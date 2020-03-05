@@ -93,7 +93,11 @@ quic_bpf = """
 #define MAX_HEADER_VALUE_LEN 128
 #define TOKEN_PREVIEW_LEN 8
 
-int sprintf(char * restrict str, const char * restrict format, ...);
+#include <linux/kernel.h>
+
+#define INIT_EVENT_NAME(event) do { \\
+        sprintf((event).type, __func__ + (sizeof("trace_") -1)); \\
+    } while (0)
 
 struct st_quicly_conn_t {
     u32 dummy[4];
@@ -140,11 +144,11 @@ struct quic_event_t {
 
 BPF_PERF_OUTPUT(events);
 
-int trace_accept(struct pt_regs *ctx) {
+int trace_quicly__accept(struct pt_regs *ctx) {
     void *pos = NULL;
     struct quic_event_t event = {};
     struct st_quicly_conn_t conn = {};
-    sprintf(event.type, "accept");
+    INIT_EVENT_NAME(event);
 
     bpf_usdt_readarg(1, ctx, &pos);
     bpf_probe_read(&conn, sizeof(conn), pos);
@@ -159,11 +163,11 @@ int trace_accept(struct pt_regs *ctx) {
     return 0;
 }
 
-int trace_receive(struct pt_regs *ctx) {
+int trace_quicly__receive(struct pt_regs *ctx) {
     void *pos = NULL;
     struct quic_event_t event = {};
     struct st_quicly_conn_t conn = {};
-    sprintf(event.type, "receive");
+    INIT_EVENT_NAME(event);
 
     bpf_usdt_readarg(1, ctx, &pos);
     bpf_probe_read(&conn, sizeof(conn), pos);
@@ -178,11 +182,11 @@ int trace_receive(struct pt_regs *ctx) {
     return 0;
 }
 
-int trace_version_switch(struct pt_regs *ctx) {
+int trace_quicly__version_switch(struct pt_regs *ctx) {
     void *pos = NULL;
     struct quic_event_t event = {};
     struct st_quicly_conn_t conn = {};
-    sprintf(event.type, "version_switch");
+    INIT_EVENT_NAME(event);
 
     bpf_usdt_readarg(1, ctx, &pos);
     bpf_probe_read(&conn, sizeof(conn), pos);
@@ -196,11 +200,11 @@ int trace_version_switch(struct pt_regs *ctx) {
     return 0;
 }
 
-int trace_idle_timeout(struct pt_regs *ctx) {
+int trace_quicly__idle_timeout(struct pt_regs *ctx) {
     void *pos = NULL;
     struct quic_event_t event = {};
     struct st_quicly_conn_t conn = {};
-    sprintf(event.type, "idle_timeout");
+    INIT_EVENT_NAME(event);
 
     bpf_usdt_readarg(1, ctx, &pos);
     bpf_probe_read(&conn, sizeof(conn), pos);
@@ -213,11 +217,11 @@ int trace_idle_timeout(struct pt_regs *ctx) {
     return 0;
 }
 
-int trace_stateless_reset_receive(struct pt_regs *ctx) {
+int trace_quicly__stateless_reset_receive(struct pt_regs *ctx) {
     void *pos = NULL;
     struct quic_event_t event = {};
     struct st_quicly_conn_t conn = {};
-    sprintf(event.type, "stateless_reset_receive");
+    INIT_EVENT_NAME(event);
 
     bpf_usdt_readarg(1, ctx, &pos);
     bpf_probe_read(&conn, sizeof(conn), pos);
@@ -230,11 +234,11 @@ int trace_stateless_reset_receive(struct pt_regs *ctx) {
     return 0;
 }
 
-int trace_crypto_decrypt(struct pt_regs *ctx) {
+int trace_quicly__crypto_decrypt(struct pt_regs *ctx) {
     void *pos = NULL;
     struct quic_event_t event = {};
     struct st_quicly_conn_t conn = {};
-    sprintf(event.type, "crypto_decrypt");
+    INIT_EVENT_NAME(event);
 
     bpf_usdt_readarg(1, ctx, &pos);
     bpf_probe_read(&conn, sizeof(conn), pos);
@@ -248,11 +252,11 @@ int trace_crypto_decrypt(struct pt_regs *ctx) {
     return 0;
 }
 
-int trace_crypto_handshake(struct pt_regs *ctx) {
+int trace_quicly__crypto_handshake(struct pt_regs *ctx) {
     void *pos = NULL;
     struct quic_event_t event = {};
     struct st_quicly_conn_t conn = {};
-    sprintf(event.type, "crypto_handshake");
+    INIT_EVENT_NAME(event);
 
     bpf_usdt_readarg(1, ctx, &pos);
     bpf_probe_read(&conn, sizeof(conn), pos);
@@ -265,11 +269,11 @@ int trace_crypto_handshake(struct pt_regs *ctx) {
     return 0;
 }
 
-int trace_packet_prepare(struct pt_regs *ctx) {
+int trace_quicly__packet_prepare(struct pt_regs *ctx) {
     void *pos = NULL;
     struct quic_event_t event = {};
     struct st_quicly_conn_t conn = {};
-    sprintf(event.type, "packet_prepare");
+    INIT_EVENT_NAME(event);
 
     bpf_usdt_readarg(1, ctx, &pos);
     bpf_probe_read(&conn, sizeof(conn), pos);
@@ -285,11 +289,11 @@ int trace_packet_prepare(struct pt_regs *ctx) {
     return 0;
 }
 
-int trace_packet_commit(struct pt_regs *ctx) {
+int trace_quicly__packet_commit(struct pt_regs *ctx) {
     void *pos = NULL;
     struct quic_event_t event = {};
     struct st_quicly_conn_t conn = {};
-    sprintf(event.type, "packet_commit");
+    INIT_EVENT_NAME(event);
 
     bpf_usdt_readarg(1, ctx, &pos);
     bpf_probe_read(&conn, sizeof(conn), pos);
@@ -305,11 +309,11 @@ int trace_packet_commit(struct pt_regs *ctx) {
     return 0;
 }
 
-int trace_packet_acked(struct pt_regs *ctx) {
+int trace_quicly__packet_acked(struct pt_regs *ctx) {
     void *pos = NULL;
     struct quic_event_t event = {};
     struct st_quicly_conn_t conn = {};
-    sprintf(event.type, "packet_acked");
+    INIT_EVENT_NAME(event);
 
     bpf_usdt_readarg(1, ctx, &pos);
     bpf_probe_read(&conn, sizeof(conn), pos);
@@ -324,11 +328,11 @@ int trace_packet_acked(struct pt_regs *ctx) {
     return 0;
 }
 
-int trace_packet_lost(struct pt_regs *ctx) {
+int trace_quicly__packet_lost(struct pt_regs *ctx) {
     void *pos = NULL;
     struct quic_event_t event = {};
     struct st_quicly_conn_t conn = {};
-    sprintf(event.type, "packet_lost");
+    INIT_EVENT_NAME(event);
 
     bpf_usdt_readarg(1, ctx, &pos);
     bpf_probe_read(&conn, sizeof(conn), pos);
@@ -342,11 +346,11 @@ int trace_packet_lost(struct pt_regs *ctx) {
     return 0;
 }
 
-int trace_cc_ack_received(struct pt_regs *ctx) {
+int trace_quicly__cc_ack_received(struct pt_regs *ctx) {
     void *pos = NULL;
     struct quic_event_t event = {};
     struct st_quicly_conn_t conn = {};
-    sprintf(event.type, "cc_ack_received");
+    INIT_EVENT_NAME(event);
 
     bpf_usdt_readarg(1, ctx, &pos);
     bpf_probe_read(&conn, sizeof(conn), pos);
@@ -363,11 +367,11 @@ int trace_cc_ack_received(struct pt_regs *ctx) {
     return 0;
 }
 
-int trace_cc_congestion(struct pt_regs *ctx) {
+int trace_quicly__cc_congestion(struct pt_regs *ctx) {
     void *pos = NULL;
     struct quic_event_t event = {};
     struct st_quicly_conn_t conn = {};
-    sprintf(event.type, "cc_congestion");
+    INIT_EVENT_NAME(event);
 
     bpf_usdt_readarg(1, ctx, &pos);
     bpf_probe_read(&conn, sizeof(conn), pos);
@@ -383,11 +387,11 @@ int trace_cc_congestion(struct pt_regs *ctx) {
     return 0;
 }
 
-int trace_transport_close_send(struct pt_regs *ctx) {
+int trace_quicly__transport_close_send(struct pt_regs *ctx) {
     void *pos = NULL;
     struct quic_event_t event = {};
     struct st_quicly_conn_t conn = {};
-    sprintf(event.type, "transport_close_send");
+    INIT_EVENT_NAME(event);
 
     bpf_usdt_readarg(1, ctx, &pos);
     bpf_probe_read(&conn, sizeof(conn), pos);
@@ -398,11 +402,11 @@ int trace_transport_close_send(struct pt_regs *ctx) {
     return 0;
 }
 
-int trace_transport_close_receive(struct pt_regs *ctx) {
+int trace_quicly__transport_close_receive(struct pt_regs *ctx) {
     void *pos = NULL;
     struct quic_event_t event = {};
     struct st_quicly_conn_t conn = {};
-    sprintf(event.type, "transport_close_receive");
+    INIT_EVENT_NAME(event);
 
     bpf_usdt_readarg(1, ctx, &pos);
     bpf_probe_read(&conn, sizeof(conn), pos);
@@ -414,11 +418,11 @@ int trace_transport_close_receive(struct pt_regs *ctx) {
     return 0;
 }
 
-int trace_application_close_send(struct pt_regs *ctx) {
+int trace_quicly__application_close_send(struct pt_regs *ctx) {
     void *pos = NULL;
     struct quic_event_t event = {};
     struct st_quicly_conn_t conn = {};
-    sprintf(event.type, "transport_close_receive");
+    INIT_EVENT_NAME(event);
 
     bpf_usdt_readarg(1, ctx, &pos);
     bpf_probe_read(&conn, sizeof(conn), pos);
@@ -429,11 +433,11 @@ int trace_application_close_send(struct pt_regs *ctx) {
     return 0;
 }
 
-int trace_new_token_send(struct pt_regs *ctx) {
+int trace_quicly__new_token_send(struct pt_regs *ctx) {
     void *pos = NULL;
     struct quic_event_t event = {};
     struct st_quicly_conn_t conn = {};
-    sprintf(event.type, "new_token_send");
+    INIT_EVENT_NAME(event);
 
     bpf_usdt_readarg(1, ctx, &pos);
     bpf_probe_read(&conn, sizeof(conn), pos);
@@ -450,11 +454,11 @@ int trace_new_token_send(struct pt_regs *ctx) {
     return 0;
 }
 
-int trace_new_token_acked(struct pt_regs *ctx) {
+int trace_quicly__new_token_acked(struct pt_regs *ctx) {
     void *pos = NULL;
     struct quic_event_t event = {};
     struct st_quicly_conn_t conn = {};
-    sprintf(event.type, "new_token_acked");
+    INIT_EVENT_NAME(event);
 
     bpf_usdt_readarg(1, ctx, &pos);
     bpf_probe_read(&conn, sizeof(conn), pos);
@@ -468,11 +472,11 @@ int trace_new_token_acked(struct pt_regs *ctx) {
     return 0;
 }
 
-int trace_new_token_receive(struct pt_regs *ctx) {
+int trace_quicly__new_token_receive(struct pt_regs *ctx) {
     void *pos = NULL;
     struct quic_event_t event = {};
     struct st_quicly_conn_t conn = {};
-    sprintf(event.type, "new_token_receive");
+    INIT_EVENT_NAME(event);
 
     bpf_usdt_readarg(1, ctx, &pos);
     bpf_probe_read(&conn, sizeof(conn), pos);
@@ -488,11 +492,11 @@ int trace_new_token_receive(struct pt_regs *ctx) {
     return 0;
 }
 
-int trace_streams_blocked_send(struct pt_regs *ctx) {
+int trace_quicly__streams_blocked_send(struct pt_regs *ctx) {
     void *pos = NULL;
     struct quic_event_t event = {};
     struct st_quicly_conn_t conn = {};
-    sprintf(event.type, "streams_blocked_send");
+    INIT_EVENT_NAME(event);
 
     bpf_usdt_readarg(1, ctx, &pos);
     bpf_probe_read(&conn, sizeof(conn), pos);
@@ -507,11 +511,11 @@ int trace_streams_blocked_send(struct pt_regs *ctx) {
     return 0;
 }
 
-int trace_streams_blocked_receive(struct pt_regs *ctx) {
+int trace_quicly__streams_blocked_receive(struct pt_regs *ctx) {
     void *pos = NULL;
     struct quic_event_t event = {};
     struct st_quicly_conn_t conn = {};
-    sprintf(event.type, "streams_blocked_receive");
+    INIT_EVENT_NAME(event);
 
     bpf_usdt_readarg(1, ctx, &pos);
     bpf_probe_read(&conn, sizeof(conn), pos);
@@ -526,11 +530,11 @@ int trace_streams_blocked_receive(struct pt_regs *ctx) {
     return 0;
 }
 
-int trace_data_blocked_receive(struct pt_regs *ctx) {
+int trace_quicly__data_blocked_receive(struct pt_regs *ctx) {
     void *pos = NULL;
     struct quic_event_t event = {};
     struct st_quicly_conn_t conn = {};
-    sprintf(event.type, "data_blocked_receive");
+    INIT_EVENT_NAME(event);
 
     bpf_usdt_readarg(1, ctx, &pos);
     bpf_probe_read(&conn, sizeof(conn), pos);
@@ -544,11 +548,11 @@ int trace_data_blocked_receive(struct pt_regs *ctx) {
     return 0;
 }
 
-int trace_stream_data_blocked_receive(struct pt_regs *ctx) {
+int trace_quicly__stream_data_blocked_receive(struct pt_regs *ctx) {
     void *pos = NULL;
     struct quic_event_t event = {};
     struct st_quicly_conn_t conn = {};
-    sprintf(event.type, "stream_data_blocked_receive");
+    INIT_EVENT_NAME(event);
 
     bpf_usdt_readarg(1, ctx, &pos);
     bpf_probe_read(&conn, sizeof(conn), pos);
@@ -563,11 +567,11 @@ int trace_stream_data_blocked_receive(struct pt_regs *ctx) {
     return 0;
 }
 
-int trace_quictrace_sent(struct pt_regs *ctx) {
+int trace_quicly__quictrace_sent(struct pt_regs *ctx) {
     void *pos = NULL;
     struct quic_event_t event = {};
     struct st_quicly_conn_t conn = {};
-    sprintf(event.type, "quictrace_sent");
+    INIT_EVENT_NAME(event);
 
     bpf_usdt_readarg(1, ctx, &pos);
     bpf_probe_read(&conn, sizeof(conn), pos);
@@ -583,11 +587,11 @@ int trace_quictrace_sent(struct pt_regs *ctx) {
     return 0;
 }
 
-int trace_quictrace_recv(struct pt_regs *ctx) {
+int trace_quicly__quictrace_recv(struct pt_regs *ctx) {
     void *pos = NULL;
     struct quic_event_t event = {};
     struct st_quicly_conn_t conn = {};
-    sprintf(event.type, "quictrace_recv");
+    INIT_EVENT_NAME(event);
 
     bpf_usdt_readarg(1, ctx, &pos);
     bpf_probe_read(&conn, sizeof(conn), pos);
@@ -601,11 +605,11 @@ int trace_quictrace_recv(struct pt_regs *ctx) {
     return 0;
 }
 
-int trace_quictrace_recv_ack_delay(struct pt_regs *ctx) {
+int trace_quicly__quictrace_recv_ack_delay(struct pt_regs *ctx) {
     void *pos = NULL;
     struct quic_event_t event = {};
     struct st_quicly_conn_t conn = {};
-    sprintf(event.type, "quictrace_recv_ack_delay");
+    INIT_EVENT_NAME(event);
 
     bpf_usdt_readarg(1, ctx, &pos);
     bpf_probe_read(&conn, sizeof(conn), pos);
@@ -619,11 +623,11 @@ int trace_quictrace_recv_ack_delay(struct pt_regs *ctx) {
     return 0;
 }
 
-int trace_quictrace_lost(struct pt_regs *ctx) {
+int trace_quicly__quictrace_lost(struct pt_regs *ctx) {
     void *pos = NULL;
     struct quic_event_t event = {};
     struct st_quicly_conn_t conn = {};
-    sprintf(event.type, "quictrace_lost");
+    INIT_EVENT_NAME(event);
 
     bpf_usdt_readarg(1, ctx, &pos);
     bpf_probe_read(&conn, sizeof(conn), pos);
@@ -637,11 +641,10 @@ int trace_quictrace_lost(struct pt_regs *ctx) {
     return 0;
 }
 
-int trace_send_response_header(struct pt_regs *ctx) {
-
+int trace_h2o__send_response_header(struct pt_regs *ctx) {
     void *pos = NULL;
     struct quic_event_t event = {};
-    sprintf(event.type, "send_response_header");
+    INIT_EVENT_NAME(event);
 
     event.master_conn_id = 0;
     bpf_usdt_readarg(1, ctx, &event.h2o_conn_id);
@@ -687,16 +690,17 @@ def handle_resp_line(cpu, data, size):
     print("%u %u TxStatus   %d" % (line.conn_id, line.req_id, line.http_status))
 
 def load_common_fields(hsh, line):
-    for k in ['at', 'type', 'master_conn_id']:
-        v = getattr(line, k)
-        # only quicly's probes have `at`
-        if v == 0 and k == 'at':
-            v = int(time.time() * 1000)
+    at = line.at
+    if at == 0:
+        at = int(time.time() * 1000)
+    hsh["at"] = at
 
-        # h2o probes has no `master_conn_id`
-        if v == 0 and k == 'master_conn_id':
-            continue
-        hsh[k] = s(v)
+    fully_qualified_type = line.type.replace("__", ":", 1)
+    hsh["type"] = fully_qualified_type
+
+    master_conn_id = line.master_conn_id
+    if master_conn_id != 0:
+        hsh["master_conn_id"] = master_conn_id
 
 def build_quic_trace_result(res, event, fields):
     for k in fields:
@@ -710,7 +714,7 @@ def handle_quic_event(cpu, data, size):
     if allowed_quic_event and ev.type != allowed_quic_event:
         return
 
-    if ev.type == "send_response_header": # HTTP-level events
+    if ev.type == "h2o__send_response_header": # HTTP-level events
         if not verbose:
             return
         if allowed_res_header_name and ev.h2o_header_name != allowed_res_header_name:
@@ -719,55 +723,55 @@ def handle_quic_event(cpu, data, size):
     res = OrderedDict()
     load_common_fields(res, ev)
 
-    if ev.type == "accept":
+    if ev.type == "quicly__accept":
         build_quic_trace_result(res, ev, ["dcid"])
-    elif ev.type == "receive":
+    elif ev.type == "quicly__receive":
         build_quic_trace_result(res, ev, ["dcid"])
-    elif ev.type == "version_switch":
+    elif ev.type == "quicly__version_switch":
         build_quic_trace_result(res, ev, ["new_version"])
-    elif ev.type == "crypto_decrypt":
+    elif ev.type == "quicly__crypto_decrypt":
         build_quic_trace_result(res, ev, ["packet_num", "len"])
-    elif ev.type == "crypto_handshake":
+    elif ev.type == "quicly__crypto_handshake":
         build_quic_trace_result(res, ev, ["ret"])
-    elif ev.type == "packet_prepare":
+    elif ev.type == "quicly__packet_prepare":
         build_quic_trace_result(res, ev, ["first_octet", "dcid"])
-    elif ev.type == "packet_commit":
+    elif ev.type == "quicly__packet_commit":
         build_quic_trace_result(res, ev, ["packet_num", "packet_len", "ack_only"])
-    elif ev.type == "packet_acked":
+    elif ev.type == "quicly__packet_acked":
         build_quic_trace_result(res, ev, ["packet_num", "newly_acked"])
-    elif ev.type == "packet_lost":
+    elif ev.type == "quicly__packet_lost":
         build_quic_trace_result(res, ev, ["packet_num"])
-    elif ev.type == "cc_ack_received":
+    elif ev.type == "quicly__cc_ack_received":
         build_quic_trace_result(res, ev, ["largest_acked", "bytes_acked", "cwnd", "inflight"])
-    elif ev.type == "cc_congestion":
+    elif ev.type == "quicly__cc_congestion":
         build_quic_trace_result(res, ev, ["max_lost_pn", "inflight", "cwnd"])
-    elif ev.type == "transport_close_send":
+    elif ev.type == "quicly__transport_close_send":
         build_quic_trace_result(res, ev, ["frame_type"])
-    elif ev.type == "transport_close_receive":
+    elif ev.type == "quicly__transport_close_receive":
         build_quic_trace_result(res, ev, ["error_code", "frame_type"])
-    elif ev.type == "application_close_send":
+    elif ev.type == "quicly__application_close_send":
         build_quic_trace_result(res, ev, ["error_code"])
-    elif ev.type == "new_token_send":
+    elif ev.type == "quicly__new_token_send":
         build_quic_trace_result(res, ev, ["token_preview", "len", "token_generation"])
-    elif ev.type == "new_token_acked":
+    elif ev.type == "quicly__new_token_acked":
         build_quic_trace_result(res, ev, ["token_generation"])
-    elif ev.type == "streams_blocked_send":
+    elif ev.type == "quicly__streams_blocked_send":
         build_quic_trace_result(res, ev, ["limit", "is_unidirectional"])
-    elif ev.type == "streams_blocked_receive":
+    elif ev.type == "quicly__streams_blocked_receive":
         build_quic_trace_result(res, ev, ["limit", "is_unidirectional"])
-    elif ev.type == "data_blocked_receive":
+    elif ev.type == "quicly__data_blocked_receive":
         build_quic_trace_result(res, ev, ["off"])
-    elif ev.type == "stream_data_blocked_receive":
+    elif ev.type == "quicly__stream_data_blocked_receive":
         build_quic_trace_result(res, ev, ["stream_id", "limit"])
-    elif ev.type == "quictrace_sent":
+    elif ev.type == "quicly__quictrace_sent":
         build_quic_trace_result(res, ev, ["packet_num", "packet_len", "packet_type"])
-    elif ev.type == "quictrace_recv":
+    elif ev.type == "quicly__quictrace_recv":
         build_quic_trace_result(res, ev, ["packet_num"])
-    elif ev.type == "quictrace_recv_ack_delay":
+    elif ev.type == "quicly__quictrace_recv_ack_delay":
         build_quic_trace_result(res, ev, ["ack_delay"])
-    elif ev.type == "quictrace_lost":
+    elif ev.type == "quicly__quictrace_lost":
         build_quic_trace_result(res, ev, ["packet_num"])
-    elif ev.type == "send_response_header":
+    elif ev.type == "h2o__send_response_header":
         build_quic_trace_result(res, ev, ["h2o_conn_id", "h2o_req_id", "h2o_header_name", "h2o_header_value"])
 
     print(json.dumps(res, separators = (',', ':')))
@@ -831,35 +835,39 @@ if h2o_pid == 0:
     usage()
 
 u = USDT(pid=int(h2o_pid))
+
 if sys.argv[1] == "quic":
-    u.enable_probe(probe="accept", fn_name="trace_accept")
-    u.enable_probe(probe="receive", fn_name="trace_receive")
-    u.enable_probe(probe="version_switch", fn_name="trace_version_switch")
-    u.enable_probe(probe="idle_timeout", fn_name="trace_idle_timeout")
-    u.enable_probe(probe="stateless_reset_receive", fn_name="trace_stateless_reset_receive")
-    u.enable_probe(probe="crypto_decrypt", fn_name="trace_crypto_decrypt")
-    u.enable_probe(probe="crypto_handshake", fn_name="trace_crypto_handshake")
-    u.enable_probe(probe="packet_prepare", fn_name="trace_packet_prepare")
-    u.enable_probe(probe="packet_commit", fn_name="trace_packet_commit")
-    u.enable_probe(probe="packet_acked", fn_name="trace_packet_acked")
-    u.enable_probe(probe="packet_lost", fn_name="trace_packet_lost")
-    u.enable_probe(probe="cc_ack_received", fn_name="trace_cc_ack_received")
-    u.enable_probe(probe="cc_congestion", fn_name="trace_cc_congestion")
-    u.enable_probe(probe="transport_close_send", fn_name="trace_transport_close_send")
-    u.enable_probe(probe="transport_close_receive", fn_name="trace_transport_close_receive")
-    u.enable_probe(probe="application_close_send", fn_name="trace_application_close_send")
-    u.enable_probe(probe="new_token_send", fn_name="trace_new_token_send")
-    u.enable_probe(probe="new_token_acked", fn_name="trace_new_token_acked")
-    u.enable_probe(probe="new_token_receive", fn_name="trace_new_token_receive")
-    u.enable_probe(probe="streams_blocked_send", fn_name="trace_streams_blocked_send")
-    u.enable_probe(probe="streams_blocked_receive", fn_name="trace_streams_blocked_receive")
-    u.enable_probe(probe="data_blocked_receive", fn_name="trace_data_blocked_receive")
-    u.enable_probe(probe="stream_data_blocked_receive", fn_name="trace_stream_data_blocked_receive")
-    u.enable_probe(probe="quictrace_sent", fn_name="trace_quictrace_sent")
-    u.enable_probe(probe="quictrace_recv", fn_name="trace_quictrace_recv")
-    u.enable_probe(probe="quictrace_recv_ack_delay", fn_name="trace_quictrace_recv_ack_delay")
-    u.enable_probe(probe="quictrace_lost", fn_name="trace_quictrace_lost")
-    u.enable_probe(probe="send_response_header", fn_name="trace_send_response_header")
+    # provider qiucly:
+    u.enable_probe(probe="accept", fn_name="trace_quicly__accept")
+    u.enable_probe(probe="receive", fn_name="trace_quicly__receive")
+    u.enable_probe(probe="version_switch", fn_name="trace_quicly__version_switch")
+    u.enable_probe(probe="idle_timeout", fn_name="trace_quicly__idle_timeout")
+    u.enable_probe(probe="stateless_reset_receive", fn_name="trace_quicly__stateless_reset_receive")
+    u.enable_probe(probe="crypto_decrypt", fn_name="trace_quicly__crypto_decrypt")
+    u.enable_probe(probe="crypto_handshake", fn_name="trace_quicly__crypto_handshake")
+    u.enable_probe(probe="packet_prepare", fn_name="trace_quicly__packet_prepare")
+    u.enable_probe(probe="packet_commit", fn_name="trace_quicly__packet_commit")
+    u.enable_probe(probe="packet_acked", fn_name="trace_quicly__packet_acked")
+    u.enable_probe(probe="packet_lost", fn_name="trace_quicly__packet_lost")
+    u.enable_probe(probe="cc_ack_received", fn_name="trace_quicly__cc_ack_received")
+    u.enable_probe(probe="cc_congestion", fn_name="trace_quicly__cc_congestion")
+    u.enable_probe(probe="transport_close_send", fn_name="trace_quicly__transport_close_send")
+    u.enable_probe(probe="transport_close_receive", fn_name="trace_quicly__transport_close_receive")
+    u.enable_probe(probe="application_close_send", fn_name="trace_quicly__application_close_send")
+    u.enable_probe(probe="new_token_send", fn_name="trace_quicly__new_token_send")
+    u.enable_probe(probe="new_token_acked", fn_name="trace_quicly__new_token_acked")
+    u.enable_probe(probe="new_token_receive", fn_name="trace_quicly__new_token_receive")
+    u.enable_probe(probe="streams_blocked_send", fn_name="trace_quicly__streams_blocked_send")
+    u.enable_probe(probe="streams_blocked_receive", fn_name="trace_quicly__streams_blocked_receive")
+    u.enable_probe(probe="data_blocked_receive", fn_name="trace_quicly__data_blocked_receive")
+    u.enable_probe(probe="stream_data_blocked_receive", fn_name="trace_quicly__stream_data_blocked_receive")
+    u.enable_probe(probe="quictrace_sent", fn_name="trace_quicly__quictrace_sent")
+    u.enable_probe(probe="quictrace_recv", fn_name="trace_quicly__quictrace_recv")
+    u.enable_probe(probe="quictrace_recv_ack_delay", fn_name="trace_quicly__quictrace_recv_ack_delay")
+    u.enable_probe(probe="quictrace_lost", fn_name="trace_quicly__quictrace_lost")
+
+    # provider h2o:
+    u.enable_probe(probe="send_response_header", fn_name="trace_h2o__send_response_header")
     b = BPF(text=quic_bpf, usdt_contexts=[u])
 else:
     u.enable_probe(probe="receive_request", fn_name="trace_receive_req")
