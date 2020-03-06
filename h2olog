@@ -13,7 +13,7 @@ import binascii, getopt, json, sys, time, os, platform
 
 version = "0.0.1"
 
-ring_buffer_page_cnt = 256 # overridden by -b=N
+perf_ring_buffer_page_cnt = 256 # overridden by -P=N
 
 # sudo itself if it is not running as root
 if os.geteuid() != 0:
@@ -798,7 +798,11 @@ USAGE: h2olog -p PID
        h2olog quic -p PID
        h2olog quic -t event_type -p PID
        h2olog quic -v -s response_header_name -p PID
-       h2olog [-h] [-d] # help / debug
+
+Other options:
+    -P [int] The size of the perf ring buffer. Default to 256.
+    -h Shows this help and exit.
+    -d Shows the BPF program and exit.
 
 h2olog version %s
 Platform: %s
@@ -807,8 +811,8 @@ BCC: %s
     exit()
 
 def trace_http():
-    b["rxbuf"].open_perf_buffer(handle_req_line, page_cnt=ring_buffer_page_cnt)
-    b["txbuf"].open_perf_buffer(handle_resp_line, page_cnt=ring_buffer_page_cnt)
+    b["rxbuf"].open_perf_buffer(handle_req_line, page_cnt=perf_ring_buffer_page_cnt)
+    b["txbuf"].open_perf_buffer(handle_resp_line, page_cnt=perf_ring_buffer_page_cnt)
 
     while 1:
         try:
@@ -817,7 +821,7 @@ def trace_http():
             exit()
 
 def trace_quic():
-    b["events"].open_perf_buffer(handle_quic_event, page_cnt=ring_buffer_page_cnt)
+    b["events"].open_perf_buffer(handle_quic_event, page_cnt=perf_ring_buffer_page_cnt)
     while 1:
         try:
             b.perf_buffer_poll()
@@ -839,6 +843,13 @@ def generate_filter_cflag(candidates):
 
     return "-DCHECK_ALLOWED_RES_HEADER_NAME(s,l)=(%s)" % " || ".join(conditions)
 
+def is_valid_page_cnt(s):
+    try:
+        n = int(s)
+        return (n > 0) and (n & (n-1) == 0)
+    except:
+        return False
+
 if len(sys.argv) < 1:
     usage()
 
@@ -854,7 +865,7 @@ try:
     allowed_res_header_name = set()
     verbose = False
     debug = False
-    opts, args = getopt.getopt(sys.argv[optidx:], 'hvp:t:s:d')
+    opts, args = getopt.getopt(sys.argv[optidx:], 'hvp:t:s:dP:')
     for opt, arg in opts:
         if opt == "-h":
             usage()
@@ -868,6 +879,11 @@ try:
             allowed_res_header_name.update(arg.lower().split(","))
         elif opt == "-d": # Debug
             debug = True
+        elif opt == "-P":
+            if not is_valid_page_cnt(arg):
+                print("Invalid value for -P, which must be a power of two: %s" % arg, file=sys.stderr)
+                sys.exit(1)
+            perf_ring_buffer_page_cnt = int(arg)
 
 
 except getopt.error as msg:
