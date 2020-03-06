@@ -562,6 +562,8 @@ static int do_write_req(h2o_httpclient_t *_client, h2o_iovec_t chunk, int is_end
         return 0;
     }
 
+    h2o_timer_unlink(&client->super._timeout);
+
     h2o_iovec_t iov = h2o_iovec_init(client->_body_buf_in_flight->bytes, client->_body_buf_in_flight->size);
     if (client->_is_chunked) {
         h2o_iovec_t bufs[3];
@@ -575,7 +577,10 @@ static int do_write_req(h2o_httpclient_t *_client, h2o_iovec_t chunk, int is_end
         client->super.bytes_written.total += iov.len;
         h2o_socket_write(client->sock, &iov, 1, on_req_body_done);
     }
+
+    h2o_timer_link(client->super.ctx->loop, client->super.ctx->io_timeout, &client->super._timeout);
     return 0;
+
 }
 
 static void on_send_timeout(h2o_timer_t *entry)
