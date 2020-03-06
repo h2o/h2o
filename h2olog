@@ -784,7 +784,7 @@ USAGE: h2olog -p PID
        h2olog quic -p PID
        h2olog quic -t event_type -p PID
        h2olog quic -v -s response_header_name -p PID
-       h2olog [-h] [-d] // help / debug
+       h2olog [-h] [-d] # help / debug
 
 h2olog version %s
 Platform: %s
