@@ -796,8 +796,8 @@ BCC: %s
     exit()
 
 def trace_http():
-    b["rxbuf"].open_perf_buffer(handle_req_line)
-    b["txbuf"].open_perf_buffer(handle_resp_line)
+    b["rxbuf"].open_perf_buffer(handle_req_line, page_cnt=128)
+    b["txbuf"].open_perf_buffer(handle_resp_line, page_cnt=128)
 
     while 1:
         try:
@@ -806,7 +806,7 @@ def trace_http():
             exit()
 
 def trace_quic():
-    b["events"].open_perf_buffer(handle_quic_event)
+    b["events"].open_perf_buffer(handle_quic_event, page_cnt=128)
     while 1:
         try:
             b.perf_buffer_poll()
