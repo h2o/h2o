@@ -144,6 +144,14 @@ struct quic_event_t {
     char h2o_header_value[MAX_HEADER_VALUE_LEN];
 };
 
+// defining it to calculate the size of h2o specific data.
+struct h2o_event_t {
+    u64 h2o_conn_id;
+    u64 h2o_req_id;
+    char h2o_header_name[MAX_STR_LEN];
+    char h2o_header_value[MAX_HEADER_VALUE_LEN];
+};
+
 BPF_PERF_OUTPUT(events);
 
 int trace_quicly__accept(struct pt_regs *ctx) {
@@ -159,7 +167,7 @@ int trace_quicly__accept(struct pt_regs *ctx) {
     bpf_usdt_readarg(3, ctx, &pos);
     bpf_probe_read(&event.dcid, MAX_STR_LEN, pos);
 
-    if (events.perf_submit(ctx, &event, sizeof(event)) < 0)
+    if (events.perf_submit(ctx, &event, sizeof(event) - sizeof(struct h2o_event_t)) < 0)
         bpf_trace_printk("failed to perf_submit\\n");
 
     return 0;
@@ -178,7 +186,7 @@ int trace_quicly__receive(struct pt_regs *ctx) {
     bpf_usdt_readarg(3, ctx, &pos);
     bpf_probe_read(&event.dcid, MAX_STR_LEN, pos);
 
-    if (events.perf_submit(ctx, &event, sizeof(event)) < 0)
+    if (events.perf_submit(ctx, &event, sizeof(event) - sizeof(struct h2o_event_t)) < 0)
         bpf_trace_printk("failed to perf_submit\\n");
 
     return 0;
@@ -196,7 +204,7 @@ int trace_quicly__version_switch(struct pt_regs *ctx) {
     bpf_usdt_readarg(2, ctx, &event.at);
     bpf_usdt_readarg(3, ctx, &event.new_version);
 
-    if (events.perf_submit(ctx, &event, sizeof(event)) < 0)
+    if (events.perf_submit(ctx, &event, sizeof(event) - sizeof(struct h2o_event_t)) < 0)
         bpf_trace_printk("failed to perf_submit\\n");
 
     return 0;
@@ -213,7 +221,7 @@ int trace_quicly__idle_timeout(struct pt_regs *ctx) {
     event.master_conn_id = conn.master_id;
     bpf_usdt_readarg(2, ctx, &event.at);
 
-    if (events.perf_submit(ctx, &event, sizeof(event)) < 0)
+    if (events.perf_submit(ctx, &event, sizeof(event) - sizeof(struct h2o_event_t)) < 0)
         bpf_trace_printk("failed to perf_submit\\n");
 
     return 0;
@@ -230,7 +238,7 @@ int trace_quicly__stateless_reset_receive(struct pt_regs *ctx) {
     event.master_conn_id = conn.master_id;
     bpf_usdt_readarg(2, ctx, &event.at);
 
-    if (events.perf_submit(ctx, &event, sizeof(event)) < 0)
+    if (events.perf_submit(ctx, &event, sizeof(event) - sizeof(struct h2o_event_t)) < 0)
         bpf_trace_printk("failed to perf_submit\\n");
 
     return 0;
@@ -248,7 +256,7 @@ int trace_quicly__crypto_decrypt(struct pt_regs *ctx) {
     bpf_usdt_readarg(2, ctx, &event.packet_num);
     bpf_usdt_readarg(4, ctx, &event.len);
 
-    if (events.perf_submit(ctx, &event, sizeof(event)) < 0)
+    if (events.perf_submit(ctx, &event, sizeof(event) - sizeof(struct h2o_event_t)) < 0)
         bpf_trace_printk("failed to perf_submit\\n");
 
     return 0;
@@ -265,7 +273,7 @@ int trace_quicly__crypto_handshake(struct pt_regs *ctx) {
     event.master_conn_id = conn.master_id;
     bpf_usdt_readarg(2, ctx, &event.ret);
 
-    if (events.perf_submit(ctx, &event, sizeof(event)) < 0)
+    if (events.perf_submit(ctx, &event, sizeof(event) - sizeof(struct h2o_event_t)) < 0)
         bpf_trace_printk("failed to perf_submit\\n");
 
     return 0;
@@ -285,7 +293,7 @@ int trace_quicly__packet_prepare(struct pt_regs *ctx) {
     bpf_usdt_readarg(4, ctx, &pos);
     bpf_probe_read(&event.dcid, MAX_STR_LEN, pos);
 
-    if (events.perf_submit(ctx, &event, sizeof(event)) < 0)
+    if (events.perf_submit(ctx, &event, sizeof(event) - sizeof(struct h2o_event_t)) < 0)
         bpf_trace_printk("failed to perf_submit\\n");
 
     return 0;
@@ -305,7 +313,7 @@ int trace_quicly__packet_commit(struct pt_regs *ctx) {
     bpf_usdt_readarg(4, ctx, &event.packet_len);
     bpf_usdt_readarg(5, ctx, &event.ack_only);
 
-    if (events.perf_submit(ctx, &event, sizeof(event)) < 0)
+    if (events.perf_submit(ctx, &event, sizeof(event) - sizeof(struct h2o_event_t)) < 0)
         bpf_trace_printk("failed to perf_submit\\n");
 
     return 0;
@@ -324,7 +332,7 @@ int trace_quicly__packet_acked(struct pt_regs *ctx) {
     bpf_usdt_readarg(3, ctx, &event.packet_num);
     bpf_usdt_readarg(4, ctx, &event.newly_acked);
 
-    if (events.perf_submit(ctx, &event, sizeof(event)) < 0)
+    if (events.perf_submit(ctx, &event, sizeof(event) - sizeof(struct h2o_event_t)) < 0)
         bpf_trace_printk("failed to perf_submit\\n");
 
     return 0;
@@ -342,7 +350,7 @@ int trace_quicly__packet_lost(struct pt_regs *ctx) {
     bpf_usdt_readarg(2, ctx, &event.at);
     bpf_usdt_readarg(3, ctx, &event.packet_num);
 
-    if (events.perf_submit(ctx, &event, sizeof(event)) < 0)
+    if (events.perf_submit(ctx, &event, sizeof(event) - sizeof(struct h2o_event_t)) < 0)
         bpf_trace_printk("failed to perf_submit\\n");
 
     return 0;
@@ -363,7 +371,7 @@ int trace_quicly__cc_ack_received(struct pt_regs *ctx) {
     bpf_usdt_readarg(5, ctx, &event.cwnd);
     bpf_usdt_readarg(6, ctx, &event.inflight);
 
-    if (events.perf_submit(ctx, &event, sizeof(event)) < 0)
+    if (events.perf_submit(ctx, &event, sizeof(event) - sizeof(struct h2o_event_t)) < 0)
         bpf_trace_printk("failed to perf_submit\\n");
 
     return 0;
@@ -383,7 +391,7 @@ int trace_quicly__cc_congestion(struct pt_regs *ctx) {
     bpf_usdt_readarg(4, ctx, &event.inflight);
     bpf_usdt_readarg(5, ctx, &event.cwnd);
 
-    if (events.perf_submit(ctx, &event, sizeof(event)) < 0)
+    if (events.perf_submit(ctx, &event, sizeof(event) - sizeof(struct h2o_event_t)) < 0)
         bpf_trace_printk("failed to perf_submit\\n");
 
     return 0;
@@ -450,7 +458,7 @@ int trace_quicly__new_token_send(struct pt_regs *ctx) {
     bpf_usdt_readarg(4, ctx, &event.len);
     bpf_usdt_readarg(5, ctx, &event.token_generation);
 
-    if (events.perf_submit(ctx, &event, sizeof(event)) < 0)
+    if (events.perf_submit(ctx, &event, sizeof(event) - sizeof(struct h2o_event_t)) < 0)
         bpf_trace_printk("failed to perf_submit\\n");
 
     return 0;
@@ -468,7 +476,7 @@ int trace_quicly__new_token_acked(struct pt_regs *ctx) {
     bpf_usdt_readarg(2, ctx, &event.at);
     bpf_usdt_readarg(3, ctx, &event.token_generation);
 
-    if (events.perf_submit(ctx, &event, sizeof(event)) < 0)
+    if (events.perf_submit(ctx, &event, sizeof(event) - sizeof(struct h2o_event_t)) < 0)
         bpf_trace_printk("failed to perf_submit\\n");
 
     return 0;
@@ -488,7 +496,7 @@ int trace_quicly__new_token_receive(struct pt_regs *ctx) {
     bpf_probe_read(&event.token_preview, TOKEN_PREVIEW_LEN, pos);
     bpf_usdt_readarg(4, ctx, &event.len);
 
-    if (events.perf_submit(ctx, &event, sizeof(event)) < 0)
+    if (events.perf_submit(ctx, &event, sizeof(event) - sizeof(struct h2o_event_t)) < 0)
         bpf_trace_printk("failed to perf_submit\\n");
 
     return 0;
@@ -507,7 +515,7 @@ int trace_quicly__streams_blocked_send(struct pt_regs *ctx) {
     bpf_usdt_readarg(3, ctx, &event.limit);
     bpf_usdt_readarg(4, ctx, &event.is_unidirectional);
 
-    if (events.perf_submit(ctx, &event, sizeof(event)) < 0)
+    if (events.perf_submit(ctx, &event, sizeof(event) - sizeof(struct h2o_event_t)) < 0)
         bpf_trace_printk("failed to perf_submit\\n");
 
     return 0;
@@ -526,7 +534,7 @@ int trace_quicly__streams_blocked_receive(struct pt_regs *ctx) {
     bpf_usdt_readarg(3, ctx, &event.limit);
     bpf_usdt_readarg(4, ctx, &event.is_unidirectional);
 
-    if (events.perf_submit(ctx, &event, sizeof(event)) < 0)
+    if (events.perf_submit(ctx, &event, sizeof(event) - sizeof(struct h2o_event_t)) < 0)
         bpf_trace_printk("failed to perf_submit\\n");
 
     return 0;
@@ -544,7 +552,7 @@ int trace_quicly__data_blocked_receive(struct pt_regs *ctx) {
     bpf_usdt_readarg(2, ctx, &event.at);
     bpf_usdt_readarg(3, ctx, &event.off);
 
-    if (events.perf_submit(ctx, &event, sizeof(event)) < 0)
+    if (events.perf_submit(ctx, &event, sizeof(event) - sizeof(struct h2o_event_t)) < 0)
         bpf_trace_printk("failed to perf_submit\\n");
 
     return 0;
@@ -563,7 +571,7 @@ int trace_quicly__stream_data_blocked_receive(struct pt_regs *ctx) {
     bpf_usdt_readarg(3, ctx, &event.stream_id);
     bpf_usdt_readarg(4, ctx, &event.limit);
 
-    if (events.perf_submit(ctx, &event, sizeof(event)) < 0)
+    if (events.perf_submit(ctx, &event, sizeof(event) - sizeof(struct h2o_event_t)) < 0)
         bpf_trace_printk("failed to perf_submit\\n");
 
     return 0;
@@ -583,7 +591,7 @@ int trace_quicly__quictrace_sent(struct pt_regs *ctx) {
     bpf_usdt_readarg(4, ctx, &event.packet_len);
     bpf_usdt_readarg(5, ctx, &event.packet_type);
 
-    if (events.perf_submit(ctx, &event, sizeof(event)) < 0)
+    if (events.perf_submit(ctx, &event, sizeof(event) - sizeof(struct h2o_event_t)) < 0)
         bpf_trace_printk("failed to perf_submit\\n");
 
     return 0;
@@ -601,7 +609,7 @@ int trace_quicly__quictrace_recv(struct pt_regs *ctx) {
     bpf_usdt_readarg(2, ctx, &event.at);
     bpf_usdt_readarg(3, ctx, &event.packet_num);
 
-    if (events.perf_submit(ctx, &event, sizeof(event)) < 0)
+    if (events.perf_submit(ctx, &event, sizeof(event) - sizeof(struct h2o_event_t)) < 0)
         bpf_trace_printk("failed to perf_submit\\n");
 
     return 0;
@@ -619,7 +627,7 @@ int trace_quicly__quictrace_recv_ack_delay(struct pt_regs *ctx) {
     bpf_usdt_readarg(2, ctx, &event.at);
     bpf_usdt_readarg(3, ctx, &event.ack_delay);
 
-    if (events.perf_submit(ctx, &event, sizeof(event)) < 0)
+    if (events.perf_submit(ctx, &event, sizeof(event) - sizeof(struct h2o_event_t)) < 0)
         bpf_trace_printk("failed to perf_submit\\n");
 
     return 0;
@@ -637,7 +645,7 @@ int trace_quicly__quictrace_lost(struct pt_regs *ctx) {
     bpf_usdt_readarg(2, ctx, &event.at);
     bpf_usdt_readarg(3, ctx, &event.packet_num);
 
-    if (events.perf_submit(ctx, &event, sizeof(event)) < 0)
+    if (events.perf_submit(ctx, &event, sizeof(event) - sizeof(struct h2o_event_t)) < 0)
         bpf_trace_printk("failed to perf_submit\\n");
 
     return 0;
