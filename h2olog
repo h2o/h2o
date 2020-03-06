@@ -826,8 +826,7 @@ def get_event_type_len(usdt, providers):
     probes = filter(lambda probe: probe.provider in providers_set, usdt.enumerate_probes())
     return 1 + max(map(lambda probe: len("%s__%s" % (probe.provider, probe.name)), probes))
 
-def generate_filter_expr(candidates):
-    # where `s` is a macro argument, and `l` is its length (size_t)
+def generate_filter_cflag(candidates):
     conditions = []
     for candidate in candidates:
         exprs = ["/* %s */ (l) == %d" % (candidate, len(candidate))]
@@ -835,7 +834,7 @@ def generate_filter_expr(candidates):
             exprs.append("(s)[%d] == '%s'" % (i, c))
         conditions.append("(%s)" % " && ".join(exprs))
 
-    return "(%s)" % " || ".join(conditions)
+    return "-DCHECK_ALLOWED_RES_HEADER_NAME(s,l)=(%s)" % " || ".join(conditions)
 
 if len(sys.argv) < 1:
     usage()
@@ -914,7 +913,7 @@ if sys.argv[1] == "quic":
         u.enable_probe(probe="send_response_header", fn_name="trace_h2o__send_response_header")
         cflags.append("-DENABLE_SEND_RESPONSE_HEADER")
         if len(allowed_res_header_name):
-            cflags.append("-DCHECK_ALLOWED_RES_HEADER_NAME(s,l)=%s" % generate_filter_expr(allowed_res_header_name))
+            cflags.append(generate_filter_cflag(allowed_res_header_name))
 
     bpf = quic_bpf
 else:
