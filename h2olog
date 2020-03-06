@@ -899,7 +899,7 @@ else:
     bpf = default_bpf
 
 if debug:
-    print(quic_bpf)
+    print(bpf)
     sys.exit()
 
 b = BPF(text=bpf, usdt_contexts=[u], cflags=cflags)
