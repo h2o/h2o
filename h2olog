@@ -843,10 +843,13 @@ def generate_filter_cflag(candidates):
 
     return "-DCHECK_ALLOWED_RES_HEADER_NAME(s,l)=(%s)" % " || ".join(conditions)
 
+def is_power_of_two(n):
+    return (n > 0) and (n & (n-1) == 0)
+
 def is_valid_page_cnt(s):
     try:
         n = int(s)
-        return (n > 0) and (n & (n-1) == 0)
+        return is_power_of_two(n)
     except:
         return False
 
