@@ -898,6 +898,7 @@ else:
     bpf = default_bpf
 
 if debug:
+    print("/* cflags = %s */" % " ".join(cflags))
     print(bpf)
     sys.exit()
 
