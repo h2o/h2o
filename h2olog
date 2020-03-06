@@ -784,8 +784,12 @@ USAGE: h2olog -p PID
        h2olog quic -p PID
        h2olog quic -t event_type -p PID
        h2olog quic -v -s response_header_name -p PID
-       h2olog [-h] [-V] [-d] // help / version / debug
-""".strip())
+       h2olog [-h] [-d] // help / debug
+
+h2olog version %s
+Platform: %s
+BCC: %s
+""".strip() % (version, platform.platform(), bcc_version))
     exit()
 
 def trace_http():
@@ -826,15 +830,10 @@ try:
     allowed_res_header_name = set()
     verbose = False
     debug = False
-    opts, args = getopt.getopt(sys.argv[optidx:], 'hVvp:t:s:d')
+    opts, args = getopt.getopt(sys.argv[optidx:], 'hvp:t:s:d')
     for opt, arg in opts:
         if opt == "-h":
             usage()
-        elif opt == "-V":
-            print("h2olog version %s" % version)
-            print("Platform: %s" % platform.platform())
-            print("BCC: %s" % bcc_version)
-            sys.exit()
         elif opt == "-p":
             h2o_pid = arg
         elif opt == "-t":
