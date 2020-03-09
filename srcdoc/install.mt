@@ -25,7 +25,9 @@ Download a release version from <a href="https://github.com/h2o/h2o/releases">th
 </p>
 
 <?= $ctx->{code}->(<< 'EOT')
-% cmake .
+% mkdir -p build
+% cd build
+% cmake ..
 % make
 % sudo make install
 EOT
@@ -95,7 +97,9 @@ CMake will search for OpenSSL by looking at the default search paths.
 </p>
 
 <?= $ctx->{code}->(<< 'EOT')
-% cmake .
+% mkdir -p build
+% cd build
+% cmake ..
 % make
 % sudo make install
 EOT
@@ -107,7 +111,9 @@ The preferred approach is to use the <code>PKG_CONFIG_PATH</code> environment va
 </p>
 
 <?= $ctx->{code}->(<< 'EOT')
-% PKG_CONFIG_PATH=/usr/local/openssl-1.0.2/lib/pkgconfig cmake .
+% mkdir -p build
+% cd build
+% PKG_CONFIG_PATH=/usr/local/openssl-1.0.2/lib/pkgconfig cmake ..
 % make
 % sudo make install
 EOT
@@ -118,7 +124,9 @@ In case your OpenSSL installation does not have the <code>lib/pkgconfig</code> d
 </p>
 
 <?= $ctx->{code}->(<< 'EOT')
-% OPENSSL_ROOT_DIR=/usr/local/openssl-1.0.2 cmake .
+% mkdir -p build
+% cd build
+% OPENSSL_ROOT_DIR=/usr/local/openssl-1.0.2 cmake ..
 % make
 % sudo make install
 EOT
