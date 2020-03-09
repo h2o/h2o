@@ -47,6 +47,15 @@ EOT
 ?>
 
 <p>
+Or if you'd like to start H2O without installing it, you can use the <code>H2O_ROOT</code> environment variable.
+</p>
+
+<?= $ctx->{code}->(<< 'EOT')
+% H2O_ROOT=$PWD build/h2o -c examples/h2o/h2o.conf
+EOT
+?>
+
+<p>
 The example configuration starts a server that listens to port 8080 (HTTP) and port 8081 (HTTPS).  Try to access the ports using the protocols respectively (note: when accessing via HTTPS it is likely that you would see hostname mismatch errors reported by the web browsers).
 </p>
 
