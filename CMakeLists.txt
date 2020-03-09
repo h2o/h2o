@@ -57,7 +57,7 @@ IF ((CMAKE_SYSTEM_NAME STREQUAL "Darwin") AND NOT (DEFINED OPENSSL_ROOT_DIR OR D
         OUTPUT_STRIP_TRAILING_WHITESPACE
         ERROR_QUIET
     )
-    IF (OPENSSL_ROOT_DIR STREQUAL "")
+    IF (NOT EXISTS ${OPENSSL_ROOT_DIR})
         MESSAGE(STATUS "*************************************************************************\n"
                     "   * Setting OPENSSL_ROOT_DIR to /usr/local/opt/openssl. On macOS, OpenSSL *\n"
                     "   * should be installed using homebrew or OPENSSL_ROOT_DIR must be set to *\n"
