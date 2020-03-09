@@ -80,7 +80,9 @@ At the time being, following packages are known to be actively maintained<sup><a
 Download a release version from <a href="https://github.com/h2o/h2o/releases">the releases page</a> or clone the master branch from <a href="https://github.com/h2o/h2o/">the source repository</a>, and build it using <a href="http://www.cmake.org/">CMake</a><sup><a href="#note_2" id="#cite_2" title="CMake is a popular build tool that can be found as a binary package on most operating systems.">2</sup></a></sup>.
 </p>
 
-<pre><code>% cmake .
+<pre><code>% mkdir -p build
+% cd build
+% cmake ..
 % make
 % sudo make install
 </code></pre>
@@ -94,6 +96,13 @@ Start the installed server using the example configuration to confirm that it ac
 </p>
 
 <pre><code>% /usr/local/bin/h2o -c examples/h2o/h2o.conf
+</code></pre>
+
+<p>
+Or if you'd like to start H2O without installing it, you can use the <code>H2O_ROOT</code> environment variable.
+</p>
+
+<pre><code>% H2O_ROOT=$PWD build/h2o -c examples/h2o/h2o.conf
 </code></pre>
 
 <p>
@@ -146,7 +155,9 @@ Once you have installed OpenSSL 1.0.2, it is possible to build H2O that links ag
 CMake will search for OpenSSL by looking at the default search paths.
 </p>
 
-<pre><code>% cmake .
+<pre><code>% mkdir -p build
+% cd build
+% cmake ..
 % make
 % sudo make install
 </code></pre>
@@ -156,7 +167,9 @@ Two ways exist to specify the directory in which CMake should search for OpenSSL
 The preferred approach is to use the <code>PKG_CONFIG_PATH</code> environment variable.
 </p>
 
-<pre><code>% PKG_CONFIG_PATH=/usr/local/openssl-1.0.2/lib/pkgconfig cmake .
+<pre><code>% mkdir -p build
+% cd build
+% PKG_CONFIG_PATH=/usr/local/openssl-1.0.2/lib/pkgconfig cmake ..
 % make
 % sudo make install
 </code></pre>
@@ -165,7 +178,9 @@ The preferred approach is to use the <code>PKG_CONFIG_PATH</code> environment va
 In case your OpenSSL installation does not have the <code>lib/pkgconfig</code> directory, you may use <code>OPENSSL_ROOT_DIR</code> environment variable to specify the root directory of the OpenSSL being installed.  However, it is likely that CMake version 3.1.2 or above is be required when using this approach<sup><a href="#note_6" id="#cite_6" title="ref: h2o issue #277, CMake issue 0015386">6</sup></a></sup>.
 </p>
 
-<pre><code>% OPENSSL_ROOT_DIR=/usr/local/openssl-1.0.2 cmake .
+<pre><code>% mkdir -p build
+% cd build
+% OPENSSL_ROOT_DIR=/usr/local/openssl-1.0.2 cmake ..
 % make
 % sudo make install
 </code></pre>
