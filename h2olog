@@ -92,7 +92,7 @@ int trace_send_resp(struct pt_regs *ctx) {
 
 quic_bpf = """
 #define MAX_STR_LEN 32
-#define MAX_HEADER_VALUE_LEN 128
+#define MAX_HEADER_VALUE_LEN 64
 #define TOKEN_PREVIEW_LEN 8
 
 #include <linux/kernel.h>
@@ -104,6 +104,13 @@ quic_bpf = """
 struct st_quicly_conn_t {
     u32 dummy[4];
     u32 master_id;
+};
+
+struct st_h2o_conn_t {
+    void *dummy_ctx;
+    void **dummy_hosts;
+    u64 dummy_connected_at[2];
+    u64 conn_id;
 };
 
 struct quic_event_t {
@@ -651,7 +658,7 @@ int trace_quicly__quictrace_lost(struct pt_regs *ctx) {
     return 0;
 }
 
-#ifdef ENABLE_SEND_RESPONSE_HEADER
+#ifdef ENABLE_H2O_PROBES
 int trace_h2o__send_response_header(struct pt_regs *ctx) {
     void *pos = NULL;
     struct quic_event_t event = {};
@@ -681,7 +688,39 @@ int trace_h2o__send_response_header(struct pt_regs *ctx) {
 
     return 0;
 }
-#endif /* ENABLE_SEND_RESPONSE_HEADER */
+
+
+int trace_h2o__h3_accept(struct pt_regs *ctx) {
+    void *pos = NULL;
+    struct quic_event_t event = {};
+    struct st_quicly_conn_t conn = {};
+    INIT_EVENT_NAME(event);
+
+    bpf_usdt_readarg(1, ctx, &event.h2o_conn_id);
+    // ignore arg 2 (struct st_h2o_conn_t*)
+    bpf_usdt_readarg(3, ctx, &pos);
+    bpf_probe_read(&conn, sizeof(conn), pos);
+    event.master_conn_id = conn.master_id;
+
+    if (events.perf_submit(ctx, &event, sizeof(event)) < 0)
+        bpf_trace_printk("failed to perf_submit\\n");
+
+    return 0;
+}
+
+int trace_h2o__h3_close(struct pt_regs *ctx) {
+    struct quic_event_t event = {};
+    INIT_EVENT_NAME(event);
+
+    bpf_usdt_readarg(1, ctx, &event.h2o_conn_id);
+
+    if (events.perf_submit(ctx, &event, sizeof(event)) < 0)
+        bpf_trace_printk("failed to perf_submit\\n");
+
+    return 0;
+}
+
+#endif /* ENABLE_H2O_PROBES */
 """
 
 # Hack to make it work both on python2 and python3
@@ -719,9 +758,7 @@ def load_common_fields(hsh, line):
     fully_qualified_type = line.type.replace("__", ":", 1)
     hsh["type"] = fully_qualified_type
 
-    master_conn_id = line.master_conn_id
-    if master_conn_id != 0:
-        hsh["master_conn_id"] = master_conn_id
+    hsh["master_conn_id"] = line.master_conn_id
 
 def build_quic_trace_result(res, event, fields):
     for k in fields:
@@ -788,7 +825,14 @@ def handle_quic_event(cpu, data, size):
         build_quic_trace_result(res, ev, ["packet_num"])
     elif ev.type == "h2o__send_response_header":
         build_quic_trace_result(res, ev, ["h2o_conn_id", "h2o_req_id", "h2o_header_name", "h2o_header_value"])
-
+        del res["master_conn_id"]
+    elif ev.type == "h2o__h3_accept":
+        build_quic_trace_result(res, ev, ["h2o_conn_id"])
+    elif ev.type == "h2o__h3_close":
+        build_quic_trace_result(res, ev, ["h2o_conn_id"])
+        del res["master_conn_id"]
+    else:
+        raise Exception("Unknown event type: %s" % ev.type)
     print(json.dumps(res, separators = (',', ':')))
 
 def usage():
@@ -932,7 +976,9 @@ if sys.argv[1] == "quic":
     # provider h2o:
     if verbose:
         u.enable_probe(probe="send_response_header", fn_name="trace_h2o__send_response_header")
-        cflags.append("-DENABLE_SEND_RESPONSE_HEADER")
+        u.enable_probe(probe="h3_accept", fn_name="trace_h2o__h3_accept")
+        u.enable_probe(probe="h3_close", fn_name="trace_h2o__h3_close")
+        cflags.append("-DENABLE_H2O_PROBES")
         if len(allowed_res_header_name):
             cflags.append(generate_filter_cflag(allowed_res_header_name))
 
