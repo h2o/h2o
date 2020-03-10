@@ -52,12 +52,12 @@ Here's an example trace.
 If you find the output to be too noisy, try using the `-t` option to only trace a specific event type.
 
 ```
-$ sudo h2olog quic -t accept -p $(pgrep -o h2o)
+$ sudo h2olog quic -t quicly:accept -p $(pgrep -o h2o)
 
-{"at": 1580410632750, "type": "accept", "master_conn_id": 2, "dcid": "cf53a37d6f47a005"}
-{"at": 1580410633662, "type": "accept", "master_conn_id": 1, "dcid": "180c19519904013e"}
-{"at": 1580410636950, "type": "accept", "master_conn_id": 2, "dcid": "8ccc04ffae33cc7b"}
-{"at": 1580410637613, "type": "accept", "master_conn_id": 3, "dcid": "1f3b9363a583158b"}
+{"at": 1580410632750, "type": "quicly:accept", "master_conn_id": 2, "dcid": "cf53a37d6f47a005"}
+{"at": 1580410633662, "type": "quicly:accept", "master_conn_id": 1, "dcid": "180c19519904013e"}
+{"at": 1580410636950, "type": "quicly:accept", "master_conn_id": 2, "dcid": "8ccc04ffae33cc7b"}
+{"at": 1580410637613, "type": "quicly:accept", "master_conn_id": 3, "dcid": "1f3b9363a583158b"}
 ```
 
 ## Program Anatomy
