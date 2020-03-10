@@ -689,7 +689,6 @@ int trace_h2o__send_response_header(struct pt_regs *ctx) {
     return 0;
 }
 
-
 int trace_h2o__h3_accept(struct pt_regs *ctx) {
     void *pos = NULL;
     struct quic_event_t event = {};
@@ -719,7 +718,6 @@ int trace_h2o__h3_close(struct pt_regs *ctx) {
 
     return 0;
 }
-
 #endif /* ENABLE_H2O_PROBES */
 """
 
@@ -754,10 +752,8 @@ def load_common_fields(hsh, line):
     if at == 0:
         at = int(time.time() * 1000)
     hsh["at"] = at
-
     fully_qualified_type = line.type.replace("__", ":", 1)
     hsh["type"] = fully_qualified_type
-
     hsh["master_conn_id"] = line.master_conn_id
 
 def build_quic_trace_result(res, event, fields):
