@@ -659,16 +659,22 @@ int trace_quicly__quictrace_lost(struct pt_regs *ctx) {
 }
 
 #ifdef ENABLE_H2O_PROBES
+BPF_HASH(h2o_to_quicly_conn, u64, u32);
+
 int trace_h2o__send_response_header(struct pt_regs *ctx) {
     void *pos = NULL;
     struct quic_event_t event = {};
     size_t name_len = 0;
     INIT_EVENT_NAME(event);
 
-    event.master_conn_id = 0;
     bpf_usdt_readarg(1, ctx, &event.h2o_conn_id);
-    bpf_usdt_readarg(2, ctx, &event.h2o_req_id);
 
+    const u32 *master_conn_id_ptr = h2o_to_quicly_conn.lookup(&event.h2o_conn_id);
+    if (master_conn_id_ptr == NULL)
+        return 0;
+    event.master_conn_id = *master_conn_id_ptr;
+
+    bpf_usdt_readarg(2, ctx, &event.h2o_req_id);
     bpf_usdt_readarg(3, ctx, &pos);
     bpf_usdt_readarg(4, ctx, &name_len);
     bpf_probe_read(&event.h2o_header_name, MAX_STR_LEN, pos);
@@ -701,6 +707,8 @@ int trace_h2o__h3_accept(struct pt_regs *ctx) {
     bpf_probe_read(&conn, sizeof(conn), pos);
     event.master_conn_id = conn.master_id;
 
+    h2o_to_quicly_conn.update(&event.h2o_conn_id, &event.master_conn_id);
+
     if (events.perf_submit(ctx, &event, sizeof(event)) < 0)
         bpf_trace_printk("failed to perf_submit\\n");
 
@@ -712,6 +720,14 @@ int trace_h2o__h3_close(struct pt_regs *ctx) {
     INIT_EVENT_NAME(event);
 
     bpf_usdt_readarg(1, ctx, &event.h2o_conn_id);
+
+    const u32 *master_conn_id_ptr = h2o_to_quicly_conn.lookup(&event.h2o_conn_id);
+    if (master_conn_id_ptr != NULL) {
+        event.master_conn_id = *master_conn_id_ptr;
+    } else {
+        bpf_trace_printk("h2o_conn_id=%lu is not associated to master_conn_id\\n", event.h2o_conn_id);
+    }
+    h2o_to_quicly_conn.delete(&event.h2o_conn_id);
 
     if (events.perf_submit(ctx, &event, sizeof(event)) < 0)
         bpf_trace_printk("failed to perf_submit\\n");
@@ -821,12 +837,10 @@ def handle_quic_event(cpu, data, size):
         build_quic_trace_result(res, ev, ["packet_num"])
     elif ev.type == "h2o__send_response_header":
         build_quic_trace_result(res, ev, ["h2o_conn_id", "h2o_req_id", "h2o_header_name", "h2o_header_value"])
-        del res["master_conn_id"]
     elif ev.type == "h2o__h3_accept":
         build_quic_trace_result(res, ev, ["h2o_conn_id"])
     elif ev.type == "h2o__h3_close":
         build_quic_trace_result(res, ev, ["h2o_conn_id"])
-        del res["master_conn_id"]
     else:
         raise Exception("Unknown event type: %s" % ev.type)
     print(json.dumps(res, separators = (',', ':')))
