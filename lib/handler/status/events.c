@@ -28,6 +28,8 @@ struct st_events_status_ctx_t {
     uint64_t h2_protocol_level_errors[H2O_HTTP2_ERROR_MAX];
     uint64_t h2_read_closed;
     uint64_t h2_write_closed;
+    uint64_t h1_request_timeout;
+    uint64_t h1_request_io_timeout;
     uint64_t ssl_errors;
     pthread_mutex_t mutex;
 };
