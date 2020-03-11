@@ -51,12 +51,20 @@ FIND_PACKAGE(PkgConfig)
 FIND_PACKAGE(Threads REQUIRED)
 
 IF ((CMAKE_SYSTEM_NAME STREQUAL "Darwin") AND NOT (DEFINED OPENSSL_ROOT_DIR OR DEFINED ENV{OPENSSL_ROOT_DIR}))
-    MESSAGE(STATUS "*************************************************************************\n"
-                "   * Setting OPENSSL_ROOT_DIR to /usr/local/opt/openssl. On macOS, OpenSSL *\n"
-                "   * should be installed using homebrew or OPENSSL_ROOT_DIR must be set to *\n"
-                "   * the path that has OpenSSL installed.                                  *\n"
-                "   *************************************************************************")
-    SET(OPENSSL_ROOT_DIR "/usr/local/opt/openssl")
+    EXECUTE_PROCESS(
+        COMMAND brew --prefix openssl
+        OUTPUT_VARIABLE OPENSSL_ROOT_DIR
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET
+    )
+    IF (NOT EXISTS ${OPENSSL_ROOT_DIR})
+        MESSAGE(STATUS "*************************************************************************\n"
+                    "   * Setting OPENSSL_ROOT_DIR to /usr/local. On macOS, OpenSSL should be   *\n"
+                    "   * installed using homebrew or OPENSSL_ROOT_DIR must be set to the path  *\n"
+                    "   * that has OpenSSL installed.                                           *\n"
+                    "   *************************************************************************")
+        SET(OPENSSL_ROOT_DIR "/usr/local")
+    ENDIF ()
 ENDIF ()
 FIND_PACKAGE(OpenSSL REQUIRED)
 FIND_PACKAGE(ZLIB REQUIRED)
