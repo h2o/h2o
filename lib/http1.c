@@ -96,6 +96,7 @@ static void finalostream_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_sendvec_
 static void finalostream_send_informational(h2o_ostream_t *_self, h2o_req_t *req);
 static void reqread_on_read(h2o_socket_t *sock, const char *err);
 static void reqread_on_timeout(h2o_timer_t *entry);
+static void req_io_on_timeout(h2o_timer_t *entry);
 static void reqread_start(struct st_h2o_http1_conn_t *conn);
 static int foreach_request(h2o_context_t *ctx, int (*cb)(h2o_req_t *req, void *cbdata), void *cbdata);
 
@@ -524,7 +525,7 @@ static void proceed_request(h2o_req_t *req, size_t written, h2o_send_state_t sen
     }
 
     set_req_timeout(conn, conn->super.ctx->globalconf->http1.req_timeout, reqread_on_timeout);
-    set_req_io_timeout(conn, conn->super.ctx->globalconf->http1.req_io_timeout, reqread_on_timeout);
+    set_req_io_timeout(conn, conn->super.ctx->globalconf->http1.req_io_timeout, req_io_on_timeout);
     h2o_socket_read_start(conn->sock, reqread_on_read);
     return;
 }
@@ -680,14 +681,14 @@ void reqread_on_read(h2o_socket_t *sock, const char *err)
         return;
     }
 
-    set_req_io_timeout(conn, conn->super.ctx->globalconf->http1.req_io_timeout, reqread_on_timeout);
+    set_req_io_timeout(conn, conn->super.ctx->globalconf->http1.req_io_timeout, req_io_on_timeout);
     if (conn->_req_entity_reader == NULL)
         handle_incoming_request(conn);
     else
         conn->_req_entity_reader->handle_incoming_entity(conn);
 }
 
-static void reqread_on_timeout(h2o_timer_t *entry)
+static void on_timeout(h2o_timer_t *entry)
 {
     struct st_h2o_http1_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http1_conn_t, _timeout_entry, entry);
 
@@ -703,10 +704,24 @@ static void reqread_on_timeout(h2o_timer_t *entry)
     close_connection(conn, 1);
 }
 
+static void req_io_on_timeout(h2o_timer_t *entry)
+{
+    struct st_h2o_http1_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http1_conn_t, _timeout_entry, entry);
+    conn->super.ctx->http1.events.request_io_timeouts++;
+    on_timeout(entry);
+}
+
+static void reqread_on_timeout(h2o_timer_t *entry)
+{
+    struct st_h2o_http1_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http1_conn_t, _timeout_entry, entry);
+    conn->super.ctx->http1.events.request_timeouts++;
+    on_timeout(entry);
+}
+
 static inline void reqread_start(struct st_h2o_http1_conn_t *conn)
 {
     set_req_timeout(conn, conn->super.ctx->globalconf->http1.req_timeout, reqread_on_timeout);
-    set_req_io_timeout(conn, conn->super.ctx->globalconf->http1.req_io_timeout, reqread_on_timeout);
+    set_req_io_timeout(conn, conn->super.ctx->globalconf->http1.req_io_timeout, req_io_on_timeout);
     h2o_socket_read_start(conn->sock, reqread_on_read);
     if (conn->sock->input->size != 0)
         handle_incoming_request(conn);
@@ -1012,6 +1027,7 @@ void finalostream_send(h2o_ostream_t *_self, h2o_req_t *_req, h2o_sendvec_t *inb
         bufs[bufcnt++] = chunked_suffix;
 
     if (bufcnt != 0) {
+        set_req_io_timeout(conn, conn->super.ctx->globalconf->http1.req_io_timeout, req_io_on_timeout);
         h2o_socket_write(conn->sock, bufs, bufcnt, h2o_send_state_is_in_progress(send_state) ? on_send_next : on_send_complete);
     } else {
         set_req_timeout(conn, 0, on_delayed_send_complete);

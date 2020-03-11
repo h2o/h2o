@@ -600,6 +600,10 @@ struct st_h2o_context_t {
          * link-list of h2o_http1_conn_t
          */
         h2o_linklist_t _conns;
+        struct {
+            uint64_t request_timeouts;
+            uint64_t request_io_timeouts;
+        } events;
     } http1;
 
     struct {
