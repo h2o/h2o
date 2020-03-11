@@ -144,6 +144,7 @@ static void close_connection(struct st_h2o_http1_conn_t *conn, int close_socket)
     if (conn->sock != NULL)
         H2O_PROBE_CONN0(H1_CLOSE, &conn->super);
     h2o_timer_unlink(&conn->_timeout_entry);
+    h2o_timer_unlink(&conn->_io_timeout_entry);
     if (conn->req_body != NULL)
         h2o_buffer_dispose(&conn->req_body);
     h2o_dispose_request(&conn->req);
@@ -688,10 +689,8 @@ void reqread_on_read(h2o_socket_t *sock, const char *err)
         conn->_req_entity_reader->handle_incoming_entity(conn);
 }
 
-static void on_timeout(h2o_timer_t *entry)
+static void on_timeout(struct st_h2o_http1_conn_t *conn)
 {
-    struct st_h2o_http1_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http1_conn_t, _timeout_entry, entry);
-
     if (conn->_req_index == 1) {
         /* assign hostconf and bind conf so that the request can be logged */
         h2o_hostconf_t *hostconf = h2o_req_setup(&conn->req);
@@ -706,16 +705,16 @@ static void on_timeout(h2o_timer_t *entry)
 
 static void req_io_on_timeout(h2o_timer_t *entry)
 {
-    struct st_h2o_http1_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http1_conn_t, _timeout_entry, entry);
+    struct st_h2o_http1_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http1_conn_t, _io_timeout_entry, entry);
     conn->super.ctx->http1.events.request_io_timeouts++;
-    on_timeout(entry);
+    on_timeout(conn);
 }
 
 static void reqread_on_timeout(h2o_timer_t *entry)
 {
     struct st_h2o_http1_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http1_conn_t, _timeout_entry, entry);
     conn->super.ctx->http1.events.request_timeouts++;
-    on_timeout(entry);
+    on_timeout(conn);
 }
 
 static inline void reqread_start(struct st_h2o_http1_conn_t *conn)
