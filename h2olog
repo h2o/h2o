@@ -841,8 +841,6 @@ def handle_quic_event(cpu, data, size):
         build_quic_trace_result(res, ev, ["h2o_conn_id"])
     elif ev.type == "h2o__h3_close":
         build_quic_trace_result(res, ev, ["h2o_conn_id"])
-    else:
-        raise Exception("Unknown event type: %s" % ev.type)
     print(json.dumps(res, separators = (',', ':')))
 
 def usage():
