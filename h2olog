@@ -851,6 +851,40 @@ int trace_h2o__h3_close(struct pt_regs *ctx) {
 #endif /* ENABLE_H2O_PROBES */
 """
 
+quic_type_map =  {
+    "quicly__accept": ["dcid"],
+    "quicly__receive": ["dcid"],
+    "quicly__version_switch": ["new_version"],
+    "quicly__crypto_decrypt": ["pn", "len"],
+    "quicly__crypto_handshake": ["ret"],
+    "quicly__packet_prepare": ["first_octet", "dcid"],
+    "quicly__packet_commit": ["pn", "len", "ack_only"],
+    "quicly__packet_acked": ["pn", "newly_acked"],
+    "quicly__packet_lost": ["pn"],
+    "quicly__cc_ack_received": ["largest_acked", "bytes_acked", "cwnd", "inflight"],
+    "quicly__cc_congestion": ["max_lost_pn", "inflight", "cwnd"],
+    "quicly__quictrace_recv_ack": ["ack_block_begin", "ack_block_end"],
+    "quicly__quictrace_cc_lost": ["min_rtt", "smoothed_rtt", "latest_rtt", "cwnd", "inflight"],
+    "quicly__quictrace_cc_ack": ["min_rtt", "smoothed_rtt", "latest_rtt", "cwnd", "inflight"],
+    "quicly__transport_close_send": ["frame_type"],
+    "quicly__transport_close_receive": ["error_code", "frame_type"],
+    "quicly__application_close_send": ["error_code"],
+    "quicly__new_token_send": ["token_preview", "len", "token_generation"],
+    "quicly__new_token_acked": ["token_generation"],
+    "quicly__streams_blocked_send": ["limit", "is_unidirectional"],
+    "quicly__streams_blocked_receive": ["limit", "is_unidirectional"],
+    "quicly__data_blocked_receive": ["off"],
+    "quicly__stream_data_blocked_receive": ["stream_id", "limit"],
+    "quicly__quictrace_sent": ["pn", "len", "packet_type"],
+    "quicly__quictrace_send_stream": ["stream_id", "off", "len", "fin"],
+    "quicly__quictrace_recv": ["pn"],
+    "quicly__quictrace_recv_ack_delay": ["ack_delay"],
+    "quicly__quictrace_lost": ["pn"],
+    "h2o__send_response_header": ["h2o_conn_id", "h2o_req_id", "h2o_header_name", "h2o_header_value"],
+    "h2o__h3_accept": ["h2o_conn_id"],
+    "h2o__h3_close": ["h2o_conn_id"],
+}
+
 # Hack to make it work both on python2 and python3
 if sys.version_info.major >= 3:
     def s(thingy):
@@ -888,7 +922,6 @@ def build_quic_trace_result(res, event, fields):
         res[outk] = s(getattr(event, k))
         if k == "token_preview":
             res[outk] = binascii.hexlify(res[outk])
-    return res
 
 def handle_quic_event(cpu, data, size):
     ev = b["events"].event(data)
@@ -897,69 +930,7 @@ def handle_quic_event(cpu, data, size):
 
     res = OrderedDict()
     load_common_fields(res, ev)
-
-    if ev.type == "quicly__accept":
-        build_quic_trace_result(res, ev, ["dcid"])
-    elif ev.type == "quicly__receive":
-        build_quic_trace_result(res, ev, ["dcid"])
-    elif ev.type == "quicly__version_switch":
-        build_quic_trace_result(res, ev, ["new_version"])
-    elif ev.type == "quicly__crypto_decrypt":
-        build_quic_trace_result(res, ev, ["pn", "len"])
-    elif ev.type == "quicly__crypto_handshake":
-        build_quic_trace_result(res, ev, ["ret"])
-    elif ev.type == "quicly__packet_prepare":
-        build_quic_trace_result(res, ev, ["first_octet", "dcid"])
-    elif ev.type == "quicly__packet_commit":
-        build_quic_trace_result(res, ev, ["pn", "len", "ack_only"])
-    elif ev.type == "quicly__packet_acked":
-        build_quic_trace_result(res, ev, ["pn", "newly_acked"])
-    elif ev.type == "quicly__packet_lost":
-        build_quic_trace_result(res, ev, ["pn"])
-    elif ev.type == "quicly__cc_ack_received":
-        build_quic_trace_result(res, ev, ["largest_acked", "bytes_acked", "cwnd", "inflight"])
-    elif ev.type == "quicly__cc_congestion":
-        build_quic_trace_result(res, ev, ["max_lost_pn", "inflight", "cwnd"])
-    elif ev.type == "quicly__quictrace_recv_ack":
-        build_quic_trace_result(res, ev, ["ack_block_begin", "ack_block_end"])
-    elif ev.type == "quicly__quictrace_cc_lost":
-        build_quic_trace_result(res, ev, ["min_rtt", "smoothed_rtt", "latest_rtt", "cwnd", "inflight"])
-    elif ev.type == "quicly__quictrace_cc_ack":
-        build_quic_trace_result(res, ev, ["min_rtt", "smoothed_rtt", "latest_rtt", "cwnd", "inflight"])
-    elif ev.type == "quicly__transport_close_send":
-        build_quic_trace_result(res, ev, ["frame_type"])
-    elif ev.type == "quicly__transport_close_receive":
-        build_quic_trace_result(res, ev, ["error_code", "frame_type"])
-    elif ev.type == "quicly__application_close_send":
-        build_quic_trace_result(res, ev, ["error_code"])
-    elif ev.type == "quicly__new_token_send":
-        build_quic_trace_result(res, ev, ["token_preview", "len", "token_generation"])
-    elif ev.type == "quicly__new_token_acked":
-        build_quic_trace_result(res, ev, ["token_generation"])
-    elif ev.type == "quicly__streams_blocked_send":
-        build_quic_trace_result(res, ev, ["limit", "is_unidirectional"])
-    elif ev.type == "quicly__streams_blocked_receive":
-        build_quic_trace_result(res, ev, ["limit", "is_unidirectional"])
-    elif ev.type == "quicly__data_blocked_receive":
-        build_quic_trace_result(res, ev, ["off"])
-    elif ev.type == "quicly__stream_data_blocked_receive":
-        build_quic_trace_result(res, ev, ["stream_id", "limit"])
-    elif ev.type == "quicly__quictrace_sent":
-        build_quic_trace_result(res, ev, ["pn", "len", "packet_type"])
-    elif ev.type == "quicly__quictrace_send_stream":
-        build_quic_trace_result(res, ev, ["stream_id", "off", "len", "fin"])
-    elif ev.type == "quicly__quictrace_recv":
-        build_quic_trace_result(res, ev, ["pn"])
-    elif ev.type == "quicly__quictrace_recv_ack_delay":
-        build_quic_trace_result(res, ev, ["ack_delay"])
-    elif ev.type == "quicly__quictrace_lost":
-        build_quic_trace_result(res, ev, ["pn"])
-    elif ev.type == "h2o__send_response_header":
-        build_quic_trace_result(res, ev, ["h2o_conn_id", "h2o_req_id", "h2o_header_name", "h2o_header_value"])
-    elif ev.type == "h2o__h3_accept":
-        build_quic_trace_result(res, ev, ["h2o_conn_id"])
-    elif ev.type == "h2o__h3_close":
-        build_quic_trace_result(res, ev, ["h2o_conn_id"])
+    build_quic_trace_result(res, ev, quic_type_map.get(ev.type, []))
     print(json.dumps(res, separators = (',', ':')))
 
 def usage():
