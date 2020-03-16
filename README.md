@@ -43,9 +43,10 @@ $ sudo h2olog quic -p $(pgrep -o h2o)
 Here's an example trace.
 
 ```
-{"at": 1580154303455, "type": "quicly:accept", "master_conn_id": 1, "dcid": "4070a82916f79d71"}
-{"at": 1580154303457, "type": "quicly:packet_prepare", "master_conn_id": 1, "first_octet": 192, "dcid": "9e4605bc54ec8b9d"}
-{"at": 1580154303457, "type": "quicly:packet_commit", "master_conn_id": 1, "packet_num": 0, "packet_len": 176, "ack_only": 0}
+{"time":1584380825832,"type":"accept","conn":1,"dcid":"f8aa2066e9c3b3cf"}
+{"time":1584380825835,"type":"crypto-decrypt","conn":1,"pn":0,"len":1236}
+{"time":1584380825832,"type":"quictrace-recv","conn":1,"pn":0}
+{"time":1584380825836,"type":"crypto-handshake","conn":1,"ret":0}
 ... and more ...
 ```
 
@@ -54,10 +55,10 @@ If you find the output to be too noisy, try using the `-t` option to only trace 
 ```
 $ sudo h2olog quic -t quicly:accept -p $(pgrep -o h2o)
 
-{"at": 1580410632750, "type": "quicly:accept", "master_conn_id": 2, "dcid": "cf53a37d6f47a005"}
-{"at": 1580410633662, "type": "quicly:accept", "master_conn_id": 1, "dcid": "180c19519904013e"}
-{"at": 1580410636950, "type": "quicly:accept", "master_conn_id": 2, "dcid": "8ccc04ffae33cc7b"}
-{"at": 1580410637613, "type": "quicly:accept", "master_conn_id": 3, "dcid": "1f3b9363a583158b"}
+{"time":1584381666657,"type":"accept","conn":2,"dcid":"704e7cdd80815ab8"}
+{"time":1584381667155,"type":"accept","conn":1,"dcid":"88f2a1554360d01c"}
+{"time":1584381670148,"type":"accept","conn":3,"dcid":"7601b689df69c71d"}
+{"time":1584381670981,"type":"accept","conn":4,"dcid":"89b4a844beb9ae3f"}
 ```
 
 ## Program Anatomy
