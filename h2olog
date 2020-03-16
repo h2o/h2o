@@ -19,6 +19,9 @@ perf_ring_buffer_page_cnt = 256 # overridden by -P=N
 if os.geteuid() != 0:
     os.execvp("sudo", ["-E", sys.executable] + sys.argv)
 
+
+json_encoder = json.JSONEncoder(separators = (',', ':'))
+
 default_bpf = """
 #define MAX_STR_LEN 128
 
@@ -931,7 +934,7 @@ def handle_quic_event(cpu, data, size):
     res = OrderedDict()
     load_common_fields(res, ev)
     build_quic_trace_result(res, ev, quic_type_map.get(ev.type, []))
-    print(json.dumps(res, separators = (',', ':')))
+    print(json_encoder.encode(res))
 
 def usage():
     print("""
