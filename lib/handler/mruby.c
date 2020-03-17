@@ -820,32 +820,19 @@ int h2o_mruby_set_response_header(h2o_mruby_shared_context_t *shared_ctx, h2o_io
     static const h2o_iovec_t fallthru_set_prefix = {H2O_STRLIT(FALLTHRU_SET_PREFIX)};
     h2o_iovec_t lc_name;
 
+    /* if possible, set the response header using token, or at least have the header field name converted to lower-case */
     if (h2o_iovec_is_token(name)) {
         token = H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, name);
-    } else {
-        /* convert name to lowercase */
-        lc_name = h2o_strdup(&req->pool, name->base, name->len);
-        h2o_strtolower(lc_name.base, lc_name.len);
-        token = h2o_lookup_token(lc_name.base, lc_name.len);
+        goto SetUsingToken;
     }
+    lc_name = h2o_strdup(&req->pool, name->base, name->len);
+    h2o_strtolower(lc_name.base, lc_name.len);
+    if ((token = h2o_lookup_token(lc_name.base, lc_name.len)) != NULL)
+        goto SetUsingToken;
 
-    if (token != NULL) {
-        if (token->flags.proxy_should_drop_for_res) {
-            /* skip */
-        } else if (token == H2O_TOKEN_CONTENT_LENGTH) {
-            req->res.content_length = h2o_strtosize(value.base, value.len);
-        } else {
-            value = h2o_strdup(&req->pool, value.base, value.len);
-            if (token == H2O_TOKEN_LINK) {
-                h2o_iovec_t new_value = h2o_push_path_in_link_header(req, value.base, value.len);
-                if (new_value.len)
-                    h2o_add_header(&req->pool, &req->res.headers, token, NULL, new_value.base, new_value.len);
-            } else {
-                h2o_add_header(&req->pool, &req->res.headers, token, NULL, value.base, value.len);
-            }
-        }
-    } else if (lc_name.len > fallthru_set_prefix.len &&
-               h2o_memis(lc_name.base, fallthru_set_prefix.len, fallthru_set_prefix.base, fallthru_set_prefix.len)) {
+    /* set using the header field string */
+    if (lc_name.len > fallthru_set_prefix.len &&
+        h2o_memis(lc_name.base, fallthru_set_prefix.len, fallthru_set_prefix.base, fallthru_set_prefix.len)) {
         /* register environment variables (with the name converted to uppercase, and using `_`) */
         size_t i;
         lc_name.base += fallthru_set_prefix.len;
@@ -859,6 +846,23 @@ int h2o_mruby_set_response_header(h2o_mruby_shared_context_t *shared_ctx, h2o_io
         h2o_add_header_by_str(&req->pool, &req->res.headers, lc_name.base, lc_name.len, 0, NULL, value.base, value.len);
     }
 
+    return 0;
+
+SetUsingToken:
+    if (token->flags.proxy_should_drop_for_res) {
+        /* skip */
+    } else if (token == H2O_TOKEN_CONTENT_LENGTH) {
+        req->res.content_length = h2o_strtosize(value.base, value.len);
+    } else {
+        value = h2o_strdup(&req->pool, value.base, value.len);
+        if (token == H2O_TOKEN_LINK) {
+            h2o_iovec_t new_value = h2o_push_path_in_link_header(req, value.base, value.len);
+            if (new_value.len)
+                h2o_add_header(&req->pool, &req->res.headers, token, NULL, new_value.base, new_value.len);
+        } else {
+            h2o_add_header(&req->pool, &req->res.headers, token, NULL, value.base, value.len);
+        }
+    }
     return 0;
 }
 
