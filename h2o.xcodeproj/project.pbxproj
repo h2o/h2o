@@ -3391,14 +3391,14 @@
 					"$(inherited)",
 				);
 				HEADER_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/include",
+					/usr/local/opt/openssl/include,
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
 					/usr/local/include,
 					include,
 				);
 				LIBRARY_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/lib",
+					/usr/local/opt/openssl/lib,
 					/usr/local/lib,
 				);
 				OTHER_CFLAGS = "";
@@ -3419,14 +3419,14 @@
 					"$(inherited)",
 				);
 				HEADER_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/include",
+					/usr/local/opt/openssl/include,
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
 					/usr/local/include,
 					include,
 				);
 				LIBRARY_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/lib",
+					/usr/local/opt/openssl/lib,
 					/usr/local/lib,
 				);
 				OTHER_CFLAGS = "";
@@ -3444,14 +3444,14 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				HEADER_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/include",
+					/usr/local/opt/openssl/include,
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
 					/usr/local/include,
 					include,
 				);
 				LIBRARY_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/lib",
+					/usr/local/opt/openssl/lib,
 					/usr/local/lib,
 				);
 				OTHER_CFLAGS = "";
@@ -3468,14 +3468,14 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				HEADER_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/include",
+					/usr/local/opt/openssl/include,
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
 					/usr/local/include,
 					include,
 				);
 				LIBRARY_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/lib",
+					/usr/local/opt/openssl/lib,
 					/usr/local/lib,
 				);
 				OTHER_CFLAGS = "";
@@ -3497,14 +3497,14 @@
 					"$(inherited)",
 				);
 				HEADER_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/include",
+					/usr/local/opt/openssl/include,
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
 					/usr/local/include,
 					include,
 				);
 				LIBRARY_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/lib",
+					/usr/local/opt/openssl/lib,
 					/usr/local/lib,
 				);
 				OTHER_CFLAGS = "";
@@ -3525,14 +3525,14 @@
 					"$(inherited)",
 				);
 				HEADER_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/include",
+					/usr/local/opt/openssl/include,
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
 					/usr/local/include,
 					include,
 				);
 				LIBRARY_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/lib",
+					/usr/local/opt/openssl/lib,
 					/usr/local/lib,
 				);
 				OTHER_CFLAGS = "";
@@ -3550,14 +3550,14 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				HEADER_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/include",
+					/usr/local/opt/openssl/include,
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
 					/usr/local/include,
 					include,
 				);
 				LIBRARY_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/lib",
+					/usr/local/opt/openssl/lib,
 					/usr/local/lib,
 				);
 				OTHER_CFLAGS = "";
@@ -3574,14 +3574,14 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				HEADER_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/include",
+					/usr/local/opt/openssl/include,
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
 					/usr/local/include,
 					include,
 				);
 				LIBRARY_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/lib",
+					/usr/local/opt/openssl/lib,
 					/usr/local/lib,
 				);
 				OTHER_CFLAGS = "";
@@ -3672,7 +3672,7 @@
 					"H2O_USE_BROTLI=1",
 				);
 				HEADER_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/include",
+					/usr/local/opt/openssl/include,
 					deps/brotli/c/include,
 					deps/yaml/include,
 					"$(inherited)",
@@ -3681,7 +3681,7 @@
 					include,
 				);
 				LIBRARY_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/lib",
+					/usr/local/opt/openssl/lib,
 					/usr/local/lib,
 				);
 				OTHER_LDFLAGS = (
@@ -3702,14 +3702,14 @@
 					"$(inherited)",
 				);
 				HEADER_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/include",
+					/usr/local/opt/openssl/include,
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
 					/usr/local/include,
 					include,
 				);
 				LIBRARY_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/lib",
+					/usr/local/opt/openssl/lib,
 					/usr/local/lib,
 				);
 				OTHER_CFLAGS = "";
@@ -3731,14 +3731,14 @@
 					"$(inherited)",
 				);
 				HEADER_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/include",
+					/usr/local/opt/openssl/include,
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
 					/usr/local/include,
 					include,
 				);
 				LIBRARY_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/lib",
+					/usr/local/opt/openssl/lib,
 					/usr/local/lib,
 				);
 				OTHER_LDFLAGS = (
@@ -3824,7 +3824,7 @@
 					"H2O_USE_BROTLI=1",
 				);
 				HEADER_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/include",
+					/usr/local/opt/openssl/include,
 					deps/brotli/c/include,
 					deps/yaml/include,
 					"$(inherited)",
@@ -3833,7 +3833,7 @@
 					include,
 				);
 				LIBRARY_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/lib",
+					/usr/local/opt/openssl/lib,
 					/usr/local/lib,
 				);
 				OTHER_LDFLAGS = (
@@ -3850,14 +3850,14 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				HEADER_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/include",
+					/usr/local/opt/openssl/include,
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
 					/usr/local/include,
 					include,
 				);
 				LIBRARY_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/lib",
+					/usr/local/opt/openssl/lib,
 					/usr/local/lib,
 				);
 				OTHER_CFLAGS = "";
@@ -3875,14 +3875,14 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				HEADER_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/include",
+					/usr/local/opt/openssl/include,
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
 					/usr/local/include,
 					include,
 				);
 				LIBRARY_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/lib",
+					/usr/local/opt/openssl/lib,
 					/usr/local/lib,
 				);
 				OTHER_LDFLAGS = (
@@ -4037,14 +4037,14 @@
 					"$(inherited)",
 				);
 				HEADER_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/include",
+					/usr/local/opt/openssl/include,
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
 					/usr/local/include,
 					include,
 				);
 				LIBRARY_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/lib",
+					/usr/local/opt/openssl/lib,
 					/usr/local/lib,
 				);
 				OTHER_CFLAGS = "";
@@ -4061,14 +4061,14 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				HEADER_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/include",
+					/usr/local/opt/openssl/include,
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
 					/usr/local/include,
 					include,
 				);
 				LIBRARY_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/lib",
+					/usr/local/opt/openssl/lib,
 					/usr/local/lib,
 				);
 				OTHER_CFLAGS = "";
@@ -4089,14 +4089,14 @@
 					"$(inherited)",
 				);
 				HEADER_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/include",
+					/usr/local/opt/openssl/include,
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
 					/usr/local/include,
 					include,
 				);
 				LIBRARY_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/lib",
+					/usr/local/opt/openssl/lib,
 					/usr/local/lib,
 				);
 				OTHER_LDFLAGS = (
@@ -4113,14 +4113,14 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				HEADER_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/include",
+					/usr/local/opt/openssl/include,
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
 					/usr/local/include,
 					include,
 				);
 				LIBRARY_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/lib",
+					/usr/local/opt/openssl/lib,
 					/usr/local/lib,
 				);
 				OTHER_LDFLAGS = (
@@ -4143,7 +4143,7 @@
 					"H2O_USE_BROTLI=1",
 				);
 				HEADER_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/include",
+					/usr/local/opt/openssl/include,
 					deps/brotli/c/include,
 					deps/yaml/include,
 					"$(inherited)",
@@ -4152,7 +4152,7 @@
 					include,
 				);
 				LIBRARY_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/lib",
+					/usr/local/opt/openssl/lib,
 					/usr/local/lib,
 				);
 				OTHER_LDFLAGS = (
@@ -4173,7 +4173,7 @@
 					"H2O_USE_BROTLI=1",
 				);
 				HEADER_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/include",
+					/usr/local/opt/openssl/include,
 					deps/brotli/c/include,
 					deps/yaml/include,
 					"$(inherited)",
@@ -4182,7 +4182,7 @@
 					include,
 				);
 				LIBRARY_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/lib",
+					/usr/local/opt/openssl/lib,
 					/usr/local/lib,
 				);
 				OTHER_LDFLAGS = (
@@ -4202,14 +4202,14 @@
 					"$(inherited)",
 				);
 				HEADER_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/include",
+					/usr/local/opt/openssl/include,
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
 					/usr/local/include,
 					include,
 				);
 				LIBRARY_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/lib",
+					/usr/local/opt/openssl/lib,
 					/usr/local/lib,
 				);
 				OTHER_CFLAGS = "";
@@ -4230,14 +4230,14 @@
 					"$(inherited)",
 				);
 				HEADER_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/include",
+					/usr/local/opt/openssl/include,
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
 					/usr/local/include,
 					include,
 				);
 				LIBRARY_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/lib",
+					/usr/local/opt/openssl/lib,
 					/usr/local/lib,
 				);
 				OTHER_CFLAGS = "";
@@ -4255,14 +4255,14 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				HEADER_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/include",
+					/usr/local/opt/openssl/include,
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
 					/usr/local/include,
 					include,
 				);
 				LIBRARY_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/lib",
+					/usr/local/opt/openssl/lib,
 					/usr/local/lib,
 				);
 				OTHER_CFLAGS = "";
@@ -4279,14 +4279,14 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				HEADER_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/include",
+					/usr/local/opt/openssl/include,
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
 					/usr/local/include,
 					include,
 				);
 				LIBRARY_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/lib",
+					/usr/local/opt/openssl/lib,
 					/usr/local/lib,
 				);
 				OTHER_CFLAGS = "";
@@ -4308,14 +4308,14 @@
 					"$(inherited)",
 				);
 				HEADER_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/include",
+					/usr/local/opt/openssl/include,
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
 					/usr/local/include,
 					include,
 				);
 				LIBRARY_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/lib",
+					/usr/local/opt/openssl/lib,
 					/usr/local/lib,
 				);
 				OTHER_CFLAGS = "";
@@ -4336,14 +4336,14 @@
 					"$(inherited)",
 				);
 				HEADER_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/include",
+					/usr/local/opt/openssl/include,
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
 					/usr/local/include,
 					include,
 				);
 				LIBRARY_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/lib",
+					/usr/local/opt/openssl/lib,
 					/usr/local/lib,
 				);
 				OTHER_CFLAGS = "";
@@ -4361,14 +4361,14 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				HEADER_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/include",
+					/usr/local/opt/openssl/include,
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
 					/usr/local/include,
 					include,
 				);
 				LIBRARY_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/lib",
+					/usr/local/opt/openssl/lib,
 					/usr/local/lib,
 				);
 				OTHER_CFLAGS = "";
@@ -4385,14 +4385,14 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				HEADER_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/include",
+					/usr/local/opt/openssl/include,
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
 					/usr/local/include,
 					include,
 				);
 				LIBRARY_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/lib",
+					/usr/local/opt/openssl/lib,
 					/usr/local/lib,
 				);
 				OTHER_CFLAGS = "";
@@ -4415,13 +4415,13 @@
 				);
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
-					"/usr/local/openssl-1.0.2/include",
+					/usr/local/opt/openssl/include,
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
 					/usr/local/include,
 					include,
 				);
 				LIBRARY_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/lib",
+					/usr/local/opt/openssl/lib,
 					/usr/local/lib,
 				);
 				OTHER_CFLAGS = "";
@@ -4443,13 +4443,13 @@
 				);
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
-					"/usr/local/openssl-1.0.2/include",
+					/usr/local/opt/openssl/include,
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
 					/usr/local/include,
 					include,
 				);
 				LIBRARY_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/lib",
+					/usr/local/opt/openssl/lib,
 					/usr/local/lib,
 				);
 				OTHER_CFLAGS = "";
@@ -4468,13 +4468,13 @@
 			buildSettings = {
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
-					"/usr/local/openssl-1.0.2/include",
+					/usr/local/opt/openssl/include,
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
 					/usr/local/include,
 					include,
 				);
 				LIBRARY_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/lib",
+					/usr/local/opt/openssl/lib,
 					/usr/local/lib,
 				);
 				OTHER_CFLAGS = "";
@@ -4492,13 +4492,13 @@
 			buildSettings = {
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
-					"/usr/local/openssl-1.0.2/include",
+					/usr/local/opt/openssl/include,
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
 					/usr/local/include,
 					include,
 				);
 				LIBRARY_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/lib",
+					/usr/local/opt/openssl/lib,
 					/usr/local/lib,
 				);
 				OTHER_CFLAGS = "";
@@ -4535,8 +4535,8 @@
 					include,
 				);
 				LIBRARY_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/lib",
 					build/default/mruby/host/lib,
+					/usr/local/opt/openssl/lib,
 					/usr/local/lib,
 				);
 				OTHER_CFLAGS = "";
@@ -4570,8 +4570,8 @@
 					include,
 				);
 				LIBRARY_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/lib",
 					build/default/mruby/host/lib,
+					/usr/local/opt/openssl/lib,
 					/usr/local/lib,
 				);
 				OTHER_CFLAGS = "";
@@ -4608,8 +4608,8 @@
 					include,
 				);
 				LIBRARY_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/lib",
 					build/default/mruby/host/lib,
+					/usr/local/opt/openssl/lib,
 					/usr/local/lib,
 				);
 				OTHER_CFLAGS = "";
@@ -4639,8 +4639,8 @@
 					include,
 				);
 				LIBRARY_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/lib",
 					build/default/mruby/host/lib,
+					/usr/local/opt/openssl/lib,
 					/usr/local/lib,
 				);
 				OTHER_CFLAGS = "";
@@ -4662,7 +4662,7 @@
 					"$(inherited)",
 				);
 				HEADER_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/include",
+					/usr/local/opt/openssl/include,
 					deps/yaml/include,
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
@@ -4670,7 +4670,7 @@
 					include,
 				);
 				LIBRARY_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/lib",
+					/usr/local/opt/openssl/lib,
 					/usr/local/lib,
 				);
 				OTHER_LDFLAGS = (
@@ -4690,7 +4690,7 @@
 					"$(inherited)",
 				);
 				HEADER_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/include",
+					/usr/local/opt/openssl/include,
 					deps/yaml/include,
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
@@ -4698,7 +4698,7 @@
 					include,
 				);
 				LIBRARY_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/lib",
+					/usr/local/opt/openssl/lib,
 					/usr/local/lib,
 				);
 				OTHER_LDFLAGS = (
@@ -4716,7 +4716,7 @@
 			buildSettings = {
 				GCC_PREPROCESSOR_DEFINITIONS = "H2O_USE_LIBUV=0";
 				HEADER_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/include",
+					/usr/local/opt/openssl/include,
 					deps/yaml/include,
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
@@ -4724,7 +4724,7 @@
 					include,
 				);
 				LIBRARY_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/lib",
+					/usr/local/opt/openssl/lib,
 					/usr/local/lib,
 				);
 				OTHER_LDFLAGS = (
@@ -4741,7 +4741,7 @@
 			buildSettings = {
 				GCC_PREPROCESSOR_DEFINITIONS = "";
 				HEADER_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/include",
+					/usr/local/opt/openssl/include,
 					deps/yaml/include,
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
@@ -4749,7 +4749,7 @@
 					include,
 				);
 				LIBRARY_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/lib",
+					/usr/local/opt/openssl/lib,
 					/usr/local/lib,
 				);
 				OTHER_LDFLAGS = (
