@@ -1633,7 +1633,7 @@ static int configure_quic_forward_node(h2o_configurator_command_t *cmd, struct s
     { /* convert value to hostname and servname */
         h2o_iovec_t hostvec;
         uint16_t portnum;
-        if (input->value != YOML_TYPE_SCALAR ||
+        if (input->value->type != YOML_TYPE_SCALAR ||
             h2o_url_parse_hostport(input->value->data.scalar, strlen(input->value->data.scalar), &hostvec, &portnum) == NULL ||
             hostvec.len >= sizeof(hostname)) {
             h2o_configurator_errprintf(cmd, input->value, "values of mapping must be in the form of `host[:port]`");
