@@ -150,6 +150,8 @@ int quicly_sentmap_update(quicly_sentmap_t *map, quicly_sentmap_iter_t *iter, qu
     }
     iter->p->data.packet.bytes_in_flight = 0;
 
+    /* Remove entry from sentmap, unless packet is deemed lost. If lost, then hold on to this packet until removed by a
+     * QUICLY_SENTMAP_EVENT_EXPIRED event. */
     if (event != QUICLY_SENTMAP_EVENT_LOST)
         discard_entry(map, iter);
 

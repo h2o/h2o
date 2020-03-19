@@ -22,6 +22,7 @@
 #include <getopt.h>
 #include <fcntl.h>
 #include <netdb.h>
+#include <netinet/udp.h>
 #include <stdio.h>
 #include <sys/select.h>
 #include <sys/socket.h>
@@ -34,6 +35,8 @@
 #include "quicly/defaults.h"
 #include "quicly/streambuf.h"
 #include "../deps/picotls/t/util.h"
+
+#define MAX_BURST_PACKETS 10
 
 FILE *quicly_trace_fp = NULL;
 static unsigned verbosity = 0;
@@ -387,40 +390,106 @@ static int on_generate_resumption_token(quicly_generate_resumption_token_t *self
 
 static quicly_generate_resumption_token_t generate_resumption_token = {&on_generate_resumption_token};
 
-static int send_one(int fd, quicly_datagram_t *p)
+#ifdef __linux__
+
+#ifndef UDP_SEGMENT
+#define UDP_SEGMENT 103
+#endif
+
+static void do_send_gso(int fd, quicly_datagram_t **packets, size_t num_packets, quicly_packet_allocator_t *pa)
 {
+    struct msghdr mess = {};
+    struct iovec vecs[num_packets];
+    union {
+        struct cmsghdr hdr;
+        char buf[CMSG_SPACE(sizeof(uint16_t))];
+    } cmsg = {};
+
+    mess.msg_name = &packets[0]->dest.sa; /* TODO quicly might start sending packets going to different paths? */
+    mess.msg_namelen = quicly_get_socklen(&packets[0]->dest.sa);
+
+    for (size_t i = 0; i != num_packets; ++i) {
+        vecs[i].iov_base = packets[i]->data.base;
+        vecs[i].iov_len = packets[i]->data.len;
+    }
+    mess.msg_iov = vecs;
+    mess.msg_iovlen = num_packets;
+
+    if (num_packets != 1) {
+        cmsg.hdr.cmsg_level = SOL_UDP;
+        cmsg.hdr.cmsg_type = UDP_SEGMENT;
+        cmsg.hdr.cmsg_len = CMSG_LEN(sizeof(uint16_t));
+        *(uint16_t *)CMSG_DATA(&cmsg.hdr) = vecs[0].iov_len;
+        mess.msg_control = &cmsg;
+        mess.msg_controllen = (socklen_t)CMSG_SPACE(sizeof(uint16_t));
+    }
+
     int ret;
-    struct msghdr mess;
-    struct iovec vec;
-    memset(&mess, 0, sizeof(mess));
-    mess.msg_name = &p->dest.sa;
-    mess.msg_namelen = quicly_get_socklen(&p->dest.sa);
-    vec.iov_base = p->data.base;
-    vec.iov_len = p->data.len;
-    mess.msg_iov = &vec;
-    mess.msg_iovlen = 1;
-    if (verbosity >= 2)
-        hexdump("sendmsg", vec.iov_base, vec.iov_len);
-    while ((ret = (int)sendmsg(fd, &mess, 0)) == -1 && errno == EINTR)
+    while ((ret = sendmsg(fd, &mess, 0)) == -1 && errno == EINTR)
         ;
-    return ret;
+    if (ret == -1)
+        perror("sendmsg failed");
+
+    for (size_t i = 0; i != num_packets; ++i)
+	 pa->free_packet(pa, packets[i]);
 }
+
+static void send_packets_gso(int fd, quicly_datagram_t **packets, size_t num_packets, quicly_packet_allocator_t *pa)
+{
+    /* send packets using GSO, coalescing up to MAX_BURST_PACKETS same-sized datagrams, with the exception that the last datagram might be of
+     * different size */
+    size_t gso_from = 0;
+    for (size_t i = 1; i < num_packets; ++i) {
+        if (packets[i]->data.len > packets[gso_from]->data.len) {
+            do_send_gso(fd, packets + gso_from, i - gso_from, pa);
+            gso_from = i;
+        } else if (packets[i]->data.len != packets[gso_from]->data.len || i + 1 - gso_from >= MAX_BURST_PACKETS) {
+            do_send_gso(fd, packets + gso_from, i + 1 - gso_from, pa);
+            gso_from = i + 1;
+            i = i + 1;
+        }
+    }
+    if (gso_from < num_packets)
+        do_send_gso(fd, packets + gso_from, num_packets - gso_from, pa);
+}
+
+#endif
+
+static void send_packets_default(int fd, quicly_datagram_t **packets, size_t num_packets, quicly_packet_allocator_t *pa)
+{
+    for (size_t i = 0; i != num_packets; ++i) {
+        struct msghdr mess;
+        struct iovec vec;
+        memset(&mess, 0, sizeof(mess));
+        mess.msg_name = &packets[i]->dest.sa;
+        mess.msg_namelen = quicly_get_socklen(&packets[i]->dest.sa);
+        vec.iov_base = packets[i]->data.base;
+        vec.iov_len = packets[i]->data.len;
+        mess.msg_iov = &vec;
+        mess.msg_iovlen = 1;
+        if (verbosity >= 2)
+            hexdump("sendmsg", vec.iov_base, vec.iov_len);
+        int ret;
+        while ((ret = (int)sendmsg(fd, &mess, 0)) == -1 && errno == EINTR)
+            ;
+        if (ret == -1)
+            perror("sendmsg failed");
+    }
+
+    for (size_t i = 0; i != num_packets; ++i)
+        pa->free_packet(pa, packets[i]);
+}
+
+static void (*send_packets)(int, quicly_datagram_t **, size_t, quicly_packet_allocator_t *) = send_packets_default;
 
 static int send_pending(int fd, quicly_conn_t *conn)
 {
-    quicly_datagram_t *packets[16];
-    size_t num_packets = sizeof(packets) / sizeof(packets[0]), i;
+    quicly_datagram_t *packets[MAX_BURST_PACKETS];
+    size_t num_packets = sizeof(packets) / sizeof(packets[0]);
     int ret;
 
-    if ((ret = quicly_send(conn, packets, &num_packets)) == 0) {
-        for (i = 0; i != num_packets; ++i) {
-            if ((ret = send_one(fd, packets[i])) == -1)
-                perror("sendmsg failed");
-            ret = 0;
-            quicly_packet_allocator_t *pa = quicly_get_context(conn)->packet_allocator;
-            pa->free_packet(pa, packets[i]);
-        }
-    }
+    if ((ret = quicly_send(conn, packets, &num_packets)) == 0 && num_packets != 0)
+        send_packets(fd, packets, num_packets, quicly_get_context(conn)->packet_allocator);
 
     return ret;
 }
@@ -669,8 +738,7 @@ static int run_server(int fd, struct sockaddr *sa, socklen_t salen)
                             quicly_datagram_t *rp =
                                 quicly_send_version_negotiation(&ctx, &sa, packet.cid.src, NULL, packet.cid.dest.encrypted);
                             assert(rp != NULL);
-                            if (send_one(fd, rp) == -1)
-                                perror("sendmsg failed");
+                            send_packets(fd, &rp, 1, ctx.packet_allocator);
                             break;
                         }
                         /* there is no way to send response to these v1 packets */
@@ -709,8 +777,7 @@ static int run_server(int fd, struct sockaddr *sa, socklen_t salen)
                                                                       packet.cid.dest.encrypted, ptls_iovec_init(NULL, 0),
                                                                       ptls_iovec_init(NULL, 0), NULL);
                             assert(rp != NULL);
-                            if (send_one(fd, rp) == -1)
-                                perror("sendmsg failed");
+                            send_packets(fd, &rp, 1, ctx.packet_allocator);
                             break;
                         } else {
                             /* new connection */
@@ -731,8 +798,7 @@ static int run_server(int fd, struct sockaddr *sa, socklen_t salen)
                          * also sending a reset, then the next CID is highly likely to contain a non-authenticating CID, ... */
                         if (packet.cid.dest.plaintext.node_id == 0 && packet.cid.dest.plaintext.thread_id == 0) {
                             quicly_datagram_t *dgram = quicly_send_stateless_reset(&ctx, &sa, NULL, packet.cid.dest.encrypted.base);
-                            if (send_one(fd, dgram) == -1)
-                                perror("sendmsg failed");
+                            send_packets(fd, &dgram, 1, ctx.packet_allocator);
                         }
                     }
                     off += plen;
@@ -900,6 +966,7 @@ static void usage(const char *cmd)
            "  -K num-packets            perform key update every num-packets packets\n"
            "  -e event-log-file         file to log events\n"
            "  -E                        expand Client Hello (sends multiple client Initials)\n"
+           "  -G                        enable UDP generic segmentation offload\n"
            "  -i interval               interval to reissue requests (in milliseconds)\n"
            "  -I timeout                idle timeout (in milliseconds; default: 600,000)\n"
            "  -l log-file               file to log traffic secrets\n"
@@ -962,7 +1029,7 @@ int main(int argc, char **argv)
         address_token_aead.dec = ptls_aead_new(&ptls_openssl_aes128gcm, &ptls_openssl_sha256, 0, secret, "");
     }
 
-    while ((ch = getopt(argc, argv, "a:b:C:c:k:K:Ee:i:I:l:M:m:NnOp:P:Rr:S:s:Vvx:X:y:h")) != -1) {
+    while ((ch = getopt(argc, argv, "a:b:C:c:k:K:Ee:Gi:I:l:M:m:NnOp:P:Rr:S:s:Vvx:X:y:h")) != -1) {
         switch (ch) {
         case 'a':
             assert(negotiated_protocols.count < sizeof(negotiated_protocols.list) / sizeof(negotiated_protocols.list[0]));
@@ -979,6 +1046,14 @@ int main(int argc, char **argv)
             break;
         case 'c':
             load_certificate_chain(ctx.tls, optarg);
+            break;
+        case 'G':
+#ifdef __linux__
+            send_packets = send_packets_gso;
+#else
+            fprintf(stderr, "UDP GSO only supported on linux\n");
+            exit(1);
+#endif
             break;
         case 'k':
             load_private_key(ctx.tls, optarg);

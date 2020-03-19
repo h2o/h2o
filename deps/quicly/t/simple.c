@@ -109,14 +109,14 @@ static void simple_http(void)
     ok(quicly_num_streams(server) == 0);
 }
 
-static void test_rst_then_close(void)
+static void test_reset_then_close(void)
 {
     quicly_stream_t *client_stream, *server_stream;
     test_streambuf_t *client_streambuf, *server_streambuf;
     uint64_t stream_id;
     int ret;
 
-    /* client sends STOP_SENDING and RST_STREAM */
+    /* client sends STOP_SENDING and RESET_STREAM */
     ret = quicly_open_stream(client, &client_stream, 0);
     ok(ret == 0);
     stream_id = client_stream->stream_id;
@@ -126,7 +126,7 @@ static void test_rst_then_close(void)
 
     transmit(client, server);
 
-    /* server sends RST_STREAM and ACKs to the packets received */
+    /* server sends RESET_STREAM and ACKs to the packets received */
     ok(quicly_num_streams(server) == 1);
     server_stream = quicly_get_stream(server, stream_id);
     ok(server_stream != NULL);
@@ -293,7 +293,7 @@ static void tiny_stream_window(void)
 
     transmit(server, client);
 
-    /* client can close the stream when it receives an RST_STREAM in response */
+    /* client can close the stream when it receives an RESET_STREAM in response */
     ok(client_streambuf->is_detached);
     ok(client_streambuf->error_received.reset_stream == QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(12345));
     ok(client_streambuf->error_received.stop_sending == -1);
@@ -303,7 +303,7 @@ static void tiny_stream_window(void)
     quic_now += QUICLY_DELAYED_ACK_TIMEOUT;
     transmit(client, server);
 
-    /* server should have recieved ACK to the RST_STREAM it has sent */
+    /* server should have recieved ACK to the RESET_STREAM it has sent */
     ok(server_streambuf->is_detached);
     ok(quicly_num_streams(server) == 0);
 
@@ -312,7 +312,7 @@ static void tiny_stream_window(void)
     quic_ctx.transport_params.max_stream_data = max_stream_data_orig;
 }
 
-static void test_rst_during_loss(void)
+static void test_reset_during_loss(void)
 {
     quicly_max_stream_data_t max_stream_data_orig = quic_ctx.transport_params.max_stream_data;
     quicly_stream_t *client_stream, *server_stream;
@@ -350,7 +350,7 @@ static void test_rst_during_loss(void)
         ok(cnt == 1);
     }
 
-    /* transmit RST_STREAM */
+    /* transmit RESET_STREAM */
     quicly_reset_stream(client_stream, QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(12345));
     ok(quicly_sendstate_transfer_complete(&client_stream->sendstate));
     transmit(client, server);
@@ -379,7 +379,7 @@ static void test_rst_during_loss(void)
     quicly_get_max_data(server, NULL, NULL, &tmp);
     ok(tmp == max_data_at_start + 8);
 
-    /* RST_STREAM for downstream is sent */
+    /* RESET_STREAM for downstream is sent */
     transmit(server, client);
     ok(client_streambuf->error_received.reset_stream == QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(54321));
     ok(client_streambuf->is_detached);
@@ -534,11 +534,11 @@ void test_simple(void)
 {
     subtest("handshake", test_handshake);
     subtest("simple-http", simple_http);
-    subtest("rst-then-close", test_rst_then_close);
+    subtest("reset-then-close", test_reset_then_close);
     subtest("send-then-close", test_send_then_close);
     subtest("reset-after-close", test_reset_after_close);
     subtest("tiny-stream-window", tiny_stream_window);
-    subtest("rst-during-loss", test_rst_during_loss);
+    subtest("reset-during-loss", test_reset_during_loss);
     subtest("close", test_close);
     subtest("tiny-connection-window", tiny_connection_window);
 }

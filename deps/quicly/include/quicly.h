@@ -591,7 +591,7 @@ struct st_quicly_stream_t {
             uint16_t error_code;
         } stop_sending;
         /**
-         * rst_stream
+         * reset_stream
          */
         struct {
             /**
@@ -599,7 +599,7 @@ struct st_quicly_stream_t {
              */
             quicly_sender_state_t sender_state;
             uint16_t error_code;
-        } rst;
+        } reset_stream;
         /**
          * sends receive window updates to peer
          */
@@ -772,7 +772,11 @@ static quicly_stream_id_t quicly_get_host_next_stream_id(quicly_conn_t *conn, in
  */
 static quicly_stream_id_t quicly_get_peer_next_stream_id(quicly_conn_t *conn, int uni);
 /**
- *
+ * Returns the local address of the connection. This may be AF_UNSPEC, indicating that the operating system is choosing the address.
+ */
+static struct sockaddr *quicly_get_sockname(quicly_conn_t *conn);
+/**
+ * Returns the remote address of the connection. This would never be AF_UNSPEC.
  */
 static struct sockaddr *quicly_get_peername(quicly_conn_t *conn);
 /**
@@ -1066,6 +1070,12 @@ inline quicly_stream_id_t quicly_get_peer_next_stream_id(quicly_conn_t *conn, in
 {
     struct _st_quicly_conn_public_t *c = (struct _st_quicly_conn_public_t *)conn;
     return uni ? c->peer.uni.next_stream_id : c->peer.bidi.next_stream_id;
+}
+
+inline struct sockaddr *quicly_get_sockname(quicly_conn_t *conn)
+{
+    struct _st_quicly_conn_public_t *c = (struct _st_quicly_conn_public_t *)conn;
+    return &c->host.address.sa;
 }
 
 inline struct sockaddr *quicly_get_peername(quicly_conn_t *conn)
