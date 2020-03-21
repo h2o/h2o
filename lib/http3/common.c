@@ -114,6 +114,8 @@ int h2o_http3_send_datagram(h2o_http3_ctx_t *ctx, quicly_datagram_t *p)
             CMSG_SPACE(sizeof(struct in6_pktinfo))
 #elif defined(IP_PKTINFO)
             CMSG_SPACE(sizeof(struct in_pktinfo))
+#elif defined(IP_SENDSRCADDR)
+            CMSG_SPACE(sizeof(struct in_addr))
 #else
             CMSG_SPACE(1)
 #endif
@@ -131,18 +133,29 @@ int h2o_http3_send_datagram(h2o_http3_ctx_t *ctx, quicly_datagram_t *p)
         size_t cmsg_bodylen = 0;
         memset(&cmsg, 0, sizeof(cmsg));
         switch (p->src.sa.sa_family) {
-        case AF_INET:
-#ifdef IP_PKTINFO
+        case AF_INET: {
+#if defined(IP_PKTINFO)
             if (*ctx->sock.port != p->src.sin.sin_port)
                 return 0;
             cmsg.hdr.cmsg_level = IPPROTO_IP;
             cmsg.hdr.cmsg_type = IP_PKTINFO;
             cmsg_bodylen = sizeof(struct in_pktinfo);
             ((struct in_pktinfo *)CMSG_DATA(&cmsg.hdr))->ipi_spec_dst = p->src.sin.sin_addr;
+#elif defined(IP_SENDSRCADDR)
+            if (*ctx->sock.port != p->src.sin.sin_port)
+                return 0;
+            struct sockaddr_in *fdaddr = (struct sockaddr_in *)&ctx->sock.addr;
+            assert(fdaddr->sin_family == AF_INET);
+            if (fdaddr->sin_addr.s_addr == INADDR_ANY) {
+                cmsg.hdr.cmsg_level = IPPROTO_IP;
+                cmsg.hdr.cmsg_type = IP_SENDSRCADDR;
+                cmsg_bodylen = sizeof(struct in_addr);
+                *(struct in_addr *)CMSG_DATA(&cmsg.hdr) = p->src.sin.sin_addr;
+            }
 #else
             h2o_fatal("IP_PKTINFO not available");
 #endif
-            break;
+        } break;
         case AF_INET6:
 #ifdef IPV6_PKTINFO
             if (*ctx->sock.port != p->src.sin6.sin6_port)
@@ -622,6 +635,8 @@ void h2o_http3_read_socket(h2o_http3_ctx_t *ctx, h2o_socket_t *sock, h2o_http3_p
                 CMSG_SPACE(sizeof(struct in6_pktinfo))
 #elif defined(IP_PKTINFO)
                 CMSG_SPACE(sizeof(struct in_pktinfo))
+#elif defined(IP_RECVDSTADDR)
+                CMSG_SPACE(sizeof(struct in_addr))
 #else
                 CMSG_SPACE(1)
 #endif
@@ -656,6 +671,14 @@ void h2o_http3_read_socket(h2o_http3_ctx_t *ctx, h2o_socket_t *sock, h2o_http3_p
                     if (cmsg->cmsg_level == IPPROTO_IP && cmsg->cmsg_type == IP_PKTINFO) {
                         dgrams[dgram_index].destaddr.sin.sin_family = AF_INET;
                         dgrams[dgram_index].destaddr.sin.sin_addr = ((struct in_pktinfo *)CMSG_DATA(cmsg))->ipi_addr;
+                        dgrams[dgram_index].destaddr.sin.sin_port = *ctx->sock.port;
+                        goto DestAddrFound;
+                    }
+#endif
+#ifdef IP_RECVDSTADDR
+                    if (cmsg->cmsg_level == IPPROTO_IP && cmsg->cmsg_type == IP_RECVDSTADDR) {
+                        dgrams[dgram_index].destaddr.sin.sin_family = AF_INET;
+                        dgrams[dgram_index].destaddr.sin.sin_addr = *(struct in_addr *)CMSG_DATA(cmsg);
                         dgrams[dgram_index].destaddr.sin.sin_port = *ctx->sock.port;
                         goto DestAddrFound;
                     }

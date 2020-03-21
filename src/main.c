@@ -1151,20 +1151,24 @@ static int open_inet_listener(h2o_configurator_command_t *cmd, yoml_t *node, con
 static void setsockopt_recvpktinfo(int fd, int family)
 {
     switch (family) {
-#ifdef IP_PKTINFO /* this is the de-facto API (that works on both linux, macOS) */
     case AF_INET: {
+#if defined(IP_PKTINFO) /* this is the de-facto API (that works on both linux, macOS) */
         int on = 1;
         if (setsockopt(fd, IPPROTO_IP, IP_PKTINFO, &on, sizeof(on)) != 0)
             h2o_fatal("failed to set IP_PKTINFO option:%s", strerror(errno));
-    } break;
+#elif defined(IP_RECVDSTADDR) /* *BSD */
+        int on = 1;
+        if (setsockopt(fd, IPPROTO_IP, IP_RECVDSTADDR, &on, sizeof(on)) != 0)
+            h2o_fatal("failed to set IP_RECVDSTADDR option:%s", strerror(errno));
 #endif
-#ifdef IPV6_RECVPKTINFO /* API defined by RFC 3542 */
+    } break;
     case AF_INET6: {
+#ifdef IPV6_RECVPKTINFO /* API defined by RFC 3542 */
         int on = 1;
         if (setsockopt(fd, IPPROTO_IPV6, IPV6_RECVPKTINFO, &on, sizeof(on)) != 0)
             h2o_fatal("failed to set IPV6_RECVPKTINFO option:%s", strerror(errno));
-    } break;
 #endif
+    } break;
     default:
         break;
     }
