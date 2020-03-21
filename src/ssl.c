@@ -192,6 +192,8 @@ static struct {
 #endif
 };
 
+static int quic_is_clustered;
+
 static unsigned char *session_ticket_get_cipher_key(struct st_session_ticket_t *ticket)
 {
     return ticket->keybuf;
@@ -393,7 +395,7 @@ static void register_session_tickets(void (*cb)(void *), void *arg)
     pthread_rwlock_unlock(&session_tickets.rwlock);
     __sync_add_and_fetch(&session_tickets.generation, 1);
     if (session_tickets.barrier != NULL) {
-        h2o_barrier_done(session_tickets.barrier);
+        h2o_barrier_wait(session_tickets.barrier);
         session_tickets.barrier = NULL;
     }
 }
@@ -778,10 +780,9 @@ static int load_tickets_file(const char *fn)
     /* sort the ticket entries being read */
     if (tickets.size > 1)
         qsort(tickets.entries, tickets.size, sizeof(tickets.entries[0]), ticket_sort_compare);
+
     /* replace the ticket list */
-    pthread_rwlock_wrlock(&session_tickets.rwlock);
-    h2o_mem_swap(&session_tickets.tickets, &tickets, sizeof(tickets));
-    pthread_rwlock_unlock(&session_tickets.rwlock);
+    swap_register_session_tickets(&tickets);
 
     ret = 0;
 Exit:
@@ -1021,14 +1022,27 @@ int ssl_session_resumption_on_config(h2o_configurator_command_t *cmd, h2o_config
     return 0;
 }
 
-void ssl_setup_session_resumption(SSL_CTX **contexts, size_t num_contexts)
+void ssl_setup_session_resumption(SSL_CTX **contexts, size_t num_contexts, struct st_h2o_quic_resumption_args_t *quic_args,
+                                  h2o_barrier_t *startup_barrier)
 {
     if (conf.cache.setup != NULL)
         conf.cache.setup(contexts, num_contexts);
 
+    if (quic_args != NULL) {
+        assert(num_contexts != 0);
+        if (conf.ticket.update_thread == NULL)
+            h2o_fatal("ticket-based encryption MUST be enabled when running QUIC");
+        quic_is_clustered = quic_args->is_clustered;
+    }
+
 #if H2O_USE_SESSION_TICKETS
     if (num_contexts == 0)
         return;
+
+    if (startup_barrier != NULL) {
+        h2o_barrier_add(startup_barrier, 1);
+        session_tickets.barrier = startup_barrier;
+    }
 
     if (conf.ticket.update_thread != NULL) {
         /* start session ticket updater thread */
@@ -1054,15 +1068,6 @@ void ssl_setup_session_resumption(SSL_CTX **contexts, size_t num_contexts)
             SSL_CTX_set_options(contexts[i], SSL_CTX_get_options(contexts[i]) | SSL_OP_NO_TICKET);
     }
 #endif
-}
-
-void ssl_session_ticket_register_setup_barrier(h2o_barrier_t *barrier)
-{
-    if (conf.ticket.update_thread == NULL)
-        h2o_fatal("ticket-based encryption MUST be enabled when running QUIC");
-    assert(session_tickets.barrier == NULL);
-    h2o_barrier_add(barrier, 1);
-    session_tickets.barrier = barrier;
 }
 
 static pthread_mutex_t *mutexes;
@@ -1140,8 +1145,8 @@ static void init_keyset(struct st_quic_keyset_t *keyset, uint8_t name, ptls_iove
     }
 
     keyset->name = name;
-    keyset->cid =
-        quicly_new_default_cid_encryptor(&ptls_openssl_bfecb, &ptls_openssl_aes128ecb, &ptls_openssl_sha256, master_secret);
+    keyset->cid = quicly_new_default_cid_encryptor(quic_is_clustered ? &ptls_openssl_aes128ecb : &ptls_openssl_bfecb,
+                                                   &ptls_openssl_aes128ecb, &ptls_openssl_sha256, master_secret);
     assert(keyset->cid != NULL);
     ret = ptls_hkdf_expand_label(&ptls_openssl_sha256, keybuf, ptls_openssl_aes128gcm.key_size, master_secret, "address-token",
                                  ptls_iovec_init(NULL, 0), "");

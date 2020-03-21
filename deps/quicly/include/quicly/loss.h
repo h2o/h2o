@@ -68,6 +68,11 @@ typedef struct quicly_loss_conf_t {
             2                                           /* number of speculative PTOs */                                           \
     }
 
+/**
+ * Holds RTT variables. We use this structure differently from the specification:
+ * * if the first sample has been obtained should be checked by doing: `latest != 0`
+ * * smoothed and variance are avaiable even before the first RTT sample is obtained
+ */
 typedef struct quicly_rtt_t {
     uint32_t minimum;
     uint32_t smoothed;
@@ -151,13 +156,15 @@ static int quicly_loss_detect_loss(quicly_loss_t *r, uint64_t largest_acked, qui
 inline void quicly_rtt_init(quicly_rtt_t *rtt, const quicly_loss_conf_t *conf, uint32_t initial_rtt)
 {
     rtt->minimum = UINT32_MAX;
-    rtt->latest = initial_rtt;
-    rtt->smoothed = 0;
-    rtt->variance = 0;
+    rtt->latest = 0;
+    rtt->smoothed = initial_rtt;
+    rtt->variance = initial_rtt / 2;
 }
 
 inline void quicly_rtt_update(quicly_rtt_t *rtt, uint32_t latest_rtt, uint32_t ack_delay)
 {
+    int is_first_sample = rtt->latest == 0;
+
     assert(latest_rtt != UINT32_MAX);
     rtt->latest = latest_rtt != 0 ? latest_rtt : 1; /* Force minimum RTT sample to 1ms */
 
@@ -170,9 +177,9 @@ inline void quicly_rtt_update(quicly_rtt_t *rtt, uint32_t latest_rtt, uint32_t a
         rtt->latest -= ack_delay;
 
     /* update smoothed_rtt and rttvar */
-    if (rtt->smoothed == 0) {
-        /* first RTT sample */
+    if (is_first_sample) {
         rtt->smoothed = rtt->latest;
+        rtt->variance = rtt->latest / 2;
     } else {
         uint32_t absdiff = rtt->smoothed >= rtt->latest ? rtt->smoothed - rtt->latest : rtt->latest - rtt->smoothed;
         rtt->variance = (rtt->variance * 3 + absdiff) / 4;
@@ -215,8 +222,6 @@ inline void quicly_loss_update_alarm(quicly_loss_t *r, int64_t now, int64_t last
     if (r->loss_time != INT64_MAX) {
         /* time-threshold loss detection */
         alarm_duration = r->loss_time - last_retransmittable_sent_at;
-    } else if (r->rtt.smoothed == 0) {
-        alarm_duration = 2 * r->rtt.latest; /* should contain initial rtt */
     } else {
         /* PTO alarm */
         assert(r->pto_count < 63);

@@ -619,7 +619,7 @@ UpdateConn:
         ctx->notify_conn_update(ctx, conn);
 }
 
-void h2o_http3_read_socket(h2o_http3_ctx_t *ctx, h2o_socket_t *sock, h2o_http3_preprocess_received_cb preprocess)
+void h2o_http3_read_socket(h2o_http3_ctx_t *ctx, h2o_socket_t *sock)
 {
     int fd = h2o_socket_get_fd(sock);
 
@@ -695,13 +695,12 @@ void h2o_http3_read_socket(h2o_http3_ctx_t *ctx, h2o_socket_t *sock, h2o_http3_p
                 dgrams[dgram_index].destaddr.sa.sa_family = AF_UNSPEC;
             DestAddrFound:;
             }
-            if (preprocess != NULL) {
+            dgrams[dgram_index].ttl = ctx->default_ttl;
+            if (ctx->preprocess_packet != NULL) {
                 /* preprocess (and drop the packet if it failed) */
-                if (!preprocess(ctx, &dgrams[dgram_index].mess, &dgrams[dgram_index].destaddr, &dgrams[dgram_index].srcaddr,
-                                &dgrams[dgram_index].ttl))
+                if (!ctx->preprocess_packet(ctx, &dgrams[dgram_index].mess, &dgrams[dgram_index].destaddr,
+                                            &dgrams[dgram_index].srcaddr, &dgrams[dgram_index].ttl))
                     goto Read;
-            } else {
-                dgrams[dgram_index].ttl = ctx->default_ttl;
             }
             assert(dgrams[dgram_index].srcaddr.sa.sa_family == AF_INET || dgrams[dgram_index].srcaddr.sa.sa_family == AF_INET6);
             bufpt += rret;
@@ -755,7 +754,7 @@ void h2o_http3_read_socket(h2o_http3_ctx_t *ctx, h2o_socket_t *sock, h2o_http3_p
 static void on_read(h2o_socket_t *sock, const char *err)
 {
     h2o_http3_ctx_t *ctx = sock->data;
-    h2o_http3_read_socket(ctx, sock, NULL);
+    h2o_http3_read_socket(ctx, sock);
 }
 
 static void on_timeout(h2o_timer_t *timeout)
@@ -881,13 +880,15 @@ void h2o_http3_dispose_context(h2o_http3_ctx_t *ctx)
 }
 
 void h2o_http3_set_context_identifier(h2o_http3_ctx_t *ctx, uint32_t accept_thread_divisor, uint32_t thread_id, uint64_t node_id,
-                                      uint8_t ttl, h2o_http3_forward_packets_cb forward_packets_cb)
+                                      uint8_t ttl, h2o_http3_forward_packets_cb forward_cb,
+                                      h2o_http3_preprocess_packet_cb preprocess_cb)
 {
     ctx->accept_thread_divisor = accept_thread_divisor;
     ctx->next_cid.thread_id = thread_id;
     ctx->next_cid.node_id = node_id;
-    ctx->forward_packets = forward_packets_cb;
+    ctx->forward_packets = forward_cb;
     ctx->default_ttl = ttl;
+    ctx->preprocess_packet = preprocess_cb;
 }
 
 void h2o_http3_close_connection(h2o_http3_conn_t *conn, int err, const char *reason_phrase)

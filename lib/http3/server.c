@@ -300,8 +300,10 @@ static void shutdown_stream(struct st_h2o_http3_server_stream_t *stream, int sto
 static socklen_t get_sockname(h2o_conn_t *_conn, struct sockaddr *sa)
 {
     struct st_h2o_http3_server_conn_t *conn = (void *)_conn;
-    memcpy(sa, &conn->h3.ctx->sock.addr, conn->h3.ctx->sock.addrlen);
-    return conn->h3.ctx->sock.addrlen;
+    struct sockaddr *src = quicly_get_sockname(conn->h3.quic);
+    socklen_t len = src->sa_family == AF_UNSPEC ? sizeof(struct sockaddr) : quicly_get_socklen(src);
+    memcpy(sa, src, len);
+    return len;
 }
 
 static socklen_t get_peername(h2o_conn_t *_conn, struct sockaddr *sa)

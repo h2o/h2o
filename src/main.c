@@ -157,6 +157,11 @@ typedef enum en_run_mode_t {
     RUN_MODE_TEST,
 } run_mode_t;
 
+struct st_h2o_quic_forward_node_t {
+    uint64_t id;
+    int fd;
+};
+
 static struct {
     h2o_globalconf_t globalconf;
     run_mode_t run_mode;
@@ -187,6 +192,8 @@ static struct {
     struct {
         size_t num_threads;
         h2o_http3_conn_callbacks_t conn_callbacks;
+        uint64_t node_id;
+        H2O_VECTOR(struct st_h2o_quic_forward_node_t) forward_nodes;
     } quic;
     int tfo_queues;
     time_t launch_time;
@@ -1186,10 +1193,10 @@ static struct addrinfo *resolve_address(h2o_configurator_command_t *cmd, yoml_t 
     hints.ai_flags = AI_ADDRCONFIG | AI_NUMERICSERV | AI_PASSIVE;
 
     if ((error = getaddrinfo(hostname, servname, &hints, &res)) != 0) {
-        h2o_configurator_errprintf(cmd, node, "failed to resolve the listening address: %s", gai_strerror(error));
+        h2o_configurator_errprintf(cmd, node, "failed to resolve address: %s", gai_strerror(error));
         return NULL;
     } else if (res == NULL) {
-        h2o_configurator_errprintf(cmd, node, "failed to resolve the listening address: getaddrinfo returned an empty list");
+        h2o_configurator_errprintf(cmd, node, "failed to resolve address: getaddrinfo returned an empty list");
         return NULL;
     }
 
@@ -1614,6 +1621,76 @@ static int on_config_tcp_fastopen(h2o_configurator_command_t *cmd, h2o_configura
     return 0;
 }
 
+static int configure_quic_forward_node(h2o_configurator_command_t *cmd, struct st_h2o_quic_forward_node_t *target,
+                                       yoml_mapping_element_t *input)
+{
+    char hostname[257], servname[sizeof(H2O_UINT16_LONGEST_STR)];
+    struct addrinfo *ai = NULL;
+    int success = 0;
+
+    target->fd = -1;
+
+    /* parse key */
+    if (h2o_configurator_scanf(cmd, input->key, "%" PRIu64, &target->id) != 0)
+        goto Exit;
+
+    { /* convert value to hostname and servname */
+        h2o_iovec_t hostvec;
+        uint16_t portnum;
+        if (input->value->type != YOML_TYPE_SCALAR ||
+            h2o_url_parse_hostport(input->value->data.scalar, strlen(input->value->data.scalar), &hostvec, &portnum) == NULL ||
+            hostvec.len >= sizeof(hostname)) {
+            h2o_configurator_errprintf(cmd, input->value, "values of mapping must be in the form of `host[:port]`");
+            goto Exit;
+        }
+        memcpy(hostname, hostvec.base, hostvec.len);
+        hostname[hostvec.len] = '\0';
+        sprintf(servname, "%" PRIu16, portnum);
+    }
+
+    /* lookup the address */
+    if ((ai = resolve_address(cmd, input->value, SOCK_DGRAM, IPPROTO_UDP, hostname, servname)) == NULL)
+        goto Exit;
+
+    /* open connected socket */
+    if ((target->fd = socket(ai->ai_family, ai->ai_socktype, ai->ai_protocol)) == -1 ||
+        connect(target->fd, ai->ai_addr, ai->ai_addrlen) != 0) {
+        h2o_configurator_errprintf(cmd, input->value, "failed to connect to %s:%s", input->value->data.scalar, strerror(errno));
+        goto Exit;
+    }
+
+    success = 1;
+Exit:
+    if (ai != NULL)
+        freeaddrinfo(ai);
+    if (!success && target->fd != -1)
+        close(target->fd);
+    return success ? 0 : -1;
+}
+
+static int on_config_quic_nodes(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    yoml_t **self_node, **mapping_node;
+
+    if (h2o_configurator_parse_mapping(cmd, node, "self:s", "mapping:m", &self_node, &mapping_node) != 0)
+        return -1;
+
+    /* obtain node-id of this server */
+    if (h2o_configurator_scanf(cmd, *self_node, "%" PRIu64, &conf.quic.node_id) != 0)
+        return -1;
+
+    /* build list of servers */
+    h2o_vector_reserve(NULL, &conf.quic.forward_nodes, (*mapping_node)->data.mapping.size);
+    size_t i;
+    for (i = 0; i != (*mapping_node)->data.mapping.size; ++i) {
+        if (configure_quic_forward_node(cmd, conf.quic.forward_nodes.entries + i, (*mapping_node)->data.mapping.elements + i) != 0)
+            return -1;
+    }
+    conf.quic.forward_nodes.size = (*mapping_node)->data.mapping.size;
+
+    return 0;
+}
+
 static int on_config_num_ocsp_updaters(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     ssize_t n;
@@ -2004,31 +2081,44 @@ static int forward_quic_packets(h2o_http3_ctx_t *h3ctx, const uint64_t *node_id,
                                 quicly_address_t *srcaddr, uint8_t ttl, quicly_decoded_packet_t *packets, size_t num_packets)
 {
     struct listener_ctx_t *ctx = H2O_STRUCT_FROM_MEMBER(struct listener_ctx_t, http3.ctx.super, h3ctx);
-    size_t i;
+    int fd;
 
-    if (node_id == NULL) {
-        /* initial or 0-RTT packet, forward to thread_id being specified */
-        if (thread_id == h3ctx->next_cid.thread_id) {
-            assert(h3ctx->acceptor == NULL);
-            /* FIXME forward packets to the newer generation process */
-            return 1;
+    /* determine the file descriptor to which the packets should be forwarded, or return */
+    if (node_id != NULL && *node_id != ctx->http3.ctx.super.next_cid.node_id) {
+        /* inter-node forwarding */
+        assert(ctx->http3.ctx.super.next_cid.node_id == conf.quic.node_id);
+        for (size_t i = 0; i != conf.quic.forward_nodes.size; ++i) {
+            if (*node_id == conf.quic.forward_nodes.entries[i].id) {
+                fd = conf.quic.forward_nodes.entries[i].fd;
+                goto NodeFound;
+            }
         }
+        return 0;
+    NodeFound:;
     } else {
-        /* validate node_id (FIXME implement inter-node forwarding) */
-        if (*node_id != ctx->http3.ctx.super.next_cid.node_id)
-            return 0;
-        /* validate thread id */
-        assert(thread_id != ctx->http3.ctx.super.next_cid.thread_id);
-        if (thread_id >= conf.quic.num_threads)
-            return 0;
+        /* intra-node */
+        if (node_id == NULL) {
+            /* initial or 0-RTT packet, forward to thread_id being specified */
+            if (thread_id == h3ctx->next_cid.thread_id) {
+                assert(h3ctx->acceptor == NULL);
+                /* FIXME forward packets to the newer generation process */
+                return 1;
+            }
+        } else {
+            /* intra-node, validate thread id */
+            assert(thread_id != ctx->http3.ctx.super.next_cid.thread_id);
+            if (thread_id >= conf.quic.num_threads)
+                return 0;
+        }
+        fd = conf.listeners[ctx->listener_index]->quic.thread_fds[thread_id];
     }
 
-    /* forward */
+    /* forward (TODO coalesce packets that were coalesced upon receipt) */
     char header_buf[H2O_QUIC_FORWARDED_HEADER_MAX_SIZE];
     size_t header_len = encode_quic_forwarded_header(header_buf, destaddr, srcaddr, ttl);
-    for (i = 0; i != num_packets; ++i) {
+    for (size_t i = 0; i != num_packets; ++i) {
         struct iovec vec[2] = {{header_buf, header_len}, {packets[i].octets.base, packets[i].octets.len}};
-        writev(conf.listeners[ctx->listener_index]->quic.thread_fds[thread_id], vec, 2);
+        writev(fd, vec, 2);
     }
 
 #if H2O_USE_DTRACE
@@ -2036,17 +2126,13 @@ static int forward_quic_packets(h2o_http3_ctx_t *h3ctx, const uint64_t *node_id,
         size_t i, num_bytes = 0;
         for (i = 0; i != num_packets; ++i)
             num_bytes += packets[i].octets.len;
-        H2O_PROBE(H3_PACKET_FORWARD, &destaddr->sa, &srcaddr->sa, num_packets, num_bytes);
+        H2O_PROBE(H3_PACKET_FORWARD, &destaddr->sa, &srcaddr->sa, num_packets, num_bytes, fd);
     }
 #endif
 
     return 1;
 }
 
-/**
- * Rewrites the datagrams being forwarded through the UNIX socket. The server process never receives a QUIC packet on a UNIX socket
- * from outside, therefore we discard all the packets that cannot be rewritten.
- */
 static int rewrite_forwarded_quic_datagram(h2o_http3_ctx_t *h3ctx, struct msghdr *msg, quicly_address_t *destaddr,
                                            quicly_address_t *srcaddr, uint8_t *ttl)
 {
@@ -2060,8 +2146,9 @@ static int rewrite_forwarded_quic_datagram(h2o_http3_ctx_t *h3ctx, struct msghdr
 
     if ((encapsulated.offset = decode_quic_forwarded_header(&encapsulated.destaddr, &encapsulated.srcaddr, &encapsulated.ttl,
                                                             h2o_iovec_init(msg->msg_iov[0].iov_base, msg->msg_iov[0].iov_len))) ==
-        SIZE_MAX)
-        return 0;
+        SIZE_MAX) {
+        return 1; /* process the packet as-is */
+    }
 
     /* assert that the destination port matches the exposed port number */
     switch (encapsulated.destaddr.sa.sa_family) {
@@ -2087,7 +2174,7 @@ static int rewrite_forwarded_quic_datagram(h2o_http3_ctx_t *h3ctx, struct msghdr
 static void forwarded_quic_socket_on_read(h2o_socket_t *sock, const char *err)
 {
     struct listener_ctx_t *ctx = sock->data;
-    h2o_http3_read_socket(&ctx->http3.ctx.super, sock, rewrite_forwarded_quic_datagram);
+    h2o_http3_read_socket(&ctx->http3.ctx.super, sock);
 }
 
 static void on_socketclose(void *data)
@@ -2330,7 +2417,8 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
         if (thread_index < conf.quic.num_threads && listener_config->quic.ctx != NULL) {
             h2o_http3_init_context(&listeners[i].http3.ctx.super, conf.threads[thread_index].ctx.loop, listeners[i].sock,
                                    listener_config->quic.ctx, on_http3_accept, NULL);
-            h2o_http3_set_context_identifier(&listeners[i].http3.ctx.super, 0, (uint32_t)thread_index, 0, 1, forward_quic_packets);
+            h2o_http3_set_context_identifier(&listeners[i].http3.ctx.super, 0, (uint32_t)thread_index, conf.quic.node_id, 4,
+                                             forward_quic_packets, rewrite_forwarded_quic_datagram);
             listeners[i].http3.ctx.accept_ctx = &listeners[i].accept_ctx;
             listeners[i].http3.ctx.send_retry = listener_config->quic.send_retry;
             int fds[2];
@@ -2354,6 +2442,9 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
 
     /* make sure all threads are initialized before starting to serve requests */
     h2o_barrier_wait(&conf.startup_sync_barrier);
+
+    if (thread_index == 0)
+        fprintf(stderr, "h2o server (pid:%d) is ready to serve requests with %zu threads\n", (int)getpid(), conf.thread_map.size);
 
     /* the main loop */
     while (1) {
@@ -2657,6 +2748,8 @@ static void setup_configurators(void)
         h2o_configurator_define_command(c, "num-name-resolution-threads", H2O_CONFIGURATOR_FLAG_GLOBAL,
                                         on_config_num_name_resolution_threads);
         h2o_configurator_define_command(c, "tcp-fastopen", H2O_CONFIGURATOR_FLAG_GLOBAL, on_config_tcp_fastopen);
+        h2o_configurator_define_command(c, "quic-nodes", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING,
+                                        on_config_quic_nodes);
         h2o_configurator_define_command(c, "ssl-session-resumption",
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING,
                                         ssl_session_resumption_on_config);
@@ -2943,6 +3036,10 @@ int main(int argc, char **argv)
         fclose(fp);
     }
 
+    /* build barrier to synchronize the start of all threads */
+    assert(conf.thread_map.size != 0);
+    h2o_barrier_init(&conf.startup_sync_barrier, conf.thread_map.size);
+
     { /* initialize SSL_CTXs for session resumption and ticket-based resumption (also starts memcached client threads for the
          purpose) */
         size_t i, j;
@@ -2959,12 +3056,15 @@ int main(int argc, char **argv)
             for (j = 0; j != conf.quic.num_threads; ++j)
                 conf.listeners[i]->quic.thread_fds[j] = -1;
         }
-        ssl_setup_session_resumption(ssl_contexts.entries, ssl_contexts.size);
+        struct st_h2o_quic_resumption_args_t quic_args_buf = {}, *quic_args = NULL;
+        h2o_barrier_t *sync_barrier = NULL;
+        if (has_quic) {
+            quic_args = &quic_args_buf;
+            quic_args->is_clustered = conf.quic.node_id != 0;
+            sync_barrier = &conf.startup_sync_barrier;
+        }
+        ssl_setup_session_resumption(ssl_contexts.entries, ssl_contexts.size, quic_args, sync_barrier);
         free(ssl_contexts.entries);
-        /* when running QUIC, set barrier to wait for the retrieval of the session ticket encryption key, which is also used for CID
-         * encryption */
-        if (has_quic)
-            ssl_session_ticket_register_setup_barrier(&conf.startup_sync_barrier);
     }
 
     /* all setup should be complete by now */
@@ -2991,13 +3091,8 @@ int main(int argc, char **argv)
         error_log_fd = -1;
     }
 
-    fprintf(stderr, "h2o server (pid:%d) is ready to serve requests with %zu threads\n", (int)getpid(), conf.thread_map.size);
-
-    assert(conf.thread_map.size != 0);
-
     /* start the threads */
     conf.threads = alloca(sizeof(conf.threads[0]) * conf.thread_map.size);
-    h2o_barrier_init(&conf.startup_sync_barrier, conf.thread_map.size);
     size_t i;
     for (i = 1; i != conf.thread_map.size; ++i) {
         pthread_t tid;
