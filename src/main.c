@@ -1682,6 +1682,7 @@ static int on_config_quic_nodes(h2o_configurator_command_t *cmd, h2o_configurato
         if (configure_quic_forward_node(cmd, conf.quic.forward_nodes.entries + i, (*mapping_node)->data.mapping.elements + i) != 0)
             return -1;
     }
+    conf.quic.forward_nodes.size = (*mapping_node)->data.mapping.size;
 
     return 0;
 }
@@ -2128,10 +2129,6 @@ static int forward_quic_packets(h2o_http3_ctx_t *h3ctx, const uint64_t *node_id,
     return 1;
 }
 
-/**
- * Rewrites the datagrams being forwarded through the UNIX socket. The server process never receives a QUIC packet on a UNIX socket
- * from outside, therefore we discard all the packets that cannot be rewritten.
- */
 static int rewrite_forwarded_quic_datagram(h2o_http3_ctx_t *h3ctx, struct msghdr *msg, quicly_address_t *destaddr,
                                            quicly_address_t *srcaddr, uint8_t *ttl)
 {
@@ -2145,8 +2142,9 @@ static int rewrite_forwarded_quic_datagram(h2o_http3_ctx_t *h3ctx, struct msghdr
 
     if ((encapsulated.offset = decode_quic_forwarded_header(&encapsulated.destaddr, &encapsulated.srcaddr, &encapsulated.ttl,
                                                             h2o_iovec_init(msg->msg_iov[0].iov_base, msg->msg_iov[0].iov_len))) ==
-        SIZE_MAX)
-        return 0;
+        SIZE_MAX) {
+        return 1; /* process the packet as-is */
+    }
 
     /* assert that the destination port matches the exposed port number */
     switch (encapsulated.destaddr.sa.sa_family) {
@@ -2172,7 +2170,7 @@ static int rewrite_forwarded_quic_datagram(h2o_http3_ctx_t *h3ctx, struct msghdr
 static void forwarded_quic_socket_on_read(h2o_socket_t *sock, const char *err)
 {
     struct listener_ctx_t *ctx = sock->data;
-    h2o_http3_read_socket(&ctx->http3.ctx.super, sock, rewrite_forwarded_quic_datagram);
+    h2o_http3_read_socket(&ctx->http3.ctx.super, sock);
 }
 
 static void on_socketclose(void *data)
@@ -2415,7 +2413,8 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
         if (thread_index < conf.quic.num_threads && listener_config->quic.ctx != NULL) {
             h2o_http3_init_context(&listeners[i].http3.ctx.super, conf.threads[thread_index].ctx.loop, listeners[i].sock,
                                    listener_config->quic.ctx, on_http3_accept, NULL);
-            h2o_http3_set_context_identifier(&listeners[i].http3.ctx.super, 0, (uint32_t)thread_index, 0, 1, forward_quic_packets);
+            h2o_http3_set_context_identifier(&listeners[i].http3.ctx.super, 0, (uint32_t)thread_index, conf.quic.node_id, 4,
+                                             forward_quic_packets, rewrite_forwarded_quic_datagram);
             listeners[i].http3.ctx.accept_ctx = &listeners[i].accept_ctx;
             listeners[i].http3.ctx.send_retry = listener_config->quic.send_retry;
             int fds[2];
@@ -2439,6 +2438,9 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
 
     /* make sure all threads are initialized before starting to serve requests */
     h2o_barrier_wait(&conf.startup_sync_barrier);
+
+    if (thread_index == 0)
+        fprintf(stderr, "h2o server (pid:%d) is ready to serve requests with %zu threads\n", (int)getpid(), conf.thread_map.size);
 
     /* the main loop */
     while (1) {
@@ -3030,6 +3032,10 @@ int main(int argc, char **argv)
         fclose(fp);
     }
 
+    /* build barrier to synchronize the start of all threads */
+    assert(conf.thread_map.size != 0);
+    h2o_barrier_init(&conf.startup_sync_barrier, conf.thread_map.size);
+
     { /* initialize SSL_CTXs for session resumption and ticket-based resumption (also starts memcached client threads for the
          purpose) */
         size_t i, j;
@@ -3046,12 +3052,15 @@ int main(int argc, char **argv)
             for (j = 0; j != conf.quic.num_threads; ++j)
                 conf.listeners[i]->quic.thread_fds[j] = -1;
         }
-        ssl_setup_session_resumption(ssl_contexts.entries, ssl_contexts.size);
+        struct st_h2o_quic_resumption_args_t quic_args_buf = {}, *quic_args = NULL;
+        h2o_barrier_t *sync_barrier = NULL;
+        if (has_quic) {
+            quic_args = &quic_args_buf;
+            quic_args->is_clustered = conf.quic.node_id != 0;
+            sync_barrier = &conf.startup_sync_barrier;
+        }
+        ssl_setup_session_resumption(ssl_contexts.entries, ssl_contexts.size, quic_args, sync_barrier);
         free(ssl_contexts.entries);
-        /* when running QUIC, set barrier to wait for the retrieval of the session ticket encryption key, which is also used for CID
-         * encryption */
-        if (has_quic)
-            ssl_session_ticket_register_setup_barrier(&conf.startup_sync_barrier);
     }
 
     /* all setup should be complete by now */
@@ -3078,13 +3087,8 @@ int main(int argc, char **argv)
         error_log_fd = -1;
     }
 
-    fprintf(stderr, "h2o server (pid:%d) is ready to serve requests with %zu threads\n", (int)getpid(), conf.thread_map.size);
-
-    assert(conf.thread_map.size != 0);
-
     /* start the threads */
     conf.threads = alloca(sizeof(conf.threads[0]) * conf.thread_map.size);
-    h2o_barrier_init(&conf.startup_sync_barrier, conf.thread_map.size);
     size_t i;
     for (i = 1; i != conf.thread_map.size; ++i) {
         pthread_t tid;

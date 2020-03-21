@@ -125,8 +125,8 @@ typedef int (*h2o_http3_forward_packets_cb)(h2o_http3_ctx_t *ctx, const uint64_t
 /**
  * preprocess a received datagram (e.g., rewrite the sockaddr). Returns if the packet was modified.
  */
-typedef int (*h2o_http3_preprocess_received_cb)(h2o_http3_ctx_t *ctx, struct msghdr *msghdr, quicly_address_t *destaddr,
-                                                quicly_address_t *srcaddr, uint8_t *ttl);
+typedef int (*h2o_http3_preprocess_packet_cb)(h2o_http3_ctx_t *ctx, struct msghdr *msghdr, quicly_address_t *destaddr,
+                                              quicly_address_t *srcaddr, uint8_t *ttl);
 
 struct st_h2o_http3_ctx_t {
     /**
@@ -182,6 +182,10 @@ struct st_h2o_http3_ctx_t {
      * TTL of a QUIC datagram. Used to prevent infinite forwarding of QUIC packets between nodes / threads.
      */
     uint8_t default_ttl;
+    /**
+     * preprocessor that rewrites a forwarded datagram (optional)
+     */
+    h2o_http3_preprocess_packet_cb preprocess_packet;
 };
 
 typedef struct st_h2o_http3_conn_callbacks_t {
@@ -302,11 +306,12 @@ void h2o_http3_dispose_context(h2o_http3_ctx_t *ctx);
  *
  */
 void h2o_http3_set_context_identifier(h2o_http3_ctx_t *ctx, uint32_t accept_thread_divisor, uint32_t thread_id, uint64_t node_id,
-                                      uint8_t ttl, h2o_http3_forward_packets_cb forward_packets_cb);
+                                      uint8_t ttl, h2o_http3_forward_packets_cb forward_cb,
+                                      h2o_http3_preprocess_packet_cb preprocess_cb);
 /**
  *
  */
-void h2o_http3_read_socket(h2o_http3_ctx_t *ctx, h2o_socket_t *sock, h2o_http3_preprocess_received_cb preprocess);
+void h2o_http3_read_socket(h2o_http3_ctx_t *ctx, h2o_socket_t *sock);
 /**
  *
  */
