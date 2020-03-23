@@ -50,3 +50,24 @@ matrix:
       script:
         - uname -a
         - make -f misc/docker-ci/check.mk dtrace CONTAINER_NAME=kazuho/h2o-ci:ubuntu1904
+    - os: osx
+      osx_image: xcode11.3
+      env:
+        - label=macOS
+      cache: ccache
+      addons:
+        homebrew:
+          update: true
+          packages:
+            - expect
+            - nghttp2
+            - ccache
+      before_install:
+        - curl -L https://cpanmin.us | perl - --nootest --self-upgrade --sudo
+        - cpanm --sudo --installdeps --notest .
+      script:
+        - mkdir -p build
+        - make -f misc/docker-ci/check.mk SRC_DIR="$PWD" _do-check
+  fast_finish: true
+  allow_failures:
+      env: label=macOS
