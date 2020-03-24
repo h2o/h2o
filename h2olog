@@ -91,6 +91,29 @@ int trace_send_resp(struct pt_regs *ctx) {
 
     return 0;
 }
+
+int trace_send_resp_header(struct pt_regs *ctx) {
+    struct trace_line_t line = {};
+    void *pos = NULL;
+
+    bpf_usdt_readarg(1, ctx, &line.conn_id);
+    bpf_usdt_readarg(2, ctx, &line.req_id);
+
+    // Extract the Header Name
+    bpf_usdt_readarg(3, ctx, &pos);
+    bpf_usdt_readarg(4, ctx, &line.header_name_len);
+    bpf_probe_read(&line.header_name, sizeof(line.header_name), pos);
+
+    // Extract the Header Value
+    bpf_usdt_readarg(5, ctx, &pos);
+    bpf_usdt_readarg(6, ctx, &line.header_value_len);
+    bpf_probe_read(&line.header_value, sizeof(line.header_value), pos);
+
+    if (txbuf.perf_submit(ctx, &line, sizeof(line)) < 0)
+        bpf_trace_printk("failed to perf_submit\\n");
+
+    return 0;
+}
 """
 
 quic_bpf = """
@@ -912,7 +935,12 @@ def handle_req_line(cpu, data, size):
 
 def handle_resp_line(cpu, data, size):
     line = b["txbuf"].event(data)
-    print("%u %u TxStatus   %d" % (line.conn_id, line.req_id, line.http_status))
+    if line.http_status:
+        print("%u %u TxStatus   %d" % (line.conn_id, line.req_id, line.http_status))
+    else:
+        hn = line.header_name[:line.header_name_len]
+        hv = line.header_value[:line.header_value_len]
+        print("%u %u TxHeader   %s %s" % (line.conn_id, line.req_id, s(hn), s(hv)))
 
 def load_common_fields(hsh, line):
     hsh["time"] = int(time.time() * 1000) if line.at == 0 else line.at
@@ -944,7 +972,7 @@ USAGE: h2olog -p PID
        h2olog quic -v -s response_header_name -p PID
 
 Other options:
-    -P [int] The size of the perf ring buffer. Default to 256.
+    -P [int] The size of the perf ring buffer. Defaults to 256.
     -h Shows this help and exit.
     -d Shows the BPF program and exit.
 
@@ -1092,6 +1120,7 @@ else:
     u.enable_probe(probe="receive_request", fn_name="trace_receive_req")
     u.enable_probe(probe="receive_request_header", fn_name="trace_receive_req_header")
     u.enable_probe(probe="send_response", fn_name="trace_send_resp")
+    u.enable_probe(probe="send_response_header", fn_name="trace_send_resp_header")
     cflags = []
     bpf = default_bpf
 
