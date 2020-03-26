@@ -165,7 +165,7 @@ struct quic_event_t {
     u8 first_octet;
     u64 frame_type;
     u32 ack_only;
-    u32 newly_acked;
+    u32 is_late_ack;
     u64 largest_acked;
     u32 bytes_acked;
     u32 ack_delay;
@@ -380,7 +380,7 @@ int trace_quicly__packet_acked(struct pt_regs *ctx) {
     event.master_conn_id = conn.master_id;
     bpf_usdt_readarg(2, ctx, &event.at);
     bpf_usdt_readarg(3, ctx, &event.pn);
-    bpf_usdt_readarg(4, ctx, &event.newly_acked);
+    bpf_usdt_readarg(4, ctx, &event.is_late_ack);
 
     if (events.perf_submit(ctx, &event, sizeof(event) - sizeof(struct h2o_event_t)) < 0)
         bpf_trace_printk("failed to perf_submit\\n");
@@ -885,7 +885,7 @@ quic_type_map =  {
     "quicly__crypto_handshake": ["ret"],
     "quicly__packet_prepare": ["first_octet", "dcid"],
     "quicly__packet_commit": ["pn", "len", "ack_only"],
-    "quicly__packet_acked": ["pn", "newly_acked"],
+    "quicly__packet_acked": ["pn", "is_late_ack"],
     "quicly__packet_lost": ["pn"],
     "quicly__cc_ack_received": ["largest_acked", "bytes_acked", "cwnd", "inflight"],
     "quicly__cc_congestion": ["max_lost_pn", "inflight", "cwnd"],
