@@ -1071,7 +1071,7 @@ if h2o_pid == 0:
 u = USDT(pid=int(h2o_pid))
 
 if sys.argv[1] == "quic":
-    # provider qiucly:
+    # provider quicly:
     u.enable_probe(probe="accept", fn_name="trace_quicly__accept")
     u.enable_probe(probe="receive", fn_name="trace_quicly__receive")
     u.enable_probe(probe="version_switch", fn_name="trace_quicly__version_switch")
