@@ -35,7 +35,6 @@ void handle_quic_event(void *cpu, void *data, int len) {
 int main(int argc, char **argv) {
   // Simplified for demonstration purpose.
   pid_t pid = -1;
-  std::string h2o_path;
   if (argc < 2) {
     std::cerr << "h2olog <pid>" << std::endl;
     return 1;
@@ -43,7 +42,7 @@ int main(int argc, char **argv) {
   pid = std::atoi(argv[1]);
 
   ebpf::BPF *bpf = new ebpf::BPF();
-  ebpf::USDT u(h2o_path, pid, "quicly", "accept", "trace_quicly__accept");
+  ebpf::USDT u("", pid, "quicly", "accept", "trace_quicly__accept");
   ebpf::StatusTuple ret = bpf->init(QUIC_BPF, {}, {u});
   if (ret.code() != 0) {
     std::cerr << ret.msg() << std::endl;
