@@ -46,11 +46,17 @@ struct event_t {
   uint64_t at;
 };
 
+typedef void (*bpf_cb)(void *cpu, void *data, int len);
+
 static void usage(void) {
   printf("h2olog (%s)\n", VERSION);
   printf("-p PID of the H2O server\n");
   printf("-h Print this help and exit\n");
   return;
+}
+
+void handle_http_event(void *cpu, void *data, int len) {
+  printf("unimplemented\n");
 }
 
 void handle_quic_event(void *cpu, void *data, int len) {
@@ -59,12 +65,18 @@ void handle_quic_event(void *cpu, void *data, int len) {
 }
 
 int main(int argc, char **argv) {
-  pid_t pid = -1;
+  pid_t h2o_pid = -1;
+  bpf_cb cb = handle_http_event;
+
+  if (argc > 1 && strcmp(argv[1], "quic") == 0) {
+    cb = handle_quic_event;
+  }
+
   int c;
   while ((c = getopt(argc, argv, "hvp:t:s:dP:")) != -1) {
     switch(c) {
     case 'p':
-      pid = atoi(optarg);
+      h2o_pid = atoi(optarg);
       break;
     case 'h':
       usage();
@@ -72,13 +84,13 @@ int main(int argc, char **argv) {
     }
   }
 
-  if (pid == -1) {
+  if (h2o_pid == -1) {
     fprintf(stderr, "Error: -p option is missing\n");
     exit(EXIT_FAILURE);
   }
 
   ebpf::BPF *bpf = new ebpf::BPF();
-  ebpf::USDT u("", pid, "quicly", "accept", "trace_quicly__accept");
+  ebpf::USDT u("", h2o_pid, "quicly", "accept", "trace_quicly__accept");
   ebpf::StatusTuple ret = bpf->init(QUIC_BPF, {}, {u});
   if (ret.code() != 0) {
     std::cerr << ret.msg() << std::endl;
@@ -91,7 +103,7 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  ret = bpf->open_perf_buffer("events", &handle_quic_event);
+  ret = bpf->open_perf_buffer("events", cb);
   if (ret.code() != 0) {
     std::cerr << ret.msg() << std::endl;
     return 1;
