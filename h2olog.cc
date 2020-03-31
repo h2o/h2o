@@ -38,6 +38,13 @@ int trace_quicly__accept(struct pt_regs *ctx) {
   events.perf_submit(ctx, &event, sizeof(event));
   return 0;
 }
+
+int trace_quicly__crypto_handshake(struct pt_regs *ctx) {
+  struct event_t event = {};
+  bpf_usdt_readarg(2, ctx, &event.at);
+  events.perf_submit(ctx, &event, sizeof(event));
+  return 0;
+}
 )";
 
 #define VERSION "0.1.0"
@@ -95,6 +102,7 @@ int main(int argc, char **argv) {
   std::vector<ebpf::USDT> probes;
   ebpf::BPF *bpf = new ebpf::BPF();
   probes.push_back(ebpf::USDT("", h2o_pid, "quicly", "accept", "trace_quicly__accept"));
+  probes.push_back(ebpf::USDT("", h2o_pid, "quicly", "crypto_handshake", "trace_quicly__crypto_handshake"));
 
   ebpf::StatusTuple ret = bpf->init(QUIC_BPF, {}, probes);
   if (ret.code() != 0) {
