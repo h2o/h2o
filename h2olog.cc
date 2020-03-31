@@ -7,7 +7,7 @@
 #include <bcc/BPF.h>
 #include <iostream>
 
-const std::string QUIC_BPF = R"(
+const char *QUIC_BPF = R"(
 struct event_t {
   uint64_t at;
 };
