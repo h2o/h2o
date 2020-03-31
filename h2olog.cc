@@ -23,6 +23,7 @@
 #include <inttypes.h>
 #include <bcc/BPF.h>
 #include <iostream>
+#include <vector>
 
 const char *QUIC_BPF = R"(
 struct event_t {
@@ -91,18 +92,22 @@ int main(int argc, char **argv) {
     exit(EXIT_FAILURE);
   }
 
+  std::vector<ebpf::USDT> probes;
   ebpf::BPF *bpf = new ebpf::BPF();
-  ebpf::USDT u("", h2o_pid, "quicly", "accept", "trace_quicly__accept");
-  ebpf::StatusTuple ret = bpf->init(QUIC_BPF, {}, {u});
+  probes.push_back(ebpf::USDT("", h2o_pid, "quicly", "accept", "trace_quicly__accept"));
+
+  ebpf::StatusTuple ret = bpf->init(QUIC_BPF, {}, probes);
   if (ret.code() != 0) {
     std::cerr << ret.msg() << std::endl;
     return 1;
   }
 
-  ret = bpf->attach_usdt(u);
-  if (ret.code() != 0) {
-    std::cerr << ret.msg() << std::endl;
-    return 1;
+  for (auto it = probes.begin(); it != probes.end(); ++it) {
+    ret = bpf->attach_usdt(*it);
+    if (ret.code() != 0) {
+      std::cerr << ret.msg() << std::endl;
+      return 1;
+    }
   }
 
   ret = bpf->open_perf_buffer("events", cb);
