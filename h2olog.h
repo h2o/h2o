@@ -28,20 +28,20 @@
 #include <vector>
 
 typedef struct st_h2o_tracer_t {
-  /*
-   * Handles an incoming BPF event.
-   */
-  void (*handle_event)(void *cpu, void *data, int len);
+    /*
+     * Handles an incoming BPF event.
+     */
+    void (*handle_event)(void *cpu, void *data, int len);
 
-  /*
-   * Returns a vector of relevant USDT probes.
-   */
-  std::vector<ebpf::USDT> (*init_usdt_probes)(pid_t h2o_pid);
+    /*
+     * Returns a vector of relevant USDT probes.
+     */
+    std::vector<ebpf::USDT> (*init_usdt_probes)(pid_t h2o_pid);
 
-  /*
-   * Returns the code to be compiled into BPF bytecode.
-   */
-  const char *(*bpf_text)(void);
+    /*
+     * Returns the code to be compiled into BPF bytecode.
+     */
+    const char *(*bpf_text)(void);
 } h2o_tracer_t;
 
 /*
