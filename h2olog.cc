@@ -35,10 +35,6 @@ static void usage(void) {
   return;
 }
 
-void handle_http_event(void *cpu, void *data, int len) {
-  printf("unimplemented\n");
-}
-
 int main(int argc, char **argv) {
   bpf_cb cb = handle_http_event;
   if (argc > 1 && strcmp(argv[1], "quic") == 0) {

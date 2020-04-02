@@ -20,28 +20,8 @@
  * IN THE SOFTWARE.
  */
 
-#ifndef h2olog_h
-#define h2olog_h
+#include "h2olog.h"
 
-#include <inttypes.h>
-#include <bcc/BPF.h>
-
-extern const char *HTTP_BPF;
-extern const char *QUIC_BPF;
-
-/*
- * Callback function pointer for the BPF event handler.
- */
-typedef void (*bpf_cb)(void *cpu, void *data, int len);
-
-/*
- * Handles an HTTP event from BPF.
- */
-void handle_http_event(void *cpu, void *data, int len);
-
-/*
- * Handles a QUIC event from BPF.
- */
-void handle_quic_event(void *cpu, void *data, int len);
-
-#endif
+void handle_http_event(void *cpu, void *data, int len) {
+  printf("unimplemented\n");
+}
