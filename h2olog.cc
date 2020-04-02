@@ -25,27 +25,7 @@
 #include <iostream>
 #include <vector>
 
-const char *QUIC_BPF = R"(
-struct event_t {
-  uint64_t at;
-};
-
-BPF_PERF_OUTPUT(events);
-
-int trace_quicly__accept(struct pt_regs *ctx) {
-  struct event_t event = {};
-  bpf_usdt_readarg(2, ctx, &event.at);
-  events.perf_submit(ctx, &event, sizeof(event));
-  return 0;
-}
-
-int trace_quicly__crypto_handshake(struct pt_regs *ctx) {
-  struct event_t event = {};
-  bpf_usdt_readarg(2, ctx, &event.at);
-  events.perf_submit(ctx, &event, sizeof(event));
-  return 0;
-}
-)";
+#include "h2olog.h"
 
 #define VERSION "0.1.0"
 #define POLL_TIMEOUT 100
