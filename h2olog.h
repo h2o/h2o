@@ -26,4 +26,7 @@
 extern const char *HTTP_BPF;
 extern const char *QUIC_BPF;
 
+// Callback function for the BPF event handler.
+typedef void (*bpf_cb)(void *cpu, void *data, int len);
+
 #endif

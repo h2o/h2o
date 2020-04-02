@@ -34,8 +34,6 @@ struct event_t {
   uint64_t at;
 };
 
-typedef void (*bpf_cb)(void *cpu, void *data, int len);
-
 static void usage(void) {
   printf("h2olog (%s)\n", VERSION);
   printf("-p PID of the H2O server\n");
