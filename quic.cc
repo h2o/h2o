@@ -60,9 +60,14 @@ static std::vector<ebpf::USDT> init_usdt_probes(pid_t h2o_pid) {
   return vec;
 }
 
+static const char *bpf_text(void) {
+  return QUIC_BPF;
+}
+
 h2o_tracer_t *create_quic_tracer(void) {
   h2o_tracer_t *tracer = (h2o_tracer_t*)malloc(sizeof(tracer));
   tracer->handle_event = handle_event;
   tracer->init_usdt_probes = init_usdt_probes;
+  tracer->bpf_text = bpf_text;
   return tracer;
 }
