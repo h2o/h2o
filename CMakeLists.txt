@@ -7,9 +7,11 @@ SET(CMAKE_CXX_EXTENSIONS OFF)
 
 PROJECT(h2olog)
 
-SET(CXX_WARNING_FLAGS "-Wall")
+IF(NOT CMAKE_BUILD_TYPE)
+    SET(CMAKE_BUILD_TYPE Release)
+ENDIF(NOT CMAKE_BUILD_TYPE)
 
-SET(CMAKE_CXX_FLAGS "${CXX_WARNING_FLAGS} ${CMAKE_CXX_FLAGS}")
+SET(CMAKE_CXX_FLAGS "-Wall -Wextra -g3 ${CMAKE_CXX_FLAGS}")
 
 FIND_PATH(LIBBCC_INCLUDE_DIR bcc/compat)
 FIND_LIBRARY(LIBBCC_LIB "bcc")
@@ -25,6 +27,36 @@ ELSE (LIBBCC_LIB)
 ENDIF (LIBBCC_LIB)
 
 SET(SOURCE_FILES h2olog.cc http.cc quic.cc)
+
+set(SOURCE_FILES
+  "h2olog.cc"
+  "http.cc"
+  "json.h"
+  "json.cc"
+)
+
+ADD_CUSTOM_COMMAND(
+    OUTPUT  "${CMAKE_BINARY_DIR}/quicly-probes.d"
+    COMMAND curl -sL 'https://raw.githubusercontent.com/h2o/quicly/master/quicly-probes.d' >${CMAKE_BINARY_DIR}/quicly-probes.d
+)
+LIST(APPEND DTRACE_FILES "${CMAKE_BINARY_DIR}/quicly-probes.d")
+
+ADD_CUSTOM_COMMAND(
+    OUTPUT  "${CMAKE_BINARY_DIR}/h2o-probes.d"
+    COMMAND curl -sLO 'https://raw.githubusercontent.com/h2o/h2o/master/h2o-probes.d' >${CMAKE_BINARY_DIR}/h2o-probes.d
+)
+LIST(APPEND DTRACE_FILES "${CMAKE_BINARY_DIR}/h2o-probes.d")
+
+SET(H2O_BINARY "${CMAKE_SOURCE_DIR}/../../h2o/h2o/build/h2o") # FIXME
+ADD_CUSTOM_COMMAND(
+    OUTPUT  "${CMAKE_BINARY_DIR}/quic.cc"
+    COMMAND "${CMAKE_SOURCE_DIR}/gen-bpf.py" "${H2O_BINARY}" "${CMAKE_BINARY_DIR}" "${CMAKE_BINARY_DIR}/quic.cc"
+    DEPENDS ${DTRACE_FILES}
+    DEPENDS "${CMAKE_SOURCE_DIR}/gen-bpf.py"
+)
+LIST(APPEND SOURCE_FILES "${CMAKE_BINARY_DIR}/quic.cc")
+
+INCLUDE_DIRECTORIES(${CMAKE_SOURCE_DIR})
 
 ADD_EXECUTABLE(h2olog ${SOURCE_FILES})
 TARGET_LINK_LIBRARIES(h2olog ${LIBBCC_LIBRARIES})
