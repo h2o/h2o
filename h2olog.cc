@@ -36,11 +36,13 @@ static void usage(void) {
 }
 
 int main(int argc, char **argv) {
-  bpf_cb cb = handle_http_event;
+  h2o_tracer_t *tracer;
   if (argc > 1 && strcmp(argv[1], "quic") == 0) {
-    cb = handle_quic_event;
+    tracer = create_quic_tracer();
     --argc;
     ++argv;
+  } else {
+    tracer = create_http_tracer();
   }
 
   int c;
@@ -80,7 +82,7 @@ int main(int argc, char **argv) {
     }
   }
 
-  ret = bpf->open_perf_buffer("events", cb);
+  ret = bpf->open_perf_buffer("events", tracer->handle_event);
   if (ret.code() != 0) {
     std::cerr << ret.msg() << std::endl;
     return 1;

@@ -29,19 +29,21 @@
 extern const char *HTTP_BPF;
 extern const char *QUIC_BPF;
 
+typedef struct st_h2o_tracer_t {
+  /*
+   * Handles an incoming BPF event.
+   */
+  void (*handle_event)(void *cpu, void *data, int len);
+} h2o_tracer_t;
 /*
- * Callback function pointer for the BPF event handler.
+
+ * Creates an HTTP tracer.
  */
-typedef void (*bpf_cb)(void *cpu, void *data, int len);
+h2o_tracer_t *create_http_tracer(void);
 
 /*
- * Handles an HTTP event from BPF.
+ * Creates a QUIC tracer.
  */
-void handle_http_event(void *cpu, void *data, int len);
-
-/*
- * Handles a QUIC event from BPF.
- */
-void handle_quic_event(void *cpu, void *data, int len);
+h2o_tracer_t *create_quic_tracer(void);
 
 #endif

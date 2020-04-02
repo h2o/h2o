@@ -22,6 +22,12 @@
 
 #include "h2olog.h"
 
-void handle_http_event(void *cpu, void *data, int len) {
+static void handle_event(void *cpu, void *data, int len) {
   printf("unimplemented\n");
+}
+
+h2o_tracer_t *create_http_tracer(void) {
+  h2o_tracer_t *tracer = (h2o_tracer_t*)malloc(sizeof(tracer));
+  tracer->handle_event = handle_event;
+  return tracer;
 }
