@@ -65,27 +65,27 @@ int main(int argc, char **argv) {
 
   std::vector<ebpf::USDT> probes;
   ebpf::BPF *bpf = new ebpf::BPF();
-  probes.push_back(ebpf::USDT("", h2o_pid, "quicly", "accept", "trace_quicly__accept"));
-  probes.push_back(ebpf::USDT("", h2o_pid, "quicly", "crypto_handshake", "trace_quicly__crypto_handshake"));
+  probes.push_back(ebpf::USDT(h2o_pid, "quicly", "accept", "trace_quicly__accept"));
+  probes.push_back(ebpf::USDT(h2o_pid, "quicly", "crypto_handshake", "trace_quicly__crypto_handshake"));
 
   ebpf::StatusTuple ret = bpf->init(QUIC_BPF, {}, probes);
-  if (ret.code() != 0) {
-    std::cerr << ret.msg() << std::endl;
-    return 1;
+  if (!ret.ok()) {
+    std::cerr << "init: " << ret.msg() << std::endl;
+    return EXIT_FAILURE;
   }
 
-  for (auto it = probes.begin(); it != probes.end(); ++it) {
-    ret = bpf->attach_usdt(*it);
+  for (auto &probe : probes) {
+    ret = bpf->attach_usdt(probe);
     if (ret.code() != 0) {
-      std::cerr << ret.msg() << std::endl;
-      return 1;
+      std::cerr << "attach_usdt: " << ret.msg() << std::endl;
+      return EXIT_FAILURE;
     }
   }
 
   ret = bpf->open_perf_buffer("events", tracer->handle_event);
-  if (ret.code() != 0) {
-    std::cerr << ret.msg() << std::endl;
-    return 1;
+  if (!ret.ok()) {
+    std::cerr << "open_perf_buffer: " << ret.msg() << std::endl;
+    return EXIT_FAILURE;
   }
 
   ebpf::BPFPerfBuffer *perf_buffer = bpf->get_perf_buffer("events");
