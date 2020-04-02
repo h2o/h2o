@@ -55,8 +55,8 @@ static void handle_event(void *cpu, void *data, int len) {
 
 static std::vector<ebpf::USDT> init_usdt_probes(pid_t h2o_pid) {
   std::vector<ebpf::USDT> vec;
-  vec.push_back(ebpf::USDT("", h2o_pid, "quicly", "accept", "trace_quicly__accept"));
-  vec.push_back(ebpf::USDT("", h2o_pid, "quicly", "crypto_handshake", "trace_quicly__crypto_handshake"));
+  vec.push_back(ebpf::USDT(h2o_pid, "quicly", "accept", "trace_quicly__accept"));
+  vec.push_back(ebpf::USDT(h2o_pid, "quicly", "crypto_handshake", "trace_quicly__crypto_handshake"));
   return vec;
 }
 
