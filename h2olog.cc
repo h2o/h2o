@@ -63,10 +63,8 @@ int main(int argc, char **argv) {
     exit(EXIT_FAILURE);
   }
 
-  std::vector<ebpf::USDT> probes;
   ebpf::BPF *bpf = new ebpf::BPF();
-  probes.push_back(ebpf::USDT(h2o_pid, "quicly", "accept", "trace_quicly__accept"));
-  probes.push_back(ebpf::USDT(h2o_pid, "quicly", "crypto_handshake", "trace_quicly__crypto_handshake"));
+  std::vector<ebpf::USDT> probes = tracer->init_usdt_probes(h2o_pid);
 
   ebpf::StatusTuple ret = bpf->init(QUIC_BPF, {}, probes);
   if (!ret.ok()) {
