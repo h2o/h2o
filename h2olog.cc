@@ -66,7 +66,7 @@ int main(int argc, char **argv) {
   ebpf::BPF *bpf = new ebpf::BPF();
   std::vector<ebpf::USDT> probes = tracer->init_usdt_probes(h2o_pid);
 
-  ebpf::StatusTuple ret = bpf->init(QUIC_BPF, {}, probes);
+  ebpf::StatusTuple ret = bpf->init(tracer->bpf_text(), {}, probes);
   if (!ret.ok()) {
     std::cerr << "init: " << ret.msg() << std::endl;
     return EXIT_FAILURE;

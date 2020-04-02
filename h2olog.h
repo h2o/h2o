@@ -27,9 +27,6 @@
 #include <bcc/BPF.h>
 #include <vector>
 
-extern const char *HTTP_BPF;
-extern const char *QUIC_BPF;
-
 typedef struct st_h2o_tracer_t {
   /*
    * Handles an incoming BPF event.
@@ -40,6 +37,11 @@ typedef struct st_h2o_tracer_t {
    * Returns a vector of relevant USDT probes.
    */
   std::vector<ebpf::USDT> (*init_usdt_probes)(pid_t h2o_pid);
+
+  /*
+   * Returns the code to be compiled into BPF bytecode.
+   */
+  const char *(*bpf_text)(void);
 } h2o_tracer_t;
 
 /*
