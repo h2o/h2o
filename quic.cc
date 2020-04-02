@@ -43,3 +43,12 @@ int trace_quicly__crypto_handshake(struct pt_regs *ctx) {
   return 0;
 }
 )";
+
+struct quic_event_t {
+  uint64_t at;
+};
+
+void handle_quic_event(void *cpu, void *data, int len) {
+  struct quic_event_t *ev = (quic_event_t*)data;
+  printf("time: %" PRIu64 "\n", ev->at);
+}

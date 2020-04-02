@@ -20,8 +20,6 @@
  * IN THE SOFTWARE.
  */
 
-#include <inttypes.h>
-#include <bcc/BPF.h>
 #include <iostream>
 #include <vector>
 
@@ -29,10 +27,6 @@
 
 #define VERSION "0.1.0"
 #define POLL_TIMEOUT 100
-
-struct event_t {
-  uint64_t at;
-};
 
 static void usage(void) {
   printf("h2olog (%s)\n", VERSION);
@@ -45,15 +39,8 @@ void handle_http_event(void *cpu, void *data, int len) {
   printf("unimplemented\n");
 }
 
-void handle_quic_event(void *cpu, void *data, int len) {
-  struct event_t *ev = (event_t*)data;
-  printf("time: %" PRIu64 "\n", ev->at);
-}
-
 int main(int argc, char **argv) {
-  pid_t h2o_pid = -1;
   bpf_cb cb = handle_http_event;
-
   if (argc > 1 && strcmp(argv[1], "quic") == 0) {
     cb = handle_quic_event;
     --argc;
@@ -61,6 +48,7 @@ int main(int argc, char **argv) {
   }
 
   int c;
+  pid_t h2o_pid = -1;
   while ((c = getopt(argc, argv, "hvp:t:s:dP:")) != -1) {
     switch(c) {
     case 'p':
