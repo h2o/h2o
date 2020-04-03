@@ -45,29 +45,33 @@ int trace_quicly__crypto_handshake(struct pt_regs *ctx) {
 )";
 
 struct quic_event_t {
-  uint64_t at;
+    uint64_t at;
 };
 
-static void handle_event(void *cpu, void *data, int len) {
-  struct quic_event_t *ev = (quic_event_t*)data;
-  printf("time: %" PRIu64 "\n", ev->at);
+static void handle_event(void *cpu, void *data, int len)
+{
+    struct quic_event_t *ev = (quic_event_t *)data;
+    printf("time: %" PRIu64 "\n", ev->at);
 }
 
-static std::vector<ebpf::USDT> init_usdt_probes(pid_t h2o_pid) {
-  std::vector<ebpf::USDT> vec;
-  vec.push_back(ebpf::USDT(h2o_pid, "quicly", "accept", "trace_quicly__accept"));
-  vec.push_back(ebpf::USDT(h2o_pid, "quicly", "crypto_handshake", "trace_quicly__crypto_handshake"));
-  return vec;
+static std::vector<ebpf::USDT> init_usdt_probes(pid_t h2o_pid)
+{
+    std::vector<ebpf::USDT> vec;
+    vec.push_back(ebpf::USDT(h2o_pid, "quicly", "accept", "trace_quicly__accept"));
+    vec.push_back(ebpf::USDT(h2o_pid, "quicly", "crypto_handshake", "trace_quicly__crypto_handshake"));
+    return vec;
 }
 
-static const char *bpf_text(void) {
-  return QUIC_BPF;
+static const char *bpf_text(void)
+{
+    return QUIC_BPF;
 }
 
-h2o_tracer_t *create_quic_tracer(void) {
-  h2o_tracer_t *tracer = (h2o_tracer_t*)malloc(sizeof(tracer));
-  tracer->handle_event = handle_event;
-  tracer->init_usdt_probes = init_usdt_probes;
-  tracer->bpf_text = bpf_text;
-  return tracer;
+h2o_tracer_t *create_quic_tracer(void)
+{
+    h2o_tracer_t *tracer = (h2o_tracer_t *)malloc(sizeof(tracer));
+    tracer->handle_event = handle_event;
+    tracer->init_usdt_probes = init_usdt_probes;
+    tracer->bpf_text = bpf_text;
+    return tracer;
 }

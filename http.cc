@@ -22,24 +22,28 @@
 
 #include "h2olog.h"
 
-static void handle_event(void *cpu, void *data, int len) {
-  printf("unimplemented\n");
+static void handle_event(void *cpu, void *data, int len)
+{
+    printf("unimplemented\n");
 }
 
-static std::vector<ebpf::USDT> init_usdt_probes(pid_t h2o_pid) {
-  // Unimplemented
-  std::vector<ebpf::USDT> vec;
-  return vec;
+static std::vector<ebpf::USDT> init_usdt_probes(pid_t h2o_pid)
+{
+    // Unimplemented
+    std::vector<ebpf::USDT> vec;
+    return vec;
 }
 
-static const char *bpf_text(void) {
-  return "unimplemented";
+static const char *bpf_text(void)
+{
+    return "unimplemented";
 }
 
-h2o_tracer_t *create_http_tracer(void) {
-  h2o_tracer_t *tracer = (h2o_tracer_t*)malloc(sizeof(tracer));
-  tracer->handle_event = handle_event;
-  tracer->init_usdt_probes = init_usdt_probes;
-  tracer->bpf_text = bpf_text;
-  return tracer;
+h2o_tracer_t *create_http_tracer(void)
+{
+    h2o_tracer_t *tracer = (h2o_tracer_t *)malloc(sizeof(tracer));
+    tracer->handle_event = handle_event;
+    tracer->init_usdt_probes = init_usdt_probes;
+    tracer->bpf_text = bpf_text;
+    return tracer;
 }
