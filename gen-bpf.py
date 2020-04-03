@@ -1,14 +1,13 @@
 #!/usr/bin/env python
-# usage: gen-bpf.py h2o_path d_files_dir output_file
+# usage: gen-bpf.py d_files_dir output_file
 
 from __future__ import print_function
 import re, ctypes, sys, json, binascii, os, time
+from pprint import pprint
 from collections import OrderedDict
 
-from bcc import USDT, BPF # TODO: remove this dependency
-
 try:
-    (_prog, h2o_path, d_files_dir, output_file) = sys.argv
+    (_prog, d_files_dir, output_file) = sys.argv
 except:
     print("usage: %s h2o_path d_files_dir output_file" % sys.argv[0])
     sys.exit(1)
@@ -24,7 +23,6 @@ block_fields = {
 
 block_probes = set([
     "quicly:debug_message",
-    "quicly:free",
 ])
 
 # mapping from proves.d's to quic-trace's:
@@ -52,38 +50,7 @@ re_flags = re.X | re.M | re.S
 matched = re.search(d_decl, d, flags = re_flags)
 provider = matched.group('provider')
 
-struct_decl = r"""
-// Those structs must be synchronized to h2o and quicly.
-// Fields that include "dummy" are ignored.
-
-struct st_quicly_stream_t {
-    uint64_t dummy;
-    int64_t stream_id;
-};
-
-struct st_quicly_conn_t {
-    uint32_t dummy[4];
-    uint32_t master_id;
-};
-
-struct st_h2o_conn_t {
-    void *dummy_ctx;
-    void **dummy_hosts;
-    uint64_t dummy_connected_at[2];
-    uint64_t h2o_conn_id;
-};
-
-struct quicly_rtt_t {
-    uint32_t minimum;
-    uint32_t smoothed;
-    uint32_t variance;
-    uint32_t latest;
-};
-
-struct st_quicly_address_token_plaintext_t {
-    int dummy;
-};
-"""
+struct_decl = read_from_file(os.path.join(os.path.dirname(__file__), "data-types.h"))
 
 def strip_typename(t):
     return t.replace("*", "").replace("struct", "").replace("const", "").replace("strict", "").strip()
@@ -97,16 +64,16 @@ def is_ptr_type(t):
 def is_bin_type(t):
     return re.search(r'\b(?:u?int8_t|void)\s*\*', t)
 
-def build_tracer_name(provider, metadata):
-    return "trace_%s__%s" % (provider, metadata['probe'])
+def build_tracer_name(metadata):
+    return "trace_%s__%s" % (metadata['provider'], metadata['name'])
 
-def build_tracer(provider, metadata):
+def build_tracer(metadata):
     c = r"""
 int %s(struct pt_regs *ctx) {
     void *buf = NULL;
     struct event_t event = { .id = %d };
 
-""" % (build_tracer_name(provider, metadata), metadata['id'])
+""" % (build_tracer_name(metadata), metadata['id'])
 
     block_field_set = block_fields.get(metadata["fully_specified_probe_name"], set())
 
@@ -118,9 +85,7 @@ int %s(struct pt_regs *ctx) {
         arg = args[i]
         arg_name = arg['name']
         arg_type = arg['type']
-        assert 'size' in arg
-        arg_size = arg['size']
-        c += "    // %s %s: %d\n" % (arg_type, arg_name, arg_size)
+        c += "    // %s %s\n" % (arg_type, arg_name)
         if arg_name in block_field_set:
             c += "    // (ignored because it's in the block list)\n"
             i += 1
@@ -175,7 +140,8 @@ for (name, args) in re.findall(r'\bprobe\s+([a-zA-Z0-9_]+)\(([^\)]+)\);', matche
     id += 1
     metadata = {
         "id": id,
-        "probe": name,
+        "provider": provider,
+        "name": name,
         "fully_specified_probe_name": "%s:%s" % (provider, name),
     }
     probe_id2metadata[id] = metadata
@@ -213,9 +179,9 @@ struct event_t {
 
 """
 
-for i in xrange(max_ints):
+for i in range(max_ints):
     event_t_decl += "    uint64_t i%d;\n" % i
-for i in xrange(max_strs):
+for i in range(max_strs):
     event_t_decl += "    char s%d[32];\n" % i
 
 event_t_decl += r"""
@@ -234,25 +200,12 @@ std::vector<ebpf::USDT> quic_init_usdt_probes(pid_t pid) {
   const std::vector<ebpf::USDT> probes = {
 """
 
-u = USDT(path = h2o_path)
-for probe in u.enumerate_probes():
-    if probe.provider != provider:
-        continue
-
-    metadata = probe_metadata[probe.name]
-
+for metadata in probe_metadata.values():
     if metadata["fully_specified_probe_name"] in block_probes:
         continue
 
-    args = metadata['args']
-    for i in range(0, probe.num_locations):
-        location = probe.get_location(i)
-        for j in range(0, location.num_arguments):
-            arg = location.get_argument(j)
-            args[j]['signed'] = arg.size < 0
-            args[j]['size'] = abs(arg.size)
-    bpf += build_tracer(provider, metadata)
-    usdt_def += """    ebpf::USDT(pid, "%s", "%s", "%s"),\n""" % (probe.provider, probe.name, build_tracer_name(probe.provider, metadata))
+    bpf += build_tracer(metadata)
+    usdt_def += """      ebpf::USDT(pid, "%s", "%s", "%s"),\n""" % (metadata['provider'], metadata['name'], build_tracer_name(metadata))
 
 usdt_def += """
     };
@@ -333,13 +286,13 @@ write_to_file(output_file, r"""
 #include <stdlib.h>
 #include <stdint.h>
 #include "h2olog.h"
+#include "data-types.h"
 #include "json.h"
 
 // BPF modules written in C
 const char *pbf_text = R"(
 %s
 )";
-%s
 %s
 %s
 %s
@@ -357,5 +310,5 @@ h2o_tracer_t *create_quic_tracer(void) {
   return tracer;
 }
 
-""" % (bpf, usdt_def, event_t_decl, struct_decl, handle_event_func))
+""" % (bpf, usdt_def, event_t_decl, handle_event_func))
 
