@@ -67,7 +67,7 @@ int main(int argc, char **argv) {
   std::vector<ebpf::USDT> probes = tracer->init_usdt_probes(h2o_pid);
 
   ebpf::StatusTuple ret = bpf->init(tracer->bpf_text(), {}, probes);
-  if (!ret.ok()) {
+  if (ret.code() != 0) {
     std::cerr << "init: " << ret.msg() << std::endl;
     return EXIT_FAILURE;
   }
@@ -81,7 +81,7 @@ int main(int argc, char **argv) {
   }
 
   ret = bpf->open_perf_buffer("events", tracer->handle_event);
-  if (!ret.ok()) {
+  if (ret.code() != 0) {
     std::cerr << "open_perf_buffer: " << ret.msg() << std::endl;
     return EXIT_FAILURE;
   }
