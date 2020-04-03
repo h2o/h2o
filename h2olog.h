@@ -23,9 +23,10 @@
 #ifndef h2olog_h
 #define h2olog_h
 
-#include <inttypes.h>
-#include <bcc/BPF.h>
+#include <cinttypes>
 #include <vector>
+#include <unistd.h>
+#include <bcc/BPF.h>
 
 typedef struct st_h2o_tracer_t {
   /*

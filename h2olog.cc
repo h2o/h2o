@@ -20,10 +20,11 @@
  * IN THE SOFTWARE.
  */
 
-#include <iostream>
 #include <vector>
 
 #include "h2olog.h"
+
+using namespace std;
 
 #define VERSION "0.1.0"
 #define POLL_TIMEOUT 100
@@ -63,33 +64,41 @@ int main(int argc, char **argv) {
     exit(EXIT_FAILURE);
   }
 
+  if (geteuid() != 0) {
+    fprintf(stderr, "Error: root privilege is required\n");
+    exit(EXIT_FAILURE);
+  }
+
   ebpf::BPF *bpf = new ebpf::BPF();
   std::vector<ebpf::USDT> probes = tracer->init_usdt_probes(h2o_pid);
 
   ebpf::StatusTuple ret = bpf->init(tracer->bpf_text(), {}, probes);
   if (ret.code() != 0) {
-    std::cerr << "init: " << ret.msg() << std::endl;
+    fprintf(stderr, "init: %s\n", ret.msg().c_str());
     return EXIT_FAILURE;
   }
 
   for (auto &probe : probes) {
     ret = bpf->attach_usdt(probe);
     if (ret.code() != 0) {
-      std::cerr << "attach_usdt: " << ret.msg() << std::endl;
+      fprintf(stderr, "attach_usdt: %s\n", ret.msg().c_str());
       return EXIT_FAILURE;
     }
   }
 
   ret = bpf->open_perf_buffer("events", tracer->handle_event);
   if (ret.code() != 0) {
-    std::cerr << "open_perf_buffer: " << ret.msg() << std::endl;
+    fprintf(stderr, "open_perf_buffer: %s\n", ret.msg().c_str());
     return EXIT_FAILURE;
   }
 
   ebpf::BPFPerfBuffer *perf_buffer = bpf->get_perf_buffer("events");
-  if (perf_buffer)
-    while (true)
+  if (perf_buffer) {
+    while (true) {
       perf_buffer->poll(POLL_TIMEOUT);
+      fflush(stdout);
+    }
+  }
 
   return 0;
 }

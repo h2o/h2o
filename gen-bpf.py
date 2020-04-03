@@ -213,23 +213,6 @@ usdt_def += """
 }
 """
 
-json_encoder = json.JSONEncoder(
-    separators = (',', ':'),
-    allow_nan = False,
-    check_circular = False
-)
-
-def write_json_pair(name, value):
-    global out
-    out.write(',"') # a following comma!
-    out.write(name)
-    out.write('":')
-    if isinstance(value, (int, long)):
-        out.write(str(value))
-    else:
-        for part in json_encoder.iterencode(value):
-            out.write(part)
-
 handle_event_func = r"""
 
 static
@@ -237,12 +220,12 @@ void quic_handle_event(void *cpu, void *data, int data_len) {
     (void)cpu;
     (void)data_len;
 
-    std::ostream &out = std::cout; // FIXME
+    FILE *out = stdout;
 
     const event_t *event = static_cast<const event_t*>(data);
 
     // output JSON
-    out << "{";
+    fprintf(out, "{");
 
     switch (event->id) {
 """
@@ -276,7 +259,7 @@ handle_event_func += r"""
         std::abort();
     }
 
-    out << "}" << std::endl;
+    fprintf(out, "}\n");
 """
 handle_event_func += "}\n";
 
