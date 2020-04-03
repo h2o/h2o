@@ -216,9 +216,9 @@ usdt_def += """
 handle_event_func = r"""
 
 static
-void quic_handle_event(void *cpu, void *data, int data_len) {
-    (void)cpu;
-    (void)data_len;
+void quic_handle_event(void *context, void *data, int data_len) {
+    h2o_tracer_t *tracer = static_cast<h2o_tracer_t*>(context);
+    tracer->count++;
 
     FILE *out = stdout;
 
@@ -286,10 +286,11 @@ const char *quic_bpf_ext() {
 }
 
 h2o_tracer_t *create_quic_tracer(void) {
-  h2o_tracer_t *tracer = (h2o_tracer_t*)malloc(sizeof(tracer));
+  h2o_tracer_t *tracer = new h2o_tracer_t();
   tracer->handle_event = quic_handle_event;
   tracer->init_usdt_probes = quic_init_usdt_probes;
   tracer->bpf_text = quic_bpf_ext;
+  tracer->count = 0;
   return tracer;
 }
 

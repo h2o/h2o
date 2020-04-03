@@ -29,10 +29,12 @@
 #include <bcc/BPF.h>
 
 typedef struct st_h2o_tracer_t {
+    std::size_t count;
+
     /*
      * Handles an incoming BPF event.
      */
-    void (*handle_event)(void *cpu, void *data, int len);
+    void (*handle_event)(void *context, void *data, int len);
 
     /*
      * Returns a vector of relevant USDT probes.

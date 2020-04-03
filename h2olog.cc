@@ -88,7 +88,7 @@ int main(int argc, char **argv)
         }
     }
 
-    ret = bpf->open_perf_buffer("events", tracer->handle_event, nullptr, nullptr, 64);
+    ret = bpf->open_perf_buffer("events", tracer->handle_event, nullptr, &tracer, 64);
     if (ret.code() != 0) {
         fprintf(stderr, "open_perf_buffer: %s\n", ret.msg().c_str());
         return EXIT_FAILURE;
@@ -96,9 +96,28 @@ int main(int argc, char **argv)
 
     ebpf::BPFPerfBuffer *perf_buffer = bpf->get_perf_buffer("events");
     if (perf_buffer) {
+        time_t t0 = time(NULL);
+
         while (true) {
             perf_buffer->poll(POLL_TIMEOUT);
             fflush(stdout);
+
+            time_t t1 = time(NULL);
+            int64_t d = t1 - t0;
+            if (d > 10) {
+                uint64_t c = tracer->count / d;
+                if (c > 0) {
+                    struct tm t;
+                    localtime_r(&t1, &t);
+                    char s[100];
+                    strftime(s, sizeof(s), "%Y-%m-%d %H:%M:%S%z", &t);
+
+                    fprintf(stderr, "%s %20lu events/s\n", s, c);
+                    t0 = t1;
+
+                    tracer->count = 0;
+                }
+            }
         }
     }
 
