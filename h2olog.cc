@@ -27,7 +27,7 @@
 using namespace std;
 
 #define VERSION "0.1.0"
-#define POLL_TIMEOUT 100
+#define POLL_TIMEOUT (-1)
 
 static void usage(void)
 {
@@ -88,7 +88,7 @@ int main(int argc, char **argv)
         }
     }
 
-    ret = bpf->open_perf_buffer("events", tracer->handle_event);
+    ret = bpf->open_perf_buffer("events", tracer->handle_event, nullptr, nullptr, 64);
     if (ret.code() != 0) {
         fprintf(stderr, "open_perf_buffer: %s\n", ret.msg().c_str());
         return EXIT_FAILURE;
@@ -102,5 +102,6 @@ int main(int argc, char **argv)
         }
     }
 
-    return 0;
+    fprintf(stderr, "Error: failed to get_perf_buffer()\n");
+    return EXIT_FAILURE;
 }
