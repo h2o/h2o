@@ -72,7 +72,7 @@ int main(int argc, char **argv)
     const char *out_file = nullptr;
     int c;
     pid_t h2o_pid = -1;
-    while ((c = getopt(argc, argv, "hvp:t:s:dP:o")) != -1) {
+    while ((c = getopt(argc, argv, "hvp:t:s:dP:o:")) != -1) {
         switch (c) {
         case 'p':
             h2o_pid = atoi(optarg);
