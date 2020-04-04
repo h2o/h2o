@@ -22,7 +22,7 @@
 
 #include "h2olog.h"
 
-static void handle_event(void *cpu, void *data, int len)
+static void handle_event(void *context, void *data, int len)
 {
     printf("unimplemented\n");
 }

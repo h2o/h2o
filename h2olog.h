@@ -29,6 +29,7 @@
 #include <bcc/BPF.h>
 
 typedef struct st_h2o_tracer_t {
+    std::FILE *out;
     std::size_t count;
 
     /*

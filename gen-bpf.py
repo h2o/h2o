@@ -220,7 +220,7 @@ void quic_handle_event(void *context, void *data, int data_len) {
     h2o_tracer_t *tracer = static_cast<h2o_tracer_t*>(context);
     tracer->count++;
 
-    FILE *out = stdout;
+    FILE *out = tracer->out;
 
     const event_t *event = static_cast<const event_t*>(data);
 
@@ -291,6 +291,7 @@ h2o_tracer_t *create_quic_tracer(void) {
   tracer->init_usdt_probes = quic_init_usdt_probes;
   tracer->bpf_text = quic_bpf_ext;
   tracer->count = 0;
+  tracer->out = nullptr;
   return tracer;
 }
 

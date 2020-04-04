@@ -37,6 +37,26 @@ static void usage(void)
     return;
 }
 
+static void show_event_per_sec(h2o_tracer_t *tracer, time_t t0)
+{
+    time_t t1 = time(NULL);
+    int64_t d = t1 - t0;
+    if (d > 10) {
+        uint64_t c = tracer->count / d;
+        if (c > 0) {
+            struct tm t;
+            localtime_r(&t1, &t);
+            char s[100];
+            strftime(s, sizeof(s), "%Y-%m-%d %H:%M:%S%z", &t);
+
+            fprintf(stderr, "%s %20lu events/s\n", s, c);
+            t0 = t1;
+
+            tracer->count = 0;
+        }
+    }
+}
+
 int main(int argc, char **argv)
 {
     h2o_tracer_t *tracer;
@@ -48,12 +68,20 @@ int main(int argc, char **argv)
         tracer = create_http_tracer();
     }
 
+    bool debug = false;
+    const char *out_file = nullptr;
     int c;
     pid_t h2o_pid = -1;
-    while ((c = getopt(argc, argv, "hvp:t:s:dP:")) != -1) {
+    while ((c = getopt(argc, argv, "hvp:t:s:dP:o")) != -1) {
         switch (c) {
         case 'p':
             h2o_pid = atoi(optarg);
+            break;
+        case 'o':
+            out_file = optarg;
+            break;
+        case 'd':
+            debug = true;
             break;
         case 'h':
             usage();
@@ -69,6 +97,17 @@ int main(int argc, char **argv)
     if (geteuid() != 0) {
         fprintf(stderr, "Error: root privilege is required\n");
         exit(EXIT_FAILURE);
+    }
+
+    if (out_file != nullptr) {
+        FILE *out = fopen(out_file, "w");
+        if (out == nullptr) {
+            fprintf(stderr, "Error: failed to open %s: %s", out_file, strerror(errno));
+            exit(EXIT_FAILURE);
+        }
+        tracer->out = out;
+    } else {
+        tracer->out = stdout;
     }
 
     ebpf::BPF *bpf = new ebpf::BPF();
@@ -94,29 +133,21 @@ int main(int argc, char **argv)
         return EXIT_FAILURE;
     }
 
+    if (debug) {
+        fprintf(stderr, "attaching pid=%d\n", h2o_pid);
+    }
+
     ebpf::BPFPerfBuffer *perf_buffer = bpf->get_perf_buffer("events");
     if (perf_buffer) {
         time_t t0 = time(NULL);
 
         while (true) {
             perf_buffer->poll(POLL_TIMEOUT);
-            fflush(stdout);
+            fflush(tracer->out);
 
-            time_t t1 = time(NULL);
-            int64_t d = t1 - t0;
-            if (d > 10) {
-                uint64_t c = tracer->count / d;
-                if (c > 0) {
-                    struct tm t;
-                    localtime_r(&t1, &t);
-                    char s[100];
-                    strftime(s, sizeof(s), "%Y-%m-%d %H:%M:%S%z", &t);
-
-                    fprintf(stderr, "%s %20lu events/s\n", s, c);
-                    t0 = t1;
-
-                    tracer->count = 0;
-                }
+            if (debug) {
+                show_event_per_sec(tracer, t0);
+                t0 = time(NULL);
             }
         }
     }
