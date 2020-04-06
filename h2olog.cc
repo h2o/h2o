@@ -127,7 +127,7 @@ int main(int argc, char **argv)
         }
     }
 
-    ret = bpf->open_perf_buffer("events", tracer->handle_event, nullptr, &tracer, 64);
+    ret = bpf->open_perf_buffer("events", tracer->handle_event, nullptr, tracer, 64);
     if (ret.code() != 0) {
         fprintf(stderr, "open_perf_buffer: %s\n", ret.msg().c_str());
         return EXIT_FAILURE;
