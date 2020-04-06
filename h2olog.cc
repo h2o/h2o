@@ -28,7 +28,7 @@
 using namespace std;
 
 #define VERSION "0.1.0"
-#define POLL_TIMEOUT (-1)
+#define POLL_TIMEOUT (1000)
 
 static void usage(void)
 {
@@ -51,10 +51,9 @@ static void show_event_per_sec(h2o_tracer_t *tracer, time_t *t0)
             strftime(s, sizeof(s), "%Y-%m-%d %H:%M:%S%z", &t);
 
             fprintf(stderr, "%s %20lu events/s\n", s, c);
-            *t0 = t1;
-
             tracer->count = 0;
         }
+        *t0 = t1;
     }
 }
 
