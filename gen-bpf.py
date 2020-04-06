@@ -244,10 +244,15 @@ void quic_handle_event(void *context, void *data, int data_len) {
 
 for probe_name in probe_metadata:
     metadata = probe_metadata[probe_name]
-    block_field_set = block_fields.get(metadata["fully_specified_probe_name"], None)
+    fully_specified_probe_name = metadata["fully_specified_probe_name"]
+
+    if fully_specified_probe_name in block_probes:
+        continue
+
+    block_field_set = block_fields.get(fully_specified_probe_name, None)
     args_map = metadata["args_map"]
 
-    handle_event_func += "    case %s: { // %s\n" % (metadata['id'], probe_name)
+    handle_event_func += "    case %s: { // %s\n" % (metadata['id'], fully_specified_probe_name)
     handle_event_func += '        json_write_pair(out, false, "type", "%s");\n' % probe_name
 
     for event_t_name, (probe_field_name, arg_type) in args_map.items():
