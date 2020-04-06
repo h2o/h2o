@@ -268,6 +268,7 @@ write_to_file(output_file, r"""
 
 #include <stdlib.h>
 #include <stdint.h>
+#include <stdio.h>
 #include "h2olog.h"
 #include "data-types.h"
 #include "json.h"

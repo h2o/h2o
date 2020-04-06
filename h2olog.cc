@@ -21,6 +21,7 @@
  */
 
 #include <vector>
+#include <unistd.h>
 
 #include "h2olog.h"
 
@@ -86,11 +87,21 @@ int main(int argc, char **argv)
         case 'h':
             usage();
             exit(EXIT_SUCCESS);
+        default:
+            usage();
+            exit(EXIT_FAILURE);
         }
+    }
+
+    if (argc > optind) {
+        fprintf(stderr, "Error: too many aruments\n");
+        usage();
+        exit(EXIT_FAILURE);
     }
 
     if (h2o_pid == -1) {
         fprintf(stderr, "Error: -p option is missing\n");
+        usage();
         exit(EXIT_FAILURE);
     }
 

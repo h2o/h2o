@@ -25,7 +25,6 @@
 
 #include <cinttypes>
 #include <vector>
-#include <unistd.h>
 #include <bcc/BPF.h>
 
 typedef struct st_h2o_tracer_t {
