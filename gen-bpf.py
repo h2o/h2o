@@ -192,7 +192,7 @@ bpf = event_t_decl + r"""
 
 BPF_PERF_OUTPUT(events);
 
-""" + struct_decl
+"""
 
 usdt_def = """
 static
@@ -275,6 +275,8 @@ write_to_file(output_file, r"""
 
 // BPF modules written in C
 const char *pbf_text = R"(
+#include "data-types.h"
+
 %s
 )";
 %s
