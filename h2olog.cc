@@ -58,6 +58,26 @@ static void show_event_per_sec(h2o_tracer_t *tracer, time_t t0)
     }
 }
 
+static void show_process(pid_t pid)
+{
+    char cmdline[256];
+    char proc_file[256];
+    snprintf(proc_file, sizeof(proc_file), "/proc/%d/cmdline", pid);
+    FILE *f = fopen(proc_file, "r");
+    if (f == nullptr) {
+        fprintf(stderr, "Failed to open %s: %s\n", proc_file, strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+    size_t nread = fread(cmdline, 1, sizeof(cmdline), f);
+    fclose(f);
+    for (size_t i = 0; i < nread; i++) {
+        if (cmdline[i] == '\0') {
+            cmdline[i] = ' ';
+        }
+    }
+    fprintf(stderr, "Attaching pid=%d (%s)\n", pid, cmdline);
+}
+
 int main(int argc, char **argv)
 {
     h2o_tracer_t *tracer;
@@ -145,7 +165,7 @@ int main(int argc, char **argv)
     }
 
     if (debug) {
-        fprintf(stderr, "attaching pid=%d\n", h2o_pid);
+        show_process(h2o_pid);
     }
 
     ebpf::BPFPerfBuffer *perf_buffer = bpf->get_perf_buffer("events");
