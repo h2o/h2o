@@ -38,10 +38,10 @@ static void usage(void)
     return;
 }
 
-static void show_event_per_sec(h2o_tracer_t *tracer, time_t t0)
+static void show_event_per_sec(h2o_tracer_t *tracer, time_t *t0)
 {
     time_t t1 = time(NULL);
-    int64_t d = t1 - t0;
+    int64_t d = t1 - *t0;
     if (d > 10) {
         uint64_t c = tracer->count / d;
         if (c > 0) {
@@ -51,7 +51,7 @@ static void show_event_per_sec(h2o_tracer_t *tracer, time_t t0)
             strftime(s, sizeof(s), "%Y-%m-%d %H:%M:%S%z", &t);
 
             fprintf(stderr, "%s %20lu events/s\n", s, c);
-            t0 = t1;
+            *t0 = t1;
 
             tracer->count = 0;
         }
@@ -177,8 +177,7 @@ int main(int argc, char **argv)
             fflush(tracer->out);
 
             if (debug) {
-                show_event_per_sec(tracer, t0);
-                t0 = time(NULL);
+                show_event_per_sec(tracer, &t0);
             }
         }
     }
