@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # usage: gen-bpf.py d_files_dir output_file
 
 from __future__ import print_function
@@ -146,9 +146,9 @@ for (name, args) in re.findall(r'\bprobe\s+([a-zA-Z0-9_]+)\(([^\)]+)\);', matche
     }
     probe_id2metadata[id] = metadata
     probe_metadata[name] = metadata
-    args = metadata['args'] = map(
+    args = metadata['args'] = list(map(
         lambda arg: re.match(r'(?P<type>\w[^;]*[^;\s])\s*\b(?P<name>[a-zA-Z0-9_]+)', arg, flags = re_flags).groupdict(),
-        arg_list)
+        arg_list))
 
     # args map is a flat arg list
     args_map = metadata['args_map'] = OrderedDict()
