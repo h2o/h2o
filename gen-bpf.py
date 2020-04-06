@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 # usage: gen-bpf.py d_files_dir output_file
 
-from __future__ import print_function
-import re, ctypes, sys, json, binascii, os, time
-from pprint import pprint
+import re, sys
 from collections import OrderedDict
+from pathlib import Path
+from pprint import pprint
 
 try:
-    (_prog, d_files_dir, output_file) = sys.argv
+    (_, d_files_dir, output_file) = sys.argv
 except:
     print("usage: %s h2o_path d_files_dir output_file" % sys.argv[0])
     sys.exit(1)
@@ -31,26 +31,76 @@ rename_map = {
     "master_id": "master_conn_id",
 }
 
-def read_from_file(path):
-    with open(path, "r") as f:
-        return f.read()
-
-def write_to_file(path, content):
-    with open(path, "w") as f:
-        f.write(content)
-
-d = read_from_file(os.path.join(d_files_dir, "quicly-probes.d"))
-
+re_flags = re.X | re.M | re.S
 whitespace = r'(?:/\*.*?\*/|\s+)'
 probe_decl = r'(?:\bprobe\s+(?:[a-zA-Z0-9_]+)\s*\([^\)]*\)\s*;)'
 d_decl = r'(?:\bprovider\s*(?P<provider>[a-zA-Z0-9_]+)\s*\{(?P<probes>(?:%s|%s)*)\})' % (probe_decl, whitespace)
 
-re_flags = re.X | re.M | re.S
+def parse_c_struct(path):
+    content = path.read_text()
 
-matched = re.search(d_decl, d, flags = re_flags)
-provider = matched.group('provider')
+    st_map = OrderedDict()
+    for (st_name, st_content) in re.findall(r'struct\s+([a-zA-Z0-9_]+)\s*\{([^}]*)\}', content, flags = re_flags):
+        st = st_map[st_name] = {}
+        for (ctype, name, is_array) in re.findall(r'(\w+[^;]*[\w\*])\s+([a-zA-Z0-9_]+)(\[\d+\])?;', st_content, flags = re_flags):
+            if "dummy" in name:
+                continue
+            st[name] = ctype + is_array
+    return st_map
 
-struct_decl = read_from_file(os.path.join(os.path.dirname(__file__), "data-types.h"))
+def parse_d(context, path):
+    content = path.read_text()
+
+    matched = re.search(d_decl, content, flags = re_flags)
+    provider = matched.group('provider')
+
+    st_map = context["st_map"]
+    probe_metadata = context["probe_metadata"]
+
+    id = context["id"]
+    max_ints = context["max_ints"]
+    max_strs = context["max_strs"]
+
+    for (name, args) in re.findall(r'\bprobe\s+([a-zA-Z0-9_]+)\(([^\)]+)\);', matched.group('probes'), flags = re_flags):
+        arg_list = re.split(r'\s*,\s*', args, flags = re_flags)
+        id += 1
+        metadata = {
+            "id": id,
+            "provider": provider,
+            "name": name,
+            "fully_specified_probe_name": "%s:%s" % (provider, name),
+        }
+        probe_metadata[name] = metadata
+        args = metadata['args'] = list(map(
+            lambda arg: re.match(r'(?P<type>\w[^;]*[^;\s])\s*\b(?P<name>[a-zA-Z0-9_]+)', arg, flags = re_flags).groupdict(),
+            arg_list))
+
+        # args map is a flat arg list
+        args_map = metadata['args_map'] = OrderedDict()
+
+        n_ints = 0
+        n_strs = 0
+        for arg in args:
+            if is_str_type(arg['type']):
+                args_map["s%d" % n_strs] = (arg['name'], arg['type'])
+                n_strs += 1
+            elif is_ptr_type(arg['type']):
+                # it assumes that all the fields in the struct are values (i.e. integers)
+                for st_key, st_valtype in st_map[strip_typename(arg['type'])].items():
+                    args_map["i%d" % n_ints] = (st_key, st_valtype)
+                    n_ints += 1
+            else:
+                args_map["i%d" % n_ints] = (arg['name'], arg['type'])
+                n_ints += 1
+
+        if max_ints < n_ints:
+            max_ints = n_ints
+        if max_strs < n_strs:
+            max_strs = n_strs
+
+    context["id"] = id
+    context["max_ints"] = max_ints
+    context["max_strs"] = max_strs
 
 def strip_typename(t):
     return t.replace("*", "").replace("struct", "").replace("const", "").replace("strict", "").strip()
@@ -67,11 +117,13 @@ def is_bin_type(t):
 def build_tracer_name(metadata):
     return "trace_%s__%s" % (metadata['provider'], metadata['name'])
 
-def build_tracer(metadata):
+def build_tracer(context, metadata):
+    st_map = context["st_map"]
+
     c = r"""
 int %s(struct pt_regs *ctx) {
     void *buf = NULL;
-    struct event_t event = { .id = %d };
+    struct quic_event_t event = { .id = %d };
 
 """ % (build_tracer_name(metadata), metadata['id'])
 
@@ -111,7 +163,7 @@ int %s(struct pt_regs *ctx) {
         i += 1
     diff = ""
     if str_i > 0:
-        diff = " - %d" % (str_i * 32)
+        diff = " - (%d * STR_LEN)" % (str_i)
     c += """
     if (events.perf_submit(ctx, &event, sizeof(event)%s) != 0)
         bpf_trace_printk("failed to perf_submit\\n");
@@ -121,68 +173,28 @@ int %s(struct pt_regs *ctx) {
     return c
 
 
-st_map = {}
-for (st_name, content) in re.findall(r'struct\s+([a-zA-Z0-9_]+)\s*\{([^}]*)\}', struct_decl, flags = re_flags):
-    st = st_map[st_name] = {}
-    for (ctype, name, is_array) in re.findall(r'(\w+[^;]*[\w\*])\s+([a-zA-Z0-9_]+)(\[\d+\])?;', content, flags = re_flags):
-        if "dummy" in name:
-            continue
-        st[name] = ctype + is_array
+context = {
+    "id": 0,
+    "max_ints": 0,
+    "max_strs": 0,
+    "probe_metadata": OrderedDict(),
+    "st_map": parse_c_struct(Path(Path(__file__).parent, "data-types.h")),
+}
 
-probe_metadata = OrderedDict()
-probe_id2metadata = OrderedDict()
-max_ints = 0
-max_strs = 0
+parse_d(context, Path(d_files_dir, "quicly-probes.d"))
 
-id = 0
-for (name, args) in re.findall(r'\bprobe\s+([a-zA-Z0-9_]+)\(([^\)]+)\);', matched.group('probes'), flags = re_flags):
-    arg_list = re.split(r'\s*,\s*', args, flags = re_flags)
-    id += 1
-    metadata = {
-        "id": id,
-        "provider": provider,
-        "name": name,
-        "fully_specified_probe_name": "%s:%s" % (provider, name),
-    }
-    probe_id2metadata[id] = metadata
-    probe_metadata[name] = metadata
-    args = metadata['args'] = list(map(
-        lambda arg: re.match(r'(?P<type>\w[^;]*[^;\s])\s*\b(?P<name>[a-zA-Z0-9_]+)', arg, flags = re_flags).groupdict(),
-        arg_list))
-
-    # args map is a flat arg list
-    args_map = metadata['args_map'] = OrderedDict()
-
-    n_ints = 0
-    n_strs = 0
-    for arg in args:
-        if is_str_type(arg['type']):
-            args_map["s%d" % n_strs] = (arg['name'], arg['type'])
-            n_strs += 1
-        elif is_ptr_type(arg['type']):
-            # it assumes that all the fields in the struct are values (i.e. integers)
-            for st_key, st_valtype in st_map[strip_typename(arg['type'])].items():
-                args_map["i%d" % n_ints] = (st_key, st_valtype)
-                n_ints += 1
-        else:
-            args_map["i%d" % n_ints] = (arg['name'], arg['type'])
-            n_ints += 1
-
-    if max_ints < n_ints:
-        max_ints = n_ints
-    if max_strs < n_strs:
-        max_strs = n_strs
+probe_metadata = context["probe_metadata"]
 
 event_t_decl = r"""
-struct event_t {
+struct quic_event_t {
     uint8_t id;
 
 """
 
-for i in range(max_ints):
+for i in range(context["max_ints"]):
     event_t_decl += "    uint64_t i%d;\n" % i
-for i in range(max_strs):
-    event_t_decl += "    char s%d[32];\n" % i
+for i in range(context["max_strs"]):
+    event_t_decl += "    char s%d[STR_LEN];\n" % i
 
 event_t_decl += r"""
 };
@@ -204,7 +216,7 @@ for metadata in probe_metadata.values():
     if metadata["fully_specified_probe_name"] in block_probes:
         continue
 
-    bpf += build_tracer(metadata)
+    bpf += build_tracer(context, metadata)
     usdt_def += """      ebpf::USDT(pid, "%s", "%s", "%s"),\n""" % (metadata['provider'], metadata['name'], build_tracer_name(metadata))
 
 usdt_def += """
@@ -222,7 +234,7 @@ void quic_handle_event(void *context, void *data, int data_len) {
 
     FILE *out = tracer->out;
 
-    const event_t *event = static_cast<const event_t*>(data);
+    const quic_event_t *event = static_cast<const quic_event_t*>(data);
 
     // output JSON
     fprintf(out, "{");
@@ -245,11 +257,13 @@ for probe_name in probe_metadata:
         if not is_bin_type(arg_type):
             handle_event_func += '        json_write_pair(out, true, "%s", (%s)(event->%s));\n' % (data_field_name, arg_type, event_t_name)
         else:
-            len_name = probe_field_name + "_len"
+            len_names = set([probe_field_name + "_len", "len"])
+
             for e, (n, t) in args_map.items():
-                if n == len_name or n == "len":
+                if n in len_names:
                     (len_event_t_name, len_arg_type) = (e, t)
-            handle_event_func += '        json_write_pair(out, true, "%s", (%s)(event->%s), (%s)(event->%s));\n' % (data_field_name, arg_type, event_t_name, len_arg_type, len_event_t_name)
+            # A string might be truncated in STRLEN
+            handle_event_func += '        json_write_pair(out, true, "%s", (%s)(event->%s), (%s)(event->%s < STR_LEN ? event->%s : STR_LEN));\n' % (data_field_name, arg_type, event_t_name, len_arg_type, len_event_t_name, len_event_t_name)
 
     handle_event_func += "        break;\n"
     handle_event_func += "    }\n"
@@ -263,7 +277,7 @@ handle_event_func += r"""
 """
 handle_event_func += "}\n";
 
-write_to_file(output_file, r"""
+Path(output_file).write_text(r"""
 // Generated code. Do not edit it here!
 
 #include <stdlib.h>
@@ -273,9 +287,13 @@ write_to_file(output_file, r"""
 #include "data-types.h"
 #include "json.h"
 
+#define STR_LEN 64
+
 // BPF modules written in C
 const char *pbf_text = R"(
 #include "data-types.h"
+
+#define STR_LEN 64
 
 %s
 )";
