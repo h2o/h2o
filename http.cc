@@ -48,8 +48,7 @@ struct event_t {
 BPF_PERF_OUTPUT(events);
 
 int trace_receive_request(struct pt_regs *ctx) {
-  struct event_t ev = {};
-  ev.type = HTTP_EVENT_RECEIVE_REQ;
+  struct event_t ev = { .type = HTTP_EVENT_RECEIVE_REQ };
   bpf_usdt_readarg(1, ctx, &ev.conn_id);
   bpf_usdt_readarg(2, ctx, &ev.req_id);
   bpf_usdt_readarg(3, ctx, &ev.http_version);
@@ -58,8 +57,7 @@ int trace_receive_request(struct pt_regs *ctx) {
 }
 
 int trace_receive_request_header(struct pt_regs *ctx) {
-  struct event_t ev = {};
-  ev.type = HTTP_EVENT_RECEIVE_REQ_HDR;
+  struct event_t ev = { .type = HTTP_EVENT_RECEIVE_REQ_HDR };
   void *pos = NULL;
   bpf_usdt_readarg(1, ctx, &ev.conn_id);
   bpf_usdt_readarg(2, ctx, &ev.req_id);
