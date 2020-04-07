@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2020 Fastly, Inc., Toru Maesaka
+ * Copyright (c) 2019-2020 Fastly, Inc., Toru Maesaka, Goro Fuji
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to
@@ -22,68 +22,52 @@
 
 #include "h2olog.h"
 
-const char *HTTP_BPF = R"(
-enum {
-  HTTP_EVENT_RECEIVE_REQ
-};
-
+const char *QUIC_BPF = R"(
 struct event_t {
-  uint8_t type;
-  uint64_t conn_id;
-  uint64_t req_id;
-  union {
-    uint32_t http_version;
-  };
+  uint64_t at;
 };
 
 BPF_PERF_OUTPUT(events);
 
-int trace_receive_request(struct pt_regs *ctx) {
-  struct event_t ev = {};
-  ev.type = HTTP_EVENT_RECEIVE_REQ;
-  bpf_usdt_readarg(1, ctx, &ev.conn_id);
-  bpf_usdt_readarg(2, ctx, &ev.req_id);
-  bpf_usdt_readarg(3, ctx, &ev.http_version);
-  if (events.perf_submit(ctx, &ev, sizeof(ev)) < 0)
-    bpf_trace_printk("failed to perf_submit\\n");
+int trace_quicly__accept(struct pt_regs *ctx) {
+  struct event_t event = {};
+  bpf_usdt_readarg(2, ctx, &event.at);
+  events.perf_submit(ctx, &event, sizeof(event));
+  return 0;
+}
+
+int trace_quicly__crypto_handshake(struct pt_regs *ctx) {
+  struct event_t event = {};
+  bpf_usdt_readarg(2, ctx, &event.at);
+  events.perf_submit(ctx, &event, sizeof(event));
   return 0;
 }
 )";
 
-enum { HTTP_EVENT_RECEIVE_REQ };
-
-struct http_event_t {
-    uint8_t type;
-    uint64_t conn_id;
-    uint64_t req_id;
-
-    union {
-        uint32_t http_version;
-    };
+struct quic_event_t {
+    uint64_t at;
 };
 
 static void handle_event(void *cpu, void *data, int len)
 {
-    struct http_event_t *ev = (http_event_t *)data;
-    if (ev->type == HTTP_EVENT_RECEIVE_REQ) {
-        printf("%" PRIu64 " %" PRIu64 " RxProtocol HTTP/%" PRIu32 ".%" PRIu32 "\n", ev->conn_id, ev->req_id, ev->http_version / 256,
-               ev->http_version % 256);
-    }
+    struct quic_event_t *ev = (quic_event_t *)data;
+    printf("time: %" PRIu64 "\n", ev->at);
 }
 
 static std::vector<ebpf::USDT> init_usdt_probes(pid_t h2o_pid)
 {
     std::vector<ebpf::USDT> vec;
-    vec.push_back(ebpf::USDT(h2o_pid, "h2o", "receive_request", "trace_receive_request"));
+    vec.push_back(ebpf::USDT(h2o_pid, "quicly", "accept", "trace_quicly__accept"));
+    vec.push_back(ebpf::USDT(h2o_pid, "quicly", "crypto_handshake", "trace_quicly__crypto_handshake"));
     return vec;
 }
 
 static const char *bpf_text(void)
 {
-    return HTTP_BPF;
+    return QUIC_BPF;
 }
 
-h2o_tracer_t *create_http_tracer(void)
+h2o_tracer_t *create_quic_tracer(void)
 {
     h2o_tracer_t *tracer = (h2o_tracer_t *)malloc(sizeof(tracer));
     tracer->handle_event = handle_event;
