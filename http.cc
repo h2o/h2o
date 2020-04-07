@@ -22,21 +22,67 @@
 
 #include "h2olog.h"
 
+const char *HTTP_BPF = R"(
+enum {
+  HTTP_EVENT_RECEIVE_REQ
+};
+
+struct event_t {
+  uint8_t type;
+  uint64_t conn_id;
+  uint64_t req_id;
+  union {
+    uint32_t http_version;
+  };
+};
+
+BPF_PERF_OUTPUT(events);
+
+int trace_receive_request(struct pt_regs *ctx) {
+  struct event_t ev = {};
+  ev.type = HTTP_EVENT_RECEIVE_REQ;
+  bpf_usdt_readarg(1, ctx, &ev.conn_id);
+  bpf_usdt_readarg(2, ctx, &ev.req_id);
+  bpf_usdt_readarg(3, ctx, &ev.http_version);
+  if (events.perf_submit(ctx, &ev, sizeof(ev)) < 0)
+    bpf_trace_printk("failed to perf_submit\\n");
+  return 0;
+}
+)";
+
+enum {
+  HTTP_EVENT_RECEIVE_REQ
+};
+
+struct http_event_t {
+    uint8_t type;
+    uint64_t conn_id;
+    uint64_t req_id;
+
+    union {
+      uint32_t http_version;
+    };
+};
+
 static void handle_event(void *cpu, void *data, int len)
 {
-    printf("unimplemented\n");
+    struct http_event_t *ev = (http_event_t *)data;
+    if (ev->type == HTTP_EVENT_RECEIVE_REQ) {
+      printf("%" PRIu64 " %" PRIu64 " RxProtocol HTTP/%" PRIu32 ".%" PRIu32 "\n",
+             ev->conn_id, ev->req_id, ev->http_version / 256, ev->http_version % 256);
+    }
 }
 
 static std::vector<ebpf::USDT> init_usdt_probes(pid_t h2o_pid)
 {
-    // Unimplemented
     std::vector<ebpf::USDT> vec;
+    vec.push_back(ebpf::USDT(h2o_pid, "h2o", "receive_request", "trace_receive_request"));
     return vec;
 }
 
 static const char *bpf_text(void)
 {
-    return "unimplemented";
+    return HTTP_BPF;
 }
 
 h2o_tracer_t *create_http_tracer(void)
