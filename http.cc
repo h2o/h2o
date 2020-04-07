@@ -83,11 +83,9 @@ static const char *bpf_text(void)
     return HTTP_BPF;
 }
 
-h2o_tracer_t *create_http_tracer(void)
+void init_http_tracer(h2o_tracer_t *tracer)
 {
-    h2o_tracer_t *tracer = (h2o_tracer_t *)malloc(sizeof(tracer));
     tracer->handle_event = handle_event;
     tracer->init_usdt_probes = init_usdt_probes;
     tracer->bpf_text = bpf_text;
-    return tracer;
 }

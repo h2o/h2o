@@ -32,9 +32,16 @@ using namespace std;
 
 static void usage(void)
 {
-    printf("h2olog (%s)\n", VERSION);
-    printf("-p PID of the H2O server\n");
-    printf("-h Print this help and exit\n");
+    printf(R"(h2olog (v%s)
+Usage: h2olog -p PID
+       h2olog quic -p PID
+       h2olog quic -t event_type -p PID
+       h2olog quic -v -s response_header_name -p PID
+Other options:
+    -h Shows this help and exit.
+    -d Shows debugging information.
+)",
+           VERSION);
     return;
 }
 
@@ -80,23 +87,31 @@ static void show_process(pid_t pid)
 
 int main(int argc, char **argv)
 {
-    h2o_tracer_t *tracer;
+    h2o_tracer_t tracer = {};
     if (argc > 1 && strcmp(argv[1], "quic") == 0) {
-        tracer = create_quic_tracer();
+        init_quic_tracer(&tracer);
         --argc;
         ++argv;
     } else {
-        tracer = create_http_tracer();
+        init_http_tracer(&tracer);
     }
 
     bool debug = false;
     const char *out_file = nullptr;
+    std::vector<std::string> event_type_filters;
+    std::vector<std::string> response_header_filters;
     int c;
     pid_t h2o_pid = -1;
-    while ((c = getopt(argc, argv, "hvp:t:s:dP:o:")) != -1) {
+    while ((c = getopt(argc, argv, "hdp:t:s:o:")) != -1) {
         switch (c) {
         case 'p':
             h2o_pid = atoi(optarg);
+            break;
+        case 't':
+            event_type_filters.push_back(optarg);
+            break;
+        case 's':
+            response_header_filters.push_back(optarg);
             break;
         case 'o':
             out_file = optarg;
@@ -136,15 +151,15 @@ int main(int argc, char **argv)
             fprintf(stderr, "Error: failed to open %s: %s", out_file, strerror(errno));
             exit(EXIT_FAILURE);
         }
-        tracer->out = out;
+        tracer.out = out;
     } else {
-        tracer->out = stdout;
+        tracer.out = stdout;
     }
 
     ebpf::BPF *bpf = new ebpf::BPF();
-    std::vector<ebpf::USDT> probes = tracer->init_usdt_probes(h2o_pid);
+    std::vector<ebpf::USDT> probes = tracer.init_usdt_probes(h2o_pid);
 
-    ebpf::StatusTuple ret = bpf->init(tracer->bpf_text(), {}, probes);
+    ebpf::StatusTuple ret = bpf->init(tracer.bpf_text(), {}, probes);
     if (ret.code() != 0) {
         fprintf(stderr, "init: %s\n", ret.msg().c_str());
         return EXIT_FAILURE;
@@ -158,7 +173,7 @@ int main(int argc, char **argv)
         }
     }
 
-    ret = bpf->open_perf_buffer("events", tracer->handle_event, nullptr, tracer, 64);
+    ret = bpf->open_perf_buffer("events", tracer.handle_event, nullptr, &tracer, 64);
     if (ret.code() != 0) {
         fprintf(stderr, "open_perf_buffer: %s\n", ret.msg().c_str());
         return EXIT_FAILURE;
@@ -174,10 +189,10 @@ int main(int argc, char **argv)
 
         while (true) {
             perf_buffer->poll(POLL_TIMEOUT);
-            fflush(tracer->out);
+            fflush(tracer.out);
 
             if (debug) {
-                show_event_per_sec(tracer, &t0);
+                show_event_per_sec(&tracer, &t0);
             }
         }
     }

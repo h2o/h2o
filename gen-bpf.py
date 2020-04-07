@@ -392,14 +392,10 @@ const char *quic_bpf_ext() {
   return pbf_text;
 }
 
-h2o_tracer_t *create_quic_tracer(void) {
-  h2o_tracer_t *tracer = new h2o_tracer_t();
+void init_quic_tracer(h2o_tracer_t * tracer) {
   tracer->handle_event = quic_handle_event;
   tracer->init_usdt_probes = quic_init_usdt_probes;
   tracer->bpf_text = quic_bpf_ext;
-  tracer->count = 0;
-  tracer->out = nullptr;
-  return tracer;
 }
 
 """ % (bpf, usdt_def, event_t_decl, handle_event_func))

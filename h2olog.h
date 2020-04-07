@@ -48,13 +48,13 @@ typedef struct st_h2o_tracer_t {
 } h2o_tracer_t;
 
 /*
- * Creates an HTTP tracer.
+ * Initialize an HTTP tracer.
  */
-h2o_tracer_t *create_http_tracer(void);
+void init_http_tracer(h2o_tracer_t *);
 
 /*
- * Creates a QUIC tracer.
+ * Initialize a QUIC tracer.
  */
-h2o_tracer_t *create_quic_tracer(void);
+void init_quic_tracer(h2o_tracer_t *);
 
 #endif
