@@ -48,7 +48,8 @@ static void show_event_per_sec(h2o_tracer_t *tracer, time_t *t0)
             struct tm t;
             localtime_r(&t1, &t);
             char s[100];
-            strftime(s, sizeof(s), "%Y-%m-%d %H:%M:%S%z", &t);
+            const char *iso8601format = "%FT%TZ";
+            strftime(s, sizeof(s), iso8601format, &t);
 
             fprintf(stderr, "%s %20lu events/s\n", s, c);
             tracer->count = 0;

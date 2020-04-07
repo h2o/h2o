@@ -40,10 +40,18 @@ block_fields = {
     "quicly:crypto_send_key_update": set(["secret"]),
     "quicly:crypto_receive_key_update": set(["secret"]),
     "quicly:crypto_receive_key_update_prepare": set(["secret"]),
+
+    "h2o:h3_accept": set(["conn"]), # `h2o_conn_t *conn`
 }
 
-block_probes = set([
+quicly_block_probes = set([
     "quicly:debug_message",
+])
+
+h2o_allow_probes = set([
+    "h2o:h3_accept",
+    "h2o:h3_close",
+    "h2o:send_response_header",
 ])
 
 # mapping from proves.d's to quic-trace's:
@@ -69,7 +77,7 @@ def parse_c_struct(path):
             st[name] = ctype + is_array
     return st_map
 
-def parse_d(context, path):
+def parse_d(context: dict, path: Path, allow_probes: set = None, block_probes: set = None):
     content = path.read_text()
 
     matched = re.search(d_decl, content, flags = re_flags)
@@ -85,8 +93,11 @@ def parse_d(context, path):
         id += 1
 
         fully_specified_probe_name = "%s:%s" % (provider, name)
-        if fully_specified_probe_name in block_probes:
+        if block_probes and fully_specified_probe_name in block_probes:
             continue
+        if allow_probes and fully_specified_probe_name not in allow_probes:
+            continue
+
 
         metadata = {
             "id": id,
@@ -104,6 +115,7 @@ def parse_d(context, path):
         for arg in args:
             arg_name = arg['name']
             arg_type = arg['type']
+
             if is_ptr_type(arg_type) and not is_str_type(arg_type):
                 for st_key, st_valtype in st_map[strip_typename(arg_type)].items():
                     flat_args_map[st_key] = st_valtype
@@ -129,15 +141,15 @@ def build_tracer_name(metadata):
 
 def build_tracer(context, metadata):
     st_map = context["st_map"]
+    fully_specified_probe_name = metadata["fully_specified_probe_name"]
 
-    c = r"""
+    c = r"""// %s
 int %s(struct pt_regs *ctx) {
-    void *buf = NULL;
-    struct quic_event_t event = { .id = %d };
+  void *buf = NULL;
+  struct quic_event_t event = { .id = %d };
 
-""" % (build_tracer_name(metadata), metadata['id'])
-
-    block_field_set = block_fields.get(metadata["fully_specified_probe_name"], set())
+""" % (fully_specified_probe_name, build_tracer_name(metadata), metadata['id'])
+    block_field_set = block_fields.get(fully_specified_probe_name, set())
     probe_name = metadata["name"]
 
     args = metadata['args']
@@ -145,32 +157,57 @@ int %s(struct pt_regs *ctx) {
         arg = args[i]
         arg_name = arg['name']
         arg_type = arg['type']
-        c += "    // %s %s\n" % (arg_type, arg_name)
+
         if arg_name in block_field_set:
-            c += "    // (ignored because it's in the block list)\n"
+            c += "  // %s %s (ignored)\n" % (arg_type, arg_name)
             continue
+        else:
+            c += "  // %s %s\n" % (arg_type, arg_name)
 
         if is_str_type(arg_type):
-            c += "    bpf_usdt_readarg(%d, ctx, &buf);\n" % (i+1)
+            c += "  bpf_usdt_readarg(%d, ctx, &buf);\n" % (i+1)
             # Use `sizeof(buf)` instead of a length variable, because older kernels
             # do not accept a variable for `bpf_probe_read()`'s length parameter.
             event_t_name = "%s.%s" % (probe_name, arg_name)
-            c += "    bpf_probe_read(&event.%s, sizeof(event.%s), buf);\n" % (event_t_name, event_t_name)
+            c += "  bpf_probe_read(&event.%s, sizeof(event.%s), buf);\n" % (event_t_name, event_t_name)
         elif is_ptr_type(arg_type):
-            c += "    %s %s = {};\n" % (arg_type.replace("*", ""), arg_name)
-            c += "    bpf_usdt_readarg(%d, ctx, &buf);\n" % (i+1)
-            c += "    bpf_probe_read(&%s, sizeof(%s), buf);\n" % (arg_name, arg_name)
+            c += "  %s %s = {};\n" % (arg_type.replace("*", ""), arg_name)
+            c += "  bpf_usdt_readarg(%d, ctx, &buf);\n" % (i+1)
+            c += "  bpf_probe_read(&%s, sizeof(%s), buf);\n" % (arg_name, arg_name)
             for st_key, st_valtype in st_map[strip_typename(arg_type)].items():
                 event_t_name = "%s.%s" % (probe_name, st_key)
-                c += "    event.%s = %s.%s; /* %s */\n" % (event_t_name, arg_name, st_key, st_valtype)
+                c += "  event.%s = %s.%s; /* %s */\n" % (event_t_name, arg_name, st_key, st_valtype)
         else:
             event_t_name = "%s.%s" % (probe_name, arg_name)
-            c += "    bpf_usdt_readarg(%d, ctx, &event.%s);\n" % (i+1, event_t_name)
-    c += r"""
-    if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
-        bpf_trace_printk("failed to perf_submit\n");
+            c += "  bpf_usdt_readarg(%d, ctx, &event.%s);\n" % (i+1, event_t_name)
 
+    if fully_specified_probe_name == "h2o:h3_accept":
+        c += r"""
+  h2o_to_quicly_conn.update(&event.h3_accept.conn_id, &event.h3_accept.master_id);
+"""
+    elif fully_specified_probe_name == "h2o:h3_close":
+        c += r"""
+  const uint32_t *master_conn_id_ptr = h2o_to_quicly_conn.lookup(&event.h3_close.conn_id);
+  if (master_conn_id_ptr != NULL) {
+    event.h3_close.master_id = *master_conn_id_ptr;
+  } else {
+    bpf_trace_printk("h2o's conn_id=%lu is not associated to master_conn_id\n", event.h3_close.conn_id);
+  }
+  h2o_to_quicly_conn.delete(&event.h3_close.conn_id);
+"""
+    elif metadata["provider"] == "h2o":
+        c += r"""
+  const uint32_t *master_conn_id_ptr = h2o_to_quicly_conn.lookup(&event.%s.conn_id);
+  if (master_conn_id_ptr == NULL)
     return 0;
+  event.%s.master_id = *master_conn_id_ptr;
+""" % (probe_name, probe_name)
+
+    c += r"""
+  if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
+    bpf_trace_printk("failed to perf_submit\n");
+
+  return 0;
 }
 """
     return c
@@ -182,7 +219,8 @@ context = {
     "st_map": parse_c_struct(Path(Path(__file__).parent, "data-types.h")),
 }
 
-parse_d(context, Path(d_files_dir, "quicly-probes.d"))
+parse_d(context, Path(d_files_dir, "quicly-probes.d"), block_probes = quicly_block_probes)
+parse_d(context, Path(d_files_dir, "h2o-probes.d"), allow_probes = h2o_allow_probes)
 
 probe_metadata = context["probe_metadata"]
 
@@ -194,7 +232,7 @@ struct quic_event_t {
 """
 
 for name, metadata in probe_metadata.items():
-    event_t_decl += "    struct { // %s\n" % name
+    event_t_decl += "    struct { // %s\n" % metadata["fully_specified_probe_name"]
     for field_name, field_type in metadata["flat_args_map"].items():
         if is_bin_type(field_type):
             f = "uint8_t %s[STR_LEN]" % field_name
@@ -203,7 +241,9 @@ for name, metadata in probe_metadata.items():
         else:
             f = "%s %s" % (field_type, field_name)
 
-        event_t_decl += "      %s;\n" % (f)
+        event_t_decl += "      %s;\n" % f
+    if metadata["provider"] == "h2o" and name != "h3_accept":
+        event_t_decl += "      uint32_t master_id;\n"
     event_t_decl += "    } %s;\n" % name
 
 event_t_decl += r"""
@@ -212,9 +252,10 @@ event_t_decl += r"""
 """
 
 bpf = event_t_decl + r"""
-
 BPF_PERF_OUTPUT(events);
 
+// HTTP/3 tracing
+BPF_HASH(h2o_to_quicly_conn, u64, u32);
 """
 
 usdt_def = """
@@ -225,13 +266,14 @@ std::vector<ebpf::USDT> quic_init_usdt_probes(pid_t pid) {
 
 for metadata in probe_metadata.values():
     bpf += build_tracer(context, metadata)
-    usdt_def += """      ebpf::USDT(pid, "%s", "%s", "%s"),\n""" % (metadata['provider'], metadata['name'], build_tracer_name(metadata))
+    usdt_def += """    ebpf::USDT(pid, "%s", "%s", "%s"),\n""" % (metadata['provider'], metadata['name'], build_tracer_name(metadata))
 
 usdt_def += """
-    };
-    return probes;
+  };
+  return probes;
 }
 """
+
 
 handle_event_func = r"""
 
@@ -277,6 +319,11 @@ for probe_name in probe_metadata:
             # A string might be truncated in STRLEN
             handle_event_func += '        json_write_pair(out, true, "%s", event->%s, (event->%s < STR_LEN ? event->%s : STR_LEN));\n' % (data_field_name, event_t_name, len_event_t_name, len_event_t_name)
 
+    if metadata["provider"] == "h2o":
+        if probe_name != "h3_accept":
+            handle_event_func += '        json_write_pair(out, true, "master_conn_id", event->%s.master_id);\n' % (probe_name)
+        handle_event_func += '        json_write_pair(out, true, "time", time_milliseconds());\n'
+
     handle_event_func += "        break;\n"
     handle_event_func += "    }\n"
 
@@ -294,6 +341,7 @@ Path(output_file).write_text(r"""// Generated code. Do not edit it here!
 #include <stdlib.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <sys/time.h>
 #include "h2olog.h"
 #include "data-types.h"
 #include "json.h"
@@ -305,9 +353,16 @@ const char *pbf_text = R"(
 #include "data-types.h"
 
 #define STR_LEN 64
-
 %s
 )";
+
+static uint64_t time_milliseconds()
+{
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    return (int64_t)tv.tv_sec * 1000 + tv.tv_usec / 1000;
+}
+
 %s
 %s
 %s

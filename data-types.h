@@ -4,6 +4,8 @@
 // Those structs must be synchronized to h2o and quicly.
 // Fields that include "dummy" are ignored.
 
+// from quicly
+
 struct st_quicly_stream_t {
     uint64_t dummy;
     int64_t stream_id;
@@ -14,13 +16,6 @@ struct st_quicly_conn_t {
     uint32_t master_id;
 };
 
-struct st_h2o_conn_t {
-    void *dummy_ctx;
-    void **dummy_hosts;
-    uint64_t dummy_connected_at[2];
-    uint64_t h2o_conn_id;
-};
-
 struct quicly_rtt_t {
     uint32_t minimum;
     uint32_t smoothed;
@@ -29,6 +24,12 @@ struct quicly_rtt_t {
 };
 
 struct st_quicly_address_token_plaintext_t {
+    int dummy;
+};
+
+// from h2o
+
+struct st_h2o_conn_t {
     int dummy;
 };
 
