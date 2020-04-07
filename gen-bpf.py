@@ -79,49 +79,38 @@ def parse_d(context, path):
     probe_metadata = context["probe_metadata"]
 
     id = context["id"]
-    max_ints = context["max_ints"]
-    max_strs = context["max_strs"]
 
     for (name, args) in re.findall(r'\bprobe\s+([a-zA-Z0-9_]+)\(([^\)]+)\);', matched.group('probes'), flags = re_flags):
         arg_list = re.split(r'\s*,\s*', args, flags = re_flags)
         id += 1
+
+        fully_specified_probe_name = "%s:%s" % (provider, name)
+        if fully_specified_probe_name in block_probes:
+            continue
+
         metadata = {
             "id": id,
             "provider": provider,
             "name": name,
-            "fully_specified_probe_name": "%s:%s" % (provider, name),
+            "fully_specified_probe_name": fully_specified_probe_name,
         }
         probe_metadata[name] = metadata
         args = metadata['args'] = list(map(
             lambda arg: re.match(r'(?P<type>\w[^;]*[^;\s])\s*\b(?P<name>[a-zA-Z0-9_]+)', arg, flags = re_flags).groupdict(),
             arg_list))
 
-        # args map is a flat arg list
-        args_map = metadata['args_map'] = OrderedDict()
+        flat_args_map = metadata['flat_args_map'] = OrderedDict()
 
-        n_ints = 0
-        n_strs = 0
         for arg in args:
-            if is_str_type(arg['type']):
-                args_map["s%d" % n_strs] = (arg['name'], arg['type'])
-                n_strs += 1
-            elif is_ptr_type(arg['type']):
-                # it assumes that all the fields in the struct are values (i.e. integers)
-                for st_key, st_valtype in st_map[strip_typename(arg['type'])].items():
-                    args_map["i%d" % n_ints] = (st_key, st_valtype)
-                    n_ints += 1
+            arg_name = arg['name']
+            arg_type = arg['type']
+            if is_ptr_type(arg_type) and not is_str_type(arg_type):
+                for st_key, st_valtype in st_map[strip_typename(arg_type)].items():
+                    flat_args_map[st_key] = st_valtype
             else:
-                args_map["i%d" % n_ints] = (arg['name'], arg['type'])
-                n_ints += 1
-
-        if max_ints < n_ints:
-            max_ints = n_ints
-        if max_strs < n_strs:
-            max_strs = n_strs
+                flat_args_map[arg_name] = arg_type
 
     context["id"] = id
-    context["max_ints"] = max_ints
-    context["max_strs"] = max_strs
 
 def strip_typename(t):
     return t.replace("*", "").replace("struct", "").replace("const", "").replace("strict", "").strip()
@@ -149,55 +138,46 @@ int %s(struct pt_regs *ctx) {
 """ % (build_tracer_name(metadata), metadata['id'])
 
     block_field_set = block_fields.get(metadata["fully_specified_probe_name"], set())
+    probe_name = metadata["name"]
 
-    i = 0
     args = metadata['args']
-    str_i = 0
-    int_i = 0
-    while i < len(args):
+    for i in range(len(args)):
         arg = args[i]
         arg_name = arg['name']
         arg_type = arg['type']
         c += "    // %s %s\n" % (arg_type, arg_name)
         if arg_name in block_field_set:
             c += "    // (ignored because it's in the block list)\n"
-            i += 1
             continue
 
         if is_str_type(arg_type):
             c += "    bpf_usdt_readarg(%d, ctx, &buf);\n" % (i+1)
             # Use `sizeof(buf)` instead of a length variable, because older kernels
             # do not accept a variable for `bpf_probe_read()`'s length parameter.
-            c += "    bpf_probe_read(&event.s%d, sizeof(event.s%d), buf);\n" % (str_i, str_i)
-            str_i += 1
+            event_t_name = "%s.%s" % (probe_name, arg_name)
+            c += "    bpf_probe_read(&event.%s, sizeof(event.%s), buf);\n" % (event_t_name, event_t_name)
         elif is_ptr_type(arg_type):
             c += "    %s %s = {};\n" % (arg_type.replace("*", ""), arg_name)
             c += "    bpf_usdt_readarg(%d, ctx, &buf);\n" % (i+1)
             c += "    bpf_probe_read(&%s, sizeof(%s), buf);\n" % (arg_name, arg_name)
-            st_name = strip_typename(arg_type)
-            for st_key, st_valtype in st_map[st_name].items():
-                c += "    event.i%d = %s.%s; /* %s */\n" % (int_i, arg_name, st_key, st_valtype)
-                int_i += 1
+            for st_key, st_valtype in st_map[strip_typename(arg_type)].items():
+                event_t_name = "%s.%s" % (probe_name, st_key)
+                c += "    event.%s = %s.%s; /* %s */\n" % (event_t_name, arg_name, st_key, st_valtype)
         else:
-            c += "    bpf_usdt_readarg(%d, ctx, &event.i%d);\n" % (i+1, int_i)
-            int_i += 1
-        i += 1
-    diff = ""
-    if str_i > 0:
-        diff = " - (%d * STR_LEN)" % (str_i)
-    c += """
-    if (events.perf_submit(ctx, &event, sizeof(event)%s) != 0)
-        bpf_trace_printk("failed to perf_submit\\n");
+            event_t_name = "%s.%s" % (probe_name, arg_name)
+            c += "    bpf_usdt_readarg(%d, ctx, &event.%s);\n" % (i+1, event_t_name)
+    c += r"""
+    if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
+        bpf_trace_printk("failed to perf_submit\n");
 
     return 0;
-}\n""" % diff
+}
+"""
     return c
 
 
 context = {
     "id": 0,
-    "max_ints": 0,
-    "max_strs": 0,
     "probe_metadata": OrderedDict(),
     "st_map": parse_c_struct(Path(Path(__file__).parent, "data-types.h")),
 }
@@ -208,16 +188,26 @@ probe_metadata = context["probe_metadata"]
 
 event_t_decl = r"""
 struct quic_event_t {
-    uint8_t id;
+  uint8_t id;
 
+  union {
 """
 
-for i in range(context["max_ints"]):
-    event_t_decl += "    uint64_t i%d;\n" % i
-for i in range(context["max_strs"]):
-    event_t_decl += "    char s%d[STR_LEN];\n" % i
+for name, metadata in probe_metadata.items():
+    event_t_decl += "    struct { // %s\n" % name
+    for field_name, field_type in metadata["flat_args_map"].items():
+        if is_bin_type(field_type):
+            f = "uint8_t %s[STR_LEN]" % field_name
+        elif is_str_type(field_type):
+            f = "char %s[STR_LEN]" % field_name
+        else:
+            f = "%s %s" % (field_type, field_name)
+
+        event_t_decl += "      %s;\n" % (f)
+    event_t_decl += "    } %s;\n" % name
 
 event_t_decl += r"""
+  };
 };
 """
 
@@ -234,9 +224,6 @@ std::vector<ebpf::USDT> quic_init_usdt_probes(pid_t pid) {
 """
 
 for metadata in probe_metadata.values():
-    if metadata["fully_specified_probe_name"] in block_probes:
-        continue
-
     bpf += build_tracer(context, metadata)
     usdt_def += """      ebpf::USDT(pid, "%s", "%s", "%s"),\n""" % (metadata['provider'], metadata['name'], build_tracer_name(metadata))
 
@@ -267,29 +254,28 @@ for probe_name in probe_metadata:
     metadata = probe_metadata[probe_name]
     fully_specified_probe_name = metadata["fully_specified_probe_name"]
 
-    if fully_specified_probe_name in block_probes:
-        continue
-
     block_field_set = block_fields.get(fully_specified_probe_name, None)
-    args_map = metadata["args_map"]
+    flat_args_map = metadata["flat_args_map"]
 
     handle_event_func += "    case %s: { // %s\n" % (metadata['id'], fully_specified_probe_name)
     handle_event_func += '        json_write_pair(out, false, "type", "%s");\n' % probe_name
 
-    for event_t_name, (probe_field_name, arg_type) in args_map.items():
-        if block_field_set and probe_field_name in block_field_set:
+    for field_name, field_type in flat_args_map.items():
+        if block_field_set and field_name in block_field_set:
             continue
-        data_field_name = rename_map.get(probe_field_name, probe_field_name)
-        if not is_bin_type(arg_type):
-            handle_event_func += '        json_write_pair(out, true, "%s", (%s)(event->%s));\n' % (data_field_name, arg_type, event_t_name)
-        else:
-            len_names = set([probe_field_name + "_len", "len"])
+        data_field_name = rename_map.get(field_name, field_name)
+        event_t_name = "%s.%s" % (probe_name, field_name)
+        if not is_bin_type(field_type):
+            handle_event_func += '        json_write_pair(out, true, "%s", event->%s);\n' % (data_field_name, event_t_name)
+        else: # bin type (it should have the correspinding length arg)
+            len_names = set([field_name + "_len", "len"])
 
-            for e, (n, t) in args_map.items():
+            for n in flat_args_map:
                 if n in len_names:
-                    (len_event_t_name, len_arg_type) = (e, t)
+                    len_event_t_name = "%s.%s" % (probe_name, n)
+
             # A string might be truncated in STRLEN
-            handle_event_func += '        json_write_pair(out, true, "%s", (%s)(event->%s), (%s)(event->%s < STR_LEN ? event->%s : STR_LEN));\n' % (data_field_name, arg_type, event_t_name, len_arg_type, len_event_t_name, len_event_t_name)
+            handle_event_func += '        json_write_pair(out, true, "%s", event->%s, (event->%s < STR_LEN ? event->%s : STR_LEN));\n' % (data_field_name, event_t_name, len_event_t_name, len_event_t_name)
 
     handle_event_func += "        break;\n"
     handle_event_func += "    }\n"
@@ -303,8 +289,7 @@ handle_event_func += r"""
 """
 handle_event_func += "}\n";
 
-Path(output_file).write_text(r"""
-// Generated code. Do not edit it here!
+Path(output_file).write_text(r"""// Generated code. Do not edit it here!
 
 #include <stdlib.h>
 #include <stdint.h>
