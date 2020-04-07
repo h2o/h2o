@@ -26,8 +26,6 @@ ELSE (LIBBCC_LIB)
   MESSAGE(SEND_ERROR "libbcc not found")
 ENDIF (LIBBCC_LIB)
 
-SET(SOURCE_FILES h2olog.cc http.cc quic.cc)
-
 set(SOURCE_FILES
   "h2olog.cc"
   "http.cc"
@@ -48,12 +46,12 @@ ADD_CUSTOM_COMMAND(
 LIST(APPEND DTRACE_FILES "${CMAKE_BINARY_DIR}/h2o-probes.d")
 
 ADD_CUSTOM_COMMAND(
-    OUTPUT  "${CMAKE_BINARY_DIR}/quic.cc"
-    COMMAND "${CMAKE_SOURCE_DIR}/gen-bpf.py" "${CMAKE_BINARY_DIR}" "${CMAKE_BINARY_DIR}/quic.cc"
+    OUTPUT  "${CMAKE_BINARY_DIR}/generated-quic.cc"
+    COMMAND "${CMAKE_SOURCE_DIR}/gen-bpf.py" "${CMAKE_BINARY_DIR}" "${CMAKE_BINARY_DIR}/generated-quic.cc"
     DEPENDS ${DTRACE_FILES}
     DEPENDS "${CMAKE_SOURCE_DIR}/gen-bpf.py"
 )
-LIST(APPEND SOURCE_FILES "${CMAKE_BINARY_DIR}/quic.cc")
+LIST(APPEND SOURCE_FILES "${CMAKE_BINARY_DIR}/generated-quic.cc")
 
 INCLUDE_DIRECTORIES(${CMAKE_SOURCE_DIR})
 
