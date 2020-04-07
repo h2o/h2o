@@ -11,6 +11,8 @@ IF(NOT CMAKE_BUILD_TYPE)
     SET(CMAKE_BUILD_TYPE Release)
 ENDIF(NOT CMAKE_BUILD_TYPE)
 
+SET(CMAKE_CXX_FLAGS_RELEASE  "-O3 -flto")
+
 SET(CMAKE_CXX_FLAGS "-Wall -Wextra -Wno-unused-parameter -g3 ${CMAKE_CXX_FLAGS}")
 
 FIND_PATH(LIBBCC_INCLUDE_DIR bcc/compat)
@@ -26,7 +28,8 @@ ELSE (LIBBCC_LIB)
   MESSAGE(SEND_ERROR "libbcc not found")
 ENDIF (LIBBCC_LIB)
 
-set(SOURCE_FILES
+SET(SOURCE_FILES
+  "h2olog.h"
   "h2olog.cc"
   "http.cc"
   "json.h"
