@@ -34,6 +34,7 @@ SET(SOURCE_FILES
   "http.cc"
   "json.h"
   "json.cc"
+  "data-types.h"
 )
 
 ADD_CUSTOM_COMMAND(
