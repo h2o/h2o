@@ -23,8 +23,11 @@
 #include "h2olog.h"
 
 const char *HTTP_BPF = R"(
+#define MAX_HDR_LEN 128
+
 enum {
-  HTTP_EVENT_RECEIVE_REQ
+  HTTP_EVENT_RECEIVE_REQ,
+  HTTP_EVENT_RECEIVE_REQ_HDR
 };
 
 struct event_t {
@@ -33,32 +36,59 @@ struct event_t {
   uint64_t req_id;
   union {
     uint32_t http_version;
+    struct {
+      uint64_t name_len;
+      uint64_t value_len;
+      char name[MAX_HDR_LEN];
+      char value[MAX_HDR_LEN];
+    } header;
   };
 };
 
 BPF_PERF_OUTPUT(events);
 
 int trace_receive_request(struct pt_regs *ctx) {
-  struct event_t ev = {};
-  ev.type = HTTP_EVENT_RECEIVE_REQ;
+  struct event_t ev = { .type = HTTP_EVENT_RECEIVE_REQ };
   bpf_usdt_readarg(1, ctx, &ev.conn_id);
   bpf_usdt_readarg(2, ctx, &ev.req_id);
   bpf_usdt_readarg(3, ctx, &ev.http_version);
-  if (events.perf_submit(ctx, &ev, sizeof(ev)) < 0)
-    bpf_trace_printk("failed to perf_submit\\n");
+  events.perf_submit(ctx, &ev, sizeof(ev));
+  return 0;
+}
+
+int trace_receive_request_header(struct pt_regs *ctx) {
+  struct event_t ev = { .type = HTTP_EVENT_RECEIVE_REQ_HDR };
+  void *pos = NULL;
+  bpf_usdt_readarg(1, ctx, &ev.conn_id);
+  bpf_usdt_readarg(2, ctx, &ev.req_id);
+  bpf_usdt_readarg(3, ctx, &pos);
+  bpf_usdt_readarg(4, ctx, &ev.header.name_len);
+  bpf_probe_read(&ev.header.name, sizeof(ev.header.name), pos);
+  bpf_usdt_readarg(5, ctx, &pos);
+  bpf_usdt_readarg(6, ctx, &ev.header.value_len);
+  bpf_probe_read(&ev.header.value, sizeof(ev.header.value), pos);
+  events.perf_submit(ctx, &ev, sizeof(ev));
   return 0;
 }
 )";
 
-enum { HTTP_EVENT_RECEIVE_REQ };
+#define MAX_HDR_LEN 128
+#define MIN(x, y) (((x) < (y)) ? (x) : (y))
+
+enum { HTTP_EVENT_RECEIVE_REQ, HTTP_EVENT_RECEIVE_REQ_HDR };
 
 struct http_event_t {
     uint8_t type;
     uint64_t conn_id;
     uint64_t req_id;
-
     union {
         uint32_t http_version;
+        struct {
+            uint64_t name_len;
+            uint64_t value_len;
+            char name[MAX_HDR_LEN];
+            char value[MAX_HDR_LEN];
+        } header;
     };
 };
 
@@ -68,6 +98,11 @@ static void handle_event(void *cpu, void *data, int len)
     if (ev->type == HTTP_EVENT_RECEIVE_REQ) {
         printf("%" PRIu64 " %" PRIu64 " RxProtocol HTTP/%" PRIu32 ".%" PRIu32 "\n", ev->conn_id, ev->req_id, ev->http_version / 256,
                ev->http_version % 256);
+    } else if (ev->type == HTTP_EVENT_RECEIVE_REQ_HDR) {
+        int n_len = MIN(ev->header.name_len, MAX_HDR_LEN);
+        int v_len = MIN(ev->header.value_len, MAX_HDR_LEN);
+        printf("%" PRIu64 " %" PRIu64 " RxHeader   %.*s %.*s\n", ev->conn_id, ev->req_id, n_len, ev->header.name, v_len,
+               ev->header.value);
     }
 }
 
@@ -75,6 +110,7 @@ static std::vector<ebpf::USDT> init_usdt_probes(pid_t h2o_pid)
 {
     std::vector<ebpf::USDT> vec;
     vec.push_back(ebpf::USDT(h2o_pid, "h2o", "receive_request", "trace_receive_request"));
+    vec.push_back(ebpf::USDT(h2o_pid, "h2o", "receive_request_header", "trace_receive_request_header"));
     return vec;
 }
 
