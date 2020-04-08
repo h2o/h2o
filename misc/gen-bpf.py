@@ -369,7 +369,7 @@ Path(output_file).write_text(r"""// Generated code. Do not edit it here!
 #define STR_LEN 64
 
 // BPF modules written in C
-const char *pbf_text = R"(
+const char *bpf_text = R"(
 #include "data-types.h"
 
 #define STR_LEN 64
@@ -389,7 +389,7 @@ static uint64_t time_milliseconds()
 
 static
 const char *quic_bpf_ext() {
-  return pbf_text;
+  return bpf_text;
 }
 
 void init_quic_tracer(h2o_tracer_t * tracer) {
