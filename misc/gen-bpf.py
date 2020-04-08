@@ -229,7 +229,7 @@ int %s(struct pt_regs *ctx) {
 context = {
     "id": 0,
     "probe_metadata": OrderedDict(),
-    "st_map": parse_c_struct(Path(Path(__file__).parent, "data-types.h")),
+    "st_map": parse_c_struct(Path(Path(__file__).parent.parent, "data-types.h")),
 }
 
 parse_d(context, Path(d_files_dir, "quicly-probes.d"),
@@ -369,7 +369,7 @@ Path(output_file).write_text(r"""// Generated code. Do not edit it here!
 #define STR_LEN 64
 
 // BPF modules written in C
-const char *pbf_text = R"(
+const char *bpf_text = R"(
 #include "data-types.h"
 
 #define STR_LEN 64
@@ -389,7 +389,7 @@ static uint64_t time_milliseconds()
 
 static
 const char *quic_bpf_ext() {
-  return pbf_text;
+  return bpf_text;
 }
 
 void init_quic_tracer(h2o_tracer_t * tracer) {

@@ -28,7 +28,14 @@
 #include <bcc/BPF.h>
 
 typedef struct st_h2o_tracer_t {
+    /*
+     * Where to output the results. Defaults to `stdout`.
+     */
     std::FILE *out;
+
+    /*
+     * The number of events emitted  in `handle_event`.
+     */
     std::size_t count;
 
     /*
