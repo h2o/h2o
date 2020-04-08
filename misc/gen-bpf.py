@@ -229,7 +229,7 @@ int %s(struct pt_regs *ctx) {
 context = {
     "id": 0,
     "probe_metadata": OrderedDict(),
-    "st_map": parse_c_struct(Path(Path(__file__).parent, "data-types.h")),
+    "st_map": parse_c_struct(Path(Path(__file__).parent.parent, "data-types.h")),
 }
 
 parse_d(context, Path(d_files_dir, "quicly-probes.d"),

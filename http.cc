@@ -77,7 +77,7 @@ int trace_receive_request_header(struct pt_regs *ctx) {
 
 enum { HTTP_EVENT_RECEIVE_REQ, HTTP_EVENT_RECEIVE_REQ_HDR };
 
-struct http_event_t {
+typedef struct st_http_event_t {
     uint8_t type;
     uint64_t conn_id;
     uint64_t req_id;
@@ -90,19 +90,23 @@ struct http_event_t {
             char value[MAX_HDR_LEN];
         } header;
     };
-};
+} http_event_t;
 
-static void handle_event(void *cpu, void *data, int len)
+static void handle_event(void *context, void *data, int len)
 {
-    struct http_event_t *ev = (http_event_t *)data;
+    h2o_tracer_t *tracer = (h2o_tracer_t *)context;
+    const http_event_t *ev = (const http_event_t *)data;
+
+    FILE *out = tracer->out;
+
     if (ev->type == HTTP_EVENT_RECEIVE_REQ) {
-        printf("%" PRIu64 " %" PRIu64 " RxProtocol HTTP/%" PRIu32 ".%" PRIu32 "\n", ev->conn_id, ev->req_id, ev->http_version / 256,
-               ev->http_version % 256);
+        fprintf(out, "%" PRIu64 " %" PRIu64 " RxProtocol HTTP/%" PRIu32 ".%" PRIu32 "\n", ev->conn_id, ev->req_id,
+                ev->http_version / 256, ev->http_version % 256);
     } else if (ev->type == HTTP_EVENT_RECEIVE_REQ_HDR) {
         int n_len = MIN(ev->header.name_len, MAX_HDR_LEN);
         int v_len = MIN(ev->header.value_len, MAX_HDR_LEN);
-        printf("%" PRIu64 " %" PRIu64 " RxHeader   %.*s %.*s\n", ev->conn_id, ev->req_id, n_len, ev->header.name, v_len,
-               ev->header.value);
+        fprintf(out, "%" PRIu64 " %" PRIu64 " RxHeader   %.*s %.*s\n", ev->conn_id, ev->req_id, n_len, ev->header.name, v_len,
+                ev->header.value);
     }
 }
 
