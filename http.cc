@@ -50,9 +50,7 @@ int trace_receive_request(struct pt_regs *ctx) {
 }
 )";
 
-enum {
-  HTTP_EVENT_RECEIVE_REQ
-};
+enum { HTTP_EVENT_RECEIVE_REQ };
 
 struct http_event_t {
     uint8_t type;
@@ -60,7 +58,7 @@ struct http_event_t {
     uint64_t req_id;
 
     union {
-      uint32_t http_version;
+        uint32_t http_version;
     };
 };
 
@@ -68,8 +66,8 @@ static void handle_event(void *cpu, void *data, int len)
 {
     struct http_event_t *ev = (http_event_t *)data;
     if (ev->type == HTTP_EVENT_RECEIVE_REQ) {
-      printf("%" PRIu64 " %" PRIu64 " RxProtocol HTTP/%" PRIu32 ".%" PRIu32 "\n",
-             ev->conn_id, ev->req_id, ev->http_version / 256, ev->http_version % 256);
+        printf("%" PRIu64 " %" PRIu64 " RxProtocol HTTP/%" PRIu32 ".%" PRIu32 "\n", ev->conn_id, ev->req_id, ev->http_version / 256,
+               ev->http_version % 256);
     }
 }
 
@@ -85,11 +83,9 @@ static const char *bpf_text(void)
     return HTTP_BPF;
 }
 
-h2o_tracer_t *create_http_tracer(void)
+void init_http_tracer(h2o_tracer_t *tracer)
 {
-    h2o_tracer_t *tracer = (h2o_tracer_t *)malloc(sizeof(tracer));
     tracer->handle_event = handle_event;
     tracer->init_usdt_probes = init_usdt_probes;
     tracer->bpf_text = bpf_text;
-    return tracer;
 }

@@ -7,16 +7,20 @@ SET(CMAKE_CXX_EXTENSIONS OFF)
 
 PROJECT(h2olog)
 
-SET(CXX_WARNING_FLAGS "-Wall")
+IF(NOT CMAKE_BUILD_TYPE)
+    SET(CMAKE_BUILD_TYPE Release)
+ENDIF(NOT CMAKE_BUILD_TYPE)
 
-SET(CMAKE_CXX_FLAGS "${CXX_WARNING_FLAGS} ${CMAKE_CXX_FLAGS}")
+SET(CMAKE_CXX_FLAGS_RELEASE  "-O3 -flto")
+
+SET(CMAKE_CXX_FLAGS "-Wall -Wextra -Wno-unused-parameter -g3 ${CMAKE_CXX_FLAGS}")
 
 FIND_PATH(LIBBCC_INCLUDE_DIR bcc/compat)
 FIND_LIBRARY(LIBBCC_LIB "bcc")
 IF (LIBBCC_LIB)
   IF (LIBBCC_INCLUDE_DIR)
+    INCLUDE_DIRECTORIES("${LIBBCC_INCLUDE_DIR}")
     INCLUDE_DIRECTORIES("${LIBBCC_INCLUDE_DIR}/bcc/compat")
-    SET(LIBBCC_LIBRARIES "-lbcc")
   ELSE (LIBBCC_INCLUDE_DIR)
     MESSAGE(SEND_ERROR "libbcc header files not found")
   ENDIF (LIBBCC_INCLUDE_DIR)
@@ -24,7 +28,36 @@ ELSE (LIBBCC_LIB)
   MESSAGE(SEND_ERROR "libbcc not found")
 ENDIF (LIBBCC_LIB)
 
-SET(SOURCE_FILES h2olog.cc http.cc quic.cc)
+SET(SOURCE_FILES
+  "h2olog.h"
+  "h2olog.cc"
+  "http.cc"
+  "json.h"
+  "json.cc"
+  "data-types.h"
+)
+
+ADD_CUSTOM_COMMAND(
+    OUTPUT  "${CMAKE_BINARY_DIR}/quicly-probes.d"
+    COMMAND curl -sL 'https://raw.githubusercontent.com/h2o/quicly/master/quicly-probes.d' >${CMAKE_BINARY_DIR}/quicly-probes.d
+)
+LIST(APPEND DTRACE_FILES "${CMAKE_BINARY_DIR}/quicly-probes.d")
+
+ADD_CUSTOM_COMMAND(
+    OUTPUT  "${CMAKE_BINARY_DIR}/h2o-probes.d"
+    COMMAND curl -sLO 'https://raw.githubusercontent.com/h2o/h2o/master/h2o-probes.d' >${CMAKE_BINARY_DIR}/h2o-probes.d
+)
+LIST(APPEND DTRACE_FILES "${CMAKE_BINARY_DIR}/h2o-probes.d")
+
+ADD_CUSTOM_COMMAND(
+    OUTPUT  "${CMAKE_BINARY_DIR}/generated-quic.cc"
+    COMMAND "${CMAKE_SOURCE_DIR}/gen-bpf.py" "${CMAKE_BINARY_DIR}" "${CMAKE_BINARY_DIR}/generated-quic.cc"
+    DEPENDS ${DTRACE_FILES}
+    DEPENDS "${CMAKE_SOURCE_DIR}/gen-bpf.py"
+)
+LIST(APPEND SOURCE_FILES "${CMAKE_BINARY_DIR}/generated-quic.cc")
+
+INCLUDE_DIRECTORIES(${CMAKE_SOURCE_DIR})
 
 ADD_EXECUTABLE(h2olog ${SOURCE_FILES})
-TARGET_LINK_LIBRARIES(h2olog ${LIBBCC_LIBRARIES})
+TARGET_LINK_LIBRARIES(h2olog ${LIBBCC_LIB})
