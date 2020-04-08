@@ -23,15 +23,18 @@
 #ifndef h2olog_h
 #define h2olog_h
 
-#include <inttypes.h>
-#include <bcc/BPF.h>
+#include <cinttypes>
 #include <vector>
+#include <bcc/BPF.h>
 
 typedef struct st_h2o_tracer_t {
+    std::FILE *out;
+    std::size_t count;
+
     /*
      * Handles an incoming BPF event.
      */
-    void (*handle_event)(void *cpu, void *data, int len);
+    void (*handle_event)(void *context, void *data, int len);
 
     /*
      * Returns a vector of relevant USDT probes.
@@ -45,13 +48,13 @@ typedef struct st_h2o_tracer_t {
 } h2o_tracer_t;
 
 /*
- * Creates an HTTP tracer.
+ * Initialize an HTTP tracer.
  */
-h2o_tracer_t *create_http_tracer(void);
+void init_http_tracer(h2o_tracer_t *);
 
 /*
- * Creates a QUIC tracer.
+ * Initialize a QUIC tracer.
  */
-h2o_tracer_t *create_quic_tracer(void);
+void init_quic_tracer(h2o_tracer_t *);
 
 #endif

@@ -20,78 +20,183 @@
  * IN THE SOFTWARE.
  */
 
-#include <iostream>
 #include <vector>
+#include <unistd.h>
 
 #include "h2olog.h"
 
+using namespace std;
+
 #define VERSION "0.1.0"
-#define POLL_TIMEOUT 100
+#define POLL_TIMEOUT (1000)
 
 static void usage(void)
 {
-    printf("h2olog (%s)\n", VERSION);
-    printf("-p PID of the H2O server\n");
-    printf("-h Print this help and exit\n");
+    printf(R"(h2olog (v%s)
+Usage: h2olog -p PID
+       h2olog quic -p PID
+       h2olog quic -t event_type -p PID
+       h2olog quic -v -s response_header_name -p PID
+Other options:
+    -h Shows this help and exit.
+    -d Shows debugging information.
+)",
+           VERSION);
     return;
+}
+
+static void show_event_per_sec(h2o_tracer_t *tracer, time_t *t0)
+{
+    time_t t1 = time(NULL);
+    int64_t d = t1 - *t0;
+    if (d > 10) {
+        uint64_t c = tracer->count / d;
+        if (c > 0) {
+            struct tm t;
+            localtime_r(&t1, &t);
+            char s[100];
+            const char *iso8601format = "%FT%TZ";
+            strftime(s, sizeof(s), iso8601format, &t);
+
+            fprintf(stderr, "%s %20lu events/s\n", s, c);
+            tracer->count = 0;
+        }
+        *t0 = t1;
+    }
+}
+
+static void show_process(pid_t pid)
+{
+    char cmdline[256];
+    char proc_file[256];
+    snprintf(proc_file, sizeof(proc_file), "/proc/%d/cmdline", pid);
+    FILE *f = fopen(proc_file, "r");
+    if (f == nullptr) {
+        fprintf(stderr, "Failed to open %s: %s\n", proc_file, strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+    size_t nread = fread(cmdline, 1, sizeof(cmdline), f);
+    fclose(f);
+    for (size_t i = 0; i < nread; i++) {
+        if (cmdline[i] == '\0') {
+            cmdline[i] = ' ';
+        }
+    }
+    fprintf(stderr, "Attaching pid=%d (%s)\n", pid, cmdline);
 }
 
 int main(int argc, char **argv)
 {
-    h2o_tracer_t *tracer;
+    h2o_tracer_t tracer = {};
     if (argc > 1 && strcmp(argv[1], "quic") == 0) {
-        tracer = create_quic_tracer();
+        init_quic_tracer(&tracer);
         --argc;
         ++argv;
     } else {
-        tracer = create_http_tracer();
+        init_http_tracer(&tracer);
     }
 
+    bool debug = false;
+    const char *out_file = nullptr;
+    std::vector<std::string> event_type_filters;
+    std::vector<std::string> response_header_filters;
     int c;
     pid_t h2o_pid = -1;
-    while ((c = getopt(argc, argv, "hvp:t:s:dP:")) != -1) {
+    while ((c = getopt(argc, argv, "hdp:t:s:o:")) != -1) {
         switch (c) {
         case 'p':
             h2o_pid = atoi(optarg);
             break;
+        case 't':
+            event_type_filters.push_back(optarg);
+            break;
+        case 's':
+            response_header_filters.push_back(optarg);
+            break;
+        case 'o':
+            out_file = optarg;
+            break;
+        case 'd':
+            debug = true;
+            break;
         case 'h':
             usage();
             exit(EXIT_SUCCESS);
+        default:
+            usage();
+            exit(EXIT_FAILURE);
         }
+    }
+
+    if (argc > optind) {
+        fprintf(stderr, "Error: too many aruments\n");
+        usage();
+        exit(EXIT_FAILURE);
     }
 
     if (h2o_pid == -1) {
         fprintf(stderr, "Error: -p option is missing\n");
+        usage();
         exit(EXIT_FAILURE);
     }
 
-    ebpf::BPF *bpf = new ebpf::BPF();
-    std::vector<ebpf::USDT> probes = tracer->init_usdt_probes(h2o_pid);
+    if (geteuid() != 0) {
+        fprintf(stderr, "Error: root privilege is required\n");
+        exit(EXIT_FAILURE);
+    }
 
-    ebpf::StatusTuple ret = bpf->init(tracer->bpf_text(), {}, probes);
-    if (!ret.ok()) {
-        std::cerr << "init: " << ret.msg() << std::endl;
+    if (out_file != nullptr) {
+        FILE *out = fopen(out_file, "w");
+        if (out == nullptr) {
+            fprintf(stderr, "Error: failed to open %s: %s", out_file, strerror(errno));
+            exit(EXIT_FAILURE);
+        }
+        tracer.out = out;
+    } else {
+        tracer.out = stdout;
+    }
+
+    ebpf::BPF *bpf = new ebpf::BPF();
+    std::vector<ebpf::USDT> probes = tracer.init_usdt_probes(h2o_pid);
+
+    ebpf::StatusTuple ret = bpf->init(tracer.bpf_text(), {}, probes);
+    if (ret.code() != 0) {
+        fprintf(stderr, "init: %s\n", ret.msg().c_str());
         return EXIT_FAILURE;
     }
 
     for (auto &probe : probes) {
         ret = bpf->attach_usdt(probe);
         if (ret.code() != 0) {
-            std::cerr << "attach_usdt: " << ret.msg() << std::endl;
+            fprintf(stderr, "attach_usdt: %s\n", ret.msg().c_str());
             return EXIT_FAILURE;
         }
     }
 
-    ret = bpf->open_perf_buffer("events", tracer->handle_event);
-    if (!ret.ok()) {
-        std::cerr << "open_perf_buffer: " << ret.msg() << std::endl;
+    ret = bpf->open_perf_buffer("events", tracer.handle_event, nullptr, &tracer, 64);
+    if (ret.code() != 0) {
+        fprintf(stderr, "open_perf_buffer: %s\n", ret.msg().c_str());
         return EXIT_FAILURE;
     }
 
-    ebpf::BPFPerfBuffer *perf_buffer = bpf->get_perf_buffer("events");
-    if (perf_buffer)
-        while (true)
-            perf_buffer->poll(POLL_TIMEOUT);
+    if (debug) {
+        show_process(h2o_pid);
+    }
 
-    return 0;
+    ebpf::BPFPerfBuffer *perf_buffer = bpf->get_perf_buffer("events");
+    if (perf_buffer) {
+        time_t t0 = time(NULL);
+
+        while (true) {
+            perf_buffer->poll(POLL_TIMEOUT);
+            fflush(tracer.out);
+
+            if (debug) {
+                show_event_per_sec(&tracer, &t0);
+            }
+        }
+    }
+
+    fprintf(stderr, "Error: failed to get_perf_buffer()\n");
+    return EXIT_FAILURE;
 }
