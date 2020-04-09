@@ -58,8 +58,15 @@ h2o_allow_probes = set([
 # convert field names for compatibility with:
 # https://github.com/h2o/quicly/blob/master/quictrace-adapter.py
 rename_map = {
+    # common fields
     "at": "time",
     "master_id": "conn",
+
+    # quicly_rtt_t
+    "minimum": "min-rtt",
+    "smoothed": "smoothed-rtt",
+    "variance": "variance-rtt",
+    "latest": "latest-rtt",
 }
 
 re_flags = re.X | re.M | re.S
@@ -318,16 +325,16 @@ for probe_name in probe_metadata:
 
   handle_event_func += "  case %s: { // %s\n" % (
       metadata['id'], fully_specified_probe_name)
-  handle_event_func += '    json_write_pair(out, false, "type", "%s");\n' % probe_name
+  handle_event_func += '    json_write_pair(out, false, "type", "%s");\n' % probe_name.replace("_", "-")
 
   for field_name, field_type in flat_args_map.items():
     if block_field_set and field_name in block_field_set:
       continue
-    data_field_name = rename_map.get(field_name, field_name)
+    json_field_name = rename_map.get(field_name, field_name).replace("_", "-")
     event_t_name = "%s.%s" % (probe_name, field_name)
     if not is_bin_type(field_type):
       handle_event_func += '    json_write_pair(out, true, "%s", event->%s);\n' % (
-          data_field_name, event_t_name)
+          json_field_name, event_t_name)
     else:  # bin type (it should have the correspinding length arg)
       len_names = set([field_name + "_len", "len"])
 
@@ -337,7 +344,7 @@ for probe_name in probe_metadata:
 
       # A string might be truncated in STRLEN
       handle_event_func += '    json_write_pair(out, true, "%s", event->%s, (event->%s < STR_LEN ? event->%s : STR_LEN));\n' % (
-          data_field_name, event_t_name, len_event_t_name, len_event_t_name)
+          json_field_name, event_t_name, len_event_t_name, len_event_t_name)
 
   if metadata["provider"] == "h2o":
     if probe_name != "h3_accept":
