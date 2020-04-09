@@ -55,10 +55,11 @@ h2o_allow_probes = set([
     "h2o:send_response_header",
 ])
 
-# mapping from proves.d's to quic-trace's:
+# convert field names for compatibility with:
+# https://github.com/h2o/quicly/blob/master/quictrace-adapter.py
 rename_map = {
     "at": "time",
-    "master_id": "master_conn_id",
+    "master_id": "conn",
 }
 
 re_flags = re.X | re.M | re.S
