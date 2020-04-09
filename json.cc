@@ -1,5 +1,6 @@
 #include "json.h"
 #include <cinttypes>
+#include <cctype>
 
 using namespace std;
 
@@ -30,7 +31,12 @@ static void json_write_str_value(FILE *out, const char *str)
             fprintf(out, "\\t");
             break;
         default:
-            fputc(*str, out);
+            if (isprint(*str)) {
+                fputc(*str, out);
+            } else {
+                auto u8 = static_cast<uint8_t>(*str);
+                fprintf(out, "\\u%04x", u8);
+            }
             break;
         }
         str++;
