@@ -27,7 +27,8 @@ const char *HTTP_BPF = R"(
 
 enum {
   HTTP_EVENT_RECEIVE_REQ,
-  HTTP_EVENT_RECEIVE_REQ_HDR
+  HTTP_EVENT_RECEIVE_REQ_HDR,
+  HTTP_EVENT_SEND_RESP
 };
 
 struct event_t {
@@ -36,6 +37,7 @@ struct event_t {
   uint64_t req_id;
   union {
     uint32_t http_version;
+    uint32_t http_status;
     struct {
       uint64_t name_len;
       uint64_t value_len;
@@ -70,12 +72,21 @@ int trace_receive_request_header(struct pt_regs *ctx) {
   events.perf_submit(ctx, &ev, sizeof(ev));
   return 0;
 }
+
+int trace_send_response(struct pt_regs *ctx) {
+  struct event_t ev = { .type = HTTP_EVENT_SEND_RESP };
+  bpf_usdt_readarg(1, ctx, &ev.conn_id);
+  bpf_usdt_readarg(2, ctx, &ev.req_id);
+  bpf_usdt_readarg(3, ctx, &ev.http_status);
+  events.perf_submit(ctx, &ev, sizeof(ev));
+  return 0;
+}
 )";
 
 #define MAX_HDR_LEN 128
 #define MIN(x, y) (((x) < (y)) ? (x) : (y))
 
-enum { HTTP_EVENT_RECEIVE_REQ, HTTP_EVENT_RECEIVE_REQ_HDR };
+enum { HTTP_EVENT_RECEIVE_REQ, HTTP_EVENT_RECEIVE_REQ_HDR, HTTP_EVENT_SEND_RESP };
 
 typedef struct st_http_event_t {
     uint8_t type;
@@ -83,6 +94,7 @@ typedef struct st_http_event_t {
     uint64_t req_id;
     union {
         uint32_t http_version;
+        uint32_t http_status;
         struct {
             uint64_t name_len;
             uint64_t value_len;
@@ -107,14 +119,18 @@ static void handle_event(void *context, void *data, int len)
         int v_len = MIN(ev->header.value_len, MAX_HDR_LEN);
         fprintf(out, "%" PRIu64 " %" PRIu64 " RxHeader   %.*s %.*s\n", ev->conn_id, ev->req_id, n_len, ev->header.name, v_len,
                 ev->header.value);
+    } else if (ev->type == HTTP_EVENT_SEND_RESP) {
+        fprintf(out, "%" PRIu64 " %" PRIu64 " TxStatus   %" PRIu32 "\n", ev->conn_id, ev->req_id, ev->http_status);
     }
 }
 
 static std::vector<ebpf::USDT> init_usdt_probes(pid_t h2o_pid)
 {
-    std::vector<ebpf::USDT> vec;
-    vec.push_back(ebpf::USDT(h2o_pid, "h2o", "receive_request", "trace_receive_request"));
-    vec.push_back(ebpf::USDT(h2o_pid, "h2o", "receive_request_header", "trace_receive_request_header"));
+    const std::vector<ebpf::USDT> vec {
+        ebpf::USDT(h2o_pid, "h2o", "receive_request", "trace_receive_request"),
+        ebpf::USDT(h2o_pid, "h2o", "receive_request_header", "trace_receive_request_header"),
+        ebpf::USDT(h2o_pid, "h2o", "send_response", "trace_send_response"),
+    };
     return vec;
 }
 
