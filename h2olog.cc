@@ -85,6 +85,40 @@ static void show_process(pid_t pid)
     fprintf(stderr, "Attaching pid=%d (%s)\n", pid, cmdline);
 }
 
+static std::string join_str(const std::string &sep, const std::vector<std::string> &strs)
+{
+    std::string s;
+    for (auto iter = strs.cbegin(); iter != strs.cend(); ++iter) {
+        if (iter != strs.cbegin()) {
+            s += sep;
+        }
+        s += *iter;
+    }
+    return s;
+}
+
+static std::string generate_header_filter_cflag(const std::vector<std::string> &tokens)
+{
+    std::vector<std::string> conditions;
+
+    for (auto &token : tokens) {
+        char buf[256];
+        snprintf(buf, sizeof(buf), "/* %s */ (slen) == %lu", token.c_str(), token.size());
+        std::vector<std::string> exprs = {buf};
+
+        for (size_t i = 0; i < token.size(); ++i) {
+            snprintf(buf, sizeof(buf), "(s)[%lu] == '%c'", i, token[i]);
+            exprs.push_back(buf);
+        }
+        conditions.push_back("(" + join_str(" && ", exprs) + ")");
+    }
+
+    std::string cflag("-DCHECK_ALLOWED_RES_HEADER_NAME(s,slen)=(");
+    cflag += join_str(" || ", conditions);
+    cflag += ")";
+    return cflag;
+}
+
 int main(int argc, char **argv)
 {
     h2o_tracer_t tracer = {};
@@ -156,10 +190,16 @@ int main(int argc, char **argv)
         tracer.out = stdout;
     }
 
+    std::vector<std::string> cflags;
+
+    if (!response_header_filters.empty()) {
+        cflags.push_back(generate_header_filter_cflag(response_header_filters));
+    }
+
     ebpf::BPF *bpf = new ebpf::BPF();
     std::vector<ebpf::USDT> probes = tracer.init_usdt_probes(h2o_pid);
 
-    ebpf::StatusTuple ret = bpf->init(tracer.bpf_text(), {}, probes);
+    ebpf::StatusTuple ret = bpf->init(tracer.bpf_text(), cflags, probes);
     if (ret.code() != 0) {
         fprintf(stderr, "init: %s\n", ret.msg().c_str());
         return EXIT_FAILURE;

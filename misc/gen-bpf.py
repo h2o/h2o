@@ -223,6 +223,14 @@ int %s(struct pt_regs *ctx) {
     return 0;
   event.%s.master_id = *master_conn_id_ptr;
 """ % (probe_name, probe_name)
+    if fully_specified_probe_name == "h2o:send_response_header":
+      # handle -s option
+      c += r"""
+#ifdef CHECK_ALLOWED_RES_HEADER_NAME
+  if (!CHECK_ALLOWED_RES_HEADER_NAME(event.send_response_header.name, event.send_response_header.name_len))
+    return 0;
+#endif
+"""
 
   c += r"""
   if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
