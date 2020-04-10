@@ -126,7 +126,7 @@ static void handle_event(void *context, void *data, int len)
 
 static std::vector<ebpf::USDT> init_usdt_probes(pid_t h2o_pid)
 {
-    const std::vector<ebpf::USDT> vec = {
+    const std::vector<ebpf::USDT> vec {
         ebpf::USDT(h2o_pid, "h2o", "receive_request", "trace_receive_request"),
         ebpf::USDT(h2o_pid, "h2o", "receive_request_header", "trace_receive_request_header"),
         ebpf::USDT(h2o_pid, "h2o", "send_response", "trace_send_response"),
