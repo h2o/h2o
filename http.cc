@@ -28,7 +28,8 @@ const char *HTTP_BPF = R"(
 enum {
   HTTP_EVENT_RECEIVE_REQ,
   HTTP_EVENT_RECEIVE_REQ_HDR,
-  HTTP_EVENT_SEND_RESP
+  HTTP_EVENT_SEND_RESP,
+  HTTP_EVENT_SEND_RESP_HDR
 };
 
 struct event_t {
@@ -81,12 +82,27 @@ int trace_send_response(struct pt_regs *ctx) {
   events.perf_submit(ctx, &ev, sizeof(ev));
   return 0;
 }
+
+int trace_send_response_header(struct pt_regs *ctx) {
+  struct event_t ev = { .type = HTTP_EVENT_SEND_RESP_HDR };
+  void *pos = NULL;
+  bpf_usdt_readarg(1, ctx, &ev.conn_id);
+  bpf_usdt_readarg(2, ctx, &ev.req_id);
+  bpf_usdt_readarg(3, ctx, &pos);
+  bpf_usdt_readarg(4, ctx, &ev.header.name_len);
+  bpf_probe_read(&ev.header.name, sizeof(ev.header.name), pos);
+  bpf_usdt_readarg(5, ctx, &pos);
+  bpf_usdt_readarg(6, ctx, &ev.header.value_len);
+  bpf_probe_read(&ev.header.value, sizeof(ev.header.value), pos);
+  events.perf_submit(ctx, &ev, sizeof(ev));
+  return 0;
+}
 )";
 
 #define MAX_HDR_LEN 128
 #define MIN(x, y) (((x) < (y)) ? (x) : (y))
 
-enum { HTTP_EVENT_RECEIVE_REQ, HTTP_EVENT_RECEIVE_REQ_HDR, HTTP_EVENT_SEND_RESP };
+enum { HTTP_EVENT_RECEIVE_REQ, HTTP_EVENT_RECEIVE_REQ_HDR, HTTP_EVENT_SEND_RESP, HTTP_EVENT_SEND_RESP_HDR };
 
 typedef struct st_http_event_t {
     uint8_t type;
@@ -108,28 +124,36 @@ static void handle_event(void *context, void *data, int len)
 {
     h2o_tracer_t *tracer = (h2o_tracer_t *)context;
     const http_event_t *ev = (const http_event_t *)data;
-
     FILE *out = tracer->out;
 
-    if (ev->type == HTTP_EVENT_RECEIVE_REQ) {
+    switch (ev->type) {
+    case HTTP_EVENT_RECEIVE_REQ:
         fprintf(out, "%" PRIu64 " %" PRIu64 " RxProtocol HTTP/%" PRIu32 ".%" PRIu32 "\n", ev->conn_id, ev->req_id,
                 ev->http_version / 256, ev->http_version % 256);
-    } else if (ev->type == HTTP_EVENT_RECEIVE_REQ_HDR) {
+        break;
+    case HTTP_EVENT_SEND_RESP:
+        fprintf(out, "%" PRIu64 " %" PRIu64 " TxStatus   %" PRIu32 "\n", ev->conn_id, ev->req_id, ev->http_status);
+        break;
+    case HTTP_EVENT_RECEIVE_REQ_HDR:
+    case HTTP_EVENT_SEND_RESP_HDR: {
         int n_len = MIN(ev->header.name_len, MAX_HDR_LEN);
         int v_len = MIN(ev->header.value_len, MAX_HDR_LEN);
-        fprintf(out, "%" PRIu64 " %" PRIu64 " RxHeader   %.*s %.*s\n", ev->conn_id, ev->req_id, n_len, ev->header.name, v_len,
+        const char *label = (ev->type == HTTP_EVENT_RECEIVE_REQ_HDR) ? "RxHeader" : "TxHeader";
+        fprintf(out, "%" PRIu64 " %" PRIu64 " %s   %.*s %.*s\n", ev->conn_id, ev->req_id, label, n_len, ev->header.name, v_len,
                 ev->header.value);
-    } else if (ev->type == HTTP_EVENT_SEND_RESP) {
-        fprintf(out, "%" PRIu64 " %" PRIu64 " TxStatus   %" PRIu32 "\n", ev->conn_id, ev->req_id, ev->http_status);
+    } break;
+    default:
+        fprintf(out, "unknown event: %u\n", ev->type);
     }
 }
 
 static std::vector<ebpf::USDT> init_usdt_probes(pid_t h2o_pid)
 {
-    const std::vector<ebpf::USDT> vec {
+    const std::vector<ebpf::USDT> vec{
         ebpf::USDT(h2o_pid, "h2o", "receive_request", "trace_receive_request"),
         ebpf::USDT(h2o_pid, "h2o", "receive_request_header", "trace_receive_request_header"),
         ebpf::USDT(h2o_pid, "h2o", "send_response", "trace_send_response"),
+        ebpf::USDT(h2o_pid, "h2o", "send_response_header", "trace_send_response_header"),
     };
     return vec;
 }
