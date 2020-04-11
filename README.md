@@ -19,6 +19,8 @@ For convenience, you can alternatively run the `make.sh` script.
 ### For building h2olog
 
 - LLVM and clang (>= 3.7.1)
+- CMake for generating the build files
+- Python 3 for the [code generator](https://github.com/toru/h2olog/blob/v2/misc/gen-bpf.py)
 - [BCC](https://iovisor.github.io/bcc/) (>= 0.11.0) [installed](https://github.com/iovisor/bcc/blob/master/INSTALL.md) on your system
 
 ### For running h2olog
