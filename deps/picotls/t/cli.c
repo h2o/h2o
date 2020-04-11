@@ -53,6 +53,9 @@
 #endif
 #include "util.h"
 
+/* sentinels indicating that the endpoint is in benchmark mode */
+static const char input_file_is_benchmark[] = "is:benchmark";
+
 static void shift_buffer(ptls_buffer_t *buf, size_t delta)
 {
     if (delta != 0) {
@@ -66,13 +69,18 @@ static void shift_buffer(ptls_buffer_t *buf, size_t delta)
 static int handle_connection(int sockfd, ptls_context_t *ctx, const char *server_name, const char *input_file,
                              ptls_handshake_properties_t *hsprop, int request_key_update, int keep_sender_open)
 {
+    static const int inputfd_is_benchmark = -2;
+
     ptls_t *tls = ptls_new(ctx, server_name == NULL);
     ptls_buffer_t rbuf, encbuf, ptbuf;
-    char bytebuf[16384];
+    char bytebuf[16384] = {0};
     enum { IN_HANDSHAKE, IN_1RTT, IN_SHUTDOWN } state = IN_HANDSHAKE;
     int inputfd = 0, ret = 0;
     size_t early_bytes_sent = 0;
+    uint64_t data_received = 0;
     ssize_t ioret;
+
+    uint64_t start_at = ctx->get_time->cb(ctx->get_time);
 
     ptls_buffer_init(&rbuf, "", 0);
     ptls_buffer_init(&encbuf, "", 0);
@@ -80,7 +88,10 @@ static int handle_connection(int sockfd, ptls_context_t *ctx, const char *server
 
     fcntl(sockfd, F_SETFL, O_NONBLOCK);
 
-    if (input_file != NULL) {
+    if (input_file == input_file_is_benchmark) {
+        if (!ptls_is_server(tls))
+            inputfd = inputfd_is_benchmark;
+    } else if (input_file != NULL) {
         if ((inputfd = open(input_file, O_RDONLY)) == -1) {
             fprintf(stderr, "failed to open file:%s:%s\n", input_file, strerror(errno));
             ret = 1;
@@ -106,11 +117,11 @@ static int handle_connection(int sockfd, ptls_context_t *ctx, const char *server
             FD_ZERO(&writefds);
             FD_ZERO(&exceptfds);
             FD_SET(sockfd, &readfds);
-            if (encbuf.off != 0)
+            if (encbuf.off != 0 || inputfd == inputfd_is_benchmark)
                 FD_SET(sockfd, &writefds);
             FD_SET(sockfd, &exceptfds);
             maxfd = sockfd + 1;
-            if (inputfd != -1) {
+            if (inputfd >= 0) {
                 FD_SET(inputfd, &readfds);
                 FD_SET(inputfd, &exceptfds);
                 if (maxfd <= inputfd)
@@ -159,7 +170,9 @@ static int handle_connection(int sockfd, ptls_context_t *ctx, const char *server
                 } else {
                     if ((ret = ptls_receive(tls, &rbuf, bytebuf + off, &leftlen)) == 0) {
                         if (rbuf.off != 0) {
-                            write(1, rbuf.base, rbuf.off);
+                            data_received += rbuf.off;
+                            if (input_file != input_file_is_benchmark)
+                                write(1, rbuf.base, rbuf.off);
                             rbuf.off = 0;
                         }
                     } else if (ret == PTLS_ERROR_IN_PROGRESS) {
@@ -173,39 +186,44 @@ static int handle_connection(int sockfd, ptls_context_t *ctx, const char *server
             }
         }
 
-        /* read input (and send if possible) */
-        if (inputfd != -1 && (FD_ISSET(inputfd, &readfds) || FD_ISSET(inputfd, &exceptfds))) {
+        /* encrypt data to send, if any is available */
+        ioret = 0;
+        if (inputfd >= 0 && (FD_ISSET(inputfd, &readfds) || FD_ISSET(inputfd, &exceptfds))) {
             while ((ioret = read(inputfd, bytebuf, sizeof(bytebuf))) == -1 && errno == EINTR)
                 ;
             if (ioret > 0) {
-                ptls_buffer_pushv(&ptbuf, bytebuf, ioret);
-                if (state == IN_HANDSHAKE) {
-                    size_t send_amount = 0;
-                    if (server_name != NULL && hsprop->client.max_early_data_size != NULL) {
-                        size_t max_can_be_sent = *hsprop->client.max_early_data_size;
-                        if (max_can_be_sent > ptbuf.off)
-                            max_can_be_sent = ptbuf.off;
-                        send_amount = max_can_be_sent - early_bytes_sent;
-                    }
-                    if (send_amount != 0) {
-                        if ((ret = ptls_send(tls, &encbuf, ptbuf.base, send_amount)) != 0) {
-                            fprintf(stderr, "ptls_send(early_data):%d\n", ret);
-                            goto Exit;
-                        }
-                        early_bytes_sent += send_amount;
-                    }
-                } else {
-                    if ((ret = ptls_send(tls, &encbuf, bytebuf, ioret)) != 0) {
-                        fprintf(stderr, "ptls_send(1rtt):%d\n", ret);
-                        goto Exit;
-                    }
-                    ptbuf.off = 0;
-                }
-            } else {
+            } else if (ioret == 0) {
                 /* closed */
                 if (input_file != NULL)
                     close(inputfd);
                 inputfd = -1;
+            }
+        } else if (inputfd == inputfd_is_benchmark) {
+            ioret = sizeof(bytebuf);
+        }
+        if (ioret > 0) {
+            ptls_buffer_pushv(&ptbuf, bytebuf, ioret);
+            if (state == IN_HANDSHAKE) {
+                size_t send_amount = 0;
+                if (server_name != NULL && hsprop->client.max_early_data_size != NULL) {
+                    size_t max_can_be_sent = *hsprop->client.max_early_data_size;
+                    if (max_can_be_sent > ptbuf.off)
+                        max_can_be_sent = ptbuf.off;
+                    send_amount = max_can_be_sent - early_bytes_sent;
+                }
+                if (send_amount != 0) {
+                    if ((ret = ptls_send(tls, &encbuf, ptbuf.base, send_amount)) != 0) {
+                        fprintf(stderr, "ptls_send(early_data):%d\n", ret);
+                        goto Exit;
+                    }
+                    early_bytes_sent += send_amount;
+                }
+            } else {
+                if ((ret = ptls_send(tls, &encbuf, bytebuf, ioret)) != 0) {
+                    fprintf(stderr, "ptls_send(1rtt):%d\n", ret);
+                    goto Exit;
+                }
+                ptbuf.off = 0;
             }
         }
 
@@ -228,8 +246,7 @@ static int handle_connection(int sockfd, ptls_context_t *ctx, const char *server
                 ptls_buffer_t wbuf;
                 uint8_t wbuf_small[32];
                 ptls_buffer_init(&wbuf, wbuf_small, sizeof(wbuf_small));
-                if ((ret = ptls_send_alert(tls, &wbuf,
-                           PTLS_ALERT_LEVEL_WARNING, PTLS_ALERT_CLOSE_NOTIFY)) != 0) {
+                if ((ret = ptls_send_alert(tls, &wbuf, PTLS_ALERT_LEVEL_WARNING, PTLS_ALERT_CLOSE_NOTIFY)) != 0) {
                     fprintf(stderr, "ptls_send_alert:%d\n", ret);
                 }
                 if (wbuf.off != 0)
@@ -242,14 +259,22 @@ static int handle_connection(int sockfd, ptls_context_t *ctx, const char *server
     }
 
 Exit:
+    if (input_file == input_file_is_benchmark) {
+        double elapsed = (ctx->get_time->cb(ctx->get_time) - start_at) / 1000.0;
+        ptls_cipher_suite_t *cipher_suite = ptls_get_cipher(tls);
+        fprintf(stderr, "received %" PRIu64 " bytes in %.3f seconds (%f.3Mbps); %s\n", data_received, elapsed,
+                data_received * 8 / elapsed / 1000 / 1000, cipher_suite != NULL ? cipher_suite->aead->name : "unknown cipher");
+    }
+
     if (sockfd != -1)
         close(sockfd);
-    if (input_file != NULL && inputfd != -1)
+    if (input_file != NULL && input_file != input_file_is_benchmark && inputfd >= 0)
         close(inputfd);
     ptls_buffer_dispose(&rbuf);
     ptls_buffer_dispose(&encbuf);
     ptls_buffer_dispose(&ptbuf);
     ptls_free(tls);
+
     return ret != 0;
 }
 
@@ -275,7 +300,7 @@ static int run_server(struct sockaddr *sa, socklen_t salen, ptls_context_t *ctx,
         return 1;
     }
 
-    fprintf(stderr, "server started on port %d\n", ntohs(((struct sockaddr_in *) sa)->sin_port));
+    fprintf(stderr, "server started on port %d\n", ntohs(((struct sockaddr_in *)sa)->sin_port));
     while (1) {
         fprintf(stderr, "waiting for connections\n");
         if ((conn_fd = accept(listen_fd, NULL, 0)) != -1)
@@ -315,6 +340,9 @@ static void usage(const char *cmd)
            "  -6                   force IPv6\n"
            "  -a                   require client authentication\n"
            "  -b                   enable brotli compression\n"
+           "  -B                   benchmark mode for measuring sustained bandwidth. Run\n"
+           "                       both endpoints with this option for some time, then kill\n"
+           "                       the client. Server will report the ingress bandwidth.\n"
            "  -C certificate-file  certificate chain used for client authentication\n"
            "  -c certificate-file  certificate chain used for server authentication\n"
            "  -i file              a file to read from and send to the peer (default: stdin)\n"
@@ -330,6 +358,8 @@ static void usage(const char *cmd)
            "                       as early data\n"
            "  -u                   update the traffic key when handshake is complete\n"
            "  -v                   verify peer using the default certificates\n"
+           "  -y cipher-suite      cipher-suite to be used, e.g., aes128gcmsha256 (default:\n"
+           "                       all)\n"
            "  -h                   print this help\n"
            "\n"
            "Supported named groups: secp256r1"
@@ -360,9 +390,10 @@ int main(int argc, char **argv)
     res_init();
 
     ptls_key_exchange_algorithm_t *key_exchanges[128] = {NULL};
-    ptls_context_t ctx = {ptls_openssl_random_bytes, &ptls_get_time, key_exchanges, ptls_openssl_cipher_suites};
+    ptls_cipher_suite_t *cipher_suites[128] = {NULL};
+    ptls_context_t ctx = {ptls_openssl_random_bytes, &ptls_get_time, key_exchanges, cipher_suites};
     ptls_handshake_properties_t hsprop = {{{{NULL}}}};
-    const char *host, *port, *file = NULL, *esni_file = NULL;
+    const char *host, *port, *input_file = NULL, *esni_file = NULL;
     struct {
         ptls_key_exchange_context_t *elements[16];
         size_t count;
@@ -372,7 +403,7 @@ int main(int argc, char **argv)
     socklen_t salen;
     int family = 0;
 
-    while ((ch = getopt(argc, argv, "46abC:c:i:Ik:nN:es:SE:K:l:vh")) != -1) {
+    while ((ch = getopt(argc, argv, "46abBC:c:i:Ik:nN:es:SE:K:l:y:vh")) != -1) {
         switch (ch) {
         case '4':
             family = AF_INET;
@@ -391,6 +422,9 @@ int main(int argc, char **argv)
             exit(1);
 #endif
             break;
+        case 'B':
+            input_file = input_file_is_benchmark;
+            break;
         case 'C':
         case 'c':
             if (ctx.certificates.count != 0) {
@@ -401,7 +435,7 @@ int main(int argc, char **argv)
             is_server = ch == 'c';
             break;
         case 'i':
-            file = optarg;
+            input_file = optarg;
             break;
         case 'I':
             keep_sender_open = 1;
@@ -477,6 +511,24 @@ int main(int argc, char **argv)
         case 'u':
             request_key_update = 1;
             break;
+        case 'y': {
+            size_t i;
+            for (i = 0; cipher_suites[i] != NULL; ++i)
+                ;
+#define MATCH(name)                                                                                                                \
+    if (cipher_suites[i] == NULL && strcasecmp(optarg, #name) == 0)                                                                \
+    cipher_suites[i] = &ptls_openssl_##name
+            MATCH(aes128gcmsha256);
+            MATCH(aes256gcmsha384);
+#if PTLS_OPENSSL_HAVE_CHACHA20_POLY1305
+            MATCH(chacha20poly1305sha256);
+#endif
+#undef MATCH
+            if (cipher_suites[i] == NULL) {
+                fprintf(stderr, "unknown cipher-suite: %s\n", optarg);
+                exit(1);
+            }
+        } break;
         case 'h':
             usage(argv[0]);
             exit(0);
@@ -516,6 +568,11 @@ int main(int argc, char **argv)
     }
     if (key_exchanges[0] == NULL)
         key_exchanges[0] = &ptls_openssl_secp256r1;
+    if (cipher_suites[0] == NULL) {
+        size_t i;
+        for (i = 0; ptls_openssl_cipher_suites[i] != NULL; ++i)
+            cipher_suites[i] = ptls_openssl_cipher_suites[i];
+    }
     if (esni_file != NULL) {
         if (esni_key_exchanges.count == 0) {
             fprintf(stderr, "-E must be used together with -K\n");
@@ -534,8 +591,8 @@ int main(int argc, char **argv)
         exit(1);
 
     if (is_server) {
-        return run_server((struct sockaddr *)&sa, salen, &ctx, file, &hsprop, request_key_update);
+        return run_server((struct sockaddr *)&sa, salen, &ctx, input_file, &hsprop, request_key_update);
     } else {
-        return run_client((struct sockaddr *)&sa, salen, &ctx, host, file, &hsprop, request_key_update, keep_sender_open);
+        return run_client((struct sockaddr *)&sa, salen, &ctx, host, input_file, &hsprop, request_key_update, keep_sender_open);
     }
 }
