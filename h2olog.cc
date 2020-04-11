@@ -103,11 +103,11 @@ static std::string generate_header_filter_cflag(const std::vector<std::string> &
 
     for (auto &token : tokens) {
         char buf[256];
-        snprintf(buf, sizeof(buf), "/* %s */ (slen) == %lu", token.c_str(), token.size());
+        snprintf(buf, sizeof(buf), "/* %s */ (slen) == %zu", token.c_str(), token.size());
         std::vector<std::string> exprs = {buf};
 
         for (size_t i = 0; i < token.size(); ++i) {
-            snprintf(buf, sizeof(buf), "(s)[%lu] == '%c'", i, token[i]);
+            snprintf(buf, sizeof(buf), "(s)[%zu] == '%c'", i, token[i]);
             exprs.push_back(buf);
         }
         conditions.push_back("(" + join_str(" && ", exprs) + ")");
