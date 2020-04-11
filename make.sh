@@ -1,4 +1,4 @@
-#!/usr/bin/bash
+#!/usr/bin/env bash
 set -xe
 
 CC=clang CXX=clang++ cmake -H. -Bbuild
