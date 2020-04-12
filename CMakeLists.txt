@@ -278,6 +278,10 @@ SET(LIBYAML_SOURCE_FILES
 
 SET(BROTLI_SOURCE_FILES
     deps/brotli/c/common/dictionary.c
+    deps/brotli/c/dec/bit_reader.c
+    deps/brotli/c/dec/decode.c
+    deps/brotli/c/dec/huffman.c
+    deps/brotli/c/dec/state.c
     deps/brotli/c/enc/backward_references.c
     deps/brotli/c/enc/backward_references_hq.c
     deps/brotli/c/enc/bit_cost.c
@@ -320,6 +324,7 @@ SET(LIB_SOURCE_FILES
     deps/picotls/deps/cifra/src/drbg.c
     deps/picotls/deps/cifra/src/hmac.c
     deps/picotls/deps/cifra/src/sha256.c
+    deps/picotls/lib/certificate_compression.c
     deps/picotls/lib/picotls.c
     deps/picotls/lib/openssl.c
     deps/picotls/lib/cifra/random.c

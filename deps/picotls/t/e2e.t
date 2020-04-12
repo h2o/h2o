@@ -65,7 +65,7 @@ subtest "certificate-compression" => sub {
         unless system("$cli -b -h > /dev/null 2>&1") == 0;
     my $guard = spawn_server(qw(-i t/assets/hello.txt -b));
     my $resp = `$cli 127.0.0.1 $port 2> /dev/null`;
-    isnt $resp, "hello";
+    is $resp, "hello";
     $resp = `$cli -b 127.0.0.1 $port 2> /dev/null`;
     is $resp, "hello";
 };

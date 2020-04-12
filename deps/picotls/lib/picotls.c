@@ -2572,7 +2572,8 @@ Exit:
 }
 
 static int default_emit_certificate_cb(ptls_emit_certificate_t *_self, ptls_t *tls, ptls_message_emitter_t *emitter,
-                                       ptls_key_schedule_t *key_sched, ptls_iovec_t context, int push_status_request)
+                                       ptls_key_schedule_t *key_sched, ptls_iovec_t context, int push_status_request,
+                                       const uint16_t *compress_algos, size_t num_compress_algos)
 {
     int ret;
 
@@ -2589,11 +2590,9 @@ Exit:
 
 static int send_certificate_and_certificate_verify(ptls_t *tls, ptls_message_emitter_t *emitter,
                                                    struct st_ptls_signature_algorithms_t *signature_algorithms,
-                                                   ptls_iovec_t context, const char *context_string, int push_status_request)
+                                                   ptls_iovec_t context, const char *context_string, int push_status_request,
+                                                   const uint16_t *compress_algos, size_t num_compress_algos)
 {
-    static ptls_emit_certificate_t default_emit_certificate = {default_emit_certificate_cb};
-    ptls_emit_certificate_t *emit_certificate =
-        tls->ctx->emit_certificate != NULL ? tls->ctx->emit_certificate : &default_emit_certificate;
     int ret;
 
     if (signature_algorithms->count == 0) {
@@ -2601,9 +2600,21 @@ static int send_certificate_and_certificate_verify(ptls_t *tls, ptls_message_emi
         goto Exit;
     }
 
-    /* send Certificate (or the equivalent) */
-    if ((ret = emit_certificate->cb(emit_certificate, tls, emitter, tls->key_schedule, context, push_status_request)) != 0)
-        goto Exit;
+    { /* send Certificate (or the equivalent) */
+        static ptls_emit_certificate_t default_emit_certificate = {default_emit_certificate_cb};
+        ptls_emit_certificate_t *emit_certificate =
+            tls->ctx->emit_certificate != NULL ? tls->ctx->emit_certificate : &default_emit_certificate;
+    Redo:
+        if ((ret = emit_certificate->cb(emit_certificate, tls, emitter, tls->key_schedule, context, push_status_request,
+                                        compress_algos, num_compress_algos)) != 0) {
+            if (ret == PTLS_ERROR_DELEGATE) {
+                assert(emit_certificate != &default_emit_certificate);
+                emit_certificate = &default_emit_certificate;
+                goto Redo;
+            }
+            goto Exit;
+        }
+    }
 
     /* build and send CertificateVerify */
     if (tls->ctx->sign_certificate != NULL) {
@@ -2885,7 +2896,7 @@ static int client_handle_finished(ptls_t *tls, ptls_message_emitter_t *emitter, 
         }
         ret = send_certificate_and_certificate_verify(tls, emitter, &tls->client.certificate_request.signature_algorithms,
                                                       tls->client.certificate_request.context,
-                                                      PTLS_CLIENT_CERTIFICATE_VERIFY_CONTEXT_STRING, 0);
+                                                      PTLS_CLIENT_CERTIFICATE_VERIFY_CONTEXT_STRING, 0, NULL, 0);
         free(tls->client.certificate_request.context.base);
         tls->client.certificate_request.context = ptls_iovec_init(NULL, 0);
         if (ret != 0)
@@ -3963,7 +3974,8 @@ static int server_handle_hello(ptls_t *tls, ptls_message_emitter_t *emitter, ptl
         }
 
         ret = send_certificate_and_certificate_verify(tls, emitter, &ch.signature_algorithms, ptls_iovec_init(NULL, 0),
-                                                      PTLS_SERVER_CERTIFICATE_VERIFY_CONTEXT_STRING, ch.status_request);
+                                                      PTLS_SERVER_CERTIFICATE_VERIFY_CONTEXT_STRING, ch.status_request,
+                                                      ch.cert_compression_algos.list, ch.cert_compression_algos.count);
 
         if (ret != 0) {
             goto Exit;

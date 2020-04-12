@@ -59,6 +59,7 @@
 #include "picotls.h"
 #include "picotls/minicrypto.h"
 #include "picotls/openssl.h"
+#include "picotls/certificate_compression.h"
 #include "cloexec.h"
 #include "yoml-parser.h"
 #include "neverbleed.h"
@@ -104,11 +105,15 @@ struct listener_ssl_config_t {
         unsigned max_failures;
         char *cmd;
         pthread_t updater_tid; /* should be valid when and only when interval != 0 */
-        struct {
-            pthread_mutex_t mutex;
-            h2o_buffer_t *data;
-        } response;
     } ocsp_stapling;
+    /**
+     * retains up-to-date data to be sent in regard to server authentication (e.g., ocsp status, pre-compressed certs)
+     */
+    struct {
+        pthread_mutex_t mutex;
+        h2o_buffer_t *ocsp_status;
+        ptls_emit_compressed_certificate_t *emit_compressed_ptls;
+    } dynamic;
 };
 
 struct listener_config_t {
@@ -371,13 +376,40 @@ static int on_client_hello_ptls(ptls_on_client_hello_t *_self, ptls_t *tls, ptls
     return ret;
 }
 
-static void update_ocsp_stapling(struct listener_ssl_config_t *ssl_conf, h2o_buffer_t *resp)
+static ptls_emit_compressed_certificate_t *build_compressed_certificate_ptls(ptls_context_t *ctx, ptls_iovec_t ocsp_status)
 {
-    pthread_mutex_lock(&ssl_conf->ocsp_stapling.response.mutex);
-    if (ssl_conf->ocsp_stapling.response.data != NULL)
-        h2o_buffer_dispose(&ssl_conf->ocsp_stapling.response.data);
-    ssl_conf->ocsp_stapling.response.data = resp;
-    pthread_mutex_unlock(&ssl_conf->ocsp_stapling.response.mutex);
+    ptls_emit_compressed_certificate_t *ecc = h2o_mem_alloc(sizeof(*ecc));
+    int ret;
+
+    if ((ret = ptls_init_compressed_certificate(ecc, ctx->certificates.list, ctx->certificates.count, ocsp_status)) != 0)
+        h2o_fatal("failed to rebuild brotli-compressed certificate chain (error %d)\n", ret);
+
+    return ecc;
+}
+
+static void build_ssl_dynamic_data(struct listener_ssl_config_t *ssl_conf, h2o_buffer_t *ocsp_status)
+{
+    ptls_emit_compressed_certificate_t *emit_cert_compressed_ptls = NULL;
+    ptls_context_t *ctx_ptls;
+
+    if ((ctx_ptls = h2o_socket_ssl_get_picotls_context(ssl_conf->ctx)) != NULL) {
+        emit_cert_compressed_ptls = build_compressed_certificate_ptls(
+            h2o_socket_ssl_get_picotls_context(ssl_conf->ctx),
+            ocsp_status != NULL ? ptls_iovec_init(ocsp_status->bytes, ocsp_status->size) : ptls_iovec_init(NULL, 0));
+    }
+
+    pthread_mutex_lock(&ssl_conf->dynamic.mutex);
+
+    if (ssl_conf->dynamic.ocsp_status != NULL)
+        h2o_buffer_dispose(&ssl_conf->dynamic.ocsp_status);
+    if (ssl_conf->dynamic.emit_compressed_ptls != NULL) {
+        ptls_dispose_compressed_certificate(ssl_conf->dynamic.emit_compressed_ptls);
+        free(ssl_conf->dynamic.emit_compressed_ptls);
+    }
+    ssl_conf->dynamic.ocsp_status = ocsp_status;
+    ssl_conf->dynamic.emit_compressed_ptls = emit_cert_compressed_ptls;
+
+    pthread_mutex_unlock(&ssl_conf->dynamic.mutex);
 }
 
 static int get_ocsp_response(const char *cert_fn, const char *cmd, h2o_buffer_t **resp)
@@ -440,7 +472,7 @@ static void *ocsp_updater_thread(void *_ssl_conf)
         switch (status) {
         case 0: /* success */
             fail_cnt = 0;
-            update_ocsp_stapling(ssl_conf, resp);
+            build_ssl_dynamic_data(ssl_conf, resp);
             fprintf(stderr, "[OCSP Stapling] successfully updated the response for certificate file:%s\n",
                     ssl_conf->certificate_file);
             break;
@@ -449,7 +481,7 @@ static void *ocsp_updater_thread(void *_ssl_conf)
                 fprintf(stderr,
                         "[OCSP Stapling] OCSP stapling is temporary disabled due to repeated errors for certificate file:%s\n",
                         ssl_conf->certificate_file);
-                update_ocsp_stapling(ssl_conf, NULL);
+                build_ssl_dynamic_data(ssl_conf, NULL);
             } else {
                 fprintf(stderr,
                         "[OCSP Stapling] reusing old response due to a temporary error occurred while fetching OCSP "
@@ -459,7 +491,7 @@ static void *ocsp_updater_thread(void *_ssl_conf)
             }
             break;
         default: /* permanent failure */
-            update_ocsp_stapling(ssl_conf, NULL);
+            build_ssl_dynamic_data(ssl_conf, NULL);
             fprintf(stderr, "[OCSP Stapling] disabled for certificate file:%s\n", ssl_conf->certificate_file);
             goto Exit;
         }
@@ -480,15 +512,15 @@ static int on_staple_ocsp_ossl(SSL *ssl, void *_ssl_conf)
     size_t len = 0;
 
     /* fetch ocsp response */
-    pthread_mutex_lock(&ssl_conf->ocsp_stapling.response.mutex);
-    if (ssl_conf->ocsp_stapling.response.data != NULL) {
-        resp = CRYPTO_malloc((int)ssl_conf->ocsp_stapling.response.data->size, __FILE__, __LINE__);
+    pthread_mutex_lock(&ssl_conf->dynamic.mutex);
+    if (ssl_conf->dynamic.ocsp_status != NULL) {
+        resp = CRYPTO_malloc((int)ssl_conf->dynamic.ocsp_status->size, __FILE__, __LINE__);
         if (resp != NULL) {
-            len = ssl_conf->ocsp_stapling.response.data->size;
-            memcpy(resp, ssl_conf->ocsp_stapling.response.data->bytes, len);
+            len = ssl_conf->dynamic.ocsp_status->size;
+            memcpy(resp, ssl_conf->dynamic.ocsp_status->bytes, len);
         }
     }
-    pthread_mutex_unlock(&ssl_conf->ocsp_stapling.response.mutex);
+    pthread_mutex_unlock(&ssl_conf->dynamic.mutex);
 
     if (resp != NULL) {
         SSL_set_tlsext_status_ocsp_resp(ssl, resp, len);
@@ -506,25 +538,34 @@ struct st_emit_certificate_ptls_t {
 };
 
 static int on_emit_certificate_ptls(ptls_emit_certificate_t *_self, ptls_t *tls, ptls_message_emitter_t *emitter,
-                                    ptls_key_schedule_t *key_sched, ptls_iovec_t context, int push_status_request)
+                                    ptls_key_schedule_t *key_sched, ptls_iovec_t context, int push_status_request,
+                                    const uint16_t *compress_algos, size_t num_compress_algos)
 {
     struct st_emit_certificate_ptls_t *self = (void *)_self;
-    ptls_context_t *tlsctx = ptls_get_context(tls);
     int ret;
 
+    pthread_mutex_lock(&self->conf->dynamic.mutex);
+
+    if (self->conf->dynamic.emit_compressed_ptls != NULL) {
+        ptls_emit_certificate_t *ec = &self->conf->dynamic.emit_compressed_ptls->super;
+        if ((ret = ec->cb(ec, tls, emitter, key_sched, context, push_status_request, compress_algos, num_compress_algos)) !=
+            PTLS_ERROR_DELEGATE)
+            goto Exit;
+    }
+
     ptls_push_message(emitter, key_sched, PTLS_HANDSHAKE_TYPE_CERTIFICATE, {
-        pthread_mutex_lock(&self->conf->ocsp_stapling.response.mutex);
-        h2o_buffer_t *ocsp_response = push_status_request ? self->conf->ocsp_stapling.response.data : NULL;
+        ptls_context_t *tlsctx = ptls_get_context(tls);
+        h2o_buffer_t *ocsp_response = push_status_request ? self->conf->dynamic.ocsp_status : NULL;
         ret = ptls_build_certificate_message(
             emitter->buf, ptls_iovec_init(NULL, 0), tlsctx->certificates.list, tlsctx->certificates.count,
             ocsp_response != NULL ? ptls_iovec_init(ocsp_response->bytes, ocsp_response->size) : ptls_iovec_init(NULL, 0));
-        pthread_mutex_unlock(&self->conf->ocsp_stapling.response.mutex);
         if (ret != 0)
             goto Exit;
     });
     ret = 0;
 
 Exit:
+    pthread_mutex_unlock(&self->conf->dynamic.mutex);
     return ret;
 }
 
@@ -883,7 +924,23 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
     SSL_CTX_set_tlsext_status_cb(ssl_ctx, on_staple_ocsp_ossl);
     SSL_CTX_set_tlsext_status_arg(ssl_ctx, ssl_config);
 #endif
-    pthread_mutex_init(&ssl_config->ocsp_stapling.response.mutex, NULL);
+
+    if (use_picotls) {
+        const char *errstr = listener_setup_ssl_picotls(listener, ssl_config, ssl_ctx);
+        if (errstr != NULL)
+            h2o_configurator_errprintf(cmd, *ssl_node, "%s; TLS 1.3 will be disabled\n", errstr);
+        if (listener->quic.ctx != NULL) {
+            listener->quic.ctx->tls = h2o_socket_ssl_get_picotls_context(ssl_ctx);
+            assert(listener->quic.ctx->tls != NULL);
+            quicly_amend_ptls_context(listener->quic.ctx->tls);
+        }
+    } else if (listener->quic.ctx != NULL) {
+        h2o_configurator_errprintf(cmd, *ssl_node, "QUIC support requires TLS 1.3 using picotls");
+        goto Error;
+    }
+
+    pthread_mutex_init(&ssl_config->dynamic.mutex, NULL);
+    build_ssl_dynamic_data(ssl_config, NULL);
     ssl_config->ocsp_stapling.cmd = ocsp_update_cmd != NULL ? h2o_strdup(NULL, (*ocsp_update_cmd)->data.scalar, SIZE_MAX).base
                                                             : "share/h2o/fetch-ocsp-response";
     if (ocsp_update_interval != 0) {
@@ -917,20 +974,6 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
             }
         } break;
         }
-    }
-
-    if (use_picotls) {
-        const char *errstr = listener_setup_ssl_picotls(listener, ssl_config, ssl_ctx);
-        if (errstr != NULL)
-            h2o_configurator_errprintf(cmd, *ssl_node, "%s; TLS 1.3 will be disabled\n", errstr);
-        if (listener->quic.ctx != NULL) {
-            listener->quic.ctx->tls = h2o_socket_ssl_get_picotls_context(ssl_ctx);
-            assert(listener->quic.ctx->tls != NULL);
-            quicly_amend_ptls_context(listener->quic.ctx->tls);
-        }
-    } else if (listener->quic.ctx != NULL) {
-        h2o_configurator_errprintf(cmd, *ssl_node, "QUIC support requires TLS 1.3 using picotls");
-        goto Error;
     }
 
     return 0;

@@ -1253,7 +1253,6 @@ int ptls_openssl_init_verify_certificate(ptls_openssl_verify_certificate_t *self
 void ptls_openssl_dispose_verify_certificate(ptls_openssl_verify_certificate_t *self)
 {
     X509_STORE_free(self->cert_store);
-    free(self);
 }
 
 X509_STORE *ptls_openssl_create_default_certificate_store(void)

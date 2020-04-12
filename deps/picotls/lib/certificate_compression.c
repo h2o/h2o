@@ -48,7 +48,8 @@ static const uint16_t algorithms[] = {PTLS_CERTIFICATE_COMPRESSION_ALGORITHM_BRO
 ptls_decompress_certificate_t ptls_decompress_certificate = {algorithms, decompress_certificate};
 
 static int emit_compressed_certificate(ptls_emit_certificate_t *_self, ptls_t *tls, ptls_message_emitter_t *emitter,
-                                       ptls_key_schedule_t *key_sched, ptls_iovec_t context, int push_status_request)
+                                       ptls_key_schedule_t *key_sched, ptls_iovec_t context, int push_status_request,
+                                       const uint16_t *compress_algos, size_t num_compress_algos)
 {
     ptls_emit_compressed_certificate_t *self = (void *)_self;
     struct st_ptls_compressed_certificate_entry_t *entry;
@@ -56,6 +57,15 @@ static int emit_compressed_certificate(ptls_emit_certificate_t *_self, ptls_t *t
 
     assert(context.len == 0 || !"precompressed mode can only be used for server certificates");
 
+    for (size_t i = 0; i != num_compress_algos; ++i) {
+        if (compress_algos[i] == PTLS_CERTIFICATE_COMPRESSION_ALGORITHM_BROTLI)
+            goto FoundBrotli;
+    }
+    /* brotli not found, delegate to the core */
+    ret = PTLS_ERROR_DELEGATE;
+    goto Exit;
+
+FoundBrotli:
     entry = &self->without_ocsp_status;
     if (push_status_request && self->with_ocsp_status.uncompressed_length != 0)
         entry = &self->with_ocsp_status;

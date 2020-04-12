@@ -289,6 +289,15 @@
 		E918FC9121365AB700CCB252 /* theft_trial.c in Sources */ = {isa = PBXBuildFile; fileRef = E918FC552136598400CCB252 /* theft_trial.c */; };
 		E918FC9221365AB700CCB252 /* theft.c in Sources */ = {isa = PBXBuildFile; fileRef = E918FC492136598300CCB252 /* theft.c */; };
 		E918FC9321365ABC00CCB252 /* prop.c in Sources */ = {isa = PBXBuildFile; fileRef = E918FC3B213658BE00CCB252 /* prop.c */; };
+		E9316ED824417E0A00C9C127 /* certificate_compression.c in Sources */ = {isa = PBXBuildFile; fileRef = E9316ED724417E0A00C9C127 /* certificate_compression.c */; };
+		E9316EE624417EAA00C9C127 /* bit_reader.c in Sources */ = {isa = PBXBuildFile; fileRef = E9316EDB24417EA900C9C127 /* bit_reader.c */; };
+		E9316EE724417EAA00C9C127 /* bit_reader.c in Sources */ = {isa = PBXBuildFile; fileRef = E9316EDB24417EA900C9C127 /* bit_reader.c */; };
+		E9316EE824417EAA00C9C127 /* decode.c in Sources */ = {isa = PBXBuildFile; fileRef = E9316EDC24417EA900C9C127 /* decode.c */; };
+		E9316EE924417EAA00C9C127 /* decode.c in Sources */ = {isa = PBXBuildFile; fileRef = E9316EDC24417EA900C9C127 /* decode.c */; };
+		E9316EEA24417EAA00C9C127 /* huffman.c in Sources */ = {isa = PBXBuildFile; fileRef = E9316EDF24417EA900C9C127 /* huffman.c */; };
+		E9316EEB24417EAA00C9C127 /* huffman.c in Sources */ = {isa = PBXBuildFile; fileRef = E9316EDF24417EA900C9C127 /* huffman.c */; };
+		E9316EEC24417EAA00C9C127 /* state.c in Sources */ = {isa = PBXBuildFile; fileRef = E9316EE324417EA900C9C127 /* state.c */; };
+		E9316EED24417EAA00C9C127 /* state.c in Sources */ = {isa = PBXBuildFile; fileRef = E9316EE324417EA900C9C127 /* state.c */; };
 		E93C7F96226EBEC9007BF39A /* frame.c in Sources */ = {isa = PBXBuildFile; fileRef = E93C7F95226EBEC9007BF39A /* frame.c */; };
 		E93C7F98226EBEC9007BF39A /* frame.c in Sources */ = {isa = PBXBuildFile; fileRef = E93C7F95226EBEC9007BF39A /* frame.c */; };
 		E93C7F9A22701806007BF39A /* frame.c in Sources */ = {isa = PBXBuildFile; fileRef = E93C7F9922701806007BF39A /* frame.c */; };
@@ -1020,6 +1029,19 @@
 		E918FC5C2136598500CCB252 /* theft_trial.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = theft_trial.h; sourceTree = "<group>"; };
 		E918FC5D2136598500CCB252 /* theft_autoshrink_internal.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = theft_autoshrink_internal.h; sourceTree = "<group>"; };
 		E918FC5E2136598600CCB252 /* theft_shrink_internal.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = theft_shrink_internal.h; sourceTree = "<group>"; };
+		E9316ED724417E0A00C9C127 /* certificate_compression.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = certificate_compression.c; sourceTree = "<group>"; };
+		E9316EDB24417EA900C9C127 /* bit_reader.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = bit_reader.c; sourceTree = "<group>"; };
+		E9316EDC24417EA900C9C127 /* decode.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = decode.c; sourceTree = "<group>"; };
+		E9316EDD24417EA900C9C127 /* huffman.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = huffman.h; sourceTree = "<group>"; };
+		E9316EDE24417EA900C9C127 /* port.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = port.h; sourceTree = "<group>"; };
+		E9316EDF24417EA900C9C127 /* huffman.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = huffman.c; sourceTree = "<group>"; };
+		E9316EE024417EA900C9C127 /* context.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = context.h; sourceTree = "<group>"; };
+		E9316EE124417EA900C9C127 /* prefix.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = prefix.h; sourceTree = "<group>"; };
+		E9316EE224417EA900C9C127 /* bit_reader.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = bit_reader.h; sourceTree = "<group>"; };
+		E9316EE324417EA900C9C127 /* state.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = state.c; sourceTree = "<group>"; };
+		E9316EE424417EAA00C9C127 /* state.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = state.h; sourceTree = "<group>"; };
+		E9316EE524417EAA00C9C127 /* transform.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = transform.h; sourceTree = "<group>"; };
+		E9316EEE2441C08100C9C127 /* certificate_compression.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = certificate_compression.h; sourceTree = "<group>"; };
 		E93C7F95226EBEC9007BF39A /* frame.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = frame.c; sourceTree = "<group>"; };
 		E93C7F9922701806007BF39A /* frame.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = frame.c; sourceTree = "<group>"; };
 		E9581B9922F001EB00299E8A /* x25519.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = x25519.c; sourceTree = "<group>"; };
@@ -2364,6 +2386,24 @@
 			path = src;
 			sourceTree = "<group>";
 		};
+		E9316EDA24417E8000C9C127 /* dec */ = {
+			isa = PBXGroup;
+			children = (
+				E9316EDB24417EA900C9C127 /* bit_reader.c */,
+				E9316EE224417EA900C9C127 /* bit_reader.h */,
+				E9316EE024417EA900C9C127 /* context.h */,
+				E9316EDC24417EA900C9C127 /* decode.c */,
+				E9316EDF24417EA900C9C127 /* huffman.c */,
+				E9316EDD24417EA900C9C127 /* huffman.h */,
+				E9316EDE24417EA900C9C127 /* port.h */,
+				E9316EE124417EA900C9C127 /* prefix.h */,
+				E9316EE324417EA900C9C127 /* state.c */,
+				E9316EE424417EAA00C9C127 /* state.h */,
+				E9316EE524417EAA00C9C127 /* transform.h */,
+			);
+			path = dec;
+			sourceTree = "<group>";
+		};
 		E9581B9822F001C000299E8A /* cifra */ = {
 			isa = PBXGroup;
 			children = (
@@ -2387,6 +2427,7 @@
 		E9708AD71E499DEA0029E0A5 /* lib */ = {
 			isa = PBXGroup;
 			children = (
+				E9316ED724417E0A00C9C127 /* certificate_compression.c */,
 				E9581B9822F001C000299E8A /* cifra */,
 				E9708AD91E499E040029E0A5 /* openssl.c */,
 				E9708ADA1E499E040029E0A5 /* picotls.c */,
@@ -2406,6 +2447,7 @@
 		E9708AE11E49A2160029E0A5 /* picotls */ = {
 			isa = PBXGroup;
 			children = (
+				E9316EEE2441C08100C9C127 /* certificate_compression.h */,
 				E9708AE21E49A2260029E0A5 /* minicrypto.h */,
 				E9708AE31E49A2260029E0A5 /* openssl.h */,
 			);
@@ -2463,6 +2505,7 @@
 			isa = PBXGroup;
 			children = (
 				E987E5DF1FD7EB5300DE4346 /* common */,
+				E9316EDA24417E8000C9C127 /* dec */,
 				E987E5541FD7BDF100DE4346 /* enc */,
 				E987E5C71FD7BE3400DE4346 /* include */,
 			);
@@ -3045,6 +3088,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				107D4D441B588021004A9B21 /* ssl.c in Sources */,
+				E9316EEC24417EAA00C9C127 /* state.c in Sources */,
 				1079244A19A3266700C52AD6 /* frame.c in Sources */,
 				E9F677D720077603006476D3 /* roundrobin.c in Sources */,
 				1079244B19A3266700C52AD6 /* context.c in Sources */,
@@ -3057,6 +3101,7 @@
 				1079244C19A3266700C52AD6 /* memory.c in Sources */,
 				10FCC1401B2E59E600F13674 /* cloexec.c in Sources */,
 				105534C71A3BB29100627ECB /* string.c in Sources */,
+				E9316EE824417EAA00C9C127 /* decode.c in Sources */,
 				E987E5ED1FD8C04D00DE4346 /* backward_references.c in Sources */,
 				107D4D4B1B5880BC004A9B21 /* scanner.c in Sources */,
 				1079244E19A3266700C52AD6 /* request.c in Sources */,
@@ -3079,6 +3124,7 @@
 				E901C430213E52B500D17C93 /* hmac.c in Sources */,
 				E987E5F91FD8C04D00DE4346 /* memory.c in Sources */,
 				10AA2EA31A88090B004322AC /* url.c in Sources */,
+				E9316EEA24417EAA00C9C127 /* huffman.c in Sources */,
 				1024A4001D23606300EB13F1 /* cache_digests.c in Sources */,
 				E987E5F61FD8C04D00DE4346 /* entropy_encode.c in Sources */,
 				105534C91A3BB41C00627ECB /* proxy.c in Sources */,
@@ -3087,6 +3133,7 @@
 				107D4D451B5880BC004A9B21 /* api.c in Sources */,
 				E98884D521E7F3D80060F010 /* sentmap.c in Sources */,
 				E987E5F31FD8C04D00DE4346 /* compress_fragment.c in Sources */,
+				E9316EE624417EAA00C9C127 /* bit_reader.c in Sources */,
 				1079245119A3266700C52AD6 /* token.c in Sources */,
 				E901C42B213E52A500D17C93 /* chash.c in Sources */,
 				E98884D321E7F3D80060F010 /* recvstate.c in Sources */,
@@ -3186,6 +3233,7 @@
 				E9E5049121501BBA004DC170 /* server.c in Sources */,
 				E9708B8B1E52C85A0029E0A5 /* tunnel.c in Sources */,
 				7DE1DB38212B1CC00055F500 /* ssl.c in Sources */,
+				E9316ED824417E0A00C9C127 /* certificate_compression.c in Sources */,
 				7D937303202AC7BA005FE6AB /* server_timing.c in Sources */,
 				E9708B531E52C7EE0029E0A5 /* config.c in Sources */,
 				08F320E11E7A9CBF0038FA5A /* read.c in Sources */,
@@ -3196,6 +3244,7 @@
 				E987E5D51FD7BEB500DE4346 /* backward_references_hq.c in Sources */,
 				E987E5D71FD7BEB500DE4346 /* bit_cost.c in Sources */,
 				E9708B631E52C80F0029E0A5 /* headers_util.c in Sources */,
+				E9316EE924417EAA00C9C127 /* decode.c in Sources */,
 				E9708B541E52C7EE0029E0A5 /* configurator.c in Sources */,
 				E93C7F98226EBEC9007BF39A /* frame.c in Sources */,
 				E9708B6D1E52C8250029E0A5 /* gzip.c in Sources */,
@@ -3210,6 +3259,7 @@
 				E9708B5F1E52C80F0029E0A5 /* errordoc.c in Sources */,
 				E9708B3C1E52C7860029E0A5 /* connect.c in Sources */,
 				E9BCE68D1FF0CFBB003CEA11 /* timerwheel.c in Sources */,
+				E9316EE724417EAA00C9C127 /* bit_reader.c in Sources */,
 				08F320E01E7A9CBD0038FA5A /* net.c in Sources */,
 				E9708B611E52C80F0029E0A5 /* file.c in Sources */,
 				E98884D821E7F3D90060F010 /* sendstate.c in Sources */,
@@ -3230,6 +3280,7 @@
 				7D0341FC1FE4D5BD0052E0A1 /* http2client.c in Sources */,
 				08F320DD1E7A9CA60038FA5A /* redis.c in Sources */,
 				E9E50479214C0385004DC170 /* common.c in Sources */,
+				E9316EED24417EAA00C9C127 /* state.c in Sources */,
 				10756E2A1AC126420009BF57 /* api.c in Sources */,
 				7D9372FE202AC70F005FE6AB /* server_timing.c in Sources */,
 				10756E2B1AC126420009BF57 /* dumper.c in Sources */,
@@ -3255,6 +3306,7 @@
 				10FFEE0A1BB23A8C0087AD75 /* neverbleed.c in Sources */,
 				E9708B811E52C84A0029E0A5 /* http2_debug_state.c in Sources */,
 				E9708B7A1E52C83D0029E0A5 /* redirect.c in Sources */,
+				E9316EEB24417EAA00C9C127 /* huffman.c in Sources */,
 				E9708B4D1E52C7DF0029E0A5 /* socket.c in Sources */,
 				E987E5DC1FD7BEB500DE4346 /* dictionary_hash.c in Sources */,
 				10E598011CE1683A000D7B94 /* mruby.c in Sources */,
