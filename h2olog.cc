@@ -25,8 +25,6 @@
 
 #include "h2olog.h"
 
-using namespace std;
-
 #define VERSION "0.1.0"
 #define POLL_TIMEOUT (1000)
 

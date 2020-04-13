@@ -2,8 +2,6 @@
 #include <cinttypes>
 #include <cctype>
 
-using namespace std;
-
 static void json_write_str_value(FILE *out, const char *str)
 {
     fputc('"', out);
