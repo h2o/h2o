@@ -48,6 +48,16 @@ RUN sudo cpanm --notest https://github.com/tokuhirom/Test-TCP.git@2.21
 # h2spec
 RUN curl -Ls https://github.com/i110/h2spec/releases/download/v2.2.0-4e8cc7e/h2spec_linux_amd64.tar.gz | tar zx -C /usr/local/bin
 
+# h2load
+ARG NGHTTP2_VERSION="1.30.0"
+ARG NGHTTP2_SHA256="089afb4c22a53f72384b71ea06194be255a8a73b50b1412589105d0e683c52ac"
+RUN apt-get install --yes autoconf automake autotools-dev libtool pkg-config
+RUN curl -LO https://github.com/nghttp2/nghttp2/releases/download/v${NGHTTP2_VERSION}/nghttp2-${NGHTTP2_VERSION}.tar.xz
+RUN (echo "${NGHTTP2_SHA256} nghttp2-${NGHTTP2_VERSION}.tar.xz" | sha256sum -c -)
+RUN tar xf nghttp2-${NGHTTP2_VERSION}.tar.xz
+RUN cd nghttp2-${NGHTTP2_VERSION} && autoreconf -i && automake && autoconf && ./configure --enable-app --prefix=/usr/local && make && make install
+ENV LD_LIBRARY_PATH="/usr/local/lib"
+
 # use dumb-init
 RUN wget -O /usr/local/bin/dumb-init https://github.com/Yelp/dumb-init/releases/download/v1.2.1/dumb-init_1.2.1_amd64 \
  && chmod +x /usr/local/bin/dumb-init
