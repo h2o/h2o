@@ -26,7 +26,7 @@ For convenience, you can alternatively run the `make.sh` script.
 ### For running h2olog
 
 - Root privilege to execute the program
-- H2O server built after [53e1db42](https://github.com/h2o/h2o/commit/53e1db428772460534191d1c35c79a6dd94e021f)
+- H2O server built after [53e1db42](https://github.com/h2o/h2o/commit/53e1db428772460534191d1c35c79a6dd94e021f) with `-DWITH_DTRACE=on` cmake option
 
 ## Quickstart
 
