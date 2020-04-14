@@ -28,12 +28,6 @@ from collections import OrderedDict
 from pathlib import Path
 from pprint import pprint
 
-try:
-  (_, d_files_dir, output_file) = sys.argv
-except:
-  print("usage: %s h2o_path d_files_dir output_file" % sys.argv[0])
-  sys.exit(1)
-
 block_fields = {
     "quicly:crypto_decrypt": set(["decrypted"]),
     "quicly:receive": set(["bytes"]),
@@ -242,73 +236,77 @@ int %s(struct pt_regs *ctx) {
   return c
 
 
-context = {
-    "id": 0,
-    "probe_metadata": OrderedDict(),
-    "st_map": parse_c_struct(Path(Path(__file__).parent.parent, "data-types.h")),
-}
+def prepare_context(d_files_dir):
+  st_map = parse_c_struct(Path(Path(__file__).parent.parent, "data-types.h"))
+  context = {
+      "id": 0,
+      "probe_metadata": OrderedDict(),
+      "st_map": st_map,
+  }
+  parse_d(context, Path(d_files_dir, "quicly-probes.d"),
+          block_probes=quicly_block_probes)
+  parse_d(context, Path(d_files_dir, "h2o-probes.d"),
+          allow_probes=h2o_allow_probes)
 
-parse_d(context, Path(d_files_dir, "quicly-probes.d"),
-        block_probes=quicly_block_probes)
-parse_d(context, Path(d_files_dir, "h2o-probes.d"),
-        allow_probes=h2o_allow_probes)
+  return context
 
-probe_metadata = context["probe_metadata"]
 
-event_t_decl = r"""
+def generate_cplusplus(context, output_file):
+
+  probe_metadata = context["probe_metadata"]
+
+  event_t_decl = r"""
 struct quic_event_t {
   uint8_t id;
 
   union {
 """
 
-for name, metadata in probe_metadata.items():
-  event_t_decl += "    struct { // %s\n" % metadata["fully_specified_probe_name"]
-  for field_name, field_type in metadata["flat_args_map"].items():
-    if is_bin_type(field_type):
-      f = "uint8_t %s[STR_LEN]" % field_name
-    elif is_str_type(field_type):
-      f = "char %s[STR_LEN]" % field_name
-    else:
-      f = "%s %s" % (field_type, field_name)
+  for name, metadata in probe_metadata.items():
+    event_t_decl += "    struct { // %s\n" % metadata["fully_specified_probe_name"]
+    for field_name, field_type in metadata["flat_args_map"].items():
+      if is_bin_type(field_type):
+        f = "uint8_t %s[STR_LEN]" % field_name
+      elif is_str_type(field_type):
+        f = "char %s[STR_LEN]" % field_name
+      else:
+        f = "%s %s" % (field_type, field_name)
 
-    event_t_decl += "      %s;\n" % f
-  if metadata["provider"] == "h2o" and name != "h3_accept":
-    event_t_decl += "      uint32_t master_id;\n"
-  event_t_decl += "    } %s;\n" % name
+      event_t_decl += "      %s;\n" % f
+    if metadata["provider"] == "h2o" and name != "h3_accept":
+      event_t_decl += "      uint32_t master_id;\n"
+    event_t_decl += "    } %s;\n" % name
 
-event_t_decl += r"""
+  event_t_decl += r"""
+    };
   };
-};
-"""
+  """
 
-bpf = event_t_decl + r"""
+  bpf = event_t_decl + r"""
 BPF_PERF_OUTPUT(events);
 
 // HTTP/3 tracing
 BPF_HASH(h2o_to_quicly_conn, u64, u32);
 """
 
-usdt_def = """
+  usdt_def = """
 static
 std::vector<ebpf::USDT> quic_init_usdt_probes(pid_t pid) {
   const std::vector<ebpf::USDT> probes = {
 """
 
-for metadata in probe_metadata.values():
-  bpf += build_tracer(context, metadata)
-  usdt_def += """    ebpf::USDT(pid, "%s", "%s", "%s"),\n""" % (
-      metadata['provider'], metadata['name'], build_tracer_name(metadata))
+  for metadata in probe_metadata.values():
+    bpf += build_tracer(context, metadata)
+    usdt_def += """    ebpf::USDT(pid, "%s", "%s", "%s"),\n""" % (
+        metadata['provider'], metadata['name'], build_tracer_name(metadata))
 
-usdt_def += """
+  usdt_def += """
   };
   return probes;
 }
 """
 
-
-handle_event_func = r"""
-
+  handle_event_func = r"""
 static
 void quic_handle_event(void *context, void *data, int data_len) {
   h2o_tracer_t *tracer = static_cast<h2o_tracer_t*>(context);
@@ -324,55 +322,55 @@ void quic_handle_event(void *context, void *data, int data_len) {
   switch (event->id) {
 """
 
-for probe_name in probe_metadata:
-  metadata = probe_metadata[probe_name]
-  fully_specified_probe_name = metadata["fully_specified_probe_name"]
+  for probe_name in probe_metadata:
+    metadata = probe_metadata[probe_name]
+    fully_specified_probe_name = metadata["fully_specified_probe_name"]
 
-  block_field_set = block_fields.get(fully_specified_probe_name, None)
-  flat_args_map = metadata["flat_args_map"]
+    block_field_set = block_fields.get(fully_specified_probe_name, None)
+    flat_args_map = metadata["flat_args_map"]
 
-  handle_event_func += "  case %s: { // %s\n" % (
-      metadata['id'], fully_specified_probe_name)
-  handle_event_func += '    json_write_pair(out, false, "type", "%s");\n' % probe_name.replace("_", "-")
+    handle_event_func += "  case %s: { // %s\n" % (
+        metadata['id'], fully_specified_probe_name)
+    handle_event_func += '    json_write_pair(out, false, "type", "%s");\n' % probe_name.replace("_", "-")
 
-  for field_name, field_type in flat_args_map.items():
-    if block_field_set and field_name in block_field_set:
-      continue
-    json_field_name = rename_map.get(field_name, field_name).replace("_", "-")
-    event_t_name = "%s.%s" % (probe_name, field_name)
-    if not is_bin_type(field_type):
-      handle_event_func += '    json_write_pair(out, true, "%s", event->%s);\n' % (
-          json_field_name, event_t_name)
-    else:  # bin type (it should have the correspinding length arg)
-      len_names = set([field_name + "_len", "len"])
+    for field_name, field_type in flat_args_map.items():
+      if block_field_set and field_name in block_field_set:
+        continue
+      json_field_name = rename_map.get(field_name, field_name).replace("_", "-")
+      event_t_name = "%s.%s" % (probe_name, field_name)
+      if not is_bin_type(field_type):
+        handle_event_func += '    json_write_pair(out, true, "%s", event->%s);\n' % (
+            json_field_name, event_t_name)
+      else:  # bin type (it should have the correspinding length arg)
+        len_names = set([field_name + "_len", "len"])
 
-      for n in flat_args_map:
-        if n in len_names:
-          len_event_t_name = "%s.%s" % (probe_name, n)
+        for n in flat_args_map:
+          if n in len_names:
+            len_event_t_name = "%s.%s" % (probe_name, n)
 
-      # A string might be truncated in STRLEN
-      handle_event_func += '    json_write_pair(out, true, "%s", event->%s, (event->%s < STR_LEN ? event->%s : STR_LEN));\n' % (
-          json_field_name, event_t_name, len_event_t_name, len_event_t_name)
+        # A string might be truncated in STRLEN
+        handle_event_func += '    json_write_pair(out, true, "%s", event->%s, (event->%s < STR_LEN ? event->%s : STR_LEN));\n' % (
+            json_field_name, event_t_name, len_event_t_name, len_event_t_name)
 
-  if metadata["provider"] == "h2o":
-    if probe_name != "h3_accept":
-      handle_event_func += '    json_write_pair(out, true, "master_conn_id", event->%s.master_id);\n' % (
-          probe_name)
-    handle_event_func += '    json_write_pair(out, true, "time", time_milliseconds());\n'
+    if metadata["provider"] == "h2o":
+      if probe_name != "h3_accept":
+        handle_event_func += '    json_write_pair(out, true, "master_conn_id", event->%s.master_id);\n' % (
+            probe_name)
+      handle_event_func += '    json_write_pair(out, true, "time", time_milliseconds());\n'
 
-  handle_event_func += "    break;\n"
-  handle_event_func += "  }\n"
+    handle_event_func += "    break;\n"
+    handle_event_func += "  }\n"
 
-handle_event_func += r"""
+  handle_event_func += r"""
   default:
     std::abort();
   }
 
   fprintf(out, "}\n");
 """
-handle_event_func += "}\n"
+  handle_event_func += "}\n"
 
-Path(output_file).write_text(r"""// Generated code. Do not edit it here!
+  Path(output_file).write_text(r"""// Generated code. Do not edit it here!
 
 #include <stdlib.h>
 #include <stdint.h>
@@ -415,3 +413,18 @@ void init_quic_tracer(h2o_tracer_t * tracer) {
 }
 
 """ % (bpf, usdt_def, event_t_decl, handle_event_func))
+
+
+def main():
+  try:
+    (_, d_files_dir, output_file) = sys.argv
+  except:
+    print("usage: %s h2o_path d_files_dir output_file" % sys.argv[0])
+    sys.exit(1)
+
+  context = prepare_context(d_files_dir)
+  generate_cplusplus(context, output_file)
+
+
+if __name__ == "__main__":
+  main()
