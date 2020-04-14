@@ -402,7 +402,12 @@ const char *h2o_url_host_to_sun(h2o_iovec_t host, struct sockaddr_un *sa)
 
     memset(sa, 0, sizeof(*sa));
     sa->sun_family = AF_UNIX;
-    memcpy(sa->sun_path, host.base + sizeof(PREFIX) - 1, host.len - (sizeof(PREFIX) - 1));
+    if(host.base[strlen(PREFIX)] == '0'){
+        memcpy(sa->sun_path + 1, host.base + (strlen(PREFIX) + 1), host.len - (strlen(PREFIX) + 1));
+    }
+    else{
+        memcpy(sa->sun_path, host.base + strlen(PREFIX), host.len - strlen(PREFIX));
+    }
     return NULL;
 
 #undef PREFIX
