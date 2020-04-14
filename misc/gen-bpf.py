@@ -419,7 +419,7 @@ def main():
   try:
     (_, d_files_dir, output_file) = sys.argv
   except:
-    print("usage: %s h2o_path d_files_dir output_file" % sys.argv[0])
+    print("usage: %s d_files_dir output_file" % sys.argv[0])
     sys.exit(1)
 
   context = prepare_context(d_files_dir)
