@@ -38,6 +38,7 @@ Usage: h2olog -p PID
 Other options:
     -h Shows this help and exit.
     -d Shows debugging information.
+    -w <file> Write output to <file> instead of stdout.
 )",
            VERSION);
     return;
@@ -134,7 +135,7 @@ int main(int argc, char **argv)
     std::vector<std::string> response_header_filters;
     int c;
     pid_t h2o_pid = -1;
-    while ((c = getopt(argc, argv, "hdp:t:s:o:")) != -1) {
+    while ((c = getopt(argc, argv, "hdp:t:s:w:")) != -1) {
         switch (c) {
         case 'p':
             h2o_pid = atoi(optarg);
@@ -145,7 +146,7 @@ int main(int argc, char **argv)
         case 's':
             response_header_filters.push_back(optarg);
             break;
-        case 'o':
+        case 'w':
             out_file = optarg;
             break;
         case 'd':
