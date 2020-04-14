@@ -56,7 +56,7 @@ RUN curl -LO https://github.com/nghttp2/nghttp2/releases/download/v${NGHTTP2_VER
 RUN (echo "${NGHTTP2_SHA256} nghttp2-${NGHTTP2_VERSION}.tar.xz" | sha256sum -c -)
 RUN tar xf nghttp2-${NGHTTP2_VERSION}.tar.xz
 RUN cd nghttp2-${NGHTTP2_VERSION} && autoreconf -i && automake && autoconf && ./configure --enable-app --prefix=/usr/local && make && make install
-
+ENV LD_LIBRARY_PATH="/usr/local/lib"
 
 # use dumb-init
 RUN wget -O /usr/local/bin/dumb-init https://github.com/Yelp/dumb-init/releases/download/v1.2.1/dumb-init_1.2.1_amd64 \
