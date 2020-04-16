@@ -1,38 +1,57 @@
 # h2olog
 
-[BPF](https://www.kernel.org/doc/html/latest/bpf/index.html) ([kernel doc](https://www.kernel.org/doc/Documentation/networking/filter.txt)) backed request logging client for the [H2O](https://github.com/h2o/h2o) server.
-h2olog can also log [QUIC](https://en.wikipedia.org/wiki/QUIC) events for [transport layer](https://en.wikipedia.org/wiki/Transport_layer) observation.
+A [varnishlog](https://varnish-cache.org/docs/trunk/reference/varnishlog.html)-like [BPF](https://www.kernel.org/doc/html/latest/bpf/index.html) ([kernel doc](https://www.kernel.org/doc/Documentation/networking/filter.txt)) backed HTTP request logging client for the [H2O](https://github.com/h2o/h2o) server.
+h2olog can also be used to log [QUIC](https://en.wikipedia.org/wiki/QUIC) events for [transport layer](https://en.wikipedia.org/wiki/Transport_layer) observation.
+See [Tracing QUIC events](#tracing-quic-events) for how.
+
+## Installing from Source
+
+See [requirements](#requirements) for build prerequisites.
+
+```
+$ cmake .
+$ make
+$ sudo make install
+```
+
+For convenience, you can alternatively run the `make.sh` script.
+
+## Requirements
+
+### For building h2olog
+
+- LLVM and clang (>= 3.7.1)
+- CMake for generating the build files
+- Python 3 for the [code generator](https://github.com/toru/h2olog/blob/v2/misc/gen-bpf.py)
+- [BCC](https://iovisor.github.io/bcc/) (>= 0.11.0) [installed](https://github.com/iovisor/bcc/blob/master/INSTALL.md) on your system
+
+### For running h2olog
+
+- Root privilege to execute the program
+- H2O server built after [53e1db42](https://github.com/h2o/h2o/commit/53e1db428772460534191d1c35c79a6dd94e021f) with `-DWITH_DTRACE=on` cmake option
 
 ## Quickstart
 
 Root privilege is required to interact with the BPF virtual machine.
-The log line format is: `ConnID ReqID HeaderName HeaderValue`, except the first line that represents the HTTP protocol version.
 
 ```
 $ sudo h2olog -p $(pgrep -o h2o)
 
-888 1 RxProtocol HTTP/2.0
-888 1 RxHeader   :authority torumk.com
-888 1 RxHeader   :method GET
-888 1 RxHeader   :path /
-888 1 RxHeader   :scheme https
-888 1 TxStatus   200
+11 0 RxProtocol HTTP/3.0
+11 0 RxHeader   :authority torumk.com
+11 0 RxHeader   :method GET
+11 0 RxHeader   :path /
+11 0 RxHeader   :scheme https
+11 0 TxStatus   200
+11 0 TxHeader   content-length 123
+11 0 TxHeader   content-type text/html
 ... and more ...
 ```
-
-## Requirements
-
-- Root privilege to execute the program
-- H2O server built after [53e1db42](https://github.com/h2o/h2o/commit/53e1db428772460534191d1c35c79a6dd94e021f)
-- [BCC](https://iovisor.github.io/bcc/) (BPF Compiler Collection) [installed](https://github.com/iovisor/bcc/blob/master/INSTALL.md) on your system
-  - BCC v0.11.0 or later is required
-  - Note that the bcc module on PyPi is unrelated to BPF.
 
 ## Tracing QUIC events
 
 Server-side [QUIC](https://en.wikipedia.org/wiki/QUIC) events can be traced using the `quic` subcommand.
 Events are rendered in [JSON](https://en.wikipedia.org/wiki/JSON) format.
-This feature is heavily a [WIP](https://en.wikipedia.org/wiki/Work_in_process).
 
 ```
 $ sudo h2olog quic -p $(pgrep -o h2o)
@@ -50,23 +69,7 @@ Here's an example trace.
 ... and more ...
 ```
 
-If you find the output to be too noisy, try using the `-t` option to only trace a specific event type.
-
-```
-$ sudo h2olog quic -t quicly:accept -p $(pgrep -o h2o)
-
-{"time":1584381666657,"type":"accept","conn":2,"dcid":"704e7cdd80815ab8"}
-{"time":1584381667155,"type":"accept","conn":1,"dcid":"88f2a1554360d01c"}
-{"time":1584381670148,"type":"accept","conn":3,"dcid":"7601b689df69c71d"}
-{"time":1584381670981,"type":"accept","conn":4,"dcid":"89b4a844beb9ae3f"}
-```
-
 ## Program Anatomy
 
-h2olog is a [BCC](https://github.com/iovisor/bcc) based single-file [Python](https://www.python.org/) program ([learn more](https://github.com/iovisor/bcc/blob/master/docs/reference_guide.md#bcc-python)).
-This might change in the future (e.g. switch to [bpftrace](https://github.com/iovisor/bpftrace)), but the same CLI interface will be kept.
-
-## TODO
-
-- Option for output filtering
-- Option to redirect the output to a file
+h2olog is a [BCC](https://github.com/iovisor/bcc) based C++ program.
+It was previously implemented using the [BCC Python binding](https://github.com/iovisor/bcc/blob/master/docs/reference_guide.md#bcc-python).
