@@ -1471,6 +1471,7 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
     ptls_default_skip_tracing = orig_skip_tracing;
 #endif
     if (accept_ret != 0) {
+        H2O_PROBE_CONN(H3_ACCEPT_ERROR, &conn->super, accept_ret);
         h2o_http3_dispose_conn(&conn->h3);
         free(conn);
         return NULL;
