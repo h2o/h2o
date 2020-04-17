@@ -39,12 +39,12 @@ struct st_h2o_tracer_t {
     /*
      * The number of events emitted in `handle_event`.
      */
-    size_t count;
+    uint64_t count;
 
     /*
      * The number of lost events. It is reset periodically.
      */
-    size_t lost_count;
+    uint64_t lost_count;
 
     /*
      * Handles an incoming BPF event.
