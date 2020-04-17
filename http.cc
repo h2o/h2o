@@ -32,7 +32,7 @@ enum {
   HTTP_EVENT_SEND_RESP_HDR
 };
 
-struct event_t {
+typedef struct  st_http_event_t {
   uint8_t type;
   uint64_t conn_id;
   uint64_t req_id;
@@ -46,12 +46,12 @@ struct event_t {
       char value[MAX_HDR_LEN];
     } header;
   };
-};
+} http_event_t;
 
 BPF_PERF_OUTPUT(events);
 
 int trace_receive_request(struct pt_regs *ctx) {
-  struct event_t ev = { .type = HTTP_EVENT_RECEIVE_REQ };
+  http_event_t ev = { .type = HTTP_EVENT_RECEIVE_REQ };
   bpf_usdt_readarg(1, ctx, &ev.conn_id);
   bpf_usdt_readarg(2, ctx, &ev.req_id);
   bpf_usdt_readarg(3, ctx, &ev.http_version);
@@ -60,7 +60,7 @@ int trace_receive_request(struct pt_regs *ctx) {
 }
 
 int trace_receive_request_header(struct pt_regs *ctx) {
-  struct event_t ev = { .type = HTTP_EVENT_RECEIVE_REQ_HDR };
+  http_event_t ev = { .type = HTTP_EVENT_RECEIVE_REQ_HDR };
   void *pos = NULL;
   bpf_usdt_readarg(1, ctx, &ev.conn_id);
   bpf_usdt_readarg(2, ctx, &ev.req_id);
@@ -75,7 +75,7 @@ int trace_receive_request_header(struct pt_regs *ctx) {
 }
 
 int trace_send_response(struct pt_regs *ctx) {
-  struct event_t ev = { .type = HTTP_EVENT_SEND_RESP };
+  http_event_t ev = { .type = HTTP_EVENT_SEND_RESP };
   bpf_usdt_readarg(1, ctx, &ev.conn_id);
   bpf_usdt_readarg(2, ctx, &ev.req_id);
   bpf_usdt_readarg(3, ctx, &ev.http_status);
@@ -84,7 +84,7 @@ int trace_send_response(struct pt_regs *ctx) {
 }
 
 int trace_send_response_header(struct pt_regs *ctx) {
-  struct event_t ev = { .type = HTTP_EVENT_SEND_RESP_HDR };
+  http_event_t ev = { .type = HTTP_EVENT_SEND_RESP_HDR };
   void *pos = NULL;
   bpf_usdt_readarg(1, ctx, &ev.conn_id);
   bpf_usdt_readarg(2, ctx, &ev.req_id);
