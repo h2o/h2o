@@ -33,4 +33,4 @@ struct st_h2o_conn_t {
     int dummy;
 };
 
-#endif
+#endif // H2OLOG_DATA_TYPES_H

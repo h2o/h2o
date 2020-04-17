@@ -63,6 +63,8 @@ rename_map = {
     "latest": "latest-rtt",
 }
 
+data_types_h = Path(Path(__file__).parent.parent, "data-types.h")
+
 re_flags = re.X | re.M | re.S
 whitespace = r'(?:/\*.*?\*/|\s+)'
 probe_decl = r'(?:\bprobe\s+(?:[a-zA-Z0-9_]+)\s*\([^\)]*\)\s*;)'
@@ -235,9 +237,8 @@ int %s(struct pt_regs *ctx) {
 """
   return c
 
-
 def prepare_context(d_files_dir):
-  st_map = parse_c_struct(Path(Path(__file__).parent.parent, "data-types.h"))
+  st_map = parse_c_struct(data_types_h)
   context = {
       "id": 0,
       "probe_metadata": OrderedDict(),
@@ -282,12 +283,15 @@ struct quic_event_t {
   };
   """
 
-  bpf = event_t_decl + r"""
+  bpf = r"""
+#define STR_LEN 64
+%s
+%s
 BPF_PERF_OUTPUT(events);
 
 // HTTP/3 tracing
 BPF_HASH(h2o_to_quicly_conn, u64, u32);
-"""
+""" % (data_types_h.read_text(), event_t_decl)
 
   usdt_def = """
 static
@@ -384,9 +388,6 @@ void quic_handle_event(void *context, void *data, int data_len) {
 
 // BPF modules written in C
 const char *bpf_text = R"(
-#include "data-types.h"
-
-#define STR_LEN 64
 %s
 )";
 
