@@ -46,13 +46,17 @@ static void json_write_str_value(FILE *out, const char *str)
     fputc('"', out);
 }
 
+static void json_write_name_value(FILE *out, const char *name)
+{
+    fprintf(out, "\"%s\":", name);
+}
+
 void json_write_pair(FILE *out, bool comma, const char *name, const char *value)
 {
     if (comma) {
         fputc(',', out);
     }
-    json_write_str_value(out, name);
-    fputc(':', out);
+    json_write_name_value(out, name);
     json_write_str_value(out, value);
 }
 
@@ -61,8 +65,7 @@ void json_write_pair(FILE *out, bool comma, const char *name, const void *value,
     if (comma) {
         fputc(',', out);
     }
-    json_write_str_value(out, name);
-    fputc(':', out);
+    json_write_name_value(out, name);
     fputc('"', out);
     const uint8_t *bin = static_cast<const uint8_t *>(value);
     for (size_t i = 0; i < len; i++) {
@@ -87,8 +90,8 @@ void json_write_pair(FILE *out, bool comma, const char *name, const int64_t valu
     if (comma) {
         fputc(',', out);
     }
-    json_write_str_value(out, name);
-    fprintf(out, ":%" PRId64, value);
+    json_write_name_value(out, name);
+    fprintf(out, "%" PRId64, value);
 }
 
 void json_write_pair(FILE *out, bool comma, const char *name, const uint64_t value)
@@ -96,6 +99,6 @@ void json_write_pair(FILE *out, bool comma, const char *name, const uint64_t val
     if (comma) {
         fputc(',', out);
     }
-    json_write_str_value(out, name);
-    fprintf(out, ":%" PRIu64, value);
+    json_write_name_value(out, name);
+    fprintf(out, "%" PRIu64, value);
 }
