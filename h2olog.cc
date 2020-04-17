@@ -58,10 +58,10 @@ static void show_event_per_sec(h2o_tracer_t *tracer, time_t *t0)
             strftime(s, sizeof(s), iso8601format, &t);
 
             if (tracer->lost_count > 0) {
-                fprintf(stderr, "%s %20lu events/s (possibly lost %" PRIu64 " events)\n", s, c, tracer->lost_count);
+                fprintf(stderr, "%s %20" PRIu64 " events/s (possibly lost %" PRIu64 " events)\n", s, c, tracer->lost_count);
                 tracer->lost_count = 0;
             } else {
-                fprintf(stderr, "%s %20lu events/s\n", s, c);
+                fprintf(stderr, "%s %20" PRIu64 " events/s\n", s, c);
             }
             tracer->count = 0;
         }
