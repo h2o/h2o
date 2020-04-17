@@ -57,7 +57,12 @@ static void show_event_per_sec(h2o_tracer_t *tracer, time_t *t0)
             const char *iso8601format = "%FT%TZ";
             strftime(s, sizeof(s), iso8601format, &t);
 
-            fprintf(stderr, "%s %20lu events/s\n", s, c);
+            if (tracer->lost_count > 0) {
+                fprintf(stderr, "%s %20lu events/s (possibly lost %" PRIu64 " events)\n", s, c, tracer->lost_count);
+                tracer->lost_count = 0;
+            } else {
+                fprintf(stderr, "%s %20lu events/s\n", s, c);
+            }
             tracer->count = 0;
         }
         *t0 = t1;
@@ -116,6 +121,22 @@ static std::string generate_header_filter_cflag(const std::vector<std::string> &
     cflag += join_str(" || ", conditions);
     cflag += ")";
     return cflag;
+}
+
+static void event_cb(void *context, void *data, int len)
+{
+    h2o_tracer_t *tracer = (h2o_tracer_t *)context;
+    tracer->count++;
+
+    tracer->handle_event(tracer, data, len);
+}
+
+static void lost_cb(void *context, uint64_t lost)
+{
+    h2o_tracer_t *tracer = (h2o_tracer_t *)context;
+    tracer->lost_count += lost;
+
+    tracer->handle_lost(tracer, lost);
 }
 
 int main(int argc, char **argv)
@@ -212,7 +233,7 @@ int main(int argc, char **argv)
         }
     }
 
-    ret = bpf->open_perf_buffer("events", tracer.handle_event, nullptr, &tracer, 64);
+    ret = bpf->open_perf_buffer("events", event_cb, lost_cb, &tracer, 64);
     if (ret.code() != 0) {
         fprintf(stderr, "open_perf_buffer: %s\n", ret.msg().c_str());
         return EXIT_FAILURE;

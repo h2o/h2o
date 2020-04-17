@@ -27,21 +27,34 @@
 #include <vector>
 #include <bcc/BPF.h>
 
-typedef struct st_h2o_tracer_t {
+struct st_h2o_tracer_t;
+typedef struct st_h2o_tracer_t h2o_tracer_t;
+
+struct st_h2o_tracer_t {
     /*
      * Where to output the results. Defaults to `stdout`.
      */
-    std::FILE *out;
+    FILE *out;
 
     /*
-     * The number of events emitted  in `handle_event`.
+     * The number of events emitted in `handle_event`.
      */
-    std::size_t count;
+    size_t count;
+
+    /*
+     * The number of lost events. It is reset periodically.
+     */
+    size_t lost_count;
 
     /*
      * Handles an incoming BPF event.
      */
-    void (*handle_event)(void *context, void *data, int len);
+    void (*handle_event)(h2o_tracer_t *tracer, const void *data, int len);
+
+    /*
+     * Handles an event data lost.
+     */
+    void (*handle_lost)(h2o_tracer_t *tracer, uint64_t lost);
 
     /*
      * Returns a vector of relevant USDT probes.
@@ -52,7 +65,7 @@ typedef struct st_h2o_tracer_t {
      * Returns the code to be compiled into BPF bytecode.
      */
     const char *(*bpf_text)(void);
-} h2o_tracer_t;
+};
 
 /*
  * Initialize an HTTP tracer.
