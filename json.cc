@@ -1,6 +1,10 @@
 #include "json.h"
 #include <cinttypes>
-#include <cctype>
+
+static bool json_need_escape(char c)
+{
+    return static_cast<unsigned char>(c) < 0x20 || c == 0x7f;
+}
 
 static void json_write_str_value(FILE *out, const char *str)
 {
@@ -29,7 +33,7 @@ static void json_write_str_value(FILE *out, const char *str)
             fprintf(out, "\\t");
             break;
         default:
-            if (isprint(*str)) {
+            if (!json_need_escape(*str)) {
                 fputc(*str, out);
             } else {
                 auto u8 = static_cast<uint8_t>(*str);
