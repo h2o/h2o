@@ -331,7 +331,7 @@ void quic_handle_event(void *context, void *data, int data_len) {
 
     handle_event_func += "  case %s: { // %s\n" % (
         metadata['id'], fully_specified_probe_name)
-    handle_event_func += '    json_write_pair_n(out, "type", "%s");\n' % probe_name.replace("_", "-")
+    handle_event_func += '    json_write_pair_n(out, STR_LIT("type"), "%s");\n' % probe_name.replace("_", "-")
 
     for field_name, field_type in flat_args_map.items():
       if block_field_set and field_name in block_field_set:
@@ -339,7 +339,7 @@ void quic_handle_event(void *context, void *data, int data_len) {
       json_field_name = rename_map.get(field_name, field_name).replace("_", "-")
       event_t_name = "%s.%s" % (probe_name, field_name)
       if not is_bin_type(field_type):
-        handle_event_func += '    json_write_pair_c(out, "%s", event->%s);\n' % (
+        handle_event_func += '    json_write_pair_c(out, STR_LIT("%s"), event->%s);\n' % (
             json_field_name, event_t_name)
       else:  # bin type (it should have the correspinding length arg)
         len_names = set([field_name + "_len", "len"])
@@ -349,14 +349,14 @@ void quic_handle_event(void *context, void *data, int data_len) {
             len_event_t_name = "%s.%s" % (probe_name, n)
 
         # A string might be truncated in STRLEN
-        handle_event_func += '    json_write_pair_c(out, "%s", event->%s, (event->%s < STR_LEN ? event->%s : STR_LEN));\n' % (
+        handle_event_func += '    json_write_pair_c(out, STR_LIT("%s"), event->%s, (event->%s < STR_LEN ? event->%s : STR_LEN));\n' % (
             json_field_name, event_t_name, len_event_t_name, len_event_t_name)
 
     if metadata["provider"] == "h2o":
       if probe_name != "h3_accept":
-        handle_event_func += '    json_write_pair_c(out, "conn", event->%s.master_id);\n' % (
+        handle_event_func += '    json_write_pair_c(out, STR_LIT("conn"), event->%s.master_id);\n' % (
             probe_name)
-      handle_event_func += '    json_write_pair_c(out, "time", time_milliseconds());\n'
+      handle_event_func += '    json_write_pair_c(out, STR_LIT("time"), time_milliseconds());\n'
 
     handle_event_func += "    break;\n"
     handle_event_func += "  }\n"
@@ -375,12 +375,14 @@ void quic_handle_event(void *context, void *data, int data_len) {
 #include <stdlib.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <string.h>
 #include <sys/time.h>
 #include "h2olog.h"
 #include "data-types.h"
 #include "json.h"
 
 #define STR_LEN 64
+#define STR_LIT(s) s, strlen(s)
 
 // BPF modules written in C
 const char *bpf_text = R"(

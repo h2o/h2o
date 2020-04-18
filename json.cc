@@ -1,5 +1,8 @@
 #include "json.h"
-#include <cinttypes>
+#include <string.h>
+#include <inttypes.h>
+
+#define FPUTS_LIT(s, out) fwrite(s, 1, strlen(s), out)
 
 static bool json_need_escape(char c)
 {
@@ -12,25 +15,25 @@ static void json_write_str_value(FILE *out, const char *str)
     while (*str) {
         switch (*str) {
         case '\"':
-            fprintf(out, "\\\"");
+            FPUTS_LIT("\\\"", out);
             break;
         case '\\':
-            fprintf(out, "\\\\");
+            FPUTS_LIT("\\\\", out);
             break;
         case '\b':
-            fprintf(out, "\\b");
+            FPUTS_LIT("\\b", out);
             break;
         case '\f':
-            fprintf(out, "\\f");
+            FPUTS_LIT("\\f", out);
             break;
         case '\n':
-            fprintf(out, "\\n");
+            FPUTS_LIT("\\n", out);
             break;
         case '\r':
-            fprintf(out, "\\r");
+            FPUTS_LIT("\\r", out);
             break;
         case '\t':
-            fprintf(out, "\\t");
+            FPUTS_LIT("\\t", out);
             break;
         default:
             if (!json_need_escape(*str)) {
@@ -46,28 +49,31 @@ static void json_write_str_value(FILE *out, const char *str)
     fputc('"', out);
 }
 
-static void json_write_name_value(FILE *out, const char *name)
+static void json_write_name_value(FILE *out, const char *name, size_t name_len)
 {
-    fprintf(out, "\"%s\":", name);
+    fputc('"', out);
+    fwrite(name, 1, name_len, out);
+    fputc('"', out);
+    fputc(':', out);
 }
 
-void json_write_pair_n(FILE *out, const char *name, const char *value)
+void json_write_pair_n(FILE *out, const char *name, size_t name_len, const char *value)
 {
-    json_write_name_value(out, name);
+    json_write_name_value(out, name, name_len);
     json_write_str_value(out, value);
 }
 
-void json_write_pair_c(FILE *out, const char *name, const char *value)
+void json_write_pair_c(FILE *out, const char *name, size_t name_len, const char *value)
 {
     fputc(',', out);
-    json_write_name_value(out, name);
+    json_write_name_value(out, name, name_len);
     json_write_str_value(out, value);
 }
 
-void json_write_pair_c(FILE *out, const char *name, const void *value, size_t len)
+void json_write_pair_c(FILE *out, const char *name, size_t name_len, const void *value, size_t len)
 {
     fputc(',', out);
-    json_write_name_value(out, name);
+    json_write_name_value(out, name, name_len);
     fputc('"', out);
     const uint8_t *bin = static_cast<const uint8_t *>(value);
     for (size_t i = 0; i < len; i++) {
@@ -77,26 +83,26 @@ void json_write_pair_c(FILE *out, const char *name, const void *value, size_t le
     fputc('"', out);
 }
 
-void json_write_pair_c(FILE *out, const char *name, const int32_t value)
+void json_write_pair_c(FILE *out, const char *name, size_t name_len, int32_t value)
 {
-    json_write_pair_c(out, name, (int64_t)value);
+    json_write_pair_c(out, name, name_len, static_cast<int64_t>(value));
 }
 
-void json_write_pair_c(FILE *out, const char *name, const uint32_t value)
+void json_write_pair_c(FILE *out, const char *name, size_t name_len, uint32_t value)
 {
-    json_write_pair_c(out, name, (uint64_t)value);
+    json_write_pair_c(out, name, name_len, static_cast<uint64_t>(value));
 }
 
-void json_write_pair_c(FILE *out, const char *name, const int64_t value)
+void json_write_pair_c(FILE *out, const char *name, size_t name_len, int64_t value)
 {
     fputc(',', out);
-    json_write_name_value(out, name);
+    json_write_name_value(out, name, name_len);
     fprintf(out, "%" PRId64, value);
 }
 
-void json_write_pair_c(FILE *out, const char *name, const uint64_t value)
+void json_write_pair_c(FILE *out, const char *name, size_t name_len, uint64_t value)
 {
     fputc(',', out);
-    json_write_name_value(out, name);
+    json_write_name_value(out, name, name_len);
     fprintf(out, "%" PRIu64, value);
 }
