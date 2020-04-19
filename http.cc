@@ -79,9 +79,8 @@ int trace_send_response_header(struct pt_regs *ctx) {
 
 #define MIN(x, y) (((x) < (y)) ? (x) : (y))
 
-static void handle_event(void *context, void *data, int len)
+static void handle_event(h2o_tracer_t *tracer, const void *data, int len)
 {
-    h2o_tracer_t *tracer = (h2o_tracer_t *)context;
     const http_event_t *ev = (const http_event_t *)data;
     FILE *out = tracer->out;
 
@@ -106,6 +105,11 @@ static void handle_event(void *context, void *data, int len)
     }
 }
 
+static void handle_lost(h2o_tracer_t *tracer, uint64_t lost)
+{
+    fprintf(stderr, "Possibly lost %" PRIu64 " events\n", lost);
+}
+
 static std::vector<ebpf::USDT> init_usdt_probes(pid_t h2o_pid)
 {
     const std::vector<ebpf::USDT> vec{
@@ -125,6 +129,7 @@ static const char *bpf_text(void)
 void init_http_tracer(h2o_tracer_t *tracer)
 {
     tracer->handle_event = handle_event;
+    tracer->handle_lost = handle_lost;
     tracer->init_usdt_probes = init_usdt_probes;
     tracer->bpf_text = bpf_text;
 }
