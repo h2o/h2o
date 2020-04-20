@@ -312,10 +312,7 @@ std::vector<ebpf::USDT> quic_init_usdt_probes(pid_t pid) {
 
   handle_event_func = r"""
 static
-void quic_handle_event(void *context, void *data, int data_len) {
-  h2o_tracer_t *tracer = static_cast<h2o_tracer_t*>(context);
-  tracer->count++;
-
+void quic_handle_event(h2o_tracer_t *tracer, const void *data, int data_len) {
   FILE *out = tracer->out;
 
   const quic_event_t *event = static_cast<const quic_event_t*>(data);
@@ -402,13 +399,17 @@ static uint64_t time_milliseconds()
 %s
 %s
 
-static
-const char *quic_bpf_ext() {
+static void quic_handle_lost(h2o_tracer_t *tracer, uint64_t lost) {
+  fprintf(tracer->out, "{\"type\":\"h2olog-event-lost\",\"time\":%%" PRIu64 ",\"lost\":%%" PRIu64 "}\n", time_milliseconds(), lost);
+}
+
+static const char *quic_bpf_ext() {
   return bpf_text;
 }
 
 void init_quic_tracer(h2o_tracer_t * tracer) {
   tracer->handle_event = quic_handle_event;
+  tracer->handle_lost = quic_handle_lost;
   tracer->init_usdt_probes = quic_init_usdt_probes;
   tracer->bpf_text = quic_bpf_ext;
 }
