@@ -21,10 +21,32 @@
  */
 
 #include "h2olog.h"
-#include "data-types.h"
 
 const char *HTTP_BPF = R"(
-#include "data-types.h"
+#define MAX_HDR_LEN 128
+
+enum {
+  HTTP_EVENT_RECEIVE_REQ,
+  HTTP_EVENT_RECEIVE_REQ_HDR,
+  HTTP_EVENT_SEND_RESP,
+  HTTP_EVENT_SEND_RESP_HDR
+};
+
+typedef struct  st_http_event_t {
+  uint8_t type;
+  uint64_t conn_id;
+  uint64_t req_id;
+  union {
+    uint32_t http_version;
+    uint32_t http_status;
+    struct {
+      uint64_t name_len;
+      uint64_t value_len;
+      char name[MAX_HDR_LEN];
+      char value[MAX_HDR_LEN];
+    } header;
+  };
+} http_event_t;
 
 BPF_PERF_OUTPUT(events);
 
@@ -77,7 +99,26 @@ int trace_send_response_header(struct pt_regs *ctx) {
 }
 )";
 
+#define MAX_HDR_LEN 128
 #define MIN(x, y) (((x) < (y)) ? (x) : (y))
+
+enum { HTTP_EVENT_RECEIVE_REQ, HTTP_EVENT_RECEIVE_REQ_HDR, HTTP_EVENT_SEND_RESP, HTTP_EVENT_SEND_RESP_HDR };
+
+typedef struct st_http_event_t {
+    uint8_t type;
+    uint64_t conn_id;
+    uint64_t req_id;
+    union {
+        uint32_t http_version;
+        uint32_t http_status;
+        struct {
+            uint64_t name_len;
+            uint64_t value_len;
+            char name[MAX_HDR_LEN];
+            char value[MAX_HDR_LEN];
+        } header;
+    };
+} http_event_t;
 
 static void handle_event(h2o_tracer_t *tracer, const void *data, int len)
 {
