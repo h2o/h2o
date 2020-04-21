@@ -76,7 +76,7 @@ static void show_process(pid_t pid)
     snprintf(proc_file, sizeof(proc_file), "/proc/%d/cmdline", pid);
     FILE *f = fopen(proc_file, "r");
     if (f == nullptr) {
-        fprintf(stderr, "Failed to open %s: %s\n", proc_file, strerror(errno));
+        fprintf(stderr, "Error: failed to open %s: %s\n", proc_file, strerror(errno));
         exit(EXIT_FAILURE);
     }
     size_t nread = fread(cmdline, 1, sizeof(cmdline), f);
@@ -221,21 +221,21 @@ int main(int argc, char **argv)
 
     ebpf::StatusTuple ret = bpf->init(tracer.bpf_text(), cflags, probes);
     if (ret.code() != 0) {
-        fprintf(stderr, "init: %s\n", ret.msg().c_str());
+        fprintf(stderr, "Error: init: %s\n", ret.msg().c_str());
         return EXIT_FAILURE;
     }
 
     for (auto &probe : probes) {
         ret = bpf->attach_usdt(probe);
         if (ret.code() != 0) {
-            fprintf(stderr, "attach_usdt: %s\n", ret.msg().c_str());
+            fprintf(stderr, "Error: attach_usdt: %s\n", ret.msg().c_str());
             return EXIT_FAILURE;
         }
     }
 
     ret = bpf->open_perf_buffer("events", event_cb, lost_cb, &tracer, 64);
     if (ret.code() != 0) {
-        fprintf(stderr, "open_perf_buffer: %s\n", ret.msg().c_str());
+        fprintf(stderr, "Error: open_perf_buffer: %s\n", ret.msg().c_str());
         return EXIT_FAILURE;
     }
 
