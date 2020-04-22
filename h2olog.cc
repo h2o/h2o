@@ -81,6 +81,7 @@ static void show_process(pid_t pid)
     }
     size_t nread = fread(cmdline, 1, sizeof(cmdline), f);
     fclose(f);
+    nread--; // skip trailing nul
     for (size_t i = 0; i < nread; i++) {
         if (cmdline[i] == '\0') {
             cmdline[i] = ' ';
