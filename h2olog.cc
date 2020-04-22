@@ -22,6 +22,7 @@
 
 #include <vector>
 #include <unistd.h>
+#include <stdarg.h>
 
 #include "h2olog.h"
 
@@ -44,6 +45,32 @@ Other options:
     return;
 }
 
+static void make_timestamp(char *buf, size_t buf_len)
+{
+    time_t t = time(NULL);
+    struct tm tms;
+    localtime_r(&t, &tms);
+    const char *iso8601format = "%FT%TZ";
+    strftime(buf, buf_len, iso8601format, &tms);
+}
+
+static void logf(const char* fmt, ...)
+    __attribute__((format (printf, 1, 2)));
+
+static void logf(const char* fmt, ...)
+ {
+    char buf[1024];
+    va_list args;
+    va_start(args, fmt);
+    vsnprintf(buf, sizeof(buf), fmt, args);
+    va_end(args);
+
+    char timestamp[128];
+    make_timestamp(timestamp, sizeof(timestamp));
+
+    fprintf(stderr, "%s %s\n", timestamp, buf);
+}
+
 static void show_event_per_sec(h2o_tracer_t *tracer, time_t *t0)
 {
     time_t t1 = time(NULL);
@@ -51,17 +78,11 @@ static void show_event_per_sec(h2o_tracer_t *tracer, time_t *t0)
     if (d > 10) {
         uint64_t c = tracer->count / d;
         if (c > 0) {
-            struct tm t;
-            localtime_r(&t1, &t);
-            char s[100];
-            const char *iso8601format = "%FT%TZ";
-            strftime(s, sizeof(s), iso8601format, &t);
-
             if (tracer->lost_count > 0) {
-                fprintf(stderr, "%s %20" PRIu64 " events/s (possibly lost %" PRIu64 " events)\n", s, c, tracer->lost_count);
+                logf("%20" PRIu64 " events/s (possibly lost %" PRIu64 " events)", c, tracer->lost_count);
                 tracer->lost_count = 0;
             } else {
-                fprintf(stderr, "%s %20" PRIu64 " events/s\n", s, c);
+                logf("%20" PRIu64 " events/s", c);
             }
             tracer->count = 0;
         }
@@ -86,7 +107,7 @@ static void show_process(pid_t pid)
             cmdline[i] = ' ';
         }
     }
-    fprintf(stderr, "Attaching pid=%d (%s)\n", pid, cmdline);
+    logf("Attaching pid=%d (%s)", pid, cmdline);
 }
 
 static std::string join_str(const std::string &sep, const std::vector<std::string> &strs)
