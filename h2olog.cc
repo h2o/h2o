@@ -54,10 +54,10 @@ static void make_timestamp(char *buf, size_t buf_len)
     strftime(buf, buf_len, iso8601format, &tms);
 }
 
-static void logf(const char* fmt, ...)
+static void infof(const char* fmt, ...)
     __attribute__((format (printf, 1, 2)));
 
-static void logf(const char* fmt, ...)
+static void infof(const char* fmt, ...)
  {
     char buf[1024];
     va_list args;
@@ -79,10 +79,10 @@ static void show_event_per_sec(h2o_tracer_t *tracer, time_t *t0)
         uint64_t c = tracer->count / d;
         if (c > 0) {
             if (tracer->lost_count > 0) {
-                logf("%20" PRIu64 " events/s (possibly lost %" PRIu64 " events)", c, tracer->lost_count);
+                infof("%20" PRIu64 " events/s (possibly lost %" PRIu64 " events)", c, tracer->lost_count);
                 tracer->lost_count = 0;
             } else {
-                logf("%20" PRIu64 " events/s", c);
+                infof("%20" PRIu64 " events/s", c);
             }
             tracer->count = 0;
         }
@@ -107,7 +107,7 @@ static void show_process(pid_t pid)
             cmdline[i] = ' ';
         }
     }
-    logf("Attaching pid=%d (%s)", pid, cmdline);
+    infof("Attaching pid=%d (%s)", pid, cmdline);
 }
 
 static std::string join_str(const std::string &sep, const std::vector<std::string> &strs)
