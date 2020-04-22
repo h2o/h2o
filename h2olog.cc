@@ -27,6 +27,7 @@
 
 #define VERSION "0.1.0"
 #define POLL_TIMEOUT (1000)
+#define PERF_BUFFER_PAGE_COUNT 256
 
 static void usage(void)
 {
@@ -233,7 +234,7 @@ int main(int argc, char **argv)
         }
     }
 
-    ret = bpf->open_perf_buffer("events", event_cb, lost_cb, &tracer, 64);
+    ret = bpf->open_perf_buffer("events", event_cb, lost_cb, &tracer, PERF_BUFFER_PAGE_COUNT);
     if (ret.code() != 0) {
         fprintf(stderr, "Error: open_perf_buffer: %s\n", ret.msg().c_str());
         return EXIT_FAILURE;
