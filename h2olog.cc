@@ -82,6 +82,11 @@ static void show_process(pid_t pid)
     }
     size_t nread = fread(cmdline, 1, sizeof(cmdline), f);
     fclose(f);
+    if (nread == 0) {
+        fprintf(stderr, "Error: failed to read from %s: %s\n", proc_file, strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+    nread--; // skip trailing nul
     for (size_t i = 0; i < nread; i++) {
         if (cmdline[i] == '\0') {
             cmdline[i] = ' ';
