@@ -54,11 +54,10 @@ static void make_timestamp(char *buf, size_t buf_len)
     strftime(buf, buf_len, iso8601format, &tms);
 }
 
-static void infof(const char* fmt, ...)
-    __attribute__((format (printf, 1, 2)));
+static void infof(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
 
-static void infof(const char* fmt, ...)
- {
+static void infof(const char *fmt, ...)
+{
     char buf[1024];
     va_list args;
     va_start(args, fmt);
