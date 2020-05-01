@@ -38,7 +38,7 @@ SET(SOURCE_FILES
 
 ADD_CUSTOM_COMMAND(
     OUTPUT  "${CMAKE_BINARY_DIR}/quicly-probes.d"
-    COMMAND curl -sL 'https://raw.githubusercontent.com/h2o/quicly/master/quicly-probes.d' >${CMAKE_BINARY_DIR}/quicly-probes.d
+    COMMAND curl -sL 'https://raw.githubusercontent.com/h2o/h2o/fb0d55a/deps/quicly/quicly-probes.d' >${CMAKE_BINARY_DIR}/quicly-probes.d
 )
 LIST(APPEND DTRACE_FILES "${CMAKE_BINARY_DIR}/quicly-probes.d")
 
