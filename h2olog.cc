@@ -35,12 +35,11 @@ static void usage(void)
     printf(R"(h2olog (v%s)
 Usage: h2olog -p PID
        h2olog quic -p PID
-       h2olog quic -t event_type -p PID
-       h2olog quic -v -s response_header_name -p PID
+       h2olog quic -s response_header_name -p PID
 Other options:
-    -h Shows this help and exit.
-    -d Shows debugging information.
-    -w <file> Write output to <file> instead of stdout.
+    -h Print this help and exit
+    -d Print debugging information
+    -w Path to write the output (default: stdout)
 )",
            VERSION);
     return;
