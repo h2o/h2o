@@ -63,7 +63,7 @@ rename_map = {
     "latest": "latest-rtt",
 }
 
-data_types_h = Path(Path(__file__).parent.parent, "data-types.h")
+data_types_h = Path(Path(__file__).parent.parent, "quic.h")
 
 re_flags = re.X | re.M | re.S
 whitespace = r'(?:/\*.*?\*/|\s+)'
@@ -379,7 +379,7 @@ void quic_handle_event(h2o_tracer_t *tracer, const void *data, int data_len) {
 #include <string.h>
 #include <sys/time.h>
 #include "h2olog.h"
-#include "data-types.h"
+#include "quic.h"
 #include "json.h"
 
 #define STR_LEN 64
