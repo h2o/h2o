@@ -33,7 +33,7 @@ SET(SOURCE_FILES
   "http.cc"
   "json.h"
   "json.cc"
-  "data-types.h"
+  "quic.h"
 )
 
 ADD_CUSTOM_COMMAND(
@@ -50,9 +50,9 @@ LIST(APPEND DTRACE_FILES "${CMAKE_BINARY_DIR}/h2o-probes.d")
 
 ADD_CUSTOM_COMMAND(
     OUTPUT  "${CMAKE_BINARY_DIR}/generated-quic.cc"
-    COMMAND "${CMAKE_SOURCE_DIR}/misc/gen-bpf.py" "${CMAKE_BINARY_DIR}" "${CMAKE_BINARY_DIR}/generated-quic.cc"
+    COMMAND "${CMAKE_SOURCE_DIR}/misc/gen-quic-bpf.py" "${CMAKE_BINARY_DIR}" "${CMAKE_BINARY_DIR}/generated-quic.cc"
     DEPENDS ${DTRACE_FILES}
-    DEPENDS "${CMAKE_SOURCE_DIR}/misc/gen-bpf.py"
+    DEPENDS "${CMAKE_SOURCE_DIR}/misc/gen-quic-bpf.py"
 )
 LIST(APPEND SOURCE_FILES "${CMAKE_BINARY_DIR}/generated-quic.cc")
 
