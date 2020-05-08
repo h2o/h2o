@@ -9,7 +9,7 @@ See [Tracing QUIC events](#tracing-quic-events) for how.
 See [requirements](#requirements) for build prerequisites.
 
 ```
-$ cmake -H. -Bbuild
+$ cmake -Bbuild
 $ make -Cbuild
 $ sudo make -Cbuild install
 ```
