@@ -47,11 +47,16 @@ typedef struct st_h2o_socketpool_target_conf_t {
      * weight - 1 for load balancer, where weight is an integer within range [1, 256]
      */
     uint8_t weight_m1;
+    int family;
 } h2o_socketpool_target_conf_t;
 
 #define H2O_SOCKETPOOL_TARGET_MAX_WEIGHT 256
 
 typedef struct st_h2o_socketpool_target_t {
+    /**
+     * Address family of the backend. Defaults to PF_UNSPEC
+     */
+    int family;
     /**
      * target URL
      */

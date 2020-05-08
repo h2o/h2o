@@ -168,6 +168,20 @@ Forwards the requests to the specified backends, and proxies the response.
 </code></pre>
 </div>
 
+<p>
+When the <code>family</code> key is used, the address family for the backend specification can be controlled. Legal values
+for are <code>inet</code> and <code>inet6</code>. If nothing is specified, an address family of <code>PF_UNSPEC</code> is
+used, which will result in both IP and IPv6 (if present) being used.
+</p>
+
+<div class="example">
+<div class="caption">Example. Forwarding the requests to multiple application server using specified address family</div>
+<pre><code>proxy.reverse.url:
+  - url: http://some.host.com:8080
+    family: inet
+</code></pre>
+</div>
+
 <div class="example">
 <div class="caption">Example. Forwarding the requests to multiple application server with different weight</div>
 <pre><code>proxy.reverse.url:

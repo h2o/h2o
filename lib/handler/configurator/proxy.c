@@ -265,14 +265,31 @@ static h2o_socketpool_target_t *parse_backend(h2o_configurator_command_t *cmd, y
     yoml_t **url_node;
     h2o_socketpool_target_conf_t lb_per_target_conf = {0}; /* default weight of each target */
 
+    lb_per_target_conf.family = PF_UNSPEC;
     switch (backend->type) {
     case YOML_TYPE_SCALAR:
         url_node = &backend;
         break;
     case YOML_TYPE_MAPPING: {
         yoml_t **weight_node;
-        if (h2o_configurator_parse_mapping(cmd, backend, "url:s", "weight:*", &url_node, &weight_node) != 0)
+        yoml_t **family_node;
+
+        if (h2o_configurator_parse_mapping(cmd, backend, "url:s", "weight:*,family:s", &url_node, &weight_node, &family_node) != 0)
             return NULL;
+        if (family_node != NULL) {
+            char family[16];
+
+            if (h2o_configurator_scanf(cmd, *family_node, "%s", family) != 0)
+                return NULL;
+            if (strcasecmp(family, "inet") == 0) {
+                lb_per_target_conf.family = PF_INET;
+            } else if (strcasecmp(family, "inet6") == 0) {
+                lb_per_target_conf.family = PF_INET6;
+            } else {
+                h2o_configurator_errprintf(cmd, *weight_node, "family must be one of: inet or inet6");
+                return NULL;
+            }
+        }
         if (weight_node != NULL) {
             unsigned weight;
             if (h2o_configurator_scanf(cmd, *weight_node, "%u", &weight) != 0)

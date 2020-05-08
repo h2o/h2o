@@ -194,6 +194,10 @@ h2o_socketpool_target_t *h2o_socketpool_create_target(h2o_url_t *origin, h2o_soc
         target->peer.sockaddr.len = salen;
         break;
     }
+    /*
+     * Copy the address family to use for getaddrinfo(3) hints.
+     */
+    target->family = lb_target_conf->family;
     target->_shared.leased_count = 0;
     if (lb_target_conf != NULL)
         target->conf.weight_m1 = lb_target_conf->weight_m1;
@@ -334,7 +338,7 @@ static void try_connect(h2o_socketpool_connect_request_t *req)
     switch (target->type) {
     case H2O_SOCKETPOOL_TYPE_NAMED:
         /* resolve the name, and connect */
-        req->getaddr_req = h2o_hostinfo_getaddr(req->getaddr_receiver, target->url.host, target->peer.named_serv, AF_UNSPEC,
+        req->getaddr_req = h2o_hostinfo_getaddr(req->getaddr_receiver, target->url.host, target->peer.named_serv, target->family,
                                                 SOCK_STREAM, IPPROTO_TCP, AI_ADDRCONFIG | AI_NUMERICSERV, on_getaddr, req);
         break;
     case H2O_SOCKETPOOL_TYPE_SOCKADDR:
