@@ -24,7 +24,6 @@ For convenience, you can alternatively run the `make.sh` script.
 - CMake for generating the build files
 - Python 3 for the [code generator](https://github.com/toru/h2olog/blob/v2/misc/gen-quic-bpf.py)
 - [BCC](https://iovisor.github.io/bcc/) (>= 0.11.0) [installed](https://github.com/iovisor/bcc/blob/master/INSTALL.md) on your system
-- [SystemTap](https://sourceware.org/systemtap/) for DTrace shim to build H2O with DTrace support
 
 For Ubuntu 20.04 or later, you can install dependencies with:
 
