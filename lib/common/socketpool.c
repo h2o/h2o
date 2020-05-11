@@ -197,9 +197,9 @@ h2o_socketpool_target_t *h2o_socketpool_create_target(h2o_url_t *origin, h2o_soc
     /*
      * Copy the address family to use for getaddrinfo(3) hints.
      */
-    target->family = lb_target_conf->family;
     target->_shared.leased_count = 0;
     if (lb_target_conf != NULL)
+        target->family = lb_target_conf->family;
         target->conf.weight_m1 = lb_target_conf->weight_m1;
     else {
         target->conf.weight_m1 = 0;
