@@ -78,6 +78,11 @@ This option specifies the directory to which H2O will be installed (default: <co
 This option instructs whether or not to build the standalone server with support for <a href="configure/mruby.html">scripting using mruby</a>.
 It is turned on by default if the prerequisites (<a href="https://www.gnu.org/software/bison/">bison</a>, <a href="https://www.ruby-lang.org/">ruby</a> and the development files<?= $ctx->{note}->(q{<code>mkmf</code> - a program for building ruby extensions is required.  In many distributions, the program is packaged as part of <code>ruby-dev<code> or <code>ruby-devel</code> package.}) ?>) are found.
 </dl>
+<dt><code>-DWITH_DTRACE=<i>on</i>|<i>off</i></code></dt>
+<dd>
+This option instructs whether or not to enable DTrace support.
+It is turned on by default if the prerequisites (<a href="https://sourceware.org/systemtap/">SystemTap</a> on Linux, or <a href="https://github.com/h2o/h2o/wiki/macOS">macOS without System Integirty Protection</a>) are found.
+</dl>
 <dt><code>-DCMAKE_C_FLAGS=...</code></dt>
 <dd>
 This option can be used to add or override the compile options being passed to the C compiler.
