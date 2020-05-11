@@ -199,10 +199,10 @@ h2o_socketpool_target_t *h2o_socketpool_create_target(h2o_url_t *origin, h2o_soc
      */
     target->_shared.leased_count = 0;
     target->family = PF_UNSPEC;
-    if (lb_target_conf != NULL)
+    if (lb_target_conf != NULL) {
         target->family = lb_target_conf->family;
         target->conf.weight_m1 = lb_target_conf->weight_m1;
-    else {
+    } else {
         target->conf.weight_m1 = 0;
     }
 
