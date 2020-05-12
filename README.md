@@ -14,6 +14,8 @@ $ make -Cbuild
 $ sudo make -Cbuild install
 ```
 
+If you have `BCC` installed to a non-standard path, give its path as [`-DCMAKE_PREFIX_PATH`](https://cmake.org/cmake/help/latest/variable/CMAKE_PREFIX_PATH.html) to `cmake`.
+
 For convenience, you can alternatively run the `make.sh` script.
 
 ## Requirements
