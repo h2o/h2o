@@ -242,9 +242,9 @@ int main(int argc, char **argv)
         tracer.out = stdout;
     }
 
-    std::vector<std::string> cflags;
-
-    cflags.push_back(make_pid_cflag("TARGET_PID", h2o_pid));
+    std::vector<std::string> cflags({
+        make_pid_cflag("H2OLOG_H2O_PID", h2o_pid),
+    });
 
     if (!response_header_filters.empty()) {
         cflags.push_back(generate_header_filter_cflag(response_header_filters));

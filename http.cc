@@ -55,7 +55,7 @@ BPF_PERF_OUTPUT(events);
 
 int trace_sched_process_exit(struct tracepoint__sched__sched_process_exit *ctx) {
   const struct task_struct *task = (const struct task_struct*)bpf_get_current_task();
-  if (task->tgid != TARGET_PID) {
+  if (task->tgid != H2OLOG_H2O_PID) {
     return 0;
   }
   http_event_t ev = { .type = SCHED_PROCESS_EXIT };
