@@ -9,9 +9,9 @@ See [Tracing QUIC events](#tracing-quic-events) for how.
 See [requirements](#requirements) for build prerequisites.
 
 ```
-$ cmake .
-$ make
-$ sudo make install
+$ cmake -Bbuild
+$ make -Cbuild
+$ sudo make -Cbuild install
 ```
 
 For convenience, you can alternatively run the `make.sh` script.
@@ -24,6 +24,12 @@ For convenience, you can alternatively run the `make.sh` script.
 - CMake for generating the build files
 - Python 3 for the [code generator](https://github.com/toru/h2olog/blob/v2/misc/gen-quic-bpf.py)
 - [BCC](https://iovisor.github.io/bcc/) (>= 0.11.0) [installed](https://github.com/iovisor/bcc/blob/master/INSTALL.md) on your system
+
+For Ubuntu 20.04 or later, you can install dependencies with:
+
+```sh
+sudo apt install clang cmake python3 systemtap-sdt-dev libbpfcc-dev linux-headers-$(uname -r)
+```
 
 ### For running h2olog
 
