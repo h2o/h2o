@@ -2216,7 +2216,7 @@ void quic_handle_event(h2o_tracer_t *tracer, const void *data, int data_len) {
     json_write_pair_c(out, STR_LIT("conn"), event->receive.master_id);
     json_write_pair_c(out, STR_LIT("time"), event->receive.at);
     json_write_pair_c(out, STR_LIT("dcid"), event->receive.dcid);
-    json_write_pair_c(out, STR_LIT("num-bytes"), event->receive.num_bytes);
+    json_write_pair_c(out, STR_LIT("bytes-len"), event->receive.num_bytes);
     break;
   }
   case 7: { // quicly:version_switch
