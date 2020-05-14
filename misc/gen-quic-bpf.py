@@ -56,6 +56,9 @@ rename_map = {
     "at": "time",
     "master_id": "conn",
 
+    # changed in the latest quicly master branch
+    "num_bytes": "bytes_len",
+
     # quicly_rtt_t
     "minimum": "min-rtt",
     "smoothed": "smoothed-rtt",
