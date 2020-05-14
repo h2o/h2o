@@ -103,7 +103,6 @@ struct quic_event_t {
       uint32_t master_id;
       int64_t at;
       char dcid[STR_LEN];
-      uint8_t bytes[STR_LEN];
       size_t num_bytes;
     } receive;
     struct { // quicly:version_switch
@@ -123,7 +122,6 @@ struct quic_event_t {
       uint32_t master_id;
       int64_t at;
       uint64_t pn;
-      uint8_t decrypted[STR_LEN];
       size_t decrypted_len;
     } crypto_decrypt;
     struct { // quicly:crypto_handshake
@@ -137,13 +135,11 @@ struct quic_event_t {
       int is_enc;
       uint8_t epoch;
       char label[STR_LEN];
-      char secret[STR_LEN];
     } crypto_update_secret;
     struct { // quicly:crypto_send_key_update
       uint32_t master_id;
       int64_t at;
       uint64_t phase;
-      char secret[STR_LEN];
     } crypto_send_key_update;
     struct { // quicly:crypto_send_key_update_confirmed
       uint32_t master_id;
@@ -154,13 +150,11 @@ struct quic_event_t {
       uint32_t master_id;
       int64_t at;
       uint64_t phase;
-      char secret[STR_LEN];
     } crypto_receive_key_update;
     struct { // quicly:crypto_receive_key_update_prepare
       uint32_t master_id;
       int64_t at;
       uint64_t phase;
-      char secret[STR_LEN];
     } crypto_receive_key_update_prepare;
     struct { // quicly:packet_prepare
       uint32_t master_id;
@@ -394,9 +388,9 @@ struct quic_event_t {
       uint32_t master_id;
       int64_t at;
       uint32_t minimum;
-      uint32_t latest;
       uint32_t smoothed;
       uint32_t variance;
+      uint32_t latest;
       uint32_t cwnd;
       size_t inflight;
     } quictrace_cc_ack;
@@ -404,9 +398,9 @@ struct quic_event_t {
       uint32_t master_id;
       int64_t at;
       uint32_t minimum;
-      uint32_t latest;
       uint32_t smoothed;
       uint32_t variance;
+      uint32_t latest;
       uint32_t cwnd;
       size_t inflight;
     } quictrace_cc_lost;
@@ -1627,9 +1621,9 @@ int trace_quicly__quictrace_cc_ack(struct pt_regs *ctx) {
   bpf_usdt_readarg(3, ctx, &buf);
   bpf_probe_read(&rtt, sizeof(rtt), buf);
   event.quictrace_cc_ack.minimum = rtt.minimum; /* uint32_t */
-  event.quictrace_cc_ack.latest = rtt.latest; /* uint32_t */
   event.quictrace_cc_ack.smoothed = rtt.smoothed; /* uint32_t */
   event.quictrace_cc_ack.variance = rtt.variance; /* uint32_t */
+  event.quictrace_cc_ack.latest = rtt.latest; /* uint32_t */
   // uint32_t cwnd
   bpf_usdt_readarg(4, ctx, &event.quictrace_cc_ack.cwnd);
   // size_t inflight
@@ -1657,9 +1651,9 @@ int trace_quicly__quictrace_cc_lost(struct pt_regs *ctx) {
   bpf_usdt_readarg(3, ctx, &buf);
   bpf_probe_read(&rtt, sizeof(rtt), buf);
   event.quictrace_cc_lost.minimum = rtt.minimum; /* uint32_t */
-  event.quictrace_cc_lost.latest = rtt.latest; /* uint32_t */
   event.quictrace_cc_lost.smoothed = rtt.smoothed; /* uint32_t */
   event.quictrace_cc_lost.variance = rtt.variance; /* uint32_t */
+  event.quictrace_cc_lost.latest = rtt.latest; /* uint32_t */
   // uint32_t cwnd
   bpf_usdt_readarg(4, ctx, &event.quictrace_cc_lost.cwnd);
   // size_t inflight
@@ -1852,7 +1846,6 @@ struct quic_event_t {
       uint32_t master_id;
       int64_t at;
       char dcid[STR_LEN];
-      uint8_t bytes[STR_LEN];
       size_t num_bytes;
     } receive;
     struct { // quicly:version_switch
@@ -1872,7 +1865,6 @@ struct quic_event_t {
       uint32_t master_id;
       int64_t at;
       uint64_t pn;
-      uint8_t decrypted[STR_LEN];
       size_t decrypted_len;
     } crypto_decrypt;
     struct { // quicly:crypto_handshake
@@ -1886,13 +1878,11 @@ struct quic_event_t {
       int is_enc;
       uint8_t epoch;
       char label[STR_LEN];
-      char secret[STR_LEN];
     } crypto_update_secret;
     struct { // quicly:crypto_send_key_update
       uint32_t master_id;
       int64_t at;
       uint64_t phase;
-      char secret[STR_LEN];
     } crypto_send_key_update;
     struct { // quicly:crypto_send_key_update_confirmed
       uint32_t master_id;
@@ -1903,13 +1893,11 @@ struct quic_event_t {
       uint32_t master_id;
       int64_t at;
       uint64_t phase;
-      char secret[STR_LEN];
     } crypto_receive_key_update;
     struct { // quicly:crypto_receive_key_update_prepare
       uint32_t master_id;
       int64_t at;
       uint64_t phase;
-      char secret[STR_LEN];
     } crypto_receive_key_update_prepare;
     struct { // quicly:packet_prepare
       uint32_t master_id;
@@ -2143,9 +2131,9 @@ struct quic_event_t {
       uint32_t master_id;
       int64_t at;
       uint32_t minimum;
-      uint32_t latest;
       uint32_t smoothed;
       uint32_t variance;
+      uint32_t latest;
       uint32_t cwnd;
       size_t inflight;
     } quictrace_cc_ack;
@@ -2153,9 +2141,9 @@ struct quic_event_t {
       uint32_t master_id;
       int64_t at;
       uint32_t minimum;
-      uint32_t latest;
       uint32_t smoothed;
       uint32_t variance;
+      uint32_t latest;
       uint32_t cwnd;
       size_t inflight;
     } quictrace_cc_lost;
@@ -2228,7 +2216,7 @@ void quic_handle_event(h2o_tracer_t *tracer, const void *data, int data_len) {
     json_write_pair_c(out, STR_LIT("conn"), event->receive.master_id);
     json_write_pair_c(out, STR_LIT("time"), event->receive.at);
     json_write_pair_c(out, STR_LIT("dcid"), event->receive.dcid);
-    json_write_pair_c(out, STR_LIT("bytes-len"), event->receive.num_bytes);
+    json_write_pair_c(out, STR_LIT("num-bytes"), event->receive.num_bytes);
     break;
   }
   case 7: { // quicly:version_switch
@@ -2609,9 +2597,9 @@ void quic_handle_event(h2o_tracer_t *tracer, const void *data, int data_len) {
     json_write_pair_c(out, STR_LIT("conn"), event->quictrace_cc_ack.master_id);
     json_write_pair_c(out, STR_LIT("time"), event->quictrace_cc_ack.at);
     json_write_pair_c(out, STR_LIT("min-rtt"), event->quictrace_cc_ack.minimum);
-    json_write_pair_c(out, STR_LIT("latest-rtt"), event->quictrace_cc_ack.latest);
     json_write_pair_c(out, STR_LIT("smoothed-rtt"), event->quictrace_cc_ack.smoothed);
     json_write_pair_c(out, STR_LIT("variance-rtt"), event->quictrace_cc_ack.variance);
+    json_write_pair_c(out, STR_LIT("latest-rtt"), event->quictrace_cc_ack.latest);
     json_write_pair_c(out, STR_LIT("cwnd"), event->quictrace_cc_ack.cwnd);
     json_write_pair_c(out, STR_LIT("inflight"), event->quictrace_cc_ack.inflight);
     break;
@@ -2621,9 +2609,9 @@ void quic_handle_event(h2o_tracer_t *tracer, const void *data, int data_len) {
     json_write_pair_c(out, STR_LIT("conn"), event->quictrace_cc_lost.master_id);
     json_write_pair_c(out, STR_LIT("time"), event->quictrace_cc_lost.at);
     json_write_pair_c(out, STR_LIT("min-rtt"), event->quictrace_cc_lost.minimum);
-    json_write_pair_c(out, STR_LIT("latest-rtt"), event->quictrace_cc_lost.latest);
     json_write_pair_c(out, STR_LIT("smoothed-rtt"), event->quictrace_cc_lost.smoothed);
     json_write_pair_c(out, STR_LIT("variance-rtt"), event->quictrace_cc_lost.variance);
+    json_write_pair_c(out, STR_LIT("latest-rtt"), event->quictrace_cc_lost.latest);
     json_write_pair_c(out, STR_LIT("cwnd"), event->quictrace_cc_lost.cwnd);
     json_write_pair_c(out, STR_LIT("inflight"), event->quictrace_cc_lost.inflight);
     break;
