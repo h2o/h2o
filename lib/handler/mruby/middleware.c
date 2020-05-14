@@ -403,7 +403,6 @@ static int skip_tracing(h2o_conn_t *conn)
 static int handle_header_raw_key(h2o_mruby_shared_context_t *shared_ctx, h2o_iovec_t *raw_key, h2o_iovec_t value, void *_req)
 {
     h2o_req_t *req = _req;
-    const h2o_token_t *token;
 
     h2o_iovec_t name = convert_env_key_to_header_name(&req->pool, raw_key->base, raw_key->len, 0);
     if (name.base == NULL)
