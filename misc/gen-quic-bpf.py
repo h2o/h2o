@@ -240,7 +240,7 @@ int %s(struct pt_regs *ctx) {
 def prepare_context(d_files_dir):
   st_map = parse_c_struct(data_types_h)
   context = {
-      "id": 1, # 1 is used for sched:sched_process_exit
+      "id": 0,
       "probe_metadata": OrderedDict(),
       "st_map": st_map,
   }
@@ -284,8 +284,6 @@ struct quic_event_t {
   """
 
   bpf = r"""
-#include <linux/sched.h>
-
 #define STR_LEN 64
 %s
 %s
@@ -293,18 +291,6 @@ BPF_PERF_OUTPUT(events);
 
 // HTTP/3 tracing
 BPF_HASH(h2o_to_quicly_conn, u64, u32);
-
-// tracepoint sched:sched_process_exit
-int trace_sched_process_exit(struct tracepoint__sched__sched_process_exit *ctx) {
-  const struct task_struct *task = (const struct task_struct*)bpf_get_current_task();
-  if (task->tgid != H2OLOG_H2O_PID) {
-    return 0;
-  }
-  struct quic_event_t ev = { .id = 1 };
-  events.perf_submit(ctx, &ev, sizeof(ev));
-  return 0;
-}
-
 """ % (data_types_h.read_text(), event_t_decl)
 
   usdt_def = """
@@ -330,10 +316,6 @@ void quic_handle_event(h2o_tracer_t *tracer, const void *data, int data_len) {
   FILE *out = tracer->out;
 
   const quic_event_t *event = static_cast<const quic_event_t*>(data);
-
-  if (event->id == 1) { // sched:sched_process_exit
-    exit(0);
-  }
 
   // output JSON
   fprintf(out, "{");
