@@ -148,13 +148,6 @@ static std::string generate_header_filter_cflag(const std::vector<std::string> &
     return cflag;
 }
 
-static std::string make_pid_cflag(const char *macro_name, pid_t pid)
-{
-    char buf[256];
-    snprintf(buf, sizeof(buf), "-D%s=%d", macro_name, pid);
-    return std::string(buf);
-}
-
 static void event_cb(void *context, void *data, int len)
 {
     h2o_tracer_t *tracer = (h2o_tracer_t *)context;
@@ -242,9 +235,7 @@ int main(int argc, char **argv)
         tracer.out = stdout;
     }
 
-    std::vector<std::string> cflags({
-        make_pid_cflag("H2OLOG_H2O_PID", h2o_pid),
-    });
+    std::vector<std::string> cflags;
 
     if (!response_header_filters.empty()) {
         cflags.push_back(generate_header_filter_cflag(response_header_filters));
@@ -258,8 +249,6 @@ int main(int argc, char **argv)
         fprintf(stderr, "Error: init: %s\n", ret.msg().c_str());
         return EXIT_FAILURE;
     }
-
-    bpf->attach_tracepoint("sched:sched_process_exit", "trace_sched_process_exit");
 
     for (auto &probe : probes) {
         ret = bpf->attach_usdt(probe);
