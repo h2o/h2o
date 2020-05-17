@@ -56,6 +56,9 @@ rename_map = {
     "at": "time",
     "master_id": "conn",
 
+    # changed in the latest quicly master branch
+    "num_bytes": "bytes_len",
+
     # quicly_rtt_t
     "minimum": "min-rtt",
     "smoothed": "smoothed-rtt",
@@ -77,7 +80,7 @@ def parse_c_struct(path):
 
   st_map = OrderedDict()
   for (st_name, st_content) in re.findall(r'struct\s+([a-zA-Z0-9_]+)\s*\{([^}]*)\}', content, flags=re_flags):
-    st = st_map[st_name] = {}
+    st = st_map[st_name] = OrderedDict()
     for (ctype, name, is_array) in re.findall(r'(\w+[^;]*[\w\*])\s+([a-zA-Z0-9_]+)(\[\d+\])?;', st_content, flags=re_flags):
       if "dummy" in name:
         continue
@@ -264,8 +267,14 @@ struct quic_event_t {
 """
 
   for name, metadata in probe_metadata.items():
-    event_t_decl += "    struct { // %s\n" % metadata["fully_specified_probe_name"]
+    fully_specified_probe_name = metadata["fully_specified_probe_name"]
+    block_field_set = block_fields.get(fully_specified_probe_name, None)
+
+    event_t_decl += "    struct { // %s\n" % fully_specified_probe_name
     for field_name, field_type in metadata["flat_args_map"].items():
+      if block_field_set and field_name in block_field_set:
+        continue
+
       if is_bin_type(field_type):
         f = "uint8_t %s[STR_LEN]" % field_name
       elif is_str_type(field_type):

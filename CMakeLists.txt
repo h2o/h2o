@@ -5,6 +5,8 @@ SET(CMAKE_CXX_STANDARD 11)
 SET(CMAKE_CXX_STANDARD_REQUIRED ON)
 SET(CMAKE_CXX_EXTENSIONS OFF)
 
+SET(H2O_COMMIT "fb0d55a")
+
 PROJECT(h2olog)
 
 IF(NOT CMAKE_BUILD_TYPE)
@@ -37,24 +39,24 @@ SET(SOURCE_FILES
 )
 
 ADD_CUSTOM_COMMAND(
-    OUTPUT  "${CMAKE_BINARY_DIR}/quicly-probes.d"
-    COMMAND curl -sLf 'https://raw.githubusercontent.com/h2o/h2o/fb0d55a/deps/quicly/quicly-probes.d' >${CMAKE_BINARY_DIR}/quicly-probes.d
+    OUTPUT  "${CMAKE_SOURCE_DIR}/quicly-probes.d"
+    COMMAND curl -sLf 'https://raw.githubusercontent.com/h2o/h2o/${H2O_COMMIT}/deps/quicly/quicly-probes.d' >${CMAKE_SOURCE_DIR}/quicly-probes.d
 )
-LIST(APPEND DTRACE_FILES "${CMAKE_BINARY_DIR}/quicly-probes.d")
+LIST(APPEND DTRACE_FILES "${CMAKE_SOURCE_DIR}/quicly-probes.d")
 
 ADD_CUSTOM_COMMAND(
-    OUTPUT  "${CMAKE_BINARY_DIR}/h2o-probes.d"
-    COMMAND curl -sLf 'https://raw.githubusercontent.com/h2o/h2o/master/h2o-probes.d' >${CMAKE_BINARY_DIR}/h2o-probes.d
+    OUTPUT  "${CMAKE_SOURCE_DIR}/h2o-probes.d"
+    COMMAND curl -sLf 'https://raw.githubusercontent.com/h2o/h2o/${H2O_COMMIT}/h2o-probes.d' >${CMAKE_SOURCE_DIR}/h2o-probes.d
 )
-LIST(APPEND DTRACE_FILES "${CMAKE_BINARY_DIR}/h2o-probes.d")
+LIST(APPEND DTRACE_FILES "${CMAKE_SOURCE_DIR}/h2o-probes.d")
 
 ADD_CUSTOM_COMMAND(
-    OUTPUT  "${CMAKE_BINARY_DIR}/generated-quic.cc"
-    COMMAND "${CMAKE_SOURCE_DIR}/misc/gen-quic-bpf.py" "${CMAKE_BINARY_DIR}" "${CMAKE_BINARY_DIR}/generated-quic.cc"
+    OUTPUT  "${CMAKE_SOURCE_DIR}/generated-quic.cc"
+    COMMAND "${CMAKE_SOURCE_DIR}/misc/gen-quic-bpf.py" "${CMAKE_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/generated-quic.cc"
     DEPENDS ${DTRACE_FILES}
     DEPENDS "${CMAKE_SOURCE_DIR}/misc/gen-quic-bpf.py"
 )
-LIST(APPEND SOURCE_FILES "${CMAKE_BINARY_DIR}/generated-quic.cc")
+LIST(APPEND SOURCE_FILES "${CMAKE_SOURCE_DIR}/generated-quic.cc")
 
 INCLUDE_DIRECTORIES(${CMAKE_SOURCE_DIR})
 
