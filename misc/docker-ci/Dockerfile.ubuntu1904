@@ -12,6 +12,7 @@ RUN apt-get install --yes \
 	curl \
 	flex \
 	git \
+	libbrotli-dev \
 	libc-ares-dev \
 	libclang-dev \
 	libedit-dev \
