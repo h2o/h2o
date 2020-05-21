@@ -1346,20 +1346,51 @@ Exit:
     return NULL;
 }
 
+
+static void neverbleed_cleanup_fds(int listen_fd, int close_notify_fd)
+{
+#ifdef LIBC_HAS_CLOSEFROM
+    int maxfd, k;
+
+    maxfd = 0;
+    if (listen_fd > maxfd) {
+        maxfd = listen_fd;
+    }
+    if (close_notify_fd > maxfd) {
+        maxfd = close_notify_fd;
+    }
+    for (k = 0; k < maxfd; k++) {
+	if (k == listen_fd || k == close_notify_fd)
+		continue;
+        switch (k) {
+        case STDOUT_FILENO:
+        case STDERR_FILENO:
+        case STDIN_FILENO:
+            break;
+        default:
+            (void) close(k);
+        }
+    }
+    closefrom(maxfd + 1);
+#else
+    int fd;
+
+    fd = (int)sysconf(_SC_OPEN_MAX) - 1;
+    for (; fd > 2; --fd) {
+        if (fd == listen_fd || fd == close_notify_fd)
+                continue;
+        close(fd);
+    }
+#endif
+}
+
 __attribute__((noreturn)) static void daemon_main(int listen_fd, int close_notify_fd, const char *tempdir)
 {
     pthread_t tid;
     pthread_attr_t thattr;
     int sock_fd;
 
-    { /* close all descriptors (except STDIN, STDOUT, STRERR, listen_fd, close_notify_fd) */
-        int fd = (int)sysconf(_SC_OPEN_MAX) - 1;
-        for (; fd > 2; --fd) {
-            if (fd == listen_fd || fd == close_notify_fd)
-                continue;
-            close(fd);
-        }
-    }
+    neverbleed_cleanup_fds(listen_fd, close_notify_fd);
 
     pthread_attr_init(&thattr);
     pthread_attr_setdetachstate(&thattr, 1);
