@@ -1931,7 +1931,11 @@ enum {
     H2O_HEADERS_CMD_MERGE,      /* merges the value into a comma-listed values of the named header */
     H2O_HEADERS_CMD_SET,        /* sets a header line, overwriting the existing one (if any) */
     H2O_HEADERS_CMD_SETIFEMPTY, /* sets a header line if empty */
-    H2O_HEADERS_CMD_UNSET       /* removes the named header(s) */
+    H2O_HEADERS_CMD_UNSET,      /* removes the named header(s) */
+    H2O_HEADER_LIST_ALLOW,      /* a list of headers to accept, all other headers are removed */
+    H2O_HEADER_LIST_DENY,       /* a list of headers to remove */
+    H2O_COOKIE_LIST_ALLOW,      /* a list of cookie names to accept, all other headers are removed (case sensitive) */
+    H2O_COOKIE_LIST_DENY,       /* a list of cookie names to remove (case sensitive) */
 };
 
 typedef enum h2o_headers_command_when {
@@ -1942,8 +1946,13 @@ typedef enum h2o_headers_command_when {
 
 struct st_h2o_headers_command_t {
     int cmd;
-    h2o_iovec_t *name; /* maybe a token */
-    h2o_iovec_t value;
+    union {
+        struct {
+            h2o_iovec_t *name; /* maybe a token */
+            h2o_iovec_t value;
+        } single;
+        h2o_iovec_vector_t name_list; /* for header name lists or cookie name lists */
+    } data;
     h2o_headers_command_when_t when;
 };
 
@@ -2040,8 +2049,12 @@ void h2o_status_register_configurator(h2o_globalconf_t *conf);
 /**
  * appends a headers command to the list
  */
-void h2o_headers_append_command(h2o_headers_command_t **cmds, int cmd, h2o_iovec_t *name, h2o_iovec_t value,
-                                h2o_headers_command_when_t when);
+void h2o_headers_append_single_command(h2o_headers_command_t **cmds, int cmd, h2o_iovec_t *name, h2o_iovec_t value,
+                                       h2o_headers_command_when_t when);
+/**
+ * appends a headers command to the list
+ */
+void h2o_headers_append_list_command(h2o_headers_command_t **cmds, int cmd, h2o_iovec_vector_t *list, h2o_headers_command_when_t when);
 /**
  * rewrite headers by the command provided
  */

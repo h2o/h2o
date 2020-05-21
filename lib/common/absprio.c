@@ -32,7 +32,7 @@ void h2o_absprio_parse_priority(const char *s, size_t len, h2o_absprio_t *prio)
     const char *token;
     size_t token_len;
 
-    while ((token = h2o_next_token(&iter, ',', &token_len, &value)) != NULL) {
+    while ((token = h2o_next_token(&iter, ',', &token_len, &value, 1)) != NULL) {
         if (token_len != 1) {
             /* Currently only "u=" and "i=" are supported. Thus token_len should always be 1.
              * Ignore unknown keys. */

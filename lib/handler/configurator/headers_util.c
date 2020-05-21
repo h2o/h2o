@@ -45,7 +45,7 @@ static int extract_name_value(const char *src, h2o_iovec_t **name, h2o_iovec_t *
     return 0;
 }
 
-static int add_cmd(h2o_configurator_command_t *cmd, yoml_t *node, int cmd_id, h2o_iovec_t *name, h2o_iovec_t value,
+static int add_single_cmd(h2o_configurator_command_t *cmd, yoml_t *node, int cmd_id, h2o_iovec_t *name, h2o_iovec_t value,
                    h2o_headers_command_when_t when, h2o_headers_command_t **cmds)
 {
     if (h2o_iovec_is_token(name)) {
@@ -56,7 +56,27 @@ static int add_cmd(h2o_configurator_command_t *cmd, yoml_t *node, int cmd_id, h2
         }
     }
 
-    h2o_headers_append_command(cmds, cmd_id, name, value, when);
+    h2o_headers_append_single_command(cmds, cmd_id, name, value, when);
+    return 0;
+}
+
+static int add_list_cmd(h2o_configurator_command_t *cmd, yoml_t *node, int cmd_id, h2o_iovec_vector_t *list,
+                   h2o_headers_command_when_t when, h2o_headers_command_t **cmds, int normalize_header)
+{
+    int i;
+
+    if (normalize_header) {
+        for (i = 0; i != list->size; i++) {
+            h2o_iovec_t name = list->entries[i];
+            const h2o_token_t *name_token;
+            if ((name_token = h2o_lookup_token(name.base, name.len)) != NULL) {
+                free(name.base);
+                list->entries[i] = name_token->buf;
+            }
+        }
+    }
+    h2o_headers_append_list_command(cmds, cmd_id, list, when);
+
     return 0;
 }
 
@@ -71,8 +91,12 @@ static int parse_header_node(h2o_configurator_command_t *cmd, yoml_t **node, yom
     } else {
         yoml_t **header_node;
         yoml_t **when_node = NULL;
-        if (h2o_configurator_parse_mapping(cmd, *node, "header:sa", "when:*", &header_node, &when_node) != 0)
-            return -1;
+        if ((*node)->type == YOML_TYPE_SEQUENCE) {
+            header_node = node;
+        } else {
+            if (h2o_configurator_parse_mapping(cmd, *node, "header:sa", "when:*", &header_node, &when_node) != 0)
+                return -1;
+        }
         if ((*header_node)->type == YOML_TYPE_SEQUENCE) {
             *headers = (*header_node)->data.sequence.elements;
             *num_headers = (*header_node)->data.sequence.size;
@@ -119,7 +143,7 @@ static int on_config_header_2arg(h2o_configurator_command_t *cmd, h2o_configurat
             h2o_configurator_errprintf(cmd, header, "failed to parse the value; should be in form of `name: value`");
             return -1;
         }
-        if (add_cmd(cmd, header, cmd_id, name, value, when, headers_cmds) != 0) {
+        if (add_single_cmd(cmd, header, cmd_id, name, value, when, headers_cmds) != 0) {
             if (!h2o_iovec_is_token(name))
                 free(name->base);
             free(value.base);
@@ -148,7 +172,7 @@ static int on_config_header_unset(h2o_configurator_command_t *cmd, h2o_configura
             h2o_configurator_errprintf(cmd, header, "invalid header name");
             return -1;
         }
-        if (add_cmd(cmd, header, H2O_HEADERS_CMD_UNSET, name, (h2o_iovec_t){NULL}, when, self->get_commands(self->child)) != 0) {
+        if (add_single_cmd(cmd, header, H2O_HEADERS_CMD_UNSET, name, (h2o_iovec_t){NULL}, when, self->get_commands(self->child)) != 0) {
             if (!h2o_iovec_is_token(name))
                 free(name->base);
             return -1;
@@ -156,6 +180,51 @@ static int on_config_header_unset(h2o_configurator_command_t *cmd, h2o_configura
     }
 
     return 0;
+}
+
+static int on_config_list_core(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node, int action, int header)
+{
+    yoml_t **headers;
+    size_t num_headers;
+    h2o_headers_command_when_t when;
+    struct headers_util_configurator_t *self = (void *)cmd->configurator;
+    h2o_iovec_vector_t list;
+
+    if (parse_header_node(cmd, &node, &headers, &num_headers, &when) != 0)
+        return -1;
+    list = (h2o_iovec_vector_t){h2o_mem_alloc(num_headers * sizeof(list.entries[0])), num_headers, num_headers};
+    int i;
+    for (i = 0; i != num_headers; i++) {
+        list.entries[i] = h2o_strdup(NULL, headers[i]->data.scalar, strlen(headers[i]->data.scalar));
+        if (header) {
+            h2o_strtolower(list.entries[i].base, list.entries[i].len);
+        }
+    }
+
+
+    if (add_list_cmd(cmd, node, action, &list, when, self->get_commands(self->child), header) != 0)
+        return -1;
+    return 0;
+}
+
+static int on_config_header_list_allow(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    return on_config_list_core(cmd, ctx, node, H2O_HEADER_LIST_ALLOW, 1);
+}
+
+static int on_config_header_list_deny(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    return on_config_list_core(cmd, ctx, node, H2O_HEADER_LIST_DENY, 1);
+}
+
+static int on_config_cookie_list_allow(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    return on_config_list_core(cmd, ctx, node, H2O_COOKIE_LIST_ALLOW, 0);
+}
+
+static int on_config_cookie_list_deny(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    return on_config_list_core(cmd, ctx, node, H2O_COOKIE_LIST_DENY, 0);
 }
 
 #define DEFINE_2ARG(fn, cmd_id)                                                                                                    \
@@ -192,17 +261,25 @@ void h2o_configurator_define_headers_commands(h2o_globalconf_t *global_conf, h2o
     DEFINE_CMD_NAME(set_directive, ".set");
     DEFINE_CMD_NAME(setifempty_directive, ".setifempty");
     DEFINE_CMD_NAME(unset_directive, ".unset");
+    DEFINE_CMD_NAME(header_list_allow_directive, ".list_allow");
+    DEFINE_CMD_NAME(header_list_deny_directive, ".list_deny");
+    DEFINE_CMD_NAME(cookie_list_allow_directive, ".cookie.list_allow");
+    DEFINE_CMD_NAME(cookie_list_deny_directive, ".cookie.list_deny");
 #undef DEFINE_CMD_NAME
 
-#define DEFINE_CMD(name, cb)                                                                                                       \
+#define DEFINE_CMD(name, cb, type)                                                                                                       \
     h2o_configurator_define_command(                                                                                               \
         &c->super, name,                                                                                                           \
-        H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR | H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING, cb)
-    DEFINE_CMD(add_directive, on_config_header_add);
-    DEFINE_CMD(append_directive, on_config_header_append);
-    DEFINE_CMD(merge_directive, on_config_header_merge);
-    DEFINE_CMD(set_directive, on_config_header_set);
-    DEFINE_CMD(setifempty_directive, on_config_header_setifempty);
-    DEFINE_CMD(unset_directive, on_config_header_unset);
+        H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_ ## type | H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING, cb)
+    DEFINE_CMD(add_directive, on_config_header_add, SCALAR);
+    DEFINE_CMD(append_directive, on_config_header_append, SCALAR);
+    DEFINE_CMD(merge_directive, on_config_header_merge, SCALAR);
+    DEFINE_CMD(set_directive, on_config_header_set, SCALAR);
+    DEFINE_CMD(setifempty_directive, on_config_header_setifempty, SCALAR);
+    DEFINE_CMD(unset_directive, on_config_header_unset, SCALAR);
+    DEFINE_CMD(header_list_allow_directive, on_config_header_list_allow, SEQUENCE);
+    DEFINE_CMD(header_list_deny_directive, on_config_header_list_deny, SEQUENCE);
+    DEFINE_CMD(cookie_list_allow_directive, on_config_cookie_list_allow, SEQUENCE);
+    DEFINE_CMD(cookie_list_deny_directive, on_config_cookie_list_deny, SEQUENCE);
 #undef DEFINE_CMD
 }

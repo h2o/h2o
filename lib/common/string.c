@@ -403,7 +403,7 @@ size_t h2o_strstr(const char *haysack, size_t haysack_len, const char *needle, s
 }
 
 /* note: returns a zero-width match as well */
-const char *h2o_next_token(h2o_iovec_t *iter, int separator, size_t *element_len, h2o_iovec_t *value)
+const char *h2o_next_token(h2o_iovec_t *iter, int separator, size_t *element_len, h2o_iovec_t *value, int coma_separator)
 {
     const char *cur = iter->base, *end = iter->base + iter->len, *token_start, *token_end;
 
@@ -425,7 +425,7 @@ const char *h2o_next_token(h2o_iovec_t *iter, int separator, size_t *element_len
             ++cur;
             break;
         }
-        if (*cur == ',') {
+        if (coma_separator && *cur == ',') {
             if (token_start == cur) {
                 ++cur;
                 token_end = cur;
@@ -450,7 +450,7 @@ const char *h2o_next_token(h2o_iovec_t *iter, int separator, size_t *element_len
 FindValue:
     *iter = h2o_iovec_init(cur, end - cur);
     *element_len = token_end - token_start;
-    if ((value->base = (char *)h2o_next_token(iter, separator, &value->len, NULL)) == NULL) {
+    if ((value->base = (char *)h2o_next_token(iter, separator, &value->len, NULL, 1)) == NULL) {
         *value = (h2o_iovec_t){"", 0};
     } else if (h2o_memis(value->base, value->len, H2O_STRLIT(","))) {
         *value = (h2o_iovec_t){"", 0};
@@ -466,7 +466,7 @@ int h2o_contains_token(const char *haysack, size_t haysack_len, const char *need
     const char *token = NULL;
     size_t token_len = 0;
 
-    while ((token = h2o_next_token(&iter, separator, &token_len, NULL)) != NULL) {
+    while ((token = h2o_next_token(&iter, separator, &token_len, NULL, 1)) != NULL) {
         if (h2o_lcstris(token, token_len, needle, needle_len)) {
             return 1;
         }
