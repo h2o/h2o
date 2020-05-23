@@ -18,16 +18,16 @@ subtest "internal" => sub {
   mode: ticket
 EOT
     sub {
-        is test(), "New";
-        test(); # openssl 0.9.8 seems to return "New" (maybe because in the first run we did not specify -sess_in)
-        is test(), "Reused";
-        is test(), "Reused";
+        sleep 1;
+        is test("new"), "New";
+        is test("reuse"), "Reused";
+        is test("reuse"), "Reused";
     });
     spawn_with(<< "EOT",
   mode: ticket
 EOT
     sub {
-        is test(), "New";
+        is test("reuse"), "New";
     });
 };
 
@@ -41,9 +41,9 @@ num-threads: 1
 EOT
     sub {
         sleep 1; # wait for tickets file to be loaded
-        is test(), "New";
-        is test(), "Reused";
-        is test(), "Reused";
+        is test("new"), "New";
+        is test("reuse"), "Reused";
+        is test("reuse"), "Reused";
     });
     spawn_with(<< "EOT",
   mode: ticket
@@ -52,7 +52,7 @@ EOT
 EOT
     sub {
         sleep 1; # wait for tickets file to be loaded
-        is test(), "Reused";
+        is test("reuse"), "Reused";
     });
 };
 
@@ -65,9 +65,10 @@ subtest "no-tickets-in-file" => sub {
 num-threads: 1
 EOT
     sub {
-        is test(), "New";
-        is test(), "New";
-        is test(), "New";
+        sleep 1; # wait for tickets file to be loaded
+        is test("new"), "New";
+        is test("reuse"), "New";
+        is test("reuse"), "New";
     });
 };
 
@@ -94,15 +95,13 @@ num-threads: 1
 EOT
         spawn_with($conf, sub {
             sleep 1;
-            is test(), "New";
-            sleep 0.5;
-            is test(), "Reused";
-            sleep 0.5;
-            is test(), "Reused";
+            is test("new"), "New";
+            is test("reuse"), "Reused";
+            is test("reuse"), "Reused";
         });
         spawn_with($conf, sub {
             sleep 1;
-            is test(), "Reused";
+            is test("reuse"), "Reused";
         });
     };
     $doit->("binary");
@@ -128,14 +127,32 @@ EOT
 }
 
 sub test {
+    my $sess_mode = shift @_; # reuse or new
+
+    # 'openssl -sess_out' writes a session file ONLY if
+    #     a session was handed out by the server!
+
+    my $cmd_opts;
+    if ( $sess_mode eq 'new' ) {
+        unlink "$tempdir/session";
+        $cmd_opts = "-sess_out $tempdir/session";
+    } else {
+        return "no session to reuse $tempdir/session does no exist" unless ( -e "$tempdir/session" );
+        $cmd_opts = "-sess_in $tempdir/session";
+    }
+
     my $lines = do {
-        my $cmd_opts = (-e "$tempdir/session" ? "-sess_in $tempdir/session" : "") . " -sess_out $tempdir/session";
-        open my $fh, "-|", "openssl s_client $cmd_opts -connect 127.0.0.1:$server->{tls_port} 2>&1 < /dev/null"
+        open my $fh, "-|", "timeout 1 openssl s_client $cmd_opts -connect 127.0.0.1:$server->{tls_port} 2>&1"
             or die "failed to open pipe:$!";
         local $/;
         <$fh>;
     };
     $lines =~ m{---\n(New|Reused),}s
         or die "failed to parse the output of s_client:{{{$lines}}}";
-    $1;
+
+    if ( $sess_mode eq 'new' ) {
+        -e "$tempdir/session" ? $1 :  "no session created $tempdir/session does no exist";
+    } else {
+        $1;
+    }
 }
