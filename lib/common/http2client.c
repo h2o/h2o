@@ -182,9 +182,15 @@ static void adjust_conn_linkedlist(h2o_httpclient_connection_pool_t *connpool, s
             break;
         node = forward ? node->next : node->prev;
     }
-    if (!forward && node != &connpool->http2.conns)
-        node = node->next;
-
+    if (forward) {
+        if (node == conn->super.link.next)
+            return;
+    } else {
+        if (node == conn->super.link.prev)
+            return;
+        if (node != &connpool->http2.conns)
+            node = node->next; /* do `insert after` rather than `insert before` */
+    }
     h2o_linklist_unlink(&conn->super.link);
     h2o_linklist_insert(node, &conn->super.link);
 }
