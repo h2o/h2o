@@ -37,10 +37,27 @@ extern "C" {
 #if __GNUC__ >= 3
 #define PTLS_LIKELY(x) __builtin_expect(!!(x), 1)
 #define PTLS_UNLIKELY(x) __builtin_expect(!!(x), 0)
+#define PTLS_BUILD_ASSERT_EXPR(cond) (sizeof(char[2 * !!(!__builtin_constant_p(cond) || (cond)) - 1]) != 0)
+#define PTLS_BUILD_ASSERT(cond) ((void)PTLS_BUILD_ASSERT_EXPR(cond))
 #else
 #define PTLS_LIKELY(x) (x)
 #define PTLS_UNLIKELY(x) (x)
+#define PTLS_BUILD_ASSERT(cond) 1
 #endif
+
+/* __builtin_types_compatible_p yields incorrect results when older versions of GCC is used; see #303.
+ * Clang with Xcode 9.4 or prior is known to not work correctly when a pointer is const-qualified; see
+ * https://github.com/h2o/quicly/pull/306#issuecomment-626037269. Older versions of clang upstream works fine, but we do not need
+ * best coverage. This macro is for preventing misuse going into the master branch, having it work one of the compilers supported in
+ * our CI is enough.
+ */
+#if (defined(__clang__) && __clang_major__ >= 10) || __GNUC__ >= 6
+#define PTLS_ASSERT_IS_ARRAY_EXPR(a) PTLS_BUILD_ASSERT_EXPR(__builtin_types_compatible_p(__typeof__(a[0])[], __typeof__(a)))
+#else
+#define PTLS_ASSERT_IS_ARRAY_EXPR(a) 1
+#endif
+
+#define PTLS_ELEMENTSOF(x) (PTLS_ASSERT_IS_ARRAY_EXPR(x) * sizeof(x) / sizeof((x)[0]))
 
 #ifdef _WINDOWS
 #define PTLS_THREADLOCAL __declspec(thread)
@@ -495,6 +512,10 @@ typedef struct st_ptls_on_client_hello_parameters_t {
      * if ESNI was used
      */
     unsigned esni : 1;
+    /**
+     * set to 1 if ClientHello is too old (or too new) to be handled by picotls
+     */
+    unsigned incompatible_version : 1;
 } ptls_on_client_hello_parameters_t;
 
 /**
@@ -650,7 +671,8 @@ struct st_ptls_context_t {
      */
     unsigned use_exporter : 1;
     /**
-     * if ChangeCipherSpec message should be sent during handshake
+     * if ChangeCipherSpec record should be sent during handshake. If the client sends CCS, the server sends one in response
+     * regardless of the value of this flag. See RFC 8446 Appendix D.3.
      */
     unsigned send_change_cipher_spec : 1;
     /**

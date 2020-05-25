@@ -236,7 +236,8 @@ struct st_ptls_t {
      */
     union {
         struct {
-            uint8_t legacy_session_id[32];
+            ptls_iovec_t legacy_session_id;
+            uint8_t legacy_session_id_buf[32];
             ptls_key_exchange_context_t *key_share_ctx;
             unsigned offered_psk : 1;
             /**
@@ -285,6 +286,7 @@ struct st_ptls_client_hello_psk_t {
 #define MAX_CLIENT_CIPHERS 32
 
 struct st_ptls_client_hello_t {
+    uint16_t legacy_version;
     const uint8_t *random_bytes;
     ptls_iovec_t legacy_session_id;
     struct {
@@ -330,7 +332,8 @@ struct st_ptls_client_hello_t {
             size_t count;
         } identities;
         unsigned ke_modes;
-        int early_data_indication;
+        unsigned early_data_indication : 1;
+        unsigned is_last_extension : 1;
     } psk;
     ptls_raw_extension_t unknown_extensions[MAX_UNKNOWN_EXTENSIONS + 1];
     unsigned status_request : 1;
@@ -379,7 +382,7 @@ static ptls_aead_context_t *new_aead(ptls_aead_algorithm_t *aead, ptls_hash_algo
 static int is_supported_version(uint16_t v)
 {
     size_t i;
-    for (i = 0; i != sizeof(supported_versions) / sizeof(supported_versions[0]); ++i)
+    for (i = 0; i != PTLS_ELEMENTSOF(supported_versions); ++i)
         if (supported_versions[i] == v)
             return 1;
     return 0;
@@ -1466,14 +1469,27 @@ Exit:
     return ret;
 }
 
-static int push_change_cipher_spec(ptls_t *tls, ptls_buffer_t *sendbuf)
+static int push_change_cipher_spec(ptls_t *tls, ptls_message_emitter_t *emitter)
 {
-    int ret = 0;
+    int ret;
 
-    if (!tls->send_change_cipher_spec)
+    /* check if we are requested to (or still need to) */
+    if (!tls->send_change_cipher_spec) {
+        ret = 0;
         goto Exit;
-    buffer_push_record(sendbuf, PTLS_CONTENT_TYPE_CHANGE_CIPHER_SPEC, { ptls_buffer_push(sendbuf, 1); });
+    }
+
+    /* CCS is a record, can only be sent when using a record-based protocol. */
+    if (emitter->begin_message != begin_record_message) {
+        ret = PTLS_ALERT_UNEXPECTED_MESSAGE;
+        goto Exit;
+    }
+
+    /* emit CCS */
+    buffer_push_record(emitter->buf, PTLS_CONTENT_TYPE_CHANGE_CIPHER_SPEC, { ptls_buffer_push(emitter->buf, 1); });
+
     tls->send_change_cipher_spec = 0;
+    ret = 0;
 Exit:
     return ret;
 }
@@ -1518,7 +1534,7 @@ static int decode_signature_algorithms(struct st_ptls_signature_algorithms_t *sa
             uint16_t id;
             if ((ret = ptls_decode16(&id, src, end)) != 0)
                 goto Exit;
-            if (sa->count < sizeof(sa->list) / sizeof(sa->list[0]))
+            if (sa->count < PTLS_ELEMENTSOF(sa->list))
                 sa->list[sa->count++] = id;
         } while (*src != end);
     });
@@ -1955,7 +1971,7 @@ static int send_client_hello(ptls_t *tls, ptls_message_emitter_t *emitter, ptls_
         ptls_buffer_pushv(sendbuf, tls->client_random, sizeof(tls->client_random));
         /* lecagy_session_id */
         ptls_buffer_push_block(
-            sendbuf, 1, { ptls_buffer_pushv(sendbuf, tls->client.legacy_session_id, sizeof(tls->client.legacy_session_id)); });
+            sendbuf, 1, { ptls_buffer_pushv(sendbuf, tls->client.legacy_session_id.base, tls->client.legacy_session_id.len); });
         /* cipher_suites */
         ptls_buffer_push_block(sendbuf, 2, {
             ptls_cipher_suite_t **cs = tls->ctx->cipher_suites;
@@ -2028,7 +2044,7 @@ static int send_client_hello(ptls_t *tls, ptls_message_emitter_t *emitter, ptls_
             buffer_push_extension(sendbuf, PTLS_EXTENSION_TYPE_SUPPORTED_VERSIONS, {
                 ptls_buffer_push_block(sendbuf, 1, {
                     size_t i;
-                    for (i = 0; i != sizeof(supported_versions) / sizeof(supported_versions[0]); ++i)
+                    for (i = 0; i != PTLS_ELEMENTSOF(supported_versions); ++i)
                         ptls_buffer_push16(sendbuf, supported_versions[i]);
                 });
             });
@@ -2098,7 +2114,7 @@ static int send_client_hello(ptls_t *tls, ptls_message_emitter_t *emitter, ptls_
         assert(!is_second_flight);
         if ((ret = setup_traffic_protection(tls, 1, "c e traffic", 1, 0)) != 0)
             goto Exit;
-        if ((ret = push_change_cipher_spec(tls, emitter->buf)) != 0)
+        if ((ret = push_change_cipher_spec(tls, emitter)) != 0)
             goto Exit;
     }
     if (resumption_secret.base != NULL && !is_second_flight) {
@@ -2316,8 +2332,8 @@ static int client_handle_hello(ptls_t *tls, ptls_message_emitter_t *emitter, ptl
 
     if ((ret = decode_server_hello(tls, &sh, message.base + PTLS_HANDSHAKE_HEADER_SIZE, message.base + message.len)) != 0)
         goto Exit;
-    if (!(sh.legacy_session_id.len == sizeof(tls->client.legacy_session_id) &&
-          ptls_mem_equal(sh.legacy_session_id.base, tls->client.legacy_session_id, sizeof(tls->client.legacy_session_id)))) {
+    if (!(sh.legacy_session_id.len == tls->client.legacy_session_id.len &&
+          ptls_mem_equal(sh.legacy_session_id.base, tls->client.legacy_session_id.base, tls->client.legacy_session_id.len))) {
         ret = PTLS_ALERT_ILLEGAL_PARAMETER;
         goto Exit;
     }
@@ -2676,7 +2692,7 @@ static int handle_certificate(ptls_t *tls, const uint8_t *src, const uint8_t *en
     ptls_decode_block(src, end, 3, {
         while (src != end) {
             ptls_decode_open_block(src, end, 3, {
-                if (num_certs < sizeof(certs) / sizeof(certs[0]))
+                if (num_certs < PTLS_ELEMENTSOF(certs))
                     certs[num_certs++] = ptls_iovec_init(src, end - src);
                 src = end;
             });
@@ -2888,6 +2904,9 @@ static int client_handle_finished(ptls_t *tls, ptls_message_emitter_t *emitter, 
             goto Exit;
     }
 
+    if ((ret = push_change_cipher_spec(tls, emitter)) != 0)
+        goto Exit;
+
     if (tls->client.certificate_request.context.base != NULL) {
         /* If this is a resumed session, the server must not send the certificate request in the handshake */
         if (tls->is_psk_handshake) {
@@ -2903,8 +2922,6 @@ static int client_handle_finished(ptls_t *tls, ptls_message_emitter_t *emitter, 
             goto Exit;
     }
 
-    if ((ret = push_change_cipher_spec(tls, emitter->buf)) != 0)
-        goto Exit;
     ret = send_finished(tls, emitter);
 
     memcpy(tls->traffic_protection.enc.secret, send_secret, sizeof(send_secret));
@@ -3129,14 +3146,12 @@ static int decode_client_hello(ptls_t *tls, struct st_ptls_client_hello_t *ch, c
     uint16_t exttype = 0;
     int ret;
 
-    { /* check protocol version */
-        uint16_t protver;
-        if ((ret = ptls_decode16(&protver, &src, end)) != 0)
-            goto Exit;
-        if (protver != 0x0303) {
-            ret = PTLS_ALERT_HANDSHAKE_FAILURE;
-            goto Exit;
-        }
+    /* decode protocol version (do not bare to decode something older than TLS 1.0) */
+    if ((ret = ptls_decode16(&ch->legacy_version, &src, end)) != 0)
+        goto Exit;
+    if (ch->legacy_version < 0x0301) {
+        ret = PTLS_ALERT_PROTOCOL_VERSION;
+        goto Exit;
     }
 
     /* skip random */
@@ -3186,6 +3201,7 @@ static int decode_client_hello(ptls_t *tls, struct st_ptls_client_hello_t *ch, c
 
     /* decode extensions */
     decode_extensions(src, end, PTLS_HANDSHAKE_TYPE_CLIENT_HELLO, &exttype, {
+        ch->psk.is_last_extension = 0;
         if (tls->ctx->on_extension != NULL &&
             (ret = tls->ctx->on_extension->cb(tls->ctx->on_extension, tls, PTLS_HANDSHAKE_TYPE_CLIENT_HELLO, exttype,
                                               ptls_iovec_init(src, end - src)) != 0))
@@ -3249,7 +3265,7 @@ static int decode_client_hello(ptls_t *tls, struct st_ptls_client_hello_t *ch, c
                             ret = PTLS_ALERT_DECODE_ERROR;
                             goto Exit;
                         }
-                        if (ch->alpn.count < sizeof(ch->alpn.list) / sizeof(ch->alpn.list[0]))
+                        if (ch->alpn.count < PTLS_ELEMENTSOF(ch->alpn.list))
                             ch->alpn.list[ch->alpn.count++] = ptls_iovec_init(src, end - src);
                         src = end;
                     });
@@ -3262,8 +3278,7 @@ static int decode_client_hello(ptls_t *tls, struct st_ptls_client_hello_t *ch, c
                     uint16_t id;
                     if ((ret = ptls_decode16(&id, &src, end)) != 0)
                         goto Exit;
-                    if (ch->cert_compression_algos.count <
-                        sizeof(ch->cert_compression_algos.list) / sizeof(ch->cert_compression_algos.list[0]))
+                    if (ch->cert_compression_algos.count < PTLS_ELEMENTSOF(ch->cert_compression_algos.list))
                         ch->cert_compression_algos.list[ch->cert_compression_algos.count++] = id;
                 } while (src != end);
             });
@@ -3280,7 +3295,7 @@ static int decode_client_hello(ptls_t *tls, struct st_ptls_client_hello_t *ch, c
             break;
         case PTLS_EXTENSION_TYPE_SUPPORTED_VERSIONS:
             ptls_decode_block(src, end, 1, {
-                size_t selected_index = sizeof(supported_versions) / sizeof(supported_versions[0]);
+                size_t selected_index = PTLS_ELEMENTSOF(supported_versions);
                 do {
                     size_t i;
                     uint16_t v;
@@ -3293,7 +3308,7 @@ static int decode_client_hello(ptls_t *tls, struct st_ptls_client_hello_t *ch, c
                         }
                     }
                 } while (src != end);
-                if (selected_index != sizeof(supported_versions) / sizeof(supported_versions[0]))
+                if (selected_index != PTLS_ELEMENTSOF(supported_versions))
                     ch->selected_version = supported_versions[selected_index];
             });
             break;
@@ -3344,7 +3359,7 @@ static int decode_client_hello(ptls_t *tls, struct st_ptls_client_hello_t *ch, c
                     });
                     if ((ret = ptls_decode32(&psk.obfuscated_ticket_age, &src, end)) != 0)
                         goto Exit;
-                    if (ch->psk.identities.count < sizeof(ch->psk.identities.list) / sizeof(ch->psk.identities.list[0]))
+                    if (ch->psk.identities.count < PTLS_ELEMENTSOF(ch->psk.identities.list))
                         ch->psk.identities.list[ch->psk.identities.count++] = psk;
                     ++num_identities;
                 } while (src != end);
@@ -3365,6 +3380,7 @@ static int decode_client_hello(ptls_t *tls, struct st_ptls_client_hello_t *ch, c
                     goto Exit;
                 }
             });
+            ch->psk.is_last_extension = 1;
         } break;
         case PTLS_EXTENSION_TYPE_PSK_KEY_EXCHANGE_MODES:
             ptls_decode_block(src, end, 1, {
@@ -3390,37 +3406,6 @@ static int decode_client_hello(ptls_t *tls, struct st_ptls_client_hello_t *ch, c
         }
         src = end;
     });
-
-    /* check if client hello make sense */
-    if (is_supported_version(ch->selected_version)) {
-        if (!(ch->compression_methods.count == 1 && ch->compression_methods.ids[0] == 0)) {
-            ret = PTLS_ALERT_ILLEGAL_PARAMETER;
-            goto Exit;
-        }
-        /* esni */
-        if (ch->esni.cipher != NULL) {
-            if (ch->key_shares.base == NULL) {
-                ret = PTLS_ALERT_ILLEGAL_PARAMETER;
-                goto Exit;
-            }
-        }
-        /* pre-shared key */
-        if (ch->psk.hash_end != NULL) {
-            /* PSK must be the last extension */
-            if (exttype != PTLS_EXTENSION_TYPE_PRE_SHARED_KEY) {
-                ret = PTLS_ALERT_ILLEGAL_PARAMETER;
-                goto Exit;
-            }
-        } else {
-            if (ch->psk.early_data_indication) {
-                ret = PTLS_ALERT_ILLEGAL_PARAMETER;
-                goto Exit;
-            }
-        }
-    } else {
-        ret = PTLS_ALERT_PROTOCOL_VERSION;
-        goto Exit;
-    }
 
     ret = 0;
 Exit:
@@ -3619,7 +3604,7 @@ static int server_handle_hello(ptls_t *tls, ptls_message_emitter_t *emitter, ptl
                               additional_extensions                                                                                \
                           } while (0);                                                                                             \
                       })
-    struct st_ptls_client_hello_t ch = {NULL,   {NULL}, {NULL},     0,     {NULL}, {NULL},   {NULL}, {{0}},
+    struct st_ptls_client_hello_t ch = {0, NULL,   {NULL}, {NULL},     0,     {NULL}, {NULL},   {NULL}, {{0}},
                                         {NULL}, {NULL}, {{{NULL}}}, {{0}}, {{0}},  {{NULL}}, {NULL}, {{UINT16_MAX}}};
     struct {
         ptls_key_exchange_algorithm_t *algorithm;
@@ -3634,13 +3619,65 @@ static int server_handle_hello(ptls_t *tls, ptls_message_emitter_t *emitter, ptl
     if ((ret = decode_client_hello(tls, &ch, message.base + PTLS_HANDSHAKE_HEADER_SIZE, message.base + message.len, properties)) !=
         0)
         goto Exit;
+
+    /* bail out if CH cannot be handled as TLS 1.3, providing the application the raw CH and SNI, to help them fallback */
+    if (!is_supported_version(ch.selected_version)) {
+        if (!is_second_flight && tls->ctx->on_client_hello != NULL) {
+            ptls_on_client_hello_parameters_t params = {
+                .server_name = ch.server_name,
+                .raw_message = message,
+                .negotiated_protocols = {ch.alpn.list, ch.alpn.count},
+                .incompatible_version = 1,
+            };
+            if ((ret = tls->ctx->on_client_hello->cb(tls->ctx->on_client_hello, tls, &params)) != 0)
+                goto Exit;
+        }
+        ret = PTLS_ALERT_PROTOCOL_VERSION;
+        goto Exit;
+    }
+
+    /* Check TLS 1.3-specific constraints. Hereafter, we might exit without calling on_client_hello. That's fine because this CH is
+     * ought to be rejected. */
+    if (ch.legacy_version <= 0x0300) {
+        /* RFC 8446 Appendix D.5: any endpoint receiving a Hello message with legacy_version set to 0x0300 MUST abort the handshake
+         * with a "protocol_version" alert. */
+        ret = PTLS_ALERT_PROTOCOL_VERSION;
+        goto Exit;
+    }
+    if (!(ch.compression_methods.count == 1 && ch.compression_methods.ids[0] == 0)) {
+        ret = PTLS_ALERT_ILLEGAL_PARAMETER;
+        goto Exit;
+    }
+    /* esni */
+    if (ch.esni.cipher != NULL) {
+        if (ch.key_shares.base == NULL) {
+            ret = PTLS_ALERT_ILLEGAL_PARAMETER;
+            goto Exit;
+        }
+    }
+    /* pre-shared key */
+    if (ch.psk.hash_end != NULL) {
+        /* PSK must be the last extension */
+        if (!ch.psk.is_last_extension) {
+            ret = PTLS_ALERT_ILLEGAL_PARAMETER;
+            goto Exit;
+        }
+    } else {
+        if (ch.psk.early_data_indication) {
+            ret = PTLS_ALERT_ILLEGAL_PARAMETER;
+            goto Exit;
+        }
+    }
+
     if (tls->ctx->require_dhe_on_psk)
         ch.psk.ke_modes &= ~(1u << PTLS_PSK_KE_MODE_PSK);
 
-    /* handle client_random, SNI, ESNI */
+    /* handle client_random, legacy_session_id, SNI, ESNI */
     if (!is_second_flight) {
         memcpy(tls->client_random, ch.random_bytes, sizeof(tls->client_random));
         log_client_random(tls);
+        if (ch.legacy_session_id.len != 0)
+            tls->send_change_cipher_spec = 1;
         ptls_iovec_t server_name = {NULL};
         int is_esni = 0;
         if (ch.esni.cipher != NULL && tls->ctx->esni != NULL) {
@@ -3793,7 +3830,7 @@ static int server_handle_hello(ptls_t *tls, ptls_message_emitter_t *emitter, ptl
                         });
                     });
                 });
-                if ((ret = push_change_cipher_spec(tls, emitter->buf)) != 0)
+                if ((ret = push_change_cipher_spec(tls, emitter)) != 0)
                     goto Exit;
                 ret = PTLS_ERROR_STATELESS_RETRY;
             } else {
@@ -3801,7 +3838,7 @@ static int server_handle_hello(ptls_t *tls, ptls_message_emitter_t *emitter, ptl
                 key_schedule_transform_post_ch1hash(tls->key_schedule);
                 key_schedule_extract(tls->key_schedule, ptls_iovec_init(NULL, 0));
                 EMIT_HELLO_RETRY_REQUEST(tls->key_schedule, key_share.algorithm != NULL ? NULL : negotiated_group, {});
-                if ((ret = push_change_cipher_spec(tls, emitter->buf)) != 0)
+                if ((ret = push_change_cipher_spec(tls, emitter)) != 0)
                     goto Exit;
                 tls->state = PTLS_STATE_SERVER_EXPECT_SECOND_CLIENT_HELLO;
                 if (ch.psk.early_data_indication)
@@ -3895,7 +3932,7 @@ static int server_handle_hello(ptls_t *tls, ptls_message_emitter_t *emitter, ptl
                                                     { ptls_buffer_push16(sendbuf, (uint16_t)psk_index); });
                           }
                       });
-    if ((ret = push_change_cipher_spec(tls, emitter->buf)) != 0)
+    if ((ret = push_change_cipher_spec(tls, emitter)) != 0)
         goto Exit;
 
     /* create protection contexts for the handshake */
@@ -4208,7 +4245,11 @@ ptls_t *ptls_client_new(ptls_context_t *ctx)
     tls->state = PTLS_STATE_CLIENT_HANDSHAKE_START;
     tls->ctx->random_bytes(tls->client_random, sizeof(tls->client_random));
     log_client_random(tls);
-    tls->ctx->random_bytes(tls->client.legacy_session_id, sizeof(tls->client.legacy_session_id));
+    if (tls->send_change_cipher_spec) {
+        tls->client.legacy_session_id =
+            ptls_iovec_init(tls->client.legacy_session_id_buf, sizeof(tls->client.legacy_session_id_buf));
+        tls->ctx->random_bytes(tls->client.legacy_session_id.base, tls->client.legacy_session_id.len);
+    }
 
     PTLS_PROBE(NEW, tls, 0);
     return tls;

@@ -1038,7 +1038,7 @@ int ptls_openssl_init_sign_certificate(ptls_openssl_sign_certificate_t *self, EV
         return PTLS_ERROR_INCOMPATIBLE_KEY;
     }
     PUSH_SCHEME(UINT16_MAX, NULL);
-    assert(scheme_index <= sizeof(self->schemes) / sizeof(self->schemes[0]));
+    assert(scheme_index <= PTLS_ELEMENTSOF(self->schemes));
 
 #undef PUSH_SCHEME
 

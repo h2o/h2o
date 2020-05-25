@@ -608,7 +608,7 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
                 .hkdf_label_prefix__obsolete = NULL,
                 .require_dhe_on_psk = 1,
                 .use_exporter = 0,
-                .send_change_cipher_spec = 0, /* FIXME set this? */
+                .send_change_cipher_spec = 0, /* is a client-only flag. As a server, this flag can be of any value. */
                 .require_client_authentication = 0,
                 .omit_end_of_early_data = 0,
                 .encrypt_ticket = NULL, /* initialized later */
@@ -619,7 +619,6 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
                 .decompress_certificate = NULL,
                 .update_esni_key = NULL,
                 .on_extension = NULL,
-
             },
         .ch =
             {
