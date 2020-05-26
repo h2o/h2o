@@ -1070,16 +1070,67 @@ void ssl_setup_session_resumption(SSL_CTX **contexts, size_t num_contexts, struc
 #endif
 }
 
-static pthread_mutex_t *mutexes;
+struct st_anylock_t {
+    int is_rw;
+    union {
+        pthread_mutex_t lock;
+        pthread_rwlock_t rwlock;
+    } u;
+};
+
+static struct st_anylock_t *locks;
+
+/* CRYPTO locks we enable RW locks for */
+static void init_locks(void)
+{
+    int nlocks = CRYPTO_num_locks();
+    locks = h2o_mem_alloc(sizeof(*locks) * nlocks);
+
+    unsigned i;
+    for (i = 0; i < nlocks; ++i) {
+        switch (i) {
+        case CRYPTO_LOCK_DH:
+        case CRYPTO_LOCK_DSA:
+        case CRYPTO_LOCK_EC:
+        case CRYPTO_LOCK_ERR:
+        case CRYPTO_LOCK_EX_DATA:
+        case CRYPTO_LOCK_MALLOC:
+        case CRYPTO_LOCK_RAND2:
+        case CRYPTO_LOCK_RSA:
+        case CRYPTO_LOCK_SSL:
+        case CRYPTO_LOCK_SSL_CTX:
+        case CRYPTO_LOCK_X509_STORE:
+            pthread_rwlock_init(&locks[i].u.rwlock, NULL);
+            locks[i].is_rw = 1;
+            break;
+        default:
+            pthread_mutex_init(&locks[i].u.lock, NULL);
+            locks[i].is_rw = 0;
+            break;
+        }
+    }
+}
 
 static void lock_callback(int mode, int n, const char *file, int line)
 {
-    if ((mode & CRYPTO_LOCK) != 0) {
-        pthread_mutex_lock(mutexes + n);
-    } else if ((mode & CRYPTO_UNLOCK) != 0) {
-        pthread_mutex_unlock(mutexes + n);
+    if (locks[n].is_rw) {
+        if (mode & CRYPTO_READ) {
+            if (mode & CRYPTO_LOCK) {
+                pthread_rwlock_rdlock(&locks[n].u.rwlock);
+            } else {
+                pthread_rwlock_unlock(&locks[n].u.rwlock);
+            }
+        } else { /* CRYPTO_WRITE */
+            if (mode & CRYPTO_LOCK) {
+                pthread_rwlock_wrlock(&locks[n].u.rwlock);
+            } else {
+                pthread_rwlock_unlock(&locks[n].u.rwlock);
+            }
+        }
+    } else if (mode & CRYPTO_LOCK) {
+        pthread_mutex_lock(&locks[n].u.lock);
     } else {
-        assert(!"unexpected mode");
+        pthread_mutex_unlock(&locks[n].u.lock);
     }
 }
 
@@ -1099,10 +1150,8 @@ static int add_lock_callback(int *num, int amount, int type, const char *file, i
 
 void init_openssl(void)
 {
-    int nlocks = CRYPTO_num_locks(), i;
-    mutexes = h2o_mem_alloc(sizeof(*mutexes) * nlocks);
-    for (i = 0; i != nlocks; ++i)
-        pthread_mutex_init(mutexes + i, NULL);
+    init_locks();
+
     CRYPTO_set_locking_callback(lock_callback);
     CRYPTO_set_id_callback(thread_id_callback);
     CRYPTO_set_add_lock_callback(add_lock_callback);
