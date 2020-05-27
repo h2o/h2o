@@ -23,13 +23,16 @@
 #include "h2olog.h"
 
 const char *HTTP_BPF = R"(
+#include <linux/sched.h>
+
 #define MAX_HDR_LEN 128
 
 enum {
   HTTP_EVENT_RECEIVE_REQ,
   HTTP_EVENT_RECEIVE_REQ_HDR,
   HTTP_EVENT_SEND_RESP,
-  HTTP_EVENT_SEND_RESP_HDR
+  HTTP_EVENT_SEND_RESP_HDR,
+  SCHED_PROCESS_EXIT,
 };
 
 typedef struct  st_http_event_t {
@@ -49,6 +52,18 @@ typedef struct  st_http_event_t {
 } http_event_t;
 
 BPF_PERF_OUTPUT(events);
+
+int trace_sched_process_exit(struct tracepoint__sched__sched_process_exit *ctx) {
+  const struct task_struct *task = (const struct task_struct*)bpf_get_current_task();
+  pid_t h2o_pid = task->tgid;
+  pid_t h2o_tid = task->pid;
+  if (!(h2o_pid == H2OLOG_H2O_PID && h2o_tid == H2OLOG_H2O_PID)) {
+    return 0;
+  }
+  http_event_t ev = { .type = SCHED_PROCESS_EXIT };
+  events.perf_submit(ctx, &ev, sizeof(ev));
+  return 0;
+}
 
 int trace_receive_request(struct pt_regs *ctx) {
   http_event_t ev = { .type = HTTP_EVENT_RECEIVE_REQ };
@@ -102,7 +117,13 @@ int trace_send_response_header(struct pt_regs *ctx) {
 #define MAX_HDR_LEN 128
 #define MIN(x, y) (((x) < (y)) ? (x) : (y))
 
-enum { HTTP_EVENT_RECEIVE_REQ, HTTP_EVENT_RECEIVE_REQ_HDR, HTTP_EVENT_SEND_RESP, HTTP_EVENT_SEND_RESP_HDR };
+enum {
+    HTTP_EVENT_RECEIVE_REQ,
+    HTTP_EVENT_RECEIVE_REQ_HDR,
+    HTTP_EVENT_SEND_RESP,
+    HTTP_EVENT_SEND_RESP_HDR,
+    SCHED_PROCESS_EXIT,
+};
 
 typedef struct st_http_event_t {
     uint8_t type;
@@ -140,6 +161,9 @@ static void handle_event(h2o_tracer_t *tracer, const void *data, int len)
         const char *label = (ev->type == HTTP_EVENT_RECEIVE_REQ_HDR) ? "RxHeader" : "TxHeader";
         fprintf(out, "%" PRIu64 " %" PRIu64 " %s   %.*s %.*s\n", ev->conn_id, ev->req_id, label, n_len, ev->header.name, v_len,
                 ev->header.value);
+    } break;
+    case SCHED_PROCESS_EXIT: {
+        exit(0);
     } break;
     default:
         fprintf(out, "unknown event: %u\n", ev->type);
