@@ -72,7 +72,7 @@ static void test_next_token(void)
     size_t token_len;
 
 #define NEXT()                                                                                                                     \
-    if ((token = h2o_next_token(&iter, ',', &token_len, NULL, 1)) == NULL) {                                                          \
+    if ((token = h2o_next_token(&iter, ',', &token_len, NULL, 1)) == NULL) {                                                       \
         ok(0);                                                                                                                     \
         return;                                                                                                                    \
     }
@@ -119,7 +119,7 @@ static void test_next_token2(void)
     size_t name_len;
 
 #define NEXT()                                                                                                                     \
-    if ((name = h2o_next_token(&iter, ',', &name_len, &value, 1)) == NULL) {                                                          \
+    if ((name = h2o_next_token(&iter, ',', &name_len, &value, 1)) == NULL) {                                                       \
         ok(0);                                                                                                                     \
         return;                                                                                                                    \
     }
@@ -162,7 +162,7 @@ static void test_next_token3(void)
     size_t name_len;
 
 #define NEXT()                                                                                                                     \
-    if ((name = h2o_next_token(&iter, ';', &name_len, &value, 1)) == NULL) {                                                          \
+    if ((name = h2o_next_token(&iter, ';', &name_len, &value, 1)) == NULL) {                                                       \
         ok(0);                                                                                                                     \
         return;                                                                                                                    \
     }

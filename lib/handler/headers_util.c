@@ -23,7 +23,8 @@ static void remove_header(h2o_headers_t *headers, h2o_headers_command_t *cmd)
             if (headers->entries[src].name == cmd->data.single.name)
                 continue;
         } else {
-            if (h2o_memis(headers->entries[src].name->base, headers->entries[src].name->len, cmd->data.single.name->base, cmd->data.single.name->len))
+            if (h2o_memis(headers->entries[src].name->base, headers->entries[src].name->len, cmd->data.single.name->base,
+                          cmd->data.single.name->len))
                 continue;
         }
         /* not matched */
@@ -50,7 +51,6 @@ static int is_in_list(const char *base, size_t len, h2o_iovec_vector_t *list, in
     }
     return 0;
 }
-
 
 static void header_list_allow(h2o_headers_t *headers, h2o_headers_command_t *cmd)
 {
@@ -82,10 +82,7 @@ static void header_list_deny(h2o_headers_t *headers, h2o_headers_command_t *cmd)
     headers->size = dst;
 }
 
-enum {
-    ALLOW,
-    DENY
-};
+enum { ALLOW, DENY };
 
 static void filter_cookie(h2o_mem_pool_t *pool, char **base, size_t *len, h2o_iovec_vector_t *list, int action)
 {
@@ -101,16 +98,16 @@ static void filter_cookie(h2o_mem_pool_t *pool, char **base, size_t *len, h2o_io
         int found = is_in_list(token, token_len, list, 0);
         if ((action == ALLOW && found) || (action == DENY && !found)) {
             if (dst_len != 0) {
-                memcpy(dst+dst_len, H2O_STRLIT("; "));
+                memcpy(dst + dst_len, H2O_STRLIT("; "));
                 dst_len += 2;
             }
-            memcpy(dst+dst_len, token, token_len);
-            dst_len+=token_len;
+            memcpy(dst + dst_len, token, token_len);
+            dst_len += token_len;
             if (token_value.len > 0) {
-                memcpy(dst+dst_len, H2O_STRLIT("="));
+                memcpy(dst + dst_len, H2O_STRLIT("="));
                 dst_len++;
-                memcpy(dst+dst_len, token_value.base, token_value.len);
-                dst_len+=token_value.len;
+                memcpy(dst + dst_len, token_value.base, token_value.len);
+                dst_len += token_value.len;
             }
         }
     } while (1);
@@ -144,7 +141,8 @@ static void cookie_list_deny(h2o_mem_pool_t *pool, h2o_headers_t *headers, h2o_h
     }
 }
 
-void h2o_headers_append_list_command(h2o_headers_command_t **cmds, int cmd, h2o_iovec_vector_t *list, h2o_headers_command_when_t when)
+void h2o_headers_append_list_command(h2o_headers_command_t **cmds, int cmd, h2o_iovec_vector_t *list,
+                                     h2o_headers_command_when_t when)
 {
     h2o_headers_command_t *new_cmds;
     size_t cnt;
@@ -159,7 +157,7 @@ void h2o_headers_append_list_command(h2o_headers_command_t **cmds, int cmd, h2o_
     new_cmds = h2o_mem_alloc_shared(NULL, (cnt + 2) * sizeof(*new_cmds), NULL);
     if (*cmds != NULL)
         memcpy(new_cmds, *cmds, cnt * sizeof(*new_cmds));
-    new_cmds[cnt] = (h2o_headers_command_t){cmd, { }, when};
+    new_cmds[cnt] = (h2o_headers_command_t){cmd, {}, when};
     new_cmds[cnt].data.name_list = *list;
     new_cmds[cnt + 1] = (h2o_headers_command_t){H2O_HEADERS_CMD_NULL};
 
@@ -184,7 +182,7 @@ void h2o_headers_append_single_command(h2o_headers_command_t **cmds, int cmd, h2
     new_cmds = h2o_mem_alloc_shared(NULL, (cnt + 2) * sizeof(*new_cmds), NULL);
     if (*cmds != NULL)
         memcpy(new_cmds, *cmds, cnt * sizeof(*new_cmds));
-    new_cmds[cnt] = (h2o_headers_command_t){cmd, { }, when};
+    new_cmds[cnt] = (h2o_headers_command_t){cmd, {}, when};
     new_cmds[cnt].data.single.name = name;
     new_cmds[cnt].data.single.value = value;
     new_cmds[cnt + 1] = (h2o_headers_command_t){H2O_HEADERS_CMD_NULL};
@@ -242,7 +240,8 @@ AddHeader:
     if (h2o_iovec_is_token(cmd->data.single.name)) {
         h2o_add_header(pool, headers, (void *)cmd->data.single.name, NULL, cmd->data.single.value.base, cmd->data.single.value.len);
     } else {
-        h2o_add_header_by_str(pool, headers, cmd->data.single.name->base, cmd->data.single.name->len, 0, NULL, cmd->data.single.value.base, cmd->data.single.value.len);
+        h2o_add_header_by_str(pool, headers, cmd->data.single.name->base, cmd->data.single.name->len, 0, NULL,
+                              cmd->data.single.value.base, cmd->data.single.value.len);
     }
     return;
 
