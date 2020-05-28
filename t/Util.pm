@@ -204,6 +204,7 @@ listen:
     key-file: examples/h2o/server.key
     certificate-file: examples/h2o/server.crt
     @{[$max_ssl_version ? "max-version: $max_ssl_version" : ""]}
+@{[$< == 0 ? "user: root" : ""]}
 EOT
 
     my $ret = spawn_h2o_raw($conf, [$port, $tls_port], \@opts);
