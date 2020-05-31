@@ -863,7 +863,8 @@ static mrb_value middleware_request_method(mrb_state *mrb, mrb_value self)
         if (h2o_req_resolve_internal_redirect_url(super, super->path, &resolved) != 0) {
             mrb_exc_raise(mrb, mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "failed to resolve reprocess uri"));
         }
-        h2o_reprocess_request_deferred(super, super->method, resolved.scheme, resolved.authority, resolved.path, super->overrides, 1);
+        h2o_reprocess_request_deferred(super, super->method, resolved.scheme, resolved.authority, resolved.path, super->overrides,
+                                       1);
     } else {
         h2o_delegate_request_deferred(super);
     }

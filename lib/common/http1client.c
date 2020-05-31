@@ -580,7 +580,6 @@ static int do_write_req(h2o_httpclient_t *_client, h2o_iovec_t chunk, int is_end
 
     h2o_timer_link(client->super.ctx->loop, client->super.ctx->io_timeout, &client->super._timeout);
     return 0;
-
 }
 
 static void on_send_timeout(h2o_timer_t *entry)

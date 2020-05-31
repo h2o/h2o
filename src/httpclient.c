@@ -490,7 +490,7 @@ int main(int argc, char **argv)
             }
             h3ctx.quic.transport_params.max_stream_data.uni = v;
             h3ctx.quic.transport_params.max_stream_data.bidi_local = v;
-            h3ctx.quic.transport_params.max_stream_data.bidi_remote = v;;
+            h3ctx.quic.transport_params.max_stream_data.bidi_remote = v;
         } break;
         case 'h':
             usage(argv[0]);
