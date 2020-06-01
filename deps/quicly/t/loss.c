@@ -105,11 +105,13 @@ static void init_cond_rand(struct loss_cond_t *cond, unsigned nloss, unsigned nt
 static int transmit_cond(quicly_conn_t *src, quicly_conn_t *dst, size_t *num_sent, size_t *num_received, struct loss_cond_t *cond,
                          int64_t latency)
 {
-    quicly_datagram_t *packets[32];
+    quicly_address_t destaddr, srcaddr;
+    struct iovec packets[32];
+    uint8_t packetsbuf[PTLS_ELEMENTSOF(packets) * quicly_get_context(src)->transport_params.max_udp_payload_size];
     int ret;
 
-    *num_sent = sizeof(packets) / sizeof(packets[0]);
-    if ((ret = quicly_send(src, packets, num_sent)) != 0) {
+    *num_sent = PTLS_ELEMENTSOF(packets);
+    if ((ret = quicly_send(src, &destaddr, &srcaddr, packets, num_sent, packetsbuf, sizeof(packetsbuf))) != 0) {
         fprintf(stderr, "%s: quicly_send: ret=%d\n", __FUNCTION__, ret);
         return ret;
     }
@@ -134,7 +136,6 @@ static int transmit_cond(quicly_conn_t *src, quicly_conn_t *dst, size_t *num_sen
                 ++*num_received;
             }
         }
-        free_packets(packets, *num_sent);
     }
     quic_now += latency;
 
@@ -152,10 +153,12 @@ static void test_even(void)
     init_cond_even(&cond_down);
     init_cond_even(&cond_up);
 
-    quic_now = 0;
+    quic_now = 1;
 
     { /* transmit first flight */
-        quicly_datagram_t *raw;
+        quicly_address_t destaddr, srcaddr;
+        struct iovec raw;
+        uint8_t rawbuf[quic_ctx.transport_params.max_udp_payload_size];
         size_t num_packets;
         quicly_decoded_packet_t decoded;
 
@@ -163,14 +166,13 @@ static void test_even(void)
                              NULL, NULL);
         ok(ret == 0);
         num_packets = 1;
-        ret = quicly_send(client, &raw, &num_packets);
+        ret = quicly_send(client, &destaddr, &srcaddr, &raw, &num_packets, rawbuf, sizeof(rawbuf));
         ok(ret == 0);
         ok(num_packets == 1);
         decode_packets(&decoded, &raw, 1);
         ok(num_packets == 1);
         ret = quicly_accept(&server, &quic_ctx, NULL, &fake_address.sa, &decoded, NULL, new_master_id(), NULL);
         ok(ret == 0);
-        free_packets(&raw, 1);
         cond_up.cb(&cond_up);
     }
 
@@ -264,10 +266,12 @@ static void loss_core(void)
     }
 #endif
 
-    quic_now = 0;
+    quic_now = 1;
 
     { /* transmit first flight */
-        quicly_datagram_t *raw;
+        quicly_address_t destaddr, srcaddr;
+        struct iovec raw;
+        uint8_t rawbuf[quic_ctx.transport_params.max_udp_payload_size];
         size_t num_packets;
         quicly_decoded_packet_t decoded;
 
@@ -275,7 +279,7 @@ static void loss_core(void)
                              NULL, NULL);
         ok(ret == 0);
         num_packets = 1;
-        ret = quicly_send(client, &raw, &num_packets);
+        ret = quicly_send(client, &destaddr, &srcaddr, &raw, &num_packets, rawbuf, sizeof(rawbuf));
         ok(ret == 0);
         ok(num_packets == 1);
         quic_now += 10;
@@ -283,7 +287,6 @@ static void loss_core(void)
         ok(num_packets == 1);
         ret = quicly_accept(&server, &quic_ctx, NULL, &fake_address.sa, &decoded, NULL, new_master_id(), NULL);
         ok(ret == 0);
-        free_packets(&raw, 1);
         quic_now += 10;
     }
 

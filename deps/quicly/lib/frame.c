@@ -50,7 +50,7 @@ uint8_t *quicly_encode_ack_frame(uint8_t *dst, uint8_t *dst_end, quicly_ranges_t
     *dst++ = QUICLY_FRAME_TYPE_ACK;
     dst = quicly_encodev(dst, ranges->ranges[range_index].end - 1); /* largest acknowledged */
     dst = quicly_encodev(dst, ack_delay);                           /* ack delay */
-    QUICLY_BUILD_ASSERT(QUICLY_MAX_ACK_BLOCKS - 1 <= 63);
+    PTLS_BUILD_ASSERT(QUICLY_MAX_ACK_BLOCKS - 1 <= 63);
     *dst++ = (uint8_t)(ranges->num_ranges - 1); /* ack blocks */
 
     while (1) {
@@ -108,4 +108,32 @@ int quicly_decode_ack_frame(const uint8_t **src, const uint8_t *end, quicly_ack_
     return 0;
 Error:
     return QUICLY_TRANSPORT_ERROR_FRAME_ENCODING;
+}
+
+uint8_t *quicly_encode_close_frame(uint8_t *const base, uint64_t error_code, uint64_t offending_frame_type,
+                                   const char *reason_phrase)
+{
+    size_t offset = 0, reason_phrase_len = strlen(reason_phrase);
+
+#define PUSHV(v)                                                                                                                   \
+    do {                                                                                                                           \
+        if (base != NULL) {                                                                                                        \
+            offset = quicly_encodev(base + offset, (v)) - base;                                                                    \
+        } else {                                                                                                                   \
+            offset += quicly_encodev_capacity(v);                                                                                  \
+        }                                                                                                                          \
+    } while (0)
+
+    PUSHV(offending_frame_type == UINT64_MAX ? QUICLY_FRAME_TYPE_APPLICATION_CLOSE : QUICLY_FRAME_TYPE_TRANSPORT_CLOSE);
+    PUSHV(error_code);
+    if (offending_frame_type != UINT64_MAX)
+        PUSHV(offending_frame_type);
+    PUSHV(reason_phrase_len);
+    if (base != NULL)
+        memcpy(base + offset, reason_phrase, reason_phrase_len);
+    offset += reason_phrase_len;
+
+#undef PUSHV
+
+    return base + offset;
 }

@@ -30,17 +30,32 @@ extern "C" {
 #include <stdint.h>
 #include "picotls.h"
 
-#define QUICLY_NUM_PACKETS_BEFORE_ACK 2
 #define QUICLY_DELAYED_ACK_TIMEOUT 25   /* milliseconds */
 #define QUICLY_DEFAULT_MAX_ACK_DELAY 25 /* milliseconds */
 #define QUICLY_LOCAL_MAX_ACK_DELAY 25   /* milliseconds */
 #define QUICLY_DEFAULT_ACK_DELAY_EXPONENT 3
 #define QUICLY_LOCAL_ACK_DELAY_EXPONENT 10
-#define QUICLY_DEFAULT_MIN_PTO 1 /* milliseconds */
+#define QUICLY_MIN_INITIAL_DCID_LEN 8
+#define QUICLY_DEFAULT_ACTIVE_CONNECTION_ID_LIMIT 2 /* If this transport parameter is absent, a default of 2 is assumed. (18.2) */
+/**
+ * how many CIDs is quicly willing to manage at the same time?
+ * this value is used in two ways:
+ * - active_connection_id_limit transport parameter advertised to the remote peer
+ * - maximum number of connection IDs we issue to the remote peer at a moment
+ */
+#define QUICLY_LOCAL_ACTIVE_CONNECTION_ID_LIMIT 4
+#define QUICLY_MIN_ACTIVE_CONNECTION_ID_LIMIT 2
+#define QUICLY_DEFAULT_MAX_UDP_PAYLOAD_SIZE 65527
+#define QUICLY_MIN_CLIENT_INITIAL_SIZE 1200
+#define QUICLY_DEFAULT_MIN_PTO 1      /* milliseconds */
 #define QUICLY_DEFAULT_INITIAL_RTT 66 /* initial retransmission timeout is *3, i.e. 200ms */
 #define QUICLY_LOSS_DEFAULT_PACKET_THRESHOLD 3
 
-#define QUICLY_MAX_PACKET_SIZE 1280 /* must be >= 1200 bytes */
+#define QUICLY_DEFAULT_PACKET_TOLERANCE 2
+#define QUICLY_MAX_PACKET_TOLERANCE 100
+#define QUICLY_FIRST_ACK_FREQUENCY_PACKET_NUMBER 1000
+#define QUICLY_ACK_FREQUENCY_CWND_FRACTION 8
+
 #define QUICLY_AEAD_TAG_SIZE 16
 
 #define QUICLY_MAX_CID_LEN_V1 20
@@ -69,7 +84,10 @@ extern "C" {
 #define QUICLY_TRANSPORT_ERROR_FINAL_SIZE QUICLY_ERROR_FROM_TRANSPORT_ERROR_CODE(0x6)
 #define QUICLY_TRANSPORT_ERROR_FRAME_ENCODING QUICLY_ERROR_FROM_TRANSPORT_ERROR_CODE(0x7)
 #define QUICLY_TRANSPORT_ERROR_TRANSPORT_PARAMETER QUICLY_ERROR_FROM_TRANSPORT_ERROR_CODE(0x8)
+#define QUICLY_TRANSPORT_ERROR_CONNECTION_ID_LIMIT QUICLY_ERROR_FROM_TRANSPORT_ERROR_CODE(0x9)
 #define QUICLY_TRANSPORT_ERROR_PROTOCOL_VIOLATION QUICLY_ERROR_FROM_TRANSPORT_ERROR_CODE(0xa)
+#define QUICLY_TRANSPORT_ERROR_INVALID_TOKEN QUICLY_ERROR_FROM_TRANSPORT_ERROR_CODE(0xb)
+#define QUICLY_TRANSPORT_ERROR_APPLICATION QUICLY_ERROR_FROM_TRANSPORT_ERROR_CODE(0xc)
 #define QUICLY_TRANSPORT_ERROR_CRYPTO_BUFFER_EXCEEDED QUICLY_ERROR_FROM_TRANSPORT_ERROR_CODE(0xd)
 #define QUICLY_TRANSPORT_ERROR_TLS_ALERT_BASE QUICLY_ERROR_FROM_TRANSPORT_ERROR_CODE(0x100)
 
@@ -81,8 +99,6 @@ extern "C" {
 #define QUICLY_ERROR_NO_COMPATIBLE_VERSION 0xff05
 #define QUICLY_ERROR_IS_CLOSING 0xff06 /* indicates that the connection has already entered closing state */
 #define QUICLY_ERROR_STATE_EXHAUSTION 0xff07
-
-#define QUICLY_BUILD_ASSERT(condition) ((void)sizeof(char[2 * !!(!__builtin_constant_p(condition) || (condition)) - 1]))
 
 typedef int64_t quicly_stream_id_t;
 
