@@ -12,6 +12,8 @@
 #define STR_LEN 64
 #define STR_LIT(s) s, strlen(s)
 
+uint64_t seq = 0;
+
 // BPF modules written in C
 const char *bpf_text = R"(
 
@@ -2187,6 +2189,7 @@ void quic_handle_event(h2o_tracer_t *tracer, const void *data, int data_len) {
   switch (event->id) {
   case 2: { // quicly:connect
     json_write_pair_n(out, STR_LIT("type"), "connect");
+    json_write_pair_c(out, STR_LIT("seq"), ++seq);
     json_write_pair_c(out, STR_LIT("conn"), event->connect.master_id);
     json_write_pair_c(out, STR_LIT("time"), event->connect.at);
     json_write_pair_c(out, STR_LIT("version"), event->connect.version);
@@ -2194,6 +2197,7 @@ void quic_handle_event(h2o_tracer_t *tracer, const void *data, int data_len) {
   }
   case 3: { // quicly:accept
     json_write_pair_n(out, STR_LIT("type"), "accept");
+    json_write_pair_c(out, STR_LIT("seq"), ++seq);
     json_write_pair_c(out, STR_LIT("conn"), event->accept.master_id);
     json_write_pair_c(out, STR_LIT("time"), event->accept.at);
     json_write_pair_c(out, STR_LIT("dcid"), event->accept.dcid);
@@ -2201,12 +2205,14 @@ void quic_handle_event(h2o_tracer_t *tracer, const void *data, int data_len) {
   }
   case 4: { // quicly:free
     json_write_pair_n(out, STR_LIT("type"), "free");
+    json_write_pair_c(out, STR_LIT("seq"), ++seq);
     json_write_pair_c(out, STR_LIT("conn"), event->free.master_id);
     json_write_pair_c(out, STR_LIT("time"), event->free.at);
     break;
   }
   case 5: { // quicly:send
     json_write_pair_n(out, STR_LIT("type"), "send");
+    json_write_pair_c(out, STR_LIT("seq"), ++seq);
     json_write_pair_c(out, STR_LIT("conn"), event->send.master_id);
     json_write_pair_c(out, STR_LIT("time"), event->send.at);
     json_write_pair_c(out, STR_LIT("state"), event->send.state);
@@ -2215,6 +2221,7 @@ void quic_handle_event(h2o_tracer_t *tracer, const void *data, int data_len) {
   }
   case 6: { // quicly:receive
     json_write_pair_n(out, STR_LIT("type"), "receive");
+    json_write_pair_c(out, STR_LIT("seq"), ++seq);
     json_write_pair_c(out, STR_LIT("conn"), event->receive.master_id);
     json_write_pair_c(out, STR_LIT("time"), event->receive.at);
     json_write_pair_c(out, STR_LIT("dcid"), event->receive.dcid);
@@ -2223,6 +2230,7 @@ void quic_handle_event(h2o_tracer_t *tracer, const void *data, int data_len) {
   }
   case 7: { // quicly:version_switch
     json_write_pair_n(out, STR_LIT("type"), "version-switch");
+    json_write_pair_c(out, STR_LIT("seq"), ++seq);
     json_write_pair_c(out, STR_LIT("conn"), event->version_switch.master_id);
     json_write_pair_c(out, STR_LIT("time"), event->version_switch.at);
     json_write_pair_c(out, STR_LIT("new-version"), event->version_switch.new_version);
@@ -2230,18 +2238,21 @@ void quic_handle_event(h2o_tracer_t *tracer, const void *data, int data_len) {
   }
   case 8: { // quicly:idle_timeout
     json_write_pair_n(out, STR_LIT("type"), "idle-timeout");
+    json_write_pair_c(out, STR_LIT("seq"), ++seq);
     json_write_pair_c(out, STR_LIT("conn"), event->idle_timeout.master_id);
     json_write_pair_c(out, STR_LIT("time"), event->idle_timeout.at);
     break;
   }
   case 9: { // quicly:stateless_reset_receive
     json_write_pair_n(out, STR_LIT("type"), "stateless-reset-receive");
+    json_write_pair_c(out, STR_LIT("seq"), ++seq);
     json_write_pair_c(out, STR_LIT("conn"), event->stateless_reset_receive.master_id);
     json_write_pair_c(out, STR_LIT("time"), event->stateless_reset_receive.at);
     break;
   }
   case 10: { // quicly:crypto_decrypt
     json_write_pair_n(out, STR_LIT("type"), "crypto-decrypt");
+    json_write_pair_c(out, STR_LIT("seq"), ++seq);
     json_write_pair_c(out, STR_LIT("conn"), event->crypto_decrypt.master_id);
     json_write_pair_c(out, STR_LIT("time"), event->crypto_decrypt.at);
     json_write_pair_c(out, STR_LIT("pn"), event->crypto_decrypt.pn);
@@ -2250,6 +2261,7 @@ void quic_handle_event(h2o_tracer_t *tracer, const void *data, int data_len) {
   }
   case 11: { // quicly:crypto_handshake
     json_write_pair_n(out, STR_LIT("type"), "crypto-handshake");
+    json_write_pair_c(out, STR_LIT("seq"), ++seq);
     json_write_pair_c(out, STR_LIT("conn"), event->crypto_handshake.master_id);
     json_write_pair_c(out, STR_LIT("time"), event->crypto_handshake.at);
     json_write_pair_c(out, STR_LIT("ret"), event->crypto_handshake.ret);
@@ -2257,6 +2269,7 @@ void quic_handle_event(h2o_tracer_t *tracer, const void *data, int data_len) {
   }
   case 12: { // quicly:crypto_update_secret
     json_write_pair_n(out, STR_LIT("type"), "crypto-update-secret");
+    json_write_pair_c(out, STR_LIT("seq"), ++seq);
     json_write_pair_c(out, STR_LIT("conn"), event->crypto_update_secret.master_id);
     json_write_pair_c(out, STR_LIT("time"), event->crypto_update_secret.at);
     json_write_pair_c(out, STR_LIT("is-enc"), event->crypto_update_secret.is_enc);
@@ -2266,6 +2279,7 @@ void quic_handle_event(h2o_tracer_t *tracer, const void *data, int data_len) {
   }
   case 13: { // quicly:crypto_send_key_update
     json_write_pair_n(out, STR_LIT("type"), "crypto-send-key-update");
+    json_write_pair_c(out, STR_LIT("seq"), ++seq);
     json_write_pair_c(out, STR_LIT("conn"), event->crypto_send_key_update.master_id);
     json_write_pair_c(out, STR_LIT("time"), event->crypto_send_key_update.at);
     json_write_pair_c(out, STR_LIT("phase"), event->crypto_send_key_update.phase);
@@ -2273,6 +2287,7 @@ void quic_handle_event(h2o_tracer_t *tracer, const void *data, int data_len) {
   }
   case 14: { // quicly:crypto_send_key_update_confirmed
     json_write_pair_n(out, STR_LIT("type"), "crypto-send-key-update-confirmed");
+    json_write_pair_c(out, STR_LIT("seq"), ++seq);
     json_write_pair_c(out, STR_LIT("conn"), event->crypto_send_key_update_confirmed.master_id);
     json_write_pair_c(out, STR_LIT("time"), event->crypto_send_key_update_confirmed.at);
     json_write_pair_c(out, STR_LIT("next-pn"), event->crypto_send_key_update_confirmed.next_pn);
@@ -2280,6 +2295,7 @@ void quic_handle_event(h2o_tracer_t *tracer, const void *data, int data_len) {
   }
   case 15: { // quicly:crypto_receive_key_update
     json_write_pair_n(out, STR_LIT("type"), "crypto-receive-key-update");
+    json_write_pair_c(out, STR_LIT("seq"), ++seq);
     json_write_pair_c(out, STR_LIT("conn"), event->crypto_receive_key_update.master_id);
     json_write_pair_c(out, STR_LIT("time"), event->crypto_receive_key_update.at);
     json_write_pair_c(out, STR_LIT("phase"), event->crypto_receive_key_update.phase);
@@ -2287,6 +2303,7 @@ void quic_handle_event(h2o_tracer_t *tracer, const void *data, int data_len) {
   }
   case 16: { // quicly:crypto_receive_key_update_prepare
     json_write_pair_n(out, STR_LIT("type"), "crypto-receive-key-update-prepare");
+    json_write_pair_c(out, STR_LIT("seq"), ++seq);
     json_write_pair_c(out, STR_LIT("conn"), event->crypto_receive_key_update_prepare.master_id);
     json_write_pair_c(out, STR_LIT("time"), event->crypto_receive_key_update_prepare.at);
     json_write_pair_c(out, STR_LIT("phase"), event->crypto_receive_key_update_prepare.phase);
@@ -2294,6 +2311,7 @@ void quic_handle_event(h2o_tracer_t *tracer, const void *data, int data_len) {
   }
   case 17: { // quicly:packet_prepare
     json_write_pair_n(out, STR_LIT("type"), "packet-prepare");
+    json_write_pair_c(out, STR_LIT("seq"), ++seq);
     json_write_pair_c(out, STR_LIT("conn"), event->packet_prepare.master_id);
     json_write_pair_c(out, STR_LIT("time"), event->packet_prepare.at);
     json_write_pair_c(out, STR_LIT("first-octet"), event->packet_prepare.first_octet);
@@ -2302,6 +2320,7 @@ void quic_handle_event(h2o_tracer_t *tracer, const void *data, int data_len) {
   }
   case 18: { // quicly:packet_commit
     json_write_pair_n(out, STR_LIT("type"), "packet-commit");
+    json_write_pair_c(out, STR_LIT("seq"), ++seq);
     json_write_pair_c(out, STR_LIT("conn"), event->packet_commit.master_id);
     json_write_pair_c(out, STR_LIT("time"), event->packet_commit.at);
     json_write_pair_c(out, STR_LIT("pn"), event->packet_commit.pn);
@@ -2311,6 +2330,7 @@ void quic_handle_event(h2o_tracer_t *tracer, const void *data, int data_len) {
   }
   case 19: { // quicly:packet_acked
     json_write_pair_n(out, STR_LIT("type"), "packet-acked");
+    json_write_pair_c(out, STR_LIT("seq"), ++seq);
     json_write_pair_c(out, STR_LIT("conn"), event->packet_acked.master_id);
     json_write_pair_c(out, STR_LIT("time"), event->packet_acked.at);
     json_write_pair_c(out, STR_LIT("pn"), event->packet_acked.pn);
@@ -2319,6 +2339,7 @@ void quic_handle_event(h2o_tracer_t *tracer, const void *data, int data_len) {
   }
   case 20: { // quicly:packet_lost
     json_write_pair_n(out, STR_LIT("type"), "packet-lost");
+    json_write_pair_c(out, STR_LIT("seq"), ++seq);
     json_write_pair_c(out, STR_LIT("conn"), event->packet_lost.master_id);
     json_write_pair_c(out, STR_LIT("time"), event->packet_lost.at);
     json_write_pair_c(out, STR_LIT("pn"), event->packet_lost.pn);
@@ -2326,6 +2347,7 @@ void quic_handle_event(h2o_tracer_t *tracer, const void *data, int data_len) {
   }
   case 21: { // quicly:pto
     json_write_pair_n(out, STR_LIT("type"), "pto");
+    json_write_pair_c(out, STR_LIT("seq"), ++seq);
     json_write_pair_c(out, STR_LIT("conn"), event->pto.master_id);
     json_write_pair_c(out, STR_LIT("time"), event->pto.at);
     json_write_pair_c(out, STR_LIT("inflight"), event->pto.inflight);
@@ -2335,6 +2357,7 @@ void quic_handle_event(h2o_tracer_t *tracer, const void *data, int data_len) {
   }
   case 22: { // quicly:cc_ack_received
     json_write_pair_n(out, STR_LIT("type"), "cc-ack-received");
+    json_write_pair_c(out, STR_LIT("seq"), ++seq);
     json_write_pair_c(out, STR_LIT("conn"), event->cc_ack_received.master_id);
     json_write_pair_c(out, STR_LIT("time"), event->cc_ack_received.at);
     json_write_pair_c(out, STR_LIT("largest-acked"), event->cc_ack_received.largest_acked);
@@ -2345,6 +2368,7 @@ void quic_handle_event(h2o_tracer_t *tracer, const void *data, int data_len) {
   }
   case 23: { // quicly:cc_congestion
     json_write_pair_n(out, STR_LIT("type"), "cc-congestion");
+    json_write_pair_c(out, STR_LIT("seq"), ++seq);
     json_write_pair_c(out, STR_LIT("conn"), event->cc_congestion.master_id);
     json_write_pair_c(out, STR_LIT("time"), event->cc_congestion.at);
     json_write_pair_c(out, STR_LIT("max-lost-pn"), event->cc_congestion.max_lost_pn);
@@ -2354,6 +2378,7 @@ void quic_handle_event(h2o_tracer_t *tracer, const void *data, int data_len) {
   }
   case 24: { // quicly:transport_close_send
     json_write_pair_n(out, STR_LIT("type"), "transport-close-send");
+    json_write_pair_c(out, STR_LIT("seq"), ++seq);
     json_write_pair_c(out, STR_LIT("conn"), event->transport_close_send.master_id);
     json_write_pair_c(out, STR_LIT("time"), event->transport_close_send.at);
     json_write_pair_c(out, STR_LIT("error-code"), event->transport_close_send.error_code);
@@ -2363,6 +2388,7 @@ void quic_handle_event(h2o_tracer_t *tracer, const void *data, int data_len) {
   }
   case 25: { // quicly:transport_close_receive
     json_write_pair_n(out, STR_LIT("type"), "transport-close-receive");
+    json_write_pair_c(out, STR_LIT("seq"), ++seq);
     json_write_pair_c(out, STR_LIT("conn"), event->transport_close_receive.master_id);
     json_write_pair_c(out, STR_LIT("time"), event->transport_close_receive.at);
     json_write_pair_c(out, STR_LIT("error-code"), event->transport_close_receive.error_code);
@@ -2372,6 +2398,7 @@ void quic_handle_event(h2o_tracer_t *tracer, const void *data, int data_len) {
   }
   case 26: { // quicly:application_close_send
     json_write_pair_n(out, STR_LIT("type"), "application-close-send");
+    json_write_pair_c(out, STR_LIT("seq"), ++seq);
     json_write_pair_c(out, STR_LIT("conn"), event->application_close_send.master_id);
     json_write_pair_c(out, STR_LIT("time"), event->application_close_send.at);
     json_write_pair_c(out, STR_LIT("error-code"), event->application_close_send.error_code);
@@ -2380,6 +2407,7 @@ void quic_handle_event(h2o_tracer_t *tracer, const void *data, int data_len) {
   }
   case 27: { // quicly:application_close_receive
     json_write_pair_n(out, STR_LIT("type"), "application-close-receive");
+    json_write_pair_c(out, STR_LIT("seq"), ++seq);
     json_write_pair_c(out, STR_LIT("conn"), event->application_close_receive.master_id);
     json_write_pair_c(out, STR_LIT("time"), event->application_close_receive.at);
     json_write_pair_c(out, STR_LIT("error-code"), event->application_close_receive.error_code);
@@ -2388,6 +2416,7 @@ void quic_handle_event(h2o_tracer_t *tracer, const void *data, int data_len) {
   }
   case 28: { // quicly:stream_send
     json_write_pair_n(out, STR_LIT("type"), "stream-send");
+    json_write_pair_c(out, STR_LIT("seq"), ++seq);
     json_write_pair_c(out, STR_LIT("conn"), event->stream_send.master_id);
     json_write_pair_c(out, STR_LIT("time"), event->stream_send.at);
     json_write_pair_c(out, STR_LIT("stream-id"), event->stream_send.stream_id);
@@ -2398,6 +2427,7 @@ void quic_handle_event(h2o_tracer_t *tracer, const void *data, int data_len) {
   }
   case 29: { // quicly:stream_receive
     json_write_pair_n(out, STR_LIT("type"), "stream-receive");
+    json_write_pair_c(out, STR_LIT("seq"), ++seq);
     json_write_pair_c(out, STR_LIT("conn"), event->stream_receive.master_id);
     json_write_pair_c(out, STR_LIT("time"), event->stream_receive.at);
     json_write_pair_c(out, STR_LIT("stream-id"), event->stream_receive.stream_id);
@@ -2407,6 +2437,7 @@ void quic_handle_event(h2o_tracer_t *tracer, const void *data, int data_len) {
   }
   case 30: { // quicly:stream_acked
     json_write_pair_n(out, STR_LIT("type"), "stream-acked");
+    json_write_pair_c(out, STR_LIT("seq"), ++seq);
     json_write_pair_c(out, STR_LIT("conn"), event->stream_acked.master_id);
     json_write_pair_c(out, STR_LIT("time"), event->stream_acked.at);
     json_write_pair_c(out, STR_LIT("stream-id"), event->stream_acked.stream_id);
@@ -2416,6 +2447,7 @@ void quic_handle_event(h2o_tracer_t *tracer, const void *data, int data_len) {
   }
   case 31: { // quicly:stream_lost
     json_write_pair_n(out, STR_LIT("type"), "stream-lost");
+    json_write_pair_c(out, STR_LIT("seq"), ++seq);
     json_write_pair_c(out, STR_LIT("conn"), event->stream_lost.master_id);
     json_write_pair_c(out, STR_LIT("time"), event->stream_lost.at);
     json_write_pair_c(out, STR_LIT("stream-id"), event->stream_lost.stream_id);
@@ -2425,6 +2457,7 @@ void quic_handle_event(h2o_tracer_t *tracer, const void *data, int data_len) {
   }
   case 32: { // quicly:max_data_send
     json_write_pair_n(out, STR_LIT("type"), "max-data-send");
+    json_write_pair_c(out, STR_LIT("seq"), ++seq);
     json_write_pair_c(out, STR_LIT("conn"), event->max_data_send.master_id);
     json_write_pair_c(out, STR_LIT("time"), event->max_data_send.at);
     json_write_pair_c(out, STR_LIT("limit"), event->max_data_send.limit);
@@ -2432,6 +2465,7 @@ void quic_handle_event(h2o_tracer_t *tracer, const void *data, int data_len) {
   }
   case 33: { // quicly:max_data_receive
     json_write_pair_n(out, STR_LIT("type"), "max-data-receive");
+    json_write_pair_c(out, STR_LIT("seq"), ++seq);
     json_write_pair_c(out, STR_LIT("conn"), event->max_data_receive.master_id);
     json_write_pair_c(out, STR_LIT("time"), event->max_data_receive.at);
     json_write_pair_c(out, STR_LIT("limit"), event->max_data_receive.limit);
@@ -2439,6 +2473,7 @@ void quic_handle_event(h2o_tracer_t *tracer, const void *data, int data_len) {
   }
   case 34: { // quicly:max_streams_send
     json_write_pair_n(out, STR_LIT("type"), "max-streams-send");
+    json_write_pair_c(out, STR_LIT("seq"), ++seq);
     json_write_pair_c(out, STR_LIT("conn"), event->max_streams_send.master_id);
     json_write_pair_c(out, STR_LIT("time"), event->max_streams_send.at);
     json_write_pair_c(out, STR_LIT("limit"), event->max_streams_send.limit);
@@ -2447,6 +2482,7 @@ void quic_handle_event(h2o_tracer_t *tracer, const void *data, int data_len) {
   }
   case 35: { // quicly:max_streams_receive
     json_write_pair_n(out, STR_LIT("type"), "max-streams-receive");
+    json_write_pair_c(out, STR_LIT("seq"), ++seq);
     json_write_pair_c(out, STR_LIT("conn"), event->max_streams_receive.master_id);
     json_write_pair_c(out, STR_LIT("time"), event->max_streams_receive.at);
     json_write_pair_c(out, STR_LIT("limit"), event->max_streams_receive.limit);
@@ -2455,6 +2491,7 @@ void quic_handle_event(h2o_tracer_t *tracer, const void *data, int data_len) {
   }
   case 36: { // quicly:max_stream_data_send
     json_write_pair_n(out, STR_LIT("type"), "max-stream-data-send");
+    json_write_pair_c(out, STR_LIT("seq"), ++seq);
     json_write_pair_c(out, STR_LIT("conn"), event->max_stream_data_send.master_id);
     json_write_pair_c(out, STR_LIT("time"), event->max_stream_data_send.at);
     json_write_pair_c(out, STR_LIT("stream-id"), event->max_stream_data_send.stream_id);
@@ -2463,6 +2500,7 @@ void quic_handle_event(h2o_tracer_t *tracer, const void *data, int data_len) {
   }
   case 37: { // quicly:max_stream_data_receive
     json_write_pair_n(out, STR_LIT("type"), "max-stream-data-receive");
+    json_write_pair_c(out, STR_LIT("seq"), ++seq);
     json_write_pair_c(out, STR_LIT("conn"), event->max_stream_data_receive.master_id);
     json_write_pair_c(out, STR_LIT("time"), event->max_stream_data_receive.at);
     json_write_pair_c(out, STR_LIT("stream-id"), event->max_stream_data_receive.stream_id);
@@ -2471,6 +2509,7 @@ void quic_handle_event(h2o_tracer_t *tracer, const void *data, int data_len) {
   }
   case 38: { // quicly:new_token_send
     json_write_pair_n(out, STR_LIT("type"), "new-token-send");
+    json_write_pair_c(out, STR_LIT("seq"), ++seq);
     json_write_pair_c(out, STR_LIT("conn"), event->new_token_send.master_id);
     json_write_pair_c(out, STR_LIT("time"), event->new_token_send.at);
     json_write_pair_c(out, STR_LIT("token"), event->new_token_send.token, (event->new_token_send.len < STR_LEN ? event->new_token_send.len : STR_LEN));
@@ -2480,6 +2519,7 @@ void quic_handle_event(h2o_tracer_t *tracer, const void *data, int data_len) {
   }
   case 39: { // quicly:new_token_acked
     json_write_pair_n(out, STR_LIT("type"), "new-token-acked");
+    json_write_pair_c(out, STR_LIT("seq"), ++seq);
     json_write_pair_c(out, STR_LIT("conn"), event->new_token_acked.master_id);
     json_write_pair_c(out, STR_LIT("time"), event->new_token_acked.at);
     json_write_pair_c(out, STR_LIT("generation"), event->new_token_acked.generation);
@@ -2487,6 +2527,7 @@ void quic_handle_event(h2o_tracer_t *tracer, const void *data, int data_len) {
   }
   case 40: { // quicly:new_token_receive
     json_write_pair_n(out, STR_LIT("type"), "new-token-receive");
+    json_write_pair_c(out, STR_LIT("seq"), ++seq);
     json_write_pair_c(out, STR_LIT("conn"), event->new_token_receive.master_id);
     json_write_pair_c(out, STR_LIT("time"), event->new_token_receive.at);
     json_write_pair_c(out, STR_LIT("token"), event->new_token_receive.token, (event->new_token_receive.len < STR_LEN ? event->new_token_receive.len : STR_LEN));
@@ -2495,18 +2536,21 @@ void quic_handle_event(h2o_tracer_t *tracer, const void *data, int data_len) {
   }
   case 41: { // quicly:handshake_done_send
     json_write_pair_n(out, STR_LIT("type"), "handshake-done-send");
+    json_write_pair_c(out, STR_LIT("seq"), ++seq);
     json_write_pair_c(out, STR_LIT("conn"), event->handshake_done_send.master_id);
     json_write_pair_c(out, STR_LIT("time"), event->handshake_done_send.at);
     break;
   }
   case 42: { // quicly:handshake_done_receive
     json_write_pair_n(out, STR_LIT("type"), "handshake-done-receive");
+    json_write_pair_c(out, STR_LIT("seq"), ++seq);
     json_write_pair_c(out, STR_LIT("conn"), event->handshake_done_receive.master_id);
     json_write_pair_c(out, STR_LIT("time"), event->handshake_done_receive.at);
     break;
   }
   case 43: { // quicly:streams_blocked_send
     json_write_pair_n(out, STR_LIT("type"), "streams-blocked-send");
+    json_write_pair_c(out, STR_LIT("seq"), ++seq);
     json_write_pair_c(out, STR_LIT("conn"), event->streams_blocked_send.master_id);
     json_write_pair_c(out, STR_LIT("time"), event->streams_blocked_send.at);
     json_write_pair_c(out, STR_LIT("limit"), event->streams_blocked_send.limit);
@@ -2515,6 +2559,7 @@ void quic_handle_event(h2o_tracer_t *tracer, const void *data, int data_len) {
   }
   case 44: { // quicly:streams_blocked_receive
     json_write_pair_n(out, STR_LIT("type"), "streams-blocked-receive");
+    json_write_pair_c(out, STR_LIT("seq"), ++seq);
     json_write_pair_c(out, STR_LIT("conn"), event->streams_blocked_receive.master_id);
     json_write_pair_c(out, STR_LIT("time"), event->streams_blocked_receive.at);
     json_write_pair_c(out, STR_LIT("limit"), event->streams_blocked_receive.limit);
@@ -2523,6 +2568,7 @@ void quic_handle_event(h2o_tracer_t *tracer, const void *data, int data_len) {
   }
   case 45: { // quicly:data_blocked_receive
     json_write_pair_n(out, STR_LIT("type"), "data-blocked-receive");
+    json_write_pair_c(out, STR_LIT("seq"), ++seq);
     json_write_pair_c(out, STR_LIT("conn"), event->data_blocked_receive.master_id);
     json_write_pair_c(out, STR_LIT("time"), event->data_blocked_receive.at);
     json_write_pair_c(out, STR_LIT("off"), event->data_blocked_receive.off);
@@ -2530,6 +2576,7 @@ void quic_handle_event(h2o_tracer_t *tracer, const void *data, int data_len) {
   }
   case 46: { // quicly:stream_data_blocked_receive
     json_write_pair_n(out, STR_LIT("type"), "stream-data-blocked-receive");
+    json_write_pair_c(out, STR_LIT("seq"), ++seq);
     json_write_pair_c(out, STR_LIT("conn"), event->stream_data_blocked_receive.master_id);
     json_write_pair_c(out, STR_LIT("time"), event->stream_data_blocked_receive.at);
     json_write_pair_c(out, STR_LIT("stream-id"), event->stream_data_blocked_receive.stream_id);
@@ -2538,6 +2585,7 @@ void quic_handle_event(h2o_tracer_t *tracer, const void *data, int data_len) {
   }
   case 47: { // quicly:quictrace_sent
     json_write_pair_n(out, STR_LIT("type"), "quictrace-sent");
+    json_write_pair_c(out, STR_LIT("seq"), ++seq);
     json_write_pair_c(out, STR_LIT("conn"), event->quictrace_sent.master_id);
     json_write_pair_c(out, STR_LIT("time"), event->quictrace_sent.at);
     json_write_pair_c(out, STR_LIT("pn"), event->quictrace_sent.pn);
@@ -2547,6 +2595,7 @@ void quic_handle_event(h2o_tracer_t *tracer, const void *data, int data_len) {
   }
   case 48: { // quicly:quictrace_recv
     json_write_pair_n(out, STR_LIT("type"), "quictrace-recv");
+    json_write_pair_c(out, STR_LIT("seq"), ++seq);
     json_write_pair_c(out, STR_LIT("conn"), event->quictrace_recv.master_id);
     json_write_pair_c(out, STR_LIT("time"), event->quictrace_recv.at);
     json_write_pair_c(out, STR_LIT("pn"), event->quictrace_recv.pn);
@@ -2554,6 +2603,7 @@ void quic_handle_event(h2o_tracer_t *tracer, const void *data, int data_len) {
   }
   case 49: { // quicly:quictrace_send_stream
     json_write_pair_n(out, STR_LIT("type"), "quictrace-send-stream");
+    json_write_pair_c(out, STR_LIT("seq"), ++seq);
     json_write_pair_c(out, STR_LIT("conn"), event->quictrace_send_stream.master_id);
     json_write_pair_c(out, STR_LIT("time"), event->quictrace_send_stream.at);
     json_write_pair_c(out, STR_LIT("stream-id"), event->quictrace_send_stream.stream_id);
@@ -2564,6 +2614,7 @@ void quic_handle_event(h2o_tracer_t *tracer, const void *data, int data_len) {
   }
   case 50: { // quicly:quictrace_recv_stream
     json_write_pair_n(out, STR_LIT("type"), "quictrace-recv-stream");
+    json_write_pair_c(out, STR_LIT("seq"), ++seq);
     json_write_pair_c(out, STR_LIT("conn"), event->quictrace_recv_stream.master_id);
     json_write_pair_c(out, STR_LIT("time"), event->quictrace_recv_stream.at);
     json_write_pair_c(out, STR_LIT("stream-id"), event->quictrace_recv_stream.stream_id);
@@ -2574,6 +2625,7 @@ void quic_handle_event(h2o_tracer_t *tracer, const void *data, int data_len) {
   }
   case 51: { // quicly:quictrace_recv_ack
     json_write_pair_n(out, STR_LIT("type"), "quictrace-recv-ack");
+    json_write_pair_c(out, STR_LIT("seq"), ++seq);
     json_write_pair_c(out, STR_LIT("conn"), event->quictrace_recv_ack.master_id);
     json_write_pair_c(out, STR_LIT("time"), event->quictrace_recv_ack.at);
     json_write_pair_c(out, STR_LIT("ack-block-begin"), event->quictrace_recv_ack.ack_block_begin);
@@ -2582,6 +2634,7 @@ void quic_handle_event(h2o_tracer_t *tracer, const void *data, int data_len) {
   }
   case 52: { // quicly:quictrace_recv_ack_delay
     json_write_pair_n(out, STR_LIT("type"), "quictrace-recv-ack-delay");
+    json_write_pair_c(out, STR_LIT("seq"), ++seq);
     json_write_pair_c(out, STR_LIT("conn"), event->quictrace_recv_ack_delay.master_id);
     json_write_pair_c(out, STR_LIT("time"), event->quictrace_recv_ack_delay.at);
     json_write_pair_c(out, STR_LIT("ack-delay"), event->quictrace_recv_ack_delay.ack_delay);
@@ -2589,6 +2642,7 @@ void quic_handle_event(h2o_tracer_t *tracer, const void *data, int data_len) {
   }
   case 53: { // quicly:quictrace_lost
     json_write_pair_n(out, STR_LIT("type"), "quictrace-lost");
+    json_write_pair_c(out, STR_LIT("seq"), ++seq);
     json_write_pair_c(out, STR_LIT("conn"), event->quictrace_lost.master_id);
     json_write_pair_c(out, STR_LIT("time"), event->quictrace_lost.at);
     json_write_pair_c(out, STR_LIT("pn"), event->quictrace_lost.pn);
@@ -2596,6 +2650,7 @@ void quic_handle_event(h2o_tracer_t *tracer, const void *data, int data_len) {
   }
   case 54: { // quicly:quictrace_cc_ack
     json_write_pair_n(out, STR_LIT("type"), "quictrace-cc-ack");
+    json_write_pair_c(out, STR_LIT("seq"), ++seq);
     json_write_pair_c(out, STR_LIT("conn"), event->quictrace_cc_ack.master_id);
     json_write_pair_c(out, STR_LIT("time"), event->quictrace_cc_ack.at);
     json_write_pair_c(out, STR_LIT("min-rtt"), event->quictrace_cc_ack.minimum);
@@ -2608,6 +2663,7 @@ void quic_handle_event(h2o_tracer_t *tracer, const void *data, int data_len) {
   }
   case 55: { // quicly:quictrace_cc_lost
     json_write_pair_n(out, STR_LIT("type"), "quictrace-cc-lost");
+    json_write_pair_c(out, STR_LIT("seq"), ++seq);
     json_write_pair_c(out, STR_LIT("conn"), event->quictrace_cc_lost.master_id);
     json_write_pair_c(out, STR_LIT("time"), event->quictrace_cc_lost.at);
     json_write_pair_c(out, STR_LIT("min-rtt"), event->quictrace_cc_lost.minimum);
@@ -2620,6 +2676,7 @@ void quic_handle_event(h2o_tracer_t *tracer, const void *data, int data_len) {
   }
   case 60: { // h2o:h3_accept
     json_write_pair_n(out, STR_LIT("type"), "h3-accept");
+    json_write_pair_c(out, STR_LIT("seq"), ++seq);
     json_write_pair_c(out, STR_LIT("conn-id"), event->h3_accept.conn_id);
     json_write_pair_c(out, STR_LIT("conn"), event->h3_accept.master_id);
     json_write_pair_c(out, STR_LIT("time"), time_milliseconds());
@@ -2627,6 +2684,7 @@ void quic_handle_event(h2o_tracer_t *tracer, const void *data, int data_len) {
   }
   case 61: { // h2o:h3_close
     json_write_pair_n(out, STR_LIT("type"), "h3-close");
+    json_write_pair_c(out, STR_LIT("seq"), ++seq);
     json_write_pair_c(out, STR_LIT("conn-id"), event->h3_close.conn_id);
     json_write_pair_c(out, STR_LIT("conn"), event->h3_close.master_id);
     json_write_pair_c(out, STR_LIT("time"), time_milliseconds());
@@ -2634,6 +2692,7 @@ void quic_handle_event(h2o_tracer_t *tracer, const void *data, int data_len) {
   }
   case 70: { // h2o:send_response_header
     json_write_pair_n(out, STR_LIT("type"), "send-response-header");
+    json_write_pair_c(out, STR_LIT("seq"), ++seq);
     json_write_pair_c(out, STR_LIT("conn-id"), event->send_response_header.conn_id);
     json_write_pair_c(out, STR_LIT("req-id"), event->send_response_header.req_id);
     json_write_pair_c(out, STR_LIT("name"), event->send_response_header.name);
@@ -2654,7 +2713,13 @@ void quic_handle_event(h2o_tracer_t *tracer, const void *data, int data_len) {
 
 
 static void quic_handle_lost(h2o_tracer_t *tracer, uint64_t lost) {
-  fprintf(tracer->out, "{\"type\":\"h2olog-event-lost\",\"time\":%" PRIu64 ",\"lost\":%" PRIu64 "}\n", time_milliseconds(), lost);
+  fprintf(tracer->out, "{"
+    "\"type\":\"h2olog-event-lost\","
+    "\"seq\":%" PRIu64 ","
+    "\"time\":%" PRIu64 ","
+    "\"lost\":%" PRIu64
+    "}\n",
+    ++seq, time_milliseconds(), lost);
 }
 
 static const char *quic_bpf_ext() {

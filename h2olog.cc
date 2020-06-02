@@ -23,7 +23,6 @@
 #include <vector>
 #include <unistd.h>
 #include <stdarg.h>
-
 #include "h2olog.h"
 
 #define VERSION "0.1.0"

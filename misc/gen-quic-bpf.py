@@ -362,6 +362,7 @@ void quic_handle_event(h2o_tracer_t *tracer, const void *data, int data_len) {
     handle_event_func += "  case %s: { // %s\n" % (
         metadata['id'], fully_specified_probe_name)
     handle_event_func += '    json_write_pair_n(out, STR_LIT("type"), "%s");\n' % probe_name.replace("_", "-")
+    handle_event_func += '    json_write_pair_c(out, STR_LIT("seq"), ++seq);\n'
 
     for field_name, field_type in flat_args_map.items():
       if block_field_set and field_name in block_field_set:
@@ -414,6 +415,8 @@ void quic_handle_event(h2o_tracer_t *tracer, const void *data, int data_len) {
 #define STR_LEN 64
 #define STR_LIT(s) s, strlen(s)
 
+uint64_t seq = 0;
+
 // BPF modules written in C
 const char *bpf_text = R"(
 %s
@@ -431,7 +434,13 @@ static uint64_t time_milliseconds()
 %s
 
 static void quic_handle_lost(h2o_tracer_t *tracer, uint64_t lost) {
-  fprintf(tracer->out, "{\"type\":\"h2olog-event-lost\",\"time\":%%" PRIu64 ",\"lost\":%%" PRIu64 "}\n", time_milliseconds(), lost);
+  fprintf(tracer->out, "{"
+    "\"type\":\"h2olog-event-lost\","
+    "\"seq\":%%" PRIu64 ","
+    "\"time\":%%" PRIu64 ","
+    "\"lost\":%%" PRIu64
+    "}\n",
+    ++seq, time_milliseconds(), lost);
 }
 
 static const char *quic_bpf_ext() {
