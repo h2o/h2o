@@ -1134,7 +1134,7 @@ static __thread struct {
     H2O_VECTOR(struct st_quic_keyset_t) keys;
 } quic_keys = {UINT_MAX /* the value needs to be one smaller than session_tickets.generation */};
 
-static void init_keyset(struct st_quic_keyset_t *keyset, uint8_t name, ptls_iovec_t master_secret)
+static void init_quic_keyset(struct st_quic_keyset_t *keyset, uint8_t name, ptls_iovec_t master_secret)
 {
     uint8_t master_digestbuf[PTLS_MAX_DIGEST_SIZE], keybuf[PTLS_MAX_SECRET_SIZE];
     int ret;
@@ -1160,7 +1160,7 @@ static void init_keyset(struct st_quic_keyset_t *keyset, uint8_t name, ptls_iove
     ptls_clear_memory(keybuf, sizeof(keybuf));
 }
 
-static void dispose_keyset(struct st_quic_keyset_t *keyset)
+static void dispose_quic_keyset(struct st_quic_keyset_t *keyset)
 {
     quicly_free_default_cid_encryptor(keyset->cid);
     keyset->cid = NULL;
@@ -1180,7 +1180,7 @@ static struct st_quic_keyset_t *update_quic_keys(void)
     while ((new_generation = session_tickets.generation) != quic_keys.generation) {
         /* we need to update. first, release all entries from quic_keys */
         while (quic_keys.keys.size != 0)
-            dispose_keyset(quic_keys.keys.entries + --quic_keys.keys.size);
+            dispose_quic_keyset(quic_keys.keys.entries + --quic_keys.keys.size);
 
         /* build quic_keys while taking the read lock */
         pthread_rwlock_rdlock(&session_tickets.rwlock);
@@ -1188,8 +1188,9 @@ static struct st_quic_keyset_t *update_quic_keys(void)
         h2o_vector_reserve(NULL, &quic_keys.keys, session_tickets.tickets.size);
         for (; quic_keys.keys.size != session_tickets.tickets.size; ++quic_keys.keys.size) {
             struct st_session_ticket_t *ticket = session_tickets.tickets.entries[quic_keys.keys.size];
-            init_keyset(quic_keys.keys.entries + quic_keys.keys.size, ticket->name[0],
-                        ptls_iovec_init(ticket->keybuf, EVP_CIPHER_key_length(ticket->cipher) + EVP_MD_block_size(ticket->hmac)));
+            init_quic_keyset(
+                quic_keys.keys.entries + quic_keys.keys.size, ticket->name[0],
+                ptls_iovec_init(ticket->keybuf, EVP_CIPHER_key_length(ticket->cipher) + EVP_MD_block_size(ticket->hmac)));
         }
         pthread_rwlock_unlock(&session_tickets.rwlock);
 
@@ -1200,7 +1201,7 @@ static struct st_quic_keyset_t *update_quic_keys(void)
     return quic_keys.keys.entries;
 }
 
-static struct st_quic_keyset_t *find_keyset(uint8_t key_id)
+static struct st_quic_keyset_t *find_quic_keyset(uint8_t key_id)
 {
     size_t i;
     for (i = 0; i != quic_keys.keys.size; ++i) {
@@ -1231,7 +1232,7 @@ static size_t decrypt_cid(quicly_cid_encryptor_t *self, quicly_cid_plaintext_t *
 
     update_quic_keys();
 
-    if ((keyset = find_keyset(encrypted[0])) == NULL)
+    if ((keyset = find_quic_keyset(encrypted[0])) == NULL)
         return SIZE_MAX;
     if ((len = keyset->cid->decrypt_cid(keyset->cid, plaintext, encrypted + 1, len != 0 ? len - 1 : 0)) == SIZE_MAX)
         return SIZE_MAX;
@@ -1245,7 +1246,7 @@ static int generate_stateless_reset_token(quicly_cid_encryptor_t *self, void *to
 
     update_quic_keys();
 
-    if ((keyset = find_keyset(encrypted[0])) == NULL)
+    if ((keyset = find_quic_keyset(encrypted[0])) == NULL)
         return 0;
     return keyset->cid->generate_stateless_reset_token(keyset->cid, token, encrypted + 1);
 }
@@ -1258,7 +1259,7 @@ int quic_decrypt_address_token(quicly_address_token_plaintext_t *pt, ptls_iovec_
 
     update_quic_keys();
 
-    if ((keyset = find_keyset(input.base[0])) == NULL)
+    if ((keyset = find_quic_keyset(input.base[0])) == NULL)
         return PTLS_ERROR_INCOMPATIBLE_KEY; /* TODO consider error code */
     return quicly_decrypt_address_token(keyset->address_token.dec, pt, input.base, input.len, 1);
 }
