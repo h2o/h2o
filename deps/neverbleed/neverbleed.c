@@ -1349,7 +1349,7 @@ Exit:
 
 static void cleanup_fds(int listen_fd, int close_notify_fd)
 {
-#ifdef LIBC_HAS_CLOSEFROM
+#if defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__)
     int maxfd, k;
 
     maxfd = 0;

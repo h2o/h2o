@@ -114,18 +114,6 @@ IF (LIBC_HAS_BACKTRACE)
     ENDIF ()
 ENDIF ()
 
-CHECK_C_SOURCE_COMPILES("
-#include <unistd.h>
-int main(void) {
-closefrom(0);
-return 0;
-}" LIBC_HAS_CLOSEFROM)
-CMAKE_POP_CHECK_STATE()
-
-IF(LIBC_HAS_CLOSEFROM)
-  ADD_DEFINITIONS("-DLIBC_HAS_CLOSEFROM")
-ENDIF()
-
 OPTION(WITHOUT_LIBS "skip building libs even when possible" OFF)
 OPTION(BUILD_SHARED_LIBS "whether to build a shared library" OFF)
 
