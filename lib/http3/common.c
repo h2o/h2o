@@ -709,20 +709,28 @@ void h2o_http3_read_socket(h2o_http3_ctx_t *ctx, h2o_socket_t *sock)
         if (num_dgrams == 0)
             break;
 
-        /* convert dgrams to decoded packets and process */
+        /* convert dgrams to decoded packets, batch those packets for processing, grouping them by the 4-tuple and ttl */
         quicly_decoded_packet_t packets[64];
         size_t packet_index = 0;
         for (dgram_index = 0; dgram_index != num_dgrams; ++dgram_index) {
-            if (packet_index != 0 &&
-                !(dgram_index == 0 ||
-                  h2o_socket_compare_address(&dgrams[dgram_index - 1].srcaddr.sa, &dgrams[dgram_index].srcaddr.sa, 1) != 0 ||
-                  !((dgrams[dgram_index - 1].destaddr.sa.sa_family == AF_UNSPEC &&
-                     dgrams[dgram_index].destaddr.sa.sa_family == AF_UNSPEC) ||
-                    h2o_socket_compare_address(&dgrams[dgram_index - 1].destaddr.sa, &dgrams[dgram_index].destaddr.sa, 1) == 0) ||
-                  dgrams[dgram_index - 1].ttl != dgrams[dgram_index].ttl)) {
-                process_packets(ctx, &dgrams[dgram_index - 1].destaddr, &dgrams[dgram_index - 1].srcaddr,
-                                dgrams[dgram_index - 1].ttl, packets, packet_index);
-                packet_index = 0;
+            if (packet_index != 0) {
+                assert(dgram_index != 0);
+                int path_is_equal = 0;
+                if (h2o_socket_compare_address(&dgrams[dgram_index - 1].srcaddr.sa, &dgrams[dgram_index].srcaddr.sa, 1) == 0) {
+                    path_is_equal = 1;
+                } else if (dgrams[dgram_index - 1].destaddr.sa.sa_family == AF_UNSPEC &&
+                           dgrams[dgram_index].destaddr.sa.sa_family == AF_UNSPEC) {
+                    path_is_equal = 1;
+                }
+                if (path_is_equal) {
+                    if (dgrams[dgram_index - 1].ttl != dgrams[dgram_index].ttl)
+                        path_is_equal = 0;
+                }
+                if (!path_is_equal) {
+                    process_packets(ctx, &dgrams[dgram_index - 1].destaddr, &dgrams[dgram_index - 1].srcaddr,
+                                    dgrams[dgram_index - 1].ttl, packets, packet_index);
+                    packet_index = 0;
+                }
             }
             size_t off = 0;
             while (off != dgrams[dgram_index].vec.iov_len) {
