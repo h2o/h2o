@@ -240,10 +240,11 @@ int %s(struct pt_regs *ctx) {
 """
   return c
 
+
 def prepare_context(d_files_dir):
   st_map = parse_c_struct(data_types_h)
   context = {
-      "id": 1, # 1 is used for sched:sched_process_exit
+      "id": 1,  # 1 is used for sched:sched_process_exit
       "probe_metadata": OrderedDict(),
       "st_map": st_map,
   }
