@@ -105,6 +105,7 @@ struct quic_event_t {
       uint32_t master_id;
       int64_t at;
       char dcid[STR_LEN];
+      uint8_t bytes[1];
       size_t num_bytes;
     } receive;
     struct { // quicly:version_switch
@@ -546,7 +547,9 @@ int trace_quicly__receive(struct pt_regs *ctx) {
   // const char * dcid
   bpf_usdt_readarg(3, ctx, &buf);
   bpf_probe_read(&event.receive.dcid, sizeof(event.receive.dcid), buf);
-  // const void * bytes (ignored)
+  // const void * bytes
+  bpf_usdt_readarg(4, ctx, &buf);
+  bpf_probe_read(&event.receive.bytes, sizeof(event.receive.bytes), buf);
   // size_t num_bytes
   bpf_usdt_readarg(5, ctx, &event.receive.num_bytes);
 
@@ -1850,6 +1853,7 @@ struct quic_event_t {
       uint32_t master_id;
       int64_t at;
       char dcid[STR_LEN];
+      uint8_t bytes[1];
       size_t num_bytes;
     } receive;
     struct { // quicly:version_switch
@@ -2225,6 +2229,7 @@ void quic_handle_event(h2o_tracer_t *tracer, const void *data, int data_len) {
     json_write_pair_c(out, STR_LIT("conn"), event->receive.master_id);
     json_write_pair_c(out, STR_LIT("time"), event->receive.at);
     json_write_pair_c(out, STR_LIT("dcid"), event->receive.dcid);
+    json_write_pair_c(out, STR_LIT("first-octet"), event->receive.bytes[0]);
     json_write_pair_c(out, STR_LIT("bytes-len"), event->receive.num_bytes);
     break;
   }
