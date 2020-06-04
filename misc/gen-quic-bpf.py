@@ -30,7 +30,6 @@ from pprint import pprint
 
 block_fields = {
     "quicly:crypto_decrypt": set(["decrypted"]),
-    "quicly:receive": set(["bytes"]),
     "quicly:crypto_update_secret": set(["secret"]),
     "quicly:crypto_send_key_update": set(["secret"]),
     "quicly:crypto_receive_key_update": set(["secret"]),
@@ -276,7 +275,9 @@ struct quic_event_t {
       if block_field_set and field_name in block_field_set:
         continue
 
-      if is_bin_type(field_type):
+      if fully_specified_probe_name == "quicly:receive" and field_name == "bytes":
+        f = "uint8_t %s[1]" % field_name  # for first-octet
+      elif is_bin_type(field_type):
         f = "uint8_t %s[STR_LEN]" % field_name
       elif is_str_type(field_type):
         f = "char %s[STR_LEN]" % field_name
@@ -370,11 +371,13 @@ void quic_handle_event(h2o_tracer_t *tracer, const void *data, int data_len) {
         continue
       json_field_name = rename_map.get(field_name, field_name).replace("_", "-")
       event_t_name = "%s.%s" % (probe_name, field_name)
-      if not is_bin_type(field_type):
+      if fully_specified_probe_name == "quicly:receive" and field_name == "bytes":
+        handle_event_func += '    json_write_pair_c(out, STR_LIT("first-octet"), event->receive.bytes[0]);\n'
+      elif not is_bin_type(field_type):
         handle_event_func += '    json_write_pair_c(out, STR_LIT("%s"), event->%s);\n' % (
             json_field_name, event_t_name)
       else:  # bin type (it should have the correspinding length arg)
-        len_names = set([field_name + "_len", "len"])
+        len_names = set([field_name + "_len", "len", "num_" + field_name])
 
         for n in flat_args_map:
           if n in len_names:
