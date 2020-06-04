@@ -1347,7 +1347,7 @@ Exit:
 }
 
 
-static void neverbleed_cleanup_fds(int listen_fd, int close_notify_fd)
+static void cleanup_fds(int listen_fd, int close_notify_fd)
 {
 #ifdef LIBC_HAS_CLOSEFROM
     int maxfd, k;
@@ -1390,7 +1390,7 @@ __attribute__((noreturn)) static void daemon_main(int listen_fd, int close_notif
     pthread_attr_t thattr;
     int sock_fd;
 
-    neverbleed_cleanup_fds(listen_fd, close_notify_fd);
+    cleanup_fds(listen_fd, close_notify_fd);
 
     pthread_attr_init(&thattr);
     pthread_attr_setdetachstate(&thattr, 1);
