@@ -5,8 +5,11 @@ SCRIPT_DIR="$PWD/$(dirname $0)"
 export PYTHONPATH="$SCRIPT_DIR/.pip3/lib/python3.5/site-packages"
 export PATH="$SCRIPT_DIR/.pip3/bin:$PATH"
 
-if ! autopep8 --version > /dev/null 2>/dev/null ;
-  then pip3 install --install-option="--prefix=$SCRIPT_DIR/.pip3" pep8 autopep8
+if ! autopep8 --version > /dev/null 2>/dev/null
+then
+  echo "autopep8 is not found. Please install it by the following command:"
+  echo "sudo pip3 install pep8 autopep8"
+  exit 1
 fi
 
 exec autopep8 "$@"
