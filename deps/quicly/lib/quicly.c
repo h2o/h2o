@@ -5173,6 +5173,8 @@ int quicly_receive(quicly_conn_t *conn, struct sockaddr *dest_addr, struct socka
     uint64_t pn, offending_frame_type = QUICLY_FRAME_TYPE_PADDING;
     int is_ack_only, ret;
 
+    assert(src_addr->sa_family == AF_INET || src_addr->sa_family == AF_INET6);
+
     lock_now(conn, 0);
 
     QUICLY_PROBE(RECEIVE, conn, conn->stash.now,

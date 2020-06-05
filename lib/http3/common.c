@@ -763,9 +763,8 @@ void h2o_http3_read_socket(h2o_http3_ctx_t *ctx, h2o_socket_t *sock)
                     ++dgram_index;
                     goto ProcessPackets;
                 }
-            } else {
-                ++packet_index;
             }
+            ++packet_index;
             /* add rest of the packets */
             while (payload_off < dgrams[dgram_index].vec.iov_len && packet_index < PTLS_ELEMENTSOF(packets)) {
                 if (quicly_decode_packet(ctx->quic, packets + packet_index, dgrams[dgram_index].vec.iov_base,
