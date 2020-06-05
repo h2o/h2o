@@ -514,6 +514,13 @@ static void process_packets(h2o_http3_ctx_t *ctx, quicly_address_t *destaddr, qu
 
     assert(num_packets != 0);
 
+#if H2O_USE_DTRACE
+    if (PTLS_UNLIKELY(H2O_H3_PACKET_RECEIVE_ENABLED())) {
+        for (size_t i = 0; i != num_packets; ++i)
+            H2O_H3_PACKET_RECEIVE(&destaddr->sa, &srcaddr->sa, packets[i].octets.base, packets[i].octets.len);
+    }
+#endif
+
     /* send VN on mimatch */
     if (QUICLY_PACKET_IS_LONG_HEADER(packets[0].octets.base[0])) {
         if (packets[0].version != QUICLY_PROTOCOL_VERSION) {
@@ -713,38 +720,72 @@ void h2o_http3_read_socket(h2o_http3_ctx_t *ctx, h2o_socket_t *sock)
         if (num_dgrams == 0)
             break;
 
-        /* convert dgrams to decoded packets and process */
+        /* convert dgrams to decoded packets and process them in group of (4-tuple, dcid) */
         quicly_decoded_packet_t packets[64];
         size_t packet_index = 0;
-        for (dgram_index = 0; dgram_index != num_dgrams; ++dgram_index) {
-            if (packet_index != 0 &&
-                !(dgram_index == 0 ||
-                  h2o_socket_compare_address(&dgrams[dgram_index - 1].srcaddr.sa, &dgrams[dgram_index].srcaddr.sa, 1) != 0 ||
-                  !((dgrams[dgram_index - 1].destaddr.sa.sa_family == AF_UNSPEC &&
-                     dgrams[dgram_index].destaddr.sa.sa_family == AF_UNSPEC) ||
-                    h2o_socket_compare_address(&dgrams[dgram_index - 1].destaddr.sa, &dgrams[dgram_index].destaddr.sa, 1) == 0) ||
-                  dgrams[dgram_index - 1].ttl != dgrams[dgram_index].ttl)) {
-                process_packets(ctx, &dgrams[dgram_index - 1].destaddr, &dgrams[dgram_index - 1].srcaddr,
-                                dgrams[dgram_index - 1].ttl, packets, packet_index);
-                packet_index = 0;
-            }
-            size_t off = 0;
-            while (off < dgrams[dgram_index].vec.iov_len) {
-                if (quicly_decode_packet(ctx->quic, packets + packet_index, dgrams[dgram_index].vec.iov_base,
-                                         dgrams[dgram_index].vec.iov_len, &off) == SIZE_MAX)
-                    break;
-                H2O_PROBE(H3_PACKET_RECEIVE, &dgrams[dgram_index].destaddr.sa, &dgrams[dgram_index].srcaddr.sa,
-                          packets[packet_index].octets.base, packets[packet_index].octets.len);
-                if (packet_index == sizeof(packets) / sizeof(packets[0]) - 1 ||
-                    !(packet_index == 0 ||
-                      h2o_memis(packets[0].cid.dest.encrypted.base, packets[0].cid.dest.encrypted.len,
-                                packets[packet_index].cid.dest.encrypted.base, packets[packet_index].cid.dest.encrypted.len))) {
-                    process_packets(ctx, &dgrams[dgram_index].destaddr, &dgrams[dgram_index].srcaddr, dgrams[dgram_index].ttl,
-                                    packets, packet_index + 1);
-                    packet_index = 0;
+        dgram_index = 0;
+        while (dgram_index < num_dgrams) {
+            int has_decoded = 0;
+            /* dispatch packets in `packets`, if the datagram at dgram_index is from a different path */
+            if (packet_index != 0) {
+                assert(dgram_index != 0);
+                /* check source address */
+                if (h2o_socket_compare_address(&dgrams[dgram_index - 1].srcaddr.sa, &dgrams[dgram_index].srcaddr.sa, 1) != 0)
+                    goto ProcessPackets;
+                /* check destination address, if available */
+                if (dgrams[dgram_index - 1].destaddr.sa.sa_family == AF_UNSPEC &&
+                    dgrams[dgram_index].destaddr.sa.sa_family == AF_UNSPEC) {
+                    /* ok */
+                } else if (h2o_socket_compare_address(&dgrams[dgram_index - 1].destaddr.sa, &dgrams[dgram_index].destaddr.sa, 1) ==
+                           0) {
+                    /* ok */
                 } else {
-                    ++packet_index;
+                    goto ProcessPackets;
                 }
+                /* check TTL */
+                if (dgrams[dgram_index - 1].ttl != dgrams[dgram_index].ttl)
+                    goto ProcessPackets;
+            }
+            /* decode the first packet */
+            size_t payload_off = 0;
+            if (quicly_decode_packet(ctx->quic, packets + packet_index, dgrams[dgram_index].vec.iov_base,
+                                     dgrams[dgram_index].vec.iov_len, &payload_off) == SIZE_MAX) {
+                ++dgram_index;
+                goto ProcessPackets;
+            }
+            /* dispatch packets in `packets` if the DCID is different, adjusting packets and packet_index to retain the newly
+             * decoded packet */
+            if (packet_index != 0) {
+                const ptls_iovec_t *prev_dcid = &packets[packet_index - 1].cid.dest.encrypted,
+                                   *cur_dcid = &packets[packet_index].cid.dest.encrypted;
+                if (!(prev_dcid->len == cur_dcid->len && memcmp(prev_dcid->base, cur_dcid->base, prev_dcid->len) == 0)) {
+                    has_decoded = 1;
+                    ++dgram_index;
+                    goto ProcessPackets;
+                }
+            } else {
+                ++packet_index;
+            }
+            /* add rest of the packets */
+            while (payload_off < dgrams[dgram_index].vec.iov_len && packet_index < PTLS_ELEMENTSOF(packets)) {
+                if (quicly_decode_packet(ctx->quic, packets + packet_index, dgrams[dgram_index].vec.iov_base,
+                                         dgrams[dgram_index].vec.iov_len, &payload_off) == SIZE_MAX)
+                    break;
+                ++packet_index;
+            }
+            ++dgram_index;
+            /* if we have enough room for (i.e. can store 4 packets that consist) next datagram, continue */
+            if (packet_index + 4 < PTLS_ELEMENTSOF(packets))
+                continue;
+
+        ProcessPackets:
+            process_packets(ctx, &dgrams[dgram_index - 1].destaddr, &dgrams[dgram_index - 1].srcaddr, dgrams[dgram_index - 1].ttl,
+                            packets, packet_index);
+            if (has_decoded) {
+                packets[0] = packets[packet_index];
+                packet_index = 1;
+            } else {
+                packet_index = 0;
             }
         }
         if (packet_index != 0)
