@@ -779,13 +779,15 @@ void h2o_http3_read_socket(h2o_http3_ctx_t *ctx, h2o_socket_t *sock)
                 continue;
 
         ProcessPackets:
-            process_packets(ctx, &dgrams[dgram_index - 1].destaddr, &dgrams[dgram_index - 1].srcaddr, dgrams[dgram_index - 1].ttl,
-                            packets, packet_index);
-            if (has_decoded) {
-                packets[0] = packets[packet_index];
-                packet_index = 1;
-            } else {
-                packet_index = 0;
+            if (packet_index != 0) {
+                process_packets(ctx, &dgrams[dgram_index - 1].destaddr, &dgrams[dgram_index - 1].srcaddr,
+                                dgrams[dgram_index - 1].ttl, packets, packet_index);
+                if (has_decoded) {
+                    packets[0] = packets[packet_index];
+                    packet_index = 1;
+                } else {
+                    packet_index = 0;
+                }
             }
         }
         if (packet_index != 0)
