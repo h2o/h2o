@@ -743,7 +743,7 @@ void h2o_http3_read_socket(h2o_http3_ctx_t *ctx, h2o_socket_t *sock)
                 } else {
                     goto ProcessPackets;
                 }
-                /* check TTL */
+                /* TTL should be same for dispatched packets */
                 if (dgrams[dgram_index - 1].ttl != dgrams[dgram_index].ttl)
                     goto ProcessPackets;
             }
