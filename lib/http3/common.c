@@ -754,7 +754,7 @@ void h2o_http3_read_socket(h2o_http3_ctx_t *ctx, h2o_socket_t *sock)
                 ++dgram_index;
                 goto ProcessPackets;
             }
-            /* dispatch packets in `packets` if the DCID is different, setting the `has_encoded` flag */
+            /* dispatch packets in `packets` if the DCID is different, setting the `has_decoded` flag */
             if (packet_index != 0) {
                 const ptls_iovec_t *prev_dcid = &packets[packet_index - 1].cid.dest.encrypted,
                                    *cur_dcid = &packets[packet_index].cid.dest.encrypted;
