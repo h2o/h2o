@@ -90,11 +90,11 @@ typedef struct quicly_loss_t {
      */
     const quicly_loss_conf_t *conf;
     /**
-     * pointer to transport parameter containing the peer's max_ack_delay
+     * pointer to transport parameter containing the remote peer's max_ack_delay
      */
     uint16_t *max_ack_delay;
     /**
-     * pointer to transport parameter containing the peer's ack exponent
+     * pointer to transport parameter containing the remote peer's ack exponent
      */
     uint8_t *ack_delay_exponent;
     /**
@@ -133,7 +133,8 @@ static void quicly_loss_init(quicly_loss_t *r, const quicly_loss_conf_t *conf, u
                              uint8_t *ack_delay_exponent);
 
 static void quicly_loss_update_alarm(quicly_loss_t *r, int64_t now, int64_t last_retransmittable_sent_at, int has_outstanding,
-                                     int can_send_stream_data, int handshake_is_in_progress, uint64_t total_bytes_sent);
+                                     int can_send_stream_data, int handshake_is_in_progress, uint64_t total_bytes_sent,
+                                     int is_after_send);
 
 /* called when an ACK is received
  */
@@ -209,7 +210,8 @@ inline void quicly_loss_init(quicly_loss_t *r, const quicly_loss_conf_t *conf, u
 }
 
 inline void quicly_loss_update_alarm(quicly_loss_t *r, int64_t now, int64_t last_retransmittable_sent_at, int has_outstanding,
-                                     int can_send_stream_data, int handshake_is_in_progress, uint64_t total_bytes_sent)
+                                     int can_send_stream_data, int handshake_is_in_progress, uint64_t total_bytes_sent,
+                                     int is_after_send)
 {
     if (!has_outstanding) {
         /* Do not set alarm if there's no data oustanding */
@@ -218,50 +220,63 @@ inline void quicly_loss_update_alarm(quicly_loss_t *r, int64_t now, int64_t last
         return;
     }
     assert(last_retransmittable_sent_at != INT64_MAX);
-    int64_t alarm_duration;
+
+#define SET_ALARM(t)                                                                                                               \
+    do {                                                                                                                           \
+        int64_t _t = (t);                                                                                                          \
+        if (is_after_send) {                                                                                                       \
+            assert(now < _t);                                                                                                      \
+        } else if (_t < now) {                                                                                                     \
+            _t = now;                                                                                                              \
+        }                                                                                                                          \
+        r->alarm_at = _t;                                                                                                          \
+    } while (0)
+
+    /* time-threshold loss detection */
     if (r->loss_time != INT64_MAX) {
-        /* time-threshold loss detection */
-        alarm_duration = r->loss_time - last_retransmittable_sent_at;
-    } else {
-        /* PTO alarm */
-        assert(r->pto_count < 63);
-        /* Probes are sent with a modified backoff to minimize latency of recovery. For instance, with num_speculative_ptos set to
-         * 2, the backoff pattern is as follows:
-         *   * when there's a tail: 0.25, 0.5, 1, 2, 4, 8, ...
-         *   * when mid-transfer: 1, 1, 1, 2, 4, 8, ...
-         * The first 2 probes in this case (and num_speculative_ptos, more generally), or the probes sent when pto_count < 0, are
-         * the speculative ones, which add potentially redundant retransmissions at a tail to reduce the cost of potential tail
-         * losses.
-         *
-         * FIXME: use of `can_send_stream_data` and `bytes_sent` is not entirely correct, it does not take things like MAX_ frames
-         * and pending.flows into consideration.
-         */
-        if (r->conf->num_speculative_ptos > 0 && r->pto_count <= 0 && !handshake_is_in_progress && !can_send_stream_data &&
-            r->total_bytes_sent < total_bytes_sent) {
-            /* New tail, defined as (i) sender is not in PTO recovery, (ii) there is no stream data to send, and
-             * (iii) new application data was sent since the last tail. Move the pto_count back to kick off speculative probing. */
-            if (r->pto_count == 0)
-                /*  kick off speculative probing if not already in progress */
-                r->pto_count = -r->conf->num_speculative_ptos;
-            r->total_bytes_sent = total_bytes_sent;
-        }
-        if (r->pto_count < 0) {
-            /* Speculative probes sent under an RTT do not need to account for ack delay, since there is no expectation
-             * of an ack being received before the probe is sent. */
-            alarm_duration = quicly_rtt_get_pto(&r->rtt, 0, r->conf->min_pto);
-            alarm_duration >>= -r->pto_count;
-            if (alarm_duration < r->conf->min_pto)
-                alarm_duration = r->conf->min_pto;
-        } else {
-            /* Ordinary PTO. The bitshift below is fine; it would take more than a millenium to overflow either alarm_duration or
-             * pto_count, even when the timer granularity is nanosecond */
-            alarm_duration = quicly_rtt_get_pto(&r->rtt, handshake_is_in_progress ? 0 : *r->max_ack_delay, r->conf->min_pto);
-            alarm_duration <<= r->pto_count;
-        }
+        SET_ALARM(r->loss_time);
+        return;
     }
-    r->alarm_at = last_retransmittable_sent_at + alarm_duration;
-    if (r->alarm_at < now)
-        r->alarm_at = now;
+
+    /* PTO alarm */
+    int64_t alarm_duration;
+    assert(r->pto_count < 63);
+    /* Probes are sent with a modified backoff to minimize latency of recovery. For instance, with num_speculative_ptos set to
+     * 2, the backoff pattern is as follows:
+     *   * when there's a tail: 0.25, 0.5, 1, 2, 4, 8, ...
+     *   * when mid-transfer: 1, 1, 1, 2, 4, 8, ...
+     * The first 2 probes in this case (and num_speculative_ptos, more generally), or the probes sent when pto_count < 0, are
+     * the speculative ones, which add potentially redundant retransmissions at a tail to reduce the cost of potential tail
+     * losses.
+     *
+     * FIXME: use of `can_send_stream_data` and `bytes_sent` is not entirely correct, it does not take things like MAX_ frames
+     * and pending.flows into consideration.
+     */
+    if (r->conf->num_speculative_ptos > 0 && r->pto_count <= 0 && !handshake_is_in_progress && !can_send_stream_data &&
+        r->total_bytes_sent < total_bytes_sent) {
+        /* New tail, defined as (i) sender is not in PTO recovery, (ii) there is no stream data to send, and
+         * (iii) new application data was sent since the last tail. Move the pto_count back to kick off speculative probing. */
+        if (r->pto_count == 0)
+            /*  kick off speculative probing if not already in progress */
+            r->pto_count = -r->conf->num_speculative_ptos;
+        r->total_bytes_sent = total_bytes_sent;
+    }
+    if (r->pto_count < 0) {
+        /* Speculative probes sent under an RTT do not need to account for ack delay, since there is no expectation
+         * of an ack being received before the probe is sent. */
+        alarm_duration = quicly_rtt_get_pto(&r->rtt, 0, r->conf->min_pto);
+        alarm_duration >>= -r->pto_count;
+        if (alarm_duration < r->conf->min_pto)
+            alarm_duration = r->conf->min_pto;
+    } else {
+        /* Ordinary PTO. The bitshift below is fine; it would take more than a millenium to overflow either alarm_duration or
+         * pto_count, even when the timer granularity is nanosecond */
+        alarm_duration = quicly_rtt_get_pto(&r->rtt, handshake_is_in_progress ? 0 : *r->max_ack_delay, r->conf->min_pto);
+        alarm_duration <<= r->pto_count;
+    }
+    SET_ALARM(last_retransmittable_sent_at + alarm_duration);
+
+#undef SET_ALARM
 }
 
 inline void quicly_loss_on_ack_received(quicly_loss_t *r, uint64_t largest_newly_acked, int64_t now, int64_t sent_at,

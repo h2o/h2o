@@ -90,7 +90,7 @@ for my $probe (@probes) {
             } elsif ($arch eq 'darwin') {
                 push @ap, "arg$i" . ' != NULL ? *(uint32_t *)copyin(arg' . $i . ' + 16, 4) : 0';
             } else {
-                push @ap, "arg$i != NULL ? ((struct _st_quicly_conn_public_t *)arg$i)->master_id.master_id : 0";
+                push @ap, "arg$i != NULL ? ((struct _st_quicly_conn_public_t *)arg$i)->local.cid_set.plaintext.master_id : 0";
             }
         } elsif ($type eq 'struct st_quicly_stream_t *') {
             push @fmt, '"stream-id":%d';

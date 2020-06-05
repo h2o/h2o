@@ -57,7 +57,7 @@ struct st_h2o_http3_ingress_unistream_t {
  */
 #define MAX_FRAME_SIZE 16384
 
-const ptls_iovec_t h2o_http3_alpn[1] = {{(void *)H2O_STRLIT("h3-27")}};
+const ptls_iovec_t h2o_http3_alpn[1] = {{(void *)H2O_STRLIT("h3-28")}};
 
 static void on_track_sendmsg_timer(h2o_timer_t *timeout);
 
@@ -102,11 +102,11 @@ void on_track_sendmsg_timer(h2o_timer_t *timeout)
  * Sends a packet, returns if the connection is still maintainable (false is returned when not being able to send a packet from the
  * designated source address).
  */
-int h2o_http3_send_datagram(h2o_http3_ctx_t *ctx, quicly_datagram_t *p)
+int h2o_http3_send_datagrams(h2o_http3_ctx_t *ctx, quicly_address_t *dest, quicly_address_t *src, struct iovec *datagrams,
+                             size_t num_datagrams)
 {
     int ret;
     struct msghdr mess;
-    struct iovec vec;
     union {
         struct cmsghdr hdr;
         char buf[
@@ -122,27 +122,24 @@ int h2o_http3_send_datagram(h2o_http3_ctx_t *ctx, quicly_datagram_t *p)
         ];
     } cmsg;
 
+    /* prepare the fields that remain constant across multiple datagrams */
     memset(&mess, 0, sizeof(mess));
-    mess.msg_name = &p->dest.sa;
-    mess.msg_namelen = quicly_get_socklen(&p->dest.sa);
-    vec.iov_base = p->data.base;
-    vec.iov_len = p->data.len;
-    mess.msg_iov = &vec;
-    mess.msg_iovlen = 1;
-    if (p->src.sa.sa_family != AF_UNSPEC) {
+    mess.msg_name = &dest->sa;
+    mess.msg_namelen = quicly_get_socklen(&dest->sa);
+    if (src->sa.sa_family != AF_UNSPEC) {
         size_t cmsg_bodylen = 0;
         memset(&cmsg, 0, sizeof(cmsg));
-        switch (p->src.sa.sa_family) {
+        switch (src->sa.sa_family) {
         case AF_INET: {
 #if defined(IP_PKTINFO)
-            if (*ctx->sock.port != p->src.sin.sin_port)
+            if (*ctx->sock.port != src->sin.sin_port)
                 return 0;
             cmsg.hdr.cmsg_level = IPPROTO_IP;
             cmsg.hdr.cmsg_type = IP_PKTINFO;
             cmsg_bodylen = sizeof(struct in_pktinfo);
-            ((struct in_pktinfo *)CMSG_DATA(&cmsg.hdr))->ipi_spec_dst = p->src.sin.sin_addr;
+            ((struct in_pktinfo *)CMSG_DATA(&cmsg.hdr))->ipi_spec_dst = src->sin.sin_addr;
 #elif defined(IP_SENDSRCADDR)
-            if (*ctx->sock.port != p->src.sin.sin_port)
+            if (*ctx->sock.port != src->sin.sin_port)
                 return 0;
             struct sockaddr_in *fdaddr = (struct sockaddr_in *)&ctx->sock.addr;
             assert(fdaddr->sin_family == AF_INET);
@@ -150,7 +147,7 @@ int h2o_http3_send_datagram(h2o_http3_ctx_t *ctx, quicly_datagram_t *p)
                 cmsg.hdr.cmsg_level = IPPROTO_IP;
                 cmsg.hdr.cmsg_type = IP_SENDSRCADDR;
                 cmsg_bodylen = sizeof(struct in_addr);
-                *(struct in_addr *)CMSG_DATA(&cmsg.hdr) = p->src.sin.sin_addr;
+                *(struct in_addr *)CMSG_DATA(&cmsg.hdr) = src->sin.sin_addr;
             }
 #else
             h2o_fatal("IP_PKTINFO not available");
@@ -158,12 +155,12 @@ int h2o_http3_send_datagram(h2o_http3_ctx_t *ctx, quicly_datagram_t *p)
         } break;
         case AF_INET6:
 #ifdef IPV6_PKTINFO
-            if (*ctx->sock.port != p->src.sin6.sin6_port)
+            if (*ctx->sock.port != src->sin6.sin6_port)
                 return 0;
             cmsg.hdr.cmsg_level = IPPROTO_IPV6;
             cmsg.hdr.cmsg_type = IPV6_PKTINFO;
             cmsg_bodylen = sizeof(struct in6_pktinfo);
-            ((struct in6_pktinfo *)CMSG_DATA(&cmsg.hdr))->ipi6_addr = p->src.sin6.sin6_addr;
+            ((struct in6_pktinfo *)CMSG_DATA(&cmsg.hdr))->ipi6_addr = src->sin6.sin6_addr;
 #else
             h2o_fatal("IPV6_PKTINFO not available");
 #endif
@@ -177,28 +174,35 @@ int h2o_http3_send_datagram(h2o_http3_ctx_t *ctx, quicly_datagram_t *p)
         mess.msg_controllen = (socklen_t)CMSG_SPACE(cmsg_bodylen);
     }
 
-    while ((ret = (int)sendmsg(h2o_socket_get_fd(ctx->sock.sock), &mess, 0)) == -1 && errno == EINTR)
-        ;
-
-    if (ret == -1) {
-        /* The UDP stack returns EINVAL (linux) or EADDRNOTAVAIL (darwin, and presumably other BSD) when it was unable to use the
-         * designated source address.  We communicate that back to the caller so that the connection can be closed immediately. */
-        if (p->src.sa.sa_family != AF_UNSPEC && (errno == EINVAL || errno == EADDRNOTAVAIL))
-            return 0;
-
-        /* Temporary failure to send a packet is not a permanent error fo the connection. (TODO do we want do something more
-         * specific?) */
-
-        /* Log the number of failed invocations once per minute, if there has been such a failure. */
-        pthread_mutex_lock(&track_sendmsg.locked.mutex);
-        ++track_sendmsg.locked.cur_failures;
-        track_sendmsg.locked.last_errno = errno;
-        if (!h2o_timer_is_linked(&track_sendmsg.locked.timer))
-            h2o_timer_link(ctx->loop, 60000, &track_sendmsg.locked.timer);
-        pthread_mutex_unlock(&track_sendmsg.locked.mutex);
-    } else {
-        __sync_fetch_and_add(&track_sendmsg.total_successes, 1);
+    /* send datagrams */
+    for (size_t i = 0; i < num_datagrams; ++i) {
+        mess.msg_iov = datagrams + i;
+        mess.msg_iovlen = 1;
+        while ((ret = (int)sendmsg(h2o_socket_get_fd(ctx->sock.sock), &mess, 0)) == -1 && errno == EINTR)
+            ;
+        if (ret == -1)
+            goto SendmsgError;
     }
+    __sync_fetch_and_add(&track_sendmsg.total_successes, 1);
+
+    return 1;
+
+SendmsgError:
+    /* The UDP stack returns EINVAL (linux) or EADDRNOTAVAIL (darwin, and presumably other BSD) when it was unable to use the
+     * designated source address.  We communicate that back to the caller so that the connection can be closed immediately. */
+    if (src->sa.sa_family != AF_UNSPEC && (errno == EINVAL || errno == EADDRNOTAVAIL))
+        return 0;
+
+    /* Temporary failure to send a packet is not a permanent error fo the connection. (TODO do we want do something more
+     * specific?) */
+
+    /* Log the number of failed invocations once per minute, if there has been such a failure. */
+    pthread_mutex_lock(&track_sendmsg.locked.mutex);
+    ++track_sendmsg.locked.cur_failures;
+    track_sendmsg.locked.last_errno = errno;
+    if (!h2o_timer_is_linked(&track_sendmsg.locked.timer))
+        h2o_timer_link(ctx->loop, 60000, &track_sendmsg.locked.timer);
+    pthread_mutex_unlock(&track_sendmsg.locked.mutex);
 
     return 1;
 }
@@ -513,12 +517,12 @@ static void process_packets(h2o_http3_ctx_t *ctx, quicly_address_t *destaddr, qu
     /* send VN on mimatch */
     if (QUICLY_PACKET_IS_LONG_HEADER(packets[0].octets.base[0])) {
         if (packets[0].version != QUICLY_PROTOCOL_VERSION) {
-            quicly_datagram_t *dgram = quicly_send_version_negotiation(ctx->quic, &srcaddr->sa, packets[0].cid.src, &destaddr->sa,
-                                                                       packets[0].cid.dest.encrypted);
-            if (dgram == NULL)
-                return;
-            h2o_http3_send_datagram(ctx, dgram);
-            ctx->quic->packet_allocator->free_packet(ctx->quic->packet_allocator, dgram);
+            uint8_t payload[QUICLY_MIN_CLIENT_INITIAL_SIZE];
+            size_t payload_size = quicly_send_version_negotiation(ctx->quic, &srcaddr->sa, packets[0].cid.src, &destaddr->sa,
+                                                                  packets[0].cid.dest.encrypted, payload);
+            assert(payload_size != SIZE_MAX);
+            struct iovec vec = {.iov_base = payload, .iov_len = payload_size};
+            h2o_http3_send_datagrams(ctx, srcaddr, destaddr, &vec, 1);
             return;
         } else if (packets[0].cid.src.len > QUICLY_MAX_CID_LEN_V1) {
             return;
@@ -536,12 +540,12 @@ static void process_packets(h2o_http3_ctx_t *ctx, quicly_address_t *destaddr, qu
         } else if (!packets[0].cid.dest.might_be_client_generated) {
             /* send stateless reset when we could not find a matching connection for a 1 RTT packet */
             if (packets[0].octets.len >= QUICLY_STATELESS_RESET_PACKET_MIN_LEN) {
-                quicly_datagram_t *dgram =
-                    quicly_send_stateless_reset(ctx->quic, &destaddr->sa, &srcaddr->sa, packets[0].cid.dest.encrypted.base);
-                if (dgram != NULL) {
-                    h2o_http3_send_datagram(ctx, dgram);
-                    ctx->quic->packet_allocator->free_packet(ctx->quic->packet_allocator, dgram);
-                }
+                uint8_t payload[QUICLY_MIN_CLIENT_INITIAL_SIZE];
+                size_t payload_size = quicly_send_stateless_reset(ctx->quic, &destaddr->sa, &srcaddr->sa,
+                                                                  packets[0].cid.dest.encrypted.base, payload);
+                assert(payload_size != SIZE_MAX);
+                struct iovec vec = {.iov_base = payload, .iov_len = payload_size};
+                h2o_http3_send_datagrams(ctx, srcaddr, destaddr, &vec, 1);
             }
             return;
         }
@@ -725,14 +729,12 @@ void h2o_http3_read_socket(h2o_http3_ctx_t *ctx, h2o_socket_t *sock)
                 packet_index = 0;
             }
             size_t off = 0;
-            while (off != dgrams[dgram_index].vec.iov_len) {
-                size_t plen = quicly_decode_packet(ctx->quic, packets + packet_index, dgrams[dgram_index].vec.iov_base + off,
-                                                   dgrams[dgram_index].vec.iov_len - off);
-                if (plen == SIZE_MAX)
+            while (off < dgrams[dgram_index].vec.iov_len) {
+                if (quicly_decode_packet(ctx->quic, packets + packet_index, dgrams[dgram_index].vec.iov_base,
+                                         dgrams[dgram_index].vec.iov_len, &off) == SIZE_MAX)
                     break;
                 H2O_PROBE(H3_PACKET_RECEIVE, &dgrams[dgram_index].destaddr.sa, &dgrams[dgram_index].srcaddr.sa,
                           packets[packet_index].octets.base, packets[packet_index].octets.len);
-                off += plen;
                 if (packet_index == sizeof(packets) / sizeof(packets[0]) - 1 ||
                     !(packet_index == 0 ||
                       h2o_memis(packets[0].cid.dest.encrypted.base, packets[0].cid.dest.encrypted.len,
@@ -990,23 +992,20 @@ Exit:
 
 int h2o_http3_send(h2o_http3_conn_t *conn)
 {
-    quicly_datagram_t *packets[16];
-    size_t num_packets, i;
+    quicly_address_t dest, src;
+    struct iovec datagrams[10];
+    size_t num_datagrams;
+    uint8_t datagram_buf[1500 * PTLS_ELEMENTSOF(datagrams)];
 
     do {
-        num_packets = sizeof(packets) / sizeof(packets[0]);
-        int ret = quicly_send(conn->quic, packets, &num_packets);
+        num_datagrams = PTLS_ELEMENTSOF(datagrams);
+        int ret = quicly_send(conn->quic, &dest, &src, datagrams, &num_datagrams, datagram_buf, sizeof(datagram_buf));
         switch (ret) {
         case 0:
-            for (i = 0; i != num_packets; ++i) {
-                if (!h2o_http3_send_datagram(conn->ctx, packets[i])) {
-                    /* FIXME close the connection immediately */
-                    break;
-                }
-                conn->ctx->quic->packet_allocator->free_packet(conn->ctx->quic->packet_allocator, packets[i]);
+            if (!h2o_http3_send_datagrams(conn->ctx, &dest, &src, datagrams, num_datagrams)) {
+                /* FIXME close the connection immediately */
+                break;
             }
-            for (; i != num_packets; ++i)
-                conn->ctx->quic->packet_allocator->free_packet(conn->ctx->quic->packet_allocator, packets[i]);
             break;
         case QUICLY_ERROR_FREE_CONNECTION:
             conn->callbacks->destroy_connection(conn);
@@ -1015,7 +1014,7 @@ int h2o_http3_send(h2o_http3_conn_t *conn)
             fprintf(stderr, "quicly_send returned %d\n", ret);
             abort();
         }
-    } while (num_packets == sizeof(packets) / sizeof(packets[0]));
+    } while (num_datagrams == PTLS_ELEMENTSOF(datagrams));
 
     h2o_http3_schedule_timer(conn);
 

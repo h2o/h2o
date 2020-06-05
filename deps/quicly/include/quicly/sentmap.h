@@ -109,6 +109,12 @@ struct st_quicly_sent_t {
             int is_inflight;
             uint64_t generation;
         } new_token;
+        struct {
+            uint64_t sequence;
+        } new_connection_id;
+        struct {
+            uint64_t sequence;
+        } retire_connection_id;
     } data;
 };
 
@@ -249,7 +255,7 @@ inline quicly_sent_t *quicly_sentmap_allocate(quicly_sentmap_t *map, quicly_sent
 {
     struct st_quicly_sent_block_t *block;
 
-    if ((block = map->tail) == NULL || block->next_insert_at == sizeof(block->entries) / sizeof(block->entries[0])) {
+    if ((block = map->tail) == NULL || block->next_insert_at == PTLS_ELEMENTSOF(block->entries)) {
         if ((block = quicly_sentmap__new_block(map)) == NULL)
             return NULL;
     }

@@ -112,6 +112,25 @@ void quicly_sendstate_reset(quicly_sendstate_t *state)
     quicly_ranges_clear(&state->pending);
 }
 
+static int check_amount_of_state(quicly_sendstate_t *state)
+{
+    size_t num_ranges = state->acked.num_ranges + state->pending.num_ranges;
+
+    /* bail out if number of gaps are small */
+    if (PTLS_LIKELY(num_ranges < 32))
+        return 0;
+
+    /* When there are large number of gaps, make sure that the amount of state retained in quicly is relatively smaller than the
+     * amount of state retained by application (in form of the stream-level send buffer). 512 is used as the threshold, based on the
+     * assumption that the STREAM frames that have been sent are on average at least 512 bytes long, when seeing excess number of
+     * gaps. */
+    int64_t bytes_buffered = (int64_t)state->size_inflight - (int64_t)state->acked.ranges[0].end;
+    if ((int64_t)num_ranges * 512 > bytes_buffered)
+        return QUICLY_TRANSPORT_ERROR_PROTOCOL_VIOLATION;
+
+    return 0;
+}
+
 int quicly_sendstate_acked(quicly_sendstate_t *state, quicly_sendstate_sent_t *args, int is_active, size_t *bytes_to_shift)
 {
     uint64_t prev_sent_upto = state->acked.ranges[0].end;
@@ -139,7 +158,7 @@ int quicly_sendstate_acked(quicly_sendstate_t *state, quicly_sendstate_sent_t *a
         *bytes_to_shift = 0;
     }
 
-    return 0;
+    return check_amount_of_state(state);
 }
 
 int quicly_sendstate_lost(quicly_sendstate_t *state, quicly_sendstate_sent_t *args)
@@ -153,9 +172,11 @@ int quicly_sendstate_lost(quicly_sendstate_t *state, quicly_sendstate_sent_t *ar
             start = state->acked.ranges[acked_slot].end;
         ++acked_slot;
         if (acked_slot == state->acked.num_ranges || end <= state->acked.ranges[acked_slot].start) {
-            if (!(start < end))
-                return 0;
-            return quicly_ranges_add(&state->pending, start, end);
+            if (start < end) {
+                if ((ret = quicly_ranges_add(&state->pending, start, end)) != 0)
+                    return ret;
+            }
+            goto Exit;
         }
         if (start < state->acked.ranges[acked_slot].start) {
             if ((ret = quicly_ranges_add(&state->pending, start, state->acked.ranges[acked_slot].start)) != 0)
@@ -163,6 +184,7 @@ int quicly_sendstate_lost(quicly_sendstate_t *state, quicly_sendstate_sent_t *ar
         }
     }
 
-    assert(state->acked.ranges[0].end <= state->pending.ranges[0].start);
-    return 0;
+Exit:
+    assert(state->pending.num_ranges == 0 || state->acked.ranges[0].end <= state->pending.ranges[0].start);
+    return check_amount_of_state(state);
 }
