@@ -725,7 +725,8 @@ void h2o_http3_read_socket(h2o_http3_ctx_t *ctx, h2o_socket_t *sock)
         size_t packet_index = 0;
         dgram_index = 0;
         while (dgram_index < num_dgrams) {
-            int has_decoded = 0;
+            int has_decoded = 0; /* indicates if a decoded packet belonging to a different connection is stored at
+                                  * `packets[packet_index]` */
             /* dispatch packets in `packets`, if the datagram at dgram_index is from a different path */
             if (packet_index != 0) {
                 assert(dgram_index != 0);
@@ -753,8 +754,7 @@ void h2o_http3_read_socket(h2o_http3_ctx_t *ctx, h2o_socket_t *sock)
                 ++dgram_index;
                 goto ProcessPackets;
             }
-            /* dispatch packets in `packets` if the DCID is different, adjusting packets and packet_index to retain the newly
-             * decoded packet */
+            /* dispatch packets in `packets` if the DCID is different, setting the `has_encoded` flag */
             if (packet_index != 0) {
                 const ptls_iovec_t *prev_dcid = &packets[packet_index - 1].cid.dest.encrypted,
                                    *cur_dcid = &packets[packet_index].cid.dest.encrypted;
