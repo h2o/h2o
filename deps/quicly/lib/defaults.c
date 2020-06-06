@@ -354,7 +354,13 @@ static int64_t default_now(quicly_now_t *self)
 {
     struct timeval tv;
     gettimeofday(&tv, NULL);
-    return (int64_t)tv.tv_sec * 1000 + tv.tv_usec / 1000;
+    int64_t tv_now = (int64_t)tv.tv_sec * 1000 + tv.tv_usec / 1000;
+
+    /* make sure that the time does not get rewind */
+    static __thread int64_t now;
+    if (now < tv_now)
+        now = tv_now;
+    return now;
 }
 
 quicly_now_t quicly_default_now = {default_now};

@@ -53,6 +53,11 @@ provider quicly {
                           size_t inflight);
     probe cc_congestion(struct st_quicly_conn_t *conn, int64_t at, uint64_t max_lost_pn, size_t inflight, uint32_t cwnd);
 
+    probe ack_send(struct st_quicly_conn_t *conn, int64_t at, uint64_t largest_acked, uint64_t ack_delay);
+
+    probe ping_send(struct st_quicly_conn_t *conn, int64_t at);
+    probe ping_receive(struct st_quicly_conn_t *conn, int64_t at);
+
     probe transport_close_send(struct st_quicly_conn_t *conn, int64_t at, uint64_t error_code, uint64_t frame_type,
                                const char *reason_phrase);
     probe transport_close_receive(struct st_quicly_conn_t *conn, int64_t at, uint64_t error_code, uint64_t frame_type,
