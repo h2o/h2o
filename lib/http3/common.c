@@ -1045,7 +1045,7 @@ int h2o_http3_send(h2o_http3_conn_t *conn)
         int ret = quicly_send(conn->quic, &dest, &src, datagrams, &num_datagrams, datagram_buf, sizeof(datagram_buf));
         switch (ret) {
         case 0:
-            if (!h2o_http3_send_datagrams(conn->ctx, &dest, &src, datagrams, num_datagrams)) {
+            if (num_datagrams != 0 && !h2o_http3_send_datagrams(conn->ctx, &dest, &src, datagrams, num_datagrams)) {
                 /* FIXME close the connection immediately */
                 break;
             }
