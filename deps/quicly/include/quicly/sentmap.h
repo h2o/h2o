@@ -53,28 +53,44 @@ typedef struct st_quicly_sent_packet_t {
      */
     uint8_t ack_eliciting : 1;
     /**
-     * number of bytes in-flight for the packet (becomes zero once deemed lost)
+     * if the frames being contained are considered inflight (becomes zero when deemed lost or when PTO fires)
      */
-    uint16_t bytes_in_flight;
+    uint8_t frames_in_flight : 1;
+    /**
+     * number of bytes in-flight for the packet, from the context of CC (becomes zero when deemed lost, but not when PTO fires)
+     */
+    uint16_t cc_bytes_in_flight;
 } quicly_sent_packet_t;
 
 typedef enum en_quicly_sentmap_event_t {
     /**
-     * a packet (or a frame) has been acked
+     * a packet has been acked
      */
     QUICLY_SENTMAP_EVENT_ACKED,
     /**
-     * a packet (or a frame) is deemed lost
+     * PTO - the packet is still considered inflight, but the contents of the frames are scheduled for retransmission
+     */
+    QUICLY_SENTMAP_EVENT_PTO,
+    /**
+     * a packet is deemed lost
      */
     QUICLY_SENTMAP_EVENT_LOST,
     /**
-     * a packet (or a frame) is being removed from the sentmap (e.g., after 3 pto, the epoch being discarded)
+     * a packet is being removed from the sentmap (e.g., after 3 pto, the epoch being discarded)
      */
     QUICLY_SENTMAP_EVENT_EXPIRED
 } quicly_sentmap_event_t;
 
-typedef int (*quicly_sent_acked_cb)(struct st_quicly_conn_t *conn, const quicly_sent_packet_t *packet, quicly_sent_t *data,
-                                    quicly_sentmap_event_t event);
+/**
+ * Callback called when a frame is either acknowledged or deemed lost. When there is a late ACK, an entry will get marked as acked
+ * after first being deemed lost.
+ * @param conn    connection
+ * @param packet  the packet to which `quicly_sent_t` belongs to
+ * @param acked   true if acked, false if the information has to be scheduled for retransmission
+ * @param data    data
+ */
+typedef int (*quicly_sent_acked_cb)(struct st_quicly_conn_t *conn, const quicly_sent_packet_t *packet, int acked,
+                                    quicly_sent_t *data);
 
 struct st_quicly_sent_t {
     quicly_sent_acked_cb acked;
@@ -158,9 +174,13 @@ struct st_quicly_sent_block_t {
  */
 typedef struct st_quicly_sentmap_t {
     /**
-     * the linked list includes entries that are deemed lost (up to 3*SRTT) as well
+     * the linked list includes entries that are deemed lost, but not expired yet
      */
     struct st_quicly_sent_block_t *head, *tail;
+    /**
+     * number of packets contained
+     */
+    size_t num_packets;
     /**
      * bytes in-flight
      */
@@ -224,8 +244,7 @@ int quicly_sentmap_update(quicly_sentmap_t *map, quicly_sentmap_iter_t *iter, qu
                           struct st_quicly_conn_t *conn);
 
 struct st_quicly_sent_block_t *quicly_sentmap__new_block(quicly_sentmap_t *map);
-int quicly_sentmap__type_packet(struct st_quicly_conn_t *conn, const quicly_sent_packet_t *packet, quicly_sent_t *sent,
-                                quicly_sentmap_event_t event);
+int quicly_sentmap__type_packet(struct st_quicly_conn_t *conn, const quicly_sent_packet_t *packet, int acked, quicly_sent_t *sent);
 
 /* inline definitions */
 
@@ -245,10 +264,13 @@ inline void quicly_sentmap_commit(quicly_sentmap_t *map, uint16_t bytes_in_fligh
 
     if (bytes_in_flight != 0) {
         map->_pending_packet->data.packet.ack_eliciting = 1;
-        map->_pending_packet->data.packet.bytes_in_flight = bytes_in_flight;
+        map->_pending_packet->data.packet.cc_bytes_in_flight = bytes_in_flight;
         map->bytes_in_flight += bytes_in_flight;
     }
+    map->_pending_packet->data.packet.frames_in_flight = 1;
     map->_pending_packet = NULL;
+
+    ++map->num_packets;
 }
 
 inline quicly_sent_t *quicly_sentmap_allocate(quicly_sentmap_t *map, quicly_sent_acked_cb acked)

@@ -81,13 +81,16 @@ void quicly_local_cid_init_set(quicly_local_cid_set_t *set, quicly_cid_encryptor
         ._size = 1,
     };
 
-    /* initialize cids[0] */
-    if (encryptor != NULL) {
+    /* if provided, set master id */
+    if (new_cid != NULL) {
         assert(new_cid->path_id == 0);
         set->plaintext = *new_cid;
+    }
+
+    /* initialize cids[0] */
+    if (encryptor != NULL) {
+        assert(new_cid != NULL && "master CID must be specified when a non-zero length CID is to be used");
         generate_cid(set, 0);
-    } else {
-        /* we have a zero-length CID at cids[0] */
     }
     set->cids[0].state =
         QUICLY_LOCAL_CID_STATE_DELIVERED; /* no need to use NCID frames, the use delivers this CID to the remote peer */
