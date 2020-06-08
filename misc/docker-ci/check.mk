@@ -22,6 +22,9 @@ ossl1.1.1:
 dtrace:
 	docker run $(DOCKER_RUN_OPTS) $(CONTAINER_NAME) env DTRACE_TESTS=1 make -f $(SRC_DIR)/misc/docker-ci/check.mk _check
 
+format-check:
+	docker run $(DOCKER_RUN_OPTS) $(CONTAINER_NAME) make -f $(SRC_DIR)/misc/docker-ci/check.mk -C $(SRC_DIR) _do-format-check
+
 _check:
 	mkdir -p build
 	sudo mount -t tmpfs tmpfs build
@@ -43,10 +46,13 @@ _do-fuzz-extra:
 	./h2o-fuzzer-http2 -close_fd_mask=3 -runs=1 -max_len=16384 $(SRC_DIR)/fuzz/http2-corpus < /dev/null
 	./h2o-fuzzer-url -close_fd_mask=3 -runs=1 -max_len=16384 $(SRC_DIR)/fuzz/url-corpus < /dev/null
 
+_do-format-check:
+	bash $(SRC_DIR)/misc/format-checker.sh -f clang-format-9 -r origin/master
+
 enter:
 	docker run $(DOCKER_RUN_OPTS) -it $(CONTAINER_NAME) bash
 
 pull:
 	docker pull $(CONTAINER_NAME)
 
-.PHONY: fuzz _check _do-check _fuzz _do-fuzz-extra enter pull
+.PHONY: fuzz _check _do-check _fuzz _do-fuzz-extra enter pull format-check _do-format_check

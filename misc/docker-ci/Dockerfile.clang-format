@@ -1,0 +1,24 @@
+FROM ubuntu:18.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get --yes update
+RUN apt-get install --yes \
+	make \
+	clang-format-9 \
+	curl \
+	git \
+	sudo \
+	wget
+
+# use dumb-init
+RUN wget -O /usr/local/bin/dumb-init https://github.com/Yelp/dumb-init/releases/download/v1.2.1/dumb-init_1.2.1_amd64 \
+ && chmod +x /usr/local/bin/dumb-init
+
+# create user
+RUN useradd --create-home ci
+RUN echo 'ci ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
+WORKDIR /home/ci
+USER ci
+
+ENTRYPOINT ["/usr/local/bin/dumb-init"]
