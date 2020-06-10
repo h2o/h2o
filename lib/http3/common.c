@@ -605,14 +605,15 @@ static void process_packets(h2o_http3_ctx_t *ctx, quicly_address_t *destaddr, qu
             iter = kh_put_h2o_http3_acceptmap(conn->ctx->conns_accepting, accept_hashkey, &r);
             assert(iter != kh_end(conn->ctx->conns_accepting));
             kh_val(conn->ctx->conns_accepting, iter) = conn;
-            goto UpdateConn;
+        } else {
+            /* existing connection */
+            conn = kh_val(ctx->conns_accepting, iter);
+            assert(conn != NULL);
+            assert(!quicly_is_client(conn->quic));
         }
-        conn = kh_val(ctx->conns_accepting, iter);
-        assert(!quicly_is_client(conn->quic));
     }
 
     { /* receive packets to the found connection */
-        assert(conn != NULL);
         if (!quicly_is_destination(conn->quic, &destaddr->sa, &srcaddr->sa, packets))
             return;
         size_t i;
@@ -623,8 +624,6 @@ static void process_packets(h2o_http3_ctx_t *ctx, quicly_address_t *destaddr, qu
         }
     }
 
-UpdateConn:
-    assert(conn != NULL);
     h2o_http3_schedule_timer(conn);
     if (ctx->notify_conn_update != NULL)
         ctx->notify_conn_update(ctx, conn);
