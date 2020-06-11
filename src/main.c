@@ -2316,7 +2316,7 @@ static h2o_http3_conn_t *on_http3_accept(h2o_http3_ctx_t *_ctx, quicly_address_t
     if (packet->token.len != 0) {
         int ret;
         const char *err_desc = NULL;
-        if ((ret = quic_decrypt_address_token(&token_buf, packet->token, &ctx->super.quic->transport_params, &err_desc)) == 0) {
+        if ((ret = quic_decrypt_address_token(&token_buf, packet->token, &err_desc)) == 0) {
             if (validate_token(ctx, &srcaddr->sa, packet->cid.src, packet->cid.dest.encrypted, &token_buf))
                 token = &token_buf;
         } else if (ret == QUICLY_TRANSPORT_ERROR_INVALID_TOKEN) {

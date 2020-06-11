@@ -1253,8 +1253,7 @@ static int generate_stateless_reset_token(quicly_cid_encryptor_t *self, void *to
 
 quicly_cid_encryptor_t quic_cid_encryptor = {encrypt_cid, decrypt_cid, generate_stateless_reset_token};
 
-int quic_decrypt_address_token(quicly_address_token_plaintext_t *pt, ptls_iovec_t input, const quicly_transport_parameters_t *tp,
-                               const char **err_desc)
+int quic_decrypt_address_token(quicly_address_token_plaintext_t *pt, ptls_iovec_t input, const char **err_desc)
 {
     struct st_quic_keyset_t *keyset;
 
@@ -1262,7 +1261,7 @@ int quic_decrypt_address_token(quicly_address_token_plaintext_t *pt, ptls_iovec_
 
     if ((keyset = find_quic_keyset(input.base[0])) == NULL)
         return PTLS_ERROR_INCOMPATIBLE_KEY; /* TODO consider error code */
-    return quicly_decrypt_address_token(keyset->address_token.dec, tp, pt, input.base, input.len, 1, err_desc);
+    return quicly_decrypt_address_token(keyset->address_token.dec, pt, input.base, input.len, 1, err_desc);
 }
 
 ptls_aead_context_t *quic_get_address_token_encryptor(uint8_t *prefix)
@@ -1282,8 +1281,7 @@ static int generate_resumption_token(quicly_generate_resumption_token_t *self, q
     if ((ret = ptls_buffer_reserve(buf, 1)) != 0)
         return ret;
     buf->base[buf->off++] = prefix;
-    return quicly_encrypt_address_token(ptls_openssl_random_bytes, aead, &quicly_get_context(conn)->transport_params, buf,
-                                        buf->off - 1, token);
+    return quicly_encrypt_address_token(ptls_openssl_random_bytes, aead, buf, buf->off - 1, token);
 }
 
 quicly_generate_resumption_token_t quic_resumption_token_generator = {generate_resumption_token};
