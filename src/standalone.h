@@ -39,6 +39,7 @@ struct st_h2o_quic_resumption_args_t {
 
 void ssl_setup_session_resumption(SSL_CTX **contexts, size_t num_contexts, struct st_h2o_quic_resumption_args_t *quic_args,
                                   h2o_barrier_t *startup_barrier);
+void ssl_setup_session_resumption_ptls(ptls_context_t *ptls, quicly_context_t *quic);
 int ssl_session_resumption_on_config(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node);
 
 extern quicly_cid_encryptor_t quic_cid_encryptor;

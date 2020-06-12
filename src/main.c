@@ -3124,6 +3124,13 @@ int main(int argc, char **argv)
         }
         ssl_setup_session_resumption(ssl_contexts.entries, ssl_contexts.size, quic_args, sync_barrier);
         free(ssl_contexts.entries);
+        for (i = 0; i != conf.num_listeners; ++i) {
+            for (j = 0; j != conf.listeners[i]->ssl.size; ++j) {
+                ptls_context_t *ptls = h2o_socket_ssl_get_picotls_context(conf.listeners[i]->ssl.entries[j]->ctx);
+                if (ptls != NULL)
+                    ssl_setup_session_resumption_ptls(ptls, conf.listeners[i]->quic.ctx);
+            }
+        }
     }
 
     /* all setup should be complete by now */

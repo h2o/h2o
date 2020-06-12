@@ -320,9 +320,59 @@ static int ticket_key_callback_ossl(SSL *ssl, unsigned char *key_name, unsigned 
     return ticket_key_callback(key_name, iv, ctx, hctx, enc);
 }
 
-static int encrypt_ticket_key_ptls(ptls_encrypt_ticket_t *self, ptls_t *tls, int is_encrypt, ptls_buffer_t *dst, ptls_iovec_t src)
+static void calculate_quic_tp_tag(uint8_t *tag64, quicly_context_t *ctx)
 {
-    return (is_encrypt ? ptls_openssl_encrypt_ticket : ptls_openssl_decrypt_ticket)(dst, src, ticket_key_callback);
+    ptls_buffer_t buf;
+    uint8_t full_digest[PTLS_SHA256_DIGEST_SIZE];
+
+    /* calculate sha256 hash of remembered tp */
+    ptls_buffer_init(&buf, "", 0);
+    if (quicly_build_session_ticket_auth_data(&buf, ctx) != 0 ||
+        ptls_calc_hash(&ptls_openssl_sha256, full_digest, buf.base, buf.off) != 0)
+        h2o_fatal("failed to calculate sha256 of remembered TPs");
+    ptls_buffer_dispose(&buf);
+
+    /* use the first 64-bit */
+    memcmp(tag64, full_digest, 8);
+}
+
+
+
+struct encrypt_ticket_ptls_t {
+    ptls_encrypt_ticket_t super;
+    uint8_t is_quic : 1;
+    uint8_t quic_tag[8];
+};
+
+static int encrypt_ticket_ptls(ptls_encrypt_ticket_t *_self, ptls_t *tls, int is_encrypt, ptls_buffer_t *dst, ptls_iovec_t src)
+{
+    struct encrypt_ticket_ptls_t *self = (void *)_self;
+    int ret;
+
+    if (is_encrypt) {
+        /* encrypt given data, witch the QUIC tag appended if necessary */
+        uint8_t srcbuf[src.len + sizeof(self->quic_tag)];
+        if (self->is_quic) {
+            memcpy(srcbuf, src.base, src.len);
+            memcpy(srcbuf + src.len, self->quic_tag, sizeof(self->quic_tag));
+            src.base = srcbuf;
+            src.len += sizeof(self->quic_tag);
+        }
+        return ptls_openssl_encrypt_ticket(dst, src, ticket_key_callback);
+    } else {
+        /* decrypt given data, then if necessary, check and remove the QUIC tag */
+        size_t dst_start_off = dst->off;
+        if ((ret = ptls_openssl_decrypt_ticket(dst, src, ticket_key_callback)) != 0)
+            return ret;
+        if (self->is_quic) {
+            if (dst->off - dst_start_off < sizeof(self->quic_tag))
+                return PTLS_ALERT_DECODE_ERROR;
+            dst->off -= sizeof(self->quic_tag);
+            if (memcmp(dst->base + dst->off, self->quic_tag, sizeof(self->quic_tag)) != 0)
+                return PTLS_ERROR_REJECT_EARLY_DATA;
+        }
+        return 0;
+    }
 }
 
 static int update_tickets(session_ticket_vector_t *tickets, uint64_t now)
@@ -1055,12 +1105,7 @@ void ssl_setup_session_resumption(SSL_CTX **contexts, size_t num_contexts, struc
         for (i = 0; i != num_contexts; ++i) {
             SSL_CTX *ctx = contexts[i];
             SSL_CTX_set_tlsext_ticket_key_cb(ctx, ticket_key_callback_ossl);
-            ptls_context_t *pctx = h2o_socket_ssl_get_picotls_context(ctx);
-            if (pctx != NULL) {
-                static ptls_encrypt_ticket_t encryptor = {encrypt_ticket_key_ptls};
-                pctx->ticket_lifetime = 86400 * 7; // FIXME conf.lifetime;
-                pctx->encrypt_ticket = &encryptor;
-            }
+            /* accompanying ptls context is initialized in ssl_setup_session_resumption_ptls */
         }
     } else {
         size_t i;
@@ -1068,6 +1113,20 @@ void ssl_setup_session_resumption(SSL_CTX **contexts, size_t num_contexts, struc
             SSL_CTX_set_options(contexts[i], SSL_CTX_get_options(contexts[i]) | SSL_OP_NO_TICKET);
     }
 #endif
+}
+
+void ssl_setup_session_resumption_ptls(ptls_context_t *ptls, quicly_context_t *quic)
+{
+    if (conf.ticket.update_thread != NULL) {
+        struct encrypt_ticket_ptls_t *encryptor = malloc(sizeof(*encryptor));
+        *encryptor = (struct encrypt_ticket_ptls_t){{encrypt_ticket_ptls}};
+        if (quic != NULL) {
+            encryptor->is_quic = 1;
+            calculate_quic_tp_tag(encryptor->quic_tag, quic);
+        }
+        ptls->ticket_lifetime = 86400 * 7; // FIXME conf.lifetime
+        ptls->encrypt_ticket = &encryptor->super;
+    }
 }
 
 static pthread_mutex_t *mutexes;
