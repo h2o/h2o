@@ -25,6 +25,7 @@
 #include <stdarg.h>
 #include "h2olog.h"
 
+#include "h2o/memory.h"
 #include "h2o/version.h"
 
 #define POLL_TIMEOUT (1000)

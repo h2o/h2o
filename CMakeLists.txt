@@ -850,6 +850,7 @@ ELSEIF ("${CMAKE_SYSTEM_NAME}" MATCHES "SunOS")
 ENDIF ()
 
 IF ("${VERSION_PRERELEASE}" STREQUAL "-DEV" AND EXISTS "${CMAKE_SOURCE_DIR}/.git")
+    SET(HAS_GITREV ON)
     ADD_DEFINITIONS("-DH2O_HAS_GITREV_H")
     ADD_CUSTOM_TARGET(gitrev ALL
         COMMAND perl ${CMAKE_CURRENT_SOURCE_DIR}/misc/generate_gitrev.pl
@@ -863,3 +864,19 @@ IF ("${VERSION_PRERELEASE}" STREQUAL "-DEV" AND EXISTS "${CMAKE_SOURCE_DIR}/.git
     ENDIF (LIBUV_FOUND)
 ENDIF ()
 
+
+OPTION(WITH_H2OLOG "use h2olog(1)" OFF)
+if (WITH_H2OLOG)
+    IF (NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        MESSAGE(FATAL "h2olog supports only Linux")
+    ENDIF ()
+
+    IF (NOT WITH_DTRACE)
+        MESSAGE(FATAL "h2olog requires DTrace support")
+    ENDIF ()
+
+    ADD_SUBDIRECTORY(misc/h2olog)
+    IF (HAS_GITREV)
+        ADD_DEPENDENCIES(h2olog gitrev)
+    ENDIF ()
+ENDIF()
