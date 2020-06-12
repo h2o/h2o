@@ -25,13 +25,14 @@
 #include <stdarg.h>
 #include "h2olog.h"
 
-#define VERSION "0.1.0"
+#include "h2o/version.h"
+
 #define POLL_TIMEOUT (1000)
 #define PERF_BUFFER_PAGE_COUNT 256
 
 static void usage(void)
 {
-    printf(R"(h2olog (v%s)
+    printf(R"(h2olog (h2o v%s)
 Usage: h2olog -p PID
        h2olog quic -p PID
        h2olog quic -s response_header_name -p PID
@@ -40,7 +41,7 @@ Other options:
     -d Print debugging information
     -w Path to write the output (default: stdout)
 )",
-           VERSION);
+           H2O_VERSION);
     return;
 }
 
