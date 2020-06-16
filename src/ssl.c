@@ -320,7 +320,7 @@ static int ticket_key_callback_ossl(SSL *ssl, unsigned char *key_name, unsigned 
     return ticket_key_callback(key_name, iv, ctx, hctx, enc);
 }
 
-static void calculate_quic_tp_tag(uint8_t *tag64, quicly_context_t *ctx)
+static void calculate_quic_tp_tag(uint8_t *tag64, const quicly_context_t *ctx)
 {
     ptls_buffer_t buf;
     uint8_t full_digest[PTLS_SHA256_DIGEST_SIZE];
@@ -371,6 +371,17 @@ static int encrypt_ticket_ptls(ptls_encrypt_ticket_t *_self, ptls_t *tls, int is
         }
         return 0;
     }
+}
+
+static ptls_encrypt_ticket_t *create_encrypt_ticket_ptls(const quicly_context_t *quic)
+{
+    struct encrypt_ticket_ptls_t *self = malloc(sizeof(*self));
+    *self = (struct encrypt_ticket_ptls_t){{encrypt_ticket_ptls}};
+    if (quic != NULL) {
+        self->is_quic = 1;
+        calculate_quic_tp_tag(self->quic_tag, quic);
+    }
+    return &self->super;
 }
 
 static int update_tickets(session_ticket_vector_t *tickets, uint64_t now)
@@ -1116,14 +1127,8 @@ void ssl_setup_session_resumption(SSL_CTX **contexts, size_t num_contexts, struc
 void ssl_setup_session_resumption_ptls(ptls_context_t *ptls, quicly_context_t *quic)
 {
     if (conf.ticket.update_thread != NULL) {
-        struct encrypt_ticket_ptls_t *encryptor = malloc(sizeof(*encryptor));
-        *encryptor = (struct encrypt_ticket_ptls_t){{encrypt_ticket_ptls}};
-        if (quic != NULL) {
-            encryptor->is_quic = 1;
-            calculate_quic_tp_tag(encryptor->quic_tag, quic);
-        }
         ptls->ticket_lifetime = 86400 * 7; // FIXME conf.lifetime
-        ptls->encrypt_ticket = &encryptor->super;
+        ptls->encrypt_ticket = create_encrypt_ticket_ptls(quic);
     }
 }
 
