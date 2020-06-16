@@ -394,8 +394,7 @@ static quicly_closed_by_remote_t closed_by_remote = {&on_closed_by_remote};
 static int on_generate_resumption_token(quicly_generate_resumption_token_t *self, quicly_conn_t *conn, ptls_buffer_t *buf,
                                         quicly_address_token_plaintext_t *token)
 {
-    return quicly_encrypt_address_token(tlsctx.random_bytes, address_token_aead.enc, &quicly_get_context(conn)->transport_params,
-                                        buf, buf->off, token);
+    return quicly_encrypt_address_token(tlsctx.random_bytes, address_token_aead.enc, buf, buf->off, token);
 }
 
 static quicly_generate_resumption_token_t generate_resumption_token = {&on_generate_resumption_token};
@@ -773,8 +772,8 @@ static int run_server(int fd, struct sockaddr *sa, socklen_t salen)
                         quicly_address_token_plaintext_t *token = NULL, token_buf;
                         if (packet.token.len != 0) {
                             const char *err_desc = NULL;
-                            int ret = quicly_decrypt_address_token(address_token_aead.dec, &ctx.transport_params, &token_buf,
-                                                                   packet.token.base, packet.token.len, 0, &err_desc);
+                            int ret = quicly_decrypt_address_token(address_token_aead.dec, &token_buf, packet.token.base,
+                                                                   packet.token.len, 0, &err_desc);
                             if (ret == 0 && validate_token(&sa, packet.cid.src, packet.cid.dest.encrypted, &token_buf, &err_desc)) {
                                 token = &token_buf;
                             } else if (enforce_retry && (ret == QUICLY_TRANSPORT_ERROR_INVALID_TOKEN ||

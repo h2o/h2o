@@ -938,25 +938,26 @@ void quicly_amend_ptls_context(ptls_context_t *ptls);
  *
  * @param random_bytes  PRNG
  * @param aead          the AEAD context to be used for decrypting the token
- * @param tp            Transport parameters. Used for detecting and rejecting resumption tokens associated to an incompatible set
- *                      of transport parameters. This argument is ignored when encrypting a Retry token.
  * @param buf           buffer to where the token being built is appended
  * @param start_off     Specifies the start offset of the token. When `start_off < buf->off`, the bytes in between will be
  *                      considered as part of the token and will be covered by the AEAD. Applications can use this location to embed
  *                      the identifier of the AEAD key being used.
  * @param plaintext     the token to be encrypted
  */
-int quicly_encrypt_address_token(void (*random_bytes)(void *, size_t), ptls_aead_context_t *aead,
-                                 const quicly_transport_parameters_t *tp, ptls_buffer_t *buf, size_t start_off,
-                                 const quicly_address_token_plaintext_t *plaintext);
+int quicly_encrypt_address_token(void (*random_bytes)(void *, size_t), ptls_aead_context_t *aead, ptls_buffer_t *buf,
+                                 size_t start_off, const quicly_address_token_plaintext_t *plaintext);
 /**
  * Decrypts an address token.
  * If decryption succeeds, returns zero. If the token is unusable due to decryption failure, returns PTLS_DECODE_ERROR. If the token
  * is unusable and the connection should be reset, returns QUICLY_ERROR_INVALID_TOKEN.
  */
-int quicly_decrypt_address_token(ptls_aead_context_t *aead, const quicly_transport_parameters_t *tp,
-                                 quicly_address_token_plaintext_t *plaintext, const void *src, size_t len, size_t prefix_len,
-                                 const char **err_desc);
+int quicly_decrypt_address_token(ptls_aead_context_t *aead, quicly_address_token_plaintext_t *plaintext, const void *src,
+                                 size_t len, size_t prefix_len, const char **err_desc);
+/**
+ * Builds authentication data for TLS session ticket. 0-RTT can be accepted only when the auth_data of the original connection and
+ * the new connection are identical.
+ */
+int quicly_build_session_ticket_auth_data(ptls_buffer_t *auth_data, const quicly_context_t *ctx);
 /**
  *
  */

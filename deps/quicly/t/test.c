@@ -402,11 +402,11 @@ static void test_address_token_codec(void)
     input.appdata.len = strlen((char *)input.appdata.bytes);
     ptls_buffer_init(&buf, "", 0);
 
-    ok(quicly_encrypt_address_token(ptls_openssl_random_bytes, enc, NULL, &buf, 0, &input) == 0);
+    ok(quicly_encrypt_address_token(ptls_openssl_random_bytes, enc, &buf, 0, &input) == 0);
 
     /* check that the output is ok */
     ptls_openssl_random_bytes(&output, sizeof(output));
-    ok(quicly_decrypt_address_token(dec, NULL, &output, buf.base, buf.off, 0, &err_desc) == 0);
+    ok(quicly_decrypt_address_token(dec, &output, buf.base, buf.off, 0, &err_desc) == 0);
     ok(input.type == output.type);
     ok(input.issued_at == output.issued_at);
     ok(input.remote.sa.sa_family == output.remote.sa.sa_family);
@@ -422,13 +422,13 @@ static void test_address_token_codec(void)
     /* failure to decrypt a Retry token is a hard error */
     ptls_openssl_random_bytes(&output, sizeof(output));
     buf.base[buf.off - 1] ^= 0x80;
-    ok(quicly_decrypt_address_token(dec, NULL, &output, buf.base, buf.off, 0, &err_desc) == QUICLY_TRANSPORT_ERROR_INVALID_TOKEN);
+    ok(quicly_decrypt_address_token(dec, &output, buf.base, buf.off, 0, &err_desc) == QUICLY_TRANSPORT_ERROR_INVALID_TOKEN);
     buf.base[buf.off - 1] ^= 0x80;
 
     /* failure to decrypt a token that is not a Retry is a soft error */
     ptls_openssl_random_bytes(&output, sizeof(output));
     buf.base[0] ^= 0x80;
-    ok(quicly_decrypt_address_token(dec, NULL, &output, buf.base, buf.off, 0, &err_desc) == PTLS_ALERT_DECODE_ERROR);
+    ok(quicly_decrypt_address_token(dec, &output, buf.base, buf.off, 0, &err_desc) == PTLS_ALERT_DECODE_ERROR);
     buf.base[0] ^= 0x80;
 
     ptls_buffer_dispose(&buf);
