@@ -350,7 +350,7 @@ static int encrypt_ticket_ptls(ptls_encrypt_ticket_t *_self, ptls_t *tls, int is
     int ret;
 
     if (is_encrypt) {
-        /* encrypt given data, witch the QUIC tag appended if necessary */
+        /* encrypt given data, with the QUIC tag appended if necessary */
         uint8_t srcbuf[src.len + sizeof(self->quic_tag)];
         if (self->is_quic) {
             memcpy(srcbuf, src.base, src.len);
