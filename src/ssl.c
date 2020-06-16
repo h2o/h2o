@@ -333,10 +333,8 @@ static void calculate_quic_tp_tag(uint8_t *tag64, quicly_context_t *ctx)
     ptls_buffer_dispose(&buf);
 
     /* use the first 64-bit */
-    memcmp(tag64, full_digest, 8);
+    memcpy(tag64, full_digest, 8);
 }
-
-
 
 struct encrypt_ticket_ptls_t {
     ptls_encrypt_ticket_t super;
