@@ -957,7 +957,7 @@ int quicly_decrypt_address_token(ptls_aead_context_t *aead, quicly_address_token
  * Builds authentication data for TLS session ticket. 0-RTT can be accepted only when the auth_data of the original connection and
  * the new connection are identical.
  */
-int quicly_build_session_ticket_auth_data(ptls_buffer_t *auth_data, quicly_context_t *ctx);
+int quicly_build_session_ticket_auth_data(ptls_buffer_t *auth_data, const quicly_context_t *ctx);
 /**
  *
  */

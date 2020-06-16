@@ -5750,7 +5750,7 @@ Exit:
     return ret;
 }
 
-int quicly_build_session_ticket_auth_data(ptls_buffer_t *auth_data, quicly_context_t *ctx)
+int quicly_build_session_ticket_auth_data(ptls_buffer_t *auth_data, const quicly_context_t *ctx)
 {
     int ret;
 
