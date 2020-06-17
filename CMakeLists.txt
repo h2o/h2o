@@ -875,7 +875,7 @@ if (WITH_H2OLOG)
         MESSAGE(FATAL "h2olog requires DTrace support")
     ENDIF ()
 
-    ADD_SUBDIRECTORY(misc/h2olog)
+    ADD_SUBDIRECTORY(h2olog)
     IF (HAS_GITREV)
         ADD_DEPENDENCIES(h2olog gitrev)
     ENDIF ()
