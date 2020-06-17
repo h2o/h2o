@@ -133,6 +133,7 @@ As an example, it is possible to log timestamps in millisecond resolution using 
 <tr><td><code>ssl.session-id</code><td>base64-encoded value of the session id used for resuming the session (since v2.2)
 <tr><td><code>ssl.cipher</code><td>name of the <a href="https://tools.ietf.org/html/rfc5246#appendix-A.5">cipher suite</a> being used, obtained from <a href="https://www.openssl.org/docs/manmaster/ssl/SSL_CIPHER_get_name.html">SSL_CIPHER_get_name</a>
 <tr><td><code>ssl.cipher-bits</code><td>strength of the cipher suite in bits
+<tr><td><code>ssl.server-name</code><td>hostname provided in Server Name Indication (SNI) extension, if any
 </table>
 <table>
 <caption>HTTP/2 (since v2.0)</caption>

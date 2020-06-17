@@ -288,6 +288,7 @@ h2o_logconf_t *h2o_logconf_compile(const char *fmt, int escape, char *errbuf)
                     MAP_EXT_TO_PROTO("ssl.cipher", ssl.cipher);
                     MAP_EXT_TO_PROTO("ssl.cipher-bits", ssl.cipher_bits);
                     MAP_EXT_TO_PROTO("ssl.session-id", ssl.session_id);
+                    MAP_EXT_TO_PROTO("ssl.server-name", ssl.server_name);
                     { /* not found */
                         h2o_iovec_t name = strdup_lowercased(pt, quote_end - pt);
                         NEW_ELEMENT(ELEMENT_TYPE_EXTENDED_VAR);

@@ -16,7 +16,14 @@ IF (WITH_DTRACE)
     MESSAGE(STATUS "Enabling USDT support")
 ENDIF ()
 
-SET(CMAKE_C_FLAGS "-std=c99 -Wall -O2 -g ${CC_WARNING_FLAGS} ${CMAKE_C_FLAGS}")
+# CMake defaults to a Debug build, whereas quicly defaults to an optimized (Release) build
+IF(NOT CMAKE_BUILD_TYPE)
+    SET(CMAKE_BUILD_TYPE Release)
+ENDIF(NOT CMAKE_BUILD_TYPE)
+SET(CMAKE_C_FLAGS "-std=c99 -Wall -g ${CC_WARNING_FLAGS} ${CMAKE_C_FLAGS}")
+SET(CMAKE_C_FLAGS_DEBUG "-O0")
+SET(CMAKE_C_FLAGS_RELEASE "-O2")
+
 INCLUDE_DIRECTORIES(
     ${OPENSSL_INCLUDE_DIR}
     deps/klib
@@ -38,7 +45,10 @@ SET(QUICLY_LIBRARY_FILES
     lib/recvstate.c
     lib/sendstate.c
     lib/sentmap.c
-    lib/streambuf.c)
+    lib/streambuf.c
+    lib/remote_cid.c
+    lib/local_cid.c
+    lib/retire_cid.c)
 
 SET(UNITTEST_SOURCE_FILES
     deps/picotest/picotest.c
@@ -49,6 +59,9 @@ SET(UNITTEST_SOURCE_FILES
     t/sentmap.c
     t/simple.c
     t/stream-concurrency.c
+    t/remote_cid.c
+    t/local_cid.c
+    t/retire_cid.c
     t/test.c)
 
 IF (WITH_DTRACE)

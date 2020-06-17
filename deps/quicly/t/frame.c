@@ -92,7 +92,7 @@ static void test_ack_decode(void)
     { /* Bogus ACK Frame larger than the internal buffer */
         uint8_t pat[1024], *end = pat;
         const uint8_t *src = pat;
-        int i, range_sum;
+        uint64_t i, range_sum;
         quicly_ack_frame_t decoded;
         end = quicly_encodev(end, 0xFA00);
         end = quicly_encodev(end, 0);

@@ -24,11 +24,10 @@
 
 static int on_acked_callcnt, on_acked_ackcnt;
 
-static int on_acked(struct st_quicly_conn_t *conn, const quicly_sent_packet_t *packet, quicly_sent_t *sent,
-                    quicly_sentmap_event_t event)
+static int on_acked(struct st_quicly_conn_t *conn, const quicly_sent_packet_t *packet, int acked, quicly_sent_t *sent)
 {
     ++on_acked_callcnt;
-    if (event == QUICLY_SENTMAP_EVENT_ACKED)
+    if (acked)
         ++on_acked_ackcnt;
     return 0;
 }
@@ -72,7 +71,7 @@ void test_sentmap(void)
             ok(sent->packet_number == at * 5 + i);
             ok(sent->sent_at == at);
             ok(sent->ack_epoch == 0);
-            ok(sent->bytes_in_flight == 1);
+            ok(sent->cc_bytes_in_flight == 1);
             quicly_sentmap_skip(&iter);
         }
     }
@@ -86,13 +85,13 @@ void test_sentmap(void)
     assert(quicly_sentmap_get(&iter)->packet_number == 11);
     while (quicly_sentmap_get(&iter)->packet_number <= 40)
         quicly_sentmap_update(&map, &iter, QUICLY_SENTMAP_EVENT_EXPIRED, NULL);
-    ok(on_acked_callcnt == 30 * 4);
+    ok(on_acked_callcnt == 30 * 2);
     ok(on_acked_ackcnt == 0);
 
     size_t cnt = 0;
     for (quicly_sentmap_init_iter(&map, &iter); (sent = quicly_sentmap_get(&iter))->packet_number != UINT64_MAX;
          quicly_sentmap_skip(&iter)) {
-        ok(sent->bytes_in_flight != 0);
+        ok(sent->cc_bytes_in_flight != 0);
         ok(sent->packet_number <= 10 || 40 < sent->packet_number);
         ++cnt;
     }

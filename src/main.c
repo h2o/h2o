@@ -2276,19 +2276,24 @@ static int validate_token(h2o_http3_server_ctx_t *ctx, struct sockaddr *remote, 
 
     if ((age = ctx->super.quic->now->cb(ctx->super.quic->now) - token->issued_at) < 0)
         age = 0;
-    if (h2o_socket_compare_address(remote, &token->remote.sa, token->is_retry) != 0)
+    if (h2o_socket_compare_address(remote, &token->remote.sa, token->type == QUICLY_ADDRESS_TOKEN_TYPE_RETRY) != 0)
         return 0;
-    if (token->is_retry) {
+    switch (token->type) {
+    case QUICLY_ADDRESS_TOKEN_TYPE_RETRY:
         if (age > 30 * 1000)
             return 0;
-        uint64_t cidhash_actual;
-        if (quicly_retry_calc_cidpair_hash(&ptls_openssl_sha256, client_cid, server_cid, &cidhash_actual) != 0)
+        if (!quicly_cid_is_equal(&token->retry.client_cid, client_cid))
             return 0;
-        if (token->retry.cidpair_hash != cidhash_actual)
+        if (!quicly_cid_is_equal(&token->retry.server_cid, server_cid))
             return 0;
-    } else {
+        break;
+    case QUICLY_ADDRESS_TOKEN_TYPE_RESUMPTION:
         if (age > 10 * 60 * 1000)
             return 0;
+        break;
+    default:
+        h2o_fatal("unexpected token type: %d", (int)token->type);
+        break;
     }
 
     return 1;
@@ -2309,13 +2314,24 @@ static h2o_http3_conn_t *on_http3_accept(h2o_http3_ctx_t *_ctx, quicly_address_t
 
     /* handle retry, setting `token` to a non-NULL pointer if contains a valid token */
     if (packet->token.len != 0) {
-        if (quic_decrypt_address_token(&token_buf, packet->token) == 0 &&
-            validate_token(ctx, &srcaddr->sa, packet->cid.src, packet->cid.dest.encrypted, &token_buf))
-            token = &token_buf;
+        int ret;
+        const char *err_desc = NULL;
+        if ((ret = quic_decrypt_address_token(&token_buf, packet->token, &err_desc)) == 0) {
+            if (validate_token(ctx, &srcaddr->sa, packet->cid.src, packet->cid.dest.encrypted, &token_buf))
+                token = &token_buf;
+        } else if (ret == QUICLY_TRANSPORT_ERROR_INVALID_TOKEN) {
+            uint8_t payload[QUICLY_MIN_CLIENT_INITIAL_SIZE];
+            size_t payload_size = quicly_send_close_invalid_token(ctx->super.quic, &srcaddr->sa, packet->cid.src, &destaddr->sa,
+                                                                  packet->cid.dest.encrypted, err_desc, payload);
+            assert(payload_size != SIZE_MAX);
+            struct iovec vec = {.iov_base = payload, .iov_len = payload_size};
+            h2o_http3_send_datagrams(&ctx->super, srcaddr, destaddr, &vec, 1);
+            return NULL;
+        }
     }
 
     /* send retry if necessary */
-    if (token == NULL || !token->is_retry) {
+    if (token == NULL || token->type != QUICLY_ADDRESS_TOKEN_TYPE_RETRY) {
         int send_retry = ctx->send_retry;
         switch (ebpf_value.quic_send_retry) {
         case H2O_EBPF_QUIC_SEND_RETRY_ON:
@@ -2329,15 +2345,16 @@ static h2o_http3_conn_t *on_http3_accept(h2o_http3_ctx_t *_ctx, quicly_address_t
         }
         if (send_retry) {
             static __thread ptls_aead_context_t *retry_aead_cache = NULL;
-            uint8_t scid[16], token_prefix;
+            uint8_t scid[16], payload[QUICLY_MIN_CLIENT_INITIAL_SIZE], token_prefix;
             ptls_openssl_random_bytes(scid, sizeof(scid));
             ptls_aead_context_t *aead = quic_get_address_token_encryptor(&token_prefix);
-            quicly_datagram_t *rp = quicly_send_retry(
-                ctx->super.quic, aead, &srcaddr->sa, packet->cid.src, &destaddr->sa, ptls_iovec_init(scid, sizeof(scid)),
-                packet->cid.dest.encrypted, ptls_iovec_init(&token_prefix, 1), ptls_iovec_init(NULL, 0), &retry_aead_cache);
-            assert(rp != NULL);
-            h2o_http3_send_datagram(&ctx->super, rp);
-            ctx->super.quic->packet_allocator->free_packet(ctx->super.quic->packet_allocator, rp);
+            size_t payload_size =
+                quicly_send_retry(ctx->super.quic, aead, &srcaddr->sa, packet->cid.src, &destaddr->sa,
+                                  ptls_iovec_init(scid, sizeof(scid)), packet->cid.dest.encrypted,
+                                  ptls_iovec_init(&token_prefix, 1), ptls_iovec_init(NULL, 0), &retry_aead_cache, payload);
+            assert(payload_size != SIZE_MAX);
+            struct iovec vec = {.iov_base = payload, .iov_len = payload_size};
+            h2o_http3_send_datagrams(&ctx->super, srcaddr, destaddr, &vec, 1);
             return NULL;
         }
     }
@@ -3107,6 +3124,13 @@ int main(int argc, char **argv)
         }
         ssl_setup_session_resumption(ssl_contexts.entries, ssl_contexts.size, quic_args, sync_barrier);
         free(ssl_contexts.entries);
+        for (i = 0; i != conf.num_listeners; ++i) {
+            for (j = 0; j != conf.listeners[i]->ssl.size; ++j) {
+                ptls_context_t *ptls = h2o_socket_ssl_get_picotls_context(conf.listeners[i]->ssl.entries[j]->ctx);
+                if (ptls != NULL)
+                    ssl_setup_session_resumption_ptls(ptls, conf.listeners[i]->quic.ctx);
+            }
+        }
     }
 
     /* all setup should be complete by now */

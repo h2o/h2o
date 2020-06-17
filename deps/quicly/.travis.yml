@@ -32,7 +32,7 @@ matrix:
         - label=osx10.13/i386
       before_install: *bs_osx
       script:
-        - curl -O https://www.openssl.org/source/openssl-1.1.0i.tar.gz
+        - curl -O https://www.openssl.org/source/old/1.1.0/openssl-1.1.0i.tar.gz
         - tar -xf openssl-1.1.0i.tar.gz
         - cd openssl-1.1.0i
         - KERNEL_BITS=32 ./config --prefix=$HOME/openssl-build

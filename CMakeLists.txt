@@ -332,9 +332,12 @@ SET(LIB_SOURCE_FILES
     deps/quicly/lib/cc-reno.c
     deps/quicly/lib/defaults.c
     deps/quicly/lib/frame.c
+    deps/quicly/lib/local_cid.c
     deps/quicly/lib/quicly.c
     deps/quicly/lib/ranges.c
     deps/quicly/lib/recvstate.c
+    deps/quicly/lib/remote_cid.c
+    deps/quicly/lib/retire_cid.c
     deps/quicly/lib/sendstate.c
     deps/quicly/lib/sentmap.c
     deps/quicly/lib/streambuf.c

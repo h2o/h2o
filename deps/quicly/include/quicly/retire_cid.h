@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2019 Fastly, Kazuho Oku
+ * Copyright (c) 2020 Fastly, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to
@@ -19,43 +19,43 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-#ifndef quicly_defaults_h
-#define quicly_defaults_h
+#ifndef quicly_retire_cid_h
+#define quicly_retire_cid_h
+
+#include "quicly/cid.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#include "quicly.h"
+/**
+ * up to how many RETIRE_CONNECTION_IDs to keep for retransmission
+ */
+#define QUICLY_RETIRE_CONNECTION_ID_LIMIT (QUICLY_LOCAL_ACTIVE_CONNECTION_ID_LIMIT * 2)
 
-extern const quicly_context_t quicly_spec_context;
-extern const quicly_context_t quicly_performant_context;
+typedef struct st_quicly_retire_cid_set_t quicly_retire_cid_set_t;
 
-/**
- * Instantiates a CID cipher.
- * The CID cipher MUST be a block cipher. It MAY be a 64-bit block cipher (e.g., blowfish) when `quicly_cid_plaintext_t::node_id` is
- * not utilized by the application. Otherwise, it MUST be a 128-bit block cipher (e.g., AES).
- * The reset token cipher MUST be a 128-bit block cipher.
- */
-quicly_cid_encryptor_t *quicly_new_default_cid_encryptor(ptls_cipher_algorithm_t *cid_cipher,
-                                                         ptls_cipher_algorithm_t *reset_token_cipher, ptls_hash_algorithm_t *hash,
-                                                         ptls_iovec_t key);
-/**
- *
- */
-void quicly_free_default_cid_encryptor(quicly_cid_encryptor_t *self);
-/**
- *
- */
-extern quicly_stream_scheduler_t quicly_default_stream_scheduler;
-/**
- *
- */
-extern quicly_now_t quicly_default_now;
-/**
- *
- */
-extern quicly_crypto_engine_t quicly_default_crypto_engine;
+struct st_quicly_retire_cid_set_t {
+    /**
+     * sequence numbers to ask for retirement
+     * Valid entries are packed in the front of the array with FIFO manner.
+     */
+    uint64_t sequences[QUICLY_RETIRE_CONNECTION_ID_LIMIT];
+    /**
+     * number of pending sequence numbers
+     */
+    size_t _num_pending;
+};
+
+void quicly_retire_cid_init(quicly_retire_cid_set_t *set);
+void quicly_retire_cid_push(quicly_retire_cid_set_t *set, uint64_t sequence);
+void quicly_retire_cid_shift(quicly_retire_cid_set_t *set, size_t num_shift);
+static size_t quicly_retire_cid_get_num_pending(const quicly_retire_cid_set_t *set);
+
+inline size_t quicly_retire_cid_get_num_pending(const quicly_retire_cid_set_t *set)
+{
+    return set->_num_pending;
+}
 
 #ifdef __cplusplus
 }

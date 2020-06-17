@@ -22,7 +22,9 @@
  * IN THE SOFTWARE.
  */
 #include <errno.h>
+#ifdef LIBC_HAS_BACKTRACE
 #include <execinfo.h>
+#endif
 #include <getopt.h>
 #include <netinet/in.h>
 #include <signal.h>
@@ -362,9 +364,11 @@ static void on_sigfatal(int signo)
 
     h2o_set_signal_handler(signo, SIG_DFL);
 
+#ifdef LIBC_HAS_BACKTRACE
     void *frames[128];
     int framecnt = backtrace(frames, sizeof(frames) / sizeof(frames[0]));
     backtrace_symbols_fd(frames, framecnt, 2);
+#endif
 }
 
 int main(int argc, char **argv)
@@ -486,7 +490,7 @@ int main(int argc, char **argv)
             }
             h3ctx.quic.transport_params.max_stream_data.uni = v;
             h3ctx.quic.transport_params.max_stream_data.bidi_local = v;
-            h3ctx.quic.transport_params.max_stream_data.bidi_remote = v;;
+            h3ctx.quic.transport_params.max_stream_data.bidi_remote = v;
         } break;
         case 'h':
             usage(argv[0]);
