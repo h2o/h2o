@@ -59,25 +59,25 @@ EOT
         });
 }
 
-subtest "list_allow" => sub  {
-    do_test('proxy.header.list_allow: [ "a" ]', "-Ha:1 -Hb:2", "a: 1", "b: 2");
-    do_test('proxy.header.list_allow: [ "c" ]', "-Ha:1 -Hb:2 -Hc:3", "c: 3", ["a: 1", "b: 2"]);
+subtest "unsetunless" => sub  {
+    do_test('proxy.header.unsetunless: [ "a" ]', "-Ha:1 -Hb:2", "a: 1", "b: 2");
+    do_test('proxy.header.unsetunless: [ "c" ]', "-Ha:1 -Hb:2 -Hc:3", "c: 3", ["a: 1", "b: 2"]);
 };
-subtest "list_deny" => sub  {
-    do_test('proxy.header.list_deny: [ "a", ]', "-Ha:1 -Hb:2", "b: 2", "a: 1");
+subtest "unset" => sub  {
+    do_test('proxy.header.unset: [ "a", ]', "-Ha:1 -Hb:2", "b: 2", "a: 1");
 };
-subtest "list_allow case insensitive" => sub  {
-    do_test('proxy.header.list_allow: [ "A" ]', "-Ha:1 -Hb:2", "a: 1", "b: 2");
-    do_test('proxy.header.list_allow: [ "a" ]', "-HA:1 -Hb:2", "a: 1", "b: 2");
+subtest "unsetunless case insensitive" => sub  {
+    do_test('proxy.header.unsetunless: [ "A" ]', "-Ha:1 -Hb:2", "a: 1", "b: 2");
+    do_test('proxy.header.unsetunless: [ "a" ]', "-HA:1 -Hb:2", "a: 1", "b: 2");
 };
 subtest "cookie_list_allow" => sub  {
-    do_test('proxy.header.cookie.list_allow: [ "a" ]', '-H"cookie:a=1; b=2; c=3"', "cookie: a=1", "");
+    do_test('proxy.header.cookie.unsetunless: [ "a" ]', '-H"cookie:a=1; b=2; c=3"', "cookie: a=1", "");
 };
 subtest "cookie_list_deny" => sub  {
-    do_test('proxy.header.cookie.list_deny: [ "a" ]', '-H"cookie:a=1; b=2; c=3"', "cookie: b=2; c=3", "");
+    do_test('proxy.header.cookie.unset: [ "a" ]', '-H"cookie:a=1; b=2; c=3"', "cookie: b=2; c=3", "");
 };
 subtest "cookie_list_allow case sensitive" => sub  {
-    do_test('proxy.header.cookie.list_allow: [ "A" ]', '-H"cookie:a=1; b=2; c=3; A=4"', "cookie: A=4", "");
+    do_test('proxy.header.cookie.unsetunless: [ "A" ]', '-H"cookie:a=1; b=2; c=3; A=4"', "cookie: A=4", "");
 };
 
 done_testing();

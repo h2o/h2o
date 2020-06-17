@@ -45,37 +45,33 @@ static int extract_name_value(const char *src, h2o_iovec_t **name, h2o_iovec_t *
     return 0;
 }
 
-static int add_single_cmd(h2o_configurator_command_t *cmd, yoml_t *node, int cmd_id, h2o_iovec_t *name, h2o_iovec_t value,
-                          h2o_headers_command_when_t when, h2o_headers_command_t **cmds)
+static int is_list_cmd(int cmd_id)
 {
-    if (h2o_iovec_is_token(name)) {
-        const h2o_token_t *token = (void *)name;
-        if (h2o_headers_is_prohibited_name(token)) {
-            h2o_configurator_errprintf(cmd, node, "the named header cannot be rewritten");
-            return -1;
-        }
-    }
-
-    h2o_headers_append_single_command(cmds, cmd_id, name, value, when);
-    return 0;
+    return cmd_id == H2O_HEADERS_CMD_UNSET
+        || cmd_id == H2O_HEADERS_CMD_UNSETUNLESS
+        || cmd_id == H2O_HEADERS_CMD_COOKIE_UNSET
+        || cmd_id == H2O_HEADERS_CMD_COOKIE_UNSETUNLESS;
 }
 
-static int add_list_cmd(h2o_configurator_command_t *cmd, yoml_t *node, int cmd_id, h2o_iovec_vector_t *list,
-                        h2o_headers_command_when_t when, h2o_headers_command_t **cmds, int normalize_header)
+static int add_cmd(h2o_configurator_command_t *cmd, yoml_t **node, int cmd_id, h2o_iovec_t **name, h2o_iovec_t *value,
+                   size_t num_args, h2o_headers_command_when_t when, h2o_headers_command_t **cmds)
 {
-    int i;
-
-    if (normalize_header) {
-        for (i = 0; i != list->size; i++) {
-            h2o_iovec_t name = list->entries[i];
-            const h2o_token_t *name_token;
-            if ((name_token = h2o_lookup_token(name.base, name.len)) != NULL) {
-                free(name.base);
-                list->entries[i] = name_token->buf;
+    size_t i;
+    for (i = 0; i < num_args; i++) {
+        if (h2o_iovec_is_token(name[i])) {
+            const h2o_token_t *token = (void *)name[i];
+            if (h2o_headers_is_prohibited_name(token)) {
+                h2o_configurator_errprintf(cmd, node[i], "the named header cannot be rewritten");
+                return -1;
             }
         }
+        if (!is_list_cmd(cmd_id)) {
+            h2o_headers_append_command(cmds, cmd_id, &name[i], value ? &value[i] : NULL, 1, when);
+        }
     }
-    h2o_headers_append_list_command(cmds, cmd_id, list, when);
+    if (is_list_cmd(cmd_id)) {
+        h2o_headers_append_command(cmds, cmd_id, name, value, num_args, when);
+    }
 
     return 0;
 }
@@ -128,7 +124,6 @@ static int parse_header_node(h2o_configurator_command_t *cmd, yoml_t **node, yom
 static int on_config_header_2arg(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, int cmd_id, yoml_t *node,
                                  h2o_headers_command_t **headers_cmds)
 {
-    h2o_iovec_t *name, value;
     yoml_t **headers;
     size_t num_headers;
     h2o_headers_command_when_t when;
@@ -136,19 +131,65 @@ static int on_config_header_2arg(h2o_configurator_command_t *cmd, h2o_configurat
     if (parse_header_node(cmd, &node, &headers, &num_headers, &when) != 0)
         return -1;
 
+    h2o_iovec_t *name[num_headers], value[num_headers];
+    yoml_t *header[num_headers];
     int i;
     for (i = 0; i != num_headers; ++i) {
-        yoml_t *header = headers[i];
-        if (extract_name_value(header->data.scalar, &name, &value) != 0) {
-            h2o_configurator_errprintf(cmd, header, "failed to parse the value; should be in form of `name: value`");
+        header[i] = headers[i];
+        if (extract_name_value(header[i]->data.scalar, &name[i], &value[i]) != 0) {
+            h2o_configurator_errprintf(cmd, header[i], "failed to parse the value; should be in form of `name: value`");
             return -1;
         }
-        if (add_single_cmd(cmd, header, cmd_id, name, value, when, headers_cmds) != 0) {
-            if (!h2o_iovec_is_token(name))
-                free(name->base);
-            free(value.base);
-            return -1;
+    }
+    if (add_cmd(cmd, header, cmd_id, name, value, num_headers, when, headers_cmds) != 0) {
+        for (i = 0; i != num_headers; i++) {
+            if (!h2o_iovec_is_token(name[i]))
+                free(name[i]->base);
+            free(value[i].base);
         }
+        return -1;
+    }
+    return 0;
+}
+
+static int on_config_unset_core(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node, int type, int is_header)
+{
+    yoml_t **headers;
+    size_t num_headers;
+    h2o_headers_command_when_t when;
+    struct headers_util_configurator_t *self = (void *)cmd->configurator;
+
+    if (parse_header_node(cmd, &node, &headers, &num_headers, &when) != 0)
+        return -1;
+
+    h2o_iovec_t *name[num_headers];
+    yoml_t *header[num_headers];
+    int i;
+    for (i = 0; i != num_headers; ++i) {
+        header[i] = headers[i];
+        if (is_header) {
+            if (extract_name(header[i]->data.scalar, strlen(header[i]->data.scalar), &name[i]) != 0) {
+                h2o_configurator_errprintf(cmd, header[i], "invalid header name");
+                return -1;
+            }
+        } else {
+            h2o_iovec_t tmp;
+
+            tmp = h2o_str_stripws(header[i]->data.scalar, strlen(header[i]->data.scalar));
+            if (tmp.len == 0) {
+                h2o_configurator_errprintf(cmd, header[i], "invalid header name");
+                return -1;
+            }
+            name[i] = h2o_mem_alloc(sizeof(*name[0]));
+            *name[i] = h2o_strdup(NULL, tmp.base, tmp.len);
+        }
+    }
+    if (add_cmd(cmd, header, type, name, NULL, num_headers, when, self->get_commands(self->child)) != 0) {
+        for (i = 0; i != num_headers; i++) {
+            if (!h2o_iovec_is_token(name[i]))
+                free(name[i]->base);
+        }
+        return -1;
     }
 
     return 0;
@@ -156,76 +197,20 @@ static int on_config_header_2arg(h2o_configurator_command_t *cmd, h2o_configurat
 
 static int on_config_header_unset(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    h2o_iovec_t *name;
-    yoml_t **headers;
-    size_t num_headers;
-    h2o_headers_command_when_t when;
-    struct headers_util_configurator_t *self = (void *)cmd->configurator;
-
-    if (parse_header_node(cmd, &node, &headers, &num_headers, &when) != 0)
-        return -1;
-
-    int i;
-    for (i = 0; i != num_headers; ++i) {
-        yoml_t *header = headers[i];
-        if (extract_name(header->data.scalar, strlen(header->data.scalar), &name) != 0) {
-            h2o_configurator_errprintf(cmd, header, "invalid header name");
-            return -1;
-        }
-        if (add_single_cmd(cmd, header, H2O_HEADERS_CMD_UNSET, name, (h2o_iovec_t){NULL}, when, self->get_commands(self->child)) !=
-            0) {
-            if (!h2o_iovec_is_token(name))
-                free(name->base);
-            return -1;
-        }
-    }
-
-    return 0;
+    return on_config_unset_core(cmd, ctx, node, H2O_HEADERS_CMD_UNSET, 1);
+}
+static int on_config_header_unsetunless(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    return on_config_unset_core(cmd, ctx, node, H2O_HEADERS_CMD_UNSETUNLESS, 1);
 }
 
-static int on_config_list_core(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node, int action,
-                               int header)
+static int on_config_cookie_unset(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    yoml_t **headers;
-    size_t num_headers;
-    h2o_headers_command_when_t when;
-    struct headers_util_configurator_t *self = (void *)cmd->configurator;
-    h2o_iovec_vector_t list;
-
-    if (parse_header_node(cmd, &node, &headers, &num_headers, &when) != 0)
-        return -1;
-    list = (h2o_iovec_vector_t){h2o_mem_alloc(num_headers * sizeof(list.entries[0])), num_headers, num_headers};
-    int i;
-    for (i = 0; i != num_headers; i++) {
-        list.entries[i] = h2o_strdup(NULL, headers[i]->data.scalar, strlen(headers[i]->data.scalar));
-        if (header) {
-            h2o_strtolower(list.entries[i].base, list.entries[i].len);
-        }
-    }
-
-    if (add_list_cmd(cmd, node, action, &list, when, self->get_commands(self->child), header) != 0)
-        return -1;
-    return 0;
+    return on_config_unset_core(cmd, ctx, node, H2O_HEADERS_CMD_COOKIE_UNSET, 0);
 }
-
-static int on_config_header_list_allow(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+static int on_config_cookie_unsetunless(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    return on_config_list_core(cmd, ctx, node, H2O_HEADER_LIST_ALLOW, 1);
-}
-
-static int on_config_header_list_deny(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
-{
-    return on_config_list_core(cmd, ctx, node, H2O_HEADER_LIST_DENY, 1);
-}
-
-static int on_config_cookie_list_allow(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
-{
-    return on_config_list_core(cmd, ctx, node, H2O_COOKIE_LIST_ALLOW, 0);
-}
-
-static int on_config_cookie_list_deny(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
-{
-    return on_config_list_core(cmd, ctx, node, H2O_COOKIE_LIST_DENY, 0);
+    return on_config_unset_core(cmd, ctx, node, H2O_HEADERS_CMD_COOKIE_UNSETUNLESS, 0);
 }
 
 #define DEFINE_2ARG(fn, cmd_id)                                                                                                    \
@@ -262,25 +247,23 @@ void h2o_configurator_define_headers_commands(h2o_globalconf_t *global_conf, h2o
     DEFINE_CMD_NAME(set_directive, ".set");
     DEFINE_CMD_NAME(setifempty_directive, ".setifempty");
     DEFINE_CMD_NAME(unset_directive, ".unset");
-    DEFINE_CMD_NAME(header_list_allow_directive, ".list_allow");
-    DEFINE_CMD_NAME(header_list_deny_directive, ".list_deny");
-    DEFINE_CMD_NAME(cookie_list_allow_directive, ".cookie.list_allow");
-    DEFINE_CMD_NAME(cookie_list_deny_directive, ".cookie.list_deny");
+    DEFINE_CMD_NAME(unsetunless_directive, ".unsetunless");
+    DEFINE_CMD_NAME(cookie_unset_directive, ".cookie.unset");
+    DEFINE_CMD_NAME(cookie_unsetunless_directive, ".cookie.unsetunless");
 #undef DEFINE_CMD_NAME
 
-#define DEFINE_CMD(name, cb, type)                                                                                                 \
+#define DEFINE_CMD(name, cb)                                                                                                       \
     h2o_configurator_define_command(                                                                                               \
         &c->super, name,                                                                                                           \
-        H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_##type | H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING, cb)
-    DEFINE_CMD(add_directive, on_config_header_add, SCALAR);
-    DEFINE_CMD(append_directive, on_config_header_append, SCALAR);
-    DEFINE_CMD(merge_directive, on_config_header_merge, SCALAR);
-    DEFINE_CMD(set_directive, on_config_header_set, SCALAR);
-    DEFINE_CMD(setifempty_directive, on_config_header_setifempty, SCALAR);
-    DEFINE_CMD(unset_directive, on_config_header_unset, SCALAR);
-    DEFINE_CMD(header_list_allow_directive, on_config_header_list_allow, SEQUENCE);
-    DEFINE_CMD(header_list_deny_directive, on_config_header_list_deny, SEQUENCE);
-    DEFINE_CMD(cookie_list_allow_directive, on_config_cookie_list_allow, SEQUENCE);
-    DEFINE_CMD(cookie_list_deny_directive, on_config_cookie_list_deny, SEQUENCE);
+        H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR | H2O_CONFIGURATOR_FLAG_EXPECT_SEQUENCE | H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING, cb)
+    DEFINE_CMD(add_directive, on_config_header_add);
+    DEFINE_CMD(append_directive, on_config_header_append);
+    DEFINE_CMD(merge_directive, on_config_header_merge);
+    DEFINE_CMD(set_directive, on_config_header_set);
+    DEFINE_CMD(setifempty_directive, on_config_header_setifempty);
+    DEFINE_CMD(unset_directive, on_config_header_unset);
+    DEFINE_CMD(unsetunless_directive, on_config_header_unsetunless);
+    DEFINE_CMD(cookie_unset_directive, on_config_cookie_unset);
+    DEFINE_CMD(cookie_unsetunless_directive, on_config_cookie_unsetunless);
 #undef DEFINE_CMD
 }

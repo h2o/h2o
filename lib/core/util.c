@@ -650,7 +650,7 @@ void h2o_extract_push_path_from_link_header(h2o_mem_pool_t *pool, const char *va
 
     /* extract URL values from Link: </pushed.css>; rel=preload */
     do {
-        if ((token = h2o_next_token(&iter, ';', &token_len, NULL, 1)) == NULL)
+        if ((token = h2o_next_token(&iter, ';', ',', &token_len, NULL)) == NULL)
             break;
         /* first element should be <URL> */
         if (!(token_len >= 2 && token[0] == '<' && token[token_len - 1] == '>'))
@@ -658,7 +658,7 @@ void h2o_extract_push_path_from_link_header(h2o_mem_pool_t *pool, const char *va
         h2o_iovec_t url_with_brackets = h2o_iovec_init(token, token_len);
         /* find rel=preload */
         int preload = 0, nopush = 0, push_only = 0, critical = 0;
-        while ((token = h2o_next_token(&iter, ';', &token_len, &token_value, 1)) != NULL &&
+        while ((token = h2o_next_token(&iter, ';', ',', &token_len, &token_value)) != NULL &&
                !h2o_memis(token, token_len, H2O_STRLIT(","))) {
             if (h2o_lcstris(token, token_len, H2O_STRLIT("rel")) &&
                 h2o_lcstris(token_value.base, token_value.len, H2O_STRLIT("preload"))) {
@@ -713,7 +713,7 @@ int h2o_get_compressible_types(const h2o_headers_t *headers)
             h2o_iovec_t iter = h2o_iovec_init(header->value.base, header->value.len);
             const char *token = NULL;
             size_t token_len = 0;
-            while ((token = h2o_next_token(&iter, ',', &token_len, NULL, 1)) != NULL) {
+            while ((token = h2o_next_token(&iter, ',', ',', &token_len, NULL)) != NULL) {
                 if (h2o_lcstris(token, token_len, H2O_STRLIT("gzip")))
                     compressible_types |= H2O_COMPRESSIBLE_GZIP;
                 else if (h2o_lcstris(token, token_len, H2O_STRLIT("br")))
