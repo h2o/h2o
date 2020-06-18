@@ -23,6 +23,7 @@
 #include <limits.h>
 #include <stdio.h>
 #include <sys/epoll.h>
+#include <errno.h>
 
 #if 0
 #define DEBUG_LOG(...) h2o_error_printf(__VA_ARGS__)
@@ -105,14 +106,18 @@ int evloop_do_proceed(h2o_evloop_t *_loop, int32_t max_wait)
     struct st_h2o_evloop_epoll_t *loop = (struct st_h2o_evloop_epoll_t *)_loop;
     struct epoll_event events[256];
     int nevents, i;
+    uint64_t wake_at = 0;
 
     /* collect (and update) status */
     if (update_status(loop) != 0)
         return -1;
 
-    /* poll */
-    max_wait = adjust_max_wait(&loop->super, max_wait);
-    nevents = epoll_wait(loop->ep, events, sizeof(events) / sizeof(events[0]), max_wait);
+    /* poll. if epoll_wait fails because of EINTR, restart it */
+    do {
+        max_wait = adjust_max_wait(&loop->super, max_wait, &wake_at);
+        nevents = epoll_wait(loop->ep, events, sizeof(events) / sizeof(events[0]), max_wait);
+    } while (nevents == -1 && errno == EINTR);
+
     update_now(&loop->super);
     if (nevents == -1)
         return -1;

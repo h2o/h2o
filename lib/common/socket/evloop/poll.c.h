@@ -21,6 +21,7 @@
  */
 #include <stdio.h>
 #include <poll.h>
+#include <errno.h>
 
 #if 0
 #define DEBUG_LOG(...) h2o_error_printf(__VA_ARGS__)
@@ -76,6 +77,7 @@ int evloop_do_proceed(h2o_evloop_t *_loop, int32_t max_wait)
     struct st_h2o_evloop_poll_t *loop = (struct st_h2o_evloop_poll_t *)_loop;
     H2O_VECTOR(struct pollfd) pollfds = {NULL};
     int fd, ret;
+    uint64_t wake_at = 0;
 
     /* update status */
     update_socks(loop);
@@ -99,9 +101,12 @@ int evloop_do_proceed(h2o_evloop_t *_loop, int32_t max_wait)
         }
     }
 
-    /* call */
-    max_wait = adjust_max_wait(&loop->super, max_wait);
-    ret = poll(pollfds.entries, (nfds_t)pollfds.size, max_wait);
+    /* call. If poll fails because of EINTR, restart it */
+    do {
+        max_wait = adjust_max_wait(&loop->super, max_wait, &wake_at);
+        ret = poll(pollfds.entries, (nfds_t)pollfds.size, max_wait);
+    } while (ret == -1 && errno == EINTR);
+
     update_now(&loop->super);
     if (ret == -1)
         goto Exit;

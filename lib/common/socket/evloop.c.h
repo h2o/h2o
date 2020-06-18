@@ -64,7 +64,7 @@ static void link_to_pending(struct st_h2o_evloop_socket_t *sock);
 static void write_pending(struct st_h2o_evloop_socket_t *sock);
 static h2o_evloop_t *create_evloop(size_t sz);
 static void update_now(h2o_evloop_t *loop);
-static int32_t adjust_max_wait(h2o_evloop_t *loop, int32_t max_wait);
+static int32_t adjust_max_wait(h2o_evloop_t *loop, int32_t max_wait, uint64_t* wake_at);
 
 /* functions to be defined in the backends */
 static int evloop_do_proceed(h2o_evloop_t *loop, int32_t max_wait);
@@ -495,16 +495,18 @@ void update_now(h2o_evloop_t *loop)
     loop->_now_millisec = loop->_now_nanosec / 1000000;
 }
 
-int32_t adjust_max_wait(h2o_evloop_t *loop, int32_t max_wait)
+int32_t adjust_max_wait(h2o_evloop_t *loop, int32_t max_wait, uint64_t* wake_at)
 {
-    uint64_t wake_at = h2o_timerwheel_get_wake_at(loop->_timeouts);
+    /* if the caller already knows when to wake up, don't recalculate that */
+    if (*wake_at == 0)
+        *wake_at = h2o_timerwheel_get_wake_at(loop->_timeouts);
 
     update_now(loop);
 
-    if (wake_at <= loop->_now_millisec) {
+    if (*wake_at <= loop->_now_millisec) {
         max_wait = 0;
     } else {
-        uint64_t delta = wake_at - loop->_now_millisec;
+        uint64_t delta = *wake_at - loop->_now_millisec;
         if (delta < max_wait)
             max_wait = (int32_t)delta;
     }

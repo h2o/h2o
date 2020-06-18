@@ -24,6 +24,7 @@
 #include <sys/types.h>
 #include <sys/event.h>
 #include <sys/time.h>
+#include <errno.h>
 
 #if 0
 #define DEBUG_LOG(...) h2o_error_printf(__VA_ARGS__)
@@ -108,16 +109,19 @@ int evloop_do_proceed(h2o_evloop_t *_loop, int32_t max_wait)
     struct kevent changelist[64], events[128];
     int nchanges, nevents, i;
     struct timespec ts;
+    uint64_t wake_at = 0;
 
     /* collect (and update) status */
     if ((nchanges = collect_status(loop, changelist, sizeof(changelist) / sizeof(changelist[0]))) == -1)
         return -1;
 
-    /* poll */
-    max_wait = adjust_max_wait(&loop->super, max_wait);
-    ts.tv_sec = max_wait / 1000;
-    ts.tv_nsec = max_wait % 1000 * 1000 * 1000;
-    nevents = kevent(loop->kq, changelist, nchanges, events, sizeof(events) / sizeof(events[0]), &ts);
+    /* poll. If kevent fails because of EINTR, restart it */
+    do {
+        max_wait = adjust_max_wait(&loop->super, max_wait, &wake_at);
+        ts.tv_sec = max_wait / 1000;
+        ts.tv_nsec = max_wait % 1000 * 1000 * 1000;
+        nevents = kevent(loop->kq, changelist, nchanges, events, sizeof(events) / sizeof(events[0]), &ts);
+    } while (nevents == -1 && errno == EINTR);
 
     update_now(&loop->super);
     if (nevents == -1)
