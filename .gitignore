@@ -16,4 +16,3 @@ misc/test-ca/demoCA/newcerts/*.pem
 tmp/
 /doc/workdir/
 include/h2o/gitrev.h
-h2olog
