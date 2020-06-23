@@ -1,1 +1,3 @@
-generated-*.cc linguist-generated=true
+/fuzz/http1-corpus/* binary
+/fuzz/http2-corpus/* binary
+/h2olog/generated-*.cc linguist-generated=true
