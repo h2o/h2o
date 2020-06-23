@@ -21,6 +21,7 @@ EOT
 <ul>
 <li>LLVM and clang (&gt;= 3.7.1)</li>
 <li>CMake for generating the build files</li>
+<li>pkg-config for detecting dependencies</li>
 <li>Python 3 for the code generator</li>
 <li><a href="https://iovisor.github.io/bcc/">BCC (a.k.a. bpfcc)</a>(&gt;= 0.11.0) <a href="https://github.com/iovisor/bcc/blob/master/INSTALL.md">installed</a> on your system</li>
 </ul>
