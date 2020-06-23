@@ -19,8 +19,8 @@ EOT
 
 <h3>For building h2olog</h3>
 <ul>
-<li>LLVM and clang (&gt;= 3.7.1)</li>
-<li>CMake for generating the build files</li>
+<li>C++11 compiler</li>
+<li>CMake (&gt;= 3.8) for generating the build files</li>
 <li>pkg-config for detecting dependencies</li>
 <li>Python 3 for the code generator</li>
 <li><a href="https://iovisor.github.io/bcc/">BCC (a.k.a. bpfcc)</a>(&gt;= 0.11.0) <a href="https://github.com/iovisor/bcc/blob/master/INSTALL.md">installed</a> on your system</li>
@@ -33,6 +33,7 @@ EOT
 <h3>For running h2olog</h3>
 <ul>
 <li>Root privilege to execute the program</li>
+<li>Linux kernel (&gt;= 4.9)</li>
 <li>H2O server built after <a href="https://github.com/h2o/h2o/commit/53e1db428772460534191d1c35c79a6dd94e021f">53e1db42</a> with <code>-DWITH_DTRACE=on</code> cmake option</li>
 </ul>
 
