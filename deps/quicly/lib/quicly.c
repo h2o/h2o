@@ -3556,8 +3556,8 @@ size_t quicly_send_retry(quicly_context_t *ctx, ptls_aead_context_t *token_encry
         memcpy(buf.base + buf.off, token_prefix.base, token_prefix.len);
         buf.off += token_prefix.len;
     }
-    if ((ret = quicly_encrypt_address_token(ctx->tls->random_bytes, token_encrypt_ctx, NULL, &buf, buf.off - token_prefix.len,
-                                            &token)) != 0)
+    if ((ret = quicly_encrypt_address_token(ctx->tls->random_bytes, token_encrypt_ctx, &buf, buf.off - token_prefix.len, &token)) !=
+        0)
         goto Exit;
 
     /* append AEAD tag */
@@ -5563,44 +5563,10 @@ void quicly_amend_ptls_context(ptls_context_t *ptls)
     ptls->update_traffic_key = &update_traffic_key;
 }
 
-/* builds AAD, from the plaintext data we'd have on wire and the transport parameter */
-static int build_aad_of_address_token(ptls_buffer_t *aad, const quicly_transport_parameters_t *tp, const void *plaintext_on_wire,
-                                      size_t plaintext_on_wire_len)
+int quicly_encrypt_address_token(void (*random_bytes)(void *, size_t), ptls_aead_context_t *aead, ptls_buffer_t *buf,
+                                 size_t start_off, const quicly_address_token_plaintext_t *plaintext)
 {
     int ret;
-
-    ptls_buffer_push_block(aad, -1, { ptls_buffer_pushv(aad, plaintext_on_wire, plaintext_on_wire_len); });
-#define PUSH_TP(id, block)                                                                                                         \
-    do {                                                                                                                           \
-        ptls_buffer_push_quicint(aad, id);                                                                                         \
-        ptls_buffer_push_block(aad, -1, block);                                                                                    \
-    } while (0)
-    PUSH_TP(QUICLY_TRANSPORT_PARAMETER_ID_ACTIVE_CONNECTION_ID_LIMIT,
-            { ptls_buffer_push_quicint(aad, tp->active_connection_id_limit); });
-    PUSH_TP(QUICLY_TRANSPORT_PARAMETER_ID_INITIAL_MAX_DATA, { ptls_buffer_push_quicint(aad, tp->max_data); });
-    PUSH_TP(QUICLY_TRANSPORT_PARAMETER_ID_INITIAL_MAX_STREAM_DATA_BIDI_LOCAL,
-            { ptls_buffer_push_quicint(aad, tp->max_stream_data.bidi_local); });
-    PUSH_TP(QUICLY_TRANSPORT_PARAMETER_ID_INITIAL_MAX_STREAM_DATA_BIDI_REMOTE,
-            { ptls_buffer_push_quicint(aad, tp->max_stream_data.bidi_remote); });
-    PUSH_TP(QUICLY_TRANSPORT_PARAMETER_ID_INITIAL_MAX_STREAM_DATA_UNI, { ptls_buffer_push_quicint(aad, tp->max_stream_data.uni); });
-    PUSH_TP(QUICLY_TRANSPORT_PARAMETER_ID_INITIAL_MAX_STREAMS_BIDI, { ptls_buffer_push_quicint(aad, tp->max_streams_bidi); });
-    PUSH_TP(QUICLY_TRANSPORT_PARAMETER_ID_INITIAL_MAX_STREAMS_UNI, { ptls_buffer_push_quicint(aad, tp->max_streams_uni); });
-#undef PUSH_TP
-
-    ret = 0;
-Exit:
-    return ret;
-}
-
-int quicly_encrypt_address_token(void (*random_bytes)(void *, size_t), ptls_aead_context_t *aead,
-                                 const quicly_transport_parameters_t *tp, ptls_buffer_t *buf, size_t start_off,
-                                 const quicly_address_token_plaintext_t *plaintext)
-{
-    ptls_iovec_t aad;
-    ptls_buffer_t resumption_aad;
-    int ret;
-
-    ptls_buffer_init(&resumption_aad, "", 0);
 
     /* type and IV */
     if ((ret = ptls_buffer_reserve(buf, 1 + aead->algo->iv_size)) != 0)
@@ -5632,7 +5598,6 @@ int quicly_encrypt_address_token(void (*random_bytes)(void *, size_t), ptls_aead
         });
         ptls_buffer_push16(buf, port);
     }
-    aad = ptls_iovec_init(buf->base + start_off, enc_start - start_off);
     switch (plaintext->type) {
     case QUICLY_ADDRESS_TOKEN_TYPE_RETRY:
         ptls_buffer_push_block(buf, 1,
@@ -5644,9 +5609,6 @@ int quicly_encrypt_address_token(void (*random_bytes)(void *, size_t), ptls_aead
         break;
     case QUICLY_ADDRESS_TOKEN_TYPE_RESUMPTION:
         ptls_buffer_push_block(buf, 1, { ptls_buffer_pushv(buf, plaintext->resumption.bytes, plaintext->resumption.len); });
-        if ((ret = build_aad_of_address_token(&resumption_aad, tp, aad.base, aad.len)) != 0)
-            goto Exit;
-        aad = ptls_iovec_init(resumption_aad.base, resumption_aad.off);
         break;
     default:
         assert(!"unexpected token type");
@@ -5657,19 +5619,17 @@ int quicly_encrypt_address_token(void (*random_bytes)(void *, size_t), ptls_aead
     /* encrypt, abusing the internal API to supply full IV */
     if ((ret = ptls_buffer_reserve(buf, aead->algo->tag_size)) != 0)
         goto Exit;
-    aead->do_encrypt_init(aead, buf->base + enc_start - aead->algo->iv_size, aad.base, aad.len);
+    aead->do_encrypt_init(aead, buf->base + enc_start - aead->algo->iv_size, buf->base + start_off, enc_start - start_off);
     ptls_aead_encrypt_update(aead, buf->base + enc_start, buf->base + enc_start, buf->off - enc_start);
     ptls_aead_encrypt_final(aead, buf->base + buf->off);
     buf->off += aead->algo->tag_size;
 
 Exit:
-    ptls_buffer_dispose(&resumption_aad);
     return ret;
 }
 
-int quicly_decrypt_address_token(ptls_aead_context_t *aead, const quicly_transport_parameters_t *tp,
-                                 quicly_address_token_plaintext_t *plaintext, const void *_token, size_t len, size_t prefix_len,
-                                 const char **err_desc)
+int quicly_decrypt_address_token(ptls_aead_context_t *aead, quicly_address_token_plaintext_t *plaintext, const void *_token,
+                                 size_t len, size_t prefix_len, const char **err_desc)
 {
     const uint8_t *const token = _token;
     uint8_t ptbuf[QUICLY_MIN_CLIENT_INITIAL_SIZE];
@@ -5701,20 +5661,12 @@ int quicly_decrypt_address_token(ptls_aead_context_t *aead, const quicly_transpo
     }
 
     /* `goto Exit` can only happen below this line, and that is guaranteed by declaring `ret` here */
-    ptls_iovec_t aad = ptls_iovec_init(token, prefix_len + 1 + aead->algo->iv_size);
-    ptls_buffer_t resumption_aad;
-    ptls_buffer_init(&resumption_aad, "", 0);
     int ret;
 
     /* decrypt */
-    if (plaintext->type == QUICLY_ADDRESS_TOKEN_TYPE_RESUMPTION) {
-        if ((ret = build_aad_of_address_token(&resumption_aad, tp, aad.base, aad.len)) != 0)
-            goto Exit;
-        aad = ptls_iovec_init(resumption_aad.base, resumption_aad.off);
-    }
     if ((ptlen = aead->do_decrypt(aead, ptbuf, token + prefix_len + 1 + aead->algo->iv_size,
-                                  len - (prefix_len + 1 + aead->algo->iv_size), token + prefix_len + 1, aad.base, aad.len)) ==
-        SIZE_MAX) {
+                                  len - (prefix_len + 1 + aead->algo->iv_size), token + prefix_len + 1, token,
+                                  prefix_len + 1 + aead->algo->iv_size)) == SIZE_MAX) {
         ret = PTLS_ALERT_DECRYPT_ERROR;
         *err_desc = "token decryption failure";
         goto Exit;
@@ -5788,7 +5740,6 @@ int quicly_decrypt_address_token(ptls_aead_context_t *aead, const quicly_transpo
     ret = 0;
 
 Exit:
-    ptls_buffer_dispose(&resumption_aad);
     if (ret != 0) {
         if (*err_desc == NULL)
             *err_desc = "token decode error";
@@ -5796,6 +5747,40 @@ Exit:
         if (plaintext->type == QUICLY_ADDRESS_TOKEN_TYPE_RETRY)
             ret = QUICLY_TRANSPORT_ERROR_INVALID_TOKEN;
     }
+    return ret;
+}
+
+int quicly_build_session_ticket_auth_data(ptls_buffer_t *auth_data, const quicly_context_t *ctx)
+{
+    int ret;
+
+#define PUSH_TP(id, block)                                                                                                         \
+    do {                                                                                                                           \
+        ptls_buffer_push_quicint(auth_data, id);                                                                                   \
+        ptls_buffer_push_block(auth_data, -1, block);                                                                              \
+    } while (0)
+
+    ptls_buffer_push_block(auth_data, -1, {
+        PUSH_TP(QUICLY_TRANSPORT_PARAMETER_ID_ACTIVE_CONNECTION_ID_LIMIT,
+                { ptls_buffer_push_quicint(auth_data, ctx->transport_params.active_connection_id_limit); });
+        PUSH_TP(QUICLY_TRANSPORT_PARAMETER_ID_INITIAL_MAX_DATA,
+                { ptls_buffer_push_quicint(auth_data, ctx->transport_params.max_data); });
+        PUSH_TP(QUICLY_TRANSPORT_PARAMETER_ID_INITIAL_MAX_STREAM_DATA_BIDI_LOCAL,
+                { ptls_buffer_push_quicint(auth_data, ctx->transport_params.max_stream_data.bidi_local); });
+        PUSH_TP(QUICLY_TRANSPORT_PARAMETER_ID_INITIAL_MAX_STREAM_DATA_BIDI_REMOTE,
+                { ptls_buffer_push_quicint(auth_data, ctx->transport_params.max_stream_data.bidi_remote); });
+        PUSH_TP(QUICLY_TRANSPORT_PARAMETER_ID_INITIAL_MAX_STREAM_DATA_UNI,
+                { ptls_buffer_push_quicint(auth_data, ctx->transport_params.max_stream_data.uni); });
+        PUSH_TP(QUICLY_TRANSPORT_PARAMETER_ID_INITIAL_MAX_STREAMS_BIDI,
+                { ptls_buffer_push_quicint(auth_data, ctx->transport_params.max_streams_bidi); });
+        PUSH_TP(QUICLY_TRANSPORT_PARAMETER_ID_INITIAL_MAX_STREAMS_UNI,
+                { ptls_buffer_push_quicint(auth_data, ctx->transport_params.max_streams_uni); });
+    });
+
+#undef PUSH_TP
+
+    ret = 0;
+Exit:
     return ret;
 }
 
