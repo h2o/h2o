@@ -1,13 +1,13 @@
 ? my $ctx = $main::context;
 ? $_mt->wrapper_file("wrapper.mt", "Configure", "Using h2olog for Tracing")->(sub {
 
-<p>h2olog is a <a href="https://www.kernel.org/doc/html/latest/bpf/index.html">BPF</a> (<a href="https://www.kernel.org/doc/Documentation/networking/filter.txt">kernel doc</a>) backed HTTP request tracing tool for the <a href="https://github.com/h2o/h2o">H2O</a> server.
-h2olog can also be used to log <a href="https://en.wikipedia.org/wiki/QUIC">QUIC</a> events for <a href="https://en.wikipedia.org/wiki/Transport_layer">transport layer</a> observation.
-See <a href="#tracing-quic-events">Tracing QUIC events</a> for how.</p>
+<p>h2olog is a an experimental <a href="https://www.kernel.org/doc/html/latest/bpf/index.html">BPF</a> (<a href="https://www.kernel.org/doc/Documentation/networking/filter.txt">kernel doc</a>) backed tracing tool for the <a href="https://github.com/h2o/h2o">H2O</a> server.
+It can be used for tracing HTTP-level or QUIC-level events.</p>
 
 <h2 id="installing-from-source">Installing from Source</h2>
 
-<p>See <a href="#requirements">requirements</a> for build prerequisites. If dependencies are satisfied, <code>-DWITH_H2OLOG=on</code> will be set and the <code>h2olog</code> target will be configured.</p>
+<p>See <a href="#requirements">requirements</a> for build prerequisites.</p>
+<p>If dependencies are satisfied, h2olog is built automatically. It is possible to manually turn on / off the build of h2olog by using the <code>-DWITH_H2OLOG</code> option. This option takes either <code>ON</code>> or <code>OFF</code> as the argument.</p>
 <p>If you have <code>BCC</code> installed to a non-standard path, use <code>pkg-config</code> for <code>cmake</code>.
 
 <?= $ctx->{code}->(<<'EOT')
@@ -23,7 +23,7 @@ EOT
 <li>CMake for generating the build files</li>
 <li>pkg-config for detecting dependencies</li>
 <li>Python 3 for the code generator</li>
-<li><a href="https://iovisor.github.io/bcc/">BCC (a.k.a. bpfcc)</a>(&gt;= 0.11.0) <a href="https://github.com/iovisor/bcc/blob/master/INSTALL.md">installed</a> on your system</li>
+<li><a href="https://iovisor.github.io/bcc/">BCC</a> (BPF compiler collection, a.k.a. bpfcc; &gt;= 0.11.0) <a href="https://github.com/iovisor/bcc/blob/master/INSTALL.md">installed</a> on your system</li>
 </ul>
 <p>For Ubuntu 20.04 or later, you can install dependencies with:</p>
 <?= $ctx->{code}->(<<'EOT')
@@ -32,9 +32,8 @@ EOT
 ?>
 <h3>For running h2olog</h3>
 <ul>
-<li>Root privilege to execute the program</li>
+<li>Root privilege to execute h2olog</li>
 <li>Linux kernel (&gt;= 4.9)</li>
-<li>H2O server built after <a href="https://github.com/h2o/h2o/commit/53e1db428772460534191d1c35c79a6dd94e021f">53e1db42</a> with <code>-DWITH_DTRACE=on</code> cmake option</li>
 </ul>
 
 <h2 id="quicstart">Quickstart</h2>
@@ -76,10 +75,5 @@ EOT
 ... and more ...
 EOT
 ?>
-
-<h2 id="program-anatomy">Program Anatomy</h2>
-
-<p>h2olog is a <a href="https://github.com/iovisor/bcc">BCC</a> based C++ program.
-It was previously implemented using the <a href="https://github.com/iovisor/bcc/blob/master/docs/reference_guide.md#bcc-python">BCC Python binding</a> on <a href="https://github.com/toru/h2olog">toru/h2olog</a>.</p>
 
 ? })
