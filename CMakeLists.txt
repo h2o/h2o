@@ -897,16 +897,15 @@ IF (WITH_H2OLOG)
         "include/h2o/version.h"
     )
 
-    FILE(COPY "deps/quicly/quicly-probes.d" DESTINATION "${CMAKE_CURRENT_BINARY_DIR}")
-    LIST(APPEND H2OLOG_DTRACE_FILES "${CMAKE_CURRENT_BINARY_DIR}/quicly-probes.d")
-
-    FILE(COPY "h2o-probes.d" DESTINATION "${CMAKE_CURRENT_BINARY_DIR}")
-    LIST(APPEND H2OLOG_DTRACE_FILES "${CMAKE_CURRENT_BINARY_DIR}/h2o-probes.d")
+    SET(H2OLOG_GEN_DEPS
+        "h2o-probes.d"
+        "deps/quicly/quicly-probes.d"
+    )
 
     ADD_CUSTOM_COMMAND(
         OUTPUT  "${CMAKE_CURRENT_SOURCE_DIR}/h2olog/generated-quic.cc"
-        COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/h2olog/misc/gen-quic-bpf.py" "${CMAKE_CURRENT_BINARY_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}/h2olog/generated-quic.cc"
-        DEPENDS "${DTRACE_FILES}"
+        COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/h2olog/misc/gen-quic-bpf.py" "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}/h2olog/generated-quic.cc"
+        DEPENDS "${H2OLOG_GEN_DEPS}"
         DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/h2olog/misc/gen-quic-bpf.py"
     )
     LIST(APPEND H2OLOG_SOURCE_FILES "${CMAKE_CURRENT_SOURCE_DIR}/h2olog/generated-quic.cc")

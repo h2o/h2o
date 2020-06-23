@@ -20,13 +20,17 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 # IN THE SOFTWARE.
 
-# usage: gen-quic-bpf.py d_files_dir output_file
+# usage: gen-quic-bpf.py h2o_dir output_file
 
 import re
 import sys
 from collections import OrderedDict
 from pathlib import Path
 from pprint import pprint
+
+quicly_probes_d = "deps/quicly/quicly-probes.d"
+h2o_probes_d = "h2o-probes.d"
+data_types_h = "h2olog/quic.h"
 
 block_fields = {
     "quicly:crypto_decrypt": set(["decrypted"]),
@@ -64,8 +68,6 @@ rename_map = {
     "variance": "variance-rtt",
     "latest": "latest-rtt",
 }
-
-data_types_h = Path(Path(__file__).parent.parent, "quic.h")
 
 re_flags = re.X | re.M | re.S
 whitespace = r'(?:/\*.*?\*/|\s+)'
@@ -240,22 +242,24 @@ int %s(struct pt_regs *ctx) {
   return c
 
 
-def prepare_context(d_files_dir):
-  st_map = parse_c_struct(data_types_h)
+def prepare_context(h2o_dir):
+  st_map = parse_c_struct(h2o_dir.joinpath(data_types_h))
   context = {
       "id": 1,  # 1 is used for sched:sched_process_exit
       "probe_metadata": OrderedDict(),
       "st_map": st_map,
+      "h2o_dir": h2o_dir,
   }
-  parse_d(context, Path(d_files_dir, "quicly-probes.d"),
+  parse_d(context, h2o_dir.joinpath(quicly_probes_d),
           block_probes=quicly_block_probes)
-  parse_d(context, Path(d_files_dir, "h2o-probes.d"),
+  parse_d(context, h2o_dir.joinpath(h2o_probes_d),
           allow_probes=h2o_allow_probes)
 
   return context
 
 
 def generate_cplusplus(context, output_file):
+  h2o_dir = context["h2o_dir"]
 
   probe_metadata = context["probe_metadata"]
 
@@ -318,7 +322,7 @@ int trace_sched_process_exit(struct tracepoint__sched__sched_process_exit *ctx) 
   return 0;
 }
 
-""" % (data_types_h.read_text(), event_t_decl)
+""" % (h2o_dir.joinpath(data_types_h).read_text(), event_t_decl)
 
   usdt_def = """
 static
@@ -463,12 +467,12 @@ void init_quic_tracer(h2o_tracer_t * tracer) {
 
 def main():
   try:
-    (_, d_files_dir, output_file) = sys.argv
+    (_, h2o_dir, output_file) = sys.argv
   except:
-    print("usage: %s d_files_dir output_file" % sys.argv[0])
+    print("usage: %s h2o_dir output_file" % sys.argv[0])
     sys.exit(1)
 
-  context = prepare_context(d_files_dir)
+  context = prepare_context(Path(h2o_dir))
   generate_cplusplus(context, output_file)
 
 
