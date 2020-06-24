@@ -84,15 +84,15 @@ static int parse_header_node(h2o_configurator_command_t *cmd, yoml_t **node, yom
         *headers = node;
         *num_headers = 1;
         *when = H2O_HEADERS_CMD_WHEN_FINAL;
+    } else if ((*node)->type == YOML_TYPE_SEQUENCE) {
+        *headers = (*node)->data.sequence.elements;
+        *num_headers = (*node)->data.sequence.size;
+        *when = H2O_HEADERS_CMD_WHEN_FINAL;
     } else {
         yoml_t **header_node;
         yoml_t **when_node = NULL;
-        if ((*node)->type == YOML_TYPE_SEQUENCE) {
-            header_node = node;
-        } else {
-            if (h2o_configurator_parse_mapping(cmd, *node, "header:sa", "when:*", &header_node, &when_node) != 0)
-                return -1;
-        }
+        if (h2o_configurator_parse_mapping(cmd, *node, "header:sa", "when:*", &header_node, &when_node) != 0)
+            return -1;
         if ((*header_node)->type == YOML_TYPE_SEQUENCE) {
             *headers = (*header_node)->data.sequence.elements;
             *num_headers = (*header_node)->data.sequence.size;
