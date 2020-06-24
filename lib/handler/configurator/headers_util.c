@@ -53,24 +53,24 @@ static int is_list_cmd(int cmd_id)
         || cmd_id == H2O_HEADERS_CMD_COOKIE_UNSETUNLESS;
 }
 
-static int add_cmd(h2o_configurator_command_t *cmd, yoml_t **node, int cmd_id, h2o_iovec_t **name, h2o_iovec_t *value,
+static int add_cmd(h2o_configurator_command_t *cmd, int cmd_id, struct st_h2o_headers_add_arg_t *args,
                    size_t num_args, h2o_headers_command_when_t when, h2o_headers_command_t **cmds)
 {
     size_t i;
     for (i = 0; i < num_args; i++) {
-        if (h2o_iovec_is_token(name[i])) {
-            const h2o_token_t *token = (void *)name[i];
+        if (h2o_iovec_is_token(args[i].name)) {
+            const h2o_token_t *token = (void *)args[i].name;
             if (h2o_headers_is_prohibited_name(token)) {
-                h2o_configurator_errprintf(cmd, node[i], "the named header cannot be rewritten");
+                h2o_configurator_errprintf(cmd, args[i].node, "the named header cannot be rewritten");
                 return -1;
             }
         }
         if (!is_list_cmd(cmd_id)) {
-            h2o_headers_append_command(cmds, cmd_id, &name[i], value ? &value[i] : NULL, 1, when);
+            h2o_headers_append_command(cmds, cmd_id, &(h2o_headers_add_arg_t){ args[i].node, args[i].name, args[i].value}, 1, when);
         }
     }
     if (is_list_cmd(cmd_id)) {
-        h2o_headers_append_command(cmds, cmd_id, name, value, num_args, when);
+        h2o_headers_append_command(cmds, cmd_id, args, num_args, when);
     }
 
     return 0;
@@ -131,28 +131,27 @@ static int on_config_header_2arg(h2o_configurator_command_t *cmd, h2o_configurat
     if (parse_header_node(cmd, &node, &headers, &num_headers, &when) != 0)
         return -1;
 
-    h2o_iovec_t *name[num_headers], value[num_headers];
-    yoml_t *header[num_headers];
+    h2o_headers_add_arg_t args[num_headers];
     int i;
     for (i = 0; i != num_headers; ++i) {
-        header[i] = headers[i];
-        if (extract_name_value(header[i]->data.scalar, &name[i], &value[i]) != 0) {
-            h2o_configurator_errprintf(cmd, header[i], "failed to parse the value; should be in form of `name: value`");
+        args[i].node = headers[i];
+        if (extract_name_value(args[i].node->data.scalar, &args[i].name, &args[i].value) != 0) {
+            h2o_configurator_errprintf(cmd, args[i].node, "failed to parse the value; should be in form of `name: value`");
             return -1;
         }
     }
-    if (add_cmd(cmd, header, cmd_id, name, value, num_headers, when, headers_cmds) != 0) {
+    if (add_cmd(cmd, cmd_id, args, num_headers, when, headers_cmds) != 0) {
         for (i = 0; i != num_headers; i++) {
-            if (!h2o_iovec_is_token(name[i]))
-                free(name[i]->base);
-            free(value[i].base);
+            if (!h2o_iovec_is_token(args[i].name))
+                free(args[i].name->base);
+            free(args[i].value.base);
         }
         return -1;
     }
     return 0;
 }
 
-static int on_config_unset_core(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node, int type, int is_header)
+static int on_config_unset_core(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node, int cmd_id)
 {
     yoml_t **headers;
     size_t num_headers;
@@ -162,32 +161,31 @@ static int on_config_unset_core(h2o_configurator_command_t *cmd, h2o_configurato
     if (parse_header_node(cmd, &node, &headers, &num_headers, &when) != 0)
         return -1;
 
-    h2o_iovec_t *name[num_headers];
-    yoml_t *header[num_headers];
+    h2o_headers_add_arg_t args[num_headers];
     int i;
     for (i = 0; i != num_headers; ++i) {
-        header[i] = headers[i];
-        if (is_header) {
-            if (extract_name(header[i]->data.scalar, strlen(header[i]->data.scalar), &name[i]) != 0) {
-                h2o_configurator_errprintf(cmd, header[i], "invalid header name");
+        args[i].node = headers[i];
+        if (cmd_id == H2O_HEADERS_CMD_UNSET || cmd_id == H2O_HEADERS_CMD_UNSETUNLESS ) {
+            if (extract_name(args[i].node->data.scalar, strlen(args[i].node->data.scalar), &args[i].name) != 0) {
+                h2o_configurator_errprintf(cmd, args[i].node, "invalid header name");
                 return -1;
             }
         } else {
             h2o_iovec_t tmp;
 
-            tmp = h2o_str_stripws(header[i]->data.scalar, strlen(header[i]->data.scalar));
+            tmp = h2o_str_stripws(args[i].node->data.scalar, strlen(args[i].node->data.scalar));
             if (tmp.len == 0) {
-                h2o_configurator_errprintf(cmd, header[i], "invalid header name");
+                h2o_configurator_errprintf(cmd, args[i].node, "invalid header name");
                 return -1;
             }
-            name[i] = h2o_mem_alloc(sizeof(*name[0]));
-            *name[i] = h2o_strdup(NULL, tmp.base, tmp.len);
+            args[i].name = h2o_mem_alloc(sizeof(args[0].name));
+            *args[i].name = h2o_strdup(NULL, tmp.base, tmp.len);
         }
     }
-    if (add_cmd(cmd, header, type, name, NULL, num_headers, when, self->get_commands(self->child)) != 0) {
+    if (add_cmd(cmd, cmd_id, args, num_headers, when, self->get_commands(self->child)) != 0) {
         for (i = 0; i != num_headers; i++) {
-            if (!h2o_iovec_is_token(name[i]))
-                free(name[i]->base);
+            if (!h2o_iovec_is_token(args[i].name))
+                free(args[i].name->base);
         }
         return -1;
     }
@@ -197,20 +195,20 @@ static int on_config_unset_core(h2o_configurator_command_t *cmd, h2o_configurato
 
 static int on_config_header_unset(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    return on_config_unset_core(cmd, ctx, node, H2O_HEADERS_CMD_UNSET, 1);
+    return on_config_unset_core(cmd, ctx, node, H2O_HEADERS_CMD_UNSET);
 }
 static int on_config_header_unsetunless(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    return on_config_unset_core(cmd, ctx, node, H2O_HEADERS_CMD_UNSETUNLESS, 1);
+    return on_config_unset_core(cmd, ctx, node, H2O_HEADERS_CMD_UNSETUNLESS);
 }
 
 static int on_config_cookie_unset(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    return on_config_unset_core(cmd, ctx, node, H2O_HEADERS_CMD_COOKIE_UNSET, 0);
+    return on_config_unset_core(cmd, ctx, node, H2O_HEADERS_CMD_COOKIE_UNSET);
 }
 static int on_config_cookie_unsetunless(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    return on_config_unset_core(cmd, ctx, node, H2O_HEADERS_CMD_COOKIE_UNSETUNLESS, 0);
+    return on_config_unset_core(cmd, ctx, node, H2O_HEADERS_CMD_COOKIE_UNSETUNLESS);
 }
 
 #define DEFINE_2ARG(fn, cmd_id)                                                                                                    \

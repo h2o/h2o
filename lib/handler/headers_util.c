@@ -1,14 +1,13 @@
 #include "h2o.h"
 
-static h2o_header_t *find_header(h2o_headers_t *headers, h2o_headers_command_t *cmd)
+static h2o_header_t *find_header(h2o_headers_t *headers, h2o_iovec_t *name)
 {
     ssize_t index;
 
-    assert(cmd->num_args == 1);
-    if (h2o_iovec_is_token(cmd->args[0].name)) {
-        index = h2o_find_header(headers, (void *)cmd->args[0].name, -1);
+    if (h2o_iovec_is_token(name)) {
+        index = h2o_find_header(headers, (void *)name, -1);
     } else {
-        index = h2o_find_header_by_str(headers, cmd->args[0].name->base, cmd->args[0].name->len, -1);
+        index = h2o_find_header_by_str(headers, name->base, name->len, -1);
     }
     if (index == -1)
         return NULL;
@@ -128,7 +127,7 @@ static void remove_header(h2o_headers_t *headers, h2o_headers_command_t *cmd)
     headers->size = dst;
 }
 
-void h2o_headers_append_command(h2o_headers_command_t **cmds, int cmd, h2o_iovec_t **names, h2o_iovec_t *values,
+void h2o_headers_append_command(h2o_headers_command_t **cmds, int cmd, h2o_headers_add_arg_t *args,
                                 size_t num_args, h2o_headers_command_when_t when)
 {
     h2o_headers_command_t *new_cmds;
@@ -149,8 +148,8 @@ void h2o_headers_append_command(h2o_headers_command_t **cmds, int cmd, h2o_iovec
     new_cmds[cnt].when = when;
     new_cmds[cnt].args = h2o_mem_alloc_shared(NULL, sizeof(*new_cmds->args) * num_args, NULL);
     for (i = 0; i < num_args; i++) {
-        new_cmds[cnt].args[i].name = names[i];
-        new_cmds[cnt].args[i].value = values ? values[i] : (h2o_iovec_t){NULL};
+        new_cmds[cnt].args[i].name = args[i].name;
+        new_cmds[cnt].args[i].value = args[i].value;
     }
     new_cmds[cnt].num_args = num_args;
     new_cmds[cnt + 1] = (h2o_headers_command_t){H2O_HEADERS_CMD_NULL};
@@ -169,12 +168,12 @@ void h2o_rewrite_headers(h2o_mem_pool_t *pool, h2o_headers_t *headers, h2o_heade
         goto AddHeader;
     case H2O_HEADERS_CMD_APPEND:
         assert(cmd->num_args == 1);
-        if ((target = find_header(headers, cmd)) == NULL)
+        if ((target = find_header(headers, cmd->args[0].name)) == NULL)
             goto AddHeader;
         goto AppendToken;
     case H2O_HEADERS_CMD_MERGE:
         assert(cmd->num_args == 1);
-        if ((target = find_header(headers, cmd)) == NULL)
+        if ((target = find_header(headers, cmd->args[0].name)) == NULL)
             goto AddHeader;
         if (h2o_contains_token(target->value.base, target->value.len, cmd->args[0].value.base, cmd->args[0].value.len, ','))
             return;
@@ -183,7 +182,8 @@ void h2o_rewrite_headers(h2o_mem_pool_t *pool, h2o_headers_t *headers, h2o_heade
         remove_header(headers, cmd);
         goto AddHeader;
     case H2O_HEADERS_CMD_SETIFEMPTY:
-        if (find_header(headers, cmd) != NULL)
+        assert(cmd->num_args == 1);
+        if (find_header(headers, cmd->args[0].name) != NULL)
             return;
         goto AddHeader;
     case H2O_HEADERS_CMD_UNSET:
