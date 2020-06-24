@@ -425,7 +425,7 @@ const char *h2o_next_token(h2o_iovec_t *iter, int inner, int outer, size_t *elem
             ++cur;
             break;
         }
-        if (outer && *cur == outer) {
+        if (*cur == outer) {
             if (token_start == cur) {
                 ++cur;
                 token_end = cur;

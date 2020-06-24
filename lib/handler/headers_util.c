@@ -45,7 +45,7 @@ static void filter_cookie(h2o_mem_pool_t *pool, char **base, size_t *len, h2o_he
     size_t dst_len = 0;
 
     do {
-        if ((token = h2o_next_token(&iter, ';', 0, &token_len, &token_value)) == NULL)
+        if ((token = h2o_next_token(&iter, ';', ';', &token_len, &token_value)) == NULL)
             break;
         int found = is_in_list(token, token_len, cmd, 0);
         if ((action == UNSETUNLESS && found) || (action == UNSET && !found)) {
