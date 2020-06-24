@@ -1945,14 +1945,14 @@ typedef enum h2o_headers_command_when {
     H2O_HEADERS_CMD_WHEN_ALL,
 } h2o_headers_command_when_t;
 
-struct st_h2o_headers_command_args_t {
+struct st_h2o_headers_command_arg_t {
         h2o_iovec_t *name; /* maybe a token */
         h2o_iovec_t value;
 };
 
 struct st_h2o_headers_command_t {
     int cmd;
-    struct st_h2o_headers_command_args_t *args;
+    struct st_h2o_headers_command_arg_t *args;
     size_t num_args;
     h2o_headers_command_when_t when;
 };
