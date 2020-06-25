@@ -14,12 +14,12 @@ static h2o_header_t *find_header(h2o_headers_t *headers, h2o_iovec_t *name)
     return headers->entries + index;
 }
 
-static int is_in_list(const char *base, size_t len, h2o_headers_command_t *cmd, int header)
+static int is_in_list(const char *base, size_t len, h2o_headers_command_t *cmd)
 {
     size_t i;
     h2o_iovec_t name = h2o_iovec_init(base, len);
     for (i = 0; i != cmd->num_args; ++i) {
-        if (header && h2o_iovec_is_token(cmd->args[i].name)) {
+        if (h2o_iovec_is_token(cmd->args[i].name)) {
             if (cmd->args[i].name->base == name.base) {
                 return 1;
             }
@@ -46,7 +46,7 @@ static void filter_cookie(h2o_mem_pool_t *pool, char **base, size_t *len, h2o_he
     do {
         if ((token = h2o_next_token(&iter, ';', ';', &token_len, &token_value)) == NULL)
             break;
-        int found = is_in_list(token, token_len, cmd, 0);
+        int found = is_in_list(token, token_len, cmd);
         if ((action == UNSETUNLESS && found) || (action == UNSET && !found)) {
             if (dst_len != 0) {
                 memcpy(dst + dst_len, H2O_STRLIT("; "));
@@ -97,7 +97,7 @@ static void remove_header_unless(h2o_headers_t *headers, h2o_headers_command_t *
     size_t src, dst = 0;
 
     for (src = 0; src != headers->size; ++src) {
-        if (!is_in_list(headers->entries[src].name->base, headers->entries[src].name->len, cmd, 1))
+        if (!is_in_list(headers->entries[src].name->base, headers->entries[src].name->len, cmd))
             continue;
         /* not matched */
         if (dst != src)
