@@ -178,7 +178,7 @@ static int on_config_unset_core(h2o_configurator_command_t *cmd, h2o_configurato
                 h2o_configurator_errprintf(cmd, args[i].node, "invalid header name");
                 return -1;
             }
-            args[i].name = h2o_mem_alloc(sizeof(args[0].name));
+            args[i].name = h2o_mem_alloc(sizeof(*args[0].name));
             *args[i].name = h2o_strdup(NULL, tmp.base, tmp.len);
         }
     }
