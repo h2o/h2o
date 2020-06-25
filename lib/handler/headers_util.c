@@ -31,11 +31,7 @@ static int is_in_list(const char *base, size_t len, h2o_headers_command_t *cmd)
     return 0;
 }
 
-enum {
-    UNSET,
-    UNSETUNLESS,
-};
-static void filter_cookie(h2o_mem_pool_t *pool, char **base, size_t *len, h2o_headers_command_t *cmd, int action)
+static void filter_cookie(h2o_mem_pool_t *pool, char **base, size_t *len, h2o_headers_command_t *cmd)
 {
     h2o_iovec_t iter = h2o_iovec_init(*base, *len), token_value;
     const char *token;
@@ -47,7 +43,7 @@ static void filter_cookie(h2o_mem_pool_t *pool, char **base, size_t *len, h2o_he
         if ((token = h2o_next_token(&iter, ';', ';', &token_len, &token_value)) == NULL)
             break;
         int found = is_in_list(token, token_len, cmd);
-        if ((action == UNSETUNLESS && found) || (action == UNSET && !found)) {
+        if ((cmd->cmd == H2O_HEADERS_CMD_COOKIE_UNSETUNLESS && found) || (cmd->cmd == H2O_HEADERS_CMD_COOKIE_UNSET && !found)) {
             if (dst_len != 0) {
                 memcpy(dst + dst_len, H2O_STRLIT("; "));
                 dst_len += 2;
@@ -74,21 +70,12 @@ static void filter_cookie(h2o_mem_pool_t *pool, char **base, size_t *len, h2o_he
     *len = dst_len;
 }
 
-static void remove_cookie_unless(h2o_mem_pool_t *pool, h2o_headers_t *headers, h2o_headers_command_t *cmd)
+static void cookie_cmd(h2o_mem_pool_t *pool, h2o_headers_t *headers, h2o_headers_command_t *cmd)
 {
     ssize_t header_index;
     for (header_index = -1; (header_index = h2o_find_header(headers, H2O_TOKEN_COOKIE, header_index)) != -1;) {
         h2o_header_t *header = headers->entries + header_index;
-        filter_cookie(pool, &header->value.base, &header->value.len, cmd, UNSETUNLESS);
-    }
-}
-
-static void remove_cookie(h2o_mem_pool_t *pool, h2o_headers_t *headers, h2o_headers_command_t *cmd)
-{
-    ssize_t header_index;
-    for (header_index = -1; (header_index = h2o_find_header(headers, H2O_TOKEN_COOKIE, header_index)) != -1;) {
-        h2o_header_t *header = headers->entries + header_index;
-        filter_cookie(pool, &header->value.base, &header->value.len, cmd, UNSET);
+        filter_cookie(pool, &header->value.base, &header->value.len, cmd);
     }
 }
 
@@ -193,10 +180,8 @@ void h2o_rewrite_headers(h2o_mem_pool_t *pool, h2o_headers_t *headers, h2o_heade
         remove_header_unless(headers, cmd);
         return;
     case H2O_HEADERS_CMD_COOKIE_UNSET:
-        remove_cookie(pool, headers, cmd);
-        return;
     case H2O_HEADERS_CMD_COOKIE_UNSETUNLESS:
-        remove_cookie_unless(pool, headers, cmd);
+        cookie_cmd(pool, headers, cmd);
         return;
     }
 
