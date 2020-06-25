@@ -1946,8 +1946,8 @@ typedef enum h2o_headers_command_when {
 } h2o_headers_command_when_t;
 
 struct st_h2o_headers_command_arg_t {
-        h2o_iovec_t *name; /* maybe a token */
-        h2o_iovec_t value;
+    h2o_iovec_t *name; /* maybe a token */
+    h2o_iovec_t value;
 };
 
 struct st_h2o_headers_command_t {

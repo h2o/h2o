@@ -53,8 +53,8 @@ static int is_list_cmd(int cmd_id)
         || cmd_id == H2O_HEADERS_CMD_COOKIE_UNSETUNLESS;
 }
 
-static int add_cmd(h2o_configurator_command_t *cmd, int cmd_id, struct st_h2o_headers_add_arg_t *args,
-                   size_t num_args, h2o_headers_command_when_t when, h2o_headers_command_t **cmds)
+static int add_cmd(h2o_configurator_command_t *cmd, int cmd_id, struct st_h2o_headers_add_arg_t *args, size_t num_args,
+                   h2o_headers_command_when_t when, h2o_headers_command_t **cmds)
 {
     size_t i;
     for (i = 0; i < num_args; i++) {
@@ -66,7 +66,7 @@ static int add_cmd(h2o_configurator_command_t *cmd, int cmd_id, struct st_h2o_he
             }
         }
         if (!is_list_cmd(cmd_id)) {
-            h2o_headers_append_command(cmds, cmd_id, &(h2o_headers_add_arg_t){ args[i].node, args[i].name, args[i].value}, 1, when);
+            h2o_headers_append_command(cmds, cmd_id, &(h2o_headers_add_arg_t){args[i].node, args[i].name, args[i].value}, 1, when);
         }
     }
     if (is_list_cmd(cmd_id)) {
@@ -165,7 +165,7 @@ static int on_config_unset_core(h2o_configurator_command_t *cmd, h2o_configurato
     int i;
     for (i = 0; i != num_headers; ++i) {
         args[i].node = headers[i];
-        if (cmd_id == H2O_HEADERS_CMD_UNSET || cmd_id == H2O_HEADERS_CMD_UNSETUNLESS ) {
+        if (cmd_id == H2O_HEADERS_CMD_UNSET || cmd_id == H2O_HEADERS_CMD_UNSETUNLESS) {
             if (extract_name(args[i].node->data.scalar, strlen(args[i].node->data.scalar), &args[i].name) != 0) {
                 h2o_configurator_errprintf(cmd, args[i].node, "invalid header name");
                 return -1;
