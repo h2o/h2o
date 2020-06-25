@@ -107,7 +107,7 @@ typedef struct st_h2o_hostconf_t h2o_hostconf_t;
 typedef struct st_h2o_globalconf_t h2o_globalconf_t;
 typedef struct st_h2o_mimemap_t h2o_mimemap_t;
 typedef struct st_h2o_logconf_t h2o_logconf_t;
-typedef struct st_h2o_headers_command_args_t h2o_headers_command_args_t;
+typedef struct st_h2o_headers_command_arg_t h2o_headers_command_arg_t;
 typedef struct st_h2o_headers_command_t h2o_headers_command_t;
 
 /**
