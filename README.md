@@ -19,4 +19,4 @@ For more information, please refer to the documentation at [h2o.examp1e.net](htt
 
 Reporting Security Issues
 ---
-Please report vulnerabilities to h2o-vuln@googlegroups.com.
+Please report vulnerabilities to h2o-vuln@googlegroups.com. See [SECURITY.md](SECURITY.md) for more information.
