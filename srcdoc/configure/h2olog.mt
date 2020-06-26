@@ -1,10 +1,10 @@
 ? my $ctx = $main::context;
 ? $_mt->wrapper_file("wrapper.mt", "Configure", "Using h2olog for Tracing")->(sub {
 
-<p>h2olog is a an experimental <a href="https://www.kernel.org/doc/html/latest/bpf/index.html">BPF</a> (<a href="https://www.kernel.org/doc/Documentation/networking/filter.txt">kernel doc</a>) backed tracing tool for the <a href="https://github.com/h2o/h2o">H2O</a> server.
+<p>h2olog is an experimental <a href="https://www.kernel.org/doc/html/latest/bpf/index.html">BPF</a> (<a href="https://www.kernel.org/doc/Documentation/networking/filter.txt">kernel doc</a>) backed tracing tool for the <a href="https://github.com/h2o/h2o">H2O</a> server.
 It can be used for tracing HTTP-level or QUIC-level events.</p>
 
-<p><em>Since this is experimental, its command-line interface might change without notice.</em></p>
+<p><em>Since h2olog is an experimental program, its command-line interface might change without notice.</em></p>
 
 <h2 id="installing-from-source">Installing from Source</h2>
 
