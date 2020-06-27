@@ -20,6 +20,7 @@
  * IN THE SOFTWARE.
  */
 #include <stdlib.h>
+#include <string.h>
 #include "aes.h"
 #include "modes.h"
 #include "sha2.h"
@@ -51,13 +52,13 @@ static inline void aesecb_decrypt(ptls_cipher_context_t *_ctx, void *output, con
     cf_aes_decrypt(&ctx->aes, input, output);
 }
 
-static inline int aesecb_setup_crypto(ptls_cipher_context_t *_ctx, int is_enc, const void *key, size_t key_size)
+static inline int aesecb_setup_crypto(ptls_cipher_context_t *_ctx, int is_enc, const void *key)
 {
     struct aesecb_context_t *ctx = (struct aesecb_context_t *)_ctx;
     ctx->super.do_dispose = aesecb_dispose;
     ctx->super.do_init = NULL;
     ctx->super.do_transform = is_enc ? aesecb_encrypt : aesecb_decrypt;
-    cf_aes_init(&ctx->aes, key, key_size);
+    cf_aes_init(&ctx->aes, key, ctx->super.algo->key_size);
     return 0;
 }
 
@@ -85,13 +86,13 @@ static inline void aesctr_transform(ptls_cipher_context_t *_ctx, void *output, c
     cf_ctr_cipher(&ctx->ctr, input, output, len);
 }
 
-static inline int aesctr_setup_crypto(ptls_cipher_context_t *_ctx, int is_enc, const void *key, size_t key_size)
+static inline int aesctr_setup_crypto(ptls_cipher_context_t *_ctx, int is_enc, const void *key)
 {
     struct aesctr_context_t *ctx = (struct aesctr_context_t *)_ctx;
     ctx->super.do_dispose = aesctr_dispose;
     ctx->super.do_init = aesctr_init;
     ctx->super.do_transform = aesctr_transform;
-    cf_aes_init(&ctx->aes, key, key_size);
+    cf_aes_init(&ctx->aes, key, ctx->super.algo->key_size);
     return 0;
 }
 
@@ -99,6 +100,7 @@ struct aesgcm_context_t {
     ptls_aead_context_t super;
     cf_aes_context aes;
     cf_gcm_ctx gcm;
+    uint8_t static_iv[PTLS_AESGCM_IV_SIZE];
 };
 
 static inline void aesgcm_dispose_crypto(ptls_aead_context_t *_ctx)
@@ -109,10 +111,12 @@ static inline void aesgcm_dispose_crypto(ptls_aead_context_t *_ctx)
     ptls_clear_memory((uint8_t *)ctx + sizeof(ctx->super), sizeof(*ctx) - sizeof(ctx->super));
 }
 
-static inline void aesgcm_encrypt_init(ptls_aead_context_t *_ctx, const void *iv, const void *aad, size_t aadlen)
+static inline void aesgcm_encrypt_init(ptls_aead_context_t *_ctx, uint64_t seq, const void *aad, size_t aadlen)
 {
     struct aesgcm_context_t *ctx = (struct aesgcm_context_t *)_ctx;
+    uint8_t iv[PTLS_AES_BLOCK_SIZE];
 
+    ptls_aead__build_iv(ctx->super.algo, iv, ctx->static_iv, seq);
     cf_gcm_encrypt_init(&cf_aes, &ctx->aes, &ctx->gcm, aad, aadlen, iv, PTLS_AESGCM_IV_SIZE);
 }
 
@@ -132,15 +136,17 @@ static inline size_t aesgcm_encrypt_final(ptls_aead_context_t *_ctx, void *outpu
     return PTLS_AESGCM_TAG_SIZE;
 }
 
-static inline size_t aesgcm_decrypt(ptls_aead_context_t *_ctx, void *output, const void *input, size_t inlen, const void *iv,
-                             const void *aad, size_t aadlen)
+static inline size_t aesgcm_decrypt(ptls_aead_context_t *_ctx, void *output, const void *input, size_t inlen, uint64_t seq,
+                                    const void *aad, size_t aadlen)
 {
     struct aesgcm_context_t *ctx = (struct aesgcm_context_t *)_ctx;
+    uint8_t iv[PTLS_AES_BLOCK_SIZE];
 
     if (inlen < PTLS_AESGCM_TAG_SIZE)
         return SIZE_MAX;
     size_t tag_offset = inlen - PTLS_AESGCM_TAG_SIZE;
 
+    ptls_aead__build_iv(ctx->super.algo, iv, ctx->static_iv, seq);
     if (cf_gcm_decrypt(&cf_aes, &ctx->aes, input, tag_offset, aad, aadlen, iv, PTLS_AESGCM_IV_SIZE, (uint8_t *)input + tag_offset,
                        PTLS_AESGCM_TAG_SIZE, output) != 0)
         return SIZE_MAX;
@@ -148,7 +154,7 @@ static inline size_t aesgcm_decrypt(ptls_aead_context_t *_ctx, void *output, con
     return tag_offset;
 }
 
-static inline int aead_aesgcm_setup_crypto(ptls_aead_context_t *_ctx, int is_enc, const void *key, size_t key_size)
+static inline int aead_aesgcm_setup_crypto(ptls_aead_context_t *_ctx, int is_enc, const void *key, const void *iv)
 {
     struct aesgcm_context_t *ctx = (struct aesgcm_context_t *)_ctx;
 
@@ -157,6 +163,7 @@ static inline int aead_aesgcm_setup_crypto(ptls_aead_context_t *_ctx, int is_enc
         ctx->super.do_encrypt_init = aesgcm_encrypt_init;
         ctx->super.do_encrypt_update = aesgcm_encrypt_update;
         ctx->super.do_encrypt_final = aesgcm_encrypt_final;
+        ctx->super.do_encrypt = ptls_aead__do_encrypt;
         ctx->super.do_decrypt = NULL;
     } else {
         ctx->super.do_encrypt_init = NULL;
@@ -165,6 +172,7 @@ static inline int aead_aesgcm_setup_crypto(ptls_aead_context_t *_ctx, int is_enc
         ctx->super.do_decrypt = aesgcm_decrypt;
     }
 
-    cf_aes_init(&ctx->aes, key, key_size);
+    cf_aes_init(&ctx->aes, key, ctx->super.algo->key_size);
+    memcpy(ctx->static_iv, iv, sizeof(ctx->static_iv));
     return 0;
 }

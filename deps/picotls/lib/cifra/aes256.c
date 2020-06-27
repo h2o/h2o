@@ -23,17 +23,17 @@
 
 static int aes256ecb_setup_crypto(ptls_cipher_context_t *ctx, int is_enc, const void *key)
 {
-    return aesecb_setup_crypto(ctx, is_enc, key, PTLS_AES256_KEY_SIZE);
+    return aesecb_setup_crypto(ctx, is_enc, key);
 }
 
 static int aes256ctr_setup_crypto(ptls_cipher_context_t *ctx, int is_enc, const void *key)
 {
-    return aesctr_setup_crypto(ctx, is_enc, key, PTLS_AES256_KEY_SIZE);
+    return aesctr_setup_crypto(ctx, is_enc, key);
 }
 
-static int aead_aes256gcm_setup_crypto(ptls_aead_context_t *ctx, int is_enc, const void *key)
+static int aead_aes256gcm_setup_crypto(ptls_aead_context_t *ctx, int is_enc, const void *key, const void *iv)
 {
-    return aead_aesgcm_setup_crypto(ctx, is_enc, key, PTLS_AES256_KEY_SIZE);
+    return aead_aesgcm_setup_crypto(ctx, is_enc, key, iv);
 }
 
 ptls_define_hash(sha384, cf_sha512_context, cf_sha384_init, cf_sha384_update, cf_sha384_digest_final);

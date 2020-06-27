@@ -64,6 +64,7 @@ ENDIF ()
 
 ADD_LIBRARY(picotls-core ${CORE_FILES})
 TARGET_LINK_LIBRARIES(picotls-core ${CORE_EXTRA_LIBS})
+
 ADD_LIBRARY(picotls-minicrypto
     ${MINICRYPTO_LIBRARY_FILES}
     lib/cifra.c
@@ -90,7 +91,6 @@ ADD_EXECUTABLE(test-minicrypto.t
     lib/cifra/aes128.c
     lib/cifra/aes256.c
     lib/cifra/random.c)
-
 SET(TEST_EXES test-minicrypto.t)
 
 FIND_PACKAGE(OpenSSL)
@@ -129,6 +129,26 @@ IF (OPENSSL_FOUND AND NOT (OPENSSL_VERSION VERSION_LESS "1.0.1"))
     SET(TEST_EXES ${TEST_EXES} test-openssl.t)
 ELSE ()
     MESSAGE(WARNING "Disabling OpenSSL support (requires 1.0.1 or newer)")
+ENDIF ()
+
+IF ((CMAKE_SIZEOF_VOID_P EQUAL 8) AND
+    (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64") OR
+     (CMAKE_SYSTEM_PROCESSOR STREQUAL "amd64") OR
+     (CMAKE_SYSTEM_PROCESSOR STREQUAL "AMD64"))
+    MESSAGE(STATUS " Enabling fusion support")
+    ADD_LIBRARY(picotls-fusion lib/fusion.c)
+    SET_TARGET_PROPERTIES(picotls-fusion PROPERTIES COMPILE_FLAGS "-mavx2 -maes -mpclmul")
+    TARGET_LINK_LIBRARIES(picotls-fusion picotls-core)
+    ADD_EXECUTABLE(test-fusion.t
+        deps/picotest/picotest.c
+        lib/picotls.c
+        t/fusion.c)
+    TARGET_LINK_LIBRARIES(test-fusion.t picotls-minicrypto)
+    SET_TARGET_PROPERTIES(test-fusion.t PROPERTIES COMPILE_FLAGS "-mavx2 -maes -mpclmul")
+    IF (WITH_DTRACE)
+        ADD_DEPENDENCIES(test-fusion.t generate-picotls-probes)
+    ENDIF ()
+    SET(TEST_EXES ${TEST_EXES} test-fusion.t)
 ENDIF ()
 
 ADD_CUSTOM_TARGET(check env BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR} prove --exec '' -v ${CMAKE_CURRENT_BINARY_DIR}/*.t t/*.t WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} DEPENDS ${TEST_EXES} cli)
