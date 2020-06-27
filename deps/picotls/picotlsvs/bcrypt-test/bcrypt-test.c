@@ -69,14 +69,17 @@ void KeyRelease(BCRYPT_KEY_HANDLE *hKey, BYTE **ko, ULONG *ko_length)
     *ko_length = 0;
 }
 
-int EncodeOneShot(wchar_t *name, wchar_t *chain_mode, size_t chain_mode_sz, BYTE *key, ULONG key_length, BYTE *data,
-                  ULONG dataLength, BYTE *nonceValue, ULONG nonceLength, BYTE *authData, ULONG authDataLength, ULONG authTagLength,
-                  BYTE *encrypted, ULONG encryptedLengthMax, ULONG *encryptedLength)
+int EncodeOneShot(ptls_aead_algorithm_t *aead, wchar_t *name, wchar_t *chain_mode, size_t chain_mode_sz, BYTE *key,
+                  ULONG key_length,
+    BYTE* iv, ULONG iv_length,
+    BYTE *data, ULONG dataLength, uint64_t seq, BYTE *authData, ULONG authDataLength, ULONG authTagLength,
+    BYTE *encrypted, ULONG encryptedLengthMax, ULONG *encryptedLength)
 {
 
     BCRYPT_KEY_HANDLE hKey = NULL;
     BYTE *authTag = encrypted + dataLength;
     BCRYPT_AUTHENTICATED_CIPHER_MODE_INFO bacmi;
+    BYTE iv_nonce[PTLS_MAX_IV_SIZE];
     BYTE *ko = NULL;
     ULONG ko_length = 0;
     int ret = 0;
@@ -90,8 +93,9 @@ int EncodeOneShot(wchar_t *name, wchar_t *chain_mode, size_t chain_mode_sz, BYTE
     memset(authTag, 0, authTagLength);
     // Set the auth mode info for AEAD
     BCRYPT_INIT_AUTH_MODE_INFO(bacmi);
-    bacmi.pbNonce = nonceValue;
-    bacmi.cbNonce = nonceLength;
+    ptls_aead__build_iv(aead, iv_nonce, iv, seq);
+    bacmi.pbNonce = iv_nonce;
+    bacmi.cbNonce = iv_length;
     bacmi.pbAuthData = authData;
     bacmi.cbAuthData = authDataLength;
     bacmi.pbTag = authTag;
@@ -113,13 +117,15 @@ int EncodeOneShot(wchar_t *name, wchar_t *chain_mode, size_t chain_mode_sz, BYTE
     return ret;
 }
 
-int DecodeOneShot(wchar_t *name, wchar_t *chain_mode, size_t chain_mode_sz, BYTE *key, ULONG key_length, BYTE *encrypted,
-                  ULONG encryptedLength, BYTE *nonceValue, ULONG nonceLength, BYTE *authData, ULONG authDataLength,
+int DecodeOneShot(ptls_aead_algorithm_t *aead, wchar_t *name, wchar_t *chain_mode, size_t chain_mode_sz, 
+    BYTE *key, ULONG key_length, BYTE * iv, ULONG iv_length, BYTE *encrypted,
+                  ULONG encryptedLength, uint64_t seq, BYTE *authData, ULONG authDataLength,
                   ULONG authTagLength, BYTE *decrypted, ULONG decryptedLengthMax, ULONG *decryptedLength)
 {
 
     BCRYPT_KEY_HANDLE hKey = NULL;
     BYTE *authTag = encrypted + (encryptedLength - authTagLength);
+    BYTE iv_nonce[PTLS_MAX_IV_SIZE];
     BCRYPT_AUTHENTICATED_CIPHER_MODE_INFO bacmi;
     BYTE *ko = NULL;
     ULONG ko_length = 0;
@@ -133,8 +139,9 @@ int DecodeOneShot(wchar_t *name, wchar_t *chain_mode, size_t chain_mode_sz, BYTE
 
     // Set the auth mode info for AEAD
     BCRYPT_INIT_AUTH_MODE_INFO(bacmi);
-    bacmi.pbNonce = nonceValue;
-    bacmi.cbNonce = nonceLength;
+    ptls_aead__build_iv(aead, iv_nonce, iv, seq);
+    bacmi.pbNonce = iv_nonce;
+    bacmi.cbNonce = iv_length;
     bacmi.pbAuthData = authData;
     bacmi.cbAuthData = authDataLength;
     bacmi.pbTag = authTag;
@@ -161,7 +168,8 @@ int test_oneshot(ptls_aead_algorithm_t *aead, wchar_t *name, wchar_t *chain_mode
 {
     BYTE key[32];
     BYTE data[123];
-    BYTE nonce[12];
+    BYTE iv[PTLS_MAX_IV_SIZE];
+    uint64_t nonce;
     BYTE authData[9];
     BYTE encrypted[256];
     ULONG encryptedLength;
@@ -171,23 +179,25 @@ int test_oneshot(ptls_aead_algorithm_t *aead, wchar_t *name, wchar_t *chain_mode
     int ret = 0;
 
     assert(sizeof(key) >= aead->key_size);
-    assert(sizeof(nonce) >= aead->iv_size);
+    assert(sizeof(iv) >= aead->iv_size);
     assert(sizeof(data) + authTagLength <= sizeof(encrypted));
     assert(sizeof(decrypted) >= sizeof(encrypted));
 
     memset(key, 'k', sizeof(key));
     memset(data, 'd', sizeof(data));
-    memset(nonce, 'n', sizeof(nonce));
+    memset(iv, 'n', sizeof(iv));
+    nonce = 0;
     memset(authData, 'a', sizeof(authData));
 
-    ret = EncodeOneShot(name, chain_mode, chain_mode_sz, key, (ULONG)aead->key_size, data, 123, nonce, (ULONG)aead->iv_size,
-                        authData, 9, authTagLength, encrypted, 256, &encryptedLength);
+    ret = EncodeOneShot(aead, name, chain_mode, chain_mode_sz, key, (ULONG)aead->key_size, iv, (ULONG)aead->iv_size, data,
+        123, nonce, authData, 9, authTagLength, encrypted, 256, &encryptedLength);
 
     printf("Encrypt one shot returns %d, l=%d\n", ret, encryptedLength);
 
     if (ret == 0) {
-        ret = DecodeOneShot(name, chain_mode, chain_mode_sz, key, (ULONG)aead->key_size, encrypted, encryptedLength, nonce,
-                            (ULONG)aead->iv_size, authData, 9, authTagLength, decrypted, 256, &decryptedLength);
+        ret = DecodeOneShot(aead, name, chain_mode, chain_mode_sz, key, (ULONG)aead->key_size, 
+            iv, (ULONG)aead->iv_size, encrypted, encryptedLength, nonce, authData, 9, 
+            authTagLength, decrypted, 256, &decryptedLength);
 
         printf("Decrypt one shot returns %d, l=%d\n", ret, decryptedLength);
 
@@ -215,7 +225,7 @@ void delete_test_aead_context(ptls_aead_context_t *ctx)
     }
 }
 
-ptls_aead_context_t *new_test_aead_context(ptls_aead_algorithm_t *aead, int is_enc, BYTE *key)
+ptls_aead_context_t *new_test_aead_context(ptls_aead_algorithm_t *aead, int is_enc, BYTE *key, BYTE *iv)
 {
     int ret = 0;
     ptls_aead_context_t *ctx = (ptls_aead_context_t *)malloc(aead->context_size);
@@ -223,7 +233,7 @@ ptls_aead_context_t *new_test_aead_context(ptls_aead_algorithm_t *aead, int is_e
     if (ctx != NULL) {
         memset(ctx, 0, aead->context_size);
         *ctx = (ptls_aead_context_t){aead};
-        if (aead->setup_crypto(ctx, is_enc, key) != 0) {
+        if (aead->setup_crypto(ctx, is_enc, key, iv) != 0) {
             printf("For %s, setup returns %d\n", aead->name, ret);
             delete_test_aead_context(ctx);
             ctx = NULL;
@@ -238,8 +248,9 @@ ptls_aead_context_t *new_test_aead_context(ptls_aead_algorithm_t *aead, int is_e
 int test_decrypt(ptls_aead_algorithm_t *aead, wchar_t *name, wchar_t *chain_mode, size_t chain_mode_sz)
 {
     BYTE key[32];
+    BYTE iv[PTLS_MAX_IV_SIZE];
     BYTE data[123];
-    BYTE nonce[12];
+    uint64_t nonce;
     BYTE authData[9];
     BYTE encrypted[256];
     ULONG encryptedLength;
@@ -250,25 +261,27 @@ int test_decrypt(ptls_aead_algorithm_t *aead, wchar_t *name, wchar_t *chain_mode
     int ret = 0;
 
     assert(sizeof(key) >= aead->key_size);
-    assert(sizeof(nonce) >= aead->iv_size);
+    assert(sizeof(iv) >= aead->iv_size);
     assert(sizeof(data) + authTagLength <= sizeof(encrypted));
     assert(sizeof(decrypted) >= sizeof(encrypted));
 
     memset(key, 'k', sizeof(key));
+    memset(iv, 'n', sizeof(iv));
     memset(data, 'd', sizeof(data));
-    memset(nonce, 'n', sizeof(nonce));
+    nonce = 0;
     memset(authData, 'a', sizeof(authData));
 
     /* Create a decryption context */
-    ctx = new_test_aead_context(aead, 0, key);
+    ctx = new_test_aead_context(aead, 0, key, iv);
     if (ctx == NULL) {
         ret = -1;
     }
 
     /* Do a simple encrypt using one shot bcrypt */
     if (ret == 0) {
-        ret = EncodeOneShot(name, chain_mode, chain_mode_sz, key, (ULONG)aead->key_size, data, 123, nonce, (ULONG)aead->iv_size,
-                            authData, 9, authTagLength, encrypted, 256, &encryptedLength);
+        ret = EncodeOneShot(aead, name, chain_mode, chain_mode_sz, key, (ULONG)aead->key_size, 
+            iv, (ULONG)aead->iv_size, data, 123, nonce,
+            authData, 9, authTagLength, encrypted, 256, &encryptedLength);
     }
 
     /* Try decrypt with library procedure */
@@ -296,8 +309,9 @@ int test_decrypt(ptls_aead_algorithm_t *aead, wchar_t *name, wchar_t *chain_mode
 int test_encrypt(ptls_aead_algorithm_t *aead, wchar_t *name, wchar_t *chain_mode, size_t chain_mode_sz)
 {
     BYTE key[32];
+    BYTE iv[PTLS_MAX_IV_SIZE];
     BYTE data[123];
-    BYTE nonce[12];
+    uint64_t nonce;
     BYTE authData[9];
     BYTE encryptedRef[256];
     ULONG encryptedRefLength;
@@ -308,25 +322,27 @@ int test_encrypt(ptls_aead_algorithm_t *aead, wchar_t *name, wchar_t *chain_mode
     int ret = 0;
 
     assert(sizeof(key) >= aead->key_size);
-    assert(sizeof(nonce) >= aead->iv_size);
+    assert(sizeof(iv) >= aead->iv_size);
     assert(sizeof(data) + authTagLength <= sizeof(encrypted));
     assert(sizeof(data) + authTagLength <= sizeof(encryptedRef));
 
     memset(key, 'k', sizeof(key));
+    memset(iv, 'n', sizeof(iv));
     memset(data, 'd', sizeof(data));
-    memset(nonce, 'n', sizeof(nonce));
+    nonce = 0;
     memset(authData, 'a', sizeof(authData));
 
     /* Create an encryption context */
-    ctx = new_test_aead_context(aead, 1, key);
+    ctx = new_test_aead_context(aead, 1, key, iv);
     if (ctx == NULL) {
         ret = -1;
     }
 
     /* Do a simple encrypt using one shot bcrypt */
     if (ret == 0) {
-        ret = EncodeOneShot(name, chain_mode, chain_mode_sz, key, (ULONG)aead->key_size, data, 123, nonce, (ULONG)aead->iv_size,
-                            authData, 9, authTagLength, encryptedRef, 256, &encryptedRefLength);
+        ret = EncodeOneShot(aead, name, chain_mode, chain_mode_sz, key, (ULONG)aead->key_size, 
+            iv, (ULONG)aead->iv_size, data, 123, nonce,
+            authData, 9, authTagLength, encryptedRef, 256, &encryptedRefLength);
     }
 
     /* Try encrypt with library procedure */
@@ -361,7 +377,8 @@ int test_encrypt(ptls_aead_algorithm_t *aead, wchar_t *name, wchar_t *chain_mode
 int test_for_size(ptls_aead_algorithm_t *aead, wchar_t *name, wchar_t *chain_mode, size_t chain_mode_sz)
 {
     BYTE key[32];
-    BYTE nonce[12];
+    BYTE iv[PTLS_MAX_IV_SIZE];
+    uint64_t nonce;
     BYTE authData[9];
     BYTE *data = NULL;
     BYTE *encrypted = NULL;
@@ -376,15 +393,16 @@ int test_for_size(ptls_aead_algorithm_t *aead, wchar_t *name, wchar_t *chain_mod
     int ret = 0;
 
     assert(sizeof(key) >= aead->key_size);
-    assert(sizeof(nonce) >= aead->iv_size);
+    assert(sizeof(iv) >= aead->iv_size);
 
     memset(key, 'k', sizeof(key));
-    memset(nonce, 'n', sizeof(nonce));
+    memset(key, 'n', sizeof(iv));
+    nonce = 0;
     memset(authData, 'a', sizeof(authData));
 
     /* Create the encryption contexts */
-    ctx_e = new_test_aead_context(aead, 1, key);
-    ctx_d = new_test_aead_context(aead, 0, key);
+    ctx_e = new_test_aead_context(aead, 1, key, iv);
+    ctx_d = new_test_aead_context(aead, 0, key, iv);
 
     if (ctx_e == NULL || ctx_d == NULL) {
         ret = -1;
