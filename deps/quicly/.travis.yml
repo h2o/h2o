@@ -39,5 +39,5 @@ matrix:
         - make
         - make install
         - cd ..
-        - cmake -DCMAKE_C_FLAGS=-m32 -DOPENSSL_ROOT_DIR=$HOME/openssl-build -DWITH_DTRACE=OFF .
+        - cmake -DCMAKE_C_FLAGS=-m32 -DOPENSSL_ROOT_DIR=$HOME/openssl-build -DWITH_DTRACE=OFF -DWITH_FUSION=OFF .
         - make && make check
