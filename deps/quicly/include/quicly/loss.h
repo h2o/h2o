@@ -74,9 +74,21 @@ typedef struct quicly_loss_conf_t {
  * * smoothed and variance are avaiable even before the first RTT sample is obtained
  */
 typedef struct quicly_rtt_t {
+    /**
+     * Minimum RTT value, measured over the entire connection.
+     */
     uint32_t minimum;
+    /**
+     * Current smoothed RTT value.
+     */
     uint32_t smoothed;
+    /**
+     * Current estimate of RTT variance.
+     */
     uint32_t variance;
+    /**
+     * Value of the latest RTT sample.
+     */
     uint32_t latest;
 } quicly_rtt_t;
 

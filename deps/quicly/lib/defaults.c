@@ -418,17 +418,19 @@ Exit:
 
 static void default_finalize_send_packet(quicly_crypto_engine_t *engine, quicly_conn_t *conn,
                                          ptls_cipher_context_t *header_protect_ctx, ptls_aead_context_t *packet_protect_ctx,
-                                         ptls_iovec_t datagram, size_t first_byte_at, size_t payload_from, int coalesced)
+                                         ptls_iovec_t datagram, size_t first_byte_at, size_t payload_from, uint64_t packet_number,
+                                         int coalesced)
 {
-    uint8_t hpmask[1 + QUICLY_SEND_PN_SIZE] = {0};
-    size_t i;
+    ptls_aead_supplementary_encryption_t supp = {.ctx = header_protect_ctx,
+                                                 .input = datagram.base + payload_from - QUICLY_SEND_PN_SIZE + QUICLY_MAX_PN_SIZE};
 
-    ptls_cipher_init(header_protect_ctx, datagram.base + payload_from - QUICLY_SEND_PN_SIZE + QUICLY_MAX_PN_SIZE);
-    ptls_cipher_encrypt(header_protect_ctx, hpmask, hpmask, sizeof(hpmask));
+    ptls_aead_encrypt_s(packet_protect_ctx, datagram.base + payload_from, datagram.base + payload_from,
+                        datagram.len - payload_from - packet_protect_ctx->algo->tag_size, packet_number,
+                        datagram.base + first_byte_at, payload_from - first_byte_at, &supp);
 
-    datagram.base[first_byte_at] ^= hpmask[0] & (QUICLY_PACKET_IS_LONG_HEADER(datagram.base[first_byte_at]) ? 0xf : 0x1f);
-    for (i = 0; i != QUICLY_SEND_PN_SIZE; ++i)
-        datagram.base[payload_from + i - QUICLY_SEND_PN_SIZE] ^= hpmask[i + 1];
+    datagram.base[first_byte_at] ^= supp.output[0] & (QUICLY_PACKET_IS_LONG_HEADER(datagram.base[first_byte_at]) ? 0xf : 0x1f);
+    for (size_t i = 0; i != QUICLY_SEND_PN_SIZE; ++i)
+        datagram.base[payload_from + i - QUICLY_SEND_PN_SIZE] ^= supp.output[i + 1];
 }
 
 quicly_crypto_engine_t quicly_default_crypto_engine = {default_setup_cipher, default_finalize_send_packet};

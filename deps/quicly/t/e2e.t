@@ -78,8 +78,8 @@ subtest "version-negotiation" => sub {
     is $resp, "hello world\n";
     my $events = slurp_file("$tempdir/events");
     if ($events =~ /"type":"connect",.*"version":(\d+)(?:.|\n)*"type":"version-switch",.*"new-version":(\d+)/m) {
-        is $2, 0xff00001c;
-        isnt $1, 0xff00001c;
+        is $2, 0xff00001d;
+        isnt $1, 0xff00001d;
     } else {
         fail "no quic-version-switch event";
         diag $events;

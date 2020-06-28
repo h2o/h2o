@@ -76,6 +76,7 @@
 		E99F8C261F4E9EBF00C26B3D /* frame.c in Sources */ = {isa = PBXBuildFile; fileRef = E99F8C251F4E9EBF00C26B3D /* frame.c */; };
 		E99F8C271F4E9F5D00C26B3D /* frame.c in Sources */ = {isa = PBXBuildFile; fileRef = E99F8C251F4E9EBF00C26B3D /* frame.c */; };
 		E99F8C291F4EAEF800C26B3D /* frame.c in Sources */ = {isa = PBXBuildFile; fileRef = E99F8C281F4EAEF800C26B3D /* frame.c */; };
+		E9B43E12246943D300824E51 /* fusion.c in Sources */ = {isa = PBXBuildFile; fileRef = E9B43E11246943D300824E51 /* fusion.c */; };
 		E9CC44111EB85E0B00DC7D3E /* khash.h in Headers */ = {isa = PBXBuildFile; fileRef = E9CC44101EB85E0B00DC7D3E /* khash.h */; };
 		E9CC441B1EC195DF00DC7D3E /* openssl.c in Sources */ = {isa = PBXBuildFile; fileRef = E98448271EA48D0000390927 /* openssl.c */; };
 		E9CC441C1EC195DF00DC7D3E /* picotls.c in Sources */ = {isa = PBXBuildFile; fileRef = E98448281EA48D0000390927 /* picotls.c */; };
@@ -185,6 +186,7 @@
 		E99F8C231F4E863200C26B3D /* frame.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = frame.h; sourceTree = "<group>"; };
 		E99F8C251F4E9EBF00C26B3D /* frame.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = frame.c; sourceTree = "<group>"; };
 		E99F8C281F4EAEF800C26B3D /* frame.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = frame.c; sourceTree = "<group>"; };
+		E9B43E11246943D300824E51 /* fusion.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = fusion.c; sourceTree = "<group>"; };
 		E9CC44101EB85E0B00DC7D3E /* khash.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = khash.h; sourceTree = "<group>"; };
 		E9CC44151EC195CA00DC7D3E /* picotest.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = picotest.c; sourceTree = "<group>"; };
 		E9CC44161EC195CA00DC7D3E /* picotest.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = picotest.h; sourceTree = "<group>"; };
@@ -361,6 +363,7 @@
 		E98448241EA48C6400390927 /* lib */ = {
 			isa = PBXGroup;
 			children = (
+				E9B43E11246943D300824E51 /* fusion.c */,
 				E98448271EA48D0000390927 /* openssl.c */,
 				E93E54681F663849001C50FE /* pembase64.c */,
 				E98448281EA48D0000390927 /* picotls.c */,
@@ -663,6 +666,7 @@
 				E973652E246FD3B40039AA49 /* remote_cid.c in Sources */,
 				E941428D23B0B839002D3CE0 /* frame.c in Sources */,
 				E941429123B0B86D002D3CE0 /* recvstate.c in Sources */,
+				E9B43E12246943D300824E51 /* fusion.c in Sources */,
 				E941428E23B0B845002D3CE0 /* defaults.c in Sources */,
 				E941429023B0B861002D3CE0 /* streambuf.c in Sources */,
 				E93E546A1F663851001C50FE /* pembase64.c in Sources */,
@@ -873,7 +877,9 @@
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"$(inherited)",
 					"QUICLY_USE_EMBEDDED_PROBES=1",
+					"QUICLY_HAVE_FUSION=1",
 				);
+				OTHER_CFLAGS = "-march=native";
 				OTHER_LDFLAGS = (
 					"-L/usr/local/opt/openssl@1.1/lib",
 					"-lcrypto",
@@ -888,7 +894,9 @@
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"$(inherited)",
 					"QUICLY_USE_EMBEDDED_PROBES=1",
+					"QUICLY_HAVE_FUSION=1",
 				);
+				OTHER_CFLAGS = "-march=native";
 				OTHER_LDFLAGS = (
 					"-L/usr/local/opt/openssl@1.1/lib",
 					"-lcrypto",
