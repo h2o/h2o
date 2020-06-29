@@ -900,6 +900,7 @@ IF (WITH_H2OLOG)
     SET(H2OLOG_GEN_DEPS
         "h2o-probes.d"
         "deps/quicly/quicly-probes.d"
+        "h2olog/quic.h"
     )
 
     ADD_CUSTOM_COMMAND(
