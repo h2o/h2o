@@ -186,6 +186,13 @@ char *h2o_configurator_get_cmd_path(const char *cmd);
 /**
  * lib/handler/configurator/headers_util.c
  */
+struct st_yoml_t;
+struct st_h2o_headers_add_arg_t {
+    struct st_yoml_t *node;
+    h2o_iovec_t *name;
+    h2o_iovec_t value;
+};
+
 void h2o_configurator_define_headers_commands(h2o_globalconf_t *global_conf, h2o_configurator_t *conf, const char *prefix,
                                               h2o_configurator_get_headers_commands_cb get_commands);
 

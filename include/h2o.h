@@ -2047,18 +2047,12 @@ void h2o_status_register_configurator(h2o_globalconf_t *conf);
 
 /* lib/handler/headers_util.c */
 
-struct st_yoml_t;
-struct st_h2o_headers_add_arg_t {
-    struct st_yoml_t *node;
-    h2o_iovec_t *name;
-    h2o_iovec_t value;
-};
-typedef struct st_h2o_headers_add_arg_t h2o_headers_add_arg_t;
+struct st_h2o_headers_add_arg_t;
 
 /**
  * appends a headers command to the list
  */
-void h2o_headers_append_command(h2o_headers_command_t **cmds, int cmd, h2o_headers_add_arg_t *args, size_t num_args,
+void h2o_headers_append_command(h2o_headers_command_t **cmds, int cmd, struct st_h2o_headers_add_arg_t *args, size_t num_args,
                                 h2o_headers_command_when_t when);
 /**
  * rewrite headers by the command provided

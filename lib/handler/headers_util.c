@@ -1,4 +1,5 @@
 #include "h2o.h"
+#include "h2o/configurator.h"
 
 static h2o_header_t *find_header(h2o_headers_t *headers, h2o_iovec_t *name)
 {
@@ -114,7 +115,8 @@ static void remove_header(h2o_headers_t *headers, h2o_headers_command_t *cmd)
     headers->size = dst;
 }
 
-void h2o_headers_append_command(h2o_headers_command_t **cmds, int cmd, h2o_headers_add_arg_t *args, size_t num_args,
+
+void h2o_headers_append_command(h2o_headers_command_t **cmds, int cmd, struct st_h2o_headers_add_arg_t *args, size_t num_args,
                                 h2o_headers_command_when_t when)
 {
     h2o_headers_command_t *new_cmds;
