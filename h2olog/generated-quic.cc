@@ -70,6 +70,11 @@ struct st_quicly_address_token_plaintext_t {
     int dummy;
 };
 
+
+struct st_quicly_stats_t {
+    int dummy;
+};
+
 struct st_h2o_conn_t {
     int dummy;
 };
@@ -455,6 +460,11 @@ struct quic_event_t {
       uint32_t cwnd;
       size_t inflight;
     } quictrace_cc_lost;
+    struct { // quicly:conn_stats
+      uint32_t master_id;
+      int64_t at;
+      size_t size;
+    } conn_stats;
     struct { // h2o:h3_accept
       uint64_t conn_id;
       uint32_t master_id;
@@ -1899,10 +1909,34 @@ int trace_quicly__quictrace_cc_lost(struct pt_regs *ctx) {
 
   return 0;
 }
+// quicly:conn_stats
+int trace_quicly__conn_stats(struct pt_regs *ctx) {
+  void *buf = NULL;
+  struct quic_event_t event = { .id = 65 };
+
+  // struct st_quicly_conn_t * conn
+  struct st_quicly_conn_t  conn = {};
+  bpf_usdt_readarg(1, ctx, &buf);
+  bpf_probe_read(&conn, sizeof(conn), buf);
+  event.conn_stats.master_id = conn.master_id; /* uint32_t */
+  // int64_t at
+  bpf_usdt_readarg(2, ctx, &event.conn_stats.at);
+  // struct st_quicly_stats_t * stats
+  struct st_quicly_stats_t  stats = {};
+  bpf_usdt_readarg(3, ctx, &buf);
+  bpf_probe_read(&stats, sizeof(stats), buf);
+  // size_t size
+  bpf_usdt_readarg(4, ctx, &event.conn_stats.size);
+
+  if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
+    bpf_trace_printk("failed to perf_submit\n");
+
+  return 0;
+}
 // h2o:h3_accept
 int trace_h2o__h3_accept(struct pt_regs *ctx) {
   void *buf = NULL;
-  struct quic_event_t event = { .id = 68 };
+  struct quic_event_t event = { .id = 69 };
 
   // uint64_t conn_id
   bpf_usdt_readarg(1, ctx, &event.h3_accept.conn_id);
@@ -1923,7 +1957,7 @@ int trace_h2o__h3_accept(struct pt_regs *ctx) {
 // h2o:h3_close
 int trace_h2o__h3_close(struct pt_regs *ctx) {
   void *buf = NULL;
-  struct quic_event_t event = { .id = 69 };
+  struct quic_event_t event = { .id = 70 };
 
   // uint64_t conn_id
   bpf_usdt_readarg(1, ctx, &event.h3_close.conn_id);
@@ -1944,7 +1978,7 @@ int trace_h2o__h3_close(struct pt_regs *ctx) {
 // h2o:send_response_header
 int trace_h2o__send_response_header(struct pt_regs *ctx) {
   void *buf = NULL;
-  struct quic_event_t event = { .id = 78 };
+  struct quic_event_t event = { .id = 79 };
 
   // uint64_t conn_id
   bpf_usdt_readarg(1, ctx, &event.send_response_header.conn_id);
@@ -2052,6 +2086,7 @@ std::vector<ebpf::USDT> quic_init_usdt_probes(pid_t pid) {
     ebpf::USDT(pid, "quicly", "quictrace_lost", "trace_quicly__quictrace_lost"),
     ebpf::USDT(pid, "quicly", "quictrace_cc_ack", "trace_quicly__quictrace_cc_ack"),
     ebpf::USDT(pid, "quicly", "quictrace_cc_lost", "trace_quicly__quictrace_cc_lost"),
+    ebpf::USDT(pid, "quicly", "conn_stats", "trace_quicly__conn_stats"),
     ebpf::USDT(pid, "h2o", "h3_accept", "trace_h2o__h3_accept"),
     ebpf::USDT(pid, "h2o", "h3_close", "trace_h2o__h3_close"),
     ebpf::USDT(pid, "h2o", "send_response_header", "trace_h2o__send_response_header"),
@@ -2439,6 +2474,11 @@ struct quic_event_t {
       uint32_t cwnd;
       size_t inflight;
     } quictrace_cc_lost;
+    struct { // quicly:conn_stats
+      uint32_t master_id;
+      int64_t at;
+      size_t size;
+    } conn_stats;
     struct { // h2o:h3_accept
       uint64_t conn_id;
       uint32_t master_id;
@@ -3035,7 +3075,15 @@ void quic_handle_event(h2o_tracer_t *tracer, const void *data, int data_len) {
     json_write_pair_c(out, STR_LIT("inflight"), event->quictrace_cc_lost.inflight);
     break;
   }
-  case 68: { // h2o:h3_accept
+  case 65: { // quicly:conn_stats
+    json_write_pair_n(out, STR_LIT("type"), "conn-stats");
+    json_write_pair_c(out, STR_LIT("seq"), ++seq);
+    json_write_pair_c(out, STR_LIT("conn"), event->conn_stats.master_id);
+    json_write_pair_c(out, STR_LIT("time"), event->conn_stats.at);
+    json_write_pair_c(out, STR_LIT("size"), event->conn_stats.size);
+    break;
+  }
+  case 69: { // h2o:h3_accept
     json_write_pair_n(out, STR_LIT("type"), "h3-accept");
     json_write_pair_c(out, STR_LIT("seq"), ++seq);
     json_write_pair_c(out, STR_LIT("conn-id"), event->h3_accept.conn_id);
@@ -3043,7 +3091,7 @@ void quic_handle_event(h2o_tracer_t *tracer, const void *data, int data_len) {
     json_write_pair_c(out, STR_LIT("time"), time_milliseconds());
     break;
   }
-  case 69: { // h2o:h3_close
+  case 70: { // h2o:h3_close
     json_write_pair_n(out, STR_LIT("type"), "h3-close");
     json_write_pair_c(out, STR_LIT("seq"), ++seq);
     json_write_pair_c(out, STR_LIT("conn-id"), event->h3_close.conn_id);
@@ -3051,7 +3099,7 @@ void quic_handle_event(h2o_tracer_t *tracer, const void *data, int data_len) {
     json_write_pair_c(out, STR_LIT("time"), time_milliseconds());
     break;
   }
-  case 78: { // h2o:send_response_header
+  case 79: { // h2o:send_response_header
     json_write_pair_n(out, STR_LIT("type"), "send-response-header");
     json_write_pair_c(out, STR_LIT("seq"), ++seq);
     json_write_pair_c(out, STR_LIT("conn-id"), event->send_response_header.conn_id);
