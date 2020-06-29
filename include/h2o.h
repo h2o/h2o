@@ -322,6 +322,11 @@ typedef enum h2o_send_informational_mode {
 
 struct st_h2o_globalconf_t {
     /**
+     * Chroot path for outer sandbox if we aren't running in a container
+     * or jail.
+     */
+    char    *privsep_dir;
+    /**
      * a NULL-terminated list of host contexts (h2o_hostconf_t)
      */
     h2o_hostconf_t **hosts;

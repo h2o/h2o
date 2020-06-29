@@ -356,6 +356,12 @@ SET(LIB_SOURCE_FILES
     lib/common/memcached.c
     lib/common/memory.c
     lib/common/multithread.c
+    lib/common/privsep.c
+    lib/common/privsep_dispatch.c
+    lib/common/privsep_sandbox_linux.c
+    lib/common/privsep_sandbox_freebsd.c
+    lib/common/allpriv.c
+    lib/common/priv_wrapper.c
     lib/common/redis.c
     lib/common/serverutil.c
     lib/common/socket.c

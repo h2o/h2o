@@ -45,6 +45,17 @@
 #endif
 #include "neverbleed.h"
 
+#include "h2o.h"
+#include "h2o/privsep.h"
+
+/*
+ * For the libh2o sandbox operations
+ */
+#include "h2o/memory.h"
+#include "h2o/serverutil.h"
+#include "h2o/socket.h"
+#include "h2o/string_.h"
+
 #if (!defined(LIBRESSL_VERSION_NUMBER) && OPENSSL_VERSION_NUMBER >= 0x1010000fL)
 #define OPENSSL_1_1_API 1
 #else
@@ -337,17 +348,15 @@ struct st_neverbleed_thread_data_t *get_thread_data(neverbleed_t *nb)
     }
 
     thdata->self_pid = self_pid;
-#ifdef SOCK_CLOEXEC
-    if ((thdata->fd = socket(PF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0)) == -1)
-        dief("socket(2) failed");
-#else
-    if ((thdata->fd = socket(PF_UNIX, SOCK_STREAM, 0)) == -1)
-        dief("socket(2) failed");
-    set_cloexec(thdata->fd);
-#endif
-    while (connect(thdata->fd, (void *)&nb->sun_, sizeof(nb->sun_)) != 0)
-        if (errno != EINTR)
-            dief("failed to connect to privsep daemon");
+    /*
+     * This code is running in the context of the non-privileged, sandboxed
+     * h2o main process. Because of this we must use the privsep interface
+     * to access the neverbleed socket so we can offload our operations.
+     */
+    thdata->fd = h2o_priv_get_neverbleed_sock(&nb->sun_);
+    if (thdata->fd == -1) {
+        dief("failed to get neverbleed connection via privsep");
+    }
     while ((r = write(thdata->fd, nb->auth_token, sizeof(nb->auth_token))) == -1 && errno == EINTR)
         ;
     if (r != sizeof(nb->auth_token))
@@ -1025,7 +1034,7 @@ static int load_key_stub(struct expbuf_t *buf)
         return -1;
     }
 
-    if ((fp = fopen(fn, "rt")) == NULL) {
+    if ((fp = h2o_priv_fopen(fn, "rt")) == NULL) {
         strerror_r(errno, errbuf, sizeof(errbuf));
         goto Respond;
     }
@@ -1180,6 +1189,11 @@ static int setuidgid_stub(struct expbuf_t *buf)
         warnf("%s: setuid(%d) failed\n", __FUNCTION__, (int)pw->pw_uid);
         goto Respond;
     }
+    /*
+     * Now that we have successfully setuid, changed socket permissions etc
+     * we can enter sandbox mode.
+     */
+    h2o_priv_bind_sandbox(SANDBOX_POLICY_NEVERBLEED);
     ret = 0;
 
 Respond:
@@ -1346,6 +1360,39 @@ Exit:
     return NULL;
 }
 
+static void set_privsep_socket(void)
+{
+    extern char *privsep_sock_path;
+    struct sockaddr_un sun;
+    int sock, ret;
+
+    /*
+     * Activate the neverbleed sandbox policy. We already have our socket
+     * descriptor that h2o will use for cryptographic operations. The only
+     * additional access we will need into the global namespace(s) is to
+     * access TLS certificate data. Create and connect a socket to the
+     * privsep process, and use this for any subsequent file system operations.
+     */
+    sock = socket(PF_UNIX, SOCK_STREAM, 0);
+    if (sock == -1) {
+        abort();
+    }
+    assert(privsep_sock_path != NULL);
+    bzero(&sun, sizeof(sun));
+    sun.sun_family = PF_UNIX;
+    snprintf(sun.sun_path, sizeof(sun.sun_path), "%s", privsep_sock_path);
+    while (1) {
+        ret = connect(sock, (struct sockaddr *)&sun, sizeof(sun));
+        if (ret == -1 && errno == EINTR) {
+            continue;
+        } else if (ret == -1) {
+            abort();
+        }
+        break;
+    }
+    h2o_privsep_set_global_sock(sock);
+}
+
 __attribute__((noreturn)) static void daemon_main(int listen_fd, int close_notify_fd, const char *tempdir)
 {
     pthread_t tid;
@@ -1363,6 +1410,12 @@ __attribute__((noreturn)) static void daemon_main(int listen_fd, int close_notif
 
     pthread_attr_init(&thattr);
     pthread_attr_setdetachstate(&thattr, 1);
+
+    /*
+     * Setup the global serialized socket for privsep operations. Make sure
+     * this stays after we close all the file descriptors in the process.
+     */
+    set_privsep_socket();
 
     if (pthread_create(&tid, &thattr, daemon_close_notify_thread, (char *)NULL + close_notify_fd) != 0)
         dief("pthread_create failed");
@@ -1464,6 +1517,7 @@ int neverbleed_init(neverbleed_t *nb, char *errbuf)
         snprintf(errbuf, NEVERBLEED_ERRBUF_SIZE, "listen(2) failed:%s", strerror(errno));
         goto Fail;
     }
+    h2o_priv_set_neverbleed_path(nb->sun_.sun_path);
     nb->daemon_pid = fork();
     switch (nb->daemon_pid) {
     case -1:

@@ -27,6 +27,7 @@
 #include <arpa/inet.h>
 #include <assert.h>
 #include <errno.h>
+#include <err.h>
 #include <fcntl.h>
 #include <getopt.h>
 #include <inttypes.h>
@@ -65,6 +66,7 @@
 #include "neverbleed.h"
 #include "h2o.h"
 #include "h2o/configurator.h"
+#include "h2o/privsep.h"
 #include "h2o/http1.h"
 #include "h2o/http2.h"
 #include "h2o/http3_server.h"
@@ -169,6 +171,7 @@ struct st_h2o_quic_forward_node_t {
 
 static struct {
     h2o_globalconf_t globalconf;
+    int emit_sandbox_hint;
     run_mode_t run_mode;
     struct {
         int *fds;
@@ -431,7 +434,6 @@ static int get_ocsp_response(const char *cert_fn, const char *cmd, h2o_buffer_t 
             goto Exit;
         }
     }
-
     if (!(WIFEXITED(child_status) && WEXITSTATUS(child_status) == 0))
         h2o_buffer_dispose(resp);
     if (!WIFEXITED(child_status)) {
@@ -1120,32 +1122,11 @@ static int open_listener(int domain, int type, int protocol, struct sockaddr *ad
 {
     int fd;
 
-    if ((fd = socket(domain, type, protocol)) == -1)
+    fd = h2o_priv_open_listener(domain, type, protocol,
+      (struct sockaddr_storage *)addr, addrlen, reuseport);
+    if (fd == -1) {
         goto Error;
-    set_cloexec(fd);
-    /* if the socket is TCP, set SO_REUSEADDR flag to avoid TIME_WAIT after shutdown */
-    if (type == SOCK_STREAM) {
-        int flag = 1;
-        if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &flag, sizeof(flag)) != 0)
-            goto Error;
     }
-#ifdef IPV6_V6ONLY
-    /* set IPv6only */
-    if (domain == AF_INET6) {
-        int flag = 1;
-        if (setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY, &flag, sizeof(flag)) != 0)
-            goto Error;
-    }
-#endif
-    if (reuseport) {
-#if H2O_HTTP3_USE_REUSEPORT
-        int flag = 1;
-        if (setsockopt(fd, SOL_SOCKET, H2O_SO_REUSEPORT, &flag, sizeof(flag)) != 0)
-            fprintf(stderr, "[warning] setsockopt(SO_REUSEPORT) failed:%s\n", strerror(errno));
-#endif
-    }
-    if (bind(fd, addr, addrlen) != 0)
-        goto Error;
 
     /* TCP-specific actions */
     if (protocol == IPPROTO_TCP) {
@@ -1156,9 +1137,6 @@ static int open_listener(int domain, int type, int protocol, struct sockaddr *ad
                 goto Error;
         }
 #endif
-        /* listen */
-        if (listen(fd, H2O_SOMAXCONN) != 0)
-            goto Error;
         /* set TCP_FASTOPEN; when tfo_queues is zero TFO is always disabled */
         if (conf.tfo_queues > 0) {
 #ifdef TCP_FASTOPEN
@@ -1169,8 +1147,12 @@ static int open_listener(int domain, int type, int protocol, struct sockaddr *ad
 #else
             tfo_queues = conf.tfo_queues;
 #endif
-            if (setsockopt(fd, IPPROTO_TCP, TCP_FASTOPEN, (const void *)&tfo_queues, sizeof(tfo_queues)) != 0)
-                fprintf(stderr, "[warning] failed to set TCP_FASTOPEN:%s\n", strerror(errno));
+            if (setsockopt(fd, IPPROTO_TCP, TCP_FASTOPEN, (const void *)&tfo_queues, sizeof(tfo_queues)) != 0) {
+                fprintf(stderr, "[warning] failed to set TCP_FASTOPEN: %s\n", strerror(errno));
+#ifdef __FreeBSD__
+                fprintf(stderr, "[warning] TCP_FASTOPEN on FreeBSD requires net.inet.tcp.fastopen.server_enable=1\n");
+#endif
+            }
 #else
             assert(!"conf.tfo_queues not zero on platform without TCP_FASTOPEN");
 #endif
@@ -1180,8 +1162,9 @@ static int open_listener(int domain, int type, int protocol, struct sockaddr *ad
     return fd;
 
 Error:
-    if (fd != -1)
+    if (fd != -1) {
         close(fd);
+    }
     return -1;
 }
 
@@ -1933,6 +1916,8 @@ static void on_sigterm(int signo)
 
 static int popen_crash_handler(void)
 {
+    h2o_exec_context_t ec;
+
     char *cmd_fullpath = h2o_configurator_get_cmd_path(conf.crash_handler), *argv[] = {cmd_fullpath, NULL};
     int pipefds[2];
 
@@ -1946,15 +1931,21 @@ static int popen_crash_handler(void)
         return -1;
     }
     /* spawn the logger */
-    int mapped_fds[] = {pipefds[0], 0, /* output of the pipe is connected to STDIN of the spawned process */
-                        2, 1,          /* STDOUT of the spawned process in connected to STDERR of h2o */
-                        -1};
-    if (h2o_spawnp(cmd_fullpath, argv, mapped_fds, 0) == -1) {
+    h2o_priv_init_exec_context(&ec);
+    h2o_priv_bind_fd(&ec, pipefds[0], STDIN_FILENO, H2O_FDMAP_SEND_TO_PROC);
+    /*
+     * Standard map for STDERR/STDOUT. They share the same controlling TTY
+     * and nothing will be explicitly "reading" from the file descriptor.
+     */
+    h2o_priv_bind_fd(&ec, STDERR_FILENO, STDOUT_FILENO, H2O_FDMAP_BASIC);
+    if (h2o_priv_exec(&ec, cmd_fullpath, argv, SANDBOX_POLICY_NONE) == - 1) {
         /* silently ignore error */
+        h2o_priv_cleanup_exec_context(&ec);
         close(pipefds[0]);
         close(pipefds[1]);
         return -1;
     }
+    h2o_priv_cleanup_exec_context(&ec);
     /* do the rest, and return the fd */
     close(pipefds[0]);
     return pipefds[1];
@@ -2403,7 +2394,7 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
     struct listener_ctx_t *listeners = alloca(sizeof(*listeners) * conf.num_listeners);
     size_t i;
 
-    h2o_context_init(&conf.threads[thread_index].ctx, h2o_evloop_create(), &conf.globalconf);
+    //h2o_context_init(&conf.threads[thread_index].ctx, h2o_evloop_create(), &conf.globalconf);
     h2o_multithread_register_receiver(conf.threads[thread_index].ctx.queue, &conf.threads[thread_index].server_notifications,
                                       on_server_notification);
     h2o_multithread_register_receiver(conf.threads[thread_index].ctx.queue, &conf.threads[thread_index].memcached,
@@ -2777,6 +2768,16 @@ jemalloc_err:
 #undef BUFSIZE
 }
 
+static void setup_configurators_post_privsep(void)
+{
+    h2o_configurator_t *c = h2o_configurator_create(&conf.globalconf, sizeof(*c));
+
+    c->enter = on_config_listen_enter;
+    c->exit = on_config_listen_exit;
+    h2o_configurator_define_command(c, "listen", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST, on_config_listen);
+    h2o_fastcgi_register_configurator(&conf.globalconf);
+}
+
 static void setup_configurators(void)
 {
     h2o_config_init(&conf.globalconf);
@@ -2786,10 +2787,10 @@ static void setup_configurators(void)
         conf.globalconf.user = "nobody";
 
     {
-        h2o_configurator_t *c = h2o_configurator_create(&conf.globalconf, sizeof(*c));
-        c->enter = on_config_listen_enter;
-        c->exit = on_config_listen_exit;
-        h2o_configurator_define_command(c, "listen", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST, on_config_listen);
+        // h2o_configurator_t *c = h2o_configurator_create(&conf.globalconf, sizeof(*c));
+        // c->enter = on_config_listen_enter;
+        // c->exit = on_config_listen_exit;
+        // h2o_configurator_define_command(c, "listen", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST, on_config_listen);
     }
 
     {
@@ -2830,7 +2831,6 @@ static void setup_configurators(void)
     h2o_compress_register_configurator(&conf.globalconf);
     h2o_expires_register_configurator(&conf.globalconf);
     h2o_errordoc_register_configurator(&conf.globalconf);
-    h2o_fastcgi_register_configurator(&conf.globalconf);
     h2o_file_register_configurator(&conf.globalconf);
     h2o_throttle_resp_register_configurator(&conf.globalconf);
     h2o_headers_register_configurator(&conf.globalconf);
@@ -2871,11 +2871,24 @@ int main(int argc, char **argv)
 
     { /* parse options */
         int ch;
-        static struct option longopts[] = {{"conf", required_argument, NULL, 'c'}, {"mode", required_argument, NULL, 'm'},
-                                           {"test", no_argument, NULL, 't'},       {"version", no_argument, NULL, 'v'},
-                                           {"help", no_argument, NULL, 'h'},       {NULL}};
-        while ((ch = getopt_long(argc, argv, "c:m:tvh", longopts, NULL)) != -1) {
+        static struct option longopts[] = {
+            {"conf", required_argument, NULL, 'c'},
+            {"mode", required_argument, NULL, 'm'},
+            {"test", no_argument, NULL, 't'},
+            {"version", no_argument, NULL, 'v'},
+            {"help", no_argument, NULL, 'h'},
+            {"chroot-directory", required_argument, NULL, 'R'},
+            {"emit-sandbox-hint", no_argument, NULL, 'E'},
+            {NULL}
+        };
+        while ((ch = getopt_long(argc, argv, "c:Em:tvhR:", longopts, NULL)) != -1) {
             switch (ch) {
+            case 'E':
+                conf.emit_sandbox_hint = 1;
+                break;
+            case 'R':
+                conf.globalconf.privsep_dir = optarg;
+                break;
             case 'c':
                 opt_config_file = optarg;
                 break;
@@ -2940,6 +2953,8 @@ int main(int argc, char **argv)
                        "                               connections. Users may send SIGHUP to the master\n"
                        "                               process to reconfigure or upgrade the server.\n"
                        "                     - test:   tests the configuration and exits\n"
+                       "  -R, --chroot-directory\n"
+                       "                     Directory to chroot to for privsep mode\n"
                        "  -t, --test         synonym of `--mode=test`\n"
                        "  -v, --version      prints the version number\n"
                        "  -h, --help         print this help\n"
@@ -2961,6 +2976,22 @@ int main(int argc, char **argv)
         argc -= optind;
         argv += optind;
     }
+
+    if (conf.emit_sandbox_hint) {
+        if (!conf.globalconf.privsep_dir) {
+            fprintf(stderr, "privsep directory must be specified for -E\n");
+            return EX_OSERR;
+        }
+        h2o_priv_sandbox_hints(conf.globalconf.privsep_dir);
+        return 0;
+    }
+
+    if (h2o_priv_init(&conf.globalconf)) {
+        fprintf(stderr, "FAILED\n[PRIVSEP] failed to initialize sandbox: %s\n",
+            strerror(errno));
+        return EX_OSERR;
+    }
+    setup_configurators_post_privsep();
 
     /* setup conf.server_starter */
     if ((conf.server_starter.num_fds = h2o_server_starter_get_fds(&conf.server_starter.fds)) == SIZE_MAX)
@@ -3157,9 +3188,14 @@ int main(int argc, char **argv)
         error_log_fd = -1;
     }
 
-    /* start the threads */
+
     conf.threads = alloca(sizeof(conf.threads[0]) * conf.thread_map.size);
     size_t i;
+    for (i = 0; i < conf.thread_map.size; i++) {
+        h2o_context_init(&conf.threads[i].ctx, h2o_evloop_create(), &conf.globalconf);
+    }
+    h2o_priv_bind_sandbox(SANDBOX_POLICY_H2OMAIN);
+    /* start the threads */
     for (i = 1; i != conf.thread_map.size; ++i) {
         pthread_t tid;
         h2o_multithread_create_thread(&tid, NULL, run_loop, (void *)i);
