@@ -256,12 +256,26 @@ static struct {
 
 static neverbleed_t *neverbleed = NULL;
 
+static int cmd_argc;
+static char **cmd_argv;
+
 static void set_cloexec(int fd)
 {
     if (fcntl(fd, F_SETFD, FD_CLOEXEC) == -1) {
         perror("failed to set FD_CLOEXEC");
         abort();
     }
+}
+
+static void on_neverbleed_fork(void)
+{
+/* Rewrite of argv should only be done on platforms that are known to benefit from doing that. On linux, doing so helps admins look
+*  for h2o (or neverbleed) by running pidof. */
+#ifdef __linux__
+    for (int i = cmd_argc - 1; i >= 0; --i)
+        memset(cmd_argv[i], 0, strlen(cmd_argv[i]));
+    strcpy(cmd_argv[0], "neverbleed");
+#endif
 }
 
 static int on_openssl_print_errors(const char *str, size_t len, void *fp)
@@ -852,6 +866,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
     if (use_neverbleed) {
         char errbuf[NEVERBLEED_ERRBUF_SIZE];
         if (neverbleed == NULL) {
+            neverbleed_post_fork_cb = on_neverbleed_fork;
             neverbleed = h2o_mem_alloc(sizeof(*neverbleed));
             if (neverbleed_init(neverbleed, errbuf) != 0) {
                 fprintf(stderr, "%s\n", errbuf);
@@ -2850,6 +2865,9 @@ static void setup_configurators(void)
 
 int main(int argc, char **argv)
 {
+    cmd_argc = argc;
+    cmd_argv = argv;
+
     const char *cmd = argv[0], *opt_config_file = H2O_TO_STR(H2O_CONFIG_PATH);
     int n, error_log_fd = -1;
     size_t num_procs = h2o_numproc();
