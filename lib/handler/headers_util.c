@@ -59,14 +59,10 @@ static void filter_cookie(h2o_mem_pool_t *pool, char **base, size_t *len, h2o_he
             }
         }
     } while (1);
-    if (dst_len > *len) {
-        if (pool == NULL) {
-            free(*base);
-            *base = malloc(dst_len);
-        } else {
-            *base = h2o_mem_alloc_pool(pool, *dst, dst_len);
-        }
-    }
+
+    if (dst_len > *len)
+        *base = h2o_mem_alloc_pool(pool, *dst, dst_len);
+
     memcpy(*base, dst, dst_len);
     *len = dst_len;
 }
