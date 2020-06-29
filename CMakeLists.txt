@@ -265,6 +265,9 @@ IF(NOT CMAKE_BUILD_TYPE)
 ENDIF(NOT CMAKE_BUILD_TYPE)
 SET(CMAKE_C_FLAGS_DEBUG  "-O0")
 SET(CMAKE_C_FLAGS_RELEASE  "-O2")
+SET(CMAKE_CXX_FLAGS_DEBUG  "-O0")
+SET(CMAKE_CXX_FLAGS_RELEASE  "-O2")
+
 
 SET(LIBYAML_SOURCE_FILES
     deps/yaml/src/api.c
@@ -849,6 +852,82 @@ ELSEIF ("${CMAKE_SYSTEM_NAME}" MATCHES "SunOS")
     ENDIF (LIBUV_FOUND)
 ENDIF ()
 
+# h2olog
+# If BCC is installed to a non-default directory,
+# set something like `PKG_CONFIG_PATH=/path/to/bcc/lib/pkgconfig cmake ...`
+IF (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND PKG_CONFIG_FOUND)
+    PKG_CHECK_MODULES(LIBBCC libbcc)
+
+    EXECUTE_PROCESS(
+        COMMAND uname -r
+        OUTPUT_VARIABLE KERNEL_VERSION
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
+
+    SET(REQUIRED_KERNEL_VERSION "4.9.0")
+    IF (NOT (KERNEL_VERSION VERSION_LESS REQUIRED_KERNEL_VERSION))
+        SET(HAVE_BPF_SUPPORTED_KERNEL ON)
+        MESSAGE(STATUS "Checking Linux kernel version ${KERNEL_VERSION} >= ${REQUIRED_KERNEL_VERSION} for h2olog - OK")
+    ENDIF ()
+
+    IF (NOT (CMAKE_VERSION VERSION_LESS "3.8"))
+        CMAKE_POLICY(SET CMP0057 NEW)
+        IF ("cxx_std_11" IN_LIST CMAKE_CXX_COMPILE_FEATURES)
+            MESSAGE(STATUS "C++11 OK")
+            SET(CXX_11 ON)
+        ENDIF ()
+    ENDIF ()
+
+    IF (WITH_DTRACE AND LIBBCC_FOUND AND HAVE_BPF_SUPPORTED_KERNEL AND CXX_11)
+        SET(WITH_H2OLOG_DEFAULT ON)
+    ENDIF ()
+ENDIF ()
+
+OPTION(WITH_H2OLOG "use h2olog command" ${WITH_H2OLOG_DEFAULT})
+IF (WITH_H2OLOG)
+    MESSAGE(STATUS "Supporting h2olog")
+
+    SET(H2OLOG_SOURCE_FILES
+        "h2olog/h2olog.h"
+        "h2olog/h2olog.cc"
+        "h2olog/http.cc"
+        "h2olog/json.h"
+        "h2olog/json.cc"
+        "h2olog/quic.h"
+        "include/h2o/version.h"
+    )
+
+    SET(H2OLOG_GEN_DEPS
+        "h2o-probes.d"
+        "deps/quicly/quicly-probes.d"
+    )
+
+    ADD_CUSTOM_COMMAND(
+        OUTPUT  "${CMAKE_CURRENT_SOURCE_DIR}/h2olog/generated-quic.cc"
+        COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/h2olog/misc/gen-quic-bpf.py" "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}/h2olog/generated-quic.cc"
+        DEPENDS ${H2OLOG_GEN_DEPS} "${CMAKE_CURRENT_SOURCE_DIR}/h2olog/misc/gen-quic-bpf.py"
+    )
+    LIST(APPEND H2OLOG_SOURCE_FILES "${CMAKE_CURRENT_SOURCE_DIR}/h2olog/generated-quic.cc")
+    LINK_DIRECTORIES("${LIBBCC_LIBRARY_DIRS}")
+
+    ADD_EXECUTABLE(h2olog ${H2OLOG_SOURCE_FILES})
+
+    SET_PROPERTY(TARGET h2olog
+        PROPERTY CXX_STANDARD 11
+        PROPERTY CXX_STANDARD_REQUIRED ON
+        PROPERTY CXX_EXTENSIONS OFF
+    )
+
+    TARGET_LINK_LIBRARIES(h2olog "${LIBBCC_LIBRARIES}")
+    TARGET_INCLUDE_DIRECTORIES(h2olog
+        PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/h2olog"
+        PRIVATE "${LIBBCC_INCLUDE_DIRS}"
+    )
+
+    INSTALL(TARGETS h2olog RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+ENDIF (WITH_H2OLOG)
+
+# gitrev
 IF ("${VERSION_PRERELEASE}" STREQUAL "-DEV" AND EXISTS "${CMAKE_SOURCE_DIR}/.git")
     ADD_DEFINITIONS("-DH2O_HAS_GITREV_H")
     ADD_CUSTOM_TARGET(gitrev ALL
@@ -861,5 +940,7 @@ IF ("${VERSION_PRERELEASE}" STREQUAL "-DEV" AND EXISTS "${CMAKE_SOURCE_DIR}/.git
     IF (LIBUV_FOUND)
         ADD_DEPENDENCIES(t-00unit-libuv.t gitrev)
     ENDIF (LIBUV_FOUND)
+    IF (TARGET h2olog)
+        ADD_DEPENDENCIES(h2olog gitrev)
+    ENDIF (TARGET h2olog)
 ENDIF ()
-
