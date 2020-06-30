@@ -127,17 +127,16 @@ h2o_iovec_t h2o_str_stripws(const char *s, size_t len);
  */
 size_t h2o_strstr(const char *haysack, size_t haysack_len, const char *needle, size_t needle_len);
 /**
- * Parses a comma-separated string or a comma-separated list of sublists into tokens. Each token is returned as a tuple of
- * (returned_pointer_being_non_null, *element_len). When all tokens are consumed, NULL is returned. See t/00unit/lib/common/string.c
- * for examples.
+ * Parses a string into tokens or name-value pairs. Each token is returned as a tuple of (returned_pointer, *element_len). When the
+ * input is fully consumed, NULL is returned. See t/00unit/lib/common/string.c for examples.
  *
  * @param iter       Iterator. When calling the function for the first time, this vector should point to the entire string to be
  *                   parsed.
- * @param separator  Separator to separate tokens. This value should be set to `','` when separating a simple comma-separated list.
- *                   A different separator can be specified when parsing a comma-separated list that consists of sublists using a
- *                   different separator (e.g., a link header is a comma-separated list of sublists using semicolons). In such case,
- *                   this function can be used to iterate through the sublist elements. Boundary of sublists is signaled to the
- *                   caller by returning `,`.
+ * @param inner      Separator to separate tokens.
+ * @param outer      The outer separator. When parsing a flat list, the values of `inner` and `outer` should be identical.
+ *                   When parsing a nested list, this value specifies the outer separator.  For example, (inner, outer) would be set
+ *                   to (';', ',') when parsing a Cache-Control header field value. In such case, boundary of sublists is signaled
+ *                   to the caller by returning a token pointing to the outer separator.
  * @param value      [optional] When a non-NULL address is given and if the found element contains `=`, that element is split into
  *                   a name-value pair and the range of the value is returned using this parameter. The name is returned as the
  *                   token.
