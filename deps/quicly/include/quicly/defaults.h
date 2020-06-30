@@ -32,10 +32,6 @@ extern const quicly_context_t quicly_spec_context;
 extern const quicly_context_t quicly_performant_context;
 
 /**
- *
- */
-extern quicly_packet_allocator_t quicly_default_packet_allocator;
-/**
  * Instantiates a CID cipher.
  * The CID cipher MUST be a block cipher. It MAY be a 64-bit block cipher (e.g., blowfish) when `quicly_cid_plaintext_t::node_id` is
  * not utilized by the application. Otherwise, it MUST be a 128-bit block cipher (e.g., AES).

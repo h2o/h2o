@@ -159,12 +159,12 @@ static void on_receive(quicly_stream_t *stream, size_t off, const void *src, siz
 
 static void process_msg(int is_client, quicly_conn_t **conns, struct msghdr *msg, size_t dgram_len)
 {
-    size_t off, packet_len, i;
+    size_t off = 0, i;
 
     /* split UDP datagram into multiple QUIC packets */
-    for (off = 0; off < dgram_len; off += packet_len) {
+    while (off < dgram_len) {
         quicly_decoded_packet_t decoded;
-        if ((packet_len = quicly_decode_packet(&ctx, &decoded, msg->msg_iov[0].iov_base + off, dgram_len - off)) == SIZE_MAX)
+        if (quicly_decode_packet(&ctx, &decoded, msg->msg_iov[0].iov_base, dgram_len, &off) == SIZE_MAX)
             return;
         /* find the corresponding connection (TODO handle version negotiation, rebinding, retry, etc.) */
         for (i = 0; conns[i] != NULL; ++i)
@@ -180,11 +180,9 @@ static void process_msg(int is_client, quicly_conn_t **conns, struct msghdr *msg
     }
 }
 
-static int send_one(int fd, quicly_datagram_t *p)
+static int send_one(int fd, struct sockaddr *dest, struct iovec *vec)
 {
-    struct iovec vec = {.iov_base = p->data.base, .iov_len = p->data.len};
-    struct msghdr mess = {
-        .msg_name = &p->dest.sa, .msg_namelen = quicly_get_socklen(&p->dest.sa), .msg_iov = &vec, .msg_iovlen = 1};
+    struct msghdr mess = {.msg_name = dest, .msg_namelen = quicly_get_socklen(dest), .msg_iov = vec, .msg_iovlen = 1};
     int ret;
 
     while ((ret = (int)sendmsg(fd, &mess, 0)) == -1 && errno == EINTR)
@@ -249,15 +247,16 @@ static int run_loop(int fd, quicly_conn_t *client)
 
         /* send QUIC packets, if any */
         for (i = 0; conns[i] != NULL; ++i) {
-            quicly_datagram_t *dgrams[16];
-            size_t num_dgrams = sizeof(dgrams) / sizeof(dgrams[0]);
-            int ret = quicly_send(conns[i], dgrams, &num_dgrams);
+            quicly_address_t dest, src;
+            struct iovec dgrams[10];
+            uint8_t dgrams_buf[PTLS_ELEMENTSOF(dgrams) * ctx.transport_params.max_udp_payload_size];
+            size_t num_dgrams = PTLS_ELEMENTSOF(dgrams);
+            int ret = quicly_send(conns[i], &dest, &src, dgrams, &num_dgrams, dgrams_buf, sizeof(dgrams_buf));
             switch (ret) {
             case 0: {
                 size_t j;
                 for (j = 0; j != num_dgrams; ++j) {
-                    send_one(fd, dgrams[j]);
-                    ctx.packet_allocator->free_packet(ctx.packet_allocator, dgrams[j]);
+                    send_one(fd, &dest.sa, &dgrams[j]);
                 }
             } break;
             case QUICLY_ERROR_FREE_CONNECTION:
@@ -365,7 +364,7 @@ int main(int argc, char **argv)
         perror("socket(2) failed");
         exit(1);
     }
-    //fcntl(fd, F_SETFL, O_NONBLOCK);
+    // fcntl(fd, F_SETFL, O_NONBLOCK);
     if (is_server()) {
         int reuseaddr = 1;
         setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &reuseaddr, sizeof(reuseaddr));

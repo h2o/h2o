@@ -33,7 +33,9 @@ void test_stream_concurrency(void)
     int ret;
 
     { /* connect */
-        quicly_datagram_t *raw;
+        quicly_address_t dest, src;
+        struct iovec raw;
+        uint8_t rawbuf[quic_ctx.transport_params.max_udp_payload_size];
         size_t num_packets;
         quicly_decoded_packet_t decoded;
 
@@ -41,14 +43,13 @@ void test_stream_concurrency(void)
                              NULL, NULL);
         ok(ret == 0);
         num_packets = 1;
-        ret = quicly_send(client, &raw, &num_packets);
+        ret = quicly_send(client, &dest, &src, &raw, &num_packets, rawbuf, sizeof(rawbuf));
         ok(ret == 0);
         ok(num_packets == 1);
         ok(decode_packets(&decoded, &raw, 1) == 1);
         ok(num_packets == 1);
         ret = quicly_accept(&server, &quic_ctx, NULL, &fake_address.sa, &decoded, NULL, new_master_id(), NULL);
         ok(ret == 0);
-        free_packets(&raw, 1);
         transmit(server, client);
     }
 

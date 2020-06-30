@@ -142,7 +142,7 @@ size_t h2o_strstr(const char *haysack, size_t haysack_len, const char *needle, s
  *                   a name-value pair and the range of the value is returned using this parameter. The name is returned as the
  *                   token.
  */
-const char *h2o_next_token(h2o_iovec_t *iter, int separator, size_t *element_len, h2o_iovec_t *value);
+const char *h2o_next_token(h2o_iovec_t *iter, int inner, int outer, size_t *element_len, h2o_iovec_t *value);
 /**
  * tests if string needle exists within a separator-separated string (for handling "#rule" of RFC 2616)
  */

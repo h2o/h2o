@@ -22,26 +22,26 @@
 #include <sys/time.h>
 #include "quicly/defaults.h"
 
+#define DEFAULT_INITIAL_EGRESS_MAX_UDP_PAYLOAD_SIZE 1280
+#define DEFAULT_MAX_UDP_PAYLOAD_SIZE 1472
 #define DEFAULT_MAX_PACKETS_PER_KEY 16777216
 #define DEFAULT_MAX_CRYPTO_BYTES 65536
 
 /* profile that employs IETF specified values */
-const quicly_context_t quicly_spec_context = {NULL,                   /* tls */
-                                              QUICLY_MAX_PACKET_SIZE, /* max_packet_size */
-                                              QUICLY_LOSS_SPEC_CONF,  /* loss */
-                                              {
-                                                  {1 * 1024 * 1024, 1 * 1024 * 1024, 1 * 1024 * 1024}, /* max_stream_data */
-                                                  16 * 1024 * 1024,                                    /* max_data */
-                                                  30 * 1000, /* idle_timeout (30 seconds) */
-                                                  100,       /* max_concurrent_streams_bidi */
-                                                  0          /* max_concurrent_streams_uni */
-                                              },
+const quicly_context_t quicly_spec_context = {NULL,                                                 /* tls */
+                                              DEFAULT_INITIAL_EGRESS_MAX_UDP_PAYLOAD_SIZE,          /* client_initial_size */
+                                              QUICLY_LOSS_SPEC_CONF,                                /* loss */
+                                              {{1 * 1024 * 1024, 1 * 1024 * 1024, 1 * 1024 * 1024}, /* max_stream_data */
+                                               16 * 1024 * 1024,                                    /* max_data */
+                                               30 * 1000,                                           /* idle_timeout (30 seconds) */
+                                               100, /* max_concurrent_streams_bidi */
+                                               0,   /* max_concurrent_streams_uni */
+                                               DEFAULT_MAX_UDP_PAYLOAD_SIZE},
                                               DEFAULT_MAX_PACKETS_PER_KEY,
                                               DEFAULT_MAX_CRYPTO_BYTES,
                                               0, /* enforce_version_negotiation */
                                               0, /* is_clustered */
                                               0, /* enlarge_client_hello */
-                                              &quicly_default_packet_allocator,
                                               NULL,
                                               NULL, /* on_stream_open */
                                               &quicly_default_stream_scheduler,
@@ -52,22 +52,20 @@ const quicly_context_t quicly_spec_context = {NULL,                   /* tls */
                                               &quicly_default_crypto_engine};
 
 /* profile with a focus on reducing latency for the HTTP use case */
-const quicly_context_t quicly_performant_context = {NULL,                        /* tls */
-                                                    QUICLY_MAX_PACKET_SIZE,      /* max_packet_size */
-                                                    QUICLY_LOSS_PERFORMANT_CONF, /* loss */
-                                                    {
-                                                        {1 * 1024 * 1024, 1 * 1024 * 1024, 1 * 1024 * 1024}, /* max_stream_data */
-                                                        16 * 1024 * 1024,                                    /* max_data */
-                                                        30 * 1000, /* idle_timeout (30 seconds) */
-                                                        100,       /* max_concurrent_streams_bidi */
-                                                        0          /* max_concurrent_streams_uni */
-                                                    },
+const quicly_context_t quicly_performant_context = {NULL,                                                 /* tls */
+                                                    DEFAULT_INITIAL_EGRESS_MAX_UDP_PAYLOAD_SIZE,          /* client_initial_size */
+                                                    QUICLY_LOSS_PERFORMANT_CONF,                          /* loss */
+                                                    {{1 * 1024 * 1024, 1 * 1024 * 1024, 1 * 1024 * 1024}, /* max_stream_data */
+                                                     16 * 1024 * 1024,                                    /* max_data */
+                                                     30 * 1000, /* idle_timeout (30 seconds) */
+                                                     100,       /* max_concurrent_streams_bidi */
+                                                     0,         /* max_concurrent_streams_uni */
+                                                     DEFAULT_MAX_UDP_PAYLOAD_SIZE},
                                                     DEFAULT_MAX_PACKETS_PER_KEY,
                                                     DEFAULT_MAX_CRYPTO_BYTES,
                                                     0, /* enforce_version_negotiation */
                                                     0, /* is_clustered */
                                                     0, /* enlarge_client_hello */
-                                                    &quicly_default_packet_allocator,
                                                     NULL,
                                                     NULL, /* on_stream_open */
                                                     &quicly_default_stream_scheduler,
@@ -76,24 +74,6 @@ const quicly_context_t quicly_performant_context = {NULL,                       
                                                     NULL,
                                                     NULL,
                                                     &quicly_default_crypto_engine};
-
-static quicly_datagram_t *default_alloc_packet(quicly_packet_allocator_t *self, size_t payloadsize)
-{
-    quicly_datagram_t *packet;
-
-    if ((packet = malloc(sizeof(*packet) + payloadsize)) == NULL)
-        return NULL;
-    packet->data.base = (uint8_t *)packet + sizeof(*packet);
-
-    return packet;
-}
-
-static void default_free_packet(quicly_packet_allocator_t *self, quicly_datagram_t *packet)
-{
-    free(packet);
-}
-
-quicly_packet_allocator_t quicly_default_packet_allocator = {default_alloc_packet, default_free_packet};
 
 /**
  * The context of the default CID encryptor.  All the contexts being used here are ECB ciphers and therefore stateless - they can be
@@ -374,7 +354,13 @@ static int64_t default_now(quicly_now_t *self)
 {
     struct timeval tv;
     gettimeofday(&tv, NULL);
-    return (int64_t)tv.tv_sec * 1000 + tv.tv_usec / 1000;
+    int64_t tv_now = (int64_t)tv.tv_sec * 1000 + tv.tv_usec / 1000;
+
+    /* make sure that the time does not get rewind */
+    static __thread int64_t now;
+    if (now < tv_now)
+        now = tv_now;
+    return now;
 }
 
 quicly_now_t quicly_default_now = {default_now};
@@ -432,17 +418,19 @@ Exit:
 
 static void default_finalize_send_packet(quicly_crypto_engine_t *engine, quicly_conn_t *conn,
                                          ptls_cipher_context_t *header_protect_ctx, ptls_aead_context_t *packet_protect_ctx,
-                                         quicly_datagram_t *packet, size_t first_byte_at, size_t payload_from, int coalesced)
+                                         ptls_iovec_t datagram, size_t first_byte_at, size_t payload_from, uint64_t packet_number,
+                                         int coalesced)
 {
-    uint8_t hpmask[1 + QUICLY_SEND_PN_SIZE] = {0};
-    size_t i;
+    ptls_aead_supplementary_encryption_t supp = {.ctx = header_protect_ctx,
+                                                 .input = datagram.base + payload_from - QUICLY_SEND_PN_SIZE + QUICLY_MAX_PN_SIZE};
 
-    ptls_cipher_init(header_protect_ctx, packet->data.base + payload_from - QUICLY_SEND_PN_SIZE + QUICLY_MAX_PN_SIZE);
-    ptls_cipher_encrypt(header_protect_ctx, hpmask, hpmask, sizeof(hpmask));
+    ptls_aead_encrypt_s(packet_protect_ctx, datagram.base + payload_from, datagram.base + payload_from,
+                        datagram.len - payload_from - packet_protect_ctx->algo->tag_size, packet_number,
+                        datagram.base + first_byte_at, payload_from - first_byte_at, &supp);
 
-    packet->data.base[first_byte_at] ^= hpmask[0] & (QUICLY_PACKET_IS_LONG_HEADER(packet->data.base[first_byte_at]) ? 0xf : 0x1f);
-    for (i = 0; i != QUICLY_SEND_PN_SIZE; ++i)
-        packet->data.base[payload_from + i - QUICLY_SEND_PN_SIZE] ^= hpmask[i + 1];
+    datagram.base[first_byte_at] ^= supp.output[0] & (QUICLY_PACKET_IS_LONG_HEADER(datagram.base[first_byte_at]) ? 0xf : 0x1f);
+    for (size_t i = 0; i != QUICLY_SEND_PN_SIZE; ++i)
+        datagram.base[payload_from + i - QUICLY_SEND_PN_SIZE] ^= supp.output[i + 1];
 }
 
 quicly_crypto_engine_t quicly_default_crypto_engine = {default_setup_cipher, default_finalize_send_packet};

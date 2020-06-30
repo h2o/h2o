@@ -75,10 +75,11 @@ subtest "memcached" => sub {
     plan skip_all => "memcached not found"
         unless prog_exists("memcached");
     my $memc_port = empty_port();
+    my $memc_user = getlogin || getpwuid($<);
     my $doit = sub {
         my $memc_proto = shift;
         my $memc_guard = spawn_server(
-            argv     => [ qw(memcached -l 127.0.0.1 -p), $memc_port, "-B", $memc_proto ],
+            argv     => [ qw(memcached -l 127.0.0.1 -p), $memc_port, "-B", $memc_proto, "-u", $memc_user ],
             is_ready => sub {
                 check_port($memc_port);
             },

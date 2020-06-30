@@ -64,6 +64,13 @@ struct quicly_rtt_t {
     uint32_t latest;
 };
 
+struct quicly_cc_t {
+    uint32_t cwnd;
+    uint32_t ssthresh;
+    uint32_t stash;
+    uint64_t recovery_end;
+};
+
 EOT
 } elsif ($arch eq 'darwin') {
 } else {
@@ -90,7 +97,7 @@ for my $probe (@probes) {
             } elsif ($arch eq 'darwin') {
                 push @ap, "arg$i" . ' != NULL ? *(uint32_t *)copyin(arg' . $i . ' + 16, 4) : 0';
             } else {
-                push @ap, "arg$i != NULL ? ((struct _st_quicly_conn_public_t *)arg$i)->master_id.master_id : 0";
+                push @ap, "arg$i != NULL ? ((struct _st_quicly_conn_public_t *)arg$i)->local.cid_set.plaintext.master_id : 0";
             }
         } elsif ($type eq 'struct st_quicly_stream_t *') {
             push @fmt, '"stream-id":%d';
@@ -109,6 +116,25 @@ for my $probe (@probes) {
                 push @ap, map{"*(uint32_t *)copyin(arg$i + $_, 4)"} qw(0 4 12);
             } else {
                 push @ap, map{"arg${i}->$_"} qw(minimum smoothed latest);
+            }
+        } elsif ($type eq 'struct st_quicly_stats_t *') {
+            push @fmt, map {qq("rtt_$_":\%u)} qw(minimum smoothed latest);
+            push @fmt, map {qq("cc_$_":\%u)} qw(type cwnd ssthresh cwnd_initial cwnd_exiting_slow_start cwnd_minimum cwnd_maximum num_loss_episodes);
+            push @fmt, map {qq("num_packets_$_":\%llu)} qw(sent ack_received lost lost_time_threshold late_acked received decryption_failed);
+            push @fmt, map {qq("num_bytes_$_":\%llu)} qw(sent received);
+            push @fmt, qq("num_ptos":\%u);
+            if ($arch eq 'linux') {
+                push @ap, map{"((struct st_quicly_stats_t *)arg$i)->rtt.$_"} qw(minimum smoothed variance);
+                push @ap, map{"((struct st_quicly_stats_t *)arg$i)->cc.$_"} qw(type cwnd ssthresh cwnd_initial cwnd_exiting_slow_start cwnd_minimum cwnd_maximum num_loss_episodes);
+                push @ap, map{"((struct st_quicly_stats_t *)arg$i)->num_packets.$_"} qw(sent ack_received lost lost_time_threshold late_acked received decryption_failed);
+                push @ap, map{"((struct st_quicly_stats_t *)arg$i)->num_bytes.$_"} qw(sent received);
+                push @ap, "((struct st_quicly_stats_t *)arg$i)->num_ptos";
+            } else {
+                push @ap, map{"arg${i}->rtt.$_"} qw(minimum smoothed variance);
+                push @ap, map{"arg${i}->cc.$_"} qw(type cwnd ssthresh cwnd_initial cwnd_exiting_slow_start cwnd_minimum cwnd_maximum num_loss_episodes);
+                push @ap, map{"(unsigned long long)arg${i}->num_packets.$_"} qw(sent ack_received lost lost_time_threshold late_acked received decryption_failed);
+                push @ap, map{"(unsigned long long)arg${i}->num_bytes.$_"} qw(sent received);
+                push @ap, "arg${i}->num_ptos";
             }
         } else {
             $name = 'time'
@@ -144,7 +170,7 @@ for my $probe (@probes) {
                 }
             } elsif ($type =~ /\s+\*$/) {
                 # emit the address for other pointers
-                push @fmt, qq!"name":"0x%llx"!;
+                push @fmt, qq!"$name":"0x%llx"!;
                 push @ap, "(unsigned long long)arg$i";
             } else {
                 die "can't handle type: $type";
