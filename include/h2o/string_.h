@@ -138,7 +138,7 @@ size_t h2o_strstr(const char *haysack, size_t haysack_len, const char *needle, s
  *                   different separator (e.g., a link header is a comma-separated list of sublists using semicolons). In such case,
  *                   this function can be used to iterate through the sublist elements. Boundary of sublists is signaled to the
  *                   caller by returning `,`.
- * @param value      [optional] When a non-NULL address is given and if the offending token contains `=`, the token is split into
+ * @param value      [optional] When a non-NULL address is given and if the found element contains `=`, that element is split into
  *                   a name-value pair and the range of the value is returned using this parameter. The name is returned as the
  *                   token.
  */
