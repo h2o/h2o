@@ -744,12 +744,16 @@ IF (LIBUV_FOUND)
     TARGET_LINK_LIBRARIES(t-00unit-libuv.t ${LIBUV_LIBRARIES} ${OPENSSL_LIBRARIES} ${EXTRA_LIBS})
 ENDIF (LIBUV_FOUND)
 
-ADD_CUSTOM_TARGET(check env H2O_ROOT=. BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR} prove -I. -v t/*.t
+ADD_CUSTOM_TARGET(checkdepends
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     DEPENDS h2o t-00unit-evloop.t lib-examples-evloop ${OPTIONAL_TEST})
 IF (LIBUV_FOUND)
-    ADD_DEPENDENCIES(check t-00unit-libuv.t lib-examples)
+    ADD_DEPENDENCIES(checkdepends t-00unit-libuv.t lib-examples)
 ENDIF ()
+
+ADD_CUSTOM_TARGET(check env H2O_ROOT=. BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR} prove -I. -v t/*.t
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    DEPENDS checkdepends)
 
 ADD_CUSTOM_TARGET(doc ${CMAKE_MAKE_PROGRAM} -f ../misc/doc.mk all BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/doc
@@ -770,7 +774,7 @@ IF (EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/misc/h2get/CMakeLists.txt AND RUBY AND BI
                         BUILD_COMMAND ${CMAKE_MAKE_PROGRAM}
                         INSTALL_COMMAND true)
     SET_TARGET_PROPERTIES(h2get PROPERTIES EXCLUDE_FROM_ALL TRUE)
-    ADD_DEPENDENCIES(check h2get)
+    ADD_DEPENDENCIES(checkdepends h2get)
 ENDIF ()
 
 ExternalProject_Add(picotls-cli
@@ -780,13 +784,13 @@ ExternalProject_Add(picotls-cli
                     BUILD_COMMAND ${CMAKE_MAKE_PROGRAM} cli
                     INSTALL_COMMAND true)
 SET_TARGET_PROPERTIES(picotls-cli PROPERTIES EXCLUDE_FROM_ALL TRUE)
-ADD_DEPENDENCIES(check picotls-cli)
+ADD_DEPENDENCIES(checkdepends picotls-cli)
 
 ADD_CUSTOM_TARGET(check-valgrind env H2O_VALGRIND=./misc/h2o_valgrind/ H2O_ROOT=. BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR} prove -I. -v t/*.t
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     DEPENDS h2o t-00unit-evloop.t)
 IF (LIBUV_FOUND)
-    ADD_DEPENDENCIES(check t-00unit-libuv.t lib-examples)
+    ADD_DEPENDENCIES(checkdepends t-00unit-libuv.t lib-examples)
 ENDIF ()
 
 IF (BUILD_FUZZER)
