@@ -148,8 +148,7 @@ void h2o_headers_append_command(h2o_headers_command_t **cmds, int cmd, struct st
     new_cmds[cnt + 1] = (h2o_headers_command_t){H2O_HEADERS_CMD_NULL};
 
     if (*cmds != NULL) {
-        for (cnt = 0; (*cmds)[cnt].cmd != H2O_HEADERS_CMD_NULL; ++cnt)
-            (*cmds)[cnt].args = NULL;
+        (*cmds)[0] = (h2o_headers_command_t){H2O_HEADERS_CMD_NULL};
         h2o_mem_release_shared(*cmds);
     }
     *cmds = new_cmds;
