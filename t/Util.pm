@@ -59,7 +59,11 @@ sub exec_unittest {
             close $wfh;
             POSIX::dup2($rfh->fileno, 5)
                 or die "dup2 failed:$!";
-            exec qw(share/h2o/kill-on-close -- memcached -l 127.0.0.1 -p), $port;
+            if ($< == 0) {
+                exec qw(share/h2o/kill-on-close -- memcached -u root -l 127.0.0.1 -p), $port;
+            } else {
+                exec qw(share/h2o/kill-on-close -- memcached -l 127.0.0.1 -p), $port;
+            }
             exit 1;
         }
         close $rfh;
