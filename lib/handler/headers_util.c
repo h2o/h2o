@@ -120,7 +120,7 @@ static void dispose_h2o_headers_command(void *_cmds)
         free(cmds[i].args);
 }
 
-void h2o_headers_append_command(h2o_headers_command_t **cmds, int cmd, struct st_h2o_headers_add_arg_t *args, size_t num_args,
+void h2o_headers_append_command(h2o_headers_command_t **cmds, int cmd, h2o_headers_command_arg_t *args, size_t num_args,
                                 h2o_headers_command_when_t when)
 {
     h2o_headers_command_t *new_cmds;
@@ -140,10 +140,8 @@ void h2o_headers_append_command(h2o_headers_command_t **cmds, int cmd, struct st
     new_cmds[cnt].cmd = cmd;
     new_cmds[cnt].when = when;
     new_cmds[cnt].args = h2o_mem_alloc(sizeof(*new_cmds->args) * num_args);
-    for (i = 0; i < num_args; i++) {
-        new_cmds[cnt].args[i].name = args[i].name;
-        new_cmds[cnt].args[i].value = args[i].value;
-    }
+    for (i = 0; i < num_args; i++)
+        new_cmds[cnt].args[i] = args[i];
     new_cmds[cnt].num_args = num_args;
     new_cmds[cnt + 1] = (h2o_headers_command_t){H2O_HEADERS_CMD_NULL};
 

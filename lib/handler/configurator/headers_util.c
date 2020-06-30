@@ -1,6 +1,12 @@
 #include "h2o.h"
 #include "h2o/configurator.h"
 
+struct headers_util_add_arg_t {
+    yoml_t *node;
+    h2o_iovec_t *name;
+    h2o_iovec_t value;
+};
+
 struct headers_util_configurator_t {
     h2o_configurator_t super;
     h2o_configurator_t *child;
@@ -53,11 +59,10 @@ static int is_list_cmd(int cmd_id)
         || cmd_id == H2O_HEADERS_CMD_COOKIE_UNSETUNLESS;
 }
 
-static int add_cmd(h2o_configurator_command_t *cmd, int cmd_id, struct st_h2o_headers_add_arg_t *args, size_t num_args,
+static int add_cmd(h2o_configurator_command_t *cmd, int cmd_id, struct headers_util_add_arg_t *args, size_t num_args,
                    h2o_headers_command_when_t when, h2o_headers_command_t **cmds)
 {
-    size_t i;
-    for (i = 0; i < num_args; i++) {
+    for (size_t i = 0; i < num_args; i++) {
         if (h2o_iovec_is_token(args[i].name)) {
             const h2o_token_t *token = (void *)args[i].name;
             if (h2o_headers_is_prohibited_name(token)) {
@@ -65,12 +70,14 @@ static int add_cmd(h2o_configurator_command_t *cmd, int cmd_id, struct st_h2o_he
                 return -1;
             }
         }
-        if (!is_list_cmd(cmd_id)) {
-            h2o_headers_append_command(cmds, cmd_id, &(struct st_h2o_headers_add_arg_t){args[i].node, args[i].name, args[i].value}, 1, when);
-        }
+        if (!is_list_cmd(cmd_id))
+            h2o_headers_append_command(cmds, cmd_id, &(h2o_headers_command_arg_t){args[i].name, args[i].value}, 1, when);
     }
     if (is_list_cmd(cmd_id)) {
-        h2o_headers_append_command(cmds, cmd_id, args, num_args, when);
+        h2o_headers_command_arg_t cmdargs[num_args];
+        for (size_t i = 0; i < num_args; ++i)
+            cmdargs[i] = (h2o_headers_command_arg_t){args[i].name, args[i].value};
+        h2o_headers_append_command(cmds, cmd_id, cmdargs, num_args, when);
     }
 
     return 0;
@@ -131,7 +138,7 @@ static int on_config_header_2arg(h2o_configurator_command_t *cmd, h2o_configurat
     if (parse_header_node(cmd, &node, &headers, &num_headers, &when) != 0)
         return -1;
 
-    struct st_h2o_headers_add_arg_t args[num_headers];
+    struct headers_util_add_arg_t args[num_headers];
     int i;
     for (i = 0; i != num_headers; ++i) {
         args[i].node = headers[i];
@@ -161,7 +168,7 @@ static int on_config_unset_core(h2o_configurator_command_t *cmd, h2o_configurato
     if (parse_header_node(cmd, &node, &headers, &num_headers, &when) != 0)
         return -1;
 
-    struct st_h2o_headers_add_arg_t args[num_headers];
+    struct headers_util_add_arg_t args[num_headers];
     int i;
     for (i = 0; i != num_headers; ++i) {
         args[i].node = headers[i];

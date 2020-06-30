@@ -107,7 +107,6 @@ typedef struct st_h2o_hostconf_t h2o_hostconf_t;
 typedef struct st_h2o_globalconf_t h2o_globalconf_t;
 typedef struct st_h2o_mimemap_t h2o_mimemap_t;
 typedef struct st_h2o_logconf_t h2o_logconf_t;
-typedef struct st_h2o_headers_command_arg_t h2o_headers_command_arg_t;
 typedef struct st_h2o_headers_command_t h2o_headers_command_t;
 
 /**
@@ -1945,14 +1944,14 @@ typedef enum h2o_headers_command_when {
     H2O_HEADERS_CMD_WHEN_ALL,
 } h2o_headers_command_when_t;
 
-struct st_h2o_headers_command_arg_t {
+typedef struct st_h2o_headers_command_arg_t {
     h2o_iovec_t *name; /* maybe a token */
     h2o_iovec_t value;
-};
+} h2o_headers_command_arg_t;
 
 struct st_h2o_headers_command_t {
     int cmd;
-    struct st_h2o_headers_command_arg_t *args;
+    h2o_headers_command_arg_t *args;
     size_t num_args;
     h2o_headers_command_when_t when;
 };
@@ -2047,12 +2046,12 @@ void h2o_status_register_configurator(h2o_globalconf_t *conf);
 
 /* lib/handler/headers_util.c */
 
-struct st_h2o_headers_add_arg_t;
+struct headers_util_add_arg_t;
 
 /**
  * appends a headers command to the list
  */
-void h2o_headers_append_command(h2o_headers_command_t **cmds, int cmd, struct st_h2o_headers_add_arg_t *args, size_t num_args,
+void h2o_headers_append_command(h2o_headers_command_t **cmds, int cmd, h2o_headers_command_arg_t *args, size_t num_args,
                                 h2o_headers_command_when_t when);
 /**
  * rewrite headers by the command provided
