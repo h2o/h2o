@@ -127,7 +127,17 @@ h2o_iovec_t h2o_str_stripws(const char *s, size_t len);
  */
 size_t h2o_strstr(const char *haysack, size_t haysack_len, const char *needle, size_t needle_len);
 /**
+ * Parses a string into tokens or name-value pairs. Each token is returned as a tuple of (returned_pointer, *element_len). When the
+ * input is fully consumed, NULL is returned. See t/00unit/lib/common/string.c for examples.
  *
+ * @param iter   Iterator. When calling the function for the first time, this vector should point to the entire string to be parsed.
+ * @param inner  Separator to separate tokens.
+ * @param outer  The outer separator. When parsing a flat list, the values of `inner` and `outer` should be identical. When parsing
+ *               a nested list, this value specifies the outer separator.  For example, (inner, outer) would be set to (';', ',')
+ *               when parsing a Cache-Control header field value. In such case, boundary of sublists is signaled to the caller by
+ *               returning a token pointing to the outer separator.
+ * @param value  [optional] When a non-NULL address is given and if the found element contains `=`, that element is split into a
+ *               name-value pair and the range of the value is returned using this parameter. The name is returned as the token.
  */
 const char *h2o_next_token(h2o_iovec_t *iter, int inner, int outer, size_t *element_len, h2o_iovec_t *value);
 /**
