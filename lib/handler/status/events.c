@@ -28,6 +28,8 @@ struct st_events_status_ctx_t {
     uint64_t h2_protocol_level_errors[H2O_HTTP2_ERROR_MAX];
     uint64_t h2_read_closed;
     uint64_t h2_write_closed;
+    uint64_t h1_request_timeout;
+    uint64_t h1_request_io_timeout;
     uint64_t ssl_errors;
     pthread_mutex_t mutex;
 };
@@ -48,6 +50,9 @@ static void events_status_per_thread(void *priv, h2o_context_t *ctx)
     }
     esc->h2_read_closed += ctx->http2.events.read_closed;
     esc->h2_write_closed += ctx->http2.events.write_closed;
+    esc->h1_request_timeout += ctx->http1.events.request_timeouts;
+    esc->h1_request_io_timeout += ctx->http1.events.request_io_timeouts;
+
 
     pthread_mutex_unlock(&esc->mutex);
 }
