@@ -1,4 +1,24 @@
 language: c
+
+env:
+  global:
+   # The next declaration is the encrypted COVERITY_SCAN_TOKEN, created
+   #   via the "travis encrypt" command using the project repo's public key
+   - secure: "VKLb1PkZCo0TPZNw/AngiKza6CLJvE7inWYIymq2wUnDSp1oD/zKe1TLwBDKkz1BreaPtK9lfcqC2TP3I+6bwW6N3+lvle9TLWqVZ0ZNu7rNc0/pbO5oqbS4H3n644hlWFaWr5L/3jkZnz/ZRB1P1cCIqknemX+8pSqsDNeoqRI="
+
+before_install:
+  - echo -n | openssl s_client -connect https://scan.coverity.com:443 | sed -ne '/-BEGIN CERTIFICATE-/,/-END CERTIFICATE-/p' | sudo tee -a /etc/ssl/certs/ca-
+
+addons:
+  coverity_scan:
+    project:
+      name: "h2o/h2o"
+      description: "H2O - the optimized HTTP/1, HTTP/2, HTTP/3 server"
+    notification_email: hfujita@fastly.com
+    build_command_prepend: "cmake -B."
+    build_command: "make all -j2"
+    branch_pattern: coverity_scan
+
 matrix:
   include:
     - os: linux
