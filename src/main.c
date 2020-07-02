@@ -49,6 +49,7 @@
 #include <sys/un.h>
 #include <sys/wait.h>
 #include <openssl/crypto.h>
+#include <openssl/dh.h>
 #include <openssl/err.h>
 #include <openssl/ssl.h>
 #ifdef LIBC_HAS_BACKTRACE
@@ -2727,7 +2728,7 @@ static h2o_iovec_t on_extra_status(void *unused, h2o_globalconf_t *_conf, h2o_re
                        " \"listeners\": %zu,\n"
                        " \"worker-threads\": %zu,\n"
                        " \"num-sessions\": %lu",
-                       SSLeay_version(SSLEAY_VERSION), current_time, restart_time, (uint64_t)(now - conf.launch_time), generation,
+                       OpenSSL_version(OPENSSL_VERSION), current_time, restart_time, (uint64_t)(now - conf.launch_time), generation,
                        num_connections(0), conf.max_connections, conf.num_listeners, conf.thread_map.size, num_sessions(0));
     assert(ret.len < BUFSIZE);
 
@@ -2928,7 +2929,7 @@ int main(int argc, char **argv)
                 break;
             case 'v':
                 printf("h2o version " H2O_VERSION "\n");
-                printf("OpenSSL: %s\n", SSLeay_version(SSLEAY_VERSION));
+                printf("OpenSSL: %s\n", OpenSSL_version(OPENSSL_VERSION));
 #if H2O_USE_MRUBY
                 printf(
                     "mruby: YES\n"); /* TODO determine the way to obtain the version of mruby (that is being linked dynamically) */
