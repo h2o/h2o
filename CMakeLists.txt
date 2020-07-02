@@ -890,6 +890,9 @@ ENDIF ()
 
 OPTION(WITH_H2OLOG "use h2olog command" ${WITH_H2OLOG_DEFAULT})
 IF (WITH_H2OLOG)
+    IF (NOT LIBBCC_FOUND)
+        MESSAGE(FATAL_ERROR "Cannot configure h2olog: -DWITH_H2OLOG=on is set but BCC is not found")
+    ENDIF ()
     MESSAGE(STATUS "Supporting h2olog")
 
     SET(H2OLOG_SOURCE_FILES
