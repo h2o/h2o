@@ -29,8 +29,10 @@
 #include <stdlib.h>
 #include <sys/stat.h>
 #include <sys/un.h>
+
 #include "h2o.h"
 #include "h2o/configurator.h"
+#include "h2o/privsep.h"
 #include "h2o/serverutil.h"
 
 struct fastcgi_configurator_t {
@@ -140,6 +142,7 @@ static int create_spawnproc(h2o_configurator_command_t *cmd, yoml_t *node, const
                             struct sockaddr_un *sa, struct passwd *pw)
 {
     int ret, listen_fd = -1, pipe_fds[2] = {-1, -1};
+    h2o_exec_context_t ec;
 
     /* build socket path */
     sa->sun_family = AF_UNIX;
@@ -179,15 +182,16 @@ static int create_spawnproc(h2o_configurator_command_t *cmd, yoml_t *node, const
         goto Error;
 
     /* spawn */
-    int mapped_fds[] = {listen_fd, 0,   /* listen_fd to 0 */
-                        pipe_fds[0], 5, /* pipe_fds[0] to 5 */
-                        -1};
-    pid_t pid = h2o_spawnp(argv[0], argv, mapped_fds, 0);
+    h2o_priv_init_exec_context(&ec);
+    h2o_priv_bind_fd(&ec, listen_fd, STDIN_FILENO, H2O_FDMAP_SEND_TO_PROC);
+    h2o_priv_bind_fd(&ec, pipe_fds[0], 5, H2O_FDMAP_SEND_TO_PROC);
+    pid_t pid = h2o_priv_exec(&ec, argv[0], argv, SANDBOX_POLICY_NONE);
     if (pid == -1) {
+        h2o_priv_cleanup_exec_context(&ec);
         h2o_error_printf("[lib/handler/fastcgi.c] failed to launch helper program %s:%s\n", argv[0], strerror(errno));
         goto Error;
     }
-
+    h2o_priv_cleanup_exec_context(&ec);
     close(listen_fd);
     listen_fd = -1;
     close(pipe_fds[0]);
@@ -218,7 +222,7 @@ static int on_config_spawn(h2o_configurator_command_t *cmd, h2o_configurator_con
     char *spawn_user = ctx->globalconf->user, *spawn_cmd;
     char *kill_on_close_cmd_path = NULL, *setuidgid_cmd_path = NULL;
     char dirname[] = "/tmp/h2o.fcgisock.XXXXXX";
-    char *argv[10];
+    char **argv;
     int spawner_fd;
     struct sockaddr_un sa;
     h2o_fastcgi_config_vars_t config_vars;
@@ -257,21 +261,9 @@ static int on_config_spawn(h2o_configurator_command_t *cmd, h2o_configurator_con
         h2o_user_pw = NULL;
     }
 
-    { /* build args */
-        size_t i = 0;
-        argv[i++] = kill_on_close_cmd_path = h2o_configurator_get_cmd_path("share/h2o/kill-on-close");
-        argv[i++] = "--rm";
-        argv[i++] = dirname;
-        argv[i++] = "--";
-        if (spawn_user != NULL) {
-            argv[i++] = setuidgid_cmd_path = h2o_configurator_get_cmd_path("share/h2o/setuidgid");
-            argv[i++] = spawn_user;
-        }
-        argv[i++] = "/bin/sh";
-        argv[i++] = "-c";
-        argv[i++] = spawn_cmd;
-        argv[i++] = NULL;
-        assert(i <= sizeof(argv) / sizeof(argv[0]));
+    argv = h2o_priv_init_fastcgi(dirname, spawn_user, spawn_cmd);
+    if (argv == NULL) {
+        h2o_fatal("failed to costruct argv for fastcgi exec");
     }
 
     if (ctx->dry_run) {

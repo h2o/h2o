@@ -23,6 +23,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "h2o/time_.h"
+#include "h2o/privsep.h"
 
 static char *emit_wday(char *dst, int wday)
 {
@@ -140,7 +141,7 @@ static int calc_gmt_offset(time_t t, struct tm *local)
     struct tm gmt;
     int delta;
 
-    gmtime_r(&t, &gmt);
+    h2o_priv_gmtime_r(&t, &gmt);
     delta = (local->tm_hour - gmt.tm_hour) * 60 + (local->tm_min - gmt.tm_min);
 
     if (local->tm_yday != gmt.tm_yday) {
@@ -157,7 +158,7 @@ static int calc_gmt_offset(time_t t, struct tm *local)
 void h2o_time2str_log(char *buf, time_t time)
 {
     struct tm localt;
-    localtime_r(&time, &localt);
+    h2o_priv_localtime_r(&time, &localt);
     int gmt_off = calc_gmt_offset(time, &localt);
     int gmt_sign;
 
