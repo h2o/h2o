@@ -14,6 +14,8 @@ sub nc_get {
 }
 
 sub nghttp_get {
+    plan skip_all => 'nghttp not found'
+        unless prog_exists('nghttp');
     my ($server, $path) = @_; 
     my $out = `nghttp -vn -t 1 'https://127.0.0.1:$server->{tls_port}$path'`;
     my $headers_size = 0;

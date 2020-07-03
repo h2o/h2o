@@ -48,6 +48,11 @@ struct st_quicly_address_token_plaintext_t {
     int dummy;
 };
 
+
+struct st_quicly_stats_t {
+    int dummy;
+};
+
 struct st_h2o_conn_t {
     int dummy;
 };

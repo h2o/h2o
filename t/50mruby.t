@@ -555,7 +555,7 @@ hosts:
 EOT
     my $nc = sub {
         my $path = shift;
-        my $cmd = "echo 'GET $path HTTP/1.1\\r\\nHost: 127.0.0.1\\r\\n\\r' | nc 127.0.0.1 $server->{port}";
+        my $cmd = "echo 'GET $path HTTP/1.1\r\nHost: 127.0.0.1\r\n\r' | nc 127.0.0.1 $server->{port}";
         (undef, my $r) = run_prog($cmd);
         split(/\r\n\r\n/, $r, 2);
     };

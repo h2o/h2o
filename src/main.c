@@ -50,6 +50,7 @@
 #include <sys/un.h>
 #include <sys/wait.h>
 #include <openssl/crypto.h>
+#include <openssl/dh.h>
 #include <openssl/err.h>
 #include <openssl/ssl.h>
 #ifdef LIBC_HAS_BACKTRACE
@@ -259,12 +260,26 @@ static struct {
 
 static neverbleed_t *neverbleed = NULL;
 
+static int cmd_argc;
+static char **cmd_argv;
+
 static void set_cloexec(int fd)
 {
     if (fcntl(fd, F_SETFD, FD_CLOEXEC) == -1) {
         perror("failed to set FD_CLOEXEC");
         abort();
     }
+}
+
+static void on_neverbleed_fork(void)
+{
+/* Rewrite of argv should only be done on platforms that are known to benefit from doing that. On linux, doing so helps admins look
+*  for h2o (or neverbleed) by running pidof. */
+#ifdef __linux__
+    for (int i = cmd_argc - 1; i >= 0; --i)
+        memset(cmd_argv[i], 0, strlen(cmd_argv[i]));
+    strcpy(cmd_argv[0], "neverbleed");
+#endif
 }
 
 static int on_openssl_print_errors(const char *str, size_t len, void *fp)
@@ -854,6 +869,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
     if (use_neverbleed) {
         char errbuf[NEVERBLEED_ERRBUF_SIZE];
         if (neverbleed == NULL) {
+            neverbleed_post_fork_cb = on_neverbleed_fork;
             neverbleed = h2o_mem_alloc(sizeof(*neverbleed));
             if (neverbleed_init(neverbleed, errbuf) != 0) {
                 fprintf(stderr, "%s\n", errbuf);
@@ -2703,7 +2719,7 @@ static h2o_iovec_t on_extra_status(void *unused, h2o_globalconf_t *_conf, h2o_re
                        " \"listeners\": %zu,\n"
                        " \"worker-threads\": %zu,\n"
                        " \"num-sessions\": %lu",
-                       SSLeay_version(SSLEAY_VERSION), current_time, restart_time, (uint64_t)(now - conf.launch_time), generation,
+                       OpenSSL_version(OPENSSL_VERSION), current_time, restart_time, (uint64_t)(now - conf.launch_time), generation,
                        num_connections(0), conf.max_connections, conf.num_listeners, conf.thread_map.size, num_sessions(0));
     assert(ret.len < BUFSIZE);
 
@@ -2850,6 +2866,9 @@ static void setup_configurators(void)
 
 int main(int argc, char **argv)
 {
+    cmd_argc = argc;
+    cmd_argv = argv;
+
     const char *cmd = argv[0], *opt_config_file = H2O_TO_STR(H2O_CONFIG_PATH);
     int n, error_log_fd = -1;
     size_t num_procs = h2o_numproc();
@@ -2923,7 +2942,7 @@ int main(int argc, char **argv)
                 break;
             case 'v':
                 printf("h2o version " H2O_VERSION "\n");
-                printf("OpenSSL: %s\n", SSLeay_version(SSLEAY_VERSION));
+                printf("OpenSSL: %s\n", OpenSSL_version(OPENSSL_VERSION));
 #if H2O_USE_MRUBY
                 printf(
                     "mruby: YES\n"); /* TODO determine the way to obtain the version of mruby (that is being linked dynamically) */

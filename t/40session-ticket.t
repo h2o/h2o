@@ -1,6 +1,7 @@
 use strict;
 use warnings;
 use File::Temp qw(tempdir);
+use IPC::Open2;
 use Net::EmptyPort qw(check_port empty_port);
 use Test::More;
 use Time::HiRes qw(sleep);
@@ -75,10 +76,11 @@ subtest "memcached" => sub {
     plan skip_all => "memcached not found"
         unless prog_exists("memcached");
     my $memc_port = empty_port();
+    my $memc_user = getlogin || getpwuid($<);
     my $doit = sub {
         my $memc_proto = shift;
         my $memc_guard = spawn_server(
-            argv     => [ qw(memcached -l 127.0.0.1 -p), $memc_port, "-B", $memc_proto ],
+            argv     => [ qw(memcached -l 127.0.0.1 -p), $memc_port, "-B", $memc_proto, "-u", $memc_user ],
             is_ready => sub {
                 check_port($memc_port);
             },
@@ -130,10 +132,10 @@ EOT
 sub test {
     my $lines = do {
         my $cmd_opts = (-e "$tempdir/session" ? "-sess_in $tempdir/session" : "") . " -sess_out $tempdir/session";
-        open my $fh, "-|", "openssl s_client $cmd_opts -connect 127.0.0.1:$server->{tls_port} 2>&1 < /dev/null"
+        open2(my $outfh, my $infh, "timeout 1 openssl s_client $cmd_opts -connect 127.0.0.1:$server->{tls_port} 2>&1")
             or die "failed to open pipe:$!";
         local $/;
-        <$fh>;
+        <$outfh>;
     };
     $lines =~ m{---\n(New|Reused),}s
         or die "failed to parse the output of s_client:{{{$lines}}}";
