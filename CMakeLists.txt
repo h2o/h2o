@@ -569,6 +569,8 @@ TARGET_LINK_LIBRARIES(libh2o ${OPENSSL_LIBRARIES} ${CMAKE_DL_LIBS})
 TARGET_LINK_LIBRARIES(libh2o-evloop ${OPENSSL_LIBRARIES} ${CMAKE_DL_LIBS})
 
 ADD_EXECUTABLE(fcgi deps/fcgi/fcgi.c deps/fcgi/sandbox.c)
+INSTALL(TARGETS fcgi DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/h2o)
+
 ADD_EXECUTABLE(t-qif t/qif.c)
 SET_TARGET_PROPERTIES(t-qif PROPERTIES
     COMPILE_FLAGS "-DH2O_USE_LIBUV=0"
@@ -704,7 +706,7 @@ IF (NOT WITHOUT_LIBS)
     INSTALL(FILES "${CMAKE_BINARY_DIR}/libh2o-evloop.pc" DESTINATION ${CMAKE_INSTALL_LIBDIR}/pkgconfig)
 ENDIF ()
 
-INSTALL(PROGRAMS fcgi share/h2o/annotate-backtrace-symbols share/h2o/fastcgi-cgi share/h2o/fetch-ocsp-response share/h2o/kill-on-close share/h2o/setuidgid share/h2o/start_server DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/h2o)
+INSTALL(PROGRAMS share/h2o/annotate-backtrace-symbols share/h2o/fastcgi-cgi share/h2o/fetch-ocsp-response share/h2o/kill-on-close share/h2o/setuidgid share/h2o/start_server DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/h2o)
 INSTALL(FILES share/h2o/ca-bundle.crt DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/h2o)
 INSTALL(FILES share/h2o/status/index.html DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/h2o/status)
 INSTALL(DIRECTORY doc/ DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/doc/h2o PATTERN "Makefile" EXCLUDE PATTERN "h2o.8" EXCLUDE PATTERN "README.md" EXCLUDE)
