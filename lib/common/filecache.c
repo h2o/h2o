@@ -26,6 +26,7 @@
 #include <unistd.h>
 #include "khash.h"
 #include "h2o/memory.h"
+#include "h2o/privsep.h"
 #include "h2o/filecache.h"
 
 KHASH_SET_INIT_STR(opencache_set)
@@ -115,7 +116,7 @@ h2o_filecache_ref_t *h2o_filecache_open_file(h2o_filecache_t *cache, const char 
     }
 
     /* open the file, or memoize the error */
-    if ((ref->fd = open(path, oflag)) != -1 && fstat(ref->fd, &ref->st) == 0) {
+    if ((ref->fd = h2o_priv_open(path, oflag)) != -1 && fstat(ref->fd, &ref->st) == 0) {
         ref->_last_modified.str[0] = '\0';
         ref->_etag.len = 0;
     } else {
@@ -152,7 +153,7 @@ struct tm *h2o_filecache_get_last_modified(h2o_filecache_ref_t *ref, char *outbu
 {
     assert(ref->fd != -1);
     if (ref->_last_modified.str[0] == '\0') {
-        gmtime_r(&ref->st.st_mtime, &ref->_last_modified.gm);
+        h2o_priv_gmtime_r(&ref->st.st_mtime, &ref->_last_modified.gm);
         h2o_time2str_rfc1123(ref->_last_modified.str, &ref->_last_modified.gm);
     }
     if (outbuf != NULL)

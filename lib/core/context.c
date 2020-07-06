@@ -24,6 +24,7 @@
 #include <sys/time.h>
 #include "h2o.h"
 #include "h2o/memcached.h"
+#include "h2o/privsep.h"
 
 void h2o_context_init_pathconf_context(h2o_context_t *ctx, h2o_pathconf_t *pathconf)
 {
@@ -183,7 +184,7 @@ void h2o_context_update_timestamp_string_cache(h2o_context_t *ctx)
     if (ctx->_timestamp_cache.value != NULL)
         h2o_mem_release_shared(ctx->_timestamp_cache.value);
     ctx->_timestamp_cache.value = h2o_mem_alloc_shared(NULL, sizeof(h2o_timestamp_string_t), NULL);
-    gmtime_r(&ctx->_timestamp_cache.tv_at.tv_sec, &gmt);
+    h2o_priv_gmtime_r(&ctx->_timestamp_cache.tv_at.tv_sec, &gmt);
     h2o_time2str_rfc1123(ctx->_timestamp_cache.value->rfc1123, &gmt);
     h2o_time2str_log(ctx->_timestamp_cache.value->log, ctx->_timestamp_cache.tv_at.tv_sec);
 }

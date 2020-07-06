@@ -356,6 +356,12 @@ SET(LIB_SOURCE_FILES
     lib/common/memcached.c
     lib/common/memory.c
     lib/common/multithread.c
+    lib/common/privsep.c
+    lib/common/privsep_dispatch.c
+    lib/common/privsep_sandbox_linux.c
+    lib/common/privsep_sandbox_freebsd.c
+    lib/common/allpriv.c
+    lib/common/priv_wrapper.c
     lib/common/redis.c
     lib/common/serverutil.c
     lib/common/socket.c
@@ -561,6 +567,14 @@ TARGET_INCLUDE_DIRECTORIES(libh2o PUBLIC ${OPENSSL_INCLUDE_DIR})
 TARGET_INCLUDE_DIRECTORIES(libh2o-evloop PUBLIC ${OPENSSL_INCLUDE_DIR})
 TARGET_LINK_LIBRARIES(libh2o ${OPENSSL_LIBRARIES} ${CMAKE_DL_LIBS})
 TARGET_LINK_LIBRARIES(libh2o-evloop ${OPENSSL_LIBRARIES} ${CMAKE_DL_LIBS})
+
+IF (CMAKE_SYSTEM_NAME STREQUAL "FreeBSD")
+    ADD_LIBRARY(sandboxc SHARED
+        deps/fcgi/lib/libsandboxc.c)
+    INSTALL(TARGETS sandboxc DESTINATION ${CMAKE_INSTALL_LIBDIR})
+ENDIF()
+ADD_EXECUTABLE(fcgi deps/fcgi/fcgi.c deps/fcgi/sandbox.c)
+INSTALL(TARGETS fcgi DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/h2o)
 
 ADD_EXECUTABLE(t-qif t/qif.c)
 SET_TARGET_PROPERTIES(t-qif PROPERTIES

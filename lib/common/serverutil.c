@@ -39,6 +39,7 @@
 #endif
 #include "cloexec.h"
 #include "h2o/memory.h"
+#include "h2o/privsep.h"
 #include "h2o/serverutil.h"
 #include "h2o/socket.h"
 #include "h2o/string_.h"
@@ -246,6 +247,7 @@ int h2o_read_command(const char *cmd, char **argv, h2o_buffer_t **resp, int *chi
     int respfds[2] = {-1, -1};
     pid_t pid = -1;
     int mutex_locked = 0, ret = -1;
+    h2o_exec_context_t h2o_ec;
 
     h2o_buffer_init(resp, &h2o_socket_buffer_prototype);
 
@@ -259,12 +261,16 @@ int h2o_read_command(const char *cmd, char **argv, h2o_buffer_t **resp, int *chi
         goto Exit;
 
     /* spawn */
-    int mapped_fds[] = {respfds[1], 1, /* stdout of the child process is read from the pipe */
-                        -1};
-    if ((pid = h2o_spawnp(cmd, argv, mapped_fds, 1)) == -1)
+    h2o_priv_init_exec_context(&h2o_ec);
+    h2o_priv_bind_fd(&h2o_ec, respfds[1], STDOUT_FILENO, H2O_FDMAP_READ_FROM_PROC);
+    pid = h2o_priv_exec(&h2o_ec, cmd, argv, SANDBOX_POLICY_NONE);
+    if (pid == -1) {
+        h2o_priv_cleanup_exec_context(&h2o_ec);
         goto Exit;
+    }
     close(respfds[1]);
     respfds[1] = -1;
+    h2o_priv_cleanup_exec_context(&h2o_ec);
 
     pthread_mutex_unlock(&cloexec_mutex);
     mutex_locked = 0;
@@ -286,7 +292,8 @@ Exit:
     if (pid != -1) {
         /* wait for the child to complete */
         pid_t r;
-        while ((r = waitpid(pid, child_status, 0)) == -1 && errno == EINTR)
+        while ((r = h2o_priv_waitpid(pid, child_status, 0)) == -1 &&
+          errno == EINTR)
             ;
         if (r == pid) {
             /* success */

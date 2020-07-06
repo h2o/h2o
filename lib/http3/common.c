@@ -33,6 +33,7 @@
 #include "h2o/http3_common.h"
 #include "h2o/http3_internal.h"
 #include "h2o/multithread.h"
+#include "h2o/privsep.h"
 #include "h2o.h"
 #include "../probes_.h"
 
@@ -178,7 +179,7 @@ int h2o_http3_send_datagrams(h2o_http3_ctx_t *ctx, quicly_address_t *dest, quicl
     for (size_t i = 0; i < num_datagrams; ++i) {
         mess.msg_iov = datagrams + i;
         mess.msg_iovlen = 1;
-        while ((ret = (int)sendmsg(h2o_socket_get_fd(ctx->sock.sock), &mess, 0)) == -1 && errno == EINTR)
+        while ((ret = (int)h2o_priv_sendmsg(h2o_socket_get_fd(ctx->sock.sock), &mess, 0)) == -1 && errno == EINTR)
             ;
         if (ret == -1)
             goto SendmsgError;
