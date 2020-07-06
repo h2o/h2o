@@ -155,8 +155,17 @@ char **h2o_privsep_init_fastcgi(char *sock_dir, char *spawn_user,
     index = 0;
     fcgi_cmd_path = h2o_configurator_get_cmd_path("share/h2o/fcgi");
     argv[index++] = fcgi_cmd_path;
+#ifdef __FreeBSD__
+    /*
+     * NB: Implement sandbox wrappers for Linux
+     * NB: We do not have a general purpopse libc wrapper for Linux.
+     * Sandbox policies are allowing open(2) within the outer sandbox
+     * but we may want to further lock down the FCGI stuff and
+     * implement the sandbox wrappers under Linux too.
+     */
     argv[index++] = "--libc-wrapper";
     argv[index++] = "libsandboxc.so";
+#endif
     argv[index++] = "--sandbox";
     argv[index++] = "--unlink-sock-path";
     argv[index++] = sock_dir;
