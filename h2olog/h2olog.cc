@@ -183,7 +183,7 @@ int main(int argc, char **argv)
         init_http_tracer(&tracer);
     }
 
-    bool debug = false;
+    int debug = 0;
     const char *out_file = nullptr;
     std::vector<std::string> event_type_filters;
     std::vector<std::string> response_header_filters;
@@ -204,7 +204,7 @@ int main(int argc, char **argv)
             out_file = optarg;
             break;
         case 'd':
-            debug = true;
+            debug++;
             break;
         case 'h':
             usage();
@@ -249,6 +249,18 @@ int main(int argc, char **argv)
 
     if (!response_header_filters.empty()) {
         cflags.push_back(generate_header_filter_cflag(response_header_filters));
+    }
+
+    if (debug >= 2) {
+        fprintf(stderr, "cflags=");
+        for (size_t i = 0; i < cflags.size(); i++) {
+            if (i > 0) {
+                fprintf(stderr, " ");
+            }
+            fprintf(stderr, "%s", cflags[i].c_str());
+        }
+        fprintf(stderr, "\n");
+        fprintf(stderr, "<BPF>\n%s\n</BPF>\n", tracer.bpf_text().c_str());
     }
 
     ebpf::BPF *bpf = new ebpf::BPF();
