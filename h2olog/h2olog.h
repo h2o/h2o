@@ -25,6 +25,7 @@
 
 #include <cinttypes>
 #include <vector>
+#include <string>
 #include <bcc/BPF.h>
 
 struct st_h2o_tracer_t;
@@ -64,7 +65,7 @@ struct st_h2o_tracer_t {
     /*
      * Returns the code to be compiled into BPF bytecode.
      */
-    const char *(*bpf_text)(void);
+    const std::string (*bpf_text)(void);
 };
 
 /*
