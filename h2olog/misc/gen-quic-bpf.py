@@ -31,9 +31,13 @@ from pprint import pprint
 quicly_probes_d = "deps/quicly/quicly-probes.d"
 h2o_probes_d = "h2o-probes.d"
 
+# An allow-list to gather data from USDT probes.
+# Only fields listed here are handled in BPF.
 struct_map = {
     # deps/quicly/include/quicly.h
     "st_quicly_stream_t": [
+        # ($member_access, $optional_flat_name)
+        # If $optional_flat_name is None, $member_access is used.
         ("stream_id", None),
     ],
 
@@ -51,6 +55,7 @@ struct_map = {
     ],
 }
 
+# A block list to list useless or secret data fields
 block_fields = {
     "quicly:crypto_decrypt": set(["decrypted"]),
     "quicly:crypto_update_secret": set(["secret"]),
@@ -61,17 +66,21 @@ block_fields = {
     "h2o:h3_accept": set(["conn"]),  # `h2o_conn_t *conn`
 }
 
+# A block list for quicly-probes.d.
+# USDT probes in quicly-probes.d are handled by default.
 quicly_block_probes = set([
     "quicly:debug_message",
 ])
 
+# An allow list for h2o-probes.d
+# USDT probes in h2o-probes.d are not handled by default.
 h2o_allow_probes = set([
     "h2o:h3_accept",
     "h2o:h3_close",
     "h2o:send_response_header",
 ])
 
-# convert field names for compatibility with:
+# To rename field names for compatibility with:
 # https://github.com/h2o/quicly/blob/master/quictrace-adapter.py
 rename_map = {
     # common fields
