@@ -1378,6 +1378,9 @@ static void set_privsep_socket(void)
     struct sockaddr_un sun;
     int sock, ret;
 
+    if (!h2o_priv_active()) {
+        return;
+    }
     /*
      * Activate the neverbleed sandbox policy. We already have our socket
      * descriptor that h2o will use for cryptographic operations. The only
