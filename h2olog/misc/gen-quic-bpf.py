@@ -329,12 +329,10 @@ def build_typedef_for_cplusplus():
   typedef = st_quicly_conn_t_def
 
   # CAUTION: it depends on a GCC/Clang compiler extension: typeof()
-  i = 0
   for st_name, st_fields in struct_map.items():
     for st_field_access, st_field_name_alias in st_fields:
-      i += 1
-      typedef += """static struct %s s%d; // placeholder for typeof()\n""" % (st_name, i)
-      typedef += """typedef typeof(s%d.%s) typeof_%s__%s;\n""" % (i, st_field_access, st_name, st_field_name_alias or st_field_access)
+      type_expr = """((const struct %s *)nullptr)->%s""" % (st_name, st_field_access)
+      typedef += """typedef typeof(%s) typeof_%s__%s;\n""" % (type_expr, st_name, st_field_name_alias or st_field_access)
 
   return typedef
 
