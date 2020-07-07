@@ -27,6 +27,12 @@
 
 static int privsep_state = PRIVSEP_STATE_OFF;
 
+int h2o_priv_active(void)
+{
+
+    return (privsep_state == PRIVSEP_STATE_ACTIVE);
+}
+
 FILE *h2o_priv_fopen(const char * restrict path, const char * restrict mode)
 {
 

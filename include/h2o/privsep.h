@@ -157,6 +157,7 @@ enum {
 /*
  * Wrapper functions for privsep/regular mode.
  */
+int              h2o_priv_active(void);
 int              h2o_priv_init(h2o_globalconf_t *);
 void             h2o_priv_bind_sandbox(int);
 int              h2o_priv_get_neverbleed_sock(struct sockaddr_un *);
