@@ -3,35 +3,33 @@ MRuby::Gem::Specification.new 'mruby-compiler' do |spec|
   spec.author  = 'mruby developers'
   spec.summary = 'mruby compiler library'
 
-  current_dir = spec.dir
-  current_build_dir = spec.build_dir
-
-  lex_def = "#{current_dir}/core/lex.def"
-  core_objs = Dir.glob("#{current_dir}/core/*.c").map { |f|
+  lex_def = "#{dir}/core/lex.def"
+  core_objs = Dir.glob("#{dir}/core/*.c").map { |f|
     next nil if build.cxx_exception_enabled? and f =~ /(codegen).c$/
-    objfile(f.pathmap("#{current_build_dir}/core/%n"))
+    objfile(f.pathmap("#{build_dir}/core/%n"))
   }.compact
 
   if build.cxx_exception_enabled?
     core_objs <<
-      build.compile_as_cxx("#{current_build_dir}/core/y.tab.c", "#{current_build_dir}/core/y.tab.cxx",
-                           objfile("#{current_build_dir}/y.tab"), ["#{current_dir}/core"]) <<
-      build.compile_as_cxx("#{current_dir}/core/codegen.c", "#{current_build_dir}/core/codegen.cxx")
+      build.compile_as_cxx("#{dir}/core/y.tab.c", "#{build_dir}/core/y.tab.cxx",
+                           objfile("#{build_dir}/y.tab"), ["#{dir}/core"]) <<
+      build.compile_as_cxx("#{dir}/core/codegen.c", "#{build_dir}/core/codegen.cxx")
   else
-    core_objs << objfile("#{current_build_dir}/core/y.tab")
-    file objfile("#{current_build_dir}/core/y.tab") => "#{current_build_dir}/core/y.tab.c" do |t|
-      cc.run t.name, t.prerequisites.first, [], ["#{current_dir}/core"]
+    core_objs << objfile("#{build_dir}/core/y.tab")
+    file objfile("#{build_dir}/core/y.tab") => "#{dir}/core/y.tab.c" do |t|
+      cc.run t.name, t.prerequisites.first, [], ["#{dir}/core"]
     end
   end
 
   # Parser
-  file "#{current_build_dir}/core/y.tab.c" => ["#{current_dir}/core/parse.y", lex_def] do |t|
-    FileUtils.mkdir_p File.dirname t.name
+  file "#{dir}/core/y.tab.c" => ["#{dir}/core/parse.y", lex_def] do |t|
     yacc.run t.name, t.prerequisites.first
+    content = File.read(t.name).gsub(/^#line +\d+ +"\K.*$/){$&.relative_path}
+    File.write(t.name, content)
   end
 
   # Lexical analyzer
-  file lex_def => "#{current_dir}/core/keywords" do |t|
+  file lex_def => "#{dir}/core/keywords" do |t|
     gperf.run t.name, t.prerequisites.first
   end
 

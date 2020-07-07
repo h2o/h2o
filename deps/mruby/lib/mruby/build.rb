@@ -1,7 +1,11 @@
+require "mruby-core-ext"
 require "mruby/build/load_gems"
 require "mruby/build/command"
 
 module MRuby
+  autoload :Gem, "mruby/gem"
+  autoload :Lockfile, "mruby/lockfile"
+
   class << self
     def targets
       @targets ||= {}
@@ -22,7 +26,6 @@ module MRuby
 
     def initialize(name, &block)
       @name, @initializer = name.to_s, block
-      MRuby::Toolchain.toolchains ||= {}
       MRuby::Toolchain.toolchains[@name] = self
     end
 
@@ -30,13 +33,8 @@ module MRuby
       conf.instance_exec(conf, params, &@initializer)
     end
 
-    def self.load
-      Dir.glob("#{MRUBY_ROOT}/tasks/toolchains/*.rake").each do |file|
-        Kernel.load file
-      end
-    end
+    self.toolchains = {}
   end
-  Toolchain.load
 
   class Build
     class << self
@@ -45,7 +43,7 @@ module MRuby
     include Rake::DSL
     include LoadGems
     attr_accessor :name, :bins, :exts, :file_separator, :build_dir, :gem_clone_dir
-    attr_reader :libmruby_objs, :gems, :toolchains
+    attr_reader :libmruby_objs, :gems, :toolchains, :gem_dir_to_repo_url
     attr_writer :enable_bintest, :enable_test
 
     alias libmruby libmruby_objs
@@ -70,7 +68,7 @@ module MRuby
 
         @file_separator = '/'
         @build_dir = "#{build_dir}/#{@name}"
-        @gem_clone_dir = "#{build_dir}/mrbgems"
+        @gem_clone_dir = "#{build_dir}/repos/#{@name}"
         @cc = Command::Compiler.new(self, %w(.c))
         @cxx = Command::Compiler.new(self, %w(.cc .cxx .cpp))
         @objc = Command::Compiler.new(self, %w(.m))
@@ -90,7 +88,9 @@ module MRuby
         @cxx_abi_enabled = false
         @enable_bintest = false
         @enable_test = false
+        @enable_lock = true
         @toolchains = []
+        @gem_dir_to_repo_url = {}
 
         MRuby.targets[@name] = self
       end
@@ -116,6 +116,14 @@ module MRuby
       @mrbc.compile_options += ' -g'
 
       @enable_debug = true
+    end
+
+    def disable_lock
+      @enable_lock = false
+    end
+
+    def lock_enabled?
+      Lockfile.enabled? && @enable_lock
     end
 
     def disable_cxx_exception
@@ -155,8 +163,8 @@ module MRuby
       compilers.each { |c|
         c.defines += %w(MRB_ENABLE_CXX_EXCEPTION MRB_ENABLE_CXX_ABI)
         c.flags << c.cxx_compile_flag
+        c.flags = c.flags.flatten - c.cxx_invalid_flags.flatten
       }
-      compilers.each { |c| c.flags << c.cxx_compile_flag }
       linker.command = cxx.command if toolchains.find { |v| v == 'gcc' }
       @cxx_abi_enabled = true
     end
@@ -165,7 +173,7 @@ module MRuby
       obj = objfile(cxx_src) if obj.nil?
 
       file cxx_src => [src, __FILE__] do |t|
-        FileUtils.mkdir_p File.dirname t.name
+        mkdir_p File.dirname t.name
         IO.write t.name, <<EOS
 #define __STDC_CONSTANT_MACROS
 #define __STDC_LIMIT_MACROS
@@ -196,10 +204,15 @@ EOS
     end
 
     def toolchain(name, params={})
-      tc = Toolchain.toolchains[name.to_s]
-      fail "Unknown #{name} toolchain" unless tc
+      name = name.to_s
+      tc = Toolchain.toolchains[name] || begin
+        path = "#{MRUBY_ROOT}/tasks/toolchains/#{name}.rake"
+        fail "Unknown #{name} toolchain" unless File.exist?(path)
+        load path
+        Toolchain.toolchains[name]
+      end
       tc.setup(self, params)
-      @toolchains.unshift name.to_s
+      @toolchains.unshift name
     end
 
     def primary_toolchain
@@ -224,6 +237,10 @@ EOS
 
     def build_mrbc_exec
       gem :core => 'mruby-bin-mrbc'
+    end
+
+    def locks
+      Lockfile.build(@name)
     end
 
     def mrbcfile
@@ -255,15 +272,7 @@ EOS
       if name.is_a?(Array)
         name.flatten.map { |n| filename(n) }
       else
-        '"%s"' % name.gsub('/', file_separator)
-      end
-    end
-
-    def cygwin_filename(name)
-      if name.is_a?(Array)
-        name.flatten.map { |n| cygwin_filename(n) }
-      else
-        '"%s"' % `cygpath -w "#{filename(name)}"`.strip
+        name.gsub('/', file_separator)
       end
     end
 
@@ -303,7 +312,7 @@ EOS
     end
 
     def verbose_flag
-      $verbose ? ' -v' : ''
+      Rake.verbose ? ' -v' : ''
     end
 
     def run_test
@@ -314,6 +323,7 @@ EOS
     end
 
     def run_bintest
+      puts ">>> Bintest #{name} <<<"
       targets = @gems.select { |v| File.directory? "#{v.dir}/bintest" }.map { |v| filename v.dir }
       targets << filename(".") if File.directory? "./bintest"
       sh "ruby test/bintest.rb#{verbose_flag} #{targets.join ' '}"
@@ -326,7 +336,8 @@ EOS
       puts "         Binaries: #{@bins.join(', ')}" unless @bins.empty?
       unless @gems.empty?
         puts "    Included Gems:"
-        @gems.map do |gem|
+        gems = @gems.sort_by { |gem| gem.name }
+        gems.each do |gem|
           gem_version = " - #{gem.version}" if gem.version != '0.0.0'
           gem_summary = " - #{gem.summary}" if gem.summary
           puts "             #{gem.name}#{gem_version}#{gem_summary}"
@@ -368,7 +379,7 @@ EOS
     end
 
     def run_test
-      @test_runner.runner_options << ' -v' if $verbose
+      @test_runner.runner_options << verbose_flag
       mrbtest = exefile("#{build_dir}/bin/mrbtest")
       if (@test_runner.command == nil)
         puts "You should run #{mrbtest} on target device."
@@ -376,27 +387,6 @@ EOS
       else
         @test_runner.run(mrbtest)
       end
-    end
-
-    def big_endian
-      if @endian
-        puts "Endian has already specified as #{@endian}."
-        return
-      end
-      @endian = :big
-      @mrbc.compile_options += ' -E'
-      compilers.each do |c|
-        c.defines += %w(MRB_ENDIAN_BIG)
-      end
-    end
-
-    def little_endian
-      if @endian
-        puts "Endian has already specified as #{@endian}."
-        return
-      end
-      @endian = :little
-      @mrbc.compile_options += ' -e'
     end
   end # CrossBuild
 end # MRuby

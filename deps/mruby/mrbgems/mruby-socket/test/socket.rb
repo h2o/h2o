@@ -28,7 +28,7 @@ assert('Socket#recvfrom') do
     rstr, ai = s.recvfrom sstr.size
 
     assert_equal sstr, rstr
-    assert_true "127.0.0.1", ai.ip_address
+    assert_equal "127.0.0.1", ai.ip_address
   ensure
     s.close rescue nil
     c.close rescue nil

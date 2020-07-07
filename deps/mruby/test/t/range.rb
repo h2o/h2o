@@ -101,12 +101,12 @@ end
 
 assert('Range#dup') do
   r = (1..3).dup
-  assert_equal r.begin, 1
-  assert_equal r.end, 3
+  assert_equal 1, r.begin
+  assert_equal 3, r.end
   assert_false r.exclude_end?
 
   r = ("a"..."z").dup
-  assert_equal r.begin, "a"
-  assert_equal r.end, "z"
+  assert_equal "a", r.begin
+  assert_equal "z", r.end
   assert_true r.exclude_end?
 end

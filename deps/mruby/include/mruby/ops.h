@@ -45,9 +45,9 @@ OPCODE(SETMCNST,   BB)       /* R(a+1)::Syms(b) = R(a) */
 OPCODE(GETUPVAR,   BBB)      /* R(a) = uvget(b,c) */
 OPCODE(SETUPVAR,   BBB)      /* uvset(b,c,R(a)) */
 OPCODE(JMP,        S)        /* pc=a */
-OPCODE(JMPIF,      BS)       /* if R(b) pc=a */
-OPCODE(JMPNOT,     BS)       /* if !R(b) pc=a */
-OPCODE(JMPNIL,     BS)       /* if R(b)==nil pc=a */
+OPCODE(JMPIF,      BS)       /* if R(a) pc=b */
+OPCODE(JMPNOT,     BS)       /* if !R(a) pc=b */
+OPCODE(JMPNIL,     BS)       /* if R(a)==nil pc=b */
 OPCODE(ONERR,      S)        /* rescue_push(a) */
 OPCODE(EXCEPT,     B)        /* R(a) = exc */
 OPCODE(RESCUE,     BB)       /* R(b) = R(a).isa?(R(b)) */
@@ -58,7 +58,7 @@ OPCODE(EPOP,       B)        /* A.times{ensure_pop().call} */
 OPCODE(SENDV,      BB)       /* R(a) = call(R(a),Syms(b),*R(a+1)) */
 OPCODE(SENDVB,     BB)       /* R(a) = call(R(a),Syms(b),*R(a+1),&R(a+2)) */
 OPCODE(SEND,       BBB)      /* R(a) = call(R(a),Syms(b),R(a+1),...,R(a+c)) */
-OPCODE(SENDB,      BBB)      /* R(a) = call(R(a),Syms(Bx),R(a+1),...,R(a+c),&R(a+c+1)) */
+OPCODE(SENDB,      BBB)      /* R(a) = call(R(a),Syms(b),R(a+1),...,R(a+c),&R(a+c+1)) */
 OPCODE(CALL,       Z)        /* R(0) = self.call(frame.argc, frame.argv) */
 OPCODE(SUPER,      BB)       /* R(a) = super(R(a+1),... ,R(a+b+1)) */
 OPCODE(ARGARY,     BS)       /* R(a) = argument array (16=m5:r1:m5:d1:lv4) */
@@ -71,9 +71,9 @@ OPCODE(RETURN_BLK, B)        /* return R(a) (in-block return) */
 OPCODE(BREAK,      B)        /* break R(a) */
 OPCODE(BLKPUSH,    BS)       /* R(a) = block (16=m5:r1:m5:d1:lv4) */
 OPCODE(ADD,        B)        /* R(a) = R(a)+R(a+1) */
-OPCODE(ADDI,       BB)       /* R(a) = R(a)+mrb_int(c)  */
+OPCODE(ADDI,       BB)       /* R(a) = R(a)+mrb_int(b) */
 OPCODE(SUB,        B)        /* R(a) = R(a)-R(a+1) */
-OPCODE(SUBI,       BB)       /* R(a) = R(a)-C */
+OPCODE(SUBI,       BB)       /* R(a) = R(a)-mrb_int(b) */
 OPCODE(MUL,        B)        /* R(a) = R(a)*R(a+1) */
 OPCODE(DIV,        B)        /* R(a) = R(a)/R(a+1) */
 OPCODE(EQ,         B)        /* R(a) = R(a)==R(a+1) */
@@ -92,8 +92,8 @@ OPCODE(APOST,      BBB)      /* *R(a),R(a+1)..R(a+c) = R(a)[b..] */
 OPCODE(INTERN,     B)        /* R(a) = intern(R(a)) */
 OPCODE(STRING,     BB)       /* R(a) = str_dup(Lit(b)) */
 OPCODE(STRCAT,     B)        /* str_cat(R(a),R(a+1)) */
-OPCODE(HASH,       BB)       /* R(a) = hash_new(R(a),R(a+1)..R(a+b)) */
-OPCODE(HASHADD,    BB)       /* R(a) = hash_push(R(a),R(a+1)..R(a+b)) */
+OPCODE(HASH,       BB)       /* R(a) = hash_new(R(a),R(a+1)..R(a+b*2-1)) */
+OPCODE(HASHADD,    BB)       /* R(a) = hash_push(R(a),R(a+1)..R(a+b*2)) */
 OPCODE(HASHCAT,    B)        /* R(a) = hash_cat(R(a),R(a+1)) */
 OPCODE(LAMBDA,     BB)       /* R(a) = lambda(SEQ[b],L_LAMBDA) */
 OPCODE(BLOCK,      BB)       /* R(a) = lambda(SEQ[b],L_BLOCK) */
@@ -115,3 +115,4 @@ OPCODE(EXT1,       Z)        /* make 1st operand 16bit */
 OPCODE(EXT2,       Z)        /* make 2nd operand 16bit */
 OPCODE(EXT3,       Z)        /* make 1st and 2nd operands 16bit */
 OPCODE(STOP,       Z)        /* stop VM */
+OPCODE(LOADI16,    BS)       /* R(a) = mrb_int(b) */

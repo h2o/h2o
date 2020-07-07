@@ -1,16 +1,16 @@
 ##
 # ensure Test
 
-assert('ensure - context - yield') do
-  class EnsureYieldBreak
-    attr_reader :ensure_context
-    def try
-      yield
-    ensure
-      @ensure_context = self
-    end
+class EnsureYieldBreak
+  attr_reader :ensure_context
+  def try
+    yield
+  ensure
+    @ensure_context = self
   end
+end
 
+assert('ensure - context - yield') do
   yielder = EnsureYieldBreak.new
   yielder.try do
   end
@@ -18,15 +18,6 @@ assert('ensure - context - yield') do
 end
 
 assert('ensure - context - yield and break') do
-  class EnsureYieldBreak
-    attr_reader :ensure_context
-    def try
-      yield
-    ensure
-      @ensure_context = self
-    end
-  end
-
   yielder = EnsureYieldBreak.new
   yielder.try do
     break
@@ -35,15 +26,6 @@ assert('ensure - context - yield and break') do
 end
 
 assert('ensure - context - yield and return') do
-  class EnsureYieldBreak
-    attr_reader :ensure_context
-    def try
-      yield
-    ensure
-      @ensure_context = self
-    end
-  end
-
   yielder = EnsureYieldBreak.new
   lambda do
     yielder.try do

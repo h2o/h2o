@@ -5,14 +5,17 @@
 static mrb_value
 mrb_mod_name(mrb_state *mrb, mrb_value self)
 {
-  mrb_value name = mrb_class_path(mrb, mrb_class_ptr(self));
-  return mrb_nil_p(name)? name : mrb_str_dup(mrb, name);
+  mrb_value name =  mrb_class_path(mrb, mrb_class_ptr(self));
+  if (mrb_string_p(name)) {
+    MRB_SET_FROZEN_FLAG(mrb_basic_ptr(name));
+  }
+  return name;
 }
 
 static mrb_value
 mrb_mod_singleton_class_p(mrb_state *mrb, mrb_value self)
 {
-  return mrb_bool_value(mrb_type(self) == MRB_TT_SCLASS);
+  return mrb_bool_value(mrb_sclass_p(self));
 }
 
 /*
@@ -40,14 +43,15 @@ mrb_mod_module_exec(mrb_state *mrb, mrb_value self)
   const mrb_value *argv;
   mrb_int argc;
   mrb_value blk;
+  struct RClass *c;
 
-  mrb_get_args(mrb, "*&", &argv, &argc, &blk);
+  mrb_get_args(mrb, "*&!", &argv, &argc, &blk);
 
-  if (mrb_nil_p(blk)) {
-    mrb_raise(mrb, E_ARGUMENT_ERROR, "no block given");
+  c = mrb_class_ptr(self);
+  if (mrb->c->ci->acc < 0) {
+    return mrb_yield_with_class(mrb, blk, argc, argv, self, c);
   }
-
-  mrb->c->ci->target_class = mrb_class_ptr(self);
+  mrb->c->ci->target_class = c;
   return mrb_yield_cont(mrb, blk, self, argc, argv);
 }
 

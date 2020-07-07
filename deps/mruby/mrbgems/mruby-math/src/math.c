@@ -4,6 +4,10 @@
 ** See Copyright Notice in mruby.h
 */
 
+#ifdef MRB_WITHOUT_FLOAT
+# error Math conflicts 'MRB_WITHOUT_FLOAT' configuration in your 'build_config.rb'
+#endif
+
 #include <mruby.h>
 #include <mruby/array.h>
 
@@ -14,16 +18,13 @@ domain_error(mrb_state *mrb, const char *func)
 {
   struct RClass *math = mrb_module_get(mrb, "Math");
   struct RClass *domainerror = mrb_class_get_under(mrb, math, "DomainError");
-  mrb_value str = mrb_str_new_cstr(mrb, func);
-  mrb_raisef(mrb, domainerror, "Numerical argument is out of domain - %S", str);
+  mrb_raisef(mrb, domainerror, "Numerical argument is out of domain - %s", func);
 }
 
 /* math functions not provided by Microsoft Visual C++ 2012 or older */
 #if defined _MSC_VER && _MSC_VER <= 1700
 
 #include <float.h>
-
-#define MATH_TOLERANCE 1E-12
 
 double
 asinh(double x)
@@ -122,7 +123,8 @@ erf(double x)
     term *= xsqr/j;
     sum  += term/(2*j+1);
     ++j;
-  } while (fabs(term/sum) > MATH_TOLERANCE);
+    if (sum == 0) break;
+  } while (fabs(term/sum) > DBL_EPSILON);
   return two_sqrtpi*sum;
 }
 
@@ -155,7 +157,7 @@ erfc(double x)
     n += 0.5;
     q1 = q2;
     q2 = b/d;
-  } while (fabs(q1-q2)/q2 > MATH_TOLERANCE);
+  } while (fabs(q1-q2)/q2 > DBL_EPSILON);
   return one_sqrtpi*exp(-x*x)*q2;
 }
 
@@ -740,12 +742,6 @@ mrb_mruby_math_gem_init(mrb_state* mrb)
   mrb_define_const(mrb, mrb_math, "E", mrb_float_value(mrb, M_E));
 #else
   mrb_define_const(mrb, mrb_math, "E", mrb_float_value(mrb, exp(1.0)));
-#endif
-
-#ifdef MRB_USE_FLOAT
-  mrb_define_const(mrb, mrb_math, "TOLERANCE", mrb_float_value(mrb, 1e-5));
-#else
-  mrb_define_const(mrb, mrb_math, "TOLERANCE", mrb_float_value(mrb, 1e-12));
 #endif
 
   mrb_define_module_function(mrb, mrb_math, "sin", math_sin, MRB_ARGS_REQ(1));

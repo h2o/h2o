@@ -8,6 +8,7 @@ mrb_protect(mrb_state *mrb, mrb_func_t body, mrb_value data, mrb_bool *state)
   struct mrb_jmpbuf *prev_jmp = mrb->jmp;
   struct mrb_jmpbuf c_jmp;
   mrb_value result = mrb_nil_value();
+  int ai = mrb_gc_arena_save(mrb);
 
   if (state) { *state = FALSE; }
 
@@ -22,6 +23,7 @@ mrb_protect(mrb_state *mrb, mrb_func_t body, mrb_value data, mrb_bool *state)
     if (state) { *state = TRUE; }
   } MRB_END_EXC(&c_jmp);
 
+  mrb_gc_arena_restore(mrb, ai);
   mrb_gc_protect(mrb, result);
   return result;
 }
@@ -32,6 +34,7 @@ mrb_ensure(mrb_state *mrb, mrb_func_t body, mrb_value b_data, mrb_func_t ensure,
   struct mrb_jmpbuf *prev_jmp = mrb->jmp;
   struct mrb_jmpbuf c_jmp;
   mrb_value result;
+  int ai = mrb_gc_arena_save(mrb);
 
   MRB_TRY(&c_jmp) {
     mrb->jmp = &c_jmp;
@@ -39,11 +42,15 @@ mrb_ensure(mrb_state *mrb, mrb_func_t body, mrb_value b_data, mrb_func_t ensure,
     mrb->jmp = prev_jmp;
   } MRB_CATCH(&c_jmp) {
     mrb->jmp = prev_jmp;
+    mrb_gc_arena_restore(mrb, ai);
     ensure(mrb, e_data);
     MRB_THROW(mrb->jmp); /* rethrow catched exceptions */
   } MRB_END_EXC(&c_jmp);
 
+  mrb_gc_arena_restore(mrb, ai);
+  mrb_gc_protect(mrb, result);
   ensure(mrb, e_data);
+  mrb_gc_arena_restore(mrb, ai);
   mrb_gc_protect(mrb, result);
   return result;
 }
@@ -64,6 +71,7 @@ mrb_rescue_exceptions(mrb_state *mrb, mrb_func_t body, mrb_value b_data, mrb_fun
   mrb_value result;
   mrb_bool error_matched = FALSE;
   mrb_int i;
+  int ai = mrb_gc_arena_save(mrb);
 
   MRB_TRY(&c_jmp) {
     mrb->jmp = &c_jmp;
@@ -82,9 +90,11 @@ mrb_rescue_exceptions(mrb_state *mrb, mrb_func_t body, mrb_value b_data, mrb_fun
     if (!error_matched) { MRB_THROW(mrb->jmp); }
 
     mrb->exc = NULL;
+    mrb_gc_arena_restore(mrb, ai);
     result = rescue(mrb, r_data);
   } MRB_END_EXC(&c_jmp);
 
+  mrb_gc_arena_restore(mrb, ai);
   mrb_gc_protect(mrb, result);
   return result;
 }

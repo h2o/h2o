@@ -32,7 +32,7 @@ MRuby::CrossBuild.new('core2-32-poky-linux') do |conf|
     cc.flags = %w(-m32 -march=core2 -mtune=core2 -msse3 -mfpmath=sse -mstackrealign -fno-omit-frame-pointer)
     cc.flags << %w(-O2 -pipe -g -feliminate-unused-debug-types)
     cc.flags << "--sysroot=#{POKY_EDISON_SYSROOT}"
-    cc.compile_options = "%{flags} -o %{outfile} -c %{infile}"
+    cc.compile_options = %Q[%{flags} -o "%{outfile}" -c "%{infile}"]
     cc.defines = %w(ENABLE_READLINE)
   end
 
@@ -47,7 +47,7 @@ MRuby::CrossBuild.new('core2-32-poky-linux') do |conf|
 
   conf.archiver do |archiver|
     archiver.command = "#{POKY_EDISON_BIN_PATH}/i586-poky-linux-ar"
-    archiver.archive_options = 'rcs %{outfile} %{objs}'
+    archiver.archive_options = 'rcs "%{outfile}" %{objs}'
   end
 
   conf.linker do |linker|

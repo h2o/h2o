@@ -1,9 +1,7 @@
 ##
 # FileTest
 
-assert('FileTest TEST SETUP') do
-  MRubyIOTestUtil.io_test_setup
-end
+MRubyIOTestUtil.io_test_setup
 
 assert("FileTest.directory?") do
   dir = MRubyIOTestUtil.mkdtemp("mruby-io-test.XXXXXX")
@@ -22,9 +20,8 @@ assert("FileTest.exist?") do
   assert_equal true,  FileTest.exist?(io), "io obj - exist"
   io.close
   assert_equal true, io.closed?
-  assert_raise IOError do
-    FileTest.exist?(io)
-  end
+  assert_raise(IOError) { FileTest.exist?(io) }
+  assert_raise(TypeError) { File.exist?($mrbtest_io_rfname.to_sym) }
 end
 
 assert("FileTest.file?") do
@@ -112,6 +109,4 @@ assert("FileTest.zero?") do
   assert_true fp2.closed?
 end
 
-assert('FileTest TEST CLEANUP') do
-  assert_nil MRubyIOTestUtil.io_test_cleanup
-end
+MRubyIOTestUtil.io_test_cleanup

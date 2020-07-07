@@ -80,7 +80,7 @@ assert('Kernel.#eval(string) context') do
   assert_equal('class') { obj.const_string }
 end
 
-assert('Object#instance_eval with begin-rescue-ensure execution order') do
+assert('BasicObject#instance_eval with begin-rescue-ensure execution order') do
   class HellRaiser
     def raise_hell
       order = [:enter_raise_hell]
@@ -100,7 +100,7 @@ assert('Object#instance_eval with begin-rescue-ensure execution order') do
   assert_equal([:enter_raise_hell, :begin, :rescue, :ensure], hell_raiser.raise_hell)
 end
 
-assert('Kernel#instance_eval() to define singleton methods Issue #3141') do
+assert('BasicObject#instance_eval to define singleton methods Issue #3141') do
   foo_class = Class.new do
     def bar(x)
       instance_eval "def baz; #{x}; end"
@@ -128,5 +128,26 @@ EOS
 foo = "FOO"
 Proc.new { foo }
 EOS
+  }
+end
+
+assert('Calling the same method as the variable name') do
+  hoge = Object.new
+  def hoge.fuga
+    "Hit!"
+  end
+  assert_equal("Hit!") { fuga = "Miss!"; eval "hoge.fuga" }
+  assert_equal("Hit!") { fuga = "Miss!"; -> { eval "hoge.fuga" }.call }
+  assert_equal("Hit!") { -> { fuga = "Miss!"; eval "hoge.fuga" }.call }
+  assert_equal("Hit!") { fuga = "Miss!"; eval("-> { hoge.fuga }").call }
+end
+
+assert('Access numbered parameter from eval') do
+  hoge = Object.new
+  def hoge.fuga(a, &b)
+    b.call(a)
+  end
+  assert_equal(6) {
+    hoge.fuga(3) { _1 + eval("_1") }
   }
 end

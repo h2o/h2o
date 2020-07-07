@@ -7,8 +7,8 @@ MRuby.each_target do
     # loader all gems
     self.libmruby_objs << objfile("#{build_dir}/mrbgems/gem_init")
     file objfile("#{build_dir}/mrbgems/gem_init") => ["#{build_dir}/mrbgems/gem_init.c", "#{build_dir}/LEGAL"]
-    file "#{build_dir}/mrbgems/gem_init.c" => [MRUBY_CONFIG, __FILE__] do |t|
-      FileUtils.mkdir_p "#{build_dir}/mrbgems"
+    file "#{build_dir}/mrbgems/gem_init.c" => [MRUBY_CONFIG, __FILE__, *Dir.glob("#{build_dir}/mrbgems/mruby-*/*.c")] do |t|
+      mkdir_p "#{build_dir}/mrbgems"
       open(t.name, 'w') do |f|
         gem_func_gems = gems.select { |g| g.generate_functions }
         gem_func_decls = gem_func_gems.each_with_object('') do |g, s|
@@ -53,7 +53,7 @@ MRuby.each_target do
 
   # legal documents
   file "#{build_dir}/LEGAL" => [MRUBY_CONFIG, __FILE__] do |t|
-    FileUtils.mkdir_p File.dirname t.name
+    mkdir_p File.dirname t.name
     open(t.name, 'w+') do |f|
      f.puts <<LEGAL
 Copyright (c) #{Time.now.year} mruby developers

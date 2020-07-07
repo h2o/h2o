@@ -105,14 +105,14 @@ module Integral
     return to_enum(:step, num, step) unless block
 
     i = __coerce_step_counter(num, step)
-    if num == nil
+    if num == self || step.infinite?
+      block.call(i) if step > 0 && i <= (num||i) || step < 0 && i >= (num||-i)
+    elsif num == nil
       while true
         block.call(i)
         i += step
       end
-      return self
-    end
-    if step > 0
+    elsif step > 0
       while i <= num
         block.call(i)
         i += step

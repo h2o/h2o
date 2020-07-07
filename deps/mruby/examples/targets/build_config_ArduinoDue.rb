@@ -42,7 +42,7 @@ MRuby::CrossBuild.new("ArduinoDue") do |conf|
     cc.flags = %w(-g -Os -w -ffunction-sections -fdata-sections -nostdlib --param max-inline-insns-single=500
                 -Dprintf=iprintf -mcpu=cortex-m3 -DF_CPU=84000000L -DARDUINO=156 -DARDUINO_SAM_DUE -DARDUINO_ARCH_SAM
                 -D__SAM3X8E__ -mthumb -DUSB_PID=0x003e -DUSB_VID=0x2341 -DUSBCON -DUSB_MANUFACTURER="Unknown" -DUSB_PRODUCT="Arduino Due")
-    cc.compile_options = "%{flags} -o %{outfile} -c %{infile}"
+    cc.compile_options = %Q[%{flags} -o "%{outfile}" -c "%{infile}"]
 
     #configuration for low memory environment
     cc.defines << %w(MRB_HEAP_PAGE_SIZE=64)
@@ -64,7 +64,7 @@ MRuby::CrossBuild.new("ArduinoDue") do |conf|
 
   conf.archiver do |archiver|
     archiver.command = "#{BIN_PATH}/arm-none-eabi-ar"
-    archiver.archive_options = 'rcs %{outfile} %{objs}'
+    archiver.archive_options = 'rcs "%{outfile}" %{objs}'
   end
 
   #no executables

@@ -8,8 +8,7 @@ istruct_test_initialize(mrb_state *mrb, mrb_value self)
 {
   char *string = (char*)mrb_istruct_ptr(self);
   mrb_int size = mrb_istruct_size();
-  mrb_value object;
-  mrb_get_args(mrb, "o", &object);
+  mrb_value object = mrb_get_arg1(mrb);
 
   if (mrb_fixnum_p(object)) {
     strncpy(string, "fixnum", size-1);
@@ -45,8 +44,8 @@ istruct_test_length(mrb_state *mrb, mrb_value self)
 static mrb_value
 istruct_test_test_receive(mrb_state *mrb, mrb_value self)
 {
-  mrb_value object;
-  mrb_get_args(mrb, "o", &object);
+  mrb_value object = mrb_get_arg1(mrb);
+
   if (mrb_obj_class(mrb, object) != mrb_class_get(mrb, "InlineStructTest"))
   {
     mrb_raise(mrb, E_TYPE_ERROR, "Expected InlineStructTest");

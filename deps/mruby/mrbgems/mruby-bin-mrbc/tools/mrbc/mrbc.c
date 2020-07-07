@@ -1,7 +1,11 @@
-#include <stdio.h>
+#include <mruby.h>
+
+#ifdef MRB_DISABLE_STDIO
+# error mruby-bin-mrbc conflicts 'MRB_DISABLE_STDIO' configuration in your 'build_config.rb'
+#endif
+
 #include <stdlib.h>
 #include <string.h>
-#include <mruby.h>
 #include <mruby/compile.h>
 #include <mruby/dump.h>
 #include <mruby/proc.h>
@@ -32,8 +36,6 @@ usage(const char *name)
   "-v           print version number, then turn on verbose mode",
   "-g           produce debugging information",
   "-B<symbol>   binary <symbol> output in C language format",
-  "-e           generate little endian iseq data",
-  "-E           generate big endian iseq data",
   "--remove-lv  remove local variables",
   "--verbose    run at verbose mode",
   "--version    print the version",
@@ -50,19 +52,26 @@ usage(const char *name)
 static char *
 get_outfilename(mrb_state *mrb, char *infile, const char *ext)
 {
-  size_t infilelen;
-  size_t extlen;
+  size_t ilen, flen, elen;
   char *outfile;
-  char *p;
+  char *p = NULL;
 
-  infilelen = strlen(infile);
-  extlen = strlen(ext);
-  outfile = (char*)mrb_malloc(mrb, infilelen + extlen + 1);
-  memcpy(outfile, infile, infilelen + 1);
+  ilen = strlen(infile);
+  flen = ilen;
   if (*ext) {
-    if ((p = strrchr(outfile, '.')) == NULL)
-      p = outfile + infilelen;
-    memcpy(p, ext, extlen + 1);
+    elen = strlen(ext);
+    if ((p = strrchr(infile, '.'))) {
+      ilen = p - infile;
+    }
+    flen += elen;
+  }
+  else {
+    flen = ilen;
+  }
+  outfile = (char*)mrb_malloc(mrb, flen+1);
+  strncpy(outfile, infile, ilen+1);
+  if (p) {
+    strncpy(outfile+ilen, ext, elen+1);
   }
 
   return outfile;
@@ -71,7 +80,6 @@ get_outfilename(mrb_state *mrb, char *infile, const char *ext)
 static int
 parse_args(mrb_state *mrb, int argc, char **argv, struct mrbc_args *args)
 {
-  char *outfile = NULL;
   static const struct mrbc_args args_zero = { 0 };
   int i;
 
@@ -86,7 +94,7 @@ parse_args(mrb_state *mrb, int argc, char **argv, struct mrbc_args *args)
       case 'o':
         if (args->outfile) {
           fprintf(stderr, "%s: an output file is already specified. (%s)\n",
-                  args->prog, outfile);
+                  args->prog, args->outfile);
           return -1;
         }
         if (argv[i][2] == '\0' && argv[i+1]) {
@@ -121,10 +129,8 @@ parse_args(mrb_state *mrb, int argc, char **argv, struct mrbc_args *args)
         args->flags |= DUMP_DEBUG_INFO;
         break;
       case 'E':
-        args->flags = DUMP_ENDIAN_BIG | (args->flags & ~DUMP_ENDIAN_MASK);
-        break;
       case 'e':
-        args->flags = DUMP_ENDIAN_LIL | (args->flags & ~DUMP_ENDIAN_MASK);
+        fprintf(stderr, "%s: -e/-E option no longer needed.\n", args->prog);
         break;
       case 'h':
         return -1;
@@ -157,10 +163,6 @@ parse_args(mrb_state *mrb, int argc, char **argv, struct mrbc_args *args)
       break;
     }
   }
-  if (args->verbose && args->initname && (args->flags & DUMP_ENDIAN_MASK) == 0) {
-    fprintf(stderr, "%s: generating %s endian C file. specify -e/-E for cross compiling.\n",
-            args->prog, bigendian_p() ? "big" : "little");
-  }
   return i;
 }
 
@@ -184,7 +186,7 @@ partial_hook(struct mrb_parser_state *p)
     return -1;
   }
   fn = args->argv[args->idx++];
-  p->f = fopen(fn, "r");
+  p->f = fopen(fn, "rb");
   if (p->f == NULL) {
     fprintf(stderr, "%s: cannot open program file. (%s)\n", args->prog, fn);
     return -1;
@@ -211,7 +213,7 @@ load_file(mrb_state *mrb, struct mrbc_args *args)
   }
   else {
     need_close = TRUE;
-    if ((infile = fopen(input, "r")) == NULL) {
+    if ((infile = fopen(input, "rb")) == NULL) {
       fprintf(stderr, "%s: cannot open program file. (%s)\n", args->prog, input);
       return mrb_nil_value();
     }

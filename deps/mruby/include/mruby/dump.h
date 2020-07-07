@@ -1,5 +1,5 @@
-/*
-** mruby/dump.h - mruby binary dumper (mrbc binary format)
+/**
+** @file mruby/dump.h - mruby binary dumper (mrbc binary format)
 **
 ** See Copyright Notice in mruby.h
 */
@@ -17,10 +17,6 @@
 MRB_BEGIN_DECL
 
 #define DUMP_DEBUG_INFO 1
-#define DUMP_ENDIAN_BIG 2
-#define DUMP_ENDIAN_LIL 4
-#define DUMP_ENDIAN_NAT 6
-#define DUMP_ENDIAN_MASK 6
 
 int mrb_dump_irep(mrb_state *mrb, mrb_irep *irep, uint8_t flags, uint8_t **bin, size_t *bin_size);
 #ifndef MRB_DISABLE_STDIO
@@ -31,6 +27,7 @@ MRB_API mrb_value mrb_load_irep_file(mrb_state*,FILE*);
 MRB_API mrb_value mrb_load_irep_file_cxt(mrb_state*, FILE*, mrbc_context*);
 #endif
 MRB_API mrb_irep *mrb_read_irep(mrb_state*, const uint8_t*);
+MRB_API mrb_irep *mrb_read_irep_buf(mrb_state*, const void*, size_t);
 
 /* dump/load error code
  *
@@ -51,8 +48,7 @@ MRB_API mrb_irep *mrb_read_irep(mrb_state*, const uint8_t*);
 
 /* Rite Binary File header */
 #define RITE_BINARY_IDENT              "RITE"
-#define RITE_BINARY_IDENT_LIL          "ETIR"
-#define RITE_BINARY_FORMAT_VER         "0006"
+#define RITE_BINARY_FORMAT_VER         "0007"
 #define RITE_COMPILER_NAME             "MATZ"
 #define RITE_COMPILER_VERSION          "0000"
 
@@ -60,7 +56,6 @@ MRB_API mrb_irep *mrb_read_irep(mrb_state*, const uint8_t*);
 
 #define RITE_BINARY_EOF                "END\0"
 #define RITE_SECTION_IREP_IDENT        "IREP"
-#define RITE_SECTION_LINENO_IDENT      "LINE"
 #define RITE_SECTION_DEBUG_IDENT       "DBG\0"
 #define RITE_SECTION_LV_IDENT          "LVAR"
 
@@ -92,10 +87,6 @@ struct rite_section_irep_header {
   uint8_t rite_version[4];    /* Rite Instruction Specification Version */
 };
 
-struct rite_section_lineno_header {
-  RITE_SECTION_HEADER;
-};
-
 struct rite_section_debug_header {
   RITE_SECTION_HEADER;
 };
@@ -109,17 +100,6 @@ struct rite_section_lv_header {
 struct rite_binary_footer {
   RITE_SECTION_HEADER;
 };
-
-static inline int
-bigendian_p()
-{
-  int i;
-  char *p;
-
-  i = 1;
-  p = (char*)&i;
-  return p[0]?0:1;
-}
 
 static inline size_t
 uint8_to_bin(uint8_t s, uint8_t *bin)

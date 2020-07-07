@@ -1,5 +1,5 @@
 /*
-** etc.c -
+** etc.c
 **
 ** See Copyright Notice in mruby.h
 */
@@ -8,8 +8,6 @@
 #include <mruby/string.h>
 #include <mruby/data.h>
 #include <mruby/class.h>
-#include <mruby/re.h>
-#include <mruby/irep.h>
 
 MRB_API struct RData*
 mrb_data_object_alloc(mrb_state *mrb, struct RClass *klass, void *ptr, const mrb_data_type *type)
@@ -26,21 +24,19 @@ mrb_data_object_alloc(mrb_state *mrb, struct RClass *klass, void *ptr, const mrb
 MRB_API void
 mrb_data_check_type(mrb_state *mrb, mrb_value obj, const mrb_data_type *type)
 {
-  if (mrb_type(obj) != MRB_TT_DATA) {
+  if (!mrb_data_p(obj)) {
     mrb_check_type(mrb, obj, MRB_TT_DATA);
   }
   if (DATA_TYPE(obj) != type) {
     const mrb_data_type *t2 = DATA_TYPE(obj);
 
     if (t2) {
-      mrb_raisef(mrb, E_TYPE_ERROR, "wrong argument type %S (expected %S)",
-                 mrb_str_new_cstr(mrb, t2->struct_name), mrb_str_new_cstr(mrb, type->struct_name));
+      mrb_raisef(mrb, E_TYPE_ERROR, "wrong argument type %s (expected %s)",
+                 t2->struct_name, type->struct_name);
     }
     else {
-      struct RClass *c = mrb_class(mrb, obj);
-
-      mrb_raisef(mrb, E_TYPE_ERROR, "uninitialized %S (expected %S)",
-                 mrb_obj_value(c), mrb_str_new_cstr(mrb, type->struct_name));
+      mrb_raisef(mrb, E_TYPE_ERROR, "uninitialized %t (expected %s)",
+                 obj, type->struct_name);
     }
   }
 }
@@ -48,7 +44,7 @@ mrb_data_check_type(mrb_state *mrb, mrb_value obj, const mrb_data_type *type)
 MRB_API void*
 mrb_data_check_get_ptr(mrb_state *mrb, mrb_value obj, const mrb_data_type *type)
 {
-  if (mrb_type(obj) != MRB_TT_DATA) {
+  if (!mrb_data_p(obj)) {
     return NULL;
   }
   if (DATA_TYPE(obj) != type) {
@@ -67,24 +63,10 @@ mrb_data_get_ptr(mrb_state *mrb, mrb_value obj, const mrb_data_type *type)
 MRB_API mrb_sym
 mrb_obj_to_sym(mrb_state *mrb, mrb_value name)
 {
-  mrb_sym id;
-
-  switch (mrb_type(name)) {
-    default:
-      name = mrb_check_string_type(mrb, name);
-      if (mrb_nil_p(name)) {
-        name = mrb_inspect(mrb, name);
-        mrb_raisef(mrb, E_TYPE_ERROR, "%S is not a symbol", name);
-        /* not reached */
-      }
-      /* fall through */
-    case MRB_TT_STRING:
-      name = mrb_str_intern(mrb, name);
-      /* fall through */
-    case MRB_TT_SYMBOL:
-      id = mrb_symbol(name);
-  }
-  return id;
+  if (mrb_symbol_p(name)) return mrb_symbol(name);
+  if (mrb_string_p(name)) return mrb_intern_str(mrb, name);
+  mrb_raisef(mrb, E_TYPE_ERROR, "%!v is not a symbol nor a string", name);
+  return 0;  /* not reached */
 }
 
 MRB_API mrb_int
@@ -150,7 +132,6 @@ mrb_obj_id(mrb_value obj)
   case MRB_TT_HASH:
   case MRB_TT_RANGE:
   case MRB_TT_EXCEPTION:
-  case MRB_TT_FILE:
   case MRB_TT_DATA:
   case MRB_TT_ISTRUCT:
   default:
@@ -158,7 +139,13 @@ mrb_obj_id(mrb_value obj)
   }
 }
 
+#if defined(MRB_NAN_BOXING) && defined(MRB_64BIT)
+#define mrb_xxx_boxing_cptr_value mrb_nan_boxing_cptr_value
+#endif
+
 #ifdef MRB_WORD_BOXING
+#define mrb_xxx_boxing_cptr_value mrb_word_boxing_cptr_value
+
 #ifndef MRB_WITHOUT_FLOAT
 MRB_API mrb_value
 mrb_word_boxing_float_value(mrb_state *mrb, mrb_float f)
@@ -167,6 +154,7 @@ mrb_word_boxing_float_value(mrb_state *mrb, mrb_float f)
 
   v.value.p = mrb_obj_alloc(mrb, MRB_TT_FLOAT, mrb->float_class);
   v.value.fp->f = f;
+  MRB_SET_FROZEN_FLAG(v.value.bp);
   return v;
 }
 
@@ -177,37 +165,24 @@ mrb_word_boxing_float_pool(mrb_state *mrb, mrb_float f)
   nf->tt = MRB_TT_FLOAT;
   nf->c = mrb->float_class;
   nf->f = f;
+  MRB_SET_FROZEN_FLAG(nf);
   return mrb_obj_value(nf);
 }
 #endif  /* MRB_WITHOUT_FLOAT */
-
-MRB_API mrb_value
-mrb_word_boxing_cptr_value(mrb_state *mrb, void *p)
-{
-  mrb_value v;
-
-  v.value.p = mrb_obj_alloc(mrb, MRB_TT_CPTR, mrb->object_class);
-  v.value.vp->p = p;
-  return v;
-}
 #endif  /* MRB_WORD_BOXING */
 
-MRB_API mrb_bool
-mrb_regexp_p(mrb_state *mrb, mrb_value v)
+#if defined(MRB_WORD_BOXING) || (defined(MRB_NAN_BOXING) && defined(MRB_64BIT))
+MRB_API mrb_value
+mrb_xxx_boxing_cptr_value(mrb_state *mrb, void *p)
 {
-  if (mrb->flags & MRB_STATE_NO_REGEXP) {
-    return FALSE;
-  }
-  if ((mrb->flags & MRB_STATE_REGEXP) || mrb_class_defined(mrb, REGEXP_CLASS)) {
-    mrb->flags |= MRB_STATE_REGEXP;
-    return mrb_obj_is_kind_of(mrb, v, mrb_class_get(mrb, REGEXP_CLASS));
-  }
-  else {
-    mrb->flags |= MRB_STATE_REGEXP;
-    mrb->flags |= MRB_STATE_NO_REGEXP;
-  }
-  return FALSE;
+  mrb_value v;
+  struct RCptr *cptr = (struct RCptr*)mrb_obj_alloc(mrb, MRB_TT_CPTR, mrb->object_class);
+
+  SET_OBJ_VALUE(v, cptr);
+  cptr->p = p;
+  return v;
 }
+#endif
 
 #if defined _MSC_VER && _MSC_VER < 1900
 

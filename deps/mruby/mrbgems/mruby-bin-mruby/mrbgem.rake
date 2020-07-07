@@ -4,7 +4,6 @@ MRuby::Gem::Specification.new('mruby-bin-mruby') do |spec|
   spec.summary = 'mruby command'
   spec.bins = %w(mruby)
   spec.add_dependency('mruby-compiler', :core => 'mruby-compiler')
-  spec.add_dependency('mruby-error', :core => 'mruby-error')
   spec.add_test_dependency('mruby-print', :core => 'mruby-print')
 
   if build.cxx_exception_enabled?

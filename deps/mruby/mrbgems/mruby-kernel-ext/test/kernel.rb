@@ -49,22 +49,52 @@ assert('Kernel#__method__') do
 end
 
 assert('Kernel#Integer') do
-  assert_equal(26, Integer("0x1a"))
-  assert_equal(930, Integer("0930", 10))
-  assert_equal(7, Integer("111", 2))
-  assert_equal(0, Integer("0"))
-  assert_equal(0, Integer("00000"))
+  assert_operator(26, :eql?, Integer("0x1a"))
+  assert_operator(930, :eql?, Integer("0930", 10))
+  assert_operator(7, :eql?, Integer("111", 2))
+  assert_operator(0, :eql?, Integer("0"))
+  assert_operator(0, :eql?, Integer("00000"))
+  assert_operator(123, :eql?, Integer('1_2_3'))
+  assert_operator(123, :eql?, Integer("\t\r\n\f\v 123 \t\r\n\f\v"))
   assert_raise(TypeError) { Integer(nil) }
+  assert_raise(ArgumentError) { Integer('a') }
+  assert_raise(ArgumentError) { Integer('4a5') }
+  assert_raise(ArgumentError) { Integer('1_2__3') }
+  assert_raise(ArgumentError) { Integer('68_') }
+  assert_raise(ArgumentError) { Integer('68_ ') }
+  assert_raise(ArgumentError) { Integer('_68') }
+  assert_raise(ArgumentError) { Integer(' _68') }
+  assert_raise(ArgumentError) { Integer('6 8') }
+  assert_raise(ArgumentError) { Integer("15\0") }
+  assert_raise(ArgumentError) { Integer("15.0") }
   skip unless Object.const_defined?(:Float)
-  assert_equal(123, Integer(123.999))
+  assert_operator(123, :eql?, Integer(123.999))
 end
 
 assert('Kernel#Float') do
   skip unless Object.const_defined?(:Float)
-  assert_equal(1.0, Float(1))
-  assert_equal(123.456, Float(123.456))
-  assert_equal(123.456, Float("123.456"))
+  assert_operator(1.0, :eql?, Float(1))
+  assert_operator(123.456, :eql?, Float(123.456))
+  assert_operator(123.456, :eql?, Float("123.456"))
+  assert_operator(123.0, :eql?, Float('1_2_3'))
+  assert_operator(12.34, :eql?, Float('1_2.3_4'))
+  assert_operator(0.9, :eql?, Float('.9'))
+  assert_operator(0.9, :eql?, Float(" \t\r\n\f\v.9 \t\r\n\f\v"))
+  assert_operator(16.0, :eql?, Float("0x10"))
   assert_raise(TypeError) { Float(nil) }
+  assert_raise(ArgumentError) { Float("1. 5") }
+  assert_raise(ArgumentError) { Float("1.5a") }
+  assert_raise(ArgumentError) { Float("1.5\0") }
+  assert_raise(ArgumentError) { Float('a') }
+  assert_raise(ArgumentError) { Float('4a5') }
+  assert_raise(ArgumentError) { Float('1_2__3') }
+  assert_raise(ArgumentError) { Float('68_') }
+  assert_raise(ArgumentError) { Float('68._7') }
+  assert_raise(ArgumentError) { Float('68.7_') }
+  assert_raise(ArgumentError) { Float('68.7_ ') }
+  assert_raise(ArgumentError) { Float('_68') }
+  assert_raise(ArgumentError) { Float(' _68') }
+  assert_raise(ArgumentError) { Float('1_2.3__4') }
 end
 
 assert('Kernel#String') do

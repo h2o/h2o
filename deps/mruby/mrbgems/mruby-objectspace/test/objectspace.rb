@@ -56,5 +56,5 @@ assert('ObjectSpace.each_object') do
 end
 
 assert 'Check class pointer of ObjectSpace.each_object.' do
-  ObjectSpace.each_object { |obj| !obj }
+  assert_nothing_raised { ObjectSpace.each_object { |obj| !obj } }
 end

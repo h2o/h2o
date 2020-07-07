@@ -46,7 +46,9 @@ if Object.const_defined?(:Struct)
       ary
     end
 
-    def _inspect
+    def _inspect(recur_list)
+      return "#<struct #{self.class}:...>" if recur_list[self.object_id]
+      recur_list[self.object_id] = true
       name = self.class.to_s
       if name[0] == "#"
         str = "#<struct "
@@ -55,7 +57,7 @@ if Object.const_defined?(:Struct)
       end
       buf = []
       self.each_pair do |k,v|
-        buf.push [k.to_s + "=" + v._inspect]
+        buf.push k.to_s + "=" + v._inspect(recur_list)
       end
       str + buf.join(", ") + ">"
     end
@@ -70,34 +72,29 @@ if Object.const_defined?(:Struct)
     # 15.2.18.4.10(x)
     #
     def inspect
-      begin
-        self._inspect
-      rescue SystemStackError
-        "#<struct #{self.class.to_s}:...>"
-      end
+      self._inspect({})
     end
 
     ##
     # 15.2.18.4.11(x)
     #
     alias to_s inspect
-  end
 
-  ##
-  # call-seq:
-  #   hsh.dig(key,...)                 -> object
-  #
-  # Extracts the nested value specified by the sequence of <i>key</i>
-  # objects by calling +dig+ at each step, returning +nil+ if any
-  # intermediate step is +nil+.
-  #
-  def dig(idx,*args)
-    n = self[idx]
-    if args.size > 0
-      n&.dig(*args)
-    else
-      n
+    ##
+    # call-seq:
+    #   hsh.dig(key,...)                 -> object
+    #
+    # Extracts the nested value specified by the sequence of <i>key</i>
+    # objects by calling +dig+ at each step, returning +nil+ if any
+    # intermediate step is +nil+.
+    #
+    def dig(idx,*args)
+      n = self[idx]
+      if args.size > 0
+        n&.dig(*args)
+      else
+        n
+      end
     end
   end
 end
-

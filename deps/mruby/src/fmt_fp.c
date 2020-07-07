@@ -1,5 +1,5 @@
 #ifndef MRB_WITHOUT_FLOAT
-#ifdef MRB_DISABLE_STDIO
+#if defined(MRB_DISABLE_STDIO) || defined(_WIN32) || defined(_WIN64)
 /*
 
 Most code in this file originates from musl (src/stdio/vfprintf.c)
@@ -30,7 +30,6 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include <limits.h>
 #include <string.h>
-#include <stdint.h>
 #include <math.h>
 #include <float.h>
 #include <ctype.h>
@@ -38,9 +37,19 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include <mruby.h>
 #include <mruby/string.h>
 
+struct fmt_args;
+
+typedef void output_func(struct fmt_args *f, const char *s, size_t l);
+
 struct fmt_args {
   mrb_state *mrb;
-  mrb_value str;
+  output_func *output;
+  void *opaque;
+};
+
+struct mrb_cstr {
+  char *buf;
+  size_t len;
 };
 
 #define MAX(a,b) ((a)>(b) ? (a) : (b))
@@ -55,15 +64,44 @@ struct fmt_args {
 #define PAD_POS    (1U<<(' '-' '))
 #define MARK_POS   (1U<<('+'-' '))
 
+#define FLAGMASK (ALT_FORM|ZERO_PAD|LEFT_ADJ|PAD_POS|MARK_POS)
+
+static output_func strcat_value;
+static output_func strcat_cstr;
+
+static void
+strcat_value(struct fmt_args *f, const char *s, size_t l)
+{
+  mrb_value str = *(mrb_value*)f->opaque;
+  mrb_str_cat(f->mrb, str, s, l);
+}
+
+static void
+strcat_cstr(struct fmt_args *f, const char *s, size_t l)
+{
+  struct mrb_cstr *cstr = (struct mrb_cstr*)f->opaque;
+
+  if (l > cstr->len) {
+    mrb_state *mrb = f->mrb;
+
+    mrb_raise(mrb, E_ARGUMENT_ERROR, "string buffer too small");
+  }
+
+  memcpy(cstr->buf, s, l);
+
+  cstr->buf += l;
+  cstr->len -= l;
+}
+
 static void
 out(struct fmt_args *f, const char *s, size_t l)
 {
-  mrb_str_cat(f->mrb, f->str, s, l);
+  f->output(f, s, l);
 }
 
 #define PAD_SIZE 256
 static void
-pad(struct fmt_args *f, char c, ptrdiff_t w, ptrdiff_t l, uint8_t fl)
+pad(struct fmt_args *f, char c, ptrdiff_t w, ptrdiff_t l, uint32_t fl)
 {
   char pad[PAD_SIZE];
   if (fl & (LEFT_ADJ | ZERO_PAD) || l >= w) return;
@@ -93,7 +131,7 @@ typedef char compiler_defines_long_double_incorrectly[9-(int)sizeof(long double)
 #endif
 
 static int
-fmt_fp(struct fmt_args *f, long double y, ptrdiff_t p, uint8_t fl, int t)
+fmt_fp(struct fmt_args *f, long double y, ptrdiff_t w, ptrdiff_t p, uint32_t fl, int t)
 {
   uint32_t big[(LDBL_MANT_DIG+28)/29 + 1          // mantissa expansion
     + (LDBL_MAX_EXP+LDBL_MANT_DIG+28+8)/9]; // exponent expansion
@@ -118,11 +156,11 @@ fmt_fp(struct fmt_args *f, long double y, ptrdiff_t p, uint8_t fl, int t)
   if (!isfinite(y)) {
     const char *ss = (t&32)?"inf":"INF";
     if (y!=y) ss=(t&32)?"nan":"NAN";
-    pad(f, ' ', 0, 3+pl, fl&~ZERO_PAD);
+    pad(f, ' ', w, 3+pl, fl&~ZERO_PAD);
     out(f, prefix, pl);
     out(f, ss, 3);
-    pad(f, ' ', 0, 3+pl, fl^LEFT_ADJ);
-    return 3+(int)pl;
+    pad(f, ' ', w, 3+pl, fl^LEFT_ADJ);
+    return (int)MAX(w, 3+pl);
   }
 
   y = frexp((double)y, &e2) * 2;
@@ -170,14 +208,14 @@ fmt_fp(struct fmt_args *f, long double y, ptrdiff_t p, uint8_t fl, int t)
     else
       l = (s-buf) + (ebuf-estr);
 
-    pad(f, ' ', 0, pl+l, fl);
+    pad(f, ' ', w, pl+l, fl);
     out(f, prefix, pl);
-    pad(f, '0', 0, pl+l, fl^ZERO_PAD);
+    pad(f, '0', w, pl+l, fl^ZERO_PAD);
     out(f, buf, s-buf);
     pad(f, '0', l-(ebuf-estr)-(s-buf), 0, 0);
     out(f, estr, ebuf-estr);
-    pad(f, ' ', 0, pl+l, fl^LEFT_ADJ);
-    return (int)pl+(int)l;
+    pad(f, ' ', w, pl+l, fl^LEFT_ADJ);
+    return (int)MAX(w, pl+l);
   }
   if (p<0) p=6;
 
@@ -289,9 +327,9 @@ fmt_fp(struct fmt_args *f, long double y, ptrdiff_t p, uint8_t fl, int t)
     l += ebuf-estr;
   }
 
-  pad(f, ' ', 0, pl+l, fl);
+  pad(f, ' ', w, pl+l, fl);
   out(f, prefix, pl);
-  pad(f, '0', 0, pl+l, fl^ZERO_PAD);
+  pad(f, '0', w, pl+l, fl^ZERO_PAD);
 
   if ((t|32)=='f') {
     if (a>r) a=r;
@@ -326,20 +364,32 @@ fmt_fp(struct fmt_args *f, long double y, ptrdiff_t p, uint8_t fl, int t)
     out(f, estr, ebuf-estr);
   }
 
-  pad(f, ' ', 0, pl+l, fl^LEFT_ADJ);
+  pad(f, ' ', w, pl+l, fl^LEFT_ADJ);
 
-  return (int)pl+(int)l;
+  return (int)MAX(w, pl+l);
 }
 
 static int
 fmt_core(struct fmt_args *f, const char *fmt, mrb_float flo)
 {
-  ptrdiff_t p;
+  ptrdiff_t w, p;
+  uint32_t fl;
 
   if (*fmt != '%') {
     return -1;
   }
   ++fmt;
+
+  /* Read modifier flags */
+  for (fl=0; (unsigned)*fmt-' '<32 && (FLAGMASK&(1U<<(*fmt-' '))); fmt++)
+    fl |= 1U<<(*fmt-' ');
+
+  /* - and 0 flags are mutually exclusive */
+  if (fl & LEFT_ADJ) fl &= ~ZERO_PAD;
+
+  for (w = 0; ISDIGIT(*fmt); ++fmt) {
+    w = 10 * w + (*fmt - '0');
+  }
 
   if (*fmt == '.') {
     ++fmt;
@@ -354,29 +404,49 @@ fmt_core(struct fmt_args *f, const char *fmt, mrb_float flo)
   switch (*fmt) {
   case 'e': case 'f': case 'g': case 'a':
   case 'E': case 'F': case 'G': case 'A':
-    return fmt_fp(f, flo, p, 0, *fmt);
+    return fmt_fp(f, flo, w, p, fl, *fmt);
   default:
     return -1;
   }
 }
 
-mrb_value
+MRB_API mrb_value
 mrb_float_to_str(mrb_state *mrb, mrb_value flo, const char *fmt)
 {
   struct fmt_args f;
+  mrb_value str = mrb_str_new_capa(mrb, 24);
 
   f.mrb = mrb;
-  f.str = mrb_str_new_capa(mrb, 24);
+  f.output = strcat_value;
+  f.opaque = (void*)&str;
   if (fmt_core(&f, fmt, mrb_float(flo)) < 0) {
     mrb_raise(mrb, E_ARGUMENT_ERROR, "invalid format string");
   }
-  return f.str;
+  return str;
 }
-#else   /* MRB_DISABLE_STDIO */
+
+MRB_API int
+mrb_float_to_cstr(mrb_state *mrb, char *buf, size_t len, const char *fmt, mrb_float fval)
+{
+  struct fmt_args f;
+  struct mrb_cstr cstr;
+
+  cstr.buf = buf;
+  cstr.len = len - 1; /* reserve NUL terminator */
+  f.mrb = mrb;
+  f.output = strcat_cstr;
+  f.opaque = (void*)&cstr;
+  if (fmt_core(&f, fmt, fval) < 0) {
+    mrb_raise(mrb, E_ARGUMENT_ERROR, "invalid format string");
+  }
+  *cstr.buf = '\0';
+  return (int)(cstr.buf - buf);
+}
+#else   /* MRB_DISABLE_STDIO || _WIN32 || _WIN64 */
 #include <mruby.h>
 #include <stdio.h>
 
-mrb_value
+MRB_API mrb_value
 mrb_float_to_str(mrb_state *mrb, mrb_value flo, const char *fmt)
 {
   char buf[25];
@@ -384,5 +454,11 @@ mrb_float_to_str(mrb_state *mrb, mrb_value flo, const char *fmt)
   snprintf(buf, sizeof(buf), fmt, mrb_float(flo));
   return mrb_str_new_cstr(mrb, buf);
 }
-#endif  /* MRB_DISABLE_STDIO */
+
+MRB_API int
+mrb_float_to_cstr(mrb_state *mrb, char *buf, size_t len, const char *fmt, mrb_float fval)
+{
+  return snprintf(buf, len, fmt, fval);
+}
+#endif  /* MRB_DISABLE_STDIO || _WIN32 || _WIN64 */
 #endif
