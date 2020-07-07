@@ -1965,18 +1965,12 @@ static uint64_t time_milliseconds()
 struct st_quicly_conn_t {
   struct _st_quicly_conn_public_t super;
 };
-static struct st_quicly_stream_t s1; // placeholder for typeof()
-typedef typeof(s1.stream_id) typeof_st_quicly_stream_t__stream_id;
-static struct quicly_rtt_t s2; // placeholder for typeof()
-typedef typeof(s2.minimum) typeof_quicly_rtt_t__minimum;
-static struct quicly_rtt_t s3; // placeholder for typeof()
-typedef typeof(s3.smoothed) typeof_quicly_rtt_t__smoothed;
-static struct quicly_rtt_t s4; // placeholder for typeof()
-typedef typeof(s4.variance) typeof_quicly_rtt_t__variance;
-static struct quicly_rtt_t s5; // placeholder for typeof()
-typedef typeof(s5.latest) typeof_quicly_rtt_t__latest;
-static struct st_quicly_conn_t s6; // placeholder for typeof()
-typedef typeof(s6.super.local.cid_set.plaintext.master_id) typeof_st_quicly_conn_t__master_id;
+typedef typeof(((const struct st_quicly_stream_t *)nullptr)->stream_id) typeof_st_quicly_stream_t__stream_id;
+typedef typeof(((const struct quicly_rtt_t *)nullptr)->minimum) typeof_quicly_rtt_t__minimum;
+typedef typeof(((const struct quicly_rtt_t *)nullptr)->smoothed) typeof_quicly_rtt_t__smoothed;
+typedef typeof(((const struct quicly_rtt_t *)nullptr)->variance) typeof_quicly_rtt_t__variance;
+typedef typeof(((const struct quicly_rtt_t *)nullptr)->latest) typeof_quicly_rtt_t__latest;
+typedef typeof(((const struct st_quicly_conn_t *)nullptr)->super.local.cid_set.plaintext.master_id) typeof_st_quicly_conn_t__master_id;
 
 
 #define GEN_FIELD_INFO(type, field, name) gen_field_info(#type, #field, &((type *)NULL)->field, name)
