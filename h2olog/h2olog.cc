@@ -39,7 +39,7 @@ Usage: h2olog -p PID
        h2olog quic -s response_header_name -p PID
 Other options:
     -h Print this help and exit
-    -d Print debugging information
+    -d Print debugging information (-dd shows more)
     -w Path to write the output (default: stdout)
 )",
            H2O_VERSION);
