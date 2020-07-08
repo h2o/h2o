@@ -291,21 +291,18 @@ std::string gen_field_info(const char *struct_type, const char *field_name, cons
 
 template <typename FieldType>
 static std::string do_resolve(const char *struct_type, const char *field_name, const char *field_type, const FieldType *field_ptr, const char *name) {
-    char buff[1024] = {};
-    char *b = buff;
-    size_t s = sizeof(buff);
-
-    b += snprintf(b, s, "/* %s (%s#%s) */\n", name, struct_type, field_name);
-    s -= b - buff;
-    b += snprintf(b, s, "#define offsetof_%s %zd\n", name, (const char *)field_ptr - (const char *)NULL);
-    s -= b - buff;
-    b += snprintf(b, s, "#define typeof_%s %s\n", name, field_type);
-    s -= b - buff;
-    b += snprintf(b, s, "#define get_%s(st) *((const %s *) ((const char*)st + offsetof_%s))\n", name, field_type, name);
-    s -= b - buff;
-    b += snprintf(b, s, "\n");
-
-    return std::string(buff, b - buff);
+    char *buff = NULL;
+    size_t buff_len = 0;
+    FILE *mem = open_memstream(&buff, &buff_len);
+    fprintf(mem, "/* %s (%s#%s) */\n", name, struct_type, field_name);
+    fprintf(mem, "#define offsetof_%s %zd\n", name, (const char *)field_ptr - (const char *)NULL);
+    fprintf(mem, "#define typeof_%s %s\n", name, field_type);
+    fprintf(mem, "#define get_%s(st) *((const %s *) ((const char*)st + offsetof_%s))\n", name, field_type, name);
+    fprintf(mem, "\n");
+    fclose(mem);
+    std::string s(buff, buff_len);
+    fclose(mem);
+    return s;
 }
 
 DEFINE_RESOLVE_FUNC(int32_t);
