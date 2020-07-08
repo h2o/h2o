@@ -213,8 +213,10 @@ static h2o_iovec_t *decode_string(h2o_mem_pool_t *pool, const uint8_t **src, con
         if (len > src_end - *src)
             return NULL;
         ret = alloc_buf(pool, len * 2); /* max compression ratio is >= 0.5 */
-        if ((ret->len = h2o_hpack_decode_huffman(ret->base, *src, len, is_header_name, err_desc)) == SIZE_MAX)
+        if ((ret->len = h2o_hpack_decode_huffman(ret->base, *src, len, is_header_name, err_desc)) == SIZE_MAX) {
+            h2o_mem_release_shared(ret);
             return NULL;
+        }
         ret->base[ret->len] = '\0';
     } else {
         if (len > src_end - *src)
