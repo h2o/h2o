@@ -84,6 +84,12 @@ This option instructs whether or not to enable DTrace support.
 It is turned on by default if the prerequisites (<a href="https://sourceware.org/systemtap/">SystemTap</a> on Linux, or DTrace on macOS) are found.
 See also <a href="https://github.com/h2o/h2o/wiki/macOS">wiki/macOS</a> to use DTrace on macOS.
 </dl>
+<dt><code>-DWITH_H2OLOG=<i>on</i>|<i>off</i></code></dt>
+<dd>
+This option instructs whether or not to enable <code>h2olog(1)</code>> support.
+It is turned on by default if the prerequisites are found.
+See also <a href="./configure/h2olog.html">h2olog</a> for details.
+</dl>
 <dt><code>-DCMAKE_C_FLAGS=...</code></dt>
 <dd>
 This option can be used to add or override the compile options being passed to the C compiler.
