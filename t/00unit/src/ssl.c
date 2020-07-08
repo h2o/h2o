@@ -22,6 +22,51 @@
 #include "../test.h"
 #include "../../../src/ssl.c"
 
+static int encrypt_and_decrypt_ticket_once(ptls_encrypt_ticket_t *encryptor, ptls_encrypt_ticket_t *decryptor)
+{
+    static const char plaintext[] = "hello world";
+    ptls_buffer_t encrypted, decrypted;
+    int ret;
+
+    /* encrypt */
+    ptls_buffer_init(&encrypted, "", 0);
+    ret = encryptor->cb(encryptor, NULL, 1, &encrypted, ptls_iovec_init(plaintext, strlen(plaintext)));
+    ok(ret == 0);
+
+    /* decrypt: If result is failure, return the error code to let the caller test. Otherwise, validate decrypted text. */
+    ptls_buffer_init(&decrypted, "", 0);
+    if ((ret = decryptor->cb(decryptor, NULL, 0, &decrypted, ptls_iovec_init(encrypted.base, encrypted.off))) != 0)
+        return ret;
+    if (decrypted.off != strlen(plaintext))
+        return PTLS_ALERT_DECODE_ERROR;
+    ok(memcmp(decrypted.base, plaintext, strlen(plaintext)) == 0);
+    ptls_buffer_dispose(&encrypted);
+    ptls_buffer_dispose(&decrypted);
+
+    return 0;
+}
+
+static void test_encrypt_ticket_ptls(void)
+{
+    /* create three encryptors, TLS, QUIC(spec_context), QUIC(another_context) */
+    quicly_context_t alt_quic = quicly_spec_context;
+    ++alt_quic.transport_params.max_streams_uni;
+    ptls_encrypt_ticket_t *tls_enc = create_encrypt_ticket_ptls(NULL),
+                          *quic_enc1 = create_encrypt_ticket_ptls(&quicly_spec_context),
+                          *quic_enc2 = create_encrypt_ticket_ptls(&alt_quic);
+
+    /* check that ticket decryption succeeds when the conditions match */
+    ok(encrypt_and_decrypt_ticket_once(tls_enc, tls_enc) == 0);
+    ok(encrypt_and_decrypt_ticket_once(quic_enc1, quic_enc1) == 0);
+    ok(encrypt_and_decrypt_ticket_once(quic_enc2, quic_enc2) == 0);
+
+    /* but that 0-RTT is rejected when the conditions do not match */
+    ok(encrypt_and_decrypt_ticket_once(tls_enc, quic_enc1) ==
+       PTLS_ERROR_REJECT_EARLY_DATA); /* TP mismatch detected before content mismatch */
+    ok(encrypt_and_decrypt_ticket_once(quic_enc1, tls_enc) == PTLS_ALERT_DECODE_ERROR);
+    ok(encrypt_and_decrypt_ticket_once(quic_enc1, quic_enc2) == PTLS_ERROR_REJECT_EARLY_DATA);
+}
+
 const uint64_t UTC2000 = (365 * 30 + 7) * 86400;
 
 static void test_load_tickets_file(void)
@@ -200,6 +245,11 @@ static void test_memcached_ticket_update(void)
 
 void test_src__ssl_c(void)
 {
+    assert(conf.ticket.update_thread != NULL);
+    do_internal_update(NULL);
+    subtest("encrypt-ticket-ptls", test_encrypt_ticket_ptls);
+    session_tickets.tickets.size = 0;
+
     subtest("load-tickets-file", test_load_tickets_file);
     subtest("serialize-tickets", test_serialize_tickets);
     subtest("memcached-ticket-update", test_memcached_ticket_update);

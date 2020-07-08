@@ -1931,6 +1931,7 @@ ssl.session-reused1 if the SSL session was reused, or 0 if not [1]
 ssl.session-idbase64-encoded value of the session id used for resuming the session (since v2.2)
 ssl.ciphername of the cipher suite being used, obtained from SSL_CIPHER_get_name
 ssl.cipher-bitsstrength of the cipher suite in bits
+ssl.server-namehostname provided in Server Name Indication (SNI) extension, if any
 
 
 HTTP/2 (since v2.0)
@@ -4243,6 +4244,109 @@ paths:
 
 This library currently supports only IPv4 addresses. TrieAddr#match? returns false when it receives an invalid IPv4 address (including an IPv6 address) as an argument..
 
+
+
+
+
+.SH USING H2OLOG FOR TRACING
+
+
+h2olog is an experimental BPF (kernel doc) backed tracing tool for the H2O server.
+It can be used for tracing HTTP-level or QUIC-level events.
+
+Since h2olog is an experimental program, its command-line interface might change without notice.
+
+Installing from Source
+
+See requirements for build prerequisites.
+If dependencies are satisfied, h2olog is built automatically. It is possible to manually turn on / off the build of h2olog by using the -DWITH_H2OLOG option. This option takes either ON> or OFF as the argument.
+If you have BCC installed to a non-standard path, use pkg-config for cmake.
+
+.PP
+.nf
+.RS
+$ PKG_CONFIG_PATH=/path/to/bcc/lib/pkgconfig cmake [options]
+
+.RE
+.fi
+.PP
+
+Requirements
+
+For building h2olog
+
+C++11 compiler
+CMake for generating the build files
+pkg-config for detecting dependencies
+Python 3 for the code generator
+BCC (BPF compiler collection, a.k.a. bpfcc; >= 0.11.0) installed on your system
+
+For Ubuntu 20.04 or later, you can install dependencies with:
+.PP
+.nf
+.RS
+$ sudo apt install clang cmake python3 libbpfcc-dev linux-headers-$(uname -r)
+
+.RE
+.fi
+.PP
+For running h2olog
+
+Root privilege to execute h2olog
+Linux kernel (>= 4.9)
+
+
+Quickstart
+h2olog -p $H2O_PID shows varnishlog-like tracing.
+
+.PP
+.nf
+.RS
+$ sudo h2olog -p $(pgrep -o h2o)
+
+11 0 RxProtocol HTTP/3.0
+11 0 RxHeader   :authority torumk.com
+11 0 RxHeader   :method GET
+11 0 RxHeader   :path /
+11 0 RxHeader   :scheme https
+11 0 TxStatus   200
+11 0 TxHeader   content-length 123
+11 0 TxHeader   content-type text/html
+... and more ...
+
+.RE
+.fi
+.PP
+
+Tracing QUIC events
+Server-side QUIC events can be traced using the quic subcommand.
+Events are rendered in JSON format.
+
+.PP
+.nf
+.RS
+$ sudo h2olog quic -p $(pgrep -o h2o)
+              ^
+              |_ The quic subcommand
+
+.RE
+.fi
+.PP
+
+Here’s an example trace.
+
+.PP
+.nf
+.RS
+{"time":1584380825832,"type":"accept","conn":1,"dcid":"f8aa2066e9c3b3cf"}
+{"time":1584380825835,"type":"crypto-decrypt","conn":1,"pn":0,"len":1236}
+{"time":1584380825832,"type":"quictrace-recv","conn":1,"pn":0}
+{"time":1584380825836,"type":"crypto-handshake","conn":1,"ret":0}
+... and more ...
+
+.RE
+.fi
+.PP
 
 
 

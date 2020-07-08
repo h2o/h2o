@@ -56,6 +56,9 @@ static inline BIO_METHOD *BIO_meth_new(int type, const char *name)
 #define X509_STORE_up_ref(store) CRYPTO_add(&(store)->references, 1, CRYPTO_LOCK_X509_STORE)
 #endif
 
+#define OPENSSL_VERSION SSLEAY_VERSION
+#define OpenSSL_version SSLeay_version
+
 #endif
 
 /* backports for OpenSSL 1.0.1 and LibreSSL */

@@ -768,6 +768,7 @@ static int bfecb_setup_crypto(ptls_cipher_context_t *ctx, int is_enc, const void
 struct aead_crypto_context_t {
     ptls_aead_context_t super;
     EVP_CIPHER_CTX *evp_ctx;
+    uint8_t static_iv[PTLS_MAX_IV_SIZE];
 };
 
 static void aead_dispose_crypto(ptls_aead_context_t *_ctx)
@@ -778,12 +779,13 @@ static void aead_dispose_crypto(ptls_aead_context_t *_ctx)
         EVP_CIPHER_CTX_free(ctx->evp_ctx);
 }
 
-static void aead_do_encrypt_init(ptls_aead_context_t *_ctx, const void *iv, const void *aad, size_t aadlen)
+static void aead_do_encrypt_init(ptls_aead_context_t *_ctx, uint64_t seq, const void *aad, size_t aadlen)
 {
     struct aead_crypto_context_t *ctx = (struct aead_crypto_context_t *)_ctx;
+    uint8_t iv[PTLS_MAX_IV_SIZE];
     int ret;
 
-    /* FIXME for performance, preserve the expanded key instead of the raw key */
+    ptls_aead__build_iv(ctx->super.algo, iv, ctx->static_iv, seq);
     ret = EVP_EncryptInit_ex(ctx->evp_ctx, NULL, NULL, NULL, iv);
     assert(ret);
 
@@ -822,17 +824,18 @@ static size_t aead_do_encrypt_final(ptls_aead_context_t *_ctx, void *_output)
     return off;
 }
 
-static size_t aead_do_decrypt(ptls_aead_context_t *_ctx, void *_output, const void *input, size_t inlen, const void *iv,
+static size_t aead_do_decrypt(ptls_aead_context_t *_ctx, void *_output, const void *input, size_t inlen, uint64_t seq,
                               const void *aad, size_t aadlen)
 {
     struct aead_crypto_context_t *ctx = (struct aead_crypto_context_t *)_ctx;
-    uint8_t *output = _output;
+    uint8_t *output = _output, iv[PTLS_MAX_IV_SIZE];
     size_t off = 0, tag_size = ctx->super.algo->tag_size;
     int blocklen, ret;
 
     if (inlen < tag_size)
         return SIZE_MAX;
 
+    ptls_aead__build_iv(ctx->super.algo, iv, ctx->static_iv, seq);
     ret = EVP_DecryptInit_ex(ctx->evp_ctx, NULL, NULL, NULL, iv);
     assert(ret);
     if (aadlen != 0) {
@@ -851,16 +854,21 @@ static size_t aead_do_decrypt(ptls_aead_context_t *_ctx, void *_output, const vo
     return off;
 }
 
-static int aead_setup_crypto(ptls_aead_context_t *_ctx, int is_enc, const void *key, const EVP_CIPHER *cipher)
+static int aead_setup_crypto(ptls_aead_context_t *_ctx, int is_enc, const void *key, const void *iv, const EVP_CIPHER *cipher)
 {
     struct aead_crypto_context_t *ctx = (struct aead_crypto_context_t *)_ctx;
     int ret;
+
+    memcpy(ctx->static_iv, iv, ctx->super.algo->iv_size);
+    if (key == NULL)
+        return 0;
 
     ctx->super.dispose_crypto = aead_dispose_crypto;
     if (is_enc) {
         ctx->super.do_encrypt_init = aead_do_encrypt_init;
         ctx->super.do_encrypt_update = aead_do_encrypt_update;
         ctx->super.do_encrypt_final = aead_do_encrypt_final;
+        ctx->super.do_encrypt = ptls_aead__do_encrypt;
         ctx->super.do_decrypt = NULL;
     } else {
         ctx->super.do_encrypt_init = NULL;
@@ -897,20 +905,20 @@ Error:
     return ret;
 }
 
-static int aead_aes128gcm_setup_crypto(ptls_aead_context_t *ctx, int is_enc, const void *key)
+static int aead_aes128gcm_setup_crypto(ptls_aead_context_t *ctx, int is_enc, const void *key, const void *iv)
 {
-    return aead_setup_crypto(ctx, is_enc, key, EVP_aes_128_gcm());
+    return aead_setup_crypto(ctx, is_enc, key, iv, EVP_aes_128_gcm());
 }
 
-static int aead_aes256gcm_setup_crypto(ptls_aead_context_t *ctx, int is_enc, const void *key)
+static int aead_aes256gcm_setup_crypto(ptls_aead_context_t *ctx, int is_enc, const void *key, const void *iv)
 {
-    return aead_setup_crypto(ctx, is_enc, key, EVP_aes_256_gcm());
+    return aead_setup_crypto(ctx, is_enc, key, iv, EVP_aes_256_gcm());
 }
 
 #if PTLS_OPENSSL_HAVE_CHACHA20_POLY1305
-static int aead_chacha20poly1305_setup_crypto(ptls_aead_context_t *ctx, int is_enc, const void *key)
+static int aead_chacha20poly1305_setup_crypto(ptls_aead_context_t *ctx, int is_enc, const void *key, const void *iv)
 {
-    return aead_setup_crypto(ctx, is_enc, key, EVP_chacha20_poly1305());
+    return aead_setup_crypto(ctx, is_enc, key, iv, EVP_chacha20_poly1305());
 }
 #endif
 
@@ -1038,7 +1046,7 @@ int ptls_openssl_init_sign_certificate(ptls_openssl_sign_certificate_t *self, EV
         return PTLS_ERROR_INCOMPATIBLE_KEY;
     }
     PUSH_SCHEME(UINT16_MAX, NULL);
-    assert(scheme_index <= sizeof(self->schemes) / sizeof(self->schemes[0]));
+    assert(scheme_index <= PTLS_ELEMENTSOF(self->schemes));
 
 #undef PUSH_SCHEME
 

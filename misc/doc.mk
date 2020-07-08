@@ -30,6 +30,7 @@ OUTPUT=\
     configure/mruby.html \
     configure/dos_detection.html \
     configure/access_control.html \
+    configure/h2olog.html \
     faq.html \
 
 MAN = workdir/configure/quick_start.man \
@@ -54,7 +55,8 @@ MAN = workdir/configure/quick_start.man \
       workdir/configure/cgi.man \
       workdir/configure/mruby.man \
       workdir/configure/dos_detection.man \
-      workdir/configure/access_control.man
+      workdir/configure/access_control.man \
+      workdir/configure/h2olog.man \
 
 %.html: %.mt snippets/directive.mt snippets/wrapper.mt
 	../misc/makedoc.pl $< $@

@@ -39,10 +39,11 @@ struct st_h2o_quic_resumption_args_t {
 
 void ssl_setup_session_resumption(SSL_CTX **contexts, size_t num_contexts, struct st_h2o_quic_resumption_args_t *quic_args,
                                   h2o_barrier_t *startup_barrier);
+void ssl_setup_session_resumption_ptls(ptls_context_t *ptls, quicly_context_t *quic);
 int ssl_session_resumption_on_config(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node);
 
 extern quicly_cid_encryptor_t quic_cid_encryptor;
-int quic_decrypt_address_token(quicly_address_token_plaintext_t *pt, ptls_iovec_t input);
+int quic_decrypt_address_token(quicly_address_token_plaintext_t *pt, ptls_iovec_t input, const char **err_desc);
 ptls_aead_context_t *quic_get_address_token_encryptor(uint8_t *prefix);
 extern quicly_generate_resumption_token_t quic_resumption_token_generator;
 

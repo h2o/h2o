@@ -265,6 +265,9 @@ IF(NOT CMAKE_BUILD_TYPE)
 ENDIF(NOT CMAKE_BUILD_TYPE)
 SET(CMAKE_C_FLAGS_DEBUG  "-O0")
 SET(CMAKE_C_FLAGS_RELEASE  "-O2")
+SET(CMAKE_CXX_FLAGS_DEBUG  "-O0")
+SET(CMAKE_CXX_FLAGS_RELEASE  "-O2")
+
 
 SET(LIBYAML_SOURCE_FILES
     deps/yaml/src/api.c
@@ -332,9 +335,12 @@ SET(LIB_SOURCE_FILES
     deps/quicly/lib/cc-reno.c
     deps/quicly/lib/defaults.c
     deps/quicly/lib/frame.c
+    deps/quicly/lib/local_cid.c
     deps/quicly/lib/quicly.c
     deps/quicly/lib/ranges.c
     deps/quicly/lib/recvstate.c
+    deps/quicly/lib/remote_cid.c
+    deps/quicly/lib/retire_cid.c
     deps/quicly/lib/sendstate.c
     deps/quicly/lib/sentmap.c
     deps/quicly/lib/streambuf.c
@@ -662,6 +668,7 @@ IF (WITH_MRUBY)
         lib/handler/mruby/channel.c
         lib/handler/configurator/mruby.c)
     SET(STANDALONE_COMPILE_FLAGS "${STANDALONE_COMPILE_FLAGS} -DH2O_USE_MRUBY=1")
+    SET_PROPERTY(DIRECTORY PROPERTY ADDITIONAL_MAKE_CLEAN_FILES ${CMAKE_CURRENT_BINARY_DIR}/mruby/)
 ENDIF (WITH_MRUBY)
 ADD_EXECUTABLE(h2o ${STANDALONE_SOURCE_FILES})
 SET_TARGET_PROPERTIES(h2o PROPERTIES COMPILE_FLAGS ${STANDALONE_COMPILE_FLAGS})
@@ -738,12 +745,16 @@ IF (LIBUV_FOUND)
     TARGET_LINK_LIBRARIES(t-00unit-libuv.t ${LIBUV_LIBRARIES} ${OPENSSL_LIBRARIES} ${EXTRA_LIBS})
 ENDIF (LIBUV_FOUND)
 
-ADD_CUSTOM_TARGET(check env H2O_ROOT=. BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR} prove -I. -v t/*.t
+ADD_CUSTOM_TARGET(checkdepends
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     DEPENDS h2o t-00unit-evloop.t lib-examples-evloop ${OPTIONAL_TEST})
 IF (LIBUV_FOUND)
-    ADD_DEPENDENCIES(check t-00unit-libuv.t lib-examples)
+    ADD_DEPENDENCIES(checkdepends t-00unit-libuv.t lib-examples)
 ENDIF ()
+
+ADD_CUSTOM_TARGET(check env H2O_ROOT=. BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR} prove -I. -v t/*.t
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    DEPENDS checkdepends)
 
 ADD_CUSTOM_TARGET(doc ${CMAKE_MAKE_PROGRAM} -f ../misc/doc.mk all BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/doc
@@ -754,9 +765,9 @@ ADD_CUSTOM_TARGET(doc-publish ${CMAKE_MAKE_PROGRAM} -f ../misc/doc.mk publish BI
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/doc
     DEPENDS h2o)
 
-GET_FILENAME_COMPONENT(EXTERNALPROJECT_SSL_ROOT_DIR ${OPENSSL_INCLUDE_DIR} DIRECTORY)
+GET_FILENAME_COMPONENT(EXTERNALPROJECT_SSL_ROOT_DIR ${OPENSSL_INCLUDE_DIR} PATH)
 
-IF (EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/misc/h2get/CMakeLists.txt)
+IF (EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/misc/h2get/CMakeLists.txt AND RUBY AND BISON)
     ExternalProject_Add(h2get
                         CONFIGURE_COMMAND ${CMAKE_COMMAND} -DH2GET_SSL_ROOT_DIR=${EXTERNALPROJECT_SSL_ROOT_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/misc/h2get
                         SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/misc/h2get
@@ -764,7 +775,7 @@ IF (EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/misc/h2get/CMakeLists.txt)
                         BUILD_COMMAND ${CMAKE_MAKE_PROGRAM}
                         INSTALL_COMMAND true)
     SET_TARGET_PROPERTIES(h2get PROPERTIES EXCLUDE_FROM_ALL TRUE)
-    ADD_DEPENDENCIES(check h2get)
+    ADD_DEPENDENCIES(checkdepends h2get)
 ENDIF ()
 
 ExternalProject_Add(picotls-cli
@@ -774,13 +785,13 @@ ExternalProject_Add(picotls-cli
                     BUILD_COMMAND ${CMAKE_MAKE_PROGRAM} cli
                     INSTALL_COMMAND true)
 SET_TARGET_PROPERTIES(picotls-cli PROPERTIES EXCLUDE_FROM_ALL TRUE)
-ADD_DEPENDENCIES(check picotls-cli)
+ADD_DEPENDENCIES(checkdepends picotls-cli)
 
 ADD_CUSTOM_TARGET(check-valgrind env H2O_VALGRIND=./misc/h2o_valgrind/ H2O_ROOT=. BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR} prove -I. -v t/*.t
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     DEPENDS h2o t-00unit-evloop.t)
 IF (LIBUV_FOUND)
-    ADD_DEPENDENCIES(check t-00unit-libuv.t lib-examples)
+    ADD_DEPENDENCIES(checkdepends t-00unit-libuv.t lib-examples)
 ENDIF ()
 
 IF (BUILD_FUZZER)
@@ -846,6 +857,83 @@ ELSEIF ("${CMAKE_SYSTEM_NAME}" MATCHES "SunOS")
     ENDIF (LIBUV_FOUND)
 ENDIF ()
 
+# h2olog
+# If BCC is installed to a non-default directory,
+# set something like `PKG_CONFIG_PATH=/path/to/bcc/lib/pkgconfig cmake ...`
+IF (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND PKG_CONFIG_FOUND)
+    PKG_CHECK_MODULES(LIBBCC libbcc)
+
+    EXECUTE_PROCESS(
+        COMMAND uname -r
+        OUTPUT_VARIABLE KERNEL_VERSION
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
+
+    SET(REQUIRED_KERNEL_VERSION "4.9.0")
+    IF (NOT (KERNEL_VERSION VERSION_LESS REQUIRED_KERNEL_VERSION))
+        SET(HAVE_BPF_SUPPORTED_KERNEL ON)
+        MESSAGE(STATUS "Checking Linux kernel version ${KERNEL_VERSION} >= ${REQUIRED_KERNEL_VERSION} for h2olog - OK")
+    ENDIF ()
+
+    IF (NOT (CMAKE_VERSION VERSION_LESS "3.8"))
+        CMAKE_POLICY(SET CMP0057 NEW)
+        IF ("cxx_std_11" IN_LIST CMAKE_CXX_COMPILE_FEATURES)
+            MESSAGE(STATUS "C++11 OK")
+            SET(CXX_11 ON)
+        ENDIF ()
+    ENDIF ()
+
+    IF (WITH_DTRACE AND LIBBCC_FOUND AND HAVE_BPF_SUPPORTED_KERNEL AND CXX_11)
+        SET(WITH_H2OLOG_DEFAULT ON)
+    ENDIF ()
+ENDIF ()
+
+OPTION(WITH_H2OLOG "use h2olog command" ${WITH_H2OLOG_DEFAULT})
+IF (WITH_H2OLOG)
+    MESSAGE(STATUS "Supporting h2olog")
+
+    SET(H2OLOG_SOURCE_FILES
+        "h2olog/h2olog.h"
+        "h2olog/h2olog.cc"
+        "h2olog/http.cc"
+        "h2olog/json.h"
+        "h2olog/json.cc"
+        "h2olog/quic.h"
+        "include/h2o/version.h"
+    )
+
+    SET(H2OLOG_GEN_DEPS
+        "h2o-probes.d"
+        "deps/quicly/quicly-probes.d"
+        "h2olog/quic.h"
+    )
+
+    ADD_CUSTOM_COMMAND(
+        OUTPUT  "${CMAKE_CURRENT_SOURCE_DIR}/h2olog/generated-quic.cc"
+        COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/h2olog/misc/gen-quic-bpf.py" "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}/h2olog/generated-quic.cc"
+        DEPENDS ${H2OLOG_GEN_DEPS} "${CMAKE_CURRENT_SOURCE_DIR}/h2olog/misc/gen-quic-bpf.py"
+    )
+    LIST(APPEND H2OLOG_SOURCE_FILES "${CMAKE_CURRENT_SOURCE_DIR}/h2olog/generated-quic.cc")
+    LINK_DIRECTORIES("${LIBBCC_LIBRARY_DIRS}")
+
+    ADD_EXECUTABLE(h2olog ${H2OLOG_SOURCE_FILES})
+
+    SET_PROPERTY(TARGET h2olog
+        PROPERTY CXX_STANDARD 11
+        PROPERTY CXX_STANDARD_REQUIRED ON
+        PROPERTY CXX_EXTENSIONS OFF
+    )
+
+    TARGET_LINK_LIBRARIES(h2olog "${LIBBCC_LIBRARIES}")
+    TARGET_INCLUDE_DIRECTORIES(h2olog
+        PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/h2olog"
+        PRIVATE "${LIBBCC_INCLUDE_DIRS}"
+    )
+
+    INSTALL(TARGETS h2olog RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+ENDIF (WITH_H2OLOG)
+
+# gitrev
 IF ("${VERSION_PRERELEASE}" STREQUAL "-DEV" AND EXISTS "${CMAKE_SOURCE_DIR}/.git")
     ADD_DEFINITIONS("-DH2O_HAS_GITREV_H")
     ADD_CUSTOM_TARGET(gitrev ALL
@@ -858,5 +946,7 @@ IF ("${VERSION_PRERELEASE}" STREQUAL "-DEV" AND EXISTS "${CMAKE_SOURCE_DIR}/.git
     IF (LIBUV_FOUND)
         ADD_DEPENDENCIES(t-00unit-libuv.t gitrev)
     ENDIF (LIBUV_FOUND)
+    IF (TARGET h2olog)
+        ADD_DEPENDENCIES(h2olog gitrev)
+    ENDIF (TARGET h2olog)
 ENDIF ()
-

@@ -49,6 +49,7 @@
 #include <sys/un.h>
 #include <sys/wait.h>
 #include <openssl/crypto.h>
+#include <openssl/dh.h>
 #include <openssl/err.h>
 #include <openssl/ssl.h>
 #ifdef LIBC_HAS_BACKTRACE
@@ -256,12 +257,26 @@ static struct {
 
 static neverbleed_t *neverbleed = NULL;
 
+static int cmd_argc;
+static char **cmd_argv;
+
 static void set_cloexec(int fd)
 {
     if (fcntl(fd, F_SETFD, FD_CLOEXEC) == -1) {
         perror("failed to set FD_CLOEXEC");
         abort();
     }
+}
+
+static void on_neverbleed_fork(void)
+{
+/* Rewrite of argv should only be done on platforms that are known to benefit from doing that. On linux, doing so helps admins look
+*  for h2o (or neverbleed) by running pidof. */
+#ifdef __linux__
+    for (int i = cmd_argc - 1; i >= 0; --i)
+        memset(cmd_argv[i], 0, strlen(cmd_argv[i]));
+    strcpy(cmd_argv[0], "neverbleed");
+#endif
 }
 
 static int on_openssl_print_errors(const char *str, size_t len, void *fp)
@@ -608,7 +623,7 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
                 .hkdf_label_prefix__obsolete = NULL,
                 .require_dhe_on_psk = 1,
                 .use_exporter = 0,
-                .send_change_cipher_spec = 0, /* FIXME set this? */
+                .send_change_cipher_spec = 0, /* is a client-only flag. As a server, this flag can be of any value. */
                 .require_client_authentication = 0,
                 .omit_end_of_early_data = 0,
                 .encrypt_ticket = NULL, /* initialized later */
@@ -619,7 +634,6 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
                 .decompress_certificate = NULL,
                 .update_esni_key = NULL,
                 .on_extension = NULL,
-
             },
         .ch =
             {
@@ -853,6 +867,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
     if (use_neverbleed) {
         char errbuf[NEVERBLEED_ERRBUF_SIZE];
         if (neverbleed == NULL) {
+            neverbleed_post_fork_cb = on_neverbleed_fork;
             neverbleed = h2o_mem_alloc(sizeof(*neverbleed));
             if (neverbleed_init(neverbleed, errbuf) != 0) {
                 fprintf(stderr, "%s\n", errbuf);
@@ -2277,19 +2292,24 @@ static int validate_token(h2o_http3_server_ctx_t *ctx, struct sockaddr *remote, 
 
     if ((age = ctx->super.quic->now->cb(ctx->super.quic->now) - token->issued_at) < 0)
         age = 0;
-    if (h2o_socket_compare_address(remote, &token->remote.sa, token->is_retry) != 0)
+    if (h2o_socket_compare_address(remote, &token->remote.sa, token->type == QUICLY_ADDRESS_TOKEN_TYPE_RETRY) != 0)
         return 0;
-    if (token->is_retry) {
+    switch (token->type) {
+    case QUICLY_ADDRESS_TOKEN_TYPE_RETRY:
         if (age > 30 * 1000)
             return 0;
-        uint64_t cidhash_actual;
-        if (quicly_retry_calc_cidpair_hash(&ptls_openssl_sha256, client_cid, server_cid, &cidhash_actual) != 0)
+        if (!quicly_cid_is_equal(&token->retry.client_cid, client_cid))
             return 0;
-        if (token->retry.cidpair_hash != cidhash_actual)
+        if (!quicly_cid_is_equal(&token->retry.server_cid, server_cid))
             return 0;
-    } else {
+        break;
+    case QUICLY_ADDRESS_TOKEN_TYPE_RESUMPTION:
         if (age > 10 * 60 * 1000)
             return 0;
+        break;
+    default:
+        h2o_fatal("unexpected token type: %d", (int)token->type);
+        break;
     }
 
     return 1;
@@ -2310,13 +2330,24 @@ static h2o_http3_conn_t *on_http3_accept(h2o_http3_ctx_t *_ctx, quicly_address_t
 
     /* handle retry, setting `token` to a non-NULL pointer if contains a valid token */
     if (packet->token.len != 0) {
-        if (quic_decrypt_address_token(&token_buf, packet->token) == 0 &&
-            validate_token(ctx, &srcaddr->sa, packet->cid.src, packet->cid.dest.encrypted, &token_buf))
-            token = &token_buf;
+        int ret;
+        const char *err_desc = NULL;
+        if ((ret = quic_decrypt_address_token(&token_buf, packet->token, &err_desc)) == 0) {
+            if (validate_token(ctx, &srcaddr->sa, packet->cid.src, packet->cid.dest.encrypted, &token_buf))
+                token = &token_buf;
+        } else if (ret == QUICLY_TRANSPORT_ERROR_INVALID_TOKEN) {
+            uint8_t payload[QUICLY_MIN_CLIENT_INITIAL_SIZE];
+            size_t payload_size = quicly_send_close_invalid_token(ctx->super.quic, &srcaddr->sa, packet->cid.src, &destaddr->sa,
+                                                                  packet->cid.dest.encrypted, err_desc, payload);
+            assert(payload_size != SIZE_MAX);
+            struct iovec vec = {.iov_base = payload, .iov_len = payload_size};
+            h2o_http3_send_datagrams(&ctx->super, srcaddr, destaddr, &vec, 1);
+            return NULL;
+        }
     }
 
     /* send retry if necessary */
-    if (token == NULL || !token->is_retry) {
+    if (token == NULL || token->type != QUICLY_ADDRESS_TOKEN_TYPE_RETRY) {
         int send_retry = ctx->send_retry;
         switch (ebpf_value.quic_send_retry) {
         case H2O_EBPF_QUIC_SEND_RETRY_ON:
@@ -2330,15 +2361,16 @@ static h2o_http3_conn_t *on_http3_accept(h2o_http3_ctx_t *_ctx, quicly_address_t
         }
         if (send_retry) {
             static __thread ptls_aead_context_t *retry_aead_cache = NULL;
-            uint8_t scid[16], token_prefix;
+            uint8_t scid[16], payload[QUICLY_MIN_CLIENT_INITIAL_SIZE], token_prefix;
             ptls_openssl_random_bytes(scid, sizeof(scid));
             ptls_aead_context_t *aead = quic_get_address_token_encryptor(&token_prefix);
-            quicly_datagram_t *rp = quicly_send_retry(
-                ctx->super.quic, aead, &srcaddr->sa, packet->cid.src, &destaddr->sa, ptls_iovec_init(scid, sizeof(scid)),
-                packet->cid.dest.encrypted, ptls_iovec_init(&token_prefix, 1), ptls_iovec_init(NULL, 0), &retry_aead_cache);
-            assert(rp != NULL);
-            h2o_http3_send_datagram(&ctx->super, rp);
-            ctx->super.quic->packet_allocator->free_packet(ctx->super.quic->packet_allocator, rp);
+            size_t payload_size =
+                quicly_send_retry(ctx->super.quic, aead, &srcaddr->sa, packet->cid.src, &destaddr->sa,
+                                  ptls_iovec_init(scid, sizeof(scid)), packet->cid.dest.encrypted,
+                                  ptls_iovec_init(&token_prefix, 1), ptls_iovec_init(NULL, 0), &retry_aead_cache, payload);
+            assert(payload_size != SIZE_MAX);
+            struct iovec vec = {.iov_base = payload, .iov_len = payload_size};
+            h2o_http3_send_datagrams(&ctx->super, srcaddr, destaddr, &vec, 1);
             return NULL;
         }
     }
@@ -2696,7 +2728,7 @@ static h2o_iovec_t on_extra_status(void *unused, h2o_globalconf_t *_conf, h2o_re
                        " \"listeners\": %zu,\n"
                        " \"worker-threads\": %zu,\n"
                        " \"num-sessions\": %lu",
-                       SSLeay_version(SSLEAY_VERSION), current_time, restart_time, (uint64_t)(now - conf.launch_time), generation,
+                       OpenSSL_version(OPENSSL_VERSION), current_time, restart_time, (uint64_t)(now - conf.launch_time), generation,
                        num_connections(0), conf.max_connections, conf.num_listeners, conf.thread_map.size, num_sessions(0));
     assert(ret.len < BUFSIZE);
 
@@ -2834,6 +2866,9 @@ static void setup_configurators(void)
 
 int main(int argc, char **argv)
 {
+    cmd_argc = argc;
+    cmd_argv = argv;
+
     const char *cmd = argv[0], *opt_config_file = H2O_TO_STR(H2O_CONFIG_PATH);
     int n, error_log_fd = -1;
     size_t num_procs = h2o_numproc();
@@ -2894,7 +2929,7 @@ int main(int argc, char **argv)
                 break;
             case 'v':
                 printf("h2o version " H2O_VERSION "\n");
-                printf("OpenSSL: %s\n", SSLeay_version(SSLEAY_VERSION));
+                printf("OpenSSL: %s\n", OpenSSL_version(OPENSSL_VERSION));
 #if H2O_USE_MRUBY
                 printf(
                     "mruby: YES\n"); /* TODO determine the way to obtain the version of mruby (that is being linked dynamically) */
@@ -3108,6 +3143,13 @@ int main(int argc, char **argv)
         }
         ssl_setup_session_resumption(ssl_contexts.entries, ssl_contexts.size, quic_args, sync_barrier);
         free(ssl_contexts.entries);
+        for (i = 0; i != conf.num_listeners; ++i) {
+            for (j = 0; j != conf.listeners[i]->ssl.size; ++j) {
+                ptls_context_t *ptls = h2o_socket_ssl_get_picotls_context(conf.listeners[i]->ssl.entries[j]->ctx);
+                if (ptls != NULL)
+                    ssl_setup_session_resumption_ptls(ptls, conf.listeners[i]->quic.ctx);
+            }
+        }
     }
 
     /* all setup should be complete by now */

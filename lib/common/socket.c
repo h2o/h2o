@@ -1029,7 +1029,7 @@ static void on_handshake_complete(h2o_socket_t *sock, const char *err)
     sock->_cb.write = NULL;
     sock->ssl->handshake.cb = NULL;
     if (err == NULL)
-        decode_ssl_input(sock);
+        err = decode_ssl_input(sock);
     handshake_cb(sock, err);
 }
 

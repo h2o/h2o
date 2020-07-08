@@ -178,6 +178,7 @@ void h2o_config_init(h2o_globalconf_t *config)
     config->max_delegations = H2O_DEFAULT_MAX_DELEGATIONS;
     config->handshake_timeout = H2O_DEFAULT_HANDSHAKE_TIMEOUT;
     config->http1.req_timeout = H2O_DEFAULT_HTTP1_REQ_TIMEOUT;
+    config->http1.req_io_timeout = H2O_DEFAULT_HTTP1_REQ_IO_TIMEOUT;
     config->http1.upgrade_to_http2 = H2O_DEFAULT_HTTP1_UPGRADE_TO_HTTP2;
     config->http1.callbacks = H2O_HTTP1_CALLBACKS;
     config->http2.idle_timeout = H2O_DEFAULT_HTTP2_IDLE_TIMEOUT;

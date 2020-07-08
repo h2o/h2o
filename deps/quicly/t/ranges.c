@@ -25,7 +25,7 @@
 #define CHECK(...)                                                                                                                 \
     do {                                                                                                                           \
         static const struct st_quicly_range_t expected[] = {__VA_ARGS__};                                                          \
-        ok(ranges.num_ranges == sizeof(expected) / sizeof(expected[0]));                                                           \
+        ok(ranges.num_ranges == PTLS_ELEMENTSOF(expected));                                                                        \
         size_t i;                                                                                                                  \
         for (i = 0; i != ranges.num_ranges; ++i) {                                                                                 \
             ok(ranges.ranges[i].start == expected[i].start);                                                                       \

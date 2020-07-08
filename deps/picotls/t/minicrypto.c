@@ -167,5 +167,4 @@ int main(int argc, char **argv)
     subtest("hrr", test_hrr);
 
     return done_testing();
-    return done_testing();
 }

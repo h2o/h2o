@@ -8,7 +8,7 @@ use t::Util;
 
 sub nc_get {
     my ($server, $path) = @_;
-    my $resp = `echo 'GET $path HTTP/1.1\\r\\n\\r\\n' | nc 127.0.0.1 $server->{port}`;
+    my $resp = `echo 'GET $path HTTP/1.1\r\n\r\n' | nc 127.0.0.1 $server->{port}`;
     (undef, my $body) = split(/\r\n\r\n/, $resp, 2);
     $body;
 }
