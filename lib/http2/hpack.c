@@ -301,6 +301,11 @@ int h2o_hpack_decode_header(h2o_mem_pool_t *pool, void *_hpack_header_table, h2o
     int64_t index = 0;
     int value_is_indexed = 0, do_index = 0;
 
+    /* This function might "leak" newly allocated memory block, assuming that the memory is from the pool and will be freed
+     * soon at pool destruction.
+     * This assersion is to make sure that we always specify a pool when using this function. */
+    assert(pool != NULL);
+
 Redo:
     if (*src >= src_end)
         return H2O_HTTP2_ERROR_COMPRESSION;
@@ -380,8 +385,11 @@ Redo:
 
     /* determine the value (if necessary) */
     if (!value_is_indexed) {
-        if ((value = decode_string(pool, src, src_end, 0, err_desc)) == NULL)
+        if ((value = decode_string(pool, src, src_end, 0, err_desc)) == NULL) {
+            /* this may leak `name` but as long as it is tied to the pool, it will be soon freed at pool destruction,
+             * so it is harmless to ignore the leak */
             return H2O_HTTP2_ERROR_COMPRESSION;
+        }
     }
 
     /* add the decoded header to the header table if necessary */
