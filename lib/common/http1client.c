@@ -514,7 +514,7 @@ static void swap_buffers(h2o_buffer_t **a, h2o_buffer_t **b)
 /**
  * bufs must have at least 3 elements of space
  */
-size_t encode_chunk(struct st_h2o_http1client_t *client, h2o_iovec_t *bufs, h2o_iovec_t chunk, size_t *bytes)
+static size_t encode_chunk(struct st_h2o_http1client_t *client, h2o_iovec_t *bufs, h2o_iovec_t chunk, size_t *bytes)
 {
     *bytes = 0;
 
