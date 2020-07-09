@@ -1259,8 +1259,8 @@ int h2o_configurator__do_parse_mapping(h2o_configurator_command_t *cmd, yoml_t *
             return -1;
         }
         if ((keys[j].type_mask & (1u << element->value->type)) == 0) {
-            char permitted_types[41] = "";
-            assert(sizeof(permitted_types) >= strlen(" or a scalar or a sequence or a mapping") + 1);
+            char permitted_types[40] = "";
+            PTLS_BUILD_ASSERT(sizeof(permitted_types) >= sizeof(" or a scalar or a sequence or a mapping"));
             if ((keys[j].type_mask & (1u << YOML_TYPE_SCALAR)) != 0)
                 strcat(permitted_types, " or a scalar");
             if ((keys[j].type_mask & (1u << YOML_TYPE_SEQUENCE)) != 0)
