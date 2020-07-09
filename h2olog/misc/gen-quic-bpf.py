@@ -406,9 +406,8 @@ int trace_sched_process_exit(struct tracepoint__sched__sched_process_exit *ctx) 
 """ % (event_t_decl)
 
   usdt_def = """
-static
-std::vector<ebpf::USDT> quic_init_usdt_probes(pid_t pid) {
-  const std::vector<ebpf::USDT> probes = {
+const std::vector<ebpf::USDT> &h2o_quic_tracer::init_usdt_probes(pid_t pid) {
+  static const std::vector<ebpf::USDT> probes = {
 """
 
   for metadata in probe_metadata.values():
@@ -423,10 +422,7 @@ std::vector<ebpf::USDT> quic_init_usdt_probes(pid_t pid) {
 """
 
   handle_event_func = r"""
-static
-void quic_handle_event(h2o_tracer_t *tracer, const void *data, int data_len) {
-  FILE *out = tracer->out;
-
+void h2o_quic_tracer::handle_event(const void *data, int data_len) {
   const quic_event_t *event = static_cast<const quic_event_t*>(data);
 
   if (event->id == 1) { // sched:sched_process_exit
@@ -509,48 +505,29 @@ void quic_handle_event(h2o_tracer_t *tracer, const void *data, int data_len) {
 #define STR_LEN 64
 #define STR_LIT(s) s, strlen(s)
 
-uint64_t seq = 0;
+struct h2o_quic_tracer : public h2o_tracer {
+  virtual void handle_event(const void *data, int len);
+  virtual const std::vector<ebpf::USDT> &init_usdt_probes(pid_t h2o_pid);
+  virtual std::string bpf_text();
+};
 
-// BPF modules written in C
-const char *bpf_text = R"(
+%s
+%s
+%s
+%s
+%s
+
+std::string h2o_quic_tracer::bpf_text() {
+  return gen_quic_bpf_header() + R"(
 %s
 )";
-
-static uint64_t time_milliseconds()
-{
-  struct timeval tv;
-  gettimeofday(&tv, NULL);
-  return (int64_t)tv.tv_sec * 1000 + tv.tv_usec / 1000;
 }
 
-%s
-%s
-%s
-%s
-%s
-
-static void quic_handle_lost(h2o_tracer_t *tracer, uint64_t lost) {
-  fprintf(tracer->out, "{"
-    "\"type\":\"h2olog-event-lost\","
-    "\"seq\":%%" PRIu64 ","
-    "\"time\":%%" PRIu64 ","
-    "\"lost\":%%" PRIu64
-    "}\n",
-    ++seq, time_milliseconds(), lost);
+h2o_tracer *create_quic_tracer() {
+  return new h2o_quic_tracer;
 }
 
-static const std::string quic_bpf_ext() {
-  return gen_quic_bpf_header() + bpf_text;
-}
-
-void init_quic_tracer(h2o_tracer_t * tracer) {
-  tracer->handle_event = quic_handle_event;
-  tracer->handle_lost = quic_handle_lost;
-  tracer->init_usdt_probes = quic_init_usdt_probes;
-  tracer->bpf_text = quic_bpf_ext;
-}
-
-""" % (bpf, build_typedef_for_cplusplus(), build_bpf_header_generator(), event_t_decl, usdt_def, handle_event_func))
+""" % (build_typedef_for_cplusplus(), build_bpf_header_generator(), event_t_decl, usdt_def, handle_event_func, bpf))
 
 
 def main():

@@ -24,58 +24,69 @@
 #define h2olog_h
 
 #include <cinttypes>
+#include <cstdio>
 #include <vector>
 #include <string>
+extern "C" {
+#include <time.h>
+}
 #include <bcc/BPF.h>
 
-struct st_h2o_tracer_t;
-typedef struct st_h2o_tracer_t h2o_tracer_t;
-
-struct st_h2o_tracer_t {
-    /*
+struct h2o_tracer {
+    /**
      * Where to output the results. Defaults to `stdout`.
      */
     FILE *out;
-
-    /*
-     * The number of events emitted in `handle_event`.
+    /**
+     * The sequence number of the event.
      */
-    uint64_t count;
-
-    /*
-     * The number of lost events. It is reset periodically.
+    uint64_t seq;
+    /**
+     * Counters for generating stats. They are reset periodically.
      */
-    uint64_t lost_count;
+    struct {
+        uint64_t num_events;
+        uint64_t num_lost;
+    } stats;
 
+    h2o_tracer() : out(NULL), seq(0)
+    {
+        stats.num_events = 0;
+        stats.num_lost = 0;
+    }
     /*
      * Handles an incoming BPF event.
      */
-    void (*handle_event)(h2o_tracer_t *tracer, const void *data, int len);
-
-    /*
+    virtual void handle_event(const void *data, int len) = 0;
+    /**
      * Handles an event data lost.
      */
-    void (*handle_lost)(h2o_tracer_t *tracer, uint64_t lost);
-
-    /*
+    void handle_lost(uint64_t lost);
+    /**
      * Returns a vector of relevant USDT probes.
      */
-    std::vector<ebpf::USDT> (*init_usdt_probes)(pid_t h2o_pid);
-
-    /*
+    virtual const std::vector<ebpf::USDT> &init_usdt_probes(pid_t h2o_pid) = 0;
+    /**
      * Returns the code to be compiled into BPF bytecode.
      */
-    const std::string (*bpf_text)(void);
+    virtual std::string bpf_text() = 0;
+    /**
+     * Returns current time in milliseconds.
+     */
+    uint64_t time_milliseconds();
+    /**
+     *
+     */
+    void show_event_per_sec(time_t *t0);
 };
 
-/*
+/**
  * Initialize an HTTP tracer.
  */
-void init_http_tracer(h2o_tracer_t *);
-
-/*
- * Initialize a QUIC tracer.
+h2o_tracer *create_http_tracer();
+/**
+ * Initializes a QUIC tracer.
  */
-void init_quic_tracer(h2o_tracer_t *);
+h2o_tracer *create_quic_tracer();
 
 #endif

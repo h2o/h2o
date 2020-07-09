@@ -20,13 +20,16 @@
  * IN THE SOFTWARE.
  */
 
+#include <memory>
 #include <vector>
+extern "C" {
 #include <unistd.h>
 #include <stdarg.h>
-#include "h2olog.h"
-
+#include <sys/time.h>
 #include "h2o/memory.h"
 #include "h2o/version.h"
+}
+#include "h2olog.h"
 
 #define POLL_TIMEOUT (1000)
 #define PERF_BUFFER_PAGE_COUNT 256
@@ -71,20 +74,38 @@ static void infof(const char *fmt, ...)
     fprintf(stderr, "%s %s\n", timestamp, buf);
 }
 
-static void show_event_per_sec(h2o_tracer_t *tracer, time_t *t0)
+uint64_t h2o_tracer::time_milliseconds()
+{
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    return (int64_t)tv.tv_sec * 1000 + tv.tv_usec / 1000;
+}
+
+void h2o_tracer::handle_lost(uint64_t lost)
+{
+    fprintf(out,
+            "{"
+            "\"type\":\"h2olog-event-lost\","
+            "\"seq\":%" PRIu64 ","
+            "\"time\":%" PRIu64 ","
+            "\"lost\":%" PRIu64 "}\n",
+            ++seq, time_milliseconds(), lost);
+}
+
+void h2o_tracer::show_event_per_sec(time_t *t0)
 {
     time_t t1 = time(NULL);
     int64_t d = t1 - *t0;
     if (d > 10) {
-        uint64_t c = tracer->count / d;
+        uint64_t c = stats.num_events / d;
         if (c > 0) {
-            if (tracer->lost_count > 0) {
-                infof("%20" PRIu64 " events/s (possibly lost %" PRIu64 " events)", c, tracer->lost_count);
-                tracer->lost_count = 0;
+            if (stats.num_lost > 0) {
+                infof("%20" PRIu64 " events/s (possibly lost %" PRIu64 " events)", c, stats.num_lost);
+                stats.num_lost = 0;
             } else {
                 infof("%20" PRIu64 " events/s", c);
             }
-            tracer->count = 0;
+            stats.num_events = 0;
         }
         *t0 = t1;
     }
@@ -158,29 +179,29 @@ static std::string make_pid_cflag(const char *macro_name, pid_t pid)
 
 static void event_cb(void *context, void *data, int len)
 {
-    h2o_tracer_t *tracer = (h2o_tracer_t *)context;
-    tracer->count++;
+    h2o_tracer *tracer = (h2o_tracer *)context;
+    tracer->stats.num_events++;
 
-    tracer->handle_event(tracer, data, len);
+    tracer->handle_event(data, len);
 }
 
 static void lost_cb(void *context, uint64_t lost)
 {
-    h2o_tracer_t *tracer = (h2o_tracer_t *)context;
-    tracer->lost_count += lost;
+    h2o_tracer *tracer = (h2o_tracer *)context;
+    tracer->stats.num_lost += lost;
 
-    tracer->handle_lost(tracer, lost);
+    tracer->handle_lost(lost);
 }
 
 int main(int argc, char **argv)
 {
-    h2o_tracer_t tracer = {};
+    std::unique_ptr<h2o_tracer> tracer;
     if (argc > 1 && strcmp(argv[1], "quic") == 0) {
-        init_quic_tracer(&tracer);
+        tracer.reset(create_quic_tracer());
         --argc;
         ++argv;
     } else {
-        init_http_tracer(&tracer);
+        tracer.reset(create_http_tracer());
     }
 
     int debug = 0;
@@ -238,9 +259,9 @@ int main(int argc, char **argv)
             fprintf(stderr, "Error: failed to open %s: %s", out_file, strerror(errno));
             exit(EXIT_FAILURE);
         }
-        tracer.out = out;
+        tracer->out = out;
     } else {
-        tracer.out = stdout;
+        tracer->out = stdout;
     }
 
     std::vector<std::string> cflags({
@@ -260,13 +281,13 @@ int main(int argc, char **argv)
             fprintf(stderr, "%s", cflags[i].c_str());
         }
         fprintf(stderr, "\n");
-        fprintf(stderr, "<BPF>\n%s\n</BPF>\n", tracer.bpf_text().c_str());
+        fprintf(stderr, "<BPF>\n%s\n</BPF>\n", tracer->bpf_text().c_str());
     }
 
     ebpf::BPF *bpf = new ebpf::BPF();
-    std::vector<ebpf::USDT> probes = tracer.init_usdt_probes(h2o_pid);
+    std::vector<ebpf::USDT> probes = tracer->init_usdt_probes(h2o_pid);
 
-    ebpf::StatusTuple ret = bpf->init(tracer.bpf_text(), cflags, probes);
+    ebpf::StatusTuple ret = bpf->init(tracer->bpf_text(), cflags, probes);
     if (ret.code() != 0) {
         fprintf(stderr, "Error: init: %s\n", ret.msg().c_str());
         return EXIT_FAILURE;
@@ -282,7 +303,7 @@ int main(int argc, char **argv)
         }
     }
 
-    ret = bpf->open_perf_buffer("events", event_cb, lost_cb, &tracer, PERF_BUFFER_PAGE_COUNT);
+    ret = bpf->open_perf_buffer("events", event_cb, lost_cb, tracer.get(), PERF_BUFFER_PAGE_COUNT);
     if (ret.code() != 0) {
         fprintf(stderr, "Error: open_perf_buffer: %s\n", ret.msg().c_str());
         return EXIT_FAILURE;
@@ -298,10 +319,10 @@ int main(int argc, char **argv)
 
         while (true) {
             perf_buffer->poll(POLL_TIMEOUT);
-            fflush(tracer.out);
+            fflush(tracer->out);
 
             if (debug) {
-                show_event_per_sec(&tracer, &t0);
+                tracer->show_event_per_sec(&t0);
             }
         }
     }
