@@ -1260,12 +1260,10 @@ int h2o_configurator__do_parse_mapping(h2o_configurator_command_t *cmd, yoml_t *
         }
         if ((keys[j].type_mask & (1u << element->value->type)) == 0) {
             char permitted_types[sizeof(" or a scalar or a sequence or a mapping")] = "";
-            if ((keys[j].type_mask & (1u << YOML_TYPE_SCALAR)) != 0)
-                strcat(permitted_types, " or a scalar");
-            if ((keys[j].type_mask & (1u << YOML_TYPE_SEQUENCE)) != 0)
-                strcat(permitted_types, " or a sequence");
-            if ((keys[j].type_mask & (1u << YOML_TYPE_MAPPING)) != 0)
-                strcat(permitted_types, " or a mapping");
+            snprintf(permitted_types, sizeof(permitted_types), "%s%s%s",
+                     (keys[j].type_mask & (1u << YOML_TYPE_SCALAR)) != 0 ? " or a scalar" : "",
+                     (keys[j].type_mask & (1u << YOML_TYPE_SEQUENCE)) != 0 ? " or a sequence" : "",
+                     (keys[j].type_mask & (1u << YOML_TYPE_MAPPING)) != 0 ? " or a mapping" : "");
             assert(strlen(permitted_types) != 0);
             h2o_configurator_errprintf(cmd, element->value, "attribute `%s` must be %s", element->key->data.scalar,
                                        permitted_types + 4);
