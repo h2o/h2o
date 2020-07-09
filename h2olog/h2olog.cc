@@ -189,7 +189,7 @@ int main(int argc, char **argv)
         tracer.reset(create_http_tracer());
     }
 
-    int debug = 0, is_quic = 1;
+    int debug = 0;
     FILE *outfp = stdout;
     std::vector<std::string> event_type_filters;
     std::vector<std::string> response_header_filters;
@@ -214,9 +214,6 @@ int main(int argc, char **argv)
             break;
         case 'd':
             debug++;
-            break;
-        case 'q':
-            is_quic = 1;
             break;
         case 'h':
             usage();
