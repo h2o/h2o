@@ -213,7 +213,6 @@ subtest 'use-after-free of chunked encoding' => sub {
     $client->send_data("400\r\n" . 'a' x 1024 . "\r\n", 1000) or last;
     $client->send_data("0\r\n\r\n", 1000) or last;
     like $output, qr{HTTP/1.1 200 }is;
-    ok ! $client->is_alive;
 
     $output = `curl -s --dump-header /dev/stdout http://127.0.0.1:$server->{port}/live-check/`;
     like $output, qr{HTTP/1.1 200 }is;
