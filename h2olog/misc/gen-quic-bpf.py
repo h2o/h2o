@@ -30,8 +30,32 @@ from pprint import pprint
 
 quicly_probes_d = "deps/quicly/quicly-probes.d"
 h2o_probes_d = "h2o-probes.d"
-data_types_h = "h2olog/quic.h"
 
+# An allow-list to gather data from USDT probes.
+# Only fields listed here are handled in BPF.
+struct_map = {
+    # deps/quicly/include/quicly.h
+    "st_quicly_stream_t": [
+        # ($member_access, $optional_flat_name)
+        # If $optional_flat_name is None, $member_access is used.
+        ("stream_id", None),
+    ],
+
+    # deps/quicly/include/quicly/loss.h
+    "quicly_rtt_t": [
+        ("minimum", None),
+        ("smoothed", None),
+        ("variance", None),
+        ("latest",  None),
+    ],
+
+    # deps/quicly/lib/quicly.c
+    "st_quicly_conn_t": [
+        ("super.local.cid_set.plaintext.master_id", "master_id"),
+    ],
+}
+
+# A block list to list useless or secret data fields
 block_fields = {
     "quicly:crypto_decrypt": set(["decrypted"]),
     "quicly:crypto_update_secret": set(["secret"]),
@@ -42,17 +66,21 @@ block_fields = {
     "h2o:h3_accept": set(["conn"]),  # `h2o_conn_t *conn`
 }
 
+# A block list for quicly-probes.d.
+# USDT probes in quicly-probes.d are handled by default.
 quicly_block_probes = set([
     "quicly:debug_message",
 ])
 
+# An allow list for h2o-probes.d
+# USDT probes in h2o-probes.d are not handled by default.
 h2o_allow_probes = set([
     "h2o:h3_accept",
     "h2o:h3_close",
     "h2o:send_response_header",
 ])
 
-# convert field names for compatibility with:
+# To rename field names for compatibility with:
 # https://github.com/h2o/quicly/blob/master/quictrace-adapter.py
 rename_map = {
     # common fields
@@ -69,25 +97,18 @@ rename_map = {
     "latest": "latest-rtt",
 }
 
+st_quicly_conn_t_def = r"""
+// This is enough for here. See `quicly.c` for the full definition.
+struct st_quicly_conn_t {
+  struct _st_quicly_conn_public_t super;
+};
+"""
+
 re_flags = re.X | re.M | re.S
 whitespace = r'(?:/\*.*?\*/|\s+)'
 probe_decl = r'(?:\bprobe\s+(?:[a-zA-Z0-9_]+)\s*\([^\)]*\)\s*;)'
 d_decl = r'(?:\bprovider\s*(?P<provider>[a-zA-Z0-9_]+)\s*\{(?P<probes>(?:%s|%s)*)\})' % (
     probe_decl, whitespace)
-
-
-def parse_c_struct(path):
-  content = path.read_text()
-
-  st_map = OrderedDict()
-  for (st_name, st_content) in re.findall(r'struct\s+([a-zA-Z0-9_]+)\s*\{([^}]*)\}', content, flags=re_flags):
-    st = st_map[st_name] = OrderedDict()
-    for (ctype, name, is_array) in re.findall(r'(\w+[^;]*[\w\*])\s+([a-zA-Z0-9_]+)(\[\d+\])?;', st_content, flags=re_flags):
-      if "dummy" in name:
-        continue
-      st[name] = ctype + is_array
-  return st_map
-
 
 def parse_d(context: dict, path: Path, allow_probes: set = None, block_probes: set = None):
   content = path.read_text()
@@ -95,7 +116,6 @@ def parse_d(context: dict, path: Path, allow_probes: set = None, block_probes: s
   matched = re.search(d_decl, content, flags=re_flags)
   provider = matched.group('provider')
 
-  st_map = context["st_map"]
   probe_metadata = context["probe_metadata"]
 
   id = context["id"]
@@ -129,8 +149,9 @@ def parse_d(context: dict, path: Path, allow_probes: set = None, block_probes: s
       arg_type = arg['type']
 
       if is_ptr_type(arg_type) and not is_str_type(arg_type):
-        for st_key, st_valtype in st_map[strip_typename(arg_type)].items():
-          flat_args_map[st_key] = st_valtype
+        st_name = strip_typename(arg_type)
+        for st_field_access, st_field_name in struct_map.get(st_name, []):
+          flat_args_map[st_field_name or st_field_access] = "typeof_%s__%s" % (st_name, st_field_name or st_field_access)
       else:
         flat_args_map[arg_name] = arg_type
 
@@ -158,7 +179,6 @@ def build_tracer_name(metadata):
 
 
 def build_tracer(context, metadata):
-  st_map = context["st_map"]
   fully_specified_probe_name = metadata["fully_specified_probe_name"]
 
   c = r"""// %s
@@ -190,13 +210,17 @@ int %s(struct pt_regs *ctx) {
       c += "  bpf_probe_read(&event.%s, sizeof(event.%s), buf);\n" % (
           event_t_name, event_t_name)
     elif is_ptr_type(arg_type):
-      c += "  %s %s = {};\n" % (arg_type.replace("*", ""), arg_name)
-      c += "  bpf_usdt_readarg(%d, ctx, &buf);\n" % (i+1)
-      c += "  bpf_probe_read(&%s, sizeof(%s), buf);\n" % (arg_name, arg_name)
-      for st_key, st_valtype in st_map[strip_typename(arg_type)].items():
-        event_t_name = "%s.%s" % (probe_name, st_key)
-        c += "  event.%s = %s.%s; /* %s */\n" % (
-            event_t_name, arg_name, st_key, st_valtype)
+      st_name = strip_typename(arg_type)
+      if st_name in struct_map:
+        c += "  uint8_t %s[sizeof_%s] = {};\n" % (arg_name, st_name)
+        c += "  bpf_usdt_readarg(%d, ctx, &buf);\n" % (i+1)
+        c += "  bpf_probe_read(&%s, sizeof_%s, buf);\n" % (arg_name, st_name)
+        for st_field_access, st_field_name in struct_map[st_name]:
+          event_t_name = "%s.%s" % (probe_name, st_field_name or st_field_access)
+          c += "  event.%s = get_%s__%s(%s);\n" % (
+              event_t_name, st_name, st_field_name or st_field_access, arg_name)
+      else:
+        c += "  // (no fields in %s)\n" % (st_name)
     else:
       event_t_name = "%s.%s" % (probe_name, arg_name)
       c += "  bpf_usdt_readarg(%d, ctx, &event.%s);\n" % (i +
@@ -243,11 +267,9 @@ int %s(struct pt_regs *ctx) {
 
 
 def prepare_context(h2o_dir):
-  st_map = parse_c_struct(h2o_dir.joinpath(data_types_h))
   context = {
       "id": 1,  # 1 is used for sched:sched_process_exit
       "probe_metadata": OrderedDict(),
-      "st_map": st_map,
       "h2o_dir": h2o_dir,
   }
   parse_d(context, h2o_dir.joinpath(quicly_probes_d),
@@ -257,10 +279,70 @@ def prepare_context(h2o_dir):
 
   return context
 
+def build_bpf_header_generator():
+  generator = r"""
+#define GEN_FIELD_INFO(type, field, name) gen_field_info(#type, #field, &((type *)NULL)->field, name)
+
+#define DEFINE_RESOLVE_FUNC(field_type) \
+std::string gen_field_info(const char *struct_type, const char *field_name, const field_type *field_ptr, const char *name) \
+{ \
+    return do_resolve(struct_type, field_name, #field_type, field_ptr, name); \
+}
+
+template <typename FieldType>
+static std::string do_resolve(const char *struct_type, const char *field_name, const char *field_type, const FieldType *field_ptr, const char *name) {
+    char *buff = NULL;
+    size_t buff_len = 0;
+    FILE *mem = open_memstream(&buff, &buff_len);
+    fprintf(mem, "/* %s (%s#%s) */\n", name, struct_type, field_name);
+    fprintf(mem, "#define offsetof_%s %zd\n", name, (const char *)field_ptr - (const char *)NULL);
+    fprintf(mem, "#define typeof_%s %s\n", name, field_type);
+    fprintf(mem, "#define get_%s(st) *((const %s *) ((const char*)st + offsetof_%s))\n", name, field_type, name);
+    fprintf(mem, "\n");
+    fclose(mem);
+    std::string s(buff, buff_len);
+    fclose(mem);
+    return s;
+}
+
+DEFINE_RESOLVE_FUNC(int32_t);
+DEFINE_RESOLVE_FUNC(uint32_t);
+DEFINE_RESOLVE_FUNC(int64_t);
+DEFINE_RESOLVE_FUNC(uint64_t);
+
+static std::string gen_quic_bpf_header() {
+  std::string bpf;
+"""
+
+  for st_name, st_fields in struct_map.items():
+    # It limits a size of structs to 128
+    # This is because the BPF stack has a limit to 512 bytes.
+    generator += r"""
+  bpf += "#define sizeof_%s " + std::to_string(std::min<size_t>(sizeof(struct %s), 128)) + "\n";
+""" % (st_name, st_name)
+
+    for st_field_access, st_field_name_alias in st_fields:
+      name = "%s__%s" % (st_name, st_field_name_alias or st_field_access)
+      generator += """  bpf += GEN_FIELD_INFO(struct %s, %s, "%s");\n""" % (st_name, st_field_access, name)
+
+  generator += r"""
+  return bpf;
+}
+"""
+  return generator
+
+def build_typedef_for_cplusplus():
+  typedef = st_quicly_conn_t_def
+
+  # CAUTION: it depends on a GCC/Clang compiler extension: typeof()
+  for st_name, st_fields in struct_map.items():
+    for st_field_access, st_field_name_alias in st_fields:
+      type_expr = """((const struct %s *)nullptr)->%s""" % (st_name, st_field_access)
+      typedef += """typedef typeof(%s) typeof_%s__%s;\n""" % (type_expr, st_name, st_field_name_alias or st_field_access)
+
+  return typedef
 
 def generate_cplusplus(context, output_file):
-  h2o_dir = context["h2o_dir"]
-
   probe_metadata = context["probe_metadata"]
 
   event_t_decl = r"""
@@ -290,7 +372,7 @@ struct quic_event_t {
 
       event_t_decl += "      %s;\n" % f
     if metadata["provider"] == "h2o" and name != "h3_accept":
-      event_t_decl += "      uint32_t master_id;\n"
+      event_t_decl += "      typeof_st_quicly_conn_t__master_id master_id;\n"
     event_t_decl += "    } %s;\n" % name
 
   event_t_decl += r"""
@@ -302,7 +384,6 @@ struct quic_event_t {
 #include <linux/sched.h>
 
 #define STR_LEN 64
-%s
 %s
 BPF_PERF_OUTPUT(events);
 
@@ -322,7 +403,7 @@ int trace_sched_process_exit(struct tracepoint__sched__sched_process_exit *ctx) 
   return 0;
 }
 
-""" % (h2o_dir.joinpath(data_types_h).read_text(), event_t_decl)
+""" % (event_t_decl)
 
   usdt_def = """
 static
@@ -416,8 +497,13 @@ void quic_handle_event(h2o_tracer_t *tracer, const void *data, int data_len) {
 #include <stdio.h>
 #include <string.h>
 #include <sys/time.h>
+
+#include <string>
+#include <algorithm>
+
+#include "quicly.h"
+
 #include "h2olog.h"
-#include "quic.h"
 #include "json.h"
 
 #define STR_LEN 64
@@ -440,6 +526,8 @@ static uint64_t time_milliseconds()
 %s
 %s
 %s
+%s
+%s
 
 static void quic_handle_lost(h2o_tracer_t *tracer, uint64_t lost) {
   fprintf(tracer->out, "{"
@@ -451,8 +539,8 @@ static void quic_handle_lost(h2o_tracer_t *tracer, uint64_t lost) {
     ++seq, time_milliseconds(), lost);
 }
 
-static const char *quic_bpf_ext() {
-  return bpf_text;
+static const std::string quic_bpf_ext() {
+  return gen_quic_bpf_header() + bpf_text;
 }
 
 void init_quic_tracer(h2o_tracer_t * tracer) {
@@ -462,7 +550,7 @@ void init_quic_tracer(h2o_tracer_t * tracer) {
   tracer->bpf_text = quic_bpf_ext;
 }
 
-""" % (bpf, usdt_def, event_t_decl, handle_event_func))
+""" % (bpf, build_typedef_for_cplusplus(), build_bpf_header_generator(), event_t_decl, usdt_def, handle_event_func))
 
 
 def main():

@@ -186,7 +186,7 @@ static std::vector<ebpf::USDT> init_usdt_probes(pid_t h2o_pid)
     return vec;
 }
 
-static const char *bpf_text(void)
+static const std::string bpf_text(void)
 {
     return HTTP_BPF;
 }
