@@ -57,7 +57,11 @@ struct h2o_tracer {
     /*
      * Handles an incoming BPF event.
      */
-    virtual void handle_event(const void *data, int len) = 0;
+    void handle_event(const void *data, int len) {
+        ++seq;
+        do_handle_event(data, len);
+    }
+    virtual void do_handle_event(const void *data, int len) = 0;
     /**
      * Handles an event data lost.
      */

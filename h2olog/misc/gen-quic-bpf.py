@@ -422,7 +422,7 @@ const std::vector<ebpf::USDT> &h2o_quic_tracer::init_usdt_probes(pid_t pid) {
 """
 
   handle_event_func = r"""
-void h2o_quic_tracer::handle_event(const void *data, int data_len) {
+void h2o_quic_tracer::do_handle_event(const void *data, int data_len) {
   const quic_event_t *event = static_cast<const quic_event_t*>(data);
 
   if (event->id == 1) { // sched:sched_process_exit
@@ -445,7 +445,7 @@ void h2o_quic_tracer::handle_event(const void *data, int data_len) {
     handle_event_func += "  case %s: { // %s\n" % (
         metadata['id'], fully_specified_probe_name)
     handle_event_func += '    json_write_pair_n(out, STR_LIT("type"), "%s");\n' % probe_name.replace("_", "-")
-    handle_event_func += '    json_write_pair_c(out, STR_LIT("seq"), ++seq);\n'
+    handle_event_func += '    json_write_pair_c(out, STR_LIT("seq"), seq);\n'
 
     for field_name, field_type in flat_args_map.items():
       if block_field_set and field_name in block_field_set:
@@ -506,7 +506,7 @@ void h2o_quic_tracer::handle_event(const void *data, int data_len) {
 #define STR_LIT(s) s, strlen(s)
 
 struct h2o_quic_tracer : public h2o_tracer {
-  virtual void handle_event(const void *data, int len);
+  virtual void do_handle_event(const void *data, int len);
   virtual const std::vector<ebpf::USDT> &init_usdt_probes(pid_t h2o_pid);
   virtual std::string bpf_text();
 };

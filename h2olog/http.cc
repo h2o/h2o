@@ -143,7 +143,7 @@ typedef struct st_http_event_t {
 
 class h2o_http_tracer : public h2o_tracer
 {
-    virtual void handle_event(const void *data, int len)
+    virtual void do_handle_event(const void *data, int len)
     {
         const http_event_t *ev = (const http_event_t *)data;
 
