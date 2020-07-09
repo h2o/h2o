@@ -32,36 +32,54 @@ extern "C" {
 }
 #include <bcc/BPF.h>
 
-struct h2o_tracer {
+class h2o_tracer
+{
+  protected:
     /**
      * Where to output the results. Defaults to `stdout`.
      */
-    FILE *out;
+    FILE *out_;
     /**
      * The sequence number of the event.
      */
-    uint64_t seq;
+    uint64_t seq_;
     /**
      * Counters for generating stats. They are reset periodically.
      */
     struct {
         uint64_t num_events;
         uint64_t num_lost;
-    } stats;
+    } stats_;
+    /**
+     * The stub function for handling an event.
+     */
+    virtual void do_handle_event(const void *data, int len) = 0;
 
-    h2o_tracer() : out(NULL), seq(0)
+  public:
+    /**
+     * Constructor.
+     */
+    h2o_tracer() : out_(NULL), seq_(0)
     {
-        stats.num_events = 0;
-        stats.num_lost = 0;
+        stats_.num_events = 0;
+        stats_.num_lost = 0;
     }
-    /*
+    /**
+     * Performs post-construction initialization common to all the tracers.
+     */
+    void init(FILE *fp)
+    {
+        out_ = fp;
+    }
+    /**
      * Handles an incoming BPF event.
      */
-    void handle_event(const void *data, int len) {
-        ++seq;
+    void handle_event(const void *data, int len)
+    {
+        ++seq_;
+        ++stats_.num_events;
         do_handle_event(data, len);
     }
-    virtual void do_handle_event(const void *data, int len) = 0;
     /**
      * Handles an event data lost.
      */
@@ -82,6 +100,13 @@ struct h2o_tracer {
      *
      */
     void show_event_per_sec(time_t *t0);
+    /**
+     *
+     */
+    void flush()
+    {
+        fflush(out_);
+    }
 };
 
 /**

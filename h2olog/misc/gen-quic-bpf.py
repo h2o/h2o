@@ -430,7 +430,7 @@ void h2o_quic_tracer::do_handle_event(const void *data, int data_len) {
   }
 
   // output JSON
-  fprintf(out, "{");
+  fprintf(out_, "{");
 
   switch (event->id) {
 """
@@ -444,8 +444,8 @@ void h2o_quic_tracer::do_handle_event(const void *data, int data_len) {
 
     handle_event_func += "  case %s: { // %s\n" % (
         metadata['id'], fully_specified_probe_name)
-    handle_event_func += '    json_write_pair_n(out, STR_LIT("type"), "%s");\n' % probe_name.replace("_", "-")
-    handle_event_func += '    json_write_pair_c(out, STR_LIT("seq"), seq);\n'
+    handle_event_func += '    json_write_pair_n(out_, STR_LIT("type"), "%s");\n' % probe_name.replace("_", "-")
+    handle_event_func += '    json_write_pair_c(out_, STR_LIT("seq"), seq_);\n'
 
     for field_name, field_type in flat_args_map.items():
       if block_field_set and field_name in block_field_set:
@@ -453,9 +453,9 @@ void h2o_quic_tracer::do_handle_event(const void *data, int data_len) {
       json_field_name = rename_map.get(field_name, field_name).replace("_", "-")
       event_t_name = "%s.%s" % (probe_name, field_name)
       if fully_specified_probe_name == "quicly:receive" and field_name == "bytes":
-        handle_event_func += '    json_write_pair_c(out, STR_LIT("first-octet"), event->receive.bytes[0]);\n'
+        handle_event_func += '    json_write_pair_c(out_, STR_LIT("first-octet"), event->receive.bytes[0]);\n'
       elif not is_bin_type(field_type):
-        handle_event_func += '    json_write_pair_c(out, STR_LIT("%s"), event->%s);\n' % (
+        handle_event_func += '    json_write_pair_c(out_, STR_LIT("%s"), event->%s);\n' % (
             json_field_name, event_t_name)
       else:  # bin type (it should have the correspinding length arg)
         len_names = set([field_name + "_len", "len", "num_" + field_name])
@@ -465,14 +465,14 @@ void h2o_quic_tracer::do_handle_event(const void *data, int data_len) {
             len_event_t_name = "%s.%s" % (probe_name, n)
 
         # A string might be truncated in STRLEN
-        handle_event_func += '    json_write_pair_c(out, STR_LIT("%s"), event->%s, (event->%s < STR_LEN ? event->%s : STR_LEN));\n' % (
+        handle_event_func += '    json_write_pair_c(out_, STR_LIT("%s"), event->%s, (event->%s < STR_LEN ? event->%s : STR_LEN));\n' % (
             json_field_name, event_t_name, len_event_t_name, len_event_t_name)
 
     if metadata["provider"] == "h2o":
       if probe_name != "h3_accept":
-        handle_event_func += '    json_write_pair_c(out, STR_LIT("conn"), event->%s.master_id);\n' % (
+        handle_event_func += '    json_write_pair_c(out_, STR_LIT("conn"), event->%s.master_id);\n' % (
             probe_name)
-      handle_event_func += '    json_write_pair_c(out, STR_LIT("time"), time_milliseconds());\n'
+      handle_event_func += '    json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());\n'
 
     handle_event_func += "    break;\n"
     handle_event_func += "  }\n"
@@ -482,7 +482,7 @@ void h2o_quic_tracer::do_handle_event(const void *data, int data_len) {
     std::abort();
   }
 
-  fprintf(out, "}\n");
+  fprintf(out_, "}\n");
 """
   handle_event_func += "}\n"
 

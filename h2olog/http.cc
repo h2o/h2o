@@ -149,25 +149,25 @@ class h2o_http_tracer : public h2o_tracer
 
         switch (ev->type) {
         case HTTP_EVENT_RECEIVE_REQ:
-            fprintf(out, "%" PRIu64 " %" PRIu64 " RxProtocol HTTP/%" PRIu32 ".%" PRIu32 "\n", ev->conn_id, ev->req_id,
+            fprintf(out_, "%" PRIu64 " %" PRIu64 " RxProtocol HTTP/%" PRIu32 ".%" PRIu32 "\n", ev->conn_id, ev->req_id,
                     ev->http_version / 256, ev->http_version % 256);
             break;
         case HTTP_EVENT_SEND_RESP:
-            fprintf(out, "%" PRIu64 " %" PRIu64 " TxStatus   %" PRIu32 "\n", ev->conn_id, ev->req_id, ev->http_status);
+            fprintf(out_, "%" PRIu64 " %" PRIu64 " TxStatus   %" PRIu32 "\n", ev->conn_id, ev->req_id, ev->http_status);
             break;
         case HTTP_EVENT_RECEIVE_REQ_HDR:
         case HTTP_EVENT_SEND_RESP_HDR: {
             int n_len = MIN(ev->header.name_len, MAX_HDR_LEN);
             int v_len = MIN(ev->header.value_len, MAX_HDR_LEN);
             const char *label = (ev->type == HTTP_EVENT_RECEIVE_REQ_HDR) ? "RxHeader" : "TxHeader";
-            fprintf(out, "%" PRIu64 " %" PRIu64 " %s   %.*s %.*s\n", ev->conn_id, ev->req_id, label, n_len, ev->header.name, v_len,
+            fprintf(out_, "%" PRIu64 " %" PRIu64 " %s   %.*s %.*s\n", ev->conn_id, ev->req_id, label, n_len, ev->header.name, v_len,
                     ev->header.value);
         } break;
         case SCHED_PROCESS_EXIT: {
             exit(0);
         } break;
         default:
-            fprintf(out, "unknown event: %u\n", ev->type);
+            fprintf(out_, "unknown event: %u\n", ev->type);
         }
     }
     virtual const std::vector<ebpf::USDT> &init_usdt_probes(pid_t h2o_pid)

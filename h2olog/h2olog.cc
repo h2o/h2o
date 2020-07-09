@@ -83,13 +83,14 @@ uint64_t h2o_tracer::time_milliseconds()
 
 void h2o_tracer::handle_lost(uint64_t lost)
 {
-    fprintf(out,
+    stats_.num_lost += lost;
+    fprintf(out_,
             "{"
             "\"type\":\"h2olog-event-lost\","
             "\"seq\":%" PRIu64 ","
             "\"time\":%" PRIu64 ","
             "\"lost\":%" PRIu64 "}\n",
-            ++seq, time_milliseconds(), lost);
+            seq_, time_milliseconds(), lost);
 }
 
 void h2o_tracer::show_event_per_sec(time_t *t0)
@@ -97,15 +98,15 @@ void h2o_tracer::show_event_per_sec(time_t *t0)
     time_t t1 = time(NULL);
     int64_t d = t1 - *t0;
     if (d > 10) {
-        uint64_t c = stats.num_events / d;
+        uint64_t c = stats_.num_events / d;
         if (c > 0) {
-            if (stats.num_lost > 0) {
-                infof("%20" PRIu64 " events/s (possibly lost %" PRIu64 " events)", c, stats.num_lost);
-                stats.num_lost = 0;
+            if (stats_.num_lost > 0) {
+                infof("%20" PRIu64 " events/s (possibly lost %" PRIu64 " events)", c, stats_.num_lost);
+                stats_.num_lost = 0;
             } else {
                 infof("%20" PRIu64 " events/s", c);
             }
-            stats.num_events = 0;
+            stats_.num_events = 0;
         }
         *t0 = t1;
     }
@@ -180,16 +181,12 @@ static std::string make_pid_cflag(const char *macro_name, pid_t pid)
 static void event_cb(void *context, void *data, int len)
 {
     h2o_tracer *tracer = (h2o_tracer *)context;
-    tracer->stats.num_events++;
-
     tracer->handle_event(data, len);
 }
 
 static void lost_cb(void *context, uint64_t lost)
 {
     h2o_tracer *tracer = (h2o_tracer *)context;
-    tracer->stats.num_lost += lost;
-
     tracer->handle_lost(lost);
 }
 
@@ -204,13 +201,13 @@ int main(int argc, char **argv)
         tracer.reset(create_http_tracer());
     }
 
-    int debug = 0;
-    const char *out_file = nullptr;
+    int debug = 0, is_quic = 1;
+    FILE *outfp = stdout;
     std::vector<std::string> event_type_filters;
     std::vector<std::string> response_header_filters;
     int c;
     pid_t h2o_pid = -1;
-    while ((c = getopt(argc, argv, "hdp:t:s:w:")) != -1) {
+    while ((c = getopt(argc, argv, "hdp:qt:s:w:")) != -1) {
         switch (c) {
         case 'p':
             h2o_pid = atoi(optarg);
@@ -222,10 +219,16 @@ int main(int argc, char **argv)
             response_header_filters.push_back(optarg);
             break;
         case 'w':
-            out_file = optarg;
+            if ((outfp = fopen(optarg, "w")) == nullptr) {
+                fprintf(stderr, "Error: failed to open %s: %s", optarg, strerror(errno));
+                exit(EXIT_FAILURE);
+            }
             break;
         case 'd':
             debug++;
+            break;
+        case 'q':
+            is_quic = 1;
             break;
         case 'h':
             usage();
@@ -253,16 +256,7 @@ int main(int argc, char **argv)
         exit(EXIT_FAILURE);
     }
 
-    if (out_file != nullptr) {
-        FILE *out = fopen(out_file, "w");
-        if (out == nullptr) {
-            fprintf(stderr, "Error: failed to open %s: %s", out_file, strerror(errno));
-            exit(EXIT_FAILURE);
-        }
-        tracer->out = out;
-    } else {
-        tracer->out = stdout;
-    }
+    tracer->init(outfp);
 
     std::vector<std::string> cflags({
         make_pid_cflag("H2OLOG_H2O_PID", h2o_pid),
@@ -319,7 +313,7 @@ int main(int argc, char **argv)
 
         while (true) {
             perf_buffer->poll(POLL_TIMEOUT);
-            fflush(tracer->out);
+            tracer->flush();
 
             if (debug) {
                 tracer->show_event_per_sec(&t0);
