@@ -901,14 +901,13 @@ IF (WITH_H2OLOG)
         "h2olog/http.cc"
         "h2olog/json.h"
         "h2olog/json.cc"
-        "h2olog/quic.h"
         "include/h2o/version.h"
     )
 
     SET(H2OLOG_GEN_DEPS
         "h2o-probes.d"
         "deps/quicly/quicly-probes.d"
-        "h2olog/quic.h"
+        "deps/quicly/include/quicly.h"
     )
 
     ADD_CUSTOM_COMMAND(
