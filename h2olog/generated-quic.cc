@@ -57,7 +57,7 @@ static std::string do_resolve(const char *struct_type, const char *field_name, c
     fprintf(mem, "#define typeof_%s %s\n", name, field_type);
     fprintf(mem, "#define get_%s(st) *((const %s *) ((const char*)st + offsetof_%s))\n", name, field_type, name);
     fprintf(mem, "\n");
-    fclose(mem);
+    fflush(mem);
     std::string s(buff, buff_len);
     fclose(mem);
     return s;
