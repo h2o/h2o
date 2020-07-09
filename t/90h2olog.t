@@ -1,5 +1,5 @@
 use strict;
-use warnings;
+use warnings FATAL => "all";
 use Digest::MD5 qw(md5_hex);
 use File::Temp qw(tempdir);
 use POSIX ":sys_wait_h";
