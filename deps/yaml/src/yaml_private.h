@@ -1,24 +1,12 @@
-
-#define YAML_VERSION_MAJOR 0
-#define YAML_VERSION_MINOR 1
-#define YAML_VERSION_PATCH 7
-#define YAML_VERSION_STRING "0.1.7"
+#if HAVE_CONFIG_H
+#include "config.h"
+#endif
 
 #include <yaml.h>
 
 #include <assert.h>
 #include <limits.h>
 #include <stddef.h>
-
-#ifndef _MSC_VER
-#include <stdint.h>
-#else
-#ifdef _WIN64
-#define PTRDIFF_MAX _I64_MAX
-#else
-#define PTRDIFF_MAX INT_MAX
-#endif
-#endif
 
 /*
  * Memory management.
@@ -79,6 +67,17 @@ yaml_parser_fetch_more_tokens(yaml_parser_t *parser);
 #define OUTPUT_RAW_BUFFER_SIZE  (OUTPUT_BUFFER_SIZE*2+2)
 
 /*
+ * The maximum size of a YAML input file.
+ * This used to be PTRDIFF_MAX, but that's not entirely portable
+ * because stdint.h isn't available on all platforms.
+ * It is not entirely clear why this isn't the maximum value
+ * that can fit into the parser->offset field.
+ */
+
+#define MAX_FILE_SIZE (~(size_t)0 / 2)
+
+
+/*
  * The size of other stacks and queues.
  */
 
@@ -91,7 +90,7 @@ yaml_parser_fetch_more_tokens(yaml_parser_t *parser);
  */
 
 #define BUFFER_INIT(context,buffer,size)                                        \
-    (((buffer).start = yaml_malloc(size)) ?                                     \
+  (((buffer).start = (yaml_char_t *)yaml_malloc(size)) ?                        \
         ((buffer).last = (buffer).pointer = (buffer).start,                     \
          (buffer).end = (buffer).start+(size),                                  \
          1) :                                                                   \
@@ -131,7 +130,7 @@ yaml_string_join(
      (value).pointer = (string))
 
 #define STRING_INIT(context,string,size)                                        \
-    (((string).start = yaml_malloc(size)) ?                                     \
+    (((string).start = YAML_MALLOC(size)) ?                                     \
         ((string).pointer = (string).start,                                     \
          (string).end = (string).start+(size),                                  \
          memset((string).start, 0, (size)),                                     \
@@ -172,14 +171,14 @@ yaml_string_join(
  * Check the octet at the specified position.
  */
 
-#define CHECK_AT(string,octet,offset)                                           \
+#define CHECK_AT(string,octet,offset)                   \
     ((string).pointer[offset] == (yaml_char_t)(octet))
 
 /*
  * Check the current octet in the buffer.
  */
 
-#define CHECK(string,octet) CHECK_AT((string),(octet),0)
+#define CHECK(string,octet) (CHECK_AT((string),(octet),0))
 
 /*
  * Check if the character at the specified position is an alphabetical
@@ -243,9 +242,9 @@ yaml_string_join(
         (string).pointer[offset] <= (yaml_char_t) 'f') ?                        \
        ((string).pointer[offset] - (yaml_char_t) 'a' + 10) :                    \
        ((string).pointer[offset] - (yaml_char_t) '0'))
- 
+
 #define AS_HEX(string)  AS_HEX_AT((string),0)
- 
+
 /*
  * Check if the character is ASCII.
  */
@@ -421,10 +420,10 @@ yaml_stack_extend(void **start, void **top, void **end);
 YAML_DECLARE(int)
 yaml_queue_extend(void **start, void **head, void **tail, void **end);
 
-#define STACK_INIT(context,stack,size)                                          \
-    (((stack).start = yaml_malloc((size)*sizeof(*(stack).start))) ?             \
+#define STACK_INIT(context,stack,type)                                     \
+  (((stack).start = (type)yaml_malloc(INITIAL_STACK_SIZE*sizeof(*(stack).start))) ? \
         ((stack).top = (stack).start,                                           \
-         (stack).end = (stack).start+(size),                                    \
+         (stack).end = (stack).start+INITIAL_STACK_SIZE,                        \
          1) :                                                                   \
         ((context)->error = YAML_MEMORY_ERROR,                                  \
          0))
@@ -454,8 +453,8 @@ yaml_queue_extend(void **start, void **head, void **tail, void **end);
 #define POP(context,stack)                                                      \
     (*(--(stack).top))
 
-#define QUEUE_INIT(context,queue,size)                                          \
-    (((queue).start = yaml_malloc((size)*sizeof(*(queue).start))) ?             \
+#define QUEUE_INIT(context,queue,size,type)                                     \
+  (((queue).start = (type)yaml_malloc((size)*sizeof(*(queue).start))) ?         \
         ((queue).head = (queue).tail = (queue).start,                           \
          (queue).end = (queue).start+(size),                                    \
          1) :                                                                   \
@@ -659,3 +658,27 @@ yaml_queue_extend(void **start, void **head, void **tail, void **end);
      (node).data.mapping.pairs.top = (node_pairs_start),                        \
      (node).data.mapping.style = (node_style))
 
+/* Strict C compiler warning helpers */
+
+#if defined(__clang__) || defined(__GNUC__)
+#  define HASATTRIBUTE_UNUSED
+#endif
+#ifdef HASATTRIBUTE_UNUSED
+#  define __attribute__unused__             __attribute__((__unused__))
+#else
+#  define __attribute__unused__
+#endif
+
+/* Shim arguments are arguments that must be included in your function,
+ * but serve no purpose inside.  Silence compiler warnings. */
+#define SHIM(a) /*@unused@*/ a __attribute__unused__
+
+/* UNUSED_PARAM() marks a shim argument in the body to silence compiler warnings */
+#ifdef __clang__
+#  define UNUSED_PARAM(a) (void)(a);
+#else
+#  define UNUSED_PARAM(a) /*@-noeffect*/if (0) (void)(a)/*@=noeffect*/;
+#endif
+
+#define YAML_MALLOC_STATIC(type) (type*)yaml_malloc(sizeof(type))
+#define YAML_MALLOC(size)        (yaml_char_t *)yaml_malloc(size)

@@ -141,10 +141,10 @@ main(int argc, char *argv[])
                 /* Add 'type': 'STREAM-START'. */
 
                 key = yaml_document_add_scalar(&output_document, NULL,
-                    "type", -1, YAML_PLAIN_SCALAR_STYLE);
+                    (yaml_char_t *)"type", -1, YAML_PLAIN_SCALAR_STYLE);
                 if (!key) goto document_error;
                 value = yaml_document_add_scalar(&output_document, NULL,
-                    "STREAM-START", -1, YAML_PLAIN_SCALAR_STYLE);
+                    (yaml_char_t *)"STREAM-START", -1, YAML_PLAIN_SCALAR_STYLE);
                 if (!value) goto document_error;
                 if (!yaml_document_append_mapping_pair(&output_document,
                             properties, key, value)) goto document_error;
@@ -157,10 +157,10 @@ main(int argc, char *argv[])
                         = input_event.data.stream_start.encoding;
 
                     key = yaml_document_add_scalar(&output_document, NULL,
-                        "encoding", -1, YAML_PLAIN_SCALAR_STYLE);
+                        (yaml_char_t *)"encoding", -1, YAML_PLAIN_SCALAR_STYLE);
                     if (!key) goto document_error;
                     value = yaml_document_add_scalar(&output_document, NULL,
-                            (encoding == YAML_UTF8_ENCODING ? "utf-8" :
+                            (yaml_char_t *)(encoding == YAML_UTF8_ENCODING ? "utf-8" :
                              encoding == YAML_UTF16LE_ENCODING ? "utf-16-le" :
                              encoding == YAML_UTF16BE_ENCODING ? "utf-16-be" :
                              "unknown"), -1, YAML_PLAIN_SCALAR_STYLE);
@@ -176,10 +176,10 @@ main(int argc, char *argv[])
                 /* Add 'type': 'STREAM-END'. */
 
                 key = yaml_document_add_scalar(&output_document, NULL,
-                    "type", -1, YAML_PLAIN_SCALAR_STYLE);
+                    (yaml_char_t *)"type", -1, YAML_PLAIN_SCALAR_STYLE);
                 if (!key) goto document_error;
                 value = yaml_document_add_scalar(&output_document, NULL,
-                    "STREAM-END", -1, YAML_PLAIN_SCALAR_STYLE);
+                    (yaml_char_t *)"STREAM-END", -1, YAML_PLAIN_SCALAR_STYLE);
                 if (!value) goto document_error;
                 if (!yaml_document_append_mapping_pair(&output_document,
                             properties, key, value)) goto document_error;
@@ -191,10 +191,10 @@ main(int argc, char *argv[])
                 /* Add 'type': 'DOCUMENT-START'. */
 
                 key = yaml_document_add_scalar(&output_document, NULL,
-                    "type", -1, YAML_PLAIN_SCALAR_STYLE);
+                    (yaml_char_t *)"type", -1, YAML_PLAIN_SCALAR_STYLE);
                 if (!key) goto document_error;
                 value = yaml_document_add_scalar(&output_document, NULL,
-                    "DOCUMENT-START", -1, YAML_PLAIN_SCALAR_STYLE);
+                    (yaml_char_t *)"DOCUMENT-START", -1, YAML_PLAIN_SCALAR_STYLE);
                 if (!value) goto document_error;
                 if (!yaml_document_append_mapping_pair(&output_document,
                             properties, key, value)) goto document_error;
@@ -210,7 +210,7 @@ main(int argc, char *argv[])
                     /* Add 'version': {}. */
                     
                     key = yaml_document_add_scalar(&output_document, NULL,
-                        "version", -1, YAML_PLAIN_SCALAR_STYLE);
+                        (yaml_char_t *)"version", -1, YAML_PLAIN_SCALAR_STYLE);
                     if (!key) goto document_error;
                     map = yaml_document_add_mapping(&output_document, NULL,
                             YAML_FLOW_MAPPING_STYLE);
@@ -221,11 +221,11 @@ main(int argc, char *argv[])
                     /* Add 'major': <number>. */
 
                     key = yaml_document_add_scalar(&output_document, NULL,
-                        "major", -1, YAML_PLAIN_SCALAR_STYLE);
+                        (yaml_char_t *)"major", -1, YAML_PLAIN_SCALAR_STYLE);
                     if (!key) goto document_error;
                     sprintf(number, "%d", version->major);
-                    value = yaml_document_add_scalar(&output_document, YAML_INT_TAG,
-                        number, -1, YAML_PLAIN_SCALAR_STYLE);
+                    value = yaml_document_add_scalar(&output_document, (yaml_char_t *)YAML_INT_TAG,
+                        (yaml_char_t *)number, -1, YAML_PLAIN_SCALAR_STYLE);
                     if (!value) goto document_error;
                     if (!yaml_document_append_mapping_pair(&output_document,
                                 map, key, value)) goto document_error;
@@ -233,11 +233,11 @@ main(int argc, char *argv[])
                     /* Add 'minor': <number>. */
 
                     key = yaml_document_add_scalar(&output_document, NULL,
-                        "minor", -1, YAML_PLAIN_SCALAR_STYLE);
+                        (yaml_char_t *)"minor", -1, YAML_PLAIN_SCALAR_STYLE);
                     if (!key) goto document_error;
                     sprintf(number, "%d", version->minor);
-                    value = yaml_document_add_scalar(&output_document, YAML_INT_TAG,
-                        number, -1, YAML_PLAIN_SCALAR_STYLE);
+                    value = yaml_document_add_scalar(&output_document, (yaml_char_t *)YAML_INT_TAG,
+                        (yaml_char_t *)number, -1, YAML_PLAIN_SCALAR_STYLE);
                     if (!value) goto document_error;
                     if (!yaml_document_append_mapping_pair(&output_document,
                                 map, key, value)) goto document_error;
@@ -253,7 +253,7 @@ main(int argc, char *argv[])
                     /* Add 'tags': []. */
                     
                     key = yaml_document_add_scalar(&output_document, NULL,
-                        "tags", -1, YAML_PLAIN_SCALAR_STYLE);
+                        (yaml_char_t *)"tags", -1, YAML_PLAIN_SCALAR_STYLE);
                     if (!key) goto document_error;
                     seq = yaml_document_add_sequence(&output_document, NULL,
                             YAML_BLOCK_SEQUENCE_STYLE);
@@ -276,7 +276,7 @@ main(int argc, char *argv[])
                         /* Add 'handle': <handle>. */
 
                         key = yaml_document_add_scalar(&output_document, NULL,
-                            "handle", -1, YAML_PLAIN_SCALAR_STYLE);
+                            (yaml_char_t *)"handle", -1, YAML_PLAIN_SCALAR_STYLE);
                         if (!key) goto document_error;
                         value = yaml_document_add_scalar(&output_document, NULL,
                             tag->handle, -1, YAML_DOUBLE_QUOTED_SCALAR_STYLE);
@@ -287,7 +287,7 @@ main(int argc, char *argv[])
                         /* Add 'prefix': <prefix>. */
 
                         key = yaml_document_add_scalar(&output_document, NULL,
-                            "prefix", -1, YAML_PLAIN_SCALAR_STYLE);
+                            (yaml_char_t *)"prefix", -1, YAML_PLAIN_SCALAR_STYLE);
                         if (!key) goto document_error;
                         value = yaml_document_add_scalar(&output_document, NULL,
                             tag->prefix, -1, YAML_DOUBLE_QUOTED_SCALAR_STYLE);
@@ -300,10 +300,10 @@ main(int argc, char *argv[])
                 /* Add 'implicit': <flag>. */
 
                 key = yaml_document_add_scalar(&output_document, NULL,
-                    "implicit", -1, YAML_PLAIN_SCALAR_STYLE);
+                    (yaml_char_t *)"implicit", -1, YAML_PLAIN_SCALAR_STYLE);
                 if (!key) goto document_error;
-                value = yaml_document_add_scalar(&output_document, YAML_BOOL_TAG,
-                        (input_event.data.document_start.implicit ?
+                value = yaml_document_add_scalar(&output_document, (yaml_char_t *)YAML_BOOL_TAG,
+                        (yaml_char_t *)(input_event.data.document_start.implicit ?
                          "true" : "false"), -1, YAML_PLAIN_SCALAR_STYLE);
                 if (!value) goto document_error;
                 if (!yaml_document_append_mapping_pair(&output_document,
@@ -316,10 +316,10 @@ main(int argc, char *argv[])
                 /* Add 'type': 'DOCUMENT-END'. */
 
                 key = yaml_document_add_scalar(&output_document, NULL,
-                    "type", -1, YAML_PLAIN_SCALAR_STYLE);
+                    (yaml_char_t *)"type", -1, YAML_PLAIN_SCALAR_STYLE);
                 if (!key) goto document_error;
                 value = yaml_document_add_scalar(&output_document, NULL,
-                    "DOCUMENT-END", -1, YAML_PLAIN_SCALAR_STYLE);
+                    (yaml_char_t *)"DOCUMENT-END", -1, YAML_PLAIN_SCALAR_STYLE);
                 if (!value) goto document_error;
                 if (!yaml_document_append_mapping_pair(&output_document,
                             properties, key, value)) goto document_error;
@@ -327,10 +327,10 @@ main(int argc, char *argv[])
                 /* Add 'implicit': <flag>. */
 
                 key = yaml_document_add_scalar(&output_document, NULL,
-                    "implicit", -1, YAML_PLAIN_SCALAR_STYLE);
+                    (yaml_char_t *)"implicit", -1, YAML_PLAIN_SCALAR_STYLE);
                 if (!key) goto document_error;
-                value = yaml_document_add_scalar(&output_document, YAML_BOOL_TAG,
-                        (input_event.data.document_end.implicit ?
+                value = yaml_document_add_scalar(&output_document, (yaml_char_t *)YAML_BOOL_TAG,
+                        (yaml_char_t *)(input_event.data.document_end.implicit ?
                          "true" : "false"), -1, YAML_PLAIN_SCALAR_STYLE);
                 if (!value) goto document_error;
                 if (!yaml_document_append_mapping_pair(&output_document,
@@ -343,10 +343,10 @@ main(int argc, char *argv[])
                 /* Add 'type': 'ALIAS'. */
 
                 key = yaml_document_add_scalar(&output_document, NULL,
-                    "type", -1, YAML_PLAIN_SCALAR_STYLE);
+                    (yaml_char_t *)"type", -1, YAML_PLAIN_SCALAR_STYLE);
                 if (!key) goto document_error;
                 value = yaml_document_add_scalar(&output_document, NULL,
-                    "ALIAS", -1, YAML_PLAIN_SCALAR_STYLE);
+                    (yaml_char_t *)"ALIAS", -1, YAML_PLAIN_SCALAR_STYLE);
                 if (!value) goto document_error;
                 if (!yaml_document_append_mapping_pair(&output_document,
                             properties, key, value)) goto document_error;
@@ -354,7 +354,7 @@ main(int argc, char *argv[])
                 /* Add 'anchor': <anchor>. */
 
                 key = yaml_document_add_scalar(&output_document, NULL,
-                    "anchor", -1, YAML_PLAIN_SCALAR_STYLE);
+                    (yaml_char_t *)"anchor", -1, YAML_PLAIN_SCALAR_STYLE);
                 if (!key) goto document_error;
                 value = yaml_document_add_scalar(&output_document, NULL,
                         input_event.data.alias.anchor, -1,
@@ -370,10 +370,10 @@ main(int argc, char *argv[])
                 /* Add 'type': 'SCALAR'. */
 
                 key = yaml_document_add_scalar(&output_document, NULL,
-                    "type", -1, YAML_PLAIN_SCALAR_STYLE);
+                    (yaml_char_t *)"type", -1, YAML_PLAIN_SCALAR_STYLE);
                 if (!key) goto document_error;
                 value = yaml_document_add_scalar(&output_document, NULL,
-                    "SCALAR", -1, YAML_PLAIN_SCALAR_STYLE);
+                    (yaml_char_t *)"SCALAR", -1, YAML_PLAIN_SCALAR_STYLE);
                 if (!value) goto document_error;
                 if (!yaml_document_append_mapping_pair(&output_document,
                             properties, key, value)) goto document_error;
@@ -383,7 +383,7 @@ main(int argc, char *argv[])
                 if (input_event.data.scalar.anchor)
                 {
                     key = yaml_document_add_scalar(&output_document, NULL,
-                        "anchor", -1, YAML_PLAIN_SCALAR_STYLE);
+                        (yaml_char_t *)"anchor", -1, YAML_PLAIN_SCALAR_STYLE);
                     if (!key) goto document_error;
                     value = yaml_document_add_scalar(&output_document, NULL,
                             input_event.data.scalar.anchor, -1,
@@ -398,7 +398,7 @@ main(int argc, char *argv[])
                 if (input_event.data.scalar.tag)
                 {
                     key = yaml_document_add_scalar(&output_document, NULL,
-                        "tag", -1, YAML_PLAIN_SCALAR_STYLE);
+                        (yaml_char_t *)"tag", -1, YAML_PLAIN_SCALAR_STYLE);
                     if (!key) goto document_error;
                     value = yaml_document_add_scalar(&output_document, NULL,
                             input_event.data.scalar.tag, -1,
@@ -411,7 +411,7 @@ main(int argc, char *argv[])
                 /* Add 'value': <value>. */
 
                 key = yaml_document_add_scalar(&output_document, NULL,
-                    "value", -1, YAML_PLAIN_SCALAR_STYLE);
+                    (yaml_char_t *)"value", -1, YAML_PLAIN_SCALAR_STYLE);
                 if (!key) goto document_error;
                 value = yaml_document_add_scalar(&output_document, NULL,
                         input_event.data.scalar.value,
@@ -426,7 +426,7 @@ main(int argc, char *argv[])
                 /* Add 'implicit': {} */
 
                 key = yaml_document_add_scalar(&output_document, NULL,
-                    "version", -1, YAML_PLAIN_SCALAR_STYLE);
+                    (yaml_char_t *)"version", -1, YAML_PLAIN_SCALAR_STYLE);
                 if (!key) goto document_error;
                 map = yaml_document_add_mapping(&output_document, NULL,
                         YAML_FLOW_MAPPING_STYLE);
@@ -437,10 +437,10 @@ main(int argc, char *argv[])
                 /* Add 'plain': <flag>. */
 
                 key = yaml_document_add_scalar(&output_document, NULL,
-                    "plain", -1, YAML_PLAIN_SCALAR_STYLE);
+                    (yaml_char_t *)"plain", -1, YAML_PLAIN_SCALAR_STYLE);
                 if (!key) goto document_error;
-                value = yaml_document_add_scalar(&output_document, YAML_BOOL_TAG,
-                        (input_event.data.scalar.plain_implicit ?
+                value = yaml_document_add_scalar(&output_document, (yaml_char_t *)YAML_BOOL_TAG,
+                        (yaml_char_t *)(input_event.data.scalar.plain_implicit ?
                          "true" : "false"), -1, YAML_PLAIN_SCALAR_STYLE);
                 if (!value) goto document_error;
                 if (!yaml_document_append_mapping_pair(&output_document,
@@ -449,10 +449,10 @@ main(int argc, char *argv[])
                 /* Add 'quoted': <flag>. */
 
                 key = yaml_document_add_scalar(&output_document, NULL,
-                    "quoted", -1, YAML_PLAIN_SCALAR_STYLE);
+                    (yaml_char_t *)"quoted", -1, YAML_PLAIN_SCALAR_STYLE);
                 if (!key) goto document_error;
-                value = yaml_document_add_scalar(&output_document, YAML_BOOL_TAG,
-                        (input_event.data.scalar.quoted_implicit ?
+                value = yaml_document_add_scalar(&output_document, (yaml_char_t *)YAML_BOOL_TAG,
+                        (yaml_char_t *)(input_event.data.scalar.quoted_implicit ?
                          "true" : "false"), -1, YAML_PLAIN_SCALAR_STYLE);
                 if (!value) goto document_error;
                 if (!yaml_document_append_mapping_pair(&output_document,
@@ -467,10 +467,10 @@ main(int argc, char *argv[])
                     /* Add 'style': <style>. */
 
                     key = yaml_document_add_scalar(&output_document, NULL,
-                        "style", -1, YAML_PLAIN_SCALAR_STYLE);
+                        (yaml_char_t *)"style", -1, YAML_PLAIN_SCALAR_STYLE);
                     if (!key) goto document_error;
                     value = yaml_document_add_scalar(&output_document, NULL,
-                            (style == YAML_PLAIN_SCALAR_STYLE ? "plain" :
+                            (yaml_char_t *)(style == YAML_PLAIN_SCALAR_STYLE ? "plain" :
                              style == YAML_SINGLE_QUOTED_SCALAR_STYLE ?
                                     "single-quoted" :
                              style == YAML_DOUBLE_QUOTED_SCALAR_STYLE ?
@@ -490,10 +490,10 @@ main(int argc, char *argv[])
                 /* Add 'type': 'SEQUENCE-START'. */
 
                 key = yaml_document_add_scalar(&output_document, NULL,
-                    "type", -1, YAML_PLAIN_SCALAR_STYLE);
+                    (yaml_char_t *)"type", -1, YAML_PLAIN_SCALAR_STYLE);
                 if (!key) goto document_error;
                 value = yaml_document_add_scalar(&output_document, NULL,
-                    "SEQUENCE-START", -1, YAML_PLAIN_SCALAR_STYLE);
+                    (yaml_char_t *)"SEQUENCE-START", -1, YAML_PLAIN_SCALAR_STYLE);
                 if (!value) goto document_error;
                 if (!yaml_document_append_mapping_pair(&output_document,
                             properties, key, value)) goto document_error;
@@ -503,7 +503,7 @@ main(int argc, char *argv[])
                 if (input_event.data.sequence_start.anchor)
                 {
                     key = yaml_document_add_scalar(&output_document, NULL,
-                        "anchor", -1, YAML_PLAIN_SCALAR_STYLE);
+                        (yaml_char_t *)"anchor", -1, YAML_PLAIN_SCALAR_STYLE);
                     if (!key) goto document_error;
                     value = yaml_document_add_scalar(&output_document, NULL,
                             input_event.data.sequence_start.anchor, -1,
@@ -518,7 +518,7 @@ main(int argc, char *argv[])
                 if (input_event.data.sequence_start.tag)
                 {
                     key = yaml_document_add_scalar(&output_document, NULL,
-                        "tag", -1, YAML_PLAIN_SCALAR_STYLE);
+                        (yaml_char_t *)"tag", -1, YAML_PLAIN_SCALAR_STYLE);
                     if (!key) goto document_error;
                     value = yaml_document_add_scalar(&output_document, NULL,
                             input_event.data.sequence_start.tag, -1,
@@ -531,10 +531,10 @@ main(int argc, char *argv[])
                 /* Add 'implicit': <flag>. */
 
                 key = yaml_document_add_scalar(&output_document, NULL,
-                    "implicit", -1, YAML_PLAIN_SCALAR_STYLE);
+                    (yaml_char_t *)"implicit", -1, YAML_PLAIN_SCALAR_STYLE);
                 if (!key) goto document_error;
-                value = yaml_document_add_scalar(&output_document, YAML_BOOL_TAG,
-                        (input_event.data.sequence_start.implicit ?
+                value = yaml_document_add_scalar(&output_document, (yaml_char_t *)YAML_BOOL_TAG,
+                        (yaml_char_t *)(input_event.data.sequence_start.implicit ?
                          "true" : "false"), -1, YAML_PLAIN_SCALAR_STYLE);
                 if (!value) goto document_error;
                 if (!yaml_document_append_mapping_pair(&output_document,
@@ -550,10 +550,10 @@ main(int argc, char *argv[])
                     /* Add 'style': <style>. */
 
                     key = yaml_document_add_scalar(&output_document, NULL,
-                        "style", -1, YAML_PLAIN_SCALAR_STYLE);
+                        (yaml_char_t *)"style", -1, YAML_PLAIN_SCALAR_STYLE);
                     if (!key) goto document_error;
                     value = yaml_document_add_scalar(&output_document, NULL,
-                            (style == YAML_BLOCK_SEQUENCE_STYLE ? "block" :
+                            (yaml_char_t *)(style == YAML_BLOCK_SEQUENCE_STYLE ? "block" :
                              style == YAML_FLOW_SEQUENCE_STYLE ? "flow" :
                              "unknown"), -1, YAML_PLAIN_SCALAR_STYLE);
                     if (!value) goto document_error;
@@ -568,10 +568,10 @@ main(int argc, char *argv[])
                 /* Add 'type': 'SEQUENCE-END'. */
 
                 key = yaml_document_add_scalar(&output_document, NULL,
-                    "type", -1, YAML_PLAIN_SCALAR_STYLE);
+                    (yaml_char_t *)"type", -1, YAML_PLAIN_SCALAR_STYLE);
                 if (!key) goto document_error;
                 value = yaml_document_add_scalar(&output_document, NULL,
-                    "SEQUENCE-END", -1, YAML_PLAIN_SCALAR_STYLE);
+                    (yaml_char_t *)"SEQUENCE-END", -1, YAML_PLAIN_SCALAR_STYLE);
                 if (!value) goto document_error;
                 if (!yaml_document_append_mapping_pair(&output_document,
                             properties, key, value)) goto document_error;
@@ -583,10 +583,10 @@ main(int argc, char *argv[])
                 /* Add 'type': 'MAPPING-START'. */
 
                 key = yaml_document_add_scalar(&output_document, NULL,
-                    "type", -1, YAML_PLAIN_SCALAR_STYLE);
+                    (yaml_char_t *)"type", -1, YAML_PLAIN_SCALAR_STYLE);
                 if (!key) goto document_error;
                 value = yaml_document_add_scalar(&output_document, NULL,
-                    "MAPPING-START", -1, YAML_PLAIN_SCALAR_STYLE);
+                    (yaml_char_t *)"MAPPING-START", -1, YAML_PLAIN_SCALAR_STYLE);
                 if (!value) goto document_error;
                 if (!yaml_document_append_mapping_pair(&output_document,
                             properties, key, value)) goto document_error;
@@ -596,7 +596,7 @@ main(int argc, char *argv[])
                 if (input_event.data.mapping_start.anchor)
                 {
                     key = yaml_document_add_scalar(&output_document, NULL,
-                        "anchor", -1, YAML_PLAIN_SCALAR_STYLE);
+                        (yaml_char_t *)"anchor", -1, YAML_PLAIN_SCALAR_STYLE);
                     if (!key) goto document_error;
                     value = yaml_document_add_scalar(&output_document, NULL,
                             input_event.data.mapping_start.anchor, -1,
@@ -611,7 +611,7 @@ main(int argc, char *argv[])
                 if (input_event.data.mapping_start.tag)
                 {
                     key = yaml_document_add_scalar(&output_document, NULL,
-                        "tag", -1, YAML_PLAIN_SCALAR_STYLE);
+                        (yaml_char_t *)"tag", -1, YAML_PLAIN_SCALAR_STYLE);
                     if (!key) goto document_error;
                     value = yaml_document_add_scalar(&output_document, NULL,
                             input_event.data.mapping_start.tag, -1,
@@ -624,10 +624,10 @@ main(int argc, char *argv[])
                 /* Add 'implicit': <flag>. */
 
                 key = yaml_document_add_scalar(&output_document, NULL,
-                    "implicit", -1, YAML_PLAIN_SCALAR_STYLE);
+                    (yaml_char_t *)"implicit", -1, YAML_PLAIN_SCALAR_STYLE);
                 if (!key) goto document_error;
-                value = yaml_document_add_scalar(&output_document, YAML_BOOL_TAG,
-                        (input_event.data.mapping_start.implicit ?
+                value = yaml_document_add_scalar(&output_document, (yaml_char_t *)YAML_BOOL_TAG,
+                        (yaml_char_t *)(input_event.data.mapping_start.implicit ?
                          "true" : "false"), -1, YAML_PLAIN_SCALAR_STYLE);
                 if (!value) goto document_error;
                 if (!yaml_document_append_mapping_pair(&output_document,
@@ -635,18 +635,18 @@ main(int argc, char *argv[])
 
                 /* Display the style information. */
 
-                if (input_event.data.sequence_start.style)
+                if (input_event.data.mapping_start.style)
                 {
-                    yaml_sequence_style_t style
+                    yaml_mapping_style_t style
                         = input_event.data.mapping_start.style;
 
                     /* Add 'style': <style>. */
 
                     key = yaml_document_add_scalar(&output_document, NULL,
-                        "style", -1, YAML_PLAIN_SCALAR_STYLE);
+                        (yaml_char_t *)"style", -1, YAML_PLAIN_SCALAR_STYLE);
                     if (!key) goto document_error;
                     value = yaml_document_add_scalar(&output_document, NULL,
-                            (style == YAML_BLOCK_MAPPING_STYLE ? "block" :
+                            (yaml_char_t *)(style == YAML_BLOCK_MAPPING_STYLE ? "block" :
                              style == YAML_FLOW_MAPPING_STYLE ? "flow" :
                              "unknown"), -1, YAML_PLAIN_SCALAR_STYLE);
                     if (!value) goto document_error;
@@ -661,10 +661,10 @@ main(int argc, char *argv[])
                 /* Add 'type': 'MAPPING-END'. */
 
                 key = yaml_document_add_scalar(&output_document, NULL,
-                    "type", -1, YAML_PLAIN_SCALAR_STYLE);
+                    (yaml_char_t *)"type", -1, YAML_PLAIN_SCALAR_STYLE);
                 if (!key) goto document_error;
                 value = yaml_document_add_scalar(&output_document, NULL,
-                    "MAPPING-END", -1, YAML_PLAIN_SCALAR_STYLE);
+                    (yaml_char_t *)"MAPPING-END", -1, YAML_PLAIN_SCALAR_STYLE);
                 if (!value) goto document_error;
                 if (!yaml_document_append_mapping_pair(&output_document,
                             properties, key, value)) goto document_error;
@@ -703,25 +703,25 @@ parser_error:
 
         case YAML_READER_ERROR:
             if (parser.problem_value != -1) {
-                fprintf(stderr, "Reader error: %s: #%X at %d\n", parser.problem,
+                fprintf(stderr, "Reader error: %s: #%X at %zd\n", parser.problem,
                         parser.problem_value, parser.problem_offset);
             }
             else {
-                fprintf(stderr, "Reader error: %s at %d\n", parser.problem,
+                fprintf(stderr, "Reader error: %s at %zd\n", parser.problem,
                         parser.problem_offset);
             }
             break;
 
         case YAML_SCANNER_ERROR:
             if (parser.context) {
-                fprintf(stderr, "Scanner error: %s at line %d, column %d\n"
-                        "%s at line %d, column %d\n", parser.context,
+                fprintf(stderr, "Scanner error: %s at line %lu, column %lu\n"
+                        "%s at line %lu, column %lu\n", parser.context,
                         parser.context_mark.line+1, parser.context_mark.column+1,
                         parser.problem, parser.problem_mark.line+1,
                         parser.problem_mark.column+1);
             }
             else {
-                fprintf(stderr, "Scanner error: %s at line %d, column %d\n",
+                fprintf(stderr, "Scanner error: %s at line %lu, column %lu\n",
                         parser.problem, parser.problem_mark.line+1,
                         parser.problem_mark.column+1);
             }
@@ -729,14 +729,14 @@ parser_error:
 
         case YAML_PARSER_ERROR:
             if (parser.context) {
-                fprintf(stderr, "Parser error: %s at line %d, column %d\n"
-                        "%s at line %d, column %d\n", parser.context,
+                fprintf(stderr, "Parser error: %s at line %lu, column %lu\n"
+                        "%s at line %lu, column %lu\n", parser.context,
                         parser.context_mark.line+1, parser.context_mark.column+1,
                         parser.problem, parser.problem_mark.line+1,
                         parser.problem_mark.column+1);
             }
             else {
-                fprintf(stderr, "Parser error: %s at line %d, column %d\n",
+                fprintf(stderr, "Parser error: %s at line %lu, column %lu\n",
                         parser.problem, parser.problem_mark.line+1,
                         parser.problem_mark.column+1);
             }
