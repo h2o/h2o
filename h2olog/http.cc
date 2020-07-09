@@ -143,6 +143,7 @@ typedef struct st_http_event_t {
 
 class h2o_http_tracer : public h2o_tracer
 {
+  protected:
     virtual void do_handle_event(const void *data, int len)
     {
         const http_event_t *ev = (const http_event_t *)data;
@@ -170,6 +171,12 @@ class h2o_http_tracer : public h2o_tracer
             fprintf(out_, "unknown event: %u\n", ev->type);
         }
     }
+    virtual void do_handle_lost(uint64_t lost)
+    {
+        fprintf(stderr, "Possibly lost %" PRIu64 " events\n", lost);
+    }
+
+  public:
     virtual const std::vector<ebpf::USDT> &init_usdt_probes(pid_t h2o_pid)
     {
         static const std::vector<ebpf::USDT> vec{

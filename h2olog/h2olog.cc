@@ -81,18 +81,6 @@ uint64_t h2o_tracer::time_milliseconds()
     return (int64_t)tv.tv_sec * 1000 + tv.tv_usec / 1000;
 }
 
-void h2o_tracer::handle_lost(uint64_t lost)
-{
-    stats_.num_lost += lost;
-    fprintf(out_,
-            "{"
-            "\"type\":\"h2olog-event-lost\","
-            "\"seq\":%" PRIu64 ","
-            "\"time\":%" PRIu64 ","
-            "\"lost\":%" PRIu64 "}\n",
-            seq_, time_milliseconds(), lost);
-}
-
 void h2o_tracer::show_event_per_sec(time_t *t0)
 {
     time_t t1 = time(NULL);

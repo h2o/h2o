@@ -505,8 +505,11 @@ void h2o_quic_tracer::do_handle_event(const void *data, int data_len) {
 #define STR_LEN 64
 #define STR_LIT(s) s, strlen(s)
 
-struct h2o_quic_tracer : public h2o_tracer {
+class h2o_quic_tracer : public h2o_tracer {
+protected:
   virtual void do_handle_event(const void *data, int len);
+  virtual void do_handle_lost(uint64_t lost);
+public:
   virtual const std::vector<ebpf::USDT> &init_usdt_probes(pid_t h2o_pid);
   virtual std::string bpf_text();
 };
@@ -516,6 +519,17 @@ struct h2o_quic_tracer : public h2o_tracer {
 %s
 %s
 %s
+
+void h2o_quic_tracer::do_handle_lost(uint64_t lost)
+{
+  fprintf(out_,
+          "{"
+          "\"type\":\"h2olog-event-lost\","
+          "\"seq\":%%" PRIu64 ","
+          "\"time\":%%" PRIu64 ","
+          "\"lost\":%%" PRIu64 "}\n",
+          seq_, time_milliseconds(), lost);
+}
 
 std::string h2o_quic_tracer::bpf_text() {
   return gen_quic_bpf_header() + R"(

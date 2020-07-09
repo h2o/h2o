@@ -54,6 +54,10 @@ class h2o_tracer
      * The stub function for handling an event.
      */
     virtual void do_handle_event(const void *data, int len) = 0;
+    /**
+     * The stub function for handling a loss event.
+     */
+    virtual void do_handle_lost(uint64_t lost) = 0;
 
   public:
     /**
@@ -83,7 +87,11 @@ class h2o_tracer
     /**
      * Handles an event data lost.
      */
-    void handle_lost(uint64_t lost);
+    void handle_lost(uint64_t lost)
+    {
+        stats_.num_lost += lost;
+        do_handle_lost(lost);
+    }
     /**
      * Returns a vector of relevant USDT probes.
      */
