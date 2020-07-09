@@ -684,7 +684,7 @@ static void on_connection_ready(struct st_h2o_http1client_t *client)
         return;
     }
 
-    h2o_iovec_t reqbufs[4];
+    h2o_iovec_t reqbufs[5]; /* 5 should be the maximum possible elements used */
     size_t reqbufcnt = 0;
     if (props.proxy_protocol->base != NULL)
         reqbufs[reqbufcnt++] = *props.proxy_protocol;
@@ -708,7 +708,7 @@ static void on_connection_ready(struct st_h2o_http1client_t *client)
         if (client->_is_chunked) {
             assert(body.base != NULL);
             size_t bytes;
-            assert(PTLS_ELEMENTSOF(reqbufs) - reqbufcnt >= 3);
+            assert(PTLS_ELEMENTSOF(reqbufs) - reqbufcnt >= 3); /* encode_chunk could write to 3 additional elements */
             reqbufcnt += encode_chunk(client, reqbufs + reqbufcnt, body, &bytes);
             client->super.bytes_written.body = bytes;
         } else if (body.base != NULL) {
