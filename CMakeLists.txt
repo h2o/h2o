@@ -336,6 +336,7 @@ SET(LIB_SOURCE_FILES
     deps/quicly/lib/defaults.c
     deps/quicly/lib/frame.c
     deps/quicly/lib/local_cid.c
+    deps/quicly/lib/loss.c
     deps/quicly/lib/quicly.c
     deps/quicly/lib/ranges.c
     deps/quicly/lib/recvstate.c

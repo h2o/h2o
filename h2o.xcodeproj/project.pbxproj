@@ -474,6 +474,9 @@
 		E98884D821E7F3D90060F010 /* sendstate.c in Sources */ = {isa = PBXBuildFile; fileRef = E98884CD21E7F3C80060F010 /* sendstate.c */; };
 		E98884D921E7F3D90060F010 /* sentmap.c in Sources */ = {isa = PBXBuildFile; fileRef = E98884CC21E7F3C80060F010 /* sentmap.c */; };
 		E98884DA21E7F3D90060F010 /* streambuf.c in Sources */ = {isa = PBXBuildFile; fileRef = E98884CB21E7F3C80060F010 /* streambuf.c */; };
+		E9A8351524B1340D007D06C2 /* loss.c in Sources */ = {isa = PBXBuildFile; fileRef = E9A8351424B1340C007D06C2 /* loss.c */; };
+		E9A8351624B13417007D06C2 /* loss.c in Sources */ = {isa = PBXBuildFile; fileRef = E9A8351424B1340C007D06C2 /* loss.c */; };
+		E9A8351724B13417007D06C2 /* loss.c in Sources */ = {isa = PBXBuildFile; fileRef = E9A8351424B1340C007D06C2 /* loss.c */; };
 		E9BCE68A1FF0CF85003CEA11 /* timerwheel.h in Headers */ = {isa = PBXBuildFile; fileRef = E9BCE6891FF0CF84003CEA11 /* timerwheel.h */; };
 		E9BCE68C1FF0CF98003CEA11 /* timerwheel.c in Sources */ = {isa = PBXBuildFile; fileRef = E9BCE68B1FF0CF98003CEA11 /* timerwheel.c */; };
 		E9BCE68D1FF0CFBB003CEA11 /* timerwheel.c in Sources */ = {isa = PBXBuildFile; fileRef = E9BCE68B1FF0CF98003CEA11 /* timerwheel.c */; };
@@ -1184,6 +1187,7 @@
 		E9A410951F9EA2E400D9B0FB /* 50reverse-proxy-multiple-backends-with-down.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "50reverse-proxy-multiple-backends-with-down.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		E9A410961F9EA2F100D9B0FB /* 50reverse-proxy-multiple-backends.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "50reverse-proxy-multiple-backends.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		E9A410971F9EA2F200D9B0FB /* 50reverse-proxy-round-robin.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "50reverse-proxy-round-robin.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		E9A8351424B1340C007D06C2 /* loss.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = loss.c; sourceTree = "<group>"; };
 		E9AFBF10212A97AD000F5DB8 /* 50mruby-redis.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "50mruby-redis.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		E9AFBF11212A9801000F5DB8 /* 50date-header.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "50date-header.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		E9AFBF12212A9801000F5DB8 /* 50file-custom-handler.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "50file-custom-handler.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
@@ -2299,6 +2303,7 @@
 				E980423C2246304F008B9745 /* defaults.c */,
 				E901C3F0213E1C4000D17C93 /* frame.c */,
 				E98403C62485172E00E3A6B1 /* local_cid.c */,
+				E9A8351424B1340C007D06C2 /* loss.c */,
 				E901C3F3213E1C4000D17C93 /* quicly.c */,
 				E901C3F2213E1C4000D17C93 /* ranges.c */,
 				E98884CE21E7F3C80060F010 /* recvstate.c */,
@@ -3058,6 +3063,7 @@
 				0812AB2B1D7FD54700004F23 /* read.c in Sources */,
 				107923C319A3217300C52AD6 /* file.c in Sources */,
 				106C22F81C040F6400405689 /* tunnel.c in Sources */,
+				E9A8351524B1340D007D06C2 /* loss.c in Sources */,
 				107923CD19A3217300C52AD6 /* memory.c in Sources */,
 				107923CC19A3217300C52AD6 /* context.c in Sources */,
 				10C45D561CFE9B300096DB06 /* requests.c in Sources */,
@@ -3243,6 +3249,7 @@
 				107D4D4A1B5880BC004A9B21 /* reader.c in Sources */,
 				E980423E22463057008B9745 /* defaults.c in Sources */,
 				1079244819A3265C00C52AD6 /* connection.c in Sources */,
+				E9A8351624B13417007D06C2 /* loss.c in Sources */,
 				1079244119A3264300C52AD6 /* picohttpparser.c in Sources */,
 				106530A71D82C0A6005B2C60 /* percent-encode-zero-byte.c in Sources */,
 				7DD70D79210F2EC400727A17 /* httpclient.c in Sources */,
@@ -3441,6 +3448,7 @@
 				E987E5D21FD7BE9500DE4346 /* memory.c in Sources */,
 				E987E5DE1FD7BEB500DE4346 /* entropy_encode.c in Sources */,
 				E987E5DD1FD7BEB500DE4346 /* encode.c in Sources */,
+				E9A8351724B13417007D06C2 /* loss.c in Sources */,
 				E9708B521E52C7E50029E0A5 /* url.c in Sources */,
 				E9708B271E49BAE10029E0A5 /* sha256.c in Sources */,
 				E9708B571E52C7EE0029E0A5 /* logconf.c in Sources */,
