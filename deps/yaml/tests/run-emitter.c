@@ -139,7 +139,7 @@ int compare_events(yaml_event_t *event1, yaml_event_t *event2)
                         event1->data.scalar.length) != 0)
                 return 0;
             if ((event1->data.scalar.plain_implicit != event2->data.scalar.plain_implicit)
-                    || (event2->data.scalar.quoted_implicit != event2->data.scalar.quoted_implicit)
+                    || (event1->data.scalar.quoted_implicit != event2->data.scalar.quoted_implicit)
                     /* || (event2->data.scalar.style != event2->data.scalar.style) */)
                 return 0;
             return 1;
@@ -205,8 +205,8 @@ int print_output(char *name, unsigned char *buffer, size_t size, int count)
         if (feof(file)) break;
     }
     fclose(file);
-    printf("#### (length: %d)\n", total_size);
-    printf("OUTPUT:\n%s#### (length: %d)\n", buffer, size);
+    printf("#### (length: %ld)\n", (long)total_size);
+    printf("OUTPUT:\n%s#### (length: %ld)\n", buffer, (long)size);
     return 0;
 }
 
@@ -319,7 +319,7 @@ main(int argc, char *argv[])
             yaml_event_delete(events+k);
         }
 
-        printf("PASSED (length: %d)\n", written);
+        printf("PASSED (length: %ld)\n", (long)written);
         print_output(argv[number], buffer, written, -1);
     }
 
