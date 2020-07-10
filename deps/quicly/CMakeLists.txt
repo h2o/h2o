@@ -50,28 +50,30 @@ SET(QUICLY_LIBRARY_FILES
     lib/frame.c
     lib/cc-reno.c
     lib/defaults.c
+    lib/local_cid.c
+    lib/loss.c
     lib/quicly.c
     lib/ranges.c
     lib/recvstate.c
+    lib/remote_cid.c
+    lib/retire_cid.c
     lib/sendstate.c
     lib/sentmap.c
-    lib/streambuf.c
-    lib/remote_cid.c
-    lib/local_cid.c
-    lib/retire_cid.c)
+    lib/streambuf.c)
 
 SET(UNITTEST_SOURCE_FILES
     deps/picotest/picotest.c
     t/frame.c
-    t/maxsender.c
+    t/local_cid.c
     t/loss.c
+    t/lossy.c
+    t/maxsender.c
     t/ranges.c
+    t/remote_cid.c
+    t/retire_cid.c
     t/sentmap.c
     t/simple.c
     t/stream-concurrency.c
-    t/remote_cid.c
-    t/local_cid.c
-    t/retire_cid.c
     t/test.c)
 
 IF (WITH_DTRACE)

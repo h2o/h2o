@@ -56,7 +56,7 @@ static void test_handshake(void)
     ok(ret == 0);
     ok(num_packets != 0);
 
-    /* receive ServerFinished */
+    /* receive server flight upto ServerFinished, send ClientFinished */
     num_decoded = decode_packets(decoded, packets, num_packets);
     for (i = 0; i != num_decoded; ++i) {
         ret = quicly_receive(client, NULL, &fake_address.sa, decoded + i);
@@ -64,6 +64,50 @@ static void test_handshake(void)
     }
     ok(quicly_get_state(client) == QUICLY_STATE_CONNECTED);
     ok(quicly_connection_is_ready(client));
+    num_packets = PTLS_ELEMENTSOF(packets);
+    ret = quicly_send(client, &dest, &src, packets, &num_packets, packetsbuf, sizeof(packetsbuf));
+    ok(ret == 0);
+    ok(num_packets != 0);
+    ok(ptls_handshake_is_complete(quicly_get_tls(client)));
+
+    /* receive ClientFinished, send HANDSHAKE_DONE */
+    num_decoded = decode_packets(decoded, packets, num_packets);
+    for (i = 0; i != num_decoded; ++i) {
+        ret = quicly_receive(server, NULL, &fake_address.sa, decoded + i);
+        ok(ret == 0);
+    }
+    ok(quicly_get_state(server) == QUICLY_STATE_CONNECTED);
+    ok(ptls_handshake_is_complete(quicly_get_tls(server)));
+    num_packets = PTLS_ELEMENTSOF(packets);
+    ret = quicly_send(server, &dest, &src, packets, &num_packets, packetsbuf, sizeof(packetsbuf));
+    ok(ret == 0);
+    ok(num_packets != 0);
+
+    /* receive HANDSHAKE_DONE, send ACK (after delay) */
+    num_decoded = decode_packets(decoded, packets, num_packets);
+    for (i = 0; i != num_decoded; ++i) {
+        ret = quicly_receive(client, NULL, &fake_address.sa, decoded + i);
+        ok(ret == 0);
+    }
+    ok(quicly_get_state(client) == QUICLY_STATE_CONNECTED);
+    ok(quicly_get_first_timeout(client) == quic_now + QUICLY_DELAYED_ACK_TIMEOUT);
+    quic_now = quicly_get_first_timeout(client);
+    num_packets = PTLS_ELEMENTSOF(packets);
+    ret = quicly_send(client, &dest, &src, packets, &num_packets, packetsbuf, sizeof(packetsbuf));
+    ok(ret == 0);
+    ok(num_packets != 0);
+
+    /* receive ACK */
+    num_decoded = decode_packets(decoded, packets, num_packets);
+    for (i = 0; i != num_decoded; ++i) {
+        ret = quicly_receive(server, NULL, &fake_address.sa, decoded + i);
+        ok(ret == 0);
+    }
+    ok(quicly_get_state(server) == QUICLY_STATE_CONNECTED);
+
+    /* both endpoints have nothing to send */
+    ok(quicly_get_first_timeout(server) == quic_now + quic_ctx.transport_params.max_idle_timeout);
+    ok(quicly_get_first_timeout(client) == quic_now + quic_ctx.transport_params.max_idle_timeout);
 }
 
 static void simple_http(void)
@@ -94,6 +138,7 @@ static void simple_http(void)
     quicly_streambuf_egress_shutdown(server_stream);
     ok(quicly_num_streams(server) == 1);
 
+    quic_now += QUICLY_DELAYED_ACK_TIMEOUT;
     transmit(server, client);
 
     ok(client_streambuf->is_detached);
