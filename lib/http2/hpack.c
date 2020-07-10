@@ -213,13 +213,8 @@ static h2o_iovec_t *decode_string(h2o_mem_pool_t *pool, const uint8_t **src, con
         if (len > src_end - *src)
             return NULL;
         ret = alloc_buf(pool, len * 2); /* max compression ratio is >= 0.5 */
-        if ((ret->len = h2o_hpack_decode_huffman(ret->base, *src, len, is_header_name, err_desc)) == SIZE_MAX) {
-            /* this may look as if `ret` is leaking, but it is okay as long as it is from a pool
-             * (pool destruction will take care of it) */
-            if (pool == NULL)
-                h2o_mem_release_shared(ret); /* if no pool (unlikely), we need to free it manually. */
+        if ((ret->len = h2o_hpack_decode_huffman(ret->base, *src, len, is_header_name, err_desc)) == SIZE_MAX)
             return NULL;
-        }
         ret->base[ret->len] = '\0';
     } else {
         if (len > src_end - *src)
