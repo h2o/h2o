@@ -52,7 +52,7 @@ extern "C" {
  * best coverage. This macro is for preventing misuse going into the master branch, having it work one of the compilers supported in
  * our CI is enough.
  */
-#if (defined(__clang__) && __clang_major__ >= 10) || __GNUC__ >= 6
+#if ((defined(__clang__) && __clang_major__ >= 10) || __GNUC__ >= 6) && !defined(__cplusplus)
 #define PTLS_ASSERT_IS_ARRAY_EXPR(a) PTLS_BUILD_ASSERT_EXPR(__builtin_types_compatible_p(__typeof__(a[0])[], __typeof__(a)))
 #else
 #define PTLS_ASSERT_IS_ARRAY_EXPR(a) 1
