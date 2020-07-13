@@ -176,7 +176,6 @@ void             h2o_priv_bind_fd(h2o_exec_context_t *, int, int, int);
 pid_t            h2o_priv_exec(h2o_exec_context_t *, const char *, char *const [], int);
 pid_t            h2o_priv_waitpid(pid_t, int *, int);
 void             h2o_priv_sandbox_hints(char *);
-char **          h2o_priv_init_fastcgi(char *, char *, char *);
 char **          h2o_priv_gen_env(void);
 struct tm *      h2o_priv_gmtime_r(const time_t *, struct tm *);
 void             h2o_priv_gmtime_cleanup(struct tm *);
@@ -198,7 +197,6 @@ int              h2o_allpriv_open_listener(int, int, int, struct sockaddr_storag
 ssize_t          h2o_allpriv_sendmsg(int, struct msghdr *, int);
 pid_t            h2o_allpriv_exec(h2o_exec_context_t *, const char *, char *const [],
                    char **, int);
-char **          h2o_allpriv_init_fastcgi(char *, char *, char *);
 /*
  * Privsep operation prototypes
  */
@@ -237,7 +235,6 @@ pid_t            h2o_privsep_exec(h2o_exec_context_t *, const char *,
 char            *h2o_privsep_marshal_vec(char *const [], size_t *);
 char            **h2o_privsep_unmarshal_vec(char *, size_t);
 void             h2o_privsep_sandbox_hints(char *);
-char **          h2o_privsep_init_fastcgi(char *, char *, char *);
 FILE *           h2o_privsep_fopen(const char * restrict,
                    const char * restrict);
 
