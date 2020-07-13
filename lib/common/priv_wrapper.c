@@ -325,14 +325,18 @@ int h2o_priv_get_neverbleed_sock(struct sockaddr_un *sun)
 
 int h2o_priv_open(const char *path, int flag, ...)
 {
+    va_list open_args;
+    int mode;
 
+    va_start(open_args, flag);
+    mode = va_arg(open_args, int);
     assert(privsep_state != 0);
     switch (privsep_state) {
     case PRIVSEP_STATE_ACTIVE:
-        return (h2o_privsep_open(path, flag, 0));
+        return (h2o_privsep_open(path, flag, mode));
         break;
     case PRIVSEP_STATE_OFF:
-        return (h2o_allpriv_open(path, flag, 0));
+        return (h2o_allpriv_open(path, flag, mode));
         break;
     default:
         abort();

@@ -222,7 +222,7 @@ static int on_config_spawn(h2o_configurator_command_t *cmd, h2o_configurator_con
     char *spawn_user = ctx->globalconf->user, *spawn_cmd;
     char *kill_on_close_cmd_path = NULL, *setuidgid_cmd_path = NULL;
     char dirname[] = "/tmp/h2o.fcgisock.XXXXXX";
-    char **argv;
+    char *argv[10];
     int spawner_fd;
     struct sockaddr_un sa;
     h2o_fastcgi_config_vars_t config_vars;
