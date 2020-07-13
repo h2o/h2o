@@ -135,59 +135,6 @@ struct tm *h2o_privsep_dotime_r(const time_t *clock,
     return (result);
 }
 
-char **h2o_privsep_init_fastcgi(char *sock_dir, char *spawn_user,
-    char *spawn_cmd)
-{
-    char **argv, buf[512], *dir, *fcgi_cmd_path, *copy;
-    size_t index, alloc;
-
-    alloc = 32;
-    argv = calloc(alloc, sizeof(argv));
-    if (argv == NULL) {
-        return (NULL);
-    }
-    copy = strdup(spawn_cmd);
-    dir = dirname(copy);
-    if (dir == NULL) {
-        free(argv);
-        return (NULL);
-    }
-    index = 0;
-    fcgi_cmd_path = h2o_configurator_get_cmd_path("share/h2o/fcgi");
-    argv[index++] = fcgi_cmd_path;
-#ifdef __FreeBSD__
-    /*
-     * NB: Implement sandbox wrappers for Linux
-     * NB: We do not have a general purpopse libc wrapper for Linux.
-     * Sandbox policies are allowing open(2) within the outer sandbox
-     * but we may want to further lock down the FCGI stuff and
-     * implement the sandbox wrappers under Linux too.
-     */
-    argv[index++] = "--libc-wrapper";
-    argv[index++] = "libsandboxc.so";
-#endif
-    argv[index++] = "--sandbox";
-    argv[index++] = "--unlink-sock-path";
-    argv[index++] = sock_dir;
-    argv[index++] = "--wait-fd";
-    sprintf(buf, "%d", 5);
-    argv[index++] = strdup(buf);
-    if (spawn_user != NULL) {
-        argv[index++] = "--setuidgid";
-        argv[index++] = spawn_user;
-    }
-    argv[index++] = "--";
-    argv[index++] = spawn_cmd;
-    /*
-     * NB: Currently any command line arguments are being passed in as a single
-     * vector entry. We need to split each field up into an element and pass
-     * it in.
-     */
-    argv[index++] = NULL;
-    assert(index < alloc);
-    return (argv);
-}
-
 pid_t h2o_privsep_waitpid(pid_t pid, int *status, int options)
 {
     h2o_privsep_watpid_t args;

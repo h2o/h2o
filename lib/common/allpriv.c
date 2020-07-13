@@ -40,36 +40,6 @@
 #define H2O_HTTP3_USE_REUSEPORT 0
 #endif
 
-char **h2o_allpriv_init_fastcgi(char *sock_dir, char *spawn_user,
-    char *spawn_cmd)
-{
-    char **argv, *kill_on_close_cmd_path, *setuidgid_cmd_path;
-    size_t index, alloc;
-
-    alloc = 32;
-    argv = calloc(alloc, sizeof(argv));
-    if (argv == NULL) {
-        return (NULL);
-    }
-    index = 0;
-    kill_on_close_cmd_path = h2o_configurator_get_cmd_path("share/h2o/kill-on-close");
-    argv[index++] = kill_on_close_cmd_path;
-    argv[index++] = "--rm";
-    argv[index++] = sock_dir;
-    argv[index++] = "--";
-    if (spawn_user != NULL) {
-        setuidgid_cmd_path = h2o_configurator_get_cmd_path("share/h2o/setuidgid");
-        argv[index++] = setuidgid_cmd_path;
-        argv[index++] = spawn_user;
-    }
-    argv[index++] = "/bin/sh";
-    argv[index++] = "-c";
-    argv[index++] = spawn_cmd;
-    argv[index++] = NULL;
-    assert(index < 32);
-    return (argv);
-}
-
 pid_t h2o_allpriv_exec(h2o_exec_context_t *ec, const char *cmd,
   char *const argv[], char **env, int policy)
 {

@@ -261,9 +261,21 @@ static int on_config_spawn(h2o_configurator_command_t *cmd, h2o_configurator_con
         h2o_user_pw = NULL;
     }
 
-    argv = h2o_priv_init_fastcgi(dirname, spawn_user, spawn_cmd);
-    if (argv == NULL) {
-        h2o_fatal("failed to costruct argv for fastcgi exec");
+    { /* build args */
+        size_t i = 0;
+        argv[i++] = kill_on_close_cmd_path = h2o_configurator_get_cmd_path("share/h2o/kill-on-close");
+        argv[i++] = "--rm";
+        argv[i++] = dirname;
+        argv[i++] = "--";
+        if (spawn_user != NULL) {
+            argv[i++] = setuidgid_cmd_path = h2o_configurator_get_cmd_path("share/h2o/setuidgid");
+            argv[i++] = spawn_user;
+        }
+        argv[i++] = "/bin/sh";
+        argv[i++] = "-c";
+        argv[i++] = spawn_cmd;
+        argv[i++] = NULL;
+        assert(i <= sizeof(argv) / sizeof(argv[0]));
     }
 
     if (ctx->dry_run) {

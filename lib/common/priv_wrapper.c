@@ -94,24 +94,6 @@ struct tm *h2o_priv_gmtime_r(const time_t *clock, struct tm *result)
     return (NULL);
 }
 
-char **h2o_priv_init_fastcgi(char *sock_dir, char *spawn_user,
-    char *spawn_cmd)
-{
-
-    assert(privsep_state != 0);
-    switch (privsep_state) {
-    case PRIVSEP_STATE_ACTIVE:
-        return (h2o_privsep_init_fastcgi(sock_dir, spawn_user, spawn_cmd));
-        break;
-    case PRIVSEP_STATE_OFF:
-        return (h2o_allpriv_init_fastcgi(sock_dir, spawn_user, spawn_cmd));
-        break;
-    default:
-        abort();
-    }
-    return (NULL);
-}
-
 char **h2o_priv_gen_env(void)
 {
     extern char **environ;
