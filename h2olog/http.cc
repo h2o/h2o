@@ -141,60 +141,59 @@ typedef struct st_http_event_t {
     };
 } http_event_t;
 
-static void handle_event(h2o_tracer_t *tracer, const void *data, int len)
+class h2o_http_tracer : public h2o_tracer
 {
-    const http_event_t *ev = (const http_event_t *)data;
-    FILE *out = tracer->out;
+  protected:
+    virtual void do_handle_event(const void *data, int len)
+    {
+        const http_event_t *ev = (const http_event_t *)data;
 
-    switch (ev->type) {
-    case HTTP_EVENT_RECEIVE_REQ:
-        fprintf(out, "%" PRIu64 " %" PRIu64 " RxProtocol HTTP/%" PRIu32 ".%" PRIu32 "\n", ev->conn_id, ev->req_id,
-                ev->http_version / 256, ev->http_version % 256);
-        break;
-    case HTTP_EVENT_SEND_RESP:
-        fprintf(out, "%" PRIu64 " %" PRIu64 " TxStatus   %" PRIu32 "\n", ev->conn_id, ev->req_id, ev->http_status);
-        break;
-    case HTTP_EVENT_RECEIVE_REQ_HDR:
-    case HTTP_EVENT_SEND_RESP_HDR: {
-        int n_len = MIN(ev->header.name_len, MAX_HDR_LEN);
-        int v_len = MIN(ev->header.value_len, MAX_HDR_LEN);
-        const char *label = (ev->type == HTTP_EVENT_RECEIVE_REQ_HDR) ? "RxHeader" : "TxHeader";
-        fprintf(out, "%" PRIu64 " %" PRIu64 " %s   %.*s %.*s\n", ev->conn_id, ev->req_id, label, n_len, ev->header.name, v_len,
-                ev->header.value);
-    } break;
-    case SCHED_PROCESS_EXIT: {
-        exit(0);
-    } break;
-    default:
-        fprintf(out, "unknown event: %u\n", ev->type);
+        switch (ev->type) {
+        case HTTP_EVENT_RECEIVE_REQ:
+            fprintf(out_, "%" PRIu64 " %" PRIu64 " RxProtocol HTTP/%" PRIu32 ".%" PRIu32 "\n", ev->conn_id, ev->req_id,
+                    ev->http_version / 256, ev->http_version % 256);
+            break;
+        case HTTP_EVENT_SEND_RESP:
+            fprintf(out_, "%" PRIu64 " %" PRIu64 " TxStatus   %" PRIu32 "\n", ev->conn_id, ev->req_id, ev->http_status);
+            break;
+        case HTTP_EVENT_RECEIVE_REQ_HDR:
+        case HTTP_EVENT_SEND_RESP_HDR: {
+            int n_len = MIN(ev->header.name_len, MAX_HDR_LEN);
+            int v_len = MIN(ev->header.value_len, MAX_HDR_LEN);
+            const char *label = (ev->type == HTTP_EVENT_RECEIVE_REQ_HDR) ? "RxHeader" : "TxHeader";
+            fprintf(out_, "%" PRIu64 " %" PRIu64 " %s   %.*s %.*s\n", ev->conn_id, ev->req_id, label, n_len, ev->header.name, v_len,
+                    ev->header.value);
+        } break;
+        case SCHED_PROCESS_EXIT: {
+            exit(0);
+        } break;
+        default:
+            fprintf(out_, "unknown event: %u\n", ev->type);
+        }
     }
-}
+    virtual void do_handle_lost(uint64_t lost)
+    {
+        fprintf(stderr, "Possibly lost %" PRIu64 " events\n", lost);
+    }
 
-static void handle_lost(h2o_tracer_t *tracer, uint64_t lost)
-{
-    fprintf(stderr, "Possibly lost %" PRIu64 " events\n", lost);
-}
+  public:
+    virtual const std::vector<ebpf::USDT> &init_usdt_probes(pid_t h2o_pid)
+    {
+        static const std::vector<ebpf::USDT> vec{
+            ebpf::USDT(h2o_pid, "h2o", "receive_request", "trace_receive_request"),
+            ebpf::USDT(h2o_pid, "h2o", "receive_request_header", "trace_receive_request_header"),
+            ebpf::USDT(h2o_pid, "h2o", "send_response", "trace_send_response"),
+            ebpf::USDT(h2o_pid, "h2o", "send_response_header", "trace_send_response_header"),
+        };
+        return vec;
+    }
+    virtual std::string bpf_text(void)
+    {
+        return HTTP_BPF;
+    }
+};
 
-static std::vector<ebpf::USDT> init_usdt_probes(pid_t h2o_pid)
+h2o_tracer *create_http_tracer()
 {
-    const std::vector<ebpf::USDT> vec{
-        ebpf::USDT(h2o_pid, "h2o", "receive_request", "trace_receive_request"),
-        ebpf::USDT(h2o_pid, "h2o", "receive_request_header", "trace_receive_request_header"),
-        ebpf::USDT(h2o_pid, "h2o", "send_response", "trace_send_response"),
-        ebpf::USDT(h2o_pid, "h2o", "send_response_header", "trace_send_response_header"),
-    };
-    return vec;
-}
-
-static const std::string bpf_text(void)
-{
-    return HTTP_BPF;
-}
-
-void init_http_tracer(h2o_tracer_t *tracer)
-{
-    tracer->handle_event = handle_event;
-    tracer->handle_lost = handle_lost;
-    tracer->init_usdt_probes = init_usdt_probes;
-    tracer->bpf_text = bpf_text;
+    return new h2o_http_tracer();
 }
