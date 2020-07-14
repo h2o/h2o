@@ -19,7 +19,7 @@ subtest "http/1" => sub {
             or die "failed to invoke command:$cmd:$!";
         autoflush $fh 1;
         for (my $i = 0; $i < $send_count; ++$i) {
-            sleep 0.1
+            sleep 0.5
                 if $i != 0;
             print $fh <<"EOT";
 GET $path HTTP/1.1\r
