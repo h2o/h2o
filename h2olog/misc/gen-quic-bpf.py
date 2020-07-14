@@ -334,11 +334,9 @@ static std::string gen_quic_bpf_header() {
 def build_typedef_for_cplusplus():
   typedef = st_quicly_conn_t_def
 
-  # CAUTION: it depends on a GCC/Clang compiler extension: typeof()
   for st_name, st_fields in struct_map.items():
     for st_field_access, st_field_name_alias in st_fields:
-      type_expr = """((const struct %s *)nullptr)->%s""" % (st_name, st_field_access)
-      typedef += """typedef typeof(%s) typeof_%s__%s;\n""" % (type_expr, st_name, st_field_name_alias or st_field_access)
+      typedef += """using typeof_%s__%s = decltype(%s::%s);\n""" % (st_name, st_field_name_alias or st_field_access, st_name, st_field_access)
 
   return typedef
 

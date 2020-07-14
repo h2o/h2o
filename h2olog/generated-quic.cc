@@ -31,12 +31,12 @@ public:
 struct st_quicly_conn_t {
   struct _st_quicly_conn_public_t super;
 };
-typedef typeof(((const struct st_quicly_stream_t *)nullptr)->stream_id) typeof_st_quicly_stream_t__stream_id;
-typedef typeof(((const struct quicly_rtt_t *)nullptr)->minimum) typeof_quicly_rtt_t__minimum;
-typedef typeof(((const struct quicly_rtt_t *)nullptr)->smoothed) typeof_quicly_rtt_t__smoothed;
-typedef typeof(((const struct quicly_rtt_t *)nullptr)->variance) typeof_quicly_rtt_t__variance;
-typedef typeof(((const struct quicly_rtt_t *)nullptr)->latest) typeof_quicly_rtt_t__latest;
-typedef typeof(((const struct st_quicly_conn_t *)nullptr)->super.local.cid_set.plaintext.master_id) typeof_st_quicly_conn_t__master_id;
+using typeof_st_quicly_stream_t__stream_id = decltype(st_quicly_stream_t::stream_id);
+using typeof_quicly_rtt_t__minimum = decltype(quicly_rtt_t::minimum);
+using typeof_quicly_rtt_t__smoothed = decltype(quicly_rtt_t::smoothed);
+using typeof_quicly_rtt_t__variance = decltype(quicly_rtt_t::variance);
+using typeof_quicly_rtt_t__latest = decltype(quicly_rtt_t::latest);
+using typeof_st_quicly_conn_t__master_id = decltype(st_quicly_conn_t::super.local.cid_set.plaintext.master_id);
 
 
 #define GEN_FIELD_INFO(type, field, name) gen_field_info(#type, #field, &((type *)NULL)->field, name)
