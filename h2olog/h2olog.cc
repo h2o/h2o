@@ -195,7 +195,7 @@ int main(int argc, char **argv)
     std::vector<std::string> response_header_filters;
     int c;
     pid_t h2o_pid = -1;
-    while ((c = getopt(argc, argv, "hdp:qt:s:w:")) != -1) {
+    while ((c = getopt(argc, argv, "hdp:t:s:w:")) != -1) {
         switch (c) {
         case 'p':
             h2o_pid = atoi(optarg);
