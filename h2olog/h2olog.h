@@ -24,58 +24,106 @@
 #define h2olog_h
 
 #include <cinttypes>
+#include <cstdio>
 #include <vector>
 #include <string>
+extern "C" {
+#include <time.h>
+}
 #include <bcc/BPF.h>
 
-struct st_h2o_tracer_t;
-typedef struct st_h2o_tracer_t h2o_tracer_t;
-
-struct st_h2o_tracer_t {
-    /*
+class h2o_tracer
+{
+  protected:
+    /**
      * Where to output the results. Defaults to `stdout`.
      */
-    FILE *out;
-
-    /*
-     * The number of events emitted in `handle_event`.
+    FILE *out_;
+    /**
+     * The sequence number of the event.
      */
-    uint64_t count;
-
-    /*
-     * The number of lost events. It is reset periodically.
+    uint64_t seq_;
+    /**
+     * Counters for generating stats. They are reset periodically.
      */
-    uint64_t lost_count;
+    struct {
+        uint64_t num_events;
+        uint64_t num_lost;
+    } stats_;
+    /**
+     * The stub function for handling an event.
+     */
+    virtual void do_handle_event(const void *data, int len) = 0;
+    /**
+     * The stub function for handling a loss event.
+     */
+    virtual void do_handle_lost(uint64_t lost) = 0;
 
-    /*
+  public:
+    /**
+     * Constructor.
+     */
+    h2o_tracer() : out_(NULL), seq_(0)
+    {
+        stats_.num_events = 0;
+        stats_.num_lost = 0;
+    }
+    /**
+     * Performs post-construction initialization common to all the tracers.
+     */
+    void init(FILE *fp)
+    {
+        out_ = fp;
+    }
+    /**
      * Handles an incoming BPF event.
      */
-    void (*handle_event)(h2o_tracer_t *tracer, const void *data, int len);
-
-    /*
+    void handle_event(const void *data, int len)
+    {
+        ++seq_;
+        ++stats_.num_events;
+        do_handle_event(data, len);
+    }
+    /**
      * Handles an event data lost.
      */
-    void (*handle_lost)(h2o_tracer_t *tracer, uint64_t lost);
-
-    /*
+    void handle_lost(uint64_t lost)
+    {
+        stats_.num_lost += lost;
+        do_handle_lost(lost);
+    }
+    /**
      * Returns a vector of relevant USDT probes.
      */
-    std::vector<ebpf::USDT> (*init_usdt_probes)(pid_t h2o_pid);
-
-    /*
+    virtual const std::vector<ebpf::USDT> &init_usdt_probes(pid_t h2o_pid) = 0;
+    /**
      * Returns the code to be compiled into BPF bytecode.
      */
-    const std::string (*bpf_text)(void);
+    virtual std::string bpf_text() = 0;
+    /**
+     * Returns current time in milliseconds.
+     */
+    uint64_t time_milliseconds();
+    /**
+     *
+     */
+    void show_event_per_sec(time_t *t0);
+    /**
+     *
+     */
+    void flush()
+    {
+        fflush(out_);
+    }
 };
 
-/*
+/**
  * Initialize an HTTP tracer.
  */
-void init_http_tracer(h2o_tracer_t *);
-
-/*
- * Initialize a QUIC tracer.
+h2o_tracer *create_http_tracer();
+/**
+ * Initializes a QUIC tracer.
  */
-void init_quic_tracer(h2o_tracer_t *);
+h2o_tracer *create_quic_tracer();
 
 #endif

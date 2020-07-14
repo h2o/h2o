@@ -131,7 +131,7 @@ yaml_emitter_dump(yaml_emitter_t *emitter, yaml_document_t *document)
 
     assert(emitter->opened);    /* Emitter should be opened. */
 
-    emitter->anchors = yaml_malloc(sizeof(*(emitter->anchors))
+    emitter->anchors = (yaml_anchors_t*)yaml_malloc(sizeof(*(emitter->anchors))
             * (document->nodes.top - document->nodes.start));
     if (!emitter->anchors) goto error;
     memset(emitter->anchors, 0, sizeof(*(emitter->anchors))
@@ -245,9 +245,9 @@ yaml_emitter_anchor_node(yaml_emitter_t *emitter, int index)
 #define ANCHOR_TEMPLATE_LENGTH  16
 
 static yaml_char_t *
-yaml_emitter_generate_anchor(yaml_emitter_t *emitter, int anchor_id)
+yaml_emitter_generate_anchor(SHIM(yaml_emitter_t *emitter), int anchor_id)
 {
-    yaml_char_t *anchor = yaml_malloc(ANCHOR_TEMPLATE_LENGTH);
+    yaml_char_t *anchor = YAML_MALLOC(ANCHOR_TEMPLATE_LENGTH);
 
     if (!anchor) return NULL;
 

@@ -406,9 +406,8 @@ int trace_sched_process_exit(struct tracepoint__sched__sched_process_exit *ctx) 
 """ % (event_t_decl)
 
   usdt_def = """
-static
-std::vector<ebpf::USDT> quic_init_usdt_probes(pid_t pid) {
-  const std::vector<ebpf::USDT> probes = {
+const std::vector<ebpf::USDT> &h2o_quic_tracer::init_usdt_probes(pid_t pid) {
+  static const std::vector<ebpf::USDT> probes = {
 """
 
   for metadata in probe_metadata.values():
@@ -423,10 +422,7 @@ std::vector<ebpf::USDT> quic_init_usdt_probes(pid_t pid) {
 """
 
   handle_event_func = r"""
-static
-void quic_handle_event(h2o_tracer_t *tracer, const void *data, int data_len) {
-  FILE *out = tracer->out;
-
+void h2o_quic_tracer::do_handle_event(const void *data, int data_len) {
   const quic_event_t *event = static_cast<const quic_event_t*>(data);
 
   if (event->id == 1) { // sched:sched_process_exit
@@ -434,7 +430,7 @@ void quic_handle_event(h2o_tracer_t *tracer, const void *data, int data_len) {
   }
 
   // output JSON
-  fprintf(out, "{");
+  fprintf(out_, "{");
 
   switch (event->id) {
 """
@@ -448,8 +444,8 @@ void quic_handle_event(h2o_tracer_t *tracer, const void *data, int data_len) {
 
     handle_event_func += "  case %s: { // %s\n" % (
         metadata['id'], fully_specified_probe_name)
-    handle_event_func += '    json_write_pair_n(out, STR_LIT("type"), "%s");\n' % probe_name.replace("_", "-")
-    handle_event_func += '    json_write_pair_c(out, STR_LIT("seq"), ++seq);\n'
+    handle_event_func += '    json_write_pair_n(out_, STR_LIT("type"), "%s");\n' % probe_name.replace("_", "-")
+    handle_event_func += '    json_write_pair_c(out_, STR_LIT("seq"), seq_);\n'
 
     for field_name, field_type in flat_args_map.items():
       if block_field_set and field_name in block_field_set:
@@ -457,9 +453,9 @@ void quic_handle_event(h2o_tracer_t *tracer, const void *data, int data_len) {
       json_field_name = rename_map.get(field_name, field_name).replace("_", "-")
       event_t_name = "%s.%s" % (probe_name, field_name)
       if fully_specified_probe_name == "quicly:receive" and field_name == "bytes":
-        handle_event_func += '    json_write_pair_c(out, STR_LIT("first-octet"), event->receive.bytes[0]);\n'
+        handle_event_func += '    json_write_pair_c(out_, STR_LIT("first-octet"), event->receive.bytes[0]);\n'
       elif not is_bin_type(field_type):
-        handle_event_func += '    json_write_pair_c(out, STR_LIT("%s"), event->%s);\n' % (
+        handle_event_func += '    json_write_pair_c(out_, STR_LIT("%s"), event->%s);\n' % (
             json_field_name, event_t_name)
       else:  # bin type (it should have the correspinding length arg)
         len_names = set([field_name + "_len", "len", "num_" + field_name])
@@ -469,14 +465,14 @@ void quic_handle_event(h2o_tracer_t *tracer, const void *data, int data_len) {
             len_event_t_name = "%s.%s" % (probe_name, n)
 
         # A string might be truncated in STRLEN
-        handle_event_func += '    json_write_pair_c(out, STR_LIT("%s"), event->%s, (event->%s < STR_LEN ? event->%s : STR_LEN));\n' % (
+        handle_event_func += '    json_write_pair_c(out_, STR_LIT("%s"), event->%s, (event->%s < STR_LEN ? event->%s : STR_LEN));\n' % (
             json_field_name, event_t_name, len_event_t_name, len_event_t_name)
 
     if metadata["provider"] == "h2o":
       if probe_name != "h3_accept":
-        handle_event_func += '    json_write_pair_c(out, STR_LIT("conn"), event->%s.master_id);\n' % (
+        handle_event_func += '    json_write_pair_c(out_, STR_LIT("conn"), event->%s.master_id);\n' % (
             probe_name)
-      handle_event_func += '    json_write_pair_c(out, STR_LIT("time"), time_milliseconds());\n'
+      handle_event_func += '    json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());\n'
 
     handle_event_func += "    break;\n"
     handle_event_func += "  }\n"
@@ -486,7 +482,7 @@ void quic_handle_event(h2o_tracer_t *tracer, const void *data, int data_len) {
     std::abort();
   }
 
-  fprintf(out, "}\n");
+  fprintf(out_, "}\n");
 """
   handle_event_func += "}\n"
 
@@ -509,48 +505,43 @@ void quic_handle_event(h2o_tracer_t *tracer, const void *data, int data_len) {
 #define STR_LEN 64
 #define STR_LIT(s) s, strlen(s)
 
-uint64_t seq = 0;
+class h2o_quic_tracer : public h2o_tracer {
+protected:
+  virtual void do_handle_event(const void *data, int len);
+  virtual void do_handle_lost(uint64_t lost);
+public:
+  virtual const std::vector<ebpf::USDT> &init_usdt_probes(pid_t h2o_pid);
+  virtual std::string bpf_text();
+};
 
-// BPF modules written in C
-const char *bpf_text = R"(
+%s
+%s
+%s
+%s
+%s
+
+void h2o_quic_tracer::do_handle_lost(uint64_t lost)
+{
+  fprintf(out_,
+          "{"
+          "\"type\":\"h2olog-event-lost\","
+          "\"seq\":%%" PRIu64 ","
+          "\"time\":%%" PRIu64 ","
+          "\"lost\":%%" PRIu64 "}\n",
+          seq_, time_milliseconds(), lost);
+}
+
+std::string h2o_quic_tracer::bpf_text() {
+  return gen_quic_bpf_header() + R"(
 %s
 )";
-
-static uint64_t time_milliseconds()
-{
-  struct timeval tv;
-  gettimeofday(&tv, NULL);
-  return (int64_t)tv.tv_sec * 1000 + tv.tv_usec / 1000;
 }
 
-%s
-%s
-%s
-%s
-%s
-
-static void quic_handle_lost(h2o_tracer_t *tracer, uint64_t lost) {
-  fprintf(tracer->out, "{"
-    "\"type\":\"h2olog-event-lost\","
-    "\"seq\":%%" PRIu64 ","
-    "\"time\":%%" PRIu64 ","
-    "\"lost\":%%" PRIu64
-    "}\n",
-    ++seq, time_milliseconds(), lost);
+h2o_tracer *create_quic_tracer() {
+  return new h2o_quic_tracer;
 }
 
-static const std::string quic_bpf_ext() {
-  return gen_quic_bpf_header() + bpf_text;
-}
-
-void init_quic_tracer(h2o_tracer_t * tracer) {
-  tracer->handle_event = quic_handle_event;
-  tracer->handle_lost = quic_handle_lost;
-  tracer->init_usdt_probes = quic_init_usdt_probes;
-  tracer->bpf_text = quic_bpf_ext;
-}
-
-""" % (bpf, build_typedef_for_cplusplus(), build_bpf_header_generator(), event_t_decl, usdt_def, handle_event_func))
+""" % (build_typedef_for_cplusplus(), build_bpf_header_generator(), event_t_decl, usdt_def, handle_event_func, bpf))
 
 
 def main():
