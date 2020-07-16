@@ -271,7 +271,7 @@ static void set_cloexec(int fd)
 static void on_neverbleed_fork(void)
 {
 /* Rewrite of argv should only be done on platforms that are known to benefit from doing that. On linux, doing so helps admins look
-*  for h2o (or neverbleed) by running pidof. */
+ *  for h2o (or neverbleed) by running pidof. */
 #ifdef __linux__
     for (int i = cmd_argc - 1; i >= 0; --i)
         memset(cmd_argv[i], 0, strlen(cmd_argv[i]));
