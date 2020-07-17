@@ -8,7 +8,6 @@ matrix:
       env:
         - label=default
       before_install: &bi
-        - docker pull kazuho/h2o-ci:latest
         - chmod -R ugo+w .
       script:
         - make -f misc/docker-ci/check.mk
@@ -49,4 +48,4 @@ matrix:
       before_install: *bi
       script:
         - uname -a
-        - make -f misc/docker-ci/check.mk dtrace CONTAINER_NAME=kazuho/h2o-ci:ubuntu1904
+        - make -f misc/docker-ci/check.mk dtrace CONTAINER_NAME=h2oserver/h2o-ci-dtrace

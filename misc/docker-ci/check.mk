@@ -1,4 +1,4 @@
-CONTAINER_NAME=kazuho/h2o-ci:latest
+CONTAINER_NAME=h2oserver/h2o-ci:latest
 SRC_DIR=/h2o
 CHECK_MK=$(SRC_DIR)/misc/docker-ci/check.mk
 CMAKE_ARGS=
