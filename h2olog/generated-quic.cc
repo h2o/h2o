@@ -523,6 +523,14 @@ struct quic_event_t {
       size_t value_len;
       typeof_st_quicly_conn_t__master_id master_id;
     } send_response_header;
+    struct { // h2o:h3s_accept
+      uint64_t conn_id;
+      typeof_st_quicly_conn_t__master_id master_id;
+    } h3s_accept;
+    struct { // h2o:h3s_destroy
+      uint64_t conn_id;
+      typeof_st_quicly_conn_t__master_id master_id;
+    } h3s_destroy;
 
     };
   };
@@ -601,6 +609,8 @@ const std::vector<ebpf::USDT> &h2o_quic_tracer::init_usdt_probes(pid_t pid) {
     ebpf::USDT(pid, "quicly", "stream_on_receive_reset", "trace_quicly__stream_on_receive_reset"),
     ebpf::USDT(pid, "quicly", "conn_stats", "trace_quicly__conn_stats"),
     ebpf::USDT(pid, "h2o", "send_response_header", "trace_h2o__send_response_header"),
+    ebpf::USDT(pid, "h2o", "h3s_accept", "trace_h2o__h3s_accept"),
+    ebpf::USDT(pid, "h2o", "h3s_destroy", "trace_h2o__h3s_destroy"),
 
   };
   return probes;
@@ -1264,6 +1274,22 @@ void h2o_quic_tracer::do_handle_event(const void *data, int data_len) {
     json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
     break;
   }
+  case 80: { // h2o:h3s_accept
+    json_write_pair_n(out_, STR_LIT("type"), "h3s-accept");
+    json_write_pair_c(out_, STR_LIT("seq"), seq_);
+    json_write_pair_c(out_, STR_LIT("conn-id"), event->h3s_accept.conn_id);
+    json_write_pair_c(out_, STR_LIT("conn"), event->h3s_accept.master_id);
+    json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
+    break;
+  }
+  case 81: { // h2o:h3s_destroy
+    json_write_pair_n(out_, STR_LIT("type"), "h3s-destroy");
+    json_write_pair_c(out_, STR_LIT("seq"), seq_);
+    json_write_pair_c(out_, STR_LIT("conn-id"), event->h3s_destroy.conn_id);
+    json_write_pair_c(out_, STR_LIT("conn"), event->h3s_destroy.master_id);
+    json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
+    break;
+  }
 
   default:
     std::abort();
@@ -1727,6 +1753,14 @@ struct quic_event_t {
       size_t value_len;
       typeof_st_quicly_conn_t__master_id master_id;
     } send_response_header;
+    struct { // h2o:h3s_accept
+      uint64_t conn_id;
+      typeof_st_quicly_conn_t__master_id master_id;
+    } h3s_accept;
+    struct { // h2o:h3s_destroy
+      uint64_t conn_id;
+      typeof_st_quicly_conn_t__master_id master_id;
+    } h3s_destroy;
 
     };
   };
@@ -3383,6 +3417,49 @@ int trace_h2o__send_response_header(struct pt_regs *ctx) {
   if (!CHECK_ALLOWED_RES_HEADER_NAME(event.send_response_header.name, event.send_response_header.name_len))
     return 0;
 #endif
+
+  if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
+    bpf_trace_printk("failed to perf_submit\n");
+
+  return 0;
+}
+// h2o:h3s_accept
+int trace_h2o__h3s_accept(struct pt_regs *ctx) {
+  void *buf = NULL;
+  struct quic_event_t event = { .id = 80 };
+
+  // uint64_t conn_id
+  bpf_usdt_readarg(1, ctx, &event.h3s_accept.conn_id);
+  // struct st_h2o_conn_t * conn
+  // (no fields in st_h2o_conn_t)
+  // struct st_quicly_conn_t * quic
+  uint8_t quic[sizeof_st_quicly_conn_t] = {};
+  bpf_usdt_readarg(3, ctx, &buf);
+  bpf_probe_read(&quic, sizeof_st_quicly_conn_t, buf);
+  event.h3s_accept.master_id = get_st_quicly_conn_t__master_id(quic);
+
+  h2o_to_quicly_conn.update(&event.h3s_accept.conn_id, &event.h3s_accept.master_id);
+
+  if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
+    bpf_trace_printk("failed to perf_submit\n");
+
+  return 0;
+}
+// h2o:h3s_destroy
+int trace_h2o__h3s_destroy(struct pt_regs *ctx) {
+  void *buf = NULL;
+  struct quic_event_t event = { .id = 81 };
+
+  // uint64_t conn_id
+  bpf_usdt_readarg(1, ctx, &event.h3s_destroy.conn_id);
+
+  const uint32_t *master_conn_id_ptr = h2o_to_quicly_conn.lookup(&event.h3s_destroy.conn_id);
+  if (master_conn_id_ptr != NULL) {
+    event.h3s_destroy.master_id = *master_conn_id_ptr;
+  } else {
+    bpf_trace_printk("h2o's conn_id=%lu is not associated to master_conn_id\n", event.h3s_destroy.conn_id);
+  }
+  h2o_to_quicly_conn.delete(&event.h3s_destroy.conn_id);
 
   if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
     bpf_trace_printk("failed to perf_submit\n");
