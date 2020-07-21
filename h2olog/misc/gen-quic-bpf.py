@@ -62,8 +62,6 @@ block_fields = {
     "quicly:crypto_send_key_update": set(["secret"]),
     "quicly:crypto_receive_key_update": set(["secret"]),
     "quicly:crypto_receive_key_update_prepare": set(["secret"]),
-
-    "h2o:h3_accept": set(["conn"]),  # `h2o_conn_t *conn`
 }
 
 # A block list for quicly-probes.d.
@@ -75,8 +73,8 @@ quicly_block_probes = set([
 # An allow list for h2o-probes.d
 # USDT probes in h2o-probes.d are not handled by default.
 h2o_allow_probes = set([
-    "h2o:h3_accept",
-    "h2o:h3_close",
+    "h2o:h3s_accept",
+    "h2o:h3s_destroy",
     "h2o:send_response_header",
 ])
 
@@ -226,19 +224,19 @@ int %s(struct pt_regs *ctx) {
       c += "  bpf_usdt_readarg(%d, ctx, &event.%s);\n" % (i +
                                                           1, event_t_name)
 
-  if fully_specified_probe_name == "h2o:h3_accept":
+  if fully_specified_probe_name == "h2o:h3s_accept":
     c += r"""
-  h2o_to_quicly_conn.update(&event.h3_accept.conn_id, &event.h3_accept.master_id);
+  h2o_to_quicly_conn.update(&event.h3s_accept.conn_id, &event.h3s_accept.master_id);
 """
-  elif fully_specified_probe_name == "h2o:h3_close":
+  elif fully_specified_probe_name == "h2o:h3s_destroy":
     c += r"""
-  const uint32_t *master_conn_id_ptr = h2o_to_quicly_conn.lookup(&event.h3_close.conn_id);
+  const uint32_t *master_conn_id_ptr = h2o_to_quicly_conn.lookup(&event.h3s_destroy.conn_id);
   if (master_conn_id_ptr != NULL) {
-    event.h3_close.master_id = *master_conn_id_ptr;
+    event.h3s_destroy.master_id = *master_conn_id_ptr;
   } else {
-    bpf_trace_printk("h2o's conn_id=%lu is not associated to master_conn_id\n", event.h3_close.conn_id);
+    bpf_trace_printk("h2o's conn_id=%lu is not associated to master_conn_id\n", event.h3s_destroy.conn_id);
   }
-  h2o_to_quicly_conn.delete(&event.h3_close.conn_id);
+  h2o_to_quicly_conn.delete(&event.h3s_destroy.conn_id);
 """
   elif metadata["provider"] == "h2o":
     c += r"""
@@ -369,7 +367,7 @@ struct quic_event_t {
         f = "%s %s" % (field_type, field_name)
 
       event_t_decl += "      %s;\n" % f
-    if metadata["provider"] == "h2o" and name != "h3_accept":
+    if metadata["provider"] == "h2o" and name != "h3s_accept":
       event_t_decl += "      typeof_st_quicly_conn_t__master_id master_id;\n"
     event_t_decl += "    } %s;\n" % name
 
@@ -467,7 +465,7 @@ void h2o_quic_tracer::do_handle_event(const void *data, int data_len) {
             json_field_name, event_t_name, len_event_t_name, len_event_t_name)
 
     if metadata["provider"] == "h2o":
-      if probe_name != "h3_accept":
+      if probe_name != "h3s_accept":
         handle_event_func += '    json_write_pair_c(out_, STR_LIT("conn"), event->%s.master_id);\n' % (
             probe_name)
       handle_event_func += '    json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());\n'
