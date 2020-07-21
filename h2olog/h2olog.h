@@ -68,6 +68,9 @@ class h2o_tracer
         stats_.num_events = 0;
         stats_.num_lost = 0;
     }
+
+    virtual ~h2o_tracer() {}
+
     /**
      * Performs post-construction initialization common to all the tracers.
      */
