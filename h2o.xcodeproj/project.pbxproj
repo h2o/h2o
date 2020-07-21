@@ -499,6 +499,9 @@
 		E9F677D6200775FF006476D3 /* least_conn.c in Sources */ = {isa = PBXBuildFile; fileRef = D081373D1FD40431004679DF /* least_conn.c */; };
 		E9F677D720077603006476D3 /* roundrobin.c in Sources */ = {isa = PBXBuildFile; fileRef = D081373E1FD40431004679DF /* roundrobin.c */; };
 		E9FB8DC423991D08007BFC59 /* ebpf.h in Headers */ = {isa = PBXBuildFile; fileRef = E908A2A923163CB70039BCEE /* ebpf.h */; };
+		E9FF84BC24C5AA47002577CA /* quicly-probes.d in Sources */ = {isa = PBXBuildFile; fileRef = E9FF84BB24C5AA46002577CA /* quicly-probes.d */; };
+		E9FF84BD24C5AA47002577CA /* quicly-probes.d in Sources */ = {isa = PBXBuildFile; fileRef = E9FF84BB24C5AA46002577CA /* quicly-probes.d */; };
+		E9FF84BE24C5AA52002577CA /* quicly-probes.d in Sources */ = {isa = PBXBuildFile; fileRef = E9FF84BB24C5AA46002577CA /* quicly-probes.d */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -1250,6 +1253,7 @@
 		E9F677D32004CCCA006476D3 /* 50zero-sized-timeout.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "50zero-sized-timeout.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		E9F677D82008686B006476D3 /* 40tls13-early-data.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "40tls13-early-data.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		E9FC525C234B0A630076F35D /* 40http3-asroot.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "40http3-asroot.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		E9FF84BB24C5AA46002577CA /* quicly-probes.d */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.dtrace; path = "quicly-probes.d"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -2283,6 +2287,7 @@
 			children = (
 				E901C3D6213E1BE700D17C93 /* include */,
 				E901C3D7213E1BED00D17C93 /* lib */,
+				E9FF84BB24C5AA46002577CA /* quicly-probes.d */,
 			);
 			path = quicly;
 			sourceTree = "<group>";
@@ -3039,6 +3044,7 @@
 				10DA969E1CD2BFAC00679165 /* cache.c in Sources */,
 				107923D219A3217300C52AD6 /* token.c in Sources */,
 				10C45D551CFE9B300096DB06 /* events.c in Sources */,
+				E9FF84BC24C5AA47002577CA /* quicly-probes.d in Sources */,
 				1058C88A1AA6E5E3008D6180 /* hostinfo.c in Sources */,
 				10AA2EBC1A9EEDF8004322AC /* proxy.c in Sources */,
 				7D67C721204F8C0E0049E935 /* httpclient.c in Sources */,
@@ -3199,6 +3205,7 @@
 				10BCF3011B214C460076939D /* fastcgi.c in Sources */,
 				104B9A281A4A5139009EEE64 /* serverutil.c in Sources */,
 				E901C430213E52B500D17C93 /* hmac.c in Sources */,
+				E9FF84BE24C5AA52002577CA /* quicly-probes.d in Sources */,
 				E987E5F91FD8C04D00DE4346 /* memory.c in Sources */,
 				10AA2EA31A88090B004322AC /* url.c in Sources */,
 				E9316EEA24417EAA00C9C127 /* huffman.c in Sources */,
@@ -3308,6 +3315,7 @@
 				E9708B861E52C8560029E0A5 /* frame.c in Sources */,
 				E9708B201E49BACA0029E0A5 /* curve25519.c in Sources */,
 				E987E5EA1FD7EBD100DE4346 /* dictionary.c in Sources */,
+				E9FF84BD24C5AA47002577CA /* quicly-probes.d in Sources */,
 				E9E5049121501BBA004DC170 /* server.c in Sources */,
 				E9708B8B1E52C85A0029E0A5 /* tunnel.c in Sources */,
 				7DE1DB38212B1CC00055F500 /* ssl.c in Sources */,
@@ -3783,6 +3791,7 @@
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"$(inherited)",
 					"PICOTLS_USE_DTRACE=1",
+					"QUICLY_USE_DTRACE=1",
 					"H2O_USE_DTRACE=1",
 				);
 				HEADER_SEARCH_PATHS = (
@@ -3937,6 +3946,7 @@
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"$(inherited)",
 					"PICOTLS_USE_DTRACE=1",
+					"QUICLY_USE_DTRACE=1",
 					"H2O_USE_DTRACE=1",
 				);
 				HEADER_SEARCH_PATHS = (
@@ -4129,6 +4139,7 @@
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"$(inherited)",
 					"PICOTLS_USE_DTRACE=1",
+					"QUICLY_USE_DTRACE=1",
 					"H2O_USE_DTRACE=1",
 				);
 				HEADER_SEARCH_PATHS = (
@@ -4150,6 +4161,7 @@
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"$(inherited)",
 					"PICOTLS_USE_DTRACE=1",
+					"QUICLY_USE_DTRACE=1",
 					"H2O_USE_DTRACE=1",
 				);
 				HEADER_SEARCH_PATHS = (
@@ -4653,6 +4665,7 @@
 					"$(inherited)",
 					"H2O_USE_PICOTLS=1",
 					"PICOTLS_USE_DTRACE=1",
+					"QUICLY_USE_DTRACE=1",
 					"H2O_USE_DTRACE=1",
 					"H2O_USE_BROTLI=1",
 				);
@@ -4726,6 +4739,7 @@
 					"$(inherited)",
 					"H2O_USE_PICOTLS=1",
 					"PICOTLS_USE_DTRACE=1",
+					"QUICLY_USE_DTRACE=1",
 					"H2O_USE_DTRACE=1",
 					"H2O_USE_BROTLI=1",
 				);
