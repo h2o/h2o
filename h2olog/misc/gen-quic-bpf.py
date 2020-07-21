@@ -108,8 +108,11 @@ probe_decl = r'(?:\bprobe\s+(?:[a-zA-Z0-9_]+)\s*\([^\)]*\)\s*;)'
 d_decl = r'(?:\bprovider\s*(?P<provider>[a-zA-Z0-9_]+)\s*\{(?P<probes>(?:%s|%s)*)\})' % (
     probe_decl, whitespace)
 
+def strip_c_comments(s):
+  return re.sub('//.*?\n|/\*.*?\*/', '', s, flags=re_flags)
+
 def parse_d(context: dict, path: Path, allow_probes: set = None, block_probes: set = None):
-  content = path.read_text()
+  content = strip_c_comments(path.read_text())
 
   matched = re.search(d_decl, content, flags=re_flags)
   provider = matched.group('provider')
