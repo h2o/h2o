@@ -28,8 +28,6 @@ provider h2o {
 
     probe h3_accept(uint64_t conn_id, struct st_h2o_conn_t *conn, struct st_quicly_conn_t *quic);
     probe h3_close(uint64_t conn_id);
-    probe h3_stream_create(uint64_t conn_id, uint64_t req_id);
-    probe h3_stream_destroy(uint64_t conn_id, uint64_t req_id);
     probe h3_stream_set_state(uint64_t conn_id, uint64_t req_id, unsigned state);
     probe h3_frame_receive(uint64_t frame_type, const void *base, size_t len);
     probe h3_packet_receive(struct sockaddr *dest, struct sockaddr *src, const void *base, size_t len);

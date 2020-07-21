@@ -413,8 +413,6 @@ void on_stream_destroy(quicly_stream_t *qs, int err)
     struct st_h2o_http3_server_stream_t *stream = qs->data;
     struct st_h2o_http3_server_conn_t *conn = get_conn(stream);
 
-    H2O_PROBE_CONN(H3_STREAM_DESTROY, &conn->super, stream->quic->stream_id);
-
     --*get_state_counter(conn, stream->state);
 
     req_scheduler_deactivate(conn, stream);
@@ -1100,8 +1098,6 @@ static int stream_open_cb(quicly_stream_open_t *self, quicly_stream_t *qs)
 
     struct st_h2o_http3_server_conn_t *conn =
         H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_conn_t, h3, *quicly_get_data(qs->conn));
-
-    H2O_PROBE_CONN(H3_STREAM_CREATE, &conn->super, qs->stream_id);
 
     /* create new stream and start handling the request */
     struct st_h2o_http3_server_stream_t *stream = h2o_mem_alloc(sizeof(*stream));
