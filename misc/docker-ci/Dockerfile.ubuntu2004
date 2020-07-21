@@ -38,7 +38,7 @@ RUN apt-get install --yes \
 	systemtap-sdt-dev \
 	wget
 
-# install curl 7.57.0 because t/80reverse-proxy-truncated-chunked.t depends on it.
+# install curl 7.57.0 because t/50fastcgi.t depends on it.
 RUN apt-get install --yes libnghttp2-dev \
 	&& wget --no-verbose -O - https://curl.haxx.se/download/curl-7.57.0.tar.gz | tar xzf - \
 	&& (cd curl-7.57.0 && ./configure --prefix=/usr/local --without-brotli --with-nghttp2 --disable-shared && make && sudo make install)
