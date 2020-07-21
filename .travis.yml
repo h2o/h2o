@@ -48,4 +48,4 @@ matrix:
       before_install: *bi
       script:
         - uname -a
-        - make -f misc/docker-ci/check.mk dtrace CONTAINER_NAME=h2oserver/h2o-ci-dtrace
+        - make -f misc/docker-ci/check.mk dtrace CONTAINER_NAME=h2oserver/h2o-ci:ubuntu2004
