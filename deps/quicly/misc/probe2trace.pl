@@ -119,19 +119,19 @@ for my $probe (@probes) {
             }
         } elsif ($type eq 'struct st_quicly_stats_t *') {
             push @fmt, map {qq("rtt_$_":\%u)} qw(minimum smoothed latest);
-            push @fmt, map {qq("cc_$_":\%u)} qw(type cwnd ssthresh cwnd_initial cwnd_exiting_slow_start cwnd_minimum cwnd_maximum num_loss_episodes);
+            push @fmt, map {qq("cc_$_":\%u)} qw(impl->type cwnd ssthresh cwnd_initial cwnd_exiting_slow_start cwnd_minimum cwnd_maximum num_loss_episodes);
             push @fmt, map {qq("num_packets_$_":\%llu)} qw(sent ack_received lost lost_time_threshold late_acked received decryption_failed);
             push @fmt, map {qq("num_bytes_$_":\%llu)} qw(sent received);
             push @fmt, qq("num_ptos":\%u);
             if ($arch eq 'linux') {
                 push @ap, map{"((struct st_quicly_stats_t *)arg$i)->rtt.$_"} qw(minimum smoothed variance);
-                push @ap, map{"((struct st_quicly_stats_t *)arg$i)->cc.$_"} qw(type cwnd ssthresh cwnd_initial cwnd_exiting_slow_start cwnd_minimum cwnd_maximum num_loss_episodes);
+                push @ap, map{"((struct st_quicly_stats_t *)arg$i)->cc.$_"} qw(impl->type cwnd ssthresh cwnd_initial cwnd_exiting_slow_start cwnd_minimum cwnd_maximum num_loss_episodes);
                 push @ap, map{"((struct st_quicly_stats_t *)arg$i)->num_packets.$_"} qw(sent ack_received lost lost_time_threshold late_acked received decryption_failed);
                 push @ap, map{"((struct st_quicly_stats_t *)arg$i)->num_bytes.$_"} qw(sent received);
                 push @ap, "((struct st_quicly_stats_t *)arg$i)->num_ptos";
             } else {
                 push @ap, map{"arg${i}->rtt.$_"} qw(minimum smoothed variance);
-                push @ap, map{"arg${i}->cc.$_"} qw(type cwnd ssthresh cwnd_initial cwnd_exiting_slow_start cwnd_minimum cwnd_maximum num_loss_episodes);
+                push @ap, map{"arg${i}->cc.$_"} qw(impl->type cwnd ssthresh cwnd_initial cwnd_exiting_slow_start cwnd_minimum cwnd_maximum num_loss_episodes);
                 push @ap, map{"(unsigned long long)arg${i}->num_packets.$_"} qw(sent ack_received lost lost_time_threshold late_acked received decryption_failed);
                 push @ap, map{"(unsigned long long)arg${i}->num_bytes.$_"} qw(sent received);
                 push @ap, "arg${i}->num_ptos";
