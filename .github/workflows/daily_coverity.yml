@@ -1,0 +1,71 @@
+name: DailyCoverity
+
+on:
+  schedule:
+    # 0:05am JST every day
+    - cron: '5 15 * * *'
+
+jobs:
+  submit:
+    runs-on: ubuntu-18.04
+
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Populate submodules
+      run: |
+        git submodule update --init --recursive
+
+    # FIXME: this may be only needed for nektos/act, where for some mysterious reason
+    # some files magically disappear after launching the action.
+    # Real GitHub Actions may not need this, but probably wouldn't hurt to run this either.
+    - name: Restore repository
+      run: git reset --hard
+
+    - name: Install Dependencies
+      env:
+          COVERITY_SCAN_TOKEN: ${{ secrets.COVERITY_SCAN_TOKEN }}
+      run: |
+          cat <<EOF > /tmp/deb-src.list
+          deb-src http://archive.ubuntu.com/ubuntu bionic main restricted
+          deb-src http://archive.ubuntu.com/ubuntu bionic-updates main restricted
+          deb-src http://archive.ubuntu.com/ubuntu bionic universe
+          deb-src http://archive.ubuntu.com/ubuntu bionic-updates universe
+          deb-src http://archive.ubuntu.com/ubuntu bionic multiverse
+          deb-src http://archive.ubuntu.com/ubuntu bionic-updates multiverse
+          deb-src http://archive.ubuntu.com/ubuntu bionic-security main restricted
+          deb-src http://archive.ubuntu.com/ubuntu bionic-security universe
+          deb-src http://archive.ubuntu.com/ubuntu bionic-security multiverse
+          EOF
+          sudo cp /tmp/deb-src.list /etc/apt/sources.list.d/
+          sudo apt-get update
+          sudo apt-get install -y wget curl build-essential
+          sudo apt-get -y build-dep h2o
+          wget https://scan.coverity.com/download/linux64 --post-data "token=${COVERITY_SCAN_TOKEN}&project=h2o%2Fh2o" -O /tmp/coverity_tool.tgz
+          tar xzf /tmp/coverity_tool.tgz -C /tmp
+          rm /tmp/coverity_tool.tgz
+
+    - name: Configure
+      run: |
+          mkdir build
+          cd build
+          cmake ..
+
+    - name: Build
+      run: |
+        export PATH=`ls -td /tmp/cov-analysis-linux64-* | head -1`/bin:$PATH
+        cd build
+        mkdir cov-int
+        cov-build --dir=cov-int make -j2
+        tar czf h2o-cov.tgz cov-int
+
+    - name: Submit
+      env:
+        COVERITY_SCAN_TOKEN: ${{ secrets.COVERITY_SCAN_TOKEN }}
+      run: |
+       curl --form token=${COVERITY_SCAN_TOKEN} \
+        --form email=hfujita@fastly.com \
+        --form file=@build/h2o-cov.tgz \
+        --form version=`git log --oneline -1 | awk '{ print $1;}'` \
+        --form description="H2O - the optimized HTTP/1, HTTP/2, HTTP/3 server" \
+        "https://scan.coverity.com/builds?project=h2o%2Fh2o"
