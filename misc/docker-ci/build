@@ -3,7 +3,7 @@
 # https://hub.docker.com/r/h2oserver/h2o-ci
 #
 # usage: misc/docker-ci/build variants...
-#        variants might be ubuntu1604 ubuntu2004 (corresponding misc/docker-ci/Dockerfile.$variant)
+#        variants might be ubuntu1604 ubuntu2004 (corresponds to misc/docker-ci/Dockerfile.$variant)
 
 set -xe
 
