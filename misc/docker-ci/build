@@ -1,0 +1,20 @@
+#!/bin/bash
+# To build Docker images for CI and push the artifacts to Docker Hub.
+# https://hub.docker.com/r/h2oserver/h2o-ci
+#
+# usage: misc/docker-ci/build variants...
+#        variants might be ubuntu1604 ubuntu2004 (corresponds to misc/docker-ci/Dockerfile.$variant)
+
+set -xe
+
+IMAGE_NAME=h2oserver/h2o-ci
+
+SCRIPT_DIR=$(realpath $(dirname $0))
+
+# The build directory must be empty to avoid include files which are should not be published.
+cd "$SCRIPT_DIR/docker-root"
+
+for variant  in $@ ; do
+    docker build --tag "${IMAGE_NAME}:${variant}" -f "${SCRIPT_DIR}/Dockerfile.${variant}" .
+    docker push "${IMAGE_NAME}:${variant}"
+done

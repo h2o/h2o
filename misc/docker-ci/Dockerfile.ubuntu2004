@@ -1,4 +1,4 @@
-FROM ubuntu:19.04
+FROM ubuntu:20.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -20,17 +20,28 @@ RUN apt-get install --yes \
 	libssl-dev \
 	libuv1-dev \
 	llvm-dev \
+	libllvm7 \
+	llvm-7-dev \
+	libclang-7-dev \
+	libbrotli-dev \
 	zlib1g-dev \
 	memcached \
 	netcat-openbsd \
 	nghttp2-client \
 	php-cgi \
 	pkgconf \
+	python3 \
+	python3-distutils \
 	redis-server \
 	ruby-dev \
 	sudo \
 	systemtap-sdt-dev \
 	wget
+
+# install curl 7.57.0 because t/50fastcgi.t depends on it.
+RUN apt-get install --yes libnghttp2-dev \
+	&& wget --no-verbose -O - https://curl.haxx.se/download/curl-7.57.0.tar.gz | tar xzf - \
+	&& (cd curl-7.57.0 && ./configure --prefix=/usr/local --without-brotli --with-nghttp2 --disable-shared && make && sudo make install)
 
 # perl
 RUN apt-get install --yes \
@@ -58,7 +69,7 @@ RUN git clone https://github.com/iovisor/bcc.git && \
 	git checkout 6021958a && \
 	mkdir build && \
 	cd build && \
-	cmake -DCMAKE_INSTALL_PREFIX=/usr .. && \
+	cmake -DCMAKE_INSTALL_PREFIX=/usr -DPYTHON_CMD=python3 .. && \
 	make && \
 	make install && \
 	make clean
