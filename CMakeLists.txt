@@ -894,11 +894,11 @@ IF (WITH_H2OLOG)
     MESSAGE(STATUS "Supporting h2olog")
 
     SET(H2OLOG_SOURCE_FILES
-        "h2olog/h2olog.h"
-        "h2olog/h2olog.cc"
-        "h2olog/http.cc"
-        "h2olog/json.h"
-        "h2olog/json.cc"
+        "src/h2olog/h2olog.h"
+        "src/h2olog/h2olog.cc"
+        "src/h2olog/http.cc"
+        "src/h2olog/json.h"
+        "src/h2olog/json.cc"
         "include/h2o/version.h"
     )
 
@@ -909,11 +909,11 @@ IF (WITH_H2OLOG)
     )
 
     ADD_CUSTOM_COMMAND(
-        OUTPUT  "${CMAKE_CURRENT_SOURCE_DIR}/h2olog/generated-quic.cc"
-        COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/h2olog/misc/gen-quic-bpf.py" "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}/h2olog/generated-quic.cc"
-        DEPENDS ${H2OLOG_GEN_DEPS} "${CMAKE_CURRENT_SOURCE_DIR}/h2olog/misc/gen-quic-bpf.py"
+        OUTPUT  "${CMAKE_CURRENT_SOURCE_DIR}/src/h2olog/generated-quic.cc"
+        COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/src/h2olog/misc/gen-quic-bpf.py" "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}/h2olog/generated-quic.cc"
+        DEPENDS ${H2OLOG_GEN_DEPS} "${CMAKE_CURRENT_SOURCE_DIR}/src/h2olog/misc/gen-quic-bpf.py"
     )
-    LIST(APPEND H2OLOG_SOURCE_FILES "${CMAKE_CURRENT_SOURCE_DIR}/h2olog/generated-quic.cc")
+    LIST(APPEND H2OLOG_SOURCE_FILES "${CMAKE_CURRENT_SOURCE_DIR}/src/h2olog/generated-quic.cc")
     LINK_DIRECTORIES("${LIBBCC_LIBRARY_DIRS}")
 
     ADD_EXECUTABLE(h2olog ${H2OLOG_SOURCE_FILES})
@@ -926,7 +926,7 @@ IF (WITH_H2OLOG)
 
     TARGET_LINK_LIBRARIES(h2olog "${LIBBCC_LIBRARIES}")
     TARGET_INCLUDE_DIRECTORIES(h2olog
-        PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/h2olog"
+        PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src/h2olog"
         PRIVATE "${LIBBCC_INCLUDE_DIRS}"
     )
 
