@@ -13,10 +13,7 @@ SCRIPT_DIR=$(realpath $(dirname $0))
 PROJECT_ROOT_DIR=$(realpath "${SCRIPT_DIR}/../..")
 
 # The build directory must be empty to avoid include files which are should not be published.
-BUILD_DIR="$SCRIPT_DIR/.empty"
-mkdir -p "$BUILD_DIR"
-trap 'rm -rf "${BUILD_DIR}"' 0
-cd $BUILD_DIR
+cd "$SCRIPT_DIR/docker-root"
 
 for variant  in $@ ; do
     docker build --tag "${IMAGE_NAME}:${variant}" -f "${SCRIPT_DIR}/Dockerfile.${variant}" "${PROJECT_ROOT_DIR}"
