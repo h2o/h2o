@@ -950,7 +950,7 @@ static int64_t lookup_dynamic(h2o_qpack_encoder_t *qpack, const h2o_iovec_t *nam
             *is_exact = 1;
             return i;
         }
-        if (name_found == 0)
+        if (name_found == -1)
             name_found = i;
     }
 
