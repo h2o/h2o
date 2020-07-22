@@ -3,7 +3,7 @@ package t::Util;
 use strict;
 use warnings;
 use Digest::MD5 qw(md5_hex);
-use File::Temp qw(tempfile);
+use File::Temp qw(tempfile tempdir);
 use IO::Socket::INET;
 use IO::Socket::SSL;
 use IO::Poll qw(POLLIN POLLOUT POLLHUP POLLERR);
@@ -15,9 +15,38 @@ use Protocol::HTTP2::Constants;
 use Scope::Guard qw(scope_guard);
 use Test::More;
 use Time::HiRes qw(sleep gettimeofday tv_interval);
+use Carp;
 
 use base qw(Exporter);
-our @EXPORT = qw(ASSETS_DIR DOC_ROOT bindir run_as_root server_features exec_unittest exec_mruby_unittest spawn_server spawn_h2o spawn_h2o_raw empty_ports create_data_file md5_file prog_exists run_prog openssl_can_negotiate curl_supports_http2 run_with_curl h2get_exists run_with_h2get run_with_h2get_simple one_shot_http_upstream wait_debugger spawn_forked spawn_h2_server find_blackhole_ip);
+our @EXPORT = qw(
+    ASSETS_DIR
+    DOC_ROOT
+    bindir
+    run_as_root
+    server_features
+    exec_unittest
+    exec_mruby_unittest
+    spawn_server
+    spawn_h2o
+    spawn_h2o_raw
+    empty_ports
+    create_data_file
+    md5_file
+    prog_exists
+    run_prog
+    openssl_can_negotiate
+    curl_supports_http2
+    run_with_curl
+    h2get_exists
+    run_with_h2get
+    run_with_h2get_simple
+    one_shot_http_upstream
+    wait_debugger
+    spawn_forked
+    spawn_h2_server
+    spawn_h2olog
+    find_blackhole_ip
+);
 
 use constant ASSETS_DIR => 't/assets';
 use constant DOC_ROOT   => ASSETS_DIR . "/doc_root";
@@ -238,6 +267,83 @@ sub spawn_h2o_raw {
         pid      => $pid,
         conf_file => $conffn,
     };
+}
+
+package H2OLog {
+    sub get_trace {
+        my($self, $cb) = @_;
+        return $self->{get_trace}->($cb);
+    }
+}
+
+# returns a subroutine reference to read tracer outputs
+# e.g.
+#   my $get_trace = spawn_h2olog({ pid => $h2o_pid });
+#   my $trace; do { $trace = $get_trace->(sub { ... }) } while not defined $trace;
+sub spawn_h2olog {
+    my ($opts) = @_;
+    my $h2o_pid = $opts->{pid} or croak("Missing pid in the opts");
+
+    my $h2olog_prog = bindir() . "/h2olog";
+
+    my $tempdir = tempdir(CLEANUP => 1);
+    my $output_file = "$tempdir/h2olog.jsonl";
+
+    my $tracer_pid = fork;
+    die "fork(2) failed: $!" unless defined $tracer_pid;
+    if ($tracer_pid == 0) {
+        # child process, spawn h2olog
+        exec $h2olog_prog, "quic", "-d", "-p", $h2o_pid, "-w", $output_file;
+        die "failed to spawn $h2olog_prog: $!";
+    }
+
+    # wait until h2olog and the trace log becomes ready
+    my $read_trace;
+    while (1) {
+        sleep 1;
+        if (open my $fh, "<", $output_file) {
+            my $off = 0;
+            $read_trace = sub {
+                seek $fh, $off, 0
+                    or die "seek failed:$!";
+                read $fh, my $bytes, 65000;
+                $bytes = ''
+                    unless defined $bytes;
+                $off += length $bytes;
+                return $bytes;
+            };
+            last;
+        }
+        die "h2olog failed to start\n"
+            if waitpid($tracer_pid, WNOHANG) == $tracer_pid;
+    }
+
+    my $get_trace = sub {
+        my ($request_cb) = @_;
+
+        $request_cb->();
+
+        # read the trace
+        my $delay = 5;
+        my $trace;
+        do {
+            sleep 1;
+
+            if (--$delay <= 0) {
+                return undef;
+            }
+        } while (($trace = $read_trace->()) eq '');
+        return $trace;
+    };
+
+    my $guard = scope_guard(sub {
+        while (waitpid($tracer_pid, 0) != $tracer_pid) {}
+    });
+
+    return bless {
+        guard => $guard,
+        get_trace => $get_trace,
+    }, "H2OLog";
 }
 
 sub empty_ports {
