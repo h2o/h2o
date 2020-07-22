@@ -10,12 +10,11 @@ set -xe
 IMAGE_NAME=h2oserver/h2o-ci
 
 SCRIPT_DIR=$(realpath $(dirname $0))
-PROJECT_ROOT_DIR=$(realpath "${SCRIPT_DIR}/../..")
 
 # The build directory must be empty to avoid include files which are should not be published.
 cd "$SCRIPT_DIR/docker-root"
 
 for variant  in $@ ; do
-    docker build --tag "${IMAGE_NAME}:${variant}" -f "${SCRIPT_DIR}/Dockerfile.${variant}" "${PROJECT_ROOT_DIR}"
+    docker build --tag "${IMAGE_NAME}:${variant}" -f "${SCRIPT_DIR}/Dockerfile.${variant}" .
     docker push "${IMAGE_NAME}:${variant}"
 done
