@@ -1,4 +1,4 @@
-CONTAINER_NAME=kazuho/h2o-ci:latest
+CONTAINER_NAME=h2oserver/h2o-ci:ubuntu1604
 SRC_DIR=/h2o
 CHECK_MK=$(SRC_DIR)/misc/docker-ci/check.mk
 CMAKE_ARGS=
@@ -24,7 +24,7 @@ dtrace:
 
 _check:
 	mkdir -p build
-	sudo mount -t tmpfs tmpfs build
+	sudo mount -t tmpfs tmpfs build -o size=3G
 	sudo chown -R ci:ci build
 	sudo chmod 0755 build
 	$(MAKE) -f $(CHECK_MK) -C build _do-check CMAKE_ARGS=$(CMAKE_ARGS)

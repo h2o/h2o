@@ -27,43 +27,87 @@ static quicly_conn_t *client, *server;
 
 static void test_handshake(void)
 {
-    quicly_datagram_t *packets[32];
+    quicly_address_t dest, src;
+    struct iovec packets[8];
+    uint8_t packetsbuf[PTLS_ELEMENTSOF(packets) * quic_ctx.transport_params.max_udp_payload_size];
     size_t num_packets, num_decoded;
-    quicly_decoded_packet_t decoded[32];
+    quicly_decoded_packet_t decoded[PTLS_ELEMENTSOF(packets) * 4];
     int ret, i;
 
     /* send CH */
     ret = quicly_connect(&client, &quic_ctx, "example.com", &fake_address.sa, NULL, new_master_id(), ptls_iovec_init(NULL, 0), NULL,
                          NULL);
     ok(ret == 0);
-    num_packets = sizeof(packets) / sizeof(packets[0]);
-    ret = quicly_send(client, packets, &num_packets);
+    num_packets = PTLS_ELEMENTSOF(packets);
+    ret = quicly_send(client, &dest, &src, packets, &num_packets, packetsbuf, sizeof(packetsbuf));
     ok(ret == 0);
     ok(num_packets == 1);
-    ok(packets[0]->data.len == 1280);
+    ok(packets[0].iov_len == 1280);
 
     /* receive CH, send handshake upto ServerFinished */
     num_decoded = decode_packets(decoded, packets, num_packets);
     ok(num_decoded == 1);
     ret = quicly_accept(&server, &quic_ctx, NULL, &fake_address.sa, decoded, NULL, new_master_id(), NULL);
     ok(ret == 0);
-    free_packets(packets, num_packets);
     ok(quicly_get_state(server) == QUICLY_STATE_CONNECTED);
     ok(quicly_connection_is_ready(server));
-    num_packets = sizeof(packets) / sizeof(packets[0]);
-    ret = quicly_send(server, packets, &num_packets);
+    num_packets = PTLS_ELEMENTSOF(packets);
+    ret = quicly_send(server, &dest, &src, packets, &num_packets, packetsbuf, sizeof(packetsbuf));
     ok(ret == 0);
     ok(num_packets != 0);
 
-    /* receive ServerFinished */
+    /* receive server flight upto ServerFinished, send ClientFinished */
     num_decoded = decode_packets(decoded, packets, num_packets);
     for (i = 0; i != num_decoded; ++i) {
         ret = quicly_receive(client, NULL, &fake_address.sa, decoded + i);
         ok(ret == 0);
     }
-    free_packets(packets, num_packets);
     ok(quicly_get_state(client) == QUICLY_STATE_CONNECTED);
     ok(quicly_connection_is_ready(client));
+    num_packets = PTLS_ELEMENTSOF(packets);
+    ret = quicly_send(client, &dest, &src, packets, &num_packets, packetsbuf, sizeof(packetsbuf));
+    ok(ret == 0);
+    ok(num_packets != 0);
+    ok(ptls_handshake_is_complete(quicly_get_tls(client)));
+
+    /* receive ClientFinished, send HANDSHAKE_DONE */
+    num_decoded = decode_packets(decoded, packets, num_packets);
+    for (i = 0; i != num_decoded; ++i) {
+        ret = quicly_receive(server, NULL, &fake_address.sa, decoded + i);
+        ok(ret == 0);
+    }
+    ok(quicly_get_state(server) == QUICLY_STATE_CONNECTED);
+    ok(ptls_handshake_is_complete(quicly_get_tls(server)));
+    num_packets = PTLS_ELEMENTSOF(packets);
+    ret = quicly_send(server, &dest, &src, packets, &num_packets, packetsbuf, sizeof(packetsbuf));
+    ok(ret == 0);
+    ok(num_packets != 0);
+
+    /* receive HANDSHAKE_DONE, send ACK (after delay) */
+    num_decoded = decode_packets(decoded, packets, num_packets);
+    for (i = 0; i != num_decoded; ++i) {
+        ret = quicly_receive(client, NULL, &fake_address.sa, decoded + i);
+        ok(ret == 0);
+    }
+    ok(quicly_get_state(client) == QUICLY_STATE_CONNECTED);
+    ok(quicly_get_first_timeout(client) == quic_now + QUICLY_DELAYED_ACK_TIMEOUT);
+    quic_now = quicly_get_first_timeout(client);
+    num_packets = PTLS_ELEMENTSOF(packets);
+    ret = quicly_send(client, &dest, &src, packets, &num_packets, packetsbuf, sizeof(packetsbuf));
+    ok(ret == 0);
+    ok(num_packets != 0);
+
+    /* receive ACK */
+    num_decoded = decode_packets(decoded, packets, num_packets);
+    for (i = 0; i != num_decoded; ++i) {
+        ret = quicly_receive(server, NULL, &fake_address.sa, decoded + i);
+        ok(ret == 0);
+    }
+    ok(quicly_get_state(server) == QUICLY_STATE_CONNECTED);
+
+    /* both endpoints have nothing to send */
+    ok(quicly_get_first_timeout(server) == quic_now + quic_ctx.transport_params.max_idle_timeout);
+    ok(quicly_get_first_timeout(client) == quic_now + quic_ctx.transport_params.max_idle_timeout);
 }
 
 static void simple_http(void)
@@ -94,6 +138,7 @@ static void simple_http(void)
     quicly_streambuf_egress_shutdown(server_stream);
     ok(quicly_num_streams(server) == 1);
 
+    quic_now += QUICLY_DELAYED_ACK_TIMEOUT;
     transmit(server, client);
 
     ok(client_streambuf->is_detached);
@@ -317,7 +362,8 @@ static void test_reset_during_loss(void)
     quicly_max_stream_data_t max_stream_data_orig = quic_ctx.transport_params.max_stream_data;
     quicly_stream_t *client_stream, *server_stream;
     test_streambuf_t *client_streambuf, *server_streambuf;
-    quicly_datagram_t *reordered_packet;
+    struct iovec reordered_packet;
+    uint8_t reordered_packet_buf[quic_ctx.transport_params.max_udp_payload_size];
     int ret;
     uint64_t max_data_at_start, tmp;
 
@@ -344,8 +390,9 @@ static void test_reset_during_loss(void)
     transmit(server, client);
 
     { /* loss of 4 bytes */
+        quicly_address_t dest, src;
         size_t cnt = 1;
-        ret = quicly_send(client, &reordered_packet, &cnt);
+        ret = quicly_send(client, &dest, &src, &reordered_packet, &cnt, reordered_packet_buf, sizeof(reordered_packet_buf));
         ok(ret == 0);
         ok(cnt == 1);
     }
@@ -399,8 +446,8 @@ static void test_reset_during_loss(void)
 
 static uint16_t test_close_error_code;
 
-static void test_closeed_by_peer(quicly_closed_by_peer_t *self, quicly_conn_t *conn, int err, uint64_t frame_type,
-                                 const char *reason, size_t reason_len)
+static void test_closeed_by_remote(quicly_closed_by_remote_t *self, quicly_conn_t *conn, int err, uint64_t frame_type,
+                                   const char *reason, size_t reason_len)
 {
     ok(QUICLY_ERROR_IS_QUIC_APPLICATION(err));
     test_close_error_code = QUICLY_ERROR_GET_ERROR_CODE(err);
@@ -411,13 +458,15 @@ static void test_closeed_by_peer(quicly_closed_by_peer_t *self, quicly_conn_t *c
 
 static void test_close(void)
 {
-    quicly_closed_by_peer_t closed_by_peer = {test_closeed_by_peer}, *orig_closed_by_peer = quic_ctx.closed_by_peer;
-    quicly_datagram_t *datagram;
+    quicly_closed_by_remote_t closed_by_remote = {test_closeed_by_remote}, *orig_closed_by_remote = quic_ctx.closed_by_remote;
+    quicly_address_t dest, src;
+    struct iovec datagram;
+    uint8_t datagram_buf[quic_ctx.transport_params.max_udp_payload_size];
     size_t num_datagrams;
     int64_t client_timeout, server_timeout;
     int ret;
 
-    quic_ctx.closed_by_peer = &closed_by_peer;
+    quic_ctx.closed_by_remote = &closed_by_remote;
 
     /* client sends close */
     ret = quicly_close(client, QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(12345), "good bye");
@@ -425,7 +474,7 @@ static void test_close(void)
     ok(quicly_get_state(client) == QUICLY_STATE_CLOSING);
     ok(quicly_get_first_timeout(client) <= quic_now);
     num_datagrams = 1;
-    ret = quicly_send(client, &datagram, &num_datagrams);
+    ret = quicly_send(client, &dest, &src, &datagram, &num_datagrams, datagram_buf, sizeof(datagram_buf));
     assert(num_datagrams == 1);
     client_timeout = quicly_get_first_timeout(client);
     ok(quic_now < client_timeout && client_timeout < quic_now + 1000); /* 3 pto or something */
@@ -443,24 +492,24 @@ static void test_close(void)
 
     /* nothing sent by the server in response */
     num_datagrams = 1;
-    ret = quicly_send(server, &datagram, &num_datagrams);
+    ret = quicly_send(server, &dest, &src, &datagram, &num_datagrams, datagram_buf, sizeof(datagram_buf));
     ok(ret == 0);
     ok(num_datagrams == 0);
 
     /* endpoints request discarding state after timeout */
     quic_now = client_timeout < server_timeout ? server_timeout : client_timeout;
     num_datagrams = 1;
-    ret = quicly_send(client, &datagram, &num_datagrams);
+    ret = quicly_send(client, &dest, &src, &datagram, &num_datagrams, datagram_buf, sizeof(datagram_buf));
     ok(ret == QUICLY_ERROR_FREE_CONNECTION);
     quicly_free(client);
     num_datagrams = 1;
-    ret = quicly_send(server, &datagram, &num_datagrams);
+    ret = quicly_send(server, &dest, &src, &datagram, &num_datagrams, datagram_buf, sizeof(datagram_buf));
     ok(ret == QUICLY_ERROR_FREE_CONNECTION);
     quicly_free(server);
 
     client = NULL;
     server = NULL;
-    quic_ctx.closed_by_peer = orig_closed_by_peer;
+    quic_ctx.closed_by_remote = orig_closed_by_remote;
 }
 
 static void tiny_connection_window(void)
@@ -478,7 +527,9 @@ static void tiny_connection_window(void)
     testdata[1024] = '\0';
 
     { /* create connection and write 16KB */
-        quicly_datagram_t *raw;
+        quicly_address_t dest, src;
+        struct iovec raw;
+        uint8_t rawbuf[quic_ctx.transport_params.max_udp_payload_size];
         size_t num_packets;
         quicly_decoded_packet_t decoded;
 
@@ -486,7 +537,7 @@ static void tiny_connection_window(void)
                              NULL, NULL);
         ok(ret == 0);
         num_packets = 1;
-        ret = quicly_send(client, &raw, &num_packets);
+        ret = quicly_send(client, &dest, &src, &raw, &num_packets, rawbuf, sizeof(rawbuf));
         ok(ret == 0);
         ok(num_packets == 1);
         ok(quicly_get_first_timeout(client) > quic_ctx.now->cb(quic_ctx.now));
@@ -494,7 +545,6 @@ static void tiny_connection_window(void)
         ok(num_packets == 1);
         ret = quicly_accept(&server, &quic_ctx, NULL, &fake_address.sa, &decoded, NULL, new_master_id(), NULL);
         ok(ret == 0);
-        free_packets(&raw, 1);
     }
 
     transmit(server, client);

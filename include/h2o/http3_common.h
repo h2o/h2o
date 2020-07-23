@@ -281,9 +281,10 @@ typedef struct st_h2o_http3_read_frame_t {
 extern const ptls_iovec_t h2o_http3_alpn[1];
 
 /**
- * sends a datagram
+ * sends datagrams
  */
-int h2o_http3_send_datagram(h2o_http3_ctx_t *ctx, quicly_datagram_t *p);
+int h2o_http3_send_datagrams(h2o_http3_ctx_t *ctx, quicly_address_t *dest, quicly_address_t *src, struct iovec *datagrams,
+                             size_t num_datagrams);
 /**
  * creates a unidirectional stream object
  */

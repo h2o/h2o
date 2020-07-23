@@ -27,10 +27,14 @@ FUNCTION (DEFINE_DTRACE_DEPENDENCIES d_file prefix)
         OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/${prefix}-probes.h
         COMMAND dtrace -o ${CMAKE_CURRENT_BINARY_DIR}/${prefix}-probes.h -s ${d_file} -h
         DEPENDS ${d_file})
+    ADD_CUSTOM_TARGET(generate-${prefix}-probes DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/${prefix}-probes.h)
+    SET_SOURCE_FILES_PROPERTIES(${CMAKE_CURRENT_BINARY_DIR}/${prefix}-probes.h PROPERTIES GENERATED TRUE)
     IF (DTRACE_USES_OBJFILE)
         ADD_CUSTOM_COMMAND(
             OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/${prefix}-probes.o
             COMMAND dtrace -o ${CMAKE_CURRENT_BINARY_DIR}/${prefix}-probes.o -s ${d_file} -G
             DEPENDS ${d_file})
+        ADD_DEPENDENCIES(generate-${prefix}-probes ${CMAKE_CURRENT_BINARY_DIR}/${prefix}-probes.o)
+        SET_SOURCE_FILES_PROPERTIES(${CMAKE_CURRENT_BINARY_DIR}/${prefix}-probes.o PROPERTIES GENERATED TRUE)
     ENDIF ()
 ENDFUNCTION ()

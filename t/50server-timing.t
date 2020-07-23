@@ -134,6 +134,8 @@ sub nc_get {
 }
 
 sub nghttp_get {
+    plan skip_all => 'nghttp not found'
+        unless prog_exists('nghttp');
     my ($server, $path) = @_; 
     my $out = `nghttp -vn 'https://127.0.0.1:$server->{tls_port}$path'`;
     ([map { parse_server_timing($_) } ($out =~ /recv \(stream_id=\d+\) server-timing: (.+)$/mg)], $out);

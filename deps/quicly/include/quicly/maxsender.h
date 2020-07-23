@@ -37,7 +37,7 @@ typedef struct st_quicly_maxsender_t {
      */
     int64_t max_committed;
     /**
-     * maximum value being acked by peer
+     * maximum value being acked by remote peer
      */
     int64_t max_acked;
     /**

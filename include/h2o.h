@@ -82,6 +82,8 @@ extern "C" {
 #define H2O_DEFAULT_HANDSHAKE_TIMEOUT (H2O_DEFAULT_HANDSHAKE_TIMEOUT_IN_SECS * 1000)
 #define H2O_DEFAULT_HTTP1_REQ_TIMEOUT_IN_SECS 10
 #define H2O_DEFAULT_HTTP1_REQ_TIMEOUT (H2O_DEFAULT_HTTP1_REQ_TIMEOUT_IN_SECS * 1000)
+#define H2O_DEFAULT_HTTP1_REQ_IO_TIMEOUT_IN_SECS 5
+#define H2O_DEFAULT_HTTP1_REQ_IO_TIMEOUT (H2O_DEFAULT_HTTP1_REQ_IO_TIMEOUT_IN_SECS * 1000)
 #define H2O_DEFAULT_HTTP1_UPGRADE_TO_HTTP2 1
 #define H2O_DEFAULT_HTTP2_IDLE_TIMEOUT_IN_SECS 10
 #define H2O_DEFAULT_HTTP2_IDLE_TIMEOUT (H2O_DEFAULT_HTTP2_IDLE_TIMEOUT_IN_SECS * 1000)
@@ -357,6 +359,10 @@ struct st_h2o_globalconf_t {
          */
         uint64_t req_timeout;
         /**
+         * request io timeout (in milliseconds)
+         */
+        uint64_t req_io_timeout;
+        /**
          * a boolean value indicating whether or not to upgrade to HTTP/2
          */
         int upgrade_to_http2;
@@ -594,6 +600,10 @@ struct st_h2o_context_t {
          * link-list of h2o_http1_conn_t
          */
         h2o_linklist_t _conns;
+        struct {
+            uint64_t request_timeouts;
+            uint64_t request_io_timeouts;
+        } events;
     } http1;
 
     struct {
@@ -836,6 +846,7 @@ typedef struct st_h2o_conn_callbacks_t {
                 h2o_iovec_t (*cipher)(h2o_req_t *req);
                 h2o_iovec_t (*cipher_bits)(h2o_req_t *req);
                 h2o_iovec_t (*session_id)(h2o_req_t *req);
+                h2o_iovec_t (*server_name)(h2o_req_t *req);
             } ssl;
             struct {
                 h2o_iovec_t (*request_index)(h2o_req_t *req);
@@ -1931,7 +1942,10 @@ enum {
     H2O_HEADERS_CMD_MERGE,      /* merges the value into a comma-listed values of the named header */
     H2O_HEADERS_CMD_SET,        /* sets a header line, overwriting the existing one (if any) */
     H2O_HEADERS_CMD_SETIFEMPTY, /* sets a header line if empty */
-    H2O_HEADERS_CMD_UNSET       /* removes the named header(s) */
+    H2O_HEADERS_CMD_UNSET,       /* removes the named header(s) */
+    H2O_HEADERS_CMD_UNSETUNLESS,       /* only keeps the named header(s) */
+    H2O_HEADERS_CMD_COOKIE_UNSET,       /* removes the named cookie(s) */
+    H2O_HEADERS_CMD_COOKIE_UNSETUNLESS,       /* only keeps the named cookie(s) */
 };
 
 typedef enum h2o_headers_command_when {
@@ -1940,10 +1954,15 @@ typedef enum h2o_headers_command_when {
     H2O_HEADERS_CMD_WHEN_ALL,
 } h2o_headers_command_when_t;
 
-struct st_h2o_headers_command_t {
-    int cmd;
+typedef struct st_h2o_headers_command_arg_t {
     h2o_iovec_t *name; /* maybe a token */
     h2o_iovec_t value;
+} h2o_headers_command_arg_t;
+
+struct st_h2o_headers_command_t {
+    int cmd;
+    h2o_headers_command_arg_t *args;
+    size_t num_args;
     h2o_headers_command_when_t when;
 };
 
@@ -2037,10 +2056,12 @@ void h2o_status_register_configurator(h2o_globalconf_t *conf);
 
 /* lib/handler/headers_util.c */
 
+struct headers_util_add_arg_t;
+
 /**
  * appends a headers command to the list
  */
-void h2o_headers_append_command(h2o_headers_command_t **cmds, int cmd, h2o_iovec_t *name, h2o_iovec_t value,
+void h2o_headers_append_command(h2o_headers_command_t **cmds, int cmd, h2o_headers_command_arg_t *args, size_t num_args,
                                 h2o_headers_command_when_t when);
 /**
  * rewrite headers by the command provided

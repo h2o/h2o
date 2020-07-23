@@ -293,6 +293,7 @@ struct ptls_bcrypt_aead_param_t {
     ULONG maxTagLength;
     ULONG nbExtraBytes;
     uint8_t *key_object;
+    uint8_t iv_static[PTLS_MAX_IV_SIZE];
     uint8_t extraBytes[PTLS_MAX_DIGEST_SIZE];
     uint8_t iv[PTLS_MAX_IV_SIZE];
     uint8_t ivbuf[PTLS_MAX_IV_SIZE];
@@ -321,12 +322,12 @@ static void ptls_bcrypt_aead_dispose_crypto(struct st_ptls_aead_context_t *_ctx)
     memset(&ctx->bctx, 0, sizeof(struct ptls_bcrypt_aead_param_t));
 }
 
-static void ptls_bcrypt_aead_do_encrypt_init(struct st_ptls_aead_context_t *_ctx, const void *iv, const void *aad, size_t aadlen)
+static void ptls_bcrypt_aead_do_encrypt_init(struct st_ptls_aead_context_t *_ctx, uint64_t seq, const void *aad, size_t aadlen)
 {
     struct ptls_bcrypt_aead_context_t *ctx = (struct ptls_bcrypt_aead_context_t *)_ctx;
 
-    /* Save a copy of the IV*/
-    memcpy(ctx->bctx.iv, iv, ctx->super.algo->iv_size);
+    /* Build the IV for this encryption */
+    ptls_aead__build_iv(ctx->super.algo, ctx->bctx.iv, ctx->bctx.iv_static, seq);
     /* Auth tag to NULL */
     memset(ctx->bctx.tag, 0, sizeof(ctx->super.algo->tag_size));
     BCRYPT_INIT_AUTH_MODE_INFO(ctx->bctx.aead_params);
@@ -427,15 +428,15 @@ static size_t ptls_bcrypt_aead_do_encrypt_final(struct st_ptls_aead_context_t *_
 }
 
 static size_t ptls_bcrypt_aead_do_decrypt(struct st_ptls_aead_context_t *_ctx, void *output, const void *input, size_t inlen,
-                                          const void *iv, const void *aad, size_t aadlen)
+                                          uint64_t seq, const void *aad, size_t aadlen)
 {
     struct ptls_bcrypt_aead_context_t *ctx = (struct ptls_bcrypt_aead_context_t *)_ctx;
     ULONG cbResult;
     size_t textLen = inlen - ctx->super.algo->tag_size;
     NTSTATUS ret;
 
-    /* Save a copy of the IV*/
-    memcpy(ctx->bctx.iv, iv, ctx->super.algo->iv_size);
+    /* Build the IV for this decryption */
+    ptls_aead__build_iv(ctx->super.algo, ctx->bctx.iv, ctx->bctx.iv_static, seq);
 
     /* TODO: pPaddingInfo must point to BCRYPT_AUTHENTICATED_CIPHER_MODE_INFO structure. */
     BCRYPT_INIT_AUTH_MODE_INFO(ctx->bctx.aead_params);
@@ -459,8 +460,8 @@ static size_t ptls_bcrypt_aead_do_decrypt(struct st_ptls_aead_context_t *_ctx, v
     }
 }
 
-static int ptls_bcrypt_aead_setup_crypto(ptls_aead_context_t *_ctx, int is_enc, const void *key, wchar_t const *bcrypt_name,
-                                         wchar_t const *bcrypt_mode, size_t bcrypt_mode_size)
+static int ptls_bcrypt_aead_setup_crypto(ptls_aead_context_t *_ctx, int is_enc, const void *key, 
+    const void * iv, wchar_t const *bcrypt_name, wchar_t const *bcrypt_mode, size_t bcrypt_mode_size)
 {
     struct ptls_bcrypt_aead_context_t *ctx = (struct ptls_bcrypt_aead_context_t *)_ctx;
     HANDLE hAlgorithm = NULL;
@@ -510,12 +511,14 @@ static int ptls_bcrypt_aead_setup_crypto(ptls_aead_context_t *_ctx, int is_enc, 
     }
 
     if (BCRYPT_SUCCESS(ret)) {
+        memcpy(ctx->bctx.iv_static, iv, ctx->super.algo->iv_size);
         if (is_enc) {
             ctx->super.dispose_crypto = ptls_bcrypt_aead_dispose_crypto;
             ctx->super.do_decrypt = NULL;
             ctx->super.do_encrypt_init = ptls_bcrypt_aead_do_encrypt_init;
             ctx->super.do_encrypt_update = ptls_bcrypt_aead_do_encrypt_update;
             ctx->super.do_encrypt_final = ptls_bcrypt_aead_do_encrypt_final;
+            ctx->super.do_encrypt = ptls_aead__do_encrypt;
         } else {
             ctx->super.dispose_crypto = ptls_bcrypt_aead_dispose_crypto;
             ctx->super.do_decrypt = ptls_bcrypt_aead_do_decrypt;
@@ -530,9 +533,9 @@ static int ptls_bcrypt_aead_setup_crypto(ptls_aead_context_t *_ctx, int is_enc, 
     }
 }
 
-static int ptls_bcrypt_aead_setup_crypto_aesgcm(ptls_aead_context_t *_ctx, int is_enc, const void *key)
+static int ptls_bcrypt_aead_setup_crypto_aesgcm(ptls_aead_context_t *_ctx, int is_enc, const void *key, const void * iv)
 {
-    return ptls_bcrypt_aead_setup_crypto(_ctx, is_enc, key, BCRYPT_AES_ALGORITHM, BCRYPT_CHAIN_MODE_GCM,
+    return ptls_bcrypt_aead_setup_crypto(_ctx, is_enc, key, iv, BCRYPT_AES_ALGORITHM, BCRYPT_CHAIN_MODE_GCM,
                                          sizeof(BCRYPT_CHAIN_MODE_GCM));
 }
 

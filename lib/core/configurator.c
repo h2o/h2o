@@ -413,6 +413,11 @@ static int on_config_http1_request_timeout(h2o_configurator_command_t *cmd, h2o_
     return config_timeout(cmd, node, &ctx->globalconf->http1.req_timeout);
 }
 
+static int on_config_http1_request_io_timeout(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    return config_timeout(cmd, node, &ctx->globalconf->http1.req_io_timeout);
+}
+
 static int on_config_http1_upgrade_to_http2(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     ssize_t ret = h2o_configurator_get_one_of(cmd, node, "OFF,ON");
@@ -944,6 +949,9 @@ void h2o_configurator__init_core(h2o_globalconf_t *conf)
         h2o_configurator_define_command(&c->super, "http1-request-timeout",
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_http1_request_timeout);
+        h2o_configurator_define_command(&c->super, "http1-request-io-timeout",
+                                        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                        on_config_http1_request_io_timeout);
         h2o_configurator_define_command(&c->super, "http1-upgrade-to-http2",
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_http1_upgrade_to_http2);
@@ -1251,13 +1259,11 @@ int h2o_configurator__do_parse_mapping(h2o_configurator_command_t *cmd, yoml_t *
             return -1;
         }
         if ((keys[j].type_mask & (1u << element->value->type)) == 0) {
-            char permitted_types[32] = "";
-            if ((keys[j].type_mask & (1u << YOML_TYPE_SCALAR)) != 0)
-                strcat(permitted_types, " or a scalar");
-            if ((keys[j].type_mask & (1u << YOML_TYPE_SEQUENCE)) != 0)
-                strcat(permitted_types, " or a sequence");
-            if ((keys[j].type_mask & (1u << YOML_TYPE_MAPPING)) != 0)
-                strcat(permitted_types, " or a mapping");
+            char permitted_types[sizeof(" or a scalar or a sequence or a mapping")] = "";
+            snprintf(permitted_types, sizeof(permitted_types), "%s%s%s",
+                     (keys[j].type_mask & (1u << YOML_TYPE_SCALAR)) != 0 ? " or a scalar" : "",
+                     (keys[j].type_mask & (1u << YOML_TYPE_SEQUENCE)) != 0 ? " or a sequence" : "",
+                     (keys[j].type_mask & (1u << YOML_TYPE_MAPPING)) != 0 ? " or a mapping" : "");
             assert(strlen(permitted_types) != 0);
             h2o_configurator_errprintf(cmd, element->value, "attribute `%s` must be %s", element->key->data.scalar,
                                        permitted_types + 4);

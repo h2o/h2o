@@ -53,6 +53,11 @@ int neverbleed_load_private_key_file(neverbleed_t *nb, SSL_CTX *ctx, const char 
  * setuidgid (also changes the file permissions so that `user` can connect to the daemon, if change_socket_ownership is non-zero)
  */
 int neverbleed_setuidgid(neverbleed_t *nb, const char *user, int change_socket_ownership);
+/**
+ * an optional callback that can be registered by the application for doing stuff immediately after the neverbleed process is being
+ * spawned
+ */
+extern void (*neverbleed_post_fork_cb)(void);
 
 #ifdef __cplusplus
 }

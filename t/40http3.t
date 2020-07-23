@@ -68,7 +68,7 @@ EOT
         };
         subtest "post" => sub {
             plan skip_all => 'mruby support is off'
-            unless server_features()->{mruby};
+                unless server_features()->{mruby};
             foreach my $cl (1, 100, 10000, 1000000) {
                 my $resp = `$client_prog -3 -b $cl -c 100000 https://127.0.0.1:$quic_port/echo 2> /dev/null`;
                 is length($resp), $cl;
@@ -84,6 +84,34 @@ subtest "single-thread" => sub {
 
 subtest "multi-thread" => sub {
     doit(16);
+};
+
+subtest "slow-echo-chunked" => sub {
+    plan skip_all => 'mruby support is off'
+        unless server_features()->{mruby};
+
+    my $guard = spawn_h2o(<< "EOT");
+listen:
+  type: quic
+  port: $quic_port
+  ssl:
+    key-file: examples/h2o/server.key
+    certificate-file: examples/h2o/server.crt
+hosts:
+  default:
+    paths:
+      /echo:
+        mruby.handler: |
+          Proc.new do |env|
+            [200, {}, env["rack.input"]]
+          end
+EOT
+
+    wait_port({port => $quic_port, proto => 'udp'});
+
+    my $resp = `$client_prog -3 -t 5 -d 1000 -b 10 -c 2 -i 1000 https://127.0.0.1:$quic_port/echo 2> /dev/null`;
+    is length($resp), 50;
+    is $resp, 'a' x 50;
 };
 
 done_testing;

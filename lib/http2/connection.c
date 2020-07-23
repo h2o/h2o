@@ -1128,7 +1128,7 @@ ssize_t expect_default(h2o_http2_conn_t *conn, const uint8_t *src, size_t len, c
         if (hret != 0)
             ret = hret;
     } else {
-        H2O_PROBE_CONN(H2_UNKNOWN_FRAME_TYPE, &conn->super, (uint64_t) frame.type);
+        H2O_PROBE_CONN(H2_UNKNOWN_FRAME_TYPE, &conn->super, (uint64_t)frame.type);
     }
 
     return ret;
@@ -1458,6 +1458,7 @@ DEFINE_TLS_LOGGER(session_reused)
 DEFINE_TLS_LOGGER(cipher)
 DEFINE_TLS_LOGGER(cipher_bits)
 DEFINE_TLS_LOGGER(session_id)
+DEFINE_TLS_LOGGER(server_name)
 #undef DEFINE_TLS_LOGGER
 
 static h2o_iovec_t log_stream_id(h2o_req_t *req)
@@ -1554,6 +1555,7 @@ static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_hostconf_t **hosts,
                     .cipher = log_cipher,
                     .cipher_bits = log_cipher_bits,
                     .session_id = log_session_id,
+                    .server_name = log_server_name,
                 },
             .http2 =
                 {

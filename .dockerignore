@@ -3,3 +3,4 @@ build
 doc/workdir
 h2o.xcodeproj
 tmp
+.gitkeep

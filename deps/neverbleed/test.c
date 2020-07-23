@@ -25,10 +25,24 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <unistd.h>
-#include <openssl/crypto.h>
+
+#include <openssl/opensslconf.h>
+#include <openssl/opensslv.h>
+
+#if OPENSSL_VERSION_NUMBER >= 0x1010000fL && !defined(OPENSSL_NO_EC) \
+    && (!defined(LIBRESSL_VERSION_NUMBER) || LIBRESSL_VERSION_NUMBER >= 0x2090100fL)
+#define NEVERBLEED_TEST_ECDSA
+#endif
+
+#ifdef NEVERBLEED_TEST_ECDSA
+#include <openssl/ec.h>
+#endif
+#include <openssl/evp.h>
 #include <openssl/ssl.h>
+
 #include "neverbleed.h"
 
+#ifdef NEVERBLEED_TEST_ECDSA
 static void setup_ecc_key(SSL_CTX *ssl_ctx)
 {
     int nid = NID_X9_62_prime256v1;
@@ -40,6 +54,7 @@ static void setup_ecc_key(SSL_CTX *ssl_ctx)
     SSL_CTX_set_tmp_ecdh(ssl_ctx, key);
     EC_KEY_free(key);
 }
+#endif
 
 int dumb_https_server(unsigned short port, SSL_CTX *ctx)
 {
@@ -100,6 +115,7 @@ int main(int argc, char **argv)
     int use_privsep;
 
     /* initialization */
+    /* FIXME: These APIs are deprecated in favor of OPENSSL_init_crypto in 1.1.0. */
     SSL_load_error_strings();
     SSL_library_init();
     OpenSSL_add_all_algorithms();
@@ -109,7 +125,9 @@ int main(int argc, char **argv)
     }
     ctx = SSL_CTX_new(SSLv23_server_method());
     SSL_CTX_set_options(ctx, SSL_OP_ALL | SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3 | SSL_OP_NO_COMPRESSION);
+#ifdef NEVERBLEED_TEST_ECDSA
     setup_ecc_key(ctx);
+#endif
 
     /* parse args */
     if (argc != 5) {

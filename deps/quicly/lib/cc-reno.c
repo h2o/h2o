@@ -22,54 +22,81 @@
 
 #include "quicly/cc.h"
 
-#define QUICLY_INITIAL_WINDOW 10
 #define QUICLY_MIN_CWND 2
 #define QUICLY_RENO_BETA 0.7
 
-void quicly_cc_init(quicly_cc_t *cc)
-{
-    memset(cc, 0, sizeof(quicly_cc_t));
-    cc->cwnd = QUICLY_INITIAL_WINDOW * QUICLY_MAX_PACKET_SIZE;
-    cc->ssthresh = UINT32_MAX;
-}
-
-// TODO: Avoid increase if sender was application limited
-void quicly_cc_on_acked(quicly_cc_t *cc, uint32_t bytes, uint64_t largest_acked, uint32_t inflight)
+/* TODO: Avoid increase if sender was application limited. */
+static void reno_on_acked(quicly_cc_t *cc, const quicly_loss_t *loss, uint32_t bytes, uint64_t largest_acked, uint32_t inflight,
+                          int64_t now, uint32_t max_udp_payload_size)
 {
     assert(inflight >= bytes);
-    // no increases while in recovery
+    /* Do not increase congestion window while in recovery. */
     if (largest_acked < cc->recovery_end)
         return;
 
-    // slow start
+    /* Slow start. */
     if (cc->cwnd < cc->ssthresh) {
         cc->cwnd += bytes;
+        if (cc->cwnd_maximum < cc->cwnd)
+            cc->cwnd_maximum = cc->cwnd;
         return;
     }
-    // congestion avoidance
-    cc->stash += bytes;
-    if (cc->stash < cc->cwnd)
+    /* Congestion avoidance. */
+    cc->state.reno.stash += bytes;
+    if (cc->state.reno.stash < cc->cwnd)
         return;
-    // increase cwnd by 1 MSS per cwnd acked
-    uint32_t count = cc->stash / cc->cwnd;
-    cc->stash -= count * cc->cwnd;
-    cc->cwnd += count * QUICLY_MAX_PACKET_SIZE;
+    /* Increase congestion window by 1 MSS per congestion window acked. */
+    uint32_t count = cc->state.reno.stash / cc->cwnd;
+    cc->state.reno.stash -= count * cc->cwnd;
+    cc->cwnd += count * max_udp_payload_size;
+    if (cc->cwnd_maximum < cc->cwnd)
+        cc->cwnd_maximum = cc->cwnd;
 }
 
-void quicly_cc_on_lost(quicly_cc_t *cc, uint32_t bytes, uint64_t lost_pn, uint64_t next_pn)
+static void reno_on_lost(quicly_cc_t *cc, const quicly_loss_t *loss, uint32_t bytes, uint64_t lost_pn, uint64_t next_pn,
+                         int64_t now, uint32_t max_udp_payload_size)
 {
-    // nothing to do if loss is in recovery window
+    /* Nothing to do if loss is in recovery window. */
     if (lost_pn < cc->recovery_end)
         return;
-    // set end of recovery window
     cc->recovery_end = next_pn;
+
+    ++cc->num_loss_episodes;
+    if (cc->cwnd_exiting_slow_start == 0)
+        cc->cwnd_exiting_slow_start = cc->cwnd;
+
+    /* Reduce congestion window. */
     cc->cwnd *= QUICLY_RENO_BETA;
-    if (cc->cwnd < QUICLY_MIN_CWND * QUICLY_MAX_PACKET_SIZE)
-        cc->cwnd = QUICLY_MIN_CWND * QUICLY_MAX_PACKET_SIZE;
+    if (cc->cwnd < QUICLY_MIN_CWND * max_udp_payload_size)
+        cc->cwnd = QUICLY_MIN_CWND * max_udp_payload_size;
     cc->ssthresh = cc->cwnd;
+
+    if (cc->cwnd_minimum > cc->cwnd)
+        cc->cwnd_minimum = cc->cwnd;
 }
 
-void quicly_cc_on_persistent_congestion(quicly_cc_t *cc)
+static void reno_on_persistent_congestion(quicly_cc_t *cc, const quicly_loss_t *loss, int64_t now)
 {
-    // TODO
+    /* TODO */
+}
+
+static const struct st_quicly_cc_impl_t reno_impl = {CC_RENO_MODIFIED, reno_on_acked, reno_on_lost, reno_on_persistent_congestion};
+
+void quicly_cc_reno_init(quicly_cc_t *cc, uint32_t initcwnd)
+{
+    memset(cc, 0, sizeof(quicly_cc_t));
+    cc->impl = &reno_impl;
+    cc->cwnd = cc->cwnd_initial = cc->cwnd_maximum = initcwnd;
+    cc->ssthresh = cc->cwnd_minimum = UINT32_MAX;
+}
+
+uint32_t quicly_cc_calc_initial_cwnd(uint16_t max_udp_payload_size)
+{
+    static const uint32_t max_packets = 10, max_bytes = 14720;
+    uint32_t cwnd = max_packets * max_udp_payload_size;
+    if (cwnd > max_bytes)
+        cwnd = max_bytes;
+    if (cwnd < QUICLY_MIN_CWND * max_udp_payload_size)
+        cwnd = QUICLY_MIN_CWND * max_udp_payload_size;
+    return cwnd;
 }

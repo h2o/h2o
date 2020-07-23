@@ -22,7 +22,9 @@
  * IN THE SOFTWARE.
  */
 #include <errno.h>
+#ifdef LIBC_HAS_BACKTRACE
 #include <execinfo.h>
+#endif
 #include <getopt.h>
 #include <netinet/in.h>
 #include <signal.h>
@@ -57,7 +59,7 @@ static int cnt_left = 1;
 static size_t cur_req_body_size = 0;
 static int chunk_size = 10;
 static h2o_iovec_t iov_filler;
-static int delay_interval_ms = 0;
+static int io_interval = 0, req_interval = 0;
 static int ssl_verify_none = 0;
 static const ptls_key_exchange_algorithm_t *h3_key_exchanges[] = {
 #if PTLS_OPENSSL_HAVE_X25519
@@ -91,12 +93,22 @@ static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *e
 static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, int version, int status, h2o_iovec_t msg,
                                       h2o_header_t *headers, size_t num_headers, int header_requires_dup);
 
+struct st_timeout {
+    h2o_timer_t timeout;
+    void *ptr;
+};
+
+static void create_timeout(h2o_loop_t *loop, uint64_t delay_ticks, h2o_timer_cb cb, void *ptr)
+{
+    struct st_timeout *t = h2o_mem_alloc(sizeof(*t));
+    *t = (struct st_timeout){{.cb = cb}, ptr};
+    h2o_timer_link(loop, delay_ticks, &t->timeout);
+}
+
 static void on_exit_deferred(h2o_timer_t *entry)
 {
-    h2o_timer_unlink(entry);
     exit(1);
 }
-static h2o_timer_t exit_deferred;
 
 static void on_error(h2o_httpclient_ctx_t *ctx, const char *fmt, ...)
 {
@@ -108,9 +120,7 @@ static void on_error(h2o_httpclient_ctx_t *ctx, const char *fmt, ...)
     fprintf(stderr, "%.*s\n", errlen, errbuf);
 
     /* defer using zero timeout to send pending GOAWAY frame */
-    memset(&exit_deferred, 0, sizeof(exit_deferred));
-    exit_deferred.cb = on_exit_deferred;
-    h2o_timer_link(ctx->loop, 0, &exit_deferred);
+    create_timeout(ctx->loop, 0, on_exit_deferred, NULL);
 }
 
 static void start_request(h2o_httpclient_ctx_t *ctx)
@@ -165,6 +175,15 @@ static void start_request(h2o_httpclient_ctx_t *ctx)
     }
 }
 
+static void on_next_request(h2o_timer_t *entry)
+{
+    struct st_timeout *t = H2O_STRUCT_FROM_MEMBER(struct st_timeout, timeout, entry);
+    h2o_httpclient_ctx_t *ctx = t->ptr;
+    free(t);
+
+    start_request(ctx);
+}
+
 static int on_body(h2o_httpclient_t *client, const char *errstr)
 {
     if (errstr != NULL && errstr != h2o_httpclient_error_is_eos) {
@@ -181,7 +200,7 @@ static int on_body(h2o_httpclient_t *client, const char *errstr)
             /* next attempt */
             h2o_mem_clear_pool(&pool);
             ftruncate(fileno(stdout), 0); /* ignore error when stdout is a tty */
-            start_request(client->ctx);
+            create_timeout(client->ctx->loop, req_interval, on_next_request, client->ctx);
         }
     }
 
@@ -244,33 +263,21 @@ int fill_body(h2o_iovec_t *reqbuf)
     }
 }
 
-struct st_timeout_ctx {
-    h2o_httpclient_t *client;
-    h2o_timer_t _timeout;
-};
-static void timeout_cb(h2o_timer_t *entry)
+static void on_io_timeout(h2o_timer_t *entry)
 {
-    static h2o_iovec_t reqbuf;
-    struct st_timeout_ctx *tctx = H2O_STRUCT_FROM_MEMBER(struct st_timeout_ctx, _timeout, entry);
+    struct st_timeout *t = H2O_STRUCT_FROM_MEMBER(struct st_timeout, timeout, entry);
+    h2o_httpclient_t *client = t->ptr;
+    free(t);
 
+    h2o_iovec_t reqbuf;
     fill_body(&reqbuf);
-    h2o_timer_unlink(&tctx->_timeout);
-    tctx->client->write_req(tctx->client, reqbuf, cur_req_body_size <= 0);
-    free(tctx);
-
-    return;
+    client->write_req(client, reqbuf, cur_req_body_size <= 0);
 }
 
 static void proceed_request(h2o_httpclient_t *client, size_t written, h2o_send_state_t send_state)
 {
-    if (cur_req_body_size > 0) {
-        struct st_timeout_ctx *tctx;
-        tctx = h2o_mem_alloc(sizeof(*tctx));
-        memset(tctx, 0, sizeof(*tctx));
-        tctx->client = client;
-        tctx->_timeout.cb = timeout_cb;
-        h2o_timer_link(client->ctx->loop, delay_interval_ms, &tctx->_timeout);
-    }
+    if (cur_req_body_size > 0)
+        create_timeout(client->ctx->loop, io_interval, on_io_timeout, client);
 }
 
 h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *errstr, h2o_iovec_t *_method, h2o_url_t *url,
@@ -299,13 +306,7 @@ h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *errstr, 
         h2o_add_header(&pool, &headers_vec, H2O_TOKEN_CONTENT_LENGTH, NULL, clbuf, clbuf_len);
 
         *proceed_req_cb = proceed_request;
-
-        struct st_timeout_ctx *tctx;
-        tctx = h2o_mem_alloc(sizeof(*tctx));
-        memset(tctx, 0, sizeof(*tctx));
-        tctx->client = client;
-        tctx->_timeout.cb = timeout_cb;
-        h2o_timer_link(client->ctx->loop, delay_interval_ms, &tctx->_timeout);
+        create_timeout(client->ctx->loop, io_interval, on_io_timeout, client);
     }
 
     *headers = headers_vec.entries;
@@ -322,9 +323,10 @@ static void usage(const char *progname)
             "  -3           HTTP/3-only mode\n"
             "  -b <size>    size of request body (in bytes; default: 0)\n"
             "  -c <size>    size of body chunk (in bytes; default: 10)\n"
+            "  -d <delay>   request interval (in msec; default: 0)\n"
             "  -H <name:value>\n"
             "               adds a request header\n"
-            "  -i <delay>   send interval between chunks (in msec; default: 0)\n"
+            "  -i <delay>   I/O interval between sending chunks (in msec; default: 0)\n"
             "  -k           skip peer verification\n"
             "  -m <method>  request method (default: GET)\n"
             "  -o <path>    file to which the response body is written (default: stdout)\n"
@@ -362,9 +364,11 @@ static void on_sigfatal(int signo)
 
     h2o_set_signal_handler(signo, SIG_DFL);
 
+#ifdef LIBC_HAS_BACKTRACE
     void *frames[128];
     int framecnt = backtrace(frames, sizeof(frames) / sizeof(frames[0]));
     backtrace_symbols_fd(frames, framecnt, 2);
+#endif
 }
 
 int main(int argc, char **argv)
@@ -412,7 +416,7 @@ int main(int argc, char **argv)
     ctx.loop = h2o_evloop_create();
 #endif
 
-    while ((opt = getopt(argc, argv, "t:m:o:b:c:H:i:k2:3W:h")) != -1) {
+    while ((opt = getopt(argc, argv, "t:m:o:b:c:d:H:i:k2:3W:h")) != -1) {
         switch (opt) {
         case 't':
             cnt_left = atoi(optarg);
@@ -440,6 +444,9 @@ int main(int argc, char **argv)
                 exit(EXIT_FAILURE);
             }
             break;
+        case 'd':
+            req_interval = atoi(optarg);
+            break;
         case 'H': {
             const char *colon, *value_start;
             if ((colon = index(optarg, ':')) == NULL) {
@@ -457,7 +464,7 @@ int main(int argc, char **argv)
             ++req.num_headers;
         } break;
         case 'i':
-            delay_interval_ms = atoi(optarg);
+            io_interval = atoi(optarg);
             break;
         case 'k':
             ssl_verify_none = 1;
@@ -486,7 +493,7 @@ int main(int argc, char **argv)
             }
             h3ctx.quic.transport_params.max_stream_data.uni = v;
             h3ctx.quic.transport_params.max_stream_data.bidi_local = v;
-            h3ctx.quic.transport_params.max_stream_data.bidi_remote = v;;
+            h3ctx.quic.transport_params.max_stream_data.bidi_remote = v;
         } break;
         case 'h':
             usage(argv[0]);
