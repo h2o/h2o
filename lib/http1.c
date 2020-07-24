@@ -543,7 +543,7 @@ static int write_req_non_streaming(void *_req, h2o_iovec_t payload, int is_end_s
         conn->req.proceed_req = NULL;
         h2o_process_request(&conn->req);
     } else {
-        proceed_request(&conn->req, payload.len, is_end_stream ? H2O_SEND_STATE_FINAL : H2O_SEND_STATE_IN_PROGRESS);
+        proceed_request(&conn->req, payload.len, H2O_SEND_STATE_IN_PROGRESS);
     }
     return 0;
 }
