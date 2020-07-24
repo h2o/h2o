@@ -408,6 +408,10 @@ struct st_h2o_globalconf_t {
     } http2;
 
     struct {
+        /**
+         * graceful shutdown timeout (in milliseconds)
+         */
+        uint64_t graceful_shutdown_timeout;
         h2o_protocol_callbacks_t callbacks;
     } http3;
 
