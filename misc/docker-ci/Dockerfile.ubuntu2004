@@ -12,6 +12,7 @@ RUN apt-get install --yes \
 	curl \
 	flex \
 	git \
+	libbrotli-dev \
 	libc-ares-dev \
 	libclang-dev \
 	libedit-dev \
@@ -23,7 +24,6 @@ RUN apt-get install --yes \
 	libllvm7 \
 	llvm-7-dev \
 	libclang-7-dev \
-	libbrotli-dev \
 	zlib1g-dev \
 	memcached \
 	netcat-openbsd \
