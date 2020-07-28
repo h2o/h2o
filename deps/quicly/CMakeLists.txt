@@ -49,29 +49,32 @@ SET(PICOTLS_OPENSSL_FILES
 SET(QUICLY_LIBRARY_FILES
     lib/frame.c
     lib/cc-reno.c
+    lib/cc-cubic.c
     lib/defaults.c
+    lib/local_cid.c
+    lib/loss.c
     lib/quicly.c
     lib/ranges.c
     lib/recvstate.c
+    lib/remote_cid.c
+    lib/retire_cid.c
     lib/sendstate.c
     lib/sentmap.c
-    lib/streambuf.c
-    lib/remote_cid.c
-    lib/local_cid.c
-    lib/retire_cid.c)
+    lib/streambuf.c)
 
 SET(UNITTEST_SOURCE_FILES
     deps/picotest/picotest.c
     t/frame.c
-    t/maxsender.c
+    t/local_cid.c
     t/loss.c
+    t/lossy.c
+    t/maxsender.c
     t/ranges.c
+    t/remote_cid.c
+    t/retire_cid.c
     t/sentmap.c
     t/simple.c
     t/stream-concurrency.c
-    t/remote_cid.c
-    t/local_cid.c
-    t/retire_cid.c
     t/test.c)
 
 IF (WITH_DTRACE)
@@ -89,6 +92,7 @@ IF (WITH_DTRACE)
 ENDIF ()
 
 ADD_LIBRARY(quicly ${QUICLY_LIBRARY_FILES})
+TARGET_LINK_LIBRARIES(quicly LINK_PUBLIC m)
 
 ADD_CUSTOM_COMMAND(
     OUTPUT embedded-probes.h
@@ -103,7 +107,7 @@ IF (WITH_FUSION)
 ENDIF ()
 ADD_EXECUTABLE(cli ${CLI_FILES})
 SET_TARGET_PROPERTIES(cli PROPERTIES COMPILE_FLAGS ${CLI_COMPILE_FLAGS})
-TARGET_LINK_LIBRARIES(cli ${OPENSSL_LIBRARIES} ${CMAKE_DL_LIBS})
+TARGET_LINK_LIBRARIES(cli ${OPENSSL_LIBRARIES} ${CMAKE_DL_LIBS} m)
 
 ADD_EXECUTABLE(test.t ${PICOTLS_OPENSSL_FILES} ${UNITTEST_SOURCE_FILES})
 TARGET_LINK_LIBRARIES(test.t quicly ${OPENSSL_LIBRARIES} ${CMAKE_DL_LIBS})

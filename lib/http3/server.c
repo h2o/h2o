@@ -260,7 +260,7 @@ static void set_state(struct st_h2o_http3_server_stream_t *stream, enum h2o_http
     struct st_h2o_http3_server_conn_t *conn = get_conn(stream);
     enum h2o_http3_server_stream_state old_state = stream->state;
 
-    H2O_PROBE_CONN(H3_STREAM_SET_STATE, &conn->super, stream->quic->stream_id, (unsigned)state);
+    H2O_PROBE_CONN(H3S_STREAM_SET_STATE, &conn->super, stream->quic->stream_id, (unsigned)state);
 
     --*get_state_counter(conn, old_state);
     stream->state = state;
@@ -412,8 +412,6 @@ void on_stream_destroy(quicly_stream_t *qs, int err)
 {
     struct st_h2o_http3_server_stream_t *stream = qs->data;
     struct st_h2o_http3_server_conn_t *conn = get_conn(stream);
-
-    H2O_PROBE_CONN(H3_STREAM_DESTROY, &conn->super, stream->quic->stream_id);
 
     --*get_state_counter(conn, stream->state);
 
@@ -1101,8 +1099,6 @@ static int stream_open_cb(quicly_stream_open_t *self, quicly_stream_t *qs)
     struct st_h2o_http3_server_conn_t *conn =
         H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_conn_t, h3, *quicly_get_data(qs->conn));
 
-    H2O_PROBE_CONN(H3_STREAM_CREATE, &conn->super, qs->stream_id);
-
     /* create new stream and start handling the request */
     struct st_h2o_http3_server_stream_t *stream = h2o_mem_alloc(sizeof(*stream));
     stream->quic = qs;
@@ -1403,7 +1399,7 @@ static void on_h3_destroy(h2o_http3_conn_t *h3)
 {
     struct st_h2o_http3_server_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_conn_t, h3, h3);
 
-    H2O_PROBE_CONN0(H3_CLOSE, &conn->super);
+    H2O_PROBE_CONN0(H3S_DESTROY, &conn->super);
 
     assert(quicly_num_streams(conn->h3.quic) == 0);
     assert(conn->num_streams.recv_headers == 0);
@@ -1487,7 +1483,7 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
     ++ctx->super.next_cid.master_id; /* FIXME check overlap */
     h2o_http3_setup(&conn->h3, qconn);
 
-    H2O_PROBE_CONN(H3_ACCEPT, &conn->super, &conn->super, conn->h3.quic);
+    H2O_PROBE_CONN(H3S_ACCEPT, &conn->super, &conn->super, conn->h3.quic);
 
     h2o_http3_send(&conn->h3);
 

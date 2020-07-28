@@ -511,7 +511,10 @@ static void swap_buffers(h2o_buffer_t **a, h2o_buffer_t **b)
     *a = swap;
 }
 
-size_t encode_chunk(struct st_h2o_http1client_t *client, h2o_iovec_t *bufs, h2o_iovec_t chunk, size_t *bytes)
+/**
+ * bufs must have at least 3 elements of space
+ */
+static size_t encode_chunk(struct st_h2o_http1client_t *client, h2o_iovec_t *bufs, h2o_iovec_t chunk, size_t *bytes)
 {
     *bytes = 0;
 
@@ -681,7 +684,7 @@ static void on_connection_ready(struct st_h2o_http1client_t *client)
         return;
     }
 
-    h2o_iovec_t reqbufs[3];
+    h2o_iovec_t reqbufs[5]; /* 5 should be the maximum possible elements used */
     size_t reqbufcnt = 0;
     if (props.proxy_protocol->base != NULL)
         reqbufs[reqbufcnt++] = *props.proxy_protocol;
@@ -705,6 +708,7 @@ static void on_connection_ready(struct st_h2o_http1client_t *client)
         if (client->_is_chunked) {
             assert(body.base != NULL);
             size_t bytes;
+            assert(PTLS_ELEMENTSOF(reqbufs) - reqbufcnt >= 3); /* encode_chunk could write to 3 additional elements */
             reqbufcnt += encode_chunk(client, reqbufs + reqbufcnt, body, &bytes);
             client->super.bytes_written.body = bytes;
         } else if (body.base != NULL) {

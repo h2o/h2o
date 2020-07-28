@@ -80,7 +80,7 @@ ok($chunked_header_found == 1, "TE:chunked header found");
 my @chunks = split /\r\n/, $body;
 
 my $chunk_len = 0;
-for (my $i = 0; $i < scalar(@chunks); $i+=3) {
+for (my $i = 0; $i < scalar(@chunks); $i+=2) {
     $chunk_len += hex($chunks[$i]);
 }
 

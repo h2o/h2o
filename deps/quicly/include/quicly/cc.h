@@ -34,19 +34,29 @@ extern "C" {
 #include <stdint.h>
 #include <string.h>
 #include "quicly/constants.h"
+#include "quicly/loss.h"
 
 typedef enum {
     /**
      * Reno, with 0.7 beta reduction
      */
-    CC_RENO_MODIFIED
+    CC_RENO_MODIFIED,
+    /**
+     * CUBIC (RFC 8312)
+     */
+    CC_CUBIC
 } quicly_cc_type_t;
+
+/**
+ * Holds pointers to concrete congestion control implementation functions.
+ */
+struct st_quicly_cc_impl_t;
 
 typedef struct st_quicly_cc_t {
     /**
-     * Congestion controller type.
+     * Congestion controller implementation.
      */
-    quicly_cc_type_t type;
+    const struct st_quicly_cc_impl_t *impl;
     /**
      * Current congestion window.
      */
@@ -56,13 +66,44 @@ typedef struct st_quicly_cc_t {
      */
     uint32_t ssthresh;
     /**
-     * Stash of acknowledged bytes, used during congestion avoidance.
-     */
-    uint32_t stash;
-    /**
      * Packet number indicating end of recovery period, if in recovery.
      */
     uint64_t recovery_end;
+    /**
+     * State information specific to the congestion controller implementation.
+     */
+    union {
+        /**
+         * State information for Reno congestion control.
+         */
+        struct {
+            /**
+             * Stash of acknowledged bytes, used during congestion avoidance.
+             */
+            uint32_t stash;
+        } reno;
+        /**
+         * State information for CUBIC congestion control.
+         */
+        struct {
+            /**
+             * Time offset from the latest congestion event until cwnd reaches W_max again.
+             */
+            double k;
+            /**
+             * Last cwnd value before the latest congestion event.
+             */
+            uint32_t w_max;
+            /**
+             * W_max value from the previous congestion event.
+             */
+            uint32_t w_last_max;
+            /**
+             * Timestamp of the latest congestion event.
+             */
+            int64_t avoidance_start;
+        } cubic;
+    } state;
     /**
      * Initial congestion window.
      */
@@ -85,23 +126,34 @@ typedef struct st_quicly_cc_t {
     uint32_t num_loss_episodes;
 } quicly_cc_t;
 
+struct st_quicly_cc_impl_t {
+    /**
+     * Congestion controller type.
+     */
+    quicly_cc_type_t type;
+    /**
+     * Called when a packet is newly acknowledged.
+     */
+    void (*cc_on_acked)(quicly_cc_t *cc, const quicly_loss_t *loss, uint32_t bytes, uint64_t largest_acked, uint32_t inflight,
+                        int64_t now, uint32_t max_udp_payload_size);
+    /**
+     * Called when a packet is detected as lost. |next_pn| is the next unsent packet number,
+     * used for setting the recovery window.
+     */
+    void (*cc_on_lost)(quicly_cc_t *cc, const quicly_loss_t *loss, uint32_t bytes, uint64_t lost_pn, uint64_t next_pn, int64_t now,
+                       uint32_t max_udp_payload_size);
+    /**
+     * Called when persistent congestion is observed.
+     */
+    void (*cc_on_persistent_congestion)(quicly_cc_t *cc, const quicly_loss_t *loss, int64_t now);
+};
+
 /**
  * Initializes the congestion controller.
  */
-void quicly_cc_init(quicly_cc_t *cc, uint32_t initcwnd);
-/**
- * Called when a packet is newly acknowledged.
- */
-void quicly_cc_on_acked(quicly_cc_t *cc, uint32_t bytes, uint64_t largest_acked, uint32_t inflight, uint32_t max_udp_payload_size);
-/**
- * Called when a packet is detected as lost. |next_pn| is the next unsent packet number,
- * used for setting the recovery window.
- */
-void quicly_cc_on_lost(quicly_cc_t *cc, uint32_t bytes, uint64_t lost_pn, uint64_t next_pn, uint32_t max_udp_payload_size);
-/**
- * Called when persistent congestion is observed.
- */
-void quicly_cc_on_persistent_congestion(quicly_cc_t *cc);
+void quicly_cc_reno_init(quicly_cc_t *cc, uint32_t initcwnd);
+void quicly_cc_cubic_init(quicly_cc_t *cc, uint32_t initcwnd);
+
 /**
  * Calculates the initial congestion window size given the maximum UDP payload size.
  */

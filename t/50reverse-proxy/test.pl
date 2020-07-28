@@ -56,7 +56,7 @@ my $upstream = $unix_socket_file ? "[unix:$unix_socket_file]" : "127.0.0.1:@{[em
 
 my $guard = do {
     local $ENV{FORCE_CHUNKED} = $starlet_force_chunked;
-    my @args = (qw(plackup -s Starlet --keepalive-timeout 100 --access-log /dev/null --listen), $unix_socket_file || $upstream);
+    my @args = (qw(plackup -s Starlet --max-workers=20 --keepalive-timeout 100 --access-log /dev/null --listen), $unix_socket_file || $upstream);
     if ($starlet_keepalive) {
         push @args, "--max-keepalive-reqs=100";
     }

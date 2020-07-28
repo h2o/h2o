@@ -819,8 +819,10 @@ int h2o_http3_read_frame(h2o_http3_read_frame_t *frame, int is_client, uint64_t 
     frame->_header_size = (uint8_t)(src - *_src);
 
     /* read the content of the frame (unless it's a DATA frame) */
+    frame->payload = NULL;
     if (frame->type != H2O_HTTP3_FRAME_TYPE_DATA) {
         if (frame->length >= MAX_FRAME_SIZE) {
+            H2O_PROBE(H3_FRAME_RECEIVE, frame->type, NULL, frame->length);
             *err_desc = "H3 frame too large";
             return H2O_HTTP3_ERROR_GENERAL_PROTOCOL; /* FIXME is this the correct code? */
         }
@@ -829,6 +831,8 @@ int h2o_http3_read_frame(h2o_http3_read_frame_t *frame, int is_client, uint64_t 
         frame->payload = src;
         src += frame->length;
     }
+
+    H2O_PROBE(H3_FRAME_RECEIVE, frame->type, frame->payload, frame->length);
 
     /* validate frame type */
     switch (frame->type) {
