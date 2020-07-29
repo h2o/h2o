@@ -11,8 +11,8 @@ use t::Util;
 # NOTE: the test does not work on Travis CI so far.
 {
     no warnings 'uninitialized', 'numeric';
-    plan skip_all => "skipping bpftrace tests (setenv DTRACE_TESTS=1 to run them)"
-        unless $ENV{DTRACE_TESTS} >= 1;
+    plan skip_all => "skipping h2olog tests (setenv DTRACE_TESTS=2 to run them)"
+        unless $ENV{DTRACE_TESTS} >= 2;
 }
 
 plan skip_all => "h2olog is supported only for Linux"
