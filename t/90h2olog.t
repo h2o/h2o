@@ -31,8 +31,6 @@ plan skip_all => 'dtrace support is off'
 plan skip_all => 'curl not found'
     unless prog_exists('curl');
 
-run_as_root();
-
 my $tempdir = tempdir(CLEANUP => 1);
 
 my $quic_port = empty_port({

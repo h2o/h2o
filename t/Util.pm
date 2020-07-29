@@ -293,7 +293,7 @@ sub spawn_h2olog {
     die "fork(2) failed: $!" unless defined $tracer_pid;
     if ($tracer_pid == 0) {
         # child process, spawn h2olog
-        exec $h2olog_prog, "quic", "-d", "-p", $h2o_pid, "-w", $output_file;
+        exec "sudo", $h2olog_prog, "quic", "-d", "-p", $h2o_pid, "-w", $output_file;
         die "failed to spawn $h2olog_prog: $!";
     }
 
