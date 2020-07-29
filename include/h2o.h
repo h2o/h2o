@@ -637,6 +637,17 @@ struct st_h2o_context_t {
 
     struct {
         /**
+         * link-list of h2o_http3_server_conn_t
+         */
+        h2o_linklist_t _conns;
+        /**
+         * timeout entry used for graceful shutdown
+         */
+        h2o_timer_t _graceful_shutdown_timeout;
+    } http3;
+
+    struct {
+        /**
          * the default client context for proxy
          */
         h2o_httpclient_ctx_t client_ctx;

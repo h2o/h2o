@@ -95,6 +95,7 @@ void h2o_context_init(h2o_context_t *ctx, h2o_loop_t *loop, h2o_globalconf_t *co
 
     h2o_linklist_init_anchor(&ctx->http1._conns);
     h2o_linklist_init_anchor(&ctx->http2._conns);
+    h2o_linklist_init_anchor(&ctx->http3._conns);
     ctx->proxy.client_ctx.loop = loop;
     ctx->proxy.client_ctx.io_timeout = ctx->globalconf->proxy.io_timeout;
     ctx->proxy.client_ctx.connect_timeout = ctx->globalconf->proxy.connect_timeout;

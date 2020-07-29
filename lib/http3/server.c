@@ -75,6 +75,7 @@ struct st_h2o_http3_server_conn_t {
     h2o_conn_t super;
     h2o_http3_conn_t h3;
     ptls_handshake_properties_t handshake_properties;
+    h2o_linklist_t _conns; /* linklist to h2o_context_t::http3._conns */
     /**
      * link-list of pending requests using st_h2o_http3_server_stream_t::link
      */
@@ -1421,6 +1422,8 @@ static void on_h3_destroy(h2o_quic_conn_t *h3_)
     assert(h2o_linklist_is_empty(&conn->delayed_streams.req_streaming));
     assert(h2o_linklist_is_empty(&conn->delayed_streams.pending));
 
+    h2o_linklist_unlink(&conn->_conns);
+
     if (h2o_timer_is_linked(&conn->timeout))
         h2o_timer_unlink(&conn->timeout);
     h2o_http3_dispose_conn(&conn->h3);
@@ -1473,6 +1476,8 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
     req_scheduler_init(conn);
     conn->scheduler.uni.active = 0;
     conn->scheduler.uni.conn_blocked = 0;
+    memset(&conn->_conns, 0, sizeof(conn->_conns));
+    h2o_linklist_insert(&ctx->accept_ctx->ctx->http3._conns, &conn->_conns);
 
     /* accept connection */
 #if PICOTLS_USE_DTRACE
