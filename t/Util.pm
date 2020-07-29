@@ -304,8 +304,11 @@ sub spawn_h2olog {
         if (open my $fh, "<", $output_file) {
             my $off = 0;
             $read_trace = sub {
+                confess "h2o is down (got $?)"
+                    if waitpid($tracer_pid, WNOHANG) != 0;
+
                 seek $fh, $off, 0
-                    or die "seek failed:$!";
+                    or die "seek failed: $!";
                 read $fh, my $bytes, 65000;
                 $bytes = ''
                     unless defined $bytes;
@@ -314,7 +317,7 @@ sub spawn_h2olog {
             };
             last;
         }
-        die "h2olog failed to start\n"
+        die "h2olog failed to start"
             if waitpid($tracer_pid, WNOHANG) == $tracer_pid;
     }
 
@@ -337,7 +340,10 @@ sub spawn_h2olog {
     };
 
     my $guard = scope_guard(sub {
-        while (waitpid($tracer_pid, 0) != $tracer_pid) {}
+        if (waitpid($tracer_pid, WNOHANG) == 0) {
+            diag "killing h2olog ($tracer_pid) with SIGINT";
+            kill "INT", $tracer_pid;
+        }
     });
 
     return bless {

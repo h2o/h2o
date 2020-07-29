@@ -60,13 +60,14 @@ EOT
 my $tracer = spawn_h2olog({ pid => $server->{pid} });
 
 my $trace;
+my $n = 5;
 do {
     $trace = $tracer->get_trace(sub {
         my ($headers, $body) = run_prog("$client_prog -3 https://127.0.0.1:$quic_port/");
         like $headers, qr{^HTTP/3 200\n}, "req: HTTP/3";
         is $body, "hello\n", "req: body";
     });
-} while not defined $trace;
+} while not defined $trace and --$n >= 0;
 
 diag "h2olog output:";
 diag $trace;
