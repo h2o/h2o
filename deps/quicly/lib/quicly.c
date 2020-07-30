@@ -2584,10 +2584,10 @@ static inline uint64_t calc_amplification_limit_allowance(quicly_conn_t *conn)
 {
     if (conn->super.remote.address_validation.validated)
         return UINT64_MAX;
-    uint64_t budget3x = conn->super.stats.num_bytes.received * 3;
-    if (budget3x <= conn->super.stats.num_bytes.sent)
+    uint64_t budget = conn->super.stats.num_bytes.received * conn->super.ctx->pre_validation_amplification_limit;
+    if (budget <= conn->super.stats.num_bytes.sent)
         return 0;
-    return budget3x - conn->super.stats.num_bytes.sent;
+    return budget - conn->super.stats.num_bytes.sent;
 }
 
 /* Helper function to compute send window based on:

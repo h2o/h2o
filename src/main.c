@@ -1469,9 +1469,9 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                 listener = add_listener(fd, ai->ai_addr, ai->ai_addrlen, ctx->hostconf == NULL, 0);
                 listener->quic.ctx = quic;
                 if (quic_node != NULL) {
-                    yoml_t **retry_node, **sndbuf, **rcvbuf;
-                    if (h2o_configurator_parse_mapping(cmd, *quic_node, NULL, "retry:s,sndbuf:s,rcvbuf:s", &retry_node, &sndbuf,
-                                                       &rcvbuf) != 0)
+                    yoml_t **retry_node, **sndbuf, **rcvbuf, **amp_limit;
+                    if (h2o_configurator_parse_mapping(cmd, *quic_node, NULL, "retry:s,sndbuf:s,rcvbuf:s,amp-limit:s", &retry_node,
+                                                       &sndbuf, &rcvbuf, &amp_limit) != 0)
                         return -1;
                     if (retry_node != NULL) {
                         ssize_t on = h2o_configurator_get_one_of(cmd, *retry_node, "OFF,ON");
@@ -1492,6 +1492,11 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                             return -1;
                         if (setsockopt(fd, SOL_SOCKET, SO_RCVBUF, &sz, sizeof(sz)) != 0)
                             h2o_configurator_errprintf(cmd, *quic_node, "setsockopt(SO_RCVBUF) failed:%s", strerror(errno));
+                    }
+                    if (amp_limit != NULL) {
+                        if (h2o_configurator_scanf(cmd, *amp_limit, "%" SCNu16,
+                                                   &listener->quic.ctx->pre_validation_amplification_limit) != 0)
+                            return -1;
                     }
                 }
                 listener_is_new = 1;

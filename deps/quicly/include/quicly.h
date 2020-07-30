@@ -257,6 +257,10 @@ struct st_quicly_context_t {
      */
     uint64_t max_crypto_bytes;
     /**
+     * (server-only) amplification limit before the peer address is validated
+     */
+    uint16_t pre_validation_amplification_limit;
+    /**
      * client-only
      */
     unsigned enforce_version_negotiation : 1;

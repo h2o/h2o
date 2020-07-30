@@ -26,6 +26,7 @@
 #define DEFAULT_MAX_UDP_PAYLOAD_SIZE 1472
 #define DEFAULT_MAX_PACKETS_PER_KEY 16777216
 #define DEFAULT_MAX_CRYPTO_BYTES 65536
+#define DEFAULT_PRE_VALIDATION_AMPLIFICATION_LIMIT 3
 
 /* profile that employs IETF specified values */
 const quicly_context_t quicly_spec_context = {NULL,                                                 /* tls */
@@ -39,6 +40,7 @@ const quicly_context_t quicly_spec_context = {NULL,                             
                                                DEFAULT_MAX_UDP_PAYLOAD_SIZE},
                                               DEFAULT_MAX_PACKETS_PER_KEY,
                                               DEFAULT_MAX_CRYPTO_BYTES,
+                                              DEFAULT_PRE_VALIDATION_AMPLIFICATION_LIMIT,
                                               0, /* enforce_version_negotiation */
                                               0, /* is_clustered */
                                               0, /* enlarge_client_hello */
@@ -64,6 +66,7 @@ const quicly_context_t quicly_performant_context = {NULL,                       
                                                      DEFAULT_MAX_UDP_PAYLOAD_SIZE},
                                                     DEFAULT_MAX_PACKETS_PER_KEY,
                                                     DEFAULT_MAX_CRYPTO_BYTES,
+                                                    DEFAULT_PRE_VALIDATION_AMPLIFICATION_LIMIT,
                                                     0, /* enforce_version_negotiation */
                                                     0, /* is_clustered */
                                                     0, /* enlarge_client_hello */
