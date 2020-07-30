@@ -1038,80 +1038,45 @@ static void on_handshake_failure_ossl111(h2o_socket_t *sock, const char *err)
     on_handshake_complete(sock, h2o_socket_error_ssl_handshake);
 }
 
-static void proceed_handshake(h2o_socket_t *sock, const char *err)
+static void proceed_handshake(h2o_socket_t *sock, const char *err);
+
+static void proceed_handshake_picotls(h2o_socket_t *sock)
+{
+    size_t consumed = sock->ssl->input.encrypted->size;
+    ptls_buffer_t wbuf;
+    ptls_buffer_init(&wbuf, "", 0);
+
+    int ret = ptls_handshake(sock->ssl->ptls, &wbuf, sock->ssl->input.encrypted->bytes, &consumed, NULL);
+    h2o_buffer_consume(&sock->ssl->input.encrypted, consumed);
+
+    switch (ret) {
+    case 0:
+    case PTLS_ERROR_IN_PROGRESS:
+        if (wbuf.off != 0) {
+            h2o_socket_read_stop(sock);
+            write_ssl_bytes(sock, wbuf.base, wbuf.off);
+            flush_pending_ssl(sock, ret == 0 ? on_handshake_complete : proceed_handshake);
+        } else {
+            h2o_socket_read_start(sock, proceed_handshake);
+        }
+        break;
+    default:
+        /* FIXME send alert in wbuf before calling the callback */
+        on_handshake_complete(sock, "picotls handshake error");
+        break;
+    }
+    ptls_buffer_dispose(&wbuf);
+}
+
+static void proceed_handshake_openssl(h2o_socket_t *sock)
 {
     h2o_iovec_t first_input = {NULL};
     int ret = 0;
+    const char *err = NULL;
 
-    sock->_cb.write = NULL;
+    assert(sock->ssl->ossl != NULL);
 
-    if (err != NULL) {
-        goto Complete;
-    }
-
-    if (sock->ssl->ossl == NULL) {
-        /* prepare I/O */
-        size_t consumed = sock->ssl->input.encrypted->size;
-        ptls_buffer_t wbuf;
-        ptls_buffer_init(&wbuf, "", 0);
-
-        if (sock->ssl->ptls != NULL) {
-            /* picotls in action, proceed the handshake */
-            ret = ptls_handshake(sock->ssl->ptls, &wbuf, sock->ssl->input.encrypted->bytes, &consumed, NULL);
-        } else {
-            /* start using picotls if the first packet contains TLS 1.3 CH */
-            ptls_context_t *ptls_ctx = h2o_socket_ssl_get_picotls_context(sock->ssl->ssl_ctx);
-            if (ptls_ctx != NULL) {
-#if PICOTLS_USE_DTRACE
-                unsigned ptls_skip_tracing_backup = ptls_default_skip_tracing;
-                ptls_default_skip_tracing = sock->_skip_tracing;
-#endif
-                ptls_t *ptls = ptls_new(ptls_ctx, 1);
-#if PICOTLS_USE_DTRACE
-                ptls_default_skip_tracing = ptls_skip_tracing_backup;
-#endif
-                if (ptls == NULL)
-                    h2o_fatal("no memory");
-                *ptls_get_data_ptr(ptls) = sock;
-                ret = ptls_handshake(ptls, &wbuf, sock->ssl->input.encrypted->bytes, &consumed, NULL);
-                if ((ret == 0 || ret == PTLS_ERROR_IN_PROGRESS) && wbuf.off != 0) {
-                    sock->ssl->ptls = ptls;
-                    sock->ssl->handshake.server.async_resumption.state = ASYNC_RESUMPTION_STATE_COMPLETE;
-                } else {
-                    ptls_free(ptls);
-                }
-            }
-        }
-
-        if (sock->ssl->ptls != NULL) {
-            /* complete I/O done by picotls */
-            h2o_buffer_consume(&sock->ssl->input.encrypted, consumed);
-            switch (ret) {
-            case 0:
-            case PTLS_ERROR_IN_PROGRESS:
-                if (wbuf.off != 0) {
-                    h2o_socket_read_stop(sock);
-                    write_ssl_bytes(sock, wbuf.base, wbuf.off);
-                    flush_pending_ssl(sock, ret == 0 ? on_handshake_complete : proceed_handshake);
-                } else {
-                    h2o_socket_read_start(sock, proceed_handshake);
-                }
-                break;
-            default:
-                /* FIXME send alert in wbuf before calling the callback */
-                on_handshake_complete(sock, "picotls handshake error");
-                break;
-            }
-            ptls_buffer_dispose(&wbuf);
-            return;
-        }
-        ptls_buffer_dispose(&wbuf);
-
-        /* fallback to openssl if the attempt failed */
-        create_ossl(sock);
-    }
-
-    if (sock->ssl->ossl != NULL && SSL_is_server(sock->ssl->ossl) &&
+    if (SSL_is_server(sock->ssl->ossl) &&
         sock->ssl->handshake.server.async_resumption.state == ASYNC_RESUMPTION_STATE_RECORD) {
         if (sock->ssl->input.encrypted->size <= 1024) {
             /* retain a copy of input if performing async resumption */
@@ -1198,8 +1163,9 @@ Redo:
             }
             goto Complete;
         }
-        if (sock->ssl->input.encrypted->size != 0)
+        if (sock->ssl->input.encrypted->size != 0) {
             goto Redo;
+        }
         h2o_socket_read_start(sock, proceed_handshake);
     }
     return;
@@ -1207,6 +1173,84 @@ Redo:
 Complete:
     h2o_socket_read_stop(sock);
     on_handshake_complete(sock, err);
+}
+
+static void proceed_handshake_undetermined(h2o_socket_t *sock)
+{
+    assert(sock->ssl->ossl == NULL && sock->ssl->ptls == NULL);
+
+    ptls_context_t *ptls_ctx = h2o_socket_ssl_get_picotls_context(sock->ssl->ssl_ctx);
+    assert(ptls_ctx != NULL);
+
+    /* process client hello using picotls */
+
+    size_t consumed = sock->ssl->input.encrypted->size;
+    ptls_buffer_t wbuf;
+    ptls_buffer_init(&wbuf, "", 0);
+
+#if PICOTLS_USE_DTRACE
+    unsigned ptls_skip_tracing_backup = ptls_default_skip_tracing;
+    ptls_default_skip_tracing = sock->_skip_tracing;
+#endif
+    ptls_t *ptls = ptls_new(ptls_ctx, 1);
+#if PICOTLS_USE_DTRACE
+    ptls_default_skip_tracing = ptls_skip_tracing_backup;
+#endif
+    if (ptls == NULL)
+        h2o_fatal("no memory");
+    *ptls_get_data_ptr(ptls) = sock;
+    int ret = ptls_handshake(ptls, &wbuf, sock->ssl->input.encrypted->bytes, &consumed, NULL);
+
+    if (ret == 0 || ret == PTLS_ERROR_IN_PROGRESS) {
+        if (ret == 0) {
+            /* there must be data to send to complete handshake */
+            assert(wbuf.off != 0);
+        } else if (wbuf.off == 0) {
+            /* need more data. replay handshake */
+            ptls_free(ptls);
+            return;
+        }
+
+        sock->ssl->ptls = ptls;
+        sock->ssl->handshake.server.async_resumption.state = ASYNC_RESUMPTION_STATE_COMPLETE;
+        h2o_buffer_consume(&sock->ssl->input.encrypted, consumed);
+
+        h2o_socket_read_stop(sock);
+        write_ssl_bytes(sock, wbuf.base, wbuf.off);
+        flush_pending_ssl(sock, ret == 0 ? on_handshake_complete : proceed_handshake);
+    } else if (ret == PTLS_ALERT_PROTOCOL_VERSION) {
+        /* the client cannot use tls1.3, fallback to openssl */
+        ptls_free(ptls);
+        create_ossl(sock);
+        proceed_handshake_openssl(sock);
+    } else {
+        ptls_free(ptls);
+        /* FIXME send alert in wbuf before calling the callback */
+        on_handshake_complete(sock, "handshake error");
+    }
+    ptls_buffer_dispose(&wbuf);
+}
+
+static void proceed_handshake(h2o_socket_t *sock, const char *err)
+{
+    sock->_cb.write = NULL;
+
+    if (err != NULL) {
+        h2o_socket_read_stop(sock);
+        on_handshake_complete(sock, err);
+        return;
+    }
+
+    if (sock->ssl->ptls != NULL) {
+        proceed_handshake_picotls(sock);
+    } else if (sock->ssl->ossl != NULL) {
+        proceed_handshake_openssl(sock);
+    } else if (h2o_socket_ssl_get_picotls_context(sock->ssl->ssl_ctx) == NULL) {
+        create_ossl(sock);
+        proceed_handshake_openssl(sock);
+    } else {
+        proceed_handshake_undetermined(sock);
+    }
 }
 
 void h2o_socket_ssl_handshake(h2o_socket_t *sock, SSL_CTX *ssl_ctx, const char *server_name, h2o_iovec_t alpn_protos,
