@@ -219,6 +219,13 @@ void h2o_socket_dont_read(h2o_socket_t *sock, int dont_read);
  */
 h2o_socket_t *h2o_socket_connect(h2o_loop_t *loop, struct sockaddr *addr, socklen_t addrlen, h2o_socket_cb cb);
 /**
+ * connects to peer with src ip spoofing
+ */
+h2o_socket_t *h2o_socket_connect_tproxy(h2o_loop_t *loop,
+                                        struct sockaddr *srcaddr, socklen_t srclen,
+                                        struct sockaddr *dstaddr, socklen_t dstrlen,
+                                        h2o_socket_cb cb);
+/**
  * prepares for latency-optimized write and returns the number of octets that should be written, or SIZE_MAX if failed to prepare
  */
 static size_t h2o_socket_prepare_for_latency_optimized_write(h2o_socket_t *sock,

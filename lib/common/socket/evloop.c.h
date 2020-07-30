@@ -457,23 +457,44 @@ h2o_socket_t *h2o_evloop_socket_accept(h2o_socket_t *_listener)
     return sock;
 }
 
-h2o_socket_t *h2o_socket_connect(h2o_loop_t *loop, struct sockaddr *addr, socklen_t addrlen, h2o_socket_cb cb)
+h2o_socket_t *h2o_socket_connect_tproxy(h2o_loop_t *loop,
+                                        struct sockaddr *srcaddr, socklen_t srclen,
+                                        struct sockaddr *dstaddr, socklen_t dstlen,
+                                        h2o_socket_cb cb)
 {
     int fd;
     struct st_h2o_evloop_socket_t *sock;
 
-    if ((fd = cloexec_socket(addr->sa_family, SOCK_STREAM, 0)) == -1)
+    if ((fd = cloexec_socket(dstaddr->sa_family, SOCK_STREAM, 0)) == -1)
         return NULL;
     fcntl(fd, F_SETFL, O_NONBLOCK);
-    if (!(connect(fd, addr, addrlen) == 0 || errno == EINPROGRESS)) {
-        close(fd);
-        return NULL;
+
+#ifdef IP_TRANSPARENT
+    if (srclen) {       /* tproxy */
+        int flag = 1;
+        if (setsockopt(fd, SOL_IP, IP_TRANSPARENT, &flag, sizeof(flag)) != 0)
+            goto Error;
+        if (bind(fd, srcaddr, srclen))
+            goto Error;
     }
+#endif
+    
+    if (!(connect(fd, dstaddr, dstlen) == 0 || errno == EINPROGRESS))
+        goto Error;
 
     sock = create_socket_set_nodelay(loop, fd, H2O_SOCKET_FLAG_IS_CONNECTING);
     h2o_socket_notify_write(&sock->super, cb);
     return &sock->super;
+Error:    
+    close(fd);
+    return NULL;
 }
+
+h2o_socket_t *h2o_socket_connect(h2o_loop_t *loop, struct sockaddr *addr, socklen_t addrlen, h2o_socket_cb cb) 
+{
+    return h2o_socket_connect_tproxy(loop, NULL, 0, addr, addrlen, cb);
+}
+
 
 h2o_evloop_t *create_evloop(size_t sz)
 {
