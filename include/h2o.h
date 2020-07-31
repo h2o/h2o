@@ -1015,10 +1015,6 @@ struct st_h2o_req_t {
      */
     h2o_handler_t *handler;
     /**
-     * the upstream proxy ssl used in reverse proxy.
-     */
-    struct st_h2o_socket_ssl_t *proxy_ssl;
-    /**
      * scheme (http, https, etc.)
      */
     const h2o_url_scheme_t *scheme;
@@ -1110,6 +1106,13 @@ struct st_h2o_req_t {
             uint64_t body;
         } bytes_read;
         h2o_httpclient_timings_t timestamps;
+        struct {
+            const char *protocol_version;
+            const char *cipher;
+            int session_reused;
+            int cipher_bits;
+            /* server name and session id are omitted since they are not static data */
+        } ssl;
     } proxy_stats;
     /**
      * the response
@@ -1680,6 +1683,13 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
  * processes a request (by sending the request upstream)
  */
 void h2o__proxy_process_request(h2o_req_t *req);
+/**
+ * returns upstream proxy SSL information
+ */
+h2o_iovec_t h2o__proxy_log_ssl_protocol_version(h2o_req_t *req);
+h2o_iovec_t h2o__proxy_log_ssl_cipher(h2o_req_t *req);
+h2o_iovec_t h2o__proxy_log_ssl_session_reused(h2o_req_t *req);
+h2o_iovec_t h2o__proxy_log_ssl_cipher_bits(h2o_req_t *req);
 
 /* mime mapper */
 

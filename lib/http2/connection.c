@@ -1451,13 +1451,6 @@ static int skip_tracing(h2o_conn_t *_conn)
     {                                                                                                                              \
         h2o_http2_conn_t *conn = (void *)req->conn;                                                                                \
         return h2o_socket_log_ssl_##name(conn->sock, &req->pool);                                                                  \
-    }                                                                   \
-    static h2o_iovec_t log_proxy_##name(h2o_req_t *req)                 \
-    {                                                                   \
-        h2o_socket_t s;                                                 \
-        if (!req->proxy_ssl) return h2o_iovec_init(NULL,0);             \
-        s.ssl = req->proxy_ssl;                                         \
-        return h2o_socket_log_ssl_##name(&s, &req->pool);               \
     }
 
 DEFINE_TLS_LOGGER(protocol_version)
@@ -1566,12 +1559,10 @@ static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_hostconf_t **hosts,
                 },
             .proxy_ssl = /* upstream proxy ssl */
                 {
-                    .protocol_version = log_proxy_protocol_version,
-                    .session_reused = log_proxy_session_reused,
-                    .cipher = log_proxy_cipher,
-                    .cipher_bits = log_proxy_cipher_bits,
-                    .session_id = log_proxy_session_id,
-                    .server_name = log_proxy_server_name,
+                    .protocol_version = h2o__proxy_log_ssl_protocol_version,
+                    .session_reused = h2o__proxy_log_ssl_session_reused,
+                    .cipher = h2o__proxy_log_ssl_cipher,
+                    .cipher_bits = h2o__proxy_log_ssl_cipher_bits,
                 },
             .http2 =
                 {
