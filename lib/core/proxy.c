@@ -398,6 +398,14 @@ static void copy_stats(struct rp_generator_t *self)
     self->src_req->proxy_stats.bytes_read.body = self->client->bytes_read.body;
 }
 
+static void retain_ssl_info(h2o_req_t *req, h2o_socket_t *sock)
+{
+    req->proxy_stats.ssl.protocol_version = h2o_socket_get_ssl_protocol_version(sock);
+    req->proxy_stats.ssl.session_reused = h2o_socket_get_ssl_session_reused(sock);
+    req->proxy_stats.ssl.cipher = h2o_socket_get_ssl_cipher(sock);
+    req->proxy_stats.ssl.cipher_bits = h2o_socket_get_ssl_cipher_bits(sock);
+}
+
 static int on_body(h2o_httpclient_t *client, const char *errstr)
 {
     struct rp_generator_t *self = client->data;
@@ -700,6 +708,8 @@ static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *e
         }
     }
     self->client->informational_cb = on_1xx;
+    
+    retain_ssl_info(req, client->get_socket(client));
     return on_head;
 }
 

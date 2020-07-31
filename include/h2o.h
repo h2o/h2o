@@ -1107,6 +1107,13 @@ struct st_h2o_req_t {
             uint64_t body;
         } bytes_read;
         h2o_httpclient_timings_t timestamps;
+        struct {
+            const char *protocol_version;
+            const char *cipher;
+            int session_reused;
+            int cipher_bits;
+            /* server name and session id are omitted since they are not static data */
+        } ssl;
     } proxy_stats;
     /**
      * the response
