@@ -1120,11 +1120,11 @@ static int skip_tracing(h2o_conn_t *_conn)
         struct st_h2o_http1_conn_t *conn = (void *)req->conn;                                                                      \
         return h2o_socket_log_ssl_##name(conn->sock, &req->pool);                                                                  \
     }                                                                   \
-    static h2o_iovec_t log_upstream_##name(h2o_req_t *req)              \
+    static h2o_iovec_t log_proxy_##name(h2o_req_t *req)                 \
     {                                                                   \
         h2o_socket_t s;                                                 \
-        if (!req->upstream_ssl) return h2o_iovec_init(NULL,0);          \
-        s.ssl = req->upstream_ssl;                                      \
+        if (!req->proxy_ssl) return h2o_iovec_init(NULL,0);             \
+        s.ssl = req->proxy_ssl;                                         \
         return h2o_socket_log_ssl_##name(&s, &req->pool);               \
     }
 
@@ -1173,14 +1173,14 @@ static const h2o_conn_callbacks_t h1_callbacks = {
                 .session_id = log_session_id,
                 .server_name = log_server_name,
             },
-        .ussl = /* upstream ssl */
+        .proxy_ssl = /* upstream proxy ssl */
             {
-                .protocol_version = log_upstream_protocol_version,
-                .session_reused = log_upstream_session_reused,
-                .cipher = log_upstream_cipher,
-                .cipher_bits = log_upstream_cipher_bits,
-                .session_id = log_upstream_session_id,
-                .server_name = log_upstream_server_name,
+                .protocol_version = log_proxy_protocol_version,
+                .session_reused = log_proxy_session_reused,
+                .cipher = log_proxy_cipher,
+                .cipher_bits = log_proxy_cipher_bits,
+                .session_id = log_proxy_session_id,
+                .server_name = log_proxy_server_name,
             },
         .http1 =
             {

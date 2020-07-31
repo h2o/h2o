@@ -847,7 +847,7 @@ typedef struct st_h2o_conn_callbacks_t {
                 h2o_iovec_t (*cipher_bits)(h2o_req_t *req);
                 h2o_iovec_t (*session_id)(h2o_req_t *req);
                 h2o_iovec_t (*server_name)(h2o_req_t *req);
-            } ssl, ussl; /* upstream ssl */
+            } ssl, proxy_ssl; /* upstream proxy ssl */
             struct {
                 h2o_iovec_t (*request_index)(h2o_req_t *req);
             } http1;
@@ -1015,9 +1015,9 @@ struct st_h2o_req_t {
      */
     h2o_handler_t *handler;
     /**
-     * the upstream ssl used in reverse proxy.
+     * the upstream proxy ssl used in reverse proxy.
      */
-    struct st_h2o_socket_ssl_t *upstream_ssl;
+    struct st_h2o_socket_ssl_t *proxy_ssl;
     /**
      * scheme (http, https, etc.)
      */

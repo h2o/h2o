@@ -700,7 +700,7 @@ static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *e
         }
     }
     self->client->informational_cb = on_1xx;
-    self->src_req->upstream_ssl = client->get_socket(client)->ssl;  // used in logging upstream ssl info
+    self->src_req->proxy_ssl = client->get_socket(client)->ssl;  // used in logging upstream ssl info
     return on_head;
 }
 
