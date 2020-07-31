@@ -398,15 +398,12 @@ static void copy_stats(struct rp_generator_t *self)
     self->src_req->proxy_stats.bytes_read.body = self->client->bytes_read.body;
 }
 
-static void copy_ssl_info(h2o_req_t *req, struct st_h2o_socket_ssl_t *ssl)
+static void retain_ssl_info(h2o_req_t *req, h2o_socket_t *sock)
 {
-    h2o_socket_t s;
-    s.ssl = ssl;
-    req->proxy_stats.ssl.protocol_version = h2o_socket_get_ssl_protocol_version(&s);
-    req->proxy_stats.ssl.session_reused = h2o_socket_get_ssl_session_reused(&s);
-    req->proxy_stats.ssl.cipher = h2o_socket_get_ssl_cipher(&s);;
-    req->proxy_stats.ssl.cipher_bits = h2o_socket_get_ssl_cipher_bits(&s);
-    /* server name and session id are omitted since they are not static data */    
+    req->proxy_stats.ssl.protocol_version = h2o_socket_get_ssl_protocol_version(sock);
+    req->proxy_stats.ssl.session_reused = h2o_socket_get_ssl_session_reused(sock);
+    req->proxy_stats.ssl.cipher = h2o_socket_get_ssl_cipher(sock);
+    req->proxy_stats.ssl.cipher_bits = h2o_socket_get_ssl_cipher_bits(sock);
 }
 
 h2o_iovec_t h2o__proxy_log_ssl_protocol_version(h2o_req_t *req) 
@@ -423,20 +420,17 @@ h2o_iovec_t h2o__proxy_log_ssl_cipher(h2o_req_t *req)
 
 h2o_iovec_t h2o__proxy_log_ssl_session_reused(h2o_req_t *req) 
 {
-    switch (req->proxy_stats.ssl.session_reused) {
-    case 0:  return h2o_iovec_init(H2O_STRLIT("0"));
-    case 1:  return h2o_iovec_init(H2O_STRLIT("1"));
-    default: return h2o_iovec_init(NULL, 0);
-    }
+    if (req->proxy_stats.ssl.session_reused)
+        return h2o_iovec_init(H2O_STRLIT("1"));
+    else
+        return h2o_iovec_init(H2O_STRLIT("0"));
 }
 
 h2o_iovec_t h2o__proxy_log_ssl_cipher_bits(h2o_req_t *req) 
 {
-    h2o_mem_pool_t *pool = &req->pool;
     int bits = req->proxy_stats.ssl.cipher_bits;
     if (bits != 0) {
-        char *s = (char *)(pool != NULL ? h2o_mem_alloc_pool(pool, char, sizeof(H2O_INT16_LONGEST_STR))
-                                        : h2o_mem_alloc(sizeof(H2O_INT16_LONGEST_STR)));
+        char *s = (char *) h2o_mem_alloc_pool(&req->pool, char, sizeof(H2O_INT16_LONGEST_STR));
         size_t len = sprintf(s, "%" PRId16, (int16_t)bits);
         return h2o_iovec_init(s, len);
     } else {
@@ -747,7 +741,7 @@ static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *e
     }
     self->client->informational_cb = on_1xx;
     
-    copy_ssl_info(req, client->get_socket(client)->ssl);
+    retain_ssl_info(req, client->get_socket(client));
     return on_head;
 }
 
