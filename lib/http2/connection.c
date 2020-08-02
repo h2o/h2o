@@ -1452,13 +1452,13 @@ static int skip_tracing(h2o_conn_t *_conn)
         h2o_http2_conn_t *conn = (void *)req->conn;                                                                                \
         return h2o_socket_log_ssl_##name(conn->sock, &req->pool);                                                                  \
     }
-
 DEFINE_TLS_LOGGER(protocol_version)
 DEFINE_TLS_LOGGER(session_reused)
 DEFINE_TLS_LOGGER(cipher)
 DEFINE_TLS_LOGGER(cipher_bits)
 DEFINE_TLS_LOGGER(session_id)
 DEFINE_TLS_LOGGER(server_name)
+DEFINE_TLS_LOGGER(negotiated_protocol)
 #undef DEFINE_TLS_LOGGER
 
 static h2o_iovec_t log_stream_id(h2o_req_t *req)
@@ -1556,6 +1556,7 @@ static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_hostconf_t **hosts,
                     .cipher_bits = log_cipher_bits,
                     .session_id = log_session_id,
                     .server_name = log_server_name,
+                    .negotiated_protocol = log_negotiated_protocol,
                 },
             .http2 =
                 {

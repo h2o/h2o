@@ -373,6 +373,14 @@ static h2o_iovec_t log_server_name(h2o_req_t *req)
     return server_name != NULL ? h2o_iovec_init(server_name, strlen(server_name)) : h2o_iovec_init(NULL, 0);
 }
 
+static h2o_iovec_t log_negotiated_protocol(h2o_req_t *req)
+{
+    struct st_h2o_http3_server_conn_t *conn = (struct st_h2o_http3_server_conn_t *)req->conn;
+    ptls_t *tls = quicly_get_tls(conn->h3.quic);
+    const char *proto = ptls_get_negotiated_protocol(tls);
+    return proto != NULL ? h2o_iovec_init(proto, strlen(proto)) : h2o_iovec_init(NULL, 0);
+}
+
 static h2o_iovec_t log_stream_id(h2o_req_t *_req)
 {
     struct st_h2o_http3_server_stream_t *stream = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_stream_t, req, _req);
@@ -1440,6 +1448,7 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
                     .cipher_bits = log_cipher_bits,
                     .session_id = log_session_id,
                     .server_name = log_server_name,
+                    .negotiated_protocol = log_negotiated_protocol,
                 },
             .http3 =
                 {

@@ -287,6 +287,7 @@ static h2o_iovec_t h2o_socket_log_ssl_cipher(h2o_socket_t *sock, h2o_mem_pool_t 
 h2o_iovec_t h2o_socket_log_ssl_cipher_bits(h2o_socket_t *sock, h2o_mem_pool_t *pool);
 h2o_iovec_t h2o_socket_log_ssl_session_id(h2o_socket_t *sock, h2o_mem_pool_t *pool);
 static h2o_iovec_t h2o_socket_log_ssl_server_name(h2o_socket_t *sock, h2o_mem_pool_t *pool);
+static h2o_iovec_t h2o_socket_log_ssl_negotiated_protocol(h2o_socket_t *sock, h2o_mem_pool_t *pool);
 int h2o_socket_ssl_new_session_cb(SSL *s, SSL_SESSION *sess);
 
 /**
@@ -439,6 +440,12 @@ inline h2o_iovec_t h2o_socket_log_ssl_server_name(h2o_socket_t *sock, h2o_mem_po
     (void)pool;
     const char *s = h2o_socket_get_ssl_server_name(sock);
     return s != NULL ? h2o_iovec_init(s, strlen(s)) : h2o_iovec_init(NULL, 0);
+}
+
+inline h2o_iovec_t h2o_socket_log_ssl_negotiated_protocol(h2o_socket_t *sock, h2o_mem_pool_t *pool)
+{
+    (void)pool;
+    return h2o_socket_ssl_get_selected_protocol(sock);
 }
 
 inline int h2o_sliding_counter_is_running(h2o_sliding_counter_t *counter)
