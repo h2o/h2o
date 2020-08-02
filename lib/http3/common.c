@@ -523,7 +523,7 @@ static void process_packets(h2o_http3_ctx_t *ctx, quicly_address_t *destaddr, qu
 
     /* send VN on mimatch */
     if (QUICLY_PACKET_IS_LONG_HEADER(packets[0].octets.base[0])) {
-        if (packets[0].version != QUICLY_PROTOCOL_VERSION) {
+        if (!quicly_is_supported_version(packets[0].version)) {
             uint8_t payload[QUICLY_MIN_CLIENT_INITIAL_SIZE];
             size_t payload_size = quicly_send_version_negotiation(ctx->quic, &srcaddr->sa, packets[0].cid.src, &destaddr->sa,
                                                                   packets[0].cid.dest.encrypted, payload);
