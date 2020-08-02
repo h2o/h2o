@@ -57,7 +57,7 @@ struct st_h2o_http3_ingress_unistream_t {
  */
 #define MAX_FRAME_SIZE 16384
 
-const ptls_iovec_t h2o_http3_alpn[1] = {{(void *)H2O_STRLIT("h3-29")}};
+const ptls_iovec_t h2o_http3_alpn[2] = {{(void *)H2O_STRLIT("h3-29")}, {(void *)H2O_STRLIT("h3-27")}};
 
 static void on_track_sendmsg_timer(h2o_timer_t *timeout);
 
