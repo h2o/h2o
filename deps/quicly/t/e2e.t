@@ -88,12 +88,17 @@ subtest "version-negotiation" => sub {
 
 subtest "retry" => sub {
     my $guard = spawn_server("-R");
-    my $resp = `$cli -e $tempdir/events -p /12 127.0.0.1 $port 2> /dev/null`;
-    is $resp, "hello world\n";
-    my $events = slurp_file("$tempdir/events");
-    complex $events, sub {
-        $_ =~ qr/"type":"receive",.*"first-octet":(\d+).*\n.*"type":"stream-lost",.*"stream-id":-1,.*"off":0,/ and $1 >= 240
-    }, "CH deemed lost in response to retry";
+    for my $version (qw(27 29)) {
+        subtest "draft-$version" => sub {
+            my $resp = `$cli -d $version -e $tempdir/events -p /12 127.0.0.1 $port 2> /dev/null`;
+            is $resp, "hello world\n";
+            my $events = slurp_file("$tempdir/events");
+            unlike $events, qr/version-switch/, "no version switch";
+            complex $events, sub {
+                $_ =~ qr/"type":"receive",.*"first-octet":(\d+).*\n.*"type":"stream-lost",.*"stream-id":-1,.*"off":0,/ and $1 >= 240
+            }, "CH deemed lost in response to retry";
+        };
+    }
 };
 
 subtest "large-client-hello" => sub {

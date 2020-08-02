@@ -40,8 +40,8 @@ const quicly_context_t quicly_spec_context = {NULL,                             
                                                DEFAULT_MAX_UDP_PAYLOAD_SIZE},
                                               DEFAULT_MAX_PACKETS_PER_KEY,
                                               DEFAULT_MAX_CRYPTO_BYTES,
+                                              QUICLY_PROTOCOL_VERSION_CURRENT,
                                               DEFAULT_PRE_VALIDATION_AMPLIFICATION_LIMIT,
-                                              0, /* enforce_version_negotiation */
                                               0, /* is_clustered */
                                               0, /* enlarge_client_hello */
                                               NULL,
@@ -66,8 +66,8 @@ const quicly_context_t quicly_performant_context = {NULL,                       
                                                      DEFAULT_MAX_UDP_PAYLOAD_SIZE},
                                                     DEFAULT_MAX_PACKETS_PER_KEY,
                                                     DEFAULT_MAX_CRYPTO_BYTES,
+                                                    QUICLY_PROTOCOL_VERSION_CURRENT,
                                                     DEFAULT_PRE_VALIDATION_AMPLIFICATION_LIMIT,
-                                                    0, /* enforce_version_negotiation */
                                                     0, /* is_clustered */
                                                     0, /* enlarge_client_hello */
                                                     NULL,

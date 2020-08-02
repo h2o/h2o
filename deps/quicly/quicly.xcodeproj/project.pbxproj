@@ -205,6 +205,12 @@
 		E9F6A4281F3C3B3F0083F0B2 /* test.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = test.h; sourceTree = "<group>"; };
 		E9F6A4291F3C3B7B0083F0B2 /* ranges.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = ranges.c; sourceTree = "<group>"; };
 		E9F6A42D1F41375B0083F0B2 /* sendstate.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = sendstate.c; sourceTree = "<group>"; };
+		E9FF84C024CC06A2002577CA /* server.key */ = {isa = PBXFileReference; lastKnownFileType = text; path = server.key; sourceTree = "<group>"; };
+		E9FF84C124CC06A2002577CA /* setup.sh */ = {isa = PBXFileReference; lastKnownFileType = text.script.sh; path = setup.sh; sourceTree = "<group>"; };
+		E9FF84C224CC06A2002577CA /* run_endpoint.sh */ = {isa = PBXFileReference; lastKnownFileType = text.script.sh; path = run_endpoint.sh; sourceTree = "<group>"; };
+		E9FF84C324CC06A2002577CA /* deploy.sh */ = {isa = PBXFileReference; lastKnownFileType = text.script.sh; path = deploy.sh; sourceTree = "<group>"; };
+		E9FF84C424CC06A2002577CA /* Dockerfile */ = {isa = PBXFileReference; lastKnownFileType = text; path = Dockerfile; sourceTree = "<group>"; };
+		E9FF84C524CC06A2002577CA /* server.crt */ = {isa = PBXFileReference; lastKnownFileType = text; path = server.crt; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -250,6 +256,7 @@
 		E95EBCCE227ECB380022C32D /* misc */ = {
 			isa = PBXGroup;
 			children = (
+				E9FF84BF24CC0687002577CA /* quic-interop-runner */,
 				E95EBCCF227ECB4B0022C32D /* build_libFuzzer.sh */,
 				E95EBCD5227F3F1F0022C32D /* probe2trace.pl */,
 			);
@@ -446,6 +453,19 @@
 				E9D3CCCC21D22E7E00516202 /* streambuf.h */,
 			);
 			path = quicly;
+			sourceTree = "<group>";
+		};
+		E9FF84BF24CC0687002577CA /* quic-interop-runner */ = {
+			isa = PBXGroup;
+			children = (
+				E9FF84C324CC06A2002577CA /* deploy.sh */,
+				E9FF84C424CC06A2002577CA /* Dockerfile */,
+				E9FF84C224CC06A2002577CA /* run_endpoint.sh */,
+				E9FF84C524CC06A2002577CA /* server.crt */,
+				E9FF84C024CC06A2002577CA /* server.key */,
+				E9FF84C124CC06A2002577CA /* setup.sh */,
+			);
+			path = "quic-interop-runner";
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
