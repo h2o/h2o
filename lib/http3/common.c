@@ -856,7 +856,7 @@ int h2o_http3_read_frame(h2o_http3_read_frame_t *frame, int is_client, uint64_t 
                 goto Validation_Success;                                                                                           \
             break;                                                                                                                 \
         default:                                                                                                                   \
-            h2o_fatal("enxpected stream type");                                                                                    \
+            h2o_fatal("unexpected stream type");                                                                                   \
             break;                                                                                                                 \
         }                                                                                                                          \
         break
