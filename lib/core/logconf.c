@@ -289,6 +289,7 @@ h2o_logconf_t *h2o_logconf_compile(const char *fmt, int escape, char *errbuf)
                     MAP_EXT_TO_PROTO("ssl.cipher-bits", ssl.cipher_bits);
                     MAP_EXT_TO_PROTO("ssl.session-id", ssl.session_id);
                     MAP_EXT_TO_PROTO("ssl.server-name", ssl.server_name);
+                    MAP_EXT_TO_PROTO("ssl.negotiated-protocol", ssl.negotiated_protocol);
                     MAP_EXT_TO_PROTO("proxy.ssl.protocol-version", proxy_ssl.protocol_version);
                     MAP_EXT_TO_PROTO("proxy.ssl.session-reused", proxy_ssl.session_reused);
                     MAP_EXT_TO_PROTO("proxy.ssl.cipher", proxy_ssl.cipher);

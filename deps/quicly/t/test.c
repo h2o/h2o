@@ -241,7 +241,9 @@ static void test_vector(void)
     ok(off == sizeof(datagram));
 
     /* decrypt */
-    ret = setup_initial_encryption(&ptls_openssl_aes128gcmsha256, &ingress, &egress, packet.cid.dest.encrypted, 0, NULL);
+    const struct st_ptls_salt_t *salt = get_salt(QUICLY_PROTOCOL_VERSION_CURRENT);
+    ret = setup_initial_encryption(&ptls_openssl_aes128gcmsha256, &ingress, &egress, packet.cid.dest.encrypted, 0,
+                                   ptls_iovec_init(salt->initial, sizeof(salt->initial)), NULL);
     ok(ret == 0);
     ok(decrypt_packet(ingress.header_protection, aead_decrypt_fixed_key, ingress.aead, &next_expected_pn, &packet, &pn, &payload) ==
        0);
@@ -267,7 +269,7 @@ static void test_retry_aead(void)
     ok(off == sizeof(packet_bytes));
 
     /* decrypt */
-    ptls_aead_context_t *retry_aead = create_retry_aead(&quic_ctx, 0);
+    ptls_aead_context_t *retry_aead = create_retry_aead(&quic_ctx, QUICLY_PROTOCOL_VERSION_CURRENT, 0);
     ok(validate_retry_tag(&decoded, &odcid, retry_aead));
     ptls_aead_free(retry_aead);
 }
