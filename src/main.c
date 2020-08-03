@@ -2342,8 +2342,8 @@ static h2o_http3_conn_t *on_http3_accept(h2o_http3_ctx_t *_ctx, quicly_address_t
                 token = &token_buf;
         } else if (ret == QUICLY_TRANSPORT_ERROR_INVALID_TOKEN) {
             uint8_t payload[QUICLY_MIN_CLIENT_INITIAL_SIZE];
-            size_t payload_size = quicly_send_close_invalid_token(ctx->super.quic, &srcaddr->sa, packet->cid.src, &destaddr->sa,
-                                                                  packet->cid.dest.encrypted, err_desc, payload);
+            size_t payload_size = quicly_send_close_invalid_token(ctx->super.quic, packet->version, &srcaddr->sa, packet->cid.src,
+                                                                  &destaddr->sa, packet->cid.dest.encrypted, err_desc, payload);
             assert(payload_size != SIZE_MAX);
             struct iovec vec = {.iov_base = payload, .iov_len = payload_size};
             h2o_http3_send_datagrams(&ctx->super, srcaddr, destaddr, &vec, 1);
@@ -2365,14 +2365,28 @@ static h2o_http3_conn_t *on_http3_accept(h2o_http3_ctx_t *_ctx, quicly_address_t
             break;
         }
         if (send_retry) {
-            static __thread ptls_aead_context_t *retry_aead_cache = NULL;
+            static __thread struct {
+                ptls_aead_context_t *current;
+                ptls_aead_context_t *draft27;
+            } retry_integrity_aead_cache;
             uint8_t scid[16], payload[QUICLY_MIN_CLIENT_INITIAL_SIZE], token_prefix;
             ptls_openssl_random_bytes(scid, sizeof(scid));
-            ptls_aead_context_t *aead = quic_get_address_token_encryptor(&token_prefix);
+            ptls_aead_context_t *token_aead = quic_get_address_token_encryptor(&token_prefix), **retry_integrity_aead;
+            switch (packet->version) {
+            case QUICLY_PROTOCOL_VERSION_CURRENT:
+                retry_integrity_aead = &retry_integrity_aead_cache.current;
+                break;
+            case QUICLY_PROTOCOL_VERSION_DRAFT27:
+                retry_integrity_aead = &retry_integrity_aead_cache.draft27;
+                break;
+            default:
+                retry_integrity_aead = NULL;
+                break;
+            }
             size_t payload_size =
-                quicly_send_retry(ctx->super.quic, aead, &srcaddr->sa, packet->cid.src, &destaddr->sa,
+                quicly_send_retry(ctx->super.quic, token_aead, packet->version, &srcaddr->sa, packet->cid.src, &destaddr->sa,
                                   ptls_iovec_init(scid, sizeof(scid)), packet->cid.dest.encrypted,
-                                  ptls_iovec_init(&token_prefix, 1), ptls_iovec_init(NULL, 0), &retry_aead_cache, payload);
+                                  ptls_iovec_init(&token_prefix, 1), ptls_iovec_init(NULL, 0), retry_integrity_aead, payload);
             assert(payload_size != SIZE_MAX);
             struct iovec vec = {.iov_base = payload, .iov_len = payload_size};
             h2o_http3_send_datagrams(&ctx->super, srcaddr, destaddr, &vec, 1);
