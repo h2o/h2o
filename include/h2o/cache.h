@@ -59,7 +59,11 @@ enum {
     /**
      * if set, the cache triggers an early update
      */
-    H2O_CACHE_FLAG_EARLY_UPDATE = 0x2
+    H2O_CACHE_FLAG_EARLY_UPDATE = 0x2,
+    /**
+     * if set, fetch updates age
+     */
+    H2O_CACHE_FLAG_AGE_UPDATE = 0x4
 };
 
 /**
