@@ -591,13 +591,13 @@ static void on_send_timeout(h2o_timer_t *entry)
     on_error(client, h2o_httpclient_error_io_timeout);
 }
 
-static h2o_iovec_t build_request(struct st_h2o_http1client_t *client, h2o_iovec_t method, h2o_url_t url, h2o_iovec_t connection,
-                                 h2o_header_t *headers, size_t num_headers)
+static h2o_iovec_t build_request(struct st_h2o_http1client_t *client, h2o_iovec_t method, const h2o_url_t *url,
+                                 h2o_iovec_t connection, const h2o_header_t *headers, size_t num_headers)
 {
     h2o_iovec_t buf;
     size_t offset = 0;
 
-    buf.len = method.len + url.path.len + url.authority.len + 512;
+    buf.len = method.len + url->path.len + url->authority.len + 512;
     buf.base = h2o_mem_alloc_pool(client->super.pool, char, buf.len);
 
 #define RESERVE(sz)                                                                                                                \
@@ -631,9 +631,9 @@ static h2o_iovec_t build_request(struct st_h2o_http1client_t *client, h2o_iovec_
 
     APPEND(method.base, method.len);
     buf.base[offset++] = ' ';
-    APPEND(url.path.base, url.path.len);
+    APPEND(url->path.base, url->path.len);
     APPEND_STRLIT(" HTTP/1.1\r\nhost: ");
-    APPEND(url.authority.base, url.authority.len);
+    APPEND(url->authority.base, url->authority.len);
     buf.base[offset++] = '\r';
     buf.base[offset++] = '\n';
     assert(offset <= buf.len);
@@ -660,8 +660,8 @@ static h2o_iovec_t build_request(struct st_h2o_http1client_t *client, h2o_iovec_
 #undef APPEND_STRLIT
 }
 
-static void start_request(struct st_h2o_http1client_t *client, h2o_iovec_t method, h2o_url_t url, h2o_header_t *headers,
-                          size_t num_headers, h2o_iovec_t body, h2o_httpclient_properties_t props)
+static void start_request(struct st_h2o_http1client_t *client, h2o_iovec_t method, const h2o_url_t *url,
+                          const h2o_header_t *headers, size_t num_headers, h2o_iovec_t body, h2o_httpclient_properties_t props)
 {
     h2o_iovec_t reqbufs[5]; /* 5 should be the maximum possible elements used */
     size_t reqbufcnt = 0;
@@ -732,7 +732,7 @@ static void on_connection_ready(struct st_h2o_http1client_t *client)
         return;
     }
 
-    start_request(client, method, url, headers, num_headers, body, props);
+    start_request(client, method, &url, headers, num_headers, body, props);
 }
 
 static void do_cancel(h2o_httpclient_t *_client)
