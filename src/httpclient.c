@@ -69,7 +69,7 @@ static const ptls_key_exchange_algorithm_t *h3_key_exchanges[] = {
 static struct {
     ptls_context_t tls;
     quicly_context_t quic;
-    h2o_http3_ctx_t h3;
+    h2o_quic_ctx_t h3;
 } h3ctx = {{ptls_openssl_random_bytes,
             &ptls_get_time,
             h3_key_exchanges,

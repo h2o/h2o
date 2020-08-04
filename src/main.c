@@ -1293,12 +1293,12 @@ static void on_connection_close(void)
     }
 }
 
-static void on_http3_conn_destroy(h2o_http3_conn_t *conn)
+static void on_http3_conn_destroy(h2o_quic_conn_t *conn)
 {
     on_connection_close();
     num_quic_connections(-1);
 
-    H2O_HTTP3_CONN_CALLBACKS.destroy_connection(conn);
+    H2O_HTTP3_CONN_CALLBACKS.super.destroy_connection(conn);
 }
 
 static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
@@ -2140,7 +2140,7 @@ NotForwarded:
     return SIZE_MAX;
 }
 
-static int forward_quic_packets(h2o_http3_ctx_t *h3ctx, const uint64_t *node_id, uint32_t thread_id, quicly_address_t *destaddr,
+static int forward_quic_packets(h2o_quic_ctx_t *h3ctx, const uint64_t *node_id, uint32_t thread_id, quicly_address_t *destaddr,
                                 quicly_address_t *srcaddr, uint8_t ttl, quicly_decoded_packet_t *packets, size_t num_packets)
 {
     struct listener_ctx_t *ctx = H2O_STRUCT_FROM_MEMBER(struct listener_ctx_t, http3.ctx.super, h3ctx);
@@ -2196,7 +2196,7 @@ static int forward_quic_packets(h2o_http3_ctx_t *h3ctx, const uint64_t *node_id,
     return 1;
 }
 
-static int rewrite_forwarded_quic_datagram(h2o_http3_ctx_t *h3ctx, struct msghdr *msg, quicly_address_t *destaddr,
+static int rewrite_forwarded_quic_datagram(h2o_quic_ctx_t *h3ctx, struct msghdr *msg, quicly_address_t *destaddr,
                                            quicly_address_t *srcaddr, uint8_t *ttl)
 {
     struct {
@@ -2320,8 +2320,8 @@ static int validate_token(h2o_http3_server_ctx_t *ctx, struct sockaddr *remote, 
     return 1;
 }
 
-static h2o_http3_conn_t *on_http3_accept(h2o_http3_ctx_t *_ctx, quicly_address_t *destaddr, quicly_address_t *srcaddr,
-                                         quicly_decoded_packet_t *packet)
+static h2o_quic_conn_t *on_http3_accept(h2o_quic_ctx_t *_ctx, quicly_address_t *destaddr, quicly_address_t *srcaddr,
+                                        quicly_decoded_packet_t *packet)
 {
     h2o_http3_server_ctx_t *ctx = (void *)_ctx;
     struct init_ebpf_key_info_t ebpf_keyinfo = {&destaddr->sa, &srcaddr->sa};
@@ -2401,7 +2401,7 @@ static h2o_http3_conn_t *on_http3_accept(h2o_http3_ctx_t *_ctx, quicly_address_t
     num_connections(1);
     num_quic_connections(1);
     num_sessions(1);
-    return conn;
+    return &conn->super;
 }
 
 static void update_listener_state(struct listener_ctx_t *listeners)
@@ -2896,7 +2896,7 @@ int main(int argc, char **argv)
     for (n = 0; n < num_procs; n++)
         conf.thread_map.entries[conf.thread_map.size++] = -1;
     conf.quic.conn_callbacks = H2O_HTTP3_CONN_CALLBACKS;
-    conf.quic.conn_callbacks.destroy_connection = on_http3_conn_destroy;
+    conf.quic.conn_callbacks.super.destroy_connection = on_http3_conn_destroy;
     conf.tfo_queues = H2O_DEFAULT_LENGTH_TCP_FASTOPEN_QUEUE;
     conf.launch_time = time(NULL);
 

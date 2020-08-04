@@ -102,7 +102,7 @@ void on_track_sendmsg_timer(h2o_timer_t *timeout)
  * Sends a packet, returns if the connection is still maintainable (false is returned when not being able to send a packet from the
  * designated source address).
  */
-int h2o_http3_send_datagrams(h2o_http3_ctx_t *ctx, quicly_address_t *dest, quicly_address_t *src, struct iovec *datagrams,
+int h2o_http3_send_datagrams(h2o_quic_ctx_t *ctx, quicly_address_t *dest, quicly_address_t *src, struct iovec *datagrams,
                              size_t num_datagrams)
 {
     int ret;
@@ -207,6 +207,11 @@ SendmsgError:
     return 1;
 }
 
+static inline const h2o_http3_conn_callbacks_t *get_callbacks(h2o_http3_conn_t *conn)
+{
+    return (const h2o_http3_conn_callbacks_t *)conn->super.callbacks;
+}
+
 static void ingress_unistream_on_destroy(quicly_stream_t *qs, int err)
 {
     struct st_h2o_http3_ingress_unistream_t *stream = qs->data;
@@ -230,7 +235,7 @@ static void ingress_unistream_on_receive(quicly_stream_t *qs, size_t off, const 
 
     /* handle the bytes */
     stream->handle_input(conn, stream, &src, src_end, quicly_recvstate_transfer_complete(&stream->quic->recvstate));
-    if (quicly_get_state(conn->quic) >= QUICLY_STATE_CLOSING)
+    if (quicly_get_state(conn->super.quic) >= QUICLY_STATE_CLOSING)
         return;
 
     /* remove bytes that have been consumed */
@@ -302,7 +307,7 @@ static void control_stream_handle_input(h2o_http3_conn_t *conn, struct st_h2o_ht
         int ret;
         const char *err_desc = NULL;
 
-        if ((ret = h2o_http3_read_frame(&frame, quicly_is_client(conn->quic), H2O_HTTP3_STREAM_TYPE_CONTROL, src, src_end,
+        if ((ret = h2o_http3_read_frame(&frame, quicly_is_client(conn->super.quic), H2O_HTTP3_STREAM_TYPE_CONTROL, src, src_end,
                                         &err_desc)) != 0) {
             if (ret != H2O_HTTP3_ERROR_INCOMPLETE)
                 h2o_http3_close_connection(conn, ret, err_desc);
@@ -313,8 +318,8 @@ static void control_stream_handle_input(h2o_http3_conn_t *conn, struct st_h2o_ht
             h2o_http3_close_connection(conn, H2O_HTTP3_ERROR_FRAME_UNEXPECTED, NULL);
             break;
         }
-        conn->callbacks->handle_control_stream_frame(conn, frame.type, frame.payload, frame.length);
-        if (quicly_get_state(conn->quic) >= QUICLY_STATE_CLOSING)
+        get_callbacks(conn)->handle_control_stream_frame(conn, frame.type, frame.payload, frame.length);
+        if (quicly_get_state(conn->super.quic) >= QUICLY_STATE_CLOSING)
             break;
     } while (*src != src_end);
 }
@@ -421,7 +426,7 @@ static int open_egress_unistream(h2o_http3_conn_t *conn, struct st_h2o_http3_egr
     quicly_stream_t *qs;
     int ret;
 
-    if ((ret = quicly_open_stream(conn->quic, &qs, 1)) != 0)
+    if ((ret = quicly_open_stream(conn->super.quic, &qs, 1)) != 0)
         return ret;
     *stream = qs->data;
     assert((*stream)->quic == qs);
@@ -496,20 +501,20 @@ static uint64_t calc_accept_hashkey(quicly_address_t *destaddr, quicly_address_t
     return result;
 }
 
-static void drop_from_acceptmap(h2o_http3_ctx_t *ctx, h2o_http3_conn_t *conn)
+static void drop_from_acceptmap(h2o_quic_ctx_t *ctx, h2o_quic_conn_t *conn)
 {
     if (conn->_accept_hashkey != 0) {
         khint_t iter;
-        if ((iter = kh_get_h2o_http3_acceptmap(ctx->conns_accepting, conn->_accept_hashkey)) != kh_end(ctx->conns_accepting))
-            kh_del_h2o_http3_acceptmap(ctx->conns_accepting, iter);
+        if ((iter = kh_get_h2o_quic_acceptmap(ctx->conns_accepting, conn->_accept_hashkey)) != kh_end(ctx->conns_accepting))
+            kh_del_h2o_quic_acceptmap(ctx->conns_accepting, iter);
         conn->_accept_hashkey = 0;
     }
 }
 
-static void process_packets(h2o_http3_ctx_t *ctx, quicly_address_t *destaddr, quicly_address_t *srcaddr, uint8_t ttl,
+static void process_packets(h2o_quic_ctx_t *ctx, quicly_address_t *destaddr, quicly_address_t *srcaddr, uint8_t ttl,
                             quicly_decoded_packet_t *packets, size_t num_packets)
 {
-    h2o_http3_conn_t *conn = NULL;
+    h2o_quic_conn_t *conn = NULL;
     size_t accepted_packet_index = SIZE_MAX;
 
     assert(num_packets != 0);
@@ -538,7 +543,7 @@ static void process_packets(h2o_http3_ctx_t *ctx, quicly_address_t *destaddr, qu
     /* find the matching connection, by first looking at the CID (all packets as client, or Handshake, 1-RTT packets as server) */
     if (packets[0].cid.dest.plaintext.node_id == ctx->next_cid.node_id &&
         packets[0].cid.dest.plaintext.thread_id == ctx->next_cid.thread_id) {
-        khiter_t iter = kh_get_h2o_http3_idmap(ctx->conns_by_id, packets[0].cid.dest.plaintext.master_id);
+        khiter_t iter = kh_get_h2o_quic_idmap(ctx->conns_by_id, packets[0].cid.dest.plaintext.master_id);
         if (iter != kh_end(ctx->conns_by_id)) {
             conn = kh_val(ctx->conns_by_id, iter);
             /* CID-based matching on Initial and 0-RTT packets should only be applied for clients */
@@ -581,7 +586,7 @@ static void process_packets(h2o_http3_ctx_t *ctx, quicly_address_t *destaddr, qu
                 return;
             }
         }
-        khiter_t iter = kh_get_h2o_http3_acceptmap(ctx->conns_accepting, accept_hashkey);
+        khiter_t iter = kh_get_h2o_quic_acceptmap(ctx->conns_accepting, accept_hashkey);
         if (iter == kh_end(ctx->conns_accepting)) {
             /* a new connection for this thread (at least on this process); accept or delegate to newer process */
             if (ctx->acceptor == NULL) {
@@ -602,7 +607,7 @@ static void process_packets(h2o_http3_ctx_t *ctx, quicly_address_t *destaddr, qu
             accepted_packet_index = i;
             conn->_accept_hashkey = accept_hashkey;
             int r;
-            iter = kh_put_h2o_http3_acceptmap(conn->ctx->conns_accepting, accept_hashkey, &r);
+            iter = kh_put_h2o_quic_acceptmap(conn->ctx->conns_accepting, accept_hashkey, &r);
             assert(iter != kh_end(conn->ctx->conns_accepting));
             kh_val(conn->ctx->conns_accepting, iter) = conn;
         } else {
@@ -624,12 +629,12 @@ static void process_packets(h2o_http3_ctx_t *ctx, quicly_address_t *destaddr, qu
         }
     }
 
-    h2o_http3_schedule_timer(conn);
+    h2o_quic_schedule_timer(conn);
     if (ctx->notify_conn_update != NULL)
         ctx->notify_conn_update(ctx, conn);
 }
 
-void h2o_http3_read_socket(h2o_http3_ctx_t *ctx, h2o_socket_t *sock)
+void h2o_http3_read_socket(h2o_quic_ctx_t *ctx, h2o_socket_t *sock)
 {
     int fd = h2o_socket_get_fd(sock);
 
@@ -797,14 +802,14 @@ void h2o_http3_read_socket(h2o_http3_ctx_t *ctx, h2o_socket_t *sock)
 
 static void on_read(h2o_socket_t *sock, const char *err)
 {
-    h2o_http3_ctx_t *ctx = sock->data;
+    h2o_quic_ctx_t *ctx = sock->data;
     h2o_http3_read_socket(ctx, sock);
 }
 
 static void on_timeout(h2o_timer_t *timeout)
 {
-    h2o_http3_conn_t *conn = H2O_STRUCT_FROM_MEMBER(h2o_http3_conn_t, _timeout, timeout);
-    h2o_http3_send(conn);
+    h2o_quic_conn_t *conn = H2O_STRUCT_FROM_MEMBER(h2o_quic_conn_t, _timeout, timeout);
+    h2o_quic_send(conn);
 }
 
 int h2o_http3_read_frame(h2o_http3_read_frame_t *frame, int is_client, uint64_t stream_type, const uint8_t **_src,
@@ -884,18 +889,18 @@ Validation_Success:;
     return 0;
 }
 
-void h2o_http3_init_context(h2o_http3_ctx_t *ctx, h2o_loop_t *loop, h2o_socket_t *sock, quicly_context_t *quic,
-                            h2o_http3_accept_cb acceptor, h2o_http3_notify_connection_update_cb notify_conn_update)
+void h2o_http3_init_context(h2o_quic_ctx_t *ctx, h2o_loop_t *loop, h2o_socket_t *sock, quicly_context_t *quic,
+                            h2o_quic_accept_cb acceptor, h2o_quic_notify_connection_update_cb notify_conn_update)
 {
     assert(quic->stream_open != NULL);
 
-    *ctx = (h2o_http3_ctx_t){loop,
-                             {sock},
-                             quic,
-                             {0} /* thread_id, node_id are set by h2o_http3_set_context_identifier */,
-                             kh_init_h2o_http3_idmap(),
-                             kh_init_h2o_http3_acceptmap(),
-                             notify_conn_update};
+    *ctx = (h2o_quic_ctx_t){loop,
+                            {sock},
+                            quic,
+                            {0} /* thread_id, node_id are set by h2o_http3_set_context_identifier */,
+                            kh_init_h2o_quic_idmap(),
+                            kh_init_h2o_quic_acceptmap(),
+                            notify_conn_update};
     ctx->sock.sock->data = ctx;
     ctx->sock.addrlen = h2o_socket_getsockname(ctx->sock.sock, (void *)&ctx->sock.addr);
     assert(ctx->sock.addrlen != 0);
@@ -916,20 +921,20 @@ void h2o_http3_init_context(h2o_http3_ctx_t *ctx, h2o_loop_t *loop, h2o_socket_t
     h2o_socket_read_start(ctx->sock.sock, on_read);
 }
 
-void h2o_http3_dispose_context(h2o_http3_ctx_t *ctx)
+void h2o_http3_dispose_context(h2o_quic_ctx_t *ctx)
 {
     assert(kh_size(ctx->conns_by_id) == 0);
     assert(kh_size(ctx->conns_accepting) == 0);
     assert(h2o_linklist_is_empty(&ctx->clients));
 
     h2o_socket_close(ctx->sock.sock);
-    kh_destroy_h2o_http3_idmap(ctx->conns_by_id);
-    kh_destroy_h2o_http3_acceptmap(ctx->conns_accepting);
+    kh_destroy_h2o_quic_idmap(ctx->conns_by_id);
+    kh_destroy_h2o_quic_acceptmap(ctx->conns_accepting);
 }
 
-void h2o_http3_set_context_identifier(h2o_http3_ctx_t *ctx, uint32_t accept_thread_divisor, uint32_t thread_id, uint64_t node_id,
-                                      uint8_t ttl, h2o_http3_forward_packets_cb forward_cb,
-                                      h2o_http3_preprocess_packet_cb preprocess_cb)
+void h2o_http3_set_context_identifier(h2o_quic_ctx_t *ctx, uint32_t accept_thread_divisor, uint32_t thread_id, uint64_t node_id,
+                                      uint8_t ttl, h2o_quic_forward_packets_cb forward_cb,
+                                      h2o_quic_preprocess_packet_cb preprocess_cb)
 {
     ctx->accept_thread_divisor = accept_thread_divisor;
     ctx->next_cid.thread_id = thread_id;
@@ -941,13 +946,13 @@ void h2o_http3_set_context_identifier(h2o_http3_ctx_t *ctx, uint32_t accept_thre
 
 void h2o_http3_close_connection(h2o_http3_conn_t *conn, int err, const char *reason_phrase)
 {
-    switch (quicly_get_state(conn->quic)) {
+    switch (quicly_get_state(conn->super.quic)) {
     case QUICLY_STATE_FIRSTFLIGHT: /* FIXME why is this separate? */
-        conn->callbacks->destroy_connection(conn);
+        conn->super.callbacks->destroy_connection(&conn->super);
         break;
     case QUICLY_STATE_CONNECTED:
-        quicly_close(conn->quic, err, reason_phrase);
-        h2o_http3_schedule_timer(conn);
+        quicly_close(conn->super.quic, err, reason_phrase);
+        h2o_quic_schedule_timer(&conn->super);
         break;
     default:
         /* only need to wait for the socket close */
@@ -955,23 +960,55 @@ void h2o_http3_close_connection(h2o_http3_conn_t *conn, int err, const char *rea
     }
 }
 
-void h2o_http3_close_all_connections(h2o_http3_ctx_t *ctx)
+void h2o_http3_close_all_connections(h2o_quic_ctx_t *ctx)
 {
-    h2o_http3_conn_t *conn;
+    h2o_quic_conn_t *conn;
 
-    kh_foreach_value(ctx->conns_by_id, conn, { h2o_http3_close_connection(conn, 0, NULL); });
-    kh_foreach_value(ctx->conns_accepting, conn, { h2o_http3_close_connection(conn, 0, NULL); });
+    kh_foreach_value(ctx->conns_by_id, conn, { h2o_http3_close_connection((h2o_http3_conn_t *)conn, 0, NULL); });
+    kh_foreach_value(ctx->conns_accepting, conn, { h2o_http3_close_connection((h2o_http3_conn_t *)conn, 0, NULL); });
 }
 
-size_t h2o_http3_num_connections(h2o_http3_ctx_t *ctx)
+size_t h2o_http3_num_connections(h2o_quic_ctx_t *ctx)
 {
     return kh_size(ctx->conns_by_id) + kh_size(ctx->conns_accepting);
 }
 
-void h2o_http3_init_conn(h2o_http3_conn_t *conn, h2o_http3_ctx_t *ctx, const h2o_http3_conn_callbacks_t *callbacks)
+void h2o_quic_init_conn(h2o_quic_conn_t *conn, h2o_quic_ctx_t *ctx, const h2o_quic_conn_callbacks_t *callbacks)
 {
-    *conn = (h2o_http3_conn_t){ctx, NULL, callbacks};
+    *conn = (h2o_quic_conn_t){ctx, NULL, callbacks};
     h2o_timer_init(&conn->_timeout, on_timeout);
+}
+
+void h2o_quic_dispose_conn(h2o_quic_conn_t *conn)
+{
+    if (conn->quic != NULL) {
+        khiter_t iter;
+        /* unregister from maps */
+        if ((iter = kh_get_h2o_quic_idmap(conn->ctx->conns_by_id, quicly_get_master_id(conn->quic)->master_id)) !=
+            kh_end(conn->ctx->conns_by_id))
+            kh_del_h2o_quic_idmap(conn->ctx->conns_by_id, iter);
+        drop_from_acceptmap(conn->ctx, conn);
+        quicly_free(conn->quic);
+    }
+    h2o_timer_unlink(&conn->_timeout);
+}
+
+void h2o_quic_setup(h2o_quic_conn_t *conn, quicly_conn_t *quic)
+{
+    conn->quic = quic;
+    *quicly_get_data(conn->quic) = conn;
+
+    /* register to the idmap */
+    int r;
+    khiter_t iter = kh_put_h2o_quic_idmap(conn->ctx->conns_by_id, quicly_get_master_id(conn->quic)->master_id, &r);
+    assert(iter != kh_end(conn->ctx->conns_by_id));
+    kh_val(conn->ctx->conns_by_id, iter) = conn;
+}
+
+void h2o_http3_init_conn(h2o_http3_conn_t *conn, h2o_quic_ctx_t *ctx, const h2o_http3_conn_callbacks_t *callbacks)
+{
+    h2o_quic_init_conn(&conn->super, ctx, &callbacks->super);
+    memset((char *)conn + sizeof(conn->super), 0, sizeof(*conn) - sizeof(conn->super));
 }
 
 void h2o_http3_dispose_conn(h2o_http3_conn_t *conn)
@@ -980,24 +1017,14 @@ void h2o_http3_dispose_conn(h2o_http3_conn_t *conn)
         h2o_qpack_destroy_decoder(conn->qpack.dec);
     if (conn->qpack.enc != NULL)
         h2o_qpack_destroy_encoder(conn->qpack.enc);
-    if (conn->quic != NULL) {
-        khiter_t iter;
-        /* unregister from maps */
-        if ((iter = kh_get_h2o_http3_idmap(conn->ctx->conns_by_id, quicly_get_master_id(conn->quic)->master_id)) !=
-            kh_end(conn->ctx->conns_by_id))
-            kh_del_h2o_http3_idmap(conn->ctx->conns_by_id, iter);
-        drop_from_acceptmap(conn->ctx, conn);
-        quicly_free(conn->quic);
-    }
-    h2o_timer_unlink(&conn->_timeout);
+    h2o_quic_dispose_conn(&conn->super);
 }
 
 int h2o_http3_setup(h2o_http3_conn_t *conn, quicly_conn_t *quic)
 {
     int ret;
 
-    conn->quic = quic;
-    *quicly_get_data(conn->quic) = conn;
+    h2o_quic_setup(&conn->super, quic);
 
     /* setup h3 objects, only when the connection state has been created */
     if (quicly_get_state(quic) > QUICLY_STATE_CONNECTED)
@@ -1005,18 +1032,12 @@ int h2o_http3_setup(h2o_http3_conn_t *conn, quicly_conn_t *quic)
 
     conn->qpack.dec = h2o_qpack_create_decoder(H2O_HTTP3_DEFAULT_HEADER_TABLE_SIZE, 100 /* FIXME */);
 
-    { /* register to the idmap */
-        int r;
-        khiter_t iter = kh_put_h2o_http3_idmap(conn->ctx->conns_by_id, quicly_get_master_id(conn->quic)->master_id, &r);
-        assert(iter != kh_end(conn->ctx->conns_by_id));
-        kh_val(conn->ctx->conns_by_id, iter) = conn;
-    }
-
     { /* open control streams, send SETTINGS */
         static const uint8_t client_first_flight[] = {H2O_HTTP3_STREAM_TYPE_CONTROL, H2O_HTTP3_FRAME_TYPE_SETTINGS, 0};
         static const uint8_t server_first_flight[] = {H2O_HTTP3_STREAM_TYPE_CONTROL, H2O_HTTP3_FRAME_TYPE_SETTINGS, 0};
-        h2o_iovec_t first_flight = quicly_is_client(conn->quic) ? h2o_iovec_init(client_first_flight, sizeof(client_first_flight))
-                                                                : h2o_iovec_init(server_first_flight, sizeof(server_first_flight));
+        h2o_iovec_t first_flight = quicly_is_client(conn->super.quic)
+                                       ? h2o_iovec_init(client_first_flight, sizeof(client_first_flight))
+                                       : h2o_iovec_init(server_first_flight, sizeof(server_first_flight));
         if ((ret = open_egress_unistream(conn, &conn->_control_streams.egress.control, first_flight)) != 0)
             return ret;
     }
@@ -1032,11 +1053,11 @@ int h2o_http3_setup(h2o_http3_conn_t *conn, quicly_conn_t *quic)
     }
 
 Exit:
-    h2o_http3_schedule_timer(conn);
+    h2o_quic_schedule_timer(&conn->super);
     return 0;
 }
 
-int h2o_http3_send(h2o_http3_conn_t *conn)
+int h2o_quic_send(h2o_quic_conn_t *conn)
 {
     quicly_address_t dest, src;
     struct iovec datagrams[10];
@@ -1062,7 +1083,7 @@ int h2o_http3_send(h2o_http3_conn_t *conn)
         }
     } while (num_datagrams == PTLS_ELEMENTSOF(datagrams));
 
-    h2o_http3_schedule_timer(conn);
+    h2o_quic_schedule_timer(conn);
 
     return 1;
 }
@@ -1078,7 +1099,7 @@ void h2o_http3_update_recvbuf(h2o_buffer_t **buf, size_t off, const void *src, s
     memcpy((*buf)->bytes + off, src, len);
 }
 
-void h2o_http3_schedule_timer(h2o_http3_conn_t *conn)
+void h2o_quic_schedule_timer(h2o_quic_conn_t *conn)
 {
     int64_t timeout = quicly_get_first_timeout(conn->quic);
     if (h2o_timer_is_linked(&conn->_timeout)) {
