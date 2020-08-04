@@ -660,30 +660,9 @@ static h2o_iovec_t build_request(struct st_h2o_http1client_t *client, h2o_iovec_
 #undef APPEND_STRLIT
 }
 
-static void on_connection_ready(struct st_h2o_http1client_t *client)
+static void start_request(struct st_h2o_http1client_t *client, h2o_iovec_t method, h2o_url_t url, h2o_header_t *headers,
+                          size_t num_headers, h2o_iovec_t body, h2o_httpclient_properties_t props)
 {
-    h2o_iovec_t proxy_protocol = h2o_iovec_init(NULL, 0);
-    int chunked = 0;
-    h2o_iovec_t connection_header = h2o_iovec_init(NULL, 0);
-    h2o_httpclient_properties_t props = {
-        &proxy_protocol,
-        &chunked,
-        &connection_header,
-    };
-    h2o_iovec_t method;
-    h2o_url_t url;
-    h2o_header_t *headers;
-    size_t num_headers;
-    h2o_iovec_t body;
-
-    client->super._cb.on_head = client->super._cb.on_connect(&client->super, NULL, &method, &url, (const h2o_header_t **)&headers,
-                                                             &num_headers, &body, &client->proceed_req, &props, client->_origin);
-
-    if (client->super._cb.on_head == NULL) {
-        close_client(client);
-        return;
-    }
-
     h2o_iovec_t reqbufs[5]; /* 5 should be the maximum possible elements used */
     size_t reqbufcnt = 0;
     if (props.proxy_protocol->base != NULL)
@@ -727,6 +706,33 @@ static void on_connection_ready(struct st_h2o_http1client_t *client)
     client->super.timings.request_begin_at = h2o_gettimeofday(client->super.ctx->loop);
 
     h2o_socket_read_start(client->sock, on_head);
+}
+
+static void on_connection_ready(struct st_h2o_http1client_t *client)
+{
+    h2o_iovec_t proxy_protocol = h2o_iovec_init(NULL, 0);
+    int chunked = 0;
+    h2o_iovec_t connection_header = h2o_iovec_init(NULL, 0);
+    h2o_httpclient_properties_t props = {
+        &proxy_protocol,
+        &chunked,
+        &connection_header,
+    };
+    h2o_iovec_t method;
+    h2o_url_t url;
+    h2o_header_t *headers;
+    size_t num_headers;
+    h2o_iovec_t body;
+
+    client->super._cb.on_head = client->super._cb.on_connect(&client->super, NULL, &method, &url, (const h2o_header_t **)&headers,
+                                                             &num_headers, &body, &client->proceed_req, &props, client->_origin);
+
+    if (client->super._cb.on_head == NULL) {
+        close_client(client);
+        return;
+    }
+
+    start_request(client, method, url, headers, num_headers, body, props);
 }
 
 static void do_cancel(h2o_httpclient_t *_client)
