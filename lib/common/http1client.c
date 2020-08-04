@@ -660,45 +660,61 @@ static h2o_iovec_t build_request(struct st_h2o_http1client_t *client, h2o_iovec_
 #undef APPEND_STRLIT
 }
 
-static void on_connection_ready(struct st_h2o_http1client_t *client)
-{
-    h2o_iovec_t proxy_protocol = h2o_iovec_init(NULL, 0);
-    int chunked = 0;
-    h2o_iovec_t connection_header = h2o_iovec_init(NULL, 0);
-    h2o_httpclient_properties_t props = {
-        &proxy_protocol,
-        &chunked,
-        &connection_header,
-    };
+struct st_h2o_on_connect_state {
+    h2o_httpclient_properties_t props;
     h2o_iovec_t method;
     h2o_url_t url;
     h2o_header_t *headers;
     size_t num_headers;
     h2o_iovec_t body;
+};
 
-    client->super._cb.on_head = client->super._cb.on_connect(&client->super, NULL, &method, &url, (const h2o_header_t **)&headers,
-                                                             &num_headers, &body, &client->proceed_req, &props, client->_origin);
+static void on_connection_ready_done(struct st_h2o_http1client_t *client, struct st_h2o_on_connect_state *state);
 
+static void on_connection_ready(struct st_h2o_http1client_t *client)
+{
+    h2o_iovec_t proxy_protocol = h2o_iovec_init(NULL, 0);
+    int chunked = 0;
+    h2o_iovec_t connection_header = h2o_iovec_init(NULL, 0);
+
+    struct st_h2o_on_connect_state state = {
+        .props =
+            {
+                .proxy_protocol = &proxy_protocol,
+                .chunked = &chunked,
+                .connection_header = &connection_header,
+            },
+    };
+
+    client->super._cb.on_head =
+        client->super._cb.on_connect(&client->super, NULL, &state.method, &state.url, (const h2o_header_t **)&state.headers,
+                                     &state.num_headers, &state.body, &client->proceed_req, &state.props, client->_origin);
     if (client->super._cb.on_head == NULL) {
         close_client(client);
         return;
     }
 
+    on_connection_ready_done(client, &state);
+}
+
+static void on_connection_ready_done(struct st_h2o_http1client_t *client, struct st_h2o_on_connect_state *state)
+{
     h2o_iovec_t reqbufs[5]; /* 5 should be the maximum possible elements used */
     size_t reqbufcnt = 0;
-    if (props.proxy_protocol->base != NULL)
-        reqbufs[reqbufcnt++] = *props.proxy_protocol;
-    h2o_iovec_t header = build_request(client, method, url, *props.connection_header, headers, num_headers);
+    if (state->props.proxy_protocol->base != NULL)
+        reqbufs[reqbufcnt++] = *state->props.proxy_protocol;
+    h2o_iovec_t header =
+        build_request(client, state->method, state->url, *state->props.connection_header, state->headers, state->num_headers);
     reqbufs[reqbufcnt++] = header;
     client->super.bytes_written.header = header.len;
 
-    client->_is_chunked = *props.chunked;
-    client->_method_is_head = h2o_memis(method.base, method.len, H2O_STRLIT("HEAD"));
+    client->_is_chunked = *state->props.chunked;
+    client->_method_is_head = h2o_memis(state->method.base, state->method.len, H2O_STRLIT("HEAD"));
 
     if (client->proceed_req != NULL) {
-        if (body.base != NULL) {
+        if (state->body.base != NULL) {
             h2o_buffer_init(&client->_body_buf, &h2o_socket_buffer_prototype);
-            if (!h2o_buffer_try_append(&client->_body_buf, body.base, body.len)) {
+            if (!h2o_buffer_try_append(&client->_body_buf, state->body.base, state->body.len)) {
                 on_whole_request_sent(client->sock, h2o_httpclient_error_internal);
                 return;
             }
@@ -706,14 +722,14 @@ static void on_connection_ready(struct st_h2o_http1client_t *client)
         h2o_socket_write(client->sock, reqbufs, reqbufcnt, on_req_body_done);
     } else {
         if (client->_is_chunked) {
-            assert(body.base != NULL);
+            assert(state->body.base != NULL);
             size_t bytes;
             assert(PTLS_ELEMENTSOF(reqbufs) - reqbufcnt >= 3); /* encode_chunk could write to 3 additional elements */
-            reqbufcnt += encode_chunk(client, reqbufs + reqbufcnt, body, &bytes);
+            reqbufcnt += encode_chunk(client, reqbufs + reqbufcnt, state->body, &bytes);
             client->super.bytes_written.body = bytes;
-        } else if (body.base != NULL) {
-            reqbufs[reqbufcnt++] = body;
-            client->super.bytes_written.body = body.len;
+        } else if (state->body.base != NULL) {
+            reqbufs[reqbufcnt++] = state->body;
+            client->super.bytes_written.body = state->body.len;
         }
         h2o_socket_write(client->sock, reqbufs, reqbufcnt, on_whole_request_sent);
     }
