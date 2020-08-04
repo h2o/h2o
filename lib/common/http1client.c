@@ -69,6 +69,17 @@ struct st_h2o_http1client_t {
     unsigned _seen_at_least_one_chunk : 1;
 };
 
+struct st_h2o_on_connect_state {
+    h2o_httpclient_properties_t props;
+    h2o_iovec_t method;
+    h2o_url_t url;
+    h2o_header_t *headers;
+    size_t num_headers;
+    h2o_iovec_t body;
+};
+
+static void on_connection_ready_done(struct st_h2o_http1client_t *client, struct st_h2o_on_connect_state *state);
+
 static void close_client(struct st_h2o_http1client_t *client)
 {
     if (client->sock != NULL) {
@@ -659,17 +670,6 @@ static h2o_iovec_t build_request(struct st_h2o_http1client_t *client, h2o_iovec_
 #undef APPEND
 #undef APPEND_STRLIT
 }
-
-struct st_h2o_on_connect_state {
-    h2o_httpclient_properties_t props;
-    h2o_iovec_t method;
-    h2o_url_t url;
-    h2o_header_t *headers;
-    size_t num_headers;
-    h2o_iovec_t body;
-};
-
-static void on_connection_ready_done(struct st_h2o_http1client_t *client, struct st_h2o_on_connect_state *state);
 
 static void on_connection_ready(struct st_h2o_http1client_t *client)
 {
