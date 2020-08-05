@@ -2346,7 +2346,7 @@ static h2o_quic_conn_t *on_http3_accept(h2o_quic_ctx_t *_ctx, quicly_address_t *
                                                                   &destaddr->sa, packet->cid.dest.encrypted, err_desc, payload);
             assert(payload_size != SIZE_MAX);
             struct iovec vec = {.iov_base = payload, .iov_len = payload_size};
-            h2o_http3_send_datagrams(&ctx->super, srcaddr, destaddr, &vec, 1);
+            h2o_quic_send_datagrams(&ctx->super, srcaddr, destaddr, &vec, 1);
             return NULL;
         }
     }
@@ -2389,7 +2389,7 @@ static h2o_quic_conn_t *on_http3_accept(h2o_quic_ctx_t *_ctx, quicly_address_t *
                                   ptls_iovec_init(&token_prefix, 1), ptls_iovec_init(NULL, 0), retry_integrity_aead, payload);
             assert(payload_size != SIZE_MAX);
             struct iovec vec = {.iov_base = payload, .iov_len = payload_size};
-            h2o_http3_send_datagrams(&ctx->super, srcaddr, destaddr, &vec, 1);
+            h2o_quic_send_datagrams(&ctx->super, srcaddr, destaddr, &vec, 1);
             return NULL;
         }
     }

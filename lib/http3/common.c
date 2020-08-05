@@ -102,7 +102,7 @@ void on_track_sendmsg_timer(h2o_timer_t *timeout)
  * Sends a packet, returns if the connection is still maintainable (false is returned when not being able to send a packet from the
  * designated source address).
  */
-int h2o_http3_send_datagrams(h2o_quic_ctx_t *ctx, quicly_address_t *dest, quicly_address_t *src, struct iovec *datagrams,
+int h2o_quic_send_datagrams(h2o_quic_ctx_t *ctx, quicly_address_t *dest, quicly_address_t *src, struct iovec *datagrams,
                              size_t num_datagrams)
 {
     int ret;
@@ -534,7 +534,7 @@ static void process_packets(h2o_quic_ctx_t *ctx, quicly_address_t *destaddr, qui
                                                                   packets[0].cid.dest.encrypted, payload);
             assert(payload_size != SIZE_MAX);
             struct iovec vec = {.iov_base = payload, .iov_len = payload_size};
-            h2o_http3_send_datagrams(ctx, srcaddr, destaddr, &vec, 1);
+            h2o_quic_send_datagrams(ctx, srcaddr, destaddr, &vec, 1);
             return;
         } else if (packets[0].cid.src.len > QUICLY_MAX_CID_LEN_V1) {
             return;
@@ -557,7 +557,7 @@ static void process_packets(h2o_quic_ctx_t *ctx, quicly_address_t *destaddr, qui
                                                                   packets[0].cid.dest.encrypted.base, payload);
                 assert(payload_size != SIZE_MAX);
                 struct iovec vec = {.iov_base = payload, .iov_len = payload_size};
-                h2o_http3_send_datagrams(ctx, srcaddr, destaddr, &vec, 1);
+                h2o_quic_send_datagrams(ctx, srcaddr, destaddr, &vec, 1);
             }
             return;
         }
@@ -1069,7 +1069,7 @@ int h2o_quic_send(h2o_quic_conn_t *conn)
         int ret = quicly_send(conn->quic, &dest, &src, datagrams, &num_datagrams, datagram_buf, sizeof(datagram_buf));
         switch (ret) {
         case 0:
-            if (num_datagrams != 0 && !h2o_http3_send_datagrams(conn->ctx, &dest, &src, datagrams, num_datagrams)) {
+            if (num_datagrams != 0 && !h2o_quic_send_datagrams(conn->ctx, &dest, &src, datagrams, num_datagrams)) {
                 /* FIXME close the connection immediately */
                 break;
             }
