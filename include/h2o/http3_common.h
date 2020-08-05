@@ -346,6 +346,10 @@ void h2o_quic_init_conn(h2o_quic_conn_t *conn, h2o_quic_ctx_t *ctx, const h2o_qu
  */
 void h2o_quic_dispose_conn(h2o_quic_conn_t *conn);
 /**
+ *
+ */
+void h2o_quic_setup(h2o_quic_conn_t *conn, quicly_conn_t *quic);
+/**
  * initializes a http3 connection
  */
 void h2o_http3_init_conn(h2o_http3_conn_t *conn, h2o_quic_ctx_t *ctx, const h2o_http3_conn_callbacks_t *callbacks);
