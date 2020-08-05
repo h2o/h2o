@@ -103,7 +103,7 @@ void on_track_sendmsg_timer(h2o_timer_t *timeout)
  * designated source address).
  */
 int h2o_quic_send_datagrams(h2o_quic_ctx_t *ctx, quicly_address_t *dest, quicly_address_t *src, struct iovec *datagrams,
-                             size_t num_datagrams)
+                            size_t num_datagrams)
 {
     int ret;
     struct msghdr mess;
