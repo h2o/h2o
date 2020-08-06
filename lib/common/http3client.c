@@ -249,7 +249,7 @@ static void handle_control_stream_frame(h2o_http3_conn_t *_conn, uint8_t type, c
 
     return;
 Fail:
-    h2o_http3_close_connection(&conn->super, err, err_desc);
+    h2o_quic_close_connection(&conn->super.super, err, err_desc);
 }
 
 struct st_h2o_http3client_conn_t *create_connection(h2o_httpclient_ctx_t *ctx, h2o_url_t *origin)

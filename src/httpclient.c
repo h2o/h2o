@@ -480,8 +480,8 @@ int main(int argc, char **argv)
             fprintf(stderr, "HTTP/3 is currently not supported by the libuv backend.\n");
             exit(EXIT_FAILURE);
 #else
-            h2o_http3_init_context(&h3ctx.h3, ctx.loop, create_quic_socket(ctx.loop), &h3ctx.quic, NULL,
-                                   h2o_httpclient_http3_notify_connection_update);
+            h2o_quic_init_context(&h3ctx.h3, ctx.loop, create_quic_socket(ctx.loop), &h3ctx.quic, NULL,
+                                  h2o_httpclient_http3_notify_connection_update);
             ctx.http3 = &h3ctx.h3;
 #endif
             break;
@@ -536,8 +536,8 @@ int main(int argc, char **argv)
     }
 
     if (ctx.http3 != NULL) {
-        h2o_http3_close_all_connections(ctx.http3);
-        while (h2o_http3_num_connections(ctx.http3) != 0) {
+        h2o_quic_close_all_connections(ctx.http3);
+        while (h2o_quic_num_connections(ctx.http3) != 0) {
 #if H2O_USE_LIBUV
             uv_run(ctx.loop, UV_RUN_ONCE);
 #else

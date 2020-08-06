@@ -258,7 +258,7 @@ static void qpack_encoder_stream_handle_input(h2o_http3_conn_t *conn, struct st_
                                               const uint8_t **src, const uint8_t *src_end, int is_eos)
 {
     if (src == NULL || is_eos) {
-        h2o_http3_close_connection(conn, H2O_HTTP3_ERROR_CLOSED_CRITICAL_STREAM, NULL);
+        h2o_quic_close_connection(&conn->super, H2O_HTTP3_ERROR_CLOSED_CRITICAL_STREAM, NULL);
         return;
     }
 
@@ -269,7 +269,7 @@ static void qpack_encoder_stream_handle_input(h2o_http3_conn_t *conn, struct st_
         const char *err_desc = NULL;
         if ((ret = h2o_qpack_decoder_handle_input(conn->qpack.dec, &unblocked_stream_ids, &num_unblocked, src, src_end,
                                                   &err_desc)) != 0) {
-            h2o_http3_close_connection(conn, ret, err_desc);
+            h2o_quic_close_connection(&conn->super, ret, err_desc);
             break;
         }
         /* TODO handle unblocked streams */
@@ -280,7 +280,7 @@ static void qpack_decoder_stream_handle_input(h2o_http3_conn_t *conn, struct st_
                                               const uint8_t **src, const uint8_t *src_end, int is_eos)
 {
     if (src == NULL || is_eos) {
-        h2o_http3_close_connection(conn, H2O_HTTP3_ERROR_CLOSED_CRITICAL_STREAM, NULL);
+        h2o_quic_close_connection(&conn->super, H2O_HTTP3_ERROR_CLOSED_CRITICAL_STREAM, NULL);
         return;
     }
 
@@ -288,7 +288,7 @@ static void qpack_decoder_stream_handle_input(h2o_http3_conn_t *conn, struct st_
         int ret;
         const char *err_desc = NULL;
         if ((ret = h2o_qpack_encoder_handle_input(conn->qpack.enc, src, src_end, &err_desc)) != 0) {
-            h2o_http3_close_connection(conn, ret, err_desc);
+            h2o_quic_close_connection(&conn->super, ret, err_desc);
             break;
         }
     }
@@ -298,7 +298,7 @@ static void control_stream_handle_input(h2o_http3_conn_t *conn, struct st_h2o_ht
                                         const uint8_t **src, const uint8_t *src_end, int is_eos)
 {
     if (src == NULL || is_eos) {
-        h2o_http3_close_connection(conn, H2O_HTTP3_ERROR_CLOSED_CRITICAL_STREAM, NULL);
+        h2o_quic_close_connection(&conn->super, H2O_HTTP3_ERROR_CLOSED_CRITICAL_STREAM, NULL);
         return;
     }
 
@@ -310,12 +310,12 @@ static void control_stream_handle_input(h2o_http3_conn_t *conn, struct st_h2o_ht
         if ((ret = h2o_http3_read_frame(&frame, quicly_is_client(conn->super.quic), H2O_HTTP3_STREAM_TYPE_CONTROL, src, src_end,
                                         &err_desc)) != 0) {
             if (ret != H2O_HTTP3_ERROR_INCOMPLETE)
-                h2o_http3_close_connection(conn, ret, err_desc);
+                h2o_quic_close_connection(&conn->super, ret, err_desc);
             break;
         }
         if (h2o_http3_has_received_settings(conn) == (frame.type == H2O_HTTP3_FRAME_TYPE_SETTINGS) ||
             frame.type == H2O_HTTP3_FRAME_TYPE_DATA) {
-            h2o_http3_close_connection(conn, H2O_HTTP3_ERROR_FRAME_UNEXPECTED, NULL);
+            h2o_quic_close_connection(&conn->super, H2O_HTTP3_ERROR_FRAME_UNEXPECTED, NULL);
             break;
         }
         get_callbacks(conn)->handle_control_stream_frame(conn, frame.type, frame.payload, frame.length);
@@ -394,7 +394,7 @@ static void egress_unistream_on_send_emit(quicly_stream_t *qs, size_t off, void 
 static void egress_unistream_on_send_stop(quicly_stream_t *qs, int err)
 {
     struct st_h2o_http3_conn_t *conn = *quicly_get_data(qs->conn);
-    h2o_http3_close_connection(conn, H2O_HTTP3_ERROR_CLOSED_CRITICAL_STREAM, NULL);
+    h2o_quic_close_connection(&conn->super, H2O_HTTP3_ERROR_CLOSED_CRITICAL_STREAM, NULL);
 }
 
 void h2o_http3_on_create_unidirectional_stream(quicly_stream_t *qs)
@@ -634,7 +634,7 @@ static void process_packets(h2o_quic_ctx_t *ctx, quicly_address_t *destaddr, qui
         ctx->notify_conn_update(ctx, conn);
 }
 
-void h2o_http3_read_socket(h2o_quic_ctx_t *ctx, h2o_socket_t *sock)
+void h2o_quic_read_socket(h2o_quic_ctx_t *ctx, h2o_socket_t *sock)
 {
     int fd = h2o_socket_get_fd(sock);
 
@@ -803,7 +803,7 @@ void h2o_http3_read_socket(h2o_quic_ctx_t *ctx, h2o_socket_t *sock)
 static void on_read(h2o_socket_t *sock, const char *err)
 {
     h2o_quic_ctx_t *ctx = sock->data;
-    h2o_http3_read_socket(ctx, sock);
+    h2o_quic_read_socket(ctx, sock);
 }
 
 static void on_timeout(h2o_timer_t *timeout)
@@ -889,8 +889,8 @@ Validation_Success:;
     return 0;
 }
 
-void h2o_http3_init_context(h2o_quic_ctx_t *ctx, h2o_loop_t *loop, h2o_socket_t *sock, quicly_context_t *quic,
-                            h2o_quic_accept_cb acceptor, h2o_quic_notify_connection_update_cb notify_conn_update)
+void h2o_quic_init_context(h2o_quic_ctx_t *ctx, h2o_loop_t *loop, h2o_socket_t *sock, quicly_context_t *quic,
+                           h2o_quic_accept_cb acceptor, h2o_quic_notify_connection_update_cb notify_conn_update)
 {
     assert(quic->stream_open != NULL);
 
@@ -921,7 +921,7 @@ void h2o_http3_init_context(h2o_quic_ctx_t *ctx, h2o_loop_t *loop, h2o_socket_t 
     h2o_socket_read_start(ctx->sock.sock, on_read);
 }
 
-void h2o_http3_dispose_context(h2o_quic_ctx_t *ctx)
+void h2o_quic_dispose_context(h2o_quic_ctx_t *ctx)
 {
     assert(kh_size(ctx->conns_by_id) == 0);
     assert(kh_size(ctx->conns_accepting) == 0);
@@ -932,9 +932,9 @@ void h2o_http3_dispose_context(h2o_quic_ctx_t *ctx)
     kh_destroy_h2o_quic_acceptmap(ctx->conns_accepting);
 }
 
-void h2o_http3_set_context_identifier(h2o_quic_ctx_t *ctx, uint32_t accept_thread_divisor, uint32_t thread_id, uint64_t node_id,
-                                      uint8_t ttl, h2o_quic_forward_packets_cb forward_cb,
-                                      h2o_quic_preprocess_packet_cb preprocess_cb)
+void h2o_quic_set_context_identifier(h2o_quic_ctx_t *ctx, uint32_t accept_thread_divisor, uint32_t thread_id, uint64_t node_id,
+                                     uint8_t ttl, h2o_quic_forward_packets_cb forward_cb,
+                                     h2o_quic_preprocess_packet_cb preprocess_cb)
 {
     ctx->accept_thread_divisor = accept_thread_divisor;
     ctx->next_cid.thread_id = thread_id;
@@ -944,15 +944,15 @@ void h2o_http3_set_context_identifier(h2o_quic_ctx_t *ctx, uint32_t accept_threa
     ctx->preprocess_packet = preprocess_cb;
 }
 
-void h2o_http3_close_connection(h2o_http3_conn_t *conn, int err, const char *reason_phrase)
+void h2o_quic_close_connection(h2o_quic_conn_t *conn, int err, const char *reason_phrase)
 {
-    switch (quicly_get_state(conn->super.quic)) {
+    switch (quicly_get_state(conn->quic)) {
     case QUICLY_STATE_FIRSTFLIGHT: /* FIXME why is this separate? */
-        conn->super.callbacks->destroy_connection(&conn->super);
+        conn->callbacks->destroy_connection(conn);
         break;
     case QUICLY_STATE_CONNECTED:
-        quicly_close(conn->super.quic, err, reason_phrase);
-        h2o_quic_schedule_timer(&conn->super);
+        quicly_close(conn->quic, err, reason_phrase);
+        h2o_quic_schedule_timer(conn);
         break;
     default:
         /* only need to wait for the socket close */
@@ -960,15 +960,15 @@ void h2o_http3_close_connection(h2o_http3_conn_t *conn, int err, const char *rea
     }
 }
 
-void h2o_http3_close_all_connections(h2o_quic_ctx_t *ctx)
+void h2o_quic_close_all_connections(h2o_quic_ctx_t *ctx)
 {
     h2o_quic_conn_t *conn;
 
-    kh_foreach_value(ctx->conns_by_id, conn, { h2o_http3_close_connection((h2o_http3_conn_t *)conn, 0, NULL); });
-    kh_foreach_value(ctx->conns_accepting, conn, { h2o_http3_close_connection((h2o_http3_conn_t *)conn, 0, NULL); });
+    kh_foreach_value(ctx->conns_by_id, conn, { h2o_quic_close_connection(conn, 0, NULL); });
+    kh_foreach_value(ctx->conns_accepting, conn, { h2o_quic_close_connection(conn, 0, NULL); });
 }
 
-size_t h2o_http3_num_connections(h2o_quic_ctx_t *ctx)
+size_t h2o_quic_num_connections(h2o_quic_ctx_t *ctx)
 {
     return kh_size(ctx->conns_by_id) + kh_size(ctx->conns_accepting);
 }

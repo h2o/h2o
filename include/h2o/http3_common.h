@@ -309,34 +309,34 @@ int h2o_http3_read_frame(h2o_http3_read_frame_t *frame, int is_client, uint64_t 
 /**
  * initializes the context
  */
-void h2o_http3_init_context(h2o_quic_ctx_t *ctx, h2o_loop_t *loop, h2o_socket_t *sock, quicly_context_t *quic,
-                            h2o_quic_accept_cb acceptor, h2o_quic_notify_connection_update_cb notify_conn_update);
+void h2o_quic_init_context(h2o_quic_ctx_t *ctx, h2o_loop_t *loop, h2o_socket_t *sock, quicly_context_t *quic,
+                           h2o_quic_accept_cb acceptor, h2o_quic_notify_connection_update_cb notify_conn_update);
 /**
  *
  */
-void h2o_http3_dispose_context(h2o_quic_ctx_t *ctx);
+void h2o_quic_dispose_context(h2o_quic_ctx_t *ctx);
 /**
  *
  */
-void h2o_http3_set_context_identifier(h2o_quic_ctx_t *ctx, uint32_t accept_thread_divisor, uint32_t thread_id, uint64_t node_id,
-                                      uint8_t ttl, h2o_quic_forward_packets_cb forward_cb,
-                                      h2o_quic_preprocess_packet_cb preprocess_cb);
+void h2o_quic_set_context_identifier(h2o_quic_ctx_t *ctx, uint32_t accept_thread_divisor, uint32_t thread_id, uint64_t node_id,
+                                     uint8_t ttl, h2o_quic_forward_packets_cb forward_cb,
+                                     h2o_quic_preprocess_packet_cb preprocess_cb);
 /**
  *
  */
-void h2o_http3_read_socket(h2o_quic_ctx_t *ctx, h2o_socket_t *sock);
+void h2o_quic_read_socket(h2o_quic_ctx_t *ctx, h2o_socket_t *sock);
 /**
  *
  */
-void h2o_http3_close_connection(h2o_http3_conn_t *conn, int err, const char *reason_phrase);
+void h2o_quic_close_connection(h2o_quic_conn_t *conn, int err, const char *reason_phrase);
 /**
  *
  */
-void h2o_http3_close_all_connections(h2o_quic_ctx_t *ctx);
+void h2o_quic_close_all_connections(h2o_quic_ctx_t *ctx);
 /**
  *
  */
-size_t h2o_http3_num_connections(h2o_quic_ctx_t *ctx);
+size_t h2o_quic_num_connections(h2o_quic_ctx_t *ctx);
 /**
  *
  */

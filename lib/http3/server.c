@@ -593,7 +593,7 @@ static void handle_buffered_input(struct st_h2o_http3_server_stream_t *stream)
                     err = H2O_HTTP3_ERROR_GENERAL_PROTOCOL;
                     err_desc = "incomplete frame";
                 }
-                h2o_http3_close_connection(&conn->h3, err, err_desc);
+                h2o_quic_close_connection(&conn->h3.super, err, err_desc);
                 return;
             }
             if (quicly_stop_requested(stream->quic)) {
@@ -1088,7 +1088,7 @@ static void handle_control_stream_frame(h2o_http3_conn_t *_conn, uint8_t type, c
 
     return;
 Fail:
-    h2o_http3_close_connection(&conn->h3, err, err_desc);
+    h2o_quic_close_connection(&conn->h3.super, err, err_desc);
 }
 
 static int stream_open_cb(quicly_stream_open_t *self, quicly_stream_t *qs)
