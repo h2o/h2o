@@ -106,6 +106,8 @@ typedef struct st_h2o_http3_priority_update_frame_t {
 uint8_t *h2o_http3_encode_priority_update_frame(uint8_t *dst, const h2o_http3_priority_update_frame_t *frame);
 int h2o_http3_decode_priority_update_frame(h2o_http3_priority_update_frame_t *frame, const uint8_t *payload, size_t len,
                                            const char **err_desc);
+size_t h2o_http3_goaway_frame_capacity(quicly_stream_id_t stream_or_push_id);
+uint8_t *h2o_http3_encode_goaway_frame(uint8_t *buff, quicly_stream_id_t stream_or_push_id);
 
 typedef h2o_quic_conn_t *(*h2o_quic_accept_cb)(h2o_quic_ctx_t *ctx, quicly_address_t *destaddr, quicly_address_t *srcaddr,
                                                quicly_decoded_packet_t *packet);

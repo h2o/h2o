@@ -59,3 +59,19 @@ int h2o_http3_decode_priority_update_frame(h2o_http3_priority_update_frame_t *fr
 
     return 0;
 }
+
+size_t h2o_http3_goaway_frame_capacity(quicly_stream_id_t stream_or_push_id)
+{
+    return 1   /* type */
+           + 1 /* length field. length should be less than 64, so 1 byte should be enough to represent it */
+           + quicly_encodev_capacity(stream_or_push_id);
+}
+
+uint8_t *h2o_http3_encode_goaway_frame(uint8_t *dst, quicly_stream_id_t stream_or_push_id)
+{
+    *dst++ = H2O_HTTP3_FRAME_TYPE_GOAWAY;                /* type */
+    *dst++ = quicly_encodev_capacity(stream_or_push_id); /* payload length */
+    dst = quicly_encodev(dst, stream_or_push_id);
+
+    return dst;
+}
