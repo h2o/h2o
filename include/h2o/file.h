@@ -25,5 +25,9 @@
 #include "h2o/memory.h"
 
 h2o_iovec_t h2o_file_read(const char *fn);
+/**
+ * Reads exactly specified bytes from given file descriptor at given offset, and returns if successful.
+ */
+int h2o_file_pread_full(int fd, void *_buf, size_t nbyte, off_t off);
 
 #endif

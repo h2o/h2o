@@ -3338,7 +3338,7 @@ int quicly_send_stream(quicly_stream_t *stream, quicly_send_context_t *s)
     /* determine if the frame incorporates FIN */
     if (!quicly_sendstate_is_open(&stream->sendstate) && end_off == stream->sendstate.final_size) {
         assert(frame_type_at != NULL);
-        /* in case the frame is detached, we need to use a new packet for just carrying the fin bit */
+        /* if frame is detached, fin is transmitted separately */
         if (detached) {
             is_fin = 0;
         } else {

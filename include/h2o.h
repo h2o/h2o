@@ -54,6 +54,7 @@ extern "C" {
 #include "h2o/version.h"
 #include "h2o/balancer.h"
 #include "h2o/http2_common.h"
+#include "h2o/http3_common.h"
 #include "h2o/send_state.h"
 
 #ifndef H2O_USE_BROTLI
@@ -409,6 +410,11 @@ struct st_h2o_globalconf_t {
 
     struct {
         h2o_protocol_callbacks_t callbacks;
+        /**
+         * Callback invoked when DSR can be used. The application should check if the request has the necessary credentials, and
+         * then return a QUIC context that can send packets from given address.
+         */
+        h2o_quic_ctx_t *(*start_dsr)(h2o_req_t *req, struct sockaddr *local_addr);
     } http3;
 
     struct {
@@ -1184,6 +1190,15 @@ struct st_h2o_req_t {
      * the Upgrade request header (or { NULL, 0 } if not available)
      */
     h2o_iovec_t upgrade;
+
+    /**
+     * A protocol implementation that is willing to serve the content using DSR should set `dsr.req` to the values to be sent using
+     * the `dsr` request header field. Then, the core will call `on_upgrade` if upstream responds with a 101 Protocol Switch.
+     */
+    struct {
+        h2o_iovec_t req;
+        void (*on_upgrade)(h2o_req_t *req, h2o_socket_t *sock);
+    } dsr;
 
     /**
      * preferred chunk size by the ostream

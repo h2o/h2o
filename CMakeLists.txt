@@ -361,6 +361,7 @@ SET(LIB_SOURCE_FILES
     deps/quicly/lib/streambuf.c
 
     lib/common/cache.c
+    lib/common/dsr.c
     lib/common/file.c
     lib/common/filecache.c
     lib/common/hostinfo.c
@@ -473,6 +474,7 @@ SET(UNIT_TEST_SOURCE_FILES
     t/00unit/lib/common/balancer/least_conn.c
     t/00unit/lib/common/balancer/roundrobin.c
     t/00unit/lib/common/cache.c
+    t/00unit/lib/common/dsr.c
     t/00unit/lib/common/hostinfo.c
     t/00unit/lib/common/httpclient.c
     t/00unit/lib/common/multithread.c
@@ -506,6 +508,7 @@ LIST(REMOVE_ITEM UNIT_TEST_SOURCE_FILES
     lib/common/balancer/least_conn.c
     lib/common/balancer/roundrobin.c
     lib/common/cache.c
+    lib/common/dsr.c
     lib/common/hostinfo.c
     lib/common/httpclient.c
     lib/common/multithread.c

@@ -31,8 +31,138 @@
 #include <sys/types.h>
 #include <time.h>
 #include <unistd.h>
-
+#include "h2o/dsr.h"
+#include "h2o/file.h"
 #include "h2o.h"
+#include "h2o/http1.h"
+
+struct dsr_file_sender {
+    h2o_quic_ctx_t *ctx;
+    h2o_dsr_quic_packet_encryptor_t encryptor;
+    quicly_address_t dest_addr, src_addr;
+    h2o_filecache_ref_t *file;
+    h2o_socket_t *sock;
+};
+
+static void destroy_dsr_file_sender(struct dsr_file_sender *sender)
+{
+    h2o_filecache_close_file(sender->file);
+    h2o_dsr_dispose_quic_packet_encryptor(&sender->encryptor);
+    if (sender->sock != NULL)
+        h2o_socket_close(sender->sock);
+    free(sender);
+}
+
+static struct dsr_file_sender *create_dsr_file_sender(h2o_req_t *req, h2o_dsr_req_t *dsr_req, h2o_filecache_ref_t *file)
+{
+    h2o_quic_ctx_t *quic_ctx;
+
+    if (req->conn->ctx->globalconf->http3.start_dsr == NULL ||
+        (quic_ctx = req->conn->ctx->globalconf->http3.start_dsr(req, &dsr_req->address.sa)) == NULL)
+        return NULL;
+
+    struct dsr_file_sender *sender = h2o_mem_alloc(sizeof(*sender));
+
+    /* create encryptor */
+    if (!h2o_dsr_init_quic_packet_encryptor(&sender->encryptor, quic_ctx->quic, dsr_req->quic_version, dsr_req->cipher))
+        return NULL;
+
+    /* setup the rest */
+    sender->ctx = quic_ctx;
+    sender->dest_addr.sa.sa_family = AF_UNSPEC;
+    sender->src_addr = dsr_req->address;
+    sender->file = file;
+    h2o_filecache_dup(file);
+    sender->sock = NULL;
+
+    return sender;
+}
+
+static void on_dsr_read(h2o_socket_t *sock, const char *err)
+{
+    struct dsr_file_sender *sender = sock->data;
+    assert(sender->sock == sock);
+
+    if (err != NULL)
+        goto Close;
+
+    struct iovec datagrams[10];
+    size_t num_datagrams = 0;
+    uint8_t datagram_buf[1500 * PTLS_ELEMENTSOF(datagrams)], *datagram_pt = datagram_buf;
+
+    while (sender->sock->input->size != 0) {
+        /* decode an instruction */
+        h2o_dsr_decoded_instruction_t inst;
+        ssize_t inst_len;
+        if ((inst_len = h2o_dsr_decode_instruction(&inst, (uint8_t *)sender->sock->input->bytes, sender->sock->input->size)) <= 0) {
+            /* break if incomplete, otherwise close */
+            if (inst_len == -1)
+                break;
+            goto Close;
+        }
+
+        switch (inst.type) {
+        case H2O_DSR_DECODED_INSTRUCTION_SET_CONTEXT:
+            /* set context */
+            if (!h2o_dsr_quic_packet_encryptor_set_context(&sender->encryptor, inst.data.set_context.header_protection_secret,
+                                                           inst.data.set_context.aead_secret))
+                goto Close;
+            sender->dest_addr = inst.data.set_context.dest_addr;
+            break;
+
+        case H2O_DSR_DECODED_INSTRUCTION_SEND_PACKET:
+            /* validate */
+            if (inst.data.send_packet.prefix.len + inst.data.send_packet.body_len + sender->encryptor.aead_ctx->algo->tag_size >
+                datagram_buf + sizeof(datagram_buf) - datagram_pt)
+                goto Close;
+            /* build packet */
+            datagrams[num_datagrams].iov_base = datagram_pt;
+            memcpy(datagram_pt, inst.data.send_packet.prefix.base, inst.data.send_packet.prefix.len);
+            datagram_pt += inst.data.send_packet.prefix.len;
+            if (!h2o_file_pread_full(sender->file->fd, datagram_pt, inst.data.send_packet.body_len, inst.data.send_packet.body_off))
+                goto Close;
+            datagram_pt += inst.data.send_packet.body_len;
+            datagram_pt += sender->encryptor.aead_ctx->algo->tag_size;
+            datagrams[num_datagrams].iov_len = datagram_pt - (uint8_t *)datagrams[num_datagrams].iov_base;
+            h2o_dsr_encrypt_quic_packet(&sender->encryptor, &inst,
+                                        ptls_iovec_init(datagrams[num_datagrams].iov_base, datagrams[num_datagrams].iov_len));
+            ++num_datagrams;
+            /* send when the buffer is full */
+            if (num_datagrams == PTLS_ELEMENTSOF(datagrams) || datagram_buf + sizeof(datagram_buf) - datagram_pt < 1500) {
+                h2o_quic_send_datagrams(sender->ctx, &sender->dest_addr, &sender->src_addr, datagrams, num_datagrams);
+                num_datagrams = 0;
+                datagram_pt = datagram_buf;
+            }
+            break;
+
+        default:
+            goto Close;
+        }
+
+        h2o_buffer_consume(&sender->sock->input, inst_len);
+    }
+
+    /* send remaining */
+    if (num_datagrams != 0)
+        h2o_quic_send_datagrams(sender->ctx, &sender->dest_addr, &sender->src_addr, datagrams, num_datagrams);
+
+    return;
+Close:
+    destroy_dsr_file_sender(sender);
+}
+
+static void on_dsr_upgrade_complete(void *_sender, h2o_socket_t *sock, size_t reqsize)
+{
+    struct dsr_file_sender *sender = _sender;
+    if (sock != NULL) {
+        sender->sock = sock;
+        sender->sock->data = sender;
+        h2o_buffer_consume(&sock->input, reqsize);
+        h2o_socket_read_start(sender->sock, on_dsr_read);
+    } else {
+        destroy_dsr_file_sender(sender);
+    }
+}
 
 #define MAX_BUF_SIZE 65000
 #define BOUNDARY_SIZE 20
@@ -128,23 +258,10 @@ static int do_pread(h2o_sendvec_t *src, h2o_req_t *req, h2o_iovec_t dst, size_t 
 {
     struct st_h2o_sendfile_generator_t *self = (void *)src->cb_arg[0];
     uint64_t file_chunk_at = src->cb_arg[1];
-    size_t bytes_read = 0;
-    ssize_t rret;
 
     assert(off + dst.len <= src->len);
 
-    /* read */
-    while (bytes_read < dst.len) {
-        while ((rret = pread(self->file.ref->fd, dst.base + bytes_read, dst.len - bytes_read, file_chunk_at + off + bytes_read)) ==
-                   -1 &&
-               errno == EINTR)
-            ;
-        if (rret == -1)
-            return 0;
-        bytes_read += rret;
-    }
-
-    return 1;
+    return h2o_file_pread_full(self->file.ref->fd, dst.base, dst.len, file_chunk_at + off);
 }
 
 static void sendvec_update_refcnt(h2o_sendvec_t *vec, h2o_req_t *req, int is_incr)
@@ -330,6 +447,38 @@ static void send_decompressed(h2o_ostream_t *_self, h2o_req_t *req, h2o_sendvec_
     h2o_ostream_send_next(&self->super, req, outbufs, outbufcnt, state);
 }
 
+static int try_dsr(struct st_h2o_sendfile_generator_t *self)
+{
+    ssize_t header_index;
+    h2o_header_t *header;
+    h2o_dsr_req_t dsr_req;
+    struct dsr_file_sender *sender;
+
+    /* see if we can utilize the DSR request (partial responses are not supported at the moment) */
+    if (self->req->res.status != 200)
+        return 0;
+    if (!h2o_memis(self->req->upgrade.base, self->req->upgrade.len, H2O_STRLIT("dsr")))
+        return 0;
+    if ((header_index = h2o_find_header(&self->req->headers, H2O_TOKEN_DSR, -1)) == -1)
+        return 0;
+    header = &self->req->headers.entries[header_index];
+    if (!h2o_dsr_parse_req(&dsr_req, header->value.base, header->value.len, 443))
+        return 0;
+
+    /* create DSR sender */
+    if ((sender = create_dsr_file_sender(self->req, &dsr_req, self->file.ref)) == NULL)
+        return 0;
+
+    /* now that DSR has started, switch status to 101, add header */
+    self->req->res.status = 101;
+    h2o_add_header(&self->req->pool, &self->req->res.headers, H2O_TOKEN_UPGRADE, NULL, H2O_STRLIT("dsr"));
+
+    /* and upgrade the connection! */
+    h2o_http1_upgrade(self->req, NULL, 0, on_dsr_upgrade_complete, sender);
+
+    return 1;
+}
+
 static void do_send_file(struct st_h2o_sendfile_generator_t *self, h2o_req_t *req, int status, const char *reason,
                          h2o_iovec_t mime_type, h2o_mime_attributes_t *mime_attr, int is_get)
 {
@@ -371,6 +520,10 @@ static void do_send_file(struct st_h2o_sendfile_generator_t *self, h2o_req_t *re
         h2o_send(req, NULL, 0, H2O_SEND_STATE_FINAL);
         return;
     }
+
+    /* try out DSR */
+    if (try_dsr(self))
+        return;
 
     /* send data */
     h2o_start_response(req, &self->super);

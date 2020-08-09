@@ -977,10 +977,12 @@ void h2o_quic_init_conn(h2o_quic_conn_t *conn, h2o_quic_ctx_t *ctx, const h2o_qu
 {
     *conn = (h2o_quic_conn_t){ctx, NULL, callbacks};
     h2o_timer_init(&conn->_timeout, on_timeout);
+    h2o_linklist_init_anchor(&conn->_dsr_builders);
 }
 
 void h2o_quic_dispose_conn(h2o_quic_conn_t *conn)
 {
+    assert(h2o_linklist_is_empty(&conn->_dsr_builders));
     if (conn->quic != NULL) {
         khiter_t iter;
         /* unregister from maps */
@@ -1075,6 +1077,7 @@ int h2o_quic_send(h2o_quic_conn_t *conn)
             }
             break;
         case QUICLY_ERROR_FREE_CONNECTION:
+            assert(h2o_linklist_is_empty(&conn->_dsr_builders));
             conn->callbacks->destroy_connection(conn);
             return 0;
         default:
@@ -1082,6 +1085,9 @@ int h2o_quic_send(h2o_quic_conn_t *conn)
             abort();
         }
     } while (num_datagrams == PTLS_ELEMENTSOF(datagrams));
+
+    if (!h2o_linklist_is_empty(&conn->_dsr_builders))
+        h2o_dsr_send_all_instructions(&conn->_dsr_builders);
 
     h2o_quic_schedule_timer(conn);
 
