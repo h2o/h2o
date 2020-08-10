@@ -80,4 +80,9 @@ provider h2o {
      */
     probe h3_packet_forward(struct sockaddr *dest, struct sockaddr *src, size_t num_packets, size_t num_bytes, int fd);
 
+    /**
+     * QUIC event, indicating that a QUIC DSR packet has been sent.
+     */
+    probe quic_dsr_send(uint64_t conn_id, struct sockaddr *dest, struct sockaddr *src, uint64_t packet_number, uint64_t offset,
+                        size_t len);
 };

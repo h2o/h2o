@@ -35,6 +35,7 @@
 #include "h2o/file.h"
 #include "h2o.h"
 #include "h2o/http1.h"
+#include "../probes_.h"
 
 struct dsr_file_sender {
     h2o_quic_ctx_t *ctx;
@@ -42,6 +43,7 @@ struct dsr_file_sender {
     quicly_address_t dest_addr, src_addr;
     h2o_filecache_ref_t *file;
     h2o_socket_t *sock;
+    uint64_t conn_id;
 };
 
 static void destroy_dsr_file_sender(struct dsr_file_sender *sender)
@@ -74,6 +76,7 @@ static struct dsr_file_sender *create_dsr_file_sender(h2o_req_t *req, h2o_dsr_re
     sender->file = file;
     h2o_filecache_dup(file);
     sender->sock = NULL;
+    sender->conn_id = req->conn->id;
 
     return sender;
 }
@@ -126,6 +129,8 @@ static void on_dsr_read(h2o_socket_t *sock, const char *err)
             datagrams[num_datagrams].iov_len = datagram_pt - (uint8_t *)datagrams[num_datagrams].iov_base;
             h2o_dsr_encrypt_quic_packet(&sender->encryptor, &inst,
                                         ptls_iovec_init(datagrams[num_datagrams].iov_base, datagrams[num_datagrams].iov_len));
+            H2O_PROBE(QUIC_DSR_SEND, sender->conn_id, &sender->dest_addr.sa, &sender->src_addr.sa,
+                      inst.data.send_packet._packet_number, inst.data.send_packet.body_off, inst.data.send_packet.body_len);
             ++num_datagrams;
             /* send when the buffer is full */
             if (num_datagrams == PTLS_ELEMENTSOF(datagrams) || datagram_buf + sizeof(datagram_buf) - datagram_pt < 1500) {
