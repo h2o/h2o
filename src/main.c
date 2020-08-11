@@ -31,7 +31,6 @@
 #include <getopt.h>
 #include <inttypes.h>
 #include <limits.h>
-#include <libgen.h>
 #include <netdb.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
@@ -3030,12 +3029,12 @@ int main(int argc, char **argv)
     }
 
     {
-        const char *dir = dirname(h2o_socket_buffer_mmap_settings.fn_template);
-        struct stat st;
-        if (!(stat(dir, &st) == 0 && S_ISDIR(st.st_mode) && access(dir, W_OK) == 0)) {
-            fprintf(stderr, "temp-buffer-path: '%s' is not a writable directory\n", dir);
+        int fd = h2o_make_temp_file(h2o_socket_buffer_mmap_settings.fn_template);
+        if (fd == -1) {
+            fprintf(stderr, "temp-buffer-path: failed to create temporary file from the mkstemp(3) template '%s': %s\n", h2o_socket_buffer_mmap_settings.fn_template, strerror(errno));
             return EX_CONFIG;
         }
+        close(fd);
     }
 
     /* calculate defaults (note: open file cached is purged once every loop) */
