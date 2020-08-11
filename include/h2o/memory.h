@@ -246,7 +246,6 @@ static void h2o_mem_addref_shared(void *p);
  * The chunk gets freed when the ref-count reaches zero.
  */
 static int h2o_mem_release_shared(void *p);
-
 /**
  * initialize the buffer using given prototype.
  */
