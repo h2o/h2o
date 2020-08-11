@@ -1996,7 +1996,7 @@ typedef struct st_h2o_proxy_config_vars_t {
     h2o_headers_command_t *headers_cmds;
     size_t max_buffer_size;
     struct {
-        uint32_t max_concurrent_strams;
+        uint32_t max_concurrent_streams;
         int ratio;
     } http2;
 } h2o_proxy_config_vars_t;
