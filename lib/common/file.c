@@ -66,3 +66,15 @@ Error:
     free(ret.base);
     return (h2o_iovec_t){NULL};
 }
+
+int h2o_file_mktemp(const char *fn_template)
+{
+    int fd;
+    char *tmpfn = alloca(strlen(fn_template) + 1);
+    strcpy(tmpfn, fn_template);
+    if ((fd = mkstemp(tmpfn)) == -1) {
+        return -1;
+    }
+    unlink(tmpfn);
+    return fd;
+}
