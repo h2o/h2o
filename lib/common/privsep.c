@@ -137,7 +137,7 @@ struct tm *h2o_privsep_dotime_r(const time_t *clock,
 
 pid_t h2o_privsep_waitpid(pid_t pid, int *status, int options)
 {
-    h2o_privsep_watpid_t args;
+    h2o_privsep_waitpid_t args;
     h2o_privsep_t *psd;
     uint32_t cmd;
     pid_t ret_pid;
