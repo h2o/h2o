@@ -61,6 +61,12 @@ extern "C" {
 #define QUICLY_MAX_CID_LEN_V1 20
 #define QUICLY_STATELESS_RESET_TOKEN_LEN 16
 
+#define QUICLY_EPOCH_INITIAL 0
+#define QUICLY_EPOCH_0RTT 1
+#define QUICLY_EPOCH_HANDSHAKE 2
+#define QUICLY_EPOCH_1RTT 3
+#define QUICLY_NUM_EPOCHS 4
+
 /* coexists with picotls error codes, assuming that int is at least 32-bits */
 #define QUICLY_ERROR_IS_QUIC(e) (((e) & ~0x1ffff) == 0x20000)
 #define QUICLY_ERROR_IS_QUIC_TRANSPORT(e) (((e) & ~0xffff) == 0x20000)
@@ -99,6 +105,7 @@ extern "C" {
 #define QUICLY_ERROR_NO_COMPATIBLE_VERSION 0xff05
 #define QUICLY_ERROR_IS_CLOSING 0xff06 /* indicates that the connection has already entered closing state */
 #define QUICLY_ERROR_STATE_EXHAUSTION 0xff07
+#define QUICLY_ERROR_INVALID_INITIAL_VERSION 0xff08
 
 typedef int64_t quicly_stream_id_t;
 

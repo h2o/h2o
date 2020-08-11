@@ -129,8 +129,7 @@ void quicly_sentmap_skip(quicly_sentmap_iter_t *iter)
     } while (iter->p->acked != quicly_sentmap__type_packet);
 }
 
-int quicly_sentmap_update(quicly_sentmap_t *map, quicly_sentmap_iter_t *iter, quicly_sentmap_event_t event,
-                          struct st_quicly_conn_t *conn)
+int quicly_sentmap_update(quicly_sentmap_t *map, quicly_sentmap_iter_t *iter, quicly_sentmap_event_t event)
 {
     quicly_sent_packet_t packet;
     int ret = 0;
@@ -149,7 +148,7 @@ int quicly_sentmap_update(quicly_sentmap_t *map, quicly_sentmap_iter_t *iter, qu
     }
     iter->p->data.packet.frames_in_flight = 0;
 
-    int should_notify = packet.frames_in_flight,
+    int should_notify = event == QUICLY_SENTMAP_EVENT_ACKED || packet.frames_in_flight,
         should_discard = event == QUICLY_SENTMAP_EVENT_ACKED || event == QUICLY_SENTMAP_EVENT_EXPIRED;
 
     /* Advance to next packet, while if necessary, doing either or both of the following:
@@ -160,7 +159,7 @@ int quicly_sentmap_update(quicly_sentmap_t *map, quicly_sentmap_iter_t *iter, qu
         --map->num_packets;
     }
     for (next_entry(iter); iter->p->acked != quicly_sentmap__type_packet; next_entry(iter)) {
-        if (should_notify && (ret = iter->p->acked(conn, &packet, event == QUICLY_SENTMAP_EVENT_ACKED, iter->p)) != 0)
+        if (should_notify && (ret = iter->p->acked(map, &packet, event == QUICLY_SENTMAP_EVENT_ACKED, iter->p)) != 0)
             goto Exit;
         if (should_discard)
             discard_entry(map, iter);
@@ -170,7 +169,7 @@ Exit:
     return ret;
 }
 
-int quicly_sentmap__type_packet(struct st_quicly_conn_t *conn, const quicly_sent_packet_t *packet, int acked, quicly_sent_t *sent)
+int quicly_sentmap__type_packet(quicly_sentmap_t *map, const quicly_sent_packet_t *packet, int acked, quicly_sent_t *sent)
 {
     assert(!"quicly_sentmap__type_packet cannot be called");
     return QUICLY_TRANSPORT_ERROR_INTERNAL;

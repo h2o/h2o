@@ -33,9 +33,9 @@
 #include "h2o/http3_common.h"
 #include "h2o/http3_internal.h"
 #include "h2o/multithread.h"
+#include "../probes_.h"
 #include "h2o/privsep.h"
 #include "h2o.h"
-#include "../probes_.h"
 
 struct st_h2o_http3_ingress_unistream_t {
     /**
@@ -58,7 +58,7 @@ struct st_h2o_http3_ingress_unistream_t {
  */
 #define MAX_FRAME_SIZE 16384
 
-const ptls_iovec_t h2o_http3_alpn[1] = {{(void *)H2O_STRLIT("h3-29")}};
+const ptls_iovec_t h2o_http3_alpn[2] = {{(void *)H2O_STRLIT("h3-29")}, {(void *)H2O_STRLIT("h3-27")}};
 
 static void on_track_sendmsg_timer(h2o_timer_t *timeout);
 
@@ -524,7 +524,7 @@ static void process_packets(h2o_http3_ctx_t *ctx, quicly_address_t *destaddr, qu
 
     /* send VN on mimatch */
     if (QUICLY_PACKET_IS_LONG_HEADER(packets[0].octets.base[0])) {
-        if (packets[0].version != QUICLY_PROTOCOL_VERSION) {
+        if (!quicly_is_supported_version(packets[0].version)) {
             uint8_t payload[QUICLY_MIN_CLIENT_INITIAL_SIZE];
             size_t payload_size = quicly_send_version_negotiation(ctx->quic, &srcaddr->sa, packets[0].cid.src, &destaddr->sa,
                                                                   packets[0].cid.dest.encrypted, payload);
@@ -820,8 +820,10 @@ int h2o_http3_read_frame(h2o_http3_read_frame_t *frame, int is_client, uint64_t 
     frame->_header_size = (uint8_t)(src - *_src);
 
     /* read the content of the frame (unless it's a DATA frame) */
+    frame->payload = NULL;
     if (frame->type != H2O_HTTP3_FRAME_TYPE_DATA) {
         if (frame->length >= MAX_FRAME_SIZE) {
+            H2O_PROBE(H3_FRAME_RECEIVE, frame->type, NULL, frame->length);
             *err_desc = "H3 frame too large";
             return H2O_HTTP3_ERROR_GENERAL_PROTOCOL; /* FIXME is this the correct code? */
         }
@@ -830,6 +832,8 @@ int h2o_http3_read_frame(h2o_http3_read_frame_t *frame, int is_client, uint64_t 
         frame->payload = src;
         src += frame->length;
     }
+
+    H2O_PROBE(H3_FRAME_RECEIVE, frame->type, frame->payload, frame->length);
 
     /* validate frame type */
     switch (frame->type) {

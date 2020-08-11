@@ -30,29 +30,55 @@ from pprint import pprint
 
 quicly_probes_d = "deps/quicly/quicly-probes.d"
 h2o_probes_d = "h2o-probes.d"
-data_types_h = "h2olog/quic.h"
 
+# An allow-list to gather data from USDT probes.
+# Only fields listed here are handled in BPF.
+struct_map = {
+    # deps/quicly/include/quicly.h
+    "st_quicly_stream_t": [
+        # ($member_access, $optional_flat_name)
+        # If $optional_flat_name is None, $member_access is used.
+        ("stream_id", None),
+    ],
+
+    # deps/quicly/include/quicly/loss.h
+    "quicly_rtt_t": [
+        ("minimum", None),
+        ("smoothed", None),
+        ("variance", None),
+        ("latest",  None),
+    ],
+
+    # deps/quicly/lib/quicly.c
+    "st_quicly_conn_t": [
+        ("super.local.cid_set.plaintext.master_id", "master_id"),
+    ],
+}
+
+# A block list to list useless or secret data fields
 block_fields = {
     "quicly:crypto_decrypt": set(["decrypted"]),
     "quicly:crypto_update_secret": set(["secret"]),
     "quicly:crypto_send_key_update": set(["secret"]),
     "quicly:crypto_receive_key_update": set(["secret"]),
     "quicly:crypto_receive_key_update_prepare": set(["secret"]),
-
-    "h2o:h3_accept": set(["conn"]),  # `h2o_conn_t *conn`
 }
 
+# A block list for quicly-probes.d.
+# USDT probes in quicly-probes.d are handled by default.
 quicly_block_probes = set([
     "quicly:debug_message",
 ])
 
+# An allow list for h2o-probes.d
+# USDT probes in h2o-probes.d are not handled by default.
 h2o_allow_probes = set([
-    "h2o:h3_accept",
-    "h2o:h3_close",
+    "h2o:h3s_accept",
+    "h2o:h3s_destroy",
     "h2o:send_response_header",
 ])
 
-# convert field names for compatibility with:
+# To rename field names for compatibility with:
 # https://github.com/h2o/quicly/blob/master/quictrace-adapter.py
 rename_map = {
     # common fields
@@ -69,33 +95,28 @@ rename_map = {
     "latest": "latest-rtt",
 }
 
+st_quicly_conn_t_def = r"""
+// This is enough for here. See `quicly.c` for the full definition.
+struct st_quicly_conn_t {
+  struct _st_quicly_conn_public_t super;
+};
+"""
+
 re_flags = re.X | re.M | re.S
 whitespace = r'(?:/\*.*?\*/|\s+)'
 probe_decl = r'(?:\bprobe\s+(?:[a-zA-Z0-9_]+)\s*\([^\)]*\)\s*;)'
 d_decl = r'(?:\bprovider\s*(?P<provider>[a-zA-Z0-9_]+)\s*\{(?P<probes>(?:%s|%s)*)\})' % (
     probe_decl, whitespace)
 
-
-def parse_c_struct(path):
-  content = path.read_text()
-
-  st_map = OrderedDict()
-  for (st_name, st_content) in re.findall(r'struct\s+([a-zA-Z0-9_]+)\s*\{([^}]*)\}', content, flags=re_flags):
-    st = st_map[st_name] = OrderedDict()
-    for (ctype, name, is_array) in re.findall(r'(\w+[^;]*[\w\*])\s+([a-zA-Z0-9_]+)(\[\d+\])?;', st_content, flags=re_flags):
-      if "dummy" in name:
-        continue
-      st[name] = ctype + is_array
-  return st_map
-
+def strip_c_comments(s):
+  return re.sub('//.*?\n|/\*.*?\*/', '', s, flags=re_flags)
 
 def parse_d(context: dict, path: Path, allow_probes: set = None, block_probes: set = None):
-  content = path.read_text()
+  content = strip_c_comments(path.read_text())
 
   matched = re.search(d_decl, content, flags=re_flags)
   provider = matched.group('provider')
 
-  st_map = context["st_map"]
   probe_metadata = context["probe_metadata"]
 
   id = context["id"]
@@ -129,8 +150,9 @@ def parse_d(context: dict, path: Path, allow_probes: set = None, block_probes: s
       arg_type = arg['type']
 
       if is_ptr_type(arg_type) and not is_str_type(arg_type):
-        for st_key, st_valtype in st_map[strip_typename(arg_type)].items():
-          flat_args_map[st_key] = st_valtype
+        st_name = strip_typename(arg_type)
+        for st_field_access, st_field_name in struct_map.get(st_name, []):
+          flat_args_map[st_field_name or st_field_access] = "typeof_%s__%s" % (st_name, st_field_name or st_field_access)
       else:
         flat_args_map[arg_name] = arg_type
 
@@ -158,7 +180,6 @@ def build_tracer_name(metadata):
 
 
 def build_tracer(context, metadata):
-  st_map = context["st_map"]
   fully_specified_probe_name = metadata["fully_specified_probe_name"]
 
   c = r"""// %s
@@ -190,31 +211,35 @@ int %s(struct pt_regs *ctx) {
       c += "  bpf_probe_read(&event.%s, sizeof(event.%s), buf);\n" % (
           event_t_name, event_t_name)
     elif is_ptr_type(arg_type):
-      c += "  %s %s = {};\n" % (arg_type.replace("*", ""), arg_name)
-      c += "  bpf_usdt_readarg(%d, ctx, &buf);\n" % (i+1)
-      c += "  bpf_probe_read(&%s, sizeof(%s), buf);\n" % (arg_name, arg_name)
-      for st_key, st_valtype in st_map[strip_typename(arg_type)].items():
-        event_t_name = "%s.%s" % (probe_name, st_key)
-        c += "  event.%s = %s.%s; /* %s */\n" % (
-            event_t_name, arg_name, st_key, st_valtype)
+      st_name = strip_typename(arg_type)
+      if st_name in struct_map:
+        c += "  uint8_t %s[sizeof_%s] = {};\n" % (arg_name, st_name)
+        c += "  bpf_usdt_readarg(%d, ctx, &buf);\n" % (i+1)
+        c += "  bpf_probe_read(&%s, sizeof_%s, buf);\n" % (arg_name, st_name)
+        for st_field_access, st_field_name in struct_map[st_name]:
+          event_t_name = "%s.%s" % (probe_name, st_field_name or st_field_access)
+          c += "  event.%s = get_%s__%s(%s);\n" % (
+              event_t_name, st_name, st_field_name or st_field_access, arg_name)
+      else:
+        c += "  // (no fields in %s)\n" % (st_name)
     else:
       event_t_name = "%s.%s" % (probe_name, arg_name)
       c += "  bpf_usdt_readarg(%d, ctx, &event.%s);\n" % (i +
                                                           1, event_t_name)
 
-  if fully_specified_probe_name == "h2o:h3_accept":
+  if fully_specified_probe_name == "h2o:h3s_accept":
     c += r"""
-  h2o_to_quicly_conn.update(&event.h3_accept.conn_id, &event.h3_accept.master_id);
+  h2o_to_quicly_conn.update(&event.h3s_accept.conn_id, &event.h3s_accept.master_id);
 """
-  elif fully_specified_probe_name == "h2o:h3_close":
+  elif fully_specified_probe_name == "h2o:h3s_destroy":
     c += r"""
-  const uint32_t *master_conn_id_ptr = h2o_to_quicly_conn.lookup(&event.h3_close.conn_id);
+  const uint32_t *master_conn_id_ptr = h2o_to_quicly_conn.lookup(&event.h3s_destroy.conn_id);
   if (master_conn_id_ptr != NULL) {
-    event.h3_close.master_id = *master_conn_id_ptr;
+    event.h3s_destroy.master_id = *master_conn_id_ptr;
   } else {
-    bpf_trace_printk("h2o's conn_id=%lu is not associated to master_conn_id\n", event.h3_close.conn_id);
+    bpf_trace_printk("h2o's conn_id=%lu is not associated to master_conn_id\n", event.h3s_destroy.conn_id);
   }
-  h2o_to_quicly_conn.delete(&event.h3_close.conn_id);
+  h2o_to_quicly_conn.delete(&event.h3s_destroy.conn_id);
 """
   elif metadata["provider"] == "h2o":
     c += r"""
@@ -243,11 +268,9 @@ int %s(struct pt_regs *ctx) {
 
 
 def prepare_context(h2o_dir):
-  st_map = parse_c_struct(h2o_dir.joinpath(data_types_h))
   context = {
       "id": 1,  # 1 is used for sched:sched_process_exit
       "probe_metadata": OrderedDict(),
-      "st_map": st_map,
       "h2o_dir": h2o_dir,
   }
   parse_d(context, h2o_dir.joinpath(quicly_probes_d),
@@ -257,10 +280,68 @@ def prepare_context(h2o_dir):
 
   return context
 
+def build_bpf_header_generator():
+  generator = r"""
+#define GEN_FIELD_INFO(type, field, name) gen_field_info(#type, #field, &((type *)NULL)->field, name)
+
+#define DEFINE_RESOLVE_FUNC(field_type) \
+std::string gen_field_info(const char *struct_type, const char *field_name, const field_type *field_ptr, const char *name) \
+{ \
+    return do_resolve(struct_type, field_name, #field_type, field_ptr, name); \
+}
+
+template <typename FieldType>
+static std::string do_resolve(const char *struct_type, const char *field_name, const char *field_type, const FieldType *field_ptr, const char *name) {
+    char *buff = NULL;
+    size_t buff_len = 0;
+    FILE *mem = open_memstream(&buff, &buff_len);
+    fprintf(mem, "/* %s (%s#%s) */\n", name, struct_type, field_name);
+    fprintf(mem, "#define offsetof_%s %zd\n", name, (const char *)field_ptr - (const char *)NULL);
+    fprintf(mem, "#define typeof_%s %s\n", name, field_type);
+    fprintf(mem, "#define get_%s(st) *((const %s *) ((const char*)st + offsetof_%s))\n", name, field_type, name);
+    fprintf(mem, "\n");
+    fflush(mem);
+    std::string s(buff, buff_len);
+    fclose(mem);
+    return s;
+}
+
+DEFINE_RESOLVE_FUNC(int32_t);
+DEFINE_RESOLVE_FUNC(uint32_t);
+DEFINE_RESOLVE_FUNC(int64_t);
+DEFINE_RESOLVE_FUNC(uint64_t);
+
+static std::string gen_quic_bpf_header() {
+  std::string bpf;
+"""
+
+  for st_name, st_fields in struct_map.items():
+    # It limits a size of structs to 128
+    # This is because the BPF stack has a limit to 512 bytes.
+    generator += r"""
+  bpf += "#define sizeof_%s " + std::to_string(std::min<size_t>(sizeof(struct %s), 128)) + "\n";
+""" % (st_name, st_name)
+
+    for st_field_access, st_field_name_alias in st_fields:
+      name = "%s__%s" % (st_name, st_field_name_alias or st_field_access)
+      generator += """  bpf += GEN_FIELD_INFO(struct %s, %s, "%s");\n""" % (st_name, st_field_access, name)
+
+  generator += r"""
+  return bpf;
+}
+"""
+  return generator
+
+def build_typedef_for_cplusplus():
+  typedef = st_quicly_conn_t_def
+
+  for st_name, st_fields in struct_map.items():
+    for st_field_access, st_field_name_alias in st_fields:
+      typedef += """using typeof_%s__%s = decltype(%s::%s);\n""" % (st_name, st_field_name_alias or st_field_access, st_name, st_field_access)
+
+  return typedef
 
 def generate_cplusplus(context, output_file):
-  h2o_dir = context["h2o_dir"]
-
   probe_metadata = context["probe_metadata"]
 
   event_t_decl = r"""
@@ -289,8 +370,8 @@ struct quic_event_t {
         f = "%s %s" % (field_type, field_name)
 
       event_t_decl += "      %s;\n" % f
-    if metadata["provider"] == "h2o" and name != "h3_accept":
-      event_t_decl += "      uint32_t master_id;\n"
+    if metadata["provider"] == "h2o" and name != "h3s_accept":
+      event_t_decl += "      typeof_st_quicly_conn_t__master_id master_id;\n"
     event_t_decl += "    } %s;\n" % name
 
   event_t_decl += r"""
@@ -302,7 +383,6 @@ struct quic_event_t {
 #include <linux/sched.h>
 
 #define STR_LEN 64
-%s
 %s
 BPF_PERF_OUTPUT(events);
 
@@ -322,12 +402,11 @@ int trace_sched_process_exit(struct tracepoint__sched__sched_process_exit *ctx) 
   return 0;
 }
 
-""" % (h2o_dir.joinpath(data_types_h).read_text(), event_t_decl)
+""" % (event_t_decl)
 
   usdt_def = """
-static
-std::vector<ebpf::USDT> quic_init_usdt_probes(pid_t pid) {
-  const std::vector<ebpf::USDT> probes = {
+const std::vector<ebpf::USDT> &h2o_quic_tracer::init_usdt_probes(pid_t pid) {
+  static const std::vector<ebpf::USDT> probes = {
 """
 
   for metadata in probe_metadata.values():
@@ -342,10 +421,7 @@ std::vector<ebpf::USDT> quic_init_usdt_probes(pid_t pid) {
 """
 
   handle_event_func = r"""
-static
-void quic_handle_event(h2o_tracer_t *tracer, const void *data, int data_len) {
-  FILE *out = tracer->out;
-
+void h2o_quic_tracer::do_handle_event(const void *data, int data_len) {
   const quic_event_t *event = static_cast<const quic_event_t*>(data);
 
   if (event->id == 1) { // sched:sched_process_exit
@@ -353,7 +429,7 @@ void quic_handle_event(h2o_tracer_t *tracer, const void *data, int data_len) {
   }
 
   // output JSON
-  fprintf(out, "{");
+  fprintf(out_, "{");
 
   switch (event->id) {
 """
@@ -367,8 +443,8 @@ void quic_handle_event(h2o_tracer_t *tracer, const void *data, int data_len) {
 
     handle_event_func += "  case %s: { // %s\n" % (
         metadata['id'], fully_specified_probe_name)
-    handle_event_func += '    json_write_pair_n(out, STR_LIT("type"), "%s");\n' % probe_name.replace("_", "-")
-    handle_event_func += '    json_write_pair_c(out, STR_LIT("seq"), ++seq);\n'
+    handle_event_func += '    json_write_pair_n(out_, STR_LIT("type"), "%s");\n' % probe_name.replace("_", "-")
+    handle_event_func += '    json_write_pair_c(out_, STR_LIT("seq"), seq_);\n'
 
     for field_name, field_type in flat_args_map.items():
       if block_field_set and field_name in block_field_set:
@@ -376,9 +452,9 @@ void quic_handle_event(h2o_tracer_t *tracer, const void *data, int data_len) {
       json_field_name = rename_map.get(field_name, field_name).replace("_", "-")
       event_t_name = "%s.%s" % (probe_name, field_name)
       if fully_specified_probe_name == "quicly:receive" and field_name == "bytes":
-        handle_event_func += '    json_write_pair_c(out, STR_LIT("first-octet"), event->receive.bytes[0]);\n'
+        handle_event_func += '    json_write_pair_c(out_, STR_LIT("first-octet"), event->receive.bytes[0]);\n'
       elif not is_bin_type(field_type):
-        handle_event_func += '    json_write_pair_c(out, STR_LIT("%s"), event->%s);\n' % (
+        handle_event_func += '    json_write_pair_c(out_, STR_LIT("%s"), event->%s);\n' % (
             json_field_name, event_t_name)
       else:  # bin type (it should have the correspinding length arg)
         len_names = set([field_name + "_len", "len", "num_" + field_name])
@@ -388,14 +464,14 @@ void quic_handle_event(h2o_tracer_t *tracer, const void *data, int data_len) {
             len_event_t_name = "%s.%s" % (probe_name, n)
 
         # A string might be truncated in STRLEN
-        handle_event_func += '    json_write_pair_c(out, STR_LIT("%s"), event->%s, (event->%s < STR_LEN ? event->%s : STR_LEN));\n' % (
+        handle_event_func += '    json_write_pair_c(out_, STR_LIT("%s"), event->%s, (event->%s < STR_LEN ? event->%s : STR_LEN));\n' % (
             json_field_name, event_t_name, len_event_t_name, len_event_t_name)
 
     if metadata["provider"] == "h2o":
-      if probe_name != "h3_accept":
-        handle_event_func += '    json_write_pair_c(out, STR_LIT("conn"), event->%s.master_id);\n' % (
+      if probe_name != "h3s_accept":
+        handle_event_func += '    json_write_pair_c(out_, STR_LIT("conn"), event->%s.master_id);\n' % (
             probe_name)
-      handle_event_func += '    json_write_pair_c(out, STR_LIT("time"), time_milliseconds());\n'
+      handle_event_func += '    json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());\n'
 
     handle_event_func += "    break;\n"
     handle_event_func += "  }\n"
@@ -405,7 +481,7 @@ void quic_handle_event(h2o_tracer_t *tracer, const void *data, int data_len) {
     std::abort();
   }
 
-  fprintf(out, "}\n");
+  fprintf(out_, "}\n");
 """
   handle_event_func += "}\n"
 
@@ -416,53 +492,55 @@ void quic_handle_event(h2o_tracer_t *tracer, const void *data, int data_len) {
 #include <stdio.h>
 #include <string.h>
 #include <sys/time.h>
+
+#include <string>
+#include <algorithm>
+
+#include "quicly.h"
+
 #include "h2olog.h"
-#include "quic.h"
 #include "json.h"
 
 #define STR_LEN 64
 #define STR_LIT(s) s, strlen(s)
 
-uint64_t seq = 0;
+class h2o_quic_tracer : public h2o_tracer {
+protected:
+  virtual void do_handle_event(const void *data, int len);
+  virtual void do_handle_lost(uint64_t lost);
+public:
+  virtual const std::vector<ebpf::USDT> &init_usdt_probes(pid_t h2o_pid);
+  virtual std::string bpf_text();
+};
 
-// BPF modules written in C
-const char *bpf_text = R"(
+%s
+%s
+%s
+%s
+%s
+
+void h2o_quic_tracer::do_handle_lost(uint64_t lost)
+{
+  fprintf(out_,
+          "{"
+          "\"type\":\"h2olog-event-lost\","
+          "\"seq\":%%" PRIu64 ","
+          "\"time\":%%" PRIu64 ","
+          "\"lost\":%%" PRIu64 "}\n",
+          seq_, time_milliseconds(), lost);
+}
+
+std::string h2o_quic_tracer::bpf_text() {
+  return gen_quic_bpf_header() + R"(
 %s
 )";
-
-static uint64_t time_milliseconds()
-{
-  struct timeval tv;
-  gettimeofday(&tv, NULL);
-  return (int64_t)tv.tv_sec * 1000 + tv.tv_usec / 1000;
 }
 
-%s
-%s
-%s
-
-static void quic_handle_lost(h2o_tracer_t *tracer, uint64_t lost) {
-  fprintf(tracer->out, "{"
-    "\"type\":\"h2olog-event-lost\","
-    "\"seq\":%%" PRIu64 ","
-    "\"time\":%%" PRIu64 ","
-    "\"lost\":%%" PRIu64
-    "}\n",
-    ++seq, time_milliseconds(), lost);
+h2o_tracer *create_quic_tracer() {
+  return new h2o_quic_tracer;
 }
 
-static const char *quic_bpf_ext() {
-  return bpf_text;
-}
-
-void init_quic_tracer(h2o_tracer_t * tracer) {
-  tracer->handle_event = quic_handle_event;
-  tracer->handle_lost = quic_handle_lost;
-  tracer->init_usdt_probes = quic_init_usdt_probes;
-  tracer->bpf_text = quic_bpf_ext;
-}
-
-""" % (bpf, usdt_def, event_t_decl, handle_event_func))
+""" % (build_typedef_for_cplusplus(), build_bpf_header_generator(), event_t_decl, usdt_def, handle_event_func, bpf))
 
 
 def main():

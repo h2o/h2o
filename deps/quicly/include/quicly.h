@@ -64,7 +64,14 @@ extern "C" {
 
 #define QUICLY_PACKET_IS_LONG_HEADER(first_byte) (((first_byte)&QUICLY_LONG_HEADER_BIT) != 0)
 
-#define QUICLY_PROTOCOL_VERSION 0xff00001d
+/**
+ * The current version being supported. At the moment, it is draft-29.
+ */
+#define QUICLY_PROTOCOL_VERSION_CURRENT 0xff00001d
+/**
+ * Draft-27 is also supported.
+ */
+#define QUICLY_PROTOCOL_VERSION_DRAFT27 0xff00001b
 
 #define QUICLY_PACKET_IS_INITIAL(first_byte) (((first_byte)&0xf0) == 0xc0)
 
@@ -126,7 +133,8 @@ QUICLY_CALLBACK_TYPE(int, stream_open, quicly_stream_t *stream);
 QUICLY_CALLBACK_TYPE(void, closed_by_remote, quicly_conn_t *conn, int err, uint64_t frame_type, const char *reason,
                      size_t reason_len);
 /**
- * returns current time in milliseconds
+ * Returns current time in milliseconds. The returned value MUST monotonically increase (i.e., it is the responsibility of the
+ * callback implementation to guarantee that the returned value never goes back to the past).
  */
 QUICLY_CALLBACK_TYPE0(int64_t, now);
 /**
@@ -138,6 +146,11 @@ QUICLY_CALLBACK_TYPE(int, save_resumption_token, quicly_conn_t *conn, ptls_iovec
  */
 QUICLY_CALLBACK_TYPE(int, generate_resumption_token, quicly_conn_t *conn, ptls_buffer_t *buf,
                      quicly_address_token_plaintext_t *token);
+/**
+ * called to initialize a congestion controller for a new connection.
+ * should in turn call one of the quicly_cc_*_init functions from cc.h with customized parameters.
+ */
+QUICLY_CALLBACK_TYPE(void, init_cc, quicly_cc_t *cc, uint32_t initcwnd, int64_t now);
 /**
  * crypto offload API
  */
@@ -251,9 +264,14 @@ struct st_quicly_context_t {
      */
     uint64_t max_crypto_bytes;
     /**
-     * client-only
+     * (client-only) Initial QUIC protocol version used by the client. Setting this to a greased version will enforce version
+     * negotiation.
      */
-    unsigned enforce_version_negotiation : 1;
+    uint32_t initial_version;
+    /**
+     * (server-only) amplification limit before the peer address is validated
+     */
+    uint16_t pre_validation_amplification_limit;
     /**
      * if inter-node routing is used (by utilising quicly_cid_plaintext_t::node_id)
      */
@@ -294,6 +312,10 @@ struct st_quicly_context_t {
      * crypto engine (offload API)
      */
     quicly_crypto_engine_t *crypto_engine;
+    /**
+     * initializes a congestion controller for given connection.
+     */
+    quicly_init_cc_t *init_cc;
 };
 
 /**
@@ -686,6 +708,10 @@ struct st_quicly_address_token_plaintext_t {
 };
 
 /**
+ * returns a boolean indicating if given protocol version is supported
+ */
+static int quicly_is_supported_version(uint32_t version);
+/**
  * Extracts QUIC packets from a datagram pointed to by `src` and `len`. If successful, the function returns the size of the QUIC
  * packet being decoded. Otherwise, SIZE_MAX is returned.
  * `off` is an I/O argument that takes starting offset of the QUIC packet to be decoded as input, and returns the starting offset of
@@ -817,9 +843,10 @@ int quicly_retry_calc_cidpair_hash(ptls_hash_algorithm_t *sha256, ptls_iovec_t c
  * @param payload           buffer used for building the packet
  * @return size of the UDP datagram payload being built, or otherwise SIZE_MAX to indicate failure
  */
-size_t quicly_send_retry(quicly_context_t *ctx, ptls_aead_context_t *token_encrypt_ctx, struct sockaddr *dest_addr,
-                         ptls_iovec_t dest_cid, struct sockaddr *src_addr, ptls_iovec_t src_cid, ptls_iovec_t odcid,
-                         ptls_iovec_t token_prefix, ptls_iovec_t appdata, ptls_aead_context_t **retry_aead_cache, uint8_t *payload);
+size_t quicly_send_retry(quicly_context_t *ctx, ptls_aead_context_t *token_encrypt_ctx, uint32_t protocol_version,
+                         struct sockaddr *dest_addr, ptls_iovec_t dest_cid, struct sockaddr *src_addr, ptls_iovec_t src_cid,
+                         ptls_iovec_t odcid, ptls_iovec_t token_prefix, ptls_iovec_t appdata,
+                         ptls_aead_context_t **retry_aead_cache, uint8_t *payload);
 /**
  * Builds UDP datagrams to be sent for given connection.
  * @param [out] dest              destination address
@@ -840,8 +867,9 @@ int quicly_send(quicly_conn_t *conn, quicly_address_t *dest, quicly_address_t *s
 /**
  *
  */
-size_t quicly_send_close_invalid_token(quicly_context_t *ctx, struct sockaddr *dest_addr, ptls_iovec_t dest_cid,
-                                       struct sockaddr *src_addr, ptls_iovec_t src_cid, const char *err_desc, void *payload);
+size_t quicly_send_close_invalid_token(quicly_context_t *ctx, uint32_t protocol_version, struct sockaddr *dest_addr,
+                                       ptls_iovec_t dest_cid, struct sockaddr *src_addr, ptls_iovec_t src_cid, const char *err_desc,
+                                       void *payload);
 /**
  *
  */
@@ -1028,6 +1056,17 @@ void quicly_stream_noop_on_receive_reset(quicly_stream_t *stream, int err);
 extern const quicly_stream_callbacks_t quicly_stream_noop_callbacks;
 
 /* inline definitions */
+
+inline int quicly_is_supported_version(uint32_t version)
+{
+    switch (version) {
+    case QUICLY_PROTOCOL_VERSION_CURRENT:
+    case QUICLY_PROTOCOL_VERSION_DRAFT27:
+        return 1;
+    default:
+        return 0;
+    }
+}
 
 inline quicly_state_t quicly_get_state(quicly_conn_t *conn)
 {

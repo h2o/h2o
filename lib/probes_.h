@@ -72,10 +72,11 @@
 
 #endif
 
-/* utility functions follow */
+/* Helper functions for probing; the functions are defined as non-inlineable, as bcc cannot handle relative offset against a static
+ * const (e.g., H2O_TOKEN_PATH->buf.base). They are available only when h2o.h is included, so that files under lib/common can
+ * include this function without creating dependency against lib/core (e.g., `h2o_req_t`). */
+#ifdef h2o_h
 
-/* define the functions as non-inlineable, as bcc cannot handle relative offset against a static const (e.g.,
- * H2O_TOKEN_PATH->buf.base) */
 __attribute__((noinline)) static void h2o_probe_request_header(h2o_req_t *req, uint64_t req_index, h2o_iovec_t name,
                                                                h2o_iovec_t value)
 {
@@ -120,5 +121,7 @@ static inline void h2o_probe_log_response(h2o_req_t *req, uint64_t req_index)
         }
     }
 }
+
+#endif
 
 #endif

@@ -20,13 +20,16 @@
  * IN THE SOFTWARE.
  */
 
+#include <memory>
 #include <vector>
+extern "C" {
 #include <unistd.h>
 #include <stdarg.h>
-#include "h2olog.h"
-
+#include <sys/time.h>
 #include "h2o/memory.h"
 #include "h2o/version.h"
+}
+#include "h2olog.h"
 
 #define POLL_TIMEOUT (1000)
 #define PERF_BUFFER_PAGE_COUNT 256
@@ -39,7 +42,7 @@ Usage: h2olog -p PID
        h2olog quic -s response_header_name -p PID
 Other options:
     -h Print this help and exit
-    -d Print debugging information
+    -d Print debugging information (-dd shows more)
     -w Path to write the output (default: stdout)
 )",
            H2O_VERSION);
@@ -71,20 +74,27 @@ static void infof(const char *fmt, ...)
     fprintf(stderr, "%s %s\n", timestamp, buf);
 }
 
-static void show_event_per_sec(h2o_tracer_t *tracer, time_t *t0)
+uint64_t h2o_tracer::time_milliseconds()
+{
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    return (int64_t)tv.tv_sec * 1000 + tv.tv_usec / 1000;
+}
+
+void h2o_tracer::show_event_per_sec(time_t *t0)
 {
     time_t t1 = time(NULL);
     int64_t d = t1 - *t0;
     if (d > 10) {
-        uint64_t c = tracer->count / d;
+        uint64_t c = stats_.num_events / d;
         if (c > 0) {
-            if (tracer->lost_count > 0) {
-                infof("%20" PRIu64 " events/s (possibly lost %" PRIu64 " events)", c, tracer->lost_count);
-                tracer->lost_count = 0;
+            if (stats_.num_lost > 0) {
+                infof("%20" PRIu64 " events/s (possibly lost %" PRIu64 " events)", c, stats_.num_lost);
+                stats_.num_lost = 0;
             } else {
                 infof("%20" PRIu64 " events/s", c);
             }
-            tracer->count = 0;
+            stats_.num_events = 0;
         }
         *t0 = t1;
     }
@@ -158,33 +168,29 @@ static std::string make_pid_cflag(const char *macro_name, pid_t pid)
 
 static void event_cb(void *context, void *data, int len)
 {
-    h2o_tracer_t *tracer = (h2o_tracer_t *)context;
-    tracer->count++;
-
-    tracer->handle_event(tracer, data, len);
+    h2o_tracer *tracer = (h2o_tracer *)context;
+    tracer->handle_event(data, len);
 }
 
 static void lost_cb(void *context, uint64_t lost)
 {
-    h2o_tracer_t *tracer = (h2o_tracer_t *)context;
-    tracer->lost_count += lost;
-
-    tracer->handle_lost(tracer, lost);
+    h2o_tracer *tracer = (h2o_tracer *)context;
+    tracer->handle_lost(lost);
 }
 
 int main(int argc, char **argv)
 {
-    h2o_tracer_t tracer = {};
+    std::unique_ptr<h2o_tracer> tracer;
     if (argc > 1 && strcmp(argv[1], "quic") == 0) {
-        init_quic_tracer(&tracer);
+        tracer.reset(create_quic_tracer());
         --argc;
         ++argv;
     } else {
-        init_http_tracer(&tracer);
+        tracer.reset(create_http_tracer());
     }
 
-    bool debug = false;
-    const char *out_file = nullptr;
+    int debug = 0;
+    FILE *outfp = stdout;
     std::vector<std::string> event_type_filters;
     std::vector<std::string> response_header_filters;
     int c;
@@ -201,10 +207,13 @@ int main(int argc, char **argv)
             response_header_filters.push_back(optarg);
             break;
         case 'w':
-            out_file = optarg;
+            if ((outfp = fopen(optarg, "w")) == nullptr) {
+                fprintf(stderr, "Error: failed to open %s: %s", optarg, strerror(errno));
+                exit(EXIT_FAILURE);
+            }
             break;
         case 'd':
-            debug = true;
+            debug++;
             break;
         case 'h':
             usage();
@@ -232,16 +241,7 @@ int main(int argc, char **argv)
         exit(EXIT_FAILURE);
     }
 
-    if (out_file != nullptr) {
-        FILE *out = fopen(out_file, "w");
-        if (out == nullptr) {
-            fprintf(stderr, "Error: failed to open %s: %s", out_file, strerror(errno));
-            exit(EXIT_FAILURE);
-        }
-        tracer.out = out;
-    } else {
-        tracer.out = stdout;
-    }
+    tracer->init(outfp);
 
     std::vector<std::string> cflags({
         make_pid_cflag("H2OLOG_H2O_PID", h2o_pid),
@@ -251,10 +251,22 @@ int main(int argc, char **argv)
         cflags.push_back(generate_header_filter_cflag(response_header_filters));
     }
 
-    ebpf::BPF *bpf = new ebpf::BPF();
-    std::vector<ebpf::USDT> probes = tracer.init_usdt_probes(h2o_pid);
+    if (debug >= 2) {
+        fprintf(stderr, "cflags=");
+        for (size_t i = 0; i < cflags.size(); i++) {
+            if (i > 0) {
+                fprintf(stderr, " ");
+            }
+            fprintf(stderr, "%s", cflags[i].c_str());
+        }
+        fprintf(stderr, "\n");
+        fprintf(stderr, "<BPF>\n%s\n</BPF>\n", tracer->bpf_text().c_str());
+    }
 
-    ebpf::StatusTuple ret = bpf->init(tracer.bpf_text(), cflags, probes);
+    ebpf::BPF *bpf = new ebpf::BPF();
+    std::vector<ebpf::USDT> probes = tracer->init_usdt_probes(h2o_pid);
+
+    ebpf::StatusTuple ret = bpf->init(tracer->bpf_text(), cflags, probes);
     if (ret.code() != 0) {
         fprintf(stderr, "Error: init: %s\n", ret.msg().c_str());
         return EXIT_FAILURE;
@@ -270,7 +282,7 @@ int main(int argc, char **argv)
         }
     }
 
-    ret = bpf->open_perf_buffer("events", event_cb, lost_cb, &tracer, PERF_BUFFER_PAGE_COUNT);
+    ret = bpf->open_perf_buffer("events", event_cb, lost_cb, tracer.get(), PERF_BUFFER_PAGE_COUNT);
     if (ret.code() != 0) {
         fprintf(stderr, "Error: open_perf_buffer: %s\n", ret.msg().c_str());
         return EXIT_FAILURE;
@@ -286,10 +298,10 @@ int main(int argc, char **argv)
 
         while (true) {
             perf_buffer->poll(POLL_TIMEOUT);
-            fflush(tracer.out);
+            tracer->flush();
 
             if (debug) {
-                show_event_per_sec(&tracer, &t0);
+                tracer->show_event_per_sec(&t0);
             }
         }
     }

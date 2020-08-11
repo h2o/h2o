@@ -511,7 +511,10 @@ static void swap_buffers(h2o_buffer_t **a, h2o_buffer_t **b)
     *a = swap;
 }
 
-size_t encode_chunk(struct st_h2o_http1client_t *client, h2o_iovec_t *bufs, h2o_iovec_t chunk, size_t *bytes)
+/**
+ * bufs must have at least 3 elements of space
+ */
+static size_t encode_chunk(struct st_h2o_http1client_t *client, h2o_iovec_t *bufs, h2o_iovec_t chunk, size_t *bytes)
 {
     *bytes = 0;
 
@@ -588,13 +591,13 @@ static void on_send_timeout(h2o_timer_t *entry)
     on_error(client, h2o_httpclient_error_io_timeout);
 }
 
-static h2o_iovec_t build_request(struct st_h2o_http1client_t *client, h2o_iovec_t method, h2o_url_t url, h2o_iovec_t connection,
-                                 h2o_header_t *headers, size_t num_headers)
+static h2o_iovec_t build_request(struct st_h2o_http1client_t *client, h2o_iovec_t method, const h2o_url_t *url,
+                                 h2o_iovec_t connection, const h2o_header_t *headers, size_t num_headers)
 {
     h2o_iovec_t buf;
     size_t offset = 0;
 
-    buf.len = method.len + url.path.len + url.authority.len + 512;
+    buf.len = method.len + url->path.len + url->authority.len + 512;
     buf.base = h2o_mem_alloc_pool(client->super.pool, char, buf.len);
 
 #define RESERVE(sz)                                                                                                                \
@@ -628,9 +631,9 @@ static h2o_iovec_t build_request(struct st_h2o_http1client_t *client, h2o_iovec_
 
     APPEND(method.base, method.len);
     buf.base[offset++] = ' ';
-    APPEND(url.path.base, url.path.len);
+    APPEND(url->path.base, url->path.len);
     APPEND_STRLIT(" HTTP/1.1\r\nhost: ");
-    APPEND(url.authority.base, url.authority.len);
+    APPEND(url->authority.base, url->authority.len);
     buf.base[offset++] = '\r';
     buf.base[offset++] = '\n';
     assert(offset <= buf.len);
@@ -657,6 +660,54 @@ static h2o_iovec_t build_request(struct st_h2o_http1client_t *client, h2o_iovec_
 #undef APPEND_STRLIT
 }
 
+static void start_request(struct st_h2o_http1client_t *client, h2o_iovec_t method, const h2o_url_t *url,
+                          const h2o_header_t *headers, size_t num_headers, h2o_iovec_t body, const h2o_httpclient_properties_t *props)
+{
+    h2o_iovec_t reqbufs[5]; /* 5 should be the maximum possible elements used */
+    size_t reqbufcnt = 0;
+    if (props->proxy_protocol->base != NULL)
+        reqbufs[reqbufcnt++] = *props->proxy_protocol;
+    h2o_iovec_t header = build_request(client, method, url, *props->connection_header, headers, num_headers);
+    reqbufs[reqbufcnt++] = header;
+    client->super.bytes_written.header = header.len;
+
+    client->_is_chunked = *props->chunked;
+    client->_method_is_head = h2o_memis(method.base, method.len, H2O_STRLIT("HEAD"));
+
+    if (client->proceed_req != NULL) {
+        if (body.base != NULL) {
+            h2o_buffer_init(&client->_body_buf, &h2o_socket_buffer_prototype);
+            if (!h2o_buffer_try_append(&client->_body_buf, body.base, body.len)) {
+                on_whole_request_sent(client->sock, h2o_httpclient_error_internal);
+                return;
+            }
+        }
+        h2o_socket_write(client->sock, reqbufs, reqbufcnt, on_req_body_done);
+    } else {
+        if (client->_is_chunked) {
+            assert(body.base != NULL);
+            size_t bytes;
+            assert(PTLS_ELEMENTSOF(reqbufs) - reqbufcnt >= 3); /* encode_chunk could write to 3 additional elements */
+            reqbufcnt += encode_chunk(client, reqbufs + reqbufcnt, body, &bytes);
+            client->super.bytes_written.body = bytes;
+        } else if (body.base != NULL) {
+            reqbufs[reqbufcnt++] = body;
+            client->super.bytes_written.body = body.len;
+        }
+        h2o_socket_write(client->sock, reqbufs, reqbufcnt, on_whole_request_sent);
+    }
+    client->super.bytes_written.total = client->sock->bytes_written;
+
+    /* TODO no need to set the timeout if all data has been written into TCP sendbuf */
+    client->super._timeout.cb = on_send_timeout;
+    h2o_timer_link(client->super.ctx->loop, client->super.ctx->io_timeout, &client->super._timeout);
+
+    client->state.req = STREAM_STATE_BODY;
+    client->super.timings.request_begin_at = h2o_gettimeofday(client->super.ctx->loop);
+
+    h2o_socket_read_start(client->sock, on_head);
+}
+
 static void on_connection_ready(struct st_h2o_http1client_t *client)
 {
     h2o_iovec_t proxy_protocol = h2o_iovec_init(NULL, 0);
@@ -681,48 +732,7 @@ static void on_connection_ready(struct st_h2o_http1client_t *client)
         return;
     }
 
-    h2o_iovec_t reqbufs[3];
-    size_t reqbufcnt = 0;
-    if (props.proxy_protocol->base != NULL)
-        reqbufs[reqbufcnt++] = *props.proxy_protocol;
-    h2o_iovec_t header = build_request(client, method, url, *props.connection_header, headers, num_headers);
-    reqbufs[reqbufcnt++] = header;
-    client->super.bytes_written.header = header.len;
-
-    client->_is_chunked = *props.chunked;
-    client->_method_is_head = h2o_memis(method.base, method.len, H2O_STRLIT("HEAD"));
-
-    if (client->proceed_req != NULL) {
-        if (body.base != NULL) {
-            h2o_buffer_init(&client->_body_buf, &h2o_socket_buffer_prototype);
-            if (!h2o_buffer_try_append(&client->_body_buf, body.base, body.len)) {
-                on_whole_request_sent(client->sock, h2o_httpclient_error_internal);
-                return;
-            }
-        }
-        h2o_socket_write(client->sock, reqbufs, reqbufcnt, on_req_body_done);
-    } else {
-        if (client->_is_chunked) {
-            assert(body.base != NULL);
-            size_t bytes;
-            reqbufcnt += encode_chunk(client, reqbufs + reqbufcnt, body, &bytes);
-            client->super.bytes_written.body = bytes;
-        } else if (body.base != NULL) {
-            reqbufs[reqbufcnt++] = body;
-            client->super.bytes_written.body = body.len;
-        }
-        h2o_socket_write(client->sock, reqbufs, reqbufcnt, on_whole_request_sent);
-    }
-    client->super.bytes_written.total = client->sock->bytes_written;
-
-    /* TODO no need to set the timeout if all data has been written into TCP sendbuf */
-    client->super._timeout.cb = on_send_timeout;
-    h2o_timer_link(client->super.ctx->loop, client->super.ctx->io_timeout, &client->super._timeout);
-
-    client->state.req = STREAM_STATE_BODY;
-    client->super.timings.request_begin_at = h2o_gettimeofday(client->super.ctx->loop);
-
-    h2o_socket_read_start(client->sock, on_head);
+    start_request(client, method, &url, headers, num_headers, body, &props);
 }
 
 static void do_cancel(h2o_httpclient_t *_client)

@@ -72,6 +72,7 @@
 #include "h2o/http2.h"
 #include "h2o/http3_server.h"
 #include "h2o/serverutil.h"
+#include "h2o/file.h"
 #if H2O_USE_MRUBY
 #include "h2o/mruby_.h"
 #endif
@@ -274,7 +275,7 @@ static void set_cloexec(int fd)
 static void on_neverbleed_fork(void)
 {
 /* Rewrite of argv should only be done on platforms that are known to benefit from doing that. On linux, doing so helps admins look
-*  for h2o (or neverbleed) by running pidof. */
+ *  for h2o (or neverbleed) by running pidof. */
 #ifdef __linux__
     for (int i = cmd_argc - 1; i >= 0; --i)
         memset(cmd_argv[i], 0, strlen(cmd_argv[i]));
@@ -1452,9 +1453,9 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                 listener = add_listener(fd, ai->ai_addr, ai->ai_addrlen, ctx->hostconf == NULL, 0);
                 listener->quic.ctx = quic;
                 if (quic_node != NULL) {
-                    yoml_t **retry_node, **sndbuf, **rcvbuf;
-                    if (h2o_configurator_parse_mapping(cmd, *quic_node, NULL, "retry:s,sndbuf:s,rcvbuf:s", &retry_node, &sndbuf,
-                                                       &rcvbuf) != 0)
+                    yoml_t **retry_node, **sndbuf, **rcvbuf, **amp_limit;
+                    if (h2o_configurator_parse_mapping(cmd, *quic_node, NULL, "retry:s,sndbuf:s,rcvbuf:s,amp-limit:s", &retry_node,
+                                                       &sndbuf, &rcvbuf, &amp_limit) != 0)
                         return -1;
                     if (retry_node != NULL) {
                         ssize_t on = h2o_configurator_get_one_of(cmd, *retry_node, "OFF,ON");
@@ -1475,6 +1476,11 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                             return -1;
                         if (setsockopt(fd, SOL_SOCKET, SO_RCVBUF, &sz, sizeof(sz)) != 0)
                             h2o_configurator_errprintf(cmd, *quic_node, "setsockopt(SO_RCVBUF) failed:%s", strerror(errno));
+                    }
+                    if (amp_limit != NULL) {
+                        if (h2o_configurator_scanf(cmd, *amp_limit, "%" SCNu16,
+                                                   &listener->quic.ctx->pre_validation_amplification_limit) != 0)
+                            return -1;
                     }
                 }
                 listener_is_new = 1;
@@ -2328,8 +2334,8 @@ static h2o_http3_conn_t *on_http3_accept(h2o_http3_ctx_t *_ctx, quicly_address_t
                 token = &token_buf;
         } else if (ret == QUICLY_TRANSPORT_ERROR_INVALID_TOKEN) {
             uint8_t payload[QUICLY_MIN_CLIENT_INITIAL_SIZE];
-            size_t payload_size = quicly_send_close_invalid_token(ctx->super.quic, &srcaddr->sa, packet->cid.src, &destaddr->sa,
-                                                                  packet->cid.dest.encrypted, err_desc, payload);
+            size_t payload_size = quicly_send_close_invalid_token(ctx->super.quic, packet->version, &srcaddr->sa, packet->cid.src,
+                                                                  &destaddr->sa, packet->cid.dest.encrypted, err_desc, payload);
             assert(payload_size != SIZE_MAX);
             struct iovec vec = {.iov_base = payload, .iov_len = payload_size};
             h2o_http3_send_datagrams(&ctx->super, srcaddr, destaddr, &vec, 1);
@@ -2351,14 +2357,28 @@ static h2o_http3_conn_t *on_http3_accept(h2o_http3_ctx_t *_ctx, quicly_address_t
             break;
         }
         if (send_retry) {
-            static __thread ptls_aead_context_t *retry_aead_cache = NULL;
+            static __thread struct {
+                ptls_aead_context_t *current;
+                ptls_aead_context_t *draft27;
+            } retry_integrity_aead_cache;
             uint8_t scid[16], payload[QUICLY_MIN_CLIENT_INITIAL_SIZE], token_prefix;
             ptls_openssl_random_bytes(scid, sizeof(scid));
-            ptls_aead_context_t *aead = quic_get_address_token_encryptor(&token_prefix);
+            ptls_aead_context_t *token_aead = quic_get_address_token_encryptor(&token_prefix), **retry_integrity_aead;
+            switch (packet->version) {
+            case QUICLY_PROTOCOL_VERSION_CURRENT:
+                retry_integrity_aead = &retry_integrity_aead_cache.current;
+                break;
+            case QUICLY_PROTOCOL_VERSION_DRAFT27:
+                retry_integrity_aead = &retry_integrity_aead_cache.draft27;
+                break;
+            default:
+                retry_integrity_aead = NULL;
+                break;
+            }
             size_t payload_size =
-                quicly_send_retry(ctx->super.quic, aead, &srcaddr->sa, packet->cid.src, &destaddr->sa,
+                quicly_send_retry(ctx->super.quic, token_aead, packet->version, &srcaddr->sa, packet->cid.src, &destaddr->sa,
                                   ptls_iovec_init(scid, sizeof(scid)), packet->cid.dest.encrypted,
-                                  ptls_iovec_init(&token_prefix, 1), ptls_iovec_init(NULL, 0), &retry_aead_cache, payload);
+                                  ptls_iovec_init(&token_prefix, 1), ptls_iovec_init(NULL, 0), retry_integrity_aead, payload);
             assert(payload_size != SIZE_MAX);
             struct iovec vec = {.iov_base = payload, .iov_len = payload_size};
             h2o_http3_send_datagrams(&ctx->super, srcaddr, destaddr, &vec, 1);
@@ -3039,6 +3059,17 @@ int main(int argc, char **argv)
         dispose_resolve_tag_arg(&resolve_tag_arg);
         yoml_free(yoml, NULL);
     }
+
+    {
+        int fd = h2o_file_mktemp(h2o_socket_buffer_mmap_settings.fn_template);
+        if (fd == -1) {
+            fprintf(stderr, "temp-buffer-path: failed to create temporary file from the mkstemp(3) template '%s': %s\n",
+                    h2o_socket_buffer_mmap_settings.fn_template, strerror(errno));
+            return EX_CONFIG;
+        }
+        close(fd);
+    }
+
     /* calculate defaults (note: open file cached is purged once every loop) */
     conf.globalconf.filecache.capacity = conf.globalconf.http2.max_concurrent_requests_per_connection * 2;
     if (conf.quic.num_threads == 0) {

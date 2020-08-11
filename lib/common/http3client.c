@@ -315,15 +315,17 @@ static void on_error_before_head(struct st_h2o_http3client_req_t *req, const cha
 static int handle_input_data_payload(struct st_h2o_http3client_req_t *req, const uint8_t **src, const uint8_t *src_end, int err,
                                      const char **err_desc)
 {
-    size_t payload_bytes = req->bytes_left_in_data_frame;
     const char *errstr;
 
     /* save data, update states */
-    if (src_end - *src < payload_bytes)
-        payload_bytes = src_end - *src;
-    h2o_buffer_append(&req->recvbuf.body, *src, payload_bytes);
-    *src += payload_bytes;
-    req->bytes_left_in_data_frame -= payload_bytes;
+    if (req->bytes_left_in_data_frame != 0) {
+        size_t payload_bytes = req->bytes_left_in_data_frame;
+        if (src_end - *src < payload_bytes)
+            payload_bytes = src_end - *src;
+        h2o_buffer_append(&req->recvbuf.body, *src, payload_bytes);
+        *src += payload_bytes;
+        req->bytes_left_in_data_frame -= payload_bytes;
+    }
     if (req->bytes_left_in_data_frame == 0)
         req->handle_input = handle_input_expect_data_frame;
 
@@ -344,26 +346,29 @@ static int handle_input_data_payload(struct st_h2o_http3client_req_t *req, const
 int handle_input_expect_data_frame(struct st_h2o_http3client_req_t *req, const uint8_t **src, const uint8_t *src_end, int err,
                                    const char **err_desc)
 {
-    h2o_http3_read_frame_t frame;
-    int ret;
-
-    if ((ret = h2o_http3_read_frame(&frame, 1, H2O_HTTP3_STREAM_TYPE_REQUEST, src, src_end, err_desc)) != 0) {
-        /* incomplete */
-        if (ret == H2O_HTTP3_ERROR_INCOMPLETE && err == 0)
+    if (*src == src_end && err == H2O_HTTP3_ERROR_EOS) {
+        /* if the input is EOS, delegate the task to the payload processing function */
+        assert(req->bytes_left_in_data_frame == 0);
+    } else {
+        /* otherwise, read the frame */
+        h2o_http3_read_frame_t frame;
+        int ret;
+        if ((ret = h2o_http3_read_frame(&frame, 1, H2O_HTTP3_STREAM_TYPE_REQUEST, src, src_end, err_desc)) != 0) {
+            /* incomplete */
+            if (ret == H2O_HTTP3_ERROR_INCOMPLETE && err == 0)
+                return ret;
+            req->super._cb.on_body(&req->super, "malformed frame");
             return ret;
-        req->super._cb.on_body(&req->super, "malformed frame");
-        return ret;
+        }
+        switch (frame.type) {
+        case H2O_HTTP3_FRAME_TYPE_DATA:
+            break;
+        default:
+            /* FIXME handle push_promise, trailers */
+            return 0;
+        }
+        req->bytes_left_in_data_frame = frame.length;
     }
-
-    switch (frame.type) {
-    case H2O_HTTP3_FRAME_TYPE_DATA:
-        break;
-    default:
-        /* FIXME handle push_promise, trailers */
-        return 0;
-    }
-
-    req->bytes_left_in_data_frame = frame.length;
 
     /* unexpected close of DATA frame is handled by handle_input_data_payload. We rely on the function to detect if the DATA frame
      * is closed right after the frame header */

@@ -7,6 +7,10 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		E904233D24AED0410072C5B7 /* loss.c in Sources */ = {isa = PBXBuildFile; fileRef = E904233C24AED0410072C5B7 /* loss.c */; };
+		E904233E24AED0410072C5B7 /* loss.c in Sources */ = {isa = PBXBuildFile; fileRef = E904233C24AED0410072C5B7 /* loss.c */; };
+		E904233F24AED0410072C5B7 /* loss.c in Sources */ = {isa = PBXBuildFile; fileRef = E904233C24AED0410072C5B7 /* loss.c */; };
+		E904234124AEFB980072C5B7 /* loss.c in Sources */ = {isa = PBXBuildFile; fileRef = E904234024AEFB980072C5B7 /* loss.c */; };
 		E9056C081F56965300E2B96C /* linklist.h in Headers */ = {isa = PBXBuildFile; fileRef = E9056C071F56965300E2B96C /* linklist.h */; };
 		E920D21C1F43DE4100799777 /* recvstate.h in Headers */ = {isa = PBXBuildFile; fileRef = E920D21B1F43DE4100799777 /* recvstate.h */; };
 		E920D21E1F43E05000799777 /* recvstate.c in Sources */ = {isa = PBXBuildFile; fileRef = E920D21D1F43E05000799777 /* recvstate.c */; };
@@ -18,7 +22,7 @@
 		E920D22B1F49533800799777 /* sentmap.c in Sources */ = {isa = PBXBuildFile; fileRef = E920D22A1F49533800799777 /* sentmap.c */; };
 		E920D22C1F49533800799777 /* sentmap.c in Sources */ = {isa = PBXBuildFile; fileRef = E920D22A1F49533800799777 /* sentmap.c */; };
 		E920D22E1F4981E500799777 /* sentmap.c in Sources */ = {isa = PBXBuildFile; fileRef = E920D22D1F4981E500799777 /* sentmap.c */; };
-		E920D2301F49EE0B00799777 /* loss.c in Sources */ = {isa = PBXBuildFile; fileRef = E920D22F1F49EE0B00799777 /* loss.c */; };
+		E920D2301F49EE0B00799777 /* lossy.c in Sources */ = {isa = PBXBuildFile; fileRef = E920D22F1F49EE0B00799777 /* lossy.c */; };
 		E92D43ED1F41DCF5002AC767 /* sendstate.h in Headers */ = {isa = PBXBuildFile; fileRef = E92D43EC1F41DCF5002AC767 /* sendstate.h */; };
 		E93E546A1F663851001C50FE /* pembase64.c in Sources */ = {isa = PBXBuildFile; fileRef = E93E54681F663849001C50FE /* pembase64.c */; };
 		E93E546B1F663852001C50FE /* pembase64.c in Sources */ = {isa = PBXBuildFile; fileRef = E93E54681F663849001C50FE /* pembase64.c */; };
@@ -134,6 +138,8 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		E904233C24AED0410072C5B7 /* loss.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = loss.c; sourceTree = "<group>"; };
+		E904234024AEFB980072C5B7 /* loss.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = loss.c; sourceTree = "<group>"; };
 		E9056C071F56965300E2B96C /* linklist.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = linklist.h; sourceTree = "<group>"; };
 		E920D21B1F43DE4100799777 /* recvstate.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = recvstate.h; sourceTree = "<group>"; };
 		E920D21D1F43E05000799777 /* recvstate.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = recvstate.c; sourceTree = "<group>"; };
@@ -143,7 +149,7 @@
 		E920D2281F4951BA00799777 /* sentmap.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = sentmap.h; sourceTree = "<group>"; };
 		E920D22A1F49533800799777 /* sentmap.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = sentmap.c; sourceTree = "<group>"; };
 		E920D22D1F4981E500799777 /* sentmap.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = sentmap.c; sourceTree = "<group>"; };
-		E920D22F1F49EE0B00799777 /* loss.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = loss.c; sourceTree = "<group>"; };
+		E920D22F1F49EE0B00799777 /* lossy.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = lossy.c; sourceTree = "<group>"; };
 		E92D43EC1F41DCF5002AC767 /* sendstate.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = sendstate.h; sourceTree = "<group>"; };
 		E93E54681F663849001C50FE /* pembase64.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = pembase64.c; sourceTree = "<group>"; };
 		E93E54BA1F69B750001C50FE /* loss.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = loss.h; sourceTree = "<group>"; };
@@ -199,6 +205,12 @@
 		E9F6A4281F3C3B3F0083F0B2 /* test.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = test.h; sourceTree = "<group>"; };
 		E9F6A4291F3C3B7B0083F0B2 /* ranges.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = ranges.c; sourceTree = "<group>"; };
 		E9F6A42D1F41375B0083F0B2 /* sendstate.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = sendstate.c; sourceTree = "<group>"; };
+		E9FF84C024CC06A2002577CA /* server.key */ = {isa = PBXFileReference; lastKnownFileType = text; path = server.key; sourceTree = "<group>"; };
+		E9FF84C124CC06A2002577CA /* setup.sh */ = {isa = PBXFileReference; lastKnownFileType = text.script.sh; path = setup.sh; sourceTree = "<group>"; };
+		E9FF84C224CC06A2002577CA /* run_endpoint.sh */ = {isa = PBXFileReference; lastKnownFileType = text.script.sh; path = run_endpoint.sh; sourceTree = "<group>"; };
+		E9FF84C324CC06A2002577CA /* deploy.sh */ = {isa = PBXFileReference; lastKnownFileType = text.script.sh; path = deploy.sh; sourceTree = "<group>"; };
+		E9FF84C424CC06A2002577CA /* Dockerfile */ = {isa = PBXFileReference; lastKnownFileType = text; path = Dockerfile; sourceTree = "<group>"; };
+		E9FF84C524CC06A2002577CA /* server.crt */ = {isa = PBXFileReference; lastKnownFileType = text; path = server.crt; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -244,6 +256,7 @@
 		E95EBCCE227ECB380022C32D /* misc */ = {
 			isa = PBXGroup;
 			children = (
+				E9FF84BF24CC0687002577CA /* quic-interop-runner */,
 				E95EBCCF227ECB4B0022C32D /* build_libFuzzer.sh */,
 				E95EBCD5227F3F1F0022C32D /* probe2trace.pl */,
 			);
@@ -311,6 +324,7 @@
 				E98042352244A5D7008B9745 /* defaults.c */,
 				E99F8C251F4E9EBF00C26B3D /* frame.c */,
 				E9736529246FD3AC0039AA49 /* local_cid.c */,
+				E904233C24AED0410072C5B7 /* loss.c */,
 				E98448411EA490A500390927 /* quicly.c */,
 				E9F6A41F1F3C0B6D0083F0B2 /* ranges.c */,
 				E920D21D1F43E05000799777 /* recvstate.c */,
@@ -394,7 +408,8 @@
 				E9736534246FD3DA0039AA49 /* remote_cid.c */,
 				E99F8C281F4EAEF800C26B3D /* frame.c */,
 				E9736533246FD3DA0039AA49 /* local_cid.c */,
-				E920D22F1F49EE0B00799777 /* loss.c */,
+				E904234024AEFB980072C5B7 /* loss.c */,
+				E920D22F1F49EE0B00799777 /* lossy.c */,
 				E99B75E61F5CF96900CF503E /* maxsender.c */,
 				E9F6A4291F3C3B7B0083F0B2 /* ranges.c */,
 				E9736535246FD3DA0039AA49 /* retire_cid.c */,
@@ -438,6 +453,19 @@
 				E9D3CCCC21D22E7E00516202 /* streambuf.h */,
 			);
 			path = quicly;
+			sourceTree = "<group>";
+		};
+		E9FF84BF24CC0687002577CA /* quic-interop-runner */ = {
+			isa = PBXGroup;
+			children = (
+				E9FF84C324CC06A2002577CA /* deploy.sh */,
+				E9FF84C424CC06A2002577CA /* Dockerfile */,
+				E9FF84C224CC06A2002577CA /* run_endpoint.sh */,
+				E9FF84C524CC06A2002577CA /* server.crt */,
+				E9FF84C024CC06A2002577CA /* server.key */,
+				E9FF84C124CC06A2002577CA /* setup.sh */,
+			);
+			path = "quic-interop-runner";
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -643,6 +671,7 @@
 				E973652B246FD3AC0039AA49 /* retire_cid.c in Sources */,
 				E920D21E1F43E05000799777 /* recvstate.c in Sources */,
 				E98042362244A5D7008B9745 /* defaults.c in Sources */,
+				E904233D24AED0410072C5B7 /* loss.c in Sources */,
 				E9F6A42E1F41375B0083F0B2 /* sendstate.c in Sources */,
 				E99F8C261F4E9EBF00C26B3D /* frame.c in Sources */,
 				E98448421EA490A500390927 /* quicly.c in Sources */,
@@ -664,6 +693,7 @@
 				E973652D246FD3B40039AA49 /* local_cid.c in Sources */,
 				E984483B1EA48DD300390927 /* openssl.c in Sources */,
 				E973652E246FD3B40039AA49 /* remote_cid.c in Sources */,
+				E904233E24AED0410072C5B7 /* loss.c in Sources */,
 				E941428D23B0B839002D3CE0 /* frame.c in Sources */,
 				E941429123B0B86D002D3CE0 /* recvstate.c in Sources */,
 				E9B43E12246943D300824E51 /* fusion.c in Sources */,
@@ -697,9 +727,10 @@
 				E9D31DD1232DEDB400ACD5EC /* quicly-probes.d in Sources */,
 				E9736530246FD3B50039AA49 /* local_cid.c in Sources */,
 				E920D22C1F49533800799777 /* sentmap.c in Sources */,
-				E920D2301F49EE0B00799777 /* loss.c in Sources */,
+				E920D2301F49EE0B00799777 /* lossy.c in Sources */,
 				E99B75E71F5CF96900CF503E /* maxsender.c in Sources */,
 				E9F6A42F1F41375B0083F0B2 /* sendstate.c in Sources */,
+				E904234124AEFB980072C5B7 /* loss.c in Sources */,
 				E920D2251F49412900799777 /* simple.c in Sources */,
 				E9736538246FD3DA0039AA49 /* retire_cid.c in Sources */,
 				E920D21F1F43E05000799777 /* recvstate.c in Sources */,
@@ -715,6 +746,7 @@
 				E9CC44261EC1963100DC7D3E /* picotest.c in Sources */,
 				E95E953D22904A4C00215ACD /* picotls-probes.d in Sources */,
 				E9CC441C1EC195DF00DC7D3E /* picotls.c in Sources */,
+				E904233F24AED0410072C5B7 /* loss.c in Sources */,
 				E98042372244A5D7008B9745 /* defaults.c in Sources */,
 				E99F8C271F4E9F5D00C26B3D /* frame.c in Sources */,
 				E9736536246FD3DA0039AA49 /* local_cid.c in Sources */,

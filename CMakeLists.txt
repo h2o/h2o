@@ -186,7 +186,7 @@ IF (PKG_CONFIG_FOUND)
     ENDIF (LIBUV_FOUND)
 ENDIF (PKG_CONFIG_FOUND)
 IF (NOT LIBUV_FOUND)
-    FIND_PACKAGE(LibUV)
+    FIND_PACKAGE(LIBUV)
     IF (LIBUV_FOUND AND LIBUV_VERSION VERSION_LESS "1.0.0")
         MESSAGE(STATUS "libuv found but ignored; is too old")
         UNSET(LIBUV_FOUND)
@@ -211,7 +211,7 @@ IF (PKG_CONFIG_FOUND)
     ENDIF (WSLAY_FOUND)
 ENDIF (PKG_CONFIG_FOUND)
 IF (NOT WSLAY_FOUND)
-    FIND_PACKAGE(Wslay)
+    FIND_PACKAGE(WSLAY)
     IF (WSLAY_FOUND)
         INCLUDE_DIRECTORIES(${WSLAY_INCLUDE_DIR})
     ENDIF (WSLAY_FOUND)
@@ -224,6 +224,16 @@ IF (ZLIB_FOUND)
     INCLUDE_DIRECTORIES(${ZLIB_INCLUDE_DIRS})
     LINK_DIRECTORIES(${ZLIB_LIBRARY_DIRS})
 ENDIF (ZLIB_FOUND)
+
+IF (PKG_CONFIG_FOUND)
+    PKG_CHECK_MODULES(BROTLI_DEC libbrotlidec)
+    PKG_CHECK_MODULES(BROTLI_ENC libbrotlienc)
+    IF (BROTLI_DEC_FOUND AND BROTLI_ENC_FOUND)
+        SET(BROTLI_FOUND TRUE)
+        INCLUDE_DIRECTORIES(${BROTLI_DEC_INCLUDE_DIRS} ${BROTLI_ENC_INCLUDE_DIRS})
+        LINK_DIRECTORIES(${BROTLI_DEC_LIBRARY_DIRS} ${BROTLI_ENC_LIBRARY_DIRS})
+    ENDIF (BROTLI_DEC_FOUND AND BROTLI_ENC_FOUND)
+ENDIF (PKG_CONFIG_FOUND)
 
 SET(CC_WARNING_FLAGS "-Wall -Wno-unused-value -Wno-unused-function -Wno-nullability-completeness -Wno-expansion-to-defined")
 IF ("${CMAKE_C_COMPILER_ID}" STREQUAL "GNU")
@@ -336,6 +346,7 @@ SET(LIB_SOURCE_FILES
     deps/quicly/lib/defaults.c
     deps/quicly/lib/frame.c
     deps/quicly/lib/local_cid.c
+    deps/quicly/lib/loss.c
     deps/quicly/lib/quicly.c
     deps/quicly/lib/ranges.c
     deps/quicly/lib/recvstate.c
@@ -567,6 +578,10 @@ TARGET_INCLUDE_DIRECTORIES(libh2o PUBLIC ${OPENSSL_INCLUDE_DIR})
 TARGET_INCLUDE_DIRECTORIES(libh2o-evloop PUBLIC ${OPENSSL_INCLUDE_DIR})
 TARGET_LINK_LIBRARIES(libh2o ${OPENSSL_LIBRARIES} ${CMAKE_DL_LIBS})
 TARGET_LINK_LIBRARIES(libh2o-evloop ${OPENSSL_LIBRARIES} ${CMAKE_DL_LIBS})
+IF (BROTLI_FOUND)
+    TARGET_LINK_LIBRARIES(libh2o ${BROTLI_DEC_LIBRARIES} ${BROTLI_ENC_LIBRARIES})
+    TARGET_LINK_LIBRARIES(libh2o-evloop ${BROTLI_DEC_LIBRARIES} ${BROTLI_ENC_LIBRARIES})
+ENDIF ()
 
 ADD_EXECUTABLE(t-qif t/qif.c)
 SET_TARGET_PROPERTIES(t-qif PROPERTIES
@@ -634,12 +649,12 @@ SET_TARGET_PROPERTIES(examples-websocket-evloop PROPERTIES
     EXCLUDE_FROM_ALL 1)
 TARGET_LINK_LIBRARIES(examples-websocket-evloop libh2o-evloop ${WSLAY_LIBRARIES} ${EXTRA_LIBS})
 
-IF (LIBUV_FOUND AND NOT WITHOUT_LIBS)
+IF (LIBUV_FOUND AND BROTLI_FOUND AND NOT WITHOUT_LIBS)
     INSTALL(TARGETS libh2o DESTINATION ${CMAKE_INSTALL_LIBDIR})
 ELSE ()
     SET_TARGET_PROPERTIES(libh2o PROPERTIES EXCLUDE_FROM_ALL 1)
 ENDIF ()
-IF (NOT WITHOUT_LIBS)
+IF (BROTLI_FOUND AND NOT WITHOUT_LIBS)
     INSTALL(TARGETS libh2o-evloop DESTINATION ${CMAKE_INSTALL_LIBDIR})
     INSTALL(TARGETS h2o-httpclient DESTINATION ${CMAKE_INSTALL_BINDIR})
 ELSE ()
@@ -720,7 +735,7 @@ SET_TARGET_PROPERTIES(t-00unit-evloop.t PROPERTIES
     COMPILE_FLAGS "-DH2O_USE_LIBUV=0 -DH2O_USE_BROTLI=1 -DH2O_UNITTEST=1"
     EXCLUDE_FROM_ALL 1)
 
-IF(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/deps/theft/Makefile)
+IF(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/deps/theft/Makefile AND BROTLI_FOUND)
     ExternalProject_Add(build-theft
                         SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/deps/theft"
                         BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}/theft"
@@ -753,9 +768,15 @@ ENDIF (LIBUV_FOUND)
 
 ADD_CUSTOM_TARGET(checkdepends
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    DEPENDS h2o t-00unit-evloop.t lib-examples-evloop ${OPTIONAL_TEST})
+    DEPENDS h2o t-00unit-evloop.t ${OPTIONAL_TEST})
 IF (LIBUV_FOUND)
-    ADD_DEPENDENCIES(checkdepends t-00unit-libuv.t lib-examples)
+    ADD_DEPENDENCIES(checkdepends t-00unit-libuv.t)
+ENDIF ()
+IF (BROTLI_FOUND)
+    IF (LIBUV_FOUND)
+        ADD_DEPENDENCIES(checkdepends lib-examples)
+    ENDIF ()
+    ADD_DEPENDENCIES(checkdepends lib-examples-evloop)
 ENDIF ()
 
 ADD_CUSTOM_TARGET(check env H2O_ROOT=. BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR} prove -I. -v t/*.t
@@ -796,9 +817,6 @@ ADD_DEPENDENCIES(checkdepends picotls-cli)
 ADD_CUSTOM_TARGET(check-valgrind env H2O_VALGRIND=./misc/h2o_valgrind/ H2O_ROOT=. BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR} prove -I. -v t/*.t
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     DEPENDS h2o t-00unit-evloop.t)
-IF (LIBUV_FOUND)
-    ADD_DEPENDENCIES(checkdepends t-00unit-libuv.t lib-examples)
-ENDIF ()
 
 IF (BUILD_FUZZER)
     IF(NOT CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
@@ -899,40 +917,39 @@ IF (WITH_H2OLOG)
     MESSAGE(STATUS "Supporting h2olog")
 
     SET(H2OLOG_SOURCE_FILES
-        "h2olog/h2olog.h"
-        "h2olog/h2olog.cc"
-        "h2olog/http.cc"
-        "h2olog/json.h"
-        "h2olog/json.cc"
-        "h2olog/quic.h"
+        "src/h2olog/h2olog.h"
+        "src/h2olog/h2olog.cc"
+        "src/h2olog/http.cc"
+        "src/h2olog/json.h"
+        "src/h2olog/json.cc"
         "include/h2o/version.h"
     )
 
     SET(H2OLOG_GEN_DEPS
         "h2o-probes.d"
         "deps/quicly/quicly-probes.d"
-        "h2olog/quic.h"
+        "deps/quicly/include/quicly.h"
     )
 
     ADD_CUSTOM_COMMAND(
-        OUTPUT  "${CMAKE_CURRENT_SOURCE_DIR}/h2olog/generated-quic.cc"
-        COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/h2olog/misc/gen-quic-bpf.py" "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}/h2olog/generated-quic.cc"
-        DEPENDS ${H2OLOG_GEN_DEPS} "${CMAKE_CURRENT_SOURCE_DIR}/h2olog/misc/gen-quic-bpf.py"
+        OUTPUT  "${CMAKE_CURRENT_SOURCE_DIR}/src/h2olog/generated-quic.cc"
+        COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/src/h2olog/misc/gen-quic-bpf.py" "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}/src/h2olog/generated-quic.cc"
+        DEPENDS ${H2OLOG_GEN_DEPS} "${CMAKE_CURRENT_SOURCE_DIR}/src/h2olog/misc/gen-quic-bpf.py"
     )
-    LIST(APPEND H2OLOG_SOURCE_FILES "${CMAKE_CURRENT_SOURCE_DIR}/h2olog/generated-quic.cc")
+    LIST(APPEND H2OLOG_SOURCE_FILES "${CMAKE_CURRENT_SOURCE_DIR}/src/h2olog/generated-quic.cc")
     LINK_DIRECTORIES("${LIBBCC_LIBRARY_DIRS}")
 
     ADD_EXECUTABLE(h2olog ${H2OLOG_SOURCE_FILES})
 
-    SET_PROPERTY(TARGET h2olog
-        PROPERTY CXX_STANDARD 11
-        PROPERTY CXX_STANDARD_REQUIRED ON
-        PROPERTY CXX_EXTENSIONS OFF
+    SET_TARGET_PROPERTIES(h2olog PROPERTIES
+        CXX_STANDARD 11
+        CXX_STANDARD_REQUIRED ON
+        CXX_EXTENSIONS OFF
     )
 
     TARGET_LINK_LIBRARIES(h2olog "${LIBBCC_LIBRARIES}")
     TARGET_INCLUDE_DIRECTORIES(h2olog
-        PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/h2olog"
+        PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src/h2olog"
         PRIVATE "${LIBBCC_INCLUDE_DIRS}"
     )
 
