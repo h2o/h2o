@@ -248,13 +248,6 @@ static void h2o_mem_addref_shared(void *p);
 static int h2o_mem_release_shared(void *p);
 
 /**
- * creates a temporary file using to the fn_template param.
- * This is a wrapper to mkstemp(3), but there's no way to access the actual filename.
- * @return fd. -1 on failure and set errno.
- */
-int h2o_make_temp_file(const char *fn_template);
-
-/**
  * initialize the buffer using given prototype.
  */
 static void h2o_buffer_init(h2o_buffer_t **buffer, h2o_buffer_prototype_t *prototype);

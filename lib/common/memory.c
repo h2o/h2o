@@ -31,6 +31,7 @@
 #include <sys/mman.h>
 #include <unistd.h>
 #include "h2o/memory.h"
+#include "h2o/file.h"
 
 #if defined(__linux__)
 #if defined(__ANDROID__) && (__ANDROID_API__ < 21)
@@ -243,18 +244,6 @@ h2o_iovec_t h2o_buffer_reserve(h2o_buffer_t **_inbuf, size_t min_guarantee)
     return reserved;
 }
 
-int h2o_make_temp_file(const char *fn_template)
-{
-    int fd;
-    char *tmpfn = alloca(strlen(fn_template) + 1);
-    strcpy(tmpfn, fn_template);
-    if ((fd = mkstemp(tmpfn)) == -1) {
-        return -1;
-    }
-    unlink(tmpfn);
-    return fd;
-}
-
 h2o_iovec_t h2o_buffer_try_reserve(h2o_buffer_t **_inbuf, size_t min_guarantee)
 {
     h2o_buffer_t *inbuf = *_inbuf;
@@ -291,7 +280,7 @@ h2o_iovec_t h2o_buffer_try_reserve(h2o_buffer_t **_inbuf, size_t min_guarantee)
                 int fd;
                 h2o_buffer_t *newp;
                 if (inbuf->_fd == -1) {
-                    if ((fd = h2o_make_temp_file(inbuf->_prototype->mmap_settings->fn_template)) == -1) {
+                    if ((fd = h2o_file_mktemp(inbuf->_prototype->mmap_settings->fn_template)) == -1) {
                         h2o_perror("failed to create temporary file");
                         goto MapError;
                     }
