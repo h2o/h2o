@@ -67,6 +67,9 @@ This document describes the configuration directives for controlling the HTTP/1 
 <li><a href="configure/http1_directives.html#http1-request-timeout">
 <code>http1-request-timeout</code>
 </a></li>
+<li><a href="configure/http1_directives.html#http1-request-io-timeout">
+<code>http1-request-io-timeout</code>
+</a></li>
 <li><a href="configure/http1_directives.html#http1-upgrade-to-http2">
 <code>http1-upgrade-to-http2</code>
 </a></li>
@@ -89,6 +92,23 @@ Timeout for incoming requests in seconds.
 <dd>global</dd>
 <dt>Default:</dt>
 <dd><code><pre>http1-request-timeout: 10</pre></code>
+</dl>
+<div id="http1-request-io-timeout" class="directive-head">
+<h3><a href="configure/http1_directives.html#http1-request-io-timeout"><code>"http1-request-io-timeout"</code></a></h3>
+</div>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+Timeout for incoming request I/O in seconds.
+</p>
+
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global</dd>
+<dt>Default:</dt>
+<dd><code><pre>http1-request-io-timeout: 5</pre></code>
 </dl>
 <div id="http1-upgrade-to-http2" class="directive-head">
 <h3><a href="configure/http1_directives.html#http1-upgrade-to-http2"><code>"http1-upgrade-to-http2"</code></a></h3>
