@@ -31,6 +31,7 @@
 #include <getopt.h>
 #include <inttypes.h>
 #include <limits.h>
+#include <libgen.h>
 #include <netdb.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
@@ -3027,6 +3028,16 @@ int main(int argc, char **argv)
         dispose_resolve_tag_arg(&resolve_tag_arg);
         yoml_free(yoml, NULL);
     }
+
+    {
+        const char *dir = dirname(h2o_socket_buffer_mmap_settings.fn_template);
+        struct stat st;
+        if (!(stat(dir, &st) == 0 && S_ISDIR(st.st_mode) && access(dir, W_OK) == 0)) {
+            fprintf(stderr, "temp-buffer-path: '%s' is not a writable directory\n", dir);
+            return EX_CONFIG;
+        }
+    }
+
     /* calculate defaults (note: open file cached is purged once every loop) */
     conf.globalconf.filecache.capacity = conf.globalconf.http2.max_concurrent_requests_per_connection * 2;
     if (conf.quic.num_threads == 0) {
