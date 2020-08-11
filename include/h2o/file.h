@@ -28,7 +28,7 @@ h2o_iovec_t h2o_file_read(const char *fn);
 
 /**
  * creates a temporary file using the fn_template param.
- * This is a wrapper to mkstemp(3), but there's no way to access the actual filename.
+ * This is a wrapper to mkstemp(3), but the file is unlinked before returning from the function. Therefore, the name of the file is not provided to the caller.
  * @return fd. -1 on failure and set errno as mkstemp(3) does.
  */
 int h2o_file_mktemp(const char *fn_template);
