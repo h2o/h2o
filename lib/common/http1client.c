@@ -661,17 +661,17 @@ static h2o_iovec_t build_request(struct st_h2o_http1client_t *client, h2o_iovec_
 }
 
 static void start_request(struct st_h2o_http1client_t *client, h2o_iovec_t method, const h2o_url_t *url,
-                          const h2o_header_t *headers, size_t num_headers, h2o_iovec_t body, h2o_httpclient_properties_t props)
+                          const h2o_header_t *headers, size_t num_headers, h2o_iovec_t body, const h2o_httpclient_properties_t *props)
 {
     h2o_iovec_t reqbufs[5]; /* 5 should be the maximum possible elements used */
     size_t reqbufcnt = 0;
-    if (props.proxy_protocol->base != NULL)
-        reqbufs[reqbufcnt++] = *props.proxy_protocol;
-    h2o_iovec_t header = build_request(client, method, url, *props.connection_header, headers, num_headers);
+    if (props->proxy_protocol->base != NULL)
+        reqbufs[reqbufcnt++] = *props->proxy_protocol;
+    h2o_iovec_t header = build_request(client, method, url, *props->connection_header, headers, num_headers);
     reqbufs[reqbufcnt++] = header;
     client->super.bytes_written.header = header.len;
 
-    client->_is_chunked = *props.chunked;
+    client->_is_chunked = *props->chunked;
     client->_method_is_head = h2o_memis(method.base, method.len, H2O_STRLIT("HEAD"));
 
     if (client->proceed_req != NULL) {
@@ -732,7 +732,7 @@ static void on_connection_ready(struct st_h2o_http1client_t *client)
         return;
     }
 
-    start_request(client, method, &url, headers, num_headers, body, props);
+    start_request(client, method, &url, headers, num_headers, body, &props);
 }
 
 static void do_cancel(h2o_httpclient_t *_client)
