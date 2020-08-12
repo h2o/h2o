@@ -26,8 +26,8 @@
 #include "quicly.h"
 #include "h2o/memory.h"
 
-KHASH_MAP_INIT_INT(h2o_http3_idmap, h2o_http3_conn_t *);
-KHASH_MAP_INIT_INT64(h2o_http3_acceptmap, h2o_http3_conn_t *);
+KHASH_MAP_INIT_INT(h2o_quic_idmap, h2o_quic_conn_t *);
+KHASH_MAP_INIT_INT64(h2o_quic_acceptmap, h2o_quic_conn_t *);
 
 struct st_h2o_http3_egress_unistream_t {
     /**

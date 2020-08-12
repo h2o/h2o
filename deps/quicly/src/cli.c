@@ -1127,7 +1127,7 @@ int main(int argc, char **argv)
                 exit(1);
             }
         case 'K':
-            if (sscanf(optarg, "%" PRIu64, &ctx.max_packets_per_key) != 1) {
+            if (sscanf(optarg, "%" SCNu64, &ctx.max_packets_per_key) != 1) {
                 fprintf(stderr, "failed to parse key update interval: %s\n", optarg);
                 exit(1);
             }

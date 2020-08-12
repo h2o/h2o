@@ -27,6 +27,8 @@
 #include "h2o/http3_internal.h"
 #include "./../probes_.h"
 
+#define MODULE_NAME "lib/http3/server.c"
+
 #define H2O_HTTP3_MAX_PLACEHOLDERS 10
 #define H2O_HTTP3_NUM_RETAINED_PRIORITIES 10
 
@@ -149,6 +151,10 @@ struct st_h2o_http3_server_conn_t {
             uint16_t conn_blocked;
         } uni;
     } scheduler;
+    /**
+     * DSR request header to be used (initialized lazily)
+     */
+    h2o_iovec_t dsr_req;
 };
 
 struct st_h2o_http3_server_stream_t {
@@ -192,6 +198,10 @@ struct st_h2o_http3_server_stream_t {
      */
     h2o_buffer_t *req_body;
     /**
+     * DSR builder (or NULL)
+     */
+    h2o_dsr_instruction_builder_t *dsr_builder;
+    /**
      * the request. Placed at the end, as it holds the pool.
      */
     h2o_req_t req;
@@ -228,6 +238,11 @@ static void check_run_blocked(struct st_h2o_http3_server_conn_t *conn)
         request_run_delayed(conn);
 }
 
+static int dsr_fake_flatten(h2o_sendvec_t *vec, h2o_req_t *req, h2o_iovec_t dst, size_t off)
+{
+    h2o_fatal("logic flaw");
+}
+
 static void dispose_request(struct st_h2o_http3_server_stream_t *stream)
 {
     size_t i;
@@ -250,6 +265,9 @@ static void dispose_request(struct st_h2o_http3_server_stream_t *stream)
         --conn->num_streams_req_streaming;
         check_run_blocked(conn);
     }
+
+    if (stream->dsr_builder != NULL)
+        h2o_dsr_destroy_instruction_builder(stream->dsr_builder);
 
     /* dispose the request */
     h2o_dispose_request(&stream->req);
@@ -300,7 +318,7 @@ static void shutdown_stream(struct st_h2o_http3_server_stream_t *stream, int sto
 static socklen_t get_sockname(h2o_conn_t *_conn, struct sockaddr *sa)
 {
     struct st_h2o_http3_server_conn_t *conn = (void *)_conn;
-    struct sockaddr *src = quicly_get_sockname(conn->h3.quic);
+    struct sockaddr *src = quicly_get_sockname(conn->h3.super.quic);
     socklen_t len = src->sa_family == AF_UNSPEC ? sizeof(struct sockaddr) : quicly_get_socklen(src);
     memcpy(sa, src, len);
     return len;
@@ -309,7 +327,7 @@ static socklen_t get_sockname(h2o_conn_t *_conn, struct sockaddr *sa)
 static socklen_t get_peername(h2o_conn_t *_conn, struct sockaddr *sa)
 {
     struct st_h2o_http3_server_conn_t *conn = (void *)_conn;
-    struct sockaddr *src = quicly_get_peername(conn->h3.quic);
+    struct sockaddr *src = quicly_get_peername(conn->h3.super.quic);
     socklen_t len = quicly_get_socklen(src);
     memcpy(sa, src, len);
     return len;
@@ -318,7 +336,7 @@ static socklen_t get_peername(h2o_conn_t *_conn, struct sockaddr *sa)
 static ptls_t *get_ptls(h2o_conn_t *_conn)
 {
     struct st_h2o_http3_server_conn_t *conn = (void *)_conn;
-    return quicly_get_tls(conn->h3.quic);
+    return quicly_get_tls(conn->h3.super.quic);
 }
 
 static int get_skip_tracing(h2o_conn_t *conn)
@@ -335,14 +353,14 @@ static h2o_iovec_t log_tls_protocol_version(h2o_req_t *_req)
 static h2o_iovec_t log_session_reused(h2o_req_t *req)
 {
     struct st_h2o_http3_server_conn_t *conn = (struct st_h2o_http3_server_conn_t *)req->conn;
-    ptls_t *tls = quicly_get_tls(conn->h3.quic);
+    ptls_t *tls = quicly_get_tls(conn->h3.super.quic);
     return ptls_is_psk_handshake(tls) ? h2o_iovec_init(H2O_STRLIT("1")) : h2o_iovec_init(H2O_STRLIT("0"));
 }
 
 static h2o_iovec_t log_cipher(h2o_req_t *req)
 {
     struct st_h2o_http3_server_conn_t *conn = (struct st_h2o_http3_server_conn_t *)req->conn;
-    ptls_t *tls = quicly_get_tls(conn->h3.quic);
+    ptls_t *tls = quicly_get_tls(conn->h3.super.quic);
     ptls_cipher_suite_t *cipher = ptls_get_cipher(tls);
     return cipher != NULL ? h2o_iovec_init(cipher->aead->name, strlen(cipher->aead->name)) : h2o_iovec_init(NULL, 0);
 }
@@ -350,7 +368,7 @@ static h2o_iovec_t log_cipher(h2o_req_t *req)
 static h2o_iovec_t log_cipher_bits(h2o_req_t *req)
 {
     struct st_h2o_http3_server_conn_t *conn = (struct st_h2o_http3_server_conn_t *)req->conn;
-    ptls_t *tls = quicly_get_tls(conn->h3.quic);
+    ptls_t *tls = quicly_get_tls(conn->h3.super.quic);
     ptls_cipher_suite_t *cipher = ptls_get_cipher(tls);
     if (cipher == NULL)
         return h2o_iovec_init(NULL, 0);
@@ -368,7 +386,7 @@ static h2o_iovec_t log_session_id(h2o_req_t *_req)
 static h2o_iovec_t log_server_name(h2o_req_t *req)
 {
     struct st_h2o_http3_server_conn_t *conn = (struct st_h2o_http3_server_conn_t *)req->conn;
-    ptls_t *tls = quicly_get_tls(conn->h3.quic);
+    ptls_t *tls = quicly_get_tls(conn->h3.super.quic);
     const char *server_name = ptls_get_server_name(tls);
     return server_name != NULL ? h2o_iovec_init(server_name, strlen(server_name)) : h2o_iovec_init(NULL, 0);
 }
@@ -376,7 +394,7 @@ static h2o_iovec_t log_server_name(h2o_req_t *req)
 static h2o_iovec_t log_negotiated_protocol(h2o_req_t *req)
 {
     struct st_h2o_http3_server_conn_t *conn = (struct st_h2o_http3_server_conn_t *)req->conn;
-    ptls_t *tls = quicly_get_tls(conn->h3.quic);
+    ptls_t *tls = quicly_get_tls(conn->h3.super.quic);
     const char *proto = ptls_get_negotiated_protocol(tls);
     return proto != NULL ? h2o_iovec_init(proto, strlen(proto)) : h2o_iovec_init(NULL, 0);
 }
@@ -393,7 +411,7 @@ static h2o_iovec_t log_quic_stats(h2o_req_t *req)
     struct st_h2o_http3_server_conn_t *conn = (struct st_h2o_http3_server_conn_t *)req->conn;
     quicly_stats_t stats;
 
-    if (quicly_get_stats(conn->h3.quic, &stats) != 0)
+    if (quicly_get_stats(conn->h3.super.quic, &stats) != 0)
         return h2o_iovec_init(H2O_STRLIT("-"));
 
     char *buf;
@@ -513,7 +531,6 @@ static void on_send_emit(quicly_stream_t *qs, size_t off, void *_dst, size_t *le
 
     assert(stream->state == H2O_HTTP3_SERVER_STREAM_STATE_SEND_BODY);
 
-    uint8_t *dst = _dst, *dst_end = dst + *len;
     size_t vec_index = 0;
 
     /* find the start position identified by vec_index and off */
@@ -525,31 +542,49 @@ static void on_send_emit(quicly_stream_t *qs, size_t off, void *_dst, size_t *le
         off -= stream->sendbuf.vecs.entries[vec_index].len;
         ++vec_index;
     }
-    assert(vec_index < stream->sendbuf.vecs.size);
+    assert(vec_index <= stream->sendbuf.vecs.size);
 
-    /* write */
-    *wrote_all = 0;
-    do {
-        size_t sz = stream->sendbuf.vecs.entries[vec_index].len - off;
-        if (dst_end - dst < sz)
-            sz = dst_end - dst;
-        if (!(stream->sendbuf.vecs.entries[vec_index].callbacks->flatten)(stream->sendbuf.vecs.entries + vec_index, &stream->req,
-                                                                          h2o_iovec_init(dst, sz), off))
-            goto Error;
-        dst += sz;
-        off += sz;
-        /* when reaching the end of the current vector, update vec_index, wrote_all */
-        if (off == stream->sendbuf.vecs.entries[vec_index].len) {
-            off = 0;
-            ++vec_index;
-            if (vec_index == stream->sendbuf.vecs.size) {
-                *wrote_all = 1;
+    if (vec_index < stream->sendbuf.vecs.size) {
+        /* write */
+        uint8_t *dst = _dst, *dst_end = dst + *len;
+        *wrote_all = 0;
+        do {
+            size_t sz = stream->sendbuf.vecs.entries[vec_index].len - off;
+            if (dst_end - dst < sz)
+                sz = dst_end - dst;
+            if (stream->sendbuf.vecs.entries[vec_index].callbacks->flatten == dsr_fake_flatten) {
+                assert(stream->dsr_builder != NULL);
+                /* detach packet and write to dsr buffer */
+                quicly_detached_send_packet_t detached;
+                quicly_stream_on_send_emit_detach_packet(&detached);
+                quicly_conn_t *qc = stream->quic->conn;
+                if (!h2o_dsr_add_instruction(stream->dsr_builder, &get_conn(stream)->h3.super._dsr_builders,
+                                             quicly_get_peername(qc), &detached, dst - (uint8_t *)detached.datagram, off, sz))
+                    goto Error;
+                dst += sz;
+                off += sz;
                 break;
             }
-        }
-    } while (dst != dst_end);
-
-    *len = dst - (uint8_t *)_dst;
+            if (!(stream->sendbuf.vecs.entries[vec_index].callbacks->flatten)(stream->sendbuf.vecs.entries + vec_index,
+                                                                              &stream->req, h2o_iovec_init(dst, sz), off))
+                goto Error;
+            dst += sz;
+            off += sz;
+            /* when reaching the end of the current vector, update vec_index, wrote_all */
+            if (off == stream->sendbuf.vecs.entries[vec_index].len) {
+                off = 0;
+                ++vec_index;
+                if (vec_index == stream->sendbuf.vecs.size) {
+                    *wrote_all = 1;
+                    break;
+                }
+            }
+        } while (dst != dst_end);
+        *len = dst - (uint8_t *)_dst;
+    } else {
+        *len = 0;
+        *wrote_all = 1;
+    }
 
     if (*wrote_all && quicly_sendstate_is_open(&stream->quic->sendstate) && !stream->proceed_requested) {
         if (!retain_sendvecs(stream))
@@ -593,7 +628,7 @@ static void handle_buffered_input(struct st_h2o_http3_server_stream_t *stream)
                     err = H2O_HTTP3_ERROR_GENERAL_PROTOCOL;
                     err_desc = "incomplete frame";
                 }
-                h2o_http3_close_connection(&conn->h3, err, err_desc);
+                h2o_quic_close_connection(&conn->h3.super, err, err_desc);
                 return;
             }
             if (quicly_stop_requested(stream->quic)) {
@@ -747,7 +782,7 @@ static void run_delayed(h2o_timer_t *timer)
                 stream->read_blocked = 0;
                 set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_RECV_BODY_UNBLOCKED);
                 handle_buffered_input(stream);
-                if (quicly_get_state(conn->h3.quic) >= QUICLY_STATE_CLOSING)
+                if (quicly_get_state(conn->h3.super.quic) >= QUICLY_STATE_CLOSING)
                     return;
             }
         }
@@ -964,6 +999,20 @@ static void write_response(struct st_h2o_http3_server_stream_t *stream)
     stream->sendbuf.final_size += buf.size;
 }
 
+static void write_data_frame_header(struct st_h2o_http3_server_stream_t *stream, uint64_t size)
+{
+    /* build DATA frame header */
+    size_t header_size = 0;
+    stream->sendbuf.data_frame_header_buf[header_size++] = H2O_HTTP3_FRAME_TYPE_DATA;
+    header_size = quicly_encodev(stream->sendbuf.data_frame_header_buf + header_size, size) - stream->sendbuf.data_frame_header_buf;
+
+    /* write */
+    h2o_vector_reserve(&stream->req.pool, &stream->sendbuf.vecs, stream->sendbuf.vecs.size + 1);
+    h2o_sendvec_init_raw(stream->sendbuf.vecs.entries + stream->sendbuf.vecs.size++, stream->sendbuf.data_frame_header_buf,
+                         header_size);
+    stream->sendbuf.final_size += header_size;
+}
+
 static void do_send(h2o_ostream_t *_ostr, h2o_req_t *_req, h2o_sendvec_t *bufs, size_t bufcnt, h2o_send_state_t send_state)
 {
     struct st_h2o_http3_server_stream_t *stream = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_stream_t, ostr_final, _ostr);
@@ -992,16 +1041,8 @@ static void do_send(h2o_ostream_t *_ostr, h2o_req_t *_req, h2o_sendvec_t *bufs, 
     }
 
     if (bufcnt != 0) {
-        /* build DATA frame header */
-        size_t header_size = 0;
-        stream->sendbuf.data_frame_header_buf[header_size++] = H2O_HTTP3_FRAME_TYPE_DATA;
-        header_size =
-            quicly_encodev(stream->sendbuf.data_frame_header_buf + header_size, size_total) - stream->sendbuf.data_frame_header_buf;
-        /* write */
-        h2o_vector_reserve(&stream->req.pool, &stream->sendbuf.vecs, stream->sendbuf.vecs.size + 1 + bufcnt);
-        h2o_sendvec_init_raw(stream->sendbuf.vecs.entries + stream->sendbuf.vecs.size++, stream->sendbuf.data_frame_header_buf,
-                             header_size);
-        stream->sendbuf.final_size += header_size;
+        write_data_frame_header(stream, size_total);
+        h2o_vector_reserve(&stream->req.pool, &stream->sendbuf.vecs, stream->sendbuf.vecs.size + bufcnt);
         memcpy(stream->sendbuf.vecs.entries + stream->sendbuf.vecs.size, bufs, sizeof(*bufs) * bufcnt);
         stream->sendbuf.vecs.size += bufcnt;
         stream->sendbuf.final_size += size_total;
@@ -1023,7 +1064,7 @@ static void do_send(h2o_ostream_t *_ostr, h2o_req_t *_req, h2o_sendvec_t *bufs, 
 
     quicly_stream_sync_sendbuf(stream->quic, 1);
     if (!stream->proceed_while_sending)
-        h2o_http3_schedule_timer(&get_conn(stream)->h3);
+        h2o_quic_schedule_timer(&get_conn(stream)->h3.super);
 }
 
 static void do_send_informational(h2o_ostream_t *_ostr, h2o_req_t *_req)
@@ -1032,6 +1073,41 @@ static void do_send_informational(h2o_ostream_t *_ostr, h2o_req_t *_req)
     assert(&stream->req == _req);
 
     write_response(stream);
+}
+
+static void do_dsr(h2o_req_t *req, h2o_socket_t *sock)
+{
+    struct st_h2o_http3_server_stream_t *stream = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_stream_t, req, req);
+
+    if (stream->req.res.content_length == SIZE_MAX) {
+        h2o_req_log_error(req, MODULE_NAME, "[dsr] got 101 without content-length");
+        h2o_send_error_500(req, "Internal Server Error", "internal error", 0);
+        return;
+    }
+
+    /* instantiate DSR instruction builder */
+    stream->dsr_builder = h2o_dsr_create_instruction_builder(sock);
+    assert(stream->dsr_builder != NULL);
+
+    /* setup response */
+    stream->req.res.status = 200;
+    write_response(stream);
+    h2o_probe_log_response(&stream->req, stream->quic->stream_id);
+    set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_SEND_BODY);
+
+    /* write DATA frame header */
+    write_data_frame_header(stream, stream->req.res.content_length);
+    /* add fake sendvec */
+    h2o_vector_reserve(&stream->req.pool, &stream->sendbuf.vecs, stream->sendbuf.vecs.size + 1);
+    static const h2o_sendvec_callbacks_t sendvec_callbacks = {dsr_fake_flatten};
+    stream->sendbuf.vecs.entries[stream->sendbuf.vecs.size++] =
+        (h2o_sendvec_t){.len = stream->req.res.content_length, .callbacks = &sendvec_callbacks};
+    stream->sendbuf.final_size += stream->req.res.content_length;
+
+    quicly_sendstate_shutdown(&stream->quic->sendstate, stream->sendbuf.final_size);
+
+    quicly_stream_sync_sendbuf(stream->quic, 1);
+    h2o_quic_schedule_timer(&get_conn(stream)->h3.super);
 }
 
 static void handle_control_stream_frame(h2o_http3_conn_t *_conn, uint8_t type, const uint8_t *payload, size_t len)
@@ -1064,7 +1140,7 @@ static void handle_control_stream_frame(h2o_http3_conn_t *_conn, uint8_t type, c
                 goto Fail;
             }
             quicly_stream_t *qs;
-            if ((qs = quicly_get_stream(conn->h3.quic, frame.element)) != NULL) {
+            if ((qs = quicly_get_stream(conn->h3.super.quic, frame.element)) != NULL) {
                 struct st_h2o_http3_server_stream_t *stream = qs->data;
                 assert(stream != NULL);
                 if (h2o_linklist_is_linked(&stream->scheduler.link)) {
@@ -1088,7 +1164,7 @@ static void handle_control_stream_frame(h2o_http3_conn_t *_conn, uint8_t type, c
 
     return;
 Fail:
-    h2o_http3_close_connection(&conn->h3, err, err_desc);
+    h2o_quic_close_connection(&conn->h3.super, err, err_desc);
 }
 
 static int stream_open_cb(quicly_stream_open_t *self, quicly_stream_t *qs)
@@ -1124,10 +1200,26 @@ static int stream_open_cb(quicly_stream_open_t *self, quicly_stream_t *qs)
     stream->proceed_requested = 0;
     stream->proceed_while_sending = 0;
     stream->req_body = NULL;
+    stream->dsr_builder = NULL;
 
     h2o_init_request(&stream->req, &conn->super, NULL);
     stream->req.version = 0x0300;
     stream->req._ostr_top = &stream->ostr_final;
+
+    /* setup dsr, initializing the cached structure if not yet being done */
+    if (conn->dsr_req.base == NULL) {
+        struct sockaddr *local_addr = quicly_get_sockname(conn->h3.super.quic);
+        if (local_addr->sa_family != AF_UNSPEC) {
+            h2o_dsr_req_t dsr_req = {
+                .quic_version = quicly_get_version(conn->h3.super.quic),
+                .cipher = ptls_get_cipher(quicly_get_tls(conn->h3.super.quic))->id,
+            };
+            memcpy(&dsr_req.address.sa, local_addr, quicly_get_socklen(local_addr));
+            conn->dsr_req = h2o_dsr_serialize_req(&dsr_req);
+        }
+    }
+    stream->req.dsr.req = conn->dsr_req;
+    stream->req.dsr.on_upgrade = do_dsr;
 
     stream->quic->data = stream;
     stream->quic->callbacks = &callbacks;
@@ -1262,7 +1354,7 @@ static int scheduler_do_send(quicly_stream_scheduler_t *sched, quicly_conn_t *qc
     struct st_h2o_http3_server_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_conn_t, h3, *quicly_get_data(qc));
     int ret = 0;
 
-    while (quicly_can_send_stream_data(conn->h3.quic, s)) {
+    while (quicly_can_send_stream_data(conn->h3.super.quic, s)) {
         /* The strategy is:
          *
          * 1. dequeue the first active stream
@@ -1285,7 +1377,7 @@ static int scheduler_do_send(quicly_stream_scheduler_t *sched, quicly_conn_t *qc
             }
             assert(i != sizeof(stream_offsets) / sizeof(stream_offsets[0]) && "we should have found one stream");
             /* 2. move to the conn_blocked list if necessary */
-            if (quicly_is_flow_capped(conn->h3.quic) && !quicly_sendstate_can_send(&stream->quic->sendstate, NULL)) {
+            if (quicly_is_flow_capped(conn->h3.super.quic) && !quicly_sendstate_can_send(&stream->quic->sendstate, NULL)) {
                 conn->scheduler.uni.active &= ~(1 << stream->quic->stream_id);
                 conn->scheduler.uni.conn_blocked |= 1 << stream->quic->stream_id;
                 continue;
@@ -1297,7 +1389,7 @@ static int scheduler_do_send(quicly_stream_scheduler_t *sched, quicly_conn_t *qc
             conn->scheduler.uni.active &= ~(1 << stream->quic->stream_id);
             if (quicly_sendstate_can_send(&stream->quic->sendstate, &stream->quic->_send_aux.max_stream_data)) {
                 uint16_t *slot = &conn->scheduler.uni.active;
-                if (quicly_is_flow_capped(conn->h3.quic) && !quicly_sendstate_can_send(&stream->quic->sendstate, NULL))
+                if (quicly_is_flow_capped(conn->h3.super.quic) && !quicly_sendstate_can_send(&stream->quic->sendstate, NULL))
                     slot = &conn->scheduler.uni.conn_blocked;
                 *slot |= 1 << stream->quic->stream_id;
             }
@@ -1311,7 +1403,7 @@ static int scheduler_do_send(quicly_stream_scheduler_t *sched, quicly_conn_t *qc
             struct st_h2o_http3_server_stream_t *stream =
                 H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_stream_t, scheduler.link, anchor->next);
             /* 1. link to the conn_blocked list if necessary */
-            if (quicly_is_flow_capped(conn->h3.quic) && !quicly_sendstate_can_send(&stream->quic->sendstate, NULL)) {
+            if (quicly_is_flow_capped(conn->h3.super.quic) && !quicly_sendstate_can_send(&stream->quic->sendstate, NULL)) {
                 req_scheduler_conn_blocked(conn, stream);
                 continue;
             }
@@ -1328,7 +1420,7 @@ static int scheduler_do_send(quicly_stream_scheduler_t *sched, quicly_conn_t *qc
             }
             /* 5. prepare for next */
             if (quicly_sendstate_can_send(&stream->quic->sendstate, &stream->quic->_send_aux.max_stream_data)) {
-                if (quicly_is_flow_capped(conn->h3.quic) && !quicly_sendstate_can_send(&stream->quic->sendstate, NULL)) {
+                if (quicly_is_flow_capped(conn->h3.super.quic) && !quicly_sendstate_can_send(&stream->quic->sendstate, NULL)) {
                     /* capped by connection-level flow control, move the stream to conn-blocked */
                     req_scheduler_conn_blocked(conn, stream);
                 } else {
@@ -1355,7 +1447,7 @@ static int scheduler_update_state(struct st_quicly_stream_scheduler_t *sched, qu
     enum { DEACTIVATE, ACTIVATE, CONN_BLOCKED } new_state;
 
     if (quicly_sendstate_can_send(&qs->sendstate, &qs->_send_aux.max_stream_data)) {
-        if (quicly_is_flow_capped(conn->h3.quic) && !quicly_sendstate_can_send(&qs->sendstate, NULL)) {
+        if (quicly_is_flow_capped(conn->h3.super.quic) && !quicly_sendstate_can_send(&qs->sendstate, NULL)) {
             new_state = CONN_BLOCKED;
         } else {
             new_state = ACTIVATE;
@@ -1403,13 +1495,14 @@ static int scheduler_update_state(struct st_quicly_stream_scheduler_t *sched, qu
 
 quicly_stream_scheduler_t h2o_http3_server_stream_scheduler = {scheduler_can_send, scheduler_do_send, scheduler_update_state};
 
-static void on_h3_destroy(h2o_http3_conn_t *h3)
+static void on_h3_destroy(h2o_quic_conn_t *h3_)
 {
+    h2o_http3_conn_t *h3 = (h2o_http3_conn_t *)h3_;
     struct st_h2o_http3_server_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_conn_t, h3, h3);
 
     H2O_PROBE_CONN0(H3S_DESTROY, &conn->super);
 
-    assert(quicly_num_streams(conn->h3.quic) == 0);
+    assert(quicly_num_streams(conn->h3.super.quic) == 0);
     assert(conn->num_streams.recv_headers == 0);
     assert(conn->num_streams.req_pending == 0);
     assert(conn->num_streams.send_headers == 0);
@@ -1422,6 +1515,8 @@ static void on_h3_destroy(h2o_http3_conn_t *h3)
 
     if (h2o_timer_is_linked(&conn->timeout))
         h2o_timer_unlink(&conn->timeout);
+    if (conn->dsr_req.base != NULL)
+        free(conn->dsr_req.base);
     h2o_http3_dispose_conn(&conn->h3);
 
     assert(conn->scheduler.reqs.active.smallest_urgency > H2O_ABSPRIO_URGENCY_MAX);
@@ -1472,6 +1567,7 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
     req_scheduler_init(conn);
     conn->scheduler.uni.active = 0;
     conn->scheduler.uni.conn_blocked = 0;
+    conn->dsr_req = h2o_iovec_init(NULL, 0);
 
     /* accept connection */
 #if PICOTLS_USE_DTRACE
@@ -1492,9 +1588,9 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
     ++ctx->super.next_cid.master_id; /* FIXME check overlap */
     h2o_http3_setup(&conn->h3, qconn);
 
-    H2O_PROBE_CONN(H3S_ACCEPT, &conn->super, &conn->super, conn->h3.quic);
+    H2O_PROBE_CONN(H3S_ACCEPT, &conn->super, &conn->super, conn->h3.super.quic);
 
-    h2o_http3_send(&conn->h3);
+    h2o_quic_send(&conn->h3.super);
 
     return &conn->h3;
 }
@@ -1509,4 +1605,4 @@ static int foreach_request(h2o_context_t *ctx, int (*cb)(h2o_req_t *req, void *c
 }
 
 const h2o_protocol_callbacks_t H2O_HTTP3_SERVER_CALLBACKS = {initiate_graceful_shutdown, foreach_request};
-const h2o_http3_conn_callbacks_t H2O_HTTP3_CONN_CALLBACKS = {on_h3_destroy, handle_control_stream_frame};
+const h2o_http3_conn_callbacks_t H2O_HTTP3_CONN_CALLBACKS = {{on_h3_destroy}, handle_control_stream_frame};

@@ -55,6 +55,7 @@ h2o_token_t h2o__tokens[] = {{{H2O_STRLIT(":authority")}, {1, 0, 0, 0, 0, 0, 0, 
                              {{H2O_STRLIT("content-type")}, {31, 0, 0, 0, 0, 0, 0, 1}},
                              {{H2O_STRLIT("cookie")}, {32, 0, 0, 0, 0, 0, 1, 0}},
                              {{H2O_STRLIT("date")}, {33, 0, 0, 0, 0, 0, 0, 1}},
+                             {{H2O_STRLIT("dsr")}, {0, 1, 1, 0, 1, 0, 0, 0}},
                              {{H2O_STRLIT("early-data")}, {0, 0, 0, 0, 0, 0, 0, 0}},
                              {{H2O_STRLIT("etag")}, {34, 0, 0, 0, 0, 0, 0, 0}},
                              {{H2O_STRLIT("expect")}, {35, 0, 0, 1, 0, 0, 0, 1}},
@@ -102,7 +103,7 @@ h2o_token_t h2o__tokens[] = {{{H2O_STRLIT(":authority")}, {1, 0, 0, 0, 0, 0, 0, 
                              {{H2O_STRLIT("x-reproxy-url")}, {0, 0, 0, 0, 0, 0, 0, 0}},
                              {{H2O_STRLIT("x-traffic")}, {0, 0, 0, 0, 0, 0, 0, 0}},
                              {{H2O_STRLIT("x-xss-protection")}, {0, 0, 0, 0, 0, 0, 0, 1}}};
-size_t h2o__num_tokens = 81;
+size_t h2o__num_tokens = 82;
 
 const h2o_hpack_static_table_entry_t h2o_hpack_static_table[61] = {{H2O_TOKEN_AUTHORITY, {H2O_STRLIT("")}},
                                                                    {H2O_TOKEN_METHOD, {H2O_STRLIT("GET")}},
@@ -287,6 +288,10 @@ const h2o_token_t *h2o_lookup_token(const char *name, size_t len)
         case 'e':
             if (memcmp(name, "ag", 2) == 0)
                 return H2O_TOKEN_AGE;
+            break;
+        case 'r':
+            if (memcmp(name, "ds", 2) == 0)
+                return H2O_TOKEN_DSR;
             break;
         }
         break;
@@ -1165,6 +1170,12 @@ int32_t h2o_qpack_lookup_date(h2o_iovec_t value, int *is_exact)
     return 6;
 }
 
+int32_t h2o_qpack_lookup_dsr(h2o_iovec_t value, int *is_exact)
+{
+    *is_exact = 0;
+    return -1;
+}
+
 int32_t h2o_qpack_lookup_early_data(h2o_iovec_t value, int *is_exact)
 {
     if (h2o_memis(value.base, value.len, H2O_STRLIT("1"))) {
@@ -1563,7 +1574,7 @@ int32_t h2o_qpack_lookup_x_xss_protection(h2o_iovec_t value, int *is_exact)
     return 62;
 }
 
-const h2o_qpack_lookup_static_cb h2o_qpack_lookup_static[81] = {h2o_qpack_lookup_authority,
+const h2o_qpack_lookup_static_cb h2o_qpack_lookup_static[82] = {h2o_qpack_lookup_authority,
                                                                 h2o_qpack_lookup_method,
                                                                 h2o_qpack_lookup_path,
                                                                 h2o_qpack_lookup_scheme,
@@ -1597,6 +1608,7 @@ const h2o_qpack_lookup_static_cb h2o_qpack_lookup_static[81] = {h2o_qpack_lookup
                                                                 h2o_qpack_lookup_content_type,
                                                                 h2o_qpack_lookup_cookie,
                                                                 h2o_qpack_lookup_date,
+                                                                h2o_qpack_lookup_dsr,
                                                                 h2o_qpack_lookup_early_data,
                                                                 h2o_qpack_lookup_etag,
                                                                 h2o_qpack_lookup_expect,

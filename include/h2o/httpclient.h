@@ -113,7 +113,7 @@ typedef struct st_h2o_httpclient_ctx_t {
     /**
      * 1-to-(0|1) relationship; NULL when h3 is not used
      */
-    struct st_h2o_http3_ctx_t *http3;
+    struct st_h2o_quic_ctx_t *http3;
 
 } h2o_httpclient_ctx_t;
 
@@ -268,7 +268,7 @@ extern const size_t h2o_httpclient__h2_size;
 
 void h2o_httpclient_connect_h3(h2o_httpclient_t **_client, h2o_mem_pool_t *pool, void *data, h2o_httpclient_ctx_t *ctx,
                                h2o_url_t *target, h2o_httpclient_connect_cb cb);
-void h2o_httpclient_http3_notify_connection_update(h2o_http3_ctx_t *ctx, h2o_http3_conn_t *conn);
+void h2o_httpclient_http3_notify_connection_update(h2o_quic_ctx_t *ctx, h2o_quic_conn_t *conn);
 extern quicly_stream_open_t h2o_httpclient_http3_on_stream_open;
 
 #endif

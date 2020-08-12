@@ -502,6 +502,10 @@
 		E9FF84BC24C5AA47002577CA /* quicly-probes.d in Sources */ = {isa = PBXBuildFile; fileRef = E9FF84BB24C5AA46002577CA /* quicly-probes.d */; };
 		E9FF84BD24C5AA47002577CA /* quicly-probes.d in Sources */ = {isa = PBXBuildFile; fileRef = E9FF84BB24C5AA46002577CA /* quicly-probes.d */; };
 		E9FF84BE24C5AA52002577CA /* quicly-probes.d in Sources */ = {isa = PBXBuildFile; fileRef = E9FF84BB24C5AA46002577CA /* quicly-probes.d */; };
+		E9FF84C724CF987E002577CA /* dsr.h in Headers */ = {isa = PBXBuildFile; fileRef = E9FF84C624CF9811002577CA /* dsr.h */; };
+		E9FF84C924CF9893002577CA /* dsr.c in Sources */ = {isa = PBXBuildFile; fileRef = E9FF84C824CF9893002577CA /* dsr.c */; };
+		E9FF84CA24CF9893002577CA /* dsr.c in Sources */ = {isa = PBXBuildFile; fileRef = E9FF84C824CF9893002577CA /* dsr.c */; };
+		E9FF84CC24CF9958002577CA /* dsr.c in Sources */ = {isa = PBXBuildFile; fileRef = E9FF84CB24CF9958002577CA /* dsr.c */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -1254,6 +1258,9 @@
 		E9F677D82008686B006476D3 /* 40tls13-early-data.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "40tls13-early-data.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		E9FC525C234B0A630076F35D /* 40http3-asroot.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "40http3-asroot.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		E9FF84BB24C5AA46002577CA /* quicly-probes.d */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.dtrace; path = "quicly-probes.d"; sourceTree = "<group>"; };
+		E9FF84C624CF9811002577CA /* dsr.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = dsr.h; sourceTree = "<group>"; };
+		E9FF84C824CF9893002577CA /* dsr.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = dsr.c; sourceTree = "<group>"; };
+		E9FF84CB24CF9958002577CA /* dsr.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = dsr.c; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -1403,6 +1410,7 @@
 				E96A24CE23E6743600CA970A /* absprio.c */,
 				D08137371FD400F4004679DF /* balancer */,
 				10DA969D1CD2BFAC00679165 /* cache.c */,
+				E9FF84C824CF9893002577CA /* dsr.c */,
 				107D4D541B5B30EE004A9B21 /* file.c */,
 				1044812F1BFD10450007863F /* filecache.c */,
 				1058C8891AA6E5E3008D6180 /* hostinfo.c */,
@@ -1479,6 +1487,7 @@
 				E96A24D123E6747500CA970A /* absprio.c */,
 				D081373C1FD40431004679DF /* balancer */,
 				10DA969F1CD2BFEE00679165 /* cache.c */,
+				E9FF84CB24CF9958002577CA /* dsr.c */,
 				10F9F2661AFC5F550056F26B /* hostinfo.c */,
 				10AA2EAD1A8E22DA004322AC /* multithread.c */,
 				104B9A271A4A5139009EEE64 /* serverutil.c */,
@@ -1816,6 +1825,7 @@
 				10DA969B1CD2BF9000679165 /* cache.h */,
 				1024A3FD1D22546800EB13F1 /* cache_digests.h */,
 				105534D71A3C785000627ECB /* configurator.h */,
+				E9FF84C624CF9811002577CA /* dsr.h */,
 				E908A2A923163CB70039BCEE /* ebpf.h */,
 				107D4D521B5B2412004A9B21 /* file.h */,
 				1044812D1BFD0FBE0007863F /* filecache.h */,
@@ -2727,6 +2737,7 @@
 				E901C3E6213E1C3600D17C93 /* ranges.h in Headers */,
 				E98884CA21E7F3AF0060F010 /* sentmap.h in Headers */,
 				E9FB8DC423991D08007BFC59 /* ebpf.h in Headers */,
+				E9FF84C724CF987E002577CA /* dsr.h in Headers */,
 				10A3D3D31B4CDF1200327CF9 /* memcached.h in Headers */,
 				E901C3ED213E1C3600D17C93 /* constants.h in Headers */,
 				08790DE01D8015A400A04BC1 /* sds.h in Headers */,
@@ -3139,6 +3150,7 @@
 				08790DE51D82782900A04BC1 /* redis.c in Sources */,
 				7DE1DB37212B1CC00055F500 /* ssl.c in Sources */,
 				E98884D021E7F3C80060F010 /* sentmap.c in Sources */,
+				E9FF84C924CF9893002577CA /* dsr.c in Sources */,
 				106C23011C0544CE00405689 /* errordoc.c in Sources */,
 				10FCC13E1B2E4A4500F13674 /* cloexec.c in Sources */,
 				105534DF1A3C7B9800627ECB /* proxy.c in Sources */,
@@ -3256,6 +3268,7 @@
 				107D4D4A1B5880BC004A9B21 /* reader.c in Sources */,
 				E980423E22463057008B9745 /* defaults.c in Sources */,
 				1079244819A3265C00C52AD6 /* connection.c in Sources */,
+				E9FF84CC24CF9958002577CA /* dsr.c in Sources */,
 				E9A8351624B13417007D06C2 /* loss.c in Sources */,
 				1079244119A3264300C52AD6 /* picohttpparser.c in Sources */,
 				106530A71D82C0A6005B2C60 /* percent-encode-zero-byte.c in Sources */,
@@ -3417,6 +3430,7 @@
 				E9708B831E52C8560029E0A5 /* cache_digests.c in Sources */,
 				E901C43B213E59A000D17C93 /* qpack.c in Sources */,
 				E9708B7F1E52C8430029E0A5 /* requests.c in Sources */,
+				E9FF84CA24CF9893002577CA /* dsr.c in Sources */,
 				E9708B431E52C7AA0029E0A5 /* picohttpparser.c in Sources */,
 				E9708B671E52C80F0029E0A5 /* status.c in Sources */,
 				08F320E21E7A9CC20038FA5A /* sds.c in Sources */,
