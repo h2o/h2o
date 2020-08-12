@@ -303,6 +303,10 @@ size_t h2o_socket_getnumerichost(struct sockaddr *sa, socklen_t salen, char *buf
  */
 int32_t h2o_socket_getport(struct sockaddr *sa);
 /**
+ * sets the port number. returns zero on success and -1 on failure
+ */
+int h2o_socket_setport(struct sockaddr *sa, uint16_t port_hostorder);
+/**
  * performs SSL handshake on a socket
  * @param sock the socket
  * @param ssl_ctx SSL context
