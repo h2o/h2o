@@ -72,7 +72,7 @@ static void test_encdec(void)
     };
 
     /* encode instructions */
-    h2o_dsr_instruction_builder_t builder = {};
+    h2o_dsr_instruction_builder_t builder = {.sock = (void *)"fake"};
     h2o_linklist_t anchor;
     h2o_dsr_decoded_instruction_t inst;
     ssize_t inst_len;
@@ -80,8 +80,8 @@ static void test_encdec(void)
     h2o_linklist_init_anchor(&anchor);
 
     /* encode a group consisting of one instruction */
-    h2o_dsr_add_instruction(&builder, &anchor, (struct sockaddr *)&dest_addr, &detached, sizeof(prefix) - 1, 0, 256);
-    ok(h2o_linklist_is_linked(&anchor));
+    ok(h2o_dsr_add_instruction(&builder, &anchor, (struct sockaddr *)&dest_addr, &detached, sizeof(prefix) - 1, 0, 256));
+    ok(!h2o_linklist_is_empty(&anchor));
 
     /* decode  */
     inst_len = h2o_dsr_decode_instruction(&inst, (const uint8_t *)builder.buf->bytes, builder.buf->size);
