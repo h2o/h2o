@@ -33,7 +33,6 @@
 #include "h2o/http3_common.h"
 #include "h2o/http3_internal.h"
 #include "h2o/multithread.h"
-#include "h2o.h"
 #include "../probes_.h"
 
 struct st_h2o_http3_ingress_unistream_t {

@@ -1354,7 +1354,8 @@ h2o_iovec_t h2o_socket_ssl_get_selected_protocol(h2o_socket_t *sock)
     const unsigned char *data = NULL;
     unsigned len = 0;
 
-    assert(sock->ssl != NULL);
+    if (sock->ssl == NULL)
+        return h2o_iovec_init(NULL, 0);
 
     if (sock->ssl->ptls != NULL) {
         const char *proto = ptls_get_negotiated_protocol(sock->ssl->ptls);

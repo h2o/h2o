@@ -29,5 +29,11 @@ h2o_iovec_t h2o_file_read(const char *fn);
  * Reads exactly specified bytes from given file descriptor at given offset, and returns if successful.
  */
 int h2o_file_pread_full(int fd, void *_buf, size_t nbyte, off_t off);
+/**
+ * creates a temporary file using the fn_template param.
+ * This is a wrapper to mkstemp(3), but the file is unlinked before returning from the function. Therefore, the name of the file is not provided to the caller.
+ * @return fd. -1 on failure and set errno as mkstemp(3) does.
+ */
+int h2o_file_mktemp(const char *fn_template);
 
 #endif

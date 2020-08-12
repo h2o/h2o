@@ -34,7 +34,8 @@
 #include "picotls.h"
 #include "picotls/openssl.h"
 #include "quicly.h"
-#include "h2o.h"
+#include "h2o/hostinfo.h"
+#include "h2o/httpclient.h"
 #include "h2o/serverutil.h"
 
 #ifndef MIN

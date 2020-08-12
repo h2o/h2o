@@ -83,3 +83,15 @@ int h2o_file_pread_full(int fd, void *_buf, size_t nbyte, off_t off)
 
     return 1;
 }
+
+int h2o_file_mktemp(const char *fn_template)
+{
+    int fd;
+    char *tmpfn = alloca(strlen(fn_template) + 1);
+    strcpy(tmpfn, fn_template);
+    if ((fd = mkstemp(tmpfn)) == -1) {
+        return -1;
+    }
+    unlink(tmpfn);
+    return fd;
+}

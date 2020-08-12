@@ -70,6 +70,7 @@
 #include "h2o/http2.h"
 #include "h2o/http3_server.h"
 #include "h2o/serverutil.h"
+#include "h2o/file.h"
 #if H2O_USE_MRUBY
 #include "h2o/mruby_.h"
 #endif
@@ -3105,6 +3106,17 @@ int main(int argc, char **argv)
         dispose_resolve_tag_arg(&resolve_tag_arg);
         yoml_free(yoml, NULL);
     }
+
+    {
+        int fd = h2o_file_mktemp(h2o_socket_buffer_mmap_settings.fn_template);
+        if (fd == -1) {
+            fprintf(stderr, "temp-buffer-path: failed to create temporary file from the mkstemp(3) template '%s': %s\n",
+                    h2o_socket_buffer_mmap_settings.fn_template, strerror(errno));
+            return EX_CONFIG;
+        }
+        close(fd);
+    }
+
     /* calculate defaults (note: open file cached is purged once every loop) */
     conf.globalconf.filecache.capacity = conf.globalconf.http2.max_concurrent_requests_per_connection * 2;
     if (conf.quic.num_threads == 0) {
