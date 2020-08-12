@@ -102,6 +102,7 @@ struct listener_ssl_config_t {
     char *certificate_file;
     SSL_CTX *ctx;
     h2o_iovec_t *http2_origin_frame;
+    h2o_iovec_t tcp_congestion_controller;
     struct {
         uint64_t interval;
         unsigned max_failures;
@@ -326,6 +327,19 @@ static struct listener_ssl_config_t *resolve_sni(struct listener_config_t *liste
     return listener->ssl.entries[0];
 }
 
+static void set_tcp_congestion_controller(h2o_socket_t *sock, struct listener_ssl_config_t *conf)
+{
+#if defined(TCP_CONGESTION)
+    if (conf->tcp_congestion_controller.base != NULL) {
+        int fd = h2o_socket_get_fd(sock);
+        assert(fd >= 0);
+        if (setsockopt(fd, IPPROTO_TCP, TCP_CONGESTION, conf->tcp_congestion_controller.base,
+                       (socklen_t)conf->tcp_congestion_controller.len) != 0)
+            perror("setsokopt(IPPROTO_TCP, TCP_CONGESTION)");
+    }
+#endif
+}
+
 static int on_sni_callback(SSL *ssl, int *ad, void *arg)
 {
     struct listener_config_t *listener = arg;
@@ -333,8 +347,10 @@ static int on_sni_callback(SSL *ssl, int *ad, void *arg)
 
     if (server_name != NULL) {
         struct listener_ssl_config_t *resolved = resolve_sni(listener, server_name, strlen(server_name));
-        if (resolved->ctx != SSL_get_SSL_CTX(ssl))
+        if (resolved->ctx != SSL_get_SSL_CTX(ssl)) {
             SSL_set_SSL_CTX(ssl, resolved->ctx);
+            set_tcp_congestion_controller(SSL_get_app_data(ssl), resolved);
+        }
     }
 
     return SSL_TLSEXT_ERR_OK;
@@ -357,6 +373,8 @@ static int on_client_hello_ptls(ptls_on_client_hello_t *_self, ptls_t *tls, ptls
         ptls_context_t *newctx = h2o_socket_ssl_get_picotls_context(resolved->ctx);
         ptls_set_context(tls, newctx);
         ptls_set_server_name(tls, (const char *)params->server_name.base, params->server_name.len);
+        if (self->listener->quic.ctx == NULL)
+            set_tcp_congestion_controller(*ptls_get_data_ptr(tls), resolved);
     }
 
     /* handle ALPN */
@@ -718,7 +736,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
     SSL_CTX *ssl_ctx = NULL;
     yoml_t **certificate_file, **key_file, **dh_file, **min_version, **max_version, **cipher_suite, **ocsp_update_cmd,
         **ocsp_update_interval_node, **ocsp_max_failures_node, **cipher_preference_node, **neverbleed_node,
-        **http2_origin_frame_node;
+        **http2_origin_frame_node, **cc_node;
     h2o_iovec_t *http2_origin_frame = NULL;
     long ssl_options = SSL_OP_ALL;
     uint64_t ocsp_update_interval = 4 * 60 * 60; /* defaults to 4 hours */
@@ -744,10 +762,11 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
                                        "min-version:s,minimum-version:s,max-version:s,maximum-version:s,"
                                        "cipher-suite:s,ocsp-update-cmd:s,ocsp-update-interval:*,"
                                        "ocsp-max-failures:*,dh-file:s,cipher-preference:*,neverbleed:*,"
-                                       "http2-origin-frame:*",
+                                       "http2-origin-frame:*,congestion-controller:s",
                                        &certificate_file, &key_file, &min_version, &min_version, &max_version, &max_version,
                                        &cipher_suite, &ocsp_update_cmd, &ocsp_update_interval_node, &ocsp_max_failures_node,
-                                       &dh_file, &cipher_preference_node, &neverbleed_node, &http2_origin_frame_node) != 0)
+                                       &dh_file, &cipher_preference_node, &neverbleed_node, &http2_origin_frame_node,
+                                       &cc_node) != 0)
         return -1;
     if (cipher_preference_node != NULL) {
         switch (h2o_configurator_get_one_of(cmd, *cipher_preference_node, "client,server")) {
@@ -953,6 +972,33 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
     } else if (listener->quic.ctx != NULL) {
         h2o_configurator_errprintf(cmd, *ssl_node, "QUIC support requires TLS 1.3 using picotls");
         goto Error;
+    }
+
+    /* congestion control is a concept of the transport but we want to control it per-host, hence defined here */
+    if (cc_node != NULL) {
+        if (listener->quic.ctx == NULL) {
+            /* TCP; CC name is kept in the SSL config */
+            ssl_config->tcp_congestion_controller = h2o_strdup(NULL, (*cc_node)->data.scalar, SIZE_MAX);
+#if !defined(TCP_CONGESTION)
+            h2o_configurator_errprintf(
+                cmd, *cc_node, "[warning] Setting ignored. TCP congestion controller cannot be set at runtime on this environment");
+#endif
+        } else {
+            /* QUIC; the context is modified directly */
+            if (listener->ssl.size != 0) {
+                h2o_configurator_errprintf(cmd, *cc_node,
+                                           "[warning] Setting ignored. At the moment, only the the first listen entry for a given "
+                                           "address:port tuple can specify the QUIC congestion controller");
+            }
+            if (strcasecmp((*cc_node)->data.scalar, "reno") == 0) {
+                listener->quic.ctx->init_cc = &quicly_cc_reno_init;
+            } else if (strcasecmp((*cc_node)->data.scalar, "cubic") == 0) {
+                listener->quic.ctx->init_cc = &quicly_cc_cubic_init;
+            } else {
+                h2o_configurator_errprintf(cmd, *cc_node, "specified congestion controller is unknown or unspported for QUIC");
+                goto Error;
+            }
+        }
     }
 
     pthread_mutex_init(&ssl_config->dynamic.mutex, NULL);
@@ -2275,6 +2321,11 @@ static void on_accept(h2o_socket_t *listener, const char *err)
 
         sock->on_close.cb = on_socketclose;
         sock->on_close.data = ctx->accept_ctx.ctx;
+
+        if (conf.listeners[ctx->listener_index]->ssl.size != 0) {
+            struct listener_ssl_config_t *sslconf = conf.listeners[ctx->listener_index]->ssl.entries[0];
+            set_tcp_congestion_controller(sock, sslconf);
+        }
 
         h2o_accept(&ctx->accept_ctx, sock);
 
