@@ -23,11 +23,11 @@
 #define H2O_CMD_BUF 1024
 #define H2O_TZ_BUF  32
 
-struct h2o_privsep_watpid {
-    int                 pid;
+struct h2o_privsep_waitpid {
+    pid_t               pid;
     int                 options;
 };
-typedef struct h2o_privsep_watpid h2o_privsep_watpid_t;
+typedef struct h2o_privsep_waitpid h2o_privsep_waitpid_t;
 
 struct h2o_fd_mapping {
     int     type;

@@ -80,7 +80,7 @@ static void privsep_handle_dotime_r(privsep_worker_t *pswd)
 
 static void privsep_handle_waitpid(privsep_worker_t *pswd)
 {
-    h2o_privsep_watpid_t args;
+    h2o_privsep_waitpid_t args;
     int status, ecode;
     pid_t pid;
 
