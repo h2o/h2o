@@ -503,3 +503,13 @@ int h2o_dsr_quic_packet_encryptor_set_context(h2o_dsr_quic_packet_encryptor_t *e
 
     return 1;
 }
+
+void h2o_dsr_encrypt_quic_packet(h2o_dsr_quic_packet_encryptor_t *encryptor, h2o_dsr_decoded_instruction_t *instruction,
+                                 ptls_iovec_t datagram)
+{
+    assert(instruction->type == H2O_DSR_DECODED_INSTRUCTION_SEND_PACKET);
+    encryptor->ctx->crypto_engine->encrypt_packet(encryptor->ctx->crypto_engine, NULL, encryptor->header_protection_ctx,
+                                                  encryptor->aead_ctx, datagram, instruction->data.send_packet._first_byte_at,
+                                                  instruction->data.send_packet._payload_from,
+                                                  instruction->data.send_packet._packet_number, 0);
+}
