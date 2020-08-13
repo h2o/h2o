@@ -759,10 +759,9 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
 
     /* parse */
     if (h2o_configurator_parse_mapping(cmd, *ssl_node, "certificate-file:s,key-file:s",
-                                       "min-version:s,minimum-version:s,max-version:s,maximum-version:s,"
-                                       "cipher-suite:s,ocsp-update-cmd:s,ocsp-update-interval:*,"
-                                       "ocsp-max-failures:*,dh-file:s,cipher-preference:*,neverbleed:*,"
-                                       "http2-origin-frame:*,congestion-controller:s",
+                                       "min-version:s,minimum-version:s,max-version:s,maximum-version:s,cipher-suite:s,"
+                                       "ocsp-update-cmd:s,ocsp-update-interval:*,ocsp-max-failures:*,dh-file:s,cipher-preference:*,"
+                                       "neverbleed:*,http2-origin-frame:*,cc:s",
                                        &certificate_file, &key_file, &min_version, &min_version, &max_version, &max_version,
                                        &cipher_suite, &ocsp_update_cmd, &ocsp_update_interval_node, &ocsp_max_failures_node,
                                        &dh_file, &cipher_preference_node, &neverbleed_node, &http2_origin_frame_node,
