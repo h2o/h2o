@@ -2886,6 +2886,7 @@ static int commit_send_packet(quicly_conn_t *conn, quicly_send_context_t *s, enu
     if (quicly_sentmap_is_open(&conn->egress.loss.sentmap))
         quicly_sentmap_commit(&conn->egress.loss.sentmap, (uint16_t)packet_bytes_in_flight);
 
+    conn->egress.cc.impl->cc_on_sent(&conn->egress.cc, &conn->egress.loss, (uint32_t)packet_bytes_in_flight, conn->stash.now);
     QUICLY_PROBE(PACKET_COMMIT, conn, conn->stash.now, conn->egress.packet_number, s->dst - s->target.first_byte_at,
                  !s->target.ack_eliciting);
     QUICLY_PROBE(QUICTRACE_SENT, conn, conn->stash.now, conn->egress.packet_number, s->dst - s->target.first_byte_at,
@@ -3301,7 +3302,6 @@ int quicly_send_stream(quicly_stream_t *stream, quicly_send_context_t *s)
 
     /* determine if the frame incorporates FIN */
     if (!quicly_sendstate_is_open(&stream->sendstate) && end_off == stream->sendstate.final_size) {
-        assert(end_off + 1 == stream->sendstate.pending.ranges[stream->sendstate.pending.num_ranges - 1].end);
         assert(frame_type_at != NULL);
         is_fin = 1;
         *frame_type_at |= QUICLY_FRAME_TYPE_STREAM_BIT_FIN;
