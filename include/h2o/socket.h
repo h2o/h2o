@@ -275,6 +275,7 @@ ptls_t *h2o_socket_get_ptls(h2o_socket_t *sock);
 /**
  *
  */
+h2o_iovec_t h2o_socket_log_tcp_congestion_controller(h2o_socket_t *sock, h2o_mem_pool_t *pool);
 const char *h2o_socket_get_ssl_protocol_version(h2o_socket_t *sock);
 int h2o_socket_get_ssl_session_reused(h2o_socket_t *sock);
 const char *h2o_socket_get_ssl_cipher(h2o_socket_t *sock);
