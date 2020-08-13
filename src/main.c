@@ -102,7 +102,7 @@ struct listener_ssl_config_t {
     char *certificate_file;
     SSL_CTX *ctx;
     h2o_iovec_t *http2_origin_frame;
-    h2o_iovec_t tcp_congestion_controller;
+    h2o_iovec_t tcp_congestion_controller; /* per-SNI CC */
     struct {
         uint64_t interval;
         unsigned max_failures;
@@ -137,6 +137,7 @@ struct listener_config_t {
         unsigned send_retry : 1;
     } quic;
     int proxy_protocol;
+    h2o_iovec_t tcp_congestion_controller; /* default CC for this address */
 };
 
 struct listener_ctx_t {
@@ -327,14 +328,13 @@ static struct listener_ssl_config_t *resolve_sni(struct listener_config_t *liste
     return listener->ssl.entries[0];
 }
 
-static void set_tcp_congestion_controller(h2o_socket_t *sock, struct listener_ssl_config_t *conf)
+static inline void set_tcp_congestion_controller(h2o_socket_t *sock, h2o_iovec_t cc_name)
 {
 #if defined(TCP_CONGESTION)
-    if (conf->tcp_congestion_controller.base != NULL) {
+    if (cc_name.base != NULL) {
         int fd = h2o_socket_get_fd(sock);
         assert(fd >= 0);
-        if (setsockopt(fd, IPPROTO_TCP, TCP_CONGESTION, conf->tcp_congestion_controller.base,
-                       (socklen_t)conf->tcp_congestion_controller.len) != 0)
+        if (setsockopt(fd, IPPROTO_TCP, TCP_CONGESTION, cc_name.base, (socklen_t)cc_name.len) != 0)
             perror("setsokopt(IPPROTO_TCP, TCP_CONGESTION)");
     }
 #endif
@@ -349,7 +349,7 @@ static int on_sni_callback(SSL *ssl, int *ad, void *arg)
         struct listener_ssl_config_t *resolved = resolve_sni(listener, server_name, strlen(server_name));
         if (resolved->ctx != SSL_get_SSL_CTX(ssl)) {
             SSL_set_SSL_CTX(ssl, resolved->ctx);
-            set_tcp_congestion_controller(SSL_get_app_data(ssl), resolved);
+            set_tcp_congestion_controller(SSL_get_app_data(ssl), resolved->tcp_congestion_controller);
         }
     }
 
@@ -374,7 +374,7 @@ static int on_client_hello_ptls(ptls_on_client_hello_t *_self, ptls_t *tls, ptls
         ptls_set_context(tls, newctx);
         ptls_set_server_name(tls, (const char *)params->server_name.base, params->server_name.len);
         if (self->listener->quic.ctx == NULL)
-            set_tcp_congestion_controller(*ptls_get_data_ptr(tls), resolved);
+            set_tcp_congestion_controller(*ptls_get_data_ptr(tls), resolved->tcp_congestion_controller);
     }
 
     /* handle ALPN */
@@ -731,12 +731,12 @@ static h2o_iovec_t *build_http2_origin_frame(h2o_configurator_command_t *cmd, yo
 }
 
 static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *listen_node,
-                              yoml_t **ssl_node, struct listener_config_t *listener, int listener_is_new)
+                              yoml_t **ssl_node, yoml_t **cc_node, struct listener_config_t *listener, int listener_is_new)
 {
     SSL_CTX *ssl_ctx = NULL;
     yoml_t **certificate_file, **key_file, **dh_file, **min_version, **max_version, **cipher_suite, **ocsp_update_cmd,
         **ocsp_update_interval_node, **ocsp_max_failures_node, **cipher_preference_node, **neverbleed_node,
-        **http2_origin_frame_node, **cc_node;
+        **http2_origin_frame_node;
     h2o_iovec_t *http2_origin_frame = NULL;
     long ssl_options = SSL_OP_ALL;
     uint64_t ocsp_update_interval = 4 * 60 * 60; /* defaults to 4 hours */
@@ -759,13 +759,13 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
 
     /* parse */
     if (h2o_configurator_parse_mapping(cmd, *ssl_node, "certificate-file:s,key-file:s",
-                                       "min-version:s,minimum-version:s,max-version:s,maximum-version:s,cipher-suite:s,"
-                                       "ocsp-update-cmd:s,ocsp-update-interval:*,ocsp-max-failures:*,dh-file:s,cipher-preference:*,"
-                                       "neverbleed:*,http2-origin-frame:*,cc:s",
+                                       "min-version:s,minimum-version:s,max-version:s,maximum-version:s,"
+                                       "cipher-suite:s,ocsp-update-cmd:s,ocsp-update-interval:*,"
+                                       "ocsp-max-failures:*,dh-file:s,cipher-preference:*,neverbleed:*,"
+                                       "http2-origin-frame:*",
                                        &certificate_file, &key_file, &min_version, &min_version, &max_version, &max_version,
                                        &cipher_suite, &ocsp_update_cmd, &ocsp_update_interval_node, &ocsp_max_failures_node,
-                                       &dh_file, &cipher_preference_node, &neverbleed_node, &http2_origin_frame_node,
-                                       &cc_node) != 0)
+                                       &dh_file, &cipher_preference_node, &neverbleed_node, &http2_origin_frame_node) != 0)
         return -1;
     if (cipher_preference_node != NULL) {
         switch (h2o_configurator_get_one_of(cmd, *cipher_preference_node, "client,server")) {
@@ -978,13 +978,9 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
         if (listener->quic.ctx == NULL) {
             /* TCP; CC name is kept in the SSL config */
             ssl_config->tcp_congestion_controller = h2o_strdup(NULL, (*cc_node)->data.scalar, SIZE_MAX);
-#if !defined(TCP_CONGESTION)
-            h2o_configurator_errprintf(
-                cmd, *cc_node, "[warning] Setting ignored. TCP congestion controller cannot be set at runtime on this environment");
-#endif
         } else {
             /* QUIC; the context is modified directly */
-            if (listener->ssl.size != 0) {
+            if (listener->ssl.size > 1) {
                 h2o_configurator_errprintf(cmd, *cc_node,
                                            "[warning] Setting ignored. At the moment, only the the first listen entry for a given "
                                            "address:port tuple can specify the QUIC congestion controller");
@@ -1073,8 +1069,9 @@ static struct listener_config_t *add_listener(int fd, struct sockaddr *addr, soc
         listener->hosts[0] = NULL;
     }
     memset(&listener->ssl, 0, sizeof(listener->ssl));
-    listener->proxy_protocol = proxy_protocol;
     memset(&listener->quic, 0, sizeof(listener->quic));
+    listener->proxy_protocol = proxy_protocol;
+    listener->tcp_congestion_controller = h2o_iovec_init(NULL, 0);
 
     conf.listeners = h2o_mem_realloc(conf.listeners, sizeof(*conf.listeners) * (conf.num_listeners + 1));
     conf.listeners[conf.num_listeners++] = listener;
@@ -1350,7 +1347,7 @@ static void on_http3_conn_destroy(h2o_quic_conn_t *conn)
 static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     const char *hostname = NULL, *servname, *type = "tcp";
-    yoml_t **ssl_node = NULL, **owner_node = NULL, **permission_node = NULL, **quic_node = NULL;
+    yoml_t **ssl_node = NULL, **owner_node = NULL, **permission_node = NULL, **quic_node = NULL, **cc_node = NULL;
     int proxy_protocol = 0;
 
     /* fetch servname (and hostname) */
@@ -1360,9 +1357,10 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
         break;
     case YOML_TYPE_MAPPING: {
         yoml_t **port_node, **host_node, **type_node, **proxy_protocol_node;
-        if (h2o_configurator_parse_mapping(cmd, node, "port:s", "host:s,type:s,owner:s,permission:*,ssl:m,proxy-protocol:*,quic:m",
+        if (h2o_configurator_parse_mapping(cmd, node, "port:s",
+                                           "host:s,type:s,owner:s,permission:*,ssl:m,proxy-protocol:*,quic:m,cc:s",
                                            &port_node, &host_node, &type_node, &owner_node, &permission_node, &ssl_node,
-                                           &proxy_protocol_node, &quic_node) != 0)
+                                           &proxy_protocol_node, &quic_node, &cc_node) != 0)
             return -1;
         servname = (*port_node)->data.scalar;
         if (host_node != NULL)
@@ -1382,6 +1380,9 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
     }
 
     if (strcmp(type, "unix") == 0) {
+
+        if (cc_node != NULL)
+            h2o_configurator_errprintf(cmd, *cc_node, "[warning] cannot set congestion controller for unix socket");
 
         /* unix socket */
         struct sockaddr_un sa;
@@ -1420,7 +1421,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
         } else if (listener->proxy_protocol != proxy_protocol) {
             goto ProxyConflict;
         }
-        if (listener_setup_ssl(cmd, ctx, node, ssl_node, listener, listener_is_new) != 0)
+        if (listener_setup_ssl(cmd, ctx, node, ssl_node, NULL, listener, listener_is_new) != 0)
             return -1;
         if (listener->hosts != NULL && ctx->hostconf != NULL)
             h2o_append_to_null_terminated_list((void *)&listener->hosts, ctx->hostconf);
@@ -1428,6 +1429,11 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
     } else if (strcmp(type, "tcp") == 0) {
 
         /* TCP socket */
+#if !defined(TCP_CONGESTION)
+        if (cc_node != NULL)
+            h2o_configurator_errprintf(
+                cmd, *cc_node, "[warning] Setting ignored. TCP congestion controller cannot be set at runtime on this environment");
+#endif
         struct addrinfo *res, *ai;
         if ((res = resolve_address(cmd, node, SOCK_STREAM, IPPROTO_TCP, hostname, servname)) == NULL)
             return -1;
@@ -1457,12 +1463,14 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                     break;
                 }
                 listener = add_listener(fd, ai->ai_addr, ai->ai_addrlen, ctx->hostconf == NULL, proxy_protocol);
+                if (cc_node != NULL)
+                    listener->tcp_congestion_controller = h2o_strdup(NULL, (*cc_node)->data.scalar, SIZE_MAX);
                 listener_is_new = 1;
             } else if (listener->proxy_protocol != proxy_protocol) {
                 freeaddrinfo(res);
                 goto ProxyConflict;
             }
-            if (listener_setup_ssl(cmd, ctx, node, ssl_node, listener, listener_is_new) != 0) {
+            if (listener_setup_ssl(cmd, ctx, node, ssl_node, cc_node, listener, listener_is_new) != 0) {
                 freeaddrinfo(res);
                 return -1;
             }
@@ -1547,7 +1555,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                 }
                 listener_is_new = 1;
             }
-            if (listener_setup_ssl(cmd, ctx, node, ssl_node, listener, listener_is_new) != 0) {
+            if (listener_setup_ssl(cmd, ctx, node, ssl_node, cc_node, listener, listener_is_new) != 0) {
                 freeaddrinfo(res);
                 return -1;
             }
@@ -2321,10 +2329,7 @@ static void on_accept(h2o_socket_t *listener, const char *err)
         sock->on_close.cb = on_socketclose;
         sock->on_close.data = ctx->accept_ctx.ctx;
 
-        if (conf.listeners[ctx->listener_index]->ssl.size != 0) {
-            struct listener_ssl_config_t *sslconf = conf.listeners[ctx->listener_index]->ssl.entries[0];
-            set_tcp_congestion_controller(sock, sslconf);
-        }
+        set_tcp_congestion_controller(sock, conf.listeners[ctx->listener_index]->tcp_congestion_controller);
 
         h2o_accept(&ctx->accept_ctx, sock);
 
