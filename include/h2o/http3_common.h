@@ -102,12 +102,17 @@ typedef struct st_h2o_http3_priority_update_frame_t {
     h2o_absprio_t priority;
 } h2o_http3_priority_update_frame_t;
 
+typedef struct st_h2o_http3_goaway_frame_t {
+    uint64_t stream_or_push_id;
+} h2o_http3_goaway_frame_t;
+
 #define H2O_HTTP3_PRIORITY_UPDATE_FRAME_CAPACITY (1 /* len */ + 1 /* frame type */ + 8 + sizeof("u=1,i=?0") - 1)
 uint8_t *h2o_http3_encode_priority_update_frame(uint8_t *dst, const h2o_http3_priority_update_frame_t *frame);
 int h2o_http3_decode_priority_update_frame(h2o_http3_priority_update_frame_t *frame, const uint8_t *payload, size_t len,
                                            const char **err_desc);
 size_t h2o_http3_goaway_frame_capacity(quicly_stream_id_t stream_or_push_id);
 uint8_t *h2o_http3_encode_goaway_frame(uint8_t *buff, quicly_stream_id_t stream_or_push_id);
+int h2o_http3_decode_goaway_frame(h2o_http3_goaway_frame_t *frame, const uint8_t *payload, size_t len, const char **err_desc);
 
 typedef h2o_quic_conn_t *(*h2o_quic_accept_cb)(h2o_quic_ctx_t *ctx, quicly_address_t *destaddr, quicly_address_t *srcaddr,
                                                quicly_decoded_packet_t *packet);

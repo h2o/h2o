@@ -75,3 +75,21 @@ uint8_t *h2o_http3_encode_goaway_frame(uint8_t *dst, quicly_stream_id_t stream_o
 
     return dst;
 }
+
+int h2o_http3_decode_goaway_frame(h2o_http3_goaway_frame_t *frame, const uint8_t *payload, size_t len, const char **err_desc)
+{
+    const uint8_t *src = payload, *end = src + len;
+
+    /* quicly_decodev below will reject len == 0 case */
+    if (len > PTLS_ENCODE_QUICINT_CAPACITY)
+        goto Fail;
+
+    if ((frame->stream_or_push_id = quicly_decodev(&src, end)) == UINT64_MAX)
+        goto Fail;
+
+    return 0;
+
+Fail:
+    *err_desc = "Invalid GOAWAY frame";
+    return H2O_HTTP3_ERROR_FRAME;
+}
