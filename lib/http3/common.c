@@ -1168,3 +1168,12 @@ void h2o_http3_send_qpack_header_ack(h2o_http3_conn_t *conn, const void *bytes, 
     h2o_buffer_append(&stream->sendbuf, bytes, len);
     H2O_HTTP3_CHECK_SUCCESS(quicly_stream_sync_sendbuf(stream->quic, 1));
 }
+
+void h2o_http3_send_goaway_frame(h2o_http3_conn_t *conn, uint64_t stream_or_push_id)
+{
+    size_t cap = h2o_http3_goaway_frame_capacity(stream_or_push_id);
+    h2o_iovec_t alloced = h2o_buffer_reserve(&conn->_control_streams.egress.control->sendbuf, cap);
+    h2o_http3_encode_goaway_frame((uint8_t *)alloced.base, stream_or_push_id);
+    conn->_control_streams.egress.control->sendbuf->size += cap;
+    quicly_stream_sync_sendbuf(conn->_control_streams.egress.control->quic, 1);
+}
