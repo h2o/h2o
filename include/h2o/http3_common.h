@@ -200,6 +200,16 @@ typedef struct st_h2o_quic_conn_callbacks_t {
     void (*destroy_connection)(h2o_quic_conn_t *conn);
 } h2o_quic_conn_callbacks_t;
 
+/**
+ * states of an HTTP/3 connection (not stream)
+ * mainly to see if a new request can be accepted
+ */
+typedef enum enum_h2o_http3_conn_state_t {
+    H2O_HTTP3_CONN_STATE_OPEN,        /* accepting new connections */
+    H2O_HTTP3_CONN_STATE_HALF_CLOSED, /* no more accepting new streams */
+    H2O_HTTP3_CONN_STATE_IS_CLOSING   /* nothing should be sent */
+} h2o_http3_conn_state_t;
+
 struct st_h2o_quic_conn_t {
     /**
      * context
@@ -233,6 +243,10 @@ struct st_h2o_http3_conn_t {
      *
      */
     h2o_quic_conn_t super;
+    /**
+     * connection state
+     */
+    h2o_http3_conn_state_t state;
     /**
      * QPACK states
      */

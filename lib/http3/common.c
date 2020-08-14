@@ -1024,6 +1024,7 @@ int h2o_http3_setup(h2o_http3_conn_t *conn, quicly_conn_t *quic)
     int ret;
 
     h2o_quic_setup(&conn->super, quic);
+    conn->state = H2O_HTTP3_CONN_STATE_OPEN;
 
     /* setup h3 objects, only when the connection state has been created */
     if (quicly_get_state(quic) > QUICLY_STATE_CONNECTED)
