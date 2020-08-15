@@ -36,7 +36,7 @@ static void reno_on_acked(quicly_cc_t *cc, const quicly_loss_t *loss, uint32_t b
 
     /* Slow start. */
     if (cc->cwnd < cc->ssthresh) {
-        cc->cwnd += bytes;
+        cc->cwnd += (bytes * (loss->conf->ssratio - 1024)) / 1024;
         if (cc->cwnd_maximum < cc->cwnd)
             cc->cwnd_maximum = cc->cwnd;
         return;

@@ -49,6 +49,10 @@ typedef struct quicly_loss_conf_t {
      * Number of speculative PTOs at the end of a window. This must not be set to more than 3.
      */
     uint8_t num_speculative_ptos;
+    /**
+     * increase ratio during slow start, multiplied by 1024; defaults to 2048 (i.e. 2x)
+     */
+    uint32_t ssratio;
 } quicly_loss_conf_t;
 
 #define QUICLY_LOSS_DEFAULT_TIME_REORDERING_PERCENTILE (1024 / 8)
@@ -58,7 +62,8 @@ typedef struct quicly_loss_conf_t {
         QUICLY_LOSS_DEFAULT_TIME_REORDERING_PERCENTILE, /* time_reordering_percentile */                                           \
             QUICLY_DEFAULT_MIN_PTO,                     /* min_pto */                                                              \
             QUICLY_DEFAULT_INITIAL_RTT,                 /* initial_rtt */                                                          \
-            0                                           /* number of speculative PTOs */                                           \
+            0,                                          /* number of speculative PTOs */                                           \
+            2048,                                       /* ssratio */                                                              \
     }
 
 #define QUICLY_LOSS_PERFORMANT_CONF                                                                                                \
@@ -66,7 +71,8 @@ typedef struct quicly_loss_conf_t {
         QUICLY_LOSS_DEFAULT_TIME_REORDERING_PERCENTILE, /* time_reordering_percentile */                                           \
             QUICLY_DEFAULT_MIN_PTO,                     /* min_pto */                                                              \
             QUICLY_DEFAULT_INITIAL_RTT,                 /* initial_rtt */                                                          \
-            2                                           /* number of speculative PTOs */                                           \
+            2,                                          /* number of speculative PTOs */                                           \
+            2048,                                       /* ssratio */                                                              \
     }
 
 /**
