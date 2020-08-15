@@ -31,6 +31,7 @@
 #include <getopt.h>
 #include <inttypes.h>
 #include <limits.h>
+#include <math.h>
 #include <netdb.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
@@ -1523,9 +1524,9 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                 listener = add_listener(fd, ai->ai_addr, ai->ai_addrlen, ctx->hostconf == NULL, 0);
                 listener->quic.ctx = quic;
                 if (quic_node != NULL) {
-                    yoml_t **retry_node, **sndbuf, **rcvbuf, **amp_limit;
-                    if (h2o_configurator_parse_mapping(cmd, *quic_node, NULL, "retry:s,sndbuf:s,rcvbuf:s,amp-limit:s", &retry_node,
-                                                       &sndbuf, &rcvbuf, &amp_limit) != 0)
+                    yoml_t **retry_node, **sndbuf, **rcvbuf, **amp_limit, **ss_ratio;
+                    if (h2o_configurator_parse_mapping(cmd, *quic_node, NULL, "retry:s,sndbuf:s,rcvbuf:s,amp-limit:s, ss-ratio:s",
+                                                       &retry_node, &sndbuf, &rcvbuf, &amp_limit, &ss_ratio) != 0)
                         return -1;
                     if (retry_node != NULL) {
                         ssize_t on = h2o_configurator_get_one_of(cmd, *retry_node, "OFF,ON");
@@ -1551,6 +1552,16 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                         if (h2o_configurator_scanf(cmd, *amp_limit, "%" SCNu16,
                                                    &listener->quic.ctx->pre_validation_amplification_limit) != 0)
                             return -1;
+                    }
+                    if (ss_ratio != NULL) {
+                        double ratio;
+                        if (h2o_configurator_scanf(cmd, *ss_ratio, "%lf", &ratio) != 0)
+                            return -1;
+                        if (isnan(ratio) || isinf(ratio) || ratio < 1) {
+                            h2o_configurator_errprintf(cmd, *ss_ratio, "ss-ratio must be a number no less than 1");
+                            return -1;
+                        }
+                        listener->quic.ctx->loss.ssratio = (uint32_t)((ratio + 0.5) / 1024);
                     }
                 }
                 listener_is_new = 1;
