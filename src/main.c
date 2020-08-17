@@ -812,7 +812,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
         }
     }
     if (ocsp_update_interval_node != NULL) {
-        if (h2o_configurator_scanf(cmd, *ocsp_update_interval_node, "%" PRIu64, &ocsp_update_interval) != 0)
+        if (h2o_configurator_scanf(cmd, *ocsp_update_interval_node, "%" SCNu64, &ocsp_update_interval) != 0)
             goto Error;
     }
     if (ocsp_max_failures_node != NULL) {
@@ -1695,7 +1695,7 @@ static int configure_quic_forward_node(h2o_configurator_command_t *cmd, struct s
     target->fd = -1;
 
     /* parse key */
-    if (h2o_configurator_scanf(cmd, input->key, "%" PRIu64, &target->id) != 0)
+    if (h2o_configurator_scanf(cmd, input->key, "%" SCNu64, &target->id) != 0)
         goto Exit;
 
     { /* convert value to hostname and servname */
@@ -1740,7 +1740,7 @@ static int on_config_quic_nodes(h2o_configurator_command_t *cmd, h2o_configurato
         return -1;
 
     /* obtain node-id of this server */
-    if (h2o_configurator_scanf(cmd, *self_node, "%" PRIu64, &conf.quic.node_id) != 0)
+    if (h2o_configurator_scanf(cmd, *self_node, "%" SCNu64, &conf.quic.node_id) != 0)
         return -1;
 
     /* build list of servers */
