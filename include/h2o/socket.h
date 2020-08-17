@@ -362,7 +362,8 @@ void h2o_ssl_register_alpn_protocols(SSL_CTX *ctx, const h2o_iovec_t *protocols)
  */
 void h2o_ssl_register_npn_protocols(SSL_CTX *ctx, const char *protocols);
 /**
- * sets the DF bit if possible, and returns if operation was successful
+ * Sets the DF bit if possible. Returns true when the operation was succcessful, or when the operating system does not provide the
+ * necessary features. In either case, operation can continue with or without the DF bit being set.
  */
 int h2o_socket_set_df_bit(int fd, int domain);
 /**
