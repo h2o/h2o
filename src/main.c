@@ -1134,7 +1134,7 @@ ErrorExit:
 }
 
 /**
- * Opens a socket for accepting connections. When the protocol is UDP, SO_REUSEPORT is set if available.
+ * Opens an INET or INET6 socket for accepting connections. When the protocol is UDP, SO_REUSEPORT is set if available.
  */
 static int open_listener(int domain, int type, int protocol, struct sockaddr *addr, socklen_t addrlen)
 {
@@ -1143,27 +1143,40 @@ static int open_listener(int domain, int type, int protocol, struct sockaddr *ad
     if ((fd = socket(domain, type, protocol)) == -1)
         goto Error;
     set_cloexec(fd);
-    /* if the socket is TCP, set SO_REUSEADDR flag to avoid TIME_WAIT after shutdown */
-    if (type == SOCK_STREAM) {
-        int flag = 1;
-        if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &flag, sizeof(flag)) != 0)
-            goto Error;
-    }
+
+    /* set SO_*, IP_* options */
 #ifdef IPV6_V6ONLY
-    /* set IPv6only */
     if (domain == AF_INET6) {
         int flag = 1;
-        if (setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY, &flag, sizeof(flag)) != 0)
+        if (setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY, &flag, sizeof(flag)) != 0) {
+            perror("setsockopt(IPV6_V6ONLY) failed");
             goto Error;
+        }
     }
 #endif
+    switch (type) {
+    case SOCK_STREAM: {
+        /* TCP: set SO_REUSEADDR flag to avoid TIME_WAIT after shutdown */
+        int on = 1;
+        if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on)) != 0)
+            goto Error;
+    } break;
+    case SOCK_DGRAM: {
+        /* UDP: set SO_REUSEPORT and DF bit */
 #if H2O_HTTP3_USE_REUSEPORT
-    {
-        int flag = 1;
-        if (setsockopt(fd, SOL_SOCKET, H2O_SO_REUSEPORT, &flag, sizeof(flag)) != 0)
+        int opt = 1;
+        if (setsockopt(fd, SOL_SOCKET, H2O_SO_REUSEPORT, &opt, sizeof(opt)) != 0)
             fprintf(stderr, "[warning] setsockopt(SO_REUSEPORT) failed:%s\n", strerror(errno));
-    }
 #endif
+        if (!h2o_socket_set_df_bit(fd, domain))
+            goto Error;
+    } break;
+    default:
+        h2o_fatal("unexpected socket type %d", type);
+        break;
+    }
+
+    /* bind */
     if (bind(fd, addr, addrlen) != 0)
         goto Error;
 

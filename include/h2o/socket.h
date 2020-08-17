@@ -362,6 +362,10 @@ void h2o_ssl_register_alpn_protocols(SSL_CTX *ctx, const h2o_iovec_t *protocols)
  */
 void h2o_ssl_register_npn_protocols(SSL_CTX *ctx, const char *protocols);
 /**
+ * sets the DF bit if possible, and returns if operation was successful
+ */
+int h2o_socket_set_df_bit(int fd, int domain);
+/**
  * helper to check if socket the socket is target of tracing
  */
 static int h2o_socket_skip_tracing(h2o_socket_t *sock);
