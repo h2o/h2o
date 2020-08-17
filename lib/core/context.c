@@ -176,6 +176,8 @@ void h2o_context_request_shutdown(h2o_context_t *ctx)
         ctx->globalconf->http1.callbacks.request_shutdown(ctx);
     if (ctx->globalconf->http2.callbacks.request_shutdown != NULL)
         ctx->globalconf->http2.callbacks.request_shutdown(ctx);
+    if (ctx->globalconf->http3.callbacks.request_shutdown != NULL)
+        ctx->globalconf->http3.callbacks.request_shutdown(ctx);
 }
 
 void h2o_context_update_timestamp_string_cache(h2o_context_t *ctx)
