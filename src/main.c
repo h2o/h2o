@@ -1133,7 +1133,10 @@ ErrorExit:
     return -1;
 }
 
-static int open_listener(int domain, int type, int protocol, struct sockaddr *addr, socklen_t addrlen, int reuseport)
+/**
+ * Opens a socket for accepting connections. When the protocol is UDP, SO_REUSEPORT is set if available.
+ */
+static int open_listener(int domain, int type, int protocol, struct sockaddr *addr, socklen_t addrlen)
 {
     int fd;
 
@@ -1154,13 +1157,13 @@ static int open_listener(int domain, int type, int protocol, struct sockaddr *ad
             goto Error;
     }
 #endif
-    if (reuseport) {
 #if H2O_HTTP3_USE_REUSEPORT
+    {
         int flag = 1;
         if (setsockopt(fd, SOL_SOCKET, H2O_SO_REUSEPORT, &flag, sizeof(flag)) != 0)
             fprintf(stderr, "[warning] setsockopt(SO_REUSEPORT) failed:%s\n", strerror(errno));
-#endif
     }
+#endif
     if (bind(fd, addr, addrlen) != 0)
         goto Error;
 
@@ -1203,11 +1206,11 @@ Error:
 }
 
 static int open_inet_listener(h2o_configurator_command_t *cmd, yoml_t *node, const char *hostname, const char *servname, int domain,
-                              int type, int protocol, struct sockaddr *addr, socklen_t addrlen, int reuseport)
+                              int type, int protocol, struct sockaddr *addr, socklen_t addrlen)
 {
     int fd;
 
-    if ((fd = open_listener(domain, type, protocol, addr, addrlen, reuseport)) == -1)
+    if ((fd = open_listener(domain, type, protocol, addr, addrlen)) == -1)
         h2o_configurator_errprintf(cmd, node, "failed to listen to %s port %s:%s: %s", protocol == IPPROTO_TCP ? "TCP" : "UDP",
                                    hostname != NULL ? hostname : "ANY", servname, strerror(errno));
 
@@ -1402,7 +1405,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                         }
                     } else {
                         if ((fd = open_inet_listener(cmd, node, hostname, servname, ai->ai_family, ai->ai_socktype, ai->ai_protocol,
-                                                     ai->ai_addr, ai->ai_addrlen, 0)) == -1) {
+                                                     ai->ai_addr, ai->ai_addrlen)) == -1) {
                             freeaddrinfo(res);
                             return -1;
                         }
@@ -1451,7 +1454,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                             return -1;
                         }
                     } else if ((fd = open_inet_listener(cmd, node, hostname, servname, ai->ai_family, ai->ai_socktype,
-                                                        ai->ai_protocol, ai->ai_addr, ai->ai_addrlen, 1)) == -1) {
+                                                        ai->ai_protocol, ai->ai_addr, ai->ai_addrlen)) == -1) {
                         freeaddrinfo(res);
                         return -1;
                     }
@@ -2485,7 +2488,7 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
                     perror("failed to obtain local address of the listening QUIC socket");
                     abort();
                 }
-                if ((fd = open_listener(ss.ss_family, SOCK_DGRAM, 0, (struct sockaddr *)&ss, sslen, 1)) != -1) {
+                if ((fd = open_listener(ss.ss_family, SOCK_DGRAM, 0, (struct sockaddr *)&ss, sslen)) != -1) {
                     setsockopt_recvpktinfo(fd, ss.ss_family);
                 } else {
                     reuseport = 0;
