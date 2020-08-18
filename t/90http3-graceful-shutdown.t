@@ -85,7 +85,7 @@ EOT
 	} else {
 		exec(
 			qw(unbuffer dtrace -p), $client_pid, "-n", <<'EOT',
-:h2o::h3_frame_receive {
+:h2o-httpclient::h3_frame_receive {
 	if (arg0 == 7) {
 		printf("\nXXXXH3 GOAWAY frame received: len=%d\n", arg2);
 	}
