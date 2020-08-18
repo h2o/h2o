@@ -97,8 +97,7 @@ EOT
 }
 
 # wait until bpftrace and the trace log becomes ready
-my $read_trace;
-$read_trace = get_tracer($tracer_pid, "$tempdir/trace.out");
+my $read_trace = get_tracer($tracer_pid, "$tempdir/trace.out");
 if ($^O eq 'linux') {
     while ($read_trace->() eq '') {
         sleep 1;
