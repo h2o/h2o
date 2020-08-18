@@ -408,6 +408,13 @@ struct st_h2o_globalconf_t {
     } http2;
 
     struct {
+        /**
+         * idle timeout (in milliseconds)
+         */
+        uint64_t idle_timeout;
+        /**
+         * the callbacks
+         */
         h2o_protocol_callbacks_t callbacks;
     } http3;
 

@@ -564,6 +564,11 @@ static int on_config_http2_casper(h2o_configurator_command_t *cmd, h2o_configura
     return 0;
 }
 
+static int on_config_http3_idle_timeout(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    return config_timeout(cmd, node, &ctx->globalconf->http3.idle_timeout);
+}
+
 static int assert_is_mimetype(h2o_configurator_command_t *cmd, yoml_t *node)
 {
     if (node->type != YOML_TYPE_SCALAR) {
@@ -990,6 +995,9 @@ void h2o_configurator__init_core(h2o_globalconf_t *conf)
                                         on_config_http2_allow_cross_origin_push);
         h2o_configurator_define_command(&c->super, "http2-casper", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST,
                                         on_config_http2_casper);
+        h2o_configurator_define_command(&c->super, "http3-idle-timeout",
+                                        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                        on_config_http3_idle_timeout);
         h2o_configurator_define_command(&c->super, "file.mime.settypes",
                                         (H2O_CONFIGURATOR_FLAG_ALL_LEVELS & ~H2O_CONFIGURATOR_FLAG_EXTENSION) |
                                             H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING,
