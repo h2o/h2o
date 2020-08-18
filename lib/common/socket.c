@@ -1437,6 +1437,42 @@ void h2o_ssl_register_npn_protocols(SSL_CTX *ctx, const char *protocols)
 
 #endif
 
+int h2o_socket_set_df_bit(int fd, int domain)
+{
+#define SETSOCKOPT(ip, optname, _optvar)                                                                                           \
+    do {                                                                                                                           \
+        int optvar = _optvar;                                                                                                      \
+        if (setsockopt(fd, ip, optname, &optvar, sizeof(optvar)) != 0) {                                                           \
+            perror("setsockopt(" H2O_TO_STR(optname) ")");                                                                         \
+            return 0;                                                                                                              \
+        }                                                                                                                          \
+        return 1;                                                                                                                  \
+    } while (0)
+
+    switch (domain) {
+    case AF_INET:
+#if defined(IP_PMTUDISC_DO)
+        SETSOCKOPT(IPPROTO_IP, IP_MTU_DISCOVER, IP_PMTUDISC_DO);
+#elif defined(IP_DONTFRAG)
+        SETSOCKOPT(IPPROTO_IP, IP_DONTFRAG, 1);
+#endif
+        break;
+    case AF_INET6:
+#if defined(IPV6_PMTUDISC_DO)
+        SETSOCKOPT(IPPROTO_IPV6, IPV6_MTU_DISCOVER, IPV6_PMTUDISC_DO);
+#elif defined(IPV6_DONTFRAG)
+        SETSOCKOPT(IPPROTO_IPV6, IPV6_DONTFRAG, 1);
+#endif
+        break;
+    default:
+        break;
+    }
+
+    return 1;
+
+#undef SETSOCKOPT
+}
+
 void h2o_sliding_counter_stop(h2o_sliding_counter_t *counter, uint64_t now)
 {
     uint64_t elapsed;

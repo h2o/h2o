@@ -1133,34 +1133,50 @@ ErrorExit:
     return -1;
 }
 
-static int open_listener(int domain, int type, int protocol, struct sockaddr *addr, socklen_t addrlen, int reuseport)
+/**
+ * Opens an INET or INET6 socket for accepting connections. When the protocol is UDP, SO_REUSEPORT is set if available.
+ */
+static int open_listener(int domain, int type, int protocol, struct sockaddr *addr, socklen_t addrlen)
 {
     int fd;
 
     if ((fd = socket(domain, type, protocol)) == -1)
         goto Error;
     set_cloexec(fd);
-    /* if the socket is TCP, set SO_REUSEADDR flag to avoid TIME_WAIT after shutdown */
-    if (type == SOCK_STREAM) {
-        int flag = 1;
-        if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &flag, sizeof(flag)) != 0)
-            goto Error;
-    }
+
+    /* set SO_*, IP_* options */
 #ifdef IPV6_V6ONLY
-    /* set IPv6only */
     if (domain == AF_INET6) {
         int flag = 1;
-        if (setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY, &flag, sizeof(flag)) != 0)
+        if (setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY, &flag, sizeof(flag)) != 0) {
+            perror("setsockopt(IPV6_V6ONLY) failed");
             goto Error;
+        }
     }
 #endif
-    if (reuseport) {
+    switch (type) {
+    case SOCK_STREAM: {
+        /* TCP: set SO_REUSEADDR flag to avoid TIME_WAIT after shutdown */
+        int on = 1;
+        if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on)) != 0)
+            goto Error;
+    } break;
+    case SOCK_DGRAM: {
+        /* UDP: set SO_REUSEPORT and DF bit */
 #if H2O_HTTP3_USE_REUSEPORT
-        int flag = 1;
-        if (setsockopt(fd, SOL_SOCKET, H2O_SO_REUSEPORT, &flag, sizeof(flag)) != 0)
+        int opt = 1;
+        if (setsockopt(fd, SOL_SOCKET, H2O_SO_REUSEPORT, &opt, sizeof(opt)) != 0)
             fprintf(stderr, "[warning] setsockopt(SO_REUSEPORT) failed:%s\n", strerror(errno));
 #endif
+        if (!h2o_socket_set_df_bit(fd, domain))
+            goto Error;
+    } break;
+    default:
+        h2o_fatal("unexpected socket type %d", type);
+        break;
     }
+
+    /* bind */
     if (bind(fd, addr, addrlen) != 0)
         goto Error;
 
@@ -1203,11 +1219,11 @@ Error:
 }
 
 static int open_inet_listener(h2o_configurator_command_t *cmd, yoml_t *node, const char *hostname, const char *servname, int domain,
-                              int type, int protocol, struct sockaddr *addr, socklen_t addrlen, int reuseport)
+                              int type, int protocol, struct sockaddr *addr, socklen_t addrlen)
 {
     int fd;
 
-    if ((fd = open_listener(domain, type, protocol, addr, addrlen, reuseport)) == -1)
+    if ((fd = open_listener(domain, type, protocol, addr, addrlen)) == -1)
         h2o_configurator_errprintf(cmd, node, "failed to listen to %s port %s:%s: %s", protocol == IPPROTO_TCP ? "TCP" : "UDP",
                                    hostname != NULL ? hostname : "ANY", servname, strerror(errno));
 
@@ -1402,7 +1418,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                         }
                     } else {
                         if ((fd = open_inet_listener(cmd, node, hostname, servname, ai->ai_family, ai->ai_socktype, ai->ai_protocol,
-                                                     ai->ai_addr, ai->ai_addrlen, 0)) == -1) {
+                                                     ai->ai_addr, ai->ai_addrlen)) == -1) {
                             freeaddrinfo(res);
                             return -1;
                         }
@@ -1451,7 +1467,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                             return -1;
                         }
                     } else if ((fd = open_inet_listener(cmd, node, hostname, servname, ai->ai_family, ai->ai_socktype,
-                                                        ai->ai_protocol, ai->ai_addr, ai->ai_addrlen, 1)) == -1) {
+                                                        ai->ai_protocol, ai->ai_addr, ai->ai_addrlen)) == -1) {
                         freeaddrinfo(res);
                         return -1;
                     }
@@ -2485,7 +2501,7 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
                     perror("failed to obtain local address of the listening QUIC socket");
                     abort();
                 }
-                if ((fd = open_listener(ss.ss_family, SOCK_DGRAM, 0, (struct sockaddr *)&ss, sslen, 1)) != -1) {
+                if ((fd = open_listener(ss.ss_family, SOCK_DGRAM, 0, (struct sockaddr *)&ss, sslen)) != -1) {
                     setsockopt_recvpktinfo(fd, ss.ss_family);
                 } else {
                     reuseport = 0;
