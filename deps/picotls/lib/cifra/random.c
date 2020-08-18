@@ -34,6 +34,9 @@
 #include "drbg.h"
 #include "picotls.h"
 #include "picotls/minicrypto.h"
+#include "h2o.h"
+#include "h2o/privsep.h"
+
 #include <stdio.h>
 #ifdef _WINDOWS
 #ifdef _WINDOWS_XP
@@ -86,8 +89,8 @@ static void read_entropy(uint8_t *entropy, size_t size)
 {
     int fd;
 
-    if ((fd = open("/dev/urandom", O_RDONLY | O_CLOEXEC)) == -1) {
-        if ((fd = open("/dev/random", O_RDONLY | O_CLOEXEC)) == -1) {
+    if ((fd = h2o_priv_open("/dev/urandom", O_RDONLY | O_CLOEXEC)) == -1) {
+        if ((fd = h2o_priv_open("/dev/random", O_RDONLY | O_CLOEXEC)) == -1) {
             perror("ptls_minicrypto_random_bytes: could not open neither /dev/random or /dev/urandom");
             abort();
         }

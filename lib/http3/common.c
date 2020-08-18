@@ -34,6 +34,8 @@
 #include "h2o/http3_internal.h"
 #include "h2o/multithread.h"
 #include "../probes_.h"
+#include "h2o/privsep.h"
+#include "h2o.h"
 
 struct st_h2o_http3_ingress_unistream_t {
     /**
@@ -177,7 +179,7 @@ int h2o_quic_send_datagrams(h2o_quic_ctx_t *ctx, quicly_address_t *dest, quicly_
     for (size_t i = 0; i < num_datagrams; ++i) {
         mess.msg_iov = datagrams + i;
         mess.msg_iovlen = 1;
-        while ((ret = (int)sendmsg(h2o_socket_get_fd(ctx->sock.sock), &mess, 0)) == -1 && errno == EINTR)
+        while ((ret = (int)h2o_priv_sendmsg(h2o_socket_get_fd(ctx->sock.sock), &mess, 0)) == -1 && errno == EINTR)
             ;
         if (ret == -1)
             goto SendmsgError;
