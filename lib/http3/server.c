@@ -75,6 +75,7 @@ struct st_h2o_http3_server_conn_t {
     h2o_conn_t super;
     h2o_http3_conn_t h3;
     ptls_handshake_properties_t handshake_properties;
+    h2o_linklist_t _conns; /* linklist to h2o_context_t::http3._conns */
     /**
      * link-list of pending requests using st_h2o_http3_server_stream_t::link
      */
@@ -1421,6 +1422,8 @@ static void on_h3_destroy(h2o_quic_conn_t *h3_)
     assert(h2o_linklist_is_empty(&conn->delayed_streams.req_streaming));
     assert(h2o_linklist_is_empty(&conn->delayed_streams.pending));
 
+    h2o_linklist_unlink(&conn->_conns);
+
     if (h2o_timer_is_linked(&conn->timeout))
         h2o_timer_unlink(&conn->timeout);
     h2o_http3_dispose_conn(&conn->h3);
@@ -1473,6 +1476,8 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
     req_scheduler_init(conn);
     conn->scheduler.uni.active = 0;
     conn->scheduler.uni.conn_blocked = 0;
+    memset(&conn->_conns, 0, sizeof(conn->_conns));
+    h2o_linklist_insert(&ctx->accept_ctx->ctx->http3._conns, &conn->_conns);
 
     /* accept connection */
 #if PICOTLS_USE_DTRACE
@@ -1500,8 +1505,70 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
     return &conn->h3;
 }
 
+static void graceful_shutdown_close_stragglers(h2o_timer_t *entry)
+{
+    h2o_context_t *ctx = H2O_STRUCT_FROM_MEMBER(h2o_context_t, http3._graceful_shutdown_timeout, entry);
+    h2o_linklist_t *node, *next;
+
+    /* We've sent two GOAWAY frames, close the remaining connections */
+    for (node = ctx->http3._conns.next; node != &ctx->http3._conns; node = next) {
+        struct st_h2o_http3_server_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_conn_t, _conns, node);
+        next = node->next;
+        h2o_quic_close_connection(&conn->h3.super, 0, "shutting down");
+    }
+}
+
+static void graceful_shutdown_resend_goaway(h2o_timer_t *entry)
+{
+    h2o_context_t *ctx = H2O_STRUCT_FROM_MEMBER(h2o_context_t, http3._graceful_shutdown_timeout, entry);
+    h2o_linklist_t *node;
+    int do_close_stragglers = 0;
+
+    /* HTTP/3 draft section 5.2.8 --
+     * "After allowing time for any in-flight requests or pushes to arrive, the endpoint can send another GOAWAY frame
+     * indicating which requests or pushes it might accept before the end of the connection.
+     * This ensures that a connection can be cleanly shut down without losing requests. */
+    for (node = ctx->http3._conns.next; node != &ctx->http3._conns; node = node->next) {
+        struct st_h2o_http3_server_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_conn_t, _conns, node);
+        if (conn->h3.state < H2O_HTTP3_CONN_STATE_HALF_CLOSED && quicly_get_state(conn->h3.super.quic) == QUICLY_STATE_CONNECTED) {
+            quicly_stream_id_t max_stream_id = quicly_get_remote_next_stream_id(conn->h3.super.quic, 0 /* == bidi */) - 4;
+            h2o_http3_send_goaway_frame(&conn->h3, max_stream_id);
+            conn->h3.state = H2O_HTTP3_CONN_STATE_HALF_CLOSED;
+            do_close_stragglers = 1;
+        }
+    }
+
+    /* After waiting a second, we still had active connections. If configured, wait one
+     * final timeout before closing the connections */
+    if (do_close_stragglers && ctx->globalconf->http3.graceful_shutdown_timeout > 0) {
+        ctx->http3._graceful_shutdown_timeout.cb = graceful_shutdown_close_stragglers;
+        h2o_timer_link(ctx->loop, ctx->globalconf->http3.graceful_shutdown_timeout, &ctx->http3._graceful_shutdown_timeout);
+    }
+}
+
 static void initiate_graceful_shutdown(h2o_context_t *ctx)
 {
+    h2o_linklist_t *node;
+
+    /* only doit once */
+    if (ctx->http3._graceful_shutdown_timeout.cb != NULL)
+        return;
+    ctx->http3._graceful_shutdown_timeout.cb = graceful_shutdown_resend_goaway;
+
+    for (node = ctx->http3._conns.next; node != &ctx->http3._conns; node = node->next) {
+        struct st_h2o_http3_server_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_conn_t, _conns, node);
+        /* There is a moment where the control stream is already closed while st_h2o_http3_server_conn_t is not.
+         * Check QUIC connection state to skip sending GOAWAY in such a case. */
+        if (conn->h3.state < H2O_HTTP3_CONN_STATE_HALF_CLOSED && quicly_get_state(conn->h3.super.quic) == QUICLY_STATE_CONNECTED) {
+            /* advertise the maximum stream ID to indicate that we will no longer accept new requests.
+             * HTTP/3 draft section 5.2.8 --
+             * "An endpoint that is attempting to gracefully shut down a connection can send a GOAWAY frame with a value set to the
+             * maximum possible value (2^62-4 for servers, 2^62-1 for clients). This ensures that the peer stops creating new
+             * requests or pushes." */
+            h2o_http3_send_goaway_frame(&conn->h3, (UINT64_C(1) << 62) - 4);
+        }
+    }
+    h2o_timer_link(ctx->loop, 1000, &ctx->http3._graceful_shutdown_timeout);
 }
 
 static int foreach_request(h2o_context_t *ctx, int (*cb)(h2o_req_t *req, void *cbdata), void *cbdata)
