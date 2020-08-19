@@ -530,7 +530,7 @@ static void process_packets(h2o_quic_ctx_t *ctx, quicly_address_t *destaddr, qui
         if (!quicly_is_supported_version(packets[0].version)) {
             uint8_t payload[QUICLY_MIN_CLIENT_INITIAL_SIZE];
             size_t payload_size = quicly_send_version_negotiation(ctx->quic, &srcaddr->sa, packets[0].cid.src, &destaddr->sa,
-                                                                  packets[0].cid.dest.encrypted, payload);
+                                                                  packets[0].cid.dest.encrypted, quicly_supported_versions, payload);
             assert(payload_size != SIZE_MAX);
             struct iovec vec = {.iov_base = payload, .iov_len = payload_size};
             h2o_quic_send_datagrams(ctx, srcaddr, destaddr, &vec, 1);
