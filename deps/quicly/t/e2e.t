@@ -153,7 +153,7 @@ subtest "retry-invalid-token" => sub {
 };
 
 subtest "stateless-reset" => sub {
-    my $guard = spawn_server(qw(-C deadbeef));
+    my $guard = spawn_server(qw(-B deadbeef));
     my $pid = fork;
     die "fork failed:$!"
         unless defined $pid;
@@ -167,7 +167,7 @@ subtest "stateless-reset" => sub {
     # parent process, let the client fetch the first response, then kill respawn the server using same CID encryption key
     sleep 1;
     undef $guard;
-    $guard = spawn_server(qw(-C deadbeef));
+    $guard = spawn_server(qw(-B deadbeef));
     # wait for the child to die
     while (waitpid($pid, 0) != $pid) {
     }
