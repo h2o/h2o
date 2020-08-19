@@ -868,7 +868,7 @@ int h2o_http3_read_frame(h2o_http3_read_frame_t *frame, int is_client, uint64_t 
                 goto Validation_Success;                                                                                           \
             break;                                                                                                                 \
         default:                                                                                                                   \
-            h2o_fatal("enxpected stream type");                                                                                    \
+            h2o_fatal("unexpected stream type");                                                                                   \
             break;                                                                                                                 \
         }                                                                                                                          \
         break
@@ -1036,6 +1036,7 @@ int h2o_http3_setup(h2o_http3_conn_t *conn, quicly_conn_t *quic)
     int ret;
 
     h2o_quic_setup(&conn->super, quic);
+    conn->state = H2O_HTTP3_CONN_STATE_OPEN;
 
     /* setup h3 objects, only when the connection state has been created */
     if (quicly_get_state(quic) > QUICLY_STATE_CONNECTED)
@@ -1178,4 +1179,13 @@ void h2o_http3_send_qpack_header_ack(h2o_http3_conn_t *conn, const void *bytes, 
     assert(stream != NULL);
     h2o_buffer_append(&stream->sendbuf, bytes, len);
     H2O_HTTP3_CHECK_SUCCESS(quicly_stream_sync_sendbuf(stream->quic, 1));
+}
+
+void h2o_http3_send_goaway_frame(h2o_http3_conn_t *conn, uint64_t stream_or_push_id)
+{
+    size_t cap = h2o_http3_goaway_frame_capacity(stream_or_push_id);
+    h2o_iovec_t alloced = h2o_buffer_reserve(&conn->_control_streams.egress.control->sendbuf, cap);
+    h2o_http3_encode_goaway_frame((uint8_t *)alloced.base, stream_or_push_id);
+    conn->_control_streams.egress.control->sendbuf->size += cap;
+    quicly_stream_sync_sendbuf(conn->_control_streams.egress.control->quic, 1);
 }
