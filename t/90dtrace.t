@@ -6,25 +6,10 @@ use POSIX ":sys_wait_h";
 use Test::More;
 use t::Util;
 
-run_as_root();
+check_dtrace_availability();
 
-plan skip_all => 'dtrace support is off'
-    unless server_features()->{dtrace};
 plan skip_all => 'curl not found'
     unless prog_exists('curl');
-
-if ($^O eq 'linux') {
-    plan skip_all => 'bpftrace not found'
-        unless prog_exists('bpftrace');
-    # NOTE: the test is likely to depend on https://github.com/iovisor/bpftrace/pull/864
-    plan skip_all => "skipping bpftrace tests (setenv DTRACE_TESTS=1 to run them)"
-        unless $ENV{DTRACE_TESTS};
-} else {
-    plan skip_all => 'dtrace not found'
-        unless prog_exists('dtrace');
-    plan skip_all => 'unbuffer not found'
-        unless prog_exists('unbuffer');
-}
 
 my $tempdir = tempdir(CLEANUP => 1);
 
@@ -106,27 +91,7 @@ EOT
 
 # wait until bpftrace and the trace log becomes ready
 my $read_trace;
-while (1) {
-    sleep 1;
-    if (open my $fh, "<", "$tempdir/trace.out") {
-        my $off = 0;
-        $read_trace = sub {
-            seek $fh, $off, 0
-                or die "seek failed:$!";
-            read $fh, my $bytes, 1048576;
-            $bytes = ''
-                unless defined $bytes;
-            $off += length $bytes;
-            if ($^O ne 'linux') {
-                $bytes = join "", map { substr($_, 4) . "\n" } grep /^XXXX/, split /\n/, $bytes;
-            }
-            return $bytes;
-        };
-        last;
-    }
-    die "bpftrace failed to start\n"
-        if waitpid($tracer_pid, WNOHANG) == $tracer_pid;
-}
+$read_trace = get_tracer($tracer_pid, "$tempdir/trace.out");
 if ($^O eq 'linux') {
     while ($read_trace->() eq '') {
         sleep 1;

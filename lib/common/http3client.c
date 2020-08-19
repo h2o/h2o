@@ -242,6 +242,13 @@ static void handle_control_stream_frame(h2o_http3_conn_t *_conn, uint8_t type, c
             err = H2O_HTTP3_ERROR_FRAME_UNEXPECTED;
             err_desc = "unexpected SETTINGS frame";
             goto Fail;
+        case H2O_HTTP3_FRAME_TYPE_GOAWAY: {
+            h2o_http3_goaway_frame_t frame;
+            if ((err = h2o_http3_decode_goaway_frame(&frame, payload, len, &err_desc)) != 0)
+                goto Fail;
+            /* FIXME: stop issuing new requests */
+            break;
+        }
         default:
             break;
         }
