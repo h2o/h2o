@@ -595,7 +595,7 @@ static void process_packets(h2o_quic_ctx_t *ctx, quicly_address_t *destaddr, qui
                 if (ctx->forward_packets != NULL &&
                     ctx->forward_packets(ctx, NULL, ctx->next_cid.thread_id, destaddr, srcaddr, ttl, packets, num_packets))
                     return;
-                /* If not forwarded, send rejection to the client. A Version Negotition packet that carries only a greasing version
+                /* If not forwarded, send rejection to the client. A Version Negotiation packet that carries only a greasing version
                  * number is used for the purpose, hoping that that signal will trigger immediate downgrade to HTTP/2, across the
                  * broad spectrum of the client implementations than if CONNECTION_REFUSED is being used. */
                 static const uint32_t no_versions[] = {0};
