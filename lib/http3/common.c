@@ -529,8 +529,9 @@ static void process_packets(h2o_quic_ctx_t *ctx, quicly_address_t *destaddr, qui
     if (QUICLY_PACKET_IS_LONG_HEADER(packets[0].octets.base[0])) {
         if (!quicly_is_supported_version(packets[0].version)) {
             uint8_t payload[QUICLY_MIN_CLIENT_INITIAL_SIZE];
-            size_t payload_size = quicly_send_version_negotiation(ctx->quic, &srcaddr->sa, packets[0].cid.src, &destaddr->sa,
-                                                                  packets[0].cid.dest.encrypted, quicly_supported_versions, payload);
+            size_t payload_size =
+                quicly_send_version_negotiation(ctx->quic, &srcaddr->sa, packets[0].cid.src, &destaddr->sa,
+                                                packets[0].cid.dest.encrypted, quicly_supported_versions, payload);
             assert(payload_size != SIZE_MAX);
             struct iovec vec = {.iov_base = payload, .iov_len = payload_size};
             h2o_quic_send_datagrams(ctx, srcaddr, destaddr, &vec, 1);
@@ -591,8 +592,19 @@ static void process_packets(h2o_quic_ctx_t *ctx, quicly_address_t *destaddr, qui
             if (ctx->acceptor == NULL) {
                 /* This is the offending thread but it is not accepting, which means that the process (or the thread) is
                  * gracefully shutting down.  Let the application process forward the packet to the next generation. */
-                if (ctx->forward_packets != NULL)
-                    ctx->forward_packets(ctx, NULL, ctx->next_cid.thread_id, destaddr, srcaddr, ttl, packets, num_packets);
+                if (ctx->forward_packets != NULL &&
+                    ctx->forward_packets(ctx, NULL, ctx->next_cid.thread_id, destaddr, srcaddr, ttl, packets, num_packets))
+                    return;
+                /* If not forwarded, send rejection to the client. A Version Negotition packet that carries only a greasing version
+                 * number is used for the purpose, hoping that that signal will trigger immediate downgrade to HTTP/2, across the
+                 * broad spectrum of the client implementations than if CONNECTION_REFUSED is being used. */
+                static const uint32_t no_versions[] = {0};
+                uint8_t payload[QUICLY_MIN_CLIENT_INITIAL_SIZE];
+                size_t payload_size = quicly_send_version_negotiation(ctx->quic, &srcaddr->sa, packets[0].cid.src, &destaddr->sa,
+                                                                      packets[0].cid.dest.encrypted, no_versions, payload);
+                assert(payload_size != SIZE_MAX);
+                struct iovec vec = {.iov_base = payload, .iov_len = payload_size};
+                h2o_quic_send_datagrams(ctx, srcaddr, destaddr, &vec, 1);
                 return;
             }
             /* try to accept any of the Initial packets being received */
