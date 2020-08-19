@@ -1072,7 +1072,7 @@
 		E9316EEE2441C08100C9C127 /* certificate_compression.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = certificate_compression.h; sourceTree = "<group>"; };
 		E93C7F95226EBEC9007BF39A /* frame.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = frame.c; sourceTree = "<group>"; };
 		E93C7F9922701806007BF39A /* frame.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = frame.c; sourceTree = "<group>"; };
-		E9414F8E24ED1CD700273C59 /* 40http3-graceful-shutdown.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "40http3-graceful-shutdown.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		E9414F8E24ED1CD700273C59 /* 40http3-shutdown.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "40http3-shutdown.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		E9414F8F24ED1D5300273C59 /* 80reverse-proxy-truncated-chunked.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "80reverse-proxy-truncated-chunked.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		E9414F9024ED1D7400273C59 /* 50proxy-forward-close-connection.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50proxy-forward-close-connection.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		E9414F9124ED1D7400273C59 /* 50reverse-proxy-header-filtering.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50reverse-proxy-header-filtering.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
@@ -2086,7 +2086,7 @@
 				E9BCE6921FF344D4003CEA11 /* 40http2-request-window-size.t */,
 				E98041C22230C45E008B9745 /* 40http3.t */,
 				E9FC525C234B0A630076F35D /* 40http3-retry.t */,
-				E9414F8E24ED1CD700273C59 /* 40http3-graceful-shutdown.t */,
+				E9414F8E24ED1CD700273C59 /* 40http3-shutdown.t */,
 				104B9A301A58F55E009EEE64 /* 40max-connections.t */,
 				10A3D3D71B4F4D0900327CF9 /* 40memcached-session-resumption.t */,
 				105534F51A460EF600627ECB /* 40protocol.t */,
