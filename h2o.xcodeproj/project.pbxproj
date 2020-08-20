@@ -1072,6 +1072,7 @@
 		E9316EEE2441C08100C9C127 /* certificate_compression.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = certificate_compression.h; sourceTree = "<group>"; };
 		E93C7F95226EBEC9007BF39A /* frame.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = frame.c; sourceTree = "<group>"; };
 		E93C7F9922701806007BF39A /* frame.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = frame.c; sourceTree = "<group>"; };
+		E9414F8D24EBFBDA00273C59 /* 40http3-reconnect.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "40http3-reconnect.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		E9414F8E24ED1CD700273C59 /* 40http3-graceful-shutdown.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "40http3-graceful-shutdown.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		E9414F8F24ED1D5300273C59 /* 80reverse-proxy-truncated-chunked.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "80reverse-proxy-truncated-chunked.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		E9414F9024ED1D7400273C59 /* 50proxy-forward-close-connection.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50proxy-forward-close-connection.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
@@ -2085,6 +2086,7 @@
 				E9F677CA1FF47BD0006476D3 /* 40http2-h2spec.t */,
 				E9BCE6921FF344D4003CEA11 /* 40http2-request-window-size.t */,
 				E98041C22230C45E008B9745 /* 40http3.t */,
+				E9414F8D24EBFBDA00273C59 /* 40http3-reconnect.t */,
 				E9FC525C234B0A630076F35D /* 40http3-retry.t */,
 				E9414F8E24ED1CD700273C59 /* 40http3-graceful-shutdown.t */,
 				104B9A301A58F55E009EEE64 /* 40max-connections.t */,
