@@ -196,6 +196,7 @@ void h2o_config_init(h2o_globalconf_t *config)
     config->http2.latency_optimization.max_additional_delay = 10;
     config->http2.latency_optimization.max_cwnd = 65535;
     config->http2.callbacks = H2O_HTTP2_CALLBACKS;
+    config->http3.idle_timeout = quicly_spec_context.transport_params.max_idle_timeout;
     config->http3.callbacks = H2O_HTTP3_SERVER_CALLBACKS;
     config->send_informational_mode = H2O_SEND_INFORMATIONAL_MODE_EXCEPT_H1;
     config->mimemap = h2o_mimemap_create();
