@@ -48,10 +48,13 @@ open my $client1, '-|', "$client_prog -3 https://127.0.0.1:$quic_port/ 2>&1"
 sleep 1;
 kill 'TERM', $server->{pid};
 sleep 1;
+my $client2_timespent = time;
 open my $client2, '-|', "$client_prog -3 https://127.0.0.1:$quic_port/ 2>&1"
     or die "failed to launch $client_prog:$?";
+$client2_timespent = time - $client2_timespent;
 
-like do { local $/; join "", <$client1>}, qr{^HTTP/[0-9\.]+ 200.*morning$}s;
-is do { local $/; join "", <$client2>}, "connection failure\n";
+like do { local $/; join "", <$client1>}, qr{^HTTP/[0-9\.]+ 200.*morning$}s, "client1 gets a response";
+is do { local $/; join "", <$client2>}, "connection failure\n", "client2 fails to connect";
+cmp_ok $client2_timespent, '<', 1, "client2 did not time out";
 
 done_testing;
