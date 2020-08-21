@@ -588,7 +588,7 @@ static void process_packets(h2o_quic_ctx_t *ctx, quicly_address_t *destaddr, qui
         if (iter == kh_end(ctx->conns_accepting)) {
             /* a new connection for this thread (at least on this process); accept or delegate to newer process */
             if (ctx->acceptor != NULL) {
-                if (!quicly_is_supported_version(packets[0].version)) {
+                if (packets[0].version != 0 && !quicly_is_supported_version(packets[0].version)) {
                     send_version_negotiation(ctx, srcaddr, packets[0].cid.src, destaddr, packets[0].cid.dest.encrypted,
                                              quicly_supported_versions);
                     return;
@@ -603,8 +603,11 @@ static void process_packets(h2o_quic_ctx_t *ctx, quicly_address_t *destaddr, qui
                 /* If not forwarded, send rejection to the peer. A Version Negotiation packet that carries only a greasing version
                  * number is used for the purpose, hoping that that signal will trigger immediate downgrade to HTTP/2, across the
                  * broad spectrum of the client implementations than if CONNECTION_REFUSED is being used. */
-                static const uint32_t no_versions[] = {0};
-                send_version_negotiation(ctx, srcaddr, packets[0].cid.src, destaddr, packets[0].cid.dest.encrypted, no_versions);
+                if (packets[0].version != 0) {
+                    static const uint32_t no_versions[] = {0};
+                    send_version_negotiation(ctx, srcaddr, packets[0].cid.src, destaddr, packets[0].cid.dest.encrypted,
+                                             no_versions);
+                }
                 return;
             }
             /* try to accept any of the Initial packets being received */
