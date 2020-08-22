@@ -44,6 +44,10 @@
 
 #define IO_TIMEOUT 5000
 
+static int save_http3_token_cb(quicly_save_resumption_token_t *self, quicly_conn_t *conn, ptls_iovec_t token);
+static quicly_save_resumption_token_t save_http3_token = {save_http3_token_cb};
+static int save_http3_ticket_cb(ptls_save_ticket_t *self, ptls_t *tls, ptls_iovec_t src);
+static ptls_save_ticket_t save_http3_ticket = {save_http3_ticket_cb};
 static h2o_httpclient_connection_pool_t *connpool;
 static h2o_mem_pool_t pool;
 struct {
@@ -71,21 +75,12 @@ static struct {
     ptls_context_t tls;
     quicly_context_t quic;
     h2o_quic_ctx_t h3;
-} h3ctx = {{ptls_openssl_random_bytes,
-            &ptls_get_time,
-            h3_key_exchanges,
-            ptls_openssl_cipher_suites,
-            {NULL},
-            NULL,
-            NULL,
-            NULL,
-            NULL,
-            NULL,
-            0,
-            0,
-            0,
-            NULL,
-            1}};
+} h3ctx = {{.random_bytes = ptls_openssl_random_bytes,
+            .get_time = &ptls_get_time,
+            .key_exchanges = h3_key_exchanges,
+            .cipher_suites = ptls_openssl_cipher_suites,
+            .save_ticket = &save_http3_ticket,
+            .omit_end_of_early_data = 1}};
 
 static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *errstr, h2o_iovec_t *method, h2o_url_t *url,
                                          const h2o_header_t **headers, size_t *num_headers, h2o_iovec_t *body,
@@ -93,6 +88,48 @@ static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *e
                                          h2o_url_t *origin);
 static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, int version, int status, h2o_iovec_t msg,
                                       h2o_header_t *headers, size_t num_headers, int header_requires_dup);
+
+static struct {
+    ptls_iovec_t token;
+    ptls_iovec_t ticket;
+    quicly_transport_parameters_t tp;
+} http3_session;
+
+static int save_http3_token_cb(quicly_save_resumption_token_t *self, quicly_conn_t *conn, ptls_iovec_t token)
+{
+    free(http3_session.token.base);
+    http3_session.token = ptls_iovec_init(h2o_mem_alloc(token.len), token.len);
+    memcpy(http3_session.token.base, token.base, token.len);
+    return 0;
+}
+
+static int save_http3_ticket_cb(ptls_save_ticket_t *self, ptls_t *tls, ptls_iovec_t src)
+{
+    quicly_conn_t *conn = *ptls_get_data_ptr(tls);
+    assert(quicly_get_tls(conn) == tls);
+
+    free(http3_session.ticket.base);
+    http3_session.ticket = ptls_iovec_init(h2o_mem_alloc(src.len), src.len);
+    memcpy(http3_session.ticket.base, src.base, src.len);
+    http3_session.tp = *quicly_get_remote_transport_parameters(conn);
+    return 0;
+}
+
+static int load_http3_session(h2o_httpclient_ctx_t *ctx, struct sockaddr *server_addr, const char *server_name, ptls_iovec_t *token,
+                              ptls_iovec_t *ticket, quicly_transport_parameters_t *tp)
+{
+    /* TODO respect server_addr, server_name */
+    if (http3_session.token.base != NULL) {
+        *token = ptls_iovec_init(h2o_mem_alloc(http3_session.token.len), http3_session.token.len);
+        memcpy(token->base, http3_session.token.base, http3_session.token.len);
+    }
+    if (http3_session.ticket.base != NULL) {
+        *ticket = ptls_iovec_init(h2o_mem_alloc(http3_session.ticket.len), http3_session.ticket.len);
+        memcpy(ticket->base, http3_session.ticket.base, http3_session.ticket.len);
+        *tp = http3_session.tp;
+    }
+    return 1;
+}
 
 struct st_timeout {
     h2o_timer_t timeout;
@@ -141,7 +178,7 @@ static void start_request(h2o_httpclient_ctx_t *ctx)
     cur_req_body_size = req.body_size;
 
     /* initiate the request */
-    if (ctx->http3 != NULL) {
+    if (ctx->http3.ctx != NULL) {
         h2o_httpclient_connect_h3(NULL, &pool, url_parsed, ctx, url_parsed, on_connect);
     } else {
         if (connpool == NULL) {
@@ -383,14 +420,13 @@ int main(int argc, char **argv)
     h2o_multithread_queue_t *queue;
     h2o_multithread_receiver_t getaddr_receiver;
     h2o_httpclient_ctx_t ctx = {
-        NULL, /* loop */
-        &getaddr_receiver,
-        IO_TIMEOUT,                              /* io_timeout */
-        IO_TIMEOUT,                              /* connect_timeout */
-        IO_TIMEOUT,                              /* first_byte_timeout */
-        NULL,                                    /* websocket_timeout */
-        IO_TIMEOUT,                              /* keepalive_timeout */
-        H2O_SOCKET_INITIAL_INPUT_BUFFER_SIZE * 2 /* max_buffer_size */
+        .getaddr_receiver = &getaddr_receiver,
+        .io_timeout = IO_TIMEOUT,
+        .connect_timeout = IO_TIMEOUT,
+        .first_byte_timeout = IO_TIMEOUT,
+        .keepalive_timeout = IO_TIMEOUT,
+        .max_buffer_size = H2O_SOCKET_INITIAL_INPUT_BUFFER_SIZE * 2,
+        .http3 = {.load_session = load_http3_session},
     };
     int opt;
 
@@ -402,6 +438,7 @@ int main(int argc, char **argv)
     h3ctx.quic = quicly_spec_context;
     h3ctx.quic.transport_params.max_streams_uni = 10;
     h3ctx.quic.tls = &h3ctx.tls;
+    h3ctx.quic.save_resumption_token = &save_http3_token;
     {
         uint8_t random_key[PTLS_SHA256_DIGEST_SIZE];
         h3ctx.tls.random_bytes(random_key, sizeof(random_key));
@@ -483,7 +520,7 @@ int main(int argc, char **argv)
 #else
             h2o_quic_init_context(&h3ctx.h3, ctx.loop, create_quic_socket(ctx.loop), &h3ctx.quic, NULL,
                                   h2o_httpclient_http3_notify_connection_update);
-            ctx.http3 = &h3ctx.h3;
+            ctx.http3.ctx = &h3ctx.h3;
 #endif
             break;
         case 'W': {
@@ -536,9 +573,9 @@ int main(int argc, char **argv)
 #endif
     }
 
-    if (ctx.http3 != NULL) {
-        h2o_quic_close_all_connections(ctx.http3);
-        while (h2o_quic_num_connections(ctx.http3) != 0) {
+    if (ctx.http3.ctx != NULL) {
+        h2o_quic_close_all_connections(ctx.http3.ctx);
+        while (h2o_quic_num_connections(ctx.http3.ctx) != 0) {
 #if H2O_USE_LIBUV
             uv_run(ctx.loop, UV_RUN_ONCE);
 #else
