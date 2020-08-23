@@ -421,6 +421,7 @@ static const quicly_stream_callbacks_t crypto_stream_callbacks = {quicly_streamb
 
 static int update_traffic_key_cb(ptls_update_traffic_key_t *self, ptls_t *tls, int is_enc, size_t epoch, const void *secret);
 static int initiate_close(quicly_conn_t *conn, int err, uint64_t frame_type, const char *reason_phrase);
+static int handle_close(quicly_conn_t *conn, int err, uint64_t frame_type, ptls_iovec_t reason_phrase);
 static int discard_sentmap_by_epoch(quicly_conn_t *conn, unsigned ack_epochs);
 
 static const quicly_transport_parameters_t default_transport_params = {.max_udp_payload_size = QUICLY_DEFAULT_MAX_UDP_PAYLOAD_SIZE,
@@ -4730,7 +4731,7 @@ static int handle_version_negotiation_packet(quicly_conn_t *conn, quicly_decoded
         }
     }
     if (selected_version == 0)
-        return QUICLY_ERROR_NO_COMPATIBLE_VERSION;
+        return handle_close(conn, QUICLY_ERROR_NO_COMPATIBLE_VERSION, UINT64_MAX, ptls_iovec_init("", 0));
 
     return negotiate_using_version(conn, selected_version);
 }
@@ -4837,7 +4838,7 @@ Found_StatelessReset:
     return 1;
 }
 
-static int handle_close(quicly_conn_t *conn, int err, uint64_t frame_type, ptls_iovec_t reason_phrase)
+int handle_close(quicly_conn_t *conn, int err, uint64_t frame_type, ptls_iovec_t reason_phrase)
 {
     int ret;
 
@@ -4845,7 +4846,8 @@ static int handle_close(quicly_conn_t *conn, int err, uint64_t frame_type, ptls_
         return 0;
 
     /* switch to closing state, notify the app (at this moment the streams are accessible), then destroy the streams */
-    if ((ret = enter_close(conn, 0, err != QUICLY_ERROR_RECEIVED_STATELESS_RESET)) != 0)
+    if ((ret = enter_close(conn, 0,
+                           !(err == QUICLY_ERROR_RECEIVED_STATELESS_RESET || err == QUICLY_ERROR_NO_COMPATIBLE_VERSION))) != 0)
         return ret;
     if (conn->super.ctx->closed_by_remote != NULL)
         conn->super.ctx->closed_by_remote->cb(conn->super.ctx->closed_by_remote, conn, err, frame_type,

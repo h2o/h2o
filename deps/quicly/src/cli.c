@@ -394,6 +394,8 @@ static void on_closed_by_remote(quicly_closed_by_remote_t *self, quicly_conn_t *
                 reason);
     } else if (err == QUICLY_ERROR_RECEIVED_STATELESS_RESET) {
         fprintf(stderr, "stateless reset\n");
+    } else if (err == QUICLY_ERROR_NO_COMPATIBLE_VERSION) {
+        fprintf(stderr, "no compatible version\n");
     } else {
         fprintf(stderr, "unexpected close:code=%d\n", err);
     }
