@@ -279,6 +279,10 @@ static void set_state(struct st_h2o_http3_server_stream_t *stream, enum h2o_http
     }
 }
 
+/**
+ * Shutdowns a stream. Note that a request stream should not be shut down until receiving some QUIC frame that refers to that
+ * stream, but we might might have created stream state due to receiving a PRIORITY_UPDATE frame prior to that.
+ */
 static void shutdown_stream(struct st_h2o_http3_server_stream_t *stream, int stop_sending_code, int reset_code)
 {
     assert(stream->state < H2O_HTTP3_SERVER_STREAM_STATE_CLOSE_WAIT);
