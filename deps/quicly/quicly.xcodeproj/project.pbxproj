@@ -90,6 +90,9 @@
 		E9D3CCCD21D22E7E00516202 /* streambuf.h in Headers */ = {isa = PBXBuildFile; fileRef = E9D3CCCC21D22E7E00516202 /* streambuf.h */; };
 		E9D3CCCF21D22F4300516202 /* streambuf.c in Sources */ = {isa = PBXBuildFile; fileRef = E9D3CCCE21D22F4300516202 /* streambuf.c */; };
 		E9D3CCD021D6D24000516202 /* streambuf.c in Sources */ = {isa = PBXBuildFile; fileRef = E9D3CCCE21D22F4300516202 /* streambuf.c */; };
+		E9DF012424E4BAC20002EEC7 /* cc-cubic.c in Sources */ = {isa = PBXBuildFile; fileRef = E9DF012324E4BAC20002EEC7 /* cc-cubic.c */; };
+		E9DF012524E4BAC90002EEC7 /* cc-cubic.c in Sources */ = {isa = PBXBuildFile; fileRef = E9DF012324E4BAC20002EEC7 /* cc-cubic.c */; };
+		E9DF012624E4BACA0002EEC7 /* cc-cubic.c in Sources */ = {isa = PBXBuildFile; fileRef = E9DF012324E4BAC20002EEC7 /* cc-cubic.c */; };
 		E9F6A4201F3C0B6D0083F0B2 /* ranges.c in Sources */ = {isa = PBXBuildFile; fileRef = E9F6A41F1F3C0B6D0083F0B2 /* ranges.c */; };
 		E9F6A4211F3C0B6D0083F0B2 /* ranges.c in Sources */ = {isa = PBXBuildFile; fileRef = E9F6A41F1F3C0B6D0083F0B2 /* ranges.c */; };
 		E9F6A4271F3C3B050083F0B2 /* ranges.h in Headers */ = {isa = PBXBuildFile; fileRef = E9F6A4261F3C3B050083F0B2 /* ranges.h */; };
@@ -200,6 +203,7 @@
 		E9CC44241EC1962700DC7D3E /* test.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = test.c; sourceTree = "<group>"; };
 		E9D3CCCC21D22E7E00516202 /* streambuf.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = streambuf.h; sourceTree = "<group>"; };
 		E9D3CCCE21D22F4300516202 /* streambuf.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = streambuf.c; sourceTree = "<group>"; };
+		E9DF012324E4BAC20002EEC7 /* cc-cubic.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = "cc-cubic.c"; sourceTree = "<group>"; };
 		E9F6A41F1F3C0B6D0083F0B2 /* ranges.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = ranges.c; sourceTree = "<group>"; };
 		E9F6A4261F3C3B050083F0B2 /* ranges.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = ranges.h; sourceTree = "<group>"; };
 		E9F6A4281F3C3B3F0083F0B2 /* test.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = test.h; sourceTree = "<group>"; };
@@ -319,6 +323,7 @@
 		E984481F1EA48BF400390927 /* lib */ = {
 			isa = PBXGroup;
 			children = (
+				E9DF012324E4BAC20002EEC7 /* cc-cubic.c */,
 				E98041C522383C62008B9745 /* cc-reno.c */,
 				E9736527246FD3AC0039AA49 /* remote_cid.c */,
 				E98042352244A5D7008B9745 /* defaults.c */,
@@ -675,6 +680,7 @@
 				E9F6A42E1F41375B0083F0B2 /* sendstate.c in Sources */,
 				E99F8C261F4E9EBF00C26B3D /* frame.c in Sources */,
 				E98448421EA490A500390927 /* quicly.c in Sources */,
+				E9DF012424E4BAC20002EEC7 /* cc-cubic.c in Sources */,
 				E973652A246FD3AC0039AA49 /* remote_cid.c in Sources */,
 				E920D22B1F49533800799777 /* sentmap.c in Sources */,
 				E9D3CCCF21D22F4300516202 /* streambuf.c in Sources */,
@@ -686,6 +692,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E9DF012524E4BAC90002EEC7 /* cc-cubic.c in Sources */,
 				E973652F246FD3B40039AA49 /* retire_cid.c in Sources */,
 				E95E953C22904A4C00215ACD /* picotls-probes.d in Sources */,
 				E941428F23B0B84F002D3CE0 /* ranges.c in Sources */,
@@ -747,6 +754,7 @@
 				E95E953D22904A4C00215ACD /* picotls-probes.d in Sources */,
 				E9CC441C1EC195DF00DC7D3E /* picotls.c in Sources */,
 				E904233F24AED0410072C5B7 /* loss.c in Sources */,
+				E9DF012624E4BACA0002EEC7 /* cc-cubic.c in Sources */,
 				E98042372244A5D7008B9745 /* defaults.c in Sources */,
 				E99F8C271F4E9F5D00C26B3D /* frame.c in Sources */,
 				E9736536246FD3DA0039AA49 /* local_cid.c in Sources */,
