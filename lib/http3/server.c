@@ -281,7 +281,8 @@ static void set_state(struct st_h2o_http3_server_stream_t *stream, enum h2o_http
 
 /**
  * Shutdowns a stream. Note that a request stream should not be shut down until receiving some QUIC frame that refers to that
- * stream, but we might might have created stream state due to receiving a PRIORITY_UPDATE frame prior to that.
+ * stream, but we might might have created stream state due to receiving a PRIORITY_UPDATE frame prior to that (see
+ * handle_priority_update_frame).
  */
 static void shutdown_stream(struct st_h2o_http3_server_stream_t *stream, int stop_sending_code, int reset_code)
 {
@@ -1019,6 +1020,33 @@ static void do_send_informational(h2o_ostream_t *_ostr, h2o_req_t *_req)
     write_response(stream);
 }
 
+static int handle_priority_update_frame(struct st_h2o_http3_server_conn_t *conn, const h2o_http3_priority_update_frame_t *frame)
+{
+    if (frame->element_is_push)
+        return H2O_HTTP3_ERROR_GENERAL_PROTOCOL;
+
+    /* obtain the stream being referred to (creating one if necessary), or return if the stream has been closed already */
+    quicly_stream_t *qs;
+    if (quicly_get_or_open_stream(conn->h3.super.quic, frame->element, &qs) != 0)
+        return H2O_HTTP3_ERROR_ID;
+    if (qs == NULL)
+        return 0;
+
+    /* apply the changes */
+    struct st_h2o_http3_server_stream_t *stream = qs->data;
+    assert(stream != NULL);
+    stream->received_priority_update = 1;
+    if (h2o_linklist_is_linked(&stream->scheduler.link)) {
+        req_scheduler_deactivate(conn, stream);
+        stream->scheduler.priority = frame->priority; /* TODO apply only the delta? */
+        req_scheduler_activate(conn, stream);
+    } else {
+        stream->scheduler.priority = frame->priority; /* TODO apply only the delta? */
+    }
+
+    return 0;
+}
+
 static void handle_control_stream_frame(h2o_http3_conn_t *_conn, uint8_t type, const uint8_t *payload, size_t len)
 {
     struct st_h2o_http3_server_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_conn_t, h3, _conn);
@@ -1043,27 +1071,9 @@ static void handle_control_stream_frame(h2o_http3_conn_t *_conn, uint8_t type, c
             h2o_http3_priority_update_frame_t frame;
             if ((err = h2o_http3_decode_priority_update_frame(&frame, payload, len, &err_desc)) != 0)
                 goto Fail;
-            if (frame.element_is_push) {
-                err = H2O_HTTP3_ERROR_GENERAL_PROTOCOL;
-                err_desc = "received PRIORITY_UPDATE referring to push";
+            if ((err = handle_priority_update_frame(conn, &frame)) != 0) {
+                err_desc = "invalid PRIORITY_UPDATE frame";
                 goto Fail;
-            }
-            quicly_stream_t *qs;
-            if (quicly_get_or_open_stream(conn->h3.super.quic, frame.element, &qs) != 0) {
-                err = H2O_HTTP3_ERROR_ID;
-                goto Fail;
-            }
-            if (qs != NULL) {
-                struct st_h2o_http3_server_stream_t *stream = qs->data;
-                assert(stream != NULL);
-                stream->received_priority_update = 1;
-                if (h2o_linklist_is_linked(&stream->scheduler.link)) {
-                    req_scheduler_deactivate(conn, stream);
-                    stream->scheduler.priority = frame.priority; /* TODO apply only the delta? */
-                    req_scheduler_activate(conn, stream);
-                } else {
-                    stream->scheduler.priority = frame.priority; /* TODO apply only the delta? */
-                }
             }
         } break;
         default:
