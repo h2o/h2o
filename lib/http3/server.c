@@ -27,9 +27,6 @@
 #include "h2o/http3_internal.h"
 #include "./../probes_.h"
 
-#define H2O_HTTP3_MAX_PLACEHOLDERS 10
-#define H2O_HTTP3_NUM_RETAINED_PRIORITIES 10
-
 /**
  * Once the size of the request body being received exceeds thit limit, streaming mode will be used (if possible), and the
  * concurrency of such requests would be limited to one per connection.

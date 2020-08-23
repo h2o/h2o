@@ -30,23 +30,6 @@
 #include "h2o/http3_common.h"
 #include "h2o/http3_internal.h"
 
-/* Firefox-like tree is used to prioritize the requests:
- *
- * Root --+--(256)-- BLOCKING streams
- *        |
- *        +--(  1)-- NONCRITICAL --+--(  32)-- NORMAL streams
- *                   placeholder   |
- *                   (0)           +--(  16)-- NONBLOCKING streams
- *                                 |
- *                                 +--(   1)-- DELAYED streams
- */
-#define H2O_HTTP3CLIENT_NONCRITICAL_PLACEHOLDER_ID 0
-#define H2O_HTTP3CLIENT_NONCRITICAL_PLACEHOLDER_WEIGHT 1
-#define H2O_HTTP3CLIENT_BLOCKING_STREAM_WEIGHT 256
-#define H2O_HTTP3CLIENT_NORMAL_STREAM_WEIGHT 32
-#define H2O_HTTP3CLIENT_NONBLOCKING_STREAM_WEIGHT 16
-#define H2O_HTTP3CLIENT_DELAYED_STREAM_WEIGHT 1
-
 #define H2O_HTTP3_ERROR_EOS H2O_HTTP3_ERROR_USER1 /* the client uses USER1 for signaling eos */
 
 struct st_h2o_http3client_conn_t {
