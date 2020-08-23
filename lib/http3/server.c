@@ -178,6 +178,10 @@ struct st_h2o_http3_server_stream_t {
      */
     uint8_t proceed_while_sending : 1;
     /**
+     * if a PRIORITY_UPDATE frame has been received
+     */
+    uint8_t received_priority_update : 1;
+    /**
      * buffer to hold the request body (or a chunk of, if in streaming mode)
      */
     h2o_buffer_t *req_body;
@@ -910,8 +914,9 @@ static int handle_input_expect_headers(struct st_h2o_http3_server_stream_t *stre
         return 0;
     }
 
-    { /* set priority */
-        assert(!h2o_linklist_is_linked(&stream->scheduler.link));
+    /* set priority */
+    assert(!h2o_linklist_is_linked(&stream->scheduler.link));
+    if (!stream->received_priority_update) {
         ssize_t index;
         if ((index = h2o_find_header(&stream->req.headers, H2O_TOKEN_PRIORITY, -1)) != -1) {
             h2o_iovec_t *value = &stream->req.headers.entries[index].value;
@@ -1047,6 +1052,7 @@ static void handle_control_stream_frame(h2o_http3_conn_t *_conn, uint8_t type, c
             if (qs != NULL) {
                 struct st_h2o_http3_server_stream_t *stream = qs->data;
                 assert(stream != NULL);
+                stream->received_priority_update = 1;
                 if (h2o_linklist_is_linked(&stream->scheduler.link)) {
                     req_scheduler_deactivate(conn, stream);
                     stream->scheduler.priority = frame.priority; /* TODO apply only the delta? */
@@ -1098,6 +1104,7 @@ static int stream_open_cb(quicly_stream_open_t *self, quicly_stream_t *qs)
     stream->read_blocked = 0;
     stream->proceed_requested = 0;
     stream->proceed_while_sending = 0;
+    stream->received_priority_update = 0;
     stream->req_body = NULL;
 
     h2o_init_request(&stream->req, &conn->super, NULL);
