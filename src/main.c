@@ -2183,7 +2183,7 @@ static int forward_quic_packets(h2o_quic_ctx_t *h3ctx, const uint64_t *node_id, 
             if (thread_id == h3ctx->next_cid.thread_id) {
                 assert(h3ctx->acceptor == NULL);
                 /* FIXME forward packets to the newer generation process */
-                return 1;
+                return 0;
             }
         } else {
             /* intra-node, validate thread id */
@@ -2360,8 +2360,8 @@ static h2o_quic_conn_t *on_http3_accept(h2o_quic_ctx_t *_ctx, quicly_address_t *
                 token = &token_buf;
         } else if (ret == QUICLY_TRANSPORT_ERROR_INVALID_TOKEN) {
             uint8_t payload[QUICLY_MIN_CLIENT_INITIAL_SIZE];
-            size_t payload_size = quicly_send_close_invalid_token(ctx->super.quic, packet->version, &srcaddr->sa, packet->cid.src,
-                                                                  &destaddr->sa, packet->cid.dest.encrypted, err_desc, payload);
+            size_t payload_size = quicly_send_close_invalid_token(ctx->super.quic, packet->version, packet->cid.src,
+                                                                  packet->cid.dest.encrypted, err_desc, payload);
             assert(payload_size != SIZE_MAX);
             struct iovec vec = {.iov_base = payload, .iov_len = payload_size};
             h2o_quic_send_datagrams(&ctx->super, srcaddr, destaddr, &vec, 1);

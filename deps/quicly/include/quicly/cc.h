@@ -102,6 +102,10 @@ typedef struct st_quicly_cc_t {
              * Timestamp of the latest congestion event.
              */
             int64_t avoidance_start;
+            /**
+             * Timestamp of the most recent send operation.
+             */
+            int64_t last_sent_time;
         } cubic;
     } state;
     /**
@@ -146,13 +150,20 @@ struct st_quicly_cc_impl_t {
      * Called when persistent congestion is observed.
      */
     void (*cc_on_persistent_congestion)(quicly_cc_t *cc, const quicly_loss_t *loss, int64_t now);
+    /**
+     * Called after a packet is sent.
+     */
+    void (*cc_on_sent)(quicly_cc_t *cc, const quicly_loss_t *loss, uint32_t bytes, int64_t now);
 };
 
 /**
- * Initializes the congestion controller.
+ * The factory method for the modified Reno congestion controller.
  */
-void quicly_cc_reno_init(quicly_cc_t *cc, uint32_t initcwnd);
-void quicly_cc_cubic_init(quicly_cc_t *cc, uint32_t initcwnd);
+extern struct st_quicly_init_cc_t quicly_cc_reno_init;
+/**
+ * The factory method for the modified Reno congestion controller.
+ */
+extern struct st_quicly_init_cc_t quicly_cc_cubic_init;
 
 /**
  * Calculates the initial congestion window size given the maximum UDP payload size.

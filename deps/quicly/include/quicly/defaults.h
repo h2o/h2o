@@ -56,10 +56,8 @@ extern quicly_now_t quicly_default_now;
  *
  */
 extern quicly_crypto_engine_t quicly_default_crypto_engine;
-/**
- *
- */
-extern quicly_init_cc_t quicly_default_init_cc;
+
+#define quicly_default_init_cc quicly_cc_reno_init
 
 #ifdef __cplusplus
 }

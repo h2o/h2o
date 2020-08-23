@@ -132,6 +132,7 @@ struct st_h2o_http3client_req_t {
 static int handle_input_expect_data_frame(struct st_h2o_http3client_req_t *req, const uint8_t **src, const uint8_t *src_end,
                                           int err, const char **err_desc);
 static void start_request(struct st_h2o_http3client_req_t *req);
+static void destroy_request(struct st_h2o_http3client_req_t *req);
 
 static struct st_h2o_http3client_conn_t *find_connection_for_origin(h2o_httpclient_ctx_t *ctx, const h2o_url_scheme_t *scheme,
                                                                     h2o_iovec_t authority)
@@ -156,7 +157,14 @@ static void destroy_connection(struct st_h2o_http3client_conn_t *conn)
 {
     if (h2o_linklist_is_linked(&conn->clients_link))
         h2o_linklist_unlink(&conn->clients_link);
-    /* FIXME pending_requests */
+    while (!h2o_linklist_is_empty(&conn->pending_requests)) {
+        struct st_h2o_http3client_req_t *req =
+            H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3client_req_t, link, conn->pending_requests.next);
+        h2o_linklist_unlink(&req->link);
+        req->super._cb.on_connect(&req->super, h2o_socket_error_conn_fail, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
+        destroy_request(req);
+    }
+    assert(h2o_linklist_is_empty(&conn->pending_requests));
     if (conn->getaddr_req != NULL)
         h2o_hostinfo_getaddr_cancel(conn->getaddr_req);
     h2o_timer_unlink(&conn->timeout);
@@ -284,7 +292,7 @@ struct st_h2o_http3client_conn_t *create_connection(h2o_httpclient_ctx_t *ctx, h
     return conn;
 }
 
-static void destroy_request(struct st_h2o_http3client_req_t *req)
+void destroy_request(struct st_h2o_http3client_req_t *req)
 {
     assert(req->quic == NULL);
     h2o_buffer_dispose(&req->sendbuf);

@@ -430,6 +430,78 @@ static void test_address_token_codec(void)
     ptls_aead_free(dec);
 }
 
+static void do_test_record_receipt(size_t epoch)
+{
+    struct st_quicly_pn_space_t *space =
+        alloc_pn_space(sizeof(*space), epoch == QUICLY_EPOCH_1RTT ? QUICLY_DEFAULT_PACKET_TOLERANCE : 1);
+    uint64_t pn = 0;
+    int64_t now = 12345, send_ack_at = INT64_MAX;
+
+    if (epoch == QUICLY_EPOCH_1RTT) {
+        /* 2nd packet triggers an ack */
+        ok(record_receipt(space, pn++, 0, now, &send_ack_at) == 0);
+        ok(send_ack_at == now + QUICLY_DELAYED_ACK_TIMEOUT);
+        now += 1;
+        ok(record_receipt(space, pn++, 0, now, &send_ack_at) == 0);
+        ok(send_ack_at == now);
+        now += 1;
+    } else {
+        /* every packet triggers an ack */
+        ok(record_receipt(space, pn++, 0, now, &send_ack_at) == 0);
+        ok(send_ack_at == now);
+        now += 1;
+    }
+
+    /* reset */
+    space->unacked_count = 0;
+    send_ack_at = INT64_MAX;
+
+    /* ack-only packets do not elicit an ack */
+    ok(record_receipt(space, pn++, 1, now, &send_ack_at) == 0);
+    ok(send_ack_at == INT64_MAX);
+    now += 1;
+    ok(record_receipt(space, pn++, 1, now, &send_ack_at) == 0);
+    ok(send_ack_at == INT64_MAX);
+    now += 1;
+    pn++; /* gap */
+    ok(record_receipt(space, pn++, 1, now, &send_ack_at) == 0);
+    ok(send_ack_at == INT64_MAX);
+    now += 1;
+    ok(record_receipt(space, pn++, 1, now, &send_ack_at) == 0);
+    ok(send_ack_at == INT64_MAX);
+    now += 1;
+
+    /* gap triggers an ack */
+    pn += 1; /* gap */
+    ok(record_receipt(space, pn++, 0, now, &send_ack_at) == 0);
+    ok(send_ack_at == now);
+    now += 1;
+
+    /* reset */
+    space->unacked_count = 0;
+    send_ack_at = INT64_MAX;
+
+    /* if 1-RTT, test ignore-order */
+    if (epoch == QUICLY_EPOCH_1RTT) {
+        space->ignore_order = 1;
+        pn++; /* gap */
+        ok(record_receipt(space, pn++, 0, now, &send_ack_at) == 0);
+        ok(send_ack_at == now + QUICLY_DELAYED_ACK_TIMEOUT);
+        now += 1;
+        ok(record_receipt(space, pn++, 0, now, &send_ack_at) == 0);
+        ok(send_ack_at == now);
+        now += 1;
+    }
+
+    do_free_pn_space(space);
+}
+
+static void test_record_receipt(void)
+{
+    do_test_record_receipt(QUICLY_EPOCH_INITIAL);
+    do_test_record_receipt(QUICLY_EPOCH_1RTT);
+}
+
 static void test_cid(void)
 {
     subtest("received cid", test_received_cid);
@@ -496,6 +568,7 @@ int main(int argc, char **argv)
     subtest("next-packet-number", test_next_packet_number);
     subtest("address-token-codec", test_address_token_codec);
     subtest("ranges", test_ranges);
+    subtest("record-receipt", test_record_receipt);
     subtest("frame", test_frame);
     subtest("maxsender", test_maxsender);
     subtest("sentmap", test_sentmap);
