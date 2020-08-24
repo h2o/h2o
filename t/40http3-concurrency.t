@@ -22,6 +22,7 @@ my $upstream = spawn_server(
     ],
     is_ready => sub { !! -e "$tempdir/upstream.sock" },
 );
+sleep 1;
 
 my $server = spawn_h2o(<< "EOT");
 listen:
