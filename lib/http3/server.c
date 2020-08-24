@@ -614,9 +614,10 @@ static void handle_buffered_input(struct st_h2o_http3_server_stream_t *stream)
                                                stream->recvbuf.handle_input == handle_input_post_trailers)) {
             /* have complete request, advance the state and process the request */
             if (stream->req.content_length != SIZE_MAX && stream->req.content_length != stream->req.req_body_bytes_received) {
+                /* the request terminated abruptly; reset the stream as we do for HTTP/2 */
                 shutdown_stream(stream, H2O_HTTP3_ERROR_NONE /* ignored */,
                                 stream->req.req_body_bytes_received < stream->req.content_length
-                                    ? H2O_HTTP3_ERROR_INCOMPLETE
+                                    ? H2O_HTTP3_ERROR_REQUEST_INCOMPLETE
                                     : H2O_HTTP3_ERROR_GENERAL_PROTOCOL);
             } else {
                 if (stream->req.write_req.cb != NULL) {
