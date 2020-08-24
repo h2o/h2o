@@ -232,7 +232,7 @@ static int on_body(h2o_httpclient_t *client, const char *errstr)
 
     if (errstr == h2o_httpclient_error_is_eos) {
         --cnt_left;
-        if (cnt_left > concurrency) {
+        if (cnt_left >= concurrency) {
             /* next attempt */
             h2o_mem_clear_pool(&pool);
             ftruncate(fileno(stdout), 0); /* ignore error when stdout is a tty */
