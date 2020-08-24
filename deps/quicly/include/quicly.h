@@ -970,6 +970,14 @@ void quicly_stream_sync_recvbuf(quicly_stream_t *stream, size_t shift_amount);
 /**
  *
  */
+static uint32_t quicly_stream_get_receive_window(quicly_stream_t *stream);
+/**
+ *
+ */
+static void quicly_stream_set_receive_window(quicly_stream_t *stream, uint32_t window);
+/**
+ *
+ */
 static int quicly_stream_is_client_initiated(quicly_stream_id_t stream_id);
 /**
  *
@@ -1153,6 +1161,16 @@ inline void **quicly_get_data(quicly_conn_t *conn)
 inline int quicly_stop_requested(quicly_stream_t *stream)
 {
     return stream->_send_aux.stop_sending.sender_state != QUICLY_SENDER_STATE_NONE;
+}
+
+inline uint32_t quicly_stream_get_receive_window(quicly_stream_t *stream)
+{
+    return stream->_recv_aux.window;
+}
+
+inline void quicly_stream_set_receive_window(quicly_stream_t *stream, uint32_t window)
+{
+    stream->_recv_aux.window = window;
 }
 
 inline int quicly_stream_is_client_initiated(quicly_stream_id_t stream_id)
