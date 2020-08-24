@@ -275,6 +275,7 @@
 		E901C4402140CCB500D17C93 /* qpack.c in Sources */ = {isa = PBXBuildFile; fileRef = E901C43F2140CCB500D17C93 /* qpack.c */; };
 		E90A95F31E30795100483D6C /* headers_util.c in Sources */ = {isa = PBXBuildFile; fileRef = E90A95F21E30795100483D6C /* headers_util.c */; };
 		E90A95F51E30797D00483D6C /* headers_util.c in Sources */ = {isa = PBXBuildFile; fileRef = E90A95F41E30797D00483D6C /* headers_util.c */; };
+		E90BB43A24F369E4006507EA /* server.c in Sources */ = {isa = PBXBuildFile; fileRef = E90BB43924F369E4006507EA /* server.c */; };
 		E918FC322136583F00CCB252 /* libh2o.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 1079231519A320A700C52AD6 /* libh2o.a */; };
 		E918FC8721365AB700CCB252 /* theft_autoshrink.c in Sources */ = {isa = PBXBuildFile; fileRef = E918FC542136598400CCB252 /* theft_autoshrink.c */; };
 		E918FC8821365AB700CCB252 /* theft_aux_builtin.c in Sources */ = {isa = PBXBuildFile; fileRef = E918FC452136598300CCB252 /* theft_aux_builtin.c */; };
@@ -491,7 +492,6 @@
 		E9E5048E214EC5E2004DC170 /* picotls.c in Sources */ = {isa = PBXBuildFile; fileRef = E9708ADA1E499E040029E0A5 /* picotls.c */; };
 		E9E5049021501BBA004DC170 /* server.c in Sources */ = {isa = PBXBuildFile; fileRef = E9E5048F21501BBA004DC170 /* server.c */; };
 		E9E5049121501BBA004DC170 /* server.c in Sources */ = {isa = PBXBuildFile; fileRef = E9E5048F21501BBA004DC170 /* server.c */; };
-		E9E5049221501BC3004DC170 /* server.c in Sources */ = {isa = PBXBuildFile; fileRef = E9E5048F21501BBA004DC170 /* server.c */; };
 		E9E5049421501CA5004DC170 /* http3_server.h in Headers */ = {isa = PBXBuildFile; fileRef = E9E5049321501CA5004DC170 /* http3_server.h */; };
 		E9F20BDD22E03FD00018D260 /* send_state.h in Headers */ = {isa = PBXBuildFile; fileRef = 7D027BEE2242283B007ACE09 /* send_state.h */; };
 		E9F677D42007476D006476D3 /* least_conn.c in Sources */ = {isa = PBXBuildFile; fileRef = D08137381FD400F4004679DF /* least_conn.c */; };
@@ -1026,6 +1026,7 @@
 		E908A2AF2320AE4D0039BCEE /* Dockerfile.ubuntu1904 */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = Dockerfile.ubuntu1904; sourceTree = "<group>"; };
 		E90A95F21E30795100483D6C /* headers_util.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = headers_util.c; sourceTree = "<group>"; };
 		E90A95F41E30797D00483D6C /* headers_util.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = headers_util.c; sourceTree = "<group>"; };
+		E90BB43924F369E4006507EA /* server.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = server.c; sourceTree = "<group>"; };
 		E90C514D230BB28800D6AD8E /* 90dtrace.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = 90dtrace.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		E918FC392136583F00CCB252 /* proptest */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = proptest; sourceTree = BUILT_PRODUCTS_DIR; };
 		E918FC3B213658BE00CCB252 /* prop.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = prop.c; sourceTree = "<group>"; };
@@ -1072,8 +1073,8 @@
 		E9316EEE2441C08100C9C127 /* certificate_compression.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = certificate_compression.h; sourceTree = "<group>"; };
 		E93C7F95226EBEC9007BF39A /* frame.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = frame.c; sourceTree = "<group>"; };
 		E93C7F9922701806007BF39A /* frame.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = frame.c; sourceTree = "<group>"; };
-		E9414F8E24ED1CD700273C59 /* 40http3-shutdown.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "40http3-shutdown.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		E9414F8D24EBFBDA00273C59 /* 40http3-reconnect.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "40http3-reconnect.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		E9414F8E24ED1CD700273C59 /* 40http3-shutdown.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "40http3-shutdown.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		E9414F8F24ED1D5300273C59 /* 80reverse-proxy-truncated-chunked.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "80reverse-proxy-truncated-chunked.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		E9414F9024ED1D7400273C59 /* 50proxy-forward-close-connection.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50proxy-forward-close-connection.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		E9414F9124ED1D7400273C59 /* 50reverse-proxy-header-filtering.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50reverse-proxy-header-filtering.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
@@ -2394,6 +2395,7 @@
 			children = (
 				E901C43F2140CCB500D17C93 /* qpack.c */,
 				E93C7F9922701806007BF39A /* frame.c */,
+				E90BB43924F369E4006507EA /* server.c */,
 			);
 			path = http3;
 			sourceTree = "<group>";
@@ -3265,6 +3267,7 @@
 				E987E5F81FD8C04D00DE4346 /* literal_cost.c in Sources */,
 				E987E5F71FD8C04D00DE4346 /* histogram.c in Sources */,
 				E901C42C213E52A800D17C93 /* curve25519.c in Sources */,
+				E90BB43A24F369E4006507EA /* server.c in Sources */,
 				107086701B7925D5002B8F18 /* compress.c in Sources */,
 				E987E5F41FD8C04D00DE4346 /* dictionary_hash.c in Sources */,
 				E96A24D323E6747A00CA970A /* absprio.c in Sources */,
@@ -3285,7 +3288,6 @@
 				10F9F2651AF4795D0056F26B /* redirect.c in Sources */,
 				E987E5F21FD8C04D00DE4346 /* compress_fragment_two_pass.c in Sources */,
 				E901C436213E52CA00D17C93 /* openssl.c in Sources */,
-				E9E5049221501BC3004DC170 /* server.c in Sources */,
 				E901C407213E1C5400D17C93 /* ranges.c in Sources */,
 				107D4D4A1B5880BC004A9B21 /* reader.c in Sources */,
 				E980423E22463057008B9745 /* defaults.c in Sources */,

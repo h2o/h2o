@@ -178,6 +178,7 @@ int main(int argc, char **argv)
         subtest("lib/http2/cache_digests.c", test_lib__http2__cache_digests);
         subtest("lib/http3/frame.c", test_lib__http3_frames);
         subtest("lib/http3/qpack.c", test_lib__http3_qpack);
+        subtest("lib/http3/server.c", test_lib__http3_server);
     }
 
     { /* tests that use the run loop */
