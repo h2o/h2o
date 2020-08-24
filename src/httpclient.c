@@ -60,7 +60,7 @@ struct {
     size_t num_headers;
     size_t body_size;
 } req = {NULL, "GET"};
-static int cnt_left = 1;
+static unsigned cnt_left = 1, concurrency = 1;
 static size_t cur_req_body_size = 0;
 static int chunk_size = 10;
 static h2o_iovec_t iov_filler;
@@ -234,7 +234,8 @@ static int on_body(h2o_httpclient_t *client, const char *errstr)
     h2o_buffer_consume(&(*client->buf), (*client->buf)->size);
 
     if (errstr == h2o_httpclient_error_is_eos) {
-        if (--cnt_left != 0) {
+        --cnt_left;
+        if (cnt_left > concurrency) {
             /* next attempt */
             h2o_mem_clear_pool(&pool);
             ftruncate(fileno(stdout), 0); /* ignore error when stdout is a tty */
@@ -360,6 +361,8 @@ static void usage(const char *progname)
             "  -2 <ratio>   HTTP/2 ratio (between 0 and 100)\n"
             "  -3           HTTP/3-only mode\n"
             "  -b <size>    size of request body (in bytes; default: 0)\n"
+            "  -C <concurrency>\n"
+            "               sets the number of requests run at once (default: 1)\n"
             "  -c <size>    size of body chunk (in bytes; default: 10)\n"
             "  -d <delay>   request interval (in msec; default: 0)\n"
             "  -H <name:value>\n"
@@ -454,10 +457,13 @@ int main(int argc, char **argv)
     ctx.loop = h2o_evloop_create();
 #endif
 
-    while ((opt = getopt(argc, argv, "t:m:o:b:c:d:H:i:k2:3W:h")) != -1) {
+    while ((opt = getopt(argc, argv, "t:m:o:b:C:c:d:H:i:k2:3W:h")) != -1) {
         switch (opt) {
         case 't':
-            cnt_left = atoi(optarg);
+            if (sscanf(optarg, "%u", &cnt_left) != 1 || cnt_left < 1) {
+                fprintf(stderr, "count (-t) must be a number greater than zero\n");
+                exit(EXIT_FAILURE);
+            }
             break;
         case 'm':
             req.method = optarg;
@@ -472,6 +478,12 @@ int main(int argc, char **argv)
             req.body_size = atoi(optarg);
             if (req.body_size <= 0) {
                 fprintf(stderr, "body size must be greater than 0\n");
+                exit(EXIT_FAILURE);
+            }
+            break;
+        case 'C':
+            if (sscanf(optarg, "%u", &concurrency) != 1 || concurrency < 1) {
+                fprintf(stderr, "concurrency (-C) must be a number greather than zero");
                 exit(EXIT_FAILURE);
             }
             break;
@@ -562,8 +574,9 @@ int main(int argc, char **argv)
     queue = h2o_multithread_create_queue(ctx.loop);
     h2o_multithread_register_receiver(queue, ctx.getaddr_receiver, h2o_hostinfo_getaddr_receiver);
 
-    /* setup the first request */
-    start_request(&ctx);
+    /* setup the first request(s) */
+    for (unsigned i = 0; i < concurrency && i < cnt_left; ++i)
+        start_request(&ctx);
 
     while (cnt_left != 0) {
 #if H2O_USE_LIBUV
