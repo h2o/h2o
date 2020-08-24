@@ -1138,7 +1138,7 @@ static void req_scheduler_init(struct st_h2o_http3_server_conn_t *conn)
 {
     size_t i;
 
-    for (i = 0; i <= H2O_ABSPRIO_URGENCY_MAX; ++i) {
+    for (i = 0; i < H2O_ABSPRIO_NUM_URGENCY_LEVELS; ++i) {
         h2o_linklist_init_anchor(&conn->scheduler.reqs.active.urgencies[i].high);
         h2o_linklist_init_anchor(&conn->scheduler.reqs.active.urgencies[i].low);
     }
@@ -1183,7 +1183,7 @@ static void req_scheduler_update_smallest_urgency_post_removal(struct st_h2o_htt
     while (h2o_linklist_is_empty(&conn->scheduler.reqs.active.urgencies[conn->scheduler.reqs.active.smallest_urgency].high) &&
            h2o_linklist_is_empty(&conn->scheduler.reqs.active.urgencies[conn->scheduler.reqs.active.smallest_urgency].low)) {
         ++conn->scheduler.reqs.active.smallest_urgency;
-        if (conn->scheduler.reqs.active.smallest_urgency > H2O_ABSPRIO_URGENCY_MAX)
+        if (conn->scheduler.reqs.active.smallest_urgency >= H2O_ABSPRIO_NUM_URGENCY_LEVELS)
             break;
     }
 }
@@ -1245,7 +1245,7 @@ static int scheduler_can_send(quicly_stream_scheduler_t *sched, quicly_conn_t *q
 
     if (conn->scheduler.uni.active != 0)
         return 1;
-    if (conn->scheduler.reqs.active.smallest_urgency <= H2O_ABSPRIO_URGENCY_MAX)
+    if (conn->scheduler.reqs.active.smallest_urgency < H2O_ABSPRIO_NUM_URGENCY_LEVELS)
         return 1;
 
     return 0;
@@ -1295,7 +1295,7 @@ static int scheduler_do_send(quicly_stream_scheduler_t *sched, quicly_conn_t *qc
                     slot = &conn->scheduler.uni.conn_blocked;
                 *slot |= 1 << stream->quic->stream_id;
             }
-        } else if (conn->scheduler.reqs.active.smallest_urgency <= H2O_ABSPRIO_URGENCY_MAX) {
+        } else if (conn->scheduler.reqs.active.smallest_urgency < H2O_ABSPRIO_NUM_URGENCY_LEVELS) {
             /* 1. obtain pointer to the offending stream */
             h2o_linklist_t *anchor = &conn->scheduler.reqs.active.urgencies[conn->scheduler.reqs.active.smallest_urgency].high;
             if (h2o_linklist_is_empty(anchor)) {
@@ -1421,7 +1421,7 @@ static void on_h3_destroy(h2o_quic_conn_t *h3_)
         h2o_timer_unlink(&conn->timeout);
     h2o_http3_dispose_conn(&conn->h3);
 
-    assert(conn->scheduler.reqs.active.smallest_urgency > H2O_ABSPRIO_URGENCY_MAX);
+    assert(conn->scheduler.reqs.active.smallest_urgency >= H2O_ABSPRIO_NUM_URGENCY_LEVELS);
     assert(h2o_linklist_is_empty(&conn->scheduler.reqs.conn_blocked));
 
     free(conn);
