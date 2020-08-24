@@ -61,7 +61,6 @@ struct {
     size_t body_size;
 } req = {NULL, "GET"};
 static unsigned cnt_left = 1, concurrency = 1;
-static size_t cur_req_body_size = 0;
 static int chunk_size = 10;
 static h2o_iovec_t iov_filler;
 static int io_interval = 0, req_interval = 0;
@@ -175,8 +174,6 @@ static void start_request(h2o_httpclient_ctx_t *ctx)
         return;
     }
 
-    cur_req_body_size = req.body_size;
-
     /* initiate the request */
     if (ctx->http3.ctx != NULL) {
         h2o_httpclient_connect_h3(NULL, &pool, url_parsed, ctx, url_parsed, on_connect);
@@ -289,12 +286,18 @@ h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, int
     return on_body;
 }
 
-int fill_body(h2o_iovec_t *reqbuf)
+static size_t *remaining_req_bytes(h2o_httpclient_t *client)
 {
-    if (cur_req_body_size > 0) {
+    return (size_t *)&client->data;
+}
+
+int fill_body(h2o_httpclient_t *client, h2o_iovec_t *reqbuf)
+{
+    size_t *cur_req_body_size = remaining_req_bytes(client);
+    if (*cur_req_body_size > 0) {
         memcpy(reqbuf, &iov_filler, sizeof(*reqbuf));
-        reqbuf->len = MIN(iov_filler.len, cur_req_body_size);
-        cur_req_body_size -= reqbuf->len;
+        reqbuf->len = MIN(iov_filler.len, *cur_req_body_size);
+        *cur_req_body_size -= reqbuf->len;
         return 0;
     } else {
         *reqbuf = h2o_iovec_init(NULL, 0);
@@ -309,13 +312,13 @@ static void on_io_timeout(h2o_timer_t *entry)
     free(t);
 
     h2o_iovec_t reqbuf;
-    fill_body(&reqbuf);
-    client->write_req(client, reqbuf, cur_req_body_size <= 0);
+    fill_body(client, &reqbuf);
+    client->write_req(client, reqbuf, *remaining_req_bytes(client) <= 0);
 }
 
 static void proceed_request(h2o_httpclient_t *client, size_t written, h2o_send_state_t send_state)
 {
-    if (cur_req_body_size > 0)
+    if (*remaining_req_bytes(client) > 0)
         create_timeout(client->ctx->loop, io_interval, on_io_timeout, client);
 }
 
@@ -339,9 +342,10 @@ h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *errstr, 
     *body = h2o_iovec_init(NULL, 0);
     *proceed_req_cb = NULL;
 
-    if (cur_req_body_size > 0) {
+    if (req.body_size > 0) {
+        *remaining_req_bytes(client) = req.body_size;
         char *clbuf = h2o_mem_alloc_pool(&pool, char, sizeof(H2O_UINT32_LONGEST_STR) - 1);
-        size_t clbuf_len = sprintf(clbuf, "%zu", cur_req_body_size);
+        size_t clbuf_len = sprintf(clbuf, "%zu", req.body_size);
         h2o_add_header(&pool, &headers_vec, H2O_TOKEN_CONTENT_LENGTH, NULL, clbuf, clbuf_len);
 
         *proceed_req_cb = proceed_request;
