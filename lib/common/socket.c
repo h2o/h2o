@@ -1065,6 +1065,7 @@ static void proceed_handshake_picotls(h2o_socket_t *sock)
         on_handshake_complete(sock, "picotls handshake error");
         break;
     }
+
     ptls_buffer_dispose(&wbuf);
 }
 
@@ -1076,8 +1077,7 @@ static void proceed_handshake_openssl(h2o_socket_t *sock)
 
     assert(sock->ssl->ossl != NULL);
 
-    if (SSL_is_server(sock->ssl->ossl) &&
-        sock->ssl->handshake.server.async_resumption.state == ASYNC_RESUMPTION_STATE_RECORD) {
+    if (SSL_is_server(sock->ssl->ossl) && sock->ssl->handshake.server.async_resumption.state == ASYNC_RESUMPTION_STATE_RECORD) {
         if (sock->ssl->input.encrypted->size <= 1024) {
             /* retain a copy of input if performing async resumption */
             first_input = h2o_iovec_init(alloca(sock->ssl->input.encrypted->size), sock->ssl->input.encrypted->size);
