@@ -1176,7 +1176,7 @@ Complete:
 }
 
 /**
- * Called when it is still untertain which of the two TLS stacks (picotls or OpenSSL) should handle the handshake.
+ * Called when it is still uncertain which of the two TLS stacks (picotls or OpenSSL) should handle the handshake.
  * The function first tries picotls without consuming the socket input buffer. Then, if picotls returns PTLS_ALERT_PROTOCOL_VERSION
  * indicating that the client is using TLS 1.2 or below, switches to using OpenSSL.
  */
