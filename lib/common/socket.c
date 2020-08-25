@@ -1175,14 +1175,17 @@ Complete:
     on_handshake_complete(sock, err);
 }
 
+/**
+ * Called when it is still untertain which of the two TLS stacks (picotls or OpenSSL) should handle the handshake.
+ * The function first tries picotls without consuming the socket input buffer. Then, if picotls returns PTLS_ALERT_PROTOCOL_VERSION
+ * indicating that the client is using TLS 1.2 or below, switches to using OpenSSL.
+ */
 static void proceed_handshake_undetermined(h2o_socket_t *sock)
 {
     assert(sock->ssl->ossl == NULL && sock->ssl->ptls == NULL);
 
     ptls_context_t *ptls_ctx = h2o_socket_ssl_get_picotls_context(sock->ssl->ssl_ctx);
     assert(ptls_ctx != NULL);
-
-    /* process client hello using picotls */
 
     size_t consumed = sock->ssl->input.encrypted->size;
     ptls_buffer_t wbuf;
