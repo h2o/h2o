@@ -90,6 +90,7 @@ extern "C" {
 #define H2O_DEFAULT_HTTP2_GRACEFUL_SHUTDOWN_TIMEOUT_IN_SECS 0 /* no timeout */
 #define H2O_DEFAULT_HTTP2_GRACEFUL_SHUTDOWN_TIMEOUT (H2O_DEFAULT_HTTP2_GRACEFUL_SHUTDOWN_TIMEOUT_IN_SECS * 1000)
 #define H2O_DEFAULT_HTTP2_ACTIVE_STREAM_WINDOW_SIZE H2O_HTTP2_MAX_STREAM_WINDOW_SIZE
+#define H2O_DEFAULT_HTTP3_ACTIVE_STREAM_WINDOW_SIZE H2O_DEFAULT_HTTP2_ACTIVE_STREAM_WINDOW_SIZE
 #define H2O_DEFAULT_PROXY_IO_TIMEOUT_IN_SECS 30
 #define H2O_DEFAULT_PROXY_IO_TIMEOUT (H2O_DEFAULT_PROXY_IO_TIMEOUT_IN_SECS * 1000)
 #define H2O_DEFAULT_PROXY_WEBSOCKET_TIMEOUT_IN_SECS 300
@@ -416,6 +417,10 @@ struct st_h2o_globalconf_t {
          * graceful shutdown timeout (in milliseconds)
          */
         uint64_t graceful_shutdown_timeout;
+        /**
+         * receive window size of the unblocked request stream
+         */
+        uint32_t active_stream_window_size;
         /**
          * the callbacks
          */

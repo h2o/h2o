@@ -51,11 +51,6 @@ struct st_h2o_http3_ingress_unistream_t {
                          const uint8_t *src_end, int is_eos);
 };
 
-/**
- * maximum payload size excluding DATA frame; stream receive window MUST be at least as big as this
- */
-#define MAX_FRAME_SIZE 16384
-
 const ptls_iovec_t h2o_http3_alpn[2] = {{(void *)H2O_STRLIT("h3-29")}, {(void *)H2O_STRLIT("h3-27")}};
 
 static void on_track_sendmsg_timer(h2o_timer_t *timeout);
@@ -840,7 +835,7 @@ int h2o_http3_read_frame(h2o_http3_read_frame_t *frame, int is_client, uint64_t 
     /* read the content of the frame (unless it's a DATA frame) */
     frame->payload = NULL;
     if (frame->type != H2O_HTTP3_FRAME_TYPE_DATA) {
-        if (frame->length >= MAX_FRAME_SIZE) {
+        if (frame->length > H2O_HTTP3_MAX_FRAME_PAYLOAD_SIZE) {
             H2O_PROBE(H3_FRAME_RECEIVE, frame->type, NULL, frame->length);
             *err_desc = "H3 frame too large";
             return H2O_HTTP3_ERROR_GENERAL_PROTOCOL; /* FIXME is this the correct code? */

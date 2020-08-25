@@ -60,8 +60,7 @@ struct {
     size_t num_headers;
     size_t body_size;
 } req = {NULL, "GET"};
-static int cnt_left = 1;
-static size_t cur_req_body_size = 0;
+static unsigned cnt_left = 1, concurrency = 1;
 static int chunk_size = 10;
 static h2o_iovec_t iov_filler;
 static int io_interval = 0, req_interval = 0;
@@ -175,8 +174,6 @@ static void start_request(h2o_httpclient_ctx_t *ctx)
         return;
     }
 
-    cur_req_body_size = req.body_size;
-
     /* initiate the request */
     if (ctx->http3.ctx != NULL) {
         h2o_httpclient_connect_h3(NULL, &pool, url_parsed, ctx, url_parsed, on_connect);
@@ -234,7 +231,8 @@ static int on_body(h2o_httpclient_t *client, const char *errstr)
     h2o_buffer_consume(&(*client->buf), (*client->buf)->size);
 
     if (errstr == h2o_httpclient_error_is_eos) {
-        if (--cnt_left != 0) {
+        --cnt_left;
+        if (cnt_left >= concurrency) {
             /* next attempt */
             h2o_mem_clear_pool(&pool);
             ftruncate(fileno(stdout), 0); /* ignore error when stdout is a tty */
@@ -288,12 +286,18 @@ h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, int
     return on_body;
 }
 
-int fill_body(h2o_iovec_t *reqbuf)
+static size_t *remaining_req_bytes(h2o_httpclient_t *client)
 {
-    if (cur_req_body_size > 0) {
+    return (size_t *)&client->data;
+}
+
+int fill_body(h2o_httpclient_t *client, h2o_iovec_t *reqbuf)
+{
+    size_t *cur_req_body_size = remaining_req_bytes(client);
+    if (*cur_req_body_size > 0) {
         memcpy(reqbuf, &iov_filler, sizeof(*reqbuf));
-        reqbuf->len = MIN(iov_filler.len, cur_req_body_size);
-        cur_req_body_size -= reqbuf->len;
+        reqbuf->len = MIN(iov_filler.len, *cur_req_body_size);
+        *cur_req_body_size -= reqbuf->len;
         return 0;
     } else {
         *reqbuf = h2o_iovec_init(NULL, 0);
@@ -308,13 +312,13 @@ static void on_io_timeout(h2o_timer_t *entry)
     free(t);
 
     h2o_iovec_t reqbuf;
-    fill_body(&reqbuf);
-    client->write_req(client, reqbuf, cur_req_body_size <= 0);
+    fill_body(client, &reqbuf);
+    client->write_req(client, reqbuf, *remaining_req_bytes(client) <= 0);
 }
 
 static void proceed_request(h2o_httpclient_t *client, size_t written, h2o_send_state_t send_state)
 {
-    if (cur_req_body_size > 0)
+    if (*remaining_req_bytes(client) > 0)
         create_timeout(client->ctx->loop, io_interval, on_io_timeout, client);
 }
 
@@ -338,9 +342,10 @@ h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *errstr, 
     *body = h2o_iovec_init(NULL, 0);
     *proceed_req_cb = NULL;
 
-    if (cur_req_body_size > 0) {
+    if (req.body_size > 0) {
+        *remaining_req_bytes(client) = req.body_size;
         char *clbuf = h2o_mem_alloc_pool(&pool, char, sizeof(H2O_UINT32_LONGEST_STR) - 1);
-        size_t clbuf_len = sprintf(clbuf, "%zu", cur_req_body_size);
+        size_t clbuf_len = sprintf(clbuf, "%zu", req.body_size);
         h2o_add_header(&pool, &headers_vec, H2O_TOKEN_CONTENT_LENGTH, NULL, clbuf, clbuf_len);
 
         *proceed_req_cb = proceed_request;
@@ -360,6 +365,8 @@ static void usage(const char *progname)
             "  -2 <ratio>   HTTP/2 ratio (between 0 and 100)\n"
             "  -3           HTTP/3-only mode\n"
             "  -b <size>    size of request body (in bytes; default: 0)\n"
+            "  -C <concurrency>\n"
+            "               sets the number of requests run at once (default: 1)\n"
             "  -c <size>    size of body chunk (in bytes; default: 10)\n"
             "  -d <delay>   request interval (in msec; default: 0)\n"
             "  -H <name:value>\n"
@@ -454,10 +461,13 @@ int main(int argc, char **argv)
     ctx.loop = h2o_evloop_create();
 #endif
 
-    while ((opt = getopt(argc, argv, "t:m:o:b:c:d:H:i:k2:3W:h")) != -1) {
+    while ((opt = getopt(argc, argv, "t:m:o:b:C:c:d:H:i:k2:3W:h")) != -1) {
         switch (opt) {
         case 't':
-            cnt_left = atoi(optarg);
+            if (sscanf(optarg, "%u", &cnt_left) != 1 || cnt_left < 1) {
+                fprintf(stderr, "count (-t) must be a number greater than zero\n");
+                exit(EXIT_FAILURE);
+            }
             break;
         case 'm':
             req.method = optarg;
@@ -472,6 +482,12 @@ int main(int argc, char **argv)
             req.body_size = atoi(optarg);
             if (req.body_size <= 0) {
                 fprintf(stderr, "body size must be greater than 0\n");
+                exit(EXIT_FAILURE);
+            }
+            break;
+        case 'C':
+            if (sscanf(optarg, "%u", &concurrency) != 1 || concurrency < 1) {
+                fprintf(stderr, "concurrency (-C) must be a number greather than zero");
                 exit(EXIT_FAILURE);
             }
             break;
@@ -562,8 +578,9 @@ int main(int argc, char **argv)
     queue = h2o_multithread_create_queue(ctx.loop);
     h2o_multithread_register_receiver(queue, ctx.getaddr_receiver, h2o_hostinfo_getaddr_receiver);
 
-    /* setup the first request */
-    start_request(&ctx);
+    /* setup the first request(s) */
+    for (unsigned i = 0; i < concurrency && i < cnt_left; ++i)
+        start_request(&ctx);
 
     while (cnt_left != 0) {
 #if H2O_USE_LIBUV

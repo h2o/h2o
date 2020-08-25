@@ -1026,6 +1026,7 @@
 		E908A2AF2320AE4D0039BCEE /* Dockerfile.ubuntu1904 */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = Dockerfile.ubuntu1904; sourceTree = "<group>"; };
 		E90A95F21E30795100483D6C /* headers_util.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = headers_util.c; sourceTree = "<group>"; };
 		E90A95F41E30797D00483D6C /* headers_util.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = headers_util.c; sourceTree = "<group>"; };
+		E90BB43B24F38937006507EA /* 40http3-concurrency.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "40http3-concurrency.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		E90BB43C24F4834D006507EA /* 40http3-forward.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "40http3-forward.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		E90C514D230BB28800D6AD8E /* 90dtrace.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = 90dtrace.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		E918FC392136583F00CCB252 /* proptest */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = proptest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -2088,6 +2089,7 @@
 				E9F677CA1FF47BD0006476D3 /* 40http2-h2spec.t */,
 				E9BCE6921FF344D4003CEA11 /* 40http2-request-window-size.t */,
 				E98041C22230C45E008B9745 /* 40http3.t */,
+				E90BB43B24F38937006507EA /* 40http3-concurrency.t */,
 				E90BB43C24F4834D006507EA /* 40http3-forward.t */,
 				E9414F8D24EBFBDA00273C59 /* 40http3-reconnect.t */,
 				E9FC525C234B0A630076F35D /* 40http3-retry.t */,

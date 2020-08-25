@@ -574,6 +574,20 @@ static int on_config_http3_graceful_shutdown_timeout(h2o_configurator_command_t 
     return config_timeout(cmd, node, &ctx->globalconf->http3.graceful_shutdown_timeout);
 }
 
+static int on_config_http3_input_window_size(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    uint32_t v;
+    if (h2o_configurator_scanf(cmd, node, "%" SCNu32, &v) != 0)
+        return -1;
+    if (v < H2O_HTTP3_INITIAL_REQUEST_STREAM_WINDOW_SIZE) {
+        h2o_configurator_errprintf(cmd, node, "window size must be no less than %u",
+                                   (unsigned)H2O_HTTP3_INITIAL_REQUEST_STREAM_WINDOW_SIZE);
+        return -1;
+    }
+    ctx->globalconf->http3.active_stream_window_size = v;
+    return 0;
+}
+
 static int assert_is_mimetype(h2o_configurator_command_t *cmd, yoml_t *node)
 {
     if (node->type != YOML_TYPE_SCALAR) {
@@ -1006,6 +1020,9 @@ void h2o_configurator__init_core(h2o_globalconf_t *conf)
         h2o_configurator_define_command(&c->super, "http3-graceful-shutdown-timeout",
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_http3_graceful_shutdown_timeout);
+        h2o_configurator_define_command(&c->super, "http3-input-window-size",
+                                        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                        on_config_http3_input_window_size);
         h2o_configurator_define_command(&c->super, "file.mime.settypes",
                                         (H2O_CONFIGURATOR_FLAG_ALL_LEVELS & ~H2O_CONFIGURATOR_FLAG_EXTENSION) |
                                             H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING,

@@ -78,6 +78,13 @@
 #define H2O_HTTP3_ERROR_TRANSPORT -2
 #define H2O_HTTP3_ERROR_USER1 -256
 
+/**
+ * maximum payload size excluding DATA frame; stream receive window MUST be at least as big as this + 16 bytes to hold the type and
+ * the length
+ */
+#define H2O_HTTP3_MAX_FRAME_PAYLOAD_SIZE 16384
+#define H2O_HTTP3_INITIAL_REQUEST_STREAM_WINDOW_SIZE (H2O_HTTP3_MAX_FRAME_PAYLOAD_SIZE * 2)
+
 typedef struct st_h2o_quic_ctx_t h2o_quic_ctx_t;
 typedef struct st_h2o_quic_conn_t h2o_quic_conn_t;
 typedef struct st_h2o_http3_conn_t h2o_http3_conn_t;
