@@ -408,6 +408,17 @@ struct st_h2o_globalconf_t {
     } http2;
 
     struct {
+        /**
+         * idle timeout (in milliseconds)
+         */
+        uint64_t idle_timeout;
+        /**
+         * graceful shutdown timeout (in milliseconds)
+         */
+        uint64_t graceful_shutdown_timeout;
+        /**
+         * the callbacks
+         */
         h2o_protocol_callbacks_t callbacks;
     } http3;
 
@@ -633,6 +644,17 @@ struct st_h2o_context_t {
 
     struct {
         /**
+         * link-list of h2o_http3_server_conn_t
+         */
+        h2o_linklist_t _conns;
+        /**
+         * timeout entry used for graceful shutdown
+         */
+        h2o_timer_t _graceful_shutdown_timeout;
+    } http3;
+
+    struct {
+        /**
          * the default client context for proxy
          */
         h2o_httpclient_ctx_t client_ctx;
@@ -847,6 +869,7 @@ typedef struct st_h2o_conn_callbacks_t {
                 h2o_iovec_t (*cipher_bits)(h2o_req_t *req);
                 h2o_iovec_t (*session_id)(h2o_req_t *req);
                 h2o_iovec_t (*server_name)(h2o_req_t *req);
+                h2o_iovec_t (*negotiated_protocol)(h2o_req_t *req);
             } ssl;
             struct {
                 h2o_iovec_t (*request_index)(h2o_req_t *req);
@@ -1106,6 +1129,13 @@ struct st_h2o_req_t {
             uint64_t body;
         } bytes_read;
         h2o_httpclient_timings_t timestamps;
+        struct {
+            const char *protocol_version;
+            const char *cipher;
+            int session_reused;
+            int cipher_bits;
+            /* server name and session id are omitted since they are not static data */
+        } ssl;
     } proxy_stats;
     /**
      * the response

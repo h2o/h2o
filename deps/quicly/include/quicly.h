@@ -64,7 +64,14 @@ extern "C" {
 
 #define QUICLY_PACKET_IS_LONG_HEADER(first_byte) (((first_byte)&QUICLY_LONG_HEADER_BIT) != 0)
 
-#define QUICLY_PROTOCOL_VERSION 0xff00001d
+/**
+ * The current version being supported. At the moment, it is draft-29.
+ */
+#define QUICLY_PROTOCOL_VERSION_CURRENT 0xff00001d
+/**
+ * Draft-27 is also supported.
+ */
+#define QUICLY_PROTOCOL_VERSION_DRAFT27 0xff00001b
 
 #define QUICLY_PACKET_IS_INITIAL(first_byte) (((first_byte)&0xf0) == 0xc0)
 
@@ -257,9 +264,14 @@ struct st_quicly_context_t {
      */
     uint64_t max_crypto_bytes;
     /**
-     * client-only
+     * (client-only) Initial QUIC protocol version used by the client. Setting this to a greased version will enforce version
+     * negotiation.
      */
-    unsigned enforce_version_negotiation : 1;
+    uint32_t initial_version;
+    /**
+     * (server-only) amplification limit before the peer address is validated
+     */
+    uint16_t pre_validation_amplification_limit;
     /**
      * if inter-node routing is used (by utilising quicly_cid_plaintext_t::node_id)
      */
@@ -696,6 +708,14 @@ struct st_quicly_address_token_plaintext_t {
 };
 
 /**
+ * zero-terminated list of protocol versions being supported by quicly
+ */
+extern const uint32_t quicly_supported_versions[];
+/**
+ * returns a boolean indicating if given protocol version is supported
+ */
+static int quicly_is_supported_version(uint32_t version);
+/**
  * Extracts QUIC packets from a datagram pointed to by `src` and `len`. If successful, the function returns the size of the QUIC
  * packet being decoded. Otherwise, SIZE_MAX is returned.
  * `off` is an I/O argument that takes starting offset of the QUIC packet to be decoded as input, and returns the starting offset of
@@ -811,10 +831,12 @@ int quicly_can_send_stream_data(quicly_conn_t *conn, quicly_send_context_t *s);
  */
 int quicly_send_stream(quicly_stream_t *stream, quicly_send_context_t *s);
 /**
- *
+ * Builds a Version Negotiation packet. The generated packet might include a greasing version.
+ * * @param versions  zero-terminated list of versions to advertise; use `quicly_supported_versions` for sending the list of
+ *                    protocol versions supported by quicly
  */
-size_t quicly_send_version_negotiation(quicly_context_t *ctx, struct sockaddr *dest_addr, ptls_iovec_t dest_cid,
-                                       struct sockaddr *src_addr, ptls_iovec_t src_cid, void *payload);
+size_t quicly_send_version_negotiation(quicly_context_t *ctx, ptls_iovec_t dest_cid, ptls_iovec_t src_cid, const uint32_t *versions,
+                                       void *payload);
 /**
  *
  */
@@ -827,9 +849,10 @@ int quicly_retry_calc_cidpair_hash(ptls_hash_algorithm_t *sha256, ptls_iovec_t c
  * @param payload           buffer used for building the packet
  * @return size of the UDP datagram payload being built, or otherwise SIZE_MAX to indicate failure
  */
-size_t quicly_send_retry(quicly_context_t *ctx, ptls_aead_context_t *token_encrypt_ctx, struct sockaddr *dest_addr,
-                         ptls_iovec_t dest_cid, struct sockaddr *src_addr, ptls_iovec_t src_cid, ptls_iovec_t odcid,
-                         ptls_iovec_t token_prefix, ptls_iovec_t appdata, ptls_aead_context_t **retry_aead_cache, uint8_t *payload);
+size_t quicly_send_retry(quicly_context_t *ctx, ptls_aead_context_t *token_encrypt_ctx, uint32_t protocol_version,
+                         struct sockaddr *dest_addr, ptls_iovec_t dest_cid, struct sockaddr *src_addr, ptls_iovec_t src_cid,
+                         ptls_iovec_t odcid, ptls_iovec_t token_prefix, ptls_iovec_t appdata,
+                         ptls_aead_context_t **retry_aead_cache, uint8_t *payload);
 /**
  * Builds UDP datagrams to be sent for given connection.
  * @param [out] dest              destination address
@@ -850,13 +873,12 @@ int quicly_send(quicly_conn_t *conn, quicly_address_t *dest, quicly_address_t *s
 /**
  *
  */
-size_t quicly_send_close_invalid_token(quicly_context_t *ctx, struct sockaddr *dest_addr, ptls_iovec_t dest_cid,
-                                       struct sockaddr *src_addr, ptls_iovec_t src_cid, const char *err_desc, void *payload);
+size_t quicly_send_close_invalid_token(quicly_context_t *ctx, uint32_t protocol_version, ptls_iovec_t dest_cid,
+                                       ptls_iovec_t src_cid, const char *err_desc, void *datagram);
 /**
  *
  */
-size_t quicly_send_stateless_reset(quicly_context_t *ctx, struct sockaddr *dest_addr, struct sockaddr *src_addr,
-                                   const void *src_cid, void *payload);
+size_t quicly_send_stateless_reset(quicly_context_t *ctx, const void *src_cid, void *payload);
 /**
  *
  */
@@ -1038,6 +1060,17 @@ void quicly_stream_noop_on_receive_reset(quicly_stream_t *stream, int err);
 extern const quicly_stream_callbacks_t quicly_stream_noop_callbacks;
 
 /* inline definitions */
+
+inline int quicly_is_supported_version(uint32_t version)
+{
+    switch (version) {
+    case QUICLY_PROTOCOL_VERSION_CURRENT:
+    case QUICLY_PROTOCOL_VERSION_DRAFT27:
+        return 1;
+    default:
+        return 0;
+    }
+}
 
 inline quicly_state_t quicly_get_state(quicly_conn_t *conn)
 {

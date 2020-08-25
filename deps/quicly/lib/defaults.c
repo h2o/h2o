@@ -26,6 +26,7 @@
 #define DEFAULT_MAX_UDP_PAYLOAD_SIZE 1472
 #define DEFAULT_MAX_PACKETS_PER_KEY 16777216
 #define DEFAULT_MAX_CRYPTO_BYTES 65536
+#define DEFAULT_PRE_VALIDATION_AMPLIFICATION_LIMIT 3
 
 /* profile that employs IETF specified values */
 const quicly_context_t quicly_spec_context = {NULL,                                                 /* tls */
@@ -39,7 +40,8 @@ const quicly_context_t quicly_spec_context = {NULL,                             
                                                DEFAULT_MAX_UDP_PAYLOAD_SIZE},
                                               DEFAULT_MAX_PACKETS_PER_KEY,
                                               DEFAULT_MAX_CRYPTO_BYTES,
-                                              0, /* enforce_version_negotiation */
+                                              QUICLY_PROTOCOL_VERSION_CURRENT,
+                                              DEFAULT_PRE_VALIDATION_AMPLIFICATION_LIMIT,
                                               0, /* is_clustered */
                                               0, /* enlarge_client_hello */
                                               NULL,
@@ -64,7 +66,8 @@ const quicly_context_t quicly_performant_context = {NULL,                       
                                                      DEFAULT_MAX_UDP_PAYLOAD_SIZE},
                                                     DEFAULT_MAX_PACKETS_PER_KEY,
                                                     DEFAULT_MAX_CRYPTO_BYTES,
-                                                    0, /* enforce_version_negotiation */
+                                                    QUICLY_PROTOCOL_VERSION_CURRENT,
+                                                    DEFAULT_PRE_VALIDATION_AMPLIFICATION_LIMIT,
                                                     0, /* is_clustered */
                                                     0, /* enlarge_client_hello */
                                                     NULL,
@@ -436,10 +439,3 @@ static void default_finalize_send_packet(quicly_crypto_engine_t *engine, quicly_
 }
 
 quicly_crypto_engine_t quicly_default_crypto_engine = {default_setup_cipher, default_finalize_send_packet};
-
-static void default_init_cc(quicly_init_cc_t *init_cc, quicly_cc_t *cc, uint32_t initcwnd, int64_t now)
-{
-    quicly_cc_reno_init(cc, initcwnd);
-}
-
-quicly_init_cc_t quicly_default_init_cc = {default_init_cc};

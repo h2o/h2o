@@ -108,8 +108,7 @@ static void graceful_shutdown_resend_goaway(h2o_timer_t *entry)
 
     /* After waiting a second, we still had active connections. If configured, wait one
      * final timeout before closing the connections */
-    if (do_close_stragglers && ctx->globalconf->http2.graceful_shutdown_timeout) {
-        h2o_timer_unlink(&ctx->http2._graceful_shutdown_timeout);
+    if (do_close_stragglers && ctx->globalconf->http2.graceful_shutdown_timeout > 0) {
         ctx->http2._graceful_shutdown_timeout.cb = graceful_shutdown_close_stragglers;
         h2o_timer_link(ctx->loop, ctx->globalconf->http2.graceful_shutdown_timeout, &ctx->http2._graceful_shutdown_timeout);
     }
@@ -1452,13 +1451,13 @@ static int skip_tracing(h2o_conn_t *_conn)
         h2o_http2_conn_t *conn = (void *)req->conn;                                                                                \
         return h2o_socket_log_ssl_##name(conn->sock, &req->pool);                                                                  \
     }
-
 DEFINE_TLS_LOGGER(protocol_version)
 DEFINE_TLS_LOGGER(session_reused)
 DEFINE_TLS_LOGGER(cipher)
 DEFINE_TLS_LOGGER(cipher_bits)
 DEFINE_TLS_LOGGER(session_id)
 DEFINE_TLS_LOGGER(server_name)
+DEFINE_TLS_LOGGER(negotiated_protocol)
 #undef DEFINE_TLS_LOGGER
 
 static h2o_iovec_t log_stream_id(h2o_req_t *req)
@@ -1556,6 +1555,7 @@ static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_hostconf_t **hosts,
                     .cipher_bits = log_cipher_bits,
                     .session_id = log_session_id,
                     .server_name = log_server_name,
+                    .negotiated_protocol = log_negotiated_protocol,
                 },
             .http2 =
                 {

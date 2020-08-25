@@ -407,7 +407,7 @@ static void loss_check_stats(int64_t *time_spent, unsigned max_failures, double 
     ok(time_mean <= expected_time_mean * 1.2);
     ok(time_median >= expected_time_median * 0.8);
     ok(time_median <= expected_time_median * 1.2);
-    //ok(time_90th >= expected_time_90th * 0.9); 90th is fragile to errors, we track this as an guarantee
+    // ok(time_90th >= expected_time_90th * 0.9); 90th is fragile to errors, we track this as an guarantee
     ok(time_90th <= expected_time_90th * 1.2);
 
     num_failures_in_loss_core = 0;

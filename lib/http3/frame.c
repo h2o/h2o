@@ -59,3 +59,38 @@ int h2o_http3_decode_priority_update_frame(h2o_http3_priority_update_frame_t *fr
 
     return 0;
 }
+
+size_t h2o_http3_goaway_frame_capacity(quicly_stream_id_t stream_or_push_id)
+{
+    return 1   /* type */
+           + 1 /* length field. length should be less than 64, so 1 byte should be enough to represent it */
+           + quicly_encodev_capacity(stream_or_push_id);
+}
+
+uint8_t *h2o_http3_encode_goaway_frame(uint8_t *dst, quicly_stream_id_t stream_or_push_id)
+{
+    *dst++ = H2O_HTTP3_FRAME_TYPE_GOAWAY;                /* type */
+    *dst++ = quicly_encodev_capacity(stream_or_push_id); /* payload length */
+    dst = quicly_encodev(dst, stream_or_push_id);
+
+    return dst;
+}
+
+int h2o_http3_decode_goaway_frame(h2o_http3_goaway_frame_t *frame, const uint8_t *payload, size_t len, const char **err_desc)
+{
+    const uint8_t *src = payload, *end = src + len;
+
+    if ((frame->stream_or_push_id = quicly_decodev(&src, end)) == UINT64_MAX)
+        goto Fail;
+
+    if (src != end) {
+        /* there was an extra byte(s) after a valid QUIC variable-length integer */
+        goto Fail;
+    }
+
+    return 0;
+
+Fail:
+    *err_desc = "Invalid GOAWAY frame";
+    return H2O_HTTP3_ERROR_FRAME;
+}

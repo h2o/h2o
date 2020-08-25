@@ -38,6 +38,7 @@ hosts:
         status: ON
 EOT
 
+    sleep 1; # wait for the spawn checker to disconnect
     my $resp = `curl --silent -o /dev/stderr 'http://127.0.0.1:$server->{port}/s/json?show=main,events' 2>&1 > /dev/null`;
     my $jresp = decode_json("$resp");
     is $jresp->{'connections'}, 1, "One connection";
@@ -55,6 +56,8 @@ hosts:
       /s:
         status: ON
 EOT
+
+    sleep 1; # wait for the spawn checker to disconnect
     my $resp;
     $resp = `curl --silent -o /dev/stderr 'http://127.0.0.1:$server->{port}/beeb98fcf148317be5fe5d763c658bc9ea9c087a' 2>&1 > /dev/null`;
     $resp = `curl --silent -o /dev/stderr 'http://127.0.0.1:$server->{port}/s/json?show=events' 2>&1 > /dev/null`;
@@ -76,6 +79,7 @@ hosts:
         status: ON
 EOT
 
+    sleep 1; # wait for the spawn checker to disconnect
     my $resp = `curl --silent -o /dev/stderr http://127.0.0.1:$server->{port}/s/json?noreqs 2>&1 > /dev/null`;
     my $jresp = decode_json("$resp");
     my @nr_requests = @{ $jresp->{'requests'} };

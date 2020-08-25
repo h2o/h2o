@@ -162,7 +162,7 @@ static void test_slow_cert_verify(void)
     /* PTO fires */
     now = loss.alarm_at;
     ok(quicly_loss_on_alarm(&loss, now, quicly_spec_context.transport_params.max_ack_delay, 0, &min_packets_to_send,
-                                &restrict_sending, on_loss_detected) == 0);
+                            &restrict_sending, on_loss_detected) == 0);
     ok(restrict_sending);
     ok(min_packets_to_send == 2);
     ok(num_packets_lost == 0);

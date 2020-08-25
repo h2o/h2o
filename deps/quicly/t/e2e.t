@@ -4,6 +4,7 @@ use strict;
 use warnings;
 use Digest::MD5 qw(md5_hex);
 use File::Temp qw(tempdir);
+use IO::Socket::INET;
 use JSON;
 use Net::EmptyPort qw(empty_port);
 use POSIX ":sys_wait_h";
@@ -88,12 +89,17 @@ subtest "version-negotiation" => sub {
 
 subtest "retry" => sub {
     my $guard = spawn_server("-R");
-    my $resp = `$cli -e $tempdir/events -p /12 127.0.0.1 $port 2> /dev/null`;
-    is $resp, "hello world\n";
-    my $events = slurp_file("$tempdir/events");
-    complex $events, sub {
-        $_ =~ qr/"type":"receive",.*"first-octet":(\d+).*\n.*"type":"stream-lost",.*"stream-id":-1,.*"off":0,/ and $1 >= 240
-    }, "CH deemed lost in response to retry";
+    for my $version (qw(27 29)) {
+        subtest "draft-$version" => sub {
+            my $resp = `$cli -d $version -e $tempdir/events -p /12 127.0.0.1 $port 2> /dev/null`;
+            is $resp, "hello world\n";
+            my $events = slurp_file("$tempdir/events");
+            unlike $events, qr/version-switch/, "no version switch";
+            complex $events, sub {
+                $_ =~ qr/"type":"receive",.*"first-octet":(\d+).*\n.*"type":"stream-lost",.*"stream-id":-1,.*"off":0,/ and $1 >= 240
+            }, "CH deemed lost in response to retry";
+        };
+    }
 };
 
 subtest "large-client-hello" => sub {
@@ -148,7 +154,7 @@ subtest "retry-invalid-token" => sub {
 };
 
 subtest "stateless-reset" => sub {
-    my $guard = spawn_server(qw(-C deadbeef));
+    my $guard = spawn_server(qw(-B deadbeef));
     my $pid = fork;
     die "fork failed:$!"
         unless defined $pid;
@@ -162,13 +168,43 @@ subtest "stateless-reset" => sub {
     # parent process, let the client fetch the first response, then kill respawn the server using same CID encryption key
     sleep 1;
     undef $guard;
-    $guard = spawn_server(qw(-C deadbeef));
+    $guard = spawn_server(qw(-B deadbeef));
     # wait for the child to die
     while (waitpid($pid, 0) != $pid) {
     }
     # check that the stateless reset is logged
     my $events = slurp_file("$tempdir/events");
-    like $events, qr/"type":"stateless-reset-receive",/m;
+    like $events, qr/"type":"stateless-reset-receive",/m, 'got stateless reset';
+    unlike +($events =~ /"type":"stateless-reset-receive",.*?\n/ and $'), qr/"type":"packet-commit",/m, 'nothing sent after receiving stateless reset';
+};
+
+subtest "no-compatible-version" => sub {
+    # spawn a server that sends empty VN
+    my $sock = IO::Socket::INET->new(
+        LocalAddr => "127.0.0.1:$port",
+        Proto     => 'udp',
+    ) or die "failed to listen to port $port:$!";
+    # launch client
+    open my $client, "-|", "$cli -e $tempdir/events 127.0.0.1 $port 2>&1"
+        or die "failed to launch $cli:$!";
+    # server sends a VN packet in response to client's packet
+    while (1) {
+        if (my $peer = $sock->recv(my $input, 1500, 0)) {
+            my $server_cidl = ord substr $input, 5;
+            my $server_cid = substr $input, 6, $server_cidl;
+            my $client_cidl = ord substr $input, 6 + $server_cidl;
+            my $client_cid = substr $input, 7, $client_cidl;
+            $sock->send(sprintf("\x80\0\0\0\0" . '%c%s%c%s' . "\x0a\x0a\x0a\x0a", $client_cidl, $client_cid, $server_cidl, $server_cid), 0, $peer);
+            last;
+        }
+    }
+    # check the output of the client
+    my $result = do {local $/; join "", <$client>};
+    like $result, qr/no compatible version/;
+    # check the trace
+    my $events = slurp_file("$tempdir/events");
+    like $events, qr/"type":"receive",/m, "one receive event";
+    unlike +($events =~ /"type":"receive",.*?\n/ and $'), qr/"type":"packet-commit",/m, "nothing sent after receiving VN";
 };
 
 subtest "idle-timeout" => sub {

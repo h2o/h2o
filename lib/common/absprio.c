@@ -24,7 +24,7 @@
 #include "h2o.h"
 #include "h2o/absprio.h"
 
-h2o_absprio_t h2o_absprio_default = {H2O_ABSPRIO_URGENCY_DEFAULT, 0};
+h2o_absprio_t h2o_absprio_default = {H2O_ABSPRIO_DEFAULT_URGENCY, 0};
 
 void h2o_absprio_parse_priority(const char *s, size_t len, h2o_absprio_t *prio)
 {
@@ -40,9 +40,9 @@ void h2o_absprio_parse_priority(const char *s, size_t len, h2o_absprio_t *prio)
         }
 
         if (token[0] == 'u') {
-            H2O_BUILD_ASSERT(H2O_ABSPRIO_URGENCY_MAX < 10);
+            H2O_BUILD_ASSERT(H2O_ABSPRIO_NUM_URGENCY_LEVELS < 10);
             if (value.base != NULL && value.len == 1 && '0' <= value.base[0] &&
-                value.base[0] <= '0' + H2O_ABSPRIO_URGENCY_BACKGROUND)
+                value.base[0] <= '0' + H2O_ABSPRIO_NUM_URGENCY_LEVELS - 1)
                 prio->urgency = value.base[0] - '0';
         } else if (token[0] == 'i') {
             if (value.base != NULL) {

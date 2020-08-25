@@ -287,6 +287,7 @@ static h2o_iovec_t h2o_socket_log_ssl_cipher(h2o_socket_t *sock, h2o_mem_pool_t 
 h2o_iovec_t h2o_socket_log_ssl_cipher_bits(h2o_socket_t *sock, h2o_mem_pool_t *pool);
 h2o_iovec_t h2o_socket_log_ssl_session_id(h2o_socket_t *sock, h2o_mem_pool_t *pool);
 static h2o_iovec_t h2o_socket_log_ssl_server_name(h2o_socket_t *sock, h2o_mem_pool_t *pool);
+static h2o_iovec_t h2o_socket_log_ssl_negotiated_protocol(h2o_socket_t *sock, h2o_mem_pool_t *pool);
 int h2o_socket_ssl_new_session_cb(SSL *s, SSL_SESSION *sess);
 
 /**
@@ -360,6 +361,11 @@ void h2o_ssl_register_alpn_protocols(SSL_CTX *ctx, const h2o_iovec_t *protocols)
  * registers the protocol list to be used for NPN
  */
 void h2o_ssl_register_npn_protocols(SSL_CTX *ctx, const char *protocols);
+/**
+ * Sets the DF bit if possible. Returns true when the operation was succcessful, or when the operating system does not provide the
+ * necessary features. In either case, operation can continue with or without the DF bit being set.
+ */
+int h2o_socket_set_df_bit(int fd, int domain);
 /**
  * helper to check if socket the socket is target of tracing
  */
@@ -439,6 +445,12 @@ inline h2o_iovec_t h2o_socket_log_ssl_server_name(h2o_socket_t *sock, h2o_mem_po
     (void)pool;
     const char *s = h2o_socket_get_ssl_server_name(sock);
     return s != NULL ? h2o_iovec_init(s, strlen(s)) : h2o_iovec_init(NULL, 0);
+}
+
+inline h2o_iovec_t h2o_socket_log_ssl_negotiated_protocol(h2o_socket_t *sock, h2o_mem_pool_t *pool)
+{
+    (void)pool;
+    return h2o_socket_ssl_get_selected_protocol(sock);
 }
 
 inline int h2o_sliding_counter_is_running(h2o_sliding_counter_t *counter)

@@ -341,4 +341,11 @@ builder {
         );
         return sub {};
     };
+    mount "/425" => sub {
+        my $env = shift;
+        if ($env->{HTTP_EARLY_DATA}) {
+            return [425, [], []];
+        }
+        return [200, ["content-type" => 'text/plain; charset=utf-8'], ["hello\n"]];
+    };
 };

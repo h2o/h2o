@@ -17,7 +17,7 @@ use Test::More;
 use Time::HiRes qw(sleep gettimeofday tv_interval);
 
 use base qw(Exporter);
-our @EXPORT = qw(ASSETS_DIR DOC_ROOT bindir run_as_root server_features exec_unittest exec_mruby_unittest spawn_server spawn_h2o spawn_h2o_raw empty_ports create_data_file md5_file prog_exists run_prog openssl_can_negotiate curl_supports_http2 run_with_curl h2get_exists run_with_h2get run_with_h2get_simple one_shot_http_upstream wait_debugger spawn_forked spawn_h2_server find_blackhole_ip);
+our @EXPORT = qw(ASSETS_DIR DOC_ROOT bindir run_as_root server_features exec_unittest exec_mruby_unittest spawn_server spawn_h2o spawn_h2o_raw empty_ports create_data_file md5_file prog_exists run_prog openssl_can_negotiate curl_supports_http2 run_with_curl h2get_exists run_with_h2get run_with_h2get_simple one_shot_http_upstream wait_debugger spawn_forked spawn_h2_server find_blackhole_ip get_tracer check_dtrace_availability);
 
 use constant ASSETS_DIR => 't/assets';
 use constant DOC_ROOT   => ASSETS_DIR . "/doc_root";
@@ -551,6 +551,54 @@ sub find_blackhole_ip {
     }
     die unless $poll->handles() == 0;
     return $blackhole_ip;
+}
+
+sub check_dtrace_availability {
+    run_as_root();
+
+    plan skip_all => 'dtrace support is off'
+        unless server_features()->{dtrace};
+
+    if ($^O eq 'linux') {
+        plan skip_all => 'bpftrace not found'
+            unless prog_exists('bpftrace');
+        # NOTE: the test is likely to depend on https://github.com/iovisor/bpftrace/pull/864
+        plan skip_all => "skipping bpftrace tests (setenv DTRACE_TESTS=1 to run them)"
+            unless $ENV{DTRACE_TESTS};
+    } else {
+        plan skip_all => 'dtrace not found'
+            unless prog_exists('dtrace');
+        plan skip_all => 'unbuffer not found'
+            unless prog_exists('unbuffer');
+    }
+}
+
+sub get_tracer {
+    my $tracer_pid = shift;
+    my $fn = shift;
+    my $read_trace;
+    while (1) {
+        sleep 1;
+        if (open my $fh, "<", $fn) {
+            my $off = 0;
+            $read_trace = sub {
+                seek $fh, $off, 0
+                    or die "seek failed:$!";
+                read $fh, my $bytes, 1048576;
+                $bytes = ''
+                    unless defined $bytes;
+                $off += length $bytes;
+                if ($^O ne 'linux') {
+                    $bytes = join "", map { substr($_, 4) . "\n" } grep /^XXXX/, split /\n/, $bytes;
+                }
+                return $bytes;
+            };
+            last;
+        }
+        die "bpftrace failed to start\n"
+            if waitpid($tracer_pid, WNOHANG) == $tracer_pid;
+    }
+    return $read_trace;
 }
 
 1;

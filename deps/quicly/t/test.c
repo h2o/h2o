@@ -241,7 +241,9 @@ static void test_vector(void)
     ok(off == sizeof(datagram));
 
     /* decrypt */
-    ret = setup_initial_encryption(&ptls_openssl_aes128gcmsha256, &ingress, &egress, packet.cid.dest.encrypted, 0, NULL);
+    const struct st_ptls_salt_t *salt = get_salt(QUICLY_PROTOCOL_VERSION_CURRENT);
+    ret = setup_initial_encryption(&ptls_openssl_aes128gcmsha256, &ingress, &egress, packet.cid.dest.encrypted, 0,
+                                   ptls_iovec_init(salt->initial, sizeof(salt->initial)), NULL);
     ok(ret == 0);
     ok(decrypt_packet(ingress.header_protection, aead_decrypt_fixed_key, ingress.aead, &next_expected_pn, &packet, &pn, &payload) ==
        0);
@@ -267,7 +269,7 @@ static void test_retry_aead(void)
     ok(off == sizeof(packet_bytes));
 
     /* decrypt */
-    ptls_aead_context_t *retry_aead = create_retry_aead(&quic_ctx, 0);
+    ptls_aead_context_t *retry_aead = create_retry_aead(&quic_ctx, QUICLY_PROTOCOL_VERSION_CURRENT, 0);
     ok(validate_retry_tag(&decoded, &odcid, retry_aead));
     ptls_aead_free(retry_aead);
 }
@@ -428,6 +430,78 @@ static void test_address_token_codec(void)
     ptls_aead_free(dec);
 }
 
+static void do_test_record_receipt(size_t epoch)
+{
+    struct st_quicly_pn_space_t *space =
+        alloc_pn_space(sizeof(*space), epoch == QUICLY_EPOCH_1RTT ? QUICLY_DEFAULT_PACKET_TOLERANCE : 1);
+    uint64_t pn = 0;
+    int64_t now = 12345, send_ack_at = INT64_MAX;
+
+    if (epoch == QUICLY_EPOCH_1RTT) {
+        /* 2nd packet triggers an ack */
+        ok(record_receipt(space, pn++, 0, now, &send_ack_at) == 0);
+        ok(send_ack_at == now + QUICLY_DELAYED_ACK_TIMEOUT);
+        now += 1;
+        ok(record_receipt(space, pn++, 0, now, &send_ack_at) == 0);
+        ok(send_ack_at == now);
+        now += 1;
+    } else {
+        /* every packet triggers an ack */
+        ok(record_receipt(space, pn++, 0, now, &send_ack_at) == 0);
+        ok(send_ack_at == now);
+        now += 1;
+    }
+
+    /* reset */
+    space->unacked_count = 0;
+    send_ack_at = INT64_MAX;
+
+    /* ack-only packets do not elicit an ack */
+    ok(record_receipt(space, pn++, 1, now, &send_ack_at) == 0);
+    ok(send_ack_at == INT64_MAX);
+    now += 1;
+    ok(record_receipt(space, pn++, 1, now, &send_ack_at) == 0);
+    ok(send_ack_at == INT64_MAX);
+    now += 1;
+    pn++; /* gap */
+    ok(record_receipt(space, pn++, 1, now, &send_ack_at) == 0);
+    ok(send_ack_at == INT64_MAX);
+    now += 1;
+    ok(record_receipt(space, pn++, 1, now, &send_ack_at) == 0);
+    ok(send_ack_at == INT64_MAX);
+    now += 1;
+
+    /* gap triggers an ack */
+    pn += 1; /* gap */
+    ok(record_receipt(space, pn++, 0, now, &send_ack_at) == 0);
+    ok(send_ack_at == now);
+    now += 1;
+
+    /* reset */
+    space->unacked_count = 0;
+    send_ack_at = INT64_MAX;
+
+    /* if 1-RTT, test ignore-order */
+    if (epoch == QUICLY_EPOCH_1RTT) {
+        space->ignore_order = 1;
+        pn++; /* gap */
+        ok(record_receipt(space, pn++, 0, now, &send_ack_at) == 0);
+        ok(send_ack_at == now + QUICLY_DELAYED_ACK_TIMEOUT);
+        now += 1;
+        ok(record_receipt(space, pn++, 0, now, &send_ack_at) == 0);
+        ok(send_ack_at == now);
+        now += 1;
+    }
+
+    do_free_pn_space(space);
+}
+
+static void test_record_receipt(void)
+{
+    do_test_record_receipt(QUICLY_EPOCH_INITIAL);
+    do_test_record_receipt(QUICLY_EPOCH_1RTT);
+}
+
 static void test_cid(void)
 {
     subtest("received cid", test_received_cid);
@@ -494,6 +568,7 @@ int main(int argc, char **argv)
     subtest("next-packet-number", test_next_packet_number);
     subtest("address-token-codec", test_address_token_codec);
     subtest("ranges", test_ranges);
+    subtest("record-receipt", test_record_receipt);
     subtest("frame", test_frame);
     subtest("maxsender", test_maxsender);
     subtest("sentmap", test_sentmap);

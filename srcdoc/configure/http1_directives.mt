@@ -16,6 +16,13 @@ $ctx->{directive}->(
 )->(sub {});
 
 $ctx->{directive}->(
+    name    => "http1-request-io-timeout",
+    levels  => [ qw(global) ],
+    default => 'http1-request-io-timeout: 5',
+    desc    => q{Timeout for incoming request I/O in seconds.},
+)->(sub {});
+
+$ctx->{directive}->(
     name    => "http1-upgrade-to-http2",
     levels  => [ qw(global) ],
     default => 'http1-upgrade-to-http2: ON',

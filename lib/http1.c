@@ -543,7 +543,7 @@ static int write_req_non_streaming(void *_req, h2o_iovec_t payload, int is_end_s
         conn->req.proceed_req = NULL;
         h2o_process_request(&conn->req);
     } else {
-        proceed_request(&conn->req, payload.len, is_end_stream ? H2O_SEND_STATE_FINAL : H2O_SEND_STATE_IN_PROGRESS);
+        proceed_request(&conn->req, payload.len, H2O_SEND_STATE_IN_PROGRESS);
     }
     return 0;
 }
@@ -1127,6 +1127,7 @@ DEFINE_TLS_LOGGER(cipher)
 DEFINE_TLS_LOGGER(cipher_bits)
 DEFINE_TLS_LOGGER(session_id)
 DEFINE_TLS_LOGGER(server_name)
+DEFINE_TLS_LOGGER(negotiated_protocol)
 
 #undef DEFINE_TLS_LOGGER
 
@@ -1165,6 +1166,7 @@ static const h2o_conn_callbacks_t h1_callbacks = {
                 .cipher_bits = log_cipher_bits,
                 .session_id = log_session_id,
                 .server_name = log_server_name,
+                .negotiated_protocol = log_negotiated_protocol,
             },
         .http1 =
             {

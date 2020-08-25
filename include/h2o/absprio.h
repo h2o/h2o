@@ -26,15 +26,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define H2O_ABSPRIO_URGENCY_PREREQUISITE 0
-#define H2O_ABSPRIO_URGENCY_DEFAULT 1
-#define H2O_ABSPRIO_URGENCY_SUPPLEMENTARY_0 2
-#define H2O_ABSPRIO_URGENCY_SUPPLEMENTARY_1 3
-#define H2O_ABSPRIO_URGENCY_SUPPLEMENTARY_2 4
-#define H2O_ABSPRIO_URGENCY_SUPPLEMENTARY_3 5
-#define H2O_ABSPRIO_URGENCY_SUPPLEMENTARY_4 6
-#define H2O_ABSPRIO_URGENCY_BACKGROUND 7
-#define H2O_ABSPRIO_URGENCY_MAX H2O_ABSPRIO_URGENCY_BACKGROUND
+#define H2O_ABSPRIO_DEFAULT_URGENCY 3
+#define H2O_ABSPRIO_NUM_URGENCY_LEVELS 8
 
 typedef struct h2o_absprio_t {
     uint8_t urgency : 3;
@@ -54,8 +47,9 @@ static uint16_t h2o_absprio_urgency_to_chromium_weight(uint8_t urgency);
 inline uint16_t h2o_absprio_urgency_to_chromium_weight(uint8_t urgency)
 {
     uint16_t weight;
-    assert(urgency < 8);
-    weight = (8 - urgency) * 32;
+    assert(urgency < H2O_ABSPRIO_NUM_URGENCY_LEVELS);
+    weight = (H2O_ABSPRIO_NUM_URGENCY_LEVELS - urgency) * 32;
     return weight;
 }
+
 #endif
