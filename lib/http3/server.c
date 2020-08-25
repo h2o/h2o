@@ -54,8 +54,8 @@ struct st_h2o_http3_req_scheduler_node_t {
  * callback used to compare precedence of the entries within the same urgency level (e.g., by comparing stream IDs)
  */
 typedef int (*h2o_http3_req_scheduler_compare_cb)(struct st_h2o_http3_req_scheduler_t *sched,
-                                                  struct st_h2o_http3_req_scheduler_node_t *x,
-                                                  struct st_h2o_http3_req_scheduler_node_t *y);
+                                                  const struct st_h2o_http3_req_scheduler_node_t *x,
+                                                  const struct st_h2o_http3_req_scheduler_node_t *y);
 
 /**
  * Once the size of the request body being received exceeds thit limit, streaming mode will be used (if possible), and the
@@ -305,8 +305,9 @@ static void req_scheduler_unblock_conn_blocked(struct st_h2o_http3_req_scheduler
     }
 }
 
-static int req_scheduler_compare_stream_id(struct st_h2o_http3_req_scheduler_t *sched, struct st_h2o_http3_req_scheduler_node_t *x,
-                                           struct st_h2o_http3_req_scheduler_node_t *y)
+static int req_scheduler_compare_stream_id(struct st_h2o_http3_req_scheduler_t *sched,
+                                           const struct st_h2o_http3_req_scheduler_node_t *x,
+                                           const struct st_h2o_http3_req_scheduler_node_t *y)
 {
     struct st_h2o_http3_server_stream_t *sx = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_stream_t, scheduler, x),
                                         *sy = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_stream_t, scheduler, y);

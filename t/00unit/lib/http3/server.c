@@ -28,8 +28,8 @@ struct sched_node_t {
     unsigned id;
 };
 
-static int compare_node(struct st_h2o_http3_req_scheduler_t *sched, struct st_h2o_http3_req_scheduler_node_t *_x,
-                        struct st_h2o_http3_req_scheduler_node_t *_y)
+static int compare_node(struct st_h2o_http3_req_scheduler_t *sched, const struct st_h2o_http3_req_scheduler_node_t *_x,
+                        const struct st_h2o_http3_req_scheduler_node_t *_y)
 {
     struct sched_node_t *x = (void *)_x, *y = (void *)_y;
     if (x->id < y->id) {
