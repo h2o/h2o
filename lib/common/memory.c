@@ -31,6 +31,7 @@
 #include <sys/mman.h>
 #include <unistd.h>
 #include "h2o/memory.h"
+#include "h2o/file.h"
 
 #if defined(__linux__)
 #if defined(__ANDROID__) && (__ANDROID_API__ < 21)
@@ -238,7 +239,7 @@ h2o_iovec_t h2o_buffer_reserve(h2o_buffer_t **_inbuf, size_t min_guarantee)
 {
     h2o_iovec_t reserved = h2o_buffer_try_reserve(_inbuf, min_guarantee);
     if (reserved.base == NULL) {
-        h2o_fatal("failed to reserve buffer; capacity: %zu, min_gurantee: %zu", (*_inbuf)->capacity, min_guarantee);
+        h2o_fatal("failed to reserve buffer; capacity: %zu, min_guarantee: %zu", (*_inbuf)->capacity, min_guarantee);
     }
     return reserved;
 }
@@ -279,13 +280,10 @@ h2o_iovec_t h2o_buffer_try_reserve(h2o_buffer_t **_inbuf, size_t min_guarantee)
                 int fd;
                 h2o_buffer_t *newp;
                 if (inbuf->_fd == -1) {
-                    char *tmpfn = alloca(strlen(inbuf->_prototype->mmap_settings->fn_template) + 1);
-                    strcpy(tmpfn, inbuf->_prototype->mmap_settings->fn_template);
-                    if ((fd = mkstemp(tmpfn)) == -1) {
+                    if ((fd = h2o_file_mktemp(inbuf->_prototype->mmap_settings->fn_template)) == -1) {
                         h2o_perror("failed to create temporary file");
                         goto MapError;
                     }
-                    unlink(tmpfn);
                 } else {
                     fd = inbuf->_fd;
                 }

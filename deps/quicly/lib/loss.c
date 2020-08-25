@@ -59,10 +59,11 @@ int quicly_loss_detect_loss(quicly_loss_t *loss, int64_t now, uint32_t max_ack_d
     while ((sent = quicly_sentmap_get(&iter))->packet_number != UINT64_MAX) {
         int64_t largest_acked_signed = loss->largest_acked_packet_plus1[sent->ack_epoch] - 1;
         if ((int64_t)sent->packet_number < largest_acked_signed &&
-            (sent->sent_at <= now - delay_until_lost ||                                      /* time threshold */
+            (sent->sent_at <= now - delay_until_lost ||                                                      /* time threshold */
              (int64_t)sent->packet_number <= largest_acked_signed - QUICLY_LOSS_DEFAULT_PACKET_THRESHOLD)) { /* packet threshold */
             if (sent->cc_bytes_in_flight != 0) {
-                on_loss_detected(loss, sent, (int64_t)sent->packet_number > largest_acked_signed - QUICLY_LOSS_DEFAULT_PACKET_THRESHOLD);
+                on_loss_detected(loss, sent,
+                                 (int64_t)sent->packet_number > largest_acked_signed - QUICLY_LOSS_DEFAULT_PACKET_THRESHOLD);
                 if ((ret = quicly_sentmap_update(&loss->sentmap, &iter, QUICLY_SENTMAP_EVENT_LOST)) != 0)
                     return ret;
             } else {

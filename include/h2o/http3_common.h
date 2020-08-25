@@ -78,11 +78,12 @@
 #define H2O_HTTP3_ERROR_TRANSPORT -2
 #define H2O_HTTP3_ERROR_USER1 -256
 
-typedef struct st_h2o_http3_ctx_t h2o_http3_ctx_t;
+typedef struct st_h2o_quic_ctx_t h2o_quic_ctx_t;
+typedef struct st_h2o_quic_conn_t h2o_quic_conn_t;
 typedef struct st_h2o_http3_conn_t h2o_http3_conn_t;
 struct st_h2o_http3_ingress_unistream_t;
 struct st_h2o_http3_egress_unistream_t;
-struct kh_h2o_http3_idmap_s;
+struct kh_h2o_quic_idmap_s;
 struct kh_h2o_http3_unauthmap_s;
 
 typedef enum en_h2o_http3_priority_element_type_t {
@@ -101,14 +102,21 @@ typedef struct st_h2o_http3_priority_update_frame_t {
     h2o_absprio_t priority;
 } h2o_http3_priority_update_frame_t;
 
+typedef struct st_h2o_http3_goaway_frame_t {
+    uint64_t stream_or_push_id;
+} h2o_http3_goaway_frame_t;
+
 #define H2O_HTTP3_PRIORITY_UPDATE_FRAME_CAPACITY (1 /* len */ + 1 /* frame type */ + 8 + sizeof("u=1,i=?0") - 1)
 uint8_t *h2o_http3_encode_priority_update_frame(uint8_t *dst, const h2o_http3_priority_update_frame_t *frame);
 int h2o_http3_decode_priority_update_frame(h2o_http3_priority_update_frame_t *frame, const uint8_t *payload, size_t len,
                                            const char **err_desc);
+size_t h2o_http3_goaway_frame_capacity(quicly_stream_id_t stream_or_push_id);
+uint8_t *h2o_http3_encode_goaway_frame(uint8_t *buff, quicly_stream_id_t stream_or_push_id);
+int h2o_http3_decode_goaway_frame(h2o_http3_goaway_frame_t *frame, const uint8_t *payload, size_t len, const char **err_desc);
 
-typedef h2o_http3_conn_t *(*h2o_http3_accept_cb)(h2o_http3_ctx_t *ctx, quicly_address_t *destaddr, quicly_address_t *srcaddr,
-                                                 quicly_decoded_packet_t *packet);
-typedef void (*h2o_http3_notify_connection_update_cb)(h2o_http3_ctx_t *ctx, h2o_http3_conn_t *conn);
+typedef h2o_quic_conn_t *(*h2o_quic_accept_cb)(h2o_quic_ctx_t *ctx, quicly_address_t *destaddr, quicly_address_t *srcaddr,
+                                               quicly_decoded_packet_t *packet);
+typedef void (*h2o_quic_notify_connection_update_cb)(h2o_quic_ctx_t *ctx, h2o_quic_conn_t *conn);
 /**
  * Forwards a packet to given node/thread.
  * When `node_id` is NULL, the forwarded packet is an Initial or a 0-RTT packet.  Application should forward the packet to given
@@ -119,16 +127,16 @@ typedef void (*h2o_http3_notify_connection_update_cb)(h2o_http3_ctx_t *ctx, h2o_
  * the packet is a stateless reset.
  * @return true if packet was forwarded (or was forwardable), otherwise false
  */
-typedef int (*h2o_http3_forward_packets_cb)(h2o_http3_ctx_t *ctx, const uint64_t *node_id, uint32_t thread_id,
-                                            quicly_address_t *destaddr, quicly_address_t *srcaddr, uint8_t ttl,
-                                            quicly_decoded_packet_t *packets, size_t num_packets);
+typedef int (*h2o_quic_forward_packets_cb)(h2o_quic_ctx_t *ctx, const uint64_t *node_id, uint32_t thread_id,
+                                           quicly_address_t *destaddr, quicly_address_t *srcaddr, uint8_t ttl,
+                                           quicly_decoded_packet_t *packets, size_t num_packets);
 /**
  * preprocess a received datagram (e.g., rewrite the sockaddr). Returns if the packet was modified.
  */
-typedef int (*h2o_http3_preprocess_packet_cb)(h2o_http3_ctx_t *ctx, struct msghdr *msghdr, quicly_address_t *destaddr,
-                                              quicly_address_t *srcaddr, uint8_t *ttl);
+typedef int (*h2o_quic_preprocess_packet_cb)(h2o_quic_ctx_t *ctx, struct msghdr *msghdr, quicly_address_t *destaddr,
+                                             quicly_address_t *srcaddr, uint8_t *ttl);
 
-struct st_h2o_http3_ctx_t {
+struct st_h2o_quic_ctx_t {
     /**
      * the event loop
      */
@@ -153,15 +161,15 @@ struct st_h2o_http3_ctx_t {
     /**
      * hashmap of connections by quicly_cid_plaintext_t::master_id.
      */
-    struct kh_h2o_http3_idmap_s *conns_by_id;
+    struct kh_h2o_quic_idmap_s *conns_by_id;
     /**
      * hashmap of connections being accepted. Keyed by 4-tuple. Exists to handle packets that do not use the server-generated CIDs.
      */
-    struct kh_h2o_http3_acceptmap_s *conns_accepting;
+    struct kh_h2o_quic_acceptmap_s *conns_accepting;
     /**
      * callback to receive connection status changes (optional)
      */
-    h2o_http3_notify_connection_update_cb notify_conn_update;
+    h2o_quic_notify_connection_update_cb notify_conn_update;
     /**
      * linklist of clients (see st_h2o_http3client_conn_t::clients_link)
      */
@@ -169,7 +177,7 @@ struct st_h2o_http3_ctx_t {
     /**
      * callback to accept new connections (optional)
      */
-    h2o_http3_accept_cb acceptor;
+    h2o_quic_accept_cb acceptor;
     /**
      * 0 to disable load distribution of accepting connections by h2o (i.e. relies on the kernel's disbirution based on 4-tuple)
      */
@@ -177,7 +185,7 @@ struct st_h2o_http3_ctx_t {
     /**
      * callback to forward packets (optional)
      */
-    h2o_http3_forward_packets_cb forward_packets;
+    h2o_quic_forward_packets_cb forward_packets;
     /**
      * TTL of a QUIC datagram. Used to prevent infinite forwarding of QUIC packets between nodes / threads.
      */
@@ -185,19 +193,28 @@ struct st_h2o_http3_ctx_t {
     /**
      * preprocessor that rewrites a forwarded datagram (optional)
      */
-    h2o_http3_preprocess_packet_cb preprocess_packet;
+    h2o_quic_preprocess_packet_cb preprocess_packet;
 };
 
-typedef struct st_h2o_http3_conn_callbacks_t {
-    void (*destroy_connection)(h2o_http3_conn_t *conn);
-    void (*handle_control_stream_frame)(h2o_http3_conn_t *conn, uint8_t type, const uint8_t *payload, size_t len);
-} h2o_http3_conn_callbacks_t;
+typedef struct st_h2o_quic_conn_callbacks_t {
+    void (*destroy_connection)(h2o_quic_conn_t *conn);
+} h2o_quic_conn_callbacks_t;
 
-struct st_h2o_http3_conn_t {
+/**
+ * states of an HTTP/3 connection (not stream)
+ * mainly to see if a new request can be accepted
+ */
+typedef enum enum_h2o_http3_conn_state_t {
+    H2O_HTTP3_CONN_STATE_OPEN,        /* accepting new connections */
+    H2O_HTTP3_CONN_STATE_HALF_CLOSED, /* no more accepting new streams */
+    H2O_HTTP3_CONN_STATE_IS_CLOSING   /* nothing should be sent */
+} h2o_http3_conn_state_t;
+
+struct st_h2o_quic_conn_t {
     /**
      * context
      */
-    h2o_http3_ctx_t *ctx;
+    h2o_quic_ctx_t *ctx;
     /**
      * underlying QUIC connection
      */
@@ -205,7 +222,31 @@ struct st_h2o_http3_conn_t {
     /**
      * callbacks
      */
-    const h2o_http3_conn_callbacks_t *callbacks;
+    const h2o_quic_conn_callbacks_t *callbacks;
+    /**
+     * the "transport" timer. Applications must have separate timer.
+     */
+    h2o_timer_t _timeout;
+    /**
+     *
+     */
+    uint64_t _accept_hashkey;
+};
+
+typedef struct st_h2o_http3_conn_callbacks_t {
+    h2o_quic_conn_callbacks_t super;
+    void (*handle_control_stream_frame)(h2o_http3_conn_t *conn, uint8_t type, const uint8_t *payload, size_t len);
+} h2o_http3_conn_callbacks_t;
+
+struct st_h2o_http3_conn_t {
+    /**
+     *
+     */
+    h2o_quic_conn_t super;
+    /**
+     * connection state
+     */
+    h2o_http3_conn_state_t state;
     /**
      * QPACK states
      */
@@ -219,10 +260,6 @@ struct st_h2o_http3_conn_t {
     struct {
         uint64_t max_header_list_size;
     } peer_settings;
-    /**
-     * the "transport" timer. Applications must have separate timer.
-     */
-    h2o_timer_t _timeout;
     struct {
         struct {
             struct st_h2o_http3_ingress_unistream_t *control;
@@ -235,10 +272,6 @@ struct st_h2o_http3_conn_t {
             struct st_h2o_http3_egress_unistream_t *qpack_decoder;
         } egress;
     } _control_streams;
-    /**
-     *
-     */
-    uint64_t _accept_hashkey;
 };
 
 #define h2o_http3_encode_frame(_pool_, _buf_, _type, _block)                                                                       \
@@ -283,8 +316,8 @@ extern const ptls_iovec_t h2o_http3_alpn[2];
 /**
  * sends datagrams
  */
-int h2o_http3_send_datagrams(h2o_http3_ctx_t *ctx, quicly_address_t *dest, quicly_address_t *src, struct iovec *datagrams,
-                             size_t num_datagrams);
+int h2o_quic_send_datagrams(h2o_quic_ctx_t *ctx, quicly_address_t *dest, quicly_address_t *src, struct iovec *datagrams,
+                            size_t num_datagrams);
 /**
  * creates a unidirectional stream object
  */
@@ -297,38 +330,50 @@ int h2o_http3_read_frame(h2o_http3_read_frame_t *frame, int is_client, uint64_t 
 /**
  * initializes the context
  */
-void h2o_http3_init_context(h2o_http3_ctx_t *ctx, h2o_loop_t *loop, h2o_socket_t *sock, quicly_context_t *quic,
-                            h2o_http3_accept_cb acceptor, h2o_http3_notify_connection_update_cb notify_conn_update);
+void h2o_quic_init_context(h2o_quic_ctx_t *ctx, h2o_loop_t *loop, h2o_socket_t *sock, quicly_context_t *quic,
+                           h2o_quic_accept_cb acceptor, h2o_quic_notify_connection_update_cb notify_conn_update);
 /**
  *
  */
-void h2o_http3_dispose_context(h2o_http3_ctx_t *ctx);
+void h2o_quic_dispose_context(h2o_quic_ctx_t *ctx);
 /**
  *
  */
-void h2o_http3_set_context_identifier(h2o_http3_ctx_t *ctx, uint32_t accept_thread_divisor, uint32_t thread_id, uint64_t node_id,
-                                      uint8_t ttl, h2o_http3_forward_packets_cb forward_cb,
-                                      h2o_http3_preprocess_packet_cb preprocess_cb);
+void h2o_quic_set_context_identifier(h2o_quic_ctx_t *ctx, uint32_t accept_thread_divisor, uint32_t thread_id, uint64_t node_id,
+                                     uint8_t ttl, h2o_quic_forward_packets_cb forward_cb,
+                                     h2o_quic_preprocess_packet_cb preprocess_cb);
 /**
  *
  */
-void h2o_http3_read_socket(h2o_http3_ctx_t *ctx, h2o_socket_t *sock);
+void h2o_quic_read_socket(h2o_quic_ctx_t *ctx, h2o_socket_t *sock);
 /**
  *
  */
-void h2o_http3_close_connection(h2o_http3_conn_t *conn, int err, const char *reason_phrase);
+void h2o_quic_close_connection(h2o_quic_conn_t *conn, int err, const char *reason_phrase);
 /**
  *
  */
-void h2o_http3_close_all_connections(h2o_http3_ctx_t *ctx);
+void h2o_quic_close_all_connections(h2o_quic_ctx_t *ctx);
 /**
  *
  */
-size_t h2o_http3_num_connections(h2o_http3_ctx_t *ctx);
+size_t h2o_quic_num_connections(h2o_quic_ctx_t *ctx);
+/**
+ *
+ */
+void h2o_quic_init_conn(h2o_quic_conn_t *conn, h2o_quic_ctx_t *ctx, const h2o_quic_conn_callbacks_t *callbacks);
+/**
+ *
+ */
+void h2o_quic_dispose_conn(h2o_quic_conn_t *conn);
+/**
+ *
+ */
+void h2o_quic_setup(h2o_quic_conn_t *conn, quicly_conn_t *quic);
 /**
  * initializes a http3 connection
  */
-void h2o_http3_init_conn(h2o_http3_conn_t *conn, h2o_http3_ctx_t *ctx, const h2o_http3_conn_callbacks_t *callbacks);
+void h2o_http3_init_conn(h2o_http3_conn_t *conn, h2o_quic_ctx_t *ctx, const h2o_http3_conn_callbacks_t *callbacks);
 /**
  *
  */
@@ -340,7 +385,7 @@ int h2o_http3_setup(h2o_http3_conn_t *conn, quicly_conn_t *quic);
 /**
  * sends packets immediately by calling quicly_send, sendmsg (returns 1 if success, 0 if the connection was destroyed)
  */
-int h2o_http3_send(h2o_http3_conn_t *conn);
+int h2o_quic_send(h2o_quic_conn_t *conn);
 /**
  * updates receive buffer
  */
@@ -349,7 +394,7 @@ void h2o_http3_update_recvbuf(h2o_buffer_t **buf, size_t off, const void *src, s
  * Schedules the transport timer. Application must call this function when it writes data to the connection (TODO better way to
  * handle this?). The function is automatically called when packets are sent or received.
  */
-void h2o_http3_schedule_timer(h2o_http3_conn_t *conn);
+void h2o_quic_schedule_timer(h2o_quic_conn_t *conn);
 /**
  *
  */
@@ -362,6 +407,10 @@ void h2o_http3_send_qpack_stream_cancel(h2o_http3_conn_t *conn, quicly_stream_id
  *
  */
 void h2o_http3_send_qpack_header_ack(h2o_http3_conn_t *conn, const void *bytes, size_t len);
+/**
+ * Enqueue GOAWAY frame for sending
+ */
+void h2o_http3_send_goaway_frame(h2o_http3_conn_t *conn, uint64_t stream_or_push_id);
 /**
  *
  */

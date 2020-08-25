@@ -708,6 +708,10 @@ struct st_quicly_address_token_plaintext_t {
 };
 
 /**
+ * zero-terminated list of protocol versions being supported by quicly
+ */
+extern const uint32_t quicly_supported_versions[];
+/**
  * returns a boolean indicating if given protocol version is supported
  */
 static int quicly_is_supported_version(uint32_t version);
@@ -827,10 +831,12 @@ int quicly_can_send_stream_data(quicly_conn_t *conn, quicly_send_context_t *s);
  */
 int quicly_send_stream(quicly_stream_t *stream, quicly_send_context_t *s);
 /**
- *
+ * Builds a Version Negotiation packet. The generated packet might include a greasing version.
+ * * @param versions  zero-terminated list of versions to advertise; use `quicly_supported_versions` for sending the list of
+ *                    protocol versions supported by quicly
  */
-size_t quicly_send_version_negotiation(quicly_context_t *ctx, struct sockaddr *dest_addr, ptls_iovec_t dest_cid,
-                                       struct sockaddr *src_addr, ptls_iovec_t src_cid, void *payload);
+size_t quicly_send_version_negotiation(quicly_context_t *ctx, ptls_iovec_t dest_cid, ptls_iovec_t src_cid, const uint32_t *versions,
+                                       void *payload);
 /**
  *
  */
@@ -867,14 +873,12 @@ int quicly_send(quicly_conn_t *conn, quicly_address_t *dest, quicly_address_t *s
 /**
  *
  */
-size_t quicly_send_close_invalid_token(quicly_context_t *ctx, uint32_t protocol_version, struct sockaddr *dest_addr,
-                                       ptls_iovec_t dest_cid, struct sockaddr *src_addr, ptls_iovec_t src_cid, const char *err_desc,
-                                       void *payload);
+size_t quicly_send_close_invalid_token(quicly_context_t *ctx, uint32_t protocol_version, ptls_iovec_t dest_cid,
+                                       ptls_iovec_t src_cid, const char *err_desc, void *datagram);
 /**
  *
  */
-size_t quicly_send_stateless_reset(quicly_context_t *ctx, struct sockaddr *dest_addr, struct sockaddr *src_addr,
-                                   const void *src_cid, void *payload);
+size_t quicly_send_stateless_reset(quicly_context_t *ctx, const void *src_cid, void *payload);
 /**
  *
  */

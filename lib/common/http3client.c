@@ -132,6 +132,7 @@ struct st_h2o_http3client_req_t {
 static int handle_input_expect_data_frame(struct st_h2o_http3client_req_t *req, const uint8_t **src, const uint8_t *src_end,
                                           int err, const char **err_desc);
 static void start_request(struct st_h2o_http3client_req_t *req);
+static void destroy_request(struct st_h2o_http3client_req_t *req);
 
 static struct st_h2o_http3client_conn_t *find_connection_for_origin(h2o_httpclient_ctx_t *ctx, const h2o_url_scheme_t *scheme,
                                                                     h2o_iovec_t authority)
@@ -142,7 +143,7 @@ static struct st_h2o_http3client_conn_t *find_connection_for_origin(h2o_httpclie
      * - check connection state(e.g., max_concurrent_streams, if received GOAWAY)
      * - use hashmap
      */
-    for (l = ctx->http3->clients.next; l != &ctx->http3->clients; l = l->next) {
+    for (l = ctx->http3.ctx->clients.next; l != &ctx->http3.ctx->clients; l = l->next) {
         struct st_h2o_http3client_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3client_conn_t, clients_link, l);
         if (conn->server.origin_url.scheme == scheme &&
             h2o_memis(conn->server.origin_url.authority.base, conn->server.origin_url.authority.len, authority.base, authority.len))
@@ -152,16 +153,34 @@ static struct st_h2o_http3client_conn_t *find_connection_for_origin(h2o_httpclie
     return NULL;
 }
 
+static void start_pending_requests(struct st_h2o_http3client_conn_t *conn)
+{
+    while (!h2o_linklist_is_empty(&conn->pending_requests)) {
+        struct st_h2o_http3client_req_t *req =
+            H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3client_req_t, link, conn->pending_requests.next);
+        h2o_linklist_unlink(&req->link);
+        start_request(req);
+    }
+}
+
 static void destroy_connection(struct st_h2o_http3client_conn_t *conn)
 {
     if (h2o_linklist_is_linked(&conn->clients_link))
         h2o_linklist_unlink(&conn->clients_link);
-    /* FIXME pending_requests */
+    while (!h2o_linklist_is_empty(&conn->pending_requests)) {
+        struct st_h2o_http3client_req_t *req =
+            H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3client_req_t, link, conn->pending_requests.next);
+        h2o_linklist_unlink(&req->link);
+        req->super._cb.on_connect(&req->super, h2o_socket_error_conn_fail, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
+        destroy_request(req);
+    }
+    assert(h2o_linklist_is_empty(&conn->pending_requests));
     if (conn->getaddr_req != NULL)
         h2o_hostinfo_getaddr_cancel(conn->getaddr_req);
     h2o_timer_unlink(&conn->timeout);
     free(conn->server.origin_url.host.base);
     free(conn->server.origin_url.authority.base);
+    free(conn->handshake_properties.client.session_ticket.base);
     h2o_http3_dispose_conn(&conn->super);
     free(conn);
 }
@@ -172,30 +191,43 @@ static void on_connect_timeout(h2o_timer_t *timeout)
     destroy_connection(conn);
 }
 
-static void start_connect(struct st_h2o_http3client_conn_t *conn, struct sockaddr *sa, socklen_t salen)
+static void start_connect(struct st_h2o_http3client_conn_t *conn, struct sockaddr *sa)
 {
     quicly_conn_t *qconn;
+    ptls_iovec_t address_token = ptls_iovec_init(NULL, 0);
+    quicly_transport_parameters_t resumed_tp;
     int ret;
 
-    assert(conn->super.quic == NULL);
+    assert(conn->super.super.quic == NULL);
     assert(conn->getaddr_req == NULL);
     assert(h2o_timer_is_linked(&conn->timeout));
     assert(conn->timeout.cb == on_connect_timeout);
 
-    /* create QUIC connection context and attach (TODO pass address token, transport params) */
-    if ((ret = quicly_connect(&qconn, conn->ctx->http3->quic, conn->server.origin_url.host.base, sa, NULL,
-                              &conn->ctx->http3->next_cid, ptls_iovec_init(NULL, 0), &conn->handshake_properties, NULL)) != 0) {
-        conn->super.quic = NULL; /* just in case */
+    /* create QUIC connection context and attach */
+    if (conn->ctx->http3.load_session != NULL) {
+        if (!conn->ctx->http3.load_session(conn->ctx, sa, conn->server.origin_url.host.base, &address_token,
+                                           &conn->handshake_properties.client.session_ticket, &resumed_tp))
+            goto Fail;
+    }
+    if ((ret = quicly_connect(&qconn, conn->ctx->http3.ctx->quic, conn->server.origin_url.host.base, sa, NULL,
+                              &conn->ctx->http3.ctx->next_cid, address_token, &conn->handshake_properties,
+                              conn->handshake_properties.client.session_ticket.base != NULL ? &resumed_tp : NULL)) != 0) {
+        conn->super.super.quic = NULL; /* just in case */
         goto Fail;
     }
-    ++conn->ctx->http3->next_cid.master_id; /* FIXME check overlap */
+    ++conn->ctx->http3.ctx->next_cid.master_id; /* FIXME check overlap */
     if ((ret = h2o_http3_setup(&conn->super, qconn)) != 0)
         goto Fail;
 
-    h2o_http3_send(&conn->super);
+    if (quicly_connection_is_ready(conn->super.super.quic))
+        start_pending_requests(conn);
 
+    h2o_quic_send(&conn->super.super);
+
+    free(address_token.base);
     return;
 Fail:
+    free(address_token.base);
     destroy_connection(conn);
 }
 
@@ -212,7 +244,7 @@ static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errs
     }
 
     struct addrinfo *selected = h2o_hostinfo_select_one(res);
-    start_connect(conn, selected->ai_addr, selected->ai_addrlen);
+    start_connect(conn, selected->ai_addr);
 }
 
 static void handle_control_stream_frame(h2o_http3_conn_t *_conn, uint8_t type, const uint8_t *payload, size_t len)
@@ -229,19 +261,21 @@ static void handle_control_stream_frame(h2o_http3_conn_t *_conn, uint8_t type, c
         if ((err = h2o_http3_handle_settings_frame(&conn->super, payload, len, &err_desc)) != 0)
             goto Fail;
         assert(h2o_http3_has_received_settings(&conn->super));
-        /* issue requests */
-        while (!h2o_linklist_is_empty(&conn->pending_requests)) {
-            struct st_h2o_http3client_req_t *req =
-                H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3client_req_t, link, conn->pending_requests.next);
-            h2o_linklist_unlink(&req->link);
-            start_request(req);
-        }
+        /* issue requests (unless it has been done already due to 0-RTT key being available) */
+        start_pending_requests(conn);
     } else {
         switch (type) {
         case H2O_HTTP3_FRAME_TYPE_SETTINGS:
             err = H2O_HTTP3_ERROR_FRAME_UNEXPECTED;
             err_desc = "unexpected SETTINGS frame";
             goto Fail;
+        case H2O_HTTP3_FRAME_TYPE_GOAWAY: {
+            h2o_http3_goaway_frame_t frame;
+            if ((err = h2o_http3_decode_goaway_frame(&frame, payload, len, &err_desc)) != 0)
+                goto Fail;
+            /* FIXME: stop issuing new requests */
+            break;
+        }
         default:
             break;
         }
@@ -249,15 +283,15 @@ static void handle_control_stream_frame(h2o_http3_conn_t *_conn, uint8_t type, c
 
     return;
 Fail:
-    h2o_http3_close_connection(&conn->super, err, err_desc);
+    h2o_quic_close_connection(&conn->super.super, err, err_desc);
 }
 
 struct st_h2o_http3client_conn_t *create_connection(h2o_httpclient_ctx_t *ctx, h2o_url_t *origin)
 {
-    static const h2o_http3_conn_callbacks_t callbacks = {(void *)destroy_connection, handle_control_stream_frame};
+    static const h2o_http3_conn_callbacks_t callbacks = {{(void *)destroy_connection}, handle_control_stream_frame};
     struct st_h2o_http3client_conn_t *conn = h2o_mem_alloc(sizeof(*conn));
 
-    h2o_http3_init_conn(&conn->super, ctx->http3, &callbacks);
+    h2o_http3_init_conn(&conn->super, ctx->http3.ctx, &callbacks);
     memset((char *)conn + sizeof(conn->super), 0, sizeof(*conn) - sizeof(conn->super));
     conn->ctx = ctx;
     conn->server.origin_url = (h2o_url_t){origin->scheme, h2o_strdup(NULL, origin->authority.base, origin->authority.len),
@@ -265,7 +299,7 @@ struct st_h2o_http3client_conn_t *create_connection(h2o_httpclient_ctx_t *ctx, h
     sprintf(conn->server.named_serv, "%" PRIu16, h2o_url_get_port(origin));
     conn->handshake_properties.client.negotiated_protocols.list = h2o_http3_alpn;
     conn->handshake_properties.client.negotiated_protocols.count = sizeof(h2o_http3_alpn) / sizeof(h2o_http3_alpn[0]);
-    h2o_linklist_insert(&ctx->http3->clients, &conn->clients_link);
+    h2o_linklist_insert(&ctx->http3.ctx->clients, &conn->clients_link);
     h2o_linklist_init_anchor(&conn->pending_requests);
 
     conn->getaddr_req = h2o_hostinfo_getaddr(conn->ctx->getaddr_receiver, conn->server.origin_url.host,
@@ -277,7 +311,7 @@ struct st_h2o_http3client_conn_t *create_connection(h2o_httpclient_ctx_t *ctx, h
     return conn;
 }
 
-static void destroy_request(struct st_h2o_http3client_req_t *req)
+void destroy_request(struct st_h2o_http3client_req_t *req)
 {
     assert(req->quic == NULL);
     h2o_buffer_dispose(&req->sendbuf);
@@ -625,7 +659,7 @@ void start_request(struct st_h2o_http3client_req_t *req)
         return;
     }
 
-    if ((ret = quicly_open_stream(req->conn->super.quic, &req->quic, 0)) != 0) {
+    if ((ret = quicly_open_stream(req->conn->super.super.quic, &req->quic, 0)) != 0) {
         on_error_before_head(req, "failed to open stream");
         destroy_request(req);
         return;
@@ -682,7 +716,7 @@ static int do_write_req(h2o_httpclient_t *_client, h2o_iovec_t chunk, int is_end
 
     req->proceed_req.bytes_written = chunk.len;
     quicly_stream_sync_sendbuf(req->quic, 1);
-    h2o_http3_schedule_timer(&req->conn->super);
+    h2o_quic_schedule_timer(&req->conn->super.super);
     return 0;
 }
 
@@ -718,13 +752,13 @@ void h2o_httpclient_connect_h3(h2o_httpclient_t **_client, h2o_mem_pool_t *pool,
 
     if (h2o_http3_has_received_settings(&conn->super)) {
         start_request(req);
-        h2o_http3_schedule_timer(&conn->super);
+        h2o_quic_schedule_timer(&conn->super.super);
     } else {
         h2o_linklist_insert(&conn->pending_requests, &req->link);
     }
 }
 
-void h2o_httpclient_http3_notify_connection_update(h2o_http3_ctx_t *ctx, h2o_http3_conn_t *_conn)
+void h2o_httpclient_http3_notify_connection_update(h2o_quic_ctx_t *ctx, h2o_quic_conn_t *_conn)
 {
     struct st_h2o_http3client_conn_t *conn = (void *)_conn;
 
