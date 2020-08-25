@@ -2231,15 +2231,17 @@ static int rewrite_forwarded_quic_datagram(h2o_quic_ctx_t *h3ctx, struct msghdr 
         return 1; /* process the packet as-is */
     }
 
-    /* assert that the destination port matches the exposed port number */
+    /* process as-is, if the destination port is going to be different; the contexts are always bound to a specific port */
     switch (encapsulated.destaddr.sa.sa_family) {
     case AF_UNSPEC:
         break;
     case AF_INET:
-        assert(encapsulated.destaddr.sin.sin_port == *h3ctx->sock.port);
+        if (encapsulated.destaddr.sin.sin_port != *h3ctx->sock.port)
+            return 1;
         break;
     case AF_INET6:
-        assert(encapsulated.destaddr.sin6.sin6_port == *h3ctx->sock.port);
+        if (encapsulated.destaddr.sin6.sin6_port != *h3ctx->sock.port)
+            return 1;
         break;
     }
 
