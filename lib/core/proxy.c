@@ -708,7 +708,7 @@ static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *e
         }
     }
     self->client->informational_cb = on_1xx;
-    
+
     retain_ssl_info(req, client->get_socket(client));
     return on_head;
 }

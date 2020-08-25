@@ -477,12 +477,12 @@ Fail:
     return pos;
 }
 
-#define APPEND_SAFE_STRING_WITH_LEN(pos, s, len)        \
-    do {                                                \
-        if (s == NULL)                                  \
-            goto EmitNull;                              \
-        RESERVE(len);                                   \
-        pos = append_safe_string(pos, s, len);          \
+#define APPEND_SAFE_STRING_WITH_LEN(pos, s, len)                                                                                   \
+    do {                                                                                                                           \
+        if (s == NULL)                                                                                                             \
+            goto EmitNull;                                                                                                         \
+        RESERVE(len);                                                                                                              \
+        pos = append_safe_string(pos, s, len);                                                                                     \
     } while (0)
 #define APPEND_SAFE_STRING(pos, s) APPEND_SAFE_STRING_WITH_LEN(pos, s, strlen(s))
 #define APPEND_DURATION(pos, name)                                                                                                 \
@@ -855,7 +855,7 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
             if (req->proxy_stats.ssl.cipher_bits == 0)
                 goto EmitNull;
             RESERVE(sizeof(H2O_INT16_LONGEST_STR));
-            pos += sprintf(pos, "%" PRIu16, (uint16_t) req->proxy_stats.ssl.cipher_bits);
+            pos += sprintf(pos, "%" PRIu16, (uint16_t)req->proxy_stats.ssl.cipher_bits);
             break;
         case ELEMENT_TYPE_PROXY_SSL_PROTOCOL_VERSION:
             APPEND_SAFE_STRING(pos, req->proxy_stats.ssl.protocol_version);
