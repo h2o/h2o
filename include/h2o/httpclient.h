@@ -26,6 +26,7 @@
 extern "C" {
 #endif
 
+#include "quicly.h"
 #include "h2o/header.h"
 #include "h2o/send_state.h"
 #include "h2o/socket.h"
@@ -110,10 +111,21 @@ typedef struct st_h2o_httpclient_ctx_t {
         int8_t counter; /* default is -1. then it'll be initialized by 50 / ratio */
     } http2;
 
-    /**
-     * 1-to-(0|1) relationship; NULL when h3 is not used
-     */
-    struct st_h2o_quic_ctx_t *http3;
+    struct {
+        /**
+         * 1-to-(0|1) relationship; NULL when h3 is not used
+         */
+        struct st_h2o_quic_ctx_t *ctx;
+        /**
+         * Optional callback invoked by the HTTP/3 client implementation to obtain information used for resuming a connection. When
+         * the connection is to be resumed, the callback should set `*address_token` and `*session_ticket` to a vector that can be
+         * freed by calling free (3), as well as writing the resumed transport parameters to `*resumed_tp`. Otherwise,
+         * `*address_token`, `*session_ticket`, `*resumed_tp` can be left untouched, and a full handshake will be exercised. The
+         * function returns if the operation was successful. When false is returned, the connection attempt is aborted.
+         */
+        int (*load_session)(struct st_h2o_httpclient_ctx_t *ctx, struct sockaddr *server_addr, const char *server_name,
+                            ptls_iovec_t *address_token, ptls_iovec_t *session_ticket, quicly_transport_parameters_t *resumed_tp);
+    } http3;
 
 } h2o_httpclient_ctx_t;
 

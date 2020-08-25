@@ -733,9 +733,10 @@ static void handle_buffered_input(struct st_h2o_http3_server_stream_t *stream)
                                                stream->recvbuf.handle_input == handle_input_post_trailers)) {
             /* have complete request, advance the state and process the request */
             if (stream->req.content_length != SIZE_MAX && stream->req.content_length != stream->req.req_body_bytes_received) {
+                /* the request terminated abruptly; reset the stream as we do for HTTP/2 */
                 shutdown_stream(stream, H2O_HTTP3_ERROR_NONE /* ignored */,
                                 stream->req.req_body_bytes_received < stream->req.content_length
-                                    ? H2O_HTTP3_ERROR_INCOMPLETE
+                                    ? H2O_HTTP3_ERROR_REQUEST_INCOMPLETE
                                     : H2O_HTTP3_ERROR_GENERAL_PROTOCOL);
             } else {
                 if (stream->req.write_req.cb != NULL) {
@@ -827,7 +828,7 @@ static void proceed_request_streaming(h2o_req_t *_req, size_t bytes_written, h2o
         }
     }
 
-    /* remove the bytes from the requset body buffer */
+    /* remove the bytes from the request body buffer */
     assert(stream->req_body->size == bytes_written);
     h2o_buffer_consume(&stream->req_body, bytes_written);
     stream->req.entity = h2o_iovec_init(NULL, 0);
@@ -856,6 +857,7 @@ static void run_delayed(h2o_timer_t *timer)
             assert(stream->read_blocked);
             h2o_linklist_unlink(&stream->link);
             made_progress = 1;
+            quicly_stream_set_receive_window(stream->quic, conn->super.ctx->globalconf->http3.active_stream_window_size);
             if (h2o_req_can_stream_request(&stream->req)) {
                 /* use streaming mode */
                 ++conn->num_streams_req_streaming;
@@ -1253,7 +1255,7 @@ static int stream_open_cb(quicly_stream_open_t *self, quicly_stream_t *qs)
     return 0;
 }
 
-quicly_stream_open_t h2o_http3_server_on_stream_open = {stream_open_cb};
+static quicly_stream_open_t on_stream_open = {stream_open_cb};
 
 static void unblock_conn_blocked_streams(struct st_h2o_http3_server_conn_t *conn)
 {
@@ -1426,7 +1428,7 @@ static int scheduler_update_state(struct st_quicly_stream_scheduler_t *sched, qu
     return 0;
 }
 
-quicly_stream_scheduler_t h2o_http3_server_stream_scheduler = {scheduler_can_send, scheduler_do_send, scheduler_update_state};
+static quicly_stream_scheduler_t scheduler = {scheduler_can_send, scheduler_do_send, scheduler_update_state};
 
 static void on_h3_destroy(h2o_quic_conn_t *h3_)
 {
@@ -1527,6 +1529,17 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
     h2o_quic_send(&conn->h3.super);
 
     return &conn->h3;
+}
+
+void h2o_http3_server_amend_quicly_context(h2o_globalconf_t *conf, quicly_context_t *quic)
+{
+    quic->transport_params.max_data =
+        conf->http3.active_stream_window_size; /* set to a size that does not block the unblocked request stream */
+    quic->transport_params.max_streams_uni = 10;
+    quic->transport_params.max_stream_data.bidi_remote = H2O_HTTP3_INITIAL_REQUEST_STREAM_WINDOW_SIZE;
+    quic->transport_params.max_idle_timeout = conf->http3.idle_timeout;
+    quic->stream_open = &on_stream_open;
+    quic->stream_scheduler = &scheduler;
 }
 
 static void graceful_shutdown_close_stragglers(h2o_timer_t *entry)

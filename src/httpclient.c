@@ -44,6 +44,10 @@
 
 #define IO_TIMEOUT 5000
 
+static int save_http3_token_cb(quicly_save_resumption_token_t *self, quicly_conn_t *conn, ptls_iovec_t token);
+static quicly_save_resumption_token_t save_http3_token = {save_http3_token_cb};
+static int save_http3_ticket_cb(ptls_save_ticket_t *self, ptls_t *tls, ptls_iovec_t src);
+static ptls_save_ticket_t save_http3_ticket = {save_http3_ticket_cb};
 static h2o_httpclient_connection_pool_t *connpool;
 static h2o_mem_pool_t pool;
 struct {
@@ -56,8 +60,7 @@ struct {
     size_t num_headers;
     size_t body_size;
 } req = {NULL, "GET"};
-static int cnt_left = 1;
-static size_t cur_req_body_size = 0;
+static unsigned cnt_left = 1, concurrency = 1;
 static int chunk_size = 10;
 static h2o_iovec_t iov_filler;
 static int io_interval = 0, req_interval = 0;
@@ -71,21 +74,12 @@ static struct {
     ptls_context_t tls;
     quicly_context_t quic;
     h2o_quic_ctx_t h3;
-} h3ctx = {{ptls_openssl_random_bytes,
-            &ptls_get_time,
-            h3_key_exchanges,
-            ptls_openssl_cipher_suites,
-            {NULL},
-            NULL,
-            NULL,
-            NULL,
-            NULL,
-            NULL,
-            0,
-            0,
-            0,
-            NULL,
-            1}};
+} h3ctx = {{.random_bytes = ptls_openssl_random_bytes,
+            .get_time = &ptls_get_time,
+            .key_exchanges = h3_key_exchanges,
+            .cipher_suites = ptls_openssl_cipher_suites,
+            .save_ticket = &save_http3_ticket,
+            .omit_end_of_early_data = 1}};
 
 static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *errstr, h2o_iovec_t *method, h2o_url_t *url,
                                          const h2o_header_t **headers, size_t *num_headers, h2o_iovec_t *body,
@@ -93,6 +87,48 @@ static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *e
                                          h2o_url_t *origin);
 static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, int version, int status, h2o_iovec_t msg,
                                       h2o_header_t *headers, size_t num_headers, int header_requires_dup);
+
+static struct {
+    ptls_iovec_t token;
+    ptls_iovec_t ticket;
+    quicly_transport_parameters_t tp;
+} http3_session;
+
+static int save_http3_token_cb(quicly_save_resumption_token_t *self, quicly_conn_t *conn, ptls_iovec_t token)
+{
+    free(http3_session.token.base);
+    http3_session.token = ptls_iovec_init(h2o_mem_alloc(token.len), token.len);
+    memcpy(http3_session.token.base, token.base, token.len);
+    return 0;
+}
+
+static int save_http3_ticket_cb(ptls_save_ticket_t *self, ptls_t *tls, ptls_iovec_t src)
+{
+    quicly_conn_t *conn = *ptls_get_data_ptr(tls);
+    assert(quicly_get_tls(conn) == tls);
+
+    free(http3_session.ticket.base);
+    http3_session.ticket = ptls_iovec_init(h2o_mem_alloc(src.len), src.len);
+    memcpy(http3_session.ticket.base, src.base, src.len);
+    http3_session.tp = *quicly_get_remote_transport_parameters(conn);
+    return 0;
+}
+
+static int load_http3_session(h2o_httpclient_ctx_t *ctx, struct sockaddr *server_addr, const char *server_name, ptls_iovec_t *token,
+                              ptls_iovec_t *ticket, quicly_transport_parameters_t *tp)
+{
+    /* TODO respect server_addr, server_name */
+    if (http3_session.token.base != NULL) {
+        *token = ptls_iovec_init(h2o_mem_alloc(http3_session.token.len), http3_session.token.len);
+        memcpy(token->base, http3_session.token.base, http3_session.token.len);
+    }
+    if (http3_session.ticket.base != NULL) {
+        *ticket = ptls_iovec_init(h2o_mem_alloc(http3_session.ticket.len), http3_session.ticket.len);
+        memcpy(ticket->base, http3_session.ticket.base, http3_session.ticket.len);
+        *tp = http3_session.tp;
+    }
+    return 1;
+}
 
 struct st_timeout {
     h2o_timer_t timeout;
@@ -138,10 +174,8 @@ static void start_request(h2o_httpclient_ctx_t *ctx)
         return;
     }
 
-    cur_req_body_size = req.body_size;
-
     /* initiate the request */
-    if (ctx->http3 != NULL) {
+    if (ctx->http3.ctx != NULL) {
         h2o_httpclient_connect_h3(NULL, &pool, url_parsed, ctx, url_parsed, on_connect);
     } else {
         if (connpool == NULL) {
@@ -197,7 +231,8 @@ static int on_body(h2o_httpclient_t *client, const char *errstr)
     h2o_buffer_consume(&(*client->buf), (*client->buf)->size);
 
     if (errstr == h2o_httpclient_error_is_eos) {
-        if (--cnt_left != 0) {
+        --cnt_left;
+        if (cnt_left >= concurrency) {
             /* next attempt */
             h2o_mem_clear_pool(&pool);
             ftruncate(fileno(stdout), 0); /* ignore error when stdout is a tty */
@@ -251,12 +286,18 @@ h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, int
     return on_body;
 }
 
-int fill_body(h2o_iovec_t *reqbuf)
+static size_t *remaining_req_bytes(h2o_httpclient_t *client)
 {
-    if (cur_req_body_size > 0) {
+    return (size_t *)&client->data;
+}
+
+int fill_body(h2o_httpclient_t *client, h2o_iovec_t *reqbuf)
+{
+    size_t *cur_req_body_size = remaining_req_bytes(client);
+    if (*cur_req_body_size > 0) {
         memcpy(reqbuf, &iov_filler, sizeof(*reqbuf));
-        reqbuf->len = MIN(iov_filler.len, cur_req_body_size);
-        cur_req_body_size -= reqbuf->len;
+        reqbuf->len = MIN(iov_filler.len, *cur_req_body_size);
+        *cur_req_body_size -= reqbuf->len;
         return 0;
     } else {
         *reqbuf = h2o_iovec_init(NULL, 0);
@@ -271,13 +312,13 @@ static void on_io_timeout(h2o_timer_t *entry)
     free(t);
 
     h2o_iovec_t reqbuf;
-    fill_body(&reqbuf);
-    client->write_req(client, reqbuf, cur_req_body_size <= 0);
+    fill_body(client, &reqbuf);
+    client->write_req(client, reqbuf, *remaining_req_bytes(client) <= 0);
 }
 
 static void proceed_request(h2o_httpclient_t *client, size_t written, h2o_send_state_t send_state)
 {
-    if (cur_req_body_size > 0)
+    if (*remaining_req_bytes(client) > 0)
         create_timeout(client->ctx->loop, io_interval, on_io_timeout, client);
 }
 
@@ -301,9 +342,10 @@ h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *errstr, 
     *body = h2o_iovec_init(NULL, 0);
     *proceed_req_cb = NULL;
 
-    if (cur_req_body_size > 0) {
+    if (req.body_size > 0) {
+        *remaining_req_bytes(client) = req.body_size;
         char *clbuf = h2o_mem_alloc_pool(&pool, char, sizeof(H2O_UINT32_LONGEST_STR) - 1);
-        size_t clbuf_len = sprintf(clbuf, "%zu", cur_req_body_size);
+        size_t clbuf_len = sprintf(clbuf, "%zu", req.body_size);
         h2o_add_header(&pool, &headers_vec, H2O_TOKEN_CONTENT_LENGTH, NULL, clbuf, clbuf_len);
 
         *proceed_req_cb = proceed_request;
@@ -323,6 +365,8 @@ static void usage(const char *progname)
             "  -2 <ratio>   HTTP/2 ratio (between 0 and 100)\n"
             "  -3           HTTP/3-only mode\n"
             "  -b <size>    size of request body (in bytes; default: 0)\n"
+            "  -C <concurrency>\n"
+            "               sets the number of requests run at once (default: 1)\n"
             "  -c <size>    size of body chunk (in bytes; default: 10)\n"
             "  -d <delay>   request interval (in msec; default: 0)\n"
             "  -H <name:value>\n"
@@ -383,14 +427,13 @@ int main(int argc, char **argv)
     h2o_multithread_queue_t *queue;
     h2o_multithread_receiver_t getaddr_receiver;
     h2o_httpclient_ctx_t ctx = {
-        NULL, /* loop */
-        &getaddr_receiver,
-        IO_TIMEOUT,                              /* io_timeout */
-        IO_TIMEOUT,                              /* connect_timeout */
-        IO_TIMEOUT,                              /* first_byte_timeout */
-        NULL,                                    /* websocket_timeout */
-        IO_TIMEOUT,                              /* keepalive_timeout */
-        H2O_SOCKET_INITIAL_INPUT_BUFFER_SIZE * 2 /* max_buffer_size */
+        .getaddr_receiver = &getaddr_receiver,
+        .io_timeout = IO_TIMEOUT,
+        .connect_timeout = IO_TIMEOUT,
+        .first_byte_timeout = IO_TIMEOUT,
+        .keepalive_timeout = IO_TIMEOUT,
+        .max_buffer_size = H2O_SOCKET_INITIAL_INPUT_BUFFER_SIZE * 2,
+        .http3 = {.load_session = load_http3_session},
     };
     int opt;
 
@@ -402,6 +445,7 @@ int main(int argc, char **argv)
     h3ctx.quic = quicly_spec_context;
     h3ctx.quic.transport_params.max_streams_uni = 10;
     h3ctx.quic.tls = &h3ctx.tls;
+    h3ctx.quic.save_resumption_token = &save_http3_token;
     {
         uint8_t random_key[PTLS_SHA256_DIGEST_SIZE];
         h3ctx.tls.random_bytes(random_key, sizeof(random_key));
@@ -417,10 +461,13 @@ int main(int argc, char **argv)
     ctx.loop = h2o_evloop_create();
 #endif
 
-    while ((opt = getopt(argc, argv, "t:m:o:b:c:d:H:i:k2:3W:h")) != -1) {
+    while ((opt = getopt(argc, argv, "t:m:o:b:C:c:d:H:i:k2:3W:h")) != -1) {
         switch (opt) {
         case 't':
-            cnt_left = atoi(optarg);
+            if (sscanf(optarg, "%u", &cnt_left) != 1 || cnt_left < 1) {
+                fprintf(stderr, "count (-t) must be a number greater than zero\n");
+                exit(EXIT_FAILURE);
+            }
             break;
         case 'm':
             req.method = optarg;
@@ -435,6 +482,12 @@ int main(int argc, char **argv)
             req.body_size = atoi(optarg);
             if (req.body_size <= 0) {
                 fprintf(stderr, "body size must be greater than 0\n");
+                exit(EXIT_FAILURE);
+            }
+            break;
+        case 'C':
+            if (sscanf(optarg, "%u", &concurrency) != 1 || concurrency < 1) {
+                fprintf(stderr, "concurrency (-C) must be a number greather than zero");
                 exit(EXIT_FAILURE);
             }
             break;
@@ -483,7 +536,7 @@ int main(int argc, char **argv)
 #else
             h2o_quic_init_context(&h3ctx.h3, ctx.loop, create_quic_socket(ctx.loop), &h3ctx.quic, NULL,
                                   h2o_httpclient_http3_notify_connection_update);
-            ctx.http3 = &h3ctx.h3;
+            ctx.http3.ctx = &h3ctx.h3;
 #endif
             break;
         case 'W': {
@@ -525,8 +578,9 @@ int main(int argc, char **argv)
     queue = h2o_multithread_create_queue(ctx.loop);
     h2o_multithread_register_receiver(queue, ctx.getaddr_receiver, h2o_hostinfo_getaddr_receiver);
 
-    /* setup the first request */
-    start_request(&ctx);
+    /* setup the first request(s) */
+    for (unsigned i = 0; i < concurrency && i < cnt_left; ++i)
+        start_request(&ctx);
 
     while (cnt_left != 0) {
 #if H2O_USE_LIBUV
@@ -536,9 +590,9 @@ int main(int argc, char **argv)
 #endif
     }
 
-    if (ctx.http3 != NULL) {
-        h2o_quic_close_all_connections(ctx.http3);
-        while (h2o_quic_num_connections(ctx.http3) != 0) {
+    if (ctx.http3.ctx != NULL) {
+        h2o_quic_close_all_connections(ctx.http3.ctx);
+        while (h2o_quic_num_connections(ctx.http3.ctx) != 0) {
 #if H2O_USE_LIBUV
             uv_run(ctx.loop, UV_RUN_ONCE);
 #else

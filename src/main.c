@@ -1479,10 +1479,6 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                 quicly_context_t *quic = h2o_mem_alloc(sizeof(*quic));
                 *quic = quicly_spec_context;
                 quic->cid_encryptor = &quic_cid_encryptor;
-                quic->transport_params.max_streams_uni = 10;
-                quic->transport_params.max_idle_timeout = conf.globalconf.http3.idle_timeout;
-                quic->stream_scheduler = &h2o_http3_server_stream_scheduler;
-                quic->stream_open = &h2o_http3_server_on_stream_open;
                 quic->generate_resumption_token = &quic_resumption_token_generator;
                 listener = add_listener(fd, ai->ai_addr, ai->ai_addrlen, ctx->hostconf == NULL, 0);
                 listener->quic.ctx = quic;
@@ -2231,15 +2227,17 @@ static int rewrite_forwarded_quic_datagram(h2o_quic_ctx_t *h3ctx, struct msghdr 
         return 1; /* process the packet as-is */
     }
 
-    /* assert that the destination port matches the exposed port number */
+    /* process as-is, if the destination port is going to be different; the contexts are always bound to a specific port */
     switch (encapsulated.destaddr.sa.sa_family) {
     case AF_UNSPEC:
         break;
     case AF_INET:
-        assert(encapsulated.destaddr.sin.sin_port == *h3ctx->sock.port);
+        if (encapsulated.destaddr.sin.sin_port != *h3ctx->sock.port)
+            return 1;
         break;
     case AF_INET6:
-        assert(encapsulated.destaddr.sin6.sin6_port == *h3ctx->sock.port);
+        if (encapsulated.destaddr.sin6.sin6_port != *h3ctx->sock.port)
+            return 1;
         break;
     }
 
@@ -3198,6 +3196,13 @@ int main(int argc, char **argv)
                     ssl_setup_session_resumption_ptls(ptls, conf.listeners[i]->quic.ctx);
             }
         }
+    }
+
+    /* apply HTTP/3 global configuraton to the listeners */
+    for (size_t i = 0; i != conf.num_listeners; ++i) {
+        quicly_context_t *qctx;
+        if ((qctx = conf.listeners[i]->quic.ctx) != NULL)
+            h2o_http3_server_amend_quicly_context(&conf.globalconf, qctx);
     }
 
     /* all setup should be complete by now */
