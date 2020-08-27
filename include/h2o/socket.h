@@ -91,7 +91,7 @@ typedef void (*h2o_socket_cb)(h2o_socket_t *sock, const char *err);
 #include "socket/evloop.h"
 #endif
 
-struct st_h2o_socket_peername_t {
+struct st_h2o_socket_namecache_t {
     socklen_t len;
     struct sockaddr addr;
 };
@@ -130,7 +130,7 @@ struct st_h2o_socket_t {
         h2o_socket_cb read;
         h2o_socket_cb write;
     } _cb;
-    struct st_h2o_socket_peername_t *_peername;
+    struct st_h2o_socket_namecache_t *_sockname, *_peername;
     struct {
         uint8_t state; /* one of H2O_SOCKET_LATENCY_STATE_* */
         uint8_t notsent_is_minimized : 1;
@@ -259,15 +259,15 @@ static int h2o_socket_is_reading(h2o_socket_t *sock);
 /**
  * returns the length of the local address obtained (or 0 if failed)
  */
-socklen_t h2o_socket_getsockname(h2o_socket_t *sock, struct sockaddr *sa);
+static socklen_t h2o_socket_getsockname(h2o_socket_t *sock, struct sockaddr *sa);
 /**
  * returns the length of the remote address obtained (or 0 if failed)
  */
-socklen_t h2o_socket_getpeername(h2o_socket_t *sock, struct sockaddr *sa);
+static socklen_t h2o_socket_getpeername(h2o_socket_t *sock, struct sockaddr *sa);
 /**
  * sets the remote address (used for overriding the value)
  */
-void h2o_socket_setpeername(h2o_socket_t *sock, struct sockaddr *sa, socklen_t len);
+static void h2o_socket_setpeername(h2o_socket_t *sock, struct sockaddr *sa, socklen_t len);
 /**
  *
  */
@@ -386,6 +386,11 @@ int h2o_socket_ebpf_init_key_raw(struct st_h2o_ebpf_map_key_t *key, int sock_typ
  */
 int h2o_socket_ebpf_init_key(struct st_h2o_ebpf_map_key_t *key, void *_sock);
 
+/**
+ * internal function; issues a syscall to fill `sa` at the same time copyng the result to the name cache
+ */
+socklen_t h2o_socket__getname(h2o_socket_t *sock, int is_peer, struct sockaddr *sa);
+void h2o_socket__setname(struct st_h2o_socket_namecache_t **slot, struct sockaddr *sa, socklen_t len);
 void h2o_socket__write_pending(h2o_socket_t *sock);
 void h2o_socket__write_on_complete(h2o_socket_t *sock, int status);
 
@@ -399,6 +404,27 @@ inline int h2o_socket_is_writing(h2o_socket_t *sock)
 inline int h2o_socket_is_reading(h2o_socket_t *sock)
 {
     return sock->_cb.read != NULL;
+}
+
+inline socklen_t h2o_socket_getsockname(h2o_socket_t *sock, struct sockaddr *sa)
+{
+    if (sock->_sockname != NULL)
+        return h2o_socket__getname(sock, 0, sa);
+    memcpy(sa, &sock->_sockname->addr, sock->_sockname->len);
+    return sock->_sockname->len;
+}
+
+inline socklen_t h2o_socket_getpeername(h2o_socket_t *sock, struct sockaddr *sa)
+{
+    if (sock->_peername == NULL)
+        return h2o_socket__getname(sock, 1, sa);
+    memcpy(sa, &sock->_peername->addr, sock->_peername->len);
+    return sock->_peername->len;
+}
+
+inline void h2o_socket_setpeername(h2o_socket_t *sock, struct sockaddr *sa, socklen_t len)
+{
+    h2o_socket__setname(&sock->_peername, sa, len);
 }
 
 inline size_t h2o_socket_prepare_for_latency_optimized_write(h2o_socket_t *sock,

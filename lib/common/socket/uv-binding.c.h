@@ -308,26 +308,16 @@ h2o_socket_t *h2o_socket_connect(h2o_loop_t *loop, struct sockaddr *addr, sockle
     return &sock->super;
 }
 
-socklen_t h2o_socket_getsockname(h2o_socket_t *_sock, struct sockaddr *sa)
+socklen_t h2o_socket__getname(h2o_socket_t *_sock, int is_peer, struct sockaddr *sa)
 {
     struct st_h2o_uv_socket_t *sock = (void *)_sock;
     assert(sock->handle->type == UV_TCP);
 
-    int len = sizeof(struct sockaddr_storage);
-    if (uv_tcp_getsockname((void *)sock->handle, sa, &len) != 0)
-        return 0;
-    return (socklen_t)len;
-}
-
-socklen_t get_peername_uncached(h2o_socket_t *_sock, struct sockaddr *sa)
-{
-    struct st_h2o_uv_socket_t *sock = (void *)_sock;
-    assert(sock->handle->type == UV_TCP);
-
-    int len = sizeof(struct sockaddr_storage);
-    if (uv_tcp_getpeername((void *)sock->handle, sa, &len) != 0)
-        return 0;
-    return (socklen_t)len;
+    socklen_t len = sizeof(struct sockaddr_storage);
+    if ((is_peer ? uv_tcp_getpeername : uv_tcp_getsockname)((void *)sock->handle, sa, &len) != 0)
+        len = 0;
+    h2o_socket__setname(is_peer ? &sock->super._peername : &sock->super._sockname, sa, len);
+    return len;
 }
 
 static void on_timeout(uv_timer_t *uv_timer)

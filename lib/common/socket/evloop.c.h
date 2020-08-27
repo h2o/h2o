@@ -362,21 +362,14 @@ h2o_loop_t *h2o_socket_get_loop(h2o_socket_t *_sock)
     return sock->loop;
 }
 
-socklen_t h2o_socket_getsockname(h2o_socket_t *_sock, struct sockaddr *sa)
+socklen_t h2o_socket__getname(h2o_socket_t *_sock, int is_peer, struct sockaddr *sa)
 {
     struct st_h2o_evloop_socket_t *sock = (void *)_sock;
     socklen_t len = sizeof(struct sockaddr_storage);
-    if (getsockname(sock->fd, sa, &len) != 0)
-        return 0;
-    return len;
-}
 
-socklen_t get_peername_uncached(h2o_socket_t *_sock, struct sockaddr *sa)
-{
-    struct st_h2o_evloop_socket_t *sock = (void *)_sock;
-    socklen_t len = sizeof(struct sockaddr_storage);
-    if (getpeername(sock->fd, sa, &len) != 0)
-        return 0;
+    if ((is_peer ? getpeername : getsockname)(sock->fd, sa, &len) != 0)
+        len = 0;
+    h2o_socket__setname(is_peer ? &sock->super._peername : &sock->super._sockname, sa, len);
     return len;
 }
 
