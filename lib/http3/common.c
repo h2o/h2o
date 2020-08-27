@@ -446,9 +446,6 @@ static uint8_t *accept_hashkey_flatten_address(uint8_t *p, quicly_address_t *add
         memcpy(p, &addr->sin.sin_port, 2);
         p += 2;
         break;
-    case AF_UNSPEC:
-        *p++ = 0;
-        break;
     default:
         h2o_fatal("unknown protocol family");
         break;
@@ -716,7 +713,7 @@ void h2o_quic_read_socket(h2o_quic_ctx_t *ctx, h2o_socket_t *sock)
                     }
 #endif
                 }
-                dgrams[dgram_index].destaddr.sa.sa_family = AF_UNSPEC;
+                dgrams[dgram_index].destaddr = ctx->sock.addr;
             DestAddrFound:;
             }
             dgrams[dgram_index].ttl = ctx->default_ttl;
@@ -746,12 +743,8 @@ void h2o_quic_read_socket(h2o_quic_ctx_t *ctx, h2o_socket_t *sock)
                 /* check source address */
                 if (h2o_socket_compare_address(&dgrams[dgram_index - 1].srcaddr.sa, &dgrams[dgram_index].srcaddr.sa, 1) != 0)
                     goto ProcessPackets;
-                /* check destination address, if available */
-                if (dgrams[dgram_index - 1].destaddr.sa.sa_family == AF_UNSPEC &&
-                    dgrams[dgram_index].destaddr.sa.sa_family == AF_UNSPEC) {
-                    /* ok */
-                } else if (h2o_socket_compare_address(&dgrams[dgram_index - 1].destaddr.sa, &dgrams[dgram_index].destaddr.sa, 1) ==
-                           0) {
+                /* check destination address */
+                if (h2o_socket_compare_address(&dgrams[dgram_index - 1].destaddr.sa, &dgrams[dgram_index].destaddr.sa, 1) == 0) {
                     /* ok */
                 } else {
                     goto ProcessPackets;
@@ -920,6 +913,7 @@ static void setsockopt_recvpktinfo(int fd, int family)
 #endif
     } break;
     default:
+        h2o_fatal("unexpected address family:%d", family);
         break;
     }
 }
@@ -927,6 +921,8 @@ static void setsockopt_recvpktinfo(int fd, int family)
 void h2o_quic_init_context(h2o_quic_ctx_t *ctx, h2o_loop_t *loop, h2o_socket_t *sock, quicly_context_t *quic,
                            h2o_quic_accept_cb acceptor, h2o_quic_notify_connection_update_cb notify_conn_update)
 {
+    struct sockaddr_storage ss;
+
     assert(quic->stream_open != NULL);
 
     *ctx = (h2o_quic_ctx_t){loop,
@@ -937,9 +933,9 @@ void h2o_quic_init_context(h2o_quic_ctx_t *ctx, h2o_loop_t *loop, h2o_socket_t *
                             kh_init_h2o_quic_acceptmap(),
                             notify_conn_update};
     ctx->sock.sock->data = ctx;
-    ctx->sock.addrlen = h2o_socket_getsockname(ctx->sock.sock, (void *)&ctx->sock.addr);
-    assert(ctx->sock.addrlen != 0);
-    switch (ctx->sock.addr.ss_family) {
+    socklen_t sslen = h2o_socket_getsockname(ctx->sock.sock, (void *)&ss);
+    assert(sslen != 0);
+    switch (ss.ss_family) {
     case AF_INET:
         ctx->sock.port = &((struct sockaddr_in *)&ctx->sock.addr)->sin_port;
         break;
@@ -947,13 +943,14 @@ void h2o_quic_init_context(h2o_quic_ctx_t *ctx, h2o_loop_t *loop, h2o_socket_t *
         ctx->sock.port = &((struct sockaddr_in6 *)&ctx->sock.addr)->sin6_port;
         break;
     default:
-        assert(!"unexpected address family");
+        h2o_fatal("unexpected address family:%d", ss.ss_family);
         break;
     }
+    memcpy(&ctx->sock.addr.sa, (void *)&ss, sslen);
     h2o_linklist_init_anchor(&ctx->clients);
     ctx->acceptor = acceptor;
 
-    setsockopt_recvpktinfo(h2o_socket_get_fd(ctx->sock.sock), ctx->sock.addr.ss_family);
+    setsockopt_recvpktinfo(h2o_socket_get_fd(ctx->sock.sock), ctx->sock.addr.sa.sa_family);
     h2o_socket_read_start(ctx->sock.sock, on_read);
 }
 

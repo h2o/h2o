@@ -2020,7 +2020,7 @@ struct st_h2o_quic_forwarded_t {
 /* The format:
  * type:     0b10000000 (1 byte)
  * version:  0x91917000 (4 bytes)
- * destaddr: 1 or 7 or 19 bytes (UNSPEC, v4, v6)
+ * destaddr: 7 or 19 bytes (v4, v6)
  * srcaddr:  same as above
  * ttl:      1 byte
  */
@@ -2044,8 +2044,6 @@ static uint8_t *encode_quic_address(uint8_t *dst, quicly_address_t *addr)
         memcpy(dst, &addr->sin.sin_port, 2);
         dst += 2;
         break;
-    case AF_UNSPEC:
-        *dst++ = 0;
     default:
         h2o_fatal("unknown protocol family");
         break;
@@ -2077,9 +2075,6 @@ static int decode_quic_address(quicly_address_t *addr, const uint8_t **src, cons
         *src += 16;
         memcpy(&addr->sin6.sin6_port, *src, 2);
         *src += 2;
-        break;
-    case 0: /* unspec */
-        addr->sa.sa_family = AF_UNSPEC;
         break;
     default:
         return 0;
@@ -2202,8 +2197,6 @@ static int rewrite_forwarded_quic_datagram(h2o_quic_ctx_t *h3ctx, struct msghdr 
 
     /* process as-is, if the destination port is going to be different; the contexts are always bound to a specific port */
     switch (encapsulated.destaddr.sa.sa_family) {
-    case AF_UNSPEC:
-        break;
     case AF_INET:
         if (encapsulated.destaddr.sin.sin_port != *h3ctx->sock.port)
             return 1;
@@ -2211,6 +2204,9 @@ static int rewrite_forwarded_quic_datagram(h2o_quic_ctx_t *h3ctx, struct msghdr 
     case AF_INET6:
         if (encapsulated.destaddr.sin6.sin6_port != *h3ctx->sock.port)
             return 1;
+        break;
+    default:
+        h2o_fatal("unexpected address family: %d", encapsulated.destaddr.sa.sa_family);
         break;
     }
 
