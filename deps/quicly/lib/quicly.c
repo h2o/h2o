@@ -4297,7 +4297,7 @@ int quicly_close(quicly_conn_t *conn, int err, const char *reason_phrase)
     return ret;
 }
 
-static int get_stream_or_open_if_new(quicly_conn_t *conn, uint64_t stream_id, quicly_stream_t **stream)
+int quicly_get_or_open_stream(quicly_conn_t *conn, uint64_t stream_id, quicly_stream_t **stream)
 {
     int ret = 0;
 
@@ -4364,7 +4364,7 @@ static int handle_stream_frame(quicly_conn_t *conn, struct st_quicly_handle_payl
     if ((ret = quicly_decode_stream_frame(state->frame_type, &state->src, state->end, &frame)) != 0)
         return ret;
     QUICLY_PROBE(QUICTRACE_RECV_STREAM, conn, conn->stash.now, frame.stream_id, frame.offset, frame.data.len, (int)frame.is_fin);
-    if ((ret = get_stream_or_open_if_new(conn, frame.stream_id, &stream)) != 0 || stream == NULL)
+    if ((ret = quicly_get_or_open_stream(conn, frame.stream_id, &stream)) != 0 || stream == NULL)
         return ret;
     return apply_stream_frame(stream, &frame);
 }
@@ -4378,7 +4378,7 @@ static int handle_reset_stream_frame(quicly_conn_t *conn, struct st_quicly_handl
     if ((ret = quicly_decode_reset_stream_frame(&state->src, state->end, &frame)) != 0)
         return ret;
 
-    if ((ret = get_stream_or_open_if_new(conn, frame.stream_id, &stream)) != 0 || stream == NULL)
+    if ((ret = quicly_get_or_open_stream(conn, frame.stream_id, &stream)) != 0 || stream == NULL)
         return ret;
 
     if (!quicly_recvstate_transfer_complete(&stream->recvstate)) {
@@ -4657,7 +4657,7 @@ static int handle_stop_sending_frame(quicly_conn_t *conn, struct st_quicly_handl
     if ((ret = quicly_decode_stop_sending_frame(&state->src, state->end, &frame)) != 0)
         return ret;
 
-    if ((ret = get_stream_or_open_if_new(conn, frame.stream_id, &stream)) != 0 || stream == NULL)
+    if ((ret = quicly_get_or_open_stream(conn, frame.stream_id, &stream)) != 0 || stream == NULL)
         return ret;
 
     if (quicly_sendstate_is_open(&stream->sendstate)) {

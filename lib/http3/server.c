@@ -27,8 +27,35 @@
 #include "h2o/http3_internal.h"
 #include "./../probes_.h"
 
-#define H2O_HTTP3_MAX_PLACEHOLDERS 10
-#define H2O_HTTP3_NUM_RETAINED_PRIORITIES 10
+/**
+ * the scheduler
+ */
+struct st_h2o_http3_req_scheduler_t {
+    struct {
+        struct {
+            h2o_linklist_t high;
+            h2o_linklist_t low;
+        } urgencies[H2O_ABSPRIO_NUM_URGENCY_LEVELS];
+        size_t smallest_urgency;
+    } active;
+    h2o_linklist_t conn_blocked;
+};
+
+/**
+ *
+ */
+struct st_h2o_http3_req_scheduler_node_t {
+    h2o_linklist_t link;
+    h2o_absprio_t priority;
+    uint64_t call_cnt;
+};
+
+/**
+ * callback used to compare precedence of the entries within the same urgency level (e.g., by comparing stream IDs)
+ */
+typedef int (*h2o_http3_req_scheduler_compare_cb)(struct st_h2o_http3_req_scheduler_t *sched,
+                                                  const struct st_h2o_http3_req_scheduler_node_t *x,
+                                                  const struct st_h2o_http3_req_scheduler_node_t *y);
 
 /**
  * Once the size of the request body being received exceeds thit limit, streaming mode will be used (if possible), and the
@@ -124,24 +151,7 @@ struct st_h2o_http3_server_conn_t {
         /**
          * States for request streams.
          */
-        struct {
-            struct {
-                struct {
-                    h2o_linklist_t high;
-                    h2o_linklist_t low;
-                } urgencies[8];
-                size_t smallest_urgency;
-            } active;
-            h2o_linklist_t conn_blocked;
-            /**
-             * a tiny cache for handling PRIORITY_UPDATE frames being received prior to the request header fields. Entries up to one
-             * that contains stream_id of -1 are valid.
-             */
-            struct {
-                int64_t stream_id;
-                h2o_absprio_t priority;
-            } reorder_cache[16];
-        } reqs;
+        struct st_h2o_http3_req_scheduler_t reqs;
         /**
          * States for unidirectional streams. Each element is a bit vector where slot for each stream is defined as: 1 << stream_id.
          */
@@ -170,11 +180,7 @@ struct st_h2o_http3_server_stream_t {
     enum h2o_http3_server_stream_state state;
     h2o_linklist_t link;
     h2o_ostream_t ostr_final;
-    struct {
-        h2o_linklist_t link;
-        h2o_absprio_t priority;
-        uint64_t call_cnt;
-    } scheduler;
+    struct st_h2o_http3_req_scheduler_node_t scheduler;
     /**
      * if read is blocked
      */
@@ -188,6 +194,10 @@ struct st_h2o_http3_server_stream_t {
      * take different actions based on if it has been called while scheduler_do_send is running.
      */
     uint8_t proceed_while_sending : 1;
+    /**
+     * if a PRIORITY_UPDATE frame has been received
+     */
+    uint8_t received_priority_update : 1;
     /**
      * buffer to hold the request body (or a chunk of, if in streaming mode)
      */
@@ -203,8 +213,112 @@ static int handle_input_post_trailers(struct st_h2o_http3_server_stream_t *strea
                                       const char **err_desc);
 static int handle_input_expect_data(struct st_h2o_http3_server_stream_t *stream, const uint8_t **src, const uint8_t *src_end,
                                     const char **err_desc);
-static void req_scheduler_activate(struct st_h2o_http3_server_conn_t *conn, struct st_h2o_http3_server_stream_t *stream);
-static void req_scheduler_deactivate(struct st_h2o_http3_server_conn_t *conn, struct st_h2o_http3_server_stream_t *stream);
+
+static void req_scheduler_init(struct st_h2o_http3_req_scheduler_t *sched)
+{
+    size_t i;
+
+    for (i = 0; i < H2O_ABSPRIO_NUM_URGENCY_LEVELS; ++i) {
+        h2o_linklist_init_anchor(&sched->active.urgencies[i].high);
+        h2o_linklist_init_anchor(&sched->active.urgencies[i].low);
+    }
+    sched->active.smallest_urgency = i;
+    h2o_linklist_init_anchor(&sched->conn_blocked);
+}
+
+static void req_scheduler_activate(struct st_h2o_http3_req_scheduler_t *sched, struct st_h2o_http3_req_scheduler_node_t *node,
+                                   h2o_http3_req_scheduler_compare_cb comp)
+{
+    /* unlink if necessary */
+    if (h2o_linklist_is_linked(&node->link))
+        h2o_linklist_unlink(&node->link);
+
+    if (!node->priority.incremental || node->call_cnt == 0) {
+        /* non-incremental streams and the first emission of incremental streams go in strict order */
+        h2o_linklist_t *anchor = &sched->active.urgencies[node->priority.urgency].high, *pos;
+        for (pos = anchor->prev; pos != anchor; pos = pos->prev) {
+            struct st_h2o_http3_req_scheduler_node_t *node_at_pos =
+                H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_req_scheduler_node_t, link, pos);
+            if (comp(sched, node_at_pos, node) < 0)
+                break;
+        }
+        h2o_linklist_insert(pos->next, &node->link);
+    } else {
+        /* once sent, incremental streams go into a lower list */
+        h2o_linklist_insert(&sched->active.urgencies[node->priority.urgency].low, &node->link);
+    }
+
+    /* book keeping */
+    if (node->priority.urgency < sched->active.smallest_urgency)
+        sched->active.smallest_urgency = node->priority.urgency;
+}
+
+static void req_scheduler_update_smallest_urgency_post_removal(struct st_h2o_http3_req_scheduler_t *sched, size_t changed)
+{
+    if (sched->active.smallest_urgency < changed)
+        return;
+
+    /* search from the location that *might* have changed */
+    sched->active.smallest_urgency = changed;
+    while (h2o_linklist_is_empty(&sched->active.urgencies[sched->active.smallest_urgency].high) &&
+           h2o_linklist_is_empty(&sched->active.urgencies[sched->active.smallest_urgency].low)) {
+        ++sched->active.smallest_urgency;
+        if (sched->active.smallest_urgency >= H2O_ABSPRIO_NUM_URGENCY_LEVELS)
+            break;
+    }
+}
+
+static void req_scheduler_deactivate(struct st_h2o_http3_req_scheduler_t *sched, struct st_h2o_http3_req_scheduler_node_t *node)
+{
+    if (h2o_linklist_is_linked(&node->link))
+        h2o_linklist_unlink(&node->link);
+
+    req_scheduler_update_smallest_urgency_post_removal(sched, node->priority.urgency);
+}
+
+static void req_scheduler_setup_for_next(struct st_h2o_http3_req_scheduler_t *sched, struct st_h2o_http3_req_scheduler_node_t *node,
+                                         h2o_http3_req_scheduler_compare_cb comp)
+{
+    assert(h2o_linklist_is_linked(&node->link));
+
+    /* reschedule to achieve round-robin behavior */
+    if (node->priority.incremental)
+        req_scheduler_activate(sched, node, comp);
+}
+
+static void req_scheduler_conn_blocked(struct st_h2o_http3_req_scheduler_t *sched, struct st_h2o_http3_req_scheduler_node_t *node)
+{
+    if (h2o_linklist_is_linked(&node->link))
+        h2o_linklist_unlink(&node->link);
+
+    h2o_linklist_insert(&sched->conn_blocked, &node->link);
+
+    req_scheduler_update_smallest_urgency_post_removal(sched, node->priority.urgency);
+}
+
+static void req_scheduler_unblock_conn_blocked(struct st_h2o_http3_req_scheduler_t *sched, h2o_http3_req_scheduler_compare_cb comp)
+{
+    while (!h2o_linklist_is_empty(&sched->conn_blocked)) {
+        struct st_h2o_http3_req_scheduler_node_t *node =
+            H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_req_scheduler_node_t, link, sched->conn_blocked.next);
+        req_scheduler_activate(sched, node, comp);
+    }
+}
+
+static int req_scheduler_compare_stream_id(struct st_h2o_http3_req_scheduler_t *sched,
+                                           const struct st_h2o_http3_req_scheduler_node_t *x,
+                                           const struct st_h2o_http3_req_scheduler_node_t *y)
+{
+    struct st_h2o_http3_server_stream_t *sx = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_stream_t, scheduler, x),
+                                        *sy = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_stream_t, scheduler, y);
+    if (sx->quic->stream_id < sy->quic->stream_id) {
+        return -1;
+    } else if (sx->quic->stream_id > sy->quic->stream_id) {
+        return 1;
+    } else {
+        return 0;
+    }
+}
 
 static struct st_h2o_http3_server_conn_t *get_conn(struct st_h2o_http3_server_stream_t *stream)
 {
@@ -286,6 +400,11 @@ static void set_state(struct st_h2o_http3_server_stream_t *stream, enum h2o_http
     }
 }
 
+/**
+ * Shutdowns a stream. Note that a request stream should not be shut down until receiving some QUIC frame that refers to that
+ * stream, but we might might have created stream state due to receiving a PRIORITY_UPDATE frame prior to that (see
+ * handle_priority_update_frame).
+ */
 static void shutdown_stream(struct st_h2o_http3_server_stream_t *stream, int stop_sending_code, int reset_code)
 {
     assert(stream->state < H2O_HTTP3_SERVER_STREAM_STATE_CLOSE_WAIT);
@@ -424,7 +543,7 @@ void on_stream_destroy(quicly_stream_t *qs, int err)
 
     --*get_state_counter(conn, stream->state);
 
-    req_scheduler_deactivate(conn, stream);
+    req_scheduler_deactivate(&conn->scheduler.reqs, &stream->scheduler);
 
     if (h2o_linklist_is_linked(&stream->link))
         h2o_linklist_unlink(&stream->link);
@@ -923,26 +1042,13 @@ static int handle_input_expect_headers(struct st_h2o_http3_server_stream_t *stre
         return 0;
     }
 
-    { /* set priority */
-        assert(!h2o_linklist_is_linked(&stream->scheduler.link));
-        /* find cached entry */
-        size_t cache_index;
-        for (cache_index = 0;
-             cache_index < sizeof(conn->scheduler.reqs.reorder_cache) / sizeof(conn->scheduler.reqs.reorder_cache[0]) &&
-             conn->scheduler.reqs.reorder_cache[cache_index].stream_id != -1;
-             ++cache_index)
-            if (conn->scheduler.reqs.reorder_cache[cache_index].stream_id == stream->quic->stream_id)
-                break;
-        if (cache_index < sizeof(conn->scheduler.reqs.reorder_cache) / sizeof(conn->scheduler.reqs.reorder_cache[0])) {
-            /* copy the cached entry */
-            stream->scheduler.priority = conn->scheduler.reqs.reorder_cache[cache_index].priority;
-        } else {
-            /* apply the value found in the header fields */
-            ssize_t index;
-            if ((index = h2o_find_header(&stream->req.headers, H2O_TOKEN_PRIORITY, -1)) != -1) {
-                h2o_iovec_t *value = &stream->req.headers.entries[index].value;
-                h2o_absprio_parse_priority(value->base, value->len, &stream->scheduler.priority);
-            }
+    /* set priority */
+    assert(!h2o_linklist_is_linked(&stream->scheduler.link));
+    if (!stream->received_priority_update) {
+        ssize_t index;
+        if ((index = h2o_find_header(&stream->req.headers, H2O_TOKEN_PRIORITY, -1)) != -1) {
+            h2o_iovec_t *value = &stream->req.headers.entries[index].value;
+            h2o_absprio_parse_priority(value->base, value->len, &stream->scheduler.priority);
         }
     }
 
@@ -1037,6 +1143,33 @@ static void do_send_informational(h2o_ostream_t *_ostr, h2o_req_t *_req)
     write_response(stream);
 }
 
+static int handle_priority_update_frame(struct st_h2o_http3_server_conn_t *conn, const h2o_http3_priority_update_frame_t *frame)
+{
+    if (frame->element_is_push)
+        return H2O_HTTP3_ERROR_GENERAL_PROTOCOL;
+
+    /* obtain the stream being referred to (creating one if necessary), or return if the stream has been closed already */
+    quicly_stream_t *qs;
+    if (quicly_get_or_open_stream(conn->h3.super.quic, frame->element, &qs) != 0)
+        return H2O_HTTP3_ERROR_ID;
+    if (qs == NULL)
+        return 0;
+
+    /* apply the changes */
+    struct st_h2o_http3_server_stream_t *stream = qs->data;
+    assert(stream != NULL);
+    stream->received_priority_update = 1;
+    if (h2o_linklist_is_linked(&stream->scheduler.link)) {
+        req_scheduler_deactivate(&conn->scheduler.reqs, &stream->scheduler);
+        stream->scheduler.priority = frame->priority; /* TODO apply only the delta? */
+        req_scheduler_activate(&conn->scheduler.reqs, &stream->scheduler, req_scheduler_compare_stream_id);
+    } else {
+        stream->scheduler.priority = frame->priority; /* TODO apply only the delta? */
+    }
+
+    return 0;
+}
+
 static void handle_control_stream_frame(h2o_http3_conn_t *_conn, uint8_t type, const uint8_t *payload, size_t len)
 {
     struct st_h2o_http3_server_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_conn_t, h3, _conn);
@@ -1061,27 +1194,9 @@ static void handle_control_stream_frame(h2o_http3_conn_t *_conn, uint8_t type, c
             h2o_http3_priority_update_frame_t frame;
             if ((err = h2o_http3_decode_priority_update_frame(&frame, payload, len, &err_desc)) != 0)
                 goto Fail;
-            if (frame.element_is_push) {
-                err = H2O_HTTP3_ERROR_GENERAL_PROTOCOL;
-                err_desc = "received PRIORITY_UPDATE referring to push";
+            if ((err = handle_priority_update_frame(conn, &frame)) != 0) {
+                err_desc = "invalid PRIORITY_UPDATE frame";
                 goto Fail;
-            }
-            quicly_stream_t *qs;
-            if ((qs = quicly_get_stream(conn->h3.super.quic, frame.element)) != NULL) {
-                struct st_h2o_http3_server_stream_t *stream = qs->data;
-                assert(stream != NULL);
-                if (h2o_linklist_is_linked(&stream->scheduler.link)) {
-                    req_scheduler_deactivate(conn, stream);
-                    stream->scheduler.priority = frame.priority; /* TODO apply only the delta? */
-                    req_scheduler_activate(conn, stream);
-                } else {
-                    stream->scheduler.priority = frame.priority; /* TODO apply only the delta? */
-                }
-            } else {
-                memmove(conn->scheduler.reqs.reorder_cache + 1, conn->scheduler.reqs.reorder_cache,
-                        sizeof(conn->scheduler.reqs.reorder_cache) - sizeof(conn->scheduler.reqs.reorder_cache[0]));
-                conn->scheduler.reqs.reorder_cache[0].stream_id = frame.element;
-                conn->scheduler.reqs.reorder_cache[0].priority = frame.priority;
             }
         } break;
         default:
@@ -1126,6 +1241,7 @@ static int stream_open_cb(quicly_stream_open_t *self, quicly_stream_t *qs)
     stream->read_blocked = 0;
     stream->proceed_requested = 0;
     stream->proceed_while_sending = 0;
+    stream->received_priority_update = 0;
     stream->req_body = NULL;
 
     h2o_init_request(&stream->req, &conn->super, NULL);
@@ -1141,103 +1257,11 @@ static int stream_open_cb(quicly_stream_open_t *self, quicly_stream_t *qs)
 
 static quicly_stream_open_t on_stream_open = {stream_open_cb};
 
-static void req_scheduler_init(struct st_h2o_http3_server_conn_t *conn)
-{
-    size_t i;
-
-    for (i = 0; i < H2O_ABSPRIO_NUM_URGENCY_LEVELS; ++i) {
-        h2o_linklist_init_anchor(&conn->scheduler.reqs.active.urgencies[i].high);
-        h2o_linklist_init_anchor(&conn->scheduler.reqs.active.urgencies[i].low);
-    }
-    conn->scheduler.reqs.active.smallest_urgency = i;
-    h2o_linklist_init_anchor(&conn->scheduler.reqs.conn_blocked);
-    for (i = 0; i < sizeof(conn->scheduler.reqs.reorder_cache) / sizeof(conn->scheduler.reqs.reorder_cache[0]); ++i)
-        conn->scheduler.reqs.reorder_cache[i].stream_id = -1;
-}
-
-static void req_scheduler_activate(struct st_h2o_http3_server_conn_t *conn, struct st_h2o_http3_server_stream_t *stream)
-{
-    /* unlink if necessary */
-    if (h2o_linklist_is_linked(&stream->scheduler.link))
-        h2o_linklist_unlink(&stream->scheduler.link);
-
-    if (!stream->scheduler.priority.incremental || stream->scheduler.call_cnt == 0) {
-        /* non-incremental streams and the first emission of incremental streams go in strict order */
-        h2o_linklist_t *anchor = &conn->scheduler.reqs.active.urgencies[stream->scheduler.priority.urgency].high, *pos;
-        for (pos = anchor->prev; pos != anchor; pos = pos->prev) {
-            struct st_h2o_http3_server_stream_t *stream_at_pos =
-                H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_stream_t, scheduler.link, pos);
-            if (stream_at_pos->quic->stream_id < stream->quic->stream_id)
-                break;
-        }
-        h2o_linklist_insert(pos->next, &stream->scheduler.link);
-    } else {
-        /* once sent, incremental streams go into a lower list */
-        h2o_linklist_insert(&conn->scheduler.reqs.active.urgencies[stream->scheduler.priority.urgency].low,
-                            &stream->scheduler.link);
-    }
-
-    /* book keeping */
-    if (stream->scheduler.priority.urgency < conn->scheduler.reqs.active.smallest_urgency)
-        conn->scheduler.reqs.active.smallest_urgency = stream->scheduler.priority.urgency;
-}
-
-static void req_scheduler_update_smallest_urgency_post_removal(struct st_h2o_http3_server_conn_t *conn, size_t changed)
-{
-    if (conn->scheduler.reqs.active.smallest_urgency < changed)
-        return;
-
-    /* search from the location that *might* have changed */
-    conn->scheduler.reqs.active.smallest_urgency = changed;
-    while (h2o_linklist_is_empty(&conn->scheduler.reqs.active.urgencies[conn->scheduler.reqs.active.smallest_urgency].high) &&
-           h2o_linklist_is_empty(&conn->scheduler.reqs.active.urgencies[conn->scheduler.reqs.active.smallest_urgency].low)) {
-        ++conn->scheduler.reqs.active.smallest_urgency;
-        if (conn->scheduler.reqs.active.smallest_urgency >= H2O_ABSPRIO_NUM_URGENCY_LEVELS)
-            break;
-    }
-}
-
-static void req_scheduler_deactivate(struct st_h2o_http3_server_conn_t *conn, struct st_h2o_http3_server_stream_t *stream)
-{
-    if (h2o_linklist_is_linked(&stream->scheduler.link))
-        h2o_linklist_unlink(&stream->scheduler.link);
-
-    req_scheduler_update_smallest_urgency_post_removal(conn, stream->scheduler.priority.urgency);
-}
-
-static void req_scheduler_setup_for_next(struct st_h2o_http3_server_conn_t *conn, struct st_h2o_http3_server_stream_t *stream)
-{
-    assert(h2o_linklist_is_linked(&stream->scheduler.link));
-
-    /* reschedule to achieve round-robin behavior */
-    if (stream->scheduler.priority.incremental)
-        req_scheduler_activate(conn, stream);
-}
-
-static void req_scheduler_conn_blocked(struct st_h2o_http3_server_conn_t *conn, struct st_h2o_http3_server_stream_t *stream)
-{
-    if (h2o_linklist_is_linked(&stream->scheduler.link))
-        h2o_linklist_unlink(&stream->scheduler.link);
-
-    h2o_linklist_insert(&conn->scheduler.reqs.conn_blocked, &stream->scheduler.link);
-
-    req_scheduler_update_smallest_urgency_post_removal(conn, stream->scheduler.priority.urgency);
-}
-
-static void req_scheduler_unblock_conn_blocked(struct st_h2o_http3_server_conn_t *conn)
-{
-    while (!h2o_linklist_is_empty(&conn->scheduler.reqs.conn_blocked)) {
-        struct st_h2o_http3_server_stream_t *stream =
-            H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_stream_t, scheduler.link, conn->scheduler.reqs.conn_blocked.next);
-        req_scheduler_activate(conn, stream);
-    }
-}
-
 static void unblock_conn_blocked_streams(struct st_h2o_http3_server_conn_t *conn)
 {
     conn->scheduler.uni.active |= conn->scheduler.uni.conn_blocked;
     conn->scheduler.uni.conn_blocked = 0;
-    req_scheduler_unblock_conn_blocked(conn);
+    req_scheduler_unblock_conn_blocked(&conn->scheduler.reqs, req_scheduler_compare_stream_id);
 }
 
 static int scheduler_can_send(quicly_stream_scheduler_t *sched, quicly_conn_t *qc, int conn_is_saturated)
@@ -1315,7 +1339,7 @@ static int scheduler_do_send(quicly_stream_scheduler_t *sched, quicly_conn_t *qc
                 H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_stream_t, scheduler.link, anchor->next);
             /* 1. link to the conn_blocked list if necessary */
             if (quicly_is_flow_capped(conn->h3.super.quic) && !quicly_sendstate_can_send(&stream->quic->sendstate, NULL)) {
-                req_scheduler_conn_blocked(conn, stream);
+                req_scheduler_conn_blocked(&conn->scheduler.reqs, &stream->scheduler);
                 continue;
             }
             /* 3. send */
@@ -1333,14 +1357,14 @@ static int scheduler_do_send(quicly_stream_scheduler_t *sched, quicly_conn_t *qc
             if (quicly_sendstate_can_send(&stream->quic->sendstate, &stream->quic->_send_aux.max_stream_data)) {
                 if (quicly_is_flow_capped(conn->h3.super.quic) && !quicly_sendstate_can_send(&stream->quic->sendstate, NULL)) {
                     /* capped by connection-level flow control, move the stream to conn-blocked */
-                    req_scheduler_conn_blocked(conn, stream);
+                    req_scheduler_conn_blocked(&conn->scheduler.reqs, &stream->scheduler);
                 } else {
                     /* schedule for next emission */
-                    req_scheduler_setup_for_next(conn, stream);
+                    req_scheduler_setup_for_next(&conn->scheduler.reqs, &stream->scheduler, req_scheduler_compare_stream_id);
                 }
             } else {
                 /* nothing to send at this moment */
-                req_scheduler_deactivate(conn, stream);
+                req_scheduler_deactivate(&conn->scheduler.reqs, &stream->scheduler);
             }
         } else {
             break;
@@ -1390,13 +1414,13 @@ static int scheduler_update_state(struct st_quicly_stream_scheduler_t *sched, qu
             return 0;
         switch (new_state) {
         case DEACTIVATE:
-            req_scheduler_deactivate(conn, stream);
+            req_scheduler_deactivate(&conn->scheduler.reqs, &stream->scheduler);
             break;
         case ACTIVATE:
-            req_scheduler_activate(conn, stream);
+            req_scheduler_activate(&conn->scheduler.reqs, &stream->scheduler, req_scheduler_compare_stream_id);
             break;
         case CONN_BLOCKED:
-            req_scheduler_conn_blocked(conn, stream);
+            req_scheduler_conn_blocked(&conn->scheduler.reqs, &stream->scheduler);
             break;
         }
     }
@@ -1475,7 +1499,7 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
     h2o_timer_init(&conn->timeout, run_delayed);
     memset(&conn->num_streams, 0, sizeof(conn->num_streams));
     conn->num_streams_req_streaming = 0;
-    req_scheduler_init(conn);
+    req_scheduler_init(&conn->scheduler.reqs);
     conn->scheduler.uni.active = 0;
     conn->scheduler.uni.conn_blocked = 0;
     memset(&conn->_conns, 0, sizeof(conn->_conns));

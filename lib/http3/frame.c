@@ -50,7 +50,10 @@ int h2o_http3_decode_priority_update_frame(h2o_http3_priority_update_frame_t *fr
         *err_desc = "invalid PRIORITY frame";
         return H2O_HTTP3_ERROR_FRAME;
     }
-    if (!frame->element_is_push) {
+    if (frame->element_is_push) {
+        if (!(!quicly_stream_is_client_initiated(frame->element) && quicly_stream_is_unidirectional(frame->element)))
+            return H2O_HTTP3_ERROR_FRAME;
+    } else {
         if (!(quicly_stream_is_client_initiated(frame->element) && !quicly_stream_is_unidirectional(frame->element)))
             return H2O_HTTP3_ERROR_FRAME;
     }
