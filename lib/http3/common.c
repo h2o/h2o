@@ -898,6 +898,32 @@ Validation_Success:;
     return 0;
 }
 
+static void setsockopt_recvpktinfo(int fd, int family)
+{
+    switch (family) {
+    case AF_INET: {
+#if defined(IP_PKTINFO) /* this is the de-facto API (that works on both linux, macOS) */
+        int on = 1;
+        if (setsockopt(fd, IPPROTO_IP, IP_PKTINFO, &on, sizeof(on)) != 0)
+            h2o_fatal("failed to set IP_PKTINFO option:%s", strerror(errno));
+#elif defined(IP_RECVDSTADDR) /* *BSD */
+        int on = 1;
+        if (setsockopt(fd, IPPROTO_IP, IP_RECVDSTADDR, &on, sizeof(on)) != 0)
+            h2o_fatal("failed to set IP_RECVDSTADDR option:%s", strerror(errno));
+#endif
+    } break;
+    case AF_INET6: {
+#ifdef IPV6_RECVPKTINFO /* API defined by RFC 3542 */
+        int on = 1;
+        if (setsockopt(fd, IPPROTO_IPV6, IPV6_RECVPKTINFO, &on, sizeof(on)) != 0)
+            h2o_fatal("failed to set IPV6_RECVPKTINFO option:%s", strerror(errno));
+#endif
+    } break;
+    default:
+        break;
+    }
+}
+
 void h2o_quic_init_context(h2o_quic_ctx_t *ctx, h2o_loop_t *loop, h2o_socket_t *sock, quicly_context_t *quic,
                            h2o_quic_accept_cb acceptor, h2o_quic_notify_connection_update_cb notify_conn_update)
 {
@@ -927,6 +953,7 @@ void h2o_quic_init_context(h2o_quic_ctx_t *ctx, h2o_loop_t *loop, h2o_socket_t *
     h2o_linklist_init_anchor(&ctx->clients);
     ctx->acceptor = acceptor;
 
+    setsockopt_recvpktinfo(h2o_socket_get_fd(ctx->sock.sock), ctx->sock.addr.ss_family);
     h2o_socket_read_start(ctx->sock.sock, on_read);
 }
 
