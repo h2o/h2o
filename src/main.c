@@ -1749,7 +1749,7 @@ static int on_config_quic_nodes(h2o_configurator_command_t *cmd, h2o_configurato
 {
     yoml_t **self_node, **mapping_node;
 
-    if (h2o_configurator_parse_mapping(cmd, node, "self:s", "mapping:m", &self_node, &mapping_node) != 0)
+    if (h2o_configurator_parse_mapping(cmd, node, "self:s,mapping:m", NULL, &self_node, &mapping_node) != 0)
         return -1;
 
     /* obtain node-id of this server */
