@@ -914,9 +914,23 @@ int32_t h2o_socket_getport(struct sockaddr *sa)
 {
     switch (sa->sa_family) {
     case AF_INET:
-        return htons(((struct sockaddr_in *)sa)->sin_port);
+        return ntohs(((struct sockaddr_in *)sa)->sin_port);
     case AF_INET6:
-        return htons(((struct sockaddr_in6 *)sa)->sin6_port);
+        return ntohs(((struct sockaddr_in6 *)sa)->sin6_port);
+    default:
+        return -1;
+    }
+}
+
+int h2o_socket_setport(struct sockaddr *sa, uint16_t port)
+{
+    switch (sa->sa_family) {
+    case AF_INET:
+        ((struct sockaddr_in *)sa)->sin_port = htons(port);
+        return 0;
+    case AF_INET6:
+        ((struct sockaddr_in6 *)sa)->sin6_port = htons(port);
+        return 0;
     default:
         return -1;
     }

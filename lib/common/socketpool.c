@@ -34,6 +34,7 @@
 #include "h2o/socket.h"
 #include "h2o/balancer.h"
 
+#include "h2o.h"
 /**
  * timeout will be set to this value when calculated less than this value
  */
@@ -69,6 +70,9 @@ struct on_close_data_t {
 };
 
 static void start_connect(h2o_socketpool_connect_request_t *req, struct sockaddr *addr, socklen_t addrlen);
+static void start_connect_tproxy(h2o_socketpool_connect_request_t *req,
+                                 struct sockaddr *srcaddr, socklen_t srclen,
+                                 struct sockaddr *dstaddr, socklen_t dstlen);
 static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errstr, struct addrinfo *res, void *_req);
 
 static void destroy_detached(struct pool_entry_t *entry)
@@ -150,6 +154,12 @@ static void common_init(h2o_socketpool_t *pool, h2o_socketpool_target_t **target
 h2o_socketpool_target_type_t detect_target_type(h2o_url_t *url, struct sockaddr_storage *sa, socklen_t *salen)
 {
     memset(sa, 0, sizeof(*sa));
+#define TPROXY_TARGET "tproxy"
+    if (url->host.len == sizeof(TPROXY_TARGET) - 1 &&
+        strncasecmp(url->host.base, TPROXY_TARGET, sizeof(TPROXY_TARGET) - 1) == 0) {
+        return H2O_SOCKETPOOL_TYPE_TPROXY;
+    }
+#undef TPROXY_TARGET
     const char *to_sun_err = h2o_url_host_to_sun(url->host, (struct sockaddr_un *)sa);
     if (to_sun_err == h2o_url_host_to_sun_err_is_not_unix_socket) {
         sa->ss_family = AF_INET;
@@ -184,6 +194,7 @@ h2o_socketpool_target_t *h2o_socketpool_create_target(h2o_url_t *origin, h2o_soc
     }
 
     switch (target->type) {
+    case H2O_SOCKETPOOL_TYPE_TPROXY:
     case H2O_SOCKETPOOL_TYPE_NAMED:
         target->peer.named_serv.base = h2o_mem_alloc(sizeof(H2O_UINT16_LONGEST_STR));
         target->peer.named_serv.len = sprintf(target->peer.named_serv.base, "%u", (unsigned)h2o_url_get_port(&target->url));
@@ -202,6 +213,7 @@ h2o_socketpool_target_t *h2o_socketpool_create_target(h2o_url_t *origin, h2o_soc
     }
 
     h2o_linklist_init_anchor(&target->_shared.sockets);
+    target->spoof_srcaddr = 0;
     return target;
 }
 
@@ -225,7 +237,12 @@ void h2o_socketpool_init_global(h2o_socketpool_t *pool, size_t capacity)
 
 void h2o_socketpool_destroy_target(h2o_socketpool_target_t *target)
 {
+    if (target->spoof_srcaddr) {   /* spoofing target was copied shallow */
+        free(target);
+        return;
+    }
     switch (target->type) {
+    case H2O_SOCKETPOOL_TYPE_TPROXY:
     case H2O_SOCKETPOOL_TYPE_NAMED:
         free(target->peer.named_serv.base);
         break;
@@ -241,7 +258,12 @@ void h2o_socketpool_destroy_target(h2o_socketpool_target_t *target)
 void h2o_socketpool_dispose(h2o_socketpool_t *pool)
 {
     size_t i;
+    int refcnt = __sync_sub_and_fetch(&pool->refcnt, 1);
 
+    if (refcnt > 0) { /* dynamic socketpool with active reference */
+        return;
+    }
+    
     pthread_mutex_lock(&pool->_shared.mutex);
     while (!h2o_linklist_is_empty(&pool->_shared.sockets)) {
         struct pool_entry_t *entry = H2O_STRUCT_FROM_MEMBER(struct pool_entry_t, all_link, pool->_shared.sockets.next);
@@ -266,6 +288,10 @@ void h2o_socketpool_dispose(h2o_socketpool_t *pool)
         h2o_socketpool_destroy_target(pool->targets.entries[i]);
     }
     free(pool->targets.entries);
+
+    if (refcnt == 0) {  /* free socketpool if dynamically allocated */
+        free(pool);
+    }
 }
 
 void h2o_socketpool_set_ssl_ctx(h2o_socketpool_t *pool, SSL_CTX *ssl_ctx)
@@ -331,17 +357,31 @@ static void try_connect(h2o_socketpool_connect_request_t *req)
     target = req->pool->targets.entries[req->selected_target];
     __sync_add_and_fetch(&req->pool->targets.entries[req->selected_target]->_shared.leased_count, 1);
 
+    struct sockaddr *src = NULL, *dst = NULL;
+    socklen_t src_len = 0, dst_len = 0;
     switch (target->type) {
     case H2O_SOCKETPOOL_TYPE_NAMED:
         /* resolve the name, and connect */
         req->getaddr_req = h2o_hostinfo_getaddr(req->getaddr_receiver, target->url.host, target->peer.named_serv, AF_UNSPEC,
                                                 SOCK_STREAM, IPPROTO_TCP, AI_ADDRCONFIG | AI_NUMERICSERV, on_getaddr, req);
+        return;
+    case H2O_SOCKETPOOL_TYPE_TPROXY:
+        dst = (void *)&req->pool->sockpair.dst.bytes;
+        dst_len = req->pool->sockpair.dst.len;
+        if (target->url._port != 65535)
+            h2o_socket_setport(dst, target->url._port);
         break;
     case H2O_SOCKETPOOL_TYPE_SOCKADDR:
         /* connect (using sockaddr_in) */
-        start_connect(req, (void *)&target->peer.sockaddr.bytes, target->peer.sockaddr.len);
+        dst = (void *)&target->peer.sockaddr.bytes;
+        dst_len = target->peer.sockaddr.len;
         break;
     }
+    if (target->spoof_srcaddr) { /* connect with client source ip address bounded */
+        src = (void *)&req->pool->sockpair.src.bytes;
+        src_len = req->pool->sockpair.src.len;
+    }
+    start_connect_tproxy(req, src, src_len, dst, dst_len);
 }
 
 static void on_handshake_complete(h2o_socket_t *sock, const char *err)
@@ -379,7 +419,13 @@ static void on_connect(h2o_socket_t *sock, const char *err)
         h2o_url_t *target_url = &req->pool->targets.entries[req->selected_target]->url;
         if (target_url->scheme->is_ssl) {
             assert(req->pool->_ssl_ctx != NULL && "h2o_socketpool_set_ssl_ctx must be called for a pool that contains SSL target");
-            h2o_socket_ssl_handshake(sock, req->pool->_ssl_ctx, target_url->host.base, req->alpn_protos, on_handshake_complete);
+            if  (req->pool->targets.entries[req->selected_target]->type == H2O_SOCKETPOOL_TYPE_TPROXY) {
+                h2o_httpclient_t *client = req->data;
+                h2o_req_t *src_req = h2o__proxy_get_srcreq(client->data);
+                char *host = h2o_strdup(&src_req->pool, src_req->input.authority.base, src_req->input.authority.len).base;
+                h2o_socket_ssl_handshake(sock, req->pool->_ssl_ctx, host, req->alpn_protos, on_handshake_complete);
+            } else
+                h2o_socket_ssl_handshake(sock, req->pool->_ssl_ctx, target_url->host.base, req->alpn_protos, on_handshake_complete);
             return;
         }
     }
@@ -396,11 +442,13 @@ static void on_close(void *data)
     __sync_sub_and_fetch(&pool->_shared.count, 1);
 }
 
-static void start_connect(h2o_socketpool_connect_request_t *req, struct sockaddr *addr, socklen_t addrlen)
+static void start_connect_tproxy(h2o_socketpool_connect_request_t *req,
+                                 struct sockaddr *src, socklen_t srclen,
+                                 struct sockaddr *dst, socklen_t dstlen)
 {
     struct on_close_data_t *close_data;
 
-    req->sock = h2o_socket_connect(req->loop, addr, addrlen, on_connect);
+    req->sock = h2o_socket_connect_tproxy(req->loop, src, srclen, dst, dstlen, on_connect);
     if (req->sock == NULL) {
         __sync_sub_and_fetch(&req->pool->targets.entries[req->selected_target]->_shared.leased_count, 1);
         if (req->remaining_try_count > 0) {
@@ -417,6 +465,10 @@ static void start_connect(h2o_socketpool_connect_request_t *req, struct sockaddr
     req->sock->data = req;
     req->sock->on_close.cb = on_close;
     req->sock->on_close.data = close_data;
+}
+static void start_connect(h2o_socketpool_connect_request_t *req, struct sockaddr *addr, socklen_t addrlen)
+{
+    start_connect_tproxy(req, NULL, 0, addr, addrlen);
 }
 
 static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errstr, struct addrinfo *res, void *_req)
@@ -437,8 +489,15 @@ static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errs
         return;
     }
 
+    h2o_socketpool_target_t *target = req->pool->targets.entries[req->selected_target];
+    struct sockaddr *src = NULL;
+    socklen_t src_len = 0;
+    if (target->spoof_srcaddr) { /* connect with client source ip address bounded */
+        src = (void *)&req->pool->sockpair.src.bytes;
+        src_len = req->pool->sockpair.src.len;
+    }
     struct addrinfo *selected = h2o_hostinfo_select_one(res);
-    start_connect(req, selected->ai_addr, selected->ai_addrlen);
+    start_connect_tproxy(req, src, src_len, selected->ai_addr, selected->ai_addrlen);
 }
 
 static size_t lookup_target(h2o_socketpool_t *pool, h2o_url_t *url)

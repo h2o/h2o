@@ -294,19 +294,41 @@ h2o_loop_t *h2o_socket_get_loop(h2o_socket_t *_sock)
     return sock->handle->loop;
 }
 
-h2o_socket_t *h2o_socket_connect(h2o_loop_t *loop, struct sockaddr *addr, socklen_t addrlen, h2o_socket_cb cb)
+h2o_socket_t *h2o_socket_connect_tproxy(h2o_loop_t *loop,
+                                        struct sockaddr *srcaddr, socklen_t srclen,
+                                        struct sockaddr *dstaddr, socklen_t dstlen,
+                                        h2o_socket_cb cb)
 {
     struct st_h2o_uv_socket_t *sock = create_socket(loop);
 
     if (sock == NULL)
         return NULL;
-    if (uv_tcp_connect(&sock->stream._creq, (void *)sock->handle, addr, on_connect) != 0) {
-        h2o_socket_close(&sock->super);
-        return NULL;
+
+#ifdef IP_TRANSPARENT
+    if (srclen) {       /* tproxy */
+        int fd, flag = 1;
+        uv_fileno((void *) sock->handle, &fd);
+        if (setsockopt(fd, SOL_IP, IP_TRANSPARENT, &flag, sizeof(flag)) != 0)
+            goto Error;
+        if (bind(fd, srcaddr, srclen))
+            goto Error;
     }
+#endif
+
+    if (uv_tcp_connect(&sock->stream._creq, (void *)sock->handle, dstaddr, on_connect) != 0)
+        goto Error;
     sock->super._cb.write = cb;
     return &sock->super;
+Error:
+    h2o_socket_close(&sock->super);
+    return NULL;
 }
+
+h2o_socket_t *h2o_socket_connect(h2o_loop_t *loop, struct sockaddr *addr, socklen_t addrlen, h2o_socket_cb cb)
+{
+    return h2o_socket_connect_tproxy(loop, NULL, 0, addr, addrlen, cb);
+}
+
 
 socklen_t h2o_socket_getsockname(h2o_socket_t *_sock, struct sockaddr *sa)
 {

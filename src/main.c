@@ -1136,7 +1136,7 @@ ErrorExit:
 /**
  * Opens an INET or INET6 socket for accepting connections. When the protocol is UDP, SO_REUSEPORT is set if available.
  */
-static int open_listener(int domain, int type, int protocol, struct sockaddr *addr, socklen_t addrlen)
+static int open_listener(int domain, int type, int protocol, struct sockaddr *addr, socklen_t addrlen, int transparent)
 {
     int fd;
 
@@ -1160,6 +1160,13 @@ static int open_listener(int domain, int type, int protocol, struct sockaddr *ad
         int on = 1;
         if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on)) != 0)
             goto Error;
+#ifdef IP_TRANSPARENT
+        if (transparent &&
+            (setsockopt(fd, SOL_IP, IP_TRANSPARENT, &on, sizeof(on)) != 0)) {
+            fprintf(stderr, "[error] setsockopt(IP_TRANSPARENT) failed:%s. Please grant h2o cap_net_admin.\n", strerror(errno));
+            goto Error;
+        }
+#endif
     } break;
     case SOCK_DGRAM: {
         /* UDP: set SO_REUSEPORT and DF bit */
@@ -1219,11 +1226,11 @@ Error:
 }
 
 static int open_inet_listener(h2o_configurator_command_t *cmd, yoml_t *node, const char *hostname, const char *servname, int domain,
-                              int type, int protocol, struct sockaddr *addr, socklen_t addrlen)
+                              int type, int protocol, struct sockaddr *addr, socklen_t addrlen, int transparent)
 {
     int fd;
 
-    if ((fd = open_listener(domain, type, protocol, addr, addrlen)) == -1)
+    if ((fd = open_listener(domain, type, protocol, addr, addrlen, transparent)) == -1)
         h2o_configurator_errprintf(cmd, node, "failed to listen to %s port %s:%s: %s", protocol == IPPROTO_TCP ? "TCP" : "UDP",
                                    hostname != NULL ? hostname : "ANY", servname, strerror(errno));
 
@@ -1322,7 +1329,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
 {
     const char *hostname = NULL, *servname, *type = "tcp";
     yoml_t **ssl_node = NULL, **owner_node = NULL, **permission_node = NULL, **quic_node = NULL;
-    int proxy_protocol = 0;
+    int proxy_protocol = 0, transparent = 0;
 
     /* fetch servname (and hostname) */
     switch (node->type) {
@@ -1330,10 +1337,10 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
         servname = node->data.scalar;
         break;
     case YOML_TYPE_MAPPING: {
-        yoml_t **port_node, **host_node, **type_node, **proxy_protocol_node;
-        if (h2o_configurator_parse_mapping(cmd, node, "port:s", "host:s,type:s,owner:s,permission:*,ssl:m,proxy-protocol:*,quic:m",
+        yoml_t **port_node, **host_node, **type_node, **proxy_protocol_node, **transparent_node;
+        if (h2o_configurator_parse_mapping(cmd, node, "port:s", "host:s,type:s,owner:s,permission:*,ssl:m,proxy-protocol:*,quic:m,transparent:*",
                                            &port_node, &host_node, &type_node, &owner_node, &permission_node, &ssl_node,
-                                           &proxy_protocol_node, &quic_node) != 0)
+                                           &proxy_protocol_node, &quic_node, &transparent_node) != 0)
             return -1;
         servname = (*port_node)->data.scalar;
         if (host_node != NULL)
@@ -1345,6 +1352,9 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
         }
         if (proxy_protocol_node != NULL &&
             (proxy_protocol = (int)h2o_configurator_get_one_of(cmd, *proxy_protocol_node, "OFF,ON")) == -1)
+            return -1;
+        if (transparent_node != NULL &&
+            (transparent = (int)h2o_configurator_get_one_of(cmd, *transparent_node, "OFF,ON")) == -1)
             return -1;
     } break;
     default:
@@ -1418,7 +1428,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                         }
                     } else {
                         if ((fd = open_inet_listener(cmd, node, hostname, servname, ai->ai_family, ai->ai_socktype, ai->ai_protocol,
-                                                     ai->ai_addr, ai->ai_addrlen)) == -1) {
+                                                     ai->ai_addr, ai->ai_addrlen, transparent)) == -1) {
                             freeaddrinfo(res);
                             return -1;
                         }
@@ -1467,7 +1477,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                             return -1;
                         }
                     } else if ((fd = open_inet_listener(cmd, node, hostname, servname, ai->ai_family, ai->ai_socktype,
-                                                        ai->ai_protocol, ai->ai_addr, ai->ai_addrlen)) == -1) {
+                                                        ai->ai_protocol, ai->ai_addr, ai->ai_addrlen, 0)) == -1) {
                         freeaddrinfo(res);
                         return -1;
                     }
@@ -2500,7 +2510,7 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
                     perror("failed to obtain local address of the listening QUIC socket");
                     abort();
                 }
-                if ((fd = open_listener(ss.ss_family, SOCK_DGRAM, 0, (struct sockaddr *)&ss, sslen)) != -1) {
+                if ((fd = open_listener(ss.ss_family, SOCK_DGRAM, 0, (struct sockaddr *)&ss, sslen, 0)) != -1) {
                     setsockopt_recvpktinfo(fd, ss.ss_family);
                 } else {
                     reuseport = 0;

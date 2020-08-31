@@ -25,6 +25,7 @@
 #include <sys/uio.h>
 #include "h2o.h"
 #include "h2o/socket.h"
+#include "h2o/tproxy.h"
 
 #ifndef IOV_MAX
 #define IOV_MAX UIO_MAXIOV
@@ -326,6 +327,9 @@ void h2o_dispose_request(h2o_req_t *req)
     if (req->error_logs != NULL)
         h2o_buffer_dispose(&req->error_logs);
 
+    if (req->overrides && req->overrides->connpool)
+        h2o_httpclient_connection_pool_dispose(req->overrides->connpool);
+    
     h2o_mem_clear_pool(&req->pool);
 }
 

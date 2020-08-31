@@ -36,7 +36,8 @@ extern "C" {
 
 typedef enum en_h2o_socketpool_target_type_t {
     H2O_SOCKETPOOL_TYPE_NAMED,
-    H2O_SOCKETPOOL_TYPE_SOCKADDR
+    H2O_SOCKETPOOL_TYPE_SOCKADDR,
+    H2O_SOCKETPOOL_TYPE_TPROXY  /* Connect to original destination IP address */
 } h2o_socketpool_target_type_t;
 
 /**
@@ -72,6 +73,10 @@ typedef struct st_h2o_socketpool_target_t {
             socklen_t len;
         } sockaddr;
     } peer;
+    /*
+     * srcaddr spoofing target
+     */
+    int spoof_srcaddr;
     /**
      * per-target lb configuration
      */
@@ -93,6 +98,13 @@ typedef struct st_h2o_socketpool_target_t {
 typedef H2O_VECTOR(h2o_socketpool_target_t *) h2o_socketpool_target_vector_t;
 
 typedef struct st_h2o_balancer_t h2o_balancer_t;
+
+typedef struct st_h2o_sockaddr_pair_t {
+    struct {
+        struct sockaddr_storage bytes;
+        socklen_t len;
+    } src, dst;
+} h2o_sockaddr_pair_t;
 
 typedef struct st_h2o_socketpool_t {
 
@@ -128,6 +140,11 @@ typedef struct st_h2o_socketpool_t {
 
     /* load balancer */
     h2o_balancer_t *balancer;
+
+    /* when used as transparent reverse proxy */
+    h2o_sockaddr_pair_t sockpair;
+    /* refcnt is zero for static socketpools, nonzero for dynamically allocated ones */
+    int refcnt;
 } h2o_socketpool_t;
 
 typedef struct st_h2o_socketpool_connect_request_t h2o_socketpool_connect_request_t;

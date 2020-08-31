@@ -179,6 +179,11 @@ h2o_cache_ref_t *h2o_cache_fetch(h2o_cache_t *cache, uint64_t now, h2o_iovec_t k
         ref->_requested_early_update = 1;
         goto NotFound;
     }
+    if (cache->flags & H2O_CACHE_FLAG_AGE_UPDATE) {
+        ref->at = now;
+        h2o_linklist_unlink(&ref->_age_link);
+        h2o_linklist_insert(&cache->age, &ref->_age_link);
+    }
     /* move the entry to the top of LRU */
     h2o_linklist_unlink(&ref->_lru_link);
     h2o_linklist_insert(&cache->lru, &ref->_lru_link);

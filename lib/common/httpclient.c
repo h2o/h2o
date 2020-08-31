@@ -40,7 +40,35 @@ const char h2o_httpclient_error_internal[] = "internal error";
 void h2o_httpclient_connection_pool_init(h2o_httpclient_connection_pool_t *connpool, h2o_socketpool_t *sockpool)
 {
     connpool->socketpool = sockpool;
+    connpool->refcnt = 0;
     h2o_linklist_init_anchor(&connpool->http2.conns);
+}
+
+h2o_httpclient_connection_pool_t *h2o_httpclient_connection_pool_create(h2o_socketpool_t *sockpool) 
+{
+    h2o_httpclient_connection_pool_t *connpool = h2o_mem_alloc(sizeof(*connpool));
+    h2o_httpclient_connection_pool_init(connpool, sockpool);
+    connpool->refcnt = 1;
+    return connpool;
+}
+
+void h2o_httpclient_connection_pool_dispose(h2o_httpclient_connection_pool_t *connpool) 
+{
+    if (connpool->refcnt == 0)
+        return;
+    
+    if (--connpool->refcnt > 0) {
+        return;
+    }
+    h2o_socketpool_dispose(connpool->socketpool);
+    
+    h2o_httpclient__h2_conn_t *http2_conn = NULL;
+    while (!h2o_linklist_is_empty(&connpool->http2.conns)) {
+        http2_conn = H2O_STRUCT_FROM_MEMBER(h2o_httpclient__h2_conn_t, link, connpool->http2.conns.next);
+        h2o_linklist_unlink(&http2_conn->link);
+        h2o_httpclient__trigger_keepalive_timeout(http2_conn);  /* trigger immediate close */
+    }
+    free(connpool);
 }
 
 static void close_client(h2o_httpclient_t *client)
