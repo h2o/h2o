@@ -23,6 +23,7 @@
 #include "h2o.h"
 #include "h2o/socketpool.h"
 #include "h2o/balancer.h"
+#include "h2o/tproxy.h"
 
 struct rp_handler_t {
     h2o_handler_t super;
@@ -32,6 +33,7 @@ struct rp_handler_t {
 
 struct rp_handler_context_t {
     h2o_httpclient_connection_pool_t connpool;
+    h2o_cache_t *cache;
     h2o_httpclient_ctx_t *client_ctx;
 };
 
@@ -43,7 +45,13 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
 
     /* setup overrides */
     *overrides = (h2o_req_overrides_t){NULL};
-    overrides->connpool = &handler_ctx->connpool;
+
+    if (self->config.spoof_srcaddr) {
+        overrides->connpool = h2o_tproxy_get_connpool(handler_ctx->cache, req, &self->config,
+                                                      self->sockpool /* use as template */);
+    }
+    if (!overrides->connpool)
+        overrides->connpool = &handler_ctx->connpool;
     overrides->location_rewrite.path_prefix = req->pathconf->path;
     overrides->use_proxy_protocol = self->config.use_proxy_protocol;
     overrides->client_ctx = handler_ctx->client_ctx;
@@ -69,6 +77,8 @@ static void on_context_init(h2o_handler_t *_self, h2o_context_t *ctx)
     memset(handler_ctx, 0, sizeof(*handler_ctx));
     h2o_httpclient_connection_pool_init(&handler_ctx->connpool, self->sockpool);
     h2o_context_set_handler_context(ctx, &self->super, handler_ctx);
+    /* setup connpool_hash for tproxy */
+    handler_ctx->cache = h2o_tproxy_create_connpool_cache(self->config.connpool_duration);
 
     /* setup a specific client context only if we need to */
     if (ctx->globalconf->proxy.io_timeout == self->config.io_timeout &&

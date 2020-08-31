@@ -472,15 +472,17 @@ h2o_socket_t *h2o_socket_connect_tproxy(h2o_loop_t *loop,
 #ifdef IP_TRANSPARENT
     if (srclen) {       /* tproxy */
         int flag = 1;
-        if (setsockopt(fd, SOL_IP, IP_TRANSPARENT, &flag, sizeof(flag)) != 0)
+        if (setsockopt(fd, SOL_IP, IP_TRANSPARENT, &flag, sizeof(flag)) != 0) {
             goto Error;
-        if (bind(fd, srcaddr, srclen))
+        }
+        if (bind(fd, srcaddr, srclen)) {
             goto Error;
+        }
     }
 #endif
-    
-    if (!(connect(fd, dstaddr, dstlen) == 0 || errno == EINPROGRESS))
+    if (!(connect(fd, dstaddr, dstlen) == 0 || errno == EINPROGRESS)) {
         goto Error;
+    }
 
     sock = create_socket_set_nodelay(loop, fd, H2O_SOCKET_FLAG_IS_CONNECTING);
     h2o_socket_notify_write(&sock->super, cb);
