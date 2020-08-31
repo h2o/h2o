@@ -884,6 +884,16 @@ static void on_keepalive_timeout(h2o_timer_t *entry)
     close_connection(conn);
 }
 
+void h2o_httpclient__trigger_keepalive_timeout(h2o_httpclient__h2_conn_t *_conn)
+{
+    struct st_h2o_http2client_conn_t *conn = (void *) _conn;
+    if (h2o_timer_is_linked(&conn->keepalive_timeout))
+        h2o_timer_unlink(&conn->keepalive_timeout);
+    else
+        assert(!"keepalive_timeout must be linked");
+    h2o_timer_link(conn->super.ctx->loop, 0, &conn->keepalive_timeout);
+}
+
 static int parse_input(struct st_h2o_http2client_conn_t *conn)
 {
     /* handle the input */

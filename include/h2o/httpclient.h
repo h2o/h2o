@@ -89,6 +89,11 @@ typedef struct st_h2o_httpclient_connection_pool_t {
         h2o_linklist_t conns;
     } http2;
 
+    /**
+     * static connection pools have zero refcnt.
+     * dynamic allocated connection pools have nonzero refcnt.
+     */
+    int refcnt;
 } h2o_httpclient_connection_pool_t;
 
 typedef struct st_h2o_httpclient_ctx_t {
@@ -259,6 +264,8 @@ extern const char h2o_httpclient_error_http2_protocol_violation[];
 extern const char h2o_httpclient_error_internal[];
 
 void h2o_httpclient_connection_pool_init(h2o_httpclient_connection_pool_t *connpool, h2o_socketpool_t *sockpool);
+h2o_httpclient_connection_pool_t *h2o_httpclient_connection_pool_create(h2o_socketpool_t *sockpool);
+void h2o_httpclient_connection_pool_dispose(h2o_httpclient_connection_pool_t *connpool);
 
 /**
  * issues a HTTP request using the connection pool. Either H1 or H2 may be used, depending on the given context.
@@ -272,8 +279,12 @@ extern const size_t h2o_httpclient__h1_size;
 
 void h2o_httpclient__h2_on_connect(h2o_httpclient_t *client, h2o_socket_t *sock, h2o_url_t *origin);
 uint32_t h2o_httpclient__h2_get_max_concurrent_streams(h2o_httpclient__h2_conn_t *conn);
+void h2o_httpclient__trigger_keepalive_timeout(h2o_httpclient__h2_conn_t *conn);
 extern const size_t h2o_httpclient__h2_size;
 
+h2o_httpclient_connection_pool_t *h2o_httpclient_connpool_create(void);
+void h2o_httpclient_connpool_dispose(h2o_httpclient_connection_pool_t *);
+    
 #ifdef quicly_h /* create http3client.h? */
 
 #include "h2o/http3_common.h"

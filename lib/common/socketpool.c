@@ -241,7 +241,12 @@ void h2o_socketpool_destroy_target(h2o_socketpool_target_t *target)
 void h2o_socketpool_dispose(h2o_socketpool_t *pool)
 {
     size_t i;
+    int refcnt = __sync_sub_and_fetch(&pool->refcnt, 1);
 
+    if (refcnt > 0) { /* dynamic socketpool with active reference */
+        return;
+    }
+    
     pthread_mutex_lock(&pool->_shared.mutex);
     while (!h2o_linklist_is_empty(&pool->_shared.sockets)) {
         struct pool_entry_t *entry = H2O_STRUCT_FROM_MEMBER(struct pool_entry_t, all_link, pool->_shared.sockets.next);
@@ -266,6 +271,10 @@ void h2o_socketpool_dispose(h2o_socketpool_t *pool)
         h2o_socketpool_destroy_target(pool->targets.entries[i]);
     }
     free(pool->targets.entries);
+
+    if (refcnt == 0) {  /* free socketpool if dynamically allocated */
+        free(pool);
+    }
 }
 
 void h2o_socketpool_set_ssl_ctx(h2o_socketpool_t *pool, SSL_CTX *ssl_ctx)

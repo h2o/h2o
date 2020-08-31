@@ -128,6 +128,8 @@ typedef struct st_h2o_socketpool_t {
 
     /* load balancer */
     h2o_balancer_t *balancer;
+    /* refcnt is zero for static socketpools, nonzero for dynamically allocated ones */
+    int refcnt;
 } h2o_socketpool_t;
 
 typedef struct st_h2o_socketpool_connect_request_t h2o_socketpool_connect_request_t;
