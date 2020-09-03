@@ -76,6 +76,9 @@ h2o_allow_probes = set([
     "h2o:h3s_accept",
     "h2o:h3s_destroy",
     "h2o:send_response_header",
+
+    "h2o:h3_packet_receive",
+    "h2o:h3_packet_forward",
 ])
 
 # To rename field names for compatibility with:
