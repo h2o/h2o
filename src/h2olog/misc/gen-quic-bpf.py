@@ -62,6 +62,8 @@ block_fields = {
     "quicly:crypto_send_key_update": set(["secret"]),
     "quicly:crypto_receive_key_update": set(["secret"]),
     "quicly:crypto_receive_key_update_prepare": set(["secret"]),
+
+    "h2o:h3_packet_receive": set(["base"]),
 }
 
 # A block list for quicly-probes.d.
@@ -79,6 +81,12 @@ h2o_allow_probes = set([
 
     "h2o:h3_packet_receive",
     "h2o:h3_packet_forward",
+])
+
+h2o_probes_without_master_id = set([
+    "h3s_accept",
+    "h3_packet_receive",
+    "h3_packet_forward",
 ])
 
 # To rename field names for compatibility with:
@@ -244,7 +252,7 @@ int %s(struct pt_regs *ctx) {
   }
   h2o_to_quicly_conn.delete(&event.h3s_destroy.conn_id);
 """
-  elif metadata["provider"] == "h2o":
+  elif metadata["provider"] == "h2o" and probe_name not in h2o_probes_without_master_id:
     c += r"""
   const uint32_t *master_conn_id_ptr = h2o_to_quicly_conn.lookup(&event.%s.conn_id);
   if (master_conn_id_ptr == NULL)
@@ -373,7 +381,7 @@ struct quic_event_t {
         f = "%s %s" % (field_type, field_name)
 
       event_t_decl += "      %s;\n" % f
-    if metadata["provider"] == "h2o" and name != "h3s_accept":
+    if metadata["provider"] == "h2o" and name not in h2o_probes_without_master_id:
       event_t_decl += "      typeof_st_quicly_conn_t__master_id master_id;\n"
     event_t_decl += "    } %s;\n" % name
 
@@ -471,7 +479,7 @@ void h2o_quic_tracer::do_handle_event(const void *data, int data_len) {
             json_field_name, event_t_name, len_event_t_name, len_event_t_name)
 
     if metadata["provider"] == "h2o":
-      if probe_name != "h3s_accept":
+      if probe_name not in h2o_probes_without_master_id:
         handle_event_func += '    json_write_pair_c(out_, STR_LIT("conn"), event->%s.master_id);\n' % (
             probe_name)
       handle_event_func += '    json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());\n'
