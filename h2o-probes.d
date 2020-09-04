@@ -68,7 +68,7 @@ provider h2o {
     probe h3s_stream_set_state(uint64_t conn_id, uint64_t req_id, unsigned state);
 
     /**
-     * HTTP/3 event, indicating that a H3 frame has been received. `bttes` is available except when frame_type is DATA.
+     * HTTP/3 event, indicating that a H3 frame has been received. `bytes` is available except when frame_type is DATA.
      */
     probe h3_frame_receive(uint64_t frame_type, const void *bytes, size_t bytes_len);
     /**
