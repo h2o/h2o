@@ -68,13 +68,13 @@ provider h2o {
     probe h3s_stream_set_state(uint64_t conn_id, uint64_t req_id, unsigned state);
 
     /**
-     * HTTP/3 event, indicating that a H3 frame has been received. `base` is available except when frame_type is DATA.
+     * HTTP/3 event, indicating that a H3 frame has been received. `bttes` is available except when frame_type is DATA.
      */
-    probe h3_frame_receive(uint64_t frame_type, const void *base, size_t len);
+    probe h3_frame_receive(uint64_t frame_type, const void *bytes, size_t bytes_len);
     /**
      * HTTP/3 event, indicating that a QUIC packet has been received.
      */
-    probe h3_packet_receive(struct sockaddr *dest, struct sockaddr *src, const void *base, size_t len);
+    probe h3_packet_receive(struct sockaddr *dest, struct sockaddr *src, const void *bytes, size_t bytes_len);
     /**
      * HTTP/3 event, indicating that a QUIC packet has been forwarded.
      */

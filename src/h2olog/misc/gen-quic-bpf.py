@@ -63,7 +63,7 @@ block_fields = {
     "quicly:crypto_receive_key_update": set(["secret"]),
     "quicly:crypto_receive_key_update_prepare": set(["secret"]),
 
-    "h2o:h3_packet_receive": set(["base"]),
+    "h2o:h3_packet_receive": set(["bytes"]),
 }
 
 # A block list for quicly-probes.d.
