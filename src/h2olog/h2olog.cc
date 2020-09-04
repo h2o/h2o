@@ -42,12 +42,13 @@ static void usage(void)
 Usage: h2olog -p PID
        h2olog quic -p PID
 Optional arguments:
-    -t EVENT_TYPES Fully-qualified probe names to show,
-       joined by a comma, e.g. "quicly:accept,quicly:free"
+    -d Print debugging information (-dd shows more)
+    -h Print this help and exit
+    -l Print the list of handled USDTs and exit
     -s RESPONSE_HEADER_NAMES  Response header names to show,
        joined by a comma, e.g. "content-type" (case-insensitive)
-    -h Print this help and exit
-    -d Print debugging information (-dd shows more)
+    -t EVENT_TYPES Fully-qualified probe names to show,
+       joined by a comma, e.g. "quicly:accept,quicly:free"
     -w Path to write the output (default: stdout)
 
 Examples:
@@ -216,12 +217,13 @@ int main(int argc, char **argv)
     }
 
     int debug = 0;
+    int list_and_exit = 0;
     FILE *outfp = stdout;
     std::vector<std::string> event_type_filters;
     std::vector<std::string> response_header_filters;
     int c;
     pid_t h2o_pid = -1;
-    while ((c = getopt(argc, argv, "hdp:t:s:w:")) != -1) {
+    while ((c = getopt(argc, argv, "hdp:t:s:w:l")) != -1) {
         switch (c) {
         case 'p':
             h2o_pid = atoi(optarg);
@@ -245,6 +247,9 @@ int main(int argc, char **argv)
         case 'd':
             debug++;
             break;
+        case 'l':
+            list_and_exit++;
+            break;
         case 'h':
             usage();
             exit(EXIT_SUCCESS);
@@ -258,6 +263,13 @@ int main(int argc, char **argv)
         fprintf(stderr, "Error: too many aruments\n");
         usage();
         exit(EXIT_FAILURE);
+    }
+
+    if (list_and_exit) {
+        for (const auto &usdt : tracer->usdt_probes()) {
+            fprintf(stderr, "%s:%s\n", usdt.provider.c_str(), usdt.name.c_str());
+        }
+        exit(EXIT_SUCCESS);
     }
 
     if (h2o_pid == -1) {
