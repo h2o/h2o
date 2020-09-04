@@ -22,6 +22,7 @@
 
 #include <memory>
 #include <vector>
+#include <bcc/BPF.h>
 extern "C" {
 #include <unistd.h>
 #include <stdarg.h>
@@ -264,7 +265,11 @@ int main(int argc, char **argv)
     }
 
     ebpf::BPF *bpf = new ebpf::BPF();
-    std::vector<ebpf::USDT> probes = tracer->init_usdt_probes(h2o_pid);
+    const std::vector<h2o_tracer::usdt> probe_defs = tracer->usdt_probes();
+    std::vector<ebpf::USDT> probes;
+    for (const auto &probe_defs : probe_defs) {
+        probes.push_back(ebpf::USDT(h2o_pid, probe_defs.provider, probe_defs.name, probe_defs.probe_func));
+    }
 
     ebpf::StatusTuple ret = bpf->init(tracer->bpf_text(), cflags, probes);
     if (ret.code() != 0) {

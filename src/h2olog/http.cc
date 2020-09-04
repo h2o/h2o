@@ -177,17 +177,17 @@ class h2o_http_tracer : public h2o_tracer
     }
 
   public:
-    virtual const std::vector<ebpf::USDT> &init_usdt_probes(pid_t h2o_pid)
+    virtual const std::vector<h2o_tracer::usdt> &usdt_probes()
     {
-        static const std::vector<ebpf::USDT> vec{
-            ebpf::USDT(h2o_pid, "h2o", "receive_request", "trace_receive_request"),
-            ebpf::USDT(h2o_pid, "h2o", "receive_request_header", "trace_receive_request_header"),
-            ebpf::USDT(h2o_pid, "h2o", "send_response", "trace_send_response"),
-            ebpf::USDT(h2o_pid, "h2o", "send_response_header", "trace_send_response_header"),
+        static const std::vector<h2o_tracer::usdt> vec{
+            h2o_tracer::usdt("h2o", "receive_request", "trace_receive_request"),
+            h2o_tracer::usdt("h2o", "receive_request_header", "trace_receive_request_header"),
+            h2o_tracer::usdt("h2o", "send_response", "trace_send_response"),
+            h2o_tracer::usdt("h2o", "send_response_header", "trace_send_response_header"),
         };
         return vec;
     }
-    virtual std::string bpf_text(void)
+    virtual const std::string bpf_text(void)
     {
         return HTTP_BPF;
     }
