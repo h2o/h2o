@@ -532,7 +532,7 @@ struct quic_event_t {
       typeof_st_quicly_conn_t__master_id master_id;
     } h3s_destroy;
     struct { // h2o:h3_packet_receive
-      size_t len;
+      size_t bytes_len;
     } h3_packet_receive;
     struct { // h2o:h3_packet_forward
       size_t num_packets;
@@ -1303,7 +1303,7 @@ void h2o_quic_tracer::do_handle_event(const void *data, int data_len) {
   case 84: { // h2o:h3_packet_receive
     json_write_pair_n(out_, STR_LIT("type"), "h3-packet-receive");
     json_write_pair_c(out_, STR_LIT("seq"), seq_);
-    json_write_pair_c(out_, STR_LIT("len"), event->h3_packet_receive.len);
+    json_write_pair_c(out_, STR_LIT("bytes-len"), event->h3_packet_receive.bytes_len);
     json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
     break;
   }
@@ -1788,7 +1788,7 @@ struct quic_event_t {
       typeof_st_quicly_conn_t__master_id master_id;
     } h3s_destroy;
     struct { // h2o:h3_packet_receive
-      size_t len;
+      size_t bytes_len;
     } h3_packet_receive;
     struct { // h2o:h3_packet_forward
       size_t num_packets;
@@ -3509,9 +3509,9 @@ int trace_h2o__h3_packet_receive(struct pt_regs *ctx) {
   // (no fields in sockaddr)
   // struct sockaddr * src
   // (no fields in sockaddr)
-  // const void * base (ignored)
-  // size_t len
-  bpf_usdt_readarg(4, ctx, &event.h3_packet_receive.len);
+  // const void * bytes (ignored)
+  // size_t bytes_len
+  bpf_usdt_readarg(4, ctx, &event.h3_packet_receive.bytes_len);
 
   if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
     bpf_trace_printk("failed to perf_submit\n");
