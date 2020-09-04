@@ -501,7 +501,7 @@ struct quic_event_t {
       typeof_st_quicly_stream_t__stream_id stream_id;
       size_t off;
       uint8_t src[STR_LEN];
-      size_t len;
+      size_t src_len;
     } stream_on_receive;
     struct { // quicly:stream_on_receive_reset
       typeof_st_quicly_conn_t__master_id master_id;
@@ -531,6 +531,14 @@ struct quic_event_t {
       uint64_t conn_id;
       typeof_st_quicly_conn_t__master_id master_id;
     } h3s_destroy;
+    struct { // h2o:h3_packet_receive
+      size_t bytes_len;
+    } h3_packet_receive;
+    struct { // h2o:h3_packet_forward
+      size_t num_packets;
+      size_t num_bytes;
+      int fd;
+    } h3_packet_forward;
 
     };
   };
@@ -611,6 +619,8 @@ const std::vector<ebpf::USDT> &h2o_quic_tracer::init_usdt_probes(pid_t pid) {
     ebpf::USDT(pid, "h2o", "send_response_header", "trace_h2o__send_response_header"),
     ebpf::USDT(pid, "h2o", "h3s_accept", "trace_h2o__h3s_accept"),
     ebpf::USDT(pid, "h2o", "h3s_destroy", "trace_h2o__h3s_destroy"),
+    ebpf::USDT(pid, "h2o", "h3_packet_receive", "trace_h2o__h3_packet_receive"),
+    ebpf::USDT(pid, "h2o", "h3_packet_forward", "trace_h2o__h3_packet_forward"),
 
   };
   return probes;
@@ -1240,8 +1250,8 @@ void h2o_quic_tracer::do_handle_event(const void *data, int data_len) {
     json_write_pair_c(out_, STR_LIT("time"), event->stream_on_receive.at);
     json_write_pair_c(out_, STR_LIT("stream-id"), event->stream_on_receive.stream_id);
     json_write_pair_c(out_, STR_LIT("off"), event->stream_on_receive.off);
-    json_write_pair_c(out_, STR_LIT("src"), event->stream_on_receive.src, (event->stream_on_receive.len < STR_LEN ? event->stream_on_receive.len : STR_LEN));
-    json_write_pair_c(out_, STR_LIT("len"), event->stream_on_receive.len);
+    json_write_pair_c(out_, STR_LIT("src"), event->stream_on_receive.src, (event->stream_on_receive.src_len < STR_LEN ? event->stream_on_receive.src_len : STR_LEN));
+    json_write_pair_c(out_, STR_LIT("src-len"), event->stream_on_receive.src_len);
     break;
   }
   case 70: { // quicly:stream_on_receive_reset
@@ -1287,6 +1297,22 @@ void h2o_quic_tracer::do_handle_event(const void *data, int data_len) {
     json_write_pair_c(out_, STR_LIT("seq"), seq_);
     json_write_pair_c(out_, STR_LIT("conn-id"), event->h3s_destroy.conn_id);
     json_write_pair_c(out_, STR_LIT("conn"), event->h3s_destroy.master_id);
+    json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
+    break;
+  }
+  case 84: { // h2o:h3_packet_receive
+    json_write_pair_n(out_, STR_LIT("type"), "h3-packet-receive");
+    json_write_pair_c(out_, STR_LIT("seq"), seq_);
+    json_write_pair_c(out_, STR_LIT("bytes-len"), event->h3_packet_receive.bytes_len);
+    json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
+    break;
+  }
+  case 85: { // h2o:h3_packet_forward
+    json_write_pair_n(out_, STR_LIT("type"), "h3-packet-forward");
+    json_write_pair_c(out_, STR_LIT("seq"), seq_);
+    json_write_pair_c(out_, STR_LIT("num-packets"), event->h3_packet_forward.num_packets);
+    json_write_pair_c(out_, STR_LIT("bytes-len"), event->h3_packet_forward.num_bytes);
+    json_write_pair_c(out_, STR_LIT("fd"), event->h3_packet_forward.fd);
     json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
     break;
   }
@@ -1731,7 +1757,7 @@ struct quic_event_t {
       typeof_st_quicly_stream_t__stream_id stream_id;
       size_t off;
       uint8_t src[STR_LEN];
-      size_t len;
+      size_t src_len;
     } stream_on_receive;
     struct { // quicly:stream_on_receive_reset
       typeof_st_quicly_conn_t__master_id master_id;
@@ -1761,6 +1787,14 @@ struct quic_event_t {
       uint64_t conn_id;
       typeof_st_quicly_conn_t__master_id master_id;
     } h3s_destroy;
+    struct { // h2o:h3_packet_receive
+      size_t bytes_len;
+    } h3_packet_receive;
+    struct { // h2o:h3_packet_forward
+      size_t num_packets;
+      size_t num_bytes;
+      int fd;
+    } h3_packet_forward;
 
     };
   };
@@ -3333,8 +3367,8 @@ int trace_quicly__stream_on_receive(struct pt_regs *ctx) {
   // const void * src
   bpf_usdt_readarg(5, ctx, &buf);
   bpf_probe_read(&event.stream_on_receive.src, sizeof(event.stream_on_receive.src), buf);
-  // size_t len
-  bpf_usdt_readarg(6, ctx, &event.stream_on_receive.len);
+  // size_t src_len
+  bpf_usdt_readarg(6, ctx, &event.stream_on_receive.src_len);
 
   if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
     bpf_trace_printk("failed to perf_submit\n");
@@ -3460,6 +3494,45 @@ int trace_h2o__h3s_destroy(struct pt_regs *ctx) {
     bpf_trace_printk("h2o's conn_id=%lu is not associated to master_conn_id\n", event.h3s_destroy.conn_id);
   }
   h2o_to_quicly_conn.delete(&event.h3s_destroy.conn_id);
+
+  if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
+    bpf_trace_printk("failed to perf_submit\n");
+
+  return 0;
+}
+// h2o:h3_packet_receive
+int trace_h2o__h3_packet_receive(struct pt_regs *ctx) {
+  void *buf = NULL;
+  struct quic_event_t event = { .id = 84 };
+
+  // struct sockaddr * dest
+  // (no fields in sockaddr)
+  // struct sockaddr * src
+  // (no fields in sockaddr)
+  // const void * bytes (ignored)
+  // size_t bytes_len
+  bpf_usdt_readarg(4, ctx, &event.h3_packet_receive.bytes_len);
+
+  if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
+    bpf_trace_printk("failed to perf_submit\n");
+
+  return 0;
+}
+// h2o:h3_packet_forward
+int trace_h2o__h3_packet_forward(struct pt_regs *ctx) {
+  void *buf = NULL;
+  struct quic_event_t event = { .id = 85 };
+
+  // struct sockaddr * dest
+  // (no fields in sockaddr)
+  // struct sockaddr * src
+  // (no fields in sockaddr)
+  // size_t num_packets
+  bpf_usdt_readarg(3, ctx, &event.h3_packet_forward.num_packets);
+  // size_t num_bytes
+  bpf_usdt_readarg(4, ctx, &event.h3_packet_forward.num_bytes);
+  // int fd
+  bpf_usdt_readarg(5, ctx, &event.h3_packet_forward.fd);
 
   if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
     bpf_trace_printk("failed to perf_submit\n");
