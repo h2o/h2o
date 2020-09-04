@@ -22,6 +22,7 @@
 
 #include <memory>
 #include <vector>
+#include <algorithm>
 #include <bcc/BPF.h>
 extern "C" {
 #include <unistd.h>
@@ -40,11 +41,19 @@ static void usage(void)
     printf(R"(h2olog (h2o v%s)
 Usage: h2olog -p PID
        h2olog quic -p PID
-       h2olog quic -s response_header_name -p PID
-Other options:
+Optional arguments:
+    -t EVENT_TYPES Fully-qualified probe names to show,
+       joined by a comma, e.g. "quicly:accept,quicly:free"
+    -s RESPONSE_HEADER_NAMES  Response header names to show,
+       joined by a comma, e.g. "content-type" (case-insensitive)
     -h Print this help and exit
     -d Print debugging information (-dd shows more)
     -w Path to write the output (default: stdout)
+
+Examples:
+    h2olog quic -p $(pgrep -o h2o)
+    h2olog quic -p $(pgrep -o h2o) -t quicly:accept,quicly:free
+    h2olog quic -p $(pgrep -o h2o) -t h2o:send_response_header,h2o:h3s_accept,h2o:h3s_destroy -s alt-svc
 )",
            H2O_VERSION);
     return;
@@ -126,7 +135,7 @@ static void show_process(pid_t pid)
     infof("Attaching pid=%d (%s)", pid, cmdline);
 }
 
-static std::string join_str(const std::string &sep, const std::vector<std::string> &strs)
+static const std::string join_str(const std::string &sep, const std::vector<std::string> &strs)
 {
     std::string s;
     for (auto iter = strs.cbegin(); iter != strs.cend(); ++iter) {
@@ -136,6 +145,22 @@ static std::string join_str(const std::string &sep, const std::vector<std::strin
         s += *iter;
     }
     return s;
+}
+
+static const std::vector<std::string> split_str(char delim, const std::string &s)
+{
+    std::vector<std::string> tokens;
+    std::size_t from = 0;
+    for (std::size_t i = 0; i < s.size(); ++i) {
+        if (s[i] == delim) {
+            tokens.push_back(s.substr(from, i - from));
+            from = i + 1;
+        }
+    }
+    if (from <= s.size()) {
+        tokens.push_back(s.substr(from, s.size()));
+    }
+    return tokens;
 }
 
 static std::string generate_header_filter_cflag(const std::vector<std::string> &tokens)
@@ -202,10 +227,14 @@ int main(int argc, char **argv)
             h2o_pid = atoi(optarg);
             break;
         case 't':
-            event_type_filters.push_back(optarg);
+            for (const auto &item : split_str(',', optarg)) {
+                event_type_filters.push_back(item);
+            }
             break;
         case 's':
-            response_header_filters.push_back(optarg);
+            for (const auto &item : split_str(',', optarg)) {
+                response_header_filters.push_back(item);
+            }
             break;
         case 'w':
             if ((outfp = fopen(optarg, "w")) == nullptr) {
@@ -253,6 +282,14 @@ int main(int argc, char **argv)
     }
 
     if (debug >= 2) {
+        fprintf(stderr, "event_type_filters=");
+        for (size_t i = 0; i < event_type_filters.size(); i++) {
+            if (i > 0) {
+                fprintf(stderr, ",");
+            }
+            fprintf(stderr, "%s", event_type_filters[i].c_str());
+        }
+        fprintf(stderr, "\n");
         fprintf(stderr, "cflags=");
         for (size_t i = 0; i < cflags.size(); i++) {
             if (i > 0) {
@@ -265,10 +302,12 @@ int main(int argc, char **argv)
     }
 
     ebpf::BPF *bpf = new ebpf::BPF();
-    const std::vector<h2o_tracer::usdt> probe_defs = tracer->usdt_probes();
     std::vector<ebpf::USDT> probes;
-    for (const auto &probe_defs : probe_defs) {
-        probes.push_back(ebpf::USDT(h2o_pid, probe_defs.provider, probe_defs.name, probe_defs.probe_func));
+    for (const auto &probe_def : tracer->usdt_probes()) {
+        if (event_type_filters.empty() || std::find(event_type_filters.cbegin(), event_type_filters.cend(),
+                                                    probe_def.provider + ":" + probe_def.name) != event_type_filters.cend()) {
+            probes.push_back(ebpf::USDT(h2o_pid, probe_def.provider, probe_def.name, probe_def.probe_func));
+        }
     }
 
     ebpf::StatusTuple ret = bpf->init(tracer->bpf_text(), cflags, probes);
