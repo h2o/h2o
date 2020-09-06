@@ -830,7 +830,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
         }
     }
     if (ocsp_update_interval_node != NULL) {
-        if (h2o_configurator_scanf(cmd, *ocsp_update_interval_node, "%" PRIu64, &ocsp_update_interval) != 0)
+        if (h2o_configurator_scanf(cmd, *ocsp_update_interval_node, "%" SCNu64, &ocsp_update_interval) != 0)
             goto Error;
     }
     if (ocsp_max_failures_node != NULL) {
@@ -1175,34 +1175,50 @@ ErrorExit:
     return -1;
 }
 
-static int open_listener(int domain, int type, int protocol, struct sockaddr *addr, socklen_t addrlen, int reuseport)
+/**
+ * Opens an INET or INET6 socket for accepting connections. When the protocol is UDP, SO_REUSEPORT is set if available.
+ */
+static int open_listener(int domain, int type, int protocol, struct sockaddr *addr, socklen_t addrlen)
 {
     int fd;
 
     if ((fd = socket(domain, type, protocol)) == -1)
         goto Error;
     set_cloexec(fd);
-    /* if the socket is TCP, set SO_REUSEADDR flag to avoid TIME_WAIT after shutdown */
-    if (type == SOCK_STREAM) {
-        int flag = 1;
-        if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &flag, sizeof(flag)) != 0)
-            goto Error;
-    }
+
+    /* set SO_*, IP_* options */
 #ifdef IPV6_V6ONLY
-    /* set IPv6only */
     if (domain == AF_INET6) {
         int flag = 1;
-        if (setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY, &flag, sizeof(flag)) != 0)
+        if (setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY, &flag, sizeof(flag)) != 0) {
+            perror("setsockopt(IPV6_V6ONLY) failed");
             goto Error;
+        }
     }
 #endif
-    if (reuseport) {
+    switch (type) {
+    case SOCK_STREAM: {
+        /* TCP: set SO_REUSEADDR flag to avoid TIME_WAIT after shutdown */
+        int on = 1;
+        if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on)) != 0)
+            goto Error;
+    } break;
+    case SOCK_DGRAM: {
+        /* UDP: set SO_REUSEPORT and DF bit */
 #if H2O_HTTP3_USE_REUSEPORT
-        int flag = 1;
-        if (setsockopt(fd, SOL_SOCKET, H2O_SO_REUSEPORT, &flag, sizeof(flag)) != 0)
+        int opt = 1;
+        if (setsockopt(fd, SOL_SOCKET, H2O_SO_REUSEPORT, &opt, sizeof(opt)) != 0)
             fprintf(stderr, "[warning] setsockopt(SO_REUSEPORT) failed:%s\n", strerror(errno));
 #endif
+        if (!h2o_socket_set_df_bit(fd, domain))
+            goto Error;
+    } break;
+    default:
+        h2o_fatal("unexpected socket type %d", type);
+        break;
     }
+
+    /* bind */
     if (bind(fd, addr, addrlen) != 0)
         goto Error;
 
@@ -1245,11 +1261,11 @@ Error:
 }
 
 static int open_inet_listener(h2o_configurator_command_t *cmd, yoml_t *node, const char *hostname, const char *servname, int domain,
-                              int type, int protocol, struct sockaddr *addr, socklen_t addrlen, int reuseport)
+                              int type, int protocol, struct sockaddr *addr, socklen_t addrlen)
 {
     int fd;
 
-    if ((fd = open_listener(domain, type, protocol, addr, addrlen, reuseport)) == -1)
+    if ((fd = open_listener(domain, type, protocol, addr, addrlen)) == -1)
         h2o_configurator_errprintf(cmd, node, "failed to listen to %s port %s:%s: %s", protocol == IPPROTO_TCP ? "TCP" : "UDP",
                                    hostname != NULL ? hostname : "ANY", servname, strerror(errno));
 
@@ -1453,7 +1469,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                         }
                     } else {
                         if ((fd = open_inet_listener(cmd, node, hostname, servname, ai->ai_family, ai->ai_socktype, ai->ai_protocol,
-                                                     ai->ai_addr, ai->ai_addrlen, 0)) == -1) {
+                                                     ai->ai_addr, ai->ai_addrlen)) == -1) {
                             freeaddrinfo(res);
                             return -1;
                         }
@@ -1504,7 +1520,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                             return -1;
                         }
                     } else if ((fd = open_inet_listener(cmd, node, hostname, servname, ai->ai_family, ai->ai_socktype,
-                                                        ai->ai_protocol, ai->ai_addr, ai->ai_addrlen, 1)) == -1) {
+                                                        ai->ai_protocol, ai->ai_addr, ai->ai_addrlen)) == -1) {
                         freeaddrinfo(res);
                         return -1;
                     }
@@ -1516,9 +1532,6 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                 quicly_context_t *quic = h2o_mem_alloc(sizeof(*quic));
                 *quic = quicly_spec_context;
                 quic->cid_encryptor = &quic_cid_encryptor;
-                quic->transport_params.max_streams_uni = 10;
-                quic->stream_scheduler = &h2o_http3_server_stream_scheduler;
-                quic->stream_open = &h2o_http3_server_on_stream_open;
                 quic->generate_resumption_token = &quic_resumption_token_generator;
                 listener = add_listener(fd, ai->ai_addr, ai->ai_addrlen, ctx->hostconf == NULL, 0);
                 listener->quic.ctx = quic;
@@ -1748,7 +1761,7 @@ static int configure_quic_forward_node(h2o_configurator_command_t *cmd, struct s
     target->fd = -1;
 
     /* parse key */
-    if (h2o_configurator_scanf(cmd, input->key, "%" PRIu64, &target->id) != 0)
+    if (h2o_configurator_scanf(cmd, input->key, "%" SCNu64, &target->id) != 0)
         goto Exit;
 
     { /* convert value to hostname and servname */
@@ -1789,11 +1802,11 @@ static int on_config_quic_nodes(h2o_configurator_command_t *cmd, h2o_configurato
 {
     yoml_t **self_node, **mapping_node;
 
-    if (h2o_configurator_parse_mapping(cmd, node, "self:s", "mapping:m", &self_node, &mapping_node) != 0)
+    if (h2o_configurator_parse_mapping(cmd, node, "self:s,mapping:m", NULL, &self_node, &mapping_node) != 0)
         return -1;
 
     /* obtain node-id of this server */
-    if (h2o_configurator_scanf(cmd, *self_node, "%" PRIu64, &conf.quic.node_id) != 0)
+    if (h2o_configurator_scanf(cmd, *self_node, "%" SCNu64, &conf.quic.node_id) != 0)
         return -1;
 
     /* build list of servers */
@@ -2219,7 +2232,7 @@ static int forward_quic_packets(h2o_quic_ctx_t *h3ctx, const uint64_t *node_id, 
             if (thread_id == h3ctx->next_cid.thread_id) {
                 assert(h3ctx->acceptor == NULL);
                 /* FIXME forward packets to the newer generation process */
-                return 1;
+                return 0;
             }
         } else {
             /* intra-node, validate thread id */
@@ -2267,15 +2280,17 @@ static int rewrite_forwarded_quic_datagram(h2o_quic_ctx_t *h3ctx, struct msghdr 
         return 1; /* process the packet as-is */
     }
 
-    /* assert that the destination port matches the exposed port number */
+    /* process as-is, if the destination port is going to be different; the contexts are always bound to a specific port */
     switch (encapsulated.destaddr.sa.sa_family) {
     case AF_UNSPEC:
         break;
     case AF_INET:
-        assert(encapsulated.destaddr.sin.sin_port == *h3ctx->sock.port);
+        if (encapsulated.destaddr.sin.sin_port != *h3ctx->sock.port)
+            return 1;
         break;
     case AF_INET6:
-        assert(encapsulated.destaddr.sin6.sin6_port == *h3ctx->sock.port);
+        if (encapsulated.destaddr.sin6.sin6_port != *h3ctx->sock.port)
+            return 1;
         break;
     }
 
@@ -2398,8 +2413,8 @@ static h2o_quic_conn_t *on_http3_accept(h2o_quic_ctx_t *_ctx, quicly_address_t *
                 token = &token_buf;
         } else if (ret == QUICLY_TRANSPORT_ERROR_INVALID_TOKEN) {
             uint8_t payload[QUICLY_MIN_CLIENT_INITIAL_SIZE];
-            size_t payload_size = quicly_send_close_invalid_token(ctx->super.quic, packet->version, &srcaddr->sa, packet->cid.src,
-                                                                  &destaddr->sa, packet->cid.dest.encrypted, err_desc, payload);
+            size_t payload_size = quicly_send_close_invalid_token(ctx->super.quic, packet->version, packet->cid.src,
+                                                                  packet->cid.dest.encrypted, err_desc, payload);
             assert(payload_size != SIZE_MAX);
             struct iovec vec = {.iov_base = payload, .iov_len = payload_size};
             h2o_quic_send_datagrams(&ctx->super, srcaddr, destaddr, &vec, 1);
@@ -2540,7 +2555,7 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
                     perror("failed to obtain local address of the listening QUIC socket");
                     abort();
                 }
-                if ((fd = open_listener(ss.ss_family, SOCK_DGRAM, 0, (struct sockaddr *)&ss, sslen, 1)) != -1) {
+                if ((fd = open_listener(ss.ss_family, SOCK_DGRAM, 0, (struct sockaddr *)&ss, sslen)) != -1) {
                     setsockopt_recvpktinfo(fd, ss.ss_family);
                 } else {
                     reuseport = 0;
@@ -3236,6 +3251,13 @@ int main(int argc, char **argv)
                     ssl_setup_session_resumption_ptls(ptls, conf.listeners[i]->quic.ctx);
             }
         }
+    }
+
+    /* apply HTTP/3 global configuraton to the listeners */
+    for (size_t i = 0; i != conf.num_listeners; ++i) {
+        quicly_context_t *qctx;
+        if ((qctx = conf.listeners[i]->quic.ctx) != NULL)
+            h2o_http3_server_amend_quicly_context(&conf.globalconf, qctx);
     }
 
     /* all setup should be complete by now */

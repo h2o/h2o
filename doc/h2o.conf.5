@@ -1374,6 +1374,13 @@ Timeout for incoming requests in seconds.
 
 .RE
 .RE
+.SS http1-request-io-timeout
+Timeout for incoming request I/O in seconds.
+
+.PP
+
+.RE
+.RE
 .SS http1-upgrade-to-http2
 Boolean flag (ON or OFF) indicating whether or not to allow upgrade to HTTP/2.
 
@@ -1932,6 +1939,14 @@ ssl.session-idbase64-encoded value of the session id used for resuming the sessi
 ssl.ciphername of the cipher suite being used, obtained from SSL_CIPHER_get_name
 ssl.cipher-bitsstrength of the cipher suite in bits
 ssl.server-namehostname provided in Server Name Indication (SNI) extension, if any
+
+
+Upstream Proxy Connection (since v2.3)
+NameDescription
+proxy.ssl.protocol-versionSSL protocol version obtained from SSL_get_version
+proxy.ssl.session-reused1 if the SSL session was reused, or 0 if not
+proxy.ssl.ciphername of the cipher suite being used, obtained from SSL_CIPHER_get_name
+proxy.ssl.cipher-bitsstrength of the cipher suite in bits
 
 
 HTTP/2 (since v2.0)

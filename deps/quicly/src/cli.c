@@ -394,6 +394,8 @@ static void on_closed_by_remote(quicly_closed_by_remote_t *self, quicly_conn_t *
                 reason);
     } else if (err == QUICLY_ERROR_RECEIVED_STATELESS_RESET) {
         fprintf(stderr, "stateless reset\n");
+    } else if (err == QUICLY_ERROR_NO_COMPATIBLE_VERSION) {
+        fprintf(stderr, "no compatible version\n");
     } else {
         fprintf(stderr, "unexpected close:code=%d\n", err);
     }
@@ -755,8 +757,8 @@ static int run_server(int fd, struct sockaddr *sa, socklen_t salen)
                     if (QUICLY_PACKET_IS_LONG_HEADER(packet.octets.base[0])) {
                         if (!quicly_is_supported_version(packet.version)) {
                             uint8_t payload[ctx.transport_params.max_udp_payload_size];
-                            size_t payload_len = quicly_send_version_negotiation(&ctx, &remote.sa, packet.cid.src, NULL,
-                                                                                 packet.cid.dest.encrypted, payload);
+                            size_t payload_len = quicly_send_version_negotiation(&ctx, packet.cid.src, packet.cid.dest.encrypted,
+                                                                                 quicly_supported_versions, payload);
                             assert(payload_len != SIZE_MAX);
                             send_one_packet(fd, &remote.sa, payload, payload_len);
                             break;
@@ -792,9 +794,8 @@ static int run_server(int fd, struct sockaddr *sa, socklen_t salen)
                                 /* Token that looks like retry was unusable, and we require retry. There's no chance of the
                                  * handshake succeeding. Therefore, send close without aquiring state. */
                                 uint8_t payload[ctx.transport_params.max_udp_payload_size];
-                                size_t payload_len =
-                                    quicly_send_close_invalid_token(&ctx, packet.version, &remote.sa, packet.cid.src, NULL,
-                                                                    packet.cid.dest.encrypted, err_desc, payload);
+                                size_t payload_len = quicly_send_close_invalid_token(&ctx, packet.version, packet.cid.src,
+                                                                                     packet.cid.dest.encrypted, err_desc, payload);
                                 assert(payload_len != SIZE_MAX);
                                 send_one_packet(fd, &remote.sa, payload, payload_len);
                             }
@@ -832,8 +833,7 @@ static int run_server(int fd, struct sockaddr *sa, socklen_t salen)
                          * also sending a reset, then the next CID is highly likely to contain a non-authenticating CID, ... */
                         if (packet.cid.dest.plaintext.node_id == 0 && packet.cid.dest.plaintext.thread_id == 0) {
                             uint8_t payload[ctx.transport_params.max_udp_payload_size];
-                            size_t payload_len =
-                                quicly_send_stateless_reset(&ctx, &remote.sa, NULL, packet.cid.dest.encrypted.base, payload);
+                            size_t payload_len = quicly_send_stateless_reset(&ctx, packet.cid.dest.encrypted.base, payload);
                             assert(payload_len != SIZE_MAX);
                             send_one_packet(fd, &remote.sa, payload, payload_len);
                         }
@@ -1360,6 +1360,23 @@ int main(int argc, char **argv)
             return 1;
         }
     }
+#if defined(IP_DONTFRAG)
+    {
+        int on = 1;
+        if (setsockopt(fd, IPPROTO_IP, IP_DONTFRAG, &on, sizeof(on)) != 0) {
+            perror("setsockopt(IP_DONTFRAG) failed");
+            return 1;
+        }
+    }
+#elif defined(IP_PMTUDISC_DO)
+    {
+        int opt = IP_PMTUDISC_DO;
+        if (setsockopt(fd, IPPROTO_IP, IP_MTU_DISCOVER, &opt, sizeof(opt)) != 0) {
+            perror("setsockopt(IP_MTU_DISCOVER) failed");
+            return 1;
+        }
+    }
+#endif
 
     return ctx.tls->certificates.count != 0 ? run_server(fd, (void *)&sa, salen) : run_client(fd, (void *)&sa, host);
 }

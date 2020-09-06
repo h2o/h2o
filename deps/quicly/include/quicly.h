@@ -708,6 +708,10 @@ struct st_quicly_address_token_plaintext_t {
 };
 
 /**
+ * zero-terminated list of protocol versions being supported by quicly
+ */
+extern const uint32_t quicly_supported_versions[];
+/**
  * returns a boolean indicating if given protocol version is supported
  */
 static int quicly_is_supported_version(uint32_t version);
@@ -827,10 +831,12 @@ int quicly_can_send_stream_data(quicly_conn_t *conn, quicly_send_context_t *s);
  */
 int quicly_send_stream(quicly_stream_t *stream, quicly_send_context_t *s);
 /**
- *
+ * Builds a Version Negotiation packet. The generated packet might include a greasing version.
+ * * @param versions  zero-terminated list of versions to advertise; use `quicly_supported_versions` for sending the list of
+ *                    protocol versions supported by quicly
  */
-size_t quicly_send_version_negotiation(quicly_context_t *ctx, struct sockaddr *dest_addr, ptls_iovec_t dest_cid,
-                                       struct sockaddr *src_addr, ptls_iovec_t src_cid, void *payload);
+size_t quicly_send_version_negotiation(quicly_context_t *ctx, ptls_iovec_t dest_cid, ptls_iovec_t src_cid, const uint32_t *versions,
+                                       void *payload);
 /**
  *
  */
@@ -867,14 +873,12 @@ int quicly_send(quicly_conn_t *conn, quicly_address_t *dest, quicly_address_t *s
 /**
  *
  */
-size_t quicly_send_close_invalid_token(quicly_context_t *ctx, uint32_t protocol_version, struct sockaddr *dest_addr,
-                                       ptls_iovec_t dest_cid, struct sockaddr *src_addr, ptls_iovec_t src_cid, const char *err_desc,
-                                       void *payload);
+size_t quicly_send_close_invalid_token(quicly_context_t *ctx, uint32_t protocol_version, ptls_iovec_t dest_cid,
+                                       ptls_iovec_t src_cid, const char *err_desc, void *datagram);
 /**
  *
  */
-size_t quicly_send_stateless_reset(quicly_context_t *ctx, struct sockaddr *dest_addr, struct sockaddr *src_addr,
-                                   const void *src_cid, void *payload);
+size_t quicly_send_stateless_reset(quicly_context_t *ctx, const void *src_cid, void *payload);
 /**
  *
  */
@@ -944,6 +948,15 @@ quicly_stream_t *quicly_get_stream(quicly_conn_t *conn, quicly_stream_id_t strea
  */
 int quicly_open_stream(quicly_conn_t *conn, quicly_stream_t **stream, int unidirectional);
 /**
+ * This function returns a stream that is already open, or if the given ID refers to a stream that can be opened by the peer but is
+ * yet-to-be opened, the functions opens that stream and returns it. Otherwise, `*stream` is set to NULL.
+ * This function can be used when implementing application protocols that send references to other streams on a stream (e.g.,
+ * PRIORITY_UPDATE frame of HTTP/3), however note that the peer might complain if the endpoint sends a frame that refers to a peer-
+ * initiated stream for which the peer has not yet sent anything.
+ * Invocation of this function might open not only the stream that is referred to by the `stream_id` but also other streams.
+ */
+int quicly_get_or_open_stream(quicly_conn_t *conn, uint64_t stream_id, quicly_stream_t **stream);
+/**
  *
  */
 void quicly_reset_stream(quicly_stream_t *stream, int err);
@@ -963,6 +976,14 @@ int quicly_stream_sync_sendbuf(quicly_stream_t *stream, int activate);
  *
  */
 void quicly_stream_sync_recvbuf(quicly_stream_t *stream, size_t shift_amount);
+/**
+ *
+ */
+static uint32_t quicly_stream_get_receive_window(quicly_stream_t *stream);
+/**
+ *
+ */
+static void quicly_stream_set_receive_window(quicly_stream_t *stream, uint32_t window);
 /**
  *
  */
@@ -1149,6 +1170,16 @@ inline void **quicly_get_data(quicly_conn_t *conn)
 inline int quicly_stop_requested(quicly_stream_t *stream)
 {
     return stream->_send_aux.stop_sending.sender_state != QUICLY_SENDER_STATE_NONE;
+}
+
+inline uint32_t quicly_stream_get_receive_window(quicly_stream_t *stream)
+{
+    return stream->_recv_aux.window;
+}
+
+inline void quicly_stream_set_receive_window(quicly_stream_t *stream, uint32_t window)
+{
+    stream->_recv_aux.window = window;
 }
 
 inline int quicly_stream_is_client_initiated(quicly_stream_id_t stream_id)

@@ -90,6 +90,7 @@ extern "C" {
 #define H2O_DEFAULT_HTTP2_GRACEFUL_SHUTDOWN_TIMEOUT_IN_SECS 0 /* no timeout */
 #define H2O_DEFAULT_HTTP2_GRACEFUL_SHUTDOWN_TIMEOUT (H2O_DEFAULT_HTTP2_GRACEFUL_SHUTDOWN_TIMEOUT_IN_SECS * 1000)
 #define H2O_DEFAULT_HTTP2_ACTIVE_STREAM_WINDOW_SIZE H2O_HTTP2_MAX_STREAM_WINDOW_SIZE
+#define H2O_DEFAULT_HTTP3_ACTIVE_STREAM_WINDOW_SIZE H2O_DEFAULT_HTTP2_ACTIVE_STREAM_WINDOW_SIZE
 #define H2O_DEFAULT_PROXY_IO_TIMEOUT_IN_SECS 30
 #define H2O_DEFAULT_PROXY_IO_TIMEOUT (H2O_DEFAULT_PROXY_IO_TIMEOUT_IN_SECS * 1000)
 #define H2O_DEFAULT_PROXY_WEBSOCKET_TIMEOUT_IN_SECS 300
@@ -408,6 +409,21 @@ struct st_h2o_globalconf_t {
     } http2;
 
     struct {
+        /**
+         * idle timeout (in milliseconds)
+         */
+        uint64_t idle_timeout;
+        /**
+         * graceful shutdown timeout (in milliseconds)
+         */
+        uint64_t graceful_shutdown_timeout;
+        /**
+         * receive window size of the unblocked request stream
+         */
+        uint32_t active_stream_window_size;
+        /**
+         * the callbacks
+         */
         h2o_protocol_callbacks_t callbacks;
     } http3;
 
@@ -630,6 +646,17 @@ struct st_h2o_context_t {
             uint64_t write_closed;
         } events;
     } http2;
+
+    struct {
+        /**
+         * link-list of h2o_http3_server_conn_t
+         */
+        h2o_linklist_t _conns;
+        /**
+         * timeout entry used for graceful shutdown
+         */
+        h2o_timer_t _graceful_shutdown_timeout;
+    } http3;
 
     struct {
         /**
@@ -1110,6 +1137,13 @@ struct st_h2o_req_t {
             uint64_t body;
         } bytes_read;
         h2o_httpclient_timings_t timestamps;
+        struct {
+            const char *protocol_version;
+            const char *cipher;
+            int session_reused;
+            int cipher_bits;
+            /* server name and session id are omitted since they are not static data */
+        } ssl;
     } proxy_stats;
     /**
      * the response

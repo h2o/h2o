@@ -51,11 +51,6 @@ struct st_h2o_http3_ingress_unistream_t {
                          const uint8_t *src_end, int is_eos);
 };
 
-/**
- * maximum payload size excluding DATA frame; stream receive window MUST be at least as big as this
- */
-#define MAX_FRAME_SIZE 16384
-
 const ptls_iovec_t h2o_http3_alpn[2] = {{(void *)H2O_STRLIT("h3-29")}, {(void *)H2O_STRLIT("h3-27")}};
 
 static void on_track_sendmsg_timer(h2o_timer_t *timeout);
@@ -510,6 +505,17 @@ static void drop_from_acceptmap(h2o_quic_ctx_t *ctx, h2o_quic_conn_t *conn)
     }
 }
 
+static void send_version_negotiation(h2o_quic_ctx_t *ctx, quicly_address_t *destaddr, ptls_iovec_t dest_cid,
+                                     quicly_address_t *srcaddr, ptls_iovec_t src_cid, const uint32_t *versions)
+{
+    uint8_t payload[QUICLY_MIN_CLIENT_INITIAL_SIZE];
+    size_t payload_size = quicly_send_version_negotiation(ctx->quic, dest_cid, src_cid, versions, payload);
+    assert(payload_size != SIZE_MAX);
+    struct iovec vec = {.iov_base = payload, .iov_len = payload_size};
+    h2o_quic_send_datagrams(ctx, destaddr, srcaddr, &vec, 1);
+    return;
+}
+
 static void process_packets(h2o_quic_ctx_t *ctx, quicly_address_t *destaddr, quicly_address_t *srcaddr, uint8_t ttl,
                             quicly_decoded_packet_t *packets, size_t num_packets)
 {
@@ -525,20 +531,9 @@ static void process_packets(h2o_quic_ctx_t *ctx, quicly_address_t *destaddr, qui
     }
 #endif
 
-    /* send VN on mimatch */
-    if (QUICLY_PACKET_IS_LONG_HEADER(packets[0].octets.base[0])) {
-        if (!quicly_is_supported_version(packets[0].version)) {
-            uint8_t payload[QUICLY_MIN_CLIENT_INITIAL_SIZE];
-            size_t payload_size = quicly_send_version_negotiation(ctx->quic, &srcaddr->sa, packets[0].cid.src, &destaddr->sa,
-                                                                  packets[0].cid.dest.encrypted, payload);
-            assert(payload_size != SIZE_MAX);
-            struct iovec vec = {.iov_base = payload, .iov_len = payload_size};
-            h2o_quic_send_datagrams(ctx, srcaddr, destaddr, &vec, 1);
-            return;
-        } else if (packets[0].cid.src.len > QUICLY_MAX_CID_LEN_V1) {
-            return;
-        }
-    }
+    if (packets[0].cid.src.len > QUICLY_MAX_CID_LEN_V1)
+        return;
+
     /* find the matching connection, by first looking at the CID (all packets as client, or Handshake, 1-RTT packets as server) */
     if (packets[0].cid.dest.plaintext.node_id == ctx->next_cid.node_id &&
         packets[0].cid.dest.plaintext.thread_id == ctx->next_cid.thread_id) {
@@ -552,8 +547,7 @@ static void process_packets(h2o_quic_ctx_t *ctx, quicly_address_t *destaddr, qui
             /* send stateless reset when we could not find a matching connection for a 1 RTT packet */
             if (packets[0].octets.len >= QUICLY_STATELESS_RESET_PACKET_MIN_LEN) {
                 uint8_t payload[QUICLY_MIN_CLIENT_INITIAL_SIZE];
-                size_t payload_size = quicly_send_stateless_reset(ctx->quic, &destaddr->sa, &srcaddr->sa,
-                                                                  packets[0].cid.dest.encrypted.base, payload);
+                size_t payload_size = quicly_send_stateless_reset(ctx->quic, packets[0].cid.dest.encrypted.base, payload);
                 assert(payload_size != SIZE_MAX);
                 struct iovec vec = {.iov_base = payload, .iov_len = payload_size};
                 h2o_quic_send_datagrams(ctx, srcaddr, destaddr, &vec, 1);
@@ -588,11 +582,27 @@ static void process_packets(h2o_quic_ctx_t *ctx, quicly_address_t *destaddr, qui
         khiter_t iter = kh_get_h2o_quic_acceptmap(ctx->conns_accepting, accept_hashkey);
         if (iter == kh_end(ctx->conns_accepting)) {
             /* a new connection for this thread (at least on this process); accept or delegate to newer process */
-            if (ctx->acceptor == NULL) {
-                /* This is the offending thread but it is not accepting, which means that the process (or the thread) is
-                 * gracefully shutting down.  Let the application process forward the packet to the next generation. */
-                if (ctx->forward_packets != NULL)
-                    ctx->forward_packets(ctx, NULL, ctx->next_cid.thread_id, destaddr, srcaddr, ttl, packets, num_packets);
+            if (ctx->acceptor != NULL) {
+                if (packets[0].version != 0 && !quicly_is_supported_version(packets[0].version)) {
+                    send_version_negotiation(ctx, srcaddr, packets[0].cid.src, destaddr, packets[0].cid.dest.encrypted,
+                                             quicly_supported_versions);
+                    return;
+                }
+            } else {
+                /* This is the offending thread but it is not accepting, which means that the process (or the thread) is not acting
+                 * as a server (likely gracefully shutting down). Let the application process forward the packet to the next
+                 * generation. */
+                if (ctx->forward_packets != NULL &&
+                    ctx->forward_packets(ctx, NULL, ctx->next_cid.thread_id, destaddr, srcaddr, ttl, packets, num_packets))
+                    return;
+                /* If not forwarded, send rejection to the peer. A Version Negotiation packet that carries only a greasing version
+                 * number is used for the purpose, hoping that that signal will trigger immediate downgrade to HTTP/2, across the
+                 * broad spectrum of the client implementations than if CONNECTION_REFUSED is being used. */
+                if (packets[0].version != 0) {
+                    static const uint32_t no_versions[] = {0};
+                    send_version_negotiation(ctx, srcaddr, packets[0].cid.src, destaddr, packets[0].cid.dest.encrypted,
+                                             no_versions);
+                }
                 return;
             }
             /* try to accept any of the Initial packets being received */
@@ -825,7 +835,7 @@ int h2o_http3_read_frame(h2o_http3_read_frame_t *frame, int is_client, uint64_t 
     /* read the content of the frame (unless it's a DATA frame) */
     frame->payload = NULL;
     if (frame->type != H2O_HTTP3_FRAME_TYPE_DATA) {
-        if (frame->length >= MAX_FRAME_SIZE) {
+        if (frame->length > H2O_HTTP3_MAX_FRAME_PAYLOAD_SIZE) {
             H2O_PROBE(H3_FRAME_RECEIVE, frame->type, NULL, frame->length);
             *err_desc = "H3 frame too large";
             return H2O_HTTP3_ERROR_GENERAL_PROTOCOL; /* FIXME is this the correct code? */
@@ -856,7 +866,7 @@ int h2o_http3_read_frame(h2o_http3_read_frame_t *frame, int is_client, uint64_t 
                 goto Validation_Success;                                                                                           \
             break;                                                                                                                 \
         default:                                                                                                                   \
-            h2o_fatal("enxpected stream type");                                                                                    \
+            h2o_fatal("unexpected stream type");                                                                                   \
             break;                                                                                                                 \
         }                                                                                                                          \
         break
@@ -1024,6 +1034,7 @@ int h2o_http3_setup(h2o_http3_conn_t *conn, quicly_conn_t *quic)
     int ret;
 
     h2o_quic_setup(&conn->super, quic);
+    conn->state = H2O_HTTP3_CONN_STATE_OPEN;
 
     /* setup h3 objects, only when the connection state has been created */
     if (quicly_get_state(quic) > QUICLY_STATE_CONNECTED)
@@ -1166,4 +1177,13 @@ void h2o_http3_send_qpack_header_ack(h2o_http3_conn_t *conn, const void *bytes, 
     assert(stream != NULL);
     h2o_buffer_append(&stream->sendbuf, bytes, len);
     H2O_HTTP3_CHECK_SUCCESS(quicly_stream_sync_sendbuf(stream->quic, 1));
+}
+
+void h2o_http3_send_goaway_frame(h2o_http3_conn_t *conn, uint64_t stream_or_push_id)
+{
+    size_t cap = h2o_http3_goaway_frame_capacity(stream_or_push_id);
+    h2o_iovec_t alloced = h2o_buffer_reserve(&conn->_control_streams.egress.control->sendbuf, cap);
+    h2o_http3_encode_goaway_frame((uint8_t *)alloced.base, stream_or_push_id);
+    conn->_control_streams.egress.control->sendbuf->size += cap;
+    quicly_stream_sync_sendbuf(conn->_control_streams.egress.control->quic, 1);
 }
