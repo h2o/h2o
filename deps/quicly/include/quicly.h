@@ -390,6 +390,12 @@ struct st_quicly_conn_streamgroup_state_t {
          */                                                                                                                        \
         uint64_t sent;                                                                                                             \
     } num_bytes;                                                                                                                   \
+    struct {                                                                                                                       \
+        uint64_t padding, ping, ack, reset_stream, stop_sending, crypto, new_token, stream, max_data, max_stream_data,             \
+            max_streams_bidi, max_streams_uni, data_blocked, stream_data_blocked, streams_blocked, new_connection_id,              \
+            retire_connection_id, path_challenge, path_response, transport_close, application_close, handshake_done,               \
+            ack_frequency;                                                                                                         \
+    } num_frames_sent, num_frames_received;                                                                                        \
     /**                                                                                                                            \
      * Total number of PTOs during the connections.                                                                                \
      */                                                                                                                            \
@@ -595,6 +601,10 @@ struct st_quicly_stream_t {
          * sends receive window updates to remote peer
          */
         quicly_maxsender_t max_stream_data_sender;
+        /**
+         * send state of STREAM_DATA_BLOCKED frames corresponding to the current max_stream_data value
+         */
+        quicly_sender_state_t blocked;
         /**
          * linklist of pending streams
          */
@@ -817,14 +827,21 @@ int64_t quicly_get_first_timeout(quicly_conn_t *conn);
  */
 uint64_t quicly_get_next_expected_packet_number(quicly_conn_t *conn);
 /**
- * returns if the connection is currently capped by connection-level flow control.
+ * returns if the connection is currently blocked by connection-level flow control.
  */
-int quicly_is_flow_capped(quicly_conn_t *conn);
+int quicly_is_blocked(quicly_conn_t *conn);
+/**
+ * Returns if stream data can be sent.
+ * When the connection is blocked by the connection-level flow control (see `quicly_is_flow_capped`), `at_stream_level` should be
+ * set to false to see if any retransmissions are to be done. Otherwise, `at_steram_level` should be set to true to test the stream-
+ * level flow control.
+ */
+int quicly_stream_can_send(quicly_stream_t *stream, int at_stream_level);
 /**
  * checks if quicly_send_stream can be invoked
  * @return a boolean indicating if quicly_send_stream can be called immediately
  */
-int quicly_can_send_stream_data(quicly_conn_t *conn, quicly_send_context_t *s);
+int quicly_can_send_data(quicly_conn_t *conn, quicly_send_context_t *s);
 /**
  * Sends data of given stream.  Called by stream scheduler.  Only streams that can send some data or EOS should be specified.  It is
  * the responsibilty of the stream scheduler to maintain a list of such streams.

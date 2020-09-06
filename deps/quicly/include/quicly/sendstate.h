@@ -59,12 +59,6 @@ void quicly_sendstate_init_closed(quicly_sendstate_t *state);
 void quicly_sendstate_dispose(quicly_sendstate_t *state);
 static int quicly_sendstate_transfer_complete(quicly_sendstate_t *state);
 static int quicly_sendstate_is_open(quicly_sendstate_t *state);
-/**
- * Returns if some data or EOS can be sent for the stream.  When `max_stream_data` is non-NULL, stream-level flow control is tested.
- * When `max_stream_data` is NULL, retruns if something can be sent when the connection is capped by the connection-level flow
- * control.
- */
-int quicly_sendstate_can_send(quicly_sendstate_t *state, const uint64_t *max_stream_data);
 int quicly_sendstate_activate(quicly_sendstate_t *state);
 int quicly_sendstate_shutdown(quicly_sendstate_t *state, uint64_t final_size);
 void quicly_sendstate_reset(quicly_sendstate_t *state);
