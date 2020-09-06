@@ -1289,7 +1289,7 @@ static int scheduler_do_send(quicly_stream_scheduler_t *sched, quicly_conn_t *qc
     struct st_h2o_http3_server_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_conn_t, h3, *quicly_get_data(qc));
     int ret = 0;
 
-    while (quicly_can_send_stream_data(conn->h3.super.quic, s)) {
+    while (quicly_can_send_data(conn->h3.super.quic, s)) {
         /* The strategy is:
          *
          * 1. dequeue the first active stream
@@ -1312,7 +1312,7 @@ static int scheduler_do_send(quicly_stream_scheduler_t *sched, quicly_conn_t *qc
             }
             assert(i != sizeof(stream_offsets) / sizeof(stream_offsets[0]) && "we should have found one stream");
             /* 2. move to the conn_blocked list if necessary */
-            if (quicly_is_flow_capped(conn->h3.super.quic) && !quicly_sendstate_can_send(&stream->quic->sendstate, NULL)) {
+            if (quicly_is_blocked(conn->h3.super.quic) && !quicly_stream_can_send(stream->quic, 0)) {
                 conn->scheduler.uni.active &= ~(1 << stream->quic->stream_id);
                 conn->scheduler.uni.conn_blocked |= 1 << stream->quic->stream_id;
                 continue;
@@ -1322,9 +1322,9 @@ static int scheduler_do_send(quicly_stream_scheduler_t *sched, quicly_conn_t *qc
                 goto Exit;
             /* 4. update scheduler state */
             conn->scheduler.uni.active &= ~(1 << stream->quic->stream_id);
-            if (quicly_sendstate_can_send(&stream->quic->sendstate, &stream->quic->_send_aux.max_stream_data)) {
+            if (quicly_stream_can_send(stream->quic, 1)) {
                 uint16_t *slot = &conn->scheduler.uni.active;
-                if (quicly_is_flow_capped(conn->h3.super.quic) && !quicly_sendstate_can_send(&stream->quic->sendstate, NULL))
+                if (quicly_is_blocked(conn->h3.super.quic) && !quicly_stream_can_send(stream->quic, 0))
                     slot = &conn->scheduler.uni.conn_blocked;
                 *slot |= 1 << stream->quic->stream_id;
             }
@@ -1338,7 +1338,7 @@ static int scheduler_do_send(quicly_stream_scheduler_t *sched, quicly_conn_t *qc
             struct st_h2o_http3_server_stream_t *stream =
                 H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_stream_t, scheduler.link, anchor->next);
             /* 1. link to the conn_blocked list if necessary */
-            if (quicly_is_flow_capped(conn->h3.super.quic) && !quicly_sendstate_can_send(&stream->quic->sendstate, NULL)) {
+            if (quicly_is_blocked(conn->h3.super.quic) && !quicly_stream_can_send(stream->quic, 0)) {
                 req_scheduler_conn_blocked(&conn->scheduler.reqs, &stream->scheduler);
                 continue;
             }
@@ -1354,8 +1354,8 @@ static int scheduler_do_send(quicly_stream_scheduler_t *sched, quicly_conn_t *qc
                 stream->proceed_while_sending = 0;
             }
             /* 5. prepare for next */
-            if (quicly_sendstate_can_send(&stream->quic->sendstate, &stream->quic->_send_aux.max_stream_data)) {
-                if (quicly_is_flow_capped(conn->h3.super.quic) && !quicly_sendstate_can_send(&stream->quic->sendstate, NULL)) {
+            if (quicly_stream_can_send(stream->quic, 1)) {
+                if (quicly_is_blocked(conn->h3.super.quic) && !quicly_stream_can_send(stream->quic, 0)) {
                     /* capped by connection-level flow control, move the stream to conn-blocked */
                     req_scheduler_conn_blocked(&conn->scheduler.reqs, &stream->scheduler);
                 } else {
@@ -1381,8 +1381,8 @@ static int scheduler_update_state(struct st_quicly_stream_scheduler_t *sched, qu
         H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_conn_t, h3, *quicly_get_data(qs->conn));
     enum { DEACTIVATE, ACTIVATE, CONN_BLOCKED } new_state;
 
-    if (quicly_sendstate_can_send(&qs->sendstate, &qs->_send_aux.max_stream_data)) {
-        if (quicly_is_flow_capped(conn->h3.super.quic) && !quicly_sendstate_can_send(&qs->sendstate, NULL)) {
+    if (quicly_stream_can_send(qs, 1)) {
+        if (quicly_is_blocked(conn->h3.super.quic) && !quicly_stream_can_send(qs, 0)) {
             new_state = CONN_BLOCKED;
         } else {
             new_state = ACTIVATE;
