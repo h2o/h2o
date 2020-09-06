@@ -524,10 +524,10 @@ Redo:
         snprintf(buf, bufsize,
                  "packets-received=%" PRIu64 ",packets-decryption-failed=%" PRIu64 ",packets-sent=%" PRIu64 ",packets-lost=%" PRIu64
                  ",packets-ack-received=%" PRIu64 ",bytes-received=%" PRIu64 ",bytes-sent=%" PRIu64 ",rtt-minimum=%" PRIu32
-                 ",rtt-smoothed=%" PRIu32 ",rtt-variance=%" PRIu32 ",rtt-latest=%" PRIu32 ",cwnd=%" PRIu32,
+                 ",rtt-smoothed=%" PRIu32 ",rtt-variance=%" PRIu32 ",rtt-latest=%" PRIu32 ",cwnd=%" PRIu32 ",data-blocked-received=%" PRIu64 ",data-blocked-sent=%" PRIu64 ",stream-data-blocked-received=%" PRIu64 ",stream-data-blocked-sent=%" PRIu64 ",streams-blocked-received=%" PRIu64 ",streams-blocked-sent=%" PRIu64,
                  stats.num_packets.received, stats.num_packets.decryption_failed, stats.num_packets.sent, stats.num_packets.lost,
                  stats.num_packets.ack_received, stats.num_bytes.received, stats.num_bytes.sent, stats.rtt.minimum,
-                 stats.rtt.smoothed, stats.rtt.variance, stats.rtt.latest, stats.cc.cwnd);
+                 stats.rtt.smoothed, stats.rtt.variance, stats.rtt.latest, stats.cc.cwnd, stats.num_frames_received.data_blocked, stats.num_frames_sent.data_blocked, stats.num_frames_received.stream_data_blocked, stats.num_frames_sent.stream_data_blocked, stats.num_frames_received.streams_blocked, stats.num_frames_sent.streams_blocked);
     if (len + 1 > bufsize) {
         bufsize = len + 1;
         goto Redo;
