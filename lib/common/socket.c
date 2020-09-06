@@ -832,6 +832,20 @@ const char *h2o_socket_get_ssl_server_name(const h2o_socket_t *sock)
     return NULL;
 }
 
+h2o_iovec_t h2o_socket_log_tcp_congestion_controller(h2o_socket_t *sock, h2o_mem_pool_t *pool)
+{
+#if defined(TCP_CONGESTION)
+    int fd;
+    if ((fd = h2o_socket_get_fd(sock)) >= 0) {
+        socklen_t buflen = 32;
+        char *buf = pool != NULL ? h2o_mem_alloc_pool(pool, *buf, buflen) : h2o_mem_alloc(buflen);
+        if (getsockopt(fd, IPPROTO_TCP, TCP_CONGESTION, buf, &buflen) == 0)
+            return h2o_iovec_init(buf, (size_t)buflen);
+    }
+#endif
+    return h2o_iovec_init(NULL, 0);
+}
+
 h2o_iovec_t h2o_socket_log_ssl_session_id(h2o_socket_t *sock, h2o_mem_pool_t *pool)
 {
     h2o_iovec_t base64id, rawid = h2o_socket_get_ssl_session_id(sock);

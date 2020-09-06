@@ -447,6 +447,22 @@ static int get_skip_tracing(h2o_conn_t *conn)
     return ptls_skip_tracing(ptls);
 }
 
+static h2o_iovec_t log_cc_name(h2o_req_t *req)
+{
+    struct st_h2o_http3_server_conn_t *conn = (struct st_h2o_http3_server_conn_t *)req->conn;
+    quicly_stats_t stats;
+
+    if (quicly_get_stats(conn->h3.super.quic, &stats) == 0) {
+        switch (stats.cc.impl->type) {
+        case CC_RENO_MODIFIED:
+            return h2o_iovec_init(H2O_STRLIT("reno"));
+        case CC_CUBIC:
+            return h2o_iovec_init(H2O_STRLIT("cubic"));
+        }
+    }
+    return h2o_iovec_init(NULL, 0);
+}
+
 static h2o_iovec_t log_tls_protocol_version(h2o_req_t *_req)
 {
     return h2o_iovec_init(H2O_STRLIT("TLSv1.3"));
@@ -1470,6 +1486,10 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
         .get_ptls = get_ptls,
         .skip_tracing = get_skip_tracing,
         .log_ = {{
+            .congestion_control =
+                {
+                    .name_ = log_cc_name,
+                },
             .ssl =
                 {
                     .protocol_version = log_tls_protocol_version,
