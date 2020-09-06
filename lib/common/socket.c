@@ -837,10 +837,16 @@ h2o_iovec_t h2o_socket_log_tcp_congestion_controller(h2o_socket_t *sock, h2o_mem
 #if defined(TCP_CONGESTION)
     int fd;
     if ((fd = h2o_socket_get_fd(sock)) >= 0) {
-        socklen_t buflen = 32;
+#define CC_BUFSIZE 32
+        socklen_t buflen = CC_BUFSIZE;
         char *buf = pool != NULL ? h2o_mem_alloc_pool(pool, *buf, buflen) : h2o_mem_alloc(buflen);
-        if (getsockopt(fd, IPPROTO_TCP, TCP_CONGESTION, buf, &buflen) == 0)
-            return h2o_iovec_init(buf, (size_t)buflen);
+        if (getsockopt(fd, IPPROTO_TCP, TCP_CONGESTION, buf, &buflen) == 0) {
+            /* Upon return, linux sets `buflen` to some value greater than the size of the string. Therefore, we apply strlen after
+             * making sure that the result does not overrun the buffer. */
+            buf[CC_BUFSIZE - 1] = '\0';
+            return h2o_iovec_init(buf, strlen(buf));
+        }
+#undef CC_BUFSIZE
     }
 #endif
     return h2o_iovec_init(NULL, 0);
