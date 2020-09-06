@@ -1445,20 +1445,21 @@ static int skip_tracing(h2o_conn_t *_conn)
     return h2o_socket_skip_tracing(conn->sock);
 }
 
-#define DEFINE_TLS_LOGGER(name)                                                                                                    \
+#define DEFINE_LOGGER(name)                                                                                                        \
     static h2o_iovec_t log_##name(h2o_req_t *req)                                                                                  \
     {                                                                                                                              \
         h2o_http2_conn_t *conn = (void *)req->conn;                                                                                \
-        return h2o_socket_log_ssl_##name(conn->sock, &req->pool);                                                                  \
+        return h2o_socket_log_##name(conn->sock, &req->pool);                                                                      \
     }
-DEFINE_TLS_LOGGER(protocol_version)
-DEFINE_TLS_LOGGER(session_reused)
-DEFINE_TLS_LOGGER(cipher)
-DEFINE_TLS_LOGGER(cipher_bits)
-DEFINE_TLS_LOGGER(session_id)
-DEFINE_TLS_LOGGER(server_name)
-DEFINE_TLS_LOGGER(negotiated_protocol)
-#undef DEFINE_TLS_LOGGER
+DEFINE_LOGGER(tcp_congestion_controller)
+DEFINE_LOGGER(ssl_protocol_version)
+DEFINE_LOGGER(ssl_session_reused)
+DEFINE_LOGGER(ssl_cipher)
+DEFINE_LOGGER(ssl_cipher_bits)
+DEFINE_LOGGER(ssl_session_id)
+DEFINE_LOGGER(ssl_server_name)
+DEFINE_LOGGER(ssl_negotiated_protocol)
+#undef DEFINE_LOGGER
 
 static h2o_iovec_t log_stream_id(h2o_req_t *req)
 {
@@ -1547,15 +1548,19 @@ static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_hostconf_t **hosts,
         .push_path = push_path,
         .get_debug_state = h2o_http2_get_debug_state,
         .log_ = {{
+            .congestion_control =
+                {
+                    .name_ = log_tcp_congestion_controller,
+                },
             .ssl =
                 {
-                    .protocol_version = log_protocol_version,
-                    .session_reused = log_session_reused,
-                    .cipher = log_cipher,
-                    .cipher_bits = log_cipher_bits,
-                    .session_id = log_session_id,
-                    .server_name = log_server_name,
-                    .negotiated_protocol = log_negotiated_protocol,
+                    .protocol_version = log_ssl_protocol_version,
+                    .session_reused = log_ssl_session_reused,
+                    .cipher = log_ssl_cipher,
+                    .cipher_bits = log_ssl_cipher_bits,
+                    .session_id = log_ssl_session_id,
+                    .server_name = log_ssl_server_name,
+                    .negotiated_protocol = log_ssl_negotiated_protocol,
                 },
             .http2 =
                 {
