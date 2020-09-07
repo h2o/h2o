@@ -199,7 +199,7 @@ int main(int argc, char **argv)
     }
 
     int debug = 0;
-    int list_and_exit = 0;
+    bool list_and_exit = false;
     FILE *outfp = stdout;
     std::vector<std::string> event_type_filters;
     std::vector<std::string> response_header_filters;
@@ -226,7 +226,7 @@ int main(int argc, char **argv)
             debug++;
             break;
         case 'l':
-            list_and_exit++;
+            list_and_exit = true;
             break;
         case 'h':
             usage();
