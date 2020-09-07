@@ -22,6 +22,7 @@
 
 #include <memory>
 #include <vector>
+#include <unordered_set>
 #include <algorithm>
 #include <bcc/BPF.h>
 extern "C" {
@@ -198,6 +199,11 @@ int main(int argc, char **argv)
         tracer.reset(create_http_tracer());
     }
 
+    std::unordered_set<std::string> available_usdt_names;
+    for (const auto &usdt : tracer->usdt_probes()) {
+        available_usdt_names.insert(usdt.provider + ":" + usdt.name);
+    }
+
     int debug = 0;
     bool list_and_exit = false;
     FILE *outfp = stdout;
@@ -211,6 +217,10 @@ int main(int argc, char **argv)
             h2o_pid = atoi(optarg);
             break;
         case 't':
+            if (available_usdt_names.find(optarg) == available_usdt_names.cend()) {
+                fprintf(stderr, "No such event type: %s\n", optarg);
+                exit(EXIT_FAILURE);
+            }
             event_type_filters.push_back(optarg);
             break;
         case 's':
@@ -271,6 +281,10 @@ int main(int argc, char **argv)
         cflags.push_back(generate_header_filter_cflag(response_header_filters));
     }
 
+    if (event_type_filters.empty()) {
+        std::copy(available_usdt_names.cbegin(), available_usdt_names.cend(), std::back_inserter(event_type_filters));
+    }
+
     if (debug >= 2) {
         fprintf(stderr, "event_type_filters=");
         for (size_t i = 0; i < event_type_filters.size(); i++) {
@@ -293,6 +307,7 @@ int main(int argc, char **argv)
 
     ebpf::BPF *bpf = new ebpf::BPF();
     std::vector<ebpf::USDT> probes;
+
     for (const auto &probe_def : tracer->usdt_probes()) {
         if (event_type_filters.empty() || std::find(event_type_filters.cbegin(), event_type_filters.cend(),
                                                     probe_def.provider + ":" + probe_def.name) != event_type_filters.cend()) {
