@@ -45,16 +45,14 @@ Optional arguments:
     -d Print debugging information (-dd shows more)
     -h Print this help and exit
     -l Print the list of handled USDTs and exit
-    -s RESPONSE_HEADER_NAMES  Response header names to show,
-       joined by a comma, e.g. "content-type" (case-insensitive)
-    -t EVENT_TYPES Fully-qualified probe names to show,
-       joined by a comma, e.g. "quicly:accept,quicly:free"
+    -s RESPONSE_HEADER_NAMES Response header names to show, e.g. "content-type"
+    -t EVENT_TYPES Fully-qualified probe names to show, e.g. "quicly:accept"
     -w Path to write the output (default: stdout)
 
 Examples:
     h2olog quic -p $(pgrep -o h2o)
-    h2olog quic -p $(pgrep -o h2o) -t quicly:accept,quicly:free
-    h2olog quic -p $(pgrep -o h2o) -t h2o:send_response_header,h2o:h3s_accept,h2o:h3s_destroy -s alt-svc
+    h2olog quic -p $(pgrep -o h2o) -t quicly:accept -t quicly:free
+    h2olog quic -p $(pgrep -o h2o) -t h2o:send_response_header -t h2o:h3s_accept -t h2o:h3s_destroy -s alt-svc
 )",
            H2O_VERSION);
     return;
@@ -148,22 +146,6 @@ static std::string join_str(const std::string &sep, const std::vector<std::strin
     return s;
 }
 
-static std::vector<std::string> split_str(char delim, const std::string &s)
-{
-    std::vector<std::string> tokens;
-    std::size_t from = 0;
-    for (std::size_t i = 0; i < s.size(); ++i) {
-        if (s[i] == delim) {
-            tokens.push_back(s.substr(from, i - from));
-            from = i + 1;
-        }
-    }
-    if (from <= s.size()) {
-        tokens.push_back(s.substr(from, s.size()));
-    }
-    return tokens;
-}
-
 static std::string generate_header_filter_cflag(const std::vector<std::string> &tokens)
 {
     std::vector<std::string> conditions;
@@ -229,14 +211,10 @@ int main(int argc, char **argv)
             h2o_pid = atoi(optarg);
             break;
         case 't':
-            for (const auto &item : split_str(',', optarg)) {
-                event_type_filters.push_back(item);
-            }
+            event_type_filters.push_back(optarg);
             break;
         case 's':
-            for (const auto &item : split_str(',', optarg)) {
-                response_header_filters.push_back(item);
-            }
+            response_header_filters.push_back(optarg);
             break;
         case 'w':
             if ((outfp = fopen(optarg, "w")) == nullptr) {
