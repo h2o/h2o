@@ -245,7 +245,7 @@ int main(int argc, char **argv)
 
     if (list_and_exit) {
         for (const auto &usdt : tracer->usdt_probes()) {
-            fprintf(stderr, "%s:%s\n", usdt.provider.c_str(), usdt.name.c_str());
+            printf("%s:%s\n", usdt.provider.c_str(), usdt.name.c_str());
         }
         exit(EXIT_SUCCESS);
     }
