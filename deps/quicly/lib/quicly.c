@@ -1103,6 +1103,7 @@ static void destroy_all_streams(quicly_conn_t *conn, int err, int including_cryp
         if (including_crypto_streams || stream->stream_id >= 0)
             destroy_stream(stream, err);
     });
+    assert(quicly_num_streams(conn) == 0);
 }
 
 quicly_stream_t *quicly_get_stream(quicly_conn_t *conn, quicly_stream_id_t stream_id)
@@ -4099,6 +4100,7 @@ int quicly_send(quicly_conn_t *conn, quicly_address_t *dest, quicly_address_t *s
         /* check if the connection can be closed now (after 3 pto) */
         if (conn->super.state == QUICLY_STATE_DRAINING || conn->egress.connection_close.num_sent != 0) {
             if (quicly_sentmap_get(&iter)->packet_number == UINT64_MAX) {
+                assert(quicly_num_streams(conn) == 0);
                 ret = QUICLY_ERROR_FREE_CONNECTION;
                 goto Exit;
             }
