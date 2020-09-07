@@ -1453,7 +1453,13 @@ static void on_h3_destroy(h2o_quic_conn_t *h3_)
 
     H2O_PROBE_CONN0(H3S_DESTROY, &conn->super);
 
-    assert(quicly_num_streams(conn->h3.super.quic) == 0);
+    /* unlink and dispose */
+    h2o_linklist_unlink(&conn->_conns);
+    if (h2o_timer_is_linked(&conn->timeout))
+        h2o_timer_unlink(&conn->timeout);
+    h2o_http3_dispose_conn(&conn->h3);
+
+    /* check consistency post-disposal */
     assert(conn->num_streams.recv_headers == 0);
     assert(conn->num_streams.req_pending == 0);
     assert(conn->num_streams.send_headers == 0);
@@ -1463,16 +1469,10 @@ static void on_h3_destroy(h2o_quic_conn_t *h3_)
     assert(h2o_linklist_is_empty(&conn->delayed_streams.recv_body_blocked));
     assert(h2o_linklist_is_empty(&conn->delayed_streams.req_streaming));
     assert(h2o_linklist_is_empty(&conn->delayed_streams.pending));
-
-    h2o_linklist_unlink(&conn->_conns);
-
-    if (h2o_timer_is_linked(&conn->timeout))
-        h2o_timer_unlink(&conn->timeout);
-    h2o_http3_dispose_conn(&conn->h3);
-
     assert(conn->scheduler.reqs.active.smallest_urgency >= H2O_ABSPRIO_NUM_URGENCY_LEVELS);
     assert(h2o_linklist_is_empty(&conn->scheduler.reqs.conn_blocked));
 
+    /* free memory */
     free(conn);
 }
 
