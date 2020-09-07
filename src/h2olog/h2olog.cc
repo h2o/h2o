@@ -136,7 +136,7 @@ static void show_process(pid_t pid)
     infof("Attaching pid=%d (%s)", pid, cmdline);
 }
 
-static const std::string join_str(const std::string &sep, const std::vector<std::string> &strs)
+static std::string join_str(const std::string &sep, const std::vector<std::string> &strs)
 {
     std::string s;
     for (auto iter = strs.cbegin(); iter != strs.cend(); ++iter) {
@@ -148,7 +148,7 @@ static const std::string join_str(const std::string &sep, const std::vector<std:
     return s;
 }
 
-static const std::vector<std::string> split_str(char delim, const std::string &s)
+static std::vector<std::string> split_str(char delim, const std::string &s)
 {
     std::vector<std::string> tokens;
     std::size_t from = 0;
