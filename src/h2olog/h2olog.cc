@@ -22,7 +22,7 @@
 
 #include <memory>
 #include <vector>
-#include <unordered_set>
+#include <set>
 #include <algorithm>
 #include <bcc/BPF.h>
 extern "C" {
@@ -199,7 +199,7 @@ int main(int argc, char **argv)
         tracer.reset(create_http_tracer());
     }
 
-    std::unordered_set<std::string> available_usdt_names;
+    std::set<std::string> available_usdt_names;
     for (const auto &usdt : tracer->usdt_probes()) {
         available_usdt_names.insert(usdt.provider + ":" + usdt.name);
     }
@@ -207,7 +207,7 @@ int main(int argc, char **argv)
     int debug = 0;
     bool list_and_exit = false;
     FILE *outfp = stdout;
-    std::vector<std::string> event_type_filters;
+    std::set<std::string> event_type_filters;
     std::vector<std::string> response_header_filters;
     int c;
     pid_t h2o_pid = -1;
@@ -221,7 +221,7 @@ int main(int argc, char **argv)
                 fprintf(stderr, "No such event type: %s\n", optarg);
                 exit(EXIT_FAILURE);
             }
-            event_type_filters.push_back(optarg);
+            event_type_filters.insert(optarg);
             break;
         case 's':
             response_header_filters.push_back(optarg);
@@ -282,16 +282,16 @@ int main(int argc, char **argv)
     }
 
     if (event_type_filters.empty()) {
-        std::copy(available_usdt_names.cbegin(), available_usdt_names.cend(), std::back_inserter(event_type_filters));
+        event_type_filters = available_usdt_names;
     }
 
     if (debug >= 2) {
         fprintf(stderr, "event_type_filters=");
-        for (size_t i = 0; i < event_type_filters.size(); i++) {
-            if (i > 0) {
+        for (auto iter = event_type_filters.cbegin(); iter != event_type_filters.cend(); iter++) {
+            if (iter != event_type_filters.cbegin()) {
                 fprintf(stderr, ",");
             }
-            fprintf(stderr, "%s", event_type_filters[i].c_str());
+            fprintf(stderr, "%s", iter->c_str());
         }
         fprintf(stderr, "\n");
         fprintf(stderr, "cflags=");
