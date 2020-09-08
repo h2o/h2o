@@ -548,9 +548,10 @@ static void process_packets(h2o_quic_ctx_t *ctx, quicly_address_t *destaddr, qui
             if (packets[0].octets.len >= QUICLY_STATELESS_RESET_PACKET_MIN_LEN) {
                 uint8_t payload[QUICLY_MIN_CLIENT_INITIAL_SIZE];
                 size_t payload_size = quicly_send_stateless_reset(ctx->quic, packets[0].cid.dest.encrypted.base, payload);
-                assert(payload_size != SIZE_MAX);
-                struct iovec vec = {.iov_base = payload, .iov_len = payload_size};
-                h2o_quic_send_datagrams(ctx, srcaddr, destaddr, &vec, 1);
+                if (payload_size != SIZE_MAX) {
+                    struct iovec vec = {.iov_base = payload, .iov_len = payload_size};
+                    h2o_quic_send_datagrams(ctx, srcaddr, destaddr, &vec, 1);
+                }
             }
             return;
         }

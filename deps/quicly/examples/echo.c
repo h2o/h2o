@@ -138,7 +138,7 @@ static void on_receive(quicly_stream_t *stream, size_t off, const void *src, siz
 
     if (is_server()) {
         /* server: echo back to the client */
-        if (quicly_sendstate_is_open(&stream->sendstate)) {
+        if (quicly_sendstate_is_open(&stream->sendstate) && (input.len > 0)) {
             quicly_streambuf_egress_write(stream, input.base, input.len);
             /* shutdown the stream after echoing all data */
             if (quicly_recvstate_transfer_complete(&stream->recvstate))

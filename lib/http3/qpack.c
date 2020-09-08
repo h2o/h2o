@@ -830,7 +830,7 @@ void h2o_qpack_destroy_encoder(h2o_qpack_encoder_t *qpack)
 
 static int handle_table_state_synchronize(h2o_qpack_encoder_t *qpack, int64_t insert_count, const char **err_desc)
 {
-    if (insert_count == 0)
+    if (qpack == NULL || insert_count == 0)
         goto Error;
 
     int64_t new_value = qpack->largest_known_received + insert_count;
@@ -841,7 +841,7 @@ static int handle_table_state_synchronize(h2o_qpack_encoder_t *qpack, int64_t in
     return 0;
 Error:
     *err_desc = "Table State Synchronize: invalid argument";
-    return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED;
+    return H2O_HTTP3_ERROR_QPACK_DECODER_STREAM;
 }
 
 static void evict_inflight_by_index(h2o_qpack_encoder_t *qpack, size_t index)
@@ -862,12 +862,14 @@ static int handle_header_ack(h2o_qpack_encoder_t *qpack, int64_t stream_id, cons
 {
     size_t i;
 
-    for (i = 0; i < qpack->inflight.size; ++i)
-        if (qpack->inflight.entries[i].stream_id == stream_id)
-            goto Found;
+    if (qpack != NULL) {
+        for (i = 0; i < qpack->inflight.size; ++i)
+            if (qpack->inflight.entries[i].stream_id == stream_id)
+                goto Found;
+    }
     /* not found */
     *err_desc = "Header Acknowledgement: invalid stream id";
-    return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED;
+    return H2O_HTTP3_ERROR_QPACK_DECODER_STREAM;
 
 Found:
     /* update largest reference */
@@ -883,11 +885,13 @@ static int handle_stream_cancellation(h2o_qpack_encoder_t *qpack, int64_t stream
 {
     size_t index = 0;
 
-    while (index < qpack->inflight.size) {
-        if (qpack->inflight.entries[index].stream_id == stream_id) {
-            evict_inflight_by_index(qpack, index);
-        } else {
-            ++index;
+    if (qpack != NULL) {
+        while (index < qpack->inflight.size) {
+            if (qpack->inflight.entries[index].stream_id == stream_id) {
+                evict_inflight_by_index(qpack, index);
+            } else {
+                ++index;
+            }
         }
     }
 

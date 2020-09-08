@@ -292,6 +292,7 @@ static void tiny_stream_window(void)
     quicly_max_stream_data_t max_stream_data_orig = quic_ctx.transport_params.max_stream_data;
     quicly_stream_t *client_stream, *server_stream;
     test_streambuf_t *client_streambuf, *server_streambuf;
+    quicly_stats_t stats;
     int ret;
 
     quic_ctx.transport_params.max_stream_data = (quicly_max_stream_data_t){4, 4, 4};
@@ -308,6 +309,13 @@ static void tiny_stream_window(void)
 
     transmit(client, server);
 
+    quicly_get_stats(client, &stats);
+    ok(stats.num_frames_sent.stream_data_blocked == 1);
+    ok(stats.num_frames_sent.data_blocked == 0);
+    quicly_get_stats(server, &stats);
+    ok(stats.num_frames_received.stream_data_blocked == 1);
+    ok(stats.num_frames_received.data_blocked == 0);
+
     server_stream = quicly_get_stream(server, client_stream->stream_id);
     ok(server_stream != NULL);
     server_streambuf = server_stream->data;
@@ -316,6 +324,9 @@ static void tiny_stream_window(void)
 
     transmit(server, client);
     transmit(client, server);
+
+    quicly_get_stats(client, &stats);
+    ok(stats.num_frames_sent.stream_data_blocked == 2);
 
     ok(buffer_is(&server_streambuf->super.ingress, "lo w"));
     quicly_streambuf_ingress_shift(server_stream, 4);
@@ -329,6 +340,9 @@ static void tiny_stream_window(void)
     quicly_request_stop(client_stream, QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(12345));
 
     transmit(client, server);
+
+    quicly_get_stats(client, &stats);
+    ok(stats.num_frames_sent.stream_data_blocked == 2);
 
     /* client should have sent ACK(FIN),STOP_RESPONDING and waiting for response */
     ok(quicly_num_streams(client) == 1);

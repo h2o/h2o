@@ -1,4 +1,4 @@
-FROM h2oserver/h2o-ci:ubuntu2004
+FROM h2oserver/h2o-ci:ubuntu2004 as builder
 
 USER root
 WORKDIR /
@@ -13,16 +13,16 @@ ARG CACHEBUST=1
 RUN git clone https://github.com/h2o/quicly.git
 
 RUN cd quicly &&  git pull && git submodule update --init --recursive && cmake . && make
+
+
+FROM martenseemann/quic-network-simulator-endpoint:latest
+
+COPY --from=builder /quicly/cli quicly/cli
 COPY server.key quicly
 COPY server.crt quicly
 
-# setup and endpoint
-COPY setup.sh .
-RUN chmod +x setup.sh
-
+# endpoint
 COPY run_endpoint.sh .
 RUN chmod +x run_endpoint.sh
-
-RUN wget https://raw.githubusercontent.com/vishnubob/wait-for-it/master/wait-for-it.sh && chmod +x wait-for-it.sh
 
 ENTRYPOINT [ "./run_endpoint.sh" ]
