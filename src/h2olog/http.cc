@@ -187,7 +187,7 @@ class h2o_http_tracer : public h2o_tracer
         };
         return vec;
     }
-    virtual const std::string bpf_text(void)
+    virtual std::string bpf_text()
     {
         return HTTP_BPF;
     }

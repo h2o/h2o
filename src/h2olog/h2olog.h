@@ -121,7 +121,7 @@ class h2o_tracer
     /**
      * Returns the code to be compiled into BPF bytecode.
      */
-    virtual const std::string bpf_text() = 0;
+    virtual std::string bpf_text() = 0;
     /**
      * Returns current time in milliseconds.
      */

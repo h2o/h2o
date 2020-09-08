@@ -23,7 +23,7 @@ protected:
   virtual void do_handle_lost(uint64_t lost);
 public:
   virtual const std::vector<h2o_tracer::usdt> &usdt_probes();
-  virtual const std::string bpf_text();
+  virtual std::string bpf_text();
 };
 
 
@@ -1336,7 +1336,7 @@ void h2o_quic_tracer::do_handle_lost(uint64_t lost)
           seq_, time_milliseconds(), lost);
 }
 
-const std::string h2o_quic_tracer::bpf_text() {
+std::string h2o_quic_tracer::bpf_text() {
   return gen_quic_bpf_header() + R"(
 
 #include <linux/sched.h>
