@@ -84,13 +84,13 @@
 #endif
 
 #if defined(__linux) && defined(SO_REUSEPORT)
-#define H2O_HTTP3_USE_REUSEPORT 1
+#define H2O_USE_REUSEPORT 1
 #define H2O_SO_REUSEPORT SO_REUSEPORT
 #elif defined(SO_REUSEPORT_LB) /* FreeBSD */
-#define H2O_HTTP3_USE_REUSEPORT 1
+#define H2O_USE_REUSEPORT 1
 #define H2O_SO_REUSEPORT SO_REUSEPORT_LB
 #else
-#define H2O_HTTP3_USE_REUSEPORT 0
+#define H2O_USE_REUSEPORT 0
 #endif
 
 #define H2O_DEFAULT_NUM_NAME_RESOLUTION_THREADS 32
@@ -236,6 +236,7 @@ static struct {
     } state;
     char *crash_handler;
     int crash_handler_wait_pipe_close;
+    int tcp_reuseport;
 } conf = {
     .globalconf = {0},
     .run_mode = RUN_MODE_WORKER,
@@ -256,6 +257,7 @@ static struct {
     .state = {{0}},
     .crash_handler = "share/h2o/annotate-backtrace-symbols",
     .crash_handler_wait_pipe_close = 0,
+    .tcp_reuseport = 0,
 };
 
 static neverbleed_t *neverbleed = NULL;
@@ -1175,6 +1177,15 @@ ErrorExit:
     return -1;
 }
 
+static void socket_reuseport(int fd)
+{
+#if H2O_USE_REUSEPORT
+    int opt = 1;
+    if (setsockopt(fd, SOL_SOCKET, H2O_SO_REUSEPORT, &opt, sizeof(opt)) != 0)
+        fprintf(stderr, "[warning] setsockopt(SO_REUSEPORT) failed:%s\n", strerror(errno));
+#endif
+}
+
 /**
  * Opens an INET or INET6 socket for accepting connections. When the protocol is UDP, SO_REUSEPORT is set if available.
  */
@@ -1198,6 +1209,8 @@ static int open_listener(int domain, int type, int protocol, struct sockaddr *ad
 #endif
     switch (type) {
     case SOCK_STREAM: {
+        if (conf.tcp_reuseport)
+            socket_reuseport(fd);
         /* TCP: set SO_REUSEADDR flag to avoid TIME_WAIT after shutdown */
         int on = 1;
         if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on)) != 0)
@@ -1205,11 +1218,7 @@ static int open_listener(int domain, int type, int protocol, struct sockaddr *ad
     } break;
     case SOCK_DGRAM: {
         /* UDP: set SO_REUSEPORT and DF bit */
-#if H2O_HTTP3_USE_REUSEPORT
-        int opt = 1;
-        if (setsockopt(fd, SOL_SOCKET, H2O_SO_REUSEPORT, &opt, sizeof(opt)) != 0)
-            fprintf(stderr, "[warning] setsockopt(SO_REUSEPORT) failed:%s\n", strerror(errno));
-#endif
+       socket_reuseport(fd);
         if (!h2o_socket_set_df_bit(fd, domain))
             goto Error;
     } break;
@@ -1885,6 +1894,19 @@ static int on_config_crash_handler_wait_pipe_close(h2o_configurator_command_t *c
     return 0;
 }
 
+static int on_tcp_reuseport(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    int ret;
+
+    ret = h2o_configurator_get_one_of(cmd, node, "OFF,ON");
+    if (ret < 0)
+        return -1;
+
+    conf.tcp_reuseport = ret;
+
+    return 0;
+}
+
 static yoml_t *load_config(yoml_parse_args_t *parse_args, yoml_t *source)
 {
     FILE *fp;
@@ -2541,7 +2563,7 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
             fd = listener_config->fd;
         } else {
             int reuseport = 0;
-#if H2O_HTTP3_USE_REUSEPORT
+#if H2O_USE_REUSEPORT
             socklen_t reuseportlen = sizeof(reuseport);
             if (getsockopt(listener_config->fd, SOL_SOCKET, H2O_SO_REUSEPORT, &reuseport, &reuseportlen) != 0) {
                 perror("gestockopt(SO_REUSEPORT) failed");
@@ -2549,14 +2571,22 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
             }
             assert(reuseportlen == sizeof(reuseport));
             if (reuseport) {
+                int type;
+                socklen_t typelen = sizeof(type);
                 struct sockaddr_storage ss;
                 socklen_t sslen = sizeof(ss);
-                if (getsockname(listener_config->fd, (struct sockaddr *)&ss, &sslen) != 0) {
-                    perror("failed to obtain local address of the listening QUIC socket");
+                if (getsockopt(listener_config->fd, SOL_SOCKET, SO_TYPE, &type, &typelen) != 0) {
+                    perror("failed to obtain the type of a listening socket");
                     abort();
                 }
-                if ((fd = open_listener(ss.ss_family, SOCK_DGRAM, 0, (struct sockaddr *)&ss, sslen)) != -1) {
-                    setsockopt_recvpktinfo(fd, ss.ss_family);
+                assert(type == SOCK_DGRAM || type == SOCK_STREAM);
+                if (getsockname(listener_config->fd, (struct sockaddr *)&ss, &sslen) != 0) {
+                    perror("failed to obtain local address of a listening socket");
+                    abort();
+                }
+                if ((fd = open_listener(ss.ss_family, type, type == SOCK_STREAM ? IPPROTO_TCP : IPPROTO_UDP, (struct sockaddr *)&ss, sslen)) != -1) {
+                    if (type == SOCK_DGRAM)
+                        setsockopt_recvpktinfo(fd, ss.ss_family);
                 } else {
                     reuseport = 0;
                 }
@@ -2930,6 +2960,7 @@ static void setup_configurators(void)
         h2o_configurator_define_command(c, "crash-handler.wait-pipe-close",
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_crash_handler_wait_pipe_close);
+        h2o_configurator_define_command(c, "tcp-reuseport", H2O_CONFIGURATOR_FLAG_GLOBAL, on_tcp_reuseport);
     }
 
     h2o_access_log_register_configurator(&conf.globalconf);
