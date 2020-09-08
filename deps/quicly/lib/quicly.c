@@ -251,7 +251,6 @@ struct st_quicly_conn_t {
             uint64_t frame_type; /* UINT64_MAX if application close */
             const char *reason_phrase;
             unsigned long num_packets_received;
-            unsigned long num_sent;
         } connection_close;
         /**
          *
@@ -1108,6 +1107,7 @@ static void destroy_all_streams(quicly_conn_t *conn, int err, int including_cryp
         if (including_crypto_streams || stream->stream_id >= 0)
             destroy_stream(stream, err);
     });
+    assert(quicly_num_streams(conn) == 0);
 }
 
 quicly_stream_t *quicly_get_stream(quicly_conn_t *conn, quicly_stream_id_t stream_id)
@@ -3892,10 +3892,7 @@ static int send_connection_close(quicly_conn_t *conn, quicly_send_context_t *s)
         return ret;
     s->dst = quicly_encode_close_frame(s->dst, error_code, offending_frame_type, reason_phrase);
 
-    /* update counter */
-    ++conn->egress.connection_close.num_sent;
-
-    /* probe */
+    /* update counter, probe */
     if (offending_frame_type != UINT64_MAX) {
         ++conn->super.stats.num_frames_sent.transport_close;
         QUICLY_PROBE(TRANSPORT_CLOSE_SEND, conn, conn->stash.now, error_code, offending_frame_type, reason_phrase);
@@ -4254,8 +4251,10 @@ int quicly_send(quicly_conn_t *conn, quicly_address_t *dest, quicly_address_t *s
         quicly_sentmap_iter_t iter;
         init_acks_iter(conn, &iter);
         /* check if the connection can be closed now (after 3 pto) */
-        if (conn->super.state == QUICLY_STATE_DRAINING || conn->egress.connection_close.num_sent != 0) {
+        if (conn->super.state == QUICLY_STATE_DRAINING ||
+            conn->super.stats.num_frames_sent.transport_close + conn->super.stats.num_frames_sent.application_close != 0) {
             if (quicly_sentmap_get(&iter)->packet_number == UINT64_MAX) {
+                assert(quicly_num_streams(conn) == 0);
                 ret = QUICLY_ERROR_FREE_CONNECTION;
                 goto Exit;
             }
