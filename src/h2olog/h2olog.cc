@@ -198,15 +198,12 @@ int main(int argc, char **argv)
         tracer.reset(create_http_tracer());
     }
 
-    std::vector<std::string> available_usdt_names;
-    for (const auto &usdt : tracer->usdt_probes()) {
-        available_usdt_names.push_back(usdt.provider + ":" + usdt.name);
-    }
+    std::vector<h2o_tracer::usdt> available_usdts = tracer->usdt_probes();
 
     int debug = 0;
     bool list_and_exit = false;
     FILE *outfp = stdout;
-    std::vector<std::string> event_type_filters;
+    std::vector<h2o_tracer::usdt> event_type_filters;
     std::vector<std::string> response_header_filters;
     int c;
     pid_t h2o_pid = -1;
@@ -215,13 +212,16 @@ int main(int argc, char **argv)
         case 'p':
             h2o_pid = atoi(optarg);
             break;
-        case 't':
-            if (std::find(available_usdt_names.cbegin(), available_usdt_names.cend(), optarg) == available_usdt_names.cend()) {
+        case 't': {
+            auto found = std::find_if(available_usdts.cbegin(), available_usdts.cend(),
+                                      [](const h2o_tracer::usdt &usdt) { return optarg == usdt.fully_qualified_name(); });
+            if (found == available_usdts.cend()) {
                 fprintf(stderr, "No such event type: %s\n", optarg);
                 exit(EXIT_FAILURE);
             }
-            event_type_filters.push_back(optarg);
+            event_type_filters.push_back(*found);
             break;
+        }
         case 's':
             response_header_filters.push_back(optarg);
             break;
@@ -281,7 +281,7 @@ int main(int argc, char **argv)
     }
 
     if (event_type_filters.empty()) {
-        event_type_filters = available_usdt_names;
+        event_type_filters = available_usdts;
     }
 
     if (debug >= 2) {
@@ -290,7 +290,7 @@ int main(int argc, char **argv)
             if (iter != event_type_filters.cbegin()) {
                 fprintf(stderr, ",");
             }
-            fprintf(stderr, "%s", iter->c_str());
+            fprintf(stderr, "%s", iter->fully_qualified_name().c_str());
         }
         fprintf(stderr, "\n");
         fprintf(stderr, "cflags=");
@@ -307,11 +307,8 @@ int main(int argc, char **argv)
     ebpf::BPF *bpf = new ebpf::BPF();
     std::vector<ebpf::USDT> probes;
 
-    for (const auto &probe_def : tracer->usdt_probes()) {
-        if (std::find(event_type_filters.cbegin(), event_type_filters.cend(), probe_def.provider + ":" + probe_def.name) !=
-            event_type_filters.cend()) {
-            probes.push_back(ebpf::USDT(h2o_pid, probe_def.provider, probe_def.name, probe_def.probe_func));
-        }
+    for (const auto &usdt : event_type_filters) {
+        probes.push_back(ebpf::USDT(h2o_pid, usdt.provider, usdt.name, usdt.probe_func));
     }
 
     ebpf::StatusTuple ret = bpf->init(tracer->bpf_text(), cflags, probes);

@@ -37,12 +37,17 @@ class h2o_tracer
     class usdt
     {
       public:
-        const std::string provider;
-        const std::string name;
-        const std::string probe_func;
+        std::string provider;
+        std::string name;
+        std::string probe_func;
         usdt(const std::string &provider, const std::string &name, const std::string &probe_func)
             : provider(provider), name(name), probe_func(probe_func)
         {
+        }
+
+        std::string fully_qualified_name() const
+        {
+            return provider + ":" + name;
         }
     };
 
