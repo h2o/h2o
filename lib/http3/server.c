@@ -526,6 +526,15 @@ static h2o_iovec_t log_stream_id(h2o_req_t *_req)
 
 static h2o_iovec_t log_quic_stats(h2o_req_t *req)
 {
+#define APPLY_NUM_FRAMES(f, dir)                                                                                                   \
+    f(padding, dir) f(ping, dir) f(ack, dir) f(reset_stream, dir) f(stop_sending, dir) f(crypto, dir) f(new_token, dir)            \
+        f(stream, dir) f(max_data, dir) f(max_stream_data, dir) f(max_streams_bidi, dir) f(max_streams_uni, dir)                   \
+            f(data_blocked, dir) f(stream_data_blocked, dir) f(streams_blocked, dir) f(new_connection_id, dir)                     \
+                f(retire_connection_id, dir) f(path_challenge, dir) f(path_response, dir) f(transport_close, dir)                  \
+                    f(application_close, dir) f(handshake_done, dir) f(ack_frequency, dir)
+#define FORMAT_OF_NUM_FRAMES(n, dir) "," H2O_TO_STR(n) "-" H2O_TO_STR(dir) "=%" PRIu64
+#define VALUE_OF_NUM_FRAMES(n, dir) , stats.num_frames_##dir.n
+
     struct st_h2o_http3_server_conn_t *conn = (struct st_h2o_http3_server_conn_t *)req->conn;
     quicly_stats_t stats;
 
@@ -533,27 +542,28 @@ static h2o_iovec_t log_quic_stats(h2o_req_t *req)
         return h2o_iovec_init(H2O_STRLIT("-"));
 
     char *buf;
-    size_t len, bufsize = 512;
+    size_t len, bufsize = 1400;
 Redo:
     buf = h2o_mem_alloc_pool(&req->pool, char, bufsize);
     len = snprintf(buf, bufsize,
                    "packets-received=%" PRIu64 ",packets-decryption-failed=%" PRIu64 ",packets-sent=%" PRIu64
                    ",packets-lost=%" PRIu64 ",packets-ack-received=%" PRIu64 ",bytes-received=%" PRIu64 ",bytes-sent=%" PRIu64
-                   ",rtt-minimum=%" PRIu32 ",rtt-smoothed=%" PRIu32 ",rtt-variance=%" PRIu32 ",rtt-latest=%" PRIu32 ",cwnd=%" PRIu32
-                   ",data-blocked-received=%" PRIu64 ",data-blocked-sent=%" PRIu64 ",stream-data-blocked-received=%" PRIu64
-                   ",stream-data-blocked-sent=%" PRIu64 ",streams-blocked-received=%" PRIu64 ",streams-blocked-sent=%" PRIu64,
+                   ",rtt-minimum=%" PRIu32 ",rtt-smoothed=%" PRIu32 ",rtt-variance=%" PRIu32 ",rtt-latest=%" PRIu32
+                   ",cwnd=%" PRIu32 APPLY_NUM_FRAMES(FORMAT_OF_NUM_FRAMES, received) APPLY_NUM_FRAMES(FORMAT_OF_NUM_FRAMES, sent),
                    stats.num_packets.received, stats.num_packets.decryption_failed, stats.num_packets.sent, stats.num_packets.lost,
                    stats.num_packets.ack_received, stats.num_bytes.received, stats.num_bytes.sent, stats.rtt.minimum,
-                   stats.rtt.smoothed, stats.rtt.variance, stats.rtt.latest, stats.cc.cwnd, stats.num_frames_received.data_blocked,
-                   stats.num_frames_sent.data_blocked, stats.num_frames_received.stream_data_blocked,
-                   stats.num_frames_sent.stream_data_blocked, stats.num_frames_received.streams_blocked,
-                   stats.num_frames_sent.streams_blocked);
+                   stats.rtt.smoothed, stats.rtt.variance, stats.rtt.latest,
+                   stats.cc.cwnd APPLY_NUM_FRAMES(VALUE_OF_NUM_FRAMES, received) APPLY_NUM_FRAMES(VALUE_OF_NUM_FRAMES, sent));
     if (len + 1 > bufsize) {
         bufsize = len + 1;
         goto Redo;
     }
 
     return h2o_iovec_init(buf, len);
+
+#undef APPLY_NUM_FRAMES
+#undef FORMAT_OF_NUM_FRAMES
+#undef VALUE_OF_NUM_FRAMES
 }
 
 void on_stream_destroy(quicly_stream_t *qs, int err)
