@@ -22,7 +22,6 @@
 
 #include <memory>
 #include <vector>
-#include <set>
 #include <algorithm>
 #include <bcc/BPF.h>
 extern "C" {
@@ -199,15 +198,15 @@ int main(int argc, char **argv)
         tracer.reset(create_http_tracer());
     }
 
-    std::set<std::string> available_usdt_names;
+    std::vector<std::string> available_usdt_names;
     for (const auto &usdt : tracer->usdt_probes()) {
-        available_usdt_names.insert(usdt.provider + ":" + usdt.name);
+        available_usdt_names.push_back(usdt.provider + ":" + usdt.name);
     }
 
     int debug = 0;
     bool list_and_exit = false;
     FILE *outfp = stdout;
-    std::set<std::string> event_type_filters;
+    std::vector<std::string> event_type_filters;
     std::vector<std::string> response_header_filters;
     int c;
     pid_t h2o_pid = -1;
@@ -217,11 +216,11 @@ int main(int argc, char **argv)
             h2o_pid = atoi(optarg);
             break;
         case 't':
-            if (available_usdt_names.find(optarg) == available_usdt_names.cend()) {
+            if (std::find(available_usdt_names.cbegin(), available_usdt_names.cend(), optarg) == available_usdt_names.cend()) {
                 fprintf(stderr, "No such event type: %s\n", optarg);
                 exit(EXIT_FAILURE);
             }
-            event_type_filters.insert(optarg);
+            event_type_filters.push_back(optarg);
             break;
         case 's':
             response_header_filters.push_back(optarg);
@@ -309,8 +308,8 @@ int main(int argc, char **argv)
     std::vector<ebpf::USDT> probes;
 
     for (const auto &probe_def : tracer->usdt_probes()) {
-        if (event_type_filters.empty() || std::find(event_type_filters.cbegin(), event_type_filters.cend(),
-                                                    probe_def.provider + ":" + probe_def.name) != event_type_filters.cend()) {
+        if (std::find(event_type_filters.cbegin(), event_type_filters.cend(), probe_def.provider + ":" + probe_def.name) !=
+            event_type_filters.cend()) {
             probes.push_back(ebpf::USDT(h2o_pid, probe_def.provider, probe_def.name, probe_def.probe_func));
         }
     }
