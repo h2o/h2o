@@ -44,9 +44,9 @@ Usage: h2olog -p PID
 Optional arguments:
     -d Print debugging information (-dd shows more)
     -h Print this help and exit
-    -l Print the list of handled USDTs and exit
-    -s RESPONSE_HEADER_NAMES Response header names to show, e.g. "content-type"
-    -t EVENT_TYPES Fully-qualified probe names to show, e.g. "quicly:accept"
+    -l Print the list of available probe names and exit
+    -s RESPONSE_HEADER_NAME A response header name to show, e.g. "content-type"
+    -t PROBE_NAME A fully-qualified probe name to show, e.g. "quicly:accept"
     -w Path to write the output (default: stdout)
 
 Examples:
@@ -198,12 +198,11 @@ int main(int argc, char **argv)
         tracer.reset(create_http_tracer());
     }
 
-    std::vector<h2o_tracer::usdt> available_usdts = tracer->usdt_probes();
+    const std::vector<h2o_tracer::usdt> available_usdts = tracer->usdt_probes();
 
     int debug = 0;
-    bool list_and_exit = false;
     FILE *outfp = stdout;
-    std::vector<h2o_tracer::usdt> event_type_filters;
+    std::vector<h2o_tracer::usdt> selected_usdts;
     std::vector<std::string> response_header_filters;
     int c;
     pid_t h2o_pid = -1;
@@ -219,7 +218,7 @@ int main(int argc, char **argv)
                 fprintf(stderr, "No such event type: %s\n", optarg);
                 exit(EXIT_FAILURE);
             }
-            event_type_filters.push_back(*found);
+            selected_usdts.push_back(*found);
             break;
         }
         case 's':
@@ -235,7 +234,10 @@ int main(int argc, char **argv)
             debug++;
             break;
         case 'l':
-            list_and_exit = true;
+            for (const auto &usdt : available_usdts) {
+                printf("%s\n", usdt.fully_qualified_name().c_str());
+            }
+            exit(EXIT_SUCCESS);
             break;
         case 'h':
             usage();
@@ -250,13 +252,6 @@ int main(int argc, char **argv)
         fprintf(stderr, "Error: too many aruments\n");
         usage();
         exit(EXIT_FAILURE);
-    }
-
-    if (list_and_exit) {
-        for (const auto &usdt : tracer->usdt_probes()) {
-            printf("%s:%s\n", usdt.provider.c_str(), usdt.name.c_str());
-        }
-        exit(EXIT_SUCCESS);
     }
 
     if (h2o_pid == -1) {
@@ -280,14 +275,14 @@ int main(int argc, char **argv)
         cflags.push_back(generate_header_filter_cflag(response_header_filters));
     }
 
-    if (event_type_filters.empty()) {
-        event_type_filters = available_usdts;
+    if (selected_usdts.empty()) {
+        selected_usdts = available_usdts;
     }
 
     if (debug >= 2) {
-        fprintf(stderr, "event_type_filters=");
-        for (auto iter = event_type_filters.cbegin(); iter != event_type_filters.cend(); iter++) {
-            if (iter != event_type_filters.cbegin()) {
+        fprintf(stderr, "selected_usdts=");
+        for (auto iter = selected_usdts.cbegin(); iter != selected_usdts.cend(); iter++) {
+            if (iter != selected_usdts.cbegin()) {
                 fprintf(stderr, ",");
             }
             fprintf(stderr, "%s", iter->fully_qualified_name().c_str());
@@ -307,7 +302,7 @@ int main(int argc, char **argv)
     ebpf::BPF *bpf = new ebpf::BPF();
     std::vector<ebpf::USDT> probes;
 
-    for (const auto &usdt : event_type_filters) {
+    for (const auto &usdt : selected_usdts) {
         probes.push_back(ebpf::USDT(h2o_pid, usdt.provider, usdt.name, usdt.probe_func));
     }
 
