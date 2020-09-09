@@ -44,9 +44,9 @@ Usage: h2olog -p PID
 Optional arguments:
     -d Print debugging information (-dd shows more)
     -h Print this help and exit
-    -l Print the list of available probe names and exit
+    -l Print the list of available tracepoints and exit
     -s RESPONSE_HEADER_NAME A response header name to show, e.g. "content-type"
-    -t PROBE_NAME A fully-qualified probe name to show, e.g. "quicly:accept"
+    -t TRACEPOINT A tracepoint, or fully-qualified probe name, to show, e.g. "quicly:accept"
     -w Path to write the output (default: stdout)
 
 Examples:
@@ -215,7 +215,7 @@ int main(int argc, char **argv)
             auto found = std::find_if(available_usdts.cbegin(), available_usdts.cend(),
                                       [](const h2o_tracer::usdt &usdt) { return optarg == usdt.fully_qualified_name(); });
             if (found == available_usdts.cend()) {
-                fprintf(stderr, "No such event type: %s\n", optarg);
+                fprintf(stderr, "No such tracepoint: %s\n", optarg);
                 exit(EXIT_FAILURE);
             }
             selected_usdts.push_back(*found);
