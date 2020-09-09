@@ -1110,6 +1110,19 @@ static void destroy_all_streams(quicly_conn_t *conn, int err, int including_cryp
     assert(quicly_num_streams(conn) == 0);
 }
 
+int quicly_foreach_stream(quicly_conn_t *conn, void *thunk, int (*cb)(void *thunk, quicly_stream_t *stream))
+{
+    quicly_stream_t *stream;
+    kh_foreach_value(conn->streams, stream, {
+        if (stream->stream_id >= 0) {
+            int ret = cb(thunk, stream);
+            if (ret != 0)
+                return ret;
+        }
+    });
+    return 0;
+}
+
 quicly_stream_t *quicly_get_stream(quicly_conn_t *conn, quicly_stream_id_t stream_id)
 {
     khiter_t iter = kh_get(quicly_stream_t, conn->streams, stream_id);
