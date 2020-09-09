@@ -1620,7 +1620,9 @@ static void graceful_shutdown_resend_goaway(h2o_timer_t *entry)
     for (node = ctx->http3._conns.next; node != &ctx->http3._conns; node = node->next) {
         struct st_h2o_http3_server_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_conn_t, _conns, node);
         if (conn->h3.state < H2O_HTTP3_CONN_STATE_HALF_CLOSED && quicly_get_state(conn->h3.super.quic) == QUICLY_STATE_CONNECTED) {
-            quicly_stream_id_t max_stream_id = quicly_get_remote_next_stream_id(conn->h3.super.quic, 0 /* == bidi */) - 4;
+            quicly_stream_id_t next_stream_id = quicly_get_remote_next_stream_id(conn->h3.super.quic, 0 /* == bidi */);
+            /* Section 5.2-1: "This identifier MAY be zero if no requests or pushes were processed."" */
+            quicly_stream_id_t max_stream_id = next_stream_id < 4 ? 0 /* we haven't received any stream yet */ : next_stream_id - 4;
             h2o_http3_send_goaway_frame(&conn->h3, max_stream_id);
             conn->h3.state = H2O_HTTP3_CONN_STATE_HALF_CLOSED;
             do_close_stragglers = 1;
