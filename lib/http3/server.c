@@ -1569,8 +1569,7 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
     ptls_default_skip_tracing = orig_skip_tracing;
 #endif
     if (accept_ret != 0) {
-        h2o_http3_dispose_conn(&conn->h3);
-        free(conn);
+        on_h3_destroy(&conn->h3.super);
         return NULL;
     }
     ++ctx->super.next_cid.master_id; /* FIXME check overlap */
