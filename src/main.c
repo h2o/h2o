@@ -982,7 +982,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
             /* QUIC; the context is modified directly */
             if (listener->ssl.size > 1) {
                 h2o_configurator_errprintf(cmd, *cc_node,
-                                           "[warning] Setting ignored. At the moment, only the the first listen entry for a given "
+                                           "[warning] Setting ignored. At the moment, only the first listen entry for a given "
                                            "address:port tuple can specify the QUIC congestion controller");
             }
             if (strcasecmp((*cc_node)->data.scalar, "reno") == 0) {
