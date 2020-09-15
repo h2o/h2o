@@ -228,6 +228,7 @@ int main(int argc, char **argv)
     }
 
     int debug = 0;
+    int drop_root = 1;
     FILE *outfp = stdout;
     std::vector<std::string> event_type_filters;
     std::vector<std::string> response_header_filters;
@@ -252,6 +253,9 @@ int main(int argc, char **argv)
             break;
         case 'd':
             debug++;
+            break;
+        case 'r':
+            drop_root = 0;
             break;
         case 'h':
             usage();
@@ -329,8 +333,10 @@ int main(int argc, char **argv)
     if (debug) {
         show_process(h2o_pid);
     }
+    if (drop_root) {
+        drop_root_privilege();
+    }
 
-    drop_root_privilege();
     ebpf::BPFPerfBuffer *perf_buffer = bpf->get_perf_buffer("events");
     if (perf_buffer) {
         time_t t0 = time(NULL);
