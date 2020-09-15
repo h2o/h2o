@@ -43,6 +43,7 @@ Usage: h2olog -p PID
 Other options:
     -h Print this help and exit
     -d Print debugging information (-dd shows more)
+    -r Run without dropping root privilege
     -w Path to write the output (default: stdout)
 )",
            H2O_VERSION);
@@ -234,7 +235,7 @@ int main(int argc, char **argv)
     std::vector<std::string> response_header_filters;
     int c;
     pid_t h2o_pid = -1;
-    while ((c = getopt(argc, argv, "hdp:t:s:w:")) != -1) {
+    while ((c = getopt(argc, argv, "hdrp:t:s:w:")) != -1) {
         switch (c) {
         case 'p':
             h2o_pid = atoi(optarg);
