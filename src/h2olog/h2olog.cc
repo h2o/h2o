@@ -133,7 +133,12 @@ static void drop_root_privilege(void)
             fprintf(stderr, "Error: failed to read the SUDO_GID env variable\n");
             exit(EXIT_FAILURE);
         }
-        gid_t gid = atoi(sudo_gid);
+        errno = 0;
+        gid_t gid = (gid_t)strtol(sudo_gid, NULL, 10);
+        if (errno != 0) {
+            fprintf(stderr, "Error: overflow while parsing SUDO_GID\n");
+            exit(EXIT_FAILURE);
+        }
         if (gid != 0 && setgid(gid) != 0) {
             fprintf(stderr, "Error: failed to drop the root group\n");
             exit(EXIT_FAILURE);
@@ -145,8 +150,13 @@ static void drop_root_privilege(void)
             fprintf(stderr, "Error: failed to read the SUDO_UID env variable\n");
             exit(EXIT_FAILURE);
         }
-        uid_t uid = atoi(sudo_uid);
-        if (uid > 0 && setuid(uid) != 0) {
+        errno = 0;
+        uid_t uid = (uid_t)strtol(sudo_uid, NULL, 10);
+        if (errno != 0) {
+            fprintf(stderr, "Error: overflow while parsing SUDO_UID\n");
+            exit(EXIT_FAILURE);
+        }
+        if (uid != 0 && setuid(uid) != 0) {
             fprintf(stderr, "Error: failed to drop the root user\n");
             exit(EXIT_FAILURE);
         }
