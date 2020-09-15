@@ -125,6 +125,34 @@ static void show_process(pid_t pid)
     infof("Attaching pid=%d (%s)", pid, cmdline);
 }
 
+static void drop_root_privilege(void)
+{
+    if (getgid() == 0) {
+        const char *sudo_gid = getenv("SUDO_GID");
+        if (sudo_gid == NULL) {
+            fprintf(stderr, "Error: failed to read the SUDO_GID env variable\n");
+            exit(EXIT_FAILURE);
+        }
+        gid_t gid = atoi(sudo_gid);
+        if (gid != 0 && setgid(gid) != 0) {
+            fprintf(stderr, "Error: failed to drop the root group\n");
+            exit(EXIT_FAILURE);
+        }
+    }
+    if (getuid() == 0) {
+        const char *sudo_uid = getenv("SUDO_UID");
+        if (sudo_uid == NULL) {
+            fprintf(stderr, "Error: failed to read the SUDO_UID env variable\n");
+            exit(EXIT_FAILURE);
+        }
+        uid_t uid = atoi(sudo_uid);
+        if (uid > 0 && setuid(uid) != 0) {
+            fprintf(stderr, "Error: failed to drop the root user\n");
+            exit(EXIT_FAILURE);
+        }
+    }
+}
+
 static std::string join_str(const std::string &sep, const std::vector<std::string> &strs)
 {
     std::string s;
@@ -292,6 +320,7 @@ int main(int argc, char **argv)
         show_process(h2o_pid);
     }
 
+    drop_root_privilege();
     ebpf::BPFPerfBuffer *perf_buffer = bpf->get_perf_buffer("events");
     if (perf_buffer) {
         time_t t0 = time(NULL);
