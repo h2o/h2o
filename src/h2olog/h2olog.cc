@@ -127,24 +127,24 @@ static void show_process(pid_t pid)
 
 static void drop_root_privilege(void)
 {
-    if (getgid() == 0) {
-        const char *sudo_gid = getenv("SUDO_GID");
-        if (sudo_gid == NULL) {
-            fprintf(stderr, "Error: failed to read the SUDO_GID env variable\n");
-            exit(EXIT_FAILURE);
-        }
-        errno = 0;
-        gid_t gid = (gid_t)strtol(sudo_gid, NULL, 10);
-        if (errno != 0) {
-            fprintf(stderr, "Error: overflow while parsing SUDO_GID\n");
-            exit(EXIT_FAILURE);
-        }
-        if (gid != 0 && setgid(gid) != 0) {
-            fprintf(stderr, "Error: failed to drop the root group\n");
-            exit(EXIT_FAILURE);
-        }
-    }
     if (getuid() == 0) {
+        if (getgid() == 0) {
+            const char *sudo_gid = getenv("SUDO_GID");
+            if (sudo_gid == NULL) {
+                fprintf(stderr, "Error: failed to read the SUDO_GID env variable\n");
+                exit(EXIT_FAILURE);
+            }
+            errno = 0;
+            gid_t gid = (gid_t)strtol(sudo_gid, NULL, 10);
+            if (errno != 0) {
+                fprintf(stderr, "Error: overflow while parsing SUDO_GID\n");
+                exit(EXIT_FAILURE);
+            }
+            if (gid != 0 && setgid(gid) != 0) {
+                fprintf(stderr, "Error: failed to drop the root group\n");
+                exit(EXIT_FAILURE);
+            }
+        }
         const char *sudo_uid = getenv("SUDO_UID");
         if (sudo_uid == NULL) {
             fprintf(stderr, "Error: failed to read the SUDO_UID env variable\n");
