@@ -915,7 +915,7 @@ int h2o_socket_compare_address(struct sockaddr *x, struct sockaddr *y, int check
     return 0;
 }
 
-size_t h2o_socket_getnumerichost(struct sockaddr *sa, socklen_t salen, char *buf)
+size_t h2o_socket_getnumerichost(const struct sockaddr *sa, socklen_t salen, char *buf)
 {
     if (sa->sa_family == AF_INET) {
         /* fast path for IPv4 addresses */
@@ -930,7 +930,7 @@ size_t h2o_socket_getnumerichost(struct sockaddr *sa, socklen_t salen, char *buf
     return strlen(buf);
 }
 
-int32_t h2o_socket_getport(struct sockaddr *sa)
+int32_t h2o_socket_getport(const struct sockaddr *sa)
 {
     switch (sa->sa_family) {
     case AF_INET:

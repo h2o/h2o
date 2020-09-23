@@ -298,11 +298,11 @@ int h2o_socket_compare_address(struct sockaddr *x, struct sockaddr *y, int check
 /**
  * getnameinfo (buf should be NI_MAXHOST in length), returns SIZE_MAX if failed
  */
-size_t h2o_socket_getnumerichost(struct sockaddr *sa, socklen_t salen, char *buf);
+size_t h2o_socket_getnumerichost(const struct sockaddr *sa, socklen_t salen, char *buf);
 /**
  * returns the port number, or -1 if failed
  */
-int32_t h2o_socket_getport(struct sockaddr *sa);
+int32_t h2o_socket_getport(const struct sockaddr *sa);
 /**
  * performs SSL handshake on a socket
  * @param sock the socket
