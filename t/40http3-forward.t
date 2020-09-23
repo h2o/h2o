@@ -30,6 +30,8 @@ my $quic_port = empty_port({ host  => "0.0.0.0", proto => "udp" });
 
 # start server1 at 0.0.0.0, check that it is up
 my $server1 = spawn("0.0.0.0", 1);
+system("sudo build/h2olog quic -p '$server1->{pid}' -d -w server1.json &");
+sleep 3;
 is do {my $fh = fetch(""); local $/; join "", <$fh> }, "server=1", "server1 is up";
 
 # initiate the slow request
@@ -38,6 +40,8 @@ sleep 1;
 
 # start server2 at 127.0.0.1, check that it isup
 my $server2 = spawn("127.0.0.1", 2);
+system("sudo build/h2olog quic -p '$server2->{pid}' -d -w server2.json &");
+sleep 3;
 is do {my $fh = fetch(""); local $/; join "", <$fh> }, "server=2", "server2 is up";
 
 # check that the slow request was served, going through $server2

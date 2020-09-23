@@ -119,8 +119,10 @@ probe_decl = r'(?:\bprobe\s+(?:[a-zA-Z0-9_]+)\s*\([^\)]*\)\s*;)'
 d_decl = r'(?:\bprovider\s*(?P<provider>[a-zA-Z0-9_]+)\s*\{(?P<probes>(?:%s|%s)*)\})' % (
     probe_decl, whitespace)
 
+
 def strip_c_comments(s):
   return re.sub('//.*?\n|/\*.*?\*/', '', s, flags=re_flags)
+
 
 def parse_d(context: dict, path: Path, allow_probes: set = None, block_probes: set = None):
   content = strip_c_comments(path.read_text())
@@ -160,7 +162,7 @@ def parse_d(context: dict, path: Path, allow_probes: set = None, block_probes: s
       arg_name = arg['name']
       arg_type = arg['type']
 
-      if is_ptr_type(arg_type) and not is_str_type(arg_type):
+      if is_ptr_type(arg_type):
         st_name = strip_typename(arg_type)
         for st_field_access, st_field_name in struct_map.get(st_name, []):
           flat_args_map[st_field_name or st_field_access] = "typeof_%s__%s" % (st_name, st_field_name or st_field_access)
@@ -175,15 +177,19 @@ def strip_typename(t):
 
 
 def is_str_type(t):
-  return re.search(r'\b(?:char|u?int8_t|void)\s*\*', t)
-
-
-def is_ptr_type(t):
-  return "*" in t
+  return re.search(r'\b(?:char)\s*\*', t)
 
 
 def is_bin_type(t):
   return re.search(r'\b(?:u?int8_t|void)\s*\*', t)
+
+
+def is_sockaddr(t):
+  return re.search(r'\bsockaddr\s*\*', t)
+
+
+def is_ptr_type(t):
+  return "*" in t and not (is_str_type(t) or is_bin_type(t) or is_sockaddr(t))
 
 
 def build_tracer_name(metadata):
@@ -195,7 +201,7 @@ def build_tracer(context, metadata):
 
   c = r"""// %s
 int %s(struct pt_regs *ctx) {
-  void *buf = NULL;
+  const void *buf = NULL;
   struct quic_event_t event = { .id = %d };
 
 """ % (fully_specified_probe_name, build_tracer_name(metadata), metadata['id'])
@@ -214,13 +220,22 @@ int %s(struct pt_regs *ctx) {
     else:
       c += "  // %s %s\n" % (arg_type, arg_name)
 
-    if is_str_type(arg_type):
+    if is_str_type(arg_type) or is_bin_type(arg_type):
       c += "  bpf_usdt_readarg(%d, ctx, &buf);\n" % (i+1)
       # Use `sizeof(buf)` instead of a length variable, because older kernels
       # do not accept a variable for `bpf_probe_read()`'s length parameter.
       event_t_name = "%s.%s" % (probe_name, arg_name)
       c += "  bpf_probe_read(&event.%s, sizeof(event.%s), buf);\n" % (
           event_t_name, event_t_name)
+    elif is_sockaddr(arg_type):
+      c += "  bpf_usdt_readarg(%d, ctx, &buf);\n" % (i+1)
+      event_t_name = "%s.%s" % (probe_name, arg_name)
+      c += "  bpf_probe_read(&event.%s, sizeof(struct my_sockaddr), buf);\n" % event_t_name
+      c += "  if (get_sockaddr__sa_family(&event.%s) == AF_INET) {\n" % event_t_name
+      c += "    bpf_probe_read(&event.%s, sizeof(struct my_sockaddr_in), buf);\n" % event_t_name
+      c += "  } else if (get_sockaddr__sa_family(&event.%s) == AF_INET6) {\n" % event_t_name
+      c += "    bpf_probe_read(&event.%s, sizeof(struct my_sockaddr_in6), buf);\n" % event_t_name
+      c += "  }\n"
     elif is_ptr_type(arg_type):
       st_name = strip_typename(arg_type)
       if st_name in struct_map:
@@ -291,6 +306,7 @@ def prepare_context(h2o_dir):
 
   return context
 
+
 def build_bpf_header_generator():
   generator = r"""
 #define GEN_FIELD_INFO(type, field, name) gen_field_info(#type, #field, &((type *)NULL)->field, name)
@@ -317,6 +333,8 @@ static std::string do_resolve(const char *struct_type, const char *field_name, c
     return s;
 }
 
+DEFINE_RESOLVE_FUNC(int16_t);
+DEFINE_RESOLVE_FUNC(uint16_t);
 DEFINE_RESOLVE_FUNC(int32_t);
 DEFINE_RESOLVE_FUNC(uint32_t);
 DEFINE_RESOLVE_FUNC(int64_t);
@@ -337,11 +355,23 @@ static std::string gen_quic_bpf_header() {
       name = "%s__%s" % (st_name, st_field_name_alias or st_field_access)
       generator += """  bpf += GEN_FIELD_INFO(struct %s, %s, "%s");\n""" % (st_name, st_field_access, name)
 
+  # sockaddr_storage is too large for BPF; use sockddr_in|sockaddr_in6 directly.
+  generator += r"""
+  bpf += GEN_FIELD_INFO(struct sockaddr, sa_family, "sockaddr__sa_family");
+  bpf += "#define AF_INET  " + std::to_string(AF_INET) + "\n";
+  bpf += "#define AF_INET6 " + std::to_string(AF_INET6) + "\n";
+  bpf += "typedef struct my_sockaddr     { uint8_t data[" + std::to_string(sizeof(sockaddr)) + "]; } my_sockaddr;\n";
+  bpf += "typedef struct my_sockaddr_in  { uint8_t data[" + std::to_string(sizeof(sockaddr_in)) + "]; } my_sockaddr_in;\n";
+  bpf += "typedef struct my_sockaddr_in6 { uint8_t data[" + std::to_string(sizeof(sockaddr_in6)) + "]; } my_sockaddr_in6;\n";
+  bpf += "typedef struct my_sockaddr_storage { uint8_t data[" + std::to_string(std::max({ sizeof(sockaddr), sizeof(sockaddr_in), sizeof(sockaddr_in6) })) + "]; } my_sockaddr_storage;\n";
+"""
+
   generator += r"""
   return bpf;
 }
 """
   return generator
+
 
 def build_typedef_for_cplusplus():
   typedef = st_quicly_conn_t_def
@@ -351,6 +381,7 @@ def build_typedef_for_cplusplus():
       typedef += """using typeof_%s__%s = decltype(%s::%s);\n""" % (st_name, st_field_name_alias or st_field_access, st_name, st_field_access)
 
   return typedef
+
 
 def generate_cplusplus(context, output_file):
   probe_metadata = context["probe_metadata"]
@@ -377,6 +408,8 @@ struct quic_event_t {
         f = "uint8_t %s[STR_LEN]" % field_name
       elif is_str_type(field_type):
         f = "char %s[STR_LEN]" % field_name
+      elif is_sockaddr(field_type):
+        f = "my_sockaddr_storage %s" % field_name
       else:
         f = "%s %s" % (field_type, field_name)
 
@@ -470,10 +503,11 @@ void h2o_quic_tracer::do_handle_event(const void *data, int data_len) {
       else:  # bin type (it should have the correspinding length arg)
         len_names = set([field_name + "_len", "len", "num_" + field_name])
 
+        len_event_t_name = None
         for n in flat_args_map:
           if n in len_names:
             len_event_t_name = "%s.%s" % (probe_name, n)
-
+        assert isinstance(len_event_t_name, str)
         # A string might be truncated in STRLEN
         handle_event_func += '    json_write_pair_c(out_, STR_LIT("%s"), event->%s, (event->%s < STR_LEN ? event->%s : STR_LEN));\n' % (
             json_field_name, event_t_name, len_event_t_name, len_event_t_name)
@@ -498,22 +532,29 @@ void h2o_quic_tracer::do_handle_event(const void *data, int data_len) {
 
   Path(output_file).write_text(r"""// Generated code. Do not edit it here!
 
+extern "C" {
 #include <stdlib.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/time.h>
+#include <sys/socket.h>
+#include "quicly.h"
+}
 
 #include <string>
 #include <algorithm>
-
-#include "quicly.h"
 
 #include "h2olog.h"
 #include "json.h"
 
 #define STR_LEN 64
 #define STR_LIT(s) s, strlen(s)
+
+typedef sockaddr my_sockaddr;
+typedef sockaddr_in my_sockaddr_in;
+typedef sockaddr_in6 my_sockaddr_in6;
+typedef sockaddr my_sockaddr_storage;
 
 class h2o_quic_tracer : public h2o_tracer {
 protected:
