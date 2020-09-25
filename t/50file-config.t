@@ -96,22 +96,6 @@ EOT
 
     $doit->("gunzip", "", ['/alice2.txt'], $alice2_orig_len);
     $doit->("gunzip", q{--header "Accept-Encoding: gzip"}, ['/alice2.txt'], $alice2_gz_len);
-
-
-    subtest 'MSIE-workaround' => sub {
-        my $server = spawn_h2o(<< "EOT");
-hosts:
-  default:
-    paths:
-      /:
-        file.dir:       t/assets/doc_root
-        file.send-gzip: ON
-EOT
-        my $resp = `curl --silent --dump-header /dev/stderr --user-agent "Mozilla/5.0 (compatible; MSIE 9.0; Windows NT 6.1; WOW64; Trident/5.0)" --header "Accept-Encoding: gzip" http://127.0.0.1:$server->{port}/ 2>&1 > /dev/null`;
-        like $resp, qr/^content-length:\s*$index_gz_len\r$/im, "length is as expected";
-        like $resp, qr/^cache-control:.*private.*\r$/im, "cache-control: private";
-        unlike $resp, qr/^vary:/im, "no vary";
-    };
 };
 
 subtest 'dir-listing' => sub {
