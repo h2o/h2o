@@ -229,7 +229,7 @@ int main(int argc, char **argv)
     }
 
     int debug = 0;
-    int drop_root = 1;
+    int preserve_root = 0;
     FILE *outfp = stdout;
     std::vector<std::string> event_type_filters;
     std::vector<std::string> response_header_filters;
@@ -256,7 +256,7 @@ int main(int argc, char **argv)
             debug++;
             break;
         case 'r':
-            drop_root = 0;
+            preserve_root = 1;
             break;
         case 'h':
             usage();
@@ -334,7 +334,7 @@ int main(int argc, char **argv)
     if (debug) {
         show_process(h2o_pid);
     }
-    if (drop_root) {
+    if (!preserve_root) {
         drop_root_privilege();
     }
 
