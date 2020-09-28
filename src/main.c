@@ -166,11 +166,6 @@ typedef enum en_run_mode_t {
     RUN_MODE_TEST,
 } run_mode_t;
 
-struct st_h2o_quic_forward_node_t {
-    uint64_t id;
-    int fd;
-};
-
 static struct {
     h2o_globalconf_t globalconf;
     run_mode_t run_mode;
@@ -202,7 +197,7 @@ static struct {
         size_t num_threads;
         h2o_http3_conn_callbacks_t conn_callbacks;
         uint64_t node_id;
-        H2O_VECTOR(struct st_h2o_quic_forward_node_t) forward_nodes;
+        h2o_quic_forward_node_vector_t forward_nodes;
     } quic;
     int tfo_queues;
     time_t launch_time;
