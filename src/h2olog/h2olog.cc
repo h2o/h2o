@@ -141,7 +141,7 @@ static void drop_root_privilege(void)
             exit(EXIT_FAILURE);
         }
         if (setgid(gid) != 0) {
-            perror("Error: setgid(2) failed\n");
+            perror("Error: setgid(2) failed");
             exit(EXIT_FAILURE);
         }
         const char *sudo_uid = getenv("SUDO_UID");
