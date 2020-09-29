@@ -43,6 +43,7 @@ Usage: h2olog -p PID
 Other options:
     -h Print this help and exit
     -d Print debugging information (-dd shows more)
+    -r Run without dropping root privilege
     -w Path to write the output (default: stdout)
 )",
            H2O_VERSION);
@@ -125,6 +126,42 @@ static void show_process(pid_t pid)
     infof("Attaching pid=%d (%s)", pid, cmdline);
 }
 
+static void drop_root_privilege(void)
+{
+    if (getuid() == 0) {
+        const char *sudo_gid = getenv("SUDO_GID");
+        if (sudo_gid == NULL) {
+            fprintf(stderr, "Error: the SUDO_GID environment variable is not set\n");
+            exit(EXIT_FAILURE);
+        }
+        errno = 0;
+        gid_t gid = (gid_t)strtol(sudo_gid, NULL, 10);
+        if (errno != 0) {
+            fprintf(stderr, "Error: failed to parse SUDO_GID\n");
+            exit(EXIT_FAILURE);
+        }
+        if (setgid(gid) != 0) {
+            perror("Error: setgid(2) failed");
+            exit(EXIT_FAILURE);
+        }
+        const char *sudo_uid = getenv("SUDO_UID");
+        if (sudo_uid == NULL) {
+            fprintf(stderr, "Error: the SUDO_UID environment variable is not set\n");
+            exit(EXIT_FAILURE);
+        }
+        errno = 0;
+        uid_t uid = (uid_t)strtol(sudo_uid, NULL, 10);
+        if (errno != 0) {
+            fprintf(stderr, "Error: failed to parse SUDO_UID\n");
+            exit(EXIT_FAILURE);
+        }
+        if (setuid(uid) != 0) {
+            perror("Error: setuid(2) failed");
+            exit(EXIT_FAILURE);
+        }
+    }
+}
+
 static std::string join_str(const std::string &sep, const std::vector<std::string> &strs)
 {
     std::string s;
@@ -190,12 +227,13 @@ int main(int argc, char **argv)
     }
 
     int debug = 0;
+    int preserve_root = 0;
     FILE *outfp = stdout;
     std::vector<std::string> event_type_filters;
     std::vector<std::string> response_header_filters;
     int c;
     pid_t h2o_pid = -1;
-    while ((c = getopt(argc, argv, "hdp:t:s:w:")) != -1) {
+    while ((c = getopt(argc, argv, "hdrp:t:s:w:")) != -1) {
         switch (c) {
         case 'p':
             h2o_pid = atoi(optarg);
@@ -214,6 +252,9 @@ int main(int argc, char **argv)
             break;
         case 'd':
             debug++;
+            break;
+        case 'r':
+            preserve_root = 1;
             break;
         case 'h':
             usage();
@@ -290,6 +331,9 @@ int main(int argc, char **argv)
 
     if (debug) {
         show_process(h2o_pid);
+    }
+    if (!preserve_root) {
+        drop_root_privilege();
     }
 
     ebpf::BPFPerfBuffer *perf_buffer = bpf->get_perf_buffer("events");
