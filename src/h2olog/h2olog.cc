@@ -156,7 +156,7 @@ static void drop_root_privilege(void)
             exit(EXIT_FAILURE);
         }
         if (setuid(uid) != 0) {
-            perror("Error: setuid(2) failed\n");
+            perror("Error: setuid(2) failed");
             exit(EXIT_FAILURE);
         }
     }
