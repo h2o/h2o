@@ -131,7 +131,7 @@ static void drop_root_privilege(void)
     if (getuid() == 0) {
         const char *sudo_gid = getenv("SUDO_GID");
         if (sudo_gid == NULL) {
-            fprintf(stderr, "Error: failed to read the SUDO_GID env variable\n");
+            fprintf(stderr, "Error: the SUDO_GID environment variable is not set\n");
             exit(EXIT_FAILURE);
         }
         errno = 0;
@@ -146,7 +146,7 @@ static void drop_root_privilege(void)
         }
         const char *sudo_uid = getenv("SUDO_UID");
         if (sudo_uid == NULL) {
-            fprintf(stderr, "Error: failed to read the SUDO_UID env variable\n");
+            fprintf(stderr, "Error: the SUDO_UID environment variable is not set\n");
             exit(EXIT_FAILURE);
         }
         errno = 0;
