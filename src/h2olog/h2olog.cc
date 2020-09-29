@@ -141,7 +141,7 @@ static void drop_root_privilege(void)
             exit(EXIT_FAILURE);
         }
         if (setgid(gid) != 0) {
-            fprintf(stderr, "Error: failed to drop the root group\n");
+            perror("Error: setgid(2) failed\n");
             exit(EXIT_FAILURE);
         }
         const char *sudo_uid = getenv("SUDO_UID");
@@ -156,7 +156,7 @@ static void drop_root_privilege(void)
             exit(EXIT_FAILURE);
         }
         if (setuid(uid) != 0) {
-            fprintf(stderr, "Error: failed to drop the root user\n");
+            perror("Error: setuid(2) failed\n");
             exit(EXIT_FAILURE);
         }
     }
