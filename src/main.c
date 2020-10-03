@@ -1213,7 +1213,7 @@ static int open_listener(int domain, int type, int protocol, struct sockaddr *ad
     } break;
     case SOCK_DGRAM: {
         /* UDP: set SO_REUSEPORT and DF bit */
-       socket_reuseport(fd);
+        socket_reuseport(fd);
         if (!h2o_socket_set_df_bit(fd, domain))
             goto Error;
     } break;
@@ -1377,10 +1377,9 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
         break;
     case YOML_TYPE_MAPPING: {
         yoml_t **port_node, **host_node, **type_node, **proxy_protocol_node;
-        if (h2o_configurator_parse_mapping(cmd, node, "port:s",
-                                           "host:s,type:s,owner:s,permission:*,ssl:m,proxy-protocol:*,quic:m,cc:s",
-                                           &port_node, &host_node, &type_node, &owner_node, &permission_node, &ssl_node,
-                                           &proxy_protocol_node, &quic_node, &cc_node) != 0)
+        if (h2o_configurator_parse_mapping(
+                cmd, node, "port:s", "host:s,type:s,owner:s,permission:*,ssl:m,proxy-protocol:*,quic:m,cc:s", &port_node,
+                &host_node, &type_node, &owner_node, &permission_node, &ssl_node, &proxy_protocol_node, &quic_node, &cc_node) != 0)
             return -1;
         servname = (*port_node)->data.scalar;
         if (host_node != NULL)
@@ -2576,7 +2575,8 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
                     perror("failed to obtain local address of a listening socket");
                     abort();
                 }
-                if ((fd = open_listener(ss.ss_family, type, type == SOCK_STREAM ? IPPROTO_TCP : IPPROTO_UDP, (struct sockaddr *)&ss, sslen)) != -1) {
+                if ((fd = open_listener(ss.ss_family, type, type == SOCK_STREAM ? IPPROTO_TCP : IPPROTO_UDP, (struct sockaddr *)&ss,
+                                        sslen)) != -1) {
                     if (type == SOCK_DGRAM)
                         setsockopt_recvpktinfo(fd, ss.ss_family);
                 } else {
