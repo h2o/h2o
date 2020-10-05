@@ -3316,11 +3316,9 @@ int main(int argc, char **argv)
 
     /* wait for all threads to exit */
     for (size_t i = 1; i != conf.thread_map.size; ++i) {
-        while (pthread_join(tids[i], NULL) != 0) {
-            if (errno != EINTR) {
-                perror("pthread_join(2) failed");
-                exit(EX_SOFTWARE);
-            }
+        if (pthread_join(tids[i], NULL) != 0) {
+            char errbuf[256];
+            h2o_fatal("pthread_join: %s", h2o_strerror_r(errno, errbuf, sizeof(errbuf)));
         }
     }
 
