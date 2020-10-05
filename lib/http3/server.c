@@ -1171,10 +1171,8 @@ static void do_send(h2o_ostream_t *_ostr, h2o_req_t *_req, h2o_sendvec_t *bufs, 
     case H2O_SEND_STATE_ERROR:
         /* TODO consider how to forward error, pending resolution of https://github.com/quicwg/base-drafts/issues/3300 */
         quicly_sendstate_shutdown(&stream->quic->sendstate, stream->sendbuf.final_size);
-        if (stream->sendbuf.vecs.size == 0) {
+        if (stream->sendbuf.vecs.size == 0)
             set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_CLOSE_WAIT);
-            return;
-        }
         break;
     }
 
