@@ -47,4 +47,12 @@ int quic_decrypt_address_token(quicly_address_token_plaintext_t *pt, ptls_iovec_
 ptls_aead_context_t *quic_get_address_token_encryptor(uint8_t *prefix);
 extern quicly_generate_resumption_token_t quic_resumption_token_generator;
 
+
+struct st_h2o_quic_forward_node_t {
+    uint64_t id;
+    int fd;
+};
+
+typedef H2O_VECTOR(struct st_h2o_quic_forward_node_t) h2o_quic_forward_node_vector_t;
+
 #endif

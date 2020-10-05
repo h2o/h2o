@@ -104,17 +104,6 @@ const h2o_protocol_callbacks_t H2O_HTTP1_CALLBACKS = {
     NULL, /* graceful_shutdown (note: nothing special needs to be done for handling graceful shutdown) */
     foreach_request};
 
-static int is_msie(h2o_req_t *req)
-{
-    ssize_t cursor = h2o_find_header(&req->headers, H2O_TOKEN_USER_AGENT, -1);
-    if (cursor == -1)
-        return 0;
-    if (h2o_strstr(req->headers.entries[cursor].value.base, req->headers.entries[cursor].value.len, H2O_STRLIT("; MSIE ")) ==
-        SIZE_MAX)
-        return 0;
-    return 1;
-}
-
 static void init_request(struct st_h2o_http1_conn_t *conn)
 {
     if (conn->_req_index != 0) {
@@ -807,22 +796,12 @@ static size_t flatten_headers_estimate_size(h2o_req_t *req, size_t server_name_a
     return len;
 }
 
-static size_t flatten_res_headers(char *buf, h2o_req_t *req, int replace_vary)
+static size_t flatten_res_headers(char *buf, h2o_req_t *req)
 {
     char *dst = buf;
     size_t i;
     for (i = 0; i != req->res.headers.size; ++i) {
         const h2o_header_t *header = req->res.headers.entries + i;
-        if (header->name == &H2O_TOKEN_VARY->buf) {
-            /* replace Vary with Cache-Control: private; see the following URLs to understand why this is necessary
-             * - http://blogs.msdn.com/b/ieinternals/archive/2009/06/17/vary-header-prevents-caching-in-ie.aspx
-             * - https://www.igvita.com/2013/05/01/deploying-webp-via-accept-content-negotiation/
-             */
-            if (replace_vary && is_msie(req)) {
-                static h2o_header_t cache_control_private = {&H2O_TOKEN_CACHE_CONTROL->buf, NULL, {H2O_STRLIT("private")}};
-                header = &cache_control_private;
-            }
-        }
         memcpy(dst, header->orig_name ? header->orig_name : header->name->base, header->name->len);
         dst += header->name->len;
         *dst++ = ':';
@@ -854,7 +833,7 @@ static size_t flatten_headers(char *buf, h2o_req_t *req, const char *connection)
         dst += sprintf(dst, "Server: %s\r\n", ctx->globalconf->server_name.base);
     }
 
-    dst += flatten_res_headers(dst, req, 1);
+    dst += flatten_res_headers(dst, req);
     *dst++ = '\r';
     *dst++ = '\n';
 
@@ -1079,7 +1058,7 @@ static void finalostream_send_informational(h2o_ostream_t *_self, h2o_req_t *req
     buf.base = h2o_mem_alloc_pool(&req->pool, char, buf.len);
     char *dst = buf.base;
     dst += sprintf(dst, "HTTP/1.1 %d %s\r\n", req->res.status, req->res.reason);
-    dst += flatten_res_headers(dst, req, 0);
+    dst += flatten_res_headers(dst, req);
     *dst++ = '\r';
     *dst++ = '\n';
 

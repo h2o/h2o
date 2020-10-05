@@ -1110,6 +1110,19 @@ static void destroy_all_streams(quicly_conn_t *conn, int err, int including_cryp
     assert(quicly_num_streams(conn) == 0);
 }
 
+int quicly_foreach_stream(quicly_conn_t *conn, void *thunk, int (*cb)(void *thunk, quicly_stream_t *stream))
+{
+    quicly_stream_t *stream;
+    kh_foreach_value(conn->streams, stream, {
+        if (stream->stream_id >= 0) {
+            int ret = cb(thunk, stream);
+            if (ret != 0)
+                return ret;
+        }
+    });
+    return 0;
+}
+
 quicly_stream_t *quicly_get_stream(quicly_conn_t *conn, quicly_stream_id_t stream_id)
 {
     khiter_t iter = kh_get(quicly_stream_t, conn->streams, stream_id);
@@ -2701,18 +2714,6 @@ static int on_ack_retire_connection_id(quicly_sentmap_t *map, const quicly_sent_
     return 0;
 }
 
-static ssize_t round_send_window(ssize_t window)
-{
-    if (window < MIN_SEND_WINDOW * 2) {
-        if (window < MIN_SEND_WINDOW) {
-            return 0;
-        } else {
-            return MIN_SEND_WINDOW * 2;
-        }
-    }
-    return window;
-}
-
 static inline uint64_t calc_amplification_limit_allowance(quicly_conn_t *conn)
 {
     if (conn->super.remote.address_validation.validated)
@@ -2720,7 +2721,9 @@ static inline uint64_t calc_amplification_limit_allowance(quicly_conn_t *conn)
     uint64_t budget = conn->super.stats.num_bytes.received * conn->super.ctx->pre_validation_amplification_limit;
     if (budget <= conn->super.stats.num_bytes.sent)
         return 0;
-    return budget - conn->super.stats.num_bytes.sent;
+    uint64_t window = budget - conn->super.stats.num_bytes.sent;
+
+    return window >= MIN_SEND_WINDOW ? window : 0;
 }
 
 /* Helper function to compute send window based on:
@@ -2729,7 +2732,7 @@ static inline uint64_t calc_amplification_limit_allowance(quicly_conn_t *conn)
  * * minimum send requirements in |min_bytes_to_send|, and
  * * if sending is to be restricted to the minimum, indicated in |restrict_sending|
  */
-static size_t calc_send_window(quicly_conn_t *conn, size_t min_bytes_to_send, int restrict_sending)
+static size_t calc_send_window(quicly_conn_t *conn, size_t min_bytes_to_send, uint64_t amp_window, int restrict_sending)
 {
     uint64_t window = 0;
     if (restrict_sending) {
@@ -2743,9 +2746,8 @@ static size_t calc_send_window(quicly_conn_t *conn, size_t min_bytes_to_send, in
         window = window > min_bytes_to_send ? window : min_bytes_to_send;
     }
     /* Cap the window by the amount allowed by address validation */
-    uint64_t remain_allowance = calc_amplification_limit_allowance(conn);
-    if (remain_allowance < window)
-        window = remain_allowance;
+    if (amp_window < window)
+        window = amp_window;
 
     return window >= MIN_SEND_WINDOW ? window : 0;
 }
@@ -2769,7 +2771,9 @@ int64_t quicly_get_first_timeout(quicly_conn_t *conn)
     if (conn->super.state >= QUICLY_STATE_CLOSING)
         return conn->egress.send_ack_at;
 
-    if (calc_send_window(conn, 0, 0) > 0) {
+    uint64_t amp_window = calc_amplification_limit_allowance(conn);
+
+    if (calc_send_window(conn, 0, amp_window, 0) > 0) {
         if (conn->egress.pending_flows != 0)
             return 0;
         if (quicly_linklist_is_linked(&conn->egress.pending_streams.control))
@@ -2780,7 +2784,7 @@ int64_t quicly_get_first_timeout(quicly_conn_t *conn)
 
     /* if something can be sent, return the earliest timeout. Otherwise return the idle timeout. */
     int64_t at = conn->idle_timeout.at;
-    if (calc_amplification_limit_allowance(conn) > 0) {
+    if (amp_window > 0) {
         if (conn->egress.loss.alarm_at < at && !is_point5rtt_with_no_handshake_data_to_send(conn))
             at = conn->egress.loss.alarm_at;
         if (conn->egress.send_ack_at < at)
@@ -3021,7 +3025,12 @@ static int _do_allocate_frame(quicly_conn_t *conn, quicly_send_context_t *s, siz
     } else {
         if (s->num_datagrams >= s->max_datagrams)
             return QUICLY_ERROR_SENDBUF_FULL;
-        s->send_window = round_send_window(s->send_window);
+        /* adjust send_window to either 0 byte or MIN*2 bytes, if it is between those two */
+        if (s->send_window < MIN_SEND_WINDOW * 2)
+            s->send_window = s->send_window < MIN_SEND_WINDOW ? 0 : MIN_SEND_WINDOW * 2;
+        /* appropriate byte counting is applied only if the first frame for a datagram is ack-eliciting; we are too lazy to adjust
+         * things when a packet is turned into ack-eliciting after an ACK frame is written into the packet image. This diversion is
+         * considered acceptable as only the first packet being built would start with a non-ack-eliciting frame (i.e. ACK). */
         if (ack_eliciting && s->send_window < (ssize_t)min_space)
             return QUICLY_ERROR_SENDBUF_FULL;
         if (s->payload_buf.end - s->payload_buf.datagram < conn->egress.max_udp_payload_size)
@@ -4081,17 +4090,18 @@ static int do_send(quicly_conn_t *conn, quicly_send_context_t *s)
         }
     }
 
-    s->send_window = calc_send_window(conn, min_packets_to_send * conn->egress.max_udp_payload_size, restrict_sending);
+    s->send_window = calc_send_window(conn, min_packets_to_send * conn->egress.max_udp_payload_size,
+                                      calc_amplification_limit_allowance(conn), restrict_sending);
     if (s->send_window == 0)
         ack_only = 1;
 
     /* send handshake flows */
     if ((ret = send_handshake_flow(conn, QUICLY_EPOCH_INITIAL, s, ack_only,
-                                   restrict_sending ||
+                                   min_packets_to_send != 0 ||
                                        (conn->super.remote.address_validation.send_probe && conn->handshake == NULL))) != 0)
         goto Exit;
     if ((ret = send_handshake_flow(conn, QUICLY_EPOCH_HANDSHAKE, s, ack_only,
-                                   restrict_sending || conn->super.remote.address_validation.send_probe)) != 0)
+                                   min_packets_to_send != 0 || conn->super.remote.address_validation.send_probe)) != 0)
         goto Exit;
 
     /* send encrypted frames */
@@ -4104,8 +4114,8 @@ static int do_send(quicly_conn_t *conn, quicly_send_context_t *s)
                 goto Exit;
         }
         if (!ack_only) {
-            /* PTO, always send PING. This is the easiest thing to do in terms of timer control. */
-            if (restrict_sending) {
+            /* PTO or loss detection timeout, always send PING. This is the easiest thing to do in terms of timer control. */
+            if (min_packets_to_send != 0) {
                 if ((ret = _do_allocate_frame(conn, s, 1, 1)) != 0)
                     goto Exit;
                 *s->dst++ = QUICLY_FRAME_TYPE_PING;

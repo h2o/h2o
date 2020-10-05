@@ -47,6 +47,7 @@ Optional arguments:
     -l Print the list of available tracepoints and exit
     -s RESPONSE_HEADER_NAME A response header name to show, e.g. "content-type"
     -t TRACEPOINT A tracepoint, or fully-qualified probe name, to show, e.g. "quicly:accept"
+    -r Run without dropping root privilege
     -w Path to write the output (default: stdout)
 
 Examples:
@@ -134,6 +135,42 @@ static void show_process(pid_t pid)
     infof("Attaching pid=%d (%s)", pid, cmdline);
 }
 
+static void drop_root_privilege(void)
+{
+    if (getuid() == 0) {
+        const char *sudo_gid = getenv("SUDO_GID");
+        if (sudo_gid == NULL) {
+            fprintf(stderr, "Error: the SUDO_GID environment variable is not set\n");
+            exit(EXIT_FAILURE);
+        }
+        errno = 0;
+        gid_t gid = (gid_t)strtol(sudo_gid, NULL, 10);
+        if (errno != 0) {
+            fprintf(stderr, "Error: failed to parse SUDO_GID\n");
+            exit(EXIT_FAILURE);
+        }
+        if (setgid(gid) != 0) {
+            perror("Error: setgid(2) failed");
+            exit(EXIT_FAILURE);
+        }
+        const char *sudo_uid = getenv("SUDO_UID");
+        if (sudo_uid == NULL) {
+            fprintf(stderr, "Error: the SUDO_UID environment variable is not set\n");
+            exit(EXIT_FAILURE);
+        }
+        errno = 0;
+        uid_t uid = (uid_t)strtol(sudo_uid, NULL, 10);
+        if (errno != 0) {
+            fprintf(stderr, "Error: failed to parse SUDO_UID\n");
+            exit(EXIT_FAILURE);
+        }
+        if (setuid(uid) != 0) {
+            perror("Error: setuid(2) failed");
+            exit(EXIT_FAILURE);
+        }
+    }
+}
+
 static std::string join_str(const std::string &sep, const std::vector<std::string> &strs)
 {
     std::string s;
@@ -201,12 +238,13 @@ int main(int argc, char **argv)
     const std::vector<h2o_tracer::usdt> available_usdts = tracer->usdt_probes();
 
     int debug = 0;
+    int preserve_root = 0;
     FILE *outfp = stdout;
     std::vector<h2o_tracer::usdt> selected_usdts;
     std::vector<std::string> response_header_filters;
     int c;
     pid_t h2o_pid = -1;
-    while ((c = getopt(argc, argv, "hdp:t:s:w:l")) != -1) {
+    while ((c = getopt(argc, argv, "hdrpl:t:s:w:")) != -1) {
         switch (c) {
         case 'p':
             h2o_pid = atoi(optarg);
@@ -238,6 +276,9 @@ int main(int argc, char **argv)
                 printf("%s\n", usdt.fully_qualified_name().c_str());
             }
             exit(EXIT_SUCCESS);
+            break;
+        case 'r':
+            preserve_root = 1;
             break;
         case 'h':
             usage();
@@ -330,6 +371,9 @@ int main(int argc, char **argv)
 
     if (debug) {
         show_process(h2o_pid);
+    }
+    if (!preserve_root) {
+        drop_root_privilege();
     }
 
     ebpf::BPFPerfBuffer *perf_buffer = bpf->get_perf_buffer("events");

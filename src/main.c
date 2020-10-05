@@ -84,13 +84,13 @@
 #endif
 
 #if defined(__linux) && defined(SO_REUSEPORT)
-#define H2O_HTTP3_USE_REUSEPORT 1
+#define H2O_USE_REUSEPORT 1
 #define H2O_SO_REUSEPORT SO_REUSEPORT
 #elif defined(SO_REUSEPORT_LB) /* FreeBSD */
-#define H2O_HTTP3_USE_REUSEPORT 1
+#define H2O_USE_REUSEPORT 1
 #define H2O_SO_REUSEPORT SO_REUSEPORT_LB
 #else
-#define H2O_HTTP3_USE_REUSEPORT 0
+#define H2O_USE_REUSEPORT 0
 #endif
 
 #define H2O_DEFAULT_NUM_NAME_RESOLUTION_THREADS 32
@@ -166,11 +166,6 @@ typedef enum en_run_mode_t {
     RUN_MODE_TEST,
 } run_mode_t;
 
-struct st_h2o_quic_forward_node_t {
-    uint64_t id;
-    int fd;
-};
-
 static struct {
     h2o_globalconf_t globalconf;
     run_mode_t run_mode;
@@ -202,12 +197,11 @@ static struct {
         size_t num_threads;
         h2o_http3_conn_callbacks_t conn_callbacks;
         uint64_t node_id;
-        H2O_VECTOR(struct st_h2o_quic_forward_node_t) forward_nodes;
+        h2o_quic_forward_node_vector_t forward_nodes;
     } quic;
     int tfo_queues;
     time_t launch_time;
     struct {
-        pthread_t tid;
         h2o_context_t ctx;
         h2o_multithread_receiver_t server_notifications;
         h2o_multithread_receiver_t memcached;
@@ -236,6 +230,7 @@ static struct {
     } state;
     char *crash_handler;
     int crash_handler_wait_pipe_close;
+    int tcp_reuseport;
 } conf = {
     .globalconf = {0},
     .run_mode = RUN_MODE_WORKER,
@@ -256,6 +251,7 @@ static struct {
     .state = {{0}},
     .crash_handler = "share/h2o/annotate-backtrace-symbols",
     .crash_handler_wait_pipe_close = 0,
+    .tcp_reuseport = 0,
 };
 
 static neverbleed_t *neverbleed = NULL;
@@ -982,7 +978,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
             /* QUIC; the context is modified directly */
             if (listener->ssl.size > 1) {
                 h2o_configurator_errprintf(cmd, *cc_node,
-                                           "[warning] Setting ignored. At the moment, only the the first listen entry for a given "
+                                           "[warning] Setting ignored. At the moment, only the first listen entry for a given "
                                            "address:port tuple can specify the QUIC congestion controller");
             }
             if (strcasecmp((*cc_node)->data.scalar, "reno") == 0) {
@@ -1175,6 +1171,15 @@ ErrorExit:
     return -1;
 }
 
+static void socket_reuseport(int fd)
+{
+#if H2O_USE_REUSEPORT
+    int opt = 1;
+    if (setsockopt(fd, SOL_SOCKET, H2O_SO_REUSEPORT, &opt, sizeof(opt)) != 0)
+        fprintf(stderr, "[warning] setsockopt(SO_REUSEPORT) failed:%s\n", strerror(errno));
+#endif
+}
+
 /**
  * Opens an INET or INET6 socket for accepting connections. When the protocol is UDP, SO_REUSEPORT is set if available.
  */
@@ -1198,6 +1203,8 @@ static int open_listener(int domain, int type, int protocol, struct sockaddr *ad
 #endif
     switch (type) {
     case SOCK_STREAM: {
+        if (conf.tcp_reuseport)
+            socket_reuseport(fd);
         /* TCP: set SO_REUSEADDR flag to avoid TIME_WAIT after shutdown */
         int on = 1;
         if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on)) != 0)
@@ -1205,11 +1212,7 @@ static int open_listener(int domain, int type, int protocol, struct sockaddr *ad
     } break;
     case SOCK_DGRAM: {
         /* UDP: set SO_REUSEPORT and DF bit */
-#if H2O_HTTP3_USE_REUSEPORT
-        int opt = 1;
-        if (setsockopt(fd, SOL_SOCKET, H2O_SO_REUSEPORT, &opt, sizeof(opt)) != 0)
-            fprintf(stderr, "[warning] setsockopt(SO_REUSEPORT) failed:%s\n", strerror(errno));
-#endif
+        socket_reuseport(fd);
         if (!h2o_socket_set_df_bit(fd, domain))
             goto Error;
     } break;
@@ -1373,10 +1376,9 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
         break;
     case YOML_TYPE_MAPPING: {
         yoml_t **port_node, **host_node, **type_node, **proxy_protocol_node;
-        if (h2o_configurator_parse_mapping(cmd, node, "port:s",
-                                           "host:s,type:s,owner:s,permission:*,ssl:m,proxy-protocol:*,quic:m,cc:s",
-                                           &port_node, &host_node, &type_node, &owner_node, &permission_node, &ssl_node,
-                                           &proxy_protocol_node, &quic_node, &cc_node) != 0)
+        if (h2o_configurator_parse_mapping(
+                cmd, node, "port:s", "host:s,type:s,owner:s,permission:*,ssl:m,proxy-protocol:*,quic:m,cc:s", &port_node,
+                &host_node, &type_node, &owner_node, &permission_node, &ssl_node, &proxy_protocol_node, &quic_node, &cc_node) != 0)
             return -1;
         servname = (*port_node)->data.scalar;
         if (host_node != NULL)
@@ -1874,15 +1876,25 @@ static int on_config_crash_handler(h2o_configurator_command_t *cmd, h2o_configur
     return 0;
 }
 
-static int on_config_crash_handler_wait_pipe_close(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+static int on_config_onoff(h2o_configurator_command_t *cmd, yoml_t *node, int *slot)
 {
     ssize_t v;
 
     if ((v = h2o_configurator_get_one_of(cmd, node, "OFF,ON")) == -1)
         return -1;
 
-    conf.crash_handler_wait_pipe_close = (int)v;
+    *slot = (int)v;
     return 0;
+}
+
+static int on_config_crash_handler_wait_pipe_close(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    return on_config_onoff(cmd, node, &conf.crash_handler_wait_pipe_close);
+}
+
+static int on_tcp_reuseport(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    return on_config_onoff(cmd, node, &conf.tcp_reuseport);
 }
 
 static yoml_t *load_config(yoml_parse_args_t *parse_args, yoml_t *source)
@@ -2503,7 +2515,7 @@ static void on_server_notification(h2o_multithread_receiver_t *receiver, h2o_lin
     }
 }
 
-H2O_NORETURN static void *run_loop(void *_thread_index)
+static void *run_loop(void *_thread_index)
 {
     size_t thread_index = (size_t)_thread_index;
     struct listener_ctx_t *listeners = alloca(sizeof(*listeners) * conf.num_listeners);
@@ -2514,7 +2526,6 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
                                       on_server_notification);
     h2o_multithread_register_receiver(conf.threads[thread_index].ctx.queue, &conf.threads[thread_index].memcached,
                                       h2o_memcached_receiver);
-    conf.threads[thread_index].tid = pthread_self();
 
     if (conf.thread_map.entries[thread_index] >= 0) {
 #ifdef H2O_HAS_PTHREAD_SETAFFINITY_NP
@@ -2541,7 +2552,7 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
             fd = listener_config->fd;
         } else {
             int reuseport = 0;
-#if H2O_HTTP3_USE_REUSEPORT
+#if H2O_USE_REUSEPORT
             socklen_t reuseportlen = sizeof(reuseport);
             if (getsockopt(listener_config->fd, SOL_SOCKET, H2O_SO_REUSEPORT, &reuseport, &reuseportlen) != 0) {
                 perror("gestockopt(SO_REUSEPORT) failed");
@@ -2549,14 +2560,23 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
             }
             assert(reuseportlen == sizeof(reuseport));
             if (reuseport) {
+                int type;
+                socklen_t typelen = sizeof(type);
                 struct sockaddr_storage ss;
                 socklen_t sslen = sizeof(ss);
-                if (getsockname(listener_config->fd, (struct sockaddr *)&ss, &sslen) != 0) {
-                    perror("failed to obtain local address of the listening QUIC socket");
+                if (getsockopt(listener_config->fd, SOL_SOCKET, SO_TYPE, &type, &typelen) != 0) {
+                    perror("failed to obtain the type of a listening socket");
                     abort();
                 }
-                if ((fd = open_listener(ss.ss_family, SOCK_DGRAM, 0, (struct sockaddr *)&ss, sslen)) != -1) {
-                    setsockopt_recvpktinfo(fd, ss.ss_family);
+                assert(type == SOCK_DGRAM || type == SOCK_STREAM);
+                if (getsockname(listener_config->fd, (struct sockaddr *)&ss, &sslen) != 0) {
+                    perror("failed to obtain local address of a listening socket");
+                    abort();
+                }
+                if ((fd = open_listener(ss.ss_family, type, type == SOCK_STREAM ? IPPROTO_TCP : IPPROTO_UDP, (struct sockaddr *)&ss,
+                                        sslen)) != -1) {
+                    if (type == SOCK_DGRAM)
+                        setsockopt_recvpktinfo(fd, ss.ss_family);
                 } else {
                     reuseport = 0;
                 }
@@ -2644,10 +2664,7 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
     while (num_connections(0) != 0)
         h2o_evloop_run(conf.threads[thread_index].ctx.loop, INT32_MAX);
 
-    /* the process that detects num_connections becoming zero performs the last cleanup */
-    if (conf.pid_file != NULL)
-        unlink(conf.pid_file);
-    _exit(0);
+    return NULL;
 }
 
 static char **build_server_starter_argv(const char *h2o_cmd, const char *config_file)
@@ -2930,6 +2947,7 @@ static void setup_configurators(void)
         h2o_configurator_define_command(c, "crash-handler.wait-pipe-close",
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_crash_handler_wait_pipe_close);
+        h2o_configurator_define_command(c, "tcp-reuseport", H2O_CONFIGURATOR_FLAG_GLOBAL, on_tcp_reuseport);
     }
 
     h2o_access_log_register_configurator(&conf.globalconf);
@@ -3286,15 +3304,24 @@ int main(int argc, char **argv)
 
     /* start the threads */
     conf.threads = alloca(sizeof(conf.threads[0]) * conf.thread_map.size);
-    size_t i;
-    for (i = 1; i != conf.thread_map.size; ++i) {
-        pthread_t tid;
-        h2o_multithread_create_thread(&tid, NULL, run_loop, (void *)i);
-    }
+    pthread_t *tids = alloca(sizeof(*tids) * conf.thread_map.size);
+    for (size_t i = 1; i != conf.thread_map.size; ++i)
+        h2o_multithread_create_thread(&tids[i], NULL, run_loop, (void *)i);
 
     /* this thread becomes the first thread */
     run_loop((void *)0);
 
-    /* notreached */
+    /* wait for all threads to exit */
+    for (size_t i = 1; i != conf.thread_map.size; ++i) {
+        if (pthread_join(tids[i], NULL) != 0) {
+            char errbuf[256];
+            h2o_fatal("pthread_join: %s", h2o_strerror_r(errno, errbuf, sizeof(errbuf)));
+        }
+    }
+
+    /* remove the pid file */
+    if (conf.pid_file != NULL)
+        unlink(conf.pid_file);
+
     return 0;
 }
