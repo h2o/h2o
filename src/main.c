@@ -1212,7 +1212,7 @@ static int open_listener(int domain, int type, int protocol, struct sockaddr *ad
     } break;
     case SOCK_DGRAM: {
         /* UDP: set SO_REUSEPORT and DF bit */
-       socket_reuseport(fd);
+        socket_reuseport(fd);
         if (!h2o_socket_set_df_bit(fd, domain))
             goto Error;
     } break;
@@ -1376,10 +1376,9 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
         break;
     case YOML_TYPE_MAPPING: {
         yoml_t **port_node, **host_node, **type_node, **proxy_protocol_node;
-        if (h2o_configurator_parse_mapping(cmd, node, "port:s",
-                                           "host:s,type:s,owner:s,permission:*,ssl:m,proxy-protocol:*,quic:m,cc:s",
-                                           &port_node, &host_node, &type_node, &owner_node, &permission_node, &ssl_node,
-                                           &proxy_protocol_node, &quic_node, &cc_node) != 0)
+        if (h2o_configurator_parse_mapping(
+                cmd, node, "port:s", "host:s,type:s,owner:s,permission:*,ssl:m,proxy-protocol:*,quic:m,cc:s", &port_node,
+                &host_node, &type_node, &owner_node, &permission_node, &ssl_node, &proxy_protocol_node, &quic_node, &cc_node) != 0)
             return -1;
         servname = (*port_node)->data.scalar;
         if (host_node != NULL)
@@ -1877,28 +1876,25 @@ static int on_config_crash_handler(h2o_configurator_command_t *cmd, h2o_configur
     return 0;
 }
 
-static int on_config_crash_handler_wait_pipe_close(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+static int on_config_onoff(h2o_configurator_command_t *cmd, yoml_t *node, int *slot)
 {
     ssize_t v;
 
     if ((v = h2o_configurator_get_one_of(cmd, node, "OFF,ON")) == -1)
         return -1;
 
-    conf.crash_handler_wait_pipe_close = (int)v;
+    *slot = (int)v;
     return 0;
+}
+
+static int on_config_crash_handler_wait_pipe_close(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    return on_config_onoff(cmd, node, &conf.crash_handler_wait_pipe_close);
 }
 
 static int on_tcp_reuseport(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    int ret;
-
-    ret = h2o_configurator_get_one_of(cmd, node, "OFF,ON");
-    if (ret < 0)
-        return -1;
-
-    conf.tcp_reuseport = ret;
-
-    return 0;
+    return on_config_onoff(cmd, node, &conf.tcp_reuseport);
 }
 
 static yoml_t *load_config(yoml_parse_args_t *parse_args, yoml_t *source)
@@ -2577,7 +2573,8 @@ static void *run_loop(void *_thread_index)
                     perror("failed to obtain local address of a listening socket");
                     abort();
                 }
-                if ((fd = open_listener(ss.ss_family, type, type == SOCK_STREAM ? IPPROTO_TCP : IPPROTO_UDP, (struct sockaddr *)&ss, sslen)) != -1) {
+                if ((fd = open_listener(ss.ss_family, type, type == SOCK_STREAM ? IPPROTO_TCP : IPPROTO_UDP, (struct sockaddr *)&ss,
+                                        sslen)) != -1) {
                     if (type == SOCK_DGRAM)
                         setsockopt_recvpktinfo(fd, ss.ss_family);
                 } else {
