@@ -114,4 +114,37 @@ EOT
     is $resp, 'a' x 50;
 };
 
+subtest "body-then-close" => sub {
+    my $upstream = spawn_server(
+        argv => [
+            qw(plackup -s Starlet --max-workers 10 --access-log /dev/null --listen), "$tempdir/upstream.sock",
+            ASSETS_DIR . "/upstream.psgi",
+        ],
+        is_ready => sub { !! -e "$tempdir/upstream.sock" },
+    );
+    my $server = spawn_h2o(<< "EOT");
+http3-idle-timeout: 5
+listen:
+  type: quic
+  port: $quic_port
+  ssl:
+    key-file: examples/h2o/server.key
+    certificate-file: examples/h2o/server.crt
+hosts:
+  default:
+    paths:
+      /:
+        proxy.reverse.url: http://[unix:$tempdir/upstream.sock]/
+EOT
+    my $fetch = sub {
+        my $qp = shift;
+        open my $fh, "-|", "$client_prog -3 https://127.0.0.1:$quic_port/suspend-body$qp 2>&1"
+            or die "failed to spawn $client_prog:$!";
+        local $/;
+        join "", <$fh>;
+    };
+    like $fetch->(""), qr{^HTTP/3 200\n.*\n\nx$}s;
+    like $fetch->("?delay-fin"), qr{^HTTP/3 200\n.*\n\nx$}s;
+};
+
 done_testing;

@@ -363,9 +363,12 @@ static int handle_input_data_payload(struct st_h2o_http3client_req_t *req, const
 int handle_input_expect_data_frame(struct st_h2o_http3client_req_t *req, const uint8_t **src, const uint8_t *src_end, int err,
                                    const char **err_desc)
 {
-    if (*src == src_end && err == H2O_HTTP3_ERROR_EOS) {
-        /* if the input is EOS, delegate the task to the payload processing function */
-        assert(req->bytes_left_in_data_frame == 0);
+    assert(req->bytes_left_in_data_frame == 0);
+    if (*src == src_end) {
+        /* return early if no input, no state change */
+        if (err == 0)
+            return 0;
+        /* either EOS or an unexpected close; delegate the task to the payload processing function */
     } else {
         /* otherwise, read the frame */
         h2o_http3_read_frame_t frame;

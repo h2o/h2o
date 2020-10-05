@@ -154,6 +154,8 @@ builder {
             my $writer = $responder->([ 200, [ 'content-type' => 'text/plain' ] ]);
             sleep 1;
             $writer->write('x');
+            sleep 1
+                if $env->{QUERY_STRING} =~ /delay-fin/;
             $writer->close;
         };
     };
