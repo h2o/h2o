@@ -30,10 +30,27 @@
 extern "C" {
 #include <time.h>
 }
-#include <bcc/BPF.h>
 
 class h2o_tracer
 {
+  public:
+    class usdt
+    {
+      public:
+        std::string provider;
+        std::string name;
+        std::string probe_func;
+        usdt(const std::string &provider, const std::string &name, const std::string &probe_func)
+            : provider(provider), name(name), probe_func(probe_func)
+        {
+        }
+
+        std::string fully_qualified_name() const
+        {
+            return provider + ":" + name;
+        }
+    };
+
   protected:
     /**
      * Where to output the results. Defaults to `stdout`.
@@ -69,7 +86,9 @@ class h2o_tracer
         stats_.num_lost = 0;
     }
 
-    virtual ~h2o_tracer() {}
+    virtual ~h2o_tracer()
+    {
+    }
 
     /**
      * Performs post-construction initialization common to all the tracers.
@@ -98,7 +117,7 @@ class h2o_tracer
     /**
      * Returns a vector of relevant USDT probes.
      */
-    virtual const std::vector<ebpf::USDT> &init_usdt_probes(pid_t h2o_pid) = 0;
+    virtual const std::vector<usdt> &usdt_probes() = 0;
     /**
      * Returns the code to be compiled into BPF bytecode.
      */

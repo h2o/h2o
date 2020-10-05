@@ -416,13 +416,13 @@ int trace_sched_process_exit(struct tracepoint__sched__sched_process_exit *ctx) 
 """ % (event_t_decl)
 
   usdt_def = """
-const std::vector<ebpf::USDT> &h2o_quic_tracer::init_usdt_probes(pid_t pid) {
-  static const std::vector<ebpf::USDT> probes = {
+const std::vector<h2o_tracer::usdt> &h2o_quic_tracer::usdt_probes() {
+  static const std::vector<h2o_tracer::usdt> probes = {
 """
 
   for metadata in probe_metadata.values():
     bpf += build_tracer(context, metadata)
-    usdt_def += """    ebpf::USDT(pid, "%s", "%s", "%s"),\n""" % (
+    usdt_def += """    h2o_tracer::usdt("%s", "%s", "%s"),\n""" % (
         metadata['provider'], metadata['name'], build_tracer_name(metadata))
 
   usdt_def += """
@@ -520,7 +520,7 @@ protected:
   virtual void do_handle_event(const void *data, int len);
   virtual void do_handle_lost(uint64_t lost);
 public:
-  virtual const std::vector<ebpf::USDT> &init_usdt_probes(pid_t h2o_pid);
+  virtual const std::vector<h2o_tracer::usdt> &usdt_probes();
   virtual std::string bpf_text();
 };
 
