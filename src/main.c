@@ -48,6 +48,7 @@
 #include <sys/uio.h>
 #include <sys/un.h>
 #include <sys/wait.h>
+#include <openssl/opensslv.h>
 #include <openssl/crypto.h>
 #include <openssl/dh.h>
 #include <openssl/err.h>
@@ -2976,6 +2977,11 @@ int main(int argc, char **argv)
 {
     cmd_argc = argc;
     cmd_argv = argv;
+
+#if !defined(LIBRESSL_VERSION_NUMBER)
+    /* assert that openssl library and header versions are the same */
+    assert(OpenSSL_version_num() == OPENSSL_VERSION_NUMBER);
+#endif
 
     const char *cmd = argv[0], *opt_config_file = H2O_TO_STR(H2O_CONFIG_PATH);
     int n, error_log_fd = -1;
