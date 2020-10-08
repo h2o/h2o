@@ -2980,7 +2980,7 @@ int main(int argc, char **argv)
 
 #if !defined(LIBRESSL_VERSION_NUMBER)
     /* assert that openssl library and header versions are the same */
-    assert(OpenSSL_version_num() == OPENSSL_VERSION_NUMBER);
+    assert(SSLeay() == OPENSSL_VERSION_NUMBER);
 #endif
 
     const char *cmd = argv[0], *opt_config_file = H2O_TO_STR(H2O_CONFIG_PATH);
