@@ -812,6 +812,9 @@ int h2o_qpack_parse_response(h2o_mem_pool_t *pool, h2o_qpack_decoder_t *qpack, i
 
 h2o_qpack_encoder_t *h2o_qpack_create_encoder(uint32_t header_table_size, uint16_t max_blocked)
 {
+    if (header_table_size > H2O_HTTP3_MAX_HEADER_TABLE_SIZE)
+        header_table_size = H2O_HTTP3_MAX_HEADER_TABLE_SIZE;
+
     h2o_qpack_encoder_t *qpack = h2o_mem_alloc(sizeof(*qpack));
     header_table_init(&qpack->table, header_table_size);
     qpack->largest_known_received = 0;
