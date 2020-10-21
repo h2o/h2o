@@ -55,8 +55,6 @@ struct st_h2o_http1_finalostream_t {
 struct st_h2o_http1_conn_t {
     h2o_conn_t super;
     h2o_socket_t *sock;
-    /* internal structure */
-    h2o_linklist_t _conns;
     h2o_timer_t _timeout_entry;
     h2o_timer_t _io_timeout_entry;
     uint64_t _req_index;
@@ -139,7 +137,7 @@ static void close_connection(struct st_h2o_http1_conn_t *conn, int close_socket)
     h2o_dispose_request(&conn->req);
     if (conn->sock != NULL && close_socket)
         h2o_socket_close(conn->sock);
-    h2o_linklist_unlink(&conn->_conns);
+    h2o_linklist_unlink(&conn->super._conns);
     free(conn);
 }
 
@@ -181,8 +179,13 @@ static void set_req_io_timeout(struct st_h2o_http1_conn_t *conn, uint64_t timeou
     if (conn->_io_timeout_entry.cb != NULL)
         h2o_timer_unlink(&conn->_io_timeout_entry);
     conn->_io_timeout_entry.cb = cb;
-    if (cb != NULL)
+    h2o_linklist_unlink(&conn->super._conns);
+    if (cb != NULL) {
         h2o_timer_link(conn->super.ctx->loop, timeout, &conn->_io_timeout_entry);
+        h2o_linklist_insert(&conn->super.ctx->http1._inactive_conns, &conn->super._conns);
+    } else {
+        h2o_linklist_insert(&conn->super.ctx->http1._active_conns, &conn->super._conns);
+    }
 }
 
 static void clear_timeouts(struct st_h2o_http1_conn_t *conn)
@@ -678,6 +681,17 @@ void reqread_on_read(h2o_socket_t *sock, const char *err)
         conn->_req_entity_reader->handle_incoming_entity(conn);
 }
 
+static int close_idle_connection(h2o_conn_t *_conn)
+{
+    struct st_h2o_http1_conn_t *conn = (void *)_conn;
+    if (conn->sock->input->size == 0) {
+        conn->req.http1_is_persistent = 0;
+        close_connection(conn, 1);
+        return 1;
+    }
+    return 0;
+}
+
 static void on_timeout(struct st_h2o_http1_conn_t *conn)
 {
     if (conn->_req_index == 1) {
@@ -688,8 +702,8 @@ static void on_timeout(struct st_h2o_http1_conn_t *conn)
         conn->req.res.reason = "Request Timeout";
     }
 
-    conn->req.http1_is_persistent = 0;
-    close_connection(conn, 1);
+    assert(conn->sock->input->size == 0);
+    close_idle_connection(&conn->super);
 }
 
 static void req_io_on_timeout(h2o_timer_t *entry)
@@ -1121,13 +1135,17 @@ static h2o_iovec_t log_request_index(h2o_req_t *req)
 
 static int foreach_request(h2o_context_t *ctx, int (*cb)(h2o_req_t *req, void *cbdata), void *cbdata)
 {
-    h2o_linklist_t *node;
+    h2o_linklist_t *conn_list[] = {&ctx->http1._active_conns, &ctx->http1._inactive_conns};
 
-    for (node = ctx->http1._conns.next; node != &ctx->http1._conns; node = node->next) {
-        struct st_h2o_http1_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http1_conn_t, _conns, node);
-        int ret = cb(&conn->req, cbdata);
-        if (ret != 0)
-            return ret;
+    for (size_t i = 0; i < sizeof(conn_list) / sizeof(conn_list[0]); i++) {
+        for (h2o_linklist_t *node = conn_list[i]->next, *node_next; node != conn_list[i]; node = node_next) {
+            node_next = node->next;
+            h2o_conn_t *_conn = H2O_STRUCT_FROM_MEMBER(h2o_conn_t, _conns, node);
+            struct st_h2o_http1_conn_t *conn = (void *)_conn;
+            int ret = cb(&conn->req, cbdata);
+            if (ret != 0)
+                return ret;
+        }
     }
     return 0;
 }
@@ -1137,6 +1155,7 @@ static const h2o_conn_callbacks_t h1_callbacks = {
     .get_peername = get_peername,
     .get_ptls = get_ptls,
     .skip_tracing = skip_tracing,
+    .close_idle_connection = close_idle_connection,
     .log_ = {{
         .congestion_control =
             {
@@ -1175,7 +1194,7 @@ void h2o_http1_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval 
     /* init properties that need to be non-zero */
     conn->sock = sock;
     sock->data = conn;
-    h2o_linklist_insert(&ctx->ctx->http1._conns, &conn->_conns);
+    h2o_linklist_insert(&ctx->ctx->http1._inactive_conns, &conn->super._conns);
 
     H2O_PROBE_CONN(H1_ACCEPT, &conn->super, conn->sock, &conn->super);
 
