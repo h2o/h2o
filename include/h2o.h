@@ -943,6 +943,19 @@ struct st_h2o_conn_t {
     h2o_linklist_t _conns;
 };
 
+#define H2O_CONN_LIST_FOREACH(decl_var, conn_list, block) \
+  do { \
+    h2o_linklist_t **_conn_list = (conn_list); \
+    for (size_t i = 0; i < sizeof(_conn_list) / sizeof(_conn_list[0]); i++) { \
+        for (h2o_linklist_t *_node = _conn_list[i]->next, *_node_next; _node != _conn_list[i]; _node = _node_next) { \
+            _node_next = _node->next; \
+            h2o_conn_t *_h2o_conn = H2O_STRUCT_FROM_MEMBER(h2o_conn_t, _conns, _node); \
+            decl_var = (void *)_h2o_conn; \
+            do block while (0); \
+        } \
+    } \
+  } while (0)
+
 /**
  * filter used for capturing a response (can be used to implement subreq)
  */

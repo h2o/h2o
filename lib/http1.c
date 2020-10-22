@@ -1136,17 +1136,11 @@ static h2o_iovec_t log_request_index(h2o_req_t *req)
 static int foreach_request(h2o_context_t *ctx, int (*cb)(h2o_req_t *req, void *cbdata), void *cbdata)
 {
     h2o_linklist_t *conn_list[] = {&ctx->http1._active_conns, &ctx->http1._inactive_conns};
-
-    for (size_t i = 0; i < sizeof(conn_list) / sizeof(conn_list[0]); i++) {
-        for (h2o_linklist_t *node = conn_list[i]->next, *node_next; node != conn_list[i]; node = node_next) {
-            node_next = node->next;
-            h2o_conn_t *_conn = H2O_STRUCT_FROM_MEMBER(h2o_conn_t, _conns, node);
-            struct st_h2o_http1_conn_t *conn = (void *)_conn;
-            int ret = cb(&conn->req, cbdata);
-            if (ret != 0)
-                return ret;
-        }
-    }
+    H2O_CONN_LIST_FOREACH(struct st_h2o_http1_conn_t *conn, conn_list, {
+        int ret = cb(&conn->req, cbdata);
+        if (ret != 0)
+            return ret;
+    });
     return 0;
 }
 

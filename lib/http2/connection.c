@@ -83,35 +83,24 @@ static void graceful_shutdown_close_stragglers(h2o_timer_t *entry)
 {
     h2o_context_t *ctx = H2O_STRUCT_FROM_MEMBER(h2o_context_t, http2._graceful_shutdown_timeout, entry);
     h2o_linklist_t *conn_list[] = {&ctx->http2._active_conns, &ctx->http2._inactive_conns};
-
-    for (size_t i = 0; i < sizeof(conn_list) / sizeof(conn_list[0]); i++) {
-        for (h2o_linklist_t *node = conn_list[i]->next, *node_next; node != conn_list[i]; node = node_next) {
-            node_next = node->next;
-            /* We've sent two GOAWAY frames, close the remaining connections */
-            h2o_conn_t *_conn = H2O_STRUCT_FROM_MEMBER(h2o_conn_t, _conns, node);
-            h2o_http2_conn_t *conn = (void *)_conn;
-            close_connection(conn);
-        }
-    }
+    H2O_CONN_LIST_FOREACH(h2o_http2_conn_t *conn, conn_list, {
+        /* We've sent two GOAWAY frames, close the remaining connections */
+        close_connection(conn);
+    });
 }
 
 static void graceful_shutdown_resend_goaway(h2o_timer_t *entry)
 {
     h2o_context_t *ctx = H2O_STRUCT_FROM_MEMBER(h2o_context_t, http2._graceful_shutdown_timeout, entry);
-    h2o_linklist_t *conn_list[] = {&ctx->http2._active_conns, &ctx->http2._inactive_conns};
     int do_close_stragglers = 0;
 
-    for (size_t i = 0; i < sizeof(conn_list) / sizeof(conn_list[0]); i++) {
-        for (h2o_linklist_t *node = conn_list[i]->next, *node_next; node != conn_list[i]; node = node_next) {
-            node_next = node->next;
-            h2o_conn_t *_conn = H2O_STRUCT_FROM_MEMBER(h2o_conn_t, _conns, node);
-            h2o_http2_conn_t *conn = (void *)_conn;
-            if (conn->state < H2O_HTTP2_CONN_STATE_HALF_CLOSED) {
-                enqueue_goaway(conn, H2O_HTTP2_ERROR_NONE, (h2o_iovec_t){NULL});
-                do_close_stragglers = 1;
-            }
+    h2o_linklist_t *conn_list[] = {&ctx->http2._active_conns, &ctx->http2._inactive_conns};
+    H2O_CONN_LIST_FOREACH(h2o_http2_conn_t *conn, conn_list, {
+        if (conn->state < H2O_HTTP2_CONN_STATE_HALF_CLOSED) {
+            enqueue_goaway(conn, H2O_HTTP2_ERROR_NONE, (h2o_iovec_t){NULL});
+            do_close_stragglers = 1;
         }
-    }
+    });
 
     /* After waiting a second, we still had active connections. If configured, wait one
      * final timeout before closing the connections */
@@ -137,25 +126,21 @@ static void initiate_graceful_shutdown(h2o_context_t *ctx)
      * requests can be initiated. After waiting at least one round trip time, the server can send another GOAWAY frame with an
      * updated last stream identifier. This ensures that a connection can be cleanly shut down without losing requests.
      */
-    h2o_linklist_t *conn_list[] = {&ctx->http2._active_conns, &ctx->http2._inactive_conns};
 
     /* only doit once */
     if (ctx->http2._graceful_shutdown_timeout.cb != NULL)
         return;
     ctx->http2._graceful_shutdown_timeout.cb = graceful_shutdown_resend_goaway;
 
-    for (size_t i = 0; i < sizeof(conn_list) / sizeof(conn_list[0]); i++) {
-        for (h2o_linklist_t *node = conn_list[i]->next, *node_next; node != conn_list[i]; node = node_next) {
-            node_next = node->next;
-            h2o_conn_t *_conn = H2O_STRUCT_FROM_MEMBER(h2o_conn_t, _conns, node);
-            h2o_http2_conn_t *conn = (void *)_conn;
-            if (conn->state < H2O_HTTP2_CONN_STATE_HALF_CLOSED) {
-                h2o_http2_encode_goaway_frame(&conn->_write.buf, INT32_MAX, H2O_HTTP2_ERROR_NONE,
-                                            (h2o_iovec_t){H2O_STRLIT("graceful shutdown")});
-                h2o_http2_conn_request_write(conn);
-            }
+    h2o_linklist_t *conn_list[] = {&ctx->http2._active_conns, &ctx->http2._inactive_conns};
+    H2O_CONN_LIST_FOREACH(h2o_http2_conn_t *conn, conn_list, {
+        if (conn->state < H2O_HTTP2_CONN_STATE_HALF_CLOSED) {
+            h2o_http2_encode_goaway_frame(&conn->_write.buf, INT32_MAX, H2O_HTTP2_ERROR_NONE,
+                                        (h2o_iovec_t){H2O_STRLIT("graceful shutdown")});
+            h2o_http2_conn_request_write(conn);
         }
-    }
+    });
+
     h2o_timer_link(ctx->loop, 1000, &ctx->http2._graceful_shutdown_timeout);
 }
 
@@ -1728,20 +1713,14 @@ static void push_path(h2o_req_t *src_req, const char *abspath, size_t abspath_le
 static int foreach_request(h2o_context_t *ctx, int (*cb)(h2o_req_t *req, void *cbdata), void *cbdata)
 {
     h2o_linklist_t *conn_list[] = {&ctx->http2._active_conns, &ctx->http2._inactive_conns};
-
-    for (size_t i = 0; i < sizeof(conn_list) / sizeof(conn_list[0]); i++) {
-        for (h2o_linklist_t *node = conn_list[i]->next, *node_next; node != conn_list[i]; node = node_next) {
-            node_next = node->next;
-            h2o_conn_t *_conn = H2O_STRUCT_FROM_MEMBER(h2o_conn_t, _conns, node);
-            h2o_http2_conn_t *conn = (void *)_conn;
-            h2o_http2_stream_t *stream;
-            kh_foreach_value(conn->streams, stream, {
-                int ret = cb(&stream->req, cbdata);
-                if (ret != 0)
-                    return ret;
-            });
-        }
-    }
+    H2O_CONN_LIST_FOREACH(h2o_http2_conn_t *conn, conn_list, {
+        h2o_http2_stream_t *stream;
+        kh_foreach_value(conn->streams, stream, {
+            int ret = cb(&stream->req, cbdata);
+            if (ret != 0)
+                return ret;
+        });
+    });
     return 0;
 }
 

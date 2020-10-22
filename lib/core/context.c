@@ -204,23 +204,17 @@ int h2o_context_close_idle_connections(h2o_context_t *ctx, int max_connections_t
         &ctx->http2._inactive_conns,
         // &ctx->http3._inactive_conns, // TODO
     };
-
-    for (size_t i = 0; i < sizeof(conn_list) / sizeof(conn_list[0]); i++) {
-        for (h2o_linklist_t *node = conn_list[i]->next, *node_next; node != conn_list[i]; node = node_next) {
-            node_next = node->next;
-            h2o_conn_t *conn = H2O_STRUCT_FROM_MEMBER(h2o_conn_t, _conns, node);
-
-            struct timeval now = h2o_gettimeofday(ctx->loop);
-            if (now.tv_sec - conn->connected_at.tv_sec < min_age)
-                continue;
-            if (conn->callbacks->close_idle_connection == NULL) {
-                fprintf(stderr, "Unexpected! Missing .close_idle_connection()"); // FIXME
-            }
-            if (conn->callbacks->close_idle_connection && conn->callbacks->close_idle_connection(conn))
-                closed++;
-            if (closed == max_connections_to_close)
-                return closed;
+    H2O_CONN_LIST_FOREACH(h2o_conn_t *conn, conn_list, {
+        struct timeval now = h2o_gettimeofday(ctx->loop);
+        if (now.tv_sec - conn->connected_at.tv_sec < min_age)
+            continue;
+        if (conn->callbacks->close_idle_connection == NULL) {
+            fprintf(stderr, "Unexpected! Missing .close_idle_connection()"); // FIXME
         }
-    }
+        if (conn->callbacks->close_idle_connection && conn->callbacks->close_idle_connection(conn))
+            closed++;
+        if (closed == max_connections_to_close)
+            return closed;
+    });
     return closed;
 }
