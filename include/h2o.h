@@ -661,7 +661,11 @@ struct st_h2o_context_t {
         /**
          * link-list of h2o_http3_server_conn_t
          */
-        h2o_linklist_t _conns;
+        h2o_linklist_t _active_conns;
+        /**
+         * link-list of h2o_http3_server_conn_t
+         */
+        h2o_linklist_t _inactive_conns;
         /**
          * timeout entry used for graceful shutdown
          */
