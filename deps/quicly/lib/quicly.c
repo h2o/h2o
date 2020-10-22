@@ -67,10 +67,6 @@
  */
 #define QUICLY_MAX_TOKEN_LEN 512
 /**
- * do not try to send ACK-eliciting frames if the available CWND is below this value
- */
-#define MIN_SEND_WINDOW 64
-/**
  * sends ACK bundled with PING, when number of gaps in the ack queue reaches or exceeds this threshold. This value should be much
  * smaller than QUICLY_MAX_RANGES.
  */
@@ -559,6 +555,11 @@ static int is_retry(quicly_conn_t *conn)
 static int needs_cid_auth(quicly_conn_t *conn)
 {
     return conn->super.version > QUICLY_PROTOCOL_VERSION_DRAFT27;
+}
+
+static int recognize_delayed_ack(quicly_conn_t *conn)
+{
+    return conn->super.ctx->transport_params.min_ack_delay_usec != UINT64_MAX;
 }
 
 static int64_t get_sentmap_expiration_time(quicly_conn_t *conn)
@@ -1681,8 +1682,11 @@ int quicly_encode_transport_parameter_list(ptls_buffer_t *buf, const quicly_tran
                 { ptls_buffer_push_quicint(buf, QUICLY_LOCAL_ACK_DELAY_EXPONENT); });
     if (QUICLY_LOCAL_MAX_ACK_DELAY != QUICLY_DEFAULT_MAX_ACK_DELAY)
         PUSH_TP(buf, QUICLY_TRANSPORT_PARAMETER_ID_MAX_ACK_DELAY, { ptls_buffer_push_quicint(buf, QUICLY_LOCAL_MAX_ACK_DELAY); });
-    PUSH_TP(buf, QUICLY_TRANSPORT_PARAMETER_ID_MIN_ACK_DELAY,
-            { ptls_buffer_push_quicint(buf, QUICLY_LOCAL_MAX_ACK_DELAY * 1000 /* in microseconds */); });
+    if (params->min_ack_delay_usec != UINT64_MAX) {
+        /* TODO consider the value we should advertise. */
+        PUSH_TP(buf, QUICLY_TRANSPORT_PARAMETER_ID_MIN_ACK_DELAY,
+                { ptls_buffer_push_quicint(buf, QUICLY_LOCAL_MAX_ACK_DELAY * 1000 /* in microseconds */); });
+    }
     if (params->disable_active_migration)
         PUSH_TP(buf, QUICLY_TRANSPORT_PARAMETER_ID_DISABLE_ACTIVE_MIGRATION, {});
     if (QUICLY_LOCAL_ACTIVE_CONNECTION_ID_LIMIT != QUICLY_DEFAULT_ACTIVE_CONNECTION_ID_LIMIT)
@@ -1713,7 +1717,7 @@ static const quicly_cid_t _tp_cid_ignore;
 
 int quicly_decode_transport_parameter_list(quicly_transport_parameters_t *params, quicly_cid_t *original_dcid,
                                            quicly_cid_t *initial_scid, quicly_cid_t *retry_scid, void *stateless_reset_token,
-                                           const uint8_t *src, const uint8_t *end)
+                                           const uint8_t *src, const uint8_t *end, int recognize_delayed_ack)
 {
 /* When non-negative, tp_index contains the literal position within the list of transport parameters recognized by this function.
  * That index is being used to find duplicates using a 64-bit bitmap (found_bits). When the transport parameter is being processed,
@@ -1861,16 +1865,18 @@ int quicly_decode_transport_parameter_list(quicly_transport_parameters_t *params
                 }
                 params->max_ack_delay = (uint16_t)v;
             });
-            DECODE_TP(QUICLY_TRANSPORT_PARAMETER_ID_MIN_ACK_DELAY, {
-                if ((params->min_ack_delay_usec = ptls_decode_quicint(&src, end)) == UINT64_MAX) {
-                    ret = QUICLY_TRANSPORT_ERROR_TRANSPORT_PARAMETER;
-                    goto Exit;
-                }
-                if (params->min_ack_delay_usec >= 16777216) { /* "values of 2^24 or greater are invalid" */
-                    ret = QUICLY_TRANSPORT_ERROR_TRANSPORT_PARAMETER;
-                    goto Exit;
-                }
-            });
+            if (recognize_delayed_ack) {
+                DECODE_TP(QUICLY_TRANSPORT_PARAMETER_ID_MIN_ACK_DELAY, {
+                    if ((params->min_ack_delay_usec = ptls_decode_quicint(&src, end)) == UINT64_MAX) {
+                        ret = QUICLY_TRANSPORT_ERROR_TRANSPORT_PARAMETER;
+                        goto Exit;
+                    }
+                    if (params->min_ack_delay_usec >= 16777216) { /* "values of 2^24 or greater are invalid" */
+                        ret = QUICLY_TRANSPORT_ERROR_TRANSPORT_PARAMETER;
+                        goto Exit;
+                    }
+                });
+            }
             DECODE_TP(QUICLY_TRANSPORT_PARAMETER_ID_ACTIVE_CONNECTION_ID_LIMIT, {
                 uint64_t v;
                 if ((v = ptls_decode_quicint(&src, end)) == UINT64_MAX) {
@@ -2033,7 +2039,8 @@ static int client_collected_extensions(ptls_t *tls, ptls_handshake_properties_t 
     if ((ret = quicly_decode_transport_parameter_list(&params, needs_cid_auth(conn) || is_retry(conn) ? &original_dcid : NULL,
                                                       needs_cid_auth(conn) ? &initial_scid : &tp_cid_ignore,
                                                       needs_cid_auth(conn) ? is_retry(conn) ? &retry_scid : NULL : &tp_cid_ignore,
-                                                      remote_cid->stateless_reset_token, src, end)) != 0)
+                                                      remote_cid->stateless_reset_token, src, end, recognize_delayed_ack(conn))) !=
+        0)
         goto Exit;
 
     /* validate CIDs */
@@ -2199,10 +2206,10 @@ static int server_collected_extensions(ptls_t *tls, ptls_handshake_properties_t 
 
     { /* decode transport_parameters extension */
         const uint8_t *src = slots[0].data.base, *end = src + slots[0].data.len;
-        if ((ret = quicly_decode_transport_parameter_list(&conn->super.remote.transport_params,
-                                                          needs_cid_auth(conn) ? NULL : &tp_cid_ignore,
-                                                          needs_cid_auth(conn) ? &initial_scid : &tp_cid_ignore,
-                                                          needs_cid_auth(conn) ? NULL : &tp_cid_ignore, NULL, src, end)) != 0)
+        if ((ret = quicly_decode_transport_parameter_list(
+                 &conn->super.remote.transport_params, needs_cid_auth(conn) ? NULL : &tp_cid_ignore,
+                 needs_cid_auth(conn) ? &initial_scid : &tp_cid_ignore, needs_cid_auth(conn) ? NULL : &tp_cid_ignore, NULL, src,
+                 end, recognize_delayed_ack(conn))) != 0)
             goto Exit;
         if (needs_cid_auth(conn) &&
             !quicly_cid_is_equal(&conn->super.remote.cid_set.cids[0].cid, ptls_iovec_init(initial_scid.cid, initial_scid.len))) {
@@ -2721,9 +2728,7 @@ static inline uint64_t calc_amplification_limit_allowance(quicly_conn_t *conn)
     uint64_t budget = conn->super.stats.num_bytes.received * conn->super.ctx->pre_validation_amplification_limit;
     if (budget <= conn->super.stats.num_bytes.sent)
         return 0;
-    uint64_t window = budget - conn->super.stats.num_bytes.sent;
-
-    return window >= MIN_SEND_WINDOW ? window : 0;
+    return budget - conn->super.stats.num_bytes.sent;
 }
 
 /* Helper function to compute send window based on:
@@ -2749,7 +2754,7 @@ static size_t calc_send_window(quicly_conn_t *conn, size_t min_bytes_to_send, ui
     if (amp_window < window)
         window = amp_window;
 
-    return window >= MIN_SEND_WINDOW ? window : 0;
+    return window;
 }
 
 /**
@@ -3025,13 +3030,7 @@ static int _do_allocate_frame(quicly_conn_t *conn, quicly_send_context_t *s, siz
     } else {
         if (s->num_datagrams >= s->max_datagrams)
             return QUICLY_ERROR_SENDBUF_FULL;
-        /* adjust send_window to either 0 byte or MIN*2 bytes, if it is between those two */
-        if (s->send_window < MIN_SEND_WINDOW * 2)
-            s->send_window = s->send_window < MIN_SEND_WINDOW ? 0 : MIN_SEND_WINDOW * 2;
-        /* appropriate byte counting is applied only if the first frame for a datagram is ack-eliciting; we are too lazy to adjust
-         * things when a packet is turned into ack-eliciting after an ACK frame is written into the packet image. This diversion is
-         * considered acceptable as only the first packet being built would start with a non-ack-eliciting frame (i.e. ACK). */
-        if (ack_eliciting && s->send_window < (ssize_t)min_space)
+        if (ack_eliciting && s->send_window == 0)
             return QUICLY_ERROR_SENDBUF_FULL;
         if (s->payload_buf.end - s->payload_buf.datagram < conn->egress.max_udp_payload_size)
             return QUICLY_ERROR_SENDBUF_FULL;
@@ -4095,13 +4094,14 @@ static int do_send(quicly_conn_t *conn, quicly_send_context_t *s)
     if (s->send_window == 0)
         ack_only = 1;
 
-    /* send handshake flows */
+    /* send handshake flows; when PTO fires...
+     *  * quicly running as a client sends either a Handshake probe (or data) if the handshake keys are available, or else an
+     *    Initial probe (or data).
+     *  * quicly running as a server sends both Initial and Handshake probes (or data) if the corresponding keys are available. */
     if ((ret = send_handshake_flow(conn, QUICLY_EPOCH_INITIAL, s, ack_only,
-                                   min_packets_to_send != 0 ||
-                                       (conn->super.remote.address_validation.send_probe && conn->handshake == NULL))) != 0)
+                                   min_packets_to_send != 0 && (!quicly_is_client(conn) || conn->handshake == NULL))) != 0)
         goto Exit;
-    if ((ret = send_handshake_flow(conn, QUICLY_EPOCH_HANDSHAKE, s, ack_only,
-                                   min_packets_to_send != 0 || conn->super.remote.address_validation.send_probe)) != 0)
+    if ((ret = send_handshake_flow(conn, QUICLY_EPOCH_HANDSHAKE, s, ack_only, min_packets_to_send != 0)) != 0)
         goto Exit;
 
     /* send encrypted frames */
@@ -4226,7 +4226,8 @@ Exit:
     if (ret == 0 && s->target.first_byte_at != NULL) {
         /* last packet can be small-sized, unless it is the first flight sent from the client */
         enum en_quicly_send_packet_mode_t commit_mode = QUICLY_COMMIT_SEND_PACKET_MODE_SMALL;
-        if (quicly_is_client(conn) && (s->payload_buf.datagram[0] & QUICLY_PACKET_TYPE_BITMASK) == QUICLY_PACKET_TYPE_INITIAL)
+        if ((s->payload_buf.datagram[0] & QUICLY_PACKET_TYPE_BITMASK) == QUICLY_PACKET_TYPE_INITIAL &&
+            (quicly_is_client(conn) || !ack_only))
             commit_mode = QUICLY_COMMIT_SEND_PACKET_MODE_FULL_SIZE;
         commit_send_packet(conn, s, commit_mode);
     }

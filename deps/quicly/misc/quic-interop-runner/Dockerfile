@@ -18,8 +18,6 @@ RUN cd quicly &&  git pull && git submodule update --init --recursive && cmake .
 FROM martenseemann/quic-network-simulator-endpoint:latest
 
 COPY --from=builder /quicly/cli quicly/cli
-COPY server.key quicly
-COPY server.crt quicly
 
 # endpoint
 COPY run_endpoint.sh .
