@@ -189,6 +189,8 @@ static struct {
      * Can be set to INT_MAX so that only max_connections would be used.
      */
     int max_quic_connections;
+    int soft_connection_limit;
+    int soft_connection_limit_min_age;
     /**
      * array size == number of worker threads to instantiate, the values indicate which CPU to pin, -1 if not
      */
@@ -241,6 +243,8 @@ static struct {
     .error_log = NULL,
     .max_connections = 1024,
     .max_quic_connections = INT_MAX, /* (INT_MAX = i.e., allow up to max_connections) */
+    .soft_connection_limit = INT_MAX,
+    .soft_connection_limit_min_age = 30,
     .thread_map = {0},               /* initialized in main() */
     .quic = {0},                     /* 0 defaults to all, conn_callbacks (initialized in main() */
     .tfo_queues = 0,                 /* initialized in main() */
@@ -1660,6 +1664,16 @@ static int on_config_max_quic_connections(h2o_configurator_command_t *cmd, h2o_c
     return h2o_configurator_scanf(cmd, node, "%d", &conf.max_quic_connections);
 }
 
+static int on_config_soft_connection_limit(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    return h2o_configurator_scanf(cmd, node, "%d", &conf.soft_connection_limit);
+}
+
+static int on_config_soft_connection_limit_min_age(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    return h2o_configurator_scanf(cmd, node, "%d", &conf.soft_connection_limit_min_age);
+}
+
 static inline int on_config_num_threads_add_cpu(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     if (node->type != YOML_TYPE_SCALAR) {
@@ -2339,6 +2353,11 @@ static void on_accept(h2o_socket_t *listener, const char *err)
 
     do {
         h2o_socket_t *sock;
+        int excess_connections = (num_connections(0) - conf.soft_connection_limit) / conf.thread_map.size;
+        if (excess_connections > 0) {
+            h2o_context_close_idle_connections(ctx->accept_ctx.ctx, excess_connections, conf.soft_connection_limit_min_age);
+        }
+
         if (num_connections(0) >= conf.max_connections) {
             /* The accepting socket is disactivated before entering the next in `run_loop`.
              * Note: it is possible that the server would accept at most `max_connections + num_threads` connections, since the
@@ -2808,6 +2827,31 @@ err:
 }
 #endif
 
+static int count_linklist(const h2o_linklist_t *list)
+{
+    int count = 0;
+    for (const h2o_linklist_t *node = list->next; node != list; node = node->next) {
+        count++;
+    }
+    return count;
+}
+
+static void count_connections(int *n_actives, int *n_inactives)
+{
+    int active = 0, inactive = 0;
+    for (size_t i = 0; i < conf.thread_map.size; ++i) {
+        const h2o_context_t *ctx = &conf.threads[i].ctx;
+        active += count_linklist(&ctx->http1._active_conns);
+        active += count_linklist(&ctx->http2._active_conns);
+        active += count_linklist(&ctx->http3._active_conns);
+        inactive += count_linklist(&ctx->http1._inactive_conns);
+        inactive += count_linklist(&ctx->http2._inactive_conns);
+        inactive += count_linklist(&ctx->http3._inactive_conns);
+    }
+    *n_actives = active;
+    *n_inactives = inactive;
+}
+
 static h2o_iovec_t on_extra_status(void *unused, h2o_globalconf_t *_conf, h2o_req_t *req)
 {
 #define BUFSIZE (16 * 1024)
@@ -2820,6 +2864,9 @@ static h2o_iovec_t on_extra_status(void *unused, h2o_globalconf_t *_conf, h2o_re
     h2o_time2str_log(restart_time, conf.launch_time);
     if ((generation = getenv("SERVER_STARTER_GENERATION")) == NULL)
         generation = "null";
+
+    int n_actives, n_inactives;
+    count_connections(&n_actives, &n_inactives);
 
     ret.base = h2o_mem_alloc_pool(&req->pool, char, BUFSIZE);
     ret.len = snprintf(ret.base, BUFSIZE,
@@ -2834,9 +2881,14 @@ static h2o_iovec_t on_extra_status(void *unused, h2o_globalconf_t *_conf, h2o_re
                        " \"max-connections\": %d,\n"
                        " \"listeners\": %zu,\n"
                        " \"worker-threads\": %zu,\n"
+                       " \"active-connections\": %d,\n"
+                       " \"inactive-connections\": %d,\n"
                        " \"num-sessions\": %lu",
                        OpenSSL_version(OPENSSL_VERSION), current_time, restart_time, (uint64_t)(now - conf.launch_time), generation,
-                       num_connections(0), conf.max_connections, conf.num_listeners, conf.thread_map.size, num_sessions(0));
+                       num_connections(0), conf.max_connections, conf.num_listeners, conf.thread_map.size,
+                       n_actives, n_inactives,
+                       num_sessions(0)
+                       );
     assert(ret.len < BUFSIZE);
 
 #if JEMALLOC_STATS == 1
@@ -2925,6 +2977,8 @@ static void setup_configurators(void)
                                         on_config_error_log);
         h2o_configurator_define_command(c, "max-connections", H2O_CONFIGURATOR_FLAG_GLOBAL, on_config_max_connections);
         h2o_configurator_define_command(c, "max-quic-connections", H2O_CONFIGURATOR_FLAG_GLOBAL, on_config_max_quic_connections);
+        h2o_configurator_define_command(c, "soft-connection-limit", H2O_CONFIGURATOR_FLAG_GLOBAL, on_config_soft_connection_limit);
+        h2o_configurator_define_command(c, "soft-connection-limit.min-age", H2O_CONFIGURATOR_FLAG_GLOBAL, on_config_soft_connection_limit_min_age);
         h2o_configurator_define_command(c, "num-threads", H2O_CONFIGURATOR_FLAG_GLOBAL, on_config_num_threads);
         h2o_configurator_define_command(c, "num-quic-threads", H2O_CONFIGURATOR_FLAG_GLOBAL, on_config_num_quic_threads);
         h2o_configurator_define_command(c, "num-name-resolution-threads", H2O_CONFIGURATOR_FLAG_GLOBAL,

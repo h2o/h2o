@@ -102,7 +102,6 @@ struct st_h2o_http3_server_conn_t {
     h2o_conn_t super;
     h2o_http3_conn_t h3;
     ptls_handshake_properties_t handshake_properties;
-    h2o_linklist_t _conns; /* linklist to h2o_context_t::http3._conns */
     /**
      * link-list of pending requests using st_h2o_http3_server_stream_t::link
      */
@@ -1484,7 +1483,7 @@ static void on_h3_destroy(h2o_quic_conn_t *h3_)
     H2O_PROBE_CONN0(H3S_DESTROY, &conn->super);
 
     /* unlink and dispose */
-    h2o_linklist_unlink(&conn->_conns);
+    h2o_linklist_unlink(&conn->super._conns);
     if (h2o_timer_is_linked(&conn->timeout))
         h2o_timer_unlink(&conn->timeout);
     h2o_http3_dispose_conn(&conn->h3);
@@ -1515,6 +1514,7 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
         .get_peername = get_peername,
         .get_ptls = get_ptls,
         .skip_tracing = get_skip_tracing,
+        .close_idle_connection = NULL, // TODO
         .log_ = {{
             .congestion_control =
                 {
@@ -1552,8 +1552,7 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
     req_scheduler_init(&conn->scheduler.reqs);
     conn->scheduler.uni.active = 0;
     conn->scheduler.uni.conn_blocked = 0;
-    memset(&conn->_conns, 0, sizeof(conn->_conns));
-    h2o_linklist_insert(&ctx->accept_ctx->ctx->http3._conns, &conn->_conns);
+    h2o_linklist_insert(&ctx->accept_ctx->ctx->http3._active_conns, &conn->super._conns);
 
     /* accept connection */
 #if PICOTLS_USE_DTRACE
@@ -1594,28 +1593,25 @@ void h2o_http3_server_amend_quicly_context(h2o_globalconf_t *conf, quicly_contex
 static void graceful_shutdown_close_stragglers(h2o_timer_t *entry)
 {
     h2o_context_t *ctx = H2O_STRUCT_FROM_MEMBER(h2o_context_t, http3._graceful_shutdown_timeout, entry);
-    h2o_linklist_t *node, *next;
-
-    /* We've sent two GOAWAY frames, close the remaining connections */
-    for (node = ctx->http3._conns.next; node != &ctx->http3._conns; node = next) {
-        struct st_h2o_http3_server_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_conn_t, _conns, node);
-        next = node->next;
+    h2o_linklist_t *conn_list[] = {&ctx->http3._active_conns, &ctx->http3._inactive_conns};
+    H2O_CONN_LIST_FOREACH(struct st_h2o_http3_server_conn_t *conn, conn_list, {
+        /* We've sent two GOAWAY frames, close the remaining connections */
         h2o_quic_close_connection(&conn->h3.super, 0, "shutting down");
-    }
+    });
 }
 
 static void graceful_shutdown_resend_goaway(h2o_timer_t *entry)
 {
     h2o_context_t *ctx = H2O_STRUCT_FROM_MEMBER(h2o_context_t, http3._graceful_shutdown_timeout, entry);
-    h2o_linklist_t *node;
     int do_close_stragglers = 0;
 
     /* HTTP/3 draft section 5.2.8 --
      * "After allowing time for any in-flight requests or pushes to arrive, the endpoint can send another GOAWAY frame
      * indicating which requests or pushes it might accept before the end of the connection.
      * This ensures that a connection can be cleanly shut down without losing requests. */
-    for (node = ctx->http3._conns.next; node != &ctx->http3._conns; node = node->next) {
-        struct st_h2o_http3_server_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_conn_t, _conns, node);
+
+    h2o_linklist_t *conn_list[] = {&ctx->http3._active_conns, &ctx->http3._inactive_conns};
+    H2O_CONN_LIST_FOREACH(struct st_h2o_http3_server_conn_t *conn, conn_list, {
         if (conn->h3.state < H2O_HTTP3_CONN_STATE_HALF_CLOSED && quicly_get_state(conn->h3.super.quic) == QUICLY_STATE_CONNECTED) {
             quicly_stream_id_t next_stream_id = quicly_get_remote_next_stream_id(conn->h3.super.quic, 0 /* == bidi */);
             /* Section 5.2-1: "This identifier MAY be zero if no requests or pushes were processed."" */
@@ -1624,7 +1620,7 @@ static void graceful_shutdown_resend_goaway(h2o_timer_t *entry)
             conn->h3.state = H2O_HTTP3_CONN_STATE_HALF_CLOSED;
             do_close_stragglers = 1;
         }
-    }
+    });
 
     /* After waiting a second, we still had active connections. If configured, wait one
      * final timeout before closing the connections */
@@ -1636,15 +1632,13 @@ static void graceful_shutdown_resend_goaway(h2o_timer_t *entry)
 
 static void initiate_graceful_shutdown(h2o_context_t *ctx)
 {
-    h2o_linklist_t *node;
-
     /* only doit once */
     if (ctx->http3._graceful_shutdown_timeout.cb != NULL)
         return;
     ctx->http3._graceful_shutdown_timeout.cb = graceful_shutdown_resend_goaway;
 
-    for (node = ctx->http3._conns.next; node != &ctx->http3._conns; node = node->next) {
-        struct st_h2o_http3_server_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_conn_t, _conns, node);
+    h2o_linklist_t *conn_list[] = {&ctx->http3._active_conns, &ctx->http3._inactive_conns};
+    H2O_CONN_LIST_FOREACH(struct st_h2o_http3_server_conn_t *conn, conn_list, {
         /* There is a moment where the control stream is already closed while st_h2o_http3_server_conn_t is not.
          * Check QUIC connection state to skip sending GOAWAY in such a case. */
         if (conn->h3.state < H2O_HTTP3_CONN_STATE_HALF_CLOSED && quicly_get_state(conn->h3.super.quic) == QUICLY_STATE_CONNECTED) {
@@ -1655,7 +1649,7 @@ static void initiate_graceful_shutdown(h2o_context_t *ctx)
              * requests or pushes." */
             h2o_http3_send_goaway_frame(&conn->h3, (UINT64_C(1) << 62) - 4);
         }
-    }
+    });
     h2o_timer_link(ctx->loop, 1000, &ctx->http3._graceful_shutdown_timeout);
 }
 
@@ -1684,11 +1678,10 @@ static int foreach_request(h2o_context_t *ctx, int (*cb)(h2o_req_t *req, void *c
 {
     struct foreach_request_ctx foreach_ctx = {.cb = cb, .cbdata = cbdata};
 
-    for (h2o_linklist_t *node = ctx->http3._conns.next; node != &ctx->http3._conns; node = node->next) {
-        struct st_h2o_http3_server_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_conn_t, _conns, node);
+    h2o_linklist_t *conn_list[] = {&ctx->http3._active_conns, &ctx->http3._inactive_conns};
+    H2O_CONN_LIST_FOREACH(struct st_h2o_http3_server_conn_t *conn, conn_list, {
         quicly_foreach_stream(conn->h3.super.quic, &foreach_ctx, foreach_request_per_conn);
-    }
-
+    });
     return 0;
 }
 
