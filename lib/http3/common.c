@@ -321,6 +321,8 @@ static void control_stream_handle_input(h2o_http3_conn_t *conn, struct st_h2o_ht
 static void discard_handle_input(h2o_http3_conn_t *conn, struct st_h2o_http3_ingress_unistream_t *stream, const uint8_t **src,
                                  const uint8_t *src_end, int is_eos)
 {
+    if (src == NULL)
+        return;
     *src = src_end;
 }
 
