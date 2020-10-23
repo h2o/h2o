@@ -422,6 +422,10 @@ struct st_h2o_globalconf_t {
          */
         uint32_t active_stream_window_size;
         /**
+         * a boolean indicating if the delayed ack extension should be used (default true)
+         */
+        uint8_t use_delayed_ack;
+        /**
          * the callbacks
          */
         h2o_protocol_callbacks_t callbacks;
