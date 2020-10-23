@@ -588,6 +588,16 @@ static int on_config_http3_input_window_size(h2o_configurator_command_t *cmd, h2
     return 0;
 }
 
+static int on_config_http3_delayed_ack(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    ssize_t on;
+
+    if ((on = h2o_configurator_get_one_of(cmd, node, "OFF,ON")) == -1)
+        return -1;
+    ctx->globalconf->http3.use_delayed_ack = (uint8_t)on;
+    return 0;
+}
+
 static int assert_is_mimetype(h2o_configurator_command_t *cmd, yoml_t *node)
 {
     if (node->type != YOML_TYPE_SCALAR) {
@@ -1023,6 +1033,9 @@ void h2o_configurator__init_core(h2o_globalconf_t *conf)
         h2o_configurator_define_command(&c->super, "http3-input-window-size",
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_http3_input_window_size);
+        h2o_configurator_define_command(&c->super, "http3-delayed-ack",
+                                        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                        on_config_http3_delayed_ack);
         h2o_configurator_define_command(&c->super, "file.mime.settypes",
                                         (H2O_CONFIGURATOR_FLAG_ALL_LEVELS & ~H2O_CONFIGURATOR_FLAG_EXTENSION) |
                                             H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING,

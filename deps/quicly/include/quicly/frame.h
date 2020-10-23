@@ -749,9 +749,7 @@ inline uint8_t *quicly_encode_ack_frequency_frame(uint8_t *dst, uint64_t sequenc
     dst = quicly_encodev(dst, sequence);
     dst = quicly_encodev(dst, packet_tolerance);
     dst = quicly_encodev(dst, max_ack_delay);
-#if 0 // not in -00
     *dst++ = !!ignore_order;
-#endif
     return dst;
 }
 
@@ -765,9 +763,6 @@ inline int quicly_decode_ack_frequency_frame(const uint8_t **src, const uint8_t 
         goto Error;
     if (*src == end)
         goto Error;
-#if 1 // not in -00
-    frame->ignore_order = 0;
-#else
     switch (*(*src)++) {
     case 0:
         frame->ignore_order = 0;
@@ -778,7 +773,6 @@ inline int quicly_decode_ack_frequency_frame(const uint8_t **src, const uint8_t 
     default:
         goto Error;
     }
-#endif
     return 0;
 Error:
     return QUICLY_TRANSPORT_ERROR_FRAME_ENCODING;

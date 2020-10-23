@@ -73,6 +73,6 @@ elif [ "$ROLE" == "server" ]; then
     esac
     echo "Starting quicly server ..."
     echo "SERVER_PARAMS:" $SERVER_PARAMS "TEST_PARAMS:" $TEST_PARAMS
-    echo "/quicly/cli $SERVER_PARAMS $TEST_PARAMS -k /quicly/server.key -c /quicly/server.crt -e /logs/$TESTCASE.out 0.0.0.0 443"
-    /quicly/cli $SERVER_PARAMS $TEST_PARAMS -k /quicly/server.key -c /quicly/server.crt -x x25519 -x secp256r1 -a "hq-29" -e /logs/$TESTCASE.out 0.0.0.0 443
+    echo "/quicly/cli $SERVER_PARAMS $TEST_PARAMS -k /certs/priv.key -c /certs/cert.pem -e /logs/$TESTCASE.out 0.0.0.0 443"
+    /quicly/cli $SERVER_PARAMS $TEST_PARAMS -k /certs/priv.key -c /certs/cert.pem -x x25519 -x secp256r1 -a "hq-29" -e /logs/$TESTCASE.out 0.0.0.0 443
 fi
