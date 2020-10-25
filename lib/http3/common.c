@@ -1132,6 +1132,7 @@ int h2o_http3_handle_settings_frame(h2o_http3_conn_t *conn, const uint8_t *paylo
 {
     const uint8_t *src = payload, *src_end = src + length;
     uint32_t header_table_size = 0;
+    uint64_t blocked_streams = 0;
 
     assert(!h2o_http3_has_received_settings(conn));
 
@@ -1150,13 +1151,15 @@ int h2o_http3_handle_settings_frame(h2o_http3_conn_t *conn, const uint8_t *paylo
             header_table_size =
                 value < conn->qpack.ctx->encoder_table_capacity ? (uint32_t)value : conn->qpack.ctx->encoder_table_capacity;
             break;
-        /* TODO add */
+        case H2O_HTTP3_SETTINGS_QPACK_BLOCKED_STREAMS:
+            blocked_streams = value;
+            break;
         default:
             break;
         }
     }
 
-    conn->qpack.enc = h2o_qpack_create_encoder(header_table_size, 100 /* FIXME */);
+    conn->qpack.enc = h2o_qpack_create_encoder(header_table_size, blocked_streams);
     return 0;
 Malformed:
     *err_desc = "malformed SETTINGS frame";
