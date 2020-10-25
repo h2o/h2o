@@ -1147,7 +1147,8 @@ int h2o_http3_handle_settings_frame(h2o_http3_conn_t *conn, const uint8_t *paylo
             conn->peer_settings.max_header_list_size = (uint64_t)value;
             break;
         case H2O_HTTP3_SETTINGS_HEADER_TABLE_SIZE:
-            header_table_size = value < conn->qpack.ctx->encoder_table_size ? (uint32_t)value : conn->qpack.ctx->encoder_table_size;
+            header_table_size =
+                value < conn->qpack.ctx->encoder_table_capacity ? (uint32_t)value : conn->qpack.ctx->encoder_table_capacity;
             break;
         /* TODO add */
         default:

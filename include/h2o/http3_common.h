@@ -239,9 +239,10 @@ struct st_h2o_quic_conn_t {
 
 typedef struct st_h2o_http3_qpack_context_t {
     /**
-     * Our preferred size of the encoder header table. The value actually used is MIN(this_value, peer_settings.header_table_size).
+     * Our preferred table capacity for the encoder. The value actually used is MIN(this_value,
+     * peer_settings.encoder_table_capacity).
      */
-    uint32_t encoder_table_size;
+    uint32_t encoder_table_capacity;
 } h2o_http3_qpack_context_t;
 
 typedef struct st_h2o_http3_conn_callbacks_t {

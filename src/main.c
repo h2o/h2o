@@ -1070,7 +1070,7 @@ static struct listener_config_t *add_listener(int fd, struct sockaddr *addr, soc
     }
     memset(&listener->ssl, 0, sizeof(listener->ssl));
     memset(&listener->quic, 0, sizeof(listener->quic));
-    listener->quic.qpack = (h2o_http3_qpack_context_t){.encoder_table_size = 4096 /* our default */};
+    listener->quic.qpack = (h2o_http3_qpack_context_t){.encoder_table_capacity = 4096 /* our default */};
     listener->proxy_protocol = proxy_protocol;
     listener->tcp_congestion_controller = h2o_iovec_init(NULL, 0);
 
@@ -1543,10 +1543,10 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                 listener = add_listener(fd, ai->ai_addr, ai->ai_addrlen, ctx->hostconf == NULL, 0);
                 listener->quic.ctx = quic;
                 if (quic_node != NULL) {
-                    yoml_t **retry_node, **sndbuf, **rcvbuf, **amp_limit, **qpack_encoder_table_size;
-                    if (h2o_configurator_parse_mapping(cmd, *quic_node, NULL,
-                                                       "retry:s,sndbuf:s,rcvbuf:s,amp-limit:s,qpack-encoder-table-size:s",
-                                                       &retry_node, &sndbuf, &rcvbuf, &amp_limit, &qpack_encoder_table_size) != 0)
+                    yoml_t **retry_node, **sndbuf, **rcvbuf, **amp_limit, **qpack_encoder_table_capacity;
+                    if (h2o_configurator_parse_mapping(
+                            cmd, *quic_node, NULL, "retry:s,sndbuf:s,rcvbuf:s,amp-limit:s,qpack-encoder-table-capacity:s",
+                            &retry_node, &sndbuf, &rcvbuf, &amp_limit, &qpack_encoder_table_capacity) != 0)
                         return -1;
                     if (retry_node != NULL) {
                         ssize_t on = h2o_configurator_get_one_of(cmd, *retry_node, "OFF,ON");
@@ -1573,9 +1573,9 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                                                    &listener->quic.ctx->pre_validation_amplification_limit) != 0)
                             return -1;
                     }
-                    if (qpack_encoder_table_size != NULL) {
-                        if (h2o_configurator_scanf(cmd, *qpack_encoder_table_size, "%" SCNu32,
-                                                   &listener->quic.qpack.encoder_table_size) != 0)
+                    if (qpack_encoder_table_capacity != NULL) {
+                        if (h2o_configurator_scanf(cmd, *qpack_encoder_table_capacity, "%" SCNu32,
+                                                   &listener->quic.qpack.encoder_table_capacity) != 0)
                             return -1;
                     }
                 }
