@@ -272,9 +272,10 @@ Fail:
 struct st_h2o_http3client_conn_t *create_connection(h2o_httpclient_ctx_t *ctx, h2o_url_t *origin)
 {
     static const h2o_http3_conn_callbacks_t callbacks = {{(void *)destroy_connection}, handle_control_stream_frame};
+    static const h2o_http3_qpack_context_t qpack_ctx = {0 /* TODO */};
     struct st_h2o_http3client_conn_t *conn = h2o_mem_alloc(sizeof(*conn));
 
-    h2o_http3_init_conn(&conn->super, ctx->http3.ctx, &callbacks);
+    h2o_http3_init_conn(&conn->super, ctx->http3.ctx, &callbacks, &qpack_ctx);
     memset((char *)conn + sizeof(conn->super), 0, sizeof(*conn) - sizeof(conn->super));
     conn->ctx = ctx;
     conn->server.origin_url = (h2o_url_t){origin->scheme, h2o_strdup(NULL, origin->authority.base, origin->authority.len),

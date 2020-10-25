@@ -50,10 +50,6 @@
 #define H2O_HTTP3_SETTINGS_MAX_HEADER_LIST_SIZE 6
 #define H2O_HTTP3_SETTINGS_QPACK_BLOCKED_STREAMS 7
 
-#define H2O_HTTP3_DEFAULT_DECODER_HEADER_TABLE_SIZE 4096
-#define H2O_HTTP3_DEFAULT_ENCODER_HEADER_TABLE_SIZE 0
-#define H2O_HTTP3_MAX_HEADER_TABLE_SIZE ((1 << 30) + 1)
-
 #define H2O_HTTP3_ERROR_NONE QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(0x100)
 #define H2O_HTTP3_ERROR_GENERAL_PROTOCOL QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(0x101)
 #define H2O_HTTP3_ERROR_INTERNAL QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(0x102)
@@ -241,6 +237,13 @@ struct st_h2o_quic_conn_t {
     uint64_t _accept_hashkey;
 };
 
+typedef struct st_h2o_http3_qpack_context_t {
+    /**
+     * Our preferred size of the encoder header table. The value actually used is MIN(this_value, peer_settings.header_table_size).
+     */
+    uint32_t encoder_table_size;
+} h2o_http3_qpack_context_t;
+
 typedef struct st_h2o_http3_conn_callbacks_t {
     h2o_quic_conn_callbacks_t super;
     void (*handle_control_stream_frame)(h2o_http3_conn_t *conn, uint8_t type, const uint8_t *payload, size_t len);
@@ -259,6 +262,7 @@ struct st_h2o_http3_conn_t {
      * QPACK states
      */
     struct {
+        const h2o_http3_qpack_context_t *ctx;
         h2o_qpack_encoder_t *enc;
         h2o_qpack_decoder_t *dec;
     } qpack;
@@ -381,7 +385,8 @@ void h2o_quic_setup(h2o_quic_conn_t *conn, quicly_conn_t *quic);
 /**
  * initializes a http3 connection
  */
-void h2o_http3_init_conn(h2o_http3_conn_t *conn, h2o_quic_ctx_t *ctx, const h2o_http3_conn_callbacks_t *callbacks);
+void h2o_http3_init_conn(h2o_http3_conn_t *conn, h2o_quic_ctx_t *ctx, const h2o_http3_conn_callbacks_t *callbacks,
+                         const h2o_http3_qpack_context_t *qpack_ctx);
 /**
  *
  */
