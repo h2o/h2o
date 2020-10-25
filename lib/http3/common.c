@@ -1043,7 +1043,7 @@ int h2o_http3_setup(h2o_http3_conn_t *conn, quicly_conn_t *quic)
     if (quicly_get_state(quic) > QUICLY_STATE_CONNECTED)
         goto Exit;
 
-    conn->qpack.dec = h2o_qpack_create_decoder(H2O_HTTP3_DEFAULT_HEADER_TABLE_SIZE, 100 /* FIXME */);
+    conn->qpack.dec = h2o_qpack_create_decoder(H2O_HTTP3_DEFAULT_DECODER_HEADER_TABLE_SIZE, 100 /* FIXME */);
 
     { /* open control streams, send SETTINGS */
         static const uint8_t client_first_flight[] = {H2O_HTTP3_STREAM_TYPE_CONTROL, H2O_HTTP3_FRAME_TYPE_SETTINGS, 0};
@@ -1129,7 +1129,7 @@ void h2o_quic_schedule_timer(h2o_quic_conn_t *conn)
 int h2o_http3_handle_settings_frame(h2o_http3_conn_t *conn, const uint8_t *payload, size_t length, const char **err_desc)
 {
     const uint8_t *src = payload, *src_end = src + length;
-    uint32_t header_table_size = H2O_HTTP3_DEFAULT_HEADER_TABLE_SIZE;
+    uint32_t header_table_size = H2O_HTTP3_DEFAULT_ENCODER_HEADER_TABLE_SIZE;
 
     assert(!h2o_http3_has_received_settings(conn));
 
