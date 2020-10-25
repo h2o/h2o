@@ -46,8 +46,8 @@
 #define H2O_HTTP3_STREAM_TYPE_QPACK_DECODER 3
 #define H2O_HTTP3_STREAM_TYPE_REQUEST 0x4000000000000000 /* internal type */
 
-#define H2O_HTTP3_SETTINGS_HEADER_TABLE_SIZE 1
-#define H2O_HTTP3_SETTINGS_MAX_HEADER_LIST_SIZE 6
+#define H2O_HTTP3_SETTINGS_QPACK_MAX_TABLE_CAPACITY 1
+#define H2O_HTTP3_SETTINGS_MAX_FIELD_SECTION_SIZE 6
 #define H2O_HTTP3_SETTINGS_QPACK_BLOCKED_STREAMS 7
 
 #define H2O_HTTP3_ERROR_NONE QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(0x100)
@@ -271,7 +271,7 @@ struct st_h2o_http3_conn_t {
      *
      */
     struct {
-        uint64_t max_header_list_size;
+        uint64_t max_field_section_size;
     } peer_settings;
     struct {
         struct {

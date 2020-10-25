@@ -1143,10 +1143,10 @@ int h2o_http3_handle_settings_frame(h2o_http3_conn_t *conn, const uint8_t *paylo
         if ((value = quicly_decodev(&src, src_end)) == UINT64_MAX)
             goto Malformed;
         switch (id) {
-        case H2O_HTTP3_SETTINGS_MAX_HEADER_LIST_SIZE:
-            conn->peer_settings.max_header_list_size = (uint64_t)value;
+        case H2O_HTTP3_SETTINGS_MAX_FIELD_SECTION_SIZE:
+            conn->peer_settings.max_field_section_size = value;
             break;
-        case H2O_HTTP3_SETTINGS_HEADER_TABLE_SIZE:
+        case H2O_HTTP3_SETTINGS_QPACK_MAX_TABLE_CAPACITY:
             header_table_size =
                 value < conn->qpack.ctx->encoder_table_capacity ? (uint32_t)value : conn->qpack.ctx->encoder_table_capacity;
             break;
