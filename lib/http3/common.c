@@ -1017,7 +1017,8 @@ void h2o_quic_setup(h2o_quic_conn_t *conn, quicly_conn_t *quic)
     kh_val(conn->ctx->conns_by_id, iter) = conn;
 }
 
-void h2o_http3_init_conn(h2o_http3_conn_t *conn, h2o_quic_ctx_t *ctx, const h2o_http3_conn_callbacks_t *callbacks)
+void h2o_http3_init_conn(h2o_http3_conn_t *conn, h2o_quic_ctx_t *ctx, const h2o_http3_conn_callbacks_t *callbacks,
+                         const h2o_http3_qpack_context_t *qpack_ctx)
 {
     h2o_quic_init_conn(&conn->super, ctx, &callbacks->super);
     memset((char *)conn + sizeof(conn->super), 0, sizeof(*conn) - sizeof(conn->super));
@@ -1043,7 +1044,8 @@ int h2o_http3_setup(h2o_http3_conn_t *conn, quicly_conn_t *quic)
     if (quicly_get_state(quic) > QUICLY_STATE_CONNECTED)
         goto Exit;
 
-    conn->qpack.dec = h2o_qpack_create_decoder(H2O_HTTP3_DEFAULT_DECODER_HEADER_TABLE_SIZE, 100 /* FIXME */);
+    /* create decoder with the table size set to zero; see SETTINGS sent below. */
+    conn->qpack.dec = h2o_qpack_create_decoder(0, 100 /* FIXME */);
 
     { /* open control streams, send SETTINGS */
         static const uint8_t client_first_flight[] = {H2O_HTTP3_STREAM_TYPE_CONTROL, H2O_HTTP3_FRAME_TYPE_SETTINGS, 0};
@@ -1129,7 +1131,8 @@ void h2o_quic_schedule_timer(h2o_quic_conn_t *conn)
 int h2o_http3_handle_settings_frame(h2o_http3_conn_t *conn, const uint8_t *payload, size_t length, const char **err_desc)
 {
     const uint8_t *src = payload, *src_end = src + length;
-    uint32_t header_table_size = H2O_HTTP3_DEFAULT_ENCODER_HEADER_TABLE_SIZE;
+    uint32_t header_table_size = 0;
+    uint64_t blocked_streams = 0;
 
     assert(!h2o_http3_has_received_settings(conn));
 
@@ -1141,19 +1144,22 @@ int h2o_http3_handle_settings_frame(h2o_http3_conn_t *conn, const uint8_t *paylo
         if ((value = quicly_decodev(&src, src_end)) == UINT64_MAX)
             goto Malformed;
         switch (id) {
-        case H2O_HTTP3_SETTINGS_MAX_HEADER_LIST_SIZE:
-            conn->peer_settings.max_header_list_size = (uint64_t)value;
+        case H2O_HTTP3_SETTINGS_MAX_FIELD_SECTION_SIZE:
+            conn->peer_settings.max_field_section_size = value;
             break;
-        case H2O_HTTP3_SETTINGS_HEADER_TABLE_SIZE:
-            header_table_size = (uint32_t)value;
+        case H2O_HTTP3_SETTINGS_QPACK_MAX_TABLE_CAPACITY:
+            header_table_size =
+                value < conn->qpack.ctx->encoder_table_capacity ? (uint32_t)value : conn->qpack.ctx->encoder_table_capacity;
             break;
-        /* TODO add */
+        case H2O_HTTP3_SETTINGS_QPACK_BLOCKED_STREAMS:
+            blocked_streams = value;
+            break;
         default:
             break;
         }
     }
 
-    conn->qpack.enc = h2o_qpack_create_encoder(header_table_size, 100 /* FIXME */);
+    conn->qpack.enc = h2o_qpack_create_encoder(header_table_size, blocked_streams);
     return 0;
 Malformed:
     *err_desc = "malformed SETTINGS frame";

@@ -135,6 +135,10 @@ struct listener_config_t {
          * whether to send retry
          */
         unsigned send_retry : 1;
+        /**
+         * QPACK settings
+         */
+        h2o_http3_qpack_context_t qpack;
     } quic;
     int proxy_protocol;
     h2o_iovec_t tcp_congestion_controller; /* default CC for this address */
@@ -1066,6 +1070,7 @@ static struct listener_config_t *add_listener(int fd, struct sockaddr *addr, soc
     }
     memset(&listener->ssl, 0, sizeof(listener->ssl));
     memset(&listener->quic, 0, sizeof(listener->quic));
+    listener->quic.qpack = (h2o_http3_qpack_context_t){.encoder_table_capacity = 4096 /* our default */};
     listener->proxy_protocol = proxy_protocol;
     listener->tcp_congestion_controller = h2o_iovec_init(NULL, 0);
 
@@ -1538,9 +1543,10 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                 listener = add_listener(fd, ai->ai_addr, ai->ai_addrlen, ctx->hostconf == NULL, 0);
                 listener->quic.ctx = quic;
                 if (quic_node != NULL) {
-                    yoml_t **retry_node, **sndbuf, **rcvbuf, **amp_limit;
-                    if (h2o_configurator_parse_mapping(cmd, *quic_node, NULL, "retry:s,sndbuf:s,rcvbuf:s,amp-limit:s", &retry_node,
-                                                       &sndbuf, &rcvbuf, &amp_limit) != 0)
+                    yoml_t **retry_node, **sndbuf, **rcvbuf, **amp_limit, **qpack_encoder_table_capacity;
+                    if (h2o_configurator_parse_mapping(
+                            cmd, *quic_node, NULL, "retry:s,sndbuf:s,rcvbuf:s,amp-limit:s,qpack-encoder-table-capacity:s",
+                            &retry_node, &sndbuf, &rcvbuf, &amp_limit, &qpack_encoder_table_capacity) != 0)
                         return -1;
                     if (retry_node != NULL) {
                         ssize_t on = h2o_configurator_get_one_of(cmd, *retry_node, "OFF,ON");
@@ -1565,6 +1571,11 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                     if (amp_limit != NULL) {
                         if (h2o_configurator_scanf(cmd, *amp_limit, "%" SCNu16,
                                                    &listener->quic.ctx->pre_validation_amplification_limit) != 0)
+                            return -1;
+                    }
+                    if (qpack_encoder_table_capacity != NULL) {
+                        if (h2o_configurator_scanf(cmd, *qpack_encoder_table_capacity, "%" SCNu32,
+                                                   &listener->quic.qpack.encoder_table_capacity) != 0)
                             return -1;
                     }
                 }
@@ -2606,6 +2617,7 @@ static void *run_loop(void *_thread_index)
                                             forward_quic_packets, rewrite_forwarded_quic_datagram);
             listeners[i].http3.ctx.accept_ctx = &listeners[i].accept_ctx;
             listeners[i].http3.ctx.send_retry = listener_config->quic.send_retry;
+            listeners[i].http3.ctx.qpack = listener_config->quic.qpack;
             int fds[2];
             /* TODO switch to using named socket in temporary directory to forward packets between server generations */
             if (socketpair(AF_UNIX, SOCK_DGRAM, 0, fds) != 0) {

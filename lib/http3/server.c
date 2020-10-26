@@ -1541,7 +1541,7 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
     /* setup the structure */
     struct st_h2o_http3_server_conn_t *conn = (void *)h2o_create_connection(
         sizeof(*conn), ctx->accept_ctx->ctx, ctx->accept_ctx->hosts, h2o_gettimeofday(ctx->accept_ctx->ctx->loop), &conn_callbacks);
-    h2o_http3_init_conn(&conn->h3, &ctx->super, h3_callbacks);
+    h2o_http3_init_conn(&conn->h3, &ctx->super, h3_callbacks, &ctx->qpack);
     conn->handshake_properties = (ptls_handshake_properties_t){{{{NULL}}}};
     h2o_linklist_init_anchor(&conn->delayed_streams.recv_body_blocked);
     h2o_linklist_init_anchor(&conn->delayed_streams.req_streaming);
