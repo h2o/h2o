@@ -43,6 +43,7 @@ static void doit(int use_enc_stream)
 
     {
         h2o_headers_t headers = {NULL};
+        h2o_add_header_by_str(&pool, &headers, H2O_STRLIT("dnt"), 0, NULL, H2O_STRLIT("1"));
         h2o_add_header_by_str(&pool, &headers, H2O_STRLIT("x-hoge"), 0, NULL, H2O_STRLIT("\x01\x02\x03")); /* literal, non-huff */
         h2o_qpack_flatten_request(enc, &pool, 123, enc_stream, &flattened, h2o_iovec_init(H2O_STRLIT("GET")), &H2O_URL_SCHEME_HTTPS,
                                   h2o_iovec_init(H2O_STRLIT("example.com")), h2o_iovec_init(H2O_STRLIT("/foobar")), headers.entries,
@@ -73,9 +74,11 @@ static void doit(int use_enc_stream)
         ok(scheme == &H2O_URL_SCHEME_HTTPS);
         ok(h2o_memis(authority.base, authority.len, H2O_STRLIT("example.com")));
         ok(h2o_memis(path.base, path.len, H2O_STRLIT("/foobar")));
-        ok(headers.size == 1);
-        ok(h2o_memis(headers.entries[0].name->base, headers.entries[0].name->len, H2O_STRLIT("x-hoge")));
-        ok(h2o_memis(headers.entries[0].value.base, headers.entries[0].value.len, H2O_STRLIT("\x01\x02\x03")));
+        ok(headers.size == 2);
+        ok(h2o_memis(headers.entries[0].name->base, headers.entries[0].name->len, H2O_STRLIT("dnt")));
+        ok(h2o_memis(headers.entries[0].value.base, headers.entries[0].value.len, H2O_STRLIT("1")));
+        ok(h2o_memis(headers.entries[1].name->base, headers.entries[1].name->len, H2O_STRLIT("x-hoge")));
+        ok(h2o_memis(headers.entries[1].value.base, headers.entries[1].value.len, H2O_STRLIT("\x01\x02\x03")));
     }
 
     if (enc_stream != NULL) {
