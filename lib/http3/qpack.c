@@ -597,7 +597,7 @@ static h2o_iovec_t *decode_header_name_literal(h2o_mem_pool_t *pool, const uint8
     } else {
         if (!h2o_hpack_validate_header_name((void *)*src, len, err_desc))
             goto Fail;
-        buf = h2o_strdup(pool, (void *)src, len);
+        buf = h2o_strdup(pool, (void *)*src, len);
     }
     *src += len;
 
