@@ -1022,6 +1022,7 @@ void h2o_http3_init_conn(h2o_http3_conn_t *conn, h2o_quic_ctx_t *ctx, const h2o_
 {
     h2o_quic_init_conn(&conn->super, ctx, &callbacks->super);
     memset((char *)conn + sizeof(conn->super), 0, sizeof(*conn) - sizeof(conn->super));
+    conn->qpack.ctx = qpack_ctx;
 }
 
 void h2o_http3_dispose_conn(h2o_http3_conn_t *conn)
