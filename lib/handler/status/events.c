@@ -28,6 +28,7 @@ struct st_events_status_ctx_t {
     uint64_t h2_protocol_level_errors[H2O_HTTP2_ERROR_MAX];
     uint64_t h2_read_closed;
     uint64_t h2_write_closed;
+    uint64_t h2_idle_timeout;
     uint64_t h1_request_timeout;
     uint64_t h1_request_io_timeout;
     uint64_t ssl_errors;
@@ -50,9 +51,9 @@ static void events_status_per_thread(void *priv, h2o_context_t *ctx)
     }
     esc->h2_read_closed += ctx->http2.events.read_closed;
     esc->h2_write_closed += ctx->http2.events.write_closed;
+    esc->h2_idle_timeout += ctx->http2.events.idle_timeouts;
     esc->h1_request_timeout += ctx->http1.events.request_timeouts;
     esc->h1_request_io_timeout += ctx->http1.events.request_io_timeouts;
-
 
     pthread_mutex_unlock(&esc->mutex);
 }
@@ -102,6 +103,7 @@ static h2o_iovec_t events_status_final(void *priv, h2o_globalconf_t *gconf, h2o_
                        " \"http2-errors.connect\": %" PRIu64 ", \n"
                        " \"http2-errors.enhance-your-calm\": %" PRIu64 ", \n"
                        " \"http2-errors.inadequate-security\": %" PRIu64 ", \n"
+                       " \"http2-errors.idle-timeout\": %" PRIu64 ", \n"
                        " \"http2.read-closed\": %" PRIu64 ", \n"
                        " \"http2.write-closed\": %" PRIu64 ", \n"
                        " \"ssl.errors\": %" PRIu64 ", \n"
@@ -111,7 +113,7 @@ static h2o_iovec_t events_status_final(void *priv, h2o_globalconf_t *gconf, h2o_
                        H2_AGG_ERR(PROTOCOL), H2_AGG_ERR(INTERNAL), H2_AGG_ERR(FLOW_CONTROL), H2_AGG_ERR(SETTINGS_TIMEOUT),
                        H2_AGG_ERR(STREAM_CLOSED), H2_AGG_ERR(FRAME_SIZE), H2_AGG_ERR(REFUSED_STREAM), H2_AGG_ERR(CANCEL),
                        H2_AGG_ERR(COMPRESSION), H2_AGG_ERR(CONNECT), H2_AGG_ERR(ENHANCE_YOUR_CALM), H2_AGG_ERR(INADEQUATE_SECURITY),
-                       esc->h2_read_closed, esc->h2_write_closed, esc->ssl_errors, h2o_mmap_errors);
+                       esc->h2_idle_timeout, esc->h2_read_closed, esc->h2_write_closed, esc->ssl_errors, h2o_mmap_errors);
     pthread_mutex_destroy(&esc->mutex);
     free(esc);
     return ret;

@@ -648,6 +648,10 @@ struct st_h2o_context_t {
              * premature close on write
              */
             uint64_t write_closed;
+            /**
+             * counter for http2 idle timeouts
+             */
+            uint64_t idle_timeouts;
         } events;
     } http2;
 

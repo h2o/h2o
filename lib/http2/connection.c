@@ -143,6 +143,7 @@ static void initiate_graceful_shutdown(h2o_context_t *ctx)
 static void on_idle_timeout(h2o_timer_t *entry)
 {
     h2o_http2_conn_t *conn = H2O_STRUCT_FROM_MEMBER(h2o_http2_conn_t, _timeout_entry, entry);
+    conn->super.ctx->http2.events.idle_timeouts++;
 
     if (conn->_write.buf_in_flight != NULL) {
         close_connection_now(conn);
