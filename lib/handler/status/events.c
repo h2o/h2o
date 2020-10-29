@@ -103,7 +103,7 @@ static h2o_iovec_t events_status_final(void *priv, h2o_globalconf_t *gconf, h2o_
                        " \"http2-errors.connect\": %" PRIu64 ", \n"
                        " \"http2-errors.enhance-your-calm\": %" PRIu64 ", \n"
                        " \"http2-errors.inadequate-security\": %" PRIu64 ", \n"
-                       " \"http2-errors.idle-timeout\": %" PRIu64 ", \n"
+                       " \"http2.idle-timeout\": %" PRIu64 ", \n"
                        " \"http2.read-closed\": %" PRIu64 ", \n"
                        " \"http2.write-closed\": %" PRIu64 ", \n"
                        " \"ssl.errors\": %" PRIu64 ", \n"
