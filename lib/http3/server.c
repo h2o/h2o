@@ -1553,7 +1553,6 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
     conn->scheduler.uni.active = 0;
     conn->scheduler.uni.conn_blocked = 0;
     memset(&conn->_conns, 0, sizeof(conn->_conns));
-    h2o_linklist_insert(&ctx->accept_ctx->ctx->http3._conns, &conn->_conns);
 
     /* accept connection */
 #if PICOTLS_USE_DTRACE
@@ -1567,10 +1566,12 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
     ptls_default_skip_tracing = orig_skip_tracing;
 #endif
     if (accept_ret != 0) {
-        on_h3_destroy(&conn->h3.super);
+        h2o_http3_dispose_conn(&conn->h3);
+        free(conn);
         return NULL;
     }
     ++ctx->super.next_cid.master_id; /* FIXME check overlap */
+    h2o_linklist_insert(&ctx->accept_ctx->ctx->http3._conns, &conn->_conns);
     h2o_http3_setup(&conn->h3, qconn);
 
     H2O_PROBE_CONN(H3S_ACCEPT, &conn->super, &conn->super, conn->h3.super.quic);
