@@ -624,14 +624,12 @@ int h2o_evloop_run(h2o_evloop_t *loop, int32_t max_wait)
         h2o_linklist_t expired;
         h2o_linklist_init_anchor(&expired);
         h2o_timerwheel_get_expired(loop->_timeouts, loop->_now_millisec, &expired);
-        if (h2o_linklist_is_empty(&expired))
-            break;
-        do {
+        while (!h2o_linklist_is_empty(&expired)) {
             h2o_timerwheel_entry_t *timer = H2O_STRUCT_FROM_MEMBER(h2o_timerwheel_entry_t, _link, expired.next);
             h2o_linklist_unlink(&timer->_link);
             timer->cb(timer);
             run_pending(loop);
-        } while (!h2o_linklist_is_empty(&expired));
+        }
     }
 
     assert(loop->_pending_as_client == NULL);
