@@ -632,10 +632,7 @@ static h2o_iovec_t build_request(struct st_h2o_http1client_t *client, h2o_iovec_
     APPEND(method.base, method.len);
     buf.base[offset++] = ' ';
     APPEND(url->path.base, url->path.len);
-    APPEND_STRLIT(" HTTP/1.1\r\nhost: ");
-    APPEND(url->authority.base, url->authority.len);
-    buf.base[offset++] = '\r';
-    buf.base[offset++] = '\n';
+    APPEND_STRLIT(" HTTP/1.1\r\n");
     assert(offset <= buf.len);
 
     if (connection.base != NULL) {
@@ -643,9 +640,18 @@ static h2o_iovec_t build_request(struct st_h2o_http1client_t *client, h2o_iovec_
         APPEND_HEADER(&h);
     }
 
+    int has_host_header = 0;
     h2o_header_t *h, *h_end;
-    for (h = (h2o_header_t *)headers, h_end = h + num_headers; h != h_end; ++h)
+    for (h = (h2o_header_t *)headers, h_end = h + num_headers; h != h_end; ++h) {
+        if (h->name == (const h2o_iovec_t *)H2O_TOKEN_HOST)
+            has_host_header = 1;
         APPEND_HEADER(h);
+    }
+
+    if (!has_host_header) {
+        h2o_header_t h = (h2o_header_t){&H2O_TOKEN_HOST->buf, NULL, url->authority};
+        APPEND_HEADER(&h);
+    }
 
     APPEND_STRLIT("\r\n");
 
