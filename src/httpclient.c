@@ -336,9 +336,14 @@ h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *errstr, 
 
     *_method = h2o_iovec_init(req.method, strlen(req.method));
     *url = *((h2o_url_t *)client->data);
-    for (i = 0; i != req.num_headers; ++i)
+    for (i = 0; i != req.num_headers; ++i) {
+        if (h2o_lookup_token(req.headers[i].name.base, req.headers[i].name.len) == H2O_TOKEN_HOST) {
+            url->authority = req.headers[i].value;
+            continue;
+        }
         h2o_add_header_by_str(&pool, &headers_vec, req.headers[i].name.base, req.headers[i].name.len, 1, NULL,
                               req.headers[i].value.base, req.headers[i].value.len);
+    }
     *body = h2o_iovec_init(NULL, 0);
     *proceed_req_cb = NULL;
 
