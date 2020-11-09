@@ -2820,6 +2820,47 @@ err:
 }
 #endif
 
+static h2o_iovec_t stringify_quic_forward_vector(h2o_mem_pool_t *pool)
+{
+#define BUFSIZE (4 * 1024)
+    h2o_iovec_t ret = {
+        .base = h2o_mem_alloc_pool(pool, char, BUFSIZE),
+        .len = 0,
+    };
+
+    ret.len = snprintf(ret.base, BUFSIZE, "[");
+    for (size_t i = 0; i < conf.quic.forward_nodes.size; ++i) {
+        if (i != 0) {
+            ret.len += snprintf(ret.base + ret.len, BUFSIZE - ret.len, ",");
+            assert(ret.len < BUFSIZE);
+        }
+        const struct st_h2o_quic_forward_node_t *forward_node = &conf.quic.forward_nodes.entries[i];
+        struct sockaddr_storage ss;
+        socklen_t ss_size = sizeof(ss);
+        char ip[INET6_ADDRSTRLEN] = "?";
+        int port = -1;
+        if (getpeername(forward_node->fd, (struct sockaddr *)&ss, &ss_size) == 0) {
+            if (ss.ss_family == AF_INET) {
+                struct sockaddr_in *sin = (struct sockaddr_in *)&ss;
+                inet_ntop(AF_INET, &sin->sin_addr, ip, sizeof(ip));
+                port = ntohs(sin->sin_port);
+            } else if (ss.ss_family == AF_INET6) {
+                struct sockaddr_in6 *sin = (struct sockaddr_in6 *)&ss;
+                inet_ntop(AF_INET6, &sin->sin6_addr, ip, sizeof(ip));
+                port = ntohs(sin->sin6_port);
+            }
+        }
+        ret.len += snprintf(ret.base + ret.len, BUFSIZE - ret.len,
+            "{\"id\":%" PRIu64 ",\"fd\":%d,\"ip\":\"%s\",\"port\":%d}",
+            forward_node->id, forward_node->fd, ip, port);
+        assert(ret.len < BUFSIZE);
+    }
+    ret.len += snprintf(ret.base + ret.len, BUFSIZE - ret.len, "]");
+    assert(ret.len < BUFSIZE);
+#undef BUFSIZE
+    return ret;
+}
+
 static h2o_iovec_t on_extra_status(void *unused, h2o_globalconf_t *_conf, h2o_req_t *req)
 {
 #define BUFSIZE (16 * 1024)
@@ -2846,9 +2887,13 @@ static h2o_iovec_t on_extra_status(void *unused, h2o_globalconf_t *_conf, h2o_re
                        " \"max-connections\": %d,\n"
                        " \"listeners\": %zu,\n"
                        " \"worker-threads\": %zu,\n"
-                       " \"num-sessions\": %lu",
+                       " \"num-sessions\": %lu,\n",
                        OpenSSL_version(OPENSSL_VERSION), current_time, restart_time, (uint64_t)(now - conf.launch_time), generation,
                        num_connections(0), conf.max_connections, conf.num_listeners, conf.thread_map.size, num_sessions(0));
+    assert(ret.len < BUFSIZE);
+
+    ret.len += snprintf(ret.base + ret.len, BUFSIZE - ret.len,
+        " \"quic-forward-nodes\":%s", stringify_quic_forward_vector(&req->pool).base);
     assert(ret.len < BUFSIZE);
 
 #if JEMALLOC_STATS == 1

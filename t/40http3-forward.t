@@ -4,6 +4,7 @@ use File::Temp qw(tempdir);
 use Net::EmptyPort qw(empty_port wait_port);
 use Test::More;
 use Time::HiRes qw(time);
+use JSON qw(decode_json);
 use t::Util;
 
 plan skip_all => 'mruby support is off'
@@ -46,6 +47,16 @@ is do {local $/; join "", <$slow_fh>}, "server=1", "slow request succeeded";
 $elapsed = time - $elapsed;
 cmp_ok $elapsed, '>=', 3, "slow request is so slow that the packets should have gone through server2";
 
+my $status = `curl -sfL http://127.0.0.1:$server1->{port}/status/json`;
+is_deeply(
+  [map { delete $_->{fd}; $_ } @{decode_json($status)->{"quic-forward-nodes"}}],
+  [
+    { id => 1, ip => "127.0.0.2", port => $quic_port },
+    { id => 2, ip => "127.0.0.1", port => $quic_port },
+  ],
+  "quic-forward-nodes in the status json",
+);
+
 done_testing;
 
 sub spawn {
@@ -76,6 +87,8 @@ hosts:
           Proc.new do |env|
             [200, {}, ["server=$server_id"]]
           end
+      "/status":
+        status: ON
 EOT
     spawn_h2o($conf);
 }
