@@ -1604,6 +1604,8 @@ static void graceful_shutdown_close_stragglers(h2o_timer_t *entry)
         next = node->next;
         h2o_quic_close_connection(&conn->h3.super, 0, "shutting down");
     }
+
+    ctx->http3._graceful_shutdown_timeout.cb = NULL;
 }
 
 static void graceful_shutdown_resend_goaway(h2o_timer_t *entry)
@@ -1633,6 +1635,8 @@ static void graceful_shutdown_resend_goaway(h2o_timer_t *entry)
     if (do_close_stragglers && ctx->globalconf->http3.graceful_shutdown_timeout > 0) {
         ctx->http3._graceful_shutdown_timeout.cb = graceful_shutdown_close_stragglers;
         h2o_timer_link(ctx->loop, ctx->globalconf->http3.graceful_shutdown_timeout, &ctx->http3._graceful_shutdown_timeout);
+    } else {
+        ctx->http3._graceful_shutdown_timeout.cb = NULL;
     }
 }
 
