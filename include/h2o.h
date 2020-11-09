@@ -517,10 +517,10 @@ struct st_h2o_globalconf_t {
 
 enum {
     H2O_COMPRESS_HINT_AUTO = 0,    /* default: let h2o negociate compression based on the configuration */
-    H2O_COMPRESS_HINT_DISABLE,     /* compression was explicitely disabled for this request */
-    H2O_COMPRESS_HINT_ENABLE,      /* compression was explicitely enabled for this request */
-    H2O_COMPRESS_HINT_ENABLE_GZIP, /* compression was explicitely enabled for this request, asking for gzip */
-    H2O_COMPRESS_HINT_ENABLE_BR,   /* compression was explicitely enabled for this request, asking for br */
+    H2O_COMPRESS_HINT_DISABLE,     /* compression was explicitly disabled for this request */
+    H2O_COMPRESS_HINT_ENABLE,      /* compression was explicitly enabled for this request */
+    H2O_COMPRESS_HINT_ENABLE_GZIP, /* compression was explicitly enabled for this request, asking for gzip */
+    H2O_COMPRESS_HINT_ENABLE_BR,   /* compression was explicitly enabled for this request, asking for br */
 };
 
 /**
@@ -1216,7 +1216,7 @@ struct st_h2o_req_t {
     unsigned send_server_timing;
 
     /**
-     * Whether the producer of the response has explicitely disabled or
+     * Whether the producer of the response has explicitly disabled or
      * enabled compression. One of H2O_COMPRESS_HINT_*
      */
     char compress_hint;
