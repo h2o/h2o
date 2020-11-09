@@ -1312,6 +1312,10 @@ static void unblock_conn_blocked_streams(struct st_h2o_http3_server_conn_t *conn
 
 static int scheduler_can_send(quicly_stream_scheduler_t *sched, quicly_conn_t *qc, int conn_is_saturated)
 {
+    /* the data pointer is NULL if called before quicly_accept() completes */
+    if (*quicly_get_data(qc) == NULL)
+        return 1;
+
     struct st_h2o_http3_server_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_conn_t, h3, *quicly_get_data(qc));
 
     if (!conn_is_saturated) {
