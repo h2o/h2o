@@ -43,8 +43,9 @@
 
 FILE *quicly_trace_fp = NULL;
 static unsigned verbosity = 0;
-static int suppress_output = 0;
+static int suppress_output = 0, send_datagram_frame = 0;
 static int64_t enqueue_requests_at = 0, request_interval = 0;
+static void *datagram_frame_payload_buf;
 
 static void hexdump(const char *title, const uint8_t *p, size_t l)
 {
@@ -488,7 +489,34 @@ static int send_pending(int fd, quicly_conn_t *conn)
     if ((ret = quicly_send(conn, &dest, &src, packets, &num_packets, buf, sizeof(buf))) == 0 && num_packets != 0)
         send_packets(fd, &dest.sa, packets, num_packets);
 
+    if (datagram_frame_payload_buf != NULL) {
+        free(datagram_frame_payload_buf);
+        datagram_frame_payload_buf = NULL;
+    }
+
     return ret;
+}
+
+static void set_datagram_frame(quicly_conn_t *conn, ptls_iovec_t payload)
+{
+    if (datagram_frame_payload_buf != NULL)
+        free(datagram_frame_payload_buf);
+
+    /* replace payload.base with an allocated buffer */
+    datagram_frame_payload_buf = malloc(payload.len);
+    memcpy(datagram_frame_payload_buf, payload.base, payload.len);
+    payload.base = datagram_frame_payload_buf;
+
+    /* set data to be sent. The buffer is being freed in `send_pending` after `quicly_send` is being called. */
+    quicly_set_datagram_frame(conn, payload);
+}
+
+static void on_receive_datagram_frame(quicly_receive_datagram_frame_t *self, quicly_conn_t *conn, ptls_iovec_t payload)
+{
+    printf("DATAGRAM: %.*s\n", (int)payload.len, payload.base);
+    /* send responds with a datagram frame */
+    if (!quicly_is_client(conn))
+        set_datagram_frame(conn, payload);
 }
 
 static void enqueue_requests(quicly_conn_t *conn)
@@ -588,6 +616,11 @@ static int run_client(int fd, struct sockaddr *sa, const char *host)
                     if (quicly_decode_packet(&ctx, &packet, buf, rret, &off) == SIZE_MAX)
                         break;
                     quicly_receive(conn, NULL, &sa, &packet);
+                    if (send_datagram_frame && quicly_connection_is_ready(conn)) {
+                        const char *message = "hello datagram!";
+                        set_datagram_frame(conn, ptls_iovec_init(message, strlen(message)));
+                        send_datagram_frame = 0;
+                    }
                 }
             }
         }
@@ -1070,7 +1103,7 @@ int main(int argc, char **argv)
         address_token_aead.dec = ptls_aead_new(&ptls_openssl_aes128gcm, &ptls_openssl_sha256, 0, secret, "");
     }
 
-    while ((ch = getopt(argc, argv, "a:b:B:c:C:d:k:Ee:Gi:I:K:l:M:m:NnOp:P:Rr:S:s:u:U:Vvx:X:y:h")) != -1) {
+    while ((ch = getopt(argc, argv, "a:b:B:c:C:Dd:k:Ee:Gi:I:K:l:M:m:NnOp:P:Rr:S:s:u:U:Vvx:X:y:h")) != -1) {
         switch (ch) {
         case 'a':
             assert(negotiated_protocols.count < PTLS_ELEMENTSOF(negotiated_protocols.list));
@@ -1117,6 +1150,9 @@ int main(int argc, char **argv)
             }
             ctx.initial_version = 0xff000000 | draft_ver;
         } break;
+        case 'D':
+            send_datagram_frame = 1;
+            break;
         case 'E':
             ctx.expand_client_hello = 1;
             break;
@@ -1304,6 +1340,13 @@ int main(int argc, char **argv)
         fprintf(stderr, "aes128gcmsha256 MUST be one of the cipher-suites specified using `-y`\n");
         return 1;
     MandatoryCipherFound:;
+    }
+
+    /* make adjustments for datagram frame support */
+    if (send_datagram_frame) {
+        static quicly_receive_datagram_frame_t cb = {on_receive_datagram_frame};
+        ctx.receive_datagram_frame = &cb;
+        ctx.transport_params.max_datagram_frame_size = ctx.transport_params.max_udp_payload_size;
     }
 
     if (ctx.tls->certificates.count != 0 || ctx.tls->sign_certificate != NULL) {
