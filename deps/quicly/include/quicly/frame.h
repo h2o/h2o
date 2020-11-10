@@ -57,6 +57,8 @@ extern "C" {
 #define QUICLY_FRAME_TYPE_TRANSPORT_CLOSE 28
 #define QUICLY_FRAME_TYPE_APPLICATION_CLOSE 29
 #define QUICLY_FRAME_TYPE_HANDSHAKE_DONE 30
+#define QUICLY_FRAME_TYPE_DATAGRAM_NOLEN 48
+#define QUICLY_FRAME_TYPE_DATAGRAM_WITHLEN 49
 #define QUICLY_FRAME_TYPE_ACK_FREQUENCY 0xaf
 
 #define QUICLY_FRAME_TYPE_STREAM_BITS 0x7
@@ -253,6 +255,16 @@ typedef struct st_quicly_new_token_frame_t {
 } quicly_new_token_frame_t;
 
 static int quicly_decode_new_token_frame(const uint8_t **src, const uint8_t *end, quicly_new_token_frame_t *frame);
+
+static size_t quicly_datagram_frame_capacity(ptls_iovec_t payload);
+static uint8_t *quicly_encode_datagram_frame(uint8_t *dst, ptls_iovec_t payload);
+
+typedef struct st_quicly_datagram_frame_t {
+    ptls_iovec_t payload;
+} quicly_datagram_frame_t;
+
+static int quicly_decode_datagram_frame(uint64_t frame_type, const uint8_t **src, const uint8_t *end,
+                                        quicly_datagram_frame_t *frame);
 
 typedef struct st_quicly_ack_frequency_frame_t {
     uint64_t sequence;
@@ -737,6 +749,40 @@ inline int quicly_decode_new_token_frame(const uint8_t **src, const uint8_t *end
         goto Error;
     frame->token = ptls_iovec_init(*src, (size_t)token_len);
     *src += frame->token.len;
+    return 0;
+Error:
+    return QUICLY_TRANSPORT_ERROR_FRAME_ENCODING;
+}
+
+inline size_t quicly_datagram_frame_capacity(ptls_iovec_t payload)
+{
+    return quicly_encodev_capacity(QUICLY_FRAME_TYPE_DATAGRAM_WITHLEN) + quicly_encodev_capacity(payload.len) + payload.len;
+}
+
+inline uint8_t *quicly_encode_datagram_frame(uint8_t *dst, ptls_iovec_t payload)
+{
+    dst = quicly_encodev(dst, QUICLY_FRAME_TYPE_DATAGRAM_WITHLEN);
+    dst = quicly_encodev(dst, payload.len);
+    memcpy(dst, payload.base, payload.len);
+    dst += payload.len;
+    return dst;
+}
+
+inline int quicly_decode_datagram_frame(uint64_t frame_type, const uint8_t **src, const uint8_t *end,
+                                        quicly_datagram_frame_t *frame)
+{
+    if (frame_type == QUICLY_FRAME_TYPE_DATAGRAM_WITHLEN) {
+        uint64_t len;
+        if ((len = quicly_decodev(src, end)) == UINT64_MAX)
+            goto Error;
+        if ((uint64_t)(end - *src) < len)
+            goto Error;
+        frame->payload.len = len;
+    } else {
+        frame->payload.len = end - *src;
+    }
+    frame->payload.base = (uint8_t *)*src;
+    *src += frame->payload.len;
     return 0;
 Error:
     return QUICLY_TRANSPORT_ERROR_FRAME_ENCODING;

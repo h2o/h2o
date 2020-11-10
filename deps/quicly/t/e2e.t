@@ -73,6 +73,12 @@ subtest "hello" => sub {
     };
 };
 
+subtest "datagram" => sub {
+    my $guard = spawn_server("-D");
+    my $resp = `$cli -D 127.0.0.1 $port 2> /dev/null`;
+    like $resp, qr/^DATAGRAM: hello datagram!$/m;
+};
+
 subtest "version-negotiation" => sub {
     my $guard = spawn_server();
     my $resp = `$cli -n -e $tempdir/events -p /12 127.0.0.1 $port 2> /dev/null`;

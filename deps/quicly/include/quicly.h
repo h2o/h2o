@@ -128,6 +128,10 @@ typedef struct st_quicly_stream_scheduler_t {
  */
 QUICLY_CALLBACK_TYPE(int, stream_open, quicly_stream_t *stream);
 /**
+ *
+ */
+QUICLY_CALLBACK_TYPE(void, receive_datagram_frame, quicly_conn_t *conn, ptls_iovec_t payload);
+/**
  * called when the connection is closed by remote peer
  */
 QUICLY_CALLBACK_TYPE(void, closed_by_remote, quicly_conn_t *conn, int err, uint64_t frame_type, const char *reason,
@@ -235,6 +239,10 @@ typedef struct st_quicly_transport_parameters_t {
      *
      */
     uint64_t active_connection_id_limit;
+    /**
+     *
+     */
+    uint16_t max_datagram_frame_size;
 } quicly_transport_parameters_t;
 
 struct st_quicly_context_t {
@@ -294,6 +302,10 @@ struct st_quicly_context_t {
      */
     quicly_stream_scheduler_t *stream_scheduler;
     /**
+     * callback for receiving datagram frame
+     */
+    quicly_receive_datagram_frame_t *receive_datagram_frame;
+    /**
      * callback called when a connection is closed by remote peer
      */
     quicly_closed_by_remote_t *closed_by_remote;
@@ -327,6 +339,11 @@ typedef enum {
      * before observing the first message from remote peer
      */
     QUICLY_STATE_FIRSTFLIGHT,
+    /**
+     * internal state used to indicate that the connection has not been provided to the application (and therefore might not have
+     * application data being associated)
+     */
+    QUICLY_STATE_ACCEPTING,
     /**
      * while connected
      */
@@ -398,7 +415,7 @@ struct st_quicly_conn_streamgroup_state_t {
         uint64_t padding, ping, ack, reset_stream, stop_sending, crypto, new_token, stream, max_data, max_stream_data,             \
             max_streams_bidi, max_streams_uni, data_blocked, stream_data_blocked, streams_blocked, new_connection_id,              \
             retire_connection_id, path_challenge, path_response, transport_close, application_close, handshake_done,               \
-            ack_frequency;                                                                                                         \
+            datagram, ack_frequency;                                                                                               \
     } num_frames_sent, num_frames_received;                                                                                        \
     /**                                                                                                                            \
      * Total number of PTOs observed during the connection.                                                                        \
@@ -1030,6 +1047,12 @@ static int quicly_stream_has_receive_side(int is_client, quicly_stream_id_t stre
  *
  */
 static int quicly_stream_is_self_initiated(quicly_stream_t *stream);
+/**
+ * Registers a datagram frame payload to be sent. When the applications calls `quicly_send` the first time after registering the
+ * datagram frame payload, the payload is either sent or the reference is discarded. Until then, it is the caller's responsibility
+ * to retain the memory pointed to by `payload`. At the moment, DATAFRAM frames are not congestion controlled.
+ */
+void quicly_set_datagram_frame(quicly_conn_t *conn, ptls_iovec_t payload);
 /**
  *
  */

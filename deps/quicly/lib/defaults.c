@@ -47,6 +47,7 @@ const quicly_context_t quicly_spec_context = {NULL,                             
                                               NULL,
                                               NULL, /* on_stream_open */
                                               &quicly_default_stream_scheduler,
+                                              NULL, /* receive_datagram_frame */
                                               NULL, /* on_conn_close */
                                               &quicly_default_now,
                                               NULL,
@@ -73,6 +74,7 @@ const quicly_context_t quicly_performant_context = {NULL,                       
                                                     NULL,
                                                     NULL, /* on_stream_open */
                                                     &quicly_default_stream_scheduler,
+                                                    NULL, /* receive_datagram_frame */
                                                     NULL, /* on_conn_close */
                                                     &quicly_default_now,
                                                     NULL,

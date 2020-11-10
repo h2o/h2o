@@ -102,6 +102,9 @@ provider quicly {
     probe stream_data_blocked_send(struct st_quicly_conn_t *conn, int64_t at, int64_t stream_id, uint64_t limit);
     probe stream_data_blocked_receive(struct st_quicly_conn_t *conn, int64_t at, int64_t stream_id, uint64_t limit);
 
+    probe datagram_send(struct st_quicly_conn_t *conn, int64_t at, const void *payload, size_t payload_len);
+    probe datagram_receive(struct st_quicly_conn_t *conn, int64_t at, const void *payload, size_t payload_len);
+
     probe ack_frequency_receive(struct st_quicly_conn_t *conn, int64_t at, uint64_t sequence, uint64_t packet_tolerance,
                                 uint64_t max_ack_delay, int ignore_order);
 
