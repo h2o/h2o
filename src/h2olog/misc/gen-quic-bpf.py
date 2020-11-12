@@ -198,13 +198,13 @@ def build_tracer_name(metadata):
 
 def build_tracer(context, metadata):
   fully_specified_probe_name = metadata["fully_specified_probe_name"]
-
+  tracer_name = build_tracer_name(metadata)
   c = r"""// %s
 int %s(struct pt_regs *ctx) {
   const void *buf = NULL;
   struct quic_event_t event = { .id = %d };
 
-""" % (fully_specified_probe_name, build_tracer_name(metadata), metadata['id'])
+""" % (fully_specified_probe_name, tracer_name, metadata['id'])
   block_field_set = block_fields.get(fully_specified_probe_name, set())
   probe_name = metadata["name"]
 
@@ -230,11 +230,11 @@ int %s(struct pt_regs *ctx) {
     elif is_sockaddr(arg_type):
       c += "  bpf_usdt_readarg(%d, ctx, &buf);\n" % (i+1)
       event_t_name = "%s.%s" % (probe_name, arg_name)
-      c += "  bpf_probe_read(&event.%s, sizeof(struct my_sockaddr), buf);\n" % event_t_name
+      c += "  bpf_probe_read(&event.%s, sizeof(struct h2olog_sockaddr), buf);\n" % event_t_name
       c += "  if (get_sockaddr__sa_family(&event.%s) == AF_INET) {\n" % event_t_name
-      c += "    bpf_probe_read(&event.%s, sizeof(struct my_sockaddr_in), buf);\n" % event_t_name
+      c += "    bpf_probe_read(&event.%s, sizeof(struct h2olog_sockaddr_in), buf);\n" % event_t_name
       c += "  } else if (get_sockaddr__sa_family(&event.%s) == AF_INET6) {\n" % event_t_name
-      c += "    bpf_probe_read(&event.%s, sizeof(struct my_sockaddr_in6), buf);\n" % event_t_name
+      c += "    bpf_probe_read(&event.%s, sizeof(struct h2olog_sockaddr_in6), buf);\n" % event_t_name
       c += "  }\n"
     elif is_ptr_type(arg_type):
       st_name = strip_typename(arg_type)
@@ -285,11 +285,11 @@ int %s(struct pt_regs *ctx) {
 
   c += r"""
   if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
-    bpf_trace_printk("failed to perf_submit\n");
+    bpf_trace_printk("failed to perf_submit in %s\n");
 
   return 0;
 }
-"""
+""" % (tracer_name)
   return c
 
 
@@ -345,10 +345,10 @@ static std::string gen_quic_bpf_header() {
 """
 
   for st_name, st_fields in struct_map.items():
-    # It limits a size of structs to 128
+    # It limits a size of structs to 100 as a heuristic.
     # This is because the BPF stack has a limit to 512 bytes.
     generator += r"""
-  bpf += "#define sizeof_%s " + std::to_string(std::min<size_t>(sizeof(struct %s), 128)) + "\n";
+  bpf += "#define sizeof_%s " + std::to_string(std::min<size_t>(sizeof(struct %s), 100)) + "\n";
 """ % (st_name, st_name)
 
     for st_field_access, st_field_name_alias in st_fields:
@@ -360,10 +360,10 @@ static std::string gen_quic_bpf_header() {
   bpf += GEN_FIELD_INFO(struct sockaddr, sa_family, "sockaddr__sa_family");
   bpf += "#define AF_INET  " + std::to_string(AF_INET) + "\n";
   bpf += "#define AF_INET6 " + std::to_string(AF_INET6) + "\n";
-  bpf += "typedef struct my_sockaddr     { uint8_t data[" + std::to_string(sizeof(sockaddr)) + "]; } my_sockaddr;\n";
-  bpf += "typedef struct my_sockaddr_in  { uint8_t data[" + std::to_string(sizeof(sockaddr_in)) + "]; } my_sockaddr_in;\n";
-  bpf += "typedef struct my_sockaddr_in6 { uint8_t data[" + std::to_string(sizeof(sockaddr_in6)) + "]; } my_sockaddr_in6;\n";
-  bpf += "typedef struct my_sockaddr_storage { uint8_t data[" + std::to_string(std::max({ sizeof(sockaddr), sizeof(sockaddr_in), sizeof(sockaddr_in6) })) + "]; } my_sockaddr_storage;\n";
+  bpf += "typedef struct h2olog_sockaddr     { uint8_t data[" + std::to_string(sizeof(sockaddr)) + "]; } h2olog_sockaddr;\n";
+  bpf += "typedef struct h2olog_sockaddr_in  { uint8_t data[" + std::to_string(sizeof(sockaddr_in)) + "]; } h2olog_sockaddr_in;\n";
+  bpf += "typedef struct h2olog_sockaddr_in6 { uint8_t data[" + std::to_string(sizeof(sockaddr_in6)) + "]; } h2olog_sockaddr_in6;\n";
+  bpf += "typedef struct h2olog_sockaddr_storage { uint8_t data[" + std::to_string(std::max({ sizeof(sockaddr), sizeof(sockaddr_in), sizeof(sockaddr_in6) })) + "]; } h2olog_sockaddr_storage;\n";
 """
 
   generator += r"""
@@ -409,7 +409,7 @@ struct quic_event_t {
       elif is_str_type(field_type):
         f = "char %s[STR_LEN]" % field_name
       elif is_sockaddr(field_type):
-        f = "my_sockaddr_storage %s" % field_name
+        f = "h2olog_sockaddr_storage %s" % field_name
       else:
         f = "%s %s" % (field_type, field_name)
 
@@ -538,7 +538,6 @@ extern "C" {
 #include <stdio.h>
 #include <string.h>
 #include <sys/time.h>
-#include <sys/socket.h>
 #include "quicly.h"
 }
 
@@ -550,11 +549,6 @@ extern "C" {
 
 #define STR_LEN 64
 #define STR_LIT(s) s, strlen(s)
-
-typedef sockaddr my_sockaddr;
-typedef sockaddr_in my_sockaddr_in;
-typedef sockaddr_in6 my_sockaddr_in6;
-typedef sockaddr my_sockaddr_storage;
 
 class h2o_quic_tracer : public h2o_tracer {
 protected:
@@ -583,6 +577,7 @@ void h2o_quic_tracer::do_handle_lost(uint64_t lost)
 }
 
 std::string h2o_quic_tracer::bpf_text() {
+  // language=c
   return gen_quic_bpf_header() + R"(
 %s
 )";

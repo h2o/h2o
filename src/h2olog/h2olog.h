@@ -29,7 +29,19 @@
 #include <string>
 extern "C" {
 #include <time.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
 }
+
+typedef sockaddr h2olog_sockaddr;
+typedef sockaddr_in h2olog_sockaddr_in;
+typedef sockaddr_in6 h2olog_sockaddr_in6;
+typedef union {
+  h2olog_sockaddr sa;
+  h2olog_sockaddr_in sin;
+  h2olog_sockaddr_in6 sin6;
+} h2olog_sockaddr_storage;
+
 
 class h2o_tracer
 {

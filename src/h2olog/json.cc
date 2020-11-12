@@ -1,3 +1,4 @@
+#include "h2olog.h"
 #include "json.h"
 
 extern "C" {
@@ -118,37 +119,22 @@ static void json_write_name_with_prefix(FILE *out, const char *prefix, size_t pr
 {
     fputc('"', out);
     fwrite(prefix, 1, prefix_len, out);
-    fputc('_', out);
+    fputc('-', out);
     fputs(name, out);
     fputc('"', out);
     fputc(':', out);
 }
 
-void json_write_pair_c(FILE *out, const char *name, size_t name_len, const sockaddr &value)
+void json_write_pair_c(FILE *out, const char *name, size_t name_len, const h2olog_sockaddr_storage &value)
 {
-    const struct sockaddr *sa = &value;
+    const sockaddr *sa = reinterpret_cast<const sockaddr*>(&value);
     fputc(',', out);
 
     // family
     json_write_name_with_prefix(out, name, name_len, "family");
-    switch (sa->sa_family) {
-    case AF_UNSPEC: {
-        json_write_str_value(out, "AF_UNSPEC");
+    fprintf(out, "%d", (int)sa->sa_family);
+    if (!(sa->sa_family == AF_INET || sa->sa_family == AF_INET6)) {
         return;
-    }
-    case AF_INET: {
-        json_write_str_value(out, "AF_INET");
-        break;
-    }
-    case AF_INET6: {
-        json_write_str_value(out, "AF_INET6");
-        break;
-    }
-    default: {
-        // this field is string
-        fprintf(out, "\"%d\"", (int)sa->sa_family);
-        return;
-    }
     }
 
     fputc(',', out);
