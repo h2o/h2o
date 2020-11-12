@@ -115,45 +115,34 @@ void json_write_pair_c(FILE *out, const char *name, size_t name_len, uint64_t va
     fprintf(out, "%" PRIu64, value);
 }
 
-static void json_write_name_with_prefix(FILE *out, const char *prefix, size_t prefix_len, const char *name)
-{
-    fputc('"', out);
-    fwrite(prefix, 1, prefix_len, out);
-    fputc('-', out);
-    fputs(name, out);
-    fputc('"', out);
-    fputc(':', out);
-}
-
 void json_write_pair_c(FILE *out, const char *name, size_t name_len, const h2olog_sockaddr_storage &value)
 {
     const sockaddr *sa = &value.sa;
     fputc(',', out);
 
-    // family
-    json_write_name_with_prefix(out, name, name_len, "family");
-    fprintf(out, "%d", (int)sa->sa_family);
-    if (!(sa->sa_family == AF_INET || sa->sa_family == AF_INET6)) {
+    json_write_name_value(out, name, name_len);
+
+    char addr[NI_MAXHOST];
+    size_t addr_len = h2o_socket_getnumerichost(sa, sizeof(h2olog_sockaddr_storage), addr);
+    if (addr_len == SIZE_MAX) {
+        fprintf(out, "null");
         return;
     }
+    int32_t port = h2o_socket_getport(sa);
 
-    fputc(',', out);
-
-    // AF_INET or AF_INET6
-
-    // addr
-    json_write_name_with_prefix(out, name, name_len, "addr");
-    char addr[NI_MAXHOST];
-    size_t len = h2o_socket_getnumerichost(sa, sizeof(h2olog_sockaddr_storage), addr);
-    if (len != SIZE_MAX) {
-        json_write_str_value(out, addr);
-    } else {
-        fprintf(out, "null");
+    if (sa->sa_family == AF_INET) {
+        // e.g. "1.2.3.4:12345"
+        fputc('"', out);
+        fwrite(addr, 1, addr_len, out);
+        fputc(':', out);
+        fprintf(out, "%" PRId32, port);
+        fputc('"', out);
+    } else if (sa->sa_family == AF_INET6) {
+        // e.g. [2001:0db8:85a3::8a2e:0370:7334]:12345"
+        fputs("\"[", out);
+        fwrite(addr, 1, addr_len, out);
+        fputc(':', out);
+        fprintf(out, "%" PRId32, port);
+        fputs("]\"", out);
     }
-
-    fputc(',', out);
-
-    // port
-    json_write_name_with_prefix(out, name, name_len, "port");
-    fprintf(out, "%" PRId32, h2o_socket_getport(sa));
 }
