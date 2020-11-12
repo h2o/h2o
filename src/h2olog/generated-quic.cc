@@ -94,7 +94,7 @@ static std::string gen_quic_bpf_header() {
   bpf += "typedef struct h2olog_sockaddr     { uint8_t data[" + std::to_string(sizeof(sockaddr)) + "]; } h2olog_sockaddr;\n";
   bpf += "typedef struct h2olog_sockaddr_in  { uint8_t data[" + std::to_string(sizeof(sockaddr_in)) + "]; } h2olog_sockaddr_in;\n";
   bpf += "typedef struct h2olog_sockaddr_in6 { uint8_t data[" + std::to_string(sizeof(sockaddr_in6)) + "]; } h2olog_sockaddr_in6;\n";
-  bpf += "typedef struct h2olog_sockaddr_storage { uint8_t data[" + std::to_string(std::max({ sizeof(sockaddr), sizeof(sockaddr_in), sizeof(sockaddr_in6) })) + "]; } h2olog_sockaddr_storage;\n";
+  bpf += "typedef union h2olog_sockaddr_storage { h2olog_sockaddr sa; h2olog_sockaddr_in sin; h2olog_sockaddr_in6 sin6; } h2olog_sockaddr_storage;\n";
 
   return bpf;
 }
