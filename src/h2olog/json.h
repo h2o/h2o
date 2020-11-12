@@ -3,9 +3,7 @@
 
 #include <cstdio>
 #include <cstdint>
-extern "C" {
-#include <sys/socket.h>
-}
+#include "h2olog.h"
 
 // "_n" suffix means "with no heading comma"
 // "_c" suffix means "with a heading comma"
