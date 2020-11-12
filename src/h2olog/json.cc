@@ -127,7 +127,7 @@ static void json_write_name_with_prefix(FILE *out, const char *prefix, size_t pr
 
 void json_write_pair_c(FILE *out, const char *name, size_t name_len, const h2olog_sockaddr_storage &value)
 {
-    const sockaddr *sa = reinterpret_cast<const sockaddr*>(&value);
+    const sockaddr *sa = &value.sa;
     fputc(',', out);
 
     // family
@@ -144,7 +144,7 @@ void json_write_pair_c(FILE *out, const char *name, size_t name_len, const h2olo
     // addr
     json_write_name_with_prefix(out, name, name_len, "addr");
     char addr[NI_MAXHOST];
-    size_t len = h2o_socket_getnumerichost(sa, sizeof(struct sockaddr_storage), addr);
+    size_t len = h2o_socket_getnumerichost(sa, sizeof(h2olog_sockaddr_storage), addr);
     if (len != SIZE_MAX) {
         json_write_str_value(out, addr);
     } else {
