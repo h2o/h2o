@@ -1,14 +1,14 @@
 // Generated code. Do not edit it here!
 
 extern "C" {
-#include <stdlib.h>
-#include <stdint.h>
-#include <stdio.h>
-#include <string.h>
 #include <sys/time.h>
 #include "quicly.h"
 }
 
+#include <cstdlib>
+#include <cstdint>
+#include <cstdio>
+#include <cstring>
 #include <string>
 #include <algorithm>
 
@@ -17,6 +17,8 @@ extern "C" {
 
 #define STR_LEN 64
 #define STR_LIT(s) s, strlen(s)
+
+using namespace std;
 
 class h2o_quic_tracer : public h2o_tracer {
 protected:

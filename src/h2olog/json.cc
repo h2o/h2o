@@ -1,14 +1,17 @@
 #include "h2olog.h"
 #include "json.h"
 
+#include <cstdio>
+#include <cstring>
+#include <cinttypes>
+
 extern "C" {
-#include <stdio.h>
-#include <string.h>
-#include <inttypes.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include "h2o/socket.h"
 }
+
+using namespace std;
 
 #define FPUTS_LIT(s, out) fwrite(s, 1, strlen(s), out)
 
