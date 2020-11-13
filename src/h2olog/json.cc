@@ -144,8 +144,8 @@ void json_write_pair_c(FILE *out, const char *name, size_t name_len, const h2olo
         // e.g. [2001:0db8:85a3::8a2e:0370:7334]:12345"
         fputs("\"[", out);
         fwrite(addr, 1, addr_len, out);
+        fputs("]\"", out);
         fputc(':', out);
         fprintf(out, "%" PRId32, port);
-        fputs("]\"", out);
     }
 }
