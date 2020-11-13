@@ -33,18 +33,10 @@ extern "C" {
 #include <netinet/in.h>
 }
 
-// Corresponding to the types in the BPF program.
-// In particualr, h2olog_sockaddr_storage is limited only to
-// sockaddr_in and sockaddr_in6 because `struct sockaddr_storage`
-// is too large to be put on the BPF stack (limited to 512 bytes),
-// while `sizeof(struct sockaddr_storage)` is 128 bytes in Linux/x64.
-typedef sockaddr h2olog_sockaddr;
-typedef sockaddr_in h2olog_sockaddr_in;
-typedef sockaddr_in6 h2olog_sockaddr_in6;
-union h2olog_sockaddr_storage {
-    h2olog_sockaddr sa;
-    h2olog_sockaddr_in sin;
-    h2olog_sockaddr_in6 sin6;
+union h2olog_address_t {
+    sockaddr sa;
+    sockaddr_in sin;
+    sockaddr_in6 sin6;
 };
 
 class h2o_tracer

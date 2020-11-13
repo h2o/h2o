@@ -118,7 +118,7 @@ void json_write_pair_c(FILE *out, const char *name, size_t name_len, uint64_t va
     fprintf(out, "%" PRIu64, value);
 }
 
-void json_write_pair_c(FILE *out, const char *name, size_t name_len, const h2olog_sockaddr_storage &value)
+void json_write_pair_c(FILE *out, const char *name, size_t name_len, const h2olog_address_t &value)
 {
     const sockaddr *sa = &value.sa;
     fputc(',', out);
@@ -126,7 +126,7 @@ void json_write_pair_c(FILE *out, const char *name, size_t name_len, const h2olo
     json_write_name_value(out, name, name_len);
 
     char addr[NI_MAXHOST];
-    size_t addr_len = h2o_socket_getnumerichost(sa, sizeof(h2olog_sockaddr_storage), addr);
+    size_t addr_len = h2o_socket_getnumerichost(sa, sizeof(h2olog_address_t), addr);
     if (addr_len == SIZE_MAX) {
         fprintf(out, "null");
         return;

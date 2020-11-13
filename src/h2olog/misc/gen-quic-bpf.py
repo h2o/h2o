@@ -53,6 +53,10 @@ struct_map = {
     "st_quicly_conn_t": [
         ("super.local.cid_set.plaintext.master_id", "master_id"),
     ],
+
+    "sockaddr": [],
+    "sockaddr_in": [],
+    "sockaddr_in6": [],
 }
 
 # A block list to list useless or secret data fields
@@ -185,7 +189,7 @@ def is_bin_type(t):
 
 
 def is_sockaddr(t):
-  return re.search(r'\bsockaddr\s*\*', t)
+  return re.search(r'\b(?:sockaddr|h2olog_address_t)\s*\*', t)
 
 
 def is_ptr_type(t):
@@ -230,11 +234,11 @@ int %s(struct pt_regs *ctx) {
     elif is_sockaddr(arg_type):
       c += "  bpf_usdt_readarg(%d, ctx, &buf);\n" % (i+1)
       event_t_name = "%s.%s" % (probe_name, arg_name)
-      c += "  bpf_probe_read(&event.%s, sizeof(struct h2olog_sockaddr), buf);\n" % event_t_name
+      c += "  bpf_probe_read(&event.%s, sizeof_sockaddr, buf);\n" % event_t_name
       c += "  if (get_sockaddr__sa_family(&event.%s) == AF_INET) {\n" % event_t_name
-      c += "    bpf_probe_read(&event.%s, sizeof(struct h2olog_sockaddr_in), buf);\n" % event_t_name
+      c += "    bpf_probe_read(&event.%s, sizeof_sockaddr_in, buf);\n" % event_t_name
       c += "  } else if (get_sockaddr__sa_family(&event.%s) == AF_INET6) {\n" % event_t_name
-      c += "    bpf_probe_read(&event.%s, sizeof(struct h2olog_sockaddr_in6), buf);\n" % event_t_name
+      c += "    bpf_probe_read(&event.%s, sizeof_sockaddr_in6, buf);\n" % event_t_name
       c += "  }\n"
     elif is_ptr_type(arg_type):
       st_name = strip_typename(arg_type)
@@ -355,15 +359,11 @@ static std::string gen_quic_bpf_header() {
       name = "%s__%s" % (st_name, st_field_name_alias or st_field_access)
       generator += """  bpf += GEN_FIELD_INFO(struct %s, %s, "%s");\n""" % (st_name, st_field_access, name)
 
-  # sockaddr_storage is too large for BPF; use sockddr_in|sockaddr_in6 directly.
   generator += r"""
   bpf += GEN_FIELD_INFO(struct sockaddr, sa_family, "sockaddr__sa_family");
   bpf += "#define AF_INET  " + std::to_string(AF_INET) + "\n";
   bpf += "#define AF_INET6 " + std::to_string(AF_INET6) + "\n";
-  bpf += "typedef struct h2olog_sockaddr     { uint8_t data[" + std::to_string(sizeof(sockaddr)) + "]; } h2olog_sockaddr;\n";
-  bpf += "typedef struct h2olog_sockaddr_in  { uint8_t data[" + std::to_string(sizeof(sockaddr_in)) + "]; } h2olog_sockaddr_in;\n";
-  bpf += "typedef struct h2olog_sockaddr_in6 { uint8_t data[" + std::to_string(sizeof(sockaddr_in6)) + "]; } h2olog_sockaddr_in6;\n";
-  bpf += "typedef union h2olog_sockaddr_storage { h2olog_sockaddr sa; h2olog_sockaddr_in sin; h2olog_sockaddr_in6 sin6; } h2olog_sockaddr_storage;\n";
+  bpf += "typedef union h2olog_address_t { uint8_t sa[sizeof_sockaddr]; uint8_t sin[sizeof_sockaddr_in]; uint8_t sin6[sizeof_sockaddr_in6]; } h2olog_address_t;\n";
 """
 
   generator += r"""
@@ -409,7 +409,7 @@ struct quic_event_t {
       elif is_str_type(field_type):
         f = "char %s[STR_LEN]" % field_name
       elif is_sockaddr(field_type):
-        f = "h2olog_sockaddr_storage %s" % field_name
+        f = "h2olog_address_t %s" % field_name
       else:
         f = "%s %s" % (field_type, field_name)
 

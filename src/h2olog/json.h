@@ -16,6 +16,6 @@ void json_write_pair_c(std::FILE *out, const char *name, size_t name_len, const 
 void json_write_pair_c(std::FILE *out, const char *name, size_t name_len, const std::uint64_t value);
 void json_write_pair_c(std::FILE *out, const char *name, size_t name_len, const std::int32_t value);
 void json_write_pair_c(std::FILE *out, const char *name, size_t name_len, const std::uint32_t value);
-void json_write_pair_c(std::FILE *out, const char *name, size_t name_len, const h2olog_sockaddr_storage &value);
+void json_write_pair_c(std::FILE *out, const char *name, size_t name_len, const h2olog_address_t &value);
 
 #endif
