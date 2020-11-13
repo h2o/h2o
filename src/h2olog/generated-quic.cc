@@ -88,13 +88,16 @@ static std::string gen_quic_bpf_header() {
   bpf += "#define sizeof_st_quicly_conn_t " + std::to_string(std::min<size_t>(sizeof(struct st_quicly_conn_t), 100)) + "\n";
   bpf += GEN_FIELD_INFO(struct st_quicly_conn_t, super.local.cid_set.plaintext.master_id, "st_quicly_conn_t__master_id");
 
+  bpf += "#define sizeof_sockaddr " + std::to_string(std::min<size_t>(sizeof(struct sockaddr), 100)) + "\n";
+
+  bpf += "#define sizeof_sockaddr_in " + std::to_string(std::min<size_t>(sizeof(struct sockaddr_in), 100)) + "\n";
+
+  bpf += "#define sizeof_sockaddr_in6 " + std::to_string(std::min<size_t>(sizeof(struct sockaddr_in6), 100)) + "\n";
+
   bpf += GEN_FIELD_INFO(struct sockaddr, sa_family, "sockaddr__sa_family");
   bpf += "#define AF_INET  " + std::to_string(AF_INET) + "\n";
   bpf += "#define AF_INET6 " + std::to_string(AF_INET6) + "\n";
-  bpf += "typedef struct h2olog_sockaddr     { uint8_t data[" + std::to_string(sizeof(sockaddr)) + "]; } h2olog_sockaddr;\n";
-  bpf += "typedef struct h2olog_sockaddr_in  { uint8_t data[" + std::to_string(sizeof(sockaddr_in)) + "]; } h2olog_sockaddr_in;\n";
-  bpf += "typedef struct h2olog_sockaddr_in6 { uint8_t data[" + std::to_string(sizeof(sockaddr_in6)) + "]; } h2olog_sockaddr_in6;\n";
-  bpf += "typedef union h2olog_sockaddr_storage { h2olog_sockaddr sa; h2olog_sockaddr_in sin; h2olog_sockaddr_in6 sin6; } h2olog_sockaddr_storage;\n";
+  bpf += "typedef union h2olog_address_t { uint8_t sa[sizeof_sockaddr]; uint8_t sin[sizeof_sockaddr_in]; uint8_t sin6[sizeof_sockaddr_in6]; } h2olog_address_t;\n";
 
   return bpf;
 }
@@ -568,13 +571,13 @@ struct quic_event_t {
       typeof_st_quicly_conn_t__master_id master_id;
     } h3s_destroy;
     struct { // h2o:h3_packet_receive
-      h2olog_sockaddr_storage dest;
-      h2olog_sockaddr_storage src;
+      h2olog_address_t dest;
+      h2olog_address_t src;
       size_t bytes_len;
     } h3_packet_receive;
     struct { // h2o:h3_packet_forward
-      h2olog_sockaddr_storage dest;
-      h2olog_sockaddr_storage src;
+      h2olog_address_t dest;
+      h2olog_address_t src;
       size_t num_packets;
       size_t num_bytes;
       int fd;
@@ -1895,13 +1898,13 @@ struct quic_event_t {
       typeof_st_quicly_conn_t__master_id master_id;
     } h3s_destroy;
     struct { // h2o:h3_packet_receive
-      h2olog_sockaddr_storage dest;
-      h2olog_sockaddr_storage src;
+      h2olog_address_t dest;
+      h2olog_address_t src;
       size_t bytes_len;
     } h3_packet_receive;
     struct { // h2o:h3_packet_forward
-      h2olog_sockaddr_storage dest;
-      h2olog_sockaddr_storage src;
+      h2olog_address_t dest;
+      h2olog_address_t src;
       size_t num_packets;
       size_t num_bytes;
       int fd;
@@ -3706,19 +3709,19 @@ int trace_h2o__h3_packet_receive(struct pt_regs *ctx) {
 
   // struct sockaddr * dest
   bpf_usdt_readarg(1, ctx, &buf);
-  bpf_probe_read(&event.h3_packet_receive.dest, sizeof(struct h2olog_sockaddr), buf);
+  bpf_probe_read(&event.h3_packet_receive.dest, sizeof_sockaddr, buf);
   if (get_sockaddr__sa_family(&event.h3_packet_receive.dest) == AF_INET) {
-    bpf_probe_read(&event.h3_packet_receive.dest, sizeof(struct h2olog_sockaddr_in), buf);
+    bpf_probe_read(&event.h3_packet_receive.dest, sizeof_sockaddr_in, buf);
   } else if (get_sockaddr__sa_family(&event.h3_packet_receive.dest) == AF_INET6) {
-    bpf_probe_read(&event.h3_packet_receive.dest, sizeof(struct h2olog_sockaddr_in6), buf);
+    bpf_probe_read(&event.h3_packet_receive.dest, sizeof_sockaddr_in6, buf);
   }
   // struct sockaddr * src
   bpf_usdt_readarg(2, ctx, &buf);
-  bpf_probe_read(&event.h3_packet_receive.src, sizeof(struct h2olog_sockaddr), buf);
+  bpf_probe_read(&event.h3_packet_receive.src, sizeof_sockaddr, buf);
   if (get_sockaddr__sa_family(&event.h3_packet_receive.src) == AF_INET) {
-    bpf_probe_read(&event.h3_packet_receive.src, sizeof(struct h2olog_sockaddr_in), buf);
+    bpf_probe_read(&event.h3_packet_receive.src, sizeof_sockaddr_in, buf);
   } else if (get_sockaddr__sa_family(&event.h3_packet_receive.src) == AF_INET6) {
-    bpf_probe_read(&event.h3_packet_receive.src, sizeof(struct h2olog_sockaddr_in6), buf);
+    bpf_probe_read(&event.h3_packet_receive.src, sizeof_sockaddr_in6, buf);
   }
   // const void * bytes (ignored)
   // size_t bytes_len
@@ -3736,19 +3739,19 @@ int trace_h2o__h3_packet_forward(struct pt_regs *ctx) {
 
   // struct sockaddr * dest
   bpf_usdt_readarg(1, ctx, &buf);
-  bpf_probe_read(&event.h3_packet_forward.dest, sizeof(struct h2olog_sockaddr), buf);
+  bpf_probe_read(&event.h3_packet_forward.dest, sizeof_sockaddr, buf);
   if (get_sockaddr__sa_family(&event.h3_packet_forward.dest) == AF_INET) {
-    bpf_probe_read(&event.h3_packet_forward.dest, sizeof(struct h2olog_sockaddr_in), buf);
+    bpf_probe_read(&event.h3_packet_forward.dest, sizeof_sockaddr_in, buf);
   } else if (get_sockaddr__sa_family(&event.h3_packet_forward.dest) == AF_INET6) {
-    bpf_probe_read(&event.h3_packet_forward.dest, sizeof(struct h2olog_sockaddr_in6), buf);
+    bpf_probe_read(&event.h3_packet_forward.dest, sizeof_sockaddr_in6, buf);
   }
   // struct sockaddr * src
   bpf_usdt_readarg(2, ctx, &buf);
-  bpf_probe_read(&event.h3_packet_forward.src, sizeof(struct h2olog_sockaddr), buf);
+  bpf_probe_read(&event.h3_packet_forward.src, sizeof_sockaddr, buf);
   if (get_sockaddr__sa_family(&event.h3_packet_forward.src) == AF_INET) {
-    bpf_probe_read(&event.h3_packet_forward.src, sizeof(struct h2olog_sockaddr_in), buf);
+    bpf_probe_read(&event.h3_packet_forward.src, sizeof_sockaddr_in, buf);
   } else if (get_sockaddr__sa_family(&event.h3_packet_forward.src) == AF_INET6) {
-    bpf_probe_read(&event.h3_packet_forward.src, sizeof(struct h2olog_sockaddr_in6), buf);
+    bpf_probe_read(&event.h3_packet_forward.src, sizeof_sockaddr_in6, buf);
   }
   // size_t num_packets
   bpf_usdt_readarg(3, ctx, &event.h3_packet_forward.num_packets);
