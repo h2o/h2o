@@ -133,19 +133,19 @@ void json_write_pair_c(FILE *out, const char *name, size_t name_len, const h2olo
     }
     int32_t port = h2o_socket_getport(sa);
 
+    fputc('"', out);
+
     if (sa->sa_family == AF_INET) {
         // e.g. "1.2.3.4:12345"
-        fputc('"', out);
         fwrite(addr, 1, addr_len, out);
-        fputc(':', out);
-        fprintf(out, "%" PRId32, port);
-        fputc('"', out);
     } else if (sa->sa_family == AF_INET6) {
-        // e.g. [2001:0db8:85a3::8a2e:0370:7334]:12345"
-        fputs("\"[", out);
+        // e.g. "[2001:0db8:85a3::8a2e:0370:7334]:12345"
+        fputc('[', out);
         fwrite(addr, 1, addr_len, out);
-        fputs("]\"", out);
-        fputc(':', out);
-        fprintf(out, "%" PRId32, port);
+        fputc(']', out);
     }
+    fputc(':', out);
+    fprintf(out, "%" PRId32, port);
+
+    fputc('"', out);
 }
