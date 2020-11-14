@@ -97,7 +97,6 @@ static std::string gen_quic_bpf_header() {
   bpf += GEN_FIELD_INFO(struct sockaddr, sa_family, "sockaddr__sa_family");
   bpf += "#define AF_INET  " + std::to_string(AF_INET) + "\n";
   bpf += "#define AF_INET6 " + std::to_string(AF_INET6) + "\n";
-  bpf += "typedef union h2olog_address_t { uint8_t sa[sizeof_sockaddr]; uint8_t sin[sizeof_sockaddr_in]; uint8_t sin6[sizeof_sockaddr_in6]; } h2olog_address_t;\n";
 
   return bpf;
 }
@@ -1429,6 +1428,13 @@ std::string h2o_quic_tracer::bpf_text() {
 #include <linux/sched.h>
 
 #define STR_LEN 64
+
+typedef union h2olog_address_t {
+  uint8_t sa[sizeof_sockaddr];
+  uint8_t sin[sizeof_sockaddr_in];
+  uint8_t sin6[sizeof_sockaddr_in6];
+} h2olog_address_t;;
+
 
 struct quic_event_t {
   uint8_t id;
