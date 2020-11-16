@@ -1,6 +1,17 @@
+#include "h2olog.h"
 #include "json.h"
-#include <string.h>
-#include <inttypes.h>
+
+#include <cstdio>
+#include <cstring>
+#include <cinttypes>
+
+extern "C" {
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include "h2o/socket.h"
+}
+
+using namespace std;
 
 #define FPUTS_LIT(s, out) fwrite(s, 1, strlen(s), out)
 
@@ -105,4 +116,36 @@ void json_write_pair_c(FILE *out, const char *name, size_t name_len, uint64_t va
     fputc(',', out);
     json_write_name_value(out, name, name_len);
     fprintf(out, "%" PRIu64, value);
+}
+
+void json_write_pair_c(FILE *out, const char *name, size_t name_len, const h2olog_address_t &value)
+{
+    const sockaddr *sa = &value.sa;
+    fputc(',', out);
+
+    json_write_name_value(out, name, name_len);
+
+    char addr[NI_MAXHOST];
+    size_t addr_len = h2o_socket_getnumerichost(sa, sizeof(h2olog_address_t), addr);
+    if (addr_len == SIZE_MAX) {
+        fprintf(out, "null");
+        return;
+    }
+    int32_t port = h2o_socket_getport(sa);
+
+    fputc('"', out);
+
+    if (sa->sa_family == AF_INET) {
+        // e.g. "1.2.3.4:12345"
+        fwrite(addr, 1, addr_len, out);
+    } else if (sa->sa_family == AF_INET6) {
+        // e.g. "[2001:0db8:85a3::8a2e:0370:7334]:12345"
+        fputc('[', out);
+        fwrite(addr, 1, addr_len, out);
+        fputc(']', out);
+    }
+    fputc(':', out);
+    fprintf(out, "%" PRId32, port);
+
+    fputc('"', out);
 }
