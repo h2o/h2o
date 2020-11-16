@@ -7,12 +7,17 @@ use warnings;
 
 my $ppid = getppid;
 
+# backtrace_symbols_fd(3) in Linux glibc shows different outputs for each compiler:
+#   clang: `./prog[0x1234]` where `0x1234` is the position addr
+#   gcc: `./prog(+0x1234)[0x55c98ec6a23b]` where `0x1234` is the position addr
+
 while (my $line = <STDIN>) {
     chomp $line;
-    if ($line =~ m{^([^\(\[]+)(.*?)\[(0x[0-9A-Fa-f]+)\]}) {
-        my ($exe, $info, $addr) = ($1, $2, $3);
+    if ($line =~ m{^([^\(\[]+)(?:\(\+(0x[0-9A-Fa-f]+)\))?[^\[]*\[(0x[0-9A-Fa-f]+)\]}) {
+        my $exe = $1;
+        my $addr = $2 // $3;
         my $resolved = addr2line($exe, $addr);
-        $line = "$exe${info}[$addr] $resolved"
+        $line .= " $resolved"
             if $resolved;
     }
     print "[$ppid] $line\n";
