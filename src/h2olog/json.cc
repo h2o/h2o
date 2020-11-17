@@ -8,6 +8,7 @@
 extern "C" {
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <netdb.h>
 #include "h2o/socket.h"
 }
 
