@@ -1510,7 +1510,7 @@ int h2o_socket_set_df_bit(int fd, int domain)
     do {                                                                                                                           \
         int optvar = _optvar;                                                                                                      \
         if (setsockopt(fd, ip, optname, &optvar, sizeof(optvar)) != 0) {                                                           \
-            perror("setsockopt(" H2O_TO_STR(optname) ")");                                                                         \
+            perror("failed to set the DF bit through setsockopt(" H2O_TO_STR(ip) ", " H2O_TO_STR(optname) ")");                    \
             return 0;                                                                                                              \
         }                                                                                                                          \
         return 1;                                                                                                                  \

@@ -1215,12 +1215,11 @@ static int open_listener(int domain, int type, int protocol, struct sockaddr *ad
         if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on)) != 0)
             goto Error;
     } break;
-    case SOCK_DGRAM: {
+    case SOCK_DGRAM:
         /* UDP: set SO_REUSEPORT and DF bit */
         socket_reuseport(fd);
-        if (!h2o_socket_set_df_bit(fd, domain))
-            goto Error;
-    } break;
+        h2o_socket_set_df_bit(fd, domain);
+        break;
     default:
         h2o_fatal("unexpected socket type %d", type);
         break;
