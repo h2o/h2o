@@ -453,7 +453,7 @@ static int handle_input_expect_headers(struct st_h2o_http3client_req_t *req, con
             return 0;
         }
         if (req->super.informational_cb != NULL &&
-            req->super.informational_cb(&req->super, 0, status, h2o_iovec_init(NULL, 0), headers.entries, headers.size) != 0) {
+            req->super.informational_cb(&req->super, 0x300, status, h2o_iovec_init(NULL, 0), headers.entries, headers.size) != 0) {
             return H2O_HTTP3_ERROR_INTERNAL;
         }
         return 0;
