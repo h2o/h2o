@@ -257,19 +257,11 @@ static void print_status_line(int version, int status, h2o_iovec_t msg)
     }
 }
 
-h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, int version, int status, h2o_iovec_t msg,
-                               h2o_header_t *headers, size_t num_headers, int header_requires_dup)
+static void print_response_headers(int version, int status, h2o_iovec_t msg, h2o_header_t *headers, size_t num_headers)
 {
-    size_t i;
-
-    if (errstr != NULL && errstr != h2o_httpclient_error_is_eos) {
-        on_error(client->ctx, errstr);
-        return NULL;
-    }
-
     print_status_line(version, status, msg);
 
-    for (i = 0; i != num_headers; ++i) {
+    for (size_t i = 0; i != num_headers; ++i) {
         const char *name = headers[i].orig_name;
         if (name == NULL)
             name = headers[i].name->base;
@@ -277,6 +269,24 @@ h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, int
     }
     fprintf(stderr, "\n");
     fflush(stderr);
+}
+
+static int on_informational(h2o_httpclient_t *client, int version, int status, h2o_iovec_t msg, h2o_header_t *headers,
+                            size_t num_headers)
+{
+    print_response_headers(version, status, msg, headers, num_headers);
+    return 0;
+}
+
+h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, int version, int status, h2o_iovec_t msg,
+                               h2o_header_t *headers, size_t num_headers, int header_requires_dup)
+{
+    if (errstr != NULL && errstr != h2o_httpclient_error_is_eos) {
+        on_error(client->ctx, errstr);
+        return NULL;
+    }
+
+    print_response_headers(version, status, msg, headers, num_headers);
 
     if (errstr == h2o_httpclient_error_is_eos) {
         on_error(client->ctx, "no body");
@@ -354,6 +364,7 @@ h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *errstr, 
 
     *headers = headers_vec.entries;
     *num_headers = headers_vec.size;
+    client->informational_cb = on_informational;
     return on_head;
 }
 
