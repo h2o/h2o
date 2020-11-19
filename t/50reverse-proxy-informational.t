@@ -20,6 +20,12 @@ my $upstream = spawn_server(
     },
 );
 
+my $quic_port = empty_port({
+    host  => "127.0.0.1",
+    proto => "udp",
+});
+my $h3client = bindir() . "/h2o-httpclient";
+
 subtest 'forward' => sub {
     subtest '100 Continue' => sub {
         do_forward(100);
@@ -32,6 +38,13 @@ subtest 'forward' => sub {
 subtest 'send 103' => sub {
     my $server = spawn_h2o(<< "EOT");
 send-informational: all
+listen:
+  type: quic
+  host: 127.0.0.1
+  port: $quic_port
+  ssl:
+    key-file: examples/h2o/server.key
+    certificate-file: examples/h2o/server.crt
 hosts:
   default:
     paths:
@@ -56,6 +69,12 @@ EOT
             (my $eh, $resp) = split(/\r\n\r\n/, $resp, 2);
             like $eh, qr{^foo: FOO}mi;
         });
+        subtest 'http/3' => sub {
+            plan skip_all => "$h3client not found"
+                unless -e $h3client;
+            my $resp = `$h3client -3 https://127.0.0.1:$quic_port/async/index.txt 2>&1`;
+            like $resp, qr{^HTTP/3 103\n.*?foo: FOO.*\n\nHTTP/3 200\n}s;
+        };
     };
     subtest 'sync' => sub {
         run_with_curl($server, sub {
@@ -64,6 +83,12 @@ EOT
             $resp = `$curl --silent --dump-header /dev/stdout '$proto://127.0.0.1:$port/sync'`;
             unlike $resp, qr{^HTTP/[\d.]+ 103}mi;
         });
+        subtest 'http/3' => sub {
+            plan skip_all => "$h3client not found"
+                unless -e $h3client;
+            my $resp = `$h3client -3 https://127.0.0.1:$quic_port/sync/index.txt 2>&1`;
+            like $resp, qr{^HTTP/3 200\n}s;
+        };
     };
 };
 
