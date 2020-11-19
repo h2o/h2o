@@ -70,21 +70,10 @@ block_fields = {
     "h2o:h3_packet_receive": set(["bytes"]),
 }
 
-# A block list for quicly-probes.d.
-# USDT probes in quicly-probes.d are handled by default.
-quicly_block_probes = set([
+# The block list for probes.
+# All the probes are handled by default in JSON mode
+block_probes = set([
     "quicly:debug_message",
-])
-
-# An allow list for h2o-probes.d
-# USDT probes in h2o-probes.d are not handled by default.
-h2o_allow_probes = set([
-    "h2o:h3s_accept",
-    "h2o:h3s_destroy",
-    "h2o:send_response_header",
-
-    "h2o:h3_packet_receive",
-    "h2o:h3_packet_forward",
 ])
 
 # To rename field names for compatibility with:
@@ -122,7 +111,7 @@ def strip_c_comments(s):
   return re.sub('//.*?\n|/\*.*?\*/', '', s, flags=re_flags)
 
 
-def parse_d(context: dict, path: Path, allow_probes: set = None, block_probes: set = None):
+def parse_d(context: dict, path: Path, block_probes: set = None):
   content = strip_c_comments(path.read_text())
 
   matched = re.search(d_decl, content, flags=re_flags)
@@ -138,8 +127,6 @@ def parse_d(context: dict, path: Path, allow_probes: set = None, block_probes: s
 
     fully_specified_probe_name = "%s:%s" % (provider, name)
     if block_probes and fully_specified_probe_name in block_probes:
-      continue
-    if allow_probes and fully_specified_probe_name not in allow_probes:
       continue
 
     metadata = {
@@ -276,9 +263,9 @@ def prepare_context(h2o_dir):
       "h2o_dir": h2o_dir,
   }
   parse_d(context, h2o_dir.joinpath(quicly_probes_d),
-          block_probes=quicly_block_probes)
+          block_probes=block_probes)
   parse_d(context, h2o_dir.joinpath(h2o_probes_d),
-          allow_probes=h2o_allow_probes)
+          block_probes=block_probes)
 
   return context
 

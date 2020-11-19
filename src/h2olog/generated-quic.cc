@@ -552,6 +552,24 @@ struct quic_event_t {
       int64_t at;
       size_t size;
     } conn_stats;
+    struct { // h2o:receive_request
+      uint64_t conn_id;
+      uint64_t req_id;
+      int http_version;
+    } receive_request;
+    struct { // h2o:receive_request_header
+      uint64_t conn_id;
+      uint64_t req_id;
+      char name[STR_LEN];
+      size_t name_len;
+      char value[STR_LEN];
+      size_t value_len;
+    } receive_request_header;
+    struct { // h2o:send_response
+      uint64_t conn_id;
+      uint64_t req_id;
+      int status;
+    } send_response;
     struct { // h2o:send_response_header
       uint64_t conn_id;
       uint64_t req_id;
@@ -560,6 +578,16 @@ struct quic_event_t {
       char value[STR_LEN];
       size_t value_len;
     } send_response_header;
+    struct { // h2o:h1_accept
+      uint64_t conn_id;
+    } h1_accept;
+    struct { // h2o:h1_close
+      uint64_t conn_id;
+    } h1_close;
+    struct { // h2o:h2_unknown_frame_type
+      uint64_t conn_id;
+      uint8_t frame_type;
+    } h2_unknown_frame_type;
     struct { // h2o:h3s_accept
       uint64_t conn_id;
       typeof_st_quicly_conn_t__master_id master_id;
@@ -567,6 +595,16 @@ struct quic_event_t {
     struct { // h2o:h3s_destroy
       uint64_t conn_id;
     } h3s_destroy;
+    struct { // h2o:h3s_stream_set_state
+      uint64_t conn_id;
+      uint64_t req_id;
+      unsigned state;
+    } h3s_stream_set_state;
+    struct { // h2o:h3_frame_receive
+      uint64_t frame_type;
+      uint8_t bytes[STR_LEN];
+      size_t bytes_len;
+    } h3_frame_receive;
     struct { // h2o:h3_packet_receive
       h2olog_address_t dest;
       h2olog_address_t src;
@@ -660,9 +698,17 @@ const std::vector<h2o_tracer::usdt> &h2o_quic_tracer::usdt_probes() {
     h2o_tracer::usdt("quicly", "stream_on_receive", "trace_quicly__stream_on_receive"),
     h2o_tracer::usdt("quicly", "stream_on_receive_reset", "trace_quicly__stream_on_receive_reset"),
     h2o_tracer::usdt("quicly", "conn_stats", "trace_quicly__conn_stats"),
+    h2o_tracer::usdt("h2o", "receive_request", "trace_h2o__receive_request"),
+    h2o_tracer::usdt("h2o", "receive_request_header", "trace_h2o__receive_request_header"),
+    h2o_tracer::usdt("h2o", "send_response", "trace_h2o__send_response"),
     h2o_tracer::usdt("h2o", "send_response_header", "trace_h2o__send_response_header"),
+    h2o_tracer::usdt("h2o", "h1_accept", "trace_h2o__h1_accept"),
+    h2o_tracer::usdt("h2o", "h1_close", "trace_h2o__h1_close"),
+    h2o_tracer::usdt("h2o", "h2_unknown_frame_type", "trace_h2o__h2_unknown_frame_type"),
     h2o_tracer::usdt("h2o", "h3s_accept", "trace_h2o__h3s_accept"),
     h2o_tracer::usdt("h2o", "h3s_destroy", "trace_h2o__h3s_destroy"),
+    h2o_tracer::usdt("h2o", "h3s_stream_set_state", "trace_h2o__h3s_stream_set_state"),
+    h2o_tracer::usdt("h2o", "h3_frame_receive", "trace_h2o__h3_frame_receive"),
     h2o_tracer::usdt("h2o", "h3_packet_receive", "trace_h2o__h3_packet_receive"),
     h2o_tracer::usdt("h2o", "h3_packet_forward", "trace_h2o__h3_packet_forward"),
 
@@ -1350,6 +1396,36 @@ void h2o_quic_tracer::do_handle_event(const void *data, int data_len) {
     json_write_pair_c(out_, STR_LIT("size"), event->conn_stats.size);
     break;
   }
+  case 77: { // h2o:receive_request
+    json_write_pair_n(out_, STR_LIT("type"), "receive-request");
+    json_write_pair_c(out_, STR_LIT("seq"), seq_);
+    json_write_pair_c(out_, STR_LIT("conn-id"), event->receive_request.conn_id);
+    json_write_pair_c(out_, STR_LIT("req-id"), event->receive_request.req_id);
+    json_write_pair_c(out_, STR_LIT("http-version"), event->receive_request.http_version);
+    json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
+    break;
+  }
+  case 78: { // h2o:receive_request_header
+    json_write_pair_n(out_, STR_LIT("type"), "receive-request-header");
+    json_write_pair_c(out_, STR_LIT("seq"), seq_);
+    json_write_pair_c(out_, STR_LIT("conn-id"), event->receive_request_header.conn_id);
+    json_write_pair_c(out_, STR_LIT("req-id"), event->receive_request_header.req_id);
+    json_write_pair_c(out_, STR_LIT("name"), event->receive_request_header.name);
+    json_write_pair_c(out_, STR_LIT("name-len"), event->receive_request_header.name_len);
+    json_write_pair_c(out_, STR_LIT("value"), event->receive_request_header.value);
+    json_write_pair_c(out_, STR_LIT("value-len"), event->receive_request_header.value_len);
+    json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
+    break;
+  }
+  case 79: { // h2o:send_response
+    json_write_pair_n(out_, STR_LIT("type"), "send-response");
+    json_write_pair_c(out_, STR_LIT("seq"), seq_);
+    json_write_pair_c(out_, STR_LIT("conn-id"), event->send_response.conn_id);
+    json_write_pair_c(out_, STR_LIT("req-id"), event->send_response.req_id);
+    json_write_pair_c(out_, STR_LIT("status"), event->send_response.status);
+    json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
+    break;
+  }
   case 80: { // h2o:send_response_header
     json_write_pair_n(out_, STR_LIT("type"), "send-response-header");
     json_write_pair_c(out_, STR_LIT("seq"), seq_);
@@ -1359,6 +1435,28 @@ void h2o_quic_tracer::do_handle_event(const void *data, int data_len) {
     json_write_pair_c(out_, STR_LIT("name-len"), event->send_response_header.name_len);
     json_write_pair_c(out_, STR_LIT("value"), event->send_response_header.value);
     json_write_pair_c(out_, STR_LIT("value-len"), event->send_response_header.value_len);
+    json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
+    break;
+  }
+  case 81: { // h2o:h1_accept
+    json_write_pair_n(out_, STR_LIT("type"), "h1-accept");
+    json_write_pair_c(out_, STR_LIT("seq"), seq_);
+    json_write_pair_c(out_, STR_LIT("conn-id"), event->h1_accept.conn_id);
+    json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
+    break;
+  }
+  case 82: { // h2o:h1_close
+    json_write_pair_n(out_, STR_LIT("type"), "h1-close");
+    json_write_pair_c(out_, STR_LIT("seq"), seq_);
+    json_write_pair_c(out_, STR_LIT("conn-id"), event->h1_close.conn_id);
+    json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
+    break;
+  }
+  case 83: { // h2o:h2_unknown_frame_type
+    json_write_pair_n(out_, STR_LIT("type"), "h2-unknown-frame-type");
+    json_write_pair_c(out_, STR_LIT("seq"), seq_);
+    json_write_pair_c(out_, STR_LIT("conn-id"), event->h2_unknown_frame_type.conn_id);
+    json_write_pair_c(out_, STR_LIT("frame-type"), event->h2_unknown_frame_type.frame_type);
     json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
     break;
   }
@@ -1374,6 +1472,24 @@ void h2o_quic_tracer::do_handle_event(const void *data, int data_len) {
     json_write_pair_n(out_, STR_LIT("type"), "h3s-destroy");
     json_write_pair_c(out_, STR_LIT("seq"), seq_);
     json_write_pair_c(out_, STR_LIT("conn-id"), event->h3s_destroy.conn_id);
+    json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
+    break;
+  }
+  case 86: { // h2o:h3s_stream_set_state
+    json_write_pair_n(out_, STR_LIT("type"), "h3s-stream-set-state");
+    json_write_pair_c(out_, STR_LIT("seq"), seq_);
+    json_write_pair_c(out_, STR_LIT("conn-id"), event->h3s_stream_set_state.conn_id);
+    json_write_pair_c(out_, STR_LIT("req-id"), event->h3s_stream_set_state.req_id);
+    json_write_pair_c(out_, STR_LIT("state"), event->h3s_stream_set_state.state);
+    json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
+    break;
+  }
+  case 87: { // h2o:h3_frame_receive
+    json_write_pair_n(out_, STR_LIT("type"), "h3-frame-receive");
+    json_write_pair_c(out_, STR_LIT("seq"), seq_);
+    json_write_pair_c(out_, STR_LIT("frame-type"), event->h3_frame_receive.frame_type);
+    json_write_pair_c(out_, STR_LIT("bytes"), event->h3_frame_receive.bytes, (event->h3_frame_receive.bytes_len < STR_LEN ? event->h3_frame_receive.bytes_len : STR_LEN));
+    json_write_pair_c(out_, STR_LIT("bytes-len"), event->h3_frame_receive.bytes_len);
     json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
     break;
   }
@@ -1882,6 +1998,24 @@ struct quic_event_t {
       int64_t at;
       size_t size;
     } conn_stats;
+    struct { // h2o:receive_request
+      uint64_t conn_id;
+      uint64_t req_id;
+      int http_version;
+    } receive_request;
+    struct { // h2o:receive_request_header
+      uint64_t conn_id;
+      uint64_t req_id;
+      char name[STR_LEN];
+      size_t name_len;
+      char value[STR_LEN];
+      size_t value_len;
+    } receive_request_header;
+    struct { // h2o:send_response
+      uint64_t conn_id;
+      uint64_t req_id;
+      int status;
+    } send_response;
     struct { // h2o:send_response_header
       uint64_t conn_id;
       uint64_t req_id;
@@ -1890,6 +2024,16 @@ struct quic_event_t {
       char value[STR_LEN];
       size_t value_len;
     } send_response_header;
+    struct { // h2o:h1_accept
+      uint64_t conn_id;
+    } h1_accept;
+    struct { // h2o:h1_close
+      uint64_t conn_id;
+    } h1_close;
+    struct { // h2o:h2_unknown_frame_type
+      uint64_t conn_id;
+      uint8_t frame_type;
+    } h2_unknown_frame_type;
     struct { // h2o:h3s_accept
       uint64_t conn_id;
       typeof_st_quicly_conn_t__master_id master_id;
@@ -1897,6 +2041,16 @@ struct quic_event_t {
     struct { // h2o:h3s_destroy
       uint64_t conn_id;
     } h3s_destroy;
+    struct { // h2o:h3s_stream_set_state
+      uint64_t conn_id;
+      uint64_t req_id;
+      unsigned state;
+    } h3s_stream_set_state;
+    struct { // h2o:h3_frame_receive
+      uint64_t frame_type;
+      uint8_t bytes[STR_LEN];
+      size_t bytes_len;
+    } h3_frame_receive;
     struct { // h2o:h3_packet_receive
       h2olog_address_t dest;
       h2olog_address_t src;
@@ -3624,6 +3778,65 @@ int trace_quicly__conn_stats(struct pt_regs *ctx) {
 
   return 0;
 }
+// h2o:receive_request
+int trace_h2o__receive_request(struct pt_regs *ctx) {
+  const void *buf = NULL;
+  struct quic_event_t event = { .id = 77 };
+
+  // uint64_t conn_id
+  bpf_usdt_readarg(1, ctx, &event.receive_request.conn_id);
+  // uint64_t req_id
+  bpf_usdt_readarg(2, ctx, &event.receive_request.req_id);
+  // int http_version
+  bpf_usdt_readarg(3, ctx, &event.receive_request.http_version);
+
+  if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
+    bpf_trace_printk("failed to perf_submit in trace_h2o__receive_request\n");
+
+  return 0;
+}
+// h2o:receive_request_header
+int trace_h2o__receive_request_header(struct pt_regs *ctx) {
+  const void *buf = NULL;
+  struct quic_event_t event = { .id = 78 };
+
+  // uint64_t conn_id
+  bpf_usdt_readarg(1, ctx, &event.receive_request_header.conn_id);
+  // uint64_t req_id
+  bpf_usdt_readarg(2, ctx, &event.receive_request_header.req_id);
+  // const char * name
+  bpf_usdt_readarg(3, ctx, &buf);
+  bpf_probe_read(&event.receive_request_header.name, sizeof(event.receive_request_header.name), buf);
+  // size_t name_len
+  bpf_usdt_readarg(4, ctx, &event.receive_request_header.name_len);
+  // const char * value
+  bpf_usdt_readarg(5, ctx, &buf);
+  bpf_probe_read(&event.receive_request_header.value, sizeof(event.receive_request_header.value), buf);
+  // size_t value_len
+  bpf_usdt_readarg(6, ctx, &event.receive_request_header.value_len);
+
+  if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
+    bpf_trace_printk("failed to perf_submit in trace_h2o__receive_request_header\n");
+
+  return 0;
+}
+// h2o:send_response
+int trace_h2o__send_response(struct pt_regs *ctx) {
+  const void *buf = NULL;
+  struct quic_event_t event = { .id = 79 };
+
+  // uint64_t conn_id
+  bpf_usdt_readarg(1, ctx, &event.send_response.conn_id);
+  // uint64_t req_id
+  bpf_usdt_readarg(2, ctx, &event.send_response.req_id);
+  // int status
+  bpf_usdt_readarg(3, ctx, &event.send_response.status);
+
+  if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
+    bpf_trace_printk("failed to perf_submit in trace_h2o__send_response\n");
+
+  return 0;
+}
 // h2o:send_response_header
 int trace_h2o__send_response_header(struct pt_regs *ctx) {
   const void *buf = NULL;
@@ -3651,6 +3864,51 @@ int trace_h2o__send_response_header(struct pt_regs *ctx) {
 
   if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
     bpf_trace_printk("failed to perf_submit in trace_h2o__send_response_header\n");
+
+  return 0;
+}
+// h2o:h1_accept
+int trace_h2o__h1_accept(struct pt_regs *ctx) {
+  const void *buf = NULL;
+  struct quic_event_t event = { .id = 81 };
+
+  // uint64_t conn_id
+  bpf_usdt_readarg(1, ctx, &event.h1_accept.conn_id);
+  // struct st_h2o_socket_t * sock
+  // (no fields in st_h2o_socket_t)
+  // struct st_h2o_conn_t * conn
+  // (no fields in st_h2o_conn_t)
+
+  if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
+    bpf_trace_printk("failed to perf_submit in trace_h2o__h1_accept\n");
+
+  return 0;
+}
+// h2o:h1_close
+int trace_h2o__h1_close(struct pt_regs *ctx) {
+  const void *buf = NULL;
+  struct quic_event_t event = { .id = 82 };
+
+  // uint64_t conn_id
+  bpf_usdt_readarg(1, ctx, &event.h1_close.conn_id);
+
+  if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
+    bpf_trace_printk("failed to perf_submit in trace_h2o__h1_close\n");
+
+  return 0;
+}
+// h2o:h2_unknown_frame_type
+int trace_h2o__h2_unknown_frame_type(struct pt_regs *ctx) {
+  const void *buf = NULL;
+  struct quic_event_t event = { .id = 83 };
+
+  // uint64_t conn_id
+  bpf_usdt_readarg(1, ctx, &event.h2_unknown_frame_type.conn_id);
+  // uint8_t frame_type
+  bpf_usdt_readarg(2, ctx, &event.h2_unknown_frame_type.frame_type);
+
+  if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
+    bpf_trace_printk("failed to perf_submit in trace_h2o__h2_unknown_frame_type\n");
 
   return 0;
 }
@@ -3684,6 +3942,41 @@ int trace_h2o__h3s_destroy(struct pt_regs *ctx) {
 
   if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
     bpf_trace_printk("failed to perf_submit in trace_h2o__h3s_destroy\n");
+
+  return 0;
+}
+// h2o:h3s_stream_set_state
+int trace_h2o__h3s_stream_set_state(struct pt_regs *ctx) {
+  const void *buf = NULL;
+  struct quic_event_t event = { .id = 86 };
+
+  // uint64_t conn_id
+  bpf_usdt_readarg(1, ctx, &event.h3s_stream_set_state.conn_id);
+  // uint64_t req_id
+  bpf_usdt_readarg(2, ctx, &event.h3s_stream_set_state.req_id);
+  // unsigned state
+  bpf_usdt_readarg(3, ctx, &event.h3s_stream_set_state.state);
+
+  if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
+    bpf_trace_printk("failed to perf_submit in trace_h2o__h3s_stream_set_state\n");
+
+  return 0;
+}
+// h2o:h3_frame_receive
+int trace_h2o__h3_frame_receive(struct pt_regs *ctx) {
+  const void *buf = NULL;
+  struct quic_event_t event = { .id = 87 };
+
+  // uint64_t frame_type
+  bpf_usdt_readarg(1, ctx, &event.h3_frame_receive.frame_type);
+  // const void * bytes
+  bpf_usdt_readarg(2, ctx, &buf);
+  bpf_probe_read(&event.h3_frame_receive.bytes, sizeof(event.h3_frame_receive.bytes), buf);
+  // size_t bytes_len
+  bpf_usdt_readarg(3, ctx, &event.h3_frame_receive.bytes_len);
+
+  if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
+    bpf_trace_printk("failed to perf_submit in trace_h2o__h3_frame_receive\n");
 
   return 0;
 }
