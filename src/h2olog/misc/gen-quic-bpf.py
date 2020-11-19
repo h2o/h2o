@@ -87,12 +87,6 @@ h2o_allow_probes = set([
     "h2o:h3_packet_forward",
 ])
 
-h2o_probes_without_master_id = set([
-    "h3s_accept",
-    "h3_packet_receive",
-    "h3_packet_forward",
-])
-
 # To rename field names for compatibility with:
 # https://github.com/h2o/quicly/blob/master/quictrace-adapter.py
 rename_map = {
@@ -256,29 +250,7 @@ int %s(struct pt_regs *ctx) {
       event_t_name = "%s.%s" % (probe_name, arg_name)
       c += "  bpf_usdt_readarg(%d, ctx, &event.%s);\n" % (i +
                                                           1, event_t_name)
-
-  if fully_specified_probe_name == "h2o:h3s_accept":
-    c += r"""
-  h2o_to_quicly_conn.update(&event.h3s_accept.conn_id, &event.h3s_accept.master_id);
-"""
-  elif fully_specified_probe_name == "h2o:h3s_destroy":
-    c += r"""
-  const uint32_t *master_conn_id_ptr = h2o_to_quicly_conn.lookup(&event.h3s_destroy.conn_id);
-  if (master_conn_id_ptr != NULL) {
-    event.h3s_destroy.master_id = *master_conn_id_ptr;
-  } else {
-    bpf_trace_printk("h2o's conn_id=%lu is not associated to master_conn_id\n", event.h3s_destroy.conn_id);
-  }
-  h2o_to_quicly_conn.delete(&event.h3s_destroy.conn_id);
-"""
-  elif metadata["provider"] == "h2o" and probe_name not in h2o_probes_without_master_id:
-    c += r"""
-  const uint32_t *master_conn_id_ptr = h2o_to_quicly_conn.lookup(&event.%s.conn_id);
-  if (master_conn_id_ptr == NULL)
-    return 0;
-  event.%s.master_id = *master_conn_id_ptr;
-""" % (probe_name, probe_name)
-    if fully_specified_probe_name == "h2o:send_response_header":
+  if fully_specified_probe_name == "h2o:send_response_header":
       # handle -s option
       c += r"""
 #ifdef CHECK_ALLOWED_RES_HEADER_NAME
@@ -413,8 +385,6 @@ struct quic_event_t {
         f = "%s %s" % (field_type, field_name)
 
       event_t_decl += "      %s;\n" % f
-    if metadata["provider"] == "h2o" and name not in h2o_probes_without_master_id:
-      event_t_decl += "      typeof_st_quicly_conn_t__master_id master_id;\n"
     event_t_decl += "    } %s;\n" % name
 
   event_t_decl += r"""
@@ -519,9 +489,6 @@ void h2o_quic_tracer::do_handle_event(const void *data, int data_len) {
             json_field_name, event_t_name, len_event_t_name, len_event_t_name)
 
     if metadata["provider"] == "h2o":
-      if probe_name not in h2o_probes_without_master_id:
-        handle_event_func += '    json_write_pair_c(out_, STR_LIT("conn"), event->%s.master_id);\n' % (
-            probe_name)
       handle_event_func += '    json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());\n'
 
     handle_event_func += "    break;\n"
