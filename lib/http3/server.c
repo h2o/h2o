@@ -1110,7 +1110,7 @@ static void write_response(struct st_h2o_http3_server_stream_t *stream)
 
     h2o_vector_reserve(&stream->req.pool, &stream->sendbuf.vecs, stream->sendbuf.vecs.size + 1);
     struct st_h2o_http3_server_sendvec_t *vec = stream->sendbuf.vecs.entries + stream->sendbuf.vecs.size++;
-    h2o_sendvec_init_raw(&vec->vec, frame.base, frame.len);
+    h2o_sendvec_init_immutable(&vec->vec, frame.base, frame.len);
     vec->entity_offset = UINT64_MAX;
     stream->sendbuf.final_size += frame.len;
 }
