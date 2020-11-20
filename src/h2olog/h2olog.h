@@ -154,6 +154,6 @@ h2o_tracer *create_http_tracer();
 /**
  * Initializes a QUIC tracer.
  */
-h2o_tracer *create_quic_tracer();
+h2o_tracer *create_raw_tracer();
 
 #endif

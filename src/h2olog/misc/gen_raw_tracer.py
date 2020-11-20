@@ -187,7 +187,7 @@ def build_tracer(context, metadata):
   c = r"""// %s
 int %s(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct quic_event_t event = { .id = %d };
+  struct event_t event = { .id = %d };
 
 """ % (fully_specified_probe_name, tracer_name, metadata['id'])
   block_field_set = block_fields.get(fully_specified_probe_name, set())
@@ -303,7 +303,7 @@ DEFINE_RESOLVE_FUNC(uint32_t);
 DEFINE_RESOLVE_FUNC(int64_t);
 DEFINE_RESOLVE_FUNC(uint64_t);
 
-static std::string gen_quic_bpf_header() {
+static std::string gen_bpf_header() {
   std::string bpf;
 """
 
@@ -345,7 +345,7 @@ def generate_cplusplus(context, output_file):
   probe_metadata = context["probe_metadata"]
 
   event_t_decl = r"""
-struct quic_event_t {
+struct event_t {
   uint8_t id;
 
   union {
@@ -404,7 +404,7 @@ int trace_sched_process_exit(struct tracepoint__sched__sched_process_exit *ctx) 
   if (!(h2o_pid == H2OLOG_H2O_PID && h2o_tid == H2OLOG_H2O_PID)) {
     return 0;
   }
-  struct quic_event_t ev = { .id = 1 };
+  struct event_t ev = { .id = 1 };
   events.perf_submit(ctx, &ev, sizeof(ev));
   return 0;
 }
@@ -412,7 +412,7 @@ int trace_sched_process_exit(struct tracepoint__sched__sched_process_exit *ctx) 
 """ % (event_t_decl)
 
   usdt_def = """
-const std::vector<h2o_tracer::usdt> &h2o_quic_tracer::usdt_probes() {
+const std::vector<h2o_tracer::usdt> &h2o_raw_tracer::usdt_probes() {
   static const std::vector<h2o_tracer::usdt> probes = {
 """
 
@@ -428,8 +428,8 @@ const std::vector<h2o_tracer::usdt> &h2o_quic_tracer::usdt_probes() {
 """
 
   handle_event_func = r"""
-void h2o_quic_tracer::do_handle_event(const void *data, int data_len) {
-  const quic_event_t *event = static_cast<const quic_event_t*>(data);
+void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
+  const event_t *event = static_cast<const event_t*>(data);
 
   if (event->id == 1) { // sched:sched_process_exit
     exit(0);
@@ -512,7 +512,7 @@ extern "C" {
 
 using namespace std;
 
-class h2o_quic_tracer : public h2o_tracer {
+class h2o_raw_tracer : public h2o_tracer {
 protected:
   virtual void do_handle_event(const void *data, int len);
   virtual void do_handle_lost(uint64_t lost);
@@ -527,7 +527,7 @@ public:
 %s
 %s
 
-void h2o_quic_tracer::do_handle_lost(uint64_t lost)
+void h2o_raw_tracer::do_handle_lost(uint64_t lost)
 {
   fprintf(out_,
           "{"
@@ -538,15 +538,15 @@ void h2o_quic_tracer::do_handle_lost(uint64_t lost)
           seq_, time_milliseconds(), lost);
 }
 
-std::string h2o_quic_tracer::bpf_text() {
+std::string h2o_raw_tracer::bpf_text() {
   // language=c
-  return gen_quic_bpf_header() + R"(
+  return gen_bpf_header() + R"(
 %s
 )";
 }
 
-h2o_tracer *create_quic_tracer() {
-  return new h2o_quic_tracer;
+h2o_tracer *create_raw_tracer() {
+  return new h2o_raw_tracer;
 }
 
 """ % (build_typedef_for_cplusplus(), build_bpf_header_generator(), event_t_decl, usdt_def, handle_event_func, bpf))

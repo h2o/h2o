@@ -228,7 +228,12 @@ int main(int argc, char **argv)
 {
     std::unique_ptr<h2o_tracer> tracer;
     if (argc > 1 && strcmp(argv[1], "quic") == 0) {
-        tracer.reset(create_quic_tracer());
+        fprintf(stderr, "warning: 'quic' mode is deprecated. Use 'raw' mode instead.\n");
+        tracer.reset(create_raw_tracer());
+        --argc;
+        ++argv;
+    } else if (argc > 1 && strcmp(argv[1], "raw") == 0) {
+        tracer.reset(create_raw_tracer());
         --argc;
         ++argv;
     } else {

@@ -20,7 +20,7 @@ extern "C" {
 
 using namespace std;
 
-class h2o_quic_tracer : public h2o_tracer {
+class h2o_raw_tracer : public h2o_tracer {
 protected:
   virtual void do_handle_event(const void *data, int len);
   virtual void do_handle_lost(uint64_t lost);
@@ -73,7 +73,7 @@ DEFINE_RESOLVE_FUNC(uint32_t);
 DEFINE_RESOLVE_FUNC(int64_t);
 DEFINE_RESOLVE_FUNC(uint64_t);
 
-static std::string gen_quic_bpf_header() {
+static std::string gen_bpf_header() {
   std::string bpf;
 
   bpf += "#define sizeof_st_quicly_stream_t " + std::to_string(std::min<size_t>(sizeof(struct st_quicly_stream_t), 100)) + "\n";
@@ -102,7 +102,7 @@ static std::string gen_quic_bpf_header() {
 }
 
 
-struct quic_event_t {
+struct event_t {
   uint8_t id;
 
   union {
@@ -622,7 +622,7 @@ struct quic_event_t {
   };
   
 
-const std::vector<h2o_tracer::usdt> &h2o_quic_tracer::usdt_probes() {
+const std::vector<h2o_tracer::usdt> &h2o_raw_tracer::usdt_probes() {
   static const std::vector<h2o_tracer::usdt> probes = {
     h2o_tracer::usdt("quicly", "connect", "trace_quicly__connect"),
     h2o_tracer::usdt("quicly", "accept", "trace_quicly__accept"),
@@ -717,8 +717,8 @@ const std::vector<h2o_tracer::usdt> &h2o_quic_tracer::usdt_probes() {
 }
 
 
-void h2o_quic_tracer::do_handle_event(const void *data, int data_len) {
-  const quic_event_t *event = static_cast<const quic_event_t*>(data);
+void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
+  const event_t *event = static_cast<const event_t*>(data);
 
   if (event->id == 1) { // sched:sched_process_exit
     exit(0);
@@ -1522,7 +1522,7 @@ void h2o_quic_tracer::do_handle_event(const void *data, int data_len) {
 }
 
 
-void h2o_quic_tracer::do_handle_lost(uint64_t lost)
+void h2o_raw_tracer::do_handle_lost(uint64_t lost)
 {
   fprintf(out_,
           "{"
@@ -1533,9 +1533,9 @@ void h2o_quic_tracer::do_handle_lost(uint64_t lost)
           seq_, time_milliseconds(), lost);
 }
 
-std::string h2o_quic_tracer::bpf_text() {
+std::string h2o_raw_tracer::bpf_text() {
   // language=c
-  return gen_quic_bpf_header() + R"(
+  return gen_bpf_header() + R"(
 
 #include <linux/sched.h>
 
@@ -1548,7 +1548,7 @@ typedef union h2olog_address_t {
 } h2olog_address_t;;
 
 
-struct quic_event_t {
+struct event_t {
   uint8_t id;
 
   union {
@@ -2080,7 +2080,7 @@ int trace_sched_process_exit(struct tracepoint__sched__sched_process_exit *ctx) 
   if (!(h2o_pid == H2OLOG_H2O_PID && h2o_tid == H2OLOG_H2O_PID)) {
     return 0;
   }
-  struct quic_event_t ev = { .id = 1 };
+  struct event_t ev = { .id = 1 };
   events.perf_submit(ctx, &ev, sizeof(ev));
   return 0;
 }
@@ -2088,7 +2088,7 @@ int trace_sched_process_exit(struct tracepoint__sched__sched_process_exit *ctx) 
 // quicly:connect
 int trace_quicly__connect(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct quic_event_t event = { .id = 2 };
+  struct event_t event = { .id = 2 };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -2108,7 +2108,7 @@ int trace_quicly__connect(struct pt_regs *ctx) {
 // quicly:accept
 int trace_quicly__accept(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct quic_event_t event = { .id = 3 };
+  struct event_t event = { .id = 3 };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -2131,7 +2131,7 @@ int trace_quicly__accept(struct pt_regs *ctx) {
 // quicly:free
 int trace_quicly__free(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct quic_event_t event = { .id = 4 };
+  struct event_t event = { .id = 4 };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -2149,7 +2149,7 @@ int trace_quicly__free(struct pt_regs *ctx) {
 // quicly:send
 int trace_quicly__send(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct quic_event_t event = { .id = 5 };
+  struct event_t event = { .id = 5 };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -2172,7 +2172,7 @@ int trace_quicly__send(struct pt_regs *ctx) {
 // quicly:receive
 int trace_quicly__receive(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct quic_event_t event = { .id = 6 };
+  struct event_t event = { .id = 6 };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -2198,7 +2198,7 @@ int trace_quicly__receive(struct pt_regs *ctx) {
 // quicly:version_switch
 int trace_quicly__version_switch(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct quic_event_t event = { .id = 7 };
+  struct event_t event = { .id = 7 };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -2218,7 +2218,7 @@ int trace_quicly__version_switch(struct pt_regs *ctx) {
 // quicly:idle_timeout
 int trace_quicly__idle_timeout(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct quic_event_t event = { .id = 8 };
+  struct event_t event = { .id = 8 };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -2236,7 +2236,7 @@ int trace_quicly__idle_timeout(struct pt_regs *ctx) {
 // quicly:stateless_reset_receive
 int trace_quicly__stateless_reset_receive(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct quic_event_t event = { .id = 9 };
+  struct event_t event = { .id = 9 };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -2254,7 +2254,7 @@ int trace_quicly__stateless_reset_receive(struct pt_regs *ctx) {
 // quicly:crypto_decrypt
 int trace_quicly__crypto_decrypt(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct quic_event_t event = { .id = 10 };
+  struct event_t event = { .id = 10 };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -2277,7 +2277,7 @@ int trace_quicly__crypto_decrypt(struct pt_regs *ctx) {
 // quicly:crypto_handshake
 int trace_quicly__crypto_handshake(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct quic_event_t event = { .id = 11 };
+  struct event_t event = { .id = 11 };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -2297,7 +2297,7 @@ int trace_quicly__crypto_handshake(struct pt_regs *ctx) {
 // quicly:crypto_update_secret
 int trace_quicly__crypto_update_secret(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct quic_event_t event = { .id = 12 };
+  struct event_t event = { .id = 12 };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -2323,7 +2323,7 @@ int trace_quicly__crypto_update_secret(struct pt_regs *ctx) {
 // quicly:crypto_send_key_update
 int trace_quicly__crypto_send_key_update(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct quic_event_t event = { .id = 13 };
+  struct event_t event = { .id = 13 };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -2344,7 +2344,7 @@ int trace_quicly__crypto_send_key_update(struct pt_regs *ctx) {
 // quicly:crypto_send_key_update_confirmed
 int trace_quicly__crypto_send_key_update_confirmed(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct quic_event_t event = { .id = 14 };
+  struct event_t event = { .id = 14 };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -2364,7 +2364,7 @@ int trace_quicly__crypto_send_key_update_confirmed(struct pt_regs *ctx) {
 // quicly:crypto_receive_key_update
 int trace_quicly__crypto_receive_key_update(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct quic_event_t event = { .id = 15 };
+  struct event_t event = { .id = 15 };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -2385,7 +2385,7 @@ int trace_quicly__crypto_receive_key_update(struct pt_regs *ctx) {
 // quicly:crypto_receive_key_update_prepare
 int trace_quicly__crypto_receive_key_update_prepare(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct quic_event_t event = { .id = 16 };
+  struct event_t event = { .id = 16 };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -2406,7 +2406,7 @@ int trace_quicly__crypto_receive_key_update_prepare(struct pt_regs *ctx) {
 // quicly:packet_prepare
 int trace_quicly__packet_prepare(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct quic_event_t event = { .id = 17 };
+  struct event_t event = { .id = 17 };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -2429,7 +2429,7 @@ int trace_quicly__packet_prepare(struct pt_regs *ctx) {
 // quicly:packet_commit
 int trace_quicly__packet_commit(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct quic_event_t event = { .id = 18 };
+  struct event_t event = { .id = 18 };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -2453,7 +2453,7 @@ int trace_quicly__packet_commit(struct pt_regs *ctx) {
 // quicly:packet_acked
 int trace_quicly__packet_acked(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct quic_event_t event = { .id = 19 };
+  struct event_t event = { .id = 19 };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -2475,7 +2475,7 @@ int trace_quicly__packet_acked(struct pt_regs *ctx) {
 // quicly:packet_lost
 int trace_quicly__packet_lost(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct quic_event_t event = { .id = 20 };
+  struct event_t event = { .id = 20 };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -2495,7 +2495,7 @@ int trace_quicly__packet_lost(struct pt_regs *ctx) {
 // quicly:pto
 int trace_quicly__pto(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct quic_event_t event = { .id = 21 };
+  struct event_t event = { .id = 21 };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -2519,7 +2519,7 @@ int trace_quicly__pto(struct pt_regs *ctx) {
 // quicly:cc_ack_received
 int trace_quicly__cc_ack_received(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct quic_event_t event = { .id = 22 };
+  struct event_t event = { .id = 22 };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -2545,7 +2545,7 @@ int trace_quicly__cc_ack_received(struct pt_regs *ctx) {
 // quicly:cc_congestion
 int trace_quicly__cc_congestion(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct quic_event_t event = { .id = 23 };
+  struct event_t event = { .id = 23 };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -2569,7 +2569,7 @@ int trace_quicly__cc_congestion(struct pt_regs *ctx) {
 // quicly:ack_send
 int trace_quicly__ack_send(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct quic_event_t event = { .id = 24 };
+  struct event_t event = { .id = 24 };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -2591,7 +2591,7 @@ int trace_quicly__ack_send(struct pt_regs *ctx) {
 // quicly:ping_send
 int trace_quicly__ping_send(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct quic_event_t event = { .id = 25 };
+  struct event_t event = { .id = 25 };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -2609,7 +2609,7 @@ int trace_quicly__ping_send(struct pt_regs *ctx) {
 // quicly:ping_receive
 int trace_quicly__ping_receive(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct quic_event_t event = { .id = 26 };
+  struct event_t event = { .id = 26 };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -2627,7 +2627,7 @@ int trace_quicly__ping_receive(struct pt_regs *ctx) {
 // quicly:transport_close_send
 int trace_quicly__transport_close_send(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct quic_event_t event = { .id = 27 };
+  struct event_t event = { .id = 27 };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -2652,7 +2652,7 @@ int trace_quicly__transport_close_send(struct pt_regs *ctx) {
 // quicly:transport_close_receive
 int trace_quicly__transport_close_receive(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct quic_event_t event = { .id = 28 };
+  struct event_t event = { .id = 28 };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -2677,7 +2677,7 @@ int trace_quicly__transport_close_receive(struct pt_regs *ctx) {
 // quicly:application_close_send
 int trace_quicly__application_close_send(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct quic_event_t event = { .id = 29 };
+  struct event_t event = { .id = 29 };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -2700,7 +2700,7 @@ int trace_quicly__application_close_send(struct pt_regs *ctx) {
 // quicly:application_close_receive
 int trace_quicly__application_close_receive(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct quic_event_t event = { .id = 30 };
+  struct event_t event = { .id = 30 };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -2723,7 +2723,7 @@ int trace_quicly__application_close_receive(struct pt_regs *ctx) {
 // quicly:stream_send
 int trace_quicly__stream_send(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct quic_event_t event = { .id = 31 };
+  struct event_t event = { .id = 31 };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -2752,7 +2752,7 @@ int trace_quicly__stream_send(struct pt_regs *ctx) {
 // quicly:stream_receive
 int trace_quicly__stream_receive(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct quic_event_t event = { .id = 32 };
+  struct event_t event = { .id = 32 };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -2779,7 +2779,7 @@ int trace_quicly__stream_receive(struct pt_regs *ctx) {
 // quicly:stream_acked
 int trace_quicly__stream_acked(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct quic_event_t event = { .id = 33 };
+  struct event_t event = { .id = 33 };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -2803,7 +2803,7 @@ int trace_quicly__stream_acked(struct pt_regs *ctx) {
 // quicly:stream_lost
 int trace_quicly__stream_lost(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct quic_event_t event = { .id = 34 };
+  struct event_t event = { .id = 34 };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -2827,7 +2827,7 @@ int trace_quicly__stream_lost(struct pt_regs *ctx) {
 // quicly:max_data_send
 int trace_quicly__max_data_send(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct quic_event_t event = { .id = 35 };
+  struct event_t event = { .id = 35 };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -2847,7 +2847,7 @@ int trace_quicly__max_data_send(struct pt_regs *ctx) {
 // quicly:max_data_receive
 int trace_quicly__max_data_receive(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct quic_event_t event = { .id = 36 };
+  struct event_t event = { .id = 36 };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -2867,7 +2867,7 @@ int trace_quicly__max_data_receive(struct pt_regs *ctx) {
 // quicly:max_streams_send
 int trace_quicly__max_streams_send(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct quic_event_t event = { .id = 37 };
+  struct event_t event = { .id = 37 };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -2889,7 +2889,7 @@ int trace_quicly__max_streams_send(struct pt_regs *ctx) {
 // quicly:max_streams_receive
 int trace_quicly__max_streams_receive(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct quic_event_t event = { .id = 38 };
+  struct event_t event = { .id = 38 };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -2911,7 +2911,7 @@ int trace_quicly__max_streams_receive(struct pt_regs *ctx) {
 // quicly:max_stream_data_send
 int trace_quicly__max_stream_data_send(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct quic_event_t event = { .id = 39 };
+  struct event_t event = { .id = 39 };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -2936,7 +2936,7 @@ int trace_quicly__max_stream_data_send(struct pt_regs *ctx) {
 // quicly:max_stream_data_receive
 int trace_quicly__max_stream_data_receive(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct quic_event_t event = { .id = 40 };
+  struct event_t event = { .id = 40 };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -2958,7 +2958,7 @@ int trace_quicly__max_stream_data_receive(struct pt_regs *ctx) {
 // quicly:new_token_send
 int trace_quicly__new_token_send(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct quic_event_t event = { .id = 41 };
+  struct event_t event = { .id = 41 };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -2983,7 +2983,7 @@ int trace_quicly__new_token_send(struct pt_regs *ctx) {
 // quicly:new_token_acked
 int trace_quicly__new_token_acked(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct quic_event_t event = { .id = 42 };
+  struct event_t event = { .id = 42 };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -3003,7 +3003,7 @@ int trace_quicly__new_token_acked(struct pt_regs *ctx) {
 // quicly:new_token_receive
 int trace_quicly__new_token_receive(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct quic_event_t event = { .id = 43 };
+  struct event_t event = { .id = 43 };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -3026,7 +3026,7 @@ int trace_quicly__new_token_receive(struct pt_regs *ctx) {
 // quicly:handshake_done_send
 int trace_quicly__handshake_done_send(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct quic_event_t event = { .id = 44 };
+  struct event_t event = { .id = 44 };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -3044,7 +3044,7 @@ int trace_quicly__handshake_done_send(struct pt_regs *ctx) {
 // quicly:handshake_done_receive
 int trace_quicly__handshake_done_receive(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct quic_event_t event = { .id = 45 };
+  struct event_t event = { .id = 45 };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -3062,7 +3062,7 @@ int trace_quicly__handshake_done_receive(struct pt_regs *ctx) {
 // quicly:streams_blocked_send
 int trace_quicly__streams_blocked_send(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct quic_event_t event = { .id = 46 };
+  struct event_t event = { .id = 46 };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -3084,7 +3084,7 @@ int trace_quicly__streams_blocked_send(struct pt_regs *ctx) {
 // quicly:streams_blocked_receive
 int trace_quicly__streams_blocked_receive(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct quic_event_t event = { .id = 47 };
+  struct event_t event = { .id = 47 };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -3106,7 +3106,7 @@ int trace_quicly__streams_blocked_receive(struct pt_regs *ctx) {
 // quicly:new_connection_id_send
 int trace_quicly__new_connection_id_send(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct quic_event_t event = { .id = 48 };
+  struct event_t event = { .id = 48 };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -3134,7 +3134,7 @@ int trace_quicly__new_connection_id_send(struct pt_regs *ctx) {
 // quicly:new_connection_id_receive
 int trace_quicly__new_connection_id_receive(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct quic_event_t event = { .id = 49 };
+  struct event_t event = { .id = 49 };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -3162,7 +3162,7 @@ int trace_quicly__new_connection_id_receive(struct pt_regs *ctx) {
 // quicly:retire_connection_id_send
 int trace_quicly__retire_connection_id_send(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct quic_event_t event = { .id = 50 };
+  struct event_t event = { .id = 50 };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -3182,7 +3182,7 @@ int trace_quicly__retire_connection_id_send(struct pt_regs *ctx) {
 // quicly:retire_connection_id_receive
 int trace_quicly__retire_connection_id_receive(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct quic_event_t event = { .id = 51 };
+  struct event_t event = { .id = 51 };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -3202,7 +3202,7 @@ int trace_quicly__retire_connection_id_receive(struct pt_regs *ctx) {
 // quicly:data_blocked_send
 int trace_quicly__data_blocked_send(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct quic_event_t event = { .id = 52 };
+  struct event_t event = { .id = 52 };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -3222,7 +3222,7 @@ int trace_quicly__data_blocked_send(struct pt_regs *ctx) {
 // quicly:data_blocked_receive
 int trace_quicly__data_blocked_receive(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct quic_event_t event = { .id = 53 };
+  struct event_t event = { .id = 53 };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -3242,7 +3242,7 @@ int trace_quicly__data_blocked_receive(struct pt_regs *ctx) {
 // quicly:stream_data_blocked_send
 int trace_quicly__stream_data_blocked_send(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct quic_event_t event = { .id = 54 };
+  struct event_t event = { .id = 54 };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -3264,7 +3264,7 @@ int trace_quicly__stream_data_blocked_send(struct pt_regs *ctx) {
 // quicly:stream_data_blocked_receive
 int trace_quicly__stream_data_blocked_receive(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct quic_event_t event = { .id = 55 };
+  struct event_t event = { .id = 55 };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -3286,7 +3286,7 @@ int trace_quicly__stream_data_blocked_receive(struct pt_regs *ctx) {
 // quicly:datagram_send
 int trace_quicly__datagram_send(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct quic_event_t event = { .id = 56 };
+  struct event_t event = { .id = 56 };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -3309,7 +3309,7 @@ int trace_quicly__datagram_send(struct pt_regs *ctx) {
 // quicly:datagram_receive
 int trace_quicly__datagram_receive(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct quic_event_t event = { .id = 57 };
+  struct event_t event = { .id = 57 };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -3332,7 +3332,7 @@ int trace_quicly__datagram_receive(struct pt_regs *ctx) {
 // quicly:ack_frequency_receive
 int trace_quicly__ack_frequency_receive(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct quic_event_t event = { .id = 58 };
+  struct event_t event = { .id = 58 };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -3358,7 +3358,7 @@ int trace_quicly__ack_frequency_receive(struct pt_regs *ctx) {
 // quicly:quictrace_sent
 int trace_quicly__quictrace_sent(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct quic_event_t event = { .id = 59 };
+  struct event_t event = { .id = 59 };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -3382,7 +3382,7 @@ int trace_quicly__quictrace_sent(struct pt_regs *ctx) {
 // quicly:quictrace_recv
 int trace_quicly__quictrace_recv(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct quic_event_t event = { .id = 60 };
+  struct event_t event = { .id = 60 };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -3402,7 +3402,7 @@ int trace_quicly__quictrace_recv(struct pt_regs *ctx) {
 // quicly:quictrace_send_stream
 int trace_quicly__quictrace_send_stream(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct quic_event_t event = { .id = 61 };
+  struct event_t event = { .id = 61 };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -3431,7 +3431,7 @@ int trace_quicly__quictrace_send_stream(struct pt_regs *ctx) {
 // quicly:quictrace_recv_stream
 int trace_quicly__quictrace_recv_stream(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct quic_event_t event = { .id = 62 };
+  struct event_t event = { .id = 62 };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -3457,7 +3457,7 @@ int trace_quicly__quictrace_recv_stream(struct pt_regs *ctx) {
 // quicly:quictrace_recv_ack
 int trace_quicly__quictrace_recv_ack(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct quic_event_t event = { .id = 63 };
+  struct event_t event = { .id = 63 };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -3479,7 +3479,7 @@ int trace_quicly__quictrace_recv_ack(struct pt_regs *ctx) {
 // quicly:quictrace_recv_ack_delay
 int trace_quicly__quictrace_recv_ack_delay(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct quic_event_t event = { .id = 64 };
+  struct event_t event = { .id = 64 };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -3499,7 +3499,7 @@ int trace_quicly__quictrace_recv_ack_delay(struct pt_regs *ctx) {
 // quicly:quictrace_lost
 int trace_quicly__quictrace_lost(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct quic_event_t event = { .id = 65 };
+  struct event_t event = { .id = 65 };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -3519,7 +3519,7 @@ int trace_quicly__quictrace_lost(struct pt_regs *ctx) {
 // quicly:quictrace_cc_ack
 int trace_quicly__quictrace_cc_ack(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct quic_event_t event = { .id = 66 };
+  struct event_t event = { .id = 66 };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -3549,7 +3549,7 @@ int trace_quicly__quictrace_cc_ack(struct pt_regs *ctx) {
 // quicly:quictrace_cc_lost
 int trace_quicly__quictrace_cc_lost(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct quic_event_t event = { .id = 67 };
+  struct event_t event = { .id = 67 };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -3579,7 +3579,7 @@ int trace_quicly__quictrace_cc_lost(struct pt_regs *ctx) {
 // quicly:stream_on_open
 int trace_quicly__stream_on_open(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct quic_event_t event = { .id = 68 };
+  struct event_t event = { .id = 68 };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -3602,7 +3602,7 @@ int trace_quicly__stream_on_open(struct pt_regs *ctx) {
 // quicly:stream_on_destroy
 int trace_quicly__stream_on_destroy(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct quic_event_t event = { .id = 69 };
+  struct event_t event = { .id = 69 };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -3627,7 +3627,7 @@ int trace_quicly__stream_on_destroy(struct pt_regs *ctx) {
 // quicly:stream_on_send_shift
 int trace_quicly__stream_on_send_shift(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct quic_event_t event = { .id = 70 };
+  struct event_t event = { .id = 70 };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -3652,7 +3652,7 @@ int trace_quicly__stream_on_send_shift(struct pt_regs *ctx) {
 // quicly:stream_on_send_emit
 int trace_quicly__stream_on_send_emit(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct quic_event_t event = { .id = 71 };
+  struct event_t event = { .id = 71 };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -3679,7 +3679,7 @@ int trace_quicly__stream_on_send_emit(struct pt_regs *ctx) {
 // quicly:stream_on_send_stop
 int trace_quicly__stream_on_send_stop(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct quic_event_t event = { .id = 72 };
+  struct event_t event = { .id = 72 };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -3704,7 +3704,7 @@ int trace_quicly__stream_on_send_stop(struct pt_regs *ctx) {
 // quicly:stream_on_receive
 int trace_quicly__stream_on_receive(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct quic_event_t event = { .id = 73 };
+  struct event_t event = { .id = 73 };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -3734,7 +3734,7 @@ int trace_quicly__stream_on_receive(struct pt_regs *ctx) {
 // quicly:stream_on_receive_reset
 int trace_quicly__stream_on_receive_reset(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct quic_event_t event = { .id = 74 };
+  struct event_t event = { .id = 74 };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -3759,7 +3759,7 @@ int trace_quicly__stream_on_receive_reset(struct pt_regs *ctx) {
 // quicly:conn_stats
 int trace_quicly__conn_stats(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct quic_event_t event = { .id = 76 };
+  struct event_t event = { .id = 76 };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -3781,7 +3781,7 @@ int trace_quicly__conn_stats(struct pt_regs *ctx) {
 // h2o:receive_request
 int trace_h2o__receive_request(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct quic_event_t event = { .id = 77 };
+  struct event_t event = { .id = 77 };
 
   // uint64_t conn_id
   bpf_usdt_readarg(1, ctx, &event.receive_request.conn_id);
@@ -3798,7 +3798,7 @@ int trace_h2o__receive_request(struct pt_regs *ctx) {
 // h2o:receive_request_header
 int trace_h2o__receive_request_header(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct quic_event_t event = { .id = 78 };
+  struct event_t event = { .id = 78 };
 
   // uint64_t conn_id
   bpf_usdt_readarg(1, ctx, &event.receive_request_header.conn_id);
@@ -3823,7 +3823,7 @@ int trace_h2o__receive_request_header(struct pt_regs *ctx) {
 // h2o:send_response
 int trace_h2o__send_response(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct quic_event_t event = { .id = 79 };
+  struct event_t event = { .id = 79 };
 
   // uint64_t conn_id
   bpf_usdt_readarg(1, ctx, &event.send_response.conn_id);
@@ -3840,7 +3840,7 @@ int trace_h2o__send_response(struct pt_regs *ctx) {
 // h2o:send_response_header
 int trace_h2o__send_response_header(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct quic_event_t event = { .id = 80 };
+  struct event_t event = { .id = 80 };
 
   // uint64_t conn_id
   bpf_usdt_readarg(1, ctx, &event.send_response_header.conn_id);
@@ -3870,7 +3870,7 @@ int trace_h2o__send_response_header(struct pt_regs *ctx) {
 // h2o:h1_accept
 int trace_h2o__h1_accept(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct quic_event_t event = { .id = 81 };
+  struct event_t event = { .id = 81 };
 
   // uint64_t conn_id
   bpf_usdt_readarg(1, ctx, &event.h1_accept.conn_id);
@@ -3887,7 +3887,7 @@ int trace_h2o__h1_accept(struct pt_regs *ctx) {
 // h2o:h1_close
 int trace_h2o__h1_close(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct quic_event_t event = { .id = 82 };
+  struct event_t event = { .id = 82 };
 
   // uint64_t conn_id
   bpf_usdt_readarg(1, ctx, &event.h1_close.conn_id);
@@ -3900,7 +3900,7 @@ int trace_h2o__h1_close(struct pt_regs *ctx) {
 // h2o:h2_unknown_frame_type
 int trace_h2o__h2_unknown_frame_type(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct quic_event_t event = { .id = 83 };
+  struct event_t event = { .id = 83 };
 
   // uint64_t conn_id
   bpf_usdt_readarg(1, ctx, &event.h2_unknown_frame_type.conn_id);
@@ -3915,7 +3915,7 @@ int trace_h2o__h2_unknown_frame_type(struct pt_regs *ctx) {
 // h2o:h3s_accept
 int trace_h2o__h3s_accept(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct quic_event_t event = { .id = 84 };
+  struct event_t event = { .id = 84 };
 
   // uint64_t conn_id
   bpf_usdt_readarg(1, ctx, &event.h3s_accept.conn_id);
@@ -3935,7 +3935,7 @@ int trace_h2o__h3s_accept(struct pt_regs *ctx) {
 // h2o:h3s_destroy
 int trace_h2o__h3s_destroy(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct quic_event_t event = { .id = 85 };
+  struct event_t event = { .id = 85 };
 
   // uint64_t conn_id
   bpf_usdt_readarg(1, ctx, &event.h3s_destroy.conn_id);
@@ -3948,7 +3948,7 @@ int trace_h2o__h3s_destroy(struct pt_regs *ctx) {
 // h2o:h3s_stream_set_state
 int trace_h2o__h3s_stream_set_state(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct quic_event_t event = { .id = 86 };
+  struct event_t event = { .id = 86 };
 
   // uint64_t conn_id
   bpf_usdt_readarg(1, ctx, &event.h3s_stream_set_state.conn_id);
@@ -3965,7 +3965,7 @@ int trace_h2o__h3s_stream_set_state(struct pt_regs *ctx) {
 // h2o:h3_frame_receive
 int trace_h2o__h3_frame_receive(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct quic_event_t event = { .id = 87 };
+  struct event_t event = { .id = 87 };
 
   // uint64_t frame_type
   bpf_usdt_readarg(1, ctx, &event.h3_frame_receive.frame_type);
@@ -3983,7 +3983,7 @@ int trace_h2o__h3_frame_receive(struct pt_regs *ctx) {
 // h2o:h3_packet_receive
 int trace_h2o__h3_packet_receive(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct quic_event_t event = { .id = 88 };
+  struct event_t event = { .id = 88 };
 
   // struct sockaddr * dest
   bpf_usdt_readarg(1, ctx, &buf);
@@ -4013,7 +4013,7 @@ int trace_h2o__h3_packet_receive(struct pt_regs *ctx) {
 // h2o:h3_packet_forward
 int trace_h2o__h3_packet_forward(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct quic_event_t event = { .id = 89 };
+  struct event_t event = { .id = 89 };
 
   // struct sockaddr * dest
   bpf_usdt_readarg(1, ctx, &buf);
@@ -4047,7 +4047,7 @@ int trace_h2o__h3_packet_forward(struct pt_regs *ctx) {
 )";
 }
 
-h2o_tracer *create_quic_tracer() {
-  return new h2o_quic_tracer;
+h2o_tracer *create_raw_tracer() {
+  return new h2o_raw_tracer;
 }
 
