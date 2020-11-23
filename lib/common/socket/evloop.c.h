@@ -401,26 +401,18 @@ static struct st_h2o_evloop_socket_t *create_socket(h2o_evloop_t *loop, int fd, 
 
 h2o_socket_t *h2o_evloop_socket_create(h2o_evloop_t *loop, int fd, int flags)
 {
-    struct st_h2o_evloop_socket_t *socket;
-    int on = 1;
-
-    /* it is the reponsibility of the event loop to modify the properties of a socket for its use (i.e., set O_NONBLOCK) */
+    /* It is the reponsibility of the event loop to modify the properties of a socket for its use (e.g., set O_NONBLOCK). Setting
+     * TCP_NODELAY on a non-TCP socket would fail, but we can ignore it. */
     fcntl(fd, F_SETFL, O_NONBLOCK);
-    socket = create_socket(loop, fd, flags);
-
-    /* if the socket does not support TCP_NODELAY, this will error, but we can
-     * ignore it.
-     */
+    int on = 1;
     setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &on, sizeof(on));
 
-    return &socket->super;
+    return &create_socket(loop, fd, flags)->super;
 }
 
 static void set_nodelay_if_inet(int fd, int sa_family)
 {
-    /* only AF_INET or AF_INET6 sockets support TCP_NODELAY. Skip for all
-     * others.
-     */
+    /* only AF_INET or AF_INET6 sockets support TCP_NODELAY. Skip for all others. */
     if (sa_family == AF_INET || sa_family == AF_INET6) {
         int on = 1;
         setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &on, sizeof(on));
