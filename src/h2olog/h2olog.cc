@@ -28,6 +28,7 @@ extern "C" {
 #include <unistd.h>
 #include <stdarg.h>
 #include <sys/time.h>
+#include <fnmatch.h>
 #include "h2o/memory.h"
 #include "h2o/version.h"
 }
@@ -44,9 +45,10 @@ Usage: h2olog -p PID
 Optional arguments:
     -d Print debugging information (-dd shows more)
     -h Print this help and exit
-    -l Print the list of available tracepoints and exit
+    -l Print the list of selected tracepoints and exit
     -s RESPONSE_HEADER_NAME A response header name to show, e.g. "content-type"
-    -t TRACEPOINT A tracepoint, or fully-qualified probe name, to show, e.g. "quicly:accept"
+    -t TRACEPOINT A tracepoint, or fully-qualified probe name, to show,
+                  accepting a glob pattern, e.g. "quicly:accept", "h2o:*"
     -r Run without dropping root privilege
     -w Path to write the output (default: stdout)
 
@@ -224,6 +226,19 @@ static void lost_cb(void *context, uint64_t lost)
     tracer->handle_lost(lost);
 }
 
+static size_t add_matched_usdts(std::vector<h2o_tracer::usdt> &selected_usdts, const std::vector<h2o_tracer::usdt> &available_usdts,
+                                const char *pattern)
+{
+    size_t added = 0;
+    for (auto usdt : available_usdts) {
+        if (fnmatch(pattern, usdt.fully_qualified_name().c_str(), 0) == 0) {
+            selected_usdts.push_back(usdt);
+            added++;
+        }
+    }
+    return added;
+}
+
 int main(int argc, char **argv)
 {
     std::unique_ptr<h2o_tracer> tracer;
@@ -250,13 +265,11 @@ int main(int argc, char **argv)
             h2o_pid = atoi(optarg);
             break;
         case 't': {
-            auto found = std::find_if(available_usdts.cbegin(), available_usdts.cend(),
-                                      [](const h2o_tracer::usdt &usdt) { return optarg == usdt.fully_qualified_name(); });
-            if (found == available_usdts.cend()) {
+            size_t added = add_matched_usdts(selected_usdts, available_usdts, optarg);
+            if (added == 0) {
                 fprintf(stderr, "No such tracepoint: %s\n", optarg);
                 exit(EXIT_FAILURE);
             }
-            selected_usdts.push_back(*found);
             break;
         }
         case 's':
@@ -272,7 +285,7 @@ int main(int argc, char **argv)
             debug++;
             break;
         case 'l':
-            for (const auto &usdt : available_usdts) {
+            for (const auto &usdt : selected_usdts.empty() ? available_usdts : selected_usdts) {
                 printf("%s\n", usdt.fully_qualified_name().c_str());
             }
             exit(EXIT_SUCCESS);
