@@ -45,7 +45,7 @@ Usage: h2olog -p PID
 Optional arguments:
     -d Print debugging information (-dd shows more)
     -h Print this help and exit
-    -l Print the list of selected tracepoints and exit
+    -l Print the list of available tracepoints and exit
     -s RESPONSE_HEADER_NAME A response header name to show, e.g. "content-type"
     -t TRACEPOINT A tracepoint, or fully-qualified probe name, to show,
                   accepting a glob pattern, e.g. "quicly:accept", "h2o:*"
@@ -285,7 +285,7 @@ int main(int argc, char **argv)
             debug++;
             break;
         case 'l':
-            for (const auto &usdt : selected_usdts.empty() ? available_usdts : selected_usdts) {
+            for (const auto &usdt : available_usdts) {
                 printf("%s\n", usdt.fully_qualified_name().c_str());
             }
             exit(EXIT_SUCCESS);
