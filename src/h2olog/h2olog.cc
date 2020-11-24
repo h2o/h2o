@@ -230,7 +230,7 @@ static size_t add_matched_usdts(std::vector<h2o_tracer::usdt> &selected_usdts, c
                                 const char *pattern)
 {
     size_t added = 0;
-    for (auto usdt : available_usdts) {
+    for (const auto& usdt : available_usdts) {
         if (fnmatch(pattern, usdt.fully_qualified_name().c_str(), 0) == 0) {
             selected_usdts.push_back(usdt);
             added++;
