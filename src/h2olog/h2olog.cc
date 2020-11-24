@@ -51,7 +51,7 @@ Optional arguments:
     -w Path to write the output (default: stdout)
 
 Examples:
-    h2olog -p -H $(pgrep -o $h2o)
+    h2olog -p -H $(pgrep -o h2o)
     h2olog -p $(pgrep -o h2o) -t quicly:accept -t quicly:free
     h2olog -p $(pgrep -o h2o) -t h2o:send_response_header -t h2o:h3s_accept -t h2o:h3s_destroy -s alt-svc
 )",
