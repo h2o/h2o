@@ -40,20 +40,20 @@ static void usage(void)
 {
     printf(R"(h2olog (h2o v%s)
 Usage: h2olog -p PID
-       h2olog quic -p PID
 Optional arguments:
     -d Print debugging information (-dd shows more)
     -h Print this help and exit
     -l Print the list of available tracepoints and exit
+    -H Trace HTTP requests and responses in varnishlog-like format
     -s RESPONSE_HEADER_NAME A response header name to show, e.g. "content-type"
     -t TRACEPOINT A tracepoint, or fully-qualified probe name, to show, e.g. "quicly:accept"
     -r Run without dropping root privilege
     -w Path to write the output (default: stdout)
 
 Examples:
-    h2olog quic -p $(pgrep -o h2o)
-    h2olog quic -p $(pgrep -o h2o) -t quicly:accept -t quicly:free
-    h2olog quic -p $(pgrep -o h2o) -t h2o:send_response_header -t h2o:h3s_accept -t h2o:h3s_destroy -s alt-svc
+    h2olog -p -H $(pgrep -o $h2o)
+    h2olog -p $(pgrep -o h2o) -t quicly:accept -t quicly:free
+    h2olog -p $(pgrep -o h2o) -t h2o:send_response_header -t h2o:h3s_accept -t h2o:h3s_destroy -s alt-svc
 )",
            H2O_VERSION);
     return;
@@ -228,11 +228,7 @@ int main(int argc, char **argv)
 {
     std::unique_ptr<h2o_tracer> tracer;
     if (argc > 1 && strcmp(argv[1], "quic") == 0) {
-        fprintf(stderr, "warning: 'quic' mode is deprecated. Use 'raw' mode instead.\n");
-        tracer.reset(create_raw_tracer());
-        --argc;
-        ++argv;
-    } else if (argc > 1 && strcmp(argv[1], "raw") == 0) {
+        fprintf(stderr, "warning: 'quic' mode is deprecated.\n");
         tracer.reset(create_raw_tracer());
         --argc;
         ++argv;
@@ -251,6 +247,9 @@ int main(int argc, char **argv)
     pid_t h2o_pid = -1;
     while ((c = getopt(argc, argv, "hdrlp:t:s:w:")) != -1) {
         switch (c) {
+        case 'H':
+            tracer.reset(create_http_tracer());
+            break;
         case 'p':
             h2o_pid = atoi(optarg);
             break;
