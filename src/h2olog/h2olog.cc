@@ -47,7 +47,7 @@ Optional arguments:
     -H Trace HTTP requests and responses in varnishlog-like format
     -s RESPONSE_HEADER_NAME A response header name to show, e.g. "content-type"
     -t TRACEPOINT A tracepoint, or fully-qualified probe name, to show,
-                  accepting a glob pattern, e.g. "quicly:accept", "h2o:*"
+                  including a glob pattern, e.g. "quicly:accept", "h2o:*"
     -r Run without dropping root privilege
     -w Path to write the output (default: stdout)
 

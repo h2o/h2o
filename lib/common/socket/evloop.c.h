@@ -399,19 +399,24 @@ static struct st_h2o_evloop_socket_t *create_socket(h2o_evloop_t *loop, int fd, 
     return sock;
 }
 
-static struct st_h2o_evloop_socket_t *create_socket_set_nodelay(h2o_evloop_t *loop, int fd, int flags)
-{
-    /* ignore errors returned by setsockopt; fd is not restricted to TCP sockets (could be a unix-domain socket for example) */
-    int on = 1;
-    setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &on, sizeof(on));
-    return create_socket(loop, fd, flags);
-}
-
 h2o_socket_t *h2o_evloop_socket_create(h2o_evloop_t *loop, int fd, int flags)
 {
-    /* it is the reponsibility of the event loop to modify the properties of a socket for its use (i.e., set O_NONBLOCK) */
+    /* It is the reponsibility of the event loop to modify the properties of a socket for its use (e.g., set O_NONBLOCK). Setting
+     * TCP_NODELAY on a non-TCP socket would fail, but we can ignore it. */
     fcntl(fd, F_SETFL, O_NONBLOCK);
-    return &create_socket_set_nodelay(loop, fd, flags)->super;
+    int on = 1;
+    setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &on, sizeof(on));
+
+    return &create_socket(loop, fd, flags)->super;
+}
+
+static void set_nodelay_if_inet(int fd, int sa_family)
+{
+    /* only AF_INET or AF_INET6 sockets support TCP_NODELAY. Skip for all others. */
+    if (sa_family == AF_INET || sa_family == AF_INET6) {
+        int on = 1;
+        setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &on, sizeof(on));
+    }
 }
 
 h2o_socket_t *h2o_evloop_socket_accept(h2o_socket_t *_listener)
@@ -447,7 +452,8 @@ h2o_socket_t *h2o_evloop_socket_accept(h2o_socket_t *_listener)
     if ((fd = cloexec_accept(listener->fd, (struct sockaddr *)peeraddr, peeraddrlen)) == -1)
         return NULL;
     fcntl(fd, F_SETFL, O_NONBLOCK);
-    sock = &create_socket_set_nodelay(listener->loop, fd, H2O_SOCKET_FLAG_IS_ACCEPTED_CONNECTION)->super;
+    sock = &create_socket(listener->loop, fd, H2O_SOCKET_FLAG_IS_ACCEPTED_CONNECTION)->super;
+    set_nodelay_if_inet(fd, peeraddr->sa_family);
 #endif
 
     if (peeraddr != NULL && *peeraddrlen <= sizeof(*peeraddr))
@@ -470,7 +476,9 @@ h2o_socket_t *h2o_socket_connect(h2o_loop_t *loop, struct sockaddr *addr, sockle
         return NULL;
     }
 
-    sock = create_socket_set_nodelay(loop, fd, H2O_SOCKET_FLAG_IS_CONNECTING);
+    sock = create_socket(loop, fd, H2O_SOCKET_FLAG_IS_CONNECTING);
+    set_nodelay_if_inet(fd, addr->sa_family);
+
     h2o_socket_notify_write(&sock->super, cb);
     return &sock->super;
 }
