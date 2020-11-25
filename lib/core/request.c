@@ -494,8 +494,21 @@ void h2o_start_response(h2o_req_t *req, h2o_generator_t *generator)
 
 void h2o_sendvec_init_raw(h2o_sendvec_t *vec, const void *base, size_t len)
 {
-    static const h2o_sendvec_callbacks_t primitive_callbacks = {h2o_sendvec_flatten_raw};
-    vec->callbacks = &primitive_callbacks;
+    static const h2o_sendvec_callbacks_t callbacks = {h2o_sendvec_flatten_raw};
+    vec->callbacks = &callbacks;
+    vec->raw = (char *)base;
+    vec->len = len;
+}
+
+static void sendvec_immutable_update_refcnt(h2o_sendvec_t *vec, h2o_req_t *req, int is_incr)
+{
+    /* noop */
+}
+
+void h2o_sendvec_init_immutable(h2o_sendvec_t *vec, const void *base, size_t len)
+{
+    static const h2o_sendvec_callbacks_t callbacks = {h2o_sendvec_flatten_raw, sendvec_immutable_update_refcnt};
+    vec->callbacks = &callbacks;
     vec->raw = (char *)base;
     vec->len = len;
 }

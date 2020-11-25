@@ -654,12 +654,9 @@ void start_request(struct st_h2o_http3client_req_t *req)
     req->quic->data = req;
 
     /* send request (TODO optimize) */
-    h2o_byte_vector_t buf = {NULL};
-    h2o_http3_encode_frame(req->super.pool, &buf, H2O_HTTP3_FRAME_TYPE_HEADERS, {
-        h2o_qpack_flatten_request(req->conn->super.qpack.enc, req->super.pool, req->quic->stream_id, NULL, &buf, method, url.scheme,
-                                  url.authority, url.path, headers, num_headers);
-    });
-    h2o_buffer_append(&req->sendbuf, buf.entries, buf.size);
+    h2o_iovec_t headers_frame = h2o_qpack_flatten_request(req->conn->super.qpack.enc, req->super.pool, req->quic->stream_id, NULL,
+                                                          method, url.scheme, url.authority, url.path, headers, num_headers);
+    h2o_buffer_append(&req->sendbuf, headers_frame.base, headers_frame.len);
     if (body.len != 0) {
         emit_data(req, body);
         if (req->proceed_req.cb != NULL)
