@@ -287,30 +287,6 @@ struct st_h2o_http3_conn_t {
     } _control_streams;
 };
 
-#define h2o_http3_encode_frame(_pool_, _buf_, _type, _block)                                                                       \
-    do {                                                                                                                           \
-        h2o_mem_pool_t *_pool = (_pool_);                                                                                          \
-        h2o_byte_vector_t *_buf = (_buf_);                                                                                         \
-        h2o_vector_reserve(_pool, _buf, _buf->size + 9);                                                                           \
-        _buf->size += 2;                                                                                                           \
-        size_t _payload_off = _buf->size;                                                                                          \
-        _buf->entries[_payload_off - 2] = (_type);                                                                                 \
-        do {                                                                                                                       \
-            _block                                                                                                                 \
-        } while (0);                                                                                                               \
-        uint8_t _vbuf[8];                                                                                                          \
-        size_t _vlen = quicly_encodev(_vbuf, _buf->size - _payload_off) - _vbuf;                                                   \
-        if (_vlen != 1) {                                                                                                          \
-            h2o_vector_reserve(_pool, _buf, _buf->size + _vlen - 1);                                                               \
-            memmove(_buf->entries + _payload_off + _vlen - 1, _buf->entries + _payload_off, _buf->size - _payload_off);            \
-            _payload_off += _vlen - 1;                                                                                             \
-            _buf->size += _vlen - 1;                                                                                               \
-            memmove(_buf->entries + _payload_off - _vlen, _vbuf, _vlen);                                                           \
-        } else {                                                                                                                   \
-            _buf->entries[_payload_off - 1] = _vbuf[0];                                                                            \
-        }                                                                                                                          \
-    } while (0)
-
 #define H2O_HTTP3_CHECK_SUCCESS(expr)                                                                                              \
     do {                                                                                                                           \
         if (!(expr))                                                                                                               \

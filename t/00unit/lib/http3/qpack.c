@@ -23,12 +23,27 @@
 #include "../../test.h"
 #include "../../../../lib/http3/qpack.c"
 
+static h2o_iovec_t get_payload(const char *_src, size_t len)
+{
+    const uint8_t *src = (const uint8_t *)_src, *end = src + len;
+    uint64_t v;
+
+    /* decode frame type and payload length */
+    v = ptls_decode_quicint(&src, end);
+    assert(v == H2O_HTTP3_FRAME_TYPE_HEADERS);
+    v = ptls_decode_quicint(&src, end);
+    assert(end - src == v);
+
+    return h2o_iovec_init(src, end - src);
+}
+
 static void doit(int use_enc_stream)
 {
     h2o_qpack_decoder_t *dec = h2o_qpack_create_decoder(4096, 10);
     h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(4096, 10);
     h2o_mem_pool_t pool;
-    h2o_byte_vector_t *enc_stream = NULL, flattened = {NULL};
+    h2o_byte_vector_t *enc_stream = NULL;
+    h2o_iovec_t flattened;
     uint8_t header_ack[H2O_HPACK_ENCODE_INT_MAX_LENGTH];
     size_t header_ack_len;
     const char *err_desc = NULL;
@@ -45,9 +60,10 @@ static void doit(int use_enc_stream)
         h2o_headers_t headers = {NULL};
         h2o_add_header_by_str(&pool, &headers, H2O_STRLIT("dnt"), 0, NULL, H2O_STRLIT("1"));
         h2o_add_header_by_str(&pool, &headers, H2O_STRLIT("x-hoge"), 0, NULL, H2O_STRLIT("\x01\x02\x03")); /* literal, non-huff */
-        h2o_qpack_flatten_request(enc, &pool, 123, enc_stream, &flattened, h2o_iovec_init(H2O_STRLIT("GET")), &H2O_URL_SCHEME_HTTPS,
-                                  h2o_iovec_init(H2O_STRLIT("example.com")), h2o_iovec_init(H2O_STRLIT("/foobar")), headers.entries,
-                                  headers.size);
+        h2o_iovec_t headers_frame = h2o_qpack_flatten_request(enc, &pool, 123, enc_stream, h2o_iovec_init(H2O_STRLIT("GET")),
+                                                              &H2O_URL_SCHEME_HTTPS, h2o_iovec_init(H2O_STRLIT("example.com")),
+                                                              h2o_iovec_init(H2O_STRLIT("/foobar")), headers.entries, headers.size);
+        flattened = get_payload(headers_frame.base, headers_frame.len);
     }
 
     if (enc_stream != NULL) {
@@ -67,8 +83,8 @@ static void doit(int use_enc_stream)
         h2o_headers_t headers = {NULL};
         size_t content_length = SIZE_MAX;
         ret = h2o_qpack_parse_request(&pool, dec, 0, &method, &scheme, &authority, &path, &headers, &pseudo_header_exists_map,
-                                      &content_length, NULL, header_ack, &header_ack_len, flattened.entries, flattened.size,
-                                      &err_desc);
+                                      &content_length, NULL, header_ack, &header_ack_len, (const uint8_t *)flattened.base,
+                                      flattened.len, &err_desc);
         ok(ret == 0);
         ok(h2o_memis(method.base, method.len, H2O_STRLIT("GET")));
         ok(scheme == &H2O_URL_SCHEME_HTTPS);

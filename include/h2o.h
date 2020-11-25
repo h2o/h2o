@@ -1426,9 +1426,15 @@ void h2o_req_bind_conf(h2o_req_t *req, h2o_hostconf_t *hostconf, h2o_pathconf_t 
  */
 static int h2o_send_state_is_in_progress(h2o_send_state_t s);
 /**
- *
+ * Initializes a send vector that refers to mutable memory region. When the `proceed` callback is invoked, it is possible for the
+ * generator to reuse (or release) that memory region.
  */
 void h2o_sendvec_init_raw(h2o_sendvec_t *vec, const void *base, size_t len);
+/**
+ * Initializes a send vector that refers to immutable memory region. It is the responsible of the generator to preserve the contents
+ * of the specified memory region until the user of the send vector finishes using the send vector.
+ */
+void h2o_sendvec_init_immutable(h2o_sendvec_t *vec, const void *base, size_t len);
 /**
  *
  */
