@@ -105,6 +105,13 @@ class h2o_tracer
     {
         out_ = fp;
     }
+
+
+    /**
+     * The tracer name used by the CLI.
+     */
+    virtual std::string name() = 0;
+
     /**
      * Handles an incoming BPF event.
      */
@@ -122,6 +129,22 @@ class h2o_tracer
         stats_.num_lost += lost;
         do_handle_lost(lost);
     }
+
+    /**
+     * Is `select_usdts()` method implemented?
+     */
+    virtual bool can_select_usdts() {
+        return false;
+    }
+
+    /**
+     * Select a tracepoint with pattern, e.g. "quicly:*".
+     * It affects what `usdt_probes()` returns;
+     */
+    virtual bool select_usdts(const char *pattern) {
+        abort(); // not implemented by default
+    }
+
     /**
      * Returns a vector of relevant USDT probes.
      */

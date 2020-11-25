@@ -411,19 +411,16 @@ int trace_sched_process_exit(struct tracepoint__sched__sched_process_exit *ctx) 
 
 """ % (event_t_decl)
 
-  usdt_def = """
-const std::vector<h2o_tracer::usdt> &h2o_raw_tracer::usdt_probes() {
-  static const std::vector<h2o_tracer::usdt> probes = {
+  usdts_def = r"""
+void h2o_raw_tracer::initialize() {
+  available_usdts.assign({
 """
-
   for metadata in probe_metadata.values():
     bpf += build_tracer(context, metadata)
-    usdt_def += """    h2o_tracer::usdt("%s", "%s", "%s"),\n""" % (
+    usdts_def += """    h2o_tracer::usdt("%s", "%s", "%s"),\n""" % (
         metadata['provider'], metadata['name'], build_tracer_name(metadata))
-
-  usdt_def += """
-  };
-  return probes;
+  usdts_def += r"""
+  });
 }
 """
 
@@ -507,36 +504,18 @@ extern "C" {
 #include "h2olog.h"
 #include "json.h"
 
+#include "raw_tracer.h.cc"
+
 #define STR_LEN 64
 #define STR_LIT(s) s, strlen(s)
 
 using namespace std;
 
-class h2o_raw_tracer : public h2o_tracer {
-protected:
-  virtual void do_handle_event(const void *data, int len);
-  virtual void do_handle_lost(uint64_t lost);
-public:
-  virtual const std::vector<h2o_tracer::usdt> &usdt_probes();
-  virtual std::string bpf_text();
-};
-
 %s
 %s
 %s
 %s
 %s
-
-void h2o_raw_tracer::do_handle_lost(uint64_t lost)
-{
-  fprintf(out_,
-          "{"
-          "\"type\":\"h2olog-event-lost\","
-          "\"seq\":%%" PRIu64 ","
-          "\"time\":%%" PRIu64 ","
-          "\"lost\":%%" PRIu64 "}\n",
-          seq_, time_milliseconds(), lost);
-}
 
 std::string h2o_raw_tracer::bpf_text() {
   // language=c
@@ -545,11 +524,7 @@ std::string h2o_raw_tracer::bpf_text() {
 )";
 }
 
-h2o_tracer *create_raw_tracer() {
-  return new h2o_raw_tracer;
-}
-
-""" % (build_typedef_for_cplusplus(), build_bpf_header_generator(), event_t_decl, usdt_def, handle_event_func, bpf))
+""" % (build_typedef_for_cplusplus(), build_bpf_header_generator(), event_t_decl, usdts_def, handle_event_func, bpf))
 
 
 def main():

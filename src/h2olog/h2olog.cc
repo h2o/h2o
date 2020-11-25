@@ -28,7 +28,6 @@ extern "C" {
 #include <unistd.h>
 #include <stdarg.h>
 #include <sys/time.h>
-#include <fnmatch.h>
 #include "h2o/memory.h"
 #include "h2o/version.h"
 }
@@ -226,41 +225,18 @@ static void lost_cb(void *context, uint64_t lost)
     tracer->handle_lost(lost);
 }
 
-static size_t add_matched_usdts(std::vector<h2o_tracer::usdt> &selected_usdts, const std::vector<h2o_tracer::usdt> &available_usdts,
-                                const char *pattern)
-{
-    size_t added = 0;
-    for (const auto &usdt : available_usdts) {
-        if (fnmatch(pattern, usdt.fully_qualified_name().c_str(), 0) == 0) {
-            selected_usdts.push_back(usdt);
-            added++;
-        }
-    }
-    return added;
-}
-
 int main(int argc, char **argv)
 {
-    std::unique_ptr<h2o_tracer> tracer;
-    if (argc > 1 && strcmp(argv[1], "quic") == 0) {
-        fprintf(stderr, "warning: 'quic' mode is deprecated.\n");
-        tracer.reset(create_raw_tracer());
-        --argc;
-        ++argv;
-    } else {
-        tracer.reset(create_http_tracer());
-    }
-
-    const std::vector<h2o_tracer::usdt> available_usdts = tracer->usdt_probes();
+    std::unique_ptr<h2o_tracer> tracer(create_raw_tracer());
 
     int debug = 0;
-    int preserve_root = 0;
+    bool preserve_root = 0;
+    bool list_usdts = false;
     FILE *outfp = stdout;
-    std::vector<h2o_tracer::usdt> selected_usdts;
     std::vector<std::string> response_header_filters;
     int c;
     pid_t h2o_pid = -1;
-    while ((c = getopt(argc, argv, "hdrlp:t:s:w:")) != -1) {
+    while ((c = getopt(argc, argv, "hHdrlp:t:s:w:")) != -1) {
         switch (c) {
         case 'H':
             tracer.reset(create_http_tracer());
@@ -269,8 +245,11 @@ int main(int argc, char **argv)
             h2o_pid = atoi(optarg);
             break;
         case 't': {
-            size_t added = add_matched_usdts(selected_usdts, available_usdts, optarg);
-            if (added == 0) {
+            if (!tracer->can_select_usdts()) {
+                fprintf(stderr, "-t is not suppored in %s\n", tracer->name().c_str());
+                exit(EXIT_FAILURE);
+            }
+            if (!tracer->select_usdts(optarg)) {
                 fprintf(stderr, "No such tracepoint: %s\n", optarg);
                 exit(EXIT_FAILURE);
             }
@@ -289,13 +268,10 @@ int main(int argc, char **argv)
             debug++;
             break;
         case 'l':
-            for (const auto &usdt : available_usdts) {
-                printf("%s\n", usdt.fully_qualified_name().c_str());
-            }
-            exit(EXIT_SUCCESS);
+            list_usdts = true;
             break;
         case 'r':
-            preserve_root = 1;
+            preserve_root = true;
             break;
         case 'h':
             usage();
@@ -310,6 +286,13 @@ int main(int argc, char **argv)
         fprintf(stderr, "Error: too many aruments\n");
         usage();
         exit(EXIT_FAILURE);
+    }
+
+    if (list_usdts) {
+        for (const auto &usdt : tracer->usdt_probes()) {
+            printf("%s\n", usdt.fully_qualified_name().c_str());
+        }
+        exit(EXIT_SUCCESS);
     }
 
     if (h2o_pid == -1) {
@@ -333,14 +316,11 @@ int main(int argc, char **argv)
         cflags.push_back(generate_header_filter_cflag(response_header_filters));
     }
 
-    if (selected_usdts.empty()) {
-        selected_usdts = available_usdts;
-    }
-
     if (debug >= 2) {
-        fprintf(stderr, "selected_usdts=");
-        for (auto iter = selected_usdts.cbegin(); iter != selected_usdts.cend(); iter++) {
-            if (iter != selected_usdts.cbegin()) {
+        fprintf(stderr, "usdts=");
+        const auto &usdts = tracer->usdt_probes();
+        for (auto iter = usdts.cbegin(); iter != usdts.cend(); iter++) {
+            if (iter != usdts.cbegin()) {
                 fprintf(stderr, ",");
             }
             fprintf(stderr, "%s", iter->fully_qualified_name().c_str());
@@ -360,7 +340,7 @@ int main(int argc, char **argv)
     ebpf::BPF *bpf = new ebpf::BPF();
     std::vector<ebpf::USDT> probes;
 
-    for (const auto &usdt : selected_usdts) {
+    for (const auto &usdt : tracer->usdt_probes()) {
         probes.push_back(ebpf::USDT(h2o_pid, usdt.provider, usdt.name, usdt.probe_func));
     }
 
