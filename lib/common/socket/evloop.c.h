@@ -453,7 +453,7 @@ h2o_socket_t *h2o_evloop_socket_accept(h2o_socket_t *_listener)
         return NULL;
     fcntl(fd, F_SETFL, O_NONBLOCK);
     sock = &create_socket(listener->loop, fd, H2O_SOCKET_FLAG_IS_ACCEPTED_CONNECTION)->super;
-    set_nodelay_if_inet(fd, peeraddr->sa_family);
+    set_nodelay_if_inet(fd, peeraddr->ss_family);
 #endif
 
     if (peeraddr != NULL && *peeraddrlen <= sizeof(*peeraddr))
