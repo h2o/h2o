@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  - push
+  - pull_request
+
+jobs:
+  default:
+    runs-on: [ubuntu-latest]
+    steps:
+    - uses: actions/checkout@v2
+    - name: Run with Docker
+      run: |
+        chmod -R ugo+w .
+        make -f misc/docker-ci/check.mk
+  openssl-1.1.0:
+    runs-on: [ubuntu-latest]
+    steps:
+    - uses: actions/checkout@v2
+    - name: Run with Docker
+      run: |
+        chmod -R ugo+w .
+        make -f misc/docker-ci/check.mk ossl1.1.0
+  openssl-1.1.1:
+    runs-on: [ubuntu-latest]
+    steps:
+    - uses: actions/checkout@v2
+    - name: Run with Docker
+      run: |
+        chmod -R ugo+w .
+        make -f misc/docker-ci/check.mk ossl1.1.1
+  fuzz:
+    runs-on: [ubuntu-latest]
+    steps:
+    - uses: actions/checkout@v2
+    - name: Run with Docker
+      run: |
+        chmod -R ugo+w .
+        make -f misc/docker-ci/check.mk fuzz
+  dtrace:
+    runs-on: [ubuntu-20.04]
+    steps:
+    - uses: actions/checkout@v2
+    - name: Run with Docker
+      run: |
+        - uname -a
+        - make -f misc/docker-ci/check.mk dtrace CONTAINER_NAME=h2oserver/h2o-ci:ubuntu2004
