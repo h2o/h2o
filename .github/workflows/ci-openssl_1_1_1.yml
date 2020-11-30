@@ -1,4 +1,4 @@
-name: CI
+name: CI/OpenSSL 1.1.1
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
   pull_request:
 
 jobs:
-  openssl_1_1_1:
+  build:
     runs-on: [ubuntu-20.04]
     steps:
     - uses: actions/checkout@v2

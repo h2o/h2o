@@ -1,4 +1,4 @@
-name: CI
+name: CI/dtrace
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
   pull_request:
 
 jobs:
-  dtrace:
+  build:
     runs-on: [ubuntu-20.04]
     steps:
     - uses: actions/checkout@v2
