@@ -1,0 +1,17 @@
+name: CI
+
+on:
+  - push
+  - pull_request
+
+jobs:
+  openssl_1_1_1:
+    runs-on: [ubuntu-20.04]
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        submodules: recursive
+    - name: Run with Docker
+      run: |
+        chmod -R ugo+w .
+        make -f misc/docker-ci/check.mk ossl1.1.1
