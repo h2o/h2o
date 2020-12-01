@@ -3,7 +3,7 @@ package t::Util;
 use strict;
 use warnings;
 use Digest::MD5 qw(md5_hex);
-use File::Temp qw(tempfile);
+use File::Temp qw(tempfile tempdir);
 use IO::Socket::INET;
 use IO::Socket::SSL;
 use IO::Poll qw(POLLIN POLLOUT POLLHUP POLLERR);
@@ -15,6 +15,7 @@ use Protocol::HTTP2::Constants;
 use Scope::Guard qw(scope_guard);
 use Test::More;
 use Time::HiRes qw(sleep gettimeofday tv_interval);
+use Carp;
 
 use base qw(Exporter);
 our @EXPORT = qw(
@@ -43,6 +44,7 @@ our @EXPORT = qw(
     wait_debugger
     spawn_forked
     spawn_h2_server
+    spawn_h2olog
     find_blackhole_ip
     get_tracer
     check_dtrace_availability
@@ -552,6 +554,91 @@ sub spawn_h2_server {
 
     close $upstream;
     return $server;
+}
+
+package H2OLog {
+    sub get_trace {
+        my($self, $cb) = @_;
+        return $self->{get_trace}->($cb);
+    }
+}
+
+# returns an object to read tracer outputs.
+# e.g.
+#   my $h2olog = spawn_h2olog({ pid => $h2o_pid, args => [...] });
+#   my $trace = $h2olog->get_trace(\&requests);
+# where requests() will make requests to h2o and called multiple times
+sub spawn_h2olog {
+    my ($opts) = @_;
+    my $h2o_pid = $opts->{pid} or croak("Missing pid in the opts");
+    my $h2olog_args = $opts->{args} // [];
+    my $h2olog_prog = bindir() . "/h2olog";
+
+    my $tempdir = tempdir(CLEANUP => 1);
+    my $output_file = "$tempdir/h2olog.jsonl";
+
+    my $tracer_pid = fork;
+    die "fork(2) failed: $!" unless defined $tracer_pid;
+    if ($tracer_pid == 0) {
+        # child process, spawn h2olog
+        exec "sudo", $h2olog_prog, @{$h2olog_args}, "-p", $h2o_pid, "-w", $output_file;
+        die "failed to spawn $h2olog_prog: $!";
+    }
+
+    # wait until h2olog and the trace log becomes ready
+    my $read_trace;
+    while (1) {
+        sleep 1;
+        if (open my $fh, "<", $output_file) {
+            my $off = 0;
+            $read_trace = sub {
+                confess "h2o is down (got $?)"
+                    if waitpid($tracer_pid, WNOHANG) != 0;
+
+                seek $fh, $off, 0
+                    or die "seek failed: $!";
+                read $fh, my $bytes, 65000;
+                $bytes = ''
+                    unless defined $bytes;
+                $off += length $bytes;
+                return $bytes;
+            };
+            last;
+        }
+        confess "h2olog failed to start"
+            if waitpid($tracer_pid, WNOHANG) == $tracer_pid;
+    }
+
+    my $get_trace = sub {
+        my ($request_cb) = @_;
+
+        my $retry_max = 10;
+        my $retry = 0;
+        my $trace;
+        do {
+            diag "making requests and tracing (#${retry})";
+
+            $request_cb->();
+
+            if (++$retry > $retry_max) {
+                confess "Cannot read trace data from h2olog ($tracer_pid)"
+            }
+            sleep 1;
+        } while (($trace = $read_trace->()) eq '');
+        return $trace;
+    };
+
+    my $guard = scope_guard(sub {
+        if (waitpid($tracer_pid, WNOHANG) == 0) {
+            diag "killing h2olog ($tracer_pid) with SIGTERM";
+            kill "TERM", $tracer_pid;
+        }
+    });
+
+    return bless {
+        _guard => $guard,
+        get_trace => $get_trace,
+    }, "H2OLog";
 }
 
 sub find_blackhole_ip {
