@@ -399,24 +399,29 @@ static struct st_h2o_evloop_socket_t *create_socket(h2o_evloop_t *loop, int fd, 
     return sock;
 }
 
-h2o_socket_t *h2o_evloop_socket_create(h2o_evloop_t *loop, int fd, int flags)
+/**
+ * Sets TCP_NODELAY if the given file descriptor is likely to be a TCP socket. The intent of this function isto reduce number of
+ * unnecessary system calls. Therefore, we skip setting TCP_NODELAY when it is certain that the socket is not a TCP socket,
+ * otherwise call setsockopt.
+ */
+static void set_nodelay_if_likely_tcp(int fd, struct sockaddr *sa)
 {
-    /* It is the reponsibility of the event loop to modify the properties of a socket for its use (e.g., set O_NONBLOCK). Setting
-     * TCP_NODELAY on a non-TCP socket would fail, but we can ignore it. */
-    fcntl(fd, F_SETFL, O_NONBLOCK);
+    if (sa == NULL)
+        return;
+    if (!(sa->sa_family == AF_INET || sa->sa_family == AF_INET6))
+        return;
+
     int on = 1;
     setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &on, sizeof(on));
-
-    return &create_socket(loop, fd, flags)->super;
 }
 
-static void set_nodelay_if_inet(int fd, int sa_family)
+h2o_socket_t *h2o_evloop_socket_create(h2o_evloop_t *loop, int fd, int flags)
 {
-    /* only AF_INET or AF_INET6 sockets support TCP_NODELAY. Skip for all others. */
-    if (sa_family == AF_INET || sa_family == AF_INET6) {
-        int on = 1;
-        setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &on, sizeof(on));
-    }
+    /* It is the reponsibility of the event loop to modify the properties of a socket for its use (e.g., set O_NONBLOCK). */
+    fcntl(fd, F_SETFL, O_NONBLOCK);
+    set_nodelay_if_likely_tcp(fd, NULL);
+
+    return &create_socket(loop, fd, flags)->super;
 }
 
 h2o_socket_t *h2o_evloop_socket_accept(h2o_socket_t *_listener)
@@ -453,7 +458,7 @@ h2o_socket_t *h2o_evloop_socket_accept(h2o_socket_t *_listener)
         return NULL;
     fcntl(fd, F_SETFL, O_NONBLOCK);
     sock = &create_socket(listener->loop, fd, H2O_SOCKET_FLAG_IS_ACCEPTED_CONNECTION)->super;
-    set_nodelay_if_inet(fd, peeraddr->sa_family);
+    set_nodelay_if_likely_tcp(fd, (struct sockaddr *)peeraddr);
 #endif
 
     if (peeraddr != NULL && *peeraddrlen <= sizeof(*peeraddr))
@@ -477,7 +482,7 @@ h2o_socket_t *h2o_socket_connect(h2o_loop_t *loop, struct sockaddr *addr, sockle
     }
 
     sock = create_socket(loop, fd, H2O_SOCKET_FLAG_IS_CONNECTING);
-    set_nodelay_if_inet(fd, addr->sa_family);
+    set_nodelay_if_likely_tcp(fd, addr);
 
     h2o_socket_notify_write(&sock->super, cb);
     return &sock->super;
