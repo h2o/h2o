@@ -38,7 +38,8 @@ INCLUDE_DIRECTORIES(
     ${OPENSSL_INCLUDE_DIR}
     deps/klib
     deps/picotls/include
-    deps/picotest include
+    deps/picotest
+    include
     ${CMAKE_CURRENT_BINARY_DIR})
 
 SET(PICOTLS_OPENSSL_FILES

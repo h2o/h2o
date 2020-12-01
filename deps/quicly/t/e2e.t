@@ -41,7 +41,7 @@ subtest "hello" => sub {
         my $events = slurp_file("$tempdir/events");
         complex $events, sub {
             $_ =~ /"type":"transport-close-send",.*?"type":"([^\"]*)",.*?"type":"([^\"]*)",.*?"type":"([^\"]*)",.*?"type":"([^\"]*)"/s
-                and $1 eq 'packet-commit' and $2 eq 'quictrace-sent' and $3 eq 'send' and $4 eq 'free';
+                and $1 eq 'packet-sent' and $2 eq 'send' and $3 eq 'free';
         };
     };
     # check if the client receives extra connection IDs
@@ -128,7 +128,7 @@ subtest "0-rtt" => sub {
     ok -e "$tempdir/session", "session saved";
     system "$cli -s $tempdir/session -e $tempdir/events 127.0.0.1 $port > /dev/null 2>&1";
     my $events = slurp_file("$tempdir/events");
-    like $events, qr/"type":"stream-send".*"stream-id":0,(.|\n)*"type":"packet-commit".*"pn":1,/m, "stream 0 on pn 1";
+    like $events, qr/"type":"stream-send".*"stream-id":0,(.|\n)*"type":"packet-sent".*"pn":1,/m, "stream 0 on pn 1";
     like $events, qr/"type":"cc-ack-received".*"largest-acked":1,/m, "pn 1 acked";
 };
 
@@ -181,7 +181,7 @@ subtest "stateless-reset" => sub {
     # check that the stateless reset is logged
     my $events = slurp_file("$tempdir/events");
     like $events, qr/"type":"stateless-reset-receive",/m, 'got stateless reset';
-    unlike +($events =~ /"type":"stateless-reset-receive",.*?\n/ and $'), qr/"type":"packet-commit",/m, 'nothing sent after receiving stateless reset';
+    unlike +($events =~ /"type":"stateless-reset-receive",.*?\n/ and $'), qr/"type":"packet-sent",/m, 'nothing sent after receiving stateless reset';
 };
 
 subtest "no-compatible-version" => sub {
@@ -210,7 +210,7 @@ subtest "no-compatible-version" => sub {
     # check the trace
     my $events = slurp_file("$tempdir/events");
     like $events, qr/"type":"receive",/m, "one receive event";
-    unlike +($events =~ /"type":"receive",.*?\n/ and $'), qr/"type":"packet-commit",/m, "nothing sent after receiving VN";
+    unlike +($events =~ /"type":"receive",.*?\n/ and $'), qr/"type":"packet-sent",/m, "nothing sent after receiving VN";
 };
 
 subtest "idle-timeout" => sub {

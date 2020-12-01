@@ -509,6 +509,66 @@ static void test_cid(void)
     subtest("retire cid", test_retire_cid);
 }
 
+/**
+ * test if quicly_accept correctly rejects a non-decryptable Initial packet with QUICLY_ERROR_DECRYPTION_FAILED
+ */
+static void test_nondecryptable_initial(void)
+{
+#define PACKET_LEN 1280
+#define HEADER_LEN 18
+#define LEN_HIGH (((PACKET_LEN - HEADER_LEN) & 0xff00) >> 8)
+#define LEN_LOW ((PACKET_LEN - HEADER_LEN) & 0xff)
+    uint8_t header[HEADER_LEN] = {
+        /* first byte for Initial: 0b1100???? */
+        0xc5,
+        /* version (29) */
+        0xff,
+        0x00,
+        0x00,
+        0x1d,
+        /* DCID len */
+        0x08,
+        /* DCID */
+        0x83,
+        0x94,
+        0xc8,
+        0xf0,
+        0x3e,
+        0x51,
+        0x57,
+        0x08,
+        /* SCID len */
+        0x00,
+        /* SCID does not appear */
+        /* token length */
+        0x00,
+        /* token does not appear */
+        /* length */
+        (0x40 | LEN_HIGH),
+        LEN_LOW,
+    };
+    quicly_conn_t *server;
+    uint8_t packetbuf[PACKET_LEN];
+    struct iovec packet = {.iov_base = packetbuf, .iov_len = sizeof(packetbuf)};
+    size_t num_decoded;
+    quicly_decoded_packet_t decoded;
+    int ret;
+
+    /* create an Initial packet, with its payload all set to zero */
+    memcpy(packetbuf, header, sizeof(header));
+    memset(packetbuf + sizeof(header), 0, sizeof(packetbuf) - sizeof(header));
+    num_decoded = decode_packets(&decoded, &packet, 1);
+    ok(num_decoded == 1);
+
+    /* decryption should fail */
+    ret = quicly_accept(&server, &quic_ctx, NULL, &fake_address.sa, &decoded, NULL, new_master_id(), NULL);
+    ok(ret == QUICLY_ERROR_DECRYPTION_FAILED);
+#undef PACKET_LEN
+#undef HEADER_LEN
+#undef LEN_HIGH
+#undef LEN_LOW
+}
+
 int main(int argc, char **argv)
 {
     static ptls_iovec_t cert;
@@ -580,6 +640,7 @@ int main(int argc, char **argv)
     subtest("simple", test_simple);
     subtest("stream-concurrency", test_stream_concurrency);
     subtest("lossy", test_lossy);
+    subtest("test-nondecryptable-initial", test_nondecryptable_initial);
 
     return done_testing();
 }
