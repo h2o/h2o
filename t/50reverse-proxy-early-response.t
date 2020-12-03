@@ -428,7 +428,7 @@ sub is_alive {
     my ($self) = @_;
     return undef unless $self->{sock};
     my $buf;
-    #local $! = 0;
+    local $! = 0;
     my $ret = $self->{sock}->recv($buf, 1, MSG_PEEK);
     return (
         (defined($ret) && length($buf) > 0)
