@@ -429,10 +429,11 @@ sub is_alive {
     return undef unless $self->{sock};
     my $buf;
     my $ret = $self->{sock}->recv($buf, 1, MSG_PEEK);
-    return (
-        (defined($ret) && length($buf) > 0)
-        || ($! == EAGAIN || $! == EWOULDBLOCK)
-    );
+    if (defined $ret) {
+        return length($buf) > 0;
+    } else {
+        return $! == EAGAIN || $! == EWOULDBLOCK;
+    }
 }
 
 sub close {
