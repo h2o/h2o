@@ -35,7 +35,6 @@ provider quicly {
     probe idle_timeout(struct st_quicly_conn_t *conn, int64_t at);
     probe stateless_reset_receive(struct st_quicly_conn_t *conn, int64_t at);
 
-    probe crypto_decrypt(struct st_quicly_conn_t *conn, int64_t at, uint64_t pn, const void *decrypted, size_t decrypted_len);
     probe crypto_handshake(struct st_quicly_conn_t *conn, int64_t at, int ret);
     probe crypto_update_secret(struct st_quicly_conn_t *conn, int64_t at, int is_enc, uint8_t epoch, const char *label, const char *secret);
     probe crypto_send_key_update(struct st_quicly_conn_t *conn, int64_t at, uint64_t phase, const char *secret);
@@ -43,10 +42,12 @@ provider quicly {
     probe crypto_receive_key_update(struct st_quicly_conn_t *conn, int64_t at, uint64_t phase, const char *secret);
     probe crypto_receive_key_update_prepare(struct st_quicly_conn_t *conn, int64_t at, uint64_t phase, const char *secret);
 
+    probe packet_sent(struct st_quicly_conn_t *conn, int64_t at, uint64_t pn, size_t len, uint8_t packet_type, int ack_only);
+    probe packet_received(struct st_quicly_conn_t *conn, int64_t at, uint64_t pn, const void *decrypted, size_t decrypted_len, uint8_t packet_type);
     probe packet_prepare(struct st_quicly_conn_t *conn, int64_t at, uint8_t first_octet, const char *dcid);
-    probe packet_commit(struct st_quicly_conn_t *conn, int64_t at, uint64_t pn, size_t len, int ack_only);
     probe packet_acked(struct st_quicly_conn_t *conn, int64_t at, uint64_t pn, int is_late_ack);
     probe packet_lost(struct st_quicly_conn_t *conn, int64_t at, uint64_t pn);
+    probe packet_decryption_failed(struct st_quicly_conn_t *conn, int64_t at, uint64_t pn);
 
     probe pto(struct st_quicly_conn_t *conn, int64_t at, size_t inflight, uint32_t cwnd, int8_t pto_count);
     probe cc_ack_received(struct st_quicly_conn_t *conn, int64_t at, uint64_t largest_acked, size_t bytes_acked, uint32_t cwnd,
@@ -108,8 +109,6 @@ provider quicly {
     probe ack_frequency_receive(struct st_quicly_conn_t *conn, int64_t at, uint64_t sequence, uint64_t packet_tolerance,
                                 uint64_t max_ack_delay, int ignore_order);
 
-    probe quictrace_sent(struct st_quicly_conn_t *conn, int64_t at, uint64_t pn, size_t len, uint8_t packet_type);
-    probe quictrace_recv(struct st_quicly_conn_t *conn, int64_t at, uint64_t pn);
     probe quictrace_send_stream(struct st_quicly_conn_t *conn, int64_t at, struct st_quicly_stream_t *stream, uint64_t off,
                                 size_t len, int fin);
     probe quictrace_recv_stream(struct st_quicly_conn_t *conn, int64_t at, int64_t stream_id, uint64_t off, size_t len, int fin);

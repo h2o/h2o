@@ -18,7 +18,7 @@ def gen_trace(f, cid, sent_trace, ack_trace):
         if event["type"] == "" or event["conn"] != cid: continue
 
         # sent packet
-        if event["type"] == "packet-commit":
+        if event["type"] == "packet-sent":
             if conn_start == 0: conn_start = event["time"]
             outstr = str(event["time"] - conn_start) + " " + \
                 str(event["pn"]) + " " + \

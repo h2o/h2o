@@ -106,6 +106,7 @@ extern "C" {
 #define QUICLY_ERROR_IS_CLOSING 0xff06 /* indicates that the connection has already entered closing state */
 #define QUICLY_ERROR_STATE_EXHAUSTION 0xff07
 #define QUICLY_ERROR_INVALID_INITIAL_VERSION 0xff08
+#define QUICLY_ERROR_DECRYPTION_FAILED 0xff09
 
 typedef int64_t quicly_stream_id_t;
 

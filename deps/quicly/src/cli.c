@@ -1406,18 +1406,14 @@ int main(int argc, char **argv)
 #if defined(IP_DONTFRAG)
     {
         int on = 1;
-        if (setsockopt(fd, IPPROTO_IP, IP_DONTFRAG, &on, sizeof(on)) != 0) {
-            perror("setsockopt(IP_DONTFRAG) failed");
-            return 1;
-        }
+        if (setsockopt(fd, IPPROTO_IP, IP_DONTFRAG, &on, sizeof(on)) != 0)
+            perror("Warning: setsockopt(IP_DONTFRAG) failed");
     }
 #elif defined(IP_PMTUDISC_DO)
     {
         int opt = IP_PMTUDISC_DO;
-        if (setsockopt(fd, IPPROTO_IP, IP_MTU_DISCOVER, &opt, sizeof(opt)) != 0) {
-            perror("setsockopt(IP_MTU_DISCOVER) failed");
-            return 1;
-        }
+        if (setsockopt(fd, IPPROTO_IP, IP_MTU_DISCOVER, &opt, sizeof(opt)) != 0)
+            perror("Warning: setsockopt(IP_MTU_DISCOVER) failed");
     }
 #endif
 
