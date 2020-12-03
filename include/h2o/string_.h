@@ -70,6 +70,10 @@ static int h2o_tolower(int ch);
  */
 static void h2o_strtolower(char *s, size_t len);
 /**
+ * copies and converts the string to lower-case
+ */
+static void h2o_strcopytolower(char *d, const char *s, size_t len);
+/**
  * tr/a-z/A-Z/
  */
 static int h2o_toupper(int ch);
@@ -183,8 +187,13 @@ inline int h2o_tolower(int ch)
 
 inline void h2o_strtolower(char *s, size_t len)
 {
-    for (; len != 0; ++s, --len)
-        *s = h2o_tolower(*s);
+    h2o_strcopytolower(s, s, len);
+}
+
+inline void h2o_strcopytolower(char *d, const char *s, size_t len)
+{
+    for (; len != 0; ++d, ++s, --len)
+        *d = h2o_tolower(*s);
 }
 
 inline int h2o_toupper(int ch)

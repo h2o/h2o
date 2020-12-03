@@ -71,12 +71,6 @@ static struct st_deferred_request_action_t *create_deferred_action(h2o_req_t *re
     return action;
 }
 
-static void strtolower_cpy(char *d, const char *s, size_t len)
-{
-    for (; len != 0; ++d, ++s, --len)
-        *d = h2o_tolower(*s);
-}
-
 static h2o_hostconf_t *find_hostconf(h2o_hostconf_t **hostconfs, h2o_iovec_t authority, uint16_t default_port,
                                      h2o_iovec_t *wildcard_match)
 {
@@ -96,7 +90,7 @@ static h2o_hostconf_t *find_hostconf(h2o_hostconf_t **hostconfs, h2o_iovec_t aut
 
     /* convert supplied hostname to lower-case */
     hostname_lc = alloca(hostname.len);
-    strtolower_cpy(hostname_lc, hostname.base, hostname.len);
+    h2o_strcopytolower(hostname_lc, hostname.base, hostname.len);
 
     do {
         h2o_hostconf_t *hostconf = *hostconfs;
