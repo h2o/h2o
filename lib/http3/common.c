@@ -611,7 +611,7 @@ static void process_packets(h2o_quic_ctx_t *ctx, quicly_address_t *destaddr, qui
             /* try to accept any of the Initial packets being received */
             size_t i;
             for (i = 0; i != num_packets; ++i)
-                if ((packets[i].octets.base[0] & 0xf0) == 0xc0)
+                if ((packets[i].octets.base[0] & QUICLY_PACKET_TYPE_BITMASK) == QUICLY_PACKET_TYPE_INITIAL)
                     if ((conn = ctx->acceptor(ctx, destaddr, srcaddr, packets + i)) != NULL)
                         break;
             if (conn == NULL)
