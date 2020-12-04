@@ -230,7 +230,7 @@ int main(int argc, char **argv)
     std::unique_ptr<h2o_tracer> tracer(create_raw_tracer());
 
     int debug = 0;
-    bool preserve_root = 0;
+    bool preserve_root = false;
     bool list_usdts = false;
     FILE *outfp = stdout;
     std::vector<std::string> response_header_filters;
