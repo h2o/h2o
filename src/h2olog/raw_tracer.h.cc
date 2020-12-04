@@ -51,15 +51,7 @@ class h2o_raw_tracer : public h2o_tracer
       initialize();
     }
 
-    virtual std::string name()
-    {
-        return "raw tracer";
-    }
-    virtual bool can_select_usdts()
-    {
-        return true;
-    }
-    virtual bool select_usdts(const char *pattern);
+    virtual std::string select_usdts(const char *pattern);
     virtual const std::vector<h2o_tracer::usdt> &usdt_probes()
     {
         return selected_usdts.empty() ? available_usdts : selected_usdts;
@@ -78,7 +70,7 @@ void h2o_raw_tracer::do_handle_lost(std::uint64_t lost)
                  seq_, time_milliseconds(), lost);
 }
 
-bool h2o_raw_tracer::select_usdts(const char *pattern)
+std::string h2o_raw_tracer::select_usdts(const char *pattern)
 {
     size_t added = 0;
     for (const auto &usdt : available_usdts) {
@@ -87,7 +79,12 @@ bool h2o_raw_tracer::select_usdts(const char *pattern)
             added++;
         }
     }
-    return added > 0;
+
+    if (added > 0) {
+        return "";
+    } else {
+        return std::string("No such tracepoint: ") + pattern;
+    }
 }
 
 h2o_tracer *create_raw_tracer()

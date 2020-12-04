@@ -245,12 +245,9 @@ int main(int argc, char **argv)
             h2o_pid = atoi(optarg);
             break;
         case 't': {
-            if (!tracer->can_select_usdts()) {
-                fprintf(stderr, "-t is not suppored in %s\n", tracer->name().c_str());
-                exit(EXIT_FAILURE);
-            }
-            if (!tracer->select_usdts(optarg)) {
-                fprintf(stderr, "No such tracepoint: %s\n", optarg);
+            std::string err = tracer->select_usdts(optarg);
+            if (!err.empty()) {
+                fprintf(stderr, "%s\n", err.c_str());
                 exit(EXIT_FAILURE);
             }
             break;
