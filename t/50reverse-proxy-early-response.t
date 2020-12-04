@@ -5,7 +5,7 @@ BEGIN { $ENV{HTTP2_DEBUG} = 'debug' }
 use Net::EmptyPort qw(check_port empty_port);
 use Scope::Guard;
 use Test::More;
-use Time::HiRes;
+use Time::HiRes qw(sleep);
 use IO::Socket::INET;
 use Protocol::HTTP2::Constants qw(:frame_types :errors :settings :flags :states :limits :endpoints);
 use t::Util;
@@ -70,11 +70,12 @@ EOS
                 my $client = H1Client->new($server);
                 $client->send_headers('POST', '/', ['transfer-encoding' => 'chunked']) or die $!;
                 $client->send_data("1\r\na\r\n") or die $!;
+                sleep 0.01;
                 my $output = $client->read(1000);
-                Time::HiRes::sleep(0.1);
+                sleep 0.01;
                 for (1..10) {
                     $client->send_data("400\r\n" . 'a' x 1024 . "\r\n", 1000) or last;
-                    Time::HiRes::sleep(0.01);
+                    sleep 0.01;
                 }
                 like $output, qr{HTTP/1.1 200 }is;
                 sleep 1;
@@ -421,12 +422,18 @@ sub read {
     $buf;
 }
 
+# This code is originated from socketpool.c
+# Find for the comment "test if the connection is still alive".
 sub is_alive {
     my ($self) = @_;
     return undef unless $self->{sock};
     my $buf;
     my $ret = $self->{sock}->recv($buf, 1, MSG_PEEK);
-    return $ret || ($! == EAGAIN || $! == EWOULDBLOCK);
+    if (defined $ret) {
+        return length($buf) > 0;
+    } else {
+        return $! == EAGAIN || $! == EWOULDBLOCK;
+    }
 }
 
 sub close {

@@ -24,8 +24,9 @@ if [ "$ROLE" == "client" ]; then
     echo "Starting quicly client ..."
     if [ ! -z "$REQUESTS" ]; then
         echo "Requests: " $REQUESTS
-        # Pull file names out of requests, generate file list for cli.
+        # Pull server and file names out of requests, generate file list for cli.
         for REQ in $REQUESTS; do
+            SERVER=`echo $REQ | cut -f3 -d'/' | cut -f1 -d':'`
             FILE=`echo $REQ | cut -f4 -d'/'`
             FILES=${FILES}" "${FILE}
             CLI_LIST=${CLI_LIST}" -P /"${FILE}
@@ -34,26 +35,26 @@ if [ "$ROLE" == "client" ]; then
         if [ "$TESTCASE" == "resumption" ]; then
             # Client needs to be run twice. First, with one request.
             FILE=`echo $FILES | cut -f1 -d" "`
-            echo "/quicly/cli -P /$FILE server 443"
-            /quicly/cli -P "/"$FILE $TEST_PARAMS -a "hq-29" -x x25519 -x secp256r1 -e /logs/$TESTCASE.out server 443
+            echo "/quicly/cli -P /$FILE $SERVER 443"
+            /quicly/cli -P "/"$FILE $TEST_PARAMS -a "hq-29" -x x25519 -x secp256r1 -e /logs/$TESTCASE.out $SERVER 443
 
             # Second time, with rest of the requests.
             CLI_LIST=`echo $CLI_LIST | cut -f3- -d" "`
-            echo "/quicly/cli $CLI_LIST server 443"
-            /quicly/cli $CLI_LIST $TEST_PARAMS -a "hq-29" -x x25519 -x secp256r1 -e /logs/$TESTCASE.out server 443
+            echo "/quicly/cli $CLI_LIST $SERVER 443"
+            /quicly/cli $CLI_LIST $TEST_PARAMS -a "hq-29" -x x25519 -x secp256r1 -e /logs/$TESTCASE.out $SERVER 443
             rm -f previous_sessions.bin
 
         elif [ "$TESTCASE" == "multiconnect" ]; then
             # Client needs to be run once per file.
             for FILE in $FILES; do
-                echo "/quicly/cli /$FILE server 443"
-                /quicly/cli -P "/"$FILE $TEST_PARAMS -a "hq-29" -x x25519 -x secp256r1 -e /logs/$TESTCASE.out server 443
+                echo "/quicly/cli /$FILE $SERVER 443"
+                /quicly/cli -P "/"$FILE $TEST_PARAMS -a "hq-29" -x x25519 -x secp256r1 -e /logs/$TESTCASE.out $SERVER 443
             done
 
         else
             # Client is run once for all files.
-            echo "/quicly/cli $CLI_LIST server 443"
-            /quicly/cli $CLI_LIST $TEST_PARAMS -a "hq-29" -x x25519 -x secp256r1 -e /logs/$TESTCASE.out server 443
+            echo "/quicly/cli $CLI_LIST $SERVER 443"
+            /quicly/cli $CLI_LIST $TEST_PARAMS -a "hq-29" -x x25519 -x secp256r1 -e /logs/$TESTCASE.out $SERVER 443
         fi
 
         # Cleanup.

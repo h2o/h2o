@@ -592,7 +592,7 @@ size_t quicly_decode_packet(quicly_context_t *ctx, quicly_decoded_packet_t *pack
     packet->token = ptls_iovec_init(NULL, 0);
     packet->decrypted.pn = UINT64_MAX;
 
-    /* move the cursor to the sencond byte */
+    /* move the cursor to the second byte */
     src += *off + 1;
 
     if (QUICLY_PACKET_IS_LONG_HEADER(packet->octets.base[0])) {
@@ -2572,7 +2572,6 @@ static int on_ack_max_stream_data(quicly_sentmap_t *map, const quicly_sent_packe
     quicly_conn_t *conn = (quicly_conn_t *)((char *)map - offsetof(quicly_conn_t, egress.loss.sentmap));
     quicly_stream_t *stream;
 
-    /* TODO cache pointer to stream (using a generation counter?) */
     if ((stream = quicly_get_stream(conn, sent->data.stream.stream_id)) != NULL) {
         if (acked) {
             quicly_maxsender_acked(&stream->_send_aux.max_stream_data_sender, &sent->data.max_stream_data.args);
@@ -2715,7 +2714,6 @@ static int on_ack_new_token(quicly_sentmap_t *map, const quicly_sent_packet_t *p
 {
     quicly_conn_t *conn = (quicly_conn_t *)((char *)map - offsetof(quicly_conn_t, egress.loss.sentmap));
 
-    /* TODO use `packet->bytes_in_flight != 0`, like on_ack_stream */
     if (sent->data.new_token.is_inflight) {
         --conn->egress.new_token.num_inflight;
         sent->data.new_token.is_inflight = 0;
@@ -2991,10 +2989,8 @@ static int commit_send_packet(quicly_conn_t *conn, quicly_send_context_t *s, enu
         quicly_sentmap_commit(&conn->egress.loss.sentmap, (uint16_t)packet_bytes_in_flight);
 
     conn->egress.cc.impl->cc_on_sent(&conn->egress.cc, &conn->egress.loss, (uint32_t)packet_bytes_in_flight, conn->stash.now);
-    QUICLY_PROBE(PACKET_COMMIT, conn, conn->stash.now, conn->egress.packet_number, s->dst - s->target.first_byte_at,
-                 !s->target.ack_eliciting);
-    QUICLY_PROBE(QUICTRACE_SENT, conn, conn->stash.now, conn->egress.packet_number, s->dst - s->target.first_byte_at,
-                 get_epoch(*s->target.first_byte_at));
+    QUICLY_PROBE(PACKET_SENT, conn, conn->stash.now, conn->egress.packet_number, s->dst - s->target.first_byte_at,
+                 get_epoch(*s->target.first_byte_at), !s->target.ack_eliciting);
 
     ++conn->egress.packet_number;
     ++conn->super.stats.num_packets.sent;
@@ -3172,7 +3168,6 @@ static int allocate_ack_eliciting_frame(quicly_conn_t *conn, quicly_send_context
     if ((*sent = quicly_sentmap_allocate(&conn->egress.loss.sentmap, acked)) == NULL)
         return PTLS_ERROR_NO_MEMORY;
 
-    /* TODO return the remaining window that the sender can use */
     return ret;
 }
 
@@ -3873,32 +3868,53 @@ Exit:
     return ret == 0 ? buf.off : SIZE_MAX;
 }
 
-static int send_handshake_flow(quicly_conn_t *conn, size_t epoch, quicly_send_context_t *s, int ack_only, int send_probe)
+static struct st_quicly_pn_space_t *setup_send_space(quicly_conn_t *conn, size_t epoch, quicly_send_context_t *s)
 {
-    struct st_quicly_pn_space_t *ack_space = NULL;
-    int ret = 0;
+    struct st_quicly_pn_space_t *space = NULL;
 
     switch (epoch) {
     case QUICLY_EPOCH_INITIAL:
         if (conn->initial == NULL || (s->current.cipher = &conn->initial->cipher.egress)->aead == NULL)
-            return 0;
+            return NULL;
         s->current.first_byte = QUICLY_PACKET_TYPE_INITIAL;
-        ack_space = &conn->initial->super;
+        space = &conn->initial->super;
         break;
     case QUICLY_EPOCH_HANDSHAKE:
         if (conn->handshake == NULL || (s->current.cipher = &conn->handshake->cipher.egress)->aead == NULL)
-            return 0;
+            return NULL;
         s->current.first_byte = QUICLY_PACKET_TYPE_HANDSHAKE;
-        ack_space = &conn->handshake->super;
+        space = &conn->handshake->super;
+        break;
+    case QUICLY_EPOCH_0RTT:
+    case QUICLY_EPOCH_1RTT:
+        if (conn->application == NULL || conn->application->cipher.egress.key.header_protection == NULL)
+            return NULL;
+        if ((epoch == QUICLY_EPOCH_0RTT) == conn->application->one_rtt_writable)
+            return NULL;
+        s->current.cipher = &conn->application->cipher.egress.key;
+        s->current.first_byte = epoch == QUICLY_EPOCH_0RTT ? QUICLY_PACKET_TYPE_0RTT : QUICLY_QUIC_BIT;
+        space = &conn->application->super;
         break;
     default:
         assert(!"logic flaw");
-        return 0;
+        break;
     }
 
+    return space;
+}
+
+static int send_handshake_flow(quicly_conn_t *conn, size_t epoch, quicly_send_context_t *s, int ack_only, int send_probe)
+{
+    struct st_quicly_pn_space_t *space;
+    int ret = 0;
+
+    /* setup send epoch, or return if it's impossible to send in this epoch */
+    if ((space = setup_send_space(conn, epoch, s)) == NULL)
+        return 0;
+
     /* send ACK */
-    if (ack_space != NULL && (ack_space->unacked_count != 0 || send_probe))
-        if ((ret = send_ack(conn, ack_space, s)) != 0)
+    if (space != NULL && (space->unacked_count != 0 || send_probe))
+        if ((ret = send_ack(conn, space, s)) != 0)
             goto Exit;
 
     if (!ack_only) {
@@ -3927,11 +3943,15 @@ Exit:
     return ret;
 }
 
-static int send_connection_close(quicly_conn_t *conn, quicly_send_context_t *s)
+static int send_connection_close(quicly_conn_t *conn, size_t epoch, quicly_send_context_t *s)
 {
     uint64_t error_code, offending_frame_type;
     const char *reason_phrase;
     int ret;
+
+    /* setup send epoch, or return if it's impossible to send in this epoch */
+    if (setup_send_space(conn, epoch, s) == NULL)
+        return 0;
 
     /* determine the payload, masking the application error when sending the frame using an unauthenticated epoch */
     error_code = conn->egress.connection_close.error_code;
@@ -4157,9 +4177,9 @@ static int do_send(quicly_conn_t *conn, quicly_send_context_t *s)
     if ((ret = send_handshake_flow(conn, QUICLY_EPOCH_HANDSHAKE, s, ack_only, min_packets_to_send != 0)) != 0)
         goto Exit;
 
-    /* send encrypted frames */
-    if (conn->application != NULL && (s->current.cipher = &conn->application->cipher.egress.key)->header_protection != NULL) {
-        s->current.first_byte = conn->application->one_rtt_writable ? QUICLY_QUIC_BIT : QUICLY_PACKET_TYPE_0RTT;
+    /* setup 0-RTT or 1-RTT send context (as the availability of the two epochs are mutually exclusive, we can try 1-RTT first as an
+     * optimization), then send application data if that succeeds */
+    if (setup_send_space(conn, QUICLY_EPOCH_1RTT, s) != NULL || setup_send_space(conn, QUICLY_EPOCH_0RTT, s) != NULL) {
         /* acks */
         if (conn->application->one_rtt_writable && conn->egress.send_ack_at <= conn->stash.now &&
             conn->application->super.unacked_count != 0) {
@@ -4346,20 +4366,14 @@ int quicly_send(quicly_conn_t *conn, quicly_address_t *dest, quicly_address_t *s
             }
         }
         if (conn->super.state == QUICLY_STATE_CLOSING && conn->egress.send_ack_at <= conn->stash.now) {
-            destroy_all_streams(conn, 0, 0); /* delayed until the emission of CONNECTION_CLOSE frame to allow quicly_close to be
-                                              * called from a stream handler */
-            if (conn->application != NULL && conn->application->one_rtt_writable) {
-                s.current.cipher = &conn->application->cipher.egress.key;
-                s.current.first_byte = QUICLY_QUIC_BIT;
-            } else if (conn->handshake != NULL && (s.current.cipher = &conn->handshake->cipher.egress)->aead != NULL) {
-                s.current.first_byte = QUICLY_PACKET_TYPE_HANDSHAKE;
-            } else {
-                s.current.cipher = &conn->initial->cipher.egress;
-                assert(s.current.cipher->aead != NULL);
-                s.current.first_byte = QUICLY_PACKET_TYPE_INITIAL;
+            /* destroy all streams; doing so is delayed until the emission of CONNECTION_CLOSE frame to allow quicly_close to be
+             * called from a stream handler */
+            destroy_all_streams(conn, 0, 0);
+            /* send CONNECTION_CLOSE in all possible epochs */
+            for (size_t epoch = 0; epoch < QUICLY_NUM_EPOCHS; ++epoch) {
+                if ((ret = send_connection_close(conn, epoch, &s)) != 0)
+                    goto Exit;
             }
-            if ((ret = send_connection_close(conn, &s)) != 0)
-                goto Exit;
             if ((ret = commit_send_packet(conn, &s, QUICLY_COMMIT_SEND_PACKET_MODE_SMALL)) != 0)
                 goto Exit;
         }
@@ -5385,6 +5399,8 @@ static int handle_payload(quicly_conn_t *conn, size_t epoch, const uint8_t *_src
             /* slow path */
             --state.src;
             if ((state.frame_type = quicly_decodev(&state.src, state.end)) == UINT64_MAX) {
+                state.frame_type =
+                    QUICLY_FRAME_TYPE_PADDING; /* we cannot signal the offending frame type when failing to decode the frame type */
                 ret = QUICLY_TRANSPORT_ERROR_FRAME_ENCODING;
                 break;
             }
@@ -5465,8 +5481,10 @@ int quicly_accept(quicly_conn_t **conn, quicly_context_t *ctx, struct sockaddr *
         goto Exit;
     next_expected_pn = 0; /* is this correct? do we need to take care of underflow? */
     if ((ret = decrypt_packet(ingress_cipher.header_protection, aead_decrypt_fixed_key, ingress_cipher.aead, &next_expected_pn,
-                              packet, &pn, &payload)) != 0)
+                              packet, &pn, &payload)) != 0) {
+        ret = QUICLY_ERROR_DECRYPTION_FAILED;
         goto Exit;
+    }
 
     /* create connection */
     if ((*conn = create_connection(ctx, packet->version, NULL, src_addr, dest_addr, &packet->cid.src, new_cid, handshake_properties,
@@ -5495,8 +5513,7 @@ int quicly_accept(quicly_conn_t **conn, quicly_context_t *ctx, struct sockaddr *
 
     QUICLY_PROBE(ACCEPT, *conn, (*conn)->stash.now,
                  QUICLY_PROBE_HEXDUMP(packet->cid.dest.encrypted.base, packet->cid.dest.encrypted.len), address_token);
-    QUICLY_PROBE(CRYPTO_DECRYPT, *conn, (*conn)->stash.now, pn, payload.base, payload.len);
-    QUICLY_PROBE(QUICTRACE_RECV, *conn, (*conn)->stash.now, pn);
+    QUICLY_PROBE(PACKET_RECEIVED, *conn, (*conn)->stash.now, pn, payload.base, payload.len, get_epoch(packet->octets.base[0]));
 
     /* handle the input; we ignore is_ack_only, we consult if there's any output from TLS in response to CH anyways */
     (*conn)->super.stats.num_packets.received += 1;
@@ -5691,12 +5708,11 @@ int quicly_receive(quicly_conn_t *conn, struct sockaddr *dest_addr, struct socka
     if ((ret = decrypt_packet(header_protection, aead.cb, aead.ctx, &(*space)->next_expected_packet_number, packet, &pn,
                               &payload)) != 0) {
         ++conn->super.stats.num_packets.decryption_failed;
-        QUICLY_PROBE(CRYPTO_DECRYPT, conn, conn->stash.now, pn, NULL, 0);
+        QUICLY_PROBE(PACKET_DECRYPTION_FAILED, conn, conn->stash.now, pn);
         goto Exit;
     }
 
-    QUICLY_PROBE(CRYPTO_DECRYPT, conn, conn->stash.now, pn, payload.base, payload.len);
-    QUICLY_PROBE(QUICTRACE_RECV, conn, conn->stash.now, pn);
+    QUICLY_PROBE(PACKET_RECEIVED, conn, conn->stash.now, pn, payload.base, payload.len, get_epoch(packet->octets.base[0]));
 
     /* update states */
     if (conn->super.state == QUICLY_STATE_FIRSTFLIGHT)
