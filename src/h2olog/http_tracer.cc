@@ -178,7 +178,7 @@ class h2o_http_tracer : public h2o_tracer
 
   public:
     virtual std::string select_usdts(const char *_pattern) {
-      return "-t is not suppored in HTTP tracer (-H)";
+      return "-t is not supported by the HTTP tracer (-H)";
     }
 
     virtual const std::vector<h2o_tracer::usdt> &usdt_probes()
