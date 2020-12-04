@@ -631,7 +631,11 @@ static h2o_iovec_t build_request(struct st_h2o_http1client_t *client, h2o_iovec_
 
     APPEND(method.base, method.len);
     buf.base[offset++] = ' ';
-    APPEND(url->path.base, url->path.len);
+    if (h2o_memis(method.base, method.len, H2O_STRLIT("CONNECT"))) {
+        APPEND(url->authority.base, url->authority.len);
+    } else {
+        APPEND(url->path.base, url->path.len);
+    }
     APPEND_STRLIT(" HTTP/1.1\r\nhost: ");
     APPEND(url->authority.base, url->authority.len);
     buf.base[offset++] = '\r';

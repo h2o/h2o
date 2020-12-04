@@ -160,6 +160,77 @@ static void on_error(h2o_httpclient_ctx_t *ctx, const char *fmt, ...)
     create_timeout(ctx->loop, 0, on_exit_deferred, NULL);
 }
 
+struct st_tunnel_t {
+    h2o_socket_t *std_in;
+    h2o_socket_t *sock;
+    /**
+     * buffer that stores data inflight (i.e. that being passed to `h2o_socket_write` for which the completion callback has not been
+     * called yet)
+     */
+    h2o_doublebuffer_t buf;
+};
+
+static void tunnel_send(struct st_tunnel_t *tunnel);
+
+static void tunnel_on_send_complete(h2o_socket_t *sock, const char *err)
+{
+    struct st_tunnel_t *tunnel = sock->data;
+
+    if (err != NULL) {
+        fprintf(stderr, "%s\n", err);
+        exit(0);
+    }
+
+    h2o_doublebuffer_consume(&tunnel->buf);
+    tunnel_send(tunnel);
+}
+
+void tunnel_send(struct st_tunnel_t *tunnel)
+{
+    if (tunnel->buf.inflight || tunnel->std_in->input->size == 0)
+        return;
+
+    h2o_iovec_t vec = h2o_doublebuffer_prepare(&tunnel->buf, &tunnel->std_in->input, SIZE_MAX);
+    h2o_socket_write(tunnel->sock, &vec, 1, tunnel_on_send_complete);
+}
+
+static void tunnel_on_stdin_read(h2o_socket_t *sock, const char *err)
+{
+    struct st_tunnel_t *tunnel = sock->data;
+
+    if (err != NULL)
+        exit(0);
+
+    tunnel_send(tunnel);
+}
+
+static void tunnel_on_socket_read(h2o_socket_t *sock, const char *err)
+{
+    struct st_tunnel_t *tunnel = sock->data;
+
+    if (err != NULL) {
+        fprintf(stderr, "%s\n", err);
+        exit(0);
+    }
+
+    write(1, tunnel->sock->input->bytes, tunnel->sock->input->size);
+    h2o_buffer_consume(&tunnel->sock->input, tunnel->sock->input->size);
+}
+
+static void tunnel_create(h2o_socket_t *sock)
+{
+    struct st_tunnel_t *tunnel = h2o_mem_alloc(sizeof(*tunnel));
+
+    tunnel->std_in = h2o_evloop_socket_create(h2o_socket_get_loop(sock), 0, 0);
+    tunnel->std_in->data = tunnel;
+    tunnel->sock = sock;
+    tunnel->sock->data = tunnel;
+    h2o_doublebuffer_init(&tunnel->buf, &h2o_socket_buffer_prototype);
+
+    h2o_socket_read_start(tunnel->std_in, tunnel_on_stdin_read);
+    h2o_socket_read_start(tunnel->sock, tunnel_on_socket_read);
+}
+
 static void start_request(h2o_httpclient_ctx_t *ctx)
 {
     h2o_url_t *url_parsed;
@@ -287,6 +358,12 @@ h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, int
     }
 
     print_response_headers(version, status, msg, headers, num_headers);
+
+    if (strcmp(req.method, "CONNECT") == 0 && status == 101) {
+        h2o_socket_t *sock = client->steal_socket(client);
+        tunnel_create(sock);
+        return NULL;
+    }
 
     if (errstr == h2o_httpclient_error_is_eos) {
         on_error(client->ctx, "no body");
