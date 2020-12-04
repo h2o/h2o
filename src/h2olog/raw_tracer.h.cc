@@ -81,7 +81,7 @@ std::string h2o_raw_tracer::select_usdts(const char *pattern)
     }
 
     if (added > 0) {
-        return "";
+        return std::string();
     } else {
         return std::string("No such tracepoint: ") + pattern;
     }
