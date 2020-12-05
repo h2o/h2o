@@ -97,10 +97,10 @@ static int on_config_proxy_protocol(h2o_configurator_command_t *cmd, h2o_configu
     return 0;
 }
 
-static int on_config_websocket_timeout(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+static int on_config_tunnel_timeout(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct proxy_configurator_t *self = (void *)cmd->configurator;
-    return h2o_configurator_scanf(cmd, node, "%" SCNu64, &self->vars->conf.websocket.timeout);
+    return h2o_configurator_scanf(cmd, node, "%" SCNu64, &self->vars->conf.tunnel.timeout);
 }
 
 static int on_config_websocket(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
@@ -109,7 +109,7 @@ static int on_config_websocket(h2o_configurator_command_t *cmd, h2o_configurator
     ssize_t ret = h2o_configurator_get_one_of(cmd, node, "OFF,ON");
     if (ret == -1)
         return -1;
-    self->vars->conf.websocket.enabled = (int)ret;
+    self->vars->conf.tunnel.enabled.websocket = (int)ret;
     return 0;
 }
 
@@ -520,8 +520,8 @@ void h2o_proxy_register_configurator(h2o_globalconf_t *conf)
     c->vars->conf.io_timeout = H2O_DEFAULT_PROXY_IO_TIMEOUT;
     c->vars->conf.connect_timeout = H2O_DEFAULT_PROXY_IO_TIMEOUT;
     c->vars->conf.first_byte_timeout = H2O_DEFAULT_PROXY_IO_TIMEOUT;
-    c->vars->conf.websocket.enabled = 0; /* have websocket proxying disabled by default; until it becomes non-experimental */
-    c->vars->conf.websocket.timeout = H2O_DEFAULT_PROXY_WEBSOCKET_TIMEOUT;
+    c->vars->conf.tunnel.enabled.websocket = 0; /* have websocket proxying disabled by default; until it becomes non-experimental */
+    c->vars->conf.tunnel.timeout = H2O_DEFAULT_PROXY_TUNNEL_TIMEOUT;
     c->vars->conf.max_buffer_size = SIZE_MAX;
     c->vars->conf.http2.max_concurrent_strams = H2O_DEFAULT_PROXY_HTTP2_MAX_CONCURRENT_STREAMS;
     c->vars->conf.http2.ratio = -1;
@@ -554,9 +554,9 @@ void h2o_proxy_register_configurator(h2o_globalconf_t *conf)
                                     on_config_timeout_keepalive);
     h2o_configurator_define_command(&c->super, "proxy.websocket",
                                     H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR, on_config_websocket);
-    h2o_configurator_define_command(&c->super, "proxy.websocket.timeout",
+    h2o_configurator_define_command(&c->super, "proxy.tunnel.timeout",
                                     H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
-                                    on_config_websocket_timeout);
+                                    on_config_tunnel_timeout);
     h2o_configurator_define_command(&c->super, "proxy.ssl.verify-peer",
                                     H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                     on_config_ssl_verify_peer);

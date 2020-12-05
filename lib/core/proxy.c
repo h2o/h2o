@@ -29,6 +29,8 @@
 #include "h2o/httpclient.h"
 #include "h2o/tunnel.h"
 
+enum req_type_t { REQ_TYPE_NORMAL, REQ_TYPE_WEBSOCKET };
+
 struct rp_generator_t {
     h2o_generator_t super;
     h2o_req_t *src_req;
@@ -40,7 +42,7 @@ struct rp_generator_t {
     h2o_buffer_t *last_content_before_send;
     h2o_doublebuffer_t sending;
     h2o_timer_t send_headers_timeout;
-    unsigned is_websocket_handshake : 1;
+    enum req_type_t type;
     unsigned had_body_error : 1; /* set if an error happened while fetching the body so that we can propagate the error */
     unsigned req_done : 1;
     unsigned res_done : 1;
@@ -141,7 +143,7 @@ static h2o_iovec_t build_content_length(h2o_mem_pool_t *pool, size_t cl)
 }
 
 static void build_request(h2o_req_t *req, h2o_iovec_t *method, h2o_url_t *url, h2o_headers_t *headers,
-                          h2o_httpclient_properties_t *props, int keepalive, int is_websocket_handshake, int use_proxy_protocol,
+                          h2o_httpclient_properties_t *props, int keepalive, enum req_type_t type, int use_proxy_protocol,
                           int *reprocess_if_too_early, h2o_url_t *origin)
 {
     size_t remote_addr_len = SIZE_MAX;
@@ -168,14 +170,19 @@ static void build_request(h2o_req_t *req, h2o_iovec_t *method, h2o_url_t *url, h
     /* url */
     h2o_url_init(url, origin->scheme, req->authority, h2o_strdup(&req->pool, req->path.base, req->path.len));
 
-    if (props->connection_header) {
-        if (is_websocket_handshake) {
+    if (props->connection_header != NULL) {
+        switch (type) {
+        case REQ_TYPE_WEBSOCKET:
             *props->connection_header = h2o_iovec_init(H2O_STRLIT("upgrade"));
             h2o_add_header(&req->pool, headers, H2O_TOKEN_UPGRADE, NULL, H2O_STRLIT("websocket"));
-        } else if (keepalive) {
-            *props->connection_header = h2o_iovec_init(H2O_STRLIT("keep-alive"));
-        } else {
-            *props->connection_header = h2o_iovec_init(H2O_STRLIT("close"));
+            break;
+        default:
+            if (keepalive) {
+                *props->connection_header = h2o_iovec_init(H2O_STRLIT("keep-alive"));
+            } else {
+                *props->connection_header = h2o_iovec_init(H2O_STRLIT("close"));
+            }
+            break;
         }
     }
 
@@ -363,7 +370,7 @@ static void do_proceed(h2o_generator_t *generator, h2o_req_t *req)
         self->client->update_window(self->client);
 }
 
-static void on_websocket_upgrade_complete(void *_info, h2o_socket_t *sock, size_t reqsize)
+static void on_tunnel_upgrade_complete(void *_info, h2o_socket_t *sock, size_t reqsize)
 {
     struct rp_ws_upgrade_info_t *info = _info;
 
@@ -376,7 +383,7 @@ static void on_websocket_upgrade_complete(void *_info, h2o_socket_t *sock, size_
     free(info);
 }
 
-static inline void on_websocket_upgrade(struct rp_generator_t *self, uint64_t timeout)
+static inline void on_tunnel_upgrade(struct rp_generator_t *self, uint64_t timeout)
 {
     h2o_req_t *req = self->src_req;
     h2o_socket_t *sock = self->client->steal_socket(self->client);
@@ -384,7 +391,7 @@ static inline void on_websocket_upgrade(struct rp_generator_t *self, uint64_t ti
     info->upstream_sock = sock;
     info->timeout = timeout;
     info->ctx = req->conn->ctx;
-    h2o_http1_upgrade(req, NULL, 0, on_websocket_upgrade_complete, info);
+    h2o_http1_upgrade(req, NULL, 0, on_tunnel_upgrade_complete, info);
 }
 
 static void copy_stats(struct rp_generator_t *self)
@@ -566,13 +573,19 @@ static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errs
     if (!seen_date_header && emit_missing_date_header)
         h2o_resp_add_date_header(req);
 
-    if (self->is_websocket_handshake && req->res.status == 101) {
-        h2o_httpclient_ctx_t *client_ctx = get_client_ctx(req);
-        assert(client_ctx->websocket_timeout != NULL);
-        h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_UPGRADE, NULL, H2O_STRLIT("websocket"));
-        on_websocket_upgrade(self, *client_ctx->websocket_timeout);
-        detach_client(self);
-        return NULL;
+    if (req->res.status == 101) {
+        switch (self->type) {
+        case REQ_TYPE_WEBSOCKET: {
+            h2o_httpclient_ctx_t *client_ctx = get_client_ctx(req);
+            assert(client_ctx->tunnel_timeout != NULL);
+            h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_UPGRADE, NULL, H2O_STRLIT("websocket"));
+            on_tunnel_upgrade(self, *client_ctx->tunnel_timeout);
+            detach_client(self);
+        } return NULL;
+        default:
+            /* TODO send 502? */
+            break;
+        }
     }
 
     /* declare the start of the response */
@@ -687,8 +700,8 @@ static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *e
     reprocess_if_too_early = h2o_conn_is_early_data(req->conn);
     h2o_headers_t headers_vec = (h2o_headers_t){NULL};
     build_request(req, method, url, &headers_vec, props,
-                  !use_proxy_protocol && h2o_socketpool_can_keepalive(client->connpool->socketpool), self->is_websocket_handshake,
-                  use_proxy_protocol, &reprocess_if_too_early, origin);
+                  !use_proxy_protocol && h2o_socketpool_can_keepalive(client->connpool->socketpool), self->type, use_proxy_protocol,
+                  &reprocess_if_too_early, origin);
     *headers = headers_vec.entries;
     *num_headers = headers_vec.size;
 
@@ -732,10 +745,10 @@ static struct rp_generator_t *proxy_send_prepare(h2o_req_t *req)
     self->super.proceed = do_proceed;
     self->super.stop = do_stop;
     self->src_req = req;
-    if (client_ctx->websocket_timeout != NULL && h2o_lcstris(req->upgrade.base, req->upgrade.len, H2O_STRLIT("websocket"))) {
-        self->is_websocket_handshake = 1;
+    if (client_ctx->tunnel_timeout != NULL && h2o_lcstris(req->upgrade.base, req->upgrade.len, H2O_STRLIT("websocket"))) {
+        self->type = REQ_TYPE_WEBSOCKET;
     } else {
-        self->is_websocket_handshake = 0;
+        self->type = REQ_TYPE_NORMAL;
     }
     self->had_body_error = 0;
     self->up_req.is_head = h2o_memis(req->method.base, req->method.len, H2O_STRLIT("HEAD"));

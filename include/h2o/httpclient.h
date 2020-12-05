@@ -97,8 +97,8 @@ typedef struct st_h2o_httpclient_ctx_t {
     uint64_t io_timeout;
     uint64_t connect_timeout;
     uint64_t first_byte_timeout;
-    uint64_t *websocket_timeout; /* NULL if upgrade to websocket is not allowed */
-    uint64_t keepalive_timeout;  /* only used for http2 for now */
+    uint64_t *tunnel_timeout;   /* NULL if upgrade to a tunnel (e.g., CONNECT, websocket proxying) is not allowed */
+    uint64_t keepalive_timeout; /* only used for http2 for now */
     size_t max_buffer_size;
 
     struct {
