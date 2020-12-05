@@ -29,7 +29,7 @@
 #include "h2o/httpclient.h"
 #include "h2o/tunnel.h"
 
-enum req_type_t { REQ_TYPE_NORMAL, REQ_TYPE_WEBSOCKET };
+enum req_type_t { REQ_TYPE_NORMAL, REQ_TYPE_WEBSOCKET, REQ_TYPE_CONNECT };
 
 struct rp_generator_t {
     h2o_generator_t super;
@@ -383,15 +383,24 @@ static void on_tunnel_upgrade_complete(void *_info, h2o_socket_t *sock, size_t r
     free(info);
 }
 
-static inline void on_tunnel_upgrade(struct rp_generator_t *self, uint64_t timeout)
+static void upgrade_to_tunnel(struct rp_generator_t *self, const char *upgrade, size_t upgrade_len)
 {
     h2o_req_t *req = self->src_req;
+    h2o_httpclient_ctx_t *client_ctx = get_client_ctx(req);
+
+    assert(client_ctx->tunnel_timeout != NULL);
+
+    if (upgrade != NULL)
+        h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_UPGRADE, NULL, upgrade, upgrade_len);
+
     h2o_socket_t *sock = self->client->steal_socket(self->client);
     struct rp_ws_upgrade_info_t *info = h2o_mem_alloc(sizeof(*info));
     info->upstream_sock = sock;
-    info->timeout = timeout;
+    info->timeout = *client_ctx->tunnel_timeout;
     info->ctx = req->conn->ctx;
     h2o_http1_upgrade(req, NULL, 0, on_tunnel_upgrade_complete, info);
+
+    detach_client(self);
 }
 
 static void copy_stats(struct rp_generator_t *self)
@@ -573,19 +582,21 @@ static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errs
     if (!seen_date_header && emit_missing_date_header)
         h2o_resp_add_date_header(req);
 
-    if (req->res.status == 101) {
-        switch (self->type) {
-        case REQ_TYPE_WEBSOCKET: {
-            h2o_httpclient_ctx_t *client_ctx = get_client_ctx(req);
-            assert(client_ctx->tunnel_timeout != NULL);
-            h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_UPGRADE, NULL, H2O_STRLIT("websocket"));
-            on_tunnel_upgrade(self, *client_ctx->tunnel_timeout);
-            detach_client(self);
-        } return NULL;
-        default:
-            /* TODO send 502? */
-            break;
+    switch (self->type) {
+    case REQ_TYPE_WEBSOCKET:
+        if (req->res.status == 101) {
+            upgrade_to_tunnel(self, H2O_STRLIT("websocket"));
+            return NULL;
         }
+        break;
+    case REQ_TYPE_CONNECT:
+        if (200 <= req->res.status && req->res.status <= 299) {
+            upgrade_to_tunnel(self, NULL, 0);
+            return NULL;
+        }
+    default:
+        /* TODO check 101? */
+        break;
     }
 
     /* declare the start of the response */
@@ -745,10 +756,13 @@ static struct rp_generator_t *proxy_send_prepare(h2o_req_t *req)
     self->super.proceed = do_proceed;
     self->super.stop = do_stop;
     self->src_req = req;
-    if (client_ctx->tunnel_timeout != NULL && h2o_lcstris(req->upgrade.base, req->upgrade.len, H2O_STRLIT("websocket"))) {
-        self->type = REQ_TYPE_WEBSOCKET;
-    } else {
-        self->type = REQ_TYPE_NORMAL;
+    self->type = REQ_TYPE_NORMAL;
+    if (client_ctx->tunnel_timeout != NULL) {
+        if (h2o_memis(req->method.base, req->method.len, H2O_STRLIT("CONNECT"))) {
+            self->type = REQ_TYPE_CONNECT;
+        } else if (h2o_lcstris(req->upgrade.base, req->upgrade.len, H2O_STRLIT("websocket"))) {
+            self->type = REQ_TYPE_WEBSOCKET;
+        }
     }
     self->had_body_error = 0;
     self->up_req.is_head = h2o_memis(req->method.base, req->method.len, H2O_STRLIT("HEAD"));

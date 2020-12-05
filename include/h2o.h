@@ -2029,9 +2029,7 @@ typedef struct st_h2o_proxy_config_vars_t {
     unsigned preserve_host : 1;
     unsigned use_proxy_protocol : 1;
     struct {
-        struct {
-            unsigned websocket : 1;
-        } enabled;
+        int enabled;
         uint64_t timeout;
     } tunnel;
     h2o_headers_command_t *headers_cmds;
