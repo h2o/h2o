@@ -359,7 +359,7 @@ h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, int
 
     print_response_headers(version, status, msg, headers, num_headers);
 
-    if (strcmp(req.method, "CONNECT") == 0 && status == 101) {
+    if (strcmp(req.method, "CONNECT") == 0 && (200 <= status && status <= 299)) {
         h2o_socket_t *sock = client->steal_socket(client);
         tunnel_create(sock);
         return NULL;
