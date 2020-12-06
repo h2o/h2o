@@ -87,7 +87,7 @@ static h2o_httpclient_t *create_client(h2o_mem_pool_t *pool, void *data, h2o_htt
     client->ctx = ctx;
     client->data = data;
     client->cancel = do_cancel;
-    client->steal_socket = NULL;
+    client->open_tunnel = NULL;
     client->get_socket = NULL;
     client->update_window = NULL;
     client->write_req = NULL;

@@ -81,8 +81,6 @@
 		1065E70C19BF664300686E72 /* evloop.h in Headers */ = {isa = PBXBuildFile; fileRef = 1065E70419BF145700686E72 /* evloop.h */; };
 		1065E70D19BF6D4600686E72 /* uv-binding.h in Headers */ = {isa = PBXBuildFile; fileRef = 1065E70619BF14E500686E72 /* uv-binding.h */; };
 		1065E70E19BF6D9400686E72 /* uv-binding.c.h in Headers */ = {isa = PBXBuildFile; fileRef = 1065E70719BF17FE00686E72 /* uv-binding.c.h */; };
-		106C22F81C040F6400405689 /* tunnel.c in Sources */ = {isa = PBXBuildFile; fileRef = 106C22F71C040F6400405689 /* tunnel.c */; };
-		106C22FA1C040F7800405689 /* tunnel.h in Headers */ = {isa = PBXBuildFile; fileRef = 106C22F91C040F7800405689 /* tunnel.h */; };
 		106C22FF1C05436100405689 /* errordoc.c in Sources */ = {isa = PBXBuildFile; fileRef = 106C22FE1C05436100405689 /* errordoc.c */; };
 		106C23011C0544CE00405689 /* errordoc.c in Sources */ = {isa = PBXBuildFile; fileRef = 106C23001C0544CE00405689 /* errordoc.c */; };
 		1070866A1B70A00F002B8F18 /* casper.c in Sources */ = {isa = PBXBuildFile; fileRef = 107086691B70A00F002B8F18 /* casper.c */; };
@@ -399,7 +397,6 @@
 		E9708B881E52C8560029E0A5 /* stream.c in Sources */ = {isa = PBXBuildFile; fileRef = 10BA72A919AAD6300059392A /* stream.c */; };
 		E9708B891E52C8560029E0A5 /* scheduler.c in Sources */ = {isa = PBXBuildFile; fileRef = 10E299571A67E68500701AA6 /* scheduler.c */; };
 		E9708B8A1E52C8560029E0A5 /* http2_debug_state.c in Sources */ = {isa = PBXBuildFile; fileRef = 080D35EA1D5E060D0029B7E5 /* http2_debug_state.c */; };
-		E9708B8B1E52C85A0029E0A5 /* tunnel.c in Sources */ = {isa = PBXBuildFile; fileRef = 106C22F71C040F6400405689 /* tunnel.c */; };
 		E9757709221BB7DC00D1EF74 /* http3_internal.h in Headers */ = {isa = PBXBuildFile; fileRef = E9757708221BB78C00D1EF74 /* http3_internal.h */; };
 		E97EC88D213CE3130086AD64 /* hpack.h in Headers */ = {isa = PBXBuildFile; fileRef = E97EC88C213CE3130086AD64 /* hpack.h */; };
 		E98042162238D35B008B9745 /* cc-reno.c in Sources */ = {isa = PBXBuildFile; fileRef = E98042152238D35B008B9745 /* cc-reno.c */; };
@@ -777,8 +774,6 @@
 		1065E70419BF145700686E72 /* evloop.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = evloop.h; sourceTree = "<group>"; };
 		1065E70619BF14E500686E72 /* uv-binding.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "uv-binding.h"; sourceTree = "<group>"; };
 		1065E70719BF17FE00686E72 /* uv-binding.c.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = "uv-binding.c.h"; sourceTree = "<group>"; };
-		106C22F71C040F6400405689 /* tunnel.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = tunnel.c; sourceTree = "<group>"; };
-		106C22F91C040F7800405689 /* tunnel.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = tunnel.h; sourceTree = "<group>"; };
 		106C22FB1C0413DA00405689 /* 40websocket.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = 40websocket.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		106C22FE1C05436100405689 /* errordoc.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = errordoc.c; sourceTree = "<group>"; };
 		106C23001C0544CE00405689 /* errordoc.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = errordoc.c; sourceTree = "<group>"; };
@@ -1875,7 +1870,6 @@
 				E9BCE6891FF0CF84003CEA11 /* timerwheel.h */,
 				107923A219A3215F00C52AD6 /* token.h */,
 				7DA3F5AE20E0B03F0000222F /* token_table.h */,
-				106C22F91C040F7800405689 /* tunnel.h */,
 				10AA2E9E1A8807CF004322AC /* url.h */,
 				107923A319A3215F00C52AD6 /* websocket.h */,
 				104B9A2C1A4BE029009EEE64 /* version.h */,
@@ -1909,7 +1903,6 @@
 				107923B219A3217300C52AD6 /* http2 */,
 				E901C438213E593D00D17C93 /* http3 */,
 				E95EBCD9228117620022C32D /* probes_.h */,
-				106C22F71C040F6400405689 /* tunnel.c */,
 				107923C119A3217300C52AD6 /* websocket.c */,
 			);
 			path = lib;
@@ -2775,7 +2768,6 @@
 				E901C3ED213E1C3600D17C93 /* constants.h in Headers */,
 				08790DE01D8015A400A04BC1 /* sds.h in Headers */,
 				7D0E5D5A20761BD800DA3E5A /* hiredis_.h in Headers */,
-				106C22FA1C040F7800405689 /* tunnel.h in Headers */,
 				08790DE21D8275DE00A04BC1 /* redis.h in Headers */,
 				0812AB211D7FCFEB00004F23 /* async.h in Headers */,
 				10D0903A19F0A51C0043D458 /* memory.h in Headers */,
@@ -3112,7 +3104,6 @@
 				10AA2E961A80A612004322AC /* time.c in Sources */,
 				0812AB2B1D7FD54700004F23 /* read.c in Sources */,
 				107923C319A3217300C52AD6 /* file.c in Sources */,
-				106C22F81C040F6400405689 /* tunnel.c in Sources */,
 				E9A8351524B1340D007D06C2 /* loss.c in Sources */,
 				107923CD19A3217300C52AD6 /* memory.c in Sources */,
 				107923CC19A3217300C52AD6 /* context.c in Sources */,
@@ -3363,7 +3354,6 @@
 				E987E5EA1FD7EBD100DE4346 /* dictionary.c in Sources */,
 				E9FF84BD24C5AA47002577CA /* quicly-probes.d in Sources */,
 				E9E5049121501BBA004DC170 /* server.c in Sources */,
-				E9708B8B1E52C85A0029E0A5 /* tunnel.c in Sources */,
 				7DE1DB38212B1CC00055F500 /* ssl.c in Sources */,
 				E9316ED824417E0A00C9C127 /* certificate_compression.c in Sources */,
 				7D937303202AC7BA005FE6AB /* server_timing.c in Sources */,

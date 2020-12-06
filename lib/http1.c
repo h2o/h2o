@@ -92,6 +92,15 @@ struct st_h2o_http1_chunked_entity_reader {
     struct phr_chunked_decoder decoder;
 };
 
+struct st_h2o_http1_tunnel_t {
+    h2o_httpclient_tunnel_t *server;
+    h2o_socket_t *client;
+    struct {
+        h2o_timer_t entry;
+        uint64_t ticks;
+    } idle_timeout;
+};
+
 static void finalostream_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_sendvec_t *inbufs, size_t inbufcnt, h2o_send_state_t state);
 static void finalostream_send_informational(h2o_ostream_t *_self, h2o_req_t *req);
 static void reqread_on_read(h2o_socket_t *sock, const char *err);
@@ -99,6 +108,7 @@ static void reqread_on_timeout(h2o_timer_t *entry);
 static void req_io_on_timeout(h2o_timer_t *entry);
 static void reqread_start(struct st_h2o_http1_conn_t *conn);
 static int foreach_request(h2o_context_t *ctx, int (*cb)(h2o_req_t *req, void *cbdata), void *cbdata);
+static void establish_tunnel(h2o_req_t *req, h2o_httpclient_tunnel_t *tunnel, uint64_t idle_timeout);
 
 const h2o_protocol_callbacks_t H2O_HTTP1_CALLBACKS = {
     NULL, /* graceful_shutdown (note: nothing special needs to be done for handling graceful shutdown) */
@@ -115,6 +125,7 @@ static void init_request(struct st_h2o_http1_conn_t *conn)
     }
     assert(conn->req_body == NULL);
     h2o_init_request(&conn->req, &conn->super, NULL);
+    conn->req.establish_tunnel = establish_tunnel;
 
     ++conn->_req_index;
     conn->req._ostr_top = &conn->_ostr_final.super;
@@ -782,6 +793,128 @@ static void on_upgrade_complete(h2o_socket_t *socket, const char *err)
     }
 
     cb(data, sock, headers_size);
+}
+
+static void tunnel_close(struct st_h2o_http1_tunnel_t *tunnel, const char *err)
+{
+    /* TODO log err */
+    tunnel->server->destroy(tunnel->server);
+    if (tunnel->client != NULL)
+        h2o_socket_close(tunnel->client);
+    h2o_timer_unlink(&tunnel->idle_timeout.entry);
+
+    free(tunnel);
+}
+
+static void tunnel_on_timeout(h2o_timer_t *timer)
+{
+    struct st_h2o_http1_tunnel_t *tunnel = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http1_tunnel_t, idle_timeout.entry, timer);
+
+    tunnel_close(tunnel, "idle timeout");
+}
+
+static void tunnel_reset_timeout(struct st_h2o_http1_tunnel_t *tunnel)
+{
+    h2o_timer_unlink(&tunnel->idle_timeout.entry);
+    h2o_timer_link(h2o_socket_get_loop(tunnel->client), tunnel->idle_timeout.ticks, &tunnel->idle_timeout.entry);
+}
+
+static void tunnel_on_client_write_complete(h2o_socket_t *_sock, const char *err)
+{
+    struct st_h2o_http1_tunnel_t *tunnel = _sock->data;
+    assert(tunnel->client == _sock);
+
+    if (err != NULL) {
+        tunnel_close(tunnel, err);
+        return;
+    }
+
+    tunnel->server->proceed_read(tunnel->server);
+}
+
+static void tunnel_on_server_read(h2o_httpclient_tunnel_t *_tunnel, const char *err, const void *bytes, size_t len)
+{
+    struct st_h2o_http1_tunnel_t *tunnel = _tunnel->data;
+    assert(tunnel->server == _tunnel);
+
+    if (err != NULL) {
+        tunnel_close(tunnel, err);
+        return;
+    }
+
+    tunnel_reset_timeout(tunnel);
+
+    h2o_iovec_t vec = h2o_iovec_init(bytes, len);
+    h2o_socket_write(tunnel->client, &vec, 1, tunnel_on_client_write_complete);
+}
+
+static void tunnel_on_client_read(h2o_socket_t *_sock, const char *err)
+{
+    struct st_h2o_http1_tunnel_t *tunnel = _sock->data;
+    assert(tunnel->client == _sock);
+
+    if (err != NULL) {
+        tunnel_close(tunnel, err);
+        return;
+    }
+
+    tunnel_reset_timeout(tunnel);
+
+    if (tunnel->client->input->size != 0) {
+        h2o_socket_read_stop(tunnel->client);
+        tunnel->server->write_(tunnel->server, tunnel->client->input->bytes, tunnel->client->input->size);
+    } else {
+        h2o_socket_read_start(tunnel->client, tunnel_on_client_read);
+    }
+}
+
+static void tunnel_on_server_write_complete(h2o_httpclient_tunnel_t *_tunnel, const char *err)
+{
+    struct st_h2o_http1_tunnel_t *tunnel = _tunnel->data;
+    assert(tunnel->server == _tunnel);
+
+    if (err != NULL) {
+        tunnel_close(tunnel, err);
+        return;
+    }
+
+    h2o_buffer_consume(&tunnel->client->input, tunnel->client->input->size);
+    tunnel_on_client_read(tunnel->client, NULL);
+}
+
+static void tunnel_on_established(void *_tunnel, h2o_socket_t *_sock, size_t reqsize)
+{
+    struct st_h2o_http1_tunnel_t *tunnel = _tunnel;
+
+    if (_sock == NULL) {
+        tunnel_close(tunnel, "closed by peer");
+        return;
+    }
+
+    tunnel->client = _sock;
+
+    tunnel_reset_timeout(tunnel);
+
+    tunnel->client->data = tunnel;
+    h2o_socket_read_stop(tunnel->client);
+    h2o_buffer_consume(&tunnel->client->input, reqsize);
+
+    tunnel->server->proceed_read(tunnel->server);
+    tunnel_on_client_read(tunnel->client, NULL);
+}
+
+void establish_tunnel(h2o_req_t *req, h2o_httpclient_tunnel_t *_tunnel, uint64_t idle_timeout)
+{
+    struct st_h2o_http1_tunnel_t *tunnel = h2o_mem_alloc(sizeof(*tunnel));
+
+    *tunnel = (struct st_h2o_http1_tunnel_t){_tunnel, NULL, {.ticks = idle_timeout}};
+    tunnel->server->on_read = tunnel_on_server_read;
+    tunnel->server->on_write_complete = tunnel_on_server_write_complete;
+    tunnel->server->data = tunnel;
+
+    h2o_timer_init(&tunnel->idle_timeout.entry, tunnel_on_timeout);
+
+    h2o_http1_upgrade(req, NULL, 0, tunnel_on_established, tunnel);
 }
 
 static size_t flatten_headers_estimate_size(h2o_req_t *req, size_t server_name_and_connection_len)

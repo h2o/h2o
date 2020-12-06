@@ -27,7 +27,6 @@
 #include "h2o.h"
 #include "h2o/http1.h"
 #include "h2o/httpclient.h"
-#include "h2o/tunnel.h"
 
 enum req_type_t { REQ_TYPE_NORMAL, REQ_TYPE_WEBSOCKET, REQ_TYPE_CONNECT };
 
@@ -46,12 +45,6 @@ struct rp_generator_t {
     unsigned had_body_error : 1; /* set if an error happened while fetching the body so that we can propagate the error */
     unsigned req_done : 1;
     unsigned res_done : 1;
-};
-
-struct rp_ws_upgrade_info_t {
-    h2o_context_t *ctx;
-    uint64_t timeout;
-    h2o_socket_t *upstream_sock;
 };
 
 static h2o_httpclient_ctx_t *get_client_ctx(h2o_req_t *req)
@@ -370,19 +363,6 @@ static void do_proceed(h2o_generator_t *generator, h2o_req_t *req)
         self->client->update_window(self->client);
 }
 
-static void on_tunnel_upgrade_complete(void *_info, h2o_socket_t *sock, size_t reqsize)
-{
-    struct rp_ws_upgrade_info_t *info = _info;
-
-    if (sock != NULL) {
-        h2o_buffer_consume(&sock->input, reqsize); // It is detached from conn. Let's trash unused data.
-        h2o_tunnel_establish(info->ctx, sock, info->upstream_sock, info->timeout);
-    } else {
-        h2o_socket_close(info->upstream_sock);
-    }
-    free(info);
-}
-
 static void upgrade_to_tunnel(struct rp_generator_t *self, const char *upgrade, size_t upgrade_len)
 {
     h2o_req_t *req = self->src_req;
@@ -393,12 +373,8 @@ static void upgrade_to_tunnel(struct rp_generator_t *self, const char *upgrade, 
     if (upgrade != NULL)
         h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_UPGRADE, NULL, upgrade, upgrade_len);
 
-    h2o_socket_t *sock = self->client->steal_socket(self->client);
-    struct rp_ws_upgrade_info_t *info = h2o_mem_alloc(sizeof(*info));
-    info->upstream_sock = sock;
-    info->timeout = *client_ctx->tunnel_timeout;
-    info->ctx = req->conn->ctx;
-    h2o_http1_upgrade(req, NULL, 0, on_tunnel_upgrade_complete, info);
+    h2o_httpclient_tunnel_t *tunnel = self->client->open_tunnel(self->client);
+    req->establish_tunnel(req, tunnel, *client_ctx->tunnel_timeout);
 
     detach_client(self);
 }
@@ -757,7 +733,7 @@ static struct rp_generator_t *proxy_send_prepare(h2o_req_t *req)
     self->super.stop = do_stop;
     self->src_req = req;
     self->type = REQ_TYPE_NORMAL;
-    if (client_ctx->tunnel_timeout != NULL) {
+    if (client_ctx->tunnel_timeout != NULL && req->establish_tunnel != NULL) {
         if (h2o_memis(req->method.base, req->method.len, H2O_STRLIT("CONNECT"))) {
             self->type = REQ_TYPE_CONNECT;
         } else if (h2o_lcstris(req->upgrade.base, req->upgrade.len, H2O_STRLIT("websocket"))) {

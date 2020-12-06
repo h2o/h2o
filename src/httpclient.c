@@ -162,19 +162,27 @@ static void on_error(h2o_httpclient_ctx_t *ctx, const char *fmt, ...)
 
 struct st_tunnel_t {
     h2o_socket_t *std_in;
-    h2o_socket_t *sock;
+    h2o_httpclient_tunnel_t *tunnel;
     /**
-     * buffer that stores data inflight (i.e. that being passed to `h2o_socket_write` for which the completion callback has not been
+     * buffer that stores data inflight (i.e. that being passed to `tunnel->write` for which the completion callback has not been
      * called yet)
      */
     h2o_doublebuffer_t buf;
 };
 
-static void tunnel_send(struct st_tunnel_t *tunnel);
-
-static void tunnel_on_send_complete(h2o_socket_t *sock, const char *err)
+static void tunnel_write(struct st_tunnel_t *tunnel)
 {
-    struct st_tunnel_t *tunnel = sock->data;
+    if (tunnel->buf.inflight || tunnel->std_in->input->size == 0)
+        return;
+
+    h2o_iovec_t vec = h2o_doublebuffer_prepare(&tunnel->buf, &tunnel->std_in->input, SIZE_MAX);
+    tunnel->tunnel->write_(tunnel->tunnel, vec.base, vec.len);
+}
+
+static void tunnel_on_write_complete(h2o_httpclient_tunnel_t *_tunnel, const char *err)
+{
+    struct st_tunnel_t *tunnel = _tunnel->data;
+    assert(tunnel->tunnel == _tunnel);
 
     if (err != NULL) {
         fprintf(stderr, "%s\n", err);
@@ -182,16 +190,7 @@ static void tunnel_on_send_complete(h2o_socket_t *sock, const char *err)
     }
 
     h2o_doublebuffer_consume(&tunnel->buf);
-    tunnel_send(tunnel);
-}
-
-void tunnel_send(struct st_tunnel_t *tunnel)
-{
-    if (tunnel->buf.inflight || tunnel->std_in->input->size == 0)
-        return;
-
-    h2o_iovec_t vec = h2o_doublebuffer_prepare(&tunnel->buf, &tunnel->std_in->input, SIZE_MAX);
-    h2o_socket_write(tunnel->sock, &vec, 1, tunnel_on_send_complete);
+    tunnel_write(tunnel);
 }
 
 static void tunnel_on_stdin_read(h2o_socket_t *sock, const char *err)
@@ -201,34 +200,38 @@ static void tunnel_on_stdin_read(h2o_socket_t *sock, const char *err)
     if (err != NULL)
         exit(0);
 
-    tunnel_send(tunnel);
+    tunnel_write(tunnel);
 }
 
-static void tunnel_on_socket_read(h2o_socket_t *sock, const char *err)
+static void tunnel_on_read(h2o_httpclient_tunnel_t *_tunnel, const char *err, const void *bytes, size_t len)
 {
-    struct st_tunnel_t *tunnel = sock->data;
+    struct st_tunnel_t *tunnel = _tunnel->data;
+    assert(tunnel->tunnel == _tunnel);
 
     if (err != NULL) {
         fprintf(stderr, "%s\n", err);
         exit(0);
     }
 
-    write(1, tunnel->sock->input->bytes, tunnel->sock->input->size);
-    h2o_buffer_consume(&tunnel->sock->input, tunnel->sock->input->size);
+    write(1, bytes, len);
+
+    tunnel->tunnel->proceed_read(tunnel->tunnel);
 }
 
-static void tunnel_create(h2o_socket_t *sock)
+static void tunnel_create(h2o_loop_t *loop, h2o_httpclient_tunnel_t *_tunnel)
 {
     struct st_tunnel_t *tunnel = h2o_mem_alloc(sizeof(*tunnel));
 
-    tunnel->std_in = h2o_evloop_socket_create(h2o_socket_get_loop(sock), 0, 0);
+    tunnel->std_in = h2o_evloop_socket_create(loop, 0, 0);
     tunnel->std_in->data = tunnel;
-    tunnel->sock = sock;
-    tunnel->sock->data = tunnel;
+    tunnel->tunnel = _tunnel;
+    tunnel->tunnel->data = tunnel;
+    tunnel->tunnel->on_read = tunnel_on_read;
+    tunnel->tunnel->on_write_complete = tunnel_on_write_complete;
     h2o_doublebuffer_init(&tunnel->buf, &h2o_socket_buffer_prototype);
 
+    tunnel->tunnel->proceed_read(tunnel->tunnel);
     h2o_socket_read_start(tunnel->std_in, tunnel_on_stdin_read);
-    h2o_socket_read_start(tunnel->sock, tunnel_on_socket_read);
 }
 
 static void start_request(h2o_httpclient_ctx_t *ctx)
@@ -360,8 +363,8 @@ h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, int
     print_response_headers(version, status, msg, headers, num_headers);
 
     if (strcmp(req.method, "CONNECT") == 0 && (200 <= status && status <= 299)) {
-        h2o_socket_t *sock = client->steal_socket(client);
-        tunnel_create(sock);
+        h2o_httpclient_tunnel_t *tunnel = client->open_tunnel(client);
+        tunnel_create(client->ctx->loop, tunnel);
         return NULL;
     }
 

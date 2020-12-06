@@ -1244,7 +1244,7 @@ static void setup_stream(struct st_h2o_http2client_stream_t *stream)
 
     stream->super.buf = &stream->input.body;
     stream->super.cancel = do_cancel;
-    stream->super.steal_socket = NULL;
+    stream->super.open_tunnel = NULL;
     stream->super.get_socket = do_get_socket;
     stream->super.update_window = do_update_window;
     stream->super.write_req = do_write_req;

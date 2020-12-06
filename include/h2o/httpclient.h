@@ -137,6 +137,37 @@ typedef struct st_h2o_httpclient_timings_t {
     struct timeval response_end_at;
 } h2o_httpclient_timings_t;
 
+/**
+ * an HTTP tunnel established e.g., by successful CONNECT
+ */
+typedef struct st_h2o_httpclient_tunnel_t {
+    /**
+     * closes the tunnel and discards the object
+     */
+    void (*destroy)(struct st_h2o_httpclient_tunnel_t *tunnel);
+    /**
+     * The write callback. The completion of a write is signalled by the invocation of the on_write callback. Until then, the user
+     * must retain the buffer unmodified. As is the case of `h2o_socket_write`, only one write can be inflight at a time.
+     */
+    void (*write_)(struct st_h2o_httpclient_tunnel_t *tunnel, const void *bytes, size_t len);
+    /**
+     * The callback to be called when the application is ready to receive new data through `on_read`.
+     */
+    void (*proceed_read)(struct st_h2o_httpclient_tunnel_t *tunnel);
+    /**
+     * user-supplied callback that is used to notify the user the completion of a write
+     */
+    void (*on_write_complete)(struct st_h2o_httpclient_tunnel_t *tunnel, const char *err);
+    /**
+     * the on-read callback to be set by the user
+     */
+    void (*on_read)(struct st_h2o_httpclient_tunnel_t *tunnel, const char *err, const void *bytes, size_t len);
+    /**
+     * user data pointer
+     */
+    void *data;
+} h2o_httpclient_tunnel_t;
+
 struct st_h2o_httpclient_t {
     /**
      * memory pool
@@ -190,9 +221,9 @@ struct st_h2o_httpclient_t {
      */
     void (*cancel)(h2o_httpclient_t *client);
     /**
-     * optional function that lets the application steal the socket (for HTTP/1.1.-style upgrade)
+     * optional function that lets the application grab the underlying stream (used for CONNECT, etc.)
      */
-    h2o_socket_t *(*steal_socket)(h2o_httpclient_t *client);
+    h2o_httpclient_tunnel_t *(*open_tunnel)(h2o_httpclient_t *client);
     /**
      * returns a pointer to the underlying h2o_socket_t
      */

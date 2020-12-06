@@ -69,6 +69,14 @@ struct st_h2o_http1client_t {
     unsigned _seen_at_least_one_chunk : 1;
 };
 
+struct st_h2o_http1client_tunnel_t {
+    h2o_httpclient_tunnel_t super;
+    h2o_socket_t *sock;
+    h2o_doublebuffer_t buf;
+};
+
+static void tunnel_socket_on_read(h2o_socket_t *sock, const char *err);
+
 static void close_client(struct st_h2o_http1client_t *client)
 {
     if (client->sock != NULL) {
@@ -665,7 +673,8 @@ static h2o_iovec_t build_request(struct st_h2o_http1client_t *client, h2o_iovec_
 }
 
 static void start_request(struct st_h2o_http1client_t *client, h2o_iovec_t method, const h2o_url_t *url,
-                          const h2o_header_t *headers, size_t num_headers, h2o_iovec_t body, const h2o_httpclient_properties_t *props)
+                          const h2o_header_t *headers, size_t num_headers, h2o_iovec_t body,
+                          const h2o_httpclient_properties_t *props)
 {
     h2o_iovec_t reqbufs[5]; /* 5 should be the maximum possible elements used */
     size_t reqbufcnt = 0;
@@ -761,15 +770,84 @@ static void do_update_window(h2o_httpclient_t *_client)
     }
 }
 
-static h2o_socket_t *do_steal_socket(h2o_httpclient_t *_client)
+static void tunnel_on_destroy(h2o_httpclient_tunnel_t *_tunnel)
 {
+    struct st_h2o_http1client_tunnel_t *tunnel = (void *)_tunnel;
+
+    h2o_socket_close(tunnel->sock);
+    h2o_doublebuffer_dispose(&tunnel->buf);
+    free(tunnel);
+}
+
+static void tunnel_on_write_complete(h2o_socket_t *sock, const char *err)
+{
+    struct st_h2o_http1client_tunnel_t *tunnel = sock->data;
+    tunnel->super.on_write_complete(&tunnel->super, err);
+}
+
+static void tunnel_on_write(h2o_httpclient_tunnel_t *_tunnel, const void *bytes, size_t len)
+{
+    struct st_h2o_http1client_tunnel_t *tunnel = (void *)_tunnel;
+
+    h2o_iovec_t vec = h2o_iovec_init(bytes, len);
+    h2o_socket_write(tunnel->sock, &vec, 1, tunnel_on_write_complete);
+}
+
+static void tunnel_proceed_read(h2o_httpclient_tunnel_t *_tunnel)
+{
+    struct st_h2o_http1client_tunnel_t *tunnel = (void *)_tunnel;
+    h2o_iovec_t vec;
+
+    /* if something was inflight, retire that */
+    if (tunnel->buf.inflight)
+        h2o_doublebuffer_consume(&tunnel->buf);
+
+    /* send data if any, or start reading from the socket */
+    if ((vec = h2o_doublebuffer_prepare(&tunnel->buf, &tunnel->sock->input, 65536)).len != 0) {
+        tunnel->super.on_read(&tunnel->super, NULL, vec.base, vec.len);
+    } else {
+        h2o_socket_read_start(tunnel->sock, tunnel_socket_on_read);
+    }
+}
+
+static void tunnel_socket_on_read(h2o_socket_t *sock, const char *err)
+{
+    struct st_h2o_http1client_tunnel_t *tunnel = (void *)sock->data;
+    assert(!tunnel->buf.inflight);
+
+    if (err != NULL) {
+        tunnel->super.on_read(&tunnel->super, err, NULL, 0);
+    } else {
+        h2o_socket_read_stop(tunnel->sock);
+        tunnel_proceed_read(&tunnel->super);
+    }
+}
+
+static h2o_httpclient_tunnel_t *do_open_tunnel(h2o_httpclient_t *_client)
+{
+    /* detatch the socket from client */
     struct st_h2o_http1client_t *client = (void *)_client;
     h2o_socket_t *sock = client->sock;
     h2o_socket_read_stop(sock);
     h2o_buffer_consume(&sock->input, client->bytes_to_consume);
     client->bytes_to_consume = 0;
     client->sock = NULL;
-    return sock;
+
+    /* create tunnel */
+    struct st_h2o_http1client_tunnel_t *tunnel = h2o_mem_alloc(sizeof(*tunnel));
+    *tunnel = (struct st_h2o_http1client_tunnel_t){
+        .super =
+            (h2o_httpclient_tunnel_t){
+                .destroy = tunnel_on_destroy,
+                .write_ = tunnel_on_write,
+                .proceed_read = tunnel_proceed_read,
+            },
+        .sock = sock,
+    };
+    tunnel->sock->data = tunnel;
+    h2o_doublebuffer_init(&tunnel->buf, &h2o_socket_buffer_prototype);
+
+    return &tunnel->super;
 }
 
 static h2o_socket_t *do_get_socket(h2o_httpclient_t *_client)
@@ -782,7 +860,7 @@ static void setup_client(struct st_h2o_http1client_t *client, h2o_socket_t *sock
 {
     memset(&client->sock, 0, sizeof(*client) - offsetof(struct st_h2o_http1client_t, sock));
     client->super.cancel = do_cancel;
-    client->super.steal_socket = do_steal_socket;
+    client->super.open_tunnel = do_open_tunnel;
     client->super.get_socket = do_get_socket;
     client->super.update_window = do_update_window;
     client->super.write_req = do_write_req;
