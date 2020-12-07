@@ -3,9 +3,11 @@ use warnings;
 use File::Temp qw(tempdir);
 use Net::EmptyPort qw(check_port empty_port);
 use Scope::Guard qw(scope_guard);
-use Test::Requires qw(Plack::Runner Starlet);
+use Test::Requires qw(Plack::Runner Starlet FCGI);
 use Test::More;
-use Time::HiRes qw(sleep);
+use Time::HiRes qw(sleep gettimeofday tv_interval);
+use IPC::Open3 qw(open3);
+use IO::Select;
 use t::Util;
 
 my $tempdir = tempdir(CLEANUP => 1);
@@ -47,10 +49,11 @@ EOT
 subtest "http/2" => sub {
     my $fetch = sub {
         my ($server, $path) = @_;
-        my $cmd = "exec @{[bindir]}/picotls/cli -I -s $tempdir/session -e 127.0.0.1 $server->{tls_port} > $tempdir/resp.txt";
-        my $pid = open my $fh, "|-", $cmd
+        my $cmd = "exec @{[bindir]}/picotls/cli -I -s $tempdir/session -e 127.0.0.1 $server->{tls_port}";
+        my $pid = open3(my $child_in, my $child_out, undef, $cmd)
             or die "failed to invoke command:$cmd:$!";
-        autoflush $fh 1;
+        $child_in->autoflush(1);
+
         # send request
         my $hpack_str = sub { chr(length $_[0]) . $_[0] };
         my $hpack_hdr = sub { "\x10" . $hpack_str->($_[0]) . $hpack_str->($_[1]) };
@@ -60,17 +63,26 @@ subtest "http/2" => sub {
             $hpack_hdr->(":authority", "127.0.0.1"),
             $hpack_hdr->(":path", $path),
         );
-        syswrite $fh, join '', (
+        syswrite $child_in, join '', (
             "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n",                             # preface
             "\x00\x00\x00\x04\x00\x00\x00\x00\x00",                         # SETTINGS
             "\x00\x00@{[chr length $hpack]}\x01\x05\x00\x00\x00\x01$hpack", # HEADERS
         );
-        # do not wait for idle-timeout
-        sleep 3;
+
+        my $select = IO::Select->new($child_out);
+
+        # do not wait for idle-timeout (10s)
+        my $t0 = [gettimeofday()];
+        unless ($select->can_read(9)) {
+            fail "`$cmd` did not get ready to read";
+        }
+        my $elapsed_sec = tv_interval($t0, [gettimeofday]);
+        diag "`$cmd` took ${elapsed_sec}s to be ready to read";
+
+        my $out = do { local $/; <$child_out> };
         kill 'KILL', $pid;
-        open $fh, "<", "$tempdir/resp.txt"
-            or die "failed to open file:$tempdir/resp.txt:$!";
-        do { local $/; <$fh> };
+
+        return $out;
     };
     run_tests(sub {
         my ($server, $path) = @_;
