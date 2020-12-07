@@ -15,19 +15,12 @@ extern "C" {
 #include "h2olog.h"
 #include "json.h"
 
+#include "raw_tracer.h.cc"
+
 #define STR_LEN 64
 #define STR_LIT(s) s, strlen(s)
 
 using namespace std;
-
-class h2o_raw_tracer : public h2o_tracer {
-protected:
-  virtual void do_handle_event(const void *data, int len);
-  virtual void do_handle_lost(uint64_t lost);
-public:
-  virtual const std::vector<h2o_tracer::usdt> &usdt_probes();
-  virtual std::string bpf_text();
-};
 
 
 // This is enough for here. See `quicly.c` for the full definition.
@@ -622,8 +615,8 @@ struct event_t {
   };
   
 
-const std::vector<h2o_tracer::usdt> &h2o_raw_tracer::usdt_probes() {
-  static const std::vector<h2o_tracer::usdt> probes = {
+void h2o_raw_tracer::initialize() {
+  available_usdts.assign({
     h2o_tracer::usdt("quicly", "connect", "trace_quicly__connect"),
     h2o_tracer::usdt("quicly", "accept", "trace_quicly__accept"),
     h2o_tracer::usdt("quicly", "free", "trace_quicly__free"),
@@ -712,8 +705,7 @@ const std::vector<h2o_tracer::usdt> &h2o_raw_tracer::usdt_probes() {
     h2o_tracer::usdt("h2o", "h3_packet_receive", "trace_h2o__h3_packet_receive"),
     h2o_tracer::usdt("h2o", "h3_packet_forward", "trace_h2o__h3_packet_forward"),
 
-  };
-  return probes;
+  });
 }
 
 
@@ -1521,17 +1513,6 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
   fprintf(out_, "}\n");
 }
 
-
-void h2o_raw_tracer::do_handle_lost(uint64_t lost)
-{
-  fprintf(out_,
-          "{"
-          "\"type\":\"h2olog-event-lost\","
-          "\"seq\":%" PRIu64 ","
-          "\"time\":%" PRIu64 ","
-          "\"lost\":%" PRIu64 "}\n",
-          seq_, time_milliseconds(), lost);
-}
 
 std::string h2o_raw_tracer::bpf_text() {
   // language=c
@@ -4045,9 +4026,5 @@ int trace_h2o__h3_packet_forward(struct pt_regs *ctx) {
 }
 
 )";
-}
-
-h2o_tracer *create_raw_tracer() {
-  return new h2o_raw_tracer;
 }
 
