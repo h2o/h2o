@@ -1563,9 +1563,12 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
     ptls_default_skip_tracing = orig_skip_tracing;
 #endif
     if (accept_ret != 0) {
+        h2o_http3_conn_t *ret = NULL;
+        if (accept_ret == QUICLY_ERROR_DECRYPTION_FAILED)
+            ret = (h2o_http3_conn_t *)H2O_QUIC_ACCEPT_CONN_DECRYPTION_FAILED;
         h2o_http3_dispose_conn(&conn->h3);
         free(conn);
-        return NULL;
+        return ret;
     }
     ++ctx->super.next_cid.master_id; /* FIXME check overlap */
     h2o_linklist_insert(&ctx->accept_ctx->ctx->http3._conns, &conn->_conns);
