@@ -234,7 +234,7 @@ DECL_ENTITY_READ_SEND_ERROR_XXX(400)
 DECL_ENTITY_READ_SEND_ERROR_XXX(413)
 DECL_ENTITY_READ_SEND_ERROR_XXX(502)
 
-static void handle_one_body_fragment(struct st_h2o_http1_conn_t *conn, size_t fragment_size, int complete)
+static void handle_one_body_fragment(struct st_h2o_http1_conn_t *conn, size_t fragment_size, size_t extra_bytes, int complete)
 {
     clear_timeouts(conn);
     h2o_socket_read_stop(conn->sock);
@@ -242,7 +242,7 @@ static void handle_one_body_fragment(struct st_h2o_http1_conn_t *conn, size_t fr
         entity_read_send_error_502(conn, "Bad Gateway", "Bad Gateway");
         return;
     }
-    h2o_buffer_consume(&conn->sock->input, fragment_size);
+    h2o_buffer_consume(&conn->sock->input, fragment_size + extra_bytes);
     conn->req.req_body_bytes_received += fragment_size;
     if (complete) {
         conn->req.proceed_req = NULL;
@@ -281,8 +281,7 @@ static void handle_chunked_entity_read(struct st_h2o_http1_conn_t *conn)
     /* complete */
     consume -= ret;
 Done:
-    handle_one_body_fragment(conn, bufsz, complete);
-    h2o_buffer_consume(&conn->sock->input, consume - bufsz);
+    handle_one_body_fragment(conn, bufsz, consume - bufsz, complete);
 }
 
 static int create_chunked_entity_reader(struct st_h2o_http1_conn_t *conn)
@@ -310,7 +309,7 @@ static void handle_content_length_entity_read(struct st_h2o_http1_conn_t *conn)
     if (!complete && length == 0)
         return;
 
-    handle_one_body_fragment(conn, length, complete);
+    handle_one_body_fragment(conn, length, 0, complete);
 }
 
 static int create_content_length_entity_reader(struct st_h2o_http1_conn_t *conn, size_t content_length)
