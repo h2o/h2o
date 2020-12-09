@@ -90,8 +90,7 @@ static h2o_hostconf_t *find_hostconf(h2o_hostconf_t **hostconfs, h2o_iovec_t aut
 
     /* convert supplied hostname to lower-case */
     hostname_lc = alloca(hostname.len);
-    memcpy(hostname_lc, hostname.base, hostname.len);
-    h2o_strtolower(hostname_lc, hostname.len);
+    h2o_strcopytolower(hostname_lc, hostname.base, hostname.len);
 
     do {
         h2o_hostconf_t *hostconf = *hostconfs;
