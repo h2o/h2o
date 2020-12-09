@@ -43,20 +43,20 @@ class h2o_raw_tracer : public h2o_tracer
     void initialize();
 
   protected:
-    virtual void do_handle_event(const void *data, int len);
-    virtual void do_handle_lost(std::uint64_t lost);
+    void do_handle_event(const void *data, int len) override;
+    void do_handle_lost(std::uint64_t lost) override;
 
   public:
     h2o_raw_tracer(): h2o_tracer() {
       initialize();
     }
 
-    virtual std::string select_usdts(const char *pattern);
-    virtual const std::vector<h2o_tracer::usdt> &usdt_probes()
+    std::string select_usdts(const char *pattern) override;
+    const std::vector<h2o_tracer::usdt> &usdt_probes() override
     {
         return selected_usdts.empty() ? available_usdts : selected_usdts;
     }
-    virtual std::string bpf_text();
+    std::string bpf_text() override;
 };
 
 void h2o_raw_tracer::do_handle_lost(std::uint64_t lost)
