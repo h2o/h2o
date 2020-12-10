@@ -66,11 +66,24 @@ subtest "http/2" => sub {
             "\x00\x00@{[chr length $hpack]}\x01\x05\x00\x00\x00\x01$hpack", # HEADERS
         );
         # do not wait for idle-timeout
-        sleep 3;
-        kill 'KILL', $pid;
-        open $fh, "<", "$tempdir/resp.txt"
-            or die "failed to open file:$tempdir/resp.txt:$!";
-        do { local $/; <$fh> };
+
+        # FIXME: there's a pattern to take 5s to get ready to read the response,
+        #        so if `sleep 1` pattern fails, retry after 5s.
+        # See https://github.com/h2o/h2o/issues/2509 for details.
+        for my $delay(1, 5) {
+            sleep $delay;
+            open $fh, "<", "$tempdir/resp.txt"
+                or die "failed to open file:$tempdir/resp.txt:$!";
+            my $resp = do { local $/; <$fh> };
+            if (length $resp) {
+                return $resp;
+            }
+
+            diag "resp.txt is empty, retrying after 5s (`$cmd`)";
+        }
+
+        fail "failed to read the response from the command `$cmd`";
+        return undef;
     };
     run_tests(sub {
         my ($server, $path) = @_;
