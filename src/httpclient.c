@@ -222,7 +222,11 @@ static void tunnel_create(h2o_loop_t *loop, h2o_httpclient_tunnel_t *_tunnel)
 {
     struct st_tunnel_t *tunnel = h2o_mem_alloc(sizeof(*tunnel));
 
+#if H2O_USE_LIBUV
+    tunnel->std_in = h2o_uv__poll_create(loop, 0, (uv_close_cb)free);
+#else
     tunnel->std_in = h2o_evloop_socket_create(loop, 0, 0);
+#endif
     tunnel->std_in->data = tunnel;
     tunnel->tunnel = _tunnel;
     tunnel->tunnel->data = tunnel;
