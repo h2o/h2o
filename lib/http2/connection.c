@@ -492,6 +492,8 @@ static int handle_incoming_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
             return ret;
     }
 
+    h2o_probe_log_request(&stream->req, stream->stream_id);
+
     /* check existence of pseudo-headers */
     if (h2o_memis(stream->req.input.method.base, stream->req.input.method.len, H2O_STRLIT("CONNECT"))) {
         if (header_exists_map != (H2O_HPACK_PARSE_HEADERS_METHOD_EXISTS | H2O_HPACK_PARSE_HEADERS_AUTHORITY_EXISTS)) {
@@ -517,8 +519,6 @@ static int handle_incoming_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
         ret = H2O_HTTP2_ERROR_REFUSED_STREAM;
         goto SendRSTStream;
     }
-
-    h2o_probe_log_request(&stream->req, stream->stream_id);
 
     /* send 400 if the request contains invalid header characters */
     if (ret != 0) {
