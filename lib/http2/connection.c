@@ -479,11 +479,10 @@ static void handle_request_body_chunk(h2o_http2_conn_t *conn, h2o_http2_stream_t
 static int handle_incoming_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, const uint8_t *src, size_t len,
                                    const char **err_desc)
 {
-    int ret, header_exists_map;
+    int ret, header_exists_map = 0;
 
     assert(stream->state == H2O_HTTP2_STREAM_STATE_RECV_HEADERS);
 
-    header_exists_map = 0;
     if ((ret = h2o_hpack_parse_request(&stream->req.pool, h2o_hpack_decode_header, &conn->_input_header_table,
                                        &stream->req.input.method, &stream->req.input.scheme, &stream->req.input.authority,
                                        &stream->req.input.path, &stream->req.headers, &header_exists_map,
@@ -493,14 +492,27 @@ static int handle_incoming_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
             return ret;
     }
 
-/* handle stream-level errors */
+    /* check existence of pseudo-headers */
+    if (h2o_memis(stream->req.input.method.base, stream->req.input.method.len, H2O_STRLIT("CONNECT"))) {
+        if (header_exists_map != (H2O_HPACK_PARSE_HEADERS_METHOD_EXISTS | H2O_HPACK_PARSE_HEADERS_AUTHORITY_EXISTS)) {
+            ret = H2O_HTTP2_ERROR_PROTOCOL;
+            goto SendRSTStream;
+        }
+        /* HTTP/2 implementation does not (yet) support CONNECT, fast-forward the stream state and send error */
+        h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_REQ_PENDING);
+        h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_SEND_HEADERS);
+        h2o_send_error_405(&stream->req, "Method Not Allowed", "CONNECT method is not allowed", 0);
+        return 0;
+    } else {
 #define EXPECTED_MAP                                                                                                               \
     (H2O_HPACK_PARSE_HEADERS_METHOD_EXISTS | H2O_HPACK_PARSE_HEADERS_PATH_EXISTS | H2O_HPACK_PARSE_HEADERS_SCHEME_EXISTS)
-    if ((header_exists_map & EXPECTED_MAP) != EXPECTED_MAP) {
-        ret = H2O_HTTP2_ERROR_PROTOCOL;
-        goto SendRSTStream;
-    }
+        if ((header_exists_map & EXPECTED_MAP) != EXPECTED_MAP) {
+            ret = H2O_HTTP2_ERROR_PROTOCOL;
+            goto SendRSTStream;
+        }
 #undef EXPECTED_MAP
+    }
+
     if (conn->num_streams.pull.open > H2O_HTTP2_SETTINGS_HOST_MAX_CONCURRENT_STREAMS) {
         ret = H2O_HTTP2_ERROR_REFUSED_STREAM;
         goto SendRSTStream;
