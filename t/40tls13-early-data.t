@@ -6,6 +6,7 @@ use Scope::Guard qw(scope_guard);
 use Test::Requires qw(Plack::Runner Starlet);
 use Test::More;
 use Time::HiRes qw(sleep);
+use IPC::Open3 qw(open3);
 use t::Util;
 
 my $tempdir = tempdir(CLEANUP => 1);
@@ -47,10 +48,12 @@ EOT
 subtest "http/2" => sub {
     my $fetch = sub {
         my ($server, $path) = @_;
-        my $cmd = "exec @{[bindir]}/picotls/cli -I -s $tempdir/session -e 127.0.0.1 $server->{tls_port} > $tempdir/resp.txt";
-        my $pid = open my $fh, "|-", $cmd
+
+        my $cmd = "exec @{[bindir]}/picotls/cli -I -s $tempdir/session -e 127.0.0.1 $server->{tls_port}";
+        my $pid = open3(my $child_in, my $child_out, undef, $cmd)
             or die "failed to invoke command:$cmd:$!";
-        autoflush $fh 1;
+        $child_in->autoflush(1);
+
         # send request
         my $hpack_str = sub { chr(length $_[0]) . $_[0] };
         my $hpack_hdr = sub { "\x10" . $hpack_str->($_[0]) . $hpack_str->($_[1]) };
@@ -60,30 +63,13 @@ subtest "http/2" => sub {
             $hpack_hdr->(":authority", "127.0.0.1"),
             $hpack_hdr->(":path", $path),
         );
-        syswrite $fh, join '', (
+        syswrite $child_in, join '', (
             "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n",                             # preface
             "\x00\x00\x00\x04\x00\x00\x00\x00\x00",                         # SETTINGS
             "\x00\x00@{[chr length $hpack]}\x01\x05\x00\x00\x00\x01$hpack", # HEADERS
         );
-        # do not wait for idle-timeout
 
-        # FIXME: there's a pattern to take 5s to get ready to read the response,
-        #        so if `sleep 1` pattern fails, retry after 5s.
-        # See https://github.com/h2o/h2o/issues/2509 for details.
-        for my $delay(1, 5) {
-            sleep $delay;
-            open $fh, "<", "$tempdir/resp.txt"
-                or die "failed to open file:$tempdir/resp.txt:$!";
-            my $resp = do { local $/; <$fh> };
-            if (length $resp) {
-                return $resp;
-            }
-
-            diag "resp.txt is empty, retrying after 5s (`$cmd`)";
-        }
-
-        fail "failed to read the response from the command `$cmd`";
-        return undef;
+        return do { local $/; <$child_out> };
     };
     run_tests(sub {
         my ($server, $path) = @_;
@@ -99,6 +85,7 @@ sub run_tests {
     my $do_test = shift;
 # spawn server
     my $server = spawn_h2o(<< "EOT");
+http2-idle-timeout: 1
 num-threads: 1
 hosts:
   default:
