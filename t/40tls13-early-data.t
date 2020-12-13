@@ -67,7 +67,7 @@ subtest "http/2" => sub {
         );
         close $child_in;
 
-        waitpid $pid, 0;
+        while (waitpid($pid, 0) != $pid) {}
 
         open my $fh, "<", "$tempdir/resp.txt"
             or die "failed to open file:$tempdir/resp.txt:$!";
