@@ -66,7 +66,9 @@ subtest "http/2" => sub {
             "\x00\x00@{[chr length $hpack]}\x01\x05\x00\x00\x00\x01$hpack", # HEADERS
         );
 
-        while (waitpid($pid, 0) != $pid) {}
+        while (waitpid($pid, 0) != $pid) {
+            sleep 0.01;
+        }
 
         open my $fh, "<", "$tempdir/resp.txt"
             or die "failed to open file:$tempdir/resp.txt:$!";
