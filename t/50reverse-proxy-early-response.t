@@ -201,6 +201,24 @@ EOS
     };
 };
 
+subtest 'use-after-free of chunked encoding' => sub {
+    my $upstream_port = empty_port({ host => '0.0.0.0' });
+    my $upstream = create_upstream($upstream_port, 0, +{ drain_body => 1 });
+    my $server = spawn_h2o(h2o_conf($upstream_port, 0));
+
+    my $client = H1Client->new($server);
+    $client->send_headers('POST', '/', ['connection' => 'close', 'transfer-encoding' => 'chunked']) or die $!;
+    $client->send_data("1\r\na\r\n") or die $!;
+    my $output = $client->read(1000);
+    Time::HiRes::sleep(0.1);
+    $client->send_data("400\r\n" . 'a' x 1024 . "\r\n", 1000) or last;
+    $client->send_data("0\r\n\r\n", 1000) or last;
+    like $output, qr{HTTP/1.1 200 }is;
+
+    $output = `curl -s --dump-header /dev/stdout http://127.0.0.1:$server->{port}/live-check/`;
+    like $output, qr{HTTP/1.1 200 }is;
+};
+
 done_testing;
 
 sub h2o_conf {
@@ -212,6 +230,8 @@ proxy.ssl.verify-peer: OFF
 hosts:
   default:
     paths:
+      /live-check:
+        file.dir: @{[ DOC_ROOT ]}
       /:
         @{[$up_is_h2 ? 'proxy.http2.ratio: 100' : '' ]}
         proxy.timeout.keepalive: 100000

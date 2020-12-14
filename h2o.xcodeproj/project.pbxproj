@@ -1016,7 +1016,6 @@
 		E904232E24AB2C9B0072C5B7 /* json.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = json.cc; sourceTree = "<group>"; };
 		E904232F24AB2C9B0072C5B7 /* http.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = http.cc; sourceTree = "<group>"; };
 		E904233024AB2C9C0072C5B7 /* json.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = json.h; sourceTree = "<group>"; };
-		E904233124AB2C9C0072C5B7 /* quic.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = quic.h; sourceTree = "<group>"; };
 		E904233224AB2C9C0072C5B7 /* h2olog.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = h2olog.cc; sourceTree = "<group>"; };
 		E904233324AB2C9C0072C5B7 /* generated-quic.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = "generated-quic.cc"; sourceTree = "<group>"; };
 		E904233424AB2C9C0072C5B7 /* h2olog.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = h2olog.h; sourceTree = "<group>"; };
@@ -2420,9 +2419,9 @@
 				E904232E24AB2C9B0072C5B7 /* json.cc */,
 				E904233024AB2C9C0072C5B7 /* json.h */,
 				E904233524AB2C9C0072C5B7 /* pyproject.toml */,
-				E904233124AB2C9C0072C5B7 /* quic.h */,
 			);
-			path = h2olog;
+			name = h2olog;
+			path = src/h2olog;
 			sourceTree = "<group>";
 		};
 		E904233624AB2CA80072C5B7 /* misc */ = {
