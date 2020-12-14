@@ -28,8 +28,8 @@ hosts:
     paths:
       /:
         proxy.reverse.url: http://127.0.0.1:$upstream_port/
-        proxy.websocket: ON
-        proxy.websocket.timeout: 1000
+        proxy.tunnel: ON
+        proxy.tunnel.timeout: 1000
 EOT
 }
 
@@ -98,8 +98,8 @@ hosts:
     paths:
       /:
         proxy.reverse.url: http://127.0.0.1:$upstream_port/
-        proxy.websocket: ON
-        proxy.websocket.timeout: 1000
+        proxy.tunnel: ON
+        proxy.tunnel.timeout: 1000
 access-log: /dev/null # enable logging
 EOT
 
