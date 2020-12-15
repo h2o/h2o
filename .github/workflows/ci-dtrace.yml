@@ -16,5 +16,4 @@ jobs:
     - name: Run with Docker
       run: |
         chmod -R ugo+w .
-        exec 2>&1
         make -f misc/docker-ci/check.mk dtrace CONTAINER_NAME=h2oserver/h2o-ci:ubuntu2004
