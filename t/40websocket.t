@@ -30,6 +30,7 @@ hosts:
         proxy.reverse.url: http://127.0.0.1:$upstream_port/
         proxy.tunnel: ON
         proxy.tunnel.timeout: 1000
+access-log: /dev/null # enable logging
 EOT
 }
 
@@ -88,26 +89,6 @@ subtest "wss" => sub {
         PeerAddr        => "127.0.0.1:$server->{tls_port}",
         SSL_verify_mode => 0,
     ) or die "failed to connect via TLS to 127.0.0.1:$server->{tls_port}:". IO::Socket::SSL::errstr();
-    doit($conn);
-};
-
-subtest "logged-ws" => sub {
-    my $server = spawn_h2o(<< "EOT");
-hosts:
-  default:
-    paths:
-      /:
-        proxy.reverse.url: http://127.0.0.1:$upstream_port/
-        proxy.tunnel: ON
-        proxy.tunnel.timeout: 1000
-access-log: /dev/null # enable logging
-EOT
-
-    my $conn = IO::Socket::INET->new(
-        PeerHost => '127.0.0.1',
-        PeerPort => $server->{port},
-        Proto    => 'tcp',
-    ) or die "failed to connect to 127.0.0.1:$server->{port}:$!";
     doit($conn);
 };
 
