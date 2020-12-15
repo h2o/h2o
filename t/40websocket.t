@@ -42,7 +42,18 @@ subtest "http/1.1" => sub {
     is $resp, "hello\n";
 };
 
-sub doit {
+sub test_echo {
+    my $conn = shift;
+    for my $i (1..10) {
+        my $msg = "hello world $i\n";
+        is $conn->syswrite($msg), length($msg), "write text ($i)";
+        is $conn->sysread(my $rbuf, 65536), length($msg), "read echo ($i)";
+        is $rbuf, $msg, "echo is correct ($i)";
+    }
+    $conn->close;
+}
+
+sub test_websocket {
     my $conn = shift;
     my $req = join(
         "\r\n",
@@ -62,26 +73,22 @@ sub doit {
     like $rbuf, qr{\r\nupgrade: websocket\r\n}is;
     unlike $rbuf, qr{\r\nupgrade:.*\r\nupgrade:}is;
     like $rbuf, qr{\r\nsec-websocket-accept: .*\r\n}is;
-    for my $i (1..10) {
-        my $msg = "hello world $i\n";
-        is $conn->syswrite($msg), length($msg), "write text ($i)";
-        is $conn->sysread($rbuf, 65536), length($msg), "read echo ($i)";
-        is $rbuf, $msg, "echo is correct ($i)";
-    }
-    $conn->close;
+    test_echo($conn);
 }
 
-subtest "ws" => sub {
+sub test_plaintext {
+    my $doit = shift;
     my $server = silent_server();
     my $conn = IO::Socket::INET->new(
         PeerHost => '127.0.0.1',
         PeerPort => $server->{port},
         Proto    => 'tcp',
     ) or die "failed to connect to 127.0.0.1:$server->{port}:$!";
-    doit($conn);
+    $doit->($conn);
 };
 
-subtest "wss" => sub {
+sub test_tls {
+    my $doit = shift;
     my $server = silent_server();
     eval q{use IO::Socket::SSL; 1}
         or plan skip_all => "IO::Socket::SSL not found";
@@ -89,7 +96,16 @@ subtest "wss" => sub {
         PeerAddr        => "127.0.0.1:$server->{tls_port}",
         SSL_verify_mode => 0,
     ) or die "failed to connect via TLS to 127.0.0.1:$server->{tls_port}:". IO::Socket::SSL::errstr();
-    doit($conn);
+    $doit->($conn);
+};
+
+subtest "websocket" => sub {
+    subtest "plaintext" => sub {
+        test_plaintext(\&test_websocket);
+    };
+    subtest "tls" => sub {
+        test_tls(\&test_websocket);
+    };
 };
 
 done_testing;
