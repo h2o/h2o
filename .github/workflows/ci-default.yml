@@ -16,4 +16,4 @@ jobs:
     - name: Run with Docker
       run: |
         chmod -R ugo+w .
-        make -f misc/docker-ci/check.mk 2>&1
+        make -f misc/docker-ci/check.mk
