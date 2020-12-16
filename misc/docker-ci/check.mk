@@ -27,7 +27,7 @@ _check:
 	sudo mount -t tmpfs tmpfs build -o size=3G
 	sudo chown -R ci:ci build
 	sudo chmod 0755 build
-	exec 2>&1 ; $(MAKE) -f $(CHECK_MK) -C build _do-check CMAKE_ARGS=$(CMAKE_ARGS)
+	$(MAKE) -f $(CHECK_MK) -C build _do-check CMAKE_ARGS=$(CMAKE_ARGS)
 
 _do-check:
 	cmake $(CMAKE_ARGS) -H$(SRC_DIR) -B.
