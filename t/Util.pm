@@ -4,7 +4,6 @@ use strict;
 use warnings;
 use Digest::MD5 qw(md5_hex);
 use File::Temp qw(tempfile);
-use IO::Handle ();
 use IO::Socket::INET;
 use IO::Socket::SSL;
 use IO::Poll qw(POLLIN POLLOUT POLLHUP POLLERR);
@@ -22,11 +21,6 @@ our @EXPORT = qw(ASSETS_DIR DOC_ROOT bindir run_as_root server_features exec_uni
 
 use constant ASSETS_DIR => 't/assets';
 use constant DOC_ROOT   => ASSETS_DIR . "/doc_root";
-
-# autoflush for STDOUT and STDERR is on if they are connected to TTY,
-# but they are not connected to TTY in GitHub Actions.
-STDOUT->autoflush(1);
-STDERR->autoflush(1);
 
 sub bindir {
     $ENV{H2O_VALGRIND} || $ENV{BINARY_DIR} || '.';
