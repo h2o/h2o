@@ -14,6 +14,7 @@ jobs:
       with:
         submodules: recursive
     - name: Run with Docker
+      shell: 'script -q -e -c "bash {0}"'
       run: |
         chmod -R ugo+w .
         make -f misc/docker-ci/check.mk fuzz
