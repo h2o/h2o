@@ -332,20 +332,28 @@ socklen_t get_peername_uncached(h2o_socket_t *_sock, struct sockaddr *sa)
 
 static void on_timeout(uv_timer_t *uv_timer)
 {
-    h2o_timer_t *timer = H2O_STRUCT_FROM_MEMBER(h2o_timer_t, uv_timer, uv_timer);
+    h2o_timer_t *timer = uv_timer->data;
     timer->is_linked = 0;
     timer->cb(timer);
 }
 
 void h2o_timer_link(h2o_loop_t *l, uint64_t delay_ticks, h2o_timer_t *timer)
 {
+    if (timer->uv_timer == NULL) {
+        timer->uv_timer = h2o_mem_alloc(sizeof(*timer->uv_timer));
+        uv_timer_init(l, timer->uv_timer);
+        timer->uv_timer->data = timer;
+    }
     timer->is_linked = 1;
-    uv_timer_init(l, &timer->uv_timer);
-    uv_timer_start(&timer->uv_timer, on_timeout, delay_ticks, 0);
+    uv_timer_start(timer->uv_timer, on_timeout, delay_ticks, 0);
 }
 
 void h2o_timer_unlink(h2o_timer_t *timer)
 {
     timer->is_linked = 0;
-    uv_timer_stop(&timer->uv_timer);
+    if (timer->uv_timer != NULL) {
+        uv_timer_stop(timer->uv_timer);
+        uv_close((uv_handle_t*)timer->uv_timer, (uv_close_cb)free);
+        timer->uv_timer = NULL;
+    }
 }
