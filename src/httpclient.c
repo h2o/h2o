@@ -175,39 +175,35 @@ static void start_request(h2o_httpclient_ctx_t *ctx)
     }
 
     /* initiate the request */
-    if (ctx->http3.ctx != NULL) {
-        h2o_httpclient_connect_h3(NULL, &pool, url_parsed, ctx, url_parsed, on_connect);
-    } else {
-        if (connpool == NULL) {
-            connpool = h2o_mem_alloc(sizeof(*connpool));
-            h2o_socketpool_t *sockpool = h2o_mem_alloc(sizeof(*sockpool));
-            h2o_socketpool_target_t *target = h2o_socketpool_create_target(url_parsed, NULL);
-            h2o_socketpool_init_specific(sockpool, 10, &target, 1, NULL);
-            h2o_socketpool_set_timeout(sockpool, IO_TIMEOUT);
-            h2o_socketpool_register_loop(sockpool, ctx->loop);
-            h2o_httpclient_connection_pool_init(connpool, sockpool);
+    if (connpool == NULL) {
+        connpool = h2o_mem_alloc(sizeof(*connpool));
+        h2o_socketpool_t *sockpool = h2o_mem_alloc(sizeof(*sockpool));
+        h2o_socketpool_target_t *target = h2o_socketpool_create_target(url_parsed, NULL);
+        h2o_socketpool_init_specific(sockpool, 10, &target, 1, NULL);
+        h2o_socketpool_set_timeout(sockpool, IO_TIMEOUT);
+        h2o_socketpool_register_loop(sockpool, ctx->loop);
+        h2o_httpclient_connection_pool_init(connpool, sockpool);
 
-            /* obtain root */
-            char *root, *crt_fullpath;
-            if ((root = getenv("H2O_ROOT")) == NULL)
-                root = H2O_TO_STR(H2O_ROOT);
+        /* obtain root */
+        char *root, *crt_fullpath;
+        if ((root = getenv("H2O_ROOT")) == NULL)
+            root = H2O_TO_STR(H2O_ROOT);
 #define CA_PATH "/share/h2o/ca-bundle.crt"
-            crt_fullpath = h2o_mem_alloc(strlen(root) + strlen(CA_PATH) + 1);
-            sprintf(crt_fullpath, "%s%s", root, CA_PATH);
+        crt_fullpath = h2o_mem_alloc(strlen(root) + strlen(CA_PATH) + 1);
+        sprintf(crt_fullpath, "%s%s", root, CA_PATH);
 #undef CA_PATH
 
-            SSL_CTX *ssl_ctx = SSL_CTX_new(TLSv1_client_method());
-            SSL_CTX_load_verify_locations(ssl_ctx, crt_fullpath, NULL);
-            if (ssl_verify_none) {
-                SSL_CTX_set_verify(ssl_ctx, SSL_VERIFY_NONE, NULL);
-            } else {
-                SSL_CTX_set_verify(ssl_ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, NULL);
-            }
-            h2o_socketpool_set_ssl_ctx(sockpool, ssl_ctx);
-            SSL_CTX_free(ssl_ctx);
+        SSL_CTX *ssl_ctx = SSL_CTX_new(TLSv1_client_method());
+        SSL_CTX_load_verify_locations(ssl_ctx, crt_fullpath, NULL);
+        if (ssl_verify_none) {
+            SSL_CTX_set_verify(ssl_ctx, SSL_VERIFY_NONE, NULL);
+        } else {
+            SSL_CTX_set_verify(ssl_ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, NULL);
         }
-        h2o_httpclient_connect(NULL, &pool, url_parsed, ctx, connpool, url_parsed, on_connect);
+        h2o_socketpool_set_ssl_ctx(sockpool, ssl_ctx);
+        SSL_CTX_free(ssl_ctx);
     }
+    h2o_httpclient_connect(NULL, &pool, url_parsed, ctx, connpool, url_parsed, on_connect);
 }
 
 static void on_next_request(h2o_timer_t *entry)
@@ -465,6 +461,7 @@ int main(int argc, char **argv)
         ptls_clear_memory(random_key, sizeof(random_key));
     }
     h3ctx.quic.stream_open = &h2o_httpclient_http3_on_stream_open;
+    ctx.http3.ctx = &h3ctx.h3;
 
 #if H2O_USE_LIBUV
     ctx.loop = uv_loop_new();
@@ -472,7 +469,10 @@ int main(int argc, char **argv)
     ctx.loop = h2o_evloop_create();
 #endif
 
-    while ((opt = getopt(argc, argv, "t:m:o:b:C:c:d:H:i:k2:3W:h")) != -1) {
+    h2o_quic_init_context(&h3ctx.h3, ctx.loop, create_quic_socket(ctx.loop), &h3ctx.quic, NULL,
+                          h2o_httpclient_http3_notify_connection_update);
+
+    while ((opt = getopt(argc, argv, "t:m:o:b:C:c:d:H:i:k2:3:W:h")) != -1) {
         switch (opt) {
         case 't':
             if (sscanf(optarg, "%u", &cnt_left) != 1 || cnt_left < 1) {
@@ -535,7 +535,8 @@ int main(int argc, char **argv)
             ssl_verify_none = 1;
             break;
         case '2':
-            if (sscanf(optarg, "%" SCNd8, &ctx.http2.ratio) != 1 || !(0 <= ctx.http2.ratio && ctx.http2.ratio <= 100)) {
+            if (sscanf(optarg, "%" SCNd8, &ctx.protocol_selector.ratio.http2) != 1 ||
+                !(0 <= ctx.protocol_selector.ratio.http2 && ctx.protocol_selector.ratio.http2 <= 100)) {
                 fprintf(stderr, "failed to parse HTTP/2 ratio (-2)\n");
                 exit(EXIT_FAILURE);
             }
@@ -545,9 +546,11 @@ int main(int argc, char **argv)
             fprintf(stderr, "HTTP/3 is currently not supported by the libuv backend.\n");
             exit(EXIT_FAILURE);
 #else
-            h2o_quic_init_context(&h3ctx.h3, ctx.loop, create_quic_socket(ctx.loop), &h3ctx.quic, NULL,
-                                  h2o_httpclient_http3_notify_connection_update);
-            ctx.http3.ctx = &h3ctx.h3;
+            if (sscanf(optarg, "%" SCNd8, &ctx.protocol_selector.ratio.http3) != 1 ||
+                !(0 <= ctx.protocol_selector.ratio.http3 && ctx.protocol_selector.ratio.http3 <= 100)) {
+                fprintf(stderr, "failed to parse HTTP/3 ratio (-3)\n");
+                exit(EXIT_FAILURE);
+            }
 #endif
             break;
         case 'W': {
@@ -571,6 +574,11 @@ int main(int argc, char **argv)
     }
     argc -= optind;
     argv += optind;
+
+    if (ctx.protocol_selector.ratio.http2 + ctx.protocol_selector.ratio.http3 > 100) {
+        fprintf(stderr, "sum of the use ratio of HTTP/2 and HTTP/3 is greater than 100");
+        exit(EXIT_FAILURE);
+    }
 
     if (argc < 1) {
         fprintf(stderr, "no URL\n");

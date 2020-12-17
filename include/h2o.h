@@ -479,12 +479,15 @@ struct st_h2o_globalconf_t {
 
         struct {
             uint32_t max_concurrent_streams;
-            /**
-             * ratio in percentage (0 ~ 100) at which each request will be sent via http2. negative value means that fixed ratio
-             * mode is disabled
-             */
-            int8_t ratio;
         } http2;
+
+        struct {
+            /**
+             * See the documentation of `h2o_httpclient_t::protocol_selector::ratio::http2`.
+             */
+            int8_t http2;
+        } protocol_ratio;
+
         /**
          * global socketpool
          */
@@ -2048,8 +2051,10 @@ typedef struct st_h2o_proxy_config_vars_t {
     size_t max_buffer_size;
     struct {
         uint32_t max_concurrent_strams;
-        int ratio;
     } http2;
+    struct {
+        int8_t http2;
+    } protocol_ratio;
 } h2o_proxy_config_vars_t;
 
 /**

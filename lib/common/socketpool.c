@@ -213,7 +213,7 @@ void h2o_socketpool_init_specific(h2o_socketpool_t *pool, size_t capacity, h2o_s
     common_init(pool, targets, num_targets, capacity, balancer);
 }
 
-static inline int is_global_pool(h2o_socketpool_t *pool)
+int h2o_socketpool_is_global(h2o_socketpool_t *pool)
 {
     return pool->balancer == NULL;
 }
@@ -476,7 +476,7 @@ void h2o_socketpool_connect(h2o_socketpool_connect_request_t **_req, h2o_socketp
     check_pool_expired_locked(pool, loop);
 
     /* TODO lookup outside this critical section */
-    if (is_global_pool(pool)) {
+    if (h2o_socketpool_is_global(pool)) {
         target = lookup_target(pool, url);
         if (target == SIZE_MAX) {
             h2o_vector_reserve(NULL, &pool->targets, pool->targets.size + 1);
@@ -490,7 +490,7 @@ void h2o_socketpool_connect(h2o_socketpool_connect_request_t **_req, h2o_socketp
     assert(pool->targets.size != 0);
 
     while (!h2o_linklist_is_empty(sockets)) {
-        if (is_global_pool(pool)) {
+        if (h2o_socketpool_is_global(pool)) {
             entry = H2O_STRUCT_FROM_MEMBER(struct pool_entry_t, target_link, sockets->next);
         } else {
             entry = H2O_STRUCT_FROM_MEMBER(struct pool_entry_t, all_link, sockets->next);

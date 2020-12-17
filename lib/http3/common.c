@@ -927,7 +927,6 @@ void h2o_quic_init_context(h2o_quic_ctx_t *ctx, h2o_loop_t *loop, h2o_socket_t *
         assert(!"unexpected address family");
         break;
     }
-    h2o_linklist_init_anchor(&ctx->clients);
     ctx->acceptor = acceptor;
 
     h2o_socket_read_start(ctx->sock.sock, on_read);
@@ -937,7 +936,6 @@ void h2o_quic_dispose_context(h2o_quic_ctx_t *ctx)
 {
     assert(kh_size(ctx->conns_by_id) == 0);
     assert(kh_size(ctx->conns_accepting) == 0);
-    assert(h2o_linklist_is_empty(&ctx->clients));
 
     h2o_socket_close(ctx->sock.sock);
     kh_destroy_h2o_quic_idmap(ctx->conns_by_id);

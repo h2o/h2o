@@ -175,10 +175,6 @@ struct st_h2o_quic_ctx_t {
      */
     h2o_quic_notify_connection_update_cb notify_conn_update;
     /**
-     * linklist of clients (see st_h2o_http3client_conn_t::clients_link)
-     */
-    h2o_linklist_t clients;
-    /**
      * callback to accept new connections (optional)
      */
     h2o_quic_accept_cb acceptor;

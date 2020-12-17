@@ -28,6 +28,8 @@ extern "C" {
 
 #include "quicly.h"
 #include "h2o/header.h"
+#include "h2o/hostinfo.h"
+#include "h2o/http3_common.h"
 #include "h2o/send_state.h"
 #include "h2o/socket.h"
 #include "h2o/socketpool.h"
@@ -89,6 +91,10 @@ typedef struct st_h2o_httpclient_connection_pool_t {
         h2o_linklist_t conns;
     } http2;
 
+    struct {
+        h2o_linklist_t conns;
+    } http3;
+
 } h2o_httpclient_connection_pool_t;
 
 typedef struct st_h2o_httpclient_ctx_t {
@@ -101,14 +107,34 @@ typedef struct st_h2o_httpclient_ctx_t {
     uint64_t keepalive_timeout;  /* only used for http2 for now */
     size_t max_buffer_size;
 
+    struct st_h2o_httpclient_protocol_selector_t {
+        struct {
+            /**
+             * If non-negative, indicates the percentage of requests for which use of HTTP/2 will be attempted. If set to negative,
+             * all connections are established with ALPN offering both H1 and H2, then the load is balanced between the different
+             * protocol versions. This behavior helps balance the load among a mixture of servers behind a load balancer, some
+             * supporting both H1 and H2 and some supporting only H1.
+             */
+            int8_t http2;
+            /**
+             * Indiates the percentage of requests for which HTTP/3 should be used. Unlike HTTP/2, this value cannot be negative,
+             * because unlike ALPN over TLS over TCP, the choice of the protocol is up to the client.
+             */
+            int8_t http3;
+        } ratio;
+        /**
+         * Each deficit is initialized to zero, then incremented by the respective percentage, and the protocol corresponding to the
+         * one with the highest value is chosen. Then, the chosen variable is decremented by 100.
+         */
+        int16_t _deficits[4];
+    } protocol_selector;
+
+    /**
+     * HTTP/2-specific settings
+     */
     struct {
         h2o_socket_latency_optimization_conditions_t latency_optimization;
         uint32_t max_concurrent_streams;
-        /**
-         * ratio of requests to use HTTP/2; between 0 to 100
-         */
-        int8_t ratio;
-        int8_t counter; /* default is -1. then it'll be initialized by 50 / ratio */
     } http2;
 
     struct {
@@ -243,6 +269,26 @@ typedef struct st_h2o_httpclient__h2_conn_t {
     h2o_linklist_t link;
 } h2o_httpclient__h2_conn_t;
 
+struct st_h2o_httpclient__h3_conn_t {
+    h2o_http3_conn_t super;
+    h2o_httpclient_ctx_t *ctx;
+    struct {
+        h2o_url_t origin_url;
+        char named_serv[sizeof(H2O_UINT16_LONGEST_STR)];
+    } server;
+    ptls_handshake_properties_t handshake_properties;
+    h2o_timer_t timeout;
+    h2o_hostinfo_getaddr_req_t *getaddr_req;
+    /**
+     * linked to h2o_httpclient_ctx_t::http3.conns
+     */
+    h2o_linklist_t clients_link;
+    /**
+     * linklist used to queue pending requests
+     */
+    h2o_linklist_t pending_requests;
+};
+
 extern const char h2o_httpclient_error_is_eos[];
 extern const char h2o_httpclient_error_refused_stream[];
 extern const char h2o_httpclient_error_unknown_alpn_protocol[];
@@ -278,10 +324,10 @@ extern const size_t h2o_httpclient__h2_size;
 
 #include "h2o/http3_common.h"
 
-void h2o_httpclient_connect_h3(h2o_httpclient_t **_client, h2o_mem_pool_t *pool, void *data, h2o_httpclient_ctx_t *ctx,
-                               h2o_url_t *target, h2o_httpclient_connect_cb cb);
 void h2o_httpclient_http3_notify_connection_update(h2o_quic_ctx_t *ctx, h2o_quic_conn_t *conn);
 extern quicly_stream_open_t h2o_httpclient_http3_on_stream_open;
+void h2o_httpclient__connect_h3(h2o_httpclient_t **client, h2o_mem_pool_t *pool, void *data, h2o_httpclient_ctx_t *ctx,
+                                h2o_httpclient_connection_pool_t *connpool, h2o_url_t *target, h2o_httpclient_connect_cb cb);
 
 #endif
 

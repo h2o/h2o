@@ -76,7 +76,7 @@ static void on_context_init(h2o_handler_t *_self, h2o_context_t *ctx)
         ctx->globalconf->proxy.first_byte_timeout == self->config.first_byte_timeout &&
         ctx->globalconf->proxy.keepalive_timeout == self->config.keepalive_timeout &&
         ctx->globalconf->proxy.max_buffer_size == self->config.max_buffer_size &&
-        ctx->globalconf->proxy.http2.ratio == self->config.http2.ratio && !self->config.websocket.enabled)
+        ctx->globalconf->proxy.protocol_ratio.http2 == self->config.protocol_ratio.http2 && !self->config.websocket.enabled)
         return;
 
     h2o_httpclient_ctx_t *client_ctx = h2o_mem_alloc(sizeof(*ctx));
@@ -93,8 +93,7 @@ static void on_context_init(h2o_handler_t *_self, h2o_context_t *ctx)
     }
 
     client_ctx->max_buffer_size = self->config.max_buffer_size;
-    client_ctx->http2.ratio = self->config.http2.ratio;
-    client_ctx->http2.counter = -1;
+    client_ctx->protocol_selector.ratio.http2 = self->config.protocol_ratio.http2;
 
     handler_ctx->client_ctx = client_ctx;
 }
