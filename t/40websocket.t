@@ -76,6 +76,17 @@ sub test_websocket {
     test_echo($conn);
 }
 
+sub test_connect {
+    my $conn = shift;
+    my $req = "CONNECT 127.0.0.1:25 HTTP/1.1\r\n\r\n"; # authority can be anything, as h2o running as *reverse* proxy doesn't care
+    is $conn->syswrite($req), length($req), "send request";
+    $conn->sysread(my $rbuf, 65536) > 0
+        or die "failed to read HTTP response";
+    like $rbuf, qr{^HTTP\/1\.1 200 }is;
+    like $rbuf, qr{\r\n\r\n$}is;
+    test_echo($conn);
+}
+
 sub test_plaintext {
     my $doit = shift;
     my $server = silent_server();
@@ -105,6 +116,15 @@ subtest "websocket" => sub {
     };
     subtest "tls" => sub {
         test_tls(\&test_websocket);
+    };
+};
+
+subtest "CONNECT" => sub {
+    subtest "plaintext" => sub {
+        test_plaintext(\&test_connect);
+    };
+    subtest "tls" => sub {
+        test_tls(\&test_connect);
     };
 };
 
