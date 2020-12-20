@@ -1,6 +1,6 @@
 name: CI/OpenSSL 1.1.0
 
-on: [pull, pull_request]
+on: [push, pull_request]
 
 jobs:
   build:
