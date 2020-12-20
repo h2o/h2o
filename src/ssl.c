@@ -273,10 +273,12 @@ static int ticket_key_callback(unsigned char *key_name, unsigned char *iv, EVP_C
         RAND_bytes(iv, EVP_MAX_IV_LENGTH);
         struct st_session_ticket_t *ticket = find_ticket_for_encryption(&session_tickets.tickets, time(NULL)), *temp_ticket = NULL;
         if (ticket != NULL) {
+if (getenv("H2O_DEBUG") != NULL) fprintf(stderr, "H2O_DEBUG %s:%d\n", __FUNCTION__, __LINE__);
         } else {
             /* create a dummy ticket and use (this is the only way to continue the handshake; contrary to the man pages, OpenSSL
              * crashes if we return zero */
             ticket = temp_ticket = new_ticket(EVP_aes_256_cbc(), EVP_sha256(), 0, UINT64_MAX, 1);
+if (getenv("H2O_DEBUG") != NULL) fprintf(stderr, "H2O_DEBUG %s:%d\n", __FUNCTION__, __LINE__);
         }
         memcpy(key_name, ticket->name, sizeof(ticket->name));
         ret = EVP_EncryptInit_ex(ctx, ticket->cipher, NULL, session_ticket_get_cipher_key(ticket), iv);
@@ -426,6 +428,7 @@ static int update_tickets(session_ticket_vector_t *tickets, uint64_t now)
         uint64_t not_before = has_valid_ticket ? now + 60 : now;
         struct st_session_ticket_t *ticket = new_ticket(conf.ticket.vars.generating.cipher, conf.ticket.vars.generating.md,
                                                         not_before, not_before + conf.lifetime - 1, 1);
+if (getenv("H2O_DEBUG") != NULL) fprintf(stderr, "H2O_DEBUG %s:%d\n", __FUNCTION__, __LINE__);
         /* avoid name collision */
         while (1) {
             size_t i;
