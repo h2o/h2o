@@ -86,7 +86,7 @@ subtest "http/2" => sub {
 
 sub run_tests {
     my $do_test = shift;
-# spawn server
+    # spawn server
     my $server = spawn_h2o(<< "EOT");
 http2-idle-timeout: 1
 num-threads: 1
@@ -111,6 +111,8 @@ hosts:
 EOT2
 ]}
 EOT
+    # give some time to h2o to setup the session ticket encryption key
+    sleep 1;
     # run tests
     subtest "proxy" => sub {
         for my $sleep (0, 1) {
