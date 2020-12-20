@@ -1414,6 +1414,8 @@ static int send_session_ticket(ptls_t *tls, ptls_message_emitter_t *emitter)
     assert(tls->ctx->ticket_lifetime != 0);
     assert(tls->ctx->encrypt_ticket != NULL);
 
+if (getenv("H2O_DEBUG") != NULL) fprintf(stderr, "H2O_DEBUG %s:%d\n", __FUNCTION__, __LINE__);
+
     { /* calculate verify-data that will be sent by the client */
         size_t orig_off = emitter->buf->off;
         if (tls->pending_handshake_secret != NULL && !tls->ctx->omit_end_of_early_data) {
@@ -2110,12 +2112,15 @@ static int send_client_hello(ptls_t *tls, ptls_message_emitter_t *emitter, ptls_
     }
     ptls__key_schedule_update_hash(tls->key_schedule, emitter->buf->base + msghash_off, emitter->buf->off - msghash_off);
 
+if (getenv("H2O_DEBUG") != NULL) fprintf(stderr, "H2O_DEBUG %s:%d\n", __FUNCTION__, __LINE__);
     if (tls->client.using_early_data) {
         assert(!is_second_flight);
+if (getenv("H2O_DEBUG") != NULL) fprintf(stderr, "H2O_DEBUG %s:%d\n", __FUNCTION__, __LINE__);
         if ((ret = setup_traffic_protection(tls, 1, "c e traffic", 1, 0)) != 0)
             goto Exit;
         if ((ret = push_change_cipher_spec(tls, emitter)) != 0)
             goto Exit;
+if (getenv("H2O_DEBUG") != NULL) fprintf(stderr, "H2O_DEBUG %s:%d\n", __FUNCTION__, __LINE__);
     }
     if (resumption_secret.base != NULL && !is_second_flight) {
         if ((ret = derive_exporter_secret(tls, 1)) != 0)
@@ -2955,6 +2960,8 @@ static int client_handle_new_session_ticket(ptls_t *tls, ptls_iovec_t message)
     ptls_iovec_t ticket_nonce;
     int ret;
 
+if (getenv("H2O_DEBUG") != NULL) fprintf(stderr, "H2O_DEBUG %s:%d\n", __FUNCTION__, __LINE__);
+
     { /* verify the format */
         uint32_t ticket_lifetime, ticket_age_add, max_early_data_size;
         ptls_iovec_t ticket;
@@ -2982,8 +2989,12 @@ static int client_handle_new_session_ticket(ptls_t *tls, ptls_iovec_t message)
         ticket_buf.off += tls->key_schedule->hashes[0].algo->digest_size;
     });
 
+if (getenv("H2O_DEBUG") != NULL) fprintf(stderr, "H2O_DEBUG %s:%d\n", __FUNCTION__, __LINE__);
+
     if ((ret = tls->ctx->save_ticket->cb(tls->ctx->save_ticket, tls, ptls_iovec_init(ticket_buf.base, ticket_buf.off))) != 0)
         goto Exit;
+
+if (getenv("H2O_DEBUG") != NULL) fprintf(stderr, "H2O_DEBUG %s:%d\n", __FUNCTION__, __LINE__);
 
     ret = 0;
 Exit:
@@ -3444,6 +3455,8 @@ static int try_psk_handshake(ptls_t *tls, size_t *psk_index, int *accept_early_d
     uint8_t binder_key[PTLS_MAX_DIGEST_SIZE];
     int ret;
 
+if (getenv("H2O_DEBUG") != NULL) fprintf(stderr, "H2O_DEBUG %s:%d\n", __FUNCTION__, __LINE__);
+
     ptls_buffer_init(&decbuf, "", 0);
 
     for (*psk_index = 0; *psk_index < ch->psk.identities.count; ++*psk_index) {
@@ -3453,8 +3466,10 @@ static int try_psk_handshake(ptls_t *tls, size_t *psk_index, int *accept_early_d
         decbuf.off = 0;
         switch (tls->ctx->encrypt_ticket->cb(tls->ctx->encrypt_ticket, tls, 0, &decbuf, identity->identity)) {
         case 0: /* decrypted */
+if (getenv("H2O_DEBUG") != NULL) fprintf(stderr, "H2O_DEBUG %s:%d\n", __FUNCTION__, __LINE__);
             break;
         case PTLS_ERROR_REJECT_EARLY_DATA: /* decrypted, but early data is rejected */
+if (getenv("H2O_DEBUG") != NULL) fprintf(stderr, "H2O_DEBUG %s:%d\n", __FUNCTION__, __LINE__);
             can_accept_early_data = 0;
             break;
         default: /* decryption failure */
@@ -3463,13 +3478,16 @@ static int try_psk_handshake(ptls_t *tls, size_t *psk_index, int *accept_early_d
         if (decode_session_identifier(&issue_at, &ticket_psk, &age_add, &ticket_server_name, &ticket_key_exchange_id, &ticket_csid,
                                       &ticket_negotiated_protocol, decbuf.base, decbuf.base + decbuf.off) != 0)
             continue;
+if (getenv("H2O_DEBUG") != NULL) fprintf(stderr, "H2O_DEBUG %s:%d\n", __FUNCTION__, __LINE__);
         /* check age */
         if (now < issue_at)
             continue;
         if (now - issue_at > (uint64_t)tls->ctx->ticket_lifetime * 1000)
             continue;
+if (getenv("H2O_DEBUG") != NULL) fprintf(stderr, "H2O_DEBUG %s:%d\n", __FUNCTION__, __LINE__);
         *accept_early_data = 0;
         if (ch->psk.early_data_indication && can_accept_early_data) {
+if (getenv("H2O_DEBUG") != NULL) fprintf(stderr, "H2O_DEBUG %s:%d\n", __FUNCTION__, __LINE__);
             /* accept early-data if abs(diff) between the reported age and the actual age is within += 10 seconds */
             int64_t delta = (now - issue_at) - (identity->obfuscated_ticket_age - age_add);
             if (delta < 0)
@@ -3477,6 +3495,7 @@ static int try_psk_handshake(ptls_t *tls, size_t *psk_index, int *accept_early_d
             if (delta <= PTLS_EARLY_DATA_MAX_DELAY)
                 *accept_early_data = 1;
         }
+if (getenv("H2O_DEBUG") != NULL) fprintf(stderr, "H2O_DEBUG %s:%d\n", __FUNCTION__, __LINE__);
         /* check server-name */
         if (ticket_server_name.len != 0) {
             if (tls->server_name == NULL)
@@ -3495,6 +3514,7 @@ static int try_psk_handshake(ptls_t *tls, size_t *psk_index, int *accept_early_d
                 continue;
             tls->key_share = *a;
         }
+if (getenv("H2O_DEBUG") != NULL) fprintf(stderr, "H2O_DEBUG %s:%d\n", __FUNCTION__, __LINE__);
         /* check cipher-suite */
         if (ticket_csid != tls->cipher_suite->id)
             continue;
@@ -3511,6 +3531,7 @@ static int try_psk_handshake(ptls_t *tls, size_t *psk_index, int *accept_early_d
         if (ch->psk.identities.list[*psk_index].binder.len != tls->key_schedule->hashes[0].algo->digest_size)
             continue;
 
+if (getenv("H2O_DEBUG") != NULL) fprintf(stderr, "H2O_DEBUG %s:%d\n", __FUNCTION__, __LINE__);
         /* found */
         goto Found;
     }
@@ -3879,9 +3900,11 @@ static int server_handle_hello(ptls_t *tls, ptls_message_emitter_t *emitter, ptl
     if (!is_second_flight && ch->psk.hash_end != 0 &&
         (ch->psk.ke_modes & ((1u << PTLS_PSK_KE_MODE_PSK) | (1u << PTLS_PSK_KE_MODE_PSK_DHE))) != 0 &&
         tls->ctx->encrypt_ticket != NULL && !tls->ctx->require_client_authentication) {
+if (getenv("H2O_DEBUG") != NULL) fprintf(stderr, "H2O_DEBUG %s:%d\n", __FUNCTION__, __LINE__);
         if ((ret = try_psk_handshake(tls, &psk_index, &accept_early_data, ch,
                                      ptls_iovec_init(message.base, ch->psk.hash_end - message.base))) != 0) {
             goto Exit;
+if (getenv("H2O_DEBUG") != NULL) fprintf(stderr, "H2O_DEBUG %s:%d\n", __FUNCTION__, __LINE__);
         }
     }
 

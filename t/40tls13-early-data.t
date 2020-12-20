@@ -8,6 +8,8 @@ use Test::More;
 use Time::HiRes qw(sleep);
 use t::Util;
 
+$ENV{H2O_DEBUG} = 1;
+
 my $tempdir = tempdir(CLEANUP => 1);
 my $upstream_port = empty_port();
 
