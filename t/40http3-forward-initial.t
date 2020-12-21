@@ -51,9 +51,6 @@ This will generate quic-nondecryptable-initial.bin.
 
 check_dtrace_availability();
 
-plan skip_all => 'This test only supports Linux'
-    unless $^O eq 'linux';
-
 plan skip_all => 'python3 not found'
     unless prog_exists('python3');
 
@@ -100,17 +97,29 @@ if ($tracer_pid == 0) {
 	close STDOUT;
 	open STDOUT, ">", "$tempdir/trace.out"
 		or die "failed to create temporary file:$tempdir/trace.out:$!";
-	exec qw(bpftrace -v -B none -p), $server->{pid}, "-e", <<'EOT';
+  if ($^O eq 'linux') {
+    exec qw(bpftrace -v -B none -p), $server->{pid}, "-e", <<'EOT';
 usdt::h2o:h3_packet_forward { printf("num_packets=%d num_bytes=%d\n", arg2, arg3); }
 EOT
-	die "failed to spawn bpftrace:$!";
+    die "failed to spawn bpftrace:$!";
+  } else {
+    exec(
+			qw(unbuffer dtrace -p), $server->{pid}, "-n", <<'EOT',
+:h2o::h3_packet_forward {
+  printf("\nXXXXnum_packets=%d num_bytes=%d\n", arg2, arg3);
+}
+EOT
+		);
+    die "failed to spawn dtrace:$!";
+  }
 }
 
 # wait until bpftrace and the trace log becomes ready
 my $read_trace = get_tracer($tracer_pid, "$tempdir/trace.out");
-# note: this cond is only needed for Linux/bpftrace
-while ($read_trace->() eq '') {
-	sleep 1;
+if ($^O eq 'linux') {
+  while ($read_trace->() eq '') {
+    sleep 1;
+  }
 }
 sleep 2;
 
