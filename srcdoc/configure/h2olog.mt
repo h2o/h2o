@@ -2,7 +2,7 @@
 ? $_mt->wrapper_file("wrapper.mt", "Configure", "Using h2olog for Tracing")->(sub {
 
 <p>h2olog is an experimental <a href="https://www.kernel.org/doc/html/latest/bpf/index.html">BPF</a> (<a href="https://www.kernel.org/doc/Documentation/networking/filter.txt">kernel doc</a>) backed tracing tool for the <a href="https://github.com/h2o/h2o">H2O</a> server.
-It can be used for tracing HTTP-level or QUIC-level events.</p>
+It can be used for tracing quicly and h2o USDT probes.</p>
 
 <p><em>Since h2olog is an experimental program, its command-line interface might change without notice.</em></p>
 
@@ -39,10 +39,10 @@ EOT
 </ul>
 
 <h2 id="quicstart">Quickstart</h2>
-<p><code>h2olog -p $H2O_PID</code> shows <a href="https://varnish-cache.org/docs/trunk/reference/varnishlog.html">varnishlog</a>-like tracing.</p>
+<p><code>h2olog -H -p $H2O_PID</code> shows <a href="https://varnish-cache.org/docs/trunk/reference/varnishlog.html">varnishlog</a>-like tracing.</p>
 
 <?= $ctx->{code}->(<<'EOT')
-$ sudo h2olog -p $(pgrep -o h2o)
+$ sudo h2olog -H -p $(pgrep -o h2o)
 
 11 0 RxProtocol HTTP/3.0
 11 0 RxHeader   :authority torumk.com
@@ -56,14 +56,12 @@ $ sudo h2olog -p $(pgrep -o h2o)
 EOT
 ?>
 
-<h2 id="tracing-quic-events">Tracing QUIC events</h2>
+<h2 id="tracing-usdt-events">Tracing USDT events</h2>
 <p>Server-side <a href="https://en.wikipedia.org/wiki/QUIC">QUIC</a> events can be traced using the <code>quic</code> subcommand.
-Events are rendered in <a href="https://en.wikipedia.org/wiki/JSON">JSON</a> format.</p>
+Events are rendered in <a href="https://jsonlines.org/">JSON Lines</a> format.</p>
 
 <?= $ctx->{code}->(<<'EOT')
-$ sudo h2olog quic -p $(pgrep -o h2o)
-              ^
-              |_ The quic subcommand
+$ sudo h2olog -p $(pgrep -o h2o)
 EOT
 ?>
 

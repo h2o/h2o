@@ -121,7 +121,7 @@ EOT
 diag $duration;
 diag $resp;
         if ($max_on) {
-            cmp_ok($duration - $resp, '<=', 2, "Writing to H2O was as fast as the curl download");
+            cmp_ok($duration - $resp, '<=', 2.2, "Writing to H2O was as fast as the curl download");
         } else {
             cmp_ok($duration - $resp, '>', 3, "Writing to H2O was much faster than the curl download");
         }

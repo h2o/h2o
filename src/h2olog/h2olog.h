@@ -105,6 +105,7 @@ class h2o_tracer
     {
         out_ = fp;
     }
+
     /**
      * Handles an incoming BPF event.
      */
@@ -122,6 +123,14 @@ class h2o_tracer
         stats_.num_lost += lost;
         do_handle_lost(lost);
     }
+
+    /**
+     * Select a tracepoint with pattern, e.g. "quicly:*".
+     * It affects what `usdt_probes()` returns;
+     *
+     * @return an error message for failure, an empty string for success
+     */
+    virtual std::string select_usdts(const char *pattern) = 0;
     /**
      * Returns a vector of relevant USDT probes.
      */
@@ -154,6 +163,6 @@ h2o_tracer *create_http_tracer();
 /**
  * Initializes a QUIC tracer.
  */
-h2o_tracer *create_quic_tracer();
+h2o_tracer *create_raw_tracer();
 
 #endif
