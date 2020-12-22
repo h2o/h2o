@@ -70,7 +70,7 @@ EOS
                 my $client = H1Client->new($server);
                 $client->send_headers('POST', '/', ['transfer-encoding' => 'chunked']) or die $!;
                 $client->send_data("1\r\na\r\n") or die $!;
-                sleep 0.01;
+                sleep 1;
                 my $output = $client->read(1000);
                 sleep 0.01;
                 for (1..10) {
