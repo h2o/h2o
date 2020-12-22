@@ -29,12 +29,11 @@ static void test_should_use_h2(void)
     for (int i = 0; i != 110; ++i) {
         enum en_protocol_selector_result_t selected = select_protocol(&selector);
         switch (i) {
-        case 9:
-        case 29:
-        case 49:
-        case 69:
-        case 89:
-        case 109:
+        case 10:
+        case 30:
+        case 50:
+        case 70:
+        case 90:
             ok(selected == PROTOCOL_SELECTOR_H2);
             break;
         default:
@@ -63,20 +62,18 @@ static void test_should_use_h2(void)
         }
     }
 
-    /* FIXME h1 should not be selected only after some h2's. In other words, the result should be a mirror image of the test above.
-     */
     selector = (struct st_h2o_httpclient_protocol_selector_t){.ratio = {.http2 = 93}};
     for (int i = 0; i != 110; ++i) {
         enum en_protocol_selector_result_t selected = select_protocol(&selector);
         switch (i) {
-        case 0:
-        case 14:
-        case 28:
-        case 42:
-        case 57:
-        case 71:
-        case 85:
-        case 100:
+        case 7:
+        case 21:
+        case 35:
+        case 49:
+        case 64:
+        case 78:
+        case 92:
+        case 107:
             ok(selected == PROTOCOL_SELECTOR_H1);
             break;
         default:
