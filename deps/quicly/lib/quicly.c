@@ -3570,8 +3570,7 @@ static void on_loss_detected(quicly_loss_t *loss, const quicly_sent_packet_t *lo
     conn->egress.cc.impl->cc_on_lost(&conn->egress.cc, &conn->egress.loss, lost_packet->cc_bytes_in_flight,
                                      lost_packet->packet_number, conn->egress.packet_number, conn->stash.now,
                                      conn->egress.max_udp_payload_size);
-    QUICLY_PROBE(PACKET_LOST, conn, conn->stash.now, lost_packet->packet_number);
-    QUICLY_PROBE(QUICTRACE_LOST, conn, conn->stash.now, lost_packet->packet_number);
+    QUICLY_PROBE(PACKET_LOST, conn, conn->stash.now, lost_packet->packet_number, lost_packet->ack_epoch);
     QUICLY_PROBE(CC_CONGESTION, conn, conn->stash.now, lost_packet->packet_number + 1, conn->egress.loss.sentmap.bytes_in_flight,
                  conn->egress.cc.cwnd);
     QUICLY_PROBE(QUICTRACE_CC_LOST, conn, conn->stash.now, &conn->egress.loss.rtt, conn->egress.cc.cwnd,
@@ -4691,7 +4690,7 @@ static int handle_ack_frame(quicly_conn_t *conn, struct st_quicly_handle_payload
         /* Ack blocks are organized in the ACK frame and consequently in the ack_block_lengths array from the largest acked down.
          * Processing acks in packet number order requires processing the ack blocks in reverse order. */
         uint64_t pn_block_max = pn_acked + frame.ack_block_lengths[gap_index] - 1;
-        QUICLY_PROBE(QUICTRACE_RECV_ACK, conn, conn->stash.now, pn_acked, pn_block_max);
+        QUICLY_PROBE(ACK_BLOCK_RECEIVED, conn, conn->stash.now, pn_acked, pn_block_max);
         while (quicly_sentmap_get(&iter)->packet_number < pn_acked)
             quicly_sentmap_skip(&iter);
         do {
@@ -4746,7 +4745,7 @@ static int handle_ack_frame(quicly_conn_t *conn, struct st_quicly_handle_payload
     if ((ret = on_ack_stream_ack_cached(conn)) != 0)
         return ret;
 
-    QUICLY_PROBE(QUICTRACE_RECV_ACK_DELAY, conn, conn->stash.now, frame.ack_delay);
+    QUICLY_PROBE(ACK_DELAY_RECEIVED, conn, conn->stash.now, frame.ack_delay);
 
     /* Update loss detection engine on ack. The function uses ack_delay only when the largest_newly_acked is also the largest acked
      * so far. So, it does not matter if the ack_delay being passed in does not apply to the largest_newly_acked. */

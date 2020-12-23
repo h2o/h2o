@@ -28,7 +28,6 @@ extern "C" {
 #include <unistd.h>
 #include <stdarg.h>
 #include <sys/time.h>
-#include <fnmatch.h>
 #include "h2o/memory.h"
 #include "h2o/version.h"
 }
@@ -41,11 +40,11 @@ static void usage(void)
 {
     printf(R"(h2olog (h2o v%s)
 Usage: h2olog -p PID
-       h2olog quic -p PID
 Optional arguments:
     -d Print debugging information (-dd shows more)
     -h Print this help and exit
     -l Print the list of available tracepoints and exit
+    -H Trace HTTP requests and responses in varnishlog-like format
     -s RESPONSE_HEADER_NAME A response header name to show, e.g. "content-type"
     -t TRACEPOINT A tracepoint, or fully-qualified probe name, to show,
                   including a glob pattern, e.g. "quicly:accept", "h2o:*"
@@ -53,9 +52,9 @@ Optional arguments:
     -w Path to write the output (default: stdout)
 
 Examples:
-    h2olog quic -p $(pgrep -o h2o)
-    h2olog quic -p $(pgrep -o h2o) -t quicly:accept -t quicly:free
-    h2olog quic -p $(pgrep -o h2o) -t h2o:send_response_header -t h2o:h3s_accept -t h2o:h3s_destroy -s alt-svc
+    h2olog -p -H $(pgrep -o h2o)
+    h2olog -p $(pgrep -o h2o) -t quicly:accept -t quicly:free
+    h2olog -p $(pgrep -o h2o) -t h2o:send_response_header -t h2o:h3s_accept -t h2o:h3s_destroy -s alt-svc
 )",
            H2O_VERSION);
     return;
@@ -226,48 +225,29 @@ static void lost_cb(void *context, uint64_t lost)
     tracer->handle_lost(lost);
 }
 
-static size_t add_matched_usdts(std::vector<h2o_tracer::usdt> &selected_usdts, const std::vector<h2o_tracer::usdt> &available_usdts,
-                                const char *pattern)
-{
-    size_t added = 0;
-    for (const auto &usdt : available_usdts) {
-        if (fnmatch(pattern, usdt.fully_qualified_name().c_str(), 0) == 0) {
-            selected_usdts.push_back(usdt);
-            added++;
-        }
-    }
-    return added;
-}
-
 int main(int argc, char **argv)
 {
-    std::unique_ptr<h2o_tracer> tracer;
-    if (argc > 1 && strcmp(argv[1], "quic") == 0) {
-        tracer.reset(create_quic_tracer());
-        --argc;
-        ++argv;
-    } else {
-        tracer.reset(create_http_tracer());
-    }
-
-    const std::vector<h2o_tracer::usdt> available_usdts = tracer->usdt_probes();
+    std::unique_ptr<h2o_tracer> tracer(create_raw_tracer());
 
     int debug = 0;
-    int preserve_root = 0;
+    bool preserve_root = false;
+    bool list_usdts = false;
     FILE *outfp = stdout;
-    std::vector<h2o_tracer::usdt> selected_usdts;
     std::vector<std::string> response_header_filters;
     int c;
     pid_t h2o_pid = -1;
-    while ((c = getopt(argc, argv, "hdrlp:t:s:w:")) != -1) {
+    while ((c = getopt(argc, argv, "hHdrlp:t:s:w:")) != -1) {
         switch (c) {
+        case 'H':
+            tracer.reset(create_http_tracer());
+            break;
         case 'p':
             h2o_pid = atoi(optarg);
             break;
         case 't': {
-            size_t added = add_matched_usdts(selected_usdts, available_usdts, optarg);
-            if (added == 0) {
-                fprintf(stderr, "No such tracepoint: %s\n", optarg);
+            std::string err = tracer->select_usdts(optarg);
+            if (!err.empty()) {
+                fprintf(stderr, "%s\n", err.c_str());
                 exit(EXIT_FAILURE);
             }
             break;
@@ -285,13 +265,10 @@ int main(int argc, char **argv)
             debug++;
             break;
         case 'l':
-            for (const auto &usdt : available_usdts) {
-                printf("%s\n", usdt.fully_qualified_name().c_str());
-            }
-            exit(EXIT_SUCCESS);
+            list_usdts = true;
             break;
         case 'r':
-            preserve_root = 1;
+            preserve_root = true;
             break;
         case 'h':
             usage();
@@ -306,6 +283,13 @@ int main(int argc, char **argv)
         fprintf(stderr, "Error: too many aruments\n");
         usage();
         exit(EXIT_FAILURE);
+    }
+
+    if (list_usdts) {
+        for (const auto &usdt : tracer->usdt_probes()) {
+            printf("%s\n", usdt.fully_qualified_name().c_str());
+        }
+        exit(EXIT_SUCCESS);
     }
 
     if (h2o_pid == -1) {
@@ -329,14 +313,11 @@ int main(int argc, char **argv)
         cflags.push_back(generate_header_filter_cflag(response_header_filters));
     }
 
-    if (selected_usdts.empty()) {
-        selected_usdts = available_usdts;
-    }
-
     if (debug >= 2) {
-        fprintf(stderr, "selected_usdts=");
-        for (auto iter = selected_usdts.cbegin(); iter != selected_usdts.cend(); iter++) {
-            if (iter != selected_usdts.cbegin()) {
+        fprintf(stderr, "usdts=");
+        const auto &usdts = tracer->usdt_probes();
+        for (auto iter = usdts.cbegin(); iter != usdts.cend(); iter++) {
+            if (iter != usdts.cbegin()) {
                 fprintf(stderr, ",");
             }
             fprintf(stderr, "%s", iter->fully_qualified_name().c_str());
@@ -356,7 +337,7 @@ int main(int argc, char **argv)
     ebpf::BPF *bpf = new ebpf::BPF();
     std::vector<ebpf::USDT> probes;
 
-    for (const auto &usdt : selected_usdts) {
+    for (const auto &usdt : tracer->usdt_probes()) {
         probes.push_back(ebpf::USDT(h2o_pid, usdt.provider, usdt.name, usdt.probe_func));
     }
 

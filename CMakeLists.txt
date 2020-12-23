@@ -920,7 +920,7 @@ IF (WITH_H2OLOG)
     SET(H2OLOG_SOURCE_FILES
         "src/h2olog/h2olog.h"
         "src/h2olog/h2olog.cc"
-        "src/h2olog/http.cc"
+        "src/h2olog/http_tracer.cc"
         "src/h2olog/json.h"
         "src/h2olog/json.cc"
         "include/h2o/version.h"
@@ -933,11 +933,11 @@ IF (WITH_H2OLOG)
     )
 
     ADD_CUSTOM_COMMAND(
-        OUTPUT  "${CMAKE_CURRENT_SOURCE_DIR}/src/h2olog/generated-quic.cc"
-        COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/src/h2olog/misc/gen-quic-bpf.py" "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}/src/h2olog/generated-quic.cc"
-        DEPENDS ${H2OLOG_GEN_DEPS} "${CMAKE_CURRENT_SOURCE_DIR}/src/h2olog/misc/gen-quic-bpf.py"
+        OUTPUT  "${CMAKE_CURRENT_SOURCE_DIR}/src/h2olog/generated_raw_tracer.cc"
+        COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/src/h2olog/misc/gen_raw_tracer.py" "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}/src/h2olog/generated_raw_tracer.cc"
+        DEPENDS ${H2OLOG_GEN_DEPS} "${CMAKE_CURRENT_SOURCE_DIR}/src/h2olog/misc/gen_raw_tracer.py"
     )
-    LIST(APPEND H2OLOG_SOURCE_FILES "${CMAKE_CURRENT_SOURCE_DIR}/src/h2olog/generated-quic.cc")
+    LIST(APPEND H2OLOG_SOURCE_FILES "${CMAKE_CURRENT_SOURCE_DIR}/src/h2olog/generated_raw_tracer.cc")
     LINK_DIRECTORIES("${LIBBCC_LIBRARY_DIRS}")
 
     ADD_EXECUTABLE(h2olog ${H2OLOG_SOURCE_FILES})

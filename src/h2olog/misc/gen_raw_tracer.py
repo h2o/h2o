@@ -70,27 +70,10 @@ block_fields = {
     "h2o:h3_packet_receive": set(["bytes"]),
 }
 
-# A block list for quicly-probes.d.
-# USDT probes in quicly-probes.d are handled by default.
-quicly_block_probes = set([
+# The block list for probes.
+# All the probes are handled by default in JSON mode
+block_probes = set([
     "quicly:debug_message",
-])
-
-# An allow list for h2o-probes.d
-# USDT probes in h2o-probes.d are not handled by default.
-h2o_allow_probes = set([
-    "h2o:h3s_accept",
-    "h2o:h3s_destroy",
-    "h2o:send_response_header",
-
-    "h2o:h3_packet_receive",
-    "h2o:h3_packet_forward",
-])
-
-h2o_probes_without_master_id = set([
-    "h3s_accept",
-    "h3_packet_receive",
-    "h3_packet_forward",
 ])
 
 # To rename field names for compatibility with:
@@ -128,7 +111,7 @@ def strip_c_comments(s):
   return re.sub('//.*?\n|/\*.*?\*/', '', s, flags=re_flags)
 
 
-def parse_d(context: dict, path: Path, allow_probes: set = None, block_probes: set = None):
+def parse_d(context: dict, path: Path, block_probes: set = None):
   content = strip_c_comments(path.read_text())
 
   matched = re.search(d_decl, content, flags=re_flags)
@@ -144,8 +127,6 @@ def parse_d(context: dict, path: Path, allow_probes: set = None, block_probes: s
 
     fully_specified_probe_name = "%s:%s" % (provider, name)
     if block_probes and fully_specified_probe_name in block_probes:
-      continue
-    if allow_probes and fully_specified_probe_name not in allow_probes:
       continue
 
     metadata = {
@@ -206,7 +187,7 @@ def build_tracer(context, metadata):
   c = r"""// %s
 int %s(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct quic_event_t event = { .id = %d };
+  struct event_t event = { .id = %d };
 
 """ % (fully_specified_probe_name, tracer_name, metadata['id'])
   block_field_set = block_fields.get(fully_specified_probe_name, set())
@@ -256,29 +237,7 @@ int %s(struct pt_regs *ctx) {
       event_t_name = "%s.%s" % (probe_name, arg_name)
       c += "  bpf_usdt_readarg(%d, ctx, &event.%s);\n" % (i +
                                                           1, event_t_name)
-
-  if fully_specified_probe_name == "h2o:h3s_accept":
-    c += r"""
-  h2o_to_quicly_conn.update(&event.h3s_accept.conn_id, &event.h3s_accept.master_id);
-"""
-  elif fully_specified_probe_name == "h2o:h3s_destroy":
-    c += r"""
-  const uint32_t *master_conn_id_ptr = h2o_to_quicly_conn.lookup(&event.h3s_destroy.conn_id);
-  if (master_conn_id_ptr != NULL) {
-    event.h3s_destroy.master_id = *master_conn_id_ptr;
-  } else {
-    bpf_trace_printk("h2o's conn_id=%lu is not associated to master_conn_id\n", event.h3s_destroy.conn_id);
-  }
-  h2o_to_quicly_conn.delete(&event.h3s_destroy.conn_id);
-"""
-  elif metadata["provider"] == "h2o" and probe_name not in h2o_probes_without_master_id:
-    c += r"""
-  const uint32_t *master_conn_id_ptr = h2o_to_quicly_conn.lookup(&event.%s.conn_id);
-  if (master_conn_id_ptr == NULL)
-    return 0;
-  event.%s.master_id = *master_conn_id_ptr;
-""" % (probe_name, probe_name)
-    if fully_specified_probe_name == "h2o:send_response_header":
+  if fully_specified_probe_name == "h2o:send_response_header":
       # handle -s option
       c += r"""
 #ifdef CHECK_ALLOWED_RES_HEADER_NAME
@@ -304,9 +263,9 @@ def prepare_context(h2o_dir):
       "h2o_dir": h2o_dir,
   }
   parse_d(context, h2o_dir.joinpath(quicly_probes_d),
-          block_probes=quicly_block_probes)
+          block_probes=block_probes)
   parse_d(context, h2o_dir.joinpath(h2o_probes_d),
-          allow_probes=h2o_allow_probes)
+          block_probes=block_probes)
 
   return context
 
@@ -344,7 +303,7 @@ DEFINE_RESOLVE_FUNC(uint32_t);
 DEFINE_RESOLVE_FUNC(int64_t);
 DEFINE_RESOLVE_FUNC(uint64_t);
 
-static std::string gen_quic_bpf_header() {
+static std::string gen_bpf_header() {
   std::string bpf;
 """
 
@@ -386,7 +345,7 @@ def generate_cplusplus(context, output_file):
   probe_metadata = context["probe_metadata"]
 
   event_t_decl = r"""
-struct quic_event_t {
+struct event_t {
   uint8_t id;
 
   union {
@@ -413,8 +372,6 @@ struct quic_event_t {
         f = "%s %s" % (field_type, field_name)
 
       event_t_decl += "      %s;\n" % f
-    if metadata["provider"] == "h2o" and name not in h2o_probes_without_master_id:
-      event_t_decl += "      typeof_st_quicly_conn_t__master_id master_id;\n"
     event_t_decl += "    } %s;\n" % name
 
   event_t_decl += r"""
@@ -447,32 +404,29 @@ int trace_sched_process_exit(struct tracepoint__sched__sched_process_exit *ctx) 
   if (!(h2o_pid == H2OLOG_H2O_PID && h2o_tid == H2OLOG_H2O_PID)) {
     return 0;
   }
-  struct quic_event_t ev = { .id = 1 };
+  struct event_t ev = { .id = 1 };
   events.perf_submit(ctx, &ev, sizeof(ev));
   return 0;
 }
 
 """ % (event_t_decl)
 
-  usdt_def = """
-const std::vector<h2o_tracer::usdt> &h2o_quic_tracer::usdt_probes() {
-  static const std::vector<h2o_tracer::usdt> probes = {
+  usdts_def = r"""
+void h2o_raw_tracer::initialize() {
+  available_usdts.assign({
 """
-
   for metadata in probe_metadata.values():
     bpf += build_tracer(context, metadata)
-    usdt_def += """    h2o_tracer::usdt("%s", "%s", "%s"),\n""" % (
+    usdts_def += """    h2o_tracer::usdt("%s", "%s", "%s"),\n""" % (
         metadata['provider'], metadata['name'], build_tracer_name(metadata))
-
-  usdt_def += """
-  };
-  return probes;
+  usdts_def += r"""
+  });
 }
 """
 
   handle_event_func = r"""
-void h2o_quic_tracer::do_handle_event(const void *data, int data_len) {
-  const quic_event_t *event = static_cast<const quic_event_t*>(data);
+void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
+  const event_t *event = static_cast<const event_t*>(data);
 
   if (event->id == 1) { // sched:sched_process_exit
     exit(0);
@@ -519,9 +473,6 @@ void h2o_quic_tracer::do_handle_event(const void *data, int data_len) {
             json_field_name, event_t_name, len_event_t_name, len_event_t_name)
 
     if metadata["provider"] == "h2o":
-      if probe_name not in h2o_probes_without_master_id:
-        handle_event_func += '    json_write_pair_c(out_, STR_LIT("conn"), event->%s.master_id);\n' % (
-            probe_name)
       handle_event_func += '    json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());\n'
 
     handle_event_func += "    break;\n"
@@ -553,49 +504,27 @@ extern "C" {
 #include "h2olog.h"
 #include "json.h"
 
+#include "raw_tracer.h.cc"
+
 #define STR_LEN 64
 #define STR_LIT(s) s, strlen(s)
 
 using namespace std;
 
-class h2o_quic_tracer : public h2o_tracer {
-protected:
-  virtual void do_handle_event(const void *data, int len);
-  virtual void do_handle_lost(uint64_t lost);
-public:
-  virtual const std::vector<h2o_tracer::usdt> &usdt_probes();
-  virtual std::string bpf_text();
-};
-
 %s
 %s
 %s
 %s
 %s
 
-void h2o_quic_tracer::do_handle_lost(uint64_t lost)
-{
-  fprintf(out_,
-          "{"
-          "\"type\":\"h2olog-event-lost\","
-          "\"seq\":%%" PRIu64 ","
-          "\"time\":%%" PRIu64 ","
-          "\"lost\":%%" PRIu64 "}\n",
-          seq_, time_milliseconds(), lost);
-}
-
-std::string h2o_quic_tracer::bpf_text() {
+std::string h2o_raw_tracer::bpf_text() {
   // language=c
-  return gen_quic_bpf_header() + R"(
+  return gen_bpf_header() + R"(
 %s
 )";
 }
 
-h2o_tracer *create_quic_tracer() {
-  return new h2o_quic_tracer;
-}
-
-""" % (build_typedef_for_cplusplus(), build_bpf_header_generator(), event_t_decl, usdt_def, handle_event_func, bpf))
+""" % (build_typedef_for_cplusplus(), build_bpf_header_generator(), event_t_decl, usdts_def, handle_event_func, bpf))
 
 
 def main():
