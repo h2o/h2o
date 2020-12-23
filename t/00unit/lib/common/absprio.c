@@ -74,7 +74,7 @@ void test_urgency_to_weight(void)
     ok(h2o_absprio_urgency_to_chromium_weight(3) == 147);
     ok(h2o_absprio_urgency_to_chromium_weight(4) == 110);
     ok(h2o_absprio_urgency_to_chromium_weight(5) == 74);
-    ok(h2o_absprio_urgency_to_chromium_weight(6) == 34);
+    ok(h2o_absprio_urgency_to_chromium_weight(6) == 37);
     ok(h2o_absprio_urgency_to_chromium_weight(7) == 1);
 }
 
