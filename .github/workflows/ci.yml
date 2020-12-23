@@ -1,0 +1,44 @@
+name: CI
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    name: "${{ matrix.type }}"
+    runs-on: [ubuntu-20.04]
+
+    # We want to run on external PRs, but not on our own internal PRs as they'll be run
+    # by the push to the branch.
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
+
+    strategy:
+      fail-fast: false
+      matrix:
+        type:
+          - default
+          - OpenSSL 1.1.0
+          - OpenSSL 1.1.1
+          - DTrace
+        include:
+          - type: default
+            task: ALL
+          - type: OpenSSL 1.1.0
+            task: ossl1.1.0
+          - type: OpenSSL 1.1.1
+            task: ossl1.1.1
+          - type: DTrace
+            task: dtrace
+            container: h2oserver/h2o-ci:ubuntu2004
+
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        submodules: recursive
+
+    - name: Run with Docker
+      shell: 'script -q -e -c "bash {0}"'
+      env:
+        CONTAINER_NAME: ${{ matrix.container }}
+      run: |
+        chmod -R ugo+w .
+        make -f misc/docker-ci/check.mk ${{ matrix.task }}

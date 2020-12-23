@@ -612,8 +612,20 @@ static void process_packets(h2o_quic_ctx_t *ctx, quicly_address_t *destaddr, qui
             size_t i;
             for (i = 0; i != num_packets; ++i)
                 if ((packets[i].octets.base[0] & QUICLY_PACKET_TYPE_BITMASK) == QUICLY_PACKET_TYPE_INITIAL)
-                    if ((conn = ctx->acceptor(ctx, destaddr, srcaddr, packets + i)) != NULL)
+                    if ((conn = ctx->acceptor(ctx, destaddr, srcaddr, packets + i)) != NULL) {
+                        /* non-null generally means success, except for H2O_QUIC_ACCEPT_CONN_DECRYPTION_FAILED */
+                        if (conn == (h2o_quic_conn_t *)H2O_QUIC_ACCEPT_CONN_DECRYPTION_FAILED) {
+                            /* failed to decrypt Initial packet <=> it could belong to a connection on a different node
+                             * forward it to the right destination */
+                            uint64_t offending_node_id = packets[i].cid.dest.plaintext.node_id;
+                            conn = NULL;
+                            if (ctx->forward_packets != NULL && ttl > 0)
+                                ctx->forward_packets(ctx, &offending_node_id, packets[i].cid.dest.plaintext.thread_id, destaddr,
+                                                     srcaddr, ttl, packets, num_packets);
+                            return;
+                        }
                         break;
+                    }
             if (conn == NULL)
                 return;
             accepted_packet_index = i;
@@ -627,6 +639,21 @@ static void process_packets(h2o_quic_ctx_t *ctx, quicly_address_t *destaddr, qui
             conn = kh_val(ctx->conns_accepting, iter);
             assert(conn != NULL);
             assert(!quicly_is_client(conn->quic));
+            if (quicly_is_destination(conn->quic, &destaddr->sa, &srcaddr->sa, packets))
+                goto Receive;
+            uint64_t offending_node_id = packets[0].cid.dest.plaintext.node_id;
+            uint32_t offending_thread_id = packets[0].cid.dest.plaintext.thread_id;
+            if (offending_node_id != ctx->next_cid.node_id || offending_thread_id != ctx->next_cid.thread_id) {
+                /* accept key matches to a connection being established, but DCID doesn't -- likely a second (or later) Initial that
+                 * is supposed to be handled by another node. forward it. */
+                if (ttl == 0)
+                    return;
+                if (ctx->forward_packets != NULL)
+                    ctx->forward_packets(ctx, &offending_node_id, offending_thread_id, destaddr, srcaddr, ttl, packets,
+                                         num_packets);
+            }
+            /* regardless of forwarding outcome, we need to drop this packet as it is not for us */
+            return;
         }
     }
 
@@ -634,6 +661,7 @@ static void process_packets(h2o_quic_ctx_t *ctx, quicly_address_t *destaddr, qui
         if (!quicly_is_destination(conn->quic, &destaddr->sa, &srcaddr->sa, packets))
             return;
         size_t i;
+    Receive:
         for (i = 0; i != num_packets; ++i) {
             /* FIXME process errors? */
             if (i != accepted_packet_index)

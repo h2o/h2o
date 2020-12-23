@@ -48,7 +48,10 @@ inline uint16_t h2o_absprio_urgency_to_chromium_weight(uint8_t urgency)
 {
     uint16_t weight;
     assert(urgency < H2O_ABSPRIO_NUM_URGENCY_LEVELS);
-    weight = (H2O_ABSPRIO_NUM_URGENCY_LEVELS - urgency) * 32;
+    /* formula excerpted from:
+     * https://quiche.googlesource.com/quiche/+/8cbe7bfa5c6efa7a42652e36fabf8d21879894be/spdy/core/spdy_protocol.cc#50 */
+    const float ksteps = 255.9f / (float)(H2O_ABSPRIO_NUM_URGENCY_LEVELS - 1);
+    weight = (uint16_t)(ksteps * ((H2O_ABSPRIO_NUM_URGENCY_LEVELS - 1) - urgency)) + 1;
     return weight;
 }
 
