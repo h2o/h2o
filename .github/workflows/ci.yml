@@ -43,6 +43,7 @@ jobs:
         CONTAINER_NAME: ${{ matrix.container }}
       run: |
         chmod -R ugo+w .
+        sudo apt-get install -y linux-headers-$(uname -r)
         make -f misc/docker-ci/check.mk ${{ matrix.task }}
 
   # See https://github.com/google/oss-fuzz/tree/master/projects/h2o for details
