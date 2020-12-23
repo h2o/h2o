@@ -181,16 +181,15 @@ static enum en_protocol_selector_result_t select_protocol(struct st_h2o_httpclie
     return result;
 }
 
-static struct st_h2o_httpclient__h2_conn_t *find_h2conn(h2o_httpclient_connection_pool_t *pool, const h2o_url_scheme_t *scheme,
-                                                        h2o_iovec_t authority)
+static struct st_h2o_httpclient__h2_conn_t *find_h2conn(h2o_httpclient_connection_pool_t *pool, h2o_url_t *target)
 {
     int should_check_target = h2o_socketpool_is_global(pool->socketpool);
 
     for (h2o_linklist_t *l = pool->http2.conns.next; l != &pool->http2.conns; l = l->next) {
         struct st_h2o_httpclient__h2_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_httpclient__h2_conn_t, link, l);
-        if (should_check_target &&
-            !(conn->origin_url.scheme == scheme &&
-              h2o_memis(conn->origin_url.authority.base, conn->origin_url.authority.len, authority.base, authority.len)))
+        if (should_check_target && !(conn->origin_url.scheme == target->scheme &&
+                                     h2o_memis(conn->origin_url.authority.base, conn->origin_url.authority.len,
+                                               target->authority.base, target->authority.len)))
             continue;
         if (conn->num_streams >= h2o_httpclient__h2_get_max_concurrent_streams(conn))
             continue;
@@ -234,7 +233,7 @@ void h2o_httpclient_connect(h2o_httpclient_t **_client, h2o_mem_pool_t *pool, vo
         break;
     case PROTOCOL_SELECTOR_H2: {
         /* H2: use existing H2 connection (if any) or create a new connection offering both H1 and H2 */
-        struct st_h2o_httpclient__h2_conn_t *h2conn = find_h2conn(connpool, origin->scheme, origin->authority);
+        struct st_h2o_httpclient__h2_conn_t *h2conn = find_h2conn(connpool, origin);
         if (h2conn != NULL) {
             connect_using_h2conn(_client, pool, data, h2conn, connpool, on_connect);
         } else {
@@ -246,7 +245,7 @@ void h2o_httpclient_connect(h2o_httpclient_t **_client, h2o_mem_pool_t *pool, vo
         break;
     case PROTOCOL_SELECTOR_SERVER_DRIVEN: {
         /* offer H2 the server, but evenly distribute the load among existing H1 and H2 connections */
-        struct st_h2o_httpclient__h2_conn_t *h2conn = find_h2conn(connpool, origin->scheme, origin->authority);
+        struct st_h2o_httpclient__h2_conn_t *h2conn = find_h2conn(connpool, origin);
         if (h2conn != NULL && connpool->socketpool->_shared.pooled_count != 0) {
             /* both of h1 and h2 connections exist, compare in-use ratio */
             double http1_ratio = (double)(connpool->socketpool->_shared.count - connpool->socketpool->_shared.pooled_count) /
