@@ -59,7 +59,7 @@ die "fork failed:$!"
 	unless defined $client_pid;
 
 if ($client_pid == 0) {
-	my @args = ("$client_prog", qw(-3 -t 5 -d 1000 -b 10 -c 2 -i 1000), "https://127.0.0.1:$quic_port/echo");
+	my @args = ("$client_prog", qw(-3 100 -t 5 -d 1000 -b 10 -c 2 -i 1000), "https://127.0.0.1:$quic_port/echo");
 	exec @args;
 	die "should not reach here!";
 }

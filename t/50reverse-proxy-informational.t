@@ -72,7 +72,7 @@ EOT
         subtest 'http/3' => sub {
             plan skip_all => "$h3client not found"
                 unless -e $h3client;
-            my $resp = `$h3client -3 https://127.0.0.1:$quic_port/async/index.txt 2>&1`;
+            my $resp = `$h3client -3 100 https://127.0.0.1:$quic_port/async/index.txt 2>&1`;
             like $resp, qr{^HTTP/3 103\n.*?foo: FOO.*\n\nHTTP/3 200\n}s;
         };
     };
@@ -86,7 +86,7 @@ EOT
         subtest 'http/3' => sub {
             plan skip_all => "$h3client not found"
                 unless -e $h3client;
-            my $resp = `$h3client -3 https://127.0.0.1:$quic_port/sync/index.txt 2>&1`;
+            my $resp = `$h3client -3 100 https://127.0.0.1:$quic_port/sync/index.txt 2>&1`;
             like $resp, qr{^HTTP/3 200\n}s;
         };
     };
