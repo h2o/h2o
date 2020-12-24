@@ -93,7 +93,8 @@ static void on_context_init(h2o_handler_t *_self, h2o_context_t *ctx)
     }
 
     client_ctx->max_buffer_size = self->config.max_buffer_size;
-    client_ctx->protocol_selector.ratio.http2 = self->config.protocol_ratio.http2;
+    client_ctx->protocol_selector =
+        (struct st_h2o_httpclient_protocol_selector_t){.ratio = {.http2 = self->config.protocol_ratio.http2}};
 
     handler_ctx->client_ctx = client_ctx;
 }
