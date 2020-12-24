@@ -133,7 +133,7 @@ static void on_pool_connect(h2o_socket_t *sock, const char *errstr, void *data, 
     }
 }
 
-enum en_protocol_selector_result_t {
+enum {
     /**
      * indicates that H1 should be chosen
      */
@@ -149,12 +149,16 @@ enum en_protocol_selector_result_t {
     /**
      * used when ratio.http2 < 0; see h2o_httpclient_ctx_t::protocol_selector.ratio.http2
      */
-    PROTOCOL_SELECTOR_SERVER_DRIVEN
+    PROTOCOL_SELECTOR_SERVER_DRIVEN,
+    /**
+     * total number
+     */
+    PROTOCOL_SELECTOR_COUNT
 };
 
-static enum en_protocol_selector_result_t select_protocol(struct st_h2o_httpclient_protocol_selector_t *selector)
+static size_t select_protocol(struct st_h2o_httpclient_protocol_selector_t *selector)
 {
-    H2O_BUILD_ASSERT(PTLS_ELEMENTSOF(selector->_deficits) == PROTOCOL_SELECTOR_SERVER_DRIVEN + 1);
+    H2O_BUILD_ASSERT(PTLS_ELEMENTSOF(selector->_deficits) == PROTOCOL_SELECTOR_COUNT);
 
     /* update the deficits */
     if (selector->ratio.http2 < 0) {
@@ -167,13 +171,11 @@ static enum en_protocol_selector_result_t select_protocol(struct st_h2o_httpclie
     }
 
     /* select one with the highest value */
-    enum en_protocol_selector_result_t result = PROTOCOL_SELECTOR_H1;
-    if (selector->_deficits[result] < selector->_deficits[PROTOCOL_SELECTOR_H2])
-        result = PROTOCOL_SELECTOR_H2;
-    if (selector->_deficits[result] < selector->_deficits[PROTOCOL_SELECTOR_H3])
-        result = PROTOCOL_SELECTOR_H3;
-    if (selector->_deficits[result] < selector->_deficits[PROTOCOL_SELECTOR_SERVER_DRIVEN])
-        result = PROTOCOL_SELECTOR_SERVER_DRIVEN;
+    size_t result = 0;
+    for (size_t i = 1; i < PROTOCOL_SELECTOR_COUNT; ++i) {
+        if (selector->_deficits[result] < selector->_deficits[i])
+            result = i;
+    }
 
     /* decrement the one being selected */
     selector->_deficits[result] -= 100;
