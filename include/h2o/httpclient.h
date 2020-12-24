@@ -282,7 +282,7 @@ struct st_h2o_httpclient__h3_conn_t {
     /**
      * linked to h2o_httpclient_ctx_t::http3.conns
      */
-    h2o_linklist_t clients_link;
+    h2o_linklist_t link;
     /**
      * linklist used to queue pending requests
      */

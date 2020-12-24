@@ -107,7 +107,7 @@ static struct st_h2o_httpclient__h3_conn_t *find_connection(h2o_httpclient_conne
      * - use hashmap
      */
     for (h2o_linklist_t *l = pool->http3.conns.next; l != &pool->http3.conns; l = l->next) {
-        struct st_h2o_httpclient__h3_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_httpclient__h3_conn_t, clients_link, l);
+        struct st_h2o_httpclient__h3_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_httpclient__h3_conn_t, link, l);
         if (should_check_target && !(conn->server.origin_url.scheme == scheme &&
                                      h2o_memis(conn->server.origin_url.authority.base, conn->server.origin_url.authority.len,
                                                authority.base, authority.len)))
@@ -130,8 +130,8 @@ static void start_pending_requests(struct st_h2o_httpclient__h3_conn_t *conn)
 
 static void destroy_connection(struct st_h2o_httpclient__h3_conn_t *conn)
 {
-    if (h2o_linklist_is_linked(&conn->clients_link))
-        h2o_linklist_unlink(&conn->clients_link);
+    if (h2o_linklist_is_linked(&conn->link))
+        h2o_linklist_unlink(&conn->link);
     while (!h2o_linklist_is_empty(&conn->pending_requests)) {
         struct st_h2o_http3client_req_t *req =
             H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3client_req_t, link, conn->pending_requests.next);
@@ -266,7 +266,7 @@ struct st_h2o_httpclient__h3_conn_t *create_connection(h2o_httpclient_ctx_t *ctx
     sprintf(conn->server.named_serv, "%" PRIu16, h2o_url_get_port(origin));
     conn->handshake_properties.client.negotiated_protocols.list = h2o_http3_alpn;
     conn->handshake_properties.client.negotiated_protocols.count = sizeof(h2o_http3_alpn) / sizeof(h2o_http3_alpn[0]);
-    h2o_linklist_insert(&pool->http3.conns, &conn->clients_link);
+    h2o_linklist_insert(&pool->http3.conns, &conn->link);
     h2o_linklist_init_anchor(&conn->pending_requests);
 
     conn->getaddr_req = h2o_hostinfo_getaddr(conn->ctx->getaddr_receiver, conn->server.origin_url.host,
