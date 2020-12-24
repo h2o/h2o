@@ -27,7 +27,7 @@ static void test_should_use_h2(void)
     struct st_h2o_httpclient_protocol_selector_t selector = {.ratio = {.http2 = 5}};
 
     for (int i = 0; i != 110; ++i) {
-        enum en_protocol_selector_result_t selected = select_protocol(&selector);
+        size_t selected = select_protocol(&selector);
         switch (i) {
         case 10:
         case 30:
@@ -44,7 +44,7 @@ static void test_should_use_h2(void)
 
     selector = (struct st_h2o_httpclient_protocol_selector_t){.ratio = {.http2 = 7}};
     for (int i = 0; i != 110; ++i) {
-        enum en_protocol_selector_result_t selected = select_protocol(&selector);
+        size_t selected = select_protocol(&selector);
         switch (i) {
         case 7:
         case 21:
@@ -64,7 +64,7 @@ static void test_should_use_h2(void)
 
     selector = (struct st_h2o_httpclient_protocol_selector_t){.ratio = {.http2 = 93}};
     for (int i = 0; i != 110; ++i) {
-        enum en_protocol_selector_result_t selected = select_protocol(&selector);
+        size_t selected = select_protocol(&selector);
         switch (i) {
         case 7:
         case 21:
@@ -84,13 +84,13 @@ static void test_should_use_h2(void)
 
     selector = (struct st_h2o_httpclient_protocol_selector_t){.ratio = {.http2 = 0}};
     for (int i = 0; i != 110; ++i) {
-        enum en_protocol_selector_result_t selected = select_protocol(&selector);
+        size_t selected = select_protocol(&selector);
         ok(selected == PROTOCOL_SELECTOR_H1);
     }
 
     selector = (struct st_h2o_httpclient_protocol_selector_t){.ratio = {.http2 = 100}};
     for (int i = 0; i != 110; ++i) {
-        enum en_protocol_selector_result_t selected = select_protocol(&selector);
+        size_t selected = select_protocol(&selector);
         ok(selected == PROTOCOL_SELECTOR_H2);
     }
 }
