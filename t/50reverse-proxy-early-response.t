@@ -136,7 +136,7 @@ EOS
             my $upstream = create_upstream($upstream_port, $up_is_h2, +{ wait_body => 2, drain_body => 1 });
             my $server = spawn_h2o(h2o_conf($upstream_port, $up_is_h2));
             local $SIG{ALRM} = sub { $upstream->{kill}->() };
-            Time::HiRes::alarm(0.5);
+            Time::HiRes::alarm(1);
             if ($down_is_h2) {
                 my $output = run_with_h2get_simple($server, <<"EOS");
                     req = { ":method" => "POST", ":authority" => authority, ":scheme" => "https", ":path" => "/",
@@ -167,7 +167,7 @@ EOS
             my $upstream = create_upstream($upstream_port, $up_is_h2, +{ drain_body => 1 });
             my $server = spawn_h2o(h2o_conf($upstream_port, $up_is_h2));
             local $SIG{ALRM} = sub { $upstream->{kill}->() };
-            Time::HiRes::alarm(0.5);
+            Time::HiRes::alarm(1);
             if ($down_is_h2) {
                 my $output = run_with_h2get_simple($server, <<"EOS");
                     req = { ":method" => "POST", ":authority" => authority, ":scheme" => "https", ":path" => "/",
