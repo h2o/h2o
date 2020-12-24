@@ -42,3 +42,30 @@ jobs:
       run: |
         chmod -R ugo+w .
         make -f misc/docker-ci/check.mk ${{ matrix.task }}
+
+  # See https://github.com/google/oss-fuzz/tree/master/projects/h2o for details
+  ossfuzz:
+    name: OSS Fuzz
+    runs-on: ubuntu-latest
+
+    # see above
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
+
+    steps:
+    - name: Build Fuzzers
+      uses: google/oss-fuzz/infra/cifuzz/actions/build_fuzzers@master
+      with:
+        oss-fuzz-project-name: 'h2o'
+        dry-run: false
+    - name: Run Fuzzers
+      uses: google/oss-fuzz/infra/cifuzz/actions/run_fuzzers@master
+      with:
+        oss-fuzz-project-name: 'h2o'
+        fuzz-seconds: 600
+        dry-run: false
+    - name: Upload Crash
+      uses: actions/upload-artifact@v1
+      if: failure()
+      with:
+        name: artifacts
+        path: ./out/artifacts
