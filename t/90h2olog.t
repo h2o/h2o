@@ -11,12 +11,13 @@ use t::Util;
 plan skip_all => "h2olog is supported only for Linux"
     if $^O ne 'linux';
 
+my $h2olog_prog = bindir() . "/h2olog";
+my $client_prog = bindir() . "/h2o-httpclient";
+
 unless ($ENV{DTRACE_TEST})  {
-  my $h2olog_prog = bindir() . "/h2olog";
   plan skip_all => "$h2olog_prog not found"
       unless -e $h2olog_prog;
 
-  my $client_prog = bindir() . "/h2o-httpclient";
   plan skip_all => "$client_prog not found"
       unless -e $client_prog;
 
