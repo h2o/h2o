@@ -360,10 +360,15 @@ static int on_config_reverse_url(h2o_configurator_command_t *cmd, h2o_configurat
         if ((targets[i] = parse_backend(cmd, backends[i])) == NULL)
             return -1;
 
+    /* check consistency */
     if (self->vars->conf.keepalive_timeout != 0 && self->vars->conf.use_proxy_protocol) {
         h2o_configurator_errprintf(cmd, node,
                                    "please either set `proxy.use-proxy-protocol` to `OFF` or disable keep-alive by "
                                    "setting `proxy.timeout.keepalive` to zero; the features are mutually exclusive");
+        return -1;
+    }
+    if (self->vars->conf.protocol_ratio.http2 + self->vars->conf.protocol_ratio.http3 > 100) {
+        h2o_configurator_errprintf(cmd, node, "sum of http2.ratio and http3.ratio cannot be greater than 100");
         return -1;
     }
 
@@ -441,6 +446,19 @@ static int on_config_http2_ratio(h2o_configurator_command_t *cmd, h2o_configurat
     return 0;
 }
 
+static int on_config_http3_ratio(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    struct proxy_configurator_t *self = (void *)cmd->configurator;
+    int ret = h2o_configurator_scanf(cmd, node, "%" SCNd8, &self->vars->conf.protocol_ratio.http3);
+    if (ret < 0)
+        return ret;
+    if (self->vars->conf.protocol_ratio.http3 < 0 || 100 < self->vars->conf.protocol_ratio.http3) {
+        h2o_configurator_errprintf(cmd, node, "proxy.http3.ratio must be between 0 and 100");
+        return -1;
+    }
+    return 0;
+}
+
 static int on_config_forward_close_connection(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     ssize_t ret = h2o_configurator_get_one_of(cmd, node, "OFF,ON");
@@ -493,6 +511,7 @@ static int on_config_exit(h2o_configurator_t *_self, h2o_configurator_context_t 
         ctx->globalconf->proxy.max_buffer_size = self->vars->conf.max_buffer_size;
         ctx->globalconf->proxy.http2.max_concurrent_streams = self->vars->conf.http2.max_concurrent_strams;
         ctx->globalconf->proxy.protocol_ratio.http2 = self->vars->conf.protocol_ratio.http2;
+        ctx->globalconf->proxy.protocol_ratio.http3 = self->vars->conf.protocol_ratio.http3;
         h2o_socketpool_set_ssl_ctx(&ctx->globalconf->proxy.global_socketpool, self->vars->ssl_ctx);
         h2o_socketpool_set_timeout(&ctx->globalconf->proxy.global_socketpool, self->vars->conf.keepalive_timeout);
     }
@@ -584,6 +603,8 @@ void h2o_proxy_register_configurator(h2o_globalconf_t *conf)
                                     on_config_http2_max_concurrent_streams);
     h2o_configurator_define_command(&c->super, "proxy.http2.ratio",
                                     H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR, on_config_http2_ratio);
+    h2o_configurator_define_command(&c->super, "proxy.http3.ratio",
+                                    H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR, on_config_http3_ratio);
     h2o_configurator_define_command(&c->super, "proxy.forward.close-connection",
                                     H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                     on_config_forward_close_connection);

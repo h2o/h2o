@@ -481,11 +481,12 @@ struct st_h2o_globalconf_t {
             uint32_t max_concurrent_streams;
         } http2;
 
+        /**
+         * See the documentation of `h2o_httpclient_t::protocol_selector.ratio`.
+         */
         struct {
-            /**
-             * See the documentation of `h2o_httpclient_t::protocol_selector::ratio::http2`.
-             */
             int8_t http2;
+            int8_t http3;
         } protocol_ratio;
 
         /**
@@ -2054,6 +2055,7 @@ typedef struct st_h2o_proxy_config_vars_t {
     } http2;
     struct {
         int8_t http2;
+        int8_t http3;
     } protocol_ratio;
 } h2o_proxy_config_vars_t;
 

@@ -106,6 +106,7 @@ void h2o_context_init(h2o_context_t *ctx, h2o_loop_t *loop, h2o_globalconf_t *co
     ctx->proxy.client_ctx.max_buffer_size = ctx->globalconf->proxy.max_buffer_size;
     ctx->proxy.client_ctx.http2.max_concurrent_streams = ctx->globalconf->proxy.http2.max_concurrent_streams;
     ctx->proxy.client_ctx.protocol_selector.ratio.http2 = ctx->globalconf->proxy.protocol_ratio.http2;
+    ctx->proxy.client_ctx.protocol_selector.ratio.http3 = ctx->globalconf->proxy.protocol_ratio.http3;
     ctx->proxy.connpool.socketpool = &ctx->globalconf->proxy.global_socketpool;
     h2o_linklist_init_anchor(&ctx->proxy.connpool.http2.conns);
 
