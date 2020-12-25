@@ -26,6 +26,8 @@ jobs:
             task: ossl1.1.0
           - type: OpenSSL 1.1.1
             task: ossl1.1.1
+          - type: Fuzz
+            task: fuzz
           - type: DTrace
             task: dtrace
             container: h2oserver/h2o-ci:ubuntu2004
