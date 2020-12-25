@@ -39,10 +39,9 @@ jobs:
 
     - name: Run with Docker
       shell: 'script -q -e -c "bash {0}"'
-      env:
-        CONTAINER_NAME: ${{ matrix.container }}
       run: |
         chmod -R ugo+w .
+        export CONTAINER_NAME=${{ matrix.container }}
         make -f misc/docker-ci/check.mk ${{ matrix.task }}
 
   # See https://github.com/google/oss-fuzz/tree/master/projects/h2o for details
