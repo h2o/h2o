@@ -35,6 +35,10 @@ jobs:
       with:
         submodules: recursive
 
+    - name: Setup Problem Matchers
+      run: |
+        echo "::add-matcher::.github/problem-matcher-test-more.json"
+
     - name: Run with Docker
       shell: 'script -q -e -c "bash {0}"'
       env:

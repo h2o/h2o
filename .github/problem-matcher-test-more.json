@@ -1,0 +1,18 @@
+{
+  "problemMatcher": [
+    {
+      "owner": "problem-matcher-test-more",
+      "pattern": [
+        {
+          "regexp": "^\\s*#\\s+(Failed test.*)$",
+          "message": 1
+        },
+        {
+          "regexp": "^\\s*#\\s+at (\\S+) line (\\d+)\\.",
+          "file": 1,
+          "line": 2
+        }
+      ]
+    }
+  ]
+}
