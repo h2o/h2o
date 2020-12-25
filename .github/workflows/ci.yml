@@ -41,8 +41,8 @@ jobs:
       shell: 'script -q -e -c "bash -xe {0}"'
       run: |
         chmod -R ugo+w .
-        if [ -n ${{ matrix.container }} ] ; then
-          export CONTAINER_NAME=${{ matrix.container }}
+        if [ -n "${{ matrix.container }}" ] ; then
+          export CONTAINER_NAME="${{ matrix.container }}"
         fi
         make -f misc/docker-ci/check.mk ${{ matrix.task }}
 
