@@ -30,6 +30,7 @@ dtrace:
 	docker run $(DOCKER_RUN_OPTS) $(CONTAINER_NAME) env DTRACE_TESTS=1 make -f $(SRC_DIR)/misc/docker-ci/check.mk _check
 
 _check:
+	uname -a
 	mkdir -p build
 	sudo mount -t tmpfs tmpfs build -o size=3G
 	sudo chown -R ci:ci build
