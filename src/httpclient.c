@@ -467,7 +467,12 @@ int main(int argc, char **argv)
     }
 #endif
 
-    while ((opt = getopt(argc, argv, "t:m:o:b:C:c:d:H:i:k2:3:W:h")) != -1) {
+    const char *optstring = "t:m:o:b:C:c:d:H:i:k2:W:h3:"
+#ifdef __GNUC__
+                            ":" /* for backward compatibility, optarg of -3 is optional when using glibc */
+#endif
+        ;
+    while ((opt = getopt(argc, argv, optstring)) != -1) {
         switch (opt) {
         case 't':
             if (sscanf(optarg, "%u", &cnt_left) != 1 || cnt_left < 1) {
@@ -541,8 +546,19 @@ int main(int argc, char **argv)
             fprintf(stderr, "HTTP/3 is currently not supported by the libuv backend.\n");
             exit(EXIT_FAILURE);
 #else
-            if (sscanf(optarg, "%" SCNd8, &ctx.protocol_selector.ratio.http3) != 1 ||
-                !(0 <= ctx.protocol_selector.ratio.http3 && ctx.protocol_selector.ratio.http3 <= 100)) {
+            if (optarg == NULL) {
+                /* parse the optional argument (glibc extension; see above) */
+                if (optind < argc && ('0' <= argv[optind][0] && argv[optind][0] <= '9') &&
+                    sscanf(argv[optind], "%" SCNd8, &ctx.protocol_selector.ratio.http3) == 1) {
+                    ++optind;
+                } else {
+                    ctx.protocol_selector.ratio.http3 = 100;
+                }
+            } else {
+                if (sscanf(optarg, "%" SCNd8, &ctx.protocol_selector.ratio.http3) != 1)
+                    ctx.protocol_selector.ratio.http3 = -1;
+            }
+            if (!(0 <= ctx.protocol_selector.ratio.http3 && ctx.protocol_selector.ratio.http3 <= 100)) {
                 fprintf(stderr, "failed to parse HTTP/3 ratio (-3)\n");
                 exit(EXIT_FAILURE);
             }
