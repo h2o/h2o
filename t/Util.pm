@@ -451,6 +451,17 @@ sub spawn_forked {
 
 sub spawn_h2_server {
     my ($upstream_port, $stream_state_cbs, $stream_frame_cbs) = @_;
+
+    my $upstream = IO::Socket::SSL->new(
+        LocalAddr => '127.0.0.1',
+        LocalPort => $upstream_port,
+        Listen => 1,
+        ReuseAddr => 1,
+        SSL_cert_file => 'examples/h2o/server.crt',
+        SSL_key_file => 'examples/h2o/server.key',
+        SSL_alpn_protocols => ['h2'],
+    ) or die "cannot create socket: $!";
+
     my $server = spawn_forked(sub {
         my $conn; $conn = Protocol::HTTP2::Connection->new(Protocol::HTTP2::Constants::SERVER,
             on_new_peer_stream => sub {
@@ -471,15 +482,6 @@ sub spawn_h2_server {
         );
         $conn->{_state} = +{};
         $conn->enqueue(Protocol::HTTP2::Constants::SETTINGS, 0, 0, +{});
-        my $upstream = IO::Socket::SSL->new(
-            LocalAddr => '127.0.0.1',
-            LocalPort => $upstream_port,
-            Listen => 1,
-            ReuseAddr => 1,
-            SSL_cert_file => 'examples/h2o/server.crt',
-            SSL_key_file => 'examples/h2o/server.key',
-            SSL_alpn_protocols => ['h2'],
-        ) or die "cannot create socket: $!";
         my $sock = $upstream->accept or die "cannot accept socket: $!";
 
         my $input = '';
@@ -518,6 +520,8 @@ sub spawn_h2_server {
             }
         }
     });
+
+    close $upstream;
     return $server;
 }
 
