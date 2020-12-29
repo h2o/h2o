@@ -1336,7 +1336,12 @@ static void notify_all_threads(void)
 
 static int num_connections(int delta)
 {
-    return __sync_fetch_and_add(&conf.state._num_connections, delta);
+    int prev = __sync_fetch_and_add(&conf.state._num_connections, delta);
+    if (delta < 0 && prev == conf.max_connections) {
+        /* ready to accept new connections. wake up all the threads! */
+        notify_all_threads();
+    }
+    return prev;
 }
 
 static int num_quic_connections(int delta)
@@ -1349,19 +1354,9 @@ static unsigned long num_sessions(int delta)
     return __sync_fetch_and_add(&conf.state._num_sessions, delta);
 }
 
-static void on_connection_close(void)
-{
-    int prev_num_connections = num_connections(-1);
-
-    if (prev_num_connections == conf.max_connections) {
-        /* ready to accept new connections. wake up all the threads! */
-        notify_all_threads();
-    }
-}
-
 static void on_http3_conn_destroy(h2o_quic_conn_t *conn)
 {
-    on_connection_close();
+    num_connections(-1);
     num_quic_connections(-1);
 
     H2O_HTTP3_CONN_CALLBACKS.super.destroy_connection(conn);
@@ -2333,7 +2328,7 @@ static void forwarded_quic_socket_on_read(h2o_socket_t *sock, const char *err)
 
 static void on_socketclose(void *data)
 {
-    on_connection_close();
+    num_connections(-1);
 }
 
 static void on_accept(h2o_socket_t *listener, const char *err)
