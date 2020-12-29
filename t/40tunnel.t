@@ -116,6 +116,7 @@ subtest "connect" => sub {
         LocalPort => $upstream_port,
         Proto     => "tcp",
         Listen    => 5,
+        ReuseAddr => 1,
     ) or die "failed to listen to port:$!";
     # fork
     my $pid = fork;
