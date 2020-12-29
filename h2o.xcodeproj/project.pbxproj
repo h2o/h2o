@@ -774,7 +774,7 @@
 		1065E70419BF145700686E72 /* evloop.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = evloop.h; sourceTree = "<group>"; };
 		1065E70619BF14E500686E72 /* uv-binding.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "uv-binding.h"; sourceTree = "<group>"; };
 		1065E70719BF17FE00686E72 /* uv-binding.c.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = "uv-binding.c.h"; sourceTree = "<group>"; };
-		106C22FB1C0413DA00405689 /* 40websocket.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = 40websocket.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		106C22FB1C0413DA00405689 /* 40tunnel.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = 40tunnel.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		106C22FE1C05436100405689 /* errordoc.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = errordoc.c; sourceTree = "<group>"; };
 		106C23001C0544CE00405689 /* errordoc.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = errordoc.c; sourceTree = "<group>"; };
 		106C23021C06AB2F00405689 /* 50errordoc.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = 50errordoc.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
@@ -2104,9 +2104,9 @@
 				107D4D501B58B342004A9B21 /* 40session-ticket.t */,
 				104B9A321A59E27A009EEE64 /* 40ssl-cipher-suite.t */,
 				E9F677D82008686B006476D3 /* 40tls13-early-data.t */,
+				106C22FB1C0413DA00405689 /* 40tunnel.t */,
 				104B9A221A47BBA1009EEE64 /* 40unix-socket.t */,
 				10AA2EB31A94B66D004322AC /* 40virtual-host.t */,
-				106C22FB1C0413DA00405689 /* 40websocket.t */,
 				10AA2EB11A931409004322AC /* 50access-log.t */,
 				109EEFD91D77B336001F11D1 /* 50chunked-encoding-proxying.t */,
 				107086741B79A08D002B8F18 /* 50compress.t */,
