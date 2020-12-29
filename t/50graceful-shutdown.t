@@ -20,7 +20,7 @@ hosts:
         - file.dir: @{[ DOC_ROOT ]}
 EOT
     unless (fork) {
-        Time::HiRes::sleep(0.5);
+        Time::HiRes::sleep(1.5);
         kill 'TERM', $server->{pid};
         exit;
     }
@@ -33,7 +33,7 @@ EOT
         ":path" => "/",
     }
     h2g.send_headers(req, 1, END_HEADERS)
-    sleep 1
+    sleep 2
     h2g.send_data(1, END_STREAM, '')
 
     loop do
@@ -67,7 +67,7 @@ hosts:
         - file.dir: @{[ DOC_ROOT ]}
 EOT
     unless (fork) {
-        Time::HiRes::sleep(0.5);
+        Time::HiRes::sleep(1.5);
         kill 'TERM', $server->{pid};
         exit;
     }
@@ -80,7 +80,7 @@ EOT
         ":path" => "/",
     }
     h2g.send_headers(req, 1, END_HEADERS)
-    sleep 2
+    sleep 3
     h2g.send_data(1, END_STREAM, '')
 
     loop do
