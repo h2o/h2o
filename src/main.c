@@ -2417,10 +2417,13 @@ static h2o_quic_conn_t *on_http3_accept(h2o_quic_ctx_t *_ctx, quicly_address_t *
                                         quicly_decoded_packet_t *packet)
 {
     /* adjust number of connections, or drop the incoming packet when handling too many connections */
-    if (num_connections(1) >= conf.max_connections)
+    if (num_connections(1) >= conf.max_connections) {
+        num_connections(-1);
         return NULL;
+    }
     if (num_quic_connections(1) >= conf.max_quic_connections) {
         num_connections(-1);
+        num_quic_connections(-1);
         return NULL;
     }
 
