@@ -1334,19 +1334,53 @@ static void notify_all_threads(void)
         h2o_multithread_send_message(&conf.threads[i].server_notifications, NULL);
 }
 
-static int num_connections(int delta)
+static int num_connections(void)
 {
-    int prev = __sync_fetch_and_add(&conf.state._num_connections, delta);
-    if (delta < 0 && prev == conf.max_connections) {
+    return __sync_add_and_fetch(&conf.state._num_connections, 0);
+}
+
+static void decrement_num_connections(void)
+{
+    if (__sync_add_and_fetch(&conf.state._num_connections, -1) < conf.max_connections) {
         /* ready to accept new connections. wake up all the threads! */
         notify_all_threads();
     }
-    return prev;
 }
 
-static int num_quic_connections(int delta)
+/**
+ * increments the counter, and returns if a new connection can be accepted
+ */
+static int increment_num_connections(void)
 {
-    return __sync_fetch_and_add(&conf.state._num_quic_connections, delta);
+    int newval = __sync_add_and_fetch(&conf.state._num_connections, 1);
+    if (newval <= conf.max_connections)
+        return 1;
+    decrement_num_connections();
+    return 0;
+}
+
+static int num_quic_connections(void)
+{
+    return __sync_add_and_fetch(&conf.state._num_quic_connections, 0);
+}
+
+static void decrement_num_quic_connections(void)
+{
+    __sync_sub_and_fetch(&conf.state._num_quic_connections, -1);
+    decrement_num_connections();
+}
+
+/**
+ * increments the counter, and returns if a new connection can be accepted
+ */
+static int increment_num_quic_connections(void)
+{
+    if (__sync_add_and_fetch(&conf.state._num_quic_connections, 1) > conf.max_quic_connections || !increment_num_connections()) {
+        /* fail */
+        __sync_add_and_fetch(&conf.state._num_connections, -1);
+        return 0;
+    }
+    return 1;
 }
 
 static unsigned long num_sessions(int delta)
@@ -1356,9 +1390,7 @@ static unsigned long num_sessions(int delta)
 
 static void on_http3_conn_destroy(h2o_quic_conn_t *conn)
 {
-    num_connections(-1);
-    num_quic_connections(-1);
-
+    decrement_num_quic_connections();
     H2O_HTTP3_CONN_CALLBACKS.super.destroy_connection(conn);
 }
 
@@ -2328,7 +2360,7 @@ static void forwarded_quic_socket_on_read(h2o_socket_t *sock, const char *err)
 
 static void on_socketclose(void *data)
 {
-    num_connections(-1);
+    decrement_num_connections();
 }
 
 static void on_accept(h2o_socket_t *listener, const char *err)
@@ -2344,17 +2376,10 @@ static void on_accept(h2o_socket_t *listener, const char *err)
 
     do {
         h2o_socket_t *sock;
-        if (num_connections(1) >= conf.max_connections) {
-            /* The accepting socket is disactivated before entering the next in `run_loop`.
-             * Note: it is possible that the server would accept at most `max_connections + num_threads` connections, since the
-             * server does not check if the number of connections has exceeded _after_ epoll notifies of a new connection _but_
-             * _before_ calling `accept`.  In other words t/40max-connections.t may fail.
-             */
-            num_connections(-1);
+        if (!increment_num_connections())
             break;
-        }
         if ((sock = h2o_evloop_socket_accept(listener)) == NULL) {
-            num_connections(-1);
+            decrement_num_connections();
             break;
         }
         num_sessions(1);
@@ -2413,15 +2438,8 @@ static h2o_quic_conn_t *on_http3_accept(h2o_quic_ctx_t *_ctx, quicly_address_t *
                                         quicly_decoded_packet_t *packet)
 {
     /* adjust number of connections, or drop the incoming packet when handling too many connections */
-    if (num_connections(1) >= conf.max_connections) {
-        num_connections(-1);
+    if (!increment_num_quic_connections())
         return NULL;
-    }
-    if (num_quic_connections(1) >= conf.max_quic_connections) {
-        num_connections(-1);
-        num_quic_connections(-1);
-        return NULL;
-    }
 
     h2o_http3_server_ctx_t *ctx = (void *)_ctx;
     struct init_ebpf_key_info_t ebpf_keyinfo = {&destaddr->sa, &srcaddr->sa};
@@ -2499,8 +2517,7 @@ static h2o_quic_conn_t *on_http3_accept(h2o_quic_ctx_t *_ctx, quicly_address_t *
 Exit:
     if (conn == NULL) {
         /* revert the changes to the connection counts */
-        num_connections(-1);
-        num_quic_connections(-1);
+        decrement_num_quic_connections();
     }
     return &conn->super;
 }
@@ -2509,7 +2526,7 @@ static void update_listener_state(struct listener_ctx_t *listeners)
 {
     size_t i;
 
-    if (num_connections(0) < conf.max_connections) {
+    if (num_connections() < conf.max_connections) {
         for (i = 0; i != conf.num_listeners; ++i) {
             if (conf.listeners[i]->quic.ctx == NULL && !h2o_socket_is_reading(listeners[i].sock))
                 h2o_socket_read_start(listeners[i].sock, on_accept);
@@ -2680,7 +2697,7 @@ static void *run_loop(void *_thread_index)
     h2o_context_request_shutdown(&conf.threads[thread_index].ctx);
 
     /* wait until all the connection gets closed */
-    while (num_connections(0) != 0)
+    while (num_connections() != 0)
         h2o_evloop_run(conf.threads[thread_index].ctx.loop, INT32_MAX);
 
     return NULL;
@@ -2855,7 +2872,7 @@ static h2o_iovec_t on_extra_status(void *unused, h2o_globalconf_t *_conf, h2o_re
                        " \"worker-threads\": %zu,\n"
                        " \"num-sessions\": %lu",
                        OpenSSL_version(OPENSSL_VERSION), current_time, restart_time, (uint64_t)(now - conf.launch_time), generation,
-                       num_connections(0), conf.max_connections, conf.num_listeners, conf.thread_map.size, num_sessions(0));
+                       num_connections(), conf.max_connections, conf.num_listeners, conf.thread_map.size, num_sessions(0));
     assert(ret.len < BUFSIZE);
 
 #if JEMALLOC_STATS == 1
