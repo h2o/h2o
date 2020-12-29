@@ -2349,7 +2349,7 @@ static void on_accept(h2o_socket_t *listener, const char *err)
 
     do {
         h2o_socket_t *sock;
-        if (num_connections(1) > conf.max_connections) {
+        if (num_connections(1) >= conf.max_connections) {
             /* The accepting socket is disactivated before entering the next in `run_loop`.
              * Note: it is possible that the server would accept at most `max_connections + num_threads` connections, since the
              * server does not check if the number of connections has exceeded _after_ epoll notifies of a new connection _but_
@@ -2417,9 +2417,9 @@ static h2o_quic_conn_t *on_http3_accept(h2o_quic_ctx_t *_ctx, quicly_address_t *
                                         quicly_decoded_packet_t *packet)
 {
     /* adjust number of connections, or drop the incoming packet when handling too many connections */
-    if (num_connections(1) > conf.max_connections)
+    if (num_connections(1) >= conf.max_connections)
         return NULL;
-    if (num_quic_connections(1) > conf.max_quic_connections) {
+    if (num_quic_connections(1) >= conf.max_quic_connections) {
         num_connections(-1);
         return NULL;
     }
