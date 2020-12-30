@@ -1,67 +1,60 @@
 #include "../../../test.h"
 #include "../../../../../lib/common/balancer/least_conn.c"
 
-static h2o_socketpool_target_vector_t gen_targets(size_t size)
+static h2o_balancer_backend_t *gen_backends(size_t size)
 {
     size_t i;
-    h2o_socketpool_target_vector_t targets = {NULL};
+    h2o_balancer_backend_t *backends = h2o_mem_alloc(size * sizeof(*backends));
 
-    h2o_vector_reserve(NULL, &targets, size);
     for (i = 0; i < size; i++) {
-        h2o_socketpool_target_t *target = h2o_mem_alloc(sizeof(*target));
-        target->_shared.leased_count = 0;
-        target->conf.weight_m1 = 0;
-        targets.entries[i] = target;
+        backends[i].conn_count = 0;
+        backends[i].weight_m1 = 0;
     }
-    targets.size = size;
 
-    return targets;
+    return backends;
 }
 
-static void free_targets(h2o_socketpool_target_vector_t *targets)
+static void free_backends(h2o_balancer_backend_t *backends)
 {
-    size_t i;
-
-    for (i = 0; i < targets->size; i++) {
-        free(targets->entries[i]);
-    }
-
-    free(targets->entries);
+    free(backends);
 }
 
 static void test_when_backend_down(void)
 {
-    h2o_socketpool_target_vector_t targets = gen_targets(10);
+    h2o_balancer_backend_t *real_backends = gen_backends(10);
+    h2o_balancer_backend_t **backends = alloca(10 * sizeof(*backends));
     char tried[10] = {0};
     size_t i;
     size_t selected;
     h2o_balancer_t *balancer;
 
+    for (i = 0; i < 10; i++)
+        backends[i] = &real_backends[i];
     balancer = h2o_balancer_create_lc();
 
     for (i = 0; i < 10; i++) {
-        selected = selector(balancer, &targets, tried);
+        selected = selector(balancer, backends, 10, tried);
         ok(selected >= 0 && selected < 10);
         ok(!tried[selected]);
         tried[selected] = 1;
     }
 
-    free_targets(&targets);
+    free_backends(real_backends);
     destroy(balancer);
 }
 
-static int check_if_acceptable(h2o_socketpool_target_vector_t *targets, size_t selected)
+static int check_if_acceptable(h2o_balancer_backend_t *backends, size_t backends_len, size_t selected)
 {
     double conn_weight_quotient;
     size_t i;
-    double selected_conn_weight_quotient = targets->entries[selected]->_shared.leased_count;
-    selected_conn_weight_quotient /= ((int)targets->entries[selected]->conf.weight_m1) + 1;
+    double selected_conn_weight_quotient = backends[selected].conn_count;
+    selected_conn_weight_quotient /= ((int)backends[selected].weight_m1) + 1;
 
-    for (i = 0; i < targets->size; i++) {
+    for (i = 0; i < backends_len; i++) {
         if (i == selected)
             continue;
-        conn_weight_quotient = targets->entries[i]->_shared.leased_count;
-        conn_weight_quotient /= ((unsigned)targets->entries[i]->conf.weight_m1) + 1;
+        conn_weight_quotient = backends[i].conn_count;
+        conn_weight_quotient /= ((unsigned)backends[i].weight_m1) + 1;
         if (conn_weight_quotient < selected_conn_weight_quotient) {
             return -1;
         }
@@ -72,64 +65,70 @@ static int check_if_acceptable(h2o_socketpool_target_vector_t *targets, size_t s
 
 static void test_least_conn(void)
 {
-    h2o_socketpool_target_vector_t targets = gen_targets(10);
+    h2o_balancer_backend_t *real_backends = gen_backends(10);
+    h2o_balancer_backend_t **backends = alloca(10 * sizeof(*backends));
     size_t i, selected;
     char tried[10] = {0};
     int check_result = 1;
     h2o_balancer_t *balancer;
 
+    for (i = 0; i < 10; i++)
+        backends[i] = &real_backends[i];
     balancer = h2o_balancer_create_lc();
 
     for (i = 0; i < 10000; i++) {
-        selected = selector(balancer, &targets, tried);
+        selected = selector(balancer, backends, 10, tried);
         if (selected > 10) {
-            ok(selected >= 0 && selected < targets.size);
+            ok(selected >= 0 && selected < 10);
             goto Done;
         }
-        check_result = check_if_acceptable(&targets, selected);
+        check_result = check_if_acceptable(real_backends, 10, selected);
         if (check_result == -1) {
             ok(!check_result);
             goto Done;
         }
-        targets.entries[selected]->_shared.leased_count++;
+        real_backends[selected].conn_count++;
     }
     ok(!check_result);
 
 Done:
-    free_targets(&targets);
+    free_backends(real_backends);
     destroy(balancer);
 }
 
 static void test_least_conn_weighted(void)
 {
-    h2o_socketpool_target_vector_t targets = gen_targets(10);
+    h2o_balancer_backend_t *real_backends = gen_backends(10);
+    h2o_balancer_backend_t **backends = alloca(10 * sizeof(*backends));
     size_t i, selected;
     char tried[10] = {0};
     int check_result = 1;
     h2o_balancer_t *balancer;
 
+    for (i = 0; i < 10; i++)
+        backends[i] = &real_backends[i];
     balancer = h2o_balancer_create_lc();
 
     for (i = 0; i < 10; i++)
-        targets.entries[i]->conf.weight_m1 = i % 3;
+        real_backends[i].weight_m1 = i % 3;
 
     for (i = 0; i < 10000; i++) {
-        selected = selector(balancer, &targets, tried);
+        selected = selector(balancer, backends, 10, tried);
         if (selected > 10) {
-            ok(selected >= 0 && selected < targets.size);
+            ok(selected >= 0 && selected < 10);
             goto Done;
         }
-        check_result = check_if_acceptable(&targets, selected);
+        check_result = check_if_acceptable(real_backends, 10, selected);
         if (check_result == -1) {
             ok(!check_result);
             goto Done;
         }
-        targets.entries[selected]->_shared.leased_count++;
+        real_backends[selected].conn_count++;
     }
     ok(!check_result);
 
 Done:
-    free_targets(&targets);
+    free_backends(real_backends);
     destroy(balancer);
 }
 

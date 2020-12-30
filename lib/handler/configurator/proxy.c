@@ -263,7 +263,7 @@ static int on_config_ssl_session_cache(h2o_configurator_command_t *cmd, h2o_conf
 static h2o_socketpool_target_t *parse_backend(h2o_configurator_command_t *cmd, yoml_t *backend)
 {
     yoml_t **url_node;
-    h2o_socketpool_target_conf_t lb_per_target_conf = {0}; /* default weight of each target */
+    h2o_balancer_backend_t lb_target_conf = {0}; /* default weight of each target */
 
     switch (backend->type) {
     case YOML_TYPE_SCALAR:
@@ -281,7 +281,7 @@ static h2o_socketpool_target_t *parse_backend(h2o_configurator_command_t *cmd, y
                 h2o_configurator_errprintf(cmd, *weight_node, "weight must be an integer in range 1 - 256");
                 return NULL;
             }
-            lb_per_target_conf.weight_m1 = weight - 1;
+            lb_target_conf.weight_m1 = weight - 1;
         }
     } break;
     default:
@@ -295,7 +295,7 @@ static h2o_socketpool_target_t *parse_backend(h2o_configurator_command_t *cmd, y
         h2o_configurator_errprintf(cmd, *url_node, "failed to parse URL: %s\n", (*url_node)->data.scalar);
         return NULL;
     }
-    return h2o_socketpool_create_target(&url, &lb_per_target_conf);
+    return h2o_socketpool_create_target(&url, &lb_target_conf);
 }
 
 static int on_config_reverse_url(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
