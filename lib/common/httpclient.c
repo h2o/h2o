@@ -163,12 +163,11 @@ static size_t select_protocol(struct st_h2o_httpclient_protocol_selector_t *sele
     /* update the deficits */
     if (selector->ratio.http2 < 0) {
         selector->_deficits[PROTOCOL_SELECTOR_SERVER_DRIVEN] += 100 - selector->ratio.http3;
-        selector->_deficits[PROTOCOL_SELECTOR_H3] += selector->ratio.http3;
     } else {
         selector->_deficits[PROTOCOL_SELECTOR_H1] += 100 - selector->ratio.http2 - selector->ratio.http3;
         selector->_deficits[PROTOCOL_SELECTOR_H2] += selector->ratio.http2;
-        selector->_deficits[PROTOCOL_SELECTOR_H3] += selector->ratio.http3;
     }
+    selector->_deficits[PROTOCOL_SELECTOR_H3] += selector->ratio.http3;
 
     /* select one with the highest value */
     size_t result = 0;
