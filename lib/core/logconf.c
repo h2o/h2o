@@ -877,6 +877,7 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
                 RESERVE_APPEND_SAFE_STRING(pos, req->proxy_stats.ssl.cipher);
             } else {
                 RESERVE(0);
+            }
             break;
 
         case ELEMENT_TYPE_PROTOCOL_SPECIFIC: {
