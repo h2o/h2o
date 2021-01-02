@@ -848,22 +848,37 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
             RESERVE(sizeof(H2O_UINT64_LONGEST_STR) - 1);
             pos += sprintf(pos, "%" PRIu64, req->proxy_stats.bytes_read.body);
             break;
+
         case ELEMENT_TYPE_PROXY_SSL_SESSION_REUSED:
             RESERVE(1);
-            *pos++ = (req->proxy_stats.ssl.session_reused) ? '1' : '0';
+            if (req->proxy_stats.ssl.session_reused >= 0)
+                *pos++ = req->proxy_stats.ssl.session_reused ? '1' : '0';
             break;
+
         case ELEMENT_TYPE_PROXY_SSL_CIPHER_BITS:
-            if (req->proxy_stats.ssl.cipher_bits == 0)
-                goto EmitNull;
-            RESERVE(sizeof(H2O_INT16_LONGEST_STR));
-            pos += sprintf(pos, "%" PRIu16, (uint16_t)req->proxy_stats.ssl.cipher_bits);
+            if (req->proxy_stats.ssl.cipher_bits != 0) {
+                RESERVE(sizeof(H2O_INT16_LONGEST_STR));
+                pos += sprintf(pos, "%" PRIu16, (uint16_t)req->proxy_stats.ssl.cipher_bits);
+            } else {
+                RESERVE(0);
+            }
             break;
+
         case ELEMENT_TYPE_PROXY_SSL_PROTOCOL_VERSION:
-            RESERVE_APPEND_SAFE_STRING(pos, req->proxy_stats.ssl.protocol_version);
+            if (req->proxy_stats.ssl.protocol_version != NULL) {
+                RESERVE_APPEND_SAFE_STRING(pos, req->proxy_stats.ssl.protocol_version);
+            } else {
+                RESERVE(0);
+            }
             break;
+
         case ELEMENT_TYPE_PROXY_SSL_CIPHER:
-            RESERVE_APPEND_SAFE_STRING(pos, req->proxy_stats.ssl.cipher);
+            if (req->proxy_stats.ssl.cipher != NULL) {
+                RESERVE_APPEND_SAFE_STRING(pos, req->proxy_stats.ssl.cipher);
+            } else {
+                RESERVE(0);
             break;
+
         case ELEMENT_TYPE_PROTOCOL_SPECIFIC: {
             h2o_iovec_t (*cb)(h2o_req_t *) = req->conn->callbacks->log_.callbacks[element->data.protocol_specific_callback_index];
             if (cb == NULL)
