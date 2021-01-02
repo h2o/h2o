@@ -163,6 +163,17 @@ typedef struct st_h2o_httpclient_timings_t {
     struct timeval response_end_at;
 } h2o_httpclient_timings_t;
 
+/**
+ * TLS properties of a HTTP client connection. Definitions of the member variables match that returned by corresponding h2o_socket
+ * function: `h2o_socket_ssl_*`.
+ */
+typedef struct st_h2o_httpclient_ssl_properties_t {
+    const char *protocol_version;
+    int session_reused;
+    const char *cipher;
+    int cipher_bits;
+} h2o_httpclient_ssl_properties_t;
+
 struct st_h2o_httpclient_t {
     /**
      * memory pool
@@ -222,7 +233,7 @@ struct st_h2o_httpclient_t {
     /**
      * returns a pointer to the underlying h2o_socket_t
      */
-    h2o_socket_t *(*get_socket)(h2o_httpclient_t *client);
+    void (*get_ssl_properties)(h2o_httpclient_t *client, h2o_httpclient_ssl_properties_t *properties);
     /**
      * callback that should be called when some data is fetched out from `buf`.
      */
@@ -319,6 +330,8 @@ extern const size_t h2o_httpclient__h1_size;
 void h2o_httpclient__h2_on_connect(h2o_httpclient_t *client, h2o_socket_t *sock, h2o_url_t *origin);
 uint32_t h2o_httpclient__h2_get_max_concurrent_streams(h2o_httpclient__h2_conn_t *conn);
 extern const size_t h2o_httpclient__h2_size;
+
+void h2o_httpclient_set_ssl_properties_of_socket(h2o_socket_t *sock, h2o_httpclient_ssl_properties_t *properties);
 
 #ifdef quicly_h /* create http3client.h? */
 

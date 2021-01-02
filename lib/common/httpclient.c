@@ -89,10 +89,6 @@ static h2o_httpclient_t *create_client(h2o_httpclient_t **_client, h2o_mem_pool_
     client->data = data;
     client->connpool = connpool;
     client->cancel = do_cancel;
-    client->steal_socket = NULL;
-    client->get_socket = NULL;
-    client->update_window = NULL;
-    client->write_req = NULL;
     client->_cb.on_connect = on_connect;
     client->_timeout.cb = on_connect_timeout;
     client->timings.start_at = h2o_gettimeofday(ctx->loop);
@@ -269,4 +265,12 @@ void h2o_httpclient_connect(h2o_httpclient_t **_client, h2o_mem_pool_t *pool, vo
         }
     } break;
     }
+}
+
+void h2o_httpclient_set_ssl_properties_of_socket(h2o_socket_t *sock, h2o_httpclient_ssl_properties_t *properties)
+{
+    properties->protocol_version = h2o_socket_get_ssl_protocol_version(sock);
+    properties->session_reused = h2o_socket_get_ssl_session_reused(sock);
+    properties->cipher = h2o_socket_get_ssl_cipher(sock);
+    properties->cipher_bits = h2o_socket_get_ssl_cipher_bits(sock);
 }

@@ -660,6 +660,25 @@ static void cancel_request(h2o_httpclient_t *_client)
     destroy_request(req);
 }
 
+static void do_get_ssl_properties(h2o_httpclient_t *_client, h2o_httpclient_ssl_properties_t *properties)
+{
+    struct st_h2o_http3client_req_t *req = (void *)_client;
+    ptls_t *tls;
+    ptls_cipher_suite_t *cipher;
+
+    if (req->quic != NULL && (tls = quicly_get_tls(req->quic->conn), (cipher = ptls_get_cipher(tls)) != NULL)) {
+        properties->protocol_version = "TLSv1.3";
+        properties->session_reused = ptls_is_psk_handshake(tls);
+        properties->cipher = cipher->aead->name;
+        properties->cipher_bits = (int)cipher->aead->key_size;
+    } else {
+        properties->protocol_version = NULL;
+        properties->session_reused = -1;
+        properties->cipher = NULL;
+        properties->cipher_bits = 0;
+    }
+}
+
 static void do_update_window(h2o_httpclient_t *_client)
 {
     /* TODO Stop receiving data for the stream when `buf` grows to certain extent. Then, resume when this function is being called.
@@ -708,7 +727,7 @@ void h2o_httpclient__connect_h3(h2o_httpclient_t **_client, h2o_mem_pool_t *pool
                                               {0},
                                               cancel_request,
                                               NULL /* steal_socket */,
-                                              NULL /* get_socket */,
+                                              do_get_ssl_properties,
                                               do_update_window,
                                               do_write_req},
                                              conn};

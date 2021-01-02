@@ -768,10 +768,10 @@ static h2o_socket_t *do_steal_socket(h2o_httpclient_t *_client)
     return sock;
 }
 
-static h2o_socket_t *do_get_socket(h2o_httpclient_t *_client)
+static void do_get_ssl_properties(h2o_httpclient_t *_client, h2o_httpclient_ssl_properties_t *properties)
 {
     struct st_h2o_http1client_t *client = (void *)_client;
-    return client->sock;
+    h2o_httpclient_set_ssl_properties_of_socket(client->sock, properties);
 }
 
 static void setup_client(struct st_h2o_http1client_t *client, h2o_socket_t *sock, h2o_url_t *origin)
@@ -779,7 +779,7 @@ static void setup_client(struct st_h2o_http1client_t *client, h2o_socket_t *sock
     memset(&client->sock, 0, sizeof(*client) - offsetof(struct st_h2o_http1client_t, sock));
     client->super.cancel = do_cancel;
     client->super.steal_socket = do_steal_socket;
-    client->super.get_socket = do_get_socket;
+    client->super.get_ssl_properties = do_get_ssl_properties;
     client->super.update_window = do_update_window;
     client->super.write_req = do_write_req;
     client->super.buf = &sock->input;
