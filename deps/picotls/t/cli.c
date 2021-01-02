@@ -136,6 +136,7 @@ static int handle_connection(int sockfd, ptls_context_t *ctx, const char *server
             size_t off = 0, leftlen;
             while ((ioret = read(sockfd, bytebuf, sizeof(bytebuf))) == -1 && errno == EINTR)
                 ;
+fprintf(stderr, "****read-sock:%zu,%s\n", ioret, strerror(errno));
             if (ioret == -1 && (errno == EWOULDBLOCK || errno == EAGAIN)) {
                 /* no data */
                 ioret = 0;
@@ -164,8 +165,10 @@ static int handle_connection(int sockfd, ptls_context_t *ctx, const char *server
                     if ((ret = ptls_receive(tls, &rbuf, bytebuf + off, &leftlen)) == 0) {
                         if (rbuf.off != 0) {
                             data_received += rbuf.off;
-                            if (input_file != input_file_is_benchmark)
+                            if (input_file != input_file_is_benchmark) {
                                 write(1, rbuf.base, rbuf.off);
+fprintf(stderr, "****write-stdout:%zu\n", rbuf.off);
+}
                             rbuf.off = 0;
                         }
                     } else if (ret == PTLS_ERROR_IN_PROGRESS) {
@@ -183,10 +186,13 @@ static int handle_connection(int sockfd, ptls_context_t *ctx, const char *server
         if (encbuf.off == 0 || state == IN_HANDSHAKE) {
             static const size_t block_size = 16384;
             if (inputfd >= 0 && (FD_ISSET(inputfd, &readfds) || FD_ISSET(inputfd, &exceptfds))) {
-                if ((ret = ptls_buffer_reserve(&ptbuf, block_size)) != 0)
+                if ((ret = ptls_buffer_reserve(&ptbuf, block_size)) != 0) {
+fprintf(stderr, "****line %d!!!!\n", __LINE__);
                     goto Exit;
+                }
                 while ((ioret = read(inputfd, ptbuf.base + ptbuf.off, block_size)) == -1 && errno == EINTR)
                     ;
+fprintf(stderr, "****read-stdin:%zu,%s\n", ioret, strerror(errno));
                 if (ioret > 0) {
                     ptbuf.off += ioret;
                 } else if (ioret == 0) {
@@ -197,8 +203,10 @@ static int handle_connection(int sockfd, ptls_context_t *ctx, const char *server
                 }
             } else if (inputfd == inputfd_is_benchmark) {
                 if (ptbuf.capacity < block_size) {
-                    if ((ret = ptls_buffer_reserve(&ptbuf, block_size - ptbuf.capacity)) != 0)
+                    if ((ret = ptls_buffer_reserve(&ptbuf, block_size - ptbuf.capacity)) != 0) {
+fprintf(stderr, "****line %d!!!!\n", __LINE__);
                         goto Exit;
+}
                     memset(ptbuf.base + ptbuf.capacity, 0, block_size - ptbuf.capacity);
                 }
                 ptbuf.off = block_size;
@@ -233,9 +241,11 @@ static int handle_connection(int sockfd, ptls_context_t *ctx, const char *server
         if (encbuf.off != 0) {
             while ((ioret = write(sockfd, encbuf.base, encbuf.off)) == -1 && errno == EINTR)
                 ;
+fprintf(stderr, "****write-sock:%zu,%s\n", ioret, strerror(errno));
             if (ioret == -1 && (errno == EWOULDBLOCK || errno == EAGAIN)) {
                 /* no data */
             } else if (ioret <= 0) {
+fprintf(stderr, "****line %d!!!!\n", __LINE__);
                 goto Exit;
             } else {
                 shift_buffer(&encbuf, ioret);
@@ -260,7 +270,9 @@ static int handle_connection(int sockfd, ptls_context_t *ctx, const char *server
         }
     }
 
+fprintf(stderr, "****line %d!!!!\n", __LINE__);
 Exit:
+    fprintf(stderr, "****Exit!!!!\n");
     if (input_file == input_file_is_benchmark) {
         double elapsed = (ctx->get_time->cb(ctx->get_time) - start_at) / 1000.0;
         ptls_cipher_suite_t *cipher_suite = ptls_get_cipher(tls);
