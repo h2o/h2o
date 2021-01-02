@@ -742,6 +742,7 @@ static struct rp_generator_t *proxy_send_prepare(h2o_req_t *req)
     self->last_content_before_send = NULL;
     h2o_doublebuffer_init(&self->sending, &h2o_socket_buffer_prototype);
     memset(&req->proxy_stats, 0, sizeof(req->proxy_stats));
+    req->proxy_stats.ssl.session_reused = -1; /* the default of this ternary variable is -1 indicating that TLS is not used */
     h2o_timer_init(&self->send_headers_timeout, on_send_headers_timeout);
     self->req_done = 0;
     self->res_done = 0;
