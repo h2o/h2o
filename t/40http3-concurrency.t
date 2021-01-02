@@ -41,7 +41,7 @@ EOT
 # send 3 requests to /suspend-body, check that all the header fields are received before the content
 sub fetch3 {
     my $opts = shift;
-    open my $client_fh, "-|", "$client_prog -3 -C 3 -t 3 $opts https://127.0.0.1:$quic_port/suspend-body 2>&1"
+    open my $client_fh, "-|", "$client_prog -3 100 -C 3 -t 3 $opts https://127.0.0.1:$quic_port/suspend-body 2>&1"
         or die "failed to spawn $client_prog:$!";
     local $/;
     join "", <$client_fh>;
