@@ -24,6 +24,7 @@
 
 import re
 import sys
+import warnings
 from collections import OrderedDict
 from pathlib import Path
 from pprint import pprint
@@ -457,20 +458,27 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
       event_t_name = "%s.%s" % (probe_name, field_name)
       if fully_specified_probe_name == "quicly:receive" and field_name == "bytes":
         handle_event_func += '    json_write_pair_c(out_, STR_LIT("first-octet"), event->receive.bytes[0]);\n'
-      elif not is_bin_type(field_type):
+      elif not is_bin_type(field_type) and not is_str_type(field_type):
         handle_event_func += '    json_write_pair_c(out_, STR_LIT("%s"), event->%s);\n' % (
             json_field_name, event_t_name)
-      else:  # bin type (it should have the correspinding length arg)
-        len_names = set([field_name + "_len", "len", "num_" + field_name])
+      else: # bin or str type with "*_len" field
+        len_names = set([field_name + "_len", "num_" + field_name])
 
         len_event_t_name = None
         for n in flat_args_map:
           if n in len_names:
             len_event_t_name = "%s.%s" % (probe_name, n)
-        assert isinstance(len_event_t_name, str)
-        # A string might be truncated in STRLEN
-        handle_event_func += '    json_write_pair_c(out_, STR_LIT("%s"), event->%s, (event->%s < STR_LEN ? event->%s : STR_LEN));\n' % (
-            json_field_name, event_t_name, len_event_t_name, len_event_t_name)
+
+        if len_event_t_name:
+          # A string might be truncated in STRLEN
+          handle_event_func += '    json_write_pair_c(out_, STR_LIT("%s"), event->%s, (event->%s < STR_LEN ? event->%s : STR_LEN));\n' % (
+              json_field_name, event_t_name, len_event_t_name, len_event_t_name)
+        else:
+          if is_bin_type(field_type):
+            warnings.warn('The field `%s` has no corresponding length field in %s, expecting `%s_len`' % (field_name, fully_specified_probe_name, field_name))
+          handle_event_func += '    json_write_pair_c(out_, STR_LIT("%s"), event->%s);\n' % (
+              json_field_name, event_t_name)
+
 
     if metadata["provider"] == "h2o":
       handle_event_func += '    json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());\n'
