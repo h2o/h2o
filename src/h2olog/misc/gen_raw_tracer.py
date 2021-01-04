@@ -240,7 +240,7 @@ int %s(struct pt_regs *ctx) {
                                                           1, event_t_name)
   if fully_specified_probe_name == "h2o:send_response_header":
       # handle -s option
-      c += r"""
+    c += r"""
 #ifdef CHECK_ALLOWED_RES_HEADER_NAME
   if (!CHECK_ALLOWED_RES_HEADER_NAME(event.send_response_header.name, event.send_response_header.name_len))
     return 0;
@@ -461,7 +461,7 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
       elif not is_bin_type(field_type) and not is_str_type(field_type):
         handle_event_func += '    json_write_pair_c(out_, STR_LIT("%s"), event->%s);\n' % (
             json_field_name, event_t_name)
-      else: # bin or str type with "*_len" field
+      else:  # bin or str type with "*_len" field
         len_names = set([field_name + "_len", "num_" + field_name])
 
         len_event_t_name = None
@@ -475,11 +475,10 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
               json_field_name, event_t_name, len_event_t_name, len_event_t_name)
         elif is_bin_type(field_type):
           handle_event_func += '    # warning "missing `%s_len` param in the probe %s, ignored."\n' % (
-            field_name, fully_specified_probe_name)
-        else: # str type
+              field_name, fully_specified_probe_name)
+        else:  # str type
           handle_event_func += '    json_write_pair_c(out_, STR_LIT("%s"), event->%s, strlen(event->%s));\n' % (
               json_field_name, event_t_name, event_t_name)
-
 
     if metadata["provider"] == "h2o":
       handle_event_func += '    json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());\n'
