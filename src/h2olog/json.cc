@@ -60,11 +60,6 @@ static void json_write_str_value(FILE *out, const char *str, size_t str_len)
     fputc('"', out);
 }
 
-static void json_write_str_value(FILE *out, const char *str)
-{
-    json_write_str_value(out, str, strlen(str));
-}
-
 static void json_write_name_value(FILE *out, const char *name, size_t name_len)
 {
     fputc('"', out);
@@ -73,17 +68,10 @@ static void json_write_name_value(FILE *out, const char *name, size_t name_len)
     fputc(':', out);
 }
 
-void json_write_pair_n(FILE *out, const char *name, size_t name_len, const char *value)
+void json_write_pair_n(FILE *out, const char *name, size_t name_len, const char *value, size_t value_len)
 {
     json_write_name_value(out, name, name_len);
-    json_write_str_value(out, value);
-}
-
-void json_write_pair_c(FILE *out, const char *name, size_t name_len, const char *value)
-{
-    fputc(',', out);
-    json_write_name_value(out, name, name_len);
-    json_write_str_value(out, value);
+    json_write_str_value(out, value, value_len);
 }
 
 void json_write_pair_c(FILE *out, const char *name, size_t name_len, const char *value, size_t value_len)

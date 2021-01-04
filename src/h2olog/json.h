@@ -8,8 +8,7 @@
 // "_n" suffix means "with no heading comma"
 // "_c" suffix means "with a heading comma"
 
-void json_write_pair_n(std::FILE *out, const char *name, size_t name_len, const char *value);
-void json_write_pair_c(std::FILE *out, const char *name, size_t name_len, const char *value);
+void json_write_pair_n(std::FILE *out, const char *name, size_t name_len, const char *value, std::size_t value_len);
 void json_write_pair_c(std::FILE *out, const char *name, size_t name_len, const char *value, std::size_t value_len);
 void json_write_pair_c(std::FILE *out, const char *name, size_t name_len, const void *value, std::size_t value_len);
 void json_write_pair_c(std::FILE *out, const char *name, size_t name_len, const std::int64_t value);

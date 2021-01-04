@@ -448,7 +448,7 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
 
     handle_event_func += "  case %s: { // %s\n" % (
         metadata['id'], fully_specified_probe_name)
-    handle_event_func += '    json_write_pair_n(out_, STR_LIT("type"), "%s");\n' % probe_name.replace("_", "-")
+    handle_event_func += '    json_write_pair_n(out_, STR_LIT("type"), STR_LIT("%s"));\n' % probe_name.replace("_", "-")
     handle_event_func += '    json_write_pair_c(out_, STR_LIT("seq"), seq_);\n'
 
     for field_name, field_type in flat_args_map.items():
@@ -473,11 +473,12 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
           # A string might be truncated in STRLEN
           handle_event_func += '    json_write_pair_c(out_, STR_LIT("%s"), event->%s, (event->%s < STR_LEN ? event->%s : STR_LEN));\n' % (
               json_field_name, event_t_name, len_event_t_name, len_event_t_name)
-        else:
-          if is_bin_type(field_type):
-            warnings.warn('The field `%s` has no corresponding length field in %s, expecting `%s_len`' % (field_name, fully_specified_probe_name, field_name))
-          handle_event_func += '    json_write_pair_c(out_, STR_LIT("%s"), event->%s);\n' % (
-              json_field_name, event_t_name)
+        elif is_bin_type(field_type):
+          handle_event_func += '    # warning "missing `%s_len` param in the probe %s, ignored."\n' % (
+            field_name, fully_specified_probe_name)
+        else: # str type
+          handle_event_func += '    json_write_pair_c(out_, STR_LIT("%s"), event->%s, strlen(event->%s));\n' % (
+              json_field_name, event_t_name, event_t_name)
 
 
     if metadata["provider"] == "h2o":
