@@ -1336,7 +1336,12 @@ static void notify_all_threads(void)
 
 static int num_connections(int delta)
 {
-    return __sync_fetch_and_add(&conf.state._num_connections, delta);
+    int prev = __sync_fetch_and_add(&conf.state._num_connections, delta);
+    if (delta < 0 && prev == conf.max_connections) {
+        /* ready to accept new connections. wake up all the threads! */
+        notify_all_threads();
+    }
+    return prev;
 }
 
 static int num_quic_connections(int delta)
@@ -1349,19 +1354,9 @@ static unsigned long num_sessions(int delta)
     return __sync_fetch_and_add(&conf.state._num_sessions, delta);
 }
 
-static void on_connection_close(void)
-{
-    int prev_num_connections = num_connections(-1);
-
-    if (prev_num_connections == conf.max_connections) {
-        /* ready to accept new connections. wake up all the threads! */
-        notify_all_threads();
-    }
-}
-
 static void on_http3_conn_destroy(h2o_quic_conn_t *conn)
 {
-    on_connection_close();
+    num_connections(-1);
     num_quic_connections(-1);
 
     H2O_HTTP3_CONN_CALLBACKS.super.destroy_connection(conn);
@@ -2333,7 +2328,7 @@ static void forwarded_quic_socket_on_read(h2o_socket_t *sock, const char *err)
 
 static void on_socketclose(void *data)
 {
-    on_connection_close();
+    num_connections(-1);
 }
 
 static void on_accept(h2o_socket_t *listener, const char *err)
@@ -2349,18 +2344,19 @@ static void on_accept(h2o_socket_t *listener, const char *err)
 
     do {
         h2o_socket_t *sock;
-        if (num_connections(0) >= conf.max_connections) {
+        if (num_connections(1) >= conf.max_connections) {
             /* The accepting socket is disactivated before entering the next in `run_loop`.
              * Note: it is possible that the server would accept at most `max_connections + num_threads` connections, since the
              * server does not check if the number of connections has exceeded _after_ epoll notifies of a new connection _but_
              * _before_ calling `accept`.  In other words t/40max-connections.t may fail.
              */
+            num_connections(-1);
             break;
         }
         if ((sock = h2o_evloop_socket_accept(listener)) == NULL) {
+            num_connections(-1);
             break;
         }
-        num_connections(1);
         num_sessions(1);
 
         sock->on_close.cb = on_socketclose;
@@ -2416,15 +2412,22 @@ static int validate_token(h2o_http3_server_ctx_t *ctx, struct sockaddr *remote, 
 static h2o_quic_conn_t *on_http3_accept(h2o_quic_ctx_t *_ctx, quicly_address_t *destaddr, quicly_address_t *srcaddr,
                                         quicly_decoded_packet_t *packet)
 {
+    /* adjust number of connections, or drop the incoming packet when handling too many connections */
+    if (num_connections(1) >= conf.max_connections) {
+        num_connections(-1);
+        return NULL;
+    }
+    if (num_quic_connections(1) >= conf.max_quic_connections) {
+        num_connections(-1);
+        num_quic_connections(-1);
+        return NULL;
+    }
+
     h2o_http3_server_ctx_t *ctx = (void *)_ctx;
     struct init_ebpf_key_info_t ebpf_keyinfo = {&destaddr->sa, &srcaddr->sa};
     h2o_ebpf_map_value_t ebpf_value = h2o_socket_ebpf_lookup(ctx->super.loop, init_ebpf_key_info, &ebpf_keyinfo);
     quicly_address_token_plaintext_t *token = NULL, token_buf;
-    h2o_http3_conn_t *conn;
-
-    /* just drop when handling too many connections */
-    if (num_connections(0) >= conf.max_connections || num_quic_connections(0) >= conf.max_quic_connections)
-        return NULL;
+    h2o_http3_conn_t *conn = NULL;
 
     /* handle retry, setting `token` to a non-NULL pointer if contains a valid token */
     if (packet->token.len != 0) {
@@ -2440,7 +2443,7 @@ static h2o_quic_conn_t *on_http3_accept(h2o_quic_ctx_t *_ctx, quicly_address_t *
             assert(payload_size != SIZE_MAX);
             struct iovec vec = {.iov_base = payload, .iov_len = payload_size};
             h2o_quic_send_datagrams(&ctx->super, srcaddr, destaddr, &vec, 1);
-            return NULL;
+            goto Exit;
         }
     }
 
@@ -2483,17 +2486,22 @@ static h2o_quic_conn_t *on_http3_accept(h2o_quic_ctx_t *_ctx, quicly_address_t *
             assert(payload_size != SIZE_MAX);
             struct iovec vec = {.iov_base = payload, .iov_len = payload_size};
             h2o_quic_send_datagrams(&ctx->super, srcaddr, destaddr, &vec, 1);
-            return NULL;
+            goto Exit;
         }
     }
 
     /* accept the connection */
     conn = h2o_http3_server_accept(ctx, destaddr, srcaddr, packet, token, ebpf_value.skip_tracing, &conf.quic.conn_callbacks);
     if (conn == NULL || &conn->super == H2O_QUIC_ACCEPT_CONN_DECRYPTION_FAILED)
-        return &conn->super;
-    num_connections(1);
-    num_quic_connections(1);
+        goto Exit;
     num_sessions(1);
+
+Exit:
+    if (conn == NULL) {
+        /* revert the changes to the connection counts */
+        num_connections(-1);
+        num_quic_connections(-1);
+    }
     return &conn->super;
 }
 
