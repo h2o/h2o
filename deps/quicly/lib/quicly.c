@@ -2484,7 +2484,7 @@ static int on_ack_ack(quicly_sentmap_t *map, const quicly_sent_packet_t *packet,
     return 0;
 }
 
-static int on_ack_stream_ack_one(quicly_conn_t *conn, quicly_stream_id_t stream_id, quicly_sendstate_sent_t *sent, int is_active)
+static int on_ack_stream_ack_one(quicly_conn_t *conn, quicly_stream_id_t stream_id, quicly_sendstate_sent_t *sent)
 {
     quicly_stream_t *stream;
     int ret;
@@ -2493,7 +2493,7 @@ static int on_ack_stream_ack_one(quicly_conn_t *conn, quicly_stream_id_t stream_
         return 0;
 
     size_t bytes_to_shift;
-    if ((ret = quicly_sendstate_acked(&stream->sendstate, sent, is_active, &bytes_to_shift)) != 0)
+    if ((ret = quicly_sendstate_acked(&stream->sendstate, sent, &bytes_to_shift)) != 0)
         return ret;
     if (bytes_to_shift != 0) {
         QUICLY_PROBE(STREAM_ON_SEND_SHIFT, stream->conn, stream->conn->stash.now, stream, bytes_to_shift);
@@ -2515,7 +2515,7 @@ static int on_ack_stream_ack_cached(quicly_conn_t *conn)
     if (conn->stash.on_ack_stream.active_acked_cache.stream_id == INT64_MIN)
         return 0;
     ret = on_ack_stream_ack_one(conn, conn->stash.on_ack_stream.active_acked_cache.stream_id,
-                                &conn->stash.on_ack_stream.active_acked_cache.args, 1);
+                                &conn->stash.on_ack_stream.active_acked_cache.args);
     conn->stash.on_ack_stream.active_acked_cache.stream_id = INT64_MIN;
     return ret;
 }
@@ -2543,8 +2543,7 @@ static int on_ack_stream(quicly_sentmap_t *map, const quicly_sent_packet_t *pack
                 conn->stash.on_ack_stream.active_acked_cache.stream_id = sent->data.stream.stream_id;
                 conn->stash.on_ack_stream.active_acked_cache.args = sent->data.stream.args;
             } else {
-                if ((ret = on_ack_stream_ack_one(conn, sent->data.stream.stream_id, &sent->data.stream.args,
-                                                 packet->frames_in_flight)) != 0)
+                if ((ret = on_ack_stream_ack_one(conn, sent->data.stream.stream_id, &sent->data.stream.args)) != 0)
                     return ret;
             }
         }
