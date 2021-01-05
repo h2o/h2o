@@ -117,7 +117,7 @@ typedef struct st_h2o_httpclient_ctx_t {
              */
             int8_t http2;
             /**
-             * Indiates the percentage of requests for which HTTP/3 should be used. Unlike HTTP/2, this value cannot be negative,
+             * Indicates the percentage of requests for which HTTP/3 should be used. Unlike HTTP/2, this value cannot be negative,
              * because unlike ALPN over TLS over TCP, the choice of the protocol is up to the client.
              */
             int8_t http3;
