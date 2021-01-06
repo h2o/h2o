@@ -701,7 +701,7 @@ static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *e
     }
     self->client->informational_cb = on_1xx;
 
-    client->get_ssl_properties(client, &req->proxy_stats.ssl);
+    client->get_conn_properties(client, &req->proxy_stats.conn);
 
     return on_head;
 }
