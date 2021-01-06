@@ -113,7 +113,7 @@ static int check_amount_of_state(quicly_sendstate_t *state)
     return 0;
 }
 
-int quicly_sendstate_acked(quicly_sendstate_t *state, quicly_sendstate_sent_t *args, int is_active, size_t *bytes_to_shift)
+int quicly_sendstate_acked(quicly_sendstate_t *state, quicly_sendstate_sent_t *args, size_t *bytes_to_shift)
 {
     uint64_t prev_sent_upto = state->acked.ranges[0].end;
     int ret;
@@ -121,10 +121,8 @@ int quicly_sendstate_acked(quicly_sendstate_t *state, quicly_sendstate_sent_t *a
     /* adjust acked and pending ranges */
     if ((ret = quicly_ranges_add(&state->acked, args->start, args->end)) != 0)
         return ret;
-    if (!is_active) {
-        if ((ret = quicly_ranges_subtract(&state->pending, args->start, args->end)) != 0)
-            return ret;
-    }
+    if ((ret = quicly_ranges_subtract(&state->pending, args->start, args->end)) != 0)
+        return ret;
     assert(state->pending.num_ranges == 0 || state->acked.ranges[0].end <= state->pending.ranges[0].start);
 
     /* calculate number of bytes that can be retired from the send buffer */

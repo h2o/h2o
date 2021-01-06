@@ -4267,7 +4267,7 @@ This library currently supports only IPv4 addresses. TrieAddr#match? returns fal
 
 
 h2olog is an experimental BPF (kernel doc) backed tracing tool for the H2O server.
-It can be used for tracing HTTP-level or QUIC-level events.
+It can be used for tracing quicly and h2o USDT probes.
 
 Since h2olog is an experimental program, its command-line interface might change without notice.
 
@@ -4312,12 +4312,12 @@ Linux kernel (>= 4.9)
 
 
 Quickstart
-h2olog -p $H2O_PID shows varnishlog-like tracing.
+h2olog -H -p $H2O_PID shows varnishlog-like tracing.
 
 .PP
 .nf
 .RS
-$ sudo h2olog -p $(pgrep -o h2o)
+$ sudo h2olog -H -p $(pgrep -o h2o)
 
 11 0 RxProtocol HTTP/3.0
 11 0 RxHeader   :authority torumk.com
@@ -4333,16 +4333,14 @@ $ sudo h2olog -p $(pgrep -o h2o)
 .fi
 .PP
 
-Tracing QUIC events
+Tracing USDT events
 Server-side QUIC events can be traced using the quic subcommand.
-Events are rendered in JSON format.
+Events are rendered in JSON Lines format.
 
 .PP
 .nf
 .RS
-$ sudo h2olog quic -p $(pgrep -o h2o)
-              ^
-              |_ The quic subcommand
+$ sudo h2olog -p $(pgrep -o h2o)
 
 .RE
 .fi
