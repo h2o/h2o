@@ -677,6 +677,7 @@ static void do_get_conn_properties(h2o_httpclient_t *_client, h2o_httpclient_con
         properties->ssl.cipher = NULL;
         properties->ssl.cipher_bits = 0;
     }
+    properties->sock = NULL;
 }
 
 static void do_update_window(h2o_httpclient_t *_client)

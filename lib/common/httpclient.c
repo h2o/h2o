@@ -273,4 +273,5 @@ void h2o_httpclient_set_conn_properties_of_socket(h2o_socket_t *sock, h2o_httpcl
     properties->ssl.session_reused = h2o_socket_get_ssl_session_reused(sock);
     properties->ssl.cipher = h2o_socket_get_ssl_cipher(sock);
     properties->ssl.cipher_bits = h2o_socket_get_ssl_cipher_bits(sock);
+    properties->sock = sock;
 }

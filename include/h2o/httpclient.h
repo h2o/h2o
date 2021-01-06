@@ -176,6 +176,10 @@ typedef struct st_h2o_httpclient_ssl_properties_t {
         const char *cipher;
         int cipher_bits;
     } ssl;
+    /**
+     * Underlying TCP connection, if any.
+     */
+    h2o_socket_t *sock;
 } h2o_httpclient_conn_properties_t;
 
 struct st_h2o_httpclient_t {
