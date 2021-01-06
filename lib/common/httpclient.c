@@ -267,10 +267,10 @@ void h2o_httpclient_connect(h2o_httpclient_t **_client, h2o_mem_pool_t *pool, vo
     }
 }
 
-void h2o_httpclient_set_ssl_properties_of_socket(h2o_socket_t *sock, h2o_httpclient_ssl_properties_t *properties)
+void h2o_httpclient_set_conn_properties_of_socket(h2o_socket_t *sock, h2o_httpclient_conn_properties_t *properties)
 {
-    properties->protocol_version = h2o_socket_get_ssl_protocol_version(sock);
-    properties->session_reused = h2o_socket_get_ssl_session_reused(sock);
-    properties->cipher = h2o_socket_get_ssl_cipher(sock);
-    properties->cipher_bits = h2o_socket_get_ssl_cipher_bits(sock);
+    properties->ssl.protocol_version = h2o_socket_get_ssl_protocol_version(sock);
+    properties->ssl.session_reused = h2o_socket_get_ssl_session_reused(sock);
+    properties->ssl.cipher = h2o_socket_get_ssl_cipher(sock);
+    properties->ssl.cipher_bits = h2o_socket_get_ssl_cipher_bits(sock);
 }
