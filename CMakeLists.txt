@@ -959,27 +959,26 @@ IF (WITH_H2OLOG)
     INSTALL(TARGETS h2olog RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 ENDIF (WITH_H2OLOG)
 
-SET(IS_GIT_REPO FALSE)
+# gitrev
+SET(GITREV_IS_AVAILABLE FALSE)
 IF (EXISTS "${CMAKE_SOURCE_DIR}/.git")
-    # asks git(1) whether or not the source dir is a git repository,
-    # since only git(1) knows what is exactly a valid git repo.
+    # asks generate_gitrev.pl whether or not gitrev is available.
     EXECUTE_PROCESS(
-        COMMAND git rev-parse
+        COMMAND perl ${CMAKE_CURRENT_SOURCE_DIR}/misc/generate_gitrev.pl
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-        RESULT_VARIABLE GIT_RESULT_CODE
+        RESULT_VARIABLE GITREV_RESULT_CODE
         OUTPUT_QUIET
         ERROR_QUIET
     )
-    IF (GIT_RESULT_CODE EQUAL 0)
-        SET(IS_GIT_REPO TRUE)
+    IF (GITREV_RESULT_CODE EQUAL 0)
+        SET(GITREV_IS_AVAILABLE TRUE)
     ENDIF ()
 ENDIF ()
 
-# gitrev
-IF ("${VERSION_PRERELEASE}" STREQUAL "-DEV" AND IS_GIT_REPO)
+IF ("${VERSION_PRERELEASE}" STREQUAL "-DEV" AND GITREV_IS_AVAILABLE)
     ADD_DEFINITIONS("-DH2O_HAS_GITREV_H")
     ADD_CUSTOM_TARGET(gitrev ALL
-        COMMAND perl ${CMAKE_CURRENT_SOURCE_DIR}/misc/generate_gitrev.pl
+        COMMAND perl ${CMAKE_CURRENT_SOURCE_DIR}/misc/generate_gitrev.pl include/h2o/gitrev.h
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
     ADD_DEPENDENCIES(libh2o gitrev)
     ADD_DEPENDENCIES(libh2o-evloop gitrev)
