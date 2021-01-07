@@ -959,8 +959,24 @@ IF (WITH_H2OLOG)
     INSTALL(TARGETS h2olog RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 ENDIF (WITH_H2OLOG)
 
+SET(IS_GIT_REPO FALSE)
+IF (EXISTS "${CMAKE_SOURCE_DIR}/.git")
+    # asks git(1) whether or not the source dir is a git repository,
+    # since only git(1) knows what is exactly a valid git repo.
+    EXECUTE_PROCESS(
+        COMMAND git rev-parse
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        RESULT_VARIABLE GIT_RESULT_CODE
+        OUTPUT_QUIET
+        ERROR_QUIET
+    )
+    IF (GIT_RESULT_CODE EQUAL 0)
+        SET(IS_GIT_REPO TRUE)
+    ENDIF ()
+ENDIF ()
+
 # gitrev
-IF ("${VERSION_PRERELEASE}" STREQUAL "-DEV" AND EXISTS "${CMAKE_SOURCE_DIR}/.git")
+IF ("${VERSION_PRERELEASE}" STREQUAL "-DEV" AND IS_GIT_REPO)
     ADD_DEFINITIONS("-DH2O_HAS_GITREV_H")
     ADD_CUSTOM_TARGET(gitrev ALL
         COMMAND perl ${CMAKE_CURRENT_SOURCE_DIR}/misc/generate_gitrev.pl
@@ -975,4 +991,6 @@ IF ("${VERSION_PRERELEASE}" STREQUAL "-DEV" AND EXISTS "${CMAKE_SOURCE_DIR}/.git
     IF (TARGET h2olog)
         ADD_DEPENDENCIES(h2olog gitrev)
     ENDIF (TARGET h2olog)
+ELSEIF (EXISTS include/h2o/gitrev.h)
+    ADD_DEFINITIONS("-DH2O_HAS_GITREV_H")
 ENDIF ()
