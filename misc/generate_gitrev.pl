@@ -1,33 +1,20 @@
 #!/usr/bin/env perl
-# usage: generate_gitrev.pl [output_header_path]
 use strict;
 use warnings;
 
-my($outpath) = @ARGV;
-
 my $gitrev = exec_git_command('git rev-parse --short HEAD') or die "failed to get current revision";
 my $content = "#define H2O_GITREV $gitrev\n";
+my $outpath = 'include/h2o/gitrev.h';
 
-my $current = '';
-if (defined($outpath)) {
-    if (open(my $fh, '<', $outpath)) {
-        local $/;
-        $current = <$fh>;
-    }
-}
+my $current = -f $outpath ? do {
+    open(my $fh, '<', $outpath) or die "failed to open $outpath: $!";
+    join('', <$fh>);
+} : '';
 
 if ($content ne $current) {
-    my $fh;
-    if (defined $outpath) {
-        open($fh, '>', $outpath) or die "failed to open $outpath: $!";
-    } else {
-        $fh = \*STDOUT;
-    }
+    open(my $fh, '>', $outpath) or die "failed to open $outpath: $!";
     print $fh $content;
-
-    if (defined $outpath) {
-        print "Updated $outpath with $gitrev\n";
-    }
+    print "Updated $outpath\n";
 }
 
 sub exec_git_command {

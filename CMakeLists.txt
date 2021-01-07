@@ -960,9 +960,9 @@ IF (WITH_H2OLOG)
 ENDIF (WITH_H2OLOG)
 
 # gitrev
-SET(GITREV_IS_AVAILABLE FALSE)
-IF (EXISTS "${CMAKE_SOURCE_DIR}/.git")
-    # asks generate_gitrev.pl whether or not gitrev is available.
+IF ("${VERSION_PRERELEASE}" STREQUAL "-DEV")
+    # To ask generate_gitrev.pl whether or not a gitrev is available,
+    # since only the script knows how to calculate the gitrev.
     EXECUTE_PROCESS(
         COMMAND perl ${CMAKE_CURRENT_SOURCE_DIR}/misc/generate_gitrev.pl
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
@@ -970,24 +970,21 @@ IF (EXISTS "${CMAKE_SOURCE_DIR}/.git")
         OUTPUT_QUIET
         ERROR_QUIET
     )
-    IF (GITREV_RESULT_CODE EQUAL 0)
-        SET(GITREV_IS_AVAILABLE TRUE)
-    ENDIF ()
-ENDIF ()
 
-IF ("${VERSION_PRERELEASE}" STREQUAL "-DEV" AND GITREV_IS_AVAILABLE)
-    ADD_DEFINITIONS("-DH2O_HAS_GITREV_H")
-    ADD_CUSTOM_TARGET(gitrev ALL
-        COMMAND perl ${CMAKE_CURRENT_SOURCE_DIR}/misc/generate_gitrev.pl include/h2o/gitrev.h
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
-    ADD_DEPENDENCIES(libh2o gitrev)
-    ADD_DEPENDENCIES(libh2o-evloop gitrev)
-    ADD_DEPENDENCIES(h2o gitrev)
-    ADD_DEPENDENCIES(t-00unit-evloop.t gitrev)
-    IF (LIBUV_FOUND)
-        ADD_DEPENDENCIES(t-00unit-libuv.t gitrev)
-    ENDIF (LIBUV_FOUND)
-    IF (TARGET h2olog)
-        ADD_DEPENDENCIES(h2olog gitrev)
-    ENDIF (TARGET h2olog)
+    IF (GITREV_RESULT_CODE EQUAL 0)
+        ADD_DEFINITIONS("-DH2O_HAS_GITREV_H")
+        ADD_CUSTOM_TARGET(gitrev ALL
+            COMMAND perl ${CMAKE_CURRENT_SOURCE_DIR}/misc/generate_gitrev.pl
+            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+        ADD_DEPENDENCIES(libh2o gitrev)
+        ADD_DEPENDENCIES(libh2o-evloop gitrev)
+        ADD_DEPENDENCIES(h2o gitrev)
+        ADD_DEPENDENCIES(t-00unit-evloop.t gitrev)
+        IF (LIBUV_FOUND)
+            ADD_DEPENDENCIES(t-00unit-libuv.t gitrev)
+        ENDIF (LIBUV_FOUND)
+        IF (TARGET h2olog)
+            ADD_DEPENDENCIES(h2olog gitrev)
+        ENDIF (TARGET h2olog)
+    ENDIF ()
 ENDIF ()
