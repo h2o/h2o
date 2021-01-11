@@ -958,19 +958,31 @@ IF (WITH_H2OLOG)
 ENDIF (WITH_H2OLOG)
 
 # gitrev
-IF ("${VERSION_PRERELEASE}" STREQUAL "-DEV" AND EXISTS "${CMAKE_SOURCE_DIR}/.git")
-    ADD_DEFINITIONS("-DH2O_HAS_GITREV_H")
-    ADD_CUSTOM_TARGET(gitrev ALL
+IF ("${VERSION_PRERELEASE}" STREQUAL "-DEV")
+    # To ask generate_gitrev.pl whether or not a gitrev is available,
+    # since only the script knows how to calculate the gitrev.
+    EXECUTE_PROCESS(
         COMMAND perl ${CMAKE_CURRENT_SOURCE_DIR}/misc/generate_gitrev.pl
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
-    ADD_DEPENDENCIES(libh2o gitrev)
-    ADD_DEPENDENCIES(libh2o-evloop gitrev)
-    ADD_DEPENDENCIES(h2o gitrev)
-    ADD_DEPENDENCIES(t-00unit-evloop.t gitrev)
-    IF (LIBUV_FOUND)
-        ADD_DEPENDENCIES(t-00unit-libuv.t gitrev)
-    ENDIF (LIBUV_FOUND)
-    IF (TARGET h2olog)
-        ADD_DEPENDENCIES(h2olog gitrev)
-    ENDIF (TARGET h2olog)
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        RESULT_VARIABLE GITREV_RESULT_CODE
+        OUTPUT_QUIET
+        ERROR_QUIET
+    )
+
+    IF (GITREV_RESULT_CODE EQUAL 0)
+        ADD_DEFINITIONS("-DH2O_HAS_GITREV_H")
+        ADD_CUSTOM_TARGET(gitrev ALL
+            COMMAND perl ${CMAKE_CURRENT_SOURCE_DIR}/misc/generate_gitrev.pl
+            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+        ADD_DEPENDENCIES(libh2o gitrev)
+        ADD_DEPENDENCIES(libh2o-evloop gitrev)
+        ADD_DEPENDENCIES(h2o gitrev)
+        ADD_DEPENDENCIES(t-00unit-evloop.t gitrev)
+        IF (LIBUV_FOUND)
+            ADD_DEPENDENCIES(t-00unit-libuv.t gitrev)
+        ENDIF (LIBUV_FOUND)
+        IF (TARGET h2olog)
+            ADD_DEPENDENCIES(h2olog gitrev)
+        ENDIF (TARGET h2olog)
+    ENDIF ()
 ENDIF ()
