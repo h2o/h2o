@@ -153,6 +153,12 @@ struct st_h2o_buffer_prototype_t {
     h2o_buffer_mmap_settings_t *mmap_settings;
 };
 
+typedef struct st_h2o_doublebuffer_t {
+    h2o_buffer_t *buf;
+    unsigned char inflight : 1;
+    size_t _bytes_inflight;
+} h2o_doublebuffer_t;
+
 #define H2O_VECTOR(type)                                                                                                           \
     struct {                                                                                                                       \
         type *entries;                                                                                                             \
@@ -296,6 +302,31 @@ static void h2o_buffer_set_prototype(h2o_buffer_t **buffer, h2o_buffer_prototype
  */
 static void h2o_buffer_link_to_pool(h2o_buffer_t *buffer, h2o_mem_pool_t *pool);
 void h2o_buffer__dispose_linked(void *p);
+/**
+ *
+ */
+static void h2o_doublebuffer_init(h2o_doublebuffer_t *db, h2o_buffer_prototype_t *prototype);
+/**
+ *
+ */
+static void h2o_doublebuffer_dispose(h2o_doublebuffer_t *db);
+/**
+ * Given a double buffer and a pointer to a buffer to which the caller is writing data, returns a vector containing data to be sent
+ * (e.g., by calling `h2o_send`).  `max_bytes` designates the maximum size of the vector to be returned.  When the double buffer is
+ * empty, `*receiving` is moved to the double buffer, and upon return `*receiving` will contain an empty buffer to which the caller
+ * should append new data.
+ */
+static h2o_iovec_t h2o_doublebuffer_prepare(h2o_doublebuffer_t *db, h2o_buffer_t **receiving, size_t max_bytes);
+/**
+ * Marks that empty data is inflight. This function can be called when making preparations to call `h2o_send` but when only the HTTP
+ * response header fields are available.
+ */
+static void h2o_doublebuffer_prepare_empty(h2o_doublebuffer_t *db);
+/**
+ * Consumes bytes being marked as inflight (by previous call to `h2o_doublebuffer_prepare`). The intended design pattern is to call
+ * this function and then the generator's `do_send` function in the `do_proceed` callback. See lib/handler/fastcgi.c.
+ */
+static void h2o_doublebuffer_consume(h2o_doublebuffer_t *db);
 /**
  * grows the vector so that it could store at least new_capacity elements of given size (or dies if impossible).
  * @param pool memory pool that the vector is using
@@ -456,6 +487,52 @@ inline int h2o_buffer_try_append(h2o_buffer_t **dst, const void *src, size_t len
     h2o_memcpy(buf.base, src, len);
     (*dst)->size += len;
     return 1;
+}
+
+inline void h2o_doublebuffer_init(h2o_doublebuffer_t *db, h2o_buffer_prototype_t *prototype)
+{
+    h2o_buffer_init(&db->buf, prototype);
+    db->inflight = 0;
+    db->_bytes_inflight = 0;
+}
+
+inline void h2o_doublebuffer_dispose(h2o_doublebuffer_t *db)
+{
+    h2o_buffer_dispose(&db->buf);
+}
+
+inline h2o_iovec_t h2o_doublebuffer_prepare(h2o_doublebuffer_t *db, h2o_buffer_t **receiving, size_t max_bytes)
+{
+    assert(!db->inflight);
+    assert(max_bytes != 0);
+
+    if (db->buf->size == 0) {
+        if ((*receiving)->size == 0)
+            return h2o_iovec_init(NULL, 0);
+        /* swap buffers */
+        h2o_buffer_t *t = db->buf;
+        db->buf = *receiving;
+        *receiving = t;
+    }
+    if ((db->_bytes_inflight = db->buf->size) > max_bytes)
+        db->_bytes_inflight = max_bytes;
+    db->inflight = 1;
+    return h2o_iovec_init(db->buf->bytes, db->_bytes_inflight);
+}
+
+inline void h2o_doublebuffer_prepare_empty(h2o_doublebuffer_t *db)
+{
+    assert(!db->inflight);
+    db->inflight = 1;
+}
+
+inline void h2o_doublebuffer_consume(h2o_doublebuffer_t *db)
+{
+    assert(db->inflight);
+    db->inflight = 0;
+
+    h2o_buffer_consume(&db->buf, db->_bytes_inflight);
+    db->_bytes_inflight = 0;
 }
 
 inline void h2o_vector__reserve(h2o_mem_pool_t *pool, h2o_vector_t *vector, size_t alignment, size_t element_size,

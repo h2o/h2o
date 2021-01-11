@@ -289,26 +289,30 @@ The value should be set to something smaller than that being set at the upstream
 
 <?
 $ctx->{directive}->(
-    name    => "proxy.websocket",
+    name    => "proxy.tunnel",
     levels  => [ qw(global host path extension) ],
-    default => q{proxy.websocket: OFF},
-    desc    => q{A boolean flag (<code>ON</code> or <code>OFF</code>) indicating whether or not to allow upgrading the proxied connection to <a href="https://tools.ietf.org/html/rfc6455">the WebSocket protocol</a>.},
+    default => q{proxy.tunnel: OFF},
+    desc    => q{A boolean flag (<code>ON</code> or <code>OFF</code>) indicating whether or not to allow tunnelling to the backend server.},
 )->(sub {
 ?>
 <p>
-When set to <code>ON</code>, the proxied connection will be upgraded to a bi-directional tunnel stream if upgrading to WebSocket connection is permitted by the backend server (i.e. if the backend server responds to a WebSocket handshake with <code>101</code> status code).
+When set to <code>ON</code>, CONNECT requests and <a href="https://tools.ietf.org/html/rfc6455">WebSocket</a> handshakes are forwarded to the backend server.
+Then, if the backend server accepts those requests, H2O forwards the HTTP response to the client and acts as a bi-directional tunnel.
 </p>
 <p>
-Support for WebSocket is considered experimental for the time being and therefore is not yet turned on by default.
+Support for tunnelling is considered experimental for the time being and therefore is not yet turned on by default.
 </p>
 ? })
 
 <?
 $ctx->{directive}->(
-    name    => "proxy.websocket.timeout",
+    name    => "proxy.tunnel.timeout",
     levels  => [ qw(global host path extension) ],
     default => q{proxy.websocket.timeout: 300000},
-    desc    => q{Sets idle timeout of a WebSocket connection being proxied.},
+    desc    => q{Sets the idle timeout of a tunnel.},
+    see_also => render_mt(<<'EOT'),
+<a href="configure/proxy_directives.html#proxy.tunnel"><code>proxy.tunnel</code></a>
+EOT
 )->(sub {})
 ?>
 
