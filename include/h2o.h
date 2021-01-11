@@ -2052,6 +2052,10 @@ typedef struct st_h2o_proxy_config_vars_t {
  */
 void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf, h2o_proxy_config_vars_t *config, h2o_socketpool_t *sockpool);
 /**
+ * registers the forward proxy handler to the context
+ */
+void h2o_proxy_register_forward_proxy(h2o_pathconf_t *pathconf, h2o_proxy_config_vars_t *config);
+/**
  * registers the configurator
  */
 void h2o_proxy_register_configurator(h2o_globalconf_t *conf);
