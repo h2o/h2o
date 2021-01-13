@@ -195,8 +195,7 @@ typedef struct st_h2o_httpclient_tunnel_t {
 } h2o_httpclient_tunnel_t;
 
 /**
- * TLS properties of a HTTP client connection. Definitions of the member variables match that returned by corresponding h2o_socket
- * function: `h2o_socket_ssl_*`.
+ * Properties of a HTTP client connection.
  */
 typedef struct st_h2o_httpclient_ssl_properties_t {
     /**
