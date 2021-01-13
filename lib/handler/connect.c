@@ -149,7 +149,7 @@ static void on_handler_dispose(h2o_handler_t *_self)
 {
 }
 
-void h2o_proxy_register_forward_proxy(h2o_pathconf_t *pathconf, h2o_proxy_config_vars_t *config)
+void h2o_connect_register(h2o_pathconf_t *pathconf, h2o_proxy_config_vars_t *config)
 {
     struct rp_handler_t *self = (void *)h2o_create_handler(pathconf, sizeof(*self));
 
