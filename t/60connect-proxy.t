@@ -19,7 +19,7 @@ hosts:
   default:
     paths:
       "/":
-        proxy.forward: ON
+        proxy.connect: ON
         proxy.tunnel.timeout: 2000
 EOT
 
