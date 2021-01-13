@@ -547,7 +547,7 @@ static void on_receive(quicly_stream_t *qs, size_t off, const void *input, size_
         /* slow path; copy data to partial_frame */
         size_t size_required = off + len;
         if (req->recvbuf.stream->size < size_required) {
-            H2O_HTTP3_CHECK_SUCCESS(h2o_buffer_reserve(&req->recvbuf.stream, size_required).base != NULL);
+            h2o_buffer_reserve(&req->recvbuf.stream, size_required - req->recvbuf.stream->size);
             req->recvbuf.stream->size = size_required;
         }
         memcpy(req->recvbuf.stream->bytes + off, input, len);
