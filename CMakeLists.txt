@@ -399,7 +399,7 @@ SET(LIB_SOURCE_FILES
     lib/handler/file.c
     lib/handler/headers.c
     lib/handler/mimemap.c
-    lib/handler/reverse_proxy.c
+    lib/handler/proxy.c
     lib/handler/connect.c
     lib/handler/redirect.c
     lib/handler/reproxy.c
