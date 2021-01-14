@@ -25,7 +25,7 @@
 #include "h2o/balancer.h"
 #include "khash.h"
 
-struct rp_handler_t {
+struct st_handler_ctx_t {
     h2o_handler_t super;
     h2o_proxy_config_vars_t config;
 };
@@ -112,7 +112,7 @@ static void start_connect(struct connect_request *req, struct sockaddr *addr, so
 
 static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
 {
-    struct rp_handler_t *handler = (void *)_handler;
+    struct st_handler_ctx_t *handler = (void *)_handler;
     h2o_iovec_t host;
     uint16_t port = 0;
     const char *ret;
@@ -151,7 +151,7 @@ static void on_handler_dispose(h2o_handler_t *_self)
 
 void h2o_connect_register(h2o_pathconf_t *pathconf, h2o_proxy_config_vars_t *config)
 {
-    struct rp_handler_t *self = (void *)h2o_create_handler(pathconf, sizeof(*self));
+    struct st_handler_ctx_t *self = (void *)h2o_create_handler(pathconf, sizeof(*self));
 
     self->super.on_context_init = on_context_init;
     self->super.on_context_dispose = on_context_dispose;
