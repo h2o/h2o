@@ -381,7 +381,7 @@ static int on_config_reverse_url(h2o_configurator_command_t *cmd, h2o_configurat
     h2o_socketpool_init_specific(sockpool, SIZE_MAX /* FIXME */, targets, num_backends, balancer);
     h2o_socketpool_set_timeout(sockpool, self->vars->conf.keepalive_timeout);
     h2o_socketpool_set_ssl_ctx(sockpool, self->vars->ssl_ctx);
-    h2o_proxy_register_proxy(ctx->pathconf, &self->vars->conf, sockpool);
+    h2o_proxy_register_reverse_proxy(ctx->pathconf, &self->vars->conf, sockpool);
     return 0;
 }
 
