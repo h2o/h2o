@@ -39,14 +39,14 @@ struct connect_request {
     h2o_multithread_receiver_t *getaddr_receiver;
     h2o_iovec_t host;
     char named_serv[sizeof(H2O_UINT16_LONGEST_STR)];
-    uint64_t timeout;
+    struct st_handler_ctx_t *handler_ctx;
 };
 
 static void on_connect(h2o_socket_t *sock, const char *err)
 {
     struct connect_request *creq = sock->data;
     h2o_req_t *req = creq->src_req;
-    uint64_t timeout = creq->timeout;
+    uint64_t timeout = creq->handler_ctx->config.tunnel.timeout;
 
     free(creq);
     sock->data = NULL;
@@ -129,7 +129,7 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
     *creq = (struct connect_request){req->conn->ctx->loop, req, 1};
     creq->getaddr_receiver = &req->conn->ctx->receivers.hostinfo_getaddr;
     creq->host = host;
-    creq->timeout = handler->config.tunnel.timeout;
+    creq->handler_ctx = handler;
     sprintf(creq->named_serv, "%" PRIu16, port);
 
     try_connect(creq);
