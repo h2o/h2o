@@ -45,7 +45,6 @@ struct connect_request {
 static void on_error(struct connect_request *req, const char *errstr)
 {
     h2o_send_error_502(req->src_req, "Gateway Error", errstr, 0);
-    free(req);
 }
 
 static void on_connect(h2o_socket_t *sock, const char *err)
@@ -59,8 +58,8 @@ static void on_connect(h2o_socket_t *sock, const char *err)
 
     h2o_req_t *req = creq->src_req;
     uint64_t timeout = creq->handler_ctx->config.tunnel.timeout;
-    free(creq);
     sock->data = NULL;
+    creq->sock = NULL;
     req->res.status = 200;
 
     h2o_httpclient_tunnel_t *tunnel = h2o_open_tunnel_from_socket(sock);
@@ -69,6 +68,15 @@ static void on_connect(h2o_socket_t *sock, const char *err)
 
 static void on_generator_dispose(void *_self)
 {
+    struct connect_request *req = _self;
+
+    if (req->getaddr_req != NULL) {
+        h2o_hostinfo_getaddr_cancel(req->getaddr_req);
+        req->getaddr_req = NULL;
+    }
+
+    if (req->sock != NULL)
+        h2o_socket_close(req->sock);
 }
 
 static void try_connect(struct connect_request *req);
@@ -127,11 +135,12 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
         return 0;
     }
     ret = h2o_url_parse_hostport(req->input.path.base, req->input.path.len, &host, &port);
-    if (ret == NULL || port == 0)
-        return -1;
+    if (ret == NULL || port == 0) {
+        h2o_send_error_400(req, "Bad Request", "Bad Request", 0);
+        return 0;
+    }
 
-    struct connect_request *creq = h2o_mem_alloc(sizeof(*creq));
-
+    struct connect_request *creq =h2o_mem_alloc_shared(&req->pool, sizeof(*creq), on_generator_dispose);
     *creq = (struct connect_request){req->conn->ctx->loop, req, 1};
     creq->getaddr_receiver = &req->conn->ctx->receivers.hostinfo_getaddr;
     creq->host = host;
@@ -143,26 +152,10 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
     return 0;
 }
 
-static void on_context_init(h2o_handler_t *_self, h2o_context_t *ctx)
-{
-}
-
-static void on_context_dispose(h2o_handler_t *_self, h2o_context_t *ctx)
-{
-}
-
-static void on_handler_dispose(h2o_handler_t *_self)
-{
-}
-
 void h2o_connect_register(h2o_pathconf_t *pathconf, h2o_proxy_config_vars_t *config)
 {
     struct st_handler_ctx_t *self = (void *)h2o_create_handler(pathconf, sizeof(*self));
 
-    self->super.on_context_init = on_context_init;
-    self->super.on_context_dispose = on_context_dispose;
-    self->super.dispose = on_handler_dispose;
     self->super.on_req = on_req;
-    self->super.supports_request_streaming = 1;
     self->config = *config;
 }
