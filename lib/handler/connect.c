@@ -42,12 +42,23 @@ struct connect_request {
     struct st_handler_ctx_t *handler_ctx;
 };
 
+static void on_error(struct connect_request *req, const char *errstr)
+{
+    h2o_send_error_502(req->src_req, "Gateway Error", errstr, 0);
+    free(req);
+}
+
 static void on_connect(h2o_socket_t *sock, const char *err)
 {
     struct connect_request *creq = sock->data;
+
+    if (err) {
+        on_error(creq, err);
+        return;
+    }
+
     h2o_req_t *req = creq->src_req;
     uint64_t timeout = creq->handler_ctx->config.tunnel.timeout;
-
     free(creq);
     sock->data = NULL;
     req->res.status = 200;
@@ -60,11 +71,6 @@ static void on_generator_dispose(void *_self)
 {
 }
 
-static void on_error(struct connect_request *req, const char *errstr)
-{
-    h2o_send_error_502(req->src_req, "Gateway Error", errstr, 0);
-    free(req);
-}
 static void try_connect(struct connect_request *req);
 static void start_connect(struct connect_request *req, struct sockaddr *addr, socklen_t addrlen);
 static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errstr, struct addrinfo *res, void *_req)
