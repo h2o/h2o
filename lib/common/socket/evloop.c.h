@@ -442,7 +442,7 @@ h2o_socket_t *h2o_evloop_socket_accept(h2o_socket_t *_listener)
     if ((fd = accept4(listener->fd, (struct sockaddr *)peeraddr, peeraddrlen, SOCK_NONBLOCK | SOCK_CLOEXEC)) == -1)
         return NULL;
 #if !defined(NDEBUG)
-    { /* assert once that TCP_NODELAY flag is inherited */
+    { /* assert once that TCP_NODELAY flag is inherited (TODO move this check into a unit test) */
         static __thread int done = 0;
         if (!done) {
             done = 1;
