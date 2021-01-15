@@ -30,15 +30,17 @@ struct st_handler_ctx_t {
     h2o_proxy_config_vars_t config;
 };
 
+#define NUM_DNS_RESULTS 3
 struct connect_request {
     h2o_loop_t *loop;
     h2o_req_t *src_req;
-    int remaining_try_count;
     h2o_socket_t *sock;
     h2o_hostinfo_getaddr_req_t *getaddr_req;
     h2o_multithread_receiver_t *getaddr_receiver;
     h2o_iovec_t host;
     char named_serv[sizeof(H2O_UINT16_LONGEST_STR)];
+    struct addrinfo dns[NUM_DNS_RESULTS];
+    size_t dns_results;
     struct st_handler_ctx_t *handler_ctx;
 };
 
@@ -79,6 +81,35 @@ static void on_generator_dispose(void *_self)
         h2o_socket_close(req->sock);
 }
 
+void h2o_hostinfo_take_n(struct addrinfo *res, struct addrinfo *out, size_t *num)
+{
+    if (res->ai_next == NULL) {
+        *num = 1;
+        out[0] = *res;
+        return;
+    }
+
+    /* count the number of candidates */
+    size_t i = 0;
+    struct addrinfo *start = res, *ai = res;
+    do {
+        ++i;
+    } while ((ai = ai->ai_next) != NULL);
+
+    if (*num > i)
+        *num = i;
+
+    i = rand() % i;
+    for (ai = res; i != 0; ai = ai->ai_next, --i)
+        ;
+    for (i = 0; i < *num; i++) {
+        out[i] = *ai;
+        ai = ai->ai_next;
+        if (ai == NULL)
+            ai = start;
+    }
+}
+
 static void try_connect(struct connect_request *req);
 static void start_connect(struct connect_request *req, struct sockaddr *addr, socklen_t addrlen);
 static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errstr, struct addrinfo *res, void *_req)
@@ -89,7 +120,7 @@ static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errs
     req->getaddr_req = NULL;
 
     if (errstr != NULL) {
-        if (req->remaining_try_count > 0) {
+        if (req->dns_results > 0) {
             try_connect(req);
             return;
         }
@@ -103,8 +134,6 @@ static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errs
 
 static void try_connect(struct connect_request *req)
 {
-    req->remaining_try_count--;
-
     req->getaddr_req =
         h2o_hostinfo_getaddr(req->getaddr_receiver, req->host, h2o_iovec_init(req->named_serv, strlen(req->named_serv)), AF_UNSPEC,
                              SOCK_STREAM, IPPROTO_TCP, AI_ADDRCONFIG | AI_NUMERICSERV, on_getaddr, req);
@@ -114,7 +143,7 @@ static void start_connect(struct connect_request *req, struct sockaddr *addr, so
 {
     req->sock = h2o_socket_connect(req->loop, addr, addrlen, on_connect);
     if (req->sock == NULL) {
-        if (req->remaining_try_count > 0) {
+        if (req->dns_results > 0) {
             try_connect(req);
             return;
         }
