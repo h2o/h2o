@@ -406,9 +406,7 @@ static struct st_h2o_evloop_socket_t *create_socket(h2o_evloop_t *loop, int fd, 
  */
 static void set_nodelay_if_likely_tcp(int fd, struct sockaddr *sa)
 {
-    if (sa == NULL)
-        return;
-    if (!(sa->sa_family == AF_INET || sa->sa_family == AF_INET6))
+    if (sa != NULL && !(sa->sa_family == AF_INET || sa->sa_family == AF_INET6))
         return;
 
     int on = 1;
