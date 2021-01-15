@@ -443,12 +443,15 @@ h2o_socket_t *h2o_evloop_socket_accept(h2o_socket_t *_listener)
     /* the anticipation here is that a socket returned by `accept4` will inherit the TCP_NODELAY flag from the listening socket */
     if ((fd = accept4(listener->fd, (struct sockaddr *)peeraddr, peeraddrlen, SOCK_NONBLOCK | SOCK_CLOEXEC)) == -1)
         return NULL;
-#if !defined(NDEBUG) && defined(DEBUG)
-    { /* assert that TCP_NODELAY flag is inherited */
-        int flag = 0;
-        socklen_t len = sizeof(flag);
-        if (0 == getsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &flag, &len)) {
-            assert(flag == 1);
+#if !defined(NDEBUG)
+    { /* assert once that TCP_NODELAY flag is inherited */
+        static __thread int done = 0;
+        if (!done) {
+            done = 1;
+            int flag = 0;
+            socklen_t len = sizeof(flag);
+            if (getsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &flag, &len) == 0)
+                assert(flag && "TCP_NODELAY should have been inherited from the listener socket");
         }
     }
 #endif
