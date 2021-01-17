@@ -441,26 +441,14 @@ h2o_socket_t *h2o_evloop_socket_accept(h2o_socket_t *_listener)
     /* the anticipation here is that a socket returned by `accept4` will inherit the TCP_NODELAY flag from the listening socket */
     if ((fd = accept4(listener->fd, (struct sockaddr *)peeraddr, peeraddrlen, SOCK_NONBLOCK | SOCK_CLOEXEC)) == -1)
         return NULL;
-#if !defined(NDEBUG)
-    { /* assert once that TCP_NODELAY flag is inherited (TODO move this check into a unit test) */
-        static __thread int done = 0;
-        if (!done) {
-            done = 1;
-            int flag = 0;
-            socklen_t len = sizeof(flag);
-            if (getsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &flag, &len) == 0)
-                assert(flag && "TCP_NODELAY should have been inherited from the listener socket");
-        }
-    }
-#endif
     sock = &create_socket(listener->loop, fd, H2O_SOCKET_FLAG_IS_ACCEPTED_CONNECTION)->super;
 #else
     if ((fd = cloexec_accept(listener->fd, (struct sockaddr *)peeraddr, peeraddrlen)) == -1)
         return NULL;
     fcntl(fd, F_SETFL, O_NONBLOCK);
     sock = &create_socket(listener->loop, fd, H2O_SOCKET_FLAG_IS_ACCEPTED_CONNECTION)->super;
-    set_nodelay_if_likely_tcp(fd, (struct sockaddr *)peeraddr);
 #endif
+    set_nodelay_if_likely_tcp(fd, (struct sockaddr *)peeraddr);
 
     if (peeraddr != NULL && *peeraddrlen <= sizeof(*peeraddr))
         h2o_socket_setpeername(sock, (struct sockaddr *)peeraddr, *peeraddrlen);
