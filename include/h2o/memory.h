@@ -272,7 +272,7 @@ h2o_iovec_t h2o_buffer_reserve(h2o_buffer_t **inbuf, size_t min_guarantee);
 /**
  * allocates a buffer.
  * @param inbuf - pointer to a pointer pointing to the structure (set *inbuf to NULL to allocate a new buffer)
- * @param min_guarantee minimum number of bytes to reserve
+ * @param min_guarantee minimum number of additional bytes to reserve
  * @return buffer to which the next data should be stored
  * @note When called against a new buffer, the function returns a buffer twice the size of requested guarantee.  The function uses
  * exponential backoff for already-allocated buffers.
