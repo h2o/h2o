@@ -859,6 +859,10 @@ static void tunnel_on_client_read(h2o_socket_t *_sock, const char *err)
 
     tunnel_reset_timeout(tunnel);
 
+    /* Instead of using a double buffer, the code below passes a pointer to `h2o_socket_t::input` directly to the write callback.
+     * Doing so is safe here because the invocation of the write callback is coupled with `h2o_socket_read_stop`; the socket input
+     * buffer is never modified (and thus never gets realloc'ed) while its contents are inflight.
+     */
     if (tunnel->client->input->size != 0) {
         h2o_socket_read_stop(tunnel->client);
         tunnel->server->write_(tunnel->server, tunnel->client->input->bytes, tunnel->client->input->size);
