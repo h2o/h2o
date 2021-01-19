@@ -47,11 +47,19 @@ struct connect_request {
     struct dns_res dns[NUM_DNS_RESULTS];
     size_t dns_results;
     struct st_handler_ctx_t *handler_ctx;
+    h2o_timer_t timeout;
 };
 
 static void on_error(struct connect_request *req, const char *errstr)
 {
+    h2o_timer_unlink(&req->timeout);
     h2o_send_error_502(req->src_req, "Gateway Error", errstr, 0);
+}
+
+static void on_timeout(h2o_timer_t *entry)
+{
+    struct connect_request *creq = H2O_STRUCT_FROM_MEMBER(struct connect_request, timeout, entry);
+    on_error(creq, h2o_httpclient_error_io_timeout);
 }
 
 static void start_connect(struct connect_request *req, struct sockaddr *addr, socklen_t addrlen);
@@ -68,6 +76,7 @@ static void on_connect(h2o_socket_t *sock, const char *err)
         return;
     }
 
+    h2o_timer_unlink(&creq->timeout);
     h2o_req_t *req = creq->src_req;
     uint64_t timeout = creq->handler_ctx->config.tunnel.timeout;
     sock->data = NULL;
@@ -175,6 +184,8 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
     creq->handler_ctx = handler;
     creq->dns_results = NUM_DNS_RESULTS;
     sprintf(creq->named_serv, "%" PRIu16, port);
+    creq->timeout.cb = on_timeout;
+    h2o_timer_link(creq->loop, handler->config.tunnel.timeout, &creq->timeout);
 
     creq->getaddr_req =
         h2o_hostinfo_getaddr(creq->getaddr_receiver, creq->host, h2o_iovec_init(creq->named_serv, strlen(creq->named_serv)), AF_UNSPEC,
