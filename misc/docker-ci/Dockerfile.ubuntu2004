@@ -65,7 +65,8 @@ RUN curl -Ls https://github.com/i110/h2spec/releases/download/v2.2.0-4e8cc7e/h2s
 
 # bcc and bpftrace
 RUN apt-get install --yes \
-	libbpfcc-dev
+	libbpfcc-dev \
+	linux-headers-$(uname -r)
 RUN git clone --branch kazuho/usdt-attach-all-locations https://github.com/kazuho/bpftrace.git && \
 	cd bpftrace && \
 	mkdir build &&  \
