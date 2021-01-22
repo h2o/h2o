@@ -11,6 +11,8 @@ use t::Util;
 plan skip_all => "h2olog is supported only for Linux"
     if $^O ne 'linux';
 
+run_as_root();
+
 my $h2olog_prog = bindir() . "/h2olog";
 my $client_prog = bindir() . "/h2o-httpclient";
 

@@ -581,7 +581,7 @@ sub spawn_h2olog {
     die "fork(2) failed: $!" unless defined $tracer_pid;
     if ($tracer_pid == 0) {
         # child process, spawn h2olog
-        exec "sudo", $h2olog_prog, @{$h2olog_args}, "-p", $h2o_pid, "-w", $output_file;
+        exec $h2olog_prog, @{$h2olog_args}, "-p", $h2o_pid, "-w", $output_file;
         die "failed to spawn $h2olog_prog: $!";
     }
 
@@ -631,7 +631,10 @@ sub spawn_h2olog {
     my $guard = scope_guard(sub {
         if (waitpid($tracer_pid, WNOHANG) == 0) {
             diag "killing h2olog ($tracer_pid) with SIGTERM";
-            kill "TERM", $tracer_pid;
+            kill("TERM", $tracer_pid)
+                or warn("failed to kill h2olog: $!");
+        } else {
+            diag "h2olog has exited successfully";
         }
     });
 
