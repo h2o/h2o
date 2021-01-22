@@ -926,18 +926,13 @@ IF (WITH_H2OLOG)
         "include/h2o/version.h"
     )
 
-    SET(H2OLOG_GEN_DEPS
-        "h2o-probes.d"
-        "deps/quicly/quicly-probes.d"
-        "deps/quicly/include/quicly.h"
-    )
+    SET(H2OLOG_RAW_TRACER_FILE "${CMAKE_CURRENT_SOURCE_DIR}/src/h2olog/generated_raw_tracer.cc")
 
     ADD_CUSTOM_COMMAND(
-        OUTPUT  "${CMAKE_CURRENT_SOURCE_DIR}/src/h2olog/generated_raw_tracer.cc"
-        COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/src/h2olog/misc/gen_raw_tracer.py" "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}/src/h2olog/generated_raw_tracer.cc"
-        DEPENDS ${H2OLOG_GEN_DEPS} "${CMAKE_CURRENT_SOURCE_DIR}/src/h2olog/misc/gen_raw_tracer.py"
+        OUTPUT  "${H2OLOG_RAW_TRACER_FILE}"
+        COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/src/h2olog/misc/gen_raw_tracer.py" "${CMAKE_CURRENT_SOURCE_DIR}" "${H2OLOG_RAW_TRACER_FILE}"
     )
-    LIST(APPEND H2OLOG_SOURCE_FILES "${CMAKE_CURRENT_SOURCE_DIR}/src/h2olog/generated_raw_tracer.cc")
+    LIST(APPEND H2OLOG_SOURCE_FILES "${H2OLOG_RAW_TRACER_FILE}")
     LINK_DIRECTORIES("${LIBBCC_LIBRARY_DIRS}")
 
     ADD_EXECUTABLE(h2olog ${H2OLOG_SOURCE_FILES})
