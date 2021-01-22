@@ -1195,10 +1195,10 @@ static void do_cancel(h2o_httpclient_t *_client)
     close_stream(stream);
 }
 
-static h2o_socket_t *do_get_socket(h2o_httpclient_t *_client)
+static void do_get_conn_properties(h2o_httpclient_t *_client, h2o_httpclient_conn_properties_t *properties)
 {
     struct st_h2o_http2client_stream_t *stream = (void *)_client;
-    return stream->conn->super.sock;
+    h2o_httpclient_set_conn_properties_of_socket(stream->conn->super.sock, properties);
 }
 
 static void do_update_window(h2o_httpclient_t *_client)
@@ -1245,7 +1245,7 @@ static void setup_stream(struct st_h2o_http2client_stream_t *stream)
     stream->super.buf = &stream->input.body;
     stream->super.cancel = do_cancel;
     stream->super.steal_socket = NULL;
-    stream->super.get_socket = do_get_socket;
+    stream->super.get_conn_properties = do_get_conn_properties;
     stream->super.update_window = do_update_window;
     stream->super.write_req = do_write_req;
 }

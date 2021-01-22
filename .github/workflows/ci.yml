@@ -32,6 +32,7 @@ jobs:
             task: dtrace
             container: h2oserver/h2o-ci:ubuntu2004
 
+    timeout-minutes: 60
     steps:
     - uses: actions/checkout@v2
       with:
@@ -54,6 +55,7 @@ jobs:
     # see above
     if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
 
+    timeout-minutes: 60
     steps:
     - name: Build Fuzzers
       uses: google/oss-fuzz/infra/cifuzz/actions/build_fuzzers@master

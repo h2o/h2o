@@ -21,11 +21,11 @@ static bool json_need_escape(char c)
     return static_cast<unsigned char>(c) < 0x20 || c == 0x7f;
 }
 
-static void json_write_str_value(FILE *out, const char *str)
+static void json_write_str_value(FILE *out, const char *str, size_t str_len)
 {
     fputc('"', out);
-    while (*str) {
-        switch (*str) {
+    for (size_t i = 0; i < str_len; i++) {
+        switch (str[i]) {
         case '\"':
             FPUTS_LIT("\\\"", out);
             break;
@@ -48,15 +48,14 @@ static void json_write_str_value(FILE *out, const char *str)
             FPUTS_LIT("\\t", out);
             break;
         default:
-            if (!json_need_escape(*str)) {
-                fputc(*str, out);
+            if (!json_need_escape(str[i])) {
+                fputc(str[i], out);
             } else {
-                auto u8 = static_cast<uint8_t>(*str);
+                auto u8 = static_cast<uint8_t>(str[i]);
                 fprintf(out, "\\u%04x", u8);
             }
             break;
         }
-        str++;
     }
     fputc('"', out);
 }
@@ -69,17 +68,17 @@ static void json_write_name_value(FILE *out, const char *name, size_t name_len)
     fputc(':', out);
 }
 
-void json_write_pair_n(FILE *out, const char *name, size_t name_len, const char *value)
+void json_write_pair_n(FILE *out, const char *name, size_t name_len, const char *value, size_t value_len)
 {
     json_write_name_value(out, name, name_len);
-    json_write_str_value(out, value);
+    json_write_str_value(out, value, value_len);
 }
 
-void json_write_pair_c(FILE *out, const char *name, size_t name_len, const char *value)
+void json_write_pair_c(FILE *out, const char *name, size_t name_len, const char *value, size_t value_len)
 {
     fputc(',', out);
     json_write_name_value(out, name, name_len);
-    json_write_str_value(out, value);
+    json_write_str_value(out, value, value_len);
 }
 
 void json_write_pair_c(FILE *out, const char *name, size_t name_len, const void *value, size_t len)

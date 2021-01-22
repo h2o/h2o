@@ -72,8 +72,23 @@ EOT
         subtest 'http/3' => sub {
             plan skip_all => "$h3client not found"
                 unless -e $h3client;
-            my $resp = `$h3client -3 https://127.0.0.1:$quic_port/async/index.txt 2>&1`;
-            like $resp, qr{^HTTP/3 103\n.*?foo: FOO.*\n\nHTTP/3 200\n}s;
+            for my $sleep_secs (qw(0 2)) {
+                subtest "sleep $sleep_secs" => sub {
+                    open my $fh, "-|", "$h3client -3 100 https://127.0.0.1:$quic_port/async/sleep-and-respond?sleep=$sleep_secs 2>&1"
+                        or die "failed to invoke $h3client:$!";
+                    like scalar(<$fh>), qr{^HTTP/3 103}, "103 resp";
+                    ok wait_for_line($fh, qr{^foo: FOO$}s, qr{^$}s), "has foo: FOO";
+                    ok wait_for_line($fh, qr{^$}), "end of 103 headers";
+                    my $early_at = Time::HiRes::time;
+                    like scalar(<$fh>), qr{^HTTP/3 200}, "200 resp";
+                    ok wait_for_line($fh, qr{^$}), "end of 200 headers";
+                    is do { local $/; <$fh> }, "hello world", "response body";
+                    my $final_at = Time::HiRes::time;
+                    if ($sleep_secs > 0) {
+                        cmp_ok $sleep_secs - 1, "<", $final_at - $early_at, "early response provided early";
+                    }
+                };
+            }
         };
     };
     subtest 'sync' => sub {
@@ -86,7 +101,7 @@ EOT
         subtest 'http/3' => sub {
             plan skip_all => "$h3client not found"
                 unless -e $h3client;
-            my $resp = `$h3client -3 https://127.0.0.1:$quic_port/sync/index.txt 2>&1`;
+            my $resp = `$h3client -3 100 https://127.0.0.1:$quic_port/sync/index.txt 2>&1`;
             like $resp, qr{^HTTP/3 200\n}s;
         };
     };
@@ -199,4 +214,15 @@ EOT
             unlike $resp, qr{^HTTP/[\d.]+ $status}mi;
         });
     };
+}
+
+sub wait_for_line {
+    my ($fh, $pass_pattern, $fail_pattern) = @_;
+    while (my $line = <$fh>) {
+        return 1 if $line =~ /$pass_pattern/;
+        if (defined $fail_pattern) {
+            return 0 if $line =~ /$fail_pattern/;
+        }
+    }
+    return 0;
 }

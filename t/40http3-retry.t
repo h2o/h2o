@@ -79,7 +79,7 @@ sub fetch {
             or die "failed to redirect stdout to pipe:$!";
         open STDERR, ">&", $writefh
             or die "failed to redirect stderr to pipe:$!";
-        exec qw(dtrace -q -c), "$client_prog -3 $progargs", "-n", <<'EOT';
+        exec qw(dtrace -q -c), "$client_prog -3 100 $progargs", "-n", <<'EOT';
 quicly$target:::receive {
     bytes = (uint8_t *)copyin(arg3, arg4);
     printf("first-byte: %02x\n", bytes[0]);

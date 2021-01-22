@@ -24,6 +24,7 @@
 
 import re
 import sys
+import warnings
 from collections import OrderedDict
 from pathlib import Path
 from pprint import pprint
@@ -239,7 +240,7 @@ int %s(struct pt_regs *ctx) {
                                                           1, event_t_name)
   if fully_specified_probe_name == "h2o:send_response_header":
       # handle -s option
-      c += r"""
+    c += r"""
 #ifdef CHECK_ALLOWED_RES_HEADER_NAME
   if (!CHECK_ALLOWED_RES_HEADER_NAME(event.send_response_header.name, event.send_response_header.name_len))
     return 0;
@@ -447,7 +448,7 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
 
     handle_event_func += "  case %s: { // %s\n" % (
         metadata['id'], fully_specified_probe_name)
-    handle_event_func += '    json_write_pair_n(out_, STR_LIT("type"), "%s");\n' % probe_name.replace("_", "-")
+    handle_event_func += '    json_write_pair_n(out_, STR_LIT("type"), STR_LIT("%s"));\n' % probe_name.replace("_", "-")
     handle_event_func += '    json_write_pair_c(out_, STR_LIT("seq"), seq_);\n'
 
     for field_name, field_type in flat_args_map.items():
@@ -457,20 +458,27 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
       event_t_name = "%s.%s" % (probe_name, field_name)
       if fully_specified_probe_name == "quicly:receive" and field_name == "bytes":
         handle_event_func += '    json_write_pair_c(out_, STR_LIT("first-octet"), event->receive.bytes[0]);\n'
-      elif not is_bin_type(field_type):
+      elif not is_bin_type(field_type) and not is_str_type(field_type):
         handle_event_func += '    json_write_pair_c(out_, STR_LIT("%s"), event->%s);\n' % (
             json_field_name, event_t_name)
-      else:  # bin type (it should have the correspinding length arg)
-        len_names = set([field_name + "_len", "len", "num_" + field_name])
+      else:  # bin or str type with "*_len" field
+        len_names = set([field_name + "_len", "num_" + field_name])
 
         len_event_t_name = None
         for n in flat_args_map:
           if n in len_names:
             len_event_t_name = "%s.%s" % (probe_name, n)
-        assert isinstance(len_event_t_name, str)
-        # A string might be truncated in STRLEN
-        handle_event_func += '    json_write_pair_c(out_, STR_LIT("%s"), event->%s, (event->%s < STR_LEN ? event->%s : STR_LEN));\n' % (
-            json_field_name, event_t_name, len_event_t_name, len_event_t_name)
+
+        if len_event_t_name:
+          # A string might be truncated in STRLEN
+          handle_event_func += '    json_write_pair_c(out_, STR_LIT("%s"), event->%s, (event->%s < STR_LEN ? event->%s : STR_LEN));\n' % (
+              json_field_name, event_t_name, len_event_t_name, len_event_t_name)
+        elif is_bin_type(field_type):
+          handle_event_func += '    # warning "missing `%s_len` param in the probe %s, ignored."\n' % (
+              field_name, fully_specified_probe_name)
+        else:  # str type
+          handle_event_func += '    json_write_pair_c(out_, STR_LIT("%s"), event->%s, strlen(event->%s));\n' % (
+              json_field_name, event_t_name, event_t_name)
 
     if metadata["provider"] == "h2o":
       handle_event_func += '    json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());\n'
