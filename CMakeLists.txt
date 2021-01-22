@@ -376,6 +376,7 @@ SET(LIB_SOURCE_FILES
     lib/common/time.c
     lib/common/timerwheel.c
     lib/common/token.c
+    lib/common/udp_tunnel.c
     lib/common/url.c
     lib/common/balancer/roundrobin.c
     lib/common/balancer/least_conn.c
