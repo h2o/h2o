@@ -14,11 +14,6 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        name:
-          - default
-          - OpenSSL 1.1.0
-          - OpenSSL 1.1.1
-          - DTrace
         include:
           - name: default
             command: make -f misc/docker-ci/check.mk ALL
