@@ -4,7 +4,7 @@ on: [push, pull_request]
 
 jobs:
   build:
-    name: "${{ matrix.type }}"
+    name: "${{ matrix.name }}"
     runs-on: [ubuntu-20.04]
 
     # We want to run on external PRs, but not on our own internal PRs as they'll be run
@@ -14,23 +14,22 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        type:
+        name:
           - default
           - OpenSSL 1.1.0
           - OpenSSL 1.1.1
           - DTrace
         include:
-          - type: default
-            task: ALL
-          - type: OpenSSL 1.1.0
-            task: ossl1.1.0
-          - type: OpenSSL 1.1.1
-            task: ossl1.1.1
-          - type: Fuzz
-            task: fuzz
-          - type: DTrace
-            task: dtrace
-            container: h2oserver/h2o-ci:ubuntu2004
+          - name: default
+            command: make -f misc/docker-ci/check.mk ALL
+          - name: OpenSSL 1.1.0
+            command: make -f misc/docker-ci/check.mk ossl1.1.0
+          - name: OpenSSL 1.1.1
+            command: make -f misc/docker-ci/check.mk ossl1.1.1
+          - name: Fuzz
+            command: make -f misc/docker-ci/check.mk fuzz
+          - name: DTrace
+            command: make -f misc/docker-ci/check.mk dtrace CONTAINER_NAME=h2oserver/h2o-ci:ubuntu2004
 
     timeout-minutes: 60
     steps:
@@ -42,10 +41,7 @@ jobs:
       shell: 'script -q -e -c "bash -xe {0}"'
       run: |
         chmod -R ugo+w .
-        if [ -n "${{ matrix.container }}" ] ; then
-          export CONTAINER_NAME="${{ matrix.container }}"
-        fi
-        make -f misc/docker-ci/check.mk ${{ matrix.task }}
+        ${{ matrix.command }}
 
   # See https://github.com/google/oss-fuzz/tree/master/projects/h2o for details
   ossfuzz:
