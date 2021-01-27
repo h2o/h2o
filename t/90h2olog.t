@@ -50,15 +50,22 @@ EOT
 });
 
 subtest "h2olog", sub {
-  my $tracer = spawn_h2olog({
+  my $trace = slurp_h2olog({
     pid => $server->{pid},
     args => [$ENV{H2OLOG_DEBUG} ? ("-d") : ()],
-  });
 
-  my $trace = $tracer->get_trace(sub {
-    my ($headers, $body) = run_prog("$client_prog -3 https://127.0.0.1:$quic_port/");
-    like $headers, qr{^HTTP/3 200\n}, "req: HTTP/3";
-    is $body, "hello\n", "req: body";
+    request => sub {
+      my ($headers, $body) = run_prog("$client_prog -3 https://127.0.0.1:$quic_port/");
+      like $headers, qr{^HTTP/3 200\n}, "req: HTTP/3";
+      is $body, "hello\n", "req: body";
+    },
+
+    is_ready => sub {
+      my($partial_tace) = @_;
+
+      # it has at least one line
+      return $partial_tace =~ /\n/;
+    },
   });
 
   if ($ENV{H2OLOG_DEBUG}) {
@@ -69,15 +76,15 @@ subtest "h2olog", sub {
 };
 
 subtest "h2olog -H", sub {
-  my $tracer = spawn_h2olog({
+  my $trace = slurp_h2olog({
     pid => $server->{pid},
     args => ["-H", $ENV{H2OLOG_DEBUG} ? ("-d") : ()],
-  });
 
-  my $trace = $tracer->get_trace(sub {
-    my ($headers, $body) = run_prog("$client_prog -3 https://127.0.0.1:$quic_port/");
-    like $headers, qr{^HTTP/3 200\n}, "req: HTTP/3";
-    is $body, "hello\n", "req: body";
+    request => sub {
+      my ($headers, $body) = run_prog("$client_prog -3 https://127.0.0.1:$quic_port/");
+      like $headers, qr{^HTTP/3 200\n}, "req: HTTP/3";
+      is $body, "hello\n", "req: body";
+    },
   });
 
   if ($ENV{H2OLOG_DEBUG}) {
