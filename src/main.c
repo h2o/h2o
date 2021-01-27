@@ -731,7 +731,8 @@ static h2o_iovec_t *build_http2_origin_frame(h2o_configurator_command_t *cmd, yo
 }
 
 static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *listen_node,
-                              yoml_t **ssl_node, yoml_t **cc_node, struct listener_config_t *listener, int listener_is_new)
+                              yoml_t **ssl_node, yoml_t **cc_node, yoml_t **initcwnd_node, struct listener_config_t *listener,
+                              int listener_is_new)
 {
     SSL_CTX *ssl_ctx = NULL;
     yoml_t **certificate_file, **key_file, **dh_file, **min_version, **max_version, **cipher_suite, **ocsp_update_cmd,
@@ -993,6 +994,19 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
                 h2o_configurator_errprintf(cmd, *cc_node, "specified congestion controller is unknown or unspported for QUIC");
                 goto Error;
             }
+        }
+    }
+
+    /* initcwnd */
+    if (initcwnd_node != NULL) {
+        if (listener->quic.ctx == NULL) {
+            /* TCP; skip as there's no way of setting */
+        } else {
+            /* QUIC */
+            uint32_t initcwnd_packets;
+            if (h2o_configurator_scanf(cmd, *initcwnd_node, "%" SCNu32, &initcwnd_packets) != 0)
+                goto Error;
+            listener->quic.ctx->initcwnd_packets = initcwnd_packets;
         }
     }
 
@@ -1365,7 +1379,8 @@ static void on_http3_conn_destroy(h2o_quic_conn_t *conn)
 static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     const char *hostname = NULL, *servname, *type = "tcp";
-    yoml_t **ssl_node = NULL, **owner_node = NULL, **permission_node = NULL, **quic_node = NULL, **cc_node = NULL;
+    yoml_t **ssl_node = NULL, **owner_node = NULL, **permission_node = NULL, **quic_node = NULL, **cc_node = NULL,
+           **initcwnd_node = NULL;
     int proxy_protocol = 0;
 
     /* fetch servname (and hostname) */
@@ -1375,9 +1390,10 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
         break;
     case YOML_TYPE_MAPPING: {
         yoml_t **port_node, **host_node, **type_node, **proxy_protocol_node;
-        if (h2o_configurator_parse_mapping(
-                cmd, node, "port:s", "host:s,type:s,owner:s,permission:*,ssl:m,proxy-protocol:*,quic:m,cc:s", &port_node,
-                &host_node, &type_node, &owner_node, &permission_node, &ssl_node, &proxy_protocol_node, &quic_node, &cc_node) != 0)
+        if (h2o_configurator_parse_mapping(cmd, node, "port:s",
+                                           "host:s,type:s,owner:s,permission:*,ssl:m,proxy-protocol:*,quic:m,cc:s,initcwnd:s",
+                                           &port_node, &host_node, &type_node, &owner_node, &permission_node, &ssl_node,
+                                           &proxy_protocol_node, &quic_node, &cc_node, &initcwnd_node) != 0)
             return -1;
         servname = (*port_node)->data.scalar;
         if (host_node != NULL)
@@ -1400,6 +1416,8 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
 
         if (cc_node != NULL)
             h2o_configurator_errprintf(cmd, *cc_node, "[warning] cannot set congestion controller for unix socket");
+        if (initcwnd_node != NULL)
+            h2o_configurator_errprintf(cmd, *initcwnd_node, "[warning] cannot set initial congestion window for unix socket");
 
         /* unix socket */
         struct sockaddr_un sa;
@@ -1438,7 +1456,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
         } else if (listener->proxy_protocol != proxy_protocol) {
             goto ProxyConflict;
         }
-        if (listener_setup_ssl(cmd, ctx, node, ssl_node, NULL, listener, listener_is_new) != 0)
+        if (listener_setup_ssl(cmd, ctx, node, ssl_node, NULL, NULL, listener, listener_is_new) != 0)
             return -1;
         if (listener->hosts != NULL && ctx->hostconf != NULL)
             h2o_append_to_null_terminated_list((void *)&listener->hosts, ctx->hostconf);
@@ -1451,6 +1469,8 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
             h2o_configurator_errprintf(
                 cmd, *cc_node, "[warning] Setting ignored. TCP congestion controller cannot be set at runtime on this environment");
 #endif
+        if (initcwnd_node != NULL)
+            h2o_configurator_errprintf(cmd, *initcwnd_node, "[warning] cannot set initial congestion window for TCP");
         struct addrinfo *res, *ai;
         if ((res = resolve_address(cmd, node, SOCK_STREAM, IPPROTO_TCP, hostname, servname)) == NULL)
             return -1;
@@ -1487,7 +1507,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                 freeaddrinfo(res);
                 goto ProxyConflict;
             }
-            if (listener_setup_ssl(cmd, ctx, node, ssl_node, cc_node, listener, listener_is_new) != 0) {
+            if (listener_setup_ssl(cmd, ctx, node, ssl_node, cc_node, NULL, listener, listener_is_new) != 0) {
                 freeaddrinfo(res);
                 return -1;
             }
@@ -1575,7 +1595,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                 }
                 listener_is_new = 1;
             }
-            if (listener_setup_ssl(cmd, ctx, node, ssl_node, cc_node, listener, listener_is_new) != 0) {
+            if (listener_setup_ssl(cmd, ctx, node, ssl_node, cc_node, initcwnd_node, listener, listener_is_new) != 0) {
                 freeaddrinfo(res);
                 return -1;
             }
