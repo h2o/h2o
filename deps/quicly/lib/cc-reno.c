@@ -98,13 +98,15 @@ static void reno_init(quicly_init_cc_t *self, quicly_cc_t *cc, uint32_t initcwnd
 
 quicly_init_cc_t quicly_cc_reno_init = {reno_init};
 
-uint32_t quicly_cc_calc_initial_cwnd(uint16_t max_udp_payload_size)
+uint32_t quicly_cc_calc_initial_cwnd(uint32_t max_packets, uint16_t max_udp_payload_size)
 {
-    static const uint32_t max_packets = 10, max_bytes = 14720;
-    uint32_t cwnd = max_packets * max_udp_payload_size;
-    if (cwnd > max_bytes)
-        cwnd = max_bytes;
-    if (cwnd < QUICLY_MIN_CWND * max_udp_payload_size)
-        cwnd = QUICLY_MIN_CWND * max_udp_payload_size;
-    return cwnd;
+    static const uint32_t mtu_max = 1472;
+
+    /* apply filters to the two arguments */
+    if (max_packets < QUICLY_MIN_CWND)
+        max_packets = QUICLY_MIN_CWND;
+    if (max_udp_payload_size > mtu_max)
+        max_udp_payload_size = mtu_max;
+
+    return max_packets * max_udp_payload_size;
 }
