@@ -1057,6 +1057,7 @@ static void usage(const char *cmd)
            "  -U size                   maximum size of UDP datagarm payload\n"
            "  -V                        verify peer using the default certificates\n"
            "  -v                        verbose mode (-vv emits packet dumps as well)\n"
+           "  -w packets                initial congestion window (default: 10)\n"
            "  -x named-group            named group to be used (default: secp256r1)\n"
            "  -X                        max bidirectional stream count (default: 100)\n"
            "  -y cipher-suite           cipher-suite to be used (default: all)\n"
@@ -1103,7 +1104,7 @@ int main(int argc, char **argv)
         address_token_aead.dec = ptls_aead_new(&ptls_openssl_aes128gcm, &ptls_openssl_sha256, 0, secret, "");
     }
 
-    while ((ch = getopt(argc, argv, "a:b:B:c:C:Dd:k:Ee:Gi:I:K:l:M:m:NnOp:P:Rr:S:s:u:U:Vvx:X:y:h")) != -1) {
+    while ((ch = getopt(argc, argv, "a:b:B:c:C:Dd:k:Ee:Gi:I:K:l:M:m:NnOp:P:Rr:S:s:u:U:Vvw:x:X:y:h")) != -1) {
         switch (ch) {
         case 'a':
             assert(negotiated_protocols.count < PTLS_ELEMENTSOF(negotiated_protocols.list));
@@ -1251,6 +1252,12 @@ int main(int argc, char **argv)
             break;
         case 'v':
             ++verbosity;
+            break;
+        case 'w':
+            if (sscanf(optarg, "%" SCNu32, &ctx.initcwnd_packets) != 1) {
+                fprintf(stderr, "invalid argument passed to `-w`\n");
+                exit(1);
+            }
             break;
         case 'x': {
             size_t i;
