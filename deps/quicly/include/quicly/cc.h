@@ -168,7 +168,7 @@ extern struct st_quicly_init_cc_t quicly_cc_cubic_init;
 /**
  * Calculates the initial congestion window size given the maximum UDP payload size.
  */
-uint32_t quicly_cc_calc_initial_cwnd(uint16_t max_udp_payload_size);
+uint32_t quicly_cc_calc_initial_cwnd(uint32_t max_packets, uint16_t max_udp_payload_size);
 
 #ifdef __cplusplus
 }
