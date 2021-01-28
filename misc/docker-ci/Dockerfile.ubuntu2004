@@ -64,21 +64,13 @@ RUN sudo cpanm --notest https://github.com/tokuhirom/Test-TCP.git@2.21
 RUN curl -Ls https://github.com/i110/h2spec/releases/download/v2.2.0-4e8cc7e/h2spec_linux_amd64.tar.gz | tar zx -C /usr/local/bin
 
 # bcc and bpftrace
-RUN git clone https://github.com/iovisor/bcc.git && \
-	cd bcc && \
-	git checkout 6021958a && \
-	mkdir build && \
-	cd build && \
-	cmake -DCMAKE_INSTALL_PREFIX=/usr -DPYTHON_CMD=python3 .. && \
-	make && \
-	make install && \
-	make clean
-RUN git clone https://github.com/kazuho/bpftrace.git && \
+RUN apt-get install --yes \
+	libbpfcc-dev
+RUN git clone --branch kazuho/usdt-attach-all-locations https://github.com/kazuho/bpftrace.git && \
 	cd bpftrace && \
-	git checkout kazuho/usdt-attach-all-locations && \
 	mkdir build &&  \
 	cd build && \
-	cmake .. && \
+	cmake -DLLVM_REQUESTED_VERSION=7 .. && \
 	make && \
 	make install && \
 	make clean
