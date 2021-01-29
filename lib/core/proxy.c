@@ -281,7 +281,7 @@ static void build_request(h2o_req_t *req, h2o_iovec_t *method, h2o_url_t *url, h
             added.base[added.len++] = '.';
             added.base[added.len++] = '0' + (0x100 <= req->version && req->version <= 0x109 ? req->version - 0x100 : 0);
         } else {
-            added.base[added.len++] = '2';
+            added.base[added.len++] = '0' + req->version / 0x100;
         }
         added.base[added.len++] = ' ';
         memcpy(added.base + added.len, req->input.authority.base, req->input.authority.len);
