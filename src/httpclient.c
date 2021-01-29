@@ -193,7 +193,7 @@ static void start_request(h2o_httpclient_ctx_t *ctx)
         sprintf(crt_fullpath, "%s%s", root, CA_PATH);
 #undef CA_PATH
 
-        SSL_CTX *ssl_ctx = SSL_CTX_new(TLSv1_client_method());
+        SSL_CTX *ssl_ctx = SSL_CTX_new(SSLv23_client_method());
         SSL_CTX_load_verify_locations(ssl_ctx, crt_fullpath, NULL);
         if (ssl_verify_none) {
             SSL_CTX_set_verify(ssl_ctx, SSL_VERIFY_NONE, NULL);
