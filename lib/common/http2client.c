@@ -337,7 +337,7 @@ static int on_head(struct st_h2o_http2client_conn_t *conn, struct st_h2o_http2cl
 
 Failed:
     assert(ret == H2O_HTTP2_ERROR_PROTOCOL);
-    call_callback_with_error(stream, h2o_httpclient_error_http2_protocol_violation);
+    call_callback_with_error(stream, h2o_httpclient_error_protocol_violation);
 SendRSTStream:
     stream_send_error(conn, stream->stream_id, ret);
     close_stream(stream);
@@ -411,7 +411,7 @@ static int handle_data_frame(struct st_h2o_http2client_conn_t *conn, h2o_http2_f
 
     if (stream->state.res != STREAM_STATE_BODY) {
         stream_send_error(conn, frame->stream_id, H2O_HTTP2_ERROR_PROTOCOL);
-        call_callback_with_error(stream, h2o_httpclient_error_http2_protocol_violation);
+        call_callback_with_error(stream, h2o_httpclient_error_protocol_violation);
         close_stream(stream);
         return 0;
     }
@@ -670,7 +670,7 @@ static int handle_window_update_frame(struct st_h2o_http2client_conn_t *conn, h2
             stream_send_error(conn, frame->stream_id, ret);
             struct st_h2o_http2client_stream_t *stream = get_stream(conn, frame->stream_id);
             if (stream != NULL) {
-                call_callback_with_error(stream, h2o_httpclient_error_http2_protocol_violation);
+                call_callback_with_error(stream, h2o_httpclient_error_protocol_violation);
                 close_stream(stream);
             }
             return 0;
@@ -899,7 +899,7 @@ static int parse_input(struct st_h2o_http2client_conn_t *conn)
                 enqueue_goaway(conn, (int)ret,
                                err_desc != NULL ? (h2o_iovec_t){(char *)err_desc, strlen(err_desc)} : (h2o_iovec_t){NULL});
             }
-            call_stream_callbacks_with_error(conn, h2o_httpclient_error_http2_protocol_violation);
+            call_stream_callbacks_with_error(conn, h2o_httpclient_error_protocol_violation);
             return close_connection(conn);
         }
         /* advance to the next frame */
