@@ -102,7 +102,7 @@ struct st_h2o_http3client_req_t {
         size_t bytes_written;
     } proceed_req;
     /**
-     * tunnel object, if used. `tunnel.destroy` is set to non-NULL iif used.
+     * tunnel object. `tunnel.destroy` is set to non-NULL iif used.
      */
     struct {
         h2o_httpclient_tunnel_t tunnel;
@@ -267,7 +267,8 @@ static void tunnel_proceed_read(h2o_httpclient_tunnel_t *_tunnel)
 {
     struct st_h2o_http3client_req_t *req = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3client_req_t, tunnel.tunnel, _tunnel);
 
-    h2o_doublebuffer_consume(&req->tunnel.ingress.doublebuf);
+    if (req->tunnel.ingress.doublebuf.inflight)
+        h2o_doublebuffer_consume(&req->tunnel.ingress.doublebuf);
     tunnel_process_ingress(req);
 }
 
@@ -620,7 +621,8 @@ static int handle_input_expect_headers(struct st_h2o_http3client_req_t *req, con
     if (is_tunnel(req)) {
         assert(req->super._cb.on_body == NULL);
     } else {
-        return frame_is_eos ? 0 : H2O_HTTP3_ERROR_INTERNAL;
+        if (req->super._cb.on_body == NULL)
+            return frame_is_eos ? 0 : H2O_HTTP3_ERROR_INTERNAL;
     }
 
     /* handle body */
