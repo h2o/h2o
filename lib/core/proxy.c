@@ -717,22 +717,14 @@ static void on_generator_dispose(void *_self)
     h2o_doublebuffer_dispose(&self->sending);
 }
 
-static struct rp_generator_t *proxy_send_prepare(h2o_req_t *req)
+static struct rp_generator_t *proxy_send_prepare(h2o_req_t *req, enum req_type_t req_type)
 {
     struct rp_generator_t *self = h2o_mem_alloc_shared(&req->pool, sizeof(*self), on_generator_dispose);
-    h2o_httpclient_ctx_t *client_ctx = get_client_ctx(req);
 
     self->super.proceed = do_proceed;
     self->super.stop = do_stop;
     self->src_req = req;
-    self->type = REQ_TYPE_NORMAL;
-    if (client_ctx->tunnel_timeout != NULL && req->establish_tunnel != NULL) {
-        if (h2o_memis(req->method.base, req->method.len, H2O_STRLIT("CONNECT"))) {
-            self->type = REQ_TYPE_CONNECT;
-        } else if (h2o_lcstris(req->upgrade.base, req->upgrade.len, H2O_STRLIT("websocket"))) {
-            self->type = REQ_TYPE_WEBSOCKET;
-        }
-    }
+    self->type = req_type;
     self->had_body_error = 0;
     self->up_req.is_head = h2o_memis(req->method.base, req->method.len, H2O_STRLIT("HEAD"));
     self->last_content_before_send = NULL;
@@ -760,7 +752,21 @@ void h2o__proxy_process_request(h2o_req_t *req)
     if (target == &target_buf)
         h2o_url_init(&target_buf, req->scheme, req->authority, h2o_iovec_init(H2O_STRLIT("/")));
 
-    struct rp_generator_t *self = proxy_send_prepare(req);
+    enum req_type_t req_type = REQ_TYPE_NORMAL;
+    int can_use_tunnel = client_ctx->tunnel_timeout != NULL && req->establish_tunnel != NULL;
+    if (h2o_memis(req->method.base, req->method.len, H2O_STRLIT("CONNECT"))) {
+        /* CONNECT requests cannot be forwarded unless configured as such */
+        if (!can_use_tunnel) {
+            h2o_send_error_405(req, "Method Not Allowed", "refusing CONNECT", H2O_SEND_ERROR_HTTP1_CLOSE_CONNECTION);
+            return;
+        }
+        req_type = REQ_TYPE_CONNECT;
+    } else if (h2o_lcstris(req->upgrade.base, req->upgrade.len, H2O_STRLIT("websocket")) && can_use_tunnel) {
+        /* websocket requests are converted to a normal request (omitting the Upgrade header field), or will have the upgrade header
+         * if req_type is set to REQ_TYPE_WEBSOCKET */
+        req_type = REQ_TYPE_WEBSOCKET;
+    }
+    struct rp_generator_t *self = proxy_send_prepare(req, req_type);
 
     /*
       When the PROXY protocol is being used (i.e. when overrides->use_proxy_protocol is set), the client needs to establish a new
