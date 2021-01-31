@@ -255,6 +255,9 @@ static void tunnel_write(h2o_httpclient_tunnel_t *_tunnel, const void *bytes, si
 
     emit_data(req, h2o_iovec_init(bytes, len));
 
+    quicly_stream_sync_sendbuf(req->quic, 1);
+    h2o_quic_schedule_timer(&req->conn->super.super);
+
     size_t sent_upto = (size_t)(req->quic->sendstate.size_inflight - req->quic->sendstate.acked.ranges[0].end);
     if (tunnel_egress_buffer_is_low(req, sent_upto)) {
         tunnel_schedule_delayed_on_write_complete(req, tunnel_delayed_on_write_complete);
@@ -820,7 +823,7 @@ void start_request(struct st_h2o_http3client_req_t *req)
         if (req->proceed_req.cb != NULL)
             req->proceed_req.bytes_written = body.len;
     }
-    if (req->proceed_req.cb == NULL)
+    if (req->proceed_req.cb == NULL && !h2o_memis(method.base, method.len, H2O_STRLIT("CONNECT")))
         quicly_sendstate_shutdown(&req->quic->sendstate, req->sendbuf->size);
     quicly_stream_sync_sendbuf(req->quic, 1);
 

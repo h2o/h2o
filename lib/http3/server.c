@@ -1283,14 +1283,14 @@ static void tunnel_on_read(h2o_httpclient_tunnel_t *_tunnel, const char *err, co
     if (len != 0) {
         h2o_vector_reserve(&stream->req.pool, &stream->sendbuf.vecs, stream->sendbuf.vecs.size + 2);
         /* DATA frame header */
-        stream->sendbuf.final_size =
-            flatten_data_frame_header(stream, stream->sendbuf.vecs.entries + stream->sendbuf.vecs.size++, len);
+        size_t header_size = flatten_data_frame_header(stream, stream->sendbuf.vecs.entries + stream->sendbuf.vecs.size++, len);
         /* payload */
         struct st_h2o_http3_server_sendvec_t *vec = stream->sendbuf.vecs.entries + stream->sendbuf.vecs.size++;
         h2o_sendvec_init_raw(&vec->vec, bytes, len);
         vec->entity_offset = stream->sendbuf.final_body_size;
         stream->sendbuf.final_body_size += len;
-        stream->sendbuf.final_size += len;
+        /* update final offset */
+        stream->sendbuf.final_size += header_size + len;
     }
 
     /* EOS */
@@ -1321,7 +1321,6 @@ void tunnel_write(struct st_h2o_http3_server_stream_t *stream)
     memcpy(stream->tunnel->up.bytes_inflight, stream->req_body->bytes, bytes_to_send);
     stream->tunnel->up.is_inflight = 1;
     h2o_buffer_consume(&stream->req_body, bytes_to_send);
-    quicly_stream_sync_recvbuf(stream->quic, bytes_to_send);
 
     /* send */
     stream->tunnel->tunnel->write_(stream->tunnel->tunnel, stream->tunnel->up.bytes_inflight, bytes_to_send);
