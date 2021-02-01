@@ -885,13 +885,13 @@ static int do_write_req(h2o_httpclient_t *_client, h2o_iovec_t chunk, int is_end
 }
 
 void h2o_httpclient__connect_h3(h2o_httpclient_t **_client, h2o_mem_pool_t *pool, void *data, h2o_httpclient_ctx_t *ctx,
-                                h2o_httpclient_connection_pool_t *connpool, h2o_url_t *target, h2o_httpclient_req_type_t req_type,
+                                h2o_httpclient_connection_pool_t *connpool, h2o_url_t *target, const char *upgrade_to,
                                 h2o_httpclient_connect_cb cb)
 {
     struct st_h2o_httpclient__h3_conn_t *conn;
     struct st_h2o_http3client_req_t *req;
 
-    assert(req_type == H2O_HTTPCLIENT_REQ_TYPE_NORMAL || req_type == H2O_HTTPCLIENT_REQ_TYPE_CONNECT);
+    assert(upgrade_to == NULL || upgrade_to == h2o_httpclient_upgrade_to_connect);
 
     if ((conn = find_connection(connpool, target->scheme, target->authority)) == NULL)
         conn = create_connection(ctx, connpool, target);
@@ -904,7 +904,7 @@ void h2o_httpclient__connect_h3(h2o_httpclient_t **_client, h2o_mem_pool_t *pool
                                               data,
                                               NULL,
                                               {h2o_gettimeofday(ctx->loop)},
-                                              req_type,
+                                              upgrade_to,
                                               {0},
                                               {0},
                                               cancel_request,

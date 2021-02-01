@@ -133,7 +133,7 @@ static h2o_iovec_t build_content_length(h2o_mem_pool_t *pool, size_t cl)
 }
 
 static void build_request(h2o_req_t *req, h2o_iovec_t *method, h2o_url_t *url, h2o_headers_t *headers,
-                          h2o_httpclient_properties_t *props, int keepalive, h2o_httpclient_req_type_t type, int use_proxy_protocol,
+                          h2o_httpclient_properties_t *props, int keepalive, const char *upgrade_to, int use_proxy_protocol,
                           int *reprocess_if_too_early, h2o_url_t *origin)
 {
     size_t remote_addr_len = SIZE_MAX;
@@ -161,18 +161,13 @@ static void build_request(h2o_req_t *req, h2o_iovec_t *method, h2o_url_t *url, h
     h2o_url_init(url, origin->scheme, req->authority, h2o_strdup(&req->pool, req->path.base, req->path.len));
 
     if (props->connection_header != NULL) {
-        switch (type) {
-        case H2O_HTTPCLIENT_REQ_TYPE_UPGRADE:
+        if (upgrade_to != NULL && upgrade_to != h2o_httpclient_upgrade_to_connect) {
             *props->connection_header = h2o_iovec_init(H2O_STRLIT("upgrade"));
-            h2o_add_header(&req->pool, headers, H2O_TOKEN_UPGRADE, NULL, H2O_STRLIT("websocket"));
-            break;
-        default:
-            if (keepalive) {
-                *props->connection_header = h2o_iovec_init(H2O_STRLIT("keep-alive"));
-            } else {
-                *props->connection_header = h2o_iovec_init(H2O_STRLIT("close"));
-            }
-            break;
+            h2o_add_header(&req->pool, headers, H2O_TOKEN_UPGRADE, NULL, upgrade_to, strlen(upgrade_to));
+        } else if (keepalive) {
+            *props->connection_header = h2o_iovec_init(H2O_STRLIT("keep-alive"));
+        } else {
+            *props->connection_header = h2o_iovec_init(H2O_STRLIT("close"));
         }
     }
 
@@ -653,7 +648,7 @@ static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *e
     reprocess_if_too_early = h2o_conn_is_early_data(req->conn);
     h2o_headers_t headers_vec = (h2o_headers_t){NULL};
     build_request(req, method, url, &headers_vec, props,
-                  !use_proxy_protocol && h2o_socketpool_can_keepalive(client->connpool->socketpool), self->client->req_type,
+                  !use_proxy_protocol && h2o_socketpool_can_keepalive(client->connpool->socketpool), self->client->upgrade_to,
                   use_proxy_protocol, &reprocess_if_too_early, origin);
     *headers = headers_vec.entries;
     *num_headers = headers_vec.size;
@@ -691,7 +686,7 @@ static void on_generator_dispose(void *_self)
     h2o_doublebuffer_dispose(&self->sending);
 }
 
-static struct rp_generator_t *proxy_send_prepare(h2o_req_t *req, h2o_httpclient_req_type_t req_type)
+static struct rp_generator_t *proxy_send_prepare(h2o_req_t *req)
 {
     struct rp_generator_t *self = h2o_mem_alloc_shared(&req->pool, sizeof(*self), on_generator_dispose);
 
@@ -725,7 +720,7 @@ void h2o__proxy_process_request(h2o_req_t *req)
     if (target == &target_buf)
         h2o_url_init(&target_buf, req->scheme, req->authority, h2o_iovec_init(H2O_STRLIT("/")));
 
-    h2o_httpclient_req_type_t req_type = H2O_HTTPCLIENT_REQ_TYPE_NORMAL;
+    const char *upgrade_to = NULL;
     int can_use_tunnel = client_ctx->tunnel_timeout != NULL && req->establish_tunnel != NULL;
     if (h2o_memis(req->method.base, req->method.len, H2O_STRLIT("CONNECT"))) {
         /* CONNECT requests cannot be forwarded unless configured as such */
@@ -733,13 +728,13 @@ void h2o__proxy_process_request(h2o_req_t *req)
             h2o_send_error_405(req, "Method Not Allowed", "refusing CONNECT", H2O_SEND_ERROR_HTTP1_CLOSE_CONNECTION);
             return;
         }
-        req_type = H2O_HTTPCLIENT_REQ_TYPE_CONNECT;
+        upgrade_to = h2o_httpclient_upgrade_to_connect;
     } else if (h2o_lcstris(req->upgrade.base, req->upgrade.len, H2O_STRLIT("websocket")) && can_use_tunnel) {
         /* websocket requests are converted to a normal request (omitting the Upgrade header field), or will have the upgrade header
-         * if req_type is set to REQ_TYPE_WEBSOCKET */
-        req_type = H2O_HTTPCLIENT_REQ_TYPE_UPGRADE;
+         * set */
+        upgrade_to = "websocket";
     }
-    struct rp_generator_t *self = proxy_send_prepare(req, req_type);
+    struct rp_generator_t *self = proxy_send_prepare(req);
 
     /*
       When the PROXY protocol is being used (i.e. when overrides->use_proxy_protocol is set), the client needs to establish a new
@@ -754,5 +749,5 @@ void h2o__proxy_process_request(h2o_req_t *req)
 
      So I leave this as it is for the time being.
      */
-    h2o_httpclient_connect(&self->client, &req->pool, self, client_ctx, connpool, target, req_type, on_connect);
+    h2o_httpclient_connect(&self->client, &req->pool, self, client_ctx, connpool, target, upgrade_to, on_connect);
 }

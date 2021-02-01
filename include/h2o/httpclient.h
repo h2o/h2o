@@ -223,12 +223,6 @@ typedef struct st_h2o_httpclient_conn_properties_t {
     h2o_socket_t *sock;
 } h2o_httpclient_conn_properties_t;
 
-typedef enum en_h2o_httpclient_req_type_t {
-    H2O_HTTPCLIENT_REQ_TYPE_NORMAL,
-    H2O_HTTPCLIENT_REQ_TYPE_CONNECT,
-    H2O_HTTPCLIENT_REQ_TYPE_UPGRADE,
-} h2o_httpclient_req_type_t;
-
 struct st_h2o_httpclient_t {
     /**
      * memory pool
@@ -259,9 +253,11 @@ struct st_h2o_httpclient_t {
      */
     h2o_httpclient_timings_t timings;
     /**
-     * request type
+     * If the stream is to be converted to convey some other protocol, this value should be set to the name of the protocol, which
+     * will be indicated by the `upgrade` request header field. Additionally, intent to create a CONNECT tunnel is indicated by a
+     * special label called `h2o_httpclient_req_upgrade_connect`.
      */
-    h2o_httpclient_req_type_t req_type;
+    const char *upgrade_to;
 
     /**
      * bytes written (above the TLS layer)
@@ -370,6 +366,8 @@ extern const char h2o_httpclient_error_http1_parse_failed[];
 extern const char h2o_httpclient_error_protocol_violation[];
 extern const char h2o_httpclient_error_internal[];
 
+extern const char h2o_httpclient_upgrade_to_connect[];
+
 void h2o_httpclient_connection_pool_init(h2o_httpclient_connection_pool_t *connpool, h2o_socketpool_t *sockpool);
 
 /**
@@ -377,7 +375,7 @@ void h2o_httpclient_connection_pool_init(h2o_httpclient_connection_pool_t *connp
  * TODO: create H1- or H2-specific connect function that works without the connection pool?
  */
 void h2o_httpclient_connect(h2o_httpclient_t **client, h2o_mem_pool_t *pool, void *data, h2o_httpclient_ctx_t *ctx,
-                            h2o_httpclient_connection_pool_t *connpool, h2o_url_t *target, h2o_httpclient_req_type_t req_type,
+                            h2o_httpclient_connection_pool_t *connpool, h2o_url_t *target, const char *upgrade_to,
                             h2o_httpclient_connect_cb on_connect);
 
 void h2o_httpclient__h1_on_connect(h2o_httpclient_t *client, h2o_socket_t *sock, h2o_url_t *origin);
@@ -396,7 +394,7 @@ void h2o_httpclient_set_conn_properties_of_socket(h2o_socket_t *sock, h2o_httpcl
 void h2o_httpclient_http3_notify_connection_update(h2o_quic_ctx_t *ctx, h2o_quic_conn_t *conn);
 extern quicly_stream_open_t h2o_httpclient_http3_on_stream_open;
 void h2o_httpclient__connect_h3(h2o_httpclient_t **client, h2o_mem_pool_t *pool, void *data, h2o_httpclient_ctx_t *ctx,
-                                h2o_httpclient_connection_pool_t *connpool, h2o_url_t *target, h2o_httpclient_req_type_t req_type,
+                                h2o_httpclient_connection_pool_t *connpool, h2o_url_t *target, const char *upgrade_to,
                                 h2o_httpclient_connect_cb cb);
 /**
  * internal API for checking if the stream is to be turned into a tunnel
@@ -407,10 +405,12 @@ static int h2o_httpclient__tunnel_is_ready(h2o_httpclient_t *client, int status)
 
 int h2o_httpclient__tunnel_is_ready(h2o_httpclient_t *client, int status)
 {
-    if (client->req_type == H2O_HTTPCLIENT_REQ_TYPE_CONNECT && 200 <= status && status <= 299)
-        return 1;
-    if (client->req_type == H2O_HTTPCLIENT_REQ_TYPE_UPGRADE && status == 101)
-        return 1;
+    if (client->upgrade_to != NULL) {
+        if (client->upgrade_to == h2o_httpclient_upgrade_to_connect && 200 <= status && status <= 299)
+            return 1;
+        if (status == 101)
+            return 1;
+    }
     return 0;
 }
 

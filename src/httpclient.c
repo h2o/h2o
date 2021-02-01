@@ -280,8 +280,7 @@ static void start_request(h2o_httpclient_ctx_t *ctx)
         SSL_CTX_free(ssl_ctx);
     }
     h2o_httpclient_connect(NULL, &pool, url_parsed, ctx, connpool, url_parsed,
-                           strcmp(req.method, "CONNECT") == 0 ? H2O_HTTPCLIENT_REQ_TYPE_CONNECT : H2O_HTTPCLIENT_REQ_TYPE_NORMAL,
-                           on_connect);
+                           strcmp(req.method, "CONNECT") == 0 ? h2o_httpclient_upgrade_to_connect : NULL, on_connect);
 }
 
 static void on_next_request(h2o_timer_t *entry)
