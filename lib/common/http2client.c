@@ -262,9 +262,10 @@ static void call_callback_with_error(struct st_h2o_http2client_stream_t *stream,
 {
     assert(errstr != NULL);
     switch (stream->state.res) {
-    case STREAM_STATE_HEAD:
-        stream->super._cb.on_head(&stream->super, errstr, 0x200, 0, h2o_iovec_init(NULL, 0), NULL, 0, 0);
-        break;
+    case STREAM_STATE_HEAD: {
+        h2o_httpclient_on_head_t on_head = {.version = 0x200};
+        stream->super._cb.on_head(&stream->super, errstr, &on_head);
+    } break;
     case STREAM_STATE_BODY:
         stream->super._cb.on_body(&stream->super, errstr);
         break;
@@ -312,9 +313,13 @@ static int on_head(struct st_h2o_http2client_conn_t *conn, struct st_h2o_http2cl
         return 0;
     }
 
+    h2o_httpclient_on_head_t on_head = {.version = 0x200,
+                                        .status = stream->input.status,
+                                        .msg = h2o_iovec_init(NULL, 0),
+                                        .headers = stream->input.headers.entries,
+                                        .num_headers = stream->input.headers.size};
     stream->super._cb.on_body =
-        stream->super._cb.on_head(&stream->super, is_end_stream ? h2o_httpclient_error_is_eos : NULL, 0x200, stream->input.status,
-                                  h2o_iovec_init(NULL, 0), stream->input.headers.entries, stream->input.headers.size, 0);
+        stream->super._cb.on_head(&stream->super, is_end_stream ? h2o_httpclient_error_is_eos : NULL, &on_head);
 
     if (is_end_stream) {
         close_response(stream);

@@ -85,8 +85,7 @@ static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *e
                                          const h2o_header_t **headers, size_t *num_headers, h2o_iovec_t *body,
                                          h2o_httpclient_proceed_req_cb *proceed_req_cb, h2o_httpclient_properties_t *props,
                                          h2o_url_t *origin);
-static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, int version, int status, h2o_iovec_t msg,
-                                      h2o_header_t *headers, size_t num_headers, int header_requires_dup);
+static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, h2o_httpclient_on_head_t *args);
 
 static struct {
     ptls_iovec_t token;
@@ -234,7 +233,6 @@ static void tunnel_create(h2o_loop_t *loop, h2o_httpclient_tunnel_t *_tunnel)
     tunnel->tunnel->on_write_complete = tunnel_on_write_complete;
     h2o_doublebuffer_init(&tunnel->buf, &h2o_socket_buffer_prototype);
 
-    tunnel->tunnel->proceed_read(tunnel->tunnel);
     h2o_socket_read_start(tunnel->std_in, tunnel_on_stdin_read);
 }
 
@@ -281,7 +279,9 @@ static void start_request(h2o_httpclient_ctx_t *ctx)
         h2o_socketpool_set_ssl_ctx(sockpool, ssl_ctx);
         SSL_CTX_free(ssl_ctx);
     }
-    h2o_httpclient_connect(NULL, &pool, url_parsed, ctx, connpool, url_parsed, on_connect);
+    h2o_httpclient_connect(NULL, &pool, url_parsed, ctx, connpool, url_parsed,
+                           strcmp(req.method, "CONNECT") == 0 ? H2O_HTTPCLIENT_REQ_TYPE_CONNECT : H2O_HTTPCLIENT_REQ_TYPE_NORMAL,
+                           on_connect);
 }
 
 static void on_next_request(h2o_timer_t *entry)
@@ -352,19 +352,17 @@ static int on_informational(h2o_httpclient_t *client, int version, int status, h
     return 0;
 }
 
-h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, int version, int status, h2o_iovec_t msg,
-                               h2o_header_t *headers, size_t num_headers, int header_requires_dup)
+h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, h2o_httpclient_on_head_t *args)
 {
     if (errstr != NULL && errstr != h2o_httpclient_error_is_eos) {
         on_error(client->ctx, errstr);
         return NULL;
     }
 
-    print_response_headers(version, status, msg, headers, num_headers);
+    print_response_headers(args->version, args->status, args->msg, args->headers, args->num_headers);
 
-    if (strcmp(req.method, "CONNECT") == 0 && (200 <= status && status <= 299)) {
-        h2o_httpclient_tunnel_t *tunnel = client->open_tunnel(client);
-        tunnel_create(client->ctx->loop, tunnel);
+    if (args->tunnel != NULL) {
+        tunnel_create(client->ctx->loop, args->tunnel);
         return NULL;
     }
 

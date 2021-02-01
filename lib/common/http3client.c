@@ -275,23 +275,6 @@ static void tunnel_proceed_read(h2o_httpclient_tunnel_t *_tunnel)
     tunnel_process_ingress(req);
 }
 
-static h2o_httpclient_tunnel_t *do_open_tunnel(h2o_httpclient_t *_client)
-{
-    struct st_h2o_http3client_req_t *req = (void *)_client;
-
-    req->tunnel.tunnel = (h2o_httpclient_tunnel_t){
-        .destroy = tunnel_destroy,
-        .write_ = tunnel_write,
-        .proceed_read = tunnel_proceed_read,
-    };
-    req->tunnel.egress.delayed = (h2o_timer_t){};
-    req->tunnel.egress.complete_to_be_called = 0;
-    h2o_doublebuffer_init(&req->tunnel.ingress.doublebuf, &h2o_socket_buffer_prototype);
-    req->tunnel.ingress.errstr = NULL;
-
-    return &req->tunnel.tunnel;
-}
-
 static struct st_h2o_httpclient__h3_conn_t *find_connection(h2o_httpclient_connection_pool_t *pool, const h2o_url_scheme_t *scheme,
                                                             h2o_iovec_t authority)
 {
@@ -475,7 +458,7 @@ struct st_h2o_httpclient__h3_conn_t *create_connection(h2o_httpclient_ctx_t *ctx
 
 static void on_error_before_head(struct st_h2o_http3client_req_t *req, const char *errstr)
 {
-    req->super._cb.on_head(&req->super, errstr, 0, 0, h2o_iovec_init(NULL, 0), NULL, 0, 0);
+    req->super._cb.on_head(&req->super, errstr, NULL);
 }
 
 static int handle_input_data_payload(struct st_h2o_http3client_req_t *req, const uint8_t **src, const uint8_t *src_end, int err,
@@ -618,9 +601,25 @@ static int handle_input_expect_headers(struct st_h2o_http3client_req_t *req, con
         return 0;
     }
 
-    /* handle final response */
-    req->super._cb.on_body = req->super._cb.on_head(&req->super, frame_is_eos ? h2o_httpclient_error_is_eos : NULL, 0x300, status,
-                                                    h2o_iovec_init(NULL, 0), headers.entries, headers.size, 0);
+    /* handle final response, creating tunnel object if necessary */
+    h2o_httpclient_on_head_t on_head = {.version = 0x300,
+                                        .msg = h2o_iovec_init(NULL, 0),
+                                        .status = status,
+                                        .headers = headers.entries,
+                                        .num_headers = headers.size};
+    if (h2o_httpclient__tunnel_is_ready(&req->super, status)) {
+        req->tunnel.tunnel = (h2o_httpclient_tunnel_t){
+            .destroy = tunnel_destroy,
+            .write_ = tunnel_write,
+            .proceed_read = tunnel_proceed_read,
+        };
+        req->tunnel.egress.delayed = (h2o_timer_t){};
+        req->tunnel.egress.complete_to_be_called = 0;
+        h2o_doublebuffer_init(&req->tunnel.ingress.doublebuf, &h2o_socket_buffer_prototype);
+        req->tunnel.ingress.errstr = NULL;
+        on_head.tunnel = &req->tunnel.tunnel;
+    }
+    req->super._cb.on_body = req->super._cb.on_head(&req->super, frame_is_eos ? h2o_httpclient_error_is_eos : NULL, &on_head);
     if (is_tunnel(req)) {
         assert(req->super._cb.on_body == NULL);
     } else {
@@ -886,10 +885,13 @@ static int do_write_req(h2o_httpclient_t *_client, h2o_iovec_t chunk, int is_end
 }
 
 void h2o_httpclient__connect_h3(h2o_httpclient_t **_client, h2o_mem_pool_t *pool, void *data, h2o_httpclient_ctx_t *ctx,
-                                h2o_httpclient_connection_pool_t *connpool, h2o_url_t *target, h2o_httpclient_connect_cb cb)
+                                h2o_httpclient_connection_pool_t *connpool, h2o_url_t *target, h2o_httpclient_req_type_t req_type,
+                                h2o_httpclient_connect_cb cb)
 {
     struct st_h2o_httpclient__h3_conn_t *conn;
     struct st_h2o_http3client_req_t *req;
+
+    assert(req_type == H2O_HTTPCLIENT_REQ_TYPE_NORMAL || req_type == H2O_HTTPCLIENT_REQ_TYPE_CONNECT);
 
     if ((conn = find_connection(connpool, target->scheme, target->authority)) == NULL)
         conn = create_connection(ctx, connpool, target);
@@ -902,10 +904,10 @@ void h2o_httpclient__connect_h3(h2o_httpclient_t **_client, h2o_mem_pool_t *pool
                                               data,
                                               NULL,
                                               {h2o_gettimeofday(ctx->loop)},
+                                              req_type,
                                               {0},
                                               {0},
                                               cancel_request,
-                                              do_open_tunnel,
                                               do_get_conn_properties,
                                               do_update_window,
                                               do_write_req},

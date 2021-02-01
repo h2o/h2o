@@ -1147,12 +1147,12 @@ static int handle_input_expect_headers(struct st_h2o_http3_server_stream_t *stre
             return handle_input_expect_headers_send_http_error(stream, h2o_send_error_400, "Invalid Request",
                                                                "CONNECT request cannot have request body", err_desc);
         set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_SEND_HEADERS);
-        h2o_process_request(&stream->req);
         stream->tunnel = h2o_mem_alloc(sizeof(*stream->tunnel));
         stream->tunnel->tunnel = NULL;
         stream->tunnel->stream = stream;
         stream->tunnel->up.is_inflight = 0;
         stream->tunnel->up.delayed_write = (h2o_timer_t){.cb = tunnel_write_delayed};
+        h2o_process_request(&stream->req);
         return 0;
     }
 
