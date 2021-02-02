@@ -42,7 +42,7 @@ struct st_connect_request_t {
     h2o_socket_t *sock;
     h2o_hostinfo_getaddr_req_t *getaddr_req;
     h2o_iovec_t host;
-    char named_serv[sizeof(H2O_UINT16_LONGEST_STR)];
+    char servrame[sizeof(H2O_UINT16_LONGEST_STR)];
     struct dns_res dns[NUM_DNS_RESULTS];
     size_t dns_results;
     struct st_connect_handler_t *handler_ctx;
@@ -184,12 +184,12 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
         .handler_ctx = handler,
         .timeout = (h2o_timer_t){.cb = on_timeout},
     };
-    int servname_len = sprintf(creq->named_serv, "%" PRIu16, port);
+    int servname_len = sprintf(creq->servrame, "%" PRIu16, port);
     h2o_timer_link(creq->loop, handler->config.tunnel.timeout, &creq->timeout);
 
     creq->getaddr_req = h2o_hostinfo_getaddr(&creq->src_req->conn->ctx->receivers.hostinfo_getaddr, creq->host,
-                                             h2o_iovec_init(creq->named_serv, servname_len), AF_UNSPEC, SOCK_STREAM,
-                                             IPPROTO_TCP, AI_ADDRCONFIG | AI_NUMERICSERV, on_getaddr, creq);
+                                             h2o_iovec_init(creq->servrame, servname_len), AF_UNSPEC, SOCK_STREAM, IPPROTO_TCP,
+                                             AI_ADDRCONFIG | AI_NUMERICSERV, on_getaddr, creq);
 
     return 0;
 }
