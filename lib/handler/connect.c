@@ -30,10 +30,11 @@ struct st_connect_handler_t {
     h2o_proxy_config_vars_t config;
 };
 
-#define NUM_DNS_RESULTS 3
-struct dns_res {
-    struct sockaddr_storage addr;
-    socklen_t len;
+#define MAX_CONNECT_RETRIES 3
+
+struct st_server_address_t {
+    struct sockaddr_storage sa;
+    socklen_t salen;
 };
 
 struct st_connect_request_t {
@@ -44,10 +45,15 @@ struct st_connect_request_t {
     h2o_hostinfo_getaddr_req_t *getaddr_req;
     h2o_iovec_t host;
     char servrame[sizeof(H2O_UINT16_LONGEST_STR)];
-    struct dns_res dns[NUM_DNS_RESULTS];
-    size_t dns_results;
+    struct {
+        struct st_server_address_t list[MAX_CONNECT_RETRIES];
+        size_t size;
+        size_t next;
+    } server_addresses;
     h2o_timer_t timeout;
 };
+
+static void start_connect(struct st_connect_request_t *creq);
 
 static void on_error(struct st_connect_request_t *creq, const char *errstr)
 {
@@ -61,17 +67,16 @@ static void on_timeout(h2o_timer_t *entry)
     on_error(creq, h2o_httpclient_error_io_timeout);
 }
 
-static void start_connect(struct st_connect_request_t *creq, struct sockaddr *addr, socklen_t addrlen);
 static void on_connect(h2o_socket_t *sock, const char *err)
 {
     struct st_connect_request_t *creq = sock->data;
 
     if (err) {
-        if (creq->dns_results-- > 0) {
-            start_connect(creq, (void *)&creq->dns[creq->dns_results - 1].addr, creq->dns[creq->dns_results - 1].len);
+        if (creq->server_addresses.next == creq->server_addresses.size) {
+            on_error(creq, err);
             return;
         }
-        on_error(creq, err);
+        start_connect(creq);
         return;
     }
 
@@ -99,35 +104,15 @@ static void on_generator_dispose(void *_self)
         h2o_socket_close(creq->sock);
 }
 
-void h2o_hostinfo_take_n(struct addrinfo *res, struct dns_res *out, size_t *num)
+static void store_server_addresses(struct st_connect_request_t *creq, struct addrinfo *res)
 {
-    if (res->ai_next == NULL) {
-        *num = 1;
-        memcpy(&out[0].addr, res->ai_addr, res->ai_addrlen);
-        out[0].len = res->ai_addrlen;
-        return;
-    }
-
-    /* count the number of candidates */
-    size_t i = 0;
-    struct addrinfo *start = res, *ai = res;
+    /* copy first entries in the response; ordering of addresses being returned by `getaddrinfo` is respected, as ordinary clients
+     * (incl. forward proxy) are not expected to distribute the load among the addresses being returned. */
     do {
-        ++i;
-    } while ((ai = ai->ai_next) != NULL);
-
-    if (*num > i)
-        *num = i;
-
-    i = rand() % i;
-    for (ai = res; i != 0; ai = ai->ai_next, --i)
-        ;
-    for (i = 0; i < *num; i++) {
-        memcpy(&out[i].addr, ai->ai_addr, ai->ai_addrlen);
-        out[i].len = ai->ai_addrlen;
-        ai = ai->ai_next;
-        if (ai == NULL)
-            ai = start;
-    }
+        struct st_server_address_t *dst = creq->server_addresses.list + creq->server_addresses.size++;
+        memcpy(&dst->sa, res->ai_addr, res->ai_addrlen);
+        dst->salen = res->ai_addrlen;
+    } while (creq->server_addresses.size < PTLS_ELEMENTSOF(creq->server_addresses.list) && (res = res->ai_next) != NULL);
 }
 
 static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errstr, struct addrinfo *res, void *_creq)
@@ -142,22 +127,23 @@ static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errs
         return;
     }
 
-    h2o_hostinfo_take_n(res, creq->dns, &creq->dns_results);
-    start_connect(creq, (void *)&creq->dns[creq->dns_results - 1].addr, creq->dns[creq->dns_results - 1].len);
+    store_server_addresses(creq, res);
+    start_connect(creq);
 }
 
-static void start_connect(struct st_connect_request_t *creq, struct sockaddr *addr, socklen_t addrlen)
+static void start_connect(struct st_connect_request_t *creq)
 {
-    creq->sock = h2o_socket_connect(creq->loop, addr, addrlen, on_connect);
-    if (creq->sock == NULL) {
-        if (creq->dns_results-- > 0) {
-            start_connect(creq, (void *)&creq->dns[creq->dns_results - 1].addr, creq->dns[creq->dns_results - 1].len);
+    /* repeat connect(pop_front(address_list)) until we run out of the list */
+    do {
+        struct st_server_address_t *server_address = creq->server_addresses.list + creq->server_addresses.next++;
+        if ((creq->sock = h2o_socket_connect(creq->loop, (struct sockaddr *)&server_address->sa, server_address->salen,
+                                             on_connect)) != NULL) {
+            creq->sock->data = creq;
             return;
         }
-        on_error(creq, h2o_socket_error_conn_fail);
-        return;
-    }
-    creq->sock->data = creq;
+    } while (creq->server_addresses.next < creq->server_addresses.size);
+
+    on_error(creq, h2o_socket_error_conn_fail);
 }
 
 static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
@@ -181,7 +167,6 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
         .loop = req->conn->ctx->loop,
         .src_req = req,
         .host = host,
-        .dns_results = NUM_DNS_RESULTS,
         .timeout = (h2o_timer_t){.cb = on_timeout},
     };
     int servname_len = sprintf(creq->servrame, "%" PRIu16, port);
