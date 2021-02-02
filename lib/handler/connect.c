@@ -37,6 +37,7 @@ struct dns_res {
 };
 
 struct st_connect_request_t {
+    struct st_connect_handler_t *handler;
     h2o_loop_t *loop;
     h2o_req_t *src_req;
     h2o_socket_t *sock;
@@ -45,7 +46,6 @@ struct st_connect_request_t {
     char servrame[sizeof(H2O_UINT16_LONGEST_STR)];
     struct dns_res dns[NUM_DNS_RESULTS];
     size_t dns_results;
-    struct st_connect_handler_t *handler_ctx;
     h2o_timer_t timeout;
 };
 
@@ -77,7 +77,7 @@ static void on_connect(h2o_socket_t *sock, const char *err)
 
     h2o_timer_unlink(&creq->timeout);
     h2o_req_t *req = creq->src_req;
-    uint64_t timeout = creq->handler_ctx->config.tunnel.timeout;
+    uint64_t timeout = creq->handler->config.tunnel.timeout;
     sock->data = NULL;
     creq->sock = NULL;
     req->res.status = 200;
@@ -177,11 +177,11 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
 
     struct st_connect_request_t *creq = h2o_mem_alloc_shared(&req->pool, sizeof(*creq), on_generator_dispose);
     *creq = (struct st_connect_request_t){
+        .handler = handler,
         .loop = req->conn->ctx->loop,
         .src_req = req,
         .host = host,
         .dns_results = NUM_DNS_RESULTS,
-        .handler_ctx = handler,
         .timeout = (h2o_timer_t){.cb = on_timeout},
     };
     int servname_len = sprintf(creq->servrame, "%" PRIu16, port);
