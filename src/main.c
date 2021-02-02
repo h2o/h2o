@@ -744,6 +744,7 @@ static ptls_cipher_suite_t **parse_tls13_ciphers(h2o_configurator_command_t *cmd
         { "TLS_AES_256_GCM_SHA384", &ptls_openssl_aes256gcmsha384},
         { "TLS_CHACHA20_POLY1305_SHA256", &ptls_openssl_chacha20poly1305sha256 },
     };
+    int seen_tls_aes_128_gcm_sha256 = 0;
     H2O_VECTOR(ptls_cipher_suite_t *) ret = {};
     p = strtok_r(p, ":", &saveptr);
     while (1) {
@@ -754,6 +755,8 @@ static ptls_cipher_suite_t **parse_tls13_ciphers(h2o_configurator_command_t *cmd
             if (!strcmp(p, cipher_suites[i].name)) {
                 ret.entries = h2o_mem_realloc(ret.entries, sizeof(ret.entries[0]) * (ret.size + 1));
                 ret.entries[ret.size++] = cipher_suites[i].cipher;
+                if (cipher_suites[i].cipher == &ptls_openssl_aes128gcmsha256)
+                    seen_tls_aes_128_gcm_sha256 = 1;
                 found = 1;
                 goto Next;
             }
@@ -767,6 +770,10 @@ Next:
     }
     ret.entries = h2o_mem_realloc(ret.entries, sizeof(ret.entries[0])  * (ret.size + 1));
     ret.entries[ret.size++] = NULL;
+
+    if (!seen_tls_aes_128_gcm_sha256) {
+        h2o_configurator_errprintf(cmd, node, "Warning: not enabling TLS_AES_128_GCM_SHA256 might reduce TLS1.3 interoperability, see RFC 8446 9.1");
+    }
 
     return ret.entries;
 }
