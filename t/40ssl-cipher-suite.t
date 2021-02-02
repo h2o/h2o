@@ -19,6 +19,7 @@ listen:
     certificate-file: examples/h2o/server.crt
     cipher-suite: AES128-SHA
     cipher-suite-tls1.3: TLS_CHACHA20_POLY1305_SHA256:TLS_AES_128_GCM_SHA256
+    cipher-preference: server
     max-version: TLSv1.3
 hosts:
   default:

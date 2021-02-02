@@ -604,7 +604,7 @@ Exit:
 }
 
 static const char *listener_setup_ssl_picotls(struct listener_config_t *listener, struct listener_ssl_config_t *ssl_config,
-                                              SSL_CTX *ssl_ctx, ptls_cipher_suite_t **cipher_suites)
+                                              SSL_CTX *ssl_ctx, ptls_cipher_suite_t **cipher_suites, int server_cipher_preference)
 {
     static const ptls_key_exchange_algorithm_t *key_exchanges[] = {
 #ifdef PTLS_OPENSSL_HAVE_X25519
@@ -647,6 +647,7 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
                 .send_change_cipher_spec = 0, /* is a client-only flag. As a server, this flag can be of any value. */
                 .require_client_authentication = 0,
                 .omit_end_of_early_data = 0,
+                .server_cipher_preference = server_cipher_preference,
                 .encrypt_ticket = NULL, /* initialized later */
                 .save_ticket = NULL,    /* initialized later */
                 .log_event = NULL,
@@ -1016,7 +1017,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
 #endif
 
     if (use_picotls) {
-        const char *errstr = listener_setup_ssl_picotls(listener, ssl_config, ssl_ctx, tls13_cipher_suites);
+        const char *errstr = listener_setup_ssl_picotls(listener, ssl_config, ssl_ctx, tls13_cipher_suites, !!(ssl_options & SSL_OP_CIPHER_SERVER_PREFERENCE));
         if (errstr != NULL)
             h2o_configurator_errprintf(cmd, *ssl_node, "%s; TLS 1.3 will be disabled\n", errstr);
         if (listener->quic.ctx != NULL) {
