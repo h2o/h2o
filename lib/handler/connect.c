@@ -41,7 +41,6 @@ struct connect_request {
     h2o_req_t *src_req;
     h2o_socket_t *sock;
     h2o_hostinfo_getaddr_req_t *getaddr_req;
-    h2o_multithread_receiver_t *getaddr_receiver;
     h2o_iovec_t host;
     char named_serv[sizeof(H2O_UINT16_LONGEST_STR)];
     struct dns_res dns[NUM_DNS_RESULTS];
@@ -177,9 +176,8 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
         return 0;
     }
 
-    struct connect_request *creq =h2o_mem_alloc_shared(&req->pool, sizeof(*creq), on_generator_dispose);
+    struct connect_request *creq = h2o_mem_alloc_shared(&req->pool, sizeof(*creq), on_generator_dispose);
     *creq = (struct connect_request){req->conn->ctx->loop, req, NULL};
-    creq->getaddr_receiver = &req->conn->ctx->receivers.hostinfo_getaddr;
     creq->host = host;
     creq->handler_ctx = handler;
     creq->dns_results = NUM_DNS_RESULTS;
@@ -187,9 +185,9 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
     creq->timeout.cb = on_timeout;
     h2o_timer_link(creq->loop, handler->config.tunnel.timeout, &creq->timeout);
 
-    creq->getaddr_req =
-        h2o_hostinfo_getaddr(creq->getaddr_receiver, creq->host, h2o_iovec_init(creq->named_serv, strlen(creq->named_serv)), AF_UNSPEC,
-                             SOCK_STREAM, IPPROTO_TCP, AI_ADDRCONFIG | AI_NUMERICSERV, on_getaddr, creq);
+    creq->getaddr_req = h2o_hostinfo_getaddr(&creq->src_req->conn->ctx->receivers.hostinfo_getaddr, creq->host,
+                                             h2o_iovec_init(creq->named_serv, strlen(creq->named_serv)), AF_UNSPEC, SOCK_STREAM,
+                                             IPPROTO_TCP, AI_ADDRCONFIG | AI_NUMERICSERV, on_getaddr, creq);
 
     return 0;
 }
