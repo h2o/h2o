@@ -154,10 +154,10 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
     h2o_iovec_t host;
     uint16_t port;
 
-    if (!h2o_memis(req->input.method.base, req->input.method.len, H2O_STRLIT("CONNECT"))) {
-        h2o_send_error_405(req, "Method Not Allowed", "Method Not Allowed", 0);
-        return 0;
-    }
+    /* this handler captures CONNECT, delegating requests with other methods to the next handler */
+    if (!h2o_memis(req->input.method.base, req->input.method.len, H2O_STRLIT("CONNECT")))
+        return -1;
+
     if (h2o_url_parse_hostport(req->input.path.base, req->input.path.len, &host, &port) == NULL || port == 0 || port == 65535) {
         h2o_send_error_400(req, "Bad Request", "Bad Request", 0);
         return 0;
