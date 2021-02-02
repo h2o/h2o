@@ -1564,12 +1564,12 @@ static int select_cipher(ptls_cipher_suite_t **selected, ptls_cipher_suite_t **c
 {
     int ret;
 
-    while (src != end) {
-        uint16_t id;
-        if ((ret = ptls_decode16(&id, &src, end)) != 0)
-            goto Exit;
-        ptls_cipher_suite_t **c = candidates;
-        for (; *c != NULL; ++c) {
+    ptls_cipher_suite_t **c = candidates;
+    for (; *c != NULL; ++c) {
+        while (src != end) {
+            uint16_t id;
+            if ((ret = ptls_decode16(&id, &src, end)) != 0)
+                goto Exit;
             if ((*c)->id == id) {
                 *selected = *c;
                 return 0;
