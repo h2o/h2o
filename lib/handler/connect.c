@@ -33,7 +33,7 @@ struct st_connect_handler_t {
 #define MAX_CONNECT_RETRIES 3
 
 struct st_server_address_t {
-    struct sockaddr_storage sa;
+    struct sockaddr *sa;
     socklen_t salen;
 };
 
@@ -112,7 +112,8 @@ static void store_server_addresses(struct st_connect_request_t *creq, struct add
      * (incl. forward proxy) are not expected to distribute the load among the addresses being returned. */
     do {
         struct st_server_address_t *dst = creq->server_addresses.list + creq->server_addresses.size++;
-        memcpy(&dst->sa, res->ai_addr, res->ai_addrlen);
+        dst->sa = h2o_mem_alloc_pool_aligned(&creq->src_req->pool, H2O_ALIGNOF(struct sockaddr), res->ai_addrlen);
+        memcpy(dst->sa, res->ai_addr, res->ai_addrlen);
         dst->salen = res->ai_addrlen;
     } while (creq->server_addresses.size < PTLS_ELEMENTSOF(creq->server_addresses.list) && (res = res->ai_next) != NULL);
 }
@@ -138,8 +139,7 @@ static void start_connect(struct st_connect_request_t *creq)
     /* repeat connect(pop_front(address_list)) until we run out of the list */
     do {
         struct st_server_address_t *server_address = creq->server_addresses.list + creq->server_addresses.next++;
-        if ((creq->sock = h2o_socket_connect(creq->loop, (struct sockaddr *)&server_address->sa, server_address->salen,
-                                             on_connect)) != NULL) {
+        if ((creq->sock = h2o_socket_connect(creq->loop, server_address->sa, server_address->salen, on_connect)) != NULL) {
             creq->sock->data = creq;
             return;
         }
