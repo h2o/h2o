@@ -288,6 +288,9 @@
 		E918FC9121365AB700CCB252 /* theft_trial.c in Sources */ = {isa = PBXBuildFile; fileRef = E918FC552136598400CCB252 /* theft_trial.c */; };
 		E918FC9221365AB700CCB252 /* theft.c in Sources */ = {isa = PBXBuildFile; fileRef = E918FC492136598300CCB252 /* theft.c */; };
 		E918FC9321365ABC00CCB252 /* prop.c in Sources */ = {isa = PBXBuildFile; fileRef = E918FC3B213658BE00CCB252 /* prop.c */; };
+		E919227725C9447D00C2D79B /* connect.c in Sources */ = {isa = PBXBuildFile; fileRef = E919227625C9447D00C2D79B /* connect.c */; };
+		E919227825C9447D00C2D79B /* connect.c in Sources */ = {isa = PBXBuildFile; fileRef = E919227625C9447D00C2D79B /* connect.c */; };
+		E919227925C9447D00C2D79B /* connect.c in Sources */ = {isa = PBXBuildFile; fileRef = E919227625C9447D00C2D79B /* connect.c */; };
 		E9316ED824417E0A00C9C127 /* certificate_compression.c in Sources */ = {isa = PBXBuildFile; fileRef = E9316ED724417E0A00C9C127 /* certificate_compression.c */; };
 		E9316EE624417EAA00C9C127 /* bit_reader.c in Sources */ = {isa = PBXBuildFile; fileRef = E9316EDB24417EA900C9C127 /* bit_reader.c */; };
 		E9316EE724417EAA00C9C127 /* bit_reader.c in Sources */ = {isa = PBXBuildFile; fileRef = E9316EDB24417EA900C9C127 /* bit_reader.c */; };
@@ -1057,6 +1060,7 @@
 		E918FC5C2136598500CCB252 /* theft_trial.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = theft_trial.h; sourceTree = "<group>"; };
 		E918FC5D2136598500CCB252 /* theft_autoshrink_internal.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = theft_autoshrink_internal.h; sourceTree = "<group>"; };
 		E918FC5E2136598600CCB252 /* theft_shrink_internal.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = theft_shrink_internal.h; sourceTree = "<group>"; };
+		E919227625C9447D00C2D79B /* connect.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = connect.c; sourceTree = "<group>"; };
 		E9316ED724417E0A00C9C127 /* certificate_compression.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = certificate_compression.c; sourceTree = "<group>"; };
 		E9316EDB24417EA900C9C127 /* bit_reader.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = bit_reader.c; sourceTree = "<group>"; };
 		E9316EDC24417EA900C9C127 /* decode.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = decode.c; sourceTree = "<group>"; };
@@ -1454,6 +1458,7 @@
 				7D9372FD202AC70F005FE6AB /* server_timing.c */,
 				1070866B1B787D06002B8F18 /* compress.c */,
 				107E340E1C7EB10700AEF5F8 /* compress */,
+				E919227625C9447D00C2D79B /* connect.c */,
 				106C22FE1C05436100405689 /* errordoc.c */,
 				104B9A501A5FB096009EEE64 /* expires.c */,
 				10BCF2FC1B168CAE0076939D /* fastcgi.c */,
@@ -3118,6 +3123,7 @@
 				10AA2EA11A88082E004322AC /* url.c in Sources */,
 				0812AB201D7FCFEB00004F23 /* async.c in Sources */,
 				E9BCE68C1FF0CF98003CEA11 /* timerwheel.c in Sources */,
+				E919227725C9447D00C2D79B /* connect.c in Sources */,
 				10EC2A381A0B4DC70083514F /* socketpool.c in Sources */,
 				1079239619A3210E00C52AD6 /* picohttpparser.c in Sources */,
 				E98403C92485172E00E3A6B1 /* local_cid.c in Sources */,
@@ -3203,6 +3209,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E919227825C9447D00C2D79B /* connect.c in Sources */,
 				E98403D02485172E00E3A6B1 /* retire_cid.c in Sources */,
 				107D4D441B588021004A9B21 /* ssl.c in Sources */,
 				E98403CA2485172E00E3A6B1 /* local_cid.c in Sources */,
@@ -3389,6 +3396,7 @@
 				E9708B7B1E52C83D0029E0A5 /* reproxy.c in Sources */,
 				08F320DF1E7A9CBB0038FA5A /* hiredis.c in Sources */,
 				E9708B5C1E52C80F0029E0A5 /* access_log.c in Sources */,
+				E919227925C9447D00C2D79B /* connect.c in Sources */,
 				E98042182238D363008B9745 /* cc-reno.c in Sources */,
 				100A55101C2BB15600C4E3E0 /* http_request.c in Sources */,
 				E987E5D61FD7BEB500DE4346 /* backward_references.c in Sources */,
