@@ -273,6 +273,10 @@ struct st_quicly_context_t {
      */
     uint64_t max_crypto_bytes;
     /**
+     * initial CWND in terms of packet numbers
+     */
+    uint32_t initcwnd_packets;
+    /**
      * (client-only) Initial QUIC protocol version used by the client. Setting this to a greased version will enforce version
      * negotiation.
      */

@@ -414,8 +414,7 @@ static int headers_sort_cb(const void *_x, const void *_y)
     return memcmp(x->name->base, y->name->base, x->name->len);
 }
 
-static h2o_httpclient_body_cb do_on_head(h2o_httpclient_t *client, const char *errstr, int version, int status, h2o_iovec_t msg,
-                                         h2o_header_t *headers, size_t num_headers, int header_requires_dup)
+static h2o_httpclient_body_cb do_on_head(h2o_httpclient_t *client, const char *errstr, h2o_httpclient_on_head_t *args)
 {
     struct st_h2o_mruby_http_request_context_t *ctx = client->data;
 
@@ -429,14 +428,13 @@ static h2o_httpclient_body_cb do_on_head(h2o_httpclient_t *client, const char *e
         ctx->client = NULL;
     }
 
-    qsort(headers, num_headers, sizeof(headers[0]), headers_sort_cb);
-    post_response(ctx, status, headers, num_headers, header_requires_dup);
+    qsort(args->headers, args->num_headers, sizeof(args->headers[0]), headers_sort_cb);
+    post_response(ctx, args->status, args->headers, args->num_headers, args->header_requires_dup);
 
     return on_body;
 }
 
-static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, int version, int status, h2o_iovec_t msg,
-                                      h2o_header_t *headers, size_t num_headers, int header_requires_dup)
+static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, h2o_httpclient_on_head_t *args)
 {
     struct st_h2o_mruby_http_request_context_t *ctx = client->data;
     if (try_dispose_context(ctx))
@@ -445,7 +443,7 @@ static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errs
     int gc_arena = mrb_gc_arena_save(ctx->ctx->shared->mrb);
     mrb_gc_protect(ctx->ctx->shared->mrb, ctx->refs.request);
 
-    h2o_httpclient_body_cb cb = do_on_head(client, errstr, version, status, msg, headers, num_headers, header_requires_dup);
+    h2o_httpclient_body_cb cb = do_on_head(client, errstr, args);
 
     mrb_gc_arena_restore(ctx->ctx->shared->mrb, gc_arena);
 
@@ -607,7 +605,7 @@ static mrb_value http_request_method(mrb_state *mrb, mrb_value self)
         mrb, mrb_ary_entry(ctx->ctx->shared->constants, H2O_MRUBY_HTTP_REQUEST_CLASS), ctx, &request_type);
 
     h2o_httpclient_connect(&ctx->client, &ctx->pool, ctx, &shared_ctx->ctx->proxy.client_ctx, &shared_ctx->ctx->proxy.connpool,
-                           &url, on_connect);
+                           &url, NULL, on_connect);
 
     return ctx->refs.request;
 }
