@@ -400,6 +400,7 @@ SET(LIB_SOURCE_FILES
     lib/handler/headers.c
     lib/handler/mimemap.c
     lib/handler/proxy.c
+    lib/handler/connect.c
     lib/handler/redirect.c
     lib/handler/reproxy.c
     lib/handler/throttle_resp.c

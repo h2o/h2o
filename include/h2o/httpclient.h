@@ -387,6 +387,8 @@ extern const size_t h2o_httpclient__h2_size;
 
 void h2o_httpclient_set_conn_properties_of_socket(h2o_socket_t *sock, h2o_httpclient_conn_properties_t *properties);
 
+h2o_httpclient_tunnel_t *h2o_open_tunnel_from_socket(h2o_socket_t *sock);
+
 #ifdef quicly_h /* create http3client.h? */
 
 #include "h2o/http3_common.h"
@@ -400,6 +402,8 @@ void h2o_httpclient__connect_h3(h2o_httpclient_t **client, h2o_mem_pool_t *pool,
  * internal API for checking if the stream is to be turned into a tunnel
  */
 static int h2o_httpclient__tunnel_is_ready(h2o_httpclient_t *client, int status);
+
+h2o_httpclient_tunnel_t *h2o_httpclient_create_tunnel_from_socket(h2o_socket_t *sock);
 
 /* inline definitions */
 

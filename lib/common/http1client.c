@@ -479,20 +479,8 @@ static void on_head(h2o_socket_t *sock, const char *err)
 
     /* provide underlying socket as a tunnel, if necessary */
     if (h2o_httpclient__tunnel_is_ready(&client->super, http_status)) {
-        struct st_h2o_http1client_tunnel_t *tunnel = h2o_mem_alloc(sizeof(*tunnel));
-        *tunnel = (struct st_h2o_http1client_tunnel_t){
-            .super =
-                (h2o_httpclient_tunnel_t){
-                    .destroy = tunnel_on_destroy,
-                    .write_ = tunnel_on_write,
-                    .proceed_read = tunnel_proceed_read,
-                },
-            .sock = client->sock,
-        };
-        tunnel->sock->data = tunnel;
-        h2o_doublebuffer_init(&tunnel->buf, &h2o_socket_buffer_prototype);
+        on_head.tunnel = h2o_httpclient_create_tunnel_from_socket(client->sock);
         client->sock = NULL;
-        on_head.tunnel = &tunnel->super;
     }
 
     /* call the callback */
@@ -880,6 +868,24 @@ void h2o_httpclient__h1_on_connect(h2o_httpclient_t *_client, h2o_socket_t *sock
 
     setup_client(client, sock, origin);
     on_connection_ready(client);
+}
+
+h2o_httpclient_tunnel_t *h2o_httpclient_create_tunnel_from_socket(h2o_socket_t *sock)
+{
+    struct st_h2o_http1client_tunnel_t *tunnel = h2o_mem_alloc(sizeof(*tunnel));
+
+    *tunnel = (struct st_h2o_http1client_tunnel_t){
+        .super = {
+            .destroy = tunnel_on_destroy,
+            .write_ = tunnel_on_write,
+            .proceed_read = tunnel_proceed_read,
+        },
+        .sock = sock,
+    };
+    tunnel->sock->data = tunnel;
+    h2o_doublebuffer_init(&tunnel->buf, &h2o_socket_buffer_prototype);
+
+    return &tunnel->super;
 }
 
 const size_t h2o_httpclient__h1_size = sizeof(struct st_h2o_http1client_t);

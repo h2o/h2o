@@ -2048,7 +2048,7 @@ typedef struct st_h2o_proxy_config_vars_t {
 } h2o_proxy_config_vars_t;
 
 /**
- * registers the reverse proxy handler to the context
+ * registers the proxy handler to the context
  */
 void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf, h2o_proxy_config_vars_t *config, h2o_socketpool_t *sockpool);
 /**
@@ -2085,6 +2085,13 @@ void h2o_reproxy_register(h2o_pathconf_t *pathconf);
  * registers the configurator
  */
 void h2o_reproxy_register_configurator(h2o_globalconf_t *conf);
+
+/* lib/handler/connect.c */
+
+/**
+ * registers the connect handler to the context
+ */
+void h2o_connect_register(h2o_pathconf_t *pathconf, h2o_proxy_config_vars_t *config);
 
 /* lib/handler/status.c */
 
