@@ -693,6 +693,10 @@ struct st_ptls_context_t {
      */
     unsigned omit_end_of_early_data : 1;
     /**
+     * server cipher preference
+     */
+    unsigned server_cipher_preference : 1;
+    /**
      *
      */
     ptls_encrypt_ticket_t *encrypt_ticket;

@@ -1560,19 +1560,34 @@ static ptls_hash_context_t *create_sha256_context(ptls_context_t *ctx)
 }
 
 static int select_cipher(ptls_cipher_suite_t **selected, ptls_cipher_suite_t **candidates, const uint8_t *src,
-                         const uint8_t *const end)
+                         const uint8_t *const end, int server_preference)
 {
     int ret;
 
-    ptls_cipher_suite_t **c = candidates;
-    for (; *c != NULL; ++c) {
+    if (server_preference) {
+        ptls_cipher_suite_t **c = candidates;
+        for (; *c != NULL; ++c) {
+            while (src != end) {
+                uint16_t id;
+                if ((ret = ptls_decode16(&id, &src, end)) != 0)
+                    goto Exit;
+                if ((*c)->id == id) {
+                    *selected = *c;
+                    return 0;
+                }
+            }
+        }
+    } else {
         while (src != end) {
             uint16_t id;
             if ((ret = ptls_decode16(&id, &src, end)) != 0)
                 goto Exit;
-            if ((*c)->id == id) {
-                *selected = *c;
-                return 0;
+            ptls_cipher_suite_t **c = candidates;
+            for (; *c != NULL; ++c) {
+                if ((*c)->id == id) {
+                    *selected = *c;
+                    return 0;
+                }
             }
         }
     }
@@ -1720,7 +1735,7 @@ static int parse_esni_keys(ptls_context_t *ctx, uint16_t *esni_version, ptls_key
     });
     /* cipher-suite */
     ptls_decode_open_block(src, end, 2, {
-        if ((ret = select_cipher(selected_cipher, ctx->cipher_suites, src, end)) != 0)
+        if ((ret = select_cipher(selected_cipher, ctx->cipher_suites, src, end, ctx->server_cipher_preference)) != 0)
             goto Exit;
         src = end;
     });
@@ -3755,7 +3770,7 @@ static int server_handle_hello(ptls_t *tls, ptls_message_emitter_t *emitter, ptl
     { /* select (or check) cipher-suite, create key_schedule */
         ptls_cipher_suite_t *cs;
         if ((ret = select_cipher(&cs, tls->ctx->cipher_suites, ch->cipher_suites.base,
-                                 ch->cipher_suites.base + ch->cipher_suites.len)) != 0)
+                                 ch->cipher_suites.base + ch->cipher_suites.len, tls->ctx->server_cipher_preference)) != 0)
             goto Exit;
         if (!is_second_flight) {
             tls->cipher_suite = cs;
