@@ -36,7 +36,7 @@ struct dns_res {
     socklen_t len;
 };
 
-struct connect_request {
+struct st_connect_request_t {
     h2o_loop_t *loop;
     h2o_req_t *src_req;
     h2o_socket_t *sock;
@@ -49,7 +49,7 @@ struct connect_request {
     h2o_timer_t timeout;
 };
 
-static void on_error(struct connect_request *req, const char *errstr)
+static void on_error(struct st_connect_request_t *req, const char *errstr)
 {
     h2o_timer_unlink(&req->timeout);
     h2o_send_error_502(req->src_req, "Gateway Error", errstr, 0);
@@ -57,14 +57,14 @@ static void on_error(struct connect_request *req, const char *errstr)
 
 static void on_timeout(h2o_timer_t *entry)
 {
-    struct connect_request *creq = H2O_STRUCT_FROM_MEMBER(struct connect_request, timeout, entry);
+    struct st_connect_request_t *creq = H2O_STRUCT_FROM_MEMBER(struct st_connect_request_t, timeout, entry);
     on_error(creq, h2o_httpclient_error_io_timeout);
 }
 
-static void start_connect(struct connect_request *req, struct sockaddr *addr, socklen_t addrlen);
+static void start_connect(struct st_connect_request_t *req, struct sockaddr *addr, socklen_t addrlen);
 static void on_connect(h2o_socket_t *sock, const char *err)
 {
-    struct connect_request *creq = sock->data;
+    struct st_connect_request_t *creq = sock->data;
 
     if (err) {
         if (creq->dns_results-- > 0) {
@@ -88,7 +88,7 @@ static void on_connect(h2o_socket_t *sock, const char *err)
 
 static void on_generator_dispose(void *_self)
 {
-    struct connect_request *req = _self;
+    struct st_connect_request_t *req = _self;
 
     if (req->getaddr_req != NULL) {
         h2o_hostinfo_getaddr_cancel(req->getaddr_req);
@@ -132,7 +132,7 @@ void h2o_hostinfo_take_n(struct addrinfo *res, struct dns_res *out, size_t *num)
 
 static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errstr, struct addrinfo *res, void *_req)
 {
-    struct connect_request *req = _req;
+    struct st_connect_request_t *req = _req;
 
     assert(getaddr_req == req->getaddr_req);
     req->getaddr_req = NULL;
@@ -146,7 +146,7 @@ static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errs
     start_connect(req, (void *)&req->dns[req->dns_results - 1].addr, req->dns[req->dns_results - 1].len);
 }
 
-static void start_connect(struct connect_request *req, struct sockaddr *addr, socklen_t addrlen)
+static void start_connect(struct st_connect_request_t *req, struct sockaddr *addr, socklen_t addrlen)
 {
     req->sock = h2o_socket_connect(req->loop, addr, addrlen, on_connect);
     if (req->sock == NULL) {
@@ -175,8 +175,8 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
         return 0;
     }
 
-    struct connect_request *creq = h2o_mem_alloc_shared(&req->pool, sizeof(*creq), on_generator_dispose);
-    *creq = (struct connect_request){req->conn->ctx->loop, req, NULL};
+    struct st_connect_request_t *creq = h2o_mem_alloc_shared(&req->pool, sizeof(*creq), on_generator_dispose);
+    *creq = (struct st_connect_request_t){req->conn->ctx->loop, req, NULL};
     creq->host = host;
     creq->handler_ctx = handler;
     creq->dns_results = NUM_DNS_RESULTS;
