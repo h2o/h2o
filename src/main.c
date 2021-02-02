@@ -604,7 +604,7 @@ Exit:
 }
 
 static const char *listener_setup_ssl_picotls(struct listener_config_t *listener, struct listener_ssl_config_t *ssl_config,
-                                              SSL_CTX *ssl_ctx)
+                                              SSL_CTX *ssl_ctx, ptls_cipher_suite_t **cipher_suites)
 {
     static const ptls_key_exchange_algorithm_t *key_exchanges[] = {
 #ifdef PTLS_OPENSSL_HAVE_X25519
@@ -623,6 +623,8 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
     X509 *cert;
     STACK_OF(X509) * cert_chain;
     int ret;
+    if (cipher_suites == NULL)
+        cipher_suites = ptls_openssl_cipher_suites;
 
     *pctx = (struct st_fat_context_t){
         .ctx =
@@ -630,7 +632,7 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
                 .random_bytes = ptls_openssl_random_bytes,
                 .get_time = &ptls_get_time,
                 .key_exchanges = key_exchanges,
-                .cipher_suites = ptls_openssl_cipher_suites,
+                .cipher_suites = cipher_suites,
                 .certificates = {0}, /* fill later */
                 .esni = NULL,        /* fill later */
                 .on_client_hello = &pctx->ch.super,
@@ -730,6 +732,45 @@ static h2o_iovec_t *build_http2_origin_frame(h2o_configurator_command_t *cmd, yo
     return http2_origin_frame;
 }
 
+static ptls_cipher_suite_t **parse_tls13_ciphers(h2o_configurator_command_t *cmd, yoml_t *node, const char *tls13_ciphers)
+{
+    char *p = alloca(strlen(tls13_ciphers) + 1), *saveptr = NULL;
+    strcpy(p, tls13_ciphers);
+    struct {
+        const char *name;
+        ptls_cipher_suite_t *cipher;
+    } cipher_suites[] = {
+        { "TLS_AES_128_GCM_SHA256", &ptls_openssl_aes128gcmsha256},
+        { "TLS_AES_256_GCM_SHA384", &ptls_openssl_aes256gcmsha384},
+        { "TLS_CHACHA20_POLY1305_SHA256", &ptls_openssl_chacha20poly1305sha256 },
+    };
+    H2O_VECTOR(ptls_cipher_suite_t *) ret = {};
+    p = strtok_r(p, ":", &saveptr);
+    while (1) {
+        if (p == NULL)
+            break;
+        int found  = 0;
+        for (int i = 0; i < (sizeof(cipher_suites) / sizeof(cipher_suites[0])); i++) {
+            if (!strcmp(p, cipher_suites[i].name)) {
+                ret.entries = h2o_mem_realloc(ret.entries, sizeof(ret.entries[0]) * (ret.size + 1));
+                ret.entries[ret.size++] = cipher_suites[i].cipher;
+                found = 1;
+                goto Next;
+            }
+        }
+Next:
+        if (!found) {
+            h2o_configurator_errprintf(cmd, node, "Unexpected cipher suite. Expected one of: `TLS_AES_128_GCM_SHA256`, `TLS_AES_256_GCM_SHA384` or `TLS_CHACHA20_POLY1305_SHA256`");
+            return NULL;
+        }
+        p = strtok_r(NULL, ":", &saveptr);
+    }
+    ret.entries = h2o_mem_realloc(ret.entries, sizeof(ret.entries[0])  * (ret.size + 1));
+    ret.entries[ret.size++] = NULL;
+
+    return ret.entries;
+}
+
 static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *listen_node,
                               yoml_t **ssl_node, yoml_t **cc_node, yoml_t **initcwnd_node, struct listener_config_t *listener,
                               int listener_is_new)
@@ -737,12 +778,13 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
     SSL_CTX *ssl_ctx = NULL;
     yoml_t **certificate_file, **key_file, **dh_file, **min_version, **max_version, **cipher_suite, **ocsp_update_cmd,
         **ocsp_update_interval_node, **ocsp_max_failures_node, **cipher_preference_node, **neverbleed_node,
-        **http2_origin_frame_node;
+        **http2_origin_frame_node, **cipher_suite_tls13;
     h2o_iovec_t *http2_origin_frame = NULL;
     long ssl_options = SSL_OP_ALL;
     uint64_t ocsp_update_interval = 4 * 60 * 60; /* defaults to 4 hours */
     unsigned ocsp_max_failures = 3;              /* defaults to 3; permit 3 failures before temporary disabling OCSP stapling */
     int use_neverbleed = 1, use_picotls = 1;     /* enabled by default */
+    ptls_cipher_suite_t **tls13_cipher_suites = NULL;
 
     if (!listener_is_new) {
         if (listener->ssl.size != 0 && ssl_node == NULL) {
@@ -763,10 +805,10 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
                                        "min-version:s,minimum-version:s,max-version:s,maximum-version:s,"
                                        "cipher-suite:s,ocsp-update-cmd:s,ocsp-update-interval:*,"
                                        "ocsp-max-failures:*,dh-file:s,cipher-preference:*,neverbleed:*,"
-                                       "http2-origin-frame:*",
+                                       "http2-origin-frame:*,cipher-suite-tls1.3:s",
                                        &certificate_file, &key_file, &min_version, &min_version, &max_version, &max_version,
                                        &cipher_suite, &ocsp_update_cmd, &ocsp_update_interval_node, &ocsp_max_failures_node,
-                                       &dh_file, &cipher_preference_node, &neverbleed_node, &http2_origin_frame_node) != 0)
+                                       &dh_file, &cipher_preference_node, &neverbleed_node, &http2_origin_frame_node, &cipher_suite_tls13) != 0)
         return -1;
     if (cipher_preference_node != NULL) {
         switch (h2o_configurator_get_one_of(cmd, *cipher_preference_node, "client,server")) {
@@ -910,6 +952,12 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
         ERR_print_errors_cb(on_openssl_print_errors, stderr);
         goto Error;
     }
+    if (use_picotls) {
+        if (cipher_suite_tls13 != NULL && (tls13_cipher_suites = parse_tls13_ciphers(cmd, *cipher_suite_tls13, (*cipher_suite_tls13)->data.scalar)) == NULL) {
+            h2o_configurator_errprintf(cmd, *cipher_suite, "failed to parse the TLS 1.3 cipher suite\n");
+            goto Error;
+        }
+    }
     if (dh_file != NULL) {
         BIO *bio = BIO_new_file((*dh_file)->data.scalar, "r");
         if (bio == NULL) {
@@ -961,7 +1009,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
 #endif
 
     if (use_picotls) {
-        const char *errstr = listener_setup_ssl_picotls(listener, ssl_config, ssl_ctx);
+        const char *errstr = listener_setup_ssl_picotls(listener, ssl_config, ssl_ctx, tls13_cipher_suites);
         if (errstr != NULL)
             h2o_configurator_errprintf(cmd, *ssl_node, "%s; TLS 1.3 will be disabled\n", errstr);
         if (listener->quic.ctx != NULL) {
