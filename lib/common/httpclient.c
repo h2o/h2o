@@ -236,7 +236,7 @@ void h2o_httpclient_connect(h2o_httpclient_t **_client, h2o_mem_pool_t *pool, vo
     /* adjust selected protocol if the attempt is to create a tunnel */
     if (upgrade_to != NULL) {
         if (upgrade_to == h2o_httpclient_upgrade_to_connect) {
-            /* CONNECT method is not supported by our H2 client */
+            /* CONNECT method is not supported by our H2 client implementation */
             if (selected_protocol == PROTOCOL_SELECTOR_H2 || selected_protocol == PROTOCOL_SELECTOR_SERVER_DRIVEN)
                 selected_protocol = PROTOCOL_SELECTOR_H1;
         } else {
