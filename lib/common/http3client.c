@@ -35,10 +35,6 @@
  */
 #define ERROR_EOS H2O_HTTP3_ERROR_USER1
 /**
- * internal error code used to indicate that a tunnel has been created
- */
-#define ERROR_TUNNEL H2O_HTTP3_ERROR_USER2
-/**
  * Maxmium amount of unsent bytes to be buffered when acting as a tunnel.
  */
 #define TUNNEL_MAX_UNSENT 16384

@@ -74,7 +74,6 @@
 #define H2O_HTTP3_ERROR_INCOMPLETE -1
 #define H2O_HTTP3_ERROR_TRANSPORT -2
 #define H2O_HTTP3_ERROR_USER1 -256
-#define H2O_HTTP3_ERROR_USER2 -257
 
 /**
  * maximum payload size excluding DATA frame; stream receive window MUST be at least as big as this + 16 bytes to hold the type and
