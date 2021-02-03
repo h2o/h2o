@@ -710,7 +710,7 @@ static h2o_iovec_t build_request(struct st_h2o_http1client_t *client, h2o_iovec_
 
     APPEND(method.base, method.len);
     buf.base[offset++] = ' ';
-    if (h2o_memis(method.base, method.len, H2O_STRLIT("CONNECT"))) {
+    if (client->super.upgrade_to == h2o_httpclient_upgrade_to_connect) {
         APPEND(url->authority.base, url->authority.len);
     } else {
         APPEND(url->path.base, url->path.len);
