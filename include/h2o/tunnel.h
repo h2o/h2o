@@ -27,7 +27,7 @@ extern "C" {
 #endif
 
 /**
- * an HTTP tunnel established e.g., by successful CONNECT
+ * bi-directional stream abstraction; used to represent tunnels created by HTTP (e.g., by successful CONNECT)
  */
 typedef struct st_h2o_tunnel_t {
     /**
