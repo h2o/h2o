@@ -187,19 +187,21 @@ struct st_h2o_httpclient_tunnel_t {
      */
     void (*write_)(struct st_h2o_httpclient_tunnel_t *tunnel, const void *bytes, size_t len);
     /**
-     * The callback to be called when the application is ready to receive new data through `on_read`.
+     * Callback asynchronously invoked by the user in response to `on_read`, to notify that the user has processed all data being
+     * provided by the call to the `on_read` callback. Next chunk of data is provided to the user only after this callback is
+     * called.
      */
     void (*proceed_read)(struct st_h2o_httpclient_tunnel_t *tunnel);
     /**
-     * user-supplied callback that is used to notify the user the completion of a write
+     * User-supplied callback that is used to notify the user the completion of a write.
      */
     void (*on_write_complete)(struct st_h2o_httpclient_tunnel_t *tunnel, const char *err);
     /**
-     * the on-read callback to be set by the user
+     * The on-read callback to be set by the user.
      */
     void (*on_read)(struct st_h2o_httpclient_tunnel_t *tunnel, const char *err, const void *bytes, size_t len);
     /**
-     * user data pointer
+     * User data pointer.
      */
     void *data;
 };
