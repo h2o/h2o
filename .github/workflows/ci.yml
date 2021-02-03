@@ -36,7 +36,7 @@ jobs:
       with:
         username: ${{ secrets.DOCKERHUB_USERNAME }}
         password: ${{ secrets.DOCKERHUB_TOKEN }}
-      if: ${{ secrets.DOCKERHUB_USERNAME && secrets.DOCKERHUB_TOKEN }}
+      continue-on-error: true
 
     - name: Run with Docker
       shell: 'script -q -e -c "bash -xe {0}"'
