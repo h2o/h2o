@@ -149,7 +149,7 @@ static void destroy_request(struct st_h2o_http3client_req_t *req)
 {
     assert(req->quic == NULL);
 
-    /* destruction of a tunnel is postponed until `h2o_httpclient_tunnel_t::destroy` is called, at which point `is_tunnel` turns
+    /* destruction of a tunnel is postponed until `h2o_httpclient_tunnel_t::destroy` (tunnel_destroy) is called, at which point `is_tunnel` turns
      * into returning false */
     if (is_tunnel(req))
         return;
