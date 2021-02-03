@@ -492,6 +492,10 @@ static int handle_incoming_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
             return ret;
     }
 
+    /* fixup the scheme so that it would never be a NULL pointer (note: checks below are done using `header_exists_map`) */
+    if (stream->req.input.scheme == NULL)
+        stream->req.input.scheme = conn->sock->ssl != NULL ? &H2O_URL_SCHEME_HTTPS : &H2O_URL_SCHEME_HTTP;
+
     h2o_probe_log_request(&stream->req, stream->stream_id);
 
     /* check existence of pseudo-headers */
