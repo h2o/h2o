@@ -93,7 +93,7 @@ struct st_h2o_http1_chunked_entity_reader {
 };
 
 struct st_h2o_http1_tunnel_t {
-    h2o_httpclient_tunnel_t *server;
+    h2o_tunnel_t *server;
     h2o_socket_t *client;
     struct {
         h2o_timer_t entry;
@@ -108,7 +108,7 @@ static void reqread_on_timeout(h2o_timer_t *entry);
 static void req_io_on_timeout(h2o_timer_t *entry);
 static void reqread_start(struct st_h2o_http1_conn_t *conn);
 static int foreach_request(h2o_context_t *ctx, int (*cb)(h2o_req_t *req, void *cbdata), void *cbdata);
-static void establish_tunnel(h2o_req_t *req, h2o_httpclient_tunnel_t *tunnel, uint64_t idle_timeout);
+static void establish_tunnel(h2o_req_t *req, h2o_tunnel_t *tunnel, uint64_t idle_timeout);
 
 const h2o_protocol_callbacks_t H2O_HTTP1_CALLBACKS = {
     NULL, /* graceful_shutdown (note: nothing special needs to be done for handling graceful shutdown) */
@@ -831,7 +831,7 @@ static void tunnel_on_client_write_complete(h2o_socket_t *_sock, const char *err
     tunnel->server->proceed_read(tunnel->server);
 }
 
-static void tunnel_on_server_read(h2o_httpclient_tunnel_t *_tunnel, const char *err, const void *bytes, size_t len)
+static void tunnel_on_server_read(h2o_tunnel_t *_tunnel, const char *err, const void *bytes, size_t len)
 {
     struct st_h2o_http1_tunnel_t *tunnel = _tunnel->data;
     assert(tunnel->server == _tunnel);
@@ -871,7 +871,7 @@ static void tunnel_on_client_read(h2o_socket_t *_sock, const char *err)
     }
 }
 
-static void tunnel_on_server_write_complete(h2o_httpclient_tunnel_t *_tunnel, const char *err)
+static void tunnel_on_server_write_complete(h2o_tunnel_t *_tunnel, const char *err)
 {
     struct st_h2o_http1_tunnel_t *tunnel = _tunnel->data;
     assert(tunnel->server == _tunnel);
@@ -906,7 +906,7 @@ static void tunnel_on_established(void *_tunnel, h2o_socket_t *_sock, size_t req
     tunnel_on_client_read(tunnel->client, NULL);
 }
 
-void establish_tunnel(h2o_req_t *req, h2o_httpclient_tunnel_t *_tunnel, uint64_t idle_timeout)
+void establish_tunnel(h2o_req_t *req, h2o_tunnel_t *_tunnel, uint64_t idle_timeout)
 {
     struct st_h2o_http1_tunnel_t *tunnel = h2o_mem_alloc(sizeof(*tunnel));
 

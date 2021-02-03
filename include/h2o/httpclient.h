@@ -33,9 +33,9 @@ extern "C" {
 #include "h2o/send_state.h"
 #include "h2o/socket.h"
 #include "h2o/socketpool.h"
+#include "h2o/tunnel.h"
 
 typedef struct st_h2o_httpclient_t h2o_httpclient_t;
-typedef struct st_h2o_httpclient_tunnel_t h2o_httpclient_tunnel_t;
 
 /**
  * Additional properties related to the HTTP request being issued.
@@ -69,7 +69,7 @@ typedef struct st_h2o_httpclient_on_head_t {
     h2o_header_t *headers;
     size_t num_headers;
     int header_requires_dup;
-    h2o_httpclient_tunnel_t *tunnel;
+    h2o_tunnel_t *tunnel;
 } h2o_httpclient_on_head_t;
 
 typedef void (*h2o_httpclient_proceed_req_cb)(h2o_httpclient_t *client, size_t written, h2o_send_state_t send_state);
@@ -172,39 +172,6 @@ typedef struct st_h2o_httpclient_timings_t {
     struct timeval response_start_at;
     struct timeval response_end_at;
 } h2o_httpclient_timings_t;
-
-/**
- * an HTTP tunnel established e.g., by successful CONNECT
- */
-struct st_h2o_httpclient_tunnel_t {
-    /**
-     * closes the tunnel and discards the object
-     */
-    void (*destroy)(struct st_h2o_httpclient_tunnel_t *tunnel);
-    /**
-     * The write callback. The completion of a write is signalled by the invocation of the on_write callback. Until then, the user
-     * must retain the buffer unmodified. As is the case of `h2o_socket_write`, only one write can be inflight at a time.
-     */
-    void (*write_)(struct st_h2o_httpclient_tunnel_t *tunnel, const void *bytes, size_t len);
-    /**
-     * Callback asynchronously invoked by the user in response to `on_read`, to notify that the user has processed all data being
-     * provided by the call to the `on_read` callback. Next chunk of data is provided to the user only after this callback is
-     * called.
-     */
-    void (*proceed_read)(struct st_h2o_httpclient_tunnel_t *tunnel);
-    /**
-     * User-supplied callback that is used to notify the user the completion of a write.
-     */
-    void (*on_write_complete)(struct st_h2o_httpclient_tunnel_t *tunnel, const char *err);
-    /**
-     * The on-read callback to be set by the user.
-     */
-    void (*on_read)(struct st_h2o_httpclient_tunnel_t *tunnel, const char *err, const void *bytes, size_t len);
-    /**
-     * User data pointer.
-     */
-    void *data;
-};
 
 /**
  * Properties of a HTTP client connection.
@@ -403,8 +370,6 @@ void h2o_httpclient__connect_h3(h2o_httpclient_t **client, h2o_mem_pool_t *pool,
  * internal API for checking if the stream is to be turned into a tunnel
  */
 static int h2o_httpclient__tunnel_is_ready(h2o_httpclient_t *client, int status);
-
-h2o_httpclient_tunnel_t *h2o_httpclient_create_tunnel_from_socket(h2o_socket_t *sock);
 
 /* inline definitions */
 

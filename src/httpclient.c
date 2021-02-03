@@ -161,7 +161,7 @@ static void on_error(h2o_httpclient_ctx_t *ctx, const char *fmt, ...)
 
 struct st_tunnel_t {
     h2o_socket_t *std_in;
-    h2o_httpclient_tunnel_t *tunnel;
+    h2o_tunnel_t *tunnel;
     /**
      * buffer that stores data inflight (i.e. that being passed to `tunnel->write` for which the completion callback has not been
      * called yet)
@@ -178,7 +178,7 @@ static void tunnel_write(struct st_tunnel_t *tunnel)
     tunnel->tunnel->write_(tunnel->tunnel, vec.base, vec.len);
 }
 
-static void tunnel_on_write_complete(h2o_httpclient_tunnel_t *_tunnel, const char *err)
+static void tunnel_on_write_complete(h2o_tunnel_t *_tunnel, const char *err)
 {
     struct st_tunnel_t *tunnel = _tunnel->data;
     assert(tunnel->tunnel == _tunnel);
@@ -202,7 +202,7 @@ static void tunnel_on_stdin_read(h2o_socket_t *sock, const char *err)
     tunnel_write(tunnel);
 }
 
-static void tunnel_on_read(h2o_httpclient_tunnel_t *_tunnel, const char *err, const void *bytes, size_t len)
+static void tunnel_on_read(h2o_tunnel_t *_tunnel, const char *err, const void *bytes, size_t len)
 {
     struct st_tunnel_t *tunnel = _tunnel->data;
     assert(tunnel->tunnel == _tunnel);
@@ -217,7 +217,7 @@ static void tunnel_on_read(h2o_httpclient_tunnel_t *_tunnel, const char *err, co
     tunnel->tunnel->proceed_read(tunnel->tunnel);
 }
 
-static void tunnel_create(h2o_loop_t *loop, h2o_httpclient_tunnel_t *_tunnel)
+static void tunnel_create(h2o_loop_t *loop, h2o_tunnel_t *_tunnel)
 {
     struct st_tunnel_t *tunnel = h2o_mem_alloc(sizeof(*tunnel));
 

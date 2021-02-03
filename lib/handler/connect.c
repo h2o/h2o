@@ -88,7 +88,7 @@ static void on_connect(h2o_socket_t *sock, const char *err)
     creq->sock = NULL;
     req->res.status = 200;
 
-    h2o_httpclient_tunnel_t *tunnel = h2o_httpclient_create_tunnel_from_socket(sock);
+    h2o_tunnel_t *tunnel = h2o_tunnel_create_from_socket(sock);
     req->establish_tunnel(req, tunnel, timeout);
 }
 

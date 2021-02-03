@@ -68,67 +68,6 @@ struct st_h2o_http1client_t {
     unsigned _seen_at_least_one_chunk : 1;
 };
 
-struct st_h2o_http1client_tunnel_t {
-    h2o_httpclient_tunnel_t super;
-    h2o_socket_t *sock;
-    h2o_doublebuffer_t buf;
-};
-
-static void tunnel_socket_on_read(h2o_socket_t *sock, const char *err);
-
-static void tunnel_on_destroy(h2o_httpclient_tunnel_t *_tunnel)
-{
-    struct st_h2o_http1client_tunnel_t *tunnel = (void *)_tunnel;
-
-    h2o_socket_close(tunnel->sock);
-    h2o_doublebuffer_dispose(&tunnel->buf);
-    free(tunnel);
-}
-
-static void tunnel_on_write_complete(h2o_socket_t *sock, const char *err)
-{
-    struct st_h2o_http1client_tunnel_t *tunnel = sock->data;
-    tunnel->super.on_write_complete(&tunnel->super, err);
-}
-
-static void tunnel_on_write(h2o_httpclient_tunnel_t *_tunnel, const void *bytes, size_t len)
-{
-    struct st_h2o_http1client_tunnel_t *tunnel = (void *)_tunnel;
-
-    h2o_iovec_t vec = h2o_iovec_init(bytes, len);
-    h2o_socket_write(tunnel->sock, &vec, 1, tunnel_on_write_complete);
-}
-
-static void tunnel_proceed_read(h2o_httpclient_tunnel_t *_tunnel)
-{
-    struct st_h2o_http1client_tunnel_t *tunnel = (void *)_tunnel;
-    h2o_iovec_t vec;
-
-    /* if something was inflight, retire that */
-    if (tunnel->buf.inflight)
-        h2o_doublebuffer_consume(&tunnel->buf);
-
-    /* send data if any, or start reading from the socket */
-    if ((vec = h2o_doublebuffer_prepare(&tunnel->buf, &tunnel->sock->input, 65536)).len != 0) {
-        tunnel->super.on_read(&tunnel->super, NULL, vec.base, vec.len);
-    } else {
-        h2o_socket_read_start(tunnel->sock, tunnel_socket_on_read);
-    }
-}
-
-static void tunnel_socket_on_read(h2o_socket_t *sock, const char *err)
-{
-    struct st_h2o_http1client_tunnel_t *tunnel = (void *)sock->data;
-    assert(!tunnel->buf.inflight);
-
-    if (err != NULL) {
-        tunnel->super.on_read(&tunnel->super, err, NULL, 0);
-    } else {
-        h2o_socket_read_stop(tunnel->sock);
-        tunnel_proceed_read(&tunnel->super);
-    }
-}
-
 static void close_client(struct st_h2o_http1client_t *client)
 {
     if (client->sock != NULL) {
@@ -479,7 +418,7 @@ static void on_head(h2o_socket_t *sock, const char *err)
 
     /* provide underlying socket as a tunnel, if necessary */
     if (h2o_httpclient__tunnel_is_ready(&client->super, http_status)) {
-        on_head.tunnel = h2o_httpclient_create_tunnel_from_socket(client->sock);
+        on_head.tunnel = h2o_tunnel_create_from_socket(client->sock);
         client->sock = NULL;
     }
 
@@ -491,10 +430,7 @@ static void on_head(h2o_socket_t *sock, const char *err)
         /* upgraded to tunnel; dispose of the httpclient instance, feed first chunk of tunnel data to the client, and return */
         assert(client->super._cb.on_body == NULL);
         close_client(client);
-        struct st_h2o_http1client_tunnel_t *tunnel = (void *)on_head.tunnel;
-        h2o_buffer_consume(&tunnel->sock->input, rlen);
-        h2o_socket_read_stop(tunnel->sock);
-        tunnel_proceed_read(&tunnel->super);
+        h2o_tunnel_finish_socket_upgrade(on_head.tunnel, rlen);
         return;
     } else if (client->state.res == STREAM_STATE_CLOSED) {
         close_response(client);
@@ -868,25 +804,6 @@ void h2o_httpclient__h1_on_connect(h2o_httpclient_t *_client, h2o_socket_t *sock
 
     setup_client(client, sock, origin);
     on_connection_ready(client);
-}
-
-h2o_httpclient_tunnel_t *h2o_httpclient_create_tunnel_from_socket(h2o_socket_t *sock)
-{
-    struct st_h2o_http1client_tunnel_t *tunnel = h2o_mem_alloc(sizeof(*tunnel));
-
-    *tunnel = (struct st_h2o_http1client_tunnel_t){
-        .super =
-            {
-                .destroy = tunnel_on_destroy,
-                .write_ = tunnel_on_write,
-                .proceed_read = tunnel_proceed_read,
-            },
-        .sock = sock,
-    };
-    tunnel->sock->data = tunnel;
-    h2o_doublebuffer_init(&tunnel->buf, &h2o_socket_buffer_prototype);
-
-    return &tunnel->super;
 }
 
 const size_t h2o_httpclient__h1_size = sizeof(struct st_h2o_http1client_t);

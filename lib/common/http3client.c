@@ -101,7 +101,7 @@ struct st_h2o_http3client_req_t {
      * tunnel object. `tunnel.destroy` is set to non-NULL iif used.
      */
     struct {
-        h2o_httpclient_tunnel_t tunnel;
+        h2o_tunnel_t tunnel;
         struct {
             h2o_timer_t delayed;
             unsigned complete_to_be_called : 1;
@@ -207,7 +207,7 @@ static void tunnel_delayed_on_write_complete(h2o_timer_t *entry)
     req->tunnel.tunnel.on_write_complete(&req->tunnel.tunnel, NULL);
 }
 
-static void tunnel_destroy(h2o_httpclient_tunnel_t *_tunnel)
+static void tunnel_destroy(h2o_tunnel_t *_tunnel)
 {
     struct st_h2o_http3client_req_t *req = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3client_req_t, tunnel.tunnel, _tunnel);
 
@@ -238,7 +238,7 @@ static void tunnel_process_ingress(struct st_h2o_http3client_req_t *req)
     }
 }
 
-static void tunnel_write(h2o_httpclient_tunnel_t *_tunnel, const void *bytes, size_t len)
+static void tunnel_write(h2o_tunnel_t *_tunnel, const void *bytes, size_t len)
 {
     struct st_h2o_http3client_req_t *req = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3client_req_t, tunnel.tunnel, _tunnel);
 
@@ -262,7 +262,7 @@ static void tunnel_write(h2o_httpclient_tunnel_t *_tunnel, const void *bytes, si
     }
 }
 
-static void tunnel_proceed_read(h2o_httpclient_tunnel_t *_tunnel)
+static void tunnel_proceed_read(h2o_tunnel_t *_tunnel)
 {
     struct st_h2o_http3client_req_t *req = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3client_req_t, tunnel.tunnel, _tunnel);
 
@@ -604,7 +604,7 @@ static int handle_input_expect_headers(struct st_h2o_http3client_req_t *req, con
                                         .headers = headers.entries,
                                         .num_headers = headers.size};
     if (h2o_httpclient__tunnel_is_ready(&req->super, status)) {
-        req->tunnel.tunnel = (h2o_httpclient_tunnel_t){
+        req->tunnel.tunnel = (h2o_tunnel_t){
             .destroy = tunnel_destroy,
             .write_ = tunnel_write,
             .proceed_read = tunnel_proceed_read,

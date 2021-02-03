@@ -218,7 +218,7 @@ struct st_h2o_http3_server_stream_t {
      * a tunnel is established (i.e. when 2xx response is being received).
      */
     struct st_h2o_http3_server_tunnel_t {
-        h2o_httpclient_tunnel_t *tunnel;
+        h2o_tunnel_t *tunnel;
         struct st_h2o_http3_server_stream_t *stream;
         struct {
             h2o_timer_t delayed_write;
@@ -1273,7 +1273,7 @@ static void do_send_informational(h2o_ostream_t *_ostr, h2o_req_t *_req)
     finalize_do_send(stream);
 }
 
-static void tunnel_on_read(h2o_httpclient_tunnel_t *_tunnel, const char *err, const void *bytes, size_t len)
+static void tunnel_on_read(h2o_tunnel_t *_tunnel, const char *err, const void *bytes, size_t len)
 {
     struct st_h2o_http3_server_stream_t *stream = _tunnel->data;
 
@@ -1333,7 +1333,7 @@ void tunnel_write_delayed(h2o_timer_t *timer)
     tunnel_write(stream);
 }
 
-static void tunnel_on_write_complete(h2o_httpclient_tunnel_t *tunnel, const char *err)
+static void tunnel_on_write_complete(h2o_tunnel_t *tunnel, const char *err)
 {
     struct st_h2o_http3_server_stream_t *stream = tunnel->data;
 
@@ -1343,7 +1343,7 @@ static void tunnel_on_write_complete(h2o_httpclient_tunnel_t *tunnel, const char
     tunnel_write(stream);
 }
 
-static void establish_tunnel(h2o_req_t *req, h2o_httpclient_tunnel_t *tunnel, uint64_t idle_timeout)
+static void establish_tunnel(h2o_req_t *req, h2o_tunnel_t *tunnel, uint64_t idle_timeout)
 {
     struct st_h2o_http3_server_stream_t *stream = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_stream_t, req, req);
 
