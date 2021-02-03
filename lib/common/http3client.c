@@ -697,7 +697,7 @@ static void on_send_stop(quicly_stream_t *qs, int err)
             req->tunnel.tunnel.on_write_complete(&req->tunnel.tunnel, h2o_socket_error_closed);
         } else {
             /* nothing to do; the fact that the peer is refusing to receive new data is not notified until the user tries to send
-             * something*/
+             * something, by calling `h2o_httpclient_tunnel_t::write_`. */
         }
     } else {
         handle_input_error(req, err);
