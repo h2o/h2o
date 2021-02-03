@@ -549,7 +549,7 @@ static int handle_input_expect_headers(struct st_h2o_http3client_req_t *req, con
     if ((ret = h2o_http3_read_frame(&frame, 1, H2O_HTTP3_STREAM_TYPE_REQUEST, src, src_end, err_desc)) != 0) {
         if (ret == H2O_HTTP3_ERROR_INCOMPLETE) {
             if (err != 0) {
-                on_error_before_head(req, err == H2O_HTTP3_ERROR_NONE ? "unexpected close" : h2o_httpclient_error_io);
+                on_error_before_head(req, h2o_httpclient_error_io);
                 return 0;
             }
             return ret;
@@ -587,7 +587,7 @@ static int handle_input_expect_headers(struct st_h2o_http3client_req_t *req, con
             return H2O_HTTP3_ERROR_GENERAL_PROTOCOL;
         }
         if (frame_is_eos) {
-            on_error_before_head(req, err == ERROR_EOS ? "unexpected close" : h2o_httpclient_error_io);
+            on_error_before_head(req, h2o_httpclient_error_io);
             return 0;
         }
         if (req->super.informational_cb != NULL &&
