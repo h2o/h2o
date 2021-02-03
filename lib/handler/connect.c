@@ -19,11 +19,10 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-#include <sys/un.h>
+#include "h2o/hostinfo.h"
+#include "h2o/memory.h"
+#include "h2o/socket.h"
 #include "h2o.h"
-#include "h2o/socketpool.h"
-#include "h2o/balancer.h"
-#include "khash.h"
 
 struct st_connect_handler_t {
     h2o_handler_t super;
