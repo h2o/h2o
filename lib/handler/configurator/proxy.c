@@ -397,7 +397,6 @@ static int on_config_connect_proxy(h2o_configurator_command_t *cmd, h2o_configur
     return 0;
 }
 
-
 static int on_config_emit_x_forwarded_headers(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     ssize_t ret = h2o_configurator_get_one_of(cmd, node, "OFF,ON");
