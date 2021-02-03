@@ -507,10 +507,10 @@ int handle_input_expect_data_frame(struct st_h2o_http3client_req_t *req, const u
             if (ret == H2O_HTTP3_ERROR_INCOMPLETE && err == 0)
                 return ret;
             if (is_tunnel(req)) {
-                req->tunnel.ingress.errstr = h2o_httpclient_error_protocol_violation;
+                req->tunnel.ingress.errstr = h2o_httpclient_error_malformed_frame;
                 tunnel_process_ingress(req);
             } else {
-                req->super._cb.on_body(&req->super, "malformed frame");
+                req->super._cb.on_body(&req->super, h2o_httpclient_error_malformed_frame);
             }
             return ret;
         }
