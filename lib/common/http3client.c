@@ -818,7 +818,7 @@ void start_request(struct st_h2o_http3client_req_t *req)
         if (req->proceed_req.cb != NULL)
             req->proceed_req.bytes_written = body.len;
     }
-    if (req->proceed_req.cb == NULL && !h2o_memis(method.base, method.len, H2O_STRLIT("CONNECT")))
+    if (req->proceed_req.cb == NULL && req->super.upgrade_to == NULL)
         quicly_sendstate_shutdown(&req->quic->sendstate, req->sendbuf->size);
     quicly_stream_sync_sendbuf(req->quic, 1);
 
