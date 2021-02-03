@@ -387,7 +387,6 @@ extern const size_t h2o_httpclient__h2_size;
 
 void h2o_httpclient_set_conn_properties_of_socket(h2o_socket_t *sock, h2o_httpclient_conn_properties_t *properties);
 
-h2o_httpclient_tunnel_t *h2o_open_tunnel_from_socket(h2o_socket_t *sock);
 
 #ifdef quicly_h /* create http3client.h? */
 
