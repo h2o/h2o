@@ -29,11 +29,6 @@ struct st_connect_handler_t {
     h2o_proxy_config_vars_t config;
 };
 
-enum connect_type {
-    NONE,
-    CONNECT,
-    CONNECT_UDP
-};
 #define MAX_CONNECT_RETRIES 3
 
 struct st_server_address_t {
@@ -43,7 +38,6 @@ struct st_server_address_t {
 
 struct st_connect_request_t {
     struct st_connect_handler_t *handler;
-    enum connect_type connect_type;
     h2o_loop_t *loop;
     h2o_req_t *src_req;
     h2o_socket_t *sock;
@@ -135,11 +129,11 @@ static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errs
         return;
     }
 
-    if (creq->connect_type == CONNECT) {
+    if (res->ai_socktype == SOCK_STREAM) {
         store_server_addresses(creq, res);
         start_connect(creq);
     } else {
-        assert(creq->connect_type == CONNECT_UDP);
+        assert(res->ai_socktype == SOCK_DGRAM);
         h2o_httpclient_udp_tunnel_t *tunnel = h2o_open_udp_tunnel_from_sa(creq->loop, res->ai_addr, res->ai_addrlen);
         h2o_req_t *req = creq->src_req;
         uint64_t timeout = creq->handler->config.tunnel.timeout;
@@ -168,16 +162,18 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
     struct st_connect_handler_t *handler = (void *)_handler;
     h2o_iovec_t host;
     uint16_t port;
-    enum connect_type connect_type = NONE;
+    int socket_proto;
+    int socket_type;
 
-    if (h2o_memis(req->input.method.base, req->input.method.len, H2O_STRLIT("CONNECT")))
-        connect_type = CONNECT;
-    else if (h2o_memis(req->input.method.base, req->input.method.len, H2O_STRLIT("CONNECT-UDP")))
-        connect_type = CONNECT_UDP;
-
-    /* this handler captures CONNECT or CONNECT-UDP, delegating requests with other methods to the next handler */
-    if (connect_type == NONE)
+    if (h2o_memis(req->input.method.base, req->input.method.len, H2O_STRLIT("CONNECT"))) {
+        socket_proto = SOCK_STREAM;
+        socket_type = IPPROTO_TCP;
+    } else if (h2o_memis(req->input.method.base, req->input.method.len, H2O_STRLIT("CONNECT-UDP"))) {
+        socket_proto = SOCK_DGRAM;
+        socket_type = IPPROTO_UDP;
+    } else {
         return -1;
+    }
 
     if (h2o_url_parse_hostport(req->input.path.base, req->input.path.len, &host, &port) == NULL || port == 0 || port == 65535) {
         h2o_send_error_400(req, "Bad Request", "Bad Request", 0);
@@ -186,7 +182,6 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
 
     struct st_connect_request_t *creq = h2o_mem_alloc_shared(&req->pool, sizeof(*creq), on_generator_dispose);
     *creq = (struct st_connect_request_t){
-        .connect_type = connect_type,
         .handler = handler,
         .loop = req->conn->ctx->loop,
         .src_req = req,
@@ -197,8 +192,8 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
     h2o_timer_link(creq->loop, handler->config.tunnel.timeout, &creq->timeout);
 
     creq->getaddr_req = h2o_hostinfo_getaddr(&creq->src_req->conn->ctx->receivers.hostinfo_getaddr, creq->server_name.host,
-            h2o_iovec_init(creq->server_name.port, port_strlen), AF_UNSPEC, SOCK_STREAM,
-            IPPROTO_TCP, AI_ADDRCONFIG | AI_NUMERICSERV, on_getaddr, creq);
+            h2o_iovec_init(creq->server_name.port, port_strlen), AF_UNSPEC, socket_type,
+            socket_proto, AI_ADDRCONFIG | AI_NUMERICSERV, on_getaddr, creq);
 
     return 0;
 }
