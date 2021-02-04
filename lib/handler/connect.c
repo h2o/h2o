@@ -166,11 +166,11 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
     int socket_type;
 
     if (h2o_memis(req->input.method.base, req->input.method.len, H2O_STRLIT("CONNECT"))) {
-        socket_proto = SOCK_STREAM;
-        socket_type = IPPROTO_TCP;
+        socket_proto = IPPROTO_TCP;
+        socket_type = SOCK_STREAM;
     } else if (h2o_memis(req->input.method.base, req->input.method.len, H2O_STRLIT("CONNECT-UDP"))) {
-        socket_proto = SOCK_DGRAM;
-        socket_type = IPPROTO_UDP;
+        socket_proto = IPPROTO_UDP;
+        socket_type = SOCK_DGRAM;
     } else {
         return -1;
     }

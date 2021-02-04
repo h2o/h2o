@@ -846,7 +846,7 @@ static void udp_tunnel_on_client_write_complete(h2o_socket_t *_sock, const char 
 {
 }
 
-static void udp_tunnel_on_server_read(h2o_httpclient_udp_tunnel_t*_tunnel, const char *err, const void *bytes, size_t len)
+static void udp_tunnel_on_server_read(h2o_httpclient_udp_tunnel_t*_tunnel, const char *err, const h2o_iovec_t *iov, size_t iovlen)
 {
     struct st_h2o_http1_tunnel_t *tunnel = _tunnel->data;
     assert(tunnel->server.udp == _tunnel);
@@ -862,17 +862,22 @@ static void udp_tunnel_on_server_read(h2o_httpclient_udp_tunnel_t*_tunnel, const
 
     tunnel_reset_timeout(tunnel);
 
-    uint8_t varint[8];
-    uint8_t *varint_end;
-    h2o_iovec_t vec[3];
-    varint_end = ptls_encode_quicint(varint, len);
-    uint8_t zero = 0;
-    vec[0].base = (char *)&zero;
-    vec[0].len = sizeof(zero);
-    vec[1].base = (char *)varint;
-    vec[1].len = varint_end - varint;
-    vec[2] = h2o_iovec_init(bytes, len);
-    h2o_socket_write(tunnel->client, vec, 3, udp_tunnel_on_client_write_complete);
+    struct {
+        uint8_t buf[8];
+        uint8_t *end;
+    } varints[iovlen];
+    h2o_iovec_t vec[iovlen * 3];
+    const uint8_t zero = 0;
+
+    for (size_t i = 0; i < iovlen; i += 3) {
+        varints[i].end = ptls_encode_quicint(varints[i].buf, iov[i].len);
+        vec[i * 3].base = (char *)&zero;
+        vec[i * 3].len = sizeof(zero);
+        vec[(i * 3) + 1].base = (char *)varints[i].buf;
+        vec[(i * 3) + 1].len = varints[i].end - varints[i].buf;
+        vec[(i * 3) + 2] = h2o_iovec_init(iov[i].base, iov[i].len);
+    }
+    h2o_socket_write(tunnel->client, vec, iovlen * 3, udp_tunnel_on_client_write_complete);
 }
 
 h2o_iovec_t get_next_chunk(const uint8_t *bytes, size_t len, size_t *to_consume, int *skip)
@@ -914,17 +919,23 @@ static void udp_tunnel_on_client_read(h2o_socket_t *_sock, const char *err)
 
     tunnel_reset_timeout(tunnel);
 
+    h2o_iovec_t iovs[64];
+    size_t iovlen = 0;
+    size_t idx = 0;
     do {
         int skip = 0;
         size_t to_consume;
-        h2o_iovec_t iov = get_next_chunk((void *)tunnel->client->input->bytes, tunnel->client->input->size, &to_consume, &skip);
-        if (iov.len == 0)
+        iovs[iovlen] = get_next_chunk((void *)(tunnel->client->input->bytes + idx), tunnel->client->input->size, &to_consume, &skip);
+        if (iovs[iovlen].len == 0)
             break;
         if (!skip)
-            tunnel->server.udp->write_(tunnel->server.udp, iov.base, iov.len);
-        h2o_buffer_consume(&tunnel->client->input, to_consume);
+            iovlen++;
+        idx += to_consume;
     } while(1);
 
+    if (iovlen > 0)
+        tunnel->server.udp->writev_(tunnel->server.udp, iovs, iovlen);
+    h2o_buffer_consume(&tunnel->client->input, idx);
     h2o_socket_read_start(tunnel->client, udp_tunnel_on_client_read);
 }
 

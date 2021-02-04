@@ -184,11 +184,11 @@ typedef struct st_h2o_httpclient_udp_tunnel_t {
     /**
      * The write callback. Contrary to what happens in the tcp tunnel, completion is immediate.
      */
-    void (*write_)(struct st_h2o_httpclient_udp_tunnel_t *tunnel, const void *bytes, size_t len);
+    void (*writev_)(struct st_h2o_httpclient_udp_tunnel_t *tunnel, h2o_iovec_t *iov, size_t iovlen);
     /**
      * the on-read callback to be set by the user
      */
-    void (*on_read)(struct st_h2o_httpclient_udp_tunnel_t *tunnel, const char *err, const void *bytes, size_t len);
+    void (*on_read)(struct st_h2o_httpclient_udp_tunnel_t *tunnel, const char *err, const h2o_iovec_t *iov, size_t iovlen);
     /**
      * user data pointer
      */
