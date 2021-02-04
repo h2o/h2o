@@ -1,5 +1,5 @@
 #!perl
-# DTRACE_TEST=1 to skip to check prereqisites except for OS
+# DTRACE_TESTS=1 to skip to check prereqisites
 # H2OLOG_DEBUG=1 for more runtime logs
 use strict;
 use warnings FATAL => "all";
@@ -16,7 +16,7 @@ run_as_root();
 my $h2olog_prog = bindir() . "/h2olog";
 my $client_prog = bindir() . "/h2o-httpclient";
 
-unless ($ENV{DTRACE_TEST})  {
+unless ($ENV{DTRACE_TESTS})  {
   plan skip_all => "$h2olog_prog not found"
       unless -e $h2olog_prog;
 
