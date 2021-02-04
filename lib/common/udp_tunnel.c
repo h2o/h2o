@@ -1,5 +1,6 @@
 #include <arpa/inet.h>
 #include <netdb.h>
+#include <unistd.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <sys/types.h>
@@ -9,7 +10,6 @@
 
 struct st_h2o_udp_tunnel_t {
     h2o_httpclient_udp_tunnel_t super;
-    struct sockaddr_storage ss;
     socklen_t len;
     h2o_socket_t *sock;
     h2o_loop_t *loop;
@@ -55,20 +55,6 @@ static void tunnel_on_writev(h2o_httpclient_udp_tunnel_t *_tunnel, h2o_iovec_t *
 {
     struct st_h2o_udp_tunnel_t *tunnel = (void *)_tunnel;
     int fd;
-    if (!tunnel->sock) {
-        struct sockaddr_in sin;
-        if ((fd = socket(PF_INET, SOCK_DGRAM, 0)) == -1) {
-            perror("failed to create UDP socket");
-            exit(EXIT_FAILURE);
-        }
-        memset(&sin, 0, sizeof(sin));
-        if (bind(fd, (void *)&sin, sizeof(sin)) != 0) {
-            perror("failed to bind bind UDP socket");
-            exit(EXIT_FAILURE);
-        }
-        tunnel->sock = h2o_evloop_socket_create(tunnel->loop, fd, H2O_SOCKET_FLAG_DONT_READ);
-        tunnel->sock->data = tunnel;
-    }
     fd = h2o_socket_get_fd(tunnel->sock);
 
     struct msghdr mess;
@@ -76,8 +62,10 @@ static void tunnel_on_writev(h2o_httpclient_udp_tunnel_t *_tunnel, h2o_iovec_t *
     for (size_t i = 0; i < iovlen; i++)
         vec[i] = (struct iovec){ .iov_base = iov[i].base, .iov_len = iov[i].len, };
     memset(&mess, 0, sizeof(mess));
+    /*
     mess.msg_name = &tunnel->ss;
     mess.msg_namelen = tunnel->len;
+    */
     mess.msg_iov = vec;
     mess.msg_iovlen = iovlen;
     while (sendmsg(fd, &mess, 0) == -1 && errno == EINTR)
@@ -89,6 +77,14 @@ static void tunnel_on_writev(h2o_httpclient_udp_tunnel_t *_tunnel, h2o_iovec_t *
 
 h2o_httpclient_udp_tunnel_t *h2o_open_udp_tunnel_from_sa(h2o_loop_t *loop, struct sockaddr *addr, socklen_t len)
 {
+    int fd;
+    if ((fd = socket(PF_INET, SOCK_DGRAM, 0)) == -1)
+        return NULL;
+
+    if (connect(fd, (void *)addr, len) != 0) {
+        close(fd);
+        return NULL;
+    }
     /* create tunnel */
     struct st_h2o_udp_tunnel_t *tunnel = h2o_mem_alloc(sizeof(*tunnel));
     *tunnel = (struct st_h2o_udp_tunnel_t){
@@ -101,7 +97,8 @@ h2o_httpclient_udp_tunnel_t *h2o_open_udp_tunnel_from_sa(h2o_loop_t *loop, struc
             .len = len,
             .loop = loop,
     };
-    memcpy(&tunnel->ss, addr, len);
+    tunnel->sock = h2o_evloop_socket_create(tunnel->loop, fd, H2O_SOCKET_FLAG_DONT_READ);
+    tunnel->sock->data = tunnel;
 
     return &tunnel->super;
 }
