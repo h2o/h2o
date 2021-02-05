@@ -99,10 +99,7 @@ enum tunnel_type {
 
 struct st_h2o_http1_tunnel_t {
     enum tunnel_type tunnel_type;
-    union {
-        h2o_httpclient_tunnel_t *tcp;
-        h2o_httpclient_udp_tunnel_t *udp;
-    } server;
+    h2o_httpclient_tunnel_t *server;
     h2o_socket_t *client;
     struct {
         h2o_timer_t entry;
@@ -118,7 +115,7 @@ static void req_io_on_timeout(h2o_timer_t *entry);
 static void reqread_start(struct st_h2o_http1_conn_t *conn);
 static int foreach_request(h2o_context_t *ctx, int (*cb)(h2o_req_t *req, void *cbdata), void *cbdata);
 static void establish_tunnel(h2o_req_t *req, h2o_httpclient_tunnel_t *tunnel, uint64_t idle_timeout);
-static void establish_udp_tunnel(h2o_req_t *req, h2o_httpclient_udp_tunnel_t *tunnel, uint64_t idle_timeout);
+static void establish_udp_tunnel(h2o_req_t *req, h2o_httpclient_tunnel_t *tunnel, uint64_t idle_timeout);
 
 const h2o_protocol_callbacks_t H2O_HTTP1_CALLBACKS = {
     NULL, /* graceful_shutdown (note: nothing special needs to be done for handling graceful shutdown) */
@@ -808,7 +805,7 @@ static void on_upgrade_complete(h2o_socket_t *socket, const char *err)
 static void tunnel_close(struct st_h2o_http1_tunnel_t *tunnel, const char *err)
 {
     /* TODO log err */
-    tunnel->server.tcp->destroy(tunnel->server.tcp);
+    tunnel->server->destroy(tunnel->server);
     if (tunnel->client != NULL)
         h2o_socket_close(tunnel->client);
     h2o_timer_unlink(&tunnel->idle_timeout.entry);
@@ -839,51 +836,13 @@ static void tunnel_on_client_write_complete(h2o_socket_t *_sock, const char *err
         return;
     }
 
-    tunnel->server.tcp->proceed_read(tunnel->server.tcp);
+    tunnel->server->proceed_read(tunnel->server);
 }
 
-static void udp_tunnel_on_client_write_complete(h2o_socket_t *_sock, const char *err)
-{
-}
-
-static void udp_tunnel_on_server_read(h2o_httpclient_udp_tunnel_t*_tunnel, const char *err, const h2o_iovec_t *iov, size_t iovlen)
+static void tunnel_on_server_read(h2o_httpclient_tunnel_t *_tunnel, const char *err, h2o_iovec_t *iovs, size_t iovlen)
 {
     struct st_h2o_http1_tunnel_t *tunnel = _tunnel->data;
-    assert(tunnel->server.udp == _tunnel);
-
-    if (err != NULL) {
-        tunnel_close(tunnel, err);
-        return;
-    }
-    /* We don't buffer on UDP tunnels, if there's already a write in progress, drop the packets to the floor */
-    if (tunnel->client->_cb.write != NULL) {
-        return;
-    }
-
-    tunnel_reset_timeout(tunnel);
-
-    struct {
-        uint8_t buf[8];
-        uint8_t *end;
-    } varints[iovlen];
-    h2o_iovec_t vec[iovlen * 3];
-    const uint8_t zero = 0;
-
-    for (size_t i = 0; i < iovlen; i += 3) {
-        varints[i].end = ptls_encode_quicint(varints[i].buf, iov[i].len);
-        vec[i * 3].base = (char *)&zero;
-        vec[i * 3].len = sizeof(zero);
-        vec[(i * 3) + 1].base = (char *)varints[i].buf;
-        vec[(i * 3) + 1].len = varints[i].end - varints[i].buf;
-        vec[(i * 3) + 2] = h2o_iovec_init(iov[i].base, iov[i].len);
-    }
-    h2o_socket_write(tunnel->client, vec, iovlen * 3, udp_tunnel_on_client_write_complete);
-}
-
-static void tcp_tunnel_on_server_read(h2o_httpclient_tunnel_t *_tunnel, const char *err, const void *bytes, size_t len)
-{
-    struct st_h2o_http1_tunnel_t *tunnel = _tunnel->data;
-    assert(tunnel->server.tcp == _tunnel);
+    assert(tunnel->server == _tunnel);
 
     if (err != NULL) {
         tunnel_close(tunnel, err);
@@ -892,8 +851,7 @@ static void tcp_tunnel_on_server_read(h2o_httpclient_tunnel_t *_tunnel, const ch
 
     tunnel_reset_timeout(tunnel);
 
-    h2o_iovec_t vec = h2o_iovec_init(bytes, len);
-    h2o_socket_write(tunnel->client, &vec, 1, tunnel_on_client_write_complete);
+    h2o_socket_write(tunnel->client, iovs, iovlen, tunnel_on_client_write_complete);
 }
 
 static void tunnel_on_client_read(h2o_socket_t *_sock, const char *err)
@@ -914,7 +872,7 @@ static void tunnel_on_client_read(h2o_socket_t *_sock, const char *err)
      */
     if (tunnel->client->input->size != 0) {
         h2o_socket_read_stop(tunnel->client);
-        tunnel->server.tcp->write_(tunnel->server.tcp, tunnel->client->input->bytes, tunnel->client->input->size);
+        tunnel->server->write_(tunnel->server, tunnel->client->input->bytes, tunnel->client->input->size);
     } else {
         h2o_socket_read_start(tunnel->client, tunnel_on_client_read);
     }
@@ -923,7 +881,7 @@ static void tunnel_on_client_read(h2o_socket_t *_sock, const char *err)
 static void tunnel_on_server_write_complete(h2o_httpclient_tunnel_t *_tunnel, const char *err)
 {
     struct st_h2o_http1_tunnel_t *tunnel = _tunnel->data;
-    assert(tunnel->server.tcp == _tunnel);
+    assert(tunnel->server == _tunnel);
 
     if (err != NULL) {
         tunnel_close(tunnel, err);
@@ -951,7 +909,7 @@ static void tunnel_on_established(void *_tunnel, h2o_socket_t *_sock, size_t req
     h2o_socket_read_stop(tunnel->client);
     h2o_buffer_consume(&tunnel->client->input, reqsize);
 
-    tunnel->server.tcp->proceed_read(tunnel->server.tcp);
+    tunnel->server->proceed_read(tunnel->server);
     tunnel_on_client_read(tunnel->client, NULL);
 }
 
@@ -970,32 +928,33 @@ static void udp_tunnel_on_established(void *_tunnel, h2o_socket_t *_sock, size_t
     h2o_buffer_consume(&tunnel->client->input, reqsize);
 
     tunnel->client->data = tunnel;
-    h2o_socket_read_start(tunnel->client, udp_tunnel_on_client_read);
+    h2o_socket_read_start(tunnel->client, tunnel_on_client_read);
 }
 
 void establish_tunnel(h2o_req_t *req, h2o_httpclient_tunnel_t *_tunnel, uint64_t idle_timeout)
 {
     struct st_h2o_http1_tunnel_t *tunnel = h2o_mem_alloc(sizeof(*tunnel));
 
-    *tunnel = (struct st_h2o_http1_tunnel_t){.server = {.tcp = _tunnel}, NULL, {.ticks = idle_timeout}};
+    *tunnel = (struct st_h2o_http1_tunnel_t){.server = _tunnel, NULL, {.ticks = idle_timeout}};
     tunnel->tunnel_type = TUNNEL_TCP;
-    tunnel->server.tcp->on_read = tcp_tunnel_on_server_read;
-    tunnel->server.tcp->on_write_complete = tunnel_on_server_write_complete;
-    tunnel->server.tcp->data = tunnel;
+    tunnel->server->on_read = tunnel_on_server_read;
+    tunnel->server->on_write_complete = tunnel_on_server_write_complete;
+    tunnel->server->data = tunnel;
 
     h2o_timer_init(&tunnel->idle_timeout.entry, tunnel_on_timeout);
 
-    h2o_http1_upgrade(req, NULL, 0, udp_tunnel_on_established, tunnel);
+    h2o_http1_upgrade(req, NULL, 0, tunnel_on_established, tunnel);
 }
 
-void establish_udp_tunnel(h2o_req_t *req, h2o_httpclient_udp_tunnel_t *_tunnel, uint64_t idle_timeout)
+void establish_udp_tunnel(h2o_req_t *req, h2o_httpclient_tunnel_t *_tunnel, uint64_t idle_timeout)
 {
     struct st_h2o_http1_tunnel_t *tunnel = h2o_mem_alloc(sizeof(*tunnel));
 
-    *tunnel = (struct st_h2o_http1_tunnel_t){.server = { .udp = _tunnel}, NULL, {.ticks = idle_timeout}};
+    *tunnel = (struct st_h2o_http1_tunnel_t){.server = _tunnel, NULL, {.ticks = idle_timeout}};
     tunnel->tunnel_type = TUNNEL_UDP;
-    tunnel->server.udp->on_read = udp_tunnel_on_server_read;
-    tunnel->server.udp->data = tunnel;
+    tunnel->server->on_read = tunnel_on_server_read;
+    tunnel->server->on_write_complete = tunnel_on_server_write_complete;
+    tunnel->server->data = tunnel;
 
     h2o_timer_init(&tunnel->idle_timeout.entry, tunnel_on_timeout);
 

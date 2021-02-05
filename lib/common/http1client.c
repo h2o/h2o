@@ -110,7 +110,7 @@ static void tunnel_proceed_read(h2o_httpclient_tunnel_t *_tunnel)
 
     /* send data if any, or start reading from the socket */
     if ((vec = h2o_doublebuffer_prepare(&tunnel->buf, &tunnel->sock->input, 65536)).len != 0) {
-        tunnel->super.on_read(&tunnel->super, NULL, vec.base, vec.len);
+        tunnel->super.on_read(&tunnel->super, NULL, &vec, 1);
     } else {
         h2o_socket_read_start(tunnel->sock, tunnel_socket_on_read);
     }

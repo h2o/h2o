@@ -199,7 +199,7 @@ struct st_h2o_httpclient_tunnel_t {
     /**
      * The on-read callback to be set by the user.
      */
-    void (*on_read)(struct st_h2o_httpclient_tunnel_t *tunnel, const char *err, const void *bytes, size_t len);
+    void (*on_read)(struct st_h2o_httpclient_tunnel_t *tunnel, const char *err, h2o_iovec_t *iov, size_t iovlen);
     /**
      * The write callback. Contrary to what happens in the tcp tunnel, completion is immediate.
      */

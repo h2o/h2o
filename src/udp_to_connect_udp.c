@@ -45,7 +45,7 @@ int main(int argc, char **argv)
     }
 
     int b = -1;
-    struct sockaddr_storage peer;
+    struct sockaddr_storage peer = {};
     while (1) {
         ret = epoll_wait(e, &ev, 1, -1);
         if (ret < 0) {

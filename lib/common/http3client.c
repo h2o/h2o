@@ -227,7 +227,7 @@ static void tunnel_process_ingress(struct st_h2o_http3client_req_t *req)
     /* send all data available alonside the close signal */
     h2o_iovec_t vec = h2o_doublebuffer_prepare(&req->tunnel.ingress.doublebuf, &req->recvbuf.body, SIZE_MAX);
     if (vec.len != 0) {
-        req->tunnel.tunnel.on_read(&req->tunnel.tunnel, req->tunnel.ingress.errstr, vec.base, vec.len);
+        req->tunnel.tunnel.on_read(&req->tunnel.tunnel, req->tunnel.ingress.errstr, &vec, 1);
         return;
     }
 
