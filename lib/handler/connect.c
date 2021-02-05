@@ -192,8 +192,8 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
     h2o_timer_link(creq->loop, handler->config.tunnel.timeout, &creq->timeout);
 
     creq->getaddr_req = h2o_hostinfo_getaddr(&creq->src_req->conn->ctx->receivers.hostinfo_getaddr, creq->server_name.host,
-            h2o_iovec_init(creq->server_name.port, port_strlen), AF_UNSPEC, socket_type,
-            socket_proto, AI_ADDRCONFIG | AI_NUMERICSERV, on_getaddr, creq);
+                                             h2o_iovec_init(creq->server_name.port, port_strlen), AF_UNSPEC, socket_type,
+                                             socket_proto, AI_ADDRCONFIG | AI_NUMERICSERV, on_getaddr, creq);
 
     return 0;
 }

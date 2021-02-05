@@ -1285,7 +1285,8 @@ static void tunnel_on_read(h2o_httpclient_tunnel_t *_tunnel, const char *err, h2
             continue;
         h2o_vector_reserve(&stream->req.pool, &stream->sendbuf.vecs, stream->sendbuf.vecs.size + 2);
         /* DATA frame header */
-        size_t header_size = flatten_data_frame_header(stream, stream->sendbuf.vecs.entries + stream->sendbuf.vecs.size++, iov[i].len);
+        size_t header_size =
+            flatten_data_frame_header(stream, stream->sendbuf.vecs.entries + stream->sendbuf.vecs.size++, iov[i].len);
         /* payload */
         struct st_h2o_http3_server_sendvec_t *vec = stream->sendbuf.vecs.entries + stream->sendbuf.vecs.size++;
         h2o_sendvec_init_raw(&vec->vec, iov[i].base, iov[i].len);

@@ -1,4 +1,4 @@
-#include <sys/types.h>          /* See NOTES */
+#include <sys/types.h> /* See NOTES */
 #include <sys/socket.h>
 #include <stdio.h>
 #include <fcntl.h>
@@ -12,7 +12,6 @@
 #include <arpa/inet.h>
 #include <sys/epoll.h>
 #include <sys/uio.h>
-
 
 #include "picotls.h"
 
@@ -37,7 +36,10 @@ int main(int argc, char **argv)
         exit(1);
     }
 
-    struct epoll_event ev = { .events = EPOLLIN, .data.fd = s,  };
+    struct epoll_event ev = {
+        .events = EPOLLIN,
+        .data.fd = s,
+    };
     ret = epoll_ctl(e, EPOLL_CTL_ADD, s, &ev);
     if (ret != 0) {
         perror("epoll_ctl");
@@ -53,7 +55,7 @@ int main(int argc, char **argv)
             exit(1);
         }
         if (ev.data.fd == s) {
-            char buf[64*1024];
+            char buf[64 * 1024];
             struct iovec vec;
             struct msghdr mess;
             memset(&mess, 0, sizeof(mess));
@@ -66,7 +68,7 @@ int main(int argc, char **argv)
             ssize_t rret;
             while ((rret = recvmsg(s, &mess, 0)) == -1 && errno == EINTR)
                 ;
-            if (b == -1 ) {
+            if (b == -1) {
                 b = socket(AF_INET, SOCK_STREAM, 0);
 
                 bsin.sin_family = AF_INET;
@@ -93,7 +95,10 @@ int main(int argc, char **argv)
                 }
                 fprintf(stderr, "Response: %.*s\n", (int)ret, resp);
 
-                struct epoll_event ev = { .events = EPOLLIN, .data.fd = b,  };
+                struct epoll_event ev = {
+                    .events = EPOLLIN,
+                    .data.fd = b,
+                };
                 ret = epoll_ctl(e, EPOLL_CTL_ADD, b, &ev);
                 if (ret != 0) {
                     perror("epoll_ctl");
@@ -106,7 +111,6 @@ int main(int argc, char **argv)
                     perror("fcntl");
                     exit(1);
                 }
-
             }
             if (rret == -1) {
                 perror("recvmsg");
@@ -136,7 +140,7 @@ int main(int argc, char **argv)
             continue;
         } else if (ev.data.fd == b) {
             char *end;
-            char req[128*1024];
+            char req[128 * 1024];
             uint64_t chunked_buf;
             int ret = read(b, req, sizeof(req));
             if (ret < 0) {

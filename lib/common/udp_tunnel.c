@@ -68,7 +68,7 @@ static void tunnel_socket_on_read(h2o_socket_t *sock, const char *err)
         vec[1].base = (char *)varint.buf;
         vec[1].len = varint.end - varint.buf;
         vec[2] = h2o_iovec_init(iov.iov_base, iov.iov_len);
-        tunnel->super.on_read(&tunnel->super, NULL, vec, sizeof(vec)/sizeof(vec[0]));
+        tunnel->super.on_read(&tunnel->super, NULL, vec, sizeof(vec) / sizeof(vec[0]));
     }
 
     return;
@@ -88,7 +88,7 @@ h2o_iovec_t get_next_chunk(const uint8_t *bytes, size_t len, size_t *to_consume,
         return h2o_iovec_init(NULL, 0);
 
     /* chunk is incomplete */
-    if (end - bytes  < chunk_length)
+    if (end - bytes < chunk_length)
         return h2o_iovec_init(NULL, 0);
 
     /*
@@ -111,7 +111,10 @@ static void tunnel_on_writev(h2o_httpclient_tunnel_t *_tunnel, h2o_iovec_t *iov,
     struct msghdr mess;
     struct iovec vec[iovlen];
     for (size_t i = 0; i < iovlen; i++)
-        vec[i] = (struct iovec){ .iov_base = iov[i].base, .iov_len = iov[i].len, };
+        vec[i] = (struct iovec){
+            .iov_base = iov[i].base,
+            .iov_len = iov[i].len,
+        };
     memset(&mess, 0, sizeof(mess));
     mess.msg_iov = vec;
     mess.msg_iovlen = iovlen;
@@ -147,7 +150,7 @@ static void tunnel_on_write(h2o_httpclient_tunnel_t *_tunnel, const void *bytes,
         if (!skip)
             iovlen++;
         idx += to_consume;
-    } while(1);
+    } while (1);
 
     if (iovlen > 0)
         tunnel_on_writev(_tunnel, iovs, iovlen);
@@ -188,8 +191,8 @@ h2o_httpclient_tunnel_t *h2o_open_udp_tunnel_from_sa(h2o_loop_t *loop, struct so
                 .proceed_read = tunnel_proceed_read,
                 .on_read = NULL,
             },
-            .len = len,
-            .loop = loop,
+        .len = len,
+        .loop = loop,
     };
     tunnel->sock = h2o_evloop_socket_create(tunnel->loop, fd, H2O_SOCKET_FLAG_DONT_READ);
     tunnel->sock->data = tunnel;
@@ -198,5 +201,3 @@ h2o_httpclient_tunnel_t *h2o_open_udp_tunnel_from_sa(h2o_loop_t *loop, struct so
 
     return &tunnel->super;
 }
-
-
