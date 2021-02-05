@@ -880,65 +880,6 @@ static void udp_tunnel_on_server_read(h2o_httpclient_udp_tunnel_t*_tunnel, const
     h2o_socket_write(tunnel->client, vec, iovlen * 3, udp_tunnel_on_client_write_complete);
 }
 
-h2o_iovec_t get_next_chunk(const uint8_t *bytes, size_t len, size_t *to_consume, int *skip)
-{
-    const uint8_t *start = bytes;
-    const uint8_t *end = bytes + len;
-    uint64_t chunk_type, chunk_length;
-    chunk_type = ptls_decode_quicint(&bytes, end);
-    if (chunk_type == UINT64_MAX)
-        return h2o_iovec_init(NULL, 0);
-    chunk_length = ptls_decode_quicint(&bytes, end);
-    if (chunk_length == UINT64_MAX)
-        return h2o_iovec_init(NULL, 0);
-
-    /* chunk is incomplete */
-    if (end - bytes  < chunk_length)
-        return h2o_iovec_init(NULL, 0);
-
-    /*
-     * https://tools.ietf.org/html/draft-ietf-masque-connect-udp-03#section-6
-     * CONNECT-UDP Stream Chunks can be used to convey UDP payloads, by
-     * using a CONNECT-UDP Stream Chunk Type of UDP_PACKET (value 0x00).
-     */
-    *skip = chunk_type != 0;
-    *to_consume = (bytes + chunk_length) - start;
-
-    return h2o_iovec_init(bytes, chunk_length);
-}
-
-static void udp_tunnel_on_client_read(h2o_socket_t *_sock, const char *err)
-{
-    struct st_h2o_http1_tunnel_t *tunnel = _sock->data;
-    assert(tunnel->client == _sock);
-
-    if (err != NULL) {
-        tunnel_close(tunnel, err);
-        return;
-    }
-
-    tunnel_reset_timeout(tunnel);
-
-    h2o_iovec_t iovs[64];
-    size_t iovlen = 0;
-    size_t idx = 0;
-    do {
-        int skip = 0;
-        size_t to_consume;
-        iovs[iovlen] = get_next_chunk((void *)(tunnel->client->input->bytes + idx), tunnel->client->input->size, &to_consume, &skip);
-        if (iovs[iovlen].len == 0)
-            break;
-        if (!skip)
-            iovlen++;
-        idx += to_consume;
-    } while(1);
-
-    if (iovlen > 0)
-        tunnel->server.udp->writev_(tunnel->server.udp, iovs, iovlen);
-    h2o_buffer_consume(&tunnel->client->input, idx);
-    h2o_socket_read_start(tunnel->client, udp_tunnel_on_client_read);
-}
-
 static void tcp_tunnel_on_server_read(h2o_httpclient_tunnel_t *_tunnel, const char *err, const void *bytes, size_t len)
 {
     struct st_h2o_http1_tunnel_t *tunnel = _tunnel->data;

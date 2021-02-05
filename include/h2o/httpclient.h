@@ -174,31 +174,7 @@ typedef struct st_h2o_httpclient_timings_t {
 } h2o_httpclient_timings_t;
 
 /**
- * a UDP tunnel established e.g., by successful CONNECT-UDP
- */
-typedef struct st_h2o_httpclient_udp_tunnel_t {
-    /**
-     * closes the tunnel and discards the object
-     */
-    void (*destroy)(struct st_h2o_httpclient_udp_tunnel_t *tunnel);
-    /**
-     * The write callback. Contrary to what happens in the tcp tunnel, completion is immediate.
-     */
-    void (*writev_)(struct st_h2o_httpclient_udp_tunnel_t *tunnel, h2o_iovec_t *iov, size_t iovlen);
-    /**
-     * the on-read callback to be set by the user
-     */
-    void (*on_read)(struct st_h2o_httpclient_udp_tunnel_t *tunnel, const char *err, const h2o_iovec_t *iov, size_t iovlen);
-    /**
-     * user data pointer
-     */
-    void *data;
-} h2o_httpclient_udp_tunnel_t;
-
-h2o_httpclient_udp_tunnel_t *h2o_open_udp_tunnel_from_sa(h2o_loop_t *loop, struct sockaddr *addr, socklen_t len);
-
-/**
- * an HTTP tunnel established e.g., by successful CONNECT
+ * an HTTP tunnel established e.g., by successful CONNECT or CONNECT-UDP
  */
 struct st_h2o_httpclient_tunnel_t {
     /**
@@ -225,10 +201,20 @@ struct st_h2o_httpclient_tunnel_t {
      */
     void (*on_read)(struct st_h2o_httpclient_tunnel_t *tunnel, const char *err, const void *bytes, size_t len);
     /**
+     * The write callback. Contrary to what happens in the tcp tunnel, completion is immediate.
+     */
+    void (*udp_write)(struct st_h2o_httpclient_tunnel_t *tunnel, h2o_iovec_t *iov, size_t iovlen);
+    /**
+     * the on-read callback to be set by the user
+     */
+    void (*on_udp_read)(struct st_h2o_httpclient_tunnel_t *tunnel, const char *err, const h2o_iovec_t *iov, size_t iovlen);
+    /**
      * User data pointer.
      */
     void *data;
 };
+
+h2o_httpclient_tunnel_t *h2o_open_udp_tunnel_from_sa(h2o_loop_t *loop, struct sockaddr *addr, socklen_t len);
 
 /**
  * Properties of a HTTP client connection.
