@@ -88,7 +88,7 @@ static void on_connect(h2o_socket_t *sock, const char *err)
     creq->sock = NULL;
     req->res.status = 200;
 
-    h2o_httpclient_tunnel_t *tunnel = h2o_httpclient_create_tunnel_from_socket(sock);
+    h2o_tunnel_t *tunnel = h2o_tunnel_create_from_socket(sock);
     req->establish_tunnel(req, tunnel, timeout);
 }
 
@@ -134,7 +134,7 @@ static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errs
         start_connect(creq);
     } else {
         assert(res->ai_socktype == SOCK_DGRAM);
-        h2o_httpclient_tunnel_t *tunnel = h2o_open_udp_tunnel_from_sa(creq->loop, res->ai_addr, res->ai_addrlen);
+        h2o_tunnel_t *tunnel = h2o_open_udp_tunnel_from_sa(creq->loop, res->ai_addr, res->ai_addrlen);
         h2o_req_t *req = creq->src_req;
         uint64_t timeout = creq->handler->config.tunnel.timeout;
         req->res.status = 200;

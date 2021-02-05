@@ -9,14 +9,14 @@
 #include "h2o/httpclient.h"
 
 struct st_h2o_udp_tunnel_t {
-    h2o_httpclient_tunnel_t super;
+    h2o_tunnel_t super;
     socklen_t len;
     h2o_socket_t *sock;
     h2o_loop_t *loop;
     h2o_buffer_t *inbuf; /* for datagram fragments */
 };
 
-static void tunnel_on_destroy(h2o_httpclient_tunnel_t *_tunnel)
+static void tunnel_on_destroy(h2o_tunnel_t *_tunnel)
 {
     struct st_h2o_udp_tunnel_t *tunnel = (void *)_tunnel;
 
@@ -102,7 +102,7 @@ h2o_iovec_t get_next_chunk(const uint8_t *bytes, size_t len, size_t *to_consume,
     return h2o_iovec_init(bytes, chunk_length);
 }
 
-static void tunnel_on_writev(h2o_httpclient_tunnel_t *_tunnel, h2o_iovec_t *iov, size_t iovlen)
+static void tunnel_on_writev(h2o_tunnel_t *_tunnel, h2o_iovec_t *iov, size_t iovlen)
 {
     struct st_h2o_udp_tunnel_t *tunnel = (void *)_tunnel;
     int fd;
@@ -125,7 +125,7 @@ static void tunnel_on_writev(h2o_httpclient_tunnel_t *_tunnel, h2o_iovec_t *iov,
     return;
 }
 
-static void tunnel_on_write(h2o_httpclient_tunnel_t *_tunnel, const void *bytes, size_t len)
+static void tunnel_on_write(h2o_tunnel_t *_tunnel, const void *bytes, size_t len)
 {
     int from_inbuf = 0;
     struct st_h2o_udp_tunnel_t *tunnel = (void *)_tunnel;
@@ -165,13 +165,13 @@ static void tunnel_on_write(h2o_httpclient_tunnel_t *_tunnel, const void *bytes,
     }
 }
 
-void tunnel_proceed_read(struct st_h2o_httpclient_tunnel_t *_tunnel)
+void tunnel_proceed_read(struct st_h2o_tunnel_t *_tunnel)
 {
     struct st_h2o_udp_tunnel_t *tunnel = (void *)_tunnel;
     h2o_socket_read_start(tunnel->sock, tunnel_socket_on_read);
 }
 
-h2o_httpclient_tunnel_t *h2o_open_udp_tunnel_from_sa(h2o_loop_t *loop, struct sockaddr *addr, socklen_t len)
+h2o_tunnel_t *h2o_open_udp_tunnel_from_sa(h2o_loop_t *loop, struct sockaddr *addr, socklen_t len)
 {
     int fd;
     if ((fd = socket(PF_INET, SOCK_DGRAM, 0)) == -1)
@@ -185,7 +185,7 @@ h2o_httpclient_tunnel_t *h2o_open_udp_tunnel_from_sa(h2o_loop_t *loop, struct so
     struct st_h2o_udp_tunnel_t *tunnel = h2o_mem_alloc(sizeof(*tunnel));
     *tunnel = (struct st_h2o_udp_tunnel_t){
         .super =
-            (h2o_httpclient_tunnel_t){
+            (h2o_tunnel_t){
                 .destroy = tunnel_on_destroy,
                 .write_ = tunnel_on_write,
                 .proceed_read = tunnel_proceed_read,

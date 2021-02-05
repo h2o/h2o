@@ -31,6 +31,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <sys/uio.h>
 #include "picotls.h"
 #include "picotls/openssl.h"
 #include "quicly.h"
@@ -59,6 +60,8 @@ struct {
     } headers[256];
     size_t num_headers;
     size_t body_size;
+    h2o_url_t connect_to; /* when CONNECT method is used, req.url specifies the address of the connect proxy, and this field
+                             specifies the address of the server to which a TCP connection should be established */
 } req = {NULL, "GET"};
 static unsigned cnt_left = 1, concurrency = 1;
 static int chunk_size = 10;
@@ -161,7 +164,7 @@ static void on_error(h2o_httpclient_ctx_t *ctx, const char *fmt, ...)
 
 struct st_tunnel_t {
     h2o_socket_t *std_in;
-    h2o_httpclient_tunnel_t *tunnel;
+    h2o_tunnel_t *tunnel;
     /**
      * buffer that stores data inflight (i.e. that being passed to `tunnel->write` for which the completion callback has not been
      * called yet)
@@ -178,7 +181,7 @@ static void tunnel_write(struct st_tunnel_t *tunnel)
     tunnel->tunnel->write_(tunnel->tunnel, vec.base, vec.len);
 }
 
-static void tunnel_on_write_complete(h2o_httpclient_tunnel_t *_tunnel, const char *err)
+static void tunnel_on_write_complete(h2o_tunnel_t *_tunnel, const char *err)
 {
     struct st_tunnel_t *tunnel = _tunnel->data;
     assert(tunnel->tunnel == _tunnel);
@@ -202,7 +205,7 @@ static void tunnel_on_stdin_read(h2o_socket_t *sock, const char *err)
     tunnel_write(tunnel);
 }
 
-static void tunnel_on_read(h2o_httpclient_tunnel_t *_tunnel, const char *err, const void *bytes, size_t len)
+static void tunnel_on_read(h2o_tunnel_t *_tunnel, const char *err, h2o_iovec_t *iov, size_t iovlen)
 {
     struct st_tunnel_t *tunnel = _tunnel->data;
     assert(tunnel->tunnel == _tunnel);
@@ -212,12 +215,15 @@ static void tunnel_on_read(h2o_httpclient_tunnel_t *_tunnel, const char *err, co
         exit(0);
     }
 
-    write(1, bytes, len);
+    struct iovec vec[iovlen];
+    for (size_t i = 0; i < iovlen; i++)
+        vec[i] = (struct iovec){.iov_base = iov[i].base, .iov_len = iov[i].len };
+    writev(1, vec, iovlen);
 
     tunnel->tunnel->proceed_read(tunnel->tunnel);
 }
 
-static void tunnel_create(h2o_loop_t *loop, h2o_httpclient_tunnel_t *_tunnel)
+static void tunnel_create(h2o_loop_t *loop, h2o_tunnel_t *_tunnel)
 {
     struct st_tunnel_t *tunnel = h2o_mem_alloc(sizeof(*tunnel));
 
@@ -269,7 +275,7 @@ static void start_request(h2o_httpclient_ctx_t *ctx)
         sprintf(crt_fullpath, "%s%s", root, CA_PATH);
 #undef CA_PATH
 
-        SSL_CTX *ssl_ctx = SSL_CTX_new(TLSv1_client_method());
+        SSL_CTX *ssl_ctx = SSL_CTX_new(SSLv23_client_method());
         SSL_CTX_load_verify_locations(ssl_ctx, crt_fullpath, NULL);
         if (ssl_verify_none) {
             SSL_CTX_set_verify(ssl_ctx, SSL_VERIFY_NONE, NULL);
@@ -422,7 +428,7 @@ h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *errstr, 
     }
 
     *_method = h2o_iovec_init(req.method, strlen(req.method));
-    *url = *((h2o_url_t *)client->data);
+    *url = *(strcmp(req.method, "CONNECT") == 0 ? &req.connect_to : (h2o_url_t *)client->data);
     for (i = 0; i != req.num_headers; ++i)
         h2o_add_header_by_str(&pool, &headers_vec, req.headers[i].name.base, req.headers[i].name.len, 1, NULL,
                               req.headers[i].value.base, req.headers[i].value.len);
@@ -465,6 +471,9 @@ static void usage(const char *progname)
             "  -o <path>    file to which the response body is written (default: stdout)\n"
             "  -t <times>   number of requests to send the request (default: 1)\n"
             "  -W <bytes>   receive window size (HTTP/3 only)\n"
+            "  -x <host:port>\n"
+            "               specifies the destination of the CONNECT request; implies\n"
+            "               `-m CONNECT`\n"
             "  -h           prints this help\n"
             "\n",
             progname);
@@ -548,7 +557,7 @@ int main(int argc, char **argv)
     }
 #endif
 
-    const char *optstring = "t:m:o:b:C:c:d:H:i:k2:W:h3:"
+    const char *optstring = "t:m:o:b:x:C:c:d:H:i:k2:W:h3:"
 #ifdef __GNUC__
                             ":" /* for backward compatibility, optarg of -3 is optional when using glibc */
 #endif
@@ -574,6 +583,13 @@ int main(int argc, char **argv)
             req.body_size = atoi(optarg);
             if (req.body_size <= 0) {
                 fprintf(stderr, "body size must be greater than 0\n");
+                exit(EXIT_FAILURE);
+            }
+            break;
+        case 'x':
+            if (h2o_url_init(&req.connect_to, NULL, h2o_iovec_init(optarg, strlen(optarg)), h2o_iovec_init(NULL, 0)) != 0 ||
+                req.connect_to._port == 0 || req.connect_to._port == 65535) {
+                fprintf(stderr, "invalid server address specified for -X\n");
                 exit(EXIT_FAILURE);
             }
             break;
@@ -666,6 +682,9 @@ int main(int argc, char **argv)
     }
     argc -= optind;
     argv += optind;
+
+    if (req.connect_to.authority.len != 0)
+        req.method = "CONNECT";
 
     if (ctx.protocol_selector.ratio.http2 + ctx.protocol_selector.ratio.http3 > 100) {
         fprintf(stderr, "sum of the use ratio of HTTP/2 and HTTP/3 is greater than 100");
