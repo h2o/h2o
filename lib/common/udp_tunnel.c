@@ -194,7 +194,12 @@ h2o_tunnel_t *h2o_open_udp_tunnel_from_sa(h2o_loop_t *loop, struct sockaddr *add
         .len = len,
         .loop = loop,
     };
+#if H2O_USE_LIBUV
+    tunnel->sock = h2o_uv__poll_create(tunnel->loop, fd, (uv_close_cb)free);
+#else
     tunnel->sock = h2o_evloop_socket_create(tunnel->loop, fd, H2O_SOCKET_FLAG_DONT_READ);
+#endif
+
     tunnel->sock->data = tunnel;
     h2o_buffer_init(&tunnel->inbuf, &h2o_socket_buffer_prototype);
     h2o_socket_read_start(tunnel->sock, tunnel_socket_on_read);
