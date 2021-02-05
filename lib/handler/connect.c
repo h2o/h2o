@@ -139,7 +139,7 @@ static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errs
         uint64_t timeout = creq->handler->config.tunnel.timeout;
         req->res.status = 200;
         h2o_timer_unlink(&creq->timeout);
-        req->establish_udp_tunnel(req, tunnel, timeout);
+        req->establish_tunnel(req, tunnel, timeout);
     }
 }
 
