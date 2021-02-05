@@ -217,7 +217,7 @@ static void tunnel_on_read(h2o_tunnel_t *_tunnel, const char *err, h2o_iovec_t *
 
     struct iovec vec[iovlen];
     for (size_t i = 0; i < iovlen; i++)
-        vec[i] = (struct iovec){.iov_base = iov[i].base, .iov_len = iov[i].len };
+        vec[i] = (struct iovec){.iov_base = iov[i].base, .iov_len = iov[i].len};
     writev(1, vec, iovlen);
 
     tunnel->tunnel->proceed_read(tunnel->tunnel);
