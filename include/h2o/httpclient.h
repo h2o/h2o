@@ -97,6 +97,21 @@ typedef struct st_h2o_httpclient_connection_pool_t {
 
 } h2o_httpclient_connection_pool_t;
 
+typedef struct st_h2o_httpclient_protocol_ratio_t {
+    /**
+     * If non-negative, indicates the percentage of requests for which use of HTTP/2 will be attempted. If set to negative, all
+     * connections are established with ALPN offering both H1 and H2, then the load is balanced between the different protocol
+     * versions. This behavior helps balance the load among a mixture of servers behind a load balancer, some supporting both H1 and
+     * H2 and some supporting only H1.
+     */
+    int8_t http2;
+    /**
+     * Indicates the percentage of requests for which HTTP/3 should be used. Unlike HTTP/2, this value cannot be negative, because
+     * unlike ALPN over TLS over TCP, the choice of the protocol is up to the client.
+     */
+    int8_t http3;
+} h2o_httpclient_protocol_ratio_t;
+
 typedef struct st_h2o_httpclient_ctx_t {
     h2o_loop_t *loop;
     h2o_multithread_receiver_t *getaddr_receiver;
@@ -108,20 +123,7 @@ typedef struct st_h2o_httpclient_ctx_t {
     size_t max_buffer_size;
 
     struct st_h2o_httpclient_protocol_selector_t {
-        struct {
-            /**
-             * If non-negative, indicates the percentage of requests for which use of HTTP/2 will be attempted. If set to negative,
-             * all connections are established with ALPN offering both H1 and H2, then the load is balanced between the different
-             * protocol versions. This behavior helps balance the load among a mixture of servers behind a load balancer, some
-             * supporting both H1 and H2 and some supporting only H1.
-             */
-            int8_t http2;
-            /**
-             * Indicates the percentage of requests for which HTTP/3 should be used. Unlike HTTP/2, this value cannot be negative,
-             * because unlike ALPN over TLS over TCP, the choice of the protocol is up to the client.
-             */
-            int8_t http3;
-        } ratio;
+        h2o_httpclient_protocol_ratio_t ratio;
         /**
          * Each deficit is initialized to zero, then incremented by the respective percentage, and the protocol corresponding to the
          * one with the highest value is chosen. Then, the chosen variable is decremented by 100.
