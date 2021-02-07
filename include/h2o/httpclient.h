@@ -293,8 +293,18 @@ typedef struct st_h2o_httpclient__h2_conn_t {
 struct st_h2o_httpclient__h3_conn_t {
     h2o_http3_conn_t super;
     h2o_httpclient_ctx_t *ctx;
+    /**
+     * When the socket is associated to a global pool, used to identify the origin. If not associated to a global pool, the values
+     * are zero-filled.
+     */
     struct {
+        /**
+         * the origin URL; null-termination of authority and host is guaranteed
+         */
         h2o_url_t origin_url;
+        /**
+         * port number in C string
+         */
         char named_serv[sizeof(H2O_UINT16_LONGEST_STR)];
     } server;
     ptls_handshake_properties_t handshake_properties;
