@@ -168,18 +168,18 @@ static void start_connect(struct st_h2o_httpclient__h3_conn_t *conn, struct sock
     assert(conn->timeout.cb == on_connect_timeout);
 
     /* create QUIC connection context and attach */
-    if (conn->ctx->http3.load_session != NULL) {
-        if (!conn->ctx->http3.load_session(conn->ctx, sa, conn->server.origin_url.host.base, &address_token,
-                                           &conn->handshake_properties.client.session_ticket, &resumed_tp))
+    if (conn->ctx->http3->load_session != NULL) {
+        if (!conn->ctx->http3->load_session(conn->ctx, sa, conn->server.origin_url.host.base, &address_token,
+                                            &conn->handshake_properties.client.session_ticket, &resumed_tp))
             goto Fail;
     }
-    if ((ret = quicly_connect(&qconn, conn->ctx->http3.ctx->quic, conn->server.origin_url.host.base, sa, NULL,
-                              &conn->ctx->http3.ctx->next_cid, address_token, &conn->handshake_properties,
+    if ((ret = quicly_connect(&qconn, &conn->ctx->http3->quic, conn->server.origin_url.host.base, sa, NULL,
+                              &conn->ctx->http3->h3.next_cid, address_token, &conn->handshake_properties,
                               conn->handshake_properties.client.session_ticket.base != NULL ? &resumed_tp : NULL)) != 0) {
         conn->super.super.quic = NULL; /* just in case */
         goto Fail;
     }
-    ++conn->ctx->http3.ctx->next_cid.master_id; /* FIXME check overlap */
+    ++conn->ctx->http3->h3.next_cid.master_id; /* FIXME check overlap */
     if ((ret = h2o_http3_setup(&conn->super, qconn)) != 0)
         goto Fail;
 
@@ -263,7 +263,7 @@ struct st_h2o_httpclient__h3_conn_t *create_connection(h2o_httpclient_ctx_t *ctx
 
     struct st_h2o_httpclient__h3_conn_t *conn = h2o_mem_alloc(sizeof(*conn));
 
-    h2o_http3_init_conn(&conn->super, ctx->http3.ctx, &callbacks, &qpack_ctx);
+    h2o_http3_init_conn(&conn->super, &ctx->http3->h3, &callbacks, &qpack_ctx);
     memset((char *)conn + sizeof(conn->super), 0, sizeof(*conn) - sizeof(conn->super));
     conn->ctx = ctx;
     h2o_url_copy(NULL, &conn->server.origin_url, origin);

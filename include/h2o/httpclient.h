@@ -112,6 +112,8 @@ typedef struct st_h2o_httpclient_protocol_ratio_t {
     int8_t http3;
 } h2o_httpclient_protocol_ratio_t;
 
+typedef struct st_h2o_http3client_ctx_t h2o_http3client_ctx_t;
+
 typedef struct st_h2o_httpclient_ctx_t {
     h2o_loop_t *loop;
     h2o_multithread_receiver_t *getaddr_receiver;
@@ -139,23 +141,27 @@ typedef struct st_h2o_httpclient_ctx_t {
         uint32_t max_concurrent_streams;
     } http2;
 
-    struct {
-        /**
-         * 1-to-(0|1) relationship; NULL when h3 is not used
-         */
-        struct st_h2o_quic_ctx_t *ctx;
-        /**
-         * Optional callback invoked by the HTTP/3 client implementation to obtain information used for resuming a connection. When
-         * the connection is to be resumed, the callback should set `*address_token` and `*session_ticket` to a vector that can be
-         * freed by calling free (3), as well as writing the resumed transport parameters to `*resumed_tp`. Otherwise,
-         * `*address_token`, `*session_ticket`, `*resumed_tp` can be left untouched, and a full handshake will be exercised. The
-         * function returns if the operation was successful. When false is returned, the connection attempt is aborted.
-         */
-        int (*load_session)(struct st_h2o_httpclient_ctx_t *ctx, struct sockaddr *server_addr, const char *server_name,
-                            ptls_iovec_t *address_token, ptls_iovec_t *session_ticket, quicly_transport_parameters_t *resumed_tp);
-    } http3;
+    /**
+     * HTTP/3-specific settings; 1-to(0|1) relationship, NULL when h3 is not used
+     */
+    h2o_http3client_ctx_t *http3;
 
 } h2o_httpclient_ctx_t;
+
+struct st_h2o_http3client_ctx_t {
+    ptls_context_t tls;
+    quicly_context_t quic;
+    h2o_quic_ctx_t h3;
+    /**
+     * Optional callback invoked by the HTTP/3 client implementation to obtain information used for resuming a connection. When the
+     * connection is to be resumed, the callback should set `*address_token` and `*session_ticket` to a vector that can be freed by
+     * calling free (3), as well as writing the resumed transport parameters to `*resumed_tp`. Otherwise, `*address_token`,
+     * `*session_ticket`, `*resumed_tp` can be left untouched, and a full handshake will be exercised. The function returns if the
+     * operation was successful. When false is returned, the connection attempt is aborted.
+     */
+    int (*load_session)(h2o_httpclient_ctx_t *ctx, struct sockaddr *server_addr, const char *server_name,
+                        ptls_iovec_t *address_token, ptls_iovec_t *session_ticket, quicly_transport_parameters_t *resumed_tp);
+};
 
 typedef struct st_h2o_httpclient_timings_t {
     struct timeval start_at;
