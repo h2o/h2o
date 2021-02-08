@@ -37,22 +37,24 @@ h2o_probes_d = "h2o-probes.d"
 struct_map = {
     # deps/quicly/include/quicly.h
     "st_quicly_stream_t": [
-        # ($member_access, $optional_flat_name)
+        # ($member_access, $optional_flat_name, $included_in_output)
         # If $optional_flat_name is None, $member_access is used.
-        ("stream_id", None),
+        ("stream_id", None, True),
     ],
 
     # deps/quicly/include/quicly/loss.h
     "quicly_rtt_t": [
-        ("minimum", None),
-        ("smoothed", None),
-        ("variance", None),
-        ("latest",  None),
+        ("minimum", None, True),
+        ("smoothed", None, True),
+        ("variance", None, True),
+        ("latest",  None, True),
     ],
 
     # deps/quicly/lib/quicly.c
     "st_quicly_conn_t": [
-        ("super.local.cid_set.plaintext.master_id", "master_id"),
+        ("super.local.cid_set.plaintext.master_id", "master_id", True),
+        ("super.local.address", "local_address", False),
+        ("super.remote.address", "remote_address", False),
     ],
 
     "sockaddr": [],
@@ -150,8 +152,9 @@ def parse_d(context: dict, path: Path, block_probes: set = None):
 
       if is_ptr_type(arg_type):
         st_name = strip_typename(arg_type)
-        for st_field_access, st_field_name in struct_map.get(st_name, []):
-          flat_args_map[st_field_name or st_field_access] = "typeof_%s__%s" % (st_name, st_field_name or st_field_access)
+        for st_field_access, st_field_name, included in struct_map.get(st_name, []):
+          if included:
+            flat_args_map[st_field_name or st_field_access] = "typeof_%s__%s" % (st_name, st_field_name or st_field_access)
       else:
         flat_args_map[arg_name] = arg_type
 
@@ -171,7 +174,7 @@ def is_bin_type(t):
 
 
 def is_sockaddr(t):
-  return re.search(r'\b(?:sockaddr|h2olog_address_t)\s*\*', t)
+  return re.search(r'\b(?:sockaddr|(?:quicly|h2olog)_address_t)\s*\*', t)
 
 
 def is_ptr_type(t):
@@ -228,10 +231,11 @@ int %s(struct pt_regs *ctx) {
         c += "  uint8_t %s[sizeof_%s] = {};\n" % (arg_name, st_name)
         c += "  bpf_usdt_readarg(%d, ctx, &buf);\n" % (i+1)
         c += "  bpf_probe_read(&%s, sizeof_%s, buf);\n" % (arg_name, st_name)
-        for st_field_access, st_field_name in struct_map[st_name]:
-          event_t_name = "%s.%s" % (probe_name, st_field_name or st_field_access)
-          c += "  event.%s = get_%s__%s(%s);\n" % (
-              event_t_name, st_name, st_field_name or st_field_access, arg_name)
+        for st_field_access, st_field_name, included in struct_map[st_name]:
+          if included:
+            event_t_name = "%s.%s" % (probe_name, st_field_name or st_field_access)
+            c += "  event.%s = get_%s__%s(%s);\n" % (
+                event_t_name, st_name, st_field_name or st_field_access, arg_name)
       else:
         c += "  // (no fields in %s)\n" % (st_name)
     else:
@@ -245,6 +249,14 @@ int %s(struct pt_regs *ctx) {
   if (!CHECK_ALLOWED_RES_HEADER_NAME(event.send_response_header.name, event.send_response_header.name_len))
     return 0;
 #endif
+"""
+
+  if fully_specified_probe_name == "h2o:h3s_accept":
+    c += r"""
+  uint64_t key = event.h3s_accept.conn_id;
+  int32_t val = 1; // always skip for now
+  h2o_map.insert(&key, &val);
+
 """
 
   c += r"""
@@ -303,6 +315,7 @@ DEFINE_RESOLVE_FUNC(int32_t);
 DEFINE_RESOLVE_FUNC(uint32_t);
 DEFINE_RESOLVE_FUNC(int64_t);
 DEFINE_RESOLVE_FUNC(uint64_t);
+DEFINE_RESOLVE_FUNC(h2olog_address_t);
 
 static std::string gen_bpf_header() {
   std::string bpf;
@@ -315,7 +328,7 @@ static std::string gen_bpf_header() {
   bpf += "#define sizeof_%s " + std::to_string(std::min<size_t>(sizeof(struct %s), 100)) + "\n";
 """ % (st_name, st_name)
 
-    for st_field_access, st_field_name_alias in st_fields:
+    for st_field_access, st_field_name_alias, _ in st_fields:
       name = "%s__%s" % (st_name, st_field_name_alias or st_field_access)
       generator += """  bpf += GEN_FIELD_INFO(struct %s, %s, "%s");\n""" % (st_name, st_field_access, name)
 
@@ -336,7 +349,7 @@ def build_typedef_for_cplusplus():
   typedef = st_quicly_conn_t_def
 
   for st_name, st_fields in struct_map.items():
-    for st_field_access, st_field_name_alias in st_fields:
+    for st_field_access, st_field_name_alias, _ in st_fields:
       typedef += """using typeof_%s__%s = decltype(%s::%s);\n""" % (st_name, st_field_name_alias or st_field_access, st_name, st_field_access)
 
   return typedef
@@ -389,10 +402,19 @@ typedef union h2olog_address_t {
   uint8_t sa[sizeof_sockaddr];
   uint8_t sin[sizeof_sockaddr_in];
   uint8_t sin6[sizeof_sockaddr_in6];
-} h2olog_address_t;;
+} h2olog_address_t;
+
+typedef h2olog_address_t quicly_address_t;
 
 %s
 BPF_PERF_OUTPUT(events);
+
+typedef uint64_t h2o_ebpf_map_key_t; // conn_id
+typedef int32_t h2o_ebpf_map_value_t; // skip_tracing
+
+// FIXME: consider the most suitable table type other than "hash"
+// FIXME: the table size should be parameterizable
+BPF_TABLE("hash", h2o_ebpf_map_key_t, h2o_ebpf_map_value_t, h2o_map, 1000);
 
 // HTTP/3 tracing
 BPF_HASH(h2o_to_quicly_conn, u64, u32);

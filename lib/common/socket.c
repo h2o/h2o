@@ -1675,11 +1675,79 @@ h2o_ebpf_map_value_t h2o_socket_ebpf_lookup(h2o_loop_t *loop, int (*init_key)(st
     if (tracing_map_fd < 0)
         return (h2o_ebpf_map_value_t){0};
 
+    // invoke the BPF callback
+
+
     // lookup map for our key
     h2o_ebpf_map_key_t key;
     if (!init_key(&key, cbdata))
         return (h2o_ebpf_map_value_t){0};
     return lookup_map(&key);
+}
+
+static __thread int tracing_map_fd2 = -1;
+static __thread uint64_t tracing_map_last_attempt2 = 0;
+
+static void open_tracing_map2(h2o_loop_t *loop)
+{
+    // only check every second
+    uint64_t now = h2o_now(loop);
+    if (tracing_map_last_attempt2 - now < 1000)
+        return;
+
+    tracing_map_last_attempt2 = now;
+
+    // check if map exists at path
+    struct stat s;
+    if (stat(&H2O_EBPF_MAP_PATH2[0], &s) == -1) {
+        // map path unavailable, cleanup fd if needed and leave
+        if (tracing_map_fd2 >= 0) {
+            close(tracing_map_fd2);
+            tracing_map_fd2 = -1;
+        }
+        return;
+    }
+
+    if (tracing_map_fd2 >= 0)
+        return; // map still exists and we have a fd
+
+    // map exists, try connect
+    union bpf_attr attr;
+    memset(&attr, 0, sizeof(attr));
+    attr.pathname = (uint64_t)&H2O_EBPF_MAP_PATH2[0];
+    tracing_map_fd2 = syscall(__NR_bpf, BPF_OBJ_GET, &attr, sizeof(attr));
+}
+
+static uint8_t lookup_map2(const uint64_t conn_id)
+{
+    union bpf_attr attr;
+    int32_t value;
+
+    memset(&attr, 0, sizeof(attr));
+    attr.map_fd = tracing_map_fd2;
+    attr.key = (uint64_t)&conn_id;
+    attr.value = (uint64_t)&value;
+
+    if (syscall(__NR_bpf, BPF_MAP_LOOKUP_ELEM, &attr, sizeof(attr)) != 0)
+        return 0;
+
+    return value;
+}
+
+int h2o_socket_ebpf_lookup2(h2o_loop_t *loop, uint64_t conn_id)
+{
+    // try open map if not opened
+    open_tracing_map2(loop);
+
+    // map is not connected, fallback accepting probe
+    if (tracing_map_fd2 < 0)
+        return 0;
+
+    // invoke the BPF callback
+
+
+    // lookup map for our key
+    return lookup_map2(conn_id);
 }
 
 #else

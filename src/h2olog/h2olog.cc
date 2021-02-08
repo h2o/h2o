@@ -24,12 +24,15 @@
 #include <vector>
 #include <algorithm>
 #include <bcc/BPF.h>
+#include <bcc/libbpf.h>
+
 extern "C" {
 #include <unistd.h>
 #include <stdarg.h>
 #include <sys/time.h>
 #include "h2o/memory.h"
 #include "h2o/version.h"
+#include "h2o/ebpf.h"
 }
 #include "h2olog.h"
 
@@ -225,6 +228,17 @@ static void lost_cb(void *context, uint64_t lost)
     tracer->handle_lost(lost);
 }
 
+static void setup_ebpf_map(ebpf::BPF *bpf)
+{
+    auto map = bpf->get_hash_table<uint64_t, int32_t>("h2o_map");
+    unlink(H2O_EBPF_MAP_PATH2); // FIXME: handle the case it exists
+    if (bpf_obj_pin(map.get_fd(), H2O_EBPF_MAP_PATH2) != 0) {
+        perror("BPF_OBJ_PIN failed");
+        exit(1);
+    }
+    fprintf(stderr, "Successfully pinned a BPF table: %s\n", H2O_EBPF_MAP_PATH2);
+}
+
 int main(int argc, char **argv)
 {
     std::unique_ptr<h2o_tracer> tracer(create_raw_tracer());
@@ -236,7 +250,8 @@ int main(int argc, char **argv)
     std::vector<std::string> response_header_filters;
     int c;
     pid_t h2o_pid = -1;
-    while ((c = getopt(argc, argv, "hHdrlp:t:s:w:")) != -1) {
+    int sample_frequency = 0;
+    while ((c = getopt(argc, argv, "hHdrlp:t:s:w:F:")) != -1) {
         switch (c) {
         case 'H':
             tracer.reset(create_http_tracer());
@@ -259,6 +274,12 @@ int main(int argc, char **argv)
             if ((outfp = fopen(optarg, "w")) == nullptr) {
                 fprintf(stderr, "Error: failed to open %s: %s", optarg, strerror(errno));
                 exit(EXIT_FAILURE);
+            }
+            break;
+        case 'F':
+            sample_frequency = atoi(optarg);
+            if (sample_frequency < 0) {
+                fprintf(stderr, "Error: the argument of -F must be a positive integer (0 to disable this option).\n");
             }
             break;
         case 'd':
@@ -346,6 +367,10 @@ int main(int argc, char **argv)
         fprintf(stderr, "Error: init: %s\n", ret.msg().c_str());
         return EXIT_FAILURE;
     }
+
+    //if (sample_frequency > 0) {
+        setup_ebpf_map(bpf);
+    //}
 
     bpf->attach_tracepoint("sched:sched_process_exit", "trace_sched_process_exit");
 

@@ -33,6 +33,8 @@ using typeof_quicly_rtt_t__smoothed = decltype(quicly_rtt_t::smoothed);
 using typeof_quicly_rtt_t__variance = decltype(quicly_rtt_t::variance);
 using typeof_quicly_rtt_t__latest = decltype(quicly_rtt_t::latest);
 using typeof_st_quicly_conn_t__master_id = decltype(st_quicly_conn_t::super.local.cid_set.plaintext.master_id);
+using typeof_st_quicly_conn_t__local_address = decltype(st_quicly_conn_t::super.local.address);
+using typeof_st_quicly_conn_t__remote_address = decltype(st_quicly_conn_t::super.remote.address);
 
 
 #define GEN_FIELD_INFO(type, field, name) gen_field_info(#type, #field, &((type *)NULL)->field, name)
@@ -65,6 +67,7 @@ DEFINE_RESOLVE_FUNC(int32_t);
 DEFINE_RESOLVE_FUNC(uint32_t);
 DEFINE_RESOLVE_FUNC(int64_t);
 DEFINE_RESOLVE_FUNC(uint64_t);
+DEFINE_RESOLVE_FUNC(h2olog_address_t);
 
 static std::string gen_bpf_header() {
   std::string bpf;
@@ -80,6 +83,8 @@ static std::string gen_bpf_header() {
 
   bpf += "#define sizeof_st_quicly_conn_t " + std::to_string(std::min<size_t>(sizeof(struct st_quicly_conn_t), 100)) + "\n";
   bpf += GEN_FIELD_INFO(struct st_quicly_conn_t, super.local.cid_set.plaintext.master_id, "st_quicly_conn_t__master_id");
+  bpf += GEN_FIELD_INFO(struct st_quicly_conn_t, super.local.address, "st_quicly_conn_t__local_address");
+  bpf += GEN_FIELD_INFO(struct st_quicly_conn_t, super.remote.address, "st_quicly_conn_t__remote_address");
 
   bpf += "#define sizeof_sockaddr " + std::to_string(std::min<size_t>(sizeof(struct sockaddr), 100)) + "\n";
 
@@ -1502,7 +1507,9 @@ typedef union h2olog_address_t {
   uint8_t sa[sizeof_sockaddr];
   uint8_t sin[sizeof_sockaddr_in];
   uint8_t sin6[sizeof_sockaddr_in6];
-} h2olog_address_t;;
+} h2olog_address_t;
+
+typedef h2olog_address_t quicly_address_t;
 
 
 struct event_t {
@@ -2017,6 +2024,13 @@ struct event_t {
   };
   
 BPF_PERF_OUTPUT(events);
+
+typedef uint64_t h2o_ebpf_map_key_t; // conn_id
+typedef int32_t h2o_ebpf_map_value_t; // skip_tracing
+
+// FIXME: consider the most suitable table type other than "hash"
+// FIXME: the table size should be parameterizable
+BPF_TABLE("hash", h2o_ebpf_map_key_t, h2o_ebpf_map_value_t, h2o_map, 1000);
 
 // HTTP/3 tracing
 BPF_HASH(h2o_to_quicly_conn, u64, u32);
@@ -3839,6 +3853,11 @@ int trace_h2o__h3s_accept(struct pt_regs *ctx) {
   bpf_usdt_readarg(3, ctx, &buf);
   bpf_probe_read(&quic, sizeof_st_quicly_conn_t, buf);
   event.h3s_accept.master_id = get_st_quicly_conn_t__master_id(quic);
+
+  uint64_t key = event.h3s_accept.conn_id;
+  int32_t val = 1; // always skip for now
+  h2o_map.insert(&key, &val);
+
 
   if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
     bpf_trace_printk("failed to perf_submit in trace_h2o__h3s_accept\n");

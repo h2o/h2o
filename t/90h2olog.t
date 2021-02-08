@@ -72,27 +72,30 @@ subtest "h2olog", sub {
     diag "h2olog output:\n", $trace;
   }
 
+  diag("ls /sys/fs/bpf/:");
+  diag(`ls /sys/fs/bpf/`);
+
   ok( (map { decode_json($_) } split /\n/, $trace), "h2olog output is valid JSON Lines");
 };
 
-subtest "h2olog -H", sub {
-  my $trace = slurp_h2olog({
-    pid => $server->{pid},
-    args => ["-H", $ENV{H2OLOG_DEBUG} ? ("-d") : ()],
+# subtest "h2olog -H", sub {
+#   my $trace = slurp_h2olog({
+#     pid => $server->{pid},
+#     args => ["-H", $ENV{H2OLOG_DEBUG} ? ("-d") : ()],
 
-    request => sub {
-      my ($headers, $body) = run_prog("$client_prog -3 https://127.0.0.1:$quic_port/");
-      like $headers, qr{^HTTP/3 200\n}, "req: HTTP/3";
-      is $body, "hello\n", "req: body";
-    },
-  });
+#     request => sub {
+#       my ($headers, $body) = run_prog("$client_prog -3 https://127.0.0.1:$quic_port/");
+#       like $headers, qr{^HTTP/3 200\n}, "req: HTTP/3";
+#       is $body, "hello\n", "req: body";
+#     },
+#   });
 
-  if ($ENV{H2OLOG_DEBUG}) {
-    diag "h2olog output:\n", $trace;
-  }
+#   if ($ENV{H2OLOG_DEBUG}) {
+#     diag "h2olog output:\n", $trace;
+#   }
 
-  ok length($trace), "h2olog output exists"
-};
+#   ok length($trace), "h2olog output exists"
+# };
 
 # wait until the server and the tracer exits
 diag "shutting down ...";

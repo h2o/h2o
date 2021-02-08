@@ -378,6 +378,9 @@ struct st_h2o_ebpf_map_key_t;
  */
 h2o_ebpf_map_value_t h2o_socket_ebpf_lookup(h2o_loop_t *loop, int (*init_key)(struct st_h2o_ebpf_map_key_t *key, void *cbdata),
                                             void *cbdata);
+
+int h2o_socket_ebpf_lookup2(h2o_loop_t *loop, uint64_t conn_id);
+
 /**
  * callback for initializing the ebpf lookup key from raw information
  */

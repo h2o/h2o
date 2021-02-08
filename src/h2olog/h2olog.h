@@ -31,13 +31,11 @@ extern "C" {
 #include <time.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+
+#include "quicly.h"
 }
 
-union h2olog_address_t {
-    sockaddr sa;
-    sockaddr_in sin;
-    sockaddr_in6 sin6;
-};
+typedef quicly_address_t h2olog_address_t;
 
 class h2o_tracer
 {
