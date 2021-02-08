@@ -725,6 +725,7 @@ static struct rp_generator_t *proxy_send_prepare(h2o_req_t *req)
     self->super.proceed = do_proceed;
     self->super.stop = do_stop;
     self->src_req = req;
+    self->client = NULL; /* when connection establish timeouts, self->client remains unset by `h2o_httpclient_connect` */
     if (client_ctx->websocket_timeout != NULL && h2o_lcstris(req->upgrade.base, req->upgrade.len, H2O_STRLIT("websocket"))) {
         self->is_websocket_handshake = 1;
     } else {

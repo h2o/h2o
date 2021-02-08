@@ -20,6 +20,8 @@
  * IN THE SOFTWARE.
  */
 #include <sys/un.h>
+#include "picotls.h"
+#include "picotls/openssl.h"
 #include "h2o.h"
 #include "h2o/socketpool.h"
 #include "h2o/balancer.h"
@@ -58,6 +60,62 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     return 0;
 }
 
+static h2o_http3client_ctx_t *create_http3_context(h2o_loop_t *loop)
+{
+#if H2O_USE_LIBUV
+    fprintf(stderr, "no HTTP/3 support for libuv\n");
+    abort();
+#else
+
+    h2o_http3client_ctx_t *h3ctx = h2o_mem_alloc(sizeof(*h3ctx));
+
+    /* tls (FIXME provide knobs to configure, incl. certificate validation) */
+    h3ctx->tls = (ptls_context_t){
+        .random_bytes = ptls_openssl_random_bytes,
+        .get_time = &ptls_get_time,
+        .key_exchanges = ptls_openssl_key_exchanges,
+        .cipher_suites = ptls_openssl_cipher_suites,
+    };
+    quicly_amend_ptls_context(&h3ctx->tls);
+
+    /* quic */
+    h3ctx->quic = quicly_spec_context;
+    h3ctx->quic.tls = &h3ctx->tls;
+    h3ctx->quic.transport_params.max_streams_uni = 10;
+    uint8_t cid_key[PTLS_SHA256_DIGEST_SIZE];
+    ptls_openssl_random_bytes(cid_key, sizeof(cid_key));
+    h3ctx->quic.cid_encryptor = quicly_new_default_cid_encryptor(&ptls_openssl_bfecb, &ptls_openssl_aes128ecb, &ptls_openssl_sha256,
+                                                                 ptls_iovec_init(cid_key, sizeof(cid_key)));
+    ptls_clear_memory(cid_key, sizeof(cid_key));
+    h3ctx->quic.stream_open = &h2o_httpclient_http3_on_stream_open;
+
+    /* http3 */
+    int sockfd;
+    if ((sockfd = socket(PF_INET, SOCK_DGRAM, 0)) < 0) {
+        perror("failed to open UDP socket");
+        abort();
+    }
+    struct sockaddr_in sin = {};
+    if (bind(sockfd, (struct sockaddr *)&sin, sizeof(sin)) != 0) {
+        perror("failed to bind default address to UDP socket");
+        abort();
+    }
+    h2o_socket_t *sock = h2o_evloop_socket_create(loop, sockfd, H2O_SOCKET_FLAG_DONT_READ);
+    h2o_quic_init_context(&h3ctx->h3, loop, sock, &h3ctx->quic, NULL, h2o_httpclient_http3_notify_connection_update);
+
+    h3ctx->load_session = NULL; /* TODO reuse session? */
+
+    return h3ctx;
+#endif
+}
+
+static void destroy_http3_context(h2o_http3client_ctx_t *h3ctx)
+{
+    h2o_quic_dispose_context(&h3ctx->h3);
+    quicly_free_default_cid_encryptor(h3ctx->quic.cid_encryptor);
+    free(h3ctx);
+}
+
 static void on_context_init(h2o_handler_t *_self, h2o_context_t *ctx)
 {
     struct rp_handler_t *self = (void *)_self;
@@ -94,8 +152,13 @@ static void on_context_init(h2o_handler_t *_self, h2o_context_t *ctx)
     }
 
     client_ctx->max_buffer_size = self->config.max_buffer_size;
-    client_ctx->protocol_selector =
-        (struct st_h2o_httpclient_protocol_selector_t){.ratio = {.http2 = self->config.protocol_ratio.http2}};
+    client_ctx->protocol_selector = (struct st_h2o_httpclient_protocol_selector_t){.ratio = self->config.protocol_ratio};
+
+    client_ctx->http2.latency_optimization =
+        ctx->globalconf->http2.latency_optimization; /* TODO provide config knob, or disable? */
+    client_ctx->http2.max_concurrent_streams = self->config.http2.max_concurrent_strams;
+
+    client_ctx->http3 = client_ctx->protocol_selector.ratio.http3 != 0 ? create_http3_context(ctx->loop) : NULL;
 
     handler_ctx->client_ctx = client_ctx;
 }
@@ -105,8 +168,11 @@ static void on_context_dispose(h2o_handler_t *_self, h2o_context_t *ctx)
     struct rp_handler_t *self = (void *)_self;
     struct rp_handler_context_t *handler_ctx = h2o_context_get_handler_context(ctx, &self->super);
 
-    if (handler_ctx->client_ctx != NULL)
+    if (handler_ctx->client_ctx != NULL) {
+        if (handler_ctx->client_ctx->http3 != NULL)
+            destroy_http3_context(handler_ctx->client_ctx->http3);
         free(handler_ctx->client_ctx);
+    }
 
     h2o_socketpool_unregister_loop(self->sockpool, ctx->loop);
 }
