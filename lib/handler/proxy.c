@@ -69,7 +69,7 @@ static h2o_http3client_ctx_t *create_http3_context(h2o_loop_t *loop)
 
     h2o_http3client_ctx_t *h3ctx = h2o_mem_alloc(sizeof(*h3ctx));
 
-    /* tls */
+    /* tls (FIXME provide knobs to configure, incl. certificate validation) */
     h3ctx->tls = (ptls_context_t){
         .random_bytes = ptls_openssl_random_bytes,
         .get_time = &ptls_get_time,
@@ -103,7 +103,7 @@ static h2o_http3client_ctx_t *create_http3_context(h2o_loop_t *loop)
     h2o_socket_t *sock = h2o_evloop_socket_create(loop, sockfd, H2O_SOCKET_FLAG_DONT_READ);
     h2o_quic_init_context(&h3ctx->h3, loop, sock, &h3ctx->quic, NULL, h2o_httpclient_http3_notify_connection_update);
 
-    h3ctx->load_session = NULL;
+    h3ctx->load_session = NULL; /* TODO reuse session? */
 
     return h3ctx;
 #endif
