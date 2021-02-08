@@ -741,6 +741,9 @@ void h2o_httpclient__connect_h3(h2o_httpclient_t **_client, h2o_mem_pool_t *pool
     h2o_buffer_init(&req->recvbuf.body, &h2o_socket_buffer_prototype);
     h2o_buffer_init(&req->recvbuf.stream, &h2o_socket_buffer_prototype);
 
+    if (_client != NULL)
+        *_client = &req->super;
+
     if (h2o_http3_has_received_settings(&conn->super)) {
         start_request(req);
         h2o_quic_schedule_timer(&conn->super.super);
