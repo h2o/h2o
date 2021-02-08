@@ -2041,10 +2041,7 @@ typedef struct st_h2o_proxy_config_vars_t {
     struct {
         uint32_t max_concurrent_strams;
     } http2;
-    struct {
-        int8_t http2;
-        int8_t http3;
-    } protocol_ratio;
+    h2o_httpclient_protocol_ratio_t protocol_ratio;
 } h2o_proxy_config_vars_t;
 
 /**

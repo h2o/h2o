@@ -693,6 +693,7 @@ static struct rp_generator_t *proxy_send_prepare(h2o_req_t *req)
     self->super.proceed = do_proceed;
     self->super.stop = do_stop;
     self->src_req = req;
+    self->client = NULL; /* when connection establish timeouts, self->client remains unset by `h2o_httpclient_connect` */
     self->had_body_error = 0;
     self->up_req.is_head = h2o_memis(req->method.base, req->method.len, H2O_STRLIT("HEAD"));
     self->last_content_before_send = NULL;

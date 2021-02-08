@@ -72,16 +72,14 @@ static const ptls_key_exchange_algorithm_t *h3_key_exchanges[] = {
     &ptls_openssl_x25519,
 #endif
     &ptls_openssl_secp256r1, NULL};
-static struct {
-    ptls_context_t tls;
-    quicly_context_t quic;
-    h2o_quic_ctx_t h3;
-} h3ctx = {{.random_bytes = ptls_openssl_random_bytes,
+static h2o_http3client_ctx_t h3ctx = {
+    .tls = {.random_bytes = ptls_openssl_random_bytes,
             .get_time = &ptls_get_time,
             .key_exchanges = h3_key_exchanges,
             .cipher_suites = ptls_openssl_cipher_suites,
             .save_ticket = &save_http3_ticket,
-            .omit_end_of_early_data = 1}};
+    },
+};
 
 static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *errstr, h2o_iovec_t *method, h2o_url_t *url,
                                          const h2o_header_t **headers, size_t *num_headers, h2o_iovec_t *body,
@@ -505,7 +503,7 @@ int main(int argc, char **argv)
         .first_byte_timeout = IO_TIMEOUT,
         .keepalive_timeout = IO_TIMEOUT,
         .max_buffer_size = H2O_SOCKET_INITIAL_INPUT_BUFFER_SIZE * 2,
-        .http3 = {.load_session = load_http3_session},
+        .http3 = &h3ctx,
     };
     int opt;
 
@@ -526,7 +524,7 @@ int main(int argc, char **argv)
         ptls_clear_memory(random_key, sizeof(random_key));
     }
     h3ctx.quic.stream_open = &h2o_httpclient_http3_on_stream_open;
-    ctx.http3.ctx = &h3ctx.h3;
+    h3ctx.load_session = load_http3_session;
 
 #if H2O_USE_LIBUV
     ctx.loop = uv_loop_new();
@@ -716,9 +714,9 @@ int main(int argc, char **argv)
 #endif
     }
 
-    if (ctx.http3.ctx != NULL) {
-        h2o_quic_close_all_connections(ctx.http3.ctx);
-        while (h2o_quic_num_connections(ctx.http3.ctx) != 0) {
+    if (ctx.http3 != NULL) {
+        h2o_quic_close_all_connections(&ctx.http3->h3);
+        while (h2o_quic_num_connections(&ctx.http3->h3) != 0) {
 #if H2O_USE_LIBUV
             uv_run(ctx.loop, UV_RUN_ONCE);
 #else
