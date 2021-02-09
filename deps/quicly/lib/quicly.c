@@ -5977,8 +5977,11 @@ void quicly_amend_ptls_context(ptls_context_t *ptls)
     static ptls_update_traffic_key_t update_traffic_key = {update_traffic_key_cb};
 
     ptls->omit_end_of_early_data = 1;
-    ptls->max_early_data_size = UINT32_MAX;
     ptls->update_traffic_key = &update_traffic_key;
+
+    /* if TLS 1.3 config permits use of early data, convert the value to 0xffffffff in accordance with QUIC-TLS */
+    if (ptls->max_early_data_size != 0)
+        ptls->max_early_data_size = UINT32_MAX;
 }
 
 int quicly_encrypt_address_token(void (*random_bytes)(void *, size_t), ptls_aead_context_t *aead, ptls_buffer_t *buf,
