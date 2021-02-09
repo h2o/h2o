@@ -59,8 +59,14 @@ typedef struct st_h2o_tunnel_t {
     void *data;
 } h2o_tunnel_t;
 
-h2o_tunnel_t *h2o_tunnel_create_from_socket(h2o_socket_t *sock);
-void h2o_tunnel_finish_socket_upgrade(h2o_tunnel_t *tunnel, size_t bytes_to_consume);
+typedef struct st_h2o_socket_tunnel_t {
+    h2o_tunnel_t super;
+    h2o_socket_t *_sock;
+    h2o_doublebuffer_t _buf;
+} h2o_socket_tunnel_t;
+
+h2o_socket_tunnel_t *h2o_socket_tunnel_create(h2o_socket_t *sock);
+void h2o_socket_tunnel_start(h2o_socket_tunnel_t *tunnel, size_t bytes_to_consume);
 
 #ifdef __cplusplus
 }

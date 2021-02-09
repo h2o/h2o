@@ -24,70 +24,64 @@
 #include "h2o.h"
 #include "h2o/tunnel.h"
 
-struct st_h2o_socket_tunnel_t {
-    h2o_tunnel_t super;
-    h2o_socket_t *sock;
-    h2o_doublebuffer_t buf;
-};
-
 static void socket_tunnel_on_read(h2o_socket_t *sock, const char *err);
 
 static void socket_tunnel_on_destroy(h2o_tunnel_t *_tunnel)
 {
-    struct st_h2o_socket_tunnel_t *tunnel = (void *)_tunnel;
+    h2o_socket_tunnel_t *tunnel = (void *)_tunnel;
 
-    h2o_socket_close(tunnel->sock);
-    h2o_doublebuffer_dispose(&tunnel->buf);
+    h2o_socket_close(tunnel->_sock);
+    h2o_doublebuffer_dispose(&tunnel->_buf);
     free(tunnel);
 }
 
 static void socket_tunnel_on_write_complete(h2o_socket_t *sock, const char *err)
 {
-    struct st_h2o_socket_tunnel_t *tunnel = sock->data;
+    h2o_socket_tunnel_t *tunnel = sock->data;
     tunnel->super.on_write_complete(&tunnel->super, err);
 }
 
 static void socket_tunnel_on_write(h2o_tunnel_t *_tunnel, const void *bytes, size_t len)
 {
-    struct st_h2o_socket_tunnel_t *tunnel = (void *)_tunnel;
+    h2o_socket_tunnel_t *tunnel = (void *)_tunnel;
 
     h2o_iovec_t vec = h2o_iovec_init(bytes, len);
-    h2o_socket_write(tunnel->sock, &vec, 1, socket_tunnel_on_write_complete);
+    h2o_socket_write(tunnel->_sock, &vec, 1, socket_tunnel_on_write_complete);
 }
 
 static void socket_tunnel_proceed_read(h2o_tunnel_t *_tunnel)
 {
-    struct st_h2o_socket_tunnel_t *tunnel = (void *)_tunnel;
+    h2o_socket_tunnel_t *tunnel = (void *)_tunnel;
     h2o_iovec_t vec;
 
     /* if something was inflight, retire that */
-    if (tunnel->buf.inflight)
-        h2o_doublebuffer_consume(&tunnel->buf);
+    if (tunnel->_buf.inflight)
+        h2o_doublebuffer_consume(&tunnel->_buf);
 
     /* send data if any, or start reading from the socket */
-    if ((vec = h2o_doublebuffer_prepare(&tunnel->buf, &tunnel->sock->input, 65536)).len != 0) {
+    if ((vec = h2o_doublebuffer_prepare(&tunnel->_buf, &tunnel->_sock->input, 65536)).len != 0) {
         tunnel->super.on_read(&tunnel->super, NULL, vec.base, vec.len);
     } else {
-        h2o_socket_read_start(tunnel->sock, socket_tunnel_on_read);
+        h2o_socket_read_start(tunnel->_sock, socket_tunnel_on_read);
     }
 }
 
 static void socket_tunnel_on_read(h2o_socket_t *sock, const char *err)
 {
-    struct st_h2o_socket_tunnel_t *tunnel = (void *)sock->data;
-    assert(!tunnel->buf.inflight);
+    h2o_socket_tunnel_t *tunnel = (void *)sock->data;
+    assert(!tunnel->_buf.inflight);
 
     if (err != NULL) {
         tunnel->super.on_read(&tunnel->super, err, NULL, 0);
     } else {
-        h2o_socket_read_stop(tunnel->sock);
+        h2o_socket_read_stop(tunnel->_sock);
         socket_tunnel_proceed_read(&tunnel->super);
     }
 }
 
-h2o_tunnel_t *h2o_tunnel_create_from_socket(h2o_socket_t *sock)
+h2o_socket_tunnel_t *h2o_socket_tunnel_create(h2o_socket_t *sock)
 {
-    struct st_h2o_socket_tunnel_t *tunnel = h2o_mem_alloc(sizeof(*tunnel));
+    h2o_socket_tunnel_t *tunnel = h2o_mem_alloc(sizeof(*tunnel));
 
     *tunnel = (struct st_h2o_socket_tunnel_t){
         .super =
@@ -96,22 +90,17 @@ h2o_tunnel_t *h2o_tunnel_create_from_socket(h2o_socket_t *sock)
                 .write_ = socket_tunnel_on_write,
                 .proceed_read = socket_tunnel_proceed_read,
             },
-        .sock = sock,
+        ._sock = sock,
     };
-    tunnel->sock->data = tunnel;
-    h2o_doublebuffer_init(&tunnel->buf, &h2o_socket_buffer_prototype);
+    tunnel->_sock->data = tunnel;
+    h2o_doublebuffer_init(&tunnel->_buf, &h2o_socket_buffer_prototype);
 
-    return &tunnel->super;
+    return tunnel;
 }
 
-void h2o_tunnel_finish_socket_upgrade(h2o_tunnel_t *_tunnel, size_t bytes_to_consume)
+void h2o_socket_tunnel_start(h2o_socket_tunnel_t *tunnel, size_t bytes_to_consume)
 {
-    struct st_h2o_socket_tunnel_t *tunnel = (void *)_tunnel;
-
-    assert(tunnel->super.destroy == socket_tunnel_on_destroy ||
-           !"only tunnels created by h2o_tunnel_create_from_socket can be upgraded");
-
-    h2o_buffer_consume(&tunnel->sock->input, bytes_to_consume);
-    h2o_socket_read_stop(tunnel->sock);
+    h2o_buffer_consume(&tunnel->_sock->input, bytes_to_consume);
+    h2o_socket_read_stop(tunnel->_sock);
     socket_tunnel_proceed_read(&tunnel->super);
 }

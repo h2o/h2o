@@ -88,9 +88,9 @@ static void on_connect(h2o_socket_t *sock, const char *err)
     creq->sock = NULL;
     req->res.status = 200;
 
-    h2o_tunnel_t *tunnel = h2o_tunnel_create_from_socket(sock);
-    req->establish_tunnel(req, tunnel, timeout);
-    h2o_tunnel_finish_socket_upgrade(tunnel, 0);
+    h2o_socket_tunnel_t *tunnel = h2o_socket_tunnel_create(sock);
+    req->establish_tunnel(req, &tunnel->super, timeout);
+    h2o_socket_tunnel_start(tunnel, 0);
 }
 
 static void on_generator_dispose(void *_self)
