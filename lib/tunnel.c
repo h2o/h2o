@@ -30,7 +30,10 @@ static void socket_tunnel_on_destroy(h2o_tunnel_t *_tunnel)
 {
     h2o_socket_tunnel_t *tunnel = (void *)_tunnel;
 
-    h2o_socket_close(tunnel->_sock);
+    if (tunnel->_sock != NULL) {
+        h2o_socket_close(tunnel->_sock);
+        tunnel->_sock = NULL;
+    }
     h2o_doublebuffer_dispose(&tunnel->_buf);
     free(tunnel);
 }
@@ -38,6 +41,12 @@ static void socket_tunnel_on_destroy(h2o_tunnel_t *_tunnel)
 static void socket_tunnel_on_write_complete(h2o_socket_t *sock, const char *err)
 {
     h2o_socket_tunnel_t *tunnel = sock->data;
+
+    if (err != NULL) {
+        h2o_socket_close(tunnel->_sock);
+        tunnel->_sock = NULL;
+    }
+
     tunnel->super.on_write_complete(&tunnel->super, err);
 }
 
@@ -72,6 +81,8 @@ static void socket_tunnel_on_read(h2o_socket_t *sock, const char *err)
     assert(!tunnel->_buf.inflight);
 
     if (err != NULL) {
+        h2o_socket_close(tunnel->_sock);
+        tunnel->_sock = NULL;
         tunnel->super.on_read(&tunnel->super, err, NULL, 0);
     } else {
         h2o_socket_read_stop(tunnel->_sock);
