@@ -362,9 +362,9 @@ static int create_entity_reader(struct st_h2o_http1_conn_t *conn, const struct p
     return -1;
 }
 
-static int init_headers(h2o_mem_pool_t *pool, h2o_headers_t *headers, const struct phr_header *src, size_t len,
-                        h2o_iovec_t *connection, h2o_iovec_t *host, h2o_iovec_t *upgrade, h2o_iovec_t *expect,
-                        ssize_t *entity_header_index)
+static const char *init_headers(h2o_mem_pool_t *pool, h2o_headers_t *headers, const struct phr_header *src, size_t len,
+                                h2o_iovec_t *connection, h2o_iovec_t *host, h2o_iovec_t *upgrade, h2o_iovec_t *expect,
+                                ssize_t *entity_header_index)
 {
     *entity_header_index = -1;
 
@@ -379,7 +379,7 @@ static int init_headers(h2o_mem_pool_t *pool, h2o_headers_t *headers, const stru
             char orig_case[src[i].name_len];
             /* reject multiline header */
             if (src[i].name_len == 0)
-                return -1;
+                return "line folding of header fields is not supported";
             /* preserve the original case */
             memcpy(orig_case, src[i].name, src[i].name_len);
             /* convert to lower-case in-place */
@@ -414,13 +414,14 @@ static int init_headers(h2o_mem_pool_t *pool, h2o_headers_t *headers, const stru
         }
     }
 
-    return 0;
+    return NULL;
 }
 
-static int fixup_request(struct st_h2o_http1_conn_t *conn, struct phr_header *headers, size_t num_headers, int minor_version,
-                         h2o_iovec_t *expect, ssize_t *entity_header_index)
+static const char *fixup_request(struct st_h2o_http1_conn_t *conn, struct phr_header *headers, size_t num_headers,
+                                 int minor_version, h2o_iovec_t *expect, ssize_t *entity_header_index)
 {
     h2o_iovec_t connection = {NULL, 0}, host = {NULL, 0}, upgrade = {NULL, 0};
+    const char *ret;
 
     expect->base = NULL;
     expect->len = 0;
@@ -433,9 +434,9 @@ static int fixup_request(struct st_h2o_http1_conn_t *conn, struct phr_header *he
         conn->_ostr_final.super.send_informational = NULL;
 
     /* init headers */
-    if (init_headers(&conn->req.pool, &conn->req.headers, headers, num_headers, &connection, &host, &upgrade, expect,
-                     entity_header_index) != 0)
-        return -1;
+    if ((ret = init_headers(&conn->req.pool, &conn->req.headers, headers, num_headers, &connection, &host, &upgrade, expect,
+                            entity_header_index)) != NULL)
+        return ret;
 
     /* copy the values to pool, since the buffer pointed by the headers may get realloced */
     if (*entity_header_index != -1) {
@@ -455,18 +456,26 @@ static int fixup_request(struct st_h2o_http1_conn_t *conn, struct phr_header *he
             upgrade = h2o_strdup(&conn->req.pool, upgrade.base, upgrade.len);
     }
 
-    /* path might contain absolute URL; if so, convert it */
-    if (conn->req.input.path.len != 0 && conn->req.input.path.base[0] != '/') {
-        h2o_url_t url;
-        if (h2o_url_parse(conn->req.input.path.base, conn->req.input.path.len, &url) == 0) {
-            conn->req.input.path = url.path;
-            host = conn->req.authority;
+    if (h2o_memis(conn->req.input.method.base, conn->req.input.method.len, H2O_STRLIT("CONNECT"))) {
+        /* CONNECT method, validate, setting the target host in `req->input.authority`. Path becomes empty. */
+        if (conn->req.input.path.len == 0 ||
+            (host.base != NULL && !h2o_memis(conn->req.input.path.base, conn->req.input.path.len, host.base, host.len)))
+            return "invalid request";
+        conn->req.input.authority = conn->req.input.path;
+        conn->req.input.path = h2o_iovec_init(NULL, 0);
+    } else {
+        /* Ordinary request, path might contain absolute URL; if so, convert it */
+        if (conn->req.input.path.len != 0 && conn->req.input.path.base[0] != '/') {
+            h2o_url_t url;
+            if (h2o_url_parse(conn->req.input.path.base, conn->req.input.path.len, &url) == 0) {
+                conn->req.input.path = url.path;
+                host = conn->req.authority;
+            }
         }
+        /* move host header to req->authority */
+        if (host.base != NULL)
+            conn->req.input.authority = host;
     }
-
-    /* move host header to req->authority */
-    if (host.base != NULL)
-        conn->req.input.authority = host;
 
     /* setup persistent flag (and upgrade info) */
     if (connection.base != NULL) {
@@ -485,7 +494,7 @@ static int fixup_request(struct st_h2o_http1_conn_t *conn, struct phr_header *he
     if (conn->req.http1_is_persistent && conn->super.ctx->shutdown_requested)
         conn->req.http1_is_persistent = 0;
 
-    return 0;
+    return NULL;
 }
 
 static void on_continue_sent(h2o_socket_t *sock, const char *err)
@@ -600,11 +609,12 @@ static void handle_incoming_request(struct st_h2o_http1_conn_t *conn)
     conn->_prevreqlen = inreqlen;
 
     switch (reqlen) {
-    default: // parse complete
+    default: { // parse complete
         conn->_unconsumed_request_size = reqlen;
-        if (fixup_request(conn, headers, num_headers, minor_version, &expect, &entity_body_header_index) != 0) {
+        const char *err;
+        if ((err = fixup_request(conn, headers, num_headers, minor_version, &expect, &entity_body_header_index)) != 0) {
             clear_timeouts(conn);
-            send_bad_request(conn, "line folding of header fields is not supported");
+            send_bad_request(conn, err);
             return;
         }
         h2o_probe_log_request(&conn->req, conn->_req_index);
@@ -640,7 +650,7 @@ static void handle_incoming_request(struct st_h2o_http1_conn_t *conn)
             h2o_socket_read_stop(conn->sock);
             process_request(conn);
         }
-        return;
+    } return;
     case -2: // incomplete
         if (inreqlen == H2O_MAX_REQLEN) {
             send_bad_request(conn, "Bad Request");
