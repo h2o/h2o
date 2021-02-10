@@ -107,6 +107,7 @@ struct st_h2o_http3client_req_t {
             unsigned complete_to_be_called : 1;
         } egress;
         struct {
+            h2o_timer_t delayed;
             h2o_doublebuffer_t doublebuf;
             const char *errstr;
         } ingress;
@@ -214,6 +215,7 @@ static void tunnel_destroy(h2o_tunnel_t *_tunnel)
     if (req->tunnel.tunnel.destroy != NULL) {
         req->tunnel.tunnel.destroy = NULL;
         h2o_timer_unlink(&req->tunnel.egress.delayed);
+        h2o_timer_unlink(&req->tunnel.ingress.delayed);
     }
 
     if (req->quic != NULL)
@@ -227,7 +229,15 @@ static void tunnel_process_ingress(struct st_h2o_http3client_req_t *req)
     if (req->tunnel.ingress.doublebuf.inflight)
         return;
 
-    /* send all data available alonside the close signal */
+    if (!h2o_timer_is_linked(&req->tunnel.ingress.delayed))
+        h2o_timer_link(req->conn->super.super.ctx->loop, 0, &req->tunnel.ingress.delayed);
+}
+
+static void tunnel_process_ingress_delayed(h2o_timer_t *entry)
+{
+    struct st_h2o_http3client_req_t *req = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3client_req_t, tunnel.ingress.delayed, entry);
+
+    /* send all data available alongside the close signal */
     h2o_iovec_t vec = h2o_doublebuffer_prepare(&req->tunnel.ingress.doublebuf, &req->recvbuf.body, SIZE_MAX);
     if (vec.len != 0) {
         req->tunnel.tunnel.on_read(&req->tunnel.tunnel, req->tunnel.ingress.errstr, vec.base, vec.len);
@@ -618,6 +628,7 @@ static int handle_input_expect_headers(struct st_h2o_http3client_req_t *req, con
         };
         req->tunnel.egress.delayed = (h2o_timer_t){};
         req->tunnel.egress.complete_to_be_called = 0;
+        req->tunnel.ingress.delayed = (h2o_timer_t){.cb = tunnel_process_ingress_delayed};
         h2o_doublebuffer_init(&req->tunnel.ingress.doublebuf, &h2o_socket_buffer_prototype);
         req->tunnel.ingress.errstr = NULL;
         on_head.tunnel = &req->tunnel.tunnel;
