@@ -44,7 +44,7 @@ our @EXPORT = qw(
     wait_debugger
     spawn_forked
     spawn_h2_server
-    slurp_h2olog
+    spawn_h2olog
     find_blackhole_ip
     get_tracer
     check_dtrace_availability
@@ -556,15 +556,21 @@ sub spawn_h2_server {
     return $server;
 }
 
-sub slurp_h2olog {
+package H2OLog {
+    sub get_trace {
+        my($self, $cb) = @_;
+        return $self->{get_trace}->($cb);
+    }
+}
+
+# returns an object to read tracer outputs.
+# e.g.
+#   my $h2olog = spawn_h2olog({ pid => $h2o_pid, args => [...] });
+#   my $trace = $h2olog->get_trace(\&requests);
+# where requests() will make requests to h2o and called multiple times
+sub spawn_h2olog {
     my ($opts) = @_;
-    my $h2o_pid = $opts->{pid} or croak("Missing `pid` in the opts");
-    my $request_cb = $opts->{request} or croak("Missing `request` callback in the opts");
-    my $is_done_cb = $opts->{is_done} // sub {
-        my($s) = @_;
-        return length($s) > 0;
-    };
-    my $timeout_sec = $opts->{timeout} // 10;
+    my $h2o_pid = $opts->{pid} or croak("Missing pid in the opts");
     my $h2olog_args = $opts->{args} // [];
     my $h2olog_prog = bindir() . "/h2olog";
 
@@ -580,57 +586,62 @@ sub slurp_h2olog {
     }
 
     # wait until h2olog and the trace log becomes ready
-    my $fh;
+    my $read_trace;
     while (1) {
-        Time::HiRes::sleep(0.1);
-        if (open $fh, "<", $output_file) {
+        sleep 1;
+        if (open my $fh, "<", $output_file) {
+            my $off = 0;
+            $read_trace = sub {
+                confess "h2o is down (got $?)"
+                    if waitpid($tracer_pid, WNOHANG) != 0;
+
+                seek $fh, $off, 0
+                    or die "seek failed: $!";
+                read $fh, my $bytes, 65000;
+                $bytes = ''
+                    unless defined $bytes;
+                $off += length $bytes;
+                return $bytes;
+            };
             last;
         }
-        confess "h2olog[$tracer_pid] failed to start"
+        confess "h2olog failed to start"
             if waitpid($tracer_pid, WNOHANG) == $tracer_pid;
     }
 
+    my $get_trace = sub {
+        my ($request_cb) = @_;
+
+        my $retry_max = 10;
+        my $retry = 0;
+        my $trace;
+        do {
+            diag "making requests and tracing (#${retry})";
+
+            $request_cb->();
+
+            if (++$retry > $retry_max) {
+                confess "Cannot read trace data from h2olog ($tracer_pid)"
+            }
+            sleep 1;
+        } while (($trace = $read_trace->()) eq '');
+        return $trace;
+    };
+
     my $guard = scope_guard(sub {
         if (waitpid($tracer_pid, WNOHANG) == 0) {
-            diag "killing h2olog[$tracer_pid] with SIGTERM";
+            diag "killing h2olog ($tracer_pid) with SIGTERM";
             kill("TERM", $tracer_pid)
-                or warn("failed to kill h2olog[$tracer_pid]: $!");
+                or warn("failed to kill h2olog: $!");
         } else {
-            diag "h2olog[$tracer_pid] has exited successfully";
+            diag "h2olog has exited successfully";
         }
     });
 
-    # request and trace
-    my $t0 = time;
-    my $try = 0;
-    my $off = 0;
-    my $output = "";
-    for (;;$try++) {
-        confess "h2olog[$tracer_pid] is down (got $?)"
-            if waitpid($tracer_pid, WNOHANG) != 0;
-
-        diag "[slurp_h2olog] making requests and tracing (#${try})";
-
-        $request_cb->();
-
-        seek $fh, $off, 0 or die "seek failed: $!";
-        read $fh, my $bytes, 65000;
-        $bytes //= '';
-        $off += length $bytes;
-
-        $output .= $bytes;
-
-        if ($is_done_cb->($output)) {
-            return $output;
-        }
-
-        if ((time() - $t0) > $timeout_sec) {
-            confess "Cannot read trace data from h2olog[$tracer_pid]"
-        }
-        sleep(1);
-    };
-
-    # never reached
+    return bless {
+        _guard => $guard,
+        get_trace => $get_trace,
+    }, "H2OLog";
 }
 
 sub find_blackhole_ip {
