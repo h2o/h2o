@@ -211,7 +211,10 @@ static void tunnel_destroy(h2o_tunnel_t *_tunnel)
 {
     struct st_h2o_http3client_req_t *req = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3client_req_t, tunnel.tunnel, _tunnel);
 
-    req->tunnel.tunnel.destroy = NULL;
+    if (req->tunnel.tunnel.destroy != NULL) {
+        req->tunnel.tunnel.destroy = NULL;
+        h2o_timer_unlink(&req->tunnel.egress.delayed);
+    }
 
     if (req->quic != NULL)
         close_stream(req, H2O_HTTP3_ERROR_NONE);
