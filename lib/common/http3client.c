@@ -29,6 +29,7 @@
 #include "h2o/http2_common.h"
 #include "h2o/http3_common.h"
 #include "h2o/http3_internal.h"
+#include "../probes_.h"
 
 /**
  * internal error code used for signalling EOS
@@ -194,23 +195,29 @@ static void tunnel_schedule_delayed_on_write_complete(struct st_h2o_http3client_
     h2o_timer_link(req->conn->super.super.ctx->loop, 0, &req->tunnel.egress.delayed);
 }
 
+static void tunnel_call_on_write_complete(struct st_h2o_http3client_req_t *req, const char *err)
+{
+    H2O_PROBE(TUNNEL_ON_WRITE_COMPLETE, &req->tunnel.tunnel, err);
+    req->tunnel.tunnel.on_write_complete(&req->tunnel.tunnel, err);
+}
+
 static void tunnel_delayed_on_write_closed(h2o_timer_t *entry)
 {
     struct st_h2o_http3client_req_t *req = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3client_req_t, tunnel.egress.delayed, entry);
-
-    req->tunnel.tunnel.on_write_complete(&req->tunnel.tunnel, h2o_socket_error_closed);
+    tunnel_call_on_write_complete(req, h2o_socket_error_closed);
 }
 
 static void tunnel_delayed_on_write_complete(h2o_timer_t *entry)
 {
     struct st_h2o_http3client_req_t *req = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3client_req_t, tunnel.egress.delayed, entry);
-
-    req->tunnel.tunnel.on_write_complete(&req->tunnel.tunnel, NULL);
+    tunnel_call_on_write_complete(req, NULL);
 }
 
 static void tunnel_destroy(h2o_tunnel_t *_tunnel)
 {
     struct st_h2o_http3client_req_t *req = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3client_req_t, tunnel.tunnel, _tunnel);
+
+    H2O_PROBE(TUNNEL_ON_DESTROY, &req->tunnel.tunnel);
 
     if (req->tunnel.tunnel.destroy != NULL) {
         req->tunnel.tunnel.destroy = NULL;
@@ -237,23 +244,27 @@ static void tunnel_process_ingress_delayed(h2o_timer_t *entry)
 {
     struct st_h2o_http3client_req_t *req = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3client_req_t, tunnel.ingress.delayed, entry);
 
-    /* send all data available alongside the close signal */
+    /* prepare the signal to be delivered, or return if there's nothing */
     h2o_iovec_t vec = h2o_doublebuffer_prepare(&req->tunnel.ingress.doublebuf, &req->recvbuf.body, SIZE_MAX);
     if (vec.len != 0) {
-        req->tunnel.tunnel.on_read(&req->tunnel.tunnel, req->tunnel.ingress.errstr, vec.base, vec.len);
+        /* we have data */
+    } else if (req->tunnel.ingress.errstr != NULL) {
+        /* we do not have data, but errstr */
+        h2o_doublebuffer_prepare_empty(&req->tunnel.ingress.doublebuf);
+    } else {
+        /* nothing needs to be notified */
         return;
     }
 
-    /* send just the close signal if no data is available */
-    if (req->tunnel.ingress.errstr != NULL) {
-        h2o_doublebuffer_prepare_empty(&req->tunnel.ingress.doublebuf);
-        req->tunnel.tunnel.on_read(&req->tunnel.tunnel, h2o_httpclient_error_io, NULL, 0);
-    }
+    H2O_PROBE(TUNNEL_ON_READ, &req->tunnel.tunnel, req->tunnel.ingress.errstr, vec.base, vec.len);
+    req->tunnel.tunnel.on_read(&req->tunnel.tunnel, req->tunnel.ingress.errstr, vec.base, vec.len);
 }
 
 static void tunnel_write(h2o_tunnel_t *_tunnel, const void *bytes, size_t len)
 {
     struct st_h2o_http3client_req_t *req = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3client_req_t, tunnel.tunnel, _tunnel);
+
+    H2O_PROBE(TUNNEL_WRITE, &req->tunnel.tunnel, bytes, len);
 
     /* We might not have had a chance to notify the app that the tunnel has been closed, if the peer sends RESET_STREAM &
      * STOP_SENDING while the app is blocked processing ingress data. In such case, `tunnel->quic` becomes NULL. */
@@ -278,6 +289,8 @@ static void tunnel_write(h2o_tunnel_t *_tunnel, const void *bytes, size_t len)
 static void tunnel_proceed_read(h2o_tunnel_t *_tunnel)
 {
     struct st_h2o_http3client_req_t *req = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3client_req_t, tunnel.tunnel, _tunnel);
+
+    H2O_PROBE(TUNNEL_PROCEED_READ, &req->tunnel.tunnel);
 
     if (req->tunnel.ingress.doublebuf.inflight)
         h2o_doublebuffer_consume(&req->tunnel.ingress.doublebuf);
@@ -631,6 +644,7 @@ static int handle_input_expect_headers(struct st_h2o_http3client_req_t *req, con
         req->tunnel.ingress.delayed = (h2o_timer_t){.cb = tunnel_process_ingress_delayed};
         h2o_doublebuffer_init(&req->tunnel.ingress.doublebuf, &h2o_socket_buffer_prototype);
         req->tunnel.ingress.errstr = NULL;
+        H2O_PROBE(H3C_TUNNEL_CREATE, &req->tunnel.tunnel);
         on_head.tunnel = &req->tunnel.tunnel;
     }
     req->super._cb.on_body = req->super._cb.on_head(&req->super, frame_is_eos ? h2o_httpclient_error_is_eos : NULL, &on_head);
