@@ -47,7 +47,7 @@ EOT
 });
 
 subtest "h2olog", sub {
-  my $tracer = spawn_h2olog({
+  my $tracer = H2ologTracer->new({
     pid => $server->{pid},
     args => [$ENV{H2OLOG_DEBUG} ? ("-d") : ()],
   });
@@ -74,7 +74,7 @@ subtest "h2olog", sub {
 };
 
 subtest "h2olog -H", sub {
-  my $tracer = spawn_h2olog({
+  my $tracer = H2ologTracer->new({
     pid => $server->{pid},
     args => ["-H", $ENV{H2OLOG_DEBUG} ? ("-d") : ()],
   });

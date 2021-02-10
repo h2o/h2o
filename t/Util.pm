@@ -44,7 +44,6 @@ our @EXPORT = qw(
     wait_debugger
     spawn_forked
     spawn_h2_server
-    spawn_h2olog
     find_blackhole_ip
     get_tracer
     check_dtrace_availability
@@ -556,73 +555,72 @@ sub spawn_h2_server {
     return $server;
 }
 
-package H2OLog {
+# usage: see t/90h2olog.t
+package H2ologTracer {
+    use POSIX ":sys_wait_h";
+
+    sub new {
+        my ($class, $opts) = @_;
+        my $h2o_pid = $opts->{pid} or Carp::croak("Missing pid in the opts");
+        my $h2olog_args = $opts->{args} // [];
+        my $h2olog_prog = t::Util::bindir() . "/h2olog";
+
+        my $tempdir = File::Temp::tempdir(CLEANUP => 1);
+        my $output_file = "$tempdir/h2olog.jsonl";
+
+        my $tracer_pid = fork;
+        die "fork(2) failed: $!" unless defined $tracer_pid;
+        if ($tracer_pid == 0) {
+            # child process, spawn h2olog
+            exec $h2olog_prog, @{$h2olog_args}, "-p", $h2o_pid, "-w", $output_file;
+            die "failed to spawn $h2olog_prog: $!";
+        }
+
+        # wait until h2olog and the trace log becomes ready
+        my $get_trace;
+        while (1) {
+            sleep 1;
+            if (open my $fh, "<", $output_file) {
+                my $off = 0;
+                $get_trace = sub {
+                    Carp::confess "h2olog[$tracer_pid] is down (got $?)"
+                        if waitpid($tracer_pid, WNOHANG) != 0;
+
+                    seek $fh, $off, 0
+                        or die "seek failed: $!";
+                    read $fh, my $bytes, 65000;
+                    $bytes = ''
+                        unless defined $bytes;
+                    $off += length $bytes;
+                    return $bytes;
+                };
+                last;
+            }
+            Carp::confess "h2olog[$tracer_pid] failed to start"
+                if waitpid($tracer_pid, WNOHANG) == $tracer_pid;
+        }
+
+        my $guard = Scope::Guard->new(sub {
+            if (waitpid($tracer_pid, WNOHANG) == 0) {
+                Test::More::diag "killing h2olog[$tracer_pid] with SIGTERM";
+                kill("TERM", $tracer_pid)
+                    or warn("failed to kill h2olog[$tracer_pid]: $!");
+            } else {
+                Test::More::diag "h2olog[$tracer_pid] has exited successfully";
+            }
+        });
+
+        return bless {
+            _guard => $guard,
+            tracer_pid => $tracer_pid,
+            get_trace => $get_trace,
+        }, $class;
+    }
+
     sub get_trace {
-        my($self, $cb) = @_;
-        return $self->{get_trace}->($cb);
+        my($self) = @_;
+        return $self->{get_trace}->();
     }
-}
-
-# returns an object to read tracer outputs.
-# e.g.
-#   my $h2olog = spawn_h2olog({ pid => $h2o_pid, args => [...] });
-#   my $trace = $h2olog->get_trace(\&requests);
-# where requests() will make requests to h2o and called multiple times
-sub spawn_h2olog {
-    my ($opts) = @_;
-    my $h2o_pid = $opts->{pid} or croak("Missing pid in the opts");
-    my $h2olog_args = $opts->{args} // [];
-    my $h2olog_prog = bindir() . "/h2olog";
-
-    my $tempdir = tempdir(CLEANUP => 1);
-    my $output_file = "$tempdir/h2olog.jsonl";
-
-    my $tracer_pid = fork;
-    die "fork(2) failed: $!" unless defined $tracer_pid;
-    if ($tracer_pid == 0) {
-        # child process, spawn h2olog
-        exec $h2olog_prog, @{$h2olog_args}, "-p", $h2o_pid, "-w", $output_file;
-        die "failed to spawn $h2olog_prog: $!";
-    }
-
-    # wait until h2olog and the trace log becomes ready
-    my $get_trace;
-    while (1) {
-        sleep 1;
-        if (open my $fh, "<", $output_file) {
-            my $off = 0;
-            $get_trace = sub {
-                confess "h2olog[$tracer_pid] is down (got $?)"
-                    if waitpid($tracer_pid, WNOHANG) != 0;
-
-                seek $fh, $off, 0
-                    or die "seek failed: $!";
-                read $fh, my $bytes, 65000;
-                $bytes = ''
-                    unless defined $bytes;
-                $off += length $bytes;
-                return $bytes;
-            };
-            last;
-        }
-        confess "h2olog[$tracer_pid] failed to start"
-            if waitpid($tracer_pid, WNOHANG) == $tracer_pid;
-    }
-
-    my $guard = scope_guard(sub {
-        if (waitpid($tracer_pid, WNOHANG) == 0) {
-            diag "killing h2olog[$tracer_pid] with SIGTERM";
-            kill("TERM", $tracer_pid)
-                or warn("failed to kill h2olog[$tracer_pid]: $!");
-        } else {
-            diag "h2olog[$tracer_pid] has exited successfully";
-        }
-    });
-
-    return bless {
-        _guard => $guard,
-        get_trace => $get_trace,
-    }, "H2OLog";
 }
 
 sub find_blackhole_ip {
