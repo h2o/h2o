@@ -52,11 +52,19 @@ subtest "h2olog", sub {
     args => [$ENV{H2OLOG_DEBUG} ? ("-d") : ()],
   });
 
-  my $trace = $tracer->get_trace(sub {
-    my ($headers, $body) = run_prog("$client_prog -3 https://127.0.0.1:$quic_port/");
-    like $headers, qr{^HTTP/3 200\n}, "req: HTTP/3";
-    is $body, "hello\n", "req: body";
-  });
+  my $retry = 10;
+  my $trace;
+  do {
+      sleep 1;
+      diag "making requests and tracing (#${retry})";
+
+      my ($headers, $body) = run_prog("$client_prog -3 https://127.0.0.1:$quic_port/");
+      like $headers, qr{^HTTP/3 200\n}, "req: HTTP/3";
+
+      if (--$retry < 0) {
+          die "Cannot read trace data from h2olog"
+      }
+  } until (($trace = $tracer->get_trace()) =~ /\n/);
 
   if ($ENV{H2OLOG_DEBUG}) {
     diag "h2olog output:\n", $trace;
@@ -71,11 +79,19 @@ subtest "h2olog -H", sub {
     args => ["-H", $ENV{H2OLOG_DEBUG} ? ("-d") : ()],
   });
 
-  my $trace = $tracer->get_trace(sub {
-    my ($headers, $body) = run_prog("$client_prog -3 https://127.0.0.1:$quic_port/");
-    like $headers, qr{^HTTP/3 200\n}, "req: HTTP/3";
-    is $body, "hello\n", "req: body";
-  });
+  my $retry = 10;
+  my $trace;
+  do {
+      sleep 1;
+      diag "making requests and tracing (#${retry})";
+
+      my ($headers, $body) = run_prog("$client_prog -3 https://127.0.0.1:$quic_port/");
+      like $headers, qr{^HTTP/3 200\n}, "req: HTTP/3";
+
+      if (--$retry < 0) {
+          die "Cannot read trace data from h2olog"
+      }
+  } until (($trace = $tracer->get_trace()) =~ m{RxProtocol\s+HTTP/3.0});
 
   if ($ENV{H2OLOG_DEBUG}) {
     diag "h2olog output:\n", $trace;

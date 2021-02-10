@@ -586,13 +586,13 @@ sub spawn_h2olog {
     }
 
     # wait until h2olog and the trace log becomes ready
-    my $read_trace;
+    my $get_trace;
     while (1) {
         sleep 1;
         if (open my $fh, "<", $output_file) {
             my $off = 0;
-            $read_trace = sub {
-                confess "h2o is down (got $?)"
+            $get_trace = sub {
+                confess "h2olog[$tracer_pid] is down (got $?)"
                     if waitpid($tracer_pid, WNOHANG) != 0;
 
                 seek $fh, $off, 0
@@ -605,36 +605,17 @@ sub spawn_h2olog {
             };
             last;
         }
-        confess "h2olog failed to start"
+        confess "h2olog[$tracer_pid] failed to start"
             if waitpid($tracer_pid, WNOHANG) == $tracer_pid;
     }
 
-    my $get_trace = sub {
-        my ($request_cb) = @_;
-
-        my $retry_max = 10;
-        my $retry = 0;
-        my $trace;
-        do {
-            diag "making requests and tracing (#${retry})";
-
-            $request_cb->();
-
-            if (++$retry > $retry_max) {
-                confess "Cannot read trace data from h2olog ($tracer_pid)"
-            }
-            sleep 1;
-        } while (($trace = $read_trace->()) eq '');
-        return $trace;
-    };
-
     my $guard = scope_guard(sub {
         if (waitpid($tracer_pid, WNOHANG) == 0) {
-            diag "killing h2olog ($tracer_pid) with SIGTERM";
+            diag "killing h2olog[$tracer_pid] with SIGTERM";
             kill("TERM", $tracer_pid)
-                or warn("failed to kill h2olog: $!");
+                or warn("failed to kill h2olog[$tracer_pid]: $!");
         } else {
-            diag "h2olog has exited successfully";
+            diag "h2olog[$tracer_pid] has exited successfully";
         }
     });
 
