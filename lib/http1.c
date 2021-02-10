@@ -928,6 +928,9 @@ void establish_tunnel(h2o_req_t *req, h2o_tunnel_t *_tunnel, uint64_t idle_timeo
     h2o_timer_init(&tunnel->idle_timeout.entry, tunnel_on_timeout);
 
     h2o_http1_upgrade(req, NULL, 0, tunnel_on_established, tunnel);
+
+    struct st_h2o_http1_conn_t *conn = (void *)req->conn;
+    h2o_probe_log_response(req, conn->_req_index, tunnel->server);
 }
 
 static size_t flatten_headers_estimate_size(h2o_req_t *req, size_t server_name_and_connection_len)
@@ -1105,13 +1108,13 @@ void finalostream_send(h2o_ostream_t *_self, h2o_req_t *_req, h2o_sendvec_t *inb
         } else {
             bufs[bufcnt].base = h2o_mem_alloc_pool(&conn->req.pool, char, headers_est_size);
         }
-        h2o_probe_log_response(&conn->req, conn->_req_index);
         bufs[bufcnt].len = flatten_headers(bufs[bufcnt].base, &conn->req, connection);
         if (pull_mode == IS_PULL) {
             pull_mode = LASTBUF_IS_PULL;
             pullbuf_off = bufs[bufcnt].len;
         }
         ++bufcnt;
+        h2o_probe_log_response(&conn->req, conn->_req_index, NULL);
         conn->_ostr_final.state = OSTREAM_STATE_BODY;
     } else {
         if (conn->_ostr_final.pull_buf == NULL)

@@ -3853,6 +3853,8 @@ int trace_h2o__send_response(struct pt_regs *ctx) {
   bpf_usdt_readarg(2, ctx, &event.send_response.req_id);
   // int status
   bpf_usdt_readarg(3, ctx, &event.send_response.status);
+  // struct st_h2o_tunnel_t * tunnel
+  // (no fields in st_h2o_tunnel_t)
 
   if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
     bpf_trace_printk("failed to perf_submit in trace_h2o__send_response\n");

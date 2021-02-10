@@ -1219,7 +1219,7 @@ static void do_send(h2o_ostream_t *_ostr, h2o_req_t *_req, h2o_sendvec_t *bufs, 
         if (!quicly_recvstate_transfer_complete(&stream->quic->recvstate) && !quicly_stop_requested(stream->quic))
             quicly_request_stop(stream->quic, H2O_HTTP3_ERROR_EARLY_RESPONSE);
         write_response(stream);
-        h2o_probe_log_response(&stream->req, stream->quic->stream_id);
+        h2o_probe_log_response(&stream->req, stream->quic->stream_id, NULL);
         set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_SEND_BODY);
     } else {
         assert(stream->state == H2O_HTTP3_SERVER_STREAM_STATE_SEND_BODY);
@@ -1353,6 +1353,7 @@ static void establish_tunnel(h2o_req_t *req, h2o_tunnel_t *tunnel, uint64_t idle
     tunnel->on_read = tunnel_on_read;
 
     write_response(stream);
+    h2o_probe_log_response(&stream->req, stream->quic->stream_id, stream->tunnel->tunnel);
     set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_SEND_BODY);
 
     finalize_do_send(stream);

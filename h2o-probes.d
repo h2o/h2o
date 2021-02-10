@@ -35,7 +35,7 @@ provider h2o {
     /**
      * HTTP-level event, indicating that a response has been sent.
      */
-    probe send_response(uint64_t conn_id, uint64_t req_id, int status);
+    probe send_response(uint64_t conn_id, uint64_t req_id, int status, struct st_h2o_tunnel_t *tunnel);
     /**
      * HTTP-level event, indicating the response header fields being sent.
      */
