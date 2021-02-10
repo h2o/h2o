@@ -57,7 +57,7 @@ subtest "h2olog", sub {
       is $body, "hello\n", "req: body";
     },
 
-    is_done => sub {
+    is_ready => sub {
       my($partial_tace) = @_;
 
       # it has at least one line
