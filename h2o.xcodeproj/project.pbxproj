@@ -1014,13 +1014,10 @@
 		E901C43C213FAE0300D17C93 /* qpack.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = qpack.h; sourceTree = "<group>"; };
 		E901C43F2140CCB500D17C93 /* qpack.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = qpack.c; sourceTree = "<group>"; };
 		E904232E24AB2C9B0072C5B7 /* json.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = json.cc; sourceTree = "<group>"; };
-		E904232F24AB2C9B0072C5B7 /* http.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = http.cc; sourceTree = "<group>"; };
 		E904233024AB2C9C0072C5B7 /* json.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = json.h; sourceTree = "<group>"; };
 		E904233224AB2C9C0072C5B7 /* h2olog.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = h2olog.cc; sourceTree = "<group>"; };
-		E904233324AB2C9C0072C5B7 /* generated-quic.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = "generated-quic.cc"; sourceTree = "<group>"; };
 		E904233424AB2C9C0072C5B7 /* h2olog.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = h2olog.h; sourceTree = "<group>"; };
 		E904233524AB2C9C0072C5B7 /* pyproject.toml */ = {isa = PBXFileReference; lastKnownFileType = text; path = pyproject.toml; sourceTree = "<group>"; };
-		E904233724AB2CBC0072C5B7 /* gen-quic-bpf.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = "gen-quic-bpf.py"; sourceTree = "<group>"; };
 		E908A2A923163CB70039BCEE /* ebpf.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = ebpf.h; sourceTree = "<group>"; };
 		E908A2AB231CF3D10039BCEE /* 50reverse-proxy-chunked-post-termination.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "50reverse-proxy-chunked-post-termination.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		E908A2AD2320AE4C0039BCEE /* Dockerfile */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = Dockerfile; sourceTree = "<group>"; };
@@ -1032,6 +1029,10 @@
 		E90BB43B24F38937006507EA /* 40http3-concurrency.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "40http3-concurrency.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		E90BB43C24F4834D006507EA /* 40http3-forward.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "40http3-forward.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		E90C514D230BB28800D6AD8E /* 90dtrace.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = 90dtrace.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		E915E87325D4A88D00FB20F7 /* http_tracer.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = http_tracer.cc; sourceTree = "<group>"; };
+		E915E87425D4A89700FB20F7 /* generated_raw_tracer.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = generated_raw_tracer.cc; sourceTree = "<group>"; };
+		E915E87525D4A89700FB20F7 /* raw_tracer.h.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = raw_tracer.h.cc; sourceTree = "<group>"; };
+		E915E87625D4A8B700FB20F7 /* gen_raw_tracer.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = gen_raw_tracer.py; sourceTree = "<group>"; };
 		E918FC392136583F00CCB252 /* proptest */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = proptest; sourceTree = BUILT_PRODUCTS_DIR; };
 		E918FC3B213658BE00CCB252 /* prop.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = prop.c; sourceTree = "<group>"; };
 		E918FC412136597200CCB252 /* theft.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = theft.h; sourceTree = "<group>"; };
@@ -1751,7 +1752,6 @@
 				E95EBCD72281148C0022C32D /* h2o-probes.d */,
 				1079231E19A3210D00C52AD6 /* deps */,
 				10583BEC1AE5A353004A3AD6 /* doc */,
-				E904232D24AB2C740072C5B7 /* h2olog */,
 				1079239E19A3215F00C52AD6 /* include */,
 				107923AD19A3217300C52AD6 /* lib */,
 				107923AA19A3216B00C52AD6 /* misc */,
@@ -2228,6 +2228,7 @@
 		10F417D419C190DD00B6E31A /* src */ = {
 			isa = PBXGroup;
 			children = (
+				E904232D24AB2C740072C5B7 /* h2olog */,
 				10D0906A19F38B850043D458 /* httpclient.c */,
 				10A3D40E1B584BEC00327CF9 /* standalone.h */,
 				10F417D519C190F800B6E31A /* main.c */,
@@ -2411,23 +2412,23 @@
 		E904232D24AB2C740072C5B7 /* h2olog */ = {
 			isa = PBXGroup;
 			children = (
-				E904233624AB2CA80072C5B7 /* misc */,
-				E904233324AB2C9C0072C5B7 /* generated-quic.cc */,
+				E915E87425D4A89700FB20F7 /* generated_raw_tracer.cc */,
 				E904233224AB2C9C0072C5B7 /* h2olog.cc */,
 				E904233424AB2C9C0072C5B7 /* h2olog.h */,
-				E904232F24AB2C9B0072C5B7 /* http.cc */,
+				E915E87325D4A88D00FB20F7 /* http_tracer.cc */,
 				E904232E24AB2C9B0072C5B7 /* json.cc */,
 				E904233024AB2C9C0072C5B7 /* json.h */,
+				E904233624AB2CA80072C5B7 /* misc */,
+				E915E87525D4A89700FB20F7 /* raw_tracer.h.cc */,
 				E904233524AB2C9C0072C5B7 /* pyproject.toml */,
 			);
-			name = h2olog;
-			path = src/h2olog;
+			path = h2olog;
 			sourceTree = "<group>";
 		};
 		E904233624AB2CA80072C5B7 /* misc */ = {
 			isa = PBXGroup;
 			children = (
-				E904233724AB2CBC0072C5B7 /* gen-quic-bpf.py */,
+				E915E87625D4A8B700FB20F7 /* gen_raw_tracer.py */,
 			);
 			path = misc;
 			sourceTree = "<group>";
