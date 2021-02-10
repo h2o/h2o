@@ -1295,6 +1295,8 @@ static size_t decrypt_cid(quicly_cid_encryptor_t *self, quicly_cid_plaintext_t *
 
     update_quic_keys();
 
+    *plaintext = (quicly_cid_plaintext_t){0, 0, 0xffffff, 0};
+
     if ((keyset = find_quic_keyset(encrypted[0])) == NULL)
         return SIZE_MAX;
     if ((len = keyset->cid->decrypt_cid(keyset->cid, plaintext, encrypted + 1, len != 0 ? len - 1 : 0)) == SIZE_MAX)
