@@ -189,7 +189,6 @@ h2o_tunnel_t *h2o_open_udp_tunnel_from_sa(h2o_loop_t *loop, struct sockaddr *add
                 .destroy = tunnel_on_destroy,
                 .write_ = tunnel_on_write,
                 .proceed_read = tunnel_proceed_read,
-                .on_read = NULL,
             },
         .len = len,
         .loop = loop,
