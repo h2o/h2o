@@ -150,8 +150,11 @@ def parse_d(context: dict, path: Path, block_probes: set = None):
 
       if is_ptr_type(arg_type):
         st_name = strip_typename(arg_type)
-        for st_field_access, st_field_name in struct_map.get(st_name, []):
-          flat_args_map[st_field_name or st_field_access] = "typeof_%s__%s" % (st_name, st_field_name or st_field_access)
+        if st_name in struct_map:
+            for st_field_access, st_field_name in struct_map[st_name]:
+              flat_args_map[st_field_name or st_field_access] = "typeof_%s__%s" % (st_name, st_field_name or st_field_access)
+        else:
+          flat_args_map[arg_name] = arg_type
       else:
         flat_args_map[arg_name] = arg_type
 
@@ -233,11 +236,9 @@ int %s(struct pt_regs *ctx) {
           c += "  event.%s = get_%s__%s(%s);\n" % (
               event_t_name, st_name, st_field_name or st_field_access, arg_name)
       else:
-        c += "  // (no fields in %s)\n" % (st_name)
+        c += "  bpf_usdt_readarg(%d, ctx, &event.%s.%s);\n" % (i + 1, probe_name, arg_name)
     else:
-      event_t_name = "%s.%s" % (probe_name, arg_name)
-      c += "  bpf_usdt_readarg(%d, ctx, &event.%s);\n" % (i +
-                                                          1, event_t_name)
+      c += "  bpf_usdt_readarg(%d, ctx, &event.%s.%s);\n" % (i + 1, probe_name, arg_name)
   if fully_specified_probe_name == "h2o:send_response_header":
       # handle -s option
     c += r"""

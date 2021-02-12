@@ -149,3 +149,10 @@ void json_write_pair_c(FILE *out, const char *name, size_t name_len, const h2olo
 
     fputc('"', out);
 }
+
+void json_write_pair_c(FILE *out, const char *name, size_t name_len, const void *value)
+{
+    fputc(',', out);
+    json_write_name_value(out, name, name_len);
+    fprintf(out, "0x%" PRIx64, (uint64_t)value);
+}
