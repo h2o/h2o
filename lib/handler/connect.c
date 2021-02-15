@@ -172,7 +172,7 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
         .timeout = {.cb = on_timeout},
     };
     int port_strlen = sprintf(creq->server_name.port, "%" PRIu16, port);
-    h2o_timer_link(creq->loop, handler->config.io_timeout, &creq->timeout);
+    h2o_timer_link(creq->loop, handler->config.connect_timeout, &creq->timeout);
 
     creq->getaddr_req = h2o_hostinfo_getaddr(&creq->src_req->conn->ctx->receivers.hostinfo_getaddr, creq->server_name.host,
                                              h2o_iovec_init(creq->server_name.port, port_strlen), AF_UNSPEC, SOCK_STREAM,
