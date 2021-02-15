@@ -2081,10 +2081,31 @@ void h2o_reproxy_register_configurator(h2o_globalconf_t *conf);
 
 /* lib/handler/connect.c */
 
+typedef struct st_h2o_connect_acl_entry_t {
+    uint8_t allow_; /* true if allow, false if deny */
+    enum { H2O_CONNECT_ACL_ADDRESS_ANY, H2O_CONNECT_ACL_ADDRESS_V4, H2O_CONNECT_ACL_ADDRESS_V6 } addr_family;
+    union {
+        uint32_t v4;
+        uint8_t v6[16];
+    } addr;
+    size_t addr_mask;
+    uint16_t port; /* 0 indicates ANY */
+} h2o_connect_acl_entry_t;
+
 /**
  * registers the connect handler to the context
  */
-void h2o_connect_register(h2o_pathconf_t *pathconf, h2o_proxy_config_vars_t *config);
+void h2o_connect_register(h2o_pathconf_t *pathconf, h2o_proxy_config_vars_t *config, h2o_connect_acl_entry_t *acl_entries,
+                          size_t num_acl_entries);
+/**
+ * Parses a ACL line and stores the result in `output`. If successful, returns NULL, otherwise a string indicating the problem is
+ * being returned.
+ */
+const char *h2o_connect_parse_acl(h2o_connect_acl_entry_t *output, const char *input);
+/**
+ * Checks if access to given target is permissible, and returns a boolean indicating the result.
+ */
+int h2o_connect_lookup_acl(h2o_connect_acl_entry_t *acl_entries, size_t num_acl_entries, struct sockaddr *target);
 
 /* lib/handler/status.c */
 

@@ -19,20 +19,21 @@ hosts:
   default:
     paths:
       "/":
-        proxy.connect: ON
+        proxy.connect:
+          - "+127.0.0.1:$origin_port"
         proxy.timeout.io: 2000
 EOT
 
 my $ok_resp = qr{HTTP/[^ ]+ 200\s}m;
 
-subtest "simple HTTP/1.1 proxied request", sub {
+subtest "basic", sub {
     my $content = `curl --http1.1 -p -x 127.0.0.1:$server->{port} --silent -v --show-error http://127.0.0.1:$origin_port/echo 2>&1`;
     like $content, qr{Proxy replied 200 to CONNECT request}m, "Connect got a 200 response to CONNECT";
     my @c = $content =~ /$ok_resp/g;
     is @c, 2, "Got two 200 responses";
 };
 
-subtest "Forward proxy timeout", sub {
+subtest "timeout", sub {
     my $content = `curl --http1.1 -p -x 127.0.0.1:$server->{port} --silent -v --show-error http://127.0.0.1:$origin_port/sleep-and-respond?sleep=1 2>&1`;
     like $content, qr{Proxy replied 200 to CONNECT request}m, "Connect got a 200";
     my @c = $content =~ /$ok_resp/g;
@@ -42,6 +43,11 @@ subtest "Forward proxy timeout", sub {
     like $content, qr{Proxy replied 200 to CONNECT request}m, "Connect got a 200";
     @c = $content =~ /$ok_resp/g;
     is @c, 1, "Only got one 200 response";
+};
+
+subtest "acl" => sub {
+    my $content = `curl --http1.1 -p -x 127.0.0.1:$server->{port} --silent -v --show-error https://8.8.8.8/ 2>&1 2>&1`;
+    like $content, qr{Received HTTP code 403 from proxy after CONNECT};
 };
 
 done_testing;
