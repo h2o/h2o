@@ -20,7 +20,7 @@ hosts:
     paths:
       "/":
         proxy.connect: ON
-        proxy.tunnel.timeout: 2000
+        proxy.timeout.io: 2000
 EOT
 
 my $ok_resp = qr{HTTP/[^ ]+ 200\s}m;
