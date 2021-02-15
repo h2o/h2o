@@ -81,15 +81,17 @@ static void on_connect(h2o_socket_t *sock, const char *err)
         return;
     }
 
+    /* create and pass the responsibility to the tunnel */
     h2o_timer_unlink(&creq->timeout);
-    h2o_req_t *req = creq->src_req;
-    uint64_t timeout = creq->handler->config.io_timeout;
     sock->data = NULL;
     creq->sock = NULL;
-    req->res.status = 200;
-
     h2o_socket_tunnel_t *tunnel = h2o_socket_tunnel_create(sock);
-    req->establish_tunnel(req, &tunnel->super, timeout);
+
+    /* send response to client */
+    creq->src_req->res.status = 200;
+    creq->src_req->establish_tunnel(creq->src_req, &tunnel->super, creq->handler->config.io_timeout);
+
+    /* start the tunnel */
     h2o_socket_tunnel_start(tunnel, 0);
 }
 
