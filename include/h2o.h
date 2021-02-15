@@ -94,7 +94,6 @@ extern "C" {
 #define H2O_DEFAULT_PROXY_IO_TIMEOUT_IN_SECS 30
 #define H2O_DEFAULT_PROXY_IO_TIMEOUT (H2O_DEFAULT_PROXY_IO_TIMEOUT_IN_SECS * 1000)
 #define H2O_DEFAULT_PROXY_TUNNEL_TIMEOUT_IN_SECS 300
-#define H2O_DEFAULT_PROXY_TUNNEL_TIMEOUT (H2O_DEFAULT_PROXY_TUNNEL_TIMEOUT_IN_SECS * 1000)
 #define H2O_DEFAULT_PROXY_SSL_SESSION_CACHE_CAPACITY 4096
 #define H2O_DEFAULT_PROXY_SSL_SESSION_CACHE_DURATION 86400000 /* 24 hours */
 #define H2O_DEFAULT_PROXY_HTTP2_MAX_CONCURRENT_STREAMS 100
@@ -2032,10 +2031,7 @@ typedef struct st_h2o_proxy_config_vars_t {
     uint64_t keepalive_timeout;
     unsigned preserve_host : 1;
     unsigned use_proxy_protocol : 1;
-    struct {
-        int enabled;
-        uint64_t timeout;
-    } tunnel;
+    unsigned tunnel_enabled : 1;
     h2o_headers_command_t *headers_cmds;
     size_t max_buffer_size;
     struct {

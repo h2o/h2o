@@ -130,9 +130,9 @@ typedef struct st_h2o_httpclient_ctx_t {
     uint64_t io_timeout;
     uint64_t connect_timeout;
     uint64_t first_byte_timeout;
-    uint64_t *tunnel_timeout;   /* NULL if upgrade to a tunnel (e.g., CONNECT, websocket proxying) is forbidden */
     uint64_t keepalive_timeout; /* only used for http2 for now */
     size_t max_buffer_size;
+    unsigned tunnel_enabled : 1;
 
     struct st_h2o_httpclient_protocol_selector_t {
         h2o_httpclient_protocol_ratio_t ratio;
