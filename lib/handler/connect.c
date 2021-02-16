@@ -231,8 +231,6 @@ const char *h2o_connect_parse_acl(h2o_connect_acl_entry_t *output, const char *i
 
     /* parse netmask (or addr_mask is set to zero to indicate that mask was not specified) */
     if (*slash_at != '\0') {
-        if (output->addr_family == H2O_CONNECT_ACL_ADDRESS_ANY)
-            return "wildcard address (*) cannot have a netmask";
         if (*slash_at != '/')
             goto GenericParseError;
         if (sscanf(slash_at + 1, "%zu", &output->addr_mask) != 1 || output->addr_mask == 0)
@@ -246,6 +244,8 @@ const char *h2o_connect_parse_acl(h2o_connect_acl_entry_t *output, const char *i
     struct in6_addr v6addr;
     if (strcmp(host, "*") == 0) {
         output->addr_family = H2O_CONNECT_ACL_ADDRESS_ANY;
+        if (output->addr_mask != 0)
+            return "wildcard address (*) cannot have a netmask";
     } else if (inet_pton(AF_INET, host, &v4addr) == 1) {
         output->addr_family = H2O_CONNECT_ACL_ADDRESS_V4;
         if (output->addr_mask == 0) {
