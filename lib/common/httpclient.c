@@ -34,8 +34,14 @@ const char h2o_httpclient_error_flow_control[] = "flow control error";
 const char h2o_httpclient_error_http1_line_folding[] = "line folding of header fields is not supported";
 const char h2o_httpclient_error_http1_unexpected_transfer_encoding[] = "unexpected type of transfer-encoding";
 const char h2o_httpclient_error_http1_parse_failed[] = "failed to parse the response";
-const char h2o_httpclient_error_http2_protocol_violation[] = "protocol violation";
+const char h2o_httpclient_error_protocol_violation[] = "protocol violation";
 const char h2o_httpclient_error_internal[] = "internal error";
+const char h2o_httpclient_error_malformed_frame[] = "malformed HTTP frame";
+
+/**
+ * Used to indicate that the HTTP request is to be "upgraded" into a CONNECT tunnel.
+ */
+const char h2o_httpclient_upgrade_to_connect[] = "\nCONNECT method";
 
 void h2o_httpclient_connection_pool_init(h2o_httpclient_connection_pool_t *connpool, h2o_socketpool_t *sockpool)
 {
@@ -77,7 +83,8 @@ static void do_cancel(h2o_httpclient_t *_client)
 }
 
 static h2o_httpclient_t *create_client(h2o_httpclient_t **_client, h2o_mem_pool_t *pool, void *data, h2o_httpclient_ctx_t *ctx,
-                                       h2o_httpclient_connection_pool_t *connpool, h2o_httpclient_connect_cb on_connect)
+                                       h2o_httpclient_connection_pool_t *connpool, const char *upgrade_to,
+                                       h2o_httpclient_connect_cb on_connect)
 {
 #define SZ_MAX(x, y) ((x) > (y) ? (x) : (y))
     size_t sz = SZ_MAX(h2o_httpclient__h1_size, h2o_httpclient__h2_size);
@@ -87,6 +94,7 @@ static h2o_httpclient_t *create_client(h2o_httpclient_t **_client, h2o_mem_pool_
     client->pool = pool;
     client->ctx = ctx;
     client->data = data;
+    client->upgrade_to = upgrade_to;
     client->connpool = connpool;
     client->cancel = do_cancel;
     client->_cb.on_connect = on_connect;
@@ -197,10 +205,10 @@ static struct st_h2o_httpclient__h2_conn_t *find_h2conn(h2o_httpclient_connectio
 }
 
 static void connect_using_socket_pool(h2o_httpclient_t **_client, h2o_mem_pool_t *pool, void *data, h2o_httpclient_ctx_t *ctx,
-                                      h2o_httpclient_connection_pool_t *connpool, h2o_url_t *origin,
+                                      h2o_httpclient_connection_pool_t *connpool, h2o_url_t *origin, const char *upgrade_to,
                                       h2o_httpclient_connect_cb on_connect, h2o_iovec_t alpn_protos)
 {
-    h2o_httpclient_t *client = create_client(_client, pool, data, ctx, connpool, on_connect);
+    h2o_httpclient_t *client = create_client(_client, pool, data, ctx, connpool, upgrade_to, on_connect);
     h2o_timer_link(client->ctx->loop, client->ctx->connect_timeout, &client->_timeout);
     h2o_socketpool_connect(&client->_connect_req, connpool->socketpool, origin, ctx->loop, ctx->getaddr_receiver, alpn_protos,
                            on_pool_connect, client);
@@ -208,14 +216,15 @@ static void connect_using_socket_pool(h2o_httpclient_t **_client, h2o_mem_pool_t
 
 static void connect_using_h2conn(h2o_httpclient_t **_client, h2o_mem_pool_t *pool, void *data,
                                  struct st_h2o_httpclient__h2_conn_t *conn, h2o_httpclient_connection_pool_t *connpool,
-                                 h2o_httpclient_connect_cb on_connect)
+                                 const char *upgrade_to, h2o_httpclient_connect_cb on_connect)
 {
-    h2o_httpclient_t *client = create_client(_client, pool, data, conn->ctx, connpool, on_connect);
+    h2o_httpclient_t *client = create_client(_client, pool, data, conn->ctx, connpool, upgrade_to, on_connect);
     h2o_httpclient__h2_on_connect(client, conn->sock, &conn->origin_url);
 }
 
 void h2o_httpclient_connect(h2o_httpclient_t **_client, h2o_mem_pool_t *pool, void *data, h2o_httpclient_ctx_t *ctx,
-                            h2o_httpclient_connection_pool_t *connpool, h2o_url_t *origin, h2o_httpclient_connect_cb on_connect)
+                            h2o_httpclient_connection_pool_t *connpool, h2o_url_t *origin, const char *upgrade_to,
+                            h2o_httpclient_connect_cb on_connect)
 {
     static const h2o_iovec_t no_protos = {}, both_protos = {H2O_STRLIT("\x02"
                                                                        "h2"
@@ -223,22 +232,36 @@ void h2o_httpclient_connect(h2o_httpclient_t **_client, h2o_mem_pool_t *pool, vo
                                                                        "http/1.1")};
     assert(connpool != NULL);
 
-    switch (select_protocol(&ctx->protocol_selector)) {
+    size_t selected_protocol = select_protocol(&ctx->protocol_selector);
+
+    /* adjust selected protocol if the attempt is to create a tunnel */
+    if (upgrade_to != NULL) {
+        if (upgrade_to == h2o_httpclient_upgrade_to_connect) {
+            /* CONNECT method is not supported by our H2 client implementation */
+            if (selected_protocol == PROTOCOL_SELECTOR_H2 || selected_protocol == PROTOCOL_SELECTOR_SERVER_DRIVEN)
+                selected_protocol = PROTOCOL_SELECTOR_H1;
+        } else {
+            /* upgrade supported only by H1 */
+            selected_protocol = PROTOCOL_SELECTOR_H1;
+        }
+    }
+
+    switch (selected_protocol) {
     case PROTOCOL_SELECTOR_H1:
         /* H1: use the socket pool to obtain a connection, without any ALPN */
-        connect_using_socket_pool(_client, pool, data, ctx, connpool, origin, on_connect, no_protos);
+        connect_using_socket_pool(_client, pool, data, ctx, connpool, origin, upgrade_to, on_connect, no_protos);
         break;
     case PROTOCOL_SELECTOR_H2: {
         /* H2: use existing H2 connection (if any) or create a new connection offering both H1 and H2 */
         struct st_h2o_httpclient__h2_conn_t *h2conn = find_h2conn(connpool, origin);
         if (h2conn != NULL) {
-            connect_using_h2conn(_client, pool, data, h2conn, connpool, on_connect);
+            connect_using_h2conn(_client, pool, data, h2conn, connpool, upgrade_to, on_connect);
         } else {
-            connect_using_socket_pool(_client, pool, data, ctx, connpool, origin, on_connect, both_protos);
+            connect_using_socket_pool(_client, pool, data, ctx, connpool, origin, upgrade_to, on_connect, both_protos);
         }
     } break;
     case PROTOCOL_SELECTOR_H3:
-        h2o_httpclient__connect_h3(_client, pool, data, ctx, connpool, origin, on_connect);
+        h2o_httpclient__connect_h3(_client, pool, data, ctx, connpool, origin, upgrade_to, on_connect);
         break;
     case PROTOCOL_SELECTOR_SERVER_DRIVEN: {
         /* offer H2 the server, but evenly distribute the load among existing H1 and H2 connections */
@@ -249,19 +272,19 @@ void h2o_httpclient_connect(h2o_httpclient_t **_client, h2o_mem_pool_t *pool, vo
                                  connpool->socketpool->_shared.count;
             double http2_ratio = h2conn->num_streams / h2o_httpclient__h2_get_max_concurrent_streams(h2conn);
             if (http2_ratio <= http1_ratio) {
-                connect_using_h2conn(_client, pool, data, h2conn, connpool, on_connect);
+                connect_using_h2conn(_client, pool, data, h2conn, connpool, upgrade_to, on_connect);
             } else {
-                connect_using_socket_pool(_client, pool, data, ctx, connpool, origin, on_connect, no_protos);
+                connect_using_socket_pool(_client, pool, data, ctx, connpool, origin, upgrade_to, on_connect, no_protos);
             }
         } else if (h2conn != NULL) {
             /* h2 connection exists */
-            connect_using_h2conn(_client, pool, data, h2conn, connpool, on_connect);
+            connect_using_h2conn(_client, pool, data, h2conn, connpool, upgrade_to, on_connect);
         } else if (connpool->socketpool->_shared.pooled_count != 0) {
             /* h1 connection exists */
-            connect_using_socket_pool(_client, pool, data, ctx, connpool, origin, on_connect, no_protos);
+            connect_using_socket_pool(_client, pool, data, ctx, connpool, origin, upgrade_to, on_connect, no_protos);
         } else {
             /* no connections, connect using ALPN */
-            connect_using_socket_pool(_client, pool, data, ctx, connpool, origin, on_connect, both_protos);
+            connect_using_socket_pool(_client, pool, data, ctx, connpool, origin, upgrade_to, on_connect, both_protos);
         }
     } break;
     }

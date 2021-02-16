@@ -33,6 +33,7 @@ extern "C" {
 #include "h2o/send_state.h"
 #include "h2o/socket.h"
 #include "h2o/socketpool.h"
+#include "h2o/tunnel.h"
 
 typedef struct st_h2o_httpclient_t h2o_httpclient_t;
 
@@ -61,11 +62,20 @@ typedef struct st_h2o_httpclient_properties_t {
     h2o_iovec_t *connection_header;
 } h2o_httpclient_properties_t;
 
+typedef struct st_h2o_httpclient_on_head_t {
+    int version;
+    int status;
+    h2o_iovec_t msg;
+    h2o_header_t *headers;
+    size_t num_headers;
+    int header_requires_dup;
+    h2o_tunnel_t *tunnel;
+} h2o_httpclient_on_head_t;
+
 typedef void (*h2o_httpclient_proceed_req_cb)(h2o_httpclient_t *client, size_t written, h2o_send_state_t send_state);
 typedef int (*h2o_httpclient_body_cb)(h2o_httpclient_t *client, const char *errstr);
-typedef h2o_httpclient_body_cb (*h2o_httpclient_head_cb)(h2o_httpclient_t *client, const char *errstr, int version, int status,
-                                                         h2o_iovec_t msg, h2o_header_t *headers, size_t num_headers,
-                                                         int header_requires_dup);
+typedef h2o_httpclient_body_cb (*h2o_httpclient_head_cb)(h2o_httpclient_t *client, const char *errstr,
+                                                         h2o_httpclient_on_head_t *args);
 /**
  * Called when the protocol stack is ready to issue a request. Application must set all the output parameters (i.e. all except
  * `client`, `errstr`, `origin`) and return a callback that will be called when the protocol stack receives the response headers
@@ -120,9 +130,9 @@ typedef struct st_h2o_httpclient_ctx_t {
     uint64_t io_timeout;
     uint64_t connect_timeout;
     uint64_t first_byte_timeout;
-    uint64_t *websocket_timeout; /* NULL if upgrade to websocket is not allowed */
-    uint64_t keepalive_timeout;  /* only used for http2 for now */
+    uint64_t keepalive_timeout; /* only used for http2 for now */
     size_t max_buffer_size;
+    unsigned tunnel_enabled : 1;
 
     struct st_h2o_httpclient_protocol_selector_t {
         h2o_httpclient_protocol_ratio_t ratio;
@@ -219,6 +229,12 @@ struct st_h2o_httpclient_t {
      * server-timing data
      */
     h2o_httpclient_timings_t timings;
+    /**
+     * If the stream is to be converted to convey some other protocol, this value should be set to the name of the protocol, which
+     * will be indicated by the `upgrade` request header field. Additionally, intent to create a CONNECT tunnel is indicated by a
+     * special label called `h2o_httpclient_req_upgrade_connect`.
+     */
+    const char *upgrade_to;
 
     /**
      * bytes written (above the TLS layer)
@@ -242,10 +258,6 @@ struct st_h2o_httpclient_t {
      * cancels a in-flight request
      */
     void (*cancel)(h2o_httpclient_t *client);
-    /**
-     * optional function that lets the application steal the socket (for HTTP/1.1.-style upgrade)
-     */
-    h2o_socket_t *(*steal_socket)(h2o_httpclient_t *client);
     /**
      * returns a pointer to the underlying h2o_socket_t
      */
@@ -338,8 +350,11 @@ extern const char h2o_httpclient_error_flow_control[];
 extern const char h2o_httpclient_error_http1_line_folding[];
 extern const char h2o_httpclient_error_http1_unexpected_transfer_encoding[];
 extern const char h2o_httpclient_error_http1_parse_failed[];
-extern const char h2o_httpclient_error_http2_protocol_violation[];
+extern const char h2o_httpclient_error_protocol_violation[];
 extern const char h2o_httpclient_error_internal[];
+extern const char h2o_httpclient_error_malformed_frame[];
+
+extern const char h2o_httpclient_upgrade_to_connect[];
 
 void h2o_httpclient_connection_pool_init(h2o_httpclient_connection_pool_t *connpool, h2o_socketpool_t *sockpool);
 
@@ -348,7 +363,8 @@ void h2o_httpclient_connection_pool_init(h2o_httpclient_connection_pool_t *connp
  * TODO: create H1- or H2-specific connect function that works without the connection pool?
  */
 void h2o_httpclient_connect(h2o_httpclient_t **client, h2o_mem_pool_t *pool, void *data, h2o_httpclient_ctx_t *ctx,
-                            h2o_httpclient_connection_pool_t *connpool, h2o_url_t *target, h2o_httpclient_connect_cb on_connect);
+                            h2o_httpclient_connection_pool_t *connpool, h2o_url_t *target, const char *upgrade_to,
+                            h2o_httpclient_connect_cb on_connect);
 
 void h2o_httpclient__h1_on_connect(h2o_httpclient_t *client, h2o_socket_t *sock, h2o_url_t *origin);
 extern const size_t h2o_httpclient__h1_size;
@@ -366,7 +382,25 @@ void h2o_httpclient_set_conn_properties_of_socket(h2o_socket_t *sock, h2o_httpcl
 void h2o_httpclient_http3_notify_connection_update(h2o_quic_ctx_t *ctx, h2o_quic_conn_t *conn);
 extern quicly_stream_open_t h2o_httpclient_http3_on_stream_open;
 void h2o_httpclient__connect_h3(h2o_httpclient_t **client, h2o_mem_pool_t *pool, void *data, h2o_httpclient_ctx_t *ctx,
-                                h2o_httpclient_connection_pool_t *connpool, h2o_url_t *target, h2o_httpclient_connect_cb cb);
+                                h2o_httpclient_connection_pool_t *connpool, h2o_url_t *target, const char *upgrade_to,
+                                h2o_httpclient_connect_cb cb);
+/**
+ * internal API for checking if the stream is to be turned into a tunnel
+ */
+static int h2o_httpclient__tunnel_is_ready(h2o_httpclient_t *client, int status);
+
+/* inline definitions */
+
+int h2o_httpclient__tunnel_is_ready(h2o_httpclient_t *client, int status)
+{
+    if (client->upgrade_to != NULL) {
+        if (client->upgrade_to == h2o_httpclient_upgrade_to_connect && 200 <= status && status <= 299)
+            return 1;
+        if (status == 101)
+            return 1;
+    }
+    return 0;
+}
 
 #endif
 

@@ -93,8 +93,7 @@ extern "C" {
 #define H2O_DEFAULT_HTTP3_ACTIVE_STREAM_WINDOW_SIZE H2O_DEFAULT_HTTP2_ACTIVE_STREAM_WINDOW_SIZE
 #define H2O_DEFAULT_PROXY_IO_TIMEOUT_IN_SECS 30
 #define H2O_DEFAULT_PROXY_IO_TIMEOUT (H2O_DEFAULT_PROXY_IO_TIMEOUT_IN_SECS * 1000)
-#define H2O_DEFAULT_PROXY_WEBSOCKET_TIMEOUT_IN_SECS 300
-#define H2O_DEFAULT_PROXY_WEBSOCKET_TIMEOUT (H2O_DEFAULT_PROXY_WEBSOCKET_TIMEOUT_IN_SECS * 1000)
+#define H2O_DEFAULT_PROXY_TUNNEL_TIMEOUT_IN_SECS 300
 #define H2O_DEFAULT_PROXY_SSL_SESSION_CACHE_CAPACITY 4096
 #define H2O_DEFAULT_PROXY_SSL_SESSION_CACHE_DURATION 86400000 /* 24 hours */
 #define H2O_DEFAULT_PROXY_HTTP2_MAX_CONCURRENT_STREAMS 100
@@ -1169,6 +1168,12 @@ struct st_h2o_req_t {
     unsigned remaining_delegations;
 
     /**
+     * Optional callback used to establish a tunnel. When a tunnel is being established to upstream, the generator fills the
+     * response headers, then calls this function directly, bypassing the ordinary `h2o_send` chain.
+     */
+    void (*establish_tunnel)(h2o_req_t *req, h2o_tunnel_t *tunnel, uint64_t idle_timeout);
+
+    /**
      * environment variables
      */
     h2o_iovec_vector_t env;
@@ -1264,18 +1269,6 @@ typedef struct st_h2o_accept_ctx_t {
     int expect_proxy_line;
     h2o_multithread_receiver_t *libmemcached_receiver;
 } h2o_accept_ctx_t;
-
-typedef struct st_h2o_doublebuffer_t {
-    h2o_buffer_t *buf;
-    unsigned char inflight : 1;
-    size_t _bytes_inflight;
-} h2o_doublebuffer_t;
-
-static void h2o_doublebuffer_init(h2o_doublebuffer_t *db, h2o_buffer_prototype_t *prototype);
-static void h2o_doublebuffer_dispose(h2o_doublebuffer_t *db);
-static h2o_iovec_t h2o_doublebuffer_prepare(h2o_doublebuffer_t *db, h2o_buffer_t **receiving, size_t max_bytes);
-static void h2o_doublebuffer_prepare_empty(h2o_doublebuffer_t *db);
-static void h2o_doublebuffer_consume(h2o_doublebuffer_t *db);
 
 /* util */
 
@@ -2038,10 +2031,7 @@ typedef struct st_h2o_proxy_config_vars_t {
     uint64_t keepalive_timeout;
     unsigned preserve_host : 1;
     unsigned use_proxy_protocol : 1;
-    struct {
-        int enabled;
-        uint64_t timeout;
-    } websocket;
+    unsigned tunnel_enabled : 1;
     h2o_headers_command_t *headers_cmds;
     size_t max_buffer_size;
     struct {
@@ -2088,6 +2078,34 @@ void h2o_reproxy_register(h2o_pathconf_t *pathconf);
  * registers the configurator
  */
 void h2o_reproxy_register_configurator(h2o_globalconf_t *conf);
+
+/* lib/handler/connect.c */
+
+typedef struct st_h2o_connect_acl_entry_t {
+    uint8_t allow_; /* true if allow, false if deny */
+    enum { H2O_CONNECT_ACL_ADDRESS_ANY, H2O_CONNECT_ACL_ADDRESS_V4, H2O_CONNECT_ACL_ADDRESS_V6 } addr_family;
+    union {
+        uint32_t v4;
+        uint8_t v6[16];
+    } addr;
+    size_t addr_mask;
+    uint16_t port; /* 0 indicates ANY */
+} h2o_connect_acl_entry_t;
+
+/**
+ * registers the connect handler to the context
+ */
+void h2o_connect_register(h2o_pathconf_t *pathconf, h2o_proxy_config_vars_t *config, h2o_connect_acl_entry_t *acl_entries,
+                          size_t num_acl_entries);
+/**
+ * Parses a ACL line and stores the result in `output`. If successful, returns NULL, otherwise a string indicating the problem is
+ * being returned.
+ */
+const char *h2o_connect_parse_acl(h2o_connect_acl_entry_t *output, const char *input);
+/**
+ * Checks if access to given target is permissible, and returns a boolean indicating the result.
+ */
+int h2o_connect_lookup_acl(h2o_connect_acl_entry_t *acl_entries, size_t num_acl_entries, struct sockaddr *target);
 
 /* lib/handler/status.c */
 
@@ -2287,52 +2305,6 @@ inline void **h2o_context_get_storage(h2o_context_t *ctx, size_t *key, void (*di
 static inline void h2o_context_set_logger_context(h2o_context_t *ctx, h2o_logger_t *logger, void *logger_ctx)
 {
     ctx->_module_configs[logger->_config_slot] = logger_ctx;
-}
-
-static inline void h2o_doublebuffer_init(h2o_doublebuffer_t *db, h2o_buffer_prototype_t *prototype)
-{
-    h2o_buffer_init(&db->buf, prototype);
-    db->inflight = 0;
-    db->_bytes_inflight = 0;
-}
-
-static inline void h2o_doublebuffer_dispose(h2o_doublebuffer_t *db)
-{
-    h2o_buffer_dispose(&db->buf);
-}
-
-static inline h2o_iovec_t h2o_doublebuffer_prepare(h2o_doublebuffer_t *db, h2o_buffer_t **receiving, size_t max_bytes)
-{
-    assert(!db->inflight);
-    assert(max_bytes != 0);
-
-    if (db->buf->size == 0) {
-        if ((*receiving)->size == 0)
-            return h2o_iovec_init(NULL, 0);
-        /* swap buffers */
-        h2o_buffer_t *t = db->buf;
-        db->buf = *receiving;
-        *receiving = t;
-    }
-    if ((db->_bytes_inflight = db->buf->size) > max_bytes)
-        db->_bytes_inflight = max_bytes;
-    db->inflight = 1;
-    return h2o_iovec_init(db->buf->bytes, db->_bytes_inflight);
-}
-
-static inline void h2o_doublebuffer_prepare_empty(h2o_doublebuffer_t *db)
-{
-    assert(!db->inflight);
-    db->inflight = 1;
-}
-
-static inline void h2o_doublebuffer_consume(h2o_doublebuffer_t *db)
-{
-    assert(db->inflight);
-    db->inflight = 0;
-
-    h2o_buffer_consume(&db->buf, db->_bytes_inflight);
-    db->_bytes_inflight = 0;
 }
 
 inline int h2o_req_can_stream_request(h2o_req_t *req)

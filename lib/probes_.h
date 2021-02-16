@@ -93,10 +93,14 @@ static inline void h2o_probe_log_request(h2o_req_t *req, uint64_t req_index)
 {
     H2O_PROBE_CONN(RECEIVE_REQUEST, req->conn, req_index, req->version);
     if (H2O_CONN_IS_PROBED(RECEIVE_REQUEST_HEADER, req->conn)) {
-        h2o_probe_request_header(req, req_index, H2O_TOKEN_AUTHORITY->buf, req->input.authority);
-        h2o_probe_request_header(req, req_index, H2O_TOKEN_METHOD->buf, req->input.method);
-        h2o_probe_request_header(req, req_index, H2O_TOKEN_PATH->buf, req->input.path);
-        h2o_probe_request_header(req, req_index, H2O_TOKEN_SCHEME->buf, req->input.scheme->name);
+        if (req->input.authority.base != NULL)
+            h2o_probe_request_header(req, req_index, H2O_TOKEN_AUTHORITY->buf, req->input.authority);
+        if (req->input.method.base != NULL)
+            h2o_probe_request_header(req, req_index, H2O_TOKEN_METHOD->buf, req->input.method);
+        if (req->input.path.base != NULL)
+            h2o_probe_request_header(req, req_index, H2O_TOKEN_PATH->buf, req->input.path);
+        if (req->input.scheme != NULL)
+            h2o_probe_request_header(req, req_index, H2O_TOKEN_SCHEME->buf, req->input.scheme->name);
         size_t i;
         for (i = 0; i != req->headers.size; ++i) {
             h2o_header_t *h = req->headers.entries + i;
@@ -105,9 +109,9 @@ static inline void h2o_probe_log_request(h2o_req_t *req, uint64_t req_index)
     }
 }
 
-static inline void h2o_probe_log_response(h2o_req_t *req, uint64_t req_index)
+static inline void h2o_probe_log_response(h2o_req_t *req, uint64_t req_index, struct st_h2o_tunnel_t *tunnel)
 {
-    H2O_PROBE_CONN(SEND_RESPONSE, req->conn, req_index, req->res.status);
+    H2O_PROBE_CONN(SEND_RESPONSE, req->conn, req_index, req->res.status, tunnel);
     if (H2O_CONN_IS_PROBED(SEND_RESPONSE_HEADER, req->conn)) {
         if (req->res.content_length != SIZE_MAX) {
             char buf[sizeof(H2O_SIZE_T_LONGEST_STR)];

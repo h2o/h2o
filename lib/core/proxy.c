@@ -27,7 +27,6 @@
 #include "h2o.h"
 #include "h2o/http1.h"
 #include "h2o/httpclient.h"
-#include "h2o/tunnel.h"
 
 struct rp_generator_t {
     h2o_generator_t super;
@@ -40,16 +39,9 @@ struct rp_generator_t {
     h2o_buffer_t *last_content_before_send;
     h2o_doublebuffer_t sending;
     h2o_timer_t send_headers_timeout;
-    unsigned is_websocket_handshake : 1;
     unsigned had_body_error : 1; /* set if an error happened while fetching the body so that we can propagate the error */
     unsigned req_done : 1;
     unsigned res_done : 1;
-};
-
-struct rp_ws_upgrade_info_t {
-    h2o_context_t *ctx;
-    uint64_t timeout;
-    h2o_socket_t *upstream_sock;
 };
 
 static h2o_httpclient_ctx_t *get_client_ctx(h2o_req_t *req)
@@ -141,7 +133,7 @@ static h2o_iovec_t build_content_length(h2o_mem_pool_t *pool, size_t cl)
 }
 
 static void build_request(h2o_req_t *req, h2o_iovec_t *method, h2o_url_t *url, h2o_headers_t *headers,
-                          h2o_httpclient_properties_t *props, int keepalive, int is_websocket_handshake, int use_proxy_protocol,
+                          h2o_httpclient_properties_t *props, int keepalive, const char *upgrade_to, int use_proxy_protocol,
                           int *reprocess_if_too_early, h2o_url_t *origin)
 {
     size_t remote_addr_len = SIZE_MAX;
@@ -168,10 +160,10 @@ static void build_request(h2o_req_t *req, h2o_iovec_t *method, h2o_url_t *url, h
     /* url */
     h2o_url_init(url, origin->scheme, req->authority, h2o_strdup(&req->pool, req->path.base, req->path.len));
 
-    if (props->connection_header) {
-        if (is_websocket_handshake) {
+    if (props->connection_header != NULL) {
+        if (upgrade_to != NULL && upgrade_to != h2o_httpclient_upgrade_to_connect) {
             *props->connection_header = h2o_iovec_init(H2O_STRLIT("upgrade"));
-            h2o_add_header(&req->pool, headers, H2O_TOKEN_UPGRADE, NULL, H2O_STRLIT("websocket"));
+            h2o_add_header(&req->pool, headers, H2O_TOKEN_UPGRADE, NULL, upgrade_to, strlen(upgrade_to));
         } else if (keepalive) {
             *props->connection_header = h2o_iovec_init(H2O_STRLIT("keep-alive"));
         } else {
@@ -363,30 +355,6 @@ static void do_proceed(h2o_generator_t *generator, h2o_req_t *req)
         self->client->update_window(self->client);
 }
 
-static void on_websocket_upgrade_complete(void *_info, h2o_socket_t *sock, size_t reqsize)
-{
-    struct rp_ws_upgrade_info_t *info = _info;
-
-    if (sock != NULL) {
-        h2o_buffer_consume(&sock->input, reqsize); // It is detached from conn. Let's trash unused data.
-        h2o_tunnel_establish(info->ctx, sock, info->upstream_sock, info->timeout);
-    } else {
-        h2o_socket_close(info->upstream_sock);
-    }
-    free(info);
-}
-
-static inline void on_websocket_upgrade(struct rp_generator_t *self, uint64_t timeout)
-{
-    h2o_req_t *req = self->src_req;
-    h2o_socket_t *sock = self->client->steal_socket(self->client);
-    struct rp_ws_upgrade_info_t *info = h2o_mem_alloc(sizeof(*info));
-    info->upstream_sock = sock;
-    info->timeout = timeout;
-    info->ctx = req->conn->ctx;
-    h2o_http1_upgrade(req, NULL, 0, on_websocket_upgrade_complete, info);
-}
-
 static void copy_stats(struct rp_generator_t *self)
 {
     self->src_req->proxy_stats.timestamps = self->client->timings;
@@ -453,8 +421,7 @@ static void on_send_headers_timeout(h2o_timer_t *entry)
     h2o_send(self->src_req, NULL, 0, H2O_SEND_STATE_IN_PROGRESS);
 }
 
-static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, int version, int status, h2o_iovec_t msg,
-                                      h2o_header_t *headers, size_t num_headers, int header_requires_dup)
+static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, h2o_httpclient_on_head_t *args)
 {
     struct rp_generator_t *self = client->data;
     h2o_req_t *req = self->src_req;
@@ -484,23 +451,24 @@ static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errs
     }
 
     /* copy the response (note: all the headers must be copied; http1client discards the input once we return from this callback) */
-    req->res.status = status;
-    req->res.reason = h2o_strdup(&req->pool, msg.base, msg.len).base;
-    for (i = 0; i != num_headers; ++i) {
-        h2o_iovec_t value = headers[i].value;
-        if (h2o_iovec_is_token(headers[i].name)) {
-            const h2o_token_t *token = H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, headers[i].name);
+    req->res.status = args->status;
+    req->res.reason = h2o_strdup(&req->pool, args->msg.base, args->msg.len).base;
+    for (i = 0; i != args->num_headers; ++i) {
+        h2o_iovec_t value = args->headers[i].value;
+        if (h2o_iovec_is_token(args->headers[i].name)) {
+            const h2o_token_t *token = H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, args->headers[i].name);
             if (token->flags.proxy_should_drop_for_res) {
                 if (token == H2O_TOKEN_CONNECTION && self->src_req->version < 0x200 &&
                     req->conn->ctx->globalconf->proxy.forward_close_connection) {
-                    if (h2o_lcstris(headers[i].value.base, headers[i].value.len, H2O_STRLIT("close")))
+                    if (h2o_lcstris(args->headers[i].value.base, args->headers[i].value.len, H2O_STRLIT("close")))
                         self->src_req->http1_is_persistent = 0;
                 }
                 continue;
             }
             if (token == H2O_TOKEN_CONTENT_LENGTH) {
                 if (req->res.content_length != SIZE_MAX ||
-                    (req->res.content_length = h2o_strtosize(headers[i].value.base, headers[i].value.len)) == SIZE_MAX) {
+                    (req->res.content_length = h2o_strtosize(args->headers[i].value.base, args->headers[i].value.len)) ==
+                        SIZE_MAX) {
                     detach_client(self);
                     h2o_req_log_error(req, "lib/core/proxy.c", "%s", "invalid response from upstream (malformed content-length)");
                     h2o_send_error_502(req, "Gateway Error", "invalid response from upstream", 0);
@@ -511,10 +479,10 @@ static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errs
                 }
                 goto Skip;
             } else if (token == H2O_TOKEN_LOCATION) {
-                if (req->res_is_delegated && (300 <= status && status <= 399) && status != 304) {
+                if (req->res_is_delegated && (300 <= args->status && args->status <= 399) && args->status != 304) {
                     detach_client(self);
-                    h2o_iovec_t method = h2o_get_redirect_method(req->method, status);
-                    h2o_send_redirect_internal(req, method, headers[i].value.base, headers[i].value.len, 1);
+                    h2o_iovec_t method = h2o_get_redirect_method(req->method, args->status);
+                    h2o_send_redirect_internal(req, method, args->headers[i].value.base, args->headers[i].value.len, 1);
                     return NULL;
                 }
                 if (req->overrides != NULL && req->overrides->location_rewrite.match != NULL) {
@@ -539,18 +507,18 @@ static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errs
             } else if (token == H2O_TOKEN_DATE) {
                 seen_date_header = 1;
             }
-            if (header_requires_dup)
+            if (args->header_requires_dup)
                 value = h2o_strdup(&req->pool, value.base, value.len);
         AddHeader:
-            h2o_add_header(&req->pool, &req->res.headers, token, headers[i].orig_name, value.base, value.len);
+            h2o_add_header(&req->pool, &req->res.headers, token, args->headers[i].orig_name, value.base, value.len);
         Skip:;
         } else {
-            h2o_iovec_t name = *headers[i].name;
-            if (header_requires_dup) {
+            h2o_iovec_t name = *args->headers[i].name;
+            if (args->header_requires_dup) {
                 name = h2o_strdup(&req->pool, name.base, name.len);
                 value = h2o_strdup(&req->pool, value.base, value.len);
             }
-            h2o_add_header_by_str(&req->pool, &req->res.headers, name.base, name.len, 0, headers[i].orig_name, value.base,
+            h2o_add_header_by_str(&req->pool, &req->res.headers, name.base, name.len, 0, args->headers[i].orig_name, value.base,
                                   value.len);
         }
     }
@@ -558,11 +526,12 @@ static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errs
     if (!seen_date_header && emit_missing_date_header)
         h2o_resp_add_date_header(req);
 
-    if (self->is_websocket_handshake && req->res.status == 101) {
+    if (args->tunnel != NULL) {
         h2o_httpclient_ctx_t *client_ctx = get_client_ctx(req);
-        assert(client_ctx->websocket_timeout != NULL);
-        h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_UPGRADE, NULL, H2O_STRLIT("websocket"));
-        on_websocket_upgrade(self, *client_ctx->websocket_timeout);
+        assert(client_ctx->tunnel_enabled);
+        if (req->upgrade.base != NULL)
+            h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_UPGRADE, NULL, req->upgrade.base, req->upgrade.len);
+        req->establish_tunnel(req, args->tunnel, client_ctx->io_timeout);
         detach_client(self);
         return NULL;
     }
@@ -679,7 +648,7 @@ static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *e
     reprocess_if_too_early = h2o_conn_is_early_data(req->conn);
     h2o_headers_t headers_vec = (h2o_headers_t){NULL};
     build_request(req, method, url, &headers_vec, props,
-                  !use_proxy_protocol && h2o_socketpool_can_keepalive(client->connpool->socketpool), self->is_websocket_handshake,
+                  !use_proxy_protocol && h2o_socketpool_can_keepalive(client->connpool->socketpool), self->client->upgrade_to,
                   use_proxy_protocol, &reprocess_if_too_early, origin);
     *headers = headers_vec.entries;
     *num_headers = headers_vec.size;
@@ -720,17 +689,11 @@ static void on_generator_dispose(void *_self)
 static struct rp_generator_t *proxy_send_prepare(h2o_req_t *req)
 {
     struct rp_generator_t *self = h2o_mem_alloc_shared(&req->pool, sizeof(*self), on_generator_dispose);
-    h2o_httpclient_ctx_t *client_ctx = get_client_ctx(req);
 
     self->super.proceed = do_proceed;
     self->super.stop = do_stop;
     self->src_req = req;
     self->client = NULL; /* when connection establish timeouts, self->client remains unset by `h2o_httpclient_connect` */
-    if (client_ctx->websocket_timeout != NULL && h2o_lcstris(req->upgrade.base, req->upgrade.len, H2O_STRLIT("websocket"))) {
-        self->is_websocket_handshake = 1;
-    } else {
-        self->is_websocket_handshake = 0;
-    }
     self->had_body_error = 0;
     self->up_req.is_head = h2o_memis(req->method.base, req->method.len, H2O_STRLIT("HEAD"));
     self->last_content_before_send = NULL;
@@ -758,6 +721,20 @@ void h2o__proxy_process_request(h2o_req_t *req)
     if (target == &target_buf)
         h2o_url_init(&target_buf, req->scheme, req->authority, h2o_iovec_init(H2O_STRLIT("/")));
 
+    const char *upgrade_to = NULL;
+    int can_use_tunnel = client_ctx->tunnel_enabled && req->establish_tunnel != NULL;
+    if (h2o_memis(req->method.base, req->method.len, H2O_STRLIT("CONNECT"))) {
+        /* CONNECT requests cannot be forwarded unless configured as such */
+        if (!can_use_tunnel) {
+            h2o_send_error_405(req, "Method Not Allowed", "refusing CONNECT", H2O_SEND_ERROR_HTTP1_CLOSE_CONNECTION);
+            return;
+        }
+        upgrade_to = h2o_httpclient_upgrade_to_connect;
+    } else if (h2o_lcstris(req->upgrade.base, req->upgrade.len, H2O_STRLIT("websocket")) && can_use_tunnel) {
+        /* websocket requests are converted to a normal request (omitting the Upgrade header field), or will have the upgrade header
+         * set */
+        upgrade_to = "websocket";
+    }
     struct rp_generator_t *self = proxy_send_prepare(req);
 
     /*
@@ -773,5 +750,5 @@ void h2o__proxy_process_request(h2o_req_t *req)
 
      So I leave this as it is for the time being.
      */
-    h2o_httpclient_connect(&self->client, &req->pool, self, client_ctx, connpool, target, on_connect);
+    h2o_httpclient_connect(&self->client, &req->pool, self, client_ctx, connpool, target, upgrade_to, on_connect);
 }
