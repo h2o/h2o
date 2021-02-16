@@ -10,7 +10,6 @@
 
 struct st_h2o_udp_tunnel_t {
     h2o_tunnel_t super;
-    socklen_t len;
     h2o_socket_t *sock;
     h2o_loop_t *loop;
     h2o_buffer_t *inbuf; /* for datagram fragments */
@@ -190,7 +189,6 @@ h2o_tunnel_t *h2o_open_udp_tunnel_from_sa(h2o_loop_t *loop, struct sockaddr *add
                 .write_ = tunnel_on_write,
                 .proceed_read = tunnel_proceed_read,
             },
-        .len = len,
         .loop = loop,
     };
 #if H2O_USE_LIBUV
