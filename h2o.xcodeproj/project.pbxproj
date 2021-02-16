@@ -302,6 +302,8 @@
 		E9316EEB24417EAA00C9C127 /* huffman.c in Sources */ = {isa = PBXBuildFile; fileRef = E9316EDF24417EA900C9C127 /* huffman.c */; };
 		E9316EEC24417EAA00C9C127 /* state.c in Sources */ = {isa = PBXBuildFile; fileRef = E9316EE324417EA900C9C127 /* state.c */; };
 		E9316EED24417EAA00C9C127 /* state.c in Sources */ = {isa = PBXBuildFile; fileRef = E9316EE324417EA900C9C127 /* state.c */; };
+		E93BB4BA25DB7975009C24D8 /* udp_tunnel.c in Sources */ = {isa = PBXBuildFile; fileRef = E93BB4B925DB7975009C24D8 /* udp_tunnel.c */; };
+		E93BB4BB25DB7975009C24D8 /* udp_tunnel.c in Sources */ = {isa = PBXBuildFile; fileRef = E93BB4B925DB7975009C24D8 /* udp_tunnel.c */; };
 		E93C7F96226EBEC9007BF39A /* frame.c in Sources */ = {isa = PBXBuildFile; fileRef = E93C7F95226EBEC9007BF39A /* frame.c */; };
 		E93C7F98226EBEC9007BF39A /* frame.c in Sources */ = {isa = PBXBuildFile; fileRef = E93C7F95226EBEC9007BF39A /* frame.c */; };
 		E93C7F9A22701806007BF39A /* frame.c in Sources */ = {isa = PBXBuildFile; fileRef = E93C7F9922701806007BF39A /* frame.c */; };
@@ -780,9 +782,9 @@
 		1065E70419BF145700686E72 /* evloop.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = evloop.h; sourceTree = "<group>"; };
 		1065E70619BF14E500686E72 /* uv-binding.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "uv-binding.h"; sourceTree = "<group>"; };
 		1065E70719BF17FE00686E72 /* uv-binding.c.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = "uv-binding.c.h"; sourceTree = "<group>"; };
-		106C22FB1C0413DA00405689 /* 40tunnel.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = 40tunnel.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		106C22F71C040F6400405689 /* tunnel.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = tunnel.c; sourceTree = "<group>"; };
 		106C22F91C040F7800405689 /* tunnel.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = tunnel.h; sourceTree = "<group>"; };
+		106C22FB1C0413DA00405689 /* 40tunnel.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = 40tunnel.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		106C22FE1C05436100405689 /* errordoc.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = errordoc.c; sourceTree = "<group>"; };
 		106C23001C0544CE00405689 /* errordoc.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = errordoc.c; sourceTree = "<group>"; };
 		106C23021C06AB2F00405689 /* 50errordoc.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = 50errordoc.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
@@ -1079,6 +1081,7 @@
 		E9316EE424417EAA00C9C127 /* state.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = state.h; sourceTree = "<group>"; };
 		E9316EE524417EAA00C9C127 /* transform.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = transform.h; sourceTree = "<group>"; };
 		E9316EEE2441C08100C9C127 /* certificate_compression.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = certificate_compression.h; sourceTree = "<group>"; };
+		E93BB4B925DB7975009C24D8 /* udp_tunnel.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = udp_tunnel.c; sourceTree = "<group>"; };
 		E93C7F95226EBEC9007BF39A /* frame.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = frame.c; sourceTree = "<group>"; };
 		E93C7F9922701806007BF39A /* frame.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = frame.c; sourceTree = "<group>"; };
 		E9414F8D24EBFBDA00273C59 /* 40http3-reconnect.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "40http3-reconnect.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
@@ -1915,6 +1918,7 @@
 				E901C438213E593D00D17C93 /* http3 */,
 				E95EBCD9228117620022C32D /* probes_.h */,
 				106C22F71C040F6400405689 /* tunnel.c */,
+				E93BB4B925DB7975009C24D8 /* udp_tunnel.c */,
 				107923C119A3217300C52AD6 /* websocket.c */,
 			);
 			path = lib;
@@ -3125,6 +3129,7 @@
 				10A3D40C1B50DAB700327CF9 /* socket.c in Sources */,
 				10AA2EC21AA0402E004322AC /* reproxy.c in Sources */,
 				7D9372FF202AC717005FE6AB /* server_timing.c in Sources */,
+				E93BB4BA25DB7975009C24D8 /* udp_tunnel.c in Sources */,
 				10835E011C9A6C2400197E59 /* logconf.c in Sources */,
 				107923C519A3217300C52AD6 /* http1.c in Sources */,
 				10AA2EA71A8DA93C004322AC /* redirect.c in Sources */,
@@ -3369,6 +3374,7 @@
 				E9708B201E49BACA0029E0A5 /* curve25519.c in Sources */,
 				E987E5EA1FD7EBD100DE4346 /* dictionary.c in Sources */,
 				E9FF84BD24C5AA47002577CA /* quicly-probes.d in Sources */,
+				E93BB4BB25DB7975009C24D8 /* udp_tunnel.c in Sources */,
 				E9E5049121501BBA004DC170 /* server.c in Sources */,
 				E9708B8B1E52C85A0029E0A5 /* tunnel.c in Sources */,
 				7DE1DB38212B1CC00055F500 /* ssl.c in Sources */,
