@@ -463,6 +463,16 @@ static const char *fixup_request(struct st_h2o_http1_conn_t *conn, struct phr_he
             return "invalid request";
         conn->req.input.authority = conn->req.input.path;
         conn->req.input.path = h2o_iovec_init(NULL, 0);
+    } else if (h2o_memis(conn->req.input.method.base, conn->req.input.method.len, H2O_STRLIT("CONNECT-UDP"))) {
+        /* CONNECT-UDP method, validate, setting the target host in `req->input.authority`. Path becomes '/'. */
+        h2o_url_t masque_url;
+        if (!(h2o_url_parse(conn->req.input.path.base, conn->req.input.path.len, &masque_url) == 0 &&
+              masque_url.scheme == &H2O_URL_SCHEME_MASQUE &&
+              h2o_memis(masque_url.path.base, masque_url.path.len, H2O_STRLIT("/")) &&
+              (host.base == NULL || h2o_memis(host.base, host.len, masque_url.authority.base, masque_url.authority.len))))
+            return "invalid request";
+        conn->req.input.authority = masque_url.authority;
+        conn->req.input.path = h2o_iovec_init(NULL, 0);
     } else {
         /* Ordinary request, path might contain absolute URL; if so, convert it */
         if (conn->req.input.path.len != 0 && conn->req.input.path.base[0] != '/') {

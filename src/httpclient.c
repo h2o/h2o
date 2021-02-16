@@ -67,6 +67,7 @@ static int chunk_size = 10;
 static h2o_iovec_t iov_filler;
 static int io_interval = 0, req_interval = 0;
 static int ssl_verify_none = 0;
+static int udp_sock = -1;
 static const ptls_key_exchange_algorithm_t *h3_key_exchanges[] = {
 #if PTLS_OPENSSL_HAVE_X25519
     &ptls_openssl_x25519,
@@ -280,7 +281,7 @@ static void start_request(h2o_httpclient_ctx_t *ctx)
         SSL_CTX_free(ssl_ctx);
     }
     h2o_httpclient_connect(NULL, &pool, url_parsed, ctx, connpool, url_parsed,
-                           strcmp(req.method, "CONNECT") == 0 ? h2o_httpclient_upgrade_to_connect : NULL, on_connect);
+                           req.connect_to.authority.len != 0 ? h2o_httpclient_upgrade_to_connect : NULL, on_connect);
 }
 
 static void on_next_request(h2o_timer_t *entry)
@@ -422,7 +423,7 @@ h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *errstr, 
     }
 
     *_method = h2o_iovec_init(req.method, strlen(req.method));
-    *url = *(strcmp(req.method, "CONNECT") == 0 ? &req.connect_to : (h2o_url_t *)client->data);
+    *url = *(req.connect_to.authority.len != 0 ? &req.connect_to : (h2o_url_t *)client->data);
     for (i = 0; i != req.num_headers; ++i)
         h2o_add_header_by_str(&pool, &headers_vec, req.headers[i].name.base, req.headers[i].name.len, 1, NULL,
                               req.headers[i].value.base, req.headers[i].value.len);
@@ -468,9 +469,20 @@ static void usage(const char *progname)
             "  -x <host:port>\n"
             "               specifies the destination of the CONNECT request; implies\n"
             "               `-m CONNECT`\n"
+            "  -X <local-udp-port:proxy-host:proxy-port>\n"
+            "               opens a CONNECT-UDP tunnel\n"
             "  -h           prints this help\n"
             "\n",
             progname);
+}
+
+static void setup_connect_to(const char *arg, int opt_ch)
+{
+     if (h2o_url_init(&req.connect_to, NULL, h2o_iovec_init(arg, strlen(arg)), h2o_iovec_init(NULL, 0)) != 0 ||
+        req.connect_to._port == 0 || req.connect_to._port == 65535) {
+        fprintf(stderr, "invalid server address specified for -%c\n", opt_ch);
+        exit(EXIT_FAILURE);
+    }
 }
 
 static void on_sigfatal(int signo)
@@ -551,7 +563,7 @@ int main(int argc, char **argv)
     }
 #endif
 
-    const char *optstring = "t:m:o:b:x:C:c:d:H:i:k2:W:h3:"
+    const char *optstring = "t:m:o:b:x:X:C:c:d:H:i:k2:W:h3:"
 #ifdef __GNUC__
                             ":" /* for backward compatibility, optarg of -3 is optional when using glibc */
 #endif
@@ -581,12 +593,29 @@ int main(int argc, char **argv)
             }
             break;
         case 'x':
-            if (h2o_url_init(&req.connect_to, NULL, h2o_iovec_init(optarg, strlen(optarg)), h2o_iovec_init(NULL, 0)) != 0 ||
-                req.connect_to._port == 0 || req.connect_to._port == 65535) {
-                fprintf(stderr, "invalid server address specified for -X\n");
+            setup_connect_to(optarg, 'x');
+            break;
+        case 'X': {
+            uint16_t udp_port;
+            int udp_port_end;
+            if (sscanf(optarg, "%" PRIu16 "%n", &udp_port, &udp_port_end) != 1 || optarg[udp_port_end] != ':') {
+                fprintf(stderr, "failed to parse optarg of -X\n");
                 exit(EXIT_FAILURE);
             }
-            break;
+            if ((udp_sock = socket(PF_INET, SOCK_DGRAM, 0)) == -1) {
+                perror("failed to create UDP socket");
+                exit(EXIT_FAILURE);
+            }
+            struct sockaddr_in sin;
+            sin.sin_family = AF_INET;
+            sin.sin_addr.s_addr = htonl(0);
+            sin.sin_port = htons(udp_port);
+            if (bind(udp_sock, (void *)&sin, sizeof(sin)) != 0) {
+                perror("failed to bind bind UDP socket");
+                exit(EXIT_FAILURE);
+            }
+            setup_connect_to(optarg + udp_port_end + 1, 'X');
+        } break;
         case 'C':
             if (sscanf(optarg, "%u", &concurrency) != 1 || concurrency < 1) {
                 fprintf(stderr, "concurrency (-C) must be a number greather than zero");
@@ -678,7 +707,7 @@ int main(int argc, char **argv)
     argv += optind;
 
     if (req.connect_to.authority.len != 0)
-        req.method = "CONNECT";
+        req.method = udp_sock == -1 ? "CONNECT" : "CONNECT-UDP";
 
     if (ctx.protocol_selector.ratio.http2 + ctx.protocol_selector.ratio.http3 > 100) {
         fprintf(stderr, "sum of the use ratio of HTTP/2 and HTTP/3 is greater than 100");
