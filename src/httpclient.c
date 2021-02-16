@@ -31,7 +31,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include <sys/uio.h>
 #include "picotls.h"
 #include "picotls/openssl.h"
 #include "quicly.h"
