@@ -14,6 +14,7 @@ struct st_h2o_udp_tunnel_t {
     h2o_loop_t *loop;
     struct {
         h2o_buffer_t *buf; /* for datagram fragments */
+        h2o_timer_t delayed;
     } egress;
     struct {
         uint8_t buf[3 + 1500];
@@ -25,6 +26,8 @@ static void tunnel_on_destroy(h2o_tunnel_t *_tunnel)
     struct st_h2o_udp_tunnel_t *tunnel = (void *)_tunnel;
 
     h2o_buffer_dispose(&tunnel->egress.buf);
+    if (h2o_timer_is_linked(&tunnel->egress.delayed))
+        h2o_timer_unlink(&tunnel->egress.delayed);
     h2o_socket_close(tunnel->sock);
     free(tunnel);
 }
@@ -122,6 +125,11 @@ static void send_udp_datagrams(h2o_tunnel_t *_tunnel, h2o_iovec_t *datagrams, si
     for (size_t i = 0; i != num_datagrams; ++i)
         while (send(h2o_socket_get_fd(tunnel->sock), datagrams[i].base, datagrams[i].len, 0) == -1 && errno == EINTR)
             ;
+}
+
+static void write_complete_delayed(h2o_timer_t *timer)
+{
+    struct st_h2o_udp_tunnel_t *tunnel = H2O_STRUCT_FROM_MEMBER(struct st_h2o_udp_tunnel_t, egress.delayed, timer);
 
     tunnel->super.on_write_complete(&tunnel->super, NULL);
 }
@@ -164,6 +172,8 @@ static void tunnel_on_write(h2o_tunnel_t *_tunnel, const void *bytes, size_t len
         memcpy(tunnel->egress.buf->bytes + tunnel->egress.buf->size, bytes + off, len - off);
         tunnel->egress.buf->size += (len - off);
     }
+
+    tunnel->super.on_write_complete(&tunnel->super, NULL);
 }
 
 void tunnel_proceed_read(struct st_h2o_tunnel_t *_tunnel)
@@ -192,6 +202,7 @@ h2o_tunnel_t *h2o_open_udp_tunnel_from_sa(h2o_loop_t *loop, struct sockaddr *add
                 .proceed_read = tunnel_proceed_read,
             },
         .loop = loop,
+        .egress = {.delayed = {.cb = write_complete_delayed}},
     };
 #if H2O_USE_LIBUV
     tunnel->sock = h2o_uv__poll_create(tunnel->loop, fd, (uv_close_cb)free);
