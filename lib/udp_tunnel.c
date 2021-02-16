@@ -12,7 +12,9 @@ struct st_h2o_udp_tunnel_t {
     h2o_tunnel_t super;
     h2o_socket_t *sock;
     h2o_loop_t *loop;
-    h2o_buffer_t *inbuf; /* for datagram fragments */
+    struct {
+        h2o_buffer_t *buf; /* for datagram fragments */
+    } egress;
     struct {
         uint8_t buf[3 + 1500];
     } ingress;
@@ -22,7 +24,7 @@ static void tunnel_on_destroy(h2o_tunnel_t *_tunnel)
 {
     struct st_h2o_udp_tunnel_t *tunnel = (void *)_tunnel;
 
-    h2o_buffer_dispose(&tunnel->inbuf);
+    h2o_buffer_dispose(&tunnel->egress.buf);
     h2o_socket_close(tunnel->sock);
     free(tunnel);
 }
@@ -138,19 +140,19 @@ static void tunnel_on_writev(h2o_tunnel_t *_tunnel, h2o_iovec_t *iov, size_t iov
 
 static void tunnel_on_write(h2o_tunnel_t *_tunnel, const void *bytes, size_t len)
 {
-    int from_inbuf = 0;
+    int from_buf = 0;
     struct st_h2o_udp_tunnel_t *tunnel = (void *)_tunnel;
     h2o_iovec_t iovs[64];
     size_t iovlen = 0;
     size_t idx = 0;
 
-    if (tunnel->inbuf->size != 0) {
-        from_inbuf = 1;
-        h2o_buffer_reserve(&tunnel->inbuf, len);
-        memcpy(tunnel->inbuf->bytes + tunnel->inbuf->size, bytes, len);
-        tunnel->inbuf->size += len;
-        bytes = tunnel->inbuf->bytes;
-        len = tunnel->inbuf->size;
+    if (tunnel->egress.buf->size != 0) {
+        from_buf = 1;
+        h2o_buffer_reserve(&tunnel->egress.buf, len);
+        memcpy(tunnel->egress.buf->bytes + tunnel->egress.buf->size, bytes, len);
+        tunnel->egress.buf->size += len;
+        bytes = tunnel->egress.buf->bytes;
+        len = tunnel->egress.buf->size;
     }
     do {
         int skip = 0;
@@ -166,13 +168,13 @@ static void tunnel_on_write(h2o_tunnel_t *_tunnel, const void *bytes, size_t len
     if (iovlen > 0)
         tunnel_on_writev(_tunnel, iovs, iovlen);
 
-    if (from_inbuf)
-        h2o_buffer_consume(&tunnel->inbuf, idx);
+    if (from_buf)
+        h2o_buffer_consume(&tunnel->egress.buf, idx);
 
     if (len != idx) {
-        h2o_buffer_reserve(&tunnel->inbuf, len - idx);
-        memcpy(tunnel->inbuf->bytes + tunnel->inbuf->size, bytes + idx, len - idx);
-        tunnel->inbuf->size += (len - idx);
+        h2o_buffer_reserve(&tunnel->egress.buf, len - idx);
+        memcpy(tunnel->egress.buf->bytes + tunnel->egress.buf->size, bytes + idx, len - idx);
+        tunnel->egress.buf->size += (len - idx);
     }
 }
 
@@ -210,7 +212,7 @@ h2o_tunnel_t *h2o_open_udp_tunnel_from_sa(h2o_loop_t *loop, struct sockaddr *add
 #endif
 
     tunnel->sock->data = tunnel;
-    h2o_buffer_init(&tunnel->inbuf, &h2o_socket_buffer_prototype);
+    h2o_buffer_init(&tunnel->egress.buf, &h2o_socket_buffer_prototype);
     h2o_socket_read_start(tunnel->sock, tunnel_socket_on_read);
 
     return &tunnel->super;
