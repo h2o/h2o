@@ -1273,27 +1273,24 @@ static void do_send_informational(h2o_ostream_t *_ostr, h2o_req_t *_req)
     finalize_do_send(stream);
 }
 
-static void tunnel_on_read(h2o_tunnel_t *_tunnel, const char *err, h2o_iovec_t *iov, size_t iovlen)
+static void tunnel_on_read(h2o_tunnel_t *_tunnel, const char *err, const void *bytes, size_t len)
 {
     struct st_h2o_http3_server_stream_t *stream = _tunnel->data;
 
     stream->proceed_requested = 0;
 
-    /* append DATA frames */
-    for (size_t i = 0; i < iovlen; i++) {
-        if (iov[i].len == 0)
-            continue;
+    /* append DATA frame */
+    if (len != 0) {
         h2o_vector_reserve(&stream->req.pool, &stream->sendbuf.vecs, stream->sendbuf.vecs.size + 2);
         /* DATA frame header */
-        size_t header_size =
-            flatten_data_frame_header(stream, stream->sendbuf.vecs.entries + stream->sendbuf.vecs.size++, iov[i].len);
+        size_t header_size = flatten_data_frame_header(stream, stream->sendbuf.vecs.entries + stream->sendbuf.vecs.size++, len);
         /* payload */
         struct st_h2o_http3_server_sendvec_t *vec = stream->sendbuf.vecs.entries + stream->sendbuf.vecs.size++;
-        h2o_sendvec_init_raw(&vec->vec, iov[i].base, iov[i].len);
+        h2o_sendvec_init_raw(&vec->vec, bytes, len);
         vec->entity_offset = stream->sendbuf.final_body_size;
-        stream->sendbuf.final_body_size += iov[i].len;
+        stream->sendbuf.final_body_size += len;
         /* update final offset */
-        stream->sendbuf.final_size += header_size + iov[i].len;
+        stream->sendbuf.final_size += header_size + len;
     }
 
     /* EOS */

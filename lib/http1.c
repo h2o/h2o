@@ -831,7 +831,7 @@ static void tunnel_on_client_write_complete(h2o_socket_t *_sock, const char *err
     tunnel->server->proceed_read(tunnel->server);
 }
 
-static void tunnel_on_server_read(h2o_tunnel_t *_tunnel, const char *err, h2o_iovec_t *iovs, size_t iovlen)
+static void tunnel_on_server_read(h2o_tunnel_t *_tunnel, const char *err, const void *bytes, size_t len)
 {
     struct st_h2o_http1_tunnel_t *tunnel = _tunnel->data;
     assert(tunnel->server == _tunnel);
@@ -843,7 +843,8 @@ static void tunnel_on_server_read(h2o_tunnel_t *_tunnel, const char *err, h2o_io
 
     tunnel_reset_timeout(tunnel);
 
-    h2o_socket_write(tunnel->client, iovs, iovlen, tunnel_on_client_write_complete);
+    h2o_iovec_t vec = h2o_iovec_init(bytes, len);
+    h2o_socket_write(tunnel->client, &vec, 1, tunnel_on_client_write_complete);
 }
 
 static void tunnel_on_client_read(h2o_socket_t *_sock, const char *err)

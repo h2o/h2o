@@ -205,7 +205,7 @@ static void tunnel_on_stdin_read(h2o_socket_t *sock, const char *err)
     tunnel_write(tunnel);
 }
 
-static void tunnel_on_read(h2o_tunnel_t *_tunnel, const char *err, h2o_iovec_t *iov, size_t iovlen)
+static void tunnel_on_read(h2o_tunnel_t *_tunnel, const char *err, const void *bytes, size_t len)
 {
     struct st_tunnel_t *tunnel = _tunnel->data;
     assert(tunnel->tunnel == _tunnel);
@@ -215,10 +215,7 @@ static void tunnel_on_read(h2o_tunnel_t *_tunnel, const char *err, h2o_iovec_t *
         exit(0);
     }
 
-    struct iovec vec[iovlen];
-    for (size_t i = 0; i < iovlen; i++)
-        vec[i] = (struct iovec){.iov_base = iov[i].base, .iov_len = iov[i].len};
-    writev(1, vec, iovlen);
+    write(1, bytes, len);
 
     tunnel->tunnel->proceed_read(tunnel->tunnel);
 }

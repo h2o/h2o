@@ -52,7 +52,7 @@ typedef struct st_h2o_tunnel_t {
     /**
      * The on-read callback to be set by the user.
      */
-    void (*on_read)(struct st_h2o_tunnel_t *tunnel, const char *err, h2o_iovec_t *iov, size_t iovlen);
+    void (*on_read)(struct st_h2o_tunnel_t *tunnel, const char *err, const void *bytes, size_t len);
     /*
      * optional on-read callback for UDP tunnels, can be use to obtain the raw datagrams without encapsulation
      */
