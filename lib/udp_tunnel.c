@@ -13,6 +13,9 @@ struct st_h2o_udp_tunnel_t {
     h2o_socket_t *sock;
     h2o_loop_t *loop;
     h2o_buffer_t *inbuf; /* for datagram fragments */
+    struct {
+        uint8_t buf[3 + 1500];
+    } ingress;
 };
 
 static void tunnel_on_destroy(h2o_tunnel_t *_tunnel)
@@ -24,6 +27,48 @@ static void tunnel_on_destroy(h2o_tunnel_t *_tunnel)
     free(tunnel);
 }
 
+static void read_and_forward_udp(struct st_h2o_udp_tunnel_t *tunnel)
+{
+    uint8_t buf[1500];
+    ssize_t rret;
+
+    /* read UDP packet, or return */
+    while ((rret = recv(h2o_socket_get_fd(tunnel->sock), buf, sizeof(buf), 0)) == -1 && errno == EINTR)
+        ;
+    if (rret == -1)
+        return;
+
+    /* forward UDP datagram as is; note that it might be zero-sized */
+    if (rret >= 0) {
+        h2o_iovec_t vec = h2o_iovec_init(buf, rret);
+        tunnel->super.on_udp_read(&tunnel->super, NULL, &vec, 1);
+    }
+}
+
+static void read_and_forward_stream(struct st_h2o_udp_tunnel_t *tunnel)
+{
+    ssize_t rret;
+
+    /* read UDP packet, keeping the first three bytes empty */
+    while ((rret = recv(h2o_socket_get_fd(tunnel->sock), tunnel->ingress.buf + 3, sizeof(tunnel->ingress.buf) - 3, 0)) == -1 &&
+           errno == EINTR)
+        ;
+    if (rret == -1)
+        return;
+
+    /* Forward the UDP packet through tunnel, with the chunk header being appended. The operation is asynchronous, that is why we
+     * stop reading from the socket, and use heap for building the payload. */
+    h2o_socket_read_stop(tunnel->sock);
+    ssize_t off = 0;
+    tunnel->ingress.buf[off++] = 0; /* chunk type = UDP_PACKET */
+    off = quicly_encodev(tunnel->ingress.buf + off, (uint64_t)rret) - tunnel->ingress.buf;
+    assert(off <= 3);
+    if (off != 3)
+        memmove(tunnel->ingress.buf + off, tunnel->ingress.buf + 3, rret);
+    off += rret;
+    tunnel->super.on_read(&tunnel->super, NULL, tunnel->ingress.buf, off);
+}
+
 static void tunnel_socket_on_read(h2o_socket_t *sock, const char *err)
 {
     struct st_h2o_udp_tunnel_t *tunnel = sock->data;
@@ -33,44 +78,11 @@ static void tunnel_socket_on_read(h2o_socket_t *sock, const char *err)
         return;
     }
 
-    uint8_t buf[16384];
-    struct msghdr mess;
-    struct sockaddr sa;
-    struct iovec iov;
-    memset(&mess, 0, sizeof(mess));
-    mess.msg_name = &sa;
-    mess.msg_namelen = sizeof(sa);
-    iov.iov_base = buf;
-    iov.iov_len = sizeof(buf);
-    mess.msg_iov = &iov;
-    mess.msg_iovlen = 1;
-    ssize_t rret;
-    while ((rret = recvmsg(h2o_socket_get_fd(tunnel->sock), &mess, 0)) == -1 && errno == EINTR)
-        ;
-
-    h2o_socket_read_stop(tunnel->sock);
-
-    if (tunnel->super.on_udp_read) {
-        h2o_iovec_t hiov = h2o_iovec_init(iov.iov_base, iov.iov_len);
-        tunnel->super.on_udp_read(&tunnel->super, NULL, &hiov, 1);
+    if (tunnel->super.on_udp_read != NULL) {
+        read_and_forward_udp(tunnel);
     } else {
-        struct {
-            uint8_t buf[8];
-            uint8_t *end;
-        } varint;
-        h2o_iovec_t vec[3];
-        const uint8_t zero = 0;
-
-        varint.end = ptls_encode_quicint(varint.buf, iov.iov_len);
-        vec[0].base = (char *)&zero;
-        vec[0].len = sizeof(zero);
-        vec[1].base = (char *)varint.buf;
-        vec[1].len = varint.end - varint.buf;
-        vec[2] = h2o_iovec_init(iov.iov_base, iov.iov_len);
-        tunnel->super.on_read(&tunnel->super, NULL, vec, sizeof(vec) / sizeof(vec[0]));
+        read_and_forward_stream(tunnel);
     }
-
-    return;
 }
 
 h2o_iovec_t get_next_chunk(const uint8_t *bytes, size_t len, size_t *to_consume, int *skip)
