@@ -479,22 +479,33 @@ static void handle_request_body_chunk(h2o_http2_conn_t *conn, h2o_http2_stream_t
 static int handle_incoming_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, const uint8_t *src, size_t len,
                                    const char **err_desc)
 {
+    h2o_iovec_t scheme = {};
     int ret, header_exists_map = 0;
 
     assert(stream->state == H2O_HTTP2_STREAM_STATE_RECV_HEADERS);
 
     if ((ret = h2o_hpack_parse_request(&stream->req.pool, h2o_hpack_decode_header, &conn->_input_header_table,
-                                       &stream->req.input.method, &stream->req.input.scheme, &stream->req.input.authority,
-                                       &stream->req.input.path, &stream->req.headers, &header_exists_map,
-                                       &stream->req.content_length, &stream->cache_digests, src, len, err_desc)) != 0) {
+                                       &stream->req.input.method, &scheme, &stream->req.input.authority, &stream->req.input.path,
+                                       &stream->req.headers, &header_exists_map, &stream->req.content_length,
+                                       &stream->cache_digests, src, len, err_desc)) != 0) {
         /* all errors except invalid-header-char are connection errors */
         if (ret != H2O_HTTP2_ERROR_INVALID_HEADER_CHAR)
             return ret;
     }
 
-    /* fixup the scheme so that it would never be a NULL pointer (note: checks below are done using `header_exists_map`) */
-    if (stream->req.input.scheme == NULL)
+    /* lookup scheme, setting it to either HTTP or HTTPS when not available or unknown to prevent having issues with
+     * `req->input.scheme` being NULL */
+    if ((header_exists_map & H2O_HPACK_PARSE_HEADERS_SCHEME_EXISTS) != 0) {
+        if (h2o_memis(scheme.base, scheme.len, H2O_STRLIT("https"))) {
+            stream->req.input.scheme = &H2O_URL_SCHEME_HTTPS;
+        } else {
+            /* TODO check other schemes; quoting RFC 7540 section 8.1.2.3, ":scheme is not restricted to http and https schemed
+             * URIs" */
+            stream->req.input.scheme = &H2O_URL_SCHEME_HTTP;
+        }
+    } else {
         stream->req.input.scheme = conn->sock->ssl != NULL ? &H2O_URL_SCHEME_HTTPS : &H2O_URL_SCHEME_HTTP;
+    }
 
     h2o_probe_log_request(&stream->req, stream->stream_id);
 
@@ -554,10 +565,8 @@ static int handle_trailing_headers(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
     size_t dummy_content_length;
     int ret;
 
-    if ((ret = h2o_hpack_parse_request(&stream->req.pool, h2o_hpack_decode_header, &conn->_input_header_table,
-                                       &stream->req.input.method, &stream->req.input.scheme, &stream->req.input.authority,
-                                       &stream->req.input.path, &stream->req.headers, NULL, &dummy_content_length, NULL, src, len,
-                                       err_desc)) != 0)
+    if ((ret = h2o_hpack_parse_request(&stream->req.pool, h2o_hpack_decode_header, &conn->_input_header_table, NULL, NULL, NULL,
+                                       NULL, &stream->req.headers, NULL, &dummy_content_length, NULL, src, len, err_desc)) != 0)
         return ret;
     handle_request_body_chunk(conn, stream, h2o_iovec_init(NULL, 0), 1);
     return 0;

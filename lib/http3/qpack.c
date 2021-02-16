@@ -774,7 +774,7 @@ static int normalize_error_code(int err)
 }
 
 int h2o_qpack_parse_request(h2o_mem_pool_t *pool, h2o_qpack_decoder_t *qpack, int64_t stream_id, h2o_iovec_t *method,
-                            const h2o_url_scheme_t **scheme, h2o_iovec_t *authority, h2o_iovec_t *path, h2o_headers_t *headers,
+                            h2o_iovec_t *scheme, h2o_iovec_t *authority, h2o_iovec_t *path, h2o_headers_t *headers,
                             int *pseudo_header_exists_map, size_t *content_length, h2o_cache_digests_t **digests, uint8_t *outbuf,
                             size_t *outbufsize, const uint8_t *_src, size_t len, const char **err_desc)
 {

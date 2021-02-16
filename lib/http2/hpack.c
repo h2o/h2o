@@ -468,7 +468,7 @@ void h2o_hpack_dispose_header_table(h2o_hpack_header_table_t *header_table)
 }
 
 int h2o_hpack_parse_request(h2o_mem_pool_t *pool, h2o_hpack_decode_header_cb decode_cb, void *decode_ctx, h2o_iovec_t *method,
-                            const h2o_url_scheme_t **scheme, h2o_iovec_t *authority, h2o_iovec_t *path, h2o_headers_t *headers,
+                            h2o_iovec_t *scheme, h2o_iovec_t *authority, h2o_iovec_t *path, h2o_headers_t *headers,
                             int *pseudo_header_exists_map, size_t *content_length, h2o_cache_digests_t **digests,
                             const uint8_t *src, size_t len, const char **err_desc)
 {
@@ -512,14 +512,11 @@ int h2o_hpack_parse_request(h2o_mem_pool_t *pool, h2o_hpack_decode_header_cb dec
                     *path = value;
                     *pseudo_header_exists_map |= H2O_HPACK_PARSE_HEADERS_PATH_EXISTS;
                 } else if (name == &H2O_TOKEN_SCHEME->buf) {
-                    if (*scheme != NULL)
+                    if (scheme->base != NULL)
                         return H2O_HTTP2_ERROR_PROTOCOL;
-                    if (h2o_memis(value.base, value.len, H2O_STRLIT("https"))) {
-                        *scheme = &H2O_URL_SCHEME_HTTPS;
-                    } else {
-                        /* draft-16 8.1.2.3 suggests quote: ":scheme is not restricted to http and https schemed URIs" */
-                        *scheme = &H2O_URL_SCHEME_HTTP;
-                    }
+                    if (value.len == 0)
+                        return H2O_HTTP2_ERROR_PROTOCOL;
+                    *scheme = value;
                     *pseudo_header_exists_map |= H2O_HPACK_PARSE_HEADERS_SCHEME_EXISTS;
                 } else {
                     return H2O_HTTP2_ERROR_PROTOCOL;
@@ -539,7 +536,7 @@ int h2o_hpack_parse_request(h2o_mem_pool_t *pool, h2o_hpack_decode_header_cb dec
                     if (token->flags.http2_should_reject) {
                         if (token == H2O_TOKEN_HOST) {
                             /* HTTP2 allows the use of host header (in place of :authority) */
-                            if (authority->base == NULL)
+                            if (authority != NULL && authority->base == NULL)
                                 *authority = value;
                             goto Next;
                         } else if (token == H2O_TOKEN_TE && h2o_lcstris(value.base, value.len, H2O_STRLIT("trailers"))) {

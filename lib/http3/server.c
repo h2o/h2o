@@ -1093,6 +1093,7 @@ static int handle_input_expect_headers(struct st_h2o_http3_server_stream_t *stre
 {
     struct st_h2o_http3_server_conn_t *conn = get_conn(stream);
     h2o_http3_read_frame_t frame;
+    h2o_iovec_t scheme = {};
     int header_exists_map, ret;
     uint8_t header_ack[H2O_HPACK_ENCODE_INT_MAX_LENGTH];
     size_t header_ack_len;
@@ -1113,17 +1114,27 @@ static int handle_input_expect_headers(struct st_h2o_http3_server_stream_t *stre
 
     /* parse the headers, and ack */
     if ((ret = h2o_qpack_parse_request(&stream->req.pool, get_conn(stream)->h3.qpack.dec, stream->quic->stream_id,
-                                       &stream->req.input.method, &stream->req.input.scheme, &stream->req.input.authority,
-                                       &stream->req.input.path, &stream->req.headers, &header_exists_map,
-                                       &stream->req.content_length, NULL /* TODO cache-digests */, header_ack, &header_ack_len,
-                                       frame.payload, frame.length, err_desc)) != 0 &&
+                                       &stream->req.input.method, &scheme, &stream->req.input.authority, &stream->req.input.path,
+                                       &stream->req.headers, &header_exists_map, &stream->req.content_length,
+                                       NULL /* TODO cache-digests */, header_ack, &header_ack_len, frame.payload, frame.length,
+                                       err_desc)) != 0 &&
         ret != H2O_HTTP2_ERROR_INVALID_HEADER_CHAR)
         return ret;
     if (header_ack_len != 0)
         h2o_http3_send_qpack_header_ack(&conn->h3, header_ack, header_ack_len);
 
-    if (stream->req.input.scheme == NULL)
+    /* lookup scheme, setting it to either HTTP or HTTPS when not available or unknown to prevent having issues with
+     * `req->input.scheme` being NULL */
+    if ((header_exists_map & H2O_HPACK_PARSE_HEADERS_SCHEME_EXISTS) != 0) {
+        if (h2o_memis(scheme.base, scheme.len, H2O_STRLIT("https"))) {
+            stream->req.input.scheme = &H2O_URL_SCHEME_HTTPS;
+        } else {
+            /* TODO lookup */
+            stream->req.input.scheme = &H2O_URL_SCHEME_HTTP;
+        }
+    } else {
         stream->req.input.scheme = &H2O_URL_SCHEME_HTTPS;
+    }
 
     h2o_probe_log_request(&stream->req, stream->quic->stream_id);
 

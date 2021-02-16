@@ -26,7 +26,14 @@
 static void test_request(h2o_iovec_t first_req, h2o_iovec_t second_req, h2o_iovec_t third_req)
 {
     h2o_hpack_header_table_t header_table;
-    h2o_req_t req;
+    h2o_mem_pool_t pool;
+    struct {
+        h2o_iovec_t method;
+        h2o_iovec_t scheme;
+        h2o_iovec_t authority;
+        h2o_iovec_t path;
+        h2o_headers_t headers;
+    } req;
     h2o_iovec_t in;
     int r, pseudo_headers_map;
     size_t content_length;
@@ -36,63 +43,54 @@ static void test_request(h2o_iovec_t first_req, h2o_iovec_t second_req, h2o_iove
     header_table.hpack_capacity = 4096;
 
     memset(&req, 0, sizeof(req));
-    h2o_mem_init_pool(&req.pool);
+    h2o_mem_init_pool(&pool);
     in = first_req;
-    r = h2o_hpack_parse_request(&req.pool, h2o_hpack_decode_header, &header_table, &req.input.method, &req.input.scheme,
-                                &req.input.authority, &req.input.path, &req.headers, &pseudo_headers_map, &content_length, NULL,
-                                (const uint8_t *)in.base, in.len, &err_desc);
+    r = h2o_hpack_parse_request(&pool, h2o_hpack_decode_header, &header_table, &req.method, &req.scheme, &req.authority, &req.path,
+                                &req.headers, &pseudo_headers_map, &content_length, NULL, (const uint8_t *)in.base, in.len,
+                                &err_desc);
     ok(r == 0);
-    ok(req.input.authority.len == 15);
-    ok(memcmp(req.input.authority.base, H2O_STRLIT("www.example.com")) == 0);
-    ok(req.input.method.len == 3);
-    ok(memcmp(req.input.method.base, H2O_STRLIT("GET")) == 0);
-    ok(req.input.path.len == 1);
-    ok(memcmp(req.input.path.base, H2O_STRLIT("/")) == 0);
-    ok(req.input.scheme == &H2O_URL_SCHEME_HTTP);
+    ok(h2o_memis(req.authority.base, req.authority.len, H2O_STRLIT("www.example.com")));
+    ok(h2o_memis(req.method.base, req.method.len, H2O_STRLIT("GET")));
+    ok(h2o_memis(req.path.base, req.path.len, H2O_STRLIT("/")));
+    ok(h2o_memis(req.scheme.base, req.scheme.len, H2O_STRLIT("http")));
     ok(req.headers.size == 0);
 
-    h2o_mem_clear_pool(&req.pool);
+    h2o_mem_clear_pool(&pool);
 
     memset(&req, 0, sizeof(req));
-    h2o_mem_init_pool(&req.pool);
+    h2o_mem_init_pool(&pool);
     in = second_req;
-    r = h2o_hpack_parse_request(&req.pool, h2o_hpack_decode_header, &header_table, &req.input.method, &req.input.scheme,
-                                &req.input.authority, &req.input.path, &req.headers, &pseudo_headers_map, &content_length, NULL,
-                                (const uint8_t *)in.base, in.len, &err_desc);
+    r = h2o_hpack_parse_request(&pool, h2o_hpack_decode_header, &header_table, &req.method, &req.scheme, &req.authority, &req.path,
+                                &req.headers, &pseudo_headers_map, &content_length, NULL, (const uint8_t *)in.base, in.len,
+                                &err_desc);
     ok(r == 0);
-    ok(req.input.authority.len == 15);
-    ok(memcmp(req.input.authority.base, H2O_STRLIT("www.example.com")) == 0);
-    ok(req.input.method.len == 3);
-    ok(memcmp(req.input.method.base, H2O_STRLIT("GET")) == 0);
-    ok(req.input.path.len == 1);
-    ok(memcmp(req.input.path.base, H2O_STRLIT("/")) == 0);
-    ok(req.input.scheme == &H2O_URL_SCHEME_HTTP);
+    ok(h2o_memis(req.authority.base, req.authority.len, H2O_STRLIT("www.example.com")));
+    ok(h2o_memis(req.method.base, req.method.len, H2O_STRLIT("GET")));
+    ok(h2o_memis(req.path.base, req.path.len, H2O_STRLIT("/")));
+    ok(h2o_memis(req.scheme.base, req.scheme.len, H2O_STRLIT("http")));
     ok(req.headers.size == 1);
     ok(h2o_memis(req.headers.entries[0].name->base, req.headers.entries[0].name->len, H2O_STRLIT("cache-control")));
     ok(h2o_lcstris(req.headers.entries[0].value.base, req.headers.entries[0].value.len, H2O_STRLIT("no-cache")));
 
-    h2o_mem_clear_pool(&req.pool);
+    h2o_mem_clear_pool(&pool);
 
     memset(&req, 0, sizeof(req));
-    h2o_mem_init_pool(&req.pool);
+    h2o_mem_init_pool(&pool);
     in = third_req;
-    r = h2o_hpack_parse_request(&req.pool, h2o_hpack_decode_header, &header_table, &req.input.method, &req.input.scheme,
-                                &req.input.authority, &req.input.path, &req.headers, &pseudo_headers_map, &content_length, NULL,
-                                (const uint8_t *)in.base, in.len, &err_desc);
+    r = h2o_hpack_parse_request(&pool, h2o_hpack_decode_header, &header_table, &req.method, &req.scheme, &req.authority, &req.path,
+                                &req.headers, &pseudo_headers_map, &content_length, NULL, (const uint8_t *)in.base, in.len,
+                                &err_desc);
     ok(r == 0);
-    ok(req.input.authority.len == 15);
-    ok(memcmp(req.input.authority.base, H2O_STRLIT("www.example.com")) == 0);
-    ok(req.input.method.len == 3);
-    ok(memcmp(req.input.method.base, H2O_STRLIT("GET")) == 0);
-    ok(req.input.path.len == 11);
-    ok(memcmp(req.input.path.base, H2O_STRLIT("/index.html")) == 0);
-    ok(req.input.scheme == &H2O_URL_SCHEME_HTTPS);
+    ok(h2o_memis(req.authority.base, req.authority.len, H2O_STRLIT("www.example.com")));
+    ok(h2o_memis(req.method.base, req.method.len, H2O_STRLIT("GET")));
+    ok(h2o_memis(req.path.base, req.path.len, H2O_STRLIT("/index.html")));
+    ok(h2o_memis(req.scheme.base, req.scheme.len, H2O_STRLIT("https")));
     ok(req.headers.size == 1);
     ok(h2o_memis(req.headers.entries[0].name->base, req.headers.entries[0].name->len, H2O_STRLIT("custom-key")));
     ok(h2o_lcstris(req.headers.entries[0].value.base, req.headers.entries[0].value.len, H2O_STRLIT("custom-value")));
 
     h2o_hpack_dispose_header_table(&header_table);
-    h2o_mem_clear_pool(&req.pool);
+    h2o_mem_clear_pool(&pool);
 }
 
 static void check_flatten(h2o_hpack_header_table_t *header_table, h2o_res_t *res, const char *expected, size_t expected_len)
@@ -339,20 +337,27 @@ static void parse_and_compare_request(h2o_hpack_header_table_t *ht, const char *
                                       h2o_iovec_t expected_method, const h2o_url_scheme_t *expected_scheme,
                                       h2o_iovec_t expected_authority, h2o_iovec_t expected_path, ...)
 {
-    h2o_req_t req = {NULL};
-    h2o_mem_init_pool(&req.pool);
+    struct {
+        h2o_iovec_t method;
+        h2o_iovec_t scheme;
+        h2o_iovec_t authority;
+        h2o_iovec_t path;
+        h2o_headers_t headers;
+    } req = {};
+    h2o_mem_pool_t pool;
+    h2o_mem_init_pool(&pool);
 
     int pseudo_header_exists_map = 0;
     size_t content_length = SIZE_MAX;
     const char *err_desc = NULL;
-    int r = h2o_hpack_parse_request(&req.pool, h2o_hpack_decode_header, ht, &req.input.method, &req.input.scheme,
-                                    &req.input.authority, &req.input.path, &req.headers, &pseudo_header_exists_map, &content_length,
-                                    NULL, (void *)(promise_base + 13), promise_len - 13, &err_desc);
+    int r = h2o_hpack_parse_request(&pool, h2o_hpack_decode_header, ht, &req.method, &req.scheme, &req.authority, &req.path,
+                                    &req.headers, &pseudo_header_exists_map, &content_length, NULL, (void *)(promise_base + 13),
+                                    promise_len - 13, &err_desc);
     ok(r == 0);
-    ok(h2o_memis(req.input.method.base, req.input.method.len, expected_method.base, expected_method.len));
-    ok(req.input.scheme == expected_scheme);
-    ok(h2o_memis(req.input.authority.base, req.input.authority.len, expected_authority.base, expected_authority.len));
-    ok(h2o_memis(req.input.path.base, req.input.path.len, expected_path.base, expected_path.len));
+    ok(h2o_memis(req.method.base, req.method.len, expected_method.base, expected_method.len));
+    ok(h2o_memis(req.scheme.base, req.scheme.len, expected_scheme->name.base, expected_scheme->name.len));
+    ok(h2o_memis(req.authority.base, req.authority.len, expected_authority.base, expected_authority.len));
+    ok(h2o_memis(req.path.base, req.path.len, expected_path.base, expected_path.len));
 
     va_list args;
     va_start(args, expected_path);
@@ -368,7 +373,7 @@ static void parse_and_compare_request(h2o_hpack_header_table_t *ht, const char *
     ok(i == req.headers.size);
     va_end(args);
 
-    h2o_mem_clear_pool(&req.pool);
+    h2o_mem_clear_pool(&pool);
 }
 
 static void test_hpack_push(void)

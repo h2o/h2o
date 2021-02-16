@@ -77,8 +77,7 @@ static void doit(int use_enc_stream)
     }
 
     {
-        h2o_iovec_t method = {NULL}, authority = {NULL}, path = {NULL};
-        const h2o_url_scheme_t *scheme = NULL;
+        h2o_iovec_t method = {NULL}, scheme = {NULL}, authority = {NULL}, path = {NULL};
         int pseudo_header_exists_map = 0;
         h2o_headers_t headers = {NULL};
         size_t content_length = SIZE_MAX;
@@ -87,7 +86,7 @@ static void doit(int use_enc_stream)
                                       flattened.len, &err_desc);
         ok(ret == 0);
         ok(h2o_memis(method.base, method.len, H2O_STRLIT("GET")));
-        ok(scheme == &H2O_URL_SCHEME_HTTPS);
+        ok(h2o_memis(scheme.base, scheme.len, H2O_STRLIT("https")));
         ok(h2o_memis(authority.base, authority.len, H2O_STRLIT("example.com")));
         ok(h2o_memis(path.base, path.len, H2O_STRLIT("/foobar")));
         ok(headers.size == 2);
