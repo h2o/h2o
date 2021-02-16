@@ -418,7 +418,7 @@ static void on_head(h2o_socket_t *sock, const char *err)
 
     /* provide underlying socket as a tunnel, if necessary */
     if (h2o_httpclient__tunnel_is_ready(&client->super, http_status)) {
-        on_head.tunnel = h2o_tunnel_create_from_socket(client->sock);
+        on_head.tunnel = &h2o_socket_tunnel_create(client->sock)->super;
         client->sock = NULL;
     }
 
@@ -430,7 +430,7 @@ static void on_head(h2o_socket_t *sock, const char *err)
         /* upgraded to tunnel; dispose of the httpclient instance, feed first chunk of tunnel data to the client, and return */
         assert(client->super._cb.on_body == NULL);
         close_client(client);
-        h2o_tunnel_finish_socket_upgrade(on_head.tunnel, rlen);
+        h2o_socket_tunnel_start((h2o_socket_tunnel_t *)on_head.tunnel, rlen);
         return;
     } else if (client->state.res == STREAM_STATE_CLOSED) {
         close_response(client);

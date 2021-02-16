@@ -22,7 +22,7 @@ hosts:
         proxy.reverse.url: http://127.0.0.1:$upstream_port/
         proxy.preserve-host: ON
         proxy.tunnel: ON
-        proxy.tunnel.timeout: 1000
+        proxy.timeout.io: 1000
 access-log: /dev/null # enable logging
 EOT
 

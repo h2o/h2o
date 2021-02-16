@@ -109,9 +109,9 @@ static inline void h2o_probe_log_request(h2o_req_t *req, uint64_t req_index)
     }
 }
 
-static inline void h2o_probe_log_response(h2o_req_t *req, uint64_t req_index)
+static inline void h2o_probe_log_response(h2o_req_t *req, uint64_t req_index, struct st_h2o_tunnel_t *tunnel)
 {
-    H2O_PROBE_CONN(SEND_RESPONSE, req->conn, req_index, req->res.status);
+    H2O_PROBE_CONN(SEND_RESPONSE, req->conn, req_index, req->res.status, tunnel);
     if (H2O_CONN_IS_PROBED(SEND_RESPONSE_HEADER, req->conn)) {
         if (req->res.content_length != SIZE_MAX) {
             char buf[sizeof(H2O_SIZE_T_LONGEST_STR)];

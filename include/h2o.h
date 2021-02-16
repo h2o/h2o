@@ -94,7 +94,6 @@ extern "C" {
 #define H2O_DEFAULT_PROXY_IO_TIMEOUT_IN_SECS 30
 #define H2O_DEFAULT_PROXY_IO_TIMEOUT (H2O_DEFAULT_PROXY_IO_TIMEOUT_IN_SECS * 1000)
 #define H2O_DEFAULT_PROXY_TUNNEL_TIMEOUT_IN_SECS 300
-#define H2O_DEFAULT_PROXY_TUNNEL_TIMEOUT (H2O_DEFAULT_PROXY_TUNNEL_TIMEOUT_IN_SECS * 1000)
 #define H2O_DEFAULT_PROXY_SSL_SESSION_CACHE_CAPACITY 4096
 #define H2O_DEFAULT_PROXY_SSL_SESSION_CACHE_DURATION 86400000 /* 24 hours */
 #define H2O_DEFAULT_PROXY_HTTP2_MAX_CONCURRENT_STREAMS 100
@@ -2032,19 +2031,13 @@ typedef struct st_h2o_proxy_config_vars_t {
     uint64_t keepalive_timeout;
     unsigned preserve_host : 1;
     unsigned use_proxy_protocol : 1;
-    struct {
-        int enabled;
-        uint64_t timeout;
-    } tunnel;
+    unsigned tunnel_enabled : 1;
     h2o_headers_command_t *headers_cmds;
     size_t max_buffer_size;
     struct {
         uint32_t max_concurrent_strams;
     } http2;
-    struct {
-        int8_t http2;
-        int8_t http3;
-    } protocol_ratio;
+    h2o_httpclient_protocol_ratio_t protocol_ratio;
 } h2o_proxy_config_vars_t;
 
 /**
@@ -2088,10 +2081,31 @@ void h2o_reproxy_register_configurator(h2o_globalconf_t *conf);
 
 /* lib/handler/connect.c */
 
+typedef struct st_h2o_connect_acl_entry_t {
+    uint8_t allow_; /* true if allow, false if deny */
+    enum { H2O_CONNECT_ACL_ADDRESS_ANY, H2O_CONNECT_ACL_ADDRESS_V4, H2O_CONNECT_ACL_ADDRESS_V6 } addr_family;
+    union {
+        uint32_t v4;
+        uint8_t v6[16];
+    } addr;
+    size_t addr_mask;
+    uint16_t port; /* 0 indicates ANY */
+} h2o_connect_acl_entry_t;
+
 /**
  * registers the connect handler to the context
  */
-void h2o_connect_register(h2o_pathconf_t *pathconf, h2o_proxy_config_vars_t *config);
+void h2o_connect_register(h2o_pathconf_t *pathconf, h2o_proxy_config_vars_t *config, h2o_connect_acl_entry_t *acl_entries,
+                          size_t num_acl_entries);
+/**
+ * Parses a ACL line and stores the result in `output`. If successful, returns NULL, otherwise a string indicating the problem is
+ * being returned.
+ */
+const char *h2o_connect_parse_acl(h2o_connect_acl_entry_t *output, const char *input);
+/**
+ * Checks if access to given target is permissible, and returns a boolean indicating the result.
+ */
+int h2o_connect_lookup_acl(h2o_connect_acl_entry_t *acl_entries, size_t num_acl_entries, struct sockaddr *target);
 
 /* lib/handler/status.c */
 

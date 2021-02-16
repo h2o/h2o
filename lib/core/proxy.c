@@ -528,10 +528,10 @@ static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errs
 
     if (args->tunnel != NULL) {
         h2o_httpclient_ctx_t *client_ctx = get_client_ctx(req);
-        assert(client_ctx->tunnel_timeout != NULL);
+        assert(client_ctx->tunnel_enabled);
         if (req->upgrade.base != NULL)
             h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_UPGRADE, NULL, req->upgrade.base, req->upgrade.len);
-        req->establish_tunnel(req, args->tunnel, *client_ctx->tunnel_timeout);
+        req->establish_tunnel(req, args->tunnel, client_ctx->io_timeout);
         detach_client(self);
         return NULL;
     }
@@ -693,6 +693,7 @@ static struct rp_generator_t *proxy_send_prepare(h2o_req_t *req)
     self->super.proceed = do_proceed;
     self->super.stop = do_stop;
     self->src_req = req;
+    self->client = NULL; /* when connection establish timeouts, self->client remains unset by `h2o_httpclient_connect` */
     self->had_body_error = 0;
     self->up_req.is_head = h2o_memis(req->method.base, req->method.len, H2O_STRLIT("HEAD"));
     self->last_content_before_send = NULL;
@@ -721,7 +722,7 @@ void h2o__proxy_process_request(h2o_req_t *req)
         h2o_url_init(&target_buf, req->scheme, req->authority, h2o_iovec_init(H2O_STRLIT("/")));
 
     const char *upgrade_to = NULL;
-    int can_use_tunnel = client_ctx->tunnel_timeout != NULL && req->establish_tunnel != NULL;
+    int can_use_tunnel = client_ctx->tunnel_enabled && req->establish_tunnel != NULL;
     if (h2o_memis(req->method.base, req->method.len, H2O_STRLIT("CONNECT"))) {
         /* CONNECT requests cannot be forwarded unless configured as such */
         if (!can_use_tunnel) {

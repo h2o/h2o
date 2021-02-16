@@ -29,6 +29,7 @@
 #include "h2o/http2_common.h"
 #include "h2o/http3_common.h"
 #include "h2o/http3_internal.h"
+#include "../probes_.h"
 
 /**
  * internal error code used for signalling EOS
@@ -107,6 +108,7 @@ struct st_h2o_http3client_req_t {
             unsigned complete_to_be_called : 1;
         } egress;
         struct {
+            h2o_timer_t delayed;
             h2o_doublebuffer_t doublebuf;
             const char *errstr;
         } ingress;
@@ -193,25 +195,35 @@ static void tunnel_schedule_delayed_on_write_complete(struct st_h2o_http3client_
     h2o_timer_link(req->conn->super.super.ctx->loop, 0, &req->tunnel.egress.delayed);
 }
 
+static void tunnel_call_on_write_complete(struct st_h2o_http3client_req_t *req, const char *err)
+{
+    H2O_PROBE(TUNNEL_ON_WRITE_COMPLETE, &req->tunnel.tunnel, err);
+    req->tunnel.tunnel.on_write_complete(&req->tunnel.tunnel, err);
+}
+
 static void tunnel_delayed_on_write_closed(h2o_timer_t *entry)
 {
     struct st_h2o_http3client_req_t *req = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3client_req_t, tunnel.egress.delayed, entry);
-
-    req->tunnel.tunnel.on_write_complete(&req->tunnel.tunnel, h2o_socket_error_closed);
+    tunnel_call_on_write_complete(req, h2o_socket_error_closed);
 }
 
 static void tunnel_delayed_on_write_complete(h2o_timer_t *entry)
 {
     struct st_h2o_http3client_req_t *req = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3client_req_t, tunnel.egress.delayed, entry);
-
-    req->tunnel.tunnel.on_write_complete(&req->tunnel.tunnel, NULL);
+    tunnel_call_on_write_complete(req, NULL);
 }
 
 static void tunnel_destroy(h2o_tunnel_t *_tunnel)
 {
     struct st_h2o_http3client_req_t *req = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3client_req_t, tunnel.tunnel, _tunnel);
 
-    req->tunnel.tunnel.destroy = NULL;
+    H2O_PROBE(TUNNEL_ON_DESTROY, &req->tunnel.tunnel);
+
+    if (req->tunnel.tunnel.destroy != NULL) {
+        req->tunnel.tunnel.destroy = NULL;
+        h2o_timer_unlink(&req->tunnel.egress.delayed);
+        h2o_timer_unlink(&req->tunnel.ingress.delayed);
+    }
 
     if (req->quic != NULL)
         close_stream(req, H2O_HTTP3_ERROR_NONE);
@@ -224,23 +236,35 @@ static void tunnel_process_ingress(struct st_h2o_http3client_req_t *req)
     if (req->tunnel.ingress.doublebuf.inflight)
         return;
 
-    /* send all data available alonside the close signal */
+    if (!h2o_timer_is_linked(&req->tunnel.ingress.delayed))
+        h2o_timer_link(req->conn->super.super.ctx->loop, 0, &req->tunnel.ingress.delayed);
+}
+
+static void tunnel_process_ingress_delayed(h2o_timer_t *entry)
+{
+    struct st_h2o_http3client_req_t *req = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3client_req_t, tunnel.ingress.delayed, entry);
+
+    /* prepare the signal to be delivered, or return if there's nothing */
     h2o_iovec_t vec = h2o_doublebuffer_prepare(&req->tunnel.ingress.doublebuf, &req->recvbuf.body, SIZE_MAX);
     if (vec.len != 0) {
-        req->tunnel.tunnel.on_read(&req->tunnel.tunnel, req->tunnel.ingress.errstr, vec.base, vec.len);
+        /* we have data */
+    } else if (req->tunnel.ingress.errstr != NULL) {
+        /* we do not have data, but errstr */
+        h2o_doublebuffer_prepare_empty(&req->tunnel.ingress.doublebuf);
+    } else {
+        /* nothing needs to be notified */
         return;
     }
 
-    /* send just the close signal if no data is available */
-    if (req->tunnel.ingress.errstr != NULL) {
-        h2o_doublebuffer_prepare_empty(&req->tunnel.ingress.doublebuf);
-        req->tunnel.tunnel.on_read(&req->tunnel.tunnel, h2o_httpclient_error_io, NULL, 0);
-    }
+    H2O_PROBE(TUNNEL_ON_READ, &req->tunnel.tunnel, req->tunnel.ingress.errstr, vec.base, vec.len);
+    req->tunnel.tunnel.on_read(&req->tunnel.tunnel, req->tunnel.ingress.errstr, vec.base, vec.len);
 }
 
 static void tunnel_write(h2o_tunnel_t *_tunnel, const void *bytes, size_t len)
 {
     struct st_h2o_http3client_req_t *req = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3client_req_t, tunnel.tunnel, _tunnel);
+
+    H2O_PROBE(TUNNEL_WRITE, &req->tunnel.tunnel, bytes, len);
 
     /* We might not have had a chance to notify the app that the tunnel has been closed, if the peer sends RESET_STREAM &
      * STOP_SENDING while the app is blocked processing ingress data. In such case, `tunnel->quic` becomes NULL. */
@@ -266,13 +290,14 @@ static void tunnel_proceed_read(h2o_tunnel_t *_tunnel)
 {
     struct st_h2o_http3client_req_t *req = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3client_req_t, tunnel.tunnel, _tunnel);
 
+    H2O_PROBE(TUNNEL_PROCEED_READ, &req->tunnel.tunnel);
+
     if (req->tunnel.ingress.doublebuf.inflight)
         h2o_doublebuffer_consume(&req->tunnel.ingress.doublebuf);
     tunnel_process_ingress(req);
 }
 
-static struct st_h2o_httpclient__h3_conn_t *find_connection(h2o_httpclient_connection_pool_t *pool, const h2o_url_scheme_t *scheme,
-                                                            h2o_iovec_t authority)
+static struct st_h2o_httpclient__h3_conn_t *find_connection(h2o_httpclient_connection_pool_t *pool, h2o_url_t *origin)
 {
     int should_check_target = h2o_socketpool_is_global(pool->socketpool);
 
@@ -282,9 +307,9 @@ static struct st_h2o_httpclient__h3_conn_t *find_connection(h2o_httpclient_conne
      */
     for (h2o_linklist_t *l = pool->http3.conns.next; l != &pool->http3.conns; l = l->next) {
         struct st_h2o_httpclient__h3_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_httpclient__h3_conn_t, link, l);
-        if (should_check_target && !(conn->server.origin_url.scheme == scheme &&
+        if (should_check_target && !(conn->server.origin_url.scheme == origin->scheme &&
                                      h2o_memis(conn->server.origin_url.authority.base, conn->server.origin_url.authority.len,
-                                               authority.base, authority.len)))
+                                               origin->authority.base, origin->authority.len)))
             continue;
         return conn;
     }
@@ -317,8 +342,8 @@ static void destroy_connection(struct st_h2o_httpclient__h3_conn_t *conn)
     if (conn->getaddr_req != NULL)
         h2o_hostinfo_getaddr_cancel(conn->getaddr_req);
     h2o_timer_unlink(&conn->timeout);
-    free(conn->server.origin_url.host.base);
     free(conn->server.origin_url.authority.base);
+    free(conn->server.origin_url.host.base);
     free(conn->handshake_properties.client.session_ticket.base);
     h2o_http3_dispose_conn(&conn->super);
     free(conn);
@@ -343,18 +368,18 @@ static void start_connect(struct st_h2o_httpclient__h3_conn_t *conn, struct sock
     assert(conn->timeout.cb == on_connect_timeout);
 
     /* create QUIC connection context and attach */
-    if (conn->ctx->http3.load_session != NULL) {
-        if (!conn->ctx->http3.load_session(conn->ctx, sa, conn->server.origin_url.host.base, &address_token,
-                                           &conn->handshake_properties.client.session_ticket, &resumed_tp))
+    if (conn->ctx->http3->load_session != NULL) {
+        if (!conn->ctx->http3->load_session(conn->ctx, sa, conn->server.origin_url.host.base, &address_token,
+                                            &conn->handshake_properties.client.session_ticket, &resumed_tp))
             goto Fail;
     }
-    if ((ret = quicly_connect(&qconn, conn->ctx->http3.ctx->quic, conn->server.origin_url.host.base, sa, NULL,
-                              &conn->ctx->http3.ctx->next_cid, address_token, &conn->handshake_properties,
+    if ((ret = quicly_connect(&qconn, &conn->ctx->http3->quic, conn->server.origin_url.host.base, sa, NULL,
+                              &conn->ctx->http3->h3.next_cid, address_token, &conn->handshake_properties,
                               conn->handshake_properties.client.session_ticket.base != NULL ? &resumed_tp : NULL)) != 0) {
         conn->super.super.quic = NULL; /* just in case */
         goto Fail;
     }
-    ++conn->ctx->http3.ctx->next_cid.master_id; /* FIXME check overlap */
+    ++conn->ctx->http3->h3.next_cid.master_id; /* FIXME check overlap */
     if ((ret = h2o_http3_setup(&conn->super, qconn)) != 0)
         goto Fail;
 
@@ -428,15 +453,20 @@ Fail:
 struct st_h2o_httpclient__h3_conn_t *create_connection(h2o_httpclient_ctx_t *ctx, h2o_httpclient_connection_pool_t *pool,
                                                        h2o_url_t *origin)
 {
+    /* FIXME When using a non-global socket pool, let the socket pool load balance H3 connections among the list of targets being
+     * available. But until then, we use the first entry. */
+    if (!h2o_socketpool_is_global(pool->socketpool))
+        origin = &pool->socketpool->targets.entries[0]->url;
+
     static const h2o_http3_conn_callbacks_t callbacks = {{(void *)destroy_connection}, handle_control_stream_frame};
     static const h2o_http3_qpack_context_t qpack_ctx = {0 /* TODO */};
+
     struct st_h2o_httpclient__h3_conn_t *conn = h2o_mem_alloc(sizeof(*conn));
 
-    h2o_http3_init_conn(&conn->super, ctx->http3.ctx, &callbacks, &qpack_ctx);
+    h2o_http3_init_conn(&conn->super, &ctx->http3->h3, &callbacks, &qpack_ctx);
     memset((char *)conn + sizeof(conn->super), 0, sizeof(*conn) - sizeof(conn->super));
     conn->ctx = ctx;
-    conn->server.origin_url = (h2o_url_t){origin->scheme, h2o_strdup(NULL, origin->authority.base, origin->authority.len),
-                                          h2o_strdup(NULL, origin->host.base, origin->host.len)};
+    h2o_url_copy(NULL, &conn->server.origin_url, origin);
     sprintf(conn->server.named_serv, "%" PRIu16, h2o_url_get_port(origin));
     conn->handshake_properties.client.negotiated_protocols.list = h2o_http3_alpn;
     conn->handshake_properties.client.negotiated_protocols.count = sizeof(h2o_http3_alpn) / sizeof(h2o_http3_alpn[0]);
@@ -611,8 +641,10 @@ static int handle_input_expect_headers(struct st_h2o_http3client_req_t *req, con
         };
         req->tunnel.egress.delayed = (h2o_timer_t){};
         req->tunnel.egress.complete_to_be_called = 0;
+        req->tunnel.ingress.delayed = (h2o_timer_t){.cb = tunnel_process_ingress_delayed};
         h2o_doublebuffer_init(&req->tunnel.ingress.doublebuf, &h2o_socket_buffer_prototype);
         req->tunnel.ingress.errstr = NULL;
+        H2O_PROBE(H3C_TUNNEL_CREATE, &req->tunnel.tunnel);
         on_head.tunnel = &req->tunnel.tunnel;
     }
     req->super._cb.on_body = req->super._cb.on_head(&req->super, frame_is_eos ? h2o_httpclient_error_is_eos : NULL, &on_head);
@@ -889,7 +921,7 @@ void h2o_httpclient__connect_h3(h2o_httpclient_t **_client, h2o_mem_pool_t *pool
 
     assert(upgrade_to == NULL || upgrade_to == h2o_httpclient_upgrade_to_connect);
 
-    if ((conn = find_connection(connpool, target->scheme, target->authority)) == NULL)
+    if ((conn = find_connection(connpool, target)) == NULL)
         conn = create_connection(ctx, connpool, target);
 
     req = h2o_mem_alloc(sizeof(*req));
@@ -912,6 +944,9 @@ void h2o_httpclient__connect_h3(h2o_httpclient_t **_client, h2o_mem_pool_t *pool
     h2o_buffer_init(&req->sendbuf, &h2o_socket_buffer_prototype);
     h2o_buffer_init(&req->recvbuf.body, &h2o_socket_buffer_prototype);
     h2o_buffer_init(&req->recvbuf.stream, &h2o_socket_buffer_prototype);
+
+    if (_client != NULL)
+        *_client = &req->super;
 
     if (h2o_http3_has_received_settings(&conn->super)) {
         start_request(req);

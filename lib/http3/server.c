@@ -218,6 +218,11 @@ struct st_h2o_http3_server_stream_t {
      * a tunnel is established (i.e. when 2xx response is being received).
      */
     struct st_h2o_http3_server_tunnel_t {
+        /**
+         * Pointer to the tunnel that is connected to the origin. This object is destroyed as soon as an error is reported on either
+         * the read side or the write side of the tunnel. The send side of the H3 stream connected to the client is FINed when the
+         * tunnel is destroyed; therefore, `quicly_sendstate_is_open(&stream->quic->sendstate) == (stream->tunnel->tunnel != NULL)`.
+         */
         h2o_tunnel_t *tunnel;
         struct st_h2o_http3_server_stream_t *stream;
         struct {
@@ -1219,7 +1224,7 @@ static void do_send(h2o_ostream_t *_ostr, h2o_req_t *_req, h2o_sendvec_t *bufs, 
         if (!quicly_recvstate_transfer_complete(&stream->quic->recvstate) && !quicly_stop_requested(stream->quic))
             quicly_request_stop(stream->quic, H2O_HTTP3_ERROR_EARLY_RESPONSE);
         write_response(stream);
-        h2o_probe_log_response(&stream->req, stream->quic->stream_id);
+        h2o_probe_log_response(&stream->req, stream->quic->stream_id, NULL);
         set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_SEND_BODY);
     } else {
         assert(stream->state == H2O_HTTP3_SERVER_STREAM_STATE_SEND_BODY);
@@ -1294,8 +1299,11 @@ static void tunnel_on_read(h2o_tunnel_t *_tunnel, const char *err, const void *b
     }
 
     /* EOS */
-    if (err != NULL)
+    if (err != NULL) {
+        stream->tunnel->tunnel->destroy(stream->tunnel->tunnel);
+        stream->tunnel->tunnel = NULL;
         shutdown_response(stream);
+    }
 
     finalize_do_send(stream);
 }
@@ -1306,14 +1314,8 @@ void tunnel_write(struct st_h2o_http3_server_stream_t *stream)
 
     assert(!stream->tunnel->up.is_inflight);
 
-    if ((bytes_to_send = stream->req_body->size) == 0) {
-        if (quicly_recvstate_transfer_complete(&stream->quic->recvstate)) {
-            stream->tunnel->tunnel->destroy(stream->tunnel->tunnel);
-            stream->tunnel->tunnel = NULL;
-            shutdown_response(stream);
-        }
+    if ((bytes_to_send = stream->req_body->size) == 0)
         return;
-    }
 
     /* move chunk of data into stream->tunnel.up.buf */
     if (bytes_to_send > sizeof(stream->tunnel->up.bytes_inflight))
@@ -1340,6 +1342,13 @@ static void tunnel_on_write_complete(h2o_tunnel_t *tunnel, const char *err)
     assert(stream->tunnel->up.is_inflight);
     stream->tunnel->up.is_inflight = 0;
 
+    if (err != NULL) {
+        stream->tunnel->tunnel->destroy(stream->tunnel->tunnel);
+        stream->tunnel->tunnel = NULL;
+        shutdown_response(stream);
+        return;
+    }
+
     tunnel_write(stream);
 }
 
@@ -1353,6 +1362,7 @@ static void establish_tunnel(h2o_req_t *req, h2o_tunnel_t *tunnel, uint64_t idle
     tunnel->on_read = tunnel_on_read;
 
     write_response(stream);
+    h2o_probe_log_response(&stream->req, stream->quic->stream_id, stream->tunnel->tunnel);
     set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_SEND_BODY);
 
     finalize_do_send(stream);
@@ -1570,9 +1580,12 @@ static int scheduler_do_send(quicly_stream_scheduler_t *sched, quicly_conn_t *qc
              *    stream. */
             if (stream->proceed_while_sending) {
                 assert(stream->proceed_requested);
-                if (stream->tunnel != NULL && stream->tunnel->tunnel != NULL) {
-                    if (quicly_sendstate_is_open(&stream->quic->sendstate))
+                if (stream->tunnel != NULL) {
+                    if (quicly_sendstate_is_open(&stream->quic->sendstate)) {
                         stream->tunnel->tunnel->proceed_read(stream->tunnel->tunnel);
+                    } else {
+                        assert(stream->tunnel->tunnel == NULL);
+                    }
                 } else {
                     h2o_proceed_response(&stream->req);
                 }

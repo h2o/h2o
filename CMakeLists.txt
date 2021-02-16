@@ -486,6 +486,7 @@ SET(UNIT_TEST_SOURCE_FILES
     t/00unit/lib/core/proxy.c
     t/00unit/lib/core/util.c
     t/00unit/lib/handler/compress.c
+    t/00unit/lib/handler/connect.c
     t/00unit/lib/handler/fastcgi.c
     t/00unit/lib/handler/file.c
     t/00unit/lib/handler/headers.c
@@ -521,6 +522,7 @@ LIST(REMOVE_ITEM UNIT_TEST_SOURCE_FILES
     lib/core/util.c
     lib/handler/compress.c
     lib/handler/compress/gzip.c
+    lib/handler/connect.c
     lib/handler/fastcgi.c
     lib/handler/file.c
     lib/handler/headers.c
@@ -943,6 +945,7 @@ IF (WITH_H2OLOG)
     LINK_DIRECTORIES("${LIBBCC_LIBRARY_DIRS}")
 
     ADD_EXECUTABLE(h2olog ${H2OLOG_SOURCE_FILES})
+    ADD_DEPENDENCIES(checkdepends h2olog)
     TARGET_LINK_LIBRARIES(h2olog libh2o-evloop ${EXTRA_LIBS})
 
     SET_TARGET_PROPERTIES(h2olog PROPERTIES

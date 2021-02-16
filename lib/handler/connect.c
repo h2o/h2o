@@ -27,6 +27,10 @@
 struct st_connect_handler_t {
     h2o_handler_t super;
     h2o_proxy_config_vars_t config;
+    struct {
+        size_t count;
+        h2o_connect_acl_entry_t entries[0];
+    } acl;
 };
 
 #define MAX_CONNECT_RETRIES 3
@@ -43,16 +47,14 @@ struct st_connect_request_t {
     h2o_socket_t *sock;
     h2o_hostinfo_getaddr_req_t *getaddr_req;
     struct {
-        h2o_iovec_t host;
-        char port[sizeof(H2O_UINT16_LONGEST_STR)];
-    } server_name;
-    struct {
         struct st_server_address_t list[MAX_CONNECT_RETRIES];
         size_t size;
         size_t next;
     } server_addresses;
     h2o_timer_t timeout;
 };
+
+#define TO_BITMASK(type, len) ((type)~(((type)1 << (sizeof(type) * 8 - (len))) - 1))
 
 static void start_connect(struct st_connect_request_t *creq);
 
@@ -81,15 +83,18 @@ static void on_connect(h2o_socket_t *sock, const char *err)
         return;
     }
 
+    /* create and pass the responsibility to the tunnel */
     h2o_timer_unlink(&creq->timeout);
-    h2o_req_t *req = creq->src_req;
-    uint64_t timeout = creq->handler->config.tunnel.timeout;
     sock->data = NULL;
     creq->sock = NULL;
-    req->res.status = 200;
+    h2o_socket_tunnel_t *tunnel = h2o_socket_tunnel_create(sock);
 
-    h2o_tunnel_t *tunnel = h2o_tunnel_create_from_socket(sock);
-    req->establish_tunnel(req, tunnel, timeout);
+    /* send response to client */
+    creq->src_req->res.status = 200;
+    creq->src_req->establish_tunnel(creq->src_req, &tunnel->super, creq->handler->config.io_timeout);
+
+    /* start the tunnel */
+    h2o_socket_tunnel_start(tunnel, 0);
 }
 
 static void on_generator_dispose(void *_self)
@@ -136,7 +141,7 @@ static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errs
         assert(res->ai_socktype == SOCK_DGRAM);
         h2o_tunnel_t *tunnel = h2o_open_udp_tunnel_from_sa(creq->loop, res->ai_addr, res->ai_addrlen);
         h2o_req_t *req = creq->src_req;
-        uint64_t timeout = creq->handler->config.tunnel.timeout;
+        uint64_t timeout = creq->handler->config.io_timeout;
         req->res.status = 200;
         h2o_timer_unlink(&creq->timeout);
         req->establish_tunnel(req, tunnel, timeout);
@@ -148,6 +153,14 @@ static void start_connect(struct st_connect_request_t *creq)
     /* repeat connect(pop_front(address_list)) until we run out of the list */
     do {
         struct st_server_address_t *server_address = creq->server_addresses.list + creq->server_addresses.next++;
+        /* check address */
+        if (!h2o_connect_lookup_acl(creq->handler->acl.entries, creq->handler->acl.count, server_address->sa)) {
+            h2o_timer_unlink(&creq->timeout);
+            h2o_req_log_error(creq->src_req, "lib/handler/connect.c", "access rejected by acl");
+            h2o_send_error_403(creq->src_req, "Access Forbidden", "Access Forbidden", 0);
+            return;
+        }
+        /* connect */
         if ((creq->sock = h2o_socket_connect(creq->loop, server_address->sa, server_address->salen, on_connect)) != NULL) {
             creq->sock->data = creq;
             return;
@@ -175,7 +188,7 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
         return -1;
     }
 
-    if (h2o_url_parse_hostport(req->input.path.base, req->input.path.len, &host, &port) == NULL || port == 0 || port == 65535) {
+    if (h2o_url_parse_hostport(req->authority.base, req->authority.len, &host, &port) == NULL || port == 0 || port == 65535) {
         h2o_send_error_400(req, "Bad Request", "Bad Request", 0);
         return 0;
     }
@@ -185,23 +198,159 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
         .handler = handler,
         .loop = req->conn->ctx->loop,
         .src_req = req,
-        .server_name = {host},
         .timeout = {.cb = on_timeout},
     };
-    int port_strlen = sprintf(creq->server_name.port, "%" PRIu16, port);
-    h2o_timer_link(creq->loop, handler->config.tunnel.timeout, &creq->timeout);
+    h2o_timer_link(creq->loop, handler->config.connect_timeout, &creq->timeout);
 
-    creq->getaddr_req = h2o_hostinfo_getaddr(&creq->src_req->conn->ctx->receivers.hostinfo_getaddr, creq->server_name.host,
-                                             h2o_iovec_init(creq->server_name.port, port_strlen), AF_UNSPEC, socket_type,
-                                             socket_proto, AI_ADDRCONFIG | AI_NUMERICSERV, on_getaddr, creq);
+    char port_str[sizeof(H2O_UINT16_LONGEST_STR)];
+    int port_strlen = sprintf(port_str, "%" PRIu16, port);
+    creq->getaddr_req =
+        h2o_hostinfo_getaddr(&creq->src_req->conn->ctx->receivers.hostinfo_getaddr, host, h2o_iovec_init(port_str, port_strlen),
+                             AF_UNSPEC, socket_type, socket_proto, AI_ADDRCONFIG | AI_NUMERICSERV, on_getaddr, creq);
 
     return 0;
 }
 
-void h2o_connect_register(h2o_pathconf_t *pathconf, h2o_proxy_config_vars_t *config)
+void h2o_connect_register(h2o_pathconf_t *pathconf, h2o_proxy_config_vars_t *config, h2o_connect_acl_entry_t *acl_entries,
+                          size_t num_acl_entries)
 {
-    struct st_connect_handler_t *self = (void *)h2o_create_handler(pathconf, sizeof(*self));
+    struct st_connect_handler_t *self = (void *)h2o_create_handler(pathconf, offsetof(struct st_connect_handler_t, acl.entries) +
+                                                                                 sizeof(*self->acl.entries) * num_acl_entries);
 
     self->super.on_req = on_req;
     self->config = *config;
+    self->acl.count = num_acl_entries;
+    memcpy(self->acl.entries, acl_entries, sizeof(self->acl.entries[0]) * num_acl_entries);
+}
+
+const char *h2o_connect_parse_acl(h2o_connect_acl_entry_t *output, const char *input)
+{
+    /* type */
+    switch (input[0]) {
+    case '+':
+        output->allow_ = 1;
+        break;
+    case '-':
+        output->allow_ = 0;
+        break;
+    default:
+        return "ACL entry must begin with + or -";
+    }
+
+    /* extract address, port */
+    h2o_iovec_t host_vec;
+    uint16_t port;
+    const char *slash_at;
+    if ((slash_at = h2o_url_parse_hostport(input + 1, strlen(input + 1), &host_vec, &port)) == NULL)
+        goto GenericParseError;
+    char *host = alloca(host_vec.len + 1);
+    memcpy(host, host_vec.base, host_vec.len);
+    host[host_vec.len] = '\0';
+
+    /* parse netmask (or addr_mask is set to zero to indicate that mask was not specified) */
+    if (*slash_at != '\0') {
+        if (*slash_at != '/')
+            goto GenericParseError;
+        if (sscanf(slash_at + 1, "%zu", &output->addr_mask) != 1 || output->addr_mask == 0)
+            return "invalid address mask";
+    } else {
+        output->addr_mask = 0;
+    }
+
+    /* parse address */
+    struct in_addr v4addr;
+    struct in6_addr v6addr;
+    if (strcmp(host, "*") == 0) {
+        output->addr_family = H2O_CONNECT_ACL_ADDRESS_ANY;
+        if (output->addr_mask != 0)
+            return "wildcard address (*) cannot have a netmask";
+    } else if (inet_pton(AF_INET, host, &v4addr) == 1) {
+        output->addr_family = H2O_CONNECT_ACL_ADDRESS_V4;
+        if (output->addr_mask == 0) {
+            output->addr_mask = 32;
+        } else if (output->addr_mask > 32) {
+            return "invalid address mask";
+        }
+        output->addr.v4 = ntohl(v4addr.s_addr) & TO_BITMASK(uint32_t, output->addr_mask);
+    } else if (inet_pton(AF_INET6, host, &v6addr) == 1) {
+        output->addr_family = H2O_CONNECT_ACL_ADDRESS_V6;
+        if (output->addr_mask == 0) {
+            output->addr_mask = 128;
+        } else if (output->addr_mask > 128) {
+            return "invalid address mask";
+        }
+        size_t i;
+        for (i = 0; i < output->addr_mask / 8; ++i)
+            output->addr.v6[i] = v6addr.s6_addr[i];
+        if (output->addr_mask % 8 != 0)
+            output->addr.v6[i] = v6addr.s6_addr[i] & TO_BITMASK(uint8_t, v6addr.s6_addr[i]);
+        for (++i; i < PTLS_ELEMENTSOF(output->addr.v6); ++i)
+            output->addr.v6[i] = 0;
+    } else {
+        return "failed to parse address";
+    }
+
+    /* set port (for whatever reason, `h2o_url_parse_hostport` sets port to 65535 when not specified, convert that to zero) */
+    output->port = port == 65535 ? 0 : port;
+
+    return NULL;
+
+GenericParseError:
+    return "failed to parse input, expected format is: [+-]address(?::port|)(?:/netmask|)";
+}
+
+int h2o_connect_lookup_acl(h2o_connect_acl_entry_t *acl_entries, size_t num_acl_entries, struct sockaddr *target)
+{
+    uint32_t target_v4addr = 0;
+    uint16_t target_port;
+
+    /* reject anything other than v4/v6, as well as converting the values to native format */
+    switch (target->sa_family) {
+    case AF_INET: {
+        struct sockaddr_in *sin = (void *)target;
+        target_v4addr = ntohl(sin->sin_addr.s_addr);
+        target_port = ntohs(sin->sin_port);
+    } break;
+    case AF_INET6:
+        target_port = htons(((struct sockaddr_in6 *)target)->sin6_port);
+        break;
+    default:
+        return 0;
+    }
+
+    /* check each ACL entry */
+    for (size_t i = 0; i != num_acl_entries; ++i) {
+        h2o_connect_acl_entry_t *entry = acl_entries + i;
+        /* check port */
+        if (entry->port != 0 && entry->port != target_port)
+            goto Next;
+        /* check address */
+        switch (entry->addr_family) {
+        case H2O_CONNECT_ACL_ADDRESS_ANY:
+            break;
+        case H2O_CONNECT_ACL_ADDRESS_V4: {
+            if (target->sa_family != AF_INET)
+                goto Next;
+            if (entry->addr.v4 != (target_v4addr & TO_BITMASK(uint32_t, entry->addr_mask)))
+                goto Next;
+        } break;
+        case H2O_CONNECT_ACL_ADDRESS_V6: {
+            if (target->sa_family != AF_INET6)
+                continue;
+            uint8_t *target_v6addr = ((struct sockaddr_in6 *)target)->sin6_addr.s6_addr;
+            size_t i;
+            for (i = 0; i < entry->addr_mask / 8; ++i)
+                if (entry->addr.v6[i] != target_v6addr[i])
+                    goto Next;
+            if (entry->addr_mask % 8 != 0 && entry->addr.v6[i] != (target_v6addr[i] & TO_BITMASK(uint8_t, entry->addr_mask % 8)))
+                goto Next;
+        } break;
+        }
+        /* match */
+        return entry->allow_;
+    Next:;
+    }
+
+    /* default rule is deny */
+    return 0;
 }
