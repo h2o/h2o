@@ -115,36 +115,24 @@ h2o_iovec_t get_next_chunk(const uint8_t *bytes, size_t len, size_t *to_consume,
     return h2o_iovec_init(bytes, chunk_length);
 }
 
-static void tunnel_on_writev(h2o_tunnel_t *_tunnel, h2o_iovec_t *iov, size_t iovlen)
+static void send_udp_datagrams(h2o_tunnel_t *_tunnel, h2o_iovec_t *datagrams, size_t num_datagrams)
 {
     struct st_h2o_udp_tunnel_t *tunnel = (void *)_tunnel;
-    int fd;
-    fd = h2o_socket_get_fd(tunnel->sock);
 
-    struct msghdr mess;
-    struct iovec vec[iovlen];
-    for (size_t i = 0; i < iovlen; i++)
-        vec[i] = (struct iovec){
-            .iov_base = iov[i].base,
-            .iov_len = iov[i].len,
-        };
-    memset(&mess, 0, sizeof(mess));
-    mess.msg_iov = vec;
-    mess.msg_iovlen = iovlen;
-    while (sendmsg(fd, &mess, 0) == -1 && errno == EINTR)
-        ;
+    for (size_t i = 0; i != num_datagrams; ++i)
+        while (send(h2o_socket_get_fd(tunnel->sock), datagrams[i].base, datagrams[i].len, 0) == -1 && errno == EINTR)
+            ;
 
     tunnel->super.on_write_complete(&tunnel->super, NULL);
-    return;
 }
 
 static void tunnel_on_write(h2o_tunnel_t *_tunnel, const void *bytes, size_t len)
 {
     int from_buf = 0;
     struct st_h2o_udp_tunnel_t *tunnel = (void *)_tunnel;
-    h2o_iovec_t iovs[64];
-    size_t iovlen = 0;
-    size_t idx = 0;
+    h2o_iovec_t datagrams[64];
+    size_t num_datagrams = 0;
+    size_t off = 0;
 
     if (tunnel->egress.buf->size != 0) {
         from_buf = 1;
@@ -157,24 +145,24 @@ static void tunnel_on_write(h2o_tunnel_t *_tunnel, const void *bytes, size_t len
     do {
         int skip = 0;
         size_t to_consume;
-        iovs[iovlen] = get_next_chunk(bytes + idx, len - idx, &to_consume, &skip);
-        if (iovs[iovlen].len == 0)
+        datagrams[num_datagrams] = get_next_chunk(bytes + off, len - off, &to_consume, &skip);
+        if (datagrams[num_datagrams].len == 0)
             break;
         if (!skip)
-            iovlen++;
-        idx += to_consume;
+            num_datagrams++;
+        off += to_consume;
     } while (1);
 
-    if (iovlen > 0)
-        tunnel_on_writev(_tunnel, iovs, iovlen);
+    if (num_datagrams > 0)
+        send_udp_datagrams(_tunnel, datagrams, num_datagrams);
 
     if (from_buf)
-        h2o_buffer_consume(&tunnel->egress.buf, idx);
+        h2o_buffer_consume(&tunnel->egress.buf, off);
 
-    if (len != idx) {
-        h2o_buffer_reserve(&tunnel->egress.buf, len - idx);
-        memcpy(tunnel->egress.buf->bytes + tunnel->egress.buf->size, bytes + idx, len - idx);
-        tunnel->egress.buf->size += (len - idx);
+    if (len != off) {
+        h2o_buffer_reserve(&tunnel->egress.buf, len - off);
+        memcpy(tunnel->egress.buf->bytes + tunnel->egress.buf->size, bytes + off, len - off);
+        tunnel->egress.buf->size += (len - off);
     }
 }
 
