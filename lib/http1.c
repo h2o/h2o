@@ -469,7 +469,7 @@ static const char *fixup_request(struct st_h2o_http1_conn_t *conn, struct phr_he
             h2o_url_t url;
             if (h2o_url_parse(conn->req.input.path.base, conn->req.input.path.len, &url) == 0) {
                 conn->req.input.path = url.path;
-                host = conn->req.authority;
+                host = url.authority; /* authority part of the absolute form overrides the host header field (RFC 7230 S5.4) */
             }
         }
         /* move host header to req->authority */
