@@ -516,6 +516,8 @@ int h2o_hpack_parse_request(h2o_mem_pool_t *pool, h2o_hpack_decode_header_cb dec
                         return H2O_HTTP2_ERROR_PROTOCOL;
                     if (h2o_memis(value.base, value.len, H2O_STRLIT("https"))) {
                         *scheme = &H2O_URL_SCHEME_HTTPS;
+                    } else if (h2o_memis(value.base, value.len, H2O_STRLIT("masque"))) {
+                        *scheme = &H2O_URL_SCHEME_MASQUE;
                     } else {
                         /* draft-16 8.1.2.3 suggests quote: ":scheme is not restricted to http and https schemed URIs" */
                         *scheme = &H2O_URL_SCHEME_HTTP;

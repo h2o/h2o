@@ -478,8 +478,22 @@ static void usage(const char *progname)
 
 static void setup_connect_to(const char *arg, int opt_ch)
 {
-     if (h2o_url_init(&req.connect_to, NULL, h2o_iovec_init(arg, strlen(arg)), h2o_iovec_init(NULL, 0)) != 0 ||
-        req.connect_to._port == 0 || req.connect_to._port == 65535) {
+    int ret;
+
+    switch (opt_ch) {
+    case 'x':
+        ret = h2o_url_init(&req.connect_to, NULL, h2o_iovec_init(arg, strlen(arg)), h2o_iovec_init(NULL, 0));
+        break;
+    case 'X':
+        ret = h2o_url_init(&req.connect_to, &H2O_URL_SCHEME_MASQUE, h2o_iovec_init(arg, strlen(arg)),
+                           h2o_iovec_init(H2O_STRLIT("/")));
+        break;
+    default:
+        h2o_fatal("unexpected opt_ch:%c", opt_ch);
+        break;
+    }
+
+    if (ret != 0 || req.connect_to._port == 0 || req.connect_to._port == 65535) {
         fprintf(stderr, "invalid server address specified for -%c\n", opt_ch);
         exit(EXIT_FAILURE);
     }

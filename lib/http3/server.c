@@ -1131,6 +1131,10 @@ static int handle_input_expect_headers(struct st_h2o_http3_server_stream_t *stre
     if (ret == H2O_HTTP2_ERROR_INVALID_HEADER_CHAR)
         return handle_input_expect_headers_send_http_error(stream, h2o_send_error_400, "Invalid Request", *err_desc, err_desc);
 
+    /* validate semantic requirement */
+    if (!h2o_req_validate_pseudo_headers(&stream->req))
+        return H2O_HTTP3_ERROR_GENERAL_PROTOCOL;
+
     /* check if content-length is within the permitted bounds */
     if (stream->req.content_length != SIZE_MAX && stream->req.content_length > conn->super.ctx->globalconf->max_request_entity_size)
         return handle_input_expect_headers_send_http_error(stream, h2o_send_error_413, "Request Entity Too Large",
@@ -1147,7 +1151,8 @@ static int handle_input_expect_headers(struct st_h2o_http3_server_stream_t *stre
     }
 
     /* special handling of CONNECT method */
-    if (h2o_memis(stream->req.input.method.base, stream->req.input.method.len, H2O_STRLIT("CONNECT"))) {
+    if (h2o_memis(stream->req.input.method.base, stream->req.input.method.len, H2O_STRLIT("CONNECT")) ||
+        h2o_memis(stream->req.input.method.base, stream->req.input.method.len, H2O_STRLIT("CONNECT-UDP"))) {
         if (stream->req.content_length != SIZE_MAX)
             return handle_input_expect_headers_send_http_error(stream, h2o_send_error_400, "Invalid Request",
                                                                "CONNECT request cannot have request body", err_desc);

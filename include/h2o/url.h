@@ -32,12 +32,7 @@ typedef struct st_h2o_url_scheme_t {
     int is_ssl;
 } h2o_url_scheme_t;
 
-extern const h2o_url_scheme_t H2O_URL_SCHEME_HTTP, H2O_URL_SCHEME_HTTPS;
-/**
- * The scheme defined by CONNECT-UDP method. As the purpose of this scheme is to distinguish requests from ordinary HTTP requests,
- * we do not use this scheme internally to propagate information; CONNECT-UDP requests carry HTTP and HTTPS schemes internally, as
- * we do for CONNECT requests.
- */
+extern const h2o_url_scheme_t H2O_URL_SCHEME_HTTP, H2O_URL_SCHEME_HTTPS, H2O_URL_SCHEME_MASQUE;
 extern const h2o_url_scheme_t H2O_URL_SCHEME_MASQUE;
 /**
  * used by fastcgi handler
