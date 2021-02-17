@@ -47,12 +47,12 @@ EOT
 });
 
 # -F=1 connection sampling per second
-subtest "h2olog -F=1", sub {
+subtest "h2olog -R=1.00", sub {
   my $t0 = time();
   my $trace = slurp_h2olog({
     pid => $server->{pid},
     # TODO: use -q (request-header filter; not yet implemented) as well as -t
-    args => ["-t", "h2o:receive_request_header", $ENV{H2OLOG_DEBUG} ? ("-d") : ()],
+    args => ["-R", "1.0", "-t", "h2o:receive_request_header", $ENV{H2OLOG_DEBUG} ? ("-d") : ()],
 
     request => sub {
       for (my $i = 1; $i <= 2; $i++) {

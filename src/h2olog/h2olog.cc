@@ -228,15 +228,17 @@ static void lost_cb(void *context, uint64_t lost)
     tracer->handle_lost(lost);
 }
 
-static void setup_ebpf_map(ebpf::BPF *bpf)
+static bool setup_ebpf_map(ebpf::BPF *bpf)
 {
-    auto map = bpf->get_table("h2o_tid_to_u64");
-    unlink(H2O_EBPF_MAP_PATH2); // FIXME: handle the case it exists
-    if (bpf_obj_pin(map.get_fd(), H2O_EBPF_MAP_PATH2) != 0) {
+    unlink(H2O_EBPF_MAP_PATH2);
+    atexit([]() { unlink(H2O_EBPF_MAP_PATH2); });
+
+    auto table = bpf->get_table("h2o_tid_to_u64");
+    if (bpf_obj_pin(table.get_fd(), H2O_EBPF_MAP_PATH2) != 0) {
         perror("BPF_OBJ_PIN failed");
-        exit(1);
+        return false;
     }
-    fprintf(stderr, "Successfully pinned a BPF table: %s\n", H2O_EBPF_MAP_PATH2);
+    return true;
 }
 
 int main(int argc, char **argv)
@@ -250,8 +252,8 @@ int main(int argc, char **argv)
     std::vector<std::string> response_header_filters;
     int c;
     pid_t h2o_pid = -1;
-    int sample_frequency = 0;
-    while ((c = getopt(argc, argv, "hHdrlp:t:s:w:F:")) != -1) {
+    double sampling_ratio = 0;
+    while ((c = getopt(argc, argv, "hHdrlp:t:s:w:R:")) != -1) {
         switch (c) {
         case 'H':
             tracer.reset(create_http_tracer());
@@ -276,10 +278,11 @@ int main(int argc, char **argv)
                 exit(EXIT_FAILURE);
             }
             break;
-        case 'F':
-            sample_frequency = atoi(optarg);
-            if (sample_frequency < 0) {
-                fprintf(stderr, "Error: the argument of -F must be a positive integer (0 to disable this option).\n");
+        case 'R': // can take 0.0 ... 1.0
+            sampling_ratio = atof(optarg);
+            if (!(sampling_ratio >= 0.0 && sampling_ratio <= 1.0)) {
+                fprintf(stderr, "Error: the argument of -R must be in the range of 0.0 to 1.0 (0.0 to disable this option)\n");
+                exit(EXIT_FAILURE);
             }
             break;
         case 'd':
@@ -368,9 +371,13 @@ int main(int argc, char **argv)
         return EXIT_FAILURE;
     }
 
-    //if (sample_frequency > 0) {
-        setup_ebpf_map(bpf);
-    //}
+    if (sampling_ratio > 0) {
+        if (!setup_ebpf_map(bpf)) {
+            return EXIT_FAILURE;
+        }
+
+        cflags.push_back("H2OLOG_SAMPLING_RATE=" + std::to_string(sampling_ratio));
+    }
 
     bpf->attach_tracepoint("sched:sched_process_exit", "trace_sched_process_exit");
 

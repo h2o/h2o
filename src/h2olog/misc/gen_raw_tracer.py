@@ -253,10 +253,11 @@ int %s(struct pt_regs *ctx) {
 
   if fully_specified_probe_name == "h2o:h3s_accept":
     c += r"""
-  // skip_tracing
+#ifdef H2OLOG_SAMPLING_RATE
   struct task_struct *task = (struct task_struct*)bpf_get_current_task();
-  uint64_t val = 1; // always skip for now
+  uint64_t val = bpf_get_prandom_u32() >= (H2OLOG_SAMPLING_RATE * UINT32_MAX);
   h2o_tid_to_u64.insert(&task->pid, &val);
+#endif H2OLOG_SAMPLING_RATE
 """
 
   c += r"""
