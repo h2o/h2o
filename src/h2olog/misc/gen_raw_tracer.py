@@ -253,10 +253,10 @@ int %s(struct pt_regs *ctx) {
 
   if fully_specified_probe_name == "h2o:h3s_accept":
     c += r"""
-  uint64_t key = event.h3s_accept.conn_id;
-  int32_t val = 1; // always skip for now
-  h2o_map.insert(&key, &val);
-
+  // skip_tracing
+  struct task_struct *task = (struct task_struct*)bpf_get_current_task();
+  uint64_t val = 1; // always skip for now
+  h2o_tid_to_u64.insert(&task->pid, &val);
 """
 
   c += r"""
@@ -409,12 +409,9 @@ typedef h2olog_address_t quicly_address_t;
 %s
 BPF_PERF_OUTPUT(events);
 
-typedef uint64_t h2o_ebpf_map_key_t; // conn_id
-typedef int32_t h2o_ebpf_map_value_t; // skip_tracing
-
-// FIXME: consider the most suitable table type other than "hash"
-// FIXME: the table size should be parameterizable
-BPF_TABLE("hash", h2o_ebpf_map_key_t, h2o_ebpf_map_value_t, h2o_map, 1000);
+// A general-purpose pinned BPF hash table.
+// The table size must be larger than the number of threads in h2o.
+BPF_TABLE("hash", pid_t, uint64_t, h2o_tid_to_u64, 1024);
 
 // HTTP/3 tracing
 BPF_HASH(h2o_to_quicly_conn, u64, u32);

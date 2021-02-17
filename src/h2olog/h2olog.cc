@@ -230,7 +230,7 @@ static void lost_cb(void *context, uint64_t lost)
 
 static void setup_ebpf_map(ebpf::BPF *bpf)
 {
-    auto map = bpf->get_hash_table<uint64_t, int32_t>("h2o_map");
+    auto map = bpf->get_table("h2o_tid_to_u64");
     unlink(H2O_EBPF_MAP_PATH2); // FIXME: handle the case it exists
     if (bpf_obj_pin(map.get_fd(), H2O_EBPF_MAP_PATH2) != 0) {
         perror("BPF_OBJ_PIN failed");

@@ -1718,14 +1718,14 @@ static void open_tracing_map2(h2o_loop_t *loop)
     tracing_map_fd2 = syscall(__NR_bpf, BPF_OBJ_GET, &attr, sizeof(attr));
 }
 
-static uint8_t lookup_map2(const uint64_t conn_id)
+static uint64_t lookup_u64_by_tid()
 {
-    union bpf_attr attr;
-    int32_t value;
+    union bpf_attr attr = {0};
+    pid_t tid = gettid();
+    uint64_t value;
 
-    memset(&attr, 0, sizeof(attr));
     attr.map_fd = tracing_map_fd2;
-    attr.key = (uint64_t)&conn_id;
+    attr.key = (uint64_t)&tid;
     attr.value = (uint64_t)&value;
 
     if (syscall(__NR_bpf, BPF_MAP_LOOKUP_ELEM, &attr, sizeof(attr)) != 0)
@@ -1734,20 +1734,29 @@ static uint8_t lookup_map2(const uint64_t conn_id)
     return value;
 }
 
-int h2o_socket_ebpf_lookup2(h2o_loop_t *loop, uint64_t conn_id)
+static int delete_u64_by_tid()
 {
-    // try open map if not opened
+    union bpf_attr attr = {0};
+    pid_t tid = gettid();
+    attr.map_fd = tracing_map_fd2;
+    attr.key = (uint64_t)&tid;
+
+    if (syscall(__NR_bpf, BPF_MAP_DELETE_ELEM, &attr, sizeof(attr)) != 0)
+        return 0;
+
+    return 1;
+}
+
+uint64_t h2o_socket_ebpf_get_retval(h2o_loop_t *loop)
+{
     open_tracing_map2(loop);
 
-    // map is not connected, fallback accepting probe
     if (tracing_map_fd2 < 0)
         return 0;
 
-    // invoke the BPF callback
-
-
-    // lookup map for our key
-    return lookup_map2(conn_id);
+    uint64_t retval = lookup_u64_by_tid();
+    delete_u64_by_tid();
+    return retval;
 }
 
 #else
@@ -1766,6 +1775,11 @@ h2o_ebpf_map_value_t h2o_socket_ebpf_lookup(h2o_loop_t *loop, int (*init_key)(st
                                             void *cbdata)
 {
     return (h2o_ebpf_map_value_t){0};
+}
+
+uint64_t h2o_socket_ebpf_get_retval(h2o_loop_t *loop)
+{
+    return 0;
 }
 
 #endif
