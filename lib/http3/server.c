@@ -1126,7 +1126,7 @@ static int handle_input_expect_headers(struct st_h2o_http3_server_stream_t *stre
     /* lookup scheme, setting it to either HTTP or HTTPS when not available or unknown to prevent having issues with
      * `req->input.scheme` being NULL */
     if ((header_exists_map & H2O_HPACK_PARSE_HEADERS_SCHEME_EXISTS) != 0) {
-        if (h2o_memis(scheme.base, scheme.len, H2O_STRLIT("https"))) {
+        if (h2o_lcstris(scheme.base, scheme.len, H2O_STRLIT("https"))) {
             stream->req.input.scheme = &H2O_URL_SCHEME_HTTPS;
         } else {
             /* TODO lookup */
