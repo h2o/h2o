@@ -937,7 +937,7 @@ IF (WITH_H2OLOG)
 
     ADD_CUSTOM_COMMAND(
         OUTPUT  "${CMAKE_CURRENT_SOURCE_DIR}/src/h2olog/generated_raw_tracer.cc"
-        COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/src/h2olog/misc/gen_raw_tracer.py" "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}/src/h2olog/generated_raw_tracer.cc"
+        COMMAND make -f misc/regen.mk src/h2olog/generated_raw_tracer.cc
         DEPENDS ${H2OLOG_GEN_DEPS} "${CMAKE_CURRENT_SOURCE_DIR}/src/h2olog/misc/gen_raw_tracer.py"
     )
     LIST(APPEND H2OLOG_SOURCE_FILES "${CMAKE_CURRENT_SOURCE_DIR}/src/h2olog/generated_raw_tracer.cc")
