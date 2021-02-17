@@ -929,17 +929,10 @@ IF (WITH_H2OLOG)
         "include/h2o/version.h"
     )
 
-    SET(H2OLOG_GEN_DEPS
-        "h2o-probes.d"
-        "deps/quicly/quicly-probes.d"
-        "deps/quicly/include/quicly.h"
-    )
-
     ADD_CUSTOM_COMMAND(
         OUTPUT  "${CMAKE_CURRENT_SOURCE_DIR}/src/h2olog/generated_raw_tracer.cc"
         COMMAND make -f misc/regen.mk src/h2olog/generated_raw_tracer.cc
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-        DEPENDS ${H2OLOG_GEN_DEPS} "${CMAKE_CURRENT_SOURCE_DIR}/src/h2olog/misc/gen_raw_tracer.py"
     )
     LIST(APPEND H2OLOG_SOURCE_FILES "${CMAKE_CURRENT_SOURCE_DIR}/src/h2olog/generated_raw_tracer.cc")
     LINK_DIRECTORIES("${LIBBCC_LIBRARY_DIRS}")
