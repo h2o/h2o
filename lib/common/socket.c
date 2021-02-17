@@ -1685,46 +1685,46 @@ h2o_ebpf_map_value_t h2o_socket_ebpf_lookup(h2o_loop_t *loop, int (*init_key)(st
     return lookup_map(&key);
 }
 
-static __thread int tracing_map_fd2 = -1;
-static __thread uint64_t tracing_map_last_attempt2 = 0;
-
-static void open_tracing_map2(h2o_loop_t *loop)
+static int open_tracing_map2(h2o_loop_t *loop)
 {
+    static __thread int fd = -1;
+    static __thread uint64_t last_attempt = 0;
+
     // only check every second
     uint64_t now = h2o_now(loop);
-    if (tracing_map_last_attempt2 - now < 1000)
-        return;
+    if (last_attempt - now < 1000)
+        return fd;
 
-    tracing_map_last_attempt2 = now;
+    tracing_map_last_attempt = now;
 
     // check if map exists at path
     struct stat s;
-    if (stat(&H2O_EBPF_MAP_PATH2[0], &s) == -1) {
+    if (stat(H2O_EBPF_MAP_PATH2, &s) == -1) {
         // map path unavailable, cleanup fd if needed and leave
-        if (tracing_map_fd2 >= 0) {
-            close(tracing_map_fd2);
-            tracing_map_fd2 = -1;
+        if (fd >= 0) {
+            close(fd);
+            fd = -1;
         }
-        return;
+        return -1;
     }
 
-    if (tracing_map_fd2 >= 0)
-        return; // map still exists and we have a fd
+    if (fd >= 0)
+        return fd; // map still exists and we have a fd
 
-    // map exists, try connect
-    union bpf_attr attr;
-    memset(&attr, 0, sizeof(attr));
-    attr.pathname = (uint64_t)&H2O_EBPF_MAP_PATH2[0];
-    tracing_map_fd2 = syscall(__NR_bpf, BPF_OBJ_GET, &attr, sizeof(attr));
+    // map exists, try bpf_obj_get
+    union bpf_attr attr = {};
+    attr.pathname = (uint64_t)H2O_EBPF_MAP_PATH2;
+    fd = syscall(__NR_bpf, BPF_OBJ_GET, &attr, sizeof(attr));
+    return fd;
 }
 
-static uint64_t lookup_u64_by_tid()
+static uint64_t lookup_u64_by_tid(int fd)
 {
     union bpf_attr attr = {0};
     pid_t tid = gettid();
     uint64_t value;
 
-    attr.map_fd = tracing_map_fd2;
+    attr.map_fd = fd;
     attr.key = (uint64_t)&tid;
     attr.value = (uint64_t)&value;
 
@@ -1734,11 +1734,11 @@ static uint64_t lookup_u64_by_tid()
     return value;
 }
 
-static int delete_u64_by_tid()
+static int delete_u64_by_tid(int fd)
 {
     union bpf_attr attr = {0};
     pid_t tid = gettid();
-    attr.map_fd = tracing_map_fd2;
+    attr.map_fd = fd;
     attr.key = (uint64_t)&tid;
 
     if (syscall(__NR_bpf, BPF_MAP_DELETE_ELEM, &attr, sizeof(attr)) != 0)
@@ -1749,13 +1749,13 @@ static int delete_u64_by_tid()
 
 uint64_t h2o_socket_ebpf_get_retval(h2o_loop_t *loop)
 {
-    open_tracing_map2(loop);
+    int fd = open_tracing_map2(loop);
 
-    if (tracing_map_fd2 < 0)
+    if (fd < 0)
         return 0;
 
-    uint64_t retval = lookup_u64_by_tid();
-    delete_u64_by_tid();
+    uint64_t retval = lookup_u64_by_tid(fd);
+    delete_u64_by_tid(fd);
     return retval;
 }
 
