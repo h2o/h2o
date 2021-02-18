@@ -1718,10 +1718,9 @@ static int open_tracing_map2(h2o_loop_t *loop)
     return fd;
 }
 
-static uint64_t lookup_u64_by_tid(int fd)
+static uint64_t lookup_u64_by_tid(int fd, pid_t tid)
 {
     union bpf_attr attr = {0};
-    pid_t tid = gettid();
     uint64_t value;
 
     attr.map_fd = fd;
@@ -1734,10 +1733,9 @@ static uint64_t lookup_u64_by_tid(int fd)
     return value;
 }
 
-static int delete_u64_by_tid(int fd)
+static int delete_u64_by_tid(int fd, pid_t tid)
 {
     union bpf_attr attr = {0};
-    pid_t tid = gettid();
     attr.map_fd = fd;
     attr.key = (uint64_t)&tid;
 
@@ -1754,8 +1752,9 @@ uint64_t h2o_socket_ebpf_pop_retval(h2o_loop_t *loop)
     if (fd < 0)
         return 0;
 
-    uint64_t retval = lookup_u64_by_tid(fd);
-    delete_u64_by_tid(fd);
+    pid_t tid = gettid();
+    uint64_t retval = lookup_u64_by_tid(fd, tid);
+    delete_u64_by_tid(fd, tid);
     return retval;
 }
 
