@@ -1695,11 +1695,14 @@ static int open_tracing_map2(h2o_loop_t *loop)
     if (last_attempt - now < 1000)
         return fd;
 
-    tracing_map_last_attempt = now;
+    last_attempt = now;
+
+    char path[PATH_MAX];
+    snprintf(path, sizeof(path), H2O_EBPF_MAP_PATH2, (uint64_t)getpid());
 
     // check if map exists at path
     struct stat s;
-    if (stat(H2O_EBPF_MAP_PATH2, &s) == -1) {
+    if (stat(path, &s) == -1) {
         // map path unavailable, cleanup fd if needed and leave
         if (fd >= 0) {
             close(fd);
@@ -1713,7 +1716,7 @@ static int open_tracing_map2(h2o_loop_t *loop)
 
     // map exists, try bpf_obj_get
     union bpf_attr attr = {};
-    attr.pathname = (uint64_t)H2O_EBPF_MAP_PATH2;
+    attr.pathname = (uint64_t)path;
     fd = syscall(__NR_bpf, BPF_OBJ_GET, &attr, sizeof(attr));
     return fd;
 }

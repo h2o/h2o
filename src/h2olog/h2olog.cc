@@ -29,6 +29,7 @@
 extern "C" {
 #include <unistd.h>
 #include <stdarg.h>
+#include <limits.h>
 #include <sys/time.h>
 #include "h2o/memory.h"
 #include "h2o/version.h"
@@ -228,14 +229,17 @@ static void lost_cb(void *context, uint64_t lost)
     tracer->handle_lost(lost);
 }
 
-static bool setup_ebpf_map(ebpf::BPF *bpf)
+static bool setup_ebpf_map(ebpf::BPF *bpf, pid_t h2o_pid)
 {
-    unlink(H2O_EBPF_MAP_PATH2);
-    atexit([]() { unlink(H2O_EBPF_MAP_PATH2); });
+    static char path[PATH_MAX];
+    snprintf(path, sizeof(path), H2O_EBPF_MAP_PATH2, (uint64_t)h2o_pid);
+
+    unlink(path);
+    atexit([]() { unlink(path); });
 
     auto table = bpf->get_table("h2o_tid_to_u64");
-    if (bpf_obj_pin(table.get_fd(), H2O_EBPF_MAP_PATH2) != 0) {
-        perror("BPF_OBJ_PIN failed");
+    if (bpf_obj_pin(table.get_fd(), path) != 0) {
+        fprintf(stderr, "BPF_OBJ_PIN failed for %s: %s\n", path, strerror(errno));
         return false;
     }
     return true;
@@ -372,7 +376,7 @@ int main(int argc, char **argv)
     }
 
     if (sampling_ratio > 0) {
-        if (!setup_ebpf_map(bpf)) {
+        if (!setup_ebpf_map(bpf, h2o_pid)) {
             return EXIT_FAILURE;
         }
 
