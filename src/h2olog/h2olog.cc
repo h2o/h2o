@@ -256,7 +256,7 @@ int main(int argc, char **argv)
     std::vector<std::string> response_header_filters;
     int c;
     pid_t h2o_pid = -1;
-    double sampling_ratio = 0;
+    double sampling_ratio = 1.0;
     while ((c = getopt(argc, argv, "hHdrlp:t:s:w:R:")) != -1) {
         switch (c) {
         case 'H':
@@ -285,7 +285,7 @@ int main(int argc, char **argv)
         case 'R': // can take 0.0 ... 1.0
             sampling_ratio = atof(optarg);
             if (!(sampling_ratio >= 0.0 && sampling_ratio <= 1.0)) {
-                fprintf(stderr, "Error: the argument of -R must be in the range of 0.0 to 1.0 (0.0 to disable this option)\n");
+                fprintf(stderr, "Error: the argument of -R must be in the range of 0.0 to 1.0\n");
                 exit(EXIT_FAILURE);
             }
             break;
@@ -375,7 +375,7 @@ int main(int argc, char **argv)
         return EXIT_FAILURE;
     }
 
-    if (sampling_ratio > 0) {
+    if (sampling_ratio < 1.0) {
         if (!setup_ebpf_map(bpf, h2o_pid)) {
             return EXIT_FAILURE;
         }
