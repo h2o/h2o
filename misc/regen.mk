@@ -5,7 +5,7 @@ exec $${H2O_PERL:-perl} -x $$0 "$$@"
 endef
 export FATPACK_SHEBANG
 
-all: tokens lib/handler/mruby/embedded.c.h lib/http2/hpack_huffman_table.h lib/handler/file/templates.c.h clang-format-all share/h2o/start_server share/h2o/fastcgi-cgi share/h2o/ca-bundle.crt
+all: tokens lib/handler/mruby/embedded.c.h lib/http2/hpack_huffman_table.h lib/handler/file/templates.c.h clang-format-all share/h2o/start_server share/h2o/fastcgi-cgi share/h2o/ca-bundle.crt src/h2olog/generated_raw_tracer.cc
 
 tokens:
 	misc/tokens.pl
@@ -26,6 +26,9 @@ lib/http2/hpack_huffman_table.h: misc/mkhufftbl.py
 lib/handler/file/templates.c.h: misc/picotemplate-conf.pl lib/handler/file/_templates.c.h
 	misc/picotemplate/picotemplate.pl --conf misc/picotemplate-conf.pl lib/handler/file/_templates.c.h || exit 1
 	clang-format -i $@
+
+src/h2olog/generated_raw_tracer.cc: src/h2olog/misc/gen_raw_tracer.py h2o-probes.d deps/quicly/quicly-probes.d deps/quicly/include/quicly.h
+	src/h2olog/misc/gen_raw_tracer.py . $@
 
 clang-format-all:
 	misc/clang-format-all.sh
