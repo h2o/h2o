@@ -27,7 +27,6 @@ lib/handler/file/templates.c.h: misc/picotemplate-conf.pl lib/handler/file/_temp
 	misc/picotemplate/picotemplate.pl --conf misc/picotemplate-conf.pl lib/handler/file/_templates.c.h || exit 1
 	clang-format -i $@
 
-
 src/h2olog/generated_raw_tracer.cc: src/h2olog/misc/gen_raw_tracer.py h2o-probes.d deps/quicly/quicly-probes.d deps/quicly/include/quicly.h
 	src/h2olog/misc/gen_raw_tracer.py . $@
 
