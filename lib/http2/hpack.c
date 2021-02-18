@@ -533,29 +533,27 @@ int h2o_hpack_parse_request(h2o_mem_pool_t *pool, h2o_hpack_decode_header_cb dec
             pseudo_header_exists_map = NULL;
             if (h2o_iovec_is_token(name)) {
                 h2o_token_t *token = H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, name);
-                if (token == H2O_TOKEN_CONTENT_LENGTH) {
-                    if ((*content_length = h2o_strtosize(value.base, value.len)) == SIZE_MAX)
-                        return H2O_HTTP2_ERROR_PROTOCOL;
-                } else {
-                    /* reject headers as defined in draft-16 8.1.2.2 */
-                    if (token->flags.http2_should_reject) {
-                        if (token == H2O_TOKEN_HOST) {
-                            /* HTTP2 allows the use of host header (in place of :authority) */
-                            if (authority->base == NULL)
-                                *authority = value;
-                            goto Next;
-                        } else if (token == H2O_TOKEN_TE && h2o_lcstris(value.base, value.len, H2O_STRLIT("trailers"))) {
-                            /* do not reject */
-                        } else {
+                if (token->flags.is_hpack_special) {
+                    if (token == H2O_TOKEN_CONTENT_LENGTH) {
+                        if ((*content_length = h2o_strtosize(value.base, value.len)) == SIZE_MAX)
                             return H2O_HTTP2_ERROR_PROTOCOL;
-                        }
-                    }
-                    if (token == H2O_TOKEN_CACHE_DIGEST && digests != NULL) {
+                        goto Next;
+                    } else if (token == H2O_TOKEN_HOST) {
+                        /* HTTP2 allows the use of host header (in place of :authority) */
+                        if (authority->base == NULL)
+                            *authority = value;
+                        goto Next;
+                    } else if (token == H2O_TOKEN_TE && h2o_lcstris(value.base, value.len, H2O_STRLIT("trailers"))) {
+                        /* do not reject */
+                    } else if (token == H2O_TOKEN_CACHE_DIGEST && digests != NULL) {
                         /* TODO cache the decoded result in HPACK, as well as delay the decoding of the digest until being used */
                         h2o_cache_digests_load_header(digests, value.base, value.len);
+                    } else {
+                        /* rest of the header fields that are marked as special are rejected */
+                        return H2O_HTTP2_ERROR_PROTOCOL;
                     }
-                    h2o_add_header(pool, headers, token, NULL, value.base, value.len);
                 }
+                h2o_add_header(pool, headers, token, NULL, value.base, value.len);
             } else {
                 h2o_add_header_by_str(pool, headers, name->base, name->len, 0, NULL, value.base, value.len);
             }
@@ -620,7 +618,7 @@ int h2o_hpack_parse_response(h2o_mem_pool_t *pool, h2o_hpack_decode_header_cb de
             if (h2o_iovec_is_token(name)) {
                 h2o_token_t *token = H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, name);
                 /* reject headers as defined in draft-16 8.1.2.2 */
-                if (token->flags.http2_should_reject)
+                if (token->flags.is_hpack_special && !(token == H2O_TOKEN_CONTENT_LENGTH || token == H2O_TOKEN_CACHE_DIGEST))
                     return H2O_HTTP2_ERROR_PROTOCOL;
                 h2o_add_header(pool, headers, token, NULL, value.base, value.len);
             } else {

@@ -59,11 +59,11 @@ while (my $line = <DATA>) {
     chomp $line;
     last if $line eq '';
     next if $line =~ /^#/;
-    my ($hpack_index, $proxy_should_drop_for_req, $proxy_should_drop_for_res, $is_init_header_special, $http2_should_reject, $copy_for_push_request, $dont_compress, $likely_to_repeat, $name, $value) =
+    my ($hpack_index, $proxy_should_drop_for_req, $proxy_should_drop_for_res, $is_init_header_special, $is_hpack_special, $copy_for_push_request, $dont_compress, $likely_to_repeat, $name, $value) =
         split /\s+/, $line, 10;
     die "unexpected input:$line"
         if $name eq '';
-    $tokens{$name} = [ $hpack_index, $proxy_should_drop_for_req, $proxy_should_drop_for_res, $is_init_header_special, $http2_should_reject, $copy_for_push_request, $dont_compress, $likely_to_repeat ]
+    $tokens{$name} = [ $hpack_index, $proxy_should_drop_for_req, $proxy_should_drop_for_res, $is_init_header_special, $is_hpack_special, $copy_for_push_request, $dont_compress, $likely_to_repeat ]
         unless defined $tokens{$name};
     if ($hpack_index != 0) {
         $hpack[$hpack_index - 1] = [ $name, $value ];
@@ -215,7 +215,7 @@ __DATA__
 # - Proxy should drop in request
 # - Proxy should drop in response
 # - Is init header special
-# - HTTP/2 should reject
+# - Is HPACK special
 # - Copy for push request
 # - Disable compression (non-zero)
 # - Likely to repeat (for QPACK)
@@ -246,7 +246,7 @@ __DATA__
 25 0 0 0 0 0 0 1 content-disposition
 26 0 0 0 0 0 0 1 content-encoding
 27 0 0 0 0 0 0 1 content-language
-28 0 0 1 0 0 0 0 content-length
+28 0 0 1 1 0 0 0 content-length
 29 0 0 0 0 0 0 0 content-location
 30 0 0 0 0 0 0 0 content-range
 31 0 0 0 0 0 0 1 content-type
@@ -288,7 +288,7 @@ __DATA__
 0 1 1 0 0 0 0 0 keep-alive
 0 0 0 0 0 0 0 1 x-forwarded-for
 0 0 0 0 0 0 0 0 x-traffic
-0 0 0 0 0 0 0 0 cache-digest
+0 0 0 0 1 0 0 0 cache-digest
 0 0 0 0 0 0 0 0 x-compress-hint
 0 0 0 0 0 0 0 0 early-data
 0 0 0 0 0 0 0 1 access-control-allow-headers
