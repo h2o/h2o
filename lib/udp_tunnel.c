@@ -62,7 +62,7 @@ static void read_and_forward_stream(struct st_h2o_udp_tunnel_t *tunnel)
         return;
 
     /* Forward the UDP packet through tunnel, with the chunk header being appended. The operation is asynchronous, that is why we
-     * stop reading from the socket, and use heap for building the payload. */
+     * stop reading from the socket, and use heap for building the payload. (TODO should we read & discard instead of stopping?) */
     h2o_socket_read_stop(tunnel->sock);
     ssize_t off = 0;
     tunnel->ingress.buf[off++] = 0; /* chunk type = UDP_PACKET */
