@@ -1673,6 +1673,13 @@ static int scheduler_update_state(struct st_quicly_stream_scheduler_t *sched, qu
 
 static quicly_stream_scheduler_t scheduler = {scheduler_can_send, scheduler_do_send, scheduler_update_state};
 
+static void datagram_frame_receive_cb(quicly_receive_datagram_frame_t *self, quicly_conn_t *conn, ptls_iovec_t payload)
+{
+    assert(!"FIXME");
+}
+
+static quicly_receive_datagram_frame_t on_receive_datagram_frame = {datagram_frame_receive_cb};
+
 static void on_h3_destroy(h2o_quic_conn_t *h3_)
 {
     h2o_http3_conn_t *h3 = (h2o_http3_conn_t *)h3_;
@@ -1789,8 +1796,11 @@ void h2o_http3_server_amend_quicly_context(h2o_globalconf_t *conf, quicly_contex
     quic->transport_params.max_stream_data.bidi_remote = H2O_HTTP3_INITIAL_REQUEST_STREAM_WINDOW_SIZE;
     quic->transport_params.max_idle_timeout = conf->http3.idle_timeout;
     quic->transport_params.min_ack_delay_usec = conf->http3.use_delayed_ack ? 0 : UINT64_MAX;
+    quic->transport_params.max_datagram_frame_size = 1500; /* accept DATAGRAM frames; let the sender determine MTU, instead of being
+                                                            * potentially too restrictive */
     quic->stream_open = &on_stream_open;
     quic->stream_scheduler = &scheduler;
+    quic->receive_datagram_frame = &on_receive_datagram_frame;
 }
 
 static void graceful_shutdown_close_stragglers(h2o_timer_t *entry)

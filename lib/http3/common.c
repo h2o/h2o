@@ -1060,6 +1060,33 @@ void h2o_http3_dispose_conn(h2o_http3_conn_t *conn)
     h2o_quic_dispose_conn(&conn->super);
 }
 
+static size_t build_firstflight(h2o_http3_conn_t *conn, uint8_t *bytebuf, size_t capacity)
+{
+    ptls_buffer_t buf;
+    int ret = 0;
+
+    ptls_buffer_init(&buf, bytebuf, capacity);
+
+    /* push stream type */
+    ptls_buffer_push_quicint(&buf, H2O_HTTP3_STREAM_TYPE_CONTROL);
+
+    /* push SETTINGS frame */
+    ptls_buffer_push_quicint(&buf, H2O_HTTP3_FRAME_TYPE_SETTINGS);
+    ptls_buffer_push_block(&buf, -1, {
+        quicly_context_t *qctx = quicly_get_context(conn->super.quic);
+        if (qctx->transport_params.max_datagram_frame_size != 0) {
+            ptls_buffer_push_quicint(&buf, H2O_HTTP3_SETTINGS_H3_DATAGRAM);
+            ptls_buffer_push_quicint(&buf, 1);
+        };
+    });
+
+    assert(!buf.is_allocated);
+    return buf.off;
+
+Exit:
+    h2o_fatal("unreachable");
+}
+
 int h2o_http3_setup(h2o_http3_conn_t *conn, quicly_conn_t *quic)
 {
     int ret;
@@ -1075,12 +1102,10 @@ int h2o_http3_setup(h2o_http3_conn_t *conn, quicly_conn_t *quic)
     conn->qpack.dec = h2o_qpack_create_decoder(0, 100 /* FIXME */);
 
     { /* open control streams, send SETTINGS */
-        static const uint8_t client_first_flight[] = {H2O_HTTP3_STREAM_TYPE_CONTROL, H2O_HTTP3_FRAME_TYPE_SETTINGS, 0};
-        static const uint8_t server_first_flight[] = {H2O_HTTP3_STREAM_TYPE_CONTROL, H2O_HTTP3_FRAME_TYPE_SETTINGS, 0};
-        h2o_iovec_t first_flight = quicly_is_client(conn->super.quic)
-                                       ? h2o_iovec_init(client_first_flight, sizeof(client_first_flight))
-                                       : h2o_iovec_init(server_first_flight, sizeof(server_first_flight));
-        if ((ret = open_egress_unistream(conn, &conn->_control_streams.egress.control, first_flight)) != 0)
+        uint8_t firstflight[32];
+        size_t firstflight_len = build_firstflight(conn, firstflight, sizeof(firstflight));
+        if ((ret = open_egress_unistream(conn, &conn->_control_streams.egress.control,
+                                         h2o_iovec_init(firstflight, firstflight_len))) != 0)
             return ret;
     }
 
@@ -1180,6 +1205,20 @@ int h2o_http3_handle_settings_frame(h2o_http3_conn_t *conn, const uint8_t *paylo
             break;
         case H2O_HTTP3_SETTINGS_QPACK_BLOCKED_STREAMS:
             blocked_streams = value;
+            break;
+        case H2O_HTTP3_SETTINGS_H3_DATAGRAM:
+            switch (value) {
+            case 0:
+                break;
+            case 1: {
+                const quicly_transport_parameters_t *remote_tp = quicly_get_remote_transport_parameters(conn->super.quic);
+                if (remote_tp->max_datagram_frame_size == 0)
+                    goto Malformed;
+                conn->peer_settings.h3_datagram = 1;
+            } break;
+            default:
+                goto Malformed;
+            }
             break;
         default:
             break;

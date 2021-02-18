@@ -980,3 +980,10 @@ static int stream_open_cb(quicly_stream_open_t *self, quicly_stream_t *qs)
 }
 
 quicly_stream_open_t h2o_httpclient_http3_on_stream_open = {stream_open_cb};
+
+static void on_receive_datagram_frame(quicly_receive_datagram_frame_t *self, quicly_conn_t *conn, ptls_iovec_t payload)
+{
+    assert(!"FIXME");
+}
+
+quicly_receive_datagram_frame_t h2o_httpclient_http3_on_receive_datagram_frame = {on_receive_datagram_frame};
