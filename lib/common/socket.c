@@ -1053,7 +1053,7 @@ static void on_handshake_complete(h2o_socket_t *sock, const char *err)
     handshake_cb(sock, err);
 }
 
-static void on_handshake_failure_ossl111(h2o_socket_t *sock, const char *err)
+static void on_handshake_fail_complete(h2o_socket_t *sock, const char *err)
 {
     on_handshake_complete(sock, h2o_socket_error_ssl_handshake);
 }
@@ -1150,7 +1150,7 @@ Redo:
              * shutdown_ssl. */
             if (sock->ssl->output.bufs.size != 0) {
                 h2o_socket_read_stop(sock);
-                flush_pending_ssl(sock, on_handshake_failure_ossl111);
+                flush_pending_ssl(sock, on_handshake_fail_complete);
                 return;
             }
         }
@@ -1248,8 +1248,9 @@ static void proceed_handshake_undetermined(h2o_socket_t *sock)
         proceed_handshake_openssl(sock);
     } else {
         ptls_free(ptls);
-        /* FIXME send alert in wbuf before calling the callback */
-        on_handshake_complete(sock, "handshake error");
+        h2o_socket_read_stop(sock);
+        write_ssl_bytes(sock, wbuf.base, wbuf.off);
+        flush_pending_ssl(sock, on_handshake_fail_complete);
     }
     ptls_buffer_dispose(&wbuf);
 }
