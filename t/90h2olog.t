@@ -1,5 +1,5 @@
 #!perl
-# DTRACE_TEST=1 to skip to check prereqisites except for OS
+# DTRACE_TESTS=1 to skip to check prereqisites
 # H2OLOG_DEBUG=1 for more runtime logs
 use strict;
 use warnings FATAL => "all";
@@ -8,15 +8,12 @@ use Test::More;
 use JSON;
 use t::Util;
 
-plan skip_all => "h2olog is supported only for Linux"
-    if $^O ne 'linux';
-
 run_as_root();
 
 my $h2olog_prog = bindir() . "/h2olog";
 my $client_prog = bindir() . "/h2o-httpclient";
 
-unless ($ENV{DTRACE_TEST})  {
+unless ($ENV{DTRACE_TESTS})  {
   plan skip_all => "$h2olog_prog not found"
       unless -e $h2olog_prog;
 
@@ -50,52 +47,42 @@ EOT
 });
 
 subtest "h2olog", sub {
-  my $trace = slurp_h2olog({
+  my $tracer = H2ologTracer->new({
     pid => $server->{pid},
-    args => [$ENV{H2OLOG_DEBUG} ? ("-d") : ()],
-
-    request => sub {
-      my ($headers, $body) = run_prog("$client_prog -3 https://127.0.0.1:$quic_port/");
-      like $headers, qr{^HTTP/3 200\n}, "req: HTTP/3";
-      is $body, "hello\n", "req: body";
-    },
-
-    is_done => sub {
-      my($partial_tace) = @_;
-
-      # it has at least one line
-      return $partial_tace =~ /\n/;
-    },
+    args => [],
   });
+
+  my ($headers, $body) = run_prog("$client_prog -3 https://127.0.0.1:$quic_port/");
+  like $headers, qr{^HTTP/3 200\n}, "req: HTTP/3";
+
+  my $trace;
+  until (($trace = $tracer->get_trace()) =~ m{"h3s-destroy"}) {}
 
   if ($ENV{H2OLOG_DEBUG}) {
     diag "h2olog output:\n", $trace;
   }
 
-  diag("ls /sys/fs/bpf/:");
-  diag(`ls /sys/fs/bpf/`);
-
   ok( (map { decode_json($_) } split /\n/, $trace), "h2olog output is valid JSON Lines");
 };
 
-# subtest "h2olog -H", sub {
-#   my $trace = slurp_h2olog({
-#     pid => $server->{pid},
-#     args => ["-H", $ENV{H2OLOG_DEBUG} ? ("-d") : ()],
+subtest "h2olog -H", sub {
+  my $tracer = H2ologTracer->new({
+    pid => $server->{pid},
+    args => ["-H"],
+  });
 
-#     request => sub {
-#       my ($headers, $body) = run_prog("$client_prog -3 https://127.0.0.1:$quic_port/");
-#       like $headers, qr{^HTTP/3 200\n}, "req: HTTP/3";
-#       is $body, "hello\n", "req: body";
-#     },
-#   });
+  my ($headers, $body) = run_prog("$client_prog -3 https://127.0.0.1:$quic_port/");
+  like $headers, qr{^HTTP/3 200\n}, "req: HTTP/3";
 
-#   if ($ENV{H2OLOG_DEBUG}) {
-#     diag "h2olog output:\n", $trace;
-#   }
+  my $trace;
+  until (($trace = $tracer->get_trace()) =~ m{RxProtocol\s+HTTP/3.0}) {}
 
-#   ok length($trace), "h2olog output exists"
-# };
+  if ($ENV{H2OLOG_DEBUG}) {
+    diag "h2olog output:\n", $trace;
+  }
+
+  ok length($trace), "h2olog output exists"
+};
 
 # wait until the server and the tracer exits
 diag "shutting down ...";
