@@ -67,7 +67,7 @@ static int chunk_size = 10;
 static h2o_iovec_t iov_filler;
 static int io_interval = 0, req_interval = 0;
 static int ssl_verify_none = 0;
-static int udp_sock = -1;
+static h2o_socket_t *udp_sock = NULL;
 static const ptls_key_exchange_algorithm_t *h3_key_exchanges[] = {
 #if PTLS_OPENSSL_HAVE_X25519
     &ptls_openssl_x25519,
@@ -218,6 +218,36 @@ static void tunnel_on_read(h2o_tunnel_t *_tunnel, const char *err, const void *b
     tunnel->tunnel->proceed_read(tunnel->tunnel);
 }
 
+static void tunnel_on_udp_sock_read(h2o_socket_t *sock, const char *err)
+{
+    struct st_tunnel_t *tunnel = sock->data;
+    quicly_address_t srcaddr;
+    uint8_t buf[1500];
+    struct iovec vec;
+    struct msghdr mess;
+    ssize_t rret;
+
+    /* read one UDP datagram, or return */
+    do {
+        vec.iov_base = buf;
+        vec.iov_len = sizeof(buf);
+        mess.msg_name = &srcaddr;
+        mess.msg_namelen = sizeof(srcaddr);
+        mess.msg_iov = &vec;
+        mess.msg_iovlen = 1;
+    } while ((rret = recvmsg(h2o_socket_get_fd(sock), &mess, 0)) == -1 && errno == EINTR);
+    if (rret == -1)
+        return;
+
+    /* append UDP chunk to the input buffer of stdin read socket! */
+    uint8_t header[3] = {0}, *header_end = quicly_encodev(header + 1, (uint64_t)rret);
+    h2o_buffer_append(&tunnel->std_in->input, header, header_end - header);
+    h2o_buffer_append(&tunnel->std_in->input, buf, rret);
+
+    /* pretend as if we read from stdin */
+    tunnel_write(tunnel);
+}
+
 static void tunnel_create(h2o_loop_t *loop, h2o_tunnel_t *_tunnel)
 {
     struct st_tunnel_t *tunnel = h2o_mem_alloc(sizeof(*tunnel));
@@ -235,6 +265,11 @@ static void tunnel_create(h2o_loop_t *loop, h2o_tunnel_t *_tunnel)
     h2o_doublebuffer_init(&tunnel->buf, &h2o_socket_buffer_prototype);
 
     h2o_socket_read_start(tunnel->std_in, tunnel_on_stdin_read);
+
+    if (udp_sock != NULL) {
+        udp_sock->data = tunnel;
+        h2o_socket_read_start(udp_sock, tunnel_on_udp_sock_read);
+    }
 }
 
 static void start_request(h2o_httpclient_ctx_t *ctx)
@@ -499,6 +534,26 @@ static void setup_connect_to(const char *arg, int opt_ch)
     }
 }
 
+#if !H2O_USE_LIBUV
+h2o_socket_t *create_udp_socket(h2o_loop_t *loop, uint16_t port)
+{
+    int fd;
+    struct sockaddr_in sin;
+    if ((fd = socket(PF_INET, SOCK_DGRAM, 0)) == -1) {
+        perror("failed to create UDP socket");
+        exit(EXIT_FAILURE);
+    }
+    sin.sin_family = AF_INET;
+    sin.sin_addr.s_addr = htonl(0);
+    sin.sin_port = htons(port);
+    if (bind(fd, (void *)&sin, sizeof(sin)) != 0) {
+        perror("failed to bind bind UDP socket");
+        exit(EXIT_FAILURE);
+    }
+    return h2o_evloop_socket_create(loop, fd, H2O_SOCKET_FLAG_DONT_READ);
+}
+#endif
+
 static void on_sigfatal(int signo)
 {
     fprintf(stderr, "received fatal signal %d\n", signo);
@@ -558,23 +613,10 @@ int main(int argc, char **argv)
     ctx.loop = h2o_evloop_create();
 #endif
 
-#if H2O_USE_LIBUV
-#else
-    { /* initialize QUIC context */
-        int fd;
-        struct sockaddr_in sin;
-        if ((fd = socket(PF_INET, SOCK_DGRAM, 0)) == -1) {
-            perror("failed to create UDP socket");
-            exit(EXIT_FAILURE);
-        }
-        memset(&sin, 0, sizeof(sin));
-        if (bind(fd, (void *)&sin, sizeof(sin)) != 0) {
-            perror("failed to bind bind UDP socket");
-            exit(EXIT_FAILURE);
-        }
-        h2o_socket_t *sock = h2o_evloop_socket_create(ctx.loop, fd, H2O_SOCKET_FLAG_DONT_READ);
-        h2o_quic_init_context(&h3ctx.h3, ctx.loop, sock, &h3ctx.quic, NULL, h2o_httpclient_http3_notify_connection_update);
-    }
+#if !H2O_USE_LIBUV
+    /* initialize QUIC context */
+    h2o_quic_init_context(&h3ctx.h3, ctx.loop, create_udp_socket(ctx.loop, 0), &h3ctx.quic, NULL,
+                          h2o_httpclient_http3_notify_connection_update);
 #endif
 
     const char *optstring = "t:m:o:b:x:X:C:c:d:H:i:k2:W:h3:"
@@ -610,25 +652,19 @@ int main(int argc, char **argv)
             setup_connect_to(optarg, 'x');
             break;
         case 'X': {
+#if H2O_USE_LIBUV
+            fprintf(stderr, "-X is not supported by the libuv backend\n");
+            exit(EXIT_FAILURE);
+#else
             uint16_t udp_port;
             int udp_port_end;
             if (sscanf(optarg, "%" PRIu16 "%n", &udp_port, &udp_port_end) != 1 || optarg[udp_port_end] != ':') {
                 fprintf(stderr, "failed to parse optarg of -X\n");
                 exit(EXIT_FAILURE);
             }
-            if ((udp_sock = socket(PF_INET, SOCK_DGRAM, 0)) == -1) {
-                perror("failed to create UDP socket");
-                exit(EXIT_FAILURE);
-            }
-            struct sockaddr_in sin;
-            sin.sin_family = AF_INET;
-            sin.sin_addr.s_addr = htonl(0);
-            sin.sin_port = htons(udp_port);
-            if (bind(udp_sock, (void *)&sin, sizeof(sin)) != 0) {
-                perror("failed to bind bind UDP socket");
-                exit(EXIT_FAILURE);
-            }
+            udp_sock = create_udp_socket(ctx.loop, udp_port);
             setup_connect_to(optarg + udp_port_end + 1, 'X');
+#endif
         } break;
         case 'C':
             if (sscanf(optarg, "%u", &concurrency) != 1 || concurrency < 1) {
@@ -721,7 +757,7 @@ int main(int argc, char **argv)
     argv += optind;
 
     if (req.connect_to.authority.len != 0)
-        req.method = udp_sock == -1 ? "CONNECT" : "CONNECT-UDP";
+        req.method = udp_sock == NULL ? "CONNECT" : "CONNECT-UDP";
 
     if (ctx.protocol_selector.ratio.http2 + ctx.protocol_selector.ratio.http3 > 100) {
         fprintf(stderr, "sum of the use ratio of HTTP/2 and HTTP/3 is greater than 100");
