@@ -1675,9 +1675,6 @@ h2o_ebpf_map_value_t h2o_socket_ebpf_lookup(h2o_loop_t *loop, int (*init_key)(st
     if (tracing_map_fd < 0)
         return (h2o_ebpf_map_value_t){0};
 
-    // invoke the BPF callback
-
-
     // lookup map for our key
     h2o_ebpf_map_key_t key;
     if (!init_key(&key, cbdata))
