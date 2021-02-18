@@ -1591,7 +1591,7 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
     h2o_http3_setup(&conn->h3, qconn);
 
     H2O_PROBE_CONN(H3S_ACCEPT, &conn->super, &conn->super, conn->h3.super.quic);
-    if (h2o_socket_ebpf_get_retval(conn->super.ctx->loop))
+    if (h2o_socket_ebpf_pop_retval(conn->super.ctx->loop))
         set_skip_tracing(&conn->super, 1);
 
     h2o_quic_send(&conn->h3.super);

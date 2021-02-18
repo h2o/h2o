@@ -1750,7 +1750,7 @@ static int delete_u64_by_tid(int fd)
     return 1;
 }
 
-uint64_t h2o_socket_ebpf_get_retval(h2o_loop_t *loop)
+uint64_t h2o_socket_ebpf_pop_retval(h2o_loop_t *loop)
 {
     int fd = open_tracing_map2(loop);
 
