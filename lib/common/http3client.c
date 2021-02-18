@@ -597,7 +597,7 @@ static int handle_input_expect_headers(struct st_h2o_http3client_req_t *req, con
             return 0;
         }
     }
-    if ((ret = h2o_qpack_parse_response(req->super.pool, req->conn->super.qpack.dec, req->quic->stream_id, &status, &headers,
+    if ((ret = h2o_qpack_parse_response(req->super.pool, req->conn->super.qpack.dec, req->quic->stream_id, &status, &headers, NULL,
                                         header_ack, &header_ack_len, frame.payload, frame.length, err_desc)) != 0) {
         if (ret == H2O_HTTP2_ERROR_INCOMPLETE) {
             /* the request is blocked by the QPACK stream */
