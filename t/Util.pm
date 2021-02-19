@@ -587,8 +587,9 @@ package H2ologTracer {
                 for (my $i = 0; $i < 10; $i++) {
                     sleep(1);
                     seek $efh, 0, 0 or die "seek failed: $!";
-                    if (my $status = scalar <$efh>) {
-                        Test::More::diag("h2olog[$tracer_pid]: $status");
+                    local $/;
+                    if (my $stderr_content = scalar <$efh>) {
+                        Test::More::diag("h2olog[$tracer_pid]: $stderr_content");
                         last STARTUP;
                     }
                 }
