@@ -26,12 +26,16 @@ import json
 PACKET_LABELS = ["initial", "0rtt", "handshake", "1rtt"]
 
 def handle_packet_lost(events, idx):
-    return [events[idx]["time"], "recovery", "packet_lost", {
-        "packet_type": PACKET_LABELS[events[idx]["packet-type"]],
-        "header": {
-            "packet_number": events[idx]["pn"]
+    return {
+        "time": events[idx]["time"],
+        "name": "recovery:packet_lost",
+        "data": {
+            "header": {
+                "packet_type": PACKET_LABELS[events[idx]["packet-type"]],
+                "packet_number": events[idx]["pn"]
+            }
         }
-    }]
+    }
 
 def handle_packet_received(events, idx):
     frames = []
@@ -54,13 +58,17 @@ def handle_packet_received(events, idx):
         if handler:
             frames.append(handler(ev))
 
-    return [events[idx]["time"], "transport", "packet_received", {
-        "packet_type": PACKET_LABELS[events[idx]["packet-type"]],
-        "header": {
-            "packet_number": events[idx]["pn"]
-        },
-        "frames": frames
-    }]
+    return {
+        "time": events[idx]["time"],
+        "name": "transport:packet_received",
+        "data": {
+            "header": {
+                "packet_type": PACKET_LABELS[events[idx]["packet-type"]],
+                "packet_number": events[idx]["pn"]
+            },
+            "frames": frames
+        }
+    }
 
 def handle_packet_sent(events, idx):
     frames = []
@@ -71,13 +79,17 @@ def handle_packet_sent(events, idx):
             frames.append(handler(events[i]))
         i -= 1
 
-    return [events[idx]["time"], "transport", "packet_sent", {
-        "packet_type": PACKET_LABELS[events[idx]["packet-type"]],
-        "header": {
-            "packet_number": events[idx]["pn"]
-        },
-        "frames": frames
-    }]
+    return {
+        "time": events[idx]["time"],
+        "name": "transport:packet_sent",
+        "data": {
+            "header": {
+                "packet_type": PACKET_LABELS[events[idx]["packet-type"]],
+                "packet_number": events[idx]["pn"]
+            },
+            "frames": frames
+        }
+    }
 
 def handle_ack_send(event):
     return render_ack_frame([[event["largest-acked"]]])
@@ -333,28 +345,24 @@ def main():
 
     (_, infile) = sys.argv
     source_events = load_quicly_events(infile)
-    trace = {
-        "vantage_point": {
-            "type": "server"
-        },
-        "event_fields": [
-           "time",
-           "category",
-           "event",
-           "data"
-        ],
-        "events": []
-    }
+    print(json.dumps({
+        "qlog_format": "NDJSON",
+        "qlog_version": "draft-02",
+        "title": "h2o/quicly qlog",
+        "trace": {
+            "vantage_point": {
+                "type": "server"
+            },
+            "common_fields": {
+                "protocol_type": "QUIC_HTTP3",
+                "time_format": "absolute"
+            }
+        }
+    }))
     for i, event in enumerate(source_events):
         handler = QLOG_EVENT_HANDLERS.get(event["type"])
         if handler:
-            trace["events"].append(handler(source_events, i))
-
-    print(json.dumps({
-        "qlog_version": "draft-02-wip",
-        "title": "h2o/quicly qlog",
-        "traces": [trace]
-    }))
+            print(json.dumps(handler(source_events, i)))
 
 if __name__ == "__main__":
     main()

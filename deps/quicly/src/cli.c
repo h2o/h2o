@@ -45,7 +45,6 @@ FILE *quicly_trace_fp = NULL;
 static unsigned verbosity = 0;
 static int suppress_output = 0, send_datagram_frame = 0;
 static int64_t enqueue_requests_at = 0, request_interval = 0;
-static void *datagram_frame_payload_buf;
 
 static void hexdump(const char *title, const uint8_t *p, size_t l)
 {
@@ -489,26 +488,7 @@ static int send_pending(int fd, quicly_conn_t *conn)
     if ((ret = quicly_send(conn, &dest, &src, packets, &num_packets, buf, sizeof(buf))) == 0 && num_packets != 0)
         send_packets(fd, &dest.sa, packets, num_packets);
 
-    if (datagram_frame_payload_buf != NULL) {
-        free(datagram_frame_payload_buf);
-        datagram_frame_payload_buf = NULL;
-    }
-
     return ret;
-}
-
-static void set_datagram_frame(quicly_conn_t *conn, ptls_iovec_t payload)
-{
-    if (datagram_frame_payload_buf != NULL)
-        free(datagram_frame_payload_buf);
-
-    /* replace payload.base with an allocated buffer */
-    datagram_frame_payload_buf = malloc(payload.len);
-    memcpy(datagram_frame_payload_buf, payload.base, payload.len);
-    payload.base = datagram_frame_payload_buf;
-
-    /* set data to be sent. The buffer is being freed in `send_pending` after `quicly_send` is being called. */
-    quicly_set_datagram_frame(conn, payload);
 }
 
 static void on_receive_datagram_frame(quicly_receive_datagram_frame_t *self, quicly_conn_t *conn, ptls_iovec_t payload)
@@ -516,7 +496,7 @@ static void on_receive_datagram_frame(quicly_receive_datagram_frame_t *self, qui
     printf("DATAGRAM: %.*s\n", (int)payload.len, payload.base);
     /* send responds with a datagram frame */
     if (!quicly_is_client(conn))
-        set_datagram_frame(conn, payload);
+        quicly_send_datagram_frames(conn, &payload, 1);
 }
 
 static void enqueue_requests(quicly_conn_t *conn)
@@ -618,7 +598,8 @@ static int run_client(int fd, struct sockaddr *sa, const char *host)
                     quicly_receive(conn, NULL, &sa, &packet);
                     if (send_datagram_frame && quicly_connection_is_ready(conn)) {
                         const char *message = "hello datagram!";
-                        set_datagram_frame(conn, ptls_iovec_init(message, strlen(message)));
+                        ptls_iovec_t datagram = ptls_iovec_init(message, strlen(message));
+                        quicly_send_datagram_frames(conn, &datagram, 1);
                         send_datagram_frame = 0;
                     }
                 }
