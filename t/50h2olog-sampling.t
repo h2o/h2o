@@ -6,6 +6,7 @@ use warnings FATAL => "all";
 use Net::EmptyPort qw(empty_port);
 use Test::More;
 use JSON;
+use Time::HiRes qw(sleep);
 use t::Util;
 
 run_as_root();
@@ -46,26 +47,18 @@ hosts:
 EOT
 });
 
-# -F=1 connection sampling per second
-subtest "h2olog -R=1.00", sub {
-  my $t0 = time();
-  my $trace = slurp_h2olog({
+subtest "h2olog -R=0.00", sub {
+  my $tracer = H2ologTracer->new({
     pid => $server->{pid},
-    # TODO: use -q (request-header filter; not yet implemented) as well as -t
-    args => ["-R", "1.0", "-t", "h2o:receive_request_header", $ENV{H2OLOG_DEBUG} ? ("-d") : ()],
-
-    request => sub {
-      for (my $i = 1; $i <= 2; $i++) {
-        my ($headers) = run_prog("$client_prog -H x-req-id:$i -3 https://127.0.0.1:$quic_port/");
-        like $headers, qr{^HTTP/3 200\n}, "req: HTTP/3";
-      }
-    },
-
-    is_done => sub {
-      my($partial) = @_;
-      return( (time() - $t0) >= 5);
-    },
+    args => ["-R", "0.0"],
   });
+
+  my ($headers) = run_prog("$client_prog -H x-req-id:42 -3 https://127.0.0.1:$quic_port/");
+  like $headers, qr{^HTTP/3 200\n}, "req: HTTP/3";
+
+  sleep(0.5);
+  my $trace;
+  until ($trace = $tracer->get_trace()) {}
 
   if ($ENV{H2OLOG_DEBUG}) {
     diag "h2olog output:\n", $trace;
@@ -74,7 +67,7 @@ subtest "h2olog -R=1.00", sub {
   my @logs = grep {
       $_->{type} eq "receive-request-header" && $_->{name} eq "x-req-id"
     } map { decode_json($_) } split /\n/, $trace;
-  diag explain(\@logs);
+  is_deeply \@logs, [], "no x-req-id header in logs";
 };
 
 
