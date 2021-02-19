@@ -461,7 +461,6 @@ static int get_skip_tracing(h2o_conn_t *conn)
 static void set_skip_tracing(h2o_conn_t *conn, int skip_tracing)
 {
     ptls_t *ptls = get_ptls(conn);
-    fprintf(stderr, "XXX h3s set_skip_tracing: %" PRIu64 "=%" PRId32 "\n", conn->id, skip_tracing);
     ptls_set_skip_tracing(ptls, skip_tracing);
 }
 
