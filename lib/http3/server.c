@@ -1125,6 +1125,8 @@ static int handle_input_expect_headers(struct st_h2o_http3_server_stream_t *stre
     if (stream->req.input.scheme == NULL)
         stream->req.input.scheme = &H2O_URL_SCHEME_HTTPS;
 
+    h2o_probe_log_request(&stream->req, stream->quic->stream_id);
+
     int is_connect = h2o_memis(stream->req.input.method.base, stream->req.input.method.len, H2O_STRLIT("CONNECT"));
 
     /* check if existence and non-existence of pseudo headers are correct */
