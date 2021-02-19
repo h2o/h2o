@@ -255,8 +255,9 @@ int %s(struct pt_regs *ctx) {
     c += r"""
 #ifdef H2OLOG_SAMPLING_RATE
   struct task_struct *task = (struct task_struct*)bpf_get_current_task();
-  uint64_t skip_tracing = bpf_get_prandom_u32() > (H2OLOG_SAMPLING_RATE * UINT32_MAX);
-  h2o_tid_to_u64.insert(&task->pid, &skip_tracing);
+  pid_t tid = task->pid;
+  uint64_t skip_tracing = 1; //bpf_get_prandom_u32() > (H2OLOG_SAMPLING_RATE * U32_MAX);
+  h2o_tid_to_u64.insert(&tid, &skip_tracing);
   if (skip_tracing)
     return 0;
 #endif
@@ -398,6 +399,7 @@ struct event_t {
 
   bpf = r"""
 #include <linux/sched.h>
+#include <linux/limits.h>
 
 #define STR_LEN 64
 

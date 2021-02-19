@@ -256,7 +256,7 @@ int main(int argc, char **argv)
     std::vector<std::string> response_header_filters;
     int c;
     pid_t h2o_pid = -1;
-    double sampling_ratio = 1.0;
+    double sampling_rate = 1.0;
     while ((c = getopt(argc, argv, "hHdrlp:t:s:w:R:")) != -1) {
         switch (c) {
         case 'H':
@@ -283,8 +283,8 @@ int main(int argc, char **argv)
             }
             break;
         case 'R': // can take 0.0 ... 1.0
-            sampling_ratio = atof(optarg);
-            if (!(sampling_ratio >= 0.0 && sampling_ratio <= 1.0)) {
+            sampling_rate = atof(optarg);
+            if (!(sampling_rate >= 0.0 && sampling_rate <= 1.0)) {
                 fprintf(stderr, "Error: the argument of -R must be in the range of 0.0 to 1.0\n");
                 exit(EXIT_FAILURE);
             }
@@ -369,18 +369,20 @@ int main(int argc, char **argv)
         probes.push_back(ebpf::USDT(h2o_pid, usdt.provider, usdt.name, usdt.probe_func));
     }
 
+    if (sampling_rate < 1.0) {
+        cflags.push_back("-DH2OLOG_SAMPLING_RATE=" + std::to_string(sampling_rate));
+    }
+
     ebpf::StatusTuple ret = bpf->init(tracer->bpf_text(), cflags, probes);
     if (ret.code() != 0) {
         fprintf(stderr, "Error: init: %s\n", ret.msg().c_str());
         return EXIT_FAILURE;
     }
 
-    if (sampling_ratio < 1.0) {
+    if (sampling_rate < 1.0) {
         if (!setup_ebpf_map(bpf, h2o_pid)) {
             return EXIT_FAILURE;
         }
-
-        cflags.push_back("H2OLOG_SAMPLING_RATE=" + std::to_string(sampling_ratio));
     }
 
     bpf->attach_tracepoint("sched:sched_process_exit", "trace_sched_process_exit");
