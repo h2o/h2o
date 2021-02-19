@@ -1249,6 +1249,7 @@ static void proceed_handshake_undetermined(h2o_socket_t *sock)
             cb = proceed_handshake;
             break;
         default:
+            assert(ret != PTLS_ERROR_STATELESS_RETRY && "stateless retry is never turned on by us for TCP");
             cb = on_handshake_fail_complete;
             break;
         }
