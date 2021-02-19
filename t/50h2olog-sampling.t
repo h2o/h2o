@@ -47,10 +47,10 @@ hosts:
 EOT
 });
 
-subtest "h2olog -R=0.00", sub {
+subtest "h2olog -S=0.00", sub {
   my $tracer = H2ologTracer->new({
     pid => $server->{pid},
-    args => ["-R", "0.0"],
+    args => ["-S", "0.0"],
   });
 
   my ($headers) = run_prog("$client_prog -H x-req-id:42 -3 https://127.0.0.1:$quic_port/");

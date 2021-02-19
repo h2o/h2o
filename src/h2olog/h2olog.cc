@@ -52,6 +52,7 @@ Optional arguments:
     -s RESPONSE_HEADER_NAME A response header name to show, e.g. "content-type"
     -t TRACEPOINT A tracepoint, or fully-qualified probe name, to show,
                   including a glob pattern, e.g. "quicly:accept", "h2o:*"
+    -S RATE Enable random sampling per connection (0-1.0)
     -r Run without dropping root privilege
     -w Path to write the output (default: stdout)
 
@@ -257,7 +258,7 @@ int main(int argc, char **argv)
     int c;
     pid_t h2o_pid = -1;
     double sampling_rate = 1.0;
-    while ((c = getopt(argc, argv, "hHdrlp:t:s:w:R:")) != -1) {
+    while ((c = getopt(argc, argv, "hHdrlp:t:s:w:S:")) != -1) {
         switch (c) {
         case 'H':
             tracer.reset(create_http_tracer());
@@ -282,10 +283,10 @@ int main(int argc, char **argv)
                 exit(EXIT_FAILURE);
             }
             break;
-        case 'R': // can take 0.0 ... 1.0
+        case 'S': // can take 0.0 ... 1.0
             sampling_rate = atof(optarg);
             if (!(sampling_rate >= 0.0 && sampling_rate <= 1.0)) {
-                fprintf(stderr, "Error: the argument of -R must be in the range of 0.0 to 1.0\n");
+                fprintf(stderr, "Error: the argument of -S must be in the range of 0.0 to 1.0\n");
                 exit(EXIT_FAILURE);
             }
             break;
