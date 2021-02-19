@@ -4212,6 +4212,10 @@ static int do_send(quicly_conn_t *conn, quicly_send_context_t *s)
                 if (s->dst_end - s->dst >= required_space) {
                     s->dst = quicly_encode_datagram_frame(s->dst, *payload);
                     QUICLY_PROBE(DATAGRAM_SEND, conn, conn->stash.now, payload->base, payload->len);
+                } else {
+                    /* FIXME: At the moment, we add a padding because we do not have a way to reclaim allocated space, and because
+                     * it is forbidden to send an empty QUIC packet. */
+                    *s->dst++ = QUICLY_FRAME_TYPE_PADDING;
                 }
             }
         }
