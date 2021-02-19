@@ -64,10 +64,25 @@ subtest "h2olog -R=0.00", sub {
     diag "h2olog output:\n", $trace;
   }
 
-  my @logs = grep {
+  my @logs = map { decode_json($_) } split /\n/, $trace;
+
+  is_deeply [
+    grep {
+      $_->{type} eq "h3s-accept"
+    } @logs
+  ], [], "no h3s-accept header in logs";
+
+  is_deeply [
+    grep {
+      $_->{type} eq "h3s-destroy"
+    } @logs
+  ], [], "no stream-on-destroy header in logs";
+
+  is_deeply [
+    grep {
       $_->{type} eq "receive-request-header" && $_->{name} eq "x-req-id"
-    } map { decode_json($_) } split /\n/, $trace;
-  is_deeply \@logs, [], "no x-req-id header in logs";
+    } @logs
+  ], [], "no x-req-id header in logs";
 };
 
 

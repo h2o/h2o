@@ -403,13 +403,13 @@ struct event_t {
 
 #define STR_LEN 64
 
-typedef union h2olog_address_t {
+typedef union st_quicly_address_t {
   uint8_t sa[sizeof_sockaddr];
   uint8_t sin[sizeof_sockaddr_in];
   uint8_t sin6[sizeof_sockaddr_in6];
-} h2olog_address_t;
+} quicly_address_t;
 
-typedef h2olog_address_t quicly_address_t;
+typedef quicly_address_t h2olog_address_t;
 
 %s
 BPF_PERF_OUTPUT(events);
