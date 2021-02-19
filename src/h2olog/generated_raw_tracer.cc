@@ -3853,9 +3853,9 @@ int trace_h2o__h3s_accept(struct pt_regs *ctx) {
   event.h3s_accept.master_id = get_st_quicly_conn_t__master_id(quic);
 
 #ifdef H2OLOG_SAMPLING_RATE
-  struct task_struct *task = (struct task_struct*)bpf_get_current_task();
+  const struct task_struct *task = (const struct task_struct*)bpf_get_current_task();
   pid_t tid = task->pid;
-  uint64_t skip_tracing = 1; //bpf_get_prandom_u32() > (H2OLOG_SAMPLING_RATE * U32_MAX);
+  uint64_t skip_tracing = bpf_get_prandom_u32() > (H2OLOG_SAMPLING_RATE * U32_MAX);
   h2o_tid_to_u64.insert(&tid, &skip_tracing);
   if (skip_tracing)
     return 0;
