@@ -682,6 +682,8 @@ int main(int argc, char **argv)
             }
             udp_sock = create_udp_socket(ctx.loop, udp_port);
             setup_connect_to(optarg + udp_port_end + 1, 'X');
+            h3ctx.quic.initial_egress_max_udp_payload_size = 1400; /* increase initial UDP payload size so that we'd have room to
+                                                                    * carry ordinary QUIC packets. */
 #endif
         } break;
         case 'C':
