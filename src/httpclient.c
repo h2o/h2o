@@ -68,6 +68,7 @@ static h2o_iovec_t iov_filler;
 static int io_interval = 0, req_interval = 0;
 static int ssl_verify_none = 0;
 static h2o_socket_t *udp_sock = NULL;
+static struct sockaddr_in udp_sock_remote_addr;
 static const ptls_key_exchange_algorithm_t *h3_key_exchanges[] = {
 #if PTLS_OPENSSL_HAVE_X25519
     &ptls_openssl_x25519,
@@ -221,31 +222,45 @@ static void tunnel_on_read(h2o_tunnel_t *_tunnel, const char *err, const void *b
 static void tunnel_on_udp_sock_read(h2o_socket_t *sock, const char *err)
 {
     struct st_tunnel_t *tunnel = sock->data;
-    quicly_address_t srcaddr;
     uint8_t buf[1500];
     struct iovec vec;
-    struct msghdr mess;
+    struct msghdr mess = {};
     ssize_t rret;
 
     /* read one UDP datagram, or return */
     do {
         vec.iov_base = buf;
         vec.iov_len = sizeof(buf);
-        mess.msg_name = &srcaddr;
-        mess.msg_namelen = sizeof(srcaddr);
+        mess.msg_name = &udp_sock_remote_addr;
+        mess.msg_namelen = sizeof(udp_sock_remote_addr);
         mess.msg_iov = &vec;
         mess.msg_iovlen = 1;
     } while ((rret = recvmsg(h2o_socket_get_fd(sock), &mess, 0)) == -1 && errno == EINTR);
     if (rret == -1)
         return;
 
-    /* append UDP chunk to the input buffer of stdin read socket! */
-    uint8_t header[3] = {0}, *header_end = quicly_encodev(header + 1, (uint64_t)rret);
-    h2o_buffer_append(&tunnel->std_in->input, header, header_end - header);
-    h2o_buffer_append(&tunnel->std_in->input, buf, rret);
+    /* send the datagram directly or encapsulated on the stream */
+    if (tunnel->tunnel->udp_write != NULL) {
+        h2o_iovec_t udpvec = h2o_iovec_init(buf, rret);
+        tunnel->tunnel->udp_write(tunnel->tunnel, &udpvec, 1);
+    } else {
+        /* append UDP chunk to the input buffer of stdin read socket! */
+        uint8_t header[3] = {0}, *header_end = quicly_encodev(header + 1, (uint64_t)rret);
+        h2o_buffer_append(&tunnel->std_in->input, header, header_end - header);
+        h2o_buffer_append(&tunnel->std_in->input, buf, rret);
+        /* pretend as if we read from stdin */
+        tunnel_write(tunnel);
+    }
+}
 
-    /* pretend as if we read from stdin */
-    tunnel_write(tunnel);
+static void tunnel_on_udp_read(h2o_tunnel_t *_tunnel, h2o_iovec_t *datagrams, size_t num_datagrams)
+{
+    for (size_t i = 0; i != num_datagrams; ++i) {
+        const h2o_iovec_t *src = datagrams + i;
+        struct iovec vec = {.iov_base = src->base, .iov_len = src->len};
+        struct msghdr mess = {.msg_name = &udp_sock_remote_addr, .msg_namelen = sizeof(udp_sock_remote_addr), .msg_iov = &vec, .msg_iovlen = 1};
+        sendmsg(h2o_socket_get_fd(udp_sock), &mess, 0);
+    }
 }
 
 static void tunnel_create(h2o_loop_t *loop, h2o_tunnel_t *_tunnel)
@@ -269,6 +284,7 @@ static void tunnel_create(h2o_loop_t *loop, h2o_tunnel_t *_tunnel)
     if (udp_sock != NULL) {
         udp_sock->data = tunnel;
         h2o_socket_read_start(udp_sock, tunnel_on_udp_sock_read);
+        tunnel->tunnel->on_udp_read = tunnel_on_udp_read;
     }
 }
 

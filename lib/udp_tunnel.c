@@ -46,7 +46,7 @@ static void read_and_forward_udp(struct st_h2o_udp_tunnel_t *tunnel)
     /* forward UDP datagram as is; note that it might be zero-sized */
     if (rret >= 0) {
         h2o_iovec_t vec = h2o_iovec_init(buf, rret);
-        tunnel->super.on_udp_read(&tunnel->super, NULL, &vec, 1);
+        tunnel->super.on_udp_read(&tunnel->super, &vec, 1);
     }
 }
 
@@ -118,7 +118,7 @@ h2o_iovec_t get_next_chunk(const uint8_t *bytes, size_t len, size_t *to_consume,
     return h2o_iovec_init(bytes, chunk_length);
 }
 
-static void send_udp_datagrams(h2o_tunnel_t *_tunnel, h2o_iovec_t *datagrams, size_t num_datagrams)
+static void tunnel_on_udp_write(h2o_tunnel_t *_tunnel, h2o_iovec_t *datagrams, size_t num_datagrams)
 {
     struct st_h2o_udp_tunnel_t *tunnel = (void *)_tunnel;
 
@@ -162,7 +162,7 @@ static void tunnel_on_write(h2o_tunnel_t *_tunnel, const void *bytes, size_t len
     } while (1);
 
     if (num_datagrams > 0)
-        send_udp_datagrams(_tunnel, datagrams, num_datagrams);
+        tunnel_on_udp_write(&tunnel->super, datagrams, num_datagrams);
 
     if (from_buf)
         h2o_buffer_consume(&tunnel->egress.buf, off);
@@ -200,6 +200,7 @@ h2o_tunnel_t *h2o_open_udp_tunnel_from_sa(h2o_loop_t *loop, struct sockaddr *add
                 .destroy = tunnel_on_destroy,
                 .write_ = tunnel_on_write,
                 .proceed_read = tunnel_proceed_read,
+                .udp_write = tunnel_on_udp_write,
             },
         .loop = loop,
         .egress = {.delayed = {.cb = write_complete_delayed}},

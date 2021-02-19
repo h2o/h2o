@@ -1232,7 +1232,8 @@ static h2o_iovec_t finalize_flatten(struct st_h2o_qpack_flatten_context_t *ctx)
 
 h2o_iovec_t h2o_qpack_flatten_request(h2o_qpack_encoder_t *_qpack, h2o_mem_pool_t *_pool, int64_t _stream_id,
                                       h2o_byte_vector_t *_encoder_buf, h2o_iovec_t method, const h2o_url_scheme_t *scheme,
-                                      h2o_iovec_t authority, h2o_iovec_t path, const h2o_header_t *headers, size_t num_headers)
+                                      h2o_iovec_t authority, h2o_iovec_t path, const h2o_header_t *headers, size_t num_headers,
+                                      h2o_iovec_t datagram_flow_id)
 {
     struct st_h2o_qpack_flatten_context_t ctx;
 
@@ -1259,12 +1260,16 @@ h2o_iovec_t h2o_qpack_flatten_request(h2o_qpack_encoder_t *_qpack, h2o_mem_pool_
     for (i = 0; i != num_headers; ++i)
         flatten_header(&ctx, headers + i);
 
+    if (datagram_flow_id.base != NULL)
+        flatten_known_header_with_static_lookup(&ctx, h2o_qpack_lookup_datagram_flow_id, H2O_TOKEN_DATAGRAM_FLOW_ID,
+                                                datagram_flow_id);
+
     return finalize_flatten(&ctx);
 }
 
 h2o_iovec_t h2o_qpack_flatten_response(h2o_qpack_encoder_t *_qpack, h2o_mem_pool_t *_pool, int64_t _stream_id,
                                        h2o_byte_vector_t *_encoder_buf, int status, const h2o_header_t *headers, size_t num_headers,
-                                       const h2o_iovec_t *server_name, size_t content_length)
+                                       const h2o_iovec_t *server_name, size_t content_length, h2o_iovec_t datagram_flow_id)
 {
     struct st_h2o_qpack_flatten_context_t ctx;
 
@@ -1320,6 +1325,10 @@ h2o_iovec_t h2o_qpack_flatten_response(h2o_qpack_encoder_t *_qpack, h2o_mem_pool
     size_t i;
     for (i = 0; i != num_headers; ++i)
         flatten_header(&ctx, headers + i);
+
+    if (datagram_flow_id.base != NULL)
+        flatten_known_header_with_static_lookup(&ctx, h2o_qpack_lookup_datagram_flow_id, H2O_TOKEN_DATAGRAM_FLOW_ID,
+                                                datagram_flow_id);
 
     return finalize_flatten(&ctx);
 }

@@ -113,6 +113,10 @@ struct st_h2o_http3client_req_t {
             const char *errstr;
         } ingress;
     } tunnel;
+    /**
+     * flags
+     */
+    unsigned offered_datagram_flow_id : 1;
 };
 
 static int handle_input_expect_data_frame(struct st_h2o_http3client_req_t *req, const uint8_t **src, const uint8_t *src_end,
@@ -295,6 +299,13 @@ static void tunnel_proceed_read(h2o_tunnel_t *_tunnel)
     if (req->tunnel.ingress.doublebuf.inflight)
         h2o_doublebuffer_consume(&req->tunnel.ingress.doublebuf);
     tunnel_process_ingress(req);
+}
+
+static void tunnel_udp_write(h2o_tunnel_t *_tunnel, h2o_iovec_t *datagrams, size_t num_datagrams)
+{
+    struct st_h2o_http3client_req_t *req = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3client_req_t, tunnel.tunnel, _tunnel);
+
+    h2o_http3_send_h3_datagrams(&req->conn->super, req->quic->stream_id, datagrams, num_datagrams);
 }
 
 static struct st_h2o_httpclient__h3_conn_t *find_connection(h2o_httpclient_connection_pool_t *pool, h2o_url_t *origin)
@@ -571,6 +582,7 @@ static int handle_input_expect_headers(struct st_h2o_http3client_req_t *req, con
     h2o_http3_read_frame_t frame;
     int status;
     h2o_headers_t headers = {NULL};
+    h2o_iovec_t datagram_flow_id = {};
     uint8_t header_ack[H2O_HPACK_ENCODE_INT_MAX_LENGTH];
     size_t header_ack_len;
     int ret, frame_is_eos;
@@ -597,8 +609,9 @@ static int handle_input_expect_headers(struct st_h2o_http3client_req_t *req, con
             return 0;
         }
     }
-    if ((ret = h2o_qpack_parse_response(req->super.pool, req->conn->super.qpack.dec, req->quic->stream_id, &status, &headers, NULL,
-                                        header_ack, &header_ack_len, frame.payload, frame.length, err_desc)) != 0) {
+    if ((ret = h2o_qpack_parse_response(req->super.pool, req->conn->super.qpack.dec, req->quic->stream_id, &status, &headers,
+                                        &datagram_flow_id, header_ack, &header_ack_len, frame.payload, frame.length, err_desc)) !=
+        0) {
         if (ret == H2O_HTTP2_ERROR_INCOMPLETE) {
             /* the request is blocked by the QPACK stream */
             req->handle_input = NULL; /* FIXME */
@@ -609,6 +622,12 @@ static int handle_input_expect_headers(struct st_h2o_http3client_req_t *req, con
     }
     if (header_ack_len != 0)
         h2o_http3_send_qpack_header_ack(&req->conn->super, header_ack, header_ack_len);
+
+    if (datagram_flow_id.base != NULL) {
+        if (!req->offered_datagram_flow_id)
+            return H2O_HTTP3_ERROR_GENERAL_PROTOCOL;
+        /* TODO validate the returned value */
+    }
 
     /* handle 1xx */
     if (100 <= status && status <= 199) {
@@ -639,6 +658,8 @@ static int handle_input_expect_headers(struct st_h2o_http3client_req_t *req, con
             .write_ = tunnel_write,
             .proceed_read = tunnel_proceed_read,
         };
+        if (req->offered_datagram_flow_id && datagram_flow_id.base != NULL)
+            req->tunnel.tunnel.udp_write = tunnel_udp_write;
         req->tunnel.egress.delayed = (h2o_timer_t){};
         req->tunnel.egress.complete_to_be_called = 0;
         req->tunnel.ingress.delayed = (h2o_timer_t){.cb = tunnel_process_ingress_delayed};
@@ -823,6 +844,7 @@ void start_request(struct st_h2o_http3client_req_t *req)
     size_t num_headers;
     h2o_iovec_t body;
     h2o_httpclient_properties_t props = {NULL};
+    char datagram_flow_id_buf[sizeof(H2O_UINT64_LONGEST_STR)];
     int ret;
 
     assert(req->quic == NULL);
@@ -842,8 +864,16 @@ void start_request(struct st_h2o_http3client_req_t *req)
     req->quic->data = req;
 
     /* send request (TODO optimize) */
-    h2o_iovec_t headers_frame = h2o_qpack_flatten_request(req->conn->super.qpack.enc, req->super.pool, req->quic->stream_id, NULL,
-                                                          method, url.scheme, url.authority, url.path, headers, num_headers);
+    h2o_iovec_t datagram_flow_id = {};
+    if (req->super.upgrade_to == h2o_httpclient_upgrade_to_connect &&
+        h2o_memis(method.base, method.len, H2O_STRLIT("CONNECT-UDP")) && h2o_http3_can_use_h3_datagram(&req->conn->super)) {
+        datagram_flow_id.len = sprintf(datagram_flow_id_buf, "%" PRIu64, req->quic->stream_id);
+        datagram_flow_id.base = datagram_flow_id_buf;
+        req->offered_datagram_flow_id = 1;
+    }
+    h2o_iovec_t headers_frame =
+        h2o_qpack_flatten_request(req->conn->super.qpack.enc, req->super.pool, req->quic->stream_id, NULL, method, url.scheme,
+                                  url.authority, url.path, headers, num_headers, datagram_flow_id);
     h2o_buffer_append(&req->sendbuf, headers_frame.base, headers_frame.len);
     if (body.len != 0) {
         emit_data(req, body);
@@ -981,9 +1011,25 @@ static int stream_open_cb(quicly_stream_open_t *self, quicly_stream_t *qs)
 
 quicly_stream_open_t h2o_httpclient_http3_on_stream_open = {stream_open_cb};
 
-static void on_receive_datagram_frame(quicly_receive_datagram_frame_t *self, quicly_conn_t *conn, ptls_iovec_t payload)
+static void on_receive_datagram_frame(quicly_receive_datagram_frame_t *self, quicly_conn_t *qc, ptls_iovec_t datagram)
 {
-    assert(!"FIXME");
+    struct st_h2o_httpclient__h3_conn_t *conn =
+        H2O_STRUCT_FROM_MEMBER(struct st_h2o_httpclient__h3_conn_t, super, *quicly_get_data(qc));
+    uint64_t flow_id;
+    h2o_iovec_t payload;
+    quicly_stream_t *qs;
+
+    /* decode, validate, get stream */
+    if ((flow_id = h2o_http3_decode_h3_datagram(&payload, datagram.base, datagram.len)) == UINT64_MAX ||
+        !(quicly_stream_is_client_initiated(flow_id) && !quicly_stream_is_unidirectional(flow_id))) {
+        h2o_quic_close_connection(&conn->super.super, H2O_HTTP3_ERROR_GENERAL_PROTOCOL, "invalid DATAGRAM frame");
+        return;
+    }
+    if ((qs = quicly_get_stream(conn->super.super.quic, flow_id)) == NULL)
+        return;
+
+    struct st_h2o_http3client_req_t *req = qs->data;
+    req->tunnel.tunnel.on_udp_read(&req->tunnel.tunnel, &payload, 1);
 }
 
 quicly_receive_datagram_frame_t h2o_httpclient_http3_on_receive_datagram_frame = {on_receive_datagram_frame};

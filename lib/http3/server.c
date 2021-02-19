@@ -98,6 +98,9 @@ enum h2o_http3_server_stream_state {
     H2O_HTTP3_SERVER_STREAM_STATE_CLOSE_WAIT
 };
 
+struct st_h2o_http3_server_stream_t;
+KHASH_MAP_INIT_INT64(stream, struct st_h2o_http3_server_stream_t *)
+
 struct st_h2o_http3_server_conn_t {
     h2o_conn_t super;
     h2o_http3_conn_t h3;
@@ -160,6 +163,10 @@ struct st_h2o_http3_server_conn_t {
             uint16_t conn_blocked;
         } uni;
     } scheduler;
+    /**
+     * stream map used for datagram flows
+     */
+    khash_t(stream) * datagram_flows;
 };
 
 /**
@@ -225,6 +232,12 @@ struct st_h2o_http3_server_stream_t {
          */
         h2o_tunnel_t *tunnel;
         struct st_h2o_http3_server_stream_t *stream;
+        /**
+         * While waiting for the generator to respond, this field contains the flow-id offered by the cilent. When the generator
+         * provides a successful response, the stream is registered as a datagram flow, or this id is set to UINT64_MAX if the
+         * establish tunnel did not meet the requirements.
+         */
+        uint64_t datagram_flow_id;
         struct {
             h2o_timer_t delayed_write;
             char bytes_inflight[16384];
@@ -374,6 +387,18 @@ static void check_run_blocked(struct st_h2o_http3_server_conn_t *conn)
         request_run_delayed(conn);
 }
 
+static void destroy_tunnel(struct st_h2o_http3_server_stream_t *stream)
+{
+    stream->tunnel->tunnel->destroy(stream->tunnel->tunnel);
+    stream->tunnel->tunnel = NULL;
+
+    /* remove stream from datagram flow list */
+    struct st_h2o_http3_server_conn_t *conn = get_conn(stream);
+    khiter_t iter = kh_get(stream, conn->datagram_flows, stream->tunnel->datagram_flow_id);
+    assert(iter != kh_end(conn->datagram_flows));
+    kh_del(stream, conn->datagram_flows, iter);
+}
+
 static void dispose_request(struct st_h2o_http3_server_stream_t *stream)
 {
     size_t i;
@@ -399,10 +424,8 @@ static void dispose_request(struct st_h2o_http3_server_stream_t *stream)
 
     /* clean up tunnel */
     if (stream->tunnel != NULL) {
-        if (stream->tunnel->tunnel != NULL) {
-            stream->tunnel->tunnel->destroy(stream->tunnel->tunnel);
-            stream->tunnel->tunnel = NULL;
-        }
+        if (stream->tunnel->tunnel != NULL)
+            destroy_tunnel(stream);
         if (h2o_timer_is_linked(&stream->tunnel->up.delayed_write))
             h2o_timer_unlink(&stream->tunnel->up.delayed_write);
         free(stream->tunnel);
@@ -1088,12 +1111,52 @@ static int handle_input_expect_headers_send_http_error(struct st_h2o_http3_serve
     return 0;
 }
 
+static int handle_input_expect_headers_process_connect(struct st_h2o_http3_server_stream_t *stream,
+                                                       h2o_iovec_t *datagram_flow_id_field, const char **err_desc)
+{
+    if (stream->req.content_length != SIZE_MAX)
+        return handle_input_expect_headers_send_http_error(stream, h2o_send_error_400, "Invalid Request",
+                                                           "CONNECT request cannot have request body", err_desc);
+
+    uint64_t datagram_flow_id = UINT64_MAX;
+    if (datagram_flow_id_field != NULL) {
+        /* CONNECT-UDP */
+        if (datagram_flow_id_field->base != NULL) {
+            /* check if it can be used */
+            if (!h2o_http3_can_use_h3_datagram(&get_conn(stream)->h3))
+                return H2O_HTTP3_ERROR_GENERAL_PROTOCOL;
+            /* TODO implement proper parsing */
+            datagram_flow_id = 0;
+            for (const char *p = datagram_flow_id_field->base; p != datagram_flow_id_field->base + datagram_flow_id_field->len;
+                 ++p) {
+                if (!('0' <= *p && *p <= '9'))
+                    break;
+                datagram_flow_id = datagram_flow_id * 10 + *p - '0';
+            }
+        }
+    }
+
+    set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_SEND_HEADERS);
+
+    stream->tunnel = h2o_mem_alloc(sizeof(*stream->tunnel));
+    stream->tunnel->tunnel = NULL;
+    stream->tunnel->stream = stream;
+    stream->tunnel->datagram_flow_id = datagram_flow_id;
+    stream->tunnel->up.is_inflight = 0;
+    stream->tunnel->up.delayed_write = (h2o_timer_t){.cb = tunnel_write_delayed};
+
+    h2o_process_request(&stream->req);
+
+    return 0;
+}
+
 static int handle_input_expect_headers(struct st_h2o_http3_server_stream_t *stream, const uint8_t **src, const uint8_t *src_end,
                                        const char **err_desc)
 {
     struct st_h2o_http3_server_conn_t *conn = get_conn(stream);
     h2o_http3_read_frame_t frame;
     int header_exists_map, ret;
+    h2o_iovec_t datagram_flow_id = {};
     uint8_t header_ack[H2O_HPACK_ENCODE_INT_MAX_LENGTH];
     size_t header_ack_len;
 
@@ -1115,7 +1178,7 @@ static int handle_input_expect_headers(struct st_h2o_http3_server_stream_t *stre
     if ((ret = h2o_qpack_parse_request(&stream->req.pool, get_conn(stream)->h3.qpack.dec, stream->quic->stream_id,
                                        &stream->req.input.method, &stream->req.input.scheme, &stream->req.input.authority,
                                        &stream->req.input.path, &stream->req.headers, &header_exists_map,
-                                       &stream->req.content_length, NULL /* TODO cache-digests */, NULL, header_ack,
+                                       &stream->req.content_length, NULL /* TODO cache-digests */, &datagram_flow_id, header_ack,
                                        &header_ack_len, frame.payload, frame.length, err_desc)) != 0 &&
         ret != H2O_HTTP2_ERROR_INVALID_HEADER_CHAR)
         return ret;
@@ -1151,19 +1214,10 @@ static int handle_input_expect_headers(struct st_h2o_http3_server_stream_t *stre
     }
 
     /* special handling of CONNECT method */
-    if (h2o_memis(stream->req.input.method.base, stream->req.input.method.len, H2O_STRLIT("CONNECT")) ||
-        h2o_memis(stream->req.input.method.base, stream->req.input.method.len, H2O_STRLIT("CONNECT-UDP"))) {
-        if (stream->req.content_length != SIZE_MAX)
-            return handle_input_expect_headers_send_http_error(stream, h2o_send_error_400, "Invalid Request",
-                                                               "CONNECT request cannot have request body", err_desc);
-        set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_SEND_HEADERS);
-        stream->tunnel = h2o_mem_alloc(sizeof(*stream->tunnel));
-        stream->tunnel->tunnel = NULL;
-        stream->tunnel->stream = stream;
-        stream->tunnel->up.is_inflight = 0;
-        stream->tunnel->up.delayed_write = (h2o_timer_t){.cb = tunnel_write_delayed};
-        h2o_process_request(&stream->req);
-        return 0;
+    if (h2o_memis(stream->req.input.method.base, stream->req.input.method.len, H2O_STRLIT("CONNECT"))) {
+        return handle_input_expect_headers_process_connect(stream, NULL, err_desc);
+    } else if (h2o_memis(stream->req.input.method.base, stream->req.input.method.len, H2O_STRLIT("CONNECT-UDP"))) {
+        return handle_input_expect_headers_process_connect(stream, &datagram_flow_id, err_desc);
     }
 
     /* change state */
@@ -1172,12 +1226,12 @@ static int handle_input_expect_headers(struct st_h2o_http3_server_stream_t *stre
     return 0;
 }
 
-static void write_response(struct st_h2o_http3_server_stream_t *stream)
+static void write_response(struct st_h2o_http3_server_stream_t *stream, h2o_iovec_t datagram_flow_id)
 {
-    h2o_iovec_t frame =
-        h2o_qpack_flatten_response(get_conn(stream)->h3.qpack.enc, &stream->req.pool, stream->quic->stream_id, NULL,
-                                   stream->req.res.status, stream->req.res.headers.entries, stream->req.res.headers.size,
-                                   &get_conn(stream)->super.ctx->globalconf->server_name, stream->req.res.content_length);
+    h2o_iovec_t frame = h2o_qpack_flatten_response(
+        get_conn(stream)->h3.qpack.enc, &stream->req.pool, stream->quic->stream_id, NULL, stream->req.res.status,
+        stream->req.res.headers.entries, stream->req.res.headers.size, &get_conn(stream)->super.ctx->globalconf->server_name,
+        stream->req.res.content_length, datagram_flow_id);
 
     h2o_vector_reserve(&stream->req.pool, &stream->sendbuf.vecs, stream->sendbuf.vecs.size + 1);
     struct st_h2o_http3_server_sendvec_t *vec = stream->sendbuf.vecs.entries + stream->sendbuf.vecs.size++;
@@ -1228,7 +1282,7 @@ static void do_send(h2o_ostream_t *_ostr, h2o_req_t *_req, h2o_sendvec_t *bufs, 
     if (stream->state == H2O_HTTP3_SERVER_STREAM_STATE_SEND_HEADERS) {
         if (!quicly_recvstate_transfer_complete(&stream->quic->recvstate) && !quicly_stop_requested(stream->quic))
             quicly_request_stop(stream->quic, H2O_HTTP3_ERROR_EARLY_RESPONSE);
-        write_response(stream);
+        write_response(stream, h2o_iovec_init(NULL, 0));
         h2o_probe_log_response(&stream->req, stream->quic->stream_id, NULL);
         set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_SEND_BODY);
     } else {
@@ -1278,7 +1332,7 @@ static void do_send_informational(h2o_ostream_t *_ostr, h2o_req_t *_req)
     struct st_h2o_http3_server_stream_t *stream = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_stream_t, ostr_final, _ostr);
     assert(&stream->req == _req);
 
-    write_response(stream);
+    write_response(stream, h2o_iovec_init(NULL, 0));
 
     finalize_do_send(stream);
 }
@@ -1305,12 +1359,18 @@ static void tunnel_on_read(h2o_tunnel_t *_tunnel, const char *err, const void *b
 
     /* EOS */
     if (err != NULL) {
-        stream->tunnel->tunnel->destroy(stream->tunnel->tunnel);
-        stream->tunnel->tunnel = NULL;
+        destroy_tunnel(stream);
         shutdown_response(stream);
     }
 
     finalize_do_send(stream);
+}
+
+static void tunnel_on_udp_read(h2o_tunnel_t *_tunnel, h2o_iovec_t *datagrams, size_t num_datagrams)
+{
+    struct st_h2o_http3_server_stream_t *stream = _tunnel->data;
+
+    h2o_http3_send_h3_datagrams(&get_conn(stream)->h3, stream->tunnel->datagram_flow_id, datagrams, num_datagrams);
 }
 
 void tunnel_write(struct st_h2o_http3_server_stream_t *stream)
@@ -1348,8 +1408,7 @@ static void tunnel_on_write_complete(h2o_tunnel_t *tunnel, const char *err)
     stream->tunnel->up.is_inflight = 0;
 
     if (err != NULL) {
-        stream->tunnel->tunnel->destroy(stream->tunnel->tunnel);
-        stream->tunnel->tunnel = NULL;
+        destroy_tunnel(stream);
         shutdown_response(stream);
         return;
     }
@@ -1360,13 +1419,33 @@ static void tunnel_on_write_complete(h2o_tunnel_t *tunnel, const char *err)
 static void establish_tunnel(h2o_req_t *req, h2o_tunnel_t *tunnel, uint64_t idle_timeout)
 {
     struct st_h2o_http3_server_stream_t *stream = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_stream_t, req, req);
+    h2o_iovec_t datagram_flow_id = {};
 
     stream->tunnel->tunnel = tunnel;
     tunnel->data = stream;
     tunnel->on_write_complete = tunnel_on_write_complete;
     tunnel->on_read = tunnel_on_read;
 
-    write_response(stream);
+    /* setup datagram-level tunneling if possible */
+    if (stream->tunnel->datagram_flow_id != UINT64_MAX) {
+        if (tunnel->udp_write != NULL) {
+            /* register to the map */
+            struct st_h2o_http3_server_conn_t *conn = get_conn(stream);
+            int r;
+            khiter_t iter = kh_put(stream, conn->datagram_flows, stream->quic->stream_id, &r);
+            assert(iter != kh_end(conn->datagram_flows));
+            kh_val(conn->datagram_flows, iter) = stream;
+            /* set the callback */
+            tunnel->on_udp_read = tunnel_on_udp_read;
+            /* build the header field */
+            datagram_flow_id.base = h2o_mem_alloc_pool(&req->pool, char, sizeof(H2O_UINT64_LONGEST_STR));
+            datagram_flow_id.len = sprintf(datagram_flow_id.base, "%" PRIu64, stream->tunnel->datagram_flow_id);
+        } else {
+            stream->tunnel->datagram_flow_id = UINT64_MAX;
+        }
+    }
+
+    write_response(stream, datagram_flow_id);
     h2o_probe_log_response(&stream->req, stream->quic->stream_id, stream->tunnel->tunnel);
     set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_SEND_BODY);
 
@@ -1673,9 +1752,27 @@ static int scheduler_update_state(struct st_quicly_stream_scheduler_t *sched, qu
 
 static quicly_stream_scheduler_t scheduler = {scheduler_can_send, scheduler_do_send, scheduler_update_state};
 
-static void datagram_frame_receive_cb(quicly_receive_datagram_frame_t *self, quicly_conn_t *conn, ptls_iovec_t payload)
+static void datagram_frame_receive_cb(quicly_receive_datagram_frame_t *self, quicly_conn_t *quic, ptls_iovec_t datagram)
 {
-    assert(!"FIXME");
+    struct st_h2o_http3_server_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_conn_t, h3, *quicly_get_data(quic));
+    uint64_t flow_id;
+    h2o_iovec_t payload;
+
+    /* decode */
+    if ((flow_id = h2o_http3_decode_h3_datagram(&payload, datagram.base, datagram.len)) == UINT64_MAX) {
+        h2o_quic_close_connection(&conn->h3.super, H2O_HTTP3_ERROR_GENERAL_PROTOCOL, "invalid DATAGRAM frame");
+        return;
+    }
+
+    /* find stream */
+    khiter_t iter = kh_get(stream, conn->datagram_flows, flow_id);
+    if (iter == kh_end(conn->datagram_flows))
+        return;
+    struct st_h2o_http3_server_stream_t *stream = kh_val(conn->datagram_flows, iter);
+    assert(stream->tunnel->tunnel != NULL);
+
+    /* forward */
+    stream->tunnel->tunnel->udp_write(stream->tunnel->tunnel, &payload, 1);
 }
 
 static quicly_receive_datagram_frame_t on_receive_datagram_frame = {datagram_frame_receive_cb};
@@ -1756,7 +1853,8 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
     req_scheduler_init(&conn->scheduler.reqs);
     conn->scheduler.uni.active = 0;
     conn->scheduler.uni.conn_blocked = 0;
-    memset(&conn->_conns, 0, sizeof(conn->_conns));
+    conn->datagram_flows = kh_init(stream);
+    conn->_conns = (h2o_linklist_t){};
 
     /* accept connection */
 #if PICOTLS_USE_DTRACE
