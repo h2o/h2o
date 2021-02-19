@@ -30,10 +30,12 @@ extern "C" {
 #include <unistd.h>
 #include <stdarg.h>
 #include <limits.h>
+#include <signal.h>
 #include <sys/time.h>
 #include "h2o/memory.h"
 #include "h2o/version.h"
 #include "h2o/ebpf.h"
+#include "h2o/serverutil.h"
 }
 #include "h2olog.h"
 
@@ -236,7 +238,12 @@ static bool setup_ebpf_map(ebpf::BPF *bpf, pid_t h2o_pid)
     snprintf(path, sizeof(path), H2O_EBPF_MAP_PATH2, (uint64_t)h2o_pid);
 
     unlink(path);
-    atexit([]() { unlink(path); });
+    atexit([]() {
+        if (unlink(path) != 0) {
+            // It occurs unless -r is specified. Probably harmless, though.
+            fprintf(stderr, "h2olog: cannot unlink %s: %s", path, strerror(errno));
+        }
+    });
 
     auto table = bpf->get_table("h2o_tid_to_u64");
     if (bpf_obj_pin(table.get_fd(), path) != 0) {
@@ -246,8 +253,24 @@ static bool setup_ebpf_map(ebpf::BPF *bpf, pid_t h2o_pid)
     return true;
 }
 
+static void sig_cleanup(int signo)
+{
+    h2o_set_signal_handler(signo, SIG_DFL);
+
+    fprintf(stderr, "h2olog caught a signal: %s/%d\n", strsignal(signo), signo);
+    exit(0);
+}
+
+static void setup_signal_handlers()
+{
+    h2o_set_signal_handler(SIGINT, sig_cleanup);
+    h2o_set_signal_handler(SIGTERM, sig_cleanup);
+}
+
 int main(int argc, char **argv)
 {
+    setup_signal_handlers();
+
     std::unique_ptr<h2o_tracer> tracer(create_raw_tracer());
 
     int debug = 0;

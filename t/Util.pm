@@ -580,10 +580,11 @@ package H2ologTracer {
         }
 
         # wait until h2olog and the trace log becomes ready
+        my $efh;
         my $get_trace;
         STARTUP: while (1) {
             Time::HiRes::sleep(0.1);
-            if (open my $efh, "<", $stderr_file) {
+            if (open $efh, "<", $stderr_file) {
                 for (my $i = 0; $i < 10; $i++) {
                     sleep(1);
                     seek $efh, 0, 0 or die "seek failed: $!";
@@ -602,8 +603,14 @@ package H2ologTracer {
         open my $fh, "<", $output_file or die "h2olog[$tracer_pid] does not create the output file ($output_file): $!";
         my $off = 0;
         $get_trace = sub {
-            Carp::confess "h2olog[$tracer_pid] is down (got $?)"
-                if waitpid($tracer_pid, WNOHANG) != 0;
+            if (waitpid($tracer_pid, WNOHANG) != 0) {
+                seek $efh, 0, 1 or die "seek failed: $!";
+                {
+                    local $/;
+                    Test::More::diag(<$efh>);
+                }
+                Carp::confess "h2olog[$tracer_pid] is down (got $?)"
+            }
 
             seek $fh, $off, 0 or die "seek failed: $!";
             read $fh, my $bytes, 65000;
