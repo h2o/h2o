@@ -3521,7 +3521,7 @@ static int try_psk_handshake(ptls_t *tls, size_t *psk_index, int *accept_early_d
             int64_t delta = (now - issue_at) - (identity->obfuscated_ticket_age - age_add);
             if (delta < 0)
                 delta = -delta;
-            if (delta <= PTLS_EARLY_DATA_MAX_DELAY)
+            if (tls->ctx->max_early_data_size != 0 && delta <= PTLS_EARLY_DATA_MAX_DELAY)
                 *accept_early_data = 1;
         }
         /* check server-name */

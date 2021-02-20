@@ -1093,7 +1093,7 @@ static int handle_input_expect_headers(struct st_h2o_http3_server_stream_t *stre
 {
     struct st_h2o_http3_server_conn_t *conn = get_conn(stream);
     h2o_http3_read_frame_t frame;
-    int header_exists_map, ret;
+    int header_exists_map = 0, ret;
     uint8_t header_ack[H2O_HPACK_ENCODE_INT_MAX_LENGTH];
     size_t header_ack_len;
 
@@ -1127,6 +1127,17 @@ static int handle_input_expect_headers(struct st_h2o_http3_server_stream_t *stre
 
     h2o_probe_log_request(&stream->req, stream->quic->stream_id);
 
+    int is_connect = h2o_memis(stream->req.input.method.base, stream->req.input.method.len, H2O_STRLIT("CONNECT"));
+
+    /* check if existence and non-existence of pseudo headers are correct */
+    int expected_map = H2O_HPACK_PARSE_HEADERS_METHOD_EXISTS | H2O_HPACK_PARSE_HEADERS_AUTHORITY_EXISTS;
+    if (!is_connect)
+        expected_map |= H2O_HPACK_PARSE_HEADERS_SCHEME_EXISTS | H2O_HPACK_PARSE_HEADERS_PATH_EXISTS;
+    if (header_exists_map != expected_map) {
+        shutdown_stream(stream, H2O_HTTP3_ERROR_GENERAL_PROTOCOL, H2O_HTTP3_ERROR_GENERAL_PROTOCOL);
+        return 0;
+    }
+
     /* send a 400 error when observing an invalid header character */
     if (ret == H2O_HTTP2_ERROR_INVALID_HEADER_CHAR)
         return handle_input_expect_headers_send_http_error(stream, h2o_send_error_400, "Invalid Request", *err_desc, err_desc);
@@ -1147,7 +1158,7 @@ static int handle_input_expect_headers(struct st_h2o_http3_server_stream_t *stre
     }
 
     /* special handling of CONNECT method */
-    if (h2o_memis(stream->req.input.method.base, stream->req.input.method.len, H2O_STRLIT("CONNECT"))) {
+    if (is_connect) {
         if (stream->req.content_length != SIZE_MAX)
             return handle_input_expect_headers_send_http_error(stream, h2o_send_error_400, "Invalid Request",
                                                                "CONNECT request cannot have request body", err_desc);
