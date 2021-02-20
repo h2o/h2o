@@ -1044,7 +1044,10 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
         if (listener->quic.ctx != NULL) {
             listener->quic.ctx->tls = h2o_socket_ssl_get_picotls_context(ssl_ctx);
             assert(listener->quic.ctx->tls != NULL);
+            assert(listener->quic.ctx->tls->update_traffic_key == NULL && "the TLS context has not been amended yet");
             quicly_amend_ptls_context(listener->quic.ctx->tls);
+            if (ssl_config->alternate_ptls_ctx != NULL)
+                quicly_amend_ptls_context(ssl_config->alternate_ptls_ctx);
         }
     } else {
         if (listener->quic.ctx != NULL) {
