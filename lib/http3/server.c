@@ -1379,6 +1379,9 @@ static void establish_tunnel(h2o_req_t *req, h2o_tunnel_t *tunnel, uint64_t idle
     finalize_do_send(stream);
     assert(!stream->proceed_while_sending);
     stream->proceed_requested = 1; /* suppress invocation of `tunnel->proceed_read` until `tunnel_on_read` gets called */
+
+    if (stream->req_body != NULL)
+        tunnel_write(stream);
 }
 
 static int handle_priority_update_frame(struct st_h2o_http3_server_conn_t *conn, const h2o_http3_priority_update_frame_t *frame)
