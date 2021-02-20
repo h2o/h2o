@@ -29,6 +29,8 @@ subtest "hybrid server" => sub {
     like run_client($RAW_CERT_OPT), $re_ok, "client(raw) -> ok";
 };
 
+done_testing;
+
 sub start_server {
     my ($use_cert, $use_raw) = @_;
 
