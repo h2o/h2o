@@ -394,9 +394,11 @@ static void destroy_tunnel(struct st_h2o_http3_server_stream_t *stream)
 
     /* remove stream from datagram flow list */
     struct st_h2o_http3_server_conn_t *conn = get_conn(stream);
-    khiter_t iter = kh_get(stream, conn->datagram_flows, stream->tunnel->datagram_flow_id);
-    assert(iter != kh_end(conn->datagram_flows));
-    kh_del(stream, conn->datagram_flows, iter);
+    if (stream->tunnel->datagram_flow_id != UINT64_MAX) {
+        khiter_t iter = kh_get(stream, conn->datagram_flows, stream->tunnel->datagram_flow_id);
+        assert(iter != kh_end(conn->datagram_flows));
+        kh_del(stream, conn->datagram_flows, iter);
+    }
 }
 
 static void dispose_request(struct st_h2o_http3_server_stream_t *stream)
@@ -1443,7 +1445,7 @@ static void establish_tunnel(h2o_req_t *req, h2o_tunnel_t *tunnel, uint64_t idle
             /* register to the map */
             struct st_h2o_http3_server_conn_t *conn = get_conn(stream);
             int r;
-            khiter_t iter = kh_put(stream, conn->datagram_flows, stream->quic->stream_id, &r);
+            khiter_t iter = kh_put(stream, conn->datagram_flows, stream->tunnel->datagram_flow_id, &r);
             assert(iter != kh_end(conn->datagram_flows));
             kh_val(conn->datagram_flows, iter) = stream;
             /* set the callback */
