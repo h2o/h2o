@@ -65,7 +65,7 @@ void ptls_bcrypt_random_bytes(void *buf, size_t len)
 
 /*
  * Support for symmetric ciphers
-*/
+ */
 
 struct ptls_bcrypt_symmetric_param_t {
     HANDLE hKey;
@@ -215,7 +215,7 @@ static int ptls_bcrypt_cipher_setup_crypto(ptls_cipher_context_t *_ctx, int is_e
             ctx->super.do_init = ptls_bcrypt_cipher_init_ctr;
             ctx->super.do_transform = ptls_bcrypt_cipher_transform_ctr;
         } else {
-            ctx->super.do_init = NULL; 
+            ctx->super.do_init = NULL;
             ctx->super.do_transform = ptls_bcrypt_cipher_transform_ecb;
         }
         ctx->bctx.is_enc = is_enc;
@@ -236,7 +236,6 @@ static int ptls_bcrypt_cipher_setup_crypto_aes_ctr(ptls_cipher_context_t *_ctx, 
     return ptls_bcrypt_cipher_setup_crypto(_ctx, is_enc, key, BCRYPT_AES_ALGORITHM, 1);
 }
 
-
 /* Picotls assumes that AEAD encryption works as:
  * - an "init" call that prepares the encryption context.
  * - a series of "update" calls that encrypt segments of the message
@@ -248,7 +247,7 @@ static int ptls_bcrypt_cipher_setup_crypto_aes_ctr(ptls_cipher_context_t *_ctx, 
  *  - the "padding info" points to a BCRYPT_AUTHENTICATED_CIPHER_MODE_INFO
  *    structure
  *  - the "IV" parameter points to a buffer holding intermediate updates
- *    of the IV. That buffer shall be initialize to zero before the 
+ *    of the IV. That buffer shall be initialize to zero before the
  *    first call.
  * The documentation of the AEAD mode on MSDN is slightly obscure, and
  * also slightly wrong. After trial and errors and web searches, we find
@@ -266,10 +265,10 @@ static int ptls_bcrypt_cipher_setup_crypto_aes_ctr(ptls_cipher_context_t *_ctx, 
  *    initialized to zero before first call.
  *  - The Mac Context parameter (pbMacContext, cbMacContext) contains
  *    a working buffer for the computation of the tag. The size
- *    must be the maxLength parameter returned retrieved in the 
+ *    must be the maxLength parameter returned retrieved in the
  *    BCRYPT_AUTH_TAG_LENGTH property of the algorithm. It must be
  *    initialized to zero before first call.
- *  - The dwflag parameters must be set to 
+ *  - The dwflag parameters must be set to
  *    BCRYPT_AUTH_MODE_CHAIN_CALLS_FLAG on first call. (The
  *    MSDN documentation says BCRYPT_AUTH_MODE_IN_PROGRESS_FLAG,
  *    but that's an error.)
@@ -284,7 +283,7 @@ static int ptls_bcrypt_cipher_setup_crypto_aes_ctr(ptls_cipher_context_t *_ctx, 
  * error STATUS_INVALID_BUFFER_SIZE if the length passed in the
  * chained calls is not an integer multiple of block size. This forces
  * us to maintain an intermediate buffer of "extra bytes".
- *    
+ *
  */
 
 struct ptls_bcrypt_aead_param_t {
@@ -347,9 +346,9 @@ static void ptls_bcrypt_aead_do_encrypt_init(struct st_ptls_aead_context_t *_ctx
     ctx->bctx.aead_params.pbAuthData = (PUCHAR)aad;
     ctx->bctx.aead_params.cbAuthData = (ULONG)aadlen;
     ctx->bctx.aead_params.pbTag = (PUCHAR)ctx->bctx.tag;
-    ctx->bctx.aead_params.cbTag = (ULONG) ctx->super.algo->tag_size;
+    ctx->bctx.aead_params.cbTag = (ULONG)ctx->super.algo->tag_size;
     // ctx->bctx.aead_params.cbAAD = (ULONG)aadlen;
-    ctx->bctx.aead_params.pbMacContext = (PUCHAR) ctx->bctx.auth_tag;
+    ctx->bctx.aead_params.pbMacContext = (PUCHAR)ctx->bctx.auth_tag;
     ctx->bctx.aead_params.cbMacContext = (ULONG)ctx->bctx.maxTagLength;
     ctx->bctx.aead_params.dwFlags = BCRYPT_AUTH_MODE_CHAIN_CALLS_FLAG;
 }
@@ -368,14 +367,15 @@ static size_t ptls_bcrypt_aead_do_encrypt_update(struct st_ptls_aead_context_t *
 
         if (inlen < requiredBytes) {
             memcpy(&ctx->bctx.extraBytes[ctx->bctx.nbExtraBytes], input, inlen);
-            ctx->bctx.nbExtraBytes += (ULONG) inlen;
+            ctx->bctx.nbExtraBytes += (ULONG)inlen;
             inlen = 0;
         } else {
             memcpy(&ctx->bctx.extraBytes[ctx->bctx.nbExtraBytes], input, requiredBytes);
             inlen -= requiredBytes;
-            input = (void*)(((uint8_t *)input) + requiredBytes);
+            input = (void *)(((uint8_t *)input) + requiredBytes);
             ret = BCryptEncrypt(ctx->bctx.hKey, (PUCHAR)ctx->bctx.extraBytes, (ULONG)ctx->super.algo->ecb_cipher->block_size,
-                                (void *)&ctx->bctx.aead_params, ctx->bctx.ivbuf, (ULONG)ctx->super.algo->iv_size, output, (ULONG)outlenMax, &cbResult1, 0);
+                                (void *)&ctx->bctx.aead_params, ctx->bctx.ivbuf, (ULONG)ctx->super.algo->iv_size, output,
+                                (ULONG)outlenMax, &cbResult1, 0);
 
             assert(BCRYPT_SUCCESS(ret));
             if (!BCRYPT_SUCCESS(ret)) {
@@ -414,8 +414,8 @@ static size_t ptls_bcrypt_aead_do_encrypt_final(struct st_ptls_aead_context_t *_
 
     ctx->bctx.aead_params.dwFlags &= ~BCRYPT_AUTH_MODE_CHAIN_CALLS_FLAG;
 
-    ret = BCryptEncrypt(ctx->bctx.hKey, (PUCHAR)ctx->bctx.extraBytes, (ULONG)ctx->bctx.nbExtraBytes, (void *)&ctx->bctx.aead_params, ctx->bctx.ivbuf,
-                        (ULONG)ctx->super.algo->iv_size, output, (ULONG)outlenMax, &cbResult, 0);
+    ret = BCryptEncrypt(ctx->bctx.hKey, (PUCHAR)ctx->bctx.extraBytes, (ULONG)ctx->bctx.nbExtraBytes, (void *)&ctx->bctx.aead_params,
+                        ctx->bctx.ivbuf, (ULONG)ctx->super.algo->iv_size, output, (ULONG)outlenMax, &cbResult, 0);
     assert(BCRYPT_SUCCESS(ret));
 
     if (BCRYPT_SUCCESS(ret)) {
@@ -425,6 +425,22 @@ static size_t ptls_bcrypt_aead_do_encrypt_final(struct st_ptls_aead_context_t *_
         cbResult += ctx->bctx.aead_params.cbTag;
     }
     return cbResult;
+}
+
+void ptls_bcrypt_do_encrypt(ptls_aead_context_t *ctx, void *output, const void *input, size_t inlen, uint64_t seq,
+                                  const void *aad, size_t aadlen, ptls_aead_supplementary_encryption_t *supp)
+{
+    size_t after_update;
+
+    ctx->do_encrypt_init(ctx, seq, aad, aadlen);
+    after_update = ctx->do_encrypt_update(ctx, output, input, inlen);
+    ctx->do_encrypt_final(ctx, (uint8_t *)output + after_update);
+
+    if (supp != NULL) {
+        ptls_cipher_init(supp->ctx, supp->input);
+        memset(supp->output, 0, sizeof(supp->output));
+        ptls_cipher_encrypt(supp->ctx, supp->output, supp->output, sizeof(supp->output));
+    }
 }
 
 static size_t ptls_bcrypt_aead_do_decrypt(struct st_ptls_aead_context_t *_ctx, void *output, const void *input, size_t inlen,
@@ -450,8 +466,8 @@ static size_t ptls_bcrypt_aead_do_decrypt(struct st_ptls_aead_context_t *_ctx, v
     ctx->bctx.aead_params.cbTag = (ULONG)(ULONG)ctx->super.algo->tag_size;
 
     /* Call the decryption */
-    ret = BCryptDecrypt(ctx->bctx.hKey, (PUCHAR)input, (ULONG)textLen, (void *)&ctx->bctx.aead_params,
-                        NULL, 0, (PUCHAR)output, (ULONG)textLen, &cbResult, 0);
+    ret = BCryptDecrypt(ctx->bctx.hKey, (PUCHAR)input, (ULONG)textLen, (void *)&ctx->bctx.aead_params, NULL, 0, (PUCHAR)output,
+                        (ULONG)textLen, &cbResult, 0);
 
     if (BCRYPT_SUCCESS(ret)) {
         return (size_t)cbResult;
@@ -460,8 +476,17 @@ static size_t ptls_bcrypt_aead_do_decrypt(struct st_ptls_aead_context_t *_ctx, v
     }
 }
 
-static int ptls_bcrypt_aead_setup_crypto(ptls_aead_context_t *_ctx, int is_enc, const void *key, 
-    const void * iv, wchar_t const *bcrypt_name, wchar_t const *bcrypt_mode, size_t bcrypt_mode_size)
+static void ptls_bcrypt_aead_xor_iv(ptls_aead_context_t *_ctx, const void *_bytes, size_t len)
+{
+    struct ptls_bcrypt_aead_context_t *ctx = (struct ptls_bcrypt_aead_context_t *)_ctx;
+    const uint8_t *bytes = _bytes;
+
+    for (size_t i = 0; i < len; ++i)
+        ctx->bctx.iv[i] ^= bytes[i];
+}
+
+static int ptls_bcrypt_aead_setup_crypto(ptls_aead_context_t *_ctx, int is_enc, const void *key, const void *iv,
+                                         wchar_t const *bcrypt_name, wchar_t const *bcrypt_mode, size_t bcrypt_mode_size)
 {
     struct ptls_bcrypt_aead_context_t *ctx = (struct ptls_bcrypt_aead_context_t *)_ctx;
     HANDLE hAlgorithm = NULL;
@@ -514,11 +539,12 @@ static int ptls_bcrypt_aead_setup_crypto(ptls_aead_context_t *_ctx, int is_enc, 
         memcpy(ctx->bctx.iv_static, iv, ctx->super.algo->iv_size);
         if (is_enc) {
             ctx->super.dispose_crypto = ptls_bcrypt_aead_dispose_crypto;
+            ctx->super.do_xor_iv = ptls_bcrypt_aead_xor_iv;
             ctx->super.do_decrypt = NULL;
             ctx->super.do_encrypt_init = ptls_bcrypt_aead_do_encrypt_init;
             ctx->super.do_encrypt_update = ptls_bcrypt_aead_do_encrypt_update;
             ctx->super.do_encrypt_final = ptls_bcrypt_aead_do_encrypt_final;
-            ctx->super.do_encrypt = ptls_aead__do_encrypt;
+            ctx->super.do_encrypt = ptls_bcrypt_do_encrypt;
         } else {
             ctx->super.dispose_crypto = ptls_bcrypt_aead_dispose_crypto;
             ctx->super.do_decrypt = ptls_bcrypt_aead_do_decrypt;
@@ -533,7 +559,7 @@ static int ptls_bcrypt_aead_setup_crypto(ptls_aead_context_t *_ctx, int is_enc, 
     }
 }
 
-static int ptls_bcrypt_aead_setup_crypto_aesgcm(ptls_aead_context_t *_ctx, int is_enc, const void *key, const void * iv)
+static int ptls_bcrypt_aead_setup_crypto_aesgcm(ptls_aead_context_t *_ctx, int is_enc, const void *key, const void *iv)
 {
     return ptls_bcrypt_aead_setup_crypto(_ctx, is_enc, key, iv, BCRYPT_AES_ALGORITHM, BCRYPT_CHAIN_MODE_GCM,
                                          sizeof(BCRYPT_CHAIN_MODE_GCM));
@@ -619,7 +645,7 @@ static void ptls_bcrypt_hash_final(struct st_ptls_hash_context_t *_ctx, void *md
             }
             assert(BCRYPT_SUCCESS(ret));
             if (!BCRYPT_SUCCESS(ret)) {
-                ctx->ctx.hHash = NULL;   
+                ctx->ctx.hHash = NULL;
             }
             break;
         }
@@ -750,6 +776,8 @@ ptls_cipher_algorithm_t ptls_bcrypt_aes256ctr = {"AES256-CTR",
                                                  ptls_bcrypt_cipher_setup_crypto_aes_ctr};
 
 ptls_aead_algorithm_t ptls_bcrypt_aes128gcm = {"AES128-GCM",
+                                               PTLS_AESGCM_CONFIDENTIALITY_LIMIT,
+                                               PTLS_AESGCM_INTEGRITY_LIMIT,
                                                &ptls_bcrypt_aes128ecb,
                                                &ptls_bcrypt_aes128ctr,
                                                PTLS_AES128_KEY_SIZE,
@@ -759,6 +787,8 @@ ptls_aead_algorithm_t ptls_bcrypt_aes128gcm = {"AES128-GCM",
                                                ptls_bcrypt_aead_setup_crypto_aesgcm};
 
 ptls_aead_algorithm_t ptls_bcrypt_aes256gcm = {"AES256-GCM",
+                                               PTLS_AESGCM_CONFIDENTIALITY_LIMIT,
+                                               PTLS_AESGCM_INTEGRITY_LIMIT,
                                                &ptls_bcrypt_aes256ecb,
                                                &ptls_bcrypt_aes256ctr,
                                                PTLS_AES256_KEY_SIZE,
