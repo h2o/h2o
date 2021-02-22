@@ -207,12 +207,13 @@ static void tunnel_on_read(h2o_tunnel_t *_tunnel, const char *err, const void *b
     struct st_tunnel_t *tunnel = _tunnel->data;
     assert(tunnel->tunnel == _tunnel);
 
+    if (len != 0)
+        write(1, bytes, len);
+
     if (err != NULL) {
         fprintf(stderr, "%s\n", err);
         exit(0);
     }
-
-    write(1, bytes, len);
 
     tunnel->tunnel->proceed_read(tunnel->tunnel);
 }
