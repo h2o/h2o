@@ -302,6 +302,9 @@
 		E9316EEC24417EAA00C9C127 /* state.c in Sources */ = {isa = PBXBuildFile; fileRef = E9316EE324417EA900C9C127 /* state.c */; };
 		E9316EED24417EAA00C9C127 /* state.c in Sources */ = {isa = PBXBuildFile; fileRef = E9316EE324417EA900C9C127 /* state.c */; };
 		E93BB45D25DA5792009C24D8 /* connect.c in Sources */ = {isa = PBXBuildFile; fileRef = E93BB45C25DA5792009C24D8 /* connect.c */; };
+		E93BB58E25DE3988009C24D8 /* pembase64.c in Sources */ = {isa = PBXBuildFile; fileRef = E93BB58D25DE3987009C24D8 /* pembase64.c */; };
+		E93BB58F25DE3988009C24D8 /* pembase64.c in Sources */ = {isa = PBXBuildFile; fileRef = E93BB58D25DE3987009C24D8 /* pembase64.c */; };
+		E93BB59025DE3988009C24D8 /* pembase64.c in Sources */ = {isa = PBXBuildFile; fileRef = E93BB58D25DE3987009C24D8 /* pembase64.c */; };
 		E93C7F96226EBEC9007BF39A /* frame.c in Sources */ = {isa = PBXBuildFile; fileRef = E93C7F95226EBEC9007BF39A /* frame.c */; };
 		E93C7F98226EBEC9007BF39A /* frame.c in Sources */ = {isa = PBXBuildFile; fileRef = E93C7F95226EBEC9007BF39A /* frame.c */; };
 		E93C7F9A22701806007BF39A /* frame.c in Sources */ = {isa = PBXBuildFile; fileRef = E93C7F9922701806007BF39A /* frame.c */; };
@@ -1082,6 +1085,8 @@
 		E9316EEE2441C08100C9C127 /* certificate_compression.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = certificate_compression.h; sourceTree = "<group>"; };
 		E93BB45025DA530E009C24D8 /* 50connect.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = 50connect.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		E93BB45C25DA5792009C24D8 /* connect.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = connect.c; sourceTree = "<group>"; };
+		E93BB58D25DE3987009C24D8 /* pembase64.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = pembase64.c; sourceTree = "<group>"; };
+		E93BB6D025E09504009C24D8 /* 40tls-raw-pubkey.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "40tls-raw-pubkey.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		E93C7F95226EBEC9007BF39A /* frame.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = frame.c; sourceTree = "<group>"; };
 		E93C7F9922701806007BF39A /* frame.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = frame.c; sourceTree = "<group>"; };
 		E9414F8D24EBFBDA00273C59 /* 40http3-reconnect.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "40http3-reconnect.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
@@ -2118,6 +2123,7 @@
 				109EEFDE1D77B350001F11D1 /* 40server-push-multiple.t */,
 				107D4D501B58B342004A9B21 /* 40session-ticket.t */,
 				104B9A321A59E27A009EEE64 /* 40ssl-cipher-suite.t */,
+				E93BB6D025E09504009C24D8 /* 40tls-raw-pubkey.t */,
 				E9F677D82008686B006476D3 /* 40tls13-early-data.t */,
 				106C22FB1C0413DA00405689 /* 40tunnel.t */,
 				104B9A221A47BBA1009EEE64 /* 40unix-socket.t */,
@@ -2555,6 +2561,7 @@
 				E9316ED724417E0A00C9C127 /* certificate_compression.c */,
 				E9581B9822F001C000299E8A /* cifra */,
 				E9708AD91E499E040029E0A5 /* openssl.c */,
+				E93BB58D25DE3987009C24D8 /* pembase64.c */,
 				E9708ADA1E499E040029E0A5 /* picotls.c */,
 			);
 			path = lib;
@@ -3195,6 +3202,7 @@
 				7DE1DB37212B1CC00055F500 /* ssl.c in Sources */,
 				E98884D021E7F3C80060F010 /* sentmap.c in Sources */,
 				106C23011C0544CE00405689 /* errordoc.c in Sources */,
+				E93BB58E25DE3988009C24D8 /* pembase64.c in Sources */,
 				E9DF012824E4CDEE0002EEC7 /* cc-cubic.c in Sources */,
 				10FCC13E1B2E4A4500F13674 /* cloexec.c in Sources */,
 				105534DF1A3C7B9800627ECB /* proxy.c in Sources */,
@@ -3282,6 +3290,7 @@
 				E987E5F51FD8C04D00DE4346 /* encode.c in Sources */,
 				E901C429213E529F00D17C93 /* blockwise.c in Sources */,
 				E987E5FC1FD8C04D00DE4346 /* utf8_util.c in Sources */,
+				E93BB58F25DE3988009C24D8 /* pembase64.c in Sources */,
 				107D4D491B5880BC004A9B21 /* parser.c in Sources */,
 				104B9A481A5F9472009EEE64 /* headers.c in Sources */,
 				E987E5F11FD8C04D00DE4346 /* cluster.c in Sources */,
@@ -3441,6 +3450,7 @@
 				E9708B391E52C75A0029E0A5 /* cloexec.c in Sources */,
 				7DF26B091FBC020600FBE2E7 /* middleware.c in Sources */,
 				E9708B451E52C7DF0029E0A5 /* file.c in Sources */,
+				E93BB59025DE3988009C24D8 /* pembase64.c in Sources */,
 				E9708B6C1E52C81D0029E0A5 /* compress.c in Sources */,
 				E9708B1F1E49BAC60029E0A5 /* chash.c in Sources */,
 				E9708B821E52C84E0029E0A5 /* http1.c in Sources */,
