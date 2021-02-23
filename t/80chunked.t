@@ -9,7 +9,7 @@ use t::Util;
 subtest "reverse-proxy" => sub {
     # spawn upstream psgi
     plan skip_all => 'Starlet not found'
-        unless system 'perl -MStarlet /dev/null > /dev/null 2>&1' == 0;
+        unless system('perl -MStarlet /dev/null > /dev/null 2>&1') == 0;
     my $upstream_port = empty_port();
     my $upstream = spawn_server(
         argv     => [qw(plackup -s Starlet --access-log /dev/null --listen), "127.0.0.1:$upstream_port", "t/assets/upstream.psgi"],
