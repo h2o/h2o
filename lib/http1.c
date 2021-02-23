@@ -532,6 +532,7 @@ static void proceed_request(h2o_req_t *req, size_t written, h2o_send_state_t sen
         return;
     }
 
+    assert(send_state == H2O_SEND_STATE_IN_PROGRESS);
     set_req_timeout(conn, conn->super.ctx->globalconf->http1.req_timeout, reqread_on_timeout);
     set_req_io_timeout(conn, conn->super.ctx->globalconf->http1.req_io_timeout, req_io_on_timeout);
     h2o_socket_read_start(conn->sock, reqread_on_read);
