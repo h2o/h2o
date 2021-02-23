@@ -1130,7 +1130,9 @@ static int verify_cert_chain(X509_STORE *store, X509 *cert, STACK_OF(X509) * cha
     X509_STORE_CTX *verify_ctx;
     int ret;
 
-    assert(server_name != NULL && "ptls_set_server_name MUST be called");
+    fprintf(stderr, "verify_cert_chain:%d\n", is_server);
+
+    //assert(server_name != NULL && "ptls_set_server_name MUST be called");
 
     /* verify certificate chain */
     if ((verify_ctx = X509_STORE_CTX_new()) == NULL) {
@@ -1210,6 +1212,8 @@ static int verify_cert(ptls_verify_certificate_t *_self, ptls_t *tls, int (**ver
     int ret = 0;
 
     assert(num_certs != 0);
+
+    fprintf(stderr, "verify_cert:%d\n", num_certs);
 
     /* convert certificates to OpenSSL representation */
     if ((cert = to_x509(certs[0])) == NULL) {
