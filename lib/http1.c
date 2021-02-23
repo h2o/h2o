@@ -267,12 +267,11 @@ static void handle_one_body_fragment(struct st_h2o_http1_conn_t *conn, size_t fr
 static void handle_chunked_entity_read(struct st_h2o_http1_conn_t *conn)
 {
     struct st_h2o_http1_chunked_entity_reader *reader = (void *)conn->_req_entity_reader;
-    size_t bufsz, consume;
+    size_t bufsz;
     ssize_t ret;
-    int complete = 1;
 
     /* decode the incoming data */
-    if ((consume = bufsz = conn->sock->input->size) == 0)
+    if ((bufsz = conn->sock->input->size) == 0)
         return;
     ret = phr_decode_chunked(&reader->decoder, conn->sock->input->bytes, &bufsz);
     if (ret != -1 && bufsz + conn->req.req_body_bytes_received >= conn->super.ctx->globalconf->max_request_entity_size) {
@@ -282,17 +281,17 @@ static void handle_chunked_entity_read(struct st_h2o_http1_conn_t *conn)
     if (ret < 0) {
         if (ret == -2) {
             /* incomplete */
-            complete = 0;
-            goto Done;
+            handle_one_body_fragment(conn, bufsz, conn->sock->input->size - bufsz, 0);
+        } else {
+            /* error */
+            entity_read_send_error_400(conn, "Invalid Request", "broken chunked-encoding");
         }
-        /* error */
-        entity_read_send_error_400(conn, "Invalid Request", "broken chunked-encoding");
-        return;
+    } else {
+        /* complete */
+        assert(bufsz + ret <= conn->sock->input->size);
+        conn->sock->input->size = bufsz + ret;
+        handle_one_body_fragment(conn, bufsz, 0, 1);
     }
-    /* complete */
-    consume -= ret;
-Done:
-    handle_one_body_fragment(conn, bufsz, consume - bufsz, complete);
 }
 
 static int create_chunked_entity_reader(struct st_h2o_http1_conn_t *conn)
