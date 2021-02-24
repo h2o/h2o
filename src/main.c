@@ -2618,6 +2618,7 @@ Exit:
         /* revert the changes to the connection counts */
         num_connections(-1);
         num_quic_connections(-1);
+        return NULL;
     }
     return &conn->super;
 }
