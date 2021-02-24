@@ -598,7 +598,7 @@ package H2ologTracer {
                 kill("TERM", $tracer_pid)
                     or warn("failed to kill h2olog[$tracer_pid]: $!");
             } else {
-                Test::More::diag($_) while <$errfh>; # the case when BPF program doesn't compile
+                Test::More::diag($_) while <$errfh>; # in case h2olog shows error messages, e.g. BPF program doesn't compile
                 Test::More::diag "h2olog[$tracer_pid] has already exited";
             }
         });
