@@ -75,13 +75,14 @@ subtest "h2olog -H", sub {
   like $headers, qr{^HTTP/3 200\n}, "req: HTTP/3";
 
   my $trace;
-  until (($trace = $tracer->get_trace()) =~ m{RxProtocol\s+HTTP/3.0}) {}
+  until (($trace = $tracer->get_trace()) =~ m{\bRxProtocol\b}) {}
 
   if ($ENV{H2OLOG_DEBUG}) {
     diag "h2olog output:\n", $trace;
   }
 
-  ok length($trace), "h2olog output exists"
+  like $trace, qr{\bRxProtocol\s+HTTP/3.0\b};
+  like $trace, qr{\bTxStatus\s+200\b};
 };
 
 # wait until the server and the tracer exits
