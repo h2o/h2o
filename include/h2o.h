@@ -995,8 +995,18 @@ typedef struct st_h2o_filereq_t {
     h2o_iovec_t local_path;
 } h2o_filereq_t;
 
-typedef void (*h2o_proceed_req_cb)(h2o_req_t *req, size_t written, h2o_send_state_t send_state);
+/**
+ * Called be the protocol handler to submit chunk of request body to the generator. The callback returns 0 if successful, otherwise
+ * a non-zero value. The buffer pointed to by `chunk` can be reused once this callback returns.
+ */
 typedef int (*h2o_write_req_cb)(void *ctx, h2o_iovec_t chunk, int is_end_stream);
+/**
+ * In response to `h2o_write_req_cb`, called by the generator to indicate to the protocol handler that new chunk can be submitted.
+ * Unless `send_states` indicates an error, `bytes_written` and `send_state` echoes the input values `chunked.len` and
+ * `is_end_stream`.
+ */
+typedef void (*h2o_proceed_req_cb)(h2o_req_t *req, size_t bytes_written, h2o_send_state_t send_state);
+
 
 #define H2O_SEND_SERVER_TIMING_BASIC 1
 #define H2O_SEND_SERVER_TIMING_PROXY 2
