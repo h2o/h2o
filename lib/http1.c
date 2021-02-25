@@ -645,6 +645,14 @@ static void handle_incoming_request(struct st_h2o_http1_conn_t *conn)
                 return;
             }
             conn->_req_entity_reader->handle_incoming_entity(conn);
+        } else if (h2o_memis(conn->req.input.method.base, conn->req.input.method.len, H2O_STRLIT("CONNECT"))) {
+            conn->req.http1_is_persistent = 0;
+            clear_timeouts(conn);
+            if (create_content_length_entity_reader(conn, SIZE_MAX) != 0)
+                return;
+            conn->req.write_req.cb = write_req_streaming_pre_dispatch;
+            conn->req.proceed_req = proceed_request;
+            process_request(conn);
         } else {
             clear_timeouts(conn);
             h2o_socket_read_stop(conn->sock);
