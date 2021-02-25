@@ -458,12 +458,6 @@ static int get_skip_tracing(h2o_conn_t *conn)
     return ptls_skip_tracing(ptls);
 }
 
-static void set_skip_tracing(h2o_conn_t *conn, int skip_tracing)
-{
-    ptls_t *ptls = get_ptls(conn);
-    ptls_set_skip_tracing(ptls, skip_tracing);
-}
-
 static h2o_iovec_t log_cc_name(h2o_req_t *req)
 {
     struct st_h2o_http3_server_conn_t *conn = (struct st_h2o_http3_server_conn_t *)req->conn;
@@ -1590,8 +1584,6 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
     h2o_http3_setup(&conn->h3, qconn);
 
     H2O_PROBE_CONN(H3S_ACCEPT, &conn->super, &conn->super, conn->h3.super.quic);
-    if (h2o_socket_ebpf_pop_retval(conn->super.ctx->loop))
-        set_skip_tracing(&conn->super, 1);
 
     h2o_quic_send(&conn->h3.super);
 

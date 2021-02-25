@@ -542,6 +542,11 @@ struct event_t {
       int64_t at;
       size_t size;
     } conn_stats;
+    struct { // h2o:socket_accept
+      int sock_type;
+      h2olog_address_t dest;
+      h2olog_address_t src;
+    } socket_accept;
     struct { // h2o:receive_request
       uint64_t conn_id;
       uint64_t req_id;
@@ -686,6 +691,7 @@ void h2o_raw_tracer::initialize() {
     h2o_tracer::usdt("quicly", "stream_on_receive", "trace_quicly__stream_on_receive"),
     h2o_tracer::usdt("quicly", "stream_on_receive_reset", "trace_quicly__stream_on_receive_reset"),
     h2o_tracer::usdt("quicly", "conn_stats", "trace_quicly__conn_stats"),
+    h2o_tracer::usdt("h2o", "socket_accept", "trace_h2o__socket_accept"),
     h2o_tracer::usdt("h2o", "receive_request", "trace_h2o__receive_request"),
     h2o_tracer::usdt("h2o", "receive_request_header", "trace_h2o__receive_request_header"),
     h2o_tracer::usdt("h2o", "send_response", "trace_h2o__send_response"),
@@ -1369,7 +1375,16 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
     json_write_pair_c(out_, STR_LIT("size"), event->conn_stats.size);
     break;
   }
-  case 75: { // h2o:receive_request
+  case 75: { // h2o:socket_accept
+    json_write_pair_n(out_, STR_LIT("type"), STR_LIT("socket-accept"));
+    json_write_pair_c(out_, STR_LIT("seq"), seq_);
+    json_write_pair_c(out_, STR_LIT("sock-type"), event->socket_accept.sock_type);
+    json_write_pair_c(out_, STR_LIT("dest"), event->socket_accept.dest);
+    json_write_pair_c(out_, STR_LIT("src"), event->socket_accept.src);
+    json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
+    break;
+  }
+  case 76: { // h2o:receive_request
     json_write_pair_n(out_, STR_LIT("type"), STR_LIT("receive-request"));
     json_write_pair_c(out_, STR_LIT("seq"), seq_);
     json_write_pair_c(out_, STR_LIT("conn-id"), event->receive_request.conn_id);
@@ -1378,7 +1393,7 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
     json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
     break;
   }
-  case 76: { // h2o:receive_request_header
+  case 77: { // h2o:receive_request_header
     json_write_pair_n(out_, STR_LIT("type"), STR_LIT("receive-request-header"));
     json_write_pair_c(out_, STR_LIT("seq"), seq_);
     json_write_pair_c(out_, STR_LIT("conn-id"), event->receive_request_header.conn_id);
@@ -1390,7 +1405,7 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
     json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
     break;
   }
-  case 77: { // h2o:send_response
+  case 78: { // h2o:send_response
     json_write_pair_n(out_, STR_LIT("type"), STR_LIT("send-response"));
     json_write_pair_c(out_, STR_LIT("seq"), seq_);
     json_write_pair_c(out_, STR_LIT("conn-id"), event->send_response.conn_id);
@@ -1399,7 +1414,7 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
     json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
     break;
   }
-  case 78: { // h2o:send_response_header
+  case 79: { // h2o:send_response_header
     json_write_pair_n(out_, STR_LIT("type"), STR_LIT("send-response-header"));
     json_write_pair_c(out_, STR_LIT("seq"), seq_);
     json_write_pair_c(out_, STR_LIT("conn-id"), event->send_response_header.conn_id);
@@ -1411,21 +1426,21 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
     json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
     break;
   }
-  case 79: { // h2o:h1_accept
+  case 80: { // h2o:h1_accept
     json_write_pair_n(out_, STR_LIT("type"), STR_LIT("h1-accept"));
     json_write_pair_c(out_, STR_LIT("seq"), seq_);
     json_write_pair_c(out_, STR_LIT("conn-id"), event->h1_accept.conn_id);
     json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
     break;
   }
-  case 80: { // h2o:h1_close
+  case 81: { // h2o:h1_close
     json_write_pair_n(out_, STR_LIT("type"), STR_LIT("h1-close"));
     json_write_pair_c(out_, STR_LIT("seq"), seq_);
     json_write_pair_c(out_, STR_LIT("conn-id"), event->h1_close.conn_id);
     json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
     break;
   }
-  case 81: { // h2o:h2_unknown_frame_type
+  case 82: { // h2o:h2_unknown_frame_type
     json_write_pair_n(out_, STR_LIT("type"), STR_LIT("h2-unknown-frame-type"));
     json_write_pair_c(out_, STR_LIT("seq"), seq_);
     json_write_pair_c(out_, STR_LIT("conn-id"), event->h2_unknown_frame_type.conn_id);
@@ -1433,7 +1448,7 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
     json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
     break;
   }
-  case 82: { // h2o:h3s_accept
+  case 83: { // h2o:h3s_accept
     json_write_pair_n(out_, STR_LIT("type"), STR_LIT("h3s-accept"));
     json_write_pair_c(out_, STR_LIT("seq"), seq_);
     json_write_pair_c(out_, STR_LIT("conn-id"), event->h3s_accept.conn_id);
@@ -1441,14 +1456,14 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
     json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
     break;
   }
-  case 83: { // h2o:h3s_destroy
+  case 84: { // h2o:h3s_destroy
     json_write_pair_n(out_, STR_LIT("type"), STR_LIT("h3s-destroy"));
     json_write_pair_c(out_, STR_LIT("seq"), seq_);
     json_write_pair_c(out_, STR_LIT("conn-id"), event->h3s_destroy.conn_id);
     json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
     break;
   }
-  case 84: { // h2o:h3s_stream_set_state
+  case 85: { // h2o:h3s_stream_set_state
     json_write_pair_n(out_, STR_LIT("type"), STR_LIT("h3s-stream-set-state"));
     json_write_pair_c(out_, STR_LIT("seq"), seq_);
     json_write_pair_c(out_, STR_LIT("conn-id"), event->h3s_stream_set_state.conn_id);
@@ -1457,7 +1472,7 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
     json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
     break;
   }
-  case 85: { // h2o:h3_frame_receive
+  case 86: { // h2o:h3_frame_receive
     json_write_pair_n(out_, STR_LIT("type"), STR_LIT("h3-frame-receive"));
     json_write_pair_c(out_, STR_LIT("seq"), seq_);
     json_write_pair_c(out_, STR_LIT("frame-type"), event->h3_frame_receive.frame_type);
@@ -1466,7 +1481,7 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
     json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
     break;
   }
-  case 86: { // h2o:h3_packet_receive
+  case 87: { // h2o:h3_packet_receive
     json_write_pair_n(out_, STR_LIT("type"), STR_LIT("h3-packet-receive"));
     json_write_pair_c(out_, STR_LIT("seq"), seq_);
     json_write_pair_c(out_, STR_LIT("dest"), event->h3_packet_receive.dest);
@@ -1475,7 +1490,7 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
     json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
     break;
   }
-  case 87: { // h2o:h3_packet_forward
+  case 88: { // h2o:h3_packet_forward
     json_write_pair_n(out_, STR_LIT("type"), STR_LIT("h3-packet-forward"));
     json_write_pair_c(out_, STR_LIT("seq"), seq_);
     json_write_pair_c(out_, STR_LIT("dest"), event->h3_packet_forward.dest);
@@ -1955,6 +1970,11 @@ struct event_t {
       int64_t at;
       size_t size;
     } conn_stats;
+    struct { // h2o:socket_accept
+      int sock_type;
+      h2olog_address_t dest;
+      h2olog_address_t src;
+    } socket_accept;
     struct { // h2o:receive_request
       uint64_t conn_id;
       uint64_t req_id;
@@ -3703,10 +3723,48 @@ int trace_quicly__conn_stats(struct pt_regs *ctx) {
 
   return 0;
 }
+// h2o:socket_accept
+int trace_h2o__socket_accept(struct pt_regs *ctx) {
+  const void *buf = NULL;
+  struct event_t event = { .id = 75 };
+
+  // int sock_type
+  bpf_usdt_readarg(1, ctx, &event.socket_accept.sock_type);
+  // struct sockaddr * dest
+  bpf_usdt_readarg(2, ctx, &buf);
+  bpf_probe_read(&event.socket_accept.dest, sizeof_sockaddr, buf);
+  if (get_sockaddr__sa_family(&event.socket_accept.dest) == AF_INET) {
+    bpf_probe_read(&event.socket_accept.dest, sizeof_sockaddr_in, buf);
+  } else if (get_sockaddr__sa_family(&event.socket_accept.dest) == AF_INET6) {
+    bpf_probe_read(&event.socket_accept.dest, sizeof_sockaddr_in6, buf);
+  }
+  // struct sockaddr * src
+  bpf_usdt_readarg(3, ctx, &buf);
+  bpf_probe_read(&event.socket_accept.src, sizeof_sockaddr, buf);
+  if (get_sockaddr__sa_family(&event.socket_accept.src) == AF_INET) {
+    bpf_probe_read(&event.socket_accept.src, sizeof_sockaddr_in, buf);
+  } else if (get_sockaddr__sa_family(&event.socket_accept.src) == AF_INET6) {
+    bpf_probe_read(&event.socket_accept.src, sizeof_sockaddr_in6, buf);
+  }
+
+#ifdef H2OLOG_SAMPLING_RATE
+  const struct task_struct *task = (const struct task_struct*)bpf_get_current_task();
+  pid_t tid = task->pid;
+  uint64_t skip_tracing = bpf_get_prandom_u32() > (H2OLOG_SAMPLING_RATE * U32_MAX);
+  h2o_tid_to_u64.insert(&tid, &skip_tracing);
+  if (skip_tracing)
+    return 0;
+#endif
+
+  if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
+    bpf_trace_printk("failed to perf_submit in trace_h2o__socket_accept\n");
+
+  return 0;
+}
 // h2o:receive_request
 int trace_h2o__receive_request(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct event_t event = { .id = 75 };
+  struct event_t event = { .id = 76 };
 
   // uint64_t conn_id
   bpf_usdt_readarg(1, ctx, &event.receive_request.conn_id);
@@ -3723,7 +3781,7 @@ int trace_h2o__receive_request(struct pt_regs *ctx) {
 // h2o:receive_request_header
 int trace_h2o__receive_request_header(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct event_t event = { .id = 76 };
+  struct event_t event = { .id = 77 };
 
   // uint64_t conn_id
   bpf_usdt_readarg(1, ctx, &event.receive_request_header.conn_id);
@@ -3748,7 +3806,7 @@ int trace_h2o__receive_request_header(struct pt_regs *ctx) {
 // h2o:send_response
 int trace_h2o__send_response(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct event_t event = { .id = 77 };
+  struct event_t event = { .id = 78 };
 
   // uint64_t conn_id
   bpf_usdt_readarg(1, ctx, &event.send_response.conn_id);
@@ -3765,7 +3823,7 @@ int trace_h2o__send_response(struct pt_regs *ctx) {
 // h2o:send_response_header
 int trace_h2o__send_response_header(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct event_t event = { .id = 78 };
+  struct event_t event = { .id = 79 };
 
   // uint64_t conn_id
   bpf_usdt_readarg(1, ctx, &event.send_response_header.conn_id);
@@ -3795,7 +3853,7 @@ int trace_h2o__send_response_header(struct pt_regs *ctx) {
 // h2o:h1_accept
 int trace_h2o__h1_accept(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct event_t event = { .id = 79 };
+  struct event_t event = { .id = 80 };
 
   // uint64_t conn_id
   bpf_usdt_readarg(1, ctx, &event.h1_accept.conn_id);
@@ -3812,7 +3870,7 @@ int trace_h2o__h1_accept(struct pt_regs *ctx) {
 // h2o:h1_close
 int trace_h2o__h1_close(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct event_t event = { .id = 80 };
+  struct event_t event = { .id = 81 };
 
   // uint64_t conn_id
   bpf_usdt_readarg(1, ctx, &event.h1_close.conn_id);
@@ -3825,7 +3883,7 @@ int trace_h2o__h1_close(struct pt_regs *ctx) {
 // h2o:h2_unknown_frame_type
 int trace_h2o__h2_unknown_frame_type(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct event_t event = { .id = 81 };
+  struct event_t event = { .id = 82 };
 
   // uint64_t conn_id
   bpf_usdt_readarg(1, ctx, &event.h2_unknown_frame_type.conn_id);
@@ -3840,7 +3898,7 @@ int trace_h2o__h2_unknown_frame_type(struct pt_regs *ctx) {
 // h2o:h3s_accept
 int trace_h2o__h3s_accept(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct event_t event = { .id = 82 };
+  struct event_t event = { .id = 83 };
 
   // uint64_t conn_id
   bpf_usdt_readarg(1, ctx, &event.h3s_accept.conn_id);
@@ -3852,15 +3910,6 @@ int trace_h2o__h3s_accept(struct pt_regs *ctx) {
   bpf_probe_read(&quic, sizeof_st_quicly_conn_t, buf);
   event.h3s_accept.master_id = get_st_quicly_conn_t__master_id(quic);
 
-#ifdef H2OLOG_SAMPLING_RATE
-  const struct task_struct *task = (const struct task_struct*)bpf_get_current_task();
-  pid_t tid = task->pid;
-  uint64_t skip_tracing = bpf_get_prandom_u32() > (H2OLOG_SAMPLING_RATE * U32_MAX);
-  h2o_tid_to_u64.insert(&tid, &skip_tracing);
-  if (skip_tracing)
-    return 0;
-#endif
-
   if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
     bpf_trace_printk("failed to perf_submit in trace_h2o__h3s_accept\n");
 
@@ -3869,7 +3918,7 @@ int trace_h2o__h3s_accept(struct pt_regs *ctx) {
 // h2o:h3s_destroy
 int trace_h2o__h3s_destroy(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct event_t event = { .id = 83 };
+  struct event_t event = { .id = 84 };
 
   // uint64_t conn_id
   bpf_usdt_readarg(1, ctx, &event.h3s_destroy.conn_id);
@@ -3882,7 +3931,7 @@ int trace_h2o__h3s_destroy(struct pt_regs *ctx) {
 // h2o:h3s_stream_set_state
 int trace_h2o__h3s_stream_set_state(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct event_t event = { .id = 84 };
+  struct event_t event = { .id = 85 };
 
   // uint64_t conn_id
   bpf_usdt_readarg(1, ctx, &event.h3s_stream_set_state.conn_id);
@@ -3899,7 +3948,7 @@ int trace_h2o__h3s_stream_set_state(struct pt_regs *ctx) {
 // h2o:h3_frame_receive
 int trace_h2o__h3_frame_receive(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct event_t event = { .id = 85 };
+  struct event_t event = { .id = 86 };
 
   // uint64_t frame_type
   bpf_usdt_readarg(1, ctx, &event.h3_frame_receive.frame_type);
@@ -3917,7 +3966,7 @@ int trace_h2o__h3_frame_receive(struct pt_regs *ctx) {
 // h2o:h3_packet_receive
 int trace_h2o__h3_packet_receive(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct event_t event = { .id = 86 };
+  struct event_t event = { .id = 87 };
 
   // struct sockaddr * dest
   bpf_usdt_readarg(1, ctx, &buf);
@@ -3947,7 +3996,7 @@ int trace_h2o__h3_packet_receive(struct pt_regs *ctx) {
 // h2o:h3_packet_forward
 int trace_h2o__h3_packet_forward(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct event_t event = { .id = 87 };
+  struct event_t event = { .id = 88 };
 
   // struct sockaddr * dest
   bpf_usdt_readarg(1, ctx, &buf);

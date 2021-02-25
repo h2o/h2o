@@ -2429,6 +2429,13 @@ static h2o_quic_conn_t *on_http3_accept(h2o_quic_ctx_t *_ctx, quicly_address_t *
     quicly_address_token_plaintext_t *token = NULL, token_buf;
     h2o_http3_conn_t *conn = NULL;
 
+    int skip_tracing = ebpf_value.skip_tracing;
+    if (H2O_SOCKET_ACCEPT_ENABLED()) {
+        H2O_SOCKET_ACCEPT(SOCK_DGRAM, destaddr, srcaddr);
+        if (h2o_socket_ebpf_pop_retval(ctx->super.loop))
+            skip_tracing = 1;
+    }
+
     /* handle retry, setting `token` to a non-NULL pointer if contains a valid token */
     if (packet->token.len != 0) {
         int ret;
@@ -2491,7 +2498,7 @@ static h2o_quic_conn_t *on_http3_accept(h2o_quic_ctx_t *_ctx, quicly_address_t *
     }
 
     /* accept the connection */
-    conn = h2o_http3_server_accept(ctx, destaddr, srcaddr, packet, token, ebpf_value.skip_tracing, &conf.quic.conn_callbacks);
+    conn = h2o_http3_server_accept(ctx, destaddr, srcaddr, packet, token, skip_tracing, &conf.quic.conn_callbacks);
     if (conn == NULL || &conn->super == H2O_QUIC_ACCEPT_CONN_DECRYPTION_FAILED)
         goto Exit;
     num_sessions(1);

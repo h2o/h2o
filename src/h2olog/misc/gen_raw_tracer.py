@@ -251,7 +251,7 @@ int %s(struct pt_regs *ctx) {
 #endif
 """
 
-  if fully_specified_probe_name == "h2o:h3s_accept":
+  if fully_specified_probe_name == "h2o:socket_accept":
     c += r"""
 #ifdef H2OLOG_SAMPLING_RATE
   const struct task_struct *task = (const struct task_struct*)bpf_get_current_task();

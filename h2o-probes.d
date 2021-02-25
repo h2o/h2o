@@ -22,6 +22,11 @@
 
 provider h2o {
     /**
+     * Socket-level accept event, which will be called before HTTP-level accept events.
+     */
+    probe socket_accept(int sock_type, struct sockaddr *dest, struct sockaddr *src);
+
+    /**
      * HTTP-level event, indicating that a request has been received.
      */
     probe receive_request(uint64_t conn_id, uint64_t req_id, int http_version);
