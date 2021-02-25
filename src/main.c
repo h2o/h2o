@@ -1689,8 +1689,8 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                                                    &listener->quic.qpack.encoder_table_capacity) != 0)
                             return -1;
                     }
-                    if (max_stream_bidi != NULL) {
-                        if (h2o_configurator_scanf(cmd, *max_stream_bidi, "%" SCNu64,
+                    if (max_streams_bidi != NULL) {
+                        if (h2o_configurator_scanf(cmd, *max_streams_bidi, "%" SCNu64,
                                                    &listener->quic.ctx->transport_params.max_streams_bidi) != 0)
                             return -1;
                     }
