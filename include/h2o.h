@@ -1226,6 +1226,10 @@ struct st_h2o_req_t {
      * if h2o_process_request has been called
      */
     unsigned char process_called : 1;
+    /**
+     * indicates if a successful response should be forwarded without applying filters
+     */
+    unsigned char is_tunnel_req;
 
     /**
      * whether if the response should include server-timing header. Logical OR of H2O_SEND_SERVER_TIMING_*

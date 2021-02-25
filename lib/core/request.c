@@ -483,11 +483,15 @@ void h2o_start_response(h2o_req_t *req, h2o_generator_t *generator)
     assert(req->_generator == NULL);
     req->_generator = generator;
 
-    /* setup response filters */
-    if (req->prefilters != NULL) {
-        req->prefilters->on_setup_ostream(req->prefilters, req, &req->_ostr_top);
+    if (req->is_tunnel_req && (req->res.status == 101 || req->res.status == 200)) {
+        /* a tunnel has been established; forward response as is */
     } else {
-        h2o_setup_next_ostream(req, &req->_ostr_top);
+        /* setup response filters */
+        if (req->prefilters != NULL) {
+            req->prefilters->on_setup_ostream(req->prefilters, req, &req->_ostr_top);
+        } else {
+            h2o_setup_next_ostream(req, &req->_ostr_top);
+        }
     }
 }
 

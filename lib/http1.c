@@ -462,6 +462,7 @@ static const char *fixup_request(struct st_h2o_http1_conn_t *conn, struct phr_he
             return "invalid request";
         conn->req.input.authority = conn->req.input.path;
         conn->req.input.path = h2o_iovec_init(NULL, 0);
+        conn->req.is_tunnel_req = 1;
     } else {
         /* Ordinary request, path might contain absolute URL; if so, convert it */
         if (conn->req.input.path.len != 0 && conn->req.input.path.base[0] != '/') {
@@ -489,8 +490,8 @@ static const char *fixup_request(struct st_h2o_http1_conn_t *conn, struct phr_he
         /* defaults to keep-alive if >= HTTP/1.1 */
         conn->req.http1_is_persistent = 1;
     }
-    /* disable keep-alive if shutdown is requested */
-    if (conn->req.http1_is_persistent && conn->super.ctx->shutdown_requested)
+    /* disable keep-alive if shutdown is requested, or if it is a CONNECT request */
+    if (conn->req.http1_is_persistent && (conn->super.ctx->shutdown_requested || conn->req.is_tunnel_req))
         conn->req.http1_is_persistent = 0;
 
     return NULL;
@@ -645,8 +646,7 @@ static void handle_incoming_request(struct st_h2o_http1_conn_t *conn)
                 return;
             }
             conn->_req_entity_reader->handle_incoming_entity(conn);
-        } else if (h2o_memis(conn->req.input.method.base, conn->req.input.method.len, H2O_STRLIT("CONNECT"))) {
-            conn->req.http1_is_persistent = 0;
+        } else if (conn->req.is_tunnel_req) {
             clear_timeouts(conn);
             if (create_content_length_entity_reader(conn, SIZE_MAX) != 0)
                 return;
@@ -1004,6 +1004,8 @@ static size_t flatten_headers(char *buf, h2o_req_t *req, const char *connection)
 
 static int should_use_chunked_encoding(h2o_req_t *req)
 {
+    if (req->is_tunnel_req)
+        return 0;
     if (req->version != 0x101)
         return 0;
     /* do nothing if content-length is known */
