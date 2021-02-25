@@ -182,6 +182,7 @@ enum h2olog_event_id_t {
   H2OLOG_EVENT_ID_H2O_H3_FRAME_RECEIVE,
   H2OLOG_EVENT_ID_H2O_H3_PACKET_RECEIVE,
   H2OLOG_EVENT_ID_H2O_H3_PACKET_FORWARD,
+  H2OLOG_EVENT_ID_H2O_H3_FORWARDED_PACKET_RECEIVE,
   H2OLOG_EVENT_ID_H2O_H3C_TUNNEL_CREATE,
   H2OLOG_EVENT_ID_H2O_TUNNEL_ON_DESTROY,
   H2OLOG_EVENT_ID_H2O_TUNNEL_ON_READ,
@@ -706,6 +707,11 @@ struct h2olog_event_t {
       size_t num_bytes;
       int fd;
     } h3_packet_forward;
+    struct { // h2o:h3_forwarded_packet_receive
+      h2olog_address_t dest;
+      h2olog_address_t src;
+      size_t num_bytes;
+    } h3_forwarded_packet_receive;
     struct { // h2o:h3c_tunnel_create
       struct st_h2o_tunnel_t * tunnel;
     } h3c_tunnel_create;
@@ -829,6 +835,7 @@ void h2o_raw_tracer::initialize() {
     h2o_tracer::usdt("h2o", "h3_frame_receive", "trace_h2o__h3_frame_receive"),
     h2o_tracer::usdt("h2o", "h3_packet_receive", "trace_h2o__h3_packet_receive"),
     h2o_tracer::usdt("h2o", "h3_packet_forward", "trace_h2o__h3_packet_forward"),
+    h2o_tracer::usdt("h2o", "h3_forwarded_packet_receive", "trace_h2o__h3_forwarded_packet_receive"),
     h2o_tracer::usdt("h2o", "h3c_tunnel_create", "trace_h2o__h3c_tunnel_create"),
     h2o_tracer::usdt("h2o", "tunnel_on_destroy", "trace_h2o__tunnel_on_destroy"),
     h2o_tracer::usdt("h2o", "tunnel_on_read", "trace_h2o__tunnel_on_read"),
@@ -1630,6 +1637,15 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
     json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
     break;
   }
+  case H2OLOG_EVENT_ID_H2O_H3_FORWARDED_PACKET_RECEIVE: { // h2o:h3_forwarded_packet_receive
+    json_write_pair_n(out_, STR_LIT("type"), STR_LIT("h3-forwarded-packet-receive"));
+    json_write_pair_c(out_, STR_LIT("seq"), seq_);
+    json_write_pair_c(out_, STR_LIT("dest"), event->h3_forwarded_packet_receive.dest);
+    json_write_pair_c(out_, STR_LIT("src"), event->h3_forwarded_packet_receive.src);
+    json_write_pair_c(out_, STR_LIT("bytes-len"), event->h3_forwarded_packet_receive.num_bytes);
+    json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
+    break;
+  }
   case H2OLOG_EVENT_ID_H2O_H3C_TUNNEL_CREATE: { // h2o:h3c_tunnel_create
     json_write_pair_n(out_, STR_LIT("type"), STR_LIT("h3c-tunnel-create"));
     json_write_pair_c(out_, STR_LIT("seq"), seq_);
@@ -1804,6 +1820,7 @@ enum h2olog_event_id_t {
   H2OLOG_EVENT_ID_H2O_H3_FRAME_RECEIVE,
   H2OLOG_EVENT_ID_H2O_H3_PACKET_RECEIVE,
   H2OLOG_EVENT_ID_H2O_H3_PACKET_FORWARD,
+  H2OLOG_EVENT_ID_H2O_H3_FORWARDED_PACKET_RECEIVE,
   H2OLOG_EVENT_ID_H2O_H3C_TUNNEL_CREATE,
   H2OLOG_EVENT_ID_H2O_TUNNEL_ON_DESTROY,
   H2OLOG_EVENT_ID_H2O_TUNNEL_ON_READ,
@@ -2328,6 +2345,11 @@ struct h2olog_event_t {
       size_t num_bytes;
       int fd;
     } h3_packet_forward;
+    struct { // h2o:h3_forwarded_packet_receive
+      h2olog_address_t dest;
+      h2olog_address_t src;
+      size_t num_bytes;
+    } h3_forwarded_packet_receive;
     struct { // h2o:h3c_tunnel_create
       struct st_h2o_tunnel_t * tunnel;
     } h3c_tunnel_create;
@@ -4302,6 +4324,35 @@ int trace_h2o__h3_packet_forward(struct pt_regs *ctx) {
 
   if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
     bpf_trace_printk("failed to perf_submit in trace_h2o__h3_packet_forward\n");
+
+  return 0;
+}
+// h2o:h3_forwarded_packet_receive
+int trace_h2o__h3_forwarded_packet_receive(struct pt_regs *ctx) {
+  const void *buf = NULL;
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_H2O_H3_FORWARDED_PACKET_RECEIVE };
+
+  // struct sockaddr * dest
+  bpf_usdt_readarg(1, ctx, &buf);
+  bpf_probe_read(&event.h3_forwarded_packet_receive.dest, sizeof_sockaddr, buf);
+  if (get_sockaddr__sa_family(&event.h3_forwarded_packet_receive.dest) == AF_INET) {
+    bpf_probe_read(&event.h3_forwarded_packet_receive.dest, sizeof_sockaddr_in, buf);
+  } else if (get_sockaddr__sa_family(&event.h3_forwarded_packet_receive.dest) == AF_INET6) {
+    bpf_probe_read(&event.h3_forwarded_packet_receive.dest, sizeof_sockaddr_in6, buf);
+  }
+  // struct sockaddr * src
+  bpf_usdt_readarg(2, ctx, &buf);
+  bpf_probe_read(&event.h3_forwarded_packet_receive.src, sizeof_sockaddr, buf);
+  if (get_sockaddr__sa_family(&event.h3_forwarded_packet_receive.src) == AF_INET) {
+    bpf_probe_read(&event.h3_forwarded_packet_receive.src, sizeof_sockaddr_in, buf);
+  } else if (get_sockaddr__sa_family(&event.h3_forwarded_packet_receive.src) == AF_INET6) {
+    bpf_probe_read(&event.h3_forwarded_packet_receive.src, sizeof_sockaddr_in6, buf);
+  }
+  // size_t num_bytes
+  bpf_usdt_readarg(3, ctx, &event.h3_forwarded_packet_receive.num_bytes);
+
+  if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
+    bpf_trace_printk("failed to perf_submit in trace_h2o__h3_forwarded_packet_receive\n");
 
   return 0;
 }
