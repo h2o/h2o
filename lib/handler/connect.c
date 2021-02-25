@@ -41,22 +41,129 @@ struct st_server_address_t {
 };
 
 struct st_connect_generator_t {
+    h2o_generator_t super;
     struct st_connect_handler_t *handler;
     h2o_loop_t *loop;
     h2o_req_t *src_req;
-    h2o_socket_t *sock;
     h2o_hostinfo_getaddr_req_t *getaddr_req;
+    h2o_socket_t *sock;
     struct {
         struct st_server_address_t list[MAX_CONNECT_RETRIES];
         size_t size;
         size_t next;
     } server_addresses;
+    h2o_buffer_t *sendbuf;
     h2o_timer_t timeout;
+    unsigned sendbuf_closed : 1;
 };
 
-#define TO_BITMASK(type, len) ((type)~(((type)1 << (sizeof(type) * 8 - (len))) - 1))
+#define TO_BITMASK(type, len) ((type) ~(((type)1 << (sizeof(type) * 8 - (len))) - 1))
 
 static void start_connect(struct st_connect_generator_t *self);
+
+static h2o_req_t *dispose_generator(struct st_connect_generator_t *self)
+{
+    if (self->getaddr_req != NULL) {
+        h2o_hostinfo_getaddr_cancel(self->getaddr_req);
+        self->getaddr_req = NULL;
+    }
+    if (self->sock != NULL)
+        h2o_socket_close(self->sock);
+    h2o_buffer_dispose(&self->sendbuf);
+    h2o_timer_unlink(&self->timeout);
+
+    return self->src_req;
+}
+
+static void close_and_send_final(struct st_connect_generator_t *self)
+{
+    assert(self->sock != NULL);
+    int was_reading = h2o_socket_is_reading(self->sock);
+
+    h2o_socket_close(self->sock);
+    self->sock = NULL;
+    h2o_timer_unlink(&self->timeout);
+
+    /* if there's nothing inflight, close downstream immediately, otherwise let `do_proceed` handle the signal */
+    if (was_reading)
+        h2o_send(dispose_generator(self), NULL, 0, H2O_SEND_STATE_FINAL);
+}
+
+static void on_io_timeout(h2o_timer_t *timer)
+{
+    struct st_connect_generator_t *self = H2O_STRUCT_FROM_MEMBER(struct st_connect_generator_t, timeout, timer);
+    close_and_send_final(self);
+}
+
+static void reset_io_timeout(struct st_connect_generator_t *self)
+{
+    h2o_timer_unlink(&self->timeout);
+    h2o_timer_link(self->loop, self->handler->config.io_timeout, &self->timeout);
+}
+
+static void tunnel_on_write_complete(h2o_socket_t *_sock, const char *err)
+{
+    struct st_connect_generator_t *self = _sock->data;
+
+    if (err != NULL || self->sendbuf_closed) {
+        close_and_send_final(self);
+        return;
+    }
+
+    size_t bytes_written = self->sendbuf->size;
+    h2o_buffer_consume(&self->sendbuf, bytes_written);
+
+    reset_io_timeout(self);
+    self->src_req->proceed_req(self->src_req, bytes_written, H2O_SEND_STATE_IN_PROGRESS);
+}
+
+static int tunnel_write(void *_self, h2o_iovec_t chunk, int is_end_stream)
+{
+    struct st_connect_generator_t *self = _self;
+
+    assert(self->sendbuf->size == 0);
+
+    h2o_buffer_append(&self->sendbuf, chunk.base, chunk.len);
+    if (is_end_stream)
+        self->sendbuf_closed = 1;
+
+    reset_io_timeout(self);
+
+    h2o_iovec_t vec = h2o_iovec_init(self->sendbuf->bytes, self->sendbuf->size);
+    h2o_socket_write(self->sock, &vec, 1, tunnel_on_write_complete);
+
+    return 0;
+}
+
+static void tunnel_on_read(h2o_socket_t *_sock, const char *err)
+{
+    struct st_connect_generator_t *self = _sock->data;
+
+    if (err != NULL) {
+        h2o_send(dispose_generator(self), NULL, 0, H2O_SEND_STATE_FINAL);
+        return;
+    }
+
+    h2o_socket_read_stop(self->sock);
+    reset_io_timeout(self); /* for simplicity, we call out I/O timeout even when downstream fails to deliver data to the client
+                             * within given interval */
+
+    h2o_iovec_t vec = h2o_iovec_init(self->sock->input->bytes, self->sock->input->size);
+    h2o_send(self->src_req, &vec, 1, H2O_SEND_STATE_IN_PROGRESS);
+}
+
+static void on_proceed(h2o_generator_t *_self, h2o_req_t *req)
+{
+    struct st_connect_generator_t *self = H2O_STRUCT_FROM_MEMBER(struct st_connect_generator_t, super, _self);
+
+    if (self->sock != NULL) {
+        h2o_buffer_consume(&self->sock->input, self->sock->input->size);
+        reset_io_timeout(self);
+        h2o_socket_read_start(self->sock, tunnel_on_read);
+    } else {
+        h2o_send(dispose_generator(self), NULL, 0, H2O_SEND_STATE_FINAL);
+    }
+}
 
 static void on_connect_error(struct st_connect_generator_t *self, const char *errstr)
 {
@@ -70,11 +177,11 @@ static void on_connect_timeout(h2o_timer_t *entry)
     on_connect_error(self, h2o_httpclient_error_io_timeout);
 }
 
-static void on_connect(h2o_socket_t *sock, const char *err)
+static void on_connect(h2o_socket_t *_sock, const char *err)
 {
-    struct st_connect_generator_t *self = sock->data;
+    struct st_connect_generator_t *self = _sock->data;
 
-    if (err) {
+    if (err != NULL) {
         if (self->server_addresses.next == self->server_addresses.size) {
             on_connect_error(self, err);
             return;
@@ -83,31 +190,22 @@ static void on_connect(h2o_socket_t *sock, const char *err)
         return;
     }
 
-    /* create and pass the responsibility to the tunnel */
-    h2o_timer_unlink(&self->timeout);
-    sock->data = NULL;
-    self->sock = NULL;
-    h2o_socket_tunnel_t *tunnel = h2o_socket_tunnel_create(sock);
+    self->timeout.cb = on_io_timeout;
+    reset_io_timeout(self);
 
-    /* send response to client */
+    /* setup write, and initiate if pending data exists */
+    self->src_req->write_req.cb = tunnel_write;
+    self->src_req->write_req.ctx = self;
+    if (self->src_req->entity.len != 0)
+        tunnel_write(self, self->src_req->entity, self->src_req->proceed_req == NULL);
+
+    /* strat the read side */
+    h2o_socket_read_start(self->sock, tunnel_on_read);
+
+    /* build and submit 200 response */
     self->src_req->res.status = 200;
-    self->src_req->establish_tunnel(self->src_req, &tunnel->super, self->handler->config.io_timeout);
-
-    /* start the tunnel */
-    h2o_socket_tunnel_start(tunnel, 0);
-}
-
-static void on_generator_dispose(void *_self)
-{
-    struct st_connect_generator_t *self = _self;
-
-    if (self->getaddr_req != NULL) {
-        h2o_hostinfo_getaddr_cancel(self->getaddr_req);
-        self->getaddr_req = NULL;
-    }
-    if (self->sock != NULL)
-        h2o_socket_close(self->sock);
-    h2o_timer_unlink(&self->timeout);
+    h2o_start_response(self->src_req, &self->super);
+    h2o_send(self->src_req, NULL, 0, H2O_SEND_STATE_IN_PROGRESS);
 }
 
 static void store_server_addresses(struct st_connect_generator_t *self, struct addrinfo *res)
@@ -160,6 +258,12 @@ static void start_connect(struct st_connect_generator_t *self)
     on_connect_error(self, h2o_socket_error_conn_fail);
 }
 
+static void on_stop(h2o_generator_t *_self, h2o_req_t *req)
+{
+    struct st_connect_generator_t *self = H2O_STRUCT_FROM_MEMBER(struct st_connect_generator_t, super, _self);
+    dispose_generator(self);
+}
+
 static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
 {
     struct st_connect_handler_t *handler = (void *)_handler;
@@ -175,13 +279,15 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
         return 0;
     }
 
-    struct st_connect_generator_t *self = h2o_mem_alloc_shared(&req->pool, sizeof(*self), on_generator_dispose);
+    struct st_connect_generator_t *self = h2o_mem_alloc_pool(&req->pool, struct st_connect_generator_t, 1);
     *self = (struct st_connect_generator_t){
+        .super = {.proceed = on_proceed, .stop = on_stop},
         .handler = handler,
         .loop = req->conn->ctx->loop,
         .src_req = req,
         .timeout = {.cb = on_connect_timeout},
     };
+    h2o_buffer_init(&self->sendbuf, &h2o_socket_buffer_prototype);
     h2o_timer_link(self->loop, handler->config.connect_timeout, &self->timeout);
 
     char port_str[sizeof(H2O_UINT16_LONGEST_STR)];
@@ -200,6 +306,7 @@ void h2o_connect_register(h2o_pathconf_t *pathconf, h2o_proxy_config_vars_t *con
                                                                                  sizeof(*self->acl.entries) * num_acl_entries);
 
     self->super.on_req = on_req;
+    self->super.supports_request_streaming = 1;
     self->config = *config;
     self->acl.count = num_acl_entries;
     memcpy(self->acl.entries, acl_entries, sizeof(self->acl.entries[0]) * num_acl_entries);
