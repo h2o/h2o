@@ -40,7 +40,7 @@ struct st_server_address_t {
     socklen_t salen;
 };
 
-struct st_connect_request_t {
+struct st_connect_generator_t {
     struct st_connect_handler_t *handler;
     h2o_loop_t *loop;
     h2o_req_t *src_req;
@@ -56,42 +56,42 @@ struct st_connect_request_t {
 
 #define TO_BITMASK(type, len) ((type)~(((type)1 << (sizeof(type) * 8 - (len))) - 1))
 
-static void start_connect(struct st_connect_request_t *creq);
+static void start_connect(struct st_connect_generator_t *self);
 
-static void on_error(struct st_connect_request_t *creq, const char *errstr)
+static void on_connect_error(struct st_connect_generator_t *self, const char *errstr)
 {
-    h2o_timer_unlink(&creq->timeout);
-    h2o_send_error_502(creq->src_req, "Gateway Error", errstr, 0);
+    h2o_timer_unlink(&self->timeout);
+    h2o_send_error_502(self->src_req, "Gateway Error", errstr, 0);
 }
 
-static void on_timeout(h2o_timer_t *entry)
+static void on_connect_timeout(h2o_timer_t *entry)
 {
-    struct st_connect_request_t *creq = H2O_STRUCT_FROM_MEMBER(struct st_connect_request_t, timeout, entry);
-    on_error(creq, h2o_httpclient_error_io_timeout);
+    struct st_connect_generator_t *self = H2O_STRUCT_FROM_MEMBER(struct st_connect_generator_t, timeout, entry);
+    on_connect_error(self, h2o_httpclient_error_io_timeout);
 }
 
 static void on_connect(h2o_socket_t *sock, const char *err)
 {
-    struct st_connect_request_t *creq = sock->data;
+    struct st_connect_generator_t *self = sock->data;
 
     if (err) {
-        if (creq->server_addresses.next == creq->server_addresses.size) {
-            on_error(creq, err);
+        if (self->server_addresses.next == self->server_addresses.size) {
+            on_connect_error(self, err);
             return;
         }
-        start_connect(creq);
+        start_connect(self);
         return;
     }
 
     /* create and pass the responsibility to the tunnel */
-    h2o_timer_unlink(&creq->timeout);
+    h2o_timer_unlink(&self->timeout);
     sock->data = NULL;
-    creq->sock = NULL;
+    self->sock = NULL;
     h2o_socket_tunnel_t *tunnel = h2o_socket_tunnel_create(sock);
 
     /* send response to client */
-    creq->src_req->res.status = 200;
-    creq->src_req->establish_tunnel(creq->src_req, &tunnel->super, creq->handler->config.io_timeout);
+    self->src_req->res.status = 200;
+    self->src_req->establish_tunnel(self->src_req, &tunnel->super, self->handler->config.io_timeout);
 
     /* start the tunnel */
     h2o_socket_tunnel_start(tunnel, 0);
@@ -99,65 +99,65 @@ static void on_connect(h2o_socket_t *sock, const char *err)
 
 static void on_generator_dispose(void *_self)
 {
-    struct st_connect_request_t *creq = _self;
+    struct st_connect_generator_t *self = _self;
 
-    if (creq->getaddr_req != NULL) {
-        h2o_hostinfo_getaddr_cancel(creq->getaddr_req);
-        creq->getaddr_req = NULL;
+    if (self->getaddr_req != NULL) {
+        h2o_hostinfo_getaddr_cancel(self->getaddr_req);
+        self->getaddr_req = NULL;
     }
-    if (creq->sock != NULL)
-        h2o_socket_close(creq->sock);
-    h2o_timer_unlink(&creq->timeout);
+    if (self->sock != NULL)
+        h2o_socket_close(self->sock);
+    h2o_timer_unlink(&self->timeout);
 }
 
-static void store_server_addresses(struct st_connect_request_t *creq, struct addrinfo *res)
+static void store_server_addresses(struct st_connect_generator_t *self, struct addrinfo *res)
 {
     /* copy first entries in the response; ordering of addresses being returned by `getaddrinfo` is respected, as ordinary clients
      * (incl. forward proxy) are not expected to distribute the load among the addresses being returned. */
     do {
-        struct st_server_address_t *dst = creq->server_addresses.list + creq->server_addresses.size++;
-        dst->sa = h2o_mem_alloc_pool_aligned(&creq->src_req->pool, H2O_ALIGNOF(struct sockaddr), res->ai_addrlen);
+        struct st_server_address_t *dst = self->server_addresses.list + self->server_addresses.size++;
+        dst->sa = h2o_mem_alloc_pool_aligned(&self->src_req->pool, H2O_ALIGNOF(struct sockaddr), res->ai_addrlen);
         memcpy(dst->sa, res->ai_addr, res->ai_addrlen);
         dst->salen = res->ai_addrlen;
-    } while (creq->server_addresses.size < PTLS_ELEMENTSOF(creq->server_addresses.list) && (res = res->ai_next) != NULL);
+    } while (self->server_addresses.size < PTLS_ELEMENTSOF(self->server_addresses.list) && (res = res->ai_next) != NULL);
 }
 
-static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errstr, struct addrinfo *res, void *_creq)
+static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errstr, struct addrinfo *res, void *_self)
 {
-    struct st_connect_request_t *creq = _creq;
+    struct st_connect_generator_t *self = _self;
 
-    assert(getaddr_req == creq->getaddr_req);
-    creq->getaddr_req = NULL;
+    assert(getaddr_req == self->getaddr_req);
+    self->getaddr_req = NULL;
 
     if (errstr != NULL) {
-        on_error(creq, errstr);
+        on_connect_error(self, errstr);
         return;
     }
 
-    store_server_addresses(creq, res);
-    start_connect(creq);
+    store_server_addresses(self, res);
+    start_connect(self);
 }
 
-static void start_connect(struct st_connect_request_t *creq)
+static void start_connect(struct st_connect_generator_t *self)
 {
     /* repeat connect(pop_front(address_list)) until we run out of the list */
     do {
-        struct st_server_address_t *server_address = creq->server_addresses.list + creq->server_addresses.next++;
+        struct st_server_address_t *server_address = self->server_addresses.list + self->server_addresses.next++;
         /* check address */
-        if (!h2o_connect_lookup_acl(creq->handler->acl.entries, creq->handler->acl.count, server_address->sa)) {
-            h2o_timer_unlink(&creq->timeout);
-            h2o_req_log_error(creq->src_req, "lib/handler/connect.c", "access rejected by acl");
-            h2o_send_error_403(creq->src_req, "Access Forbidden", "Access Forbidden", 0);
+        if (!h2o_connect_lookup_acl(self->handler->acl.entries, self->handler->acl.count, server_address->sa)) {
+            h2o_timer_unlink(&self->timeout);
+            h2o_req_log_error(self->src_req, "lib/handler/connect.c", "access rejected by acl");
+            h2o_send_error_403(self->src_req, "Access Forbidden", "Access Forbidden", 0);
             return;
         }
         /* connect */
-        if ((creq->sock = h2o_socket_connect(creq->loop, server_address->sa, server_address->salen, on_connect)) != NULL) {
-            creq->sock->data = creq;
+        if ((self->sock = h2o_socket_connect(self->loop, server_address->sa, server_address->salen, on_connect)) != NULL) {
+            self->sock->data = self;
             return;
         }
-    } while (creq->server_addresses.next < creq->server_addresses.size);
+    } while (self->server_addresses.next < self->server_addresses.size);
 
-    on_error(creq, h2o_socket_error_conn_fail);
+    on_connect_error(self, h2o_socket_error_conn_fail);
 }
 
 static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
@@ -175,20 +175,20 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
         return 0;
     }
 
-    struct st_connect_request_t *creq = h2o_mem_alloc_shared(&req->pool, sizeof(*creq), on_generator_dispose);
-    *creq = (struct st_connect_request_t){
+    struct st_connect_generator_t *self = h2o_mem_alloc_shared(&req->pool, sizeof(*self), on_generator_dispose);
+    *self = (struct st_connect_generator_t){
         .handler = handler,
         .loop = req->conn->ctx->loop,
         .src_req = req,
-        .timeout = {.cb = on_timeout},
+        .timeout = {.cb = on_connect_timeout},
     };
-    h2o_timer_link(creq->loop, handler->config.connect_timeout, &creq->timeout);
+    h2o_timer_link(self->loop, handler->config.connect_timeout, &self->timeout);
 
     char port_str[sizeof(H2O_UINT16_LONGEST_STR)];
     int port_strlen = sprintf(port_str, "%" PRIu16, port);
-    creq->getaddr_req =
-        h2o_hostinfo_getaddr(&creq->src_req->conn->ctx->receivers.hostinfo_getaddr, host, h2o_iovec_init(port_str, port_strlen),
-                             AF_UNSPEC, SOCK_STREAM, IPPROTO_TCP, AI_ADDRCONFIG | AI_NUMERICSERV, on_getaddr, creq);
+    self->getaddr_req =
+        h2o_hostinfo_getaddr(&self->src_req->conn->ctx->receivers.hostinfo_getaddr, host, h2o_iovec_init(port_str, port_strlen),
+                             AF_UNSPEC, SOCK_STREAM, IPPROTO_TCP, AI_ADDRCONFIG | AI_NUMERICSERV, on_getaddr, self);
 
     return 0;
 }
