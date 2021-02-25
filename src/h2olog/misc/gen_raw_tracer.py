@@ -117,14 +117,11 @@ def parse_d(context: dict, path: Path, block_probes: set = None):
 
   matched = re.search(d_decl, content, flags=re_flags)
   provider = matched.group('provider')
-
   probe_metadata = context["probe_metadata"]
-
-  id = context["id"]
 
   for (name, args) in re.findall(r'\bprobe\s+([a-zA-Z0-9_]+)\(([^\)]+)\);', matched.group('probes'), flags=re_flags):
     arg_list = re.split(r'\s*,\s*', args, flags=re_flags)
-    id += 1
+    id = ("T_%s_%s" % (provider, name)).upper()
 
     fully_specified_probe_name = "%s:%s" % (provider, name)
     if block_probes and fully_specified_probe_name in block_probes:
@@ -191,7 +188,7 @@ def build_tracer(context, metadata):
   c = r"""// %s
 int %s(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct event_t event = { .id = %d };
+  struct event_t event = { .id = %s };
 
 """ % (fully_specified_probe_name, tracer_name, metadata['id'])
   block_field_set = block_fields.get(fully_specified_probe_name, set())
@@ -260,7 +257,6 @@ int %s(struct pt_regs *ctx) {
 
 def prepare_context(h2o_dir):
   context = {
-      "id": 1,  # 1 is used for sched:sched_process_exit
       "probe_metadata": OrderedDict(),
       "h2o_dir": h2o_dir,
   }
@@ -346,9 +342,14 @@ def build_typedef_for_cplusplus():
 def generate_cplusplus(context, output_file):
   probe_metadata = context["probe_metadata"]
 
+  event_id_t_decl = r"""
+enum event_id_t {
+  T_SCHED_SCHED_PROCESS_EXIT,
+"""
+
   event_t_decl = r"""
 struct event_t {
-  uint8_t id;
+  enum event_id_t id;
 
   union {
 """
@@ -356,6 +357,8 @@ struct event_t {
   for name, metadata in probe_metadata.items():
     fully_specified_probe_name = metadata["fully_specified_probe_name"]
     block_field_set = block_fields.get(fully_specified_probe_name, None)
+
+    event_id_t_decl += "  %s,\n" % metadata["id"]
 
     event_t_decl += "    struct { // %s\n" % fully_specified_probe_name
     for field_name, field_type in metadata["flat_args_map"].items():
@@ -377,9 +380,11 @@ struct event_t {
     event_t_decl += "    } %s;\n" % name
 
   event_t_decl += r"""
-    };
   };
-  """
+};
+"""
+
+  event_id_t_decl += "};\n"
 
   bpf = r"""
 #include <linux/sched.h>
@@ -392,6 +397,7 @@ typedef union h2olog_address_t {
   uint8_t sin6[sizeof_sockaddr_in6];
 } h2olog_address_t;;
 
+%s
 %s
 BPF_PERF_OUTPUT(events);
 
@@ -406,12 +412,12 @@ int trace_sched_process_exit(struct tracepoint__sched__sched_process_exit *ctx) 
   if (!(h2o_pid == H2OLOG_H2O_PID && h2o_tid == H2OLOG_H2O_PID)) {
     return 0;
   }
-  struct event_t ev = { .id = 1 };
+  struct event_t ev = { .id = T_SCHED_SCHED_PROCESS_EXIT };
   events.perf_submit(ctx, &ev, sizeof(ev));
   return 0;
 }
 
-""" % (event_t_decl)
+""" % (event_id_t_decl, event_t_decl)
 
   usdts_def = r"""
 void h2o_raw_tracer::initialize() {
@@ -430,7 +436,7 @@ void h2o_raw_tracer::initialize() {
 void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
   const event_t *event = static_cast<const event_t*>(data);
 
-  if (event->id == 1) { // sched:sched_process_exit
+  if (event->id == T_SCHED_SCHED_PROCESS_EXIT) {
     exit(0);
   }
 
@@ -525,6 +531,7 @@ using namespace std;
 %s
 %s
 %s
+%s
 
 std::string h2o_raw_tracer::bpf_text() {
   // language=c
@@ -533,7 +540,7 @@ std::string h2o_raw_tracer::bpf_text() {
 )";
 }
 
-""" % (build_typedef_for_cplusplus(), build_bpf_header_generator(), event_t_decl, usdts_def, handle_event_func, bpf))
+""" % (build_typedef_for_cplusplus(), build_bpf_header_generator(), event_id_t_decl, event_t_decl, usdts_def, handle_event_func, bpf))
 
 
 def main():
