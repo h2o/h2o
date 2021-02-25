@@ -105,9 +105,9 @@ static void on_generator_dispose(void *_self)
         h2o_hostinfo_getaddr_cancel(creq->getaddr_req);
         creq->getaddr_req = NULL;
     }
-
     if (creq->sock != NULL)
         h2o_socket_close(creq->sock);
+    h2o_timer_unlink(&creq->timeout);
 }
 
 static void store_server_addresses(struct st_connect_request_t *creq, struct addrinfo *res)
