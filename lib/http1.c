@@ -637,6 +637,10 @@ static void handle_incoming_request(struct st_h2o_http1_conn_t *conn)
             conn->_req_entity_reader->handle_incoming_entity(conn);
         } else if (conn->req.is_tunnel_req) {
             clear_timeouts(conn);
+            if (!h2o_req_can_stream_request(&conn->req)) {
+                h2o_send_error_405(&conn->req, "Method Not Allowed", "Method Not Allowed", 0);
+                return;
+            }
             if (create_content_length_entity_reader(conn, SIZE_MAX) != 0)
                 return;
             conn->req.write_req.cb = write_req_streaming_pre_dispatch;
