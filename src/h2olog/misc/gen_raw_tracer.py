@@ -121,7 +121,7 @@ def parse_d(context: dict, path: Path, block_probes: set = None):
 
   for (name, args) in re.findall(r'\bprobe\s+([a-zA-Z0-9_]+)\(([^\)]+)\);', matched.group('probes'), flags=re_flags):
     arg_list = re.split(r'\s*,\s*', args, flags=re_flags)
-    id = ("T_%s_%s" % (provider, name)).upper()
+    id = ("H2OLOG_EVENT_ID_%s_%s" % (provider, name)).upper()
 
     fully_specified_probe_name = "%s:%s" % (provider, name)
     if block_probes and fully_specified_probe_name in block_probes:
@@ -188,7 +188,7 @@ def build_tracer(context, metadata):
   c = r"""// %s
 int %s(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct event_t event = { .id = %s };
+  struct h2olog_event_t event = { .id = %s };
 
 """ % (fully_specified_probe_name, tracer_name, metadata['id'])
   block_field_set = block_fields.get(fully_specified_probe_name, set())
@@ -343,13 +343,13 @@ def generate_cplusplus(context, output_file):
   probe_metadata = context["probe_metadata"]
 
   event_id_t_decl = r"""
-enum event_id_t {
-  T_SCHED_SCHED_PROCESS_EXIT,
+enum h2olog_event_id_t {
+  H2OLOG_EVENT_ID_SCHED_SCHED_PROCESS_EXIT,
 """
 
   event_t_decl = r"""
-struct event_t {
-  enum event_id_t id;
+struct h2olog_event_t {
+  enum h2olog_event_id_t id;
 
   union {
 """
@@ -412,7 +412,7 @@ int trace_sched_process_exit(struct tracepoint__sched__sched_process_exit *ctx) 
   if (!(h2o_pid == H2OLOG_H2O_PID && h2o_tid == H2OLOG_H2O_PID)) {
     return 0;
   }
-  struct event_t ev = { .id = T_SCHED_SCHED_PROCESS_EXIT };
+  struct h2olog_event_t ev = { .id = H2OLOG_EVENT_ID_SCHED_SCHED_PROCESS_EXIT };
   events.perf_submit(ctx, &ev, sizeof(ev));
   return 0;
 }
@@ -434,9 +434,9 @@ void h2o_raw_tracer::initialize() {
 
   handle_event_func = r"""
 void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
-  const event_t *event = static_cast<const event_t*>(data);
+  const h2olog_event_t *event = static_cast<const h2olog_event_t*>(data);
 
-  if (event->id == T_SCHED_SCHED_PROCESS_EXIT) {
+  if (event->id == H2OLOG_EVENT_ID_SCHED_SCHED_PROCESS_EXIT) {
     exit(0);
   }
 
