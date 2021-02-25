@@ -788,8 +788,9 @@ static void on_send_complete(h2o_socket_t *sock, const char *err)
     /* TODO Consider if we should shut down the send side in case HTTP/1 is running without Content-Length header, as there is no
      * other way to communicate the end of the response. T-E chunked will communicate the end when HTTP/1.1 is being used. */
     conn->_ostr_final.state = OSTREAM_STATE_DONE;
-    if (conn->req.proceed_req == NULL)
-        cleanup_connection(conn);
+    if (conn->req.proceed_req != NULL)
+        conn->req.http1_is_persistent = 0;
+    cleanup_connection(conn);
 }
 
 static void on_upgrade_complete(h2o_socket_t *socket, const char *err)
