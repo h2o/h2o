@@ -939,10 +939,15 @@ IF (WITH_H2OLOG)
         "include/h2o/version.h"
     )
 
+    # This phony target is required to force to trigger a custom command.
+    # If DEPENDS is empty, the custom command won't be triggered when OUTPUT files exist.
+    ADD_CUSTOM_TARGET(phony_force_trigger_command COMMAND echo -n)
+
     ADD_CUSTOM_COMMAND(
         OUTPUT  "${CMAKE_CURRENT_SOURCE_DIR}/src/h2olog/generated_raw_tracer.cc"
         COMMAND make -f misc/regen.mk src/h2olog/generated_raw_tracer.cc
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        DEPENDS phony_force_trigger_command
     )
     LIST(APPEND H2OLOG_SOURCE_FILES "${CMAKE_CURRENT_SOURCE_DIR}/src/h2olog/generated_raw_tracer.cc")
     LINK_DIRECTORIES("${LIBBCC_LIBRARY_DIRS}")
