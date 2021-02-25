@@ -47,42 +47,68 @@ hosts:
 EOT
 });
 
+diag "quic port: $quic_port / port: $server->{port} / tls port: $server->{tls_port}";
+
 subtest "h2olog -S=0.00", sub {
   my $tracer = H2ologTracer->new({
     pid => $server->{pid},
     args => ["-S", "0.0"],
   });
 
-  my ($headers) = run_prog("$client_prog -H x-req-id:42 -3 https://127.0.0.1:$quic_port/");
-  like $headers, qr{^HTTP/3 200\n}, "req: HTTP/3";
+  subtest "HTTP/1", sub {
+    my ($headers) = run_prog("$client_prog -H x-req-id:42 http://127.0.0.1:$server->{port}/");
+    like $headers, qr{^HTTP/1\.1 200\b}, "req: HTTP/1";
 
-  sleep(0.5);
-  my $trace;
-  until ($trace = $tracer->get_trace()) {}
+    my $t0 = time();
+    my $timeout = 2;
+    my $trace;
+    until ($trace = $tracer->get_trace()) {
+      Time::HiRes::sleep(0.1);
 
-  if ($ENV{H2OLOG_DEBUG}) {
-    diag "h2olog output:\n", $trace;
-  }
+      if ((time() - $t0) > $timeout) {
+        last;
+      }
+    }
 
-  my @logs = map { decode_json($_) } split /\n/, $trace;
+    if ($ENV{H2OLOG_DEBUG}) {
+      diag "h2olog output:\n", $trace;
+    }
 
-  is_deeply [
-    grep {
-      $_->{type} eq "h3s-accept"
-    } @logs
-  ], [], "no h3s-accept header in logs";
+    pass "nothing is emitted";
+  };
 
-  is_deeply [
-    grep {
-      $_->{type} eq "h3s-destroy"
-    } @logs
-  ], [], "no stream-on-destroy header in logs";
+  subtest "HTTP/3", sub {
+    my ($headers) = run_prog("$client_prog -H x-req-id:42 -3 https://127.0.0.1:$quic_port/");
+    like $headers, qr{^HTTP/3 200\n}, "req: HTTP/3";
 
-  is_deeply [
-    grep {
-      $_->{type} eq "receive-request-header" && $_->{name} eq "x-req-id"
-    } @logs
-  ], [], "no x-req-id header in logs";
+    sleep(0.5);
+    my $trace;
+    until ($trace = $tracer->get_trace()) {}
+
+    if ($ENV{H2OLOG_DEBUG}) {
+      diag "h2olog output:\n", $trace;
+    }
+
+    my @logs = map { decode_json($_) } split /\n/, $trace;
+
+    is_deeply [
+      grep {
+        $_->{type} eq "h3s-accept"
+      } @logs
+    ], [], "no h3s-accept header in logs";
+
+    is_deeply [
+      grep {
+        $_->{type} eq "h3s-destroy"
+      } @logs
+    ], [], "no stream-on-destroy header in logs";
+
+    is_deeply [
+      grep {
+        $_->{type} eq "receive-request-header" && $_->{name} eq "x-req-id"
+      } @logs
+    ], [], "no x-req-id header in logs";
+  };
 };
 
 
