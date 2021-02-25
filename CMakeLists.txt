@@ -939,10 +939,12 @@ IF (WITH_H2OLOG)
         "include/h2o/version.h"
     )
 
+    ADD_CUSTOM_COMMAND(OUTPUT force COMMAND echo -n)
     ADD_CUSTOM_COMMAND(
         OUTPUT  "${CMAKE_CURRENT_SOURCE_DIR}/src/h2olog/generated_raw_tracer.cc"
         COMMAND make -f misc/regen.mk src/h2olog/generated_raw_tracer.cc
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        DEPENDS force
     )
     LIST(APPEND H2OLOG_SOURCE_FILES "${CMAKE_CURRENT_SOURCE_DIR}/src/h2olog/generated_raw_tracer.cc")
     LINK_DIRECTORIES("${LIBBCC_LIBRARY_DIRS}")
