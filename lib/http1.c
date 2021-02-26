@@ -474,6 +474,7 @@ static const char *fixup_request(struct st_h2o_http1_conn_t *conn, struct phr_he
         }
         if (upgrade.base != NULL && h2o_contains_token(connection.base, connection.len, H2O_STRLIT("upgrade"), ',')) {
             conn->req.upgrade = upgrade;
+            conn->req.is_tunnel_req = 1;
         }
     } else if (conn->req.version >= 0x101) {
         /* defaults to keep-alive if >= HTTP/1.1 */

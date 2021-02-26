@@ -1178,12 +1178,6 @@ struct st_h2o_req_t {
     unsigned remaining_delegations;
 
     /**
-     * Optional callback used to establish a tunnel. When a tunnel is being established to upstream, the generator fills the
-     * response headers, then calls this function directly, bypassing the ordinary `h2o_send` chain.
-     */
-    void (*establish_tunnel)(h2o_req_t *req, h2o_tunnel_t *tunnel, uint64_t idle_timeout);
-
-    /**
      * environment variables
      */
     h2o_iovec_vector_t env;
