@@ -647,6 +647,7 @@ static void handle_incoming_request(struct st_h2o_http1_conn_t *conn)
             conn->req.write_req.cb = write_req_streaming_pre_dispatch;
             conn->req.write_req.ctx = &conn->req;
             conn->req.proceed_req = proceed_request;
+            conn->req.entity = h2o_iovec_init("", 0); /* set to non-NULL pointer to indicate that request body exists */
             process_request(conn);
         } else {
             clear_timeouts(conn);
