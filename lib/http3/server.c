@@ -1232,8 +1232,6 @@ static void do_send(h2o_ostream_t *_ostr, h2o_req_t *_req, h2o_sendvec_t *bufs, 
     stream->proceed_requested = 0;
 
     if (stream->state == H2O_HTTP3_SERVER_STREAM_STATE_SEND_HEADERS) {
-        if (!quicly_recvstate_transfer_complete(&stream->quic->recvstate) && !quicly_stop_requested(stream->quic))
-            quicly_request_stop(stream->quic, H2O_HTTP3_ERROR_EARLY_RESPONSE);
         write_response(stream);
         h2o_probe_log_response(&stream->req, stream->quic->stream_id, NULL);
         set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_SEND_BODY);
