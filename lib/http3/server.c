@@ -145,6 +145,10 @@ struct st_h2o_http3_server_conn_t {
      */
     uint32_t num_streams_req_streaming;
     /**
+     * number of streams in tunneling mode
+     */
+    uint32_t num_streams_tunnelling;
+    /**
      * scheduler
      */
     struct {
@@ -379,6 +383,8 @@ static void dispose_request(struct st_h2o_http3_server_stream_t *stream)
         check_run_blocked(conn);
     }
 
+    if (stream->req.is_tunnel_req)
+        --get_conn(stream)->num_streams_tunnelling;
 
     /* dispose the request */
     h2o_dispose_request(&stream->req);
@@ -1131,6 +1137,7 @@ static int handle_input_expect_headers(struct st_h2o_http3_server_stream_t *stre
                                                                "CONNECT request cannot have request body", err_desc);
         stream->req.is_tunnel_req = 1;
         stream->req.proceed_req = proceed_request_streaming;
+        ++conn->num_streams_tunnelling;
         set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_SEND_HEADERS);
         h2o_process_request(&stream->req);
         return 0;
@@ -1558,6 +1565,7 @@ static void on_h3_destroy(h2o_quic_conn_t *h3_)
     assert(conn->num_streams.send_body == 0);
     assert(conn->num_streams.close_wait == 0);
     assert(conn->num_streams_req_streaming == 0);
+    assert(conn->num_streams_tunnelling == 0);
     assert(h2o_linklist_is_empty(&conn->delayed_streams.recv_body_blocked));
     assert(h2o_linklist_is_empty(&conn->delayed_streams.req_streaming));
     assert(h2o_linklist_is_empty(&conn->delayed_streams.pending));
@@ -1611,6 +1619,7 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
     h2o_timer_init(&conn->timeout, run_delayed);
     memset(&conn->num_streams, 0, sizeof(conn->num_streams));
     conn->num_streams_req_streaming = 0;
+    conn->num_streams_tunnelling = 0;
     req_scheduler_init(&conn->scheduler.reqs);
     conn->scheduler.uni.active = 0;
     conn->scheduler.uni.conn_blocked = 0;
