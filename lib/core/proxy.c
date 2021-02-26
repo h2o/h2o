@@ -615,10 +615,6 @@ static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *e
         detach_client(self);
         h2o_req_log_error(self->src_req, "lib/core/proxy.c", "%s", errstr);
         h2o_send_error_502(self->src_req, "Gateway Error", errstr, 0);
-        if (self->src_req->proceed_req != NULL) {
-            self->src_req->proceed_req(self->src_req, 0, H2O_SEND_STATE_ERROR);
-        }
-
         return NULL;
     }
 
