@@ -49,41 +49,64 @@ EOT
 
 diag "quic port: $quic_port / port: $server->{port} / tls port: $server->{tls_port}";
 
+subtest "h2olog -S=1.00", sub {
+  my $tracer = H2ologTracer->new({
+    pid => $server->{pid},
+    args => ["-S", "1.0"],
+  });
+  subtest "TCP", sub {
+    my ($headers) = run_prog("$client_prog http://127.0.0.1:$server->{port}/");
+    like $headers, qr{^HTTP/1\.1 200\b}, "req: HTTP/1";
+
+    my $trace;
+    until (($trace = $tracer->get_trace()) =~ /\n/) {}
+    my @logs = map { decode_json($_) } split /\n/, $trace;
+    my($event) = grep { $_->{type} eq "socket-accept" } @logs;
+
+    like $event->{src}, qr/\A127\.0\.0\.1:\d+\z/, "destination (remote) addr";
+    is $event->{dest}, "127.0.0.1:$server->{port}", "source (local) addr";
+  };
+
+  subtest "QUIC", sub {
+    my ($headers) = run_prog("$client_prog -3 https://127.0.0.1:$quic_port/");
+    like $headers, qr{^HTTP/3 200\b}, "req: HTTP/3";
+
+    my $trace;
+    until (($trace = $tracer->get_trace()) =~ /\n/) {}
+    my @logs = map { decode_json($_) } split /\n/, $trace;
+    my($event) = grep { $_->{type} eq "socket-accept" } @logs;
+
+    like $event->{src}, qr/\A127\.0\.0\.1:\d+\z/, "destination (remote) addr";
+    is $event->{dest}, "127.0.0.1:$quic_port", "source (local) addr";
+  };
+};
+
 subtest "h2olog -S=0.00", sub {
   my $tracer = H2ologTracer->new({
     pid => $server->{pid},
     args => ["-S", "0.0"],
   });
 
-  subtest "HTTP/1", sub {
-    my ($headers) = run_prog("$client_prog -H x-req-id:42 http://127.0.0.1:$server->{port}/");
+  subtest "TCP", sub {
+    my ($headers) = run_prog("$client_prog http://127.0.0.1:$server->{port}/");
     like $headers, qr{^HTTP/1\.1 200\b}, "req: HTTP/1";
 
-    my $t0 = time();
-    my $timeout = 2;
-    my $trace;
-    until ($trace = $tracer->get_trace()) {
-      Time::HiRes::sleep(0.1);
-
-      if ((time() - $t0) > $timeout) {
-        last;
-      }
-    }
+    sleep(1);
+    my $trace =  $tracer->get_trace();
 
     if ($ENV{H2OLOG_DEBUG}) {
       diag "h2olog output:\n", $trace;
     }
 
-    pass "nothing is emitted";
+    is $trace, "", "nothing is emitted";
   };
 
-  subtest "HTTP/3", sub {
-    my ($headers) = run_prog("$client_prog -H x-req-id:42 -3 https://127.0.0.1:$quic_port/");
+  subtest "QUIC", sub {
+    my ($headers) = run_prog("$client_prog -3 https://127.0.0.1:$quic_port/");
     like $headers, qr{^HTTP/3 200\n}, "req: HTTP/3";
 
-    sleep(0.5);
-    my $trace;
-    until ($trace = $tracer->get_trace()) {}
+    sleep(1);
+    my $trace = $tracer->get_trace();
 
     if ($ENV{H2OLOG_DEBUG}) {
       diag "h2olog output:\n", $trace;
@@ -102,12 +125,6 @@ subtest "h2olog -S=0.00", sub {
         $_->{type} eq "h3s-destroy"
       } @logs
     ], [], "no stream-on-destroy header in logs";
-
-    is_deeply [
-      grep {
-        $_->{type} eq "receive-request-header" && $_->{name} eq "x-req-id"
-      } @logs
-    ], [], "no x-req-id header in logs";
   };
 };
 
