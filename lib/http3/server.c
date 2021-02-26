@@ -1137,6 +1137,7 @@ static int handle_input_expect_headers(struct st_h2o_http3_server_stream_t *stre
                                                                "CONNECT request cannot have request body", err_desc);
         stream->req.is_tunnel_req = 1;
         h2o_buffer_init(&stream->req_body, &h2o_socket_buffer_prototype);
+        stream->req.entity = h2o_iovec_init("", 0);
         stream->req.proceed_req = proceed_request_streaming;
         ++conn->num_streams_tunnelling;
         set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_SEND_HEADERS);
