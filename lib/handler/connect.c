@@ -63,15 +63,19 @@ static void start_connect(struct st_connect_generator_t *self);
 
 static h2o_req_t *dispose_generator(struct st_connect_generator_t *self)
 {
-    if (self->getaddr_req != NULL) {
+    /* detect duplicate call to `dispose_generator`, which could happen due to this function being called via `stop` callback and
+     * the pool destructor callback */
+    if (self->sendbuf == NULL)
+        return NULL;
+
+    if (self->getaddr_req != NULL)
         h2o_hostinfo_getaddr_cancel(self->getaddr_req);
-        self->getaddr_req = NULL;
-    }
     if (self->sock != NULL)
         h2o_socket_close(self->sock);
     h2o_buffer_dispose(&self->sendbuf);
     h2o_timer_unlink(&self->timeout);
 
+    assert(self->sendbuf == NULL);
     return self->src_req;
 }
 
@@ -264,6 +268,12 @@ static void on_stop(h2o_generator_t *_self, h2o_req_t *req)
     dispose_generator(self);
 }
 
+static void on_generator_dispose(void *_self)
+{
+    struct st_connect_generator_t *self = _self;
+    dispose_generator(self);
+}
+
 static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
 {
     struct st_connect_handler_t *handler = (void *)_handler;
@@ -279,7 +289,7 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
         return 0;
     }
 
-    struct st_connect_generator_t *self = h2o_mem_alloc_pool(&req->pool, struct st_connect_generator_t, 1);
+    struct st_connect_generator_t *self = h2o_mem_alloc_shared(&req->pool, sizeof(*self), on_generator_dispose);
     *self = (struct st_connect_generator_t){
         .super = {.proceed = on_proceed, .stop = on_stop},
         .handler = handler,
