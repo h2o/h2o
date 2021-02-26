@@ -429,7 +429,7 @@ h2o_socket_t *h2o_evloop_socket_accept(h2o_socket_t *_listener)
     h2o_socket_t *sock;
 
     /* cache the remote address, if we know that we are going to use the value (in h2o_socket_ebpf_lookup) */
-#if h2O_USE_EBPF_MAP
+#if H2O_USE_EBPF_MAP
     struct sockaddr_storage peeraddr[1];
     socklen_t peeraddrlen[1] = {sizeof(peeraddr[0])};
 #else
