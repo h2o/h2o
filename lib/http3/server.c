@@ -1392,7 +1392,7 @@ void tunnel_write(struct st_h2o_http3_server_stream_t *stream)
 
     assert(!stream->tunnel->up.is_inflight);
 
-    if ((bytes_to_send = stream->req_body->size) == 0)
+    if (stream->req_body == NULL || (bytes_to_send = stream->req_body->size) == 0)
         return;
 
     /* move chunk of data into stream->tunnel.up.buf */
