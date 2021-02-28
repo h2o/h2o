@@ -468,15 +468,6 @@ static void on_whole_request_sent(h2o_socket_t *sock, const char *err)
         return;
     }
 
-    if (client->_is_chunked) {
-        client->_is_chunked = 0;
-        h2o_iovec_t last = h2o_iovec_init(H2O_STRLIT("0\r\n\r\n"));
-        client->super.bytes_written.body += last.len;
-        client->super.bytes_written.total += last.len;
-        h2o_socket_write(client->sock, &last, 1, on_whole_request_sent);
-        return;
-    }
-
     client->state.req = STREAM_STATE_CLOSED;
     client->super.timings.request_end_at = h2o_gettimeofday(client->super.ctx->loop);
 
@@ -527,25 +518,35 @@ static void swap_buffers(h2o_buffer_t **a, h2o_buffer_t **b)
 }
 
 /**
- * bufs must have at least 3 elements of space
+ * bufs must have at least 4 elements of space
  */
-static size_t encode_chunk(struct st_h2o_http1client_t *client, h2o_iovec_t *bufs, h2o_iovec_t chunk, size_t *bytes)
+static size_t encode_chunk(struct st_h2o_http1client_t *client, h2o_iovec_t *bufs, h2o_iovec_t chunk, int is_end_stream,
+                           size_t *bytes)
 {
+    size_t bufcnt = 0;
     *bytes = 0;
 
-    size_t i = 0;
-    bufs[i].len = snprintf(client->_chunk_len_str, sizeof(client->_chunk_len_str), "%zx\r\n", chunk.len);
-    *bytes += bufs[i].len;
-    bufs[i++].base = client->_chunk_len_str;
-
-    if (chunk.base != NULL) {
-        bufs[i++] = h2o_iovec_init(chunk.base, chunk.len);
+    if (chunk.len != 0) {
+        /* encode chunk header */
+        bufs[bufcnt].base = client->_chunk_len_str;
+        bufs[bufcnt].len = snprintf(client->_chunk_len_str, sizeof(client->_chunk_len_str), "%zx\r\n", chunk.len);
+        *bytes += bufs[bufcnt].len;
+        ++bufcnt;
+        /* append chunk body */
+        bufs[bufcnt++] = chunk;
         *bytes += chunk.len;
+        /* append CRLF */
+        bufs[bufcnt++] = h2o_iovec_init("\r\n", 2);
+        *bytes += 2;
     }
-    bufs[i++] = h2o_iovec_init("\r\n", 2);
-    *bytes += 2;
 
-    return i;
+    if (is_end_stream) {
+        static const h2o_iovec_t terminator = {H2O_STRLIT("0\r\n\r\n")};
+        bufs[bufcnt++] = terminator;
+        *bytes += terminator.len;
+    }
+
+    return bufcnt;
 }
 
 static int do_write_req(h2o_httpclient_t *_client, h2o_iovec_t chunk, int is_end_stream)
@@ -578,9 +579,9 @@ static int do_write_req(h2o_httpclient_t *_client, h2o_iovec_t chunk, int is_end
 
     h2o_iovec_t iov = h2o_iovec_init(client->_body_buf_in_flight->bytes, client->_body_buf_in_flight->size);
     if (client->_is_chunked) {
-        h2o_iovec_t bufs[3];
+        h2o_iovec_t bufs[4];
         size_t bytes;
-        size_t bufcnt = encode_chunk(client, bufs, iov, &bytes);
+        size_t bufcnt = encode_chunk(client, bufs, iov, client->_body_buf_is_done, &bytes);
         client->super.bytes_written.body += bytes;
         client->super.bytes_written.total += bytes;
         h2o_socket_write(client->sock, bufs, bufcnt, on_req_body_done);
@@ -677,7 +678,7 @@ static void start_request(struct st_h2o_http1client_t *client, h2o_iovec_t metho
                           const h2o_header_t *headers, size_t num_headers, h2o_iovec_t body,
                           const h2o_httpclient_properties_t *props)
 {
-    h2o_iovec_t reqbufs[5]; /* 5 should be the maximum possible elements used */
+    h2o_iovec_t reqbufs[6]; /* 6 should be the maximum possible elements used */
     size_t reqbufcnt = 0;
     if (props->proxy_protocol->base != NULL)
         reqbufs[reqbufcnt++] = *props->proxy_protocol;
@@ -701,8 +702,8 @@ static void start_request(struct st_h2o_http1client_t *client, h2o_iovec_t metho
         if (client->_is_chunked) {
             assert(body.base != NULL);
             size_t bytes;
-            assert(PTLS_ELEMENTSOF(reqbufs) - reqbufcnt >= 3); /* encode_chunk could write to 3 additional elements */
-            reqbufcnt += encode_chunk(client, reqbufs + reqbufcnt, body, &bytes);
+            assert(PTLS_ELEMENTSOF(reqbufs) - reqbufcnt >= 4); /* encode_chunk could write to 3 additional elements */
+            reqbufcnt += encode_chunk(client, reqbufs + reqbufcnt, body, 1, &bytes);
             client->super.bytes_written.body = bytes;
         } else if (body.base != NULL) {
             reqbufs[reqbufcnt++] = body;
