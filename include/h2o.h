@@ -997,7 +997,8 @@ typedef struct st_h2o_filereq_t {
 
 /**
  * Called be the protocol handler to submit chunk of request body to the generator. The callback returns 0 if successful, otherwise
- * a non-zero value. The buffer pointed to by `chunk` can be reused once this callback returns.
+ * a non-zero value. The buffer pointed to by `chunk` can be reused once this callback returns. `chunk` must be non-empty, or
+ * `is_end_stream` must be set.
  */
 typedef int (*h2o_write_req_cb)(void *ctx, h2o_iovec_t chunk, int is_end_stream);
 /**
