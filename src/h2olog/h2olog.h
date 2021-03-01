@@ -35,8 +35,6 @@ extern "C" {
 #include "quicly.h"
 }
 
-typedef quicly_address_t h2olog_address_t;
-
 class h2o_tracer
 {
   public:

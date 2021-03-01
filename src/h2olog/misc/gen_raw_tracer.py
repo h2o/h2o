@@ -171,7 +171,7 @@ def is_bin_type(t):
 
 
 def is_sockaddr(t):
-  return re.search(r'\b(?:sockaddr|h2olog_address_t)\s*\*', t)
+  return re.search(r'\b(?:sockaddr|quicly_address_t)\s*\*', t)
 
 
 def is_ptr_type(t):
@@ -380,7 +380,7 @@ struct event_t {
       elif is_str_type(field_type):
         f = "char %s[STR_LEN]" % field_name
       elif is_sockaddr(field_type):
-        f = "h2olog_address_t %s" % field_name
+        f = "quicly_address_t %s" % field_name
       else:
         f = "%s %s" % (field_type, field_name)
 
@@ -398,11 +398,11 @@ struct event_t {
 
 #define STR_LEN 64
 
-typedef union h2olog_address_t {
+typedef union quicly_address_t {
   uint8_t sa[sizeof_sockaddr];
   uint8_t sin[sizeof_sockaddr_in];
   uint8_t sin6[sizeof_sockaddr_in6];
-} h2olog_address_t;;
+} quicly_address_t;;
 
 %s
 BPF_PERF_OUTPUT(events);

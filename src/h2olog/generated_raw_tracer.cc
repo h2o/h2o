@@ -539,8 +539,8 @@ struct event_t {
     } conn_stats;
     struct { // h2o:socket_accept
       int sock_type;
-      h2olog_address_t dest;
-      h2olog_address_t src;
+      quicly_address_t dest;
+      quicly_address_t src;
     } socket_accept;
     struct { // h2o:receive_request
       uint64_t conn_id;
@@ -596,13 +596,13 @@ struct event_t {
       size_t bytes_len;
     } h3_frame_receive;
     struct { // h2o:h3_packet_receive
-      h2olog_address_t dest;
-      h2olog_address_t src;
+      quicly_address_t dest;
+      quicly_address_t src;
       size_t bytes_len;
     } h3_packet_receive;
     struct { // h2o:h3_packet_forward
-      h2olog_address_t dest;
-      h2olog_address_t src;
+      quicly_address_t dest;
+      quicly_address_t src;
       size_t num_packets;
       size_t num_bytes;
       int fd;
@@ -1514,11 +1514,11 @@ std::string h2o_raw_tracer::bpf_text() {
 
 #define STR_LEN 64
 
-typedef union h2olog_address_t {
+typedef union quicly_address_t {
   uint8_t sa[sizeof_sockaddr];
   uint8_t sin[sizeof_sockaddr_in];
   uint8_t sin6[sizeof_sockaddr_in6];
-} h2olog_address_t;;
+} quicly_address_t;;
 
 
 struct event_t {
@@ -1965,8 +1965,8 @@ struct event_t {
     } conn_stats;
     struct { // h2o:socket_accept
       int sock_type;
-      h2olog_address_t dest;
-      h2olog_address_t src;
+      quicly_address_t dest;
+      quicly_address_t src;
     } socket_accept;
     struct { // h2o:receive_request
       uint64_t conn_id;
@@ -2022,13 +2022,13 @@ struct event_t {
       size_t bytes_len;
     } h3_frame_receive;
     struct { // h2o:h3_packet_receive
-      h2olog_address_t dest;
-      h2olog_address_t src;
+      quicly_address_t dest;
+      quicly_address_t src;
       size_t bytes_len;
     } h3_packet_receive;
     struct { // h2o:h3_packet_forward
-      h2olog_address_t dest;
-      h2olog_address_t src;
+      quicly_address_t dest;
+      quicly_address_t src;
       size_t num_packets;
       size_t num_bytes;
       int fd;
