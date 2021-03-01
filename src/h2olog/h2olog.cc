@@ -232,25 +232,14 @@ static void lost_cb(void *context, uint64_t lost)
     tracer->handle_lost(lost);
 }
 
-static bool setup_ebpf_map(ebpf::BPF *bpf, pid_t h2o_pid)
+static void setup_ebpf_map(ebpf::BPF *bpf, pid_t h2o_pid)
 {
-    static char path[PATH_MAX];
-    snprintf(path, sizeof(path), H2O_EBPF_TID2U64_MAP_PATH, (uint64_t)h2o_pid);
-
-    unlink(path);
-    atexit([]() {
-        if (unlink(path) != 0) {
-            // It occurs unless -r is specified. Probably harmless, though.
-            fprintf(stderr, "h2olog: cannot unlink %s: %s", path, strerror(errno));
-        }
-    });
-
     auto table = bpf->get_table("h2o_tid_to_u64");
-    if (bpf_obj_pin(table.get_fd(), path) != 0) {
-        fprintf(stderr, "BPF_OBJ_PIN failed for %s: %s\n", path, strerror(errno));
-        return false;
+    if (bpf_obj_pin(table.get_fd(), H2O_EBPF_TID2U64_MAP_PATH) != 0) {
+        if (errno != EEXIST) {
+            fprintf(stderr, "BPF_OBJ_PIN failed for %s: %s\n", H2O_EBPF_TID2U64_MAP_PATH, strerror(errno));
+        }
     }
-    return true;
 }
 
 static void sig_cleanup(int signo)
@@ -404,9 +393,7 @@ int main(int argc, char **argv)
     }
 
     if (sampling_rate < 1.0) {
-        if (!setup_ebpf_map(bpf, h2o_pid)) {
-            return EXIT_FAILURE;
-        }
+        setup_ebpf_map(bpf, h2o_pid);
     }
 
     bpf->attach_tracepoint("sched:sched_process_exit", "trace_sched_process_exit");

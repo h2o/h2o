@@ -1685,8 +1685,7 @@ static int open_tracing_tid2u64_map(h2o_loop_t *loop)
 
     last_attempt = now;
 
-    char path[PATH_MAX];
-    snprintf(path, sizeof(path), H2O_EBPF_TID2U64_MAP_PATH, (uint64_t)getpid());
+    const char *path = H2O_EBPF_TID2U64_MAP_PATH;
 
     // check if map exists at path
     struct stat s;

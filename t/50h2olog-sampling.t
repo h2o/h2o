@@ -129,6 +129,29 @@ subtest "h2olog -S=0.00", sub {
 };
 
 
+subtest "multiple h2olog with sampling filters", sub {
+  my $tracer1 = H2ologTracer->new({
+    pid => $server->{pid},
+    args => ["-S", "0.0"],
+  });
+  my $tracer2 = H2ologTracer->new({
+    pid => $server->{pid},
+    args => ["-S", "0.0"],
+  });
+
+  my ($headers) = run_prog("$client_prog -3 https://127.0.0.1:$quic_port/");
+  like $headers, qr{^HTTP/3 200\n}, "req: HTTP/3";
+
+  my($trace1, $trace2);
+  until (($trace1 = $tracer1->get_trace()) =~ /\n/){}
+  until (($trace2 = $tracer2->get_trace()) =~ /\n/){}
+
+  diag "tracer1:", $trace1;
+  diag "tracer2:", $trace2;
+
+  pass "multiple tracers can attach to the same h2o process";
+};
+
 # wait until the server and the tracer exits
 diag "shutting down ...";
 undef $server;
