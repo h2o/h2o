@@ -376,8 +376,7 @@ struct st_h2o_ebpf_map_key_t;
 /**
  * function to lookup if the connection is tagged for special treatment. At the moment, the results are: 0 - no, 1 - trace.
  */
-h2o_ebpf_map_value_t h2o_socket_ebpf_lookup(h2o_loop_t *loop, int (*init_key)(struct st_h2o_ebpf_map_key_t *key, void *cbdata),
-                                            void *cbdata);
+h2o_ebpf_map_value_t h2o_socket_ebpf_lookup(h2o_loop_t *loop, const struct st_h2o_ebpf_map_key_t *key);
 
 /**
  * function to get a return value from BPF program and remove it.
@@ -386,13 +385,13 @@ h2o_ebpf_map_value_t h2o_socket_ebpf_lookup(h2o_loop_t *loop, int (*init_key)(st
 uint64_t h2o_socket_ebpf_pop_retval(h2o_loop_t *loop);
 
 /**
- * callback for initializing the ebpf lookup key from raw information
+ * initializes the ebpf lookup key from raw information
  */
 int h2o_socket_ebpf_init_key_raw(struct st_h2o_ebpf_map_key_t *key, int sock_type, struct sockaddr *local, struct sockaddr *remote);
 /**
- * callback for initializing the ebpf lookup key from `h2o_socket_t`
+ * initializes the ebpf lookup key from `h2o_socket_t`
  */
-int h2o_socket_ebpf_init_key(struct st_h2o_ebpf_map_key_t *key, void *_sock);
+int h2o_socket_ebpf_init_key_from_sock(struct st_h2o_ebpf_map_key_t *key, h2o_socket_t *sock);
 
 void h2o_socket__write_pending(h2o_socket_t *sock);
 void h2o_socket__write_on_complete(h2o_socket_t *sock, int status);

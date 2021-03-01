@@ -453,18 +453,10 @@ h2o_socket_t *h2o_evloop_socket_accept(h2o_socket_t *_listener)
 
     if (peeraddr != NULL && *peeraddrlen <= sizeof(*peeraddr))
         h2o_socket_setpeername(sock, (struct sockaddr *)peeraddr, *peeraddrlen);
-    if (h2o_socket_ebpf_lookup(listener->loop, h2o_socket_ebpf_init_key, sock).skip_tracing)
-        sock->_skip_tracing = 1;
-
-    if (H2O_SOCKET_ACCEPT_ENABLED()) {
-        struct sockaddr *local_addr = NULL;
-        struct sockaddr_storage ss; //
-        if (h2o_socket_getsockname(sock, (struct sockaddr *)&ss) != 0)
-            local_addr = (struct sockaddr *)&ss;
-        H2O_SOCKET_ACCEPT(SOCK_STREAM, (struct sockaddr *)local_addr, (struct sockaddr *)peeraddr);
-        if (h2o_socket_ebpf_pop_retval(listener->loop))
+    h2o_ebpf_map_key_t ebpf_map_key;
+    if (h2o_socket_ebpf_init_key_from_sock(&ebpf_map_key, sock))
+        if (h2o_socket_ebpf_lookup(listener->loop, &ebpf_map_key).skip_tracing)
             sock->_skip_tracing = 1;
-    }
 
     return sock;
 }

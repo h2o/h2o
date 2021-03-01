@@ -1619,17 +1619,15 @@ static h2o_ebpf_map_value_t lookup_map(const void *key)
     return value;
 }
 
-static inline int set_ebpf_map_key_tuples(struct sockaddr *sa, h2o_ebpf_address_t *ea)
+static inline int set_ebpf_map_key_tuples(struct sockaddr *sa, quicly_address_t *addr)
 {
     if (sa->sa_family == AF_INET) {
         struct sockaddr_in *sin = (void *)sa;
-        memcpy(ea->ip, &sin->sin_addr, sizeof(sin->sin_addr));
-        ea->port = sin->sin_port;
+        addr->sin = *sin;
         return 1;
     } else if (sa->sa_family == AF_INET6) {
         struct sockaddr_in6 *sin = (void *)sa;
-        memcpy(ea->ip, &sin->sin6_addr, sizeof(sin->sin6_addr));
-        ea->port = sin->sin6_port;
+        addr->sin6 = *sin;
         return 1;
     } else {
         return 0;
@@ -1643,14 +1641,12 @@ int h2o_socket_ebpf_init_key_raw(h2o_ebpf_map_key_t *key, int sock_type, struct 
         return 0;
     if (!set_ebpf_map_key_tuples(remote, &key->remote))
         return 0;
-    key->family = local->sa_family == AF_INET6 ? 6 : 4;
-    key->protocol = sock_type;
+    key->sock_type = sock_type;
     return 1;
 }
 
-int h2o_socket_ebpf_init_key(h2o_ebpf_map_key_t *key, void *_sock)
+int h2o_socket_ebpf_init_key_from_sock(h2o_ebpf_map_key_t *key, h2o_socket_t *sock)
 {
-    h2o_socket_t *sock = _sock;
     struct sockaddr_storage local, remote;
     unsigned int sock_type, sock_type_len = sizeof(sock_type_len);
 
@@ -1665,21 +1661,20 @@ int h2o_socket_ebpf_init_key(h2o_ebpf_map_key_t *key, void *_sock)
     return h2o_socket_ebpf_init_key_raw(key, sock_type, (void *)&local, (void *)&remote);
 }
 
-h2o_ebpf_map_value_t h2o_socket_ebpf_lookup(h2o_loop_t *loop, int (*init_key)(struct st_h2o_ebpf_map_key_t *key, void *cbdata),
-                                            void *cbdata)
+h2o_ebpf_map_value_t h2o_socket_ebpf_lookup(h2o_loop_t *loop, const h2o_ebpf_map_key_t *key)
 {
-    // try open map if not opened
+    h2o_ebpf_map_value_t value = {0};
+
     open_tracing_map(loop);
 
-    // map is not connected, fallback accepting probe
-    if (tracing_map_fd < 0)
-        return (h2o_ebpf_map_value_t){0};
+    if (tracing_map_fd >= 0)
+        value = lookup_map(key);
 
-    // lookup map for our key
-    h2o_ebpf_map_key_t key;
-    if (!init_key(&key, cbdata))
-        return (h2o_ebpf_map_value_t){0};
-    return lookup_map(&key);
+    H2O_SOCKET_ACCEPT(key->sock_type, &key->local.sa, &key->remote.sa);
+    if (h2o_socket_ebpf_pop_retval(loop))
+        value.skip_tracing = 1;
+
+    return value;
 }
 
 static int open_tracing_tid2u64_map(h2o_loop_t *loop)

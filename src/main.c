@@ -2369,16 +2369,6 @@ static void on_accept(h2o_socket_t *listener, const char *err)
     } while (--num_accepts != 0);
 }
 
-struct init_ebpf_key_info_t {
-    struct sockaddr *local, *remote;
-};
-
-static int init_ebpf_key_info(struct st_h2o_ebpf_map_key_t *key, void *_info)
-{
-    struct init_ebpf_key_info_t *info = _info;
-    return h2o_socket_ebpf_init_key_raw(key, SOCK_DGRAM, info->local, info->remote);
-}
-
 static int validate_token(h2o_http3_server_ctx_t *ctx, struct sockaddr *remote, ptls_iovec_t client_cid, ptls_iovec_t server_cid,
                           quicly_address_token_plaintext_t *token)
 {
@@ -2424,17 +2414,14 @@ static h2o_quic_conn_t *on_http3_accept(h2o_quic_ctx_t *_ctx, quicly_address_t *
     }
 
     h2o_http3_server_ctx_t *ctx = (void *)_ctx;
-    struct init_ebpf_key_info_t ebpf_keyinfo = {&destaddr->sa, &srcaddr->sa};
-    h2o_ebpf_map_value_t ebpf_value = h2o_socket_ebpf_lookup(ctx->super.loop, init_ebpf_key_info, &ebpf_keyinfo);
+
+    h2o_ebpf_map_key_t ebpf_map_key;
+    h2o_ebpf_map_value_t ebpf_map_value = {0};
+    if (h2o_socket_ebpf_init_key_raw(&ebpf_map_key, SOCK_DGRAM, &destaddr->sa, &srcaddr->sa))
+        ebpf_map_value = h2o_socket_ebpf_lookup(ctx->super.loop, &ebpf_map_key);
+
     quicly_address_token_plaintext_t *token = NULL, token_buf;
     h2o_http3_conn_t *conn = NULL;
-
-    int skip_tracing = ebpf_value.skip_tracing;
-    if (H2O_SOCKET_ACCEPT_ENABLED()) {
-        H2O_SOCKET_ACCEPT(SOCK_DGRAM, destaddr, srcaddr);
-        if (h2o_socket_ebpf_pop_retval(ctx->super.loop))
-            skip_tracing = 1;
-    }
 
     /* handle retry, setting `token` to a non-NULL pointer if contains a valid token */
     if (packet->token.len != 0) {
@@ -2457,7 +2444,7 @@ static h2o_quic_conn_t *on_http3_accept(h2o_quic_ctx_t *_ctx, quicly_address_t *
     /* send retry if necessary */
     if (token == NULL || token->type != QUICLY_ADDRESS_TOKEN_TYPE_RETRY) {
         int send_retry = ctx->send_retry;
-        switch (ebpf_value.quic_send_retry) {
+        switch (ebpf_map_value.quic_send_retry) {
         case H2O_EBPF_QUIC_SEND_RETRY_ON:
             send_retry = 1;
             break;
@@ -2498,7 +2485,7 @@ static h2o_quic_conn_t *on_http3_accept(h2o_quic_ctx_t *_ctx, quicly_address_t *
     }
 
     /* accept the connection */
-    conn = h2o_http3_server_accept(ctx, destaddr, srcaddr, packet, token, skip_tracing, &conf.quic.conn_callbacks);
+    conn = h2o_http3_server_accept(ctx, destaddr, srcaddr, packet, token, ebpf_map_value.skip_tracing, &conf.quic.conn_callbacks);
     if (conn == NULL || &conn->super == H2O_QUIC_ACCEPT_CONN_DECRYPTION_FAILED)
         goto Exit;
     num_sessions(1);

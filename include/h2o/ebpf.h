@@ -22,15 +22,21 @@
 #ifndef h2o__ebpf_h
 #define h2o__ebpf_h
 
-typedef struct st_h2o_ebpf_address_t {
-    uint8_t ip[16];
-    uint16_t port;
-} h2o_ebpf_address_t;
+#include "quicly.h"
 
 typedef struct st_h2o_ebpf_map_key_t {
-    uint8_t family;
-    uint8_t protocol;
-    h2o_ebpf_address_t local, remote;
+    /**
+     * SOCK_STZREAM or SOCK_DGRAM
+     */
+    int sock_type;
+    /**
+     * The local, destination adddress in sockaddr_in or sockaddr_in6.
+     */
+    quicly_address_t local;
+    /**
+     * The remote, source address in sockaddr_in or sockaddr_in6.
+     */
+    quicly_address_t remote;
 } h2o_ebpf_map_key_t;
 
 #define H2O_EBPF_QUIC_SEND_RETRY_DEFAULT 0
