@@ -379,12 +379,6 @@ struct st_h2o_ebpf_map_key_t;
 h2o_ebpf_map_value_t h2o_socket_ebpf_lookup(h2o_loop_t *loop, const struct st_h2o_ebpf_map_key_t *key);
 
 /**
- * function to get a return value from BPF program and remove it.
- * Technically, it calls BPF_MAP_LOOKUP_ELEM and BPF_MAP_DELETE_ELEM by the thread id.
- */
-uint64_t h2o_socket_ebpf_pop_retval(h2o_loop_t *loop);
-
-/**
  * initializes the ebpf lookup key from raw information
  */
 int h2o_socket_ebpf_init_key_raw(struct st_h2o_ebpf_map_key_t *key, int sock_type, struct sockaddr *local, struct sockaddr *remote);

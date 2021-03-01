@@ -1570,15 +1570,15 @@ void h2o_sliding_counter_stop(h2o_sliding_counter_t *counter, uint64_t now)
 #include "h2o-probes.h"
 #include <sys/stat.h>
 
-static __thread int tracing_map_fd = -1;
-static __thread uint64_t tracing_map_last_attempt = 0;
-
-static void open_tracing_map(h2o_loop_t *loop)
+static int open_tracing_map(h2o_loop_t *loop)
 {
+    static __thread int tracing_map_fd = -1;
+    static __thread uint64_t tracing_map_last_attempt = 0;
+
     // only check every second
     uint64_t now = h2o_now(loop);
     if (tracing_map_last_attempt - now < 1000)
-        return;
+        return tracing_map_fd;
 
     tracing_map_last_attempt = now;
 
@@ -1590,33 +1590,45 @@ static void open_tracing_map(h2o_loop_t *loop)
             close(tracing_map_fd);
             tracing_map_fd = -1;
         }
-        return;
+        return -1;
     }
 
     if (tracing_map_fd >= 0)
-        return; // map still exists and we have a fd
+        return tracing_map_fd; // map still exists and we have a fd
 
     // map exists, try connect
     union bpf_attr attr;
     memset(&attr, 0, sizeof(attr));
     attr.pathname = (uint64_t)&H2O_EBPF_MAP_PATH[0];
     tracing_map_fd = syscall(__NR_bpf, BPF_OBJ_GET, &attr, sizeof(attr));
+    return tracing_map_fd;
 }
 
-static h2o_ebpf_map_value_t lookup_map(const void *key)
+static int ebpf_map_lookup(int fd, const void *keyptr, void *valptr)
 {
     union bpf_attr attr;
-    h2o_ebpf_map_value_t value;
 
     memset(&attr, 0, sizeof(attr));
-    attr.map_fd = tracing_map_fd;
-    attr.key = (uint64_t)key;
-    attr.value = (uint64_t)&value;
+    attr.map_fd = fd;
+    attr.key = (uint64_t)keyptr;
+    attr.value = (uint64_t)valptr;
 
     if (syscall(__NR_bpf, BPF_MAP_LOOKUP_ELEM, &attr, sizeof(attr)) != 0)
-        return (h2o_ebpf_map_value_t){0};
+        return 1;
 
-    return value;
+    return 0;
+}
+
+static int ebpf_map_delete(int fd, const void *keyptr)
+{
+    union bpf_attr attr = {0};
+    attr.map_fd = fd;
+    attr.key = (uint64_t)keyptr;
+
+    if (syscall(__NR_bpf, BPF_MAP_DELETE_ELEM, &attr, sizeof(attr)) != 0)
+        return 0;
+
+    return 1;
 }
 
 static inline int set_ebpf_map_key_tuples(struct sockaddr *sa, quicly_address_t *addr)
@@ -1661,22 +1673,6 @@ int h2o_socket_ebpf_init_key_from_sock(h2o_ebpf_map_key_t *key, h2o_socket_t *so
     return h2o_socket_ebpf_init_key_raw(key, sock_type, (void *)&local, (void *)&remote);
 }
 
-h2o_ebpf_map_value_t h2o_socket_ebpf_lookup(h2o_loop_t *loop, const h2o_ebpf_map_key_t *key)
-{
-    h2o_ebpf_map_value_t value = {0};
-
-    open_tracing_map(loop);
-
-    if (tracing_map_fd >= 0)
-        value = lookup_map(key);
-
-    H2O_SOCKET_ACCEPT(key->sock_type, &key->local.sa, &key->remote.sa);
-    if (h2o_socket_ebpf_pop_retval(loop))
-        value.skip_tracing = 1;
-
-    return value;
-}
-
 static int open_tracing_tid2u64_map(h2o_loop_t *loop)
 {
     static __thread int fd = -1;
@@ -1713,34 +1709,7 @@ static int open_tracing_tid2u64_map(h2o_loop_t *loop)
     return fd;
 }
 
-static uint64_t lookup_u64_by_tid(int fd, pid_t tid)
-{
-    union bpf_attr attr = {0};
-    uint64_t value;
-
-    attr.map_fd = fd;
-    attr.key = (uint64_t)&tid;
-    attr.value = (uint64_t)&value;
-
-    if (syscall(__NR_bpf, BPF_MAP_LOOKUP_ELEM, &attr, sizeof(attr)) != 0)
-        return 0;
-
-    return value;
-}
-
-static int delete_u64_by_tid(int fd, pid_t tid)
-{
-    union bpf_attr attr = {0};
-    attr.map_fd = fd;
-    attr.key = (uint64_t)&tid;
-
-    if (syscall(__NR_bpf, BPF_MAP_DELETE_ELEM, &attr, sizeof(attr)) != 0)
-        return 0;
-
-    return 1;
-}
-
-uint64_t h2o_socket_ebpf_pop_retval(h2o_loop_t *loop)
+static uint64_t ebpf_tid2u64_map_pop_retval(h2o_loop_t *loop)
 {
     int fd = open_tracing_tid2u64_map(loop);
 
@@ -1748,9 +1717,26 @@ uint64_t h2o_socket_ebpf_pop_retval(h2o_loop_t *loop)
         return 0;
 
     pid_t tid = gettid();
-    uint64_t retval = lookup_u64_by_tid(fd, tid);
-    delete_u64_by_tid(fd, tid);
+    uint64_t retval = 0;
+    if (ebpf_map_lookup(fd, &tid, &retval)) {
+        ebpf_map_delete(fd, &tid);
+    }
     return retval;
+}
+
+h2o_ebpf_map_value_t h2o_socket_ebpf_lookup(h2o_loop_t *loop, const h2o_ebpf_map_key_t *key)
+{
+    h2o_ebpf_map_value_t value = {0};
+
+    int map_fd = open_tracing_map(loop);
+    if (map_fd >= 0)
+        ebpf_map_lookup(map_fd, key, &value);
+
+    H2O_SOCKET_ACCEPT(key->sock_type, &key->local.sa, &key->remote.sa);
+    if (ebpf_tid2u64_map_pop_retval(loop))
+        value.skip_tracing = 1;
+
+    return value;
 }
 
 #else
@@ -1769,11 +1755,6 @@ h2o_ebpf_map_value_t h2o_socket_ebpf_lookup(h2o_loop_t *loop, int (*init_key)(st
                                             void *cbdata)
 {
     return (h2o_ebpf_map_value_t){0};
-}
-
-uint64_t h2o_socket_ebpf_get_retval(h2o_loop_t *loop)
-{
-    return 0;
 }
 
 #endif
