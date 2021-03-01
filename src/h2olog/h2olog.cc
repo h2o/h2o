@@ -235,7 +235,7 @@ static void lost_cb(void *context, uint64_t lost)
 static bool setup_ebpf_map(ebpf::BPF *bpf, pid_t h2o_pid)
 {
     static char path[PATH_MAX];
-    snprintf(path, sizeof(path), H2O_EBPF_MAP_PATH2, (uint64_t)h2o_pid);
+    snprintf(path, sizeof(path), H2O_EBPF_TID2U64_MAP_PATH, (uint64_t)h2o_pid);
 
     unlink(path);
     atexit([]() {

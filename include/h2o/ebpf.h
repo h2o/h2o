@@ -46,6 +46,6 @@ typedef struct st_h2o_ebpf_map_value_t {
 #define H2O_EBPF_MAP_PATH "/sys/fs/bpf/h2o_map"
 
 // bpf_hash<pid_t, uint64_t>
-#define H2O_EBPF_MAP_PATH2 "/sys/fs/bpf/h2o_tid_to_u64_%" PRIu64
+#define H2O_EBPF_TID2U64_MAP_PATH "/sys/fs/bpf/h2o_tid_to_u64_%" PRIu64
 
 #endif

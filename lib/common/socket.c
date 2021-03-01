@@ -1682,7 +1682,7 @@ h2o_ebpf_map_value_t h2o_socket_ebpf_lookup(h2o_loop_t *loop, int (*init_key)(st
     return lookup_map(&key);
 }
 
-static int open_tracing_map2(h2o_loop_t *loop)
+static int open_tracing_tid2u64_map(h2o_loop_t *loop)
 {
     static __thread int fd = -1;
     static __thread uint64_t last_attempt = 0;
@@ -1695,7 +1695,7 @@ static int open_tracing_map2(h2o_loop_t *loop)
     last_attempt = now;
 
     char path[PATH_MAX];
-    snprintf(path, sizeof(path), H2O_EBPF_MAP_PATH2, (uint64_t)getpid());
+    snprintf(path, sizeof(path), H2O_EBPF_TID2U64_MAP_PATH, (uint64_t)getpid());
 
     // check if map exists at path
     struct stat s;
@@ -1747,7 +1747,7 @@ static int delete_u64_by_tid(int fd, pid_t tid)
 
 uint64_t h2o_socket_ebpf_pop_retval(h2o_loop_t *loop)
 {
-    int fd = open_tracing_map2(loop);
+    int fd = open_tracing_tid2u64_map(loop);
 
     if (fd < 0)
         return 0;
