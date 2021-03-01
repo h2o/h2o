@@ -1,10 +1,13 @@
 use strict;
 use warnings;
+use File::Temp qw(tempdir);
 use IO::Socket::INET;
 use Net::EmptyPort qw(check_port empty_port);
 use Test::More;
 use Time::HiRes qw(sleep);
 use t::Util;
+
+my $tempdir = tempdir(CLEANUP => 1);
 
 # determine upstream port to be used, spawn h2o that would connect there
 my $upstream_port = empty_port();
@@ -60,35 +63,36 @@ subtest "slow" => sub {
         unless prog_exists("printf");
     plan skip_all => "nc not found"
         unless prog_exists("nc");
-    for my $interval (0, 0.1) {
-        subtest "interval:$interval" => sub {
-            # setup server, that sends a "hello" response, recording all the input
-            open my $reqfh, "-|", "printf 'HTTP/1.1 200 OK\r\nConnection: close\r\n\r\nhello' | nc -l 127.0.0.1 $upstream_port"
-                or die "failed to launch nc:$!";
-            sleep 1;
-            # connect and send request, sending one byte every 100ms
-            my $sock = IO::Socket::INET->new(
-                PeerAddr => "127.0.0.1:$server->{port}",
-                Proto    => "tcp",
-            ) or die "connection failed:$!";
-            my $req = "POST / HTTP/1.1\r\nTransfer-encoding: chunked\r\n\r\n5\r\nhello\r\n5\r\nworld\r\n0\r\n\r\n";
-            for (0 .. length($req) - 1) {
-                syswrite($sock, substr($req, $_, 1)) == 1
-                    or die "failed to send data:$!";
-                sleep $interval
-                    if $interval != 0;
-            }
-            # check the respnose
-            my $resp = read_all($sock);
-            like $resp, qr{^HTTP/1\.1 200 OK\r\n.*\r\n\r\n}s, "is 200 OK";
-            my $resp_body = parse_chunked((split /\r\n\r\n/s, $resp, 2)[1]);
-            is $resp_body, "hello";
-            # check the request sent to nc
-            $req = do {local $/; <$reqfh>};
-            my $req_body = parse_chunked((split /\r\n\r\n/s, $req, 2)[1]);
-            is $req_body, 'helloworld';
-        };
+
+    # setup upstream that records all the input
+    open my $dummyfh, "|-", "exec nc -l 127.0.0.1 $upstream_port > $tempdir/req.txt"
+        or die "failed to launch nc:$!";
+    sleep 1;
+
+    # connect and send request, sending one byte every 100ms
+    my $sock = IO::Socket::INET->new(
+        PeerAddr => "127.0.0.1:$server->{port}",
+        Proto    => "tcp",
+    ) or die "connection failed:$!";
+    my $req = "POST / HTTP/1.1\r\nTransfer-encoding: chunked\r\n\r\n5\r\nhello\r\n5\r\nworld\r\n0\r\n\r\n";
+    for (0 .. length($req) - 1) {
+        syswrite($sock, substr($req, $_, 1)) == 1
+            or die "failed to send data:$!";
+        sleep 0.1;
     }
+    sleep 1;
+
+    # fetch all recorded input
+    $req = do {
+        open my $fh, "$tempdir/req.txt"
+            or die "failed to open $tempdir/req.txt:$!";
+        local $/;
+        <$fh>;
+    };
+    my ($req_headers, $req_body_chunked) = split /\r\n\r\n/s, $req, 2;
+    like $req_headers, qr{^POST / HTTP\/1\.1\r\n}s;
+    my $req_body = parse_chunked($req_body_chunked);
+    is $req_body, 'helloworld';
 };
 
 done_testing;
