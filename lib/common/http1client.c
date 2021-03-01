@@ -699,13 +699,8 @@ static void start_request(struct st_h2o_http1client_t *client, h2o_iovec_t metho
         }
         h2o_socket_write(client->sock, reqbufs, reqbufcnt, on_req_body_done);
     } else {
-        if (client->_is_chunked) {
-            assert(body.base != NULL);
-            size_t bytes;
-            assert(PTLS_ELEMENTSOF(reqbufs) - reqbufcnt >= 4); /* encode_chunk could write to 3 additional elements */
-            reqbufcnt += encode_chunk(client, reqbufs + reqbufcnt, body, 1, &bytes);
-            client->super.bytes_written.body = bytes;
-        } else if (body.base != NULL) {
+        assert(!client->_is_chunked);
+        if (body.len != 0) {
             reqbufs[reqbufcnt++] = body;
             client->super.bytes_written.body = body.len;
         }
