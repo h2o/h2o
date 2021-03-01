@@ -1743,16 +1743,15 @@ h2o_ebpf_map_value_t h2o_socket_ebpf_lookup(h2o_loop_t *loop, const h2o_ebpf_map
 
 int h2o_socket_ebpf_init_key_raw(struct st_h2o_ebpf_map_key_t *key, int sock_type, struct sockaddr *local, struct sockaddr *remote)
 {
-    h2o_fatal("unimplemented");
+    return 0;
 }
 
-int h2o_socket_ebpf_init_key(struct st_h2o_ebpf_map_key_t *key, void *sock)
+int h2o_socket_ebpf_init_key_from_sock(struct st_h2o_ebpf_map_key_t *key, h2o_socket_t *sock)
 {
-    h2o_fatal("unimplemented");
+    return 0;
 }
 
-h2o_ebpf_map_value_t h2o_socket_ebpf_lookup(h2o_loop_t *loop, int (*init_key)(struct st_h2o_ebpf_map_key_t *key, void *cbdata),
-                                            void *cbdata)
+h2o_ebpf_map_value_t h2o_socket_ebpf_lookup(h2o_loop_t *loop, const h2o_ebpf_map_key_t *key)
 {
     return (h2o_ebpf_map_value_t){0};
 }
