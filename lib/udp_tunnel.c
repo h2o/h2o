@@ -185,7 +185,10 @@ void tunnel_proceed_read(struct st_h2o_tunnel_t *_tunnel)
 h2o_tunnel_t *h2o_open_udp_tunnel_from_sa(h2o_loop_t *loop, struct sockaddr *addr, socklen_t len)
 {
     int fd;
-    if ((fd = socket(PF_INET, SOCK_DGRAM, 0)) == -1)
+
+    assert(addr->sa_family == AF_INET || addr->sa_family == AF_INET6);
+
+    if ((fd = socket(addr->sa_family, SOCK_DGRAM, 0)) == -1)
         return NULL;
 
     if (connect(fd, (void *)addr, len) != 0) {
