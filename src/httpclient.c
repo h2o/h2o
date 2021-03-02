@@ -53,6 +53,7 @@ static h2o_mem_pool_t pool;
 struct {
     const char *url;
     const char *method;
+    const char *authority;
     struct {
         h2o_iovec_t name;
         h2o_iovec_t value;
@@ -250,7 +251,6 @@ static void start_request(h2o_httpclient_ctx_t *ctx)
         on_error(ctx, "unrecognized type of URL: %s", req.url);
         return;
     }
-
     /* initiate the request */
     if (connpool == NULL) {
         connpool = h2o_mem_alloc(sizeof(*connpool));
@@ -424,6 +424,20 @@ h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *errstr, 
 
     *_method = h2o_iovec_init(req.method, strlen(req.method));
     *url = *(strcmp(req.method, "CONNECT") == 0 ? &req.connect_to : (h2o_url_t *)client->data);
+    if (req.authority) {
+        h2o_url_t *authority_url = h2o_mem_alloc_pool(&pool, *authority_url, 1);
+        const char *ret = h2o_url_parse_hostport(req.authority, strlen(req.authority), &authority_url->host, &authority_url->_port);
+        if (ret == NULL) {
+            on_error(client->ctx, "Malformed authority: %s", req.authority);
+            return NULL;
+        }
+        authority_url->authority = h2o_iovec_init(req.authority, strlen(req.authority));
+
+        url->host = authority_url->host;
+        url->_port = authority_url->_port;
+        url->authority = authority_url->authority;
+    }
+
     for (i = 0; i != req.num_headers; ++i)
         h2o_add_header_by_str(&pool, &headers_vec, req.headers[i].name.base, req.headers[i].name.len, 1, NULL,
                               req.headers[i].value.base, req.headers[i].value.len);
@@ -552,7 +566,7 @@ int main(int argc, char **argv)
     }
 #endif
 
-    const char *optstring = "t:m:o:b:x:C:c:d:H:i:k2:W:h3:"
+    const char *optstring = "t:m:o:b:x:C:c:d:H:i:k2:W:A:h3:"
 #ifdef __GNUC__
                             ":" /* for backward compatibility, optarg of -3 is optional when using glibc */
 #endif
@@ -564,6 +578,9 @@ int main(int argc, char **argv)
                 fprintf(stderr, "count (-t) must be a number greater than zero\n");
                 exit(EXIT_FAILURE);
             }
+            break;
+        case 'A':
+            req.authority = optarg;
             break;
         case 'm':
             req.method = optarg;
