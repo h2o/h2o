@@ -37,7 +37,7 @@ hosts:
 EOT
 
 # setup upstream server, populating it with response, but still open
-open my $up_resp, '|-', "exec nc -l 127.0.0.1 $up_port > $tempdir/up_req.txt"
+my $up_pid = open my $up_resp, '|-', "exec nc -l 127.0.0.1 $up_port > $tempdir/up_req.txt"
     or die "failed to launch nc:$!";
 $up_resp->autoflush(1);
 print $up_resp "HTTP/1.1 200 OK\r\nConnection: close\r\n\r\nhello";
@@ -64,6 +64,7 @@ for (my $cnt = 0;; ++$cnt) {
 }
 
 # kill nc
+kill 'KILL', $up_pid;
 undef $up_resp;
 
 subtest "request-received-upstream" => sub {
