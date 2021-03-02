@@ -677,7 +677,7 @@ int main(int argc, char **argv)
 #else
             uint16_t udp_port;
             int udp_port_end;
-            if (sscanf(optarg, "%" PRIu16 "%n", &udp_port, &udp_port_end) != 1 || optarg[udp_port_end] != ':') {
+            if (sscanf(optarg, "%" SCNu16 "%n", &udp_port, &udp_port_end) != 1 || optarg[udp_port_end] != ':') {
                 fprintf(stderr, "failed to parse optarg of -X\n");
                 exit(EXIT_FAILURE);
             }
