@@ -22,6 +22,7 @@
 
 import sys
 import json
+import getopt
 
 PACKET_LABELS = ["initial", "0rtt", "handshake", "1rtt"]
 
@@ -328,7 +329,10 @@ FRAME_EVENT_HANDLERS = {
 def usage():
     print(r"""
 Usage:
-    python qlog-adapter.py inTrace.jsonl
+    qlog-adapter.py inTrace.jsonl
+
+    -l Prints list of USDT probes to be used and exit
+    -h Prints this help and exit
 """.strip())
 
 def load_quicly_events(infile):
@@ -338,12 +342,29 @@ def load_quicly_events(infile):
             events.append(json.loads(line))
     return events
 
+def list_events():
+    for name in [
+        *sorted(QLOG_EVENT_HANDLERS.keys()),
+        *sorted(FRAME_EVENT_HANDLERS.keys()),
+    ]:
+        print(name)
+
 def main():
-    if len(sys.argv) != 2:
+    opts, args = getopt.getopt(sys.argv[1:], "hl")
+
+    for opt, arg in opts:
+        if opt == "-h":
+            usage()
+            sys.exit(0)
+        if opt == "-l":
+            list_events()
+            sys.exit(0)
+
+    if len(args) != 1:
         usage()
         sys.exit(1)
 
-    (_, infile) = sys.argv
+    (infile,) = args
     source_events = load_quicly_events(infile)
     print(json.dumps({
         "qlog_format": "NDJSON",
