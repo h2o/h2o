@@ -518,7 +518,7 @@ static void req_body_send_complete(h2o_socket_t *sock, const char *err)
 /**
  * Encodes data in `body_buf`, moving the contents to `body_buf_inflight`. `bufs` must have at least 4 elements of space.
  */
-static size_t encode_chunk(struct st_h2o_http1client_t *client, h2o_iovec_t *bufs, size_t *bytes)
+static size_t req_body_send_prepare(struct st_h2o_http1client_t *client, h2o_iovec_t *bufs, size_t *bytes)
 {
     size_t bufcnt = 0;
     *bytes = 0;
@@ -564,7 +564,7 @@ static void req_body_send(struct st_h2o_http1client_t *client)
         return;
 
     h2o_iovec_t bufs[4];
-    size_t bytes, bufcnt = encode_chunk(client, bufs, &bytes);
+    size_t bytes, bufcnt = req_body_send_prepare(client, bufs, &bytes);
 
     h2o_timer_unlink(&client->super._timeout);
 
@@ -692,7 +692,7 @@ static void start_request(struct st_h2o_http1client_t *client, h2o_iovec_t metho
     client->_is_chunked = *props->chunked;
     client->_method_is_head = h2o_memis(method.base, method.len, H2O_STRLIT("HEAD"));
 
-    assert(PTLS_ELEMENTSOF(reqbufs) - reqbufcnt >= 4); /* encode_chunk could write to 4 additional elements */
+    assert(PTLS_ELEMENTSOF(reqbufs) - reqbufcnt >= 4); /* req_body_send_prepare could write to 4 additional elements */
     if (client->proceed_req != NULL) {
         h2o_buffer_init(&client->body_buf.buf, &h2o_socket_buffer_prototype);
         if (body.len != 0 && !h2o_buffer_try_append(&client->body_buf.buf, body.base, body.len)) {
@@ -700,7 +700,7 @@ static void start_request(struct st_h2o_http1client_t *client, h2o_iovec_t metho
             return;
         }
         size_t bytes_written;
-        reqbufcnt += encode_chunk(client, reqbufs + reqbufcnt, &bytes_written);
+        reqbufcnt += req_body_send_prepare(client, reqbufs + reqbufcnt, &bytes_written);
         client->super.bytes_written.body = bytes_written;
         h2o_socket_write(client->sock, reqbufs, reqbufcnt, req_body_send_complete);
     } else {
