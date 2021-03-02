@@ -586,6 +586,8 @@ static int write_req(void *ctx, h2o_iovec_t chunk, int is_end_stream)
     struct rp_generator_t *self = ctx;
     h2o_httpclient_t *client = self->client;
 
+    assert(chunk.len != 0 || is_end_stream);
+
     if (client == NULL) {
         return -1;
     }
