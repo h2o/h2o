@@ -140,6 +140,7 @@ static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errs
     } else {
         assert(res->ai_socktype == SOCK_DGRAM);
         h2o_tunnel_t *tunnel = h2o_open_udp_tunnel_from_sa(creq->loop, res->ai_addr, res->ai_addrlen);
+        assert(tunnel != NULL);
         h2o_req_t *req = creq->src_req;
         uint64_t timeout = creq->handler->config.io_timeout;
         req->res.status = 200;
