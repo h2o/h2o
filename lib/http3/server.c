@@ -1204,7 +1204,7 @@ static void do_send(h2o_ostream_t *_ostr, h2o_req_t *_req, h2o_sendvec_t *bufs, 
 
     if (stream->state == H2O_HTTP3_SERVER_STREAM_STATE_SEND_HEADERS) {
         write_response(stream);
-        h2o_probe_log_response(&stream->req, stream->quic->stream_id, NULL);
+        h2o_probe_log_response(&stream->req, stream->quic->stream_id);
         set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_SEND_BODY);
     } else {
         assert(stream->state == H2O_HTTP3_SERVER_STREAM_STATE_SEND_BODY);

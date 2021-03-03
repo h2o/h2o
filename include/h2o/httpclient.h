@@ -33,7 +33,6 @@ extern "C" {
 #include "h2o/send_state.h"
 #include "h2o/socket.h"
 #include "h2o/socketpool.h"
-#include "h2o/tunnel.h"
 
 typedef struct st_h2o_httpclient_t h2o_httpclient_t;
 
@@ -69,7 +68,6 @@ typedef struct st_h2o_httpclient_on_head_t {
     h2o_header_t *headers;
     size_t num_headers;
     int header_requires_dup;
-    h2o_tunnel_t *tunnel;
 } h2o_httpclient_on_head_t;
 
 typedef void (*h2o_httpclient_proceed_req_cb)(h2o_httpclient_t *client, size_t written, h2o_send_state_t send_state);

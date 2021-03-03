@@ -999,7 +999,7 @@ void finalostream_send(h2o_ostream_t *_self, h2o_req_t *_req, h2o_sendvec_t *inb
             pullbuf_off = bufs[bufcnt].len;
         }
         ++bufcnt;
-        h2o_probe_log_response(&conn->req, conn->_req_index, NULL);
+        h2o_probe_log_response(&conn->req, conn->_req_index);
         conn->_ostr_final.state = OSTREAM_STATE_BODY;
     } else {
         if (conn->_ostr_final.pull_buf == NULL)

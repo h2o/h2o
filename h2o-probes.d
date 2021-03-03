@@ -20,8 +20,6 @@
  * IN THE SOFTWARE.
  */
 
-struct st_h2o_tunnel_t;
-
 provider h2o {
     /**
      * HTTP-level event, indicating that a request has been received.
@@ -35,7 +33,7 @@ provider h2o {
     /**
      * HTTP-level event, indicating that a response has been sent.
      */
-    probe send_response(uint64_t conn_id, uint64_t req_id, int status, struct st_h2o_tunnel_t *tunnel);
+    probe send_response(uint64_t conn_id, uint64_t req_id, int status);
     /**
      * HTTP-level event, indicating the response header fields being sent.
      */
@@ -85,18 +83,4 @@ provider h2o {
      * HTTP/3 event, indicating that a forwarded QUIC packet has been received.
      */
     probe h3_forwarded_packet_receive(struct sockaddr *dest, struct sockaddr *src, size_t num_bytes);
-
-    /**
-     * FIXME define probes for http3client, aligning the arguments of `h2o_tunnel_create`
-     */
-    probe h3c_tunnel_create(struct st_h2o_tunnel_t *tunnel);
-
-    probe tunnel_on_destroy(struct st_h2o_tunnel_t *tunnel);
-    probe tunnel_on_read(struct st_h2o_tunnel_t *tunnel, const char *err, const void *bytes, size_t bytes_len);
-    probe tunnel_proceed_read(struct st_h2o_tunnel_t *tunnel);
-    probe tunnel_write(struct st_h2o_tunnel_t *tunnel, const void *bytes, size_t bytes_len);
-    probe tunnel_on_write_complete(struct st_h2o_tunnel_t *tunnel, const char *err);
-
-    probe socket_tunnel_create(struct st_h2o_tunnel_t *tunnel);
-    probe socket_tunnel_start(struct st_h2o_tunnel_t *tunnel, size_t bytes_to_consume);
 };
