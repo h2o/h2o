@@ -102,6 +102,7 @@ struct st_h2o_http3client_req_t {
 static int handle_input_expect_data_frame(struct st_h2o_http3client_req_t *req, const uint8_t **src, const uint8_t *src_end,
                                           int err, const char **err_desc);
 static void start_request(struct st_h2o_http3client_req_t *req);
+static int do_write_req(h2o_httpclient_t *_client, h2o_iovec_t chunk, int is_end_stream);
 
 static size_t emit_data(struct st_h2o_http3client_req_t *req, h2o_iovec_t payload)
 {
@@ -659,8 +660,10 @@ void start_request(struct st_h2o_http3client_req_t *req)
     h2o_buffer_append(&req->sendbuf, headers_frame.base, headers_frame.len);
     if (body.len != 0) {
         emit_data(req, body);
-        if (req->proceed_req.cb != NULL)
+        if (req->proceed_req.cb != NULL) {
+            req->super.write_req = do_write_req;
             req->proceed_req.bytes_inflight = body.len;
+        }
     }
     if (req->proceed_req.cb == NULL && req->super.upgrade_to == NULL)
         quicly_sendstate_shutdown(&req->quic->sendstate, req->sendbuf->size);
@@ -703,7 +706,7 @@ static void do_update_window(h2o_httpclient_t *_client)
      */
 }
 
-static int do_write_req(h2o_httpclient_t *_client, h2o_iovec_t chunk, int is_end_stream)
+int do_write_req(h2o_httpclient_t *_client, h2o_iovec_t chunk, int is_end_stream)
 {
     struct st_h2o_http3client_req_t *req = (void *)_client;
 
@@ -752,8 +755,7 @@ void h2o_httpclient__connect_h3(h2o_httpclient_t **_client, h2o_mem_pool_t *pool
                   {0},
                   cancel_request,
                   do_get_conn_properties,
-                  do_update_window,
-                  do_write_req},
+                  do_update_window},
         .conn = conn,
         .proceed_req = {.cb = NULL, .bytes_inflight = SIZE_MAX},
     };
