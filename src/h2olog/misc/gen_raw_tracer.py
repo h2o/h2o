@@ -25,6 +25,7 @@
 import re
 import sys
 import warnings
+from typing import Optional
 from collections import OrderedDict
 from pathlib import Path
 from pprint import pprint
@@ -101,26 +102,138 @@ struct st_quicly_conn_t {
 };
 """
 
-re_flags = re.X | re.M | re.S
-whitespace = r'(?:/\*.*?\*/|\s+)'
-probe_decl = r'(?:\bprobe\s+(?:[a-zA-Z0-9_]+)\s*\([^\)]*\)\s*;)'
-d_decl = r'(?:\bprovider\s*(?P<provider>[a-zA-Z0-9_]+)\s*\{(?P<probes>(?:%s|%s)*)\})' % (
-    probe_decl, whitespace)
+re_xms = re.X | re.M | re.S
+comment = r'/\*.*?\*/'
+
+class Lexer:
+
+  def __init__(self, src):
+    self.src = src
+    self.pos = 0
+
+  def skip(self, pattern) -> bool:
+    m = re.match(pattern , self.src[self.pos:], re_xms)
+    if m:
+      self.pos += m.end()
+      return True
+    return False
+
+  def skip_whitespaces(self) -> bool:
+    return self.skip(r'\s+')
+
+  def skip_whitespaces_or_comments(self):
+    while self.skip_whitespaces() or self.skip(comment):
+      pass
+
+  def expect_opt(self, pattern) -> Optional[re.Match]:
+    m = re.match(pattern, self.src[self.pos:], re_xms)
+    if m:
+      self.pos += m.end()
+    return m
+
+  def expect(self, pattern) -> re.Match:
+    m = self.expect_opt(pattern)
+    if not m:
+      sys.exit("Expected '%s' but got '%s' at %s"
+        % (pattern, self.src[self.pos], self.line_and_column()))
+    return m
 
 
-def strip_c_comments(s):
-  return re.sub('//.*?\n|/\*.*?\*/', '', s, flags=re_flags)
+  def peek(self, pattern):
+    return re.match(pattern, self.src[self.pos:], re_xms)
 
+  def line_and_column(self):
+    lines = re.split(r'\n', self.src[:self.pos])
+    return "%d:%d" % (len(lines), len(lines[-1]))
+
+def parse_dscript(src):
+  lexer = Lexer(src)
+
+  provider = None # type: str | None
+  probes = OrderedDict()
+
+  prev_pos = -1
+  while prev_pos != lexer.pos:
+    prev_pos = lexer.pos
+
+    lexer.skip_whitespaces_or_comments()
+    if lexer.peek(r'provider\b'):
+      break
+    lexer.skip(r'\S+')
+
+  # a provider
+  m = lexer.expect(r'provider\s+(?P<provider>\w+)\s*\{')
+  provider = m.group("provider")
+
+  # list of probes
+  while True:
+    lexer.skip_whitespaces_or_comments()
+
+    m = lexer.expect_opt(r'probe\s+(?P<probe>\w+)\s*\(')
+    if m:
+      probe_name = m.group("probe")
+      probe = {
+        "name": probe_name,
+        "args": [],
+      }
+
+      probes[probe_name] = probe
+
+      # list of fields or parameters
+      while True:
+        lexer.skip_whitespaces()
+        annotation = None # type: str | None
+        m = lexer.expect_opt(comment)
+        if m:
+          m = re.search(r'(?P<annotation>@\w+)', m[0], re_xms)
+          if m:
+            annotation = m.group("annotation")
+
+        tokens = [] # type: list[str]
+        while True:
+          lexer.skip_whitespaces_or_comments()
+          m = lexer.expect_opt(r'\w+|\*')
+          if m:
+            tokens.append(m[0])
+          else:
+            break
+
+        name = tokens.pop()
+
+        arg = {
+          "name": name,
+          "type": " ".join(tokens),
+          "annotation": annotation,
+        }
+        probe["args"].append(arg)
+
+        lexer.skip_whitespaces_or_comments()
+        m = lexer.expect_opt(r',')
+        if not m:
+          break
+
+      lexer.skip_whitespaces_or_comments()
+      lexer.expect(r'\)')
+      lexer.skip_whitespaces_or_comments()
+      lexer.expect(r';')
+    else:
+      break
+
+  lexer.skip_whitespaces_or_comments()
+  lexer.expect(r'}')
+
+  return {
+    "provider": provider,
+    "probes": probes,
+  }
 
 def parse_d(context: dict, path: Path, block_probes: set = None):
-  content = strip_c_comments(path.read_text())
+  dscript = parse_dscript(path.read_text())
+  provider = dscript["provider"]
 
-  matched = re.search(d_decl, content, flags=re_flags)
-  provider = matched.group('provider')
   probe_metadata = context["probe_metadata"]
 
-  for (name, args) in re.findall(r'\bprobe\s+([a-zA-Z0-9_]+)\(([^\)]+)\);', matched.group('probes'), flags=re_flags):
-    arg_list = re.split(r'\s*,\s*', args, flags=re_flags)
+  for (name, probe) in dscript["probes"].items():
     id = ("H2OLOG_EVENT_ID_%s_%s" % (provider, name)).upper()
 
     fully_specified_probe_name = "%s:%s" % (provider, name)
@@ -131,13 +244,11 @@ def parse_d(context: dict, path: Path, block_probes: set = None):
         "id": id,
         "provider": provider,
         "name": name,
+        "args": probe["args"],
         "fully_specified_probe_name": fully_specified_probe_name,
     }
     probe_metadata[name] = metadata
-    args = metadata['args'] = list(map(
-        lambda arg: re.match(
-            r'(?P<type>\w[^;]*[^;\s])\s*\b(?P<name>[a-zA-Z0-9_]+)', arg, flags=re_flags).groupdict(),
-        arg_list))
+    args = metadata['args']
 
     flat_args_map = metadata['flat_args_map'] = OrderedDict()
 
@@ -154,9 +265,6 @@ def parse_d(context: dict, path: Path, block_probes: set = None):
           flat_args_map[arg_name] = arg_type
       else:
         flat_args_map[arg_name] = arg_type
-
-  context["id"] = id
-
 
 def strip_typename(t):
   return t.replace("*", "").replace("struct", "").replace("const", "").replace("strict", "").strip()
