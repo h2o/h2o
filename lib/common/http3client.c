@@ -153,15 +153,6 @@ static void close_stream(struct st_h2o_http3client_req_t *req, int err)
     detach_stream(req);
 }
 
-static int tunnel_egress_buffer_is_low(struct st_h2o_http3client_req_t *req, size_t sent_upto)
-{
-    if (!quicly_sendstate_is_open(&req->quic->sendstate))
-        return 0;
-
-    assert(sent_upto <= req->sendbuf->size);
-    return req->sendbuf->size - sent_upto < TUNNEL_MAX_UNSENT;
-}
-
 static struct st_h2o_httpclient__h3_conn_t *find_connection(h2o_httpclient_connection_pool_t *pool, h2o_url_t *origin)
 {
     int should_check_target = h2o_socketpool_is_global(pool->socketpool);
