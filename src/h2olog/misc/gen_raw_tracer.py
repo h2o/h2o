@@ -25,7 +25,7 @@
 import re
 import sys
 import warnings
-from typing import Optional
+from typing import Optional, Tuple
 from collections import OrderedDict
 from pathlib import Path
 from pprint import pprint
@@ -106,7 +106,7 @@ comment = r'/\*.*?\*/'
 
 class Lexer:
 
-  def __init__(self, src):
+  def __init__(self, src: str):
     self.src = src
     self.pos = 0
 
@@ -166,13 +166,30 @@ def parse_dscript(src):
 
   # list of probes
   while True:
-    lexer.skip_whitespaces_or_comments()
+    annotations = [] # type: list[Tuple[str, Optional[str]]]
+    while True:
+      lexer.skip_whitespaces()
+
+      m = lexer.expect_opt(comment)
+      if m and m[0].startswith("/**"):
+        l = Lexer(m[0])
+
+        while True:
+          l.skip(r'[^@]+')
+          m = l.expect_opt(r'(?P<name>@\w+)(?:\s+(?P<value>[^\n]+))?')
+          if m:
+            annotations.append((m.group("name"), m.group("value")))
+          else:
+            break
+      else:
+        break
 
     m = lexer.expect_opt(r'probe\s+(?P<probe>\w+)\s*\(')
     if m:
       probe_name = m.group("probe")
       probe = {
         "name": probe_name,
+        "annotations": annotations,
         "args": [],
       }
 
@@ -181,12 +198,6 @@ def parse_dscript(src):
       # list of fields or parameters
       while True:
         lexer.skip_whitespaces()
-        annotation = None # type: str | None
-        m = lexer.expect_opt(comment)
-        if m:
-          m = re.search(r'(?P<annotation>@\w+)', m[0], re_xms)
-          if m:
-            annotation = m.group("annotation")
 
         tokens = [] # type: list[str]
         while True:
@@ -202,7 +213,6 @@ def parse_dscript(src):
         arg = {
           "name": name,
           "type": " ".join(tokens),
-          "annotation": annotation,
         }
         probe["args"].append(arg)
 
@@ -254,6 +264,10 @@ def parse_d(context: dict, path: Path, block_probes: set = None):
     block_field_set.update(
       block_fields.get(fully_specified_probe_name, set())
     )
+    for (name, value) in probe["annotations"]:
+      if name == "@appdata" and value != None:
+        for probe_name in map(lambda s: s.strip(), value.split(r',')):
+          block_field_set.add(probe_name)
 
     flat_args_map = metadata['flat_args_map'] = OrderedDict()
 
@@ -270,9 +284,6 @@ def parse_d(context: dict, path: Path, block_probes: set = None):
           flat_args_map[arg_name] = arg_type
       else:
         flat_args_map[arg_name] = arg_type
-
-      if arg["annotation"] == "@appdata":
-        block_field_set.add(arg_name)
 
 def strip_typename(t):
   return t.replace("*", "").replace("struct", "").replace("const", "").replace("strict", "").strip()

@@ -75,8 +75,10 @@ provider h2o {
     probe h3_frame_receive(uint64_t frame_type, const void *bytes, size_t bytes_len);
     /**
      * HTTP/3 event, indicating that a QUIC packet has been received.
+     *
+     * @appdata bytes
      */
-    probe h3_packet_receive(struct sockaddr *dest, struct sockaddr *src, /* @appdata */ const void *bytes, size_t bytes_len);
+    probe h3_packet_receive(struct sockaddr *dest, struct sockaddr *src, const void *bytes, size_t bytes_len);
     /**
      * HTTP/3 event, indicating that a QUIC packet has been forwarded.
      */
