@@ -253,7 +253,7 @@ def parse_dscript(path: Path):
     "probes": probes,
   }
 
-def parse_d(context: dict, path: Path, block_probes: set = None):
+def parse_and_analyze(context: dict, path: Path, block_probes: set = None):
   dscript = parse_dscript(path)
   provider = dscript["provider"]
 
@@ -404,9 +404,9 @@ def prepare_context(h2o_dir):
       "probe_metadata": OrderedDict(),
       "h2o_dir": h2o_dir,
   }
-  parse_d(context, h2o_dir.joinpath(quicly_probes_d),
+  parse_and_analyze(context, h2o_dir.joinpath(quicly_probes_d),
           block_probes=block_probes)
-  parse_d(context, h2o_dir.joinpath(h2o_probes_d),
+  parse_and_analyze(context, h2o_dir.joinpath(h2o_probes_d),
           block_probes=block_probes)
 
   return context
