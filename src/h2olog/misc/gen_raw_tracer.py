@@ -118,8 +118,9 @@ comment = r'/\*.*?\*/'
 
 class Lexer:
 
-  def __init__(self, src: str):
+  def __init__(self, src: str, filename: Optional[str] = None):
     self.src = src
+    self.filename = filename
     self.pos = 0
 
   def skip(self, pattern) -> bool:
@@ -145,8 +146,12 @@ class Lexer:
   def expect(self, pattern) -> re.Match:
     m = self.expect_opt(pattern)
     if not m:
-      sys.exit("Expected '%s' but got '%s' at %s"
-        % (pattern, self.src[self.pos], self.line_and_column()))
+      if self.filename:
+        position = " at %s:%s" % (self.filename, self.line_and_column())
+      else:
+        position = ""
+      sys.exit("Expected '%s' but got '%s'%s"
+        % (pattern, self.src[self.pos], position))
     return m
 
 
@@ -157,8 +162,8 @@ class Lexer:
     lines = re.split(r'\n', self.src[:self.pos])
     return "%d:%d" % (len(lines), len(lines[-1]))
 
-def parse_dscript(src):
-  lexer = Lexer(src)
+def parse_dscript(path: Path):
+  lexer = Lexer(path.read_text(), path.name)
 
   provider = None # type: str | None
   probes = OrderedDict()
@@ -249,7 +254,7 @@ def parse_dscript(src):
   }
 
 def parse_d(context: dict, path: Path, block_probes: set = None):
-  dscript = parse_dscript(path.read_text())
+  dscript = parse_dscript(path)
   provider = dscript["provider"]
 
   probe_metadata = context["probe_metadata"]
