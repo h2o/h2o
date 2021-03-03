@@ -20,7 +20,19 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 # IN THE SOFTWARE.
 
-# usage: gen-quic-bpf.py h2o_dir output_file
+# gen_raw_tracer.py - Generate an h2olog tracer to emit USDT probes by parsing D script files.
+#
+# The gen_raw_tracer.py can parse @appdata annotations in D script files, for example:
+#
+# <code>
+# /**
+#  * @appdata payload1, payload2
+#  */
+# probe foo(const char *payload1, void *payload2, size_t payload2_len);
+# </code>
+#
+# In this case, `payload1` and `payload2` are annotated as `@appdata`,
+# which h2olog does not emit by default.
 
 import re
 import sys
