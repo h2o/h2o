@@ -62,14 +62,13 @@ struct_map = {
 }
 
 # A block list to list useless or secret data fields
+# TODO: replace this dict with /* @appdata */ annotations
 block_fields = {
     "quicly:crypto_decrypt": set(["decrypted"]),
     "quicly:crypto_update_secret": set(["secret"]),
     "quicly:crypto_send_key_update": set(["secret"]),
     "quicly:crypto_receive_key_update": set(["secret"]),
     "quicly:crypto_receive_key_update_prepare": set(["secret"]),
-
-    "h2o:h3_packet_receive": set(["bytes"]),
 }
 
 # The block list for probes.
@@ -246,9 +245,15 @@ def parse_d(context: dict, path: Path, block_probes: set = None):
         "name": name,
         "args": probe["args"],
         "fully_specified_probe_name": fully_specified_probe_name,
+        "block_field_set": set(),
     }
+    block_field_set = metadata["block_field_set"] # type: set[str]
     probe_metadata[name] = metadata
     args = metadata['args']
+
+    block_field_set.update(
+      block_fields.get(fully_specified_probe_name, set())
+    )
 
     flat_args_map = metadata['flat_args_map'] = OrderedDict()
 
@@ -265,6 +270,9 @@ def parse_d(context: dict, path: Path, block_probes: set = None):
           flat_args_map[arg_name] = arg_type
       else:
         flat_args_map[arg_name] = arg_type
+
+      if arg["annotation"] == "@appdata":
+        block_field_set.add(arg_name)
 
 def strip_typename(t):
   return t.replace("*", "").replace("struct", "").replace("const", "").replace("strict", "").strip()
@@ -299,7 +307,7 @@ int %s(struct pt_regs *ctx) {
   struct h2olog_event_t event = { .id = %s };
 
 """ % (fully_specified_probe_name, tracer_name, metadata['id'])
-  block_field_set = block_fields.get(fully_specified_probe_name, set())
+  block_field_set = metadata["block_field_set"] # type: set[str]
   probe_name = metadata["name"]
 
   args = metadata['args']
@@ -464,13 +472,13 @@ struct h2olog_event_t {
 
   for name, metadata in probe_metadata.items():
     fully_specified_probe_name = metadata["fully_specified_probe_name"]
-    block_field_set = block_fields.get(fully_specified_probe_name, None)
+    block_field_set = metadata["block_field_set"] # type: set[str]
 
     event_id_t_decl += "  %s,\n" % metadata["id"]
 
     event_t_decl += "    struct { // %s\n" % fully_specified_probe_name
     for field_name, field_type in metadata["flat_args_map"].items():
-      if block_field_set and field_name in block_field_set:
+      if field_name in block_field_set:
         continue
 
       if fully_specified_probe_name == "quicly:receive" and field_name == "bytes":
@@ -557,8 +565,7 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
   for probe_name in probe_metadata:
     metadata = probe_metadata[probe_name]
     fully_specified_probe_name = metadata["fully_specified_probe_name"]
-
-    block_field_set = block_fields.get(fully_specified_probe_name, None)
+    block_field_set = metadata["block_field_set"] # type: set[str]
     flat_args_map = metadata["flat_args_map"]
 
     handle_event_func += "  case %s: { // %s\n" % (
@@ -567,7 +574,7 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
     handle_event_func += '    json_write_pair_c(out_, STR_LIT("seq"), seq_);\n'
 
     for field_name, field_type in flat_args_map.items():
-      if block_field_set and field_name in block_field_set:
+      if field_name in block_field_set:
         continue
       json_field_name = rename_map.get(field_name, field_name).replace("_", "-")
       event_t_name = "%s.%s" % (probe_name, field_name)
