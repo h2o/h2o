@@ -834,6 +834,13 @@ void h2o_send_informational(h2o_req_t *req)
     if (req->_ostr_top->send_informational == NULL)
         goto Clear;
 
+    size_t index;
+    if ((index = h2o_find_header(&req->headers, H2O_TOKEN_NO_EARLY_HINTS, -1)) != -1) {
+        h2o_iovec_t value = req->headers.entries[index].value;
+        if (value.len == 1 && value.base[0] == '1')
+            goto Clear;
+    }
+
     int i = 0;
     for (i = 0; i != req->num_filters; ++i) {
         h2o_filter_t *filter = req->filters[i];

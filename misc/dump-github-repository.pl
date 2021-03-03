@@ -29,7 +29,18 @@ mkdir("$dest")
     or $! == Errno::EEXIST or die "failed to (re)create directory:$dest:$!";
 run("curl --silent --show-error --location $repo/archive/$commit.tar.gz | (cd $dest && tar x --strip-components $strip_components -zf - $tar_path)") == 0
     or die "failed to extract $repo/archive/$commit.tar.gz to $dest";
-run("git add -f `find $rm_path -type f`") == 0
+if ($path eq '') {
+    # relink deps/*
+    for my $dep (glob "deps/*") {
+        if (-d "$dest/$dep") {
+            run("rmdir $dest/$dep") == 0
+                or die "failed to rmdir $dest/$dep:$!";
+            run("ln -s ../../../$dep $dest/$dep") == 0
+                or die "failed to symlink ../../$dep to $dest/$dep:$!";
+        }
+    }
+}
+run("git add -f `find $rm_path -type f -or -type l`") == 0
     or die "failed to add files under $dest";
 run("git commit --allow-empty -m 'extract $repo @ $commit @{[defined $path ? qq{($path)} : '']} at $dest' $dest") == 0
     or die "failed to commit";
