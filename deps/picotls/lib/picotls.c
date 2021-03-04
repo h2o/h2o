@@ -83,6 +83,7 @@
 #ifndef PTLS_MAX_EARLY_DATA_SKIP_SIZE
 #define PTLS_MAX_EARLY_DATA_SKIP_SIZE 65536
 #endif
+#define PTLS_DEBUG 1
 #if defined(PTLS_DEBUG) && PTLS_DEBUG
 #define PTLS_DEBUGF(...) fprintf(stderr, __VA_ARGS__)
 #else
@@ -1226,8 +1227,8 @@ static int setup_traffic_protection(ptls_t *tls, int is_enc, const char *secret_
 
     log_secret(tls, log_labels[ptls_is_server(tls) == is_enc][epoch],
                ptls_iovec_init(ctx->secret, tls->key_schedule->hashes[0].algo->digest_size));
-    PTLS_DEBUGF("[%s] %02x%02x,%02x%02x\n", log_labels[ptls_is_server(tls)][epoch], (unsigned)ctx->secret[0],
-                (unsigned)ctx->secret[1], (unsigned)ctx->aead->static_iv[0], (unsigned)ctx->aead->static_iv[1]);
+    //PTLS_DEBUGF("[%s] %02x%02x,%02x%02x\n", log_labels[ptls_is_server(tls)][epoch], (unsigned)ctx->secret[0],
+    //            (unsigned)ctx->secret[1], (unsigned)ctx->aead->static_iv[0], (unsigned)ctx->aead->static_iv[1]);
 
     return 0;
 }
@@ -4825,7 +4826,8 @@ int ptls_handshake(ptls_t *tls, ptls_buffer_t *_sendbuf, const void *input, size
     struct st_ptls_record_message_emitter_t emitter;
     int ret;
 
-    assert(tls->state < PTLS_STATE_POST_HANDSHAKE_MIN);
+    //assert(tls->state < PTLS_STATE_POST_HANDSHAKE_MIN);
+    PTLS_DEBUGF("%s: tls->state:%u\n", __FUNCTION__, tls->state);
 
     init_record_message_emitter(tls, &emitter, _sendbuf);
     size_t sendbuf_orig_off = emitter.super.buf->off;

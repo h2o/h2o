@@ -645,6 +645,8 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
     X509 *cert;
     STACK_OF(X509) * cert_chain;
     int ret;
+    int verify_mode = 0;
+    static ptls_openssl_verify_certificate_t vc;
 
     *pctx = (struct st_fat_context_t){
         .ctx =
@@ -699,7 +701,19 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
         key = SSL_get_privatekey(fakeconn);
         assert(key != NULL);
         cert = SSL_get_certificate(fakeconn);
+        /* obtain peer verify mode */
+        verify_mode = (SSL_get_verify_mode(fakeconn) & SSL_VERIFY_PEER)? 1 : 0;
         SSL_free(fakeconn);
+    }
+
+    if (verify_mode == 1) {
+        pctx->ctx.require_client_authentication = 1;
+        /* log the flag */
+        fprintf(stderr, "client cert verification is Enabled.\n");
+        /* set verify callback */
+        X509_STORE *ca_store = SSL_CTX_get_cert_store(ssl_ctx);
+        ptls_openssl_init_verify_certificate(&vc, ca_store);
+        pctx->ctx.verify_certificate = &vc.super;
     }
 
     /* create signer */
