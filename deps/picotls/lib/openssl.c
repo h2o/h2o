@@ -1121,7 +1121,6 @@ static int verify_cert_chain(X509_STORE *store, X509 *cert, STACK_OF(X509) * cha
     int ret;
 
     fprintf(stderr, "verify_cert_chain:%d\n", is_server);
-
     //assert(server_name != NULL && "ptls_set_server_name MUST be called");
 
     /* verify certificate chain */
@@ -1163,6 +1162,10 @@ static int verify_cert_chain(X509_STORE *store, X509 *cert, STACK_OF(X509) * cha
         goto Exit;
     }
 
+    fprintf(stderr, "verify_cert_chain: server_name=%s\n", server_name);
+
+/* TODO: This is a hack. Different business logic to verify CN and/or others for client certificate. */
+#if 0
 #ifdef X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS
     /* verify CN */
     if (server_name != NULL) {
@@ -1183,12 +1186,13 @@ static int verify_cert_chain(X509_STORE *store, X509 *cert, STACK_OF(X509) * cha
 #else
 #warning "hostname validation is disabled; OpenSSL >= 1.0.2 or LibreSSL >= 2.5.0 is required"
 #endif
-
+#endif
     ret = 0;
 
 Exit:
     if (verify_ctx != NULL)
         X509_STORE_CTX_free(verify_ctx);
+    fprintf(stderr, "verify_cert_chain: ret=%d\n", ret);
     return ret;
 }
 
@@ -1235,7 +1239,8 @@ Exit:
         sk_X509_pop_free(chain, X509_free);
     if (cert != NULL)
         X509_free(cert);
-    return ret;
+    fprintf(stderr, "verify_cert: ret=%d\n", ret);
+   return ret;
 }
 
 static void cleanup_cipher_ctx(EVP_CIPHER_CTX *ctx)
