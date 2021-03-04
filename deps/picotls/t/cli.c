@@ -422,7 +422,7 @@ int main(int argc, char **argv)
     int family = 0;
     const char *raw_pub_key_file = NULL, *cert_location = NULL;
 
-    while ((ch = getopt(argc, argv, "46abBC:c:i:Ik:nN:es:Sr:E:K:l:y:vh")) != -1) {
+    while ((ch = getopt(argc, argv, "46abBC:c:i:Ik:nN:es:Sr:E:K:l:y:v:h")) != -1) {
         switch (ch) {
         case '4':
             family = AF_INET;
@@ -503,7 +503,7 @@ int main(int argc, char **argv)
             setup_log_event(&ctx, optarg);
             break;
         case 'v':
-            setup_verify_certificate(&ctx);
+            setup_verify_certificate(&ctx, optarg);
             break;
         case 'N': {
             ptls_key_exchange_algorithm_t *algo = NULL;
