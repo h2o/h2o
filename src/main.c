@@ -2581,16 +2581,16 @@ static void *run_loop(void *_thread_index)
         CPU_SET(conf.thread_map.entries[thread_index], &cpu_set);
         if (pthread_setaffinity_np(pthread_self(), sizeof(cpu_set), &cpu_set) != 0) {
 #else
-	int r;
-	cpuset_t *cpu_set = cpuset_create();
-	if (!cpu_set) {
+        int r;
+        cpuset_t *cpu_set = cpuset_create();
+        if (!cpu_set) {
             h2o_fatal("internal error; thread pinning failed at creation");
-	}
-	cpuset_zero(cpu_set);
-	cpuset_set(conf.thread_map.entries[thread_index], cpu_set);
-	r = pthread_setaffinity_np(pthread_self(), cpuset_size(cpu_set), cpu_set);
-	cpuset_destroy(cpu_set);
-	if (r != 0) {
+        }
+        cpuset_zero(cpu_set);
+        cpuset_set(conf.thread_map.entries[thread_index], cpu_set);
+        r = pthread_setaffinity_np(pthread_self(), cpuset_size(cpu_set), cpu_set);
+        cpuset_destroy(cpu_set);
+        if (r != 0) {
 #endif
             static int once;
             if (__sync_fetch_and_add(&once, 1) == 0) {
