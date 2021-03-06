@@ -658,12 +658,12 @@ void start_request(struct st_h2o_http3client_req_t *req)
     h2o_iovec_t headers_frame = h2o_qpack_flatten_request(req->conn->super.qpack.enc, req->super.pool, req->quic->stream_id, NULL,
                                                           method, url.scheme, url.authority, url.path, headers, num_headers);
     h2o_buffer_append(&req->sendbuf, headers_frame.base, headers_frame.len);
-    if (body.len != 0) {
+    if (body.len != 0)
         emit_data(req, body);
-        if (req->proceed_req.cb != NULL) {
-            req->super.write_req = do_write_req;
+    if (req->proceed_req.cb != NULL) {
+        req->super.write_req = do_write_req;
+        if (body.len != 0)
             req->proceed_req.bytes_inflight = body.len;
-        }
     }
     if (req->proceed_req.cb == NULL && req->super.upgrade_to == NULL)
         quicly_sendstate_shutdown(&req->quic->sendstate, req->sendbuf->size);
