@@ -326,6 +326,7 @@ static void filler_on_io_timeout(h2o_timer_t *entry)
     h2o_iovec_t vec = iov_filler;
     if (vec.len > req.filler_remaining_bytes)
         vec.len = req.filler_remaining_bytes;
+    req.filler_remaining_bytes -= vec.len;
     client->write_req(client, vec, req.filler_remaining_bytes == 0);
 }
 
