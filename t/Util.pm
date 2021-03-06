@@ -3,7 +3,7 @@ package t::Util;
 use strict;
 use warnings;
 use Digest::MD5 qw(md5_hex);
-use File::Temp qw(tempfile);
+use File::Temp qw(tempfile tempdir);
 use IO::Socket::INET;
 use IO::Socket::SSL;
 use IO::Poll qw(POLLIN POLLOUT POLLHUP POLLERR);
@@ -15,9 +15,39 @@ use Protocol::HTTP2::Constants;
 use Scope::Guard qw(scope_guard);
 use Test::More;
 use Time::HiRes qw(sleep gettimeofday tv_interval);
+use Carp;
 
 use base qw(Exporter);
-our @EXPORT = qw(ASSETS_DIR DOC_ROOT bindir run_as_root server_features exec_unittest exec_mruby_unittest spawn_server spawn_h2o spawn_h2o_raw empty_ports create_data_file md5_file prog_exists run_prog openssl_can_negotiate curl_supports_http2 run_with_curl h2get_exists run_with_h2get run_with_h2get_simple one_shot_http_upstream wait_debugger spawn_forked spawn_h2_server find_blackhole_ip get_tracer check_dtrace_availability);
+our @EXPORT = qw(
+    ASSETS_DIR
+    DOC_ROOT
+    bindir
+    run_as_root
+    server_features
+    exec_unittest
+    exec_mruby_unittest
+    spawn_server
+    spawn_h2o
+    spawn_h2o_raw
+    empty_ports
+    create_data_file
+    md5_file
+    prog_exists
+    run_prog
+    openssl_can_negotiate
+    curl_supports_http2
+    run_with_curl
+    h2get_exists
+    run_with_h2get
+    run_with_h2get_simple
+    one_shot_http_upstream
+    wait_debugger
+    spawn_forked
+    spawn_h2_server
+    find_blackhole_ip
+    get_tracer
+    check_dtrace_availability
+);
 
 use constant ASSETS_DIR => 't/assets';
 use constant DOC_ROOT   => ASSETS_DIR . "/doc_root";
@@ -523,6 +553,67 @@ sub spawn_h2_server {
 
     close $upstream;
     return $server;
+}
+
+# usage: see t/90h2olog.t
+package H2ologTracer {
+    use POSIX ":sys_wait_h";
+
+    sub new {
+        my ($class, $opts) = @_;
+        my $h2o_pid = $opts->{pid} or Carp::croak("Missing pid in the opts");
+        my $h2olog_args = $opts->{args} // [];
+        my $h2olog_prog = t::Util::bindir() . "/h2olog";
+
+        my $tempdir = File::Temp::tempdir(CLEANUP => 1);
+        my $output_file = "$tempdir/h2olog.jsonl";
+
+        my $tracer_pid = open my($errfh), "-|", qq{exec $h2olog_prog @{$h2olog_args} -d -p $h2o_pid -w '$output_file' 2>&1};
+        die "failed to spawn $h2olog_prog: $!" unless defined $tracer_pid;
+
+        # wait until h2olog and the trace log becomes ready
+        my $stderr_firstline = <$errfh>;
+        if (not defined $stderr_firstline) {
+            Carp::confess("h2olog[$tracer_pid] died unexpectedly");
+        }
+        Test::More::diag("h2olog[$tracer_pid]: $stderr_firstline");
+
+        open my $fh, "<", $output_file or die "h2olog[$tracer_pid] does not create the output file ($output_file): $!";
+        my $off = 0;
+        my $get_trace = sub {
+            Carp::confess "h2olog[$tracer_pid] is down (got $?)"
+                if waitpid($tracer_pid, WNOHANG) != 0;
+
+            seek $fh, $off, 0 or die "seek failed: $!";
+            read $fh, my $bytes, 65000;
+            $bytes = ''
+                unless defined $bytes;
+            $off += length $bytes;
+            return $bytes;
+        };
+
+        my $guard = Scope::Guard->new(sub {
+            if (waitpid($tracer_pid, WNOHANG) == 0) {
+                Test::More::diag "killing h2olog[$tracer_pid] with SIGTERM";
+                kill("TERM", $tracer_pid)
+                    or warn("failed to kill h2olog[$tracer_pid]: $!");
+            } else {
+                Test::More::diag($_) while <$errfh>; # in case h2olog shows error messages, e.g. BPF program doesn't compile
+                Test::More::diag "h2olog[$tracer_pid] has already exited";
+            }
+        });
+
+        return bless {
+            _guard => $guard,
+            tracer_pid => $tracer_pid,
+            get_trace => $get_trace,
+        }, $class;
+    }
+
+    sub get_trace {
+        my($self) = @_;
+        return $self->{get_trace}->();
+    }
 }
 
 sub find_blackhole_ip {

@@ -57,6 +57,7 @@ subtest 'middleware' => sub {
         my ($port, $tls_port) = empty_ports(2, { host => "0.0.0.0" });
         my $empty_port = empty_port();
         my $server = spawn_h2o_raw(<<"EOT", [$port, $tls_port]);
+num-threads: 1
 hosts:
   "127.0.0.1:$port":
     paths: &paths
