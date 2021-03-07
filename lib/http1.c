@@ -650,6 +650,8 @@ static void handle_incoming_request(struct st_h2o_http1_conn_t *conn)
             }
             if (create_content_length_entity_reader(conn, SIZE_MAX) != 0)
                 return;
+            conn->_unconsumed_request_size = 0;
+            h2o_buffer_consume(&conn->sock->input, reqlen);
             h2o_buffer_init(&conn->req_body, &h2o_socket_buffer_prototype);
             conn->req.write_req.cb = write_req_streaming_pre_dispatch;
             conn->req.write_req.ctx = &conn->req;
