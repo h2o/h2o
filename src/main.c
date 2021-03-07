@@ -57,6 +57,11 @@
 #include <quicly.h>
 
 #endif
+#ifdef H2O_HAS_THREAD_POLICY_SET
+#include <mach/mach_init.h>
+#include <mach/thread_act.h>
+#include <mach/thread_policy.h>
+#endif
 #include "picotls.h"
 #include "picotls/certificate_compression.h"
 #include "picotls/minicrypto.h"
@@ -1830,7 +1835,7 @@ static int on_config_num_threads(h2o_configurator_command_t *cmd, h2o_configurat
             conf.thread_map.entries[conf.thread_map.size++] = -1;
     } else if (node->type == YOML_TYPE_SEQUENCE) {
         /* a sequence is treated as a list of CPUs to bind to, one per thread to instantiate */
-#ifdef H2O_HAS_PTHREAD_SETAFFINITY_NP
+#if defined(H2O_HAS_PTHREAD_SETAFFINITY_NP) || defined(H2O_HAS_THREAD_POLICY_SET)
         size_t i;
         for (i = 0; i < node->data.sequence.size; i++) {
             if (on_config_num_threads_add_cpu(cmd, ctx, node->data.sequence.elements[i]) != 0)
@@ -2670,7 +2675,7 @@ static void *run_loop(void *_thread_index)
                                       h2o_memcached_receiver);
 
     if (conf.thread_map.entries[thread_index] >= 0) {
-#ifdef H2O_HAS_PTHREAD_SETAFFINITY_NP
+#if defined(H2O_HAS_PTHREAD_SETAFFINITY_NP)
 #ifndef __NetBSD__
         cpu_set_t cpu_set;
         CPU_ZERO(&cpu_set);
@@ -2693,6 +2698,15 @@ static void *run_loop(void *_thread_index)
                 fprintf(stderr, "[warning] failed to set bind to CPU:%d\n", conf.thread_map.entries[thread_index]);
             }
         }
+#elif defined(H2O_HAS_THREAD_POLICY_SET)
+	thread_affinity_policy_data_t cpu_set = {conf.thread_map.entries[thread_index]};
+	if (thread_policy_set(mach_thread_self(), THREAD_AFFINITY_POLICY,
+		(thread_policy_t)&cpu_set, THREAD_AFFINITY_POLICY_COUNT) != KERN_SUCCESS) {
+            static int once;
+            if (__sync_fetch_and_add(&once, 1) == 0) {
+                fprintf(stderr, "[warning] failed to set bind to CPU:%d\n", conf.thread_map.entries[thread_index]);
+            }
+	}
 #else
         h2o_fatal("internal error; thread pinning not available even though specified");
 #endif
