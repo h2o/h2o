@@ -55,7 +55,6 @@ struct {
     } headers[256];
     size_t num_headers;
     size_t body_size;
-    size_t filler_remaining_bytes;
     h2o_url_t connect_to; /* when CONNECT method is used, req.url specifies the address of the connect proxy, and this field
                              specifies the address of the server to which a TCP connection should be established */
 } req = {NULL, "GET"};
@@ -317,6 +316,11 @@ h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, h2o
     return on_body;
 }
 
+static size_t *filler_remaining_bytes(h2o_httpclient_t *client)
+{
+    return (size_t *)&client->data;
+}
+
 static void filler_on_io_timeout(h2o_timer_t *entry)
 {
     struct st_timeout *t = H2O_STRUCT_FROM_MEMBER(struct st_timeout, timeout, entry);
@@ -324,15 +328,15 @@ static void filler_on_io_timeout(h2o_timer_t *entry)
     free(t);
 
     h2o_iovec_t vec = iov_filler;
-    if (vec.len > req.filler_remaining_bytes)
-        vec.len = req.filler_remaining_bytes;
-    req.filler_remaining_bytes -= vec.len;
-    client->write_req(client, vec, req.filler_remaining_bytes == 0);
+    if (vec.len > *filler_remaining_bytes(client))
+        vec.len = *filler_remaining_bytes(client);
+    *filler_remaining_bytes(client) -= vec.len;
+    client->write_req(client, vec, *filler_remaining_bytes(client) == 0);
 }
 
 static void filler_proceed_request(h2o_httpclient_t *client, size_t written, h2o_send_state_t send_state)
 {
-    if (req.filler_remaining_bytes > 0)
+    if (*filler_remaining_bytes(client) > 0)
         create_timeout(client->ctx->loop, io_interval, filler_on_io_timeout, client);
 }
 
@@ -367,7 +371,7 @@ h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *errstr, 
             h2o_buffer_consume(&std_in->input, body->len);
         }
     } else if (req.body_size > 0) {
-        req.filler_remaining_bytes = req.body_size;
+        *filler_remaining_bytes(client) = req.body_size;
         char *clbuf = h2o_mem_alloc_pool(&pool, char, sizeof(H2O_UINT32_LONGEST_STR) - 1);
         size_t clbuf_len = sprintf(clbuf, "%zu", req.body_size);
         h2o_add_header(&pool, &headers_vec, H2O_TOKEN_CONTENT_LENGTH, NULL, clbuf, clbuf_len);
