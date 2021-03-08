@@ -191,20 +191,6 @@ static void clear_timeouts(struct st_h2o_http1_conn_t *conn)
     set_req_io_timeout(conn, 0, NULL);
 }
 
-static void process_request(struct st_h2o_http1_conn_t *conn)
-{
-    if (conn->sock->ssl == NULL && conn->req.upgrade.base != NULL && conn->super.ctx->globalconf->http1.upgrade_to_http2 &&
-        conn->req.upgrade.len >= 3 && h2o_lcstris(conn->req.upgrade.base, 3, H2O_STRLIT("h2c")) &&
-        (conn->req.upgrade.len == 3 ||
-         (conn->req.upgrade.len == 6 && (memcmp(conn->req.upgrade.base + 3, H2O_STRLIT("-14")) == 0 ||
-                                         memcmp(conn->req.upgrade.base + 3, H2O_STRLIT("-16")) == 0)))) {
-        if (h2o_http2_handle_upgrade(&conn->req, conn->super.connected_at) == 0) {
-            return;
-        }
-    }
-    h2o_process_request(&conn->req);
-}
-
 static void entity_read_do_send_error(struct st_h2o_http1_conn_t *conn, int status, size_t status_error_index, const char *reason,
                                       const char *body)
 {
@@ -415,6 +401,7 @@ static const char *fixup_request(struct st_h2o_http1_conn_t *conn, struct phr_he
                                  int minor_version, h2o_iovec_t *expect, ssize_t *entity_header_index)
 {
     h2o_iovec_t connection = {NULL, 0}, host = {NULL, 0}, upgrade = {NULL, 0};
+    int is_connect = h2o_memis(conn->req.input.method.base, conn->req.input.method.len, H2O_STRLIT("CONNECT"));
     const char *ret;
 
     expect->base = NULL;
@@ -423,9 +410,12 @@ static const char *fixup_request(struct st_h2o_http1_conn_t *conn, struct phr_he
     conn->req.input.scheme = conn->sock->ssl != NULL ? &H2O_URL_SCHEME_HTTPS : &H2O_URL_SCHEME_HTTP;
     conn->req.version = 0x100 | (minor_version != 0);
 
-    /* RFC 7231 6.2: a server MUST NOT send a 1xx response to an HTTP/1.0 client */
-    if (conn->req.version < 0x101)
-        conn->_ostr_final.super.send_informational = NULL;
+    /* special handling for HTTP/1.0 */
+    if (conn->req.version < 0x101) {
+        conn->_ostr_final.super.send_informational = NULL; /* RFC 7231 6.2: MUST NOT send a 1xx response to an HTTP/1.0 client */
+        if (is_connect)
+            return "CONNECT cannot be used on HTTP/1.0";
+    }
 
     /* init headers */
     if ((ret = init_headers(&conn->req.pool, &conn->req.headers, headers, num_headers, &connection, &host, &upgrade, expect,
@@ -433,7 +423,7 @@ static const char *fixup_request(struct st_h2o_http1_conn_t *conn, struct phr_he
         return ret;
 
     /* copy the values to pool, since the buffer pointed by the headers may get realloced */
-    if (*entity_header_index != -1) {
+    if (*entity_header_index != -1 || is_connect || upgrade.base != NULL) {
         size_t i;
         conn->req.input.method = h2o_strdup(&conn->req.pool, conn->req.input.method.base, conn->req.input.method.len);
         conn->req.input.path = h2o_strdup(&conn->req.pool, conn->req.input.path.base, conn->req.input.path.len);
@@ -450,7 +440,7 @@ static const char *fixup_request(struct st_h2o_http1_conn_t *conn, struct phr_he
             upgrade = h2o_strdup(&conn->req.pool, upgrade.base, upgrade.len);
     }
 
-    if (h2o_memis(conn->req.input.method.base, conn->req.input.method.len, H2O_STRLIT("CONNECT"))) {
+    if (is_connect) {
         /* CONNECT method, validate, setting the target host in `req->input.authority`. Path becomes empty. */
         if (conn->req.input.path.len == 0 ||
             (host.base != NULL && !h2o_memis(conn->req.input.path.base, conn->req.input.path.len, host.base, host.len)))
@@ -587,6 +577,22 @@ static int write_req_first(void *_req, h2o_iovec_t payload, int is_end_stream)
     return write_req_non_streaming(&conn->req, payload, is_end_stream);
 }
 
+static int is_h2_upgrade_request(struct st_h2o_http1_conn_t *conn)
+{
+    if (conn->req.upgrade.base == NULL)
+        return 0;
+    if (conn->sock->ssl != NULL)
+        return 0;
+    if (!conn->super.ctx->globalconf->http1.upgrade_to_http2)
+        return 0;
+    if (conn->req.upgrade.len >= 3 && h2o_lcstris(conn->req.upgrade.base, 3, H2O_STRLIT("h2c")) &&
+        (conn->req.upgrade.len == 3 ||
+         (conn->req.upgrade.len == 6 && (memcmp(conn->req.upgrade.base + 3, H2O_STRLIT("-14")) == 0 ||
+                                         memcmp(conn->req.upgrade.base + 3, H2O_STRLIT("-16")) == 0))))
+        return 1;
+    return 0;
+}
+
 static void handle_incoming_request(struct st_h2o_http1_conn_t *conn)
 {
     size_t inreqlen = conn->sock->input->size < H2O_MAX_REQLEN ? conn->sock->input->size : H2O_MAX_REQLEN;
@@ -616,6 +622,7 @@ static void handle_incoming_request(struct st_h2o_http1_conn_t *conn)
         }
         h2o_probe_log_request(&conn->req, conn->_req_index);
         if (entity_body_header_index != -1) {
+            /* Request has body, start reading it. Invocation of `h2o_process_request` is delayed to reduce backend concurrency. */
             conn->req.timestamps.request_body_begin_at = h2o_gettimeofday(conn->super.ctx->loop);
             if (expect.base != NULL) {
                 if (!h2o_lcstris(expect.base, expect.len, H2O_STRLIT("100-continue"))) {
@@ -642,10 +649,19 @@ static void handle_incoming_request(struct st_h2o_http1_conn_t *conn)
                 return;
             }
             conn->_req_entity_reader->handle_incoming_entity(conn);
-        } else if (conn->req.is_tunnel_req) {
+        } else if (is_h2_upgrade_request(conn)) {
+            /* Upgrade to H2. Stop reading from the socket, then process the upgrade request. */
             clear_timeouts(conn);
-            /* tunnelling is can be used only with handlers that support request streaming */
-            if (conn->req.upgrade.base == NULL && !h2o_req_can_stream_request(&conn->req)) {
+            h2o_socket_read_stop(conn->sock);
+            if (h2o_http2_handle_upgrade(&conn->req, conn->super.connected_at) != 0)
+                h2o_send_error_400(&conn->req, "Invalid Request", "Broken upgrade request to HTTP/2", 0);
+        } else if (conn->req.is_tunnel_req) {
+            /* Is a CONNECT request or a upgrade that uses our stream API (e.g., websocket tunnelling), therefore:
+             * * the request is submitted immediately for processing,
+             * * input is read and provided to the request handler using the request streaming API,
+             * * but the timeout is stopped as the client might wait for the server to send 200 before sending anything. */
+            clear_timeouts(conn);
+            if (!h2o_req_can_stream_request(&conn->req)) {
                 h2o_send_error_405(&conn->req, "Method Not Allowed", "Method Not Allowed", 0);
                 return;
             }
@@ -658,11 +674,12 @@ static void handle_incoming_request(struct st_h2o_http1_conn_t *conn)
             conn->req.write_req.ctx = &conn->req;
             conn->req.proceed_req = proceed_request;
             conn->req.entity = h2o_iovec_init("", 0); /* set to non-NULL pointer to indicate that request body exists */
-            process_request(conn);
+            h2o_process_request(&conn->req);
         } else {
+            /* Ordinary request without request body. */
             clear_timeouts(conn);
             h2o_socket_read_stop(conn->sock);
-            process_request(conn);
+            h2o_process_request(&conn->req);
         }
     } return;
     case -2: // incomplete
