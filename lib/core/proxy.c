@@ -182,7 +182,7 @@ static void build_request(h2o_req_t *req, h2o_iovec_t *method, h2o_url_t *url, h
             if (req->content_length != SIZE_MAX) {
                 h2o_iovec_t cl_buf = build_content_length(&req->pool, req->content_length);
                 h2o_add_header(&req->pool, headers, H2O_TOKEN_CONTENT_LENGTH, NULL, cl_buf.base, cl_buf.len);
-            } else if (props->chunked != NULL && !req->is_tunnel_req) {
+            } else if (props->chunked != NULL) {
                 *props->chunked = 1;
                 h2o_add_header(&req->pool, headers, H2O_TOKEN_TRANSFER_ENCODING, NULL, H2O_STRLIT("chunked"));
             }
