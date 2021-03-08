@@ -1221,9 +1221,10 @@ struct st_h2o_req_t {
      */
     unsigned char process_called : 1;
     /**
-     * indicates if a successful response should be forwarded without applying filters
+     * Indicates if requested to serve something other than HTTP (e.g., websocket, upgrade, CONNECT, ...). When the protocol handler
+     * returns a successful response, filters are skipped.
      */
-    unsigned char is_tunnel_req;
+    unsigned char is_tunnel_req : 1;
 
     /**
      * whether if the response should include server-timing header. Logical OR of H2O_SEND_SERVER_TIMING_*
