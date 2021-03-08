@@ -4753,8 +4753,8 @@ int ptls_handshake(ptls_t *tls, ptls_buffer_t *_sendbuf, const void *input, size
     struct st_ptls_record_message_emitter_t emitter;
     int ret;
 
-    //assert(tls->state < PTLS_STATE_POST_HANDSHAKE_MIN);
     PTLS_DEBUGF("%s: tls->state:%u\n", __FUNCTION__, tls->state);
+    assert(tls->state < PTLS_STATE_POST_HANDSHAKE_MIN);
 
     init_record_message_emitter(tls, &emitter, _sendbuf);
     size_t sendbuf_orig_off = emitter.super.buf->off;
@@ -4813,7 +4813,7 @@ int ptls_receive(ptls_t *tls, ptls_buffer_t *decryptbuf, const void *_input, siz
     size_t decryptbuf_orig_size = decryptbuf->off;
     int ret = 0;
 
-    assert(tls->state >= PTLS_STATE_SERVER_EXPECT_END_OF_EARLY_DATA);
+    //assert(tls->state >= PTLS_STATE_SERVER_EXPECT_END_OF_EARLY_DATA);
 
     /* loop until we decrypt some application data (or an error) */
     while (ret == 0 && input != end && decryptbuf_orig_size == decryptbuf->off) {
