@@ -34,13 +34,18 @@
 # In this case, `payload1` and `payload2` are annotated as `@appdata`,
 # which h2olog does not emit by default.
 
+from json import encoder
 import re
 import sys
-import warnings
-from typing import Optional, Tuple
+import json
+import os
+from typing import Optional, Tuple, Any
 from collections import OrderedDict
 from pathlib import Path
 from pprint import pprint
+from copy import deepcopy
+
+DEBUG = os.getenv("DEBUG")
 
 quicly_probes_d = "deps/quicly/quicly-probes.d"
 h2o_probes_d = "h2o-probes.d"
@@ -146,17 +151,19 @@ class Lexer:
   def expect(self, pattern) -> re.Match:
     m = self.expect_opt(pattern)
     if not m:
-      if self.filename:
-        position = " at %s:%s" % (self.filename, self.line_and_column())
-      else:
-        position = ""
-      sys.exit("Expected '%s' but got '%s'%s"
-        % (pattern, self.src[self.pos], position))
+      sys.exit("Expected '%s' but got '%s' %s"
+        % (pattern, self.src[self.pos], self.position_hint()))
     return m
 
 
   def peek(self, pattern):
     return re.match(pattern, self.src[self.pos:], re_xms)
+
+  def position_hint(self):
+    if self.filename:
+      return "at %s:%s" % (self.filename, self.line_and_column())
+    else:
+      return "at %s" % self.line_and_column()
 
   def line_and_column(self):
     lines = re.split(r'\n', self.src[:self.pos])
@@ -165,48 +172,55 @@ class Lexer:
 def parse_dscript(path: Path):
   lexer = Lexer(path.read_text(), path.name)
 
-  provider = None # type: str | None
+  provider = None # type: Optional[str]
   probes = OrderedDict()
+  appdata = None
 
+  def die(msg):
+      sys.exit("[dscript-parser] %s %s" % (msg, lexer.position_hint()))
+
+  # before the "provider" keyword
   prev_pos = -1
   while prev_pos != lexer.pos:
     prev_pos = lexer.pos
 
+    while True:
+      lexer.skip_whitespaces()
+      m = lexer.expect_opt(comment)
+      if m:
+        # find for /* @appdata {...} */
+        m = re.match(r'/\*\s*@appdata\s*(?P<json>\{.*\})\s*\*/', m[0], re_xms)
+        if m:
+          if appdata:
+            die("cannot place @appdata annotation more than once per file")
+          try:
+            appdata = json.loads(m.group("json"))
+          except:
+            die("cannot parse JSON in the @appdata annotation")
+          if not isinstance(appdata, dict):
+            die("@appdata must be a JSON object")
+      else:
+        break
+
     lexer.skip_whitespaces_or_comments()
     if lexer.peek(r'provider\b'):
       break
+    # ignore anythong other than the "provider" keyword
     lexer.skip(r'\S+')
 
-  # a provider
+  # a provider block
   m = lexer.expect(r'provider\s+(?P<provider>\w+)\s*\{')
   provider = m.group("provider")
 
   # list of probes
   while True:
-    annotations = [] # type: list[Tuple[str, Optional[str]]]
-    while True:
-      lexer.skip_whitespaces()
-
-      m = lexer.expect_opt(comment)
-      if m and m[0].startswith("/**"):
-        l = Lexer(m[0])
-
-        while True:
-          l.skip(r'[^@]+')
-          m = l.expect_opt(r'(?P<name>@\w+)(?:\s+(?P<value>[^\n]+))?')
-          if m:
-            annotations.append((m.group("name"), m.group("value")))
-          else:
-            break
-      else:
-        break
+    lexer.skip_whitespaces_or_comments()
 
     m = lexer.expect_opt(r'probe\s+(?P<probe>\w+)\s*\(')
     if m:
       probe_name = m.group("probe")
       probe = {
         "name": probe_name,
-        "annotations": annotations,
         "args": [],
       }
 
@@ -248,14 +262,24 @@ def parse_dscript(path: Path):
   lexer.skip_whitespaces_or_comments()
   lexer.expect(r'}')
 
+  if not appdata:
+    appdata = {}
+
   return {
     "provider": provider,
     "probes": probes,
+    "appdata": appdata,
   }
 
 def parse_and_analyze(context: dict, path: Path, block_probes: set = None):
   dscript = parse_dscript(path)
+
+  if DEBUG:
+    json.dump(dscript, sys.stderr, indent = 2)
+    print("", file = sys.stderr)
+
   provider = dscript["provider"]
+  appdata = deepcopy(dscript["appdata"]) # type: dict[str, Any]
 
   probe_metadata = context["probe_metadata"]
 
@@ -274,23 +298,29 @@ def parse_and_analyze(context: dict, path: Path, block_probes: set = None):
         "fully_specified_probe_name": fully_specified_probe_name,
         "block_field_set": set(),
     }
-    block_field_set = metadata["block_field_set"] # type: set[str]
     probe_metadata[name] = metadata
     args = metadata['args']
+    block_field_set = metadata["block_field_set"] # type: set[str]
 
     block_field_set.update(
       block_fields.get(fully_specified_probe_name, set())
     )
-    for (name, value) in probe["annotations"]:
-      if name == "@appdata" and value != None:
-        for probe_name in map(lambda s: s.strip(), value.split(r',')):
-          block_field_set.add(probe_name)
+
+    appdata_fields = appdata.get(name, None)
+    if appdata_fields != None:
+      if not isinstance(appdata_fields, list):
+        sys.exit("An @appdata field must have a list of strings as a value but got: %s" % json.dumps(appdata_fields))
+    else:
+      appdata_fields = []
 
     flat_args_map = metadata['flat_args_map'] = OrderedDict()
-
     for arg in args:
       arg_name = arg['name']
       arg_type = arg['type']
+
+      if arg_name in appdata_fields:
+        appdata_fields.remove(arg_name)
+        block_field_set.add(arg_name)
 
       if is_ptr_type(arg_type):
         st_name = strip_typename(arg_type)
@@ -301,6 +331,20 @@ def parse_and_analyze(context: dict, path: Path, block_probes: set = None):
           flat_args_map[arg_name] = arg_type
       else:
         flat_args_map[arg_name] = arg_type
+
+    if name in appdata and len(appdata_fields) == 0:
+      del appdata[name]
+
+  # make sure all the items in @appdata have been consumed
+  if appdata:
+    for (probe_name, fields) in appdata.items():
+      if fields:
+        print("invalid @appdata: probe fields are not used: %s: %s" % (json.dumps(probe_name), json.dumps(fields)), file = sys.stderr)
+      else:
+        print("invalid @appdata: probe name is not used: %s" % json.dumps(probe_name), file = sys.stderr)
+    sys.exit(1)
+
+
 
 def strip_typename(t):
   return t.replace("*", "").replace("struct", "").replace("const", "").replace("strict", "").strip()
