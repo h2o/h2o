@@ -1147,7 +1147,7 @@ static int handle_input_expect_headers_process_connect(struct st_h2o_http3_serve
         }
     }
 
-    set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_SEND_HEADERS);
+    set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_SEND_HEADERS, 0);
 
     stream->tunnel = h2o_mem_alloc(sizeof(*stream->tunnel));
     stream->tunnel->tunnel = NULL;
@@ -1380,7 +1380,6 @@ static void tunnel_on_read(h2o_tunnel_t *_tunnel, const char *err, const void *b
     /* EOS */
     if (err != NULL) {
         destroy_tunnel(stream);
-        shutdown_response(stream);
         shutdown_by_generator(stream);
     }
 
