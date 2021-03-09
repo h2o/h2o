@@ -25,13 +25,17 @@
 # The gen_raw_tracer.py can parse @appdata annotations in D script files, for example:
 #
 # <code>
-# /**
-#  * @appdata payload1, payload2
+# /* @appdata
+#  {
+#     "probe1": ["payload1", "payload2"]
+#  }
 #  */
-# probe foo(const char *payload1, void *payload2, size_t payload2_len);
+# provider provider1 {
+#   probe probe1(const char *payload1, void *payload2, size_t payload2_len);
+# }
 # </code>
 #
-# In this case, `payload1` and `payload2` are annotated as `@appdata`,
+# In this case, `payload1` and `payload2` are annotated as application data,
 # which h2olog does not emit by default.
 
 from json import encoder
