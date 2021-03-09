@@ -400,8 +400,8 @@ static const char *init_headers(h2o_mem_pool_t *pool, h2o_headers_t *headers, co
 static int upgrade_is_h2(h2o_iovec_t upgrade)
 {
     if (h2o_lcstris(upgrade.base, upgrade.len, H2O_STRLIT("h2c")) ||
-        h2o_lcstris(upgrade.base, upgrade.len, H2O_STRLIT("h2c-14")) == 0 ||
-        h2o_lcstris(upgrade.base, upgrade.len, H2O_STRLIT("h2c-16")) == 0)
+        h2o_lcstris(upgrade.base, upgrade.len, H2O_STRLIT("h2c-14")) ||
+        h2o_lcstris(upgrade.base, upgrade.len, H2O_STRLIT("h2c-16")))
         return 1;
     return 0;
 }
