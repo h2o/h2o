@@ -38,7 +38,6 @@
 # In this case, `payload1` and `payload2` are annotated as application data,
 # which h2olog does not emit by default.
 
-from json import encoder
 import re
 import sys
 import json
@@ -125,6 +124,7 @@ struct st_quicly_conn_t {
 re_xms = re.X | re.M | re.S
 comment = r'/\*.*?\*/'
 
+
 class Lexer:
 
   def __init__(self, src: str, filename: Optional[str] = None):
@@ -133,7 +133,7 @@ class Lexer:
     self.pos = 0
 
   def skip(self, pattern) -> bool:
-    m = re.match(pattern , self.src[self.pos:], re_xms)
+    m = re.match(pattern, self.src[self.pos:], re_xms)
     if m:
       self.pos += m.end()
       return True
@@ -156,9 +156,8 @@ class Lexer:
     m = self.expect_opt(pattern)
     if not m:
       sys.exit("Expected '%s' but got '%s' %s"
-        % (pattern, self.src[self.pos], self.position_hint()))
+               % (pattern, self.src[self.pos], self.position_hint()))
     return m
-
 
   def peek(self, pattern):
     return re.match(pattern, self.src[self.pos:], re_xms)
@@ -173,15 +172,16 @@ class Lexer:
     lines = re.split(r'\n', self.src[:self.pos])
     return "%d:%d" % (len(lines), len(lines[-1]))
 
+
 def parse_dscript(path: Path):
   lexer = Lexer(path.read_text(), path.name)
 
-  provider = None # type: Optional[str]
+  provider = None  # type: Optional[str]
   probes = OrderedDict()
   appdata = None
 
   def die(msg):
-      sys.exit("[dscript-parser] %s %s" % (msg, lexer.position_hint()))
+    sys.exit("[dscript-parser] %s %s" % (msg, lexer.position_hint()))
 
   # before the "provider" keyword
   prev_pos = -1
@@ -224,8 +224,8 @@ def parse_dscript(path: Path):
     if m:
       probe_name = m.group("probe")
       probe = {
-        "name": probe_name,
-        "args": [],
+          "name": probe_name,
+          "args": [],
       }
 
       probes[probe_name] = probe
@@ -234,7 +234,7 @@ def parse_dscript(path: Path):
       while True:
         lexer.skip_whitespaces()
 
-        tokens = [] # type: list[str]
+        tokens = []  # type: list[str]
         while True:
           lexer.skip_whitespaces_or_comments()
           m = lexer.expect_opt(r'\w+|\*')
@@ -246,8 +246,8 @@ def parse_dscript(path: Path):
         name = tokens.pop()
 
         arg = {
-          "name": name,
-          "type": " ".join(tokens),
+            "name": name,
+            "type": " ".join(tokens),
         }
         probe["args"].append(arg)
 
@@ -270,20 +270,21 @@ def parse_dscript(path: Path):
     appdata = {}
 
   return {
-    "provider": provider,
-    "probes": probes,
-    "appdata": appdata,
+      "provider": provider,
+      "probes": probes,
+      "appdata": appdata,
   }
+
 
 def parse_and_analyze(context: dict, path: Path, block_probes: set = None):
   dscript = parse_dscript(path)
 
   if DEBUG:
-    json.dump(dscript, sys.stderr, indent = 2)
-    print("", file = sys.stderr)
+    json.dump(dscript, sys.stderr, indent=2)
+    print("", file=sys.stderr)
 
   provider = dscript["provider"]
-  appdata = deepcopy(dscript["appdata"]) # type: dict[str, Any]
+  appdata = deepcopy(dscript["appdata"])  # type: dict[str, Any]
 
   probe_metadata = context["probe_metadata"]
 
@@ -304,10 +305,10 @@ def parse_and_analyze(context: dict, path: Path, block_probes: set = None):
     }
     probe_metadata[name] = metadata
     args = metadata['args']
-    block_field_set = metadata["block_field_set"] # type: set[str]
+    block_field_set = metadata["block_field_set"]  # type: set[str]
 
     block_field_set.update(
-      block_fields.get(fully_specified_probe_name, set())
+        block_fields.get(fully_specified_probe_name, set())
     )
 
     appdata_fields = appdata.get(name, None)
@@ -329,8 +330,8 @@ def parse_and_analyze(context: dict, path: Path, block_probes: set = None):
       if is_ptr_type(arg_type):
         st_name = strip_typename(arg_type)
         if st_name in struct_map:
-            for st_field_access, st_field_name in struct_map[st_name]:
-              flat_args_map[st_field_name or st_field_access] = "typeof_%s__%s" % (st_name, st_field_name or st_field_access)
+          for st_field_access, st_field_name in struct_map[st_name]:
+            flat_args_map[st_field_name or st_field_access] = "typeof_%s__%s" % (st_name, st_field_name or st_field_access)
         else:
           flat_args_map[arg_name] = arg_type
       else:
@@ -343,11 +344,10 @@ def parse_and_analyze(context: dict, path: Path, block_probes: set = None):
   if appdata:
     for (probe_name, fields) in appdata.items():
       if fields:
-        print("invalid @appdata: probe fields are not used: %s: %s" % (json.dumps(probe_name), json.dumps(fields)), file = sys.stderr)
+        print("invalid @appdata: probe fields are not used: %s: %s" % (json.dumps(probe_name), json.dumps(fields)), file=sys.stderr)
       else:
-        print("invalid @appdata: probe name is not used: %s" % json.dumps(probe_name), file = sys.stderr)
+        print("invalid @appdata: probe name is not used: %s" % json.dumps(probe_name), file=sys.stderr)
     sys.exit(1)
-
 
 
 def strip_typename(t):
@@ -383,7 +383,7 @@ int %s(struct pt_regs *ctx) {
   struct h2olog_event_t event = { .id = %s };
 
 """ % (fully_specified_probe_name, tracer_name, metadata['id'])
-  block_field_set = metadata["block_field_set"] # type: set[str]
+  block_field_set = metadata["block_field_set"]  # type: set[str]
   probe_name = metadata["name"]
 
   args = metadata['args']
@@ -453,9 +453,9 @@ def prepare_context(h2o_dir):
       "h2o_dir": h2o_dir,
   }
   parse_and_analyze(context, h2o_dir.joinpath(quicly_probes_d),
-          block_probes=block_probes)
+                    block_probes=block_probes)
   parse_and_analyze(context, h2o_dir.joinpath(h2o_probes_d),
-          block_probes=block_probes)
+                    block_probes=block_probes)
 
   return context
 
@@ -548,7 +548,7 @@ struct h2olog_event_t {
 
   for name, metadata in probe_metadata.items():
     fully_specified_probe_name = metadata["fully_specified_probe_name"]
-    block_field_set = metadata["block_field_set"] # type: set[str]
+    block_field_set = metadata["block_field_set"]  # type: set[str]
 
     event_id_t_decl += "  %s,\n" % metadata["id"]
 
@@ -641,7 +641,7 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
   for probe_name in probe_metadata:
     metadata = probe_metadata[probe_name]
     fully_specified_probe_name = metadata["fully_specified_probe_name"]
-    block_field_set = metadata["block_field_set"] # type: set[str]
+    block_field_set = metadata["block_field_set"]  # type: set[str]
     flat_args_map = metadata["flat_args_map"]
 
     handle_event_func += "  case %s: { // %s\n" % (
