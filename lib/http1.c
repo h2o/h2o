@@ -397,6 +397,17 @@ static const char *init_headers(h2o_mem_pool_t *pool, h2o_headers_t *headers, co
     return NULL;
 }
 
+static int upgrade_is_h2(h2o_iovec_t upgrade)
+{
+    if (h2o_lcstris(upgrade.base, upgrade.len, H2O_STRLIT("h2c")) ||
+        h2o_lcstris(upgrade.base, upgrade.len, H2O_STRLIT("h2c-14")) == 0 ||
+        h2o_lcstris(upgrade.base, upgrade.len, H2O_STRLIT("h2c-16")) == 0)
+        return 1;
+    return 0;
+}
+
+static const char fixup_request_is_h2_upgrade[] = "fixup h2 upgrade";
+
 static const char *fixup_request(struct st_h2o_http1_conn_t *conn, struct phr_header *headers, size_t num_headers,
                                  int minor_version, h2o_iovec_t *expect, ssize_t *entity_header_index)
 {
@@ -478,6 +489,20 @@ static const char *fixup_request(struct st_h2o_http1_conn_t *conn, struct phr_he
     }
     /* disable keep-alive if shutdown is requested, or if it is a CONNECT request */
     if (conn->req.http1_is_persistent && (conn->super.ctx->shutdown_requested || conn->req.is_tunnel_req))
+        conn->req.http1_is_persistent = 0;
+
+    /* if upgrade to h2 was requested, obey to the request or pretend as if upgrade was not requested */
+    if (upgrade_is_h2(conn->req.upgrade)) {
+        if (*entity_header_index == -1 && !is_connect)
+            return fixup_request_is_h2_upgrade;
+        conn->req.upgrade = h2o_iovec_init(NULL, 0);
+        conn->req.is_tunnel_req = 0;
+    }
+
+    /* Turn off persistent connection if the request is an attempt to create a tunnel, as the request boundary changes based on
+     * if we send 200 (on CONNECT) or 101 (on upgrade). While it is possible to stop reading at the moment when we send the response
+     * indicating failure and prepare to receive a new request, doing so is not worth the complexity. */
+    if (conn->req.is_tunnel_req)
         conn->req.http1_is_persistent = 0;
 
     return NULL;
@@ -577,22 +602,6 @@ static int write_req_first(void *_req, h2o_iovec_t payload, int is_end_stream)
     return write_req_non_streaming(&conn->req, payload, is_end_stream);
 }
 
-static int is_h2_upgrade_request(struct st_h2o_http1_conn_t *conn)
-{
-    if (conn->req.upgrade.base == NULL)
-        return 0;
-    if (conn->sock->ssl != NULL)
-        return 0;
-    if (!conn->super.ctx->globalconf->http1.upgrade_to_http2)
-        return 0;
-    if (conn->req.upgrade.len >= 3 && h2o_lcstris(conn->req.upgrade.base, 3, H2O_STRLIT("h2c")) &&
-        (conn->req.upgrade.len == 3 ||
-         (conn->req.upgrade.len == 6 && (memcmp(conn->req.upgrade.base + 3, H2O_STRLIT("-14")) == 0 ||
-                                         memcmp(conn->req.upgrade.base + 3, H2O_STRLIT("-16")) == 0))))
-        return 1;
-    return 0;
-}
-
 static void handle_incoming_request(struct st_h2o_http1_conn_t *conn)
 {
     size_t inreqlen = conn->sock->input->size < H2O_MAX_REQLEN ? conn->sock->input->size : H2O_MAX_REQLEN;
@@ -615,13 +624,19 @@ static void handle_incoming_request(struct st_h2o_http1_conn_t *conn)
     default: { // parse complete
         conn->_unconsumed_request_size = reqlen;
         const char *err;
-        if ((err = fixup_request(conn, headers, num_headers, minor_version, &expect, &entity_body_header_index)) != 0) {
+        if ((err = fixup_request(conn, headers, num_headers, minor_version, &expect, &entity_body_header_index)) != NULL &&
+            err != fixup_request_is_h2_upgrade) {
             clear_timeouts(conn);
             send_bad_request(conn, err);
             return;
         }
         h2o_probe_log_request(&conn->req, conn->_req_index);
-        if (entity_body_header_index != -1) {
+        if (err == fixup_request_is_h2_upgrade) {
+            clear_timeouts(conn);
+            h2o_socket_read_stop(conn->sock);
+            if (h2o_http2_handle_upgrade(&conn->req, conn->super.connected_at) != 0)
+                h2o_send_error_400(&conn->req, "Invalid Request", "Broken upgrade request to HTTP/2", 0);
+        } else if (entity_body_header_index != -1) {
             /* Request has body, start reading it. Invocation of `h2o_process_request` is delayed to reduce backend concurrency. */
             conn->req.timestamps.request_body_begin_at = h2o_gettimeofday(conn->super.ctx->loop);
             if (expect.base != NULL) {
@@ -633,9 +648,8 @@ static void handle_incoming_request(struct st_h2o_http1_conn_t *conn)
                     return;
                 }
             }
-            if (create_entity_reader(conn, headers + entity_body_header_index) != 0) {
+            if (create_entity_reader(conn, headers + entity_body_header_index) != 0)
                 return;
-            }
             conn->req.write_req.cb = write_req_first;
             conn->req.write_req.ctx = &conn->req;
             conn->_unconsumed_request_size = 0;
@@ -649,12 +663,6 @@ static void handle_incoming_request(struct st_h2o_http1_conn_t *conn)
                 return;
             }
             conn->_req_entity_reader->handle_incoming_entity(conn);
-        } else if (is_h2_upgrade_request(conn)) {
-            /* Upgrade to H2. Stop reading from the socket, then process the upgrade request. */
-            clear_timeouts(conn);
-            h2o_socket_read_stop(conn->sock);
-            if (h2o_http2_handle_upgrade(&conn->req, conn->super.connected_at) != 0)
-                h2o_send_error_400(&conn->req, "Invalid Request", "Broken upgrade request to HTTP/2", 0);
         } else if (conn->req.is_tunnel_req) {
             /* Is a CONNECT request or a upgrade that uses our stream API (e.g., websocket tunnelling), therefore:
              * * the request is submitted immediately for processing,

@@ -1221,8 +1221,8 @@ struct st_h2o_req_t {
      */
     unsigned char process_called : 1;
     /**
-     * Indicates if requested to serve something other than HTTP (e.g., websocket, upgrade, CONNECT, ...). When the protocol handler
-     * returns a successful response, filters are skipped.
+     * Indicates if requested to serve something other than HTTP (e.g., websocket, upgrade, CONNECT, ...) using the streaming API.
+     * When the protocol handler returns a successful response, filters are skipped.
      */
     unsigned char is_tunnel_req : 1;
 
