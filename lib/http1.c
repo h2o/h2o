@@ -493,7 +493,8 @@ static const char *fixup_request(struct st_h2o_http1_conn_t *conn, struct phr_he
 
     /* if upgrade to h2 was requested, obey to the request or pretend as if upgrade was not requested */
     if (upgrade_is_h2(conn->req.upgrade)) {
-        if (*entity_header_index == -1 && !is_connect)
+        if (conn->sock->ssl == NULL && conn->super.ctx->globalconf->http1.upgrade_to_http2 && *entity_header_index == -1 &&
+            !is_connect)
             return fixup_request_is_h2_upgrade;
         conn->req.upgrade = h2o_iovec_init(NULL, 0);
         conn->req.is_tunnel_req = 0;
