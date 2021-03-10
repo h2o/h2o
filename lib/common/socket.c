@@ -1619,7 +1619,7 @@ static int ebpf_map_lookup(int fd, const void *keyptr, void *valptr)
     return 0;
 }
 
-static int ebpf_map_delete(int fd, const void *keyptr)
+static int ebpf_map_delete(int fd, const void *key)
 {
     union bpf_attr attr = {0};
     attr.map_fd = fd;
