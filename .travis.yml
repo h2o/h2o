@@ -38,14 +38,3 @@ matrix:
       before_install: *bi
       script:
         - make -f misc/docker-ci/check.mk ossl1.1.1
-    - os: linux
-      sudo: required
-      dist: bionic
-      services:
-        - docker
-      env:
-        - label=dtrace
-      before_install: *bi
-      script:
-        - uname -a
-        - make -f misc/docker-ci/check.mk dtrace CONTAINER_NAME=h2oserver/h2o-ci:ubuntu2004

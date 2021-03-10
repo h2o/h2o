@@ -290,6 +290,9 @@ h2o_iovec_t h2o_buffer_try_reserve(h2o_buffer_t **_inbuf, size_t min_guarantee)
                 int fallocate_ret;
 #if USE_POSIX_FALLOCATE
                 fallocate_ret = posix_fallocate(fd, 0, new_allocsize);
+                if (fallocate_ret != 0) {
+                    errno = fallocate_ret;
+                }
 #else
                 fallocate_ret = ftruncate(fd, new_allocsize);
 #endif

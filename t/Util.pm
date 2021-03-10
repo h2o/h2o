@@ -567,50 +567,22 @@ package H2ologTracer {
 
         my $tempdir = File::Temp::tempdir(CLEANUP => 1);
         my $output_file = "$tempdir/h2olog.jsonl";
-        my $stderr_file = "$tempdir/stderr.txt";
 
-        pipe my $rfh, my $wfh or die "pipe failed: $!";
-
-        my $tracer_pid = fork;
-        die "fork(2) failed: $!" unless defined $tracer_pid;
-        if ($tracer_pid == 0) {
-            # child process, spawn h2olog
-            exec qq{$h2olog_prog @{$h2olog_args} -d -p $h2o_pid -w '$output_file' 2>$stderr_file};
-            die "failed to spawn $h2olog_prog: $!";
-        }
+        my $tracer_pid = open my($errfh), "-|", qq{exec $h2olog_prog @{$h2olog_args} -d -p $h2o_pid -w '$output_file' 2>&1};
+        die "failed to spawn $h2olog_prog: $!" unless defined $tracer_pid;
 
         # wait until h2olog and the trace log becomes ready
-        my $efh;
-        my $get_trace;
-        STARTUP: while (1) {
-            Time::HiRes::sleep(0.1);
-            if (open $efh, "<", $stderr_file) {
-                for (my $i = 0; $i < 10; $i++) {
-                    sleep(1);
-                    seek $efh, 0, 0 or die "seek failed: $!";
-                    if (my $status = scalar <$efh>) {
-                        Test::More::diag("h2olog[$tracer_pid]: $status");
-                        last STARTUP;
-                    }
-                }
-
-                Carp::confess "h2olog[$tracer_pid] emits nothing"
-            }
-            Carp::confess "h2olog[$tracer_pid] failed to start"
-                if waitpid($tracer_pid, WNOHANG) != 0;
+        my $stderr_firstline = <$errfh>;
+        if (not defined $stderr_firstline) {
+            Carp::confess("h2olog[$tracer_pid] died unexpectedly");
         }
+        Test::More::diag("h2olog[$tracer_pid]: $stderr_firstline");
 
         open my $fh, "<", $output_file or die "h2olog[$tracer_pid] does not create the output file ($output_file): $!";
         my $off = 0;
-        $get_trace = sub {
-            if (waitpid($tracer_pid, WNOHANG) != 0) {
-                seek $efh, 0, 1 or die "seek failed: $!";
-                {
-                    local $/;
-                    Test::More::diag(<$efh>);
-                }
-                Carp::confess "h2olog[$tracer_pid] is down (got $?)"
-            }
+        my $get_trace = sub {
+            Carp::confess "h2olog[$tracer_pid] is down (got $?)"
+                if waitpid($tracer_pid, WNOHANG) != 0;
 
             seek $fh, $off, 0 or die "seek failed: $!";
             read $fh, my $bytes, 65000;
@@ -626,6 +598,7 @@ package H2ologTracer {
                 kill("TERM", $tracer_pid)
                     or warn("failed to kill h2olog[$tracer_pid]: $!");
             } else {
+                Test::More::diag($_) while <$errfh>; # in case h2olog shows error messages, e.g. BPF program doesn't compile
                 Test::More::diag "h2olog[$tracer_pid] has already exited";
             }
         });
