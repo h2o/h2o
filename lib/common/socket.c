@@ -1604,7 +1604,7 @@ static int open_tracing_map(h2o_loop_t *loop)
     return tracing_map_fd;
 }
 
-static int ebpf_map_lookup(int fd, const void *keyptr, void *valptr)
+static int ebpf_map_lookup(int fd, const void *key, void *value)
 {
     union bpf_attr attr;
 
