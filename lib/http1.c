@@ -817,12 +817,20 @@ static void on_send_complete(h2o_socket_t *sock, const char *err)
         }
     }
 
-    /* TODO Consider if we should shut down the send side in case HTTP/1 is running without Content-Length header, as there is no
-     * other way to communicate the end of the response. T-E chunked will communicate the end when HTTP/1.1 is being used. */
     conn->_ostr_final.state = OSTREAM_STATE_DONE;
-    if (conn->req.proceed_req != NULL)
+
+    if (conn->req.is_tunnel_req && (conn->req.upgrade.base != NULL ? conn->req.res.status == 101
+                                                                   : 200 <= conn->req.res.status && conn->req.res.status <= 299)) {
+        /* If the connection is acting as a tunnel, close the receive side when the send side is being closed. */
         conn->req.http1_is_persistent = 0;
-    cleanup_connection(conn);
+        cleanup_connection(conn);
+    } else {
+        /* Is a normal request-response cycle: conmplete the handling of request-response, or wait for the request to complete.
+         * TODO Consider if we should shut down the send side in case HTTP/1 is running without Content-Length header, as there is
+         * no other way to communicate the end of the response. T-E chunked will communicate the end when HTTP/1.1 is being used. */
+        if (conn->req.proceed_req == NULL)
+            cleanup_connection(conn);
+    }
 }
 
 static void on_upgrade_complete(h2o_socket_t *socket, const char *err)
