@@ -1613,8 +1613,8 @@ static int ebpf_map_lookup(int fd, const void *key, void *value)
 
     memset(&attr, 0, sizeof(attr));
     attr.map_fd = fd;
-    attr.key = (uint64_t)keyptr;
-    attr.value = (uint64_t)valptr;
+    attr.key = (uint64_t)key;
+    attr.value = (uint64_t)value;
 
     if (syscall(__NR_bpf, BPF_MAP_LOOKUP_ELEM, &attr, sizeof(attr)) != 0)
         return 1;
@@ -1626,7 +1626,7 @@ static int ebpf_map_delete(int fd, const void *key)
 {
     union bpf_attr attr = {0};
     attr.map_fd = fd;
-    attr.key = (uint64_t)keyptr;
+    attr.key = (uint64_t)key;
 
     if (syscall(__NR_bpf, BPF_MAP_DELETE_ELEM, &attr, sizeof(attr)) != 0)
         return 0;
