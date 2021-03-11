@@ -421,12 +421,9 @@ static const char *fixup_request(struct st_h2o_http1_conn_t *conn, struct phr_he
     conn->req.input.scheme = conn->sock->ssl != NULL ? &H2O_URL_SCHEME_HTTPS : &H2O_URL_SCHEME_HTTP;
     conn->req.version = 0x100 | (minor_version != 0);
 
-    /* special handling for HTTP/1.0 */
-    if (conn->req.version < 0x101) {
-        conn->_ostr_final.super.send_informational = NULL; /* RFC 7231 6.2: MUST NOT send a 1xx response to an HTTP/1.0 client */
-        if (is_connect)
-            return "CONNECT cannot be used on HTTP/1.0";
-    }
+    /* RFC 7231 6.2: a server MUST NOT send a 1xx response to an HTTP/1.0 client */
+    if (conn->req.version < 0x101)
+        conn->_ostr_final.super.send_informational = NULL;
 
     /* init headers */
     if ((ret = init_headers(&conn->req.pool, &conn->req.headers, headers, num_headers, &connection, &host, &upgrade, expect,
@@ -453,8 +450,9 @@ static const char *fixup_request(struct st_h2o_http1_conn_t *conn, struct phr_he
 
     if (is_connect) {
         /* CONNECT method, validate, setting the target host in `req->input.authority`. Path becomes empty. */
-        if (conn->req.input.path.len == 0 ||
-            (host.base != NULL && !h2o_memis(conn->req.input.path.base, conn->req.input.path.len, host.base, host.len)))
+        if (conn->req.version < 0x101 || conn->req.input.path.len == 0 ||
+            (host.base != NULL && !h2o_memis(conn->req.input.path.base, conn->req.input.path.len, host.base, host.len)) ||
+            *entity_header_index != -1)
             return "invalid request";
         conn->req.input.authority = conn->req.input.path;
         conn->req.input.path = h2o_iovec_init(NULL, 0);
@@ -471,40 +469,31 @@ static const char *fixup_request(struct st_h2o_http1_conn_t *conn, struct phr_he
         /* move host header to req->authority */
         if (host.base != NULL)
             conn->req.input.authority = host;
-    }
-
-    /* setup persistent flag (and upgrade info) */
-    if (connection.base != NULL) {
-        /* TODO contains_token function can be faster */
-        if (h2o_contains_token(connection.base, connection.len, H2O_STRLIT("keep-alive"), ',')) {
+        /* handle Connection and Upgrade header fields */
+        if (connection.base != NULL) {
+            /* TODO contains_token function can be faster */
+            if (h2o_contains_token(connection.base, connection.len, H2O_STRLIT("keep-alive"), ',')) {
+                conn->req.http1_is_persistent = 1;
+            }
+            /* Upgrade is respected only for requests without bodies. Use of upgrade on a request with body is unsupported, because
+             * we reuse the entity reader for reading the body and the tunnelled data. */
+            if (upgrade.base != NULL && h2o_contains_token(connection.base, connection.len, H2O_STRLIT("upgrade"), ',') &&
+                *entity_header_index == -1) {
+                /* early return if upgrading to h2 */
+                if (upgrade_is_h2(conn->req.upgrade) && conn->sock->ssl == NULL &&
+                    conn->super.ctx->globalconf->http1.upgrade_to_http2 && !is_connect)
+                    return fixup_request_is_h2_upgrade;
+                conn->req.upgrade = upgrade;
+                conn->req.is_tunnel_req = 1;
+            }
+        } else if (conn->req.version >= 0x101) {
+            /* defaults to keep-alive if >= HTTP/1.1 */
             conn->req.http1_is_persistent = 1;
         }
-        if (upgrade.base != NULL && h2o_contains_token(connection.base, connection.len, H2O_STRLIT("upgrade"), ',')) {
-            conn->req.upgrade = upgrade;
-            conn->req.is_tunnel_req = 1;
-        }
-    } else if (conn->req.version >= 0x101) {
-        /* defaults to keep-alive if >= HTTP/1.1 */
-        conn->req.http1_is_persistent = 1;
+        /* disable keep-alive if shutdown is requested */
+        if (conn->req.http1_is_persistent && conn->super.ctx->shutdown_requested)
+            conn->req.http1_is_persistent = 0;
     }
-    /* disable keep-alive if shutdown is requested, or if it is a CONNECT request */
-    if (conn->req.http1_is_persistent && (conn->super.ctx->shutdown_requested || conn->req.is_tunnel_req))
-        conn->req.http1_is_persistent = 0;
-
-    /* if upgrade to h2 was requested, obey to the request or pretend as if upgrade was not requested */
-    if (upgrade_is_h2(conn->req.upgrade)) {
-        if (conn->sock->ssl == NULL && conn->super.ctx->globalconf->http1.upgrade_to_http2 && *entity_header_index == -1 &&
-            !is_connect)
-            return fixup_request_is_h2_upgrade;
-        conn->req.upgrade = h2o_iovec_init(NULL, 0);
-        conn->req.is_tunnel_req = 0;
-    }
-
-    /* Turn off persistent connection if the request is an attempt to create a tunnel, as the request boundary changes based on
-     * if we send 200 (on CONNECT) or 101 (on upgrade). While it is possible to stop reading at the moment when we send the response
-     * indicating failure and prepare to receive a new request, doing so is not worth the complexity. */
-    if (conn->req.is_tunnel_req)
-        conn->req.http1_is_persistent = 0;
 
     return NULL;
 }
@@ -822,7 +811,7 @@ static void on_send_complete(h2o_socket_t *sock, const char *err)
     if (conn->req.is_tunnel_req && (conn->req.upgrade.base != NULL ? conn->req.res.status == 101
                                                                    : 200 <= conn->req.res.status && conn->req.res.status <= 299)) {
         /* If the connection is acting as a tunnel, close the receive side when the send side is being closed. */
-        conn->req.http1_is_persistent = 0;
+        assert(!conn->req.http1_is_persistent);
         cleanup_connection(conn);
     } else {
         /* Is a normal request-response cycle: conmplete the handling of request-response, or wait for the request to complete.
