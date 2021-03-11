@@ -22,21 +22,33 @@
 #ifndef h2o__ebpf_h
 #define h2o__ebpf_h
 
-#include "quicly.h"
+// This file may be included in a BPF program
+
+// sizeof(struct in6_addr)
+#define H2O_EBPF_SIZEOF_ADDR 16
+typedef struct st_h2o_ebpf_address_t {
+    uint8_t ip[H2O_EBPF_SIZEOF_ADDR];
+    uint16_t port;
+} h2o_ebpf_address_t;
 
 typedef struct st_h2o_ebpf_map_key_t {
     /**
      * SOCK_STZREAM or SOCK_DGRAM
      */
     int sock_type;
+
+    /**
+     * AF_INET or AF_INET6
+     */
+    int sa_family;
     /**
      * The local, destination adddress in sockaddr_in or sockaddr_in6.
      */
-    quicly_address_t local;
+    h2o_ebpf_address_t local;
     /**
      * The remote, source address in sockaddr_in or sockaddr_in6.
      */
-    quicly_address_t remote;
+    h2o_ebpf_address_t remote;
 } h2o_ebpf_map_key_t;
 
 #define H2O_EBPF_QUIC_SEND_RETRY_DEFAULT 0

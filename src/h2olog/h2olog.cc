@@ -269,7 +269,7 @@ int main(int argc, char **argv)
     std::vector<std::string> response_header_filters;
     int c;
     pid_t h2o_pid = -1;
-    double sampling_rate = 1.0;
+    double sampling_rate = -1;
     while ((c = getopt(argc, argv, "hHdrlp:t:s:w:S:")) != -1) {
         switch (c) {
         case 'H':
@@ -348,6 +348,7 @@ int main(int argc, char **argv)
 
     std::vector<std::string> cflags({
         make_pid_cflag("H2OLOG_H2O_PID", h2o_pid),
+        std::string("-DH2O_EBPF_TID2U64_MAP_PATH=\"") + H2O_EBPF_TID2U64_MAP_PATH + std::string("\""),
     });
 
     if (!response_header_filters.empty()) {
@@ -382,7 +383,7 @@ int main(int argc, char **argv)
         probes.push_back(ebpf::USDT(h2o_pid, usdt.provider, usdt.name, usdt.probe_func));
     }
 
-    if (sampling_rate < 1.0) {
+    if (sampling_rate >= 0) {
         cflags.push_back("-DH2OLOG_SAMPLING_RATE=" + std::to_string(sampling_rate));
     }
 
@@ -392,7 +393,7 @@ int main(int argc, char **argv)
         return EXIT_FAILURE;
     }
 
-    if (sampling_rate < 1.0) {
+    if (sampling_rate >= 0) {
         setup_ebpf_map(bpf, h2o_pid);
     }
 

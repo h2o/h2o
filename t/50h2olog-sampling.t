@@ -49,6 +49,17 @@ EOT
 
 diag "quic port: $quic_port / port: $server->{port} / tls port: $server->{tls_port}";
 
+sub debug_socket_accept {
+  my($trace) = @_;
+
+  my @socket_accept_events = grep { /"type"\s*:\s*"socket-accept"/ } split /\n/, $trace;
+  if (@socket_accept_events) {
+    diag("socket-accept: ", @socket_accept_events);
+  } else {
+    diag("socket-accept: not found");
+  }
+}
+
 subtest "h2olog -S=1.00", sub {
   my $tracer = H2ologTracer->new({
     pid => $server->{pid},
@@ -60,11 +71,14 @@ subtest "h2olog -S=1.00", sub {
 
     my $trace;
     until (($trace = $tracer->get_trace()) =~ /\n/) {}
+    debug_socket_accept($trace);
+
     my @logs = map { decode_json($_) } split /\n/, $trace;
     my($event) = grep { $_->{type} eq "socket-accept" } @logs;
 
-    like $event->{src}, qr/\A127\.0\.0\.1:\d+\z/, "destination (remote) addr";
-    is $event->{dest}, "127.0.0.1:$server->{port}", "source (local) addr";
+    is $event->{"info-sock-type"}, "SOCK_STREAM";
+    like $event->{"info-src"}, qr/\A127\.0\.0\.1:\d+\z/, "source (remote) addr";
+    is $event->{"info-dest"}, "127.0.0.1:$server->{port}", "destination (local) addr";
   };
 
   subtest "QUIC", sub {
@@ -73,11 +87,12 @@ subtest "h2olog -S=1.00", sub {
 
     my $trace;
     until (($trace = $tracer->get_trace()) =~ /\n/) {}
+    debug_socket_accept($trace);
     my @logs = map { decode_json($_) } split /\n/, $trace;
     my($event) = grep { $_->{type} eq "socket-accept" } @logs;
 
-    like $event->{src}, qr/\A127\.0\.0\.1:\d+\z/, "destination (remote) addr";
-    is $event->{dest}, "127.0.0.1:$quic_port", "source (local) addr";
+    like $event->{"info-src"}, qr/\A127\.0\.0\.1:\d+\z/, "destination (remote) addr";
+    is $event->{"info-dest"}, "127.0.0.1:$quic_port", "source (local) addr";
   };
 };
 
@@ -93,6 +108,7 @@ subtest "h2olog -S=0.00", sub {
 
     sleep(1);
     my $trace =  $tracer->get_trace();
+    debug_socket_accept($trace);
 
     if ($ENV{H2OLOG_DEBUG}) {
       diag "h2olog output:\n", $trace;
@@ -107,6 +123,7 @@ subtest "h2olog -S=0.00", sub {
 
     sleep(1);
     my $trace = $tracer->get_trace();
+    debug_socket_accept($trace);
 
     if ($ENV{H2OLOG_DEBUG}) {
       diag "h2olog output:\n", $trace;
@@ -127,7 +144,6 @@ subtest "h2olog -S=0.00", sub {
     ], [], "no stream-on-destroy header in logs";
   };
 };
-
 
 subtest "multiple h2olog with sampling filters", sub {
   my $tracer1 = H2ologTracer->new({

@@ -25,8 +25,9 @@ struct st_h2o_tunnel_t;
 provider h2o {
     /**
      * Socket-level accept event, which will be called before HTTP-level accept events.
+     * This is fired only if the h2o_return map exists.
      */
-    probe socket_accept(int sock_type, struct sockaddr *dest, struct sockaddr *src);
+    probe socket_accept(struct st_h2o_ebpf_map_key_t *info);
 
     /**
      * HTTP-level event, indicating that a request has been received.

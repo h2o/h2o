@@ -55,6 +55,8 @@ struct_map = {
         ("super.local.cid_set.plaintext.master_id", "master_id"),
     ],
 
+    "st_h2o_ebpf_map_key_t": [],
+
     "sockaddr": [],
     "sockaddr_in": [],
     "sockaddr_in6": [],
@@ -148,14 +150,17 @@ def parse_d(context: dict, path: Path, block_probes: set = None):
       if is_ptr_type(arg_type):
         st_name = strip_typename(arg_type)
         if st_name in struct_map:
+          if struct_map[st_name]:
+            # decodes the struct into members in BPF programs.
             for st_field_access, st_field_name in struct_map[st_name]:
               flat_args_map[st_field_name or st_field_access] = "typeof_%s__%s" % (st_name, st_field_name or st_field_access)
+          else:
+             # decoes the struct into members in the user space (json.cc).
+            flat_args_map[arg_name] = "struct %s" % st_name
         else:
           flat_args_map[arg_name] = arg_type
       else:
         flat_args_map[arg_name] = arg_type
-
-  context["id"] = id
 
 
 def strip_typename(t):
@@ -225,13 +230,17 @@ int %s(struct pt_regs *ctx) {
     elif is_ptr_type(arg_type):
       st_name = strip_typename(arg_type)
       if st_name in struct_map:
-        c += "  uint8_t %s[sizeof_%s] = {};\n" % (arg_name, st_name)
-        c += "  bpf_usdt_readarg(%d, ctx, &buf);\n" % (i+1)
-        c += "  bpf_probe_read(&%s, sizeof_%s, buf);\n" % (arg_name, st_name)
-        for st_field_access, st_field_name in struct_map[st_name]:
-          event_t_name = "%s.%s" % (probe_name, st_field_name or st_field_access)
-          c += "  event.%s = get_%s__%s(%s);\n" % (
-              event_t_name, st_name, st_field_name or st_field_access, arg_name)
+        if struct_map[st_name]:
+          c += "  uint8_t %s[sizeof_%s] = {};\n" % (arg_name, st_name)
+          c += "  bpf_usdt_readarg(%d, ctx, &buf);\n" % (i+1)
+          c += "  bpf_probe_read(&%s, sizeof_%s, buf);\n" % (arg_name, st_name)
+          for st_field_access, st_field_name in struct_map[st_name]:
+            event_t_name = "%s.%s" % (probe_name, st_field_name or st_field_access)
+            c += "  event.%s = get_%s__%s(%s);\n" % (
+                event_t_name, st_name, st_field_name or st_field_access, arg_name)
+        else:
+          c += "  bpf_usdt_readarg(%d, ctx, &buf);\n" % (i+1)
+          c += "  bpf_probe_read(&event.%s.%s, sizeof_%s, buf);\n" % (probe_name, arg_name, st_name)
       else:
         c += "  bpf_usdt_readarg(%d, ctx, &event.%s.%s);\n" % (i + 1, probe_name, arg_name)
     else:
@@ -408,7 +417,11 @@ typedef union quicly_address_t {
   uint8_t sa[sizeof_sockaddr];
   uint8_t sin[sizeof_sockaddr_in];
   uint8_t sin6[sizeof_sockaddr_in6];
-} quicly_address_t;;
+} quicly_address_t;
+
+struct st_h2o_ebpf_map_key_t {
+  uint8_t payload[sizeof_st_h2o_ebpf_map_key_t];
+};
 
 %s
 %s
@@ -416,7 +429,7 @@ BPF_PERF_OUTPUT(events);
 
 // A general-purpose pinned BPF hash table.
 // The table size must be larger than the number of threads in h2o.
-BPF_TABLE("hash", pid_t, uint64_t, h2o_tid_to_u64, 1024);
+BPF_TABLE_PINNED("hash", pid_t, uint64_t, h2o_tid_to_u64, 1024, H2O_EBPF_TID2U64_MAP_PATH);
 
 // HTTP/3 tracing
 BPF_HASH(h2o_to_quicly_conn, u64, u32);
@@ -524,6 +537,7 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
 extern "C" {
 #include <sys/time.h>
 #include "quicly.h"
+#include "h2o/ebpf.h"
 }
 
 #include <cstdlib>
