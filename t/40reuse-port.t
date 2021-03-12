@@ -18,6 +18,7 @@ hosts:
         file.dir: @{[ DOC_ROOT ]}
 EOT
     my $out = `ss -tlnp sport $server->{port} 2>&1 | sed '1d'`;
+    print($out);
     if ($reuseport eq 'ON') {
         my @lines = split(/\n/, $out);
         is scalar(@lines), 4, "Found 4 listeners";
