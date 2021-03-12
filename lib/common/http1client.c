@@ -574,12 +574,6 @@ static int do_write_req(h2o_httpclient_t *_client, h2o_iovec_t chunk, int is_end
 
     swap_buffers(&client->_body_buf, &client->_body_buf_in_flight);
 
-    if (client->_body_buf_in_flight->size == 0) {
-        /* return immediately if the chunk is empty */
-        on_req_body_done(client->sock, NULL);
-        return 0;
-    }
-
     h2o_timer_unlink(&client->super._timeout);
 
     h2o_iovec_t iov = h2o_iovec_init(client->_body_buf_in_flight->bytes, client->_body_buf_in_flight->size);

@@ -374,7 +374,7 @@ static void check_run_blocked(struct st_h2o_http3_server_conn_t *conn)
         request_run_delayed(conn);
 }
 
-static void dispose_request(struct st_h2o_http3_server_stream_t *stream)
+static void pre_dispose_request(struct st_h2o_http3_server_stream_t *stream)
 {
     size_t i;
 
@@ -407,9 +407,6 @@ static void dispose_request(struct st_h2o_http3_server_stream_t *stream)
             h2o_timer_unlink(&stream->tunnel->up.delayed_write);
         free(stream->tunnel);
     }
-
-    /* dispose the request */
-    h2o_dispose_request(&stream->req);
 }
 
 static void set_state(struct st_h2o_http3_server_stream_t *stream, enum h2o_http3_server_stream_state state)
@@ -428,7 +425,7 @@ static void set_state(struct st_h2o_http3_server_stream_t *stream, enum h2o_http
         assert(conn->delayed_streams.recv_body_blocked.prev == &stream->link || !"stream is not registered to the recv_body list?");
         break;
     case H2O_HTTP3_SERVER_STREAM_STATE_CLOSE_WAIT: {
-        dispose_request(stream);
+        pre_dispose_request(stream);
         static const quicly_stream_callbacks_t close_wait_callbacks = {on_stream_destroy,
                                                                        quicly_stream_noop_on_send_shift,
                                                                        quicly_stream_noop_on_send_emit,
@@ -620,7 +617,8 @@ void on_stream_destroy(quicly_stream_t *qs, int err)
     if (h2o_linklist_is_linked(&stream->link))
         h2o_linklist_unlink(&stream->link);
     if (stream->state != H2O_HTTP3_SERVER_STREAM_STATE_CLOSE_WAIT)
-        dispose_request(stream);
+        pre_dispose_request(stream);
+    h2o_dispose_request(&stream->req);
     free(stream);
 }
 
@@ -1093,7 +1091,7 @@ static int handle_input_expect_headers(struct st_h2o_http3_server_stream_t *stre
 {
     struct st_h2o_http3_server_conn_t *conn = get_conn(stream);
     h2o_http3_read_frame_t frame;
-    int header_exists_map, ret;
+    int header_exists_map = 0, ret;
     uint8_t header_ack[H2O_HPACK_ENCODE_INT_MAX_LENGTH];
     size_t header_ack_len;
 
@@ -1127,6 +1125,17 @@ static int handle_input_expect_headers(struct st_h2o_http3_server_stream_t *stre
 
     h2o_probe_log_request(&stream->req, stream->quic->stream_id);
 
+    int is_connect = h2o_memis(stream->req.input.method.base, stream->req.input.method.len, H2O_STRLIT("CONNECT"));
+
+    /* check if existence and non-existence of pseudo headers are correct */
+    int expected_map = H2O_HPACK_PARSE_HEADERS_METHOD_EXISTS | H2O_HPACK_PARSE_HEADERS_AUTHORITY_EXISTS;
+    if (!is_connect)
+        expected_map |= H2O_HPACK_PARSE_HEADERS_SCHEME_EXISTS | H2O_HPACK_PARSE_HEADERS_PATH_EXISTS;
+    if (header_exists_map != expected_map) {
+        shutdown_stream(stream, H2O_HTTP3_ERROR_GENERAL_PROTOCOL, H2O_HTTP3_ERROR_GENERAL_PROTOCOL);
+        return 0;
+    }
+
     /* send a 400 error when observing an invalid header character */
     if (ret == H2O_HTTP2_ERROR_INVALID_HEADER_CHAR)
         return handle_input_expect_headers_send_http_error(stream, h2o_send_error_400, "Invalid Request", *err_desc, err_desc);
@@ -1147,7 +1156,7 @@ static int handle_input_expect_headers(struct st_h2o_http3_server_stream_t *stre
     }
 
     /* special handling of CONNECT method */
-    if (h2o_memis(stream->req.input.method.base, stream->req.input.method.len, H2O_STRLIT("CONNECT"))) {
+    if (is_connect) {
         if (stream->req.content_length != SIZE_MAX)
             return handle_input_expect_headers_send_http_error(stream, h2o_send_error_400, "Invalid Request",
                                                                "CONNECT request cannot have request body", err_desc);
@@ -1221,8 +1230,6 @@ static void do_send(h2o_ostream_t *_ostr, h2o_req_t *_req, h2o_sendvec_t *bufs, 
     stream->proceed_requested = 0;
 
     if (stream->state == H2O_HTTP3_SERVER_STREAM_STATE_SEND_HEADERS) {
-        if (!quicly_recvstate_transfer_complete(&stream->quic->recvstate) && !quicly_stop_requested(stream->quic))
-            quicly_request_stop(stream->quic, H2O_HTTP3_ERROR_EARLY_RESPONSE);
         write_response(stream);
         h2o_probe_log_response(&stream->req, stream->quic->stream_id, NULL);
         set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_SEND_BODY);
@@ -1368,6 +1375,9 @@ static void establish_tunnel(h2o_req_t *req, h2o_tunnel_t *tunnel, uint64_t idle
     finalize_do_send(stream);
     assert(!stream->proceed_while_sending);
     stream->proceed_requested = 1; /* suppress invocation of `tunnel->proceed_read` until `tunnel_on_read` gets called */
+
+    if (stream->req_body != NULL)
+        tunnel_write(stream);
 }
 
 static int handle_priority_update_frame(struct st_h2o_http3_server_conn_t *conn, const h2o_http3_priority_update_frame_t *frame)

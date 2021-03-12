@@ -78,11 +78,17 @@ extern "C" {
 #define PTLS_AES_IV_SIZE 16
 #define PTLS_AESGCM_IV_SIZE 12
 #define PTLS_AESGCM_TAG_SIZE 16
+#define PTLS_AESGCM_CONFIDENTIALITY_LIMIT 0x2000000            /* 2^25 */
+#define PTLS_AESGCM_INTEGRITY_LIMIT UINT64_C(0x40000000000000) /* 2^54 */
+#define PTLS_AESCCM_CONFIDENTIALITY_LIMIT 0xB504F3             /* 2^23.5 */
+#define PTLS_AESCCM_INTEGRITY_LIMIT 0xB504F3                   /* 2^23.5 */
 
 #define PTLS_CHACHA20_KEY_SIZE 32
 #define PTLS_CHACHA20_IV_SIZE 16
 #define PTLS_CHACHA20POLY1305_IV_SIZE 12
 #define PTLS_CHACHA20POLY1305_TAG_SIZE 16
+#define PTLS_CHACHA20POLY1305_CONFIDENTIALITY_LIMIT UINT64_MAX       /* at least 2^64 */
+#define PTLS_CHACHA20POLY1305_INTEGRITY_LIMIT UINT64_C(0x1000000000) /* 2^36 */
 
 #define PTLS_BLOWFISH_KEY_SIZE 16
 #define PTLS_BLOWFISH_BLOCK_SIZE 8
@@ -147,6 +153,7 @@ extern "C" {
 #define PTLS_ALERT_BAD_RECORD_MAC 20
 #define PTLS_ALERT_HANDSHAKE_FAILURE 40
 #define PTLS_ALERT_BAD_CERTIFICATE 42
+#define PTLS_ALERT_UNSUPPORTED_CERTIFICATE 43
 #define PTLS_ALERT_CERTIFICATE_REVOKED 44
 #define PTLS_ALERT_CERTIFICATE_EXPIRED 45
 #define PTLS_ALERT_CERTIFICATE_UNKNOWN 46
@@ -203,6 +210,9 @@ extern "C" {
 #define PTLS_HANDSHAKE_TYPE_KEY_UPDATE 24
 #define PTLS_HANDSHAKE_TYPE_COMPRESSED_CERTIFICATE 25
 #define PTLS_HANDSHAKE_TYPE_MESSAGE_HASH 254
+
+#define PTLS_CERTIFICATE_TYPE_X509 0
+#define PTLS_CERTIFICATE_TYPE_RAW_PUBLIC_KEY 2
 
 #define PTLS_ZERO_DIGEST_SHA256                                                                                                    \
     {                                                                                                                              \
@@ -318,6 +328,7 @@ typedef struct st_ptls_aead_context_t {
     const struct st_ptls_aead_algorithm_t *algo;
     /* field above this line must not be altered by the crypto binding */
     void (*dispose_crypto)(struct st_ptls_aead_context_t *ctx);
+    void (*do_xor_iv)(struct st_ptls_aead_context_t *ctx, const void * bytes, size_t len);
     void (*do_encrypt_init)(struct st_ptls_aead_context_t *ctx, uint64_t seq, const void *aad, size_t aadlen);
     size_t (*do_encrypt_update)(struct st_ptls_aead_context_t *ctx, void *output, const void *input, size_t inlen);
     size_t (*do_encrypt_final)(struct st_ptls_aead_context_t *ctx, void *output);
@@ -335,6 +346,14 @@ typedef const struct st_ptls_aead_algorithm_t {
      * name (following the convention of `openssl ciphers -v ALL`)
      */
     const char *name;
+    /**
+     * confidentiality_limit (max records / packets sent before re-key)
+     */
+    const uint64_t confidentiality_limit;
+    /**
+     * integrity_limit (max decryption failure records / packets before re-key)
+     */
+    const uint64_t integrity_limit;
     /**
      * the underlying key stream
      */
@@ -516,6 +535,10 @@ typedef struct st_ptls_on_client_hello_parameters_t {
         const uint16_t *list;
         size_t count;
     } cipher_suites;
+    struct {
+        const uint8_t *list;
+        size_t count;
+    } server_certificate_types;
     /**
      * if ESNI was used
      */
@@ -692,6 +715,19 @@ struct st_ptls_context_t {
      * if set, EOED will not be emitted or accepted
      */
     unsigned omit_end_of_early_data : 1;
+    /**
+     * This option turns on support for Raw Public Keys (RFC 7250).
+     *
+     * When running as a client, this option instructs the client to request the server to send raw public keys in place of X.509
+     * certificate chain. The client should set its `certificate_verify` callback to one that is capable of validating the raw
+     * public key that will be sent by the server.
+     *
+     * When running as a server, this option instructs the server to only handle clients requesting the use of raw public keys. If
+     * the client does not, the handshake is rejected. Note however that the rejection happens only after the `on_client_hello`
+     * callback is being called. Therefore, applications can support both X.509 and raw public keys by swapping `ptls_context_t` to
+     * the correct one when that callback is being called (like handling swapping the contexts based on the value of SNI).
+     */
+    unsigned use_raw_public_keys : 1;
     /**
      *
      */
@@ -1215,6 +1251,11 @@ ptls_aead_context_t *ptls_aead_new_direct(ptls_aead_algorithm_t *aead, int is_en
  */
 void ptls_aead_free(ptls_aead_context_t *ctx);
 /**
+ * Permutes the static IV by applying given bytes using bit-wise XOR. This API can be used for supplying nonces longer than 64-
+ * bits.
+ */
+static void ptls_aead_xor_iv(ptls_aead_context_t *ctx, const void *bytes, size_t len);
+/**
  *
  */
 static size_t ptls_aead_encrypt(ptls_aead_context_t *ctx, void *output, const void *input, size_t inlen, uint64_t seq,
@@ -1397,6 +1438,11 @@ inline void ptls_cipher_init(ptls_cipher_context_t *ctx, const void *iv)
 inline void ptls_cipher_encrypt(ptls_cipher_context_t *ctx, void *output, const void *input, size_t len)
 {
     ctx->do_transform(ctx, output, input, len);
+}
+
+inline void ptls_aead_xor_iv(ptls_aead_context_t *ctx, const void *bytes, size_t len)
+{
+    ctx->do_xor_iv(ctx, bytes, len);
 }
 
 inline size_t ptls_aead_encrypt(ptls_aead_context_t *ctx, void *output, const void *input, size_t inlen, uint64_t seq,

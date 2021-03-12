@@ -93,6 +93,10 @@ ADD_EXECUTABLE(test-minicrypto.t
     lib/cifra/random.c)
 SET(TEST_EXES test-minicrypto.t)
 
+
+SET(PTLSBENCH_LIBS
+    picotls-minicrypto picotls-core)
+
 FIND_PACKAGE(OpenSSL)
 IF (OPENSSL_FOUND AND NOT (OPENSSL_VERSION VERSION_LESS "1.0.1"))
     MESSAGE(STATUS "  Enabling OpenSSL support")
@@ -122,9 +126,7 @@ IF (OPENSSL_FOUND AND NOT (OPENSSL_VERSION VERSION_LESS "1.0.1"))
     SET_TARGET_PROPERTIES(test-openssl.t PROPERTIES COMPILE_FLAGS "-DPTLS_MEMORY_DEBUG=1")
     TARGET_LINK_LIBRARIES(test-openssl.t ${OPENSSL_LIBRARIES} ${CMAKE_DL_LIBS})
 
-    ADD_EXECUTABLE(ptlsbench t/ptlsbench.c)
-    SET_TARGET_PROPERTIES(ptlsbench PROPERTIES COMPILE_FLAGS "-DPTLS_MEMORY_DEBUG=1")
-    TARGET_LINK_LIBRARIES(ptlsbench picotls-minicrypto picotls-openssl picotls-core ${OPENSSL_LIBRARIES} ${CMAKE_DL_LIBS})
+    LIST(APPEND PTLSBENCH_LIBS picotls-openssl ${OPENSSL_LIBRARIES} ${CMAKE_DL_LIBS})
 
     SET(TEST_EXES ${TEST_EXES} test-openssl.t)
 ELSE ()
@@ -149,7 +151,13 @@ IF ((CMAKE_SIZEOF_VOID_P EQUAL 8) AND
         ADD_DEPENDENCIES(test-fusion.t generate-picotls-probes)
     ENDIF ()
     SET(TEST_EXES ${TEST_EXES} test-fusion.t)
+    
+    LIST(APPEND PTLSBENCH_LIBS picotls-fusion)
 ENDIF ()
+
+ADD_EXECUTABLE(ptlsbench t/ptlsbench.c)
+SET_TARGET_PROPERTIES(ptlsbench PROPERTIES COMPILE_FLAGS "-DPTLS_MEMORY_DEBUG=1")
+TARGET_LINK_LIBRARIES(ptlsbench ${PTLSBENCH_LIBS})
 
 ADD_CUSTOM_TARGET(check env BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR} prove --exec '' -v ${CMAKE_CURRENT_BINARY_DIR}/*.t t/*.t WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} DEPENDS ${TEST_EXES} cli)
 
