@@ -222,12 +222,12 @@ DECL_ENTITY_READ_SEND_ERROR_XXX(502)
 
 static void handle_one_body_fragment(struct st_h2o_http1_conn_t *conn, size_t fragment_size, size_t extra_bytes, int complete)
 {
-    clear_timeouts(conn);
-
     if (fragment_size == 0 && !complete) {
         h2o_buffer_consume(&conn->sock->input, extra_bytes);
         return;
     }
+
+    clear_timeouts(conn);
 
     h2o_socket_read_stop(conn->sock);
     if (conn->req.write_req.cb(conn->req.write_req.ctx, h2o_iovec_init(conn->sock->input->bytes, fragment_size), complete) != 0) {
