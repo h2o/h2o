@@ -17,7 +17,7 @@ hosts:
       "/":
         file.dir: @{[ DOC_ROOT ]}
 EOT
-    my $out = `ss -tlnp sport $server->{port} 2>&1 | sed '1d'`;
+    my $out = `ss -tlnp | grep -w 0.0.0.0:$server->{port} 2>&1`;
     print($out);
     if ($reuseport eq 'ON') {
         my @lines = split(/\n/, $out);
