@@ -51,7 +51,7 @@ wait_port({port => $quic_port, proto => 'udp'});
 # Test 1:
 # Throw decryptable Initial first, then second-flight Initial with corrupted SCID
 # For the second packet, the correct behavior is to discard the packet.
-#system("python", "t/udp-generator.py", "127.0.0.1", "$quic_port", "t/assets/quic-decryptable-initial.bin", "t/assets/quic-initial-w-corrupted-scid.bin") == 0 or die "Failed to launch udp-generator";
+system("python", "t/udp-generator.py", "127.0.0.1", "$quic_port", "t/assets/quic-decryptable-initial.bin", "t/assets/quic-initial-w-corrupted-scid.bin") == 0 or die "Failed to launch udp-generator";
 
 # make sure the server did not crash
 my $port = $server->{port};
