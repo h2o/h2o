@@ -810,17 +810,15 @@ static void on_send_complete(h2o_socket_t *sock, const char *err)
 
     conn->_ostr_final.state = OSTREAM_STATE_DONE;
 
-    if (conn->req.is_tunnel_req && (conn->req.upgrade.base != NULL ? conn->req.res.status == 101
-                                                                   : 200 <= conn->req.res.status && conn->req.res.status <= 299)) {
-        /* If the connection is acting as a tunnel, close the receive side when the send side is being closed. */
+    if (conn->req.is_tunnel_req) {
+        /* We have received a complete request (the end of the request is the request headers, see `fixup_request`), and the
+         * connection is not going to handle any more requests. Therefore, we can close the connection immediately, regardless of if
+         * the connection had been turned into a tunnel. */
         assert(!conn->req.http1_is_persistent);
         cleanup_connection(conn);
-    } else {
-        /* Is a normal request-response cycle: conmplete the handling of request-response, or wait for the request to complete.
-         * TODO Consider if we should shut down the send side in case HTTP/1 is running without Content-Length header, as there is
-         * no other way to communicate the end of the response. T-E chunked will communicate the end when HTTP/1.1 is being used. */
-        if (conn->req.proceed_req == NULL)
-            cleanup_connection(conn);
+    } else if (conn->req.proceed_req == NULL) {
+        /* Upstream has sent an early response. Continue forwarding the request body. */
+        cleanup_connection(conn);
     }
 }
 
