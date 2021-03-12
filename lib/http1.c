@@ -674,6 +674,7 @@ static void handle_incoming_request(struct st_h2o_http1_conn_t *conn)
             conn->req.proceed_req = proceed_request;
             conn->req.entity = h2o_iovec_init("", 0); /* set to non-NULL pointer to indicate that request body exists */
             h2o_process_request(&conn->req);
+            conn->_req_entity_reader->handle_incoming_entity(conn);
         } else {
             /* Ordinary request without request body. */
             clear_timeouts(conn);
