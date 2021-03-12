@@ -785,11 +785,14 @@ int h2o_qpack_parse_request(h2o_mem_pool_t *pool, h2o_qpack_decoder_t *qpack, in
     if ((ret = parse_decode_context(qpack, &ctx, stream_id, &src, src_end)) != 0)
         return ret;
     if ((ret = h2o_hpack_parse_request(pool, decode_header, &ctx, method, scheme, authority, path, headers,
-                                       pseudo_header_exists_map, content_length, digests, src, src_end - src, err_desc)) != 0)
-        return normalize_error_code(ret);
+                                       pseudo_header_exists_map, content_length, digests, src, src_end - src, err_desc)) != 0) {
+        /* bail out if the error is a hard error, otherwise build header ack then return */
+        if (ret != H2O_HTTP2_ERROR_INVALID_HEADER_CHAR)
+            return normalize_error_code(ret);
+    }
 
     *outbufsize = send_header_ack(qpack, &ctx, outbuf, stream_id);
-    return 0;
+    return ret;
 }
 
 int h2o_qpack_parse_response(h2o_mem_pool_t *pool, h2o_qpack_decoder_t *qpack, int64_t stream_id, int *status,
