@@ -406,6 +406,7 @@ static void pre_dispose_request(struct st_h2o_http3_server_stream_t *stream)
         if (h2o_timer_is_linked(&stream->tunnel->up.delayed_write))
             h2o_timer_unlink(&stream->tunnel->up.delayed_write);
         free(stream->tunnel);
+        stream->tunnel = NULL;
     }
 }
 
@@ -1363,6 +1364,10 @@ static void establish_tunnel(h2o_req_t *req, h2o_tunnel_t *tunnel, uint64_t idle
 {
     struct st_h2o_http3_server_stream_t *stream = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_stream_t, req, req);
 
+    if (stream->tunnel == NULL) {
+        /* the tunnel has been closed in the meantime */
+        return;
+    }
     stream->tunnel->tunnel = tunnel;
     tunnel->data = stream;
     tunnel->on_write_complete = tunnel_on_write_complete;
