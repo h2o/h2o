@@ -158,8 +158,9 @@ subtest "connect" => sub {
         };
     };
     my $connect_get_resp = sub {
-        my ($conn, $origin) = @_;
+        my ($conn, $origin, $extra) = @_;
         my $req = join "\r\n", "CONNECT $origin HTTP/1.1", "host: $origin", "connection: close", "", "";
+        $req .= $extra if defined $extra;
         is $conn->syswrite($req), length($req), "send request";
         sleep 0.5; # wait for body
         my $resp = '';
@@ -190,6 +191,23 @@ subtest "connect" => sub {
                 like $resp, qr{HTTP/[0-9\.]+ 200.*\r\n\r\n$}s, "check response";
                 test_echo($conn);
             });
+        };
+        subtest "early-data" => sub {
+            subtest "fail" => sub {
+                $connector->(sub {
+                    my $conn = shift;
+                    my $resp = $connect_get_resp->($conn, "fail:8080");
+                    like $resp, qr{HTTP/[0-9\.]+ 403.*\r\n\r\naccess forbidden\n$}s, "check response";
+                });
+            };
+            subtest "success" => sub {
+                $connector->(sub {
+                    my $conn = shift;
+                    my $resp = $connect_get_resp->($conn, "success:8080", "abc");
+                    like $resp, qr{HTTP/[0-9\.]+ 200.*\r\n\r\nabc$}s, "check response";
+                    test_echo($conn);
+                });
+            };
         };
     };
     subtest "plaintext" => sub {
