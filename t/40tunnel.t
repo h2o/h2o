@@ -112,21 +112,21 @@ subtest "websocket" => sub {
 
 subtest "connect" => sub {
     # create listening socket
-    my $server_sock = IO::Socket::INET->new(
+    my $upstream_listener = IO::Socket::INET->new(
         LocalPort => $upstream_port,
         Proto     => "tcp",
         Listen    => 5,
         ReuseAddr => 1,
     ) or die "failed to listen to port:$!";
     # fork
-    my $pid = fork;
+    my $upstream_pid = fork;
     die "fork failed:$!"
-        unless defined $pid;
-    if ($pid == 0) {
-        # server
+        unless defined $upstream_pid;
+    if ($upstream_pid == 0) {
+        # upstream server
         while (1) {
             # accept
-            my $conn = $server_sock->accept
+            my $conn = $upstream_listener->accept
                 or next;
             # read request
             $conn->sysread(my $req, 4096)
@@ -149,50 +149,35 @@ subtest "connect" => sub {
         }
     }
     # client; run tests
-    undef $server_sock;
-    my $test_get = sub {
-        my ($proto, $port) = @_;
-        subtest "GET" => sub {
-            my $resp = `curl --dump-header /dev/stdout --silent --insecure '$proto://127.0.0.1:$port/'`;
-            like $resp, qr{^HTTP/[^ ]+ 403.*\naccess forbidden\n$}s;
+    undef $upstream_listener;
+    subtest "h1-rawsock" => sub {
+        my $test_get = sub {
+            my ($proto, $port) = @_;
+            subtest "GET" => sub {
+                my $resp = `curl --dump-header /dev/stdout --silent --insecure '$proto://127.0.0.1:$port/'`;
+                like $resp, qr{^HTTP/[^ ]+ 403.*\naccess forbidden\n$}s;
+            };
         };
-    };
-    my $connect_get_resp = sub {
-        my ($conn, $origin, $extra) = @_;
-        my $req = join "\r\n", "CONNECT $origin HTTP/1.1", "host: $origin", "connection: close", "", "";
-        $req .= $extra if defined $extra;
-        is $conn->syswrite($req), length($req), "send request";
-        sleep 0.5; # wait for body
-        my $resp = '';
-        while (IO::Select->new($conn)->can_read(0)) {
-            my $rret = $conn->sysread($resp, 4096, length $resp);
-            last if $rret == 0;
-            if (! defined $rret) {
-                fail "read response";
-                return "";
-            }
-        }
-        pass "read response";
-        $resp;
-    };
-    my $test_connect = sub {
-        my $connector = shift;
-        subtest "fail" => sub {
-            $connector->(sub {
-                my $conn = shift;
-                my $resp = $connect_get_resp->($conn, "fail:8080");
-                like $resp, qr{HTTP/[0-9\.]+ 403.*\r\n\r\naccess forbidden\n$}s, "check response";
-            });
-        };
-        subtest "success" => sub {
-            $connector->(sub {
-                my $conn = shift;
-                my $resp = $connect_get_resp->($conn, "success:8080");
-                like $resp, qr{HTTP/[0-9\.]+ 200.*\r\n\r\n$}s, "check response";
-                test_echo($conn);
-            });
-        };
-        subtest "early-data" => sub {
+        my $test_connect = sub {
+            my $connector = shift;
+            my $connect_get_resp = sub {
+                my ($conn, $origin, $extra) = @_;
+                my $req = join "\r\n", "CONNECT $origin HTTP/1.1", "host: $origin", "connection: close", "", "";
+                $req .= $extra if defined $extra;
+                is $conn->syswrite($req), length($req), "send request";
+                sleep 0.5; # wait for body
+                my $resp = '';
+                while (IO::Select->new($conn)->can_read(0)) {
+                    my $rret = $conn->sysread($resp, 4096, length $resp);
+                    last if $rret == 0;
+                    if (! defined $rret) {
+                        fail "read response";
+                        return "";
+                    }
+                }
+                pass "read response";
+                $resp;
+            };
             subtest "fail" => sub {
                 $connector->(sub {
                     my $conn = shift;
@@ -203,23 +188,40 @@ subtest "connect" => sub {
             subtest "success" => sub {
                 $connector->(sub {
                     my $conn = shift;
-                    my $resp = $connect_get_resp->($conn, "success:8080", "abc");
-                    like $resp, qr{HTTP/[0-9\.]+ 200.*\r\n\r\nabc$}s, "check response";
+                    my $resp = $connect_get_resp->($conn, "success:8080");
+                    like $resp, qr{HTTP/[0-9\.]+ 200.*\r\n\r\n$}s, "check response";
                     test_echo($conn);
                 });
             };
+            subtest "early-data" => sub {
+                subtest "fail" => sub {
+                    $connector->(sub {
+                        my $conn = shift;
+                        my $resp = $connect_get_resp->($conn, "fail:8080");
+                        like $resp, qr{HTTP/[0-9\.]+ 403.*\r\n\r\naccess forbidden\n$}s, "check response";
+                    });
+                };
+                subtest "success" => sub {
+                    $connector->(sub {
+                        my $conn = shift;
+                        my $resp = $connect_get_resp->($conn, "success:8080", "abc");
+                        like $resp, qr{HTTP/[0-9\.]+ 200.*\r\n\r\nabc$}s, "check response";
+                        test_echo($conn);
+                    });
+                };
+            };
+        };
+        subtest "plaintext" => sub {
+            $test_get->('http', $server->{port});
+            $test_connect->(\&test_plaintext);
+        };
+        subtest "tls" => sub {
+            $test_get->('https', $server->{tls_port});
+            $test_connect->(\&test_tls);
         };
     };
-    subtest "plaintext" => sub {
-        $test_get->('http', $server->{port});
-        $test_connect->(\&test_plaintext);
-    };
-    subtest "tls" => sub {
-        $test_get->('https', $server->{tls_port});
-        $test_connect->(\&test_tls);
-    };
-    kill 'KILL', $pid;
-    while (waitpid($pid, 0) != $pid) {}
+    kill 'KILL', $upstream_pid;
+    while (waitpid($upstream_pid, 0) != $upstream_pid) {}
 };
 
 done_testing;
