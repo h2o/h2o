@@ -145,13 +145,11 @@ subtest "connect" => sub {
             $conn->sysread(my $req, 4096)
                 or die "failed to read request";
             $req =~ qr{^([^ ]+) ([^ ]+) HTTP/.*?\r\n\r\n(.*)$}s
-                or die "failed to parse request";
-            die "failed to parse request"
-                if $3;
-            my ($meth, $origin) = ($1, $2);
+                or die "failed to parse request:::$req";
+            my ($meth, $origin, $remainder) = ($1, $2, $3 ? $3 : "");
             # send 200 and run as an echo server, or send 403
             if ($meth eq 'CONNECT' and $origin !~ /^fail:/) {
-                $conn->syswrite("HTTP/1.1 200 OK\r\n\r\n");
+                $conn->syswrite("HTTP/1.1 200 OK\r\n\r\n$3");
                 while ($conn->sysread(my $buf, 4096)) {
                     $conn->syswrite($buf)
                         or last;
