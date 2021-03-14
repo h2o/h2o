@@ -94,6 +94,7 @@ EOT
             my ($headers, $body) = get($proto, $port, $curl, '/');
             like $headers, qr{^HTTP/[0-9.]+ 502}is;
 
+            sleep 1;
             my ($access_logs, $error_logs) = read_logs($access_log_file, $error_log_file);
             note $_ for @$error_logs;
             is scalar(@$access_logs), 1, 'access log count';
@@ -158,6 +159,7 @@ EOT
             my ($headers, $body) = get($proto, $port, $curl, '/');
             like $headers, qr{^HTTP/[0-9.]+ 502}is;
 
+            sleep 1;
             my ($access_logs, $error_logs) = read_logs($access_log_file, $error_log_file);
             note $_ for @$error_logs;
             is scalar(@$access_logs), 1, 'access log count';
