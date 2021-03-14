@@ -1,5 +1,6 @@
 use strict;
 use warnings;
+use File::Temp qw(tempdir);
 use IO::Select;
 use IO::Socket::INET;
 use Net::EmptyPort qw(check_port empty_port);
@@ -12,9 +13,21 @@ plan skip_all => 'plackup not found'
 plan skip_all => 'Starlet not found'
     unless system('perl -MStarlet /dev/null > /dev/null 2>&1') == 0;
 
+my $tempdir = tempdir(CLEANUP => 1);
+
 my $upstream_port = empty_port();
+my $quic_port = empty_port({
+    host  => "127.0.0.1",
+    proto => "udp",
+});
 
 my $server = spawn_h2o(<< "EOT");
+listen:
+  type: quic
+  port: $quic_port
+  ssl:
+    key-file: examples/h2o/server.key
+    certificate-file: examples/h2o/server.crt
 hosts:
   default:
     paths:
@@ -148,7 +161,7 @@ subtest "connect" => sub {
             }
         }
     }
-    # client; run tests
+    # client; run tests, first using hand-written h1 client, then using h2o-httpclient
     undef $upstream_listener;
     subtest "h1-rawsock" => sub {
         my $test_get = sub {
@@ -219,6 +232,42 @@ subtest "connect" => sub {
             $test_get->('https', $server->{tls_port});
             $test_connect->(\&test_tls);
         };
+    };
+    subtest "h2o-httpclient" => sub {
+        my $client_prog = bindir() . "/h2o-httpclient";
+        plan skip_all => "$client_prog not found"
+            unless -e $client_prog;
+        my $connect_get_resp = sub {
+            my ($scheme, $port, $opts, $target, $send_cb) = @_;
+            open my $fh, "|-", "exec $client_prog -k -x $target $opts $scheme://127.0.0.1:$port/ > $tempdir/out 2>&1"
+                or die "failed to launch $client_prog:$!";
+            $fh->autoflush(1);
+            $send_cb->($fh);
+            close $fh;
+            open $fh, "<", "$tempdir/out"
+                or die "failed to open $tempdir/out:$!";
+            do { local $/; <$fh> };
+        };
+        for (['h1', 'http', $server->{port}, ''], ['h1s', 'https', $server->{tls_port}, ''], ['h3', 'https', $quic_port, '-3 100']) {
+            my ($name, $scheme, $port, $opts) = @$_;
+            subtest $name => sub {
+                subtest "fail" => sub {
+                    my $resp = $connect_get_resp->($scheme, $port, $opts, "fail:8080", sub {
+                        sleep 1;
+                    });
+                    like $resp, qr{^HTTP/\S+ 403.*\n\n}s;
+                };
+                subtest "success" => sub {
+                    my $resp = $connect_get_resp->($scheme, $port, $opts, "success:8080", sub {
+                        my $fh = shift;
+                        sleep 0.5;
+                        print $fh "hello world";
+                        sleep 0.5;
+                    });
+                    like $resp, qr{^HTTP/\S+ 200.*\nhello world$}s;
+                };
+            };
+        }
     };
     kill 'KILL', $upstream_pid;
     while (waitpid($upstream_pid, 0) != $upstream_pid) {}
