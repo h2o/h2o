@@ -8,9 +8,13 @@ plan skip_all => "ss not found"
 
 sub doit {
     my $reuseport = shift;
-    my $server = spawn_h2o(<< "EOT");
-num-threads: 4
+    my ($port) = empty_ports(1, { host => "0.0.0.0" });
+    my $server = spawn_h2o_raw(<< "EOT", [$port]);
 tcp-reuseport: $reuseport
+listen:
+  host: 0.0.0.0
+  port: $port
+num-threads: 4
 hosts:
   default:
     paths:
