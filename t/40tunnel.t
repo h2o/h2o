@@ -255,7 +255,7 @@ subtest "connect" => sub {
                     my $resp = $connect_get_resp->($scheme, $port, $opts, "fail:8080", sub {
                         sleep 1;
                     });
-                    like $resp, qr{^HTTP/\S+ 403.*\n\n}s;
+                    like $resp, qr{^HTTP/\S+ 403.*\n\naccess forbidden\n$}s;
                 };
                 subtest "success" => sub {
                     my $resp = $connect_get_resp->($scheme, $port, $opts, "success:8080", sub {
@@ -265,6 +265,20 @@ subtest "connect" => sub {
                         sleep 0.5;
                     });
                     like $resp, qr{^HTTP/\S+ 200.*\nhello world$}s;
+                };
+                subtest "early" => sub {
+                    my $doit = sub {
+                        my $target = shift;
+                        $connect_get_resp->($scheme, $port, $opts, $target, sub {
+                            my $fh = shift;
+                            print $fh "hello world";
+                            sleep 1;
+                        });
+                    };
+                    my $resp = $doit->("fail:8080");
+                    like $resp, qr{^HTTP/\S+ 403.*\n\naccess forbidden\n$}s, "fail";
+                    $resp = $doit->("success:8080");
+                    like $resp, qr{^HTTP/\S+ 200.*\nhello world$}s, "success";
                 };
             };
         }
