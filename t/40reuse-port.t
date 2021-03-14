@@ -22,7 +22,7 @@ hosts:
         file.dir: @{[ DOC_ROOT ]}
 EOT
     print(`ss -tlnp`);
-    my $out = `ss -tlnp | grep -w 0.0.0.0:$server->{port} 2>&1`;
+    my $out = `ss -tlnp | grep -w \*:$server->{port} 2>&1`;
     print($out);
     if ($reuseport eq 'ON') {
         my @lines = split(/\n/, $out);
