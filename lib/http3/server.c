@@ -931,16 +931,17 @@ static void run_delayed(h2o_timer_t *timer)
         while (!h2o_linklist_is_empty(&conn->delayed_streams.req_streaming)) {
             struct st_h2o_http3_server_stream_t *stream =
                 H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_stream_t, link, conn->delayed_streams.req_streaming.next);
+            int is_end_stream = quicly_recvstate_transfer_complete(&stream->quic->recvstate);
             assert(stream->req.process_called);
             assert(stream->req.write_req.cb != NULL);
             assert(stream->req_body != NULL);
-            assert(stream->req_body->size != 0);
+            assert(stream->req_body->size != 0 || is_end_stream);
             assert(!stream->read_blocked);
             h2o_linklist_unlink(&stream->link);
             stream->read_blocked = 1;
             made_progress = 1;
             if (stream->req.write_req.cb(stream->req.write_req.ctx, h2o_iovec_init(stream->req_body->bytes, stream->req_body->size),
-                                         quicly_recvstate_transfer_complete(&stream->quic->recvstate)) != 0) {
+                                         is_end_stream) != 0) {
                 shutdown_stream(stream, H2O_HTTP3_ERROR_INTERNAL, H2O_HTTP3_ERROR_INTERNAL);
             }
         }
