@@ -1605,12 +1605,12 @@ int h2o_setup_ebpf_map(char *map_path, size_t map_path_len)
     int fd = ebpf_map_create(BPF_MAP_TYPE_HASH, sizeof(pid_t), sizeof(uint64_t),
                  H2O_EBPF_MAP_SIZE, H2O_EBPF_RETURN_MAP_NAME);
     if (fd < 0) {
-        perror("BPF_MAP_CREATE failed");
+        h2o_perror("BPF_MAP_CREATE failed");
         return 0;
     }
 
     if (ebpf_obj_pin(fd, map_path) != 0) {
-        perror("BPF_OBJ_PIN failed");
+        h2o_perror("BPF_OBJ_PIN failed");
         return 0;
     }
     close(fd); // each worker thread has its own fd
@@ -1646,40 +1646,33 @@ static int open_tracing_map(h2o_loop_t *loop)
         return tracing_map_fd; // map still exists and we have a fd
 
     // map exists, try connect
-    union bpf_attr attr;
-    memset(&attr, 0, sizeof(attr));
-    attr.pathname = (uint64_t)&H2O_EBPF_MAP_PATH[0];
+    union bpf_attr attr = {
+        .pathname = (uint64_t)&H2O_EBPF_MAP_PATH[0],
+    };
     tracing_map_fd = syscall(__NR_bpf, BPF_OBJ_GET, &attr, sizeof(attr));
     if (tracing_map_fd < 0)
-        perror("BPF_OBJ_GET failed:");
+        h2o_perror("BPF_OBJ_GET failed");
     return tracing_map_fd;
 }
 
 static int ebpf_map_lookup(int fd, const void *key, void *value)
 {
-    union bpf_attr attr;
+    union bpf_attr attr = {
+        .map_fd = fd,
+        .key = (uint64_t)key,
+        .value = (uint64_t)value,
+    };
 
-    memset(&attr, 0, sizeof(attr));
-    attr.map_fd = fd;
-    attr.key = (uint64_t)key;
-    attr.value = (uint64_t)value;
-
-    if (syscall(__NR_bpf, BPF_MAP_LOOKUP_ELEM, &attr, sizeof(attr)) != 0)
-        return 0;
-
-    return 1;
+    return syscall(__NR_bpf, BPF_MAP_LOOKUP_ELEM, &attr, sizeof(attr));
 }
 
 static int ebpf_map_delete(int fd, const void *key)
 {
-    union bpf_attr attr = {0};
-    attr.map_fd = fd;
-    attr.key = (uint64_t)key;
-
-    if (syscall(__NR_bpf, BPF_MAP_DELETE_ELEM, &attr, sizeof(attr)) != 0)
-        return 0;
-
-    return 1;
+    union bpf_attr attr = {
+        .map_fd = fd,
+        .key = (uint64_t)key,
+    };
+    return syscall(__NR_bpf, BPF_MAP_DELETE_ELEM, &attr, sizeof(attr));
 }
 
 static inline int set_ebpf_map_key_tuples(const struct sockaddr *src, h2o_ebpf_address_t *dest)
@@ -1763,7 +1756,7 @@ static int open_ebpf_return_map(h2o_loop_t *loop)
     };
     fd = syscall(__NR_bpf, BPF_OBJ_GET, &attr, sizeof(attr));
     if (fd < 0)
-        perror("BPF_OBJ_GET failed:");
+        h2o_perror("BPF_OBJ_GET failed");
     return fd;
 }
 
@@ -1796,7 +1789,7 @@ h2o_ebpf_map_value_t h2o_socket_ebpf_lookup(h2o_loop_t *loop, int (*init_key)(h2
         H2O_SOCKET_ACCEPT(tid, &key);
 
         uint64_t retval = 0;
-        if (ebpf_map_lookup(return_fd, &tid, &retval)) {
+        if (ebpf_map_lookup(return_fd, &tid, &retval) != 0) {
             ebpf_map_delete(return_fd, &tid);
         }
 
