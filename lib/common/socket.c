@@ -1079,11 +1079,7 @@ static void proceed_handshake_picotls(h2o_socket_t *sock)
         } else {
             int state = ptls_handshake_is_in_client_auth(sock->ssl->ptls);
             fprintf(stderr, "proceed_handshake_picotls: is_in_client_auth_state: %d\n", state);
-            if (state) {
-                h2o_socket_read_start(sock, proceed_handshake);
-            } else {
-                h2o_socket_read_start(sock, on_handshake_complete);
-            }
+            h2o_socket_read_start(sock, state ? proceed_handshake : on_handshake_complete);
         }
         break;
     default:
