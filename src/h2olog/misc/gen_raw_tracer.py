@@ -257,10 +257,8 @@ int %s(struct pt_regs *ctx) {
   if fully_specified_probe_name == "h2o:socket_accept":
     c += r"""
 #ifdef H2OLOG_SAMPLING_RATE
-  const struct task_struct *task = (const struct task_struct*)bpf_get_current_task();
-  pid_t tid = task->pid;
   h2o_ebpf_map_value_t retval = bpf_get_prandom_u32() > (H2OLOG_SAMPLING_RATE * U32_MAX);
-  h2o_return.insert(&tid, &retval);
+  h2o_return.insert(&event.socket_accept.tid, &retval);
   if (retval)
     return 0;
 #endif

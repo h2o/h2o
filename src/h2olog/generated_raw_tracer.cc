@@ -643,6 +643,7 @@ struct h2olog_event_t {
       size_t size;
     } conn_stats;
     struct { // h2o:socket_accept
+      pid_t tid;
       struct st_h2o_ebpf_map_key_t info;
     } socket_accept;
     struct { // h2o:receive_request
@@ -1527,6 +1528,7 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
   case H2OLOG_EVENT_ID_H2O_SOCKET_ACCEPT: { // h2o:socket_accept
     json_write_pair_n(out_, STR_LIT("type"), STR_LIT("socket-accept"));
     json_write_pair_c(out_, STR_LIT("seq"), seq_);
+    json_write_pair_c(out_, STR_LIT("tid"), event->socket_accept.tid);
     json_write_pair_c(out_, STR_LIT("info"), event->socket_accept.info);
     json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
     break;
@@ -2300,6 +2302,7 @@ struct h2olog_event_t {
       size_t size;
     } conn_stats;
     struct { // h2o:socket_accept
+      pid_t tid;
       struct st_h2o_ebpf_map_key_t info;
     } socket_accept;
     struct { // h2o:receive_request
@@ -4095,15 +4098,15 @@ int trace_h2o__socket_accept(struct pt_regs *ctx) {
   const void *buf = NULL;
   struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_H2O_SOCKET_ACCEPT };
 
+  // pid_t tid
+  bpf_usdt_readarg(1, ctx, &event.socket_accept.tid);
   // struct st_h2o_ebpf_map_key_t * info
-  bpf_usdt_readarg(1, ctx, &buf);
+  bpf_usdt_readarg(2, ctx, &buf);
   bpf_probe_read(&event.socket_accept.info, sizeof_st_h2o_ebpf_map_key_t, buf);
 
 #ifdef H2OLOG_SAMPLING_RATE
-  const struct task_struct *task = (const struct task_struct*)bpf_get_current_task();
-  pid_t tid = task->pid;
   h2o_ebpf_map_value_t retval = bpf_get_prandom_u32() > (H2OLOG_SAMPLING_RATE * U32_MAX);
-  h2o_return.insert(&tid, &retval);
+  h2o_return.insert(&event.socket_accept.tid, &retval);
   if (retval)
     return 0;
 #endif
