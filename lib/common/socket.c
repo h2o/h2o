@@ -1077,9 +1077,13 @@ static void proceed_handshake_picotls(h2o_socket_t *sock)
             write_ssl_bytes(sock, wbuf.base, wbuf.off);
             flush_pending_ssl(sock, ret == 0 ? on_handshake_complete : proceed_handshake);
         } else {
-            fprintf(stderr, "proceed_handshake_picotls: \n");
-            h2o_socket_read_start(sock, on_handshake_complete);
-//            h2o_socket_read_start(sock, proceed_handshake);
+            int state = ptls_handshake_is_in_client_auth(sock->ssl->ptls);
+            fprintf(stderr, "proceed_handshake_picotls: is_in_client_auth_state: %d\n", state);
+            if (state) {
+                h2o_socket_read_start(sock, proceed_handshake);
+            } else {
+                h2o_socket_read_start(sock, on_handshake_complete);
+            }
         }
         break;
     default:
