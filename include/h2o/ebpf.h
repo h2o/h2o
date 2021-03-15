@@ -33,14 +33,13 @@ typedef struct st_h2o_ebpf_address_t {
 
 typedef struct st_h2o_ebpf_map_key_t {
     /**
-     * SOCK_STZREAM or SOCK_DGRAM
-     */
-    int sock_type;
-
-    /**
      * AF_INET or AF_INET6
      */
     int sa_family;
+    /**
+     * SOCK_STZREAM or SOCK_DGRAM
+     */
+    int sock_type;
     /**
      * The local, destination adddress in sockaddr_in or sockaddr_in6.
      */
