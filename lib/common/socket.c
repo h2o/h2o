@@ -1812,7 +1812,7 @@ h2o_ebpf_map_value_t h2o_socket_ebpf_lookup(h2o_loop_t *loop, int (*init_key)(h2
 
 int h2o_setup_ebpf_map(char *map_path, size_t map_path_len)
 {
-    return 0
+    return 0;
 }
 
 int h2o_socket_ebpf_init_key_raw(struct st_h2o_ebpf_map_key_t *key, int sock_type, struct sockaddr *local, struct sockaddr *remote)
@@ -1820,12 +1820,13 @@ int h2o_socket_ebpf_init_key_raw(struct st_h2o_ebpf_map_key_t *key, int sock_typ
     return 0;
 }
 
-int h2o_socket_ebpf_init_key_from_sock(struct st_h2o_ebpf_map_key_t *key, h2o_socket_t *sock)
+int h2o_socket_ebpf_init_key_from_sock(struct st_h2o_ebpf_map_key_t *key, void *sock)
 {
     return 0;
 }
 
-h2o_ebpf_map_value_t h2o_socket_ebpf_lookup(h2o_loop_t *loop, const h2o_ebpf_map_key_t *key)
+h2o_ebpf_map_value_t h2o_socket_ebpf_lookup(h2o_loop_t *loop, int (*init_key)(h2o_ebpf_map_key_t *key, void *cbdata),
+                                            void *cbdata)
 {
     return (h2o_ebpf_map_value_t){0};
 }
