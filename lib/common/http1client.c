@@ -472,16 +472,21 @@ static void on_whole_request_sent(h2o_socket_t *sock, const char *err)
     client->state.req = STREAM_STATE_CLOSED;
     client->super.timings.request_end_at = h2o_gettimeofday(client->super.ctx->loop);
 
-    switch (client->state.res) {
-    case STREAM_STATE_HEAD:
-        client->super._timeout.cb = on_head_first_byte_timeout;
-        h2o_timer_link(client->super.ctx->loop, client->super.ctx->first_byte_timeout, &client->super._timeout);
-        break;
-    case STREAM_STATE_BODY:
-        break;
-    case STREAM_STATE_CLOSED:
-        close_client(client);
-        break;
+    if (client->super.upgrade_to != NULL) {
+        /* TODO use shutdown(2) to signal the peer that our send side has been closed, but continue reading on the receive side. */
+        on_error(client, h2o_httpclient_error_is_eos);
+    } else {
+        switch (client->state.res) {
+        case STREAM_STATE_HEAD:
+            client->super._timeout.cb = on_head_first_byte_timeout;
+            h2o_timer_link(client->super.ctx->loop, client->super.ctx->first_byte_timeout, &client->super._timeout);
+            break;
+        case STREAM_STATE_BODY:
+            break;
+        case STREAM_STATE_CLOSED:
+            close_client(client);
+            break;
+        }
     }
 }
 
