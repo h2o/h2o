@@ -1202,13 +1202,23 @@ static void do_send(h2o_ostream_t *_ostr, h2o_req_t *_req, h2o_sendvec_t *bufs, 
 
     stream->proceed_requested = 0;
 
-    if (stream->state == H2O_HTTP3_SERVER_STREAM_STATE_SEND_HEADERS) {
+    switch (stream->state) {
+    case H2O_HTTP3_SERVER_STREAM_STATE_SEND_HEADERS:
         write_response(stream);
         h2o_probe_log_response(&stream->req, stream->quic->stream_id);
         set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_SEND_BODY);
-    } else {
-        assert(stream->state == H2O_HTTP3_SERVER_STREAM_STATE_SEND_BODY);
+        break;
+    case H2O_HTTP3_SERVER_STREAM_STATE_SEND_BODY:
         assert(quicly_sendstate_is_open(&stream->quic->sendstate));
+        break;
+    case H2O_HTTP3_SERVER_STREAM_STATE_CLOSE_WAIT:
+        /* This protocol handler transitions to CLOSE_WAIT when the request side is being reset by the origin. But our client-side
+         * implementations are capable of handling uni-directional close, therefore `do_send` might be invoked. The handler swallows
+         * the input, and relies on eventual destruction of `h2o_req_t` to discard the generator. */
+        return;
+    default:
+        h2o_fatal("logic flaw");
+        break;
     }
 
     /* If vectors carrying response body are being provided, copy them, incrementing the reference count if possible (for future
