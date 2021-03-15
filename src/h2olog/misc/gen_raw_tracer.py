@@ -555,7 +555,6 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
 extern "C" {
 #include <sys/time.h>
 #include "quicly.h"
-#include "h2o/ebpf.h"
 }
 
 #include <cstdlib>

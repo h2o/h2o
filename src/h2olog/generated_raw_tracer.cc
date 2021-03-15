@@ -3,7 +3,6 @@
 extern "C" {
 #include <sys/time.h>
 #include "quicly.h"
-#include "h2o/ebpf.h"
 }
 
 #include <cstdlib>

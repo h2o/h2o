@@ -30,7 +30,6 @@ extern "C" {
 #include <unistd.h>
 #include <stdarg.h>
 #include <limits.h>
-#include <signal.h>
 #include <sys/time.h>
 #include "h2o/memory.h"
 #include "h2o/version.h"
@@ -232,24 +231,8 @@ static void lost_cb(void *context, uint64_t lost)
     tracer->handle_lost(lost);
 }
 
-static void sig_cleanup(int signo)
-{
-    h2o_set_signal_handler(signo, SIG_DFL);
-
-    fprintf(stderr, "h2olog caught a signal: %s/%d\n", strsignal(signo), signo);
-    exit(0);
-}
-
-static void setup_signal_handlers()
-{
-    h2o_set_signal_handler(SIGINT, sig_cleanup);
-    h2o_set_signal_handler(SIGTERM, sig_cleanup);
-}
-
 int main(int argc, char **argv)
 {
-    setup_signal_handlers();
-
     std::unique_ptr<h2o_tracer> tracer(create_raw_tracer());
 
     int debug = 0;
