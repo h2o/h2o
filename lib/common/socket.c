@@ -1783,8 +1783,14 @@ h2o_ebpf_map_value_t h2o_socket_ebpf_lookup(h2o_loop_t *loop, int (*init_key)(h2
     if (return_fd >= 0) {
         pid_t tid = gettid();
 
-        // make sure a possible old value is cleared
-        ebpf_map_delete(return_fd, &tid);
+        // make sure a possible old value is not set,
+        // otherwise the subsequent logic will be unreliable.
+        if (ebpf_map_delete(return_fd, &tid) != 0) {
+            if (errno != ENOENT) {
+                char buf[128];
+                h2o_fatal("BPF_MAP_DELETE failed: %s", h2o_strerror_r(errno, buf, sizeof(buf)));
+            }
+        }
 
         H2O_SOCKET_ACCEPT(tid, &key);
 
