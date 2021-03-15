@@ -1573,28 +1573,40 @@ void h2o_sliding_counter_stop(h2o_sliding_counter_t *counter, uint64_t now)
 #include "h2o-probes.h"
 #include <sys/stat.h>
 
+static int ebpf_map_create(uint32_t map_type, uint32_t key_size, uint32_t value_size, uint32_t max_entries, const char *map_name)
+{
+    union bpf_attr attr = {
+        .map_type = map_type,
+        .key_size = key_size,
+        .value_size = value_size,
+        .max_entries = max_entries,
+    };
+    strncpy(attr.map_name, map_name, sizeof(attr.map_name));
+
+    return syscall(__NR_bpf, BPF_MAP_CREATE, &attr, sizeof(attr));
+}
+
+static int ebpf_obj_pin(int bpf_fd, const char* pathname)
+{
+     union bpf_attr  attr = {
+        .bpf_fd = (uint32_t)bpf_fd,
+        .pathname = (uint64_t)pathname,
+    };
+    return syscall(__NR_bpf, BPF_OBJ_PIN, &attr, sizeof(attr));
+}
+
 int h2o_setup_ebpf_maps(void)
 {
-    unlink(H2O_EBPF_TID2U64_MAP_PATH);
+    unlink(H2O_EBPF_RETURN_MAP_PATH);
 
-    union bpf_attr attr = {
-        .map_type = BPF_MAP_TYPE_HASH,
-        .key_size = sizeof(pid_t),
-        .value_size = sizeof(uint64_t),
-        .max_entries = 1024,
-    };
-    snprintf(attr.map_name, sizeof(attr.map_name), "h2o_tid_to_u64");
-    int fd = syscall(__NR_bpf, BPF_MAP_CREATE, &attr, sizeof(attr));
+    int fd = ebpf_map_create(BPF_MAP_TYPE_HASH, sizeof(pid_t), sizeof(uint64_t),
+                 H2O_EBPF_MAP_SIZE, H2O_EBPF_RETURN_MAP_NAME);
     if (fd < 0) {
         perror("BPF_MAP_CREATE failed");
         return 0;
     }
 
-    attr = (union bpf_attr){
-        .bpf_fd = fd,
-        .pathname = (uint64_t)H2O_EBPF_TID2U64_MAP_PATH,
-    };
-    if (syscall(__NR_bpf, BPF_OBJ_PIN, &attr, sizeof(attr)) != 0) {
+    if (ebpf_obj_pin(fd, H2O_EBPF_RETURN_MAP_PATH) != 0) {
         perror("BPF_OBJ_PIN failed");
         return 0;
     }
@@ -1714,7 +1726,7 @@ int h2o_socket_ebpf_init_key_from_sock(h2o_ebpf_map_key_t *key, void *_sock)
     return h2o_socket_ebpf_init_key_raw(key, sock_type, (void *)&local, (void *)&remote);
 }
 
-static int open_tracing_tid2u64_map(h2o_loop_t *loop)
+static int open_ebpf_return_map(h2o_loop_t *loop)
 {
     static __thread int fd = -1;
     static __thread uint64_t last_attempt = 0;
@@ -1726,7 +1738,7 @@ static int open_tracing_tid2u64_map(h2o_loop_t *loop)
 
     last_attempt = now;
 
-    const char *path = H2O_EBPF_TID2U64_MAP_PATH;
+    const char *path = H2O_EBPF_RETURN_MAP_PATH;
 
     // check if map exists at path
     struct stat s;
@@ -1754,7 +1766,7 @@ static int open_tracing_tid2u64_map(h2o_loop_t *loop)
 h2o_ebpf_map_value_t h2o_socket_ebpf_lookup(h2o_loop_t *loop, int (*init_key)(h2o_ebpf_map_key_t *key, void *cbdata), void *cbdata)
 {
     int map_fd = open_tracing_map(loop);
-    int return_fd = open_tracing_tid2u64_map(loop);
+    int return_fd = open_ebpf_return_map(loop);
     if (H2O_LIKELY(map_fd < 0 && return_fd < 0))
         return (h2o_ebpf_map_value_t){0};
 

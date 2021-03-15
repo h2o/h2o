@@ -259,9 +259,9 @@ int %s(struct pt_regs *ctx) {
 #ifdef H2OLOG_SAMPLING_RATE
   const struct task_struct *task = (const struct task_struct*)bpf_get_current_task();
   pid_t tid = task->pid;
-  uint64_t skip_tracing = bpf_get_prandom_u32() > (H2OLOG_SAMPLING_RATE * U32_MAX);
-  h2o_tid_to_u64.insert(&tid, &skip_tracing);
-  if (skip_tracing)
+  h2o_ebpf_map_value_t retval = bpf_get_prandom_u32() > (H2OLOG_SAMPLING_RATE * U32_MAX);
+  h2o_return.insert(&tid, &retval);
+  if (retval)
     return 0;
 #endif
 """
@@ -423,13 +423,15 @@ struct st_h2o_ebpf_map_key_t {
   uint8_t payload[sizeof_st_h2o_ebpf_map_key_t];
 };
 
+typedef uint64_t h2o_ebpf_map_value_t;
+
 %s
 %s
 BPF_PERF_OUTPUT(events);
 
-// A general-purpose pinned BPF hash table.
+// A pinned BPF object to return a value to h2o.
 // The table size must be larger than the number of threads in h2o.
-BPF_TABLE_PINNED("hash", pid_t, uint64_t, h2o_tid_to_u64, 1024, H2O_EBPF_TID2U64_MAP_PATH);
+BPF_TABLE_PINNED("hash", pid_t, h2o_ebpf_map_value_t, h2o_return, 1024, H2O_EBPF_RETURN_MAP_PATH);
 
 // HTTP/3 tracing
 BPF_HASH(h2o_to_quicly_conn, u64, u32);

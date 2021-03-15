@@ -234,10 +234,10 @@ static void lost_cb(void *context, uint64_t lost)
 
 static void setup_ebpf_map(ebpf::BPF *bpf, pid_t h2o_pid)
 {
-    auto table = bpf->get_table("h2o_tid_to_u64");
-    if (bpf_obj_pin(table.get_fd(), H2O_EBPF_TID2U64_MAP_PATH) != 0) {
+    auto table = bpf->get_table("h2o_return");
+    if (bpf_obj_pin(table.get_fd(), H2O_EBPF_RETURN_MAP_PATH) != 0) {
         if (errno != EEXIST) {
-            fprintf(stderr, "BPF_OBJ_PIN failed for %s: %s\n", H2O_EBPF_TID2U64_MAP_PATH, strerror(errno));
+            fprintf(stderr, "BPF_OBJ_PIN failed for %s: %s\n", H2O_EBPF_RETURN_MAP_PATH, strerror(errno));
         }
     }
 }
@@ -348,7 +348,7 @@ int main(int argc, char **argv)
 
     std::vector<std::string> cflags({
         make_pid_cflag("H2OLOG_H2O_PID", h2o_pid),
-        std::string("-DH2O_EBPF_TID2U64_MAP_PATH=\"") + H2O_EBPF_TID2U64_MAP_PATH + std::string("\""),
+        std::string("-DH2O_EBPF_RETURN_MAP_PATH=\"") + H2O_EBPF_RETURN_MAP_PATH + std::string("\""),
     });
 
     if (!response_header_filters.empty()) {
