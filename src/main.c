@@ -1163,10 +1163,9 @@ static struct listener_config_t *add_listener(int fd, struct sockaddr *addr, soc
     struct listener_config_t *listener = h2o_mem_alloc(sizeof(*listener));
 
     memset(listener, 0, sizeof(*listener));
-    memcpy(&listener->addr, addr, addrlen);
-    assert(listener->fds.size == 0);
     h2o_vector_reserve(NULL, &listener->fds, 1);
     listener->fds.entries[listener->fds.size++] = fd;
+    memcpy(&listener->addr, addr, addrlen);
     listener->addrlen = addrlen;
     if (is_global) {
         listener->hosts = NULL;
@@ -3089,52 +3088,59 @@ static void setup_configurators(void)
     h2o_config_register_status_handler(&conf.globalconf, &extra_status_handler);
 }
 
+static int dup_listener(int listener, int reuseport)
+{
+    int fd = -1;
+#if H2O_USE_REUSEPORT
+    if (reuseport) {
+        int type;
+        socklen_t typelen = sizeof(type);
+        struct sockaddr_storage ss;
+        socklen_t sslen = sizeof(ss);
+        if (getsockopt(listener, SOL_SOCKET, SO_TYPE, &type, &typelen) != 0) {
+            perror("failed to obtain the type of a listening socket");
+            abort();
+        }
+        assert(type == SOCK_DGRAM || type == SOCK_STREAM);
+        if (getsockname(listener, (struct sockaddr *)&ss, &sslen) != 0) {
+            perror("failed to obtain local address of a listening socket");
+            abort();
+        }
+        if ((fd = open_listener(ss.ss_family, type, type == SOCK_STREAM ? IPPROTO_TCP : IPPROTO_UDP, (struct sockaddr *)&ss,
+                                sslen)) != -1) {
+            if (type == SOCK_DGRAM)
+                setsockopt_recvpktinfo(fd, ss.ss_family);
+        } else {
+            perror("failed to bind additional listener");
+            abort();
+        }
+    }
+#endif
+    if (!reuseport && (fd = dup(listener)) == -1) {
+        perror("failed to dup listening socket");
+        abort();
+    }
+    set_cloexec(fd);
+    return fd;
+}
+
 static void create_per_thread_listeners(void)
 {
     for (size_t i = 0; i != conf.num_listeners; ++i) {
         struct listener_config_t *listener_config = conf.listeners[i];
-            int reuseport = 0;
+        int reuseport = 0;
 
 #if H2O_USE_REUSEPORT
-            socklen_t reuseportlen = sizeof(reuseport);
-            if (getsockopt(listener_config->fds.entries[0], SOL_SOCKET, H2O_SO_REUSEPORT, &reuseport, &reuseportlen) != 0) {
-                perror("gestockopt(SO_REUSEPORT) failed");
-                abort();
-            }
-            assert(reuseportlen == sizeof(reuseport));
+        socklen_t reuseportlen = sizeof(reuseport);
+        if (getsockopt(listener_config->fds.entries[0], SOL_SOCKET, H2O_SO_REUSEPORT, &reuseport, &reuseportlen) != 0) {
+            perror("gestockopt(SO_REUSEPORT) failed");
+            abort();
+        }
+        assert(reuseportlen == sizeof(reuseport));
 #endif
 
         for (size_t j = 1; j < conf.thread_map.size; j++) {
-            int fd = -1;
-#if H2O_USE_REUSEPORT
-            if (reuseport) {
-                int type;
-                socklen_t typelen = sizeof(type);
-                struct sockaddr_storage ss;
-                socklen_t sslen = sizeof(ss);
-                if (getsockopt(listener_config->fds.entries[0], SOL_SOCKET, SO_TYPE, &type, &typelen) != 0) {
-                    perror("failed to obtain the type of a listening socket");
-                    abort();
-                }
-                assert(type == SOCK_DGRAM || type == SOCK_STREAM);
-                if (getsockname(listener_config->fds.entries[0], (struct sockaddr *)&ss, &sslen) != 0) {
-                    perror("failed to obtain local address of a listening socket");
-                    abort();
-                }
-                if ((fd = open_listener(ss.ss_family, type, type == SOCK_STREAM ? IPPROTO_TCP : IPPROTO_UDP, (struct sockaddr *)&ss, sslen)) != -1) {
-                    if (type == SOCK_DGRAM)
-                        setsockopt_recvpktinfo(fd, ss.ss_family);
-                } else {
-                    reuseport = 0;
-                }
-            }
-#endif
-            if (!reuseport && (fd = dup(listener_config->fds.entries[0])) == -1) {
-                perror("failed to dup listening socket");
-                abort();
-            }
-            set_cloexec(fd);
-            assert(fd != -1);
+            int fd = dup_listener(listener_config->fds.entries[0], reuseport);
             h2o_vector_reserve(NULL, &listener_config->fds, listener_config->fds.size + 1);
             assert(j == listener_config->fds.size);
             listener_config->fds.entries[listener_config->fds.size++] = fd;
