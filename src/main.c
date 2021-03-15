@@ -3133,19 +3133,6 @@ static void setup_configurators(void)
     h2o_config_register_status_handler(&conf.globalconf, &extra_status_handler);
 }
 
-static char ebpf_map_path[PATH_MAX];
-static void cleanup_ebpf_maps(void)
-{
-    unlink(ebpf_map_path);
-}
-
-static void setup_ebpf_map(void)
-{
-    if (h2o_setup_ebpf_map(ebpf_map_path, sizeof(ebpf_map_path))) {
-        atexit(cleanup_ebpf_maps);
-    }
-}
-
 int main(int argc, char **argv)
 {
     cmd_argc = argc;
@@ -3369,7 +3356,7 @@ int main(int argc, char **argv)
     }
 
     setup_signal_handlers();
-    setup_ebpf_map();
+    h2o_setup_ebpf_maps();
 
     /* open the log file to redirect STDIN/STDERR to, before calling setuid */
     if (conf.error_log != NULL) {

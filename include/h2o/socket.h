@@ -376,7 +376,7 @@ static int h2o_socket_skip_tracing(h2o_socket_t *sock);
  * Sets up eBPF maps, requireing root privileges
  * and thus should be called before dropping the privileges.
  */
-int h2o_setup_ebpf_map(char *map_path, size_t map_path_len);
+int h2o_setup_ebpf_maps(void);
 
 /**
  * function to lookup if the connection is tagged for special treatment. At the moment, the results are: 0 - no, 1 - trace.

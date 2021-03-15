@@ -1597,11 +1597,15 @@ static int ebpf_obj_pin(int bpf_fd, const char* pathname)
 
 static char h2o_return_map_path[PATH_MAX];
 
-int h2o_setup_ebpf_map(char *map_path, size_t map_path_len)
+int h2o_setup_ebpf_maps(void)
 {
-    snprintf(map_path, map_path_len, H2O_EBPF_RETURN_MAP_PATH, getpid());
-    unlink(map_path);
+    snprintf(h2o_return_map_path, sizeof(h2o_return_map_path), H2O_EBPF_RETURN_MAP_PATH, getpid());
+    unlink(h2o_return_map_path);
 
+    // It creates a pinned BPF object file,
+    // and h2o cannot unlink the file because
+    // h2o drops root privileges after this function
+    // unless its configuration is set to keep the privileges.
     int fd = ebpf_map_create(BPF_MAP_TYPE_HASH, sizeof(pid_t), sizeof(uint64_t),
                  H2O_EBPF_MAP_SIZE, H2O_EBPF_RETURN_MAP_NAME);
     if (fd < 0) {
@@ -1609,13 +1613,11 @@ int h2o_setup_ebpf_map(char *map_path, size_t map_path_len)
         return 0;
     }
 
-    if (ebpf_obj_pin(fd, map_path) != 0) {
+    if (ebpf_obj_pin(fd, h2o_return_map_path) != 0) {
         h2o_perror("BPF_OBJ_PIN failed");
         return 0;
     }
     close(fd); // each worker thread has its own fd
-
-    strncpy(h2o_return_map_path, map_path, sizeof(h2o_return_map_path));
     return 1;
 }
 
@@ -1804,7 +1806,7 @@ h2o_ebpf_map_value_t h2o_socket_ebpf_lookup(h2o_loop_t *loop, int (*init_key)(h2
 
 #else
 
-int h2o_setup_ebpf_map(char *map_path, size_t map_path_len)
+int h2o_setup_ebpf_maps(void)
 {
     return 0;
 }
