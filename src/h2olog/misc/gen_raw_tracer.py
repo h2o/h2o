@@ -71,6 +71,9 @@ block_fields = {
     "quicly:crypto_receive_key_update_prepare": set(["secret"]),
 
     "h2o:h3_packet_receive": set(["bytes"]),
+
+    # they are metadata to control how h2olog's connection-level filters work.
+    "h2o:socket_accept": set(["tid", "map_value"]),
 }
 
 # The block list for probes.
@@ -255,11 +258,28 @@ int %s(struct pt_regs *ctx) {
 """
 
   if fully_specified_probe_name == "h2o:socket_accept":
+    # The actional definition of h2o_ebpf_map_value_t is defined in h2o/ebpf.h as:
+    #
+    # typedef struct st_h2o_ebpf_map_value_t {
+    #    uint64_t skip_tracing : 1;
+    #    uint64_t quic_send_retry : 2;
+    # } h2o_ebpf_map_value_t;
+    #
+    # but union types are not available in iovisor/bcc (as of v0.12.0),
+    # so we use `uint64_t` instead, as it should be the same size as `h2o_ebpf_map_value_t`.
+
     c += r"""
 #ifdef H2OLOG_SAMPLING_RATE
-  h2o_ebpf_map_value_t retval = bpf_get_prandom_u32() > (H2OLOG_SAMPLING_RATE * U32_MAX);
-  h2o_return.insert(&event.socket_accept.tid, &retval);
-  if (retval)
+  pid_t tid;
+  uint64_t map_value;
+  bpf_usdt_readarg(1, ctx, &tid);
+  bpf_usdt_readarg(2, ctx, &map_value);
+  int skip_tracing = bpf_get_prandom_u32() > (H2OLOG_SAMPLING_RATE * U32_MAX);
+  if (skip_tracing) {
+    map_value |= 1; // skip_tracing
+  }
+  h2o_return.insert(&tid, &map_value);
+  if (skip_tracing)
     return 0;
 #endif
 """
@@ -421,15 +441,13 @@ struct st_h2o_ebpf_map_key_t {
   uint8_t payload[sizeof_st_h2o_ebpf_map_key_t];
 };
 
-typedef uint64_t h2o_ebpf_map_value_t;
-
 %s
 %s
 BPF_PERF_OUTPUT(events);
 
 // A pinned BPF object to return a value to h2o.
 // The table size must be larger than the number of threads in h2o.
-BPF_TABLE_PINNED("hash", pid_t, h2o_ebpf_map_value_t, h2o_return, 1024, H2O_EBPF_RETURN_MAP_PATH);
+BPF_TABLE_PINNED("hash", pid_t, uint64_t, h2o_return, 1024, H2O_EBPF_RETURN_MAP_PATH);
 
 // HTTP/3 tracing
 BPF_HASH(h2o_to_quicly_conn, u64, u32);

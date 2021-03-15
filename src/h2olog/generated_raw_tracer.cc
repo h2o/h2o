@@ -643,7 +643,6 @@ struct h2olog_event_t {
       size_t size;
     } conn_stats;
     struct { // h2o:socket_accept
-      pid_t tid;
       struct st_h2o_ebpf_map_key_t info;
     } socket_accept;
     struct { // h2o:receive_request
@@ -1528,7 +1527,6 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
   case H2OLOG_EVENT_ID_H2O_SOCKET_ACCEPT: { // h2o:socket_accept
     json_write_pair_n(out_, STR_LIT("type"), STR_LIT("socket-accept"));
     json_write_pair_c(out_, STR_LIT("seq"), seq_);
-    json_write_pair_c(out_, STR_LIT("tid"), event->socket_accept.tid);
     json_write_pair_c(out_, STR_LIT("info"), event->socket_accept.info);
     json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
     break;
@@ -1753,8 +1751,6 @@ typedef union quicly_address_t {
 struct st_h2o_ebpf_map_key_t {
   uint8_t payload[sizeof_st_h2o_ebpf_map_key_t];
 };
-
-typedef uint64_t h2o_ebpf_map_value_t;
 
 
 enum h2olog_event_id_t {
@@ -2302,7 +2298,6 @@ struct h2olog_event_t {
       size_t size;
     } conn_stats;
     struct { // h2o:socket_accept
-      pid_t tid;
       struct st_h2o_ebpf_map_key_t info;
     } socket_accept;
     struct { // h2o:receive_request
@@ -2418,7 +2413,7 @@ BPF_PERF_OUTPUT(events);
 
 // A pinned BPF object to return a value to h2o.
 // The table size must be larger than the number of threads in h2o.
-BPF_TABLE_PINNED("hash", pid_t, h2o_ebpf_map_value_t, h2o_return, 1024, H2O_EBPF_RETURN_MAP_PATH);
+BPF_TABLE_PINNED("hash", pid_t, uint64_t, h2o_return, 1024, H2O_EBPF_RETURN_MAP_PATH);
 
 // HTTP/3 tracing
 BPF_HASH(h2o_to_quicly_conn, u64, u32);
@@ -4098,16 +4093,23 @@ int trace_h2o__socket_accept(struct pt_regs *ctx) {
   const void *buf = NULL;
   struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_H2O_SOCKET_ACCEPT };
 
-  // pid_t tid
-  bpf_usdt_readarg(1, ctx, &event.socket_accept.tid);
+  // pid_t tid (ignored)
+  // struct st_h2o_ebpf_map_value_t map_value (ignored)
   // struct st_h2o_ebpf_map_key_t * info
-  bpf_usdt_readarg(2, ctx, &buf);
+  bpf_usdt_readarg(3, ctx, &buf);
   bpf_probe_read(&event.socket_accept.info, sizeof_st_h2o_ebpf_map_key_t, buf);
 
 #ifdef H2OLOG_SAMPLING_RATE
-  h2o_ebpf_map_value_t retval = bpf_get_prandom_u32() > (H2OLOG_SAMPLING_RATE * U32_MAX);
-  h2o_return.insert(&event.socket_accept.tid, &retval);
-  if (retval)
+  pid_t tid;
+  uint64_t map_value;
+  bpf_usdt_readarg(1, ctx, &tid);
+  bpf_usdt_readarg(2, ctx, &map_value);
+  int skip_tracing = bpf_get_prandom_u32() > (H2OLOG_SAMPLING_RATE * U32_MAX);
+  if (skip_tracing) {
+    map_value |= 1; // skip_tracing
+  }
+  h2o_return.insert(&tid, &map_value);
+  if (skip_tracing)
     return 0;
 #endif
 

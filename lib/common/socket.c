@@ -1792,15 +1792,11 @@ h2o_ebpf_map_value_t h2o_socket_ebpf_lookup(h2o_loop_t *loop, int (*init_key)(h2
             }
         }
 
-        H2O_SOCKET_ACCEPT(tid, &key);
+        H2O_SOCKET_ACCEPT(tid, value, &key);
 
-        uint64_t retval = 0;
-        if (ebpf_map_lookup(return_fd, &tid, &retval) != 0) {
+        if (ebpf_map_lookup(return_fd, &tid, &value) != 0) {
             ebpf_map_delete(return_fd, &tid);
         }
-
-        if (retval)
-            value.skip_tracing = 1;
     }
 
     return value;
