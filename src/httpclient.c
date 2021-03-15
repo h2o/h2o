@@ -169,7 +169,7 @@ static void stdin_on_read(h2o_socket_t *_sock, const char *err)
     assert(std_in == _sock);
 
     if (err != NULL)
-        exit(0);
+        h2o_socket_read_stop(std_in);
 
     h2o_httpclient_t *client = std_in->data;
 
@@ -177,7 +177,7 @@ static void stdin_on_read(h2o_socket_t *_sock, const char *err)
     if (client == NULL || client->write_req == NULL)
         return;
 
-    if (client->write_req(client, h2o_iovec_init(std_in->input->bytes, std_in->input->size), 0) != 0) {
+    if (client->write_req(client, h2o_iovec_init(std_in->input->bytes, std_in->input->size), err != NULL) != 0) {
         fprintf(stderr, "write_req error\n");
         exit(1);
     }
