@@ -1595,9 +1595,12 @@ static int ebpf_obj_pin(int bpf_fd, const char* pathname)
     return syscall(__NR_bpf, BPF_OBJ_PIN, &attr, sizeof(attr));
 }
 
-int h2o_setup_ebpf_maps(void)
+static char h2o_return_map_path[PATH_MAX];
+
+int h2o_setup_ebpf_map(char *map_path, size_t map_path_len)
 {
-    unlink(H2O_EBPF_RETURN_MAP_PATH);
+    snprintf(map_path, map_path_len, H2O_EBPF_RETURN_MAP_PATH, getpid());
+    unlink(map_path);
 
     int fd = ebpf_map_create(BPF_MAP_TYPE_HASH, sizeof(pid_t), sizeof(uint64_t),
                  H2O_EBPF_MAP_SIZE, H2O_EBPF_RETURN_MAP_NAME);
@@ -1606,11 +1609,13 @@ int h2o_setup_ebpf_maps(void)
         return 0;
     }
 
-    if (ebpf_obj_pin(fd, H2O_EBPF_RETURN_MAP_PATH) != 0) {
+    if (ebpf_obj_pin(fd, map_path) != 0) {
         perror("BPF_OBJ_PIN failed");
         return 0;
     }
+    close(fd); // each worker thread has its own fd
 
+    strncpy(h2o_return_map_path, map_path, sizeof(h2o_return_map_path));
     return 1;
 }
 
@@ -1738,11 +1743,9 @@ static int open_ebpf_return_map(h2o_loop_t *loop)
 
     last_attempt = now;
 
-    const char *path = H2O_EBPF_RETURN_MAP_PATH;
-
     // check if map exists at path
     struct stat s;
-    if (stat(path, &s) == -1) {
+    if (stat(h2o_return_map_path, &s) == -1) {
         // map path unavailable, cleanup fd if needed and leave
         if (fd >= 0) {
             close(fd);
@@ -1755,8 +1758,9 @@ static int open_ebpf_return_map(h2o_loop_t *loop)
         return fd; // map still exists and we have a fd
 
     // map exists, try bpf_obj_get
-    union bpf_attr attr = {};
-    attr.pathname = (uint64_t)path;
+    union bpf_attr attr = {
+        .pathname = (uint64_t)h2o_return_map_path,
+    };
     fd = syscall(__NR_bpf, BPF_OBJ_GET, &attr, sizeof(attr));
     if (fd < 0)
         perror("BPF_OBJ_GET failed:");
@@ -1805,6 +1809,11 @@ h2o_ebpf_map_value_t h2o_socket_ebpf_lookup(h2o_loop_t *loop, int (*init_key)(h2
 }
 
 #else
+
+int h2o_setup_ebpf_map(char *map_path, size_t map_path_len)
+{
+    return 0
+}
 
 int h2o_socket_ebpf_init_key_raw(struct st_h2o_ebpf_map_key_t *key, int sock_type, struct sockaddr *local, struct sockaddr *remote)
 {

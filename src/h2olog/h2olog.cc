@@ -232,16 +232,6 @@ static void lost_cb(void *context, uint64_t lost)
     tracer->handle_lost(lost);
 }
 
-static void setup_ebpf_map(ebpf::BPF *bpf, pid_t h2o_pid)
-{
-    auto table = bpf->get_table("h2o_return");
-    if (bpf_obj_pin(table.get_fd(), H2O_EBPF_RETURN_MAP_PATH) != 0) {
-        if (errno != EEXIST) {
-            fprintf(stderr, "BPF_OBJ_PIN failed for %s: %s\n", H2O_EBPF_RETURN_MAP_PATH, strerror(errno));
-        }
-    }
-}
-
 static void sig_cleanup(int signo)
 {
     h2o_set_signal_handler(signo, SIG_DFL);
@@ -346,9 +336,11 @@ int main(int argc, char **argv)
 
     tracer->init(outfp);
 
+    char map_path[PATH_MAX];
+    snprintf(map_path, sizeof(map_path), H2O_EBPF_RETURN_MAP_PATH, h2o_pid);
     std::vector<std::string> cflags({
         make_pid_cflag("H2OLOG_H2O_PID", h2o_pid),
-        std::string("-DH2O_EBPF_RETURN_MAP_PATH=\"") + H2O_EBPF_RETURN_MAP_PATH + std::string("\""),
+        std::string("-DH2O_EBPF_RETURN_MAP_PATH=\"") + map_path + std::string("\""),
     });
 
     if (!response_header_filters.empty()) {
@@ -391,10 +383,6 @@ int main(int argc, char **argv)
     if (ret.code() != 0) {
         fprintf(stderr, "Error: init: %s\n", ret.msg().c_str());
         return EXIT_FAILURE;
-    }
-
-    if (sampling_rate >= 0) {
-        setup_ebpf_map(bpf, h2o_pid);
     }
 
     bpf->attach_tracepoint("sched:sched_process_exit", "trace_sched_process_exit");
