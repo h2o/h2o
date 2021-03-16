@@ -3142,8 +3142,6 @@ static void create_per_thread_listeners(void)
         h2o_vector_reserve(NULL, &listener_config->fds, conf.thread_map.size);
         while (listener_config->fds.size < conf.thread_map.size) {
             int fd = dup_listener(listener_config->fds.entries[0]);
-            h2o_vector_reserve(NULL, &listener_config->fds, listener_config->fds.size + 1);
-            assert(j == listener_config->fds.size);
             listener_config->fds.entries[listener_config->fds.size++] = fd;
         }
     }
