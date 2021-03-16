@@ -1765,8 +1765,7 @@ static int open_ebpf_return_map(h2o_loop_t *loop)
 h2o_ebpf_map_value_t h2o_socket_ebpf_lookup(h2o_loop_t *loop, int (*init_key)(h2o_ebpf_map_key_t *key, void *cbdata), void *cbdata)
 {
     int map_fd = open_tracing_map(loop);
-    int return_fd = open_ebpf_return_map(loop);
-    if (H2O_LIKELY(map_fd < 0 && return_fd < 0))
+    if (H2O_LIKELY(map_fd < 0 && !H2O_SOCKET_ACCEPT_ENABLED()))
         return (h2o_ebpf_map_value_t){0};
 
     // do lookup only if an eBPF map is actually open.
@@ -1782,7 +1781,8 @@ h2o_ebpf_map_value_t h2o_socket_ebpf_lookup(h2o_loop_t *loop, int (*init_key)(h2
         ebpf_map_lookup(map_fd, &key, &value);
 
     // for h2o_return
-    if (return_fd >= 0) {
+    int return_fd;
+    if (H2O_SOCKET_ACCEPT_ENABLED() && (return_fd = open_ebpf_return_map(loop)) >= 0) {
         pid_t tid = gettid();
 
         // make sure a possible old value is not set,
