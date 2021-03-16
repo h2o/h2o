@@ -3088,8 +3088,19 @@ static void setup_configurators(void)
     h2o_config_register_status_handler(&conf.globalconf, &extra_status_handler);
 }
 
-static int dup_listener(int listener, int reuseport)
+static int dup_listener(int listener)
 {
+    int reuseport = 0;
+
+#if H2O_USE_REUSEPORT
+    socklen_t reuseportlen = sizeof(reuseport);
+    if (getsockopt(listener, SOL_SOCKET, H2O_SO_REUSEPORT, &reuseport, &reuseportlen) != 0) {
+        perror("gestockopt(SO_REUSEPORT) failed");
+        abort();
+    }
+    assert(reuseportlen == sizeof(reuseport));
+#endif
+
     int fd = -1;
 #if H2O_USE_REUSEPORT
     if (reuseport) {
@@ -3128,19 +3139,9 @@ static void create_per_thread_listeners(void)
 {
     for (size_t i = 0; i != conf.num_listeners; ++i) {
         struct listener_config_t *listener_config = conf.listeners[i];
-        int reuseport = 0;
-
-#if H2O_USE_REUSEPORT
-        socklen_t reuseportlen = sizeof(reuseport);
-        if (getsockopt(listener_config->fds.entries[0], SOL_SOCKET, H2O_SO_REUSEPORT, &reuseport, &reuseportlen) != 0) {
-            perror("gestockopt(SO_REUSEPORT) failed");
-            abort();
-        }
-        assert(reuseportlen == sizeof(reuseport));
-#endif
 
         for (size_t j = 1; j < conf.thread_map.size; j++) {
-            int fd = dup_listener(listener_config->fds.entries[0], reuseport);
+            int fd = dup_listener(listener_config->fds.entries[0]);
             h2o_vector_reserve(NULL, &listener_config->fds, listener_config->fds.size + 1);
             assert(j == listener_config->fds.size);
             listener_config->fds.entries[listener_config->fds.size++] = fd;
