@@ -83,7 +83,6 @@
 #ifndef PTLS_MAX_EARLY_DATA_SKIP_SIZE
 #define PTLS_MAX_EARLY_DATA_SKIP_SIZE 65536
 #endif
-#define PTLS_DEBUG 1
 #if defined(PTLS_DEBUG) && PTLS_DEBUG
 #define PTLS_DEBUGF(...) fprintf(stderr, __VA_ARGS__)
 #else
@@ -1227,8 +1226,8 @@ static int setup_traffic_protection(ptls_t *tls, int is_enc, const char *secret_
 
     log_secret(tls, log_labels[ptls_is_server(tls) == is_enc][epoch],
                ptls_iovec_init(ctx->secret, tls->key_schedule->hashes[0].algo->digest_size));
-    //PTLS_DEBUGF("[%s] %02x%02x,%02x%02x\n", log_labels[ptls_is_server(tls)][epoch], (unsigned)ctx->secret[0],
-    //            (unsigned)ctx->secret[1], (unsigned)ctx->aead->static_iv[0], (unsigned)ctx->aead->static_iv[1]);
+    PTLS_DEBUGF("[%s] %02x%02x,%02x%02x\n", log_labels[ptls_is_server(tls)][epoch], (unsigned)ctx->secret[0],
+                (unsigned)ctx->secret[1], (unsigned)ctx->aead->static_iv[0], (unsigned)ctx->aead->static_iv[1]);
 
     return 0;
 }
@@ -4469,12 +4468,6 @@ int ptls_set_negotiated_protocol(ptls_t *tls, const char *protocol, size_t proto
     return 0;
 }
 
-int ptls_handshake_is_in_client_auth(ptls_t *tls)
-{
-    return (tls->state == PTLS_STATE_SERVER_EXPECT_CERTIFICATE || 
-            tls->state == PTLS_STATE_SERVER_EXPECT_CERTIFICATE_VERIFY);
-}
-
 int ptls_handshake_is_complete(ptls_t *tls)
 {
     return tls->state >= PTLS_STATE_POST_HANDSHAKE_MIN;
@@ -4832,7 +4825,6 @@ int ptls_handshake(ptls_t *tls, ptls_buffer_t *_sendbuf, const void *input, size
     struct st_ptls_record_message_emitter_t emitter;
     int ret;
 
-    PTLS_DEBUGF("%s: tls->state:%u\n", __FUNCTION__, tls->state);
     assert(tls->state < PTLS_STATE_POST_HANDSHAKE_MIN);
 
     init_record_message_emitter(tls, &emitter, _sendbuf);
@@ -4892,7 +4884,6 @@ int ptls_receive(ptls_t *tls, ptls_buffer_t *decryptbuf, const void *_input, siz
     size_t decryptbuf_orig_size = decryptbuf->off;
     int ret = 0;
 
-    PTLS_DEBUGF("%s: tls->state:%u\n", __FUNCTION__, tls->state);
     assert(tls->state >= PTLS_STATE_SERVER_EXPECT_END_OF_EARLY_DATA);
 
     /* loop until we decrypt some application data (or an error) */

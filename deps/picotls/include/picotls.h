@@ -1129,10 +1129,6 @@ const char *ptls_get_negotiated_protocol(ptls_t *tls);
  */
 int ptls_set_negotiated_protocol(ptls_t *tls, const char *protocol, size_t protocol_len);
 /**
- * returns if the handshake is in the process of client authentication
- */
-int ptls_handshake_is_in_client_auth(ptls_t *tls);
-/**
  * returns if the handshake has been completed
  */
 int ptls_handshake_is_complete(ptls_t *tls);
