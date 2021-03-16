@@ -319,12 +319,10 @@ int main(int argc, char **argv)
 
     tracer->init(outfp);
 
-    char map_path[PATH_MAX];
-    snprintf(map_path, sizeof(map_path), H2O_EBPF_RETURN_MAP_PATH, h2o_pid);
     std::vector<std::string> cflags({
         make_pid_cflag("H2OLOG_H2O_PID", h2o_pid),
         std::string("-DH2O_EBPF_MAP_SIZE=") + std::to_string(H2O_EBPF_MAP_SIZE),
-        std::string("-DH2O_EBPF_RETURN_MAP_PATH=\"") + map_path + std::string("\""),
+        std::string("-DH2O_EBPF_RETURN_MAP_PATH=\"") + H2O_EBPF_RETURN_MAP_PATH + std::string("\""),
     });
 
     if (!response_header_filters.empty()) {

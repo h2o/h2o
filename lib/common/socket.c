@@ -1614,29 +1614,25 @@ static int ebpf_map_delete(int fd, const void *key)
     return syscall(__NR_bpf, BPF_MAP_DELETE_ELEM, &attr, sizeof(attr));
 }
 
-static char h2o_return_map_path[PATH_MAX];
-
 int h2o_setup_ebpf_maps(void)
 {
     if (getuid() != 0) {
         h2o_error_printf("skipping to set up eBPF maps because bpf(2) requires root privileges");
         return 0;
     }
-    snprintf(h2o_return_map_path, sizeof(h2o_return_map_path), H2O_EBPF_RETURN_MAP_PATH, getpid());
-    unlink(h2o_return_map_path);
 
     // It creates a pinned BPF object file,
     // and h2o cannot unlink the file because
     // h2o drops root privileges after this function
     // unless its configuration is set to keep the privileges.
-    int fd = ebpf_map_create(BPF_MAP_TYPE_HASH, sizeof(pid_t), sizeof(uint64_t),
+    int fd = ebpf_map_create(BPF_MAP_TYPE_LRU_HASH, sizeof(pid_t), sizeof(uint64_t),
                  H2O_EBPF_MAP_SIZE, H2O_EBPF_RETURN_MAP_NAME);
     if (fd < 0) {
         h2o_perror("BPF_MAP_CREATE failed");
         return 0;
     }
 
-    if (ebpf_obj_pin(fd, h2o_return_map_path) != 0) {
+    if (ebpf_obj_pin(fd, H2O_EBPF_RETURN_MAP_PATH) != 0) {
         h2o_perror("BPF_OBJ_PIN failed");
         return 0;
     }
@@ -1743,7 +1739,7 @@ static int open_ebpf_return_map(h2o_loop_t *loop)
 
     // check if map exists at path
     struct stat s;
-    if (stat(h2o_return_map_path, &s) == -1) {
+    if (stat(H2O_EBPF_RETURN_MAP_PATH, &s) == -1) {
         // map path unavailable, cleanup fd if needed and leave
         if (fd >= 0) {
             close(fd);
@@ -1757,7 +1753,7 @@ static int open_ebpf_return_map(h2o_loop_t *loop)
 
     // map exists, try bpf_obj_get
     union bpf_attr attr = {
-        .pathname = (uint64_t)h2o_return_map_path,
+        .pathname = (uint64_t)H2O_EBPF_RETURN_MAP_PATH,
     };
     fd = syscall(__NR_bpf, BPF_OBJ_GET, &attr, sizeof(attr));
     if (fd < 0)
@@ -1796,12 +1792,8 @@ h2o_ebpf_map_value_t h2o_socket_ebpf_lookup(h2o_loop_t *loop, int (*init_key)(h2
                 h2o_fatal("BPF_MAP_DELETE failed: %s", h2o_strerror_r(errno, buf, sizeof(buf)));
             }
         }
-
         H2O_SOCKET_ACCEPT(tid, value, &key);
-
-        if (ebpf_map_lookup(return_fd, &tid, &value) != 0) {
-            ebpf_map_delete(return_fd, &tid);
-        }
+        ebpf_map_lookup(return_fd, &tid, &value);
     }
 
     return value;

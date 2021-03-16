@@ -64,7 +64,7 @@ typedef struct st_h2o_ebpf_map_value_t {
 
 // bpf_hash<tid_t, h2o_ebpf_map_value_t>
 #define H2O_EBPF_RETURN_MAP_NAME "h2o_return"
-#define H2O_EBPF_RETURN_MAP_PATH "/sys/fs/bpf/" H2O_EBPF_RETURN_MAP_NAME "_%u"
+#define H2O_EBPF_RETURN_MAP_PATH "/sys/fs/bpf/" H2O_EBPF_RETURN_MAP_NAME
 
 // The size of pinned BPF objects. It cannot be dynamic,
 // so h2o must make sure it's empty at the startup.
