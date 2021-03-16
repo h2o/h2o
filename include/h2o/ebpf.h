@@ -62,15 +62,12 @@ typedef struct st_h2o_ebpf_map_value_t {
 // bpf_hash<h2o_ebpf_map_key_t, h2o_ebpf_map_value_t>
 #define H2O_EBPF_MAP_PATH "/sys/fs/bpf/h2o_map"
 
-// bpf_hash<tid_t, h2o_ebpf_map_value_t>
+// h2o_return map uses an LRU hash map (needs Linux 4.10 or later)
+// bpf_lru_hash<tid_t, h2o_ebpf_map_value_t>
 #define H2O_EBPF_RETURN_MAP_NAME "h2o_return"
 #define H2O_EBPF_RETURN_MAP_PATH "/sys/fs/bpf/" H2O_EBPF_RETURN_MAP_NAME
 
-// The size of pinned BPF objects. It cannot be dynamic,
-// so h2o must make sure it's empty at the startup.
-//
-// FWIW Linux 4.10 or later supports LRU hashes,
-// but h2olog's minimum requirement is Linux 4.9.
+// The size of pinned BPF objects, which must be larger than the number of processors.
 #define H2O_EBPF_MAP_SIZE 1024
 
 #endif
