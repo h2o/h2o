@@ -1595,6 +1595,25 @@ static int ebpf_obj_pin(int bpf_fd, const char* pathname)
     return syscall(__NR_bpf, BPF_OBJ_PIN, &attr, sizeof(attr));
 }
 
+static int ebpf_map_lookup(int fd, const void *key, void *value)
+{
+    union bpf_attr attr = {
+        .map_fd = fd,
+        .key = (uint64_t)key,
+        .value = (uint64_t)value,
+    };
+    return syscall(__NR_bpf, BPF_MAP_LOOKUP_ELEM, &attr, sizeof(attr));
+}
+
+static int ebpf_map_delete(int fd, const void *key)
+{
+    union bpf_attr attr = {
+        .map_fd = fd,
+        .key = (uint64_t)key,
+    };
+    return syscall(__NR_bpf, BPF_MAP_DELETE_ELEM, &attr, sizeof(attr));
+}
+
 static char h2o_return_map_path[PATH_MAX];
 
 int h2o_setup_ebpf_maps(void)
@@ -1659,26 +1678,6 @@ static int open_tracing_map(h2o_loop_t *loop)
     if (tracing_map_fd < 0)
         h2o_perror("BPF_OBJ_GET failed");
     return tracing_map_fd;
-}
-
-static int ebpf_map_lookup(int fd, const void *key, void *value)
-{
-    union bpf_attr attr = {
-        .map_fd = fd,
-        .key = (uint64_t)key,
-        .value = (uint64_t)value,
-    };
-
-    return syscall(__NR_bpf, BPF_MAP_LOOKUP_ELEM, &attr, sizeof(attr));
-}
-
-static int ebpf_map_delete(int fd, const void *key)
-{
-    union bpf_attr attr = {
-        .map_fd = fd,
-        .key = (uint64_t)key,
-    };
-    return syscall(__NR_bpf, BPF_MAP_DELETE_ELEM, &attr, sizeof(attr));
 }
 
 static inline int set_ebpf_map_key_tuples(const struct sockaddr *src, h2o_ebpf_address_t *dest)
@@ -1769,7 +1768,7 @@ static int open_ebpf_return_map(h2o_loop_t *loop)
 h2o_ebpf_map_value_t h2o_socket_ebpf_lookup(h2o_loop_t *loop, int (*init_key)(h2o_ebpf_map_key_t *key, void *cbdata), void *cbdata)
 {
     int map_fd = open_tracing_map(loop);
-    if (H2O_LIKELY(map_fd < 0 && !H2O_SOCKET_ACCEPT_ENABLED()))
+    if (map_fd < 0 && !H2O_SOCKET_ACCEPT_ENABLED())
         return (h2o_ebpf_map_value_t){0};
 
     // do lookup only if an eBPF map is actually open.
