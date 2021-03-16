@@ -3139,8 +3139,8 @@ static void create_per_thread_listeners(void)
 {
     for (size_t i = 0; i != conf.num_listeners; ++i) {
         struct listener_config_t *listener_config = conf.listeners[i];
-
-        for (size_t j = 1; j < conf.thread_map.size; j++) {
+        h2o_vector_reserve(NULL, &listener_config->fds, conf.thread_map.size);
+        while (listener_config->fds.size < conf.thread_map.size) {
             int fd = dup_listener(listener_config->fds.entries[0]);
             h2o_vector_reserve(NULL, &listener_config->fds, listener_config->fds.size + 1);
             assert(j == listener_config->fds.size);
