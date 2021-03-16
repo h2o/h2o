@@ -1599,6 +1599,10 @@ static char h2o_return_map_path[PATH_MAX];
 
 int h2o_setup_ebpf_maps(void)
 {
+    if (getuid() != 0) {
+        h2o_error_printf("skipping to set up eBPF maps because bpf(2) requires root privileges");
+        return 0;
+    }
     snprintf(h2o_return_map_path, sizeof(h2o_return_map_path), H2O_EBPF_RETURN_MAP_PATH, getpid());
     unlink(h2o_return_map_path);
 
