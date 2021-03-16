@@ -265,7 +265,7 @@ int %s(struct pt_regs *ctx) {
     #    uint64_t quic_send_retry : 2;
     # } h2o_ebpf_map_value_t;
     #
-    # but union types are not available in iovisor/bcc (as of v0.12.0),
+    # but bit-field types are not available in iovisor/bcc (as of v0.12.0),
     # so we use `uint64_t` instead, as it should be the same size as `h2o_ebpf_map_value_t`.
 
     c += r"""
