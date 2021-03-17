@@ -1280,8 +1280,6 @@ static int verify_cert_chain(X509_STORE *store, X509 *cert, STACK_OF(X509) * cha
         goto Exit;
     }
 
-    fprintf(stderr, "verify_cert_chain: server_name=%s\n", server_name);
-
 /* TODO: This is a hack. Different business logic to verify CN and/or others for client certificate. */
 #if 0
 #ifdef X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS
