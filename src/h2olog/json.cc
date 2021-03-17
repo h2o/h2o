@@ -189,7 +189,7 @@ void json_write_pair_c(std::FILE *out, const char *name, size_t name_len, const 
         } else if (value.family == 6) {
             quicly_address_t addr = {
                 .sin6 = {
-                    .sin6_family = AF_INET,
+                    .sin6_family = AF_INET6,
                     .sin6_port = entry.second.port,
                 },
             };
