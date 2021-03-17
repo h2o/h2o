@@ -1353,8 +1353,7 @@ Exit:
         sk_X509_pop_free(chain, X509_free);
     if (cert != NULL)
         X509_free(cert);
-    fprintf(stderr, "verify_cert: ret=%d\n", ret);
-   return ret;
+    return ret;
 }
 
 int ptls_openssl_init_verify_certificate(ptls_openssl_verify_certificate_t *self, X509_STORE *store)
