@@ -1219,7 +1219,6 @@ static int verify_cert_chain(X509_STORE *store, X509 *cert, STACK_OF(X509) * cha
     X509_STORE_CTX *verify_ctx;
     int ret;
 
-    fprintf(stderr, "verify_cert_chain:%d\n", is_server);
     //assert(server_name != NULL && "ptls_set_server_name MUST be called");
 
     /* verify certificate chain */
