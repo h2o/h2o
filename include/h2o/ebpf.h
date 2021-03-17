@@ -32,22 +32,9 @@ typedef struct st_h2o_ebpf_address_t {
 } h2o_ebpf_address_t;
 
 typedef struct st_h2o_ebpf_map_key_t {
-    /**
-     * AF_INET or AF_INET6
-     */
-    int sa_family;
-    /**
-     * SOCK_STZREAM or SOCK_DGRAM
-     */
-    int sock_type;
-    /**
-     * The local, destination adddress in sockaddr_in or sockaddr_in6.
-     */
-    h2o_ebpf_address_t local;
-    /**
-     * The remote, source address in sockaddr_in or sockaddr_in6.
-     */
-    h2o_ebpf_address_t remote;
+    uint8_t family;
+    uint8_t protocol;
+    h2o_ebpf_address_t local, remote;
 } h2o_ebpf_map_key_t;
 
 #define H2O_EBPF_QUIC_SEND_RETRY_DEFAULT 0

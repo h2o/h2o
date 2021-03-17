@@ -1697,8 +1697,8 @@ static inline int set_ebpf_map_key_tuples(const struct sockaddr *src, h2o_ebpf_a
 int h2o_socket_ebpf_init_key_raw(h2o_ebpf_map_key_t *key, int sock_type, struct sockaddr *local, struct sockaddr *remote)
 {
     *key = (h2o_ebpf_map_key_t){
-        .sock_type = sock_type,
-        .sa_family = local->sa_family,
+        .protocol = sock_type,
+        .family = local->sa_family == AF_INET ? 4 : 6,
     };
     if (!set_ebpf_map_key_tuples(local, &key->local))
         return 0;

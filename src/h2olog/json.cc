@@ -160,13 +160,13 @@ void json_write_pair_c(std::FILE *out, const char *name, size_t name_len, const 
     // sock_type
     full_name_len = snprintf(full_name, sizeof(full_name), "%*s-sock-type", (int)name_len, name);
 
-    if (value.sock_type == SOCK_STREAM) {
+    if (value.protocol == SOCK_STREAM) {
         json_write_pair_c(out, full_name, full_name_len, "SOCK_STREAM", strlen("SOCK_STREAM"));
-    } else if (value.sock_type == SOCK_DGRAM) {
+    } else if (value.protocol == SOCK_DGRAM) {
         json_write_pair_c(out, full_name, full_name_len, "SOCK_DGRAM", strlen("SOCK_DGRAM"));
     } else {
         // unknown socket type. maybe not reached.
-        json_write_pair_c(out, full_name, full_name_len, value.sock_type);
+        json_write_pair_c(out, full_name, full_name_len, value.protocol);
     }
 
     // dest, src
@@ -177,7 +177,7 @@ void json_write_pair_c(std::FILE *out, const char *name, size_t name_len, const 
         full_name_len = snprintf(full_name, sizeof(full_name), "%*s-%s", (int)name_len, name, entry.first);
 
         // it converts h2o_ebpf_address_t into sockaddr_in/in6 first.
-        if (value.sa_family == AF_INET) {
+        if (value.family == 4) {
             quicly_address_t addr = {
                 .sin = {
                     .sin_family = AF_INET,
@@ -186,7 +186,7 @@ void json_write_pair_c(std::FILE *out, const char *name, size_t name_len, const 
             };
             memcpy(&addr.sin.sin_addr, entry.second.ip, sizeof(addr.sin.sin_addr));
             json_write_pair_c(out, full_name, full_name_len, addr);
-        } else if (value.sa_family == AF_INET6) {
+        } else if (value.family == 6) {
             quicly_address_t addr = {
                 .sin6 = {
                     .sin6_family = AF_INET,
