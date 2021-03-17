@@ -2614,7 +2614,8 @@ static h2o_quic_conn_t *on_http3_accept(h2o_quic_ctx_t *_ctx, quicly_address_t *
     }
 
     /* accept the connection */
-    conn = h2o_http3_server_accept(ctx, destaddr, srcaddr, packet, token, H2O_EBPF_SKIP_TRACING_IS_SET(ebpf_map_value), &conf.quic.conn_callbacks);
+    conn = h2o_http3_server_accept(ctx, destaddr, srcaddr, packet, token, H2O_EBPF_SKIP_TRACING_IS_SET(ebpf_map_value),
+                                   &conf.quic.conn_callbacks);
     if (conn == NULL || &conn->super == H2O_QUIC_ACCEPT_CONN_DECRYPTION_FAILED)
         goto Exit;
     num_sessions(1);

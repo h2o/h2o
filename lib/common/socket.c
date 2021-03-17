@@ -1586,9 +1586,9 @@ static int ebpf_map_create(uint32_t map_type, uint32_t key_size, uint32_t value_
     return syscall(__NR_bpf, BPF_MAP_CREATE, &attr, sizeof(attr));
 }
 
-static int ebpf_obj_pin(int bpf_fd, const char* pathname)
+static int ebpf_obj_pin(int bpf_fd, const char *pathname)
 {
-     union bpf_attr  attr = {
+    union bpf_attr attr = {
         .bpf_fd = (uint32_t)bpf_fd,
         .pathname = (uint64_t)pathname,
     };
@@ -1625,8 +1625,8 @@ int h2o_socket_ebpf_prepare_maps(void)
     // and h2o cannot unlink the file because
     // h2o drops root privileges after this function
     // unless its configuration is set to keep the privileges.
-    int fd = ebpf_map_create(BPF_MAP_TYPE_LRU_HASH, sizeof(pid_t), sizeof(uint64_t),
-                 H2O_EBPF_RETURN_MAP_SIZE, H2O_EBPF_RETURN_MAP_NAME);
+    int fd =
+        ebpf_map_create(BPF_MAP_TYPE_LRU_HASH, sizeof(pid_t), sizeof(uint64_t), H2O_EBPF_RETURN_MAP_SIZE, H2O_EBPF_RETURN_MAP_NAME);
     if (fd < 0) {
         h2o_perror("BPF_MAP_CREATE failed");
         return 0;
@@ -1805,11 +1805,10 @@ int h2o_socket_ebpf_init_key_raw(struct st_h2o_ebpf_map_key_t *key, int sock_typ
 
 int h2o_socket_ebpf_init_key_from_sock(struct st_h2o_ebpf_map_key_t *key, void *sock)
 {
-    h2o_fatal("unimplemented");;
+    h2o_fatal("unimplemented");
 }
 
-uint64_t h2o_socket_ebpf_lookup(h2o_loop_t *loop, int (*init_key)(h2o_ebpf_map_key_t *key, void *cbdata),
-                                            void *cbdata)
+uint64_t h2o_socket_ebpf_lookup(h2o_loop_t *loop, int (*init_key)(h2o_ebpf_map_key_t *key, void *cbdata), void *cbdata)
 {
     return 0;
 }
