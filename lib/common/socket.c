@@ -1680,7 +1680,6 @@ static inline int set_ebpf_map_key_tuples(const struct sockaddr *sa, h2o_ebpf_ad
 {
     if (sa->sa_family == AF_INET) {
         struct sockaddr_in *sin = (void *)sa;
-        assert(sizeof(ea->ip) >= sizeof(sin->sin_addr));
         memcpy(ea->ip, &sin->sin_addr, sizeof(sin->sin_addr));
         ea->port = sin->sin_port;
         return 1;
@@ -1696,15 +1695,13 @@ static inline int set_ebpf_map_key_tuples(const struct sockaddr *sa, h2o_ebpf_ad
 
 int h2o_socket_ebpf_init_key_raw(h2o_ebpf_map_key_t *key, int sock_type, struct sockaddr *local, struct sockaddr *remote)
 {
-    *key = (h2o_ebpf_map_key_t){
-        .protocol = sock_type,
-        .family = local->sa_family == AF_INET ? 4 : 6,
-    };
+    memset(key, 0, sizeof(*key));
     if (!set_ebpf_map_key_tuples(local, &key->local))
         return 0;
     if (!set_ebpf_map_key_tuples(remote, &key->remote))
         return 0;
-
+    key->family = local->sa_family == AF_INET6 ? 6 : 4;
+    key->protocol = sock_type;
     return 1;
 }
 
