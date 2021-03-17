@@ -124,7 +124,7 @@ static inline void setup_session_file(ptls_context_t *ctx, ptls_handshake_proper
     }
 }
 
-static X509_STORE * openssl_init_cert_store(char const * crt_file)
+static inline X509_STORE* init_cert_store(char const *crt_file)
 {
     int ret = 0;
     X509_STORE *store = X509_STORE_new();
@@ -144,7 +144,7 @@ static X509_STORE * openssl_init_cert_store(char const * crt_file)
 static inline void setup_verify_certificate(ptls_context_t *ctx, const char *ca_file)
 {
     static ptls_openssl_verify_certificate_t vc;
-    ptls_openssl_init_verify_certificate(&vc, openssl_init_cert_store(ca_file));
+    ptls_openssl_init_verify_certificate(&vc, init_cert_store(ca_file));
     ctx->verify_certificate = &vc.super;
 }
 
