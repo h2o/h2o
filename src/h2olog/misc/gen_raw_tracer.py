@@ -276,8 +276,8 @@ def parse_dscript(path: Path):
   }
 
 
-def parse_and_analyze(context: dict, path: Path, block_probes: set = None):
-  dscript = parse_dscript(path)
+def parse_and_analyze(context: dict, d_file: Path):
+  dscript = parse_dscript(d_file)
 
   if DEBUG:
     json.dump(dscript, sys.stderr, indent=2)
@@ -344,9 +344,11 @@ def parse_and_analyze(context: dict, path: Path, block_probes: set = None):
   if appdata:
     for (probe_name, fields) in appdata.items():
       if fields:
-        print("invalid @appdata: probe fields are not used: %s: %s" % (json.dumps(probe_name), json.dumps(fields)), file=sys.stderr)
+        print("invalid @appdata: probe fields are not used in provider %s: %s: %s" %
+          (provider, json.dumps(probe_name), json.dumps(fields)), file=sys.stderr)
       else:
-        print("invalid @appdata: probe name is not used: %s" % json.dumps(probe_name), file=sys.stderr)
+        print("invalid @appdata: probe name is not used in provider %s: %s" %
+          (provider, json.dumps(probe_name)), file=sys.stderr)
     sys.exit(1)
 
 
@@ -447,18 +449,13 @@ int %s(struct pt_regs *ctx) {
   return c
 
 
-def prepare_context(h2o_dir):
+def prepare_context(d_files: list):
   context = {
       "probe_metadata": OrderedDict(),
-      "h2o_dir": h2o_dir,
   }
-  parse_and_analyze(context, h2o_dir.joinpath(quicly_probes_d),
-                    block_probes=block_probes)
-  parse_and_analyze(context, h2o_dir.joinpath(h2o_probes_d),
-                    block_probes=block_probes)
-
+  for d_file in d_files:
+    parse_and_analyze(context, Path(d_file))
   return context
-
 
 def build_bpf_header_generator():
   generator = r"""
@@ -733,15 +730,21 @@ std::string h2o_raw_tracer::bpf_text() {
 
 """ % (build_typedef_for_cplusplus(), build_bpf_header_generator(), event_id_t_decl, event_t_decl, usdts_def, handle_event_func, bpf))
 
-
-def main():
-  try:
-    (_, h2o_dir, output_file) = sys.argv
-  except:
-    print("usage: %s h2o_dir output_file" % sys.argv[0])
+def usage():
+    print("usage: %s output_file d_files..." % sys.argv[0])
     sys.exit(1)
 
-  context = prepare_context(Path(h2o_dir))
+
+def main():
+  output_file = sys.argv[1]
+  if not output_file:
+    usage()
+
+  d_files = sys.argv[2:]
+  if not d_files:
+    usage()
+
+  context = prepare_context(d_files)
   generate_cplusplus(context, output_file)
 
 
