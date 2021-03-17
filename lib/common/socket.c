@@ -1705,7 +1705,7 @@ int h2o_socket_ebpf_init_key_raw(h2o_ebpf_map_key_t *key, int sock_type, struct 
     return 1;
 }
 
-int h2o_socket_ebpf_init_key_from_sock(h2o_ebpf_map_key_t *key, void *_sock)
+int h2o_socket_ebpf_init_key(h2o_ebpf_map_key_t *key, void *_sock)
 {
     h2o_socket_t *sock = _sock;
     struct sockaddr_storage local, remote;
@@ -1764,12 +1764,12 @@ uint64_t h2o_socket_ebpf_lookup(h2o_loop_t *loop, int (*init_key)(h2o_ebpf_map_k
 
     int tracing_map_fd = get_tracing_map_fd(loop);
     h2o_ebpf_map_key_t key;
-    if ((tracing_map_fd >= 0 || H2O_SOCKET_ACCEPT_ENABLED()) && init_key(&key, cbdata)) {
+    if ((tracing_map_fd >= 0 || H2O_SOCKET_LOOKUP_ENABLED()) && init_key(&key, cbdata)) {
         if (tracing_map_fd >= 0)
             ebpf_map_lookup(tracing_map_fd, &key, &value);
 
         int return_map_fd;
-        if (H2O_SOCKET_ACCEPT_ENABLED() && (return_map_fd = get_return_map_fd(loop)) >= 0) {
+        if (H2O_SOCKET_LOOKUP_ENABLED() && (return_map_fd = get_return_map_fd(loop)) >= 0) {
             pid_t tid = gettid();
 
             // make sure a possible old value is not set,
@@ -1780,7 +1780,7 @@ uint64_t h2o_socket_ebpf_lookup(h2o_loop_t *loop, int (*init_key)(h2o_ebpf_map_k
                     h2o_fatal("BPF_MAP_DELETE failed: %s", h2o_strerror_r(errno, buf, sizeof(buf)));
                 }
             }
-            H2O_SOCKET_ACCEPT(tid, value, &key);
+            H2O_SOCKET_LOOKUP(tid, value, &key);
             ebpf_map_lookup(return_map_fd, &tid, &value);
         }
     }

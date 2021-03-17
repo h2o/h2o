@@ -171,7 +171,7 @@ enum h2olog_event_id_t {
   H2OLOG_EVENT_ID_QUICLY_STREAM_ON_RECEIVE,
   H2OLOG_EVENT_ID_QUICLY_STREAM_ON_RECEIVE_RESET,
   H2OLOG_EVENT_ID_QUICLY_CONN_STATS,
-  H2OLOG_EVENT_ID_H2O_SOCKET_ACCEPT,
+  H2OLOG_EVENT_ID_H2O_SOCKET_LOOKUP,
   H2OLOG_EVENT_ID_H2O_RECEIVE_REQUEST,
   H2OLOG_EVENT_ID_H2O_RECEIVE_REQUEST_HEADER,
   H2OLOG_EVENT_ID_H2O_SEND_RESPONSE,
@@ -641,9 +641,9 @@ struct h2olog_event_t {
       struct st_quicly_stats_t * stats;
       size_t size;
     } conn_stats;
-    struct { // h2o:socket_accept
+    struct { // h2o:socket_lookup
       struct st_h2o_ebpf_map_key_t info;
-    } socket_accept;
+    } socket_lookup;
     struct { // h2o:receive_request
       uint64_t conn_id;
       uint64_t req_id;
@@ -828,7 +828,7 @@ void h2o_raw_tracer::initialize() {
     h2o_tracer::usdt("quicly", "stream_on_receive", "trace_quicly__stream_on_receive"),
     h2o_tracer::usdt("quicly", "stream_on_receive_reset", "trace_quicly__stream_on_receive_reset"),
     h2o_tracer::usdt("quicly", "conn_stats", "trace_quicly__conn_stats"),
-    h2o_tracer::usdt("h2o", "socket_accept", "trace_h2o__socket_accept"),
+    h2o_tracer::usdt("h2o", "socket_lookup", "trace_h2o__socket_lookup"),
     h2o_tracer::usdt("h2o", "receive_request", "trace_h2o__receive_request"),
     h2o_tracer::usdt("h2o", "receive_request_header", "trace_h2o__receive_request_header"),
     h2o_tracer::usdt("h2o", "send_response", "trace_h2o__send_response"),
@@ -1523,10 +1523,10 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
     json_write_pair_c(out_, STR_LIT("size"), event->conn_stats.size);
     break;
   }
-  case H2OLOG_EVENT_ID_H2O_SOCKET_ACCEPT: { // h2o:socket_accept
-    json_write_pair_n(out_, STR_LIT("type"), STR_LIT("socket-accept"));
+  case H2OLOG_EVENT_ID_H2O_SOCKET_LOOKUP: { // h2o:socket_lookup
+    json_write_pair_n(out_, STR_LIT("type"), STR_LIT("socket-lookup"));
     json_write_pair_c(out_, STR_LIT("seq"), seq_);
-    json_write_pair_c(out_, STR_LIT("info"), event->socket_accept.info);
+    json_write_pair_c(out_, STR_LIT("info"), event->socket_lookup.info);
     json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
     break;
   }
@@ -1826,7 +1826,7 @@ enum h2olog_event_id_t {
   H2OLOG_EVENT_ID_QUICLY_STREAM_ON_RECEIVE,
   H2OLOG_EVENT_ID_QUICLY_STREAM_ON_RECEIVE_RESET,
   H2OLOG_EVENT_ID_QUICLY_CONN_STATS,
-  H2OLOG_EVENT_ID_H2O_SOCKET_ACCEPT,
+  H2OLOG_EVENT_ID_H2O_SOCKET_LOOKUP,
   H2OLOG_EVENT_ID_H2O_RECEIVE_REQUEST,
   H2OLOG_EVENT_ID_H2O_RECEIVE_REQUEST_HEADER,
   H2OLOG_EVENT_ID_H2O_SEND_RESPONSE,
@@ -2296,9 +2296,9 @@ struct h2olog_event_t {
       struct st_quicly_stats_t * stats;
       size_t size;
     } conn_stats;
-    struct { // h2o:socket_accept
+    struct { // h2o:socket_lookup
       struct st_h2o_ebpf_map_key_t info;
-    } socket_accept;
+    } socket_lookup;
     struct { // h2o:receive_request
       uint64_t conn_id;
       uint64_t req_id;
@@ -4087,16 +4087,16 @@ int trace_quicly__conn_stats(struct pt_regs *ctx) {
 
   return 0;
 }
-// h2o:socket_accept
-int trace_h2o__socket_accept(struct pt_regs *ctx) {
+// h2o:socket_lookup
+int trace_h2o__socket_lookup(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_H2O_SOCKET_ACCEPT };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_H2O_SOCKET_LOOKUP };
 
   // pid_t tid (ignored)
-  // struct st_h2o_ebpf_map_value_t map_value (ignored)
+  // uint64_t attrs (ignored)
   // struct st_h2o_ebpf_map_key_t * info
   bpf_usdt_readarg(3, ctx, &buf);
-  bpf_probe_read(&event.socket_accept.info, sizeof_st_h2o_ebpf_map_key_t, buf);
+  bpf_probe_read(&event.socket_lookup.info, sizeof_st_h2o_ebpf_map_key_t, buf);
 
 #ifdef H2OLOG_SAMPLING_RATE
   pid_t tid;
@@ -4113,7 +4113,7 @@ int trace_h2o__socket_accept(struct pt_regs *ctx) {
 #endif
 
   if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
-    bpf_trace_printk("failed to perf_submit in trace_h2o__socket_accept\n");
+    bpf_trace_printk("failed to perf_submit in trace_h2o__socket_lookup\n");
 
   return 0;
 }

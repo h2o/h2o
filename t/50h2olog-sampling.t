@@ -49,14 +49,14 @@ EOT
 
 diag "quic port: $quic_port / port: $server->{port} / tls port: $server->{tls_port}";
 
-sub debug_socket_accept {
+sub debug_socket_lookup {
   my($trace) = @_;
 
-  my @socket_accept_events = grep { /"type"\s*:\s*"socket-accept"/ } split /\n/, $trace;
-  if (@socket_accept_events) {
-    diag("socket-accept: ", @socket_accept_events);
+  my @socket_lookup_events = grep { /"type"\s*:\s*"socket-lookup"/ } split /\n/, $trace;
+  if (@socket_lookup_events) {
+    diag("socket-lookup: ", @socket_lookup_events);
   } else {
-    diag("socket-accept: not found");
+    diag("socket-lookup: not found");
   }
 }
 
@@ -71,10 +71,10 @@ subtest "h2olog -S=1.00", sub {
 
     my $trace;
     until (($trace = $tracer->get_trace()) =~ /\n/) {}
-    debug_socket_accept($trace);
+    debug_socket_lookup($trace);
 
     my @logs = map { decode_json($_) } split /\n/, $trace;
-    my($event) = grep { $_->{type} eq "socket-accept" } @logs;
+    my($event) = grep { $_->{type} eq "socket-lookup" } @logs;
 
     is $event->{"info-sock-type"}, "SOCK_STREAM";
     like $event->{"info-src"}, qr/\A127\.0\.0\.1:\d+\z/, "source (remote) addr";
@@ -87,9 +87,9 @@ subtest "h2olog -S=1.00", sub {
 
     my $trace;
     until (($trace = $tracer->get_trace()) =~ /\n/) {}
-    debug_socket_accept($trace);
+    debug_socket_lookup($trace);
     my @logs = map { decode_json($_) } split /\n/, $trace;
-    my($event) = grep { $_->{type} eq "socket-accept" } @logs;
+    my($event) = grep { $_->{type} eq "socket-lookup" } @logs;
 
     like $event->{"info-src"}, qr/\A127\.0\.0\.1:\d+\z/, "destination (remote) addr";
     is $event->{"info-dest"}, "127.0.0.1:$quic_port", "source (local) addr";
@@ -108,7 +108,7 @@ subtest "h2olog -S=0.00", sub {
 
     sleep(1);
     my $trace =  $tracer->get_trace();
-    debug_socket_accept($trace);
+    debug_socket_lookup($trace);
 
     if ($ENV{H2OLOG_DEBUG}) {
       diag "h2olog output:\n", $trace;
@@ -123,7 +123,7 @@ subtest "h2olog -S=0.00", sub {
 
     sleep(1);
     my $trace = $tracer->get_trace();
-    debug_socket_accept($trace);
+    debug_socket_lookup($trace);
 
     if ($ENV{H2OLOG_DEBUG}) {
       diag "h2olog output:\n", $trace;
@@ -162,8 +162,10 @@ subtest "multiple h2olog with sampling filters", sub {
   until (($trace1 = $tracer1->get_trace()) =~ /\n/){}
   until (($trace2 = $tracer2->get_trace()) =~ /\n/){}
 
-  diag "tracer1:", $trace1;
-  diag "tracer2:", $trace2;
+  if ($ENV{H2OLOG_DEBUG}) {
+    diag "tracer1:", $trace1;
+    diag "tracer2:", $trace2;
+  }
 
   pass "multiple tracers can attach to the same h2o process";
 };

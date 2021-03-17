@@ -24,10 +24,10 @@ struct st_h2o_tunnel_t;
 
 provider h2o {
     /**
-     * Socket-level accept event, which will be called before HTTP-level accept events.
-     * This is fired only if the h2o_return map exists.
+     * HTTP-level event, indicating socket attributes are looked up.
+     * Its BPF tracer can return a modified `attrs` parameter via the `h2o_return` map.
      */
-    probe socket_accept(pid_t tid, struct st_h2o_ebpf_map_value_t map_value, struct st_h2o_ebpf_map_key_t *info);
+    probe socket_lookup(pid_t tid, uint64_t attrs, struct st_h2o_ebpf_map_key_t *info);
 
     /**
      * HTTP-level event, indicating that a request has been received.

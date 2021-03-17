@@ -2496,7 +2496,7 @@ struct init_ebpf_key_info_t {
     struct sockaddr *local, *remote;
 };
 
-static int init_ebpf_key_from_info(h2o_ebpf_map_key_t *key, void *_info)
+static int init_ebpf_key(h2o_ebpf_map_key_t *key, void *_info)
 {
     struct init_ebpf_key_info_t *info = _info;
     return h2o_socket_ebpf_init_key_raw(key, SOCK_DGRAM, info->local, info->remote);
@@ -2552,7 +2552,7 @@ static h2o_quic_conn_t *on_http3_accept(h2o_quic_ctx_t *_ctx, quicly_address_t *
         .local = &destaddr->sa,
         .remote = &srcaddr->sa,
     };
-    uint64_t ebpf_map_value = h2o_socket_ebpf_lookup(ctx->super.loop, init_ebpf_key_from_info, &ebpf_key_info);
+    uint64_t ebpf_map_value = h2o_socket_ebpf_lookup(ctx->super.loop, init_ebpf_key, &ebpf_key_info);
 
     quicly_address_token_plaintext_t *token = NULL, token_buf;
     h2o_http3_conn_t *conn = NULL;

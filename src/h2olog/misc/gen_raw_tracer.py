@@ -73,7 +73,7 @@ block_fields = {
     "h2o:h3_packet_receive": set(["bytes"]),
 
     # they are metadata to control how h2olog's connection-level filters work.
-    "h2o:socket_accept": set(["tid", "map_value"]),
+    "h2o:socket_lookup": set(["tid", "attrs"]),
 }
 
 # The block list for probes.
@@ -257,7 +257,7 @@ int %s(struct pt_regs *ctx) {
 #endif
 """
 
-  if fully_specified_probe_name == "h2o:socket_accept":
+  if fully_specified_probe_name == "h2o:socket_lookup":
     c += r"""
 #ifdef H2OLOG_SAMPLING_RATE
   pid_t tid;
