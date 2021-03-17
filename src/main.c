@@ -706,7 +706,7 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
         SSL_free(fakeconn);
     }
 
-    if (verify_mode == 1) {
+    if (verify_mode) {
         pctx->ctx.require_client_authentication = 1;
         /* log the flag */
         fprintf(stderr, "client cert verification is Enabled.\n");
