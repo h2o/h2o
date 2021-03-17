@@ -715,7 +715,7 @@ int main(int argc, char **argv)
 #endif
     }
 
-    if (ctx.http3 != NULL) {
+    if (ctx.protocol_selector.ratio.http3 > 0) {
         h2o_quic_close_all_connections(&ctx.http3->h3);
         while (h2o_quic_num_connections(&ctx.http3->h3) != 0) {
 #if H2O_USE_LIBUV
