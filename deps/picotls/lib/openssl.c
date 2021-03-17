@@ -1199,7 +1199,6 @@ static int verify_cert_chain(X509_STORE *store, X509 *cert, STACK_OF(X509) * cha
 Exit:
     if (verify_ctx != NULL)
         X509_STORE_CTX_free(verify_ctx);
-    fprintf(stderr, "verify_cert_chain: ret=%d\n", ret);
     return ret;
 }
 
