@@ -40,14 +40,19 @@ typedef struct st_h2o_ebpf_map_key_t {
     h2o_ebpf_address_t local, remote;
 } h2o_ebpf_map_key_t;
 
-#define H2O_EBPF_QUIC_SEND_RETRY_DEFAULT 0
-#define H2O_EBPF_QUIC_SEND_RETRY_ON 1
-#define H2O_EBPF_QUIC_SEND_RETRY_OFF 2
 
-typedef struct st_h2o_ebpf_map_value_t {
-    uint64_t skip_tracing : 1;
-    uint64_t quic_send_retry : 2;
-} h2o_ebpf_map_value_t;
+/* avoid using a bit-field struct because BCC does not support it */
+
+#define H2O_EBPF_SKIP_TRACING 0x01
+
+// the "quic_send_retry" flag takes 3 state: default, on, off
+#define H2O_EBPF_QUIC_SEND_RETRY_MASK 0x06
+#define H2O_EBPF_QUIC_SEND_RETRY_ON 0x02
+#define H2O_EBPF_QUIC_SEND_RETRY_OFF 0x04
+
+#define H2O_EBPF_SKIP_TRACING_IS_SET(f) (((f) & H2O_EBPF_SKIP_TRACING) == H2O_EBPF_SKIP_TRACING)
+#define H2O_EBPF_QUIC_SEND_RETRY_ON_IS_SET(f) (((f) & H2O_EBPF_QUIC_SEND_RETRY_MASK) == H2O_EBPF_QUIC_SEND_RETRY_ON)
+#define H2O_EBPF_QUIC_SEND_RETRY_OFF_IS_SET(f) (((f) & H2O_EBPF_QUIC_SEND_RETRY_MASK) == H2O_EBPF_QUIC_SEND_RETRY_OFF)
 
 // bpf_hash<h2o_ebpf_map_key_t, h2o_ebpf_map_value_t>
 #define H2O_EBPF_MAP_PATH "/sys/fs/bpf/h2o_map"

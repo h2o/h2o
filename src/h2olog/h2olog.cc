@@ -321,6 +321,7 @@ int main(int argc, char **argv)
 
     std::vector<std::string> cflags({
         make_pid_cflag("H2OLOG_H2O_PID", h2o_pid),
+        std::string("-DH2O_EBPF_SKIP_TRACING=") + std::to_string(H2O_EBPF_SKIP_TRACING),
         std::string("-DH2O_EBPF_RETURN_MAP_SIZE=") + std::to_string(H2O_EBPF_RETURN_MAP_SIZE),
         std::string("-DH2O_EBPF_RETURN_MAP_PATH=\"") + H2O_EBPF_RETURN_MAP_PATH + std::string("\""),
     });

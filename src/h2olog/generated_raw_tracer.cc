@@ -4105,7 +4105,7 @@ int trace_h2o__socket_accept(struct pt_regs *ctx) {
   bpf_usdt_readarg(2, ctx, &map_value);
   int skip_tracing = bpf_get_prandom_u32() > (H2OLOG_SAMPLING_RATE * U32_MAX);
   if (skip_tracing) {
-    map_value |= 1; // skip_tracing
+    map_value |= H2O_EBPF_SKIP_TRACING;
   }
   h2o_return.insert(&tid, &map_value);
   if (skip_tracing)

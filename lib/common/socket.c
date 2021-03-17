@@ -1761,9 +1761,9 @@ static int get_return_map_fd(h2o_loop_t *loop)
     return fd;
 }
 
-h2o_ebpf_map_value_t h2o_socket_ebpf_lookup(h2o_loop_t *loop, int (*init_key)(h2o_ebpf_map_key_t *key, void *cbdata), void *cbdata)
+uint64_t h2o_socket_ebpf_lookup(h2o_loop_t *loop, int (*init_key)(h2o_ebpf_map_key_t *key, void *cbdata), void *cbdata)
 {
-    h2o_ebpf_map_value_t value = {0};
+    uint64_t value = 0;
 
     int tracing_map_fd = get_tracing_map_fd(loop);
     h2o_ebpf_map_key_t key;
@@ -1808,10 +1808,10 @@ int h2o_socket_ebpf_init_key_from_sock(struct st_h2o_ebpf_map_key_t *key, void *
     h2o_fatal("unimplemented");;
 }
 
-h2o_ebpf_map_value_t h2o_socket_ebpf_lookup(h2o_loop_t *loop, int (*init_key)(h2o_ebpf_map_key_t *key, void *cbdata),
+uint64_t h2o_socket_ebpf_lookup(h2o_loop_t *loop, int (*init_key)(h2o_ebpf_map_key_t *key, void *cbdata),
                                             void *cbdata)
 {
-    return (h2o_ebpf_map_value_t){0};
+    return 0;
 }
 
 #endif
