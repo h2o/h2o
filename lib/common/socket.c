@@ -1763,37 +1763,29 @@ static int get_return_map_fd(h2o_loop_t *loop)
 
 h2o_ebpf_map_value_t h2o_socket_ebpf_lookup(h2o_loop_t *loop, int (*init_key)(h2o_ebpf_map_key_t *key, void *cbdata), void *cbdata)
 {
-    int tracing_map_fd = get_tracing_map_fd(loop);
-    if (tracing_map_fd < 0 && !H2O_SOCKET_ACCEPT_ENABLED())
-        return (h2o_ebpf_map_value_t){0};
-
-    // do lookup only if an eBPF map is actually open.
-
-    h2o_ebpf_map_key_t key;
-    if (!init_key(&key, cbdata))
-        return (h2o_ebpf_map_value_t){0};
-
     h2o_ebpf_map_value_t value = {0};
 
-    // for h2o_map
-    if (tracing_map_fd >= 0)
-        ebpf_map_lookup(tracing_map_fd, &key, &value);
+    int tracing_map_fd = get_tracing_map_fd(loop);
+    h2o_ebpf_map_key_t key;
+    if ((tracing_map_fd >= 0 || H2O_SOCKET_ACCEPT_ENABLED()) && init_key(&key, cbdata)) {
+        if (tracing_map_fd >= 0)
+            ebpf_map_lookup(tracing_map_fd, &key, &value);
 
-    // for h2o_return
-    int return_map_fd;
-    if (H2O_SOCKET_ACCEPT_ENABLED() && (return_map_fd = get_return_map_fd(loop)) >= 0) {
-        pid_t tid = gettid();
+        int return_map_fd;
+        if (H2O_SOCKET_ACCEPT_ENABLED() && (return_map_fd = get_return_map_fd(loop)) >= 0) {
+            pid_t tid = gettid();
 
-        // make sure a possible old value is not set,
-        // otherwise the subsequent logic will be unreliable.
-        if (ebpf_map_delete(return_map_fd, &tid) != 0) {
-            if (errno != ENOENT) {
-                char buf[128];
-                h2o_fatal("BPF_MAP_DELETE failed: %s", h2o_strerror_r(errno, buf, sizeof(buf)));
+            // make sure a possible old value is not set,
+            // otherwise the subsequent logic will be unreliable.
+            if (ebpf_map_delete(return_map_fd, &tid) != 0) {
+                if (errno != ENOENT) {
+                    char buf[128];
+                    h2o_fatal("BPF_MAP_DELETE failed: %s", h2o_strerror_r(errno, buf, sizeof(buf)));
+                }
             }
+            H2O_SOCKET_ACCEPT(tid, value, &key);
+            ebpf_map_lookup(return_map_fd, &tid, &value);
         }
-        H2O_SOCKET_ACCEPT(tid, value, &key);
-        ebpf_map_lookup(return_map_fd, &tid, &value);
     }
 
     return value;
