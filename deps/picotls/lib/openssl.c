@@ -1327,8 +1327,6 @@ static int verify_cert(ptls_verify_certificate_t *_self, ptls_t *tls,
 
     assert(num_certs != 0);
 
-    fprintf(stderr, "verify_cert:%d\n", num_certs);
-
     /* convert certificates to OpenSSL representation */
     if ((cert = to_x509(certs[0])) == NULL) {
         ret = PTLS_ALERT_BAD_CERTIFICATE;
