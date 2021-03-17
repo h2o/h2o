@@ -22,7 +22,7 @@
 
 # gen_raw_tracer.py - Generate an h2olog tracer to emit USDT probes by parsing D script files.
 #
-# The gen_raw_tracer.py can parse @appdata annotations in D script files, for example:
+# gen_raw_tracer.py parses D script files accompanied by @appdata annotation, for example:
 #
 # <code>
 # /* @appdata
