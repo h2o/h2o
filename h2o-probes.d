@@ -20,8 +20,6 @@
  * IN THE SOFTWARE.
  */
 
-struct st_h2o_tunnel_t;
-
 provider h2o {
     /**
      * HTTP-level event, indicating that a request has been received.
@@ -81,6 +79,10 @@ provider h2o {
      * HTTP/3 event, indicating that a QUIC packet has been forwarded.
      */
     probe h3_packet_forward(struct sockaddr *dest, struct sockaddr *src, size_t num_packets, size_t num_bytes, int fd);
+    /**
+     * HTTP/3 event, indicating that a forwarded QUIC packet has been received.
+     */
+    probe h3_forwarded_packet_receive(struct sockaddr *dest, struct sockaddr *src, size_t num_bytes);
 
     /**
      * FIXME define probes for http3client, aligning the arguments of `h2o_tunnel_create`
