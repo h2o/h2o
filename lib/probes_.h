@@ -29,6 +29,10 @@
 #if H2O_USE_DTRACE
 
 #include "picotls.h"
+/* as probes_.h is used by files under lib/common, structures that are specific to the server-side implementation have to be
+ * forward-declared. */
+struct st_h2o_conn_t;
+struct st_h2o_tunnel_t;
 #include "h2o-probes.h"
 
 #define H2O_CONN_IS_PROBED(label, conn) (PTLS_UNLIKELY(H2O_##label##_ENABLED()) && !conn->callbacks->skip_tracing(conn))
