@@ -396,8 +396,9 @@ static void destroy_tunnel(struct st_h2o_http3_server_stream_t *stream)
     struct st_h2o_http3_server_conn_t *conn = get_conn(stream);
     if (stream->tunnel->datagram_flow_id != UINT64_MAX) {
         khiter_t iter = kh_get(stream, conn->datagram_flows, stream->tunnel->datagram_flow_id);
-        assert(iter != kh_end(conn->datagram_flows));
-        kh_del(stream, conn->datagram_flows, iter);
+        /* it's possible the tunnel wasn't established yet */
+        if (iter != kh_end(conn->datagram_flows))
+            kh_del(stream, conn->datagram_flows, iter);
     }
 }
 
