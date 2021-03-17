@@ -22,9 +22,12 @@
 #ifndef h2o__ebpf_h
 #define h2o__ebpf_h
 
-// This file may be included in a BPF program
+/*
+ * This file may be included in a BPF program. A BPF program can be written in C, which can includes a few system headers, for
+ * example linux/sched.h and inttypes.h, and most of standard C/POSIX headers, for example stdio.h and socket.h, are not available.
+ */
 
-// sizeof(struct in6_addr)
+// max(sizeof(struct in6_addr), sizeof(struct in_addr))
 #define H2O_EBPF_SIZEOF_ADDR 16
 typedef struct st_h2o_ebpf_address_t {
     uint8_t ip[H2O_EBPF_SIZEOF_ADDR];
@@ -55,6 +58,6 @@ typedef struct st_h2o_ebpf_map_value_t {
 #define H2O_EBPF_RETURN_MAP_PATH "/sys/fs/bpf/" H2O_EBPF_RETURN_MAP_NAME
 
 // The size of pinned BPF objects, which must be larger than the number of processors.
-#define H2O_EBPF_MAP_SIZE 1024
+#define H2O_EBPF_RETURN_MAP_SIZE 1024
 
 #endif

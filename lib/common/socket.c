@@ -1614,7 +1614,7 @@ static int ebpf_map_delete(int fd, const void *key)
     return syscall(__NR_bpf, BPF_MAP_DELETE_ELEM, &attr, sizeof(attr));
 }
 
-int h2o_setup_ebpf_maps(void)
+int h2o_socket_ebpf_prepare_maps(void)
 {
     if (getuid() != 0) {
         h2o_error_printf("skipping to set up eBPF maps because bpf(2) requires root privileges");
@@ -1626,7 +1626,7 @@ int h2o_setup_ebpf_maps(void)
     // h2o drops root privileges after this function
     // unless its configuration is set to keep the privileges.
     int fd = ebpf_map_create(BPF_MAP_TYPE_LRU_HASH, sizeof(pid_t), sizeof(uint64_t),
-                 H2O_EBPF_MAP_SIZE, H2O_EBPF_RETURN_MAP_NAME);
+                 H2O_EBPF_RETURN_MAP_SIZE, H2O_EBPF_RETURN_MAP_NAME);
     if (fd < 0) {
         h2o_perror("BPF_MAP_CREATE failed");
         return 0;
@@ -1640,7 +1640,7 @@ int h2o_setup_ebpf_maps(void)
     return 1;
 }
 
-static int open_tracing_map(h2o_loop_t *loop)
+static int get_tracing_map_fd(h2o_loop_t *loop)
 {
     static __thread int tracing_map_fd = -1;
     static __thread uint64_t tracing_map_last_attempt = 0;
@@ -1676,18 +1676,18 @@ static int open_tracing_map(h2o_loop_t *loop)
     return tracing_map_fd;
 }
 
-static inline int set_ebpf_map_key_tuples(const struct sockaddr *src, h2o_ebpf_address_t *dest)
+static inline int set_ebpf_map_key_tuples(const struct sockaddr *sa, h2o_ebpf_address_t *ea)
 {
-    if (src->sa_family == AF_INET) {
-        struct sockaddr_in *sin = (void *)src;
-        assert(sizeof(dest->ip) >= sizeof(sin->sin_addr));
-        memcpy(dest->ip, &sin->sin_addr, sizeof(sin->sin_addr));
-        dest->port = sin->sin_port;
+    if (sa->sa_family == AF_INET) {
+        struct sockaddr_in *sin = (void *)sa;
+        assert(sizeof(ea->ip) >= sizeof(sin->sin_addr));
+        memcpy(ea->ip, &sin->sin_addr, sizeof(sin->sin_addr));
+        ea->port = sin->sin_port;
         return 1;
-    } else if (src->sa_family == AF_INET6) {
-        struct sockaddr_in6 *sin = (void *)src;
-        memcpy(dest->ip, &sin->sin6_addr, sizeof(sin->sin6_addr));
-        dest->port = sin->sin6_port;
+    } else if (sa->sa_family == AF_INET6) {
+        struct sockaddr_in6 *sin = (void *)sa;
+        memcpy(ea->ip, &sin->sin6_addr, sizeof(sin->sin6_addr));
+        ea->port = sin->sin6_port;
         return 1;
     } else {
         return 0;
@@ -1725,7 +1725,7 @@ int h2o_socket_ebpf_init_key_from_sock(h2o_ebpf_map_key_t *key, void *_sock)
     return h2o_socket_ebpf_init_key_raw(key, sock_type, (void *)&local, (void *)&remote);
 }
 
-static int open_ebpf_return_map(h2o_loop_t *loop)
+static int get_return_map_fd(h2o_loop_t *loop)
 {
     static __thread int fd = -1;
     static __thread uint64_t last_attempt = 0;
@@ -1763,8 +1763,8 @@ static int open_ebpf_return_map(h2o_loop_t *loop)
 
 h2o_ebpf_map_value_t h2o_socket_ebpf_lookup(h2o_loop_t *loop, int (*init_key)(h2o_ebpf_map_key_t *key, void *cbdata), void *cbdata)
 {
-    int map_fd = open_tracing_map(loop);
-    if (map_fd < 0 && !H2O_SOCKET_ACCEPT_ENABLED())
+    int tracing_map_fd = get_tracing_map_fd(loop);
+    if (tracing_map_fd < 0 && !H2O_SOCKET_ACCEPT_ENABLED())
         return (h2o_ebpf_map_value_t){0};
 
     // do lookup only if an eBPF map is actually open.
@@ -1776,24 +1776,24 @@ h2o_ebpf_map_value_t h2o_socket_ebpf_lookup(h2o_loop_t *loop, int (*init_key)(h2
     h2o_ebpf_map_value_t value = {0};
 
     // for h2o_map
-    if (map_fd >= 0)
-        ebpf_map_lookup(map_fd, &key, &value);
+    if (tracing_map_fd >= 0)
+        ebpf_map_lookup(tracing_map_fd, &key, &value);
 
     // for h2o_return
-    int return_fd;
-    if (H2O_SOCKET_ACCEPT_ENABLED() && (return_fd = open_ebpf_return_map(loop)) >= 0) {
+    int return_map_fd;
+    if (H2O_SOCKET_ACCEPT_ENABLED() && (return_map_fd = get_return_map_fd(loop)) >= 0) {
         pid_t tid = gettid();
 
         // make sure a possible old value is not set,
         // otherwise the subsequent logic will be unreliable.
-        if (ebpf_map_delete(return_fd, &tid) != 0) {
+        if (ebpf_map_delete(return_map_fd, &tid) != 0) {
             if (errno != ENOENT) {
                 char buf[128];
                 h2o_fatal("BPF_MAP_DELETE failed: %s", h2o_strerror_r(errno, buf, sizeof(buf)));
             }
         }
         H2O_SOCKET_ACCEPT(tid, value, &key);
-        ebpf_map_lookup(return_fd, &tid, &value);
+        ebpf_map_lookup(return_map_fd, &tid, &value);
     }
 
     return value;
@@ -1801,19 +1801,19 @@ h2o_ebpf_map_value_t h2o_socket_ebpf_lookup(h2o_loop_t *loop, int (*init_key)(h2
 
 #else
 
-int h2o_setup_ebpf_maps(void)
+int h2o_socket_ebpf_prepare_maps(void)
 {
     return 0;
 }
 
 int h2o_socket_ebpf_init_key_raw(struct st_h2o_ebpf_map_key_t *key, int sock_type, struct sockaddr *local, struct sockaddr *remote)
 {
-    return 0;
+    h2o_fatal("unimplemented");
 }
 
 int h2o_socket_ebpf_init_key_from_sock(struct st_h2o_ebpf_map_key_t *key, void *sock)
 {
-    return 0;
+    h2o_fatal("unimplemented");;
 }
 
 h2o_ebpf_map_value_t h2o_socket_ebpf_lookup(h2o_loop_t *loop, int (*init_key)(h2o_ebpf_map_key_t *key, void *cbdata),

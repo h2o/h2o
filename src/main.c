@@ -3356,7 +3356,7 @@ int main(int argc, char **argv)
     }
 
     setup_signal_handlers();
-    h2o_setup_ebpf_maps();
+    h2o_socket_ebpf_prepare_maps();
 
     /* open the log file to redirect STDIN/STDERR to, before calling setuid */
     if (conf.error_log != NULL) {
