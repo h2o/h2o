@@ -715,16 +715,16 @@ int main(int argc, char **argv)
 #endif
     }
 
-    if (ctx.http3 != NULL) {
+#if H2O_USE_LIBUV
+    /* libuv path currently does not support http3 */
+#else
+    if (ctx.protocol_selector.ratio.http3 > 0) {
         h2o_quic_close_all_connections(&ctx.http3->h3);
         while (h2o_quic_num_connections(&ctx.http3->h3) != 0) {
-#if H2O_USE_LIBUV
-            uv_run(ctx.loop, UV_RUN_ONCE);
-#else
             h2o_evloop_run(ctx.loop, INT32_MAX);
-#endif
         }
     }
+#endif
 
     return 0;
 }
