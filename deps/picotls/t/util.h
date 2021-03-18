@@ -136,6 +136,8 @@ static inline X509_STORE* init_cert_store(char const *crt_file)
             fprintf(stderr, "Cannot load store (%s), ret = %d\n",
                 crt_file, ret);
         }
+    } else {
+        fprintf(stderr, "Cannot get a new X509 store\n");
     }
 
     return store;
@@ -144,7 +146,7 @@ static inline X509_STORE* init_cert_store(char const *crt_file)
 static inline void setup_verify_certificate(ptls_context_t *ctx, const char *ca_file)
 {
     static ptls_openssl_verify_certificate_t vc;
-    ptls_openssl_init_verify_certificate(&vc, init_cert_store(ca_file));
+    ptls_openssl_init_verify_certificate(&vc, ca_file != NULL ? init_cert_store(ca_file) : NULL);
     ctx->verify_certificate = &vc.super;
 }
 

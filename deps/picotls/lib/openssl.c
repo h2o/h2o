@@ -1219,8 +1219,6 @@ static int verify_cert_chain(X509_STORE *store, X509 *cert, STACK_OF(X509) * cha
     X509_STORE_CTX *verify_ctx;
     int ret;
 
-    //assert(server_name != NULL && "ptls_set_server_name MUST be called");
-
     /* verify certificate chain */
     if ((verify_ctx = X509_STORE_CTX_new()) == NULL) {
         ret = PTLS_ERROR_NO_MEMORY;
@@ -1280,29 +1278,29 @@ static int verify_cert_chain(X509_STORE *store, X509 *cert, STACK_OF(X509) * cha
         goto Exit;
     }
 
-/* TODO: This is a hack. Different business logic to verify CN and/or others for client certificate. */
-#if 0
+    if (!is_server) {
+        assert(server_name != NULL && "ptls_set_server_name MUST be called");
 #ifdef X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS
-    /* verify CN */
-    if (server_name != NULL) {
-        if (ptls_server_name_is_ipaddr(server_name)) {
-            ret = X509_check_ip_asc(cert, server_name, 0);
-        } else {
-            ret = X509_check_host(cert, server_name, strlen(server_name), X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS, NULL);
-        }
-        if (ret != 1) {
-            if (ret == 0) { /* failed match */
-                ret = PTLS_ALERT_BAD_CERTIFICATE;
+        /* verify CN */
+        if (server_name != NULL) {
+            if (ptls_server_name_is_ipaddr(server_name)) {
+                ret = X509_check_ip_asc(cert, server_name, 0);
             } else {
-                ret = PTLS_ERROR_LIBRARY;
+                ret = X509_check_host(cert, server_name, strlen(server_name), X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS, NULL);
             }
-            goto Exit;
+            if (ret != 1) {
+                if (ret == 0) { /* failed match */
+                    ret = PTLS_ALERT_BAD_CERTIFICATE;
+                } else {
+                    ret = PTLS_ERROR_LIBRARY;
+                }
+                goto Exit;
+            }
         }
-    }
 #else
 #warning "hostname validation is disabled; OpenSSL >= 1.0.2 or LibreSSL >= 2.5.0 is required"
 #endif
-#endif
+    }
     ret = 0;
 
 Exit:

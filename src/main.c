@@ -641,6 +641,7 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
         struct st_on_client_hello_ptls_t ch;
         struct st_emit_certificate_ptls_t ec;
         ptls_openssl_sign_certificate_t sc;
+        ptls_openssl_verify_certificate_t vc;
     } *pctx = h2o_mem_alloc(sizeof(*pctx));
     EVP_PKEY *key;
     X509 *cert;
@@ -716,8 +717,11 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
         fprintf(stderr, "client cert verification is Enabled.\n");
         /* set verify callback */
         X509_STORE *ca_store = SSL_CTX_get_cert_store(ssl_ctx);
-        ptls_openssl_init_verify_certificate(&vc, ca_store);
-        pctx->ctx.verify_certificate = &vc.super;
+        if (ptls_openssl_init_verify_certificate(&pctx->vc, ca_store) != 0) {
+            free(pctx);
+            return "failed to setup verify environment";
+        }
+        pctx->ctx.verify_certificate = &pctx->vc.super;
     }
 
     /* create signer */
@@ -998,11 +1002,18 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
     if (use_client_verify) {
         SSL_CTX_set_verify(ssl_ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, h2o_ssl_peer_verify_callback);
 
-        if (SSL_CTX_load_verify_locations(ssl_ctx, (*client_CA_file)->data.scalar, NULL) != 1) {
-            h2o_configurator_errprintf(cmd, *client_CA_file, "failed to load client CA file:%s\n",
-                                       (*client_CA_file)->data.scalar);
-            ERR_print_errors_cb(on_openssl_print_errors, stderr);
-            goto Error;
+        if (client_CA_file != NULL) {
+            if (SSL_CTX_load_verify_locations(ssl_ctx, (*client_CA_file)->data.scalar, NULL) != 1) {
+                h2o_configurator_errprintf(cmd, *client_CA_file, "failed to load client CA file:%s\n",
+                                        (*client_CA_file)->data.scalar);
+                ERR_print_errors_cb(on_openssl_print_errors, stderr);
+                goto Error;
+            }
+        } else {
+            /* use default trust store */
+            if (SSL_CTX_set_default_verify_paths(ssl_ctx) != 1) {
+                goto Error;
+            }
         }
     }
 
