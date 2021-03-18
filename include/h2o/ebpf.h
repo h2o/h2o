@@ -28,10 +28,8 @@
  * ebpf.h MUST only depend on the include files available to the BPF compiler.
  */
 
-// max(sizeof(struct in6_addr), sizeof(struct in_addr))
-#define H2O_EBPF_SIZEOF_ADDR 16
 typedef struct st_h2o_ebpf_address_t {
-    uint8_t ip[H2O_EBPF_SIZEOF_ADDR];
+    uint8_t ip[16];
     uint16_t port;
 } h2o_ebpf_address_t;
 
