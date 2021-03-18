@@ -73,7 +73,7 @@ block_fields = {
     "h2o:h3_packet_receive": set(["bytes"]),
 
     # they are metadata to control how h2olog's connection-level filters work.
-    "h2o:socket_lookup": set(["tid", "attrs"]),
+    "h2o:socket_lookup": set(["tid", "original_flags"]),
 }
 
 # The block list for probes.

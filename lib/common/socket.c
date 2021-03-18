@@ -1781,7 +1781,13 @@ uint64_t h2o_socket_ebpf_lookup(h2o_loop_t *loop, int (*init_key)(h2o_ebpf_map_k
                 }
             }
             H2O_SOCKET_LOOKUP(tid, value, &key);
-            ebpf_map_lookup(return_map_fd, &tid, &value);
+            if (ebpf_map_lookup(return_map_fd, &tid, &value) != 0) {
+                if (errno == ENOENT)
+                    h2o_error_printf(
+                        "Warning: BPF handler for h2o:socket_lookup did not set a return value via h2o_return map");
+                else
+                    h2o_perror("BPF_MAP_LOOKUP failed");
+            }
         }
     }
 

@@ -4093,7 +4093,7 @@ int trace_h2o__socket_lookup(struct pt_regs *ctx) {
   struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_H2O_SOCKET_LOOKUP };
 
   // pid_t tid (ignored)
-  // uint64_t attrs (ignored)
+  // uint64_t original_flags (ignored)
   // struct st_h2o_ebpf_map_key_t * info
   bpf_usdt_readarg(3, ctx, &buf);
   bpf_probe_read(&event.socket_lookup.info, sizeof_st_h2o_ebpf_map_key_t, buf);
