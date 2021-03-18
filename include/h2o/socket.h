@@ -373,7 +373,7 @@ int h2o_socket_set_df_bit(int fd, int domain);
 static int h2o_socket_skip_tracing(h2o_socket_t *sock);
 
 /**
- * Prepares eBPF maps, requireing root privileges and thus should be called before dropping the privileges.
+ * Prepares eBPF maps. Requires root privileges and thus should be called before dropping the privileges.
  */
 int h2o_socket_ebpf_prepare_maps(void);
 /**
