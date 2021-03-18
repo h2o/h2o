@@ -1091,6 +1091,7 @@ static int handle_input_expect_headers_send_http_error(struct st_h2o_http3_serve
         quicly_request_stop(stream->quic, H2O_HTTP3_ERROR_EARLY_RESPONSE);
 
     set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_SEND_HEADERS, 0);
+    sendfn(&stream->req, reason, body, 0);
     *err_desc = NULL;
 
     return 0;
