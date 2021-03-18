@@ -28,7 +28,7 @@ provider h2o {
      * The probe MUST write the result into the h2o_return map; see ebpf.h for details. original_flags contains the flags that will
      * be associated when the probe is not attached.
      */
-    probe socket_lookup(pid_t tid, uint64_t original_flags, struct st_h2o_ebpf_map_key_t *info);
+    probe socket_lookup_flags(pid_t tid, uint64_t original_flags, struct st_h2o_ebpf_map_key_t *info);
 
     /**
      * HTTP-level event, indicating that a request has been received.

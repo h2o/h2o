@@ -212,13 +212,6 @@ static std::string generate_header_filter_cflag(const std::vector<std::string> &
     return cflag;
 }
 
-static std::string make_pid_cflag(const char *macro_name, pid_t pid)
-{
-    char buf[256];
-    snprintf(buf, sizeof(buf), "-D%s=%d", macro_name, pid);
-    return std::string(buf);
-}
-
 static void event_cb(void *context, void *data, int len)
 {
     h2o_tracer *tracer = (h2o_tracer *)context;
@@ -230,6 +223,19 @@ static void lost_cb(void *context, uint64_t lost)
     h2o_tracer *tracer = (h2o_tracer *)context;
     tracer->handle_lost(lost);
 }
+
+template <typename T>
+static std::string build_define_cflag(const char *name, const T& value)
+{
+    return std::string("-D") + std::string(name) + "=" + std::to_string(value);
+}
+
+static std::string build_define_cflag(const char *name, const char *value)
+{
+    return std::string("-D") + std::string(name) + "=\"" + std::string(value) + "\"";
+}
+
+#define CFLAG_D(name) build_define_cflag(#name, name)
 
 int main(int argc, char **argv)
 {
@@ -320,10 +326,10 @@ int main(int argc, char **argv)
     tracer->init(outfp);
 
     std::vector<std::string> cflags({
-        make_pid_cflag("H2OLOG_H2O_PID", h2o_pid),
-        std::string("-DH2O_EBPF_SKIP_TRACING=") + std::to_string(H2O_EBPF_SKIP_TRACING),
-        std::string("-DH2O_EBPF_RETURN_MAP_SIZE=") + std::to_string(H2O_EBPF_RETURN_MAP_SIZE),
-        std::string("-DH2O_EBPF_RETURN_MAP_PATH=\"") + H2O_EBPF_RETURN_MAP_PATH + std::string("\""),
+        build_define_cflag("H2OLOG_H2O_PID", h2o_pid),
+        CFLAG_D(H2O_EBPF_FLAGS_SKIP_TRACING_BIT),
+        CFLAG_D(H2O_EBPF_RETURN_MAP_SIZE),
+        CFLAG_D(H2O_EBPF_RETURN_MAP_PATH),
     });
 
     if (!response_header_filters.empty()) {

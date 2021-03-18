@@ -273,8 +273,8 @@ h2o_socket_t *h2o_uv_socket_create(uv_handle_t *handle, uv_close_cb close_cb)
     sock->handle = handle;
     sock->close_cb = close_cb;
     sock->handle->data = sock;
-    uint64_t ebpf_map_value = h2o_socket_ebpf_lookup(sock->handle->loop, h2o_socket_ebpf_init_key, &sock->super);
-    if (H2O_EBPF_SKIP_TRACING_IS_SET(ebpf_map_value))
+    uint64_t flags = h2o_socket_ebpf_lookup_flags(sock->handle->loop, h2o_socket_ebpf_init_key, &sock->super);
+    if (H2O_EBPF_SKIP_TRACING(flags))
         sock->super._skip_tracing = 1;
     return &sock->super;
 }

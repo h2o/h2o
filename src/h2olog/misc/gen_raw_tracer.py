@@ -73,7 +73,7 @@ block_fields = {
     "h2o:h3_packet_receive": set(["bytes"]),
 
     # they are metadata to control how h2olog's connection-level filters work.
-    "h2o:socket_lookup": set(["tid", "original_flags"]),
+    "h2o:socket_lookup_flags": set(["tid", "original_flags"]),
 }
 
 # The block list for probes.
@@ -257,18 +257,18 @@ int %s(struct pt_regs *ctx) {
 #endif
 """
 
-  if fully_specified_probe_name == "h2o:socket_lookup":
+  if fully_specified_probe_name == "h2o:socket_lookup_flags":
     c += r"""
 #ifdef H2OLOG_SAMPLING_RATE
   pid_t tid;
-  uint64_t map_value;
+  uint64_t flags;
   bpf_usdt_readarg(1, ctx, &tid);
-  bpf_usdt_readarg(2, ctx, &map_value);
+  bpf_usdt_readarg(2, ctx, &flags);
   int skip_tracing = bpf_get_prandom_u32() > (H2OLOG_SAMPLING_RATE * U32_MAX);
   if (skip_tracing) {
-    map_value |= H2O_EBPF_SKIP_TRACING;
+    flags |= H2O_EBPF_FLAGS_SKIP_TRACING_BIT;
   }
-  h2o_return.insert(&tid, &map_value);
+  h2o_return.insert(&tid, &flags);
   if (skip_tracing)
     return 0;
 #endif

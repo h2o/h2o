@@ -1656,8 +1656,9 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                 if (quic_node != NULL) {
                     yoml_t **retry_node, **sndbuf, **rcvbuf, **amp_limit, **qpack_encoder_table_capacity, **max_streams_bidi;
                     if (h2o_configurator_parse_mapping(
-                            cmd, *quic_node, NULL, "retry:s,sndbuf:s,rcvbuf:s,amp-limit:s,qpack-encoder-table-capacity:s,max-streams-bidi:s",
-                            &retry_node, &sndbuf, &rcvbuf, &amp_limit, &qpack_encoder_table_capacity, &max_streams_bidi) != 0)
+                            cmd, *quic_node, NULL,
+                            "retry:s,sndbuf:s,rcvbuf:s,amp-limit:s,qpack-encoder-table-capacity:s,max-streams-bidi:s", &retry_node,
+                            &sndbuf, &rcvbuf, &amp_limit, &qpack_encoder_table_capacity, &max_streams_bidi) != 0)
                         return -1;
                     if (retry_node != NULL) {
                         ssize_t on = h2o_configurator_get_one_of(cmd, *retry_node, "OFF,ON");
@@ -2552,7 +2553,7 @@ static h2o_quic_conn_t *on_http3_accept(h2o_quic_ctx_t *_ctx, quicly_address_t *
         .local = &destaddr->sa,
         .remote = &srcaddr->sa,
     };
-    uint64_t ebpf_map_value = h2o_socket_ebpf_lookup(ctx->super.loop, init_ebpf_key, &ebpf_key_info);
+    uint64_t flags = h2o_socket_ebpf_lookup_flags(ctx->super.loop, init_ebpf_key, &ebpf_key_info);
 
     quicly_address_token_plaintext_t *token = NULL, token_buf;
     h2o_http3_conn_t *conn = NULL;
@@ -2578,9 +2579,9 @@ static h2o_quic_conn_t *on_http3_accept(h2o_quic_ctx_t *_ctx, quicly_address_t *
     /* send retry if necessary */
     if (token == NULL || token->type != QUICLY_ADDRESS_TOKEN_TYPE_RETRY) {
         int send_retry = ctx->send_retry;
-        if (H2O_EBPF_QUIC_SEND_RETRY_ON_IS_SET(ebpf_map_value)) {
+        if (H2O_EBPF_QUIC_SEND_RETRY_ON(flags)) {
             send_retry = 1;
-        } else if (H2O_EBPF_QUIC_SEND_RETRY_OFF_IS_SET(ebpf_map_value)) {
+        } else if (H2O_EBPF_QUIC_SEND_RETRY_OFF(flags)) {
             send_retry = 0;
         }
         if (send_retry) {
@@ -2614,8 +2615,7 @@ static h2o_quic_conn_t *on_http3_accept(h2o_quic_ctx_t *_ctx, quicly_address_t *
     }
 
     /* accept the connection */
-    conn = h2o_http3_server_accept(ctx, destaddr, srcaddr, packet, token, H2O_EBPF_SKIP_TRACING_IS_SET(ebpf_map_value),
-                                   &conf.quic.conn_callbacks);
+    conn = h2o_http3_server_accept(ctx, destaddr, srcaddr, packet, token, H2O_EBPF_SKIP_TRACING(flags), &conf.quic.conn_callbacks);
     if (conn == NULL || &conn->super == H2O_QUIC_ACCEPT_CONN_DECRYPTION_FAILED)
         goto Exit;
     num_sessions(1);

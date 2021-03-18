@@ -1758,21 +1758,21 @@ static int get_return_map_fd(h2o_loop_t *loop)
     return fd;
 }
 
-uint64_t h2o_socket_ebpf_lookup(h2o_loop_t *loop, int (*init_key)(h2o_ebpf_map_key_t *key, void *cbdata), void *cbdata)
+uint64_t h2o_socket_ebpf_lookup_flags(h2o_loop_t *loop, int (*init_key)(h2o_ebpf_map_key_t *key, void *cbdata), void *cbdata)
 {
-    uint64_t value = 0;
+    uint64_t flags = 0;
 
     int tracing_map_fd = get_tracing_map_fd(loop);
     h2o_ebpf_map_key_t key;
-    if ((tracing_map_fd >= 0 || H2O_SOCKET_LOOKUP_ENABLED()) && init_key(&key, cbdata)) {
+    if ((tracing_map_fd >= 0 || H2O_SOCKET_LOOKUP_FLAGS_ENABLED()) && init_key(&key, cbdata)) {
         if (tracing_map_fd >= 0)
-            ebpf_map_lookup(tracing_map_fd, &key, &value);
+            ebpf_map_lookup(tracing_map_fd, &key, &flags);
 
         int return_map_fd;
-        if (H2O_SOCKET_LOOKUP_ENABLED() && (return_map_fd = get_return_map_fd(loop)) >= 0) {
+        if (H2O_SOCKET_LOOKUP_FLAGS_ENABLED() && (return_map_fd = get_return_map_fd(loop)) >= 0) {
             pid_t tid = gettid();
 
-            // make sure a possible old value is not set,
+            // make sure a possible old flags is not set,
             // otherwise the subsequent logic will be unreliable.
             if (ebpf_map_delete(return_map_fd, &tid) != 0) {
                 if (errno != ENOENT) {
@@ -1780,18 +1780,18 @@ uint64_t h2o_socket_ebpf_lookup(h2o_loop_t *loop, int (*init_key)(h2o_ebpf_map_k
                     h2o_fatal("BPF_MAP_DELETE failed: %s", h2o_strerror_r(errno, buf, sizeof(buf)));
                 }
             }
-            H2O_SOCKET_LOOKUP(tid, value, &key);
-            if (ebpf_map_lookup(return_map_fd, &tid, &value) != 0) {
+            H2O_SOCKET_LOOKUP_FLAGS(tid, flags, &key);
+            if (ebpf_map_lookup(return_map_fd, &tid, &flags) != 0) {
                 if (errno == ENOENT)
                     h2o_error_printf(
-                        "Warning: BPF handler for h2o:socket_lookup did not set a return value via h2o_return map");
+                        "Warning: BPF handler for h2o:socket_lookup did not set a return flags via h2o_return map");
                 else
                     h2o_perror("BPF_MAP_LOOKUP failed");
             }
         }
     }
 
-    return value;
+    return flags;
 }
 
 #else
@@ -1811,7 +1811,7 @@ int h2o_socket_ebpf_init_key_from_sock(struct st_h2o_ebpf_map_key_t *key, void *
     h2o_fatal("unimplemented");
 }
 
-uint64_t h2o_socket_ebpf_lookup(h2o_loop_t *loop, int (*init_key)(h2o_ebpf_map_key_t *key, void *cbdata), void *cbdata)
+uint64_t h2o_socket_ebpf_lookup_flags(h2o_loop_t *loop, int (*init_key)(h2o_ebpf_map_key_t *key, void *cbdata), void *cbdata)
 {
     return 0;
 }

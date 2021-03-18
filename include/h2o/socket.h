@@ -377,9 +377,9 @@ static int h2o_socket_skip_tracing(h2o_socket_t *sock);
  */
 int h2o_socket_ebpf_prepare_maps(void);
 /**
- * function to lookup if the connection is tagged for special treatment. At the moment, the results are: 0 - no, 1 - trace.
+ * Function to lookup if the connection is tagged for special treatment. The result is a union of `H2O_EBPF_FLAGS_*`.
  */
-uint64_t h2o_socket_ebpf_lookup(h2o_loop_t *loop, int (*init_key)(h2o_ebpf_map_key_t *key, void *cbdata), void *cbdata);
+uint64_t h2o_socket_ebpf_lookup_flags(h2o_loop_t *loop, int (*init_key)(h2o_ebpf_map_key_t *key, void *cbdata), void *cbdata);
 /**
  * function for initializing the ebpf lookup key from raw information
  */

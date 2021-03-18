@@ -41,28 +41,40 @@ typedef struct st_h2o_ebpf_map_key_t {
     h2o_ebpf_address_t local, remote;
 } h2o_ebpf_map_key_t;
 
-/* avoid using a bit-field struct because BCC does not support it */
+/**
+ * `H2O_EBPF_FLAGS_*` are the value type of the pinned BPF maps: h2o_map and h2o_return
+ */
+#define H2O_EBPF_FLAGS_SKIP_TRACING_BIT 0x01
 
-#define H2O_EBPF_SKIP_TRACING 0x01
+/**
+ * QUIC_SEND_RETRY bits take 2 bits for 3 state: default, on, off
+ */
+#define H2O_EBPF_FLAGS_QUIC_SEND_RETRY_MASK 0x06
+#define H2O_EBPF_FLAGS_QUIC_SEND_RETRY_ON_BIT 0x02
+#define H2O_EBPF_FLAGS_QUIC_SEND_RETRY_OFF_BIT 0x04
 
-// the "quic_send_retry" flag takes 3 state: default, on, off
-#define H2O_EBPF_QUIC_SEND_RETRY_MASK 0x06
-#define H2O_EBPF_QUIC_SEND_RETRY_ON 0x02
-#define H2O_EBPF_QUIC_SEND_RETRY_OFF 0x04
+#define H2O_EBPF_SKIP_TRACING(flags) (((flags)&H2O_EBPF_FLAGS_SKIP_TRACING_BIT) == H2O_EBPF_FLAGS_SKIP_TRACING_BIT)
+#define H2O_EBPF_QUIC_SEND_RETRY_ON(flags) (((flags)&H2O_EBPF_FLAGS_QUIC_SEND_RETRY_MASK) == H2O_EBPF_FLAGS_QUIC_SEND_RETRY_ON_BIT)
+#define H2O_EBPF_QUIC_SEND_RETRY_OFF(flags) (((flags)&H2O_EBPF_FLAGS_QUIC_SEND_RETRY_MASK) == H2O_EBPF_FLAGS_QUIC_SEND_RETRY_OFF_BIT)
 
-#define H2O_EBPF_SKIP_TRACING_IS_SET(f) (((f)&H2O_EBPF_SKIP_TRACING) == H2O_EBPF_SKIP_TRACING)
-#define H2O_EBPF_QUIC_SEND_RETRY_ON_IS_SET(f) (((f)&H2O_EBPF_QUIC_SEND_RETRY_MASK) == H2O_EBPF_QUIC_SEND_RETRY_ON)
-#define H2O_EBPF_QUIC_SEND_RETRY_OFF_IS_SET(f) (((f)&H2O_EBPF_QUIC_SEND_RETRY_MASK) == H2O_EBPF_QUIC_SEND_RETRY_OFF)
-
-// bpf_hash<h2o_ebpf_map_key_t, h2o_ebpf_map_value_t>
+/**
+ * A pinned BPF map to control connection flags.
+ * The key type is h2o_ebpf_map_key_t, and the value type is uint64_t that contains `H2O_EBPF_FLAGS_*`.
+ */
 #define H2O_EBPF_MAP_PATH "/sys/fs/bpf/h2o_map"
 
-// h2o_return map uses an LRU hash map (needs Linux 4.10 or later)
-// bpf_lru_hash<tid_t, h2o_ebpf_map_value_t>
+/**
+ * A pinned BPF map to control connection flags, used together with h2o:socket_lookup_flags probe.
+ * The key type is a thread ID typed as pid_t obtained by `gettid()`, and the value type is uint64_t that contains
+ * `H2O_EBPF_FLAGS_*`.
+ * See also h2o-probes.d.
+ */
 #define H2O_EBPF_RETURN_MAP_NAME "h2o_return"
 #define H2O_EBPF_RETURN_MAP_PATH "/sys/fs/bpf/" H2O_EBPF_RETURN_MAP_NAME
 
-// The size of pinned BPF objects, which must be larger than the number of processors.
+/**
+ * The size of pinned BPF objects, which must be larger than the number of processors.
+ */
 #define H2O_EBPF_RETURN_MAP_SIZE 1024
 
 #endif
