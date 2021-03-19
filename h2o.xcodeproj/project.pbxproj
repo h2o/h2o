@@ -676,6 +676,7 @@
 		08790E101D8BD7F100A04BC1 /* examples-redis-client */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = "examples-redis-client"; sourceTree = BUILT_PRODUCTS_DIR; };
 		08819C2C218C9FA90057ED23 /* qif */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = qif; sourceTree = BUILT_PRODUCTS_DIR; };
 		08819C2D218C9FF70057ED23 /* qif.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = qif.c; sourceTree = "<group>"; };
+		08B3D43A26042CAF002F195C /* 50connect-deadlock.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50connect-deadlock.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		08E9CC4D1E41F6660049DD26 /* embedded.c.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = embedded.c.h; sourceTree = "<group>"; };
 		100A550C1C22857B00C4E3E0 /* 50mruby-htpasswd.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50mruby-htpasswd.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		100A550E1C2BB15100C4E3E0 /* http_request.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = http_request.c; sourceTree = "<group>"; };
@@ -2138,6 +2139,7 @@
 				E9BC76C11EE3D9A900EB7A09 /* 50compress-hint.t */,
 				E9AFBF18212A9802000F5DB8 /* 50config.t */,
 				E93BB45025DA530E009C24D8 /* 50connect.t */,
+				08B3D43A26042CAF002F195C /* 50connect-deadlock.t */,
 				E9AFBF11212A9801000F5DB8 /* 50date-header.t */,
 				106C23021C06AB2F00405689 /* 50errordoc.t */,
 				104B9A541A60773E009EEE64 /* 50expires.t */,
