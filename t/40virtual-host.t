@@ -80,4 +80,79 @@ EOT
     is $fetch->("example.org"), md5_file("examples/doc_root/index.html"), "example.org";
 };
 
+subtest "default to first" => sub {
+    my $server = spawn_h2o(sub {
+        my ($port, $tls_port) = @_;
+        return << "EOT";
+hosts:
+  "www.example.com:$port":
+    paths:
+      /:
+        file.dir: examples/doc_root
+  "*.example.com:$port":
+    paths:
+      /:
+        file.dir: examples/doc_root.alternate
+  "*:$port":
+    paths:
+      /:
+        file.dir: examples/doc_root.third
+EOT
+    });
+
+    my $fetch = sub {
+        my $host = shift;
+        my $resp;
+        if (defined($host)) {
+            $resp = `curl --silent --resolve $host:$server->{port}:127.0.0.1 http://$host:$server->{port}/`;
+        } else {
+            $resp = `curl --silent --http1.0 --header Host: http://127.0.0.1:$server->{port}/`;
+        }
+        md5_hex($resp);
+    };
+
+    is $fetch->("www.example.com"), md5_file("examples/doc_root/index.html"), "www.example.com";
+    is $fetch->("xxx.example.com"), md5_file("examples/doc_root.alternate/index.txt"), "xxx.example.com";
+    is $fetch->("example.org"), md5_file("examples/doc_root.third/index.txt"), "example.org";
+    is $fetch->(undef), md5_file("examples/doc_root/index.html"), "no host header";
+};
+
+subtest "default: ON" => sub {
+    my $server = spawn_h2o(sub {
+        my ($port, $tls_port) = @_;
+        return << "EOT";
+hosts:
+  "www.example.com:$port":
+    paths:
+      /:
+        file.dir: examples/doc_root
+  "*.example.com:$port":
+    paths:
+      /:
+        file.dir: examples/doc_root.alternate
+  "*:$port":
+    default: ON
+    paths:
+      /:
+        file.dir: examples/doc_root.third
+EOT
+    });
+
+    my $fetch = sub {
+        my $host = shift;
+        my $resp;
+        if (defined($host)) {
+            $resp = `curl --silent --resolve $host:$server->{port}:127.0.0.1 http://$host:$server->{port}/`;
+        } else {
+            $resp = `curl --silent --http1.0 --header Host: http://127.0.0.1:$server->{port}/`;
+        }
+        md5_hex($resp);
+    };
+
+    is $fetch->("www.example.com"), md5_file("examples/doc_root/index.html"), "www.example.com";
+    is $fetch->("xxx.example.com"), md5_file("examples/doc_root.alternate/index.txt"), "xxx.example.com";
+    is $fetch->("example.org"), md5_file("examples/doc_root.third/index.txt"), "example.org";
+    is $fetch->(undef), md5_file("examples/doc_root.third/index.txt"), "no host header";
+};
+
 done_testing();

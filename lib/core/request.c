@@ -114,6 +114,20 @@ static h2o_hostconf_t *find_hostconf(h2o_hostconf_t **hostconfs, h2o_iovec_t aut
     return NULL;
 }
 
+static h2o_hostconf_t *find_default_hostconf(h2o_hostconf_t **hostconfs)
+{
+    /* default to the first entry */
+    h2o_hostconf_t *hostconf0 = hostconfs[0];
+
+    do {
+        h2o_hostconf_t *hostconf = *hostconfs;
+        if (hostconf->is_default)
+            return hostconf;
+    } while (*++hostconfs != NULL);
+
+    return hostconf0;
+}
+
 h2o_hostconf_t *h2o_req_setup(h2o_req_t *req)
 {
     h2o_context_t *ctx = req->conn->ctx;
@@ -126,10 +140,10 @@ h2o_hostconf_t *h2o_req_setup(h2o_req_t *req)
         if (req->conn->hosts[1] == NULL ||
             (hostconf = find_hostconf(req->conn->hosts, req->input.authority, req->input.scheme->default_port,
                                       &req->authority_wildcard_match)) == NULL)
-            hostconf = *req->conn->hosts;
+            hostconf = find_default_hostconf(req->conn->hosts);
     } else {
         /* set the authority name to the default one */
-        hostconf = *req->conn->hosts;
+        hostconf = find_default_hostconf(req->conn->hosts);
         req->input.authority = hostconf->authority.hostport;
     }
 

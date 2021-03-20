@@ -348,6 +348,7 @@ static int on_config_paths(h2o_configurator_command_t *cmd, h2o_configurator_con
 static int on_config_hosts(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     size_t i;
+    uint8_t seen_default_host = 0;
 
     if (node->data.mapping.size == 0) {
         h2o_configurator_errprintf(cmd, node, "the mapping cannot be empty");
@@ -381,6 +382,7 @@ static int on_config_hosts(h2o_configurator_command_t *cmd, h2o_configurator_con
         }
         host_ctx->mimemap = &host_ctx->hostconf->mimemap;
         int cmd_ret = h2o_configurator_apply_commands(host_ctx, value, H2O_CONFIGURATOR_FLAG_HOST, NULL);
+        uint8_t is_default_host = host_ctx->hostconf->is_default;
         destroy_context(host_ctx);
         if (cmd_ret != 0)
             return -1;
@@ -388,8 +390,26 @@ static int on_config_hosts(h2o_configurator_command_t *cmd, h2o_configurator_con
             h2o_configurator_errprintf(NULL, value, "mandatory configuration directive `paths` is missing");
             return -1;
         }
+        if (is_default_host) {
+            if (seen_default_host) {
+                h2o_configurator_errprintf(cmd, key, "multiple host entries marked as default");
+                return -1;
+            }
+            seen_default_host = 1;
+        }
     }
 
+    return 0;
+}
+
+static int on_config_default_host(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    h2o_hostconf_t *hostconf = ctx->hostconf;
+    ssize_t on;
+
+    if ((on = h2o_configurator_get_one_of(cmd, node, "OFF,ON")) == -1)
+        return -1;
+    hostconf->is_default = (uint8_t)on;
     return 0;
 }
 
@@ -961,6 +981,9 @@ void h2o_configurator__init_core(h2o_globalconf_t *conf)
         h2o_configurator_define_command(
             c, "paths", H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING | H2O_CONFIGURATOR_FLAG_DEFERRED,
             on_config_paths);
+        h2o_configurator_define_command(
+            c, "default", H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR | H2O_CONFIGURATOR_FLAG_DEFERRED,
+            on_config_default_host);
     };
 
     { /* setup global configurators */

@@ -266,6 +266,11 @@ struct st_h2o_hostconf_t {
         uint16_t port;
     } authority;
     /**
+     * a boolean indicating whether this is the default to use when no other
+     * hostconf matches and when the request has no authority pseudo-header.
+     */
+    uint8_t is_default;
+    /**
      * list of path configurations
      */
     H2O_VECTOR(h2o_pathconf_t *) paths;
