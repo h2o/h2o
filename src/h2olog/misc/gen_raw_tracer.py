@@ -82,13 +82,7 @@ struct_map = {
 }
 
 # A block list to list useless or secret data fields
-# TODO: replace this dict with /* @appdata */ annotations
 block_fields = {
-    "quicly:crypto_decrypt": set(["decrypted"]),
-    "quicly:crypto_update_secret": set(["secret"]),
-    "quicly:crypto_send_key_update": set(["secret"]),
-    "quicly:crypto_receive_key_update": set(["secret"]),
-    "quicly:crypto_receive_key_update_prepare": set(["secret"]),
 }
 
 # The block list for probes.
