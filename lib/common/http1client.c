@@ -577,6 +577,7 @@ static int do_write_req(h2o_httpclient_t *_client, h2o_iovec_t chunk, int is_end
     h2o_timer_unlink(&client->super._timeout);
 
     h2o_iovec_t iov = h2o_iovec_init(client->_body_buf_in_flight->bytes, client->_body_buf_in_flight->size);
+    assert(iov.len != 0);
     if (client->_is_chunked) {
         h2o_iovec_t bufs[3];
         size_t bytes;
