@@ -260,9 +260,6 @@ def parse_dscript(path: Path):
   lexer.skip_whitespaces_or_comments()
   lexer.expect(r'}')
 
-  if not appdata:
-    appdata = {}
-
   return {
       "provider": provider,
       "probes": probes,
@@ -276,6 +273,9 @@ def parse_and_analyze(context: dict, d_file: Path):
   if DEBUG:
     json.dump(dscript, sys.stderr, indent=2)
     print("", file=sys.stderr)
+
+  if dscript["appdata"] == None:
+    sys.exit("@appdata section is not declared in %s" % d_file)
 
   provider = dscript["provider"]
   appdata = deepcopy(dscript["appdata"])  # type: dict[str, Any]
