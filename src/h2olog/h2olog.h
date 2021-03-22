@@ -75,6 +75,12 @@ class h2o_tracer
         uint64_t num_events;
         uint64_t num_lost;
     } stats_;
+
+    /**
+     * Whether or not to include application data.
+     */
+    bool appdata_ = false;
+
     /**
      * The stub function for handling an event.
      */
@@ -153,6 +159,14 @@ class h2o_tracer
     void flush()
     {
         fflush(out_);
+    }
+
+    /**
+     * Set true to include application data.
+     */
+    void set_appdata(bool appdata)
+    {
+        appdata_ = appdata;
     }
 };
 

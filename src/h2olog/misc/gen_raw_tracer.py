@@ -81,10 +81,6 @@ struct_map = {
     "sockaddr_in6": [],
 }
 
-# A block list to list useless or secret data fields
-block_fields = {
-}
-
 # The block list for probes.
 # All the probes are handled by default in JSON mode
 block_probes = set([
@@ -295,15 +291,10 @@ def parse_and_analyze(context: dict, d_file: Path):
         "name": name,
         "args": probe["args"],
         "fully_specified_probe_name": fully_specified_probe_name,
-        "block_field_set": set(),
+        "appdata_field_set": set(),
     }
     probe_metadata[name] = metadata
     args = metadata['args']
-    block_field_set = metadata["block_field_set"]  # type: set[str]
-
-    block_field_set.update(
-        block_fields.get(fully_specified_probe_name, set())
-    )
 
     appdata_fields = appdata.get(name, None)
     if appdata_fields != None:
@@ -319,7 +310,7 @@ def parse_and_analyze(context: dict, d_file: Path):
 
       if arg_name in appdata_fields:
         appdata_fields.remove(arg_name)
-        block_field_set.add(arg_name)
+        metadata["appdata_field_set"].add(arg_name)
 
       if is_ptr_type(arg_type):
         st_name = strip_typename(arg_type)
@@ -379,7 +370,7 @@ int %s(struct pt_regs *ctx) {
   struct h2olog_event_t event = { .id = %s };
 
 """ % (fully_specified_probe_name, tracer_name, metadata['id'])
-  block_field_set = metadata["block_field_set"]  # type: set[str]
+  appdata_field_set = metadata["appdata_field_set"]  # type: set[str]
   probe_name = metadata["name"]
 
   args = metadata['args']
@@ -388,9 +379,8 @@ int %s(struct pt_regs *ctx) {
     arg_name = arg['name']
     arg_type = arg['type']
 
-    if arg_name in block_field_set:
-      c += "  // %s %s (ignored)\n" % (arg_type, arg_name)
-      continue
+    if arg_name in appdata_field_set:
+      c += "  // %s %s (appdata)\n" % (arg_type, arg_name)
     else:
       c += "  // %s %s\n" % (arg_type, arg_name)
 
@@ -539,15 +529,11 @@ struct h2olog_event_t {
 
   for name, metadata in probe_metadata.items():
     fully_specified_probe_name = metadata["fully_specified_probe_name"]
-    block_field_set = metadata["block_field_set"]  # type: set[str]
-
+    appdata_field_set = metadata["appdata_field_set"]
     event_id_t_decl += "  %s,\n" % metadata["id"]
 
     event_t_decl += "    struct { // %s\n" % fully_specified_probe_name
     for field_name, field_type in metadata["flat_args_map"].items():
-      if field_name in block_field_set:
-        continue
-
       if is_bin_type(field_type):
         f = "uint8_t %s[STR_LEN]" % field_name
       elif is_str_type(field_type):
@@ -557,7 +543,10 @@ struct h2olog_event_t {
       else:
         f = "%s %s" % (field_type, field_name)
 
-      event_t_decl += "      %s;\n" % f
+      if field_name in appdata_field_set:
+        event_t_decl += "      %s; // appdata\n" % f
+      else:
+        event_t_decl += "      %s;\n" % f
     event_t_decl += "    } %s;\n" % name
 
   event_t_decl += r"""
@@ -630,7 +619,7 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
   for probe_name in probe_metadata:
     metadata = probe_metadata[probe_name]
     fully_specified_probe_name = metadata["fully_specified_probe_name"]
-    block_field_set = metadata["block_field_set"]  # type: set[str]
+    appdata_field_set = metadata["appdata_field_set"]  # type: set[str]
     flat_args_map = metadata["flat_args_map"]
 
     handle_event_func += "  case %s: { // %s\n" % (
@@ -639,12 +628,11 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
     handle_event_func += '    json_write_pair_c(out_, STR_LIT("seq"), seq_);\n'
 
     for field_name, field_type in flat_args_map.items():
-      if field_name in block_field_set:
-        continue
+      stmts = ""
       json_field_name = rename_map.get(field_name, field_name).replace("_", "-")
       event_t_name = "%s.%s" % (probe_name, field_name)
       if not is_bin_type(field_type) and not is_str_type(field_type):
-        handle_event_func += '    json_write_pair_c(out_, STR_LIT("%s"), event->%s);\n' % (
+        stmts += '    json_write_pair_c(out_, STR_LIT("%s"), event->%s);\n' % (
             json_field_name, event_t_name)
       else:  # bin or str type with "*_len" field
         len_names = set([field_name + "_len", "num_" + field_name])
@@ -656,14 +644,20 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
 
         if len_event_t_name:
           # A string might be truncated in STRLEN
-          handle_event_func += '    json_write_pair_c(out_, STR_LIT("%s"), event->%s, (event->%s < STR_LEN ? event->%s : STR_LEN));\n' % (
+          stmts += '    json_write_pair_c(out_, STR_LIT("%s"), event->%s, (event->%s < STR_LEN ? event->%s : STR_LEN));\n' % (
               json_field_name, event_t_name, len_event_t_name, len_event_t_name)
         elif is_bin_type(field_type):
-          handle_event_func += '    # warning "missing `%s_len` param in the probe %s, ignored."\n' % (
+          stmts += '    # warning "missing `%s_len` param in the probe %s, ignored."\n' % (
               field_name, fully_specified_probe_name)
         else:  # str type
-          handle_event_func += '    json_write_pair_c(out_, STR_LIT("%s"), event->%s, strlen(event->%s));\n' % (
+          stmts += '    json_write_pair_c(out_, STR_LIT("%s"), event->%s, strlen(event->%s));\n' % (
               json_field_name, event_t_name, event_t_name)
+      if field_name in appdata_field_set:
+        handle_event_func += "    if (appdata_) {\n"
+        handle_event_func += re.sub(r"^", "  ", stmts, flags=re_xms).rstrip() + "\n"
+        handle_event_func += "    }\n"
+      else:
+        handle_event_func += stmts
 
     if metadata["provider"] == "h2o":
       handle_event_func += '    json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());\n'

@@ -19,7 +19,7 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-
+/* @appdata {} */
 /**
  * Providers of quicly. Name of the arguments are important - they are used as the names of JSON fields when the dtrace script is
  * generated.
