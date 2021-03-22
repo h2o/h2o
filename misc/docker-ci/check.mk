@@ -3,7 +3,13 @@ SRC_DIR=/h2o
 CHECK_MK=$(SRC_DIR)/misc/docker-ci/check.mk
 CMAKE_ARGS=
 FUZZ_ASAN=ASAN_OPTIONS=detect_leaks=0
-DOCKER_RUN_OPTS=--privileged -v `pwd`:$(SRC_DIR) -v /sys/kernel/debug:/sys/kernel/debug --add-host=127.0.0.1.xip.io:127.0.0.1 -it
+DOCKER_RUN_OPTS=--privileged \
+	-v `pwd`:$(SRC_DIR) \
+	-v /sys/kernel/debug:/sys/kernel/debug \
+	-v /lib/modules:/lib/modules:ro \
+	-v /usr/src:/usr/src:ro \
+	--add-host=127.0.0.1.xip.io:127.0.0.1 \
+	-it
 
 ALL:
 	docker run $(DOCKER_RUN_OPTS) $(CONTAINER_NAME) make -f $(SRC_DIR)/misc/docker-ci/check.mk _check
@@ -23,6 +29,7 @@ dtrace:
 	docker run $(DOCKER_RUN_OPTS) $(CONTAINER_NAME) env DTRACE_TESTS=1 make -f $(SRC_DIR)/misc/docker-ci/check.mk _check
 
 _check:
+	uname -a
 	mkdir -p build
 	sudo mount -t tmpfs tmpfs build -o size=3G
 	sudo chown -R ci:ci build

@@ -84,9 +84,16 @@ CHECK_C_SOURCE_COMPILES("
 #include <sched.h>
 #include <pthread.h>
 int main(void) {
+#ifndef __NetBSD__
 cpu_set_t s;
 CPU_ZERO(&s);
 pthread_setaffinity_np(0, sizeof(s), &s);
+#else
+cpuset_t *s = cpuset_create();
+cpuset_zero(s);
+pthread_setaffinity_np(0, cpuset_size(s), s);
+cpuset_destroy(s);
+#endif
 return 0;
 }" HAS_PTHREAD_SETAFFINITY_NP)
 CMAKE_POP_CHECK_STATE()
@@ -941,7 +948,7 @@ IF (WITH_H2OLOG)
 
     # This phony target is required to force to trigger a custom command.
     # If DEPENDS is empty, the custom command won't be triggered when OUTPUT files exist.
-    ADD_CUSTOM_TARGET(phony_force_trigger_command COMMAND echo -n)
+    ADD_CUSTOM_COMMAND(OUTPUT phony_force_trigger_command COMMAND echo -n)
 
     ADD_CUSTOM_COMMAND(
         OUTPUT  "${CMAKE_CURRENT_SOURCE_DIR}/src/h2olog/generated_raw_tracer.cc"
