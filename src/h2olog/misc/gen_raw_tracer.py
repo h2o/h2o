@@ -554,9 +554,7 @@ struct h2olog_event_t {
       if field_name in block_field_set:
         continue
 
-      if fully_specified_probe_name == "quicly:receive" and field_name == "bytes":
-        f = "uint8_t %s[1]" % field_name  # for first-octet
-      elif is_bin_type(field_type):
+      if is_bin_type(field_type):
         f = "uint8_t %s[STR_LEN]" % field_name
       elif is_str_type(field_type):
         f = "char %s[STR_LEN]" % field_name
@@ -651,9 +649,7 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
         continue
       json_field_name = rename_map.get(field_name, field_name).replace("_", "-")
       event_t_name = "%s.%s" % (probe_name, field_name)
-      if fully_specified_probe_name == "quicly:receive" and field_name == "bytes":
-        handle_event_func += '    json_write_pair_c(out_, STR_LIT("first-octet"), event->receive.bytes[0]);\n'
-      elif not is_bin_type(field_type) and not is_str_type(field_type):
+      if not is_bin_type(field_type) and not is_str_type(field_type):
         handle_event_func += '    json_write_pair_c(out_, STR_LIT("%s"), event->%s);\n' % (
             json_field_name, event_t_name)
       else:  # bin or str type with "*_len" field
