@@ -20,15 +20,15 @@ my $sock = IO::Socket::INET->new(
 	Proto    => 'udp',
 	PeerAddr => $server,
 	PeerPort => $port,
-) or die "Failed to create a UDP socket: $!\n";
+) or die "Failed to create a UDP socket: $!";
 
 for my $f (@ARGV) {
-	my $fh = IO::File->new($f, "r") or die "Failed to open file: $f: $!\n";
+	my $fh = IO::File->new($f, "r") or die "Failed to open file: $f: $!";
 	my $read = $fh->read(my $dgram, 1500); # 1500 bytes must be enough to store the entire datagram at the moment
 	undef $fh;
-	my $sent = $sock->send($dgram) or die "Failed to send a datagram: $!\n";
+	my $sent = $sock->send($dgram) or die "Failed to send a datagram: $!";
 	if ($read != $sent) {
-		die "$read bytes read but $sent bytes sent\n";
+		die "$read bytes read but $sent bytes sent";
 	}
 }
 
