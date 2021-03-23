@@ -1509,24 +1509,6 @@ void h2o_ssl_register_npn_protocols(SSL_CTX *ctx, const char *protocols)
 
 int h2o_ssl_peer_verify_callback (int preok, X509_STORE_CTX *store_ctx)
 {
-    char data[256];
-
-    /* TODO: How much details are verified by default by openssl? */
-    /* if preverify fails get more details */
-    if (!preok)
-    {
-        X509 *cert = X509_STORE_CTX_get_current_cert(store_ctx);
-        int  depth = X509_STORE_CTX_get_error_depth(store_ctx);
-        int  err = X509_STORE_CTX_get_error(store_ctx);
-
-        fprintf(stderr, "-Error with certificate at depth: %i\n", depth);
-        X509_NAME_oneline(X509_get_issuer_name(cert), data, 256);
-        fprintf(stderr, "  issuer   = %s\n", data);
-        X509_NAME_oneline(X509_get_subject_name(cert), data, 256);
-        fprintf(stderr, "  subject  = %s\n", data);
-        fprintf(stderr, "  err %i:%s\n", err, X509_verify_cert_error_string(err) );
-    }
-
     return preok;
 }
 
