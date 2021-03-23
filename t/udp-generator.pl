@@ -3,6 +3,7 @@
 # Read datagrams from input files and send them to a specified server
 
 use strict;
+use warnings;
 use IO::File;
 use IO::Socket;
 
