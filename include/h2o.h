@@ -266,11 +266,9 @@ struct st_h2o_hostconf_t {
         uint16_t port;
     } authority;
     /**
-     * a boolean indicating that this hostconf can only be used for a request
-     * with the ":authority" pseudo-header field / "Host" that matches hostport.
-     * When strict_match is false, then this hostconf is eligible for use as
-     * the fallback hostconf for a request that does not match any applicable
-     * hostconf.
+     * A boolean indicating that this hostconf can only be used for a request with the ":authority" pseudo-header field / "Host"
+     * that matches hostport. When strict_match is false, then this hostconf is eligible for use as the fallback hostconf for a
+     * request that does not match any applicable hostconf.
      */
     uint8_t strict_match;
     /**
@@ -336,8 +334,8 @@ struct st_h2o_globalconf_t {
      */
     h2o_hostconf_t **hosts;
     /**
-     * The hostconf that will be used when none of the hostconfs for the
-     * listener match the request and they all have strict-match: ON.
+     * The hostconf that will be used when none of the hostconfs for the listener match the request and they all have strict-match:
+     * ON.
      */
     h2o_hostconf_t *fallback_host;
     /**
