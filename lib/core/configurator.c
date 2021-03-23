@@ -393,6 +393,17 @@ static int on_config_hosts(h2o_configurator_command_t *cmd, h2o_configurator_con
     return 0;
 }
 
+static int on_config_strict_match(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    h2o_hostconf_t *hostconf = ctx->hostconf;
+    ssize_t on;
+
+    if ((on = h2o_configurator_get_one_of(cmd, node, "OFF,ON")) == -1)
+        return -1;
+    hostconf->strict_match = (uint8_t)on;
+    return 0;
+}
+
 static int on_config_limit_request_body(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     return h2o_configurator_scanf(cmd, node, "%zu", &ctx->globalconf->max_request_entity_size);
@@ -961,6 +972,9 @@ void h2o_configurator__init_core(h2o_globalconf_t *conf)
         h2o_configurator_define_command(
             c, "paths", H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING | H2O_CONFIGURATOR_FLAG_DEFERRED,
             on_config_paths);
+        h2o_configurator_define_command(
+            c, "strict-match", H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+            on_config_strict_match);
     };
 
     { /* setup global configurators */
