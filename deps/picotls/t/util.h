@@ -136,10 +136,11 @@ static inline X509_STORE* init_cert_store(char const *crt_file)
             fprintf(stderr, "Cannot load store (%s), ret = %d\n",
                 crt_file, ret);
             X509_STORE_free(store);
-            return NULL;
+            exit(1);
         }
     } else {
         fprintf(stderr, "Cannot get a new X509 store\n");
+        exit(1);
     }
 
     return store;
