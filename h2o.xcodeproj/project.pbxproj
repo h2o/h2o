@@ -1273,6 +1273,11 @@
 		E9D4978E25E49FCA00F4A80D /* 40http1-pipeline.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "40http1-pipeline.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		E9D497C625E4DE1E00F4A80D /* 80chunked.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = 80chunked.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		E9D498B725EE684500F4A80D /* 50reverse-proxy-h3-early-response.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50reverse-proxy-h3-early-response.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		E9D49A4F25FB561A00F4A80D /* 40http1-streaming-framing.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "40http1-streaming-framing.t"; sourceTree = "<group>"; };
+		E9D49A5025FB561A00F4A80D /* 40http3-forward-initial.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "40http3-forward-initial.t"; sourceTree = "<group>"; };
+		E9D49A5125FB562800F4A80D /* 50http1-proxy-full-uri.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50http1-proxy-full-uri.t"; sourceTree = "<group>"; };
+		E9D49A5225FB562800F4A80D /* 90h2olog.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = 90h2olog.t; sourceTree = "<group>"; };
+		E9D49A5325FB562800F4A80D /* quic-ndec-initial-gen.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = "quic-ndec-initial-gen.c"; sourceTree = "<group>"; };
 		E9DF012724E4CDEE0002EEC7 /* cc-cubic.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = "cc-cubic.c"; sourceTree = "<group>"; };
 		E9E50472214A5B8A004DC170 /* http3client.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = http3client.c; sourceTree = "<group>"; };
 		E9E50475214B3D28004DC170 /* http3_common.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = http3_common.h; sourceTree = "<group>"; };
@@ -2106,12 +2111,14 @@
 				E9414F9424ED1D7500273C59 /* 40error-log-escape.t */,
 				E9D4978E25E49FCA00F4A80D /* 40http1-pipeline.t */,
 				E9414F9924ED1D7500273C59 /* 40http1-timeouts.t */,
+				E9D49A4F25FB561A00F4A80D /* 40http1-streaming-framing.t */,
 				E9414F9724ED1D7500273C59 /* 40http2-h2spec-client.t */,
 				E9F677CA1FF47BD0006476D3 /* 40http2-h2spec.t */,
 				E9BCE6921FF344D4003CEA11 /* 40http2-request-window-size.t */,
 				E98041C22230C45E008B9745 /* 40http3.t */,
 				E90BB43B24F38937006507EA /* 40http3-concurrency.t */,
 				E90BB43C24F4834D006507EA /* 40http3-forward.t */,
+				E9D49A5025FB561A00F4A80D /* 40http3-forward-initial.t */,
 				E9414F8D24EBFBDA00273C59 /* 40http3-reconnect.t */,
 				E9FC525C234B0A630076F35D /* 40http3-retry.t */,
 				E9414F8E24ED1CD700273C59 /* 40http3-shutdown.t */,
@@ -2151,6 +2158,7 @@
 				100AE41A1B27D74800CE18BB /* 50file-range.t */,
 				E9AFBF13212A9801000F5DB8 /* 50graceful-shutdown.t */,
 				1058C87F1AA42568008D6180 /* 50headers.t */,
+				E9D49A5125FB562800F4A80D /* 50http1-proxy-full-uri.t */,
 				109EEFDB1D77B336001F11D1 /* 50http2_debug_state.t */,
 				E9AFBF22212A982D000F5DB8 /* 50internal-redirect.t */,
 				105534F71A460F2E00627ECB /* 50mimemap.t */,
@@ -2236,12 +2244,14 @@
 				E9414F8F24ED1D5300273C59 /* 80reverse-proxy-truncated-chunked.t */,
 				10B6D4501C727315005F0CF8 /* 80yaml-merge.t */,
 				E90C514D230BB28800D6AD8E /* 90dtrace.t */,
+				E9D49A5225FB562800F4A80D /* 90h2olog.t */,
 				104B9A451A5D1004009EEE64 /* 90live-fetch-ocsp-response.t */,
 				109EEFE31D77B350001F11D1 /* 90live-sni.t */,
 				10C2117C1B8164B1005A9D02 /* 90root-fastcgi-php.t */,
 				10AA2EC51AA0557A004322AC /* assets */,
 				105534FB1A460F4200627ECB /* Util.pm */,
 				08819C2D218C9FF70057ED23 /* qif.c */,
+				E9D49A5325FB562800F4A80D /* quic-ndec-initial-gen.c */,
 			);
 			path = t;
 			sourceTree = "<group>";
