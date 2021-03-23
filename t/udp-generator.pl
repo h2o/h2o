@@ -7,7 +7,7 @@ use warnings;
 use IO::File;
 use IO::Socket;
 
-if (scalar @ARGV < 3) {
+if (@ARGV < 3) {
 	print STDERR "Usage: $0 [server] [port] [input...]\n";
 	exit 1;
 }
