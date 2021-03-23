@@ -22,7 +22,7 @@ my $sock = IO::Socket::INET->new(
 	PeerPort => $port,
 ) or die "Failed to create a UDP socket: $!\n";
 
-foreach my $f (@ARGV) {
+for my $f (@ARGV) {
 	my $fh = IO::File->new($f, "r") or die "Failed to open file: $!\n";
 	my $read = $fh->read(my $dgram, 1500); # 1500 bytes must be enough to store the entire datagram at the moment
 	undef $fh;
