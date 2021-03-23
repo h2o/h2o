@@ -452,7 +452,7 @@ static void usage(const char *progname)
             "Usage: %s [options] <url>\n"
             "Options:\n"
             "  -2 <ratio>   HTTP/2 ratio (between 0 and 100)\n"
-            "  -3           HTTP/3-only mode\n"
+            "  -3 <ratio>   HTTP/3 ratio (between 0 and 100)\n"
             "  -b <size>    size of request body (in bytes; default: 0)\n"
             "  -C <concurrency>\n"
             "               sets the number of requests run at once (default: 1)\n"
