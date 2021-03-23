@@ -339,7 +339,7 @@ struct st_h2o_globalconf_t {
      * The hostconf that will be used when none of the hostconfs for the
      * listener match the request and they all have strict-match: ON.
      */
-    h2o_hostconf_t *default_host;
+    h2o_hostconf_t *fallback_host;
     /**
      * list of configurators
      */

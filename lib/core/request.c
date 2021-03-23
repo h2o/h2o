@@ -116,7 +116,7 @@ static h2o_hostconf_t *find_hostconf(h2o_hostconf_t **hostconfs, h2o_iovec_t aut
 
 static h2o_hostconf_t *find_default_hostconf(h2o_hostconf_t **hostconfs)
 {
-    h2o_hostconf_t *default_host = hostconfs[0]->global->default_host;
+    h2o_hostconf_t *fallback_host = hostconfs[0]->global->fallback_host;
 
     do {
         h2o_hostconf_t *hostconf = *hostconfs;
@@ -124,7 +124,7 @@ static h2o_hostconf_t *find_default_hostconf(h2o_hostconf_t **hostconfs)
             return hostconf;
     } while (*++hostconfs != NULL);
 
-    return default_host;
+    return fallback_host;
 }
 
 h2o_hostconf_t *h2o_req_setup(h2o_req_t *req)
