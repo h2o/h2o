@@ -1203,14 +1203,23 @@ static int handle_input_expect_headers(struct st_h2o_http3_server_stream_t *stre
     h2o_probe_log_request(&stream->req, stream->quic->stream_id);
 
     int is_connect = h2o_memis(stream->req.input.method.base, stream->req.input.method.len, H2O_STRLIT("CONNECT"));
+    int is_connect_udp = h2o_memis(stream->req.input.method.base, stream->req.input.method.len, H2O_STRLIT("CONNECT-UDP"));
 
     /* check if existence and non-existence of pseudo headers are correct */
     int expected_map = H2O_HPACK_PARSE_HEADERS_METHOD_EXISTS | H2O_HPACK_PARSE_HEADERS_AUTHORITY_EXISTS;
-    if (!is_connect)
+    if (!is_connect && !is_connect_udp)
         expected_map |= H2O_HPACK_PARSE_HEADERS_SCHEME_EXISTS | H2O_HPACK_PARSE_HEADERS_PATH_EXISTS;
-    if (header_exists_map != expected_map) {
-        shutdown_stream(stream, H2O_HTTP3_ERROR_GENERAL_PROTOCOL, H2O_HTTP3_ERROR_GENERAL_PROTOCOL, 0);
-        return 0;
+    if (is_connect_udp) {
+        /* only require method and authority for connect-udp for now, ignore if the others are set */
+        if ((header_exists_map & expected_map) != expected_map) {
+            shutdown_stream(stream, H2O_HTTP3_ERROR_GENERAL_PROTOCOL, H2O_HTTP3_ERROR_GENERAL_PROTOCOL, 0);
+            return 0;
+        }
+    } else {
+        if (header_exists_map != expected_map) {
+            shutdown_stream(stream, H2O_HTTP3_ERROR_GENERAL_PROTOCOL, H2O_HTTP3_ERROR_GENERAL_PROTOCOL, 0);
+            return 0;
+        }
     }
 
     /* send a 400 error when observing an invalid header character */
