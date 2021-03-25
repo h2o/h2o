@@ -1058,6 +1058,10 @@ static void usage(const char *cmd)
            "  -V                        verify peer using the default certificates\n"
            "  -v                        verbose mode (-vv emits packet dumps as well)\n"
            "  -w packets                initial congestion window (default: 10)\n"
+           "  -W public-key-file        use raw public keys (RFC 7250). When set and running as a\n"
+           "                            client, the argument specifies the public keys that the\n"
+           "                            server is expected to use. When running as a server, the\n"
+           "                            argument is ignored.\n"
            "  -x named-group            named group to be used (default: secp256r1)\n"
            "  -X                        max bidirectional stream count (default: 100)\n"
            "  -y cipher-suite           cipher-suite to be used (default: all)\n"
@@ -1079,7 +1083,7 @@ static void push_req(const char *path, int to_file)
 
 int main(int argc, char **argv)
 {
-    const char *host, *port, *cid_key = NULL;
+    const char *cert_file = NULL, *raw_pubkey_file = NULL, *host, *port, *cid_key = NULL;
     struct sockaddr_storage sa;
     socklen_t salen;
     unsigned udpbufsize = 0;
@@ -1104,7 +1108,7 @@ int main(int argc, char **argv)
         address_token_aead.dec = ptls_aead_new(&ptls_openssl_aes128gcm, &ptls_openssl_sha256, 0, secret, "");
     }
 
-    while ((ch = getopt(argc, argv, "a:b:B:c:C:Dd:k:Ee:Gi:I:K:l:M:m:NnOp:P:Rr:S:s:u:U:Vvw:x:X:y:h")) != -1) {
+    while ((ch = getopt(argc, argv, "a:b:B:c:C:Dd:k:Ee:Gi:I:K:l:M:m:NnOp:P:Rr:S:s:u:U:Vvw:W:x:X:y:h")) != -1) {
         switch (ch) {
         case 'a':
             assert(negotiated_protocols.count < PTLS_ELEMENTSOF(negotiated_protocols.list));
@@ -1120,7 +1124,7 @@ int main(int argc, char **argv)
             cid_key = optarg;
             break;
         case 'c':
-            load_certificate_chain(ctx.tls, optarg);
+            cert_file = optarg;
             break;
         case 'C':
             if (strcmp(optarg, "reno") == 0) {
@@ -1259,6 +1263,9 @@ int main(int argc, char **argv)
                 exit(1);
             }
             break;
+        case 'W':
+            raw_pubkey_file = optarg;
+            break;
         case 'x': {
             size_t i;
             for (i = 0; key_exchanges[i] != NULL; ++i)
@@ -1356,11 +1363,19 @@ int main(int argc, char **argv)
         ctx.transport_params.max_datagram_frame_size = ctx.transport_params.max_udp_payload_size;
     }
 
-    if (ctx.tls->certificates.count != 0 || ctx.tls->sign_certificate != NULL) {
+    if (cert_file != NULL || ctx.tls->sign_certificate != NULL) {
         /* server */
-        if (ctx.tls->certificates.count == 0 || ctx.tls->sign_certificate == NULL) {
+        if (cert_file == NULL || ctx.tls->sign_certificate == NULL) {
             fprintf(stderr, "-c and -k options must be used together\n");
             exit(1);
+        }
+        if (raw_pubkey_file != NULL) {
+            ctx.tls->certificates.list = malloc(sizeof(*ctx.tls->certificates.list));
+            load_raw_public_key(ctx.tls->certificates.list, cert_file);
+            ctx.tls->certificates.count = 1;
+            ctx.tls->use_raw_public_keys = 1;
+        } else {
+            load_certificate_chain(ctx.tls, cert_file);
         }
         if (cid_key == NULL) {
             static char random_key[17];
@@ -1371,6 +1386,19 @@ int main(int argc, char **argv)
                                                              ptls_iovec_init(cid_key, strlen(cid_key)));
     } else {
         /* client */
+        if (raw_pubkey_file != NULL) {
+            ptls_iovec_t raw_pub_key;
+            EVP_PKEY *pubkey;
+            load_raw_public_key(&raw_pub_key, raw_pubkey_file);
+            pubkey = d2i_PUBKEY(NULL, (const unsigned char **)&raw_pub_key.base, raw_pub_key.len);
+            if (pubkey == NULL) {
+                fprintf(stderr, "Failed to create an EVP_PKEY from the key found in %s\n", raw_pubkey_file);
+                return 1;
+            }
+            setup_raw_pubkey_verify_certificate(ctx.tls, pubkey);
+            EVP_PKEY_free(pubkey);
+            ctx.tls->use_raw_public_keys = 1;
+        }
         hs_properties.client.negotiated_protocols.list = negotiated_protocols.list;
         hs_properties.client.negotiated_protocols.count = negotiated_protocols.count;
         if (session_file != NULL)
