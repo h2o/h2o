@@ -1774,7 +1774,7 @@ uint64_t h2o_socket_ebpf_lookup_flags(h2o_loop_t *loop, int (*init_key)(h2o_ebpf
 
             // make sure a possible old flags is not set,
             // otherwise the subsequent logic will be unreliable.
-            if (ebpf_map_delete(return_map_fd, &tid) == 0) {
+            if (ebpf_map_delete(return_map_fd, &tid) == 0 || errno == ENOENT) {
                 H2O_SOCKET_LOOKUP_FLAGS(tid, flags, &key);
                 if (ebpf_map_lookup(return_map_fd, &tid, &flags) != 0) {
                     if (errno == ENOENT)
@@ -1783,7 +1783,7 @@ uint64_t h2o_socket_ebpf_lookup_flags(h2o_loop_t *loop, int (*init_key)(h2o_ebpf
                     else
                         h2o_perror("BPF_MAP_LOOKUP failed");
                 }
-            } else if (errno != ENOENT)
+            } else
                 h2o_perror("BPF_MAP_DELETE failed");
         }
     }
