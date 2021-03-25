@@ -1793,7 +1793,7 @@ uint64_t h2o_socket_ebpf_lookup_flags(h2o_loop_t *loop, int (*init_key)(h2o_ebpf
 
 #else
 
-int h2o_socket_ebpf_prepare_maps(void)
+int h2o_socket_ebpf_setup(void)
 {
     return 0;
 }
@@ -1803,7 +1803,7 @@ int h2o_socket_ebpf_init_key_raw(struct st_h2o_ebpf_map_key_t *key, int sock_typ
     h2o_fatal("unimplemented");
 }
 
-int h2o_socket_ebpf_init_key_from_sock(struct st_h2o_ebpf_map_key_t *key, void *sock)
+int h2o_socket_ebpf_init_key(struct st_h2o_ebpf_map_key_t *key, void *sock)
 {
     h2o_fatal("unimplemented");
 }
