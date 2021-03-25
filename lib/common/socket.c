@@ -1614,7 +1614,7 @@ static int ebpf_map_delete(int fd, const void *key)
     return syscall(__NR_bpf, BPF_MAP_DELETE_ELEM, &attr, sizeof(attr));
 }
 
-int h2o_socket_ebpf_prepare_maps(void)
+int h2o_socket_ebpf_setup(void)
 {
     if (getuid() != 0) {
         h2o_error_printf("skipping to set up eBPF maps because bpf(2) requires root privileges");
