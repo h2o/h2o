@@ -720,13 +720,10 @@ def usage():
 
 
 def main():
-  output_file = sys.argv[1]
-  if not output_file:
+  if len(sys.argv) <= 2:
     usage()
 
-  d_files = sys.argv[2:]
-  if not d_files:
-    usage()
+  output_file, *d_files = sys.argv[1:]
 
   context = prepare_context(d_files)
   generate_cplusplus(context, output_file)
