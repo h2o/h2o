@@ -37,20 +37,20 @@ subtest "basic", sub {
 
 subtest "acl" => sub {
     my $content = `curl --http1.1 -p -x 127.0.0.1:$server->{port} --silent -v --show-error https://8.8.8.8/ 2>&1`;
-    like $content, qr{Proxy-Status: h2o/test; error=destination_ip_prohibited; next-hop="8\.8\.8\.8"}i;
+    like $content, qr{proxy-status: h2o/test; error=destination_ip_prohibited; next-hop="8\.8\.8\.8"}i;
     like $content, qr{Received HTTP code 403 from proxy after CONNECT};
 };
 
 subtest "nxdomain" => sub {
     my $content = `curl --http1.1 -p -x 127.0.0.1:$server->{port} --silent -v --show-error https://doesnotexist.xip.io/ 2>&1`;
-    like $content, qr{Proxy-Status: h2o/test; error=dns_error; rcode=NXDOMAIN; next-hop="doesnotexist.xip.io"}i;
+    like $content, qr{proxy-status: h2o/test; error=dns_error; rcode=NXDOMAIN; next-hop="doesnotexist.xip.io"}i;
     like $content, qr{Received HTTP code 502 from proxy after CONNECT};
 };
 
 # This test assumes that nothing listens on port 1 (tcpmux).
 subtest "refused" => sub {
     my $content = `curl --http1.1 -p -x 127.0.0.1:$server->{port} --silent -v --show-error https://127.0.0.1:1/ 2>&1`;
-    like $content, qr{Proxy-Status: h2o/test; error=connection_refused; next-hop="127\.0\.0\.1"}i;
+    like $content, qr{proxy-status: h2o/test; error=connection_refused; next-hop="127\.0\.0\.1"}i;
     like $content, qr{Received HTTP code 502 from proxy after CONNECT};
 };
 
