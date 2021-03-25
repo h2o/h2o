@@ -1798,12 +1798,12 @@ int h2o_socket_ebpf_setup(void)
     return 0;
 }
 
-int h2o_socket_ebpf_init_key_raw(struct st_h2o_ebpf_map_key_t *key, int sock_type, struct sockaddr *local, struct sockaddr *remote)
+int h2o_socket_ebpf_init_key_raw(h2o_ebpf_map_key_t *key, int sock_type, struct sockaddr *local, struct sockaddr *remote)
 {
     h2o_fatal("unimplemented");
 }
 
-int h2o_socket_ebpf_init_key(struct st_h2o_ebpf_map_key_t *key, void *sock)
+int h2o_socket_ebpf_init_key(h2o_ebpf_map_key_t *key, void *sock)
 {
     h2o_fatal("unimplemented");
 }
