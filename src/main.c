@@ -2548,7 +2548,6 @@ static h2o_quic_conn_t *on_http3_accept(h2o_quic_ctx_t *_ctx, quicly_address_t *
     }
 
     h2o_http3_server_ctx_t *ctx = (void *)_ctx;
-
     struct init_ebpf_key_info_t ebpf_key_info = {
         .local = &destaddr->sa,
         .remote = &srcaddr->sa,

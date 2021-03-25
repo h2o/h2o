@@ -1582,7 +1582,6 @@ static int ebpf_map_create(uint32_t map_type, uint32_t key_size, uint32_t value_
         .max_entries = max_entries,
     };
     strncpy(attr.map_name, map_name, sizeof(attr.map_name));
-
     return syscall(__NR_bpf, BPF_MAP_CREATE, &attr, sizeof(attr));
 }
 
