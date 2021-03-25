@@ -90,13 +90,12 @@ struct st_h2o_http3client_req_t {
     int (*handle_input)(struct st_h2o_http3client_req_t *req, const uint8_t **src, const uint8_t *src_end, int err,
                         const char **err_desc);
     /**
-     * proceed_req callback.  The callback is invoked when all bytes in the send buffer is emitted for the first time (at this point
-     * bytes_written is changed to zero, so that the proceed_req function is called once per every block being supplied from the
-     * application).
+     * `proceed_req` callback. The callback is invoked when all bytes in the send buffer is emitted for the first time.
+     * `bytes_inflight` contains the number of bytes being transmitted, or SIZE_MAX if nothing is inflight.
      */
     struct {
         h2o_httpclient_proceed_req_cb cb;
-        size_t bytes_written;
+        size_t bytes_inflight;
     } proceed_req;
     /**
      * tunnel object. `tunnel.destroy` is set to non-NULL iif used.
@@ -702,9 +701,9 @@ static void on_send_emit(quicly_stream_t *qs, size_t off, void *dst, size_t *len
         if (req->tunnel.egress.complete_to_be_called && tunnel_egress_buffer_is_low(req, off + *len))
             req->tunnel.tunnel.on_write_complete(&req->tunnel.tunnel, NULL);
     } else {
-        if (*wrote_all && req->proceed_req.bytes_written != 0) {
-            size_t bytes_written = req->proceed_req.bytes_written;
-            req->proceed_req.bytes_written = 0;
+        if (*wrote_all && req->proceed_req.bytes_inflight != SIZE_MAX) {
+            size_t bytes_written = req->proceed_req.bytes_inflight;
+            req->proceed_req.bytes_inflight = SIZE_MAX;
             req->proceed_req.cb(&req->super, bytes_written,
                                 quicly_sendstate_is_open(&req->quic->sendstate) ? H2O_SEND_STATE_IN_PROGRESS
                                                                                 : H2O_SEND_STATE_FINAL);
@@ -848,7 +847,7 @@ void start_request(struct st_h2o_http3client_req_t *req)
     if (body.len != 0) {
         emit_data(req, body);
         if (req->proceed_req.cb != NULL)
-            req->proceed_req.bytes_written = body.len;
+            req->proceed_req.bytes_inflight = body.len;
     }
     if (req->proceed_req.cb == NULL && req->super.upgrade_to == NULL)
         quicly_sendstate_shutdown(&req->quic->sendstate, req->sendbuf->size);
@@ -896,7 +895,7 @@ static int do_write_req(h2o_httpclient_t *_client, h2o_iovec_t chunk, int is_end
     struct st_h2o_http3client_req_t *req = (void *)_client;
 
     assert(req->quic != NULL && quicly_sendstate_is_open(&req->quic->sendstate));
-    assert(req->proceed_req.bytes_written == 0);
+    assert(req->proceed_req.bytes_inflight == SIZE_MAX);
 
     emit_data(req, chunk);
 
@@ -904,9 +903,11 @@ static int do_write_req(h2o_httpclient_t *_client, h2o_iovec_t chunk, int is_end
     if (is_end_stream) {
         assert(quicly_sendstate_is_open(&req->quic->sendstate));
         quicly_sendstate_shutdown(&req->quic->sendstate, req->quic->sendstate.acked.ranges[0].end + req->sendbuf->size);
+    } else {
+        assert(chunk.len != 0);
     }
 
-    req->proceed_req.bytes_written = chunk.len;
+    req->proceed_req.bytes_inflight = chunk.len;
     quicly_stream_sync_sendbuf(req->quic, 1);
     h2o_quic_schedule_timer(&req->conn->super.super);
     return 0;
@@ -925,21 +926,24 @@ void h2o_httpclient__connect_h3(h2o_httpclient_t **_client, h2o_mem_pool_t *pool
         conn = create_connection(ctx, connpool, target);
 
     req = h2o_mem_alloc(sizeof(*req));
-    *req = (struct st_h2o_http3client_req_t){{pool,
-                                              ctx,
-                                              connpool,
-                                              &req->recvbuf.body,
-                                              data,
-                                              NULL,
-                                              {h2o_gettimeofday(ctx->loop)},
-                                              upgrade_to,
-                                              {0},
-                                              {0},
-                                              cancel_request,
-                                              do_get_conn_properties,
-                                              do_update_window,
-                                              do_write_req},
-                                             conn};
+    *req = (struct st_h2o_http3client_req_t){
+        .super = {pool,
+                  ctx,
+                  connpool,
+                  &req->recvbuf.body,
+                  data,
+                  NULL,
+                  {h2o_gettimeofday(ctx->loop)},
+                  upgrade_to,
+                  {0},
+                  {0},
+                  cancel_request,
+                  do_get_conn_properties,
+                  do_update_window,
+                  do_write_req},
+        .conn = conn,
+        .proceed_req = {.cb = NULL, .bytes_inflight = SIZE_MAX},
+    };
     req->super._cb.on_connect = cb;
     h2o_buffer_init(&req->sendbuf, &h2o_socket_buffer_prototype);
     h2o_buffer_init(&req->recvbuf.body, &h2o_socket_buffer_prototype);
