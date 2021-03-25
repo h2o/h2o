@@ -256,7 +256,8 @@ static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errs
         start_connect(creq);
     } else {
         assert(res->ai_socktype == SOCK_DGRAM);
-        h2o_tunnel_t *tunnel = h2o_open_udp_tunnel_from_sa(creq->loop, res->ai_addr, res->ai_addrlen);
+        int so_err = 0;
+        h2o_tunnel_t *tunnel = h2o_open_udp_tunnel_from_sa(creq->loop, res->ai_addr, res->ai_addrlen, &so_err);
         h2o_req_t *req = creq->src_req;
         h2o_timer_unlink(&creq->timeout);
         if (tunnel != 0) {
@@ -266,7 +267,8 @@ static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errs
             req->establish_tunnel(req, tunnel, timeout);
         } else {
             h2o_req_log_error(req, "lib/handler/connect.c", "Failed to create downstream socket");
-            h2o_send_error_502(req, "Bad Gateway", "Bad Gateway", 0);
+            make_proxy_status_error_with_sa(creq, errno_to_proxy_status_error(so_err), NULL, res->ai_addr, res->ai_addrlen);
+            h2o_send_error_502(req, "Bad Gateway", "Bad Gateway", H2O_SEND_ERROR_KEEP_HEADERS);
         }
     }
 }

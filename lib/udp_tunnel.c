@@ -182,16 +182,21 @@ static void tunnel_proceed_read(struct st_h2o_tunnel_t *_tunnel)
     h2o_socket_read_start(tunnel->sock, tunnel_socket_on_read);
 }
 
-h2o_tunnel_t *h2o_open_udp_tunnel_from_sa(h2o_loop_t *loop, struct sockaddr *addr, socklen_t len)
+h2o_tunnel_t *h2o_open_udp_tunnel_from_sa(h2o_loop_t *loop, struct sockaddr *addr, socklen_t len, int *so_err)
 {
     int fd;
 
     assert(addr->sa_family == AF_INET || addr->sa_family == AF_INET6);
 
-    if ((fd = socket(addr->sa_family, SOCK_DGRAM, 0)) == -1)
+    if ((fd = socket(addr->sa_family, SOCK_DGRAM, 0)) == -1) {
+        if (so_err != NULL)
+            *so_err = errno;
         return NULL;
+    }
 
     if (connect(fd, (void *)addr, len) != 0) {
+        if (so_err != NULL)
+            *so_err = errno;
         close(fd);
         return NULL;
     }
