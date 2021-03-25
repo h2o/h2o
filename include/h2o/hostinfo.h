@@ -33,7 +33,7 @@
 
 typedef struct st_h2o_hostinfo_getaddr_req_t h2o_hostinfo_getaddr_req_t;
 
-typedef void (*h2o_hostinfo_getaddr_cb)(h2o_hostinfo_getaddr_req_t *req, const char *errstr, struct addrinfo *res, void *cbdata);
+typedef void (*h2o_hostinfo_getaddr_cb)(h2o_hostinfo_getaddr_req_t *req, const char *errstr, const char *rcode_str, struct addrinfo *res, void *cbdata);
 
 extern size_t h2o_hostinfo_max_threads;
 

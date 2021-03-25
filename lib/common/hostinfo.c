@@ -35,6 +35,7 @@ struct st_h2o_hostinfo_getaddr_req_t {
         struct {
             h2o_multithread_message_t message;
             const char *errstr;
+            const char *rcode_str;
             struct addrinfo *ai;
         } _out;
     };
@@ -50,6 +51,33 @@ static struct {
 
 size_t h2o_hostinfo_max_threads = 1;
 
+static const char *dns_rcode_str_from_gai_error(int ret)
+{
+    switch (ret) {
+    case EAI_NONAME: /* The node or service is not known. */
+        return "NXDOMAIN";
+
+    case EAI_ADDRFAMILY: /* The specified network host does not have any network addresses in the requested address family. */
+    case EAI_NODATA: /* The specified network host exists, but does not have any network addresses defined. */
+        return "NODATA";
+
+    case EAI_AGAIN: /* The name server returned a temporary failure indication.  Try again later. */
+        return "SERVFAIL";
+
+    case EAI_FAIL: /* The name server returned a permanent failure indication. */
+        return "REFUSED";
+
+    case EAI_BADFLAGS: /* hints.ai_flags contains invalid flags; or, hints.ai_flags included AI_CANONNAME and name was NULL. */
+    case EAI_FAMILY: /* The requested address family is not supported. */
+    case EAI_MEMORY: /* Out of memory. */
+    case EAI_SERVICE: /* The requested service is not available for the requested socket type. */
+    case EAI_SOCKTYPE: /* The requested socket type is not supported. */
+    case EAI_SYSTEM: /* Other system error, check errno for details. */
+    default:
+        return "SERVFAIL";
+    }
+}
+
 static void lookup_and_respond(h2o_hostinfo_getaddr_req_t *req)
 {
     struct addrinfo *res;
@@ -58,9 +86,11 @@ static void lookup_and_respond(h2o_hostinfo_getaddr_req_t *req)
     req->_out.message = (h2o_multithread_message_t){{NULL}};
     if (ret != 0) {
         req->_out.errstr = gai_strerror(ret);
+        req->_out.rcode_str = dns_rcode_str_from_gai_error(ret);
         req->_out.ai = NULL;
     } else {
         req->_out.errstr = NULL;
+        req->_out.rcode_str = "NOERROR";
         req->_out.ai = res;
     }
 
@@ -177,7 +207,7 @@ void h2o_hostinfo_getaddr_receiver(h2o_multithread_receiver_t *receiver, h2o_lin
         h2o_hostinfo_getaddr_cb cb = req->_cb;
         if (cb != NULL) {
             req->_cb = NULL;
-            cb(req, req->_out.errstr, req->_out.ai, req->cbdata);
+            cb(req, req->_out.errstr, req->_out.rcode_str, req->_out.ai, req->cbdata);
         }
         if (req->_out.ai != NULL)
             freeaddrinfo(req->_out.ai);

@@ -294,7 +294,7 @@ h2o_loop_t *h2o_socket_get_loop(h2o_socket_t *_sock)
     return sock->handle->loop;
 }
 
-h2o_socket_t *h2o_socket_connect(h2o_loop_t *loop, struct sockaddr *addr, socklen_t addrlen, h2o_socket_cb cb)
+h2o_socket_t *h2o_socket_connect(h2o_loop_t *loop, struct sockaddr *addr, socklen_t addrlen, h2o_socket_cb cb, int *so_err)
 {
     struct st_h2o_uv_socket_t *sock = create_socket(loop);
 

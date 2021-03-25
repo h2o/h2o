@@ -97,6 +97,57 @@ static int on_config_proxy_protocol(h2o_configurator_command_t *cmd, h2o_configu
     return 0;
 }
 
+static int on_config_connect_proxy_status(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    struct proxy_configurator_t *self = (void *)cmd->configurator;
+    ssize_t ret = h2o_configurator_get_one_of(cmd, node, "OFF,ON");
+    if (ret == -1)
+        return -1;
+    self->vars->conf.connect_proxy_status_enabled = (int)ret;
+    return 0;
+}
+
+static int on_config_proxy_status_identity(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    /* https://tools.ietf.org/html/rfc8941#section-3.3.4 */
+    static const char *tfirst = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz*";
+    static const char *tchars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz!#$%&'*+-.^_`|~:/";
+
+    const char *s = node->data.scalar;
+    size_t slen = strlen(s);
+    for (size_t i = 0; i < slen; ++i) {
+        unsigned char b = s[i];
+        if (b < 0x20 || b > 0x7E) {
+            h2o_configurator_errprintf(cmd, node, "proxy-status.identity must only consist of printable ASCII characters");
+            return -1;
+        }
+    }
+    if (s[0] != '\0' && strchr(tfirst, s[0]) != NULL && strspn(s, tchars) == slen) {
+        /* sf-token */
+        ctx->globalconf->proxy_status_identity = h2o_strdup(NULL, s, slen);
+    } else {
+        /* sf-string */
+        size_t to_escape = 0;
+        for (size_t i = 0; i < slen; ++i) {
+            if (s[i] == '\\' || s[i] == '"')
+                ++to_escape;
+        }
+        char *buf = h2o_mem_alloc(slen + to_escape + 3);
+        char *d = buf;
+        *(d++) = '"';
+        for (size_t i = 0; i < slen; ++i) {
+            if (s[i] == '\\' || s[i] == '"')
+                *(d++) = '\\';
+            *(d++) = s[i];
+        }
+        *(d++) = '"';
+        *d = '\0';
+        ctx->globalconf->proxy_status_identity = h2o_iovec_init(buf, slen + to_escape + 2);
+    }
+
+    return 0;
+}
+
 static int on_config_tunnel(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct proxy_configurator_t *self = (void *)cmd->configurator;
@@ -573,6 +624,12 @@ void h2o_proxy_register_configurator(h2o_globalconf_t *conf)
                                     H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SEQUENCE |
                                         H2O_CONFIGURATOR_FLAG_DEFERRED,
                                     on_config_connect_proxy);
+    h2o_configurator_define_command(&c->super, "proxy.connect.proxy-status",
+                                    H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                    on_config_connect_proxy_status);
+    h2o_configurator_define_command(&c->super, "proxy-status.identity",
+                                    H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                    on_config_proxy_status_identity);
     h2o_configurator_define_command(&c->super, "proxy.preserve-host",
                                     H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                     on_config_preserve_host);

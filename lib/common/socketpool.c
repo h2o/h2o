@@ -69,7 +69,7 @@ struct on_close_data_t {
 };
 
 static void start_connect(h2o_socketpool_connect_request_t *req, struct sockaddr *addr, socklen_t addrlen);
-static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errstr, struct addrinfo *res, void *_req);
+static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errstr, const char *rcode_str, struct addrinfo *res, void *_req);
 
 static void destroy_detached(struct pool_entry_t *entry)
 {
@@ -400,7 +400,7 @@ static void start_connect(h2o_socketpool_connect_request_t *req, struct sockaddr
 {
     struct on_close_data_t *close_data;
 
-    req->sock = h2o_socket_connect(req->loop, addr, addrlen, on_connect);
+    req->sock = h2o_socket_connect(req->loop, addr, addrlen, on_connect, NULL);
     if (req->sock == NULL) {
         __sync_sub_and_fetch(&req->pool->targets.entries[req->selected_target]->_shared.leased_count, 1);
         if (req->remaining_try_count > 0) {
@@ -419,7 +419,7 @@ static void start_connect(h2o_socketpool_connect_request_t *req, struct sockaddr
     req->sock->on_close.data = close_data;
 }
 
-static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errstr, struct addrinfo *res, void *_req)
+static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errstr, const char *rcode_str, struct addrinfo *res, void *_req)
 {
     h2o_socketpool_connect_request_t *req = _req;
 
