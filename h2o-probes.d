@@ -20,8 +20,6 @@
  * IN THE SOFTWARE.
  */
 
-struct st_h2o_tunnel_t;
-
 /* @appdata
 {
     "receive_request_header": ["name", "value"],

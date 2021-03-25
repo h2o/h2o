@@ -117,7 +117,7 @@ static void link_to_statechanged(struct st_h2o_evloop_socket_t *sock)
 
 static const char *on_read_core(int fd, h2o_buffer_t **input)
 {
-    int read_any = 0;
+    ssize_t read_so_far = 0;
 
     while (1) {
         ssize_t rret;
@@ -134,14 +134,17 @@ static const char *on_read_core(int fd, h2o_buffer_t **input)
             else
                 return h2o_socket_error_io;
         } else if (rret == 0) {
-            if (!read_any)
+            if (read_so_far == 0)
                 return h2o_socket_error_closed; /* TODO notify close */
             break;
         }
         (*input)->size += rret;
         if (buf.len != rret)
             break;
-        read_any = 1;
+        read_so_far += rret;
+        if (read_so_far >= (1024 * 1024))
+            break;
+
     }
     return NULL;
 }
