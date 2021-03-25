@@ -41,7 +41,7 @@ const char h2o_httpclient_error_malformed_frame[] = "malformed HTTP frame";
 /**
  * Used to indicate that the HTTP request is to be "upgraded" into a CONNECT tunnel.
  */
-const char h2o_httpclient_upgrade_to_connect[] = "\nCONNECT method";
+const char h2o_httpclient_upgrade_to_connect[] = "\nCONNECT / CONNECT-UDP method";
 
 void h2o_httpclient_connection_pool_init(h2o_httpclient_connection_pool_t *connpool, h2o_socketpool_t *sockpool)
 {

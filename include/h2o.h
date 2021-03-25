@@ -1370,6 +1370,11 @@ void h2o_init_request(h2o_req_t *req, h2o_conn_t *conn, h2o_req_t *src);
  */
 void h2o_dispose_request(h2o_req_t *req);
 /**
+ * Checks and returns if pseudo headers meet the constraints. This function should be called by each protocol implementation before
+ * passing the request to `h2o_process_request`.
+ */
+int h2o_req_validate_pseudo_headers(h2o_req_t *req);
+/**
  * called by the connection layer to start processing a request that is ready
  */
 void h2o_process_request(h2o_req_t *req);

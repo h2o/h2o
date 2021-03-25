@@ -40,7 +40,7 @@ static void test_request(h2o_iovec_t first_req, h2o_iovec_t second_req, h2o_iove
     in = first_req;
     r = h2o_hpack_parse_request(&req.pool, h2o_hpack_decode_header, &header_table, &req.input.method, &req.input.scheme,
                                 &req.input.authority, &req.input.path, &req.headers, &pseudo_headers_map, &content_length, NULL,
-                                (const uint8_t *)in.base, in.len, &err_desc);
+                                NULL, (const uint8_t *)in.base, in.len, &err_desc);
     ok(r == 0);
     ok(req.input.authority.len == 15);
     ok(memcmp(req.input.authority.base, H2O_STRLIT("www.example.com")) == 0);
@@ -58,7 +58,7 @@ static void test_request(h2o_iovec_t first_req, h2o_iovec_t second_req, h2o_iove
     in = second_req;
     r = h2o_hpack_parse_request(&req.pool, h2o_hpack_decode_header, &header_table, &req.input.method, &req.input.scheme,
                                 &req.input.authority, &req.input.path, &req.headers, &pseudo_headers_map, &content_length, NULL,
-                                (const uint8_t *)in.base, in.len, &err_desc);
+                                NULL, (const uint8_t *)in.base, in.len, &err_desc);
     ok(r == 0);
     ok(req.input.authority.len == 15);
     ok(memcmp(req.input.authority.base, H2O_STRLIT("www.example.com")) == 0);
@@ -78,7 +78,7 @@ static void test_request(h2o_iovec_t first_req, h2o_iovec_t second_req, h2o_iove
     in = third_req;
     r = h2o_hpack_parse_request(&req.pool, h2o_hpack_decode_header, &header_table, &req.input.method, &req.input.scheme,
                                 &req.input.authority, &req.input.path, &req.headers, &pseudo_headers_map, &content_length, NULL,
-                                (const uint8_t *)in.base, in.len, &err_desc);
+                                NULL, (const uint8_t *)in.base, in.len, &err_desc);
     ok(r == 0);
     ok(req.input.authority.len == 15);
     ok(memcmp(req.input.authority.base, H2O_STRLIT("www.example.com")) == 0);
@@ -347,7 +347,7 @@ static void parse_and_compare_request(h2o_hpack_header_table_t *ht, const char *
     const char *err_desc = NULL;
     int r = h2o_hpack_parse_request(&req.pool, h2o_hpack_decode_header, ht, &req.input.method, &req.input.scheme,
                                     &req.input.authority, &req.input.path, &req.headers, &pseudo_header_exists_map, &content_length,
-                                    NULL, (void *)(promise_base + 13), promise_len - 13, &err_desc);
+                                    NULL, NULL, (void *)(promise_base + 13), promise_len - 13, &err_desc);
     ok(r == 0);
     ok(h2o_memis(req.input.method.base, req.input.method.len, expected_method.base, expected_method.len));
     ok(req.input.scheme == expected_scheme);

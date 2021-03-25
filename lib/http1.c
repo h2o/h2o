@@ -467,6 +467,7 @@ static const char *fixup_request(struct st_h2o_http1_conn_t *conn, struct phr_he
         if (conn->req.input.path.len != 0 && conn->req.input.path.base[0] != '/') {
             h2o_url_t url;
             if (h2o_url_parse(conn->req.input.path.base, conn->req.input.path.len, &url) == 0) {
+                conn->req.input.scheme = url.scheme;
                 conn->req.input.path = url.path;
                 host = url.authority; /* authority part of the absolute form overrides the host header field (RFC 7230 S5.4) */
             }
@@ -474,7 +475,11 @@ static const char *fixup_request(struct st_h2o_http1_conn_t *conn, struct phr_he
         /* move host header to req->authority */
         if (host.base != NULL)
             conn->req.input.authority = host;
+        /* each protocol implementation validates masque */
     }
+
+    if (!h2o_req_validate_pseudo_headers(&conn->req))
+        return "invalid request";
 
     /* setup persistent flag (and upgrade info) */
     if (connection.base != NULL) {
@@ -924,7 +929,7 @@ void establish_tunnel(h2o_req_t *req, h2o_tunnel_t *_tunnel, uint64_t idle_timeo
 {
     struct st_h2o_http1_tunnel_t *tunnel = h2o_mem_alloc(sizeof(*tunnel));
 
-    *tunnel = (struct st_h2o_http1_tunnel_t){_tunnel, NULL, {.ticks = idle_timeout}};
+    *tunnel = (struct st_h2o_http1_tunnel_t){.server = _tunnel, NULL, {.ticks = idle_timeout}};
     tunnel->server->on_read = tunnel_on_server_read;
     tunnel->server->on_write_complete = tunnel_on_server_write_complete;
     tunnel->server->data = tunnel;
