@@ -1452,7 +1452,6 @@ static void establish_tunnel(h2o_req_t *req, h2o_tunnel_t *tunnel, uint64_t idle
     h2o_iovec_t datagram_flow_id = {};
 
     if (stream->tunnel == NULL) {
-        tunnel->destroy(tunnel);
         /* the tunnel has been closed in the meantime */
         return;
     }

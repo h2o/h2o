@@ -88,12 +88,13 @@ static void on_connect(h2o_socket_t *sock, const char *err)
     sock->data = NULL;
     creq->sock = NULL;
     h2o_socket_tunnel_t *tunnel = h2o_socket_tunnel_create(sock);
-    /* start the tunnel */
-    h2o_socket_tunnel_start(tunnel, 0);
+
     /* send response to client */
     creq->src_req->res.status = 200;
     creq->src_req->establish_tunnel(creq->src_req, &tunnel->super, creq->handler->config.io_timeout);
 
+    /* start the tunnel */
+    h2o_socket_tunnel_start(tunnel, 0);
 }
 
 static void on_generator_dispose(void *_self)
@@ -140,16 +141,10 @@ static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errs
         assert(res->ai_socktype == SOCK_DGRAM);
         h2o_tunnel_t *tunnel = h2o_open_udp_tunnel_from_sa(creq->loop, res->ai_addr, res->ai_addrlen);
         h2o_req_t *req = creq->src_req;
+        uint64_t timeout = creq->handler->config.io_timeout;
+        req->res.status = 200;
         h2o_timer_unlink(&creq->timeout);
-        if (tunnel != 0) {
-            uint64_t timeout = creq->handler->config.io_timeout;
-            req->res.status = 200;
-            tunnel->proceed_read(tunnel);
-            req->establish_tunnel(req, tunnel, timeout);
-        } else {
-            h2o_req_log_error(req, "lib/handler/connect.c", "Failed to create downstream socket");
-            h2o_send_error_502(req, "Bad Gateway", "Bad Gateway", 0);
-        }
+        req->establish_tunnel(req, tunnel, timeout);
     }
 }
 
