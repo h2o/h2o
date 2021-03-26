@@ -61,12 +61,10 @@ static const char *dns_rcode_str_from_gai_error(int ret)
     case EAI_NODATA: /* The specified network host exists, but does not have any network addresses defined. */
         return "NODATA";
 
-    case EAI_AGAIN: /* The name server returned a temporary failure indication.  Try again later. */
-        return "SERVFAIL";
-
     case EAI_FAIL: /* The name server returned a permanent failure indication. */
         return "REFUSED";
 
+    case EAI_AGAIN: /* The name server returned a temporary failure indication.  Try again later. */
     case EAI_BADFLAGS: /* hints.ai_flags contains invalid flags; or, hints.ai_flags included AI_CANONNAME and name was NULL. */
     case EAI_FAMILY: /* The requested address family is not supported. */
     case EAI_MEMORY: /* Out of memory. */
