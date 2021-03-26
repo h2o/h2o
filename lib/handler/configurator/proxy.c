@@ -446,7 +446,7 @@ static int on_config_max_buffer_size(h2o_configurator_command_t *cmd, h2o_config
 static int on_config_http2_max_concurrent_streams(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct proxy_configurator_t *self = (void *)cmd->configurator;
-    return h2o_configurator_scanf(cmd, node, "%u", &self->vars->conf.http2.max_concurrent_strams);
+    return h2o_configurator_scanf(cmd, node, "%u", &self->vars->conf.http2.max_concurrent_streams);
 }
 
 static int on_config_http2_ratio(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
@@ -525,7 +525,7 @@ static int on_config_exit(h2o_configurator_t *_self, h2o_configurator_context_t 
         ctx->globalconf->proxy.first_byte_timeout = self->vars->conf.first_byte_timeout;
         ctx->globalconf->proxy.keepalive_timeout = self->vars->conf.keepalive_timeout;
         ctx->globalconf->proxy.max_buffer_size = self->vars->conf.max_buffer_size;
-        ctx->globalconf->proxy.http2.max_concurrent_streams = self->vars->conf.http2.max_concurrent_strams;
+        ctx->globalconf->proxy.http2.max_concurrent_streams = self->vars->conf.http2.max_concurrent_streams;
         ctx->globalconf->proxy.protocol_ratio.http2 = self->vars->conf.protocol_ratio.http2;
         ctx->globalconf->proxy.protocol_ratio.http3 = self->vars->conf.protocol_ratio.http3;
         h2o_socketpool_set_ssl_ctx(&ctx->globalconf->proxy.global_socketpool, self->vars->ssl_ctx);
@@ -557,7 +557,7 @@ void h2o_proxy_register_configurator(h2o_globalconf_t *conf)
     c->vars->conf.first_byte_timeout = H2O_DEFAULT_PROXY_IO_TIMEOUT;
     c->vars->conf.tunnel_enabled = 0; /* experimental support for tunneling (e.g., CONNECT, websocket) is disabled by default */
     c->vars->conf.max_buffer_size = SIZE_MAX;
-    c->vars->conf.http2.max_concurrent_strams = H2O_DEFAULT_PROXY_HTTP2_MAX_CONCURRENT_STREAMS;
+    c->vars->conf.http2.max_concurrent_streams = H2O_DEFAULT_PROXY_HTTP2_MAX_CONCURRENT_STREAMS;
     c->vars->conf.protocol_ratio.http2 = -1;
     c->vars->conf.keepalive_timeout = h2o_socketpool_get_timeout(&conf->proxy.global_socketpool);
 
