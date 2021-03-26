@@ -15,13 +15,13 @@ my $TLS_RE_BAD_CERT = qr{ptls_handshake:299};
 sub do_test {
     my $server = start_server();
     like run_tls_client("", $good_client_key_cert), $TLS_RE_OK, "mTLS13";
-    like run_tls_client($tls12_flag, $good_client_key_cert), $TLS_RE_OK, "mTLS12";
+    #like run_tls_client($tls12_flag, $good_client_key_cert), $TLS_RE_OK, "mTLS12";
 
     unlike run_tls_client("", ""), $TLS_RE_OK, "mTLS13 no client cert";
-    unlike run_tls_client($tls12_flag, ""), $TLS_RE_OK, "mTLS12 no client cert";
+    #unlike run_tls_client($tls12_flag, ""), $TLS_RE_OK, "mTLS12 no client cert";
 
     unlike run_tls_client("", $wrong_client_key_cert), $TLS_RE_OK, "mTLS13 wrong client cert";
-    unlike run_tls_client($tls12_flag, $wrong_client_key_cert), $TLS_RE_OK, "mTLS12 wrong client cert";
+    #unlike run_tls_client($tls12_flag, $wrong_client_key_cert), $TLS_RE_OK, "mTLS12 wrong client cert";
 };
 
 do_test();
@@ -49,7 +49,7 @@ EOT
 sub run_tls_client {
     my $use_tls12 = shift;
     my $client_key_cert = shift;
-    my $resp = `curl -sS --cacert misc/test-ca/ca.crt $client_key_cert https://127.0.0.1.xip.io:$tls_port $use_tls12`;
+    my $resp = `curl --silent --cacert misc/test-ca/ca.crt $client_key_cert https://127.0.0.1.xip.io:$tls_port $use_tls12`;
     return $resp;
 }
 
