@@ -133,7 +133,7 @@ static void _make_proxy_status_error(struct st_connect_request_t *creq,
     assert(nparts <= sizeof(parts) / sizeof(parts[0]));
     h2o_iovec_t hval = h2o_concat_list(pool, parts, nparts);
 
-    h2o_add_header_by_str(pool, &creq->src_req->res.headers, H2O_STRLIT("Proxy-Status"), 0, NULL, hval.base, hval.len);
+    h2o_add_header_by_str(pool, &creq->src_req->res.headers, H2O_STRLIT("proxy-status"), 0, NULL, hval.base, hval.len);
 }
 
 static void make_proxy_status_error(struct st_connect_request_t *creq,

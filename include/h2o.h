@@ -347,7 +347,7 @@ struct st_h2o_globalconf_t {
      */
     h2o_iovec_t server_name;
     /**
-     * formated "sf-token" or "sf-string" for the Proxy-Status header
+     * formated "sf-token" or "sf-string" for the proxy-status header
      */
     h2o_iovec_t proxy_status_identity;
     /**
