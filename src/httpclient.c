@@ -504,6 +504,7 @@ int main(int argc, char **argv)
         .first_byte_timeout = IO_TIMEOUT,
         .keepalive_timeout = IO_TIMEOUT,
         .max_buffer_size = H2O_SOCKET_INITIAL_INPUT_BUFFER_SIZE * 2,
+        .http2 = {.max_concurrent_streams = 100},
         .http3 = &h3ctx,
     };
     int opt;
