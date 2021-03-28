@@ -381,6 +381,7 @@ void h2o_httpclient_set_conn_properties_of_socket(h2o_socket_t *sock, h2o_httpcl
 
 void h2o_httpclient_http3_notify_connection_update(h2o_quic_ctx_t *ctx, h2o_quic_conn_t *conn);
 extern quicly_stream_open_t h2o_httpclient_http3_on_stream_open;
+extern quicly_receive_datagram_frame_t h2o_httpclient_http3_on_receive_datagram_frame;
 void h2o_httpclient__connect_h3(h2o_httpclient_t **client, h2o_mem_pool_t *pool, void *data, h2o_httpclient_ctx_t *ctx,
                                 h2o_httpclient_connection_pool_t *connpool, h2o_url_t *target, const char *upgrade_to,
                                 h2o_httpclient_connect_cb cb);

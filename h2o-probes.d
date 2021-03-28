@@ -20,8 +20,6 @@
  * IN THE SOFTWARE.
  */
 
-struct st_h2o_tunnel_t;
-
 provider h2o {
     /**
      * HTTP-level event, indicating that a request has been received.

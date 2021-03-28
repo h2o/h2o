@@ -54,6 +54,15 @@ typedef struct st_h2o_tunnel_t {
      */
     void (*on_read)(struct st_h2o_tunnel_t *tunnel, const char *err, const void *bytes, size_t len);
     /**
+     * Optional write callback for UDP tunnels. This callback is synchronous. Applications need not wait for completion, and the
+     * buffers can be reused after the call to this callback returns.
+     */
+    void (*udp_write)(struct st_h2o_tunnel_t *tunnel, h2o_iovec_t *datagrams, size_t num_datagrams);
+    /**
+     * Optional on-read callback for UDP tunnels, can be use to obtain the raw datagrams without encapsulation.
+     */
+    void (*on_udp_read)(struct st_h2o_tunnel_t *tunnel, h2o_iovec_t *datagrams, size_t num_datagrams);
+    /**
      * User data pointer.
      */
     void *data;
@@ -67,6 +76,8 @@ typedef struct st_h2o_socket_tunnel_t {
 
 h2o_socket_tunnel_t *h2o_socket_tunnel_create(h2o_socket_t *sock);
 void h2o_socket_tunnel_start(h2o_socket_tunnel_t *tunnel, size_t bytes_to_consume);
+
+h2o_tunnel_t *h2o_open_udp_tunnel_from_sa(h2o_loop_t *loop, struct sockaddr *addr, socklen_t len);
 
 #ifdef __cplusplus
 }

@@ -96,13 +96,12 @@ static void on_connect(h2o_socket_t *sock, const char *err)
     sock->data = NULL;
     creq->sock = NULL;
     h2o_socket_tunnel_t *tunnel = h2o_socket_tunnel_create(sock);
-
+    /* start the tunnel */
+    h2o_socket_tunnel_start(tunnel, 0);
     /* send response to client */
     creq->src_req->res.status = 200;
     creq->src_req->establish_tunnel(creq->src_req, &tunnel->super, creq->handler->config.io_timeout);
 
-    /* start the tunnel */
-    h2o_socket_tunnel_start(tunnel, 0);
 }
 
 static void on_generator_dispose(void *_self)
@@ -142,8 +141,24 @@ static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errs
         return;
     }
 
-    store_server_addresses(creq, res);
-    start_connect(creq);
+    if (res->ai_socktype == SOCK_STREAM) {
+        store_server_addresses(creq, res);
+        start_connect(creq);
+    } else {
+        assert(res->ai_socktype == SOCK_DGRAM);
+        h2o_tunnel_t *tunnel = h2o_open_udp_tunnel_from_sa(creq->loop, res->ai_addr, res->ai_addrlen);
+        h2o_req_t *req = creq->src_req;
+        h2o_timer_unlink(&creq->timeout);
+        if (tunnel != 0) {
+            uint64_t timeout = creq->handler->config.io_timeout;
+            req->res.status = 200;
+            tunnel->proceed_read(tunnel);
+            req->establish_tunnel(req, tunnel, timeout);
+        } else {
+            h2o_req_log_error(req, "lib/handler/connect.c", "Failed to create downstream socket");
+            h2o_send_error_502(req, "Bad Gateway", "Bad Gateway", 0);
+        }
+    }
 }
 
 static void start_connect(struct st_connect_request_t *creq)
@@ -173,10 +188,18 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
     struct st_connect_handler_t *handler = (void *)_handler;
     h2o_iovec_t host;
     uint16_t port;
+    int socket_proto;
+    int socket_type;
 
-    /* this handler captures CONNECT, delegating requests with other methods to the next handler */
-    if (!h2o_memis(req->input.method.base, req->input.method.len, H2O_STRLIT("CONNECT")))
+    if (h2o_memis(req->input.method.base, req->input.method.len, H2O_STRLIT("CONNECT"))) {
+        socket_proto = IPPROTO_TCP;
+        socket_type = SOCK_STREAM;
+    } else if (h2o_memis(req->input.method.base, req->input.method.len, H2O_STRLIT("CONNECT-UDP"))) {
+        socket_proto = IPPROTO_UDP;
+        socket_type = SOCK_DGRAM;
+    } else {
         return -1;
+    }
 
     if (h2o_url_parse_hostport(req->authority.base, req->authority.len, &host, &port) == NULL || port == 0 || port == 65535) {
         h2o_send_error_400(req, "Bad Request", "Bad Request", 0);
@@ -196,7 +219,7 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
     int port_strlen = sprintf(port_str, "%" PRIu16, port);
     creq->getaddr_req =
         h2o_hostinfo_getaddr(&creq->src_req->conn->ctx->receivers.hostinfo_getaddr, host, h2o_iovec_init(port_str, port_strlen),
-                             AF_UNSPEC, SOCK_STREAM, IPPROTO_TCP, AI_ADDRCONFIG | AI_NUMERICSERV, on_getaddr, creq);
+                             AF_UNSPEC, socket_type, socket_proto, AI_ADDRCONFIG | AI_NUMERICSERV, on_getaddr, creq);
 
     return 0;
 }

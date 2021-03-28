@@ -328,6 +328,21 @@ void h2o_dispose_request(h2o_req_t *req)
     h2o_mem_clear_pool(&req->pool);
 }
 
+int h2o_req_validate_pseudo_headers(h2o_req_t *req)
+{
+    if (h2o_memis(req->input.method.base, req->input.method.len, H2O_STRLIT("CONNECT-UDP"))) {
+        if (req->input.scheme != &H2O_URL_SCHEME_MASQUE)
+            return 0;
+        if (!h2o_memis(req->input.path.base, req->input.path.len, H2O_STRLIT("/")))
+            return 0;
+    } else {
+        if (req->input.scheme == &H2O_URL_SCHEME_MASQUE)
+            return 0;
+    }
+
+    return 1;
+}
+
 h2o_handler_t *h2o_get_first_handler(h2o_req_t *req)
 {
     h2o_hostconf_t *hostconf = h2o_req_setup(req);

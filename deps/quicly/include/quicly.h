@@ -1052,11 +1052,12 @@ static int quicly_stream_has_receive_side(int is_client, quicly_stream_id_t stre
  */
 static int quicly_stream_is_self_initiated(quicly_stream_t *stream);
 /**
- * Registers a datagram frame payload to be sent. When the applications calls `quicly_send` the first time after registering the
- * datagram frame payload, the payload is either sent or the reference is discarded. Until then, it is the caller's responsibility
- * to retain the memory pointed to by `payload`. At the moment, DATAFRAM frames are not congestion controlled.
+ * Sends QUIC DATAGRAM frames. Some of the frames being provided may get dropped.
+ * Notes:
+ * * At the moment, emission of QUIC packets carrying DATAGRAM frames is not congestion controlled.
+ * * While the API is designed to look like synchronous, application still has to call `quicly_send` for the time being.
  */
-void quicly_set_datagram_frame(quicly_conn_t *conn, ptls_iovec_t payload);
+void quicly_send_datagram_frames(quicly_conn_t *conn, ptls_iovec_t *datagrams, size_t num_datagrams);
 /**
  *
  */
