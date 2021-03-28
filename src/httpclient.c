@@ -158,18 +158,11 @@ static void on_error(h2o_httpclient_ctx_t *ctx, const char *fmt, ...)
     create_timeout(ctx->loop, 0, on_exit_deferred, NULL);
 }
 
-static void stdin_proceed_request(h2o_httpclient_t *client, size_t bytes_written, h2o_send_state_t state)
-{
-    if (state != H2O_SEND_STATE_IN_PROGRESS)
-        h2o_socket_read_stop(std_in);
-}
-
 static void stdin_on_read(h2o_socket_t *_sock, const char *err)
 {
     assert(std_in == _sock);
 
-    if (err != NULL)
-        h2o_socket_read_stop(std_in);
+    h2o_socket_read_stop(std_in);
 
     h2o_httpclient_t *client = std_in->data;
 
@@ -182,6 +175,12 @@ static void stdin_on_read(h2o_socket_t *_sock, const char *err)
         exit(1);
     }
     h2o_buffer_consume(&std_in->input, std_in->input->size);
+}
+
+static void stdin_proceed_request(h2o_httpclient_t *client, size_t bytes_written, h2o_send_state_t state)
+{
+    if (state == H2O_SEND_STATE_IN_PROGRESS)
+        h2o_socket_read_start(std_in, stdin_on_read);
 }
 
 static void start_request(h2o_httpclient_ctx_t *ctx)
