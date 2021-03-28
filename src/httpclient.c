@@ -63,6 +63,7 @@ struct {
                              specifies the address of the server to which a TCP connection should be established */
 } req = {NULL, "GET"};
 static unsigned cnt_left = 1, concurrency = 1;
+unsigned hack_stall_after_eos = 0;
 static int chunk_size = 10;
 static h2o_iovec_t iov_filler;
 static int io_interval = 0, req_interval = 0;
@@ -305,6 +306,9 @@ static int on_body(h2o_httpclient_t *client, const char *errstr)
     h2o_buffer_consume(&(*client->buf), (*client->buf)->size);
 
     if (errstr == h2o_httpclient_error_is_eos) {
+	if (hack_stall_after_eos > 0) {
+	    sleep(hack_stall_after_eos);
+	}
         --cnt_left;
         if (cnt_left >= concurrency) {
             /* next attempt */
@@ -464,6 +468,7 @@ static void usage(const char *progname)
             "  -k           skip peer verification\n"
             "  -m <method>  request method (default: GET)\n"
             "  -o <path>    file to which the response body is written (default: stdout)\n"
+            "  -S <seconds> hack: stall the client for these many seconds at end of stream\n"
             "  -t <times>   number of requests to send the request (default: 1)\n"
             "  -W <bytes>   receive window size (HTTP/3 only)\n"
             "  -x <host:port>\n"
@@ -552,7 +557,7 @@ int main(int argc, char **argv)
     }
 #endif
 
-    const char *optstring = "t:m:o:b:x:C:c:d:H:i:k2:W:h3:"
+    const char *optstring = "S:t:m:o:b:x:C:c:d:H:i:k2:W:h3:"
 #ifdef __GNUC__
                             ":" /* for backward compatibility, optarg of -3 is optional when using glibc */
 #endif
@@ -562,6 +567,12 @@ int main(int argc, char **argv)
         case 't':
             if (sscanf(optarg, "%u", &cnt_left) != 1 || cnt_left < 1) {
                 fprintf(stderr, "count (-t) must be a number greater than zero\n");
+                exit(EXIT_FAILURE);
+            }
+            break;
+        case 'S':
+            if (sscanf(optarg, "%u", &hack_stall_after_eos) != 1 || hack_stall_after_eos < 1) {
+                fprintf(stderr, "stall time (-S) must be a number greater than zero\n");
                 exit(EXIT_FAILURE);
             }
             break;
