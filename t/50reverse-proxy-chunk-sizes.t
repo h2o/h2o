@@ -31,13 +31,14 @@ sub test {
     my ($cl, $size, $trailer) = @_;
     my $file = create_data_file($size);
     my $file_md5 = md5_file($file);
-    note("$size, cl:'$cl', trailer:'$trailer', h2c");
-    my $resp;
-    $resp = `nghttp $cl $trailer -d $file -u http://127.0.0.1:$server->{port}/echo`;
-    is md5_hex($resp), $file_md5, "body matches";
-    note("$size, cl:'$cl', trailer:'$trailer', h2");
-    $resp = `nghttp $cl $trailer -d $file https://127.0.0.1:$server->{tls_port}/echo`;
-    is md5_hex($resp), $file_md5, "body matches";
+    subtest "$size, cl:'$cl', trailer:'$trailer', h2c" => sub {
+        my $resp = `nghttp $cl $trailer -d $file -u http://127.0.0.1:$server->{port}/echo`;
+        is md5_hex($resp), $file_md5, "body matches";
+    };
+    subtest "$size, cl:'$cl', trailer:'$trailer', h2" => sub {
+        my $resp = `nghttp $cl $trailer -d $file https://127.0.0.1:$server->{tls_port}/echo`;
+        is md5_hex($resp), $file_md5, "body matches";
+    };
 }
 my @sizes = ( 1000, 65535, 1000000 );
 my @clopts = ( "", "--no-content-length" );
