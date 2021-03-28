@@ -88,6 +88,85 @@ static int EVP_CIPHER_CTX_reset(EVP_CIPHER_CTX *ctx)
 
 #endif
 
+static const struct st_ptls_openssl_signature_scheme_t rsa_signature_schemes[] = {{PTLS_SIGNATURE_RSA_PSS_RSAE_SHA256, EVP_sha256},
+                                                                                  {PTLS_SIGNATURE_RSA_PSS_RSAE_SHA384, EVP_sha384},
+                                                                                  {PTLS_SIGNATURE_RSA_PSS_RSAE_SHA512, EVP_sha512},
+                                                                                  {UINT16_MAX, NULL}};
+static const struct st_ptls_openssl_signature_scheme_t secp256r1_signature_schemes[] = {
+    {PTLS_SIGNATURE_ECDSA_SECP256R1_SHA256, EVP_sha256}, {UINT16_MAX, NULL}};
+#if PTLS_OPENSSL_HAVE_SECP384R1
+static const struct st_ptls_openssl_signature_scheme_t secp384r1_signature_schemes[] = {
+    {PTLS_SIGNATURE_ECDSA_SECP384R1_SHA384, EVP_sha384}, {UINT16_MAX, NULL}};
+#endif
+#if PTLS_OPENSSL_HAVE_SECP521R1
+static const struct st_ptls_openssl_signature_scheme_t secp521r1_signature_schemes[] = {
+    {PTLS_SIGNATURE_ECDSA_SECP521R1_SHA512, EVP_sha512}, {UINT16_MAX, NULL}};
+#endif
+#if PTLS_OPENSSL_HAVE_ED25519
+static const struct st_ptls_openssl_signature_scheme_t ed25519_signature_schemes[] = {{PTLS_SIGNATURE_ED25519, NULL},
+                                                                                      {UINT16_MAX, NULL}};
+#endif
+
+/**
+ * The default list sent in ClientHello.signature_algorithms. ECDSA certificates are preferred.
+ */
+static const uint16_t default_signature_schemes[] = {
+#if PTLS_OPENSSL_HAVE_ED25519
+    PTLS_SIGNATURE_ED25519,
+#endif
+    PTLS_SIGNATURE_ECDSA_SECP256R1_SHA256,
+#if PTLS_OPENSSL_HAVE_SECP384R1
+    PTLS_SIGNATURE_ECDSA_SECP384R1_SHA384,
+#endif
+#if PTLS_OPENSSL_HAVE_SECP521R1
+    PTLS_SIGNATURE_ECDSA_SECP521R1_SHA512,
+#endif
+    PTLS_SIGNATURE_RSA_PSS_RSAE_SHA512,
+    PTLS_SIGNATURE_RSA_PSS_RSAE_SHA384,
+    PTLS_SIGNATURE_RSA_PSS_RSAE_SHA256,
+    UINT16_MAX};
+
+static const struct st_ptls_openssl_signature_scheme_t *lookup_signature_schemes(EVP_PKEY *key)
+{
+    const struct st_ptls_openssl_signature_scheme_t *schemes = NULL;
+
+    switch (EVP_PKEY_id(key)) {
+    case EVP_PKEY_RSA:
+        schemes = rsa_signature_schemes;
+        break;
+    case EVP_PKEY_EC: {
+        EC_KEY *eckey = EVP_PKEY_get1_EC_KEY(key);
+        switch (EC_GROUP_get_curve_name(EC_KEY_get0_group(eckey))) {
+        case NID_X9_62_prime256v1:
+            schemes = secp256r1_signature_schemes;
+            break;
+#if PTLS_OPENSSL_HAVE_SECP384R1
+        case NID_secp384r1:
+            schemes = secp384r1_signature_schemes;
+            break;
+#endif
+#if PTLS_OPENSSL_HAVE_SECP521R1
+        case NID_secp521r1:
+            schemes = secp521r1_signature_schemes;
+            break;
+#endif
+        default:
+            break;
+        }
+        EC_KEY_free(eckey);
+    } break;
+#if PTLS_OPENSSL_HAVE_ED25519
+    case EVP_PKEY_ED25519:
+        schemes = ed25519_signature_schemes;
+        break;
+#endif
+    default:
+        break;
+    }
+
+    return schemes;
+}
+
 void ptls_openssl_random_bytes(void *buf, size_t len)
 {
     int ret = RAND_bytes(buf, (int)len);
@@ -613,9 +692,11 @@ int ptls_openssl_create_key_exchange(ptls_key_exchange_context_t **ctx, EVP_PKEY
     }
 }
 
-static int do_sign(EVP_PKEY *key, ptls_buffer_t *outbuf, ptls_iovec_t input, const EVP_MD *md)
+static int do_sign(EVP_PKEY *key, const struct st_ptls_openssl_signature_scheme_t *scheme, ptls_buffer_t *outbuf,
+                   ptls_iovec_t input)
 {
     EVP_MD_CTX *ctx = NULL;
+    const EVP_MD *md = scheme->scheme_md != NULL ? scheme->scheme_md() : NULL;
     EVP_PKEY_CTX *pkey_ctx;
     size_t siglen;
     int ret;
@@ -624,38 +705,58 @@ static int do_sign(EVP_PKEY *key, ptls_buffer_t *outbuf, ptls_iovec_t input, con
         ret = PTLS_ERROR_NO_MEMORY;
         goto Exit;
     }
+
     if (EVP_DigestSignInit(ctx, &pkey_ctx, md, NULL, key) != 1) {
         ret = PTLS_ERROR_LIBRARY;
         goto Exit;
     }
-    if (EVP_PKEY_id(key) == EVP_PKEY_RSA) {
-        if (EVP_PKEY_CTX_set_rsa_padding(pkey_ctx, RSA_PKCS1_PSS_PADDING) != 1) {
+
+#if PTLS_OPENSSL_HAVE_ED25519
+    if (EVP_PKEY_id(key) == EVP_PKEY_ED25519) {
+        /* ED25519 requires the use of the all-at-once function that appeared in OpenSSL 1.1.1, hence different path */
+        if (EVP_DigestSign(ctx, NULL, &siglen, input.base, input.len) != 1) {
             ret = PTLS_ERROR_LIBRARY;
             goto Exit;
         }
-        if (EVP_PKEY_CTX_set_rsa_pss_saltlen(pkey_ctx, -1) != 1) {
+        if ((ret = ptls_buffer_reserve(outbuf, siglen)) != 0)
+            goto Exit;
+        if (EVP_DigestSign(ctx, outbuf->base + outbuf->off, &siglen, input.base, input.len) != 1) {
             ret = PTLS_ERROR_LIBRARY;
             goto Exit;
         }
-        if (EVP_PKEY_CTX_set_rsa_mgf1_md(pkey_ctx, EVP_sha256()) != 1) {
+    } else
+#endif
+    {
+        if (EVP_PKEY_id(key) == EVP_PKEY_RSA) {
+            if (EVP_PKEY_CTX_set_rsa_padding(pkey_ctx, RSA_PKCS1_PSS_PADDING) != 1) {
+                ret = PTLS_ERROR_LIBRARY;
+                goto Exit;
+            }
+            if (EVP_PKEY_CTX_set_rsa_pss_saltlen(pkey_ctx, -1) != 1) {
+                ret = PTLS_ERROR_LIBRARY;
+                goto Exit;
+            }
+            if (EVP_PKEY_CTX_set_rsa_mgf1_md(pkey_ctx, md) != 1) {
+                ret = PTLS_ERROR_LIBRARY;
+                goto Exit;
+            }
+        }
+        if (EVP_DigestSignUpdate(ctx, input.base, input.len) != 1) {
+            ret = PTLS_ERROR_LIBRARY;
+            goto Exit;
+        }
+        if (EVP_DigestSignFinal(ctx, NULL, &siglen) != 1) {
+            ret = PTLS_ERROR_LIBRARY;
+            goto Exit;
+        }
+        if ((ret = ptls_buffer_reserve(outbuf, siglen)) != 0)
+            goto Exit;
+        if (EVP_DigestSignFinal(ctx, outbuf->base + outbuf->off, &siglen) != 1) {
             ret = PTLS_ERROR_LIBRARY;
             goto Exit;
         }
     }
-    if (EVP_DigestSignUpdate(ctx, input.base, input.len) != 1) {
-        ret = PTLS_ERROR_LIBRARY;
-        goto Exit;
-    }
-    if (EVP_DigestSignFinal(ctx, NULL, &siglen) != 1) {
-        ret = PTLS_ERROR_LIBRARY;
-        goto Exit;
-    }
-    if ((ret = ptls_buffer_reserve(outbuf, siglen)) != 0)
-        goto Exit;
-    if (EVP_DigestSignFinal(ctx, outbuf->base + outbuf->off, &siglen) != 1) {
-        ret = PTLS_ERROR_LIBRARY;
-        goto Exit;
-    }
+
     outbuf->off += siglen;
 
     ret = 0;
@@ -944,7 +1045,7 @@ static int sign_certificate(ptls_sign_certificate_t *_self, ptls_t *tls, uint16_
     ptls_openssl_sign_certificate_t *self = (ptls_openssl_sign_certificate_t *)_self;
     const struct st_ptls_openssl_signature_scheme_t *scheme;
 
-    /* select the algorithm */
+    /* select the algorithm (driven by server-side preference of `self->schemes`) */
     for (scheme = self->schemes; scheme->scheme_id != UINT16_MAX; ++scheme) {
         size_t i;
         for (i = 0; i != num_algorithms; ++i)
@@ -955,7 +1056,7 @@ static int sign_certificate(ptls_sign_certificate_t *_self, ptls_t *tls, uint16_
 
 Found:
     *selected_algorithm = scheme->scheme_id;
-    return do_sign(self->key, outbuf, input, scheme->scheme_md);
+    return do_sign(self->key, scheme, outbuf, input);
 }
 
 static X509 *to_x509(ptls_iovec_t vec)
@@ -964,9 +1065,10 @@ static X509 *to_x509(ptls_iovec_t vec)
     return d2i_X509(NULL, &p, (long)vec.len);
 }
 
-static int verify_sign(void *verify_ctx, ptls_iovec_t data, ptls_iovec_t signature)
+static int verify_sign(void *verify_ctx, uint16_t algo, ptls_iovec_t data, ptls_iovec_t signature)
 {
     EVP_PKEY *key = verify_ctx;
+    const struct st_ptls_openssl_signature_scheme_t *scheme;
     EVP_MD_CTX *ctx = NULL;
     EVP_PKEY_CTX *pkey_ctx = NULL;
     int ret = 0;
@@ -974,36 +1076,65 @@ static int verify_sign(void *verify_ctx, ptls_iovec_t data, ptls_iovec_t signatu
     if (data.base == NULL)
         goto Exit;
 
+    if ((scheme = lookup_signature_schemes(key)) == NULL) {
+        ret = PTLS_ERROR_LIBRARY;
+        goto Exit;
+    }
+    for (; scheme->scheme_id != UINT16_MAX; ++scheme)
+        if (scheme->scheme_id == algo)
+            goto SchemeFound;
+    ret = PTLS_ALERT_ILLEGAL_PARAMETER;
+    goto Exit;
+
+SchemeFound:
     if ((ctx = EVP_MD_CTX_create()) == NULL) {
         ret = PTLS_ERROR_NO_MEMORY;
         goto Exit;
     }
-    if (EVP_DigestVerifyInit(ctx, &pkey_ctx, EVP_sha256(), NULL, key) != 1) {
-        ret = PTLS_ERROR_LIBRARY;
-        goto Exit;
-    }
-    if (EVP_PKEY_id(key) == EVP_PKEY_RSA) {
-        if (EVP_PKEY_CTX_set_rsa_padding(pkey_ctx, RSA_PKCS1_PSS_PADDING) != 1) {
+
+#if PTLS_OPENSSL_HAVE_ED25519
+    if (EVP_PKEY_id(key) == EVP_PKEY_ED25519) {
+        /* ED25519 requires the use of the all-at-once function that appeared in OpenSSL 1.1.1, hence different path */
+        if (EVP_DigestVerifyInit(ctx, &pkey_ctx, NULL, NULL, key) != 1) {
             ret = PTLS_ERROR_LIBRARY;
             goto Exit;
         }
-        if (EVP_PKEY_CTX_set_rsa_pss_saltlen(pkey_ctx, -1) != 1) {
+        if (EVP_DigestVerify(ctx, signature.base, signature.len, data.base, data.len) != 1) {
             ret = PTLS_ERROR_LIBRARY;
             goto Exit;
         }
-        if (EVP_PKEY_CTX_set_rsa_mgf1_md(pkey_ctx, EVP_sha256()) != 1) {
+    } else
+#endif
+    {
+        if (EVP_DigestVerifyInit(ctx, &pkey_ctx, scheme->scheme_md(), NULL, key) != 1) {
             ret = PTLS_ERROR_LIBRARY;
             goto Exit;
         }
+
+        if (EVP_PKEY_id(key) == EVP_PKEY_RSA) {
+            if (EVP_PKEY_CTX_set_rsa_padding(pkey_ctx, RSA_PKCS1_PSS_PADDING) != 1) {
+                ret = PTLS_ERROR_LIBRARY;
+                goto Exit;
+            }
+            if (EVP_PKEY_CTX_set_rsa_pss_saltlen(pkey_ctx, -1) != 1) {
+                ret = PTLS_ERROR_LIBRARY;
+                goto Exit;
+            }
+            if (EVP_PKEY_CTX_set_rsa_mgf1_md(pkey_ctx, scheme->scheme_md()) != 1) {
+                ret = PTLS_ERROR_LIBRARY;
+                goto Exit;
+            }
+        }
+        if (EVP_DigestVerifyUpdate(ctx, data.base, data.len) != 1) {
+            ret = PTLS_ERROR_LIBRARY;
+            goto Exit;
+        }
+        if (EVP_DigestVerifyFinal(ctx, signature.base, signature.len) != 1) {
+            ret = PTLS_ALERT_DECRYPT_ERROR;
+            goto Exit;
+        }
     }
-    if (EVP_DigestVerifyUpdate(ctx, data.base, data.len) != 1) {
-        ret = PTLS_ERROR_LIBRARY;
-        goto Exit;
-    }
-    if (EVP_DigestVerifyFinal(ctx, signature.base, signature.len) != 1) {
-        ret = PTLS_ALERT_DECRYPT_ERROR;
-        goto Exit;
-    }
+
     ret = 0;
 
 Exit:
@@ -1016,50 +1147,9 @@ Exit:
 int ptls_openssl_init_sign_certificate(ptls_openssl_sign_certificate_t *self, EVP_PKEY *key)
 {
     *self = (ptls_openssl_sign_certificate_t){{sign_certificate}};
-    size_t scheme_index = 0;
 
-#define PUSH_SCHEME(id, md)                                                                                                        \
-    self->schemes[scheme_index++] = (struct st_ptls_openssl_signature_scheme_t)                                                    \
-    {                                                                                                                              \
-        id, md                                                                                                                     \
-    }
-
-    switch (EVP_PKEY_id(key)) {
-    case EVP_PKEY_RSA:
-        PUSH_SCHEME(PTLS_SIGNATURE_RSA_PSS_RSAE_SHA256, EVP_sha256());
-        PUSH_SCHEME(PTLS_SIGNATURE_RSA_PSS_RSAE_SHA384, EVP_sha384());
-        PUSH_SCHEME(PTLS_SIGNATURE_RSA_PSS_RSAE_SHA512, EVP_sha512());
-        break;
-    case EVP_PKEY_EC: {
-        EC_KEY *eckey = EVP_PKEY_get1_EC_KEY(key);
-        switch (EC_GROUP_get_curve_name(EC_KEY_get0_group(eckey))) {
-        case NID_X9_62_prime256v1:
-            PUSH_SCHEME(PTLS_SIGNATURE_ECDSA_SECP256R1_SHA256, EVP_sha256());
-            break;
-#if defined(NID_secp384r1) && !OPENSSL_NO_SHA384
-        case NID_secp384r1:
-            PUSH_SCHEME(PTLS_SIGNATURE_ECDSA_SECP384R1_SHA384, EVP_sha384());
-            break;
-#endif
-#if defined(NID_secp384r1) && !OPENSSL_NO_SHA512
-        case NID_secp521r1:
-            PUSH_SCHEME(PTLS_SIGNATURE_ECDSA_SECP521R1_SHA512, EVP_sha512());
-            break;
-#endif
-        default:
-            EC_KEY_free(eckey);
-            return PTLS_ERROR_INCOMPATIBLE_KEY;
-        }
-        EC_KEY_free(eckey);
-    } break;
-    default:
+    if ((self->schemes = lookup_signature_schemes(key)) == NULL)
         return PTLS_ERROR_INCOMPATIBLE_KEY;
-    }
-    PUSH_SCHEME(UINT16_MAX, NULL);
-    assert(scheme_index <= PTLS_ELEMENTSOF(self->schemes));
-
-#undef PUSH_SCHEME
-
     EVP_PKEY_up_ref(key);
     self->key = key;
 
@@ -1200,8 +1290,9 @@ Exit:
     return ret;
 }
 
-static int verify_cert(ptls_verify_certificate_t *_self, ptls_t *tls, int (**verifier)(void *, ptls_iovec_t, ptls_iovec_t),
-                       void **verify_data, ptls_iovec_t *certs, size_t num_certs)
+static int verify_cert(ptls_verify_certificate_t *_self, ptls_t *tls,
+                       int (**verifier)(void *, uint16_t, ptls_iovec_t, ptls_iovec_t), void **verify_data, ptls_iovec_t *certs,
+                       size_t num_certs)
 {
     ptls_openssl_verify_certificate_t *self = (ptls_openssl_verify_certificate_t *)_self;
     X509 *cert = NULL;
@@ -1246,7 +1337,7 @@ Exit:
 
 int ptls_openssl_init_verify_certificate(ptls_openssl_verify_certificate_t *self, X509_STORE *store)
 {
-    *self = (ptls_openssl_verify_certificate_t){{verify_cert}};
+    *self = (ptls_openssl_verify_certificate_t){{verify_cert, default_signature_schemes}};
 
     if (store != NULL) {
         X509_STORE_up_ref(store);
@@ -1286,8 +1377,9 @@ Error:
     return NULL;
 }
 
-static int verify_raw_cert(ptls_verify_certificate_t *_self, ptls_t *tls, int (**verifier)(void *, ptls_iovec_t, ptls_iovec_t),
-                           void **verify_data, ptls_iovec_t *certs, size_t num_certs)
+static int verify_raw_cert(ptls_verify_certificate_t *_self, ptls_t *tls,
+                           int (**verifier)(void *, uint16_t algo, ptls_iovec_t, ptls_iovec_t), void **verify_data,
+                           ptls_iovec_t *certs, size_t num_certs)
 {
     ptls_openssl_raw_pubkey_verify_certificate_t *self = (ptls_openssl_raw_pubkey_verify_certificate_t *)_self;
     int ret = PTLS_ALERT_BAD_CERTIFICATE;
@@ -1323,7 +1415,7 @@ Exit:
 int ptls_openssl_raw_pubkey_init_verify_certificate(ptls_openssl_raw_pubkey_verify_certificate_t *self, EVP_PKEY *expected_pubkey)
 {
     EVP_PKEY_up_ref(expected_pubkey);
-    *self = (ptls_openssl_raw_pubkey_verify_certificate_t){{verify_raw_cert}, expected_pubkey};
+    *self = (ptls_openssl_raw_pubkey_verify_certificate_t){{verify_raw_cert, default_signature_schemes}, expected_pubkey};
     return 0;
 }
 void ptls_openssl_raw_pubkey_dispose_verify_certificate(ptls_openssl_raw_pubkey_verify_certificate_t *self)
