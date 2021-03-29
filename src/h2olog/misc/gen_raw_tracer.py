@@ -330,10 +330,10 @@ def parse_and_analyze(context: dict, d_file: Path):
     for (probe_name, fields) in appdata.items():
       if fields:
         print("invalid @appdata: probe fields are not used in provider %s: %s: %s" %
-          (provider, json.dumps(probe_name), json.dumps(fields)), file=sys.stderr)
+              (provider, json.dumps(probe_name), json.dumps(fields)), file=sys.stderr)
       else:
         print("invalid @appdata: probe name is not used in provider %s: %s" %
-          (provider, json.dumps(probe_name)), file=sys.stderr)
+              (provider, json.dumps(probe_name)), file=sys.stderr)
     sys.exit(1)
 
 
@@ -440,6 +440,7 @@ def prepare_context(d_files: list):
   for d_file in d_files:
     parse_and_analyze(context, Path(d_file))
   return context
+
 
 def build_bpf_header_generator():
   generator = r"""
@@ -714,9 +715,10 @@ std::string h2o_raw_tracer::bpf_text() {
 
 """ % (build_typedef_for_cplusplus(), build_bpf_header_generator(), event_id_t_decl, event_t_decl, usdts_def, handle_event_func, bpf))
 
+
 def usage():
-    print("usage: %s output_file d_files..." % sys.argv[0])
-    sys.exit(1)
+  print("usage: %s output_file d_files..." % sys.argv[0])
+  sys.exit(1)
 
 
 def main():
