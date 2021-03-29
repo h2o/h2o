@@ -390,7 +390,7 @@ static void usage(const char *progname)
             "Usage: %s [options] <url>\n"
             "Options:\n"
             "  -2 <ratio>   HTTP/2 ratio (between 0 and 100)\n"
-            "  -3           HTTP/3-only mode\n"
+            "  -3 <ratio>   HTTP/3 ratio (between 0 and 100)\n"
             "  -b <size>    size of request body (in bytes; default: 0)\n"
             "  -C <concurrency>\n"
             "               sets the number of requests run at once (default: 1)\n"
@@ -442,6 +442,7 @@ int main(int argc, char **argv)
         .first_byte_timeout = IO_TIMEOUT,
         .keepalive_timeout = IO_TIMEOUT,
         .max_buffer_size = H2O_SOCKET_INITIAL_INPUT_BUFFER_SIZE * 2,
+        .http2 = {.max_concurrent_streams = 100},
         .http3 = &h3ctx,
     };
     int opt;

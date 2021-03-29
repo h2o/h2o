@@ -172,6 +172,10 @@ static void on_proceed(h2o_generator_t *_self, h2o_req_t *req)
 static void on_connect_error(struct st_connect_generator_t *self, const char *errstr)
 {
     h2o_timer_unlink(&self->timeout);
+    if (self->sock != NULL) {
+        h2o_socket_close(self->sock);
+        self->sock = NULL;
+    }
     h2o_send_error_502(self->src_req, "Gateway Error", errstr, 0);
 }
 
@@ -185,11 +189,15 @@ static void on_connect(h2o_socket_t *_sock, const char *err)
 {
     struct st_connect_generator_t *self = _sock->data;
 
+    assert(self->sock == _sock);
+
     if (err != NULL) {
         if (self->server_addresses.next == self->server_addresses.size) {
             on_connect_error(self, err);
             return;
         }
+        h2o_socket_close(self->sock);
+        self->sock = NULL;
         start_connect(self);
         return;
     }

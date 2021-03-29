@@ -379,6 +379,17 @@ static void usage(const char *cmd)
 #if PTLS_OPENSSL_HAVE_X25519
            ", X25519"
 #endif
+           "\n"
+           "Supported signature algorithms: rsa, secp256r1"
+#if PTLS_OPENSSL_HAVE_SECP384R1
+           ", secp384r1"
+#endif
+#if PTLS_OPENSSL_HAVE_SECP521R1
+           ", secp521r1"
+#endif
+#if PTLS_OPENSSL_HAVE_ED25519
+           ", ed25519"
+#endif
            "\n\n",
            cmd);
 }
