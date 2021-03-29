@@ -14,7 +14,7 @@ plan skip_all => 'Starlet not found'
 my $upstream_port = empty_port();
 my $tls_port = empty_port();
 my $tls12_flag = '--tls-max 1.2';
-my $good_client_key_cert = '--key misc/test-ca/demoCA/test_client.key --cert misc/test-ca/demoCA/test_client.crt';
+my $good_client_key_cert = '--key t/assets/test_client.key --cert t/assets/test_client.crt';
 my $wrong_client_key_cert = '--key examples/h2o/server.key --cert examples/h2o/server.crt';
 my $TLS_RE_OK = qr{hello};
 
@@ -38,8 +38,7 @@ listen:
   ssl: &ssl
     key-file: examples/h2o/server.key
     certificate-file: examples/h2o/server.crt
-    client-verify: on
-    client-CA-file: examples/h2o/test_client_ca.crt
+    client-ca-file: examples/h2o/test_client_ca.crt
 EOT
     my $server = spawn_h2o_raw($conf, [ $tls_port ]);
 }
@@ -51,18 +50,14 @@ sub run_tls_client {
     return $resp;
 }
 
-sub do_test {
-    my $server = start_server();
-    like run_tls_client("", $good_client_key_cert), $TLS_RE_OK, "mTLS13";
-    #like run_tls_client($tls12_flag, $good_client_key_cert), $TLS_RE_OK, "mTLS12";
+my $server = start_server();
+like run_tls_client("", $good_client_key_cert), $TLS_RE_OK, "mTLS13";
+#like run_tls_client($tls12_flag, $good_client_key_cert), $TLS_RE_OK, "mTLS12";
 
-    unlike run_tls_client("", ""), $TLS_RE_OK, "mTLS13 no client cert";
-    #unlike run_tls_client($tls12_flag, ""), $TLS_RE_OK, "mTLS12 no client cert";
+unlike run_tls_client("", ""), $TLS_RE_OK, "mTLS13 no client cert";
+#unlike run_tls_client($tls12_flag, ""), $TLS_RE_OK, "mTLS12 no client cert";
 
-    unlike run_tls_client("", $wrong_client_key_cert), $TLS_RE_OK, "mTLS13 wrong client cert";
-    #unlike run_tls_client($tls12_flag, $wrong_client_key_cert), $TLS_RE_OK, "mTLS12 wrong client cert";
-}
-
-do_test();
+unlike run_tls_client("", $wrong_client_key_cert), $TLS_RE_OK, "mTLS13 wrong client cert";
+#unlike run_tls_client($tls12_flag, $wrong_client_key_cert), $TLS_RE_OK, "mTLS12 wrong client cert";
 
 done_testing();
