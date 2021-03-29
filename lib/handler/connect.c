@@ -61,6 +61,10 @@ static void start_connect(struct st_connect_request_t *creq);
 static void on_error(struct st_connect_request_t *creq, const char *errstr)
 {
     h2o_timer_unlink(&creq->timeout);
+    if (creq->sock != NULL) {
+        h2o_socket_close(creq->sock);
+        creq->sock = NULL;
+    }
     h2o_send_error_502(creq->src_req, "Gateway Error", errstr, 0);
 }
 
@@ -74,11 +78,15 @@ static void on_connect(h2o_socket_t *sock, const char *err)
 {
     struct st_connect_request_t *creq = sock->data;
 
+    assert(creq->sock == sock);
+
     if (err) {
         if (creq->server_addresses.next == creq->server_addresses.size) {
             on_error(creq, err);
             return;
         }
+        h2o_socket_close(sock);
+        creq->sock = NULL;
         start_connect(creq);
         return;
     }
