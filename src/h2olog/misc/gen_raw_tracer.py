@@ -654,7 +654,7 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
           stmts += '    json_write_pair_c(out_, STR_LIT("%s"), event->%s, strlen(event->%s));\n' % (
               json_field_name, event_t_name, event_t_name)
       if field_name in appdata_field_set:
-        handle_event_func += "    if (appdata_) {\n"
+        handle_event_func += "    if (include_appdata_) {\n"
         handle_event_func += re.sub(r"^", "  ", stmts, flags=re_xms).rstrip() + "\n"
         handle_event_func += "    }\n"
       else:

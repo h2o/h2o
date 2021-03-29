@@ -79,7 +79,7 @@ class h2o_tracer
     /**
      * Whether or not to include application data.
      */
-    bool appdata_ = false;
+    bool include_appdata_ = false;
 
     /**
      * The stub function for handling an event.
@@ -107,10 +107,10 @@ class h2o_tracer
     /**
      * Performs post-construction initialization common to all the tracers.
      */
-    void init(FILE *fp, bool appdata)
+    void init(FILE *fp, bool include_appdata)
     {
         out_ = fp;
-        appdata_ = appdata;
+        include_appdata_ = include_appdata;
     }
 
     /**

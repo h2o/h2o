@@ -233,7 +233,7 @@ int main(int argc, char **argv)
     int debug = 0;
     bool preserve_root = false;
     bool list_usdts = false;
-    bool appdata = false;
+    bool include_appdata = false;
     FILE *outfp = stdout;
     std::vector<std::string> response_header_filters;
     int c;
@@ -264,7 +264,7 @@ int main(int argc, char **argv)
             }
             break;
         case 'a':
-            appdata = true;
+            include_appdata = true;
             break;
         case 'd':
             debug++;
@@ -308,7 +308,7 @@ int main(int argc, char **argv)
         exit(EXIT_FAILURE);
     }
 
-    tracer->init(outfp, appdata);
+    tracer->init(outfp, include_appdata);
 
     std::vector<std::string> cflags({
         make_pid_cflag("H2OLOG_H2O_PID", h2o_pid),
