@@ -308,8 +308,7 @@ int main(int argc, char **argv)
         exit(EXIT_FAILURE);
     }
 
-    tracer->init(outfp);
-    tracer->set_appdata(appdata);
+    tracer->init(outfp, appdata);
 
     std::vector<std::string> cflags({
         make_pid_cflag("H2OLOG_H2O_PID", h2o_pid),

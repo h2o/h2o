@@ -107,9 +107,10 @@ class h2o_tracer
     /**
      * Performs post-construction initialization common to all the tracers.
      */
-    void init(FILE *fp)
+    void init(FILE *fp, bool appdata)
     {
         out_ = fp;
+        appdata_ = appdata;
     }
 
     /**
@@ -159,14 +160,6 @@ class h2o_tracer
     void flush()
     {
         fflush(out_);
-    }
-
-    /**
-     * Set true to include application data.
-     */
-    void set_appdata(bool appdata)
-    {
-        appdata_ = appdata;
     }
 };
 
