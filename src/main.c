@@ -719,7 +719,7 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
         X509_STORE *ca_store = SSL_CTX_get_cert_store(ssl_ctx);
         if (ptls_openssl_init_verify_certificate(&pctx->vc, ca_store) != 0) {
             free(pctx);
-            return "failed to setup verify environment";
+            return "failed to setup client certificate verification environment";
         }
         pctx->ctx.verify_certificate = &pctx->vc.super;
     }
