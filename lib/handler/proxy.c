@@ -152,7 +152,7 @@ static void on_context_init(h2o_handler_t *_self, h2o_context_t *ctx)
 
     client_ctx->http2.latency_optimization =
         ctx->globalconf->http2.latency_optimization; /* TODO provide config knob, or disable? */
-    client_ctx->http2.max_concurrent_streams = self->config.http2.max_concurrent_strams;
+    client_ctx->http2.max_concurrent_streams = self->config.http2.max_concurrent_streams;
 
     client_ctx->http3 = client_ctx->protocol_selector.ratio.http3 != 0 ? create_http3_context(ctx->loop) : NULL;
 

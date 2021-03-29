@@ -124,6 +124,7 @@ extern "C" {
 #define PTLS_SIGNATURE_RSA_PSS_RSAE_SHA256 0x0804
 #define PTLS_SIGNATURE_RSA_PSS_RSAE_SHA384 0x0805
 #define PTLS_SIGNATURE_RSA_PSS_RSAE_SHA512 0x0806
+#define PTLS_SIGNATURE_ED25519 0x0807
 
 /* ESNI */
 #define PTLS_ESNI_VERSION_DRAFT03 0xff02
@@ -575,9 +576,15 @@ PTLS_CALLBACK_TYPE(int, sign_certificate, ptls_t *tls, uint16_t *selected_algori
  * The implementor of the callback should use that as the opportunity to free any temporary data allocated for the verify_sign
  * callback.
  */
-PTLS_CALLBACK_TYPE(int, verify_certificate, ptls_t *tls,
-                   int (**verify_sign)(void *verify_ctx, ptls_iovec_t data, ptls_iovec_t sign), void **verify_data,
-                   ptls_iovec_t *certs, size_t num_certs);
+typedef struct st_ptls_verify_certificate_t {
+    int (*cb)(struct st_ptls_verify_certificate_t *self, ptls_t *tls,
+              int (**verify_sign)(void *verify_ctx, uint16_t algo, ptls_iovec_t data, ptls_iovec_t sign), void **verify_data,
+              ptls_iovec_t *certs, size_t num_certs);
+    /**
+     * list of signature algorithms being supported, terminated by UINT16_MAX
+     */
+    const uint16_t *algos;
+} ptls_verify_certificate_t;
 /**
  * Encrypt-and-signs (or verify-and-decrypts) a ticket (server-only).
  * When used for encryption (i.e., is_encrypt being set), the function should return 0 if successful, or else a non-zero value.

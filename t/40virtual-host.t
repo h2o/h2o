@@ -9,6 +9,18 @@ use t::Util;
 plan skip_all => 'curl not found'
     unless prog_exists('curl');
 
+sub fetch {
+    my $server = shift;
+    my $host = shift;
+    my $resp;
+    if (defined($host)) {
+        $resp = `curl --silent --resolve $host:$server->{port}:127.0.0.1 http://$host:$server->{port}/`;
+    } else {
+        $resp = `curl --silent --http1.0 --header Host: http://127.0.0.1:$server->{port}/`;
+    }
+    md5_hex($resp);
+}
+
 subtest "basic" => sub {
     # create config
     my ($global_port, $alternate_port) = empty_ports(2);
@@ -68,16 +80,159 @@ hosts:
 EOT
     });
 
-    my $fetch = sub {
-        my $host = shift;
-        my $resp = `curl --silent --resolve $host:$server->{port}:127.0.0.1 http://$host:$server->{port}/`;
-        md5_hex($resp);
-    };
+    is fetch($server, "www.example.com"), md5_file("examples/doc_root.alternate/index.txt"), "www.example.com";
+    is fetch($server, "xxx.example.com"), md5_file("examples/doc_root.alternate/index.txt"), "xxx.example.com";
+    is fetch($server, "example.com"), md5_file("examples/doc_root/index.html"), "example.com";
+    is fetch($server, "example.org"), md5_file("examples/doc_root/index.html"), "example.org";
+};
 
-    is $fetch->("www.example.com"), md5_file("examples/doc_root.alternate/index.txt"), "www.example.com";
-    is $fetch->("xxx.example.com"), md5_file("examples/doc_root.alternate/index.txt"), "xxx.example.com";
-    is $fetch->("example.com"), md5_file("examples/doc_root/index.html"), "example.com";
-    is $fetch->("example.org"), md5_file("examples/doc_root/index.html"), "example.org";
+subtest "default to first, without wildcard" => sub {
+    my $server = spawn_h2o(sub {
+        my ($port, $tls_port) = @_;
+        return << "EOT";
+hosts:
+  "example.com:$port":
+    paths:
+      /:
+        file.dir: examples/doc_root
+  "example.org:$port":
+    paths:
+      /:
+        file.dir: examples/doc_root.alternate
+EOT
+    });
+
+    is fetch($server, "example.com"), md5_file("examples/doc_root/index.html"), "example.com";
+    is fetch($server, "example.org"), md5_file("examples/doc_root.alternate/index.txt"), "example.org";
+    is fetch($server, undef), md5_file("examples/doc_root/index.html"), "no host header";
+};
+
+subtest "strict match, without wildcard" => sub {
+    my $server = spawn_h2o(sub {
+        my ($port, $tls_port) = @_;
+        return << "EOT";
+hosts:
+  "example.com:$port":
+    strict-match: ON
+    paths:
+      /:
+        file.dir: examples/doc_root
+  "example.org:$port":
+    paths:
+      /:
+        file.dir: examples/doc_root.alternate
+EOT
+    });
+
+    is fetch($server, "example.com"), md5_file("examples/doc_root/index.html"), "example.com";
+    is fetch($server, "example.org"), md5_file("examples/doc_root.alternate/index.txt"), "example.org";
+    is fetch($server, undef), md5_file("examples/doc_root.alternate/index.txt"), "no host header";
+};
+
+subtest "all strict match, without wildcard" => sub {
+    my $server = spawn_h2o(sub {
+        my ($port, $tls_port) = @_;
+        return << "EOT";
+hosts:
+  "example.com:$port":
+    strict-match: ON
+    paths:
+      /:
+        file.dir: examples/doc_root
+  "example.org:$port":
+    strict-match: ON
+    paths:
+      /:
+        file.dir: examples/doc_root.alternate
+EOT
+    });
+
+    is fetch($server, "example.com"), md5_file("examples/doc_root/index.html"), "example.com";
+    is fetch($server, "example.org"), md5_file("examples/doc_root.alternate/index.txt"), "example.org";
+    is fetch($server, undef), md5_hex("not found"), "no host header";
+};
+
+subtest "default to first, with wildcard" => sub {
+    my $server = spawn_h2o(sub {
+        my ($port, $tls_port) = @_;
+        return << "EOT";
+hosts:
+  "www.example.com:$port":
+    paths:
+      /:
+        file.dir: examples/doc_root
+  "*.example.com:$port":
+    paths:
+      /:
+        file.dir: examples/doc_root.alternate
+  "*:$port":
+    paths:
+      /:
+        file.dir: examples/doc_root.third
+EOT
+    });
+
+    is fetch($server, "www.example.com"), md5_file("examples/doc_root/index.html"), "www.example.com";
+    is fetch($server, "xxx.example.com"), md5_file("examples/doc_root.alternate/index.txt"), "xxx.example.com";
+    is fetch($server, "example.org"), md5_file("examples/doc_root.third/index.txt"), "example.org";
+    is fetch($server, undef), md5_file("examples/doc_root/index.html"), "no host header";
+};
+
+subtest "strict match, with wildcard" => sub {
+    my $server = spawn_h2o(sub {
+        my ($port, $tls_port) = @_;
+        return << "EOT";
+hosts:
+  "www.example.com:$port":
+    strict-match: ON
+    paths:
+      /:
+        file.dir: examples/doc_root
+  "*.example.com:$port":
+    strict-match: ON
+    paths:
+      /:
+        file.dir: examples/doc_root.alternate
+  "*:$port":
+    paths:
+      /:
+        file.dir: examples/doc_root.third
+EOT
+    });
+
+    is fetch($server, "www.example.com"), md5_file("examples/doc_root/index.html"), "www.example.com";
+    is fetch($server, "xxx.example.com"), md5_file("examples/doc_root.alternate/index.txt"), "xxx.example.com";
+    is fetch($server, "example.org"), md5_file("examples/doc_root.third/index.txt"), "example.org";
+    is fetch($server, undef), md5_file("examples/doc_root.third/index.txt"), "no host header";
+};
+
+subtest "all strict match, with wildcard" => sub {
+    my $server = spawn_h2o(sub {
+        my ($port, $tls_port) = @_;
+        return << "EOT";
+hosts:
+  "www.example.com:$port":
+    strict-match: ON
+    paths:
+      /:
+        file.dir: examples/doc_root
+  "*.example.com:$port":
+    strict-match: ON
+    paths:
+      /:
+        file.dir: examples/doc_root.alternate
+  "*:$port":
+    strict-match: ON
+    paths:
+      /:
+        file.dir: examples/doc_root.third
+EOT
+    });
+
+    is fetch($server, "www.example.com"), md5_file("examples/doc_root/index.html"), "www.example.com";
+    is fetch($server, "xxx.example.com"), md5_file("examples/doc_root.alternate/index.txt"), "xxx.example.com";
+    is fetch($server, "example.org"), md5_file("examples/doc_root.third/index.txt"), "example.org";
+    is fetch($server, undef), md5_hex("not found"), "no host header";
 };
 
 done_testing();

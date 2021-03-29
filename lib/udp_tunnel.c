@@ -176,7 +176,7 @@ static void tunnel_on_write(h2o_tunnel_t *_tunnel, const void *bytes, size_t len
     tunnel->super.on_write_complete(&tunnel->super, NULL);
 }
 
-static void tunnel_proceed_read(struct st_h2o_tunnel_t *_tunnel)
+void tunnel_proceed_read(struct st_h2o_tunnel_t *_tunnel)
 {
     struct st_h2o_udp_tunnel_t *tunnel = (void *)_tunnel;
     h2o_socket_read_start(tunnel->sock, tunnel_socket_on_read);
@@ -216,6 +216,7 @@ h2o_tunnel_t *h2o_open_udp_tunnel_from_sa(h2o_loop_t *loop, struct sockaddr *add
 
     tunnel->sock->data = tunnel;
     h2o_buffer_init(&tunnel->egress.buf, &h2o_socket_buffer_prototype);
+    h2o_socket_read_start(tunnel->sock, tunnel_socket_on_read);
 
     return &tunnel->super;
 }

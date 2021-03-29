@@ -70,34 +70,31 @@ subtest "certificate-compression" => sub {
     is $resp, "hello";
 };
 
-subtest "raw-certificates-rsa" => sub {
-    my $guard = spawn_server("rsa", qw(-r - -i t/assets/hello.txt));
-    my $resp = `$cli -v -r t/assets/server.pub 127.0.0.1 $port 2> /dev/null`;
-    is $resp, "hello";
+# This test acts as an end-to-end testing of the certificate verifier of the OpenSSL backend.
+subtest "raw-public-keys" => sub {
+    my @key_types = do {
+        my $help = `$cli -h`;
+        $help =~ /^Supported signature algorithms:\s*(.*)\s*$/m
+            or die "failed to extract list of supported signature algorithms from $cli -h";
+        split /,\s*/, $1;
+    };
+    die "unexpected list of supported signature algorithms: @key_types"
+        unless grep /^rsa$/, @key_types;
+    for my $key_type (@key_types) {
+        subtest $key_type => sub {
+            my $guard = spawn_server($key_type, qw(-r - -i t/assets/hello.txt));
+            my $resp = `$cli -v -r t/assets/$key_type/pub.pem 127.0.0.1 $port 2> /dev/null`;
+            is $resp, "hello";
+        };
+    }
 };
-
-
-subtest "raw-certificates-ec" => sub {
-    my $guard = spawn_server("ec", qw(-r - -i t/assets/hello.txt));
-    my $resp = `$cli -v -r t/assets/ec256-pub.pem 127.0.0.1 $port 2> /dev/null`;
-    is $resp, "hello";
-};
-
 
 done_testing;
 
 sub spawn_server {
     my $key_type = shift;
-    my @cmd;
-    if ($key_type eq "rsa") {
-        my $ext = "crt";
-        $ext = "pub" if (grep(/^-r$/, @_));
-        @cmd = ($cli, "-k", "t/assets/server.key", "-c", "t/assets/server.$ext", @_, "127.0.0.1", $port);
-    } elsif ($key_type eq "ec") {
-        @cmd = ($cli, "-k", "t/assets/ec256-key-pair.pem", "-c", "t/assets/ec256-pub.pem", @_, "127.0.0.1", $port);
-    } else {
-        die "Unexpected key type: $key_type";
-    }
+    my $cert_type = grep(/^-r$/, @_) ? "pub" : "cert";
+    my @cmd = ($cli, "-k", "t/assets/$key_type/key.pem", "-c", "t/assets/$key_type/$cert_type.pem", @_, "127.0.0.1", $port);
     my $pid = fork;
     die "fork failed:$!"
         unless defined $pid;
