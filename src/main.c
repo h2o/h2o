@@ -647,10 +647,11 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
     X509 *cert;
     STACK_OF(X509) * cert_chain;
     int ret;
-    int verify_mode = 0;
+    int use_client_verify = 0;
     static ptls_openssl_verify_certificate_t vc;
     if (cipher_suites == NULL)
         cipher_suites = ptls_openssl_cipher_suites;
+
 
     *pctx = (struct st_fat_context_t){
         .ctx =
@@ -707,14 +708,12 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
         assert(key != NULL);
         cert = SSL_get_certificate(fakeconn);
         /* obtain peer verify mode */
-        verify_mode = (SSL_get_verify_mode(fakeconn) & SSL_VERIFY_PEER)? 1 : 0;
+        use_client_verify = (SSL_get_verify_mode(fakeconn) & SSL_VERIFY_PEER)? 1 : 0;
         SSL_free(fakeconn);
     }
 
-    if (verify_mode) {
+    if (use_client_verify) {
         pctx->ctx.require_client_authentication = 1;
-        /* log the flag */
-        fprintf(stderr, "client cert verification is Enabled.\n");
         /* set verify callback */
         X509_STORE *ca_store = SSL_CTX_get_cert_store(ssl_ctx);
         if (ptls_openssl_init_verify_certificate(&pctx->vc, ca_store) != 0) {
@@ -843,7 +842,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
     SSL_CTX *ssl_ctx = NULL;
     yoml_t **certificate_file, **key_file, **dh_file, **min_version, **max_version, **cipher_suite, **cipher_suite_tls13_node,
         **ocsp_update_cmd, **ocsp_update_interval_node, **ocsp_max_failures_node, **cipher_preference_node, **neverbleed_node,
-        **http2_origin_frame_node, **raw_pubkey_file, **client_verify_node, **client_CA_file;
+        **http2_origin_frame_node, **raw_pubkey_file, **client_CA_file;
 
     h2o_iovec_t *http2_origin_frame = NULL;
     long ssl_options = SSL_OP_ALL;
@@ -851,7 +850,6 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
     unsigned ocsp_max_failures = 3;              /* defaults to 3; permit 3 failures before temporary disabling OCSP stapling */
     int use_neverbleed = 1, use_picotls = 1;     /* enabled by default */
     ptls_cipher_suite_t **cipher_suite_tls13 = NULL;
-    int use_client_verify = 0;                   /* disabled by default */
 
     if (!listener_is_new) {
         if (listener->ssl.size != 0 && ssl_node == NULL) {
@@ -872,11 +870,11 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
                                        "certificate-file:s,raw-pubkey-file:s,min-version:s,minimum-version:s,max-version:s,"
                                        "maximum-version:s,cipher-suite:s,cipher-suite-tls1.3:a,ocsp-update-cmd:s,"
                                        "ocsp-update-interval:*,ocsp-max-failures:*,dh-file:s,cipher-preference:*,neverbleed:*,"
-                                       "http2-origin-frame:*,client-verify:*,client-CA-file:s",
+                                       "http2-origin-frame:*,client-CA-file:s",
                                        &key_file, &certificate_file, &raw_pubkey_file, &min_version, &min_version, &max_version,
                                        &max_version, &cipher_suite, &cipher_suite_tls13_node, &ocsp_update_cmd,
                                        &ocsp_update_interval_node, &ocsp_max_failures_node, &dh_file, &cipher_preference_node,
-                                       &neverbleed_node, &http2_origin_frame_node, &client_verify_node, &client_CA_file) != 0)
+                                       &neverbleed_node, &http2_origin_frame_node, &client_CA_file) != 0)
         return -1;
     if (certificate_file == NULL && raw_pubkey_file == NULL) {
         h2o_configurator_errprintf(cmd, *ssl_node, "either one of certificate-file or raw-public-key file must be specified");
@@ -895,8 +893,6 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
         }
     }
     if (neverbleed_node != NULL && (use_neverbleed = (int)h2o_configurator_get_one_of(cmd, *neverbleed_node, "off,on")) == -1)
-        return -1;
-    if (client_verify_node != NULL && (use_client_verify = (int)h2o_configurator_get_one_of(cmd, *client_verify_node, "off,on")) == -1)
         return -1;
     if (http2_origin_frame_node != NULL) {
         switch ((*http2_origin_frame_node)->type) {
@@ -998,22 +994,15 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
     ssl_ctx = SSL_CTX_new(SSLv23_server_method());
     SSL_CTX_set_options(ssl_ctx, ssl_options);
 
-    /* set up client certificate verification if enabled */
-    if (use_client_verify) {
-        SSL_CTX_set_verify(ssl_ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, h2o_ssl_peer_verify_callback);
+    /* set up client certificate verification if client_ca_file is configured */
+    if (client_ca_file != NULL) {
+        SSL_CTX_set_verify(ssl_ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, NULL);
 
-        if (client_CA_file != NULL) {
-            if (SSL_CTX_load_verify_locations(ssl_ctx, (*client_CA_file)->data.scalar, NULL) != 1) {
-                h2o_configurator_errprintf(cmd, *client_CA_file, "failed to load client CA file:%s\n",
-                                        (*client_CA_file)->data.scalar);
-                ERR_print_errors_cb(on_openssl_print_errors, stderr);
-                goto Error;
-            }
-        } else {
-            /* use default trust store */
-            if (SSL_CTX_set_default_verify_paths(ssl_ctx) != 1) {
-                goto Error;
-            }
+        if (SSL_CTX_load_verify_locations(ssl_ctx, (*client_ca_file)->data.scalar, NULL) != 1) {
+            h2o_configurator_errprintf(cmd, *client_ca_file, "failed to load client CA file:%s\n",
+                                    (*client_ca_file)->data.scalar);
+            ERR_print_errors_cb(on_openssl_print_errors, stderr);
+            goto Error;
         }
     }
 

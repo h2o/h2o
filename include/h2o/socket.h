@@ -363,10 +363,6 @@ void h2o_ssl_register_alpn_protocols(SSL_CTX *ctx, const h2o_iovec_t *protocols)
  */
 void h2o_ssl_register_npn_protocols(SSL_CTX *ctx, const char *protocols);
 /**
- * OpenSSL callback for peer certificate verification
- */
- int h2o_ssl_peer_verify_callback (int preok, X509_STORE_CTX *store_ctx);
-/**
  * Sets the DF bit if possible. Returns true when the operation was succcessful, or when the operating system does not provide the
  * necessary features. In either case, operation can continue with or without the DF bit being set.
  */

@@ -1507,11 +1507,6 @@ void h2o_ssl_register_npn_protocols(SSL_CTX *ctx, const char *protocols)
 
 #endif
 
-int h2o_ssl_peer_verify_callback (int preok, X509_STORE_CTX *store_ctx)
-{
-    return preok;
-}
-
 int h2o_socket_set_df_bit(int fd, int domain)
 {
 #define SETSOCKOPT(ip, optname, _optvar)                                                                                           \
