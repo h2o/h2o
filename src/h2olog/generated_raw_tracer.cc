@@ -946,7 +946,7 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
     json_write_pair_c(out_, STR_LIT("is-enc"), event->crypto_update_secret.is_enc);
     json_write_pair_c(out_, STR_LIT("epoch"), event->crypto_update_secret.epoch);
     json_write_pair_c(out_, STR_LIT("label"), event->crypto_update_secret.label, strlen(event->crypto_update_secret.label));
-    if (appdata_) {
+    if (include_appdata_) {
       json_write_pair_c(out_, STR_LIT("secret"), event->crypto_update_secret.secret, strlen(event->crypto_update_secret.secret));
     }
     break;
@@ -957,7 +957,7 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
     json_write_pair_c(out_, STR_LIT("conn"), event->crypto_send_key_update.master_id);
     json_write_pair_c(out_, STR_LIT("time"), event->crypto_send_key_update.at);
     json_write_pair_c(out_, STR_LIT("phase"), event->crypto_send_key_update.phase);
-    if (appdata_) {
+    if (include_appdata_) {
       json_write_pair_c(out_, STR_LIT("secret"), event->crypto_send_key_update.secret, strlen(event->crypto_send_key_update.secret));
     }
     break;
@@ -976,7 +976,7 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
     json_write_pair_c(out_, STR_LIT("conn"), event->crypto_receive_key_update.master_id);
     json_write_pair_c(out_, STR_LIT("time"), event->crypto_receive_key_update.at);
     json_write_pair_c(out_, STR_LIT("phase"), event->crypto_receive_key_update.phase);
-    if (appdata_) {
+    if (include_appdata_) {
       json_write_pair_c(out_, STR_LIT("secret"), event->crypto_receive_key_update.secret, strlen(event->crypto_receive_key_update.secret));
     }
     break;
@@ -987,7 +987,7 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
     json_write_pair_c(out_, STR_LIT("conn"), event->crypto_receive_key_update_prepare.master_id);
     json_write_pair_c(out_, STR_LIT("time"), event->crypto_receive_key_update_prepare.at);
     json_write_pair_c(out_, STR_LIT("phase"), event->crypto_receive_key_update_prepare.phase);
-    if (appdata_) {
+    if (include_appdata_) {
       json_write_pair_c(out_, STR_LIT("secret"), event->crypto_receive_key_update_prepare.secret, strlen(event->crypto_receive_key_update_prepare.secret));
     }
     break;
@@ -1009,7 +1009,7 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
     json_write_pair_c(out_, STR_LIT("conn"), event->packet_received.master_id);
     json_write_pair_c(out_, STR_LIT("time"), event->packet_received.at);
     json_write_pair_c(out_, STR_LIT("pn"), event->packet_received.pn);
-    if (appdata_) {
+    if (include_appdata_) {
       json_write_pair_c(out_, STR_LIT("decrypted"), event->packet_received.decrypted, (event->packet_received.decrypted_len < STR_LEN ? event->packet_received.decrypted_len : STR_LEN));
     }
     json_write_pair_c(out_, STR_LIT("decrypted-len"), event->packet_received.decrypted_len);
@@ -1389,7 +1389,7 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
     json_write_pair_c(out_, STR_LIT("seq"), seq_);
     json_write_pair_c(out_, STR_LIT("conn"), event->datagram_send.master_id);
     json_write_pair_c(out_, STR_LIT("time"), event->datagram_send.at);
-    if (appdata_) {
+    if (include_appdata_) {
       json_write_pair_c(out_, STR_LIT("payload"), event->datagram_send.payload, (event->datagram_send.payload_len < STR_LEN ? event->datagram_send.payload_len : STR_LEN));
     }
     json_write_pair_c(out_, STR_LIT("payload-len"), event->datagram_send.payload_len);
@@ -1400,7 +1400,7 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
     json_write_pair_c(out_, STR_LIT("seq"), seq_);
     json_write_pair_c(out_, STR_LIT("conn"), event->datagram_receive.master_id);
     json_write_pair_c(out_, STR_LIT("time"), event->datagram_receive.at);
-    if (appdata_) {
+    if (include_appdata_) {
       json_write_pair_c(out_, STR_LIT("payload"), event->datagram_receive.payload, (event->datagram_receive.payload_len < STR_LEN ? event->datagram_receive.payload_len : STR_LEN));
     }
     json_write_pair_c(out_, STR_LIT("payload-len"), event->datagram_receive.payload_len);
@@ -1517,7 +1517,7 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
     json_write_pair_c(out_, STR_LIT("time"), event->stream_on_receive.at);
     json_write_pair_c(out_, STR_LIT("stream-id"), event->stream_on_receive.stream_id);
     json_write_pair_c(out_, STR_LIT("off"), event->stream_on_receive.off);
-    if (appdata_) {
+    if (include_appdata_) {
       json_write_pair_c(out_, STR_LIT("src"), event->stream_on_receive.src, (event->stream_on_receive.src_len < STR_LEN ? event->stream_on_receive.src_len : STR_LEN));
     }
     json_write_pair_c(out_, STR_LIT("src-len"), event->stream_on_receive.src_len);
@@ -1555,11 +1555,11 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
     json_write_pair_c(out_, STR_LIT("seq"), seq_);
     json_write_pair_c(out_, STR_LIT("conn-id"), event->receive_request_header.conn_id);
     json_write_pair_c(out_, STR_LIT("req-id"), event->receive_request_header.req_id);
-    if (appdata_) {
+    if (include_appdata_) {
       json_write_pair_c(out_, STR_LIT("name"), event->receive_request_header.name, (event->receive_request_header.name_len < STR_LEN ? event->receive_request_header.name_len : STR_LEN));
     }
     json_write_pair_c(out_, STR_LIT("name-len"), event->receive_request_header.name_len);
-    if (appdata_) {
+    if (include_appdata_) {
       json_write_pair_c(out_, STR_LIT("value"), event->receive_request_header.value, (event->receive_request_header.value_len < STR_LEN ? event->receive_request_header.value_len : STR_LEN));
     }
     json_write_pair_c(out_, STR_LIT("value-len"), event->receive_request_header.value_len);
@@ -1581,11 +1581,11 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
     json_write_pair_c(out_, STR_LIT("seq"), seq_);
     json_write_pair_c(out_, STR_LIT("conn-id"), event->send_response_header.conn_id);
     json_write_pair_c(out_, STR_LIT("req-id"), event->send_response_header.req_id);
-    if (appdata_) {
+    if (include_appdata_) {
       json_write_pair_c(out_, STR_LIT("name"), event->send_response_header.name, (event->send_response_header.name_len < STR_LEN ? event->send_response_header.name_len : STR_LEN));
     }
     json_write_pair_c(out_, STR_LIT("name-len"), event->send_response_header.name_len);
-    if (appdata_) {
+    if (include_appdata_) {
       json_write_pair_c(out_, STR_LIT("value"), event->send_response_header.value, (event->send_response_header.value_len < STR_LEN ? event->send_response_header.value_len : STR_LEN));
     }
     json_write_pair_c(out_, STR_LIT("value-len"), event->send_response_header.value_len);
@@ -1645,7 +1645,7 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
     json_write_pair_n(out_, STR_LIT("type"), STR_LIT("h3-frame-receive"));
     json_write_pair_c(out_, STR_LIT("seq"), seq_);
     json_write_pair_c(out_, STR_LIT("frame-type"), event->h3_frame_receive.frame_type);
-    if (appdata_) {
+    if (include_appdata_) {
       json_write_pair_c(out_, STR_LIT("bytes"), event->h3_frame_receive.bytes, (event->h3_frame_receive.bytes_len < STR_LEN ? event->h3_frame_receive.bytes_len : STR_LEN));
     }
     json_write_pair_c(out_, STR_LIT("bytes-len"), event->h3_frame_receive.bytes_len);
@@ -1701,7 +1701,7 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
     json_write_pair_c(out_, STR_LIT("seq"), seq_);
     json_write_pair_c(out_, STR_LIT("tunnel"), event->tunnel_on_read.tunnel);
     json_write_pair_c(out_, STR_LIT("err"), event->tunnel_on_read.err, strlen(event->tunnel_on_read.err));
-    if (appdata_) {
+    if (include_appdata_) {
       json_write_pair_c(out_, STR_LIT("bytes"), event->tunnel_on_read.bytes, (event->tunnel_on_read.bytes_len < STR_LEN ? event->tunnel_on_read.bytes_len : STR_LEN));
     }
     json_write_pair_c(out_, STR_LIT("bytes-len"), event->tunnel_on_read.bytes_len);
@@ -1719,7 +1719,7 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
     json_write_pair_n(out_, STR_LIT("type"), STR_LIT("tunnel-write"));
     json_write_pair_c(out_, STR_LIT("seq"), seq_);
     json_write_pair_c(out_, STR_LIT("tunnel"), event->tunnel_write.tunnel);
-    if (appdata_) {
+    if (include_appdata_) {
       json_write_pair_c(out_, STR_LIT("bytes"), event->tunnel_write.bytes, (event->tunnel_write.bytes_len < STR_LEN ? event->tunnel_write.bytes_len : STR_LEN));
     }
     json_write_pair_c(out_, STR_LIT("bytes-len"), event->tunnel_write.bytes_len);
