@@ -825,7 +825,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
     if (h2o_configurator_parse_mapping(cmd, *ssl_node, "key-file:s",
                                        "certificate-file:s,raw-pubkey-file:s,min-version:s,minimum-version:s,max-version:s,"
                                        "maximum-version:s,cipher-suite:s,ocsp-update-cmd:s,ocsp-update-interval:*,"
-                                       "ocsp-max-failures:*,dh-file:s,cipher-preference:*,neverbleed:*,http2-origin-frame:*,client-verify:*,client-CA-file:s",
+                                       "ocsp-max-failures:*,dh-file:s,cipher-preference:*,neverbleed:*,http2-origin-frame:*,client-verify:*,client-ca-file:s",
                                        &key_file, &certificate_file, &raw_pubkey_file, &min_version, &min_version, &max_version,
                                        &max_version, &cipher_suite, &ocsp_update_cmd, &ocsp_update_interval_node,
                                        &ocsp_max_failures_node, &dh_file, &cipher_preference_node, &neverbleed_node,
