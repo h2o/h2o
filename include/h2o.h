@@ -93,7 +93,6 @@ extern "C" {
 #define H2O_DEFAULT_HTTP3_ACTIVE_STREAM_WINDOW_SIZE H2O_DEFAULT_HTTP2_ACTIVE_STREAM_WINDOW_SIZE
 #define H2O_DEFAULT_PROXY_IO_TIMEOUT_IN_SECS 30
 #define H2O_DEFAULT_PROXY_IO_TIMEOUT (H2O_DEFAULT_PROXY_IO_TIMEOUT_IN_SECS * 1000)
-#define H2O_DEFAULT_PROXY_TUNNEL_TIMEOUT_IN_SECS 300
 #define H2O_DEFAULT_PROXY_SSL_SESSION_CACHE_CAPACITY 4096
 #define H2O_DEFAULT_PROXY_SSL_SESSION_CACHE_DURATION 86400000 /* 24 hours */
 #define H2O_DEFAULT_PROXY_HTTP2_MAX_CONCURRENT_STREAMS 100
@@ -1018,7 +1017,10 @@ typedef int (*h2o_write_req_cb)(void *ctx, h2o_iovec_t chunk, int is_end_stream)
  * `is_end_stream`.
  */
 typedef void (*h2o_proceed_req_cb)(h2o_req_t *req, size_t bytes_written, h2o_send_state_t send_state);
-
+/**
+ *
+ */
+typedef void (*h2o_forward_datagram_cb)(h2o_req_t *req, h2o_iovec_t *datagrams, size_t num_datagrams);
 
 #define H2O_SEND_SERVER_TIMING_BASIC 1
 #define H2O_SEND_SERVER_TIMING_PROXY 2
@@ -1190,12 +1192,6 @@ struct st_h2o_req_t {
     unsigned remaining_delegations;
 
     /**
-     * Optional callback used to establish a tunnel. When a tunnel is being established to upstream, the generator fills the
-     * response headers, then calls this function directly, bypassing the ordinary `h2o_send` chain.
-     */
-    void (*establish_tunnel)(h2o_req_t *req, h2o_tunnel_t *tunnel, uint64_t idle_timeout);
-
-    /**
      * environment variables
      */
     h2o_iovec_vector_t env;
@@ -1238,6 +1234,11 @@ struct st_h2o_req_t {
      * if h2o_process_request has been called
      */
     unsigned char process_called : 1;
+    /**
+     * Indicates if requested to serve something other than HTTP (e.g., websocket, upgrade, CONNECT, ...) using the streaming API.
+     * When the protocol handler returns a successful response, filters are skipped.
+     */
+    unsigned char is_tunnel_req : 1;
 
     /**
      * whether if the response should include server-timing header. Logical OR of H2O_SEND_SERVER_TIMING_*
@@ -1272,6 +1273,13 @@ struct st_h2o_req_t {
      * callback and context for receiving more request body (see h2o_handler_t::supports_request_streaming for details)
      */
     h2o_proceed_req_cb proceed_req;
+
+    /**
+     * Callbacks used for forwarding datagrams. Write-side is assumed to use `write_req.ctx` for retaining the context if necessary.
+     */
+    struct {
+        h2o_forward_datagram_cb write_, read_;
+    } forward_datagram;
 
     /* internal structure */
     h2o_generator_t *_generator;

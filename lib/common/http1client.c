@@ -375,35 +375,37 @@ static void on_head(h2o_socket_t *sock, const char *err)
         }
     }
 
-    /* parse the headers */
+    /* recognize hop-by-hop response headers */
     reader = on_body_until_close;
-    client->_do_keepalive = minor_version >= 1;
-    for (i = 0; i != num_headers; ++i) {
-        if (headers[i].name == &H2O_TOKEN_CONNECTION->buf) {
-            if (h2o_contains_token(headers[i].value.base, headers[i].value.len, H2O_STRLIT("keep-alive"), ',')) {
-                client->_do_keepalive = 1;
-            } else {
-                client->_do_keepalive = 0;
+    if (!h2o_httpclient__tunnel_is_ready(&client->super, http_status)) {
+        client->_do_keepalive = minor_version >= 1;
+        for (i = 0; i != num_headers; ++i) {
+            if (headers[i].name == &H2O_TOKEN_CONNECTION->buf) {
+                if (h2o_contains_token(headers[i].value.base, headers[i].value.len, H2O_STRLIT("keep-alive"), ',')) {
+                    client->_do_keepalive = 1;
+                } else {
+                    client->_do_keepalive = 0;
+                }
+            } else if (headers[i].name == &H2O_TOKEN_TRANSFER_ENCODING->buf) {
+                if (h2o_memis(headers[i].value.base, headers[i].value.len, H2O_STRLIT("chunked"))) {
+                    /* precond: _body_decoder.chunked is zero-filled */
+                    client->_body_decoder.chunked.decoder.consume_trailer = 1;
+                    reader = on_body_chunked;
+                } else if (h2o_memis(headers[i].value.base, headers[i].value.len, H2O_STRLIT("identity"))) {
+                    /* continue */
+                } else {
+                    on_error(client, h2o_httpclient_error_http1_unexpected_transfer_encoding);
+                    return;
+                }
+            } else if (headers[i].name == &H2O_TOKEN_CONTENT_LENGTH->buf) {
+                if ((client->_body_decoder.content_length.bytesleft = h2o_strtosize(headers[i].value.base, headers[i].value.len)) ==
+                    SIZE_MAX) {
+                    on_error(client, h2o_httpclient_error_invalid_content_length);
+                    return;
+                }
+                if (reader != on_body_chunked)
+                    reader = on_body_content_length;
             }
-        } else if (headers[i].name == &H2O_TOKEN_TRANSFER_ENCODING->buf) {
-            if (h2o_memis(headers[i].value.base, headers[i].value.len, H2O_STRLIT("chunked"))) {
-                /* precond: _body_decoder.chunked is zero-filled */
-                client->_body_decoder.chunked.decoder.consume_trailer = 1;
-                reader = on_body_chunked;
-            } else if (h2o_memis(headers[i].value.base, headers[i].value.len, H2O_STRLIT("identity"))) {
-                /* continue */
-            } else {
-                on_error(client, h2o_httpclient_error_http1_unexpected_transfer_encoding);
-                return;
-            }
-        } else if (headers[i].name == &H2O_TOKEN_CONTENT_LENGTH->buf) {
-            if ((client->_body_decoder.content_length.bytesleft = h2o_strtosize(headers[i].value.base, headers[i].value.len)) ==
-                SIZE_MAX) {
-                on_error(client, h2o_httpclient_error_invalid_content_length);
-                return;
-            }
-            if (reader != on_body_chunked)
-                reader = on_body_content_length;
         }
     }
 
@@ -411,7 +413,7 @@ static void on_head(h2o_socket_t *sock, const char *err)
     client->super.timings.response_start_at = h2o_gettimeofday(client->super.ctx->loop);
 
     /* RFC 2616 4.4 */
-    if (client->_method_is_head || http_status == 101 || http_status == 204 || http_status == 304) {
+    if (client->_method_is_head || http_status == 204 || http_status == 304) {
         client->state.res = STREAM_STATE_CLOSED;
         client->super.timings.response_end_at = h2o_gettimeofday(client->super.ctx->loop);
     } else {
@@ -427,23 +429,11 @@ static void on_head(h2o_socket_t *sock, const char *err)
                                         .num_headers = num_headers,
                                         .header_requires_dup = 1};
 
-    /* provide underlying socket as a tunnel, if necessary */
-    if (h2o_httpclient__tunnel_is_ready(&client->super, http_status)) {
-        on_head.tunnel = &h2o_socket_tunnel_create(client->sock)->super;
-        client->sock = NULL;
-    }
-
     /* call the callback */
     client->super._cb.on_body = client->super._cb.on_head(
         &client->super, client->state.res == STREAM_STATE_CLOSED ? h2o_httpclient_error_is_eos : NULL, &on_head);
 
-    if (on_head.tunnel != NULL) {
-        /* upgraded to tunnel; dispose of the httpclient instance, feed first chunk of tunnel data to the client, and return */
-        assert(client->super._cb.on_body == NULL);
-        close_client(client);
-        h2o_socket_tunnel_start((h2o_socket_tunnel_t *)on_head.tunnel, rlen);
-        return;
-    } else if (client->state.res == STREAM_STATE_CLOSED) {
+    if (client->state.res == STREAM_STATE_CLOSED) {
         close_response(client);
         return;
     } else if (client->super._cb.on_body == NULL) {
@@ -482,16 +472,21 @@ static void on_whole_request_sent(h2o_socket_t *sock, const char *err)
     client->state.req = STREAM_STATE_CLOSED;
     client->super.timings.request_end_at = h2o_gettimeofday(client->super.ctx->loop);
 
-    switch (client->state.res) {
-    case STREAM_STATE_HEAD:
-        client->super._timeout.cb = on_head_first_byte_timeout;
-        h2o_timer_link(client->super.ctx->loop, client->super.ctx->first_byte_timeout, &client->super._timeout);
-        break;
-    case STREAM_STATE_BODY:
-        break;
-    case STREAM_STATE_CLOSED:
-        close_client(client);
-        break;
+    if (client->super.upgrade_to != NULL) {
+        /* TODO use shutdown(2) to signal the peer that our send side has been closed, but continue reading on the receive side. */
+        on_error(client, h2o_httpclient_error_is_eos);
+    } else {
+        switch (client->state.res) {
+        case STREAM_STATE_HEAD:
+            client->super._timeout.cb = on_head_first_byte_timeout;
+            h2o_timer_link(client->super.ctx->loop, client->super.ctx->first_byte_timeout, &client->super._timeout);
+            break;
+        case STREAM_STATE_BODY:
+            break;
+        case STREAM_STATE_CLOSED:
+            close_client(client);
+            break;
+        }
     }
 }
 

@@ -171,20 +171,21 @@ static void build_request(h2o_req_t *req, h2o_iovec_t *method, h2o_url_t *url, h
         }
     }
 
-    /* CL or TE? Depends on whether we're streaming the request body or
-       not, and if CL was advertised in the original request */
-    if (req->proceed_req == NULL) {
-        if (req->entity.base != NULL || req_requires_content_length(req)) {
-            h2o_iovec_t cl_buf = build_content_length(&req->pool, req->entity.len);
-            h2o_add_header(&req->pool, headers, H2O_TOKEN_CONTENT_LENGTH, NULL, cl_buf.base, cl_buf.len);
-        }
-    } else {
-        if (req->content_length != SIZE_MAX) {
-            h2o_iovec_t cl_buf = build_content_length(&req->pool, req->content_length);
-            h2o_add_header(&req->pool, headers, H2O_TOKEN_CONTENT_LENGTH, NULL, cl_buf.base, cl_buf.len);
-        } else if (props->chunked != NULL) {
-            *(props->chunked) = 1;
-            h2o_add_header(&req->pool, headers, H2O_TOKEN_TRANSFER_ENCODING, NULL, H2O_STRLIT("chunked"));
+    /* setup CL or TE, if necessary; chunked encoding is used when the request body is stream and content-length is unknown */
+    if (!req->is_tunnel_req) {
+        if (req->proceed_req == NULL) {
+            if (req->entity.base != NULL || req_requires_content_length(req)) {
+                h2o_iovec_t cl_buf = build_content_length(&req->pool, req->entity.len);
+                h2o_add_header(&req->pool, headers, H2O_TOKEN_CONTENT_LENGTH, NULL, cl_buf.base, cl_buf.len);
+            }
+        } else {
+            if (req->content_length != SIZE_MAX) {
+                h2o_iovec_t cl_buf = build_content_length(&req->pool, req->content_length);
+                h2o_add_header(&req->pool, headers, H2O_TOKEN_CONTENT_LENGTH, NULL, cl_buf.base, cl_buf.len);
+            } else if (props->chunked != NULL) {
+                *props->chunked = 1;
+                h2o_add_header(&req->pool, headers, H2O_TOKEN_TRANSFER_ENCODING, NULL, H2O_STRLIT("chunked"));
+            }
         }
     }
 
@@ -526,14 +527,9 @@ static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errs
     if (!seen_date_header && emit_missing_date_header)
         h2o_resp_add_date_header(req);
 
-    if (args->tunnel != NULL) {
-        h2o_httpclient_ctx_t *client_ctx = get_client_ctx(req);
-        assert(client_ctx->tunnel_enabled);
-        if (req->upgrade.base != NULL)
-            h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_UPGRADE, NULL, req->upgrade.base, req->upgrade.len);
-        req->establish_tunnel(req, args->tunnel, client_ctx->io_timeout);
-        detach_client(self);
-        return NULL;
+    if (req->upgrade.base != NULL && req->res.status == 101) {
+        assert(req->is_tunnel_req);
+        h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_UPGRADE, NULL, req->upgrade.base, req->upgrade.len);
     }
 
     /* declare the start of the response */
@@ -621,10 +617,6 @@ static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *e
         detach_client(self);
         h2o_req_log_error(self->src_req, "lib/core/proxy.c", "%s", errstr);
         h2o_send_error_502(self->src_req, "Gateway Error", errstr, 0);
-        if (self->src_req->proceed_req != NULL) {
-            self->src_req->proceed_req(self->src_req, 0, H2O_SEND_STATE_ERROR);
-        }
-
         return NULL;
     }
 
@@ -724,18 +716,21 @@ void h2o__proxy_process_request(h2o_req_t *req)
         h2o_url_init(&target_buf, req->scheme, req->authority, h2o_iovec_init(H2O_STRLIT("/")));
 
     const char *upgrade_to = NULL;
-    int can_use_tunnel = client_ctx->tunnel_enabled && req->establish_tunnel != NULL;
-    if (h2o_memis(req->method.base, req->method.len, H2O_STRLIT("CONNECT"))) {
-        /* CONNECT requests cannot be forwarded unless configured as such */
-        if (!can_use_tunnel) {
-            h2o_send_error_405(req, "Method Not Allowed", "refusing CONNECT", H2O_SEND_ERROR_HTTP1_CLOSE_CONNECTION);
-            return;
+    if (req->is_tunnel_req) {
+        if (req->upgrade.base != NULL) {
+            /* upgrade requests (e.g. websocket) are either tunnelled or converted to a normal request (by omitting the Upgrade
+             * header field)  depending on the configuration */
+            if (client_ctx->tunnel_enabled)
+                upgrade_to = h2o_strdup(&req->pool, req->upgrade.base, req->upgrade.len).base;
+        } else {
+            /* CONNECT request; process as a CONNECT upgrade or reject */
+            if (client_ctx->tunnel_enabled) {
+                upgrade_to = h2o_httpclient_upgrade_to_connect;
+            } else {
+                h2o_send_error_405(req, "Method Not Allowed", "refusing CONNECT", H2O_SEND_ERROR_HTTP1_CLOSE_CONNECTION);
+                return;
+            }
         }
-        upgrade_to = h2o_httpclient_upgrade_to_connect;
-    } else if (h2o_lcstris(req->upgrade.base, req->upgrade.len, H2O_STRLIT("websocket")) && can_use_tunnel) {
-        /* websocket requests are converted to a normal request (omitting the Upgrade header field), or will have the upgrade header
-         * set */
-        upgrade_to = "websocket";
     }
     struct rp_generator_t *self = proxy_send_prepare(req);
 
