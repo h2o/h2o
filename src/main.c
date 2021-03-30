@@ -2577,10 +2577,15 @@ static h2o_quic_conn_t *on_http3_accept(h2o_quic_ctx_t *_ctx, quicly_address_t *
     /* send retry if necessary */
     if (token == NULL || token->type != QUICLY_ADDRESS_TOKEN_TYPE_RETRY) {
         int send_retry = ctx->send_retry;
-        if (H2O_EBPF_QUIC_SEND_RETRY_ON(flags)) {
+        switch (flags & H2O_EBPF_FLAGS_QUIC_SEND_RETRY_MASK) {
+        case H2O_EBPF_FLAGS_QUIC_SEND_RETRY_BITS_ON:
             send_retry = 1;
-        } else if (H2O_EBPF_QUIC_SEND_RETRY_OFF(flags)) {
+            break;
+        case H2O_EBPF_FLAGS_QUIC_SEND_RETRY_BITS_OFF:
             send_retry = 0;
+            break;
+        default:
+            break;
         }
         if (send_retry) {
             static __thread struct {
