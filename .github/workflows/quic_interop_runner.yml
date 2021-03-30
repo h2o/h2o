@@ -24,11 +24,10 @@ jobs:
 
     - name: Build and deploy
       run: |
-        if [ "${{ github.event_name }}" != "push" ]
+        if [ "${{ github.event_name }}" == "push" ]
         then
-          export TAG=canary
-        else
           echo "on push to $GITHUB_REF"
           export TAG=latest
+          export PUBLISH=1
         fi
         misc/quic-interop-runner/deploy.sh
