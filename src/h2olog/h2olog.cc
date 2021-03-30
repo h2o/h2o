@@ -48,6 +48,7 @@ Optional arguments:
     -s RESPONSE_HEADER_NAME A response header name to show, e.g. "content-type"
     -t TRACEPOINT A tracepoint, or fully-qualified probe name, to show,
                   including a glob pattern, e.g. "quicly:accept", "h2o:*"
+    -a Include application data which are omitted by default
     -r Run without dropping root privilege
     -w Path to write the output (default: stdout)
 
@@ -232,11 +233,12 @@ int main(int argc, char **argv)
     int debug = 0;
     bool preserve_root = false;
     bool list_usdts = false;
+    bool include_appdata = false;
     FILE *outfp = stdout;
     std::vector<std::string> response_header_filters;
     int c;
     pid_t h2o_pid = -1;
-    while ((c = getopt(argc, argv, "hHdrlp:t:s:w:")) != -1) {
+    while ((c = getopt(argc, argv, "hHdrlap:t:s:w:")) != -1) {
         switch (c) {
         case 'H':
             tracer.reset(create_http_tracer());
@@ -260,6 +262,9 @@ int main(int argc, char **argv)
                 fprintf(stderr, "Error: failed to open %s: %s", optarg, strerror(errno));
                 exit(EXIT_FAILURE);
             }
+            break;
+        case 'a':
+            include_appdata = true;
             break;
         case 'd':
             debug++;
@@ -303,7 +308,7 @@ int main(int argc, char **argv)
         exit(EXIT_FAILURE);
     }
 
-    tracer->init(outfp);
+    tracer->init(outfp, include_appdata);
 
     std::vector<std::string> cflags({
         make_pid_cflag("H2OLOG_H2O_PID", h2o_pid),
