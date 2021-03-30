@@ -158,7 +158,7 @@ def parse_d(context: dict, path: Path, block_probes: set = None):
             for st_field_access, st_field_name in struct_map[st_name]:
               flat_args_map[st_field_name or st_field_access] = "typeof_%s__%s" % (st_name, st_field_name or st_field_access)
           else:
-             # decoes the struct into members in the user space (json.cc).
+             # decodes the struct into members in the user space (json.cc).
             flat_args_map[arg_name] = "struct %s" % st_name
         else:
           flat_args_map[arg_name] = arg_type
