@@ -377,7 +377,7 @@ static int udp_write_stream(void *_self, h2o_iovec_t chunk, int is_end_stream)
         int skip = 0;
         size_t to_consume;
         h2o_iovec_t datagram = udp_get_next_chunk(chunk.base + off, chunk.len - off, &to_consume, &skip);
-        if (datagram.len == 0)
+        if (datagram.base == NULL)
             break;
         if (!skip)
             udp_write_core(self, datagram);
