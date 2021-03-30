@@ -25,7 +25,7 @@ struct st_h2o_tunnel_t;
 provider h2o {
     /**
      * When a new connection is accepted, h2o invokes this probe to obtain the flags to be associated to the new connection.
-     * The probe MUST write the result into the h2o_return map; see ebpf.h for details. original_flags contains the flags that will
+     * The probe MUST write the result into the h2o_return map; see ebpf.h for details. `original_flags` contain the flags that will
      * be associated when the probe is not attached.
      */
     probe socket_lookup_flags(pid_t tid, uint64_t original_flags, struct st_h2o_ebpf_map_key_t *info);
