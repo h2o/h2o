@@ -4104,8 +4104,9 @@ int trace_h2o__socket_lookup_flags(struct pt_regs *ctx) {
   if (skip_tracing) {
     flags |= H2O_EBPF_FLAGS_SKIP_TRACING_BIT;
   }
-  if (h2o_return.insert(&event.socket_lookup_flags.tid, &flags) != 0)
-    bpf_trace_printk("failed to insert 0x%lx to h2o_return in trace_h2o__socket_lookup_flags\n", flags);
+  int64_t ret = h2o_return.insert(&event.socket_lookup_flags.tid, &flags);
+  if (ret != 0)
+    bpf_trace_printk("failed to insert 0x%lx in trace_h2o__socket_lookup_flags with errno=%ld\n", flags, -ret);
 #endif
 
   return 0;
