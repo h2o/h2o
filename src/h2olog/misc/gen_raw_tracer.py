@@ -71,9 +71,6 @@ block_fields = {
     "quicly:crypto_receive_key_update_prepare": set(["secret"]),
 
     "h2o:h3_packet_receive": set(["bytes"]),
-
-    # they are metadata to control how h2olog's connection-level filters work.
-    "h2o:socket_lookup_flags": set(["tid", "original_flags"]),
 }
 
 # The block list for probes.
@@ -260,27 +257,25 @@ int %s(struct pt_regs *ctx) {
   if fully_specified_probe_name == "h2o:socket_lookup_flags":
     c += r"""
 #ifdef H2OLOG_SAMPLING_RATE
-  pid_t tid;
-  uint64_t flags;
-  bpf_usdt_readarg(1, ctx, &tid);
-  bpf_usdt_readarg(2, ctx, &flags);
+  uint64_t flags = event.socket_lookup_flags.original_flags;
   int skip_tracing = bpf_get_prandom_u32() > (H2OLOG_SAMPLING_RATE * U32_MAX);
   if (skip_tracing) {
     flags |= H2O_EBPF_FLAGS_SKIP_TRACING_BIT;
   }
-  h2o_return.insert(&tid, &flags);
-  if (skip_tracing)
-    return 0;
+  if (h2o_return.insert(&event.socket_lookup_flags.tid, &flags) != 0)
+    bpf_trace_printk("failed to insert 0x%%lx to h2o_return in %s\n", flags);
 #endif
-"""
-
-  c += r"""
+""" % (tracer_name)
+  else:
+    c += r"""
   if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
     bpf_trace_printk("failed to perf_submit in %s\n");
+""" % (tracer_name)
 
+  c += r"""
   return 0;
 }
-""" % (tracer_name)
+"""
   return c
 
 
@@ -488,6 +483,9 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
     metadata = probe_metadata[probe_name]
     fully_specified_probe_name = metadata["fully_specified_probe_name"]
 
+    if fully_specified_probe_name == "h2o:socket_lookup_flags":
+      continue
+
     block_field_set = block_fields.get(fully_specified_probe_name, None)
     flat_args_map = metadata["flat_args_map"]
 
@@ -545,6 +543,7 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
 extern "C" {
 #include <sys/time.h>
 #include "quicly.h"
+#include "h2o/ebpf.h"
 }
 
 #include <cstdlib>

@@ -3,6 +3,7 @@
 extern "C" {
 #include <sys/time.h>
 #include "quicly.h"
+#include "h2o/ebpf.h"
 }
 
 #include <cstdlib>
@@ -642,6 +643,8 @@ struct h2olog_event_t {
       size_t size;
     } conn_stats;
     struct { // h2o:socket_lookup_flags
+      pid_t tid;
+      uint64_t original_flags;
       struct st_h2o_ebpf_map_key_t info;
     } socket_lookup_flags;
     struct { // h2o:receive_request
@@ -1523,13 +1526,6 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
     json_write_pair_c(out_, STR_LIT("size"), event->conn_stats.size);
     break;
   }
-  case H2OLOG_EVENT_ID_H2O_SOCKET_LOOKUP_FLAGS: { // h2o:socket_lookup_flags
-    json_write_pair_n(out_, STR_LIT("type"), STR_LIT("socket-lookup-flags"));
-    json_write_pair_c(out_, STR_LIT("seq"), seq_);
-    json_write_pair_c(out_, STR_LIT("info"), event->socket_lookup_flags.info);
-    json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
-    break;
-  }
   case H2OLOG_EVENT_ID_H2O_RECEIVE_REQUEST: { // h2o:receive_request
     json_write_pair_n(out_, STR_LIT("type"), STR_LIT("receive-request"));
     json_write_pair_c(out_, STR_LIT("seq"), seq_);
@@ -2297,6 +2293,8 @@ struct h2olog_event_t {
       size_t size;
     } conn_stats;
     struct { // h2o:socket_lookup_flags
+      pid_t tid;
+      uint64_t original_flags;
       struct st_h2o_ebpf_map_key_t info;
     } socket_lookup_flags;
     struct { // h2o:receive_request
@@ -4092,28 +4090,23 @@ int trace_h2o__socket_lookup_flags(struct pt_regs *ctx) {
   const void *buf = NULL;
   struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_H2O_SOCKET_LOOKUP_FLAGS };
 
-  // pid_t tid (ignored)
-  // uint64_t original_flags (ignored)
+  // pid_t tid
+  bpf_usdt_readarg(1, ctx, &event.socket_lookup_flags.tid);
+  // uint64_t original_flags
+  bpf_usdt_readarg(2, ctx, &event.socket_lookup_flags.original_flags);
   // struct st_h2o_ebpf_map_key_t * info
   bpf_usdt_readarg(3, ctx, &buf);
   bpf_probe_read(&event.socket_lookup_flags.info, sizeof_st_h2o_ebpf_map_key_t, buf);
 
 #ifdef H2OLOG_SAMPLING_RATE
-  pid_t tid;
-  uint64_t flags;
-  bpf_usdt_readarg(1, ctx, &tid);
-  bpf_usdt_readarg(2, ctx, &flags);
+  uint64_t flags = event.socket_lookup_flags.original_flags;
   int skip_tracing = bpf_get_prandom_u32() > (H2OLOG_SAMPLING_RATE * U32_MAX);
   if (skip_tracing) {
     flags |= H2O_EBPF_FLAGS_SKIP_TRACING_BIT;
   }
-  h2o_return.insert(&tid, &flags);
-  if (skip_tracing)
-    return 0;
+  if (h2o_return.insert(&event.socket_lookup_flags.tid, &flags) != 0)
+    bpf_trace_printk("failed to insert 0x%lx to h2o_return in trace_h2o__socket_lookup_flags\n", flags);
 #endif
-
-  if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
-    bpf_trace_printk("failed to perf_submit in trace_h2o__socket_lookup_flags\n");
 
   return 0;
 }

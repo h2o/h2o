@@ -150,58 +150,6 @@ void json_write_pair_c(FILE *out, const char *name, size_t name_len, const quicl
     fputc('"', out);
 }
 
-void json_write_pair_c(std::FILE *out, const char *name, size_t name_len, const h2o_ebpf_map_key_t &value)
-{
-    // unpack key into sock_type, remote and local
-    // sa_family is used to determin the address family.
-    char full_name[256];
-    size_t full_name_len;
-
-    // sock_type
-    full_name_len = snprintf(full_name, sizeof(full_name), "%*s-sock-type", (int)name_len, name);
-
-    if (value.protocol == SOCK_STREAM) {
-        json_write_pair_c(out, full_name, full_name_len, "SOCK_STREAM", strlen("SOCK_STREAM"));
-    } else if (value.protocol == SOCK_DGRAM) {
-        json_write_pair_c(out, full_name, full_name_len, "SOCK_DGRAM", strlen("SOCK_DGRAM"));
-    } else {
-        // unknown socket type. maybe not reached.
-        json_write_pair_c(out, full_name, full_name_len, value.protocol);
-    }
-
-    // dest, src
-    for (const auto &entry : {
-        std::make_pair("dest", value.local),
-        std::make_pair("src", value.remote),
-    }) {
-        full_name_len = snprintf(full_name, sizeof(full_name), "%*s-%s", (int)name_len, name, entry.first);
-
-        // it converts h2o_ebpf_address_t into sockaddr_in/in6 first.
-        if (value.family == 4) {
-            quicly_address_t addr = {
-                .sin = {
-                    .sin_family = AF_INET,
-                    .sin_port = entry.second.port,
-                },
-            };
-            memcpy(&addr.sin.sin_addr, entry.second.ip, sizeof(addr.sin.sin_addr));
-            json_write_pair_c(out, full_name, full_name_len, addr);
-        } else if (value.family == 6) {
-            quicly_address_t addr = {
-                .sin6 = {
-                    .sin6_family = AF_INET6,
-                    .sin6_port = entry.second.port,
-                },
-            };
-            memcpy(&addr.sin6.sin6_addr, entry.second.ip, sizeof(addr.sin6.sin6_addr));
-            json_write_pair_c(out, full_name, full_name_len, addr);
-        } else {
-            // unknown address family. maybe not reached.
-            json_write_pair_c(out, full_name, full_name_len, (void*)nullptr);
-        }
-    }
-}
-
 void json_write_pair_c(FILE *out, const char *name, size_t name_len, const void *value)
 {
     fputc(',', out);

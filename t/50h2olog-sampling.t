@@ -49,17 +49,6 @@ EOT
 
 diag "quic port: $quic_port / port: $server->{port} / tls port: $server->{tls_port}";
 
-sub debug_socket_lookup_flags {
-  my($trace) = @_;
-
-  my @socket_lookup_flags_events = grep { /"type"\s*:\s*"socket-lookup-flags"/ } split /\n/, $trace;
-  if (@socket_lookup_flags_events) {
-    diag("socket-lookup-flags: ", @socket_lookup_flags_events);
-  } else {
-    diag("socket-lookup-flags: not found");
-  }
-}
-
 subtest "h2olog -S=1.00", sub {
   my $tracer = H2ologTracer->new({
     pid => $server->{pid},
@@ -71,28 +60,23 @@ subtest "h2olog -S=1.00", sub {
 
     my $trace;
     until (($trace = $tracer->get_trace()) =~ /\n/) {}
-    debug_socket_lookup_flags($trace);
-
+    if ($ENV{H2OLOG_DEBUG}) {
+      diag "h2olog output:\n", $trace;
+    }
     my @logs = map { decode_json($_) } split /\n/, $trace;
-    my($event) = grep { $_->{type} eq "socket-lookup-flags" } @logs;
-
-    is $event->{"info-sock-type"}, "SOCK_STREAM";
-    like $event->{"info-src"}, qr/\A127\.0\.0\.1:\d+\z/, "source (remote) addr";
-    is $event->{"info-dest"}, "127.0.0.1:$server->{port}", "destination (local) addr";
+    ok scalar(grep { $_->{type} eq "h1-accept" } @logs), "h1-accept has been logged";
   };
-
   subtest "QUIC", sub {
     my ($headers) = run_prog("$client_prog -3 https://127.0.0.1:$quic_port/");
     like $headers, qr{^HTTP/3 200\b}, "req: HTTP/3";
 
     my $trace;
     until (($trace = $tracer->get_trace()) =~ /\n/) {}
-    debug_socket_lookup_flags($trace);
+    if ($ENV{H2OLOG_DEBUG}) {
+      diag "h2olog output:\n", $trace;
+    }
     my @logs = map { decode_json($_) } split /\n/, $trace;
-    my($event) = grep { $_->{type} eq "socket-lookup-flags" } @logs;
-
-    like $event->{"info-src"}, qr/\A127\.0\.0\.1:\d+\z/, "destination (remote) addr";
-    is $event->{"info-dest"}, "127.0.0.1:$quic_port", "source (local) addr";
+    ok scalar(grep { $_->{type} eq "h3s-accept" } @logs), "h3s-accept has been logged";
   };
 };
 
@@ -108,13 +92,12 @@ subtest "h2olog -S=0.00", sub {
 
     sleep(1);
     my $trace =  $tracer->get_trace();
-    debug_socket_lookup_flags($trace);
 
     if ($ENV{H2OLOG_DEBUG}) {
       diag "h2olog output:\n", $trace;
     }
 
-    is $trace, "", "nothing is emitted";
+    is $trace, "", "nothing has been logged";
   };
 
   subtest "QUIC", sub {
@@ -123,7 +106,6 @@ subtest "h2olog -S=0.00", sub {
 
     sleep(1);
     my $trace = $tracer->get_trace();
-    debug_socket_lookup_flags($trace);
 
     if ($ENV{H2OLOG_DEBUG}) {
       diag "h2olog output:\n", $trace;
