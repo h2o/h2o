@@ -950,7 +950,7 @@ IF (WITH_H2OLOG)
 
     # This phony target is required to force to trigger a custom command.
     # If DEPENDS is empty, the custom command won't be triggered when OUTPUT files exist.
-    ADD_CUSTOM_TARGET(phony_force_trigger_command COMMAND echo -n)
+    ADD_CUSTOM_COMMAND(OUTPUT phony_force_trigger_command COMMAND echo -n)
 
     ADD_CUSTOM_COMMAND(
         OUTPUT  "${CMAKE_CURRENT_SOURCE_DIR}/src/h2olog/generated_raw_tracer.cc"

@@ -10,7 +10,10 @@ Picotls is a [TLS 1.3 (RFC 8446)](https://tools.ietf.org/html/rfc8446) protocol 
   * ["fusion" AES-GCM engine, optimized for QUIC and other protocols that use short AEAD blocks](https://github.com/h2o/picotls/pull/310)
 * support for PSK, PSK-DHE resumption using 0-RTT
 * API for dealing directly with TLS handshake messages (essential for QUIC)
-* support for new extensions: Encrypted SNI (wg-draft-02), Certificate Compression (wg-draft-10)
+* supported extensions:
+  * RFC 7250 (raw public keys)
+  * RFC 8879 (certificate compression)
+  * Encrypted SNI (wg-draft-02)
 
 Primary goal of the project is to create a fast, tiny, low-latency TLS 1.3 implementation that can be used with the HTTP/2 protocol stack and the upcoming QUIC stack of the [H2O HTTP/2 server](https://h2o.examp1e.net).
 
@@ -20,8 +23,8 @@ License and the cryptographic algorithms supported by the crypto bindings are as
 
 | Binding | License | Key Exchange | Certificate | AEAD cipher |
 |:-----:|:-----:|:-----:|:-----:|:-----:|
-| minicrypto | [CC0](https://github.com/ctz/cifra/) / [2-clause BSD](https://github.com/kmackay/micro-ecc) | secp256r1, x25519 | ECDSA (P256)<sup>1</sup> | AES-128-GCM, chacha20-poly1305 |
-| OpenSSL | OpenSSL | secp256r1, secp384r1, secp521r1, x25519 | RSA, ECDSA (P256) | AES-128-GCM, AES-256-GCM, chacha20-poly1305 |
+| minicrypto | [CC0](https://github.com/ctz/cifra/) / [2-clause BSD](https://github.com/kmackay/micro-ecc) | secp256r1, x25519 | ECDSA (secp256r1)<sup>1</sup> | AES-128-GCM, chacha20-poly1305 |
+| OpenSSL | OpenSSL | secp256r1, secp384r1, secp521r1, x25519 | RSA, ECDSA (secp256r1, secp384r1, secp521r1), ed25519 | AES-128-GCM, AES-256-GCM, chacha20-poly1305 |
 
 Note 1: Minicrypto binding is capable of signing a handshake using the certificate's key, but cannot verify a signature sent by the peer.
 

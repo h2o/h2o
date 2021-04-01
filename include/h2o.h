@@ -266,6 +266,12 @@ struct st_h2o_hostconf_t {
         uint16_t port;
     } authority;
     /**
+     * A boolean indicating that this hostconf can only be used for a request with the ":authority" pseudo-header field / "Host"
+     * that matches hostport. When strict_match is false, then this hostconf is eligible for use as the fallback hostconf for a
+     * request that does not match any applicable hostconf.
+     */
+    uint8_t strict_match;
+    /**
      * list of path configurations
      */
     H2O_VECTOR(h2o_pathconf_t *) paths;
@@ -327,6 +333,11 @@ struct st_h2o_globalconf_t {
      * a NULL-terminated list of host contexts (h2o_hostconf_t)
      */
     h2o_hostconf_t **hosts;
+    /**
+     * The hostconf that will be used when none of the hostconfs for the listener match the request and they all have strict-match:
+     * ON.
+     */
+    h2o_hostconf_t *fallback_host;
     /**
      * list of configurators
      */
@@ -997,7 +1008,8 @@ typedef struct st_h2o_filereq_t {
 
 /**
  * Called be the protocol handler to submit chunk of request body to the generator. The callback returns 0 if successful, otherwise
- * a non-zero value. The buffer pointed to by `chunk` can be reused once this callback returns.
+ * a non-zero value. The buffer pointed to by `chunk` can be reused once this callback returns. `chunk` must be non-empty, or
+ * `is_end_stream` must be set.
  */
 typedef int (*h2o_write_req_cb)(void *ctx, h2o_iovec_t chunk, int is_end_stream);
 /**
@@ -2045,7 +2057,7 @@ typedef struct st_h2o_proxy_config_vars_t {
     h2o_headers_command_t *headers_cmds;
     size_t max_buffer_size;
     struct {
-        uint32_t max_concurrent_strams;
+        uint32_t max_concurrent_streams;
     } http2;
     h2o_httpclient_protocol_ratio_t protocol_ratio;
 } h2o_proxy_config_vars_t;
