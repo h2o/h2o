@@ -132,7 +132,8 @@ static int on_config_proxy_status_identity(h2o_configurator_command_t *cmd, h2o_
             if (s[i] == '\\' || s[i] == '"')
                 ++to_escape;
         }
-        char *buf = h2o_mem_alloc(slen + to_escape + 3);
+        const size_t output_len = slen + to_escape + 2;
+        char *buf = h2o_mem_alloc(output_len);
         char *d = buf;
         *(d++) = '"';
         for (size_t i = 0; i < slen; ++i) {
@@ -140,9 +141,8 @@ static int on_config_proxy_status_identity(h2o_configurator_command_t *cmd, h2o_
                 *(d++) = '\\';
             *(d++) = s[i];
         }
-        *(d++) = '"';
-        *d = '\0';
-        ctx->globalconf->proxy_status_identity = h2o_iovec_init(buf, slen + to_escape + 2);
+        *d = '"';
+        ctx->globalconf->proxy_status_identity = h2o_iovec_init(buf, output_len);
     }
 
     return 0;

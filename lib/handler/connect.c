@@ -71,7 +71,8 @@ static h2o_iovec_t encode_sf_string(h2o_mem_pool_t *pool, const char *s, size_t 
         if (s[i] == '\\' || s[i] == '"')
             ++to_escape;
     }
-    char *buf = h2o_mem_alloc_pool(pool, char, slen + to_escape + 3);
+    const size_t output_len = slen + to_escape + 2;
+    char *buf = h2o_mem_alloc_pool(pool, char, output_len);
     char *d = buf;
     *(d++) = '"';
     for (size_t i = 0; i < slen; ++i) {
@@ -79,9 +80,8 @@ static h2o_iovec_t encode_sf_string(h2o_mem_pool_t *pool, const char *s, size_t 
             *(d++) = '\\';
         *(d++) = s[i];
     }
-    *(d++) = '"';
-    *d = '\0';
-    return h2o_iovec_init(buf, slen + to_escape + 2);
+    *d = '"';
+    return h2o_iovec_init(buf, output_len);
 }
 
 static void _make_proxy_status_error(struct st_connect_request_t *creq,
