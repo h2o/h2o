@@ -127,22 +127,7 @@ static int on_config_proxy_status_identity(h2o_configurator_command_t *cmd, h2o_
         ctx->globalconf->proxy_status_identity = h2o_strdup(NULL, s, slen);
     } else {
         /* sf-string */
-        size_t to_escape = 0;
-        for (size_t i = 0; i < slen; ++i) {
-            if (s[i] == '\\' || s[i] == '"')
-                ++to_escape;
-        }
-        const size_t output_len = slen + to_escape + 2;
-        char *buf = h2o_mem_alloc(output_len);
-        char *d = buf;
-        *(d++) = '"';
-        for (size_t i = 0; i < slen; ++i) {
-            if (s[i] == '\\' || s[i] == '"')
-                *(d++) = '\\';
-            *(d++) = s[i];
-        }
-        *d = '"';
-        ctx->globalconf->proxy_status_identity = h2o_iovec_init(buf, output_len);
+        ctx->globalconf->proxy_status_identity = h2o_encode_sf_string(NULL, s, slen);
     }
 
     return 0;

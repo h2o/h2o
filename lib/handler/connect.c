@@ -60,30 +60,6 @@ struct st_connect_request_t {
 
 #define TO_BITMASK(type, len) ((type)~(((type)1 << (sizeof(type) * 8 - (len))) - 1))
 
-static h2o_iovec_t encode_sf_string(h2o_mem_pool_t *pool, const char *s, size_t slen)
-{
-    if (slen == SIZE_MAX)
-        slen = strlen(s);
-
-    /* https://tools.ietf.org/html/rfc8941#section-3.3.3 */
-    size_t to_escape = 0;
-    for (size_t i = 0; i < slen; ++i) {
-        if (s[i] == '\\' || s[i] == '"')
-            ++to_escape;
-    }
-    const size_t output_len = slen + to_escape + 2;
-    char *buf = h2o_mem_alloc_pool(pool, char, output_len);
-    char *d = buf;
-    *(d++) = '"';
-    for (size_t i = 0; i < slen; ++i) {
-        if (s[i] == '\\' || s[i] == '"')
-            *(d++) = '\\';
-        *(d++) = s[i];
-    }
-    *d = '"';
-    return h2o_iovec_init(buf, output_len);
-}
-
 static void _make_proxy_status_error(struct st_connect_request_t *creq,
     const char *error_type, const char *details,
     const char *rcode, const struct sockaddr *addr, socklen_t addrlen)
@@ -124,11 +100,11 @@ static void _make_proxy_status_error(struct st_connect_request_t *creq,
     }
     if (next_hop.base != NULL) {
         parts[nparts++] = h2o_iovec_init(H2O_STRLIT("; next-hop="));
-        parts[nparts++] = encode_sf_string(pool, next_hop.base, next_hop.len);
+        parts[nparts++] = h2o_encode_sf_string(pool, next_hop.base, next_hop.len);
     }
     if (details != NULL) {
         parts[nparts++] = h2o_iovec_init(H2O_STRLIT("; details="));
-        parts[nparts++] = encode_sf_string(pool, details, SIZE_MAX);
+        parts[nparts++] = h2o_encode_sf_string(pool, details, SIZE_MAX);
     }
     assert(nparts <= sizeof(parts) / sizeof(parts[0]));
     h2o_iovec_t hval = h2o_concat_list(pool, parts, nparts);
