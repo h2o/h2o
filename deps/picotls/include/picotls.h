@@ -736,6 +736,10 @@ struct st_ptls_context_t {
      */
     unsigned use_raw_public_keys : 1;
     /**
+     * boolean indicating if the cipher-suite should be chosen based on server's preference
+     */
+    unsigned server_cipher_preference : 1;
+    /**
      *
      */
     ptls_encrypt_ticket_t *encrypt_ticket;

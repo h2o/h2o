@@ -49,7 +49,6 @@
 #define _CRT_SECURE_NO_WARNINGS
 #endif
 #pragma warning(disable : 4996)
-#include <ms/applink.c>
 #endif
 
 #if !defined(LIBRESSL_VERSION_NUMBER) && OPENSSL_VERSION_NUMBER >= 0x10100000L
@@ -1231,7 +1230,27 @@ static int verify_cert_chain(X509_STORE *store, X509 *cert, STACK_OF(X509) * cha
         ret = PTLS_ERROR_LIBRARY;
         goto Exit;
     }
-    X509_STORE_CTX_set_purpose(verify_ctx, is_server ? X509_PURPOSE_SSL_SERVER : X509_PURPOSE_SSL_CLIENT);
+
+    {
+        X509_VERIFY_PARAM *params;
+        if ((params = X509_VERIFY_PARAM_new()) == NULL) {
+            ret = PTLS_ERROR_NO_MEMORY;
+            goto Exit;
+        }
+        X509_VERIFY_PARAM_set_purpose(params, is_server ? X509_PURPOSE_SSL_SERVER : X509_PURPOSE_SSL_CLIENT);
+        X509_VERIFY_PARAM_set_depth(params, 98); /* use the default of OpenSSL 1.0.2 and above; see `man SSL_CTX_set_verify` */
+        if (server_name != NULL) {
+            if (ptls_server_name_is_ipaddr(server_name)) {
+                X509_VERIFY_PARAM_set1_ip_asc(params, server_name);
+            }
+            else {
+                X509_VERIFY_PARAM_set1_host(params, server_name, 0);
+                X509_VERIFY_PARAM_set_hostflags(params, X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS);
+            }
+        }
+        X509_STORE_CTX_set0_param(verify_ctx, params); /* params will be freed alongside verify_ctx */
+    }
+
     if (X509_verify_cert(verify_ctx) != 1) {
         int x509_err = X509_STORE_CTX_get_error(verify_ctx);
         switch (x509_err) {
@@ -1251,6 +1270,7 @@ static int verify_cert_chain(X509_STORE *store, X509 *cert, STACK_OF(X509) * cha
         case X509_V_ERR_CERT_REJECTED:
             ret = PTLS_ALERT_UNKNOWN_CA;
             break;
+        case X509_V_ERR_HOSTNAME_MISMATCH:
         case X509_V_ERR_INVALID_CA:
             ret = PTLS_ALERT_BAD_CERTIFICATE;
             break;
@@ -1260,27 +1280,6 @@ static int verify_cert_chain(X509_STORE *store, X509 *cert, STACK_OF(X509) * cha
         }
         goto Exit;
     }
-
-#ifdef X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS
-    /* verify CN */
-    if (server_name != NULL) {
-        if (ptls_server_name_is_ipaddr(server_name)) {
-            ret = X509_check_ip_asc(cert, server_name, 0);
-        } else {
-            ret = X509_check_host(cert, server_name, strlen(server_name), X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS, NULL);
-        }
-        if (ret != 1) {
-            if (ret == 0) { /* failed match */
-                ret = PTLS_ALERT_BAD_CERTIFICATE;
-            } else {
-                ret = PTLS_ERROR_LIBRARY;
-            }
-            goto Exit;
-        }
-    }
-#else
-#warning "hostname validation is disabled; OpenSSL >= 1.0.2 or LibreSSL >= 2.5.0 is required"
-#endif
 
     ret = 0;
 
@@ -1383,7 +1382,7 @@ static int verify_raw_cert(ptls_verify_certificate_t *_self, ptls_t *tls,
 {
     ptls_openssl_raw_pubkey_verify_certificate_t *self = (ptls_openssl_raw_pubkey_verify_certificate_t *)_self;
     int ret = PTLS_ALERT_BAD_CERTIFICATE;
-    ptls_iovec_t expected_pubkey = {};
+    ptls_iovec_t expected_pubkey = { 0 };
 
     assert(num_certs != 0);
 

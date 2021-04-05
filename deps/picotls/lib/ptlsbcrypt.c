@@ -135,7 +135,7 @@ static void ptls_bcrypt_cipher_transform_ctr(ptls_cipher_context_t *_ctx, void *
     ULONG cbResult;
     NTSTATUS ret;
     uint8_t eiv[PTLS_MAX_IV_SIZE];
-    int i;
+    size_t i;
     uint64_t seq = 0;
     size_t processed = 0;
     uint8_t const *v_in = input;
