@@ -4013,21 +4013,21 @@ static int server_handle_hello(ptls_t *tls, ptls_message_emitter_t *emitter, ptl
     }
 
     /* send ServerHello */
-    EMIT_SERVER_HELLO(tls->key_schedule,
-                      { tls->ctx->random_bytes(emitter->buf->base + emitter->buf->off, PTLS_HELLO_RANDOM_SIZE); },
-                      {
-                          ptls_buffer_t *sendbuf = emitter->buf;
-                          if (mode != HANDSHAKE_MODE_PSK) {
-                              buffer_push_extension(sendbuf, PTLS_EXTENSION_TYPE_KEY_SHARE, {
-                                  ptls_buffer_push16(sendbuf, key_share.algorithm->id);
-                                  ptls_buffer_push_block(sendbuf, 2, { ptls_buffer_pushv(sendbuf, pubkey.base, pubkey.len); });
-                              });
-                          }
-                          if (mode != HANDSHAKE_MODE_FULL) {
-                              buffer_push_extension(sendbuf, PTLS_EXTENSION_TYPE_PRE_SHARED_KEY,
-                                                    { ptls_buffer_push16(sendbuf, (uint16_t)psk_index); });
-                          }
-                      });
+    EMIT_SERVER_HELLO(
+        tls->key_schedule, { tls->ctx->random_bytes(emitter->buf->base + emitter->buf->off, PTLS_HELLO_RANDOM_SIZE); },
+        {
+            ptls_buffer_t *sendbuf = emitter->buf;
+            if (mode != HANDSHAKE_MODE_PSK) {
+                buffer_push_extension(sendbuf, PTLS_EXTENSION_TYPE_KEY_SHARE, {
+                    ptls_buffer_push16(sendbuf, key_share.algorithm->id);
+                    ptls_buffer_push_block(sendbuf, 2, { ptls_buffer_pushv(sendbuf, pubkey.base, pubkey.len); });
+                });
+            }
+            if (mode != HANDSHAKE_MODE_FULL) {
+                buffer_push_extension(sendbuf, PTLS_EXTENSION_TYPE_PRE_SHARED_KEY,
+                                      { ptls_buffer_push16(sendbuf, (uint16_t)psk_index); });
+            }
+        });
     if ((ret = push_change_cipher_spec(tls, emitter)) != 0)
         goto Exit;
 
