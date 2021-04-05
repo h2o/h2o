@@ -741,9 +741,9 @@ static ptls_cipher_suite_t **parse_tls13_ciphers(h2o_configurator_command_t *cmd
         const char *name;
         ptls_cipher_suite_t *cipher;
     } cipher_suites[] = {
-        { "TLS_AES_128_GCM_SHA256", &ptls_openssl_aes128gcmsha256},
-        { "TLS_AES_256_GCM_SHA384", &ptls_openssl_aes256gcmsha384},
-        { "TLS_CHACHA20_POLY1305_SHA256", &ptls_openssl_chacha20poly1305sha256 },
+        {"TLS_AES_128_GCM_SHA256", &ptls_openssl_aes128gcmsha256},
+        {"TLS_AES_256_GCM_SHA384", &ptls_openssl_aes256gcmsha384},
+        {"TLS_CHACHA20_POLY1305_SHA256", &ptls_openssl_chacha20poly1305sha256},
     };
     int seen_tls_aes_128_gcm_sha256 = 0;
     H2O_VECTOR(ptls_cipher_suite_t *) ret = {};
@@ -751,7 +751,7 @@ static ptls_cipher_suite_t **parse_tls13_ciphers(h2o_configurator_command_t *cmd
     while (1) {
         if (p == NULL)
             break;
-        int found  = 0;
+        int found = 0;
         for (int i = 0; i < (sizeof(cipher_suites) / sizeof(cipher_suites[0])); i++) {
             if (strcmp(p, cipher_suites[i].name) == 0) {
                 h2o_vector_reserve(NULL, &ret, ret.size + 1);
@@ -762,9 +762,11 @@ static ptls_cipher_suite_t **parse_tls13_ciphers(h2o_configurator_command_t *cmd
                 goto Next;
             }
         }
-Next:
+    Next:
         if (!found) {
-            h2o_configurator_errprintf(cmd, node, "Unexpected cipher suite. Expected one of: `TLS_AES_128_GCM_SHA256`, `TLS_AES_256_GCM_SHA384` or `TLS_CHACHA20_POLY1305_SHA256`");
+            h2o_configurator_errprintf(cmd, node,
+                                       "Unexpected cipher suite. Expected one of: `TLS_AES_128_GCM_SHA256`, "
+                                       "`TLS_AES_256_GCM_SHA384` or `TLS_CHACHA20_POLY1305_SHA256`");
             return NULL;
         }
         p = strtok_r(NULL, ":", &saveptr);
@@ -773,7 +775,8 @@ Next:
     ret.entries[ret.size++] = NULL;
 
     if (!seen_tls_aes_128_gcm_sha256) {
-        h2o_configurator_errprintf(cmd, node, "Warning: not enabling TLS_AES_128_GCM_SHA256 might reduce TLS1.3 interoperability, see RFC 8446 9.1");
+        h2o_configurator_errprintf(
+            cmd, node, "Warning: not enabling TLS_AES_128_GCM_SHA256 might reduce TLS1.3 interoperability, see RFC 8446 9.1");
     }
 
     return ret.entries;
@@ -816,7 +819,8 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
                                        "http2-origin-frame:*,cipher-suite-tls1.3:s",
                                        &certificate_file, &key_file, &min_version, &min_version, &max_version, &max_version,
                                        &cipher_suite, &ocsp_update_cmd, &ocsp_update_interval_node, &ocsp_max_failures_node,
-                                       &dh_file, &cipher_preference_node, &neverbleed_node, &http2_origin_frame_node, &cipher_suite_tls13_node) != 0)
+                                       &dh_file, &cipher_preference_node, &neverbleed_node, &http2_origin_frame_node,
+                                       &cipher_suite_tls13_node) != 0)
         return -1;
     if (cipher_preference_node != NULL) {
         switch (h2o_configurator_get_one_of(cmd, *cipher_preference_node, "client,server")) {
@@ -1017,7 +1021,8 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
 #endif
 
     if (use_picotls) {
-        const char *errstr = listener_setup_ssl_picotls(listener, ssl_config, ssl_ctx, cipher_suite_tls13, !!(ssl_options & SSL_OP_CIPHER_SERVER_PREFERENCE));
+        const char *errstr = listener_setup_ssl_picotls(listener, ssl_config, ssl_ctx, cipher_suite_tls13,
+                                                        !!(ssl_options & SSL_OP_CIPHER_SERVER_PREFERENCE));
         if (errstr != NULL)
             h2o_configurator_errprintf(cmd, *ssl_node, "%s; TLS 1.3 will be disabled\n", errstr);
         if (listener->quic.ctx != NULL) {
