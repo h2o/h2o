@@ -50,8 +50,8 @@ subtest "acl" => sub {
 subtest "nxdomain" => sub {
     run_with_curl($server, sub {
         my ($proto, $port, $curl) = @_;
-        my $content = `$curl --proxy-insecure -p -x $proto://127.0.0.1:$port --silent -v --show-error https://doesnotexist.xip.io/ 2>&1`;
-        like $content, qr{proxy-status: h2o/test; error=dns_error; rcode=NXDOMAIN; next-hop="doesnotexist.xip.io"}i;
+        my $content = `$curl --proxy-insecure -p -x $proto://127.0.0.1:$port --silent -v --show-error https://doesnotexist.example.org/ 2>&1`;
+        like $content, qr{proxy-status: h2o/test; error=dns_error; rcode=NXDOMAIN; next-hop="doesnotexist.example.org"}i;
         like $content, qr{Received HTTP code 502 from proxy after CONNECT};
     });
 };
