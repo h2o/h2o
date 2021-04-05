@@ -733,10 +733,10 @@ static h2o_iovec_t *build_http2_origin_frame(h2o_configurator_command_t *cmd, yo
     return http2_origin_frame;
 }
 
-static ptls_cipher_suite_t **parse_tls13_ciphers(h2o_configurator_command_t *cmd, yoml_t *node, const char *tls13_ciphers)
+static ptls_cipher_suite_t **parse_tls13_ciphers(h2o_configurator_command_t *cmd, yoml_t *node)
 {
-    char *p = alloca(strlen(tls13_ciphers) + 1), *saveptr = NULL;
-    strcpy(p, tls13_ciphers);
+    char *p = alloca(strlen(node->data.scalar) + 1), *saveptr = NULL;
+    strcpy(p, node->data.scalar);
     struct {
         const char *name;
         ptls_cipher_suite_t *cipher;
@@ -961,7 +961,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
         goto Error;
     }
     if (use_picotls) {
-        if (cipher_suite_tls13 != NULL && (tls13_cipher_suites = parse_tls13_ciphers(cmd, *cipher_suite_tls13, (*cipher_suite_tls13)->data.scalar)) == NULL) {
+        if (cipher_suite_tls13 != NULL && (tls13_cipher_suites = parse_tls13_ciphers(cmd, *cipher_suite_tls13)) == NULL) {
             h2o_configurator_errprintf(cmd, *cipher_suite, "failed to parse the TLS 1.3 cipher suite\n");
             goto Error;
         }
