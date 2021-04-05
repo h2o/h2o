@@ -57,5 +57,7 @@ ptls_aead_algorithm_t ptls_minicrypto_aes128gcm = {"AES128-GCM",
                                                    PTLS_AESGCM_TAG_SIZE,
                                                    sizeof(struct aesgcm_context_t),
                                                    aead_aes128gcm_setup_crypto};
-ptls_cipher_suite_t ptls_minicrypto_aes128gcmsha256 = {PTLS_CIPHER_SUITE_AES_128_GCM_SHA256, &ptls_minicrypto_aes128gcm,
-                                                       &ptls_minicrypto_sha256};
+ptls_cipher_suite_t ptls_minicrypto_aes128gcmsha256 = {.id = PTLS_CIPHER_SUITE_AES_128_GCM_SHA256,
+                                                       .name = PTLS_CIPHER_SUITE_NAME_AES_128_GCM_SHA256,
+                                                       .aead = &ptls_minicrypto_aes128gcm,
+                                                       .hash = &ptls_minicrypto_sha256};

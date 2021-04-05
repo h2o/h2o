@@ -1604,10 +1604,14 @@ ptls_hash_algorithm_t ptls_openssl_sha256 = {PTLS_SHA256_BLOCK_SIZE, PTLS_SHA256
                                              PTLS_ZERO_DIGEST_SHA256};
 ptls_hash_algorithm_t ptls_openssl_sha384 = {PTLS_SHA384_BLOCK_SIZE, PTLS_SHA384_DIGEST_SIZE, sha384_create,
                                              PTLS_ZERO_DIGEST_SHA384};
-ptls_cipher_suite_t ptls_openssl_aes128gcmsha256 = {PTLS_CIPHER_SUITE_AES_128_GCM_SHA256, &ptls_openssl_aes128gcm,
-                                                    &ptls_openssl_sha256};
-ptls_cipher_suite_t ptls_openssl_aes256gcmsha384 = {PTLS_CIPHER_SUITE_AES_256_GCM_SHA384, &ptls_openssl_aes256gcm,
-                                                    &ptls_openssl_sha384};
+ptls_cipher_suite_t ptls_openssl_aes128gcmsha256 = {.id = PTLS_CIPHER_SUITE_AES_128_GCM_SHA256,
+                                                    .name = PTLS_CIPHER_SUITE_NAME_AES_128_GCM_SHA256,
+                                                    .aead = &ptls_openssl_aes128gcm,
+                                                    .hash = &ptls_openssl_sha256};
+ptls_cipher_suite_t ptls_openssl_aes256gcmsha384 = {.id = PTLS_CIPHER_SUITE_AES_256_GCM_SHA384,
+                                                    .name = PTLS_CIPHER_SUITE_NAME_AES_256_GCM_SHA384,
+                                                    .aead = &ptls_openssl_aes256gcm,
+                                                    .hash = &ptls_openssl_sha384};
 #if PTLS_OPENSSL_HAVE_CHACHA20_POLY1305
 ptls_cipher_algorithm_t ptls_openssl_chacha20 = {
     "CHACHA20",           PTLS_CHACHA20_KEY_SIZE, 1 /* block size */, PTLS_CHACHA20_IV_SIZE, sizeof(struct cipher_context_t),
@@ -1622,8 +1626,10 @@ ptls_aead_algorithm_t ptls_openssl_chacha20poly1305 = {"CHACHA20-POLY1305",
                                                        PTLS_CHACHA20POLY1305_TAG_SIZE,
                                                        sizeof(struct aead_crypto_context_t),
                                                        aead_chacha20poly1305_setup_crypto};
-ptls_cipher_suite_t ptls_openssl_chacha20poly1305sha256 = {PTLS_CIPHER_SUITE_CHACHA20_POLY1305_SHA256,
-                                                           &ptls_openssl_chacha20poly1305, &ptls_openssl_sha256};
+ptls_cipher_suite_t ptls_openssl_chacha20poly1305sha256 = {.id = PTLS_CIPHER_SUITE_CHACHA20_POLY1305_SHA256,
+                                                           .name = PTLS_CIPHER_SUITE_NAME_CHACHA20_POLY1305_SHA256,
+                                                           .aead = &ptls_openssl_chacha20poly1305,
+                                                           .hash = &ptls_openssl_sha256};
 #endif
 ptls_cipher_suite_t *ptls_openssl_cipher_suites[] = {&ptls_openssl_aes256gcmsha384, &ptls_openssl_aes128gcmsha256,
 #if PTLS_OPENSSL_HAVE_CHACHA20_POLY1305

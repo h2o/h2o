@@ -52,8 +52,8 @@ static void test_select_cipher(void)
         *candidates[] = {&ptls_minicrypto_chacha20poly1305sha256, &ptls_minicrypto_aes128gcmsha256, NULL};
 
     {
-        static const uint8_t input[] = {};
-        ok(select_cipher(&selected, candidates, input, input + sizeof(input), 0) == PTLS_ALERT_HANDSHAKE_FAILURE);
+        static const uint8_t input; /* `input[0]` is preferable, but prohibited by MSVC */
+        ok(select_cipher(&selected, candidates, &input, &input, 0) == PTLS_ALERT_HANDSHAKE_FAILURE);
     }
 
     {

@@ -105,8 +105,11 @@ extern "C" {
 
 /* cipher-suites */
 #define PTLS_CIPHER_SUITE_AES_128_GCM_SHA256 0x1301
+#define PTLS_CIPHER_SUITE_NAME_AES_128_GCM_SHA256 "TLS_AES_128_GCM_SHA256"
 #define PTLS_CIPHER_SUITE_AES_256_GCM_SHA384 0x1302
+#define PTLS_CIPHER_SUITE_NAME_AES_256_GCM_SHA384 "TLS_AES_256_GCM_SHA384"
 #define PTLS_CIPHER_SUITE_CHACHA20_POLY1305_SHA256 0x1303
+#define PTLS_CIPHER_SUITE_NAME_CHACHA20_POLY1305_SHA256 "TLS_CHACHA20_POLY1305_SHA256"
 
 /* negotiated_groups */
 #define PTLS_GROUP_SECP256R1 23
@@ -445,9 +448,22 @@ typedef const struct st_ptls_hash_algorithm_t {
 } ptls_hash_algorithm_t;
 
 typedef const struct st_ptls_cipher_suite_t {
+    /**
+     * ID as defined by the TLS Cipher Suites registry
+     */
     uint16_t id;
+    /**
+     * underlying AEAD algorithm
+     */
     ptls_aead_algorithm_t *aead;
+    /**
+     * underlying hash algorithm
+     */
     ptls_hash_algorithm_t *hash;
+    /**
+     * value of the "Description" field of the TLS Cipher Suites registry
+     */
+    const char *name;
 } ptls_cipher_suite_t;
 
 struct st_ptls_traffic_protection_t;
