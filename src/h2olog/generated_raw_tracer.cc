@@ -15,7 +15,7 @@ extern "C" {
 #include "h2olog.h"
 #include "json.h"
 
-#include "raw_tracer.h.cc"
+#include "raw_tracer.cc.h"
 
 #define STR_LEN 64
 #define STR_LIT(s) s, strlen(s)
