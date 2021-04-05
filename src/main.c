@@ -781,20 +781,20 @@ static h2o_iovec_t *build_http2_origin_frame(h2o_configurator_command_t *cmd, yo
 
 static ptls_cipher_suite_t **parse_tls13_ciphers(h2o_configurator_command_t *cmd, yoml_t *node)
 {
-    char *p = alloca(strlen(node->data.scalar) + 1), *saveptr = NULL;
-    strcpy(p, node->data.scalar);
+    h2o_iovec_t iter = h2o_iovec_init(node->data.scalar, strlen(node->data.scalar));
+    const char *name;
+    size_t name_len;
     int seen_tls_aes_128_gcm_sha256 = 0;
     H2O_VECTOR(ptls_cipher_suite_t *) ret = {};
-    p = strtok_r(p, ":", &saveptr);
-    while (1) {
-        if (p == NULL)
-            break;
+
+    while ((name = h2o_next_token(&iter, ':', ':', &name_len, NULL)) != NULL) {
+        ptls_cipher_suite_t *cand;
         int found = 0;
-        for (size_t i = 0; ptls_openssl_cipher_suites[i] != NULL; ++i) {
-            if (strcmp(p, ptls_openssl_cipher_suites[i]->name) == 0) {
+        for (size_t i = 0; (cand = ptls_openssl_cipher_suites[i]) != NULL; ++i) {
+            if (name_len == strlen(cand->name) && memcmp(name, cand->name, name_len) == 0) {
                 h2o_vector_reserve(NULL, &ret, ret.size + 1);
-                ret.entries[ret.size++] = ptls_openssl_cipher_suites[i];
-                if (ptls_openssl_cipher_suites[i] == &ptls_openssl_aes128gcmsha256)
+                ret.entries[ret.size++] = cand;
+                if (cand == &ptls_openssl_aes128gcmsha256)
                     seen_tls_aes_128_gcm_sha256 = 1;
                 found = 1;
                 goto Next;
@@ -809,7 +809,6 @@ static ptls_cipher_suite_t **parse_tls13_ciphers(h2o_configurator_command_t *cmd
             h2o_configurator_errprintf(cmd, node, "%s", msg);
             return NULL;
         }
-        p = strtok_r(NULL, ":", &saveptr);
     }
     h2o_vector_reserve(NULL, &ret, ret.size + 1);
     ret.entries[ret.size++] = NULL;
