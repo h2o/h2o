@@ -754,7 +754,7 @@ static ptls_cipher_suite_t **parse_tls13_ciphers(h2o_configurator_command_t *cmd
         int found  = 0;
         for (int i = 0; i < (sizeof(cipher_suites) / sizeof(cipher_suites[0])); i++) {
             if (strcmp(p, cipher_suites[i].name) == 0) {
-                ret.entries = h2o_mem_realloc(ret.entries, sizeof(ret.entries[0]) * (ret.size + 1));
+                h2o_vector_reserve(NULL, &ret, ret.size + 1);
                 ret.entries[ret.size++] = cipher_suites[i].cipher;
                 if (cipher_suites[i].cipher == &ptls_openssl_aes128gcmsha256)
                     seen_tls_aes_128_gcm_sha256 = 1;
@@ -769,7 +769,7 @@ Next:
         }
         p = strtok_r(NULL, ":", &saveptr);
     }
-    ret.entries = h2o_mem_realloc(ret.entries, sizeof(ret.entries[0])  * (ret.size + 1));
+    h2o_vector_reserve(NULL, &ret, ret.size + 1);
     ret.entries[ret.size++] = NULL;
 
     if (!seen_tls_aes_128_gcm_sha256) {
