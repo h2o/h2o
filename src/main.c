@@ -781,34 +781,31 @@ static h2o_iovec_t *build_http2_origin_frame(h2o_configurator_command_t *cmd, yo
 
 static ptls_cipher_suite_t **parse_tls13_ciphers(h2o_configurator_command_t *cmd, yoml_t *node)
 {
-    h2o_iovec_t iter = h2o_iovec_init(node->data.scalar, strlen(node->data.scalar));
-    const char *name;
-    size_t name_len;
     int seen_tls_aes_128_gcm_sha256 = 0;
     H2O_VECTOR(ptls_cipher_suite_t *) ret = {};
 
-    while ((name = h2o_next_token(&iter, ':', ':', &name_len, NULL)) != NULL) {
-        ptls_cipher_suite_t *cand;
-        int found = 0;
-        for (size_t i = 0; (cand = ptls_openssl_cipher_suites[i]) != NULL; ++i) {
-            if (name_len == strlen(cand->name) && memcmp(name, cand->name, name_len) == 0) {
-                h2o_vector_reserve(NULL, &ret, ret.size + 1);
-                ret.entries[ret.size++] = cand;
-                if (cand == &ptls_openssl_aes128gcmsha256)
-                    seen_tls_aes_128_gcm_sha256 = 1;
-                found = 1;
-                goto Next;
-            }
-        }
-    Next:
-        if (!found) {
-            char msg[1024];
-            strcpy(msg, "Unexpected cipher suite. Expected one of:");
-            for (size_t i = 0; ptls_openssl_cipher_suites[i] != NULL; ++i)
-                sprintf(msg + strlen(msg), " %s", ptls_openssl_cipher_suites[i]->name);
-            h2o_configurator_errprintf(cmd, node, "%s", msg);
+    for (size_t i = 0; i != node->data.sequence.size; ++i) {
+        yoml_t *element = node->data.sequence.elements[i];
+        if (element->type != YOML_TYPE_SCALAR) {
+            h2o_configurator_errprintf(cmd, element, "elements of `cipher-suite-tls1.3` must be strings");
             return NULL;
         }
+        ptls_cipher_suite_t *cand;
+        for (size_t i = 0; (cand = ptls_openssl_cipher_suites[i]) != NULL; ++i)
+            if (strcmp(element->data.scalar, cand->name) == 0)
+                goto Found;
+        /* not found */
+        char msg[1024];
+        strcpy(msg, "Unexpected cipher suite. Expected one of:");
+        for (size_t i = 0; ptls_openssl_cipher_suites[i] != NULL; ++i)
+            sprintf(msg + strlen(msg), " %s", ptls_openssl_cipher_suites[i]->name);
+        h2o_configurator_errprintf(cmd, node, "%s", msg);
+        return NULL;
+    Found:
+        h2o_vector_reserve(NULL, &ret, ret.size + 1);
+        ret.entries[ret.size++] = cand;
+        if (cand == &ptls_openssl_aes128gcmsha256)
+            seen_tls_aes_128_gcm_sha256 = 1;
     }
     h2o_vector_reserve(NULL, &ret, ret.size + 1);
     ret.entries[ret.size++] = NULL;
@@ -853,7 +850,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
     /* parse */
     if (h2o_configurator_parse_mapping(cmd, *ssl_node, "key-file:s",
                                        "certificate-file:s,raw-pubkey-file:s,min-version:s,minimum-version:s,max-version:s,"
-                                       "maximum-version:s,cipher-suite:s,cipher-suite-tls1.3:s,ocsp-update-cmd:s,"
+                                       "maximum-version:s,cipher-suite:s,cipher-suite-tls1.3:a,ocsp-update-cmd:s,"
                                        "ocsp-update-interval:*,ocsp-max-failures:*,dh-file:s,cipher-preference:*,neverbleed:*,"
                                        "http2-origin-frame:*",
                                        &key_file, &certificate_file, &raw_pubkey_file, &min_version, &min_version, &max_version,
