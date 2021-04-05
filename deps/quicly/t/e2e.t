@@ -324,10 +324,22 @@ subtest "key-update" => sub {
     };
 };
 
+subtest "raw-certificates-ec" => sub {
+    my $guard = spawn_server(qw(-W -));
+    my $resp = `$cli -p /12 -W t/assets/ec256-pub.pem 127.0.0.1 $port 2> /dev/null`;
+    is $resp, "hello world\n";
+};
+
+
 done_testing;
 
 sub spawn_server {
-    my @cmd = ($cli, "-k", "t/assets/server.key", "-c", "t/assets/server.crt", @_, "127.0.0.1", $port);
+    my @cmd;
+    if (grep(/^-W$/, @_)) {
+        @cmd = ($cli, "-k", "t/assets/ec256-key-pair.pem", "-c", "t/assets/ec256-pub.pem", @_, "127.0.0.1", $port);
+    } else {
+        @cmd = ($cli, "-k", "t/assets/server.key", "-c", "t/assets/server.crt", @_, "127.0.0.1", $port);
+    }
     my $pid = fork;
     die "fork failed:$!"
         unless defined $pid;

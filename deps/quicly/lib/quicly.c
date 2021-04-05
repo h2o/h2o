@@ -3731,6 +3731,8 @@ static int send_resumption_token(quicly_conn_t *conn, quicly_send_context_t *s)
     if ((ret = allocate_ack_eliciting_frame(conn, s, quicly_new_token_frame_capacity(ptls_iovec_init(tokenbuf.base, tokenbuf.off)),
                                             &sent, on_ack_new_token)) != 0)
         goto Exit;
+    ++conn->egress.new_token.num_inflight;
+    sent->data.new_token.is_inflight = 1;
     sent->data.new_token.generation = conn->egress.new_token.generation;
     s->dst = quicly_encode_new_token_frame(s->dst, ptls_iovec_init(tokenbuf.base, tokenbuf.off));
     conn->egress.pending_flows &= ~QUICLY_PENDING_FLOW_NEW_TOKEN_BIT;
@@ -4038,8 +4040,8 @@ static int update_traffic_key_cb(ptls_update_traffic_key_t *self, ptls_t *tls, i
     ptls_aead_context_t **aead_slot;
     int ret;
     static const char *log_labels[2][4] = {
-        {NULL, "QUIC_CLIENT_EARLY_TRAFFIC_SECRET", "QUIC_CLIENT_HANDSHAKE_TRAFFIC_SECRET", "QUIC_CLIENT_TRAFFIC_SECRET_0"},
-        {NULL, NULL, "QUIC_SERVER_HANDSHAKE_TRAFFIC_SECRET", "QUIC_SERVER_TRAFFIC_SECRET_0"}};
+        {NULL, "CLIENT_EARLY_TRAFFIC_SECRET", "CLIENT_HANDSHAKE_TRAFFIC_SECRET", "CLIENT_TRAFFIC_SECRET_0"},
+        {NULL, NULL, "SERVER_HANDSHAKE_TRAFFIC_SECRET", "SERVER_TRAFFIC_SECRET_0"}};
     const char *log_label = log_labels[ptls_is_server(tls) == is_enc][epoch];
 
     QUICLY_PROBE(CRYPTO_UPDATE_SECRET, conn, conn->stash.now, is_enc, epoch, log_label,
@@ -5977,8 +5979,11 @@ void quicly_amend_ptls_context(ptls_context_t *ptls)
     static ptls_update_traffic_key_t update_traffic_key = {update_traffic_key_cb};
 
     ptls->omit_end_of_early_data = 1;
-    ptls->max_early_data_size = UINT32_MAX;
     ptls->update_traffic_key = &update_traffic_key;
+
+    /* if TLS 1.3 config permits use of early data, convert the value to 0xffffffff in accordance with QUIC-TLS */
+    if (ptls->max_early_data_size != 0)
+        ptls->max_early_data_size = UINT32_MAX;
 }
 
 int quicly_encrypt_address_token(void (*random_bytes)(void *, size_t), ptls_aead_context_t *aead, ptls_buffer_t *buf,

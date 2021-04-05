@@ -785,11 +785,14 @@ int h2o_qpack_parse_request(h2o_mem_pool_t *pool, h2o_qpack_decoder_t *qpack, in
     if ((ret = parse_decode_context(qpack, &ctx, stream_id, &src, src_end)) != 0)
         return ret;
     if ((ret = h2o_hpack_parse_request(pool, decode_header, &ctx, method, scheme, authority, path, headers,
-                                       pseudo_header_exists_map, content_length, digests, src, src_end - src, err_desc)) != 0)
-        return normalize_error_code(ret);
+                                       pseudo_header_exists_map, content_length, digests, src, src_end - src, err_desc)) != 0) {
+        /* bail out if the error is a hard error, otherwise build header ack then return */
+        if (ret != H2O_HTTP2_ERROR_INVALID_HEADER_CHAR)
+            return normalize_error_code(ret);
+    }
 
     *outbufsize = send_header_ack(qpack, &ctx, outbuf, stream_id);
-    return 0;
+    return ret;
 }
 
 int h2o_qpack_parse_response(h2o_mem_pool_t *pool, h2o_qpack_decoder_t *qpack, int64_t stream_id, int *status,
@@ -1237,15 +1240,19 @@ h2o_iovec_t h2o_qpack_flatten_request(h2o_qpack_encoder_t *_qpack, h2o_mem_pool_
 
     /* pseudo headers */
     flatten_known_header_with_static_lookup(&ctx, h2o_qpack_lookup_method, H2O_TOKEN_METHOD, method);
-    if (scheme == &H2O_URL_SCHEME_HTTP) {
-        flatten_static_indexed(&ctx, 22);
-    } else if (scheme == &H2O_URL_SCHEME_HTTPS) {
-        flatten_static_indexed(&ctx, 23);
-    } else {
-        flatten_known_header_with_static_lookup(&ctx, h2o_qpack_lookup_scheme, H2O_TOKEN_SCHEME, scheme->name);
+    int is_connect = h2o_memis(method.base, method.len, H2O_STRLIT("CONNECT"));
+    if (!is_connect) {
+        if (scheme == &H2O_URL_SCHEME_HTTP) {
+            flatten_static_indexed(&ctx, 22);
+        } else if (scheme == &H2O_URL_SCHEME_HTTPS) {
+            flatten_static_indexed(&ctx, 23);
+        } else {
+            flatten_known_header_with_static_lookup(&ctx, h2o_qpack_lookup_scheme, H2O_TOKEN_SCHEME, scheme->name);
+        }
     }
     flatten_known_header_with_static_lookup(&ctx, h2o_qpack_lookup_authority, H2O_TOKEN_AUTHORITY, authority);
-    flatten_known_header_with_static_lookup(&ctx, h2o_qpack_lookup_path, H2O_TOKEN_PATH, path);
+    if (!is_connect)
+        flatten_known_header_with_static_lookup(&ctx, h2o_qpack_lookup_path, H2O_TOKEN_PATH, path);
 
     /* flatten headers */
     size_t i;
