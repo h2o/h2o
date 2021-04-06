@@ -215,7 +215,7 @@ static void store_server_addresses(struct st_connect_request_t *creq, struct add
     } while (creq->server_addresses.size < PTLS_ELEMENTSOF(creq->server_addresses.list) && (res = res->ai_next) != NULL);
 }
 
-static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errstr, const char *rcode_str, struct addrinfo *res, void *_creq)
+static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errstr, struct addrinfo *res, void *_creq)
 {
     struct st_connect_request_t *creq = _creq;
 
@@ -223,7 +223,18 @@ static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errs
     creq->getaddr_req = NULL;
 
     if (errstr != NULL) {
-        make_proxy_status_error_with_rcode(creq, "dns_error", errstr, rcode_str);
+        const char *rcode;
+        if (errstr == h2o_hostinfo_error_nxdomain)
+            rcode = "NXDOMAIN";
+        else if (errstr == h2o_hostinfo_error_nodata)
+            rcode = "NODATA";
+        else if (errstr == h2o_hostinfo_error_refused)
+            rcode = "REFUSED";
+        else if (errstr == h2o_hostinfo_error_servfail)
+            rcode = "SERVFAIL";
+        else
+            rcode = NULL;
+        make_proxy_status_error_with_rcode(creq, "dns_error", errstr, rcode);
         on_error(creq, errstr);
         return;
     }
