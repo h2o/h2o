@@ -131,16 +131,16 @@ static void make_proxy_status_error_with_sa(struct st_connect_request_t *creq,
     _make_proxy_status_error(creq, error_type, details, NULL, addr, addrlen);
 }
 
-static char *errno_to_proxy_status_error(int so_err)
+static char *socket_error_to_proxy_status_error(const char *err)
 {
-    switch (so_err) {
-    case ENETUNREACH:
-        return "destination_ip_unroutable";
-    case ECONNREFUSED:
+    if (err == h2o_socket_error_conn_refused)
         return "connection_refused";
-    default:
+    else if (err == h2o_socket_error_conn_timed_out)
+        return "connection_timeout";
+    else if (err == h2o_socket_error_network_unreachable)
+        return "destination_ip_unroutable";
+    else
         return "proxy_internal_error";
-    }
 }
 
 static void start_connect(struct st_connect_request_t *creq);
@@ -168,7 +168,7 @@ static void on_connect(h2o_socket_t *sock, const char *err)
 
     if (err) {
         if (creq->server_addresses.next == creq->server_addresses.size) {
-            make_proxy_status_error(creq, errno_to_proxy_status_error(sock->so_err), err);
+            make_proxy_status_error(creq, socket_error_to_proxy_status_error(err), err);
             on_error(creq, err);
             return;
         }
@@ -235,7 +235,7 @@ static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errs
 static void start_connect(struct st_connect_request_t *creq)
 {
     /* repeat connect(pop_front(address_list)) until we run out of the list */
-    int so_err = 0;
+    const char *err = NULL;
     do {
         struct st_server_address_t *server_address = creq->server_addresses.list + creq->server_addresses.next++;
         creq->proxy_status_next_hop.dest_addr = server_address;
@@ -248,13 +248,13 @@ static void start_connect(struct st_connect_request_t *creq)
             return;
         }
         /* connect */
-        if ((creq->sock = h2o_socket_connect(creq->loop, server_address->sa, server_address->salen, on_connect, &so_err)) != NULL) {
+        if ((creq->sock = h2o_socket_connect(creq->loop, server_address->sa, server_address->salen, on_connect, &err)) != NULL) {
             creq->sock->data = creq;
             return;
         }
     } while (creq->server_addresses.next < creq->server_addresses.size);
 
-    make_proxy_status_error(creq, errno_to_proxy_status_error(so_err), NULL);
+    make_proxy_status_error(creq, socket_error_to_proxy_status_error(err), NULL);
     on_error(creq, h2o_socket_error_conn_fail);
 }
 
