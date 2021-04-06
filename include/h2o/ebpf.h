@@ -69,7 +69,8 @@ typedef struct st_h2o_ebpf_map_key_t {
 #define H2O_EBPF_RETURN_MAP_PATH "/sys/fs/bpf/" H2O_EBPF_RETURN_MAP_NAME
 
 /**
- * The size of pinned BPF objects, which must be 2 times larger than the number of processors.
+ * The size of pinned BPF objects.
+ * The size must be much larger than the number of worker threads and the safe value seems to depend on the system,
  */
 #define H2O_EBPF_RETURN_MAP_SIZE 1024
 
