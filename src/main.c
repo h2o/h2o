@@ -1023,10 +1023,8 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
         goto Error;
     }
     if (use_picotls) {
-        if (cipher_suite_tls13_node != NULL && (cipher_suite_tls13 = parse_tls13_ciphers(cmd, *cipher_suite_tls13_node)) == NULL) {
-            h2o_configurator_errprintf(cmd, *cipher_suite, "failed to parse the TLS 1.3 cipher suite\n");
+        if (cipher_suite_tls13_node != NULL && (cipher_suite_tls13 = parse_tls13_ciphers(cmd, *cipher_suite_tls13_node)) == NULL)
             goto Error;
-        }
     }
     if (dh_file != NULL) {
         BIO *bio = BIO_new_file((*dh_file)->data.scalar, "r");
