@@ -205,6 +205,11 @@ void h2o_config_init(h2o_globalconf_t *config)
     h2o_socketpool_init_global(&config->proxy.global_socketpool, SIZE_MAX);
 
     h2o_configurator__init_core(config);
+
+    config->fallback_host = create_hostconf(config);
+    config->fallback_host->authority.port = 65535;
+    config->fallback_host->authority.host = h2o_strdup(NULL, H2O_STRLIT("*"));
+    config->fallback_host->authority.hostport = h2o_strdup(NULL, H2O_STRLIT("*"));
 }
 
 h2o_pathconf_t *h2o_config_register_path(h2o_hostconf_t *hostconf, const char *path, int flags)
@@ -284,6 +289,8 @@ void h2o_config_dispose(h2o_globalconf_t *config)
         destroy_hostconf(hostconf);
     }
     free(config->hosts);
+
+    destroy_hostconf(config->fallback_host);
 
     h2o_socketpool_dispose(&config->proxy.global_socketpool);
     h2o_mem_release_shared(config->mimemap);
