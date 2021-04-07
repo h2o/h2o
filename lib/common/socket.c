@@ -1616,7 +1616,7 @@ static int ebpf_map_delete(int fd, const void *key)
 int h2o_socket_ebpf_setup(void)
 {
     if (getuid() != 0) {
-        h2o_error_printf("skipping to set up eBPF maps because bpf(2) requires root privileges");
+        h2o_error_printf("skipping to set up eBPF maps because bpf(2) requires root privileges\n");
         return 0;
     }
 
@@ -1781,8 +1781,9 @@ uint64_t h2o_socket_ebpf_lookup_flags(h2o_loop_t *loop, int (*init_key)(h2o_ebpf
                         // ENOENT could be issued in some reasons even if BPF tries to insert the entry, for example:
                         //   * the entry in LRU hash was evicted
                         //   * the insert operation in BPF program failed with ENOMEM
-                        h2o_error_printf("BPF_MAP_LOOKUP failed. "
-                                         "BPF handler for h2o:socket_lookup_flags might not have set the flags via h2o_return map");
+                        h2o_error_printf(
+                            "BPF_MAP_LOOKUP failed. "
+                            "BPF handler for h2o:socket_lookup_flags might not have set the flags via h2o_return map\n");
                     else
                         h2o_perror("BPF_MAP_LOOKUP failed");
                 }
