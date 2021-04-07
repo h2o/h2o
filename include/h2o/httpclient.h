@@ -391,7 +391,7 @@ static int h2o_httpclient__tunnel_is_ready(h2o_httpclient_t *client, int status)
 
 /* inline definitions */
 
-int h2o_httpclient__tunnel_is_ready(h2o_httpclient_t *client, int status)
+inline int h2o_httpclient__tunnel_is_ready(h2o_httpclient_t *client, int status)
 {
     if (client->upgrade_to != NULL) {
         if (client->upgrade_to == h2o_httpclient_upgrade_to_connect && 200 <= status && status <= 299)

@@ -20,14 +20,35 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 # IN THE SOFTWARE.
 
-# usage: gen-quic-bpf.py h2o_dir output_file
+# gen_raw_tracer.py - Generate an h2olog tracer to emit USDT probes by parsing D script files.
+#
+# gen_raw_tracer.py parses D script files accompanied by @appdata annotation, for example:
+#
+# <code>
+# /* @appdata
+#  {
+#     "probe1": ["payload1", "payload2"]
+#  }
+#  */
+# provider provider1 {
+#   probe probe1(const char *payload1, void *payload2, size_t payload2_len);
+# }
+# </code>
+#
+# In this case, `payload1` and `payload2` are annotated as application data,
+# which h2olog does not emit by default.
 
 import re
 import sys
-import warnings
+import json
+import os
+from typing import Optional, Tuple, Any
 from collections import OrderedDict
 from pathlib import Path
 from pprint import pprint
+from copy import deepcopy
+
+DEBUG = os.getenv("DEBUG")
 
 quicly_probes_d = "deps/quicly/quicly-probes.d"
 h2o_probes_d = "h2o-probes.d"
@@ -60,17 +81,6 @@ struct_map = {
     "sockaddr_in6": [],
 }
 
-# A block list to list useless or secret data fields
-block_fields = {
-    "quicly:crypto_decrypt": set(["decrypted"]),
-    "quicly:crypto_update_secret": set(["secret"]),
-    "quicly:crypto_send_key_update": set(["secret"]),
-    "quicly:crypto_receive_key_update": set(["secret"]),
-    "quicly:crypto_receive_key_update_prepare": set(["secret"]),
-
-    "h2o:h3_packet_receive": set(["bytes"]),
-}
-
 # The block list for probes.
 # All the probes are handled by default in JSON mode
 block_probes = set([
@@ -101,26 +111,174 @@ struct st_quicly_conn_t {
 };
 """
 
-re_flags = re.X | re.M | re.S
-whitespace = r'(?:/\*.*?\*/|\s+)'
-probe_decl = r'(?:\bprobe\s+(?:[a-zA-Z0-9_]+)\s*\([^\)]*\)\s*;)'
-d_decl = r'(?:\bprovider\s*(?P<provider>[a-zA-Z0-9_]+)\s*\{(?P<probes>(?:%s|%s)*)\})' % (
-    probe_decl, whitespace)
+re_xms = re.X | re.M | re.S
+comment = r'/\*.*?\*/'
 
 
-def strip_c_comments(s):
-  return re.sub('//.*?\n|/\*.*?\*/', '', s, flags=re_flags)
+class Lexer:
+
+  def __init__(self, src: str, filename: Optional[str] = None):
+    self.src = src
+    self.filename = filename
+    self.pos = 0
+
+  def skip(self, pattern) -> bool:
+    m = re.match(pattern, self.src[self.pos:], re_xms)
+    if m:
+      self.pos += m.end()
+      return True
+    return False
+
+  def skip_whitespaces(self) -> bool:
+    return self.skip(r'\s+')
+
+  def skip_whitespaces_or_comments(self):
+    while self.skip_whitespaces() or self.skip(comment):
+      pass
+
+  def expect_opt(self, pattern) -> Optional[re.Match]:
+    m = re.match(pattern, self.src[self.pos:], re_xms)
+    if m:
+      self.pos += m.end()
+    return m
+
+  def expect(self, pattern) -> re.Match:
+    m = self.expect_opt(pattern)
+    if not m:
+      sys.exit("Expected '%s' but got '%s' %s"
+               % (pattern, self.src[self.pos], self.position_hint()))
+    return m
+
+  def peek(self, pattern):
+    return re.match(pattern, self.src[self.pos:], re_xms)
+
+  def position_hint(self):
+    if self.filename:
+      return "at %s:%s" % (self.filename, self.line_and_column())
+    else:
+      return "at %s" % self.line_and_column()
+
+  def line_and_column(self):
+    lines = re.split(r'\n', self.src[:self.pos])
+    return "%d:%d" % (len(lines), len(lines[-1]))
 
 
-def parse_d(context: dict, path: Path, block_probes: set = None):
-  content = strip_c_comments(path.read_text())
+def parse_dscript(path: Path):
+  lexer = Lexer(path.read_text(), path.name)
 
-  matched = re.search(d_decl, content, flags=re_flags)
-  provider = matched.group('provider')
+  provider = None  # type: Optional[str]
+  probes = OrderedDict()
+  appdata = None
+
+  def die(msg):
+    sys.exit("[dscript-parser] %s %s" % (msg, lexer.position_hint()))
+
+  # before the "provider" keyword
+  prev_pos = -1
+  while prev_pos != lexer.pos:
+    prev_pos = lexer.pos
+
+    while True:
+      lexer.skip_whitespaces()
+      m = lexer.expect_opt(comment)
+      if m:
+        # find for /* @appdata {...} */
+        m = re.match(r'/\*\s*@appdata\s*(?P<json>\{.*\})\s*\*/', m[0], re_xms)
+        if m:
+          if appdata:
+            die("cannot place @appdata annotation more than once per file")
+          try:
+            appdata = json.loads(m.group("json"))
+          except:
+            die("cannot parse JSON in the @appdata annotation")
+          if not isinstance(appdata, dict):
+            die("@appdata must be a JSON object")
+      else:
+        break
+
+    lexer.skip_whitespaces_or_comments()
+    if lexer.peek(r'provider\b'):
+      break
+    # ignore anythong other than the "provider" keyword
+    lexer.skip(r'\S+')
+
+  # a provider block
+  m = lexer.expect(r'provider\s+(?P<provider>\w+)\s*\{')
+  provider = m.group("provider")
+
+  # list of probes
+  while True:
+    lexer.skip_whitespaces_or_comments()
+
+    m = lexer.expect_opt(r'probe\s+(?P<probe>\w+)\s*\(')
+    if m:
+      probe_name = m.group("probe")
+      probe = {
+          "name": probe_name,
+          "args": [],
+      }
+
+      probes[probe_name] = probe
+
+      # list of fields or parameters
+      while True:
+        lexer.skip_whitespaces()
+
+        tokens = []  # type: list[str]
+        while True:
+          lexer.skip_whitespaces_or_comments()
+          m = lexer.expect_opt(r'\w+|\*')
+          if m:
+            tokens.append(m[0])
+          else:
+            break
+
+        name = tokens.pop()
+
+        arg = {
+            "name": name,
+            "type": " ".join(tokens),
+        }
+        probe["args"].append(arg)
+
+        lexer.skip_whitespaces_or_comments()
+        m = lexer.expect_opt(r',')
+        if not m:
+          break
+
+      lexer.skip_whitespaces_or_comments()
+      lexer.expect(r'\)')
+      lexer.skip_whitespaces_or_comments()
+      lexer.expect(r';')
+    else:
+      break
+
+  lexer.skip_whitespaces_or_comments()
+  lexer.expect(r'}')
+
+  return {
+      "provider": provider,
+      "probes": probes,
+      "appdata": appdata,
+  }
+
+
+def parse_and_analyze(context: dict, d_file: Path):
+  dscript = parse_dscript(d_file)
+
+  if DEBUG:
+    json.dump(dscript, sys.stderr, indent=2)
+    print("", file=sys.stderr)
+
+  if dscript["appdata"] == None:
+    sys.exit("@appdata section is not declared in %s" % d_file)
+
+  provider = dscript["provider"]
+  appdata = deepcopy(dscript["appdata"])  # type: dict[str, Any]
+
   probe_metadata = context["probe_metadata"]
 
-  for (name, args) in re.findall(r'\bprobe\s+([a-zA-Z0-9_]+)\(([^\)]+)\);', matched.group('probes'), flags=re_flags):
-    arg_list = re.split(r'\s*,\s*', args, flags=re_flags)
+  for (name, probe) in dscript["probes"].items():
     id = ("H2OLOG_EVENT_ID_%s_%s" % (provider, name)).upper()
 
     fully_specified_probe_name = "%s:%s" % (provider, name)
@@ -131,31 +289,52 @@ def parse_d(context: dict, path: Path, block_probes: set = None):
         "id": id,
         "provider": provider,
         "name": name,
+        "args": probe["args"],
         "fully_specified_probe_name": fully_specified_probe_name,
+        "appdata_field_set": set(),
     }
     probe_metadata[name] = metadata
-    args = metadata['args'] = list(map(
-        lambda arg: re.match(
-            r'(?P<type>\w[^;]*[^;\s])\s*\b(?P<name>[a-zA-Z0-9_]+)', arg, flags=re_flags).groupdict(),
-        arg_list))
+    args = metadata['args']
+
+    appdata_fields = appdata.get(name, None)
+    if appdata_fields != None:
+      if not isinstance(appdata_fields, list):
+        sys.exit("An @appdata field must have a list of strings as a value but got: %s" % json.dumps(appdata_fields))
+    else:
+      appdata_fields = []
 
     flat_args_map = metadata['flat_args_map'] = OrderedDict()
-
     for arg in args:
       arg_name = arg['name']
       arg_type = arg['type']
 
+      if arg_name in appdata_fields:
+        appdata_fields.remove(arg_name)
+        metadata["appdata_field_set"].add(arg_name)
+
       if is_ptr_type(arg_type):
         st_name = strip_typename(arg_type)
         if st_name in struct_map:
-            for st_field_access, st_field_name in struct_map[st_name]:
-              flat_args_map[st_field_name or st_field_access] = "typeof_%s__%s" % (st_name, st_field_name or st_field_access)
+          for st_field_access, st_field_name in struct_map[st_name]:
+            flat_args_map[st_field_name or st_field_access] = "typeof_%s__%s" % (st_name, st_field_name or st_field_access)
         else:
           flat_args_map[arg_name] = arg_type
       else:
         flat_args_map[arg_name] = arg_type
 
-  context["id"] = id
+    if name in appdata and len(appdata_fields) == 0:
+      del appdata[name]
+
+  # make sure all the items in @appdata have been consumed
+  if appdata:
+    for (probe_name, fields) in appdata.items():
+      if fields:
+        print("invalid @appdata: probe fields are not used in provider %s: %s: %s" %
+              (provider, json.dumps(probe_name), json.dumps(fields)), file=sys.stderr)
+      else:
+        print("invalid @appdata: probe name is not used in provider %s: %s" %
+              (provider, json.dumps(probe_name)), file=sys.stderr)
+    sys.exit(1)
 
 
 def strip_typename(t):
@@ -191,7 +370,7 @@ int %s(struct pt_regs *ctx) {
   struct h2olog_event_t event = { .id = %s };
 
 """ % (fully_specified_probe_name, tracer_name, metadata['id'])
-  block_field_set = block_fields.get(fully_specified_probe_name, set())
+  appdata_field_set = metadata["appdata_field_set"]  # type: set[str]
   probe_name = metadata["name"]
 
   args = metadata['args']
@@ -200,9 +379,8 @@ int %s(struct pt_regs *ctx) {
     arg_name = arg['name']
     arg_type = arg['type']
 
-    if arg_name in block_field_set:
-      c += "  // %s %s (ignored)\n" % (arg_type, arg_name)
-      continue
+    if arg_name in appdata_field_set:
+      c += "  // %s %s (appdata)\n" % (arg_type, arg_name)
     else:
       c += "  // %s %s\n" % (arg_type, arg_name)
 
@@ -255,16 +433,12 @@ int %s(struct pt_regs *ctx) {
   return c
 
 
-def prepare_context(h2o_dir):
+def prepare_context(d_files: list):
   context = {
       "probe_metadata": OrderedDict(),
-      "h2o_dir": h2o_dir,
   }
-  parse_d(context, h2o_dir.joinpath(quicly_probes_d),
-          block_probes=block_probes)
-  parse_d(context, h2o_dir.joinpath(h2o_probes_d),
-          block_probes=block_probes)
-
+  for d_file in d_files:
+    parse_and_analyze(context, Path(d_file))
   return context
 
 
@@ -356,18 +530,12 @@ struct h2olog_event_t {
 
   for name, metadata in probe_metadata.items():
     fully_specified_probe_name = metadata["fully_specified_probe_name"]
-    block_field_set = block_fields.get(fully_specified_probe_name, None)
-
+    appdata_field_set = metadata["appdata_field_set"]
     event_id_t_decl += "  %s,\n" % metadata["id"]
 
     event_t_decl += "    struct { // %s\n" % fully_specified_probe_name
     for field_name, field_type in metadata["flat_args_map"].items():
-      if block_field_set and field_name in block_field_set:
-        continue
-
-      if fully_specified_probe_name == "quicly:receive" and field_name == "bytes":
-        f = "uint8_t %s[1]" % field_name  # for first-octet
-      elif is_bin_type(field_type):
+      if is_bin_type(field_type):
         f = "uint8_t %s[STR_LEN]" % field_name
       elif is_str_type(field_type):
         f = "char %s[STR_LEN]" % field_name
@@ -376,7 +544,10 @@ struct h2olog_event_t {
       else:
         f = "%s %s" % (field_type, field_name)
 
-      event_t_decl += "      %s;\n" % f
+      if field_name in appdata_field_set:
+        event_t_decl += "      %s; // appdata\n" % f
+      else:
+        event_t_decl += "      %s;\n" % f
     event_t_decl += "    } %s;\n" % name
 
   event_t_decl += r"""
@@ -449,8 +620,7 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
   for probe_name in probe_metadata:
     metadata = probe_metadata[probe_name]
     fully_specified_probe_name = metadata["fully_specified_probe_name"]
-
-    block_field_set = block_fields.get(fully_specified_probe_name, None)
+    appdata_field_set = metadata["appdata_field_set"]  # type: set[str]
     flat_args_map = metadata["flat_args_map"]
 
     handle_event_func += "  case %s: { // %s\n" % (
@@ -459,14 +629,11 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
     handle_event_func += '    json_write_pair_c(out_, STR_LIT("seq"), seq_);\n'
 
     for field_name, field_type in flat_args_map.items():
-      if block_field_set and field_name in block_field_set:
-        continue
+      stmts = ""
       json_field_name = rename_map.get(field_name, field_name).replace("_", "-")
       event_t_name = "%s.%s" % (probe_name, field_name)
-      if fully_specified_probe_name == "quicly:receive" and field_name == "bytes":
-        handle_event_func += '    json_write_pair_c(out_, STR_LIT("first-octet"), event->receive.bytes[0]);\n'
-      elif not is_bin_type(field_type) and not is_str_type(field_type):
-        handle_event_func += '    json_write_pair_c(out_, STR_LIT("%s"), event->%s);\n' % (
+      if not is_bin_type(field_type) and not is_str_type(field_type):
+        stmts += '    json_write_pair_c(out_, STR_LIT("%s"), event->%s);\n' % (
             json_field_name, event_t_name)
       else:  # bin or str type with "*_len" field
         len_names = set([field_name + "_len", "num_" + field_name])
@@ -478,14 +645,20 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
 
         if len_event_t_name:
           # A string might be truncated in STRLEN
-          handle_event_func += '    json_write_pair_c(out_, STR_LIT("%s"), event->%s, (event->%s < STR_LEN ? event->%s : STR_LEN));\n' % (
+          stmts += '    json_write_pair_c(out_, STR_LIT("%s"), event->%s, (event->%s < STR_LEN ? event->%s : STR_LEN));\n' % (
               json_field_name, event_t_name, len_event_t_name, len_event_t_name)
         elif is_bin_type(field_type):
-          handle_event_func += '    # warning "missing `%s_len` param in the probe %s, ignored."\n' % (
+          stmts += '    # warning "missing `%s_len` param in the probe %s, ignored."\n' % (
               field_name, fully_specified_probe_name)
         else:  # str type
-          handle_event_func += '    json_write_pair_c(out_, STR_LIT("%s"), event->%s, strlen(event->%s));\n' % (
+          stmts += '    json_write_pair_c(out_, STR_LIT("%s"), event->%s, strlen(event->%s));\n' % (
               json_field_name, event_t_name, event_t_name)
+      if field_name in appdata_field_set:
+        handle_event_func += "    if (include_appdata_) {\n"
+        handle_event_func += re.sub(r"^", "  ", stmts, flags=re_xms).rstrip() + "\n"
+        handle_event_func += "    }\n"
+      else:
+        handle_event_func += stmts
 
     if metadata["provider"] == "h2o":
       handle_event_func += '    json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());\n'
@@ -519,7 +692,7 @@ extern "C" {
 #include "h2olog.h"
 #include "json.h"
 
-#include "raw_tracer.h.cc"
+#include "raw_tracer.cc.h"
 
 #define STR_LEN 64
 #define STR_LIT(s) s, strlen(s)
@@ -543,14 +716,18 @@ std::string h2o_raw_tracer::bpf_text() {
 """ % (build_typedef_for_cplusplus(), build_bpf_header_generator(), event_id_t_decl, event_t_decl, usdts_def, handle_event_func, bpf))
 
 
-def main():
-  try:
-    (_, h2o_dir, output_file) = sys.argv
-  except:
-    print("usage: %s h2o_dir output_file" % sys.argv[0])
-    sys.exit(1)
+def usage():
+  print("usage: %s output_file d_files..." % sys.argv[0])
+  sys.exit(1)
 
-  context = prepare_context(Path(h2o_dir))
+
+def main():
+  if len(sys.argv) <= 2:
+    usage()
+
+  output_file, *d_files = sys.argv[1:]
+
+  context = prepare_context(d_files)
   generate_cplusplus(context, output_file)
 
 

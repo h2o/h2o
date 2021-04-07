@@ -105,15 +105,23 @@ extern "C" {
 
 /* cipher-suites */
 #define PTLS_CIPHER_SUITE_AES_128_GCM_SHA256 0x1301
+#define PTLS_CIPHER_SUITE_NAME_AES_128_GCM_SHA256 "TLS_AES_128_GCM_SHA256"
 #define PTLS_CIPHER_SUITE_AES_256_GCM_SHA384 0x1302
+#define PTLS_CIPHER_SUITE_NAME_AES_256_GCM_SHA384 "TLS_AES_256_GCM_SHA384"
 #define PTLS_CIPHER_SUITE_CHACHA20_POLY1305_SHA256 0x1303
+#define PTLS_CIPHER_SUITE_NAME_CHACHA20_POLY1305_SHA256 "TLS_CHACHA20_POLY1305_SHA256"
 
 /* negotiated_groups */
 #define PTLS_GROUP_SECP256R1 23
+#define PTLS_GROUP_NAME_SECP256R1 "scep256r1"
 #define PTLS_GROUP_SECP384R1 24
+#define PTLS_GROUP_NAME_SECP384R1 "secp384r1"
 #define PTLS_GROUP_SECP521R1 25
+#define PTLS_GROUP_NAME_SECP521R1 "secp521r1"
 #define PTLS_GROUP_X25519 29
+#define PTLS_GROUP_NAME_X25519 "x25519"
 #define PTLS_GROUP_X448 30
+#define PTLS_GROUP_NAME_X448 "x448"
 
 /* signature algorithms */
 #define PTLS_SIGNATURE_RSA_PKCS1_SHA1 0x0201
@@ -124,6 +132,7 @@ extern "C" {
 #define PTLS_SIGNATURE_RSA_PSS_RSAE_SHA256 0x0804
 #define PTLS_SIGNATURE_RSA_PSS_RSAE_SHA384 0x0805
 #define PTLS_SIGNATURE_RSA_PSS_RSAE_SHA512 0x0806
+#define PTLS_SIGNATURE_ED25519 0x0807
 
 /* ESNI */
 #define PTLS_ESNI_VERSION_DRAFT03 0xff02
@@ -289,6 +298,10 @@ typedef const struct st_ptls_key_exchange_algorithm_t {
      * crypto-specific data
      */
     intptr_t data;
+    /**
+     * Description as defined in the IANA TLS registry
+     */
+    const char *name;
 } ptls_key_exchange_algorithm_t;
 
 /**
@@ -328,7 +341,7 @@ typedef struct st_ptls_aead_context_t {
     const struct st_ptls_aead_algorithm_t *algo;
     /* field above this line must not be altered by the crypto binding */
     void (*dispose_crypto)(struct st_ptls_aead_context_t *ctx);
-    void (*do_xor_iv)(struct st_ptls_aead_context_t *ctx, const void * bytes, size_t len);
+    void (*do_xor_iv)(struct st_ptls_aead_context_t *ctx, const void *bytes, size_t len);
     void (*do_encrypt_init)(struct st_ptls_aead_context_t *ctx, uint64_t seq, const void *aad, size_t aadlen);
     size_t (*do_encrypt_update)(struct st_ptls_aead_context_t *ctx, void *output, const void *input, size_t inlen);
     size_t (*do_encrypt_final)(struct st_ptls_aead_context_t *ctx, void *output);
@@ -444,9 +457,22 @@ typedef const struct st_ptls_hash_algorithm_t {
 } ptls_hash_algorithm_t;
 
 typedef const struct st_ptls_cipher_suite_t {
+    /**
+     * ID as defined by the TLS Cipher Suites registry
+     */
     uint16_t id;
+    /**
+     * underlying AEAD algorithm
+     */
     ptls_aead_algorithm_t *aead;
+    /**
+     * underlying hash algorithm
+     */
     ptls_hash_algorithm_t *hash;
+    /**
+     * value of the "Description" field of the TLS Cipher Suites registry
+     */
+    const char *name;
 } ptls_cipher_suite_t;
 
 struct st_ptls_traffic_protection_t;
@@ -575,9 +601,15 @@ PTLS_CALLBACK_TYPE(int, sign_certificate, ptls_t *tls, uint16_t *selected_algori
  * The implementor of the callback should use that as the opportunity to free any temporary data allocated for the verify_sign
  * callback.
  */
-PTLS_CALLBACK_TYPE(int, verify_certificate, ptls_t *tls,
-                   int (**verify_sign)(void *verify_ctx, ptls_iovec_t data, ptls_iovec_t sign), void **verify_data,
-                   ptls_iovec_t *certs, size_t num_certs);
+typedef struct st_ptls_verify_certificate_t {
+    int (*cb)(struct st_ptls_verify_certificate_t *self, ptls_t *tls,
+              int (**verify_sign)(void *verify_ctx, uint16_t algo, ptls_iovec_t data, ptls_iovec_t sign), void **verify_data,
+              ptls_iovec_t *certs, size_t num_certs);
+    /**
+     * list of signature algorithms being supported, terminated by UINT16_MAX
+     */
+    const uint16_t *algos;
+} ptls_verify_certificate_t;
 /**
  * Encrypt-and-signs (or verify-and-decrypts) a ticket (server-only).
  * When used for encryption (i.e., is_encrypt being set), the function should return 0 if successful, or else a non-zero value.
@@ -728,6 +760,10 @@ struct st_ptls_context_t {
      * the correct one when that callback is being called (like handling swapping the contexts based on the value of SNI).
      */
     unsigned use_raw_public_keys : 1;
+    /**
+     * boolean indicating if the cipher-suite should be chosen based on server's preference
+     */
+    unsigned server_cipher_preference : 1;
     /**
      *
      */
