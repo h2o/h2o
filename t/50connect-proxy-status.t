@@ -42,7 +42,7 @@ subtest "acl" => sub {
     run_with_curl($server, sub {
         my ($proto, $port, $curl) = @_;
         my $content = `$curl --proxy-insecure -p -x $proto://127.0.0.1:$port --silent -v --show-error https://8.8.8.8/ 2>&1`;
-        like $content, qr{proxy-status: h2o/test; error=destination_ip_prohibited; next-hop="8\.8\.8\.8"}i;
+        like $content, qr{proxy-status: h2o/test; error=destination_ip_prohibited}i;
         like $content, qr{Received HTTP code 403 from proxy after CONNECT};
     });
 };
@@ -51,7 +51,7 @@ subtest "nxdomain" => sub {
     run_with_curl($server, sub {
         my ($proto, $port, $curl) = @_;
         my $content = `$curl --proxy-insecure -p -x $proto://127.0.0.1:$port --silent -v --show-error https://doesnotexist.example.org/ 2>&1`;
-        like $content, qr{proxy-status: h2o/test; error=dns_error; rcode=NXDOMAIN; next-hop="doesnotexist.example.org"}i;
+        like $content, qr{proxy-status: h2o/test; error=dns_error; rcode=NXDOMAIN}i;
         like $content, qr{Received HTTP code 502 from proxy after CONNECT};
     });
 };
@@ -61,7 +61,7 @@ subtest "refused" => sub {
     run_with_curl($server, sub {
         my ($proto, $port, $curl) = @_;
         my $content = `$curl --proxy-insecure -p -x $proto://127.0.0.1:$port --silent -v --show-error https://127.0.0.1:1/ 2>&1`;
-        like $content, qr{proxy-status: h2o/test; error=connection_refused; next-hop="127\.0\.0\.1"}i;
+        like $content, qr{proxy-status: h2o/test; error=connection_refused}i;
         like $content, qr{Received HTTP code 502 from proxy after CONNECT};
     });
 };
