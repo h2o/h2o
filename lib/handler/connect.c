@@ -88,16 +88,22 @@ static void make_proxy_status_error(struct st_connect_request_t *creq,
     h2o_add_header_by_str(pool, &creq->src_req->res.headers, H2O_STRLIT("proxy-status"), 0, NULL, hval.base, hval.len);
 }
 
-static char *socket_error_to_proxy_status_error(const char *err)
+static void make_proxy_status_error_for_socket_error(struct st_connect_request_t *creq,
+    const char *err)
 {
+    const char *error_type;
+    const char *details = NULL;
     if (err == h2o_socket_error_conn_refused)
-        return "connection_refused";
+        error_type = "connection_refused";
     else if (err == h2o_socket_error_conn_timed_out)
-        return "connection_timeout";
+        error_type = "connection_timeout";
     else if (err == h2o_socket_error_network_unreachable)
-        return "destination_ip_unroutable";
-    else
-        return "proxy_internal_error";
+        error_type = "destination_ip_unroutable";
+    else {
+        error_type = "proxy_internal_error";
+        details = err;
+    }
+    make_proxy_status_error(creq, error_type, details, NULL);
 }
 
 static void start_connect(struct st_connect_request_t *creq);
@@ -125,7 +131,7 @@ static void on_connect(h2o_socket_t *sock, const char *err)
 
     if (err) {
         if (creq->server_addresses.next == creq->server_addresses.size) {
-            make_proxy_status_error(creq, socket_error_to_proxy_status_error(err), err, NULL);
+            make_proxy_status_error_for_socket_error(creq, err);
             on_error(creq, err);
             return;
         }
@@ -221,7 +227,7 @@ static void start_connect(struct st_connect_request_t *creq)
         }
     } while (creq->server_addresses.next < creq->server_addresses.size);
 
-    make_proxy_status_error(creq, socket_error_to_proxy_status_error(err), NULL, NULL);
+    make_proxy_status_error_for_socket_error(creq, err);
     on_error(creq, h2o_socket_error_conn_fail);
 }
 
