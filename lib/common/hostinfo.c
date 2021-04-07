@@ -35,7 +35,6 @@ struct st_h2o_hostinfo_getaddr_req_t {
         struct {
             h2o_multithread_message_t message;
             const char *errstr;
-            const char *rcode_str;
             struct addrinfo *ai;
         } _out;
     };
@@ -51,28 +50,67 @@ static struct {
 
 size_t h2o_hostinfo_max_threads = 1;
 
-static const char *dns_rcode_str_from_gai_error(int ret)
+/* generic errors (https://tools.ietf.org/html/rfc8499#section-3) */
+const char h2o_hostinfo_error_nxdomain[] = "hostname does not exist";
+const char h2o_hostinfo_error_nodata[] = "no address associated with hostname";
+const char h2o_hostinfo_error_refused[] = "non-recoverable failure in name resolution";
+const char h2o_hostinfo_error_servfail[] = "temporary failure in name resolution";
+
+/* errors specfic to getaddrinfo */
+const char h2o_hostinfo_error_gai_addrfamily[] = "address family for hostname not supported";
+const char h2o_hostinfo_error_gai_badflags[] = "bad value for ai_flags";
+const char h2o_hostinfo_error_gai_family[] = "ai_family not supported";
+const char h2o_hostinfo_error_gai_memory[] = "memory allocation failure";
+const char h2o_hostinfo_error_gai_service[] = "servname not supported for ai_socktype";
+const char h2o_hostinfo_error_gai_socktype[] = "ai_socktype not supported";
+const char h2o_hostinfo_error_gai_system[] = "system error";
+const char h2o_hostinfo_error_gai_inprogress[] = "processing request in progress";
+const char h2o_hostinfo_error_gai_canceled[] = "request canceled";
+const char h2o_hostinfo_error_gai_notcanceled[] = "request not canceled";
+const char h2o_hostinfo_error_gai_alldone[] = "all requests done";
+const char h2o_hostinfo_error_gai_intr[] = "interrupted by a signal";
+const char h2o_hostinfo_error_gai_idn_encode[] = "parameter string not correctly encoded";
+const char h2o_hostinfo_error_gai_other[] = "name resolution failed";
+
+static const char *hostinfo_error_from_gai_error(int ret)
 {
     switch (ret) {
-    case EAI_NONAME: /* The node or service is not known. */
-        return "NXDOMAIN";
-
-    case EAI_ADDRFAMILY: /* The specified network host does not have any network addresses in the requested address family. */
-    case EAI_NODATA: /* The specified network host exists, but does not have any network addresses defined. */
-        return "NODATA";
-
-    case EAI_FAIL: /* The name server returned a permanent failure indication. */
-        return "REFUSED";
-
-    case EAI_AGAIN: /* The name server returned a temporary failure indication.  Try again later. */
-    case EAI_BADFLAGS: /* hints.ai_flags contains invalid flags; or, hints.ai_flags included AI_CANONNAME and name was NULL. */
-    case EAI_FAMILY: /* The requested address family is not supported. */
-    case EAI_MEMORY: /* Out of memory. */
-    case EAI_SERVICE: /* The requested service is not available for the requested socket type. */
-    case EAI_SOCKTYPE: /* The requested socket type is not supported. */
-    case EAI_SYSTEM: /* Other system error, check errno for details. */
+    case EAI_NONAME:
+        return h2o_hostinfo_error_nxdomain;
+    case EAI_NODATA:
+        return h2o_hostinfo_error_nodata;
+    case EAI_FAIL:
+        return h2o_hostinfo_error_refused;
+    case EAI_AGAIN:
+        return h2o_hostinfo_error_servfail;
+    case EAI_ADDRFAMILY:
+        return h2o_hostinfo_error_gai_addrfamily;
+    case EAI_BADFLAGS:
+        return h2o_hostinfo_error_gai_badflags;
+    case EAI_FAMILY:
+        return h2o_hostinfo_error_gai_family;
+    case EAI_MEMORY:
+        return h2o_hostinfo_error_gai_memory;
+    case EAI_SERVICE:
+        return h2o_hostinfo_error_gai_service;
+    case EAI_SOCKTYPE:
+        return h2o_hostinfo_error_gai_socktype;
+    case EAI_SYSTEM:
+        return h2o_hostinfo_error_gai_system;
+    case EAI_INPROGRESS:
+        return h2o_hostinfo_error_gai_inprogress;
+    case EAI_CANCELED:
+        return h2o_hostinfo_error_gai_canceled;
+    case EAI_NOTCANCELED:
+        return h2o_hostinfo_error_gai_notcanceled;
+    case EAI_ALLDONE:
+        return h2o_hostinfo_error_gai_alldone;
+    case EAI_INTR:
+        return h2o_hostinfo_error_gai_intr;
+    case EAI_IDN_ENCODE:
+        return h2o_hostinfo_error_gai_idn_encode;
     default:
-        return "SERVFAIL";
+        return h2o_hostinfo_error_gai_other;
     }
 }
 
@@ -83,12 +121,10 @@ static void lookup_and_respond(h2o_hostinfo_getaddr_req_t *req)
     int ret = getaddrinfo(req->_in.name, req->_in.serv, &req->_in.hints, &res);
     req->_out.message = (h2o_multithread_message_t){{NULL}};
     if (ret != 0) {
-        req->_out.errstr = gai_strerror(ret);
-        req->_out.rcode_str = dns_rcode_str_from_gai_error(ret);
+        req->_out.errstr = hostinfo_error_from_gai_error(ret);
         req->_out.ai = NULL;
     } else {
         req->_out.errstr = NULL;
-        req->_out.rcode_str = "NOERROR";
         req->_out.ai = res;
     }
 
@@ -205,7 +241,7 @@ void h2o_hostinfo_getaddr_receiver(h2o_multithread_receiver_t *receiver, h2o_lin
         h2o_hostinfo_getaddr_cb cb = req->_cb;
         if (cb != NULL) {
             req->_cb = NULL;
-            cb(req, req->_out.errstr, req->_out.rcode_str, req->_out.ai, req->cbdata);
+            cb(req, req->_out.errstr, req->_out.ai, req->cbdata);
         }
         if (req->_out.ai != NULL)
             freeaddrinfo(req->_out.ai);

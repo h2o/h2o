@@ -31,9 +31,31 @@
 #include <sys/types.h>
 #include "h2o/multithread.h"
 
+/* generic errors (https://tools.ietf.org/html/rfc8499#section-3) */
+extern const char h2o_hostinfo_error_nxdomain[];
+extern const char h2o_hostinfo_error_nodata[];
+extern const char h2o_hostinfo_error_refused[];
+extern const char h2o_hostinfo_error_servfail[];
+
+/* errors specfic to getaddrinfo */
+extern const char h2o_hostinfo_error_gai_addrfamily[];
+extern const char h2o_hostinfo_error_gai_badflags[];
+extern const char h2o_hostinfo_error_gai_family[];
+extern const char h2o_hostinfo_error_gai_memory[];
+extern const char h2o_hostinfo_error_gai_service[];
+extern const char h2o_hostinfo_error_gai_socktype[];
+extern const char h2o_hostinfo_error_gai_system[];
+extern const char h2o_hostinfo_error_gai_inprogress[];
+extern const char h2o_hostinfo_error_gai_canceled[];
+extern const char h2o_hostinfo_error_gai_notcanceled[];
+extern const char h2o_hostinfo_error_gai_alldone[];
+extern const char h2o_hostinfo_error_gai_intr[];
+extern const char h2o_hostinfo_error_gai_idn_encode[];
+extern const char h2o_hostinfo_error_gai_other[];
+
 typedef struct st_h2o_hostinfo_getaddr_req_t h2o_hostinfo_getaddr_req_t;
 
-typedef void (*h2o_hostinfo_getaddr_cb)(h2o_hostinfo_getaddr_req_t *req, const char *errstr, const char *rcode_str, struct addrinfo *res, void *cbdata);
+typedef void (*h2o_hostinfo_getaddr_cb)(h2o_hostinfo_getaddr_req_t *req, const char *errstr, struct addrinfo *res, void *cbdata);
 
 extern size_t h2o_hostinfo_max_threads;
 
