@@ -52,44 +52,14 @@ struct st_connect_request_t {
         size_t next;
     } server_addresses;
     h2o_timer_t timeout;
-    struct {
-        h2o_iovec_t dest_hostname;
-        const struct st_server_address_t *dest_addr;
-    } proxy_status_next_hop;
 };
 
 #define TO_BITMASK(type, len) ((type)~(((type)1 << (sizeof(type) * 8 - (len))) - 1))
 
-static h2o_iovec_t encode_sf_string(h2o_mem_pool_t *pool, const char *s, size_t slen)
-{
-    if (slen == SIZE_MAX)
-        slen = strlen(s);
-
-    /* https://tools.ietf.org/html/rfc8941#section-3.3.3 */
-    size_t to_escape = 0;
-    for (size_t i = 0; i < slen; ++i) {
-        if (s[i] == '\\' || s[i] == '"')
-            ++to_escape;
-    }
-    char *buf = h2o_mem_alloc_pool(pool, char, slen + to_escape + 3);
-    char *d = buf;
-    *(d++) = '"';
-    for (size_t i = 0; i < slen; ++i) {
-        if (s[i] == '\\' || s[i] == '"')
-            *(d++) = '\\';
-        *(d++) = s[i];
-    }
-    *(d++) = '"';
-    *d = '\0';
-    return h2o_iovec_init(buf, slen + to_escape + 2);
-}
-
-static void _make_proxy_status_error(struct st_connect_request_t *creq,
-    const char *error_type, const char *details,
-    const char *rcode, const struct sockaddr *addr, socklen_t addrlen)
+static void make_proxy_status_error(struct st_connect_request_t *creq,
+    const char *error_type, const char *details, const char *rcode)
 {
     h2o_mem_pool_t *pool = &creq->src_req->pool;
-    char addr_str[NI_MAXHOST];
 
     if (!creq->handler->config.connect_proxy_status_enabled)
         return;
@@ -97,20 +67,6 @@ static void _make_proxy_status_error(struct st_connect_request_t *creq,
     h2o_iovec_t identity = creq->src_req->conn->ctx->globalconf->proxy_status_identity;
     if (identity.base == NULL)
         identity = h2o_iovec_init(H2O_STRLIT("h2o"));
-
-    h2o_iovec_t next_hop = creq->proxy_status_next_hop.dest_hostname;
-    if (addr != NULL) {
-        size_t addr_str_len = h2o_socket_getnumerichost(addr, addrlen, addr_str);
-        if (addr_str_len != SIZE_MAX) {
-            next_hop = h2o_iovec_init(addr_str, addr_str_len);
-        }
-    } else if (creq->proxy_status_next_hop.dest_addr != NULL) {
-        const struct st_server_address_t *dest_addr = creq->proxy_status_next_hop.dest_addr;
-        size_t addr_str_len = h2o_socket_getnumerichost(dest_addr->sa, dest_addr->salen, addr_str);
-        if (addr_str_len != SIZE_MAX) {
-            next_hop = h2o_iovec_init(addr_str, addr_str_len);
-        }
-    }
 
     h2o_iovec_t parts[9] = {
         identity,
@@ -122,13 +78,9 @@ static void _make_proxy_status_error(struct st_connect_request_t *creq,
         parts[nparts++] = h2o_iovec_init(H2O_STRLIT("; rcode="));
         parts[nparts++] = h2o_iovec_init(rcode, strlen(rcode));
     }
-    if (next_hop.base != NULL) {
-        parts[nparts++] = h2o_iovec_init(H2O_STRLIT("; next-hop="));
-        parts[nparts++] = encode_sf_string(pool, next_hop.base, next_hop.len);
-    }
     if (details != NULL) {
         parts[nparts++] = h2o_iovec_init(H2O_STRLIT("; details="));
-        parts[nparts++] = encode_sf_string(pool, details, SIZE_MAX);
+        parts[nparts++] = h2o_encode_sf_string(pool, details, SIZE_MAX);
     }
     assert(nparts <= sizeof(parts) / sizeof(parts[0]));
     h2o_iovec_t hval = h2o_concat_list(pool, parts, nparts);
@@ -136,35 +88,22 @@ static void _make_proxy_status_error(struct st_connect_request_t *creq,
     h2o_add_header_by_str(pool, &creq->src_req->res.headers, H2O_STRLIT("proxy-status"), 0, NULL, hval.base, hval.len);
 }
 
-static void make_proxy_status_error(struct st_connect_request_t *creq,
-    const char *error_type, const char *details)
+static void make_proxy_status_error_for_socket_error(struct st_connect_request_t *creq,
+    const char *err)
 {
-    _make_proxy_status_error(creq, error_type, details, NULL, NULL, 0);
-}
-
-static void make_proxy_status_error_with_rcode(struct st_connect_request_t *creq,
-    const char *error_type, const char *details, const char *rcode)
-{
-    _make_proxy_status_error(creq, error_type, details, rcode, NULL, 0);
-}
-
-static void make_proxy_status_error_with_sa(struct st_connect_request_t *creq,
-    const char *error_type, const char *details,
-    const struct sockaddr *addr, socklen_t addrlen)
-{
-    _make_proxy_status_error(creq, error_type, details, NULL, addr, addrlen);
-}
-
-static char *errno_to_proxy_status_error(int so_err)
-{
-    switch (so_err) {
-    case ENETUNREACH:
-        return "destination_ip_unroutable";
-    case ECONNREFUSED:
-        return "connection_refused";
-    default:
-        return "proxy_internal_error";
+    const char *error_type;
+    const char *details = NULL;
+    if (err == h2o_socket_error_conn_refused)
+        error_type = "connection_refused";
+    else if (err == h2o_socket_error_conn_timed_out)
+        error_type = "connection_timeout";
+    else if (err == h2o_socket_error_network_unreachable)
+        error_type = "destination_ip_unroutable";
+    else {
+        error_type = "proxy_internal_error";
+        details = err;
     }
+    make_proxy_status_error(creq, error_type, details, NULL);
 }
 
 static void start_connect(struct st_connect_request_t *creq);
@@ -172,16 +111,20 @@ static void start_connect(struct st_connect_request_t *creq);
 static void on_error(struct st_connect_request_t *creq, const char *errstr)
 {
     h2o_timer_unlink(&creq->timeout);
+    if (creq->sock != NULL) {
+        h2o_socket_close(creq->sock);
+        creq->sock = NULL;
+    }
     h2o_send_error_502(creq->src_req, "Gateway Error", errstr, H2O_SEND_ERROR_KEEP_HEADERS);
 }
 
 static void on_timeout(h2o_timer_t *entry)
 {
     struct st_connect_request_t *creq = H2O_STRUCT_FROM_MEMBER(struct st_connect_request_t, timeout, entry);
-    if (creq->proxy_status_next_hop.dest_addr != NULL) {
-        make_proxy_status_error(creq, "connection_timeout", NULL);
+    if (creq->server_addresses.size > 0) {
+        make_proxy_status_error(creq, "connection_timeout", NULL, NULL);
     } else {
-        make_proxy_status_error(creq, "dns_timeout", NULL);
+        make_proxy_status_error(creq, "dns_timeout", NULL, NULL);
     }
     on_error(creq, h2o_httpclient_error_io_timeout);
 }
@@ -190,12 +133,16 @@ static void on_connect(h2o_socket_t *sock, const char *err)
 {
     struct st_connect_request_t *creq = sock->data;
 
+    assert(creq->sock == sock);
+
     if (err) {
         if (creq->server_addresses.next == creq->server_addresses.size) {
-            make_proxy_status_error(creq, errno_to_proxy_status_error(sock->so_err), err);
+            make_proxy_status_error_for_socket_error(creq, err);
             on_error(creq, err);
             return;
         }
+        h2o_socket_close(sock);
+        creq->sock = NULL;
         start_connect(creq);
         return;
     }
@@ -238,7 +185,7 @@ static void store_server_addresses(struct st_connect_request_t *creq, struct add
     } while (creq->server_addresses.size < PTLS_ELEMENTSOF(creq->server_addresses.list) && (res = res->ai_next) != NULL);
 }
 
-static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errstr, const char *rcode_str, struct addrinfo *res, void *_creq)
+static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errstr, struct addrinfo *res, void *_creq)
 {
     struct st_connect_request_t *creq = _creq;
 
@@ -246,7 +193,18 @@ static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errs
     creq->getaddr_req = NULL;
 
     if (errstr != NULL) {
-        make_proxy_status_error_with_rcode(creq, "dns_error", errstr, rcode_str);
+        const char *rcode;
+        if (errstr == h2o_hostinfo_error_nxdomain)
+            rcode = "NXDOMAIN";
+        else if (errstr == h2o_hostinfo_error_nodata)
+            rcode = "NODATA";
+        else if (errstr == h2o_hostinfo_error_refused)
+            rcode = "REFUSED";
+        else if (errstr == h2o_hostinfo_error_servfail)
+            rcode = "SERVFAIL";
+        else
+            rcode = NULL;
+        make_proxy_status_error(creq, "dns_error", errstr, rcode);
         on_error(creq, errstr);
         return;
     }
@@ -256,8 +214,8 @@ static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errs
         start_connect(creq);
     } else {
         assert(res->ai_socktype == SOCK_DGRAM);
-        int so_err = 0;
-        h2o_tunnel_t *tunnel = h2o_open_udp_tunnel_from_sa(creq->loop, res->ai_addr, res->ai_addrlen, &so_err);
+        const char *err = NULL;
+        h2o_tunnel_t *tunnel = h2o_open_udp_tunnel_from_sa(creq->loop, res->ai_addr, res->ai_addrlen, &err);
         h2o_req_t *req = creq->src_req;
         h2o_timer_unlink(&creq->timeout);
         if (tunnel != 0) {
@@ -267,7 +225,7 @@ static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errs
             req->establish_tunnel(req, tunnel, timeout);
         } else {
             h2o_req_log_error(req, "lib/handler/connect.c", "Failed to create downstream socket");
-            make_proxy_status_error_with_sa(creq, errno_to_proxy_status_error(so_err), NULL, res->ai_addr, res->ai_addrlen);
+            make_proxy_status_error_for_socket_error(creq, err);
             h2o_send_error_502(req, "Bad Gateway", "Bad Gateway", H2O_SEND_ERROR_KEEP_HEADERS);
         }
     }
@@ -276,26 +234,25 @@ static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errs
 static void start_connect(struct st_connect_request_t *creq)
 {
     /* repeat connect(pop_front(address_list)) until we run out of the list */
-    int so_err = 0;
+    const char *err = NULL;
     do {
         struct st_server_address_t *server_address = creq->server_addresses.list + creq->server_addresses.next++;
-        creq->proxy_status_next_hop.dest_addr = server_address;
         /* check address */
         if (!h2o_connect_lookup_acl(creq->handler->acl.entries, creq->handler->acl.count, server_address->sa)) {
             h2o_timer_unlink(&creq->timeout);
             h2o_req_log_error(creq->src_req, "lib/handler/connect.c", "access rejected by acl");
-            make_proxy_status_error(creq, "destination_ip_prohibited", NULL);
+            make_proxy_status_error(creq, "destination_ip_prohibited", NULL, NULL);
             h2o_send_error_403(creq->src_req, "Access Forbidden", "Access Forbidden", H2O_SEND_ERROR_KEEP_HEADERS);
             return;
         }
         /* connect */
-        if ((creq->sock = h2o_socket_connect(creq->loop, server_address->sa, server_address->salen, on_connect, &so_err)) != NULL) {
+        if ((creq->sock = h2o_socket_connect(creq->loop, server_address->sa, server_address->salen, on_connect, &err)) != NULL) {
             creq->sock->data = creq;
             return;
         }
     } while (creq->server_addresses.next < creq->server_addresses.size);
 
-    make_proxy_status_error(creq, errno_to_proxy_status_error(so_err), NULL);
+    make_proxy_status_error_for_socket_error(creq, err);
     on_error(creq, h2o_socket_error_conn_fail);
 }
 
@@ -328,7 +285,6 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
         .loop = req->conn->ctx->loop,
         .src_req = req,
         .timeout = {.cb = on_timeout},
-        .proxy_status_next_hop = {.dest_hostname = host},
     };
     h2o_timer_link(creq->loop, handler->config.connect_timeout, &creq->timeout);
 

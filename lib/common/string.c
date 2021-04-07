@@ -627,3 +627,33 @@ int h2o_str_at_position(char *buf, const char *src, size_t src_len, int lineno, 
     *buf = '\0';
     return 0;
 }
+
+h2o_iovec_t h2o_encode_sf_string(h2o_mem_pool_t *pool, const char *s, size_t slen)
+{
+    if (slen == SIZE_MAX)
+        slen = strlen(s);
+
+    /* https://tools.ietf.org/html/rfc8941#section-3.3.3 */
+    size_t to_escape = 0;
+    for (size_t i = 0; i < slen; ++i) {
+        if (s[i] == '\\' || s[i] == '"')
+            ++to_escape;
+    }
+
+    h2o_iovec_t ret;
+    ret.len = slen + to_escape + 2;
+    if (pool != NULL) {
+        ret.base = h2o_mem_alloc_pool(pool, char, ret.len);
+    } else {
+        ret.base = h2o_mem_alloc(ret.len);
+    }
+    char *dst = ret.base;
+    *(dst++) = '"';
+    for (size_t i = 0; i < slen; ++i) {
+        if (s[i] == '\\' || s[i] == '"')
+            *(dst++) = '\\';
+        *(dst++) = s[i];
+    }
+    *dst = '"';
+    return ret;
+}

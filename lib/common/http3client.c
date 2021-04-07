@@ -406,7 +406,7 @@ Fail:
     destroy_connection(conn);
 }
 
-static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errstr, const char *rcode_str, struct addrinfo *res, void *_conn)
+static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errstr, struct addrinfo *res, void *_conn)
 {
     struct st_h2o_httpclient__h3_conn_t *conn = _conn;
 
