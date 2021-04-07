@@ -31,8 +31,6 @@ extern "C" {
 #include <time.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
-
-#include "quicly.h"
 }
 
 class h2o_tracer

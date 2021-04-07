@@ -34,7 +34,6 @@ extern "C" {
 #include "h2o/memory.h"
 #include "h2o/version.h"
 #include "h2o/ebpf.h"
-#include "h2o/serverutil.h"
 }
 #include "h2olog.h"
 
