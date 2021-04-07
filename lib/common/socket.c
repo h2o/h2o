@@ -139,6 +139,7 @@ const char h2o_socket_error_conn_fail[] = "connection failure";
 const char h2o_socket_error_conn_refused[] = "connection refused";
 const char h2o_socket_error_conn_timed_out[] = "connection timed out";
 const char h2o_socket_error_network_unreachable[] = "network unreachable";
+const char h2o_socket_error_host_unreachable[] = "host unreachable";
 const char h2o_socket_error_socket_fail[] = "socket creation failed";
 const char h2o_socket_error_ssl_no_cert[] = "no certificate";
 const char h2o_socket_error_ssl_cert_invalid[] = "invalid certificate";

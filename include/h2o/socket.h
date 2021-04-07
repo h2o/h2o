@@ -177,6 +177,7 @@ extern const char h2o_socket_error_conn_fail[];
 extern const char h2o_socket_error_conn_refused[];
 extern const char h2o_socket_error_conn_timed_out[];
 extern const char h2o_socket_error_network_unreachable[];
+extern const char h2o_socket_error_host_unreachable[];
 extern const char h2o_socket_error_socket_fail[];
 extern const char h2o_socket_error_ssl_no_cert[];
 extern const char h2o_socket_error_ssl_cert_invalid[];
