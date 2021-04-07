@@ -191,6 +191,8 @@ static const char *socket_error_from_errno(int e, const char *default_err)
         return h2o_socket_error_conn_timed_out;
     case ENETUNREACH:
         return h2o_socket_error_network_unreachable;
+    case EHOSTUNREACH:
+        return h2o_socket_error_host_unreachable;
     default:
         return default_err;
     }
