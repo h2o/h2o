@@ -54,6 +54,7 @@ Optional arguments:
     -t TRACEPOINT A tracepoint, or fully-qualified probe name, to show,
                   including a glob pattern, e.g. "quicly:accept", "h2o:*"
     -S RATE Enable random sampling per connection (0-1.0)
+    -a Include application data which are omitted by default
     -r Run without dropping root privilege
     -w Path to write the output (default: stdout)
 
@@ -244,12 +245,13 @@ int main(int argc, char **argv)
     int debug = 0;
     bool preserve_root = false;
     bool list_usdts = false;
+    bool include_appdata = false;
     FILE *outfp = stdout;
     std::vector<std::string> response_header_filters;
     int c;
     pid_t h2o_pid = -1;
     double sampling_rate = -1;
-    while ((c = getopt(argc, argv, "hHdrlp:t:s:w:S:")) != -1) {
+    while ((c = getopt(argc, argv, "hHdrlap:t:s:w:S:")) != -1) {
         switch (c) {
         case 'H':
             tracer.reset(create_http_tracer());
@@ -280,6 +282,9 @@ int main(int argc, char **argv)
                 fprintf(stderr, "Error: the argument of -S must be in the range of 0.0 to 1.0\n");
                 exit(EXIT_FAILURE);
             }
+            break;
+        case 'a':
+            include_appdata = true;
             break;
         case 'd':
             debug++;
@@ -323,7 +328,7 @@ int main(int argc, char **argv)
         exit(EXIT_FAILURE);
     }
 
-    tracer->init(outfp);
+    tracer->init(outfp, include_appdata);
 
     std::vector<std::string> cflags({
         build_define_cflag("H2OLOG_H2O_PID", h2o_pid),

@@ -16,7 +16,7 @@ extern "C" {
 #include "h2olog.h"
 #include "json.h"
 
-#include "raw_tracer.h.cc"
+#include "raw_tracer.cc.h"
 
 #define STR_LEN 64
 #define STR_LIT(s) s, strlen(s)
@@ -227,7 +227,7 @@ struct h2olog_event_t {
       typeof_st_quicly_conn_t__master_id master_id;
       int64_t at;
       char dcid[STR_LEN];
-      uint8_t bytes[1];
+      uint8_t bytes[STR_LEN];
       size_t bytes_len;
     } receive;
     struct { // quicly:version_switch
@@ -254,11 +254,13 @@ struct h2olog_event_t {
       int is_enc;
       uint8_t epoch;
       char label[STR_LEN];
+      char secret[STR_LEN]; // appdata
     } crypto_update_secret;
     struct { // quicly:crypto_send_key_update
       typeof_st_quicly_conn_t__master_id master_id;
       int64_t at;
       uint64_t phase;
+      char secret[STR_LEN]; // appdata
     } crypto_send_key_update;
     struct { // quicly:crypto_send_key_update_confirmed
       typeof_st_quicly_conn_t__master_id master_id;
@@ -269,11 +271,13 @@ struct h2olog_event_t {
       typeof_st_quicly_conn_t__master_id master_id;
       int64_t at;
       uint64_t phase;
+      char secret[STR_LEN]; // appdata
     } crypto_receive_key_update;
     struct { // quicly:crypto_receive_key_update_prepare
       typeof_st_quicly_conn_t__master_id master_id;
       int64_t at;
       uint64_t phase;
+      char secret[STR_LEN]; // appdata
     } crypto_receive_key_update_prepare;
     struct { // quicly:packet_sent
       typeof_st_quicly_conn_t__master_id master_id;
@@ -287,7 +291,7 @@ struct h2olog_event_t {
       typeof_st_quicly_conn_t__master_id master_id;
       int64_t at;
       uint64_t pn;
-      uint8_t decrypted[STR_LEN];
+      uint8_t decrypted[STR_LEN]; // appdata
       size_t decrypted_len;
       uint8_t packet_type;
     } packet_received;
@@ -539,13 +543,13 @@ struct h2olog_event_t {
     struct { // quicly:datagram_send
       typeof_st_quicly_conn_t__master_id master_id;
       int64_t at;
-      uint8_t payload[STR_LEN];
+      uint8_t payload[STR_LEN]; // appdata
       size_t payload_len;
     } datagram_send;
     struct { // quicly:datagram_receive
       typeof_st_quicly_conn_t__master_id master_id;
       int64_t at;
-      uint8_t payload[STR_LEN];
+      uint8_t payload[STR_LEN]; // appdata
       size_t payload_len;
     } datagram_receive;
     struct { // quicly:ack_frequency_receive
@@ -627,7 +631,7 @@ struct h2olog_event_t {
       int64_t at;
       typeof_st_quicly_stream_t__stream_id stream_id;
       size_t off;
-      uint8_t src[STR_LEN];
+      uint8_t src[STR_LEN]; // appdata
       size_t src_len;
     } stream_on_receive;
     struct { // quicly:stream_on_receive_reset
@@ -655,9 +659,9 @@ struct h2olog_event_t {
     struct { // h2o:receive_request_header
       uint64_t conn_id;
       uint64_t req_id;
-      char name[STR_LEN];
+      char name[STR_LEN]; // appdata
       size_t name_len;
-      char value[STR_LEN];
+      char value[STR_LEN]; // appdata
       size_t value_len;
     } receive_request_header;
     struct { // h2o:send_response
@@ -669,9 +673,9 @@ struct h2olog_event_t {
     struct { // h2o:send_response_header
       uint64_t conn_id;
       uint64_t req_id;
-      char name[STR_LEN];
+      char name[STR_LEN]; // appdata
       size_t name_len;
-      char value[STR_LEN];
+      char value[STR_LEN]; // appdata
       size_t value_len;
     } send_response_header;
     struct { // h2o:h1_accept
@@ -701,12 +705,13 @@ struct h2olog_event_t {
     } h3s_stream_set_state;
     struct { // h2o:h3_frame_receive
       uint64_t frame_type;
-      uint8_t bytes[STR_LEN];
+      uint8_t bytes[STR_LEN]; // appdata
       size_t bytes_len;
     } h3_frame_receive;
     struct { // h2o:h3_packet_receive
       quicly_address_t dest;
       quicly_address_t src;
+      uint8_t bytes[STR_LEN];
       size_t bytes_len;
     } h3_packet_receive;
     struct { // h2o:h3_packet_forward
@@ -730,7 +735,7 @@ struct h2olog_event_t {
     struct { // h2o:tunnel_on_read
       struct st_h2o_tunnel_t * tunnel;
       char err[STR_LEN];
-      uint8_t bytes[STR_LEN];
+      uint8_t bytes[STR_LEN]; // appdata
       size_t bytes_len;
     } tunnel_on_read;
     struct { // h2o:tunnel_proceed_read
@@ -738,7 +743,7 @@ struct h2olog_event_t {
     } tunnel_proceed_read;
     struct { // h2o:tunnel_write
       struct st_h2o_tunnel_t * tunnel;
-      uint8_t bytes[STR_LEN];
+      uint8_t bytes[STR_LEN]; // appdata
       size_t bytes_len;
     } tunnel_write;
     struct { // h2o:tunnel_on_write_complete
@@ -909,7 +914,7 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
     json_write_pair_c(out_, STR_LIT("conn"), event->receive.master_id);
     json_write_pair_c(out_, STR_LIT("time"), event->receive.at);
     json_write_pair_c(out_, STR_LIT("dcid"), event->receive.dcid, strlen(event->receive.dcid));
-    json_write_pair_c(out_, STR_LIT("first-octet"), event->receive.bytes[0]);
+    json_write_pair_c(out_, STR_LIT("bytes"), event->receive.bytes, (event->receive.bytes_len < STR_LEN ? event->receive.bytes_len : STR_LEN));
     json_write_pair_c(out_, STR_LIT("bytes-len"), event->receive.bytes_len);
     break;
   }
@@ -951,6 +956,9 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
     json_write_pair_c(out_, STR_LIT("is-enc"), event->crypto_update_secret.is_enc);
     json_write_pair_c(out_, STR_LIT("epoch"), event->crypto_update_secret.epoch);
     json_write_pair_c(out_, STR_LIT("label"), event->crypto_update_secret.label, strlen(event->crypto_update_secret.label));
+    if (include_appdata_) {
+      json_write_pair_c(out_, STR_LIT("secret"), event->crypto_update_secret.secret, strlen(event->crypto_update_secret.secret));
+    }
     break;
   }
   case H2OLOG_EVENT_ID_QUICLY_CRYPTO_SEND_KEY_UPDATE: { // quicly:crypto_send_key_update
@@ -959,6 +967,9 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
     json_write_pair_c(out_, STR_LIT("conn"), event->crypto_send_key_update.master_id);
     json_write_pair_c(out_, STR_LIT("time"), event->crypto_send_key_update.at);
     json_write_pair_c(out_, STR_LIT("phase"), event->crypto_send_key_update.phase);
+    if (include_appdata_) {
+      json_write_pair_c(out_, STR_LIT("secret"), event->crypto_send_key_update.secret, strlen(event->crypto_send_key_update.secret));
+    }
     break;
   }
   case H2OLOG_EVENT_ID_QUICLY_CRYPTO_SEND_KEY_UPDATE_CONFIRMED: { // quicly:crypto_send_key_update_confirmed
@@ -975,6 +986,9 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
     json_write_pair_c(out_, STR_LIT("conn"), event->crypto_receive_key_update.master_id);
     json_write_pair_c(out_, STR_LIT("time"), event->crypto_receive_key_update.at);
     json_write_pair_c(out_, STR_LIT("phase"), event->crypto_receive_key_update.phase);
+    if (include_appdata_) {
+      json_write_pair_c(out_, STR_LIT("secret"), event->crypto_receive_key_update.secret, strlen(event->crypto_receive_key_update.secret));
+    }
     break;
   }
   case H2OLOG_EVENT_ID_QUICLY_CRYPTO_RECEIVE_KEY_UPDATE_PREPARE: { // quicly:crypto_receive_key_update_prepare
@@ -983,6 +997,9 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
     json_write_pair_c(out_, STR_LIT("conn"), event->crypto_receive_key_update_prepare.master_id);
     json_write_pair_c(out_, STR_LIT("time"), event->crypto_receive_key_update_prepare.at);
     json_write_pair_c(out_, STR_LIT("phase"), event->crypto_receive_key_update_prepare.phase);
+    if (include_appdata_) {
+      json_write_pair_c(out_, STR_LIT("secret"), event->crypto_receive_key_update_prepare.secret, strlen(event->crypto_receive_key_update_prepare.secret));
+    }
     break;
   }
   case H2OLOG_EVENT_ID_QUICLY_PACKET_SENT: { // quicly:packet_sent
@@ -1002,7 +1019,9 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
     json_write_pair_c(out_, STR_LIT("conn"), event->packet_received.master_id);
     json_write_pair_c(out_, STR_LIT("time"), event->packet_received.at);
     json_write_pair_c(out_, STR_LIT("pn"), event->packet_received.pn);
-    json_write_pair_c(out_, STR_LIT("decrypted"), event->packet_received.decrypted, (event->packet_received.decrypted_len < STR_LEN ? event->packet_received.decrypted_len : STR_LEN));
+    if (include_appdata_) {
+      json_write_pair_c(out_, STR_LIT("decrypted"), event->packet_received.decrypted, (event->packet_received.decrypted_len < STR_LEN ? event->packet_received.decrypted_len : STR_LEN));
+    }
     json_write_pair_c(out_, STR_LIT("decrypted-len"), event->packet_received.decrypted_len);
     json_write_pair_c(out_, STR_LIT("packet-type"), event->packet_received.packet_type);
     break;
@@ -1380,7 +1399,9 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
     json_write_pair_c(out_, STR_LIT("seq"), seq_);
     json_write_pair_c(out_, STR_LIT("conn"), event->datagram_send.master_id);
     json_write_pair_c(out_, STR_LIT("time"), event->datagram_send.at);
-    json_write_pair_c(out_, STR_LIT("payload"), event->datagram_send.payload, (event->datagram_send.payload_len < STR_LEN ? event->datagram_send.payload_len : STR_LEN));
+    if (include_appdata_) {
+      json_write_pair_c(out_, STR_LIT("payload"), event->datagram_send.payload, (event->datagram_send.payload_len < STR_LEN ? event->datagram_send.payload_len : STR_LEN));
+    }
     json_write_pair_c(out_, STR_LIT("payload-len"), event->datagram_send.payload_len);
     break;
   }
@@ -1389,7 +1410,9 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
     json_write_pair_c(out_, STR_LIT("seq"), seq_);
     json_write_pair_c(out_, STR_LIT("conn"), event->datagram_receive.master_id);
     json_write_pair_c(out_, STR_LIT("time"), event->datagram_receive.at);
-    json_write_pair_c(out_, STR_LIT("payload"), event->datagram_receive.payload, (event->datagram_receive.payload_len < STR_LEN ? event->datagram_receive.payload_len : STR_LEN));
+    if (include_appdata_) {
+      json_write_pair_c(out_, STR_LIT("payload"), event->datagram_receive.payload, (event->datagram_receive.payload_len < STR_LEN ? event->datagram_receive.payload_len : STR_LEN));
+    }
     json_write_pair_c(out_, STR_LIT("payload-len"), event->datagram_receive.payload_len);
     break;
   }
@@ -1504,7 +1527,9 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
     json_write_pair_c(out_, STR_LIT("time"), event->stream_on_receive.at);
     json_write_pair_c(out_, STR_LIT("stream-id"), event->stream_on_receive.stream_id);
     json_write_pair_c(out_, STR_LIT("off"), event->stream_on_receive.off);
-    json_write_pair_c(out_, STR_LIT("src"), event->stream_on_receive.src, (event->stream_on_receive.src_len < STR_LEN ? event->stream_on_receive.src_len : STR_LEN));
+    if (include_appdata_) {
+      json_write_pair_c(out_, STR_LIT("src"), event->stream_on_receive.src, (event->stream_on_receive.src_len < STR_LEN ? event->stream_on_receive.src_len : STR_LEN));
+    }
     json_write_pair_c(out_, STR_LIT("src-len"), event->stream_on_receive.src_len);
     break;
   }
@@ -1540,9 +1565,13 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
     json_write_pair_c(out_, STR_LIT("seq"), seq_);
     json_write_pair_c(out_, STR_LIT("conn-id"), event->receive_request_header.conn_id);
     json_write_pair_c(out_, STR_LIT("req-id"), event->receive_request_header.req_id);
-    json_write_pair_c(out_, STR_LIT("name"), event->receive_request_header.name, (event->receive_request_header.name_len < STR_LEN ? event->receive_request_header.name_len : STR_LEN));
+    if (include_appdata_) {
+      json_write_pair_c(out_, STR_LIT("name"), event->receive_request_header.name, (event->receive_request_header.name_len < STR_LEN ? event->receive_request_header.name_len : STR_LEN));
+    }
     json_write_pair_c(out_, STR_LIT("name-len"), event->receive_request_header.name_len);
-    json_write_pair_c(out_, STR_LIT("value"), event->receive_request_header.value, (event->receive_request_header.value_len < STR_LEN ? event->receive_request_header.value_len : STR_LEN));
+    if (include_appdata_) {
+      json_write_pair_c(out_, STR_LIT("value"), event->receive_request_header.value, (event->receive_request_header.value_len < STR_LEN ? event->receive_request_header.value_len : STR_LEN));
+    }
     json_write_pair_c(out_, STR_LIT("value-len"), event->receive_request_header.value_len);
     json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
     break;
@@ -1562,9 +1591,13 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
     json_write_pair_c(out_, STR_LIT("seq"), seq_);
     json_write_pair_c(out_, STR_LIT("conn-id"), event->send_response_header.conn_id);
     json_write_pair_c(out_, STR_LIT("req-id"), event->send_response_header.req_id);
-    json_write_pair_c(out_, STR_LIT("name"), event->send_response_header.name, (event->send_response_header.name_len < STR_LEN ? event->send_response_header.name_len : STR_LEN));
+    if (include_appdata_) {
+      json_write_pair_c(out_, STR_LIT("name"), event->send_response_header.name, (event->send_response_header.name_len < STR_LEN ? event->send_response_header.name_len : STR_LEN));
+    }
     json_write_pair_c(out_, STR_LIT("name-len"), event->send_response_header.name_len);
-    json_write_pair_c(out_, STR_LIT("value"), event->send_response_header.value, (event->send_response_header.value_len < STR_LEN ? event->send_response_header.value_len : STR_LEN));
+    if (include_appdata_) {
+      json_write_pair_c(out_, STR_LIT("value"), event->send_response_header.value, (event->send_response_header.value_len < STR_LEN ? event->send_response_header.value_len : STR_LEN));
+    }
     json_write_pair_c(out_, STR_LIT("value-len"), event->send_response_header.value_len);
     json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
     break;
@@ -1622,7 +1655,9 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
     json_write_pair_n(out_, STR_LIT("type"), STR_LIT("h3-frame-receive"));
     json_write_pair_c(out_, STR_LIT("seq"), seq_);
     json_write_pair_c(out_, STR_LIT("frame-type"), event->h3_frame_receive.frame_type);
-    json_write_pair_c(out_, STR_LIT("bytes"), event->h3_frame_receive.bytes, (event->h3_frame_receive.bytes_len < STR_LEN ? event->h3_frame_receive.bytes_len : STR_LEN));
+    if (include_appdata_) {
+      json_write_pair_c(out_, STR_LIT("bytes"), event->h3_frame_receive.bytes, (event->h3_frame_receive.bytes_len < STR_LEN ? event->h3_frame_receive.bytes_len : STR_LEN));
+    }
     json_write_pair_c(out_, STR_LIT("bytes-len"), event->h3_frame_receive.bytes_len);
     json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
     break;
@@ -1632,6 +1667,7 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
     json_write_pair_c(out_, STR_LIT("seq"), seq_);
     json_write_pair_c(out_, STR_LIT("dest"), event->h3_packet_receive.dest);
     json_write_pair_c(out_, STR_LIT("src"), event->h3_packet_receive.src);
+    json_write_pair_c(out_, STR_LIT("bytes"), event->h3_packet_receive.bytes, (event->h3_packet_receive.bytes_len < STR_LEN ? event->h3_packet_receive.bytes_len : STR_LEN));
     json_write_pair_c(out_, STR_LIT("bytes-len"), event->h3_packet_receive.bytes_len);
     json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
     break;
@@ -1675,7 +1711,9 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
     json_write_pair_c(out_, STR_LIT("seq"), seq_);
     json_write_pair_c(out_, STR_LIT("tunnel"), event->tunnel_on_read.tunnel);
     json_write_pair_c(out_, STR_LIT("err"), event->tunnel_on_read.err, strlen(event->tunnel_on_read.err));
-    json_write_pair_c(out_, STR_LIT("bytes"), event->tunnel_on_read.bytes, (event->tunnel_on_read.bytes_len < STR_LEN ? event->tunnel_on_read.bytes_len : STR_LEN));
+    if (include_appdata_) {
+      json_write_pair_c(out_, STR_LIT("bytes"), event->tunnel_on_read.bytes, (event->tunnel_on_read.bytes_len < STR_LEN ? event->tunnel_on_read.bytes_len : STR_LEN));
+    }
     json_write_pair_c(out_, STR_LIT("bytes-len"), event->tunnel_on_read.bytes_len);
     json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
     break;
@@ -1691,7 +1729,9 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
     json_write_pair_n(out_, STR_LIT("type"), STR_LIT("tunnel-write"));
     json_write_pair_c(out_, STR_LIT("seq"), seq_);
     json_write_pair_c(out_, STR_LIT("tunnel"), event->tunnel_write.tunnel);
-    json_write_pair_c(out_, STR_LIT("bytes"), event->tunnel_write.bytes, (event->tunnel_write.bytes_len < STR_LEN ? event->tunnel_write.bytes_len : STR_LEN));
+    if (include_appdata_) {
+      json_write_pair_c(out_, STR_LIT("bytes"), event->tunnel_write.bytes, (event->tunnel_write.bytes_len < STR_LEN ? event->tunnel_write.bytes_len : STR_LEN));
+    }
     json_write_pair_c(out_, STR_LIT("bytes-len"), event->tunnel_write.bytes_len);
     json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
     break;
@@ -1877,7 +1917,7 @@ struct h2olog_event_t {
       typeof_st_quicly_conn_t__master_id master_id;
       int64_t at;
       char dcid[STR_LEN];
-      uint8_t bytes[1];
+      uint8_t bytes[STR_LEN];
       size_t bytes_len;
     } receive;
     struct { // quicly:version_switch
@@ -1904,11 +1944,13 @@ struct h2olog_event_t {
       int is_enc;
       uint8_t epoch;
       char label[STR_LEN];
+      char secret[STR_LEN]; // appdata
     } crypto_update_secret;
     struct { // quicly:crypto_send_key_update
       typeof_st_quicly_conn_t__master_id master_id;
       int64_t at;
       uint64_t phase;
+      char secret[STR_LEN]; // appdata
     } crypto_send_key_update;
     struct { // quicly:crypto_send_key_update_confirmed
       typeof_st_quicly_conn_t__master_id master_id;
@@ -1919,11 +1961,13 @@ struct h2olog_event_t {
       typeof_st_quicly_conn_t__master_id master_id;
       int64_t at;
       uint64_t phase;
+      char secret[STR_LEN]; // appdata
     } crypto_receive_key_update;
     struct { // quicly:crypto_receive_key_update_prepare
       typeof_st_quicly_conn_t__master_id master_id;
       int64_t at;
       uint64_t phase;
+      char secret[STR_LEN]; // appdata
     } crypto_receive_key_update_prepare;
     struct { // quicly:packet_sent
       typeof_st_quicly_conn_t__master_id master_id;
@@ -1937,7 +1981,7 @@ struct h2olog_event_t {
       typeof_st_quicly_conn_t__master_id master_id;
       int64_t at;
       uint64_t pn;
-      uint8_t decrypted[STR_LEN];
+      uint8_t decrypted[STR_LEN]; // appdata
       size_t decrypted_len;
       uint8_t packet_type;
     } packet_received;
@@ -2189,13 +2233,13 @@ struct h2olog_event_t {
     struct { // quicly:datagram_send
       typeof_st_quicly_conn_t__master_id master_id;
       int64_t at;
-      uint8_t payload[STR_LEN];
+      uint8_t payload[STR_LEN]; // appdata
       size_t payload_len;
     } datagram_send;
     struct { // quicly:datagram_receive
       typeof_st_quicly_conn_t__master_id master_id;
       int64_t at;
-      uint8_t payload[STR_LEN];
+      uint8_t payload[STR_LEN]; // appdata
       size_t payload_len;
     } datagram_receive;
     struct { // quicly:ack_frequency_receive
@@ -2277,7 +2321,7 @@ struct h2olog_event_t {
       int64_t at;
       typeof_st_quicly_stream_t__stream_id stream_id;
       size_t off;
-      uint8_t src[STR_LEN];
+      uint8_t src[STR_LEN]; // appdata
       size_t src_len;
     } stream_on_receive;
     struct { // quicly:stream_on_receive_reset
@@ -2305,9 +2349,9 @@ struct h2olog_event_t {
     struct { // h2o:receive_request_header
       uint64_t conn_id;
       uint64_t req_id;
-      char name[STR_LEN];
+      char name[STR_LEN]; // appdata
       size_t name_len;
-      char value[STR_LEN];
+      char value[STR_LEN]; // appdata
       size_t value_len;
     } receive_request_header;
     struct { // h2o:send_response
@@ -2319,9 +2363,9 @@ struct h2olog_event_t {
     struct { // h2o:send_response_header
       uint64_t conn_id;
       uint64_t req_id;
-      char name[STR_LEN];
+      char name[STR_LEN]; // appdata
       size_t name_len;
-      char value[STR_LEN];
+      char value[STR_LEN]; // appdata
       size_t value_len;
     } send_response_header;
     struct { // h2o:h1_accept
@@ -2351,12 +2395,13 @@ struct h2olog_event_t {
     } h3s_stream_set_state;
     struct { // h2o:h3_frame_receive
       uint64_t frame_type;
-      uint8_t bytes[STR_LEN];
+      uint8_t bytes[STR_LEN]; // appdata
       size_t bytes_len;
     } h3_frame_receive;
     struct { // h2o:h3_packet_receive
       quicly_address_t dest;
       quicly_address_t src;
+      uint8_t bytes[STR_LEN];
       size_t bytes_len;
     } h3_packet_receive;
     struct { // h2o:h3_packet_forward
@@ -2380,7 +2425,7 @@ struct h2olog_event_t {
     struct { // h2o:tunnel_on_read
       struct st_h2o_tunnel_t * tunnel;
       char err[STR_LEN];
-      uint8_t bytes[STR_LEN];
+      uint8_t bytes[STR_LEN]; // appdata
       size_t bytes_len;
     } tunnel_on_read;
     struct { // h2o:tunnel_proceed_read
@@ -2388,7 +2433,7 @@ struct h2olog_event_t {
     } tunnel_proceed_read;
     struct { // h2o:tunnel_write
       struct st_h2o_tunnel_t * tunnel;
-      uint8_t bytes[STR_LEN];
+      uint8_t bytes[STR_LEN]; // appdata
       size_t bytes_len;
     } tunnel_write;
     struct { // h2o:tunnel_on_write_complete
@@ -2633,7 +2678,9 @@ int trace_quicly__crypto_update_secret(struct pt_regs *ctx) {
   // const char * label
   bpf_usdt_readarg(5, ctx, &buf);
   bpf_probe_read(&event.crypto_update_secret.label, sizeof(event.crypto_update_secret.label), buf);
-  // const char * secret (ignored)
+  // const char * secret (appdata)
+  bpf_usdt_readarg(6, ctx, &buf);
+  bpf_probe_read(&event.crypto_update_secret.secret, sizeof(event.crypto_update_secret.secret), buf);
 
   if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
     bpf_trace_printk("failed to perf_submit in trace_quicly__crypto_update_secret\n");
@@ -2654,7 +2701,9 @@ int trace_quicly__crypto_send_key_update(struct pt_regs *ctx) {
   bpf_usdt_readarg(2, ctx, &event.crypto_send_key_update.at);
   // uint64_t phase
   bpf_usdt_readarg(3, ctx, &event.crypto_send_key_update.phase);
-  // const char * secret (ignored)
+  // const char * secret (appdata)
+  bpf_usdt_readarg(4, ctx, &buf);
+  bpf_probe_read(&event.crypto_send_key_update.secret, sizeof(event.crypto_send_key_update.secret), buf);
 
   if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
     bpf_trace_printk("failed to perf_submit in trace_quicly__crypto_send_key_update\n");
@@ -2695,7 +2744,9 @@ int trace_quicly__crypto_receive_key_update(struct pt_regs *ctx) {
   bpf_usdt_readarg(2, ctx, &event.crypto_receive_key_update.at);
   // uint64_t phase
   bpf_usdt_readarg(3, ctx, &event.crypto_receive_key_update.phase);
-  // const char * secret (ignored)
+  // const char * secret (appdata)
+  bpf_usdt_readarg(4, ctx, &buf);
+  bpf_probe_read(&event.crypto_receive_key_update.secret, sizeof(event.crypto_receive_key_update.secret), buf);
 
   if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
     bpf_trace_printk("failed to perf_submit in trace_quicly__crypto_receive_key_update\n");
@@ -2716,7 +2767,9 @@ int trace_quicly__crypto_receive_key_update_prepare(struct pt_regs *ctx) {
   bpf_usdt_readarg(2, ctx, &event.crypto_receive_key_update_prepare.at);
   // uint64_t phase
   bpf_usdt_readarg(3, ctx, &event.crypto_receive_key_update_prepare.phase);
-  // const char * secret (ignored)
+  // const char * secret (appdata)
+  bpf_usdt_readarg(4, ctx, &buf);
+  bpf_probe_read(&event.crypto_receive_key_update_prepare.secret, sizeof(event.crypto_receive_key_update_prepare.secret), buf);
 
   if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
     bpf_trace_printk("failed to perf_submit in trace_quicly__crypto_receive_key_update_prepare\n");
@@ -2763,7 +2816,7 @@ int trace_quicly__packet_received(struct pt_regs *ctx) {
   bpf_usdt_readarg(2, ctx, &event.packet_received.at);
   // uint64_t pn
   bpf_usdt_readarg(3, ctx, &event.packet_received.pn);
-  // const void * decrypted
+  // const void * decrypted (appdata)
   bpf_usdt_readarg(4, ctx, &buf);
   bpf_probe_read(&event.packet_received.decrypted, sizeof(event.packet_received.decrypted), buf);
   // size_t decrypted_len
@@ -3708,7 +3761,7 @@ int trace_quicly__datagram_send(struct pt_regs *ctx) {
   event.datagram_send.master_id = get_st_quicly_conn_t__master_id(conn);
   // int64_t at
   bpf_usdt_readarg(2, ctx, &event.datagram_send.at);
-  // const void * payload
+  // const void * payload (appdata)
   bpf_usdt_readarg(3, ctx, &buf);
   bpf_probe_read(&event.datagram_send.payload, sizeof(event.datagram_send.payload), buf);
   // size_t payload_len
@@ -3731,7 +3784,7 @@ int trace_quicly__datagram_receive(struct pt_regs *ctx) {
   event.datagram_receive.master_id = get_st_quicly_conn_t__master_id(conn);
   // int64_t at
   bpf_usdt_readarg(2, ctx, &event.datagram_receive.at);
-  // const void * payload
+  // const void * payload (appdata)
   bpf_usdt_readarg(3, ctx, &buf);
   bpf_probe_read(&event.datagram_receive.payload, sizeof(event.datagram_receive.payload), buf);
   // size_t payload_len
@@ -4027,7 +4080,7 @@ int trace_quicly__stream_on_receive(struct pt_regs *ctx) {
   event.stream_on_receive.stream_id = get_st_quicly_stream_t__stream_id(stream);
   // size_t off
   bpf_usdt_readarg(4, ctx, &event.stream_on_receive.off);
-  // const void * src
+  // const void * src (appdata)
   bpf_usdt_readarg(5, ctx, &buf);
   bpf_probe_read(&event.stream_on_receive.src, sizeof(event.stream_on_receive.src), buf);
   // size_t src_len
@@ -4137,12 +4190,12 @@ int trace_h2o__receive_request_header(struct pt_regs *ctx) {
   bpf_usdt_readarg(1, ctx, &event.receive_request_header.conn_id);
   // uint64_t req_id
   bpf_usdt_readarg(2, ctx, &event.receive_request_header.req_id);
-  // const char * name
+  // const char * name (appdata)
   bpf_usdt_readarg(3, ctx, &buf);
   bpf_probe_read(&event.receive_request_header.name, sizeof(event.receive_request_header.name), buf);
   // size_t name_len
   bpf_usdt_readarg(4, ctx, &event.receive_request_header.name_len);
-  // const char * value
+  // const char * value (appdata)
   bpf_usdt_readarg(5, ctx, &buf);
   bpf_probe_read(&event.receive_request_header.value, sizeof(event.receive_request_header.value), buf);
   // size_t value_len
@@ -4181,12 +4234,12 @@ int trace_h2o__send_response_header(struct pt_regs *ctx) {
   bpf_usdt_readarg(1, ctx, &event.send_response_header.conn_id);
   // uint64_t req_id
   bpf_usdt_readarg(2, ctx, &event.send_response_header.req_id);
-  // const char * name
+  // const char * name (appdata)
   bpf_usdt_readarg(3, ctx, &buf);
   bpf_probe_read(&event.send_response_header.name, sizeof(event.send_response_header.name), buf);
   // size_t name_len
   bpf_usdt_readarg(4, ctx, &event.send_response_header.name_len);
-  // const char * value
+  // const char * value (appdata)
   bpf_usdt_readarg(5, ctx, &buf);
   bpf_probe_read(&event.send_response_header.value, sizeof(event.send_response_header.value), buf);
   // size_t value_len
@@ -4304,7 +4357,7 @@ int trace_h2o__h3_frame_receive(struct pt_regs *ctx) {
 
   // uint64_t frame_type
   bpf_usdt_readarg(1, ctx, &event.h3_frame_receive.frame_type);
-  // const void * bytes
+  // const void * bytes (appdata)
   bpf_usdt_readarg(2, ctx, &buf);
   bpf_probe_read(&event.h3_frame_receive.bytes, sizeof(event.h3_frame_receive.bytes), buf);
   // size_t bytes_len
@@ -4336,7 +4389,9 @@ int trace_h2o__h3_packet_receive(struct pt_regs *ctx) {
   } else if (get_sockaddr__sa_family(&event.h3_packet_receive.src) == AF_INET6) {
     bpf_probe_read(&event.h3_packet_receive.src, sizeof_sockaddr_in6, buf);
   }
-  // const void * bytes (ignored)
+  // const void * bytes
+  bpf_usdt_readarg(3, ctx, &buf);
+  bpf_probe_read(&event.h3_packet_receive.bytes, sizeof(event.h3_packet_receive.bytes), buf);
   // size_t bytes_len
   bpf_usdt_readarg(4, ctx, &event.h3_packet_receive.bytes_len);
 
@@ -4443,7 +4498,7 @@ int trace_h2o__tunnel_on_read(struct pt_regs *ctx) {
   // const char * err
   bpf_usdt_readarg(2, ctx, &buf);
   bpf_probe_read(&event.tunnel_on_read.err, sizeof(event.tunnel_on_read.err), buf);
-  // const void * bytes
+  // const void * bytes (appdata)
   bpf_usdt_readarg(3, ctx, &buf);
   bpf_probe_read(&event.tunnel_on_read.bytes, sizeof(event.tunnel_on_read.bytes), buf);
   // size_t bytes_len
@@ -4474,7 +4529,7 @@ int trace_h2o__tunnel_write(struct pt_regs *ctx) {
 
   // struct st_h2o_tunnel_t * tunnel
   bpf_usdt_readarg(1, ctx, &event.tunnel_write.tunnel);
-  // const void * bytes
+  // const void * bytes (appdata)
   bpf_usdt_readarg(2, ctx, &buf);
   bpf_probe_read(&event.tunnel_write.bytes, sizeof(event.tunnel_write.bytes), buf);
   // size_t bytes_len

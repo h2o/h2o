@@ -186,6 +186,8 @@ int ptls_minicrypto_init_secp256r1sha256_sign_certificate(ptls_minicrypto_secp25
     return 0;
 }
 
-ptls_key_exchange_algorithm_t ptls_minicrypto_secp256r1 = {PTLS_GROUP_SECP256R1, secp256r1_create_key_exchange,
-                                                           secp256r1_key_exchange};
+ptls_key_exchange_algorithm_t ptls_minicrypto_secp256r1 = {.id = PTLS_GROUP_SECP256R1,
+                                                           .name = PTLS_GROUP_NAME_SECP256R1,
+                                                           .create = secp256r1_create_key_exchange,
+                                                           .exchange = secp256r1_key_exchange};
 ptls_key_exchange_algorithm_t *ptls_minicrypto_key_exchanges[] = {&ptls_minicrypto_secp256r1, NULL};

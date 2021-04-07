@@ -50,9 +50,12 @@ extern ptls_key_exchange_algorithm_t ptls_openssl_secp384r1;
 #define PTLS_OPENSSL_HAS_SECP521R1 1 /* deprecated; use HAVE_ */
 extern ptls_key_exchange_algorithm_t ptls_openssl_secp521r1;
 #endif
+#ifdef EVP_PKEY_ED25519
+#define PTLS_OPENSSL_HAVE_ED25519 1
+#endif
 #if defined(NID_X25519) && !defined(LIBRESSL_VERSION_NUMBER)
 #define PTLS_OPENSSL_HAVE_X25519 1
-#define PTLS_OPENSSL_HAS_X25519 1  /* deprecated; use HAVE_ */
+#define PTLS_OPENSSL_HAS_X25519 1 /* deprecated; use HAVE_ */
 extern ptls_key_exchange_algorithm_t ptls_openssl_x25519;
 #endif
 #ifndef OPENSSL_NO_BF
@@ -91,13 +94,13 @@ int ptls_openssl_create_key_exchange(ptls_key_exchange_context_t **ctx, EVP_PKEY
 
 struct st_ptls_openssl_signature_scheme_t {
     uint16_t scheme_id;
-    const EVP_MD *scheme_md;
+    const EVP_MD *(*scheme_md)(void);
 };
 
 typedef struct st_ptls_openssl_sign_certificate_t {
     ptls_sign_certificate_t super;
     EVP_PKEY *key;
-    struct st_ptls_openssl_signature_scheme_t schemes[4]; /* terminated by .scheme_id == UINT16_MAX */
+    const struct st_ptls_openssl_signature_scheme_t *schemes; /* terminated by .scheme_id == UINT16_MAX */
 } ptls_openssl_sign_certificate_t;
 
 int ptls_openssl_init_sign_certificate(ptls_openssl_sign_certificate_t *self, EVP_PKEY *key);

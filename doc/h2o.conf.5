@@ -3179,25 +3179,30 @@ The value should be set to something smaller than that being set at the upstream
 .RE
 .RE
 
-.SS proxy.websocket
-A boolean flag (ON or OFF) indicating whether or not to allow upgrading the proxied connection to the WebSocket protocol.
+.SS proxy.tunnel
+A boolean flag (ON or OFF) indicating whether or not to allow tunnelling to the backend server.
 
 .PP
 
 
-When set to ON, the proxied connection will be upgraded to a bi-directional tunnel stream if upgrading to WebSocket connection is permitted by the backend server (i.e. if the backend server responds to a WebSocket handshake with 101 status code).
+When set to ON, CONNECT requests and WebSocket handshakes are forwarded to the backend server.
+Then, if the backend server accepts those requests, H2O forwards the HTTP response to the client and acts as a bi-directional tunnel.
 
 
-Support for WebSocket is considered experimental for the time being and therefore is not yet turned on by default.
+Support for tunnelling is considered experimental for the time being and therefore is not yet turned on by default.
 
 
 .RE
 .RE
 
-.SS proxy.websocket.timeout
-Sets idle timeout of a WebSocket connection being proxied.
+.SS proxy.tunnel.timeout
+Sets the idle timeout of a tunnel.
 
 .PP
+
+.PP
+.BR See\ also:
+proxy.tunnel
 
 .RE
 .RE

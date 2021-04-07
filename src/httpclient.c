@@ -452,7 +452,7 @@ static void usage(const char *progname)
             "Usage: %s [options] <url>\n"
             "Options:\n"
             "  -2 <ratio>   HTTP/2 ratio (between 0 and 100)\n"
-            "  -3           HTTP/3-only mode\n"
+            "  -3 <ratio>   HTTP/3 ratio (between 0 and 100)\n"
             "  -b <size>    size of request body (in bytes; default: 0)\n"
             "  -C <concurrency>\n"
             "               sets the number of requests run at once (default: 1)\n"
@@ -504,6 +504,7 @@ int main(int argc, char **argv)
         .first_byte_timeout = IO_TIMEOUT,
         .keepalive_timeout = IO_TIMEOUT,
         .max_buffer_size = H2O_SOCKET_INITIAL_INPUT_BUFFER_SIZE * 2,
+        .http2 = {.max_concurrent_streams = 100},
         .http3 = &h3ctx,
     };
     int opt;
@@ -715,16 +716,16 @@ int main(int argc, char **argv)
 #endif
     }
 
-    if (ctx.http3 != NULL) {
+#if H2O_USE_LIBUV
+    /* libuv path currently does not support http3 */
+#else
+    if (ctx.protocol_selector.ratio.http3 > 0) {
         h2o_quic_close_all_connections(&ctx.http3->h3);
         while (h2o_quic_num_connections(&ctx.http3->h3) != 0) {
-#if H2O_USE_LIBUV
-            uv_run(ctx.loop, UV_RUN_ONCE);
-#else
             h2o_evloop_run(ctx.loop, INT32_MAX);
-#endif
         }
     }
+#endif
 
     return 0;
 }

@@ -130,7 +130,7 @@ struct listener_ssl_config_t {
 };
 
 struct listener_config_t {
-    int fd;
+    H2O_VECTOR(int) fds;
     struct sockaddr_storage addr;
     socklen_t addrlen;
     h2o_hostconf_t **hosts;
@@ -626,7 +626,8 @@ Exit:
 }
 
 static const char *listener_setup_ssl_picotls(struct listener_config_t *listener, struct listener_ssl_config_t *ssl_config,
-                                              SSL_CTX *ssl_ctx, ptls_iovec_t raw_public_key)
+                                              SSL_CTX *ssl_ctx, ptls_iovec_t raw_public_key, ptls_cipher_suite_t **cipher_suites,
+                                              int server_cipher_preference)
 {
     static const ptls_key_exchange_algorithm_t *key_exchanges[] = {
 #ifdef PTLS_OPENSSL_HAVE_X25519
@@ -645,6 +646,8 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
     X509 *cert;
     STACK_OF(X509) * cert_chain;
     int ret;
+    if (cipher_suites == NULL)
+        cipher_suites = ptls_openssl_cipher_suites;
 
     *pctx = (struct st_fat_context_t){
         .ctx =
@@ -652,7 +655,7 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
                 .random_bytes = ptls_openssl_random_bytes,
                 .get_time = &ptls_get_time,
                 .key_exchanges = key_exchanges,
-                .cipher_suites = ptls_openssl_cipher_suites,
+                .cipher_suites = cipher_suites,
                 .certificates = {0}, /* fill later */
                 .esni = NULL,        /* fill later */
                 .on_client_hello = &pctx->ch.super,
@@ -667,6 +670,7 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
                 .send_change_cipher_spec = 0, /* is a client-only flag. As a server, this flag can be of any value. */
                 .require_client_authentication = 0,
                 .omit_end_of_early_data = 0,
+                .server_cipher_preference = server_cipher_preference,
                 .encrypt_ticket = NULL, /* initialized later */
                 .save_ticket = NULL,    /* initialized later */
                 .log_event = NULL,
@@ -775,19 +779,59 @@ static h2o_iovec_t *build_http2_origin_frame(h2o_configurator_command_t *cmd, yo
     return http2_origin_frame;
 }
 
+static ptls_cipher_suite_t **parse_tls13_ciphers(h2o_configurator_command_t *cmd, yoml_t *node)
+{
+    int seen_tls_aes_128_gcm_sha256 = 0;
+    H2O_VECTOR(ptls_cipher_suite_t *) ret = {};
+
+    for (size_t i = 0; i != node->data.sequence.size; ++i) {
+        yoml_t *element = node->data.sequence.elements[i];
+        if (element->type != YOML_TYPE_SCALAR) {
+            h2o_configurator_errprintf(cmd, element, "elements of `cipher-suite-tls1.3` must be strings");
+            return NULL;
+        }
+        ptls_cipher_suite_t *cand;
+        for (size_t i = 0; (cand = ptls_openssl_cipher_suites[i]) != NULL; ++i)
+            if (strcmp(element->data.scalar, cand->name) == 0)
+                goto Found;
+        /* not found */
+        char msg[1024];
+        strcpy(msg, "Unexpected cipher suite. Expected one of:");
+        for (size_t i = 0; ptls_openssl_cipher_suites[i] != NULL; ++i)
+            sprintf(msg + strlen(msg), " %s", ptls_openssl_cipher_suites[i]->name);
+        h2o_configurator_errprintf(cmd, node, "%s", msg);
+        return NULL;
+    Found:
+        h2o_vector_reserve(NULL, &ret, ret.size + 1);
+        ret.entries[ret.size++] = cand;
+        if (cand == &ptls_openssl_aes128gcmsha256)
+            seen_tls_aes_128_gcm_sha256 = 1;
+    }
+    h2o_vector_reserve(NULL, &ret, ret.size + 1);
+    ret.entries[ret.size++] = NULL;
+
+    if (!seen_tls_aes_128_gcm_sha256) {
+        h2o_configurator_errprintf(
+            cmd, node, "Warning: not enabling TLS_AES_128_GCM_SHA256 might reduce TLS1.3 interoperability, see RFC 8446 9.1");
+    }
+
+    return ret.entries;
+}
+
 static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *listen_node,
                               yoml_t **ssl_node, yoml_t **cc_node, yoml_t **initcwnd_node, struct listener_config_t *listener,
                               int listener_is_new)
 {
     SSL_CTX *ssl_ctx = NULL;
-    yoml_t **certificate_file, **key_file, **dh_file, **min_version, **max_version, **cipher_suite, **ocsp_update_cmd,
-        **ocsp_update_interval_node, **ocsp_max_failures_node, **cipher_preference_node, **neverbleed_node,
+    yoml_t **certificate_file, **key_file, **dh_file, **min_version, **max_version, **cipher_suite, **cipher_suite_tls13_node,
+        **ocsp_update_cmd, **ocsp_update_interval_node, **ocsp_max_failures_node, **cipher_preference_node, **neverbleed_node,
         **http2_origin_frame_node, **raw_pubkey_file;
     h2o_iovec_t *http2_origin_frame = NULL;
     long ssl_options = SSL_OP_ALL;
     uint64_t ocsp_update_interval = 4 * 60 * 60; /* defaults to 4 hours */
     unsigned ocsp_max_failures = 3;              /* defaults to 3; permit 3 failures before temporary disabling OCSP stapling */
     int use_neverbleed = 1, use_picotls = 1;     /* enabled by default */
+    ptls_cipher_suite_t **cipher_suite_tls13 = NULL;
 
     if (!listener_is_new) {
         if (listener->ssl.size != 0 && ssl_node == NULL) {
@@ -806,12 +850,13 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
     /* parse */
     if (h2o_configurator_parse_mapping(cmd, *ssl_node, "key-file:s",
                                        "certificate-file:s,raw-pubkey-file:s,min-version:s,minimum-version:s,max-version:s,"
-                                       "maximum-version:s,cipher-suite:s,ocsp-update-cmd:s,ocsp-update-interval:*,"
-                                       "ocsp-max-failures:*,dh-file:s,cipher-preference:*,neverbleed:*,http2-origin-frame:*",
+                                       "maximum-version:s,cipher-suite:s,cipher-suite-tls1.3:a,ocsp-update-cmd:s,"
+                                       "ocsp-update-interval:*,ocsp-max-failures:*,dh-file:s,cipher-preference:*,neverbleed:*,"
+                                       "http2-origin-frame:*",
                                        &key_file, &certificate_file, &raw_pubkey_file, &min_version, &min_version, &max_version,
-                                       &max_version, &cipher_suite, &ocsp_update_cmd, &ocsp_update_interval_node,
-                                       &ocsp_max_failures_node, &dh_file, &cipher_preference_node, &neverbleed_node,
-                                       &http2_origin_frame_node) != 0)
+                                       &max_version, &cipher_suite, &cipher_suite_tls13_node, &ocsp_update_cmd,
+                                       &ocsp_update_interval_node, &ocsp_max_failures_node, &dh_file, &cipher_preference_node,
+                                       &neverbleed_node, &http2_origin_frame_node) != 0)
         return -1;
     if (certificate_file == NULL && raw_pubkey_file == NULL) {
         h2o_configurator_errprintf(cmd, *ssl_node, "either one of certificate-file or raw-public-key file must be specified");
@@ -977,6 +1022,12 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
         ERR_print_errors_cb(on_openssl_print_errors, stderr);
         goto Error;
     }
+    if (use_picotls) {
+        if (cipher_suite_tls13_node != NULL && (cipher_suite_tls13 = parse_tls13_ciphers(cmd, *cipher_suite_tls13_node)) == NULL) {
+            h2o_configurator_errprintf(cmd, *cipher_suite, "failed to parse the TLS 1.3 cipher suite\n");
+            goto Error;
+        }
+    }
     if (dh_file != NULL) {
         BIO *bio = BIO_new_file((*dh_file)->data.scalar, "r");
         if (bio == NULL) {
@@ -1038,7 +1089,8 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
                 return -1;
             }
         }
-        const char *errstr = listener_setup_ssl_picotls(listener, ssl_config, ssl_ctx, raw_pubkey);
+        const char *errstr = listener_setup_ssl_picotls(listener, ssl_config, ssl_ctx, raw_pubkey, cipher_suite_tls13,
+                                                        !!(ssl_options & SSL_OP_CIPHER_SERVER_PREFERENCE));
         if (errstr != NULL)
             h2o_configurator_errprintf(cmd, *ssl_node, "%s; TLS 1.3 will be disabled\n", errstr);
         if (listener->quic.ctx != NULL) {
@@ -1162,8 +1214,10 @@ static struct listener_config_t *add_listener(int fd, struct sockaddr *addr, soc
 {
     struct listener_config_t *listener = h2o_mem_alloc(sizeof(*listener));
 
+    memset(listener, 0, sizeof(*listener));
+    h2o_vector_reserve(NULL, &listener->fds, 1);
+    listener->fds.entries[listener->fds.size++] = fd;
     memcpy(&listener->addr, addr, addrlen);
-    listener->fd = fd;
     listener->addrlen = addrlen;
     if (is_global) {
         listener->hosts = NULL;
@@ -2705,49 +2759,7 @@ static void *run_loop(void *_thread_index)
     /* setup listeners */
     for (i = 0; i != conf.num_listeners; ++i) {
         struct listener_config_t *listener_config = conf.listeners[i];
-        int fd = -1;
-        /* dup the listener fd for other threads than the main thread */
-        if (thread_index == 0) {
-            fd = listener_config->fd;
-        } else {
-            int reuseport = 0;
-#if H2O_USE_REUSEPORT
-            socklen_t reuseportlen = sizeof(reuseport);
-            if (getsockopt(listener_config->fd, SOL_SOCKET, H2O_SO_REUSEPORT, &reuseport, &reuseportlen) != 0) {
-                perror("gestockopt(SO_REUSEPORT) failed");
-                abort();
-            }
-            assert(reuseportlen == sizeof(reuseport));
-            if (reuseport) {
-                int type;
-                socklen_t typelen = sizeof(type);
-                struct sockaddr_storage ss;
-                socklen_t sslen = sizeof(ss);
-                if (getsockopt(listener_config->fd, SOL_SOCKET, SO_TYPE, &type, &typelen) != 0) {
-                    perror("failed to obtain the type of a listening socket");
-                    abort();
-                }
-                assert(type == SOCK_DGRAM || type == SOCK_STREAM);
-                if (getsockname(listener_config->fd, (struct sockaddr *)&ss, &sslen) != 0) {
-                    perror("failed to obtain local address of a listening socket");
-                    abort();
-                }
-                if ((fd = open_listener(ss.ss_family, type, type == SOCK_STREAM ? IPPROTO_TCP : IPPROTO_UDP, (struct sockaddr *)&ss,
-                                        sslen)) != -1) {
-                    if (type == SOCK_DGRAM)
-                        setsockopt_recvpktinfo(fd, ss.ss_family);
-                } else {
-                    reuseport = 0;
-                }
-            }
-#endif
-            if (!reuseport && (fd = dup(listener_config->fd)) == -1) {
-                perror("failed to dup listening socket");
-                abort();
-            }
-            set_cloexec(fd);
-        }
-        assert(fd != -1);
+        int fd = listener_config->fds.entries[thread_index];
         listeners[i] = (struct listener_ctx_t){i,
                                                {&conf.threads[thread_index].ctx, listener_config->hosts, NULL, NULL,
                                                 listener_config->proxy_protocol, &conf.threads[thread_index].memcached}};
@@ -3132,6 +3144,65 @@ static void setup_configurators(void)
     h2o_config_register_status_handler(&conf.globalconf, &extra_status_handler);
 }
 
+static int dup_listener(int listener)
+{
+    int reuseport = 0;
+
+#if H2O_USE_REUSEPORT
+    socklen_t reuseportlen = sizeof(reuseport);
+    if (getsockopt(listener, SOL_SOCKET, H2O_SO_REUSEPORT, &reuseport, &reuseportlen) != 0) {
+        perror("gestockopt(SO_REUSEPORT) failed");
+        abort();
+    }
+    assert(reuseportlen == sizeof(reuseport));
+#endif
+
+    int fd = -1;
+#if H2O_USE_REUSEPORT
+    if (reuseport) {
+        int type;
+        socklen_t typelen = sizeof(type);
+        struct sockaddr_storage ss;
+        socklen_t sslen = sizeof(ss);
+        if (getsockopt(listener, SOL_SOCKET, SO_TYPE, &type, &typelen) != 0) {
+            perror("failed to obtain the type of a listening socket");
+            abort();
+        }
+        assert(type == SOCK_DGRAM || type == SOCK_STREAM);
+        if (getsockname(listener, (struct sockaddr *)&ss, &sslen) != 0) {
+            perror("failed to obtain local address of a listening socket");
+            abort();
+        }
+        if ((fd = open_listener(ss.ss_family, type, type == SOCK_STREAM ? IPPROTO_TCP : IPPROTO_UDP, (struct sockaddr *)&ss,
+                                sslen)) != -1) {
+            if (type == SOCK_DGRAM)
+                setsockopt_recvpktinfo(fd, ss.ss_family);
+        } else {
+            perror("failed to bind additional listener");
+            abort();
+        }
+    }
+#endif
+    if (!reuseport && (fd = dup(listener)) == -1) {
+        perror("failed to dup listening socket");
+        abort();
+    }
+    set_cloexec(fd);
+    return fd;
+}
+
+static void create_per_thread_listeners(void)
+{
+    for (size_t i = 0; i != conf.num_listeners; ++i) {
+        struct listener_config_t *listener_config = conf.listeners[i];
+        h2o_vector_reserve(NULL, &listener_config->fds, conf.thread_map.size);
+        while (listener_config->fds.size < conf.thread_map.size) {
+            int fd = dup_listener(listener_config->fds.entries[0]);
+            listener_config->fds.entries[listener_config->fds.size++] = fd;
+        }
+    }
+}
+
 int main(int argc, char **argv)
 {
     cmd_argc = argc;
@@ -3364,6 +3435,9 @@ int main(int argc, char **argv)
     }
     setvbuf(stdout, NULL, _IOLBF, 0);
     setvbuf(stderr, NULL, _IOLBF, 0);
+
+    /* call `bind()` before setuid(), different uids can't bind the same address */
+    create_per_thread_listeners();
 
     /* setuid */
     if (conf.globalconf.user != NULL) {
