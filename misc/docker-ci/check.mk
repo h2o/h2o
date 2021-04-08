@@ -6,7 +6,6 @@ FUZZ_ASAN=ASAN_OPTIONS=detect_leaks=0
 DOCKER_RUN_OPTS=--privileged \
 	-v `pwd`:$(SRC_DIR) \
 	-v /sys/kernel/debug:/sys/kernel/debug \
-	-v /sys/fs/bpf:/sys/fs/bpf \
 	-v /lib/modules:/lib/modules:ro \
 	-v /usr/src:/usr/src:ro \
 	--add-host=127.0.0.1.xip.io:127.0.0.1 \
@@ -27,12 +26,16 @@ ossl1.1.1:
 		CMAKE_ARGS='-DOPENSSL_ROOT_DIR=/opt/openssl-1.1.1'
 
 dtrace:
-	sudo mkdir -p /sys/fs/bpf
-	sudo mount -t bpf bpf /sys/fs/bpf -o nosuid,nodev,noexec,mode=700
+  # BPF_MAP_CREATE fails with EPERM if RLIMIT_MEMLOCK is too small.
+	echo -e "[Service]\nLimitMEMLOCK=infinity" | sudo env SYSTEMD_EDITOR=tee systemctl edit docker.service
+	sudo systemctl daemon-reload
+	sudo systemctl restart docker
 	docker run $(DOCKER_RUN_OPTS) $(CONTAINER_NAME) env DTRACE_TESTS=1 make -f $(SRC_DIR)/misc/docker-ci/check.mk _check
 
 _check:
 	uname -a
+	sudo mkdir -p /sys/fs/bpf
+	sudo mount -t bpf bpf /sys/fs/bpf -o nosuid,nodev,noexec,mode=700
 	mkdir -p build
 	sudo mount -t tmpfs tmpfs build -o size=3G
 	sudo chown -R ci:ci build
