@@ -42,11 +42,6 @@ jobs:
       shell: 'script -q -e -c "bash -xe {0}"'
       run: |
         chmod -R ugo+w .
-        # BPF_MAP_CREATE fails with EPERM if RLIMIT_MEMLOCK is too small.
-        echo -e "[Service]\nLimitMEMLOCK=infinity" | sudo env SYSTEMD_EDITOR=tee systemctl edit docker.service
-        sudo systemctl daemon-reload
-        sudo systemctl restart docker
-
         ${{ matrix.command }}
 
   # See https://github.com/google/oss-fuzz/tree/master/projects/h2o for details
