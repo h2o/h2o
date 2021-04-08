@@ -26,10 +26,6 @@ ossl1.1.1:
 		CMAKE_ARGS='-DOPENSSL_ROOT_DIR=/opt/openssl-1.1.1'
 
 dtrace:
-  # BPF_MAP_CREATE fails with EPERM if RLIMIT_MEMLOCK is too small.
-	echo -e "[Service]\nLimitMEMLOCK=infinity" | sudo env SYSTEMD_EDITOR=tee systemctl edit docker.service
-	sudo systemctl daemon-reload
-	sudo systemctl restart docker
 	docker run $(DOCKER_RUN_OPTS) $(CONTAINER_NAME) env DTRACE_TESTS=1 make -f $(SRC_DIR)/misc/docker-ci/check.mk _check
 
 _check:
