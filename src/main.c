@@ -2672,11 +2672,10 @@ static h2o_quic_conn_t *on_http3_accept(h2o_quic_ctx_t *_ctx, quicly_address_t *
     num_sessions(1);
 
 Exit:
-    if (conn == NULL) {
+    if (conn == NULL || &conn->super == H2O_QUIC_ACCEPT_CONN_DECRYPTION_FAILED) {
         /* revert the changes to the connection counts */
         num_connections(-1);
         num_quic_connections(-1);
-        return NULL;
     }
     return &conn->super;
 }
