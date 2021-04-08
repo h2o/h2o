@@ -30,6 +30,7 @@ dtrace:
 
 _check:
 	uname -a
+	ulimit -a
 	sudo mkdir -p /sys/fs/bpf
 	sudo mount -t bpf bpf /sys/fs/bpf -o nosuid,nodev,noexec,mode=700
 	mkdir -p build
