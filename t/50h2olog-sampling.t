@@ -25,6 +25,10 @@ unless ($ENV{DTRACE_TEST})  {
       unless server_features()->{dtrace};
 }
 
+# make sure the h2o_return map does not exist at first,
+# but don't unlink it elsewhere to make sure `h2o_return` stuff works if the map already exists.
+unlink("/sys/fs/bpf/h2o_return");
+
 my $quic_port = empty_port({
     host  => "127.0.0.1",
     proto => "udp",
