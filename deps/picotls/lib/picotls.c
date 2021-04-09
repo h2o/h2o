@@ -1571,24 +1571,37 @@ static ptls_hash_context_t *create_sha256_context(ptls_context_t *ctx)
 }
 
 static int select_cipher(ptls_cipher_suite_t **selected, ptls_cipher_suite_t **candidates, const uint8_t *src,
-                         const uint8_t *const end)
+                         const uint8_t *const end, int server_preference)
 {
+    size_t found_index = SIZE_MAX;
     int ret;
 
     while (src != end) {
         uint16_t id;
         if ((ret = ptls_decode16(&id, &src, end)) != 0)
             goto Exit;
-        ptls_cipher_suite_t **c = candidates;
-        for (; *c != NULL; ++c) {
-            if ((*c)->id == id) {
-                *selected = *c;
-                return 0;
+        for (size_t i = 0; candidates[i] != NULL; ++i) {
+            if (candidates[i]->id == id) {
+                if (server_preference) {
+                    /* preserve smallest matching index, and proceed to the next input */
+                    if (i < found_index) {
+                        found_index = i;
+                        break;
+                    }
+                } else {
+                    /* return the pointer matching to the first input that can be used */
+                    *selected = candidates[i];
+                    goto Exit;
+                }
             }
         }
     }
-
-    ret = PTLS_ALERT_HANDSHAKE_FAILURE;
+    if (found_index != SIZE_MAX) {
+        *selected = candidates[found_index];
+        ret = 0;
+    } else {
+        ret = PTLS_ALERT_HANDSHAKE_FAILURE;
+    }
 
 Exit:
     return ret;
@@ -1731,7 +1744,7 @@ static int parse_esni_keys(ptls_context_t *ctx, uint16_t *esni_version, ptls_key
     });
     /* cipher-suite */
     ptls_decode_open_block(src, end, 2, {
-        if ((ret = select_cipher(selected_cipher, ctx->cipher_suites, src, end)) != 0)
+        if ((ret = select_cipher(selected_cipher, ctx->cipher_suites, src, end, ctx->server_cipher_preference)) != 0)
             goto Exit;
         src = end;
     });
@@ -3816,7 +3829,7 @@ static int server_handle_hello(ptls_t *tls, ptls_message_emitter_t *emitter, ptl
     { /* select (or check) cipher-suite, create key_schedule */
         ptls_cipher_suite_t *cs;
         if ((ret = select_cipher(&cs, tls->ctx->cipher_suites, ch->cipher_suites.base,
-                                 ch->cipher_suites.base + ch->cipher_suites.len)) != 0)
+                                 ch->cipher_suites.base + ch->cipher_suites.len, tls->ctx->server_cipher_preference)) != 0)
             goto Exit;
         if (!is_second_flight) {
             tls->cipher_suite = cs;
@@ -4000,21 +4013,21 @@ static int server_handle_hello(ptls_t *tls, ptls_message_emitter_t *emitter, ptl
     }
 
     /* send ServerHello */
-    EMIT_SERVER_HELLO(tls->key_schedule,
-                      { tls->ctx->random_bytes(emitter->buf->base + emitter->buf->off, PTLS_HELLO_RANDOM_SIZE); },
-                      {
-                          ptls_buffer_t *sendbuf = emitter->buf;
-                          if (mode != HANDSHAKE_MODE_PSK) {
-                              buffer_push_extension(sendbuf, PTLS_EXTENSION_TYPE_KEY_SHARE, {
-                                  ptls_buffer_push16(sendbuf, key_share.algorithm->id);
-                                  ptls_buffer_push_block(sendbuf, 2, { ptls_buffer_pushv(sendbuf, pubkey.base, pubkey.len); });
-                              });
-                          }
-                          if (mode != HANDSHAKE_MODE_FULL) {
-                              buffer_push_extension(sendbuf, PTLS_EXTENSION_TYPE_PRE_SHARED_KEY,
-                                                    { ptls_buffer_push16(sendbuf, (uint16_t)psk_index); });
-                          }
-                      });
+    EMIT_SERVER_HELLO(
+        tls->key_schedule, { tls->ctx->random_bytes(emitter->buf->base + emitter->buf->off, PTLS_HELLO_RANDOM_SIZE); },
+        {
+            ptls_buffer_t *sendbuf = emitter->buf;
+            if (mode != HANDSHAKE_MODE_PSK) {
+                buffer_push_extension(sendbuf, PTLS_EXTENSION_TYPE_KEY_SHARE, {
+                    ptls_buffer_push16(sendbuf, key_share.algorithm->id);
+                    ptls_buffer_push_block(sendbuf, 2, { ptls_buffer_pushv(sendbuf, pubkey.base, pubkey.len); });
+                });
+            }
+            if (mode != HANDSHAKE_MODE_FULL) {
+                buffer_push_extension(sendbuf, PTLS_EXTENSION_TYPE_PRE_SHARED_KEY,
+                                      { ptls_buffer_push16(sendbuf, (uint16_t)psk_index); });
+            }
+        });
     if ((ret = push_change_cipher_spec(tls, emitter)) != 0)
         goto Exit;
 

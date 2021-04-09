@@ -49,7 +49,6 @@
 #define _CRT_SECURE_NO_WARNINGS
 #endif
 #pragma warning(disable : 4996)
-#include <ms/applink.c>
 #endif
 
 #if !defined(LIBRESSL_VERSION_NUMBER) && OPENSSL_VERSION_NUMBER >= 0x10100000L
@@ -1231,7 +1230,26 @@ static int verify_cert_chain(X509_STORE *store, X509 *cert, STACK_OF(X509) * cha
         ret = PTLS_ERROR_LIBRARY;
         goto Exit;
     }
-    X509_STORE_CTX_set_purpose(verify_ctx, is_server ? X509_PURPOSE_SSL_SERVER : X509_PURPOSE_SSL_CLIENT);
+
+    {
+        X509_VERIFY_PARAM *params;
+        if ((params = X509_VERIFY_PARAM_new()) == NULL) {
+            ret = PTLS_ERROR_NO_MEMORY;
+            goto Exit;
+        }
+        X509_VERIFY_PARAM_set_purpose(params, is_server ? X509_PURPOSE_SSL_SERVER : X509_PURPOSE_SSL_CLIENT);
+        X509_VERIFY_PARAM_set_depth(params, 98); /* use the default of OpenSSL 1.0.2 and above; see `man SSL_CTX_set_verify` */
+        if (server_name != NULL) {
+            if (ptls_server_name_is_ipaddr(server_name)) {
+                X509_VERIFY_PARAM_set1_ip_asc(params, server_name);
+            } else {
+                X509_VERIFY_PARAM_set1_host(params, server_name, 0);
+                X509_VERIFY_PARAM_set_hostflags(params, X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS);
+            }
+        }
+        X509_STORE_CTX_set0_param(verify_ctx, params); /* params will be freed alongside verify_ctx */
+    }
+
     if (X509_verify_cert(verify_ctx) != 1) {
         int x509_err = X509_STORE_CTX_get_error(verify_ctx);
         switch (x509_err) {
@@ -1251,6 +1269,7 @@ static int verify_cert_chain(X509_STORE *store, X509 *cert, STACK_OF(X509) * cha
         case X509_V_ERR_CERT_REJECTED:
             ret = PTLS_ALERT_UNKNOWN_CA;
             break;
+        case X509_V_ERR_HOSTNAME_MISMATCH:
         case X509_V_ERR_INVALID_CA:
             ret = PTLS_ALERT_BAD_CERTIFICATE;
             break;
@@ -1260,27 +1279,6 @@ static int verify_cert_chain(X509_STORE *store, X509 *cert, STACK_OF(X509) * cha
         }
         goto Exit;
     }
-
-#ifdef X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS
-    /* verify CN */
-    if (server_name != NULL) {
-        if (ptls_server_name_is_ipaddr(server_name)) {
-            ret = X509_check_ip_asc(cert, server_name, 0);
-        } else {
-            ret = X509_check_host(cert, server_name, strlen(server_name), X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS, NULL);
-        }
-        if (ret != 1) {
-            if (ret == 0) { /* failed match */
-                ret = PTLS_ALERT_BAD_CERTIFICATE;
-            } else {
-                ret = PTLS_ERROR_LIBRARY;
-            }
-            goto Exit;
-        }
-    }
-#else
-#warning "hostname validation is disabled; OpenSSL >= 1.0.2 or LibreSSL >= 2.5.0 is required"
-#endif
 
     ret = 0;
 
@@ -1383,7 +1381,7 @@ static int verify_raw_cert(ptls_verify_certificate_t *_self, ptls_t *tls,
 {
     ptls_openssl_raw_pubkey_verify_certificate_t *self = (ptls_openssl_raw_pubkey_verify_certificate_t *)_self;
     int ret = PTLS_ALERT_BAD_CERTIFICATE;
-    ptls_iovec_t expected_pubkey = {};
+    ptls_iovec_t expected_pubkey = {0};
 
     assert(num_certs != 0);
 
@@ -1556,18 +1554,31 @@ Exit:
     return ret;
 }
 
-ptls_key_exchange_algorithm_t ptls_openssl_secp256r1 = {PTLS_GROUP_SECP256R1, x9_62_create_key_exchange, secp_key_exchange,
-                                                        NID_X9_62_prime256v1};
+ptls_key_exchange_algorithm_t ptls_openssl_secp256r1 = {.id = PTLS_GROUP_SECP256R1,
+                                                        .name = PTLS_GROUP_NAME_SECP256R1,
+                                                        .create = x9_62_create_key_exchange,
+                                                        .exchange = secp_key_exchange,
+                                                        .data = NID_X9_62_prime256v1};
 #if PTLS_OPENSSL_HAVE_SECP384R1
-ptls_key_exchange_algorithm_t ptls_openssl_secp384r1 = {PTLS_GROUP_SECP384R1, x9_62_create_key_exchange, secp_key_exchange,
-                                                        NID_secp384r1};
+ptls_key_exchange_algorithm_t ptls_openssl_secp384r1 = {.id = PTLS_GROUP_SECP384R1,
+                                                        .name = PTLS_GROUP_NAME_SECP384R1,
+                                                        .create = x9_62_create_key_exchange,
+                                                        .exchange = secp_key_exchange,
+                                                        .data = NID_secp384r1};
 #endif
 #if PTLS_OPENSSL_HAVE_SECP521R1
-ptls_key_exchange_algorithm_t ptls_openssl_secp521r1 = {PTLS_GROUP_SECP521R1, x9_62_create_key_exchange, secp_key_exchange,
-                                                        NID_secp521r1};
+ptls_key_exchange_algorithm_t ptls_openssl_secp521r1 = {.id = PTLS_GROUP_SECP521R1,
+                                                        .name = PTLS_GROUP_NAME_SECP521R1,
+                                                        .create = x9_62_create_key_exchange,
+                                                        .exchange = secp_key_exchange,
+                                                        .data = NID_secp521r1};
 #endif
 #if PTLS_OPENSSL_HAVE_X25519
-ptls_key_exchange_algorithm_t ptls_openssl_x25519 = {PTLS_GROUP_X25519, evp_keyex_create, evp_keyex_exchange, NID_X25519};
+ptls_key_exchange_algorithm_t ptls_openssl_x25519 = {.id = PTLS_GROUP_X25519,
+                                                     .name = PTLS_GROUP_NAME_X25519,
+                                                     .create = evp_keyex_create,
+                                                     .exchange = evp_keyex_exchange,
+                                                     .data = NID_X25519};
 #endif
 ptls_key_exchange_algorithm_t *ptls_openssl_key_exchanges[] = {&ptls_openssl_secp256r1, NULL};
 ptls_cipher_algorithm_t ptls_openssl_aes128ecb = {
@@ -1605,10 +1616,14 @@ ptls_hash_algorithm_t ptls_openssl_sha256 = {PTLS_SHA256_BLOCK_SIZE, PTLS_SHA256
                                              PTLS_ZERO_DIGEST_SHA256};
 ptls_hash_algorithm_t ptls_openssl_sha384 = {PTLS_SHA384_BLOCK_SIZE, PTLS_SHA384_DIGEST_SIZE, sha384_create,
                                              PTLS_ZERO_DIGEST_SHA384};
-ptls_cipher_suite_t ptls_openssl_aes128gcmsha256 = {PTLS_CIPHER_SUITE_AES_128_GCM_SHA256, &ptls_openssl_aes128gcm,
-                                                    &ptls_openssl_sha256};
-ptls_cipher_suite_t ptls_openssl_aes256gcmsha384 = {PTLS_CIPHER_SUITE_AES_256_GCM_SHA384, &ptls_openssl_aes256gcm,
-                                                    &ptls_openssl_sha384};
+ptls_cipher_suite_t ptls_openssl_aes128gcmsha256 = {.id = PTLS_CIPHER_SUITE_AES_128_GCM_SHA256,
+                                                    .name = PTLS_CIPHER_SUITE_NAME_AES_128_GCM_SHA256,
+                                                    .aead = &ptls_openssl_aes128gcm,
+                                                    .hash = &ptls_openssl_sha256};
+ptls_cipher_suite_t ptls_openssl_aes256gcmsha384 = {.id = PTLS_CIPHER_SUITE_AES_256_GCM_SHA384,
+                                                    .name = PTLS_CIPHER_SUITE_NAME_AES_256_GCM_SHA384,
+                                                    .aead = &ptls_openssl_aes256gcm,
+                                                    .hash = &ptls_openssl_sha384};
 #if PTLS_OPENSSL_HAVE_CHACHA20_POLY1305
 ptls_cipher_algorithm_t ptls_openssl_chacha20 = {
     "CHACHA20",           PTLS_CHACHA20_KEY_SIZE, 1 /* block size */, PTLS_CHACHA20_IV_SIZE, sizeof(struct cipher_context_t),
@@ -1623,8 +1638,10 @@ ptls_aead_algorithm_t ptls_openssl_chacha20poly1305 = {"CHACHA20-POLY1305",
                                                        PTLS_CHACHA20POLY1305_TAG_SIZE,
                                                        sizeof(struct aead_crypto_context_t),
                                                        aead_chacha20poly1305_setup_crypto};
-ptls_cipher_suite_t ptls_openssl_chacha20poly1305sha256 = {PTLS_CIPHER_SUITE_CHACHA20_POLY1305_SHA256,
-                                                           &ptls_openssl_chacha20poly1305, &ptls_openssl_sha256};
+ptls_cipher_suite_t ptls_openssl_chacha20poly1305sha256 = {.id = PTLS_CIPHER_SUITE_CHACHA20_POLY1305_SHA256,
+                                                           .name = PTLS_CIPHER_SUITE_NAME_CHACHA20_POLY1305_SHA256,
+                                                           .aead = &ptls_openssl_chacha20poly1305,
+                                                           .hash = &ptls_openssl_sha256};
 #endif
 ptls_cipher_suite_t *ptls_openssl_cipher_suites[] = {&ptls_openssl_aes256gcmsha384, &ptls_openssl_aes128gcmsha256,
 #if PTLS_OPENSSL_HAVE_CHACHA20_POLY1305
