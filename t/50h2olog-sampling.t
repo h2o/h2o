@@ -34,7 +34,8 @@ my $quic_port = empty_port({
     proto => "udp",
 });
 
-my $server = spawn_h2o({
+sub spawn_my_h2o {
+  return spawn_h2o({
     opts => [qw(--mode=worker)],
     conf => << "EOT",
 listen:
@@ -50,6 +51,9 @@ hosts:
         file.dir: t/assets/doc_root
 EOT
 });
+}
+
+my $server = spawn_my_h2o();
 
 diag "quic port: $quic_port / port: $server->{port} / tls port: $server->{tls_port}";
 
@@ -159,5 +163,24 @@ subtest "multiple h2olog with sampling filters", sub {
 # wait until the server and the tracer exits
 diag "shutting down ...";
 undef $server;
+
+subtest "h2o_return exists", sub {
+  ok -f "/sys/fs/bpf/h2o_return", "h2o_return does exist";
+
+  my $server = spawn_my_h2o();
+
+  my $tracer = H2ologTracer->new({
+    pid => $server->{pid},
+    args => ["-S", "1.0"],
+  });
+
+  my ($headers) = run_prog("$client_prog http://127.0.0.1:$server->{port}/");
+  like $headers, qr{^HTTP/1\.1 200\b}, "req: HTTP/1";
+
+  my $trace;
+  until (($trace = $tracer->get_trace()) =~ /\n/) {}
+  my @logs = map { decode_json($_) } split /\n/, $trace;
+  ok scalar(grep { $_->{type} eq "h1-accept" } @logs), "h1-accept has been logged";
+};
 
 done_testing();

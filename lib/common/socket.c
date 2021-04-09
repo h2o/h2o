@@ -1635,7 +1635,9 @@ void h2o_socket_ebpf_setup(void)
     }
 
     if (ebpf_obj_pin(fd, H2O_EBPF_RETURN_MAP_PATH) != 0) {
-        if (errno == ENOENT) {
+        if (errno == EEXIST) {
+            /* ok */
+        } else if (errno == ENOENT) {
             h2o_error_printf("Warning: BPF_OBJ_PIN failed with ENOENT, "
                              "because /sys/fs/bpf is not mounted as the BPF filesystem.\n");
         } else {
