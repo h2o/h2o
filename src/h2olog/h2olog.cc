@@ -369,7 +369,11 @@ int main(int argc, char **argv)
     }
 
     if (sampling_rate >= 0) {
-        cflags.push_back("-DH2OLOG_SAMPLING_RATE=" + std::to_string(sampling_rate));
+        /* To give the calculated rate in U32 because eBPF bytecode has no floating point numbers,
+         * See the bpf(2) manpage. */
+        cflags.push_back(
+            build_define_cflag("H2OLOG_SAMPLING_RATE_U32", (uint32_t)(sampling_rate * UINT32_MAX))
+        );
     }
 
     ebpf::StatusTuple ret = bpf->init(tracer->bpf_text(), cflags, probes);

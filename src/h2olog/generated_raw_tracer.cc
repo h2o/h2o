@@ -4151,9 +4151,9 @@ int trace_h2o__socket_lookup_flags(struct pt_regs *ctx) {
   bpf_usdt_readarg(3, ctx, &buf);
   bpf_probe_read(&event.socket_lookup_flags.info, sizeof_st_h2o_ebpf_map_key_t, buf);
 
-#ifdef H2OLOG_SAMPLING_RATE
+#ifdef H2OLOG_SAMPLING_RATE_U32
   uint64_t flags = event.socket_lookup_flags.original_flags;
-  int skip_tracing = bpf_get_prandom_u32() > (H2OLOG_SAMPLING_RATE * U32_MAX);
+  int skip_tracing = bpf_get_prandom_u32() > H2OLOG_SAMPLING_RATE_U32;
   if (skip_tracing) {
     flags |= H2O_EBPF_FLAGS_SKIP_TRACING_BIT;
   }
