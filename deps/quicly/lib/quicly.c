@@ -5455,7 +5455,10 @@ int quicly_accept(quicly_conn_t **conn, quicly_context_t *ctx, struct sockaddr *
                   const quicly_cid_plaintext_t *new_cid, ptls_handshake_properties_t *handshake_properties)
 {
     const struct st_ptls_salt_t *salt;
-    struct st_quicly_cipher_context_t ingress_cipher = {NULL}, egress_cipher = {NULL};
+    struct {
+        struct st_quicly_cipher_context_t ingress, egress;
+        int alive;
+    } cipher = {};
     ptls_iovec_t payload;
     uint64_t next_expected_pn, pn, offending_frame_type = QUICLY_FRAME_TYPE_PADDING;
     int is_ack_only, ret;
@@ -5479,11 +5482,12 @@ int quicly_accept(quicly_conn_t **conn, quicly_context_t *ctx, struct sockaddr *
         ret = QUICLY_TRANSPORT_ERROR_PROTOCOL_VIOLATION;
         goto Exit;
     }
-    if ((ret = setup_initial_encryption(get_aes128gcmsha256(ctx), &ingress_cipher, &egress_cipher, packet->cid.dest.encrypted, 0,
+    if ((ret = setup_initial_encryption(get_aes128gcmsha256(ctx), &cipher.ingress, &cipher.egress, packet->cid.dest.encrypted, 0,
                                         ptls_iovec_init(salt->initial, sizeof(salt->initial)), NULL)) != 0)
         goto Exit;
+    cipher.alive = 1;
     next_expected_pn = 0; /* is this correct? do we need to take care of underflow? */
-    if ((ret = decrypt_packet(ingress_cipher.header_protection, aead_decrypt_fixed_key, ingress_cipher.aead, &next_expected_pn,
+    if ((ret = decrypt_packet(cipher.ingress.header_protection, aead_decrypt_fixed_key, cipher.ingress.aead, &next_expected_pn,
                               packet, &pn, &payload)) != 0) {
         ret = QUICLY_ERROR_DECRYPTION_FAILED;
         goto Exit;
@@ -5508,10 +5512,9 @@ int quicly_accept(quicly_conn_t **conn, quicly_context_t *ctx, struct sockaddr *
     if ((ret = setup_handshake_space_and_flow(*conn, QUICLY_EPOCH_INITIAL)) != 0)
         goto Exit;
     (*conn)->initial->super.next_expected_packet_number = next_expected_pn;
-    (*conn)->initial->cipher.ingress = ingress_cipher;
-    ingress_cipher = (struct st_quicly_cipher_context_t){NULL};
-    (*conn)->initial->cipher.egress = egress_cipher;
-    egress_cipher = (struct st_quicly_cipher_context_t){NULL};
+    (*conn)->initial->cipher.ingress = cipher.ingress;
+    (*conn)->initial->cipher.egress = cipher.egress;
+    cipher.alive = 0;
     (*conn)->crypto.handshake_properties.collected_extensions = server_collected_extensions;
     (*conn)->initial->largest_ingress_udp_payload_size = packet->datagram_size;
 
@@ -5536,6 +5539,10 @@ Exit:
             ret = 0;
         }
         unlock_now(*conn);
+    }
+    if (cipher.alive) {
+        dispose_cipher(&cipher.ingress);
+        dispose_cipher(&cipher.egress);
     }
     return ret;
 }
