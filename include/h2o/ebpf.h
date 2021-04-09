@@ -51,8 +51,6 @@ typedef struct st_h2o_ebpf_map_key_t {
 #define H2O_EBPF_FLAGS_QUIC_SEND_RETRY_BITS_ON 0x02
 #define H2O_EBPF_FLAGS_QUIC_SEND_RETRY_BITS_OFF 0x04
 
-#define H2O_EBPF_SKIP_TRACING(flags) (((flags)&H2O_EBPF_FLAGS_SKIP_TRACING_BIT) == H2O_EBPF_FLAGS_SKIP_TRACING_BIT)
-
 /**
  * A pinned BPF map to control connection flags.
  * The key type is h2o_ebpf_map_key_t, and the value type is uint64_t that contains `H2O_EBPF_FLAGS_*`.

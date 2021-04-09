@@ -456,7 +456,7 @@ h2o_socket_t *h2o_evloop_socket_accept(h2o_socket_t *_listener)
     if (peeraddr != NULL && *peeraddrlen <= sizeof(*peeraddr))
         h2o_socket_setpeername(sock, (struct sockaddr *)peeraddr, *peeraddrlen);
     uint64_t flags = h2o_socket_ebpf_lookup_flags(listener->loop, h2o_socket_ebpf_init_key, sock);
-    if (H2O_EBPF_SKIP_TRACING(flags))
+    if ((flags & H2O_EBPF_FLAGS_SKIP_TRACING_BIT) != 0)
         sock->_skip_tracing = 1;
     return sock;
 }

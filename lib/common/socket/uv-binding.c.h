@@ -274,7 +274,7 @@ h2o_socket_t *h2o_uv_socket_create(uv_handle_t *handle, uv_close_cb close_cb)
     sock->close_cb = close_cb;
     sock->handle->data = sock;
     uint64_t flags = h2o_socket_ebpf_lookup_flags(sock->handle->loop, h2o_socket_ebpf_init_key, &sock->super);
-    if (H2O_EBPF_SKIP_TRACING(flags))
+    if ((flags & H2O_EBPF_FLAGS_SKIP_TRACING_BIT) != 0)
         sock->super._skip_tracing = 1;
     return &sock->super;
 }
