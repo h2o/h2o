@@ -1750,18 +1750,20 @@ uint64_t h2o_socket_ebpf_lookup_flags(h2o_loop_t *loop, int (*init_key)(h2o_ebpf
                 H2O_SOCKET_LOOKUP_FLAGS(tid, flags, &key);
 
                 if (ebpf_map_lookup(return_map_fd, &tid, &flags) != 0) {
-                    if (errno == ENOENT)
+                    if (errno == ENOENT) {
                         /* ENOENT could be issued in some reasons even if BPF tries to insert the entry, for example:
                          *  * the entry in LRU hash was evicted
                          *  * the insert operation in BPF program failed with ENOMEM */
                         h2o_error_printf(
                             "BPF_MAP_LOOKUP failed. "
                             "BPF handler for h2o:socket_lookup_flags might not have set the flags via h2o_return map\n");
-                    else
+                    } else {
                         h2o_perror("BPF_MAP_LOOKUP failed");
+                    }
                 }
-            } else
+            } else {
                 h2o_perror("BPF_MAP_DELETE failed");
+            }
         }
     }
 
