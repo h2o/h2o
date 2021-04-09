@@ -105,13 +105,13 @@ size_t ptls_minicrypto_asn1_decode_private_key(ptls_asn1_pkcs8_private_key_t *pk
             byte_index += oid_length;
         }
     }
-  
+
     if (*decode_error == 0) {
         /* get parameters, ANY */
         if (log_ctx != NULL) {
             log_ctx->fn(log_ctx->ctx, "      Parameters:\n");
         }
-      
+
         if (last_byte1 <= byte_index) {
             pkey->parameters_index = 0;
             pkey->parameters_length = 0;

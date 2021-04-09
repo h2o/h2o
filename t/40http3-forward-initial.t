@@ -51,9 +51,6 @@ This will generate quic-nondecryptable-initial.bin.
 
 check_dtrace_availability();
 
-plan skip_all => 'python3 not found'
-    unless prog_exists('python3');
-
 my $tempdir = tempdir(CLEANUP => 1);
 
 my $quic_port = empty_port({
@@ -128,13 +125,13 @@ sleep 2;
 # test1: throw non-decryptable Initial first
 # Since it's not associated with any existing connections, h2o would pass it to `quicly_accept` and
 # it would return QUICLY_ERROR_DECRYPTION_FAILED. Then h2o would try to forward the packet using DCID's node_id field.
-system("python3", "t/udp-generator.py", "127.0.0.1", "$quic_port", "t/assets/quic-nondecryptable-initial.bin") == 0 or die "Failed to launch udp-generator";
+system("perl", "t/udp-generator.pl", "127.0.0.1", "$quic_port", "t/assets/quic-nondecryptable-initial.bin") == 0 or die "Failed to launch udp-generator";
 
 # test2: throw decryptable Initial first, then non-decryptable Initial next
 # The first Initial would successfully create a new connection object inside h2o.
 # Then the because second Initial's DCID doesn't match the first one's, h2o determines
 # the packet should be for another node, and forwards it using DCID's node_id field.
-system("python3", "t/udp-generator.py", "127.0.0.1", "$quic_port", "t/assets/quic-decryptable-initial.bin", "t/assets/quic-nondecryptable-initial.bin") == 0 or die "Failed to launch udp-generator";
+system("perl", "t/udp-generator.pl", "127.0.0.1", "$quic_port", "t/assets/quic-decryptable-initial.bin", "t/assets/quic-nondecryptable-initial.bin") == 0 or die "Failed to launch udp-generator";
 
 # shutdown h2o
 undef $server;

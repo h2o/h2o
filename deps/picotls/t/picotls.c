@@ -44,6 +44,37 @@ static void test_is_ipaddr(void)
     ok(ptls_server_name_is_ipaddr("2001:db8::2:1"));
 }
 
+static void test_select_cipher(void)
+{
+#define C(x) ((x) >> 8) & 0xff, (x)&0xff
+
+    ptls_cipher_suite_t *selected,
+        *candidates[] = {&ptls_minicrypto_chacha20poly1305sha256, &ptls_minicrypto_aes128gcmsha256, NULL};
+
+    {
+        static const uint8_t input; /* `input[0]` is preferable, but prohibited by MSVC */
+        ok(select_cipher(&selected, candidates, &input, &input, 0) == PTLS_ALERT_HANDSHAKE_FAILURE);
+    }
+
+    {
+        static const uint8_t input[] = {C(PTLS_CIPHER_SUITE_AES_128_GCM_SHA256), C(PTLS_CIPHER_SUITE_CHACHA20_POLY1305_SHA256)};
+        ok(select_cipher(&selected, candidates, input, input + sizeof(input), 0) == 0);
+        ok(selected == &ptls_minicrypto_aes128gcmsha256);
+        ok(select_cipher(&selected, candidates, input, input + sizeof(input), 1) == 0);
+        ok(selected == &ptls_minicrypto_chacha20poly1305sha256);
+    }
+
+    {
+        static const uint8_t input[] = {C(PTLS_CIPHER_SUITE_AES_256_GCM_SHA384), C(PTLS_CIPHER_SUITE_AES_128_GCM_SHA256)};
+        ok(select_cipher(&selected, candidates, input, input + sizeof(input), 0) == 0);
+        ok(selected == &ptls_minicrypto_aes128gcmsha256);
+        ok(select_cipher(&selected, candidates, input, input + sizeof(input), 1) == 0);
+        ok(selected == &ptls_minicrypto_aes128gcmsha256);
+    }
+
+#undef C
+}
+
 ptls_context_t *ctx, *ctx_peer;
 ptls_verify_certificate_t *verify_certificate;
 struct st_ptls_ffx_test_variants_t ffx_variants[7];
@@ -1662,6 +1693,7 @@ static void test_tls12_hello(void)
 void test_picotls(void)
 {
     subtest("is_ipaddr", test_is_ipaddr);
+    subtest("select_cypher", test_select_cipher);
     subtest("sha256", test_sha256);
     subtest("sha384", test_sha384);
     subtest("hmac-sha256", test_hmac_sha256);
