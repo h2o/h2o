@@ -4159,7 +4159,7 @@ int trace_h2o__socket_lookup_flags(struct pt_regs *ctx) {
   }
   int64_t ret = h2o_return.insert(&event.socket_lookup_flags.tid, &flags);
   if (ret != 0)
-    bpf_trace_printk("failed to insert 0x%lx in trace_h2o__socket_lookup_flags with errno=%ld\n", flags, -ret);
+    bpf_trace_printk("failed to insert 0x%llx in trace_h2o__socket_lookup_flags with errno=%lld\n", flags, -ret);
 #endif
 
   return 0;

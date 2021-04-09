@@ -444,7 +444,7 @@ int %s(struct pt_regs *ctx) {
   }
   int64_t ret = h2o_return.insert(&event.socket_lookup_flags.tid, &flags);
   if (ret != 0)
-    bpf_trace_printk("failed to insert 0x%%lx in %s with errno=%%ld\n", flags, -ret);
+    bpf_trace_printk("failed to insert 0x%%llx in %s with errno=%%lld\n", flags, -ret);
 #endif
 """ % (tracer_name)
   else:
