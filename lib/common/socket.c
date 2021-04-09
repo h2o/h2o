@@ -1625,12 +1625,22 @@ void h2o_socket_ebpf_setup(void)
     int fd =
         ebpf_map_create(BPF_MAP_TYPE_LRU_HASH, sizeof(pid_t), sizeof(uint64_t), H2O_EBPF_RETURN_MAP_SIZE, H2O_EBPF_RETURN_MAP_NAME);
     if (fd < 0) {
-        h2o_perror("BPF_MAP_CREATE failed");
+        if (errno == EPERM) {
+            h2o_error_printf("Warning: BPF_MAP_CREATE failed with EPERM, "
+                             "maybe because RLIMIT_MEMLOCK is too small.\n");
+        } else {
+            h2o_perror("Warning: BPF_MAP_CREATE failed");
+        }
         return;
     }
 
     if (ebpf_obj_pin(fd, H2O_EBPF_RETURN_MAP_PATH) != 0) {
-        h2o_perror("BPF_OBJ_PIN failed");
+        if (errno == ENOENT) {
+            h2o_error_printf("Warning: BPF_OBJ_PIN failed with ENOENT, "
+                             "because /sys/fs/bpf is not mounted as the BPF filesystem.\n");
+        } else {
+            h2o_perror("Warning: BPF_OBJ_PIN failed");
+        }
     }
     close(fd); // each worker thread has its own fd
 }
