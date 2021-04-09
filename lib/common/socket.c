@@ -1639,40 +1639,44 @@ int h2o_socket_ebpf_setup(void)
     return 1;
 }
 
-static int get_tracing_map_fd(h2o_loop_t *loop)
+static void get_map_fd(h2o_loop_t *loop, const char *map_path, int *fd, uint64_t *last_attempt)
 {
-    static __thread int tracing_map_fd = -1;
-    static __thread uint64_t tracing_map_last_attempt = 0;
-
     // only check every second
     uint64_t now = h2o_now(loop);
-    if (tracing_map_last_attempt - now < 1000)
-        return tracing_map_fd;
+    if (*last_attempt - now < 1000)
+        return;
 
-    tracing_map_last_attempt = now;
+    *last_attempt = now;
 
     // check if map exists at path
     struct stat s;
-    if (stat(&H2O_EBPF_MAP_PATH[0], &s) == -1) {
+    if (stat(map_path, &s) == -1) {
         // map path unavailable, cleanup fd if needed and leave
-        if (tracing_map_fd >= 0) {
-            close(tracing_map_fd);
-            tracing_map_fd = -1;
+        if (*fd >= 0) {
+            close(*fd);
+            *fd = -1;
         }
-        return -1;
+        return;
     }
 
-    if (tracing_map_fd >= 0)
-        return tracing_map_fd; // map still exists and we have a fd
+    if (*fd >= 0)
+        return; // map still exists and we have a fd
 
     // map exists, try connect
     union bpf_attr attr = {
-        .pathname = (uint64_t)&H2O_EBPF_MAP_PATH[0],
+        .pathname = (uint64_t)map_path,
     };
-    tracing_map_fd = syscall(__NR_bpf, BPF_OBJ_GET, &attr, sizeof(attr));
-    if (tracing_map_fd < 0)
+    *fd = syscall(__NR_bpf, BPF_OBJ_GET, &attr, sizeof(attr));
+    if (*fd < 0)
         h2o_perror("BPF_OBJ_GET failed");
-    return tracing_map_fd;
+}
+
+static int get_tracing_map_fd(h2o_loop_t *loop)
+{
+    static __thread int fd = -1;
+    static __thread uint64_t last_attempt = 0;
+    get_map_fd(loop, H2O_EBPF_MAP_PATH, &fd, &last_attempt);
+    return fd;
 }
 
 static inline int set_ebpf_map_key_tuples(const struct sockaddr *sa, h2o_ebpf_address_t *ea)
@@ -1725,35 +1729,7 @@ static int get_return_map_fd(h2o_loop_t *loop)
 {
     static __thread int fd = -1;
     static __thread uint64_t last_attempt = 0;
-
-    // only check every second
-    uint64_t now = h2o_now(loop);
-    if (last_attempt - now < 1000)
-        return fd;
-
-    last_attempt = now;
-
-    // check if map exists at path
-    struct stat s;
-    if (stat(H2O_EBPF_RETURN_MAP_PATH, &s) == -1) {
-        // map path unavailable, cleanup fd if needed and leave
-        if (fd >= 0) {
-            close(fd);
-            fd = -1;
-        }
-        return -1;
-    }
-
-    if (fd >= 0)
-        return fd; // map still exists and we have a fd
-
-    // map exists, try bpf_obj_get
-    union bpf_attr attr = {
-        .pathname = (uint64_t)H2O_EBPF_RETURN_MAP_PATH,
-    };
-    fd = syscall(__NR_bpf, BPF_OBJ_GET, &attr, sizeof(attr));
-    if (fd < 0)
-        h2o_perror("BPF_OBJ_GET failed");
+    get_map_fd(loop, H2O_EBPF_RETURN_MAP_PATH, &fd, &last_attempt);
     return fd;
 }
 
