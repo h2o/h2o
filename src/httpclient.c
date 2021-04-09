@@ -301,12 +301,13 @@ static void on_next_request(h2o_timer_t *entry)
 
 static int on_body(h2o_httpclient_t *client, const char *errstr)
 {
-    if (errstr != NULL && udp_sock != NULL)
-        h2o_socket_read_stop(udp_sock);
-
-    if (errstr != NULL && errstr != h2o_httpclient_error_is_eos) {
-        on_error(client->ctx, errstr);
-        return -1;
+    if (errstr != NULL) {
+        if (udp_sock != NULL)
+            h2o_socket_read_stop(udp_sock);
+        if (errstr != h2o_httpclient_error_is_eos) {
+            on_error(client->ctx, errstr);
+            return -1;
+        }
     }
 
     fwrite((*client->buf)->bytes, 1, (*client->buf)->size, stdout);
