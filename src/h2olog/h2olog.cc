@@ -224,17 +224,17 @@ static void lost_cb(void *context, uint64_t lost)
     tracer->handle_lost(lost);
 }
 
-template <typename T> static std::string build_define_cflag(const char *name, const T &value)
+template <typename T> static std::string build_cflag_d(const char *name, const T &value)
 {
     return std::string("-D") + std::string(name) + "=" + std::to_string(value);
 }
 
-static std::string build_define_cflag(const char *name, const char *value)
+static std::string build_cflag_d(const char *name, const char *value)
 {
     return std::string("-D") + std::string(name) + "=\"" + std::string(value) + "\"";
 }
 
-#define CFLAG_D(name) build_define_cflag(#name, name)
+#define CFLAG_D(name) build_cflag_d(#name, name)
 
 int main(int argc, char **argv)
 {
@@ -329,7 +329,7 @@ int main(int argc, char **argv)
     tracer->init(outfp, include_appdata);
 
     std::vector<std::string> cflags({
-        build_define_cflag("H2OLOG_H2O_PID", h2o_pid),
+        build_cflag_d("H2OLOG_H2O_PID", h2o_pid),
         CFLAG_D(H2O_EBPF_FLAGS_SKIP_TRACING_BIT),
         CFLAG_D(H2O_EBPF_RETURN_MAP_SIZE),
         CFLAG_D(H2O_EBPF_RETURN_MAP_PATH),
@@ -370,7 +370,7 @@ int main(int argc, char **argv)
     if (sampling_rate >= 0) {
         /* To give the calculated rate in U32 because eBPF bytecode has no floating point numbers,
          * See the bpf(2) manpage. */
-        cflags.push_back(build_define_cflag("H2OLOG_SAMPLING_RATE_U32", (uint32_t)(sampling_rate * UINT32_MAX)));
+        cflags.push_back(build_cflag_d("H2OLOG_SAMPLING_RATE_U32", static_cast<uint32_t>(sampling_rate * UINT32_MAX)));
     }
 
     ebpf::StatusTuple ret = bpf->init(tracer->bpf_text(), cflags, probes);
