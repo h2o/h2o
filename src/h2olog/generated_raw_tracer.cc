@@ -172,7 +172,7 @@ enum h2olog_event_id_t {
   H2OLOG_EVENT_ID_QUICLY_STREAM_ON_RECEIVE,
   H2OLOG_EVENT_ID_QUICLY_STREAM_ON_RECEIVE_RESET,
   H2OLOG_EVENT_ID_QUICLY_CONN_STATS,
-  H2OLOG_EVENT_ID_H2O_SOCKET_LOOKUP_FLAGS,
+  H2OLOG_EVENT_ID_H2O__PRIVATE_SOCKET_LOOKUP_FLAGS,
   H2OLOG_EVENT_ID_H2O_RECEIVE_REQUEST,
   H2OLOG_EVENT_ID_H2O_RECEIVE_REQUEST_HEADER,
   H2OLOG_EVENT_ID_H2O_SEND_RESPONSE,
@@ -646,11 +646,11 @@ struct h2olog_event_t {
       struct st_quicly_stats_t * stats;
       size_t size;
     } conn_stats;
-    struct { // h2o:socket_lookup_flags
+    struct { // h2o:_private_socket_lookup_flags
       pid_t tid;
       uint64_t original_flags;
       struct st_h2o_ebpf_map_key_t info;
-    } socket_lookup_flags;
+    } _private_socket_lookup_flags;
     struct { // h2o:receive_request
       uint64_t conn_id;
       uint64_t req_id;
@@ -836,7 +836,7 @@ void h2o_raw_tracer::initialize() {
     h2o_tracer::usdt("quicly", "stream_on_receive", "trace_quicly__stream_on_receive"),
     h2o_tracer::usdt("quicly", "stream_on_receive_reset", "trace_quicly__stream_on_receive_reset"),
     h2o_tracer::usdt("quicly", "conn_stats", "trace_quicly__conn_stats"),
-    h2o_tracer::usdt("h2o", "socket_lookup_flags", "trace_h2o__socket_lookup_flags"),
+    h2o_tracer::usdt("h2o", "_private_socket_lookup_flags", "trace_h2o___private_socket_lookup_flags"),
     h2o_tracer::usdt("h2o", "receive_request", "trace_h2o__receive_request"),
     h2o_tracer::usdt("h2o", "receive_request_header", "trace_h2o__receive_request_header"),
     h2o_tracer::usdt("h2o", "send_response", "trace_h2o__send_response"),
@@ -1862,7 +1862,7 @@ enum h2olog_event_id_t {
   H2OLOG_EVENT_ID_QUICLY_STREAM_ON_RECEIVE,
   H2OLOG_EVENT_ID_QUICLY_STREAM_ON_RECEIVE_RESET,
   H2OLOG_EVENT_ID_QUICLY_CONN_STATS,
-  H2OLOG_EVENT_ID_H2O_SOCKET_LOOKUP_FLAGS,
+  H2OLOG_EVENT_ID_H2O__PRIVATE_SOCKET_LOOKUP_FLAGS,
   H2OLOG_EVENT_ID_H2O_RECEIVE_REQUEST,
   H2OLOG_EVENT_ID_H2O_RECEIVE_REQUEST_HEADER,
   H2OLOG_EVENT_ID_H2O_SEND_RESPONSE,
@@ -2336,11 +2336,11 @@ struct h2olog_event_t {
       struct st_quicly_stats_t * stats;
       size_t size;
     } conn_stats;
-    struct { // h2o:socket_lookup_flags
+    struct { // h2o:_private_socket_lookup_flags
       pid_t tid;
       uint64_t original_flags;
       struct st_h2o_ebpf_map_key_t info;
-    } socket_lookup_flags;
+    } _private_socket_lookup_flags;
     struct { // h2o:receive_request
       uint64_t conn_id;
       uint64_t req_id;
@@ -4138,28 +4138,28 @@ int trace_quicly__conn_stats(struct pt_regs *ctx) {
 
   return 0;
 }
-// h2o:socket_lookup_flags
-int trace_h2o__socket_lookup_flags(struct pt_regs *ctx) {
+// h2o:_private_socket_lookup_flags
+int trace_h2o___private_socket_lookup_flags(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_H2O_SOCKET_LOOKUP_FLAGS };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_H2O__PRIVATE_SOCKET_LOOKUP_FLAGS };
 
   // pid_t tid
-  bpf_usdt_readarg(1, ctx, &event.socket_lookup_flags.tid);
+  bpf_usdt_readarg(1, ctx, &event._private_socket_lookup_flags.tid);
   // uint64_t original_flags
-  bpf_usdt_readarg(2, ctx, &event.socket_lookup_flags.original_flags);
+  bpf_usdt_readarg(2, ctx, &event._private_socket_lookup_flags.original_flags);
   // struct st_h2o_ebpf_map_key_t * info
   bpf_usdt_readarg(3, ctx, &buf);
-  bpf_probe_read(&event.socket_lookup_flags.info, sizeof_st_h2o_ebpf_map_key_t, buf);
+  bpf_probe_read(&event._private_socket_lookup_flags.info, sizeof_st_h2o_ebpf_map_key_t, buf);
 
 #ifdef H2OLOG_SAMPLING_RATE_U32
-  uint64_t flags = event.socket_lookup_flags.original_flags;
+  uint64_t flags = event._private_socket_lookup_flags.original_flags;
   int skip_tracing = bpf_get_prandom_u32() > H2OLOG_SAMPLING_RATE_U32;
   if (skip_tracing) {
     flags |= H2O_EBPF_FLAGS_SKIP_TRACING_BIT;
   }
-  int64_t ret = h2o_return.insert(&event.socket_lookup_flags.tid, &flags);
+  int64_t ret = h2o_return.insert(&event._private_socket_lookup_flags.tid, &flags);
   if (ret != 0)
-    bpf_trace_printk("failed to insert 0x%llx in trace_h2o__socket_lookup_flags with errno=%lld\n", flags, -ret);
+    bpf_trace_printk("failed to insert 0x%llx in trace_h2o___private_socket_lookup_flags with errno=%lld\n", flags, -ret);
 #endif
 
   return 0;

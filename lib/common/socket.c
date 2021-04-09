@@ -1747,17 +1747,17 @@ uint64_t h2o_socket_ebpf_lookup_flags(h2o_loop_t *loop, int (*init_key)(h2o_ebpf
 
     int tracing_map_fd = get_tracing_map_fd(loop);
     h2o_ebpf_map_key_t key;
-    if ((tracing_map_fd >= 0 || H2O_SOCKET_LOOKUP_FLAGS_ENABLED()) && init_key(&key, cbdata)) {
+    if ((tracing_map_fd >= 0 || H2O__PRIVATE_SOCKET_LOOKUP_FLAGS_ENABLED()) && init_key(&key, cbdata)) {
         if (tracing_map_fd >= 0)
             ebpf_map_lookup(tracing_map_fd, &key, &flags);
 
         int return_map_fd;
-        if (H2O_SOCKET_LOOKUP_FLAGS_ENABLED() && (return_map_fd = get_return_map_fd(loop)) >= 0) {
+        if (H2O__PRIVATE_SOCKET_LOOKUP_FLAGS_ENABLED() && (return_map_fd = get_return_map_fd(loop)) >= 0) {
             pid_t tid = gettid();
 
             /* Make sure a possible old flags is not set, otherwise the subsequent logic will be unreliable. */
             if (ebpf_map_delete(return_map_fd, &tid) == 0 || errno == ENOENT) {
-                H2O_SOCKET_LOOKUP_FLAGS(tid, flags, &key);
+                H2O__PRIVATE_SOCKET_LOOKUP_FLAGS(tid, flags, &key);
 
                 if (ebpf_map_lookup(return_map_fd, &tid, &flags) != 0) {
                     if (errno == ENOENT) {
@@ -1766,7 +1766,7 @@ uint64_t h2o_socket_ebpf_lookup_flags(h2o_loop_t *loop, int (*init_key)(h2o_ebpf
                          *  * the insert operation in BPF program failed with ENOMEM */
                         h2o_error_printf(
                             "BPF_MAP_LOOKUP failed. "
-                            "BPF handler for h2o:socket_lookup_flags might not have set the flags via h2o_return map\n");
+                            "BPF handler for h2o:socket_lookup_flags_private might not have set the flags via h2o_return map\n");
                     } else {
                         h2o_perror("BPF_MAP_LOOKUP failed");
                     }

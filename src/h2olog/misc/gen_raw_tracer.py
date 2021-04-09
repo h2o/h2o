@@ -434,15 +434,15 @@ int %s(struct pt_regs *ctx) {
 #endif
 """
 
-  if fully_specified_probe_name == "h2o:socket_lookup_flags":
+  if fully_specified_probe_name == "h2o:_private_socket_lookup_flags":
     c += r"""
 #ifdef H2OLOG_SAMPLING_RATE_U32
-  uint64_t flags = event.socket_lookup_flags.original_flags;
+  uint64_t flags = event._private_socket_lookup_flags.original_flags;
   int skip_tracing = bpf_get_prandom_u32() > H2OLOG_SAMPLING_RATE_U32;
   if (skip_tracing) {
     flags |= H2O_EBPF_FLAGS_SKIP_TRACING_BIT;
   }
-  int64_t ret = h2o_return.insert(&event.socket_lookup_flags.tid, &flags);
+  int64_t ret = h2o_return.insert(&event._private_socket_lookup_flags.tid, &flags);
   if (ret != 0)
     bpf_trace_printk("failed to insert 0x%%llx in %s with errno=%%lld\n", flags, -ret);
 #endif
@@ -657,7 +657,7 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
     metadata = probe_metadata[probe_name]
     fully_specified_probe_name = metadata["fully_specified_probe_name"]
 
-    if fully_specified_probe_name == "h2o:socket_lookup_flags":
+    if fully_specified_probe_name == "h2o:_private_socket_lookup_flags":
       continue
 
     appdata_field_set = metadata["appdata_field_set"]  # type: set[str]
