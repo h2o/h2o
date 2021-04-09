@@ -1613,11 +1613,11 @@ static int ebpf_map_delete(int fd, const void *key)
     return syscall(__NR_bpf, BPF_MAP_DELETE_ELEM, &attr, sizeof(attr));
 }
 
-int h2o_socket_ebpf_setup(void)
+void h2o_socket_ebpf_setup(void)
 {
     if (getuid() != 0) {
         h2o_error_printf("skipping to set up eBPF maps because bpf(2) requires root privileges\n");
-        return 0;
+        return;
     }
 
     /* It creates a pinned BPF object file, and h2o cannot unlink the file because h2o drops root privileges after this function
@@ -1626,15 +1626,13 @@ int h2o_socket_ebpf_setup(void)
         ebpf_map_create(BPF_MAP_TYPE_LRU_HASH, sizeof(pid_t), sizeof(uint64_t), H2O_EBPF_RETURN_MAP_SIZE, H2O_EBPF_RETURN_MAP_NAME);
     if (fd < 0) {
         h2o_perror("BPF_MAP_CREATE failed");
-        return 0;
+        return;
     }
 
     if (ebpf_obj_pin(fd, H2O_EBPF_RETURN_MAP_PATH) != 0) {
         h2o_perror("BPF_OBJ_PIN failed");
-        return 0;
     }
     close(fd); // each worker thread has its own fd
-    return 1;
 }
 
 static void get_map_fd(h2o_loop_t *loop, const char *map_path, int *fd, uint64_t *last_attempt)
@@ -1772,9 +1770,8 @@ uint64_t h2o_socket_ebpf_lookup_flags(h2o_loop_t *loop, int (*init_key)(h2o_ebpf
 
 #else
 
-int h2o_socket_ebpf_setup(void)
+void h2o_socket_ebpf_setup(void)
 {
-    return 0;
 }
 
 int h2o_socket_ebpf_init_key_raw(h2o_ebpf_map_key_t *key, int sock_type, struct sockaddr *local, struct sockaddr *remote)
