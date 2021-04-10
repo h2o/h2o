@@ -225,5 +225,7 @@ ptls_aead_algorithm_t ptls_minicrypto_chacha20poly1305 = {"CHACHA20-POLY1305",
                                                           PTLS_CHACHA20POLY1305_TAG_SIZE,
                                                           sizeof(struct chacha20poly1305_context_t),
                                                           aead_chacha20poly1305_setup_crypto};
-ptls_cipher_suite_t ptls_minicrypto_chacha20poly1305sha256 = {PTLS_CIPHER_SUITE_CHACHA20_POLY1305_SHA256,
-                                                              &ptls_minicrypto_chacha20poly1305, &ptls_minicrypto_sha256};
+ptls_cipher_suite_t ptls_minicrypto_chacha20poly1305sha256 = {.id = PTLS_CIPHER_SUITE_CHACHA20_POLY1305_SHA256,
+                                                              .name = PTLS_CIPHER_SUITE_NAME_CHACHA20_POLY1305_SHA256,
+                                                              .aead = &ptls_minicrypto_chacha20poly1305,
+                                                              .hash = &ptls_minicrypto_sha256};
