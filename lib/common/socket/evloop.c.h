@@ -115,19 +115,53 @@ static void link_to_statechanged(struct st_h2o_evloop_socket_t *sock)
     }
 }
 
-static const char *on_read_core(int fd, h2o_buffer_t **input)
+static const char *on_read_core(struct st_h2o_evloop_socket_t *sock)
 {
     ssize_t read_so_far = 0;
+    int fd = sock->fd;
+    h2o_buffer_t **input = sock->super.ssl == NULL ? &sock->super.input : &sock->super.ssl->input.encrypted;
+    int timestamping = sock->super.timestamping;
+
+    struct msghdr msg;
 
     while (1) {
         ssize_t rret;
         h2o_iovec_t buf = h2o_buffer_try_reserve(input, 4096);
+        size_t buflen = (buf.len <= INT_MAX / 2 ? buf.len : INT_MAX / 2 +1);
+
         if (buf.base == NULL) {
             /* memory allocation failed */
             return h2o_socket_error_out_of_memory;
         }
-        while ((rret = read(fd, buf.base, buf.len <= INT_MAX / 2 ? buf.len : INT_MAX / 2 + 1)) == -1 && errno == EINTR)
+
+        /* if timestamping is enabled, lets setup everything we need to make it happen */
+        size_t controllen = CMSG_SPACE(sizeof(struct timespec));
+        char control[controllen];
+        struct iovec iov = { .iov_base = buf.base, .iov_len = buflen };
+
+        msg = (struct msghdr) { .msg_control = NULL,
+                                .msg_controllen = 0,
+                                .msg_name = NULL,
+                                .msg_namelen = 0,
+                                .msg_iov = &iov,
+                                .msg_iovlen = 1 };
+
+        if (timestamping) {
+            memset(control, 0, controllen);
+            msg.msg_control = &control;
+            msg.msg_controllen = controllen;
+        }
+
+        while ((rret=recvmsg(fd, &msg, 0)) == -1 && errno == EINTR)
             ;
+
+        if (rret > 0) {
+            if (sock->super.needs_timestamp) {
+                h2o_socket_handle_timestamp(sock, &msg);
+                sock->super.needs_timestamp = 0;
+            }
+        }
+
         if (rret == -1) {
             if (errno == EAGAIN)
                 break;
@@ -236,7 +270,7 @@ static void read_on_ready(struct st_h2o_evloop_socket_t *sock)
     if ((sock->_flags & H2O_SOCKET_FLAG_DONT_READ) != 0)
         goto Notify;
 
-    if ((err = on_read_core(sock->fd, sock->super.ssl == NULL ? &sock->super.input : &sock->super.ssl->input.encrypted)) != NULL)
+    if ((err = on_read_core(sock)) != NULL)
         goto Notify;
 
     if (sock->super.ssl != NULL && sock->super.ssl->handshake.cb == NULL)
@@ -396,6 +430,7 @@ static struct st_h2o_evloop_socket_t *create_socket(h2o_evloop_t *loop, int fd, 
     sock->_wreq.bufs = sock->_wreq.smallbufs;
     sock->_next_pending = sock;
     sock->_next_statechanged = sock;
+    sock->super.needs_timestamp = 0;
 
     evloop_do_on_socket_create(sock);
 

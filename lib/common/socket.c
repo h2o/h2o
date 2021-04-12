@@ -50,6 +50,11 @@
 #define TCP_NOTSENT_LOWAT 25
 #endif
 
+#if defined(__linux__)
+#include <linux/errqueue.h>
+#include <linux/net_tstamp.h>
+#endif /* defined(__linux__) */
+
 #if H2O_USE_DTRACE && defined(__linux__)
 #define H2O_USE_EBPF_MAP 1
 #endif
@@ -442,6 +447,50 @@ h2o_socket_t *h2o_socket_import(h2o_loop_t *loop, h2o_socket_export_t *info)
     sock->input = info->input;
     h2o_buffer_set_prototype(&sock->input, &h2o_socket_buffer_prototype);
     return sock;
+}
+
+#define NSEC_PER_SEC 1000000000
+
+static inline int64_t
+timespec_to_nsec(const struct timespec *a)
+{
+       return (int64_t)a->tv_sec * NSEC_PER_SEC + a->tv_nsec;
+}
+
+void h2o_socket_handle_timestamp(struct st_h2o_evloop_socket_t *sock, struct msghdr *msg)
+{
+#if defined(__linux__) && !defined(H2O_USE_LIBUV)
+    struct scm_timestamping *ts = NULL;
+    struct timespec tp = { 0 };
+    uint64_t time_now = 0, packet_ts = 0;
+
+    for (struct cmsghdr *cmsg = CMSG_FIRSTHDR(msg); cmsg;
+            cmsg = CMSG_NXTHDR(msg, cmsg)) {
+
+        /* in the future we may want to harvest IP_RECVERR messages here, which could have interesting data */
+        if (cmsg->cmsg_level != SOL_SOCKET)
+            continue;
+
+        switch (cmsg->cmsg_type) {
+            case SO_TIMESTAMPNS:
+                memset(&tp, 0, sizeof(struct timespec));
+
+                ts = (struct scm_timestamping *)CMSG_DATA(cmsg);
+                sock->super.packet_ts = timespec_to_nsec(&ts->ts[0]);
+
+                h2o_sliding_counter_start(&loop->packet_latency_nanosec_counter, packet_ts);
+                h2o_sliding_counter_stop(&loop->packet_latency_nanosec_counter, time_now);
+                break;
+            default:
+                /* Ignore other cmsg options */
+                break;
+        }
+    }
+
+    return;
+#else /* !defined(__linux__) || (defined(__linux__) && defined(H2O_USE_LIBUV)) */
+    return;
+#endif /* defined(__linux__) && !defined(H2O_USE_LIBUV) */
 }
 
 void h2o_socket_close(h2o_socket_t *sock)
