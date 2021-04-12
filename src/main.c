@@ -648,10 +648,8 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
     STACK_OF(X509) * cert_chain;
     int ret;
     int use_client_verify = 0;
-    static ptls_openssl_verify_certificate_t vc;
     if (cipher_suites == NULL)
         cipher_suites = ptls_openssl_cipher_suites;
-
 
     *pctx = (struct st_fat_context_t){
         .ctx =
@@ -842,7 +840,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
     SSL_CTX *ssl_ctx = NULL;
     yoml_t **certificate_file, **key_file, **dh_file, **min_version, **max_version, **cipher_suite, **cipher_suite_tls13_node,
         **ocsp_update_cmd, **ocsp_update_interval_node, **ocsp_max_failures_node, **cipher_preference_node, **neverbleed_node,
-        **http2_origin_frame_node, **raw_pubkey_file, **client_CA_file;
+        **http2_origin_frame_node, **raw_pubkey_file, **client_ca_file;
 
     h2o_iovec_t *http2_origin_frame = NULL;
     long ssl_options = SSL_OP_ALL;
@@ -870,11 +868,11 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
                                        "certificate-file:s,raw-pubkey-file:s,min-version:s,minimum-version:s,max-version:s,"
                                        "maximum-version:s,cipher-suite:s,cipher-suite-tls1.3:a,ocsp-update-cmd:s,"
                                        "ocsp-update-interval:*,ocsp-max-failures:*,dh-file:s,cipher-preference:*,neverbleed:*,"
-                                       "http2-origin-frame:*,client-CA-file:s",
+                                       "http2-origin-frame:*,client-ca-file:s",
                                        &key_file, &certificate_file, &raw_pubkey_file, &min_version, &min_version, &max_version,
                                        &max_version, &cipher_suite, &cipher_suite_tls13_node, &ocsp_update_cmd,
                                        &ocsp_update_interval_node, &ocsp_max_failures_node, &dh_file, &cipher_preference_node,
-                                       &neverbleed_node, &http2_origin_frame_node, &client_CA_file) != 0)
+                                       &neverbleed_node, &http2_origin_frame_node, &client_ca_file) != 0)
         return -1;
     if (certificate_file == NULL && raw_pubkey_file == NULL) {
         h2o_configurator_errprintf(cmd, *ssl_node, "either one of certificate-file or raw-public-key file must be specified");

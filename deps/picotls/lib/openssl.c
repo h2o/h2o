@@ -1237,12 +1237,15 @@ static int verify_cert_chain(X509_STORE *store, X509 *cert, STACK_OF(X509) * cha
         }
         X509_VERIFY_PARAM_set_purpose(params, is_server ? X509_PURPOSE_SSL_SERVER : X509_PURPOSE_SSL_CLIENT);
         X509_VERIFY_PARAM_set_depth(params, 98); /* use the default of OpenSSL 1.0.2 and above; see `man SSL_CTX_set_verify` */
-        if (server_name != NULL) {
-            if (ptls_server_name_is_ipaddr(server_name)) {
-                X509_VERIFY_PARAM_set1_ip_asc(params, server_name);
-            } else {
-                X509_VERIFY_PARAM_set1_host(params, server_name, 0);
-                X509_VERIFY_PARAM_set_hostflags(params, X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS);
+        if (!is_server) {
+            assert(server_name != NULL && "ptls_set_server_name MUST be called");
+            if (server_name != NULL) {
+                if (ptls_server_name_is_ipaddr(server_name)) {
+                    X509_VERIFY_PARAM_set1_ip_asc(params, server_name);
+                } else {
+                    X509_VERIFY_PARAM_set1_host(params, server_name, 0);
+                    X509_VERIFY_PARAM_set_hostflags(params, X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS);
+                }
             }
         }
         X509_STORE_CTX_set0_param(verify_ctx, params); /* params will be freed alongside verify_ctx */
@@ -1278,29 +1281,6 @@ static int verify_cert_chain(X509_STORE *store, X509 *cert, STACK_OF(X509) * cha
         goto Exit;
     }
 
-    if (!is_server) {
-        assert(server_name != NULL && "ptls_set_server_name MUST be called");
-#ifdef X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS
-        /* verify CN */
-        if (server_name != NULL) {
-            if (ptls_server_name_is_ipaddr(server_name)) {
-                ret = X509_check_ip_asc(cert, server_name, 0);
-            } else {
-                ret = X509_check_host(cert, server_name, strlen(server_name), X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS, NULL);
-            }
-            if (ret != 1) {
-                if (ret == 0) { /* failed match */
-                    ret = PTLS_ALERT_BAD_CERTIFICATE;
-                } else {
-                    ret = PTLS_ERROR_LIBRARY;
-                }
-                goto Exit;
-            }
-        }
-#else
-#warning "hostname validation is disabled; OpenSSL >= 1.0.2 or LibreSSL >= 2.5.0 is required"
-#endif
-    }
     ret = 0;
 
 Exit:
