@@ -457,12 +457,12 @@ timespec_to_nsec(const struct timespec *a)
        return (int64_t)a->tv_sec * NSEC_PER_SEC + a->tv_nsec;
 }
 
+#if defined(__linux__) && !H2O_USE_LIBUV
 void h2o_socket_handle_timestamp(struct st_h2o_evloop_socket_t *sock, struct msghdr *msg)
 {
-#if defined(__linux__) && !defined(H2O_USE_LIBUV)
     struct scm_timestamping *ts = NULL;
-    struct timespec tp = { 0 };
-    uint64_t time_now = 0, packet_ts = 0;
+    uint64_t packet_ts = 0;
+    h2o_loop_t *loop = sock->loop;
 
     for (struct cmsghdr *cmsg = CMSG_FIRSTHDR(msg); cmsg;
             cmsg = CMSG_NXTHDR(msg, cmsg)) {
@@ -473,13 +473,10 @@ void h2o_socket_handle_timestamp(struct st_h2o_evloop_socket_t *sock, struct msg
 
         switch (cmsg->cmsg_type) {
             case SO_TIMESTAMPNS:
-                memset(&tp, 0, sizeof(struct timespec));
-
                 ts = (struct scm_timestamping *)CMSG_DATA(cmsg);
-                sock->super.packet_ts = timespec_to_nsec(&ts->ts[0]);
+                packet_ts = timespec_to_nsec(&ts->ts[0]);
 
                 h2o_sliding_counter_start(&loop->packet_latency_nanosec_counter, packet_ts);
-                h2o_sliding_counter_stop(&loop->packet_latency_nanosec_counter, time_now);
                 break;
             default:
                 /* Ignore other cmsg options */
@@ -488,10 +485,13 @@ void h2o_socket_handle_timestamp(struct st_h2o_evloop_socket_t *sock, struct msg
     }
 
     return;
-#else /* !defined(__linux__) || (defined(__linux__) && defined(H2O_USE_LIBUV)) */
-    return;
-#endif /* defined(__linux__) && !defined(H2O_USE_LIBUV) */
 }
+#else /* !defined(__linux__) || (defined(__linux__) && H2O_USE_LIBUV) */
+void h2o_socket_handle_timestamp(struct st_h2o_evloop_socket_t *sock, struct msghdr *msg)
+{
+    return;
+}
+#endif /* defined(__linux__) && !defined(H2O_USE_LIBUV) */
 
 void h2o_socket_close(h2o_socket_t *sock)
 {
