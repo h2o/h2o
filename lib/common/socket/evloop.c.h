@@ -115,6 +115,50 @@ static void link_to_statechanged(struct st_h2o_evloop_socket_t *sock)
     }
 }
 
+#define NSEC_PER_SEC 1000000000
+
+static inline int64_t
+timespec_to_nsec(const struct timespec *a)
+{
+       return (int64_t)a->tv_sec * NSEC_PER_SEC + a->tv_nsec;
+}
+
+#if defined(__linux__) && !H2O_USE_LIBUV
+static void handle_timestamp(struct st_h2o_evloop_socket_t *sock, struct msghdr *msg)
+{
+    struct scm_timestamping *ts = NULL;
+    uint64_t packet_ts = 0;
+    h2o_loop_t *loop = sock->loop;
+
+    for (struct cmsghdr *cmsg = CMSG_FIRSTHDR(msg); cmsg;
+            cmsg = CMSG_NXTHDR(msg, cmsg)) {
+
+        /* in the future we may want to harvest IP_RECVERR messages here, which could have interesting data */
+        if (cmsg->cmsg_level != SOL_SOCKET)
+            continue;
+
+        switch (cmsg->cmsg_type) {
+            case SO_TIMESTAMPNS:
+                ts = (struct scm_timestamping *)CMSG_DATA(cmsg);
+                packet_ts = timespec_to_nsec(&ts->ts[0]);
+
+                h2o_sliding_counter_start(&loop->packet_latency_nanosec_counter, packet_ts);
+                break;
+            default:
+                /* Ignore other cmsg options */
+                break;
+        }
+    }
+
+    return;
+}
+#else /* !defined(__linux__) || (defined(__linux__) && H2O_USE_LIBUV) */
+static void handle_timestamp(struct st_h2o_evloop_socket_t *sock, struct msghdr *msg)
+{
+    return;
+}
+#endif /* defined(__linux__) && !defined(H2O_USE_LIBUV) */
+
 static const char *on_read_core(struct st_h2o_evloop_socket_t *sock)
 {
     ssize_t read_so_far = 0;
@@ -157,7 +201,7 @@ static const char *on_read_core(struct st_h2o_evloop_socket_t *sock)
 
         if (rret > 0) {
             if (sock->super.needs_timestamp) {
-                h2o_socket_handle_timestamp(sock, &msg);
+                handle_timestamp(sock, &msg);
                 sock->super.needs_timestamp = 0;
             }
         }

@@ -204,10 +204,6 @@ void h2o_socket_dispose_export(h2o_socket_export_t *info);
  */
 void h2o_socket_close(h2o_socket_t *sock);
 /**
- * Handles a packet timestamp from an h2o socket on platforms which support it
- */
-void h2o_socket_handle_timestamp(struct st_h2o_evloop_socket_t *sock, struct msghdr *msg);
-/**
  * Schedules a callback to be notify we the socket can be written to
  */
 void h2o_socket_notify_write(h2o_socket_t *sock, h2o_socket_cb cb);
