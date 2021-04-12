@@ -3731,6 +3731,8 @@ static int send_resumption_token(quicly_conn_t *conn, quicly_send_context_t *s)
     if ((ret = allocate_ack_eliciting_frame(conn, s, quicly_new_token_frame_capacity(ptls_iovec_init(tokenbuf.base, tokenbuf.off)),
                                             &sent, on_ack_new_token)) != 0)
         goto Exit;
+    ++conn->egress.new_token.num_inflight;
+    sent->data.new_token.is_inflight = 1;
     sent->data.new_token.generation = conn->egress.new_token.generation;
     s->dst = quicly_encode_new_token_frame(s->dst, ptls_iovec_init(tokenbuf.base, tokenbuf.off));
     conn->egress.pending_flows &= ~QUICLY_PENDING_FLOW_NEW_TOKEN_BIT;
@@ -4038,8 +4040,8 @@ static int update_traffic_key_cb(ptls_update_traffic_key_t *self, ptls_t *tls, i
     ptls_aead_context_t **aead_slot;
     int ret;
     static const char *log_labels[2][4] = {
-        {NULL, "QUIC_CLIENT_EARLY_TRAFFIC_SECRET", "QUIC_CLIENT_HANDSHAKE_TRAFFIC_SECRET", "QUIC_CLIENT_TRAFFIC_SECRET_0"},
-        {NULL, NULL, "QUIC_SERVER_HANDSHAKE_TRAFFIC_SECRET", "QUIC_SERVER_TRAFFIC_SECRET_0"}};
+        {NULL, "CLIENT_EARLY_TRAFFIC_SECRET", "CLIENT_HANDSHAKE_TRAFFIC_SECRET", "CLIENT_TRAFFIC_SECRET_0"},
+        {NULL, NULL, "SERVER_HANDSHAKE_TRAFFIC_SECRET", "SERVER_TRAFFIC_SECRET_0"}};
     const char *log_label = log_labels[ptls_is_server(tls) == is_enc][epoch];
 
     QUICLY_PROBE(CRYPTO_UPDATE_SECRET, conn, conn->stash.now, is_enc, epoch, log_label,
@@ -5453,7 +5455,10 @@ int quicly_accept(quicly_conn_t **conn, quicly_context_t *ctx, struct sockaddr *
                   const quicly_cid_plaintext_t *new_cid, ptls_handshake_properties_t *handshake_properties)
 {
     const struct st_ptls_salt_t *salt;
-    struct st_quicly_cipher_context_t ingress_cipher = {NULL}, egress_cipher = {NULL};
+    struct {
+        struct st_quicly_cipher_context_t ingress, egress;
+        int alive;
+    } cipher = {};
     ptls_iovec_t payload;
     uint64_t next_expected_pn, pn, offending_frame_type = QUICLY_FRAME_TYPE_PADDING;
     int is_ack_only, ret;
@@ -5477,11 +5482,12 @@ int quicly_accept(quicly_conn_t **conn, quicly_context_t *ctx, struct sockaddr *
         ret = QUICLY_TRANSPORT_ERROR_PROTOCOL_VIOLATION;
         goto Exit;
     }
-    if ((ret = setup_initial_encryption(get_aes128gcmsha256(ctx), &ingress_cipher, &egress_cipher, packet->cid.dest.encrypted, 0,
+    if ((ret = setup_initial_encryption(get_aes128gcmsha256(ctx), &cipher.ingress, &cipher.egress, packet->cid.dest.encrypted, 0,
                                         ptls_iovec_init(salt->initial, sizeof(salt->initial)), NULL)) != 0)
         goto Exit;
+    cipher.alive = 1;
     next_expected_pn = 0; /* is this correct? do we need to take care of underflow? */
-    if ((ret = decrypt_packet(ingress_cipher.header_protection, aead_decrypt_fixed_key, ingress_cipher.aead, &next_expected_pn,
+    if ((ret = decrypt_packet(cipher.ingress.header_protection, aead_decrypt_fixed_key, cipher.ingress.aead, &next_expected_pn,
                               packet, &pn, &payload)) != 0) {
         ret = QUICLY_ERROR_DECRYPTION_FAILED;
         goto Exit;
@@ -5506,10 +5512,9 @@ int quicly_accept(quicly_conn_t **conn, quicly_context_t *ctx, struct sockaddr *
     if ((ret = setup_handshake_space_and_flow(*conn, QUICLY_EPOCH_INITIAL)) != 0)
         goto Exit;
     (*conn)->initial->super.next_expected_packet_number = next_expected_pn;
-    (*conn)->initial->cipher.ingress = ingress_cipher;
-    ingress_cipher = (struct st_quicly_cipher_context_t){NULL};
-    (*conn)->initial->cipher.egress = egress_cipher;
-    egress_cipher = (struct st_quicly_cipher_context_t){NULL};
+    (*conn)->initial->cipher.ingress = cipher.ingress;
+    (*conn)->initial->cipher.egress = cipher.egress;
+    cipher.alive = 0;
     (*conn)->crypto.handshake_properties.collected_extensions = server_collected_extensions;
     (*conn)->initial->largest_ingress_udp_payload_size = packet->datagram_size;
 
@@ -5534,6 +5539,10 @@ Exit:
             ret = 0;
         }
         unlock_now(*conn);
+    }
+    if (cipher.alive) {
+        dispose_cipher(&cipher.ingress);
+        dispose_cipher(&cipher.egress);
     }
     return ret;
 }

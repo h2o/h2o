@@ -1019,10 +1019,10 @@
 				EXECUTABLE_PREFIX = lib;
 				GCC_PREPROCESSOR_DEFINITIONS = "$(inherited)";
 				HEADER_SEARCH_PATHS = (
-					"/usr/local/openssl-1.1.0/include",
+					/usr/local/opt/openssl/include,
 					include,
 				);
-				LIBRARY_SEARCH_PATHS = "/usr/local/openssl-1.1.0/lib";
+				LIBRARY_SEARCH_PATHS = /usr/local/opt/openssl/lib;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
 			name = Debug;
@@ -1033,10 +1033,10 @@
 				EXECUTABLE_PREFIX = lib;
 				GCC_PREPROCESSOR_DEFINITIONS = "$(inherited)";
 				HEADER_SEARCH_PATHS = (
-					"/usr/local/openssl-1.1.0/include",
+					/usr/local/opt/openssl/include,
 					include,
 				);
-				LIBRARY_SEARCH_PATHS = "/usr/local/openssl-1.1.0/lib";
+				LIBRARY_SEARCH_PATHS = /usr/local/opt/openssl/lib;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
 			name = Release;
@@ -1143,10 +1143,10 @@
 			buildSettings = {
 				GCC_PREPROCESSOR_DEFINITIONS = "$(inherited)";
 				HEADER_SEARCH_PATHS = (
-					"/usr/local/openssl-1.1.0/include",
+					/usr/local/opt/openssl/include,
 					include,
 				);
-				LIBRARY_SEARCH_PATHS = "/usr/local/openssl-1.1.0/lib";
+				LIBRARY_SEARCH_PATHS = /usr/local/opt/openssl/lib;
 				OTHER_LDFLAGS = "-lcrypto";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
@@ -1157,10 +1157,10 @@
 			buildSettings = {
 				GCC_PREPROCESSOR_DEFINITIONS = "$(inherited)";
 				HEADER_SEARCH_PATHS = (
-					"/usr/local/openssl-1.1.0/include",
+					/usr/local/opt/openssl/include,
 					include,
 				);
-				LIBRARY_SEARCH_PATHS = "/usr/local/openssl-1.1.0/lib";
+				LIBRARY_SEARCH_PATHS = /usr/local/opt/openssl/lib;
 				OTHER_LDFLAGS = "-lcrypto";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
@@ -1193,11 +1193,11 @@
 				);
 				HEADER_SEARCH_PATHS = (
 					include,
-					"/usr/local/openssl-1.1.0/include",
+					/usr/local/opt/openssl/include,
 					/usr/local/include,
 				);
 				LIBRARY_SEARCH_PATHS = (
-					"/usr/local/openssl-1.1.0/lib",
+					/usr/local/opt/openssl/lib,
 					/usr/local/lib,
 				);
 				OTHER_LDFLAGS = (
@@ -1219,11 +1219,11 @@
 				);
 				HEADER_SEARCH_PATHS = (
 					include,
-					"/usr/local/openssl-1.1.0/include",
+					/usr/local/opt/openssl/include,
 					/usr/local/include,
 				);
 				LIBRARY_SEARCH_PATHS = (
-					"/usr/local/openssl-1.1.0/lib",
+					/usr/local/opt/openssl/lib,
 					/usr/local/lib,
 				);
 				OTHER_LDFLAGS = (
@@ -1259,10 +1259,10 @@
 			buildSettings = {
 				GCC_PREPROCESSOR_DEFINITIONS = "$(inherited)";
 				HEADER_SEARCH_PATHS = (
-					"/usr/local/openssl-1.1.0/include",
+					/usr/local/opt/openssl/include,
 					include,
 				);
-				LIBRARY_SEARCH_PATHS = "/usr/local/openssl-1.1.0/lib";
+				LIBRARY_SEARCH_PATHS = /usr/local/opt/openssl/lib;
 				OTHER_LDFLAGS = "-lcrypto";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
@@ -1273,10 +1273,10 @@
 			buildSettings = {
 				GCC_PREPROCESSOR_DEFINITIONS = "$(inherited)";
 				HEADER_SEARCH_PATHS = (
-					"/usr/local/openssl-1.1.0/include",
+					/usr/local/opt/openssl/include,
 					include,
 				);
-				LIBRARY_SEARCH_PATHS = "/usr/local/openssl-1.1.0/lib";
+				LIBRARY_SEARCH_PATHS = /usr/local/opt/openssl/lib;
 				OTHER_LDFLAGS = "-lcrypto";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};

@@ -37,8 +37,8 @@
 #include <stdio.h>
 #ifdef _WINDOWS
 #ifdef _WINDOWS_XP
- /* The modern BCrypt API is only available on Windows Vista and later versions.
-  * If compiling on Windows XP, we need to use the olded "wincrypt" API */
+/* The modern BCrypt API is only available on Windows Vista and later versions.
+ * If compiling on Windows XP, we need to use the olded "wincrypt" API */
 #include <wincrypt.h>
 
 static void read_entropy(uint8_t *entropy, size_t size)
@@ -57,13 +57,13 @@ static void read_entropy(uint8_t *entropy, size_t size)
     }
 }
 #else
- /* The old "Wincrypt" API requires access to default security containers.
-  * This can cause access control errors on some systems. We prefer
-  * to use the modern BCrypt API when available */
+/* The old "Wincrypt" API requires access to default security containers.
+ * This can cause access control errors on some systems. We prefer
+ * to use the modern BCrypt API when available */
 #include <bcrypt.h>
 
- static void read_entropy(uint8_t *entropy, size_t size)
- {
+static void read_entropy(uint8_t *entropy, size_t size)
+{
     NTSTATUS nts = 0;
     BCRYPT_ALG_HANDLE hAlgorithm = 0;
 

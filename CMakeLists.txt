@@ -686,7 +686,9 @@ IF (WITH_MRUBY)
         SET(MRUBY_TOOLCHAIN "gcc")
     ENDIF ()
     ADD_CUSTOM_TARGET(mruby
-        MRUBY_TOOLCHAIN=${MRUBY_TOOLCHAIN} MRUBY_CONFIG=${CMAKE_CURRENT_SOURCE_DIR}/misc/mruby_config.rb MRUBY_BUILD_DIR=${CMAKE_CURRENT_BINARY_DIR}/mruby MRUBY_ADDITIONAL_CONFIG=${MRUBY_ADDITIONAL_CONFIG} ruby minirake
+        # deps/mruby/tasks/toolchains/clang.rake looks for CC, CXX and LD.
+        # There are no C++ files in deps/mruby, use the C compiler for linking.
+        MRUBY_TOOLCHAIN=${MRUBY_TOOLCHAIN} CC=${CMAKE_C_COMPILER} CXX=${CMAKE_CXX_COMPILER} LD=${CMAKE_C_COMPILER} MRUBY_CONFIG=${CMAKE_CURRENT_SOURCE_DIR}/misc/mruby_config.rb MRUBY_BUILD_DIR=${CMAKE_CURRENT_BINARY_DIR}/mruby MRUBY_ADDITIONAL_CONFIG=${MRUBY_ADDITIONAL_CONFIG} ruby minirake
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/deps/mruby
         BYPRODUCTS "${CMAKE_CURRENT_BINARY_DIR}/mruby/host/lib/libmruby.a"
                    "${CMAKE_CURRENT_BINARY_DIR}/mruby/host/mrbgems/mruby-onig-regexp/onigmo-6.1.2/.libs/libonigmo.a"
@@ -948,7 +950,7 @@ IF (WITH_H2OLOG)
 
     # This phony target is required to force to trigger a custom command.
     # If DEPENDS is empty, the custom command won't be triggered when OUTPUT files exist.
-    ADD_CUSTOM_TARGET(phony_force_trigger_command COMMAND echo -n)
+    ADD_CUSTOM_COMMAND(OUTPUT phony_force_trigger_command COMMAND echo -n)
 
     ADD_CUSTOM_COMMAND(
         OUTPUT  "${CMAKE_CURRENT_SOURCE_DIR}/src/h2olog/generated_raw_tracer.cc"
