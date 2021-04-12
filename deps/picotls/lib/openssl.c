@@ -1237,6 +1237,7 @@ static int verify_cert_chain(X509_STORE *store, X509 *cert, STACK_OF(X509) * cha
         }
         X509_VERIFY_PARAM_set_purpose(params, is_server ? X509_PURPOSE_SSL_SERVER : X509_PURPOSE_SSL_CLIENT);
         X509_VERIFY_PARAM_set_depth(params, 98); /* use the default of OpenSSL 1.0.2 and above; see `man SSL_CTX_set_verify` */
+        X509_VERIFY_PARAM_set_flags(params, X509_V_FLAG_PARTIAL_CHAIN);
         if (!is_server) {
             assert(server_name != NULL && "ptls_set_server_name MUST be called");
             if (server_name != NULL) {
