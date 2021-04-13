@@ -468,7 +468,7 @@ static void disable_latency_optimized_write(h2o_socket_t *sock, int (*adjust_not
         sock->_latency_optimization.notsent_is_minimized = 0;
     }
     sock->_latency_optimization.state = H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_DISABLED;
-    sock->_latency_optimization.suggested_tls_payload_size = 16384;
+    sock->_latency_optimization.suggested_tls_payload_size = SIZE_MAX;
     sock->_latency_optimization.suggested_write_size = SIZE_MAX;
 }
 
@@ -505,7 +505,7 @@ static inline void prepare_for_latency_optimized_write(h2o_socket_t *sock,
                 goto Disable;
             sock->_latency_optimization.notsent_is_minimized = 0;
         }
-        sock->_latency_optimization.suggested_tls_payload_size = 16384;
+        sock->_latency_optimization.suggested_tls_payload_size = SIZE_MAX;
         sock->_latency_optimization.suggested_write_size = SIZE_MAX;
     }
     return;
@@ -617,7 +617,7 @@ size_t h2o_socket_do_prepare_for_latency_optimized_write(h2o_socket_t *sock,
 #undef CALC_CWND_PAIR_FROM_BYTE_UNITS
 }
 
-static size_t calc_next_tls_record_size(h2o_socket_t *sock, size_t bufsize)
+static size_t calc_tls_write_size(h2o_socket_t *sock, size_t bufsize)
 {
     size_t recsize;
 
@@ -626,7 +626,7 @@ static size_t calc_next_tls_record_size(h2o_socket_t *sock, size_t bufsize)
     switch (sock->_latency_optimization.state) {
     case H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_TBD:
     case H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_DISABLED:
-        recsize = sock->bytes_written < 200 * 1024 ? calc_suggested_tls_payload_size(sock, 1400) : 16384;
+        recsize = sock->bytes_written < 200 * 1024 ? calc_suggested_tls_payload_size(sock, 1400) : SIZE_MAX;
         break;
     case H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_DETERMINED:
         sock->_latency_optimization.state = H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_NEEDS_UPDATE;
@@ -636,11 +636,7 @@ static size_t calc_next_tls_record_size(h2o_socket_t *sock, size_t bufsize)
         break;
     }
 
-    /* cap recsize by the number of bytes that actually can be encoded */
-    if (recsize > bufsize)
-        recsize = bufsize;
-
-    return recsize;
+    return recsize < bufsize ? recsize : bufsize;
 }
 
 void h2o_socket_write(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_socket_cb cb)
@@ -663,7 +659,7 @@ void h2o_socket_write(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_
             size_t off = 0;
             while (off != bufs[0].len) {
                 int ret;
-                size_t sz = calc_next_tls_record_size(sock, bufs[0].len - off);
+                size_t sz = calc_tls_write_size(sock, bufs[0].len - off);
                 if (sock->ssl->ptls != NULL) {
                     size_t dst_size = sz + ptls_get_record_overhead(sock->ssl->ptls);
                     void *dst = h2o_mem_alloc_pool(&sock->ssl->output.pool, char, dst_size);
