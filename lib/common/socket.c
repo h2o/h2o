@@ -1741,6 +1741,43 @@ static int get_return_map_fd(h2o_loop_t *loop)
     return fd;
 }
 
+static void on_track_ebpf_lookup_timer(h2o_timer_t *timeout);
+
+struct {
+    int first_time_warning;
+    uint64_t total_successes;
+    struct {
+        pthread_mutex_t mutex;
+        uint64_t prev_successes;
+        uint64_t cur_failures; // for ENOENT
+        h2o_timer_t timer;
+    } locked;
+} track_ebpf_lookup = {
+    .locked = {
+        .mutex = PTHREAD_MUTEX_INITIALIZER,
+        .timer = {
+            .cb = on_track_ebpf_lookup_timer,
+        },
+    }
+};
+
+static void on_track_ebpf_lookup_timer(h2o_timer_t *timeout)
+{
+    pthread_mutex_lock(&track_ebpf_lookup.locked.mutex);
+
+    uint64_t total_successes = __sync_fetch_and_add(&track_ebpf_lookup.total_successes, 0),
+             cur_successes = total_successes - track_ebpf_lookup.locked.prev_successes;
+
+    fprintf(stderr, "BPF_MAP_LOOKUP_ELEM failed with ENOENT %" PRIu64 " time%s, succeeded: %" PRIu64 " time%s, over the last minute.\n",
+            track_ebpf_lookup.locked.cur_failures, track_ebpf_lookup.locked.cur_failures > 1 ? "s" : "", cur_successes,
+            cur_successes > 1 ? "s" : "");
+
+    track_ebpf_lookup.locked.prev_successes = total_successes;
+    track_ebpf_lookup.locked.cur_failures = 0;
+
+    pthread_mutex_unlock(&track_ebpf_lookup.locked.mutex);
+}
+
 uint64_t h2o_socket_ebpf_lookup_flags(h2o_loop_t *loop, int (*init_key)(h2o_ebpf_map_key_t *key, void *cbdata), void *cbdata)
 {
     uint64_t flags = 0;
@@ -1759,14 +1796,22 @@ uint64_t h2o_socket_ebpf_lookup_flags(h2o_loop_t *loop, int (*init_key)(h2o_ebpf
             if (ebpf_map_delete(return_map_fd, &tid) == 0 || errno == ENOENT) {
                 H2O__PRIVATE_SOCKET_LOOKUP_FLAGS(tid, flags, &key);
 
-                if (ebpf_map_lookup(return_map_fd, &tid, &flags) != 0) {
+                if (ebpf_map_lookup(return_map_fd, &tid, &flags) == 0) {
+                    __sync_fetch_and_add(&track_ebpf_lookup.total_successes, 1);
+                } else {
                     if (errno == ENOENT) {
                         /* ENOENT could be issued in some reasons even if BPF tries to insert the entry, for example:
                          *  * the entry in LRU hash was evicted
-                         *  * the insert operation in BPF program failed with ENOMEM */
-                        h2o_error_printf(
-                            "BPF_MAP_LOOKUP failed. "
-                            "BPF handler for h2o:socket_lookup_flags_private might not have set the flags via h2o_return map\n");
+                         *  * the insert operation in BPF program failed with ENOMEM
+                         * We don't know the frequency for this ENOENT, so cap the number of logs.
+                         *
+                         * Other than the above reasons, ENOENT is issued when the tracer does not set the flags via h2o_return map,
+                         * See h2o:_private_socket_lookup_flags handler in h2olog for details. */
+                        pthread_mutex_lock(&track_ebpf_lookup.locked.mutex);
+                        ++track_ebpf_lookup.locked.cur_failures;
+                        if (!h2o_timer_is_linked(&track_ebpf_lookup.locked.timer))
+                            h2o_timer_link(loop, 60000, &track_ebpf_lookup.locked.timer);
+                        pthread_mutex_unlock(&track_ebpf_lookup.locked.mutex);
                     } else {
                         h2o_perror("BPF_MAP_LOOKUP failed");
                     }
