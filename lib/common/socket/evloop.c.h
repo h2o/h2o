@@ -159,14 +159,9 @@ static void handle_timestamp(struct st_h2o_evloop_socket_t *sock, struct msghdr 
 }
 #endif /* defined(__linux__) */
 
-static const char *on_read_core(struct st_h2o_evloop_socket_t *sock)
+static const char *on_read_core(int fd, h2o_buffer_t **input, struct msghdr *msg)
 {
     ssize_t read_so_far = 0;
-    int fd = sock->fd;
-    h2o_buffer_t **input = sock->super.ssl == NULL ? &sock->super.input : &sock->super.ssl->input.encrypted;
-    int timestamping = sock->super.timestamping;
-
-    struct msghdr msg;
 
     while (1) {
         ssize_t rret;
@@ -179,31 +174,16 @@ static const char *on_read_core(struct st_h2o_evloop_socket_t *sock)
         size_t buflen = (buf.len <= INT_MAX / 2 ? buf.len : INT_MAX / 2 +1);
         struct iovec iov = { .iov_base = buf.base, .iov_len = buflen };
 
-        size_t controllen = CMSG_SPACE(sizeof(struct timespec));
-        char control[controllen];
-        msg = (struct msghdr) { .msg_control = NULL,
-                                .msg_controllen = 0,
-                                .msg_name = NULL,
-                                .msg_namelen = 0,
-                                .msg_iov = &iov,
-                                .msg_iovlen = 1 };
+        /* set the buffer to receive incoming data. the caller may (or may
+         * not) have set other fields of the msghdr structure prior to calling
+         * `on_read_core`.
+         */
+        assert(msg != NULL);
+        msg->msg_iov = &iov;
+        msg->msg_iovlen = 1;
 
-        /* if timestamping is enabled, lets setup everything we need to make it happen */
-        if (timestamping) {
-            memset(control, 0, controllen);
-            msg.msg_control = &control;
-            msg.msg_controllen = controllen;
-        }
-
-        while ((rret=recvmsg(fd, &msg, 0)) == -1 && errno == EINTR)
+        while ((rret=recvmsg(fd, msg, 0)) == -1 && errno == EINTR)
             ;
-
-        if (rret > 0) {
-            if (sock->super.needs_timestamp) {
-                handle_timestamp(sock, &msg);
-                sock->super.needs_timestamp = 0;
-            }
-        }
 
         if (rret == -1) {
             if (errno == EAGAIN)
@@ -310,11 +290,31 @@ static void read_on_ready(struct st_h2o_evloop_socket_t *sock)
     const char *err = 0;
     size_t prev_size = sock->super.input->size;
 
+    size_t controllen = CMSG_SPACE(sizeof(struct timespec));
+    char *control = alloca(controllen);
+
+    struct msghdr msg = {0};
+
     if ((sock->_flags & H2O_SOCKET_FLAG_DONT_READ) != 0)
         goto Notify;
 
-    if ((err = on_read_core(sock)) != NULL)
+    /* if timestamping is enabled, setup the msghdr for on_read_core */
+    if (sock->super.timestamping) {
+       msg = (struct msghdr) { .msg_control = control,
+                               .msg_controllen = controllen,
+                               .msg_name = NULL,
+                               .msg_namelen = 0,
+                               .msg_iov = NULL,
+                               .msg_iovlen = 0 };
+    }
+
+    if ((err = on_read_core(sock->fd, sock->super.ssl == NULL ?  &sock->super.input : &sock->super.ssl->input.encrypted, &msg)) != NULL)
         goto Notify;
+
+    if (sock->super.timestamping && sock->super.needs_timestamp) {
+        handle_timestamp(sock, &msg);
+        sock->super.needs_timestamp = 0;
+    }
 
     if (sock->super.ssl != NULL && sock->super.ssl->handshake.cb == NULL)
         err = decode_ssl_input(&sock->super);
