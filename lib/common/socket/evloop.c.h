@@ -29,6 +29,11 @@
 #include "cloexec.h"
 #include "h2o/linklist.h"
 
+#if defined(__linux__)
+#include <linux/errqueue.h>
+#include <linux/net_tstamp.h>
+#endif /* defined(__linux__) */
+
 #if !defined(H2O_USE_ACCEPT4)
 #ifdef __linux__
 #if defined(__ANDROID__) && __ANDROID_API__ < 21
