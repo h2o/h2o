@@ -123,7 +123,7 @@ timespec_to_nsec(const struct timespec *a)
        return (int64_t)a->tv_sec * NSEC_PER_SEC + a->tv_nsec;
 }
 
-#if defined(__linux__) && !H2O_USE_LIBUV
+#if defined(__linux__)
 static void handle_timestamp(struct st_h2o_evloop_socket_t *sock, struct msghdr *msg)
 {
     struct scm_timestamping *ts = NULL;
@@ -152,12 +152,12 @@ static void handle_timestamp(struct st_h2o_evloop_socket_t *sock, struct msghdr 
 
     return;
 }
-#else /* !defined(__linux__) || (defined(__linux__) && H2O_USE_LIBUV) */
+#else /* !defined(__linux__) */
 static void handle_timestamp(struct st_h2o_evloop_socket_t *sock, struct msghdr *msg)
 {
     return;
 }
-#endif /* defined(__linux__) && !defined(H2O_USE_LIBUV) */
+#endif /* defined(__linux__) */
 
 static const char *on_read_core(struct st_h2o_evloop_socket_t *sock)
 {
@@ -171,18 +171,16 @@ static const char *on_read_core(struct st_h2o_evloop_socket_t *sock)
     while (1) {
         ssize_t rret;
         h2o_iovec_t buf = h2o_buffer_try_reserve(input, 4096);
-        size_t buflen = (buf.len <= INT_MAX / 2 ? buf.len : INT_MAX / 2 +1);
-
         if (buf.base == NULL) {
             /* memory allocation failed */
             return h2o_socket_error_out_of_memory;
         }
 
-        /* if timestamping is enabled, lets setup everything we need to make it happen */
-        size_t controllen = CMSG_SPACE(sizeof(struct timespec));
-        char control[controllen];
+        size_t buflen = (buf.len <= INT_MAX / 2 ? buf.len : INT_MAX / 2 +1);
         struct iovec iov = { .iov_base = buf.base, .iov_len = buflen };
 
+        size_t controllen = CMSG_SPACE(sizeof(struct timespec));
+        char control[controllen];
         msg = (struct msghdr) { .msg_control = NULL,
                                 .msg_controllen = 0,
                                 .msg_name = NULL,
@@ -190,6 +188,7 @@ static const char *on_read_core(struct st_h2o_evloop_socket_t *sock)
                                 .msg_iov = &iov,
                                 .msg_iovlen = 1 };
 
+        /* if timestamping is enabled, lets setup everything we need to make it happen */
         if (timestamping) {
             memset(control, 0, controllen);
             msg.msg_control = &control;

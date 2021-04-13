@@ -110,9 +110,6 @@ struct st_h2o_socket_t {
     void *data;
     struct st_h2o_socket_ssl_t *ssl;
     h2o_buffer_t *input;
-    int timestamping;
-    int needs_timestamp;
-
     /**
      * total bytes read (above the TLS layer)
      */
@@ -125,6 +122,15 @@ struct st_h2o_socket_t {
      * boolean flag to indicate if sock is NOT being traced
      */
     unsigned _skip_tracing : 1;
+    /**
+      * boolean flag to indicate if timestamping is enabled for this socket.
+      */
+    unsigned timestamping : 1;
+    /**
+      * boolean flag to indicate if this socket has had a timestamp taken yet.
+      */
+    unsigned needs_timestamp : 1;
+
     struct {
         void (*cb)(void *data);
         void *data;
