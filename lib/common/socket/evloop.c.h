@@ -156,7 +156,7 @@ static void handle_timestamp(struct st_h2o_evloop_socket_t *sock, struct msghdr 
                     h2o_error_printf("error getting clock time: %s\n", strerror(errno));
                     break;
                 }
-				time_now = timespec_to_nsec(&tp);
+                time_now = timespec_to_nsec(&tp);
 
                 /* the time window starts at packet_ts, when the packet
                  * arrived in the kernel before most of the network stack has
