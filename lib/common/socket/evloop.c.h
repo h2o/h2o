@@ -126,8 +126,9 @@ timespec_to_nsec(const struct timespec *a)
 #if defined(__linux__)
 static void handle_timestamp(struct st_h2o_evloop_socket_t *sock, struct msghdr *msg)
 {
-    struct scm_timestamping *ts = NULL;
-    uint64_t packet_ts = 0;
+    struct timespec *ts = NULL;
+    struct timespec tp = { 0 };
+    uint64_t time_now = 0,  packet_ts = 0;
     h2o_loop_t *loop = sock->loop;
 
     for (struct cmsghdr *cmsg = CMSG_FIRSTHDR(msg); cmsg;
@@ -139,10 +140,27 @@ static void handle_timestamp(struct st_h2o_evloop_socket_t *sock, struct msghdr 
 
         switch (cmsg->cmsg_type) {
             case SO_TIMESTAMPNS:
-                ts = (struct scm_timestamping *)CMSG_DATA(cmsg);
-                packet_ts = timespec_to_nsec(&ts->ts[0]);
+                ts = (struct timespec *)CMSG_DATA(cmsg);
+                packet_ts = timespec_to_nsec(ts);
 
+                /* We use CLOCK_REALTIME to get the current system time
+                 * because the timespec returned from the kernel also uses
+                 * CLOCK_REALTIME.
+                 */
+                if (clock_gettime(CLOCK_REALTIME, &tp) == -1) {
+                    h2o_error_printf("error getting clock time: %s\n", strerror(errno));
+                    break;
+                }
+				time_now = timespec_to_nsec(&tp);
+
+                /* the time window starts at packet_ts, when the packet
+                 * arrived in the kernel before most of the network stack has
+                 * run.
+                 *
+                 * the time window ends now (time_now).
+                 */
                 h2o_sliding_counter_start(&loop->packet_latency_nanosec_counter, packet_ts);
+                h2o_sliding_counter_stop(&loop->packet_latency_nanosec_counter, time_now);
                 break;
             default:
                 /* Ignore other cmsg options */
