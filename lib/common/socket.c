@@ -621,12 +621,21 @@ static size_t calc_tls_write_size(h2o_socket_t *sock, size_t bufsize)
 {
     size_t recsize;
 
-    /* set recsize to the maximum TLS record size by using the latency optimizer, or if the optimizer is not in action, based on the
-     * number of bytes that have already been sent */
+    /* set recsize to the maximum TLS record size by using the latency optimizer */
     switch (sock->_latency_optimization.state) {
     case H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_TBD:
     case H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_DISABLED:
-        recsize = sock->bytes_written < 200 * 1024 ? calc_suggested_tls_payload_size(sock, 1400) : SIZE_MAX;
+        /* Use small TLS records during slow start, even latency optimization does not kick in due to RTT being below 50ms. The
+         * logic is designed to keep the lost oppportunity per each RTT to 1/16 of the window of that RTT. */
+#define DIVISOR 8 // amortized lost opportunity is 1/(2*DIVISOR)
+        if (sock->bytes_written / DIVISOR >= 16384) {
+            recsize = SIZE_MAX;
+        } else {
+            recsize = sock->bytes_written / DIVISOR / 16 * 16; /* divide by 8, round by 128-bit (i.e. typical block size) */
+            if (recsize < 1400)
+                recsize = 1400;
+        }
+#undef DIVISOR
         break;
     case H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_DETERMINED:
         sock->_latency_optimization.state = H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_NEEDS_UPDATE;
