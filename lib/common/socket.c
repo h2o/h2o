@@ -1757,14 +1757,13 @@ struct {
         uint64_t cur_failures; // for ENOENT
         h2o_timer_t timer;
     } locked;
-} track_ebpf_lookup = {
-    .locked = {
-        .mutex = PTHREAD_MUTEX_INITIALIZER,
-        .timer = {
-            .cb = on_track_ebpf_lookup_timer,
-        },
-    }
-};
+} track_ebpf_lookup = {.locked = {
+                           .mutex = PTHREAD_MUTEX_INITIALIZER,
+                           .timer =
+                               {
+                                   .cb = on_track_ebpf_lookup_timer,
+                               },
+                       }};
 
 static void on_track_ebpf_lookup_timer(h2o_timer_t *timeout)
 {
@@ -1773,7 +1772,8 @@ static void on_track_ebpf_lookup_timer(h2o_timer_t *timeout)
     uint64_t total_successes = __sync_fetch_and_add(&track_ebpf_lookup.total_successes, 0),
              cur_successes = total_successes - track_ebpf_lookup.locked.prev_successes;
 
-    fprintf(stderr, "BPF_MAP_LOOKUP_ELEM failed with ENOENT %" PRIu64 " time%s, succeeded: %" PRIu64 " time%s, over the last minute.\n",
+    fprintf(stderr,
+            "BPF_MAP_LOOKUP_ELEM failed with ENOENT %" PRIu64 " time%s, succeeded: %" PRIu64 " time%s, over the last minute.\n",
             track_ebpf_lookup.locked.cur_failures, track_ebpf_lookup.locked.cur_failures > 1 ? "s" : "", cur_successes,
             cur_successes > 1 ? "s" : "");
 

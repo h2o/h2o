@@ -958,7 +958,6 @@ static int on_config_stash(h2o_configurator_command_t *cmd, h2o_configurator_con
     return 0;
 }
 
-
 static int on_config_usdt_selective_tracing(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     ssize_t on;
