@@ -131,7 +131,7 @@ int h2o_quic_send_datagrams(h2o_quic_ctx_t *ctx, quicly_address_t *dest, quicly_
             cmsg.hdr.cmsg_level = IPPROTO_IP;
             cmsg.hdr.cmsg_type = IP_PKTINFO;
             cmsg_bodylen = sizeof(struct in_pktinfo);
-            ((struct in_pktinfo *)CMSG_DATA(&cmsg.hdr))->ipi_spec_dst = src->sin.sin_addr;
+            memcpy(&((struct in_pktinfo *)CMSG_DATA(&cmsg.hdr))->ipi_spec_dst, &src->sin.sin_addr, sizeof(struct in_addr));
 #elif defined(IP_SENDSRCADDR)
             if (*ctx->sock.port != src->sin.sin_port)
                 return 0;
@@ -141,7 +141,7 @@ int h2o_quic_send_datagrams(h2o_quic_ctx_t *ctx, quicly_address_t *dest, quicly_
                 cmsg.hdr.cmsg_level = IPPROTO_IP;
                 cmsg.hdr.cmsg_type = IP_SENDSRCADDR;
                 cmsg_bodylen = sizeof(struct in_addr);
-                *(struct in_addr *)CMSG_DATA(&cmsg.hdr) = src->sin.sin_addr;
+                memcpy(CMSG_DATA(&cmsg.hdr), &src->sin.sin_addr, sizeof(struct in_addr));
             }
 #else
             h2o_fatal("IP_PKTINFO not available");
@@ -154,7 +154,7 @@ int h2o_quic_send_datagrams(h2o_quic_ctx_t *ctx, quicly_address_t *dest, quicly_
             cmsg.hdr.cmsg_level = IPPROTO_IPV6;
             cmsg.hdr.cmsg_type = IPV6_PKTINFO;
             cmsg_bodylen = sizeof(struct in6_pktinfo);
-            ((struct in6_pktinfo *)CMSG_DATA(&cmsg.hdr))->ipi6_addr = src->sin6.sin6_addr;
+            memcpy(&((struct in6_pktinfo *)CMSG_DATA(&cmsg.hdr))->ipi6_addr, &src->sin6.sin6_addr, sizeof(struct in6_addr));
 #else
             h2o_fatal("IPV6_PKTINFO not available");
 #endif
