@@ -195,24 +195,35 @@ static const char *on_read_core(int fd, h2o_buffer_t **input, struct msghdr *msg
         }
 
         size_t buflen = (buf.len <= INT_MAX / 2 ? buf.len : INT_MAX / 2 +1);
-        struct iovec iov = { .iov_base = buf.base, .iov_len = buflen };
 
-        /* set the buffer to receive incoming data. the caller may (or may
-         * not) have set other fields of the msghdr structure prior to calling
-         * `on_read_core`.
+        /* Not all file descriptors are sockets; if a non-socket is passed
+         * here, we can't call recvmsg on it, so we fall back to regular read
+         * call.
          */
-        assert(msg != NULL);
-        msg->msg_iov = &iov;
-        msg->msg_iovlen = 1;
+        if (msg == NULL) {
+            while ((rret=read(fd, buf.base, buflen)) == -1 &&  errno == EINTR)
+                ;
+        } else {
+            struct iovec iov = { .iov_base = buf.base, .iov_len = buflen };
 
-        while ((rret=recvmsg(fd, msg, 0)) == -1 && errno == EINTR)
-            ;
+            /* set the buffer to receive incoming data. the caller may (or may
+             * not) have set other fields of the msghdr structure prior to calling
+             * `on_read_core`.
+             */
+            assert(msg != NULL);
+            msg->msg_iov = &iov;
+            msg->msg_iovlen = 1;
+
+            while ((rret=recvmsg(fd, msg, 0)) == -1 && errno == EINTR)
+                ;
+        }
 
         if (rret == -1) {
             if (errno == EAGAIN)
                 break;
-            else
+            else {
                 return h2o_socket_error_io;
+            }
         } else if (rret == 0) {
             if (read_so_far == 0)
                 return h2o_socket_error_closed; /* TODO notify close */
@@ -313,29 +324,34 @@ static void read_on_ready(struct st_h2o_evloop_socket_t *sock)
     const char *err = 0;
     size_t prev_size = sock->super.input->size;
 
-    size_t controllen = CMSG_SPACE(sizeof(struct timespec));
-    char *control = alloca(controllen);
-
-    struct msghdr msg = {0};
+    struct msghdr msg = { 0 };
+    struct msghdr *pmsg = NULL;
 
     if ((sock->_flags & H2O_SOCKET_FLAG_DONT_READ) != 0)
         goto Notify;
 
-    /* if timestamping is enabled, setup the msghdr for on_read_core */
+    /* if timestamping is enabled, setup the msghdr for on_read_core
+     * and set pmsg equal to the object.
+     *
+     */
     if (sock->super.timestamping) {
-       msg = (struct msghdr) { .msg_control = control,
-                               .msg_controllen = controllen,
-                               .msg_name = NULL,
-                               .msg_namelen = 0,
-                               .msg_iov = NULL,
-                               .msg_iovlen = 0 };
+        size_t controllen = CMSG_SPACE(sizeof(struct timespec));
+        char *control = alloca(controllen);
+
+        msg = (struct msghdr ) { .msg_control = control,
+                                 .msg_controllen = controllen,
+                                 .msg_name = NULL,
+                                 .msg_namelen = 0,
+                                 .msg_iov = NULL,
+                                 .msg_iovlen = 0 };
+        pmsg = &msg;
     }
 
-    if ((err = on_read_core(sock->fd, sock->super.ssl == NULL ?  &sock->super.input : &sock->super.ssl->input.encrypted, &msg)) != NULL)
+    if ((err = on_read_core(sock->fd, sock->super.ssl == NULL ?  &sock->super.input : &sock->super.ssl->input.encrypted, pmsg)) != NULL)
         goto Notify;
 
     if (sock->super.timestamping && sock->super.needs_timestamp) {
-        handle_timestamp(sock, &msg);
+        handle_timestamp(sock, pmsg);
         sock->super.needs_timestamp = 0;
     }
 
