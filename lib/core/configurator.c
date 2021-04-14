@@ -958,6 +958,16 @@ static int on_config_stash(h2o_configurator_command_t *cmd, h2o_configurator_con
     return 0;
 }
 
+
+static int on_config_usdt_selective_tracing(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    ssize_t on;
+    if ((on = h2o_configurator_get_one_of(cmd, node, "OFF,ON")) == -1)
+        return -1;
+    ctx->globalconf->usdt_selective_tracing = (uint8_t)on;
+    return 0;
+}
+
 void h2o_configurator__init_core(h2o_globalconf_t *conf)
 {
     /* check if already initialized */
@@ -1086,6 +1096,9 @@ void h2o_configurator__init_core(h2o_globalconf_t *conf)
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_send_informational);
         h2o_configurator_define_command(&c->super, "stash", H2O_CONFIGURATOR_FLAG_ALL_LEVELS, on_config_stash);
+        h2o_configurator_define_command(&c->super, "usdt-selective-tracing",
+                                        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                        on_config_usdt_selective_tracing);
     }
 }
 

@@ -38,6 +38,7 @@ sub spawn_my_h2o {
   return spawn_h2o({
     opts => [qw(--mode=worker)],
     conf => << "EOT",
+usdt-selective-tracing: ON
 listen:
   type: quic
   port: $quic_port

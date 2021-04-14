@@ -3426,7 +3426,10 @@ int main(int argc, char **argv)
     }
 
     setup_signal_handlers();
-    h2o_socket_ebpf_setup();
+    if (conf.globalconf.usdt_selective_tracing && !h2o_socket_ebpf_setup()) {
+        h2o_error_printf("usdt-selective-tracing: failed to setup eBPF\n");
+        return EX_CONFIG;
+    }
 
     /* open the log file to redirect STDIN/STDERR to, before calling setuid */
     if (conf.error_log != NULL) {

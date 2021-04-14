@@ -52,7 +52,8 @@ Optional arguments:
     -s RESPONSE_HEADER_NAME A response header name to show, e.g. "content-type"
     -t TRACEPOINT A tracepoint, or fully-qualified probe name, to show,
                   including a glob pattern, e.g. "quicly:accept", "h2o:*"
-    -S RATE Enable random sampling per connection (0-1.0)
+    -S RATE Enable random sampling per connection (0.0-1.0)
+            Requires for h2o to have `usdt-selective-tracing: ON` in its config file
     -a Include application data which are omitted by default
     -r Run without dropping root privilege
     -w Path to write the output (default: stdout)

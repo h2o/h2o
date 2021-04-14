@@ -1613,11 +1613,12 @@ static int ebpf_map_delete(int fd, const void *key)
     return syscall(__NR_bpf, BPF_MAP_DELETE_ELEM, &attr, sizeof(attr));
 }
 
-void h2o_socket_ebpf_setup(void)
+int h2o_socket_ebpf_setup(void)
 {
+    int success = 0;
     if (getuid() != 0) {
-        h2o_error_printf("skipping to set up eBPF maps because bpf(2) requires root privileges\n");
-        return;
+        h2o_error_printf("failed to set up eBPF maps because bpf(2) requires root privileges\n");
+        goto Exit;
     }
 
     /* It creates a pinned BPF object file, and h2o cannot unlink the file because h2o drops root privileges after this function
@@ -1626,25 +1627,29 @@ void h2o_socket_ebpf_setup(void)
         ebpf_map_create(BPF_MAP_TYPE_LRU_HASH, sizeof(pid_t), sizeof(uint64_t), H2O_EBPF_RETURN_MAP_SIZE, H2O_EBPF_RETURN_MAP_NAME);
     if (fd < 0) {
         if (errno == EPERM) {
-            h2o_error_printf("Warning: BPF_MAP_CREATE failed with EPERM, "
+            h2o_error_printf("BPF_MAP_CREATE failed with EPERM, "
                              "maybe because RLIMIT_MEMLOCK is too small.\n");
         } else {
-            h2o_perror("Warning: BPF_MAP_CREATE failed");
+            h2o_perror("BPF_MAP_CREATE failed");
         }
-        return;
+        goto Exit;
     }
 
     if (ebpf_obj_pin(fd, H2O_EBPF_RETURN_MAP_PATH) != 0) {
         if (errno == EEXIST) {
-            /* ok */
+            success = 1;
         } else if (errno == ENOENT) {
-            h2o_error_printf("Warning: BPF_OBJ_PIN failed with ENOENT, "
+            h2o_error_printf("BPF_OBJ_PIN failed with ENOENT, "
                              "because /sys/fs/bpf is not mounted as the BPF filesystem.\n");
         } else {
-            h2o_perror("Warning: BPF_OBJ_PIN failed");
+            h2o_perror("BPF_OBJ_PIN failed");
         }
+    } else {
+        success = 1;
     }
     close(fd); // each worker thread has its own fd
+Exit:
+    return success;
 }
 
 static void get_map_fd(h2o_loop_t *loop, const char *map_path, int *fd, uint64_t *last_attempt)
@@ -1827,8 +1832,9 @@ uint64_t h2o_socket_ebpf_lookup_flags(h2o_loop_t *loop, int (*init_key)(h2o_ebpf
 
 #else
 
-void h2o_socket_ebpf_setup(void)
+int h2o_socket_ebpf_setup(void)
 {
+    return 0;
 }
 
 int h2o_socket_ebpf_init_key_raw(h2o_ebpf_map_key_t *key, int sock_type, struct sockaddr *local, struct sockaddr *remote)
