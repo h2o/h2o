@@ -553,8 +553,7 @@ static void run_socket(struct st_h2o_evloop_socket_t *sock)
             socklen_t l = sizeof(so_err);
             so_err = 0;
             if (getsockopt(sock->fd, SOL_SOCKET, SO_ERROR, &so_err, &l) != 0 || so_err != 0) {
-                /* FIXME lookup the error table */
-                err = h2o_socket_error_conn_fail;
+                err = strerror(so_err);
             }
         }
         on_write_complete(&sock->super, err);
