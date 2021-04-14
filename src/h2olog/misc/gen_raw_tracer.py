@@ -55,31 +55,31 @@ h2o_probes_d = "h2o-probes.d"
 
 # An allow-list to gather data from USDT probes.
 # Only fields listed here are handled in BPF.
-struct_map = {
+struct_map = OrderedDict([
     # deps/quicly/include/quicly.h
-    "st_quicly_stream_t": [
+    ["st_quicly_stream_t", [
         # ($member_access, $optional_flat_name)
         # If $optional_flat_name is None, $member_access is used.
         ("stream_id", None),
-    ],
+    ]],
 
     # deps/quicly/include/quicly/loss.h
-    "quicly_rtt_t": [
+    ["quicly_rtt_t", [
         ("minimum", None),
         ("smoothed", None),
         ("variance", None),
         ("latest",  None),
-    ],
+    ]],
 
     # deps/quicly/lib/quicly.c
-    "st_quicly_conn_t": [
+    ["st_quicly_conn_t", [
         ("super.local.cid_set.plaintext.master_id", "master_id"),
-    ],
+    ]],
 
-    "sockaddr": [],
-    "sockaddr_in": [],
-    "sockaddr_in6": [],
-}
+    ["sockaddr", []],
+    ["sockaddr_in", []],
+    ["sockaddr_in6", []],
+])
 
 # The block list for probes.
 # All the probes are handled by default in JSON mode
@@ -136,13 +136,13 @@ class Lexer:
     while self.skip_whitespaces() or self.skip(comment):
       pass
 
-  def expect_opt(self, pattern) -> Optional[re.Match]:
+  def expect_opt(self, pattern):
     m = re.match(pattern, self.src[self.pos:], re_xms)
     if m:
       self.pos += m.end()
     return m
 
-  def expect(self, pattern) -> re.Match:
+  def expect(self, pattern):
     m = self.expect_opt(pattern)
     if not m:
       sys.exit("Expected '%s' but got '%s' %s"
@@ -183,7 +183,7 @@ def parse_dscript(path: Path):
       m = lexer.expect_opt(comment)
       if m:
         # find for /* @appdata {...} */
-        m = re.match(r'/\*\s*@appdata\s*(?P<json>\{.*\})\s*\*/', m[0], re_xms)
+        m = re.match(r'/\*\s*@appdata\s*(?P<json>\{.*\})\s*\*/', m.group(0), re_xms)
         if m:
           if appdata:
             die("cannot place @appdata annotation more than once per file")
@@ -229,7 +229,7 @@ def parse_dscript(path: Path):
           lexer.skip_whitespaces_or_comments()
           m = lexer.expect_opt(r'\w+|\*')
           if m:
-            tokens.append(m[0])
+            tokens.append(m.group(0))
           else:
             break
 
