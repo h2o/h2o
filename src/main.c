@@ -3424,7 +3424,7 @@ int main(int argc, char **argv)
 
     setup_signal_handlers();
     if (conf.globalconf.usdt_selective_tracing && !h2o_socket_ebpf_setup()) {
-        h2o_error_printf("usdt-selective-tracing: failed to setup eBPF\n");
+        h2o_error_printf("usdt-selective-tracing is set to ON but failed to setup eBPF\n");
         return EX_CONFIG;
     }
 

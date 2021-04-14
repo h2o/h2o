@@ -1640,7 +1640,7 @@ int h2o_socket_ebpf_setup(void)
             success = 1;
         } else if (errno == ENOENT) {
             h2o_error_printf("BPF_OBJ_PIN failed with ENOENT, "
-                             "because /sys/fs/bpf is not mounted as the BPF filesystem.\n");
+                             "because /sys/fs/bpf is not mounted as a BPF filesystem.\n");
         } else {
             h2o_perror("BPF_OBJ_PIN failed");
         }
