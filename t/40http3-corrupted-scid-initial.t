@@ -5,6 +5,7 @@ use Net::EmptyPort qw(empty_port wait_port);
 use POSIX ":sys_wait_h";
 use Test::More;
 use t::Util;
+use JSON;
 
 # Refer to 40http3-forward-initial.t for re-generating the input packets.
 # quic-initial-w-corrupted-scid.bin and quic-initial-w-zerolen-scid.bin need a DCID based on node_id == 1.
@@ -33,6 +34,9 @@ hosts:
     paths:
       /:
         file.dir: t/assets/doc_root
+      "/server-status":
+        status: ON
+
 quic-nodes:
   self: 1
   mapping:
@@ -57,6 +61,15 @@ for my $i(1 .. 2) {
 	ok system("curl -ksfL http://127.0.0.1:$port > /dev/null") == 0, "server is alive after getting an Initial with corrupted SCID ($i)";
 }
 
+sub get_num_connections() {
+  my $resp = `curl --silent -o /dev/stderr http://127.0.0.1:$port/server-status/json?show=main 2>&1 > /dev/null`;
+  my $jresp = decode_json("$resp");;
+  return $jresp->{'connections'};
+}
+
+# one for curl, one for half-opened QUIC conenction by quic-decryptable-initial.bin above
+ok get_num_connections() == 2, "Number of connections is two";
+
 # Test 2:
 # Throw Initial with h2o-issued (valid) DCID and zero-length SCID
 system("perl", "t/udp-generator.pl", "127.0.0.1", "$quic_port", "t/assets/quic-initial-w-zerolen-scid.bin") == 0 or die "Failed to launch udp-generator";
@@ -65,6 +78,9 @@ for my $i(1 .. 2) {
 	sleep 1;
 	ok system("curl -ksfL http://127.0.0.1:$port > /dev/null") == 0, "server is alive after getting an Initial with zero-length SCID ($i)";
 }
+
+# packet from test 2 shall be dropped and should not affect connection count
+ok get_num_connections() == 2, "Number of connections is still two";
 
 # shutdown h2o
 undef $server;

@@ -1023,10 +1023,8 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
         goto Error;
     }
     if (use_picotls) {
-        if (cipher_suite_tls13_node != NULL && (cipher_suite_tls13 = parse_tls13_ciphers(cmd, *cipher_suite_tls13_node)) == NULL) {
-            h2o_configurator_errprintf(cmd, *cipher_suite, "failed to parse the TLS 1.3 cipher suite\n");
+        if (cipher_suite_tls13_node != NULL && (cipher_suite_tls13 = parse_tls13_ciphers(cmd, *cipher_suite_tls13_node)) == NULL)
             goto Error;
-        }
     }
     if (dh_file != NULL) {
         BIO *bio = BIO_new_file((*dh_file)->data.scalar, "r");
@@ -2678,11 +2676,10 @@ static h2o_quic_conn_t *on_http3_accept(h2o_quic_ctx_t *_ctx, quicly_address_t *
     num_sessions(1);
 
 Exit:
-    if (conn == NULL) {
+    if (conn == NULL || &conn->super == H2O_QUIC_ACCEPT_CONN_DECRYPTION_FAILED) {
         /* revert the changes to the connection counts */
         num_connections(-1);
         num_quic_connections(-1);
-        return NULL;
     }
     return &conn->super;
 }

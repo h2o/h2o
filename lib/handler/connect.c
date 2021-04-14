@@ -61,6 +61,10 @@ static void start_connect(struct st_connect_request_t *creq);
 static void on_error(struct st_connect_request_t *creq, const char *errstr)
 {
     h2o_timer_unlink(&creq->timeout);
+    if (creq->getaddr_req != NULL) {
+        h2o_hostinfo_getaddr_cancel(creq->getaddr_req);
+        creq->getaddr_req = NULL;
+    }
     if (creq->sock != NULL) {
         h2o_socket_close(creq->sock);
         creq->sock = NULL;
