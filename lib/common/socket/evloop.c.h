@@ -333,6 +333,12 @@ static void read_on_ready(struct st_h2o_evloop_socket_t *sock)
     /* if timestamping is enabled, setup the msghdr for on_read_core
      * and set pmsg equal to the object.
      *
+     * only sockets can be timestampped -- all other FD types that can make it
+     * to this function would have timestamping = 0, and so would pass a NULL
+     * pointer (as pmsg) to on_read_core below.
+     *
+     * on_read_core knows to call either read or recvmsg based on whether or
+     * not it got a msghdr structure.
      */
     if (sock->super.timestamping) {
         size_t controllen = CMSG_SPACE(sizeof(struct timespec));
