@@ -4,7 +4,7 @@ CHECK_MK=$(SRC_DIR)/misc/docker-ci/check.mk
 CMAKE_ARGS=
 FUZZ_ASAN=ASAN_OPTIONS=detect_leaks=0
 DOCKER_RUN_OPTS=--privileged \
-	--ulimit memlock=67108864:67108864 \
+	--ulimit memlock=-1 \
 	-v `pwd`:$(SRC_DIR) \
 	-v /sys/kernel/debug:/sys/kernel/debug \
 	-v /lib/modules:/lib/modules:ro \
