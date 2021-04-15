@@ -30,6 +30,7 @@
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/time.h>
 #include <unistd.h>
 #include "picotls.h"
 #include "picotls/openssl.h"
@@ -67,6 +68,13 @@ static int chunk_size = 10;
 static h2o_iovec_t iov_filler;
 static int io_interval = 0, req_interval = 0;
 static int ssl_verify_none = 0;
+static struct {
+    struct timeval start; /* set to non-zero if recording timings */
+    struct timeval headers_sent;
+    struct timeval headers_received;
+    struct timeval first_byte_received;
+    struct timeval last_byte_received;
+} timings;
 static const ptls_key_exchange_algorithm_t *h3_key_exchanges[] = {
 #if PTLS_OPENSSL_HAVE_X25519
     &ptls_openssl_x25519,
@@ -127,6 +135,11 @@ static int load_http3_session(h2o_httpclient_ctx_t *ctx, struct sockaddr *server
         *tp = http3_session.tp;
     }
     return 1;
+}
+
+static uint64_t sub_timeval(const struct timeval *x, const struct timeval *y)
+{
+    return ((uint64_t)x->tv_sec * 1000000 + x->tv_usec) - ((uint64_t)y->tv_sec * 1000000 + y->tv_usec);
 }
 
 struct st_timeout {
@@ -295,6 +308,20 @@ static void on_next_request(h2o_timer_t *entry)
 
 static int on_body(h2o_httpclient_t *client, const char *errstr)
 {
+    if (timings.first_byte_received.tv_sec == 0)
+        gettimeofday(&timings.first_byte_received, NULL);
+    if (errstr != NULL) {
+        gettimeofday(&timings.last_byte_received, NULL);
+        if (timings.start.tv_sec != 0) {
+            fprintf(stderr,
+                    "Timings: headers-sent: %" PRIu64 ", headers-received: %" PRIu64 ", first-byte-received: %" PRIu64
+                    ", last-byte-received: %" PRIu64 "\n",
+                    sub_timeval(&timings.headers_sent, &timings.start), sub_timeval(&timings.headers_received, &timings.start),
+                    sub_timeval(&timings.first_byte_received, &timings.start),
+                    sub_timeval(&timings.last_byte_received, &timings.start));
+        }
+    }
+
     if (errstr != NULL && errstr != h2o_httpclient_error_is_eos) {
         on_error(client->ctx, errstr);
         return -1;
@@ -354,6 +381,8 @@ static int on_informational(h2o_httpclient_t *client, int version, int status, h
 
 h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, h2o_httpclient_on_head_t *args)
 {
+    gettimeofday(&timings.headers_received, NULL);
+
     if (errstr != NULL && errstr != h2o_httpclient_error_is_eos) {
         on_error(client->ctx, errstr);
         return NULL;
@@ -443,6 +472,9 @@ h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *errstr, 
     *headers = headers_vec.entries;
     *num_headers = headers_vec.size;
     client->informational_cb = on_informational;
+
+    gettimeofday(&timings.headers_sent, NULL);
+
     return on_head;
 }
 
@@ -465,6 +497,7 @@ static void usage(const char *progname)
             "  -m <method>  request method (default: GET)\n"
             "  -o <path>    file to which the response body is written (default: stdout)\n"
             "  -t <times>   number of requests to send the request (default: 1)\n"
+            "  -T           report timing information\n"
             "  -W <bytes>   receive window size (HTTP/3 only)\n"
             "  -x <host:port>\n"
             "               specifies the destination of the CONNECT request; implies\n"
@@ -553,7 +586,7 @@ int main(int argc, char **argv)
     }
 #endif
 
-    const char *optstring = "t:m:o:b:x:C:c:d:H:i:k2:W:h3:"
+    const char *optstring = "t:m:o:b:x:C:c:d:H:i:k2:TW:h3:"
 #ifdef __GNUC__
                             ":" /* for backward compatibility, optarg of -3 is optional when using glibc */
 #endif
@@ -656,6 +689,9 @@ int main(int argc, char **argv)
                 exit(EXIT_FAILURE);
             }
 #endif
+            break;
+        case 'T':
+            gettimeofday(&timings.start, NULL);
             break;
         case 'W': {
             uint64_t v;
