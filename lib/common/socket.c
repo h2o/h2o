@@ -1613,6 +1613,8 @@ static int ebpf_map_delete(int fd, const void *key)
     return syscall(__NR_bpf, BPF_MAP_DELETE_ELEM, &attr, sizeof(attr));
 }
 
+static int return_map_fd = -1; // for h2o_return
+
 int h2o_socket_ebpf_setup(void)
 {
     int success = 0;
@@ -1645,9 +1647,9 @@ int h2o_socket_ebpf_setup(void)
             h2o_perror("BPF_OBJ_PIN failed");
         }
     } else {
+        return_map_fd = fd;
         success = 1;
     }
-    close(fd); // each worker thread has its own fd
 Exit:
     return success;
 }
@@ -1738,14 +1740,6 @@ int h2o_socket_ebpf_init_key(h2o_ebpf_map_key_t *key, void *_sock)
     return h2o_socket_ebpf_init_key_raw(key, sock_type, (void *)&local, (void *)&remote);
 }
 
-static int get_return_map_fd(h2o_loop_t *loop)
-{
-    static __thread int fd = -1;
-    static __thread uint64_t last_attempt = 0;
-    get_map_fd(loop, H2O_EBPF_RETURN_MAP_PATH, &fd, &last_attempt);
-    return fd;
-}
-
 static void on_track_ebpf_lookup_timer(h2o_timer_t *timeout);
 
 struct {
@@ -1793,8 +1787,7 @@ uint64_t h2o_socket_ebpf_lookup_flags(h2o_loop_t *loop, int (*init_key)(h2o_ebpf
         if (tracing_map_fd >= 0)
             ebpf_map_lookup(tracing_map_fd, &key, &flags);
 
-        int return_map_fd;
-        if (H2O__PRIVATE_SOCKET_LOOKUP_FLAGS_ENABLED() && (return_map_fd = get_return_map_fd(loop)) >= 0) {
+        if (H2O__PRIVATE_SOCKET_LOOKUP_FLAGS_ENABLED() && return_map_fd >= 0) {
             pid_t tid = gettid();
 
             /* Make sure a possible old flags is not set, otherwise the subsequent logic will be unreliable. */
