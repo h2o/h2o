@@ -1214,7 +1214,7 @@ Exit:
     return ret;
 }
 
-static int verify_cert_chain(X509_STORE *store, X509 *cert, STACK_OF(X509) * chain, int is_server, const char *server_name)
+static int verify_cert_chain(X509_STORE *store, X509 *cert, STACK_OF(X509) * chain, int is_server, const char *server_name, uint32_t options)
 {
     X509_STORE_CTX *verify_ctx;
     int ret;
@@ -1237,7 +1237,8 @@ static int verify_cert_chain(X509_STORE *store, X509 *cert, STACK_OF(X509) * cha
         }
         X509_VERIFY_PARAM_set_purpose(params, is_server ? X509_PURPOSE_SSL_SERVER : X509_PURPOSE_SSL_CLIENT);
         X509_VERIFY_PARAM_set_depth(params, 98); /* use the default of OpenSSL 1.0.2 and above; see `man SSL_CTX_set_verify` */
-        X509_VERIFY_PARAM_set_flags(params, X509_V_FLAG_PARTIAL_CHAIN);
+        if (options & X509_V_FLAG_PARTIAL_CHAIN)
+            X509_VERIFY_PARAM_set_flags(params, X509_V_FLAG_PARTIAL_CHAIN);
         if (!is_server) {
             assert(server_name != NULL && "ptls_set_server_name MUST be called");
             if (server_name != NULL) {
@@ -1317,7 +1318,7 @@ static int verify_cert(ptls_verify_certificate_t *_self, ptls_t *tls,
     }
 
     /* verify the chain */
-    if ((ret = verify_cert_chain(self->cert_store, cert, chain, ptls_is_server(tls), ptls_get_server_name(tls))) != 0)
+    if ((ret = verify_cert_chain(self->cert_store, cert, chain, ptls_is_server(tls), ptls_get_server_name(tls), self->options)) != 0)
         goto Exit;
 
     /* extract public key for verifying the TLS handshake signature */
@@ -1335,10 +1336,11 @@ Exit:
     return ret;
 }
 
-int ptls_openssl_init_verify_certificate(ptls_openssl_verify_certificate_t *self, X509_STORE *store)
+int ptls_openssl_init_verify_certificate(ptls_openssl_verify_certificate_t *self, X509_STORE *store, uint32_t options)
 {
     *self = (ptls_openssl_verify_certificate_t){{verify_cert, default_signature_schemes}};
 
+    self->options = options;
     if (store != NULL) {
         X509_STORE_up_ref(store);
         self->cert_store = store;

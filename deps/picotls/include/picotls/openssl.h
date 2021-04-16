@@ -115,9 +115,10 @@ typedef struct st_ptls_openssl_raw_pubkey_verify_certificate_t {
 typedef struct st_ptls_openssl_verify_certificate_t {
     ptls_verify_certificate_t super;
     X509_STORE *cert_store;
+    uint32_t options; /* bits for verification options, using openssl flags */
 } ptls_openssl_verify_certificate_t;
 
-int ptls_openssl_init_verify_certificate(ptls_openssl_verify_certificate_t *self, X509_STORE *store);
+int ptls_openssl_init_verify_certificate(ptls_openssl_verify_certificate_t *self, X509_STORE *store, uint32_t options);
 void ptls_openssl_dispose_verify_certificate(ptls_openssl_verify_certificate_t *self);
 X509_STORE *ptls_openssl_create_default_certificate_store(void);
 
