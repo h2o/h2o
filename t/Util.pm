@@ -226,7 +226,14 @@ sub spawn_h2o {
         $max_ssl_version = $conf->{max_ssl_version} || undef;
         $conf = $conf->{conf};
     }
+    my $user;
+    if ($conf =~ /^user:/) { # do not override the specified user
+        $user = "";
+    } else {
+        $user = $< == 0 ? "user: root" : "";
+    }
     $conf = <<"EOT";
+$conf
 listen:
   host: 0.0.0.0
   port: $port
@@ -237,8 +244,7 @@ listen:
     key-file: examples/h2o/server.key
     certificate-file: examples/h2o/server.crt
     @{[$max_ssl_version ? "max-version: $max_ssl_version" : ""]}
-@{[$< == 0 ? "user: root" : ""]}
-$conf
+$user
 EOT
 
     my $ret = spawn_h2o_raw($conf, [$port, $tls_port], \@opts);
