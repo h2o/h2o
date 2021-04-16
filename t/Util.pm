@@ -227,7 +227,6 @@ sub spawn_h2o {
         $conf = $conf->{conf};
     }
     $conf = <<"EOT";
-$conf
 listen:
   host: 0.0.0.0
   port: $port
@@ -239,6 +238,7 @@ listen:
     certificate-file: examples/h2o/server.crt
     @{[$max_ssl_version ? "max-version: $max_ssl_version" : ""]}
 @{[$< == 0 ? "user: root" : ""]}
+$conf
 EOT
 
     my $ret = spawn_h2o_raw($conf, [$port, $tls_port], \@opts);
