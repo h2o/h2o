@@ -1001,10 +1001,11 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
             ERR_print_errors_cb(on_openssl_print_errors, stderr);
             goto Error;
         }
-        /* enable partial chain verification */
-        X509_VERIFY_PARAM *vpm = SSL_CTX_get0_param(ssl_ctx);
-        if (vpm != NULL)
-            X509_VERIFY_PARAM_set_flags(vpm, X509_V_FLAG_PARTIAL_CHAIN);
+        /* Enable partial chain verification. That is done at the cert-store level, as the store is shared by the verification
+         * callback of picotls for incoming TLS 1.3 connections. */
+        X509_VERIFY_PARAM *vpm = X509_STORE_get0_param(SSL_CTX_get_cert_store(ssl_ctx));
+        int ret = X509_VERIFY_PARAM_set_flags(vpm, X509_V_FLAG_PARTIAL_CHAIN);
+        assert(ret == 1);
     }
 
     SSL_CTX_set_session_id_context(ssl_ctx, H2O_SESSID_CTX, H2O_SESSID_CTX_LEN);
