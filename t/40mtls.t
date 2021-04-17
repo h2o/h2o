@@ -55,9 +55,18 @@ sub run_tls_client {
 }
 
 sub curl_support_tls13 {
-    my $openssl_ver = `curl --version`;
-    $openssl_ver =~ /OpenSSL\/(\d+)\.(\d+)\.(\d+)/
-        or die "cannot parse OpenSSL version: $openssl_ver";
-    $openssl_ver = $1 * 10000 + $2 * 100 + $3;
-    return $openssl_ver >= 10101;
+    # Unavailability of TLS 1.3 support can be detected only after curl connects to the server. Therefore, we setup a dummy server,
+    # run curl, accept a connection, then see what happens
+    my $listen = IO::Socket::INET->new(
+        LocalAddr => "127.0.0.1:0",
+        Proto     => "tcp",
+        Listen    => 5,
+    ) or die "failed to listen to random port:$!";
+    open my $fh, "-|", "curl --tlsv1.3 https://127.0.0.1:@{[$listen->sockport]}/ 2>&1"
+        or die "failed to launch curl:$!";
+    $listen->accept;
+    sleep 0.5;
+    close $listen;
+    close $fh;
+    $? >> 8 != 4; # exit status 4 indicates missing feature
 }
