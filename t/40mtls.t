@@ -6,7 +6,7 @@ use Test::More;
 use t::Util;
 
 my $tls_port = empty_port();
-my $good_client_key_cert = '--key t/assets/test_client.key --cert t/assets/test_client_intermediate.crt';
+my $good_client_key_cert = '--key t/assets/test_client.key --cert t/assets/test_client.crt';
 my $wrong_client_key_cert = '--key examples/h2o/server.key --cert examples/h2o/server.crt';
 my $TLS_RE_OK = qr{hello};
 
@@ -33,7 +33,7 @@ sub run_tests {
 
 sub run_tls_client {
     my $opts = shift;
-    my $resp = `curl $opts --cacert misc/test-ca/ca.crt https://127.0.0.1.xip.io:$tls_port`;
+    my $resp = `curl $opts --cacert misc/test-ca/root/ca.crt https://127.0.0.1.xip.io:$tls_port`;
     return $resp;
 }
 
@@ -52,7 +52,7 @@ listen:
     max-version: $tls_max
     key-file: examples/h2o/server.key
     certificate-file: examples/h2o/server.crt
-    client-ca-file: examples/h2o/test_client_int_ca.crt
+    client-ca-file: misc/test-ca/intermediate/ca.crt
 EOT
 }
 
