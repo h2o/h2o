@@ -35,11 +35,10 @@ my $quic_port = empty_port({
 });
 
 sub spawn_my_h2o {
-  my $username = getpwuid($ENV{SUDO_UID});
   return spawn_h2o({
     opts => [qw(--mode=worker)],
+    user => getpwuid($ENV{SUDO_UID}),
     conf => << "EOT",
-user: $username
 usdt-selective-tracing: ON
 listen:
   type: quic
