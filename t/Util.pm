@@ -220,7 +220,7 @@ sub spawn_h2o {
     # setup the configuration file
     $conf = $conf->($port, $tls_port)
         if ref $conf eq 'CODE';
-    my $user = $< == 0 ? "user: root" : "";
+    my $user = $< == 0 ? "root" : "";
     if (ref $conf eq 'HASH') {
         @opts = @{$conf->{opts}}
             if $conf->{opts};
