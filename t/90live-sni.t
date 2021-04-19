@@ -4,7 +4,7 @@ use Digest::MD5 qw(md5_hex);
 use Test::More;
 use t::Util;
 
-our $CA_CERT = "misc/test-ca/ca.crt";
+our $CA_CERT = "misc/test-ca/root/ca.crt";
 
 # using wget since curl of OS X 10.9.5 returns invalid certificate chain error with the test
 plan skip_all => 'wget not found'
