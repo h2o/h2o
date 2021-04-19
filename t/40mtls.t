@@ -15,6 +15,9 @@ subtest "tls1.2" => sub {
     run_tests('');
 };
 
+sleep 1; # without this sleep; the server occasionally fails to bind to $tls_port (maybe some sub-process of h2o still hanging
+         # around?)
+
 subtest "tls1.3" => sub {
     plan skip_all => 'curl does not support TLS 1.3'
         unless curl_support_tls13();
