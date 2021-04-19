@@ -38,14 +38,14 @@ done_testing;
 
 sub run_tests {
     my $opts = shift;
-    like run_tls_client($opts, $good_client_key_cert), $TLS_RE_OK, "correct client cert";
-    unlike run_tls_client($opts, ""), $TLS_RE_OK, "no client cert";
-    unlike run_tls_client($opts, $wrong_client_key_cert), $TLS_RE_OK, "wrong client cert";
+    like run_tls_client("$opts $good_client_key_cert"), $TLS_RE_OK, "correct client cert";
+    unlike run_tls_client($opts), $TLS_RE_OK, "no client cert";
+    unlike run_tls_client("$opts $wrong_client_key_cert"), $TLS_RE_OK, "wrong client cert";
 }
 
 sub run_tls_client {
-    my ($opts, $client_key_cert) = @_;
-    my $resp = `curl --silent $opts --cacert misc/test-ca/ca.crt $client_key_cert https://127.0.0.1.xip.io:$tls_port`;
+    my $opts = shift;
+    my $resp = `curl $opts --cacert misc/test-ca/ca.crt https://127.0.0.1.xip.io:$tls_port`;
     return $resp;
 }
 
