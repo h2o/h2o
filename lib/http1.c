@@ -371,6 +371,8 @@ static const char *init_headers(h2o_mem_pool_t *pool, h2o_headers_t *headers, co
                                 h2o_iovec_t *connection, h2o_iovec_t *host, h2o_iovec_t *upgrade, h2o_iovec_t *expect,
                                 ssize_t *entity_header_index)
 {
+    ssize_t content_length_index = -1;
+
     *entity_header_index = -1;
 
     assert(headers->size == 0);
@@ -397,9 +399,9 @@ static const char *init_headers(h2o_mem_pool_t *pool, h2o_headers_t *headers, co
                     } else if (name_token == H2O_TOKEN_CONTENT_LENGTH) {
                         if (*entity_header_index != -1)
                             return "request entity header already set";
-                        *entity_header_index = i;
+                        *entity_header_index = content_length_index = i;
                     } else if (name_token == H2O_TOKEN_TRANSFER_ENCODING) {
-                        if (*entity_header_index != -1)
+                        if (content_length_index != -1)
                             return "request entity header already set";
                         *entity_header_index = i;
                     } else if (name_token == H2O_TOKEN_EXPECT) {
