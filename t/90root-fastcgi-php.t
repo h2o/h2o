@@ -27,8 +27,9 @@ sub check_resp {
 }
 
 subtest 'user-in-global-conf' => sub {
-    my $server = spawn_h2o(<< "EOT");
-user: nobody
+    my $server = spawn_h2o({
+      user => "nobody",
+      conf => << "EOT",
 file.custom-handler:
   extension: .php
   fastcgi.spawn: "exec php-cgi"
@@ -38,12 +39,14 @@ hosts:
       "/":
         file.dir: @{[ DOC_ROOT ]}
 EOT
+    });
     check_resp($server->{port});
 };
 
 subtest 'user-in-fastcgi.spawn' => sub {
-    my $server = spawn_h2o(<< "EOT");
-user: nobody
+    my $server = spawn_h2o({
+      user => "nobody",
+      conf => << "EOT",
 file.custom-handler:
   extension: .php
   fastcgi.spawn:
@@ -55,12 +58,14 @@ hosts:
       "/":
         file.dir: @{[ DOC_ROOT ]}
 EOT
+    });
     check_resp($server->{port});
 };
 
 subtest 'user-not-in-map-style-fastcgi.spawn' => sub {
-    my $server = spawn_h2o(<< "EOT");
-user: nobody
+    my $server = spawn_h2o({
+      user => "nobody",
+      conf => << "EOT",
 file.custom-handler:
   extension: .php
   fastcgi.spawn:
@@ -71,6 +76,7 @@ hosts:
       "/":
         file.dir: @{[ DOC_ROOT ]}
 EOT
+    });
     check_resp($server->{port});
 };
 

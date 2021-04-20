@@ -52,8 +52,8 @@ static inline BIO_METHOD *BIO_meth_new(int type, const char *name)
 
 #ifndef OPENSSL_IS_BORINGSSL
 #define SSL_CTX_up_ref(ctx) CRYPTO_add(&(ctx)->references, 1, CRYPTO_LOCK_SSL_CTX)
-
 #define X509_STORE_up_ref(store) CRYPTO_add(&(store)->references, 1, CRYPTO_LOCK_X509_STORE)
+#define X509_STORE_get0_param(p) ((p)->param)
 #endif
 
 #define OPENSSL_VERSION SSLEAY_VERSION

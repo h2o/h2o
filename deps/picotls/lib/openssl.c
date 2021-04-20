@@ -63,6 +63,7 @@
 
 #define EVP_PKEY_up_ref(p) CRYPTO_add(&(p)->references, 1, CRYPTO_LOCK_EVP_PKEY)
 #define X509_STORE_up_ref(p) CRYPTO_add(&(p)->references, 1, CRYPTO_LOCK_X509_STORE)
+#define X509_STORE_get0_param(p) ((p)->param)
 
 static HMAC_CTX *HMAC_CTX_new(void)
 {
@@ -1219,8 +1220,6 @@ static int verify_cert_chain(X509_STORE *store, X509 *cert, STACK_OF(X509) * cha
     X509_STORE_CTX *verify_ctx;
     int ret;
 
-    assert(server_name != NULL && "ptls_set_server_name MUST be called");
-
     /* verify certificate chain */
     if ((verify_ctx = X509_STORE_CTX_new()) == NULL) {
         ret = PTLS_ERROR_NO_MEMORY;
@@ -1231,15 +1230,13 @@ static int verify_cert_chain(X509_STORE *store, X509 *cert, STACK_OF(X509) * cha
         goto Exit;
     }
 
-    {
-        X509_VERIFY_PARAM *params;
-        if ((params = X509_VERIFY_PARAM_new()) == NULL) {
-            ret = PTLS_ERROR_NO_MEMORY;
-            goto Exit;
-        }
+    { /* setup verify params */
+        X509_VERIFY_PARAM *params = X509_STORE_CTX_get0_param(verify_ctx);
         X509_VERIFY_PARAM_set_purpose(params, is_server ? X509_PURPOSE_SSL_SERVER : X509_PURPOSE_SSL_CLIENT);
         X509_VERIFY_PARAM_set_depth(params, 98); /* use the default of OpenSSL 1.0.2 and above; see `man SSL_CTX_set_verify` */
-        if (server_name != NULL) {
+        /* when _acting_ as client, set the server name */
+        if (!is_server) {
+            assert(server_name != NULL && "ptls_set_server_name MUST be called");
             if (ptls_server_name_is_ipaddr(server_name)) {
                 X509_VERIFY_PARAM_set1_ip_asc(params, server_name);
             } else {
@@ -1247,7 +1244,6 @@ static int verify_cert_chain(X509_STORE *store, X509 *cert, STACK_OF(X509) * cha
                 X509_VERIFY_PARAM_set_hostflags(params, X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS);
             }
         }
-        X509_STORE_CTX_set0_param(verify_ctx, params); /* params will be freed alongside verify_ctx */
     }
 
     if (X509_verify_cert(verify_ctx) != 1) {
