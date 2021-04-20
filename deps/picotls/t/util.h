@@ -124,10 +124,32 @@ static inline void setup_session_file(ptls_context_t *ctx, ptls_handshake_proper
     }
 }
 
-static inline void setup_verify_certificate(ptls_context_t *ctx)
+static inline X509_STORE* init_cert_store(char const *crt_file)
+{
+    int ret = 0;
+    X509_STORE *store = X509_STORE_new();
+
+    if (store != NULL) {
+        X509_LOOKUP *lookup = X509_STORE_add_lookup(store, X509_LOOKUP_file());
+        ret = X509_LOOKUP_load_file(lookup, crt_file, X509_FILETYPE_PEM);
+        if (ret != 1) {
+            fprintf(stderr, "Cannot load store (%s), ret = %d\n",
+                crt_file, ret);
+            X509_STORE_free(store);
+            exit(1);
+        }
+    } else {
+        fprintf(stderr, "Cannot get a new X509 store\n");
+        exit(1);
+    }
+
+    return store;
+}
+
+static inline void setup_verify_certificate(ptls_context_t *ctx, const char *ca_file)
 {
     static ptls_openssl_verify_certificate_t vc;
-    ptls_openssl_init_verify_certificate(&vc, NULL);
+    ptls_openssl_init_verify_certificate(&vc, ca_file != NULL ? init_cert_store(ca_file) : NULL);
     ctx->verify_certificate = &vc.super;
 }
 
