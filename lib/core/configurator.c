@@ -963,7 +963,7 @@ static int on_config_usdt_selective_tracing(h2o_configurator_command_t *cmd, h2o
     ssize_t on;
     if ((on = h2o_configurator_get_one_of(cmd, node, "OFF,ON")) == -1)
         return -1;
-    ctx->globalconf->usdt_selective_tracing = (uint8_t)on;
+    ctx->globalconf->usdt_selective_tracing = (int)on;
     return 0;
 }
 
