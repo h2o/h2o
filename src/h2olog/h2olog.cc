@@ -225,17 +225,29 @@ static void lost_cb(void *context, uint64_t lost)
     tracer->handle_lost(lost);
 }
 
-template <typename T> static std::string build_cflag_d(const char *name, const T &value)
+/**
+ * Builds a `-D$name=$expr` style cc macro.
+ */
+std::string build_cc_macro_expr(const char *name, const std::string &expr)
 {
-    return std::string("-D") + std::string(name) + "=" + std::to_string(value);
+    return std::string("-D") + std::string(name) + "=" + expr;
 }
 
-static std::string build_cflag_d(const char *name, const char *value)
+template <typename T> static std::string build_cc_macro_expr(const char *name, const T &expr)
 {
-    return std::string("-D") + std::string(name) + "=\"" + std::string(value) + "\"";
+    return build_cc_macro_expr(name, std::to_string(expr));
 }
 
-#define CFLAG_D(name) build_cflag_d(#name, name)
+/**
+ * Builds a `-D$name="$str"` style cc macro.
+ */
+static std::string build_cc_macro_str(const char *name, const std::string &str)
+{
+    return build_cc_macro_expr(name, "\"" + str + "\"");
+}
+
+#define CC_MACRO_EXPR(name) build_cc_macro_expr(#name, name)
+#define CC_MACRO_STR(name) build_cc_macro_str(#name, name)
 
 int main(int argc, char **argv)
 {
@@ -330,10 +342,10 @@ int main(int argc, char **argv)
     tracer->init(outfp, include_appdata);
 
     std::vector<std::string> cflags({
-        build_cflag_d("H2OLOG_H2O_PID", h2o_pid),
-        CFLAG_D(H2O_EBPF_FLAGS_SKIP_TRACING_BIT),
-        CFLAG_D(H2O_EBPF_RETURN_MAP_SIZE),
-        CFLAG_D(H2O_EBPF_RETURN_MAP_PATH),
+        build_cc_macro_expr("H2OLOG_H2O_PID", h2o_pid),
+        CC_MACRO_EXPR(H2O_EBPF_FLAGS_SKIP_TRACING_BIT),
+        CC_MACRO_EXPR(H2O_EBPF_RETURN_MAP_SIZE),
+        CC_MACRO_STR(H2O_EBPF_RETURN_MAP_PATH),
     });
 
     if (!response_header_filters.empty()) {
@@ -371,7 +383,7 @@ int main(int argc, char **argv)
     if (sampling_rate >= 0) {
         /* To give the calculated rate in U32 because eBPF bytecode has no floating point numbers,
          * See the bpf(2) manpage. */
-        cflags.push_back(build_cflag_d("H2OLOG_SAMPLING_RATE_U32", static_cast<uint32_t>(sampling_rate * UINT32_MAX)));
+        cflags.push_back(build_cc_macro_expr("H2OLOG_SAMPLING_RATE_U32", static_cast<uint32_t>(sampling_rate * UINT32_MAX)));
     }
 
     ebpf::StatusTuple ret = bpf->init(tracer->bpf_text(), cflags, probes);
