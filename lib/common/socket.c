@@ -1646,6 +1646,7 @@ static int return_map_fd = -1; // for h2o_return
 int h2o_socket_ebpf_setup(void)
 {
     int success = 0;
+    int fd = -1;
     if (getuid() != 0) {
         h2o_error_printf("failed to set up eBPF maps because bpf(2) requires root privileges\n");
         goto Exit;
@@ -1653,8 +1654,8 @@ int h2o_socket_ebpf_setup(void)
 
     if (!file_exist(H2O_EBPF_RETURN_MAP_PATH)) {
         // creates a map and pinns the map to BPF fs
-        int fd = ebpf_map_create(BPF_MAP_TYPE_LRU_HASH, sizeof(pid_t), sizeof(uint64_t), H2O_EBPF_RETURN_MAP_SIZE,
-                                 H2O_EBPF_RETURN_MAP_NAME);
+        fd = ebpf_map_create(BPF_MAP_TYPE_LRU_HASH, sizeof(pid_t), sizeof(uint64_t), H2O_EBPF_RETURN_MAP_SIZE,
+                             H2O_EBPF_RETURN_MAP_NAME);
         if (fd < 0) {
             if (errno == EPERM) {
                 h2o_error_printf("BPF_MAP_CREATE failed with EPERM, "
@@ -1664,7 +1665,6 @@ int h2o_socket_ebpf_setup(void)
             }
             goto Exit;
         }
-
         if (ebpf_obj_pin(fd, H2O_EBPF_RETURN_MAP_PATH) != 0) {
             if (errno == ENOENT) {
                 h2o_error_printf("BPF_OBJ_PIN failed with ENOENT, "
@@ -1672,26 +1672,22 @@ int h2o_socket_ebpf_setup(void)
             } else {
                 h2o_perror("BPF_OBJ_PIN failed");
             }
-            close(fd);
-        } else {
-            return_map_fd = fd;
-            success = 1;
+            goto Exit;
         }
+        success = 1;
     } else {
         // the pinned map file already exist
-        int fd = ebpf_obj_get(H2O_EBPF_RETURN_MAP_PATH);
+        fd = ebpf_obj_get(H2O_EBPF_RETURN_MAP_PATH);
         if (fd < 0) {
             h2o_perror("BPF_MAP_CREATE failed");
             goto Exit;
         }
-
         // make sure the map type and map name are as expected
         struct bpf_map_info map_info;
         if (ebpf_obj_get_info_by_fd(fd, &map_info) != 0) {
             h2o_perror("BPF_OBJ_GET_INFO_BY_FD failed");
             goto Exit;
         }
-
         if (map_info.type != BPF_MAP_TYPE_LRU_HASH) {
             h2o_error_printf("Unexpected map type: expected BPF_MAP_TYPE_LRU_HASH (%d) but got %d\n", BPF_MAP_TYPE_LRU_HASH,
                              map_info.type);
@@ -1701,12 +1697,15 @@ int h2o_socket_ebpf_setup(void)
             h2o_error_printf("Unexpected map name: expected %s but got %s\n", H2O_EBPF_RETURN_MAP_NAME, map_info.name);
             goto Exit;
         }
-
-        return_map_fd = fd;
         success = 1;
     }
 
 Exit:
+    if (success) {
+        return_map_fd = fd;
+    } else if (fd >= 0) {
+        close(fd);
+    }
     return success;
 }
 
