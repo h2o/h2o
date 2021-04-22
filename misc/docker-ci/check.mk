@@ -32,7 +32,7 @@ dtrace:
 _check:
 	uname -a
 	sudo mkdir -p /sys/fs/bpf
-	sudo mount -t bpf bpf /sys/fs/bpf
+	sudo mount -t bpf bpf /sys/fs/bpf -o mode=700
 	mkdir -p build
 	sudo mount -t tmpfs tmpfs build -o size=3G
 	sudo chown -R ci:ci build
