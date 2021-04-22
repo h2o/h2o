@@ -53,15 +53,15 @@ struct st_h2o_http3_ingress_unistream_t {
 
 const ptls_iovec_t h2o_http3_alpn[2] = {{(void *)H2O_STRLIT("h3-29")}, {(void *)H2O_STRLIT("h3-27")}};
 
-static void report_sendmsg_failures(h2o_failure_reporter_t *reporter, uint64_t total_successes, uint64_t cur_successes)
+static void report_sendmsg_errors(h2o_error_reporter_t *reporter, uint64_t total_successes, uint64_t cur_successes)
 {
     char errstr[256];
     strerror_r((int)reporter->data, errstr, sizeof(errstr));
     fprintf(stderr, "sendmsg failed %" PRIu64 " time%s, succeeded: %" PRIu64 " time%s, over the last minute: %s\n",
-            reporter->cur_failures, reporter->cur_failures > 1 ? "s" : "", cur_successes, cur_successes > 1 ? "s" : "", errstr);
+            reporter->cur_errors, reporter->cur_errors > 1 ? "s" : "", cur_successes, cur_successes > 1 ? "s" : "", errstr);
 }
 
-static h2o_failure_reporter_t track_sendmsg = H2O_FAILURE_REPORTER_INITIALIZER(report_sendmsg_failures);
+static h2o_error_reporter_t track_sendmsg = H2O_ERROR_REPORTER_INITIALIZER(report_sendmsg_errors);
 
 /**
  * Sends a packet, returns if the connection is still maintainable (false is returned when not being able to send a packet from the
@@ -148,7 +148,7 @@ int h2o_quic_send_datagrams(h2o_quic_ctx_t *ctx, quicly_address_t *dest, quicly_
         if (ret == -1)
             goto SendmsgError;
     }
-    h2o_failure_reporter_record_success(&track_sendmsg);
+    h2o_error_reporter_record_success(&track_sendmsg);
 
     return 1;
 
@@ -162,7 +162,7 @@ SendmsgError:
      * specific?) */
 
     /* Log the number of failed invocations once per minute, if there has been such a failure. */
-    h2o_failure_reporter_record_failure(ctx->loop, &track_sendmsg, 60000, errno);
+    h2o_error_reporter_record_error(ctx->loop, &track_sendmsg, 60000, errno);
 
     return 1;
 }
