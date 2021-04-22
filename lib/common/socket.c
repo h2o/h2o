@@ -1570,8 +1570,9 @@ void h2o_sliding_counter_stop(h2o_sliding_counter_t *counter, uint64_t now)
 #if H2O_USE_EBPF_MAP
 #include <linux/bpf.h>
 #include <linux/unistd.h>
-#include "h2o-probes.h"
 #include <sys/stat.h>
+#include "h2o/multithread.h"
+#include "h2o-probes.h"
 
 static int ebpf_map_create(uint32_t map_type, uint32_t key_size, uint32_t value_size, uint32_t max_entries, const char *map_name)
 {
@@ -1742,40 +1743,14 @@ int h2o_socket_ebpf_init_key(h2o_ebpf_map_key_t *key, void *_sock)
 
 static void on_track_ebpf_lookup_timer(h2o_timer_t *timeout);
 
-struct {
-    int first_time_warning;
-    uint64_t total_successes;
-    struct {
-        pthread_mutex_t mutex;
-        uint64_t prev_successes;
-        uint64_t cur_failures; // for ENOENT
-        h2o_timer_t timer;
-    } locked;
-} track_ebpf_lookup = {.locked = {
-                           .mutex = PTHREAD_MUTEX_INITIALIZER,
-                           .timer =
-                               {
-                                   .cb = on_track_ebpf_lookup_timer,
-                               },
-                       }};
-
-static void on_track_ebpf_lookup_timer(h2o_timer_t *timeout)
+static void report_ebpf_lookup_errors(h2o_error_reporter_t *reporter, uint64_t total_successes, uint64_t cur_successes)
 {
-    pthread_mutex_lock(&track_ebpf_lookup.locked.mutex);
-
-    uint64_t total_successes = __sync_fetch_and_add(&track_ebpf_lookup.total_successes, 0),
-             cur_successes = total_successes - track_ebpf_lookup.locked.prev_successes;
-
     fprintf(stderr,
             "BPF_MAP_LOOKUP_ELEM failed with ENOENT %" PRIu64 " time%s, succeeded: %" PRIu64 " time%s, over the last minute.\n",
-            track_ebpf_lookup.locked.cur_failures, track_ebpf_lookup.locked.cur_failures > 1 ? "s" : "", cur_successes,
-            cur_successes > 1 ? "s" : "");
-
-    track_ebpf_lookup.locked.prev_successes = total_successes;
-    track_ebpf_lookup.locked.cur_failures = 0;
-
-    pthread_mutex_unlock(&track_ebpf_lookup.locked.mutex);
+            reporter->cur_errors, reporter->cur_errors > 1 ? "s" : "", cur_successes, cur_successes > 1 ? "s" : "");
 }
+
+static h2o_error_reporter_t track_ebpf_lookup = H2O_ERROR_REPORTER_INITIALIZER(report_ebpf_lookup_errors);
 
 uint64_t h2o_socket_ebpf_lookup_flags(h2o_loop_t *loop, int (*init_key)(h2o_ebpf_map_key_t *key, void *cbdata), void *cbdata)
 {
@@ -1795,7 +1770,7 @@ uint64_t h2o_socket_ebpf_lookup_flags(h2o_loop_t *loop, int (*init_key)(h2o_ebpf
                 H2O__PRIVATE_SOCKET_LOOKUP_FLAGS(tid, flags, &key);
 
                 if (ebpf_map_lookup(return_map_fd, &tid, &flags) == 0) {
-                    __sync_fetch_and_add(&track_ebpf_lookup.total_successes, 1);
+                    h2o_error_reporter_record_success(&track_ebpf_lookup);
                 } else {
                     if (errno == ENOENT) {
                         /* ENOENT could be issued in some reasons even if BPF tries to insert the entry, for example:
@@ -1805,11 +1780,7 @@ uint64_t h2o_socket_ebpf_lookup_flags(h2o_loop_t *loop, int (*init_key)(h2o_ebpf
                          *
                          * Other than the above reasons, ENOENT is issued when the tracer does not set the flags via h2o_return map,
                          * See h2o:_private_socket_lookup_flags handler in h2olog for details. */
-                        pthread_mutex_lock(&track_ebpf_lookup.locked.mutex);
-                        ++track_ebpf_lookup.locked.cur_failures;
-                        if (!h2o_timer_is_linked(&track_ebpf_lookup.locked.timer))
-                            h2o_timer_link(loop, 60000, &track_ebpf_lookup.locked.timer);
-                        pthread_mutex_unlock(&track_ebpf_lookup.locked.mutex);
+                        h2o_error_reporter_record_error(loop, &track_ebpf_lookup, 60000, 0);
                     } else {
                         h2o_perror("BPF_MAP_LOOKUP failed");
                     }
