@@ -1595,6 +1595,27 @@ static int ebpf_obj_pin(int bpf_fd, const char *pathname)
     return syscall(__NR_bpf, BPF_OBJ_PIN, &attr, sizeof(attr));
 }
 
+static int ebpf_obj_get(const char *pathname)
+{
+    union bpf_attr attr = {
+        .pathname = (uint64_t)pathname,
+    };
+    return syscall(__NR_bpf, BPF_OBJ_GET, &attr, sizeof(attr));
+}
+
+static int ebpf_obj_get_info_by_fd(int fd, struct bpf_map_info *info)
+{
+    union bpf_attr attr = {
+        .info =
+            {
+                .bpf_fd = fd,
+                .info = (uint64_t)info,
+                .info_len = sizeof(*info),
+            },
+    };
+    return syscall(__NR_bpf, BPF_OBJ_GET_INFO_BY_FD, &attr, sizeof(attr));
+}
+
 static int ebpf_map_lookup(int fd, const void *key, void *value)
 {
     union bpf_attr attr = {
@@ -1614,6 +1635,12 @@ static int ebpf_map_delete(int fd, const void *key)
     return syscall(__NR_bpf, BPF_MAP_DELETE_ELEM, &attr, sizeof(attr));
 }
 
+static int file_exist(const char *path)
+{
+    struct stat s;
+    return stat(path, &s) == 0;
+}
+
 static int return_map_fd = -1; // for h2o_return
 
 int h2o_socket_ebpf_setup(void)
@@ -1624,33 +1651,61 @@ int h2o_socket_ebpf_setup(void)
         goto Exit;
     }
 
-    /* It creates a pinned BPF object file, and h2o cannot unlink the file because h2o drops root privileges after this function
-     * unless its configuration is set to keep the privileges. */
-    int fd =
-        ebpf_map_create(BPF_MAP_TYPE_LRU_HASH, sizeof(pid_t), sizeof(uint64_t), H2O_EBPF_RETURN_MAP_SIZE, H2O_EBPF_RETURN_MAP_NAME);
-    if (fd < 0) {
-        if (errno == EPERM) {
-            h2o_error_printf("BPF_MAP_CREATE failed with EPERM, "
-                             "maybe because RLIMIT_MEMLOCK is too small.\n");
-        } else {
-            h2o_perror("BPF_MAP_CREATE failed");
+    if (!file_exist(H2O_EBPF_RETURN_MAP_PATH)) {
+        // creates a map and pinns the map to BPF fs
+        int fd = ebpf_map_create(BPF_MAP_TYPE_LRU_HASH, sizeof(pid_t), sizeof(uint64_t), H2O_EBPF_RETURN_MAP_SIZE,
+                                 H2O_EBPF_RETURN_MAP_NAME);
+        if (fd < 0) {
+            if (errno == EPERM) {
+                h2o_error_printf("BPF_MAP_CREATE failed with EPERM, "
+                                 "maybe because RLIMIT_MEMLOCK is too small.\n");
+            } else {
+                h2o_perror("BPF_MAP_CREATE failed");
+            }
+            goto Exit;
         }
-        goto Exit;
-    }
 
-    if (ebpf_obj_pin(fd, H2O_EBPF_RETURN_MAP_PATH) != 0) {
-        if (errno == EEXIST) {
-            success = 1;
-        } else if (errno == ENOENT) {
-            h2o_error_printf("BPF_OBJ_PIN failed with ENOENT, "
-                             "because /sys/fs/bpf is not mounted as a BPF filesystem.\n");
+        if (ebpf_obj_pin(fd, H2O_EBPF_RETURN_MAP_PATH) != 0) {
+            if (errno == ENOENT) {
+                h2o_error_printf("BPF_OBJ_PIN failed with ENOENT, "
+                                 "because /sys/fs/bpf is not mounted as a BPF filesystem.\n");
+            } else {
+                h2o_perror("BPF_OBJ_PIN failed");
+            }
+            close(fd);
         } else {
-            h2o_perror("BPF_OBJ_PIN failed");
+            return_map_fd = fd;
+            success = 1;
         }
     } else {
+        // the pinned map file already exist
+        int fd = ebpf_obj_get(H2O_EBPF_RETURN_MAP_PATH);
+        if (fd < 0) {
+            h2o_perror("BPF_MAP_CREATE failed");
+            goto Exit;
+        }
+
+        // make sure the map type and map name are as expected
+        struct bpf_map_info map_info;
+        if (ebpf_obj_get_info_by_fd(fd, &map_info) != 0) {
+            h2o_perror("BPF_OBJ_GET_INFO_BY_FD failed");
+            goto Exit;
+        }
+
+        if (map_info.type != BPF_MAP_TYPE_LRU_HASH) {
+            h2o_error_printf("Unexpected map type: expected BPF_MAP_TYPE_LRU_HASH (%d) but got %d\n", BPF_MAP_TYPE_LRU_HASH,
+                             map_info.type);
+            goto Exit;
+        }
+        if (!h2o_memis(map_info.name, strlen(map_info.name), H2O_EBPF_RETURN_MAP_NAME, strlen(H2O_EBPF_RETURN_MAP_NAME))) {
+            h2o_error_printf("Unexpected map name: expected %s but got %s\n", H2O_EBPF_RETURN_MAP_NAME, map_info.name);
+            goto Exit;
+        }
+
         return_map_fd = fd;
         success = 1;
     }
+
 Exit:
     return success;
 }
@@ -1664,9 +1719,7 @@ static void get_map_fd(h2o_loop_t *loop, const char *map_path, int *fd, uint64_t
 
     *last_attempt = now;
 
-    // check if map exists at path
-    struct stat s;
-    if (stat(map_path, &s) == -1) {
+    if (!file_exist(map_path)) {
         // map path unavailable, cleanup fd if needed and leave
         if (*fd >= 0) {
             close(*fd);
@@ -1778,8 +1831,8 @@ uint64_t h2o_socket_ebpf_lookup_flags(h2o_loop_t *loop, int (*init_key)(h2o_ebpf
                          *  * the insert operation in BPF program failed with ENOMEM
                          * We don't know the frequency for this ENOENT, so cap the number of logs.
                          *
-                         * Other than the above reasons, ENOENT is issued when the tracer does not set the flags via h2o_return map,
-                         * See h2o:_private_socket_lookup_flags handler in h2olog for details. */
+                         * Other than the above reasons, ENOENT is issued when the tracer does not set the flags via h2o_return
+                         * map, See h2o:_private_socket_lookup_flags handler in h2olog for details. */
                         h2o_error_reporter_record_error(loop, &track_ebpf_lookup, 60000, 0);
                     } else {
                         h2o_perror("BPF_MAP_LOOKUP failed");
