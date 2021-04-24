@@ -679,6 +679,8 @@ static void on_send_shift(quicly_stream_t *qs, size_t delta)
         if (quicly_sendstate_is_open(&stream->quic->sendstate)) {
             assert(stream->state == H2O_HTTP3_SERVER_STREAM_STATE_SEND_HEADERS || stream->proceed_requested);
         } else {
+            if (quicly_stream_has_receive_side(0, stream->quic->stream_id))
+                quicly_request_stop(stream->quic, H2O_HTTP3_ERROR_EARLY_RESPONSE);
             set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_CLOSE_WAIT, 0);
         }
     }
@@ -1193,8 +1195,11 @@ static size_t flatten_data_frame_header(struct st_h2o_http3_server_stream_t *str
 static void shutdown_by_generator(struct st_h2o_http3_server_stream_t *stream)
 {
     quicly_sendstate_shutdown(&stream->quic->sendstate, stream->sendbuf.final_size);
-    if (stream->sendbuf.vecs.size == 0)
-        set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_CLOSE_WAIT, 1);
+    if (stream->sendbuf.vecs.size == 0) {
+        if (quicly_stream_has_receive_side(0, stream->quic->stream_id))
+            quicly_request_stop(stream->quic, H2O_HTTP3_ERROR_EARLY_RESPONSE);
+        set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_CLOSE_WAIT, 0);
+    }
 }
 
 static void finalize_do_send(struct st_h2o_http3_server_stream_t *stream)
