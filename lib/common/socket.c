@@ -1746,10 +1746,7 @@ static void get_map_fd(h2o_loop_t *loop, const char *map_path, int *fd, uint64_t
         return; // map still exists and we have a fd
 
     // map exists, try connect
-    union bpf_attr attr = {
-        .pathname = (uint64_t)map_path,
-    };
-    *fd = syscall(__NR_bpf, BPF_OBJ_GET, &attr, sizeof(attr));
+    *fd = ebpf_obj_get(map_path);
     if (*fd < 0)
         h2o_perror("BPF_OBJ_GET failed");
 }
