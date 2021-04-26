@@ -53,44 +53,15 @@ struct st_h2o_http3_ingress_unistream_t {
 
 const ptls_iovec_t h2o_http3_alpn[2] = {{(void *)H2O_STRLIT("h3-29")}, {(void *)H2O_STRLIT("h3-27")}};
 
-static void on_track_sendmsg_timer(h2o_timer_t *timeout);
-
-static struct {
-    /**
-     * counts number of successful invocations of `sendmsg` since the process was launched
-     */
-    uint64_t total_successes;
-    /**
-     * struct that retains information since previous log emission. Needs locked access using `locked.mutex`.
-     */
-    struct {
-        pthread_mutex_t mutex;
-        uint64_t prev_successes;
-        uint64_t cur_failures;
-        int last_errno;
-        h2o_timer_t timer;
-    } locked;
-} track_sendmsg = {.locked = {PTHREAD_MUTEX_INITIALIZER, .timer = {.cb = on_track_sendmsg_timer}}};
-
-void on_track_sendmsg_timer(h2o_timer_t *timeout)
+static void report_sendmsg_errors(h2o_error_reporter_t *reporter, uint64_t total_successes, uint64_t cur_successes)
 {
     char errstr[256];
-
-    pthread_mutex_lock(&track_sendmsg.locked.mutex);
-
-    uint64_t total_successes = __sync_fetch_and_add(&track_sendmsg.total_successes, 0),
-             cur_successes = total_successes - track_sendmsg.locked.prev_successes;
-
     fprintf(stderr, "sendmsg failed %" PRIu64 " time%s, succeeded: %" PRIu64 " time%s, over the last minute: %s\n",
-            track_sendmsg.locked.cur_failures, track_sendmsg.locked.cur_failures > 1 ? "s" : "", cur_successes,
-            cur_successes > 1 ? "s" : "", h2o_strerror_r(track_sendmsg.locked.last_errno, errstr, sizeof(errstr)));
-
-    track_sendmsg.locked.prev_successes = total_successes;
-    track_sendmsg.locked.cur_failures = 0;
-    track_sendmsg.locked.last_errno = 0;
-
-    pthread_mutex_unlock(&track_sendmsg.locked.mutex);
+            reporter->cur_errors, reporter->cur_errors > 1 ? "s" : "", cur_successes, cur_successes > 1 ? "s" : "",
+            h2o_strerror_r((int)reporter->data, errstr, sizeof(errstr)));
 }
+
+static h2o_error_reporter_t track_sendmsg = H2O_ERROR_REPORTER_INITIALIZER(report_sendmsg_errors);
 
 /**
  * Sends a packet, returns if the connection is still maintainable (false is returned when not being able to send a packet from the
@@ -177,7 +148,7 @@ int h2o_quic_send_datagrams(h2o_quic_ctx_t *ctx, quicly_address_t *dest, quicly_
         if (ret == -1)
             goto SendmsgError;
     }
-    __sync_fetch_and_add(&track_sendmsg.total_successes, 1);
+    h2o_error_reporter_record_success(&track_sendmsg);
 
     return 1;
 
@@ -191,12 +162,7 @@ SendmsgError:
      * specific?) */
 
     /* Log the number of failed invocations once per minute, if there has been such a failure. */
-    pthread_mutex_lock(&track_sendmsg.locked.mutex);
-    ++track_sendmsg.locked.cur_failures;
-    track_sendmsg.locked.last_errno = errno;
-    if (!h2o_timer_is_linked(&track_sendmsg.locked.timer))
-        h2o_timer_link(ctx->loop, 60000, &track_sendmsg.locked.timer);
-    pthread_mutex_unlock(&track_sendmsg.locked.mutex);
+    h2o_error_reporter_record_error(ctx->loop, &track_sendmsg, 60000, errno);
 
     return 1;
 }

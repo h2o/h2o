@@ -1492,6 +1492,12 @@ static int received_key_update(quicly_conn_t *conn, uint64_t newly_decrypted_key
     }
 }
 
+static inline void update_open_count(quicly_context_t *ctx, ssize_t delta)
+{
+    if (ctx->update_open_count != NULL)
+        ctx->update_open_count->cb(ctx->update_open_count, delta);
+}
+
 void quicly_free(quicly_conn_t *conn)
 {
     lock_now(conn, 0);
@@ -1505,6 +1511,7 @@ void quicly_free(quicly_conn_t *conn)
         QUICLY_PROBE(CONN_STATS, conn, conn->stash.now, &stats, sizeof(stats));
     }
 #endif
+    update_open_count(conn->super.ctx, -1);
 
     destroy_all_streams(conn, 0, 1);
     clear_datagram_frame_payloads(conn);
@@ -2058,6 +2065,8 @@ static quicly_conn_t *create_connection(quicly_context_t *ctx, uint32_t protocol
     conn->stash.on_ack_stream.active_acked_cache.stream_id = INT64_MIN;
 
     *ptls_get_data_ptr(tls) = conn;
+
+    update_open_count(conn->super.ctx, 1);
 
     return conn;
 }
