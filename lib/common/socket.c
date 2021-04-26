@@ -1805,8 +1805,6 @@ int h2o_socket_ebpf_init_key(h2o_ebpf_map_key_t *key, void *_sock)
     return h2o_socket_ebpf_init_key_raw(key, sock_type, (void *)&local, (void *)&remote);
 }
 
-static void on_track_ebpf_lookup_timer(h2o_timer_t *timeout);
-
 static void report_ebpf_lookup_errors(h2o_error_reporter_t *reporter, uint64_t total_successes, uint64_t cur_successes)
 {
     fprintf(stderr,
