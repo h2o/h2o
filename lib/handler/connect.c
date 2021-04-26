@@ -63,6 +63,10 @@ struct st_connect_generator_t {
      * set when h2o_send has been called to notify that the socket has been closed
      */
     unsigned read_closed : 1;
+    /**
+     * if socket has been closed
+     */
+    unsigned socket_closed : 1;
 };
 
 #define TO_BITMASK(type, len) ((type) ~(((type)1 << (sizeof(type) * 8 - (len))) - 1))
@@ -78,6 +82,7 @@ static void dispose_generator(struct st_connect_generator_t *self)
     if (self->sock != NULL) {
         h2o_socket_close(self->sock);
         self->sock = NULL;
+        self->socket_closed = 1;
     }
     if (self->sendbuf != NULL)
         h2o_buffer_dispose(&self->sendbuf);
@@ -92,6 +97,7 @@ static void close_socket(struct st_connect_generator_t *self)
     h2o_buffer_init(&self->sock->input, &h2o_socket_buffer_prototype);
     h2o_socket_close(self->sock);
     self->sock = NULL;
+    self->socket_closed = 1;
 }
 
 static void close_readwrite(struct st_connect_generator_t *self)
@@ -150,6 +156,14 @@ static void tunnel_on_write_complete(h2o_socket_t *_sock, const char *err)
     self->src_req->proceed_req(self->src_req, bytes_written, H2O_SEND_STATE_IN_PROGRESS);
 }
 
+static void tunnel_do_write(struct st_connect_generator_t *self)
+{
+    reset_io_timeout(self);
+
+    h2o_iovec_t vec = h2o_iovec_init(self->sendbuf->bytes, self->sendbuf->size);
+    h2o_socket_write(self->sock, &vec, 1, tunnel_on_write_complete);
+}
+
 static int tunnel_write(void *_self, h2o_iovec_t chunk, int is_end_stream)
 {
     struct st_connect_generator_t *self = _self;
@@ -158,17 +172,17 @@ static int tunnel_write(void *_self, h2o_iovec_t chunk, int is_end_stream)
     assert(self->sendbuf->size == 0);
 
     /* the socket might have been closed due to a read error */
-    if (self->sock == NULL)
+    if (self->socket_closed)
         return 1;
 
+    /* buffer input */
     h2o_buffer_append(&self->sendbuf, chunk.base, chunk.len);
     if (is_end_stream)
         self->sendbuf_closed = 1;
 
-    reset_io_timeout(self);
-
-    h2o_iovec_t vec = h2o_iovec_init(self->sendbuf->bytes, self->sendbuf->size);
-    h2o_socket_write(self->sock, &vec, 1, tunnel_on_write_complete);
+    /* write if the socket has been opened */
+    if (self->sock != NULL)
+        tunnel_do_write(self);
 
     return 0;
 }
@@ -243,11 +257,9 @@ static void on_connect(h2o_socket_t *_sock, const char *err)
     self->timeout.cb = on_io_timeout;
     reset_io_timeout(self);
 
-    /* setup write, and initiate if pending data exists */
-    self->src_req->write_req.cb = tunnel_write;
-    self->src_req->write_req.ctx = self;
-    if (self->src_req->entity.len != 0)
-        tunnel_write(self, self->src_req->entity, self->src_req->proceed_req == NULL);
+    /* start the write if there's data to be sent */
+    if (self->sendbuf->size != 0 || self->sendbuf_closed)
+        tunnel_do_write(self);
 
     /* strat the read side */
     h2o_socket_read_start(self->sock, tunnel_on_read);
@@ -345,6 +357,11 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
     };
     h2o_buffer_init(&self->sendbuf, &h2o_socket_buffer_prototype);
     h2o_timer_link(self->loop, handler->config.connect_timeout, &self->timeout);
+
+    /* setup write_req now, so that the protocol handler would not provide additional data until we call `proceed_req` */
+    assert(req->entity.len == 0 && "the handler is incapable of accepting input via `write_req.cb` while writing req->entity");
+    self->src_req->write_req.cb = tunnel_write;
+    self->src_req->write_req.ctx = self;
 
     char port_str[sizeof(H2O_UINT16_LONGEST_STR)];
     int port_strlen = sprintf(port_str, "%" PRIu16, port);
