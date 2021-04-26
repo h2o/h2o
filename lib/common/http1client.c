@@ -113,6 +113,7 @@ static void close_response(struct st_h2o_http1client_t *client)
 
 static h2o_httpclient_body_cb call_on_head(struct st_h2o_http1client_t *client, const char *errstr, h2o_httpclient_on_head_t *args)
 {
+    assert(!client->_delay_free);
     client->_delay_free = 1;
     h2o_httpclient_body_cb cb = client->super._cb.on_head(&client->super, errstr, args);
     client->_delay_free = 0;
@@ -121,10 +122,19 @@ static h2o_httpclient_body_cb call_on_head(struct st_h2o_http1client_t *client, 
 
 static int call_on_body(struct st_h2o_http1client_t *client, const char *errstr)
 {
+    assert(!client->_delay_free);
     client->_delay_free = 1;
     int ret = client->super._cb.on_body(&client->super, errstr);
     client->_delay_free = 0;
     return ret;
+}
+
+static void call_proceed_req(struct st_h2o_http1client_t *client, size_t written, h2o_send_state_t send_state)
+{
+    assert(!client->_delay_free);
+    client->_delay_free = 1;
+    client->proceed_req(&client->super, written, send_state);
+    client->_delay_free = 0;
 }
 
 static void on_error(struct st_h2o_http1client_t *client, const char *errstr)
@@ -137,9 +147,8 @@ static void on_error(struct st_h2o_http1client_t *client, const char *errstr)
         call_on_body(client, errstr);
         break;
     case STREAM_STATE_CLOSED:
-        if (client->proceed_req != NULL) {
-            client->proceed_req(&client->super, 0, H2O_SEND_STATE_ERROR);
-        }
+        if (client->proceed_req != NULL)
+            call_proceed_req(client, 0, H2O_SEND_STATE_ERROR);
         break;
     }
     close_client(client);
@@ -515,8 +524,8 @@ static void req_body_send_complete(h2o_socket_t *sock, const char *err)
         return;
     }
 
-    client->proceed_req(&client->super, client->body_buf_inflight.buf->size,
-                        client->body_buf_inflight.is_end_stream ? H2O_SEND_STATE_FINAL : H2O_SEND_STATE_IN_PROGRESS);
+    call_proceed_req(client, client->body_buf_inflight.buf->size,
+                     client->body_buf_inflight.is_end_stream ? H2O_SEND_STATE_FINAL : H2O_SEND_STATE_IN_PROGRESS);
     h2o_buffer_dispose(&client->body_buf_inflight.buf);
 
     if (!client->body_buf_inflight.is_end_stream) {
