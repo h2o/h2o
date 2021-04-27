@@ -113,8 +113,14 @@ update.doUpdate = function update(cb) {
       } else if (field == "client") {
         return req.host;
       } else if (field == "URI") {
-        var scheme = req["ssl.cipher-bits"] != null ? "https" : "http";
-        return scheme + "://" + req.authority + req.path + req.query;
+        if (req.path != null) {
+            var scheme = req["ssl.cipher-bits"] != null ? "https" : "http";
+            return scheme + "://" + req.authority + req.path + req.query;
+        } else if (req.authority != null) {
+            return req.authority; // connect method?
+        } else {
+            return "-";
+        }
       }
       return req[field];
     }
