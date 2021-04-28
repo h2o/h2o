@@ -1635,12 +1635,6 @@ static int ebpf_map_delete(int fd, const void *key)
     return syscall(__NR_bpf, BPF_MAP_DELETE_ELEM, &attr, sizeof(attr));
 }
 
-static int file_exist(const char *path)
-{
-    struct stat s;
-    return stat(path, &s) == 0;
-}
-
 static int return_map_fd = -1; // for h2o_return
 
 int h2o_socket_ebpf_setup(void)
@@ -1662,8 +1656,14 @@ int h2o_socket_ebpf_setup(void)
         goto Exit;
     }
 
-    if (!file_exist(H2O_EBPF_RETURN_MAP_PATH)) {
-        // creates a map and pinns the map to BPF fs
+    fd = ebpf_obj_get(H2O_EBPF_RETURN_MAP_PATH);
+    if (fd < 0) {
+        if (errno != ENOENT) {
+            h2o_perror("BPF_OBJ_GET failed");
+            goto Exit;
+        }
+
+        // when the pinned map file does not exist, creates a map and pinns the map to the BPF filesystem
         fd = ebpf_map_create(map_attr.type, map_attr.key_size, map_attr.value_size, H2O_EBPF_RETURN_MAP_SIZE,
                              H2O_EBPF_RETURN_MAP_NAME);
         if (fd < 0) {
@@ -1685,13 +1685,7 @@ int h2o_socket_ebpf_setup(void)
             goto Exit;
         }
         success = 1;
-    } else {
-        // the pinned map file already exist
-        fd = ebpf_obj_get(H2O_EBPF_RETURN_MAP_PATH);
-        if (fd < 0) {
-            h2o_perror("BPF_MAP_CREATE failed");
-            goto Exit;
-        }
+    } else { // when BPF_OBJ_GET succeeded
         // make sure the critical attributes (type, key size, value size) are correct.
         // otherwise usdt-selective-tracing does not work.
         struct bpf_map_info m;
@@ -1735,7 +1729,8 @@ static void get_map_fd(h2o_loop_t *loop, const char *map_path, int *fd, uint64_t
 
     *last_attempt = now;
 
-    if (!file_exist(map_path)) {
+    struct stat s;
+    if (stat(map_path, &s) != 0) {
         // map path unavailable, cleanup fd if needed and leave
         if (*fd >= 0) {
             close(*fd);
