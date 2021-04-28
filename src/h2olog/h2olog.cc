@@ -228,7 +228,7 @@ static void lost_cb(void *context, uint64_t lost)
 /**
  * Builds a `-D$name=$expr` style cc macro.
  */
-std::string build_cc_macro_expr(const char *name, const std::string &expr)
+static std::string build_cc_macro_expr(const char *name, const std::string &expr)
 {
     return std::string("-D") + std::string(name) + "=" + expr;
 }
