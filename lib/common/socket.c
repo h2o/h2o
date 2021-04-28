@@ -1700,16 +1700,18 @@ int h2o_socket_ebpf_setup(void)
             goto Exit;
         }
         if (m.type != map_attr.type) {
-            h2o_error_printf("Unexpected map type: expected %d but got %d\n", map_attr.type, m.type);
+            h2o_error_printf("%s has an unexpected map type: expected %d but got %d\n", H2O_EBPF_RETURN_MAP_PATH, map_attr.type,
+                             m.type);
             goto Exit;
         }
         if (m.key_size != map_attr.key_size) {
-            h2o_error_printf("Unexpected map key size: expected %" PRIu32 " but got %" PRIu32 "\n", map_attr.key_size, m.key_size);
+            h2o_error_printf("%s has an unexpected map key size: expected %" PRIu32 " but got %" PRIu32 "\n",
+                             H2O_EBPF_RETURN_MAP_PATH, map_attr.key_size, m.key_size);
             goto Exit;
         }
         if (m.key_size != map_attr.key_size) {
-            h2o_error_printf("Unexpected map value size: expected %" PRIu32 " but got %" PRIu32 "\n", map_attr.value_size,
-                             m.key_size);
+            h2o_error_printf("%s has an unexpected map value size: expected %" PRIu32 " but got %" PRIu32 "\n",
+                             H2O_EBPF_RETURN_MAP_PATH, map_attr.value_size, m.key_size);
             goto Exit;
         }
         success = 1;
