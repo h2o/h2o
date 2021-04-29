@@ -1662,8 +1662,7 @@ int h2o_socket_ebpf_setup(void)
             h2o_perror("BPF_OBJ_GET failed");
             goto Exit;
         }
-
-        // when the pinned map file does not exist, creates a map and pinns the map to the BPF filesystem
+        /* Pinned eBPF map does not exist. Create one and pin it to the BPF filesystem. */
         fd = ebpf_map_create(map_attr.type, map_attr.key_size, map_attr.value_size, H2O_EBPF_RETURN_MAP_SIZE,
                              H2O_EBPF_RETURN_MAP_NAME);
         if (fd < 0) {
@@ -1685,9 +1684,9 @@ int h2o_socket_ebpf_setup(void)
             goto Exit;
         }
         success = 1;
-    } else { // when BPF_OBJ_GET succeeded
-        // make sure the critical attributes (type, key size, value size) are correct.
-        // otherwise usdt-selective-tracing does not work.
+    } else {
+        /* BPF_OBJ_GET successfully opened a pinned eBPF map. Make sure the critical attributes (type, key size, value size) are
+         * correct, otherwise usdt-selective-tracing does not work. */
         struct bpf_map_info m;
         if (ebpf_obj_get_info_by_fd(fd, &m) != 0) {
             h2o_perror("BPF_OBJ_GET_INFO_BY_FD failed");
