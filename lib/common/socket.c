@@ -1076,7 +1076,12 @@ static void proceed_handshake_picotls(h2o_socket_t *sock)
             write_ssl_bytes(sock, wbuf.base, wbuf.off);
             flush_pending_ssl(sock, ret == 0 ? on_handshake_complete : proceed_handshake);
         } else {
-            h2o_socket_read_start(sock, ret == PTLS_ERROR_IN_PROGRESS ? proceed_handshake : on_handshake_complete);
+            if (ret == 0 && sock->ssl->input.encrypted->size > 0) {
+                /* handshake complete and there's encrypted data ready for processing */
+                on_handshake_complete(sock, NULL);
+            } else {
+                h2o_socket_read_start(sock, ret == PTLS_ERROR_IN_PROGRESS ? proceed_handshake : on_handshake_complete);
+            }
         }
         break;
     default:
