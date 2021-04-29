@@ -19,8 +19,8 @@ my $TLS_RE_OK = qr{hello};
 #          # around?)
 
 subtest "tls1.3" => sub {
-    # plan skip_all => 'curl does not support TLS 1.3'
-    #     unless curl_support_tls13();
+    plan skip_all => 'curl does not support TLS 1.3'
+        unless curl_support_tls13();
     my $server = spawn_server("tlsv1.3");
     run_tests('--tlsv1.3') for 1 .. 100;
 };
@@ -30,8 +30,8 @@ done_testing;
 sub run_tests {
     my $opts = shift;
     like run_tls_client("$opts $good_client_key_cert"), $TLS_RE_OK, "correct client cert" or die "test failed";
-    # unlike run_tls_client($opts), $TLS_RE_OK, "no client cert";
-    # unlike run_tls_client("$opts $wrong_client_key_cert"), $TLS_RE_OK, "wrong client cert";
+    unlike run_tls_client($opts), $TLS_RE_OK, "no client cert";
+    unlike run_tls_client("$opts $wrong_client_key_cert"), $TLS_RE_OK, "wrong client cert";
 }
 
 sub run_tls_client {
