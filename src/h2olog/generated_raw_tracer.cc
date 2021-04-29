@@ -39,7 +39,7 @@ using typeof_st_quicly_conn_t__master_id = decltype(st_quicly_conn_t::super.loca
 #define GEN_FIELD_INFO(type, field, name) gen_field_info(#type, #field, &((type *)NULL)->field, name)
 
 #define DEFINE_RESOLVE_FUNC(field_type) \
-static std::string gen_field_info(const char *struct_type, const char *field_name, const field_type *field_ptr, const char *name) \
+std::string gen_field_info(const char *struct_type, const char *field_name, const field_type *field_ptr, const char *name) \
 { \
     return do_resolve(struct_type, field_name, #field_type, field_ptr, name); \
 }

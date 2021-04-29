@@ -1666,8 +1666,7 @@ int h2o_socket_ebpf_setup(void)
                              H2O_EBPF_RETURN_MAP_NAME);
         if (fd < 0) {
             if (errno == EPERM) {
-                h2o_error_printf("BPF_MAP_CREATE failed with EPERM, "
-                                 "maybe because RLIMIT_MEMLOCK is too small.\n");
+                h2o_error_printf("BPF_MAP_CREATE failed with EPERM, maybe because RLIMIT_MEMLOCK is too small.\n");
             } else {
                 h2o_perror("BPF_MAP_CREATE failed");
             }
@@ -1675,8 +1674,7 @@ int h2o_socket_ebpf_setup(void)
         }
         if (ebpf_obj_pin(fd, H2O_EBPF_RETURN_MAP_PATH) != 0) {
             if (errno == ENOENT) {
-                h2o_error_printf("BPF_OBJ_PIN failed with ENOENT, "
-                                 "because /sys/fs/bpf is not mounted as a BPF filesystem.\n");
+                h2o_error_printf("BPF_OBJ_PIN failed with ENOENT, because /sys/fs/bpf is not mounted as a BPF filesystem.\n");
             } else {
                 h2o_perror("BPF_OBJ_PIN failed");
             }
@@ -1691,18 +1689,19 @@ int h2o_socket_ebpf_setup(void)
             goto Error;
         }
         if (m.type != map_attr.type) {
-            h2o_error_printf("%s has an unexpected map type: expected %d but got %d\n", H2O_EBPF_RETURN_MAP_PATH, map_attr.type,
+            h2o_error_printf(H2O_EBPF_RETURN_MAP_PATH " has an unexpected map type: expected %d but got %d\n", map_attr.type,
                              m.type);
             goto Error;
         }
         if (m.key_size != map_attr.key_size) {
-            h2o_error_printf("%s has an unexpected map key size: expected %" PRIu32 " but got %" PRIu32 "\n",
-                             H2O_EBPF_RETURN_MAP_PATH, map_attr.key_size, m.key_size);
+            h2o_error_printf(H2O_EBPF_RETURN_MAP_PATH " has an unexpected map key size: expected %" PRIu32 " but got %" PRIu32 "\n",
+                             map_attr.key_size, m.key_size);
             goto Error;
         }
         if (m.key_size != map_attr.key_size) {
-            h2o_error_printf("%s has an unexpected map value size: expected %" PRIu32 " but got %" PRIu32 "\n",
-                             H2O_EBPF_RETURN_MAP_PATH, map_attr.value_size, m.key_size);
+            h2o_error_printf(H2O_EBPF_RETURN_MAP_PATH " has an unexpected map value size: expected %" PRIu32 " but got %" PRIu32
+                                                      "\n",
+                             map_attr.value_size, m.key_size);
             goto Error;
         }
     }
