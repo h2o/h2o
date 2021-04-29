@@ -431,7 +431,7 @@ h2o_socket_t *h2o_evloop_socket_accept(h2o_socket_t *_listener)
     int fd;
     h2o_socket_t *sock;
 
-    /* cache the remote address, if we know that we are going to use the value (in h2o_socket_ebpf_lookup) */
+    /* cache the remote address, if we know that we are going to use the value (in h2o_socket_ebpf_lookup_flags) */
 #if H2O_USE_EBPF_MAP
     struct sockaddr_storage peeraddr[1];
     socklen_t peeraddrlen[1] = {sizeof(peeraddr[0])};
@@ -455,7 +455,8 @@ h2o_socket_t *h2o_evloop_socket_accept(h2o_socket_t *_listener)
 
     if (peeraddr != NULL && *peeraddrlen <= sizeof(*peeraddr))
         h2o_socket_setpeername(sock, (struct sockaddr *)peeraddr, *peeraddrlen);
-    if (h2o_socket_ebpf_lookup(listener->loop, h2o_socket_ebpf_init_key, sock).skip_tracing)
+    uint64_t flags = h2o_socket_ebpf_lookup_flags(listener->loop, h2o_socket_ebpf_init_key, sock);
+    if ((flags & H2O_EBPF_FLAGS_SKIP_TRACING_BIT) != 0)
         sock->_skip_tracing = 1;
     return sock;
 }
