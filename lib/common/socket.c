@@ -1649,18 +1649,17 @@ int h2o_socket_ebpf_setup(void)
         .value_size = sizeof(uint64_t),
     };
 
-    int success = 0;
     int fd = -1;
     if (getuid() != 0) {
         h2o_error_printf("failed to set up eBPF maps because bpf(2) requires root privileges\n");
-        goto Exit;
+        goto Error;
     }
 
     fd = ebpf_obj_get(H2O_EBPF_RETURN_MAP_PATH);
     if (fd < 0) {
         if (errno != ENOENT) {
             h2o_perror("BPF_OBJ_GET failed");
-            goto Exit;
+            goto Error;
         }
         /* Pinned eBPF map does not exist. Create one and pin it to the BPF filesystem. */
         fd = ebpf_map_create(map_attr.type, map_attr.key_size, map_attr.value_size, H2O_EBPF_RETURN_MAP_SIZE,
@@ -1672,7 +1671,7 @@ int h2o_socket_ebpf_setup(void)
             } else {
                 h2o_perror("BPF_MAP_CREATE failed");
             }
-            goto Exit;
+            goto Error;
         }
         if (ebpf_obj_pin(fd, H2O_EBPF_RETURN_MAP_PATH) != 0) {
             if (errno == ENOENT) {
@@ -1681,42 +1680,41 @@ int h2o_socket_ebpf_setup(void)
             } else {
                 h2o_perror("BPF_OBJ_PIN failed");
             }
-            goto Exit;
+            goto Error;
         }
-        success = 1;
     } else {
         /* BPF_OBJ_GET successfully opened a pinned eBPF map. Make sure the critical attributes (type, key size, value size) are
          * correct, otherwise usdt-selective-tracing does not work. */
         struct bpf_map_info m;
         if (ebpf_obj_get_info_by_fd(fd, &m) != 0) {
             h2o_perror("BPF_OBJ_GET_INFO_BY_FD failed");
-            goto Exit;
+            goto Error;
         }
         if (m.type != map_attr.type) {
             h2o_error_printf("%s has an unexpected map type: expected %d but got %d\n", H2O_EBPF_RETURN_MAP_PATH, map_attr.type,
                              m.type);
-            goto Exit;
+            goto Error;
         }
         if (m.key_size != map_attr.key_size) {
             h2o_error_printf("%s has an unexpected map key size: expected %" PRIu32 " but got %" PRIu32 "\n",
                              H2O_EBPF_RETURN_MAP_PATH, map_attr.key_size, m.key_size);
-            goto Exit;
+            goto Error;
         }
         if (m.key_size != map_attr.key_size) {
             h2o_error_printf("%s has an unexpected map value size: expected %" PRIu32 " but got %" PRIu32 "\n",
                              H2O_EBPF_RETURN_MAP_PATH, map_attr.value_size, m.key_size);
-            goto Exit;
+            goto Error;
         }
-        success = 1;
     }
 
-Exit:
-    if (success) {
-        return_map_fd = fd;
-    } else if (fd >= 0) {
+    /* success */
+    return_map_fd = fd;
+    return 1;
+
+Error:
+    if (fd >= 0)
         close(fd);
-    }
-    return success;
+    return 0;
 }
 
 static void get_map_fd(h2o_loop_t *loop, const char *map_path, int *fd, uint64_t *last_attempt)
