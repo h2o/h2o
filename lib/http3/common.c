@@ -970,7 +970,8 @@ void h2o_quic_close_all_connections(h2o_quic_ctx_t *ctx)
     h2o_quic_conn_t *conn;
 
     kh_foreach_value(ctx->conns_by_id, conn, { h2o_quic_close_connection(conn, 0, NULL); });
-    kh_foreach_value(ctx->conns_accepting, conn, { h2o_quic_close_connection(conn, 0, NULL); });
+    /* closing a connection should also remove an entry from conns_accepting */
+    assert(kh_size(ctx->conns_accepting) == 0);
 }
 
 size_t h2o_quic_num_connections(h2o_quic_ctx_t *ctx)
