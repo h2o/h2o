@@ -50,6 +50,19 @@
 #define TCP_NOTSENT_LOWAT 25
 #endif
 
+#if defined(__linux__)
+#include <linux/errqueue.h>
+#include <linux/net_tstamp.h>
+#include <sys/syscall.h>
+
+#ifndef SYS_gettid
+#error "SYS_gettid unavailable on this system"
+#endif
+
+#define gettid() ((pid_t)syscall(SYS_gettid))
+
+#endif /* defined(__linux__) */
+
 #if H2O_USE_DTRACE && defined(__linux__)
 #define H2O_USE_EBPF_MAP 1
 #endif
