@@ -80,12 +80,6 @@ struct_map = OrderedDict([
     ["sockaddr_in6", []],
 ])
 
-# The block list for probes.
-# All the probes are handled by default in JSON mode
-block_probes = set([
-    "quicly:debug_message",
-])
-
 # To rename field names for compatibility with:
 # https://github.com/h2o/quicly/blob/master/quictrace-adapter.py
 rename_map = {
@@ -281,8 +275,6 @@ def parse_and_analyze(context: dict, d_file: Path):
     id = ("H2OLOG_EVENT_ID_%s_%s" % (provider, name)).upper()
 
     fully_specified_probe_name = "%s:%s" % (provider, name)
-    if block_probes and fully_specified_probe_name in block_probes:
-      continue
 
     metadata = {
         "id": id,
