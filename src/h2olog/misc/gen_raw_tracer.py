@@ -50,9 +50,6 @@ from copy import deepcopy
 
 DEBUG = os.getenv("DEBUG")
 
-quicly_probes_d = "deps/quicly/quicly-probes.d"
-h2o_probes_d = "h2o-probes.d"
-
 # An allow-list to gather data from USDT probes.
 # Only fields listed here are handled in BPF.
 struct_map = OrderedDict([
