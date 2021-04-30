@@ -975,7 +975,9 @@ void h2o_quic_close_all_connections(h2o_quic_ctx_t *ctx)
 
 size_t h2o_quic_num_connections(h2o_quic_ctx_t *ctx)
 {
-    return kh_size(ctx->conns_by_id) + kh_size(ctx->conns_accepting);
+    /* throughout its lifetime, a connection is always registered to both conns_by_id and conns_accepting,
+       thus counting conns_by_id is enough */
+    return kh_size(ctx->conns_by_id);
 }
 
 void h2o_quic_init_conn(h2o_quic_conn_t *conn, h2o_quic_ctx_t *ctx, const h2o_quic_conn_callbacks_t *callbacks)
