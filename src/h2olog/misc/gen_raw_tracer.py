@@ -597,9 +597,6 @@ BPF_PERF_OUTPUT(events);
 // The table size must be larger than the number of threads in h2o.
 BPF_TABLE_PINNED("lru_hash", pid_t, uint64_t, h2o_return, H2O_EBPF_RETURN_MAP_SIZE, H2O_EBPF_RETURN_MAP_PATH);
 
-// HTTP/3 tracing
-BPF_HASH(h2o_to_quicly_conn, u64, u32);
-
 // tracepoint sched:sched_process_exit
 int trace_sched_process_exit(struct tracepoint__sched__sched_process_exit *ctx) {
   const struct task_struct *task = (const struct task_struct*)bpf_get_current_task();
