@@ -47,6 +47,7 @@ our @EXPORT = qw(
     find_blackhole_ip
     get_tracer
     check_dtrace_availability
+    run_picotls_client
 );
 
 use constant ASSETS_DIR => 't/assets';
@@ -696,6 +697,38 @@ sub get_tracer {
             if waitpid($tracer_pid, WNOHANG) == $tracer_pid;
     }
     return $read_trace;
+}
+
+sub run_picotls_client {
+    my($opts) = @_;
+    my $port = $opts->{port}; # required
+    my $host = $opts->{host} // '127.0.0.1';
+    my $path = $opts->{path} // '/';
+    my $cli_opts = $opts->{opts} // '';
+    my $connection = $opts->{keep_alive} ? "keep-alive" : "close";
+
+    my $cli = bindir() . "/picotls/cli";
+    die "picotls-cli ($cli) not found" unless -e $cli;
+
+    my $tempdir = tempdir();
+    my $cmd = "exec $cli $cli_opts $host $port > $tempdir/resp.txt 2>&1";
+    diag $cmd;
+    open my $fh, "|-", $cmd
+        or die "failed to invoke command:$cmd:$!";
+    autoflush $fh 1;
+    print $fh <<"EOT";
+GET $path HTTP/1.1\r
+Host: $host:$port\r
+Connection: $connection\r
+\r
+EOT
+    Time::HiRes::sleep(0.1) until -e "$tempdir/resp.txt" && -s "$tempdir/resp.txt" > 0;
+    close $fh;
+
+    open $fh, "<", "$tempdir/resp.txt"
+        or die "failed to open file:$tempdir/resp.txt:$!";
+    my $resp = do { local $/; <$fh> };
+    return $resp;
 }
 
 1;
