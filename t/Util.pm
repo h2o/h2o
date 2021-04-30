@@ -705,10 +705,8 @@ sub run_picotls_client {
     my $host = $opts->{host} // '127.0.0.1';
     my $path = $opts->{path} // '/';
     my $cli_opts = $opts->{opts} // '';
-    my $connection = $opts->{keep_alive} ? "keep-alive" : "close";
 
     my $cli = bindir() . "/picotls/cli";
-    die "picotls-cli ($cli) not found" unless -e $cli;
 
     my $tempdir = tempdir();
     my $cmd = "exec $cli $cli_opts $host $port > $tempdir/resp.txt 2>&1";
@@ -719,10 +717,10 @@ sub run_picotls_client {
     print $fh <<"EOT";
 GET $path HTTP/1.1\r
 Host: $host:$port\r
-Connection: $connection\r
+Connection: close\r
 \r
 EOT
-    Time::HiRes::sleep(0.1) until -e "$tempdir/resp.txt" && -s "$tempdir/resp.txt" > 0;
+    sleep 1;
     close $fh;
 
     open $fh, "<", "$tempdir/resp.txt"
