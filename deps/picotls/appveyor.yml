@@ -1,0 +1,25 @@
+version: build{build}
+image: Visual Studio 2017
+
+environment:
+  matrix:
+    - platform: x86
+      configuration: Debug
+      OPENSSLDIR: C:\OpenSSL-v11-Win32
+    - platform: x64
+      configuration: Debug
+      OPENSSL64DIR: C:\OpenSSL-v11-Win64
+    - platform: x86
+      configuration: Release
+      OPENSSLDIR: C:\OpenSSL-v11-Win32
+    - platform: x64
+      configuration: Release
+      OPENSSL64DIR: C:\OpenSSL-v11-Win64
+
+install:
+  - ps: git submodule --quiet update --init --recursive
+
+build:
+  parallel: true
+  project: picotlsvs\picotlsvs.sln
+

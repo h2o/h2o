@@ -686,7 +686,9 @@ IF (WITH_MRUBY)
         SET(MRUBY_TOOLCHAIN "gcc")
     ENDIF ()
     ADD_CUSTOM_TARGET(mruby
-        MRUBY_TOOLCHAIN=${MRUBY_TOOLCHAIN} MRUBY_CONFIG=${CMAKE_CURRENT_SOURCE_DIR}/misc/mruby_config.rb MRUBY_BUILD_DIR=${CMAKE_CURRENT_BINARY_DIR}/mruby MRUBY_ADDITIONAL_CONFIG=${MRUBY_ADDITIONAL_CONFIG} ruby minirake
+        # deps/mruby/tasks/toolchains/clang.rake looks for CC, CXX and LD.
+        # There are no C++ files in deps/mruby, use the C compiler for linking.
+        MRUBY_TOOLCHAIN=${MRUBY_TOOLCHAIN} CC=${CMAKE_C_COMPILER} CXX=${CMAKE_CXX_COMPILER} LD=${CMAKE_C_COMPILER} MRUBY_CONFIG=${CMAKE_CURRENT_SOURCE_DIR}/misc/mruby_config.rb MRUBY_BUILD_DIR=${CMAKE_CURRENT_BINARY_DIR}/mruby MRUBY_ADDITIONAL_CONFIG=${MRUBY_ADDITIONAL_CONFIG} ruby minirake
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/deps/mruby
         BYPRODUCTS "${CMAKE_CURRENT_BINARY_DIR}/mruby/host/lib/libmruby.a"
                    "${CMAKE_CURRENT_BINARY_DIR}/mruby/host/mrbgems/mruby-onig-regexp/onigmo-6.1.2/.libs/libonigmo.a"
@@ -914,7 +916,7 @@ IF (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND PKG_CONFIG_FOUND)
         OUTPUT_STRIP_TRAILING_WHITESPACE
     )
 
-    SET(REQUIRED_KERNEL_VERSION "4.9.0")
+    SET(REQUIRED_KERNEL_VERSION "4.10.0")
     IF (NOT (KERNEL_VERSION VERSION_LESS REQUIRED_KERNEL_VERSION))
         SET(HAVE_BPF_SUPPORTED_KERNEL ON)
         MESSAGE(STATUS "Checking Linux kernel version ${KERNEL_VERSION} >= ${REQUIRED_KERNEL_VERSION} for h2olog - OK")
