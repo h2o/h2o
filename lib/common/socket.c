@@ -27,6 +27,7 @@
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <string.h>
+#include <sys/syscall.h>
 #include <sys/un.h>
 #include <unistd.h>
 #include <openssl/err.h>
@@ -1588,7 +1589,7 @@ static int ebpf_map_create(uint32_t map_type, uint32_t key_size, uint32_t value_
         .max_entries = max_entries,
     };
     strncpy(attr.map_name, map_name, sizeof(attr.map_name));
-    return syscall(__NR_bpf, BPF_MAP_CREATE, &attr, sizeof(attr));
+    return syscall(SYS_bpf, BPF_MAP_CREATE, &attr, sizeof(attr));
 }
 
 static int ebpf_obj_pin(int bpf_fd, const char *pathname)
@@ -1597,7 +1598,7 @@ static int ebpf_obj_pin(int bpf_fd, const char *pathname)
         .bpf_fd = (uint32_t)bpf_fd,
         .pathname = (uint64_t)pathname,
     };
-    return syscall(__NR_bpf, BPF_OBJ_PIN, &attr, sizeof(attr));
+    return syscall(SYS_bpf, BPF_OBJ_PIN, &attr, sizeof(attr));
 }
 
 static int ebpf_obj_get(const char *pathname)
@@ -1605,7 +1606,7 @@ static int ebpf_obj_get(const char *pathname)
     union bpf_attr attr = {
         .pathname = (uint64_t)pathname,
     };
-    return syscall(__NR_bpf, BPF_OBJ_GET, &attr, sizeof(attr));
+    return syscall(SYS_bpf, BPF_OBJ_GET, &attr, sizeof(attr));
 }
 
 static int ebpf_obj_get_info_by_fd(int fd, struct bpf_map_info *info)
@@ -1618,7 +1619,7 @@ static int ebpf_obj_get_info_by_fd(int fd, struct bpf_map_info *info)
                 .info_len = sizeof(*info),
             },
     };
-    return syscall(__NR_bpf, BPF_OBJ_GET_INFO_BY_FD, &attr, sizeof(attr));
+    return syscall(SYS_bpf, BPF_OBJ_GET_INFO_BY_FD, &attr, sizeof(attr));
 }
 
 static int ebpf_map_lookup(int fd, const void *key, void *value)
@@ -1628,7 +1629,7 @@ static int ebpf_map_lookup(int fd, const void *key, void *value)
         .key = (uint64_t)key,
         .value = (uint64_t)value,
     };
-    return syscall(__NR_bpf, BPF_MAP_LOOKUP_ELEM, &attr, sizeof(attr));
+    return syscall(SYS_bpf, BPF_MAP_LOOKUP_ELEM, &attr, sizeof(attr));
 }
 
 static int ebpf_map_delete(int fd, const void *key)
@@ -1637,7 +1638,7 @@ static int ebpf_map_delete(int fd, const void *key)
         .map_fd = fd,
         .key = (uint64_t)key,
     };
-    return syscall(__NR_bpf, BPF_MAP_DELETE_ELEM, &attr, sizeof(attr));
+    return syscall(SYS_bpf, BPF_MAP_DELETE_ELEM, &attr, sizeof(attr));
 }
 
 static int return_map_fd = -1; // for h2o_return
@@ -1823,7 +1824,7 @@ uint64_t h2o_socket_ebpf_lookup_flags(h2o_loop_t *loop, int (*init_key)(h2o_ebpf
             ebpf_map_lookup(tracing_map_fd, &key, &flags);
 
         if (H2O__PRIVATE_SOCKET_LOOKUP_FLAGS_ENABLED() && return_map_fd >= 0) {
-            pid_t tid = gettid();
+            pid_t tid = (pid_t)syscall(SYS_gettid); /* gettid() was not available until glibc 2.30 (2019) */
 
             /* Make sure old flags do not exist, otherwise the subsequent logic will be unreliable. */
             if (ebpf_map_delete(return_map_fd, &tid) == 0 || errno == ENOENT) {
