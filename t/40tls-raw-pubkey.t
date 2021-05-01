@@ -17,8 +17,8 @@ my $QUIC_RE_BAD_CERT = qr({"type":"transport-close-receive",.*"error-code":299,)
 subtest "x509 server" => sub {
     my $server = start_server(1, 0);
     subtest "tls13" => sub {
-        like run_tls_client(""), $TLS_RE_OK, "x509 -> ok";
-        like run_tls_client($TLS_RAW_CERT_OPT), $TLS_RE_BAD_CERT, "raw -> bad_cert";
+        like run_picotls_client({ port => $tls_port }), $TLS_RE_OK, "x509 -> ok";
+        like run_picotls_client({ port => $tls_port, opts => $TLS_RAW_CERT_OPT }), $TLS_RE_BAD_CERT, "raw -> bad_cert";
     };
     subtest "quic" => sub {
         like run_quic_client(""), $QUIC_RE_OK, "x509 -> ok";
@@ -29,8 +29,8 @@ subtest "x509 server" => sub {
 subtest "raw server" => sub {
     my $server = start_server(0, 1);
     subtest "tls13" => sub {
-        like run_tls_client(""), $TLS_RE_BAD_CERT, "x509 -> bad_cert";
-        like run_tls_client($TLS_RAW_CERT_OPT), $TLS_RE_OK, "raw -> ok";
+        like run_picotls_client({ port => $tls_port }), $TLS_RE_BAD_CERT, "x509 -> bad_cert";
+        like run_picotls_client({ port => $tls_port, opts => $TLS_RAW_CERT_OPT }), $TLS_RE_OK, "raw -> ok";
     };
     subtest "quic" => sub {
         like run_quic_client(""), $QUIC_RE_BAD_CERT, "x509 -> ok";
@@ -41,8 +41,8 @@ subtest "raw server" => sub {
 subtest "hybrid server" => sub {
     my $server = start_server(1, 1);
     subtest "tls13" => sub {
-        like run_tls_client(""), $TLS_RE_OK, "raw -> ok";
-        like run_tls_client($TLS_RAW_CERT_OPT), $TLS_RE_OK, "raw -> ok";
+        like run_picotls_client({ port => $tls_port }), $TLS_RE_OK, "raw -> ok";
+        like run_picotls_client({ port => $tls_port, opts => $TLS_RAW_CERT_OPT }), $TLS_RE_OK, "raw -> ok";
     };
     subtest "quic" => sub {
         like run_quic_client(""), $QUIC_RE_OK, "x509 -> ok";
@@ -75,25 +75,6 @@ listen:
     <<: *ssl
 EOT
     my $server = spawn_h2o_raw($conf, [ $tls_port ]);
-}
-
-sub run_tls_client {
-    my $opts = shift;
-    my $cmd = "exec @{[bindir]}/picotls/cli $opts 127.0.0.1 $tls_port > $tempdir/resp.txt 2>&1";
-    open my $fh, "|-", $cmd
-        or die "failed to invoke command:$cmd:$!";
-    autoflush $fh 1;
-    print $fh <<"EOT";
-GET / HTTP/1.1\r
-Host: 127.0.0.1:$tls_port\r
-Connection: close\r
-\r
-EOT
-    sleep 1;
-    close $fh;
-    open $fh, "<", "$tempdir/resp.txt"
-        or die "failed to open file:$tempdir/resp.txt:$!";
-    do { local $/; <$fh> };
 }
 
 sub run_quic_client {
