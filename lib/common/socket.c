@@ -27,6 +27,7 @@
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <string.h>
+#include <sys/syscall.h>
 #include <sys/un.h>
 #include <unistd.h>
 #include <openssl/err.h>
@@ -1818,7 +1819,7 @@ uint64_t h2o_socket_ebpf_lookup_flags(h2o_loop_t *loop, int (*init_key)(h2o_ebpf
             ebpf_map_lookup(tracing_map_fd, &key, &flags);
 
         if (H2O__PRIVATE_SOCKET_LOOKUP_FLAGS_ENABLED() && return_map_fd >= 0) {
-            pid_t tid = gettid();
+            pid_t tid = (pid_t)syscall(SYS_gettid);
 
             /* Make sure old flags do not exist, otherwise the subsequent logic will be unreliable. */
             if (ebpf_map_delete(return_map_fd, &tid) == 0 || errno == ENOENT) {
