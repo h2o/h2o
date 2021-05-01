@@ -74,8 +74,8 @@ ssize_t h2o_add_header(h2o_mem_pool_t *pool, h2o_headers_t *headers, const h2o_t
     return add_header(pool, headers, (h2o_iovec_t *)&token->buf, orig_name, value, value_len, (h2o_header_flags_t){0});
 }
 
-ssize_t h2o_add_header_by_str(h2o_mem_pool_t *pool, h2o_headers_t *headers, const char *lowercase_name, size_t lowercase_name_len, int maybe_token,
-                              const char *orig_name, const char *value, size_t value_len)
+ssize_t h2o_add_header_by_str(h2o_mem_pool_t *pool, h2o_headers_t *headers, const char *lowercase_name, size_t lowercase_name_len,
+                              int maybe_token, const char *orig_name, const char *value, size_t value_len)
 {
     if (maybe_token) {
         const h2o_token_t *token = h2o_lookup_token(lowercase_name, lowercase_name_len);
@@ -101,8 +101,8 @@ ssize_t h2o_set_header(h2o_mem_pool_t *pool, h2o_headers_t *headers, const h2o_t
     }
 }
 
-ssize_t h2o_set_header_by_str(h2o_mem_pool_t *pool, h2o_headers_t *headers, const char *lowercase_name, size_t lowercase_name_len, int maybe_token,
-                              const char *value, size_t value_len, int overwrite_if_exists)
+ssize_t h2o_set_header_by_str(h2o_mem_pool_t *pool, h2o_headers_t *headers, const char *lowercase_name, size_t lowercase_name_len,
+                              int maybe_token, const char *value, size_t value_len, int overwrite_if_exists)
 {
     ssize_t cursor;
 
