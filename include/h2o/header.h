@@ -86,8 +86,8 @@ ssize_t h2o_add_header(h2o_mem_pool_t *pool, h2o_headers_t *headers, const h2o_t
 /**
  * adds a header to list
  */
-ssize_t h2o_add_header_by_str(h2o_mem_pool_t *pool, h2o_headers_t *headers, const char *name, size_t name_len, int maybe_token,
-                              const char *orig_name, const char *value, size_t value_len);
+ssize_t h2o_add_header_by_str(h2o_mem_pool_t *pool, h2o_headers_t *headers, const char *lowercase_name, size_t lowercase_name_len,
+                              int maybe_token, const char *orig_name, const char *value, size_t value_len);
 /**
  * adds or replaces a header into the list
  */
@@ -96,8 +96,8 @@ ssize_t h2o_set_header(h2o_mem_pool_t *pool, h2o_headers_t *headers, const h2o_t
 /**
  * adds or replaces a header into the list
  */
-ssize_t h2o_set_header_by_str(h2o_mem_pool_t *pool, h2o_headers_t *headers, const char *name, size_t name_len, int maybe_token,
-                              const char *value, size_t value_len, int overwrite_if_exists);
+ssize_t h2o_set_header_by_str(h2o_mem_pool_t *pool, h2o_headers_t *headers, const char *lowercase_name, size_t lowercase_name_len,
+                              int maybe_token, const char *value, size_t value_len, int overwrite_if_exists);
 /**
  * sets a header token
  */
