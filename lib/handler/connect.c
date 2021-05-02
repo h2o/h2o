@@ -58,39 +58,38 @@ struct st_connect_request_t {
 
 #define TO_BITMASK(type, len) ((type) ~(((type)1 << (sizeof(type) * 8 - (len))) - 1))
 
-static void make_proxy_status_error(struct st_connect_request_t *creq, const char *error_type, const char *details,
-                                    const char *rcode)
+static void record_error(struct st_connect_request_t *creq, const char *error_type, const char *details, const char *rcode)
 {
-    h2o_mem_pool_t *pool = &creq->src_req->pool;
+    h2o_req_log_error(creq->src_req, MODULE_NAME, "%s; rcode=%s; details=%s", error_type, rcode, details);
 
-    if (!creq->handler->config.connect_proxy_status_enabled)
-        return;
+    if (creq->handler->config.connect_proxy_status_enabled) {
+        h2o_mem_pool_t *pool = &creq->src_req->pool;
+        h2o_iovec_t identity = creq->src_req->conn->ctx->globalconf->proxy_status_identity;
+        if (identity.base == NULL)
+            identity = h2o_iovec_init(H2O_STRLIT("h2o"));
 
-    h2o_iovec_t identity = creq->src_req->conn->ctx->globalconf->proxy_status_identity;
-    if (identity.base == NULL)
-        identity = h2o_iovec_init(H2O_STRLIT("h2o"));
+        h2o_iovec_t parts[9] = {
+            identity,
+            h2o_iovec_init(H2O_STRLIT("; error=")),
+            h2o_iovec_init(error_type, strlen(error_type)),
+        };
+        size_t nparts = 3;
+        if (rcode != NULL) {
+            parts[nparts++] = h2o_iovec_init(H2O_STRLIT("; rcode="));
+            parts[nparts++] = h2o_iovec_init(rcode, strlen(rcode));
+        }
+        if (details != NULL) {
+            parts[nparts++] = h2o_iovec_init(H2O_STRLIT("; details="));
+            parts[nparts++] = h2o_encode_sf_string(pool, details, SIZE_MAX);
+        }
+        assert(nparts <= sizeof(parts) / sizeof(parts[0]));
+        h2o_iovec_t hval = h2o_concat_list(pool, parts, nparts);
 
-    h2o_iovec_t parts[9] = {
-        identity,
-        h2o_iovec_init(H2O_STRLIT("; error=")),
-        h2o_iovec_init(error_type, strlen(error_type)),
-    };
-    size_t nparts = 3;
-    if (rcode != NULL) {
-        parts[nparts++] = h2o_iovec_init(H2O_STRLIT("; rcode="));
-        parts[nparts++] = h2o_iovec_init(rcode, strlen(rcode));
+        h2o_add_header_by_str(pool, &creq->src_req->res.headers, H2O_STRLIT("proxy-status"), 0, NULL, hval.base, hval.len);
     }
-    if (details != NULL) {
-        parts[nparts++] = h2o_iovec_init(H2O_STRLIT("; details="));
-        parts[nparts++] = h2o_encode_sf_string(pool, details, SIZE_MAX);
-    }
-    assert(nparts <= sizeof(parts) / sizeof(parts[0]));
-    h2o_iovec_t hval = h2o_concat_list(pool, parts, nparts);
-
-    h2o_add_header_by_str(pool, &creq->src_req->res.headers, H2O_STRLIT("proxy-status"), 0, NULL, hval.base, hval.len);
 }
 
-static void make_proxy_status_error_for_socket_error(struct st_connect_request_t *creq, const char *err)
+static void record_socket_error(struct st_connect_request_t *creq, const char *err)
 {
     const char *error_type;
     const char *details = NULL;
@@ -104,7 +103,7 @@ static void make_proxy_status_error_for_socket_error(struct st_connect_request_t
         error_type = "proxy_internal_error";
         details = err;
     }
-    make_proxy_status_error(creq, error_type, details, NULL);
+    record_error(creq, error_type, details, NULL);
 }
 
 static void start_connect(struct st_connect_request_t *creq);
@@ -127,9 +126,9 @@ static void on_timeout(h2o_timer_t *entry)
 {
     struct st_connect_request_t *creq = H2O_STRUCT_FROM_MEMBER(struct st_connect_request_t, timeout, entry);
     if (creq->server_addresses.size > 0) {
-        make_proxy_status_error(creq, "connection_timeout", NULL, NULL);
+        record_error(creq, "connection_timeout", NULL, NULL);
     } else {
-        make_proxy_status_error(creq, "dns_timeout", NULL, NULL);
+        record_error(creq, "dns_timeout", NULL, NULL);
     }
     on_error(creq, h2o_httpclient_error_io_timeout);
 }
@@ -142,7 +141,7 @@ static void on_connect(h2o_socket_t *sock, const char *err)
 
     if (err) {
         if (creq->server_addresses.next == creq->server_addresses.size) {
-            make_proxy_status_error_for_socket_error(creq, err);
+            record_socket_error(creq, err);
             on_error(creq, err);
             return;
         }
@@ -210,7 +209,7 @@ static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errs
             rcode = "SERVFAIL";
         else
             rcode = NULL;
-        make_proxy_status_error(creq, "dns_error", errstr, rcode);
+        record_error(creq, "dns_error", errstr, rcode);
         on_error(creq, errstr);
         return;
     }
@@ -229,8 +228,7 @@ static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errs
             uint64_t timeout = creq->handler->config.io_timeout;
             req->establish_tunnel(req, tunnel, timeout);
         } else {
-            h2o_req_log_error(req, MODULE_NAME, "failed to create socket:%s", err);
-            make_proxy_status_error_for_socket_error(creq, err);
+            record_socket_error(creq, err);
             h2o_send_error_502(req, "Bad Gateway", "Bad Gateway", H2O_SEND_ERROR_KEEP_HEADERS);
         }
     }
@@ -245,8 +243,7 @@ static void start_connect(struct st_connect_request_t *creq)
         /* check address */
         if (!h2o_connect_lookup_acl(creq->handler->acl.entries, creq->handler->acl.count, server_address->sa)) {
             h2o_timer_unlink(&creq->timeout);
-            h2o_req_log_error(creq->src_req, MODULE_NAME, "access rejected by acl");
-            make_proxy_status_error(creq, "destination_ip_prohibited", NULL, NULL);
+            record_error(creq, "destination_ip_prohibited", NULL, NULL);
             h2o_send_error_403(creq->src_req, "Access Forbidden", "Access Forbidden", H2O_SEND_ERROR_KEEP_HEADERS);
             return;
         }
@@ -257,7 +254,7 @@ static void start_connect(struct st_connect_request_t *creq)
         }
     } while (creq->server_addresses.next < creq->server_addresses.size);
 
-    make_proxy_status_error_for_socket_error(creq, err);
+    record_socket_error(creq, err);
     on_error(creq, h2o_socket_error_conn_fail);
 }
 
