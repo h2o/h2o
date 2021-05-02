@@ -947,6 +947,22 @@ int32_t h2o_socket_getport(const struct sockaddr *sa)
     }
 }
 
+const char *h2o_socket_get_error_string(int errnum, const char *default_err)
+{
+    switch (errnum) {
+    case ECONNREFUSED:
+        return h2o_socket_error_conn_refused;
+    case ETIMEDOUT:
+        return h2o_socket_error_conn_timed_out;
+    case ENETUNREACH:
+        return h2o_socket_error_network_unreachable;
+    case EHOSTUNREACH:
+        return h2o_socket_error_host_unreachable;
+    default:
+        return default_err;
+    }
+}
+
 static void create_ossl(h2o_socket_t *sock)
 {
     sock->ssl->ossl = SSL_new(sock->ssl->ssl_ctx);

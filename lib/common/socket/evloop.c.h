@@ -460,22 +460,6 @@ h2o_socket_t *h2o_evloop_socket_accept(h2o_socket_t *_listener)
     return sock;
 }
 
-static const char *socket_error_from_errno(int e, const char *default_err)
-{
-    switch (e) {
-    case ECONNREFUSED:
-        return h2o_socket_error_conn_refused;
-    case ETIMEDOUT:
-        return h2o_socket_error_conn_timed_out;
-    case ENETUNREACH:
-        return h2o_socket_error_network_unreachable;
-    case EHOSTUNREACH:
-        return h2o_socket_error_host_unreachable;
-    default:
-        return default_err;
-    }
-}
-
 h2o_socket_t *h2o_socket_connect(h2o_loop_t *loop, struct sockaddr *addr, socklen_t addrlen, h2o_socket_cb cb, const char **err)
 {
     int fd;
@@ -489,9 +473,8 @@ h2o_socket_t *h2o_socket_connect(h2o_loop_t *loop, struct sockaddr *addr, sockle
     }
     fcntl(fd, F_SETFL, O_NONBLOCK);
     if (!(connect(fd, addr, addrlen) == 0 || errno == EINPROGRESS)) {
-        if (err != NULL) {
-            *err = socket_error_from_errno(errno, h2o_socket_error_conn_fail);
-        }
+        if (err != NULL)
+            *err = h2o_socket_get_error_string(errno, h2o_socket_error_conn_fail);
         close(fd);
         return NULL;
     }
@@ -575,9 +558,8 @@ static void run_socket(struct st_h2o_evloop_socket_t *sock)
             int so_err = 0;
             socklen_t l = sizeof(so_err);
             so_err = 0;
-            if (getsockopt(sock->fd, SOL_SOCKET, SO_ERROR, &so_err, &l) != 0 || so_err != 0) {
-                err = socket_error_from_errno(so_err, h2o_socket_error_conn_fail);
-            }
+            if (getsockopt(sock->fd, SOL_SOCKET, SO_ERROR, &so_err, &l) != 0 || so_err != 0)
+                err = h2o_socket_get_error_string(so_err, h2o_socket_error_conn_fail);
         }
         on_write_complete(&sock->super, err);
     }

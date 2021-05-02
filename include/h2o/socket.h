@@ -309,6 +309,10 @@ size_t h2o_socket_getnumerichost(const struct sockaddr *sa, socklen_t salen, cha
  */
 int32_t h2o_socket_getport(const struct sockaddr *sa);
 /**
+ * converts given error number to string representation if known, otherwise returns `default_err`
+ */
+const char *h2o_socket_get_error_string(int errnum, const char *default_err);
+/**
  * performs SSL handshake on a socket
  * @param sock the socket
  * @param ssl_ctx SSL context
