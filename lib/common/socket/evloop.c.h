@@ -144,7 +144,6 @@ static const char *on_read_core(int fd, h2o_buffer_t **input)
         read_so_far += rret;
         if (read_so_far >= (1024 * 1024))
             break;
-
     }
     return NULL;
 }
@@ -461,15 +460,21 @@ h2o_socket_t *h2o_evloop_socket_accept(h2o_socket_t *_listener)
     return sock;
 }
 
-h2o_socket_t *h2o_socket_connect(h2o_loop_t *loop, struct sockaddr *addr, socklen_t addrlen, h2o_socket_cb cb)
+h2o_socket_t *h2o_socket_connect(h2o_loop_t *loop, struct sockaddr *addr, socklen_t addrlen, h2o_socket_cb cb, const char **err)
 {
     int fd;
     struct st_h2o_evloop_socket_t *sock;
 
-    if ((fd = cloexec_socket(addr->sa_family, SOCK_STREAM, 0)) == -1)
+    if ((fd = cloexec_socket(addr->sa_family, SOCK_STREAM, 0)) == -1) {
+        if (err != NULL) {
+            *err = h2o_socket_error_socket_fail;
+        }
         return NULL;
+    }
     fcntl(fd, F_SETFL, O_NONBLOCK);
     if (!(connect(fd, addr, addrlen) == 0 || errno == EINPROGRESS)) {
+        if (err != NULL)
+            *err = h2o_socket_get_error_string(errno, h2o_socket_error_conn_fail);
         close(fd);
         return NULL;
     }
@@ -553,10 +558,8 @@ static void run_socket(struct st_h2o_evloop_socket_t *sock)
             int so_err = 0;
             socklen_t l = sizeof(so_err);
             so_err = 0;
-            if (getsockopt(sock->fd, SOL_SOCKET, SO_ERROR, &so_err, &l) != 0 || so_err != 0) {
-                /* FIXME lookup the error table */
-                err = h2o_socket_error_conn_fail;
-            }
+            if (getsockopt(sock->fd, SOL_SOCKET, SO_ERROR, &so_err, &l) != 0 || so_err != 0)
+                err = h2o_socket_get_error_string(so_err, h2o_socket_error_conn_fail);
         }
         on_write_complete(&sock->super, err);
     }

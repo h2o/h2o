@@ -137,6 +137,11 @@ const char h2o_socket_error_out_of_memory[] = "out of memory";
 const char h2o_socket_error_io[] = "I/O error";
 const char h2o_socket_error_closed[] = "socket closed by peer";
 const char h2o_socket_error_conn_fail[] = "connection failure";
+const char h2o_socket_error_conn_refused[] = "connection refused";
+const char h2o_socket_error_conn_timed_out[] = "connection timed out";
+const char h2o_socket_error_network_unreachable[] = "network unreachable";
+const char h2o_socket_error_host_unreachable[] = "host unreachable";
+const char h2o_socket_error_socket_fail[] = "socket creation failed";
 const char h2o_socket_error_ssl_no_cert[] = "no certificate";
 const char h2o_socket_error_ssl_cert_invalid[] = "invalid certificate";
 const char h2o_socket_error_ssl_cert_name_mismatch[] = "certificate name mismatch";
@@ -939,6 +944,22 @@ int32_t h2o_socket_getport(const struct sockaddr *sa)
         return htons(((struct sockaddr_in6 *)sa)->sin6_port);
     default:
         return -1;
+    }
+}
+
+const char *h2o_socket_get_error_string(int errnum, const char *default_err)
+{
+    switch (errnum) {
+    case ECONNREFUSED:
+        return h2o_socket_error_conn_refused;
+    case ETIMEDOUT:
+        return h2o_socket_error_conn_timed_out;
+    case ENETUNREACH:
+        return h2o_socket_error_network_unreachable;
+    case EHOSTUNREACH:
+        return h2o_socket_error_host_unreachable;
+    default:
+        return default_err;
     }
 }
 
