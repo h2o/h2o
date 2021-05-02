@@ -60,7 +60,8 @@ struct st_connect_request_t {
 
 static void record_error(struct st_connect_request_t *creq, const char *error_type, const char *details, const char *rcode)
 {
-    h2o_req_log_error(creq->src_req, MODULE_NAME, "%s; rcode=%s; details=%s", error_type, rcode, details);
+    h2o_req_log_error(creq->src_req, MODULE_NAME, "%s; rcode=%s; details=%s", error_type, rcode != NULL ? rcode : "(null)",
+                      details != NULL ? details : "(null)");
 
     if (creq->handler->config.connect_proxy_status_enabled) {
         h2o_mem_pool_t *pool = &creq->src_req->pool;
