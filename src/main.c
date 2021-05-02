@@ -641,11 +641,13 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
         struct st_on_client_hello_ptls_t ch;
         struct st_emit_certificate_ptls_t ec;
         ptls_openssl_sign_certificate_t sc;
+        ptls_openssl_verify_certificate_t vc;
     } *pctx = h2o_mem_alloc(sizeof(*pctx));
     EVP_PKEY *key;
     X509 *cert;
     STACK_OF(X509) * cert_chain;
     int ret;
+    int use_client_verify = 0;
     if (cipher_suites == NULL)
         cipher_suites = ptls_openssl_cipher_suites;
 
@@ -703,7 +705,20 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
         key = SSL_get_privatekey(fakeconn);
         assert(key != NULL);
         cert = SSL_get_certificate(fakeconn);
+        /* obtain peer verify mode */
+        use_client_verify = (SSL_get_verify_mode(fakeconn) & SSL_VERIFY_PEER)? 1 : 0;
         SSL_free(fakeconn);
+    }
+
+    if (use_client_verify) {
+        pctx->ctx.require_client_authentication = 1;
+        /* set verify callback */
+        X509_STORE *ca_store = SSL_CTX_get_cert_store(ssl_ctx);
+        if (ptls_openssl_init_verify_certificate(&pctx->vc, ca_store) != 0) {
+            free(pctx);
+            return "failed to setup client certificate verification environment";
+        }
+        pctx->ctx.verify_certificate = &pctx->vc.super;
     }
 
     /* create signer */
@@ -825,7 +840,8 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
     SSL_CTX *ssl_ctx = NULL;
     yoml_t **certificate_file, **key_file, **dh_file, **min_version, **max_version, **cipher_suite, **cipher_suite_tls13_node,
         **ocsp_update_cmd, **ocsp_update_interval_node, **ocsp_max_failures_node, **cipher_preference_node, **neverbleed_node,
-        **http2_origin_frame_node, **raw_pubkey_file;
+        **http2_origin_frame_node, **raw_pubkey_file, **client_ca_file;
+
     h2o_iovec_t *http2_origin_frame = NULL;
     long ssl_options = SSL_OP_ALL;
     uint64_t ocsp_update_interval = 4 * 60 * 60; /* defaults to 4 hours */
@@ -852,11 +868,11 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
                                        "certificate-file:s,raw-pubkey-file:s,min-version:s,minimum-version:s,max-version:s,"
                                        "maximum-version:s,cipher-suite:s,cipher-suite-tls1.3:a,ocsp-update-cmd:s,"
                                        "ocsp-update-interval:*,ocsp-max-failures:*,dh-file:s,cipher-preference:*,neverbleed:*,"
-                                       "http2-origin-frame:*",
+                                       "http2-origin-frame:*,client-ca-file:s",
                                        &key_file, &certificate_file, &raw_pubkey_file, &min_version, &min_version, &max_version,
                                        &max_version, &cipher_suite, &cipher_suite_tls13_node, &ocsp_update_cmd,
                                        &ocsp_update_interval_node, &ocsp_max_failures_node, &dh_file, &cipher_preference_node,
-                                       &neverbleed_node, &http2_origin_frame_node) != 0)
+                                       &neverbleed_node, &http2_origin_frame_node, &client_ca_file) != 0)
         return -1;
     if (certificate_file == NULL && raw_pubkey_file == NULL) {
         h2o_configurator_errprintf(cmd, *ssl_node, "either one of certificate-file or raw-public-key file must be specified");
@@ -975,6 +991,22 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
     /* setup */
     ssl_ctx = SSL_CTX_new(SSLv23_server_method());
     SSL_CTX_set_options(ssl_ctx, ssl_options);
+
+    /* set up client certificate verification if client_ca_file is configured */
+    if (client_ca_file != NULL) {
+        SSL_CTX_set_verify(ssl_ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, NULL);
+        if (SSL_CTX_load_verify_locations(ssl_ctx, (*client_ca_file)->data.scalar, NULL) != 1) {
+            h2o_configurator_errprintf(cmd, *client_ca_file, "failed to load client CA file:%s\n",
+                                    (*client_ca_file)->data.scalar);
+            ERR_print_errors_cb(on_openssl_print_errors, stderr);
+            goto Error;
+        }
+        /* Enable partial chain verification. That is done at the cert-store level, as the store is shared by the verification
+         * callback of picotls for incoming TLS 1.3 connections. */
+        X509_VERIFY_PARAM *vpm = X509_STORE_get0_param(SSL_CTX_get_cert_store(ssl_ctx));
+        int ret = X509_VERIFY_PARAM_set_flags(vpm, X509_V_FLAG_PARTIAL_CHAIN);
+        assert(ret == 1);
+    }
 
     SSL_CTX_set_session_id_context(ssl_ctx, H2O_SESSID_CTX, H2O_SESSID_CTX_LEN);
 
@@ -1127,7 +1159,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
             } else if (strcasecmp((*cc_node)->data.scalar, "cubic") == 0) {
                 listener->quic.ctx->init_cc = &quicly_cc_cubic_init;
             } else {
-                h2o_configurator_errprintf(cmd, *cc_node, "specified congestion controller is unknown or unspported for QUIC");
+                h2o_configurator_errprintf(cmd, *cc_node, "specified congestion controller is unknown or unsupported for QUIC");
                 goto Error;
             }
         }
@@ -2548,7 +2580,7 @@ struct init_ebpf_key_info_t {
     struct sockaddr *local, *remote;
 };
 
-static int init_ebpf_key_info(struct st_h2o_ebpf_map_key_t *key, void *_info)
+static int init_ebpf_key(h2o_ebpf_map_key_t *key, void *_info)
 {
     struct init_ebpf_key_info_t *info = _info;
     return h2o_socket_ebpf_init_key_raw(key, SOCK_DGRAM, info->local, info->remote);
@@ -2599,8 +2631,12 @@ static h2o_quic_conn_t *on_http3_accept(h2o_quic_ctx_t *_ctx, quicly_address_t *
     }
 
     h2o_http3_server_ctx_t *ctx = (void *)_ctx;
-    struct init_ebpf_key_info_t ebpf_keyinfo = {&destaddr->sa, &srcaddr->sa};
-    h2o_ebpf_map_value_t ebpf_value = h2o_socket_ebpf_lookup(ctx->super.loop, init_ebpf_key_info, &ebpf_keyinfo);
+    struct init_ebpf_key_info_t ebpf_key_info = {
+        .local = &destaddr->sa,
+        .remote = &srcaddr->sa,
+    };
+    uint64_t flags = h2o_socket_ebpf_lookup_flags(ctx->super.loop, init_ebpf_key, &ebpf_key_info);
+
     quicly_address_token_plaintext_t *token = NULL, token_buf;
     h2o_http3_conn_t *conn = NULL;
 
@@ -2625,11 +2661,11 @@ static h2o_quic_conn_t *on_http3_accept(h2o_quic_ctx_t *_ctx, quicly_address_t *
     /* send retry if necessary */
     if (token == NULL || token->type != QUICLY_ADDRESS_TOKEN_TYPE_RETRY) {
         int send_retry = ctx->send_retry;
-        switch (ebpf_value.quic_send_retry) {
-        case H2O_EBPF_QUIC_SEND_RETRY_ON:
+        switch (flags & H2O_EBPF_FLAGS_QUIC_SEND_RETRY_MASK) {
+        case H2O_EBPF_FLAGS_QUIC_SEND_RETRY_BITS_ON:
             send_retry = 1;
             break;
-        case H2O_EBPF_QUIC_SEND_RETRY_OFF:
+        case H2O_EBPF_FLAGS_QUIC_SEND_RETRY_BITS_OFF:
             send_retry = 0;
             break;
         default:
@@ -2666,7 +2702,7 @@ static h2o_quic_conn_t *on_http3_accept(h2o_quic_ctx_t *_ctx, quicly_address_t *
     }
 
     /* accept the connection */
-    conn = h2o_http3_server_accept(ctx, destaddr, srcaddr, packet, token, ebpf_value.skip_tracing, &conf.quic.conn_callbacks);
+    conn = h2o_http3_server_accept(ctx, destaddr, srcaddr, packet, token, (H2O_EBPF_FLAGS_SKIP_TRACING_BIT & flags) != 0, &conf.quic.conn_callbacks);
     if (conn == NULL || &conn->super == H2O_QUIC_ACCEPT_CONN_DECRYPTION_FAILED)
         goto Exit;
     num_sessions(1);
@@ -3419,6 +3455,10 @@ int main(int argc, char **argv)
     }
 
     setup_signal_handlers();
+    if (conf.globalconf.usdt_selective_tracing && !h2o_socket_ebpf_setup()) {
+        h2o_error_printf("usdt-selective-tracing is set to ON but failed to setup eBPF\n");
+        return EX_CONFIG;
+    }
 
     /* open the log file to redirect STDIN/STDERR to, before calling setuid */
     if (conf.error_log != NULL) {

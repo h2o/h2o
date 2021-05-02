@@ -156,6 +156,11 @@ QUICLY_CALLBACK_TYPE(int, generate_resumption_token, quicly_conn_t *conn, ptls_b
  */
 QUICLY_CALLBACK_TYPE(void, init_cc, quicly_cc_t *cc, uint32_t initcwnd, int64_t now);
 /**
+ * reference counting.
+ * delta must be either 1 or -1.
+ */
+QUICLY_CALLBACK_TYPE(void, update_open_count, ssize_t delta);
+/**
  * crypto offload API
  */
 typedef struct st_quicly_crypto_engine_t {
@@ -333,6 +338,10 @@ struct st_quicly_context_t {
      * initializes a congestion controller for given connection.
      */
     quicly_init_cc_t *init_cc;
+    /**
+     * optional refcount callback
+     */
+    quicly_update_open_count_t *update_open_count;
 };
 
 /**

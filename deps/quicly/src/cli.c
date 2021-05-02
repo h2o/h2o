@@ -1233,7 +1233,7 @@ int main(int argc, char **argv)
             }
             break;
         case 'V':
-            setup_verify_certificate(ctx.tls);
+            setup_verify_certificate(ctx.tls, NULL);
             break;
         case 'v':
             ++verbosity;

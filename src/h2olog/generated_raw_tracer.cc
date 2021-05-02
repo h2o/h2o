@@ -3,6 +3,7 @@
 extern "C" {
 #include <sys/time.h>
 #include "quicly.h"
+#include "h2o/ebpf.h"
 }
 
 #include <cstdlib>
@@ -80,6 +81,8 @@ static std::string gen_bpf_header() {
 
   bpf += "#define sizeof_st_quicly_conn_t " + std::to_string(std::min<size_t>(sizeof(struct st_quicly_conn_t), 100)) + "\n";
   bpf += GEN_FIELD_INFO(struct st_quicly_conn_t, super.local.cid_set.plaintext.master_id, "st_quicly_conn_t__master_id");
+
+  bpf += "#define sizeof_st_h2o_ebpf_map_key_t " + std::to_string(std::min<size_t>(sizeof(struct st_h2o_ebpf_map_key_t), 100)) + "\n";
 
   bpf += "#define sizeof_sockaddr " + std::to_string(std::min<size_t>(sizeof(struct sockaddr), 100)) + "\n";
 
@@ -169,6 +172,7 @@ enum h2olog_event_id_t {
   H2OLOG_EVENT_ID_QUICLY_STREAM_ON_RECEIVE,
   H2OLOG_EVENT_ID_QUICLY_STREAM_ON_RECEIVE_RESET,
   H2OLOG_EVENT_ID_QUICLY_CONN_STATS,
+  H2OLOG_EVENT_ID_H2O__PRIVATE_SOCKET_LOOKUP_FLAGS,
   H2OLOG_EVENT_ID_H2O_RECEIVE_REQUEST,
   H2OLOG_EVENT_ID_H2O_RECEIVE_REQUEST_HEADER,
   H2OLOG_EVENT_ID_H2O_SEND_RESPONSE,
@@ -642,6 +646,11 @@ struct h2olog_event_t {
       struct st_quicly_stats_t * stats;
       size_t size;
     } conn_stats;
+    struct { // h2o:_private_socket_lookup_flags
+      pid_t tid;
+      uint64_t original_flags;
+      struct st_h2o_ebpf_map_key_t info;
+    } _private_socket_lookup_flags;
     struct { // h2o:receive_request
       uint64_t conn_id;
       uint64_t req_id;
@@ -700,21 +709,21 @@ struct h2olog_event_t {
       size_t bytes_len;
     } h3_frame_receive;
     struct { // h2o:h3_packet_receive
-      h2olog_address_t dest;
-      h2olog_address_t src;
+      quicly_address_t dest;
+      quicly_address_t src;
       uint8_t bytes[STR_LEN];
       size_t bytes_len;
     } h3_packet_receive;
     struct { // h2o:h3_packet_forward
-      h2olog_address_t dest;
-      h2olog_address_t src;
+      quicly_address_t dest;
+      quicly_address_t src;
       size_t num_packets;
       size_t num_bytes;
       int fd;
     } h3_packet_forward;
     struct { // h2o:h3_forwarded_packet_receive
-      h2olog_address_t dest;
-      h2olog_address_t src;
+      quicly_address_t dest;
+      quicly_address_t src;
       size_t num_bytes;
     } h3_forwarded_packet_receive;
     struct { // h2o:h3c_tunnel_create
@@ -827,6 +836,7 @@ void h2o_raw_tracer::initialize() {
     h2o_tracer::usdt("quicly", "stream_on_receive", "trace_quicly__stream_on_receive"),
     h2o_tracer::usdt("quicly", "stream_on_receive_reset", "trace_quicly__stream_on_receive_reset"),
     h2o_tracer::usdt("quicly", "conn_stats", "trace_quicly__conn_stats"),
+    h2o_tracer::usdt("h2o", "_private_socket_lookup_flags", "trace_h2o___private_socket_lookup_flags"),
     h2o_tracer::usdt("h2o", "receive_request", "trace_h2o__receive_request"),
     h2o_tracer::usdt("h2o", "receive_request_header", "trace_h2o__receive_request_header"),
     h2o_tracer::usdt("h2o", "send_response", "trace_h2o__send_response"),
@@ -1763,14 +1773,19 @@ std::string h2o_raw_tracer::bpf_text() {
   return gen_bpf_header() + R"(
 
 #include <linux/sched.h>
+#include <linux/limits.h>
 
 #define STR_LEN 64
 
-typedef union h2olog_address_t {
+typedef union quicly_address_t {
   uint8_t sa[sizeof_sockaddr];
   uint8_t sin[sizeof_sockaddr_in];
   uint8_t sin6[sizeof_sockaddr_in6];
-} h2olog_address_t;;
+} quicly_address_t;
+
+struct st_h2o_ebpf_map_key_t {
+  uint8_t payload[sizeof_st_h2o_ebpf_map_key_t];
+};
 
 
 enum h2olog_event_id_t {
@@ -1847,6 +1862,7 @@ enum h2olog_event_id_t {
   H2OLOG_EVENT_ID_QUICLY_STREAM_ON_RECEIVE,
   H2OLOG_EVENT_ID_QUICLY_STREAM_ON_RECEIVE_RESET,
   H2OLOG_EVENT_ID_QUICLY_CONN_STATS,
+  H2OLOG_EVENT_ID_H2O__PRIVATE_SOCKET_LOOKUP_FLAGS,
   H2OLOG_EVENT_ID_H2O_RECEIVE_REQUEST,
   H2OLOG_EVENT_ID_H2O_RECEIVE_REQUEST_HEADER,
   H2OLOG_EVENT_ID_H2O_SEND_RESPONSE,
@@ -2320,6 +2336,11 @@ struct h2olog_event_t {
       struct st_quicly_stats_t * stats;
       size_t size;
     } conn_stats;
+    struct { // h2o:_private_socket_lookup_flags
+      pid_t tid;
+      uint64_t original_flags;
+      struct st_h2o_ebpf_map_key_t info;
+    } _private_socket_lookup_flags;
     struct { // h2o:receive_request
       uint64_t conn_id;
       uint64_t req_id;
@@ -2378,21 +2399,21 @@ struct h2olog_event_t {
       size_t bytes_len;
     } h3_frame_receive;
     struct { // h2o:h3_packet_receive
-      h2olog_address_t dest;
-      h2olog_address_t src;
+      quicly_address_t dest;
+      quicly_address_t src;
       uint8_t bytes[STR_LEN];
       size_t bytes_len;
     } h3_packet_receive;
     struct { // h2o:h3_packet_forward
-      h2olog_address_t dest;
-      h2olog_address_t src;
+      quicly_address_t dest;
+      quicly_address_t src;
       size_t num_packets;
       size_t num_bytes;
       int fd;
     } h3_packet_forward;
     struct { // h2o:h3_forwarded_packet_receive
-      h2olog_address_t dest;
-      h2olog_address_t src;
+      quicly_address_t dest;
+      quicly_address_t src;
       size_t num_bytes;
     } h3_forwarded_packet_receive;
     struct { // h2o:h3c_tunnel_create
@@ -2431,6 +2452,10 @@ struct h2olog_event_t {
 };
 
 BPF_PERF_OUTPUT(events);
+
+// A pinned BPF object to return a value to h2o.
+// The table size must be larger than the number of threads in h2o.
+BPF_TABLE_PINNED("lru_hash", pid_t, uint64_t, h2o_return, H2O_EBPF_RETURN_MAP_SIZE, H2O_EBPF_RETURN_MAP_PATH);
 
 // HTTP/3 tracing
 BPF_HASH(h2o_to_quicly_conn, u64, u32);
@@ -4110,6 +4135,32 @@ int trace_quicly__conn_stats(struct pt_regs *ctx) {
 
   if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
     bpf_trace_printk("failed to perf_submit in trace_quicly__conn_stats\n");
+
+  return 0;
+}
+// h2o:_private_socket_lookup_flags
+int trace_h2o___private_socket_lookup_flags(struct pt_regs *ctx) {
+  const void *buf = NULL;
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_H2O__PRIVATE_SOCKET_LOOKUP_FLAGS };
+
+  // pid_t tid
+  bpf_usdt_readarg(1, ctx, &event._private_socket_lookup_flags.tid);
+  // uint64_t original_flags
+  bpf_usdt_readarg(2, ctx, &event._private_socket_lookup_flags.original_flags);
+  // struct st_h2o_ebpf_map_key_t * info
+  bpf_usdt_readarg(3, ctx, &buf);
+  bpf_probe_read(&event._private_socket_lookup_flags.info, sizeof_st_h2o_ebpf_map_key_t, buf);
+
+#ifdef H2OLOG_SAMPLING_RATE_U32
+  uint64_t flags = event._private_socket_lookup_flags.original_flags;
+  int skip_tracing = bpf_get_prandom_u32() > H2OLOG_SAMPLING_RATE_U32;
+  if (skip_tracing) {
+    flags |= H2O_EBPF_FLAGS_SKIP_TRACING_BIT;
+  }
+  int64_t ret = h2o_return.insert(&event._private_socket_lookup_flags.tid, &flags);
+  if (ret != 0)
+    bpf_trace_printk("failed to insert 0x%llx in trace_h2o___private_socket_lookup_flags with errno=%lld\n", flags, -ret);
+#endif
 
   return 0;
 }
