@@ -648,11 +648,11 @@ h2o_iovec_t h2o_encode_sf_string(h2o_mem_pool_t *pool, const char *s, size_t sle
         ret.base = h2o_mem_alloc(ret.len + 1);
     }
     char *dst = ret.base;
-    *(dst++) = '"';
+    *dst++ = '"';
     for (size_t i = 0; i < slen; ++i) {
         if (s[i] == '\\' || s[i] == '"')
-            *(dst++) = '\\';
-        *(dst++) = s[i];
+            *dst++ = '\\';
+        *dst++ = s[i];
     }
     *dst++ = '"';
     *dst++ = '\0';
