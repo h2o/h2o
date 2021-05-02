@@ -24,6 +24,8 @@
 #include "h2o/socket.h"
 #include "h2o.h"
 
+#define MODULE_NAME "lib/handler/connect.c"
+
 struct st_connect_handler_t {
     h2o_handler_t super;
     h2o_proxy_config_vars_t config;
@@ -228,7 +230,7 @@ static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errs
 	    uint64_t timeout = creq->handler->config.io_timeout;
 	    req->establish_tunnel(req, tunnel, timeout);
         } else {
-            h2o_req_log_error(req, "lib/handler/connect.c", "Failed to create downstream socket");
+            h2o_req_log_error(req, MODULE_NAME, "Failed to create downstream socket");
             make_proxy_status_error_for_socket_error(creq, err);
             h2o_send_error_502(req, "Bad Gateway", "Bad Gateway", H2O_SEND_ERROR_KEEP_HEADERS);
         }
@@ -244,7 +246,7 @@ static void start_connect(struct st_connect_request_t *creq)
         /* check address */
         if (!h2o_connect_lookup_acl(creq->handler->acl.entries, creq->handler->acl.count, server_address->sa)) {
             h2o_timer_unlink(&creq->timeout);
-            h2o_req_log_error(creq->src_req, "lib/handler/connect.c", "access rejected by acl");
+            h2o_req_log_error(creq->src_req, MODULE_NAME, "access rejected by acl");
             make_proxy_status_error(creq, "destination_ip_prohibited", NULL, NULL);
             h2o_send_error_403(creq->src_req, "Access Forbidden", "Access Forbidden", H2O_SEND_ERROR_KEEP_HEADERS);
             return;
