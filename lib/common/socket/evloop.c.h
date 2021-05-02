@@ -144,7 +144,6 @@ static const char *on_read_core(int fd, h2o_buffer_t **input)
         read_so_far += rret;
         if (read_so_far >= (1024 * 1024))
             break;
-
     }
     return NULL;
 }
@@ -470,7 +469,7 @@ static const char *socket_error_from_errno(int e, const char *default_err)
     case ENETUNREACH:
         return h2o_socket_error_network_unreachable;
     case EHOSTUNREACH:
-	return h2o_socket_error_host_unreachable;
+        return h2o_socket_error_host_unreachable;
     default:
         return default_err;
     }

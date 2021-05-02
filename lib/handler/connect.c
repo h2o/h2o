@@ -56,10 +56,10 @@ struct st_connect_request_t {
     h2o_timer_t timeout;
 };
 
-#define TO_BITMASK(type, len) ((type)~(((type)1 << (sizeof(type) * 8 - (len))) - 1))
+#define TO_BITMASK(type, len) ((type) ~(((type)1 << (sizeof(type) * 8 - (len))) - 1))
 
-static void make_proxy_status_error(struct st_connect_request_t *creq,
-    const char *error_type, const char *details, const char *rcode)
+static void make_proxy_status_error(struct st_connect_request_t *creq, const char *error_type, const char *details,
+                                    const char *rcode)
 {
     h2o_mem_pool_t *pool = &creq->src_req->pool;
 
@@ -90,8 +90,7 @@ static void make_proxy_status_error(struct st_connect_request_t *creq,
     h2o_add_header_by_str(pool, &creq->src_req->res.headers, H2O_STRLIT("proxy-status"), 0, NULL, hval.base, hval.len);
 }
 
-static void make_proxy_status_error_for_socket_error(struct st_connect_request_t *creq,
-    const char *err)
+static void make_proxy_status_error_for_socket_error(struct st_connect_request_t *creq, const char *err)
 {
     const char *error_type;
     const char *details = NULL;
@@ -226,9 +225,9 @@ static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errs
         h2o_req_t *req = creq->src_req;
         h2o_timer_unlink(&creq->timeout);
         if (tunnel != NULL) {
-	    req->res.status = 200;
-	    uint64_t timeout = creq->handler->config.io_timeout;
-	    req->establish_tunnel(req, tunnel, timeout);
+            req->res.status = 200;
+            uint64_t timeout = creq->handler->config.io_timeout;
+            req->establish_tunnel(req, tunnel, timeout);
         } else {
             h2o_req_log_error(req, MODULE_NAME, "failed to create socket:%s", err);
             make_proxy_status_error_for_socket_error(creq, err);
