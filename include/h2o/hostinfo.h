@@ -45,12 +45,6 @@ extern const char h2o_hostinfo_error_gai_memory[];
 extern const char h2o_hostinfo_error_gai_service[];
 extern const char h2o_hostinfo_error_gai_socktype[];
 extern const char h2o_hostinfo_error_gai_system[];
-extern const char h2o_hostinfo_error_gai_inprogress[];
-extern const char h2o_hostinfo_error_gai_canceled[];
-extern const char h2o_hostinfo_error_gai_notcanceled[];
-extern const char h2o_hostinfo_error_gai_alldone[];
-extern const char h2o_hostinfo_error_gai_intr[];
-extern const char h2o_hostinfo_error_gai_idn_encode[];
 extern const char h2o_hostinfo_error_gai_other[];
 
 typedef struct st_h2o_hostinfo_getaddr_req_t h2o_hostinfo_getaddr_req_t;

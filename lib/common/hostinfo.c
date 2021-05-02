@@ -64,12 +64,6 @@ const char h2o_hostinfo_error_gai_memory[] = "memory allocation failure";
 const char h2o_hostinfo_error_gai_service[] = "servname not supported for ai_socktype";
 const char h2o_hostinfo_error_gai_socktype[] = "ai_socktype not supported";
 const char h2o_hostinfo_error_gai_system[] = "system error";
-const char h2o_hostinfo_error_gai_inprogress[] = "processing request in progress";
-const char h2o_hostinfo_error_gai_canceled[] = "request canceled";
-const char h2o_hostinfo_error_gai_notcanceled[] = "request not canceled";
-const char h2o_hostinfo_error_gai_alldone[] = "all requests done";
-const char h2o_hostinfo_error_gai_intr[] = "interrupted by a signal";
-const char h2o_hostinfo_error_gai_idn_encode[] = "parameter string not correctly encoded";
 const char h2o_hostinfo_error_gai_other[] = "name resolution failed";
 
 static const char *hostinfo_error_from_gai_error(int ret)
@@ -97,18 +91,6 @@ static const char *hostinfo_error_from_gai_error(int ret)
         return h2o_hostinfo_error_gai_socktype;
     case EAI_SYSTEM:
         return h2o_hostinfo_error_gai_system;
-    case EAI_INPROGRESS:
-        return h2o_hostinfo_error_gai_inprogress;
-    case EAI_CANCELED:
-        return h2o_hostinfo_error_gai_canceled;
-    case EAI_NOTCANCELED:
-        return h2o_hostinfo_error_gai_notcanceled;
-    case EAI_ALLDONE:
-        return h2o_hostinfo_error_gai_alldone;
-    case EAI_INTR:
-        return h2o_hostinfo_error_gai_intr;
-    case EAI_IDN_ENCODE:
-        return h2o_hostinfo_error_gai_idn_encode;
     default:
         return h2o_hostinfo_error_gai_other;
     }
