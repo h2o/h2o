@@ -357,6 +357,10 @@ struct st_h2o_globalconf_t {
      * setuid user (or NULL)
      */
     char *user;
+    /**
+     * sets up the h2o_return map if true.
+     */
+    int usdt_selective_tracing;
 
     /**
      * SSL handshake timeout
