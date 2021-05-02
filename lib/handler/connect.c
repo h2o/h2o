@@ -230,7 +230,7 @@ static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errs
 	    uint64_t timeout = creq->handler->config.io_timeout;
 	    req->establish_tunnel(req, tunnel, timeout);
         } else {
-            h2o_req_log_error(req, MODULE_NAME, "Failed to create downstream socket");
+            h2o_req_log_error(req, MODULE_NAME, "failed to create socket:%s", err);
             make_proxy_status_error_for_socket_error(creq, err);
             h2o_send_error_502(req, "Bad Gateway", "Bad Gateway", H2O_SEND_ERROR_KEEP_HEADERS);
         }
