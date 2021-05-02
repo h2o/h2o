@@ -174,6 +174,11 @@ extern const char h2o_socket_error_out_of_memory[];
 extern const char h2o_socket_error_io[];
 extern const char h2o_socket_error_closed[];
 extern const char h2o_socket_error_conn_fail[];
+extern const char h2o_socket_error_conn_refused[];
+extern const char h2o_socket_error_conn_timed_out[];
+extern const char h2o_socket_error_network_unreachable[];
+extern const char h2o_socket_error_host_unreachable[];
+extern const char h2o_socket_error_socket_fail[];
 extern const char h2o_socket_error_ssl_no_cert[];
 extern const char h2o_socket_error_ssl_cert_invalid[];
 extern const char h2o_socket_error_ssl_cert_name_mismatch[];
@@ -217,7 +222,7 @@ void h2o_socket_dont_read(h2o_socket_t *sock, int dont_read);
 /**
  * connects to peer
  */
-h2o_socket_t *h2o_socket_connect(h2o_loop_t *loop, struct sockaddr *addr, socklen_t addrlen, h2o_socket_cb cb);
+h2o_socket_t *h2o_socket_connect(h2o_loop_t *loop, struct sockaddr *addr, socklen_t addrlen, h2o_socket_cb cb, const char **err);
 /**
  * prepares for latency-optimized write and returns the number of octets that should be written, or SIZE_MAX if failed to prepare
  */

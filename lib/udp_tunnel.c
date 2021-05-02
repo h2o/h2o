@@ -182,16 +182,39 @@ void tunnel_proceed_read(struct st_h2o_tunnel_t *_tunnel)
     h2o_socket_read_start(tunnel->sock, tunnel_socket_on_read);
 }
 
-h2o_tunnel_t *h2o_open_udp_tunnel_from_sa(h2o_loop_t *loop, struct sockaddr *addr, socklen_t len)
+static const char *socket_error_from_errno(int e, const char *default_err)
+{
+    switch (e) {
+    case ECONNREFUSED:
+        return h2o_socket_error_conn_refused;
+    case ETIMEDOUT:
+        return h2o_socket_error_conn_timed_out;
+    case ENETUNREACH:
+        return h2o_socket_error_network_unreachable;
+    case EHOSTUNREACH:
+        return h2o_socket_error_host_unreachable;
+    default:
+        return default_err;
+    }
+}
+
+h2o_tunnel_t *h2o_open_udp_tunnel_from_sa(h2o_loop_t *loop, struct sockaddr *addr, socklen_t len, const char **err)
 {
     int fd;
 
     assert(addr->sa_family == AF_INET || addr->sa_family == AF_INET6);
 
-    if ((fd = socket(addr->sa_family, SOCK_DGRAM, 0)) == -1)
+    if ((fd = socket(addr->sa_family, SOCK_DGRAM, 0)) == -1) {
+        if (err != NULL) {
+            *err = h2o_socket_error_socket_fail;
+        }
         return NULL;
+    }
 
     if (connect(fd, (void *)addr, len) != 0) {
+        if (err != NULL) {
+            *err = socket_error_from_errno(errno, h2o_socket_error_conn_fail);
+        }
         close(fd);
         return NULL;
     }

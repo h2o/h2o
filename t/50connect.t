@@ -31,6 +31,7 @@ subtest "basic", sub {
     like $content, qr{Proxy replied 200 to CONNECT request}m, "Connect got a 200 response to CONNECT";
     my @c = $content =~ /$ok_resp/g;
     is @c, 2, "Got two 200 responses";
+    unlike $content, qr{proxy-status:}i;
 };
 
 subtest "timeout", sub {
@@ -38,16 +39,19 @@ subtest "timeout", sub {
     like $content, qr{Proxy replied 200 to CONNECT request}m, "Connect got a 200";
     my @c = $content =~ /$ok_resp/g;
     is @c, 2, "Got two 200 responses, no timeout";
+    unlike $content, qr{proxy-status:}i;
 
     $content = `curl --http1.1 -p -x 127.0.0.1:$server->{port} --silent -v --show-error http://127.0.0.1:$origin_port/sleep-and-respond?sleep=10 2>&1`;
     like $content, qr{Proxy replied 200 to CONNECT request}m, "Connect got a 200";
     @c = $content =~ /$ok_resp/g;
     is @c, 1, "Only got one 200 response";
+    unlike $content, qr{proxy-status:}i;
 };
 
 subtest "acl" => sub {
     my $content = `curl --http1.1 -p -x 127.0.0.1:$server->{port} --silent -v --show-error https://8.8.8.8/ 2>&1 2>&1`;
     like $content, qr{Received HTTP code 403 from proxy after CONNECT};
+    unlike $content, qr{proxy-status:}i;
 };
 
 done_testing;

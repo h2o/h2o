@@ -347,6 +347,10 @@ struct st_h2o_globalconf_t {
      */
     h2o_iovec_t server_name;
     /**
+     * formated "sf-token" or "sf-string" for the proxy-status header
+     */
+    h2o_iovec_t proxy_status_identity;
+    /**
      * maximum size of the accepted request entity (e.g. POST data)
      */
     size_t max_request_entity_size;
@@ -2063,6 +2067,7 @@ typedef struct st_h2o_proxy_config_vars_t {
     unsigned preserve_host : 1;
     unsigned use_proxy_protocol : 1;
     unsigned tunnel_enabled : 1;
+    unsigned connect_proxy_status_enabled : 1;
     h2o_headers_command_t *headers_cmds;
     size_t max_buffer_size;
     struct {

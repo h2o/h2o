@@ -77,7 +77,7 @@ typedef struct st_h2o_socket_tunnel_t {
 h2o_socket_tunnel_t *h2o_socket_tunnel_create(h2o_socket_t *sock);
 void h2o_socket_tunnel_start(h2o_socket_tunnel_t *tunnel, size_t bytes_to_consume);
 
-h2o_tunnel_t *h2o_open_udp_tunnel_from_sa(h2o_loop_t *loop, struct sockaddr *addr, socklen_t len);
+h2o_tunnel_t *h2o_open_udp_tunnel_from_sa(h2o_loop_t *loop, struct sockaddr *addr, socklen_t len, const char **err);
 
 #ifdef __cplusplus
 }
