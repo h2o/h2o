@@ -643,9 +643,9 @@ h2o_iovec_t h2o_encode_sf_string(h2o_mem_pool_t *pool, const char *s, size_t sle
     h2o_iovec_t ret;
     ret.len = slen + to_escape + 2;
     if (pool != NULL) {
-        ret.base = h2o_mem_alloc_pool(pool, char, ret.len);
+        ret.base = h2o_mem_alloc_pool(pool, char, ret.len + 1);
     } else {
-        ret.base = h2o_mem_alloc(ret.len);
+        ret.base = h2o_mem_alloc(ret.len + 1);
     }
     char *dst = ret.base;
     *(dst++) = '"';
@@ -654,6 +654,7 @@ h2o_iovec_t h2o_encode_sf_string(h2o_mem_pool_t *pool, const char *s, size_t sle
             *(dst++) = '\\';
         *(dst++) = s[i];
     }
-    *dst = '"';
+    *dst++ = '"';
+    *dst++ = '\0';
     return ret;
 }
