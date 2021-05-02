@@ -20,6 +20,16 @@
  * IN THE SOFTWARE.
  */
 
+/* @appdata
+{
+    "receive_request_header": ["name", "value"],
+    "send_response_header": ["name", "value"],
+    "h3_frame_receive": ["bytes"],
+    "tunnel_on_read": ["bytes"],
+    "tunnel_write": ["bytes"]
+}
+*/
+
 provider h2o {
     /**
      * HTTP-level event, indicating that a request has been received.

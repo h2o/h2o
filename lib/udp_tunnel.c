@@ -154,7 +154,7 @@ static void tunnel_on_write(h2o_tunnel_t *_tunnel, const void *bytes, size_t len
         int skip = 0;
         size_t to_consume;
         datagrams[num_datagrams] = get_next_chunk(bytes + off, len - off, &to_consume, &skip);
-        if (datagrams[num_datagrams].len == 0)
+        if (datagrams[num_datagrams].base == NULL)
             break;
         if (!skip)
             num_datagrams++;
