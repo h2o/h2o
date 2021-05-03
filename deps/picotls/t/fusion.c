@@ -19,6 +19,7 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
+
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
@@ -50,7 +51,7 @@ static const char *tostr(const void *_p, size_t len)
 
 static void test_loadn(void)
 {
-    uint8_t buf[8192] = { 0 };
+    uint8_t buf[8192] = {0};
 
     for (size_t off = 0; off < 8192 - 15; ++off) {
         uint8_t *src = buf + off;
@@ -65,7 +66,7 @@ static void test_loadn(void)
     ok(!!"success");
 }
 
-static const uint8_t zero[16384] = { 0 };
+static const uint8_t zero[16384] = {0};
 
 static void test_ecb(void)
 {
@@ -193,21 +194,62 @@ static void gcm_test_vectors(void)
     ptls_fusion_aesgcm_free(aead);
 }
 
-static void test_generated(int aes256)
+static void gcm_iv96(void)
+{
+    static const uint8_t key[16] = {0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff},
+                         aad[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19},
+                         iv[] = {20, 20, 20, 20, 24, 25, 26, 27, 28, 29, 30, 31},
+                         plaintext[] =
+                             "hello world\nhello world\nhello world\nhello world\nhello world\nhello world\nhello world\n";
+    static const uint8_t expected[] = {0xd3, 0xa8, 0x1d, 0x96, 0x4c, 0x9b, 0x02, 0xd7, 0x9a, 0xb0, 0x41, 0x07, 0x4c, 0x8c, 0xe2,
+                                       0xe0, 0x2e, 0x83, 0x54, 0x52, 0x45, 0xcb, 0xd4, 0x68, 0xc8, 0x43, 0x45, 0xca, 0x91, 0xfb,
+                                       0xa3, 0x7a, 0x67, 0xed, 0xe8, 0xd7, 0x5e, 0xe2, 0x33, 0xd1, 0x3e, 0xbf, 0x50, 0xc2, 0x4b,
+                                       0x86, 0x83, 0x55, 0x11, 0xbb, 0x17, 0x4f, 0xf5, 0x78, 0xb8, 0x65, 0xeb, 0x9a, 0x2b, 0x8f,
+                                       0x77, 0x08, 0xa9, 0x60, 0x17, 0x73, 0xc5, 0x07, 0xf3, 0x04, 0xc9, 0x3f, 0x67, 0x4d, 0x12,
+                                       0xa1, 0x02, 0x93, 0xc2, 0x3c, 0xd3, 0xf8, 0x59, 0x33, 0xd5, 0x01, 0xc3, 0xbb, 0xaa, 0xe6,
+                                       0x3f, 0xbb, 0x23, 0x66, 0x94, 0x26, 0x28, 0x43, 0xa5, 0xfd, 0x2f};
+
+    ptls_aead_context_t *aead = ptls_aead_new_direct(&ptls_fusion_aes128gcm, 0, key, iv);
+    uint8_t encrypted[sizeof(plaintext) + 16], decrypted[sizeof(plaintext)];
+    uint8_t seq32[4] = {0, 1, 2, 3};
+    uint8_t seq32_bad[4] = {0x89, 0xab, 0xcd, 0xef};
+
+    ptls_aead_xor_iv(aead, seq32, sizeof(seq32));
+    ptls_aead_encrypt(aead, encrypted, plaintext, sizeof(plaintext), 0, aad, sizeof(aad));
+    ok(memcmp(expected, encrypted, sizeof(plaintext)) == 0);
+    ok(memcmp(expected + sizeof(plaintext), encrypted + sizeof(plaintext), 16) == 0);
+    ok(ptls_aead_decrypt(aead, decrypted, encrypted, sizeof(encrypted), 0, aad, sizeof(aad)) == sizeof(plaintext));
+    ok(memcmp(decrypted, plaintext, sizeof(plaintext)) == 0);
+    ptls_aead_xor_iv(aead, seq32, sizeof(seq32));
+    ptls_aead_xor_iv(aead, seq32_bad, sizeof(seq32_bad));
+    ok(ptls_aead_decrypt(aead, decrypted, encrypted, sizeof(encrypted), 0, aad, sizeof(aad)) == SIZE_MAX);
+    ptls_aead_xor_iv(aead, seq32_bad, sizeof(seq32_bad));
+    ptls_aead_xor_iv(aead, seq32, sizeof(seq32));
+    ok(ptls_aead_decrypt(aead, decrypted, encrypted, sizeof(encrypted), 0, aad, sizeof(aad)) == sizeof(plaintext));
+    ok(memcmp(decrypted, plaintext, sizeof(plaintext)) == 0);
+    ptls_aead_free(aead);
+}
+
+static void test_generated(int aes256, int iv96)
 {
     ptls_cipher_context_t *rand = ptls_cipher_new(&ptls_minicrypto_aes128ctr, 1, zero);
     ptls_cipher_init(rand, zero);
     int i;
-
-    for (i = 0; i < 10000; ++i) {
+#ifdef _WINDOWS
+    const int nb_runs = 1000;
+#else
+    const int nb_runs = 10000;
+#endif
+    for (i = 0; i < nb_runs; ++i) {
         /* generate input using RNG */
-        uint8_t key[32], iv[12], aadlen, textlen;
+        uint8_t key[32], iv[12], seq32[4], aadlen, textlen;
         uint64_t seq;
         ptls_cipher_encrypt(rand, key, zero, sizeof(key));
         ptls_cipher_encrypt(rand, iv, zero, sizeof(iv));
         ptls_cipher_encrypt(rand, &aadlen, zero, sizeof(aadlen));
         ptls_cipher_encrypt(rand, &textlen, zero, sizeof(textlen));
         ptls_cipher_encrypt(rand, &seq, zero, sizeof(seq));
+        ptls_cipher_encrypt(rand, seq32, zero, sizeof(seq32));
 
         uint8_t aad[256], text[256];
 
@@ -222,6 +264,9 @@ static void test_generated(int aes256)
         { /* check using fusion */
             ptls_aead_context_t *fusion =
                 ptls_aead_new_direct(aes256 ? &ptls_fusion_aes256gcm : &ptls_fusion_aes128gcm, 1, key, iv);
+            if (iv96) {
+                ptls_aead_xor_iv(fusion, seq32, sizeof(seq32));
+            }
             ptls_aead_encrypt(fusion, encrypted, text, textlen, seq, aad, aadlen);
             if (ptls_aead_decrypt(fusion, decrypted, encrypted, textlen + 16, seq, aad, aadlen) != textlen)
                 goto Fail;
@@ -235,6 +280,9 @@ static void test_generated(int aes256)
         { /* check that the encrypted text can be decrypted by OpenSSL */
             ptls_aead_context_t *mc =
                 ptls_aead_new_direct(aes256 ? &ptls_minicrypto_aes256gcm : &ptls_minicrypto_aes128gcm, 0, key, iv);
+            if (iv96) {
+                ptls_aead_xor_iv(mc, seq32, sizeof(seq32));
+            }
             if (ptls_aead_decrypt(mc, decrypted, encrypted, textlen + 16, seq, aad, aadlen) != textlen)
                 goto Fail;
             if (memcmp(decrypted, text, textlen) != 0)
@@ -254,14 +302,23 @@ Fail:
 
 static void test_generated_aes128(void)
 {
-    test_generated(0);
+    test_generated(0, 0);
 }
 
 static void test_generated_aes256(void)
 {
-    test_generated(1);
+    test_generated(1, 0);
 }
 
+static void test_generated_aes128_iv96(void)
+{
+    test_generated(0, 1);
+}
+
+static void test_generated_aes256_iv96(void)
+{
+    test_generated(1, 1);
+}
 int main(int argc, char **argv)
 {
     if (!ptls_fusion_is_supported_by_cpu()) {
@@ -274,8 +331,11 @@ int main(int argc, char **argv)
     subtest("gcm-basic", gcm_basic);
     subtest("gcm-capacity", gcm_capacity);
     subtest("gcm-test-vectors", gcm_test_vectors);
+    subtest("gcm-iv96", gcm_iv96);
     subtest("generated-128", test_generated_aes128);
     subtest("generated-256", test_generated_aes256);
+    subtest("generated-128-iv96", test_generated_aes128_iv96);
+    subtest("generated-256-iv96", test_generated_aes256_iv96);
 
     return done_testing();
 }

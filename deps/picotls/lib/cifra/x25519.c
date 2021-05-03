@@ -116,4 +116,5 @@ Exit:
     return ret;
 }
 
-ptls_key_exchange_algorithm_t ptls_minicrypto_x25519 = {PTLS_GROUP_X25519, x25519_create_key_exchange, x25519_key_exchange};
+ptls_key_exchange_algorithm_t ptls_minicrypto_x25519 = {
+    .id = PTLS_GROUP_X25519, .name = PTLS_GROUP_NAME_X25519, .create = x25519_create_key_exchange, .exchange = x25519_key_exchange};

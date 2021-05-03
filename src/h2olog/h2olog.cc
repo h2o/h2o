@@ -24,12 +24,16 @@
 #include <vector>
 #include <algorithm>
 #include <bcc/BPF.h>
+#include <bcc/libbpf.h>
+
 extern "C" {
 #include <unistd.h>
 #include <stdarg.h>
+#include <limits.h>
 #include <sys/time.h>
 #include "h2o/memory.h"
 #include "h2o/version.h"
+#include "h2o/ebpf.h"
 }
 #include "h2olog.h"
 
@@ -48,6 +52,9 @@ Optional arguments:
     -s RESPONSE_HEADER_NAME A response header name to show, e.g. "content-type"
     -t TRACEPOINT A tracepoint, or fully-qualified probe name, to show,
                   including a glob pattern, e.g. "quicly:accept", "h2o:*"
+    -S RATE Enable random sampling per connection (0.0-1.0)
+            Requires for h2o to have `usdt-selective-tracing: ON` in its config file
+    -a Include application data which are omitted by default
     -r Run without dropping root privilege
     -w Path to write the output (default: stdout)
 
@@ -206,13 +213,6 @@ static std::string generate_header_filter_cflag(const std::vector<std::string> &
     return cflag;
 }
 
-static std::string make_pid_cflag(const char *macro_name, pid_t pid)
-{
-    char buf[256];
-    snprintf(buf, sizeof(buf), "-D%s=%d", macro_name, pid);
-    return std::string(buf);
-}
-
 static void event_cb(void *context, void *data, int len)
 {
     h2o_tracer *tracer = (h2o_tracer *)context;
@@ -225,6 +225,30 @@ static void lost_cb(void *context, uint64_t lost)
     tracer->handle_lost(lost);
 }
 
+/**
+ * Builds a `-D$name=$expr` style cc macro.
+ */
+static std::string build_cc_macro_expr(const char *name, const std::string &expr)
+{
+    return std::string("-D") + std::string(name) + "=" + expr;
+}
+
+template <typename T> static std::string build_cc_macro_expr(const char *name, const T &expr)
+{
+    return build_cc_macro_expr(name, std::to_string(expr));
+}
+
+/**
+ * Builds a `-D$name="$str"` style cc macro.
+ */
+static std::string build_cc_macro_str(const char *name, const std::string &str)
+{
+    return build_cc_macro_expr(name, "\"" + str + "\"");
+}
+
+#define CC_MACRO_EXPR(name) build_cc_macro_expr(#name, name)
+#define CC_MACRO_STR(name) build_cc_macro_str(#name, name)
+
 int main(int argc, char **argv)
 {
     std::unique_ptr<h2o_tracer> tracer(create_raw_tracer());
@@ -232,11 +256,13 @@ int main(int argc, char **argv)
     int debug = 0;
     bool preserve_root = false;
     bool list_usdts = false;
+    bool include_appdata = false;
     FILE *outfp = stdout;
     std::vector<std::string> response_header_filters;
     int c;
     pid_t h2o_pid = -1;
-    while ((c = getopt(argc, argv, "hHdrlp:t:s:w:")) != -1) {
+    double sampling_rate = -1;
+    while ((c = getopt(argc, argv, "hHdrlap:t:s:w:S:")) != -1) {
         switch (c) {
         case 'H':
             tracer.reset(create_http_tracer());
@@ -260,6 +286,16 @@ int main(int argc, char **argv)
                 fprintf(stderr, "Error: failed to open %s: %s", optarg, strerror(errno));
                 exit(EXIT_FAILURE);
             }
+            break;
+        case 'S': // can take 0.0 ... 1.0
+            sampling_rate = atof(optarg);
+            if (!(sampling_rate >= 0.0 && sampling_rate <= 1.0)) {
+                fprintf(stderr, "Error: the argument of -S must be in the range of 0.0 to 1.0\n");
+                exit(EXIT_FAILURE);
+            }
+            break;
+        case 'a':
+            include_appdata = true;
             break;
         case 'd':
             debug++;
@@ -303,10 +339,13 @@ int main(int argc, char **argv)
         exit(EXIT_FAILURE);
     }
 
-    tracer->init(outfp);
+    tracer->init(outfp, include_appdata);
 
     std::vector<std::string> cflags({
-        make_pid_cflag("H2OLOG_H2O_PID", h2o_pid),
+        build_cc_macro_expr("H2OLOG_H2O_PID", h2o_pid),
+        CC_MACRO_EXPR(H2O_EBPF_FLAGS_SKIP_TRACING_BIT),
+        CC_MACRO_EXPR(H2O_EBPF_RETURN_MAP_SIZE),
+        CC_MACRO_STR(H2O_EBPF_RETURN_MAP_PATH),
     });
 
     if (!response_header_filters.empty()) {
@@ -339,6 +378,12 @@ int main(int argc, char **argv)
 
     for (const auto &usdt : tracer->usdt_probes()) {
         probes.push_back(ebpf::USDT(h2o_pid, usdt.provider, usdt.name, usdt.probe_func));
+    }
+
+    if (sampling_rate >= 0) {
+        /* To give the calculated rate in U32 because eBPF bytecode has no floating point numbers,
+         * See the bpf(2) manpage. */
+        cflags.push_back(build_cc_macro_expr("H2OLOG_SAMPLING_RATE_U32", static_cast<uint32_t>(sampling_rate * UINT32_MAX)));
     }
 
     ebpf::StatusTuple ret = bpf->init(tracer->bpf_text(), cflags, probes);

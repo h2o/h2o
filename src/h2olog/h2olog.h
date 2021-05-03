@@ -33,12 +33,6 @@ extern "C" {
 #include <netinet/in.h>
 }
 
-union h2olog_address_t {
-    sockaddr sa;
-    sockaddr_in sin;
-    sockaddr_in6 sin6;
-};
-
 class h2o_tracer
 {
   public:
@@ -75,6 +69,12 @@ class h2o_tracer
         uint64_t num_events;
         uint64_t num_lost;
     } stats_;
+
+    /**
+     * Whether or not to include application data.
+     */
+    bool include_appdata_ = false;
+
     /**
      * The stub function for handling an event.
      */
@@ -101,9 +101,10 @@ class h2o_tracer
     /**
      * Performs post-construction initialization common to all the tracers.
      */
-    void init(FILE *fp)
+    void init(FILE *fp, bool include_appdata)
     {
         out_ = fp;
+        include_appdata_ = include_appdata;
     }
 
     /**

@@ -15,8 +15,8 @@ my $tempdir = tempdir(CLEANUP => 1);
 
 my $server = spawn_h2o({
     opts => [qw(--mode=worker)],
+    user => "nobody",
     conf => << 'EOT',
-user: nobody
 hosts:
   default:
     paths:

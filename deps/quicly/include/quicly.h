@@ -156,6 +156,11 @@ QUICLY_CALLBACK_TYPE(int, generate_resumption_token, quicly_conn_t *conn, ptls_b
  */
 QUICLY_CALLBACK_TYPE(void, init_cc, quicly_cc_t *cc, uint32_t initcwnd, int64_t now);
 /**
+ * reference counting.
+ * delta must be either 1 or -1.
+ */
+QUICLY_CALLBACK_TYPE(void, update_open_count, ssize_t delta);
+/**
  * crypto offload API
  */
 typedef struct st_quicly_crypto_engine_t {
@@ -329,6 +334,10 @@ struct st_quicly_context_t {
      * initializes a congestion controller for given connection.
      */
     quicly_init_cc_t *init_cc;
+    /**
+     * optional refcount callback
+     */
+    quicly_update_open_count_t *update_open_count;
 };
 
 /**
@@ -1051,11 +1060,12 @@ static int quicly_stream_has_receive_side(int is_client, quicly_stream_id_t stre
  */
 static int quicly_stream_is_self_initiated(quicly_stream_t *stream);
 /**
- * Registers a datagram frame payload to be sent. When the applications calls `quicly_send` the first time after registering the
- * datagram frame payload, the payload is either sent or the reference is discarded. Until then, it is the caller's responsibility
- * to retain the memory pointed to by `payload`. At the moment, DATAFRAM frames are not congestion controlled.
+ * Sends QUIC DATAGRAM frames. Some of the frames being provided may get dropped.
+ * Notes:
+ * * At the moment, emission of QUIC packets carrying DATAGRAM frames is not congestion controlled.
+ * * While the API is designed to look like synchronous, application still has to call `quicly_send` for the time being.
  */
-void quicly_set_datagram_frame(quicly_conn_t *conn, ptls_iovec_t payload);
+void quicly_send_datagram_frames(quicly_conn_t *conn, ptls_iovec_t *datagrams, size_t num_datagrams);
 /**
  *
  */

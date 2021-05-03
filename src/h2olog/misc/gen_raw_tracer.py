@@ -20,56 +20,68 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 # IN THE SOFTWARE.
 
-# usage: gen-quic-bpf.py h2o_dir output_file
+# gen_raw_tracer.py - Generate an h2olog tracer to emit USDT probes by parsing D script files.
+#
+# gen_raw_tracer.py parses D script files accompanied by @appdata annotation, for example:
+#
+# <code>
+# /* @appdata
+#  {
+#     "probe1": ["payload1", "payload2"]
+#  }
+#  */
+# provider provider1 {
+#   probe probe1(const char *payload1, void *payload2, size_t payload2_len);
+# }
+# </code>
+#
+# In this case, `payload1` and `payload2` are annotated as application data,
+# which h2olog does not emit by default.
 
 import re
 import sys
-import warnings
+import json
+import os
+from typing import Optional, Tuple, Any
 from collections import OrderedDict
 from pathlib import Path
 from pprint import pprint
+from copy import deepcopy
+
+DEBUG = os.getenv("DEBUG")
 
 quicly_probes_d = "deps/quicly/quicly-probes.d"
 h2o_probes_d = "h2o-probes.d"
 
 # An allow-list to gather data from USDT probes.
 # Only fields listed here are handled in BPF.
-struct_map = {
+struct_map = OrderedDict([
     # deps/quicly/include/quicly.h
-    "st_quicly_stream_t": [
+    ["st_quicly_stream_t", [
         # ($member_access, $optional_flat_name)
         # If $optional_flat_name is None, $member_access is used.
         ("stream_id", None),
-    ],
+    ]],
 
     # deps/quicly/include/quicly/loss.h
-    "quicly_rtt_t": [
+    ["quicly_rtt_t", [
         ("minimum", None),
         ("smoothed", None),
         ("variance", None),
         ("latest",  None),
-    ],
+    ]],
 
     # deps/quicly/lib/quicly.c
-    "st_quicly_conn_t": [
+    ["st_quicly_conn_t", [
         ("super.local.cid_set.plaintext.master_id", "master_id"),
-    ],
+    ]],
 
-    "sockaddr": [],
-    "sockaddr_in": [],
-    "sockaddr_in6": [],
-}
+    ["st_h2o_ebpf_map_key_t", []],
 
-# A block list to list useless or secret data fields
-block_fields = {
-    "quicly:crypto_decrypt": set(["decrypted"]),
-    "quicly:crypto_update_secret": set(["secret"]),
-    "quicly:crypto_send_key_update": set(["secret"]),
-    "quicly:crypto_receive_key_update": set(["secret"]),
-    "quicly:crypto_receive_key_update_prepare": set(["secret"]),
-
-    "h2o:h3_packet_receive": set(["bytes"]),
-}
+    ["sockaddr", []],
+    ["sockaddr_in", []],
+    ["sockaddr_in6", []],
+])
 
 # The block list for probes.
 # All the probes are handled by default in JSON mode
@@ -101,30 +113,175 @@ struct st_quicly_conn_t {
 };
 """
 
-re_flags = re.X | re.M | re.S
-whitespace = r'(?:/\*.*?\*/|\s+)'
-probe_decl = r'(?:\bprobe\s+(?:[a-zA-Z0-9_]+)\s*\([^\)]*\)\s*;)'
-d_decl = r'(?:\bprovider\s*(?P<provider>[a-zA-Z0-9_]+)\s*\{(?P<probes>(?:%s|%s)*)\})' % (
-    probe_decl, whitespace)
+re_xms = re.X | re.M | re.S
+comment = r'/\*.*?\*/'
 
 
-def strip_c_comments(s):
-  return re.sub('//.*?\n|/\*.*?\*/', '', s, flags=re_flags)
+class Lexer:
+
+  def __init__(self, src: str, filename: Optional[str] = None):
+    self.src = src
+    self.filename = filename
+    self.pos = 0
+
+  def skip(self, pattern) -> bool:
+    m = re.match(pattern, self.src[self.pos:], re_xms)
+    if m:
+      self.pos += m.end()
+      return True
+    return False
+
+  def skip_whitespaces(self) -> bool:
+    return self.skip(r'\s+')
+
+  def skip_whitespaces_or_comments(self):
+    while self.skip_whitespaces() or self.skip(comment):
+      pass
+
+  def expect_opt(self, pattern):
+    m = re.match(pattern, self.src[self.pos:], re_xms)
+    if m:
+      self.pos += m.end()
+    return m
+
+  def expect(self, pattern):
+    m = self.expect_opt(pattern)
+    if not m:
+      sys.exit("Expected '%s' but got '%s' %s"
+               % (pattern, self.src[self.pos], self.position_hint()))
+    return m
+
+  def peek(self, pattern):
+    return re.match(pattern, self.src[self.pos:], re_xms)
+
+  def position_hint(self):
+    if self.filename:
+      return "at %s:%s" % (self.filename, self.line_and_column())
+    else:
+      return "at %s" % self.line_and_column()
+
+  def line_and_column(self):
+    lines = re.split(r'\n', self.src[:self.pos])
+    return "%d:%d" % (len(lines), len(lines[-1]))
 
 
-def parse_d(context: dict, path: Path, block_probes: set = None):
-  content = strip_c_comments(path.read_text())
+def parse_dscript(path: Path):
+  lexer = Lexer(path.read_text(), path.name)
 
-  matched = re.search(d_decl, content, flags=re_flags)
-  provider = matched.group('provider')
+  provider = None  # type: Optional[str]
+  probes = OrderedDict()
+  appdata = None
+
+  def die(msg):
+    sys.exit("[dscript-parser] %s %s" % (msg, lexer.position_hint()))
+
+  # before the "provider" keyword
+  prev_pos = -1
+  while prev_pos != lexer.pos:
+    prev_pos = lexer.pos
+
+    while True:
+      lexer.skip_whitespaces()
+      m = lexer.expect_opt(comment)
+      if m:
+        # find for /* @appdata {...} */
+        m = re.match(r'/\*\s*@appdata\s*(?P<json>\{.*\})\s*\*/', m.group(0), re_xms)
+        if m:
+          if appdata:
+            die("cannot place @appdata annotation more than once per file")
+          try:
+            appdata = json.loads(m.group("json"))
+          except:
+            die("cannot parse JSON in the @appdata annotation")
+          if not isinstance(appdata, dict):
+            die("@appdata must be a JSON object")
+      else:
+        break
+
+    lexer.skip_whitespaces_or_comments()
+    if lexer.peek(r'provider\b'):
+      break
+    # ignore anythong other than the "provider" keyword
+    lexer.skip(r'\S+')
+
+  # a provider block
+  m = lexer.expect(r'provider\s+(?P<provider>\w+)\s*\{')
+  provider = m.group("provider")
+
+  # list of probes
+  while True:
+    lexer.skip_whitespaces_or_comments()
+
+    m = lexer.expect_opt(r'probe\s+(?P<probe>\w+)\s*\(')
+    if m:
+      probe_name = m.group("probe")
+      probe = {
+          "name": probe_name,
+          "args": [],
+      }
+
+      probes[probe_name] = probe
+
+      # list of fields or parameters
+      while True:
+        lexer.skip_whitespaces()
+
+        tokens = []  # type: list[str]
+        while True:
+          lexer.skip_whitespaces_or_comments()
+          m = lexer.expect_opt(r'\w+|\*')
+          if m:
+            tokens.append(m.group(0))
+          else:
+            break
+
+        name = tokens.pop()
+
+        arg = {
+            "name": name,
+            "type": " ".join(tokens),
+        }
+        probe["args"].append(arg)
+
+        lexer.skip_whitespaces_or_comments()
+        m = lexer.expect_opt(r',')
+        if not m:
+          break
+
+      lexer.skip_whitespaces_or_comments()
+      lexer.expect(r'\)')
+      lexer.skip_whitespaces_or_comments()
+      lexer.expect(r';')
+    else:
+      break
+
+  lexer.skip_whitespaces_or_comments()
+  lexer.expect(r'}')
+
+  return {
+      "provider": provider,
+      "probes": probes,
+      "appdata": appdata,
+  }
+
+
+def parse_and_analyze(context: dict, d_file: Path):
+  dscript = parse_dscript(d_file)
+
+  if DEBUG:
+    json.dump(dscript, sys.stderr, indent=2)
+    print("", file=sys.stderr)
+
+  if dscript["appdata"] == None:
+    sys.exit("@appdata section is not declared in %s" % d_file)
+
+  provider = dscript["provider"]
+  appdata = deepcopy(dscript["appdata"])  # type: dict[str, Any]
 
   probe_metadata = context["probe_metadata"]
 
-  id = context["id"]
-
-  for (name, args) in re.findall(r'\bprobe\s+([a-zA-Z0-9_]+)\(([^\)]+)\);', matched.group('probes'), flags=re_flags):
-    arg_list = re.split(r'\s*,\s*', args, flags=re_flags)
-    id += 1
+  for (name, probe) in dscript["probes"].items():
+    id = ("H2OLOG_EVENT_ID_%s_%s" % (provider, name)).upper()
 
     fully_specified_probe_name = "%s:%s" % (provider, name)
     if block_probes and fully_specified_probe_name in block_probes:
@@ -134,31 +291,57 @@ def parse_d(context: dict, path: Path, block_probes: set = None):
         "id": id,
         "provider": provider,
         "name": name,
+        "args": probe["args"],
         "fully_specified_probe_name": fully_specified_probe_name,
+        "appdata_field_set": set(),
     }
     probe_metadata[name] = metadata
-    args = metadata['args'] = list(map(
-        lambda arg: re.match(
-            r'(?P<type>\w[^;]*[^;\s])\s*\b(?P<name>[a-zA-Z0-9_]+)', arg, flags=re_flags).groupdict(),
-        arg_list))
+    args = metadata['args']
+
+    appdata_fields = appdata.get(name, None)
+    if appdata_fields != None:
+      if not isinstance(appdata_fields, list):
+        sys.exit("An @appdata field must have a list of strings as a value but got: %s" % json.dumps(appdata_fields))
+    else:
+      appdata_fields = []
 
     flat_args_map = metadata['flat_args_map'] = OrderedDict()
-
     for arg in args:
       arg_name = arg['name']
       arg_type = arg['type']
 
+      if arg_name in appdata_fields:
+        appdata_fields.remove(arg_name)
+        metadata["appdata_field_set"].add(arg_name)
+
       if is_ptr_type(arg_type):
         st_name = strip_typename(arg_type)
         if st_name in struct_map:
+          if struct_map[st_name]:
+            # decodes the struct into members in BPF programs.
             for st_field_access, st_field_name in struct_map[st_name]:
               flat_args_map[st_field_name or st_field_access] = "typeof_%s__%s" % (st_name, st_field_name or st_field_access)
+          else:
+            # decodes the struct into members in the user space (json.cc).
+            flat_args_map[arg_name] = "struct %s" % st_name
         else:
           flat_args_map[arg_name] = arg_type
       else:
         flat_args_map[arg_name] = arg_type
 
-  context["id"] = id
+    if name in appdata and len(appdata_fields) == 0:
+      del appdata[name]
+
+  # make sure all the items in @appdata have been consumed
+  if appdata:
+    for (probe_name, fields) in appdata.items():
+      if fields:
+        print("invalid @appdata: probe fields are not used in provider %s: %s: %s" %
+              (provider, json.dumps(probe_name), json.dumps(fields)), file=sys.stderr)
+      else:
+        print("invalid @appdata: probe name is not used in provider %s: %s" %
+              (provider, json.dumps(probe_name)), file=sys.stderr)
+    sys.exit(1)
 
 
 def strip_typename(t):
@@ -174,7 +357,7 @@ def is_bin_type(t):
 
 
 def is_sockaddr(t):
-  return re.search(r'\b(?:sockaddr|h2olog_address_t)\s*\*', t)
+  return re.search(r'\b(?:sockaddr|quicly_address_t)\s*\*', t)
 
 
 def is_ptr_type(t):
@@ -191,10 +374,10 @@ def build_tracer(context, metadata):
   c = r"""// %s
 int %s(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct event_t event = { .id = %d };
+  struct h2olog_event_t event = { .id = %s };
 
 """ % (fully_specified_probe_name, tracer_name, metadata['id'])
-  block_field_set = block_fields.get(fully_specified_probe_name, set())
+  appdata_field_set = metadata["appdata_field_set"]  # type: set[str]
   probe_name = metadata["name"]
 
   args = metadata['args']
@@ -203,9 +386,8 @@ int %s(struct pt_regs *ctx) {
     arg_name = arg['name']
     arg_type = arg['type']
 
-    if arg_name in block_field_set:
-      c += "  // %s %s (ignored)\n" % (arg_type, arg_name)
-      continue
+    if arg_name in appdata_field_set:
+      c += "  // %s %s (appdata)\n" % (arg_type, arg_name)
     else:
       c += "  // %s %s\n" % (arg_type, arg_name)
 
@@ -228,13 +410,17 @@ int %s(struct pt_regs *ctx) {
     elif is_ptr_type(arg_type):
       st_name = strip_typename(arg_type)
       if st_name in struct_map:
-        c += "  uint8_t %s[sizeof_%s] = {};\n" % (arg_name, st_name)
-        c += "  bpf_usdt_readarg(%d, ctx, &buf);\n" % (i+1)
-        c += "  bpf_probe_read(&%s, sizeof_%s, buf);\n" % (arg_name, st_name)
-        for st_field_access, st_field_name in struct_map[st_name]:
-          event_t_name = "%s.%s" % (probe_name, st_field_name or st_field_access)
-          c += "  event.%s = get_%s__%s(%s);\n" % (
-              event_t_name, st_name, st_field_name or st_field_access, arg_name)
+        if struct_map[st_name]:
+          c += "  uint8_t %s[sizeof_%s] = {};\n" % (arg_name, st_name)
+          c += "  bpf_usdt_readarg(%d, ctx, &buf);\n" % (i+1)
+          c += "  bpf_probe_read(&%s, sizeof_%s, buf);\n" % (arg_name, st_name)
+          for st_field_access, st_field_name in struct_map[st_name]:
+            event_t_name = "%s.%s" % (probe_name, st_field_name or st_field_access)
+            c += "  event.%s = get_%s__%s(%s);\n" % (
+                event_t_name, st_name, st_field_name or st_field_access, arg_name)
+        else:
+          c += "  bpf_usdt_readarg(%d, ctx, &buf);\n" % (i+1)
+          c += "  bpf_probe_read(&event.%s.%s, sizeof_%s, buf);\n" % (probe_name, arg_name, st_name)
       else:
         c += "  bpf_usdt_readarg(%d, ctx, &event.%s.%s);\n" % (i + 1, probe_name, arg_name)
     else:
@@ -248,27 +434,38 @@ int %s(struct pt_regs *ctx) {
 #endif
 """
 
-  c += r"""
+  if fully_specified_probe_name == "h2o:_private_socket_lookup_flags":
+    c += r"""
+#ifdef H2OLOG_SAMPLING_RATE_U32
+  uint64_t flags = event._private_socket_lookup_flags.original_flags;
+  int skip_tracing = bpf_get_prandom_u32() > H2OLOG_SAMPLING_RATE_U32;
+  if (skip_tracing) {
+    flags |= H2O_EBPF_FLAGS_SKIP_TRACING_BIT;
+  }
+  int64_t ret = h2o_return.insert(&event._private_socket_lookup_flags.tid, &flags);
+  if (ret != 0)
+    bpf_trace_printk("failed to insert 0x%%llx in %s with errno=%%lld\n", flags, -ret);
+#endif
+""" % (tracer_name)
+  else:
+    c += r"""
   if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
     bpf_trace_printk("failed to perf_submit in %s\n");
+""" % (tracer_name)
 
+  c += r"""
   return 0;
 }
-""" % (tracer_name)
+"""
   return c
 
 
-def prepare_context(h2o_dir):
+def prepare_context(d_files: list):
   context = {
-      "id": 1,  # 1 is used for sched:sched_process_exit
       "probe_metadata": OrderedDict(),
-      "h2o_dir": h2o_dir,
   }
-  parse_d(context, h2o_dir.joinpath(quicly_probes_d),
-          block_probes=block_probes)
-  parse_d(context, h2o_dir.joinpath(h2o_probes_d),
-          block_probes=block_probes)
-
+  for d_file in d_files:
+    parse_and_analyze(context, Path(d_file))
   return context
 
 
@@ -346,54 +543,70 @@ def build_typedef_for_cplusplus():
 def generate_cplusplus(context, output_file):
   probe_metadata = context["probe_metadata"]
 
+  event_id_t_decl = r"""
+enum h2olog_event_id_t {
+  H2OLOG_EVENT_ID_SCHED_SCHED_PROCESS_EXIT,
+"""
+
   event_t_decl = r"""
-struct event_t {
-  uint8_t id;
+struct h2olog_event_t {
+  enum h2olog_event_id_t id;
 
   union {
 """
 
   for name, metadata in probe_metadata.items():
     fully_specified_probe_name = metadata["fully_specified_probe_name"]
-    block_field_set = block_fields.get(fully_specified_probe_name, None)
+    appdata_field_set = metadata["appdata_field_set"]
+    event_id_t_decl += "  %s,\n" % metadata["id"]
 
     event_t_decl += "    struct { // %s\n" % fully_specified_probe_name
     for field_name, field_type in metadata["flat_args_map"].items():
-      if block_field_set and field_name in block_field_set:
-        continue
-
-      if fully_specified_probe_name == "quicly:receive" and field_name == "bytes":
-        f = "uint8_t %s[1]" % field_name  # for first-octet
-      elif is_bin_type(field_type):
+      if is_bin_type(field_type):
         f = "uint8_t %s[STR_LEN]" % field_name
       elif is_str_type(field_type):
         f = "char %s[STR_LEN]" % field_name
       elif is_sockaddr(field_type):
-        f = "h2olog_address_t %s" % field_name
+        f = "quicly_address_t %s" % field_name
       else:
         f = "%s %s" % (field_type, field_name)
 
-      event_t_decl += "      %s;\n" % f
+      if field_name in appdata_field_set:
+        event_t_decl += "      %s; // appdata\n" % f
+      else:
+        event_t_decl += "      %s;\n" % f
     event_t_decl += "    } %s;\n" % name
 
   event_t_decl += r"""
-    };
   };
-  """
+};
+"""
+
+  event_id_t_decl += "};\n"
 
   bpf = r"""
 #include <linux/sched.h>
+#include <linux/limits.h>
 
 #define STR_LEN 64
 
-typedef union h2olog_address_t {
+typedef union quicly_address_t {
   uint8_t sa[sizeof_sockaddr];
   uint8_t sin[sizeof_sockaddr_in];
   uint8_t sin6[sizeof_sockaddr_in6];
-} h2olog_address_t;;
+} quicly_address_t;
+
+struct st_h2o_ebpf_map_key_t {
+  uint8_t payload[sizeof_st_h2o_ebpf_map_key_t];
+};
 
 %s
+%s
 BPF_PERF_OUTPUT(events);
+
+// A pinned BPF object to return a value to h2o.
+// The table size must be larger than the number of threads in h2o.
+BPF_TABLE_PINNED("lru_hash", pid_t, uint64_t, h2o_return, H2O_EBPF_RETURN_MAP_SIZE, H2O_EBPF_RETURN_MAP_PATH);
 
 // HTTP/3 tracing
 BPF_HASH(h2o_to_quicly_conn, u64, u32);
@@ -406,12 +619,12 @@ int trace_sched_process_exit(struct tracepoint__sched__sched_process_exit *ctx) 
   if (!(h2o_pid == H2OLOG_H2O_PID && h2o_tid == H2OLOG_H2O_PID)) {
     return 0;
   }
-  struct event_t ev = { .id = 1 };
+  struct h2olog_event_t ev = { .id = H2OLOG_EVENT_ID_SCHED_SCHED_PROCESS_EXIT };
   events.perf_submit(ctx, &ev, sizeof(ev));
   return 0;
 }
 
-""" % (event_t_decl)
+""" % (event_id_t_decl, event_t_decl)
 
   usdts_def = r"""
 void h2o_raw_tracer::initialize() {
@@ -428,9 +641,9 @@ void h2o_raw_tracer::initialize() {
 
   handle_event_func = r"""
 void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
-  const event_t *event = static_cast<const event_t*>(data);
+  const h2olog_event_t *event = static_cast<const h2olog_event_t*>(data);
 
-  if (event->id == 1) { // sched:sched_process_exit
+  if (event->id == H2OLOG_EVENT_ID_SCHED_SCHED_PROCESS_EXIT) {
     exit(0);
   }
 
@@ -444,7 +657,10 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
     metadata = probe_metadata[probe_name]
     fully_specified_probe_name = metadata["fully_specified_probe_name"]
 
-    block_field_set = block_fields.get(fully_specified_probe_name, None)
+    if fully_specified_probe_name == "h2o:_private_socket_lookup_flags":
+      continue
+
+    appdata_field_set = metadata["appdata_field_set"]  # type: set[str]
     flat_args_map = metadata["flat_args_map"]
 
     handle_event_func += "  case %s: { // %s\n" % (
@@ -453,14 +669,11 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
     handle_event_func += '    json_write_pair_c(out_, STR_LIT("seq"), seq_);\n'
 
     for field_name, field_type in flat_args_map.items():
-      if block_field_set and field_name in block_field_set:
-        continue
+      stmts = ""
       json_field_name = rename_map.get(field_name, field_name).replace("_", "-")
       event_t_name = "%s.%s" % (probe_name, field_name)
-      if fully_specified_probe_name == "quicly:receive" and field_name == "bytes":
-        handle_event_func += '    json_write_pair_c(out_, STR_LIT("first-octet"), event->receive.bytes[0]);\n'
-      elif not is_bin_type(field_type) and not is_str_type(field_type):
-        handle_event_func += '    json_write_pair_c(out_, STR_LIT("%s"), event->%s);\n' % (
+      if not is_bin_type(field_type) and not is_str_type(field_type):
+        stmts += '    json_write_pair_c(out_, STR_LIT("%s"), event->%s);\n' % (
             json_field_name, event_t_name)
       else:  # bin or str type with "*_len" field
         len_names = set([field_name + "_len", "num_" + field_name])
@@ -472,14 +685,20 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
 
         if len_event_t_name:
           # A string might be truncated in STRLEN
-          handle_event_func += '    json_write_pair_c(out_, STR_LIT("%s"), event->%s, (event->%s < STR_LEN ? event->%s : STR_LEN));\n' % (
+          stmts += '    json_write_pair_c(out_, STR_LIT("%s"), event->%s, (event->%s < STR_LEN ? event->%s : STR_LEN));\n' % (
               json_field_name, event_t_name, len_event_t_name, len_event_t_name)
         elif is_bin_type(field_type):
-          handle_event_func += '    # warning "missing `%s_len` param in the probe %s, ignored."\n' % (
+          stmts += '    # warning "missing `%s_len` param in the probe %s, ignored."\n' % (
               field_name, fully_specified_probe_name)
         else:  # str type
-          handle_event_func += '    json_write_pair_c(out_, STR_LIT("%s"), event->%s, strlen(event->%s));\n' % (
+          stmts += '    json_write_pair_c(out_, STR_LIT("%s"), event->%s, strlen(event->%s));\n' % (
               json_field_name, event_t_name, event_t_name)
+      if field_name in appdata_field_set:
+        handle_event_func += "    if (include_appdata_) {\n"
+        handle_event_func += re.sub(r"^", "  ", stmts, flags=re_xms).rstrip() + "\n"
+        handle_event_func += "    }\n"
+      else:
+        handle_event_func += stmts
 
     if metadata["provider"] == "h2o":
       handle_event_func += '    json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());\n'
@@ -501,6 +720,7 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
 extern "C" {
 #include <sys/time.h>
 #include "quicly.h"
+#include "h2o/ebpf.h"
 }
 
 #include <cstdlib>
@@ -513,13 +733,14 @@ extern "C" {
 #include "h2olog.h"
 #include "json.h"
 
-#include "raw_tracer.h.cc"
+#include "raw_tracer.cc.h"
 
 #define STR_LEN 64
 #define STR_LIT(s) s, strlen(s)
 
 using namespace std;
 
+%s
 %s
 %s
 %s
@@ -533,17 +754,21 @@ std::string h2o_raw_tracer::bpf_text() {
 )";
 }
 
-""" % (build_typedef_for_cplusplus(), build_bpf_header_generator(), event_t_decl, usdts_def, handle_event_func, bpf))
+""" % (build_typedef_for_cplusplus(), build_bpf_header_generator(), event_id_t_decl, event_t_decl, usdts_def, handle_event_func, bpf))
+
+
+def usage():
+  print("usage: %s output_file d_files..." % sys.argv[0])
+  sys.exit(1)
 
 
 def main():
-  try:
-    (_, h2o_dir, output_file) = sys.argv
-  except:
-    print("usage: %s h2o_dir output_file" % sys.argv[0])
-    sys.exit(1)
+  if len(sys.argv) <= 2:
+    usage()
 
-  context = prepare_context(Path(h2o_dir))
+  output_file, *d_files = sys.argv[1:]
+
+  context = prepare_context(d_files)
   generate_cplusplus(context, output_file)
 
 

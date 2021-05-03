@@ -337,9 +337,12 @@ struct st_quicly_conn_t {
          */
         quicly_retire_cid_set_t retire_cid;
         /**
-         * DATAGRAM frame payload to be sent
+         * payload of DATAGRAM frames to be sent
          */
-        ptls_iovec_t datagram_frame_payload;
+        struct {
+            ptls_iovec_t payloads[10];
+            size_t count;
+        } datagram_frame_payloads;
     } egress;
     /**
      * crypto data
@@ -552,6 +555,15 @@ static void dispose_cipher(struct st_quicly_cipher_context_t *ctx)
 {
     ptls_aead_free(ctx->aead);
     ptls_cipher_free(ctx->header_protection);
+}
+
+static void clear_datagram_frame_payloads(quicly_conn_t *conn)
+{
+    for (size_t i = 0; i != conn->egress.datagram_frame_payloads.count; ++i) {
+        free(conn->egress.datagram_frame_payloads.payloads[i].base);
+        conn->egress.datagram_frame_payloads.payloads[i] = ptls_iovec_init(NULL, 0);
+    }
+    conn->egress.datagram_frame_payloads.count = 0;
 }
 
 static int is_retry(quicly_conn_t *conn)
@@ -1489,6 +1501,12 @@ static int received_key_update(quicly_conn_t *conn, uint64_t newly_decrypted_key
     }
 }
 
+static inline void update_open_count(quicly_context_t *ctx, ssize_t delta)
+{
+    if (ctx->update_open_count != NULL)
+        ctx->update_open_count->cb(ctx->update_open_count, delta);
+}
+
 void quicly_free(quicly_conn_t *conn)
 {
     lock_now(conn, 0);
@@ -1502,8 +1520,10 @@ void quicly_free(quicly_conn_t *conn)
         QUICLY_PROBE(CONN_STATS, conn, conn->stash.now, &stats, sizeof(stats));
     }
 #endif
+    update_open_count(conn->super.ctx, -1);
 
     destroy_all_streams(conn, 0, 1);
+    clear_datagram_frame_payloads(conn);
 
     quicly_maxsender_dispose(&conn->ingress.max_data.sender);
     quicly_maxsender_dispose(&conn->ingress.max_streams.uni);
@@ -2054,6 +2074,8 @@ static quicly_conn_t *create_connection(quicly_context_t *ctx, uint32_t protocol
     conn->stash.on_ack_stream.active_acked_cache.stream_id = INT64_MIN;
 
     *ptls_get_data_ptr(tls) = conn;
+
+    update_open_count(conn->super.ctx, 1);
 
     return conn;
 }
@@ -2767,13 +2789,11 @@ static int on_ack_retire_connection_id(quicly_sentmap_t *map, const quicly_sent_
 
 static int should_send_datagram_frame(quicly_conn_t *conn)
 {
-    if (conn->egress.datagram_frame_payload.base == NULL)
+    if (conn->egress.datagram_frame_payloads.count == 0)
         return 0;
     if (conn->application == NULL)
         return 0;
     if (conn->application->cipher.egress.key.aead == NULL)
-        return 0;
-    if (conn->super.remote.transport_params.max_datagram_frame_size < conn->egress.datagram_frame_payload.len)
         return 0;
     return 1;
 }
@@ -3740,6 +3760,8 @@ static int send_resumption_token(quicly_conn_t *conn, quicly_send_context_t *s)
     if ((ret = allocate_ack_eliciting_frame(conn, s, quicly_new_token_frame_capacity(ptls_iovec_init(tokenbuf.base, tokenbuf.off)),
                                             &sent, on_ack_new_token)) != 0)
         goto Exit;
+    ++conn->egress.new_token.num_inflight;
+    sent->data.new_token.is_inflight = 1;
     sent->data.new_token.generation = conn->egress.new_token.generation;
     s->dst = quicly_encode_new_token_frame(s->dst, ptls_iovec_init(tokenbuf.base, tokenbuf.off));
     conn->egress.pending_flows &= ~QUICLY_PENDING_FLOW_NEW_TOKEN_BIT;
@@ -4047,8 +4069,8 @@ static int update_traffic_key_cb(ptls_update_traffic_key_t *self, ptls_t *tls, i
     ptls_aead_context_t **aead_slot;
     int ret;
     static const char *log_labels[2][4] = {
-        {NULL, "QUIC_CLIENT_EARLY_TRAFFIC_SECRET", "QUIC_CLIENT_HANDSHAKE_TRAFFIC_SECRET", "QUIC_CLIENT_TRAFFIC_SECRET_0"},
-        {NULL, NULL, "QUIC_SERVER_HANDSHAKE_TRAFFIC_SECRET", "QUIC_SERVER_TRAFFIC_SECRET_0"}};
+        {NULL, "CLIENT_EARLY_TRAFFIC_SECRET", "CLIENT_HANDSHAKE_TRAFFIC_SECRET", "CLIENT_TRAFFIC_SECRET_0"},
+        {NULL, NULL, "SERVER_HANDSHAKE_TRAFFIC_SECRET", "SERVER_TRAFFIC_SECRET_0"}};
     const char *log_label = log_labels[ptls_is_server(tls) == is_enc][epoch];
 
     QUICLY_PROBE(CRYPTO_UPDATE_SECRET, conn, conn->stash.now, is_enc, epoch, log_label,
@@ -4202,15 +4224,19 @@ static int do_send(quicly_conn_t *conn, quicly_send_context_t *s)
          *   This is because we do not have a way to retract the generation of a QUIC packet.
          * * Does not notify the application that the frame was dropped internally. */
         if (should_send_datagram_frame(conn)) {
-            size_t required_space = quicly_datagram_frame_capacity(conn->egress.datagram_frame_payload);
-            if ((ret = _do_allocate_frame(conn, s, required_space, 1)) != 0)
-                goto Exit;
-            if (s->dst_end - s->dst >= required_space) {
-                s->dst = quicly_encode_datagram_frame(s->dst, conn->egress.datagram_frame_payload);
-                QUICLY_PROBE(DATAGRAM_SEND, conn, conn->stash.now, conn->egress.datagram_frame_payload.base,
-                             conn->egress.datagram_frame_payload.len);
-                conn->egress.datagram_frame_payload = ptls_iovec_init(NULL, 0);
-                ++conn->super.stats.num_frames_sent.datagram;
+            for (size_t i = 0; i != conn->egress.datagram_frame_payloads.count; ++i) {
+                ptls_iovec_t *payload = conn->egress.datagram_frame_payloads.payloads + i;
+                size_t required_space = quicly_datagram_frame_capacity(*payload);
+                if ((ret = _do_allocate_frame(conn, s, required_space, 1)) != 0)
+                    goto Exit;
+                if (s->dst_end - s->dst >= required_space) {
+                    s->dst = quicly_encode_datagram_frame(s->dst, *payload);
+                    QUICLY_PROBE(DATAGRAM_SEND, conn, conn->stash.now, payload->base, payload->len);
+                } else {
+                    /* FIXME: At the moment, we add a padding because we do not have a way to reclaim allocated space, and because
+                     * it is forbidden to send an empty QUIC packet. */
+                    *s->dst++ = QUICLY_FRAME_TYPE_PADDING;
+                }
             }
         }
         if (!ack_only) {
@@ -4341,9 +4367,18 @@ Exit:
     return ret;
 }
 
-void quicly_set_datagram_frame(quicly_conn_t *conn, ptls_iovec_t payload)
+void quicly_send_datagram_frames(quicly_conn_t *conn, ptls_iovec_t *datagrams, size_t num_datagrams)
 {
-    conn->egress.datagram_frame_payload = payload;
+    for (size_t i = 0; i != num_datagrams; ++i) {
+        if (conn->egress.datagram_frame_payloads.count == PTLS_ELEMENTSOF(conn->egress.datagram_frame_payloads.payloads))
+            break;
+        void *copied;
+        if ((copied = malloc(datagrams[i].len)) == NULL)
+            break;
+        memcpy(copied, datagrams[i].base, datagrams[i].len);
+        conn->egress.datagram_frame_payloads.payloads[conn->egress.datagram_frame_payloads.count++] =
+            ptls_iovec_init(copied, datagrams[i].len);
+    }
 }
 
 int quicly_send(quicly_conn_t *conn, quicly_address_t *dest, quicly_address_t *src, struct iovec *datagrams, size_t *num_datagrams,
@@ -4401,7 +4436,7 @@ int quicly_send(quicly_conn_t *conn, quicly_address_t *dest, quicly_address_t *s
     assert_consistency(conn, 1);
 
 Exit:
-    conn->egress.datagram_frame_payload = ptls_iovec_init(NULL, 0);
+    clear_datagram_frame_payloads(conn);
     if (s.num_datagrams != 0) {
         *dest = conn->super.remote.address;
         *src = conn->super.local.address;
@@ -5462,7 +5497,10 @@ int quicly_accept(quicly_conn_t **conn, quicly_context_t *ctx, struct sockaddr *
                   const quicly_cid_plaintext_t *new_cid, ptls_handshake_properties_t *handshake_properties)
 {
     const struct st_ptls_salt_t *salt;
-    struct st_quicly_cipher_context_t ingress_cipher = {NULL}, egress_cipher = {NULL};
+    struct {
+        struct st_quicly_cipher_context_t ingress, egress;
+        int alive;
+    } cipher = {};
     ptls_iovec_t payload;
     uint64_t next_expected_pn, pn, offending_frame_type = QUICLY_FRAME_TYPE_PADDING;
     int is_ack_only, ret;
@@ -5486,11 +5524,12 @@ int quicly_accept(quicly_conn_t **conn, quicly_context_t *ctx, struct sockaddr *
         ret = QUICLY_TRANSPORT_ERROR_PROTOCOL_VIOLATION;
         goto Exit;
     }
-    if ((ret = setup_initial_encryption(get_aes128gcmsha256(ctx), &ingress_cipher, &egress_cipher, packet->cid.dest.encrypted, 0,
+    if ((ret = setup_initial_encryption(get_aes128gcmsha256(ctx), &cipher.ingress, &cipher.egress, packet->cid.dest.encrypted, 0,
                                         ptls_iovec_init(salt->initial, sizeof(salt->initial)), NULL)) != 0)
         goto Exit;
+    cipher.alive = 1;
     next_expected_pn = 0; /* is this correct? do we need to take care of underflow? */
-    if ((ret = decrypt_packet(ingress_cipher.header_protection, aead_decrypt_fixed_key, ingress_cipher.aead, &next_expected_pn,
+    if ((ret = decrypt_packet(cipher.ingress.header_protection, aead_decrypt_fixed_key, cipher.ingress.aead, &next_expected_pn,
                               packet, &pn, &payload)) != 0) {
         ret = QUICLY_ERROR_DECRYPTION_FAILED;
         goto Exit;
@@ -5515,10 +5554,9 @@ int quicly_accept(quicly_conn_t **conn, quicly_context_t *ctx, struct sockaddr *
     if ((ret = setup_handshake_space_and_flow(*conn, QUICLY_EPOCH_INITIAL)) != 0)
         goto Exit;
     (*conn)->initial->super.next_expected_packet_number = next_expected_pn;
-    (*conn)->initial->cipher.ingress = ingress_cipher;
-    ingress_cipher = (struct st_quicly_cipher_context_t){NULL};
-    (*conn)->initial->cipher.egress = egress_cipher;
-    egress_cipher = (struct st_quicly_cipher_context_t){NULL};
+    (*conn)->initial->cipher.ingress = cipher.ingress;
+    (*conn)->initial->cipher.egress = cipher.egress;
+    cipher.alive = 0;
     (*conn)->crypto.handshake_properties.collected_extensions = server_collected_extensions;
     (*conn)->initial->largest_ingress_udp_payload_size = packet->datagram_size;
 
@@ -5543,6 +5581,10 @@ Exit:
             ret = 0;
         }
         unlock_now(*conn);
+    }
+    if (cipher.alive) {
+        dispose_cipher(&cipher.ingress);
+        dispose_cipher(&cipher.egress);
     }
     return ret;
 }

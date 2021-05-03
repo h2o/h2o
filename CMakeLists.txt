@@ -84,9 +84,16 @@ CHECK_C_SOURCE_COMPILES("
 #include <sched.h>
 #include <pthread.h>
 int main(void) {
+#ifndef __NetBSD__
 cpu_set_t s;
 CPU_ZERO(&s);
 pthread_setaffinity_np(0, sizeof(s), &s);
+#else
+cpuset_t *s = cpuset_create();
+cpuset_zero(s);
+pthread_setaffinity_np(0, cpuset_size(s), s);
+cpuset_destroy(s);
+#endif
 return 0;
 }" HAS_PTHREAD_SETAFFINITY_NP)
 CMAKE_POP_CHECK_STATE()
@@ -338,6 +345,7 @@ SET(LIB_SOURCE_FILES
     deps/picotls/deps/cifra/src/hmac.c
     deps/picotls/deps/cifra/src/sha256.c
     deps/picotls/lib/certificate_compression.c
+    deps/picotls/lib/pembase64.c
     deps/picotls/lib/picotls.c
     deps/picotls/lib/openssl.c
     deps/picotls/lib/cifra/random.c
@@ -400,6 +408,7 @@ SET(LIB_SOURCE_FILES
     lib/handler/headers.c
     lib/handler/mimemap.c
     lib/handler/proxy.c
+    lib/handler/connect.c
     lib/handler/redirect.c
     lib/handler/reproxy.c
     lib/handler/throttle_resp.c
@@ -484,6 +493,7 @@ SET(UNIT_TEST_SOURCE_FILES
     t/00unit/lib/core/proxy.c
     t/00unit/lib/core/util.c
     t/00unit/lib/handler/compress.c
+    t/00unit/lib/handler/connect.c
     t/00unit/lib/handler/fastcgi.c
     t/00unit/lib/handler/file.c
     t/00unit/lib/handler/headers.c
@@ -519,6 +529,7 @@ LIST(REMOVE_ITEM UNIT_TEST_SOURCE_FILES
     lib/core/util.c
     lib/handler/compress.c
     lib/handler/compress/gzip.c
+    lib/handler/connect.c
     lib/handler/fastcgi.c
     lib/handler/file.c
     lib/handler/headers.c
@@ -675,7 +686,9 @@ IF (WITH_MRUBY)
         SET(MRUBY_TOOLCHAIN "gcc")
     ENDIF ()
     ADD_CUSTOM_TARGET(mruby
-        MRUBY_TOOLCHAIN=${MRUBY_TOOLCHAIN} MRUBY_CONFIG=${CMAKE_CURRENT_SOURCE_DIR}/misc/mruby_config.rb MRUBY_BUILD_DIR=${CMAKE_CURRENT_BINARY_DIR}/mruby MRUBY_ADDITIONAL_CONFIG=${MRUBY_ADDITIONAL_CONFIG} ruby minirake
+        # deps/mruby/tasks/toolchains/clang.rake looks for CC, CXX and LD.
+        # There are no C++ files in deps/mruby, use the C compiler for linking.
+        MRUBY_TOOLCHAIN=${MRUBY_TOOLCHAIN} CC=${CMAKE_C_COMPILER} CXX=${CMAKE_CXX_COMPILER} LD=${CMAKE_C_COMPILER} MRUBY_CONFIG=${CMAKE_CURRENT_SOURCE_DIR}/misc/mruby_config.rb MRUBY_BUILD_DIR=${CMAKE_CURRENT_BINARY_DIR}/mruby MRUBY_ADDITIONAL_CONFIG=${MRUBY_ADDITIONAL_CONFIG} ruby minirake
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/deps/mruby
         BYPRODUCTS "${CMAKE_CURRENT_BINARY_DIR}/mruby/host/lib/libmruby.a"
                    "${CMAKE_CURRENT_BINARY_DIR}/mruby/host/mrbgems/mruby-onig-regexp/onigmo-6.1.2/.libs/libonigmo.a"
@@ -815,6 +828,15 @@ ExternalProject_Add(picotls-cli
 SET_TARGET_PROPERTIES(picotls-cli PROPERTIES EXCLUDE_FROM_ALL TRUE)
 ADD_DEPENDENCIES(checkdepends picotls-cli)
 
+ExternalProject_Add(quicly-cli
+                    CONFIGURE_COMMAND ${CMAKE_COMMAND} -DOPENSSL_ROOT_DIR=${EXTERNALPROJECT_SSL_ROOT_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/deps/quicly
+                    SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/deps/quicly
+                    BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/quicly
+                    BUILD_COMMAND ${CMAKE_MAKE_PROGRAM} cli
+                    INSTALL_COMMAND true)
+SET_TARGET_PROPERTIES(quicly-cli PROPERTIES EXCLUDE_FROM_ALL TRUE)
+ADD_DEPENDENCIES(checkdepends quicly-cli)
+
 ADD_CUSTOM_TARGET(check-valgrind env H2O_VALGRIND=./misc/h2o_valgrind/ H2O_ROOT=. BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR} prove -I. -v t/*.t
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     DEPENDS h2o t-00unit-evloop.t)
@@ -894,7 +916,7 @@ IF (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND PKG_CONFIG_FOUND)
         OUTPUT_STRIP_TRAILING_WHITESPACE
     )
 
-    SET(REQUIRED_KERNEL_VERSION "4.9.0")
+    SET(REQUIRED_KERNEL_VERSION "4.10.0")
     IF (NOT (KERNEL_VERSION VERSION_LESS REQUIRED_KERNEL_VERSION))
         SET(HAVE_BPF_SUPPORTED_KERNEL ON)
         MESSAGE(STATUS "Checking Linux kernel version ${KERNEL_VERSION} >= ${REQUIRED_KERNEL_VERSION} for h2olog - OK")
@@ -926,16 +948,15 @@ IF (WITH_H2OLOG)
         "include/h2o/version.h"
     )
 
-    SET(H2OLOG_GEN_DEPS
-        "h2o-probes.d"
-        "deps/quicly/quicly-probes.d"
-        "deps/quicly/include/quicly.h"
-    )
+    # This phony target is required to force to trigger a custom command.
+    # If DEPENDS is empty, the custom command won't be triggered when OUTPUT files exist.
+    ADD_CUSTOM_COMMAND(OUTPUT phony_force_trigger_command COMMAND echo -n)
 
     ADD_CUSTOM_COMMAND(
         OUTPUT  "${CMAKE_CURRENT_SOURCE_DIR}/src/h2olog/generated_raw_tracer.cc"
-        COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/src/h2olog/misc/gen_raw_tracer.py" "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}/src/h2olog/generated_raw_tracer.cc"
-        DEPENDS ${H2OLOG_GEN_DEPS} "${CMAKE_CURRENT_SOURCE_DIR}/src/h2olog/misc/gen_raw_tracer.py"
+        COMMAND make -f misc/regen.mk src/h2olog/generated_raw_tracer.cc
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        DEPENDS phony_force_trigger_command
     )
     LIST(APPEND H2OLOG_SOURCE_FILES "${CMAKE_CURRENT_SOURCE_DIR}/src/h2olog/generated_raw_tracer.cc")
     LINK_DIRECTORIES("${LIBBCC_LIBRARY_DIRS}")
