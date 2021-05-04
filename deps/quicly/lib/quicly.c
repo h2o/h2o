@@ -628,7 +628,7 @@ size_t quicly_decode_packet(quicly_context_t *ctx, quicly_decoded_packet_t *pack
         switch (packet->octets.base[0] & QUICLY_PACKET_TYPE_BITMASK) {
         case QUICLY_PACKET_TYPE_INITIAL:
         case QUICLY_PACKET_TYPE_0RTT:
-            if (ctx->cid_encryptor != NULL && packet->cid.dest.encrypted.len != 0 &&
+            if (ctx->cid_encryptor == NULL || packet->cid.dest.encrypted.len == 0 ||
                 ctx->cid_encryptor->decrypt_cid(ctx->cid_encryptor, &packet->cid.dest.plaintext, packet->cid.dest.encrypted.base,
                                                 packet->cid.dest.encrypted.len) == SIZE_MAX)
                 packet->cid.dest.plaintext = quicly_cid_plaintext_invalid;

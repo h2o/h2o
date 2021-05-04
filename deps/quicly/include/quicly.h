@@ -679,10 +679,11 @@ typedef struct st_quicly_decoded_packet_t {
              */
             ptls_iovec_t encrypted;
             /**
-             * The decrypted CID, or `quicly_cid_plaintext_invalid`. Assuming that `cid_decryptor` is non-NULL, this variable would
+             * The decrypted CID, or `quicly_cid_plaintext_invalid`. Assuming that `cid_encryptor` is non-NULL, this variable would
              * contain a valid value whenever `might_be_client_generated` is false. When `might_be_client_generated` is true, this
              * value might be set to `quicly_cid_plaintext_invalid`. Note however that, as the CID itself is not authenticated,
              * a packet might be bogus regardless of the value of the CID.
+             * When `cid_encryptor` is NULL, the value is always set to `quicly_cid_plaintext_invalid`.
              */
             quicly_cid_plaintext_t plaintext;
             /**
