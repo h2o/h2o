@@ -218,17 +218,17 @@ static void expbuf_reserve(struct expbuf_t *buf, size_t extra)
 {
     char *n;
 
-    if (extra <= buf->buf + buf->capacity - buf->end)
+    if (extra <= buf->buf - buf->end + buf->capacity)
         return;
 
     if (buf->capacity == 0)
         buf->capacity = 4096;
-    while (buf->buf + buf->capacity - buf->end < extra)
+    while (buf->buf - buf->end + buf->capacity < extra)
         buf->capacity *= 2;
     if ((n = realloc(buf->buf, buf->capacity)) == NULL)
         dief("realloc failed");
-    buf->start += n - buf->buf;
-    buf->end += n - buf->buf;
+    buf->start = n + (buf->start - buf->end);
+    buf->end = n + (buf->end - buf->buf);
     buf->buf = n;
 }
 
@@ -1367,21 +1367,50 @@ Exit:
     return NULL;
 }
 
+static void cleanup_fds(int listen_fd, int close_notify_fd)
+{
+#if defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__)
+    int maxfd, k;
+
+    maxfd = 0;
+    if (listen_fd > maxfd) {
+        maxfd = listen_fd;
+    }
+    if (close_notify_fd > maxfd) {
+        maxfd = close_notify_fd;
+    }
+    for (k = 0; k < maxfd; k++) {
+        if (k == listen_fd || k == close_notify_fd)
+                continue;
+        switch (k) {
+        case STDOUT_FILENO:
+        case STDERR_FILENO:
+        case STDIN_FILENO:
+            break;
+        default:
+            (void) close(k);
+        }
+    }
+    closefrom(maxfd + 1);
+#else
+    int fd;
+
+    fd = (int)sysconf(_SC_OPEN_MAX) - 1;
+    for (; fd > 2; --fd) {
+        if (fd == listen_fd || fd == close_notify_fd)
+                continue;
+        close(fd);
+    }
+#endif
+}
+
 __attribute__((noreturn)) static void daemon_main(int listen_fd, int close_notify_fd, const char *tempdir)
 {
     pthread_t tid;
     pthread_attr_t thattr;
     int sock_fd;
 
-    { /* close all descriptors (except STDIN, STDOUT, STRERR, listen_fd, close_notify_fd) */
-        int fd = (int)sysconf(_SC_OPEN_MAX) - 1;
-        for (; fd > 2; --fd) {
-            if (fd == listen_fd || fd == close_notify_fd)
-                continue;
-            close(fd);
-        }
-    }
-
+    cleanup_fds(listen_fd, close_notify_fd);
     pthread_attr_init(&thattr);
     pthread_attr_setdetachstate(&thattr, 1);
 

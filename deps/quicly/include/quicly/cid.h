@@ -60,11 +60,16 @@ typedef struct st_quicly_cid_plaintext_t {
      */
     uint32_t thread_id : 24;
     /**
-     * for inter-node routing; available only when using a 16-byte cipher to encrypt CIDs, otherwise set to zero. See
-     * quicly_context_t::is_clustered.
+     * for inter-node routing; available only when using a 16-byte cipher to encrypt CIDs, otherwise set to zero.
      */
     uint64_t node_id;
 } quicly_cid_plaintext_t;
+
+/**
+ * A CID used for indicating that a CID is invalid. Both .node_id and .thread_id are set to their maximum. Therefore, mappings must
+ * refrain from using those values.
+ */
+extern quicly_cid_plaintext_t quicly_cid_plaintext_invalid;
 
 /**
  * CID encryption
@@ -76,10 +81,11 @@ typedef struct st_quicly_cid_encryptor_t {
     void (*encrypt_cid)(struct st_quicly_cid_encryptor_t *self, quicly_cid_t *encrypted, void *stateless_reset_token,
                         const quicly_cid_plaintext_t *plaintext);
     /**
-     * decrypts CID. plaintext->thread_id should contain a randomly distributed number when validation fails, so that the value can
-     * be used for distributing load among the threads within the process.
-     * @param len length of encrypted bytes if known, or 0 if unknown (short header packet)
-     * @return length of the CID, or SIZE_MAX if decryption failed
+     * decrypts a CID
+     * @param plaintext  if successful, the decoded CID will be written
+     * @param encrypt    the encrypted CID
+     * @param len        length of the encrypted CID when the packet is a long header packet, or 0 if it is a short header packet
+     * @return           length of the CID if successful, or SIZE_MAX if failed
      */
     size_t (*decrypt_cid)(struct st_quicly_cid_encryptor_t *self, quicly_cid_plaintext_t *plaintext, const void *encrypted,
                           size_t len);

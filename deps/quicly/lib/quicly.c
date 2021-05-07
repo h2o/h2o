@@ -431,6 +431,8 @@ static int initiate_close(quicly_conn_t *conn, int err, uint64_t frame_type, con
 static int handle_close(quicly_conn_t *conn, int err, uint64_t frame_type, ptls_iovec_t reason_phrase);
 static int discard_sentmap_by_epoch(quicly_conn_t *conn, unsigned ack_epochs);
 
+quicly_cid_plaintext_t quicly_cid_plaintext_invalid = {.node_id = UINT64_MAX, .thread_id = 0xffffff};
+
 static const quicly_transport_parameters_t default_transport_params = {.max_udp_payload_size = QUICLY_DEFAULT_MAX_UDP_PAYLOAD_SIZE,
                                                                        .ack_delay_exponent = QUICLY_DEFAULT_ACK_DELAY_EXPONENT,
                                                                        .max_ack_delay = QUICLY_DEFAULT_MAX_ACK_DELAY,
@@ -623,18 +625,25 @@ size_t quicly_decode_packet(quicly_context_t *ctx, quicly_decoded_packet_t *pack
             goto Error;
         packet->cid.src.base = (uint8_t *)src;
         src += packet->cid.src.len;
-        if (ctx->cid_encryptor != NULL) {
-            ctx->cid_encryptor->decrypt_cid(ctx->cid_encryptor, &packet->cid.dest.plaintext, packet->cid.dest.encrypted.base,
-                                            packet->cid.dest.encrypted.len);
-        } else {
-            packet->cid.dest.plaintext = (quicly_cid_plaintext_t){0};
-        }
         switch (packet->octets.base[0] & QUICLY_PACKET_TYPE_BITMASK) {
         case QUICLY_PACKET_TYPE_INITIAL:
         case QUICLY_PACKET_TYPE_0RTT:
+            if (ctx->cid_encryptor == NULL || packet->cid.dest.encrypted.len == 0 ||
+                ctx->cid_encryptor->decrypt_cid(ctx->cid_encryptor, &packet->cid.dest.plaintext, packet->cid.dest.encrypted.base,
+                                                packet->cid.dest.encrypted.len) == SIZE_MAX)
+                packet->cid.dest.plaintext = quicly_cid_plaintext_invalid;
             packet->cid.dest.might_be_client_generated = 1;
             break;
         default:
+            if (ctx->cid_encryptor != NULL) {
+                if (packet->cid.dest.encrypted.len == 0)
+                    goto Error;
+                if (ctx->cid_encryptor->decrypt_cid(ctx->cid_encryptor, &packet->cid.dest.plaintext,
+                                                    packet->cid.dest.encrypted.base, packet->cid.dest.encrypted.len) == SIZE_MAX)
+                    goto Error;
+            } else {
+                packet->cid.dest.plaintext = quicly_cid_plaintext_invalid;
+            }
             packet->cid.dest.might_be_client_generated = 0;
             break;
         }
@@ -688,7 +697,7 @@ size_t quicly_decode_packet(quicly_context_t *ctx, quicly_decoded_packet_t *pack
             src += local_cidl;
         } else {
             packet->cid.dest.encrypted = ptls_iovec_init(NULL, 0);
-            packet->cid.dest.plaintext = (quicly_cid_plaintext_t){0};
+            packet->cid.dest.plaintext = quicly_cid_plaintext_invalid;
         }
         packet->cid.dest.might_be_client_generated = 0;
         packet->cid.src = ptls_iovec_init(NULL, 0);

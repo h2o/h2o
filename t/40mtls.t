@@ -28,8 +28,16 @@ subtest "tls1.3 with picotls-cli", sub {
     # whereas openssl calls write(2) for each TLS record.
     my $server = spawn_h2o_server("tlsv1.3");
     like run_picotls_client({ port => $tls_port, opts => "-k t/assets/test_client.key -C t/assets/test_client.crt" }), $TLS_RE_OK, "correct client cert";
-    unlike run_picotls_client({ port => $tls_port }), $TLS_RE_OK, "no client cert";
-    unlike run_picotls_client({ port => $tls_port, opts => "-k examples/h2o/server.key -C examples/h2o/server.crt" }), $TLS_RE_OK, "wrong client cert";
+    like(
+        run_picotls_client({ port => $tls_port }),
+        qr/^ptls_receive:372$/m,
+        "no client cert -> certificate_required alert from peer (116+256)",
+    );
+    like(
+        run_picotls_client({ port => $tls_port, opts => "-k examples/h2o/server.key -C examples/h2o/server.crt" }),
+        qr/^ptls_receive:304$/m,
+        "wrong client cert -> unknown_ca alert from peer (48+256)",
+    );
 };
 
 done_testing;
