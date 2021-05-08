@@ -177,7 +177,7 @@ static void stdin_on_read(h2o_socket_t *_sock, const char *err)
     h2o_buffer_consume(&std_in->input, std_in->input->size);
 }
 
-static void stdin_proceed_request(h2o_httpclient_t *client, size_t bytes_written, h2o_send_state_t state)
+static void stdin_proceed_request(h2o_httpclient_t *client, h2o_send_state_t state)
 {
     if (state == H2O_SEND_STATE_IN_PROGRESS)
         h2o_socket_read_start(std_in, stdin_on_read);
@@ -333,7 +333,7 @@ static void filler_on_io_timeout(h2o_timer_t *entry)
     client->write_req(client, vec, *filler_remaining_bytes(client) == 0);
 }
 
-static void filler_proceed_request(h2o_httpclient_t *client, size_t written, h2o_send_state_t send_state)
+static void filler_proceed_request(h2o_httpclient_t *client, h2o_send_state_t send_state)
 {
     if (*filler_remaining_bytes(client) > 0)
         create_timeout(client->ctx->loop, io_interval, filler_on_io_timeout, client);

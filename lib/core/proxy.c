@@ -388,7 +388,7 @@ static int on_body(h2o_httpclient_t *client, const char *errstr)
             h2o_req_log_error(self->src_req, "lib/core/proxy.c", "%s", errstr);
             self->had_body_error = 1;
             if (self->src_req->proceed_req != NULL) {
-                self->src_req->proceed_req(self->src_req, 0, H2O_SEND_STATE_ERROR);
+                self->src_req->proceed_req(self->src_req, H2O_SEND_STATE_ERROR);
             }
         }
     }
@@ -444,7 +444,7 @@ static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errs
         } else {
             h2o_send_error_502(req, "Gateway Error", errstr, 0);
             if (self->src_req->proceed_req != NULL) {
-                self->src_req->proceed_req(self->src_req, 0, H2O_SEND_STATE_ERROR);
+                self->src_req->proceed_req(self->src_req, H2O_SEND_STATE_ERROR);
             }
         }
 
@@ -474,7 +474,7 @@ static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errs
                     h2o_req_log_error(req, "lib/core/proxy.c", "%s", "invalid response from upstream (malformed content-length)");
                     h2o_send_error_502(req, "Gateway Error", "invalid response from upstream", 0);
                     if (self->src_req->proceed_req != NULL) {
-                        self->src_req->proceed_req(self->src_req, 0, H2O_SEND_STATE_ERROR);
+                        self->src_req->proceed_req(self->src_req, H2O_SEND_STATE_ERROR);
                     }
                     return NULL;
                 }
@@ -568,7 +568,7 @@ static int on_1xx(h2o_httpclient_t *client, int version, int status, h2o_iovec_t
     return 0;
 }
 
-static void proceed_request(h2o_httpclient_t *client, size_t written, h2o_send_state_t send_state)
+static void proceed_request(h2o_httpclient_t *client, h2o_send_state_t send_state)
 {
     struct rp_generator_t *self = client->data;
     if (self == NULL) {
@@ -578,7 +578,7 @@ static void proceed_request(h2o_httpclient_t *client, size_t written, h2o_send_s
         detach_client(self);
     }
     if (self->src_req->proceed_req != NULL)
-        self->src_req->proceed_req(self->src_req, written, send_state);
+        self->src_req->proceed_req(self->src_req, send_state);
 }
 
 static int write_req(void *ctx, h2o_iovec_t chunk, int is_end_stream)

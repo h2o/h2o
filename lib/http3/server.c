@@ -869,7 +869,7 @@ static void on_receive_reset(quicly_stream_t *qs, int err)
     }
 }
 
-static void proceed_request_streaming(h2o_req_t *_req, size_t bytes_written, h2o_send_state_t state)
+static void proceed_request_streaming(h2o_req_t *_req, h2o_send_state_t state)
 {
     struct st_h2o_http3_server_stream_t *stream = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_stream_t, req, _req);
     struct st_h2o_http3_server_conn_t *conn = get_conn(stream);
@@ -894,8 +894,7 @@ static void proceed_request_streaming(h2o_req_t *_req, size_t bytes_written, h2o
     }
 
     /* remove the bytes from the request body buffer */
-    assert(stream->req_body->size == bytes_written);
-    h2o_buffer_consume(&stream->req_body, bytes_written);
+    h2o_buffer_consume(&stream->req_body, stream->req_body->size);
     stream->req.entity = h2o_iovec_init(NULL, 0);
 
     /* unblock read until the next invocation of write_req, or after the final invocation */

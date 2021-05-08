@@ -52,7 +52,7 @@ static const h2o_iovec_t SERVER_PREFACE = {(char *)SERVER_PREFACE_BIN, sizeof(SE
 __thread h2o_buffer_prototype_t h2o_http2_wbuf_buffer_prototype = {{16}, {H2O_HTTP2_DEFAULT_OUTBUF_SIZE}};
 
 static void update_stream_input_window(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, size_t bytes);
-static void proceed_request(h2o_req_t *req, size_t written, h2o_send_state_t send_state);
+static void proceed_request(h2o_req_t *req, h2o_send_state_t send_state);
 static void initiate_graceful_shutdown(h2o_context_t *ctx);
 static void close_connection_now(h2o_http2_conn_t *conn);
 static int close_connection(h2o_http2_conn_t *conn);
@@ -444,10 +444,10 @@ static int update_stream_output_window(h2o_http2_stream_t *stream, ssize_t delta
 
 static void write_streaming_body(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
 {
-    assert(!stream->_write_req_inflight);
+    assert(stream->_write_req_bytes_inflight == 0);
     assert(stream->req_body->size != 0);
 
-    stream->_write_req_inflight = 1;
+    stream->_write_req_bytes_inflight = stream->req_body->size;
 
     int write_req_result = stream->req.write_req.cb(stream->req.write_req.ctx,
                                                     h2o_iovec_init(stream->req_body->bytes, stream->req_body->size),
@@ -496,7 +496,7 @@ static void handle_request_body_chunk(h2o_http2_conn_t *conn, h2o_http2_stream_t
         if (is_end_stream)
             finish_body_streaming(stream);
         if (stream->req.write_req.cb != NULL) {
-            if (!stream->_write_req_inflight)
+            if (stream->_write_req_bytes_inflight == 0)
                 write_streaming_body(conn, stream);
         } else {
             stream->req.entity = h2o_iovec_init(stream->req_body->bytes, stream->req_body->size);
@@ -790,12 +790,13 @@ static void set_priority(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, con
     }
 }
 
-void proceed_request(h2o_req_t *req, size_t written, h2o_send_state_t send_state)
+void proceed_request(h2o_req_t *req, h2o_send_state_t send_state)
 {
     h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, req, req);
     h2o_http2_conn_t *conn = (h2o_http2_conn_t *)stream->req.conn;
+    size_t written = stream->_write_req_bytes_inflight;
 
-    stream->_write_req_inflight = 0;
+    stream->_write_req_bytes_inflight = 0;
 
     if (send_state == H2O_SEND_STATE_ERROR) {
         finish_body_streaming(stream);

@@ -194,9 +194,8 @@ static void start_pending_requests(struct st_h2o_httpclient__h3_conn_t *conn)
 
 static void call_proceed_req(struct st_h2o_http3client_req_t *req, h2o_send_state_t send_state)
 {
-    size_t bytes_written = req->proceed_req.bytes_inflight;
     req->proceed_req.bytes_inflight = SIZE_MAX;
-    req->proceed_req.cb(&req->super, bytes_written, send_state);
+    req->proceed_req.cb(&req->super, send_state);
 }
 
 static void destroy_connection(struct st_h2o_httpclient__h3_conn_t *conn)

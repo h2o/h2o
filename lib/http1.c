@@ -525,7 +525,7 @@ static void send_bad_request(struct st_h2o_http1_conn_t *conn, const char *body)
     h2o_send_error_400(&conn->req, "Bad Request", body, H2O_SEND_ERROR_HTTP1_CLOSE_CONNECTION);
 }
 
-static void proceed_request(h2o_req_t *req, size_t written, h2o_send_state_t send_state)
+static void proceed_request(h2o_req_t *req, h2o_send_state_t send_state)
 {
     struct st_h2o_http1_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http1_conn_t, req, req);
 
@@ -553,7 +553,7 @@ static int write_req_non_streaming(void *_req, h2o_iovec_t payload, int is_end_s
         conn->req.proceed_req = NULL;
         h2o_process_request(&conn->req);
     } else {
-        proceed_request(&conn->req, payload.len, H2O_SEND_STATE_IN_PROGRESS);
+        proceed_request(&conn->req, H2O_SEND_STATE_IN_PROGRESS);
     }
     return 0;
 }

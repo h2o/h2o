@@ -100,7 +100,6 @@ struct st_h2o_http2client_stream_t {
 
     struct {
         h2o_httpclient_proceed_req_cb proceed_req;
-        size_t bytes_in_flight;
         unsigned char done : 1;
     } streaming;
 };
@@ -271,7 +270,7 @@ static void call_callback_with_error(struct st_h2o_http2client_stream_t *stream,
         break;
     case STREAM_STATE_CLOSED:
         if (stream->streaming.proceed_req != NULL) {
-            stream->streaming.proceed_req(&stream->super, 0, H2O_SEND_STATE_ERROR);
+            stream->streaming.proceed_req(&stream->super, H2O_SEND_STATE_ERROR);
         }
         break;
     }
@@ -1016,12 +1015,9 @@ static void on_write_complete(h2o_socket_t *sock, const char *err)
             H2O_STRUCT_FROM_MEMBER(struct st_h2o_http2client_stream_t, output.sending_link, link);
         h2o_linklist_unlink(link);
 
-        if (stream->streaming.proceed_req != NULL) {
-            size_t bytes_written = stream->streaming.bytes_in_flight;
-            stream->streaming.bytes_in_flight = 0;
-            stream->streaming.proceed_req(&stream->super, bytes_written,
+        if (stream->streaming.proceed_req != NULL)
+            stream->streaming.proceed_req(&stream->super,
                                           stream->streaming.done ? H2O_SEND_STATE_FINAL : H2O_SEND_STATE_IN_PROGRESS);
-        }
 
         if (stream->streaming.proceed_req == NULL || stream->streaming.done) {
             stream->state.req = STREAM_STATE_CLOSED;
@@ -1103,9 +1099,6 @@ static void do_emit_writereq(struct st_h2o_http2client_conn_t *conn)
         } else if (h2o_http2_window_get_avail(&stream->output.window) > 0) {
             h2o_linklist_insert(&conn->output.sending_streams, node); /* move to the tail to rotate buffers */
         }
-
-        if (stream->streaming.proceed_req != NULL)
-            stream->streaming.bytes_in_flight += bytes_emitted;
 
         if (next == first)
             break;
