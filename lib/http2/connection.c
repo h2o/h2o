@@ -442,6 +442,24 @@ static int update_stream_output_window(h2o_http2_stream_t *stream, ssize_t delta
     return 0;
 }
 
+static void write_streaming_body(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
+{
+    assert(!stream->_write_req_inflight);
+    assert(stream->req_body->size != 0);
+
+    stream->_write_req_inflight = 1;
+
+    int write_req_result = stream->req.write_req.cb(stream->req.write_req.ctx,
+                                                    h2o_iovec_init(stream->req_body->bytes, stream->req_body->size),
+                                                    !stream->_req_streaming_in_progress);
+    h2o_buffer_consume(&stream->req_body, stream->req_body->size);
+
+    if (write_req_result != 0) {
+        stream_send_error(conn, stream->stream_id, H2O_HTTP2_ERROR_STREAM_CLOSED);
+        h2o_http2_stream_reset(conn, stream);
+    }
+}
+
 static void handle_request_body_chunk(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, h2o_iovec_t payload, int is_end_stream)
 {
     stream->req.req_body_bytes_received += payload.len;
@@ -465,26 +483,47 @@ static void handle_request_body_chunk(h2o_http2_conn_t *conn, h2o_http2_stream_t
     if (!stream->blocked_by_server)
         h2o_http2_stream_set_blocked_by_server(conn, stream, 1);
 
-    /* handle input */
+    /* update state, buffer the data */
     if (is_end_stream && stream->state < H2O_HTTP2_STREAM_STATE_REQ_PENDING) {
         h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_REQ_PENDING);
         if (stream->req.proceed_req != NULL)
             h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_SEND_HEADERS);
     }
-    if (stream->req.write_req.cb(stream->req.write_req.ctx, payload, is_end_stream) != 0) {
-        stream_send_error(conn, stream->stream_id, H2O_HTTP2_ERROR_STREAM_CLOSED);
-        h2o_http2_stream_reset(conn, stream);
+    h2o_buffer_append(&stream->req_body, payload.base, payload.len);
+
+    /* if streaming request body, submit the chunk or just keep it, and return */
+    if (stream->_req_streaming_in_progress) {
+        if (is_end_stream)
+            finish_body_streaming(stream);
+        if (!stream->_write_req_inflight)
+            write_streaming_body(conn, stream);
         return;
     }
 
-    if (is_end_stream) {
-        if (stream->_req_streaming_in_progress) {
-            finish_body_streaming(stream);
+    stream->req.entity = h2o_iovec_init(stream->req_body->bytes, stream->req_body->size);
+
+    /* if this block is the first (and not the last) DATA frame, trigger request streaming if possible, update stream input window
+     * to receive more data */
+    if (!stream->_received_first_body_chunk) {
+        stream->_received_first_body_chunk = 1;
+        if (!is_end_stream && h2o_req_can_stream_request(&stream->req)) {
+            stream->req.entity = h2o_iovec_init(stream->req_body->bytes, stream->req_body->size);
+            stream->req.proceed_req = proceed_request;
+            if (!reset_stream_if_disregarded(conn, stream))
+                execute_or_enqueue_request_core(conn, stream);
+            return;
         }
-        if (stream->state == H2O_HTTP2_STREAM_STATE_END_STREAM) {
-            h2o_http2_stream_close(conn, stream);
-        }
+        /* TODO elect input streams one by one for non-streaming case as well? */
+        if (!is_end_stream)
+            update_stream_input_window(conn, stream,
+                                       conn->super.ctx->globalconf->http2.active_stream_window_size -
+                                           H2O_HTTP2_SETTINGS_HOST_STREAM_INITIAL_WINDOW_SIZE);
     }
+
+    if (stream->state == H2O_HTTP2_STREAM_STATE_END_STREAM)
+        h2o_http2_stream_close(conn, stream);
+    if (!stream->req.process_called)
+        execute_or_enqueue_request(conn, stream);
 }
 
 static int send_invalid_request_error(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, const char *err_desc)
@@ -545,7 +584,6 @@ static int handle_incoming_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
         /* reject the request if content-length is specified or if the stream has been closed */
         if (stream->req.content_length != SIZE_MAX || stream->req_body == NULL)
             return send_invalid_request_error(conn, stream, "Invalid CONNECT request");
-        assert(stream->req.write_req.cb != NULL); /* should have been sent already */
         /* handle the request */
         stream->req.is_tunnel_req = 1;
         stream->req.proceed_req = proceed_request;
@@ -753,6 +791,8 @@ void proceed_request(h2o_req_t *req, size_t written, h2o_send_state_t send_state
     h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, req, req);
     h2o_http2_conn_t *conn = (h2o_http2_conn_t *)stream->req.conn;
 
+    stream->_write_req_inflight = 0;
+
     if (send_state == H2O_SEND_STATE_ERROR) {
         finish_body_streaming(stream);
         if (conn->state < H2O_HTTP2_CONN_STATE_IS_CLOSING)
@@ -771,60 +811,9 @@ void proceed_request(h2o_req_t *req, size_t written, h2o_send_state_t send_state
         h2o_http2_stream_set_blocked_by_server(conn, stream, 0);
         update_idle_timeout(conn);
     }
-}
 
-static int write_req_non_streaming(void *_req, h2o_iovec_t payload, int is_end_stream)
-{
-    h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, req, _req);
-
-    if (h2o_buffer_try_append(&stream->req_body, payload.base, payload.len) == 0)
-        return -1;
-    proceed_request(&stream->req, payload.len, is_end_stream ? H2O_SEND_STATE_FINAL : H2O_SEND_STATE_IN_PROGRESS);
-
-    if (is_end_stream) {
-        stream->req.entity = h2o_iovec_init(stream->req_body->bytes, stream->req_body->size);
-        execute_or_enqueue_request((h2o_http2_conn_t *)stream->req.conn, stream);
-    }
-    return 0;
-}
-
-static int write_req_streaming_pre_dispatch(void *_req, h2o_iovec_t payload, int is_end_stream)
-{
-    h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, req, _req);
-    if (!h2o_buffer_try_append(&stream->req_body, payload.base, payload.len))
-        return -1;
-    stream->req.entity = h2o_iovec_init(stream->req_body->bytes, stream->req_body->size);
-
-    /* mark that we have seen eos */
-    if (is_end_stream)
-        stream->req.proceed_req = NULL;
-
-    return 0;
-}
-
-static int write_req_first(void *_req, h2o_iovec_t payload, int is_end_stream)
-{
-    h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, req, _req);
-    h2o_http2_conn_t *conn = (h2o_http2_conn_t *)stream->req.conn;
-
-    /* if possible, switch streaming request body mode */
-    if (!is_end_stream && h2o_req_can_stream_request(&stream->req)) {
-        if (!h2o_buffer_try_append(&stream->req_body, payload.base, payload.len))
-            return -1;
-        stream->req.entity = h2o_iovec_init(stream->req_body->bytes, stream->req_body->size);
-        stream->req.write_req.cb = write_req_streaming_pre_dispatch;
-        stream->req.proceed_req = proceed_request;
-        if (!reset_stream_if_disregarded(conn, stream))
-            execute_or_enqueue_request_core(conn, stream);
-        return 0;
-    }
-
-    /* TODO elect input streams one by one for non-streaming case as well? */
-    update_stream_input_window(conn, stream,
-                               conn->super.ctx->globalconf->http2.active_stream_window_size -
-                                   H2O_HTTP2_SETTINGS_HOST_STREAM_INITIAL_WINDOW_SIZE);
-    stream->req.write_req.cb = write_req_non_streaming;
-    return write_req_non_streaming(&stream->req, payload, is_end_stream);
+    if (h2o_send_state_is_in_progress(send_state) && stream->req_body->size != 0)
+        write_streaming_body(conn, stream);
 }
 
 static int handle_data_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame, const char **err_desc)
@@ -925,8 +914,6 @@ static int handle_headers_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame
         set_priority(conn, stream, &payload.priority, 0);
     }
     h2o_http2_stream_prepare_for_request(conn, stream);
-    stream->req.write_req.cb = write_req_first;
-    stream->req.write_req.ctx = &stream->req;
 
     /* setup container for request body if it is expected to arrive */
     if ((frame->flags & H2O_HTTP2_FRAME_FLAG_END_STREAM) == 0)

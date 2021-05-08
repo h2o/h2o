@@ -1011,34 +1011,10 @@ typedef struct st_h2o_filereq_t {
 
 /**
  * Called be the protocol handler to submit chunk of request body to the generator. The callback returns 0 if successful, otherwise
- * a non-zero value. Due to historical reasons, at memoment, there is a discrepancy in how this callback (or the underlying
- * `h2o_httpclient_t::write_req` callback) can be used.
+ * a non-zero value. Once `write_req.cb` is called, subsequent invocations MUST be postponed until the `proceed_req` is called. At
+ * the moment, `write_req_cb` is required to create a copy of data being provided before returning. To avoid copying, we should
+ * consider delegating the responsibility of retaining the buffer to the caller.
  *
- * The following implementations assume that the callback cannot be called until the `proceed_req` callback is invoked in response:
- *   * lib/common/http3client.c
- *   * lib/handler/connect.c
- *
- * The following implementations allow the user to call `write_req` repeatedly while request body is in flight.
- *   * lib/common/http1client.c
- *   * lib/common/http2client.c
- *
- * Both groups of the implementations copy data into their buffer at the time of invocation, thereby allowing the users to reuse
- * the buffer when the `write_req` callback returns.
- *
- * Among the groups of the callers, the only user that invokes `write_req` without waiting for the invocation of `proceed_req` is
- * the http2 protocol handler (lib/http2/connection.c and lib/http2/stream.c). Other callers listed below wait for `proceed_req`:
- *   * lib/http1.c
- *   * lib/http3/server.c
- *   * src/httpclient.c
- *
- * The discrepancy indicates that the requests being received by the HTTP/2 protocol handler cannot be passed to the reverse proxy
- * using HTTP/3, or to the connect handler.
- *
- * Eventually, we should change the HTTP/2 protocol handler so that it would refrain from invoking `write_req` consequently. That
- * should not be difficult, as the protocol handler retains a stream-level buffer anyways for demultiplexing the HTTP/2 streams that
- * it is handling. Additionally, we might consider delegating the responsibility of retaining the buffer from the implementations to
- * the users, doing so would eliminate the need to copy data when the implementations can utilize the send buffer provided by the
- * TCP/IP stack (i.e., in case of lib/common/http1client.c and lib/handler/connect.c).
  */
 typedef int (*h2o_write_req_cb)(void *ctx, h2o_iovec_t chunk, int is_end_stream);
 /**

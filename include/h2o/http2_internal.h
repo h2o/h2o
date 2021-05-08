@@ -119,6 +119,14 @@ struct st_h2o_http2_stream_t {
      */
     unsigned _req_streaming_in_progress : 1;
     /**
+     * if waiting for `proceed_req` to be called
+     */
+    unsigned _write_req_inflight : 1;
+    /**
+     *
+     */
+    unsigned _received_first_body_chunk : 1;
+    /**
      *  steate of the ostream, only used in push mode
      */
     h2o_send_state_t send_state;
