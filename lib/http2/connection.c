@@ -491,12 +491,16 @@ static void handle_request_body_chunk(h2o_http2_conn_t *conn, h2o_http2_stream_t
     }
     h2o_buffer_append(&stream->req_body, payload.base, payload.len);
 
-    /* if streaming request body, submit the chunk or just keep it, and return */
+    /* if streaming request body, either submit the chunk or just keep it, and return */
     if (stream->_req_streaming_in_progress) {
         if (is_end_stream)
             finish_body_streaming(stream);
-        if (!stream->_write_req_inflight)
-            write_streaming_body(conn, stream);
+        if (stream->req.write_req.cb != NULL) {
+            if (!stream->_write_req_inflight)
+                write_streaming_body(conn, stream);
+        } else {
+            stream->req.entity = h2o_iovec_init(stream->req_body->bytes, stream->req_body->size);
+        }
         return;
     }
 
