@@ -525,7 +525,7 @@ static void handle_request_body_chunk(h2o_http2_conn_t *conn, h2o_http2_stream_t
     if (stream->state == H2O_HTTP2_STREAM_STATE_END_STREAM)
         h2o_http2_stream_close(conn, stream);
     if (!stream->req.process_called)
-        execute_or_enqueue_request(conn, stream);
+        execute_or_enqueue_request_core(conn, stream);
 }
 
 static int send_invalid_request_error(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, const char *err_desc)
