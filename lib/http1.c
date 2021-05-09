@@ -580,6 +580,17 @@ static int write_req_first(void *_req, int is_end_stream)
     return write_req_non_streaming(&conn->req, is_end_stream);
 }
 
+static int write_req_connect_first(void *_req, int is_end_stream)
+{
+    struct st_h2o_http1_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http1_conn_t, req, _req);
+
+    conn->req.write_req.cb = NULL; /* will not be called again until proceed_req is called by the generator */
+    if (is_end_stream)
+        conn->req.proceed_req = NULL;
+
+    return 0;
+}
+
 static void handle_incoming_request(struct st_h2o_http1_conn_t *conn)
 {
     size_t inreqlen = conn->sock->input->size < H2O_MAX_REQLEN ? conn->sock->input->size : H2O_MAX_REQLEN;
@@ -657,7 +668,7 @@ static void handle_incoming_request(struct st_h2o_http1_conn_t *conn)
             conn->_unconsumed_request_size = 0;
             h2o_buffer_consume(&conn->sock->input, reqlen);
             h2o_buffer_init(&conn->req_body, &h2o_socket_buffer_prototype);
-            conn->req.write_req.cb = NULL;
+            conn->req.write_req.cb = write_req_connect_first;
             conn->req.write_req.ctx = &conn->req;
             conn->req.proceed_req = proceed_request;
             conn->req.entity = h2o_iovec_init("", 0); /* set to non-NULL pointer to indicate that request body exists */
