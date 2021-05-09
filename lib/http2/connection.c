@@ -445,11 +445,12 @@ static int update_stream_output_window(h2o_http2_stream_t *stream, ssize_t delta
 static void write_streaming_body(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
 {
     assert(stream->req.entity.base == NULL);
-    assert(stream->req_body->size != 0);
+    assert(stream->req_body->size != 0 || !stream->_req_streaming_in_progress);
+    assert(!stream->_req_streaming_sent_close);
 
     stream->req.entity = h2o_iovec_init(stream->req_body->bytes, stream->req_body->size);
-    int write_req_result = stream->req.write_req.cb(stream->req.write_req.ctx, !stream->_req_streaming_in_progress);
-    h2o_buffer_consume(&stream->req_body, stream->req_body->size);
+    stream->_req_streaming_sent_close = !stream->_req_streaming_in_progress;
+    int write_req_result = stream->req.write_req.cb(stream->req.write_req.ctx, stream->_req_streaming_sent_close);
 
     if (write_req_result != 0) {
         stream_send_error(conn, stream->stream_id, H2O_HTTP2_ERROR_STREAM_CLOSED);
@@ -793,6 +794,8 @@ void proceed_request(h2o_req_t *req, const char *errstr)
     h2o_http2_conn_t *conn = (h2o_http2_conn_t *)stream->req.conn;
     size_t written = stream->req.entity.len;
 
+    h2o_buffer_consume(&stream->req_body, written);
+
     stream->req.entity = h2o_iovec_init(NULL, 0);
 
     if (errstr != NULL) {
@@ -814,7 +817,8 @@ void proceed_request(h2o_req_t *req, const char *errstr)
         update_idle_timeout(conn);
     }
 
-    if (stream->req_body->size != 0 || !stream->_req_streaming_in_progress)
+    if ((stream->req_body->size != 0 || (!stream->_req_streaming_in_progress && !stream->_req_streaming_sent_close)) &&
+        stream->req.write_req.cb != NULL)
         write_streaming_body(conn, stream);
 }
 

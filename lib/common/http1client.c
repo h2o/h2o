@@ -515,15 +515,18 @@ static void req_body_send_complete(h2o_socket_t *sock, const char *err)
 {
     struct st_h2o_http1client_t *client = sock->data;
 
+    h2o_buffer_consume(&client->body_buf.buf, client->body_buf.buf->size);
+
     if (err != NULL) {
         on_whole_request_sent(client->sock, err);
         return;
     }
 
-    call_proceed_req(client, NULL);
-    h2o_buffer_consume(&client->body_buf.buf, client->body_buf.buf->size);
+    int is_end_stream = client->body_buf.is_end_stream;
 
-    if (client->body_buf.is_end_stream)
+    call_proceed_req(client, NULL);
+
+    if (is_end_stream)
         on_whole_request_sent(client->sock, NULL);
 }
 

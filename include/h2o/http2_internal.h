@@ -121,6 +121,10 @@ struct st_h2o_http2_stream_t {
     /**
      *
      */
+    unsigned _req_streaming_sent_close : 1;
+    /**
+     *
+     */
     unsigned _received_first_body_chunk : 1;
     /**
      *  steate of the ostream, only used in push mode
