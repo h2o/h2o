@@ -537,6 +537,9 @@ static void proceed_request(h2o_req_t *req, const char *errstr)
 {
     struct st_h2o_http1_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http1_conn_t, req, req);
 
+    assert(conn->req.entity.len == conn->req_body->size);
+    h2o_buffer_consume(&conn->req_body, conn->req_body->size);
+
     if (errstr != NULL) {
         entity_read_send_error_502(conn, "Bad Gateway", "Bad Gateway");
         return;
