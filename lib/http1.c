@@ -525,16 +525,15 @@ static void send_bad_request(struct st_h2o_http1_conn_t *conn, const char *body)
     h2o_send_error_400(&conn->req, "Bad Request", body, H2O_SEND_ERROR_HTTP1_CLOSE_CONNECTION);
 }
 
-static void proceed_request(h2o_req_t *req, h2o_send_state_t send_state)
+static void proceed_request(h2o_req_t *req, const char *errstr)
 {
     struct st_h2o_http1_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http1_conn_t, req, req);
 
-    if (send_state == H2O_SEND_STATE_ERROR) {
+    if (errstr != NULL) {
         entity_read_send_error_502(conn, "Bad Gateway", "Bad Gateway");
         return;
     }
 
-    assert(send_state == H2O_SEND_STATE_IN_PROGRESS);
     set_req_timeout(conn, conn->super.ctx->globalconf->http1.req_timeout, reqread_on_timeout);
     set_req_io_timeout(conn, conn->super.ctx->globalconf->http1.req_io_timeout, req_io_on_timeout);
     h2o_socket_read_start(conn->sock, reqread_on_read);
@@ -553,7 +552,7 @@ static int write_req_non_streaming(void *_req, h2o_iovec_t payload, int is_end_s
         conn->req.proceed_req = NULL;
         h2o_process_request(&conn->req);
     } else {
-        proceed_request(&conn->req, H2O_SEND_STATE_IN_PROGRESS);
+        proceed_request(&conn->req, 0);
     }
     return 0;
 }

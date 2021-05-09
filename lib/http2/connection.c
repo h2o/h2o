@@ -52,7 +52,7 @@ static const h2o_iovec_t SERVER_PREFACE = {(char *)SERVER_PREFACE_BIN, sizeof(SE
 __thread h2o_buffer_prototype_t h2o_http2_wbuf_buffer_prototype = {{16}, {H2O_HTTP2_DEFAULT_OUTBUF_SIZE}};
 
 static void update_stream_input_window(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, size_t bytes);
-static void proceed_request(h2o_req_t *req, h2o_send_state_t send_state);
+static void proceed_request(h2o_req_t *req, const char *errstr);
 static void initiate_graceful_shutdown(h2o_context_t *ctx);
 static void close_connection_now(h2o_http2_conn_t *conn);
 static int close_connection(h2o_http2_conn_t *conn);
@@ -790,7 +790,7 @@ static void set_priority(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, con
     }
 }
 
-void proceed_request(h2o_req_t *req, h2o_send_state_t send_state)
+void proceed_request(h2o_req_t *req, const char *errstr)
 {
     h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, req, req);
     h2o_http2_conn_t *conn = (h2o_http2_conn_t *)stream->req.conn;
@@ -798,7 +798,7 @@ void proceed_request(h2o_req_t *req, h2o_send_state_t send_state)
 
     stream->_write_req_bytes_inflight = 0;
 
-    if (send_state == H2O_SEND_STATE_ERROR) {
+    if (errstr != NULL) {
         finish_body_streaming(stream);
         if (conn->state < H2O_HTTP2_CONN_STATE_IS_CLOSING)
             stream_send_error(conn, stream->stream_id, H2O_HTTP2_ERROR_STREAM_CLOSED);
@@ -807,7 +807,7 @@ void proceed_request(h2o_req_t *req, h2o_send_state_t send_state)
         return;
     }
 
-    if (h2o_send_state_is_in_progress(send_state)) {
+    if (stream->_req_streaming_in_progress) {
         assert(written != 0);
         update_stream_input_window(conn, stream, written);
     }
@@ -817,7 +817,7 @@ void proceed_request(h2o_req_t *req, h2o_send_state_t send_state)
         update_idle_timeout(conn);
     }
 
-    if (h2o_send_state_is_in_progress(send_state) && stream->req_body->size != 0)
+    if (stream->req_body->size != 0 || !stream->_req_streaming_in_progress)
         write_streaming_body(conn, stream);
 }
 

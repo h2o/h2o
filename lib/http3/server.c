@@ -869,7 +869,7 @@ static void on_receive_reset(quicly_stream_t *qs, int err)
     }
 }
 
-static void proceed_request_streaming(h2o_req_t *_req, h2o_send_state_t state)
+static void proceed_request_streaming(h2o_req_t *_req, const char *errstr)
 {
     struct st_h2o_http3_server_stream_t *stream = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_stream_t, req, _req);
     struct st_h2o_http3_server_conn_t *conn = get_conn(stream);
@@ -878,7 +878,7 @@ static void proceed_request_streaming(h2o_req_t *_req, h2o_send_state_t state)
     assert(!h2o_linklist_is_linked(&stream->link));
     assert(conn->num_streams_req_streaming != 0 || stream->req.is_tunnel_req);
 
-    if (state != H2O_SEND_STATE_IN_PROGRESS) {
+    if (errstr != NULL || quicly_recvstate_transfer_complete(&stream->quic->recvstate)) {
         /* tidy up the request streaming */
         stream->req.write_req.cb = NULL;
         stream->req.write_req.ctx = NULL;
@@ -887,7 +887,7 @@ static void proceed_request_streaming(h2o_req_t *_req, h2o_send_state_t state)
             --conn->num_streams_req_streaming;
         check_run_blocked(conn);
         /* close the stream if an error occurred */
-        if (state == H2O_SEND_STATE_ERROR) {
+        if (errstr != NULL) {
             shutdown_stream(stream, H2O_HTTP3_ERROR_INTERNAL, H2O_HTTP3_ERROR_INTERNAL, 1);
             return;
         }

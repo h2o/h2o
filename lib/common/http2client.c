@@ -269,9 +269,8 @@ static void call_callback_with_error(struct st_h2o_http2client_stream_t *stream,
         stream->super._cb.on_body(&stream->super, errstr);
         break;
     case STREAM_STATE_CLOSED:
-        if (stream->streaming.proceed_req != NULL) {
-            stream->streaming.proceed_req(&stream->super, H2O_SEND_STATE_ERROR);
-        }
+        if (stream->streaming.proceed_req != NULL)
+            stream->streaming.proceed_req(&stream->super, errstr);
         break;
     }
 }
@@ -1016,8 +1015,7 @@ static void on_write_complete(h2o_socket_t *sock, const char *err)
         h2o_linklist_unlink(link);
 
         if (stream->streaming.proceed_req != NULL)
-            stream->streaming.proceed_req(&stream->super,
-                                          stream->streaming.done ? H2O_SEND_STATE_FINAL : H2O_SEND_STATE_IN_PROGRESS);
+            stream->streaming.proceed_req(&stream->super, 0);
 
         if (stream->streaming.proceed_req == NULL || stream->streaming.done) {
             stream->state.req = STREAM_STATE_CLOSED;
