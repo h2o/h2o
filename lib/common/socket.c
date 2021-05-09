@@ -1708,10 +1708,10 @@ int h2o_socket_ebpf_setup(void)
                              map_attr.key_size, m.key_size);
             goto Error;
         }
-        if (m.key_size != map_attr.key_size) {
+        if (m.value_size != map_attr.value_size) {
             h2o_error_printf(H2O_EBPF_RETURN_MAP_PATH " has an unexpected map value size: expected %" PRIu32 " but got %" PRIu32
                                                       "\n",
-                             map_attr.value_size, m.key_size);
+                             map_attr.value_size, m.value_size);
             goto Error;
         }
     }
