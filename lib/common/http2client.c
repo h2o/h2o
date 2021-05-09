@@ -101,6 +101,7 @@ struct st_h2o_http2client_stream_t {
     struct {
         h2o_httpclient_proceed_req_cb proceed_req;
         unsigned char done : 1;
+        unsigned char inflight : 1;
     } streaming;
 };
 
@@ -269,8 +270,10 @@ static void call_callback_with_error(struct st_h2o_http2client_stream_t *stream,
         stream->super._cb.on_body(&stream->super, errstr);
         break;
     case STREAM_STATE_CLOSED:
-        if (stream->streaming.proceed_req != NULL)
+        if (stream->streaming.proceed_req != NULL) {
+            stream->streaming.inflight = 0; /* proceed_req can be called to indicate error, regardless of write being inflight */
             stream->streaming.proceed_req(&stream->super, errstr);
+        }
         break;
     }
 }
@@ -1014,8 +1017,10 @@ static void on_write_complete(h2o_socket_t *sock, const char *err)
             H2O_STRUCT_FROM_MEMBER(struct st_h2o_http2client_stream_t, output.sending_link, link);
         h2o_linklist_unlink(link);
 
-        if (stream->streaming.proceed_req != NULL)
+        if (stream->streaming.proceed_req != NULL && stream->streaming.inflight) {
+            stream->streaming.inflight = 0;
             stream->streaming.proceed_req(&stream->super, 0);
+        }
 
         if (stream->streaming.proceed_req == NULL || stream->streaming.done) {
             stream->state.req = STREAM_STATE_CLOSED;
@@ -1210,7 +1215,9 @@ static int do_write_req(h2o_httpclient_t *_client, h2o_iovec_t chunk, int is_end
 {
     struct st_h2o_http2client_stream_t *stream = (void *)_client;
     assert(stream->streaming.proceed_req != NULL);
+    assert(!stream->streaming.inflight);
 
+    stream->streaming.inflight = 1;
     if (is_end_stream)
         stream->streaming.done = 1;
 
