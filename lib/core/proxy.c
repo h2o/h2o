@@ -576,10 +576,11 @@ static void proceed_request(h2o_httpclient_t *client, const char *errstr)
         self->src_req->proceed_req(self->src_req, errstr);
 }
 
-static int write_req(void *ctx, h2o_iovec_t chunk, int is_end_stream)
+static int write_req(void *ctx, int is_end_stream)
 {
     struct rp_generator_t *self = ctx;
     h2o_httpclient_t *client = self->client;
+    h2o_iovec_t chunk = self->src_req->entity;
 
     assert(chunk.len != 0 || is_end_stream);
 

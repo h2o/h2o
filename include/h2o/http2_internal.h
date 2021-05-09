@@ -123,10 +123,6 @@ struct st_h2o_http2_stream_t {
      */
     unsigned _received_first_body_chunk : 1;
     /**
-     * bytes being submitted to `write_req` and waiting for completion, or 0 if none
-     */
-    size_t _write_req_bytes_inflight;
-    /**
      *  steate of the ostream, only used in push mode
      */
     h2o_send_state_t send_state;

@@ -163,9 +163,10 @@ static void tunnel_do_write(struct st_connect_generator_t *self)
     h2o_socket_write(self->sock, &vec, 1, tunnel_on_write_complete);
 }
 
-static int tunnel_write(void *_self, h2o_iovec_t chunk, int is_end_stream)
+static int tunnel_write(void *_self, int is_end_stream)
 {
     struct st_connect_generator_t *self = _self;
+    h2o_iovec_t chunk = self->src_req->entity;
 
     assert(!self->sendbuf_closed);
     assert(self->sendbuf->size == 0);

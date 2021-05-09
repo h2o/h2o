@@ -444,14 +444,11 @@ static int update_stream_output_window(h2o_http2_stream_t *stream, ssize_t delta
 
 static void write_streaming_body(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
 {
-    assert(stream->_write_req_bytes_inflight == 0);
+    assert(stream->req.entity.base == NULL);
     assert(stream->req_body->size != 0);
 
-    stream->_write_req_bytes_inflight = stream->req_body->size;
-
-    int write_req_result = stream->req.write_req.cb(stream->req.write_req.ctx,
-                                                    h2o_iovec_init(stream->req_body->bytes, stream->req_body->size),
-                                                    !stream->_req_streaming_in_progress);
+    stream->req.entity = h2o_iovec_init(stream->req_body->bytes, stream->req_body->size);
+    int write_req_result = stream->req.write_req.cb(stream->req.write_req.ctx, !stream->_req_streaming_in_progress);
     h2o_buffer_consume(&stream->req_body, stream->req_body->size);
 
     if (write_req_result != 0) {
@@ -496,7 +493,7 @@ static void handle_request_body_chunk(h2o_http2_conn_t *conn, h2o_http2_stream_t
         if (is_end_stream)
             finish_body_streaming(stream);
         if (stream->req.write_req.cb != NULL) {
-            if (stream->_write_req_bytes_inflight == 0)
+            if (stream->req.entity.base == NULL)
                 write_streaming_body(conn, stream);
         } else {
             stream->req.entity = h2o_iovec_init(stream->req_body->bytes, stream->req_body->size);
@@ -794,9 +791,9 @@ void proceed_request(h2o_req_t *req, const char *errstr)
 {
     h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, req, req);
     h2o_http2_conn_t *conn = (h2o_http2_conn_t *)stream->req.conn;
-    size_t written = stream->_write_req_bytes_inflight;
+    size_t written = stream->req.entity.len;
 
-    stream->_write_req_bytes_inflight = 0;
+    stream->req.entity = h2o_iovec_init(NULL, 0);
 
     if (errstr != NULL) {
         finish_body_streaming(stream);

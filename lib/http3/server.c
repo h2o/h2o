@@ -894,6 +894,7 @@ static void proceed_request_streaming(h2o_req_t *_req, const char *errstr)
     }
 
     /* remove the bytes from the request body buffer */
+    assert(stream->req.entity.len == stream->req_body->size);
     h2o_buffer_consume(&stream->req_body, stream->req_body->size);
     stream->req.entity = h2o_iovec_init(NULL, 0);
 
@@ -951,8 +952,8 @@ static void run_delayed(h2o_timer_t *timer)
             h2o_linklist_unlink(&stream->link);
             stream->read_blocked = 1;
             made_progress = 1;
-            if (stream->req.write_req.cb(stream->req.write_req.ctx, h2o_iovec_init(stream->req_body->bytes, stream->req_body->size),
-                                         is_end_stream) != 0)
+            assert(stream->req.entity.base == stream->req_body->bytes && stream->req.entity.len == stream->req_body->size);
+            if (stream->req.write_req.cb(stream->req.write_req.ctx, is_end_stream) != 0)
                 shutdown_stream(stream, H2O_HTTP3_ERROR_INTERNAL, H2O_HTTP3_ERROR_INTERNAL, 0);
         }
 

@@ -1016,7 +1016,7 @@ typedef struct st_h2o_filereq_t {
  * consider delegating the responsibility of retaining the buffer to the caller.
  *
  */
-typedef int (*h2o_write_req_cb)(void *ctx, h2o_iovec_t chunk, int is_end_stream);
+typedef int (*h2o_write_req_cb)(void *ctx, int is_end_stream);
 /**
  * In response to `h2o_write_req_cb`, called by the generator to indicate to the protocol handler that new chunk can be submitted.
  * Note that `errstr` will be NULL (rather than an error code indicating EOS) when called in response to `h2o_write_req_cb` with
