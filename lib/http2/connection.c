@@ -504,10 +504,12 @@ static void handle_request_body_chunk(h2o_http2_conn_t *conn, h2o_http2_stream_t
 
     stream->req.entity = h2o_iovec_init(stream->req_body->bytes, stream->req_body->size);
 
+    int is_first_chunk = !stream->_received_first_body_chunk;
+    stream->_received_first_body_chunk = 1;
+
     /* if this block is the first (and not the last) DATA frame, trigger request streaming if possible, update stream input window
      * to receive more data */
-    if (!stream->_received_first_body_chunk) {
-        stream->_received_first_body_chunk = 1;
+    if (is_first_chunk) {
         if (!is_end_stream && h2o_req_can_stream_request(&stream->req)) {
             stream->req.entity = h2o_iovec_init(stream->req_body->bytes, stream->req_body->size);
             stream->req.proceed_req = proceed_request;
@@ -524,7 +526,7 @@ static void handle_request_body_chunk(h2o_http2_conn_t *conn, h2o_http2_stream_t
 
     if (stream->state == H2O_HTTP2_STREAM_STATE_END_STREAM)
         h2o_http2_stream_close(conn, stream);
-    if (!stream->req.process_called)
+    if (is_first_chunk && !stream->req.process_called)
         execute_or_enqueue_request_core(conn, stream);
 }
 
