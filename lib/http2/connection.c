@@ -186,7 +186,8 @@ static int can_run_requests(h2o_http2_conn_t *conn)
 static void process_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
 {
     if (stream->req.proceed_req != NULL) {
-        assert(!(stream->req_body.state == H2O_HTTP2_REQ_BODY_NONE || stream->req_body.state == H2O_HTTP2_REQ_BODY_CLOSE_DELIVERED));
+        assert(
+            !(stream->req_body.state == H2O_HTTP2_REQ_BODY_NONE || stream->req_body.state == H2O_HTTP2_REQ_BODY_CLOSE_DELIVERED));
         conn->num_streams._req_streaming_in_progress++;
         stream->req_body.streamed = 1;
         if (stream->req.is_tunnel_req)
@@ -496,7 +497,7 @@ static void handle_request_body_chunk(h2o_http2_conn_t *conn, h2o_http2_stream_t
     switch (stream->req_body.state) {
     case H2O_HTTP2_REQ_BODY_OPEN_BEFORE_FIRST_FRAME:
         is_first = 1;
-        set_req_body_state(conn, stream,  H2O_HTTP2_REQ_BODY_OPEN);
+        set_req_body_state(conn, stream, H2O_HTTP2_REQ_BODY_OPEN);
         break;
     case H2O_HTTP2_REQ_BODY_OPEN:
         break;
@@ -911,7 +912,8 @@ static int handle_data_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame, c
             return H2O_HTTP2_ERROR_PROTOCOL;
         }
     }
-    if (!(stream->state == H2O_HTTP2_REQ_BODY_OPEN_BEFORE_FIRST_FRAME || stream->state == H2O_HTTP2_REQ_BODY_OPEN)) {
+    if (!(stream->req_body.state == H2O_HTTP2_REQ_BODY_OPEN_BEFORE_FIRST_FRAME ||
+          stream->req_body.state == H2O_HTTP2_REQ_BODY_OPEN)) {
         stream_send_error(conn, frame->stream_id, H2O_HTTP2_ERROR_STREAM_CLOSED);
         h2o_http2_stream_reset(conn, stream);
         return 0;
