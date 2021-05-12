@@ -374,6 +374,9 @@ void close_connection_now(h2o_http2_conn_t *conn)
     assert(conn->num_streams.push.half_closed == 0);
     assert(conn->num_streams.push.send_body == 0);
     assert(conn->num_streams.priority.open == 0);
+    assert(conn->num_streams.blocked_by_server == 0);
+    assert(conn->num_streams._req_streaming_in_progress == 0);
+    assert(conn->num_streams.tunnel == 0);
     kh_destroy(h2o_http2_stream_t, conn->streams);
     assert(conn->_http1_req_input == NULL);
     h2o_hpack_dispose_header_table(&conn->_input_header_table);
