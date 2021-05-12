@@ -59,7 +59,7 @@ struct {
     } headers[256];
     size_t num_headers;
     size_t body_size;
-    h2o_url_t connect_to; /* when CONNECT method is used, req.url specifies the address of the connect proxy, and this field
+    h2o_url_t *connect_to; /* when -x option is used, req.url specifies the address of the connect proxy, and this field
                              specifies the address of the server to which a TCP connection should be established */
 } req = {NULL, "GET"};
 static unsigned cnt_left = 1, concurrency = 1;
@@ -251,11 +251,15 @@ static void start_request(h2o_httpclient_ctx_t *ctx)
         return;
     }
 
+    if (req.connect_to)
+        req.connect_to->scheme = url_parsed->scheme;
+
     /* initiate the request */
     if (connpool == NULL) {
         connpool = h2o_mem_alloc(sizeof(*connpool));
         h2o_socketpool_t *sockpool = h2o_mem_alloc(sizeof(*sockpool));
-        h2o_socketpool_target_t *target = h2o_socketpool_create_target(url_parsed, NULL);
+        h2o_socketpool_target_t *target = h2o_socketpool_create_target(
+                req.connect_to ? req.connect_to : url_parsed, NULL);
         h2o_socketpool_init_specific(sockpool, 10, &target, 1, NULL);
         h2o_socketpool_set_timeout(sockpool, IO_TIMEOUT);
         h2o_socketpool_register_loop(sockpool, ctx->loop);
@@ -423,7 +427,7 @@ h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *errstr, 
     }
 
     *_method = h2o_iovec_init(req.method, strlen(req.method));
-    *url = *(strcmp(req.method, "CONNECT") == 0 ? &req.connect_to : (h2o_url_t *)client->data);
+    *url = *(strcmp(req.method, "CONNECT") == 0 ? req.connect_to : (h2o_url_t *)client->data);
     for (i = 0; i != req.num_headers; ++i)
         h2o_add_header_by_str(&pool, &headers_vec, req.headers[i].name.base, req.headers[i].name.len, 1, NULL,
                               req.headers[i].value.base, req.headers[i].value.len);
@@ -467,8 +471,7 @@ static void usage(const char *progname)
             "  -t <times>   number of requests to send the request (default: 1)\n"
             "  -W <bytes>   receive window size (HTTP/3 only)\n"
             "  -x <host:port>\n"
-            "               specifies the destination of the CONNECT request; implies\n"
-            "               `-m CONNECT`\n"
+            "               specifies the host and port to connect to\n"
             "  -h           prints this help\n"
             "\n",
             progname);
@@ -583,8 +586,9 @@ int main(int argc, char **argv)
             }
             break;
         case 'x':
-            if (h2o_url_init(&req.connect_to, NULL, h2o_iovec_init(optarg, strlen(optarg)), h2o_iovec_init(NULL, 0)) != 0 ||
-                req.connect_to._port == 0 || req.connect_to._port == 65535) {
+            req.connect_to = h2o_mem_alloc(sizeof(*req.connect_to));
+            if (h2o_url_init(req.connect_to, NULL, h2o_iovec_init(optarg, strlen(optarg)), h2o_iovec_init(NULL, 0)) != 0 ||
+                req.connect_to->_port == 0 || req.connect_to->_port == 65535) {
                 fprintf(stderr, "invalid server address specified for -X\n");
                 exit(EXIT_FAILURE);
             }
@@ -679,9 +683,6 @@ int main(int argc, char **argv)
     argc -= optind;
     argv += optind;
 
-    if (req.connect_to.authority.len != 0)
-        req.method = "CONNECT";
-
     if (ctx.protocol_selector.ratio.http2 + ctx.protocol_selector.ratio.http3 > 100) {
         fprintf(stderr, "sum of the use ratio of HTTP/2 and HTTP/3 is greater than 100");
         exit(EXIT_FAILURE);
@@ -726,6 +727,9 @@ int main(int argc, char **argv)
         }
     }
 #endif
+
+    if (req.connect_to)
+        free(req.connect_to);
 
     return 0;
 }
