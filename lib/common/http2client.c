@@ -1019,7 +1019,7 @@ static void on_write_complete(h2o_socket_t *sock, const char *err)
 
         if (stream->streaming.proceed_req != NULL && stream->streaming.inflight) {
             stream->streaming.inflight = 0;
-            stream->streaming.proceed_req(&stream->super, 0);
+            stream->streaming.proceed_req(&stream->super, NULL);
         }
 
         if (stream->streaming.proceed_req == NULL || stream->streaming.done) {
