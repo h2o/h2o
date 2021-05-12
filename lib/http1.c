@@ -533,6 +533,13 @@ static void send_bad_request(struct st_h2o_http1_conn_t *conn, const char *body)
     h2o_send_error_400(&conn->req, "Bad Request", body, H2O_SEND_ERROR_HTTP1_CLOSE_CONNECTION);
 }
 
+static void resume_request_read(struct st_h2o_http1_conn_t *conn)
+{
+    set_req_timeout(conn, conn->super.ctx->globalconf->http1.req_timeout, reqread_on_timeout);
+    set_req_io_timeout(conn, conn->super.ctx->globalconf->http1.req_io_timeout, req_io_on_timeout);
+    h2o_socket_read_start(conn->sock, reqread_on_read);
+}
+
 static void proceed_request(h2o_req_t *req, const char *errstr)
 {
     struct st_h2o_http1_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http1_conn_t, req, req);
@@ -545,10 +552,7 @@ static void proceed_request(h2o_req_t *req, const char *errstr)
     assert(conn->req.entity.len == conn->req_body->size);
     h2o_buffer_consume(&conn->req_body, conn->req_body->size);
 
-    set_req_timeout(conn, conn->super.ctx->globalconf->http1.req_timeout, reqread_on_timeout);
-    set_req_io_timeout(conn, conn->super.ctx->globalconf->http1.req_io_timeout, req_io_on_timeout);
-    h2o_socket_read_start(conn->sock, reqread_on_read);
-    return;
+    resume_request_read(conn);
 }
 
 static int write_req_non_streaming(void *_req, int is_end_stream)
@@ -559,7 +563,7 @@ static int write_req_non_streaming(void *_req, int is_end_stream)
         conn->req.proceed_req = NULL;
         h2o_process_request(&conn->req);
     } else {
-        proceed_request(&conn->req, 0);
+        resume_request_read(conn);
     }
     return 0;
 }
