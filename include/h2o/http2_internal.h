@@ -115,25 +115,26 @@ struct st_h2o_http2_stream_t {
     };
     unsigned blocked_by_server : 1;
     /**
-     * if the response body is streaming (including tunnels)
-     */
-    unsigned _req_streaming_in_progress : 1;
-    /**
-     *
-     */
-    unsigned _req_streaming_sent_close : 1;
-    /**
-     *
-     */
-    unsigned _received_first_body_chunk : 1;
-    /**
-     *  steate of the ostream, only used in push mode
+     *  state of the ostream, only used in push mode
      */
     h2o_send_state_t send_state;
     /**
-     * request body buffer
+     * request body (not available when `buf` is NULL
      */
-    h2o_buffer_t *req_body;
+    struct {
+        h2o_buffer_t *buf;
+        enum en_h2o_req_body_state_t {
+            H2O_HTTP2_REQ_BODY_NONE,
+            H2O_HTTP2_REQ_BODY_OPEN_BEFORE_FIRST_FRAME,
+            H2O_HTTP2_REQ_BODY_OPEN,
+            H2O_HTTP2_REQ_BODY_CLOSE_QUEUED,
+            H2O_HTTP2_REQ_BODY_CLOSE_DELIVERED
+        } state;
+        /**
+         * if the response body is streaming or was streamed, including tunnels
+         */
+        unsigned streamed : 1;
+    } req_body;
     /**
      * the request object; placed at last since it is large and has it's own ctor
      */
