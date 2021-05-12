@@ -299,6 +299,8 @@ void h2o_http2_conn_preserve_stream_scheduler(h2o_http2_conn_t *conn, h2o_http2_
 
 static void set_req_body_state(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, enum en_h2o_req_body_state_t new_state)
 {
+    assert(stream->req_body.state < new_state); /* use `<` instead of `<=` as we think we only use the function that way, and
+                                                 * setting CLOSE_DELIVERED twice causes unnecessary decrements */
     switch (new_state) {
     case H2O_HTTP2_REQ_BODY_NONE:
         h2o_fatal("invalid state");
