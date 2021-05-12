@@ -325,7 +325,7 @@ void h2o_http2_conn_unregister_stream(h2o_http2_conn_t *conn, h2o_http2_stream_t
     assert(iter != kh_end(conn->streams));
     kh_del(h2o_http2_stream_t, conn->streams, iter);
 
-    if (stream->state != H2O_HTTP2_REQ_BODY_NONE && stream->req_body.state < H2O_HTTP2_REQ_BODY_CLOSE_DELIVERED) {
+    if (stream->req_body.state != H2O_HTTP2_REQ_BODY_NONE && stream->req_body.state < H2O_HTTP2_REQ_BODY_CLOSE_DELIVERED) {
         stream->req.proceed_req = NULL;
         set_req_body_state(conn, stream, H2O_HTTP2_REQ_BODY_CLOSE_DELIVERED);
     }
