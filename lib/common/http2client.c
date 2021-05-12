@@ -961,7 +961,11 @@ static void on_connection_ready(struct st_h2o_http2client_stream_t *stream, stru
     h2o_http2_window_init(&stream->output.window, conn->peer_settings.initial_window_size);
 
     /* forward request state */
-    if (body.base != NULL || stream->streaming.proceed_req != NULL) {
+    if (stream->streaming.proceed_req != NULL) {
+        stream->state.req = STREAM_STATE_BODY;
+        if (body.len != 0)
+            stream->streaming.inflight = 1;
+    } else if (body.base != NULL) {
         stream->state.req = STREAM_STATE_BODY;
     } else {
         stream->state.req = STREAM_STATE_CLOSED;
