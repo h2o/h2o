@@ -235,8 +235,8 @@ static void handle_one_body_fragment(struct st_h2o_http1_conn_t *conn, size_t fr
         entity_read_send_error_502(conn, "Bad Gateway", "Bad Gateway");
         return;
     }
-    conn->req.req_body_bytes_received += fragment_size;
     h2o_buffer_consume(&conn->sock->input, fragment_size + extra_bytes);
+    conn->req.req_body_bytes_received += fragment_size;
 
     /* invoke action */
     conn->req.entity = h2o_iovec_init(conn->req_body->bytes, conn->req_body->size);
