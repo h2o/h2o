@@ -242,6 +242,7 @@ struct st_h2o_http3_server_stream_t {
 };
 
 static void on_stream_destroy(quicly_stream_t *qs, int err);
+static int retain_sendvecs(struct st_h2o_http3_server_stream_t *stream);
 static int handle_input_post_trailers(struct st_h2o_http3_server_stream_t *stream, const uint8_t **src, const uint8_t *src_end,
                                       const char **err_desc);
 static int handle_input_expect_data(struct st_h2o_http3_server_stream_t *stream, const uint8_t **src, const uint8_t *src_end,
@@ -404,6 +405,7 @@ static void pre_dispose_request(struct st_h2o_http3_server_stream_t *stream)
     /* clean up tunnel */
     if (stream->tunnel != NULL) {
         if (stream->tunnel->tunnel != NULL) {
+            retain_sendvecs(stream);
             stream->tunnel->tunnel->destroy(stream->tunnel->tunnel);
             stream->tunnel->tunnel = NULL;
         }
@@ -638,7 +640,7 @@ static void allocated_vec_update_refcnt(h2o_sendvec_t *vec, h2o_req_t *req, int 
     free(vec->raw);
 }
 
-static int retain_sendvecs(struct st_h2o_http3_server_stream_t *stream)
+int retain_sendvecs(struct st_h2o_http3_server_stream_t *stream)
 {
     for (; stream->sendbuf.min_index_to_addref != stream->sendbuf.vecs.size; ++stream->sendbuf.min_index_to_addref) {
         struct st_h2o_http3_server_sendvec_t *vec = stream->sendbuf.vecs.entries + stream->sendbuf.min_index_to_addref;
@@ -1318,6 +1320,7 @@ static void tunnel_on_read(h2o_tunnel_t *_tunnel, const char *err, const void *b
 
     /* EOS */
     if (err != NULL) {
+        retain_sendvecs(stream);
         stream->tunnel->tunnel->destroy(stream->tunnel->tunnel);
         stream->tunnel->tunnel = NULL;
         shutdown_by_generator(stream);
@@ -1361,6 +1364,7 @@ static void tunnel_on_write_complete(h2o_tunnel_t *tunnel, const char *err)
     stream->tunnel->up.is_inflight = 0;
 
     if (err != NULL) {
+        retain_sendvecs(stream);
         stream->tunnel->tunnel->destroy(stream->tunnel->tunnel);
         stream->tunnel->tunnel = NULL;
         shutdown_by_generator(stream);
