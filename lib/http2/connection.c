@@ -540,10 +540,11 @@ static void handle_request_body_chunk(h2o_http2_conn_t *conn, h2o_http2_stream_t
         return;
 
     /* update state, buffer the data */
+    int req_queued = stream->req.proceed_req != NULL;
     if (is_end_stream) {
         if (stream->state < H2O_HTTP2_STREAM_STATE_REQ_PENDING) {
             h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_REQ_PENDING);
-            if (stream->req.proceed_req != NULL)
+            if (req_queued)
                 h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_SEND_HEADERS);
         }
         if (stream->req.write_req.cb != NULL) {
@@ -584,7 +585,7 @@ static void handle_request_body_chunk(h2o_http2_conn_t *conn, h2o_http2_stream_t
     }
 
     /* run or queue the request when all input is available (and if the request has not been queued for streaming processing) */
-    if (is_end_stream && stream->req.proceed_req == NULL)
+    if (is_end_stream && !req_queued)
         execute_or_enqueue_request(conn, stream);
 }
 
