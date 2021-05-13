@@ -332,6 +332,9 @@ void h2o_http2_conn_unregister_stream(h2o_http2_conn_t *conn, h2o_http2_stream_t
         set_req_body_state(conn, stream, H2O_HTTP2_REQ_BODY_CLOSE_DELIVERED);
     }
 
+    if (stream->blocked_by_server)
+        h2o_http2_stream_set_blocked_by_server(conn, stream, 0);
+
     switch (stream->state) {
     case H2O_HTTP2_STREAM_STATE_RECV_BODY:
         if (h2o_linklist_is_linked(&stream->_link))
