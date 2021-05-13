@@ -573,7 +573,6 @@ static void handle_request_body_chunk(h2o_http2_conn_t *conn, h2o_http2_stream_t
     if (is_first && !is_end_stream) {
         /* trigger request streaming mode if possible */
         if (h2o_req_can_stream_request(&stream->req)) {
-            stream->req_body.streamed = 1;
             stream->req.proceed_req = proceed_request;
             execute_or_enqueue_request_core(conn, stream);
             return;
@@ -649,7 +648,6 @@ static int handle_incoming_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
             return send_invalid_request_error(conn, stream, "Invalid CONNECT request");
         /* handle the request */
         stream->req.is_tunnel_req = 1;
-        stream->req_body.streamed = 1;
         stream->req.proceed_req = proceed_request;
         h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_RECV_BODY);
         set_req_body_state(conn, stream, H2O_HTTP2_REQ_BODY_OPEN);
