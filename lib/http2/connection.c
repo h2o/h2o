@@ -583,8 +583,8 @@ static void handle_request_body_chunk(h2o_http2_conn_t *conn, h2o_http2_stream_t
                                        H2O_HTTP2_SETTINGS_HOST_STREAM_INITIAL_WINDOW_SIZE);
     }
 
-    /* run or queue the request when all input is available */
-    if (is_end_stream)
+    /* run or queue the request when all input is available (and if the request has not been queued for streaming processing) */
+    if (is_end_stream && stream->req.proceed_req == NULL)
         execute_or_enqueue_request(conn, stream);
 }
 
