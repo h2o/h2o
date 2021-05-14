@@ -1090,26 +1090,30 @@ static void proceed_handshake_picotls(h2o_socket_t *sock)
     int ret = ptls_handshake(sock->ssl->ptls, &wbuf, sock->ssl->input.encrypted->bytes, &consumed, NULL);
     h2o_buffer_consume(&sock->ssl->input.encrypted, consumed);
 
+    /* determine the next action */
+    h2o_socket_cb next_cb;
     switch (ret) {
     case 0:
+        next_cb = on_handshake_complete;
+        break;
     case PTLS_ERROR_IN_PROGRESS:
-        if (wbuf.off != 0) {
-            h2o_socket_read_stop(sock);
-            write_ssl_bytes(sock, wbuf.base, wbuf.off);
-            flush_pending_ssl(sock, ret == 0 ? on_handshake_complete : proceed_handshake);
-        } else {
-            if (ret == 0 && sock->ssl->input.encrypted->size > 0) {
-                /* handshake complete and there's encrypted data ready for processing */
-                on_handshake_complete(sock, NULL);
-            } else {
-                h2o_socket_read_start(sock, ret == PTLS_ERROR_IN_PROGRESS ? proceed_handshake : on_handshake_complete);
-            }
-        }
+        next_cb = proceed_handshake;
         break;
     default:
-        /* FIXME send alert in wbuf before calling the callback */
-        on_handshake_complete(sock, "picotls handshake error");
+        next_cb = on_handshake_fail_complete;
         break;
+    }
+
+    /* When something is to be sent, send it and then take the next action. If there's nothing to be sent and the handshake is still
+     * in progress, wait for more bytes to arrive; otherwise, take the action immediately. */
+    if (wbuf.off != 0) {
+        h2o_socket_read_stop(sock);
+        write_ssl_bytes(sock, wbuf.base, wbuf.off);
+        flush_pending_ssl(sock, next_cb);
+    } else if (ret == PTLS_ERROR_IN_PROGRESS) {
+        h2o_socket_read_start(sock, next_cb);
+    } else {
+        next_cb(sock, NULL);
     }
 
     ptls_buffer_dispose(&wbuf);
@@ -1725,10 +1729,10 @@ int h2o_socket_ebpf_setup(void)
                              map_attr.key_size, m.key_size);
             goto Error;
         }
-        if (m.key_size != map_attr.key_size) {
+        if (m.value_size != map_attr.value_size) {
             h2o_error_printf(H2O_EBPF_RETURN_MAP_PATH " has an unexpected map value size: expected %" PRIu32 " but got %" PRIu32
                                                       "\n",
-                             map_attr.value_size, m.key_size);
+                             map_attr.value_size, m.value_size);
             goto Error;
         }
     }
