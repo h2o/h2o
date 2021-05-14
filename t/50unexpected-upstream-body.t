@@ -58,10 +58,12 @@ sub doit {
         if ($chunked_enabled) {
             subtest 'chunked upstream unexpectedly closed' => sub {
                 my ($server, $upstream) = $spawner->();
-                local $SIG{ALRM} = sub { kill 'KILL', $upstream->{pid} };
+                my $killed;
+                local $SIG{ALRM} = sub { kill 'KILL', $upstream->{pid}; $killed = 1; };
                 alarm(1);
                 my $body = nc_get($server, '/infinite-stream');
                 alarm(0);
+                ok $killed, 'SIGKILL sent';
                 like $body, qr/0\r\n\r\n$/is, 'chunked eos';
             };
         }

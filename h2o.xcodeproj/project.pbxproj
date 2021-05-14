@@ -3857,6 +3857,7 @@
 					"DEBUG=1",
 					"H2O_USE_MRUBY=1",
 					"H2O_ROOT=/mydev/h2o",
+					"kh_inline=\"inline __unused\"",
 					"$(inherited)",
 				);
 				GCC_SYMBOLS_PRIVATE_EXTERN = NO;
@@ -4014,6 +4015,7 @@
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"H2O_USE_MRUBY=1",
 					"H2O_ROOT=/mydev/h2o",
+					"kh_inline=\"inline __unused\"",
 					"$(inherited)",
 				);
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
@@ -4162,6 +4164,7 @@
 					"H2O_USE_LIBUV=0",
 					"H2O_ROOT=/mydev/h2o",
 					"$(inherited)",
+					"kh_inline=\"inline __unused\"",
 				);
 				GCC_SYMBOLS_PRIVATE_EXTERN = NO;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
@@ -4207,6 +4210,7 @@
 					"H2O_USE_MRUBY=1",
 					"H2O_USE_LIBUV=0",
 					"H2O_ROOT=/mydev/h2o",
+					"kh_inline=\"inline __unused\"",
 					"$(inherited)",
 				);
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
