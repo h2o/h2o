@@ -239,7 +239,6 @@ struct st_h2o_http3_server_stream_t {
 };
 
 static void on_stream_destroy(quicly_stream_t *qs, int err);
-static int retain_sendvecs(struct st_h2o_http3_server_stream_t *stream);
 static int handle_input_post_trailers(struct st_h2o_http3_server_stream_t *stream, const uint8_t **src, const uint8_t *src_end,
                                       const char **err_desc);
 static int handle_input_expect_data(struct st_h2o_http3_server_stream_t *stream, const uint8_t **src, const uint8_t *src_end,
@@ -639,7 +638,7 @@ static void allocated_vec_update_refcnt(h2o_sendvec_t *vec, h2o_req_t *req, int 
     free(vec->raw);
 }
 
-int retain_sendvecs(struct st_h2o_http3_server_stream_t *stream)
+static int retain_sendvecs(struct st_h2o_http3_server_stream_t *stream)
 {
     for (; stream->sendbuf.min_index_to_addref != stream->sendbuf.vecs.size; ++stream->sendbuf.min_index_to_addref) {
         struct st_h2o_http3_server_sendvec_t *vec = stream->sendbuf.vecs.entries + stream->sendbuf.min_index_to_addref;
@@ -893,7 +892,7 @@ static void on_receive_reset(quicly_stream_t *qs, int err)
     }
 }
 
-static void proceed_request_streaming(h2o_req_t *_req, size_t bytes_written, h2o_send_state_t state)
+static void proceed_request_streaming(h2o_req_t *_req, const char *errstr)
 {
     struct st_h2o_http3_server_stream_t *stream = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_stream_t, req, _req);
     struct st_h2o_http3_server_conn_t *conn = get_conn(stream);
@@ -902,7 +901,7 @@ static void proceed_request_streaming(h2o_req_t *_req, size_t bytes_written, h2o
     assert(!h2o_linklist_is_linked(&stream->link));
     assert(conn->num_streams_req_streaming != 0 || stream->req.is_tunnel_req);
 
-    if (state != H2O_SEND_STATE_IN_PROGRESS) {
+    if (errstr != NULL || quicly_recvstate_transfer_complete(&stream->quic->recvstate)) {
         /* tidy up the request streaming */
         stream->req.write_req.cb = NULL;
         stream->req.write_req.ctx = NULL;
@@ -911,15 +910,15 @@ static void proceed_request_streaming(h2o_req_t *_req, size_t bytes_written, h2o
             --conn->num_streams_req_streaming;
         check_run_blocked(conn);
         /* close the stream if an error occurred */
-        if (state == H2O_SEND_STATE_ERROR) {
+        if (errstr != NULL) {
             shutdown_stream(stream, H2O_HTTP3_ERROR_INTERNAL, H2O_HTTP3_ERROR_INTERNAL, 1);
             return;
         }
     }
 
     /* remove the bytes from the request body buffer */
-    assert(stream->req_body->size == bytes_written);
-    h2o_buffer_consume(&stream->req_body, bytes_written);
+    assert(stream->req.entity.len == stream->req_body->size);
+    h2o_buffer_consume(&stream->req_body, stream->req_body->size);
     stream->req.entity = h2o_iovec_init(NULL, 0);
 
     /* unblock read until the next invocation of write_req, or after the final invocation */
@@ -976,8 +975,8 @@ static void run_delayed(h2o_timer_t *timer)
             h2o_linklist_unlink(&stream->link);
             stream->read_blocked = 1;
             made_progress = 1;
-            if (stream->req.write_req.cb(stream->req.write_req.ctx, h2o_iovec_init(stream->req_body->bytes, stream->req_body->size),
-                                         is_end_stream) != 0)
+            assert(stream->req.entity.base == stream->req_body->bytes && stream->req.entity.len == stream->req_body->size);
+            if (stream->req.write_req.cb(stream->req.write_req.ctx, is_end_stream) != 0)
                 shutdown_stream(stream, H2O_HTTP3_ERROR_INTERNAL, H2O_HTTP3_ERROR_INTERNAL, 0);
         }
 

@@ -77,7 +77,6 @@ struct st_connect_generator_t {
             struct {
                 h2o_buffer_t *buf; /* for datagram fragments */
                 h2o_timer_t delayed;
-                size_t bytes_inflight;
             } egress;
             struct {
                 uint8_t buf[UDP_CHUNK_OVERHEAD + 1500];
@@ -199,7 +198,7 @@ static void close_readwrite(struct st_connect_generator_t *self)
     if (!self->write_closed && self->is_tcp && self->tcp.sendbuf->size != 0) {
         self->write_closed = 1;
         h2o_timer_link(get_loop(self), 0, &self->timeout);
-        self->src_req->proceed_req(self->src_req, 0, H2O_SEND_STATE_ERROR);
+        self->src_req->proceed_req(self->src_req, h2o_httpclient_error_io /* TODO notify as cancel? */);
         return;
     }
 }
@@ -312,9 +311,8 @@ static void tcp_on_write_complete(h2o_socket_t *_sock, const char *err)
 
     reset_io_timeout(self);
 
-    size_t bytes_written = self->tcp.sendbuf->size;
-    h2o_buffer_consume(&self->tcp.sendbuf, bytes_written);
-    self->src_req->proceed_req(self->src_req, bytes_written, H2O_SEND_STATE_IN_PROGRESS);
+    h2o_buffer_consume(&self->tcp.sendbuf, self->tcp.sendbuf->size);
+    self->src_req->proceed_req(self->src_req, NULL);
 }
 
 static void tcp_do_write(struct st_connect_generator_t *self)
@@ -325,9 +323,10 @@ static void tcp_do_write(struct st_connect_generator_t *self)
     h2o_socket_write(self->sock, &vec, 1, tcp_on_write_complete);
 }
 
-static int tcp_write(void *_self, h2o_iovec_t chunk, int is_end_stream)
+static int tcp_write(void *_self, int is_end_stream)
 {
     struct st_connect_generator_t *self = _self;
+    h2o_iovec_t chunk = self->src_req->entity;
 
     assert(!self->write_closed);
     assert(self->tcp.sendbuf->size == 0);
@@ -477,9 +476,7 @@ static void udp_write_stream_complete_delayed(h2o_timer_t *_timer)
         return;
     }
 
-    size_t bytes_written = self->udp.egress.bytes_inflight;
-    self->udp.egress.bytes_inflight = 0;
-    self->src_req->proceed_req(self->src_req, bytes_written, H2O_SEND_STATE_IN_PROGRESS);
+    self->src_req->proceed_req(self->src_req, NULL);
 }
 
 static void udp_do_write_stream(struct st_connect_generator_t *self, h2o_iovec_t chunk)
@@ -516,18 +513,17 @@ static void udp_do_write_stream(struct st_connect_generator_t *self, h2o_iovec_t
     h2o_timer_link(get_loop(self), 0, &self->udp.egress.delayed);
 }
 
-static int udp_write_stream(void *_self, h2o_iovec_t chunk, int is_end_stream)
+static int udp_write_stream(void *_self, int is_end_stream)
 {
     struct st_connect_generator_t *self = _self;
+    h2o_iovec_t chunk = self->src_req->entity;
 
     assert(!self->write_closed);
-    assert(self->udp.egress.bytes_inflight == 0);
 
     /* the socket might have been closed tue to a read error */
     if (self->socket_closed)
         return 1;
 
-    self->udp.egress.bytes_inflight = chunk.len;
     if (is_end_stream)
         self->write_closed = 1;
 

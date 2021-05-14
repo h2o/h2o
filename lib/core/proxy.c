@@ -387,9 +387,8 @@ static int on_body(h2o_httpclient_t *client, const char *errstr)
             detach_client(self);
             h2o_req_log_error(self->src_req, "lib/core/proxy.c", "%s", errstr);
             self->had_body_error = 1;
-            if (self->src_req->proceed_req != NULL) {
-                self->src_req->proceed_req(self->src_req, 0, H2O_SEND_STATE_ERROR);
-            }
+            if (self->src_req->proceed_req != NULL)
+                self->src_req->proceed_req(self->src_req, errstr);
         }
     }
     if (!self->sending.inflight)
@@ -443,9 +442,8 @@ static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errs
             h2o_send(req, NULL, 0, H2O_SEND_STATE_ERROR);
         } else {
             h2o_send_error_502(req, "Gateway Error", errstr, 0);
-            if (self->src_req->proceed_req != NULL) {
-                self->src_req->proceed_req(self->src_req, 0, H2O_SEND_STATE_ERROR);
-            }
+            if (self->src_req->proceed_req != NULL)
+                self->src_req->proceed_req(self->src_req, h2o_httpclient_error_refused_stream);
         }
 
         return NULL;
@@ -473,9 +471,8 @@ static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errs
                     detach_client(self);
                     h2o_req_log_error(req, "lib/core/proxy.c", "%s", "invalid response from upstream (malformed content-length)");
                     h2o_send_error_502(req, "Gateway Error", "invalid response from upstream", 0);
-                    if (self->src_req->proceed_req != NULL) {
-                        self->src_req->proceed_req(self->src_req, 0, H2O_SEND_STATE_ERROR);
-                    }
+                    if (self->src_req->proceed_req != NULL)
+                        self->src_req->proceed_req(self->src_req, h2o_httpclient_error_io);
                     return NULL;
                 }
                 goto Skip;
@@ -568,23 +565,22 @@ static int on_1xx(h2o_httpclient_t *client, int version, int status, h2o_iovec_t
     return 0;
 }
 
-static void proceed_request(h2o_httpclient_t *client, size_t written, h2o_send_state_t send_state)
+static void proceed_request(h2o_httpclient_t *client, const char *errstr)
 {
     struct rp_generator_t *self = client->data;
-    if (self == NULL) {
+    if (self == NULL)
         return;
-    }
-    if (send_state == H2O_SEND_STATE_ERROR) {
+    if (errstr != NULL)
         detach_client(self);
-    }
     if (self->src_req->proceed_req != NULL)
-        self->src_req->proceed_req(self->src_req, written, send_state);
+        self->src_req->proceed_req(self->src_req, errstr);
 }
 
-static int write_req(void *ctx, h2o_iovec_t chunk, int is_end_stream)
+static int write_req(void *ctx, int is_end_stream)
 {
     struct rp_generator_t *self = ctx;
     h2o_httpclient_t *client = self->client;
+    h2o_iovec_t chunk = self->src_req->entity;
 
     assert(chunk.len != 0 || is_end_stream);
 
