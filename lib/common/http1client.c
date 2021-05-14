@@ -61,14 +61,12 @@ struct st_h2o_http1client_t {
      */
     char _chunk_len_str[(sizeof(H2O_UINT64_LONGEST_HEX_STR) - 1) + 2 + 1];
     /**
-     * Buffer used to retain request body when request body is being streamed. `body_buf` retains data to be sent, `body_buf.buf`
-     * always points to a valid object. `body_buf_inflight` retains data inflight, `body_buf_inflight.buf` is set to non-NULL only
-     * when something is in flight.
+     * buffer used to retain request body that is inflight
      */
     struct {
         h2o_buffer_t *buf;
         int is_end_stream;
-    } body_buf, body_buf_inflight;
+    } body_buf;
     /**
      * maintain the number of bytes being already processed on the associated socket
      */
@@ -95,8 +93,6 @@ static void close_client(struct st_h2o_http1client_t *client)
         h2o_timer_unlink(&client->super._timeout);
     if (client->body_buf.buf != NULL)
         h2o_buffer_dispose(&client->body_buf.buf);
-    if (client->body_buf_inflight.buf != NULL)
-        h2o_buffer_dispose(&client->body_buf_inflight.buf);
     if (!client->_delay_free)
         free(client);
 }
@@ -129,11 +125,11 @@ static int call_on_body(struct st_h2o_http1client_t *client, const char *errstr)
     return ret;
 }
 
-static void call_proceed_req(struct st_h2o_http1client_t *client, size_t written, h2o_send_state_t send_state)
+static void call_proceed_req(struct st_h2o_http1client_t *client, const char *errstr)
 {
     assert(!client->_delay_free);
     client->_delay_free = 1;
-    client->proceed_req(&client->super, written, send_state);
+    client->proceed_req(&client->super, errstr);
     client->_delay_free = 0;
 }
 
@@ -148,7 +144,7 @@ static void on_error(struct st_h2o_http1client_t *client, const char *errstr)
         break;
     case STREAM_STATE_CLOSED:
         if (client->proceed_req != NULL)
-            call_proceed_req(client, 0, H2O_SEND_STATE_ERROR);
+            call_proceed_req(client, errstr);
         break;
     }
     close_client(client);
@@ -519,60 +515,52 @@ static void req_body_send_complete(h2o_socket_t *sock, const char *err)
 {
     struct st_h2o_http1client_t *client = sock->data;
 
+    h2o_buffer_consume(&client->body_buf.buf, client->body_buf.buf->size);
+
     if (err != NULL) {
         on_whole_request_sent(client->sock, err);
         return;
     }
 
-    call_proceed_req(client, client->body_buf_inflight.buf->size,
-                     client->body_buf_inflight.is_end_stream ? H2O_SEND_STATE_FINAL : H2O_SEND_STATE_IN_PROGRESS);
-    h2o_buffer_dispose(&client->body_buf_inflight.buf);
+    int is_end_stream = client->body_buf.is_end_stream;
 
-    if (!client->body_buf_inflight.is_end_stream) {
-        req_body_send(client);
-    } else {
+    call_proceed_req(client, NULL);
+
+    if (is_end_stream)
         on_whole_request_sent(client->sock, NULL);
-    }
 }
 
 /**
- * Encodes data in `body_buf`, moving the contents to `body_buf_inflight`. `bufs` must have at least 4 elements of space.
+ * Encodes data. `bufs` must have at least 4 elements of space.
  */
 static size_t req_body_send_prepare(struct st_h2o_http1client_t *client, h2o_iovec_t *bufs, size_t *bytes)
 {
     size_t bufcnt = 0;
     *bytes = 0;
 
-    assert(client->body_buf_inflight.buf == NULL);
-
-    /* move body_buf to body_buf_inflight, resetting `body_buf->buf` */
-    client->body_buf_inflight = client->body_buf;
-    h2o_buffer_init(&client->body_buf.buf, &h2o_socket_buffer_prototype);
-
-    /* build chunk */
     if (client->_is_chunked) {
-        if (client->body_buf_inflight.buf->size != 0) {
+        if (client->body_buf.buf->size != 0) {
             /* build chunk header */
             bufs[bufcnt].base = client->_chunk_len_str;
             bufs[bufcnt].len =
-                snprintf(client->_chunk_len_str, sizeof(client->_chunk_len_str), "%zx\r\n", client->body_buf_inflight.buf->size);
+                snprintf(client->_chunk_len_str, sizeof(client->_chunk_len_str), "%zx\r\n", client->body_buf.buf->size);
             *bytes += bufs[bufcnt].len;
             ++bufcnt;
             /* append chunk body */
-            bufs[bufcnt++] = h2o_iovec_init(client->body_buf_inflight.buf->bytes, client->body_buf_inflight.buf->size);
-            *bytes += client->body_buf_inflight.buf->size;
+            bufs[bufcnt++] = h2o_iovec_init(client->body_buf.buf->bytes, client->body_buf.buf->size);
+            *bytes += client->body_buf.buf->size;
             /* append CRLF */
             bufs[bufcnt++] = h2o_iovec_init("\r\n", 2);
             *bytes += 2;
         }
-        if (client->body_buf_inflight.is_end_stream) {
+        if (client->body_buf.is_end_stream) {
             static const h2o_iovec_t terminator = {H2O_STRLIT("0\r\n\r\n")};
             bufs[bufcnt++] = terminator;
             *bytes += terminator.len;
         }
-    } else if (client->body_buf_inflight.buf->size != 0) {
-        bufs[bufcnt++] = h2o_iovec_init(client->body_buf_inflight.buf->bytes, client->body_buf_inflight.buf->size);
-        *bytes += client->body_buf_inflight.buf->size;
+    } else if (client->body_buf.buf->size != 0) {
+        bufs[bufcnt++] = h2o_iovec_init(client->body_buf.buf->bytes, client->body_buf.buf->size);
+        *bytes += client->body_buf.buf->size;
     }
 
     return bufcnt;
@@ -580,9 +568,6 @@ static size_t req_body_send_prepare(struct st_h2o_http1client_t *client, h2o_iov
 
 static void req_body_send(struct st_h2o_http1client_t *client)
 {
-    if (client->body_buf.buf->size == 0 && !client->body_buf.is_end_stream)
-        return;
-
     h2o_iovec_t bufs[4];
     size_t bytes, bufcnt = req_body_send_prepare(client, bufs, &bytes);
 
@@ -600,6 +585,8 @@ static int do_write_req(h2o_httpclient_t *_client, h2o_iovec_t chunk, int is_end
     struct st_h2o_http1client_t *client = (struct st_h2o_http1client_t *)_client;
 
     assert(chunk.len != 0 || is_end_stream);
+    assert(!h2o_socket_is_writing(client->sock));
+    assert(client->body_buf.buf->size == 0);
 
     /* store given content to buffer */
     if (chunk.len != 0) {
@@ -612,8 +599,7 @@ static int do_write_req(h2o_httpclient_t *_client, h2o_iovec_t chunk, int is_end
     if (client->state.res == STREAM_STATE_CLOSED)
         client->_do_keepalive = 0;
 
-    if (!h2o_socket_is_writing(client->sock))
-        req_body_send(client);
+    req_body_send(client);
 
     return 0;
 }

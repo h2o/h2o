@@ -192,11 +192,10 @@ static void start_pending_requests(struct st_h2o_httpclient__h3_conn_t *conn)
     }
 }
 
-static void call_proceed_req(struct st_h2o_http3client_req_t *req, h2o_send_state_t send_state)
+static void call_proceed_req(struct st_h2o_http3client_req_t *req, const char *errstr)
 {
-    size_t bytes_written = req->proceed_req.bytes_inflight;
     req->proceed_req.bytes_inflight = SIZE_MAX;
-    req->proceed_req.cb(&req->super, bytes_written, send_state);
+    req->proceed_req.cb(&req->super, errstr);
 }
 
 static void destroy_connection(struct st_h2o_httpclient__h3_conn_t *conn)
@@ -559,7 +558,7 @@ static void on_send_emit(quicly_stream_t *qs, size_t off, void *dst, size_t *len
     memcpy(dst, req->sendbuf->bytes + off, *len);
 
     if (*wrote_all && req->proceed_req.bytes_inflight != SIZE_MAX)
-        call_proceed_req(req, quicly_sendstate_is_open(&req->quic->sendstate) ? H2O_SEND_STATE_IN_PROGRESS : H2O_SEND_STATE_FINAL);
+        call_proceed_req(req, NULL);
 }
 
 static void on_send_stop(quicly_stream_t *qs, int err)
@@ -573,7 +572,7 @@ static void on_send_stop(quicly_stream_t *qs, int err)
         quicly_reset_stream(req->quic, err);
 
     if (req->proceed_req.bytes_inflight != SIZE_MAX)
-        call_proceed_req(req, H2O_SEND_STATE_ERROR);
+        call_proceed_req(req, h2o_httpclient_error_io /* TODO better error code? */);
 
     if (quicly_recvstate_transfer_complete(&req->quic->recvstate)) {
         detach_stream(req);
@@ -655,7 +654,7 @@ static void on_receive(quicly_stream_t *qs, size_t off, const void *input, size_
         if (!send_is_open) {
             destroy_request(req);
         } else if (req->proceed_req.bytes_inflight != SIZE_MAX) {
-            call_proceed_req(req, H2O_SEND_STATE_ERROR);
+            call_proceed_req(req, h2o_httpclient_error_io);
             destroy_request(req);
         } else {
             /* wait for write_req to be called */

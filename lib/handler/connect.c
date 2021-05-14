@@ -120,7 +120,7 @@ static void close_readwrite(struct st_connect_generator_t *self)
     if (!self->sendbuf_closed && self->sendbuf->size != 0) {
         self->sendbuf_closed = 1;
         h2o_timer_link(self->loop, 0, &self->timeout);
-        self->src_req->proceed_req(self->src_req, 0, H2O_SEND_STATE_ERROR);
+        self->src_req->proceed_req(self->src_req, h2o_httpclient_error_io /* TODO notify as cancel? */);
         return;
     }
 }
@@ -151,9 +151,8 @@ static void tunnel_on_write_complete(h2o_socket_t *_sock, const char *err)
 
     reset_io_timeout(self);
 
-    size_t bytes_written = self->sendbuf->size;
-    h2o_buffer_consume(&self->sendbuf, bytes_written);
-    self->src_req->proceed_req(self->src_req, bytes_written, H2O_SEND_STATE_IN_PROGRESS);
+    h2o_buffer_consume(&self->sendbuf, self->sendbuf->size);
+    self->src_req->proceed_req(self->src_req, NULL);
 }
 
 static void tunnel_do_write(struct st_connect_generator_t *self)
@@ -164,9 +163,10 @@ static void tunnel_do_write(struct st_connect_generator_t *self)
     h2o_socket_write(self->sock, &vec, 1, tunnel_on_write_complete);
 }
 
-static int tunnel_write(void *_self, h2o_iovec_t chunk, int is_end_stream)
+static int tunnel_write(void *_self, int is_end_stream)
 {
     struct st_connect_generator_t *self = _self;
+    h2o_iovec_t chunk = self->src_req->entity;
 
     assert(!self->sendbuf_closed);
     assert(self->sendbuf->size == 0);

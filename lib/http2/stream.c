@@ -70,8 +70,8 @@ void h2o_http2_stream_close(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
     h2o_http2_conn_unregister_stream(conn, stream);
     if (stream->cache_digests != NULL)
         h2o_cache_digests_destroy(stream->cache_digests);
-    if (stream->req_body != NULL)
-        h2o_buffer_dispose(&stream->req_body);
+    if (stream->req_body.buf != NULL)
+        h2o_buffer_dispose(&stream->req_body.buf);
     h2o_dispose_request(&stream->req);
     if (stream->stream_id == 1 && conn->_http1_req_input != NULL)
         h2o_buffer_dispose(&conn->_http1_req_input);
@@ -427,9 +427,8 @@ void h2o_http2_stream_send_pending_data(h2o_http2_conn_t *conn, h2o_http2_stream
 void h2o_http2_stream_proceed(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
 {
     if (stream->state == H2O_HTTP2_STREAM_STATE_END_STREAM) {
-        if (!stream->_req_streaming_in_progress) {
+        if (stream->req_body.state == H2O_HTTP2_REQ_BODY_CLOSE_DELIVERED)
             h2o_http2_stream_close(conn, stream);
-        }
     } else {
         if (!stream->blocked_by_server)
             h2o_http2_stream_set_blocked_by_server(conn, stream, 1);
