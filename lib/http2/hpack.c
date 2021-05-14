@@ -925,21 +925,27 @@ void h2o_hpack_flatten_request(h2o_buffer_t **buf, h2o_hpack_header_table_t *hea
                                size_t max_frame_size, h2o_iovec_t method, h2o_url_t *url, const h2o_header_t *headers,
                                size_t num_headers, int is_end_stream)
 {
+    int is_connect = h2o_memis(method.base, method.len, H2O_STRLIT("CONNECT"));
+
     size_t capacity = calc_headers_capacity(headers, num_headers);
     capacity += H2O_HTTP2_FRAME_HEADER_SIZE;
     capacity += calc_capacity(H2O_TOKEN_METHOD->buf.len, method.len);
-    capacity += calc_capacity(H2O_TOKEN_SCHEME->buf.len, url->scheme->name.len);
+    if (!is_connect)
+        capacity += calc_capacity(H2O_TOKEN_SCHEME->buf.len, url->scheme->name.len);
     capacity += calc_capacity(H2O_TOKEN_AUTHORITY->buf.len, url->authority.len);
-    capacity += calc_capacity(H2O_TOKEN_PATH->buf.len, url->path.len);
+    if (!is_connect)
+        capacity += calc_capacity(H2O_TOKEN_PATH->buf.len, url->path.len);
 
     size_t start_at = (*buf)->size;
     uint8_t *dst = (void *)(h2o_buffer_reserve(buf, capacity).base + H2O_HTTP2_FRAME_HEADER_SIZE);
 
     /* encode */
     dst = encode_method(header_table, dst, method);
-    dst = encode_scheme(header_table, dst, url->scheme);
+    if (!is_connect)
+        dst = encode_scheme(header_table, dst, url->scheme);
     dst = encode_header_token(header_table, dst, H2O_TOKEN_AUTHORITY, &url->authority);
-    dst = encode_path(header_table, dst, url->path);
+    if (!is_connect)
+        dst = encode_path(header_table, dst, url->path);
     size_t i;
     for (i = 0; i != num_headers; ++i) {
         const h2o_header_t *header = headers + i;

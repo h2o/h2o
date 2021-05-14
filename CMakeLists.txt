@@ -438,9 +438,6 @@ SET(LIB_SOURCE_FILES
 
     lib/http1.c
 
-    lib/tunnel.c
-    lib/udp_tunnel.c
-
     lib/http2/cache_digests.c
     lib/http2/casper.c
     lib/http2/connection.c
