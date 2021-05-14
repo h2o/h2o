@@ -867,6 +867,7 @@ IF (BUILD_FUZZER)
     ADD_EXECUTABLE(h2o-fuzzer-http2 fuzz/driver.cc)
     ADD_EXECUTABLE(h2o-fuzzer-http3 fuzz/driver_h3.cc fuzz/quicly_mock.c ${FUZZED_SOURCE_FILES})
     ADD_EXECUTABLE(h2o-fuzzer-url fuzz/driver_url.cc)
+    ADD_EXECUTABLE(h3-header-generator fuzz/h3_header_generator.c)
     SET_TARGET_PROPERTIES(h2o-fuzzer-http1 PROPERTIES COMPILE_FLAGS "-DHTTP1")
     SET_TARGET_PROPERTIES(h2o-fuzzer-http2 PROPERTIES COMPILE_FLAGS "-DHTTP2")
     SET_TARGET_PROPERTIES(h2o-fuzzer-http3 PROPERTIES COMPILE_FLAGS "-DH2O_USE_LIBUV=0")
@@ -913,6 +914,7 @@ IF (BUILD_FUZZER)
     # h3 fuzzer does not use libh2o so it can replace quicly with quicly_mock
     TARGET_LINK_LIBRARIES(h2o-fuzzer-http3 ${EXTRA_LIBS} ${LIB_FUZZER} ${OPENSSL_LIBRARIES} ${CMAKE_DL_LIBS})
     TARGET_LINK_LIBRARIES(h2o-fuzzer-url libh2o-evloop ${EXTRA_LIBS} ${LIB_FUZZER})
+    TARGET_LINK_LIBRARIES(h3-header-generator libh2o-evloop ${EXTRA_LIBS})
 
 ENDIF (BUILD_FUZZER)
 
