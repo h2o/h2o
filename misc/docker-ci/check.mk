@@ -54,7 +54,7 @@ _do-fuzz-extra:
 	./h2o-fuzzer-url -close_fd_mask=3 -runs=1 -max_len=16384 $(SRC_DIR)/fuzz/url-corpus < /dev/null
 
 enter:
-	docker run $(DOCKER_RUN_OPTS) -it $(CONTAINER_NAME) bash
+	docker run $(DOCKER_RUN_OPTS) -it --entrypoint "bash" $(CONTAINER_NAME)
 
 pull:
 	docker pull $(CONTAINER_NAME)
