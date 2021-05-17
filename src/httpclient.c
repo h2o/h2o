@@ -251,7 +251,7 @@ static void start_request(h2o_httpclient_ctx_t *ctx)
         return;
     }
 
-    if (req.connect_to)
+    if (req.connect_to != NULL)
         req.connect_to->scheme = url_parsed->scheme;
 
     /* initiate the request */
@@ -728,7 +728,7 @@ int main(int argc, char **argv)
     }
 #endif
 
-    if (req.connect_to)
+    if (req.connect_to != NULL)
         free(req.connect_to);
 
     return 0;
