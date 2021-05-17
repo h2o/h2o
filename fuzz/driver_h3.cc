@@ -47,17 +47,8 @@ static ptls_context_t ptls_ctx = {
 };
 static h2o_http3_conn_callbacks_t conn_callbacks = H2O_HTTP3_CONN_CALLBACKS;
 
-static quicly_address_t src_addr = {.sin = {
-                                        .sin_family = AF_INET,
-                                        .sin_addr = {.s_addr = htonl(0x7f000001)},
-                                        .sin_port = htons(12345),
-                                    }};
-
-static quicly_address_t dst_addr = {.sin = {
-                                        .sin_family = AF_INET,
-                                        .sin_addr = {.s_addr = htonl(0x7f000001)},
-                                        .sin_port = htons(8443),
-                                    }};
+static quicly_address_t src_addr;
+static quicly_address_t dst_addr;
 
 static void quic_init_context(h2o_quic_ctx_t *ctx, h2o_evloop_t *loop)
 {
@@ -107,6 +98,11 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size)
 
         init_done = true;
     }
+
+    src_addr.sin.sin_family = dst_addr.sin.sin_family = AF_INET;
+    src_addr.sin.sin_addr.s_addr = dst_addr.sin.sin_addr.s_addr = htonl(0x7f000001);
+    src_addr.sin.sin_port = htons(12345);
+    dst_addr.sin.sin_port = htons(8443);
 
     ++num_connections;
     h2o_http3_conn_t *conn = h2o_http3_server_accept(&server_ctx, &dst_addr, &src_addr, NULL /* initial_packet */,
