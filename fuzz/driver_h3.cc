@@ -26,6 +26,10 @@
  */
 
 #define H2O_USE_EPOLL 1
+#include <signal.h>
+
+#include "driver_common.h"
+
 #include "picotls.h"
 #include "quicly.h"
 #include "quicly_mock.h"
@@ -46,6 +50,8 @@ static ptls_context_t ptls_ctx = {
     .get_time = &ptls_get_time,
 };
 static h2o_http3_conn_callbacks_t conn_callbacks = H2O_HTTP3_CONN_CALLBACKS;
+static char unix_listener[PATH_MAX];
+static int client_timeout_ms;
 
 static quicly_address_t src_addr;
 static quicly_address_t dst_addr;
@@ -68,20 +74,49 @@ static void on_destroy_connection(h2o_quic_conn_t *conn)
     H2O_HTTP3_CONN_CALLBACKS.super.destroy_connection(conn);
 }
 
+static bool sent_response = false;
+
+static void on_stream_send_cb(mquicly_on_stream_send_t *self, quicly_conn_t *conn, quicly_stream_t *stream, const void *buff,
+                              uint64_t off, size_t len, int is_fin)
+{
+    if (is_fin)
+        sent_response = true;
+}
+
+static mquicly_on_stream_send_t on_stream_send = {.cb = on_stream_send_cb};
+
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size)
 {
     if (!init_done) {
         h2o_hostconf_t *hostconf;
         h2o_access_log_filehandle_t *logfh = h2o_access_log_open_handle("/dev/stdout", NULL, H2O_LOGCONF_ESCAPE_APACHE);
         h2o_pathconf_t *pathconf;
+        static char tmpname[] = "/tmp/h2o-fuzz-XXXXXX";
+        char *dirname;
+        pthread_t tupstream;
+        const char *client_timeout_ms_str;
+
+        h2o_barrier_init(&init_barrier, 2);
+        signal(SIGPIPE, SIG_IGN);
+
+        dirname = mkdtemp(tmpname);
+        snprintf(unix_listener, sizeof(unix_listener), "http://[unix://%s/_.sock]/proxy", dirname);
+        if ((client_timeout_ms_str = getenv("H2O_FUZZER_CLIENT_TIMEOUT")) != NULL)
+            client_timeout_ms = atoi(client_timeout_ms_str);
+        if (!client_timeout_ms)
+            client_timeout_ms = 10;
 
         h2o_config_init(&config);
         hostconf = h2o_config_register_host(&config, h2o_iovec_init(H2O_STRLIT("default")), 65535);
+
+        register_proxy(hostconf, unix_listener);
 
         pathconf = h2o_config_register_path(hostconf, "/", 0);
         h2o_file_register(pathconf, "examples/doc_root", NULL, NULL, 0);
         if (logfh != NULL)
             h2o_access_log_register(pathconf, logfh);
+
+        mquicly_context.on_stream_send = &on_stream_send;
 
         h2o_context_init(&ctx, h2o_evloop_create(), &config);
         accept_ctx.ctx = &ctx;
@@ -95,7 +130,10 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size)
 
         quic_init_context(&server_ctx.super, ctx.loop);
         h2o_http3_server_amend_quicly_context(&config, server_ctx.super.quic);
-
+        if (pthread_create(&tupstream, NULL, upstream_thread, dirname) != 0) {
+            abort();
+        }
+        h2o_barrier_wait(&init_barrier);
         init_done = true;
     }
 
@@ -105,6 +143,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size)
     dst_addr.sin.sin_port = htons(8443);
 
     ++num_connections;
+    sent_response = false;
     h2o_http3_conn_t *conn = h2o_http3_server_accept(&server_ctx, &dst_addr, &src_addr, NULL /* initial_packet */,
                                                      NULL /* address_token */, 0 /* skip_tracing */, &conn_callbacks);
     assert(conn != NULL);
@@ -117,12 +156,18 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size)
     quicly_recvstate_update(&stream->recvstate, 0, &Size, 1, 63);
     stream->callbacks->on_receive(stream, 0, Data, Size);
 
-    h2o_evloop_run(ctx.loop, 1);
-
-    if (num_connections == 0) {
-        /* connection was closed abruptly due to an error in the input */
-        return 0;
-    }
+    uint64_t loop_start = h2o_now(ctx.loop);
+    do {
+        if (loop_start + client_timeout_ms < h2o_now(ctx.loop)) {
+            break; /* time up */
+        }
+        uint64_t time_left = loop_start + client_timeout_ms - h2o_now(ctx.loop);
+        h2o_evloop_run(ctx.loop, time_left);
+        if (num_connections == 0) {
+            /* connection was closed abruptly due to an error in the input */
+            return 0;
+        }
+    } while (!sent_response);
 
     mquicly_closed_by_remote(conn->super.quic, 0, 0 /* TODO: frame_type */, ptls_iovec_init(NULL, 0));
     /* simulate timer update at the end of process_packets() */

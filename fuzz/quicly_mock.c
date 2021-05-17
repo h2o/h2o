@@ -104,7 +104,7 @@ int quicly_stream_can_send(quicly_stream_t *stream, int at_stream_level)
 
 ptls_t *quicly_get_tls(quicly_conn_t *conn)
 {
-    assert(0 && "unimplemented");
+    /* TODO: is this okay */
     return NULL;
 }
 
