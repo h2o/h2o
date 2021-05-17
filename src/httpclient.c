@@ -588,8 +588,8 @@ int main(int argc, char **argv)
         case 'x':
             req.connect_to = h2o_mem_alloc(sizeof(*req.connect_to));
             if (h2o_url_init(req.connect_to, NULL, h2o_iovec_init(optarg, strlen(optarg)), h2o_iovec_init(NULL, 0)) != 0 ||
-                req.connect_to->_port == 0 || req.connect_to->_port == 65535) {
-                fprintf(stderr, "invalid server address specified for -X\n");
+                    req.connect_to->_port == 0 || req.connect_to->_port == 65535) {
+                fprintf(stderr, "invalid server address specified for -x\n");
                 exit(EXIT_FAILURE);
             }
             break;
