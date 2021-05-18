@@ -229,6 +229,8 @@ int mquicly_open_stream(quicly_conn_t *conn, quicly_stream_t **stream, int is_re
     group->num_streams++;
 
     conn->super.ctx->stream_open->cb(conn->super.ctx->stream_open, *stream);
+
+    return 0;
 }
 
 static void destroy_stream(quicly_stream_t *stream, int err)
