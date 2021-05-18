@@ -631,6 +631,9 @@ void on_stream_destroy(quicly_stream_t *qs, int err)
         pre_dispose_request(stream);
     if (!stream->req_disposed)
         h2o_dispose_request(&stream->req);
+    /* in case the stream is destroyed before the buffer is fully consumed */
+    h2o_buffer_dispose(&stream->recvbuf.buf);
+
     free(stream);
 }
 
