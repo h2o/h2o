@@ -239,7 +239,7 @@ static void tunnel_create(h2o_loop_t *loop, h2o_tunnel_t *_tunnel)
 
 static void start_request(h2o_httpclient_ctx_t *ctx)
 {
-    h2o_url_t *url_parsed;
+    h2o_url_t *url_parsed = NULL;
 
     /* clear memory pool */
     h2o_mem_clear_pool(&pool);
@@ -251,15 +251,29 @@ static void start_request(h2o_httpclient_ctx_t *ctx)
         return;
     }
 
-    if (req.connect_to != NULL)
+    if (req.connect_to != NULL) {
         req.connect_to->scheme = url_parsed->scheme;
+
+        /* rebuild url_parsed->authority with the port string, even for default ports */
+        if (h2o_url_init_with_hostport(
+                url_parsed,
+                &pool,
+                url_parsed->scheme,
+                url_parsed->host,
+                h2o_url_get_port(url_parsed),
+                url_parsed->path,
+                0) != 0) {
+            on_error(ctx, "failed to rebuild URL: %s", req.url);
+            return;
+        }
+    }
 
     /* initiate the request */
     if (connpool == NULL) {
         connpool = h2o_mem_alloc(sizeof(*connpool));
         h2o_socketpool_t *sockpool = h2o_mem_alloc(sizeof(*sockpool));
         h2o_socketpool_target_t *target = h2o_socketpool_create_target(
-                req.connect_to ? req.connect_to : url_parsed, NULL);
+                req.connect_to != NULL ? req.connect_to : url_parsed, NULL);
         h2o_socketpool_init_specific(sockpool, 10, &target, 1, NULL);
         h2o_socketpool_set_timeout(sockpool, IO_TIMEOUT);
         h2o_socketpool_register_loop(sockpool, ctx->loop);
@@ -427,7 +441,7 @@ h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *errstr, 
     }
 
     *_method = h2o_iovec_init(req.method, strlen(req.method));
-    *url = *(strcmp(req.method, "CONNECT") == 0 ? req.connect_to : (h2o_url_t *)client->data);
+    *url = *((h2o_url_t *)client->data);
     for (i = 0; i != req.num_headers; ++i)
         h2o_add_header_by_str(&pool, &headers_vec, req.headers[i].name.base, req.headers[i].name.len, 1, NULL,
                               req.headers[i].value.base, req.headers[i].value.len);
