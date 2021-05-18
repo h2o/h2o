@@ -105,12 +105,18 @@ int quicly_is_blocked(quicly_conn_t *conn)
 
 void quicly_request_stop(quicly_stream_t *stream, int err)
 {
-    assert(0 && "unimplemented");
+    return;
 }
 
 void quicly_reset_stream(quicly_stream_t *stream, int err)
 {
-    assert(0 && "unimplemented");
+    /* dispose sendbuf state */
+    quicly_sendstate_reset(&stream->sendstate);
+
+    /* inline expansion of resched_stream_data() */
+    /* TODO: consider streams_blocked? */
+    quicly_stream_scheduler_t *scheduler = stream->conn->super.ctx->stream_scheduler;
+    scheduler->update_state(scheduler, stream);
 }
 
 socklen_t quicly_get_socklen(struct sockaddr *sa)
@@ -368,7 +374,10 @@ int quicly_receive(quicly_conn_t *conn, struct sockaddr *dest_addr, struct socka
 
 int quicly_close(quicly_conn_t *conn, int err, const char *reason_phrase)
 {
-    assert(0 && "unimplemented");
+    if (conn->super.state >= QUICLY_STATE_CLOSING)
+        return 0;
+
+    conn->super.state = QUICLY_STATE_CLOSING;
     return 0;
 }
 
