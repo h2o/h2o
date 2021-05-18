@@ -472,6 +472,8 @@ static void usage(const char *progname)
             "  -W <bytes>   receive window size (HTTP/3 only)\n"
             "  -x <host:port>\n"
             "               specifies the host and port to connect to\n"
+            "               the same host will be used for TLS verification,\n"
+            "               -k may be needed if connecting to a host other than the url\n"
             "  -h           prints this help\n"
             "\n",
             progname);
