@@ -119,6 +119,11 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size)
 
     h2o_evloop_run(ctx.loop, 1);
 
+    if (num_connections == 0) {
+        /* connection was closed abruptly due to an error in the input */
+        return 0;
+    }
+
     mquicly_closed_by_remote(conn->super.quic, 0, 0 /* TODO: frame_type */, ptls_iovec_init(NULL, 0));
     /* simulate timer update at the end of process_packets() */
     h2o_quic_schedule_timer(&conn->super);
