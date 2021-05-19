@@ -544,7 +544,7 @@ static void handle_request_body_chunk(h2o_http2_conn_t *conn, h2o_http2_stream_t
     if (is_end_stream) {
         if (stream->state < H2O_HTTP2_STREAM_STATE_REQ_PENDING) {
             h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_REQ_PENDING);
-            if (req_queued)
+            if (req_queued && can_run_requests(conn))
                 h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_SEND_HEADERS);
         }
         if (stream->req.write_req.cb != NULL) {
