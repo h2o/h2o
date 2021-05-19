@@ -113,6 +113,8 @@ void quicly_reset_stream(quicly_stream_t *stream, int err)
     /* dispose sendbuf state */
     quicly_sendstate_reset(&stream->sendstate);
 
+    stream->_send_aux.reset_stream.sender_state = QUICLY_SENDER_STATE_SEND;
+
     /* inline expansion of resched_stream_data() */
     /* TODO: consider streams_blocked? */
     quicly_stream_scheduler_t *scheduler = stream->conn->super.ctx->stream_scheduler;
