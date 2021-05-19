@@ -105,7 +105,7 @@ int quicly_is_blocked(quicly_conn_t *conn)
 
 void quicly_request_stop(quicly_stream_t *stream, int err)
 {
-    return;
+    stream->_send_aux.stop_sending.sender_state = QUICLY_SENDER_STATE_SEND;
 }
 
 void quicly_reset_stream(quicly_stream_t *stream, int err)
