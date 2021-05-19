@@ -975,7 +975,8 @@ static void run_delayed(h2o_timer_t *timer)
             h2o_linklist_unlink(&stream->link);
             stream->read_blocked = 1;
             made_progress = 1;
-            assert(stream->req.entity.base == stream->req_body->bytes && stream->req.entity.len == stream->req_body->size);
+            assert(stream->req.entity.len == stream->req_body->size &&
+                   (stream->req.entity.len == 0 || stream->req.entity.base == stream->req_body->bytes));
             if (stream->req.write_req.cb(stream->req.write_req.ctx, is_end_stream) != 0)
                 shutdown_stream(stream, H2O_HTTP3_ERROR_INTERNAL, H2O_HTTP3_ERROR_INTERNAL, 0);
         }
