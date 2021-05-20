@@ -73,12 +73,14 @@ static const ptls_key_exchange_algorithm_t *h3_key_exchanges[] = {
 #endif
     &ptls_openssl_secp256r1, NULL};
 static h2o_http3client_ctx_t h3ctx = {
-    .tls = {.random_bytes = ptls_openssl_random_bytes,
+    .tls =
+        {
+            .random_bytes = ptls_openssl_random_bytes,
             .get_time = &ptls_get_time,
             .key_exchanges = h3_key_exchanges,
             .cipher_suites = ptls_openssl_cipher_suites,
             .save_ticket = &save_http3_ticket,
-    },
+        },
 };
 
 static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *errstr, h2o_iovec_t *method, h2o_url_t *url,
@@ -255,14 +257,8 @@ static void start_request(h2o_httpclient_ctx_t *ctx)
         req.connect_to->scheme = url_parsed->scheme;
 
         /* rebuild url_parsed->authority with the port string, even for default ports */
-        if (h2o_url_init_with_hostport(
-                url_parsed,
-                &pool,
-                url_parsed->scheme,
-                url_parsed->host,
-                h2o_url_get_port(url_parsed),
-                url_parsed->path,
-                0) != 0) {
+        if (h2o_url_init_with_hostport(url_parsed, &pool, url_parsed->scheme, url_parsed->host, h2o_url_get_port(url_parsed),
+                                       url_parsed->path, 0) != 0) {
             on_error(ctx, "failed to rebuild URL: %s", req.url);
             return;
         }
@@ -272,8 +268,7 @@ static void start_request(h2o_httpclient_ctx_t *ctx)
     if (connpool == NULL) {
         connpool = h2o_mem_alloc(sizeof(*connpool));
         h2o_socketpool_t *sockpool = h2o_mem_alloc(sizeof(*sockpool));
-        h2o_socketpool_target_t *target = h2o_socketpool_create_target(
-                req.connect_to != NULL ? req.connect_to : url_parsed, NULL);
+        h2o_socketpool_target_t *target = h2o_socketpool_create_target(req.connect_to != NULL ? req.connect_to : url_parsed, NULL);
         h2o_socketpool_init_specific(sockpool, 10, &target, 1, NULL);
         h2o_socketpool_set_timeout(sockpool, IO_TIMEOUT);
         h2o_socketpool_register_loop(sockpool, ctx->loop);
@@ -466,30 +461,29 @@ h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *errstr, 
 
 static void usage(const char *progname)
 {
-    fprintf(stderr,
-            "Usage: %s [options] <url>\n"
-            "Options:\n"
-            "  -2 <ratio>   HTTP/2 ratio (between 0 and 100)\n"
-            "  -3 <ratio>   HTTP/3 ratio (between 0 and 100)\n"
-            "  -b <size>    size of request body (in bytes; default: 0)\n"
-            "  -C <concurrency>\n"
-            "               sets the number of requests run at once (default: 1)\n"
-            "  -c <size>    size of body chunk (in bytes; default: 10)\n"
-            "  -d <delay>   request interval (in msec; default: 0)\n"
-            "  -H <name:value>\n"
-            "               adds a request header\n"
-            "  -i <delay>   I/O interval between sending chunks (in msec; default: 0)\n"
-            "  -k           skip peer verification\n"
-            "  -m <method>  request method (default: GET)\n"
-            "  -o <path>    file to which the response body is written (default: stdout)\n"
-            "  -t <times>   number of requests to send the request (default: 1)\n"
-            "  -W <bytes>   receive window size (HTTP/3 only)\n"
-            "  -x <host:port>\n"
-            "               specifies the host and port to connect to\n"
-            "               the same host will be used for TLS verification,\n"
-            "               -k may be needed if connecting to a host other than the url\n"
-            "  -h           prints this help\n"
-            "\n",
+    fprintf(stderr, "Usage: %s [options] <url>\n"
+                    "Options:\n"
+                    "  -2 <ratio>   HTTP/2 ratio (between 0 and 100)\n"
+                    "  -3 <ratio>   HTTP/3 ratio (between 0 and 100)\n"
+                    "  -b <size>    size of request body (in bytes; default: 0)\n"
+                    "  -C <concurrency>\n"
+                    "               sets the number of requests run at once (default: 1)\n"
+                    "  -c <size>    size of body chunk (in bytes; default: 10)\n"
+                    "  -d <delay>   request interval (in msec; default: 0)\n"
+                    "  -H <name:value>\n"
+                    "               adds a request header\n"
+                    "  -i <delay>   I/O interval between sending chunks (in msec; default: 0)\n"
+                    "  -k           skip peer verification\n"
+                    "  -m <method>  request method (default: GET)\n"
+                    "  -o <path>    file to which the response body is written (default: stdout)\n"
+                    "  -t <times>   number of requests to send the request (default: 1)\n"
+                    "  -W <bytes>   receive window size (HTTP/3 only)\n"
+                    "  -x <host:port>\n"
+                    "               specifies the host and port to connect to\n"
+                    "               the same host will be used for TLS verification,\n"
+                    "               -k may be needed if connecting to a host other than the url\n"
+                    "  -h           prints this help\n"
+                    "\n",
             progname);
 }
 
@@ -604,7 +598,7 @@ int main(int argc, char **argv)
         case 'x':
             req.connect_to = h2o_mem_alloc(sizeof(*req.connect_to));
             if (h2o_url_init(req.connect_to, NULL, h2o_iovec_init(optarg, strlen(optarg)), h2o_iovec_init(NULL, 0)) != 0 ||
-                    req.connect_to->_port == 0 || req.connect_to->_port == 65535) {
+                req.connect_to->_port == 0 || req.connect_to->_port == 65535) {
                 fprintf(stderr, "invalid server address specified for -x\n");
                 exit(EXIT_FAILURE);
             }
@@ -734,7 +728,7 @@ int main(int argc, char **argv)
     }
 
 #if H2O_USE_LIBUV
-    /* libuv path currently does not support http3 */
+/* libuv path currently does not support http3 */
 #else
     if (ctx.protocol_selector.ratio.http3 > 0) {
         h2o_quic_close_all_connections(&ctx.http3->h3);
