@@ -381,9 +381,9 @@ int main(int argc, char **argv)
     }
 
     if (sampling_rate >= 0) {
-        /* To give the calculated rate in U32 because eBPF bytecode has no floating point numbers,
-         * See the bpf(2) manpage. */
-        cflags.push_back(build_cc_macro_expr("H2OLOG_SAMPLING_RATE_U32", static_cast<uint32_t>(sampling_rate * UINT32_MAX)));
+        /* eBPF bytecode cannot handle floating point numbers see man bpf(2). We use uint32_t from 0 to 0x80000000 (which maps to
+         * 0.0 to 1.0). */
+        cflags.push_back(build_cc_macro_expr("H2OLOG_SAMPLING_RATE_U32", static_cast<uint32_t>(sampling_rate * 0x80000000)));
     }
 
     ebpf::StatusTuple ret = bpf->init(tracer->bpf_text(), cflags, probes);
