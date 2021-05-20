@@ -31,6 +31,6 @@ extern h2o_barrier_t init_barrier;
 h2o_pathconf_t *register_handler(h2o_hostconf_t *hostconf, const char *path, int (*on_req)(h2o_handler_t *, h2o_req_t *));
 void write_fully(int fd, char *buf, size_t len, int abort_on_err);
 void *upstream_thread(void *arg);
-void register_proxy(h2o_hostconf_t *hostconf, const char *unix_path);
+void register_proxy(h2o_hostconf_t *hostconf, const char *unix_path, h2o_access_log_filehandle_t *logfh);
 
 #endif

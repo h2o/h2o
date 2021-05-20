@@ -99,10 +99,11 @@ void *upstream_thread(void *arg)
     }
 }
 
-void register_proxy(h2o_hostconf_t *hostconf, const char *unix_path)
+void register_proxy(h2o_hostconf_t *hostconf, const char *unix_path, h2o_access_log_filehandle_t *logfh)
 {
     h2o_url_t upstream;
     h2o_proxy_config_vars_t proxy_config = {};
+    h2o_pathconf_t *pathconf;
     /* Assuming the origin is in the same node and is not super busy, we expect 100ms should be enough for proxy timeout.
      * Having a large value would explode the total runtime of the fuzzer. */
     proxy_config.io_timeout = 100;
@@ -114,5 +115,8 @@ void register_proxy(h2o_hostconf_t *hostconf, const char *unix_path)
     h2o_socketpool_init_specific(sockpool, SIZE_MAX /* FIXME */, &target, 1, NULL);
     h2o_socketpool_set_timeout(sockpool, 2000);
     h2o_socketpool_set_ssl_ctx(sockpool, NULL);
-    h2o_proxy_register_reverse_proxy(h2o_config_register_path(hostconf, "/reproxy-test", 0), &proxy_config, sockpool);
+    pathconf = h2o_config_register_path(hostconf, "/reproxy-test", 0);
+    h2o_proxy_register_reverse_proxy(pathconf, &proxy_config, sockpool);
+    if (logfh != NULL)
+        h2o_access_log_register(pathconf, logfh);
 }

@@ -109,7 +109,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size)
         h2o_config_init(&config);
         hostconf = h2o_config_register_host(&config, h2o_iovec_init(H2O_STRLIT("default")), 65535);
 
-        register_proxy(hostconf, unix_listener);
+        register_proxy(hostconf, unix_listener, logfh);
 
         pathconf = h2o_config_register_path(hostconf, "/", 0);
         h2o_file_register(pathconf, "examples/doc_root", NULL, NULL, 0);

@@ -287,7 +287,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size)
         config.http1.req_timeout = 10 * 1000;
         hostconf = h2o_config_register_host(&config, h2o_iovec_init(H2O_STRLIT(unix_listener)), 65535);
         register_handler(hostconf, "/chunked-test", chunked_test);
-        register_proxy(hostconf, unix_listener);
+        register_proxy(hostconf, unix_listener, NULL);
         h2o_file_register(h2o_config_register_path(hostconf, "/", 0), "./examples/doc_root", NULL, NULL, 0);
 
         loop = h2o_evloop_create();
