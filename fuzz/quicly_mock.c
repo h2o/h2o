@@ -74,6 +74,13 @@ int quicly_accept(quicly_conn_t **conn, quicly_context_t *ctx, struct sockaddr *
 
 int quicly_stream_sync_sendbuf(quicly_stream_t *stream, int activate)
 {
+    int ret;
+
+    if (activate) {
+        if ((ret = quicly_sendstate_activate(&stream->sendstate)) != 0)
+            return ret;
+    }
+
     quicly_stream_scheduler_t *scheduler = stream->conn->super.ctx->stream_scheduler;
     scheduler->update_state(scheduler, stream);
     return 0;
