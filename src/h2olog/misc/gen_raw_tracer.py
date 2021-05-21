@@ -436,16 +436,23 @@ int %s(struct pt_regs *ctx) {
 
   if fully_specified_probe_name == "h2o:_private_socket_lookup_flags":
     c += r"""
-#ifdef H2OLOG_SAMPLING_RATE_U32
   uint64_t flags = event._private_socket_lookup_flags.original_flags;
-  int skip_tracing = bpf_get_prandom_u32() > H2OLOG_SAMPLING_RATE_U32;
-  if (skip_tracing) {
-    flags |= H2O_EBPF_FLAGS_SKIP_TRACING_BIT;
+#ifdef H2OLOG_SAMPLING_RATE_U32
+  if ((flags & H2O_EBPF_FLAGS_SKIP_TRACING_BIT) == 0) {
+    if (bpf_get_prandom_u32() > H2OLOG_SAMPLING_RATE_U32)
+      flags |= H2O_EBPF_FLAGS_SKIP_TRACING_BIT;
   }
+#endif
+#ifdef H2OLOG_IS_SAMPLING_ADDRESS
+  if ((flags & H2O_EBPF_FLAGS_SKIP_TRACING_BIT) == 0) {
+    if (!H2OLOG_IS_SAMPLING_ADDRESS(event._private_socket_lookup_flags.info.family,
+                                    event._private_socket_lookup_flags.info.remote.ip))
+      flags |= H2O_EBPF_FLAGS_SKIP_TRACING_BIT;
+  }
+#endif
   int64_t ret = h2o_return.insert(&event._private_socket_lookup_flags.tid, &flags);
   if (ret != 0)
     bpf_trace_printk("failed to insert 0x%%llx in %s with errno=%%lld\n", flags, -ret);
-#endif
 """ % (tracer_name)
   else:
     c += r"""
@@ -587,6 +594,7 @@ struct h2olog_event_t {
   bpf = r"""
 #include <linux/sched.h>
 #include <linux/limits.h>
+#include "include/h2o/ebpf.h"
 
 #define STR_LEN 64
 
@@ -595,10 +603,6 @@ typedef union quicly_address_t {
   uint8_t sin[sizeof_sockaddr_in];
   uint8_t sin6[sizeof_sockaddr_in6];
 } quicly_address_t;
-
-struct st_h2o_ebpf_map_key_t {
-  uint8_t payload[sizeof_st_h2o_ebpf_map_key_t];
-};
 
 %s
 %s
