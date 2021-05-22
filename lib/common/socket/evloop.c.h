@@ -29,6 +29,11 @@
 #include "cloexec.h"
 #include "h2o/linklist.h"
 
+#if defined(__linux__)
+#include <linux/errqueue.h>
+#include <linux/net_tstamp.h>
+#endif /* defined(__linux__) */
+
 #if !defined(H2O_USE_ACCEPT4)
 #ifdef __linux__
 #if defined(__ANDROID__) && __ANDROID_API__ < 21
@@ -115,7 +120,69 @@ static void link_to_statechanged(struct st_h2o_evloop_socket_t *sock)
     }
 }
 
-static const char *on_read_core(int fd, h2o_buffer_t **input)
+#define NSEC_PER_SEC 1000000000
+
+static inline int64_t
+timespec_to_nsec(const struct timespec *a)
+{
+       return (int64_t)a->tv_sec * NSEC_PER_SEC + a->tv_nsec;
+}
+
+#if defined(__linux__)
+static void handle_timestamp(struct st_h2o_evloop_socket_t *sock, struct msghdr *msg)
+{
+    struct timespec *ts = NULL;
+    struct timespec tp = { 0 };
+    uint64_t time_now = 0,  packet_ts = 0;
+    h2o_loop_t *loop = sock->loop;
+
+    for (struct cmsghdr *cmsg = CMSG_FIRSTHDR(msg); cmsg;
+            cmsg = CMSG_NXTHDR(msg, cmsg)) {
+
+        /* in the future we may want to harvest IP_RECVERR messages here, which could have interesting data */
+        if (cmsg->cmsg_level != SOL_SOCKET)
+            continue;
+
+        switch (cmsg->cmsg_type) {
+            case SO_TIMESTAMPNS:
+                ts = (struct timespec *)CMSG_DATA(cmsg);
+                packet_ts = timespec_to_nsec(ts);
+
+                /* We use CLOCK_REALTIME to get the current system time
+                 * because the timespec returned from the kernel also uses
+                 * CLOCK_REALTIME.
+                 */
+                if (clock_gettime(CLOCK_REALTIME, &tp) == -1) {
+                    h2o_error_printf("error getting clock time: %s\n", strerror(errno));
+                    break;
+                }
+                time_now = timespec_to_nsec(&tp);
+
+                /* the time window starts at packet_ts, when the packet
+                 * arrived in the kernel before most of the network stack has
+                 * run.
+                 *
+                 * the time window ends now (time_now).
+                 */
+                h2o_sliding_counter_start(&loop->packet_latency_nanosec_counter, packet_ts);
+                h2o_sliding_counter_stop(&loop->packet_latency_nanosec_counter, time_now);
+                break;
+            default:
+                /* Ignore other cmsg options */
+                break;
+        }
+    }
+
+    return;
+}
+#else /* !defined(__linux__) */
+static void handle_timestamp(struct st_h2o_evloop_socket_t *sock, struct msghdr *msg)
+{
+    return;
+}
+#endif /* defined(__linux__) */
+
+static const char *on_read_core(int fd, h2o_buffer_t **input, struct msghdr *msg)
 {
     ssize_t read_so_far = 0;
 
@@ -126,13 +193,37 @@ static const char *on_read_core(int fd, h2o_buffer_t **input)
             /* memory allocation failed */
             return h2o_socket_error_out_of_memory;
         }
-        while ((rret = read(fd, buf.base, buf.len <= INT_MAX / 2 ? buf.len : INT_MAX / 2 + 1)) == -1 && errno == EINTR)
-            ;
+
+        size_t buflen = (buf.len <= INT_MAX / 2 ? buf.len : INT_MAX / 2 +1);
+
+        /* Not all file descriptors are sockets; if a non-socket is passed
+         * here, we can't call recvmsg on it, so we fall back to regular read
+         * call.
+         */
+        if (msg == NULL) {
+            while ((rret=read(fd, buf.base, buflen)) == -1 &&  errno == EINTR)
+                ;
+        } else {
+            struct iovec iov = { .iov_base = buf.base, .iov_len = buflen };
+
+            /* set the buffer to receive incoming data. the caller may (or may
+             * not) have set other fields of the msghdr structure prior to calling
+             * `on_read_core`.
+             */
+            assert(msg != NULL);
+            msg->msg_iov = &iov;
+            msg->msg_iovlen = 1;
+
+            while ((rret=recvmsg(fd, msg, 0)) == -1 && errno == EINTR)
+                ;
+        }
+
         if (rret == -1) {
             if (errno == EAGAIN)
                 break;
-            else
+            else {
                 return h2o_socket_error_io;
+            }
         } else if (rret == 0) {
             if (read_so_far == 0)
                 return h2o_socket_error_closed; /* TODO notify close */
@@ -233,11 +324,42 @@ static void read_on_ready(struct st_h2o_evloop_socket_t *sock)
     const char *err = 0;
     size_t prev_size = sock->super.input->size;
 
+    struct msghdr msg = { 0 };
+    struct msghdr *pmsg = NULL;
+
     if ((sock->_flags & H2O_SOCKET_FLAG_DONT_READ) != 0)
         goto Notify;
 
-    if ((err = on_read_core(sock->fd, sock->super.ssl == NULL ? &sock->super.input : &sock->super.ssl->input.encrypted)) != NULL)
+    /* if timestamping is enabled, setup the msghdr for on_read_core
+     * and set pmsg equal to the object.
+     *
+     * only sockets can be timestampped -- all other FD types that can make it
+     * to this function would have timestamping = 0, and so would pass a NULL
+     * pointer (as pmsg) to on_read_core below.
+     *
+     * on_read_core knows to call either read or recvmsg based on whether or
+     * not it got a msghdr structure.
+     */
+    if (sock->super.timestamping) {
+        size_t controllen = CMSG_SPACE(sizeof(struct timespec));
+        char *control = alloca(controllen);
+
+        msg = (struct msghdr ) { .msg_control = control,
+                                 .msg_controllen = controllen,
+                                 .msg_name = NULL,
+                                 .msg_namelen = 0,
+                                 .msg_iov = NULL,
+                                 .msg_iovlen = 0 };
+        pmsg = &msg;
+    }
+
+    if ((err = on_read_core(sock->fd, sock->super.ssl == NULL ?  &sock->super.input : &sock->super.ssl->input.encrypted, pmsg)) != NULL)
         goto Notify;
+
+    if (sock->super.timestamping && sock->super.needs_timestamp) {
+        handle_timestamp(sock, pmsg);
+        sock->super.needs_timestamp = 0;
+    }
 
     if (sock->super.ssl != NULL && sock->super.ssl->handshake.cb == NULL)
         err = decode_ssl_input(&sock->super);
@@ -396,6 +518,7 @@ static struct st_h2o_evloop_socket_t *create_socket(h2o_evloop_t *loop, int fd, 
     sock->_wreq.bufs = sock->_wreq.smallbufs;
     sock->_next_pending = sock;
     sock->_next_statechanged = sock;
+    sock->super.needs_timestamp = 0;
 
     evloop_do_on_socket_create(sock);
 

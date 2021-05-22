@@ -151,6 +151,7 @@ struct listener_config_t {
         h2o_http3_qpack_context_t qpack;
     } quic;
     int proxy_protocol;
+    int timestamping;
     h2o_iovec_t tcp_congestion_controller; /* default CC for this address */
 };
 
@@ -1240,7 +1241,7 @@ static struct listener_config_t *find_listener(struct sockaddr *addr, socklen_t 
     return NULL;
 }
 
-static struct listener_config_t *add_listener(int fd, struct sockaddr *addr, socklen_t addrlen, int is_global, int proxy_protocol)
+static struct listener_config_t *add_listener(int fd, struct sockaddr *addr, socklen_t addrlen, int is_global, int proxy_protocol, int timestamping)
 {
     struct listener_config_t *listener = h2o_mem_alloc(sizeof(*listener));
 
@@ -1257,6 +1258,7 @@ static struct listener_config_t *add_listener(int fd, struct sockaddr *addr, soc
     }
     memset(&listener->ssl, 0, sizeof(listener->ssl));
     memset(&listener->quic, 0, sizeof(listener->quic));
+    listener->timestamping = timestamping;
     listener->quic.qpack = (h2o_http3_qpack_context_t){.encoder_table_capacity = 4096 /* our default */};
     listener->proxy_protocol = proxy_protocol;
     listener->tcp_congestion_controller = h2o_iovec_init(NULL, 0);
@@ -1375,13 +1377,26 @@ static void socket_reuseport(int fd)
 /**
  * Opens an INET or INET6 socket for accepting connections. When the protocol is UDP, SO_REUSEPORT is set if available.
  */
-static int open_listener(int domain, int type, int protocol, struct sockaddr *addr, socklen_t addrlen)
+static int open_listener(int domain, int type, int protocol, struct sockaddr *addr, socklen_t addrlen, int timestamping)
 {
     int fd;
 
     if ((fd = socket(domain, type, protocol)) == -1)
         goto Error;
     set_cloexec(fd);
+
+   {
+        if (timestamping) {
+#if defined(__linux__)
+            int flag = 1;
+            if (setsockopt(fd, SOL_SOCKET, SO_TIMESTAMPNS, &flag, sizeof(flag)) != 0) {
+                goto Error;
+            }
+#else /* !defined(__linux__) */
+            fprintf(stderr, "[warning] cannot set SO_TIMESTAMPNS because the platform does not support it\n");
+#endif /* defined(__linux__) */
+        }
+    }
 
     /* set SO_*, IP_* options */
 #ifdef IPV6_V6ONLY
@@ -1463,11 +1478,11 @@ Error:
 }
 
 static int open_inet_listener(h2o_configurator_command_t *cmd, yoml_t *node, const char *hostname, const char *servname, int domain,
-                              int type, int protocol, struct sockaddr *addr, socklen_t addrlen)
+                              int type, int protocol, struct sockaddr *addr, socklen_t addrlen, int timestamping)
 {
     int fd;
 
-    if ((fd = open_listener(domain, type, protocol, addr, addrlen)) == -1)
+    if ((fd = open_listener(domain, type, protocol, addr, addrlen, timestamping)) == -1)
         h2o_configurator_errprintf(cmd, node, "failed to listen to %s port %s:%s: %s", protocol == IPPROTO_TCP ? "TCP" : "UDP",
                                    hostname != NULL ? hostname : "ANY", servname, strerror(errno));
 
@@ -1563,6 +1578,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
     yoml_t **ssl_node = NULL, **owner_node = NULL, **permission_node = NULL, **quic_node = NULL, **cc_node = NULL,
            **initcwnd_node = NULL;
     int proxy_protocol = 0;
+    int packet_timestamping = 0;
 
     /* fetch servname (and hostname) */
     switch (node->type) {
@@ -1570,11 +1586,11 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
         servname = node->data.scalar;
         break;
     case YOML_TYPE_MAPPING: {
-        yoml_t **port_node, **host_node, **type_node, **proxy_protocol_node;
+        yoml_t **port_node, **host_node, **type_node, **proxy_protocol_node, **packet_timestamping_node;
         if (h2o_configurator_parse_mapping(cmd, node, "port:s",
-                                           "host:s,type:s,owner:s,permission:*,ssl:m,proxy-protocol:*,quic:m,cc:s,initcwnd:s",
+                                           "host:s,type:s,owner:s,permission:*,ssl:m,proxy-protocol:*,quic:m,cc:s,initcwnd:s,packet-timestamping:s",
                                            &port_node, &host_node, &type_node, &owner_node, &permission_node, &ssl_node,
-                                           &proxy_protocol_node, &quic_node, &cc_node, &initcwnd_node) != 0)
+                                           &proxy_protocol_node, &quic_node, &cc_node, &initcwnd_node, &packet_timestamping_node) != 0)
             return -1;
         servname = (*port_node)->data.scalar;
         if (host_node != NULL)
@@ -1586,6 +1602,10 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
         }
         if (proxy_protocol_node != NULL &&
             (proxy_protocol = (int)h2o_configurator_get_one_of(cmd, *proxy_protocol_node, "OFF,ON")) == -1)
+            return -1;
+
+        if (packet_timestamping_node != NULL &&
+            (packet_timestamping = (int)h2o_configurator_get_one_of(cmd, *packet_timestamping_node, "OFF,ON")) == -1)
             return -1;
     } break;
     default:
@@ -1632,7 +1652,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
             default:
                 break;
             }
-            listener = add_listener(fd, (struct sockaddr *)&sa, sizeof(sa), ctx->hostconf == NULL, proxy_protocol);
+            listener = add_listener(fd, (struct sockaddr *)&sa, sizeof(sa), ctx->hostconf == NULL, proxy_protocol, 0);
             listener_is_new = 1;
         } else if (listener->proxy_protocol != proxy_protocol) {
             goto ProxyConflict;
@@ -1671,7 +1691,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                         }
                     } else {
                         if ((fd = open_inet_listener(cmd, node, hostname, servname, ai->ai_family, ai->ai_socktype, ai->ai_protocol,
-                                                     ai->ai_addr, ai->ai_addrlen)) == -1) {
+                                                     ai->ai_addr, ai->ai_addrlen, packet_timestamping)) == -1) {
                             freeaddrinfo(res);
                             return -1;
                         }
@@ -1680,7 +1700,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                 default:
                     break;
                 }
-                listener = add_listener(fd, ai->ai_addr, ai->ai_addrlen, ctx->hostconf == NULL, proxy_protocol);
+                listener = add_listener(fd, ai->ai_addr, ai->ai_addrlen, ctx->hostconf == NULL, proxy_protocol, packet_timestamping);
                 if (cc_node != NULL)
                     listener->tcp_congestion_controller = h2o_strdup(NULL, (*cc_node)->data.scalar, SIZE_MAX);
                 listener_is_new = 1;
@@ -1722,7 +1742,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                             return -1;
                         }
                     } else if ((fd = open_inet_listener(cmd, node, hostname, servname, ai->ai_family, ai->ai_socktype,
-                                                        ai->ai_protocol, ai->ai_addr, ai->ai_addrlen)) == -1) {
+                                                        ai->ai_protocol, ai->ai_addr, ai->ai_addrlen, packet_timestamping)) == -1) {
                         freeaddrinfo(res);
                         return -1;
                     }
@@ -1735,7 +1755,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                 *quic = quicly_spec_context;
                 quic->cid_encryptor = &quic_cid_encryptor;
                 quic->generate_resumption_token = &quic_resumption_token_generator;
-                listener = add_listener(fd, ai->ai_addr, ai->ai_addrlen, ctx->hostconf == NULL, 0);
+                listener = add_listener(fd, ai->ai_addr, ai->ai_addrlen, ctx->hostconf == NULL, 0, packet_timestamping);
                 listener->quic.ctx = quic;
                 if (quic_node != NULL) {
                     yoml_t **retry_node, **sndbuf, **rcvbuf, **amp_limit, **qpack_encoder_table_capacity, **max_streams_bidi;
@@ -2569,6 +2589,9 @@ static void on_accept(h2o_socket_t *listener, const char *err)
         sock->on_close.cb = on_socketclose;
         sock->on_close.data = ctx->accept_ctx.ctx;
 
+        sock->timestamping = listener->timestamping;
+        sock->needs_timestamp = 1;
+
         set_tcp_congestion_controller(sock, conf.listeners[ctx->listener_index]->tcp_congestion_controller);
 
         h2o_accept(&ctx->accept_ctx, sock);
@@ -2797,6 +2820,8 @@ static void *run_loop(void *_thread_index)
             listeners[i].accept_ctx.http2_origin_frame = listener_config->ssl.entries[0]->http2_origin_frame;
         }
         listeners[i].sock = h2o_evloop_socket_create(conf.threads[thread_index].ctx.loop, fd, H2O_SOCKET_FLAG_DONT_READ);
+        listeners[i].sock->timestamping = listener_config->timestamping;
+
         listeners[i].sock->data = listeners + i;
         /* setup quic context and the unix socket to receive forwarded packets */
         if (thread_index < conf.quic.num_threads && listener_config->quic.ctx != NULL) {
@@ -3173,7 +3198,7 @@ static void setup_configurators(void)
     h2o_config_register_status_handler(&conf.globalconf, &extra_status_handler);
 }
 
-static int dup_listener(int listener)
+static int dup_listener(int listener, int timestamping)
 {
     int reuseport = 0;
 
@@ -3203,7 +3228,7 @@ static int dup_listener(int listener)
             abort();
         }
         if ((fd = open_listener(ss.ss_family, type, type == SOCK_STREAM ? IPPROTO_TCP : IPPROTO_UDP, (struct sockaddr *)&ss,
-                                sslen)) != -1) {
+                                sslen, timestamping)) != -1) {
             if (type == SOCK_DGRAM)
                 setsockopt_recvpktinfo(fd, ss.ss_family);
         } else {
@@ -3226,7 +3251,7 @@ static void create_per_thread_listeners(void)
         struct listener_config_t *listener_config = conf.listeners[i];
         h2o_vector_reserve(NULL, &listener_config->fds, conf.thread_map.size);
         while (listener_config->fds.size < conf.thread_map.size) {
-            int fd = dup_listener(listener_config->fds.entries[0]);
+            int fd = dup_listener(listener_config->fds.entries[0], listener_config->timestamping);
             listener_config->fds.entries[listener_config->fds.size++] = fd;
         }
     }
