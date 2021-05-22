@@ -261,7 +261,7 @@ int main(int argc, char **argv)
     std::vector<std::string> response_header_filters;
     int c;
     pid_t h2o_pid = -1;
-    double sampling_rate = -1;
+    double sampling_rate = 1.0;
     while ((c = getopt(argc, argv, "hHdrlap:t:s:w:S:")) != -1) {
         switch (c) {
         case 'H':
@@ -380,10 +380,9 @@ int main(int argc, char **argv)
         probes.push_back(ebpf::USDT(h2o_pid, usdt.provider, usdt.name, usdt.probe_func));
     }
 
-    if (sampling_rate >= 0) {
-        /* To give the calculated rate in U32 because eBPF bytecode has no floating point numbers,
-         * See the bpf(2) manpage. */
-        cflags.push_back(build_cc_macro_expr("H2OLOG_SAMPLING_RATE_U32", static_cast<uint32_t>(sampling_rate * UINT32_MAX)));
+    if (sampling_rate < 1.0) {
+        /* eBPF bytecode cannot handle floating point numbers see man bpf(2). We use uint32_t which maps to 0 <= value < 1. */
+        cflags.push_back(build_cc_macro_expr("H2OLOG_SAMPLING_RATE_U32", static_cast<uint32_t>(sampling_rate * ((uint64_t)1 << 32));
     }
 
     ebpf::StatusTuple ret = bpf->init(tracer->bpf_text(), cflags, probes);

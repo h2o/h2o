@@ -438,7 +438,7 @@ int %s(struct pt_regs *ctx) {
     c += r"""
 #ifdef H2OLOG_SAMPLING_RATE_U32
   uint64_t flags = event._private_socket_lookup_flags.original_flags;
-  int skip_tracing = bpf_get_prandom_u32() > H2OLOG_SAMPLING_RATE_U32;
+  int skip_tracing = bpf_get_prandom_u32() >= H2OLOG_SAMPLING_RATE_U32;
   if (skip_tracing) {
     flags |= H2O_EBPF_FLAGS_SKIP_TRACING_BIT;
   }
