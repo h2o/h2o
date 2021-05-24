@@ -33,12 +33,6 @@ extern "C" {
 #include <netinet/in.h>
 }
 
-union h2olog_address_t {
-    sockaddr sa;
-    sockaddr_in sin;
-    sockaddr_in6 sin6;
-};
-
 class h2o_tracer
 {
   public:

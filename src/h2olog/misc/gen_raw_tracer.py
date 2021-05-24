@@ -55,31 +55,33 @@ h2o_probes_d = "h2o-probes.d"
 
 # An allow-list to gather data from USDT probes.
 # Only fields listed here are handled in BPF.
-struct_map = {
+struct_map = OrderedDict([
     # deps/quicly/include/quicly.h
-    "st_quicly_stream_t": [
+    ["st_quicly_stream_t", [
         # ($member_access, $optional_flat_name)
         # If $optional_flat_name is None, $member_access is used.
         ("stream_id", None),
-    ],
+    ]],
 
     # deps/quicly/include/quicly/loss.h
-    "quicly_rtt_t": [
+    ["quicly_rtt_t", [
         ("minimum", None),
         ("smoothed", None),
         ("variance", None),
         ("latest",  None),
-    ],
+    ]],
 
     # deps/quicly/lib/quicly.c
-    "st_quicly_conn_t": [
+    ["st_quicly_conn_t", [
         ("super.local.cid_set.plaintext.master_id", "master_id"),
-    ],
+    ]],
 
-    "sockaddr": [],
-    "sockaddr_in": [],
-    "sockaddr_in6": [],
-}
+    ["st_h2o_ebpf_map_key_t", []],
+
+    ["sockaddr", []],
+    ["sockaddr_in", []],
+    ["sockaddr_in6", []],
+])
 
 # The block list for probes.
 # All the probes are handled by default in JSON mode
@@ -136,13 +138,13 @@ class Lexer:
     while self.skip_whitespaces() or self.skip(comment):
       pass
 
-  def expect_opt(self, pattern) -> Optional[re.Match]:
+  def expect_opt(self, pattern):
     m = re.match(pattern, self.src[self.pos:], re_xms)
     if m:
       self.pos += m.end()
     return m
 
-  def expect(self, pattern) -> re.Match:
+  def expect(self, pattern):
     m = self.expect_opt(pattern)
     if not m:
       sys.exit("Expected '%s' but got '%s' %s"
@@ -183,7 +185,7 @@ def parse_dscript(path: Path):
       m = lexer.expect_opt(comment)
       if m:
         # find for /* @appdata {...} */
-        m = re.match(r'/\*\s*@appdata\s*(?P<json>\{.*\})\s*\*/', m[0], re_xms)
+        m = re.match(r'/\*\s*@appdata\s*(?P<json>\{.*\})\s*\*/', m.group(0), re_xms)
         if m:
           if appdata:
             die("cannot place @appdata annotation more than once per file")
@@ -229,7 +231,7 @@ def parse_dscript(path: Path):
           lexer.skip_whitespaces_or_comments()
           m = lexer.expect_opt(r'\w+|\*')
           if m:
-            tokens.append(m[0])
+            tokens.append(m.group(0))
           else:
             break
 
@@ -315,8 +317,13 @@ def parse_and_analyze(context: dict, d_file: Path):
       if is_ptr_type(arg_type):
         st_name = strip_typename(arg_type)
         if st_name in struct_map:
-          for st_field_access, st_field_name in struct_map[st_name]:
-            flat_args_map[st_field_name or st_field_access] = "typeof_%s__%s" % (st_name, st_field_name or st_field_access)
+          if struct_map[st_name]:
+            # decodes the struct into members in BPF programs.
+            for st_field_access, st_field_name in struct_map[st_name]:
+              flat_args_map[st_field_name or st_field_access] = "typeof_%s__%s" % (st_name, st_field_name or st_field_access)
+          else:
+            # decodes the struct into members in the user space (json.cc).
+            flat_args_map[arg_name] = "struct %s" % st_name
         else:
           flat_args_map[arg_name] = arg_type
       else:
@@ -350,7 +357,7 @@ def is_bin_type(t):
 
 
 def is_sockaddr(t):
-  return re.search(r'\b(?:sockaddr|h2olog_address_t)\s*\*', t)
+  return re.search(r'\b(?:sockaddr|quicly_address_t)\s*\*', t)
 
 
 def is_ptr_type(t):
@@ -403,13 +410,17 @@ int %s(struct pt_regs *ctx) {
     elif is_ptr_type(arg_type):
       st_name = strip_typename(arg_type)
       if st_name in struct_map:
-        c += "  uint8_t %s[sizeof_%s] = {};\n" % (arg_name, st_name)
-        c += "  bpf_usdt_readarg(%d, ctx, &buf);\n" % (i+1)
-        c += "  bpf_probe_read(&%s, sizeof_%s, buf);\n" % (arg_name, st_name)
-        for st_field_access, st_field_name in struct_map[st_name]:
-          event_t_name = "%s.%s" % (probe_name, st_field_name or st_field_access)
-          c += "  event.%s = get_%s__%s(%s);\n" % (
-              event_t_name, st_name, st_field_name or st_field_access, arg_name)
+        if struct_map[st_name]:
+          c += "  uint8_t %s[sizeof_%s] = {};\n" % (arg_name, st_name)
+          c += "  bpf_usdt_readarg(%d, ctx, &buf);\n" % (i+1)
+          c += "  bpf_probe_read(&%s, sizeof_%s, buf);\n" % (arg_name, st_name)
+          for st_field_access, st_field_name in struct_map[st_name]:
+            event_t_name = "%s.%s" % (probe_name, st_field_name or st_field_access)
+            c += "  event.%s = get_%s__%s(%s);\n" % (
+                event_t_name, st_name, st_field_name or st_field_access, arg_name)
+        else:
+          c += "  bpf_usdt_readarg(%d, ctx, &buf);\n" % (i+1)
+          c += "  bpf_probe_read(&event.%s.%s, sizeof_%s, buf);\n" % (probe_name, arg_name, st_name)
       else:
         c += "  bpf_usdt_readarg(%d, ctx, &event.%s.%s);\n" % (i + 1, probe_name, arg_name)
     else:
@@ -423,13 +434,29 @@ int %s(struct pt_regs *ctx) {
 #endif
 """
 
-  c += r"""
+  if fully_specified_probe_name == "h2o:_private_socket_lookup_flags":
+    c += r"""
+#ifdef H2OLOG_SAMPLING_RATE_U32
+  uint64_t flags = event._private_socket_lookup_flags.original_flags;
+  int skip_tracing = bpf_get_prandom_u32() > H2OLOG_SAMPLING_RATE_U32;
+  if (skip_tracing) {
+    flags |= H2O_EBPF_FLAGS_SKIP_TRACING_BIT;
+  }
+  int64_t ret = h2o_return.insert(&event._private_socket_lookup_flags.tid, &flags);
+  if (ret != 0)
+    bpf_trace_printk("failed to insert 0x%%llx in %s with errno=%%lld\n", flags, -ret);
+#endif
+""" % (tracer_name)
+  else:
+    c += r"""
   if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
     bpf_trace_printk("failed to perf_submit in %s\n");
+""" % (tracer_name)
 
+  c += r"""
   return 0;
 }
-""" % (tracer_name)
+"""
   return c
 
 
@@ -540,7 +567,7 @@ struct h2olog_event_t {
       elif is_str_type(field_type):
         f = "char %s[STR_LEN]" % field_name
       elif is_sockaddr(field_type):
-        f = "h2olog_address_t %s" % field_name
+        f = "quicly_address_t %s" % field_name
       else:
         f = "%s %s" % (field_type, field_name)
 
@@ -559,18 +586,27 @@ struct h2olog_event_t {
 
   bpf = r"""
 #include <linux/sched.h>
+#include <linux/limits.h>
 
 #define STR_LEN 64
 
-typedef union h2olog_address_t {
+typedef union quicly_address_t {
   uint8_t sa[sizeof_sockaddr];
   uint8_t sin[sizeof_sockaddr_in];
   uint8_t sin6[sizeof_sockaddr_in6];
-} h2olog_address_t;;
+} quicly_address_t;
+
+struct st_h2o_ebpf_map_key_t {
+  uint8_t payload[sizeof_st_h2o_ebpf_map_key_t];
+};
 
 %s
 %s
 BPF_PERF_OUTPUT(events);
+
+// A pinned BPF object to return a value to h2o.
+// The table size must be larger than the number of threads in h2o.
+BPF_TABLE_PINNED("lru_hash", pid_t, uint64_t, h2o_return, H2O_EBPF_RETURN_MAP_SIZE, H2O_EBPF_RETURN_MAP_PATH);
 
 // HTTP/3 tracing
 BPF_HASH(h2o_to_quicly_conn, u64, u32);
@@ -620,6 +656,10 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
   for probe_name in probe_metadata:
     metadata = probe_metadata[probe_name]
     fully_specified_probe_name = metadata["fully_specified_probe_name"]
+
+    if fully_specified_probe_name == "h2o:_private_socket_lookup_flags":
+      continue
+
     appdata_field_set = metadata["appdata_field_set"]  # type: set[str]
     flat_args_map = metadata["flat_args_map"]
 
@@ -680,6 +720,7 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
 extern "C" {
 #include <sys/time.h>
 #include "quicly.h"
+#include "h2o/ebpf.h"
 }
 
 #include <cstdlib>

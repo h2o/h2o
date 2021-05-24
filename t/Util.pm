@@ -47,6 +47,7 @@ our @EXPORT = qw(
     find_blackhole_ip
     get_tracer
     check_dtrace_availability
+    run_picotls_client
 );
 
 use constant ASSETS_DIR => 't/assets';
@@ -220,10 +221,12 @@ sub spawn_h2o {
     # setup the configuration file
     $conf = $conf->($port, $tls_port)
         if ref $conf eq 'CODE';
+    my $user = $< == 0 ? "root" : "";
     if (ref $conf eq 'HASH') {
         @opts = @{$conf->{opts}}
             if $conf->{opts};
         $max_ssl_version = $conf->{max_ssl_version} || undef;
+        $user = $conf->{user} if exists $conf->{user};
         $conf = $conf->{conf};
     }
     $conf = <<"EOT";
@@ -238,7 +241,7 @@ listen:
     key-file: examples/h2o/server.key
     certificate-file: examples/h2o/server.crt
     @{[$max_ssl_version ? "max-version: $max_ssl_version" : ""]}
-@{[$< == 0 ? "user: root" : ""]}
+@{[$user ? "user: $user" : ""]}
 EOT
 
     my $ret = spawn_h2o_raw($conf, [$port, $tls_port], \@opts);
@@ -694,6 +697,36 @@ sub get_tracer {
             if waitpid($tracer_pid, WNOHANG) == $tracer_pid;
     }
     return $read_trace;
+}
+
+sub run_picotls_client {
+    my($opts) = @_;
+    my $port = $opts->{port}; # required
+    my $host = $opts->{host} // '127.0.0.1';
+    my $path = $opts->{path} // '/';
+    my $cli_opts = $opts->{opts} // '';
+
+    my $cli = bindir() . "/picotls/cli";
+
+    my $tempdir = tempdir();
+    my $cmd = "exec $cli $cli_opts $host $port > $tempdir/resp.txt 2>&1";
+    diag $cmd;
+    open my $fh, "|-", $cmd
+        or die "failed to invoke command:$cmd:$!";
+    autoflush $fh 1;
+    print $fh <<"EOT";
+GET $path HTTP/1.1\r
+Host: $host:$port\r
+Connection: close\r
+\r
+EOT
+    sleep 1;
+    close $fh;
+
+    open $fh, "<", "$tempdir/resp.txt"
+        or die "failed to open file:$tempdir/resp.txt:$!";
+    my $resp = do { local $/; <$fh> };
+    return $resp;
 }
 
 1;

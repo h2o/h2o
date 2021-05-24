@@ -679,6 +679,7 @@
 		08790E101D8BD7F100A04BC1 /* examples-redis-client */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = "examples-redis-client"; sourceTree = BUILT_PRODUCTS_DIR; };
 		08819C2C218C9FA90057ED23 /* qif */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = qif; sourceTree = BUILT_PRODUCTS_DIR; };
 		08819C2D218C9FF70057ED23 /* qif.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = qif.c; sourceTree = "<group>"; };
+		08C7C365262AB30F009C944C /* 40mtls.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = 40mtls.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		08E9CC4D1E41F6660049DD26 /* embedded.c.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = embedded.c.h; sourceTree = "<group>"; };
 		100A550C1C22857B00C4E3E0 /* 50mruby-htpasswd.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50mruby-htpasswd.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		100A550E1C2BB15100C4E3E0 /* http_request.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = http_request.c; sourceTree = "<group>"; };
@@ -1037,7 +1038,7 @@
 		E90C514D230BB28800D6AD8E /* 90dtrace.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = 90dtrace.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		E915E87325D4A88D00FB20F7 /* http_tracer.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = http_tracer.cc; sourceTree = "<group>"; };
 		E915E87425D4A89700FB20F7 /* generated_raw_tracer.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = generated_raw_tracer.cc; sourceTree = "<group>"; };
-		E915E87525D4A89700FB20F7 /* raw_tracer.h.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = raw_tracer.h.cc; sourceTree = "<group>"; };
+		E915E87525D4A89700FB20F7 /* raw_tracer.cc.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = raw_tracer.cc.h; sourceTree = "<group>"; };
 		E915E87625D4A8B700FB20F7 /* gen_raw_tracer.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = gen_raw_tracer.py; sourceTree = "<group>"; };
 		E918FC392136583F00CCB252 /* proptest */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = proptest; sourceTree = BUILT_PRODUCTS_DIR; };
 		E918FC3B213658BE00CCB252 /* prop.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = prop.c; sourceTree = "<group>"; };
@@ -2125,6 +2126,7 @@
 				E9414F9D24ED4DD300273C59 /* 40http3-shutdown-reject-conn.t */,
 				104B9A301A58F55E009EEE64 /* 40max-connections.t */,
 				10A3D3D71B4F4D0900327CF9 /* 40memcached-session-resumption.t */,
+				08C7C365262AB30F009C944C /* 40mtls.t */,
 				105534F51A460EF600627ECB /* 40protocol.t */,
 				1070E1641B451D43001CCAFA /* 40proxy-protocol.t */,
 				E9BC76BF1EE3D71000EB7A09 /* 40redis-session-resumption.t */,
@@ -2450,7 +2452,7 @@
 				E904232E24AB2C9B0072C5B7 /* json.cc */,
 				E904233024AB2C9C0072C5B7 /* json.h */,
 				E904233624AB2CA80072C5B7 /* misc */,
-				E915E87525D4A89700FB20F7 /* raw_tracer.h.cc */,
+				E915E87525D4A89700FB20F7 /* raw_tracer.cc.h */,
 				E904233524AB2C9C0072C5B7 /* pyproject.toml */,
 			);
 			path = h2olog;
@@ -3849,6 +3851,7 @@
 					"DEBUG=1",
 					"H2O_USE_MRUBY=1",
 					"H2O_ROOT=/mydev/h2o",
+					"kh_inline=\"inline __unused\"",
 					"$(inherited)",
 				);
 				GCC_SYMBOLS_PRIVATE_EXTERN = NO;
@@ -4006,6 +4009,7 @@
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"H2O_USE_MRUBY=1",
 					"H2O_ROOT=/mydev/h2o",
+					"kh_inline=\"inline __unused\"",
 					"$(inherited)",
 				);
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
@@ -4154,6 +4158,7 @@
 					"H2O_USE_LIBUV=0",
 					"H2O_ROOT=/mydev/h2o",
 					"$(inherited)",
+					"kh_inline=\"inline __unused\"",
 				);
 				GCC_SYMBOLS_PRIVATE_EXTERN = NO;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
@@ -4199,6 +4204,7 @@
 					"H2O_USE_MRUBY=1",
 					"H2O_USE_LIBUV=0",
 					"H2O_ROOT=/mydev/h2o",
+					"kh_inline=\"inline __unused\"",
 					"$(inherited)",
 				);
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
