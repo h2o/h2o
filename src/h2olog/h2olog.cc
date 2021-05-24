@@ -365,7 +365,11 @@ int main(int argc, char **argv)
 
     tracer->init(outfp, include_appdata);
 
+    const char *h2o_root = getenv("H2O_ROOT");
+    if (h2o_root == NULL)
+        h2o_root = H2O_TO_STR(H2O_ROOT);
     std::vector<std::string> cflags({
+        std::string("-I") + std::string(h2o_root) + "/include",
         build_cc_macro_expr("H2OLOG_H2O_PID", h2o_pid),
         CC_MACRO_EXPR(H2O_EBPF_RETURN_MAP_SIZE),
     });

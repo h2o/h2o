@@ -1774,7 +1774,7 @@ std::string h2o_raw_tracer::bpf_text() {
 
 #include <linux/sched.h>
 #include <linux/limits.h>
-#include "include/h2o/ebpf.h"
+#include "h2o/ebpf.h"
 
 #define STR_LEN 64
 

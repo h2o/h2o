@@ -594,7 +594,7 @@ struct h2olog_event_t {
   bpf = r"""
 #include <linux/sched.h>
 #include <linux/limits.h>
-#include "include/h2o/ebpf.h"
+#include "h2o/ebpf.h"
 
 #define STR_LEN 64
 
