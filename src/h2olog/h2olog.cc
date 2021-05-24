@@ -382,7 +382,8 @@ int main(int argc, char **argv)
 
     if (sampling_rate < 1.0) {
         /* eBPF bytecode cannot handle floating point numbers see man bpf(2). We use uint32_t which maps to 0 <= value < 1. */
-        cflags.push_back(build_cc_macro_expr("H2OLOG_SAMPLING_RATE_U32", static_cast<uint32_t>(sampling_rate * ((uint64_t)1 << 32));
+        cflags.push_back(
+            build_cc_macro_expr("H2OLOG_SAMPLING_RATE_U32", static_cast<uint32_t>(sampling_rate * (UINT64_C(1) << 32))));
     }
 
     ebpf::StatusTuple ret = bpf->init(tracer->bpf_text(), cflags, probes);
