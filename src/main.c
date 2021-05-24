@@ -37,6 +37,7 @@
 #include <poll.h>
 #include <pthread.h>
 #include <pwd.h>
+#include <grp.h>
 #include <signal.h>
 #include <stdio.h>
 #include <unistd.h>
@@ -1274,21 +1275,38 @@ Found:
 }
 
 static int open_unix_listener(h2o_configurator_command_t *cmd, yoml_t *node, struct sockaddr_un *sa, yoml_t **owner_node,
-                              yoml_t **permission_node)
+                              yoml_t **group_node, yoml_t **permission_node)
 {
     struct stat st;
     int fd = -1;
     struct passwd *owner = NULL, pwbuf;
     char pwbuf_buf[65536];
+    gid_t owner_gid = -1;
     unsigned mode = UINT_MAX;
 
     /* obtain owner and permission */
+    if (owner_node == NULL && group_node != NULL) {
+        h2o_configurator_errprintf(cmd, *group_node, "`group` cannot be used without `owner`");
+        goto ErrorExit;
+    }
     if (owner_node != NULL) {
         int r = getpwnam_r((*owner_node)->data.scalar, &pwbuf, pwbuf_buf, sizeof(pwbuf_buf), &owner);
         if (r != 0 || owner == NULL) {
             h2o_configurator_errprintf(cmd, *owner_node, "failed to obtain uid of user:%s: %s", (*owner_node)->data.scalar,
                                        (r == 0 ? "Not found" : strerror(r)));
             goto ErrorExit;
+        }
+        owner_gid = owner->pw_gid;
+        if (group_node != NULL) {
+            struct group *group = NULL, grbuf;
+            char grbuf_buf[65536];
+            r = getgrnam_r((*group_node)->data.scalar, &grbuf, grbuf_buf, sizeof(grbuf_buf), &group);
+            if (r != 0 || group == NULL) {
+                h2o_configurator_errprintf(cmd, *group_node, "failed to obtain gid of group:%s: %s", (*group_node)->data.scalar,
+                                           (r == 0 ? "Not found" : strerror(r)));
+                goto ErrorExit;
+            }
+            owner_gid = group->gr_gid;
         }
     }
     if (permission_node != NULL && h2o_configurator_scanf(cmd, *permission_node, "%o", &mode) != 0) {
@@ -1314,9 +1332,9 @@ static int open_unix_listener(h2o_configurator_command_t *cmd, yoml_t *node, str
     set_cloexec(fd);
 
     /* set file owner and permission */
-    if (owner != NULL && chown(sa->sun_path, owner->pw_uid, owner->pw_gid) != 0) {
-        h2o_configurator_errprintf(NULL, node, "failed to chown socket:%s to %s: %s", sa->sun_path, owner->pw_name,
-                                   strerror(errno));
+    if (owner != NULL && chown(sa->sun_path, owner->pw_uid, owner_gid) != 0) {
+        h2o_configurator_errprintf(NULL, node, "failed to chown socket:%s to %s (gid %u): %s", sa->sun_path, owner->pw_name,
+                                   (unsigned)owner_gid, strerror(errno));
         goto ErrorExit;
     }
     if (mode != UINT_MAX && chmod(sa->sun_path, mode) != 0) {
@@ -1530,7 +1548,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
 {
     const char *hostname = NULL, *servname, *type = "tcp";
     yoml_t **ssl_node = NULL, **owner_node = NULL, **permission_node = NULL, **quic_node = NULL, **cc_node = NULL,
-           **initcwnd_node = NULL;
+           **initcwnd_node = NULL, **group_node = NULL;
     int proxy_protocol = 0;
 
     /* fetch servname (and hostname) */
@@ -1541,8 +1559,8 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
     case YOML_TYPE_MAPPING: {
         yoml_t **port_node, **host_node, **type_node, **proxy_protocol_node;
         if (h2o_configurator_parse_mapping(cmd, node, "port:s",
-                                           "host:s,type:s,owner:s,permission:*,ssl:m,proxy-protocol:*,quic:m,cc:s,initcwnd:s",
-                                           &port_node, &host_node, &type_node, &owner_node, &permission_node, &ssl_node,
+                                           "host:s,type:s,owner:s,group:s,permission:*,ssl:m,proxy-protocol:*,quic:m,cc:s,initcwnd:s",
+                                           &port_node, &host_node, &type_node, &owner_node, &group_node, &permission_node, &ssl_node,
                                            &proxy_protocol_node, &quic_node, &cc_node, &initcwnd_node) != 0)
             return -1;
         servname = (*port_node)->data.scalar;
@@ -1594,7 +1612,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                         return -1;
                     }
                 } else {
-                    if ((fd = open_unix_listener(cmd, node, &sa, owner_node, permission_node)) == -1)
+                    if ((fd = open_unix_listener(cmd, node, &sa, owner_node, group_node, permission_node)) == -1)
                         return -1;
                 }
                 break;
