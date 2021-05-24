@@ -2505,14 +2505,16 @@ static int forward_quic_packets(h2o_quic_ctx_t *h3ctx, const uint64_t *node_id, 
     return 1;
 }
 
+struct st_rewrite_forwarded_quic_datagram_encapsulated_t {
+    quicly_address_t destaddr, srcaddr;
+    uint8_t ttl;
+    size_t offset;
+};
+
 static int rewrite_forwarded_quic_datagram(h2o_quic_ctx_t *h3ctx, struct msghdr *msg, quicly_address_t *destaddr,
                                            quicly_address_t *srcaddr, uint8_t *ttl)
 {
-    struct {
-        quicly_address_t destaddr, srcaddr;
-        uint8_t ttl;
-        size_t offset;
-    } encapsulated;
+    struct st_rewrite_forwarded_quic_datagram_encapsulated_t encapsulated = {0};
 
     assert(msg->msg_iovlen == 1);
 
@@ -3560,8 +3562,12 @@ int main(int argc, char **argv)
     /* apply HTTP/3 global configuraton to the listeners */
     for (size_t i = 0; i != conf.num_listeners; ++i) {
         quicly_context_t *qctx;
-        if ((qctx = conf.listeners[i]->quic.ctx) != NULL)
-            h2o_http3_server_amend_quicly_context(&conf.globalconf, qctx);
+        if ((qctx = conf.listeners[i]->quic.ctx) != NULL) {
+            uint64_t max_udp_payload_size = qctx->transport_params.max_udp_payload_size;
+            if (conf.quic.node_id != 0)
+                max_udp_payload_size -= sizeof(struct st_rewrite_forwarded_quic_datagram_encapsulated_t);
+            h2o_http3_server_amend_quicly_context(&conf.globalconf, qctx, max_udp_payload_size);
+        }
     }
 
     /* all setup should be complete by now */

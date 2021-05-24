@@ -1806,7 +1806,7 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
     return &conn->h3;
 }
 
-void h2o_http3_server_amend_quicly_context(h2o_globalconf_t *conf, quicly_context_t *quic)
+void h2o_http3_server_amend_quicly_context(h2o_globalconf_t *conf, quicly_context_t *quic, uint64_t max_udp_payload_size)
 {
     quic->transport_params.max_data =
         conf->http3.active_stream_window_size; /* set to a size that does not block the unblocked request stream */
@@ -1814,6 +1814,7 @@ void h2o_http3_server_amend_quicly_context(h2o_globalconf_t *conf, quicly_contex
     quic->transport_params.max_stream_data.bidi_remote = H2O_HTTP3_INITIAL_REQUEST_STREAM_WINDOW_SIZE;
     quic->transport_params.max_idle_timeout = conf->http3.idle_timeout;
     quic->transport_params.min_ack_delay_usec = conf->http3.use_delayed_ack ? 0 : UINT64_MAX;
+    quic->transport_params.max_udp_payload_size = max_udp_payload_size;
     quic->stream_open = &on_stream_open;
     quic->stream_scheduler = &scheduler;
 }
