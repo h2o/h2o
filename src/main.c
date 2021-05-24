@@ -3564,8 +3564,10 @@ int main(int argc, char **argv)
         quicly_context_t *qctx;
         if ((qctx = conf.listeners[i]->quic.ctx) != NULL) {
             uint64_t max_udp_payload_size = qctx->transport_params.max_udp_payload_size;
-            if (conf.quic.node_id != 0)
+            if (conf.quic.node_id != 0) {
+                /* lower max_udp_payload_size of clustered server by encapsulation header size to avoid exceeding MTU */
                 max_udp_payload_size -= sizeof(struct st_rewrite_forwarded_quic_datagram_encapsulated_t);
+            }
             h2o_http3_server_amend_quicly_context(&conf.globalconf, qctx, max_udp_payload_size);
         }
     }
