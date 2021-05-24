@@ -1284,9 +1284,10 @@ static int open_unix_listener(h2o_configurator_command_t *cmd, yoml_t *node, str
 
     /* obtain owner and permission */
     if (owner_node != NULL) {
-        if (getpwnam_r((*owner_node)->data.scalar, &pwbuf, pwbuf_buf, sizeof(pwbuf_buf), &owner) != 0 || owner == NULL) {
+        int r = getpwnam_r((*owner_node)->data.scalar, &pwbuf, pwbuf_buf, sizeof(pwbuf_buf), &owner);
+        if (r != 0 || owner == NULL) {
             h2o_configurator_errprintf(cmd, *owner_node, "failed to obtain uid of user:%s: %s", (*owner_node)->data.scalar,
-                                       strerror(errno));
+                                       (r == 0 ? "Not found" : strerror(r)));
             goto ErrorExit;
         }
     }
