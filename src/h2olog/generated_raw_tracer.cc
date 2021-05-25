@@ -2452,7 +2452,9 @@ BPF_PERF_OUTPUT(events);
 
 // A pinned BPF object to return a value to h2o.
 // The table size must be larger than the number of threads in h2o.
+#if H2OLOG_SELECTIVE_TRACING
 BPF_TABLE_PINNED("lru_hash", pid_t, uint64_t, h2o_return, H2O_EBPF_RETURN_MAP_SIZE, H2O_EBPF_RETURN_MAP_PATH);
+#endif
 
 // HTTP/3 tracing
 BPF_HASH(h2o_to_quicly_conn, u64, u32);
@@ -4135,6 +4137,8 @@ int trace_quicly__conn_stats(struct pt_regs *ctx) {
 
   return 0;
 }
+
+#if H2OLOG_SELECTIVE_TRACING
 // h2o:_private_socket_lookup_flags
 int trace_h2o___private_socket_lookup_flags(struct pt_regs *ctx) {
   const void *buf = NULL;
@@ -4168,6 +4172,8 @@ int trace_h2o___private_socket_lookup_flags(struct pt_regs *ctx) {
 
   return 0;
 }
+#endif
+
 // h2o:receive_request
 int trace_h2o__receive_request(struct pt_regs *ctx) {
   const void *buf = NULL;
