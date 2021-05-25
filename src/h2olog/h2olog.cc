@@ -30,6 +30,7 @@ extern "C" {
 #include <unistd.h>
 #include <stdarg.h>
 #include <limits.h>
+#include <arpa/inet.h>
 #include <sys/time.h>
 #include "h2o/memory.h"
 #include "h2o/version.h"
@@ -262,7 +263,8 @@ int main(int argc, char **argv)
     int c;
     pid_t h2o_pid = -1;
     double sampling_rate = 1.0;
-    while ((c = getopt(argc, argv, "hHdrlap:t:s:w:S:")) != -1) {
+    std::vector<std::pair<std::vector<uint8_t> /* address */, unsigned /* netmask */>> sampling_addresses;
+    while ((c = getopt(argc, argv, "hHdrlap:t:s:w:S:A:")) != -1) {
         switch (c) {
         case 'H':
             tracer.reset(create_http_tracer());
@@ -294,6 +296,28 @@ int main(int argc, char **argv)
                 exit(EXIT_FAILURE);
             }
             break;
+        case 'A': {
+            const char *slash = std::find(optarg, optarg + strlen(optarg), '/');
+            std::string addr(optarg, slash - optarg);
+            in_addr v4;
+            in6_addr v6;
+            if (inet_pton(AF_INET, addr.c_str(), (sockaddr *)&v4) == 1) {
+                const uint8_t *src = reinterpret_cast<const uint8_t *>(&v4);
+                sampling_addresses.emplace_back(std::vector<uint8_t>(src, src + 4), 32);
+            } else if (inet_pton(AF_INET6, addr.c_str(), (sockaddr *)&v6) == 1) {
+                const uint8_t *src = reinterpret_cast<const uint8_t *>(&v6);
+                sampling_addresses.emplace_back(std::vector<uint8_t>(src, src + 16), 128);
+            } else {
+                fprintf(stderr, "Error: invalid address supplied to -A: %s\n", optarg);
+                exit(EXIT_FAILURE);
+            }
+            if (*slash != '\0') {
+                if (sscanf(slash + 1, "%u", &sampling_addresses.back().second) != 1) {
+                    fprintf(stderr, "Error: invalid address mask supplied to -A: %s\n", optarg);
+                    exit(EXIT_FAILURE);
+                }
+            }
+        } break;
         case 'a':
             include_appdata = true;
             break;
@@ -341,15 +365,62 @@ int main(int argc, char **argv)
 
     tracer->init(outfp, include_appdata);
 
+    const char *h2o_root = getenv("H2O_ROOT");
+    if (h2o_root == NULL)
+        h2o_root = H2O_TO_STR(H2O_ROOT);
+    // BCC does not resolve a relative path, so h2olog does resolve it as an absolute path.
+    char h2o_root_resolved[PATH_MAX];
+    if (realpath(h2o_root, h2o_root_resolved) == NULL) {
+        h2o_perror("Error: realpath failed for H2O_ROOT");
+        exit(EXIT_FAILURE);
+    }
     std::vector<std::string> cflags({
+        std::string("-I") + std::string(h2o_root_resolved) + "/include",
         build_cc_macro_expr("H2OLOG_H2O_PID", h2o_pid),
-        CC_MACRO_EXPR(H2O_EBPF_FLAGS_SKIP_TRACING_BIT),
         CC_MACRO_EXPR(H2O_EBPF_RETURN_MAP_SIZE),
-        CC_MACRO_STR(H2O_EBPF_RETURN_MAP_PATH),
     });
 
     if (!response_header_filters.empty()) {
         cflags.push_back(generate_header_filter_cflag(response_header_filters));
+    }
+
+    ebpf::BPF *bpf = new ebpf::BPF();
+    std::vector<ebpf::USDT> probes;
+
+    for (const auto &usdt : tracer->usdt_probes()) {
+        probes.push_back(ebpf::USDT(h2o_pid, usdt.provider, usdt.name, usdt.probe_func));
+    }
+
+    if (sampling_rate < 1.0) {
+        /* eBPF bytecode cannot handle floating point numbers see man bpf(2). We use uint32_t which maps to 0 <= value < 1. */
+        cflags.push_back(
+            build_cc_macro_expr("H2OLOG_SAMPLING_RATE_U32", static_cast<uint32_t>(sampling_rate * (UINT64_C(1) << 32))));
+    }
+    if (!sampling_addresses.empty()) {
+        std::string expr;
+        for (const auto &addrmask : sampling_addresses) {
+            if (!expr.empty())
+                expr += " || ";
+            expr += "((family) == ";
+            expr += addrmask.first.size() == 4 ? '4' : '6';
+            size_t off;
+            for (off = 0; off < addrmask.second / 8 * 8; off += 8) {
+                expr += " && (addr)[";
+                expr += std::to_string(off / 8);
+                expr += "] == ";
+                expr += std::to_string(addrmask.first[off / 8]);
+            }
+            if (addrmask.second % 8 != 0) {
+                expr += " && ((addr)[";
+                expr += std::to_string(off / 8);
+                expr += "] & ";
+                expr += std::to_string((uint8_t)(0xff << (8 - addrmask.second % 8)));
+                expr += ") == ";
+                expr += std::to_string(addrmask.first[off / 8]);
+            }
+            expr += ')';
+        }
+        cflags.push_back(build_cc_macro_expr("H2OLOG_IS_SAMPLING_ADDRESS(family, addr)", std::string("(") + expr + ")"));
     }
 
     if (debug >= 2) {
@@ -371,19 +442,6 @@ int main(int argc, char **argv)
         }
         fprintf(stderr, "\n");
         fprintf(stderr, "<BPF>\n%s\n</BPF>\n", tracer->bpf_text().c_str());
-    }
-
-    ebpf::BPF *bpf = new ebpf::BPF();
-    std::vector<ebpf::USDT> probes;
-
-    for (const auto &usdt : tracer->usdt_probes()) {
-        probes.push_back(ebpf::USDT(h2o_pid, usdt.provider, usdt.name, usdt.probe_func));
-    }
-
-    if (sampling_rate < 1.0) {
-        /* eBPF bytecode cannot handle floating point numbers see man bpf(2). We use uint32_t which maps to 0 <= value < 1. */
-        cflags.push_back(
-            build_cc_macro_expr("H2OLOG_SAMPLING_RATE_U32", static_cast<uint32_t>(sampling_rate * (UINT64_C(1) << 32))));
     }
 
     ebpf::StatusTuple ret = bpf->init(tracer->bpf_text(), cflags, probes);
