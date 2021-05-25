@@ -370,7 +370,10 @@ int main(int argc, char **argv)
         h2o_root = H2O_TO_STR(H2O_ROOT);
     // BCC does not resolve a relative path, so h2olog does resolve it as an absolute path.
     char h2o_root_resolved[PATH_MAX];
-    realpath(h2o_root, h2o_root_resolved);
+    if (realpath(h2o_root, h2o_root_resolved) == NULL) {
+        h2o_perror("Error: realpath failed for H2O_ROOT");
+        exit(EXIT_FAILURE);
+    }
     std::vector<std::string> cflags({
         std::string("-I") + std::string(h2o_root_resolved) + "/include",
         build_cc_macro_expr("H2OLOG_H2O_PID", h2o_pid),
