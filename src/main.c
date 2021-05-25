@@ -3444,15 +3444,15 @@ int main(int argc, char **argv)
         struct rlimit limit = {0};
 
         if (getrlimit(RLIMIT_NOFILE, &limit) == 0) {
+            /* raise RLIMIT_NOFILE, making sure that we can reach max_connections */
+
             if (conf.max_connections > (int)limit.rlim_max) {
-                fprintf(stderr, "[error] The 'max-connections'=[%d] configuration value "
-                                "should not exceed the file descriptor limit of "
-                                "the process 'RLIMIT_NOFILE'=[%lu]\n",
+                fprintf(stderr, "[error] The 'max-connections'=[%d] configuration value should not exceed the file descriptor "
+                                "limit of the process 'RLIMIT_NOFILE'=[%lu]\n",
                         conf.max_connections, limit.rlim_max);
                 return EX_CONFIG;
             }
 
-            /* raise RLIMIT_NOFILE */
             limit.rlim_cur = limit.rlim_max;
 
             if (setrlimit(RLIMIT_NOFILE, &limit) == 0
@@ -3462,14 +3462,10 @@ int main(int argc, char **argv)
                 ) {
                 fprintf(stderr, "[INFO] raised RLIMIT_NOFILE to %d\n", (int)limit.rlim_cur);
             } else {
-                fprintf(stderr, "[warning] setrlimit(RLIMIT_NOFILE) failed "
-                                "with error %d:'%s'\n",
-                        errno, strerror(errno));
+                fprintf(stderr, "[warning] setrlimit(RLIMIT_NOFILE) failed:%s\n", strerror(errno));
             }
         } else {
-            fprintf(stderr, "[warning] getrlimit(RLIMIT_NOFILE) failed "
-                            "with error %d:'%s'\n",
-                    errno, strerror(errno));
+            fprintf(stderr, "[warning] getrlimit(RLIMIT_NOFILE) failed:%s\n", strerror(errno));
         }
     }
 
