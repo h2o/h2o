@@ -1757,10 +1757,10 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                 listener = add_listener(fd, ai->ai_addr, ai->ai_addrlen, ctx->hostconf == NULL, 0);
                 listener->quic.ctx = quic;
                 if (quic_node != NULL) {
-                    yoml_t **retry_node, **sndbuf, **rcvbuf, **amp_limit, **qpack_encoder_table_capacity, **max_streams_bidi;
+                    yoml_t **retry_node, **sndbuf, **rcvbuf, **amp_limit, **qpack_encoder_table_capacity, **max_streams_bidi, **max_udp_payload_size;
                     if (h2o_configurator_parse_mapping(
-                            cmd, *quic_node, NULL, "retry:s,sndbuf:s,rcvbuf:s,amp-limit:s,qpack-encoder-table-capacity:s,max-streams-bidi:s",
-                            &retry_node, &sndbuf, &rcvbuf, &amp_limit, &qpack_encoder_table_capacity, &max_streams_bidi) != 0)
+                            cmd, *quic_node, NULL, "retry:s,sndbuf:s,rcvbuf:s,amp-limit:s,qpack-encoder-table-capacity:s,max-streams-bidi:s,max-udp-paylod-size:s",
+                            &retry_node, &sndbuf, &rcvbuf, &amp_limit, &qpack_encoder_table_capacity, &max_streams_bidi, &max_udp_payload_size) != 0)
                         return -1;
                     if (retry_node != NULL) {
                         ssize_t on = h2o_configurator_get_one_of(cmd, *retry_node, "OFF,ON");
@@ -1795,6 +1795,11 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                     if (max_streams_bidi != NULL) {
                         if (h2o_configurator_scanf(cmd, *max_streams_bidi, "%" SCNu64,
                                                    &listener->quic.ctx->transport_params.max_streams_bidi) != 0)
+                            return -1;
+                    }
+                    if (max_udp_payload_size != NULL) {
+                        if (h2o_configurator_scanf(cmd, *max_udp_payload_size, "%" SCNu64,
+                                                   &listener->quic.ctx->transport_params.max_udp_payload_size) != 0)
                             return -1;
                     }
                 }
@@ -2505,16 +2510,14 @@ static int forward_quic_packets(h2o_quic_ctx_t *h3ctx, const uint64_t *node_id, 
     return 1;
 }
 
-struct st_rewrite_forwarded_quic_datagram_encapsulated_t {
-    quicly_address_t destaddr, srcaddr;
-    uint8_t ttl;
-    size_t offset;
-};
-
 static int rewrite_forwarded_quic_datagram(h2o_quic_ctx_t *h3ctx, struct msghdr *msg, quicly_address_t *destaddr,
                                            quicly_address_t *srcaddr, uint8_t *ttl)
 {
-    struct st_rewrite_forwarded_quic_datagram_encapsulated_t encapsulated = {0};
+    struct {
+        quicly_address_t destaddr, srcaddr;
+        uint8_t ttl;
+        size_t offset;
+    } encapsulated;
 
     assert(msg->msg_iovlen == 1);
 
@@ -3562,14 +3565,8 @@ int main(int argc, char **argv)
     /* apply HTTP/3 global configuraton to the listeners */
     for (size_t i = 0; i != conf.num_listeners; ++i) {
         quicly_context_t *qctx;
-        if ((qctx = conf.listeners[i]->quic.ctx) != NULL) {
-            uint64_t max_udp_payload_size = qctx->transport_params.max_udp_payload_size;
-            if (conf.quic.node_id != 0) {
-                /* lower max_udp_payload_size of clustered server by encapsulation header size to avoid exceeding MTU */
-                max_udp_payload_size -= sizeof(struct st_rewrite_forwarded_quic_datagram_encapsulated_t);
-            }
-            h2o_http3_server_amend_quicly_context(&conf.globalconf, qctx, max_udp_payload_size);
-        }
+        if ((qctx = conf.listeners[i]->quic.ctx) != NULL)
+            h2o_http3_server_amend_quicly_context(&conf.globalconf, qctx);
     }
 
     /* all setup should be complete by now */
