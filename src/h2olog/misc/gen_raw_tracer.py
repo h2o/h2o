@@ -647,6 +647,9 @@ void h2o_raw_tracer::initialize() {
 """
   for metadata in probe_metadata.values():
     bpf += build_tracer(context, metadata)
+
+    if metadata["fully_specified_probe_name"] == "h2o:_private_socket_lookup_flags":
+      continue
     usdts_def += """    h2o_tracer::usdt("%s", "%s", "%s"),\n""" % (
         metadata['provider'], metadata['name'], build_tracer_name(metadata))
   usdts_def += r"""

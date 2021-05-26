@@ -424,12 +424,10 @@ int main(int argc, char **argv)
 
     if (selective_tracing) {
         cflags.push_back(build_cc_macro_expr("H2OLOG_SELECTIVE_TRACING", 1));
+        probes.push_back(ebpf::USDT(h2o_pid, "h2o", "_private_socket_lookup_flags", "trace_h2o___private_socket_lookup_flags"));
     }
 
     for (const auto &usdt : tracer->usdt_probes()) {
-        if (!selective_tracing && usdt.fully_qualified_name() == "h2o:_private_socket_lookup_flags")
-            continue;
-
         probes.push_back(ebpf::USDT(h2o_pid, usdt.provider, usdt.name, usdt.probe_func));
     }
 
