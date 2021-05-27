@@ -491,6 +491,7 @@ static void write_streaming_body(h2o_http2_conn_t *conn, h2o_http2_stream_t *str
     if (stream->req.write_req.cb(stream->req.write_req.ctx, is_end_stream) != 0) {
         stream_send_error(conn, stream->stream_id, H2O_HTTP2_ERROR_STREAM_CLOSED);
         h2o_http2_stream_reset(conn, stream);
+        return;
     }
 
     /* close the H2 stream if both sides are done */
