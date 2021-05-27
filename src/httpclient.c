@@ -469,6 +469,8 @@ static void usage(const char *progname)
             "  -x <host:port>\n"
             "               specifies the destination of the CONNECT request; implies\n"
             "               `-m CONNECT`\n"
+            "  --max-udp-payload-size <bytes>\n"
+            "               specifies the max_udp_payload_size transport parameter to send\n"
             "  -h           prints this help\n"
             "\n",
             progname);
@@ -553,12 +555,14 @@ int main(int argc, char **argv)
     }
 #endif
 
+    int is_opt_max_udp_payload_size = 0;
+    struct option longopts[] = {{"max-udp-payload-size", required_argument, &is_opt_max_udp_payload_size, 1}, {NULL}};
     const char *optstring = "t:m:o:b:x:C:c:d:H:i:k2:W:h3:"
 #ifdef __GNUC__
                             ":" /* for backward compatibility, optarg of -3 is optional when using glibc */
 #endif
         ;
-    while ((opt = getopt(argc, argv, optstring)) != -1) {
+    while ((opt = getopt_long(argc, argv, optstring, longopts, NULL)) != -1) {
         switch (opt) {
         case 't':
             if (sscanf(optarg, "%u", &cnt_left) != 1 || cnt_left < 1) {
@@ -670,6 +674,12 @@ int main(int argc, char **argv)
         case 'h':
             usage(argv[0]);
             exit(0);
+            break;
+        case 0:
+            if (is_opt_max_udp_payload_size == 1) {
+                h3ctx.quic.initial_egress_max_udp_payload_size = (uint16_t)strtoul(optarg, NULL, 10);
+                h3ctx.quic.transport_params.max_udp_payload_size = (uint64_t)strtoull(optarg, NULL, 10);
+            }
             break;
         default:
             exit(EXIT_FAILURE);
