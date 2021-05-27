@@ -1590,10 +1590,10 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
         break;
     case YOML_TYPE_MAPPING: {
         yoml_t **port_node, **host_node, **type_node, **proxy_protocol_node;
-        if (h2o_configurator_parse_mapping(cmd, node, "port:s",
-                                           "host:s,type:s,owner:s,group:s,permission:*,ssl:m,proxy-protocol:*,quic:m,cc:s,initcwnd:s",
-                                           &port_node, &host_node, &type_node, &owner_node, &group_node, &permission_node, &ssl_node,
-                                           &proxy_protocol_node, &quic_node, &cc_node, &initcwnd_node) != 0)
+        if (h2o_configurator_parse_mapping(
+                cmd, node, "port:s", "host:s,type:s,owner:s,group:s,permission:*,ssl:m,proxy-protocol:*,quic:m,cc:s,initcwnd:s",
+                &port_node, &host_node, &type_node, &owner_node, &group_node, &permission_node, &ssl_node, &proxy_protocol_node,
+                &quic_node, &cc_node, &initcwnd_node) != 0)
             return -1;
         servname = (*port_node)->data.scalar;
         if (host_node != NULL)
@@ -1757,10 +1757,13 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                 listener = add_listener(fd, ai->ai_addr, ai->ai_addrlen, ctx->hostconf == NULL, 0);
                 listener->quic.ctx = quic;
                 if (quic_node != NULL) {
-                    yoml_t **retry_node, **sndbuf, **rcvbuf, **amp_limit, **qpack_encoder_table_capacity, **max_streams_bidi;
-                    if (h2o_configurator_parse_mapping(
-                            cmd, *quic_node, NULL, "retry:s,sndbuf:s,rcvbuf:s,amp-limit:s,qpack-encoder-table-capacity:s,max-streams-bidi:s",
-                            &retry_node, &sndbuf, &rcvbuf, &amp_limit, &qpack_encoder_table_capacity, &max_streams_bidi) != 0)
+                    yoml_t **retry_node, **sndbuf, **rcvbuf, **amp_limit, **qpack_encoder_table_capacity, **max_streams_bidi,
+                        **max_udp_payload_size;
+                    if (h2o_configurator_parse_mapping(cmd, *quic_node, NULL, "retry:s,sndbuf:s,rcvbuf:s,amp-limit:s,qpack-encoder-"
+                                                                              "table-capacity:s,max-streams-bidi:s,max-udp-paylod-"
+                                                                              "size:s",
+                                                       &retry_node, &sndbuf, &rcvbuf, &amp_limit, &qpack_encoder_table_capacity,
+                                                       &max_streams_bidi, &max_udp_payload_size) != 0)
                         return -1;
                     if (retry_node != NULL) {
                         ssize_t on = h2o_configurator_get_one_of(cmd, *retry_node, "OFF,ON");
@@ -1795,6 +1798,11 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                     if (max_streams_bidi != NULL) {
                         if (h2o_configurator_scanf(cmd, *max_streams_bidi, "%" SCNu64,
                                                    &listener->quic.ctx->transport_params.max_streams_bidi) != 0)
+                            return -1;
+                    }
+                    if (max_udp_payload_size != NULL) {
+                        if (h2o_configurator_scanf(cmd, *max_udp_payload_size, "%" SCNu64,
+                                                   &listener->quic.ctx->transport_params.max_udp_payload_size) != 0)
                             return -1;
                     }
                 }
