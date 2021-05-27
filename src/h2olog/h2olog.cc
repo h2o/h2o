@@ -387,14 +387,12 @@ int main(int argc, char **argv)
     ebpf::BPF *bpf = new ebpf::BPF();
     std::vector<ebpf::USDT> probes;
 
-    for (const auto &usdt : tracer->usdt_probes()) {
-        probes.push_back(ebpf::USDT(h2o_pid, usdt.provider, usdt.name, usdt.probe_func));
-    }
-
+    bool selective_tracing = false;
     if (sampling_rate < 1.0) {
         /* eBPF bytecode cannot handle floating point numbers see man bpf(2). We use uint32_t which maps to 0 <= value < 1. */
         cflags.push_back(
             build_cc_macro_expr("H2OLOG_SAMPLING_RATE_U32", static_cast<uint32_t>(sampling_rate * (UINT64_C(1) << 32))));
+        selective_tracing = true;
     }
     if (!sampling_addresses.empty()) {
         std::string expr;
@@ -421,6 +419,16 @@ int main(int argc, char **argv)
             expr += ')';
         }
         cflags.push_back(build_cc_macro_expr("H2OLOG_IS_SAMPLING_ADDRESS(family, addr)", std::string("(") + expr + ")"));
+        selective_tracing = true;
+    }
+
+    if (selective_tracing) {
+        cflags.push_back(build_cc_macro_expr("H2OLOG_SELECTIVE_TRACING", 1));
+        probes.push_back(ebpf::USDT(h2o_pid, "h2o", "_private_socket_lookup_flags", "trace_h2o___private_socket_lookup_flags"));
+    }
+
+    for (const auto &usdt : tracer->usdt_probes()) {
+        probes.push_back(ebpf::USDT(h2o_pid, usdt.provider, usdt.name, usdt.probe_func));
     }
 
     if (debug >= 2) {

@@ -53,6 +53,11 @@ typedef struct  st_http_event_t {
 
 BPF_PERF_OUTPUT(events);
 
+int trace_h2o___private_socket_lookup_flags(struct pt_regs *ctx) {
+  // TODO: HTTP tracer does not support selective-tracing yet.
+  return 0;
+}
+
 int trace_sched_process_exit(struct tracepoint__sched__sched_process_exit *ctx) {
   const struct task_struct *task = (const struct task_struct*)bpf_get_current_task();
   pid_t h2o_pid = task->tgid;

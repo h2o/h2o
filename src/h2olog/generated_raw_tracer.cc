@@ -836,7 +836,6 @@ void h2o_raw_tracer::initialize() {
     h2o_tracer::usdt("quicly", "stream_on_receive", "trace_quicly__stream_on_receive"),
     h2o_tracer::usdt("quicly", "stream_on_receive_reset", "trace_quicly__stream_on_receive_reset"),
     h2o_tracer::usdt("quicly", "conn_stats", "trace_quicly__conn_stats"),
-    h2o_tracer::usdt("h2o", "_private_socket_lookup_flags", "trace_h2o___private_socket_lookup_flags"),
     h2o_tracer::usdt("h2o", "receive_request", "trace_h2o__receive_request"),
     h2o_tracer::usdt("h2o", "receive_request_header", "trace_h2o__receive_request_header"),
     h2o_tracer::usdt("h2o", "send_response", "trace_h2o__send_response"),
@@ -2449,10 +2448,6 @@ struct h2olog_event_t {
 };
 
 BPF_PERF_OUTPUT(events);
-
-// A pinned BPF object to return a value to h2o.
-// The table size must be larger than the number of threads in h2o.
-BPF_TABLE_PINNED("lru_hash", pid_t, uint64_t, h2o_return, H2O_EBPF_RETURN_MAP_SIZE, H2O_EBPF_RETURN_MAP_PATH);
 
 // HTTP/3 tracing
 BPF_HASH(h2o_to_quicly_conn, u64, u32);
@@ -4135,6 +4130,12 @@ int trace_quicly__conn_stats(struct pt_regs *ctx) {
 
   return 0;
 }
+
+#if H2OLOG_SELECTIVE_TRACING
+// A pinned BPF object to return a value to h2o.
+// The table size must be larger than the number of threads in h2o.
+BPF_TABLE_PINNED("lru_hash", pid_t, uint64_t, h2o_return, H2O_EBPF_RETURN_MAP_SIZE, H2O_EBPF_RETURN_MAP_PATH);
+
 // h2o:_private_socket_lookup_flags
 int trace_h2o___private_socket_lookup_flags(struct pt_regs *ctx) {
   const void *buf = NULL;
@@ -4168,6 +4169,8 @@ int trace_h2o___private_socket_lookup_flags(struct pt_regs *ctx) {
 
   return 0;
 }
+#endif
+
 // h2o:receive_request
 int trace_h2o__receive_request(struct pt_regs *ctx) {
   const void *buf = NULL;

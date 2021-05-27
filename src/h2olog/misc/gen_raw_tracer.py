@@ -464,6 +464,19 @@ int %s(struct pt_regs *ctx) {
   return 0;
 }
 """
+
+  if fully_specified_probe_name == "h2o:_private_socket_lookup_flags":
+    c = r"""
+#if H2OLOG_SELECTIVE_TRACING
+// A pinned BPF object to return a value to h2o.
+// The table size must be larger than the number of threads in h2o.
+BPF_TABLE_PINNED("lru_hash", pid_t, uint64_t, h2o_return, H2O_EBPF_RETURN_MAP_SIZE, H2O_EBPF_RETURN_MAP_PATH);
+
+%s
+#endif
+
+""" % c.strip()
+
   return c
 
 
@@ -608,10 +621,6 @@ typedef union quicly_address_t {
 %s
 BPF_PERF_OUTPUT(events);
 
-// A pinned BPF object to return a value to h2o.
-// The table size must be larger than the number of threads in h2o.
-BPF_TABLE_PINNED("lru_hash", pid_t, uint64_t, h2o_return, H2O_EBPF_RETURN_MAP_SIZE, H2O_EBPF_RETURN_MAP_PATH);
-
 // HTTP/3 tracing
 BPF_HASH(h2o_to_quicly_conn, u64, u32);
 
@@ -636,6 +645,9 @@ void h2o_raw_tracer::initialize() {
 """
   for metadata in probe_metadata.values():
     bpf += build_tracer(context, metadata)
+
+    if metadata["fully_specified_probe_name"] == "h2o:_private_socket_lookup_flags":
+      continue
     usdts_def += """    h2o_tracer::usdt("%s", "%s", "%s"),\n""" % (
         metadata['provider'], metadata['name'], build_tracer_name(metadata))
   usdts_def += r"""
