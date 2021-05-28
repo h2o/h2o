@@ -152,20 +152,12 @@ void json_write_pair_c(FILE *out, const char *name, size_t name_len, const quicl
 
 void json_write_pair_c(FILE *out, const char *name, size_t name_len, const quicly_cid_plaintext_t &value)
 {
-    char fq_name[100];
-    size_t fq_name_len;
-
-    fq_name_len = snprintf(fq_name, sizeof(fq_name), "%*s-master-id", (int)name_len, name);
-    json_write_pair_c(out, fq_name, fq_name_len, value.master_id);
-
-    fq_name_len = snprintf(fq_name, sizeof(fq_name), "%*s-path-id", (int)name_len, name);
-    json_write_pair_c(out, fq_name, fq_name_len, value.path_id);
-
-    fq_name_len = snprintf(fq_name, sizeof(fq_name), "%*s-thread-id", (int)name_len, name);
-    json_write_pair_c(out, fq_name, fq_name_len, value.thread_id);
-
-    fq_name_len = snprintf(fq_name, sizeof(fq_name), "%*s-node-id", (int)name_len, name);
-    json_write_pair_c(out, fq_name, fq_name_len, value.node_id);
+    fputc(',', out);
+    // make a tuple of [master_id, thread_id, path_id, node_id]
+    // log collectors can use [master_id, thread_id] to indentify the QUIC connection.
+    json_write_name_value(out, name, name_len);
+    fprintf(out, "[%" PRIu32 ",%" PRIu32 ",%" PRIu32 ",%" PRIu64 "]",
+        value.master_id, value.thread_id, value.path_id, value.node_id);
 }
 
 void json_write_pair_c(FILE *out, const char *name, size_t name_len, const void *value)

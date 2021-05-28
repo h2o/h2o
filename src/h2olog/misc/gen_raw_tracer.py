@@ -94,6 +94,7 @@ block_probes = set([
 rename_map = {
     # common fields
     "at": "time",
+    "quicly_conn": "conn",
 
     # changed in the latest quicly master branch
     "num_bytes": "bytes_len",
