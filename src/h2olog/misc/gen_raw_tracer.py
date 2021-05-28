@@ -73,7 +73,7 @@ struct_map = OrderedDict([
 
     # deps/quicly/lib/quicly.c
     ["st_quicly_conn_t", [
-        ("super.local.cid_set.plaintext.master_id", "master_id"),
+        ("super.local.cid_set.plaintext", "quicly_conn"),
     ]],
 
     ["st_h2o_ebpf_map_key_t", []],
@@ -94,7 +94,6 @@ block_probes = set([
 rename_map = {
     # common fields
     "at": "time",
-    "master_id": "conn",
 
     # changed in the latest quicly master branch
     "num_bytes": "bytes_len",
@@ -521,6 +520,7 @@ DEFINE_RESOLVE_FUNC(int32_t);
 DEFINE_RESOLVE_FUNC(uint32_t);
 DEFINE_RESOLVE_FUNC(int64_t);
 DEFINE_RESOLVE_FUNC(uint64_t);
+DEFINE_RESOLVE_FUNC(quicly_cid_plaintext_t);
 
 static std::string gen_bpf_header() {
   std::string bpf;
@@ -610,6 +610,14 @@ struct h2olog_event_t {
 #include "h2o/ebpf.h"
 
 #define STR_LEN 64
+
+// copied it from quicly/cid.h because metaprogramming with bit fields is hard to maintain.
+typedef struct st_quicly_cid_plaintext_t {
+    uint32_t master_id;
+    uint32_t path_id : 8;
+    uint32_t thread_id : 24;
+    uint64_t node_id;
+} quicly_cid_plaintext_t;
 
 typedef union quicly_address_t {
   uint8_t sa[sizeof_sockaddr];
