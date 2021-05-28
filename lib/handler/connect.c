@@ -406,9 +406,6 @@ static void tcp_on_connect(h2o_socket_t *_sock, const char *err)
     if (self->tcp.sendbuf->size != 0 || self->write_closed)
         tcp_do_write(self);
 
-    /* strat the read side */
-    h2o_socket_read_start(self->sock, tcp_on_read);
-
     /* build and submit 200 response */
     self->src_req->res.status = 200;
     h2o_start_response(self->src_req, &self->super);
