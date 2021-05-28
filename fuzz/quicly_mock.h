@@ -29,6 +29,21 @@ extern "C" {
 
 /* non-standard quicly interfaces useful for quicly mockup (`m` stands from mockup) */
 
+/* macro to define mockup-specific callback handlers */
+#define MQUICLY_CALLBACK_TYPE(ret, name, ...)                                                                                      \
+    typedef struct st_mquicly_##name##_t {                                                                                         \
+        ret (*cb)(struct st_mquicly_##name##_t * self, __VA_ARGS__);                                                               \
+    } mquicly_##name##_t
+
+MQUICLY_CALLBACK_TYPE(void, on_stream_send, quicly_conn_t *conn, quicly_stream_t *stream, const void *buff, uint64_t off,
+                      size_t len, int is_fin);
+
+typedef struct st_mquicly_context_t {
+    mquicly_on_stream_send_t *on_stream_send;
+} mquicly_context_t;
+
+extern mquicly_context_t mquicly_context;
+
 /**
  * open a new stream over conn.
  * can simulate a remote-initiated stream open.

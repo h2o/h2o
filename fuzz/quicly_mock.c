@@ -27,8 +27,11 @@
 #include "quicly.h"
 #include "quicly/sendstate.h"
 #include "quicly/recvstate.h"
+#include "quicly_mock.h"
 
 KHASH_MAP_INIT_INT64(quicly_stream_t, quicly_stream_t *)
+
+mquicly_context_t mquicly_context;
 
 struct st_quicly_conn_t {
     struct _st_quicly_conn_public_t super;
@@ -154,9 +157,16 @@ int quicly_send_stream(quicly_stream_t *stream, quicly_send_context_t *s)
     uint8_t buff[1024];
     uint64_t off = stream->sendstate.pending.ranges[0].start, end_off;
     size_t capacity = sizeof(buff);
-    int wrote_all = 0;
+    int wrote_all = 0, is_fin;
     int ret;
 
+    if (!quicly_sendstate_is_open(&stream->sendstate) && off == stream->sendstate.final_size) {
+        /* special case for emitting FIN only */
+        end_off = off;
+        wrote_all = 1;
+        is_fin = 1;
+        goto UpdateState;
+    }
     { /* cap the capacity to the current range */
         uint64_t range_capacity = stream->sendstate.pending.ranges[0].end - off;
         if (!quicly_sendstate_is_open(&stream->sendstate) && off + range_capacity > stream->sendstate.final_size) {
@@ -172,10 +182,22 @@ int quicly_send_stream(quicly_stream_t *stream, quicly_send_context_t *s)
 
     end_off = off + len;
 
+    /* determine if the frame incorporates FIN */
+    if (!quicly_sendstate_is_open(&stream->sendstate) && end_off == stream->sendstate.final_size) {
+        is_fin = 1;
+    } else {
+        is_fin = 0;
+    }
+
+UpdateState:
+    /* notify the fuzzing driver of stream send event */
+    if (mquicly_context.on_stream_send != NULL) {
+        mquicly_context.on_stream_send->cb(mquicly_context.on_stream_send, stream->conn, stream, buff, off, len, is_fin);
+    }
     if (stream->sendstate.size_inflight < end_off) {
         stream->sendstate.size_inflight = end_off;
     }
-    if ((ret = quicly_ranges_subtract(&stream->sendstate.pending, off, end_off)) != 0)
+    if ((ret = quicly_ranges_subtract(&stream->sendstate.pending, off, end_off + is_fin)) != 0)
         return ret;
     if (wrote_all) {
         if ((ret = quicly_ranges_subtract(&stream->sendstate.pending, stream->sendstate.size_inflight, UINT64_MAX)) != 0)
