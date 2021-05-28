@@ -153,6 +153,7 @@ struct listener_config_t {
     } quic;
     int proxy_protocol;
     h2o_iovec_t tcp_congestion_controller; /* default CC for this address */
+    int accept_both; /* plaintext and TLS */
 };
 
 struct listener_ctx_t {
@@ -851,14 +852,8 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
     ptls_cipher_suite_t **cipher_suite_tls13 = NULL;
 
     if (!listener_is_new) {
-        if (listener->ssl.size != 0 && ssl_node == NULL) {
-            h2o_configurator_errprintf(cmd, listen_node, "cannot accept HTTP; already defined to accept HTTPS");
-            return -1;
-        }
-        if (listener->ssl.size == 0 && ssl_node != NULL) {
-            h2o_configurator_errprintf(cmd, *ssl_node, "cannot accept HTTPS; already defined to accept HTTP");
-            return -1;
-        }
+        if (!!listener->ssl.size != !!ssl_node)
+            listener->accept_both = 1;
     }
 
     if (ssl_node == NULL)
@@ -2822,6 +2817,7 @@ static void *run_loop(void *_thread_index)
         if (listener_config->ssl.size != 0) {
             listeners[i].accept_ctx.ssl_ctx = listener_config->ssl.entries[0]->ctx;
             listeners[i].accept_ctx.http2_origin_frame = listener_config->ssl.entries[0]->http2_origin_frame;
+            listeners[i].accept_ctx.accept_both = listener_config->accept_both;
         }
         listeners[i].sock = h2o_evloop_socket_create(conf.threads[thread_index].ctx.loop, fd, H2O_SOCKET_FLAG_DONT_READ);
         listeners[i].sock->data = listeners + i;

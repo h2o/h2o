@@ -474,6 +474,44 @@ SkipToEOL:
 #undef SKIP_TO_WS
 }
 
+static void drop_to_http1(h2o_socket_t *sock)
+{
+    struct st_h2o_accept_data_t *data = sock->data;
+    sock->data = NULL;
+    h2o_http1_accept(data->ctx, sock, data->connected_at);
+    accept_data_callbacks.destroy(data);
+}
+
+static void on_first_byte(h2o_socket_t *sock, const char *err)
+{
+    struct st_h2o_accept_data_t *data = sock->data;
+    h2o_accept_ctx_t *ctx = data->ctx;
+
+    if (err != NULL) {
+        accept_data_callbacks.destroy(data);
+        h2o_socket_close(sock);
+        return;
+    }
+
+    if (!sock->input->size)
+        return;
+
+    if (sock->input->bytes[0] == 0x16)
+        h2o_socket_ssl_handshake(sock, ctx->ssl_ctx, NULL, h2o_iovec_init(NULL, 0), on_ssl_handshake_complete);
+    else
+        drop_to_http1(sock);
+}
+
+static void accept_possibly_ssl(h2o_accept_ctx_t *ctx, h2o_socket_t *sock)
+{
+    if (!ctx->ssl_ctx)
+        drop_to_http1(sock);
+    else if (ctx->accept_both)
+        h2o_socket_read_start(sock, on_first_byte);
+    else
+        h2o_socket_ssl_handshake(sock, ctx->ssl_ctx, NULL, h2o_iovec_init(NULL, 0), on_ssl_handshake_complete);
+}
+
 static void on_read_proxy_line(h2o_socket_t *sock, const char *err)
 {
     struct st_h2o_accept_data_t *data = sock->data;
@@ -499,14 +537,7 @@ static void on_read_proxy_line(h2o_socket_t *sock, const char *err)
         break;
     }
 
-    if (data->ctx->ssl_ctx != NULL) {
-        h2o_socket_ssl_handshake(sock, data->ctx->ssl_ctx, NULL, h2o_iovec_init(NULL, 0), on_ssl_handshake_complete);
-    } else {
-        struct st_h2o_accept_data_t *data = sock->data;
-        sock->data = NULL;
-        h2o_http1_accept(data->ctx, sock, data->connected_at);
-        accept_data_callbacks.destroy(data);
-    }
+    accept_possibly_ssl(data->ctx, sock);
 }
 
 void h2o_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock)
@@ -518,7 +549,7 @@ void h2o_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock)
         if (ctx->expect_proxy_line) {
             h2o_socket_read_start(sock, on_read_proxy_line);
         } else {
-            h2o_socket_ssl_handshake(sock, ctx->ssl_ctx, NULL, h2o_iovec_init(NULL, 0), on_ssl_handshake_complete);
+            accept_possibly_ssl(ctx, sock);
         }
     } else {
         h2o_http1_accept(ctx, sock, connected_at);
