@@ -6,6 +6,7 @@ use warnings FATAL => "all";
 use Net::EmptyPort qw(empty_port);
 use Test::More;
 use JSON;
+use File::Temp qw(tempdir);
 use t::Util;
 
 run_as_root();
@@ -63,6 +64,17 @@ subtest "h2olog", sub {
   }
 
   ok( (map { decode_json($_) } split /\n/, $trace), "h2olog output is valid JSON Lines");
+
+  subtest "qlog-adapter", sub {
+    my $tempdir = tempdir(CLEANUP => 1);
+    my $input_jsonl = "$tempdir/input.jsonl";
+    open my $out, ">", $input_jsonl or die $!;
+    print $out $trace;
+    close $out;
+    my $qlog = `./deps/quicly/misc/qlog-adapter.py $input_jsonl`;
+    is $?, 0;
+    ok (map { decode_json($_) } split /\n/, $qlog), "qlog-adapter returns a valid JSON-Lines";
+  };
 };
 
 subtest "h2olog -H", sub {
