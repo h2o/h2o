@@ -1,5 +1,6 @@
 use strict;
 use warnings;
+use File::Temp qw(tempdir);
 use IO::Select;
 use IO::Socket::INET;
 use Net::EmptyPort qw(check_port empty_port);
@@ -12,9 +13,21 @@ plan skip_all => 'plackup not found'
 plan skip_all => 'Starlet not found'
     unless system('perl -MStarlet /dev/null > /dev/null 2>&1') == 0;
 
+my $tempdir = tempdir(CLEANUP => 1);
+
 my $upstream_port = empty_port();
+my $quic_port = empty_port({
+    host  => "127.0.0.1",
+    proto => "udp",
+});
 
 my $server = spawn_h2o(<< "EOT");
+listen:
+  type: quic
+  port: $quic_port
+  ssl:
+    key-file: examples/h2o/server.key
+    certificate-file: examples/h2o/server.crt
 hosts:
   default:
     paths:
@@ -112,33 +125,31 @@ subtest "websocket" => sub {
 
 subtest "connect" => sub {
     # create listening socket
-    my $server_sock = IO::Socket::INET->new(
+    my $upstream_listener = IO::Socket::INET->new(
         LocalPort => $upstream_port,
         Proto     => "tcp",
         Listen    => 5,
         ReuseAddr => 1,
     ) or die "failed to listen to port:$!";
     # fork
-    my $pid = fork;
+    my $upstream_pid = fork;
     die "fork failed:$!"
-        unless defined $pid;
-    if ($pid == 0) {
-        # server
+        unless defined $upstream_pid;
+    if ($upstream_pid == 0) {
+        # upstream server
         while (1) {
             # accept
-            my $conn = $server_sock->accept
+            my $conn = $upstream_listener->accept
                 or next;
             # read request
             $conn->sysread(my $req, 4096)
                 or die "failed to read request";
             $req =~ qr{^([^ ]+) ([^ ]+) HTTP/.*?\r\n\r\n(.*)$}s
-                or die "failed to parse request";
-            die "failed to parse request"
-                if $3;
-            my ($meth, $origin) = ($1, $2);
+                or die "failed to parse request:::$req";
+            my ($meth, $origin, $remainder) = ($1, $2, $3 ? $3 : "");
             # send 200 and run as an echo server, or send 403
             if ($meth eq 'CONNECT' and $origin !~ /^fail:/) {
-                $conn->syswrite("HTTP/1.1 200 OK\r\n\r\n");
+                $conn->syswrite("HTTP/1.1 200 OK\r\n\r\n$3");
                 while ($conn->sysread(my $buf, 4096)) {
                     $conn->syswrite($buf)
                         or last;
@@ -148,60 +159,130 @@ subtest "connect" => sub {
             }
         }
     }
-    # client; run tests
-    undef $server_sock;
-    my $test_get = sub {
-        my ($proto, $port) = @_;
-        subtest "GET" => sub {
-            my $resp = `curl --dump-header /dev/stdout --silent --insecure '$proto://127.0.0.1:$port/'`;
-            like $resp, qr{^HTTP/[^ ]+ 403.*\naccess forbidden\n$}s;
+    # client; run tests, first using hand-written h1 client, then using h2o-httpclient
+    undef $upstream_listener;
+    subtest "h1-rawsock" => sub {
+        my $test_get = sub {
+            my ($proto, $port) = @_;
+            subtest "GET" => sub {
+                my $resp = `curl --dump-header /dev/stdout --silent --insecure '$proto://127.0.0.1:$port/'`;
+                like $resp, qr{^HTTP/[^ ]+ 403.*\naccess forbidden\n$}s;
+            };
+        };
+        my $test_connect = sub {
+            my $connector = shift;
+            my $connect_get_resp = sub {
+                my ($conn, $origin, $extra) = @_;
+                my $req = join "\r\n", "CONNECT $origin HTTP/1.1", "host: $origin", "connection: close", "", "";
+                $req .= $extra if defined $extra;
+                is $conn->syswrite($req), length($req), "send request";
+                sleep 0.5; # wait for body
+                my $resp = '';
+                while (IO::Select->new($conn)->can_read(0)) {
+                    my $rret = $conn->sysread($resp, 4096, length $resp);
+                    last if $rret == 0;
+                    if (! defined $rret) {
+                        fail "read response";
+                        return "";
+                    }
+                }
+                pass "read response";
+                $resp;
+            };
+            subtest "fail" => sub {
+                $connector->(sub {
+                    my $conn = shift;
+                    my $resp = $connect_get_resp->($conn, "fail:8080");
+                    like $resp, qr{HTTP/[0-9\.]+ 403.*\r\n\r\naccess forbidden\n$}s, "check response";
+                });
+            };
+            subtest "success" => sub {
+                $connector->(sub {
+                    my $conn = shift;
+                    my $resp = $connect_get_resp->($conn, "success:8080");
+                    like $resp, qr{HTTP/[0-9\.]+ 200.*\r\n\r\n$}s, "check response";
+                    test_echo($conn);
+                });
+            };
+            subtest "early-data" => sub {
+                subtest "fail" => sub {
+                    $connector->(sub {
+                        my $conn = shift;
+                        my $resp = $connect_get_resp->($conn, "fail:8080");
+                        like $resp, qr{HTTP/[0-9\.]+ 403.*\r\n\r\naccess forbidden\n$}s, "check response";
+                    });
+                };
+                subtest "success" => sub {
+                    $connector->(sub {
+                        my $conn = shift;
+                        my $resp = $connect_get_resp->($conn, "success:8080", "abc");
+                        like $resp, qr{HTTP/[0-9\.]+ 200.*\r\n\r\nabc$}s, "check response";
+                        test_echo($conn);
+                    });
+                };
+            };
+        };
+        subtest "plaintext" => sub {
+            $test_get->('http', $server->{port});
+            $test_connect->(\&test_plaintext);
+        };
+        subtest "tls" => sub {
+            $test_get->('https', $server->{tls_port});
+            $test_connect->(\&test_tls);
         };
     };
-    my $connect_get_resp = sub {
-        my ($conn, $origin) = @_;
-        my $req = join "\r\n", "CONNECT $origin HTTP/1.1", "host: $origin", "connection: close", "", "";
-        is $conn->syswrite($req), length($req), "send request";
-        sleep 0.5; # wait for body
-        my $resp = '';
-        while (IO::Select->new($conn)->can_read(0)) {
-            my $rret = $conn->sysread($resp, 4096, length $resp);
-            last if $rret == 0;
-            if (! defined $rret) {
-                fail "read response";
-                return "";
-            }
+    subtest "h2o-httpclient" => sub {
+        my $client_prog = bindir() . "/h2o-httpclient";
+        plan skip_all => "$client_prog not found"
+            unless -e $client_prog;
+        my $connect_get_resp = sub {
+            my ($scheme, $port, $opts, $target, $send_cb) = @_;
+            open my $fh, "|-", "exec $client_prog -k -x $target $opts $scheme://127.0.0.1:$port/ > $tempdir/out 2>&1"
+                or die "failed to launch $client_prog:$!";
+            $fh->autoflush(1);
+            $send_cb->($fh);
+            close $fh;
+            open $fh, "<", "$tempdir/out"
+                or die "failed to open $tempdir/out:$!";
+            do { local $/; <$fh> };
+        };
+        for (['h1', 'http', $server->{port}, ''], ['h1s', 'https', $server->{tls_port}, ''], ['h3', 'https', $quic_port, '-3 100']) {
+            my ($name, $scheme, $port, $opts) = @$_;
+            subtest $name => sub {
+                subtest "fail" => sub {
+                    my $resp = $connect_get_resp->($scheme, $port, $opts, "fail:8080", sub {
+                        sleep 1;
+                    });
+                    like $resp, qr{^HTTP/\S+ 403.*\n\naccess forbidden\n$}s;
+                };
+                subtest "success" => sub {
+                    my $resp = $connect_get_resp->($scheme, $port, $opts, "success:8080", sub {
+                        my $fh = shift;
+                        sleep 0.5;
+                        print $fh "hello world";
+                        sleep 0.5;
+                    });
+                    like $resp, qr{^HTTP/\S+ 200.*\nhello world$}s;
+                };
+                subtest "early" => sub {
+                    my $doit = sub {
+                        my $target = shift;
+                        $connect_get_resp->($scheme, $port, $opts, $target, sub {
+                            my $fh = shift;
+                            print $fh "hello world";
+                            sleep 1;
+                        });
+                    };
+                    my $resp = $doit->("fail:8080");
+                    like $resp, qr{^HTTP/\S+ 403.*\n\naccess forbidden\n$}s, "fail";
+                    $resp = $doit->("success:8080");
+                    like $resp, qr{^HTTP/\S+ 200.*\nhello world$}s, "success";
+                };
+            };
         }
-        pass "read response";
-        $resp;
     };
-    my $test_connect = sub {
-        my $connector = shift;
-        subtest "fail" => sub {
-            $connector->(sub {
-                my $conn = shift;
-                my $resp = $connect_get_resp->($conn, "fail:8080");
-                like $resp, qr{HTTP/[0-9\.]+ 403.*\r\n\r\naccess forbidden\n$}s, "check response";
-            });
-        };
-        subtest "success" => sub {
-            $connector->(sub {
-                my $conn = shift;
-                my $resp = $connect_get_resp->($conn, "success:8080");
-                like $resp, qr{HTTP/[0-9\.]+ 200.*\r\n\r\n$}s, "check response";
-                test_echo($conn);
-            });
-        };
-    };
-    subtest "plaintext" => sub {
-        $test_get->('http', $server->{port});
-        $test_connect->(\&test_plaintext);
-    };
-    subtest "tls" => sub {
-        $test_get->('https', $server->{tls_port});
-        $test_connect->(\&test_tls);
-    };
-    kill 'KILL', $pid;
-    while (waitpid($pid, 0) != $pid) {}
+    kill 'KILL', $upstream_pid;
+    while (waitpid($upstream_pid, 0) != $upstream_pid) {}
 };
 
 done_testing;
