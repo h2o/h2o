@@ -1719,7 +1719,7 @@ int h2o_req_resolve_internal_redirect_url(h2o_req_t *req, h2o_iovec_t dest, h2o_
 /**
  * logs an error
  */
-void h2o_req_log_error(h2o_req_t *req, const char *module, const char *fmt, ...) __attribute__((format(printf, 3, 4)));
+void h2o_req_log_error(h2o_req_t *req, const char *module, const char *fmt, ...) H2O_ATTRIBUTE_FORMAT_PRINTF(3, 4);
 void h2o_write_error_log(h2o_iovec_t prefix, h2o_iovec_t msg);
 
 /* log */

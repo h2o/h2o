@@ -226,10 +226,10 @@ void h2o_httpclient_connect(h2o_httpclient_t **_client, h2o_mem_pool_t *pool, vo
                             h2o_httpclient_connection_pool_t *connpool, h2o_url_t *origin, const char *upgrade_to,
                             h2o_httpclient_connect_cb on_connect)
 {
-    static const h2o_iovec_t no_protos = {}, both_protos = {H2O_STRLIT("\x02"
+    static const h2o_iovec_t no_protos = {}, both_protos = H2O_IOVEC_STRLIT("\x02"
                                                                        "h2"
                                                                        "\x08"
-                                                                       "http/1.1")};
+                                                                       "http/1.1");
     assert(connpool != NULL);
 
     size_t selected_protocol = select_protocol(&ctx->protocol_selector);
@@ -260,9 +260,11 @@ void h2o_httpclient_connect(h2o_httpclient_t **_client, h2o_mem_pool_t *pool, vo
             connect_using_socket_pool(_client, pool, data, ctx, connpool, origin, upgrade_to, on_connect, both_protos);
         }
     } break;
+#ifndef H2O_NO_HTTP3
     case PROTOCOL_SELECTOR_H3:
         h2o_httpclient__connect_h3(_client, pool, data, ctx, connpool, origin, upgrade_to, on_connect);
         break;
+#endif
     case PROTOCOL_SELECTOR_SERVER_DRIVEN: {
         /* offer H2 the server, but evenly distribute the load among existing H1 and H2 connections */
         struct st_h2o_httpclient__h2_conn_t *h2conn = find_h2conn(connpool, origin);

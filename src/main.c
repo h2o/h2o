@@ -47,7 +47,9 @@
 #include <sys/time.h>
 #include <sys/types.h>
 #include <sys/uio.h>
+#ifndef H2O_NO_UNIX_SOCKETS
 #include <sys/un.h>
+#endif
 #include <sys/wait.h>
 #include <openssl/crypto.h>
 #include <openssl/dh.h>
@@ -1306,6 +1308,7 @@ Found:
     return conf.server_starter.fds[i];
 }
 
+#ifndef H2O_NO_UNIX_SOCKETS
 static int open_unix_listener(h2o_configurator_command_t *cmd, yoml_t *node, struct sockaddr_un *sa, yoml_t **owner_node,
                               yoml_t **group_node, yoml_t **permission_node)
 {
@@ -1381,6 +1384,7 @@ ErrorExit:
         close(fd);
     return -1;
 }
+#endif
 
 static void socket_reuseport(int fd)
 {
@@ -1612,6 +1616,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
         return -1;
     }
 
+#ifndef H2O_NO_UNIX_SOCKETS
     if (strcmp(type, "unix") == 0) {
 
         if (cc_node != NULL)
@@ -1661,7 +1666,9 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
         if (listener->hosts != NULL && ctx->hostconf != NULL)
             h2o_append_to_null_terminated_list((void *)&listener->hosts, ctx->hostconf);
 
-    } else if (strcmp(type, "tcp") == 0) {
+    } else
+#endif
+    if (strcmp(type, "tcp") == 0) {
 
         /* TCP socket */
 #if !defined(TCP_CONGESTION)
@@ -2949,11 +2956,13 @@ static char **build_server_starter_argv(const char *h2o_cmd, const char *config_
                 sprintf(newarg, "--port=%s:%s", host, serv);
             }
         } break;
+#ifndef H2O_NO_UNIX_SOCKETS
         case AF_UNIX: {
             struct sockaddr_un *sa = (void *)&conf.listeners[i]->addr;
             newarg = h2o_mem_alloc(sizeof("--path=") + strlen(sa->sun_path));
             sprintf(newarg, "--path=%s", sa->sun_path);
         } break;
+#endif
         }
         h2o_vector_reserve(NULL, &args, args.size + 1);
         args.entries[args.size++] = newarg;

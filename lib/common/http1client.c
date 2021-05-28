@@ -24,7 +24,6 @@
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <sys/types.h>
-#include <sys/un.h>
 #include "picohttpparser.h"
 #include "h2o/httpclient.h"
 #include "h2o/token.h"
@@ -546,7 +545,7 @@ static size_t req_body_send_prepare(struct st_h2o_http1client_t *client, h2o_iov
             *bytes += 2;
         }
         if (client->body_buf_inflight.is_end_stream) {
-            static const h2o_iovec_t terminator = {H2O_STRLIT("0\r\n\r\n")};
+            static const h2o_iovec_t terminator = H2O_IOVEC_STRLIT("0\r\n\r\n");
             bufs[bufcnt++] = terminator;
             *bytes += terminator.len;
         }

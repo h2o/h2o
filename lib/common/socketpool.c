@@ -22,11 +22,13 @@
 #include <assert.h>
 #include <errno.h>
 #include <netdb.h>
+#include <netinet/in.h>
 #include <stdlib.h>
 #include <sys/socket.h>
 #include <sys/types.h>
+#ifndef H2O_NO_UNIX_SOCKETS
 #include <sys/un.h>
-#include <netinet/in.h>
+#endif
 #include "h2o/hostinfo.h"
 #include "h2o/linklist.h"
 #include "h2o/socketpool.h"
@@ -150,8 +152,10 @@ static void common_init(h2o_socketpool_t *pool, h2o_socketpool_target_t **target
 h2o_socketpool_target_type_t detect_target_type(h2o_url_t *url, struct sockaddr_storage *sa, socklen_t *salen)
 {
     memset(sa, 0, sizeof(*sa));
+#ifndef H2O_NO_UNIX_SOCKETS
     const char *to_sun_err = h2o_url_host_to_sun(url->host, (struct sockaddr_un *)sa);
     if (to_sun_err == h2o_url_host_to_sun_err_is_not_unix_socket) {
+#endif
         sa->ss_family = AF_INET;
         struct sockaddr_in *sin = (struct sockaddr_in *)sa;
         *salen = sizeof(*sin);
@@ -162,11 +166,13 @@ h2o_socketpool_target_type_t detect_target_type(h2o_url_t *url, struct sockaddr_
         } else {
             return H2O_SOCKETPOOL_TYPE_NAMED;
         }
+#ifndef H2O_NO_UNIX_SOCKETS
     } else {
         assert(to_sun_err == NULL);
         *salen = sizeof(struct sockaddr_un);
         return H2O_SOCKETPOOL_TYPE_SOCKADDR;
     }
+#endif
 }
 
 h2o_socketpool_target_t *h2o_socketpool_create_target(h2o_url_t *origin, h2o_socketpool_target_conf_t *lb_target_conf)

@@ -124,6 +124,31 @@ ENDIF ()
 OPTION(WITHOUT_LIBS "skip building libs even when possible" OFF)
 OPTION(BUILD_SHARED_LIBS "whether to build a shared library" OFF)
 
+OPTION(WITHOUT_HTTP3 "don't include http/3 support" OFF)
+OPTION(WITHOUT_FASTCGI "don't include fastcgi" OFF)
+OPTION(WITHOUT_HIREDIS "don't include hiredis" OFF)
+OPTION(WITHOUT_MEMCACHED "don't include memcached" OFF)
+
+IF (MINGW)
+    SET(WITHOUT_HTTP3 "ON")
+    SET(WITHOUT_FASTCGI "ON")
+    SET(WITHOUT_HIREDIS "ON")
+    SET(WITHOUT_MEMCACHED "ON")
+    SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D_WIN32_WINNT=0x0600 -D_POSIX_C_SOURCE -DO_CLOEXEC=0 -DH2O_NO_UNIX_SOCKETS")
+ENDIF ()
+
+IF (WITHOUT_HTTP3)
+    SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DH2O_NO_HTTP3")
+ENDIF ()
+
+IF (WITHOUT_HIREDIS)
+    SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DH2O_NO_REDIS")
+ENDIF ()
+
+IF (WITHOUT_MEMCACHED)
+    SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DH2O_NO_MEMCACHED")
+ENDIF ()
+
 FIND_PROGRAM(RUBY ruby)
 FIND_PROGRAM(BISON bison)
 IF (RUBY AND BISON)
@@ -184,6 +209,10 @@ INCLUDE_DIRECTORIES(
     deps/yaml/include
     deps/yoml
     ${CMAKE_CURRENT_BINARY_DIR})
+
+IF (MINGW)
+    INCLUDE_DIRECTORIES(include/compat/mingw)
+ENDIF ()
 
 IF (PKG_CONFIG_FOUND)
     PKG_CHECK_MODULES(LIBUV libuv>=1.0.0)
@@ -322,21 +351,7 @@ SET(BROTLI_SOURCE_FILES
     lib/handler/compress/brotli.c)
 
 SET(LIB_SOURCE_FILES
-    deps/cloexec/cloexec.c
-    deps/hiredis/async.c
-    deps/hiredis/hiredis.c
-    deps/hiredis/net.c
-    deps/hiredis/read.c
-    deps/hiredis/sds.c
     deps/libgkc/gkc.c
-    deps/libyrmcds/close.c
-    deps/libyrmcds/connect.c
-    deps/libyrmcds/recv.c
-    deps/libyrmcds/send.c
-    deps/libyrmcds/send_text.c
-    deps/libyrmcds/socket.c
-    deps/libyrmcds/strerror.c
-    deps/libyrmcds/text_mode.c
     deps/picohttpparser/picohttpparser.c
     deps/picotls/deps/cifra/src/blockwise.c
     deps/picotls/deps/cifra/src/chash.c
@@ -350,20 +365,6 @@ SET(LIB_SOURCE_FILES
     deps/picotls/lib/openssl.c
     deps/picotls/lib/cifra/random.c
     deps/picotls/lib/cifra/x25519.c
-    deps/quicly/lib/cc-cubic.c
-    deps/quicly/lib/cc-reno.c
-    deps/quicly/lib/defaults.c
-    deps/quicly/lib/frame.c
-    deps/quicly/lib/local_cid.c
-    deps/quicly/lib/loss.c
-    deps/quicly/lib/quicly.c
-    deps/quicly/lib/ranges.c
-    deps/quicly/lib/recvstate.c
-    deps/quicly/lib/remote_cid.c
-    deps/quicly/lib/retire_cid.c
-    deps/quicly/lib/sendstate.c
-    deps/quicly/lib/sentmap.c
-    deps/quicly/lib/streambuf.c
 
     lib/common/cache.c
     lib/common/file.c
@@ -371,13 +372,9 @@ SET(LIB_SOURCE_FILES
     lib/common/hostinfo.c
     lib/common/http1client.c
     lib/common/http2client.c
-    lib/common/http3client.c
     lib/common/httpclient.c
-    lib/common/memcached.c
     lib/common/memory.c
     lib/common/multithread.c
-    lib/common/redis.c
-    lib/common/serverutil.c
     lib/common/socket.c
     lib/common/socketpool.c
     lib/common/string.c
@@ -403,7 +400,6 @@ SET(LIB_SOURCE_FILES
     lib/handler/compress/gzip.c
     lib/handler/errordoc.c
     lib/handler/expires.c
-    lib/handler/fastcgi.c
     lib/handler/file.c
     lib/handler/headers.c
     lib/handler/mimemap.c
@@ -424,7 +420,6 @@ SET(LIB_SOURCE_FILES
     lib/handler/configurator/compress.c
     lib/handler/configurator/errordoc.c
     lib/handler/configurator/expires.c
-    lib/handler/configurator/fastcgi.c
     lib/handler/configurator/file.c
     lib/handler/configurator/headers.c
     lib/handler/configurator/proxy.c
@@ -447,12 +442,70 @@ SET(LIB_SOURCE_FILES
     lib/http2/hpack.c
     lib/http2/scheduler.c
     lib/http2/stream.c
-    lib/http2/http2_debug_state.c
+    lib/http2/http2_debug_state.c)
 
-    lib/http3/frame.c
-    lib/http3/qpack.c
-    lib/http3/common.c
-    lib/http3/server.c)
+IF (NOT MINGW)
+    SET(LIB_SOURCE_FILES
+        ${LIB_SOURCE_FILES}
+        lib/common/serverutil.c
+        deps/cloexec/cloexec.c)
+ENDIF ()
+
+IF (NOT WITHOUT_HTTP3)
+    SET(LIB_SOURCE_FILES
+        ${LIB_SOURCE_FILES}
+        deps/quicly/lib/cc-cubic.c
+        deps/quicly/lib/cc-reno.c
+        deps/quicly/lib/defaults.c
+        deps/quicly/lib/frame.c
+        deps/quicly/lib/local_cid.c
+        deps/quicly/lib/loss.c
+        deps/quicly/lib/quicly.c
+        deps/quicly/lib/ranges.c
+        deps/quicly/lib/recvstate.c
+        deps/quicly/lib/remote_cid.c
+        deps/quicly/lib/retire_cid.c
+        deps/quicly/lib/sendstate.c
+        deps/quicly/lib/sentmap.c
+        deps/quicly/lib/streambuf.c
+        lib/common/http3client.c
+        lib/http3/frame.c
+        lib/http3/qpack.c
+        lib/http3/common.c
+        lib/http3/server.c)
+ENDIF ()
+
+IF (NOT WITHOUT_FASTCGI)
+    SET(LIB_SOURCE_FILES
+        ${LIB_SOURCE_FILES}
+        lib/handler/fastcgi.c
+        lib/handler/configurator/fastcgi.c)
+ENDIF ()
+
+IF (NOT WITHOUT_HIREDIS)
+    SET(LIB_SOURCE_FILES
+        ${LIB_SOURCE_FILES}
+        deps/hiredis/async.c
+        deps/hiredis/hiredis.c
+        deps/hiredis/net.c
+        deps/hiredis/read.c
+        deps/hiredis/sds.c
+        lib/common/redis.c)
+ENDIF ()
+
+IF (NOT WITHOUT_MEMCACHED)
+    SET(LIB_SOURCE_FILES
+        ${LIB_SOURCE_FILES}
+        deps/libyrmcds/close.c
+        deps/libyrmcds/connect.c
+        deps/libyrmcds/recv.c
+        deps/libyrmcds/send.c
+        deps/libyrmcds/send_text.c
+        deps/libyrmcds/socket.c
+        deps/libyrmcds/strerror.c
+        deps/libyrmcds/text_mode.c
+        lib/common/memcached.c)
+ENDIF ()
 
 IF (WITH_DTRACE)
     DEFINE_DTRACE_DEPENDENCIES(${CMAKE_SOURCE_DIR}/deps/picotls/picotls-probes.d picotls)

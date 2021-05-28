@@ -24,7 +24,6 @@
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <sys/types.h>
-#include <sys/un.h>
 #include "khash.h"
 #include "h2o/hpack.h"
 #include "h2o/httpclient.h"
@@ -902,7 +901,7 @@ static int parse_input(struct st_h2o_http2client_conn_t *conn)
         } else if (ret < 0) {
             if (ret != H2O_HTTP2_ERROR_PROTOCOL_CLOSE_IMMEDIATELY) {
                 enqueue_goaway(conn, (int)ret,
-                               err_desc != NULL ? (h2o_iovec_t){(char *)err_desc, strlen(err_desc)} : (h2o_iovec_t){NULL});
+                               err_desc != NULL ? h2o_iovec_init((char *)err_desc, strlen(err_desc)) : h2o_iovec_init(NULL, 0));
             }
             call_stream_callbacks_with_error(conn, h2o_httpclient_error_protocol_violation);
             return close_connection(conn);
@@ -1114,7 +1113,7 @@ static void do_emit_writereq(struct st_h2o_http2client_conn_t *conn)
 
     if (conn->output.buf->size != 0) {
         /* write and wait for completion */
-        h2o_iovec_t buf = {conn->output.buf->bytes, conn->output.buf->size};
+        h2o_iovec_t buf = h2o_iovec_init(conn->output.buf->bytes, conn->output.buf->size);
         h2o_socket_write(conn->super.sock, &buf, 1, on_write_complete);
         conn->output.buf_in_flight = conn->output.buf;
         h2o_buffer_init(&conn->output.buf, &wbuf_buffer_prototype);

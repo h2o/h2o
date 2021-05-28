@@ -30,7 +30,7 @@
 #include "h2o/absprio.h"
 #include "../probes_.h"
 
-static const h2o_iovec_t CONNECTION_PREFACE = {H2O_STRLIT("PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n")};
+static const h2o_iovec_t CONNECTION_PREFACE = H2O_IOVEC_STRLIT("PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n");
 
 #define LIT16(x) ((uint32_t)(x) >> 8) & 0xff, (x)&0xff
 #define LIT24(x) LIT16((x) >> 8), (x)&0xff
@@ -47,7 +47,7 @@ static const uint8_t SERVER_PREFACE_BIN[] = {
 #undef LIT32
 #undef LIT_FRAME_HEADER
 
-static const h2o_iovec_t SERVER_PREFACE = {(char *)SERVER_PREFACE_BIN, sizeof(SERVER_PREFACE_BIN)};
+static const h2o_iovec_t SERVER_PREFACE = H2O_IOVEC_STRLIT(SERVER_PREFACE_BIN);
 
 __thread h2o_buffer_prototype_t h2o_http2_wbuf_buffer_prototype = {{16}, {H2O_HTTP2_DEFAULT_OUTBUF_SIZE}};
 
@@ -101,7 +101,7 @@ static void graceful_shutdown_resend_goaway(h2o_timer_t *entry)
     for (node = ctx->http2._conns.next; node != &ctx->http2._conns; node = node->next) {
         h2o_http2_conn_t *conn = H2O_STRUCT_FROM_MEMBER(h2o_http2_conn_t, _conns, node);
         if (conn->state < H2O_HTTP2_CONN_STATE_HALF_CLOSED) {
-            enqueue_goaway(conn, H2O_HTTP2_ERROR_NONE, (h2o_iovec_t){NULL});
+            enqueue_goaway(conn, H2O_HTTP2_ERROR_NONE, (h2o_iovec_t)H2O_IOVEC_NULL);
             do_close_stragglers = 1;
         }
     }
@@ -133,7 +133,7 @@ static void initiate_graceful_shutdown(h2o_context_t *ctx)
         h2o_http2_conn_t *conn = H2O_STRUCT_FROM_MEMBER(h2o_http2_conn_t, _conns, node);
         if (conn->state < H2O_HTTP2_CONN_STATE_HALF_CLOSED) {
             h2o_http2_encode_goaway_frame(&conn->_write.buf, INT32_MAX, H2O_HTTP2_ERROR_NONE,
-                                          (h2o_iovec_t){H2O_STRLIT("graceful shutdown")});
+                                          (h2o_iovec_t)H2O_IOVEC_STRLIT("graceful shutdown"));
             h2o_http2_conn_request_write(conn);
         }
     }
@@ -1186,7 +1186,7 @@ static int parse_input(h2o_http2_conn_t *conn)
         } else if (ret < 0) {
             if (ret != H2O_HTTP2_ERROR_PROTOCOL_CLOSE_IMMEDIATELY) {
                 enqueue_goaway(conn, (int)ret,
-                               err_desc != NULL ? (h2o_iovec_t){(char *)err_desc, strlen(err_desc)} : (h2o_iovec_t){NULL});
+                               err_desc != NULL ? h2o_iovec_init((char *)err_desc, strlen(err_desc)) : (h2o_iovec_t)H2O_IOVEC_NULL);
             }
             return close_connection(conn);
         }
@@ -1384,7 +1384,7 @@ static int emit_writereq_of_openref(h2o_http2_scheduler_openref_t *ref, int *sti
             size_t num_trailers = 0;
             h2o_iovec_t server_timing;
             if ((server_timing = h2o_build_server_timing_trailer(&stream->req, NULL, 0, NULL, 0)).len != 0) {
-                static const h2o_iovec_t name = {H2O_STRLIT("server-timing")};
+                static const h2o_iovec_t name = H2O_IOVEC_STRLIT("server-timing");
                 trailers[num_trailers++] = (h2o_header_t){(h2o_iovec_t *)&name, NULL, server_timing};
             }
             h2o_hpack_flatten_trailers(&conn->_write.buf, &conn->_output_header_table, stream->stream_id,
@@ -1406,7 +1406,7 @@ void do_emit_writereq(h2o_http2_conn_t *conn)
 
     if (conn->_write.buf->size != 0) {
         /* write and wait for completion */
-        h2o_iovec_t buf = {conn->_write.buf->bytes, conn->_write.buf->size};
+        h2o_iovec_t buf = h2o_iovec_init(conn->_write.buf->bytes, conn->_write.buf->size);
         h2o_socket_write(conn->sock, &buf, 1, on_write_complete);
         conn->_write.buf_in_flight = conn->_write.buf;
         h2o_buffer_init(&conn->_write.buf, &h2o_http2_wbuf_buffer_prototype);
@@ -1692,7 +1692,7 @@ static void push_path(h2o_req_t *src_req, const char *abspath, size_t abspath_le
     h2o_http2_stream_prepare_for_request(conn, stream);
 
     /* setup request */
-    stream->req.input.method = (h2o_iovec_t){H2O_STRLIT("GET")};
+    stream->req.input.method = (h2o_iovec_t)H2O_IOVEC_STRLIT("GET");
     stream->req.input.scheme = src_stream->req.input.scheme;
     stream->req.input.authority =
         h2o_strdup(&stream->req.pool, src_stream->req.input.authority.base, src_stream->req.input.authority.len);

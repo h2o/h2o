@@ -96,7 +96,7 @@ static void send_response(struct st_h2o_status_collector_t *collector)
     h2o_iovec_t resp[nr_resp];
 
     memset(resp, 0, sizeof(resp[0]) * nr_resp);
-    resp[cur_resp++] = (h2o_iovec_t){H2O_STRLIT("{\n")};
+    resp[cur_resp++] = (h2o_iovec_t)H2O_IOVEC_STRLIT("{\n");
 
     int coma_removed = 0;
     for (i = 0; i < req->conn->ctx->globalconf->statuses.size; i++) {
@@ -111,7 +111,7 @@ static void send_response(struct st_h2o_status_collector_t *collector)
             coma_removed = 1;
         }
     }
-    resp[cur_resp++] = (h2o_iovec_t){H2O_STRLIT("\n}\n")};
+    resp[cur_resp++] = (h2o_iovec_t)H2O_IOVEC_STRLIT("\n}\n");
 
     req->res.status = 200;
     h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, NULL, H2O_STRLIT("text/plain; charset=utf-8"));
@@ -214,7 +214,7 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     } else if (h2o_memis(local_path.base, local_path.len, H2O_STRLIT("/json"))) {
         int ret;
         /* "/json" maps to the JSON API */
-        h2o_iovec_t status_list = {NULL, 0}; /* NULL means we'll show all statuses */
+        h2o_iovec_t status_list = H2O_IOVEC_NULL; /* NULL means we'll show all statuses */
         if (req->query_at != SIZE_MAX && (req->path.len - req->query_at > 6)) {
             if (h2o_memis(&req->path.base[req->query_at], 6, "?show=", 6)) {
                 status_list = h2o_iovec_init(&req->path.base[req->query_at + 6], req->path.len - req->query_at - 6);

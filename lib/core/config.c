@@ -29,7 +29,9 @@
 #include "h2o/configurator.h"
 #include "h2o/http1.h"
 #include "h2o/http2.h"
+#ifndef H2O_NO_HTTP3
 #include "h2o/http3_server.h"
+#endif
 
 static h2o_hostconf_t *create_hostconf(h2o_globalconf_t *globalconf)
 {
@@ -196,10 +198,12 @@ void h2o_config_init(h2o_globalconf_t *config)
     config->http2.latency_optimization.max_additional_delay = 10;
     config->http2.latency_optimization.max_cwnd = 65535;
     config->http2.callbacks = H2O_HTTP2_CALLBACKS;
+#ifndef H2O_NO_HTTP3
     config->http3.idle_timeout = quicly_spec_context.transport_params.max_idle_timeout;
     config->http3.active_stream_window_size = H2O_DEFAULT_HTTP3_ACTIVE_STREAM_WINDOW_SIZE;
     config->http3.use_delayed_ack = 1;
     config->http3.callbacks = H2O_HTTP3_SERVER_CALLBACKS;
+#endif
     config->send_informational_mode = H2O_SEND_INFORMATIONAL_MODE_EXCEPT_H1;
     config->mimemap = h2o_mimemap_create();
     h2o_socketpool_init_global(&config->proxy.global_socketpool, SIZE_MAX);
@@ -257,7 +261,7 @@ h2o_hostconf_t *h2o_config_register_host(h2o_globalconf_t *config, h2o_iovec_t h
     /* create hostconf */
     hostconf = create_hostconf(config);
     hostconf->authority.host = host_lc;
-    host_lc = (h2o_iovec_t){NULL};
+    host_lc = (h2o_iovec_t)H2O_IOVEC_NULL;
     hostconf->authority.port = port;
     if (hostconf->authority.port == 65535) {
         hostconf->authority.hostport = hostconf->authority.host;

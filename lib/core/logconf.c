@@ -648,8 +648,11 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
                 goto EmitNull;
             {
                 size_t bufsz, len;
-                if (localt.tm_year == 0)
-                    localtime_r(&req->processed_at.at.tv_sec, &localt);
+                if (localt.tm_year == 0) {
+                    /* work around pointer type collision in MingW */
+                    time_t tmp = req->processed_at.at.tv_sec;
+                    localtime_r(&tmp, &localt);
+                }
                 for (bufsz = 128;; bufsz *= 2) {
                     RESERVE(bufsz);
                     if ((len = strftime(pos, bufsz, element->data.name.base, &localt)) != 0)

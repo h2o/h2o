@@ -328,7 +328,7 @@ static void post_error(struct st_h2o_mruby_http_request_context_t *ctx, const ch
     ctx->resp.after_closed->size += errstr_len;
     ctx->resp.has_content = 1;
 
-    static const h2o_iovec_t client_warning = {H2O_STRLIT("client-warning")};
+    static const h2o_iovec_t client_warning = H2O_IOVEC_STRLIT("client-warning");
     h2o_header_t headers_sorted[] = {
         {(h2o_iovec_t *)&client_warning, NULL, h2o_iovec_init(errstr, errstr_len)},
         {&H2O_TOKEN_CONTENT_TYPE->buf, NULL, h2o_iovec_init(H2O_STRLIT("text/plain; charset=utf-8"))},

@@ -47,7 +47,7 @@ static void on_setup_ostream(h2o_filter_t *self, h2o_req_t *req, h2o_ostream_t *
         break;
     default:
         method = h2o_iovec_init(H2O_STRLIT("GET"));
-        req->entity = (h2o_iovec_t){NULL};
+        req->entity = (h2o_iovec_t)H2O_IOVEC_NULL;
         break;
     }
 

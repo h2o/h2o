@@ -25,7 +25,6 @@
 #include <stdlib.h>
 #include <sys/stat.h>
 #include <sys/types.h>
-#include <sys/uio.h>
 #include <unistd.h>
 #include "h2o/file.h"
 
@@ -33,7 +32,7 @@ h2o_iovec_t h2o_file_read(const char *fn)
 {
     int fd;
     struct stat st;
-    h2o_iovec_t ret = {NULL};
+    h2o_iovec_t ret = H2O_IOVEC_NULL;
 
     /* open */
     if ((fd = open(fn, O_RDONLY | O_CLOEXEC)) == -1)
@@ -64,7 +63,7 @@ Error:
     if (fd != -1)
         close(fd);
     free(ret.base);
-    return (h2o_iovec_t){NULL};
+    return (h2o_iovec_t)H2O_IOVEC_NULL;
 }
 
 int h2o_file_mktemp(const char *fn_template)

@@ -425,7 +425,7 @@ static const char *init_headers(h2o_mem_pool_t *pool, h2o_headers_t *headers, co
 static const char *fixup_request(struct st_h2o_http1_conn_t *conn, struct phr_header *headers, size_t num_headers,
                                  int minor_version, h2o_iovec_t *expect, ssize_t *entity_header_index)
 {
-    h2o_iovec_t connection = {NULL, 0}, host = {NULL, 0}, upgrade = {NULL, 0};
+    h2o_iovec_t connection = H2O_IOVEC_NULL, host = H2O_IOVEC_NULL, upgrade = H2O_IOVEC_NULL;
     const char *ret;
 
     expect->base = NULL;
@@ -598,7 +598,7 @@ static int write_req_first(void *_req, h2o_iovec_t payload, int is_end_stream)
 
 static void handle_incoming_request(struct st_h2o_http1_conn_t *conn)
 {
-    size_t inreqlen = conn->sock->input->size < H2O_MAX_REQLEN ? conn->sock->input->size : H2O_MAX_REQLEN;
+    size_t methodlen, pathlen, inreqlen = conn->sock->input->size < H2O_MAX_REQLEN ? conn->sock->input->size : H2O_MAX_REQLEN;
     int reqlen, minor_version;
     struct phr_header headers[H2O_MAX_HEADERS];
     size_t num_headers = H2O_MAX_HEADERS;
@@ -610,8 +610,10 @@ static void handle_incoming_request(struct st_h2o_http1_conn_t *conn)
         conn->req.timestamps.request_begin_at = h2o_gettimeofday(conn->super.ctx->loop);
 
     reqlen = phr_parse_request(conn->sock->input->bytes, inreqlen, (const char **)&conn->req.input.method.base,
-                               &conn->req.input.method.len, (const char **)&conn->req.input.path.base, &conn->req.input.path.len,
+                               &methodlen, (const char **)&conn->req.input.path.base, &pathlen,
                                &minor_version, headers, &num_headers, conn->_prevreqlen);
+    conn->req.input.method.len = methodlen;
+    conn->req.input.path.len = pathlen;
     conn->_prevreqlen = inreqlen;
 
     switch (reqlen) {
@@ -644,7 +646,7 @@ static void handle_incoming_request(struct st_h2o_http1_conn_t *conn)
             h2o_buffer_consume(&conn->sock->input, reqlen);
             h2o_buffer_init(&conn->req_body, &h2o_socket_buffer_prototype);
             if (expect.base != NULL) {
-                static const h2o_iovec_t res = {H2O_STRLIT("HTTP/1.1 100 Continue\r\n\r\n")};
+                static const h2o_iovec_t res = H2O_IOVEC_STRLIT("HTTP/1.1 100 Continue\r\n\r\n");
                 h2o_socket_write(conn->sock, (void *)&res, 1, on_continue_sent);
                 /* processing of the incoming entity is postponed until the 100 response is sent */
                 h2o_socket_read_stop(conn->sock);
@@ -666,7 +668,7 @@ static void handle_incoming_request(struct st_h2o_http1_conn_t *conn)
         /* upgrade to HTTP/2 if the request starts with: PRI * HTTP/2 */
         if (conn->super.ctx->globalconf->http1.upgrade_to_http2) {
             /* should check up to the first octet that phr_parse_request returns an error */
-            static const h2o_iovec_t HTTP2_SIG = {H2O_STRLIT("PRI * HTTP/2")};
+            static const h2o_iovec_t HTTP2_SIG = H2O_IOVEC_STRLIT("PRI * HTTP/2");
             if (conn->sock->input->size >= HTTP2_SIG.len && memcmp(conn->sock->input->bytes, HTTP2_SIG.base, HTTP2_SIG.len) == 0) {
                 h2o_accept_ctx_t accept_ctx = {conn->super.ctx, conn->super.hosts};
                 h2o_socket_t *sock = conn->sock;

@@ -61,6 +61,7 @@ void h2o_filecache_destroy(h2o_filecache_t *cache);
 void h2o_filecache_clear(h2o_filecache_t *cache);
 
 h2o_filecache_ref_t *h2o_filecache_open_file(h2o_filecache_t *cache, const char *path, int oflag);
+ssize_t h2o_filecache_read_file(h2o_filecache_ref_t *ref, void *buf, size_t count, off_t offset);
 void h2o_filecache_close_file(h2o_filecache_ref_t *ref);
 struct tm *h2o_filecache_get_last_modified(h2o_filecache_ref_t *ref, char *outbuf);
 size_t h2o_filecache_get_etag(h2o_filecache_ref_t *ref, char *outbuf);

@@ -62,8 +62,8 @@ static const char *get_debug_state_string(h2o_http2_stream_t *stream)
     return NULL;
 }
 
-__attribute__((format(printf, 3, 4))) static void append_chunk(h2o_mem_pool_t *pool, h2o_iovec_vector_t *chunks, const char *fmt,
-                                                               ...)
+H2O_ATTRIBUTE_FORMAT_PRINTF(3, 4)
+static void append_chunk(h2o_mem_pool_t *pool, h2o_iovec_vector_t *chunks, const char *fmt, ...)
 {
     va_list args;
 

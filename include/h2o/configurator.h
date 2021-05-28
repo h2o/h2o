@@ -23,6 +23,7 @@
 #define h2o__configurator_h
 
 #include "yoml.h"
+#include "h2o/format.h"
 
 enum {
     H2O_CONFIGURATOR_FLAG_GLOBAL = 0x1,
@@ -145,7 +146,7 @@ int h2o_configurator_apply_commands(h2o_configurator_context_t *ctx, yoml_t *nod
  * emits configuration error
  */
 void h2o_configurator_errprintf(h2o_configurator_command_t *cmd, yoml_t *node, const char *reason, ...)
-    __attribute__((format(printf, 3, 4)));
+    H2O_ATTRIBUTE_FORMAT_PRINTF(3, 4);
 /**
  * interprets the configuration value using sscanf, or prints an error upon failure
  * @param configurator configurator
@@ -154,7 +155,7 @@ void h2o_configurator_errprintf(h2o_configurator_command_t *cmd, yoml_t *node, c
  * @return 0 if successful, -1 if not
  */
 int h2o_configurator_scanf(h2o_configurator_command_t *cmd, yoml_t *node, const char *fmt, ...)
-    __attribute__((format(scanf, 3, 4)));
+    H2O_ATTRIBUTE_FORMAT_SCANF(3, 4);
 /**
  * interprets the configuration value and returns the index of the matched string within the candidate strings, or prints an error
  * upon failure
