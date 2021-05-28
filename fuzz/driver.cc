@@ -406,7 +406,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size)
 
     /* Loop until the connection is closed by the client or server */
     while (is_valid_fd(c)) {
-        h2o_evloop_run(ctx.loop, 10);
+        h2o_evloop_run(ctx.loop, client_timeout_ms);
     }
 
     h2o_barrier_wait(end);
