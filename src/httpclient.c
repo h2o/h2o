@@ -469,9 +469,14 @@ static void usage(const char *progname)
             "  -x <host:port>\n"
             "               specifies the destination of the CONNECT request; implies\n"
             "               `-m CONNECT`\n"
-            "  -h           prints this help\n"
+            "  --initial-udp-payload-size <bytes>\n"
+            "               specifies the udp payload size of the initial message (default: %" PRIu16 ")\n"
+            "  --max-udp-payload-size <bytes>\n"
+            "               specifies the max_udp_payload_size transport parameter to send (default: %" PRIu64 ")\n"
+            "  -h, --help   prints this help\n"
             "\n",
-            progname);
+            progname, quicly_spec_context.initial_egress_max_udp_payload_size,
+            quicly_spec_context.transport_params.max_udp_payload_size);
 }
 
 static void on_sigfatal(int signo)
@@ -553,12 +558,18 @@ int main(int argc, char **argv)
     }
 #endif
 
+    int is_opt_initial_udp_payload_size = 0;
+    int is_opt_max_udp_payload_size = 0;
+    struct option longopts[] = {{"initial-udp-payload-size", required_argument, &is_opt_initial_udp_payload_size, 1},
+                                {"max-udp-payload-size", required_argument, &is_opt_max_udp_payload_size, 1},
+                                {"help", no_argument, NULL, 'h'},
+                                {NULL}};
     const char *optstring = "t:m:o:b:x:C:c:d:H:i:k2:W:h3:"
 #ifdef __GNUC__
                             ":" /* for backward compatibility, optarg of -3 is optional when using glibc */
 #endif
         ;
-    while ((opt = getopt(argc, argv, optstring)) != -1) {
+    while ((opt = getopt_long(argc, argv, optstring, longopts, NULL)) != -1) {
         switch (opt) {
         case 't':
             if (sscanf(optarg, "%u", &cnt_left) != 1 || cnt_left < 1) {
@@ -670,6 +681,21 @@ int main(int argc, char **argv)
         case 'h':
             usage(argv[0]);
             exit(0);
+            break;
+        case 0:
+            if (is_opt_initial_udp_payload_size == 1) {
+                if (sscanf(optarg, "%" SCNu16, &h3ctx.quic.initial_egress_max_udp_payload_size) != 1) {
+                    fprintf(stderr, "failed to parse --initial-udp-payload-size\n");
+                    exit(EXIT_FAILURE);
+                }
+                is_opt_initial_udp_payload_size = 0;
+            } else if (is_opt_max_udp_payload_size == 1) {
+                if (sscanf(optarg, "%" SCNu64, &h3ctx.quic.transport_params.max_udp_payload_size) != 1) {
+                    fprintf(stderr, "failed to parse --max-udp-payload-size\n");
+                    exit(EXIT_FAILURE);
+                }
+                is_opt_max_udp_payload_size = 0;
+            }
             break;
         default:
             exit(EXIT_FAILURE);
