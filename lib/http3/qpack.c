@@ -741,9 +741,13 @@ static int parse_decode_context(h2o_qpack_decoder_t *qpack, struct st_h2o_qpack_
         uint64_t max_value = qpack->total_inserts + qpack->max_entries;
         uint64_t rounded = max_value / full_range * full_range;
         ctx->largest_ref += rounded - 1;
-        if (ctx->largest_ref > max_value && ctx->largest_ref > full_range)
+        if (ctx->largest_ref > max_value) {
+            if (ctx->largest_ref <= full_range)
+                return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED;
             ctx->largest_ref -= full_range;
-        assert(ctx->largest_ref != 0);
+        }
+        if (ctx->largest_ref == 0)
+            return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED;
     }
 
     /* base index */
