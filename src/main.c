@@ -392,8 +392,8 @@ static int on_client_hello_ptls(ptls_on_client_hello_t *_self, ptls_t *tls, ptls
     }
 
     /* switch to raw public key context if requested and available */
-    if (params->server_certificate_types.count > 0
-        && memchr(params->server_certificate_types.list, PTLS_CERTIFICATE_TYPE_RAW_PUBLIC_KEY,
+    if (params->server_certificate_types.count > 0 &&
+        memchr(params->server_certificate_types.list, PTLS_CERTIFICATE_TYPE_RAW_PUBLIC_KEY,
                params->server_certificate_types.count) != NULL) {
         if (ssl_config->alternate_ptls_ctx != NULL) {
             assert(ssl_config->alternate_ptls_ctx->use_raw_public_keys);
@@ -708,7 +708,7 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
         assert(key != NULL);
         cert = SSL_get_certificate(fakeconn);
         /* obtain peer verify mode */
-        use_client_verify = (SSL_get_verify_mode(fakeconn) & SSL_VERIFY_PEER)? 1 : 0;
+        use_client_verify = (SSL_get_verify_mode(fakeconn) & SSL_VERIFY_PEER) ? 1 : 0;
         SSL_free(fakeconn);
     }
 
@@ -998,8 +998,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
     if (client_ca_file != NULL) {
         SSL_CTX_set_verify(ssl_ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, NULL);
         if (SSL_CTX_load_verify_locations(ssl_ctx, (*client_ca_file)->data.scalar, NULL) != 1) {
-            h2o_configurator_errprintf(cmd, *client_ca_file, "failed to load client CA file:%s\n",
-                                    (*client_ca_file)->data.scalar);
+            h2o_configurator_errprintf(cmd, *client_ca_file, "failed to load client CA file:%s\n", (*client_ca_file)->data.scalar);
             ERR_print_errors_cb(on_openssl_print_errors, stderr);
             goto Error;
         }
@@ -1760,9 +1759,10 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                 if (quic_node != NULL) {
                     yoml_t **retry_node, **sndbuf, **rcvbuf, **amp_limit, **qpack_encoder_table_capacity, **max_streams_bidi,
                         **max_udp_payload_size;
-                    if (h2o_configurator_parse_mapping(cmd, *quic_node, NULL, "retry:s,sndbuf:s,rcvbuf:s,amp-limit:s,qpack-encoder-"
-                                                                              "table-capacity:s,max-streams-bidi:s,max-udp-paylod-"
-                                                                              "size:s",
+                    if (h2o_configurator_parse_mapping(cmd, *quic_node, NULL,
+                                                       "retry:s,sndbuf:s,rcvbuf:s,amp-limit:s,qpack-encoder-"
+                                                       "table-capacity:s,max-streams-bidi:s,max-udp-paylod-"
+                                                       "size:s",
                                                        &retry_node, &sndbuf, &rcvbuf, &amp_limit, &qpack_encoder_table_capacity,
                                                        &max_streams_bidi, &max_udp_payload_size) != 0)
                         return -1;
@@ -2730,7 +2730,8 @@ static h2o_quic_conn_t *on_http3_accept(h2o_quic_ctx_t *_ctx, quicly_address_t *
     }
 
     /* accept the connection */
-    conn = h2o_http3_server_accept(ctx, destaddr, srcaddr, packet, token, (H2O_EBPF_FLAGS_SKIP_TRACING_BIT & flags) != 0, &conf.quic.conn_callbacks);
+    conn = h2o_http3_server_accept(ctx, destaddr, srcaddr, packet, token, (H2O_EBPF_FLAGS_SKIP_TRACING_BIT & flags) != 0,
+                                   &conf.quic.conn_callbacks);
     if (conn == NULL || &conn->super == H2O_QUIC_ACCEPT_CONN_DECRYPTION_FAILED)
         goto Exit;
     num_sessions(1);

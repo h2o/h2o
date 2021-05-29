@@ -73,12 +73,14 @@ static const ptls_key_exchange_algorithm_t *h3_key_exchanges[] = {
 #endif
     &ptls_openssl_secp256r1, NULL};
 static h2o_http3client_ctx_t h3ctx = {
-    .tls = {.random_bytes = ptls_openssl_random_bytes,
+    .tls =
+        {
+            .random_bytes = ptls_openssl_random_bytes,
             .get_time = &ptls_get_time,
             .key_exchanges = h3_key_exchanges,
             .cipher_suites = ptls_openssl_cipher_suites,
             .save_ticket = &save_http3_ticket,
-    },
+        },
 };
 
 static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *errstr, h2o_iovec_t *method, h2o_url_t *url,

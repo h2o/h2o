@@ -144,7 +144,6 @@ static const char *on_read_core(int fd, h2o_buffer_t **input)
         read_so_far += rret;
         if (read_so_far >= (1024 * 1024))
             break;
-
     }
     return NULL;
 }
