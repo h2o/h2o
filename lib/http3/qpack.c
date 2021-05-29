@@ -334,6 +334,11 @@ static int insert_literal_header(h2o_qpack_decoder_t *qpack, const char *name, s
     return decode_value_and_insert(qpack, header, value_is_huff, value, value_len, err_desc);
 }
 
+static int64_t qpack_table_cur(struct st_h2o_qpack_header_table_t *table)
+{
+    return table->base_offset + ((uintptr_t)table->last - (uintptr_t)table->first);
+}
+
 static int insert_with_name_reference(h2o_qpack_decoder_t *qpack, int name_is_static, int64_t name_index, int value_is_huff,
                                       const uint8_t *value, int64_t value_len, const char **err_desc)
 {
@@ -349,7 +354,7 @@ static int insert_with_name_reference(h2o_qpack_decoder_t *qpack, int name_is_st
         return insert_token_header(qpack, ref->name, value_is_huff, value, value_len, err_desc);
     } else {
         struct st_h2o_qpack_header_t *ref;
-        int64_t base_index = qpack->table.base_offset + (qpack->table.last - qpack->table.first) - 1;
+        int64_t base_index = qpack_table_cur(&qpack->table) - 1;
         if (name_index > base_index) {
             *err_desc = h2o_qpack_err_invalid_dynamic_reference;
             return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED;
@@ -755,7 +760,7 @@ static int parse_decode_context(h2o_qpack_decoder_t *qpack, struct st_h2o_qpack_
     ctx->base_index = sign == 0 ? ctx->largest_ref + ctx->base_index : ctx->largest_ref - ctx->base_index - 1;
 
     /* is the stream blocked? */
-    if (ctx->largest_ref >= qpack->table.base_offset + qpack->table.last - qpack->table.first) {
+    if (ctx->largest_ref >= qpack_table_cur(&qpack->table)) {
         if (qpack->blocked_streams.list.size + 1 >= qpack->max_blocked)
             return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED;
         decoder_link_blocked(qpack, stream_id, ctx->largest_ref);
@@ -836,7 +841,7 @@ static int handle_table_state_synchronize(h2o_qpack_encoder_t *qpack, int64_t in
         goto Error;
 
     int64_t new_value = qpack->largest_known_received + insert_count;
-    if (new_value >= qpack->table.base_offset + qpack->table.last - qpack->table.first)
+    if (new_value >= qpack_table_cur(&qpack->table))
         goto Error;
     qpack->largest_known_received = new_value;
 
@@ -940,7 +945,7 @@ static int64_t lookup_dynamic(h2o_qpack_encoder_t *qpack, const h2o_iovec_t *nam
     size_t i;
     int64_t name_found = -1;
 
-    for (i = acked_only ? qpack->largest_known_received : qpack->table.base_offset + qpack->table.last - qpack->table.first - 1;
+    for (i = acked_only ? qpack->largest_known_received : qpack_table_cur(&qpack->table) - 1;
          i >= qpack->table.base_offset; --i) {
         struct st_h2o_qpack_header_t *entry = qpack->table.first[i - qpack->table.base_offset];
         /* compare names (and continue unless they match) */
@@ -1120,7 +1125,7 @@ static void do_flatten_header(struct st_h2o_qpack_flatten_context_t *ctx, int32_
             added->value[value.len] = '\0';
             header_table_insert(&ctx->qpack->table, added);
             /* emit header field to headers block */
-            flatten_dynamic_indexed(ctx, ctx->qpack->table.base_offset + ctx->qpack->table.last - ctx->qpack->table.first - 1);
+            flatten_dynamic_indexed(ctx, qpack_table_cur(&ctx->qpack->table) - 1);
             return;
         }
     } else {
@@ -1174,7 +1179,7 @@ static void prepare_flatten(struct st_h2o_qpack_flatten_context_t *ctx, h2o_qpac
     ctx->stream_id = stream_id;
     ctx->encoder_buf = qpack != NULL && qpack->num_blocked < qpack->max_blocked ? encoder_buf : NULL;
     ctx->headers_buf = (h2o_byte_vector_t){NULL};
-    ctx->base_index = qpack != NULL ? qpack->table.base_offset + qpack->table.last - qpack->table.first - 1 : 0;
+    ctx->base_index = qpack != NULL ? qpack_table_cur(&qpack->table) - 1 : 0;
     ctx->largest_ref = 0;
 
     /* allocate some space, hoping to avoid realloc, but not wasting too much */
