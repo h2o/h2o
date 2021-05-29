@@ -174,10 +174,12 @@ static void test_hpack(void)
     {
         h2o_iovec_t huffcode = {H2O_STRLIT("\xf1\xe3\xc2\xe5\xf2\x3a\x6b\xa0\xab\x90\xf4\xff")};
         char buf[32];
+        unsigned soft_errors = 0;
         const char *err_desc = NULL;
-        size_t len = h2o_hpack_decode_huffman(buf, (const uint8_t *)huffcode.base, huffcode.len, 0, &err_desc);
+        size_t len = h2o_hpack_decode_huffman(buf, &soft_errors, (const uint8_t *)huffcode.base, huffcode.len, 0, &err_desc);
         ok(len == sizeof("www.example.com") - 1);
         ok(memcmp(buf, "www.example.com", len) == 0);
+        ok(soft_errors == 0);
         ok(err_desc == NULL);
     }
     h2o_mem_clear_pool(&pool);
@@ -186,12 +188,13 @@ static void test_hpack(void)
     {
         char *str = "\x8c\xf1\xe3\xc2\xe5\xf2\x3a\x6b\xa0\xab\x90\xf4\xff";
         const uint8_t *buf;
+        unsigned soft_errors = 0;
         const char *errstr = NULL;
         size_t len;
         len = strlen(str);
         buf = (const uint8_t *)str;
         /* since we're only passing one byte, decode_string should fail */
-        h2o_iovec_t *decoded = decode_string(&pool, &buf, &buf[1], 0, &errstr);
+        h2o_iovec_t *decoded = decode_string(&pool, &soft_errors, &buf, &buf[1], 0, &errstr);
         ok(decoded == NULL);
     }
     h2o_mem_clear_pool(&pool);

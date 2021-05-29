@@ -37,6 +37,7 @@ struct st_h2o_qpack_header_t {
     h2o_iovec_t *name;
     size_t value_len;
     h2o_iovec_t _name_buf;
+    unsigned soft_errors;
     char value[1];
 };
 
@@ -229,15 +230,16 @@ static int decode_int(int64_t *value, const uint8_t **src, const uint8_t *src_en
     return 0;
 }
 
-static size_t decode_value(int is_huff, const uint8_t *src, size_t srclen, char *outbuf, const char **err_desc)
+static size_t decode_value(char *outbuf, unsigned *soft_errors, int is_huff, const uint8_t *src, size_t srclen,
+                           const char **err_desc)
 {
     size_t outlen;
 
     if (is_huff) {
-        if ((outlen = h2o_hpack_decode_huffman(outbuf, src, srclen, 0, err_desc)) == SIZE_MAX)
+        if ((outlen = h2o_hpack_decode_huffman(outbuf, soft_errors, src, srclen, 0, err_desc)) == SIZE_MAX)
             return SIZE_MAX;
     } else {
-        h2o_hpack_validate_header_value((void *)src, srclen, err_desc);
+        h2o_hpack_validate_header_value(soft_errors, (void *)src, srclen);
         memcpy(outbuf, src, srclen);
         outlen = srclen;
     }
@@ -295,7 +297,7 @@ static void decoder_insert(h2o_qpack_decoder_t *qpack, struct st_h2o_qpack_heade
 static int decode_value_and_insert(h2o_qpack_decoder_t *qpack, struct st_h2o_qpack_header_t *header, int is_huff,
                                    const uint8_t *qstr, size_t qstrlen, const char **err_desc)
 {
-    if ((header->value_len = decode_value(is_huff, qstr, qstrlen, header->value, err_desc)) == SIZE_MAX)
+    if ((header->value_len = decode_value(header->value, &header->soft_errors, is_huff, qstr, qstrlen, err_desc)) == SIZE_MAX)
         goto Fail;
     if (header->name->len + header->value_len + HEADER_ENTRY_SIZE_OFFSET > qpack->table.max_size) {
         *err_desc = h2o_qpack_err_header_exceeds_table_size;
@@ -315,11 +317,12 @@ static int insert_token_header(h2o_qpack_decoder_t *qpack, const h2o_token_t *na
         h2o_mem_alloc_shared(NULL, offsetof(struct st_h2o_qpack_header_t, value) + (value_len * 2) + 1, NULL);
 
     header->name = (h2o_iovec_t *)&name->buf;
+    header->soft_errors = 0;
     return decode_value_and_insert(qpack, header, value_is_huff, value, value_len, err_desc);
 }
 
 static int insert_literal_header(h2o_qpack_decoder_t *qpack, const char *name, size_t name_len, int value_is_huff,
-                                 const uint8_t *value, size_t value_len, const char **err_desc)
+                                 const uint8_t *value, size_t value_len, unsigned soft_errors, const char **err_desc)
 {
     size_t value_capacity = (value_is_huff ? value_len * 2 : value_len) + 1;
     struct st_h2o_qpack_header_t *header =
@@ -330,6 +333,7 @@ static int insert_literal_header(h2o_qpack_decoder_t *qpack, const char *name, s
     header->_name_buf.base[name_len] = '\0';
     header->_name_buf.len = name_len;
     header->name = &header->_name_buf;
+    header->soft_errors = soft_errors;
 
     return decode_value_and_insert(qpack, header, value_is_huff, value, value_len, err_desc);
 }
@@ -359,7 +363,8 @@ static int insert_with_name_reference(h2o_qpack_decoder_t *qpack, int name_is_st
         if (h2o_iovec_is_token(ref->name)) {
             return insert_token_header(qpack, (h2o_token_t *)ref->name, value_is_huff, value, value_len, err_desc);
         } else {
-            return insert_literal_header(qpack, ref->name->base, ref->name->len, value_is_huff, value, value_len, err_desc);
+            return insert_literal_header(qpack, ref->name->base, ref->name->len, value_is_huff, value, value_len,
+                                         ref->soft_errors & H2O_HPACK_SOFT_ERROR_BIT_INVALID_NAME, err_desc);
         }
     }
 }
@@ -368,6 +373,7 @@ static int insert_without_name_reference(h2o_qpack_decoder_t *qpack, int qnhuff,
                                          const uint8_t *qv, int64_t qvlen, const char **err_desc)
 {
     h2o_iovec_t name;
+    unsigned soft_errors = 0;
 
     if (qnlen >= MAX_HEADER_NAME_LENGTH) {
         *err_desc = h2o_qpack_err_header_name_too_long;
@@ -380,10 +386,10 @@ static int insert_without_name_reference(h2o_qpack_decoder_t *qpack, int qnhuff,
 
     if (qnhuff) {
         name.base = alloca(qnlen * 2);
-        if ((name.len = h2o_hpack_decode_huffman(name.base, qn, qnlen, 1, err_desc)) == SIZE_MAX)
+        if ((name.len = h2o_hpack_decode_huffman(name.base, &soft_errors, qn, qnlen, 1, err_desc)) == SIZE_MAX)
             return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED;
     } else {
-        if (!h2o_hpack_validate_header_name((void *)qn, qnlen, err_desc))
+        if (!h2o_hpack_validate_header_name(&soft_errors, (void *)qn, qnlen, err_desc))
             return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED;
         name = h2o_iovec_init(qn, qnlen);
     }
@@ -392,7 +398,7 @@ static int insert_without_name_reference(h2o_qpack_decoder_t *qpack, int qnhuff,
     if ((token = h2o_lookup_token(name.base, name.len)) != NULL) {
         return insert_token_header(qpack, token, qvhuff, qv, qvlen, err_desc);
     } else {
-        return insert_literal_header(qpack, name.base, name.len, qvhuff, qv, qvlen, err_desc);
+        return insert_literal_header(qpack, name.base, name.len, qvhuff, qv, qvlen, soft_errors, err_desc);
     }
 }
 
@@ -567,8 +573,8 @@ static struct st_h2o_qpack_header_t *resolve_dynamic_postbase(struct st_h2o_qpac
     return resolve_dynamic_abs(table, base_index + off + 1, err_desc);
 }
 
-static h2o_iovec_t *decode_header_name_literal(h2o_mem_pool_t *pool, const uint8_t **src, const uint8_t *src_end,
-                                               unsigned prefix_bits, const char **err_desc)
+static h2o_iovec_t *decode_header_name_literal(h2o_mem_pool_t *pool, unsigned *soft_errors, const uint8_t **src,
+                                               const uint8_t *src_end, unsigned prefix_bits, const char **err_desc)
 {
     h2o_iovec_t buf = {NULL};
     const h2o_token_t *token;
@@ -587,14 +593,14 @@ static h2o_iovec_t *decode_header_name_literal(h2o_mem_pool_t *pool, const uint8
     /* decode and convert to token (if possible) */
     if (is_huff) {
         buf.base = h2o_mem_alloc_pool(pool, char, len * 2 + 1);
-        if ((buf.len = h2o_hpack_decode_huffman(buf.base, *src, len, 1, err_desc)) == SIZE_MAX)
+        if ((buf.len = h2o_hpack_decode_huffman(buf.base, soft_errors, *src, len, 1, err_desc)) == SIZE_MAX)
             goto Fail;
         buf.base[buf.len] = '\0';
         token = h2o_lookup_token(buf.base, buf.len);
     } else if ((token = h2o_lookup_token((const char *)*src, len)) != NULL) {
         /* was an uncompressed token */
     } else {
-        if (!h2o_hpack_validate_header_name((void *)*src, len, err_desc))
+        if (!h2o_hpack_validate_header_name(soft_errors, (void *)*src, len, err_desc))
             goto Fail;
         buf = h2o_strdup(pool, (void *)*src, len);
     }
@@ -611,8 +617,8 @@ Fail:
     return NULL;
 }
 
-static h2o_iovec_t decode_header_value_literal(h2o_mem_pool_t *pool, const uint8_t **src, const uint8_t *src_end,
-                                               const char **err_desc)
+static h2o_iovec_t decode_header_value_literal(h2o_mem_pool_t *pool, unsigned *soft_errors, const uint8_t **src,
+                                               const uint8_t *src_end, const char **err_desc)
 {
     h2o_iovec_t buf;
     int is_huff = (**src & 0x80) != 0;
@@ -626,7 +632,7 @@ static h2o_iovec_t decode_header_value_literal(h2o_mem_pool_t *pool, const uint8
         goto Fail;
 
     buf.base = h2o_mem_alloc_pool(pool, char, is_huff ? len * 2 + 1 : len + 1);
-    if ((buf.len = decode_value(is_huff, *src, len, buf.base, err_desc)) == SIZE_MAX)
+    if ((buf.len = decode_value(buf.base, soft_errors, is_huff, *src, len, err_desc)) == SIZE_MAX)
         goto Fail;
     *src += len;
 
@@ -653,6 +659,7 @@ static int decode_header(h2o_mem_pool_t *pool, void *_ctx, h2o_iovec_t **name, h
                          const uint8_t *src_end, const char **err_desc)
 {
     struct st_h2o_qpack_decode_header_ctx_t *ctx = _ctx;
+    unsigned soft_errors;
 
     switch (**src >> 4) {
     case 12:
@@ -664,6 +671,7 @@ static int decode_header(h2o_mem_pool_t *pool, void *_ctx, h2o_iovec_t **name, h
             goto Fail;
         *name = (h2o_iovec_t *)&entry->name->buf;
         *value = entry->value;
+        soft_errors = 0;
     } break;
     case 8:
     case 9:
@@ -675,6 +683,7 @@ static int decode_header(h2o_mem_pool_t *pool, void *_ctx, h2o_iovec_t **name, h
         h2o_mem_link_shared(pool, entry);
         *name = entry->name;
         *value = h2o_iovec_init(entry->value, entry->value_len);
+        soft_errors = entry->soft_errors;
     } break;
     case 5:
     case 7: /* literal header field with static name reference */ {
@@ -682,7 +691,8 @@ static int decode_header(h2o_mem_pool_t *pool, void *_ctx, h2o_iovec_t **name, h
         if ((entry = resolve_static(src, src_end, 4, err_desc)) == NULL)
             goto Fail;
         *name = (h2o_iovec_t *)&entry->name->buf;
-        if ((*value = decode_header_value_literal(pool, src, src_end, err_desc)).base == NULL)
+        soft_errors = 0;
+        if ((*value = decode_header_value_literal(pool, &soft_errors, src, src_end, err_desc)).base == NULL)
             goto Fail;
     } break;
     case 4:
@@ -692,14 +702,16 @@ static int decode_header(h2o_mem_pool_t *pool, void *_ctx, h2o_iovec_t **name, h
             goto Fail;
         h2o_mem_link_shared(pool, entry);
         *name = entry->name;
-        if ((*value = decode_header_value_literal(pool, src, src_end, err_desc)).base == NULL)
+        soft_errors = (entry->soft_errors) & H2O_HPACK_SOFT_ERROR_BIT_INVALID_NAME;
+        if ((*value = decode_header_value_literal(pool, &soft_errors, src, src_end, err_desc)).base == NULL)
             goto Fail;
     } break;
     case 2:
     case 3: /* literal header field without name reference */ {
-        if ((*name = decode_header_name_literal(pool, src, src_end, 3, err_desc)) == NULL)
+        soft_errors = 0;
+        if ((*name = decode_header_name_literal(pool, &soft_errors, src, src_end, 3, err_desc)) == NULL)
             goto Fail;
-        if ((*value = decode_header_value_literal(pool, src, src_end, err_desc)).base == NULL)
+        if ((*value = decode_header_value_literal(pool, &soft_errors, src, src_end, err_desc)).base == NULL)
             goto Fail;
     } break;
     case 1: /* indexed header field with post-base index */ {
@@ -709,6 +721,7 @@ static int decode_header(h2o_mem_pool_t *pool, void *_ctx, h2o_iovec_t **name, h
         h2o_mem_link_shared(pool, entry);
         *name = entry->name;
         *value = h2o_iovec_init(entry->value, entry->value_len);
+        soft_errors = entry->soft_errors;
     } break;
     case 0: /* literal header field with post-base name reference */ {
         struct st_h2o_qpack_header_t *entry;
@@ -716,11 +729,22 @@ static int decode_header(h2o_mem_pool_t *pool, void *_ctx, h2o_iovec_t **name, h
             goto Fail;
         h2o_mem_link_shared(pool, entry);
         *name = entry->name;
-        if ((*value = decode_header_value_literal(pool, src, src_end, err_desc)).base == NULL)
+        soft_errors = (entry->soft_errors) & H2O_HPACK_SOFT_ERROR_BIT_INVALID_NAME;
+        if ((*value = decode_header_value_literal(pool, &soft_errors, src, src_end, err_desc)).base == NULL)
             goto Fail;
     } break;
+    default:
+        h2o_fatal("unreachable");
+        soft_errors = 0;
+        break;
     }
 
+    if (soft_errors != 0) {
+        *err_desc = (soft_errors & H2O_HPACK_SOFT_ERROR_BIT_INVALID_NAME) != 0
+                        ? h2o_hpack_soft_err_found_invalid_char_in_header_name
+                        : h2o_hpack_soft_err_found_invalid_char_in_header_value;
+        return H2O_HTTP2_ERROR_INVALID_HEADER_CHAR;
+    }
     return 0;
 Fail:
     return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED;
