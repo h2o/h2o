@@ -336,7 +336,7 @@ static int insert_literal_header(h2o_qpack_decoder_t *qpack, const char *name, s
 
 static int64_t qpack_table_cur(struct st_h2o_qpack_header_table_t *table)
 {
-    return table->base_offset + ((uintptr_t)table->last - (uintptr_t)table->first);
+    return table->base_offset + (table->last - table->first);
 }
 
 static int insert_with_name_reference(h2o_qpack_decoder_t *qpack, int name_is_static, int64_t name_index, int value_is_huff,
