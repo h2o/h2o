@@ -637,13 +637,13 @@ Fail:
 
 struct st_h2o_qpack_decode_header_ctx_t {
     h2o_qpack_decoder_t *qpack;
-    int64_t largest_ref, base_index;
+    int64_t req_insert_count, base_index;
 };
 
 static size_t send_header_ack(h2o_qpack_decoder_t *qpack, struct st_h2o_qpack_decode_header_ctx_t *ctx, uint8_t *outbuf,
                               int64_t stream_id)
 {
-    if (ctx->largest_ref == 0)
+    if (ctx->req_insert_count == 0)
         return 0;
     outbuf[0] = 0x80;
     return h2o_hpack_encode_int(outbuf, stream_id, 7) - outbuf;
@@ -732,21 +732,21 @@ static int parse_decode_context(h2o_qpack_decoder_t *qpack, struct st_h2o_qpack_
     ctx->qpack = qpack;
 
     /* largest reference */
-    if (decode_int(&ctx->largest_ref, src, src_end, 8) != 0)
+    if (decode_int(&ctx->req_insert_count, src, src_end, 8) != 0)
         return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED;
-    if (ctx->largest_ref > 0) {
+    if (ctx->req_insert_count > 0) {
         if (qpack->max_entries == 0)
             return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED;
         const uint32_t full_range = 2 * qpack->max_entries;
         uint64_t max_value = qpack->total_inserts + qpack->max_entries;
         uint64_t rounded = max_value / full_range * full_range;
-        ctx->largest_ref += rounded - 1;
-        if (ctx->largest_ref > max_value) {
-            if (ctx->largest_ref <= full_range)
+        ctx->req_insert_count += rounded - 1;
+        if (ctx->req_insert_count > max_value) {
+            if (ctx->req_insert_count <= full_range)
                 return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED;
-            ctx->largest_ref -= full_range;
+            ctx->req_insert_count -= full_range;
         }
-        if (ctx->largest_ref == 0)
+        if (ctx->req_insert_count == 0)
             return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED;
     }
 
@@ -756,13 +756,13 @@ static int parse_decode_context(h2o_qpack_decoder_t *qpack, struct st_h2o_qpack_
     int sign = (**src & 0x80) != 0;
     if (decode_int(&ctx->base_index, src, src_end, 7) != 0)
         return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED;
-    ctx->base_index = sign == 0 ? ctx->largest_ref + ctx->base_index : ctx->largest_ref - ctx->base_index - 1;
+    ctx->base_index = sign == 0 ? ctx->req_insert_count + ctx->base_index : ctx->req_insert_count - ctx->base_index - 1;
 
     /* is the stream blocked? */
-    if (ctx->largest_ref >= qpack->table.base_offset + qpack->table.last - qpack->table.first) {
+    if (ctx->req_insert_count >= qpack->table.base_offset + qpack->table.last - qpack->table.first) {
         if (qpack->blocked_streams.list.size + 1 >= qpack->max_blocked)
             return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED;
-        decoder_link_blocked(qpack, stream_id, ctx->largest_ref);
+        decoder_link_blocked(qpack, stream_id, ctx->req_insert_count);
         return H2O_HTTP3_ERROR_INCOMPLETE;
     }
 
