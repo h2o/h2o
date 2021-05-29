@@ -46,7 +46,7 @@ struct st_h2o_qpack_header_table_t {
      */
     struct st_h2o_qpack_header_t **buf_start, **first, **last, **buf_end;
     /**
-     * index of `first`
+     * absolute index of `first`
      */
     int64_t base_offset;
     /**
