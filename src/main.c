@@ -392,7 +392,8 @@ static int on_client_hello_ptls(ptls_on_client_hello_t *_self, ptls_t *tls, ptls
     }
 
     /* switch to raw public key context if requested and available */
-    if (memchr(params->server_certificate_types.list, PTLS_CERTIFICATE_TYPE_RAW_PUBLIC_KEY,
+    if (params->server_certificate_types.count > 0
+        && memchr(params->server_certificate_types.list, PTLS_CERTIFICATE_TYPE_RAW_PUBLIC_KEY,
                params->server_certificate_types.count) != NULL) {
         if (ssl_config->alternate_ptls_ctx != NULL) {
             assert(ssl_config->alternate_ptls_ctx->use_raw_public_keys);
