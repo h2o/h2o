@@ -1,3 +1,3 @@
-V	241207193305Z		01	unknown	/CN=127.0.0.1.xip.io
-V	241207201102Z		02	unknown	/CN=alternate.127.0.0.1.xip.io
+V	241207193305Z		01	unknown	/CN=127.0.0.1.vcap.me
+V	241207201102Z		02	unknown	/CN=alternate.127.0.0.1.vcap.me
 V	310417051942Z		03	unknown	/CN=H2O Intermediate CA

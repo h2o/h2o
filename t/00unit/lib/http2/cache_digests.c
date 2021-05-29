@@ -44,9 +44,9 @@ static void test_decode(void)
     ok(digests->fresh.url_only.entries[0].keys.entries[0] == 0x0b);
     ok(!digests->fresh.complete);
 
-    ok(h2o_cache_digests_lookup_by_url(digests, H2O_STRLIT("https://127.0.0.1.xip.io:8081/cache-digests.cgi/hello.js")) ==
+    ok(h2o_cache_digests_lookup_by_url(digests, H2O_STRLIT("https://127.0.0.1.vcap.me:8081/cache-digests.cgi/hello.js")) ==
        H2O_CACHE_DIGESTS_STATE_FRESH);
-    ok(h2o_cache_digests_lookup_by_url(digests, H2O_STRLIT("https://127.0.0.1.xip.io:8081/notfound.js")) ==
+    ok(h2o_cache_digests_lookup_by_url(digests, H2O_STRLIT("https://127.0.0.1.vcap.me:8081/notfound.js")) ==
        H2O_CACHE_DIGESTS_STATE_UNKNOWN);
 
     h2o_cache_digests_load_header(&digests, H2O_STRLIT("FOO; stale, AcA; validators; complete"));
@@ -56,9 +56,9 @@ static void test_decode(void)
     ok(digests->fresh.url_and_etag.entries[0].keys.size == 0);
     ok(digests->fresh.complete);
 
-    ok(h2o_cache_digests_lookup_by_url(digests, H2O_STRLIT("https://127.0.0.1.xip.io:8081/notfound.js")) ==
+    ok(h2o_cache_digests_lookup_by_url(digests, H2O_STRLIT("https://127.0.0.1.vcap.me:8081/notfound.js")) ==
        H2O_CACHE_DIGESTS_STATE_NOT_CACHED);
-    ok(h2o_cache_digests_lookup_by_url(digests, H2O_STRLIT("https://127.0.0.1.xip.io:8081/cache-digests.cgi/hello.js")) ==
+    ok(h2o_cache_digests_lookup_by_url(digests, H2O_STRLIT("https://127.0.0.1.vcap.me:8081/cache-digests.cgi/hello.js")) ==
        H2O_CACHE_DIGESTS_STATE_FRESH);
 
     h2o_cache_digests_load_header(&digests, H2O_STRLIT("AcA; reset"));

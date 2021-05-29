@@ -9,7 +9,7 @@ DOCKER_RUN_OPTS=--privileged \
 	-v /sys/kernel/debug:/sys/kernel/debug \
 	-v /lib/modules:/lib/modules:ro \
 	-v /usr/src:/usr/src:ro \
-	--add-host=127.0.0.1.xip.io:127.0.0.1 \
+	--add-host=127.0.0.1.vcap.me:127.0.0.1 \
 	-it
 
 ALL:

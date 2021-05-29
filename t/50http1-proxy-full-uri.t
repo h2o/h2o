@@ -28,7 +28,7 @@ hosts:
   default:
     paths:
       /:
-        proxy.reverse.url: http://127.0.0.1.xip.io:$upstream_port
+        proxy.reverse.url: http://127.0.0.1.vcap.me:$upstream_port
         proxy.preserve-host: $preserve
 EOT
     my $port = $server->{port};
@@ -46,7 +46,7 @@ EOT
 }
 
 doit("ON", "");
-doit("OFF", ".xip.io");
+doit("OFF", ".vcap.me");
 
 
 done_testing();

@@ -7,7 +7,7 @@ Certificate:
         Validity
             Not Before: Jun  9 21:40:42 2018 GMT
             Not After : Jun  6 21:40:42 2028 GMT
-        Subject: CN=*.127.0.0.1.xip.io
+        Subject: CN=*.127.0.0.1.vcap.me
         Subject Public Key Info:
             Public Key Algorithm: rsaEncryption
                 Public-Key: (2048 bit)

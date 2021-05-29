@@ -24,7 +24,7 @@ listen:
     key-file: examples/h2o/wildcard.key
     certificate-file: examples/h2o/wildcard.crt
 hosts:
-  "*.127.0.0.1.xip.io:$tls_port":
+  "*.127.0.0.1.vcap.me:$tls_port":
     paths:
       /:
         file.dir: examples/doc_root

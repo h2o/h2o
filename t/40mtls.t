@@ -51,7 +51,7 @@ sub run_tests {
 
 sub run_tls_client {
     my $opts = shift;
-    my $resp = `curl $opts --cacert misc/test-ca/root/ca.crt --silent --show-error https://127.0.0.1.xip.io:$tls_port`;
+    my $resp = `curl $opts --cacert misc/test-ca/root/ca.crt --silent --show-error https://127.0.0.1.vcap.me:$tls_port`;
     return $resp;
 }
 
