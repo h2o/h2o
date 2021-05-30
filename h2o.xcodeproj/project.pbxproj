@@ -681,6 +681,7 @@
 		08819C2D218C9FF70057ED23 /* qif.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = qif.c; sourceTree = "<group>"; };
 		08C7C365262AB30F009C944C /* 40mtls.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = 40mtls.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		08CEA9CF2662136B00B4BB6B /* 80http3-header-linefeed.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "80http3-header-linefeed.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		08CEA9D026643C4700B4BB6B /* 50timeout-on-max-concurrent-requests.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50timeout-on-max-concurrent-requests.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		08E9CC4D1E41F6660049DD26 /* embedded.c.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = embedded.c.h; sourceTree = "<group>"; };
 		100A550C1C22857B00C4E3E0 /* 50mruby-htpasswd.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50mruby-htpasswd.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		100A550E1C2BB15100C4E3E0 /* http_request.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = http_request.c; sourceTree = "<group>"; };
@@ -2226,6 +2227,7 @@
 				E9AFBF1E212A9814000F5DB8 /* 50stop-opening-new-push-streams.t */,
 				E9AFBF19212A9813000F5DB8 /* 50suspend-body.t */,
 				10C45D4D1CFD15890096DB06 /* 50throttle-response.t */,
+				08CEA9D026643C4700B4BB6B /* 50timeout-on-max-concurrent-requests.t */,
 				E9AFBF2A212A985E000F5DB8 /* 50too-much-data.t */,
 				E9AFBF2B212A985E000F5DB8 /* 50too-much-headers.t */,
 				E9AFBF29212A985E000F5DB8 /* 50uncompressed-headers.t */,
