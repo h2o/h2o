@@ -2024,15 +2024,15 @@ void h2o_file_register_configurator(h2o_globalconf_t *conf);
 
 enum {
     H2O_HEADERS_CMD_NULL,
-    H2O_HEADERS_CMD_ADD,        /* adds a new header line */
-    H2O_HEADERS_CMD_APPEND,     /* adds a new header line or contenates to the existing header */
-    H2O_HEADERS_CMD_MERGE,      /* merges the value into a comma-listed values of the named header */
-    H2O_HEADERS_CMD_SET,        /* sets a header line, overwriting the existing one (if any) */
-    H2O_HEADERS_CMD_SETIFEMPTY, /* sets a header line if empty */
-    H2O_HEADERS_CMD_UNSET,       /* removes the named header(s) */
-    H2O_HEADERS_CMD_UNSETUNLESS,       /* only keeps the named header(s) */
+    H2O_HEADERS_CMD_ADD,                /* adds a new header line */
+    H2O_HEADERS_CMD_APPEND,             /* adds a new header line or contenates to the existing header */
+    H2O_HEADERS_CMD_MERGE,              /* merges the value into a comma-listed values of the named header */
+    H2O_HEADERS_CMD_SET,                /* sets a header line, overwriting the existing one (if any) */
+    H2O_HEADERS_CMD_SETIFEMPTY,         /* sets a header line if empty */
+    H2O_HEADERS_CMD_UNSET,              /* removes the named header(s) */
+    H2O_HEADERS_CMD_UNSETUNLESS,        /* only keeps the named header(s) */
     H2O_HEADERS_CMD_COOKIE_UNSET,       /* removes the named cookie(s) */
-    H2O_HEADERS_CMD_COOKIE_UNSETUNLESS,       /* only keeps the named cookie(s) */
+    H2O_HEADERS_CMD_COOKIE_UNSETUNLESS, /* only keeps the named cookie(s) */
 };
 
 typedef enum h2o_headers_command_when {

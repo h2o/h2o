@@ -359,7 +359,7 @@ void h2o_timer_unlink(h2o_timer_t *timer)
     timer->is_linked = 0;
     if (timer->uv_timer != NULL) {
         uv_timer_stop(timer->uv_timer);
-        uv_close((uv_handle_t*)timer->uv_timer, (uv_close_cb)free);
+        uv_close((uv_handle_t *)timer->uv_timer, (uv_close_cb)free);
         timer->uv_timer = NULL;
     }
 }

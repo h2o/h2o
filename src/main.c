@@ -37,6 +37,7 @@
 #include <poll.h>
 #include <pthread.h>
 #include <pwd.h>
+#include <grp.h>
 #include <signal.h>
 #include <stdio.h>
 #include <unistd.h>
@@ -391,7 +392,8 @@ static int on_client_hello_ptls(ptls_on_client_hello_t *_self, ptls_t *tls, ptls
     }
 
     /* switch to raw public key context if requested and available */
-    if (memchr(params->server_certificate_types.list, PTLS_CERTIFICATE_TYPE_RAW_PUBLIC_KEY,
+    if (params->server_certificate_types.count > 0 &&
+        memchr(params->server_certificate_types.list, PTLS_CERTIFICATE_TYPE_RAW_PUBLIC_KEY,
                params->server_certificate_types.count) != NULL) {
         if (ssl_config->alternate_ptls_ctx != NULL) {
             assert(ssl_config->alternate_ptls_ctx->use_raw_public_keys);
@@ -706,7 +708,7 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
         assert(key != NULL);
         cert = SSL_get_certificate(fakeconn);
         /* obtain peer verify mode */
-        use_client_verify = (SSL_get_verify_mode(fakeconn) & SSL_VERIFY_PEER)? 1 : 0;
+        use_client_verify = (SSL_get_verify_mode(fakeconn) & SSL_VERIFY_PEER) ? 1 : 0;
         SSL_free(fakeconn);
     }
 
@@ -996,8 +998,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
     if (client_ca_file != NULL) {
         SSL_CTX_set_verify(ssl_ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, NULL);
         if (SSL_CTX_load_verify_locations(ssl_ctx, (*client_ca_file)->data.scalar, NULL) != 1) {
-            h2o_configurator_errprintf(cmd, *client_ca_file, "failed to load client CA file:%s\n",
-                                    (*client_ca_file)->data.scalar);
+            h2o_configurator_errprintf(cmd, *client_ca_file, "failed to load client CA file:%s\n", (*client_ca_file)->data.scalar);
             ERR_print_errors_cb(on_openssl_print_errors, stderr);
             goto Error;
         }
@@ -1306,20 +1307,38 @@ Found:
 }
 
 static int open_unix_listener(h2o_configurator_command_t *cmd, yoml_t *node, struct sockaddr_un *sa, yoml_t **owner_node,
-                              yoml_t **permission_node)
+                              yoml_t **group_node, yoml_t **permission_node)
 {
     struct stat st;
     int fd = -1;
     struct passwd *owner = NULL, pwbuf;
     char pwbuf_buf[65536];
+    gid_t owner_gid = -1;
     unsigned mode = UINT_MAX;
 
     /* obtain owner and permission */
+    if (owner_node == NULL && group_node != NULL) {
+        h2o_configurator_errprintf(cmd, *group_node, "`group` cannot be used without `owner`");
+        goto ErrorExit;
+    }
     if (owner_node != NULL) {
-        if (getpwnam_r((*owner_node)->data.scalar, &pwbuf, pwbuf_buf, sizeof(pwbuf_buf), &owner) != 0 || owner == NULL) {
+        int r = getpwnam_r((*owner_node)->data.scalar, &pwbuf, pwbuf_buf, sizeof(pwbuf_buf), &owner);
+        if (r != 0 || owner == NULL) {
             h2o_configurator_errprintf(cmd, *owner_node, "failed to obtain uid of user:%s: %s", (*owner_node)->data.scalar,
-                                       strerror(errno));
+                                       (r == 0 ? "Not found" : strerror(r)));
             goto ErrorExit;
+        }
+        owner_gid = owner->pw_gid;
+        if (group_node != NULL) {
+            struct group *group = NULL, grbuf;
+            char grbuf_buf[65536];
+            r = getgrnam_r((*group_node)->data.scalar, &grbuf, grbuf_buf, sizeof(grbuf_buf), &group);
+            if (r != 0 || group == NULL) {
+                h2o_configurator_errprintf(cmd, *group_node, "failed to obtain gid of group:%s: %s", (*group_node)->data.scalar,
+                                           (r == 0 ? "Not found" : strerror(r)));
+                goto ErrorExit;
+            }
+            owner_gid = group->gr_gid;
         }
     }
     if (permission_node != NULL && h2o_configurator_scanf(cmd, *permission_node, "%o", &mode) != 0) {
@@ -1345,9 +1364,9 @@ static int open_unix_listener(h2o_configurator_command_t *cmd, yoml_t *node, str
     set_cloexec(fd);
 
     /* set file owner and permission */
-    if (owner != NULL && chown(sa->sun_path, owner->pw_uid, owner->pw_gid) != 0) {
-        h2o_configurator_errprintf(NULL, node, "failed to chown socket:%s to %s: %s", sa->sun_path, owner->pw_name,
-                                   strerror(errno));
+    if (owner != NULL && chown(sa->sun_path, owner->pw_uid, owner_gid) != 0) {
+        h2o_configurator_errprintf(NULL, node, "failed to chown socket:%s to %s (gid %u): %s", sa->sun_path, owner->pw_name,
+                                   (unsigned)owner_gid, strerror(errno));
         goto ErrorExit;
     }
     if (mode != UINT_MAX && chmod(sa->sun_path, mode) != 0) {
@@ -1561,7 +1580,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
 {
     const char *hostname = NULL, *servname, *type = "tcp";
     yoml_t **ssl_node = NULL, **owner_node = NULL, **permission_node = NULL, **quic_node = NULL, **cc_node = NULL,
-           **initcwnd_node = NULL;
+           **initcwnd_node = NULL, **group_node = NULL;
     int proxy_protocol = 0;
 
     /* fetch servname (and hostname) */
@@ -1571,10 +1590,10 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
         break;
     case YOML_TYPE_MAPPING: {
         yoml_t **port_node, **host_node, **type_node, **proxy_protocol_node;
-        if (h2o_configurator_parse_mapping(cmd, node, "port:s",
-                                           "host:s,type:s,owner:s,permission:*,ssl:m,proxy-protocol:*,quic:m,cc:s,initcwnd:s",
-                                           &port_node, &host_node, &type_node, &owner_node, &permission_node, &ssl_node,
-                                           &proxy_protocol_node, &quic_node, &cc_node, &initcwnd_node) != 0)
+        if (h2o_configurator_parse_mapping(
+                cmd, node, "port:s", "host:s,type:s,owner:s,group:s,permission:*,ssl:m,proxy-protocol:*,quic:m,cc:s,initcwnd:s",
+                &port_node, &host_node, &type_node, &owner_node, &group_node, &permission_node, &ssl_node, &proxy_protocol_node,
+                &quic_node, &cc_node, &initcwnd_node) != 0)
             return -1;
         servname = (*port_node)->data.scalar;
         if (host_node != NULL)
@@ -1625,7 +1644,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                         return -1;
                     }
                 } else {
-                    if ((fd = open_unix_listener(cmd, node, &sa, owner_node, permission_node)) == -1)
+                    if ((fd = open_unix_listener(cmd, node, &sa, owner_node, group_node, permission_node)) == -1)
                         return -1;
                 }
                 break;
@@ -1738,10 +1757,14 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                 listener = add_listener(fd, ai->ai_addr, ai->ai_addrlen, ctx->hostconf == NULL, 0);
                 listener->quic.ctx = quic;
                 if (quic_node != NULL) {
-                    yoml_t **retry_node, **sndbuf, **rcvbuf, **amp_limit, **qpack_encoder_table_capacity, **max_streams_bidi;
-                    if (h2o_configurator_parse_mapping(
-                            cmd, *quic_node, NULL, "retry:s,sndbuf:s,rcvbuf:s,amp-limit:s,qpack-encoder-table-capacity:s,max-streams-bidi:s",
-                            &retry_node, &sndbuf, &rcvbuf, &amp_limit, &qpack_encoder_table_capacity, &max_streams_bidi) != 0)
+                    yoml_t **retry_node, **sndbuf, **rcvbuf, **amp_limit, **qpack_encoder_table_capacity, **max_streams_bidi,
+                        **max_udp_payload_size;
+                    if (h2o_configurator_parse_mapping(cmd, *quic_node, NULL,
+                                                       "retry:s,sndbuf:s,rcvbuf:s,amp-limit:s,qpack-encoder-"
+                                                       "table-capacity:s,max-streams-bidi:s,max-udp-paylod-"
+                                                       "size:s",
+                                                       &retry_node, &sndbuf, &rcvbuf, &amp_limit, &qpack_encoder_table_capacity,
+                                                       &max_streams_bidi, &max_udp_payload_size) != 0)
                         return -1;
                     if (retry_node != NULL) {
                         ssize_t on = h2o_configurator_get_one_of(cmd, *retry_node, "OFF,ON");
@@ -1776,6 +1799,11 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                     if (max_streams_bidi != NULL) {
                         if (h2o_configurator_scanf(cmd, *max_streams_bidi, "%" SCNu64,
                                                    &listener->quic.ctx->transport_params.max_streams_bidi) != 0)
+                            return -1;
+                    }
+                    if (max_udp_payload_size != NULL) {
+                        if (h2o_configurator_scanf(cmd, *max_udp_payload_size, "%" SCNu64,
+                                                   &listener->quic.ctx->transport_params.max_udp_payload_size) != 0)
                             return -1;
                     }
                 }
@@ -2702,7 +2730,8 @@ static h2o_quic_conn_t *on_http3_accept(h2o_quic_ctx_t *_ctx, quicly_address_t *
     }
 
     /* accept the connection */
-    conn = h2o_http3_server_accept(ctx, destaddr, srcaddr, packet, token, (H2O_EBPF_FLAGS_SKIP_TRACING_BIT & flags) != 0, &conf.quic.conn_callbacks);
+    conn = h2o_http3_server_accept(ctx, destaddr, srcaddr, packet, token, (H2O_EBPF_FLAGS_SKIP_TRACING_BIT & flags) != 0,
+                                   &conf.quic.conn_callbacks);
     if (conn == NULL || &conn->super == H2O_QUIC_ACCEPT_CONN_DECRYPTION_FAILED)
         goto Exit;
     num_sessions(1);
@@ -3440,17 +3469,28 @@ int main(int argc, char **argv)
         conf.error_log = NULL;
     }
 
-    { /* raise RLIMIT_NOFILE */
-        struct rlimit limit;
+    {
+        struct rlimit limit = {0};
         if (getrlimit(RLIMIT_NOFILE, &limit) == 0) {
+            /* raise RLIMIT_NOFILE, making sure that we can reach max_connections */
+            if (conf.max_connections > limit.rlim_max) {
+                fprintf(stderr, "[error] 'max-connections'=[%d] configuration value should not exceed the hard limit of file "
+                                "descriptors 'RLIMIT_NOFILE'=[%llu]\n",
+                        conf.max_connections, (unsigned long long)limit.rlim_max);
+                return EX_CONFIG;
+            }
             limit.rlim_cur = limit.rlim_max;
             if (setrlimit(RLIMIT_NOFILE, &limit) == 0
 #ifdef __APPLE__
                 || (limit.rlim_cur = OPEN_MAX, setrlimit(RLIMIT_NOFILE, &limit)) == 0
 #endif
-            ) {
-                fprintf(stderr, "[INFO] raised RLIMIT_NOFILE to %d\n", (int)limit.rlim_cur);
+                ) {
+                fprintf(stderr, "[INFO] raised RLIMIT_NOFILE to %llu\n", (unsigned long long)limit.rlim_cur);
+            } else {
+                fprintf(stderr, "[warning] setrlimit(RLIMIT_NOFILE) failed:%s\n", strerror(errno));
             }
+        } else {
+            fprintf(stderr, "[warning] getrlimit(RLIMIT_NOFILE) failed:%s\n", strerror(errno));
         }
     }
 

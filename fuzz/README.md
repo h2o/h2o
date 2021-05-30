@@ -30,9 +30,9 @@ $ cp ./fuzz/http2-corpus.fresh/* ./fuzz/http2-corpus
 
 You will likely want to tailor fuzzer options to your execution environment, but here are basic examples of running each fuzzer:
 
-HTTP/1: `ASAN_OPTIONS=detect_leaks=0 ./h2o-fuzzer-http1 -max_len=$((16 * 1024 )) -dict=fuzz/http.dict=fuzz/http1-corpus`
+HTTP/1: `ASAN_OPTIONS=detect_leaks=0 ./h2o-fuzzer-http1 -max_len=$((16 * 1024 )) -dict=fuzz/http.dict fuzz/http1-corpus`
 
-HTTP/2: `ASAN_OPTIONS=detect_leaks=0 ./h2o-fuzzer-http2 -max_len=$((16 * 1024 )) -dict=fuzz/http.dict=fuzz/http2-corpus`
+HTTP/2: `ASAN_OPTIONS=detect_leaks=0 ./h2o-fuzzer-http2 -max_len=$((16 * 1024 )) -dict=fuzz/http.dict fuzz/http2-corpus`
 
 The fuzzer looks at `H2O_FUZZER_CLIENT_TIMEOUT` in order to configure the
 client thread event loop timeout in milli-seconds. It defaults to 10 ms.
