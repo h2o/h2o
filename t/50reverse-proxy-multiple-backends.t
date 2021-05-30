@@ -85,8 +85,8 @@ hosts:
       /:
         proxy.reverse.url:
           backends:
-            - http://127.0.0.1.xip.io:$upstream_port1/echo-server-port
-            - http://127.0.0.1.xip.io:$upstream_port2/echo-server-port
+            - http://localhost.examp1e.net:$upstream_port1/echo-server-port
+            - http://localhost.examp1e.net:$upstream_port2/echo-server-port
 EOT
 };
 
@@ -145,7 +145,7 @@ hosts:
       /:
         proxy.reverse.url:
           backends:
-            - http://127.0.0.1.xip.io:$upstream_port/echo-server-port
+            - http://localhost.examp1e.net:$upstream_port/echo-server-port
             - http://[unix:$upstream_file]/echo-server-port
 EOT
 };

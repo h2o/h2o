@@ -38,9 +38,9 @@ hosts:
     paths:
       /:
         proxy.reverse.url:
-          - http://127.0.0.1.XIP.IO:$upstream_port1/echo-server-port
+          - http://localhost.examp1e.net:$upstream_port1/echo-server-port
           -
-            url: http://127.0.0.1.XIP.IO:$upstream_port2/echo-server-port
+            url: http://localhost.examp1e.net:$upstream_port2/echo-server-port
             weight: 2
 EOT
 
