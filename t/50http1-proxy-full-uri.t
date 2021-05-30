@@ -22,7 +22,7 @@ my $guard = spawn_server(
 
 sub doit {
     my $preserve = shift;
-    my $hostname = shift;
+    my $expected = shift;
     my $server = spawn_h2o(<< "EOT");
 hosts:
   default:
@@ -42,11 +42,11 @@ EOT
         . " --header 'Host: 127.0.0.1:@{[$server->{port}]}' "
         . " http://127.0.0.1:@{[$server->{port}]}/echo-headers");
 
-    like $body, qr/^host: 127.0.0.1$hostname:$port/mi, 'host header is the expected one';
+    like $body, qr/^host: $expected:$port/mi, 'host header is the expected one';
 }
 
-doit("ON", "");
-doit("OFF", ".xip.io");
+doit("ON", "127.0.0.1");
+doit("OFF", "localhost.examp1e.net");
 
 
 done_testing();
