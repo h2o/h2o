@@ -54,6 +54,6 @@ EOR
 
 test_origin_frame('', '');
 test_origin_frame('http2-origin-frame: [ ]', "0\n\"\"");
-test_origin_frame('http2-origin-frame: [ "https://a.localhost.examp1e.net" ]', "28\n\"\\000\\032https://a.localhost.examp1e.net\"");
-test_origin_frame('http2-origin-frame: [ "https://a.localhost.examp1e.net", "https://b.localhost.examp1e.net" ]', "56\n\"\\000\\032https://a.localhost.examp1e.net\\000\\032https://b.localhost.examp1e.net\"");
+test_origin_frame('http2-origin-frame: [ "https://a.localhost.examp1e.net" ]', "33\n\"\\000\\037https://a.localhost.examp1e.net\"");
+test_origin_frame('http2-origin-frame: [ "https://a.localhost.examp1e.net", "https://b.localhost.examp1e.net" ]', "66\n\"\\000\\037https://a.localhost.examp1e.net\\000\\037https://b.localhost.examp1e.net\"");
 done_testing();
