@@ -95,7 +95,7 @@ typedef struct st_h2o_hpack_header_table_t {
 typedef struct st_h2o_hpack_header_table_entry_t {
     h2o_iovec_t *name;
     h2o_iovec_t *value;
-    const char *err_desc; /* the recorded soft error description */
+    unsigned soft_errors;
 } h2o_hpack_header_table_entry_t;
 
 void h2o_hpack_dispose_header_table(h2o_hpack_header_table_t *header_table);
