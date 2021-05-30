@@ -3469,17 +3469,28 @@ int main(int argc, char **argv)
         conf.error_log = NULL;
     }
 
-    { /* raise RLIMIT_NOFILE */
-        struct rlimit limit;
+    {
+        struct rlimit limit = {0};
         if (getrlimit(RLIMIT_NOFILE, &limit) == 0) {
+            /* raise RLIMIT_NOFILE, making sure that we can reach max_connections */
+            if (conf.max_connections > limit.rlim_max) {
+                fprintf(stderr, "[error] 'max-connections'=[%d] configuration value should not exceed the hard limit of file "
+                                "descriptors 'RLIMIT_NOFILE'=[%llu]\n",
+                        conf.max_connections, (unsigned long long)limit.rlim_max);
+                return EX_CONFIG;
+            }
             limit.rlim_cur = limit.rlim_max;
             if (setrlimit(RLIMIT_NOFILE, &limit) == 0
 #ifdef __APPLE__
                 || (limit.rlim_cur = OPEN_MAX, setrlimit(RLIMIT_NOFILE, &limit)) == 0
 #endif
-            ) {
-                fprintf(stderr, "[INFO] raised RLIMIT_NOFILE to %d\n", (int)limit.rlim_cur);
+                ) {
+                fprintf(stderr, "[INFO] raised RLIMIT_NOFILE to %llu\n", (unsigned long long)limit.rlim_cur);
+            } else {
+                fprintf(stderr, "[warning] setrlimit(RLIMIT_NOFILE) failed:%s\n", strerror(errno));
             }
+        } else {
+            fprintf(stderr, "[warning] getrlimit(RLIMIT_NOFILE) failed:%s\n", strerror(errno));
         }
     }
 

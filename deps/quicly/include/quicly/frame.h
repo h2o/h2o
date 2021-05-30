@@ -597,7 +597,7 @@ inline uint8_t *quicly_encode_stream_data_blocked_frame(uint8_t *dst, quicly_str
 inline int quicly_decode_stream_data_blocked_frame(const uint8_t **src, const uint8_t *end,
                                                    quicly_stream_data_blocked_frame_t *frame)
 {
-    if ((frame->stream_id = quicly_decodev(src, end)) == UINT64_MAX)
+    if ((frame->stream_id = quicly_decodev(src, end)) == -1)
         goto Error;
     if ((frame->offset = quicly_decodev(src, end)) == UINT64_MAX)
         goto Error;
