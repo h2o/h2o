@@ -374,7 +374,7 @@ def build_tracer(context, metadata):
   c = r"""// %s
 int %s(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = %s, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = %s, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
 """ % (fully_specified_probe_name, tracer_name, metadata['id'])
   appdata_field_set = metadata["appdata_field_set"]  # type: set[str]
@@ -624,11 +624,6 @@ BPF_PERF_OUTPUT(events);
 
 // HTTP/3 tracing
 BPF_HASH(h2o_to_quicly_conn, u64, u32);
-
-static pid_t get_h2o_tid(void) {
-  u64 pid_tgid = bpf_get_current_pid_tgid();
-  return (pid_t)(pid_tgid & 0xffffffff);
-}
 
 // tracepoint sched:sched_process_exit
 int trace_sched_process_exit(struct tracepoint__sched__sched_process_exit *ctx) {

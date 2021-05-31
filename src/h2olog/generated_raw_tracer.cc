@@ -2548,11 +2548,6 @@ BPF_PERF_OUTPUT(events);
 // HTTP/3 tracing
 BPF_HASH(h2o_to_quicly_conn, u64, u32);
 
-static pid_t get_h2o_tid(void) {
-  u64 pid_tgid = bpf_get_current_pid_tgid();
-  return (pid_t)(pid_tgid & 0xffffffff);
-}
-
 // tracepoint sched:sched_process_exit
 int trace_sched_process_exit(struct tracepoint__sched__sched_process_exit *ctx) {
   const struct task_struct *task = (const struct task_struct*)bpf_get_current_task();
@@ -2569,7 +2564,7 @@ int trace_sched_process_exit(struct tracepoint__sched__sched_process_exit *ctx) 
 // quicly:connect
 int trace_quicly__connect(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_CONNECT, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_CONNECT, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -2589,7 +2584,7 @@ int trace_quicly__connect(struct pt_regs *ctx) {
 // quicly:accept
 int trace_quicly__accept(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_ACCEPT, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_ACCEPT, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -2612,7 +2607,7 @@ int trace_quicly__accept(struct pt_regs *ctx) {
 // quicly:free
 int trace_quicly__free(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_FREE, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_FREE, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -2630,7 +2625,7 @@ int trace_quicly__free(struct pt_regs *ctx) {
 // quicly:send
 int trace_quicly__send(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_SEND, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_SEND, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -2653,7 +2648,7 @@ int trace_quicly__send(struct pt_regs *ctx) {
 // quicly:receive
 int trace_quicly__receive(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_RECEIVE, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_RECEIVE, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -2679,7 +2674,7 @@ int trace_quicly__receive(struct pt_regs *ctx) {
 // quicly:version_switch
 int trace_quicly__version_switch(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_VERSION_SWITCH, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_VERSION_SWITCH, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -2699,7 +2694,7 @@ int trace_quicly__version_switch(struct pt_regs *ctx) {
 // quicly:idle_timeout
 int trace_quicly__idle_timeout(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_IDLE_TIMEOUT, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_IDLE_TIMEOUT, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -2717,7 +2712,7 @@ int trace_quicly__idle_timeout(struct pt_regs *ctx) {
 // quicly:stateless_reset_receive
 int trace_quicly__stateless_reset_receive(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_STATELESS_RESET_RECEIVE, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_STATELESS_RESET_RECEIVE, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -2735,7 +2730,7 @@ int trace_quicly__stateless_reset_receive(struct pt_regs *ctx) {
 // quicly:crypto_handshake
 int trace_quicly__crypto_handshake(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_CRYPTO_HANDSHAKE, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_CRYPTO_HANDSHAKE, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -2755,7 +2750,7 @@ int trace_quicly__crypto_handshake(struct pt_regs *ctx) {
 // quicly:crypto_update_secret
 int trace_quicly__crypto_update_secret(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_CRYPTO_UPDATE_SECRET, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_CRYPTO_UPDATE_SECRET, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -2783,7 +2778,7 @@ int trace_quicly__crypto_update_secret(struct pt_regs *ctx) {
 // quicly:crypto_send_key_update
 int trace_quicly__crypto_send_key_update(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_CRYPTO_SEND_KEY_UPDATE, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_CRYPTO_SEND_KEY_UPDATE, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -2806,7 +2801,7 @@ int trace_quicly__crypto_send_key_update(struct pt_regs *ctx) {
 // quicly:crypto_send_key_update_confirmed
 int trace_quicly__crypto_send_key_update_confirmed(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_CRYPTO_SEND_KEY_UPDATE_CONFIRMED, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_CRYPTO_SEND_KEY_UPDATE_CONFIRMED, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -2826,7 +2821,7 @@ int trace_quicly__crypto_send_key_update_confirmed(struct pt_regs *ctx) {
 // quicly:crypto_receive_key_update
 int trace_quicly__crypto_receive_key_update(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_CRYPTO_RECEIVE_KEY_UPDATE, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_CRYPTO_RECEIVE_KEY_UPDATE, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -2849,7 +2844,7 @@ int trace_quicly__crypto_receive_key_update(struct pt_regs *ctx) {
 // quicly:crypto_receive_key_update_prepare
 int trace_quicly__crypto_receive_key_update_prepare(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_CRYPTO_RECEIVE_KEY_UPDATE_PREPARE, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_CRYPTO_RECEIVE_KEY_UPDATE_PREPARE, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -2872,7 +2867,7 @@ int trace_quicly__crypto_receive_key_update_prepare(struct pt_regs *ctx) {
 // quicly:packet_sent
 int trace_quicly__packet_sent(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_PACKET_SENT, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_PACKET_SENT, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -2898,7 +2893,7 @@ int trace_quicly__packet_sent(struct pt_regs *ctx) {
 // quicly:packet_received
 int trace_quicly__packet_received(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_PACKET_RECEIVED, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_PACKET_RECEIVED, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -2925,7 +2920,7 @@ int trace_quicly__packet_received(struct pt_regs *ctx) {
 // quicly:packet_prepare
 int trace_quicly__packet_prepare(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_PACKET_PREPARE, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_PACKET_PREPARE, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -2948,7 +2943,7 @@ int trace_quicly__packet_prepare(struct pt_regs *ctx) {
 // quicly:packet_acked
 int trace_quicly__packet_acked(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_PACKET_ACKED, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_PACKET_ACKED, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -2970,7 +2965,7 @@ int trace_quicly__packet_acked(struct pt_regs *ctx) {
 // quicly:packet_lost
 int trace_quicly__packet_lost(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_PACKET_LOST, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_PACKET_LOST, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -2992,7 +2987,7 @@ int trace_quicly__packet_lost(struct pt_regs *ctx) {
 // quicly:packet_decryption_failed
 int trace_quicly__packet_decryption_failed(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_PACKET_DECRYPTION_FAILED, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_PACKET_DECRYPTION_FAILED, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -3012,7 +3007,7 @@ int trace_quicly__packet_decryption_failed(struct pt_regs *ctx) {
 // quicly:pto
 int trace_quicly__pto(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_PTO, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_PTO, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -3036,7 +3031,7 @@ int trace_quicly__pto(struct pt_regs *ctx) {
 // quicly:cc_ack_received
 int trace_quicly__cc_ack_received(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_CC_ACK_RECEIVED, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_CC_ACK_RECEIVED, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -3062,7 +3057,7 @@ int trace_quicly__cc_ack_received(struct pt_regs *ctx) {
 // quicly:cc_congestion
 int trace_quicly__cc_congestion(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_CC_CONGESTION, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_CC_CONGESTION, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -3086,7 +3081,7 @@ int trace_quicly__cc_congestion(struct pt_regs *ctx) {
 // quicly:ack_block_received
 int trace_quicly__ack_block_received(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_ACK_BLOCK_RECEIVED, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_ACK_BLOCK_RECEIVED, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -3108,7 +3103,7 @@ int trace_quicly__ack_block_received(struct pt_regs *ctx) {
 // quicly:ack_delay_received
 int trace_quicly__ack_delay_received(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_ACK_DELAY_RECEIVED, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_ACK_DELAY_RECEIVED, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -3128,7 +3123,7 @@ int trace_quicly__ack_delay_received(struct pt_regs *ctx) {
 // quicly:ack_send
 int trace_quicly__ack_send(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_ACK_SEND, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_ACK_SEND, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -3150,7 +3145,7 @@ int trace_quicly__ack_send(struct pt_regs *ctx) {
 // quicly:ping_send
 int trace_quicly__ping_send(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_PING_SEND, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_PING_SEND, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -3168,7 +3163,7 @@ int trace_quicly__ping_send(struct pt_regs *ctx) {
 // quicly:ping_receive
 int trace_quicly__ping_receive(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_PING_RECEIVE, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_PING_RECEIVE, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -3186,7 +3181,7 @@ int trace_quicly__ping_receive(struct pt_regs *ctx) {
 // quicly:transport_close_send
 int trace_quicly__transport_close_send(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_TRANSPORT_CLOSE_SEND, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_TRANSPORT_CLOSE_SEND, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -3211,7 +3206,7 @@ int trace_quicly__transport_close_send(struct pt_regs *ctx) {
 // quicly:transport_close_receive
 int trace_quicly__transport_close_receive(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_TRANSPORT_CLOSE_RECEIVE, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_TRANSPORT_CLOSE_RECEIVE, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -3236,7 +3231,7 @@ int trace_quicly__transport_close_receive(struct pt_regs *ctx) {
 // quicly:application_close_send
 int trace_quicly__application_close_send(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_APPLICATION_CLOSE_SEND, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_APPLICATION_CLOSE_SEND, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -3259,7 +3254,7 @@ int trace_quicly__application_close_send(struct pt_regs *ctx) {
 // quicly:application_close_receive
 int trace_quicly__application_close_receive(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_APPLICATION_CLOSE_RECEIVE, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_APPLICATION_CLOSE_RECEIVE, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -3282,7 +3277,7 @@ int trace_quicly__application_close_receive(struct pt_regs *ctx) {
 // quicly:stream_send
 int trace_quicly__stream_send(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_STREAM_SEND, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_STREAM_SEND, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -3311,7 +3306,7 @@ int trace_quicly__stream_send(struct pt_regs *ctx) {
 // quicly:stream_receive
 int trace_quicly__stream_receive(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_STREAM_RECEIVE, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_STREAM_RECEIVE, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -3338,7 +3333,7 @@ int trace_quicly__stream_receive(struct pt_regs *ctx) {
 // quicly:stream_acked
 int trace_quicly__stream_acked(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_STREAM_ACKED, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_STREAM_ACKED, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -3362,7 +3357,7 @@ int trace_quicly__stream_acked(struct pt_regs *ctx) {
 // quicly:stream_lost
 int trace_quicly__stream_lost(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_STREAM_LOST, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_STREAM_LOST, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -3386,7 +3381,7 @@ int trace_quicly__stream_lost(struct pt_regs *ctx) {
 // quicly:max_data_send
 int trace_quicly__max_data_send(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_MAX_DATA_SEND, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_MAX_DATA_SEND, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -3406,7 +3401,7 @@ int trace_quicly__max_data_send(struct pt_regs *ctx) {
 // quicly:max_data_receive
 int trace_quicly__max_data_receive(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_MAX_DATA_RECEIVE, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_MAX_DATA_RECEIVE, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -3426,7 +3421,7 @@ int trace_quicly__max_data_receive(struct pt_regs *ctx) {
 // quicly:max_streams_send
 int trace_quicly__max_streams_send(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_MAX_STREAMS_SEND, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_MAX_STREAMS_SEND, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -3448,7 +3443,7 @@ int trace_quicly__max_streams_send(struct pt_regs *ctx) {
 // quicly:max_streams_receive
 int trace_quicly__max_streams_receive(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_MAX_STREAMS_RECEIVE, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_MAX_STREAMS_RECEIVE, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -3470,7 +3465,7 @@ int trace_quicly__max_streams_receive(struct pt_regs *ctx) {
 // quicly:max_stream_data_send
 int trace_quicly__max_stream_data_send(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_MAX_STREAM_DATA_SEND, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_MAX_STREAM_DATA_SEND, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -3495,7 +3490,7 @@ int trace_quicly__max_stream_data_send(struct pt_regs *ctx) {
 // quicly:max_stream_data_receive
 int trace_quicly__max_stream_data_receive(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_MAX_STREAM_DATA_RECEIVE, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_MAX_STREAM_DATA_RECEIVE, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -3517,7 +3512,7 @@ int trace_quicly__max_stream_data_receive(struct pt_regs *ctx) {
 // quicly:new_token_send
 int trace_quicly__new_token_send(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_NEW_TOKEN_SEND, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_NEW_TOKEN_SEND, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -3542,7 +3537,7 @@ int trace_quicly__new_token_send(struct pt_regs *ctx) {
 // quicly:new_token_acked
 int trace_quicly__new_token_acked(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_NEW_TOKEN_ACKED, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_NEW_TOKEN_ACKED, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -3562,7 +3557,7 @@ int trace_quicly__new_token_acked(struct pt_regs *ctx) {
 // quicly:new_token_receive
 int trace_quicly__new_token_receive(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_NEW_TOKEN_RECEIVE, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_NEW_TOKEN_RECEIVE, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -3585,7 +3580,7 @@ int trace_quicly__new_token_receive(struct pt_regs *ctx) {
 // quicly:handshake_done_send
 int trace_quicly__handshake_done_send(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_HANDSHAKE_DONE_SEND, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_HANDSHAKE_DONE_SEND, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -3603,7 +3598,7 @@ int trace_quicly__handshake_done_send(struct pt_regs *ctx) {
 // quicly:handshake_done_receive
 int trace_quicly__handshake_done_receive(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_HANDSHAKE_DONE_RECEIVE, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_HANDSHAKE_DONE_RECEIVE, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -3621,7 +3616,7 @@ int trace_quicly__handshake_done_receive(struct pt_regs *ctx) {
 // quicly:streams_blocked_send
 int trace_quicly__streams_blocked_send(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_STREAMS_BLOCKED_SEND, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_STREAMS_BLOCKED_SEND, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -3643,7 +3638,7 @@ int trace_quicly__streams_blocked_send(struct pt_regs *ctx) {
 // quicly:streams_blocked_receive
 int trace_quicly__streams_blocked_receive(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_STREAMS_BLOCKED_RECEIVE, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_STREAMS_BLOCKED_RECEIVE, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -3665,7 +3660,7 @@ int trace_quicly__streams_blocked_receive(struct pt_regs *ctx) {
 // quicly:new_connection_id_send
 int trace_quicly__new_connection_id_send(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_NEW_CONNECTION_ID_SEND, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_NEW_CONNECTION_ID_SEND, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -3693,7 +3688,7 @@ int trace_quicly__new_connection_id_send(struct pt_regs *ctx) {
 // quicly:new_connection_id_receive
 int trace_quicly__new_connection_id_receive(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_NEW_CONNECTION_ID_RECEIVE, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_NEW_CONNECTION_ID_RECEIVE, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -3721,7 +3716,7 @@ int trace_quicly__new_connection_id_receive(struct pt_regs *ctx) {
 // quicly:retire_connection_id_send
 int trace_quicly__retire_connection_id_send(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_RETIRE_CONNECTION_ID_SEND, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_RETIRE_CONNECTION_ID_SEND, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -3741,7 +3736,7 @@ int trace_quicly__retire_connection_id_send(struct pt_regs *ctx) {
 // quicly:retire_connection_id_receive
 int trace_quicly__retire_connection_id_receive(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_RETIRE_CONNECTION_ID_RECEIVE, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_RETIRE_CONNECTION_ID_RECEIVE, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -3761,7 +3756,7 @@ int trace_quicly__retire_connection_id_receive(struct pt_regs *ctx) {
 // quicly:data_blocked_send
 int trace_quicly__data_blocked_send(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_DATA_BLOCKED_SEND, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_DATA_BLOCKED_SEND, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -3781,7 +3776,7 @@ int trace_quicly__data_blocked_send(struct pt_regs *ctx) {
 // quicly:data_blocked_receive
 int trace_quicly__data_blocked_receive(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_DATA_BLOCKED_RECEIVE, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_DATA_BLOCKED_RECEIVE, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -3801,7 +3796,7 @@ int trace_quicly__data_blocked_receive(struct pt_regs *ctx) {
 // quicly:stream_data_blocked_send
 int trace_quicly__stream_data_blocked_send(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_STREAM_DATA_BLOCKED_SEND, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_STREAM_DATA_BLOCKED_SEND, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -3823,7 +3818,7 @@ int trace_quicly__stream_data_blocked_send(struct pt_regs *ctx) {
 // quicly:stream_data_blocked_receive
 int trace_quicly__stream_data_blocked_receive(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_STREAM_DATA_BLOCKED_RECEIVE, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_STREAM_DATA_BLOCKED_RECEIVE, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -3845,7 +3840,7 @@ int trace_quicly__stream_data_blocked_receive(struct pt_regs *ctx) {
 // quicly:datagram_send
 int trace_quicly__datagram_send(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_DATAGRAM_SEND, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_DATAGRAM_SEND, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -3868,7 +3863,7 @@ int trace_quicly__datagram_send(struct pt_regs *ctx) {
 // quicly:datagram_receive
 int trace_quicly__datagram_receive(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_DATAGRAM_RECEIVE, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_DATAGRAM_RECEIVE, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -3891,7 +3886,7 @@ int trace_quicly__datagram_receive(struct pt_regs *ctx) {
 // quicly:ack_frequency_receive
 int trace_quicly__ack_frequency_receive(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_ACK_FREQUENCY_RECEIVE, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_ACK_FREQUENCY_RECEIVE, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -3917,7 +3912,7 @@ int trace_quicly__ack_frequency_receive(struct pt_regs *ctx) {
 // quicly:quictrace_send_stream
 int trace_quicly__quictrace_send_stream(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_QUICTRACE_SEND_STREAM, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_QUICTRACE_SEND_STREAM, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -3946,7 +3941,7 @@ int trace_quicly__quictrace_send_stream(struct pt_regs *ctx) {
 // quicly:quictrace_recv_stream
 int trace_quicly__quictrace_recv_stream(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_QUICTRACE_RECV_STREAM, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_QUICTRACE_RECV_STREAM, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -3972,7 +3967,7 @@ int trace_quicly__quictrace_recv_stream(struct pt_regs *ctx) {
 // quicly:quictrace_cc_ack
 int trace_quicly__quictrace_cc_ack(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_QUICTRACE_CC_ACK, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_QUICTRACE_CC_ACK, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -4002,7 +3997,7 @@ int trace_quicly__quictrace_cc_ack(struct pt_regs *ctx) {
 // quicly:quictrace_cc_lost
 int trace_quicly__quictrace_cc_lost(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_QUICTRACE_CC_LOST, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_QUICTRACE_CC_LOST, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -4032,7 +4027,7 @@ int trace_quicly__quictrace_cc_lost(struct pt_regs *ctx) {
 // quicly:stream_on_open
 int trace_quicly__stream_on_open(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_STREAM_ON_OPEN, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_STREAM_ON_OPEN, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -4055,7 +4050,7 @@ int trace_quicly__stream_on_open(struct pt_regs *ctx) {
 // quicly:stream_on_destroy
 int trace_quicly__stream_on_destroy(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_STREAM_ON_DESTROY, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_STREAM_ON_DESTROY, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -4080,7 +4075,7 @@ int trace_quicly__stream_on_destroy(struct pt_regs *ctx) {
 // quicly:stream_on_send_shift
 int trace_quicly__stream_on_send_shift(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_STREAM_ON_SEND_SHIFT, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_STREAM_ON_SEND_SHIFT, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -4105,7 +4100,7 @@ int trace_quicly__stream_on_send_shift(struct pt_regs *ctx) {
 // quicly:stream_on_send_emit
 int trace_quicly__stream_on_send_emit(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_STREAM_ON_SEND_EMIT, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_STREAM_ON_SEND_EMIT, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -4132,7 +4127,7 @@ int trace_quicly__stream_on_send_emit(struct pt_regs *ctx) {
 // quicly:stream_on_send_stop
 int trace_quicly__stream_on_send_stop(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_STREAM_ON_SEND_STOP, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_STREAM_ON_SEND_STOP, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -4157,7 +4152,7 @@ int trace_quicly__stream_on_send_stop(struct pt_regs *ctx) {
 // quicly:stream_on_receive
 int trace_quicly__stream_on_receive(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_STREAM_ON_RECEIVE, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_STREAM_ON_RECEIVE, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -4187,7 +4182,7 @@ int trace_quicly__stream_on_receive(struct pt_regs *ctx) {
 // quicly:stream_on_receive_reset
 int trace_quicly__stream_on_receive_reset(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_STREAM_ON_RECEIVE_RESET, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_STREAM_ON_RECEIVE_RESET, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -4212,7 +4207,7 @@ int trace_quicly__stream_on_receive_reset(struct pt_regs *ctx) {
 // quicly:conn_stats
 int trace_quicly__conn_stats(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_CONN_STATS, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_CONN_STATS, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // struct st_quicly_conn_t * conn
   uint8_t conn[sizeof_st_quicly_conn_t] = {};
@@ -4240,7 +4235,7 @@ BPF_TABLE_PINNED("lru_hash", pid_t, uint64_t, h2o_return, H2O_EBPF_RETURN_MAP_SI
 // h2o:_private_socket_lookup_flags
 int trace_h2o___private_socket_lookup_flags(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_H2O__PRIVATE_SOCKET_LOOKUP_FLAGS, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_H2O__PRIVATE_SOCKET_LOOKUP_FLAGS, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // pid_t tid
   bpf_usdt_readarg(1, ctx, &event._private_socket_lookup_flags.tid);
@@ -4275,7 +4270,7 @@ int trace_h2o___private_socket_lookup_flags(struct pt_regs *ctx) {
 // h2o:receive_request
 int trace_h2o__receive_request(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_H2O_RECEIVE_REQUEST, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_H2O_RECEIVE_REQUEST, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // uint64_t conn_id
   bpf_usdt_readarg(1, ctx, &event.receive_request.conn_id);
@@ -4292,7 +4287,7 @@ int trace_h2o__receive_request(struct pt_regs *ctx) {
 // h2o:receive_request_header
 int trace_h2o__receive_request_header(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_H2O_RECEIVE_REQUEST_HEADER, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_H2O_RECEIVE_REQUEST_HEADER, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // uint64_t conn_id
   bpf_usdt_readarg(1, ctx, &event.receive_request_header.conn_id);
@@ -4317,7 +4312,7 @@ int trace_h2o__receive_request_header(struct pt_regs *ctx) {
 // h2o:send_response
 int trace_h2o__send_response(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_H2O_SEND_RESPONSE, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_H2O_SEND_RESPONSE, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // uint64_t conn_id
   bpf_usdt_readarg(1, ctx, &event.send_response.conn_id);
@@ -4336,7 +4331,7 @@ int trace_h2o__send_response(struct pt_regs *ctx) {
 // h2o:send_response_header
 int trace_h2o__send_response_header(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_H2O_SEND_RESPONSE_HEADER, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_H2O_SEND_RESPONSE_HEADER, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // uint64_t conn_id
   bpf_usdt_readarg(1, ctx, &event.send_response_header.conn_id);
@@ -4366,7 +4361,7 @@ int trace_h2o__send_response_header(struct pt_regs *ctx) {
 // h2o:h1_accept
 int trace_h2o__h1_accept(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_H2O_H1_ACCEPT, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_H2O_H1_ACCEPT, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // uint64_t conn_id
   bpf_usdt_readarg(1, ctx, &event.h1_accept.conn_id);
@@ -4383,7 +4378,7 @@ int trace_h2o__h1_accept(struct pt_regs *ctx) {
 // h2o:h1_close
 int trace_h2o__h1_close(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_H2O_H1_CLOSE, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_H2O_H1_CLOSE, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // uint64_t conn_id
   bpf_usdt_readarg(1, ctx, &event.h1_close.conn_id);
@@ -4396,7 +4391,7 @@ int trace_h2o__h1_close(struct pt_regs *ctx) {
 // h2o:h2_unknown_frame_type
 int trace_h2o__h2_unknown_frame_type(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_H2O_H2_UNKNOWN_FRAME_TYPE, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_H2O_H2_UNKNOWN_FRAME_TYPE, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // uint64_t conn_id
   bpf_usdt_readarg(1, ctx, &event.h2_unknown_frame_type.conn_id);
@@ -4411,7 +4406,7 @@ int trace_h2o__h2_unknown_frame_type(struct pt_regs *ctx) {
 // h2o:h3s_accept
 int trace_h2o__h3s_accept(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_H2O_H3S_ACCEPT, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_H2O_H3S_ACCEPT, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // uint64_t conn_id
   bpf_usdt_readarg(1, ctx, &event.h3s_accept.conn_id);
@@ -4431,7 +4426,7 @@ int trace_h2o__h3s_accept(struct pt_regs *ctx) {
 // h2o:h3s_destroy
 int trace_h2o__h3s_destroy(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_H2O_H3S_DESTROY, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_H2O_H3S_DESTROY, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // uint64_t conn_id
   bpf_usdt_readarg(1, ctx, &event.h3s_destroy.conn_id);
@@ -4444,7 +4439,7 @@ int trace_h2o__h3s_destroy(struct pt_regs *ctx) {
 // h2o:h3s_stream_set_state
 int trace_h2o__h3s_stream_set_state(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_H2O_H3S_STREAM_SET_STATE, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_H2O_H3S_STREAM_SET_STATE, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // uint64_t conn_id
   bpf_usdt_readarg(1, ctx, &event.h3s_stream_set_state.conn_id);
@@ -4461,7 +4456,7 @@ int trace_h2o__h3s_stream_set_state(struct pt_regs *ctx) {
 // h2o:h3_frame_receive
 int trace_h2o__h3_frame_receive(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_H2O_H3_FRAME_RECEIVE, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_H2O_H3_FRAME_RECEIVE, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // uint64_t frame_type
   bpf_usdt_readarg(1, ctx, &event.h3_frame_receive.frame_type);
@@ -4479,7 +4474,7 @@ int trace_h2o__h3_frame_receive(struct pt_regs *ctx) {
 // h2o:h3_packet_receive
 int trace_h2o__h3_packet_receive(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_H2O_H3_PACKET_RECEIVE, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_H2O_H3_PACKET_RECEIVE, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // struct sockaddr * dest
   bpf_usdt_readarg(1, ctx, &buf);
@@ -4511,7 +4506,7 @@ int trace_h2o__h3_packet_receive(struct pt_regs *ctx) {
 // h2o:h3_packet_forward
 int trace_h2o__h3_packet_forward(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_H2O_H3_PACKET_FORWARD, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_H2O_H3_PACKET_FORWARD, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // struct sockaddr * dest
   bpf_usdt_readarg(1, ctx, &buf);
@@ -4544,7 +4539,7 @@ int trace_h2o__h3_packet_forward(struct pt_regs *ctx) {
 // h2o:h3_forwarded_packet_receive
 int trace_h2o__h3_forwarded_packet_receive(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_H2O_H3_FORWARDED_PACKET_RECEIVE, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_H2O_H3_FORWARDED_PACKET_RECEIVE, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // struct sockaddr * dest
   bpf_usdt_readarg(1, ctx, &buf);
@@ -4573,7 +4568,7 @@ int trace_h2o__h3_forwarded_packet_receive(struct pt_regs *ctx) {
 // h2o:h3c_tunnel_create
 int trace_h2o__h3c_tunnel_create(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_H2O_H3C_TUNNEL_CREATE, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_H2O_H3C_TUNNEL_CREATE, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // struct st_h2o_tunnel_t * tunnel
   bpf_usdt_readarg(1, ctx, &event.h3c_tunnel_create.tunnel);
@@ -4586,7 +4581,7 @@ int trace_h2o__h3c_tunnel_create(struct pt_regs *ctx) {
 // h2o:tunnel_on_destroy
 int trace_h2o__tunnel_on_destroy(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_H2O_TUNNEL_ON_DESTROY, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_H2O_TUNNEL_ON_DESTROY, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // struct st_h2o_tunnel_t * tunnel
   bpf_usdt_readarg(1, ctx, &event.tunnel_on_destroy.tunnel);
@@ -4599,7 +4594,7 @@ int trace_h2o__tunnel_on_destroy(struct pt_regs *ctx) {
 // h2o:tunnel_on_read
 int trace_h2o__tunnel_on_read(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_H2O_TUNNEL_ON_READ, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_H2O_TUNNEL_ON_READ, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // struct st_h2o_tunnel_t * tunnel
   bpf_usdt_readarg(1, ctx, &event.tunnel_on_read.tunnel);
@@ -4620,7 +4615,7 @@ int trace_h2o__tunnel_on_read(struct pt_regs *ctx) {
 // h2o:tunnel_proceed_read
 int trace_h2o__tunnel_proceed_read(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_H2O_TUNNEL_PROCEED_READ, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_H2O_TUNNEL_PROCEED_READ, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // struct st_h2o_tunnel_t * tunnel
   bpf_usdt_readarg(1, ctx, &event.tunnel_proceed_read.tunnel);
@@ -4633,7 +4628,7 @@ int trace_h2o__tunnel_proceed_read(struct pt_regs *ctx) {
 // h2o:tunnel_write
 int trace_h2o__tunnel_write(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_H2O_TUNNEL_WRITE, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_H2O_TUNNEL_WRITE, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // struct st_h2o_tunnel_t * tunnel
   bpf_usdt_readarg(1, ctx, &event.tunnel_write.tunnel);
@@ -4651,7 +4646,7 @@ int trace_h2o__tunnel_write(struct pt_regs *ctx) {
 // h2o:tunnel_on_write_complete
 int trace_h2o__tunnel_on_write_complete(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_H2O_TUNNEL_ON_WRITE_COMPLETE, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_H2O_TUNNEL_ON_WRITE_COMPLETE, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // struct st_h2o_tunnel_t * tunnel
   bpf_usdt_readarg(1, ctx, &event.tunnel_on_write_complete.tunnel);
@@ -4667,7 +4662,7 @@ int trace_h2o__tunnel_on_write_complete(struct pt_regs *ctx) {
 // h2o:socket_tunnel_create
 int trace_h2o__socket_tunnel_create(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_H2O_SOCKET_TUNNEL_CREATE, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_H2O_SOCKET_TUNNEL_CREATE, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // struct st_h2o_tunnel_t * tunnel
   bpf_usdt_readarg(1, ctx, &event.socket_tunnel_create.tunnel);
@@ -4680,7 +4675,7 @@ int trace_h2o__socket_tunnel_create(struct pt_regs *ctx) {
 // h2o:socket_tunnel_start
 int trace_h2o__socket_tunnel_start(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_H2O_SOCKET_TUNNEL_START, .tid = get_h2o_tid(), };
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_H2O_SOCKET_TUNNEL_START, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
   // struct st_h2o_tunnel_t * tunnel
   bpf_usdt_readarg(1, ctx, &event.socket_tunnel_start.tunnel);
