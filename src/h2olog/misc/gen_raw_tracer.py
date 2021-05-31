@@ -374,7 +374,7 @@ def build_tracer(context, metadata):
   c = r"""// %s
 int %s(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = %s };
+  struct h2olog_event_t event = { .id = %s, .tid = get_h2o_tid(), };
 
 """ % (fully_specified_probe_name, tracer_name, metadata['id'])
   appdata_field_set = metadata["appdata_field_set"]  # type: set[str]
@@ -571,6 +571,7 @@ enum h2olog_event_id_t {
   event_t_decl = r"""
 struct h2olog_event_t {
   enum h2olog_event_id_t id;
+  uint32_t tid;
 
   union {
 """
@@ -623,6 +624,11 @@ BPF_PERF_OUTPUT(events);
 
 // HTTP/3 tracing
 BPF_HASH(h2o_to_quicly_conn, u64, u32);
+
+static pid_t get_h2o_tid(void) {
+  u64 pid_tgid = bpf_get_current_pid_tgid();
+  return (pid_t)(pid_tgid & 0xffffffff);
+}
 
 // tracepoint sched:sched_process_exit
 int trace_sched_process_exit(struct tracepoint__sched__sched_process_exit *ctx) {
@@ -682,6 +688,7 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
     handle_event_func += "  case %s: { // %s\n" % (
         metadata['id'], fully_specified_probe_name)
     handle_event_func += '    json_write_pair_n(out_, STR_LIT("type"), STR_LIT("%s"));\n' % probe_name.replace("_", "-")
+    handle_event_func += '    json_write_pair_c(out_, STR_LIT("tid"), event->tid);\n'
     handle_event_func += '    json_write_pair_c(out_, STR_LIT("seq"), seq_);\n'
 
     for field_name, field_type in flat_args_map.items():
