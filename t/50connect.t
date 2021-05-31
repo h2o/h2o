@@ -22,6 +22,8 @@ my $quic_port = empty_port({
     host  => "127.0.0.1",
     proto => "udp",
 });
+my $one_shot_upstream = empty_port();
+my $g2 = one_shot_http_upstream("It works!", $one_shot_upstream);
 my $server = spawn_h2o(<< "EOT");
 listen:
   type: quic
@@ -35,10 +37,44 @@ hosts:
       "/":
         proxy.connect:
           - "+127.0.0.1:$origin_port"
+          - "+127.0.0.1:$one_shot_upstream"
         proxy.timeout.io: 2000
 EOT
 
 my $ok_resp = qr{HTTP/[^ ]+ 200\s}m;
+
+subtest "h2get-connect" => sub {
+    my ($stderr,$stdout) = run_with_h2get_simple($server, <<"EOS");
+    req = {
+        ":method" => "CONNECT",
+        ":authority" => "127.0.0.1:$one_shot_upstream",
+    }
+    h2g.send_headers(req, 1, END_HEADERS)
+    while true
+        f = h2g.read(-1)
+        if f.type == "WINDOW_UPDATE" then
+            next
+        elsif f.type == "HEADERS" then
+            break
+        else
+            puts "got #{f.type} failed"
+            exit 1
+        end
+    end
+    h2g.send_data(1, 0, "It doesn't have to be HTTP!")
+    f = h2g.read(-1)
+    puts f.payload
+    if f.type != "DATA" then
+        puts "Frame type failed"
+    end
+    f = h2g.read(-1)
+    if f.type != "DATA" then
+        puts "Frame type failed"
+    end
+EOS
+    like $stdout, qr/It works!/s, "Response from origin";
+    unlike $stdout, qr/Failed/s, "Received expected frames";
+};
 
 subtest "curl-h1" => sub {
     subtest "basic", sub {
