@@ -682,6 +682,16 @@ struct st_h2o_context_t {
          * timeout entry used for graceful shutdown
          */
         h2o_timer_t _graceful_shutdown_timeout;
+        struct {
+            /**
+             * number of packets forwarded to another node in a cluster
+             */
+            uint64_t packet_forwarded;
+            /**
+             * number of forwarded packets received from another node in a cluster
+             */
+            uint64_t forwarded_packet_received;
+        } events;
     } http3;
 
     struct {
