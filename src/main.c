@@ -2501,6 +2501,7 @@ static int forward_quic_packets(h2o_quic_ctx_t *h3ctx, const uint64_t *node_id, 
     for (size_t i = 0; i != num_packets; ++i) {
         struct iovec vec[2] = {{header_buf, header_len}, {packets[i].octets.base, packets[i].octets.len}};
         writev(fd, vec, 2);
+        ++h2octx->http3.events.packet_forwarded;
     }
 
 #if H2O_USE_DTRACE
@@ -2511,7 +2512,6 @@ static int forward_quic_packets(h2o_quic_ctx_t *h3ctx, const uint64_t *node_id, 
         H2O_PROBE(H3_PACKET_FORWARD, &destaddr->sa, &srcaddr->sa, num_packets, num_bytes, fd);
     }
 #endif
-    ++h2octx->http3.events.packet_forwarded;
 
     return 1;
 }
