@@ -94,16 +94,19 @@ block_probes = set([
 rename_map = {
     # common fields
     "at": "time",
-    "master_id": "conn",
+    "conn_master_id": "conn",
 
     # changed in the latest quicly master branch
     "num_bytes": "bytes_len",
 
     # quicly_rtt_t
-    "minimum": "min-rtt",
-    "smoothed": "smoothed-rtt",
-    "variance": "variance-rtt",
-    "latest": "latest-rtt",
+    "rtt_minimum": "min-rtt",
+    "rtt_smoothed": "smoothed-rtt",
+    "rtt_variance": "variance-rtt",
+    "rtt_latest": "latest-rtt",
+
+    # quicly_stream_t
+    "stream_stream_id": "stream_id",
 }
 
 st_quicly_conn_t_def = r"""
@@ -264,7 +267,6 @@ def parse_dscript(path: Path):
       "appdata": appdata,
   }
 
-
 def parse_and_analyze(context: dict, d_file: Path):
   dscript = parse_dscript(d_file)
 
@@ -320,7 +322,8 @@ def parse_and_analyze(context: dict, d_file: Path):
           if struct_map[st_name]:
             # decodes the struct into members in BPF programs.
             for st_field_access, st_field_name in struct_map[st_name]:
-              flat_args_map[st_field_name or st_field_access] = "typeof_%s__%s" % (st_name, st_field_name or st_field_access)
+              flat_arg_name = "%s_%s" % (arg_name, st_field_name or st_field_access)
+              flat_args_map[flat_arg_name] = "typeof_%s__%s" % (st_name, st_field_name or st_field_access)
           else:
             # decodes the struct into members in the user space (json.cc).
             flat_args_map[arg_name] = "struct %s" % st_name
@@ -415,7 +418,7 @@ int %s(struct pt_regs *ctx) {
           c += "  bpf_usdt_readarg(%d, ctx, &buf);\n" % (i+1)
           c += "  bpf_probe_read(&%s, sizeof_%s, buf);\n" % (arg_name, st_name)
           for st_field_access, st_field_name in struct_map[st_name]:
-            event_t_name = "%s.%s" % (probe_name, st_field_name or st_field_access)
+            event_t_name = "%s.%s_%s" % (probe_name, arg_name, st_field_name or st_field_access)
             c += "  event.%s = get_%s__%s(%s);\n" % (
                 event_t_name, st_name, st_field_name or st_field_access, arg_name)
         else:
