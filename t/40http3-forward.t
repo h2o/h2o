@@ -60,7 +60,7 @@ $jresp = decode_json("$resp");
 my $num_forwarded = $jresp->{'http3.packet-forwarded'};
 
 cmp_ok($num_forwarded, '>', 0, "some packets were forwarded through event counter");
-is($num_forwarded, num_forwarded_received, "packets forwarded == packets received");
+is($num_forwarded, $num_forwarded_received, "packets forwarded == packets received");
 
 done_testing;
 
