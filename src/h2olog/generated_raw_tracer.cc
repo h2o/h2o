@@ -1630,7 +1630,6 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
     json_write_pair_c(out_, STR_LIT("conn-id"), event->receive_request.conn_id);
     json_write_pair_c(out_, STR_LIT("req-id"), event->receive_request.req_id);
     json_write_pair_c(out_, STR_LIT("http-version"), event->receive_request.http_version);
-    json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
     break;
   }
   case H2OLOG_EVENT_ID_H2O_RECEIVE_REQUEST_HEADER: { // h2o:receive_request_header
@@ -1647,7 +1646,6 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
       json_write_pair_c(out_, STR_LIT("value"), event->receive_request_header.value, (event->receive_request_header.value_len < STR_LEN ? event->receive_request_header.value_len : STR_LEN));
     }
     json_write_pair_c(out_, STR_LIT("value-len"), event->receive_request_header.value_len);
-    json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
     break;
   }
   case H2OLOG_EVENT_ID_H2O_SEND_RESPONSE: { // h2o:send_response
@@ -1658,7 +1656,6 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
     json_write_pair_c(out_, STR_LIT("req-id"), event->send_response.req_id);
     json_write_pair_c(out_, STR_LIT("status"), event->send_response.status);
     json_write_pair_c(out_, STR_LIT("tunnel"), event->send_response.tunnel);
-    json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
     break;
   }
   case H2OLOG_EVENT_ID_H2O_SEND_RESPONSE_HEADER: { // h2o:send_response_header
@@ -1675,7 +1672,6 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
       json_write_pair_c(out_, STR_LIT("value"), event->send_response_header.value, (event->send_response_header.value_len < STR_LEN ? event->send_response_header.value_len : STR_LEN));
     }
     json_write_pair_c(out_, STR_LIT("value-len"), event->send_response_header.value_len);
-    json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
     break;
   }
   case H2OLOG_EVENT_ID_H2O_H1_ACCEPT: { // h2o:h1_accept
@@ -1685,7 +1681,6 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
     json_write_pair_c(out_, STR_LIT("conn-id"), event->h1_accept.conn_id);
     json_write_pair_c(out_, STR_LIT("sock"), event->h1_accept.sock);
     json_write_pair_c(out_, STR_LIT("conn"), event->h1_accept.conn);
-    json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
     break;
   }
   case H2OLOG_EVENT_ID_H2O_H1_CLOSE: { // h2o:h1_close
@@ -1693,7 +1688,6 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
     json_write_pair_c(out_, STR_LIT("tid"), event->tid);
     json_write_pair_c(out_, STR_LIT("seq"), seq_);
     json_write_pair_c(out_, STR_LIT("conn-id"), event->h1_close.conn_id);
-    json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
     break;
   }
   case H2OLOG_EVENT_ID_H2O_H2_UNKNOWN_FRAME_TYPE: { // h2o:h2_unknown_frame_type
@@ -1702,7 +1696,6 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
     json_write_pair_c(out_, STR_LIT("seq"), seq_);
     json_write_pair_c(out_, STR_LIT("conn-id"), event->h2_unknown_frame_type.conn_id);
     json_write_pair_c(out_, STR_LIT("frame-type"), event->h2_unknown_frame_type.frame_type);
-    json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
     break;
   }
   case H2OLOG_EVENT_ID_H2O_H3S_ACCEPT: { // h2o:h3s_accept
@@ -1712,7 +1705,6 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
     json_write_pair_c(out_, STR_LIT("conn-id"), event->h3s_accept.conn_id);
     json_write_pair_c(out_, STR_LIT("conn"), event->h3s_accept.conn);
     json_write_pair_c(out_, STR_LIT("conn"), event->h3s_accept.master_id);
-    json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
     break;
   }
   case H2OLOG_EVENT_ID_H2O_H3S_DESTROY: { // h2o:h3s_destroy
@@ -1720,7 +1712,6 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
     json_write_pair_c(out_, STR_LIT("tid"), event->tid);
     json_write_pair_c(out_, STR_LIT("seq"), seq_);
     json_write_pair_c(out_, STR_LIT("conn-id"), event->h3s_destroy.conn_id);
-    json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
     break;
   }
   case H2OLOG_EVENT_ID_H2O_H3S_STREAM_SET_STATE: { // h2o:h3s_stream_set_state
@@ -1730,7 +1721,6 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
     json_write_pair_c(out_, STR_LIT("conn-id"), event->h3s_stream_set_state.conn_id);
     json_write_pair_c(out_, STR_LIT("req-id"), event->h3s_stream_set_state.req_id);
     json_write_pair_c(out_, STR_LIT("state"), event->h3s_stream_set_state.state);
-    json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
     break;
   }
   case H2OLOG_EVENT_ID_H2O_H3_FRAME_RECEIVE: { // h2o:h3_frame_receive
@@ -1742,7 +1732,6 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
       json_write_pair_c(out_, STR_LIT("bytes"), event->h3_frame_receive.bytes, (event->h3_frame_receive.bytes_len < STR_LEN ? event->h3_frame_receive.bytes_len : STR_LEN));
     }
     json_write_pair_c(out_, STR_LIT("bytes-len"), event->h3_frame_receive.bytes_len);
-    json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
     break;
   }
   case H2OLOG_EVENT_ID_H2O_H3_PACKET_RECEIVE: { // h2o:h3_packet_receive
@@ -1753,7 +1742,6 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
     json_write_pair_c(out_, STR_LIT("src"), event->h3_packet_receive.src);
     json_write_pair_c(out_, STR_LIT("bytes"), event->h3_packet_receive.bytes, (event->h3_packet_receive.bytes_len < STR_LEN ? event->h3_packet_receive.bytes_len : STR_LEN));
     json_write_pair_c(out_, STR_LIT("bytes-len"), event->h3_packet_receive.bytes_len);
-    json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
     break;
   }
   case H2OLOG_EVENT_ID_H2O_H3_PACKET_FORWARD: { // h2o:h3_packet_forward
@@ -1765,7 +1753,6 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
     json_write_pair_c(out_, STR_LIT("num-packets"), event->h3_packet_forward.num_packets);
     json_write_pair_c(out_, STR_LIT("bytes-len"), event->h3_packet_forward.num_bytes);
     json_write_pair_c(out_, STR_LIT("fd"), event->h3_packet_forward.fd);
-    json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
     break;
   }
   case H2OLOG_EVENT_ID_H2O_H3_FORWARDED_PACKET_RECEIVE: { // h2o:h3_forwarded_packet_receive
@@ -1775,7 +1762,6 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
     json_write_pair_c(out_, STR_LIT("dest"), event->h3_forwarded_packet_receive.dest);
     json_write_pair_c(out_, STR_LIT("src"), event->h3_forwarded_packet_receive.src);
     json_write_pair_c(out_, STR_LIT("bytes-len"), event->h3_forwarded_packet_receive.num_bytes);
-    json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
     break;
   }
   case H2OLOG_EVENT_ID_H2O_H3C_TUNNEL_CREATE: { // h2o:h3c_tunnel_create
@@ -1783,7 +1769,6 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
     json_write_pair_c(out_, STR_LIT("tid"), event->tid);
     json_write_pair_c(out_, STR_LIT("seq"), seq_);
     json_write_pair_c(out_, STR_LIT("tunnel"), event->h3c_tunnel_create.tunnel);
-    json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
     break;
   }
   case H2OLOG_EVENT_ID_H2O_TUNNEL_ON_DESTROY: { // h2o:tunnel_on_destroy
@@ -1791,7 +1776,6 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
     json_write_pair_c(out_, STR_LIT("tid"), event->tid);
     json_write_pair_c(out_, STR_LIT("seq"), seq_);
     json_write_pair_c(out_, STR_LIT("tunnel"), event->tunnel_on_destroy.tunnel);
-    json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
     break;
   }
   case H2OLOG_EVENT_ID_H2O_TUNNEL_ON_READ: { // h2o:tunnel_on_read
@@ -1804,7 +1788,6 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
       json_write_pair_c(out_, STR_LIT("bytes"), event->tunnel_on_read.bytes, (event->tunnel_on_read.bytes_len < STR_LEN ? event->tunnel_on_read.bytes_len : STR_LEN));
     }
     json_write_pair_c(out_, STR_LIT("bytes-len"), event->tunnel_on_read.bytes_len);
-    json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
     break;
   }
   case H2OLOG_EVENT_ID_H2O_TUNNEL_PROCEED_READ: { // h2o:tunnel_proceed_read
@@ -1812,7 +1795,6 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
     json_write_pair_c(out_, STR_LIT("tid"), event->tid);
     json_write_pair_c(out_, STR_LIT("seq"), seq_);
     json_write_pair_c(out_, STR_LIT("tunnel"), event->tunnel_proceed_read.tunnel);
-    json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
     break;
   }
   case H2OLOG_EVENT_ID_H2O_TUNNEL_WRITE: { // h2o:tunnel_write
@@ -1824,7 +1806,6 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
       json_write_pair_c(out_, STR_LIT("bytes"), event->tunnel_write.bytes, (event->tunnel_write.bytes_len < STR_LEN ? event->tunnel_write.bytes_len : STR_LEN));
     }
     json_write_pair_c(out_, STR_LIT("bytes-len"), event->tunnel_write.bytes_len);
-    json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
     break;
   }
   case H2OLOG_EVENT_ID_H2O_TUNNEL_ON_WRITE_COMPLETE: { // h2o:tunnel_on_write_complete
@@ -1833,7 +1814,6 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
     json_write_pair_c(out_, STR_LIT("seq"), seq_);
     json_write_pair_c(out_, STR_LIT("tunnel"), event->tunnel_on_write_complete.tunnel);
     json_write_pair_c(out_, STR_LIT("err"), event->tunnel_on_write_complete.err, strlen(event->tunnel_on_write_complete.err));
-    json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
     break;
   }
   case H2OLOG_EVENT_ID_H2O_SOCKET_TUNNEL_CREATE: { // h2o:socket_tunnel_create
@@ -1841,7 +1821,6 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
     json_write_pair_c(out_, STR_LIT("tid"), event->tid);
     json_write_pair_c(out_, STR_LIT("seq"), seq_);
     json_write_pair_c(out_, STR_LIT("tunnel"), event->socket_tunnel_create.tunnel);
-    json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
     break;
   }
   case H2OLOG_EVENT_ID_H2O_SOCKET_TUNNEL_START: { // h2o:socket_tunnel_start
@@ -1850,7 +1829,6 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
     json_write_pair_c(out_, STR_LIT("seq"), seq_);
     json_write_pair_c(out_, STR_LIT("tunnel"), event->socket_tunnel_start.tunnel);
     json_write_pair_c(out_, STR_LIT("bytes-to-consume"), event->socket_tunnel_start.bytes_to_consume);
-    json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
     break;
   }
 

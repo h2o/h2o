@@ -718,9 +718,6 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
       else:
         handle_event_func += stmts
 
-    if metadata["provider"] == "h2o":
-      handle_event_func += '    json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());\n'
-
     handle_event_func += "    break;\n"
     handle_event_func += "  }\n"
 
