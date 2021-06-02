@@ -113,6 +113,7 @@ static void do_read_stop(h2o_socket_t *sock);
 static int do_export(h2o_socket_t *_sock, h2o_socket_export_t *info);
 static h2o_socket_t *do_import(h2o_loop_t *loop, h2o_socket_export_t *info);
 static socklen_t get_peername_uncached(h2o_socket_t *sock, struct sockaddr *sa);
+static socklen_t get_sockname_uncached(h2o_socket_t *sock, struct sockaddr *sa);
 
 /* internal functions called from the backend */
 static const char *decode_ssl_input(h2o_socket_t *sock);
@@ -338,6 +339,11 @@ static void dispose_socket(h2o_socket_t *sock, const char *err)
     if (sock->_peername != NULL) {
         free(sock->_peername);
         sock->_peername = NULL;
+    }
+
+    if (sock->_sockname != NULL) {
+        free(sock->_sockname);
+        sock->_sockname = NULL;
     }
 
     close_cb = sock->on_close.cb;
@@ -722,9 +728,8 @@ void h2o_socket_read_stop(h2o_socket_t *sock)
 
 void h2o_socket_setpeername(h2o_socket_t *sock, struct sockaddr *sa, socklen_t len)
 {
-    if (sock->_peername != NULL)
-        free(sock->_peername);
-    sock->_peername = h2o_mem_alloc(offsetof(struct st_h2o_socket_peername_t, addr) + len);
+    free(sock->_peername);
+    sock->_peername = h2o_mem_alloc(offsetof(struct st_h2o_socket_addr_t, addr) + len);
     sock->_peername->len = len;
     memcpy(&sock->_peername->addr, sa, len);
 }
@@ -739,6 +744,21 @@ socklen_t h2o_socket_getpeername(h2o_socket_t *sock, struct sockaddr *sa)
     /* call, copy to cache, and return */
     socklen_t len = get_peername_uncached(sock, sa);
     h2o_socket_setpeername(sock, sa, len);
+    return len;
+}
+
+socklen_t h2o_socket_getsockname(h2o_socket_t *sock, struct sockaddr *sa)
+{
+    /* return cached, if exists */
+    if (sock->_sockname != NULL) {
+        memcpy(sa, &sock->_sockname->addr, sock->_sockname->len);
+        return sock->_sockname->len;
+    }
+    /* call, copy to cache, and return */
+    socklen_t len = get_sockname_uncached(sock, sa);
+    sock->_sockname = h2o_mem_alloc(offsetof(struct st_h2o_socket_addr_t, addr) + len);
+    sock->_sockname->len = len;
+    memcpy(&sock->_sockname->addr, sa, len);
     return len;
 }
 
