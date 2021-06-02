@@ -340,7 +340,6 @@ static void dispose_socket(h2o_socket_t *sock, const char *err)
         free(sock->_peername);
         sock->_peername = NULL;
     }
-
     if (sock->_sockname != NULL) {
         free(sock->_sockname);
         sock->_sockname = NULL;
