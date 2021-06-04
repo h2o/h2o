@@ -341,7 +341,7 @@ static int tcp_write(void *_self, int is_end_stream)
         self->write_closed = 1;
 
     /* write if the socket has been opened */
-    if (self->sock != NULL)
+    if (self->sock != NULL && !h2o_socket_is_writing(self->sock))
         tcp_do_write(self);
 
     return 0;
