@@ -31,9 +31,9 @@ hosts:
   default:
     paths:
       /proxy-date:
-        proxy.reverse.url: http://127.0.0.1.xip.io:$date_upstream_port
+        proxy.reverse.url: http://localhost.examp1e.net:$date_upstream_port
       /proxy-no-date:
-        proxy.reverse.url: http://127.0.0.1.xip.io:$no_date_upstream_port
+        proxy.reverse.url: http://localhost.examp1e.net:$no_date_upstream_port
       /mruby-date:
         mruby.handler: |
           Proc.new do |env|
@@ -55,9 +55,9 @@ hosts:
   default:
     paths:
       /proxy-date:
-        proxy.reverse.url: http://127.0.0.1.xip.io:$date_upstream_port
+        proxy.reverse.url: http://localhost.examp1e.net:$date_upstream_port
       /proxy-no-date:
-        proxy.reverse.url: http://127.0.0.1.xip.io:$no_date_upstream_port
+        proxy.reverse.url: http://localhost.examp1e.net:$no_date_upstream_port
       /mruby-date:
         mruby.handler: |
           Proc.new do |env|

@@ -144,7 +144,6 @@ static const char *on_read_core(int fd, h2o_buffer_t **input)
         read_so_far += rret;
         if (read_so_far >= (1024 * 1024))
             break;
-
     }
     return NULL;
 }
@@ -365,7 +364,7 @@ h2o_loop_t *h2o_socket_get_loop(h2o_socket_t *_sock)
     return sock->loop;
 }
 
-socklen_t h2o_socket_getsockname(h2o_socket_t *_sock, struct sockaddr *sa)
+socklen_t get_sockname_uncached(h2o_socket_t *_sock, struct sockaddr *sa)
 {
     struct st_h2o_evloop_socket_t *sock = (void *)_sock;
     socklen_t len = sizeof(struct sockaddr_storage);

@@ -91,7 +91,7 @@ typedef void (*h2o_socket_cb)(h2o_socket_t *sock, const char *err);
 #include "socket/evloop.h"
 #endif
 
-struct st_h2o_socket_peername_t {
+struct st_h2o_socket_addr_t {
     socklen_t len;
     struct sockaddr addr;
 };
@@ -130,7 +130,8 @@ struct st_h2o_socket_t {
         h2o_socket_cb read;
         h2o_socket_cb write;
     } _cb;
-    struct st_h2o_socket_peername_t *_peername;
+    struct st_h2o_socket_addr_t *_peername;
+    struct st_h2o_socket_addr_t *_sockname;
     struct {
         uint8_t state; /* one of H2O_SOCKET_LATENCY_STATE_* */
         uint8_t notsent_is_minimized : 1;

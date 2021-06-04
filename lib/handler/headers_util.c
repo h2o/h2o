@@ -100,7 +100,8 @@ static void remove_header(h2o_headers_t *headers, h2o_headers_command_t *cmd)
             if (headers->entries[src].name == cmd->args[0].name)
                 continue;
         } else {
-            if (h2o_memis(headers->entries[src].name->base, headers->entries[src].name->len, cmd->args[0].name->base, cmd->args[0].name->len))
+            if (h2o_memis(headers->entries[src].name->base, headers->entries[src].name->len, cmd->args[0].name->base,
+                          cmd->args[0].name->len))
                 continue;
         }
         /* not matched */
@@ -110,7 +111,6 @@ static void remove_header(h2o_headers_t *headers, h2o_headers_command_t *cmd)
     }
     headers->size = dst;
 }
-
 
 static void dispose_h2o_headers_command(void *_cmds)
 {
@@ -199,7 +199,8 @@ AddHeader:
     if (h2o_iovec_is_token(cmd->args[0].name)) {
         h2o_add_header(pool, headers, (void *)cmd->args[0].name, NULL, cmd->args[0].value.base, cmd->args[0].value.len);
     } else {
-        h2o_add_header_by_str(pool, headers, cmd->args[0].name->base, cmd->args[0].name->len, 0, NULL, cmd->args[0].value.base, cmd->args[0].value.len);
+        h2o_add_header_by_str(pool, headers, cmd->args[0].name->base, cmd->args[0].name->len, 0, NULL, cmd->args[0].value.base,
+                              cmd->args[0].value.len);
     }
     return;
 

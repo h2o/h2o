@@ -656,7 +656,8 @@ static void handle_incoming_request(struct st_h2o_http1_conn_t *conn)
             h2o_socket_read_stop(conn->sock);
             process_request(conn);
         }
-    } return;
+    }
+        return;
     case -2: // incomplete
         if (inreqlen == H2O_MAX_REQLEN) {
             send_bad_request(conn, "Bad Request");
