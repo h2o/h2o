@@ -2,7 +2,6 @@ use strict;
 use warnings;
 use Digest::MD5 qw(md5_hex);
 use File::Temp qw(tempdir);
-use Net::EmptyPort qw(empty_port wait_port);
 use POSIX ":sys_wait_h";
 use Test::More;
 use t::Util;
@@ -27,19 +26,8 @@ my $client_prog = bindir() . "/h2o-httpclient";
 plan skip_all => "$client_prog not found"
     unless -e $client_prog;
 
-my $quic_port = empty_port({
-    host  => "127.0.0.1",
-    proto => "udp",
-});
-
 # spawn a simple HTTP/3 echo server, excerpted from 40http3.t
 my $server = spawn_h2o(<< "EOT");
-listen:
-  type: quic
-  port: $quic_port
-  ssl:
-    key-file: examples/h2o/server.key
-    certificate-file: examples/h2o/server.crt
 http3-graceful-shutdown-timeout: 1
 hosts:
   default:
@@ -51,15 +39,13 @@ hosts:
           end
 EOT
 
-wait_port({port => $quic_port, proto => 'udp'});
-
 # launch httpclient
 my $client_pid = fork;
 die "fork failed:$!"
 	unless defined $client_pid;
 
 if ($client_pid == 0) {
-	my @args = ("$client_prog", qw(-3 100 -t 5 -d 1000 -b 10 -c 2 -i 1000), "https://127.0.0.1:$quic_port/echo");
+	my @args = ("$client_prog", qw(-3 100 -t 5 -d 1000 -b 10 -c 2 -i 1000), "https://127.0.0.1:$server->{quic_port}/echo");
 	exec @args;
 	die "should not reach here!";
 }

@@ -1,7 +1,6 @@
 use strict;
 use warnings;
 use File::Temp qw(tempdir);
-use Net::EmptyPort qw(empty_port wait_port);
 use Test::More;
 use Time::HiRes qw(time);
 use t::Util;
@@ -27,19 +26,17 @@ plan skip_all => "macOS has issues https://twitter.com/kazuho/status/12980731105
 #     can still receive packets at 127.0.0.2)
 #  3. check that the slow request completes *after* the new server is up
 
-my $quic_port = empty_port({ host  => "0.0.0.0", proto => "udp" });
-
 # start server1 at 0.0.0.0, check that it is up
 my $server1 = spawn("0.0.0.0", 1);
-is do {my $fh = fetch(""); local $/; join "", <$fh> }, "server=1", "server1 is up";
+is do {my $fh = fetch($server, ""); local $/; join "", <$fh> }, "server=1", "server1 is up";
 
 # initiate the slow request
-my $slow_fh = fetch("-b 1200 -c 20 -i 100");
+my $slow_fh = fetch($server, "-b 1200 -c 20 -i 100");
 sleep 1;
 
 # start server2 at 127.0.0.1, check that it isup
 my $server2 = spawn("127.0.0.1", 2);
-is do {my $fh = fetch(""); local $/; join "", <$fh> }, "server=2", "server2 is up";
+is do {my $fh = fetch($server, ""); local $/; join "", <$fh> }, "server=2", "server2 is up";
 
 # check that the slow request was served, going through $server2
 my $elapsed = time;
@@ -66,15 +63,10 @@ done_testing;
 
 sub spawn {
     my ($listen_ip, $server_id) = @_;
-    my $conf = {opts => [qw(-m worker)], conf => <<"EOT"};
+    my $conf = sub {
+        my ($port, $tls_port, $quic_port) = @_;
+        return +{ opts => [qw(-m worker)], conf => <<"EOT" };
 num-threads: 1
-listen:
-  type: quic
-  host: $listen_ip
-  port: $quic_port
-  ssl:
-    key-file: examples/h2o/server.key
-    certificate-file: examples/h2o/server.crt
 quic-nodes:
   self: $server_id
   mapping:
@@ -95,12 +87,13 @@ hosts:
       "/server-status":
         status: ON
 EOT
-    spawn_h2o($conf);
+    };
+    spawn_h2o($conf, +{ quic => +{ host => $listen_ip } });
 }
 
 sub fetch {
-    my $opts = shift;
-    open my $fh, "-|", "$client_prog -3 100 $opts https://127.0.0.1:$quic_port/ 2> /dev/null"
+    my ($server, $opts) = @_;
+    open my $fh, "-|", "$client_prog -3 100 $opts https://127.0.0.1:$server->{quic_port}/ 2> /dev/null"
         or die "failed to spawn $client_prog:$!";
     $fh;
 }

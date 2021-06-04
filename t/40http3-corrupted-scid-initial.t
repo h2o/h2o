@@ -1,7 +1,6 @@
 use strict;
 use warnings;
 use File::Temp qw(tempdir);
-use Net::EmptyPort qw(empty_port wait_port);
 use POSIX ":sys_wait_h";
 use Test::More;
 use t::Util;
@@ -12,19 +11,7 @@ use JSON;
 
 my $tempdir = tempdir(CLEANUP => 1);
 
-my $quic_port = empty_port({
-    host  => "127.0.0.1",
-    proto => "udp",
-});
-
 my $server = spawn_h2o(<< "EOT");
-listen:
-  type: quic
-  host: 127.0.0.1
-  port: $quic_port
-  ssl:
-    key-file: examples/h2o/server.key
-    certificate-file: examples/h2o/server.crt
 ssl-session-resumption:
   mode: ticket
   ticket-store: file
@@ -45,14 +32,12 @@ quic-nodes:
    3: "127.0.0.3:8443"
 EOT
 
-wait_port({port => $quic_port, proto => 'udp'});
-
 # throw packets to h2o
 
 # Test 1:
 # Throw decryptable Initial first, then second-flight Initial with corrupted SCID
 # For the second packet, the correct behavior is to discard the packet.
-system("perl", "t/udp-generator.pl", "127.0.0.1", "$quic_port", "t/assets/quic-decryptable-initial.bin", "t/assets/quic-initial-w-corrupted-scid.bin") == 0 or die "Failed to launch udp-generator";
+system("perl", "t/udp-generator.pl", "127.0.0.1", "$server->{quic_port}", "t/assets/quic-decryptable-initial.bin", "t/assets/quic-initial-w-corrupted-scid.bin") == 0 or die "Failed to launch udp-generator";
 
 # make sure the server did not crash
 my $port = $server->{port};
@@ -72,7 +57,7 @@ ok get_num_connections() == 2, "Number of connections is two";
 
 # Test 2:
 # Throw Initial with h2o-issued (valid) DCID and zero-length SCID
-system("perl", "t/udp-generator.pl", "127.0.0.1", "$quic_port", "t/assets/quic-initial-w-zerolen-scid.bin") == 0 or die "Failed to launch udp-generator";
+system("perl", "t/udp-generator.pl", "127.0.0.1", "$server->{quic_port}", "t/assets/quic-initial-w-zerolen-scid.bin") == 0 or die "Failed to launch udp-generator";
 
 for my $i(1 .. 2) {
 	sleep 1;

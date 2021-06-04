@@ -14,7 +14,7 @@ plan skip_all => 'curl not found'
 my $tempdir = tempdir(CLEANUP => 1);
 
 my $server = spawn_h2o({
-    opts => [qw(--mode=worker)],
+    args => [qw(--mode=worker)],
     user => "nobody",
     conf => << 'EOT',
 hosts:

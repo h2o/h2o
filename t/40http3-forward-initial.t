@@ -1,7 +1,6 @@
 use strict;
 use warnings;
 use File::Temp qw(tempdir);
-use Net::EmptyPort qw(empty_port wait_port);
 use POSIX ":sys_wait_h";
 use Test::More;
 use t::Util;
@@ -53,19 +52,7 @@ check_dtrace_availability();
 
 my $tempdir = tempdir(CLEANUP => 1);
 
-my $quic_port = empty_port({
-    host  => "127.0.0.1",
-    proto => "udp",
-});
-
 my $server = spawn_h2o(<< "EOT");
-listen:
-  type: quic
-  host: 127.0.0.1
-  port: $quic_port
-  ssl:
-    key-file: examples/h2o/server.key
-    certificate-file: examples/h2o/server.crt
 ssl-session-resumption:
   mode: ticket
   ticket-store: file
@@ -82,8 +69,6 @@ quic-nodes:
    2: "127.0.0.2:8443"
    3: "127.0.0.3:8443"
 EOT
-
-wait_port({port => $quic_port, proto => 'udp'});
 
 # launch tracer for h2o server
 my $tracer_pid = fork;
@@ -125,13 +110,13 @@ sleep 2;
 # test1: throw non-decryptable Initial first
 # Since it's not associated with any existing connections, h2o would pass it to `quicly_accept` and
 # it would return QUICLY_ERROR_DECRYPTION_FAILED. Then h2o would try to forward the packet using DCID's node_id field.
-system("perl", "t/udp-generator.pl", "127.0.0.1", "$quic_port", "t/assets/quic-nondecryptable-initial.bin") == 0 or die "Failed to launch udp-generator";
+system("perl", "t/udp-generator.pl", "127.0.0.1", "$server->{quic_port}", "t/assets/quic-nondecryptable-initial.bin") == 0 or die "Failed to launch udp-generator";
 
 # test2: throw decryptable Initial first, then non-decryptable Initial next
 # The first Initial would successfully create a new connection object inside h2o.
 # Then the because second Initial's DCID doesn't match the first one's, h2o determines
 # the packet should be for another node, and forwards it using DCID's node_id field.
-system("perl", "t/udp-generator.pl", "127.0.0.1", "$quic_port", "t/assets/quic-decryptable-initial.bin", "t/assets/quic-nondecryptable-initial.bin") == 0 or die "Failed to launch udp-generator";
+system("perl", "t/udp-generator.pl", "127.0.0.1", "$server->{quic_port}", "t/assets/quic-decryptable-initial.bin", "t/assets/quic-nondecryptable-initial.bin") == 0 or die "Failed to launch udp-generator";
 
 # shutdown h2o
 undef $server;

@@ -3,7 +3,6 @@
 # H2OLOG_DEBUG=1 for more runtime logs
 use strict;
 use warnings FATAL => "all";
-use Net::EmptyPort qw(empty_port);
 use Test::More;
 use JSON;
 use t::Util;
@@ -24,20 +23,9 @@ unless ($ENV{DTRACE_TESTS})  {
       unless server_features()->{dtrace};
 }
 
-my $quic_port = empty_port({
-    host  => "127.0.0.1",
-    proto => "udp",
-});
-
 my $server = spawn_h2o({
-    opts => [qw(--mode=worker)],
+    args => [qw(--mode=worker)],
     conf => << "EOT",
-listen:
-  type: quic
-  port: $quic_port
-  ssl:
-    key-file: examples/h2o/server.key
-    certificate-file: examples/h2o/server.crt
 hosts:
   default:
     paths:
@@ -52,7 +40,7 @@ subtest "h2olog", sub {
     args => [],
   });
 
-  my ($headers, $body) = run_prog("$client_prog -3 https://127.0.0.1:$quic_port/");
+  my ($headers, $body) = run_prog("$client_prog -3 https://127.0.0.1:$server->{quic_port}/");
   like $headers, qr{^HTTP/3 200\n}, "req: HTTP/3";
 
   my $trace;
@@ -72,7 +60,7 @@ subtest "h2olog -H", sub {
     args => ["-H"],
   });
 
-  my ($headers, $body) = run_prog("$client_prog -3 https://127.0.0.1:$quic_port/");
+  my ($headers, $body) = run_prog("$client_prog -3 https://127.0.0.1:$server->{quic_port}/");
   like $headers, qr{^HTTP/3 200\n}, "req: HTTP/3";
 
   my $trace;

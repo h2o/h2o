@@ -20,10 +20,6 @@ my $upstream = spawn_server(
     },
 );
 
-my $quic_port = empty_port({
-    host  => "127.0.0.1",
-    proto => "udp",
-});
 my $h3client = bindir() . "/h2o-httpclient";
 
 subtest 'forward' => sub {
@@ -38,13 +34,6 @@ subtest 'forward' => sub {
 subtest 'send 103' => sub {
     my $server = spawn_h2o(<< "EOT");
 send-informational: all
-listen:
-  type: quic
-  host: 127.0.0.1
-  port: $quic_port
-  ssl:
-    key-file: examples/h2o/server.key
-    certificate-file: examples/h2o/server.crt
 hosts:
   default:
     paths:
@@ -74,7 +63,7 @@ EOT
                 unless -e $h3client;
             for my $sleep_secs (qw(0 2)) {
                 subtest "sleep $sleep_secs" => sub {
-                    open my $fh, "-|", "$h3client -3 100 https://127.0.0.1:$quic_port/async/sleep-and-respond?sleep=$sleep_secs 2>&1"
+                    open my $fh, "-|", "$h3client -3 100 https://127.0.0.1:$server->{quic_port}/async/sleep-and-respond?sleep=$sleep_secs 2>&1"
                         or die "failed to invoke $h3client:$!";
                     like scalar(<$fh>), qr{^HTTP/3 103}, "103 resp";
                     ok wait_for_line($fh, qr{^foo: FOO$}s, qr{^$}s), "has foo: FOO";
@@ -101,7 +90,7 @@ EOT
         subtest 'http/3' => sub {
             plan skip_all => "$h3client not found"
                 unless -e $h3client;
-            my $resp = `$h3client -3 100 https://127.0.0.1:$quic_port/sync/index.txt 2>&1`;
+            my $resp = `$h3client -3 100 https://127.0.0.1:$server->{quic_port}/sync/index.txt 2>&1`;
             like $resp, qr{^HTTP/3 200\n}s;
         };
     };
