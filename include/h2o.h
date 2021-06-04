@@ -682,6 +682,16 @@ struct st_h2o_context_t {
          * timeout entry used for graceful shutdown
          */
         h2o_timer_t _graceful_shutdown_timeout;
+        struct {
+            /**
+             * number of packets forwarded to another node in a cluster
+             */
+            uint64_t packet_forwarded;
+            /**
+             * number of forwarded packets received from another node in a cluster
+             */
+            uint64_t forwarded_packet_received;
+        } events;
     } http3;
 
     struct {
@@ -1022,7 +1032,6 @@ typedef int (*h2o_write_req_cb)(void *ctx, h2o_iovec_t chunk, int is_end_stream)
  * `is_end_stream`.
  */
 typedef void (*h2o_proceed_req_cb)(h2o_req_t *req, size_t bytes_written, h2o_send_state_t send_state);
-
 
 #define H2O_SEND_SERVER_TIMING_BASIC 1
 #define H2O_SEND_SERVER_TIMING_PROXY 2
@@ -2006,15 +2015,15 @@ void h2o_file_register_configurator(h2o_globalconf_t *conf);
 
 enum {
     H2O_HEADERS_CMD_NULL,
-    H2O_HEADERS_CMD_ADD,        /* adds a new header line */
-    H2O_HEADERS_CMD_APPEND,     /* adds a new header line or contenates to the existing header */
-    H2O_HEADERS_CMD_MERGE,      /* merges the value into a comma-listed values of the named header */
-    H2O_HEADERS_CMD_SET,        /* sets a header line, overwriting the existing one (if any) */
-    H2O_HEADERS_CMD_SETIFEMPTY, /* sets a header line if empty */
-    H2O_HEADERS_CMD_UNSET,       /* removes the named header(s) */
-    H2O_HEADERS_CMD_UNSETUNLESS,       /* only keeps the named header(s) */
+    H2O_HEADERS_CMD_ADD,                /* adds a new header line */
+    H2O_HEADERS_CMD_APPEND,             /* adds a new header line or contenates to the existing header */
+    H2O_HEADERS_CMD_MERGE,              /* merges the value into a comma-listed values of the named header */
+    H2O_HEADERS_CMD_SET,                /* sets a header line, overwriting the existing one (if any) */
+    H2O_HEADERS_CMD_SETIFEMPTY,         /* sets a header line if empty */
+    H2O_HEADERS_CMD_UNSET,              /* removes the named header(s) */
+    H2O_HEADERS_CMD_UNSETUNLESS,        /* only keeps the named header(s) */
     H2O_HEADERS_CMD_COOKIE_UNSET,       /* removes the named cookie(s) */
-    H2O_HEADERS_CMD_COOKIE_UNSETUNLESS,       /* only keeps the named cookie(s) */
+    H2O_HEADERS_CMD_COOKIE_UNSETUNLESS, /* only keeps the named cookie(s) */
 };
 
 typedef enum h2o_headers_command_when {

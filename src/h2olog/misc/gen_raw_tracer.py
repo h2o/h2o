@@ -94,16 +94,19 @@ block_probes = set([
 rename_map = {
     # common fields
     "at": "time",
-    "master_id": "conn",
+    "conn_master_id": "conn",
 
     # changed in the latest quicly master branch
     "num_bytes": "bytes_len",
 
     # quicly_rtt_t
-    "minimum": "min-rtt",
-    "smoothed": "smoothed-rtt",
-    "variance": "variance-rtt",
-    "latest": "latest-rtt",
+    "rtt_minimum": "min-rtt",
+    "rtt_smoothed": "smoothed-rtt",
+    "rtt_variance": "variance-rtt",
+    "rtt_latest": "latest-rtt",
+
+    # quicly_stream_t
+    "stream_stream_id": "stream_id",
 }
 
 st_quicly_conn_t_def = r"""
@@ -264,7 +267,6 @@ def parse_dscript(path: Path):
       "appdata": appdata,
   }
 
-
 def parse_and_analyze(context: dict, d_file: Path):
   dscript = parse_dscript(d_file)
 
@@ -320,7 +322,8 @@ def parse_and_analyze(context: dict, d_file: Path):
           if struct_map[st_name]:
             # decodes the struct into members in BPF programs.
             for st_field_access, st_field_name in struct_map[st_name]:
-              flat_args_map[st_field_name or st_field_access] = "typeof_%s__%s" % (st_name, st_field_name or st_field_access)
+              flat_arg_name = "%s_%s" % (arg_name, st_field_name or st_field_access)
+              flat_args_map[flat_arg_name] = "typeof_%s__%s" % (st_name, st_field_name or st_field_access)
           else:
             # decodes the struct into members in the user space (json.cc).
             flat_args_map[arg_name] = "struct %s" % st_name
@@ -374,7 +377,7 @@ def build_tracer(context, metadata):
   c = r"""// %s
 int %s(struct pt_regs *ctx) {
   const void *buf = NULL;
-  struct h2olog_event_t event = { .id = %s };
+  struct h2olog_event_t event = { .id = %s, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
 """ % (fully_specified_probe_name, tracer_name, metadata['id'])
   appdata_field_set = metadata["appdata_field_set"]  # type: set[str]
@@ -415,7 +418,7 @@ int %s(struct pt_regs *ctx) {
           c += "  bpf_usdt_readarg(%d, ctx, &buf);\n" % (i+1)
           c += "  bpf_probe_read(&%s, sizeof_%s, buf);\n" % (arg_name, st_name)
           for st_field_access, st_field_name in struct_map[st_name]:
-            event_t_name = "%s.%s" % (probe_name, st_field_name or st_field_access)
+            event_t_name = "%s.%s_%s" % (probe_name, arg_name, st_field_name or st_field_access)
             c += "  event.%s = get_%s__%s(%s);\n" % (
                 event_t_name, st_name, st_field_name or st_field_access, arg_name)
         else:
@@ -436,16 +439,23 @@ int %s(struct pt_regs *ctx) {
 
   if fully_specified_probe_name == "h2o:_private_socket_lookup_flags":
     c += r"""
-#ifdef H2OLOG_SAMPLING_RATE_U32
   uint64_t flags = event._private_socket_lookup_flags.original_flags;
-  int skip_tracing = bpf_get_prandom_u32() > H2OLOG_SAMPLING_RATE_U32;
-  if (skip_tracing) {
-    flags |= H2O_EBPF_FLAGS_SKIP_TRACING_BIT;
+#ifdef H2OLOG_SAMPLING_RATE_U32
+  if ((flags & H2O_EBPF_FLAGS_SKIP_TRACING_BIT) == 0) {
+    if (bpf_get_prandom_u32() >= H2OLOG_SAMPLING_RATE_U32)
+      flags |= H2O_EBPF_FLAGS_SKIP_TRACING_BIT;
   }
+#endif
+#ifdef H2OLOG_IS_SAMPLING_ADDRESS
+  if ((flags & H2O_EBPF_FLAGS_SKIP_TRACING_BIT) == 0) {
+    if (!H2OLOG_IS_SAMPLING_ADDRESS(event._private_socket_lookup_flags.info.family,
+                                    event._private_socket_lookup_flags.info.remote.ip))
+      flags |= H2O_EBPF_FLAGS_SKIP_TRACING_BIT;
+  }
+#endif
   int64_t ret = h2o_return.insert(&event._private_socket_lookup_flags.tid, &flags);
   if (ret != 0)
     bpf_trace_printk("failed to insert 0x%%llx in %s with errno=%%lld\n", flags, -ret);
-#endif
 """ % (tracer_name)
   else:
     c += r"""
@@ -457,6 +467,19 @@ int %s(struct pt_regs *ctx) {
   return 0;
 }
 """
+
+  if fully_specified_probe_name == "h2o:_private_socket_lookup_flags":
+    c = r"""
+#if H2OLOG_SELECTIVE_TRACING
+// A pinned BPF object to return a value to h2o.
+// The table size must be larger than the number of threads in h2o.
+BPF_TABLE_PINNED("lru_hash", pid_t, uint64_t, h2o_return, H2O_EBPF_RETURN_MAP_SIZE, H2O_EBPF_RETURN_MAP_PATH);
+
+%s
+#endif
+
+""" % c.strip()
+
   return c
 
 
@@ -551,6 +574,7 @@ enum h2olog_event_id_t {
   event_t_decl = r"""
 struct h2olog_event_t {
   enum h2olog_event_id_t id;
+  uint32_t tid;
 
   union {
 """
@@ -587,6 +611,7 @@ struct h2olog_event_t {
   bpf = r"""
 #include <linux/sched.h>
 #include <linux/limits.h>
+#include "h2o/ebpf.h"
 
 #define STR_LEN 64
 
@@ -596,17 +621,9 @@ typedef union quicly_address_t {
   uint8_t sin6[sizeof_sockaddr_in6];
 } quicly_address_t;
 
-struct st_h2o_ebpf_map_key_t {
-  uint8_t payload[sizeof_st_h2o_ebpf_map_key_t];
-};
-
 %s
 %s
 BPF_PERF_OUTPUT(events);
-
-// A pinned BPF object to return a value to h2o.
-// The table size must be larger than the number of threads in h2o.
-BPF_TABLE_PINNED("lru_hash", pid_t, uint64_t, h2o_return, H2O_EBPF_RETURN_MAP_SIZE, H2O_EBPF_RETURN_MAP_PATH);
 
 // HTTP/3 tracing
 BPF_HASH(h2o_to_quicly_conn, u64, u32);
@@ -632,6 +649,9 @@ void h2o_raw_tracer::initialize() {
 """
   for metadata in probe_metadata.values():
     bpf += build_tracer(context, metadata)
+
+    if metadata["fully_specified_probe_name"] == "h2o:_private_socket_lookup_flags":
+      continue
     usdts_def += """    h2o_tracer::usdt("%s", "%s", "%s"),\n""" % (
         metadata['provider'], metadata['name'], build_tracer_name(metadata))
   usdts_def += r"""
@@ -666,6 +686,7 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
     handle_event_func += "  case %s: { // %s\n" % (
         metadata['id'], fully_specified_probe_name)
     handle_event_func += '    json_write_pair_n(out_, STR_LIT("type"), STR_LIT("%s"));\n' % probe_name.replace("_", "-")
+    handle_event_func += '    json_write_pair_c(out_, STR_LIT("tid"), event->tid);\n'
     handle_event_func += '    json_write_pair_c(out_, STR_LIT("seq"), seq_);\n'
 
     for field_name, field_type in flat_args_map.items():

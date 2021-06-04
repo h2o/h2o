@@ -32,6 +32,8 @@ struct st_events_status_ctx_t {
     uint64_t h1_request_timeout;
     uint64_t h1_request_io_timeout;
     uint64_t ssl_errors;
+    uint64_t h3_packet_forwarded;
+    uint64_t h3_forwarded_packet_received;
     pthread_mutex_t mutex;
 };
 
@@ -54,6 +56,8 @@ static void events_status_per_thread(void *priv, h2o_context_t *ctx)
     esc->h2_idle_timeout += ctx->http2.events.idle_timeouts;
     esc->h1_request_timeout += ctx->http1.events.request_timeouts;
     esc->h1_request_io_timeout += ctx->http1.events.request_io_timeouts;
+    esc->h3_packet_forwarded += ctx->http3.events.packet_forwarded;
+    esc->h3_forwarded_packet_received += ctx->http3.events.forwarded_packet_received;
 
     pthread_mutex_unlock(&esc->mutex);
 }
@@ -106,6 +110,8 @@ static h2o_iovec_t events_status_final(void *priv, h2o_globalconf_t *gconf, h2o_
                        " \"http2.read-closed\": %" PRIu64 ", \n"
                        " \"http2.write-closed\": %" PRIu64 ", \n"
                        " \"http2.idle-timeout\": %" PRIu64 ", \n"
+                       " \"http3.packet-forwarded\": %" PRIu64 ", \n"
+                       " \"http3.forwarded-packet-received\": %" PRIu64 ", \n"
                        " \"ssl.errors\": %" PRIu64 ", \n"
                        " \"memory.mmap_errors\": %zu\n",
                        H1_AGG_ERR(400), H1_AGG_ERR(403), H1_AGG_ERR(404), H1_AGG_ERR(405), H1_AGG_ERR(416), H1_AGG_ERR(417),
@@ -113,7 +119,8 @@ static h2o_iovec_t events_status_final(void *priv, h2o_globalconf_t *gconf, h2o_
                        H2_AGG_ERR(PROTOCOL), H2_AGG_ERR(INTERNAL), H2_AGG_ERR(FLOW_CONTROL), H2_AGG_ERR(SETTINGS_TIMEOUT),
                        H2_AGG_ERR(STREAM_CLOSED), H2_AGG_ERR(FRAME_SIZE), H2_AGG_ERR(REFUSED_STREAM), H2_AGG_ERR(CANCEL),
                        H2_AGG_ERR(COMPRESSION), H2_AGG_ERR(CONNECT), H2_AGG_ERR(ENHANCE_YOUR_CALM), H2_AGG_ERR(INADEQUATE_SECURITY),
-                       esc->h2_read_closed, esc->h2_write_closed, esc->h2_idle_timeout, esc->ssl_errors, h2o_mmap_errors);
+                       esc->h2_read_closed, esc->h2_write_closed, esc->h2_idle_timeout, esc->h3_packet_forwarded,
+                       esc->h3_forwarded_packet_received, esc->ssl_errors, h2o_mmap_errors);
     pthread_mutex_destroy(&esc->mutex);
     free(esc);
     return ret;

@@ -29,12 +29,8 @@ unless ($ENV{DTRACE_TEST})  {
 # but don't unlink it elsewhere to make sure `h2o_return` stuff works if the map already exists.
 unlink("/sys/fs/bpf/h2o_return");
 
-my $quic_port = empty_port({
-    host  => "127.0.0.1",
-    proto => "udp",
-});
-
 sub spawn_my_h2o {
+  my($quic_port) = @_;
   return spawn_h2o({
     opts => [qw(--mode=worker)],
     user => getpwuid($ENV{SUDO_UID}),
@@ -55,9 +51,35 @@ EOT
 });
 }
 
-my $server = spawn_my_h2o();
+subtest "h2olog should be able to start when h2o has no `usdt-selective-tracing: ON`", sub {
+  my $server = spawn_h2o(<<'EOT');
+hosts:
+  default:
+    paths:
+      /:
+        file.dir: t/assets/doc_root
+EOT
 
-diag "quic port: $quic_port / port: $server->{port} / tls port: $server->{tls_port}";
+  my $tracer = H2ologTracer->new({
+    pid => $server->{pid},
+    args => [],
+  });
+
+  my ($headers) = run_prog("$client_prog http://127.0.0.1:$server->{port}/");
+  like $headers, qr{^HTTP/1\.1 200\b}, "req: HTTP/1";
+
+  my $trace;
+  until (($trace = $tracer->get_trace()) =~ /\n/) {}
+  pass "h2olog has startded successfully";
+};
+
+
+my $quic_port = empty_port({
+    host  => "127.0.0.1",
+    proto => "udp",
+});
+
+my $server = spawn_my_h2o($quic_port);
 
 subtest "h2olog -S=1.00", sub {
   my $tracer = H2ologTracer->new({
@@ -169,7 +191,7 @@ undef $server;
 subtest "h2o_return exists", sub {
   ok -f "/sys/fs/bpf/h2o_return", "h2o_return does exist";
 
-  my $server = spawn_my_h2o();
+  my $server = spawn_my_h2o($quic_port);
 
   my $tracer = H2ologTracer->new({
     pid => $server->{pid},

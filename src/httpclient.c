@@ -461,30 +461,36 @@ h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *errstr, 
 
 static void usage(const char *progname)
 {
-    fprintf(stderr, "Usage: %s [options] <url>\n"
-                    "Options:\n"
-                    "  -2 <ratio>   HTTP/2 ratio (between 0 and 100)\n"
-                    "  -3 <ratio>   HTTP/3 ratio (between 0 and 100)\n"
-                    "  -b <size>    size of request body (in bytes; default: 0)\n"
-                    "  -C <concurrency>\n"
-                    "               sets the number of requests run at once (default: 1)\n"
-                    "  -c <size>    size of body chunk (in bytes; default: 10)\n"
-                    "  -d <delay>   request interval (in msec; default: 0)\n"
-                    "  -H <name:value>\n"
-                    "               adds a request header\n"
-                    "  -i <delay>   I/O interval between sending chunks (in msec; default: 0)\n"
-                    "  -k           skip peer verification\n"
-                    "  -m <method>  request method (default: GET)\n"
-                    "  -o <path>    file to which the response body is written (default: stdout)\n"
-                    "  -t <times>   number of requests to send the request (default: 1)\n"
-                    "  -W <bytes>   receive window size (HTTP/3 only)\n"
-                    "  -x <host:port>\n"
-                    "               specifies the host and port to connect to\n"
-                    "               the same host will be used for TLS verification,\n"
-                    "               -k may be needed if connecting to a host other than the url\n"
-                    "  -h           prints this help\n"
-                    "\n",
-            progname);
+    fprintf(stderr,
+            "Usage: %s [options] <url>\n"
+            "Options:\n"
+            "  -2 <ratio>   HTTP/2 ratio (between 0 and 100)\n"
+            "  -3 <ratio>   HTTP/3 ratio (between 0 and 100)\n"
+            "  -b <size>    size of request body (in bytes; default: 0)\n"
+            "  -C <concurrency>\n"
+            "               sets the number of requests run at once (default: 1)\n"
+            "  -c <size>    size of body chunk (in bytes; default: 10)\n"
+            "  -d <delay>   request interval (in msec; default: 0)\n"
+            "  -H <name:value>\n"
+            "               adds a request header\n"
+            "  -i <delay>   I/O interval between sending chunks (in msec; default: 0)\n"
+            "  -k           skip peer verification\n"
+            "  -m <method>  request method (default: GET)\n"
+            "  -o <path>    file to which the response body is written (default: stdout)\n"
+            "  -t <times>   number of requests to send the request (default: 1)\n"
+            "  -W <bytes>   receive window size (HTTP/3 only)\n"
+            "  -x <host:port>\n"
+            "               specifies the host and port to connect to\n"
+            "               the same host will be used for TLS verification,\n"
+            "               -k may be needed if connecting to a host other than the url\n"
+            "  --initial-udp-payload-size <bytes>\n"
+            "               specifies the udp payload size of the initial message (default: %" PRIu16 ")\n"
+            "  --max-udp-payload-size <bytes>\n"
+            "               specifies the max_udp_payload_size transport parameter to send (default: %" PRIu64 ")\n"
+            "  -h, --help   prints this help\n"
+            "\n",
+            progname, quicly_spec_context.initial_egress_max_udp_payload_size,
+            quicly_spec_context.transport_params.max_udp_payload_size);
 }
 
 static void on_sigfatal(int signo)
@@ -566,12 +572,18 @@ int main(int argc, char **argv)
     }
 #endif
 
+    int is_opt_initial_udp_payload_size = 0;
+    int is_opt_max_udp_payload_size = 0;
+    struct option longopts[] = {{"initial-udp-payload-size", required_argument, &is_opt_initial_udp_payload_size, 1},
+                                {"max-udp-payload-size", required_argument, &is_opt_max_udp_payload_size, 1},
+                                {"help", no_argument, NULL, 'h'},
+                                {NULL}};
     const char *optstring = "t:m:o:b:x:C:c:d:H:i:k2:W:h3:"
 #ifdef __GNUC__
                             ":" /* for backward compatibility, optarg of -3 is optional when using glibc */
 #endif
         ;
-    while ((opt = getopt(argc, argv, optstring)) != -1) {
+    while ((opt = getopt_long(argc, argv, optstring, longopts, NULL)) != -1) {
         switch (opt) {
         case 't':
             if (sscanf(optarg, "%u", &cnt_left) != 1 || cnt_left < 1) {
@@ -684,6 +696,21 @@ int main(int argc, char **argv)
         case 'h':
             usage(argv[0]);
             exit(0);
+            break;
+        case 0:
+            if (is_opt_initial_udp_payload_size == 1) {
+                if (sscanf(optarg, "%" SCNu16, &h3ctx.quic.initial_egress_max_udp_payload_size) != 1) {
+                    fprintf(stderr, "failed to parse --initial-udp-payload-size\n");
+                    exit(EXIT_FAILURE);
+                }
+                is_opt_initial_udp_payload_size = 0;
+            } else if (is_opt_max_udp_payload_size == 1) {
+                if (sscanf(optarg, "%" SCNu64, &h3ctx.quic.transport_params.max_udp_payload_size) != 1) {
+                    fprintf(stderr, "failed to parse --max-udp-payload-size\n");
+                    exit(EXIT_FAILURE);
+                }
+                is_opt_max_udp_payload_size = 0;
+            }
             break;
         default:
             exit(EXIT_FAILURE);

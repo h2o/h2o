@@ -122,12 +122,12 @@ for my $probe (@probes) {
             my @fields;
             push @fields, map {["rtt.$_" => '%u']} qw(minimum smoothed variance);
             push @fields, map {["cc.$_" => '%u']} qw(impl->type cwnd ssthresh cwnd_initial cwnd_exiting_slow_start cwnd_minimum cwnd_maximum num_loss_episodes);
-            push @fields, map {["num_packets.$_" => '%llu']} qw(sent ack_received lost lost_time_threshold late_acked received decryption_failed);
-            push @fields, map {["num_bytes.$_" => '%llu']} qw(sent received);
-                for my $container (qw(num_frames_sent num_frames_received)) {
-                    push @fields, map{["$container.$_" => '%llu']} qw(padding ping ack reset_stream stop_sending crypto new_token stream max_data max_stream_data max_streams_bidi max_streams_uni data_blocked stream_data_blocked streams_blocked new_connection_id retire_connection_id path_challenge path_response transport_close application_close handshake_done ack_frequency);
-                }
-            push @fields, ["num_ptos" => '%llu'];
+            push @fields, map {["num_packets.$_" => $arch eq 'embedded' ? '%" PRIu64 "' : '%llu']} qw(sent ack_received lost lost_time_threshold late_acked received decryption_failed);
+            push @fields, map {["num_bytes.$_" => $arch eq 'embedded' ? '%" PRIu64 "' : '%llu']} qw(sent received);
+            for my $container (qw(num_frames_sent num_frames_received)) {
+                push @fields, map{["$container.$_" => $arch eq 'embedded' ? '%" PRIu64 "' : '%llu']} qw(padding ping ack reset_stream stop_sending crypto new_token stream max_data max_stream_data max_streams_bidi max_streams_uni data_blocked stream_data_blocked streams_blocked new_connection_id retire_connection_id path_challenge path_response transport_close application_close handshake_done ack_frequency);
+            }
+            push @fields, ["num_ptos" => $arch eq 'embedded' ? '%" PRIu64 "' : '%llu'];
             # generate @fmt, @ap
             push @fmt, map {my $n = $_->[0]; $n =~ tr/./_/; sprintf '"%s":%s', $n, $_->[1]} @fields;
             if ($arch eq 'linux') {
@@ -218,6 +218,7 @@ EOT
     } else {
         my $fmt = join ', ', @fmt;
         $fmt =~ s/\"/\\\"/g;
+        $fmt =~ s/\%\\" ([A-Za-z0-9]+) \\"/\%" $1 "/g; # nasty hack to revert `"` -> `\"` right above for PRItNN
         print << "EOT";
 
 #define QUICLY_@{[ uc $probe->[0] ]}_ENABLED() (quicly_trace_fp != NULL)

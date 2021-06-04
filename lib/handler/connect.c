@@ -54,7 +54,7 @@ struct st_connect_request_t {
     h2o_timer_t timeout;
 };
 
-#define TO_BITMASK(type, len) ((type)~(((type)1 << (sizeof(type) * 8 - (len))) - 1))
+#define TO_BITMASK(type, len) ((type) ~(((type)1 << (sizeof(type) * 8 - (len))) - 1))
 
 static void start_connect(struct st_connect_request_t *creq);
 

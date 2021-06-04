@@ -62,7 +62,8 @@ subtest "h2olog", sub {
     diag "h2olog output:\n", $trace;
   }
 
-  ok( (map { decode_json($_) } split /\n/, $trace), "h2olog output is valid JSON Lines");
+  my @events = map { decode_json($_) } split /\n/, $trace;
+  is scalar(grep { $_->{type} && $_->{tid} && $_->{seq} } @events), scalar(@events), "each event has type, tid and seq";
 };
 
 subtest "h2olog -H", sub {
