@@ -1418,6 +1418,14 @@ void h2o_socket_ssl_set_picotls_context(SSL_CTX *ossl, ptls_context_t *ptls)
     SSL_CTX_set_ex_data(ossl, get_ptls_index(), ptls);
 }
 
+struct st_ptls_t *h2o_ssl_get_socket_ptls(h2o_socket_t *sock)
+{
+    if (sock->ssl)
+        return sock->ssl->ptls;
+
+    return NULL;
+}
+
 static void on_dispose_ssl_ctx_session_cache(void *parent, void *ptr, CRYPTO_EX_DATA *ad, int idx, long argl, void *argp)
 {
     h2o_cache_t *ssl_session_cache = (h2o_cache_t *)ptr;
@@ -1898,6 +1906,22 @@ int h2o_socket_ebpf_init_key(h2o_ebpf_map_key_t *key, void *sock)
 uint64_t h2o_socket_ebpf_lookup_flags(h2o_loop_t *loop, int (*init_key)(h2o_ebpf_map_key_t *key, void *cbdata), void *cbdata)
 {
     return 0;
+}
+
+SSL *h2o_ssl_get_ssl(h2o_socket_t *sock)
+{
+    if (sock->ssl)
+        return sock->ssl->ossl;
+
+    return NULL;
+}
+
+SSL_CTX *h2o_ssl_get_ssl_ctx(h2o_socket_t *sock)
+{
+    if (sock->ssl)
+        return sock->ssl->ssl_ctx;
+
+    return NULL;
 }
 
 #endif
