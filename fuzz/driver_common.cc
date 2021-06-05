@@ -109,6 +109,7 @@ void register_proxy(h2o_hostconf_t *hostconf, const char *unix_path, h2o_access_
     proxy_config.io_timeout = 100;
     proxy_config.connect_timeout = proxy_config.io_timeout;
     proxy_config.first_byte_timeout = proxy_config.io_timeout;
+    proxy_config.max_buffer_size = 1024 * 1024;
     h2o_url_parse(unix_path, strlen(unix_path), &upstream);
     h2o_socketpool_t *sockpool = new h2o_socketpool_t();
     h2o_socketpool_target_t *target = h2o_socketpool_create_target(&upstream, NULL);
