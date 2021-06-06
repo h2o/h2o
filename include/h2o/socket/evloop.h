@@ -56,6 +56,10 @@ typedef h2o_timerwheel_cb h2o_timer_cb;
 
 h2o_socket_t *h2o_evloop_socket_create(h2o_evloop_t *loop, int fd, int flags);
 h2o_socket_t *h2o_evloop_socket_accept(h2o_socket_t *listener);
+/**
+ * Sets number of bytes that can be read at once (default: 1MB).
+ */
+void h2o_evloop_socket_set_max_read_size(h2o_socket_t *sock, size_t max_size);
 
 h2o_evloop_t *h2o_evloop_create(void);
 void h2o_evloop_destroy(h2o_evloop_t *loop);
