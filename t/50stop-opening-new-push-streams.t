@@ -4,6 +4,9 @@ use Net::EmptyPort qw(check_port empty_port);
 use Test::More;
 use t::Util;
 
+plan skip_all => 'mruby support is off'
+    unless server_features()->{mruby};
+
 my $server = spawn_h2o(<< "EOT");
 http2-idle-timeout: 2
 hosts:

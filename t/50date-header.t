@@ -6,6 +6,8 @@ use t::Util;
 
 plan skip_all => 'curl not found'
     unless prog_exists('curl');
+plan skip_all => 'mruby support is off'
+    unless server_features()->{mruby};
 plan skip_all => 'plackup not found'
     unless prog_exists('plackup');
 plan skip_all => 'Starlet not found'
