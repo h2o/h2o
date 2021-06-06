@@ -21,7 +21,7 @@ hosts:
       "/":
         file.dir: @{[ DOC_ROOT ]}
 EOT
-    my $out = `ss -tlnp | grep -w \*:$server->{port} 2>&1`;
+    my $out = `ss -tlnp | grep ":$port" 2>&1`;
     if ($reuseport eq 'ON') {
         my @lines = split(/\n/, $out);
         is scalar(@lines), 4, "Found 4 listeners";
