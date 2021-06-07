@@ -124,7 +124,7 @@ static int on_config_connect(h2o_configurator_command_t *cmd, h2o_configurator_c
             return -1;
         }
         h2o_url_init_with_hostport(&upstream, NULL, &H2O_URL_SCHEME_FASTCGI, h2o_iovec_init(hostname, strlen(hostname)), port,
-                                   h2o_iovec_init(H2O_STRLIT("/")), 1);
+                                   h2o_iovec_init(H2O_STRLIT("/")));
     } else {
         h2o_configurator_errprintf(cmd, node, "unknown listen type: %s", type);
         return -1;

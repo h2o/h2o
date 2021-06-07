@@ -411,12 +411,12 @@ const char *h2o_url_host_to_sun(h2o_iovec_t host, struct sockaddr_un *sa)
 const char h2o_url_host_to_sun_err_is_not_unix_socket[] = "supplied name does not look like an unix-domain socket";
 
 int h2o_url_init_with_hostport(h2o_url_t *url, h2o_mem_pool_t *pool, const h2o_url_scheme_t *scheme, h2o_iovec_t host,
-                               uint16_t port, h2o_iovec_t path, int is_default_port_check)
+                               uint16_t port, h2o_iovec_t path)
 {
     url->scheme = scheme;
     url->path = path;
 
-    if (is_default_port_check && port == scheme->default_port) {
+    if (port == scheme->default_port) {
         url->_port = 65535;
         url->authority = h2o_strdup(pool, host.base, host.len);
         url->host = url->authority;
