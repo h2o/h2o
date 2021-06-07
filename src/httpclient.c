@@ -59,8 +59,7 @@ struct {
     } headers[256];
     size_t num_headers;
     size_t body_size;
-    h2o_url_t *connect_to; /* when -x option is used, req.url specifies the address of the connect proxy, and this field
-                             specifies the address of the server to which a TCP connection should be established */
+    h2o_url_t *connect_to; /* when non-NULL, this property specifies the layer-4 address where the client should connect to */
 } req = {NULL, "GET"};
 static unsigned cnt_left = 1, concurrency = 1;
 static int chunk_size = 10;
