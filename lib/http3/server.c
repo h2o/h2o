@@ -1761,8 +1761,9 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
     };
 
     /* setup the structure */
+    struct timeval connected_at = h2o_gettimeofday(ctx->accept_ctx->ctx->loop);
     struct st_h2o_http3_server_conn_t *conn = (void *)h2o_create_connection(
-        sizeof(*conn), ctx->accept_ctx->ctx, ctx->accept_ctx->hosts, h2o_gettimeofday(ctx->accept_ctx->ctx->loop), &conn_callbacks);
+        sizeof(*conn), ctx->accept_ctx->ctx, ctx->accept_ctx->hosts, connected_at, &conn_callbacks);
     h2o_http3_init_conn(&conn->h3, &ctx->super, h3_callbacks, &ctx->qpack);
     conn->handshake_properties = (ptls_handshake_properties_t){{{{NULL}}}};
     h2o_linklist_init_anchor(&conn->delayed_streams.recv_body_blocked);
@@ -1799,7 +1800,7 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
     h2o_linklist_insert(&ctx->accept_ctx->ctx->http3._conns, &conn->_conns);
     h2o_http3_setup(&conn->h3, qconn);
 
-    H2O_PROBE_CONN(H3S_ACCEPT, &conn->super, &conn->super, conn->h3.super.quic);
+    H2O_PROBE_CONN(H3S_ACCEPT, &conn->super, &conn->super, conn->h3.super.quic, connected_at);
 
     h2o_quic_send(&conn->h3.super);
 

@@ -150,6 +150,16 @@ void json_write_pair_c(FILE *out, const char *name, size_t name_len, const quicl
     fputc('"', out);
 }
 
+// write a `struct timeval` in microseconds
+void json_write_pair_c(FILE *out, const char *name, size_t name_len, struct timeval value)
+{
+    int64_t usec = (static_cast<int64_t>(value.tv_sec) * 1000000L) + static_cast<int64_t>(value.tv_usec);
+
+    fputc(',', out);
+    json_write_name_value(out, name, name_len);
+    fprintf(out, "%" PRIi64, usec);
+}
+
 void json_write_pair_c(FILE *out, const char *name, size_t name_len, const void *value)
 {
     fputc(',', out);

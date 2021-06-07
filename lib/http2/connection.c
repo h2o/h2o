@@ -341,6 +341,8 @@ void close_connection_now(h2o_http2_conn_t *conn)
 
     assert(!h2o_timer_is_linked(&conn->_write.timeout_entry));
 
+    H2O_PROBE_CONN0(H2_CLOSE, &conn->super);
+
     kh_foreach_value(conn->streams, stream, { h2o_http2_stream_close(conn, stream); });
 
     assert(conn->num_streams.pull.open == 0);
@@ -1743,6 +1745,9 @@ void h2o_http2_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval 
     h2o_http2_conn_t *conn = create_conn(ctx->ctx, ctx->hosts, sock, connected_at);
     conn->http2_origin_frame = ctx->http2_origin_frame;
     sock->data = conn;
+
+    H2O_PROBE_CONN(H2_ACCEPT, &conn->super, conn->sock, &conn->super, connected_at);
+
     h2o_socket_read_start(conn->sock, on_read);
     update_idle_timeout(conn);
     if (sock->input->size != 0)

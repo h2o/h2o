@@ -62,12 +62,20 @@ provider h2o {
     /**
      * HTTP/1 server-level event, indicating that a connection has been accepted.
      */
-    probe h1_accept(uint64_t conn_id, struct st_h2o_socket_t *sock, struct st_h2o_conn_t *conn);
+    probe h1_accept(uint64_t conn_id, struct st_h2o_socket_t *sock, struct st_h2o_conn_t *conn, struct timeval connected_at);
     /**
      * HTTP/1 server-level event, indicating that a connection has been closed.
      */
     probe h1_close(uint64_t conn_id);
 
+    /**
+     * HTTP/2 server-level event, indicating that a connection has been accepted.
+     */
+    probe h2_accept(uint64_t conn_id, struct st_h2o_socket_t *sock, struct st_h2o_conn_t *conn, struct timeval connected_at);
+    /**
+     * HTTP/2 server-level event, indicating that a connection has been closed.
+     */
+    probe h2_close(uint64_t conn_id);
     /**
      * HTTP/2 server-level event, indicating that a frame of unknown type has been received.
      */
@@ -76,7 +84,7 @@ provider h2o {
     /**
      * HTTP/3 server-level event, indicating that a new connection has been accepted
      */
-    probe h3s_accept(uint64_t conn_id, struct st_h2o_conn_t *conn, struct st_quicly_conn_t *quic);
+    probe h3s_accept(uint64_t conn_id, struct st_h2o_conn_t *conn, struct st_quicly_conn_t *quic, struct timeval connected_at);
     /**
      * HTTP/3 server-level event, indicating that a connection has been destroyed
      */
