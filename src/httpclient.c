@@ -251,17 +251,15 @@ static void start_request(h2o_httpclient_ctx_t *ctx)
         on_error(ctx, "unrecognized type of URL: %s", req.url);
         return;
     }
-
-    if (req.connect_to != NULL) {
-        req.connect_to->scheme = url_parsed->scheme;
-
-        /* rebuild url_parsed->authority with the port string, even for default ports */
-        if (h2o_url_init_with_hostport(url_parsed, &pool, url_parsed->scheme, url_parsed->host, h2o_url_get_port(url_parsed),
-                                       url_parsed->path, 0) != 0) {
-            on_error(ctx, "failed to rebuild URL: %s", req.url);
-            return;
-        }
+    if (strcmp(req.method, "CONNECT") == 0 && memchr(url_parsed->authority.base, ':', url_parsed->authority.len) == NULL) {
+        on_error(ctx, "CONNECT method without explicit port number: %.*s", (int)url_parsed->authority.len,
+                 url_parsed->authority.base);
+        return;
     }
+
+    /* if `-x` option is used, copy the scheme so that the socket pool uses TLS when necessary */
+    if (req.connect_to != NULL)
+        req.connect_to->scheme = url_parsed->scheme;
 
     /* initiate the request */
     if (connpool == NULL) {
