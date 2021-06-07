@@ -1746,7 +1746,7 @@ void h2o_http2_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval 
     conn->http2_origin_frame = ctx->http2_origin_frame;
     sock->data = conn;
 
-    H2O_PROBE_CONN(H2_ACCEPT, &conn->super, conn->sock, &conn->super, connected_at);
+    H2O_PROBE_CONN(H2_ACCEPT, &conn->super, conn->sock, &conn->super, &connected_at);
 
     h2o_socket_read_start(conn->sock, on_read);
     update_idle_timeout(conn);

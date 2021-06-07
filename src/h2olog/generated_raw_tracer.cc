@@ -90,6 +90,8 @@ static std::string gen_bpf_header() {
 
   bpf += "#define sizeof_sockaddr_in6 " + std::to_string(std::min<size_t>(sizeof(struct sockaddr_in6), 100)) + "\n";
 
+  bpf += "#define sizeof_timeval " + std::to_string(std::min<size_t>(sizeof(struct timeval), 100)) + "\n";
+
   bpf += GEN_FIELD_INFO(struct sockaddr, sa_family, "sockaddr__sa_family");
   bpf += "#define AF_INET  " + std::to_string(AF_INET) + "\n";
   bpf += "#define AF_INET6 " + std::to_string(AF_INET6) + "\n";
@@ -4418,8 +4420,9 @@ int trace_h2o__h1_accept(struct pt_regs *ctx) {
   bpf_usdt_readarg(2, ctx, &event.h1_accept.sock);
   // struct st_h2o_conn_t * conn
   bpf_usdt_readarg(3, ctx, &event.h1_accept.conn);
-  // struct timeval connected_at
-  bpf_usdt_readarg(4, ctx, &event.h1_accept.connected_at);
+  // struct timeval * connected_at
+  bpf_usdt_readarg(4, ctx, &buf);
+  bpf_probe_read(&event.h1_accept.connected_at, sizeof_timeval, buf);
 
   if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
     bpf_trace_printk("failed to perf_submit in trace_h2o__h1_accept\n");
@@ -4450,8 +4453,9 @@ int trace_h2o__h2_accept(struct pt_regs *ctx) {
   bpf_usdt_readarg(2, ctx, &event.h2_accept.sock);
   // struct st_h2o_conn_t * conn
   bpf_usdt_readarg(3, ctx, &event.h2_accept.conn);
-  // struct timeval connected_at
-  bpf_usdt_readarg(4, ctx, &event.h2_accept.connected_at);
+  // struct timeval * connected_at
+  bpf_usdt_readarg(4, ctx, &buf);
+  bpf_probe_read(&event.h2_accept.connected_at, sizeof_timeval, buf);
 
   if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
     bpf_trace_printk("failed to perf_submit in trace_h2o__h2_accept\n");
@@ -4500,8 +4504,9 @@ int trace_h2o__h3s_accept(struct pt_regs *ctx) {
   bpf_usdt_readarg(3, ctx, &buf);
   bpf_probe_read(&quic, sizeof_st_quicly_conn_t, buf);
   event.h3s_accept.quic_master_id = get_st_quicly_conn_t__master_id(quic);
-  // struct timeval connected_at
-  bpf_usdt_readarg(4, ctx, &event.h3s_accept.connected_at);
+  // struct timeval * connected_at
+  bpf_usdt_readarg(4, ctx, &buf);
+  bpf_probe_read(&event.h3s_accept.connected_at, sizeof_timeval, buf);
 
   if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
     bpf_trace_printk("failed to perf_submit in trace_h2o__h3s_accept\n");

@@ -81,6 +81,7 @@ struct_map = OrderedDict([
     ["sockaddr", []],
     ["sockaddr_in", []],
     ["sockaddr_in6", []],
+    ["timeval", []],
 ])
 
 # The block list for probes.
