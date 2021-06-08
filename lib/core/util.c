@@ -26,7 +26,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdarg.h>
-#include <openssl/rand.h>
 #include "h2o.h"
 #include "h2o/http1.h"
 #include "h2o/http2.h"
@@ -945,54 +944,4 @@ void h2o_cleanup_thread(void)
     h2o_mem_clear_recycle(&h2o_mem_pool_allocator);
     h2o_mem_clear_recycle(&h2o_http2_wbuf_buffer_prototype.allocator);
     h2o_mem_clear_recycle(&h2o_socket_buffer_prototype.allocator);
-}
-
-void h2o_generate_uuidv4(char *buf)
-{
-    // RFC-4122 "A Universally Unique IDentifier (UUID) URN Namespace"
-    // 4.4. Algorithms for Creating a UUID from Truly Random or Pseudo-Random Numbers
-
-    uint8_t uuid[16];
-
-    if (RAND_bytes((void*)&uuid, sizeof(uuid)) != 1) {
-        h2o_fatal("RAND_bytes failed");
-    }
-
-    // Variant:
-    // > Set the two most significant bits (bits 6 and 7) of the
-    // > clock_seq_hi_and_reserved to zero and one, respectively.
-    uuid[8] = (uuid[8] & 0x3f) | 0x80;
-
-    // Version:
-    // > Set the four most significant bits (bits 12 through 15) of the
-    // > time_hi_and_version field to the 4-bit version number from
-    // > Section 4.1.3.
-    const int version = 4;
-    uuid[6] = (uuid[6] & 0x0f) | (version << 4);
-
-    // String Representation:
-    // > UUID  = time-low "-" time-mid "-"
-    // >         time-high-and-version "-"
-    // >         clock-seq-and-reserved
-    // >         clock-seq-low "-" node
-    // See also "4.1.2. Layout and Byte Order" for the layout
-    size_t pos = 0;
-#define UUID_ENC_PART(b, p, u, start, last) do { \
-        h2o_hex_encode(&b[p], &u[start], last - start + 1); \
-        p += (last - start + 1) * 2; \
-    } while (0)
-
-    UUID_ENC_PART(buf, pos, uuid, 0, 3); /* time_low */
-    buf[pos++] = '-';
-    UUID_ENC_PART(buf, pos, uuid, 4, 5); /* time_mid */
-    buf[pos++] = '-';
-    UUID_ENC_PART(buf, pos, uuid, 6, 7); /* time_hi_and_version */
-    buf[pos++] = '-';
-    UUID_ENC_PART(buf, pos, uuid, 8, 8); /* clock_seq_hi_and_reserved */
-    UUID_ENC_PART(buf, pos, uuid, 9, 9); /* clock_seq_low */
-    buf[pos++] = '-';
-    UUID_ENC_PART(buf, pos, uuid, 10, 15);
-#undef UUID_ENC_PART
-
-    /* '\0' is set by h2o_hex_encode() */
 }

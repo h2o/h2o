@@ -381,6 +381,7 @@ SET(LIB_SOURCE_FILES
     lib/common/socket.c
     lib/common/socketpool.c
     lib/common/string.c
+    lib/common/rand.c
     lib/common/time.c
     lib/common/timerwheel.c
     lib/common/token.c

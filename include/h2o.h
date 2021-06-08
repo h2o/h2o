@@ -2205,11 +2205,6 @@ void h2o_http2_debug_state_register_configurator(h2o_globalconf_t *conf);
 extern pthread_mutex_t h2o_conn_id_mutex;
 #endif
 
-/**
- * Generates and sets a UUIDv4 to buf, which must have an enough size, 37 bytes (36 + NUL byte).
- */
-void h2o_generate_uuidv4(char *buf);
-
 inline h2o_conn_t *h2o_create_connection(size_t sz, h2o_context_t *ctx, h2o_hostconf_t **hosts, struct timeval connected_at,
                                          const h2o_conn_callbacks_t *callbacks)
 {

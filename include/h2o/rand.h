@@ -32,4 +32,10 @@
 #define h2o_srand() srand(time(NULL) ^ getpid())
 #define h2o_rand() rand()
 #endif
+
+/**
+ * Generates and sets a UUIDv4 to buf, which must have an enough size, 37 bytes (36 + NUL byte).
+ */
+void h2o_generate_uuidv4(char *buf);
+
 #endif
