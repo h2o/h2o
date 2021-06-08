@@ -34,12 +34,12 @@
 #endif
 
 /*
- * size of a UUID string representation + NUL byte
+ * size of a UUID string representation.
  */
-#define H2O_UUID_STR_RFC4122_LEN 37
+#define H2O_UUID_STR_RFC4122_LEN 36
 
 /**
- * generates and sets a UUIDv4 to buf, which must have an enough size, H2O_UUID_STR_RFC4122_LEN.
+ * generates and sets a UUIDv4 to buf, which must have an enough size, H2O_UUID_STR_RFC4122_LEN + 1.
  */
 void h2o_generate_uuidv4(char *buf);
 
