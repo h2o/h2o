@@ -683,6 +683,7 @@ struct h2olog_event_t {
       uint64_t conn_id;
       struct st_h2o_socket_t * sock;
       struct st_h2o_conn_t * conn;
+      char conn_uuid[STR_LEN];
     } h1_accept;
     struct { // h2o:h1_close
       uint64_t conn_id;
@@ -695,6 +696,7 @@ struct h2olog_event_t {
       uint64_t conn_id;
       struct st_h2o_conn_t * conn;
       typeof_st_quicly_conn_t__master_id quic_master_id;
+      char conn_uuid[STR_LEN];
     } h3s_accept;
     struct { // h2o:h3s_destroy
       uint64_t conn_id;
@@ -1685,6 +1687,7 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
     json_write_pair_c(out_, STR_LIT("conn-id"), event->h1_accept.conn_id);
     json_write_pair_c(out_, STR_LIT("sock"), event->h1_accept.sock);
     json_write_pair_c(out_, STR_LIT("conn"), event->h1_accept.conn);
+    json_write_pair_c(out_, STR_LIT("conn-uuid"), event->h1_accept.conn_uuid, strlen(event->h1_accept.conn_uuid));
     json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
     break;
   }
@@ -1712,6 +1715,7 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
     json_write_pair_c(out_, STR_LIT("conn-id"), event->h3s_accept.conn_id);
     json_write_pair_c(out_, STR_LIT("conn"), event->h3s_accept.conn);
     json_write_pair_c(out_, STR_LIT("quic-master-id"), event->h3s_accept.quic_master_id);
+    json_write_pair_c(out_, STR_LIT("conn-uuid"), event->h3s_accept.conn_uuid, strlen(event->h3s_accept.conn_uuid));
     json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
     break;
   }
@@ -2464,6 +2468,7 @@ struct h2olog_event_t {
       uint64_t conn_id;
       struct st_h2o_socket_t * sock;
       struct st_h2o_conn_t * conn;
+      char conn_uuid[STR_LEN];
     } h1_accept;
     struct { // h2o:h1_close
       uint64_t conn_id;
@@ -2476,6 +2481,7 @@ struct h2olog_event_t {
       uint64_t conn_id;
       struct st_h2o_conn_t * conn;
       typeof_st_quicly_conn_t__master_id quic_master_id;
+      char conn_uuid[STR_LEN];
     } h3s_accept;
     struct { // h2o:h3s_destroy
       uint64_t conn_id;
@@ -4369,6 +4375,9 @@ int trace_h2o__h1_accept(struct pt_regs *ctx) {
   bpf_usdt_readarg(2, ctx, &event.h1_accept.sock);
   // struct st_h2o_conn_t * conn
   bpf_usdt_readarg(3, ctx, &event.h1_accept.conn);
+  // const char * conn_uuid
+  bpf_usdt_readarg(4, ctx, &buf);
+  bpf_probe_read(&event.h1_accept.conn_uuid, sizeof(event.h1_accept.conn_uuid), buf);
 
   if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
     bpf_trace_printk("failed to perf_submit in trace_h2o__h1_accept\n");
@@ -4417,6 +4426,9 @@ int trace_h2o__h3s_accept(struct pt_regs *ctx) {
   bpf_usdt_readarg(3, ctx, &buf);
   bpf_probe_read(&quic, sizeof_st_quicly_conn_t, buf);
   event.h3s_accept.quic_master_id = get_st_quicly_conn_t__master_id(quic);
+  // const char * conn_uuid
+  bpf_usdt_readarg(4, ctx, &buf);
+  bpf_probe_read(&event.h3s_accept.conn_uuid, sizeof(event.h3s_accept.conn_uuid), buf);
 
   if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
     bpf_trace_printk("failed to perf_submit in trace_h2o__h3s_accept\n");
