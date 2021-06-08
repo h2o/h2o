@@ -35,10 +35,10 @@ static void format_uuid_rfc4122(char *dst, const uint8_t *uuid)
     // >         clock-seq-low "-" node
     // See also "4.1.2. Layout and Byte Order" for the layout
     size_t pos = 0;
-#define UUID_ENC_PART(start, last)                                                                                                 \
+#define UUID_ENC_PART(first, last)                                                                                                 \
     do {                                                                                                                           \
-        h2o_hex_encode(&dst[pos], &uuid[start], last - start + 1);                                                                 \
-        pos += (last - start + 1) * 2;                                                                                             \
+        h2o_hex_encode(&dst[pos], &uuid[first], last - first + 1);                                                                 \
+        pos += (last - first + 1) * 2;                                                                                             \
     } while (0)
 
     UUID_ENC_PART(0, 3); /* time_low */
