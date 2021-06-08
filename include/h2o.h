@@ -2221,7 +2221,7 @@ inline h2o_conn_t *h2o_create_connection(size_t sz, h2o_context_t *ctx, h2o_host
     return conn;
 }
 
-inline char *h2o_conn_get_uuid(h2o_conn_t *conn)
+inline const char *h2o_conn_get_uuid(h2o_conn_t *conn)
 {
     if (conn->_uuid.is_initialized)
         return conn->_uuid.str;
