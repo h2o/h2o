@@ -950,11 +950,13 @@ void h2o_cleanup_thread(void)
 void h2o_generate_uuidv4(char *buf)
 {
     // RFC-4122 4.4. Algorithms for Creating a UUID from Truly Random or Pseudo-Random Numbers
+
+    // 4.2.1 Layout And Byte Order
     struct rfc4122 {
         uint32_t time_low;
         uint16_t time_mid;
         uint16_t time_hi_and_version;
-        uint8_t clock_seq_hi_reserved;
+        uint8_t clock_seq_hi_and_reserved;
         uint8_t clock_seq_low;
         uint8_t node[6];
     } uuid;
@@ -967,7 +969,7 @@ void h2o_generate_uuidv4(char *buf)
     // Variant:
     // > Set the two most significant bits (bits 6 and 7) of the
     // > clock_seq_hi_and_reserved to zero and one, respectively.
-    uuid.clock_seq_hi_reserved = (uuid.clock_seq_hi_reserved & 0x3f) & 0x80;
+    uuid.clock_seq_hi_and_reserved = (uuid.clock_seq_hi_and_reserved & 0x3f) & 0x80;
 
     // Version:
     // > Set the four most significant bits (bits 12 through 15) of the
@@ -993,7 +995,7 @@ void h2o_generate_uuidv4(char *buf)
     buf[pos++] = '-';
     UUID_ENC_PART(buf, pos, uuid.time_hi_and_version);
     buf[pos++] = '-';
-    UUID_ENC_PART(buf, pos, uuid.clock_seq_hi_reserved);
+    UUID_ENC_PART(buf, pos, uuid.clock_seq_hi_and_reserved);
     UUID_ENC_PART(buf, pos, uuid.clock_seq_low);
     buf[pos++] = '-';
     UUID_ENC_PART(buf, pos, uuid.node);
