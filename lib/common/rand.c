@@ -35,21 +35,22 @@ static void format_uuid_rfc4122(char *dst, const uint8_t *uuid)
     // >         clock-seq-low "-" node
     // See also "4.1.2. Layout and Byte Order" for the layout
     size_t pos = 0;
-#define UUID_ENC_PART(b, p, u, start, last) do { \
-        h2o_hex_encode(&b[p], &u[start], last - start + 1); \
-        p += (last - start + 1) * 2; \
+#define UUID_ENC_PART(start, last)                                                                                                 \
+    do {                                                                                                                           \
+        h2o_hex_encode(&dst[pos], &uuid[start], last - start + 1);                                                                 \
+        pos += (last - start + 1) * 2;                                                                                             \
     } while (0)
 
-    UUID_ENC_PART(dst, pos, uuid, 0, 3); /* time_low */
+    UUID_ENC_PART(0, 3); /* time_low */
     dst[pos++] = '-';
-    UUID_ENC_PART(dst, pos, uuid, 4, 5); /* time_mid */
+    UUID_ENC_PART(4, 5); /* time_mid */
     dst[pos++] = '-';
-    UUID_ENC_PART(dst, pos, uuid, 6, 7); /* time_hi_and_version */
+    UUID_ENC_PART(6, 7); /* time_hi_and_version */
     dst[pos++] = '-';
-    UUID_ENC_PART(dst, pos, uuid, 8, 8); /* clock_seq_hi_and_reserved */
-    UUID_ENC_PART(dst, pos, uuid, 9, 9); /* clock_seq_low */
+    UUID_ENC_PART(8, 8); /* clock_seq_hi_and_reserved */
+    UUID_ENC_PART(9, 9); /* clock_seq_low */
     dst[pos++] = '-';
-    UUID_ENC_PART(dst, pos, uuid, 10, 15); /* node */
+    UUID_ENC_PART(10, 15); /* node */
 #undef UUID_ENC_PART
 
     /* '\0' is set by h2o_hex_encode() */
@@ -61,7 +62,7 @@ void h2o_generate_uuidv4(char *buf)
     // 4.4. Algorithms for Creating a UUID from Truly Random or Pseudo-Random Numbers
 
     uint8_t uuid[16];
-    ptls_openssl_random_bytes((void*)&uuid, sizeof(uuid));
+    ptls_openssl_random_bytes((void *)&uuid, sizeof(uuid));
 
     // Variant:
     // > Set the two most significant bits (bits 6 and 7) of the
