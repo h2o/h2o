@@ -972,12 +972,13 @@ struct st_h2o_conn_t {
      */
     const h2o_conn_callbacks_t *callbacks;
 
-#if H2O_USE_CONN_UUID
     /**
-     * connection UUID (UUIDv4 string representation)
+     * connection UUID (UUIDv4 in the string representation).
      */
-    char uuid[37];
-#endif
+    struct {
+        char str[H2O_UUID_STR_RFC4122_LEN];
+        uint8_t is_initialized;
+    } uuid;
 };
 
 /**
@@ -1338,6 +1339,10 @@ void h2o_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock);
  */
 static h2o_conn_t *h2o_create_connection(size_t sz, h2o_context_t *ctx, h2o_hostconf_t **hosts, struct timeval connected_at,
                                          const h2o_conn_callbacks_t *callbacks);
+/**
+ * returns the uuid of the connection as a null-terminated string. the size of the uuid is H2O_UUID_STR_RFC4122_LEN.
+ */
+static char* h2o_conn_get_uuid(h2o_conn_t *conn);
 /**
  * returns if the connection is still in early-data state (i.e., if there is a risk of received requests being a replay)
  */
@@ -2220,12 +2225,19 @@ inline h2o_conn_t *h2o_create_connection(size_t sz, h2o_context_t *ctx, h2o_host
 #else
     conn->id = __sync_add_and_fetch(&h2o_connection_id, 1);
 #endif
-#if H2O_USE_CONN_UUID
-    h2o_generate_uuidv4(conn->uuid);
-#endif
+    conn->uuid.is_initialized = 0;
     conn->callbacks = callbacks;
 
     return conn;
+}
+
+inline char* h2o_conn_get_uuid(h2o_conn_t *conn)
+{
+    if (conn->uuid.is_initialized)
+        return conn->uuid.str;
+    h2o_generate_uuidv4(conn->uuid.str);
+    conn->uuid.is_initialized = 1;
+    return conn->uuid.str;
 }
 
 inline int h2o_conn_is_early_data(h2o_conn_t *conn)

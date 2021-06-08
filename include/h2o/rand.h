@@ -33,8 +33,13 @@
 #define h2o_rand() rand()
 #endif
 
+/*
+ * size of a UUID string representation + NUL byte
+ */
+#define H2O_UUID_STR_RFC4122_LEN 37
+
 /**
- * Generates and sets a UUIDv4 to buf, which must have an enough size, 37 bytes (36 + NUL byte).
+ * generates and sets a UUIDv4 to buf, which must have an enough size, H2O_UUID_STR_RFC4122_LEN.
  */
 void h2o_generate_uuidv4(char *buf);
 
