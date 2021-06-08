@@ -522,7 +522,7 @@ static std::string do_resolve(const char *struct_type, const char *field_name, c
     return s;
 }
 
-typedef char uuid_str_t[36];
+typedef char uuid_str_t[37];
 DEFINE_RESOLVE_FUNC(uuid_str_t);
 DEFINE_RESOLVE_FUNC(int16_t);
 DEFINE_RESOLVE_FUNC(uint16_t);
@@ -622,7 +622,7 @@ struct h2olog_event_t {
 #define STR_LEN 64
 
 typedef struct st_uuid_str_t {
-  char s[36];
+  char s[37];
 } uuid_str_t;
 
 typedef union quicly_address_t {
