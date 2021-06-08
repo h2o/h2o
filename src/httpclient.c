@@ -240,7 +240,7 @@ static void tunnel_create(h2o_loop_t *loop, h2o_tunnel_t *_tunnel)
 
 static void start_request(h2o_httpclient_ctx_t *ctx)
 {
-    h2o_url_t *url_parsed = NULL;
+    h2o_url_t *url_parsed;
 
     /* clear memory pool */
     h2o_mem_clear_pool(&pool);
