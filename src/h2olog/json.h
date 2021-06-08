@@ -21,9 +21,4 @@ void json_write_pair_c(std::FILE *out, const char *name, size_t name_len, const 
 void json_write_pair_c(std::FILE *out, const char *name, size_t name_len, const quicly_address_t &value);
 void json_write_pair_c(std::FILE *out, const char *name, size_t name_len, const void *value);
 
-template<std::size_t value_len>
-static inline void json_write_pair_c(std::FILE *out, const char *name, size_t name_len, const char (&value)[value_len])
-{
-    json_write_pair_c(out, name, name_len, value, value_len - 1);
-}
 #endif

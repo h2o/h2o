@@ -61,16 +61,6 @@ extern "C" {
 #define H2O_USE_BROTLI 0
 #endif
 
-#if H2O_USE_DTRACE
-/* h2o_conn_t::uuid is passed to h2o:hX_accept probes */
-#define H2O_USE_CONN_UUID 1
-#else
-/* h2o_conn_t::uuid is disabled by default but you can enable it if you want  */
-#ifndef H2O_USE_CONN_UUID
-#define H2O_USE_CONN_UUID 0
-#endif
-#endif
-
 #ifndef H2O_MAX_HEADERS
 #define H2O_MAX_HEADERS 100
 #endif
