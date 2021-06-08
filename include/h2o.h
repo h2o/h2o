@@ -61,6 +61,16 @@ extern "C" {
 #define H2O_USE_BROTLI 0
 #endif
 
+#if H2O_USE_DTRACE
+/* h2o_conn_t::uuid is passed to h2o:hX_accept probes */
+#define H2O_USE_CONN_UUID 1
+#else
+/* h2o_conn_t::uuid is disabled by default but you can enable it if you want  */
+#ifndef H2O_USE_CONN_UUID
+#define H2O_USE_CONN_UUID 0
+#endif
+#endif
+
 #ifndef H2O_MAX_HEADERS
 #define H2O_MAX_HEADERS 100
 #endif
@@ -961,6 +971,13 @@ struct st_h2o_conn_t {
      * callbacks
      */
     const h2o_conn_callbacks_t *callbacks;
+
+#if H2O_USE_CONN_UUID
+    /**
+     * connection UUID (UUIDv4 string representation)
+     */
+    char uuid[37];
+#endif
 };
 
 /**
@@ -2188,6 +2205,11 @@ void h2o_http2_debug_state_register_configurator(h2o_globalconf_t *conf);
 extern pthread_mutex_t h2o_conn_id_mutex;
 #endif
 
+/**
+ * Generates and sets a UUIDv4 to buf, which must have an enough size, 37 bytes (36 + NUL byte).
+ */
+void h2o_generate_uuidv4(char *buf);
+
 inline h2o_conn_t *h2o_create_connection(size_t sz, h2o_context_t *ctx, h2o_hostconf_t **hosts, struct timeval connected_at,
                                          const h2o_conn_callbacks_t *callbacks)
 {
@@ -2202,6 +2224,9 @@ inline h2o_conn_t *h2o_create_connection(size_t sz, h2o_context_t *ctx, h2o_host
     pthread_mutex_unlock(&h2o_conn_id_mutex);
 #else
     conn->id = __sync_add_and_fetch(&h2o_connection_id, 1);
+#endif
+#if H2O_USE_CONN_UUID
+    h2o_generate_uuidv4(conn->uuid);
 #endif
     conn->callbacks = callbacks;
 
