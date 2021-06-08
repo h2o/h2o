@@ -26,17 +26,17 @@
 #include "h2o/string_.h"
 #include "picotls/openssl.h"
 
-static void format_uuid_rfc4122(char *dst, uint8_t *uuid, uint8_t version)
+static void format_uuid_rfc4122(char *dst, uint8_t *octets, uint8_t version)
 {
     // Variant:
     // > Set the two most significant bits (bits 6 and 7) of the
     // > clock_seq_hi_and_reserved to zero and one, respectively.
-    uuid[8] = (uuid[8] & 0x3f) | 0x80;
+    octets[8] = (octets[8] & 0x3f) | 0x80;
     // Version:
     // > Set the four most significant bits (bits 12 through 15) of the
     // > time_hi_and_version field to the 4-bit version number from
     // > Section 4.1.3.
-    uuid[6] = (uuid[6] & 0x0f) | (version << 4);
+    octets[6] = (octets[6] & 0x0f) | (version << 4);
 
     // String Representation:
     // > UUID  = time-low "-" time-mid "-"
@@ -48,7 +48,7 @@ static void format_uuid_rfc4122(char *dst, uint8_t *uuid, uint8_t version)
 
 #define UUID_ENC_PART(first, last)                                                                                                 \
     do {                                                                                                                           \
-        h2o_hex_encode(&dst[pos], &uuid[first], last - first + 1);                                                                 \
+        h2o_hex_encode(&dst[pos], &octets[first], last - first + 1);                                                               \
         pos += (last - first + 1) * 2;                                                                                             \
     } while (0)
 
@@ -73,7 +73,7 @@ void h2o_generate_uuidv4(char *buf)
     // RFC-4122 "A Universally Unique IDentifier (UUID) URN Namespace"
     // 4.4. Algorithms for Creating a UUID from Truly Random or Pseudo-Random Numbers
 
-    uint8_t uuid[16];
-    ptls_openssl_random_bytes((void *)&uuid, sizeof(uuid));
-    format_uuid_rfc4122(buf, uuid, 4);
+    uint8_t octets[16];
+    ptls_openssl_random_bytes((void *)&octets, sizeof(octets));
+    format_uuid_rfc4122(buf, octets, 4);
 }
