@@ -2214,8 +2214,8 @@ inline h2o_conn_t *h2o_create_connection(size_t sz, h2o_context_t *ctx, h2o_host
 #else
     conn->id = __sync_add_and_fetch(&h2o_connection_id, 1);
 #endif
-    conn->_uuid.is_initialized = 0;
     conn->callbacks = callbacks;
+    conn->_uuid.is_initialized = 0;
 
     return conn;
 }
