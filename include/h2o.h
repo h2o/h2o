@@ -961,7 +961,6 @@ struct st_h2o_conn_t {
      * callbacks
      */
     const h2o_conn_callbacks_t *callbacks;
-
     /**
      * connection UUID (UUIDv4 in the string representation).
      */
