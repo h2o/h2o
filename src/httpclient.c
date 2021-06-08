@@ -722,7 +722,7 @@ int main(int argc, char **argv)
         fprintf(stderr, "sum of the use ratio of HTTP/2 and HTTP/3 is greater than 100\n");
         exit(EXIT_FAILURE);
     }
-    if (strcmp(method, "CONNECT") == 0 && req.connect_to == NULL) {
+    if (strcmp(req.method, "CONNECT") == 0 && req.connect_to == NULL) {
         fprintf(stderr, "CONNECT method must be accompanied by an `-x` option\n");
         exit(EXIT_FAILURE);
     }
