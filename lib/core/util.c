@@ -1001,5 +1001,5 @@ void h2o_generate_uuidv4(char *buf)
     UUID_ENC_PART(buf, pos, uuid.node);
 #undef UUID_ENC_PART
 
-    buf[pos] = '\0';
+    /* '\0' is set by h2o_hex_encode() */
 }
