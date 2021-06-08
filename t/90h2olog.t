@@ -66,7 +66,7 @@ subtest "h2olog", sub {
   is scalar(grep { $_->{type} && $_->{tid} && $_->{seq} } @events), scalar(@events), "each event has type, tid and seq";
 
   my($h3s_accept) = grep { $_->{type} eq "h3s-accept" } @events;
-  ok is_uuidv4($h3s_accept->{"conn-uuid"}),, "h3s-accept has a UUIDv4 field `conn-uuid`"
+  ok is_uuidv4($h3s_accept->{"conn-uuid"}), "h3s-accept has a UUIDv4 field `conn-uuid`"
 };
 
 subtest "h2olog -H", sub {
