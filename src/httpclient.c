@@ -260,12 +260,6 @@ static void start_request(h2o_httpclient_ctx_t *ctx)
         }
     }
 
-    if (strcmp(req.method, "CONNECT") == 0 && memchr(url_parsed->authority.base, ':', url_parsed->authority.len) == NULL) {
-        on_error(ctx, "CONNECT method without explicit port number: %.*s", (int)url_parsed->authority.len,
-                 url_parsed->authority.base);
-        return;
-    }
-
     /* initiate the request */
     if (connpool == NULL) {
         connpool = h2o_mem_alloc(sizeof(*connpool));
