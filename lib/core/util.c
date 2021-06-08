@@ -949,18 +949,10 @@ void h2o_cleanup_thread(void)
 
 void h2o_generate_uuidv4(char *buf)
 {
-    // RFC-4122 4.4. Algorithms for Creating a UUID from Truly Random or Pseudo-Random Numbers
+    // RFC-4122 "A Universally Unique IDentifier (UUID) URN Namespace"
+    // 4.4. Algorithms for Creating a UUID from Truly Random or Pseudo-Random Numbers
 
-    // 4.2.1 Layout And Byte Order
-    struct rfc4122 {
-        uint32_t time_low;
-        uint16_t time_mid;
-        uint16_t time_hi_and_version;
-        uint8_t clock_seq_hi_and_reserved;
-        uint8_t clock_seq_low;
-        uint8_t node[6];
-    } uuid;
-    _Static_assert(sizeof(uuid) == 16, "size of UUID structure must be 16");
+    uint8_t uuid[16];
 
     if (RAND_bytes((void*)&uuid, sizeof(uuid)) != 1) {
         h2o_fatal("RAND_bytes failed");
@@ -969,36 +961,37 @@ void h2o_generate_uuidv4(char *buf)
     // Variant:
     // > Set the two most significant bits (bits 6 and 7) of the
     // > clock_seq_hi_and_reserved to zero and one, respectively.
-    uuid.clock_seq_hi_and_reserved = (uuid.clock_seq_hi_and_reserved & 0x3f) & 0x80;
+    uuid[8] = (uuid[8] & 0x3f) | 0x80;
 
     // Version:
     // > Set the four most significant bits (bits 12 through 15) of the
     // > time_hi_and_version field to the 4-bit version number from
     // > Section 4.1.3.
     const int version = 4;
-    uuid.time_hi_and_version = (uuid.time_hi_and_version & 0x0f) | (version << 4);
+    uuid[6] = (uuid[6] & 0x0f) | (version << 4);
 
     // String Representation:
     // > UUID  = time-low "-" time-mid "-"
     // >         time-high-and-version "-"
     // >         clock-seq-and-reserved
     // >         clock-seq-low "-" node
+    // See also "4.1.2. Layout and Byte Order" for the layout
     size_t pos = 0;
-#define UUID_ENC_PART(b, pos_var, field) do { \
-        h2o_hex_encode(&b[pos_var], &field, sizeof(field)); \
-        pos_var += sizeof(field) * 2; \
+#define UUID_ENC_PART(b, p, u, start, last) do { \
+        h2o_hex_encode(&b[p], &u[start], last - start + 1); \
+        p += (last - start + 1) * 2; \
     } while (0)
 
-    UUID_ENC_PART(buf, pos, uuid.time_low);
+    UUID_ENC_PART(buf, pos, uuid, 0, 3); /* time_low */
     buf[pos++] = '-';
-    UUID_ENC_PART(buf, pos, uuid.time_mid);
+    UUID_ENC_PART(buf, pos, uuid, 4, 5); /* time_mid */
     buf[pos++] = '-';
-    UUID_ENC_PART(buf, pos, uuid.time_hi_and_version);
+    UUID_ENC_PART(buf, pos, uuid, 6, 7); /* time_hi_and_version */
     buf[pos++] = '-';
-    UUID_ENC_PART(buf, pos, uuid.clock_seq_hi_and_reserved);
-    UUID_ENC_PART(buf, pos, uuid.clock_seq_low);
+    UUID_ENC_PART(buf, pos, uuid, 8, 8); /* clock_seq_hi_and_reserved */
+    UUID_ENC_PART(buf, pos, uuid, 9, 9); /* clock_seq_low */
     buf[pos++] = '-';
-    UUID_ENC_PART(buf, pos, uuid.node);
+    UUID_ENC_PART(buf, pos, uuid, 10, 15);
 #undef UUID_ENC_PART
 
     /* '\0' is set by h2o_hex_encode() */
