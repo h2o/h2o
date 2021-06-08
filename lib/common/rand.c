@@ -52,6 +52,7 @@ static void format_uuid_rfc4122(char *dst, const uint8_t *uuid)
     UUID_ENC_PART(9, 9); /* clock_seq_low */
     dst[pos++] = '-';
     UUID_ENC_PART(10, 15); /* node */
+
 #undef UUID_ENC_PART
 
     /* '\0' is set by h2o_hex_encode() */
