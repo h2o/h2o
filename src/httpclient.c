@@ -51,7 +51,7 @@ static ptls_save_ticket_t save_http3_ticket = {save_http3_ticket_cb};
 static h2o_httpclient_connection_pool_t *connpool;
 static h2o_mem_pool_t pool;
 struct {
-    const char *url;
+    const char *target; /* either URL or host:port when the method is CONNECT */
     const char *method;
     struct {
         h2o_iovec_t name;
@@ -245,21 +245,26 @@ static void start_request(h2o_httpclient_ctx_t *ctx)
     /* clear memory pool */
     h2o_mem_clear_pool(&pool);
 
-    /* parse URL */
+    /* parse URL, or host:port if CONNECT */
     url_parsed = h2o_mem_alloc_pool(&pool, *url_parsed, 1);
-    if (h2o_url_parse(req.url, SIZE_MAX, url_parsed) != 0) {
-        on_error(ctx, "unrecognized type of URL: %s", req.url);
-        return;
+    if (strcmp(req.method, "CONNECT") == 0) {
+        if (h2o_url_init(url_parsed, NULL, h2o_iovec_init(req.target, strlen(req.target)), h2o_iovec_init(NULL, 0)) != 0 ||
+            url_parsed->_port == 0 || url_parsed->_port == 65535) {
+            on_error(ctx, "CONNECT target should be in the form of host:port: %s", req.target);
+            return;
+        }
+    } else {
+        if (h2o_url_parse(req.target, SIZE_MAX, url_parsed) != 0) {
+            on_error(ctx, "unrecognized type of URL: %s", req.target);
+            return;
+        }
     }
+
     if (strcmp(req.method, "CONNECT") == 0 && memchr(url_parsed->authority.base, ':', url_parsed->authority.len) == NULL) {
         on_error(ctx, "CONNECT method without explicit port number: %.*s", (int)url_parsed->authority.len,
                  url_parsed->authority.base);
         return;
     }
-
-    /* if `-x` option is used, copy the scheme so that the socket pool uses TLS when necessary */
-    if (req.connect_to != NULL)
-        req.connect_to->scheme = url_parsed->scheme;
 
     /* initiate the request */
     if (connpool == NULL) {
@@ -472,14 +477,15 @@ static void usage(const char *progname)
             "               adds a request header\n"
             "  -i <delay>   I/O interval between sending chunks (in msec; default: 0)\n"
             "  -k           skip peer verification\n"
-            "  -m <method>  request method (default: GET)\n"
+            "  -m <method>  request method (default: GET). When method is CONNECT,\n"
+            "               \"host:port\" should be specified in place of URL.\n"
             "  -o <path>    file to which the response body is written (default: stdout)\n"
             "  -t <times>   number of requests to send the request (default: 1)\n"
             "  -W <bytes>   receive window size (HTTP/3 only)\n"
-            "  -x <host:port>\n"
-            "               specifies the host and port to connect to; the same host will be\n"
-            "               used for TLS verification, -k may be needed if connecting to a\n"
-            "               host other than the url\n"
+            "  -x <URL>     specifies the host and port to connect to. When the scheme is\n"
+            "               set to HTTP, cleartext TCP is used. When the scheme is HTTPS,\n"
+            "               TLS is used and the provided hostname is used for peer.\n"
+            "               verification\n"
             "  --initial-udp-payload-size <bytes>\n"
             "               specifies the udp payload size of the initial message (default:\n"
             "               %" PRIu16 ")\n"
@@ -608,9 +614,8 @@ int main(int argc, char **argv)
             break;
         case 'x':
             req.connect_to = h2o_mem_alloc(sizeof(*req.connect_to));
-            if (h2o_url_init(req.connect_to, NULL, h2o_iovec_init(optarg, strlen(optarg)), h2o_iovec_init(NULL, 0)) != 0 ||
-                req.connect_to->_port == 0 || req.connect_to->_port == 65535) {
-                fprintf(stderr, "invalid server address specified for -x\n");
+            if (h2o_url_parse(optarg, strlen(optarg), req.connect_to) != 0) {
+                fprintf(stderr, "invalid server URL specified for -x\n");
                 exit(EXIT_FAILURE);
             }
             break;
@@ -728,7 +733,7 @@ int main(int argc, char **argv)
         fprintf(stderr, "no URL\n");
         exit(EXIT_FAILURE);
     }
-    req.url = argv[0];
+    req.target = argv[0];
 
     if (req.body_size != 0) {
         iov_filler.base = h2o_mem_alloc(chunk_size);
