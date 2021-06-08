@@ -68,12 +68,12 @@ static void format_uuid_rfc4122(char *dst, uint8_t *octets, uint8_t version)
     /* '\0' is set by h2o_hex_encode() */
 }
 
-void h2o_generate_uuidv4(char *buf)
+void h2o_generate_uuidv4(char *dst)
 {
     // RFC-4122 "A Universally Unique IDentifier (UUID) URN Namespace"
     // 4.4. Algorithms for Creating a UUID from Truly Random or Pseudo-Random Numbers
 
     uint8_t octets[16];
     ptls_openssl_random_bytes((void *)&octets, sizeof(octets));
-    format_uuid_rfc4122(buf, octets, 4);
+    format_uuid_rfc4122(dst, octets, 4);
 }
