@@ -76,6 +76,10 @@ struct_map = OrderedDict([
         ("super.local.cid_set.plaintext.master_id", "master_id"),
     ]],
 
+    ["st_h2o_conn_t", [
+        ("uuid", None),
+    ]],
+
     ["st_h2o_ebpf_map_key_t", []],
 
     ["sockaddr", []],
@@ -518,6 +522,8 @@ static std::string do_resolve(const char *struct_type, const char *field_name, c
     return s;
 }
 
+typedef char uuid_str_t[37];
+DEFINE_RESOLVE_FUNC(uuid_str_t);
 DEFINE_RESOLVE_FUNC(int16_t);
 DEFINE_RESOLVE_FUNC(uint16_t);
 DEFINE_RESOLVE_FUNC(int32_t);
@@ -614,6 +620,10 @@ struct h2olog_event_t {
 #include "h2o/ebpf.h"
 
 #define STR_LEN 64
+
+typedef struct st_uuid_str_t {
+  char s[37];
+} uuid_str_t;
 
 typedef union quicly_address_t {
   uint8_t sa[sizeof_sockaddr];
@@ -741,6 +751,7 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
 extern "C" {
 #include <sys/time.h>
 #include "quicly.h"
+#include "h2o.h"
 #include "h2o/ebpf.h"
 }
 
