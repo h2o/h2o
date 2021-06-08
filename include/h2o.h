@@ -974,9 +974,9 @@ struct st_h2o_conn_t {
 
 #if H2O_USE_CONN_UUID
     /**
-     * connection UUID (UUIDv4 string representation)
+     * connection UUID (UUIDv4 string representation). does not have NUL byte.
      */
-    char uuid[37];
+    char uuid[36];
 #endif
 };
 
@@ -2206,7 +2206,8 @@ extern pthread_mutex_t h2o_conn_id_mutex;
 #endif
 
 /**
- * Generates and sets a UUIDv4 to buf, which must have an enough size, 37 bytes (36 + NUL byte).
+ * Generates and sets a UUIDv4 to buf, which must have an enough size, 36 bytes.
+ * No NUL byte is set.
  */
 void h2o_generate_uuidv4(char *buf);
 
