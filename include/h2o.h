@@ -1332,7 +1332,7 @@ static h2o_conn_t *h2o_create_connection(size_t sz, h2o_context_t *ctx, h2o_host
 /**
  * returns the uuid of the connection as a null-terminated string.
  */
-static char *h2o_conn_get_uuid(h2o_conn_t *conn);
+static const char *h2o_conn_get_uuid(h2o_conn_t *conn);
 /**
  * returns if the connection is still in early-data state (i.e., if there is a risk of received requests being a replay)
  */
