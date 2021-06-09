@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2020 Fastly, Inc., Toru Maesaka, Goro Fuji
+ * Copyright (c) 2019-2021 Fastly, Inc., Toru Maesaka, Goro Fuji, Kazuho Oku
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to
