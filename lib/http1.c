@@ -1250,7 +1250,7 @@ void h2o_http1_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval 
     sock->data = conn;
     h2o_linklist_insert(&ctx->ctx->http1._conns, &conn->_conns);
 
-    H2O_PROBE_CONN(H1_ACCEPT, &conn->super, conn->sock, &conn->super);
+    H2O_PROBE_CONN(H1_ACCEPT, &conn->super, conn->sock, &conn->super, h2o_conn_get_uuid(&conn->super));
 
     init_request(conn);
     reqread_start(conn);

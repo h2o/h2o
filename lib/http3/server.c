@@ -1792,7 +1792,7 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
     h2o_linklist_insert(&ctx->accept_ctx->ctx->http3._conns, &conn->_conns);
     h2o_http3_setup(&conn->h3, qconn);
 
-    H2O_PROBE_CONN(H3S_ACCEPT, &conn->super, &conn->super, conn->h3.super.quic);
+    H2O_PROBE_CONN(H3S_ACCEPT, &conn->super, &conn->super, conn->h3.super.quic, h2o_conn_get_uuid(&conn->super));
 
     h2o_quic_send(&conn->h3.super);
 

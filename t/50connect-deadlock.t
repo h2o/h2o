@@ -97,7 +97,7 @@ subtest "h2o-httpclient" => sub {
             my ($writefh, $readfh, $errfh);
             $errfh = gensym;
             my $guard = do {
-                my $pid = open3($writefh, $readfh, $errfh, "exec $client_prog -k -x 127.0.0.1:$origin_port $opts $scheme://127.0.0.1:$port");
+                my $pid = open3($writefh, $readfh, $errfh, "exec $client_prog -k $opts -m CONNECT -x $scheme://127.0.0.1:$port 127.0.0.1:$origin_port");
                 die unless $pid > 0;
                 sub {
                     kill 'KILL', $pid;

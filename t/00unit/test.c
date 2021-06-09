@@ -163,6 +163,7 @@ int main(int argc, char **argv)
         subtest("lib/common/serverutil.c", test_lib__common__serverutil_c);
         subtest("lib/common/serverutil.c", test_lib__common__socket_c);
         subtest("lib/common/string.c", test_lib__common__string_c);
+        subtest("lib/common/rand.c", test_lib__common__rand_c);
         subtest("lib/common/url.c", test_lib__common__url_c);
         subtest("lib/common/time.c", test_lib__common__time_c);
         subtest("lib/common/timerwheel.c", test_lib__common__timerwheel_c);

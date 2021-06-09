@@ -685,6 +685,16 @@ struct st_h2o_context_t {
          * timeout entry used for graceful shutdown
          */
         h2o_timer_t _graceful_shutdown_timeout;
+        struct {
+            /**
+             * number of packets forwarded to another node in a cluster
+             */
+            uint64_t packet_forwarded;
+            /**
+             * number of forwarded packets received from another node in a cluster
+             */
+            uint64_t forwarded_packet_received;
+        } events;
     } http3;
 
     struct {
@@ -954,6 +964,13 @@ struct st_h2o_conn_t {
      * callbacks
      */
     const h2o_conn_callbacks_t *callbacks;
+    /**
+     * connection UUID (UUIDv4 in the string representation).
+     */
+    struct {
+        char str[H2O_UUID_STR_RFC4122_LEN + 1];
+        uint8_t is_initialized;
+    } _uuid;
 };
 
 /**
@@ -1325,6 +1342,10 @@ void h2o_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock);
  */
 static h2o_conn_t *h2o_create_connection(size_t sz, h2o_context_t *ctx, h2o_hostconf_t **hosts, struct timeval connected_at,
                                          const h2o_conn_callbacks_t *callbacks);
+/**
+ * returns the uuid of the connection as a null-terminated string.
+ */
+static const char *h2o_conn_get_uuid(h2o_conn_t *conn);
 /**
  * returns if the connection is still in early-data state (i.e., if there is a risk of received requests being a replay)
  */
@@ -2214,8 +2235,18 @@ inline h2o_conn_t *h2o_create_connection(size_t sz, h2o_context_t *ctx, h2o_host
     conn->id = __sync_add_and_fetch(&h2o_connection_id, 1);
 #endif
     conn->callbacks = callbacks;
+    conn->_uuid.is_initialized = 0;
 
     return conn;
+}
+
+inline const char *h2o_conn_get_uuid(h2o_conn_t *conn)
+{
+    if (conn->_uuid.is_initialized)
+        return conn->_uuid.str;
+    h2o_generate_uuidv4(conn->_uuid.str);
+    conn->_uuid.is_initialized = 1;
+    return conn->_uuid.str;
 }
 
 inline int h2o_conn_is_early_data(h2o_conn_t *conn)

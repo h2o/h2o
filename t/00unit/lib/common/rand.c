@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016 David Carlier
+ * Copyright (c) 2021 Goro Fuji, Fastly, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to
@@ -19,28 +19,25 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-#ifndef h2o__rand_h
-#define h2o__rand_h
+#include "../../test.h"
+#include "../../../../lib/common/rand.c"
 
-#include <stdlib.h>
-#include <unistd.h>
+static void test_format_uuid_rfc4122(void)
+{
+    uint8_t octets[16] = {0};
+    char dst[H2O_UUID_STR_RFC4122_LEN + 1];
 
-#if defined(__APPLE__) || defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__)
-#define h2o_srand()
-#define h2o_rand() arc4random()
-#else
-#define h2o_srand() srand(time(NULL) ^ getpid())
-#define h2o_rand() rand()
-#endif
+    format_uuid_rfc4122(dst, octets, 4);
+    ok(strlen(dst) == H2O_UUID_STR_RFC4122_LEN);
+    ok(strcmp(dst, "00000000-0000-4000-8000-000000000000") == 0);
 
-/*
- * size of a UUID string representation.
- */
-#define H2O_UUID_STR_RFC4122_LEN (sizeof("01234567-0123-4000-8000-0123456789ab") - 1)
+    memset(octets, 0xff, sizeof(octets));
+    format_uuid_rfc4122(dst, octets, 4);
+    ok(strlen(dst) == H2O_UUID_STR_RFC4122_LEN);
+    ok(strcmp(dst, "ffffffff-ffff-4fff-bfff-ffffffffffff") == 0);
+}
 
-/**
- * generates and sets a UUIDv4 to dst, which must have an enough size, H2O_UUID_STR_RFC4122_LEN + 1.
- */
-void h2o_generate_uuidv4(char *dst);
-
-#endif
+void test_lib__common__rand_c(void)
+{
+    subtest("format_uuid_rfc4122", test_format_uuid_rfc4122);
+}

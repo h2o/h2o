@@ -47,7 +47,7 @@ static ptls_save_ticket_t save_http3_ticket = {save_http3_ticket_cb};
 static h2o_httpclient_connection_pool_t *connpool;
 static h2o_mem_pool_t pool;
 struct {
-    const char *url;
+    const char *target; /* either URL or host:port when the method is CONNECT or CONNECT_UDP */
     const char *method;
     struct {
         h2o_iovec_t name;
@@ -55,8 +55,7 @@ struct {
     } headers[256];
     size_t num_headers;
     size_t body_size;
-    h2o_url_t connect_to; /* when CONNECT method is used, req.url specifies the address of the connect proxy, and this field
-                             specifies the address of the server to which a TCP connection should be established */
+    h2o_url_t *connect_to; /* when non-NULL, this property specifies the layer-4 address where the client should connect to */
 } req = {NULL, "GET"};
 static unsigned cnt_left = 1, concurrency = 1;
 static int chunk_size = 10;
@@ -248,22 +247,35 @@ static void stdin_proceed_request(h2o_httpclient_t *client, const char *errstr)
 static void start_request(h2o_httpclient_ctx_t *ctx)
 {
     h2o_url_t *url_parsed;
+    int is_connect = strcmp(req.method, "CONNECT") == 0 || strcmp(req.method, "CONNECT-UDP") == 0;
 
     /* clear memory pool */
     h2o_mem_clear_pool(&pool);
 
-    /* parse URL */
+    /* parse URL, or host:port if CONNECT */
     url_parsed = h2o_mem_alloc_pool(&pool, *url_parsed, 1);
-    if (h2o_url_parse(req.url, SIZE_MAX, url_parsed) != 0) {
-        on_error(ctx, "unrecognized type of URL: %s", req.url);
-        return;
+    if (is_connect) {
+        if (h2o_url_init(url_parsed, NULL, h2o_iovec_init(req.target, strlen(req.target)), h2o_iovec_init(NULL, 0)) != 0 ||
+            url_parsed->_port == 0 || url_parsed->_port == 65535) {
+            on_error(ctx, "CONNECT target should be in the form of host:port: %s", req.target);
+            return;
+        }
+        if (strcmp(req.method, "CONNECT-UDP") == 0) {
+            url_parsed->scheme = &H2O_URL_SCHEME_MASQUE;
+            url_parsed->path = h2o_iovec_init(H2O_STRLIT("/"));
+        }
+    } else {
+        if (h2o_url_parse(req.target, SIZE_MAX, url_parsed) != 0) {
+            on_error(ctx, "unrecognized type of URL: %s", req.target);
+            return;
+        }
     }
 
     /* initiate the request */
     if (connpool == NULL) {
         connpool = h2o_mem_alloc(sizeof(*connpool));
         h2o_socketpool_t *sockpool = h2o_mem_alloc(sizeof(*sockpool));
-        h2o_socketpool_target_t *target = h2o_socketpool_create_target(url_parsed, NULL);
+        h2o_socketpool_target_t *target = h2o_socketpool_create_target(req.connect_to != NULL ? req.connect_to : url_parsed, NULL);
         h2o_socketpool_init_specific(sockpool, 10, &target, 1, NULL);
         h2o_socketpool_set_timeout(sockpool, IO_TIMEOUT);
         h2o_socketpool_register_loop(sockpool, ctx->loop);
@@ -289,7 +301,7 @@ static void start_request(h2o_httpclient_ctx_t *ctx)
         SSL_CTX_free(ssl_ctx);
     }
     h2o_httpclient_connect(std_in.sock != NULL ? (h2o_httpclient_t **)&std_in.sock->data : NULL, &pool, url_parsed, ctx, connpool,
-                           url_parsed, req.connect_to.authority.len != 0 ? h2o_httpclient_upgrade_to_connect : NULL, on_connect);
+                           url_parsed, is_connect ? h2o_httpclient_upgrade_to_connect : NULL, on_connect);
 }
 
 static void on_next_request(h2o_timer_t *entry)
@@ -424,14 +436,14 @@ h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *errstr, 
     }
 
     *_method = h2o_iovec_init(req.method, strlen(req.method));
-    *url = *(req.connect_to.authority.len != 0 ? &req.connect_to : (h2o_url_t *)client->data);
+    *url = *(h2o_url_t *)client->data;
     for (i = 0; i != req.num_headers; ++i)
         h2o_add_header_by_str(&pool, &headers_vec, req.headers[i].name.base, req.headers[i].name.len, 1, NULL,
                               req.headers[i].value.base, req.headers[i].value.len);
     *body = h2o_iovec_init(NULL, 0);
     *proceed_req_cb = NULL;
 
-    if (req.connect_to.authority.len != 0) {
+    if (client->upgrade_to != NULL) {
         *proceed_req_cb = stdin_proceed_request;
         if (std_in.sock->input->size != 0) {
             body->len = std_in.sock->input->size;
@@ -470,46 +482,27 @@ static void usage(const char *progname)
             "               adds a request header\n"
             "  -i <delay>   I/O interval between sending chunks (in msec; default: 0)\n"
             "  -k           skip peer verification\n"
-            "  -m <method>  request method (default: GET)\n"
+            "  -m <method>  request method (default: GET). When method is CONNECT,\n"
+            "               \"host:port\" should be specified in place of URL.\n"
             "  -o <path>    file to which the response body is written (default: stdout)\n"
             "  -t <times>   number of requests to send the request (default: 1)\n"
             "  -W <bytes>   receive window size (HTTP/3 only)\n"
-            "  -x <host:port>\n"
-            "               specifies the destination of the CONNECT request; implies\n"
-            "               `-m CONNECT`\n"
-            "  -X <local-udp-port:proxy-host:proxy-port>\n"
-            "               opens a CONNECT-UDP tunnel\n"
+            "  -x <URL>     specifies the host and port to connect to. When the scheme is\n"
+            "               set to HTTP, cleartext TCP is used. When the scheme is HTTPS,\n"
+            "               TLS is used and the provided hostname is used for peer.\n"
+            "               verification\n"
+            "  -X <local-udp-port>\n"
+            "               specifies that the tunnel being created is a CONNECT-UDP tunnel\n"
             "  --initial-udp-payload-size <bytes>\n"
-            "               specifies the udp payload size of the initial message (default: %" PRIu16 ")\n"
+            "               specifies the udp payload size of the initial message (default:\n"
+            "               %" PRIu16 ")\n"
             "  --max-udp-payload-size <bytes>\n"
-            "               specifies the max_udp_payload_size transport parameter to send (default: %" PRIu64 ")\n"
+            "               specifies the max_udp_payload_size transport parameter to send\n"
+            "               (default: %" PRIu64 ")\n"
             "  -h, --help   prints this help\n"
             "\n",
             progname, quicly_spec_context.initial_egress_max_udp_payload_size,
             quicly_spec_context.transport_params.max_udp_payload_size);
-}
-
-static void setup_connect_to(const char *arg, int opt_ch)
-{
-    int ret;
-
-    switch (opt_ch) {
-    case 'x':
-        ret = h2o_url_init(&req.connect_to, NULL, h2o_iovec_init(arg, strlen(arg)), h2o_iovec_init(NULL, 0));
-        break;
-    case 'X':
-        ret = h2o_url_init(&req.connect_to, &H2O_URL_SCHEME_MASQUE, h2o_iovec_init(arg, strlen(arg)),
-                           h2o_iovec_init(H2O_STRLIT("/")));
-        break;
-    default:
-        h2o_fatal("unexpected opt_ch:%c", opt_ch);
-        break;
-    }
-
-    if (ret != 0 || req.connect_to._port == 0 || req.connect_to._port == 65535) {
-        fprintf(stderr, "invalid server address specified for -%c\n", opt_ch);
-        exit(EXIT_FAILURE);
-    }
 }
 
 #if !H2O_USE_LIBUV
@@ -636,7 +629,11 @@ int main(int argc, char **argv)
             }
             break;
         case 'x':
-            setup_connect_to(optarg, 'x');
+            req.connect_to = h2o_mem_alloc(sizeof(*req.connect_to));
+            if (h2o_url_parse(optarg, strlen(optarg), req.connect_to) != 0) {
+                fprintf(stderr, "invalid server URL specified for -x\n");
+                exit(EXIT_FAILURE);
+            }
             break;
         case 'X': {
 #if H2O_USE_LIBUV
@@ -644,16 +641,15 @@ int main(int argc, char **argv)
             exit(EXIT_FAILURE);
 #else
             uint16_t udp_port;
-            int udp_port_end;
-            if (sscanf(optarg, "%" SCNu16 "%n", &udp_port, &udp_port_end) != 1 || optarg[udp_port_end] != ':') {
+            if (sscanf(optarg, "%" SCNu16, &udp_port) != 1) {
                 fprintf(stderr, "failed to parse optarg of -X\n");
                 exit(EXIT_FAILURE);
             }
             udp_sock = create_udp_socket(ctx.loop, udp_port);
             h2o_socket_read_start(udp_sock, tunnel_on_udp_sock_read);
-            setup_connect_to(optarg + udp_port_end + 1, 'X');
             h3ctx.quic.initial_egress_max_udp_payload_size = 1400; /* increase initial UDP payload size so that we'd have room to
                                                                     * carry ordinary QUIC packets. */
+            req.method = "CONNECT-UDP";
 #endif
         } break;
         case 'C':
@@ -761,8 +757,15 @@ int main(int argc, char **argv)
     argc -= optind;
     argv += optind;
 
-    if (req.connect_to.authority.len != 0) {
-        req.method = udp_sock == NULL ? "CONNECT" : "CONNECT-UDP";
+    if (ctx.protocol_selector.ratio.http2 + ctx.protocol_selector.ratio.http3 > 100) {
+        fprintf(stderr, "sum of the use ratio of HTTP/2 and HTTP/3 is greater than 100\n");
+        exit(EXIT_FAILURE);
+    }
+    if (strcmp(req.method, "CONNECT") == 0 || strcmp(req.method, "CONNECT-UDP") == 0) {
+        if (req.connect_to == NULL) {
+            fprintf(stderr, "CONNECT method must be accompanied by an `-x` option\n");
+            exit(EXIT_FAILURE);
+        }
 #if H2O_USE_LIBUV
         std_in.sock = h2o_uv__poll_create(ctx.loop, 0, (uv_close_cb)free);
 #else
@@ -771,16 +774,11 @@ int main(int argc, char **argv)
         h2o_socket_read_start(std_in.sock, stdin_on_read);
     }
 
-    if (ctx.protocol_selector.ratio.http2 + ctx.protocol_selector.ratio.http3 > 100) {
-        fprintf(stderr, "sum of the use ratio of HTTP/2 and HTTP/3 is greater than 100");
-        exit(EXIT_FAILURE);
-    }
-
     if (argc < 1) {
         fprintf(stderr, "no URL\n");
         exit(EXIT_FAILURE);
     }
-    req.url = argv[0];
+    req.target = argv[0];
 
     if (req.body_size != 0) {
         iov_filler.base = h2o_mem_alloc(chunk_size);
@@ -806,7 +804,7 @@ int main(int argc, char **argv)
     }
 
 #if H2O_USE_LIBUV
-    /* libuv path currently does not support http3 */
+/* libuv path currently does not support http3 */
 #else
     if (ctx.protocol_selector.ratio.http3 > 0) {
         h2o_quic_close_all_connections(&ctx.http3->h3);
@@ -815,6 +813,9 @@ int main(int argc, char **argv)
         }
     }
 #endif
+
+    if (req.connect_to != NULL)
+        free(req.connect_to);
 
     return 0;
 }

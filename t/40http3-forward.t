@@ -5,6 +5,7 @@ use Net::EmptyPort qw(empty_port wait_port);
 use Test::More;
 use Time::HiRes qw(time);
 use t::Util;
+use JSON;
 
 plan skip_all => 'mruby support is off'
     unless server_features()->{mruby};
@@ -46,6 +47,21 @@ is do {local $/; join "", <$slow_fh>}, "server=1", "slow request succeeded";
 $elapsed = time - $elapsed;
 cmp_ok $elapsed, '>=', 3, "slow request is so slow that the packets should have gone through server2";
 
+# check that some packets were actually forwarded, and the event counter captured them
+my $server1_port = ${server1}->{port};
+my $server2_port = ${server2}->{port};
+
+my $resp = `curl --silent -o /dev/stderr http://127.0.0.1:${server1_port}/server-status/json?show=events 2>&1 > /dev/null`;
+my $jresp = decode_json("$resp");
+my $num_forwarded_received = $jresp->{'http3.forwarded-packet-received'};
+
+$resp = `curl --silent -o /dev/stderr http://127.0.0.1:${server2_port}/server-status/json?show=events 2>&1 > /dev/null`;
+$jresp = decode_json("$resp");
+my $num_forwarded = $jresp->{'http3.packet-forwarded'};
+
+cmp_ok($num_forwarded, '>', 0, "some packets were forwarded");
+is($num_forwarded, $num_forwarded_received, "packets forwarded == packets received");
+
 done_testing;
 
 sub spawn {
@@ -76,6 +92,8 @@ hosts:
           Proc.new do |env|
             [200, {}, ["server=$server_id"]]
           end
+      "/server-status":
+        status: ON
 EOT
     spawn_h2o($conf);
 }

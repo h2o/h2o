@@ -237,7 +237,7 @@ subtest "connect" => sub {
             unless -e $client_prog;
         my $connect_get_resp = sub {
             my ($scheme, $port, $opts, $target, $send_cb) = @_;
-            open my $fh, "|-", "exec $client_prog -k -x $target $opts $scheme://127.0.0.1:$port/ > $tempdir/out 2>&1"
+            open my $fh, "|-", "exec $client_prog -k $opts -m CONNECT -x $scheme://127.0.0.1:$port/ $target > $tempdir/out 2>&1"
                 or die "failed to launch $client_prog:$!";
             $fh->autoflush(1);
             $send_cb->($fh);
