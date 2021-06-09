@@ -46,23 +46,27 @@ static void usage(void)
     printf(R"(h2olog (h2o v%s)
 Usage: h2olog -p PID
 Optional arguments:
-    -d Print debugging information (-dd shows more)
-    -h Print this help and exit
-    -l Print the list of available tracepoints and exit
-    -H Trace HTTP requests and responses in varnishlog-like format
-    -s RESPONSE_HEADER_NAME A response header name to show, e.g. "content-type"
-    -t TRACEPOINT A tracepoint, or fully-qualified probe name, to show,
-                  including a glob pattern, e.g. "quicly:accept", "h2o:*"
-    -S RATE Enable random sampling per connection (0.0-1.0)
-            Requires for h2o to have `usdt-selective-tracing: ON` in its config file
-    -a Include application data which are omitted by default
-    -r Run without dropping root privilege
-    -w Path to write the output (default: stdout)
+  -d                Print debugging information (-dd shows more).
+  -h                Print this help and exit.
+  -l                Print the list of available tracepoints and exit.
+  -H                Trace HTTP requests and responses in varnishlog-like format.
+  -s <header-name>  A response header name to show, e.g. "content-type".
+  -t <tracepoint>   A tracepoint, or fully-qualified probe name to trace. Glob
+                    patterns can be used; e.g., "quicly:accept", "h2o:*".
+  -S <rate>         Enable random sampling per connection (0.0-1.0). Requires
+                    `usdt-selective-tracing: ON` must be specified in the h2o
+                    config file.
+  -A <ip-address>   Limit connections being traced to those coming from the
+                    specified address. Requries use of `usdt-selective-tracing`.
+  -a                Include application data which are omitted by default.
+  -r                Run without dropping root privilege.
+  -w <path>         Path to write the output (default: stdout).
 
 Examples:
-    h2olog -p $(pgrep -o h2o) -H
-    h2olog -p $(pgrep -o h2o) -t quicly:accept -t quicly:free
-    h2olog -p $(pgrep -o h2o) -t h2o:send_response_header -t h2o:h3s_accept -t h2o:h3s_destroy -s alt-svc
+  h2olog -p $(pgrep -o h2o) -H
+  h2olog -p $(pgrep -o h2o) -t quicly:accept -t quicly:free
+  h2olog -p $(pgrep -o h2o) -t h2o:send_response_header -t h2o:h3s_accept \
+         -t h2o:h3s_destroy -s alt-svc
 )",
            H2O_VERSION);
     return;
