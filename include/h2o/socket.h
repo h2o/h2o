@@ -372,6 +372,10 @@ int h2o_socket_set_df_bit(int fd, int domain);
  * helper to check if socket the socket is target of tracing
  */
 static int h2o_socket_skip_tracing(h2o_socket_t *sock);
+/**
+ *
+ */
+void h2o_socket_set_skip_tracing(h2o_socket_t *sock, int skip_tracing);
 
 /**
  * Prepares eBPF maps. Requires root privileges and thus should be called before dropping the privileges. Returns a boolean
@@ -382,6 +386,10 @@ int h2o_socket_ebpf_setup(void);
  * Function to lookup if the connection is tagged for special treatment. The result is a union of `H2O_EBPF_FLAGS_*`.
  */
 uint64_t h2o_socket_ebpf_lookup_flags(h2o_loop_t *loop, int (*init_key)(h2o_ebpf_map_key_t *key, void *cbdata), void *cbdata);
+/**
+ *
+ */
+uint64_t h2o_socket_ebpf_lookup_flags_sni(h2o_loop_t *loop, uint64_t flags, const char *server_name, size_t server_name_len);
 /**
  * function for initializing the ebpf lookup key from raw information
  */
