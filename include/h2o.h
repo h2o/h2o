@@ -691,6 +691,10 @@ struct st_h2o_context_t {
              * number of forwarded packets received from another node in a cluster
              */
             uint64_t forwarded_packet_received;
+            /**
+             * number of lost packets
+             */
+            uint64_t packet_lost;
         } events;
     } http3;
 
