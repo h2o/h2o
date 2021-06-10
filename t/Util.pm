@@ -218,11 +218,10 @@ sub spawn_h2o {
 
     # decide the port numbers
     my ($port, $tls_port) = empty_ports(2, { host => "0.0.0.0" });
-    my $quic = $opts->{quic} || +{ host => '0.0.0.0' };;
-    $quic->{port} ||= empty_port({ host => "0.0.0.0", proto => "udp" });
+    my $quic_port = empty_port({ host => "0.0.0.0", proto => "udp" });
 
     # setup the configuration file
-    $conf = $conf->($port, $tls_port, $quic->{port})
+    $conf = $conf->($port, $tls_port, $quic_port)
         if ref $conf eq 'CODE';
     my $user = $< == 0 ? "root" : "";
     if (ref $conf eq 'HASH') {
@@ -247,29 +246,25 @@ listen:
   host: 0.0.0.0
   port: $tls_port
 $ssl
-EOT
-    if ($quic) {
-        $user_and_listen .= <<"EOT";
 listen:
   type: quic
-  host: $quic->{host}
-  port: $quic->{port}
+  host: 0.0.0.0
+  port: $quic_port
 $ssl
 EOT
-    }
     my $whole_conf = join("\n", $user_and_listen, $conf);
 
     my $port_defs = [
         +{ port => $port, proto => 'tcp' },
         +{ port => $tls_port, proto => 'tcp' },
-        ($quic ? (+{ port => $quic->{port}, proto => 'udp' }) : ()),
+        +{ port => $quic_port, proto => 'udp' },
     ];
     my $ret = spawn_h2o_raw($whole_conf, $port_defs, \@args);
     return {
         %$ret,
         port => $port,
         tls_port => $tls_port,
-        quic_port => $quic->{port},
+        quic_port => $quic_port,
     };
 }
 
