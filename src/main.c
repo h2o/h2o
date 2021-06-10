@@ -269,6 +269,8 @@ static struct {
     .tcp_reuseport = 0,
 };
 
+static __thread size_t thread_index;
+
 static neverbleed_t *neverbleed = NULL;
 
 static int cmd_argc;
@@ -317,21 +319,16 @@ static void setup_ecc_key(SSL_CTX *ssl_ctx)
 
 static void on_sni_update_tracing(void *conn, int is_quic, const char *server_name, size_t server_name_len)
 {
-    h2o_loop_t *loop;
     int cur_skip_tracing;
 
     if (is_quic) {
-        h2o_http3_conn_t *h3conn = *quicly_get_data(conn);
-        loop = h3conn->super.ctx->loop;
         cur_skip_tracing = ptls_skip_tracing(quicly_get_tls(conn));
     } else {
-        h2o_socket_t *sock = conn;
-        loop = h2o_socket_get_loop(sock);
-        cur_skip_tracing = h2o_socket_skip_tracing(sock);
+        cur_skip_tracing = h2o_socket_skip_tracing(conn);
     }
 
     uint64_t flags = cur_skip_tracing ? H2O_EBPF_FLAGS_SKIP_TRACING_BIT : 0;
-    flags = h2o_socket_ebpf_lookup_flags_sni(loop, flags, server_name, server_name_len);
+    flags = h2o_socket_ebpf_lookup_flags_sni(conf.threads[thread_index].ctx.loop, flags, server_name, server_name_len);
 
     int new_skip_tracing = (flags & H2O_EBPF_FLAGS_SKIP_TRACING_BIT) != 0;
 
@@ -2815,7 +2812,7 @@ static void on_server_notification(h2o_multithread_receiver_t *receiver, h2o_lin
 
 static void *run_loop(void *_thread_index)
 {
-    size_t thread_index = (size_t)_thread_index;
+    thread_index = (size_t)_thread_index;
     struct listener_ctx_t *listeners = alloca(sizeof(*listeners) * conf.num_listeners);
     size_t i;
 
