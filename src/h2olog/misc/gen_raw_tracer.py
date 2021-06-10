@@ -755,6 +755,7 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
   }
 
   fprintf(out_, "}\n");
+  fflush(out_);
 """
   handle_event_func += "}\n"
 
