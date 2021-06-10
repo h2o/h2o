@@ -1922,4 +1922,9 @@ uint64_t h2o_socket_ebpf_lookup_flags(h2o_loop_t *loop, int (*init_key)(h2o_ebpf
     return 0;
 }
 
+uint64_t h2o_socket_ebpf_lookup_flags_sni(h2o_loop_t *loop, uint64_t flags, const char *server_name, size_t server_name_len)
+{
+    return flags;
+}
+
 #endif
