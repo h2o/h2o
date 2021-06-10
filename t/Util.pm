@@ -571,7 +571,7 @@ package H2ologTracer {
         my $tempdir = File::Temp::tempdir(CLEANUP => 1);
         my $output_file = "$tempdir/h2olog.jsonl";
 
-        my $tracer_pid = open my($errfh), "-|", qq{exec $h2olog_prog @{$h2olog_args} -d -p $h2o_pid -w '$output_file' 2>&1};
+        my $tracer_pid = open my($errfh), "-|", qq{exec $h2olog_prog @{$h2olog_args} -d -p $h2o_pid -w '$output_file' 2>&1 | tee /dev/stderr};
         die "failed to spawn $h2olog_prog: $!" unless defined $tracer_pid;
 
         # wait until h2olog and the trace log becomes ready
