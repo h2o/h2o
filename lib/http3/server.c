@@ -1702,12 +1702,70 @@ static void on_h3_destroy(h2o_quic_conn_t *h3_)
 {
     h2o_http3_conn_t *h3 = (h2o_http3_conn_t *)h3_;
     struct st_h2o_http3_server_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_conn_t, h3, h3);
-    quicly_stats_t stats = {0};
+    quicly_stats_t stats;
     
     H2O_PROBE_CONN0(H3S_DESTROY, &conn->super);
 
-    if (quicly_get_stats(h3_->quic, &stats) == 0)
-        conn->super.ctx->http3.events.packet_lost += stats.num_packets.lost;
+    if (quicly_get_stats(h3_->quic, &stats) == 0) {
+        conn->super.ctx->http3.num_packets.received += stats.num_packets.received;
+        conn->super.ctx->http3.num_packets.decryption_failed += stats.num_packets.decryption_failed;
+        conn->super.ctx->http3.num_packets.sent += stats.num_packets.sent;
+        conn->super.ctx->http3.num_packets.lost += stats.num_packets.lost;
+        conn->super.ctx->http3.num_packets.lost_time_threshold += stats.num_packets.lost_time_threshold;
+        conn->super.ctx->http3.num_packets.ack_received += stats.num_packets.ack_received;
+        conn->super.ctx->http3.num_packets.late_acked += stats.num_packets.late_acked;
+        conn->super.ctx->http3.num_bytes.received += stats.num_bytes.received;
+        conn->super.ctx->http3.num_bytes.sent += stats.num_bytes.sent;
+        conn->super.ctx->http3.num_frames_sent.padding += stats.num_frames_sent.padding;
+        conn->super.ctx->http3.num_frames_sent.ping += stats.num_frames_sent.ping;
+        conn->super.ctx->http3.num_frames_sent.ack += stats.num_frames_sent.ack;
+        conn->super.ctx->http3.num_frames_sent.reset_stream += stats.num_frames_sent.reset_stream;
+        conn->super.ctx->http3.num_frames_sent.stop_sending += stats.num_frames_sent.stop_sending;
+        conn->super.ctx->http3.num_frames_sent.crypto += stats.num_frames_sent.crypto;
+        conn->super.ctx->http3.num_frames_sent.new_token += stats.num_frames_sent.new_token;
+        conn->super.ctx->http3.num_frames_sent.stream += stats.num_frames_sent.stream;
+        conn->super.ctx->http3.num_frames_sent.max_data += stats.num_frames_sent.max_data;
+        conn->super.ctx->http3.num_frames_sent.max_stream_data += stats.num_frames_sent.max_stream_data;
+        conn->super.ctx->http3.num_frames_sent.max_streams_bidi += stats.num_frames_sent.max_streams_bidi;
+        conn->super.ctx->http3.num_frames_sent.max_streams_uni += stats.num_frames_sent.max_streams_uni;
+        conn->super.ctx->http3.num_frames_sent.data_blocked += stats.num_frames_sent.data_blocked;
+        conn->super.ctx->http3.num_frames_sent.stream_data_blocked += stats.num_frames_sent.stream_data_blocked;
+        conn->super.ctx->http3.num_frames_sent.streams_blocked += stats.num_frames_sent.streams_blocked;
+        conn->super.ctx->http3.num_frames_sent.new_connection_id += stats.num_frames_sent.new_connection_id;
+        conn->super.ctx->http3.num_frames_sent.retire_connection_id += stats.num_frames_sent.retire_connection_id;
+        conn->super.ctx->http3.num_frames_sent.path_challenge += stats.num_frames_sent.path_challenge;
+        conn->super.ctx->http3.num_frames_sent.path_response += stats.num_frames_sent.path_response;
+        conn->super.ctx->http3.num_frames_sent.transport_close += stats.num_frames_sent.transport_close;
+        conn->super.ctx->http3.num_frames_sent.application_close += stats.num_frames_sent.application_close;
+        conn->super.ctx->http3.num_frames_sent.handshake_done += stats.num_frames_sent.handshake_done;
+        conn->super.ctx->http3.num_frames_sent.datagram += stats.num_frames_sent.datagram;
+        conn->super.ctx->http3.num_frames_sent.ack_frequency += stats.num_frames_sent.ack_frequency;
+        conn->super.ctx->http3.num_frames_received.padding += stats.num_frames_received.padding;
+        conn->super.ctx->http3.num_frames_received.ping += stats.num_frames_received.ping;
+        conn->super.ctx->http3.num_frames_received.ack += stats.num_frames_received.ack;
+        conn->super.ctx->http3.num_frames_received.reset_stream += stats.num_frames_received.reset_stream;
+        conn->super.ctx->http3.num_frames_received.stop_sending += stats.num_frames_received.stop_sending;
+        conn->super.ctx->http3.num_frames_received.crypto += stats.num_frames_received.crypto;
+        conn->super.ctx->http3.num_frames_received.new_token += stats.num_frames_received.new_token;
+        conn->super.ctx->http3.num_frames_received.stream += stats.num_frames_received.stream;
+        conn->super.ctx->http3.num_frames_received.max_data += stats.num_frames_received.max_data;
+        conn->super.ctx->http3.num_frames_received.max_stream_data += stats.num_frames_received.max_stream_data;
+        conn->super.ctx->http3.num_frames_received.max_streams_bidi += stats.num_frames_received.max_streams_bidi;
+        conn->super.ctx->http3.num_frames_received.max_streams_uni += stats.num_frames_received.max_streams_uni;
+        conn->super.ctx->http3.num_frames_received.data_blocked += stats.num_frames_received.data_blocked;
+        conn->super.ctx->http3.num_frames_received.stream_data_blocked += stats.num_frames_received.stream_data_blocked;
+        conn->super.ctx->http3.num_frames_received.streams_blocked += stats.num_frames_received.streams_blocked;
+        conn->super.ctx->http3.num_frames_received.new_connection_id += stats.num_frames_received.new_connection_id;
+        conn->super.ctx->http3.num_frames_received.retire_connection_id += stats.num_frames_received.retire_connection_id;
+        conn->super.ctx->http3.num_frames_received.path_challenge += stats.num_frames_received.path_challenge;
+        conn->super.ctx->http3.num_frames_received.path_response += stats.num_frames_received.path_response;
+        conn->super.ctx->http3.num_frames_received.transport_close += stats.num_frames_received.transport_close;
+        conn->super.ctx->http3.num_frames_received.application_close += stats.num_frames_received.application_close;
+        conn->super.ctx->http3.num_frames_received.handshake_done += stats.num_frames_received.handshake_done;
+        conn->super.ctx->http3.num_frames_received.datagram += stats.num_frames_received.datagram;
+        conn->super.ctx->http3.num_frames_received.ack_frequency += stats.num_frames_received.ack_frequency;
+        conn->super.ctx->http3.num_ptos += stats.num_ptos;
+    }
 
     /* unlink and dispose */
     h2o_linklist_unlink(&conn->_conns);
