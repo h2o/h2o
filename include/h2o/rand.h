@@ -36,11 +36,11 @@
 /*
  * size of a UUID string representation.
  */
-#define H2O_UUID_STR_RFC4122_LEN (sizeof("7d444840-9dc0-11d1-b245-5ffdce74fad2") - 1)
+#define H2O_UUID_STR_RFC4122_LEN (sizeof("01234567-0123-4000-8000-0123456789ab") - 1)
 
 /**
- * generates and sets a UUIDv4 to buf, which must have an enough size, H2O_UUID_STR_RFC4122_LEN + 1.
+ * generates and sets a UUIDv4 to dst, which must have an enough size, H2O_UUID_STR_RFC4122_LEN + 1.
  */
-void h2o_generate_uuidv4(char *buf);
+void h2o_generate_uuidv4(char *dst);
 
 #endif

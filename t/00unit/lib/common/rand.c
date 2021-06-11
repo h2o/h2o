@@ -24,15 +24,15 @@
 
 static void test_format_uuid_rfc4122(void)
 {
-    uint8_t uuid[16] = {0};
+    uint8_t octets[16] = {0};
     char dst[H2O_UUID_STR_RFC4122_LEN + 1];
 
-    format_uuid_rfc4122(dst, uuid, 4);
+    format_uuid_rfc4122(dst, octets, 4);
     ok(strlen(dst) == H2O_UUID_STR_RFC4122_LEN);
     ok(strcmp(dst, "00000000-0000-4000-8000-000000000000") == 0);
 
-    memset(uuid, 0xff, sizeof(uuid));
-    format_uuid_rfc4122(dst, uuid, 4);
+    memset(octets, 0xff, sizeof(octets));
+    format_uuid_rfc4122(dst, octets, 4);
     ok(strlen(dst) == H2O_UUID_STR_RFC4122_LEN);
     ok(strcmp(dst, "ffffffff-ffff-4fff-bfff-ffffffffffff") == 0);
 }
