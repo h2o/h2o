@@ -693,7 +693,7 @@ struct st_h2o_context_t {
             uint64_t forwarded_packet_received;
         } events;
         /**
-         * aggrgegated quicly stats
+         * aggregated quicly stats
          */
         QUICLY_STATS_PREBUILT_FIELDS;
     } http3;
