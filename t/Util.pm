@@ -575,11 +575,13 @@ package H2ologTracer {
         die "failed to spawn $h2olog_prog: $!" unless defined $tracer_pid;
 
         # wait until h2olog and the trace log becomes ready
-        my $stderr_firstline = <$errfh>;
-        if (not defined $stderr_firstline) {
-            Carp::confess("h2olog[$tracer_pid] died unexpectedly");
+        while (1) {
+            my $errline = <$errfh>;
+            Carp::confess("h2olog[$tracer_pid] died unexpectedly")
+                unless defined $errline;
+            Test::More::diag("h2olog[$tracer_pid]: $errline");
+            last if $errline =~ /Attaching pid=/;
         }
-        Test::More::diag("h2olog[$tracer_pid]: $stderr_firstline");
 
         open my $fh, "<", $output_file or die "h2olog[$tracer_pid] does not create the output file ($output_file): $!";
         my $off = 0;
