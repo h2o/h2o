@@ -2,7 +2,7 @@ use strict;
 use warnings;
 use File::Temp qw(tempdir);
 use IPC::Open2;
-use Net::EmptyPort qw(check_port empty_port);
+use Net::EmptyPort qw(check_port empty_port wait_port);
 use Test::More;
 use Time::HiRes qw(sleep);
 use t::Util;
@@ -59,13 +59,45 @@ EOT
 
 subtest "no-tickets-in-file" => sub {
     my $tickets_file = "t/40session-ticket/nonexistent";
+    my $quic_port = empty_port({ host  => "127.0.0.1", proto => "udp" });
     spawn_with(<< "EOT",
   mode: ticket
   ticket-store: file
   ticket-file: $tickets_file
 num-threads: 1
+# there was a bug that caused the quic setting to stall on startup, so check for that
+listen:
+  type: quic
+  port: $quic_port
+  ssl:
+    key-file: examples/h2o/server.key
+    certificate-file: examples/h2o/server.crt
 EOT
     sub {
+        wait_port({port => $quic_port, proto => 'udp'});
+        is test(), "New";
+        is test(), "New";
+        is test(), "New";
+    });
+};
+
+subtest "parse error" => sub {
+    my $tickets_file = "t/40session-ticket/invalid";
+    my $quic_port = empty_port({ host  => "127.0.0.1", proto => "udp" });
+    spawn_with(<< "EOT",
+  mode: ticket
+  ticket-store: file
+  ticket-file: $tickets_file
+num-threads: 1
+listen: # ditto
+  type: quic
+  port: $quic_port
+  ssl:
+    key-file: examples/h2o/server.key
+    certificate-file: examples/h2o/server.crt
+EOT
+    sub {
+        wait_port({port => $quic_port, proto => 'udp'});
         is test(), "New";
         is test(), "New";
         is test(), "New";

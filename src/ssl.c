@@ -446,6 +446,13 @@ static int update_tickets(session_ticket_vector_t *tickets, uint64_t now)
     return altered;
 }
 
+static void try_clear_session_tickets_barrier(void) {
+    if (session_tickets.barrier != NULL) {
+        h2o_barrier_wait(session_tickets.barrier);
+        session_tickets.barrier = NULL;
+    }
+}
+
 static void register_session_tickets(void (*cb)(void *), void *arg)
 {
     pthread_rwlock_wrlock(&session_tickets.rwlock);
@@ -453,10 +460,7 @@ static void register_session_tickets(void (*cb)(void *), void *arg)
     assert(session_tickets.tickets.size != 0);
     pthread_rwlock_unlock(&session_tickets.rwlock);
     __sync_add_and_fetch(&session_tickets.generation, 1);
-    if (session_tickets.barrier != NULL) {
-        h2o_barrier_wait(session_tickets.barrier);
-        session_tickets.barrier = NULL;
-    }
+    try_clear_session_tickets_barrier();
 }
 
 static void do_swap_register_session_tickets(void *p)
@@ -863,13 +867,17 @@ H2O_NORETURN static void *ticket_file_updater(void *unused)
                 char errbuf[256];
                 strerror_r(errno, errbuf, sizeof(errbuf));
                 fprintf(stderr, "cannot load session ticket secrets from file:%s:%s\n", conf.ticket.vars.file.filename, errbuf);
+                try_clear_session_tickets_barrier();
             }
             last_mtime = 0;
         } else if (last_mtime != st.st_mtime) {
             /* (re)load */
             last_mtime = st.st_mtime;
-            if (load_tickets_file(conf.ticket.vars.file.filename) == 0)
+            if (load_tickets_file(conf.ticket.vars.file.filename) == 0) {
                 fprintf(stderr, "session ticket secrets have been (re)loaded\n");
+            } else {
+                try_clear_session_tickets_barrier();
+            }
         }
         sleep(10);
     }
