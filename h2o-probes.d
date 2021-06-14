@@ -39,6 +39,10 @@ provider h2o {
      * Do not use it for a tracing event.
      */
     probe _private_socket_lookup_flags(pid_t tid, uint64_t original_flags, struct st_h2o_ebpf_map_key_t *info);
+    /**
+     * Same as `_private_socket_lookup_flags`, expect that this probe is invoked when SNI is being obtained.
+     */
+    probe _private_socket_lookup_flags_sni(pid_t tid, uint64_t original_flags, const char *server_name, size_t server_name_len);
 
     /**
      * HTTP-level event, indicating that a request has been received.

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2020 Fastly, Inc., Toru Maesaka, Goro Fuji
+ * Copyright (c) 2019-2021 Fastly, Inc., Toru Maesaka, Goro Fuji, Kazuho Oku
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to
@@ -46,23 +46,30 @@ static void usage(void)
     printf(R"(h2olog (h2o v%s)
 Usage: h2olog -p PID
 Optional arguments:
-    -d Print debugging information (-dd shows more)
-    -h Print this help and exit
-    -l Print the list of available tracepoints and exit
-    -H Trace HTTP requests and responses in varnishlog-like format
-    -s RESPONSE_HEADER_NAME A response header name to show, e.g. "content-type"
-    -t TRACEPOINT A tracepoint, or fully-qualified probe name, to show,
-                  including a glob pattern, e.g. "quicly:accept", "h2o:*"
-    -S RATE Enable random sampling per connection (0.0-1.0)
-            Requires for h2o to have `usdt-selective-tracing: ON` in its config file
-    -a Include application data which are omitted by default
-    -r Run without dropping root privilege
-    -w Path to write the output (default: stdout)
+  -d                Print debugging information (-dd shows more).
+  -h                Print this help and exit.
+  -l                Print the list of available tracepoints and exit.
+  -H                Trace HTTP requests and responses in varnishlog-like format.
+  -s <header-name>  A response header name to show, e.g. "content-type".
+  -t <tracepoint>   A tracepoint, or fully-qualified probe name to trace. Glob
+                    patterns can be used; e.g., "quicly:accept", "h2o:*".
+  -S <rate>         Enable random sampling per connection (0.0-1.0). Requires
+                    `usdt-selective-tracing: ON` must be specified in the h2o
+                    config file.
+  -A <ip-address>   Limit connections being traced to those coming from the
+                    specified address. Requries use of `usdt-selective-tracing`.
+  -N <server-name>  Limit connections being traced to those carrying the
+                    specified name in the TLS SNI extension. Requires use of
+                    `usdt-selective-tracing: ON`.
+  -a                Include application data which are omitted by default.
+  -r                Run without dropping root privilege.
+  -w <path>         Path to write the output (default: stdout).
 
 Examples:
-    h2olog -p $(pgrep -o h2o) -H
-    h2olog -p $(pgrep -o h2o) -t quicly:accept -t quicly:free
-    h2olog -p $(pgrep -o h2o) -t h2o:send_response_header -t h2o:h3s_accept -t h2o:h3s_destroy -s alt-svc
+  h2olog -p $(pgrep -o h2o) -H
+  h2olog -p $(pgrep -o h2o) -t quicly:accept -t quicly:free
+  h2olog -p $(pgrep -o h2o) -t h2o:send_response_header -t h2o:h3s_accept \
+         -t h2o:h3s_destroy -s alt-svc
 )",
            H2O_VERSION);
     return;
@@ -264,7 +271,8 @@ int main(int argc, char **argv)
     pid_t h2o_pid = -1;
     double sampling_rate = 1.0;
     std::vector<std::pair<std::vector<uint8_t> /* address */, unsigned /* netmask */>> sampling_addresses;
-    while ((c = getopt(argc, argv, "hHdrlap:t:s:w:S:A:")) != -1) {
+    std::vector<std::string> sampling_snis;
+    while ((c = getopt(argc, argv, "hHdrlap:t:s:w:S:A:N:")) != -1) {
         switch (c) {
         case 'H':
             tracer.reset(create_http_tracer());
@@ -318,6 +326,9 @@ int main(int argc, char **argv)
                 }
             }
         } break;
+        case 'N':
+            sampling_snis.emplace_back(optarg);
+            break;
         case 'a':
             include_appdata = true;
             break;
@@ -421,10 +432,43 @@ int main(int argc, char **argv)
         cflags.push_back(build_cc_macro_expr("H2OLOG_IS_SAMPLING_ADDRESS(family, addr)", std::string("(") + expr + ")"));
         selective_tracing = true;
     }
+    if (!sampling_snis.empty()) {
+        /* if both address- and sni-based sampling are used, the output will be the union of both */
+        if (sampling_addresses.empty())
+            cflags.push_back(build_cc_macro_expr("H2OLOG_IS_SAMPLING_ADDRESS(family, addr)", 0));
+        std::string expr;
+        for (const auto &name : sampling_snis) {
+            if (!expr.empty())
+                expr += " || ";
+            expr += "((name_len) == ";
+            expr += std::to_string(name.size());
+            /* as string constants cannot be used in eBPF, do hand-written memcmp */
+            for (size_t i = 0; i < name.size(); i += 8) {
+                uint64_t u8 = 0, mask = 0;
+                memcpy(&u8, name.c_str() + i, std::min((size_t)8, name.size() - i));
+                expr += " && (*(uint64_t *)((name) + ";
+                expr += std::to_string(i);
+                expr += ")";
+                if (name.size() - i < 8) {
+                    static const uint8_t mask_bytes[14] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}; /* 7x 0xff, 7x 0x00 */
+                    memcpy(&mask, mask_bytes + 7 - (name.size() - i), 8);
+                    expr += " & ";
+                    expr += std::to_string(mask);
+                }
+                expr += ") == ";
+                expr += std::to_string(u8);
+            }
+            expr += ")";
+        }
+        cflags.push_back(build_cc_macro_expr("H2OLOG_IS_SAMPLING_SNI(name, name_len)", std::string("(") + expr + ")"));
+        selective_tracing = true;
+    }
 
     if (selective_tracing) {
         cflags.push_back(build_cc_macro_expr("H2OLOG_SELECTIVE_TRACING", 1));
         probes.push_back(ebpf::USDT(h2o_pid, "h2o", "_private_socket_lookup_flags", "trace_h2o___private_socket_lookup_flags"));
+        probes.push_back(
+            ebpf::USDT(h2o_pid, "h2o", "_private_socket_lookup_flags_sni", "trace_h2o___private_socket_lookup_flags_sni"));
     }
 
     for (const auto &usdt : tracer->usdt_probes()) {
