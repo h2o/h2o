@@ -1593,6 +1593,13 @@ int h2o_socket_set_df_bit(int fd, int domain)
 #undef SETSOCKOPT
 }
 
+void h2o_socket_set_skip_tracing(h2o_socket_t *sock, int skip_tracing)
+{
+    sock->_skip_tracing = skip_tracing;
+    if (sock->ssl != NULL && sock->ssl->ptls != NULL)
+        ptls_set_skip_tracing(sock->ssl->ptls, skip_tracing);
+}
+
 void h2o_sliding_counter_stop(h2o_sliding_counter_t *counter, uint64_t now)
 {
     uint64_t elapsed;
@@ -1857,6 +1864,37 @@ static void report_ebpf_lookup_errors(h2o_error_reporter_t *reporter, uint64_t t
 
 static h2o_error_reporter_t track_ebpf_lookup = H2O_ERROR_REPORTER_INITIALIZER(report_ebpf_lookup_errors);
 
+#define DO_EBPF_RETURN_LOOKUP(func)                                                                                                \
+    do {                                                                                                                           \
+        if (return_map_fd >= 0) {                                                                                                  \
+            pid_t tid = (pid_t)syscall(SYS_gettid); /* gettid() was not available until glibc 2.30 (2019) */                       \
+            /* Make sure old flags do not exist, otherwise the subsequent logic will be unreliable. */                             \
+            if (ebpf_map_delete(return_map_fd, &tid) == 0 || errno == ENOENT) {                                                    \
+                do {                                                                                                               \
+                    func                                                                                                           \
+                } while (0);                                                                                                       \
+                if (ebpf_map_lookup(return_map_fd, &tid, &flags) == 0) {                                                           \
+                    h2o_error_reporter_record_success(&track_ebpf_lookup);                                                         \
+                } else {                                                                                                           \
+                    if (errno == ENOENT) {                                                                                         \
+                        /* ENOENT could be issued in some reasons even if BPF tries to insert the entry, for example:              \
+                         *  * the entry in LRU hash was evicted                                                                    \
+                         *  * the insert operation in BPF program failed with ENOMEM                                               \
+                         * We don't know the frequency for this ENOENT, so cap the number of logs.                                 \
+                         *                                                                                                         \
+                         * Other than the above reasons, ENOENT is issued when the tracer does not set the flags via h2o_return    \
+                         * map, See h2o:_private_socket_lookup_flags handler in h2olog for details. */                             \
+                        h2o_error_reporter_record_error(loop, &track_ebpf_lookup, 60000, 0);                                       \
+                    } else {                                                                                                       \
+                        h2o_perror("BPF_MAP_LOOKUP failed");                                                                       \
+                    }                                                                                                              \
+                }                                                                                                                  \
+            } else {                                                                                                               \
+                h2o_perror("BPF_MAP_DELETE failed");                                                                               \
+            }                                                                                                                      \
+        }                                                                                                                          \
+    } while (0)
+
 uint64_t h2o_socket_ebpf_lookup_flags(h2o_loop_t *loop, int (*init_key)(h2o_ebpf_map_key_t *key, void *cbdata), void *cbdata)
 {
     uint64_t flags = 0;
@@ -1867,37 +1905,21 @@ uint64_t h2o_socket_ebpf_lookup_flags(h2o_loop_t *loop, int (*init_key)(h2o_ebpf
         if (tracing_map_fd >= 0)
             ebpf_map_lookup(tracing_map_fd, &key, &flags);
 
-        if (H2O__PRIVATE_SOCKET_LOOKUP_FLAGS_ENABLED() && return_map_fd >= 0) {
-            pid_t tid = (pid_t)syscall(SYS_gettid); /* gettid() was not available until glibc 2.30 (2019) */
-
-            /* Make sure old flags do not exist, otherwise the subsequent logic will be unreliable. */
-            if (ebpf_map_delete(return_map_fd, &tid) == 0 || errno == ENOENT) {
-                H2O__PRIVATE_SOCKET_LOOKUP_FLAGS(tid, flags, &key);
-
-                if (ebpf_map_lookup(return_map_fd, &tid, &flags) == 0) {
-                    h2o_error_reporter_record_success(&track_ebpf_lookup);
-                } else {
-                    if (errno == ENOENT) {
-                        /* ENOENT could be issued in some reasons even if BPF tries to insert the entry, for example:
-                         *  * the entry in LRU hash was evicted
-                         *  * the insert operation in BPF program failed with ENOMEM
-                         * We don't know the frequency for this ENOENT, so cap the number of logs.
-                         *
-                         * Other than the above reasons, ENOENT is issued when the tracer does not set the flags via h2o_return
-                         * map, See h2o:_private_socket_lookup_flags handler in h2olog for details. */
-                        h2o_error_reporter_record_error(loop, &track_ebpf_lookup, 60000, 0);
-                    } else {
-                        h2o_perror("BPF_MAP_LOOKUP failed");
-                    }
-                }
-            } else {
-                h2o_perror("BPF_MAP_DELETE failed");
-            }
-        }
+        if (H2O__PRIVATE_SOCKET_LOOKUP_FLAGS_ENABLED())
+            DO_EBPF_RETURN_LOOKUP({ H2O__PRIVATE_SOCKET_LOOKUP_FLAGS(tid, flags, &key); });
     }
 
     return flags;
 }
+
+uint64_t h2o_socket_ebpf_lookup_flags_sni(h2o_loop_t *loop, uint64_t flags, const char *server_name, size_t server_name_len)
+{
+    if (H2O__PRIVATE_SOCKET_LOOKUP_FLAGS_SNI_ENABLED())
+        DO_EBPF_RETURN_LOOKUP({ H2O__PRIVATE_SOCKET_LOOKUP_FLAGS_SNI(tid, flags, server_name, server_name_len); });
+    return flags;
+}
+
+#undef DO_EBPF_RETURN_LOOKUP
 
 #else
 
@@ -1919,6 +1941,11 @@ int h2o_socket_ebpf_init_key(h2o_ebpf_map_key_t *key, void *sock)
 uint64_t h2o_socket_ebpf_lookup_flags(h2o_loop_t *loop, int (*init_key)(h2o_ebpf_map_key_t *key, void *cbdata), void *cbdata)
 {
     return 0;
+}
+
+uint64_t h2o_socket_ebpf_lookup_flags_sni(h2o_loop_t *loop, uint64_t flags, const char *server_name, size_t server_name_len)
+{
+    return flags;
 }
 
 #endif

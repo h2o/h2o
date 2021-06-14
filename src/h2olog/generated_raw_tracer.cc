@@ -173,6 +173,7 @@ enum h2olog_event_id_t {
   H2OLOG_EVENT_ID_QUICLY_STREAM_ON_RECEIVE_RESET,
   H2OLOG_EVENT_ID_QUICLY_CONN_STATS,
   H2OLOG_EVENT_ID_H2O__PRIVATE_SOCKET_LOOKUP_FLAGS,
+  H2OLOG_EVENT_ID_H2O__PRIVATE_SOCKET_LOOKUP_FLAGS_SNI,
   H2OLOG_EVENT_ID_H2O_RECEIVE_REQUEST,
   H2OLOG_EVENT_ID_H2O_RECEIVE_REQUEST_HEADER,
   H2OLOG_EVENT_ID_H2O_SEND_RESPONSE,
@@ -644,6 +645,12 @@ struct h2olog_event_t {
       uint64_t original_flags;
       struct st_h2o_ebpf_map_key_t info;
     } _private_socket_lookup_flags;
+    struct { // h2o:_private_socket_lookup_flags_sni
+      pid_t tid;
+      uint64_t original_flags;
+      char server_name[STR_LEN];
+      size_t server_name_len;
+    } _private_socket_lookup_flags_sni;
     struct { // h2o:receive_request
       uint64_t conn_id;
       uint64_t req_id;
@@ -1577,6 +1584,17 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
     json_write_pair_c(out_, STR_LIT("size"), event->conn_stats.size);
     break;
   }
+  case H2OLOG_EVENT_ID_H2O__PRIVATE_SOCKET_LOOKUP_FLAGS_SNI: { // h2o:_private_socket_lookup_flags_sni
+    json_write_pair_n(out_, STR_LIT("type"), STR_LIT("-private-socket-lookup-flags-sni"));
+    json_write_pair_c(out_, STR_LIT("tid"), event->tid);
+    json_write_pair_c(out_, STR_LIT("seq"), seq_);
+    json_write_pair_c(out_, STR_LIT("tid"), event->_private_socket_lookup_flags_sni.tid);
+    json_write_pair_c(out_, STR_LIT("original-flags"), event->_private_socket_lookup_flags_sni.original_flags);
+    json_write_pair_c(out_, STR_LIT("server-name"), event->_private_socket_lookup_flags_sni.server_name, (event->_private_socket_lookup_flags_sni.server_name_len < STR_LEN ? event->_private_socket_lookup_flags_sni.server_name_len : STR_LEN));
+    json_write_pair_c(out_, STR_LIT("server-name-len"), event->_private_socket_lookup_flags_sni.server_name_len);
+    json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
+    break;
+  }
   case H2OLOG_EVENT_ID_H2O_RECEIVE_REQUEST: { // h2o:receive_request
     json_write_pair_n(out_, STR_LIT("type"), STR_LIT("receive-request"));
     json_write_pair_c(out_, STR_LIT("tid"), event->tid);
@@ -1834,6 +1852,7 @@ enum h2olog_event_id_t {
   H2OLOG_EVENT_ID_QUICLY_STREAM_ON_RECEIVE_RESET,
   H2OLOG_EVENT_ID_QUICLY_CONN_STATS,
   H2OLOG_EVENT_ID_H2O__PRIVATE_SOCKET_LOOKUP_FLAGS,
+  H2OLOG_EVENT_ID_H2O__PRIVATE_SOCKET_LOOKUP_FLAGS_SNI,
   H2OLOG_EVENT_ID_H2O_RECEIVE_REQUEST,
   H2OLOG_EVENT_ID_H2O_RECEIVE_REQUEST_HEADER,
   H2OLOG_EVENT_ID_H2O_SEND_RESPONSE,
@@ -2305,6 +2324,12 @@ struct h2olog_event_t {
       uint64_t original_flags;
       struct st_h2o_ebpf_map_key_t info;
     } _private_socket_lookup_flags;
+    struct { // h2o:_private_socket_lookup_flags_sni
+      pid_t tid;
+      uint64_t original_flags;
+      char server_name[STR_LEN];
+      size_t server_name_len;
+    } _private_socket_lookup_flags_sni;
     struct { // h2o:receive_request
       uint64_t conn_id;
       uint64_t req_id;
@@ -2389,6 +2414,12 @@ BPF_PERF_OUTPUT(events);
 
 // HTTP/3 tracing
 BPF_HASH(h2o_to_quicly_conn, u64, u32);
+
+#if H2OLOG_SELECTIVE_TRACING
+// A pinned BPF object to return a value to h2o.
+// The table size must be larger than the number of threads in h2o.
+BPF_TABLE_PINNED("lru_hash", pid_t, uint64_t, h2o_return, H2O_EBPF_RETURN_MAP_SIZE, H2O_EBPF_RETURN_MAP_PATH);
+#endif
 
 // tracepoint sched:sched_process_exit
 int trace_sched_process_exit(struct tracepoint__sched__sched_process_exit *ctx) {
@@ -4070,10 +4101,6 @@ int trace_quicly__conn_stats(struct pt_regs *ctx) {
 }
 
 #if H2OLOG_SELECTIVE_TRACING
-// A pinned BPF object to return a value to h2o.
-// The table size must be larger than the number of threads in h2o.
-BPF_TABLE_PINNED("lru_hash", pid_t, uint64_t, h2o_return, H2O_EBPF_RETURN_MAP_SIZE, H2O_EBPF_RETURN_MAP_PATH);
-
 // h2o:_private_socket_lookup_flags
 int trace_h2o___private_socket_lookup_flags(struct pt_regs *ctx) {
   const void *buf = NULL;
@@ -4104,6 +4131,45 @@ int trace_h2o___private_socket_lookup_flags(struct pt_regs *ctx) {
   int64_t ret = h2o_return.insert(&event._private_socket_lookup_flags.tid, &flags);
   if (ret != 0)
     bpf_trace_printk("failed to insert 0x%llx in trace_h2o___private_socket_lookup_flags with errno=%lld\n", flags, -ret);
+
+  return 0;
+}
+#endif
+
+
+#if H2OLOG_SELECTIVE_TRACING
+// h2o:_private_socket_lookup_flags_sni
+int trace_h2o___private_socket_lookup_flags_sni(struct pt_regs *ctx) {
+  const void *buf = NULL;
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_H2O__PRIVATE_SOCKET_LOOKUP_FLAGS_SNI, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
+
+  // pid_t tid
+  bpf_usdt_readarg(1, ctx, &event._private_socket_lookup_flags_sni.tid);
+  // uint64_t original_flags
+  bpf_usdt_readarg(2, ctx, &event._private_socket_lookup_flags_sni.original_flags);
+  // const char * server_name
+  bpf_usdt_readarg(3, ctx, &buf);
+  bpf_probe_read(&event._private_socket_lookup_flags_sni.server_name, sizeof(event._private_socket_lookup_flags_sni.server_name), buf);
+  // size_t server_name_len
+  bpf_usdt_readarg(4, ctx, &event._private_socket_lookup_flags_sni.server_name_len);
+
+  uint64_t flags  = event._private_socket_lookup_flags_sni.original_flags;
+  if ((flags & H2O_EBPF_FLAGS_SKIP_TRACING_BIT) != 0) {
+#ifdef H2OLOG_IS_SAMPLING_SNI
+    size_t server_name_len = event._private_socket_lookup_flags_sni.server_name_len;
+    if (server_name_len > sizeof(event._private_socket_lookup_flags_sni.server_name))
+      server_name_len = sizeof(event._private_socket_lookup_flags_sni.server_name);
+    if (H2OLOG_IS_SAMPLING_SNI(event._private_socket_lookup_flags_sni.server_name, server_name_len)
+#ifdef H2OLOG_SAMPLING_RATE_U32
+        && bpf_get_prandom_u32() < H2OLOG_SAMPLING_RATE_U32
+#endif
+      )
+      flags &= ~H2O_EBPF_FLAGS_SKIP_TRACING_BIT;
+#endif
+  }
+  int64_t ret = h2o_return.insert(&event._private_socket_lookup_flags_sni.tid, &flags);
+  if (ret != 0)
+    bpf_trace_printk("failed to insert 0x%lx in trace_h2o___private_socket_lookup_flags_sni with errno=%lld\n", flags, -ret);
 
   return 0;
 }

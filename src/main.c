@@ -269,6 +269,8 @@ static struct {
     .tcp_reuseport = 0,
 };
 
+static __thread size_t thread_index;
+
 static neverbleed_t *neverbleed = NULL;
 
 static int cmd_argc;
@@ -315,6 +317,30 @@ static void setup_ecc_key(SSL_CTX *ssl_ctx)
 #endif
 }
 
+static void on_sni_update_tracing(void *conn, int is_quic, const char *server_name, size_t server_name_len)
+{
+    int cur_skip_tracing;
+
+    if (is_quic) {
+        cur_skip_tracing = ptls_skip_tracing(quicly_get_tls(conn));
+    } else {
+        cur_skip_tracing = h2o_socket_skip_tracing(conn);
+    }
+
+    uint64_t flags = cur_skip_tracing ? H2O_EBPF_FLAGS_SKIP_TRACING_BIT : 0;
+    flags = h2o_socket_ebpf_lookup_flags_sni(conf.threads[thread_index].ctx.loop, flags, server_name, server_name_len);
+
+    int new_skip_tracing = (flags & H2O_EBPF_FLAGS_SKIP_TRACING_BIT) != 0;
+
+    if (cur_skip_tracing != new_skip_tracing) {
+        if (is_quic) {
+            ptls_set_skip_tracing(quicly_get_tls(conn), new_skip_tracing);
+        } else {
+            h2o_socket_set_skip_tracing(conn, new_skip_tracing);
+        }
+    }
+}
+
 static struct listener_ssl_config_t *resolve_sni(struct listener_config_t *listener, const char *name, size_t name_len)
 {
     size_t i, j;
@@ -357,10 +383,13 @@ static int on_sni_callback(SSL *ssl, int *ad, void *arg)
     const char *server_name = SSL_get_servername(ssl, TLSEXT_NAMETYPE_host_name);
 
     if (server_name != NULL) {
-        struct listener_ssl_config_t *resolved = resolve_sni(listener, server_name, strlen(server_name));
+        size_t server_name_len = strlen(server_name);
+        h2o_socket_t *sock = SSL_get_app_data(ssl);
+        on_sni_update_tracing(sock, 0, server_name, server_name_len);
+        struct listener_ssl_config_t *resolved = resolve_sni(listener, server_name, server_name_len);
         if (resolved->ctx != SSL_get_SSL_CTX(ssl)) {
             SSL_set_SSL_CTX(ssl, resolved->ctx);
-            set_tcp_congestion_controller(SSL_get_app_data(ssl), resolved->tcp_congestion_controller);
+            set_tcp_congestion_controller(sock, resolved->tcp_congestion_controller);
         }
     }
 
@@ -380,12 +409,15 @@ static int on_client_hello_ptls(ptls_on_client_hello_t *_self, ptls_t *tls, ptls
 
     /* handle SNI */
     if (params->server_name.base != NULL) {
+        void *conn = *ptls_get_data_ptr(tls);
+        on_sni_update_tracing(conn, self->listener->quic.ctx != NULL, (const char *)params->server_name.base,
+                              params->server_name.len);
         ssl_config = resolve_sni(self->listener, (const char *)params->server_name.base, params->server_name.len);
         ptls_context_t *newctx = h2o_socket_ssl_get_picotls_context(ssl_config->ctx);
         ptls_set_context(tls, newctx);
         ptls_set_server_name(tls, (const char *)params->server_name.base, params->server_name.len);
         if (self->listener->quic.ctx == NULL)
-            set_tcp_congestion_controller(*ptls_get_data_ptr(tls), ssl_config->tcp_congestion_controller);
+            set_tcp_congestion_controller(conn, ssl_config->tcp_congestion_controller);
     } else {
         ssl_config = self->listener->ssl.entries[0];
         assert(ssl_config != NULL);
@@ -2780,7 +2812,7 @@ static void on_server_notification(h2o_multithread_receiver_t *receiver, h2o_lin
 
 static void *run_loop(void *_thread_index)
 {
-    size_t thread_index = (size_t)_thread_index;
+    thread_index = (size_t)_thread_index;
     struct listener_ctx_t *listeners = alloca(sizeof(*listeners) * conf.num_listeners);
     size_t i;
 
