@@ -130,14 +130,15 @@ static h2o_iovec_t events_status_final(void *priv, h2o_globalconf_t *gconf, h2o_
                  H2_AGG_ERR(COMPRESSION), H2_AGG_ERR(CONNECT), H2_AGG_ERR(ENHANCE_YOUR_CALM), H2_AGG_ERR(INADEQUATE_SECURITY),
                  esc->h2_read_closed, esc->h2_write_closed, esc->h2_idle_timeout, esc->http3.packet_forwarded,
                  esc->http3.forwarded_packet_received H2O_QUIC_AGGREGATED_STATS_APPLY(QUIC_VAL), esc->ssl_errors, h2o_mmap_errors);
-    pthread_mutex_destroy(&esc->mutex);
-    free(esc);
-    return ret;
 #undef H1_AGG_ERR
 #undef H2_AGG_ERR
 #undef QUIC_FMT
 #undef QUIC_VAL
 #undef BUFSIZE
+
+    pthread_mutex_destroy(&esc->mutex);
+    free(esc);
+    return ret;
 }
 
 h2o_status_handler_t h2o_events_status_handler = {
