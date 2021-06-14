@@ -215,10 +215,11 @@ sub spawn_h2o {
     $opts ||= +{};
     my @args;
     my $max_ssl_version;
+    my $quic = $opts->{quic} // 1; # enabled on default
 
     # decide the port numbers
     my ($port, $tls_port) = empty_ports(2, { host => "0.0.0.0" });
-    my $quic_port = empty_port({ host => "0.0.0.0", proto => "udp" });
+    my $quic_port = $quic ? empty_port({ host => "0.0.0.0", proto => "udp" }) : undef;
 
     # setup the configuration file
     $conf = $conf->($port, $tls_port, $quic_port)
@@ -246,18 +247,24 @@ listen:
   host: 0.0.0.0
   port: $tls_port
 $ssl
+EOT
+    if ($quic) {
+        $user_and_listen .= <<"EOT";
 listen:
   type: quic
   host: 0.0.0.0
   port: $quic_port
 $ssl
 EOT
-    my $whole_conf = join("\n", $user_and_listen, $conf);
+    }
+    my $whole_conf = join("\n", $conf, $user_and_listen);
 
     my $port_defs = [
         +{ port => $port, proto => 'tcp' },
         +{ port => $tls_port, proto => 'tcp' },
-        +{ port => $quic_port, proto => 'udp' },
+        ($quic ? (
+            +{ port => $quic_port, proto => 'udp' },
+        ) : ()),
     ];
     my $ret = spawn_h2o_raw($whole_conf, $port_defs, \@args);
     return {
