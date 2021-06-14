@@ -600,10 +600,12 @@ static void on_send_stop(quicly_stream_t *qs, int err)
     if (req->proceed_req.bytes_inflight != SIZE_MAX)
         call_proceed_req(req, h2o_httpclient_error_io /* TODO better error code? */);
 
-    if (quicly_recvstate_transfer_complete(&req->quic->recvstate)) {
-        detach_stream(req);
-        destroy_request(req);
+    if (!quicly_recvstate_transfer_complete(&req->quic->recvstate)) {
+        quicly_request_stop(req->quic, H2O_HTTP3_ERROR_REQUEST_CANCELLED);
+        notify_response_error(req, h2o_httpclient_error_io);
     }
+    detach_stream(req);
+    destroy_request(req);
 }
 
 static int on_receive_process_bytes(struct st_h2o_http3client_req_t *req, const uint8_t **src, const uint8_t *src_end,
