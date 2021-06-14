@@ -122,7 +122,7 @@ static h2o_iovec_t events_status_final(void *priv, h2o_globalconf_t *gconf, h2o_
                  " \"http3.packet-forwarded\": %" PRIu64 ",\n"
                  " \"http3.forwarded-packet-received\": %" PRIu64
                  ",\n" H2O_QUIC_AGGREGATED_STATS_APPLY(QUIC_FMT) " \"ssl.errors\": %" PRIu64 ",\n"
-                                                                  " \"memory.mmap_errors\": %zu\n",
+                                                                 " \"memory.mmap_errors\": %zu\n",
                  H1_AGG_ERR(400), H1_AGG_ERR(403), H1_AGG_ERR(404), H1_AGG_ERR(405), H1_AGG_ERR(416), H1_AGG_ERR(417),
                  H1_AGG_ERR(500), H1_AGG_ERR(502), H1_AGG_ERR(503), esc->h1_request_timeout, esc->h1_request_io_timeout,
                  H2_AGG_ERR(PROTOCOL), H2_AGG_ERR(INTERNAL), H2_AGG_ERR(FLOW_CONTROL), H2_AGG_ERR(SETTINGS_TIMEOUT),
