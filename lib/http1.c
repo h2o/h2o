@@ -420,7 +420,7 @@ static const char *fixup_request(struct st_h2o_http1_conn_t *conn, struct phr_he
                                  int minor_version, h2o_iovec_t *expect, ssize_t *entity_header_index)
 {
     h2o_iovec_t connection = {NULL, 0}, host = {NULL, 0}, upgrade = {NULL, 0};
-    int is_connect = h2o_memis(conn->req.input.method.base, conn->req.input.method.len, H2O_STRLIT("CONNECT"));
+    enum { METHOD_NORMAL, METHOD_CONNECT, METHOD_CONNECT_UDP } method_type;
     const char *ret;
 
     expect->base = NULL;
@@ -433,13 +433,21 @@ static const char *fixup_request(struct st_h2o_http1_conn_t *conn, struct phr_he
     if (conn->req.version < 0x101)
         conn->_ostr_final.super.send_informational = NULL;
 
+    if (h2o_memis(conn->req.input.method.base, conn->req.input.method.len, H2O_STRLIT("CONNECT"))) {
+        method_type = METHOD_CONNECT;
+    } else if (h2o_memis(conn->req.input.method.base, conn->req.input.method.len, H2O_STRLIT("CONNECT-UDP"))) {
+        method_type = METHOD_CONNECT_UDP;
+    } else {
+        method_type = METHOD_NORMAL;
+    }
+
     /* init headers */
     if ((ret = init_headers(&conn->req.pool, &conn->req.headers, headers, num_headers, &connection, &host, &upgrade, expect,
                             entity_header_index)) != NULL)
         return ret;
 
     /* copy the values to pool, since the buffer pointed by the headers may get realloced */
-    if (*entity_header_index != -1 || is_connect || upgrade.base != NULL) {
+    if (*entity_header_index != -1 || method_type != METHOD_NORMAL || upgrade.base != NULL) {
         size_t i;
         conn->req.input.method = h2o_strdup(&conn->req.pool, conn->req.input.method.base, conn->req.input.method.len);
         conn->req.input.path = h2o_strdup(&conn->req.pool, conn->req.input.path.base, conn->req.input.path.len);
@@ -456,7 +464,7 @@ static const char *fixup_request(struct st_h2o_http1_conn_t *conn, struct phr_he
             upgrade = h2o_strdup(&conn->req.pool, upgrade.base, upgrade.len);
     }
 
-    if (is_connect) {
+    if (method_type == METHOD_CONNECT) {
         /* CONNECT method, validate, setting the target host in `req->input.authority`. Path becomes empty. */
         if (conn->req.version < 0x101 || conn->req.input.path.len == 0 ||
             (host.base != NULL && !h2o_memis(conn->req.input.path.base, conn->req.input.path.len, host.base, host.len)) ||
@@ -482,7 +490,7 @@ static const char *fixup_request(struct st_h2o_http1_conn_t *conn, struct phr_he
         if (!h2o_req_validate_pseudo_headers(&conn->req))
             return "invalid request";
         /* special handling for CONNECT-UDP, else it is an ordinary request */
-        if (h2o_memis(conn->req.input.method.base, conn->req.input.method.len, H2O_STRLIT("CONNECT-UDP"))) {
+        if (method_type == METHOD_CONNECT_UDP) {
             conn->req.is_tunnel_req = 1;
         } else {
             /* handle Connection and Upgrade header fields */
