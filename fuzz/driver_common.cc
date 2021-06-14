@@ -20,6 +20,7 @@
  * IN THE SOFTWARE.
  */
 
+#define H2O_USE_EPOLL 1
 #include "driver_common.h"
 
 #include <unistd.h>
