@@ -1702,8 +1702,15 @@ static void on_h3_destroy(h2o_quic_conn_t *h3_)
 {
     h2o_http3_conn_t *h3 = (h2o_http3_conn_t *)h3_;
     struct st_h2o_http3_server_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_conn_t, h3, h3);
+    quicly_stats_t stats;
 
     H2O_PROBE_CONN0(H3S_DESTROY, &conn->super);
+
+    if (quicly_get_stats(h3_->quic, &stats) == 0) {
+#define ACC(fld, _unused) conn->super.ctx->quic.fld += stats.fld;
+        H2O_QUIC_AGGREGATED_STATS_APPLY(ACC);
+#undef ACC
+    }
 
     /* unlink and dispose */
     h2o_linklist_unlink(&conn->_conns);
