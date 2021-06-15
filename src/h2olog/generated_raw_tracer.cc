@@ -187,6 +187,7 @@ enum h2olog_event_id_t {
   H2OLOG_EVENT_ID_H2O_H3_FRAME_RECEIVE,
   H2OLOG_EVENT_ID_H2O_H3_PACKET_RECEIVE,
   H2OLOG_EVENT_ID_H2O_H3_PACKET_FORWARD,
+  H2OLOG_EVENT_ID_H2O_H3_PACKET_FORWARD_IGNORED,
   H2OLOG_EVENT_ID_H2O_H3_FORWARDED_PACKET_RECEIVE,
   H2OLOG_EVENT_ID_H2O_H3C_TUNNEL_CREATE,
   H2OLOG_EVENT_ID_H2O_TUNNEL_ON_DESTROY,
@@ -731,6 +732,10 @@ struct h2olog_event_t {
       size_t num_bytes;
       int fd;
     } h3_packet_forward;
+    struct { // h2o:h3_packet_forward_ignored
+      uint64_t node_id;
+      uint32_t thread_id;
+    } h3_packet_forward_ignored;
     struct { // h2o:h3_forwarded_packet_receive
       quicly_address_t dest;
       quicly_address_t src;
@@ -859,6 +864,7 @@ void h2o_raw_tracer::initialize() {
     h2o_tracer::usdt("h2o", "h3_frame_receive", "trace_h2o__h3_frame_receive"),
     h2o_tracer::usdt("h2o", "h3_packet_receive", "trace_h2o__h3_packet_receive"),
     h2o_tracer::usdt("h2o", "h3_packet_forward", "trace_h2o__h3_packet_forward"),
+    h2o_tracer::usdt("h2o", "h3_packet_forward_ignored", "trace_h2o__h3_packet_forward_ignored"),
     h2o_tracer::usdt("h2o", "h3_forwarded_packet_receive", "trace_h2o__h3_forwarded_packet_receive"),
     h2o_tracer::usdt("h2o", "h3c_tunnel_create", "trace_h2o__h3c_tunnel_create"),
     h2o_tracer::usdt("h2o", "tunnel_on_destroy", "trace_h2o__tunnel_on_destroy"),
@@ -1790,6 +1796,15 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
     json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
     break;
   }
+  case H2OLOG_EVENT_ID_H2O_H3_PACKET_FORWARD_IGNORED: { // h2o:h3_packet_forward_ignored
+    json_write_pair_n(out_, STR_LIT("type"), STR_LIT("h3-packet-forward-ignored"));
+    json_write_pair_c(out_, STR_LIT("tid"), event->tid);
+    json_write_pair_c(out_, STR_LIT("seq"), seq_);
+    json_write_pair_c(out_, STR_LIT("node-id"), event->h3_packet_forward_ignored.node_id);
+    json_write_pair_c(out_, STR_LIT("thread-id"), event->h3_packet_forward_ignored.thread_id);
+    json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
+    break;
+  }
   case H2OLOG_EVENT_ID_H2O_H3_FORWARDED_PACKET_RECEIVE: { // h2o:h3_forwarded_packet_receive
     json_write_pair_n(out_, STR_LIT("type"), STR_LIT("h3-forwarded-packet-receive"));
     json_write_pair_c(out_, STR_LIT("tid"), event->tid);
@@ -1990,6 +2005,7 @@ enum h2olog_event_id_t {
   H2OLOG_EVENT_ID_H2O_H3_FRAME_RECEIVE,
   H2OLOG_EVENT_ID_H2O_H3_PACKET_RECEIVE,
   H2OLOG_EVENT_ID_H2O_H3_PACKET_FORWARD,
+  H2OLOG_EVENT_ID_H2O_H3_PACKET_FORWARD_IGNORED,
   H2OLOG_EVENT_ID_H2O_H3_FORWARDED_PACKET_RECEIVE,
   H2OLOG_EVENT_ID_H2O_H3C_TUNNEL_CREATE,
   H2OLOG_EVENT_ID_H2O_TUNNEL_ON_DESTROY,
@@ -2534,6 +2550,10 @@ struct h2olog_event_t {
       size_t num_bytes;
       int fd;
     } h3_packet_forward;
+    struct { // h2o:h3_packet_forward_ignored
+      uint64_t node_id;
+      uint32_t thread_id;
+    } h3_packet_forward_ignored;
     struct { // h2o:h3_forwarded_packet_receive
       quicly_address_t dest;
       quicly_address_t src;
@@ -4611,6 +4631,21 @@ int trace_h2o__h3_packet_forward(struct pt_regs *ctx) {
 
   if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
     bpf_trace_printk("failed to perf_submit in trace_h2o__h3_packet_forward\n");
+
+  return 0;
+}
+// h2o:h3_packet_forward_ignored
+int trace_h2o__h3_packet_forward_ignored(struct pt_regs *ctx) {
+  const void *buf = NULL;
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_H2O_H3_PACKET_FORWARD_IGNORED, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
+
+  // uint64_t node_id
+  bpf_usdt_readarg(1, ctx, &event.h3_packet_forward_ignored.node_id);
+  // uint32_t thread_id
+  bpf_usdt_readarg(2, ctx, &event.h3_packet_forward_ignored.thread_id);
+
+  if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
+    bpf_trace_printk("failed to perf_submit in trace_h2o__h3_packet_forward_ignored\n");
 
   return 0;
 }
