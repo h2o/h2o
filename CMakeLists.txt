@@ -680,7 +680,9 @@ SET(STANDALONE_SOURCE_FILES
     ${BROTLI_SOURCE_FILES}
     deps/neverbleed/neverbleed.c
     src/main.c
-    src/ssl.c)
+    src/ssl.c
+    src/asan_opts.c
+)
 SET(STANDALONE_COMPILE_FLAGS "-DH2O_USE_LIBUV=0 -DH2O_USE_BROTLI=1")
 IF (WITH_MRUBY)
     IF (${CMAKE_C_COMPILER_ID} STREQUAL "Clang")

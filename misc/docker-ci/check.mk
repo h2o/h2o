@@ -2,7 +2,6 @@ CONTAINER_NAME=h2oserver/h2o-ci:ubuntu1604
 SRC_DIR=/h2o
 CHECK_MK=$(SRC_DIR)/misc/docker-ci/check.mk
 CMAKE_ARGS=
-FUZZ_ASAN=ASAN_OPTIONS=detect_leaks=0
 DOCKER_RUN_OPTS=--privileged \
 	--ulimit memlock=-1 \
 	-v `pwd`:$(SRC_DIR) \
@@ -45,8 +44,8 @@ _do-check:
 	make check
 
 _fuzz:
-	$(FUZZ_ASAN) CC=clang CXX=clang++ $(MAKE) -f $(CHECK_MK) _check CMAKE_ARGS=-DBUILD_FUZZER=ON
-	$(FUZZ_ASAN) $(MAKE) -f $(CHECK_MK) -C build _do-fuzz-extra
+	CC=clang CXX=clang++ $(MAKE) -f $(CHECK_MK) _check CMAKE_ARGS=-DBUILD_FUZZER=ON
+	$(MAKE) -f $(CHECK_MK) -C build _do-fuzz-extra
 
 _do-fuzz-extra:
 	./h2o-fuzzer-http1 -close_fd_mask=3 -runs=1 -max_len=16384 $(SRC_DIR)/fuzz/http1-corpus < /dev/null
