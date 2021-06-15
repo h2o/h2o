@@ -89,12 +89,12 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size)
 {
     if (!init_done) {
         h2o_hostconf_t *hostconf;
-        h2o_access_log_filehandle_t *logfh = h2o_access_log_open_handle("/dev/stdout", NULL, H2O_LOGCONF_ESCAPE_APACHE);
+        h2o_access_log_filehandle_t *logfh = NULL;
         h2o_pathconf_t *pathconf;
         static char tmpname[] = "/tmp/h2o-fuzz-XXXXXX";
         char *dirname;
         pthread_t tupstream;
-        const char *client_timeout_ms_str;
+        const char *client_timeout_ms_str, *log_access_str;
 
         h2o_barrier_init(&init_barrier, 2);
         signal(SIGPIPE, SIG_IGN);
@@ -105,6 +105,12 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size)
             client_timeout_ms = atoi(client_timeout_ms_str);
         if (!client_timeout_ms)
             client_timeout_ms = 10;
+
+        if ((log_access_str = getenv("H2O_FUZZER_LOG_ACCESS")) != NULL) {
+            bool log_access = atoi(log_access_str) != 0;
+            if (log_access)
+                logfh = h2o_access_log_open_handle("/dev/stdout", NULL, H2O_LOGCONF_ESCAPE_APACHE);
+        }
 
         h2o_config_init(&config);
         hostconf = h2o_config_register_host(&config, h2o_iovec_init(H2O_STRLIT("default")), 65535);
