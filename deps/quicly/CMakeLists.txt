@@ -97,7 +97,7 @@ TARGET_LINK_LIBRARIES(quicly LINK_PUBLIC m)
 
 ADD_CUSTOM_COMMAND(
     OUTPUT embedded-probes.h
-    COMMAND ${CMAKE_SOURCE_DIR}/misc/probe2trace.pl -a embedded < ${CMAKE_SOURCE_DIR}/quicly-probes.d > ${CMAKE_CURRENT_BINARY_DIR}/embedded-probes.h
+    COMMAND ${PROJECT_SOURCE_DIR}/misc/probe2trace.pl -a embedded < ${PROJECT_SOURCE_DIR}/quicly-probes.d > ${CMAKE_CURRENT_BINARY_DIR}/embedded-probes.h
     DEPENDS quicly-probes.d misc/probe2trace.pl
     VERBATIM)
 SET(CLI_FILES ${PICOTLS_OPENSSL_FILES} ${QUICLY_LIBRARY_FILES} src/cli.c embedded-probes.h)
