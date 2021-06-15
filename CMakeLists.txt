@@ -475,6 +475,7 @@ SET(UNIT_TEST_SOURCE_FILES
     ${LIB_SOURCE_FILES}
     ${LIBYAML_SOURCE_FILES}
     ${BROTLI_SOURCE_FILES}
+    src/asan_opts.c
     deps/picotest/picotest.c
     t/00unit/test.c
     t/00unit/lib/common/balancer/least_conn.c
@@ -614,7 +615,7 @@ IF (WSLAY_FOUND)
     ADD_DEPENDENCIES(lib-examples-evloop examples-websocket-evloop)
 ENDIF (WSLAY_FOUND)
 ADD_EXECUTABLE(examples-latency-optimization-evloop examples/libh2o/latency-optimization.c)
-ADD_EXECUTABLE(h2o-httpclient src/httpclient.c)
+ADD_EXECUTABLE(h2o-httpclient src/httpclient.c src/asan_opts.c)
 ADD_EXECUTABLE(examples-socket-client-evloop examples/libh2o/socket-client.c)
 ADD_EXECUTABLE(examples-simple-evloop examples/libh2o/simple.c)
 ADD_EXECUTABLE(examples-websocket-evloop lib/websocket.c examples/libh2o/websocket.c)
