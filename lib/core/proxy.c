@@ -189,20 +189,7 @@ static void build_request(h2o_req_t *req, h2o_iovec_t *method, h2o_url_t *url, h
     }
 
     /* headers */
-    /* rewrite headers if necessary */
     h2o_headers_t req_headers = req->headers;
-    if (req->overrides != NULL && req->overrides->headers_cmds != NULL) {
-        req_headers.entries = NULL;
-        req_headers.size = 0;
-        req_headers.capacity = 0;
-        h2o_headers_command_t *cmd;
-        h2o_vector_reserve(&req->pool, &req_headers, req->headers.capacity);
-        memcpy(req_headers.entries, req->headers.entries, sizeof(req->headers.entries[0]) * req->headers.size);
-        req_headers.size = req->headers.size;
-        for (cmd = req->overrides->headers_cmds; cmd->cmd != H2O_HEADERS_CMD_NULL; ++cmd)
-            h2o_rewrite_headers(&req->pool, &req_headers, cmd);
-    }
-
     {
         const h2o_header_t *h, *h_end;
         int found_early_data = 0;
@@ -281,6 +268,13 @@ static void build_request(h2o_req_t *req, h2o_iovec_t *method, h2o_url_t *url, h
 
         via_buf = build_request_merge_headers(&req->pool, via_buf, added, ',');
         h2o_add_header(&req->pool, headers, H2O_TOKEN_VIA, NULL, via_buf.base, via_buf.len);
+    }
+
+    /* rewrite headers if necessary */
+    if (req->overrides != NULL && req->overrides->headers_cmds != NULL) {
+        h2o_headers_command_t *cmd;
+        for (cmd = req->overrides->headers_cmds; cmd->cmd != H2O_HEADERS_CMD_NULL; ++cmd)
+            h2o_rewrite_headers(&req->pool, headers, cmd);
     }
 }
 
