@@ -1127,6 +1127,7 @@ static int handle_input_expect_headers_process_connect(struct st_h2o_http3_serve
     stream->datagram_flow_id = datagram_flow_id;
     ++get_conn(stream)->num_streams_tunnelling;
     set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_SEND_HEADERS, 0);
+    quicly_stream_set_receive_window(stream->quic, get_conn(stream)->super.ctx->globalconf->http3.active_stream_window_size);
     h2o_process_request(&stream->req);
 
     return 0;
