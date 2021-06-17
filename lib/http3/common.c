@@ -630,9 +630,16 @@ static void process_packets(h2o_quic_ctx_t *ctx, quicly_address_t *destaddr, qui
         size_t i;
     Receive:
         for (i = 0; i != num_packets; ++i) {
-            /* FIXME process errors? */
-            if (i != accepted_packet_index)
-                quicly_receive(conn->quic, &destaddr->sa, &srcaddr->sa, packets + i);
+            if (i != accepted_packet_index) {
+                int ret = quicly_receive(conn->quic, &destaddr->sa, &srcaddr->sa, packets + i);
+                switch (ret) {
+                    case QUICLY_ERROR_STATE_EXHAUSTION:
+                    case PTLS_ERROR_NO_MEMORY:
+                        fprintf(stderr, "%s: `quicly_receive()` returned ret:%d\n", __func__, ret);
+                        conn->callbacks->destroy_connection(conn);
+                        return;
+                }
+            }
         }
     }
 
@@ -1111,6 +1118,7 @@ int h2o_quic_send(h2o_quic_conn_t *conn)
                 break;
             }
             break;
+        case QUICLY_ERROR_STATE_EXHAUSTION:
         case QUICLY_ERROR_FREE_CONNECTION:
             conn->callbacks->destroy_connection(conn);
             return 0;
