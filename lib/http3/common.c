@@ -633,11 +633,11 @@ static void process_packets(h2o_quic_ctx_t *ctx, quicly_address_t *destaddr, qui
             if (i != accepted_packet_index) {
                 int ret = quicly_receive(conn->quic, &destaddr->sa, &srcaddr->sa, packets + i);
                 switch (ret) {
-                    case QUICLY_ERROR_STATE_EXHAUSTION:
-                    case PTLS_ERROR_NO_MEMORY:
-                        fprintf(stderr, "%s: `quicly_receive()` returned ret:%d\n", __func__, ret);
-                        conn->callbacks->destroy_connection(conn);
-                        return;
+                case QUICLY_ERROR_STATE_EXHAUSTION:
+                case PTLS_ERROR_NO_MEMORY:
+                    fprintf(stderr, "%s: `quicly_receive()` returned ret:%d\n", __func__, ret);
+                    conn->callbacks->destroy_connection(conn);
+                    return;
                 }
             }
         }
