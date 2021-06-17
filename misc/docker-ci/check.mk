@@ -51,6 +51,7 @@ _fuzz:
 _do-fuzz-extra:
 	./h2o-fuzzer-http1 -close_fd_mask=3 -runs=1 -max_len=16384 $(SRC_DIR)/fuzz/http1-corpus < /dev/null
 	./h2o-fuzzer-http2 -close_fd_mask=3 -runs=1 -max_len=16384 $(SRC_DIR)/fuzz/http2-corpus < /dev/null
+        ./h2o-fuzzer-http3 -close_fd_mask=3 -runs=1 -max_len=16384 $(SRC_DIR)/fuzz/http3-corpus < /dev/null
 	./h2o-fuzzer-url -close_fd_mask=3 -runs=1 -max_len=16384 $(SRC_DIR)/fuzz/url-corpus < /dev/null
 
 enter:
