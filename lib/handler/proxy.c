@@ -19,7 +19,6 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-#include <sys/un.h>
 #include "picotls.h"
 #include "picotls/openssl.h"
 #include "h2o.h"
@@ -60,6 +59,7 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     return 0;
 }
 
+#ifndef H2O_NO_HTTP3
 static h2o_http3client_ctx_t *create_http3_context(h2o_loop_t *loop)
 {
 #if H2O_USE_LIBUV
@@ -115,6 +115,7 @@ static void destroy_http3_context(h2o_http3client_ctx_t *h3ctx)
     quicly_free_default_cid_encryptor(h3ctx->quic.cid_encryptor);
     free(h3ctx);
 }
+#endif
 
 static void on_context_init(h2o_handler_t *_self, h2o_context_t *ctx)
 {
@@ -154,7 +155,9 @@ static void on_context_init(h2o_handler_t *_self, h2o_context_t *ctx)
         ctx->globalconf->http2.latency_optimization; /* TODO provide config knob, or disable? */
     client_ctx->http2.max_concurrent_streams = self->config.http2.max_concurrent_streams;
 
+#ifndef H2O_NO_HTTP3
     client_ctx->http3 = client_ctx->protocol_selector.ratio.http3 != 0 ? create_http3_context(ctx->loop) : NULL;
+#endif
 
     handler_ctx->client_ctx = client_ctx;
 }
@@ -165,8 +168,10 @@ static void on_context_dispose(h2o_handler_t *_self, h2o_context_t *ctx)
     struct rp_handler_context_t *handler_ctx = h2o_context_get_handler_context(ctx, &self->super);
 
     if (handler_ctx->client_ctx != NULL) {
+#ifndef H2O_NO_HTTP3
         if (handler_ctx->client_ctx->http3 != NULL)
             destroy_http3_context(handler_ctx->client_ctx->http3);
+#endif
         free(handler_ctx->client_ctx);
     }
 

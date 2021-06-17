@@ -135,8 +135,7 @@ static int do_pread(h2o_sendvec_t *src, h2o_req_t *req, h2o_iovec_t dst, size_t 
 
     /* read */
     while (bytes_read < dst.len) {
-        while ((rret = pread(self->file.ref->fd, dst.base + bytes_read, dst.len - bytes_read, file_chunk_at + off + bytes_read)) ==
-                   -1 &&
+        while ((rret = h2o_filecache_read_file(self->file.ref, dst.base + bytes_read, dst.len - bytes_read, file_chunk_at + off + bytes_read)) == -1 &&
                errno == EINTR)
             ;
         if (rret == -1)
@@ -209,7 +208,7 @@ static void do_multirange_proceed(h2o_generator_t *_self, h2o_req_t *req)
     rlen = self->bytesleft;
     if (rlen + used_buf > MAX_BUF_SIZE)
         rlen = MAX_BUF_SIZE - used_buf;
-    while ((rret = pread(self->file.ref->fd, self->ranged.multirange_buf + used_buf, rlen, self->file.off)) == -1 && errno == EINTR)
+    while ((rret = h2o_filecache_read_file(self->file.ref, self->ranged.multirange_buf + used_buf, rlen, self->file.off)) == -1 && errno == EINTR)
         ;
     if (rret == -1)
         goto Error;
@@ -240,7 +239,7 @@ static struct st_h2o_sendfile_generator_t *create_generator(h2o_req_t *req, cons
 {
     struct st_h2o_sendfile_generator_t *self;
     h2o_filecache_ref_t *fileref;
-    h2o_iovec_t content_encoding = (h2o_iovec_t){NULL};
+    h2o_iovec_t content_encoding = H2O_IOVEC_NULL;
     unsigned gunzip = 0;
 
     *is_dir = 0;

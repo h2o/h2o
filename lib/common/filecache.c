@@ -28,6 +28,42 @@
 #include "h2o/memory.h"
 #include "h2o/filecache.h"
 
+#ifdef __MINGW32__
+#include <winternl.h>
+
+/* from ddk/ntifs.h */
+NTSYSCALLAPI
+NTSTATUS
+NTAPI
+NtReadFile(
+  IN HANDLE FileHandle,
+  IN HANDLE Event OPTIONAL,
+  IN PVOID ApcRoutine OPTIONAL,
+  IN PVOID ApcContext OPTIONAL,
+  OUT PIO_STATUS_BLOCK IoStatusBlock,
+  OUT PVOID Buffer,
+  IN ULONG Length,
+  IN PLARGE_INTEGER ByteOffset OPTIONAL,
+  IN PULONG Key OPTIONAL);
+
+static ssize_t pread(int fd, void* buf, size_t count, off_t offset)
+{
+    /* h2o reads from h2o_filecache_ref_t.fd only with pread (comment it out to verify)
+     * this allows me to ignore the existence of the file pointer position maintained
+     * by Windows I/O manager and use NtReadFile() without opening extra file handles
+     */
+    IO_STATUS_BLOCK sb;
+    LARGE_INTEGER li;
+    li.QuadPart = offset;
+    NTSTATUS s = NtReadFile((HANDLE)_get_osfhandle(fd), NULL, NULL, NULL, &sb, buf, count, &li, NULL);
+    if (NT_SUCCESS (s))
+        return sb.Information;
+
+    /* FIXME: set errno to something appropriate */
+    return -1 ;
+}
+#endif
+
 KHASH_SET_INIT_STR(opencache_set)
 
 struct st_h2o_filecache_t {
@@ -134,6 +170,11 @@ Exit:
         ref = NULL;
     }
     return ref;
+}
+
+ssize_t h2o_filecache_read_file(h2o_filecache_ref_t *ref, void *buf, size_t count, off_t offset)
+{
+    return pread(ref->fd, buf, count, offset);
 }
 
 void h2o_filecache_close_file(h2o_filecache_ref_t *ref)

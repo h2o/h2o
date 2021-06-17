@@ -32,6 +32,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include "h2o/format.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -88,8 +89,19 @@ typedef struct st_h2o_buffer_prototype_t h2o_buffer_prototype_t;
  * buffer structure compatible with iovec
  */
 typedef struct st_h2o_iovec_t {
+#ifdef __MINGW32__
+#define H2O_IOVEC_NULL      {0, NULL}
+#define H2O_IOVEC_EMPTY     {0, ""}
+#define H2O_IOVEC_STRLIT(s) {sizeof(s) - 1, (s)}
+    unsigned int len;
+    char *base;
+#else
+#define H2O_IOVEC_NULL      {NULL}
+#define H2O_IOVEC_EMPTY     {"", 0}
+#define H2O_IOVEC_STRLIT(s) {(s), sizeof(s) - 1}
     char *base;
     size_t len;
+#endif
 } h2o_iovec_t;
 
 typedef struct st_h2o_mem_recycle_t {
@@ -175,7 +187,7 @@ extern void *(*volatile h2o_mem__set_secure)(void *, int, size_t);
 /**
  * prints an error message and aborts
  */
-H2O_NORETURN void h2o__fatal(const char *file, int line, const char *msg, ...) __attribute__((format(printf, 3, 4)));
+H2O_NORETURN void h2o__fatal(const char *file, int line, const char *msg, ...) H2O_ATTRIBUTE_FORMAT_PRINTF(3, 4);
 #ifndef h2o_fatal
 #define h2o_fatal(...) h2o__fatal(__FILE__, __LINE__, __VA_ARGS__)
 #endif

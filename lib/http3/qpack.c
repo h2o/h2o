@@ -581,7 +581,7 @@ static struct st_h2o_qpack_header_t *resolve_dynamic_postbase(struct st_h2o_qpac
 static h2o_iovec_t *decode_header_name_literal(h2o_mem_pool_t *pool, unsigned *soft_errors, const uint8_t **src,
                                                const uint8_t *src_end, unsigned prefix_bits, const char **err_desc)
 {
-    h2o_iovec_t buf = {NULL};
+    h2o_iovec_t buf = H2O_IOVEC_NULL;
     const h2o_token_t *token;
     int is_huff;
     int64_t len;
@@ -1190,7 +1190,7 @@ static void flatten_known_header_with_static_lookup(struct st_h2o_qpack_flatten_
 {
     int is_exact;
     int32_t static_index = lookup_cb(value, &is_exact);
-    assert(index >= 0);
+    assert(static_index >= 0);
 
     do_flatten_header(ctx, static_index, is_exact, name->flags.likely_to_repeat, &name->buf, value, (h2o_header_flags_t){0});
 }

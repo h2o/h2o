@@ -817,7 +817,7 @@ int h2o_mruby_set_response_header(h2o_mruby_shared_context_t *shared_ctx, h2o_io
 {
     h2o_req_t *req = _req;
     const h2o_token_t *token;
-    static const h2o_iovec_t fallthru_set_prefix = {H2O_STRLIT(FALLTHRU_SET_PREFIX)};
+    static const h2o_iovec_t fallthru_set_prefix = H2O_IOVEC_STRLIT(FALLTHRU_SET_PREFIX);
     h2o_iovec_t lc_name;
 
     /* if possible, set the response header using token, or at least have the header field name converted to lower-case */

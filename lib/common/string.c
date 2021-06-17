@@ -444,16 +444,21 @@ const char *h2o_next_token(h2o_iovec_t *iter, int inner, int outer, size_t *elem
     *iter = h2o_iovec_init(cur, end - cur);
     *element_len = token_end - token_start;
     if (value != NULL)
-        *value = (h2o_iovec_t){NULL};
+        *value = (h2o_iovec_t)H2O_IOVEC_NULL;
     return token_start;
 
 FindValue:
     *iter = h2o_iovec_init(cur, end - cur);
     *element_len = token_end - token_start;
-    if ((value->base = (char *)h2o_next_token(iter, inner, outer, &value->len, NULL)) == NULL) {
-        *value = (h2o_iovec_t){"", 0};
-    } else if (h2o_memis(value->base, value->len, H2O_STRLIT(","))) {
-        *value = (h2o_iovec_t){"", 0};
+
+    size_t tmp;
+    if ((value->base = (char *)h2o_next_token(iter, inner, outer, &tmp, NULL)) == NULL) {
+        *value = (h2o_iovec_t)H2O_IOVEC_EMPTY;
+        return token_start;
+    }
+    value->len = tmp;
+    if (h2o_memis(value->base, value->len, H2O_STRLIT(","))) {
+        *value = (h2o_iovec_t)H2O_IOVEC_EMPTY;
         iter->base -= 1;
         iter->len += 1;
     }
@@ -502,7 +507,7 @@ h2o_iovec_t h2o_htmlescape(h2o_mem_pool_t *pool, const char *src, size_t len)
     /* escape and return the result if necessary */
     if (add_size != 0) {
         /* allocate buffer and fill in the chars that are known not to require escaping */
-        h2o_iovec_t escaped = {h2o_mem_alloc_pool(pool, char, len + add_size + 1), 0};
+        h2o_iovec_t escaped = h2o_iovec_init(h2o_mem_alloc_pool(pool, char, len + add_size + 1), 0);
         /* fill-in the rest */
         for (s = src; s != end; ++s) {
             switch (*s) {
@@ -532,7 +537,7 @@ h2o_iovec_t h2o_htmlescape(h2o_mem_pool_t *pool, const char *src, size_t len)
 
 h2o_iovec_t h2o_concat_list(h2o_mem_pool_t *pool, h2o_iovec_t *list, size_t count)
 {
-    h2o_iovec_t ret = {NULL, 0};
+    h2o_iovec_t ret = H2O_IOVEC_NULL;
     size_t i;
 
     /* calc the length */
@@ -560,7 +565,7 @@ h2o_iovec_t h2o_concat_list(h2o_mem_pool_t *pool, h2o_iovec_t *list, size_t coun
 h2o_iovec_t h2o_join_list(h2o_mem_pool_t *pool, h2o_iovec_t *list, size_t count, h2o_iovec_t delimiter)
 {
     if (count == 0) {
-        return h2o_iovec_init(NULL, 0);
+        return (h2o_iovec_t)H2O_IOVEC_NULL;
     }
 
     size_t joined_len = 0;

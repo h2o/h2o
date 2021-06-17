@@ -72,6 +72,7 @@ int h2o_access_log_open_log(const char *path)
 {
     int fd;
 
+#ifndef __MINGW32__
     if (path[0] == '|') {
         int pipefds[2];
         pid_t pid;
@@ -120,12 +121,15 @@ int h2o_access_log_open_log(const char *path)
             }
 
         } else {
+#endif
             if ((fd = open(path, O_CREAT | O_WRONLY | O_APPEND | O_CLOEXEC, 0644)) == -1) {
                 h2o_error_printf("failed to open log file:%s:%s\n", path, strerror(errno));
                 return -1;
             }
+#ifndef __MINGW32__
         }
     }
+#endif
 
     return fd;
 }

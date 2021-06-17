@@ -25,7 +25,6 @@
 #ifdef __linux__
 #include <sys/eventfd.h>
 #endif
-#include "cloexec.h"
 #include "h2o/multithread.h"
 
 struct st_h2o_multithread_queue_t {
@@ -76,6 +75,7 @@ pthread_mutex_t h2o_conn_id_mutex = PTHREAD_MUTEX_INITIALIZER;
 #if H2O_USE_LIBUV
 #else
 
+#include "cloexec.h"
 #include <errno.h>
 #include <fcntl.h>
 #include <unistd.h>

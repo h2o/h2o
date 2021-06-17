@@ -230,6 +230,19 @@ int do_export(h2o_socket_t *_sock, h2o_socket_export_t *info)
 
     if (uv_fileno(sock->handle, &fd) != 0)
         return -1;
+#ifdef __MINGW32__
+    /* Strictly speaking, sockets should be duplicated with WSADuplicateSocket+WSASocket,
+     * which transfers a socket to a different process. This combo existed to support
+     * layered service providers, which have been deprecated since Windows Server 2012.
+     * In the absence of LSPs, a socket is a just regular kernel object handle.
+     */
+    HANDLE h;
+    if (!DuplicateHandle(GetCurrentProcess(), fd, GetCurrentProcess(), &h, 0, FALSE, DUPLICATE_SAME_ACCESS))
+        return -1;
+
+    /* FIXME: info->fd should be uv_os_fd_t  */
+    info->fd = (LONG_PTR)h;
+#else
     /* FIXME: consider how to overcome the epoll(2) problem; man says,
      * "even after a file descriptor that is part of an epoll set has been closed,
      * events may be reported for that file descriptor if other file descriptors
@@ -237,6 +250,7 @@ int do_export(h2o_socket_t *_sock, h2o_socket_export_t *info)
      */
     if ((info->fd = dup(fd)) == -1)
         return -1;
+#endif
     return 0;
 }
 

@@ -31,7 +31,7 @@ uint8_t *h2o_http3_encode_priority_update_frame(uint8_t *dst, const h2o_http3_pr
     *dst++ = '=';
     *dst++ = '0' + frame->priority.urgency;
     if (!frame->priority.incremental) {
-        static const h2o_iovec_t s = {H2O_STRLIT(",i=1")};
+        static const h2o_iovec_t s = H2O_IOVEC_STRLIT(",i=1");
         memcpy(dst, s.base, s.len);
         dst += s.len;
     }

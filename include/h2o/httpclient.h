@@ -26,10 +26,8 @@
 extern "C" {
 #endif
 
-#include "quicly.h"
 #include "h2o/header.h"
 #include "h2o/hostinfo.h"
-#include "h2o/http3_common.h"
 #include "h2o/send_state.h"
 #include "h2o/socket.h"
 #include "h2o/socketpool.h"
@@ -151,12 +149,18 @@ typedef struct st_h2o_httpclient_ctx_t {
         uint32_t max_concurrent_streams;
     } http2;
 
+#ifndef H2O_NO_HTTP3
     /**
      * HTTP/3-specific settings; 1-to(0|1) relationship, NULL when h3 is not used
      */
     h2o_http3client_ctx_t *http3;
+#endif
 
 } h2o_httpclient_ctx_t;
+
+#ifndef H2O_NO_HTTP3
+
+#include "h2o/http3_common.h"
 
 struct st_h2o_http3client_ctx_t {
     ptls_context_t tls;
@@ -172,6 +176,7 @@ struct st_h2o_http3client_ctx_t {
     int (*load_session)(h2o_httpclient_ctx_t *ctx, struct sockaddr *server_addr, const char *server_name,
                         ptls_iovec_t *address_token, ptls_iovec_t *session_ticket, quicly_transport_parameters_t *resumed_tp);
 };
+#endif
 
 typedef struct st_h2o_httpclient_timings_t {
     struct timeval start_at;
@@ -308,6 +313,7 @@ typedef struct st_h2o_httpclient__h2_conn_t {
     h2o_linklist_t link;
 } h2o_httpclient__h2_conn_t;
 
+#ifndef H2O_NO_HTTP3
 struct st_h2o_httpclient__h3_conn_t {
     h2o_http3_conn_t super;
     h2o_httpclient_ctx_t *ctx;
@@ -337,6 +343,7 @@ struct st_h2o_httpclient__h3_conn_t {
      */
     h2o_linklist_t pending_requests;
 };
+#endif
 
 extern const char h2o_httpclient_error_is_eos[];
 extern const char h2o_httpclient_error_refused_stream[];
@@ -375,15 +382,15 @@ extern const size_t h2o_httpclient__h2_size;
 
 void h2o_httpclient_set_conn_properties_of_socket(h2o_socket_t *sock, h2o_httpclient_conn_properties_t *properties);
 
-#ifdef quicly_h /* create http3client.h? */
-
-#include "h2o/http3_common.h"
+#ifndef H2O_NO_HTTP3 /* create http3client.h? */
 
 void h2o_httpclient_http3_notify_connection_update(h2o_quic_ctx_t *ctx, h2o_quic_conn_t *conn);
 extern quicly_stream_open_t h2o_httpclient_http3_on_stream_open;
 void h2o_httpclient__connect_h3(h2o_httpclient_t **client, h2o_mem_pool_t *pool, void *data, h2o_httpclient_ctx_t *ctx,
                                 h2o_httpclient_connection_pool_t *connpool, h2o_url_t *target, const char *upgrade_to,
                                 h2o_httpclient_connect_cb cb);
+#endif
+
 /**
  * internal API for checking if the stream is to be turned into a tunnel
  */
@@ -401,8 +408,6 @@ inline int h2o_httpclient__tunnel_is_ready(h2o_httpclient_t *client, int status)
     }
     return 0;
 }
-
-#endif
 
 #ifdef __cplusplus
 }

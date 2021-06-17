@@ -28,7 +28,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdarg.h>
+#ifndef __MINGW32__
 #include <sys/mman.h>
+#endif
 #include <unistd.h>
 #include "h2o/memory.h"
 #include "h2o/file.h"
@@ -216,20 +218,24 @@ void h2o_mem_link_shared(h2o_mem_pool_t *pool, void *p)
     link_shared(pool, H2O_STRUCT_FROM_MEMBER(struct st_h2o_mem_pool_shared_entry_t, bytes, p));
 }
 
+#ifndef __MINGW32__
 static size_t topagesize(size_t capacity)
 {
     size_t pagesize = getpagesize();
     return (offsetof(h2o_buffer_t, _buf) + capacity + pagesize - 1) / pagesize * pagesize;
 }
+#endif
 
 void h2o_buffer__do_free(h2o_buffer_t *buffer)
 {
     /* caller should assert that the buffer is not part of the prototype */
     if (buffer->capacity == buffer->_prototype->_initial_buf.capacity) {
         h2o_mem_free_recycle(&buffer->_prototype->allocator, buffer);
+#ifndef __MINGW32__
     } else if (buffer->_fd != -1) {
         close(buffer->_fd);
         munmap((void *)buffer, topagesize(buffer->capacity));
+#endif
     } else {
         free(buffer);
     }
@@ -239,7 +245,7 @@ h2o_iovec_t h2o_buffer_reserve(h2o_buffer_t **_inbuf, size_t min_guarantee)
 {
     h2o_iovec_t reserved = h2o_buffer_try_reserve(_inbuf, min_guarantee);
     if (reserved.base == NULL) {
-        h2o_fatal("failed to reserve buffer; capacity: %zu, min_guarantee: %zu", (*_inbuf)->capacity, min_guarantee);
+        h2o_fatal("failed to reserve buffer; capacity: %zu, min_guarantee: %zu", (size_t)(*_inbuf)->capacity, min_guarantee);
     }
     return reserved;
 }
@@ -275,6 +281,7 @@ h2o_iovec_t h2o_buffer_try_reserve(h2o_buffer_t **_inbuf, size_t min_guarantee)
             do {
                 new_capacity *= 2;
             } while (new_capacity - inbuf->size < min_guarantee);
+#ifndef __MINGW32__
             if (inbuf->_prototype->mmap_settings != NULL && inbuf->_prototype->mmap_settings->threshold <= new_capacity) {
                 size_t new_allocsize = topagesize(new_capacity);
                 int fd;
@@ -322,7 +329,9 @@ h2o_iovec_t h2o_buffer_try_reserve(h2o_buffer_t **_inbuf, size_t min_guarantee)
                     inbuf->capacity = new_capacity;
                     inbuf->bytes = newp->_buf + offset;
                 }
-            } else {
+            } else
+#endif/*__MINGW32__*/
+            {
                 h2o_buffer_t *newp = h2o_mem_alloc(offsetof(h2o_buffer_t, _buf) + new_capacity);
                 newp->size = inbuf->size;
                 newp->bytes = newp->_buf;
@@ -341,11 +350,13 @@ h2o_iovec_t h2o_buffer_try_reserve(h2o_buffer_t **_inbuf, size_t min_guarantee)
 
     return ret;
 
+#ifndef __MINGW32__
 MapError:
     __sync_add_and_fetch(&h2o_mmap_errors, 1);
     ret.base = NULL;
     ret.len = 0;
     return ret;
+#endif
 }
 
 void h2o_buffer_consume(h2o_buffer_t **_inbuf, size_t delta)
@@ -437,7 +448,10 @@ void h2o_append_to_null_terminated_list(void ***list, void *element)
 
 char *h2o_strerror_r(int err, char *buf, size_t len)
 {
-#ifndef _GNU_SOURCE
+#if defined(__MINGW32__)
+    strerror_s(buf, len, err);
+    return buf;
+#elif !defined(_GNU_SOURCE)
     strerror_r(err, buf, len);
     return buf;
 #else

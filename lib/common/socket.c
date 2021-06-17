@@ -27,8 +27,9 @@
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <string.h>
-#include <sys/syscall.h>
+#ifndef H2O_NO_UNIX_SOCKETS
 #include <sys/un.h>
+#endif
 #include <unistd.h>
 #include <openssl/err.h>
 #if defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__)
@@ -407,7 +408,11 @@ void h2o_socket_dispose_export(h2o_socket_export_t *info)
         info->ssl = NULL;
     }
     h2o_buffer_dispose(&info->input);
+#ifdef __MINGW32__
+    closesocket(info->fd);
+#else
     close(info->fd);
+#endif
     info->fd = -1;
 }
 
@@ -907,12 +912,7 @@ int h2o_socket_compare_address(struct sockaddr *x, struct sockaddr *y, int check
 
     CMP(x->sa_family, y->sa_family);
 
-    if (x->sa_family == AF_UNIX) {
-        struct sockaddr_un *xun = (void *)x, *yun = (void *)y;
-        int r = strcmp(xun->sun_path, yun->sun_path);
-        if (r != 0)
-            return r;
-    } else if (x->sa_family == AF_INET) {
+    if (x->sa_family == AF_INET) {
         struct sockaddr_in *xin = (void *)x, *yin = (void *)y;
         CMP(ntohl(xin->sin_addr.s_addr), ntohl(yin->sin_addr.s_addr));
         if (check_port)
@@ -926,6 +926,13 @@ int h2o_socket_compare_address(struct sockaddr *x, struct sockaddr *y, int check
             CMP(ntohs(xin6->sin6_port), ntohs(yin6->sin6_port));
         CMP(xin6->sin6_flowinfo, yin6->sin6_flowinfo);
         CMP(xin6->sin6_scope_id, yin6->sin6_scope_id);
+#ifndef H2O_NO_UNIX_SOCKETS
+    } else if (x->sa_family == AF_UNIX) {
+        struct sockaddr_un *xun = (void *)x, *yun = (void *)y;
+        int r = strcmp(xun->sun_path, yun->sun_path);
+        if (r != 0)
+            return r;
+#endif
     } else {
         assert(!"unknown sa_family");
     }
@@ -1119,7 +1126,7 @@ static void proceed_handshake_picotls(h2o_socket_t *sock)
 
 static void proceed_handshake_openssl(h2o_socket_t *sock)
 {
-    h2o_iovec_t first_input = {NULL};
+    h2o_iovec_t first_input = H2O_IOVEC_NULL;
     int ret = 0;
     const char *err = NULL;
 
@@ -1541,7 +1548,7 @@ int h2o_socket_set_df_bit(int fd, int domain)
 #define SETSOCKOPT(ip, optname, _optvar)                                                                                           \
     do {                                                                                                                           \
         int optvar = _optvar;                                                                                                      \
-        if (setsockopt(fd, ip, optname, &optvar, sizeof(optvar)) != 0) {                                                           \
+        if (setsockopt(fd, ip, optname, (const void*)&optvar, sizeof(optvar)) != 0) {                                              \
             perror("failed to set the DF bit through setsockopt(" H2O_TO_STR(ip) ", " H2O_TO_STR(optname) ")");                    \
             return 0;                                                                                                              \
         }                                                                                                                          \
@@ -1607,6 +1614,7 @@ void h2o_sliding_counter_stop(h2o_sliding_counter_t *counter, uint64_t now)
 #include <linux/bpf.h>
 #include <linux/unistd.h>
 #include <sys/stat.h>
+#include <sys/syscall.h>
 #include "h2o/multithread.h"
 #include "h2o-probes.h"
 

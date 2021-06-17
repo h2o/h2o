@@ -80,4 +80,4 @@ static h2o_iovec_t ssl_status_final(void *_ssc, h2o_globalconf_t *globalconf, h2
 #undef BUFSIZE
 }
 
-h2o_status_handler_t h2o_ssl_status_handler = {{H2O_STRLIT("ssl")}, ssl_status_final, ssl_status_init, ssl_status_per_thread};
+h2o_status_handler_t h2o_ssl_status_handler = {H2O_IOVEC_STRLIT("ssl"), ssl_status_final, ssl_status_init, ssl_status_per_thread};

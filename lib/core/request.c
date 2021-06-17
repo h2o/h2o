@@ -234,10 +234,17 @@ static void retain_original_response(h2o_req_t *req)
 
 void h2o_write_error_log(h2o_iovec_t prefix, h2o_iovec_t msg)
 {
+#ifdef __MINGW32__
+    /* no writev in MingW, too bad */
+    write(2, prefix.base, prefix.len);
+    write(2, msg.base, msg.len);
+    write(2, "\n", 1);
+#else
     /* use writev(2) to emit error atomically */
     struct iovec vecs[] = {{prefix.base, prefix.len}, {msg.base, msg.len}, {"\n", 1}};
     H2O_BUILD_ASSERT(sizeof(vecs) / sizeof(vecs[0]) <= IOV_MAX);
     writev(2, vecs, sizeof(vecs) / sizeof(vecs[0]));
+#endif
 }
 
 static void on_default_error_callback(void *data, h2o_iovec_t prefix, h2o_iovec_t msg)
@@ -746,8 +753,8 @@ void h2o_send_redirect(h2o_req_t *req, int status, const char *reason, const cha
     }
 
     static h2o_generator_t generator = {NULL, NULL};
-    static const h2o_iovec_t body_prefix = {H2O_STRLIT("<!DOCTYPE html><TITLE>Moved</TITLE><P>The document has moved <A HREF=\"")};
-    static const h2o_iovec_t body_suffix = {H2O_STRLIT("\">here</A>")};
+    static const h2o_iovec_t body_prefix = H2O_IOVEC_STRLIT("<!DOCTYPE html><TITLE>Moved</TITLE><P>The document has moved <A HREF=\"");
+    static const h2o_iovec_t body_suffix = H2O_IOVEC_STRLIT("\">here</A>");
 
     /* build and send response */
     h2o_iovec_t bufs[3];
