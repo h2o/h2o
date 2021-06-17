@@ -74,11 +74,24 @@ static void on_destroy_connection(h2o_quic_conn_t *conn)
     H2O_HTTP3_CONN_CALLBACKS.super.destroy_connection(conn);
 }
 
+/* record egress activities on stream 0 */
+/**
+ * sent a full response?
+ */
 static bool sent_response = false;
+static uint64_t last_sent_off;
+static size_t last_sent_len;
 
 static void on_stream_send_cb(mquicly_on_stream_send_t *self, quicly_conn_t *conn, quicly_stream_t *stream, const void *buff,
                               uint64_t off, size_t len, int is_fin)
 {
+    /* at the moment we aren't interested in streams other than 0 */
+    if (stream->stream_id != 0)
+        return;
+
+    last_sent_off = off;
+    last_sent_len = len;
+
     if (is_fin)
         sent_response = true;
 }
@@ -172,6 +185,18 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size)
         if (num_connections == 0) {
             /* connection was closed abruptly due to an error in the input */
             return 0;
+        }
+
+        if (last_sent_len > 0) {
+            /* simulate ack-receiving event */
+            quicly_sendstate_sent_t sent = {.start = last_sent_off, .end = last_sent_off + last_sent_len};
+            size_t bytes_to_shift;
+
+            last_sent_len = 0;
+            int ret = quicly_sendstate_acked(&stream->sendstate, &sent, &bytes_to_shift);
+            assert(ret == 0);
+            if (bytes_to_shift != 0)
+                stream->callbacks->on_send_shift(stream, bytes_to_shift);
         }
     } while (!sent_response);
 
