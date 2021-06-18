@@ -977,6 +977,14 @@ typedef struct st_h2o_conn_callbacks_t {
      */
     h2o_http2_debug_state_t *(*get_debug_state)(h2o_req_t *req, int hpack_enabled);
     /**
+     * returns number of requests inflight (optional, only supported by H2, H3)
+     */
+    uint32_t (*num_reqs_inflight)(h2o_conn_t *conn);
+    /**
+     * optional callbacks that returns the tracer regsitry
+     */
+    quicly_tracer_t *(*get_tracer)(h2o_conn_t *conn);
+    /**
      * logging callbacks (all of them are optional)
      */
     union {
@@ -2287,6 +2295,17 @@ void h2o_http2_debug_state_register(h2o_hostconf_t *hostconf, int hpack_enabled)
  * registers the configurator
  */
 void h2o_http2_debug_state_register_configurator(h2o_globalconf_t *conf);
+
+/* lib/handler/conn_state.c */
+
+/**
+ *
+ */
+void h2o_self_trace_register(h2o_pathconf_t *conf);
+/**
+ *
+ */
+void h2o_self_trace_register_configurator(h2o_globalconf_t *conf);
 
 /* inline defs */
 
