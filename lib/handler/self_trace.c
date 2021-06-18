@@ -22,6 +22,8 @@
 #include <inttypes.h>
 #include "h2o.h"
 
+#define SEND_WAIT 500 /* how frequent new loglines should be pushed out; in milliseconds */
+
 struct h2o_self_trace_generator {
     h2o_generator_t super;
     h2o_req_t *req;
@@ -64,7 +66,7 @@ static void on_send_timeout(h2o_timer_t *_timer)
 static void adjust_send_timer(struct h2o_self_trace_generator *self)
 {
     if (!self->inflight.inflight && self->should_send_buffered && !h2o_timer_is_linked(&self->send_timer))
-        h2o_timer_link(self->req->conn->ctx->loop, 1000, &self->send_timer);
+        h2o_timer_link(self->req->conn->ctx->loop, SEND_WAIT, &self->send_timer);
 }
 
 
