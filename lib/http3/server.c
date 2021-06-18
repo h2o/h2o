@@ -497,6 +497,18 @@ static int get_skip_tracing(h2o_conn_t *conn)
     return ptls_skip_tracing(ptls);
 }
 
+static uint32_t num_reqs_inflight(h2o_conn_t *_conn)
+{
+    struct st_h2o_http3_server_conn_t *conn = (void *)_conn;
+    return quicly_num_streams_by_group(conn->h3.super.quic, 0, 0);
+}
+
+static quicly_tracer_t *get_tracer(h2o_conn_t *_conn)
+{
+    struct st_h2o_http3_server_conn_t *conn = (void *)_conn;
+    return quicly_get_tracer(conn->h3.super.quic);
+}
+
 static h2o_iovec_t log_cc_name(h2o_req_t *req)
 {
     struct st_h2o_http3_server_conn_t *conn = (struct st_h2o_http3_server_conn_t *)req->conn;
@@ -1744,6 +1756,8 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
         .get_peername = get_peername,
         .get_ptls = get_ptls,
         .skip_tracing = get_skip_tracing,
+        .num_reqs_inflight = num_reqs_inflight,
+        .get_tracer = get_tracer,
         .log_ = {{
             .congestion_control =
                 {
