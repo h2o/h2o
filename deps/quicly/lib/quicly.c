@@ -75,13 +75,23 @@
 
 KHASH_MAP_INIT_INT64(quicly_stream_t, quicly_stream_t *)
 
+#if QUICLY_USE_TRACER
+#define QUICLY_TRACER(label, conn, ...) QUICLY_TRACER_##label(conn, __VA_ARGS__)
+#else
+#define QUICLY_TRACER(...)
+#endif
+
 #if QUICLY_USE_EMBEDDED_PROBES || QUICLY_USE_DTRACE
 #define QUICLY_PROBE(label, conn, ...)                                                                                             \
     do {                                                                                                                           \
         quicly_conn_t *_conn = (conn);                                                                                             \
         if (PTLS_UNLIKELY(QUICLY_##label##_ENABLED()) && !ptls_skip_tracing(_conn->crypto.tls))                                    \
             QUICLY_##label(_conn, __VA_ARGS__);                                                                                    \
+        QUICLY_TRACER(label, _conn,  __VA_ARGS__);                                                                                 \
     } while (0)
+#else
+#define QUICLY_PROBE(label, conn, ...) QUICLY_TRACER(label, conn, __VA_ARGS__)
+#endif
 #define QUICLY_PROBE_HEXDUMP(s, l)                                                                                                 \
     ({                                                                                                                             \
         size_t _l = (l);                                                                                                           \
@@ -92,11 +102,6 @@ KHASH_MAP_INIT_INT64(quicly_stream_t, quicly_stream_t *)
         size_t _l = (l);                                                                                                           \
         quicly_escape_unsafe_string(alloca(_l * 4 + 1), (s), _l);                                                                  \
     })
-#else
-#define QUICLY_PROBE(label, conn, ...)
-#define QUICLY_PROBE_HEXDUMP(s, l)
-#define QUICLY_PROBE_ESCAPE_UNSAFE_STRING(s, l)
-#endif
 
 struct st_quicly_cipher_context_t {
     ptls_aead_context_t *aead;
@@ -406,6 +411,10 @@ struct st_quicly_conn_t {
         } on_ack_stream;
     } stash;
 };
+
+#if QUICLY_USE_TRACER
+#include "quicly-tracer.h"
+#endif
 
 struct st_quicly_handle_payload_state_t {
     const uint8_t *src, *const end;
@@ -974,8 +983,12 @@ void crypto_stream_receive(quicly_stream_t *stream, size_t off, const void *src,
             if (conn->crypto.handshake_properties.client.early_data_acceptance == PTLS_EARLY_DATA_REJECTED) {
                 dispose_cipher(&conn->application->cipher.egress.key);
                 conn->application->cipher.egress.key = (struct st_quicly_cipher_context_t){NULL};
-                discard_sentmap_by_epoch(
-                    conn, 1u << QUICLY_EPOCH_1RTT); /* retire all packets with ack_epoch == 3; they are all 0-RTT packets */
+                /* retire all packets with ack_epoch == 3; they are all 0-RTT packets */
+                int ret;
+                if ((ret = discard_sentmap_by_epoch(conn, 1u << QUICLY_EPOCH_1RTT)) != 0) {
+                    initiate_close(conn, ret, QUICLY_FRAME_TYPE_CRYPTO, NULL);
+                    goto Exit;
+                }
             }
         }
     }
@@ -1016,11 +1029,16 @@ static void init_stream_properties(quicly_stream_t *stream, uint32_t initial_max
 
     /* Set the number of max ranges to be capable of handling following case:
      * * every one of the two packets being sent are lost
-     * * average size of a STREAM frame found in a packet is >= ~512 bytes
+     * * average size of a STREAM frame found in a packet is >= ~512 bytes, or small STREAM frame is sent for every other stream
+     *   being opened (e.g., sending QPACK encoder/decoder stream frame for each HTTP/3 request)
      * See also: the doc-comment on `_recv_aux.max_ranges`.
      */
-    if ((stream->_recv_aux.max_ranges = initial_max_stream_data_local / 1024) < 63)
-        stream->_recv_aux.max_ranges = 63;
+    uint32_t fragments_minmax = (uint32_t)(stream->conn->super.ctx->transport_params.max_streams_uni +
+                                           stream->conn->super.ctx->transport_params.max_streams_bidi);
+    if (fragments_minmax < 63)
+        fragments_minmax = 63;
+    if ((stream->_recv_aux.max_ranges = initial_max_stream_data_local / 1024) < fragments_minmax)
+        stream->_recv_aux.max_ranges = fragments_minmax;
 }
 
 static void dispose_stream_properties(quicly_stream_t *stream)
@@ -1161,6 +1179,13 @@ quicly_stream_t *quicly_get_stream(quicly_conn_t *conn, quicly_stream_id_t strea
 ptls_t *quicly_get_tls(quicly_conn_t *conn)
 {
     return conn->crypto.tls;
+}
+
+uint32_t quicly_num_streams_by_group(quicly_conn_t *conn, int uni, int locally_initiated)
+{
+    int server_initiated = quicly_is_client(conn) != locally_initiated;
+    struct st_quicly_conn_streamgroup_state_t *state = get_streamgroup_state(conn, uni * 2 + server_initiated);
+    return state->num_streams;
 }
 
 int quicly_get_stats(quicly_conn_t *conn, quicly_stats_t *stats)
@@ -3540,19 +3565,21 @@ UpdateState:
     return 0;
 }
 
-static inline void init_acks_iter(quicly_conn_t *conn, quicly_sentmap_iter_t *iter)
+static inline int init_acks_iter(quicly_conn_t *conn, quicly_sentmap_iter_t *iter)
 {
-    quicly_loss_init_sentmap_iter(&conn->egress.loss, iter, conn->stash.now, conn->super.remote.transport_params.max_ack_delay,
-                                  conn->super.state >= QUICLY_STATE_CLOSING);
+    return quicly_loss_init_sentmap_iter(&conn->egress.loss, iter, conn->stash.now,
+                                         conn->super.remote.transport_params.max_ack_delay,
+                                         conn->super.state >= QUICLY_STATE_CLOSING);
 }
 
 int discard_sentmap_by_epoch(quicly_conn_t *conn, unsigned ack_epochs)
 {
     quicly_sentmap_iter_t iter;
     const quicly_sent_packet_t *sent;
-    int ret = 0;
+    int ret;
 
-    init_acks_iter(conn, &iter);
+    if ((ret = init_acks_iter(conn, &iter)) != 0)
+        return ret;
 
     while ((sent = quicly_sentmap_get(&iter))->packet_number != UINT64_MAX) {
         if ((ack_epochs & (1u << sent->ack_epoch)) != 0) {
@@ -3575,7 +3602,8 @@ static int mark_frames_on_pto(quicly_conn_t *conn, uint8_t ack_epoch, size_t *by
     const quicly_sent_packet_t *sent;
     int ret;
 
-    init_acks_iter(conn, &iter);
+    if ((ret = init_acks_iter(conn, &iter)) != 0)
+        return ret;
 
     while ((sent = quicly_sentmap_get(&iter))->packet_number != UINT64_MAX) {
         if (sent->ack_epoch == ack_epoch && sent->frames_in_flight) {
@@ -4813,8 +4841,9 @@ static int handle_ack_frame(quicly_conn_t *conn, struct st_quicly_handle_payload
                  conn->egress.loss.sentmap.bytes_in_flight);
 
     /* loss-detection  */
-    quicly_loss_detect_loss(&conn->egress.loss, conn->stash.now, conn->super.remote.transport_params.max_ack_delay,
-                            conn->initial == NULL && conn->handshake == NULL, on_loss_detected);
+    if ((ret = quicly_loss_detect_loss(&conn->egress.loss, conn->stash.now, conn->super.remote.transport_params.max_ack_delay,
+                                       conn->initial == NULL && conn->handshake == NULL, on_loss_detected)) != 0)
+        return ret;
     update_loss_alarm(conn, 0);
 
     return 0;
@@ -5853,6 +5882,8 @@ Exit:
             conn->egress.loss.alarm_at = conn->stash.now;
         assert_consistency(conn, 0);
         break;
+    case PTLS_ERROR_NO_MEMORY:
+    case QUICLY_ERROR_STATE_EXHAUSTION:
     case QUICLY_ERROR_PACKET_IGNORED:
         break;
     default: /* close connection */

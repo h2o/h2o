@@ -381,6 +381,7 @@ SET(LIB_SOURCE_FILES
     lib/common/socket.c
     lib/common/socketpool.c
     lib/common/string.c
+    lib/common/rand.c
     lib/common/time.c
     lib/common/timerwheel.c
     lib/common/token.c
@@ -412,6 +413,7 @@ SET(LIB_SOURCE_FILES
     lib/handler/redirect.c
     lib/handler/reproxy.c
     lib/handler/throttle_resp.c
+    lib/handler/self_trace.c
     lib/handler/server_timing.c
     lib/handler/status.c
     lib/handler/headers_util.c
@@ -431,6 +433,7 @@ SET(LIB_SOURCE_FILES
     lib/handler/configurator/redirect.c
     lib/handler/configurator/reproxy.c
     lib/handler/configurator/throttle_resp.c
+    lib/handler/configurator/self_trace.c
     lib/handler/configurator/server_timing.c
     lib/handler/configurator/status.c
     lib/handler/configurator/http2_debug_state.c
@@ -452,7 +455,9 @@ SET(LIB_SOURCE_FILES
     lib/http3/frame.c
     lib/http3/qpack.c
     lib/http3/common.c
-    lib/http3/server.c)
+    lib/http3/server.c
+
+    ${CMAKE_CURRENT_BINARY_DIR}/quicly-tracer.h)
 
 IF (WITH_DTRACE)
     DEFINE_DTRACE_DEPENDENCIES(${CMAKE_SOURCE_DIR}/deps/picotls/picotls-probes.d picotls)
@@ -485,6 +490,7 @@ SET(UNIT_TEST_SOURCE_FILES
     t/00unit/lib/common/serverutil.c
     t/00unit/lib/common/socket.c
     t/00unit/lib/common/string.c
+    t/00unit/lib/common/rand.c
     t/00unit/lib/common/time.c
     t/00unit/lib/common/url.c
     t/00unit/lib/common/timerwheel.c
@@ -520,6 +526,7 @@ LIST(REMOVE_ITEM UNIT_TEST_SOURCE_FILES
     lib/common/serverutil.c
     lib/common/socket.c
     lib/common/string.c
+    lib/common/rand.c
     lib/common/time.c
     lib/common/timerwheel.c
     lib/common/url.c
@@ -591,7 +598,7 @@ ELSE ()
 ENDIF (WSLAY_FOUND)
 SET_TARGET_PROPERTIES(libh2o-evloop PROPERTIES
     OUTPUT_NAME h2o-evloop
-    COMPILE_FLAGS "-DH2O_USE_LIBUV=0"
+    COMPILE_FLAGS "-DH2O_USE_LIBUV=0 -DQUICLY_USE_TRACER=1"
     VERSION ${LIBRARY_VERSION}
     SOVERSION ${LIBRARY_SOVERSION})
 IF (WSLAY_FOUND)
@@ -608,6 +615,12 @@ IF (BROTLI_FOUND)
     TARGET_LINK_LIBRARIES(libh2o ${BROTLI_DEC_LIBRARIES} ${BROTLI_ENC_LIBRARIES})
     TARGET_LINK_LIBRARIES(libh2o-evloop ${BROTLI_DEC_LIBRARIES} ${BROTLI_ENC_LIBRARIES})
 ENDIF ()
+
+ADD_CUSTOM_COMMAND(
+    OUTPUT quicly-tracer.h
+    COMMAND ${PROJECT_SOURCE_DIR}/deps/quicly/misc/probe2trace.pl -a tracer < ${PROJECT_SOURCE_DIR}/deps/quicly/quicly-probes.d > ${CMAKE_CURRENT_BINARY_DIR}/quicly-tracer.h
+    DEPENDS deps/quicly/quicly-probes.d deps/quicly/misc/probe2trace.pl
+    VERBATIM)
 
 ADD_EXECUTABLE(t-qif t/qif.c)
 SET_TARGET_PROPERTIES(t-qif PROPERTIES
@@ -696,7 +709,7 @@ SET(STANDALONE_SOURCE_FILES
     deps/neverbleed/neverbleed.c
     src/main.c
     src/ssl.c)
-SET(STANDALONE_COMPILE_FLAGS "-DH2O_USE_LIBUV=0 -DH2O_USE_BROTLI=1")
+SET(STANDALONE_COMPILE_FLAGS "-DH2O_USE_LIBUV=0 -DH2O_USE_BROTLI=1 -DQUICLY_USE_TRACER=1")
 IF (WITH_MRUBY)
     IF (${CMAKE_C_COMPILER_ID} STREQUAL "Clang")
         SET(MRUBY_TOOLCHAIN "clang")
@@ -724,7 +737,7 @@ IF (WITH_MRUBY)
     SET_PROPERTY(DIRECTORY PROPERTY ADDITIONAL_MAKE_CLEAN_FILES ${CMAKE_CURRENT_BINARY_DIR}/mruby/)
 ENDIF (WITH_MRUBY)
 ADD_EXECUTABLE(h2o ${STANDALONE_SOURCE_FILES})
-SET_TARGET_PROPERTIES(h2o PROPERTIES COMPILE_FLAGS ${STANDALONE_COMPILE_FLAGS})
+SET_TARGET_PROPERTIES(h2o PROPERTIES COMPILE_FLAGS "${STANDALONE_COMPILE_FLAGS}")
 TARGET_INCLUDE_DIRECTORIES(h2o PUBLIC ${OPENSSL_INCLUDE_DIR})
 TARGET_LINK_LIBRARIES(h2o ${OPENSSL_LIBRARIES} ${CMAKE_DL_LIBS})
 IF (WITH_MRUBY)

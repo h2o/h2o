@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016 David Carlier
+ * Copyright (c) 2021 Fastly, Kazuho Oku
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to
@@ -19,28 +19,25 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-#ifndef h2o__rand_h
-#define h2o__rand_h
+#include "h2o.h"
+#include "h2o/configurator.h"
 
-#include <stdlib.h>
-#include <unistd.h>
+static int on_config_self_trace(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    switch (h2o_configurator_get_one_of(cmd, node, "OFF,ON")) {
+    case 1:
+        h2o_self_trace_register(ctx->pathconf);
+        return 0;
+    default: /* error */
+        return -1;
+    }
+}
 
-#if defined(__APPLE__) || defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__)
-#define h2o_srand()
-#define h2o_rand() arc4random()
-#else
-#define h2o_srand() srand(time(NULL) ^ getpid())
-#define h2o_rand() rand()
-#endif
+void h2o_self_trace_register_configurator(h2o_globalconf_t *conf)
+{
+    struct st_h2o_configurator_t *c = (void *)h2o_configurator_create(conf, sizeof(*c));
 
-/*
- * size of a UUID string representation.
- */
-#define H2O_UUID_STR_RFC4122_LEN (sizeof("01234567-0123-4000-8000-0123456789ab") - 1)
-
-/**
- * generates and sets a UUIDv4 to dst, which must have an enough size, H2O_UUID_STR_RFC4122_LEN + 1.
- */
-void h2o_generate_uuidv4(char *dst);
-
-#endif
+    h2o_configurator_define_command(
+        c, "self-trace", H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_DEFERRED | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+        on_config_self_trace);
+}

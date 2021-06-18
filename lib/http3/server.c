@@ -497,6 +497,18 @@ static int get_skip_tracing(h2o_conn_t *conn)
     return ptls_skip_tracing(ptls);
 }
 
+static uint32_t num_reqs_inflight(h2o_conn_t *_conn)
+{
+    struct st_h2o_http3_server_conn_t *conn = (void *)_conn;
+    return quicly_num_streams_by_group(conn->h3.super.quic, 0, 0);
+}
+
+static quicly_tracer_t *get_tracer(h2o_conn_t *_conn)
+{
+    struct st_h2o_http3_server_conn_t *conn = (void *)_conn;
+    return quicly_get_tracer(conn->h3.super.quic);
+}
+
 static h2o_iovec_t log_cc_name(h2o_req_t *req)
 {
     struct st_h2o_http3_server_conn_t *conn = (struct st_h2o_http3_server_conn_t *)req->conn;
@@ -1705,8 +1717,15 @@ static void on_h3_destroy(h2o_quic_conn_t *h3_)
 {
     h2o_http3_conn_t *h3 = (h2o_http3_conn_t *)h3_;
     struct st_h2o_http3_server_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_conn_t, h3, h3);
+    quicly_stats_t stats;
 
     H2O_PROBE_CONN0(H3S_DESTROY, &conn->super);
+
+    if (quicly_get_stats(h3_->quic, &stats) == 0) {
+#define ACC(fld, _unused) conn->super.ctx->quic.fld += stats.fld;
+        H2O_QUIC_AGGREGATED_STATS_APPLY(ACC);
+#undef ACC
+    }
 
     /* unlink and dispose */
     h2o_linklist_unlink(&conn->_conns);
@@ -1740,6 +1759,8 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
         .get_peername = get_peername,
         .get_ptls = get_ptls,
         .skip_tracing = get_skip_tracing,
+        .num_reqs_inflight = num_reqs_inflight,
+        .get_tracer = get_tracer,
         .log_ = {{
             .congestion_control =
                 {
@@ -1802,7 +1823,7 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
     h2o_linklist_insert(&ctx->accept_ctx->ctx->http3._conns, &conn->_conns);
     h2o_http3_setup(&conn->h3, qconn);
 
-    H2O_PROBE_CONN(H3S_ACCEPT, &conn->super, &conn->super, conn->h3.super.quic);
+    H2O_PROBE_CONN(H3S_ACCEPT, &conn->super, &conn->super, conn->h3.super.quic, h2o_conn_get_uuid(&conn->super));
 
     h2o_quic_send(&conn->h3.super);
 

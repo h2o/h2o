@@ -39,6 +39,10 @@ provider h2o {
      * Do not use it for a tracing event.
      */
     probe _private_socket_lookup_flags(pid_t tid, uint64_t original_flags, struct st_h2o_ebpf_map_key_t *info);
+    /**
+     * Same as `_private_socket_lookup_flags`, expect that this probe is invoked when SNI is being obtained.
+     */
+    probe _private_socket_lookup_flags_sni(pid_t tid, uint64_t original_flags, const char *server_name, size_t server_name_len);
 
     /**
      * HTTP-level event, indicating that a request has been received.
@@ -62,7 +66,7 @@ provider h2o {
     /**
      * HTTP/1 server-level event, indicating that a connection has been accepted.
      */
-    probe h1_accept(uint64_t conn_id, struct st_h2o_socket_t *sock, struct st_h2o_conn_t *conn);
+    probe h1_accept(uint64_t conn_id, struct st_h2o_socket_t *sock, struct st_h2o_conn_t *conn, const char *conn_uuid);
     /**
      * HTTP/1 server-level event, indicating that a connection has been closed.
      */
@@ -76,7 +80,7 @@ provider h2o {
     /**
      * HTTP/3 server-level event, indicating that a new connection has been accepted
      */
-    probe h3s_accept(uint64_t conn_id, struct st_h2o_conn_t *conn, struct st_quicly_conn_t *quic);
+    probe h3s_accept(uint64_t conn_id, struct st_h2o_conn_t *conn, struct st_quicly_conn_t *quic, const char *conn_uuid);
     /**
      * HTTP/3 server-level event, indicating that a connection has been destroyed
      */
