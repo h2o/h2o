@@ -47,6 +47,7 @@ extern "C" {
 #include "h2o/multithread.h"
 #include "h2o/rand.h"
 #include "h2o/socket.h"
+#include "h2o/stats.h"
 #include "h2o/string_.h"
 #include "h2o/time_.h"
 #include "h2o/token.h"
@@ -315,7 +316,9 @@ typedef struct st_h2o_protocol_callbacks_t {
 typedef h2o_iovec_t (*final_status_handler_cb)(void *ctx, h2o_globalconf_t *gconf, h2o_req_t *req);
 typedef const struct st_h2o_status_handler_t {
     h2o_iovec_t name;
-    h2o_iovec_t (*final)(void *ctx, h2o_globalconf_t *gconf, h2o_req_t *req); /* mandatory, will be passed the optional context */
+    h2o_iovec_t (*json)(void *ctx, h2o_globalconf_t *gconf, h2o_req_t *req); /* mandatory, will be passed the optional context */
+    h2o_iovec_t (*prometheus)(void *ctx, h2o_globalconf_t *gconf,
+                              h2o_req_t *req); /* optional, will not be included in prometheus if absent */
     void *(*init)(void); /* optional callback, allocates a context that will be passed to per_thread() */
     void (*per_thread)(void *priv, h2o_context_t *ctx); /* optional callback, will be called for each thread */
 } h2o_status_handler_t;
@@ -603,7 +606,26 @@ typedef H2O_VECTOR(h2o_context_storage_item_t) h2o_context_storage_t;
  * be used for generating expression that take all the members equally.
  */
 struct st_h2o_quic_aggregated_stats_t {
-    QUICLY_STATS_PREBUILT_FIELDS;
+    struct {
+        h2o_metric_t received;
+        h2o_metric_t decryption_failed;
+        h2o_metric_t sent;
+        h2o_metric_t lost;
+        h2o_metric_t lost_time_threshold;
+        h2o_metric_t ack_received;
+        h2o_metric_t late_acked;
+    } num_packets;
+    struct {
+        h2o_metric_t received;
+        h2o_metric_t sent;
+    } num_bytes;
+    struct {
+        h2o_metric_t padding, ping, ack, reset_stream, stop_sending, crypto, new_token, stream, max_data, max_stream_data,
+            max_streams_bidi, max_streams_uni, data_blocked, stream_data_blocked, streams_blocked, new_connection_id,
+            retire_connection_id, path_challenge, path_response, transport_close, application_close, handshake_done, datagram,
+            ack_frequency;
+    } num_frames_sent, num_frames_received;
+    h2o_metric_t num_ptos;
 };
 
 /* clang-format off */
@@ -708,10 +730,6 @@ struct st_h2o_context_t {
          * link-list of h2o_http1_conn_t
          */
         h2o_linklist_t _conns;
-        struct {
-            uint64_t request_timeouts;
-            uint64_t request_io_timeouts;
-        } events;
     } http1;
 
     struct {
@@ -723,24 +741,6 @@ struct st_h2o_context_t {
          * timeout entry used for graceful shutdown
          */
         h2o_timer_t _graceful_shutdown_timeout;
-        struct {
-            /**
-             * counter for http2 errors internally emitted by h2o
-             */
-            uint64_t protocol_level_errors[H2O_HTTP2_ERROR_MAX];
-            /**
-             * premature close on read
-             */
-            uint64_t read_closed;
-            /**
-             * premature close on write
-             */
-            uint64_t write_closed;
-            /**
-             * counter for http2 idle timeouts
-             */
-            uint64_t idle_timeouts;
-        } events;
     } http2;
 
     struct {
@@ -752,16 +752,6 @@ struct st_h2o_context_t {
          * timeout entry used for graceful shutdown
          */
         h2o_timer_t _graceful_shutdown_timeout;
-        struct {
-            /**
-             * number of packets forwarded to another node in a cluster
-             */
-            uint64_t packet_forwarded;
-            /**
-             * number of forwarded packets received from another node in a cluster
-             */
-            uint64_t forwarded_packet_received;
-        } events;
     } http3;
 
     struct {
@@ -775,32 +765,75 @@ struct st_h2o_context_t {
         h2o_httpclient_connection_pool_t connpool;
     } proxy;
 
-    struct {
-        /**
-         * counter for SSL errors
-         */
-        uint64_t errors;
-        /**
-         * counter for selected ALPN protocols
-         */
-        uint64_t alpn_h1;
-        uint64_t alpn_h2;
-        /**
-         * counter for handshakes
-         */
-        uint64_t handshake_full;
-        uint64_t handshake_resume;
-        /**
-         * summations of handshake latency in microsecond
-         */
-        uint64_t handshake_accum_time_full;
-        uint64_t handshake_accum_time_resume;
-    } ssl;
-
     /**
-     * aggregated quicly stats
+     * stats
      */
-    struct st_h2o_quic_aggregated_stats_t quic;
+    struct {
+        struct {
+            struct {
+                h2o_metric_t request_timeouts;
+                h2o_metric_t request_io_timeouts;
+            } server;
+        } http1;
+        struct {
+            struct {
+                /**
+                 * counter for http2 errors internally emitted by h2o
+                 */
+                h2o_metric_t protocol_level_errors[H2O_HTTP2_ERROR_MAX];
+                /**
+                 * premature close on read
+                 */
+                h2o_metric_t read_closed;
+                /**
+                 * premature close on write
+                 */
+                h2o_metric_t write_closed;
+                /**
+                 * counter for http2 idle timeouts
+                 */
+                h2o_metric_t idle_timeouts;
+            } server;
+        } http2;
+        struct {
+            struct {
+                struct st_h2o_quic_aggregated_stats_t quic;
+                /**
+                 * number of packets forwarded to another node in a cluster
+                 */
+                h2o_metric_t packet_forwarded;
+                /**
+                 * number of forwarded packets received from another node in a cluster
+                 */
+                h2o_metric_t forwarded_packet_received;
+            } server;
+        } http3;
+        h2o_metric_t emitted_error_status[H2O_STATUS_ERROR_MAX];
+        struct {
+            struct {
+                /**
+                 * counter for SSL errors
+                 */
+                h2o_metric_t handshake_errors;
+                /**
+                 * counter for selected ALPN protocols
+                 */
+                h2o_metric_t alpn_h1;
+                h2o_metric_t alpn_h2;
+                /**
+                 * counter for handshakes
+                 */
+                h2o_metric_t handshake_full;
+                h2o_metric_t handshake_resume;
+                /**
+                 * summations of handshake latency in microsecond
+                 */
+                h2o_metric_t handshake_accum_time_full;
+                h2o_metric_t handshake_accum_time_resume;
+            } server;
+        } ssl;
+
+    } stats;
 
     /**
      * pointer to per-module configs
@@ -812,10 +845,6 @@ struct st_h2o_context_t {
         h2o_timestamp_string_t *value;
     } _timestamp_cache;
 
-    /**
-     * counter for http1 error status internally emitted by h2o
-     */
-    uint64_t emitted_error_status[H2O_STATUS_ERROR_MAX];
 
     H2O_VECTOR(h2o_pathconf_t *) _pathconfs_inited;
 };
@@ -1762,7 +1791,7 @@ void h2o_send_error_generic(h2o_req_t *req, int status, const char *reason, cons
 #define H2O_SEND_ERROR_XXX(status)                                                                                                 \
     static inline void h2o_send_error_##status(h2o_req_t *req, const char *reason, const char *body, int flags)                    \
     {                                                                                                                              \
-        req->conn->ctx->emitted_error_status[H2O_STATUS_ERROR_##status]++;                                                         \
+        req->conn->ctx->stats.emitted_error_status[H2O_STATUS_ERROR_##status].counter++;                                           \
         h2o_send_error_generic(req, status, reason, body, flags);                                                                  \
     }
 
