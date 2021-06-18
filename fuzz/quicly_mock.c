@@ -326,9 +326,16 @@ int quicly_is_destination(quicly_conn_t *conn, struct sockaddr *dest_addr, struc
     return 0;
 }
 
-int quicly_get_stats(quicly_conn_t *conn, quicly_stats_t *stats)
+uint32_t quicly_num_streams_by_group(quicly_conn_t *conn, int uni, int locally_initiated)
 {
     assert(0 && "unimplemented");
+    return 0;
+}
+
+int quicly_get_stats(quicly_conn_t *conn, quicly_stats_t *stats)
+{
+    /* Do nothing */
+    memset(stats, 0, sizeof(*stats));
     return 0;
 }
 
