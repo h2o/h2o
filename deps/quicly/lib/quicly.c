@@ -5866,6 +5866,8 @@ Exit:
             conn->egress.loss.alarm_at = conn->stash.now;
         assert_consistency(conn, 0);
         break;
+    case PTLS_ERROR_NO_MEMORY:
+    case QUICLY_ERROR_STATE_EXHAUSTION:
     case QUICLY_ERROR_PACKET_IGNORED:
         break;
     default: /* close connection */
