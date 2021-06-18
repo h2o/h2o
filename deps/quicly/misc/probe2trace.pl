@@ -7,7 +7,7 @@ use warnings;
 use Getopt::Long;
 
 my $arch = $^O;
-my %tracer_probes = map { uc($_) => 1 } qw(packet_sent packet_received packet_acked packet_lost packet_decryption_failed pto cc_ack_received cc_congestion max_data_send max_data_receive max_stream_data_send max_stream_data_receive streams_blocked_send streams_blocked_receive stream_on_open stream_on_destroy);
+my %tracer_probes = map { uc($_) => 1 } qw(packet_sent packet_received packet_acked packet_lost packet_decryption_failed pto cc_ack_received cc_congestion quictrace_cc_ack quictrace_cc_lost max_data_send max_data_receive max_stream_data_send max_stream_data_receive streams_blocked_send streams_blocked_receive stream_on_open stream_on_destroy);
 
 GetOptions("arch=s" => \$arch)
     or die "invalid command option\n";
