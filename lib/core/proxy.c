@@ -189,11 +189,10 @@ static void build_request(h2o_req_t *req, h2o_iovec_t *method, h2o_url_t *url, h
     }
 
     /* headers */
-    h2o_headers_t req_headers = req->headers;
     {
         const h2o_header_t *h, *h_end;
         int found_early_data = 0;
-        for (h = req_headers.entries, h_end = h + req_headers.size; h != h_end; ++h) {
+        for (h = req->headers.entries, h_end = h + req->headers.size; h != h_end; ++h) {
             if (h2o_iovec_is_token(h->name)) {
                 const h2o_token_t *token = (void *)h->name;
                 if (token->flags.proxy_should_drop_for_req)
