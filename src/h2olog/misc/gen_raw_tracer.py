@@ -457,6 +457,26 @@ int %s(struct pt_regs *ctx) {
   if (ret != 0)
     bpf_trace_printk("failed to insert 0x%%llx in %s with errno=%%lld\n", flags, -ret);
 """ % (tracer_name)
+  elif fully_specified_probe_name == "h2o:_private_socket_lookup_flags_sni":
+    c+= r"""
+  uint64_t flags  = event._private_socket_lookup_flags_sni.original_flags;
+  if ((flags & H2O_EBPF_FLAGS_SKIP_TRACING_BIT) != 0) {
+#ifdef H2OLOG_IS_SAMPLING_SNI
+    size_t server_name_len = event._private_socket_lookup_flags_sni.server_name_len;
+    if (server_name_len > sizeof(event._private_socket_lookup_flags_sni.server_name))
+      server_name_len = sizeof(event._private_socket_lookup_flags_sni.server_name);
+    if (H2OLOG_IS_SAMPLING_SNI(event._private_socket_lookup_flags_sni.server_name, server_name_len)
+#ifdef H2OLOG_SAMPLING_RATE_U32
+        && bpf_get_prandom_u32() < H2OLOG_SAMPLING_RATE_U32
+#endif
+      )
+      flags &= ~H2O_EBPF_FLAGS_SKIP_TRACING_BIT;
+#endif
+  }
+  int64_t ret = h2o_return.insert(&event._private_socket_lookup_flags_sni.tid, &flags);
+  if (ret != 0)
+    bpf_trace_printk("failed to insert 0x%%lx in %s with errno=%%lld\n", flags, -ret);
+""" % (tracer_name)
   else:
     c += r"""
   if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
@@ -468,13 +488,9 @@ int %s(struct pt_regs *ctx) {
 }
 """
 
-  if fully_specified_probe_name == "h2o:_private_socket_lookup_flags":
+  if fully_specified_probe_name.startswith("h2o:_private_socket_lookup_flags"):
     c = r"""
 #if H2OLOG_SELECTIVE_TRACING
-// A pinned BPF object to return a value to h2o.
-// The table size must be larger than the number of threads in h2o.
-BPF_TABLE_PINNED("lru_hash", pid_t, uint64_t, h2o_return, H2O_EBPF_RETURN_MAP_SIZE, H2O_EBPF_RETURN_MAP_PATH);
-
 %s
 #endif
 
@@ -628,6 +644,12 @@ BPF_PERF_OUTPUT(events);
 // HTTP/3 tracing
 BPF_HASH(h2o_to_quicly_conn, u64, u32);
 
+#if H2OLOG_SELECTIVE_TRACING
+// A pinned BPF object to return a value to h2o.
+// The table size must be larger than the number of threads in h2o.
+BPF_TABLE_PINNED("lru_hash", pid_t, uint64_t, h2o_return, H2O_EBPF_RETURN_MAP_SIZE, H2O_EBPF_RETURN_MAP_PATH);
+#endif
+
 // tracepoint sched:sched_process_exit
 int trace_sched_process_exit(struct tracepoint__sched__sched_process_exit *ctx) {
   const struct task_struct *task = (const struct task_struct*)bpf_get_current_task();
@@ -650,7 +672,7 @@ void h2o_raw_tracer::initialize() {
   for metadata in probe_metadata.values():
     bpf += build_tracer(context, metadata)
 
-    if metadata["fully_specified_probe_name"] == "h2o:_private_socket_lookup_flags":
+    if metadata["fully_specified_probe_name"].startswith("h2o:_private_socket_lookup_flags"):
       continue
     usdts_def += """    h2o_tracer::usdt("%s", "%s", "%s"),\n""" % (
         metadata['provider'], metadata['name'], build_tracer_name(metadata))
