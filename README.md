@@ -1,7 +1,7 @@
 H2O - an optimized HTTP server with support for HTTP/1.x, HTTP/2 and HTTP/3 (experimental)
 ===
 
-[![Build Status](https://travis-ci.org/h2o/h2o.svg?branch=master)](https://travis-ci.org/h2o/h2o)
+[![CI](https://github.com/h2o/h2o/actions/workflows/ci.yml/badge.svg)](https://github.com/h2o/h2o/actions/workflows/ci.yml)
 <a href="https://scan.coverity.com/projects/h2o-h2o">
   <img alt="Coverity Scan Build Status"
        src="https://scan.coverity.com/projects/10654/badge.svg"/>
