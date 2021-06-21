@@ -460,8 +460,6 @@ static void set_state(struct st_h2o_http3_server_stream_t *stream, enum h2o_http
 static void shutdown_stream(struct st_h2o_http3_server_stream_t *stream, int stop_sending_code, int reset_code, int in_generator)
 {
     assert(stream->state < H2O_HTTP3_SERVER_STREAM_STATE_CLOSE_WAIT);
-    if (h2o_linklist_is_linked(&stream->link))
-        h2o_linklist_unlink(&stream->link);
     if (quicly_stream_has_receive_side(0, stream->quic->stream_id))
         quicly_request_stop(stream->quic, stop_sending_code);
     if (quicly_stream_has_send_side(0, stream->quic->stream_id) && !quicly_sendstate_transfer_complete(&stream->quic->sendstate))
@@ -905,11 +903,8 @@ static void on_receive_reset(quicly_stream_t *qs, int err)
     struct st_h2o_http3_server_stream_t *stream = qs->data;
 
     /* if we were still receiving the request, discard! */
-    if (stream->state == H2O_HTTP3_SERVER_STREAM_STATE_RECV_HEADERS) {
-        if (h2o_linklist_is_linked(&stream->link))
-            h2o_linklist_unlink(&stream->link);
+    if (stream->state == H2O_HTTP3_SERVER_STREAM_STATE_RECV_HEADERS)
         shutdown_stream(stream, H2O_HTTP3_ERROR_NONE /* ignored */, H2O_HTTP3_ERROR_REQUEST_REJECTED, 0);
-    }
 }
 
 static void proceed_request_streaming(h2o_req_t *_req, size_t bytes_written, h2o_send_state_t state)
