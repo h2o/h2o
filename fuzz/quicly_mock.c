@@ -70,7 +70,7 @@ int quicly_accept(quicly_conn_t **conn, quicly_context_t *ctx, struct sockaddr *
                   quicly_decoded_packet_t *packet, quicly_address_token_plaintext_t *address_token,
                   const quicly_cid_plaintext_t *new_cid, ptls_handshake_properties_t *handshake_properties)
 {
-    *conn = create_connection(ctx, false, src_addr, dest_addr);
+    *conn = create_connection(ctx, 0, src_addr, dest_addr);
     (*conn)->super.state = QUICLY_STATE_CONNECTED;
     return 0;
 }
