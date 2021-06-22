@@ -2507,7 +2507,7 @@ static int forward_quic_packets(h2o_quic_ctx_t *h3ctx, const uint64_t *node_id, 
                 goto NodeFound;
             }
         }
-        H2O_PROBE(H3_PACKET_FORWARD_IGNORED, *node_id, 0);
+        H2O_PROBE(H3_PACKET_FORWARD_TO_NODE_IGNORE, *node_id);
         return 0;
     NodeFound:;
     } else {
@@ -2517,14 +2517,14 @@ static int forward_quic_packets(h2o_quic_ctx_t *h3ctx, const uint64_t *node_id, 
             if (thread_id == h3ctx->next_cid.thread_id) {
                 assert(h3ctx->acceptor == NULL);
                 /* FIXME forward packets to the newer generation process */
-                H2O_PROBE(H3_PACKET_FORWARD_IGNORED, 0, thread_id);
+                H2O_PROBE(H3_PACKET_FORWARD_TO_THREAD_IGNORE, thread_id);
                 return 0;
             }
         } else {
             /* intra-node, validate thread id */
             assert(thread_id != ctx->http3.ctx.super.next_cid.thread_id);
             if (thread_id >= conf.quic.num_threads) {
-                H2O_PROBE(H3_PACKET_FORWARD_IGNORED, 0, thread_id);
+                H2O_PROBE(H3_PACKET_FORWARD_TO_THREAD_IGNORE, thread_id);
                 return 0;
             }
         }
