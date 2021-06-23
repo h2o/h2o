@@ -1015,7 +1015,7 @@ static void usage(const char *cmd)
            "  -k key-file               specifies the credentials to be used for running the\n"
            "                            server. If omitted, the command runs as a client.\n"
            "  -C <algorithm>            the congestion control algorithm; either \"reno\"\n"
-           "                            (default) or \"cubic\"\n"
+           "                            (default), \"cubic\", or \"pico\"\n"
            "  -d draft-number           specifies the draft version number to be used (e.g.,\n"
            "                            29)\n"
            "  -e event-log-file         file to log events\n"
@@ -1115,6 +1115,8 @@ int main(int argc, char **argv)
                 ctx.init_cc = &quicly_cc_reno_init;
             } else if (strcmp(optarg, "cubic") == 0) {
                 ctx.init_cc = &quicly_cc_cubic_init;
+            } else if (strcmp(optarg, "pico") == 0) {
+                ctx.init_cc = &quicly_cc_pico_init;
             } else {
                 fprintf(stderr, "unknown congestion controller: %s\n", optarg);
                 exit(1);

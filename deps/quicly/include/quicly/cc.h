@@ -44,7 +44,11 @@ typedef enum {
     /**
      * CUBIC (RFC 8312)
      */
-    CC_CUBIC
+    CC_CUBIC,
+    /**
+     *
+     */
+    CC_PICO
 } quicly_cc_type_t;
 
 /**
@@ -81,7 +85,7 @@ typedef struct st_quicly_cc_t {
              * Stash of acknowledged bytes, used during congestion avoidance.
              */
             uint32_t stash;
-        } reno;
+        } reno, pico;
         /**
          * State information for CUBIC congestion control.
          */
@@ -164,6 +168,10 @@ extern struct st_quicly_init_cc_t quicly_cc_reno_init;
  * The factory method for the modified Reno congestion controller.
  */
 extern struct st_quicly_init_cc_t quicly_cc_cubic_init;
+/**
+ * The factory method for the Pico congestion controller.
+ */
+extern struct st_quicly_init_cc_t quicly_cc_pico_init;
 
 /**
  * Calculates the initial congestion window size given the maximum UDP payload size.

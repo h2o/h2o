@@ -51,6 +51,7 @@ SET(QUICLY_LIBRARY_FILES
     lib/frame.c
     lib/cc-reno.c
     lib/cc-cubic.c
+    lib/cc-pico.c
     lib/defaults.c
     lib/local_cid.c
     lib/loss.c
