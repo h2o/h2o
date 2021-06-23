@@ -1191,6 +1191,8 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
                 listener->quic.ctx->init_cc = &quicly_cc_reno_init;
             } else if (strcasecmp((*cc_node)->data.scalar, "cubic") == 0) {
                 listener->quic.ctx->init_cc = &quicly_cc_cubic_init;
+            } else if (strcasecmp((*cc_node)->data.scalar, "pico") == 0) {
+                listener->quic.ctx->init_cc = &quicly_cc_pico_init;
             } else {
                 h2o_configurator_errprintf(cmd, *cc_node, "specified congestion controller is unknown or unsupported for QUIC");
                 goto Error;

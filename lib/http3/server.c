@@ -520,6 +520,8 @@ static h2o_iovec_t log_cc_name(h2o_req_t *req)
             return h2o_iovec_init(H2O_STRLIT("reno"));
         case CC_CUBIC:
             return h2o_iovec_init(H2O_STRLIT("cubic"));
+        case CC_PICO:
+            return h2o_iovec_init(H2O_STRLIT("pico"));
         }
     }
     return h2o_iovec_init(NULL, 0);
