@@ -1187,10 +1187,12 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
                                            "[warning] Setting ignored. At the moment, only the first listen entry for a given "
                                            "address:port tuple can specify the QUIC congestion controller");
             }
-            if (strcasecmp((*cc_node)->data.scalar, "reno") == 0) {
-                listener->quic.ctx->init_cc = &quicly_cc_reno_init;
-            } else if (strcasecmp((*cc_node)->data.scalar, "cubic") == 0) {
-                listener->quic.ctx->init_cc = &quicly_cc_cubic_init;
+            quicly_cc_type_t **cand;
+            for (cand = quicly_cc_all_types; *cand != NULL; ++cand)
+                if (strcasecmp((*cand)->name, (*cc_node)->data.scalar) == 0)
+                    break;
+            if (*cand != NULL) {
+                listener->quic.ctx->init_cc = (*cand)->cc_init;
             } else {
                 h2o_configurator_errprintf(cmd, *cc_node, "specified congestion controller is unknown or unsupported for QUIC");
                 goto Error;
