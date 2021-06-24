@@ -423,7 +423,8 @@ static void tcp_start_connect(struct st_connect_generator_t *self)
         struct st_server_address_t *server_address;
         if ((server_address = grab_connect_address(self)) == NULL)
             return;
-        if ((self->sock = h2o_socket_connect(get_loop(self), server_address->sa, server_address->salen, tcp_on_connect, &err)) != NULL) {
+        if ((self->sock = h2o_socket_connect(get_loop(self), server_address->sa, server_address->salen,
+                                             self->handler->config.socket_mark, tcp_on_connect, &err)) != NULL) {
             self->sock->data = self;
             return;
         }
@@ -607,7 +608,9 @@ static void udp_connect(struct st_connect_generator_t *self)
     /* determine server address an connect */
     if ((server_address = grab_connect_address(self)) == NULL)
         return;
+    uint32_t socket_mark = self->handler->config.socket_mark;
     if ((fd = socket(server_address->sa->sa_family, SOCK_DGRAM, 0)) == -1 ||
+        (socket_mark != 0 && h2o_socket_set_so_mark(fd, socket_mark) == -1) ||
         connect(fd, server_address->sa, server_address->salen) != 0) {
         const char *err = h2o_socket_error_conn_fail;
         if (fd != -1) {

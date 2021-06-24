@@ -142,6 +142,7 @@ const char h2o_socket_error_conn_timed_out[] = "connection timed out";
 const char h2o_socket_error_network_unreachable[] = "network unreachable";
 const char h2o_socket_error_host_unreachable[] = "host unreachable";
 const char h2o_socket_error_socket_fail[] = "socket creation failed";
+const char h2o_socket_error_so_mark_fail[] = "could not set socket mark";
 const char h2o_socket_error_ssl_no_cert[] = "no certificate";
 const char h2o_socket_error_ssl_cert_invalid[] = "invalid certificate";
 const char h2o_socket_error_ssl_cert_name_mismatch[] = "certificate name mismatch";
@@ -1903,3 +1904,19 @@ uint64_t h2o_socket_ebpf_lookup_flags(h2o_loop_t *loop, int (*init_key)(h2o_ebpf
 }
 
 #endif
+
+int h2o_socket_set_so_mark(int fd, uint32_t socket_mark)
+{
+    if (socket_mark != 0) {
+#ifdef SO_MARK
+        socklen_t len = sizeof(socket_mark);
+        if (setsockopt(fd, SOL_SOCKET, SO_MARK, &socket_mark, len) != 0) {
+            h2o_perror("setsockopt(SO_MARK)");
+            return -1;
+        }
+#else
+        return -1;
+#endif
+    }
+    return 0;
+}

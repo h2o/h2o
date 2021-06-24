@@ -460,7 +460,8 @@ h2o_socket_t *h2o_evloop_socket_accept(h2o_socket_t *_listener)
     return sock;
 }
 
-h2o_socket_t *h2o_socket_connect(h2o_loop_t *loop, struct sockaddr *addr, socklen_t addrlen, h2o_socket_cb cb, const char **err)
+h2o_socket_t *h2o_socket_connect(h2o_loop_t *loop, struct sockaddr *addr, socklen_t addrlen, uint32_t socket_mark, h2o_socket_cb cb,
+                                 const char **err)
 {
     int fd;
     struct st_h2o_evloop_socket_t *sock;
@@ -469,6 +470,13 @@ h2o_socket_t *h2o_socket_connect(h2o_loop_t *loop, struct sockaddr *addr, sockle
         if (err != NULL) {
             *err = h2o_socket_error_socket_fail;
         }
+        return NULL;
+    }
+    if (socket_mark != 0 && h2o_socket_set_so_mark(fd, socket_mark) == -1) {
+        if (err != NULL) {
+            *err = h2o_socket_error_so_mark_fail;
+        }
+        close(fd);
         return NULL;
     }
     fcntl(fd, F_SETFL, O_NONBLOCK);

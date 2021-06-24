@@ -400,7 +400,7 @@ static void start_connect(h2o_socketpool_connect_request_t *req, struct sockaddr
 {
     struct on_close_data_t *close_data;
 
-    req->sock = h2o_socket_connect(req->loop, addr, addrlen, on_connect, NULL);
+    req->sock = h2o_socket_connect(req->loop, addr, addrlen, 0, on_connect, NULL);
     if (req->sock == NULL) {
         __sync_sub_and_fetch(&req->pool->targets.entries[req->selected_target]->_shared.leased_count, 1);
         if (req->remaining_try_count > 0) {

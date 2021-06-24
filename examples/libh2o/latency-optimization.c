@@ -365,7 +365,7 @@ int main(int argc, char **argv)
         h2o_socket_t *listen_sock = h2o_evloop_socket_create(loop, fd, H2O_SOCKET_FLAG_DONT_READ);
         h2o_socket_read_start(listen_sock, on_accept);
     } else {
-        if ((sock = h2o_socket_connect(loop, res->ai_addr, res->ai_addrlen, on_connect, NULL)) == NULL) {
+        if ((sock = h2o_socket_connect(loop, res->ai_addr, res->ai_addrlen, 0, on_connect, NULL)) == NULL) {
             fprintf(stderr, "failed to create socket:%s\n", strerror(errno));
             exit(1);
         }

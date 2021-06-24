@@ -107,6 +107,21 @@ static int on_config_connect_proxy_status(h2o_configurator_command_t *cmd, h2o_c
     return 0;
 }
 
+static int on_config_connect_socket_mark(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+#ifndef SO_MARK
+    h2o_configurator_errprintf(cmd, node, "the platform does not support the SOL_SOCKET option SO_MARK");
+    return -1
+#else
+    struct proxy_configurator_t *self = (void *)cmd->configurator;
+    uint32_t val;
+    if (h2o_configurator_scanf(cmd, node, "%" PRIx32, &val) != 0)
+        return -1;
+    self->vars->conf.socket_mark = val;
+    return 0;
+#endif
+}
+
 static int on_config_proxy_status_identity(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     /* https://tools.ietf.org/html/rfc8941#section-3.3.4 */
@@ -612,6 +627,9 @@ void h2o_proxy_register_configurator(h2o_globalconf_t *conf)
     h2o_configurator_define_command(&c->super, "proxy.connect.proxy-status",
                                     H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                     on_config_connect_proxy_status);
+    h2o_configurator_define_command(&c->super, "proxy.connect.socket-mark",
+                                    H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                    on_config_connect_socket_mark);
     h2o_configurator_define_command(&c->super, "proxy-status.identity",
                                     H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                     on_config_proxy_status_identity);

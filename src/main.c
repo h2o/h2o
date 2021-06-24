@@ -48,6 +48,10 @@
 #include <sys/uio.h>
 #include <sys/un.h>
 #include <sys/wait.h>
+#ifdef LIBCAP_FOUND
+#include <sys/capability.h>
+#include <sys/prctl.h>
+#endif
 #include <openssl/crypto.h>
 #include <openssl/dh.h>
 #include <openssl/err.h>
@@ -245,6 +249,9 @@ static struct {
     char *crash_handler;
     int crash_handler_wait_pipe_close;
     int tcp_reuseport;
+#ifdef LIBCAP_FOUND
+    H2O_VECTOR(cap_value_t) capabilities;
+#endif
 } conf = {
     .globalconf = {0},
     .run_mode = RUN_MODE_WORKER,
@@ -1849,6 +1856,81 @@ static int on_config_user(h2o_configurator_command_t *cmd, h2o_configurator_cont
     return 0;
 }
 
+static int on_config_capabilities(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+#ifndef LIBCAP_FOUND
+    h2o_configurator_errprintf(cmd, node, "the platform does not support Linux capabilities"
+#ifdef __linux
+        " (hint: install libcap-dev or libcap-devel and rerun cmake)"
+#endif
+        );
+    return -1;
+#else
+
+    h2o_vector_reserve(NULL, &conf.capabilities, node->data.sequence.size);
+    for (size_t i = 0; i != node->data.sequence.size; ++i) {
+        yoml_t *element = node->data.sequence.elements[i];
+        if (element->type != YOML_TYPE_SCALAR) {
+            h2o_configurator_errprintf(cmd, element, "elements of `capability` must be strings");
+            return -1;
+        }
+        cap_value_t cap;
+        int r = cap_from_name(element->data.scalar, &cap);
+        if (r != 0) {
+            h2o_configurator_errprintf(cmd, element, "unknown capability name `%s`", element->data.scalar);
+            return -1;
+        }
+        conf.capabilities.entries[i] = cap;
+    }
+    conf.capabilities.size = node->data.sequence.size;
+    return 0;
+#endif
+}
+
+static void on_before_setuidgid(void)
+{
+#ifdef LIBCAP_FOUND
+    if (conf.capabilities.size > 0) {
+        int r = prctl(PR_SET_KEEPCAPS, 1, 0, 0, 0);
+        if (r != 0) {
+            char buf[128];
+            h2o_fatal("prctl(PR_SET_KEEPCAPS,1): %s", h2o_strerror_r(errno, buf, sizeof(buf)));
+        }
+    }
+#endif
+}
+
+static void on_after_setuidgid(void)
+{
+#ifdef LIBCAP_FOUND
+    if (conf.capabilities.size > 0) {
+        int r;
+        char buf[128];
+        cap_t cap = cap_init();
+        if (cap == NULL) {
+            h2o_fatal("cap_init: %s", h2o_strerror_r(errno, buf, sizeof(buf)));
+        }
+        r = cap_set_flag(cap, CAP_EFFECTIVE, conf.capabilities.size, conf.capabilities.entries, CAP_SET);
+        if (r != 0) {
+            h2o_fatal("cap_set_flag(CAP_EFFECTIVE): %s", h2o_strerror_r(errno, buf, sizeof(buf)));
+        }
+        r = cap_set_flag(cap, CAP_PERMITTED, conf.capabilities.size, conf.capabilities.entries, CAP_SET);
+        if (r != 0) {
+            h2o_fatal("cap_set_flag(CAP_PERMITTED): %s", h2o_strerror_r(errno, buf, sizeof(buf)));
+        }
+        r = cap_set_proc(cap);
+        if (r != 0) {
+            h2o_fatal("cap_set_proc: %s", h2o_strerror_r(errno, buf, sizeof(buf)));
+        }
+        cap_free(cap);
+        r = prctl(PR_SET_KEEPCAPS, 0, 0, 0, 0);
+        if (r != 0) {
+            h2o_fatal("prctl(PR_SET_KEEPCAPS,0): %s", h2o_strerror_r(errno, buf, sizeof(buf)));
+        }
+    }
+#endif
+}
+
 static int on_config_pid_file(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     conf.pid_file = h2o_strdup(NULL, node->data.scalar, SIZE_MAX).base;
@@ -3120,6 +3202,8 @@ static void setup_configurators(void)
         h2o_configurator_t *c = h2o_configurator_create(&conf.globalconf, sizeof(*c));
         h2o_configurator_define_command(c, "user", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_user);
+        h2o_configurator_define_command(c, "capabilities", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SEQUENCE,
+                                        on_config_capabilities);
         h2o_configurator_define_command(c, "pid-file", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_pid_file);
         h2o_configurator_define_command(c, "error-log", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
@@ -3473,10 +3557,12 @@ int main(int argc, char **argv)
 
     /* setuid */
     if (conf.globalconf.user != NULL) {
+        on_before_setuidgid();
         if (h2o_setuidgid(conf.globalconf.user) != 0) {
             fprintf(stderr, "failed to change the running user (are you sure you are running as root?)\n");
             return EX_OSERR;
         }
+        on_after_setuidgid();
         if (neverbleed != NULL && neverbleed_setuidgid(neverbleed, conf.globalconf.user, 1) != 0) {
             fprintf(stderr, "failed to change the running user of neverbleed daemon\n");
             return EX_OSERR;

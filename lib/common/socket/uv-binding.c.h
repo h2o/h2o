@@ -295,7 +295,8 @@ h2o_loop_t *h2o_socket_get_loop(h2o_socket_t *_sock)
     return sock->handle->loop;
 }
 
-h2o_socket_t *h2o_socket_connect(h2o_loop_t *loop, struct sockaddr *addr, socklen_t addrlen, h2o_socket_cb cb, const char **err)
+h2o_socket_t *h2o_socket_connect(h2o_loop_t *loop, struct sockaddr *addr, socklen_t addrlen, uint32_t socket_mark, h2o_socket_cb cb,
+                                 const char **err)
 {
     struct st_h2o_uv_socket_t *sock = create_socket(loop);
 
@@ -303,6 +304,15 @@ h2o_socket_t *h2o_socket_connect(h2o_loop_t *loop, struct sockaddr *addr, sockle
         if (err != NULL)
             *err = h2o_socket_error_socket_fail;
         return NULL;
+    }
+    if (socket_mark != 0) {
+        uv_os_fd_t fd;
+        if (uv_fileno(sock->handle, &fd) != -1 || h2o_socket_set_so_mark(fd, socket_mark) == -1) {
+            h2o_socket_close(&sock->super);
+            if (err != NULL)
+                *err = h2o_socket_error_so_mark_fail;
+            return NULL;
+        }
     }
     if (uv_tcp_connect(&sock->stream._creq, (void *)sock->handle, addr, on_connect) != 0) {
         h2o_socket_close(&sock->super);

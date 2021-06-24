@@ -2083,6 +2083,7 @@ typedef struct st_h2o_proxy_config_vars_t {
         uint32_t max_concurrent_streams;
     } http2;
     h2o_httpclient_protocol_ratio_t protocol_ratio;
+    uint32_t socket_mark;
 } h2o_proxy_config_vars_t;
 
 /**
