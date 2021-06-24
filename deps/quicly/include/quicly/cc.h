@@ -36,27 +36,19 @@ extern "C" {
 #include "quicly/constants.h"
 #include "quicly/loss.h"
 
-typedef enum {
-    /**
-     * Reno, with 0.7 beta reduction
-     */
-    CC_RENO_MODIFIED,
-    /**
-     * CUBIC (RFC 8312)
-     */
-    CC_CUBIC
-} quicly_cc_type_t;
+#define QUICLY_MIN_CWND 2
+#define QUICLY_RENO_BETA 0.7
 
 /**
  * Holds pointers to concrete congestion control implementation functions.
  */
-struct st_quicly_cc_impl_t;
+typedef const struct st_quicly_cc_type_t quicly_cc_type_t;
 
 typedef struct st_quicly_cc_t {
     /**
-     * Congestion controller implementation.
+     * Congestion controller type.
      */
-    const struct st_quicly_cc_impl_t *impl;
+    quicly_cc_type_t *type;
     /**
      * Current congestion window.
      */
@@ -74,7 +66,8 @@ typedef struct st_quicly_cc_t {
      */
     union {
         /**
-         * State information for Reno congestion control.
+         * State information for Reno congestion control. Pico also uses this (and therefore we can switch between Reno and Pico
+         * mid-connection).
          */
         struct {
             /**
@@ -130,11 +123,15 @@ typedef struct st_quicly_cc_t {
     uint32_t num_loss_episodes;
 } quicly_cc_t;
 
-struct st_quicly_cc_impl_t {
+struct st_quicly_cc_type_t {
     /**
-     * Congestion controller type.
+     * name (e.g., "reno")
      */
-    quicly_cc_type_t type;
+    const char *name;
+    /**
+     * Corresponding default init_cc.
+     */
+    struct st_quicly_init_cc_t *cc_init;
     /**
      * Called when a packet is newly acknowledged.
      */
@@ -154,21 +151,35 @@ struct st_quicly_cc_impl_t {
      * Called after a packet is sent.
      */
     void (*cc_on_sent)(quicly_cc_t *cc, const quicly_loss_t *loss, uint32_t bytes, int64_t now);
+    /**
+     * Switches the underlying algorithm of `cc` to that of `cc_switch`, returning a boolean if the operation was successful.
+     */
+    int (*cc_switch)(quicly_cc_t *cc);
 };
 
 /**
- * The factory method for the modified Reno congestion controller.
+ * The type objects for each CC. These can be used for testing the type of each `quicly_cc_t`.
  */
-extern struct st_quicly_init_cc_t quicly_cc_reno_init;
+extern quicly_cc_type_t quicly_cc_type_reno, quicly_cc_type_cubic, quicly_cc_type_pico;
 /**
- * The factory method for the modified Reno congestion controller.
+ * The factory methods for each CC.
  */
-extern struct st_quicly_init_cc_t quicly_cc_cubic_init;
+extern struct st_quicly_init_cc_t quicly_cc_reno_init, quicly_cc_cubic_init, quicly_cc_pico_init;
+
+/**
+ * A null-terminated list of all CC types.
+ */
+extern quicly_cc_type_t *quicly_cc_all_types[];
 
 /**
  * Calculates the initial congestion window size given the maximum UDP payload size.
  */
 uint32_t quicly_cc_calc_initial_cwnd(uint32_t max_packets, uint16_t max_udp_payload_size);
+
+void quicly_cc_reno_on_lost(quicly_cc_t *cc, const quicly_loss_t *loss, uint32_t bytes, uint64_t lost_pn, uint64_t next_pn,
+                            int64_t now, uint32_t max_udp_payload_size);
+void quicly_cc_reno_on_persistent_congestion(quicly_cc_t *cc, const quicly_loss_t *loss, int64_t now);
+void quicly_cc_reno_on_sent(quicly_cc_t *cc, const quicly_loss_t *loss, uint32_t bytes, int64_t now);
 
 #ifdef __cplusplus
 }
