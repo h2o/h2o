@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015 DeNA Co., Ltd., Kazuho Oku
+ * Copyright (c) 2021 Goro Fuji, Fastly, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to
@@ -19,19 +19,25 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-#ifndef h2o__file_h
-#define h2o__file_h
+#include "../../test.h"
+#include "../../../../lib/common/rand.c"
 
-#include "h2o/memory.h"
+static void test_format_uuid_rfc4122(void)
+{
+    uint8_t octets[16] = {0};
+    char dst[H2O_UUID_STR_RFC4122_LEN + 1];
 
-h2o_iovec_t h2o_file_read(const char *fn);
+    format_uuid_rfc4122(dst, octets, 4);
+    ok(strlen(dst) == H2O_UUID_STR_RFC4122_LEN);
+    ok(strcmp(dst, "00000000-0000-4000-8000-000000000000") == 0);
 
-/**
- * creates a temporary file using the fn_template param.
- * This is a wrapper to mkstemp(3), but the file is unlinked before returning from the function. Therefore, the name of the file is
- * not provided to the caller.
- * @return fd. -1 on failure and set errno as mkstemp(3) does.
- */
-int h2o_file_mktemp(const char *fn_template);
+    memset(octets, 0xff, sizeof(octets));
+    format_uuid_rfc4122(dst, octets, 4);
+    ok(strlen(dst) == H2O_UUID_STR_RFC4122_LEN);
+    ok(strcmp(dst, "ffffffff-ffff-4fff-bfff-ffffffffffff") == 0);
+}
 
-#endif
+void test_lib__common__rand_c(void)
+{
+    subtest("format_uuid_rfc4122", test_format_uuid_rfc4122);
+}

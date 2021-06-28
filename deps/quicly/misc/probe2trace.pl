@@ -7,6 +7,7 @@ use warnings;
 use Getopt::Long;
 
 my $arch = $^O;
+my %tracer_probes = map { uc($_) => 1 } qw(packet_sent packet_received packet_acked packet_lost packet_decryption_failed pto cc_ack_received cc_congestion quictrace_cc_ack quictrace_cc_lost max_data_send max_data_receive max_stream_data_send max_stream_data_receive streams_blocked_send streams_blocked_receive stream_on_open stream_on_destroy);
 
 GetOptions("arch=s" => \$arch)
     or die "invalid command option\n";
@@ -73,12 +74,18 @@ struct quicly_cc_t {
 
 EOT
 } elsif ($arch eq 'darwin') {
-} else {
+} elsif ($arch eq 'embedded') {
     print << 'EOT';
 #ifndef embedded_probes_h
 #define embedded_probes_h
 
 extern FILE *quicly_trace_fp;
+EOT
+} else {
+    print << 'EOT';
+#ifndef callback_probes_h
+#define callback_probes_h
+
 EOT
 }
 
@@ -91,13 +98,15 @@ for my $probe (@probes) {
     for (my $i = 0; $i < @{$probe->[1]}; ++$i) {
         my ($name, $type) = @{$probe->[1]->[$i]};
         if ($type eq 'struct st_quicly_conn_t *') {
-            push @fmt, '"conn":%u';
-            if ($arch eq 'linux') {
-                push @ap, "arg$i" . ' != NULL ? ((struct st_quicly_conn_t *)arg' . $i . ')->master_id : 0';
-            } elsif ($arch eq 'darwin') {
-                push @ap, "arg$i" . ' != NULL ? *(uint32_t *)copyin(arg' . $i . ' + 16, 4) : 0';
-            } else {
-                push @ap, "arg$i != NULL ? ((struct _st_quicly_conn_public_t *)arg$i)->local.cid_set.plaintext.master_id : 0";
+            if ($arch ne 'tracer') {
+                push @fmt, '"conn":%u';
+                if ($arch eq 'linux') {
+                    push @ap, "arg$i" . ' != NULL ? ((struct st_quicly_conn_t *)arg' . $i . ')->master_id : 0';
+                } elsif ($arch eq 'darwin') {
+                    push @ap, "arg$i" . ' != NULL ? *(uint32_t *)copyin(arg' . $i . ' + 16, 4) : 0';
+                } else {
+                    push @ap, "arg$i != NULL ? ((struct _st_quicly_conn_public_t *)arg$i)->local.cid_set.plaintext.master_id : 0";
+                }
             }
         } elsif ($type eq 'struct st_quicly_stream_t *') {
             push @fmt, '"stream-id":%d';
@@ -122,12 +131,12 @@ for my $probe (@probes) {
             my @fields;
             push @fields, map {["rtt.$_" => '%u']} qw(minimum smoothed variance);
             push @fields, map {["cc.$_" => '%u']} qw(impl->type cwnd ssthresh cwnd_initial cwnd_exiting_slow_start cwnd_minimum cwnd_maximum num_loss_episodes);
-            push @fields, map {["num_packets.$_" => '%llu']} qw(sent ack_received lost lost_time_threshold late_acked received decryption_failed);
-            push @fields, map {["num_bytes.$_" => '%llu']} qw(sent received);
-                for my $container (qw(num_frames_sent num_frames_received)) {
-                    push @fields, map{["$container.$_" => '%llu']} qw(padding ping ack reset_stream stop_sending crypto new_token stream max_data max_stream_data max_streams_bidi max_streams_uni data_blocked stream_data_blocked streams_blocked new_connection_id retire_connection_id path_challenge path_response transport_close application_close handshake_done ack_frequency);
-                }
-            push @fields, ["num_ptos" => '%llu'];
+            push @fields, map {["num_packets.$_" => $arch eq 'embedded' ? '%" PRIu64 "' : '%llu']} qw(sent ack_received lost lost_time_threshold late_acked received decryption_failed);
+            push @fields, map {["num_bytes.$_" => $arch eq 'embedded' ? '%" PRIu64 "' : '%llu']} qw(sent received);
+            for my $container (qw(num_frames_sent num_frames_received)) {
+                push @fields, map{["$container.$_" => $arch eq 'embedded' ? '%" PRIu64 "' : '%llu']} qw(padding ping ack reset_stream stop_sending crypto new_token stream max_data max_stream_data max_streams_bidi max_streams_uni data_blocked stream_data_blocked streams_blocked new_connection_id retire_connection_id path_challenge path_response transport_close application_close handshake_done ack_frequency);
+            }
+            push @fields, ["num_ptos" => $arch eq 'embedded' ? '%" PRIu64 "' : '%llu'];
             # generate @fmt, @ap
             push @fmt, map {my $n = $_->[0]; $n =~ tr/./_/; sprintf '"%s":%s', $n, $_->[1]} @fields;
             if ($arch eq 'linux') {
@@ -151,7 +160,7 @@ for my $probe (@probes) {
                     push @ap, "(unsigned long long)arg$i";
                 }
             } elsif ($type =~ /^int(?:([0-9]+)_t|)$/) {
-                if ($arch ne 'embedded') {
+                if ($arch ne 'embedded' && $arch ne 'tracer') {
                     push @fmt, qq!"$name":\%@{[$1 && $1 == 64 ? 'ld' : 'd']}!;
                     push @ap, "arg$i";
                 } else {
@@ -218,19 +227,40 @@ EOT
     } else {
         my $fmt = join ', ', @fmt;
         $fmt =~ s/\"/\\\"/g;
-        print << "EOT";
+        $fmt =~ s/\%\\" ([A-Za-z0-9]+) \\"/\%" $1 "/g; # nasty hack to revert `"` -> `\"` right above for PRItNN
+        my $params = join ", ", map { "$probe->[1]->[$_]->[1] arg$_" } 0..$#{$probe->[1]};
+        if ($arch eq 'embedded') {
+            print << "EOT";
 
 #define QUICLY_@{[ uc $probe->[0] ]}_ENABLED() (quicly_trace_fp != NULL)
 
-static void QUICLY_@{[ uc $probe->[0] ]}(@{[ join ", ", map { "$probe->[1]->[$_]->[1] arg$_" } 0..$#{$probe->[1]}]})
+static void QUICLY_@{[ uc $probe->[0] ]}($params)
 {
     fprintf(quicly_trace_fp, "{$fmt}\\n", @{[join ', ', @ap]});
 }
 EOT
+        } else {
+            # callback probes, the ones not specified are no-op
+            if ($tracer_probes{uc $probe->[0]}) {
+                print << "EOT";
+
+static inline void QUICLY_TRACER_@{[ uc $probe->[0] ]}($params)
+{
+    if (arg0->super.tracer.cb != NULL)
+        arg0->super.tracer.cb(arg0->super.tracer.ctx, "{$fmt}\\n", @{[join ', ', @ap]});
+}
+EOT
+            } else {
+                print << "EOT";
+
+#define QUICLY_TRACER_@{[uc $probe->[0] ]}(...)
+EOT
+            }
+        }
     }
 }
 
-if ($arch eq 'embedded') {
+if ($arch eq 'embedded' || $arch eq 'tracer') {
 print << 'EOT';
 
 #endif

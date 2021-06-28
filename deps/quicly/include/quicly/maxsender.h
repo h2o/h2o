@@ -112,7 +112,7 @@ inline void quicly_maxsender_record(quicly_maxsender_t *m, int64_t value, quicly
 
 inline void quicly_maxsender_acked(quicly_maxsender_t *m, quicly_maxsender_sent_t *sent)
 {
-    if (m->max_acked < sent->value)
+    if (m->max_acked < (int64_t)sent->value)
         m->max_acked = sent->value;
     /* num_inflight should not be adjusted in case of a late ACK */
     if (sent->inflight) {

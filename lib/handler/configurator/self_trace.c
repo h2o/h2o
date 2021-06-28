@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015 DeNA Co., Ltd., Kazuho Oku
+ * Copyright (c) 2021 Fastly, Kazuho Oku
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to
@@ -19,19 +19,25 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-#ifndef h2o__file_h
-#define h2o__file_h
+#include "h2o.h"
+#include "h2o/configurator.h"
 
-#include "h2o/memory.h"
+static int on_config_self_trace(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    switch (h2o_configurator_get_one_of(cmd, node, "OFF,ON")) {
+    case 1:
+        h2o_self_trace_register(ctx->pathconf);
+        return 0;
+    default: /* error */
+        return -1;
+    }
+}
 
-h2o_iovec_t h2o_file_read(const char *fn);
+void h2o_self_trace_register_configurator(h2o_globalconf_t *conf)
+{
+    struct st_h2o_configurator_t *c = (void *)h2o_configurator_create(conf, sizeof(*c));
 
-/**
- * creates a temporary file using the fn_template param.
- * This is a wrapper to mkstemp(3), but the file is unlinked before returning from the function. Therefore, the name of the file is
- * not provided to the caller.
- * @return fd. -1 on failure and set errno as mkstemp(3) does.
- */
-int h2o_file_mktemp(const char *fn_template);
-
-#endif
+    h2o_configurator_define_command(
+        c, "self-trace", H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_DEFERRED | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+        on_config_self_trace);
+}

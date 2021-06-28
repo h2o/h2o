@@ -54,7 +54,7 @@ struct st_connect_request_t {
     h2o_timer_t timeout;
 };
 
-#define TO_BITMASK(type, len) ((type)~(((type)1 << (sizeof(type) * 8 - (len))) - 1))
+#define TO_BITMASK(type, len) ((type) ~(((type)1 << (sizeof(type) * 8 - (len))) - 1))
 
 static void start_connect(struct st_connect_request_t *creq);
 
@@ -165,6 +165,11 @@ static void start_connect(struct st_connect_request_t *creq)
         /* connect */
         if ((creq->sock = h2o_socket_connect(creq->loop, server_address->sa, server_address->salen, on_connect)) != NULL) {
             creq->sock->data = creq;
+#if !H2O_USE_LIBUV
+            /* This is the maximum amount of data that will be buffered within userspace. It is hard-coded to 64KB to balance
+             * throughput and latency, and because we do not expect the need to change the value. */
+            h2o_evloop_socket_set_max_read_size(creq->sock, 64 * 1024);
+#endif
             return;
         }
     } while (creq->server_addresses.next < creq->server_addresses.size);
@@ -208,6 +213,8 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
 void h2o_connect_register(h2o_pathconf_t *pathconf, h2o_proxy_config_vars_t *config, h2o_connect_acl_entry_t *acl_entries,
                           size_t num_acl_entries)
 {
+    assert(config->max_buffer_size != 0);
+
     struct st_connect_handler_t *self = (void *)h2o_create_handler(pathconf, offsetof(struct st_connect_handler_t, acl.entries) +
                                                                                  sizeof(*self->acl.entries) * num_acl_entries);
 

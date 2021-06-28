@@ -62,7 +62,11 @@ subtest "h2olog", sub {
     diag "h2olog output:\n", $trace;
   }
 
-  ok( (map { decode_json($_) } split /\n/, $trace), "h2olog output is valid JSON Lines");
+  my @events = map { decode_json($_) } split /\n/, $trace;
+  is scalar(grep { $_->{type} && $_->{tid} && $_->{seq} } @events), scalar(@events), "each event has type, tid and seq";
+
+  my($h3s_accept) = grep { $_->{type} eq "h3s-accept" } @events;
+  ok is_uuidv4($h3s_accept->{"conn-uuid"}), "h3s-accept has a UUIDv4 field `conn-uuid`"
 };
 
 subtest "h2olog -H", sub {
@@ -90,3 +94,10 @@ diag "shutting down ...";
 undef $server;
 
 done_testing();
+
+sub is_uuidv4 {
+  my($s) = @_;
+
+  # sited from https://stackoverflow.com/a/19989922/805246
+  $s =~ /\A[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}\z/i;
+}

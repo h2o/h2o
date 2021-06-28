@@ -28,7 +28,7 @@ hosts:
   default:
     paths:
       /:
-        proxy.reverse.url: http://127.0.0.1.xip.io:$upstream_port
+        proxy.reverse.url: http://localhost.examp1e.net:$upstream_port
 EOT
 
     my $curl = 'curl --silent --dump-header /dev/stderr';
@@ -46,7 +46,7 @@ hosts:
   default:
     paths:
       /:
-        proxy.reverse.url: http://127.0.0.1.xip.io:$upstream_port
+        proxy.reverse.url: http://localhost.examp1e.net:$upstream_port
 EOT
 
     my $curl = 'curl --silent --dump-header /dev/stderr';
