@@ -198,7 +198,8 @@ static void run_pending_requests(h2o_http2_conn_t *conn)
 
             /* handle streaming request */
             if (stream->req.proceed_req != NULL) {
-                if (conn->num_streams._req_streaming_in_progress >= 1)
+                if (conn->num_streams._req_streaming_in_progress >=
+                    conn->super.ctx->globalconf->http2.max_concurrent_streaming_requests_per_connection)
                     continue;
                 conn->num_streams._req_streaming_in_progress++;
                 stream->_req_streaming_in_progress = 1;

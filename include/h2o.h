@@ -403,6 +403,10 @@ struct st_h2o_globalconf_t {
          */
         size_t max_concurrent_requests_per_connection;
         /**
+         * maximum number of HTTP2 streaming requests (per connection) to be handled simultaneously internally.
+         */
+        size_t max_concurrent_streaming_requests_per_connection;
+        /**
          * maximum nuber of streams (per connection) to be allowed in IDLE / CLOSED state (used for tracking dependencies).
          */
         size_t max_streams_for_priority;
