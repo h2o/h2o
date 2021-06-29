@@ -599,6 +599,76 @@ typedef struct st_h2o_context_storage_item_t {
 typedef H2O_VECTOR(h2o_context_storage_item_t) h2o_context_storage_t;
 
 /**
+ * Holds the counters. It is mere coincident that the members are equivalent with QUICLY_STATS_PREBUILT_FIELDS. The macro below can
+ * be used for generating expression that take all the members equally.
+ */
+struct st_h2o_quic_aggregated_stats_t {
+    QUICLY_STATS_PREBUILT_FIELDS;
+};
+
+/* clang-format off */
+#define H2O_QUIC_AGGREGATED_STATS_APPLY(func) \
+    func(num_packets.received, "num-packets.received") \
+    func(num_packets.decryption_failed, "num-packets.decryption-failed") \
+    func(num_packets.sent, "num-packets.sent") \
+    func(num_packets.lost, "num-packets.lost") \
+    func(num_packets.lost_time_threshold, "num-packets.lost-time-threshold") \
+    func(num_packets.ack_received, "num-packets.ack-received") \
+    func(num_packets.late_acked, "num-packets.late-acked") \
+    func(num_bytes.received, "num-bytes.received") \
+    func(num_bytes.sent, "num-bytes.sent") \
+    func(num_frames_sent.padding, "num-frames-sent.padding") \
+    func(num_frames_sent.ping, "num-frames-sent.ping") \
+    func(num_frames_sent.ack, "num-frames-sent.ack") \
+    func(num_frames_sent.reset_stream, "num-frames-sent.reset_stream") \
+    func(num_frames_sent.stop_sending, "num-frames-sent.stop_sending") \
+    func(num_frames_sent.crypto, "num-frames-sent.crypto") \
+    func(num_frames_sent.new_token, "num-frames-sent.new_token") \
+    func(num_frames_sent.stream, "num-frames-sent.stream") \
+    func(num_frames_sent.max_data, "num-frames-sent.max_data") \
+    func(num_frames_sent.max_stream_data, "num-frames-sent.max_stream_data") \
+    func(num_frames_sent.max_streams_bidi, "num-frames-sent.max_streams_bidi") \
+    func(num_frames_sent.max_streams_uni, "num-frames-sent.max_streams_uni") \
+    func(num_frames_sent.data_blocked, "num-frames-sent.data_blocked") \
+    func(num_frames_sent.stream_data_blocked, "num-frames-sent.stream_data_blocked") \
+    func(num_frames_sent.streams_blocked, "num-frames-sent.streams_blocked") \
+    func(num_frames_sent.new_connection_id, "num-frames-sent.new_connection_id") \
+    func(num_frames_sent.retire_connection_id, "num-frames-sent.retire_connection_id") \
+    func(num_frames_sent.path_challenge, "num-frames-sent.path_challenge") \
+    func(num_frames_sent.path_response, "num-frames-sent.path_response") \
+    func(num_frames_sent.transport_close, "num-frames-sent.transport_close") \
+    func(num_frames_sent.application_close, "num-frames-sent.application_close") \
+    func(num_frames_sent.handshake_done, "num-frames-sent.handshake_done") \
+    func(num_frames_sent.datagram, "num-frames-sent.datagram") \
+    func(num_frames_sent.ack_frequency, "num-frames-sent.ack_frequency") \
+    func(num_frames_received.padding, "num-frames-received.padding") \
+    func(num_frames_received.ping, "num-frames-received.ping") \
+    func(num_frames_received.ack, "num-frames-received.ack") \
+    func(num_frames_received.reset_stream, "num-frames-received.reset_stream") \
+    func(num_frames_received.stop_sending, "num-frames-received.stop_sending") \
+    func(num_frames_received.crypto, "num-frames-received.crypto") \
+    func(num_frames_received.new_token, "num-frames-received.new_token") \
+    func(num_frames_received.stream, "num-frames-received.stream") \
+    func(num_frames_received.max_data, "num-frames-received.max_data") \
+    func(num_frames_received.max_stream_data, "num-frames-received.max_stream_data") \
+    func(num_frames_received.max_streams_bidi, "num-frames-received.max_streams_bidi") \
+    func(num_frames_received.max_streams_uni, "num-frames-received.max_streams_uni") \
+    func(num_frames_received.data_blocked, "num-frames-received.data_blocked") \
+    func(num_frames_received.stream_data_blocked, "num-frames-received.stream_data_blocked") \
+    func(num_frames_received.streams_blocked, "num-frames-received.streams_blocked") \
+    func(num_frames_received.new_connection_id, "num-frames-received.new_connection_id") \
+    func(num_frames_received.retire_connection_id, "num-frames-received.retire_connection_id") \
+    func(num_frames_received.path_challenge, "num-frames-received.path_challenge") \
+    func(num_frames_received.path_response, "num-frames-received.path_response") \
+    func(num_frames_received.transport_close, "num-frames-received.transport_close") \
+    func(num_frames_received.application_close, "num-frames-received.application_close") \
+    func(num_frames_received.handshake_done, "num-frames-received.handshake_done") \
+    func(num_frames_received.datagram, "num-frames-received.datagram") \
+    func(num_frames_received.ack_frequency, "num-frames-received.ack_frequency") \
+    func(num_ptos, "num-ptos")
+/* clang-format on */
+
+/**
  * context of the http server.
  */
 struct st_h2o_context_t {
@@ -682,6 +752,16 @@ struct st_h2o_context_t {
          * timeout entry used for graceful shutdown
          */
         h2o_timer_t _graceful_shutdown_timeout;
+        struct {
+            /**
+             * number of packets forwarded to another node in a cluster
+             */
+            uint64_t packet_forwarded;
+            /**
+             * number of forwarded packets received from another node in a cluster
+             */
+            uint64_t forwarded_packet_received;
+        } events;
     } http3;
 
     struct {
@@ -716,6 +796,11 @@ struct st_h2o_context_t {
         uint64_t handshake_accum_time_full;
         uint64_t handshake_accum_time_resume;
     } ssl;
+
+    /**
+     * aggregated quicly stats
+     */
+    struct st_h2o_quic_aggregated_stats_t quic;
 
     /**
      * pointer to per-module configs
@@ -889,6 +974,14 @@ typedef struct st_h2o_conn_callbacks_t {
      */
     h2o_http2_debug_state_t *(*get_debug_state)(h2o_req_t *req, int hpack_enabled);
     /**
+     * returns number of requests inflight (optional, only supported by H2, H3)
+     */
+    uint32_t (*num_reqs_inflight)(h2o_conn_t *conn);
+    /**
+     * optional callbacks that returns the tracer regsitry
+     */
+    quicly_tracer_t *(*get_tracer)(h2o_conn_t *conn);
+    /**
      * logging callbacks (all of them are optional)
      */
     union {
@@ -951,6 +1044,13 @@ struct st_h2o_conn_t {
      * callbacks
      */
     const h2o_conn_callbacks_t *callbacks;
+    /**
+     * connection UUID (UUIDv4 in the string representation).
+     */
+    struct {
+        char str[H2O_UUID_STR_RFC4122_LEN + 1];
+        uint8_t is_initialized;
+    } _uuid;
 };
 
 /**
@@ -1022,7 +1122,6 @@ typedef int (*h2o_write_req_cb)(void *ctx, h2o_iovec_t chunk, int is_end_stream)
  * `is_end_stream`.
  */
 typedef void (*h2o_proceed_req_cb)(h2o_req_t *req, size_t bytes_written, h2o_send_state_t send_state);
-
 
 #define H2O_SEND_SERVER_TIMING_BASIC 1
 #define H2O_SEND_SERVER_TIMING_PROXY 2
@@ -1312,6 +1411,10 @@ void h2o_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock);
  */
 static h2o_conn_t *h2o_create_connection(size_t sz, h2o_context_t *ctx, h2o_hostconf_t **hosts, struct timeval connected_at,
                                          const h2o_conn_callbacks_t *callbacks);
+/**
+ * returns the uuid of the connection as a null-terminated string.
+ */
+static const char *h2o_conn_get_uuid(h2o_conn_t *conn);
 /**
  * returns if the connection is still in early-data state (i.e., if there is a risk of received requests being a replay)
  */
@@ -2006,15 +2109,15 @@ void h2o_file_register_configurator(h2o_globalconf_t *conf);
 
 enum {
     H2O_HEADERS_CMD_NULL,
-    H2O_HEADERS_CMD_ADD,        /* adds a new header line */
-    H2O_HEADERS_CMD_APPEND,     /* adds a new header line or contenates to the existing header */
-    H2O_HEADERS_CMD_MERGE,      /* merges the value into a comma-listed values of the named header */
-    H2O_HEADERS_CMD_SET,        /* sets a header line, overwriting the existing one (if any) */
-    H2O_HEADERS_CMD_SETIFEMPTY, /* sets a header line if empty */
-    H2O_HEADERS_CMD_UNSET,       /* removes the named header(s) */
-    H2O_HEADERS_CMD_UNSETUNLESS,       /* only keeps the named header(s) */
+    H2O_HEADERS_CMD_ADD,                /* adds a new header line */
+    H2O_HEADERS_CMD_APPEND,             /* adds a new header line or contenates to the existing header */
+    H2O_HEADERS_CMD_MERGE,              /* merges the value into a comma-listed values of the named header */
+    H2O_HEADERS_CMD_SET,                /* sets a header line, overwriting the existing one (if any) */
+    H2O_HEADERS_CMD_SETIFEMPTY,         /* sets a header line if empty */
+    H2O_HEADERS_CMD_UNSET,              /* removes the named header(s) */
+    H2O_HEADERS_CMD_UNSETUNLESS,        /* only keeps the named header(s) */
     H2O_HEADERS_CMD_COOKIE_UNSET,       /* removes the named cookie(s) */
-    H2O_HEADERS_CMD_COOKIE_UNSETUNLESS,       /* only keeps the named cookie(s) */
+    H2O_HEADERS_CMD_COOKIE_UNSETUNLESS, /* only keeps the named cookie(s) */
 };
 
 typedef enum h2o_headers_command_when {
@@ -2173,6 +2276,17 @@ void h2o_http2_debug_state_register(h2o_hostconf_t *hostconf, int hpack_enabled)
  */
 void h2o_http2_debug_state_register_configurator(h2o_globalconf_t *conf);
 
+/* lib/handler/conn_state.c */
+
+/**
+ *
+ */
+void h2o_self_trace_register(h2o_pathconf_t *conf);
+/**
+ *
+ */
+void h2o_self_trace_register_configurator(h2o_globalconf_t *conf);
+
 /* inline defs */
 
 #ifdef H2O_NO_64BIT_ATOMICS
@@ -2195,8 +2309,18 @@ inline h2o_conn_t *h2o_create_connection(size_t sz, h2o_context_t *ctx, h2o_host
     conn->id = __sync_add_and_fetch(&h2o_connection_id, 1);
 #endif
     conn->callbacks = callbacks;
+    conn->_uuid.is_initialized = 0;
 
     return conn;
+}
+
+inline const char *h2o_conn_get_uuid(h2o_conn_t *conn)
+{
+    if (conn->_uuid.is_initialized)
+        return conn->_uuid.str;
+    h2o_generate_uuidv4(conn->_uuid.str);
+    conn->_uuid.is_initialized = 1;
+    return conn->_uuid.str;
 }
 
 inline int h2o_conn_is_early_data(h2o_conn_t *conn)

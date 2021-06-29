@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2020 Fastly, Inc., Toru Maesaka, Goro Fuji
+ * Copyright (c) 2019-2021 Fastly, Inc., Toru Maesaka, Goro Fuji, Kazuho Oku
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to
@@ -30,6 +30,7 @@ extern "C" {
 #include <unistd.h>
 #include <stdarg.h>
 #include <limits.h>
+#include <arpa/inet.h>
 #include <sys/time.h>
 #include "h2o/memory.h"
 #include "h2o/version.h"
@@ -45,23 +46,30 @@ static void usage(void)
     printf(R"(h2olog (h2o v%s)
 Usage: h2olog -p PID
 Optional arguments:
-    -d Print debugging information (-dd shows more)
-    -h Print this help and exit
-    -l Print the list of available tracepoints and exit
-    -H Trace HTTP requests and responses in varnishlog-like format
-    -s RESPONSE_HEADER_NAME A response header name to show, e.g. "content-type"
-    -t TRACEPOINT A tracepoint, or fully-qualified probe name, to show,
-                  including a glob pattern, e.g. "quicly:accept", "h2o:*"
-    -S RATE Enable random sampling per connection (0.0-1.0)
-            Requires for h2o to have `usdt-selective-tracing: ON` in its config file
-    -a Include application data which are omitted by default
-    -r Run without dropping root privilege
-    -w Path to write the output (default: stdout)
+  -d                Print debugging information (-dd shows more).
+  -h                Print this help and exit.
+  -l                Print the list of available tracepoints and exit.
+  -H                Trace HTTP requests and responses in varnishlog-like format.
+  -s <header-name>  A response header name to show, e.g. "content-type".
+  -t <tracepoint>   A tracepoint, or fully-qualified probe name to trace. Glob
+                    patterns can be used; e.g., "quicly:accept", "h2o:*".
+  -S <rate>         Enable random sampling per connection (0.0-1.0). Requires
+                    `usdt-selective-tracing: ON` must be specified in the h2o
+                    config file.
+  -A <ip-address>   Limit connections being traced to those coming from the
+                    specified address. Requries use of `usdt-selective-tracing`.
+  -N <server-name>  Limit connections being traced to those carrying the
+                    specified name in the TLS SNI extension. Requires use of
+                    `usdt-selective-tracing: ON`.
+  -a                Include application data which are omitted by default.
+  -r                Run without dropping root privilege.
+  -w <path>         Path to write the output (default: stdout).
 
 Examples:
-    h2olog -p $(pgrep -o h2o) -H
-    h2olog -p $(pgrep -o h2o) -t quicly:accept -t quicly:free
-    h2olog -p $(pgrep -o h2o) -t h2o:send_response_header -t h2o:h3s_accept -t h2o:h3s_destroy -s alt-svc
+  h2olog -p $(pgrep -o h2o) -H
+  h2olog -p $(pgrep -o h2o) -t quicly:accept -t quicly:free
+  h2olog -p $(pgrep -o h2o) -t h2o:send_response_header -t h2o:h3s_accept \
+         -t h2o:h3s_destroy -s alt-svc
 )",
            H2O_VERSION);
     return;
@@ -261,8 +269,10 @@ int main(int argc, char **argv)
     std::vector<std::string> response_header_filters;
     int c;
     pid_t h2o_pid = -1;
-    double sampling_rate = -1;
-    while ((c = getopt(argc, argv, "hHdrlap:t:s:w:S:")) != -1) {
+    double sampling_rate = 1.0;
+    std::vector<std::pair<std::vector<uint8_t> /* address */, unsigned /* netmask */>> sampling_addresses;
+    std::vector<std::string> sampling_snis;
+    while ((c = getopt(argc, argv, "hHdrlap:t:s:w:S:A:N:")) != -1) {
         switch (c) {
         case 'H':
             tracer.reset(create_http_tracer());
@@ -293,6 +303,31 @@ int main(int argc, char **argv)
                 fprintf(stderr, "Error: the argument of -S must be in the range of 0.0 to 1.0\n");
                 exit(EXIT_FAILURE);
             }
+            break;
+        case 'A': {
+            const char *slash = std::find(optarg, optarg + strlen(optarg), '/');
+            std::string addr(optarg, slash - optarg);
+            in_addr v4;
+            in6_addr v6;
+            if (inet_pton(AF_INET, addr.c_str(), (sockaddr *)&v4) == 1) {
+                const uint8_t *src = reinterpret_cast<const uint8_t *>(&v4);
+                sampling_addresses.emplace_back(std::vector<uint8_t>(src, src + 4), 32);
+            } else if (inet_pton(AF_INET6, addr.c_str(), (sockaddr *)&v6) == 1) {
+                const uint8_t *src = reinterpret_cast<const uint8_t *>(&v6);
+                sampling_addresses.emplace_back(std::vector<uint8_t>(src, src + 16), 128);
+            } else {
+                fprintf(stderr, "Error: invalid address supplied to -A: %s\n", optarg);
+                exit(EXIT_FAILURE);
+            }
+            if (*slash != '\0') {
+                if (sscanf(slash + 1, "%u", &sampling_addresses.back().second) != 1) {
+                    fprintf(stderr, "Error: invalid address mask supplied to -A: %s\n", optarg);
+                    exit(EXIT_FAILURE);
+                }
+            }
+        } break;
+        case 'N':
+            sampling_snis.emplace_back(optarg);
             break;
         case 'a':
             include_appdata = true;
@@ -341,15 +376,103 @@ int main(int argc, char **argv)
 
     tracer->init(outfp, include_appdata);
 
+    const char *h2o_root = getenv("H2O_ROOT");
+    if (h2o_root == NULL)
+        h2o_root = H2O_TO_STR(H2O_ROOT);
+    // BCC does not resolve a relative path, so h2olog does resolve it as an absolute path.
+    char h2o_root_resolved[PATH_MAX];
+    if (realpath(h2o_root, h2o_root_resolved) == NULL) {
+        h2o_perror("Error: realpath failed for H2O_ROOT");
+        exit(EXIT_FAILURE);
+    }
     std::vector<std::string> cflags({
+        std::string("-I") + std::string(h2o_root_resolved) + "/include",
         build_cc_macro_expr("H2OLOG_H2O_PID", h2o_pid),
-        CC_MACRO_EXPR(H2O_EBPF_FLAGS_SKIP_TRACING_BIT),
         CC_MACRO_EXPR(H2O_EBPF_RETURN_MAP_SIZE),
-        CC_MACRO_STR(H2O_EBPF_RETURN_MAP_PATH),
     });
 
     if (!response_header_filters.empty()) {
         cflags.push_back(generate_header_filter_cflag(response_header_filters));
+    }
+
+    ebpf::BPF *bpf = new ebpf::BPF();
+    std::vector<ebpf::USDT> probes;
+
+    bool selective_tracing = false;
+    if (sampling_rate < 1.0) {
+        /* eBPF bytecode cannot handle floating point numbers see man bpf(2). We use uint32_t which maps to 0 <= value < 1. */
+        cflags.push_back(
+            build_cc_macro_expr("H2OLOG_SAMPLING_RATE_U32", static_cast<uint32_t>(sampling_rate * (UINT64_C(1) << 32))));
+        selective_tracing = true;
+    }
+    if (!sampling_addresses.empty()) {
+        std::string expr;
+        for (const auto &addrmask : sampling_addresses) {
+            if (!expr.empty())
+                expr += " || ";
+            expr += "((family) == ";
+            expr += addrmask.first.size() == 4 ? '4' : '6';
+            size_t off;
+            for (off = 0; off < addrmask.second / 8 * 8; off += 8) {
+                expr += " && (addr)[";
+                expr += std::to_string(off / 8);
+                expr += "] == ";
+                expr += std::to_string(addrmask.first[off / 8]);
+            }
+            if (addrmask.second % 8 != 0) {
+                expr += " && ((addr)[";
+                expr += std::to_string(off / 8);
+                expr += "] & ";
+                expr += std::to_string((uint8_t)(0xff << (8 - addrmask.second % 8)));
+                expr += ") == ";
+                expr += std::to_string(addrmask.first[off / 8]);
+            }
+            expr += ')';
+        }
+        cflags.push_back(build_cc_macro_expr("H2OLOG_IS_SAMPLING_ADDRESS(family, addr)", std::string("(") + expr + ")"));
+        selective_tracing = true;
+    }
+    if (!sampling_snis.empty()) {
+        /* if both address- and sni-based sampling are used, the output will be the union of both */
+        if (sampling_addresses.empty())
+            cflags.push_back(build_cc_macro_expr("H2OLOG_IS_SAMPLING_ADDRESS(family, addr)", 0));
+        std::string expr;
+        for (const auto &name : sampling_snis) {
+            if (!expr.empty())
+                expr += " || ";
+            expr += "((name_len) == ";
+            expr += std::to_string(name.size());
+            /* as string constants cannot be used in eBPF, do hand-written memcmp */
+            for (size_t i = 0; i < name.size(); i += 8) {
+                uint64_t u8 = 0, mask = 0;
+                memcpy(&u8, name.c_str() + i, std::min((size_t)8, name.size() - i));
+                expr += " && (*(uint64_t *)((name) + ";
+                expr += std::to_string(i);
+                expr += ")";
+                if (name.size() - i < 8) {
+                    static const uint8_t mask_bytes[14] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}; /* 7x 0xff, 7x 0x00 */
+                    memcpy(&mask, mask_bytes + 7 - (name.size() - i), 8);
+                    expr += " & ";
+                    expr += std::to_string(mask);
+                }
+                expr += ") == ";
+                expr += std::to_string(u8);
+            }
+            expr += ")";
+        }
+        cflags.push_back(build_cc_macro_expr("H2OLOG_IS_SAMPLING_SNI(name, name_len)", std::string("(") + expr + ")"));
+        selective_tracing = true;
+    }
+
+    if (selective_tracing) {
+        cflags.push_back(build_cc_macro_expr("H2OLOG_SELECTIVE_TRACING", 1));
+        probes.push_back(ebpf::USDT(h2o_pid, "h2o", "_private_socket_lookup_flags", "trace_h2o___private_socket_lookup_flags"));
+        probes.push_back(
+            ebpf::USDT(h2o_pid, "h2o", "_private_socket_lookup_flags_sni", "trace_h2o___private_socket_lookup_flags_sni"));
+    }
+
+    for (const auto &usdt : tracer->usdt_probes()) {
+        probes.push_back(ebpf::USDT(h2o_pid, usdt.provider, usdt.name, usdt.probe_func));
     }
 
     if (debug >= 2) {
@@ -371,19 +494,6 @@ int main(int argc, char **argv)
         }
         fprintf(stderr, "\n");
         fprintf(stderr, "<BPF>\n%s\n</BPF>\n", tracer->bpf_text().c_str());
-    }
-
-    ebpf::BPF *bpf = new ebpf::BPF();
-    std::vector<ebpf::USDT> probes;
-
-    for (const auto &usdt : tracer->usdt_probes()) {
-        probes.push_back(ebpf::USDT(h2o_pid, usdt.provider, usdt.name, usdt.probe_func));
-    }
-
-    if (sampling_rate >= 0) {
-        /* To give the calculated rate in U32 because eBPF bytecode has no floating point numbers,
-         * See the bpf(2) manpage. */
-        cflags.push_back(build_cc_macro_expr("H2OLOG_SAMPLING_RATE_U32", static_cast<uint32_t>(sampling_rate * UINT32_MAX)));
     }
 
     ebpf::StatusTuple ret = bpf->init(tracer->bpf_text(), cflags, probes);

@@ -53,10 +53,8 @@ static int extract_name_value(const char *src, h2o_iovec_t **name, h2o_iovec_t *
 
 static int is_list_cmd(int cmd_id)
 {
-    return cmd_id == H2O_HEADERS_CMD_UNSET
-        || cmd_id == H2O_HEADERS_CMD_UNSETUNLESS
-        || cmd_id == H2O_HEADERS_CMD_COOKIE_UNSET
-        || cmd_id == H2O_HEADERS_CMD_COOKIE_UNSETUNLESS;
+    return cmd_id == H2O_HEADERS_CMD_UNSET || cmd_id == H2O_HEADERS_CMD_UNSETUNLESS || cmd_id == H2O_HEADERS_CMD_COOKIE_UNSET ||
+           cmd_id == H2O_HEADERS_CMD_COOKIE_UNSETUNLESS;
 }
 
 static int add_cmd(h2o_configurator_command_t *cmd, int cmd_id, struct headers_util_add_arg_t *args, size_t num_args,
@@ -258,9 +256,10 @@ void h2o_configurator_define_headers_commands(h2o_globalconf_t *global_conf, h2o
 #undef DEFINE_CMD_NAME
 
 #define DEFINE_CMD(name, cb)                                                                                                       \
-    h2o_configurator_define_command(                                                                                               \
-        &c->super, name,                                                                                                           \
-        H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR | H2O_CONFIGURATOR_FLAG_EXPECT_SEQUENCE | H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING, cb)
+    h2o_configurator_define_command(&c->super, name,                                                                               \
+                                    H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR |                       \
+                                        H2O_CONFIGURATOR_FLAG_EXPECT_SEQUENCE | H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING,              \
+                                    cb)
     DEFINE_CMD(add_directive, on_config_header_add);
     DEFINE_CMD(append_directive, on_config_header_append);
     DEFINE_CMD(merge_directive, on_config_header_merge);

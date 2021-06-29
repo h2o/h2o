@@ -47,8 +47,9 @@ class h2o_raw_tracer : public h2o_tracer
     void do_handle_lost(std::uint64_t lost) override;
 
   public:
-    h2o_raw_tracer(): h2o_tracer() {
-      initialize();
+    h2o_raw_tracer() : h2o_tracer()
+    {
+        initialize();
     }
 
     std::string select_usdts(const char *pattern) override;

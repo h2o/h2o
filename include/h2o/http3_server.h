@@ -22,6 +22,10 @@
 #ifndef h2o__http3_server_h
 #define h2o__http3_server_h
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <sys/socket.h>
 #include "quicly.h"
 #include "h2o/http3_common.h"
@@ -48,5 +52,9 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
  * amends the quicly context so that it could be used for the server
  */
 void h2o_http3_server_amend_quicly_context(h2o_globalconf_t *conf, quicly_context_t *quic);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

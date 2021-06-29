@@ -9,7 +9,7 @@ DOCKER_RUN_OPTS=--privileged \
 	-v /sys/kernel/debug:/sys/kernel/debug \
 	-v /lib/modules:/lib/modules:ro \
 	-v /usr/src:/usr/src:ro \
-	--add-host=127.0.0.1.xip.io:127.0.0.1 \
+	--add-host=localhost.examp1e.net:127.0.0.1 \
 	-it
 
 ALL:
@@ -52,6 +52,7 @@ _fuzz:
 _do-fuzz-extra:
 	./h2o-fuzzer-http1 -close_fd_mask=3 -runs=1 -max_len=16384 $(SRC_DIR)/fuzz/http1-corpus < /dev/null
 	./h2o-fuzzer-http2 -close_fd_mask=3 -runs=1 -max_len=16384 $(SRC_DIR)/fuzz/http2-corpus < /dev/null
+	./h2o-fuzzer-http3 -close_fd_mask=3 -runs=1 -max_len=16384 $(SRC_DIR)/fuzz/http3-corpus < /dev/null
 	./h2o-fuzzer-url -close_fd_mask=3 -runs=1 -max_len=16384 $(SRC_DIR)/fuzz/url-corpus < /dev/null
 
 enter:

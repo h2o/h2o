@@ -21,8 +21,8 @@
  */
 #include "quicly/loss.h"
 
-void quicly_loss_init_sentmap_iter(quicly_loss_t *loss, quicly_sentmap_iter_t *iter, int64_t now, uint32_t max_ack_delay,
-                                   int is_closing)
+int quicly_loss_init_sentmap_iter(quicly_loss_t *loss, quicly_sentmap_iter_t *iter, int64_t now, uint32_t max_ack_delay,
+                                  int is_closing)
 {
     quicly_sentmap_init_iter(&loss->sentmap, iter);
 
@@ -33,10 +33,13 @@ void quicly_loss_init_sentmap_iter(quicly_loss_t *loss, quicly_sentmap_iter_t *i
      * heavy loss; in such case, 32 is more than enough, yet small enough that the memory footprint does not matter. */
     const quicly_sent_packet_t *sent;
     while ((sent = quicly_sentmap_get(iter))->sent_at <= retire_before && sent->cc_bytes_in_flight == 0) {
+        int ret;
         if (!is_closing && loss->sentmap.num_packets < 32)
             break;
-        quicly_sentmap_update(&loss->sentmap, iter, QUICLY_SENTMAP_EVENT_EXPIRED);
+        if ((ret = quicly_sentmap_update(&loss->sentmap, iter, QUICLY_SENTMAP_EVENT_EXPIRED)) != 0)
+            return ret;
     }
+    return 0;
 }
 
 int quicly_loss_detect_loss(quicly_loss_t *loss, int64_t now, uint32_t max_ack_delay, int is_1rtt_only,
@@ -52,7 +55,8 @@ int quicly_loss_detect_loss(quicly_loss_t *loss, int64_t now, uint32_t max_ack_d
 
     loss->loss_time = INT64_MAX;
 
-    quicly_loss_init_sentmap_iter(loss, &iter, now, max_ack_delay, 0);
+    if ((ret = quicly_loss_init_sentmap_iter(loss, &iter, now, max_ack_delay, 0)) != 0)
+        return ret;
 
     /* Mark packets as lost if they are smaller than the largest_acked and outside either time-threshold or packet-threshold
      * windows. Once marked as lost, cc_bytes_in_flight becomes zero. */
@@ -79,7 +83,8 @@ int quicly_loss_detect_loss(quicly_loss_t *loss, int64_t now, uint32_t max_ack_d
     }
 
     if (!is_1rtt_only) {
-        quicly_loss_init_sentmap_iter(loss, &iter, now, max_ack_delay, 0);
+        if ((ret = quicly_loss_init_sentmap_iter(loss, &iter, now, max_ack_delay, 0)) != 0)
+            return ret;
         sent = quicly_sentmap_get(&iter);
     }
 

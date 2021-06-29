@@ -160,6 +160,7 @@ QUICLY_CALLBACK_TYPE(void, init_cc, quicly_cc_t *cc, uint32_t initcwnd, int64_t 
  * delta must be either 1 or -1.
  */
 QUICLY_CALLBACK_TYPE(void, update_open_count, ssize_t delta);
+
 /**
  * crypto offload API
  */
@@ -190,6 +191,20 @@ typedef struct st_quicly_crypto_engine_t {
                            ptls_aead_context_t *packet_protect_ctx, ptls_iovec_t datagram, size_t first_byte_at,
                            size_t payload_from, uint64_t packet_number, int coalesced);
 } quicly_crypto_engine_t;
+
+/**
+ * data structure used for self-tracing
+ */
+typedef struct st_quicly_tracer_t {
+    /**
+     * NULL when not used
+     */
+    void (*cb)(void *ctx, const char *fmt, ...) __attribute__((format(printf, 2, 3)));
+    /**
+     *
+     */
+    void *ctx;
+} quicly_tracer_t;
 
 typedef struct st_quicly_max_stream_data_t {
     uint64_t bidi_local, bidi_remote, uni;
@@ -459,6 +474,8 @@ struct st_quicly_default_scheduler_state_t {
     quicly_linklist_t blocked;
 };
 
+typedef void (*quicly_trace_cb)(void *ctx, const char *fmt, ...) __attribute__((format(printf, 2, 3)));
+
 struct _st_quicly_conn_public_t {
     quicly_context_t *ctx;
     quicly_state_t state;
@@ -514,6 +531,10 @@ struct _st_quicly_conn_public_t {
     } stats;
     uint32_t version;
     void *data;
+    /**
+     * trace callback (cb != NULL when used)
+     */
+    quicly_tracer_t tracer;
 };
 
 typedef enum {
@@ -813,6 +834,10 @@ static uint32_t quicly_num_streams(quicly_conn_t *conn);
 /**
  *
  */
+uint32_t quicly_num_streams_by_group(quicly_conn_t *conn, int uni, int locally_initiated);
+/**
+ *
+ */
 static int quicly_is_client(quicly_conn_t *conn);
 /**
  *
@@ -842,6 +867,10 @@ void quicly_get_max_data(quicly_conn_t *conn, uint64_t *send_permitted, uint64_t
  *
  */
 static void **quicly_get_data(quicly_conn_t *conn);
+/**
+ *
+ */
+static quicly_tracer_t *quicly_get_tracer(quicly_conn_t *conn);
 /**
  * destroys a connection object.
  */
@@ -1228,6 +1257,12 @@ inline void **quicly_get_data(quicly_conn_t *conn)
 {
     struct _st_quicly_conn_public_t *c = (struct _st_quicly_conn_public_t *)conn;
     return &c->data;
+}
+
+inline quicly_tracer_t *quicly_get_tracer(quicly_conn_t *conn)
+{
+    struct _st_quicly_conn_public_t *c = (struct _st_quicly_conn_public_t *)conn;
+    return &c->tracer;
 }
 
 inline int quicly_stop_requested(quicly_stream_t *stream)

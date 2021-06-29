@@ -526,6 +526,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = E984481B1EA48BD400390927 /* Build configuration list for PBXNativeTarget "quicly" */;
 			buildPhases = (
+				08CEA9DF267B461700B4BB6B /* ShellScript */,
 				E98448131EA48BD400390927 /* Sources */,
 				E98448141EA48BD400390927 /* Frameworks */,
 				E98448151EA48BD400390927 /* Headers */,
@@ -632,6 +633,25 @@
 /* End PBXProject section */
 
 /* Begin PBXShellScriptBuildPhase section */
+		08CEA9DF267B461700B4BB6B /* ShellScript */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/quicly-probes.d",
+			);
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(DERIVED_FILES_DIR)/quicly-tracer.h",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# Type a script or drag a script file from your workspace to insert its path.\n\nexec $SRCROOT/misc/probe2trace.pl -a tracer < $SRCROOT/quicly-probes.d > $DERIVED_FILES_DIR/quicly-tracer.h\n";
+		};
 		E941428B23B0B70F002D3CE0 /* ShellScript */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
@@ -899,6 +919,10 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				EXECUTABLE_PREFIX = lib;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"QUICLY_USE_TRACER=1",
+				);
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
 			name = Debug;
@@ -907,6 +931,10 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				EXECUTABLE_PREFIX = lib;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"QUICLY_USE_TRACER=1",
+				);
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
 			name = Release;
