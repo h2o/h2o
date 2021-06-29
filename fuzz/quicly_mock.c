@@ -40,7 +40,7 @@ struct st_quicly_conn_t {
 struct st_quicly_send_context_t {
 };
 
-static quicly_conn_t *create_connection(quicly_context_t *ctx, bool is_client, struct sockaddr *remote_addr,
+static quicly_conn_t *create_connection(quicly_context_t *ctx, int is_client, struct sockaddr *remote_addr,
                                         struct sockaddr *local_addr)
 {
     quicly_conn_t *conn = calloc(1, sizeof(*conn));
