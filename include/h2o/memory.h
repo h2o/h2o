@@ -196,6 +196,10 @@ static h2o_iovec_t h2o_iovec_init(const void *base, size_t len);
  */
 H2O_RETURNS_NONNULL static void *h2o_mem_alloc(size_t sz);
 /**
+ * wrapper of calloc; allocates and sets to zero given size of memory or dies if impossible
+ */
+H2O_RETURNS_NONNULL static void *h2o_mem_calloc(size_t nmemb, size_t sz);
+/**
  * warpper of realloc; reallocs the given chunk or dies if impossible
  */
 static void *h2o_mem_realloc(void *oldp, size_t sz);
@@ -402,6 +406,14 @@ inline h2o_iovec_t h2o_iovec_init(const void *base, size_t len)
 inline void *h2o_mem_alloc(size_t sz)
 {
     void *p = malloc(sz);
+    if (p == NULL)
+        h2o_fatal("no memory");
+    return p;
+}
+
+inline void *h2o_mem_calloc(size_t nmemb, size_t sz)
+{
+    void *p = calloc(nmemb, sz);
     if (p == NULL)
         h2o_fatal("no memory");
     return p;
