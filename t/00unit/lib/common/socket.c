@@ -107,7 +107,7 @@ static void test_prepare_for_latency_optimization(void)
     prepare_for_latency_optimized_write(&sock, &cond, 50000 /* rtt */, 1400 /* mss */, 10 /* cwnd_size */, 6 /* cwnd_avail */, 4,
                                         test_adjust_notsent_lowat);
     ok(sock._latency_optimization.state == H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_DISABLED);
-    ok(sock._latency_optimization.suggested_tls_payload_size == 16384);
+    ok(sock._latency_optimization.suggested_tls_payload_size == SIZE_MAX);
     ok(sock._latency_optimization.suggested_write_size == SIZE_MAX);
     ok(cb_ret_vars.minimize_notsent_lowat.call_cnt == 0);
 
@@ -137,7 +137,7 @@ static void test_prepare_for_latency_optimization(void)
     prepare_for_latency_optimized_write(&sock, &cond, 50000 /* rtt */, 1400 /* mss */, (65535 / 1400) + 1 /* cwnd_size */,
                                         (65535 / 1400) + 1 /* cwnd_avail */, 4, test_adjust_notsent_lowat);
     ok(sock._latency_optimization.state == H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_DETERMINED);
-    ok(sock._latency_optimization.suggested_tls_payload_size == 16384);
+    ok(sock._latency_optimization.suggested_tls_payload_size == SIZE_MAX);
     ok(sock._latency_optimization.suggested_write_size == SIZE_MAX);
     ok(cb_ret_vars.minimize_notsent_lowat.call_cnt == 2);
     ok(cb_ret_vars.minimize_notsent_lowat.cur == 0);
@@ -157,7 +157,7 @@ static void test_prepare_for_latency_optimization(void)
     prepare_for_latency_optimized_write(&sock, &cond, 50000 /* rtt */, 1400 /* mss */, 8 /* cwnd_size */, 6 /* cwnd_avail */, 6,
                                         test_adjust_notsent_lowat);
     ok(sock._latency_optimization.state == H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_DISABLED);
-    ok(sock._latency_optimization.suggested_tls_payload_size == 16384);
+    ok(sock._latency_optimization.suggested_tls_payload_size == SIZE_MAX);
     ok(sock._latency_optimization.suggested_write_size == SIZE_MAX);
     ok(cb_ret_vars.minimize_notsent_lowat.call_cnt == 4);
     ok(cb_ret_vars.minimize_notsent_lowat.cur == 0);
