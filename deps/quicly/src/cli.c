@@ -45,7 +45,6 @@ FILE *quicly_trace_fp = NULL;
 static unsigned verbosity = 0;
 static int suppress_output = 0, send_datagram_frame = 0;
 static int64_t enqueue_requests_at = 0, request_interval = 0;
-static void *datagram_frame_payload_buf;
 
 static void hexdump(const char *title, const uint8_t *p, size_t l)
 {
@@ -489,26 +488,7 @@ static int send_pending(int fd, quicly_conn_t *conn)
     if ((ret = quicly_send(conn, &dest, &src, packets, &num_packets, buf, sizeof(buf))) == 0 && num_packets != 0)
         send_packets(fd, &dest.sa, packets, num_packets);
 
-    if (datagram_frame_payload_buf != NULL) {
-        free(datagram_frame_payload_buf);
-        datagram_frame_payload_buf = NULL;
-    }
-
     return ret;
-}
-
-static void set_datagram_frame(quicly_conn_t *conn, ptls_iovec_t payload)
-{
-    if (datagram_frame_payload_buf != NULL)
-        free(datagram_frame_payload_buf);
-
-    /* replace payload.base with an allocated buffer */
-    datagram_frame_payload_buf = malloc(payload.len);
-    memcpy(datagram_frame_payload_buf, payload.base, payload.len);
-    payload.base = datagram_frame_payload_buf;
-
-    /* set data to be sent. The buffer is being freed in `send_pending` after `quicly_send` is being called. */
-    quicly_set_datagram_frame(conn, payload);
 }
 
 static void on_receive_datagram_frame(quicly_receive_datagram_frame_t *self, quicly_conn_t *conn, ptls_iovec_t payload)
@@ -516,7 +496,7 @@ static void on_receive_datagram_frame(quicly_receive_datagram_frame_t *self, qui
     printf("DATAGRAM: %.*s\n", (int)payload.len, payload.base);
     /* send responds with a datagram frame */
     if (!quicly_is_client(conn))
-        set_datagram_frame(conn, payload);
+        quicly_send_datagram_frames(conn, &payload, 1);
 }
 
 static void enqueue_requests(quicly_conn_t *conn)
@@ -618,7 +598,8 @@ static int run_client(int fd, struct sockaddr *sa, const char *host)
                     quicly_receive(conn, NULL, &sa, &packet);
                     if (send_datagram_frame && quicly_connection_is_ready(conn)) {
                         const char *message = "hello datagram!";
-                        set_datagram_frame(conn, ptls_iovec_init(message, strlen(message)));
+                        ptls_iovec_t datagram = ptls_iovec_init(message, strlen(message));
+                        quicly_send_datagram_frames(conn, &datagram, 1);
                         send_datagram_frame = 0;
                     }
                 }
@@ -1026,15 +1007,17 @@ static void usage(const char *cmd)
            "Options:\n"
            "  -a <alpn>                 ALPN identifier; repeat the option to set multiple\n"
            "                            candidates\n"
-           "  -b <buffer-size>          specifies the size of the send / receive buffer in bytes\n"
+           "  -b <buffer-size>          specifies the size of the send / receive buffer in\n"
+           "                            bytes\n"
            "  -B <cid-key>              CID encryption key (server-only). Randomly generated\n"
            "                            if omitted.\n"
            "  -c certificate-file\n"
            "  -k key-file               specifies the credentials to be used for running the\n"
            "                            server. If omitted, the command runs as a client.\n"
-           "  -C <algorithm>            the congestion control algorithm; either \"reno\" (default) or\n"
-           "                            \"cubic\"\n"
-           "  -d draft-number           specifies the draft version number to be used (e.g., 29)\n"
+           "  -C <algorithm>            the congestion control algorithm; either \"reno\"\n"
+           "                            (default) or \"cubic\"\n"
+           "  -d draft-number           specifies the draft version number to be used (e.g.,\n"
+           "                            29)\n"
            "  -e event-log-file         file to log events\n"
            "  -E                        expand Client Hello (sends multiple client Initials)\n"
            "  -G                        enable UDP generic segmentation offload\n"
@@ -1048,7 +1031,8 @@ static void usage(const char *cmd)
            "  -n                        enforce version negotiation (client-only)\n"
            "  -O                        suppress output\n"
            "  -p path                   path to request (can be set multiple times)\n"
-           "  -P path                   path to request, store response to file (can be set multiple times)\n"
+           "  -P path                   path to request, store response to file (can be set\n"
+           "                            multiple times)\n"
            "  -R                        require Retry (server only)\n"
            "  -r [initial-pto]          initial PTO (in milliseconds)\n"
            "  -S [num-speculative-ptos] number of speculative PTOs\n"
@@ -1058,10 +1042,10 @@ static void usage(const char *cmd)
            "  -V                        verify peer using the default certificates\n"
            "  -v                        verbose mode (-vv emits packet dumps as well)\n"
            "  -w packets                initial congestion window (default: 10)\n"
-           "  -W public-key-file        use raw public keys (RFC 7250). When set and running as a\n"
-           "                            client, the argument specifies the public keys that the\n"
-           "                            server is expected to use. When running as a server, the\n"
-           "                            argument is ignored.\n"
+           "  -W public-key-file        use raw public keys (RFC 7250). When set and running\n"
+           "                            as a client, the argument specifies the public keys\n"
+           "                            that the server is expected to use. When running as\n"
+           "                            a server, the argument is ignored.\n"
            "  -x named-group            named group to be used (default: secp256r1)\n"
            "  -X                        max bidirectional stream count (default: 100)\n"
            "  -y cipher-suite           cipher-suite to be used (default: all)\n"
@@ -1252,7 +1236,7 @@ int main(int argc, char **argv)
             }
             break;
         case 'V':
-            setup_verify_certificate(ctx.tls);
+            setup_verify_certificate(ctx.tls, NULL);
             break;
         case 'v':
             ++verbosity;

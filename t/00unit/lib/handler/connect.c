@@ -59,7 +59,12 @@ static void test_acl(void)
     ok(h2o_connect_parse_acl(entries + 3, "-[2001:db8::]/33") == NULL);
     ok(!entries[3].allow_);
     ok(entries[3].addr_family == H2O_CONNECT_ACL_ADDRESS_V6);
-    ok(memcmp(entries[3].addr.v6, "\x20\x01\x0d\xb8" "\0\0\0\0" "\0\0\0\0" "\0\0\0\0", 16) == 0);
+    ok(memcmp(entries[3].addr.v6,
+              "\x20\x01\x0d\xb8"
+              "\0\0\0\0"
+              "\0\0\0\0"
+              "\0\0\0\0",
+              16) == 0);
     ok(entries[3].addr_mask == 33);
     ok(entries[3].port == 0);
 
@@ -83,7 +88,12 @@ static void test_acl(void)
 
     struct sockaddr_in6 sin6;
     sin6.sin6_family = AF_INET6;
-    memcpy(sin6.sin6_addr.s6_addr, "\x20\x01\x0d\xb8" "\0\0\0\0" "\0\0\0\0" "\0\0\0\1", 16);
+    memcpy(sin6.sin6_addr.s6_addr,
+           "\x20\x01\x0d\xb8"
+           "\0\0\0\0"
+           "\0\0\0\0"
+           "\0\0\0\1",
+           16);
     sin6.sin6_port = 443;
     ok(!h2o_connect_lookup_acl(entries, PTLS_ELEMENTSOF(entries), (void *)&sin6));
     sin6.sin6_addr.s6_addr[4] |= 0x80;

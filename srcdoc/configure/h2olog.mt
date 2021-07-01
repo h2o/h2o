@@ -35,7 +35,7 @@ EOT
 <h3>For running h2olog</h3>
 <ul>
 <li>Root privilege to execute h2olog</li>
-<li>Linux kernel (&gt;= 4.9)</li>
+<li>Linux kernel (&gt;= 4.10)</li>
 </ul>
 
 <h2 id="quicstart">Quickstart</h2>

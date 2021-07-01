@@ -4,11 +4,12 @@ CHECK_MK=$(SRC_DIR)/misc/docker-ci/check.mk
 CMAKE_ARGS=
 FUZZ_ASAN=ASAN_OPTIONS=detect_leaks=0
 DOCKER_RUN_OPTS=--privileged \
+	--ulimit memlock=-1 \
 	-v `pwd`:$(SRC_DIR) \
 	-v /sys/kernel/debug:/sys/kernel/debug \
 	-v /lib/modules:/lib/modules:ro \
 	-v /usr/src:/usr/src:ro \
-	--add-host=127.0.0.1.xip.io:127.0.0.1 \
+	--add-host=localhost.examp1e.net:127.0.0.1 \
 	-it
 
 ALL:
@@ -30,6 +31,8 @@ dtrace:
 
 _check:
 	uname -a
+	sudo mkdir -p /sys/fs/bpf
+	sudo mount -t bpf bpf /sys/fs/bpf -o mode=700
 	mkdir -p build
 	sudo mount -t tmpfs tmpfs build -o size=3G
 	sudo chown -R ci:ci build
@@ -48,6 +51,7 @@ _fuzz:
 _do-fuzz-extra:
 	./h2o-fuzzer-http1 -close_fd_mask=3 -runs=1 -max_len=16384 $(SRC_DIR)/fuzz/http1-corpus < /dev/null
 	./h2o-fuzzer-http2 -close_fd_mask=3 -runs=1 -max_len=16384 $(SRC_DIR)/fuzz/http2-corpus < /dev/null
+	./h2o-fuzzer-http3 -close_fd_mask=3 -runs=1 -max_len=16384 $(SRC_DIR)/fuzz/http3-corpus < /dev/null
 	./h2o-fuzzer-url -close_fd_mask=3 -runs=1 -max_len=16384 $(SRC_DIR)/fuzz/url-corpus < /dev/null
 
 enter:

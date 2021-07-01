@@ -34,6 +34,9 @@ extern const char h2o_hpack_err_found_upper_case_in_header_name[];
 extern const char h2o_hpack_soft_err_found_invalid_char_in_header_name[];
 extern const char h2o_hpack_soft_err_found_invalid_char_in_header_value[];
 
+#define H2O_HPACK_SOFT_ERROR_BIT_INVALID_NAME 0x1
+#define H2O_HPACK_SOFT_ERROR_BIT_INVALID_VALUE 0x2
+
 /**
  * encodes an integer (maximum size of the output excluding the first octet is H2O_HTTP2_ENCODE_INT_MAX_LENGTH bytes)
  */
@@ -47,33 +50,46 @@ size_t h2o_hpack_encode_huffman(uint8_t *dst, const uint8_t *src, size_t len);
  */
 int64_t h2o_hpack_decode_int(const uint8_t **src, const uint8_t *src_end, unsigned prefix_bits);
 /**
- * decodes a huffman string and returns its length, or SIZE_MAX if fails. The destination buffer must be at least double the size
- * of the input.
+ * Decodes a huffman string and returns its length, or SIZE_MAX if hard fails. The destination buffer must be at least double the
+ * size of the input. For the soft errors being detected, the corresponding bits of `*soft_errors` will be set.
  */
-size_t h2o_hpack_decode_huffman(char *dst, const uint8_t *src, size_t len, int is_name, const char **err_desc);
+size_t h2o_hpack_decode_huffman(char *dst, unsigned *soft_errors, const uint8_t *src, size_t len, int is_name,
+                                const char **err_desc);
 /**
- * validates header name and returns a boolean. Result will be true and *err_desc will be set to non-NULL if a soft error is
- * detected.
+ * Validates header name and returns if hard validation succeeded. Upon failure, description of the hard failure will be stored in
+ * `*err_desc`. Upon success, the corresponding bits in `*soft_errors` will be set for the soft errors being detected.
  */
-int h2o_hpack_validate_header_name(const char *s, size_t len, const char **err_desc);
+int h2o_hpack_validate_header_name(unsigned *soft_errors, const char *s, size_t len, const char **err_desc);
 /**
- * see h2o_http2_validate_header_name. The function only returns soft errors hence declared void.
+ * Validates a header field value and returns soft errors.
  */
-void h2o_hpack_validate_header_value(const char *s, size_t len, const char **err_desc);
+void h2o_hpack_validate_header_value(unsigned *soft_errors, const char *s, size_t len);
 
 #define H2O_HPACK_PARSE_HEADERS_METHOD_EXISTS 1
 #define H2O_HPACK_PARSE_HEADERS_SCHEME_EXISTS 2
 #define H2O_HPACK_PARSE_HEADERS_PATH_EXISTS 4
 #define H2O_HPACK_PARSE_HEADERS_AUTHORITY_EXISTS 8
 
+/**
+ * Decodes a header field. This function must indicate soft errors using error codes, setting `*err_desc` to appropciate values.
+ */
 typedef int (*h2o_hpack_decode_header_cb)(h2o_mem_pool_t *pool, void *ctx, h2o_iovec_t **name, h2o_iovec_t *value,
                                           const uint8_t **const src, const uint8_t *src_end, const char **err_desc);
+/**
+ * HPACK implementation of `h2o_hpack_decode_header_cb`.
+ */
 int h2o_hpack_decode_header(h2o_mem_pool_t *pool, void *_hpack_header_table, h2o_iovec_t **name, h2o_iovec_t *_value,
                             const uint8_t **const src, const uint8_t *src_end, const char **err_desc);
+/**
+ * Request parser that uses given callback as the decoder.
+ */
 int h2o_hpack_parse_request(h2o_mem_pool_t *pool, h2o_hpack_decode_header_cb decode_cb, void *decode_ctx, h2o_iovec_t *method,
                             const h2o_url_scheme_t **scheme, h2o_iovec_t *authority, h2o_iovec_t *path, h2o_headers_t *headers,
                             int *pseudo_header_exists_map, size_t *content_length, h2o_cache_digests_t **digests,
                             const uint8_t *src, size_t len, const char **err_desc);
+/**
+ * Response parser that uses given callback as the decoder.
+ */
 int h2o_hpack_parse_response(h2o_mem_pool_t *pool, h2o_hpack_decode_header_cb decode_cb, void *decode_ctx, int *status,
                              h2o_headers_t *headers, const uint8_t *src, size_t len, const char **err_desc);
 

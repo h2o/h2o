@@ -56,6 +56,7 @@ struct st_h2o_evloop_socket_t {
             h2o_iovec_t smallbufs[4];
         };
     } _wreq;
+    size_t max_read_size;
     struct st_h2o_evloop_socket_t *_next_pending;
     struct st_h2o_evloop_socket_t *_next_statechanged;
 };
@@ -115,18 +116,21 @@ static void link_to_statechanged(struct st_h2o_evloop_socket_t *sock)
     }
 }
 
-static const char *on_read_core(int fd, h2o_buffer_t **input)
+static const char *on_read_core(int fd, h2o_buffer_t **input, size_t max_bytes)
 {
     ssize_t read_so_far = 0;
 
     while (1) {
         ssize_t rret;
-        h2o_iovec_t buf = h2o_buffer_try_reserve(input, 4096);
+        h2o_iovec_t buf = h2o_buffer_try_reserve(input, max_bytes < 4096 ? max_bytes : 4096);
         if (buf.base == NULL) {
             /* memory allocation failed */
             return h2o_socket_error_out_of_memory;
         }
-        while ((rret = read(fd, buf.base, buf.len <= INT_MAX / 2 ? buf.len : INT_MAX / 2 + 1)) == -1 && errno == EINTR)
+        size_t read_size = buf.len <= INT_MAX / 2 ? buf.len : INT_MAX / 2 + 1;
+        if (read_size > max_bytes)
+            read_size = max_bytes;
+        while ((rret = read(fd, buf.base, read_size)) == -1 && errno == EINTR)
             ;
         if (rret == -1) {
             if (errno == EAGAIN)
@@ -142,9 +146,8 @@ static const char *on_read_core(int fd, h2o_buffer_t **input)
         if (buf.len != rret)
             break;
         read_so_far += rret;
-        if (read_so_far >= (1024 * 1024))
+        if (read_so_far >= max_bytes)
             break;
-
     }
     return NULL;
 }
@@ -236,7 +239,8 @@ static void read_on_ready(struct st_h2o_evloop_socket_t *sock)
     if ((sock->_flags & H2O_SOCKET_FLAG_DONT_READ) != 0)
         goto Notify;
 
-    if ((err = on_read_core(sock->fd, sock->super.ssl == NULL ? &sock->super.input : &sock->super.ssl->input.encrypted)) != NULL)
+    if ((err = on_read_core(sock->fd, sock->super.ssl == NULL ? &sock->super.input : &sock->super.ssl->input.encrypted,
+                            sock->max_read_size)) != NULL)
         goto Notify;
 
     if (sock->super.ssl != NULL && sock->super.ssl->handshake.cb == NULL)
@@ -365,7 +369,7 @@ h2o_loop_t *h2o_socket_get_loop(h2o_socket_t *_sock)
     return sock->loop;
 }
 
-socklen_t h2o_socket_getsockname(h2o_socket_t *_sock, struct sockaddr *sa)
+socklen_t get_sockname_uncached(h2o_socket_t *_sock, struct sockaddr *sa)
 {
     struct st_h2o_evloop_socket_t *sock = (void *)_sock;
     socklen_t len = sizeof(struct sockaddr_storage);
@@ -394,6 +398,7 @@ static struct st_h2o_evloop_socket_t *create_socket(h2o_evloop_t *loop, int fd, 
     sock->fd = fd;
     sock->_flags = flags;
     sock->_wreq.bufs = sock->_wreq.smallbufs;
+    sock->max_read_size = 1024 * 1024; /* by default, we read up to 1MB at once */
     sock->_next_pending = sock;
     sock->_next_statechanged = sock;
 
@@ -431,7 +436,7 @@ h2o_socket_t *h2o_evloop_socket_accept(h2o_socket_t *_listener)
     int fd;
     h2o_socket_t *sock;
 
-    /* cache the remote address, if we know that we are going to use the value (in h2o_socket_ebpf_lookup) */
+    /* cache the remote address, if we know that we are going to use the value (in h2o_socket_ebpf_lookup_flags) */
 #if H2O_USE_EBPF_MAP
     struct sockaddr_storage peeraddr[1];
     socklen_t peeraddrlen[1] = {sizeof(peeraddr[0])};
@@ -455,7 +460,8 @@ h2o_socket_t *h2o_evloop_socket_accept(h2o_socket_t *_listener)
 
     if (peeraddr != NULL && *peeraddrlen <= sizeof(*peeraddr))
         h2o_socket_setpeername(sock, (struct sockaddr *)peeraddr, *peeraddrlen);
-    if (h2o_socket_ebpf_lookup(listener->loop, h2o_socket_ebpf_init_key, sock).skip_tracing)
+    uint64_t flags = h2o_socket_ebpf_lookup_flags(listener->loop, h2o_socket_ebpf_init_key, sock);
+    if ((flags & H2O_EBPF_FLAGS_SKIP_TRACING_BIT) != 0)
         sock->_skip_tracing = 1;
     return sock;
 }
@@ -478,6 +484,12 @@ h2o_socket_t *h2o_socket_connect(h2o_loop_t *loop, struct sockaddr *addr, sockle
 
     h2o_socket_notify_write(&sock->super, cb);
     return &sock->super;
+}
+
+void h2o_evloop_socket_set_max_read_size(h2o_socket_t *_sock, size_t max_size)
+{
+    struct st_h2o_evloop_socket_t *sock = (void *)_sock;
+    sock->max_read_size = max_size;
 }
 
 h2o_evloop_t *create_evloop(size_t sz)

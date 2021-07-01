@@ -91,7 +91,7 @@ typedef void (*h2o_socket_cb)(h2o_socket_t *sock, const char *err);
 #include "socket/evloop.h"
 #endif
 
-struct st_h2o_socket_peername_t {
+struct st_h2o_socket_addr_t {
     socklen_t len;
     struct sockaddr addr;
 };
@@ -130,7 +130,8 @@ struct st_h2o_socket_t {
         h2o_socket_cb read;
         h2o_socket_cb write;
     } _cb;
-    struct st_h2o_socket_peername_t *_peername;
+    struct st_h2o_socket_addr_t *_peername;
+    struct st_h2o_socket_addr_t *_sockname;
     struct {
         uint8_t state; /* one of H2O_SOCKET_LATENCY_STATE_* */
         uint8_t notsent_is_minimized : 1;
@@ -371,21 +372,32 @@ int h2o_socket_set_df_bit(int fd, int domain);
  * helper to check if socket the socket is target of tracing
  */
 static int h2o_socket_skip_tracing(h2o_socket_t *sock);
+/**
+ *
+ */
+void h2o_socket_set_skip_tracing(h2o_socket_t *sock, int skip_tracing);
 
-struct st_h2o_ebpf_map_key_t;
 /**
- * function to lookup if the connection is tagged for special treatment. At the moment, the results are: 0 - no, 1 - trace.
+ * Prepares eBPF maps. Requires root privileges and thus should be called before dropping the privileges. Returns a boolean
+ * indicating if operation succeeded.
  */
-h2o_ebpf_map_value_t h2o_socket_ebpf_lookup(h2o_loop_t *loop, int (*init_key)(struct st_h2o_ebpf_map_key_t *key, void *cbdata),
-                                            void *cbdata);
+int h2o_socket_ebpf_setup(void);
 /**
- * callback for initializing the ebpf lookup key from raw information
+ * Function to lookup if the connection is tagged for special treatment. The result is a union of `H2O_EBPF_FLAGS_*`.
  */
-int h2o_socket_ebpf_init_key_raw(struct st_h2o_ebpf_map_key_t *key, int sock_type, struct sockaddr *local, struct sockaddr *remote);
+uint64_t h2o_socket_ebpf_lookup_flags(h2o_loop_t *loop, int (*init_key)(h2o_ebpf_map_key_t *key, void *cbdata), void *cbdata);
+/**
+ *
+ */
+uint64_t h2o_socket_ebpf_lookup_flags_sni(h2o_loop_t *loop, uint64_t flags, const char *server_name, size_t server_name_len);
+/**
+ * function for initializing the ebpf lookup key from raw information
+ */
+int h2o_socket_ebpf_init_key_raw(h2o_ebpf_map_key_t *key, int sock_type, struct sockaddr *local, struct sockaddr *remote);
 /**
  * callback for initializing the ebpf lookup key from `h2o_socket_t`
  */
-int h2o_socket_ebpf_init_key(struct st_h2o_ebpf_map_key_t *key, void *_sock);
+int h2o_socket_ebpf_init_key(h2o_ebpf_map_key_t *key, void *sock);
 
 void h2o_socket__write_pending(h2o_socket_t *sock);
 void h2o_socket__write_on_complete(h2o_socket_t *sock, int status);

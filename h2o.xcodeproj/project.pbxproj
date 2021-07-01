@@ -27,6 +27,15 @@
 		08790E111D8BD85700A04BC1 /* redis-client.c in Sources */ = {isa = PBXBuildFile; fileRef = 08790DF41D8BD72500A04BC1 /* redis-client.c */; };
 		08819C25218C9FA90057ED23 /* libh2o.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 1079231519A320A700C52AD6 /* libh2o.a */; };
 		08819C2E218C9FF70057ED23 /* qif.c in Sources */ = {isa = PBXBuildFile; fileRef = 08819C2D218C9FF70057ED23 /* qif.c */; };
+		08CEA9D226701D7600B4BB6B /* rand.c in Sources */ = {isa = PBXBuildFile; fileRef = 08CEA9D126701D7600B4BB6B /* rand.c */; };
+		08CEA9D326701D7600B4BB6B /* rand.c in Sources */ = {isa = PBXBuildFile; fileRef = 08CEA9D126701D7600B4BB6B /* rand.c */; };
+		08CEA9D526701D8E00B4BB6B /* rand.c in Sources */ = {isa = PBXBuildFile; fileRef = 08CEA9D426701D8E00B4BB6B /* rand.c */; };
+		08CEA9D7267AF0EB00B4BB6B /* self_trace.c in Sources */ = {isa = PBXBuildFile; fileRef = 08CEA9D6267AF0EB00B4BB6B /* self_trace.c */; };
+		08CEA9D8267AF0EB00B4BB6B /* self_trace.c in Sources */ = {isa = PBXBuildFile; fileRef = 08CEA9D6267AF0EB00B4BB6B /* self_trace.c */; };
+		08CEA9D9267AF0EB00B4BB6B /* self_trace.c in Sources */ = {isa = PBXBuildFile; fileRef = 08CEA9D6267AF0EB00B4BB6B /* self_trace.c */; };
+		08CEA9DB267B0E3B00B4BB6B /* self_trace.c in Sources */ = {isa = PBXBuildFile; fileRef = 08CEA9DA267B0E3B00B4BB6B /* self_trace.c */; };
+		08CEA9DC267B0E3B00B4BB6B /* self_trace.c in Sources */ = {isa = PBXBuildFile; fileRef = 08CEA9DA267B0E3B00B4BB6B /* self_trace.c */; };
+		08CEA9DD267B0E3B00B4BB6B /* self_trace.c in Sources */ = {isa = PBXBuildFile; fileRef = 08CEA9DA267B0E3B00B4BB6B /* self_trace.c */; };
 		08E9CC4E1E41F6660049DD26 /* embedded.c.h in Headers */ = {isa = PBXBuildFile; fileRef = 08E9CC4D1E41F6660049DD26 /* embedded.c.h */; };
 		08F320DD1E7A9CA60038FA5A /* redis.c in Sources */ = {isa = PBXBuildFile; fileRef = 08790DE31D8276EA00A04BC1 /* redis.c */; };
 		08F320DE1E7A9CB80038FA5A /* async.c in Sources */ = {isa = PBXBuildFile; fileRef = 0812AB1C1D7FCFEB00004F23 /* async.c */; settings = {COMPILER_FLAGS = "-Wno-conversion"; }; };
@@ -679,6 +688,13 @@
 		08790E101D8BD7F100A04BC1 /* examples-redis-client */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = "examples-redis-client"; sourceTree = BUILT_PRODUCTS_DIR; };
 		08819C2C218C9FA90057ED23 /* qif */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = qif; sourceTree = BUILT_PRODUCTS_DIR; };
 		08819C2D218C9FF70057ED23 /* qif.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = qif.c; sourceTree = "<group>"; };
+		08C7C365262AB30F009C944C /* 40mtls.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = 40mtls.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		08CEA9CF2662136B00B4BB6B /* 80http3-header-linefeed.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "80http3-header-linefeed.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		08CEA9D026643C4700B4BB6B /* 50timeout-on-max-concurrent-requests.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50timeout-on-max-concurrent-requests.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		08CEA9D126701D7600B4BB6B /* rand.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = rand.c; sourceTree = "<group>"; };
+		08CEA9D426701D8E00B4BB6B /* rand.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = rand.c; sourceTree = "<group>"; };
+		08CEA9D6267AF0EB00B4BB6B /* self_trace.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = self_trace.c; sourceTree = "<group>"; };
+		08CEA9DA267B0E3B00B4BB6B /* self_trace.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = self_trace.c; sourceTree = "<group>"; };
 		08E9CC4D1E41F6660049DD26 /* embedded.c.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = embedded.c.h; sourceTree = "<group>"; };
 		100A550C1C22857B00C4E3E0 /* 50mruby-htpasswd.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50mruby-htpasswd.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		100A550E1C2BB15100C4E3E0 /* http_request.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = http_request.c; sourceTree = "<group>"; };
@@ -1037,7 +1053,7 @@
 		E90C514D230BB28800D6AD8E /* 90dtrace.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = 90dtrace.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		E915E87325D4A88D00FB20F7 /* http_tracer.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = http_tracer.cc; sourceTree = "<group>"; };
 		E915E87425D4A89700FB20F7 /* generated_raw_tracer.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = generated_raw_tracer.cc; sourceTree = "<group>"; };
-		E915E87525D4A89700FB20F7 /* raw_tracer.h.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = raw_tracer.h.cc; sourceTree = "<group>"; };
+		E915E87525D4A89700FB20F7 /* raw_tracer.cc.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = raw_tracer.cc.h; sourceTree = "<group>"; };
 		E915E87625D4A8B700FB20F7 /* gen_raw_tracer.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = gen_raw_tracer.py; sourceTree = "<group>"; };
 		E918FC392136583F00CCB252 /* proptest */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = proptest; sourceTree = BUILT_PRODUCTS_DIR; };
 		E918FC3B213658BE00CCB252 /* prop.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = prop.c; sourceTree = "<group>"; };
@@ -1275,7 +1291,7 @@
 		E9D498B725EE684500F4A80D /* 50reverse-proxy-h3-early-response.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50reverse-proxy-h3-early-response.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		E9D49A4F25FB561A00F4A80D /* 40http1-streaming-framing.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "40http1-streaming-framing.t"; sourceTree = "<group>"; };
 		E9D49A5025FB561A00F4A80D /* 40http3-forward-initial.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "40http3-forward-initial.t"; sourceTree = "<group>"; };
-		E9D49A5125FB562800F4A80D /* 50http1-proxy-full-uri.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50http1-proxy-full-uri.t"; sourceTree = "<group>"; };
+		E9D49A5125FB562800F4A80D /* 50http1-proxy-full-uri.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50http1-proxy-full-uri.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		E9D49A5225FB562800F4A80D /* 90h2olog.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = 90h2olog.t; sourceTree = "<group>"; };
 		E9D49A5325FB562800F4A80D /* quic-ndec-initial-gen.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = "quic-ndec-initial-gen.c"; sourceTree = "<group>"; };
 		E9DF012724E4CDEE0002EEC7 /* cc-cubic.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = "cc-cubic.c"; sourceTree = "<group>"; };
@@ -1454,6 +1470,7 @@
 				7D0341FA1FE4D5B60052E0A1 /* http2client.c */,
 				E9E50472214A5B8A004DC170 /* http3client.c */,
 				10A3D3D11B4CDBDC00327CF9 /* memcached.c */,
+				08CEA9D126701D7600B4BB6B /* rand.c */,
 				08790DE31D8276EA00A04BC1 /* redis.c */,
 				107923BA19A3217300C52AD6 /* memory.c */,
 				10AA2EAB1A8DE0AE004322AC /* multithread.c */,
@@ -1487,6 +1504,7 @@
 				105534E91A42A83700627ECB /* file */,
 				10AA2EBD1AA019D8004322AC /* headers.c */,
 				E90A95F21E30795100483D6C /* headers_util.c */,
+				084FC7C01D54B90D00E89F66 /* http2_debug_state.c */,
 				107923BB19A3217300C52AD6 /* mimemap.c */,
 				108867731AD9061100987967 /* mimemap */,
 				10B38A651B8D345D007DC191 /* mruby.c */,
@@ -1494,10 +1512,10 @@
 				10D0907219F633B00043D458 /* proxy.c */,
 				10AA2EA41A8D9999004322AC /* redirect.c */,
 				10AA2EC31AA0403A004322AC /* reproxy.c */,
+				08CEA9D6267AF0EB00B4BB6B /* self_trace.c */,
 				10835E021C9A860000197E59 /* status.c */,
 				10C45D521CFE9B180096DB06 /* status */,
 				10C45D501CFD160A0096DB06 /* throttle_resp.c */,
-				084FC7C01D54B90D00E89F66 /* http2_debug_state.c */,
 			);
 			path = handler;
 			sourceTree = "<group>";
@@ -1525,6 +1543,7 @@
 				10DA969F1CD2BFEE00679165 /* cache.c */,
 				10F9F2661AFC5F550056F26B /* hostinfo.c */,
 				10AA2EAD1A8E22DA004322AC /* multithread.c */,
+				08CEA9D426701D8E00B4BB6B /* rand.c */,
 				104B9A271A4A5139009EEE64 /* serverutil.c */,
 				103BAB351B130666000694F4 /* socket.c */,
 				105534C61A3BB29100627ECB /* string.c */,
@@ -1614,6 +1633,7 @@
 				10C45D4E1CFD15FA0096DB06 /* throttle_resp.c */,
 				084FC7C31D54BB9200E89F66 /* http2_debug_state.c */,
 				7D937301202AC7BA005FE6AB /* server_timing.c */,
+				08CEA9DA267B0E3B00B4BB6B /* self_trace.c */,
 			);
 			path = configurator;
 			sourceTree = "<group>";
@@ -2125,6 +2145,7 @@
 				E9414F9D24ED4DD300273C59 /* 40http3-shutdown-reject-conn.t */,
 				104B9A301A58F55E009EEE64 /* 40max-connections.t */,
 				10A3D3D71B4F4D0900327CF9 /* 40memcached-session-resumption.t */,
+				08C7C365262AB30F009C944C /* 40mtls.t */,
 				105534F51A460EF600627ECB /* 40protocol.t */,
 				1070E1641B451D43001CCAFA /* 40proxy-protocol.t */,
 				E9BC76BF1EE3D71000EB7A09 /* 40redis-session-resumption.t */,
@@ -2223,6 +2244,7 @@
 				E9AFBF1E212A9814000F5DB8 /* 50stop-opening-new-push-streams.t */,
 				E9AFBF19212A9813000F5DB8 /* 50suspend-body.t */,
 				10C45D4D1CFD15890096DB06 /* 50throttle-response.t */,
+				08CEA9D026643C4700B4BB6B /* 50timeout-on-max-concurrent-requests.t */,
 				E9AFBF2A212A985E000F5DB8 /* 50too-much-data.t */,
 				E9AFBF2B212A985E000F5DB8 /* 50too-much-headers.t */,
 				E9AFBF29212A985E000F5DB8 /* 50uncompressed-headers.t */,
@@ -2233,6 +2255,7 @@
 				109EEFE11D77B350001F11D1 /* 80dup-host-headers.t */,
 				E9BC76C51EE4AB6C00EB7A09 /* 80graceful-shutdown.t */,
 				E9AFBF2C212A985E000F5DB8 /* 80http2-idle-timeout-for-zero-window.t */,
+				08CEA9CF2662136B00B4BB6B /* 80http3-header-linefeed.t */,
 				109EEFE21D77B350001F11D1 /* 80invalid-h2-chars-in-headers.t */,
 				105534FE1A46134A00627ECB /* 80issues61.t */,
 				1092E0011BEB1DDC001074BF /* 80issues579.t */,
@@ -2450,7 +2473,7 @@
 				E904232E24AB2C9B0072C5B7 /* json.cc */,
 				E904233024AB2C9C0072C5B7 /* json.h */,
 				E904233624AB2CA80072C5B7 /* misc */,
-				E915E87525D4A89700FB20F7 /* raw_tracer.h.cc */,
+				E915E87525D4A89700FB20F7 /* raw_tracer.cc.h */,
 				E904233524AB2C9C0072C5B7 /* pyproject.toml */,
 			);
 			path = h2olog;
@@ -2893,6 +2916,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 1079231919A320A700C52AD6 /* Build configuration list for PBXNativeTarget "h2o" */;
 			buildPhases = (
+				08CEA9E1267B620800B4BB6B /* ShellScript */,
 				1079231119A320A700C52AD6 /* Sources */,
 				1079231219A320A700C52AD6 /* Frameworks */,
 				1079231319A320A700C52AD6 /* Headers */,
@@ -3016,6 +3040,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 10F417CE19C1907B00B6E31A /* Build configuration list for PBXNativeTarget "server" */;
 			buildPhases = (
+				08CEA9E2267B626F00B4BB6B /* ShellScript */,
 				10F417C919C1907B00B6E31A /* Sources */,
 				10F417CB19C1907B00B6E31A /* Frameworks */,
 				10F417CD19C1907B00B6E31A /* CopyFiles */,
@@ -3084,6 +3109,47 @@
 		};
 /* End PBXProject section */
 
+/* Begin PBXShellScriptBuildPhase section */
+		08CEA9E1267B620800B4BB6B /* ShellScript */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/deps/quicly/quicly-probes.d",
+			);
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(DERIVED_FILE_DIR)/quicly-tracer.h",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# Type a script or drag a script file from your workspace to insert its path.\n\nexec $SRCROOT/deps/quicly/misc/probe2trace.pl -a tracer < $SRCROOT/deps/quicly/quicly-probes.d > $DERIVED_FILES_DIR/quicly-tracer.h\n";
+		};
+		08CEA9E2267B626F00B4BB6B /* ShellScript */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/deps/quicly/quicly-probes.d",
+			);
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(DERIVED_FILE_DIR)/quicly-tracer.h",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# Type a script or drag a script file from your workspace to insert its path.\n\nexec $SRCROOT/deps/quicly/misc/probe2trace.pl -a tracer < $SRCROOT/deps/quicly/quicly-probes.d > $DERIVED_FILES_DIR/quicly-tracer.h\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
 		08790E061D8BD7F100A04BC1 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
@@ -3133,6 +3199,7 @@
 				107923C619A3217300C52AD6 /* connection.c in Sources */,
 				1022E7C31CA8BCCE00CE2A05 /* text_mode.c in Sources */,
 				080D35EB1D5E060D0029B7E5 /* http2_debug_state.c in Sources */,
+				08CEA9D7267AF0EB00B4BB6B /* self_trace.c in Sources */,
 				10835E051C9B3C6200197E59 /* status.c in Sources */,
 				7D937302202AC7BA005FE6AB /* server_timing.c in Sources */,
 				E901C3F9213E1C4000D17C93 /* frame.c in Sources */,
@@ -3189,6 +3256,7 @@
 				107D4D551B5B30EE004A9B21 /* file.c in Sources */,
 				10D0907319F633B00043D458 /* proxy.c in Sources */,
 				10A3D3D21B4CDBDC00327CF9 /* memcached.c in Sources */,
+				08CEA9DB267B0E3B00B4BB6B /* self_trace.c in Sources */,
 				0812AB221D7FCFEB00004F23 /* hiredis.c in Sources */,
 				7D0341FB1FE4D5B60052E0A1 /* http2client.c in Sources */,
 				107923CF19A3217300C52AD6 /* request.c in Sources */,
@@ -3205,6 +3273,7 @@
 				10C45D4F1CFD15FA0096DB06 /* throttle_resp.c in Sources */,
 				E9E5049021501BBA004DC170 /* server.c in Sources */,
 				10A3D4081B50DAB700327CF9 /* close.c in Sources */,
+				08CEA9D226701D7600B4BB6B /* rand.c in Sources */,
 				105534EF1A440FC800627ECB /* config.c in Sources */,
 				10E299581A67E68500701AA6 /* scheduler.c in Sources */,
 				107923D319A3217300C52AD6 /* util.c in Sources */,
@@ -3291,6 +3360,7 @@
 				10AA2EA31A88090B004322AC /* url.c in Sources */,
 				E9316EEA24417EAA00C9C127 /* huffman.c in Sources */,
 				1024A4001D23606300EB13F1 /* cache_digests.c in Sources */,
+				08CEA9D8267AF0EB00B4BB6B /* self_trace.c in Sources */,
 				E987E5F61FD8C04D00DE4346 /* entropy_encode.c in Sources */,
 				105534C91A3BB41C00627ECB /* proxy.c in Sources */,
 				E93C7F9A22701806007BF39A /* frame.c in Sources */,
@@ -3308,6 +3378,7 @@
 				E987E5FC1FD8C04D00DE4346 /* utf8_util.c in Sources */,
 				E93BB58F25DE3988009C24D8 /* pembase64.c in Sources */,
 				107D4D491B5880BC004A9B21 /* parser.c in Sources */,
+				08CEA9DC267B0E3B00B4BB6B /* self_trace.c in Sources */,
 				104B9A481A5F9472009EEE64 /* headers.c in Sources */,
 				E987E5F11FD8C04D00DE4346 /* cluster.c in Sources */,
 				E987E5F81FD8C04D00DE4346 /* literal_cost.c in Sources */,
@@ -3336,6 +3407,7 @@
 				E987E5F21FD8C04D00DE4346 /* compress_fragment_two_pass.c in Sources */,
 				E901C436213E52CA00D17C93 /* openssl.c in Sources */,
 				E901C407213E1C5400D17C93 /* ranges.c in Sources */,
+				08CEA9D526701D8E00B4BB6B /* rand.c in Sources */,
 				107D4D4A1B5880BC004A9B21 /* reader.c in Sources */,
 				E980423E22463057008B9745 /* defaults.c in Sources */,
 				1079244819A3265C00C52AD6 /* connection.c in Sources */,
@@ -3413,6 +3485,7 @@
 				E987E5D51FD7BEB500DE4346 /* backward_references_hq.c in Sources */,
 				E987E5D71FD7BEB500DE4346 /* bit_cost.c in Sources */,
 				E9708B631E52C80F0029E0A5 /* headers_util.c in Sources */,
+				08CEA9DD267B0E3B00B4BB6B /* self_trace.c in Sources */,
 				E9316EE924417EAA00C9C127 /* decode.c in Sources */,
 				E9708B541E52C7EE0029E0A5 /* configurator.c in Sources */,
 				E93C7F98226EBEC9007BF39A /* frame.c in Sources */,
@@ -3443,6 +3516,7 @@
 				E9708B1E1E49BAC10029E0A5 /* blockwise.c in Sources */,
 				E9581B9E22F0022D00299E8A /* random.c in Sources */,
 				E987E5D41FD7BE9F00DE4346 /* histogram.c in Sources */,
+				08CEA9D9267AF0EB00B4BB6B /* self_trace.c in Sources */,
 				08F320DE1E7A9CB80038FA5A /* async.c in Sources */,
 				E987E5DA1FD7BEB500DE4346 /* compress_fragment_two_pass.c in Sources */,
 				E987E5D11FD7BE9200DE4346 /* metablock.c in Sources */,
@@ -3518,6 +3592,7 @@
 				E9708B841E52C8560029E0A5 /* casper.c in Sources */,
 				E9581B9B22F001F300299E8A /* x25519.c in Sources */,
 				E987E5CF1FD7BE8800DE4346 /* utf8_util.c in Sources */,
+				08CEA9D326701D7600B4BB6B /* rand.c in Sources */,
 				107E34131C7FAC2000AEF5F8 /* brotli.c in Sources */,
 				E9708B4F1E52C7E50029E0A5 /* string.c in Sources */,
 				E98403CE2485172E00E3A6B1 /* remote_cid.c in Sources */,
@@ -3618,17 +3693,8 @@
 					"DEBUG=1",
 					"$(inherited)",
 				);
-				HEADER_SEARCH_PATHS = (
-					/usr/local/opt/openssl/include,
-					"$(inherited)",
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
-					/usr/local/include,
-					include,
-				);
-				LIBRARY_SEARCH_PATHS = (
-					/usr/local/opt/openssl/lib,
-					/usr/local/lib,
-				);
+				HEADER_SEARCH_PATHS = "$(inherited)";
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				OTHER_CFLAGS = "";
 				OTHER_LDFLAGS = (
 					"-lssl",
@@ -3646,17 +3712,8 @@
 					"DEBUG=1",
 					"$(inherited)",
 				);
-				HEADER_SEARCH_PATHS = (
-					/usr/local/opt/openssl/include,
-					"$(inherited)",
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
-					/usr/local/include,
-					include,
-				);
-				LIBRARY_SEARCH_PATHS = (
-					/usr/local/opt/openssl/lib,
-					/usr/local/lib,
-				);
+				HEADER_SEARCH_PATHS = "$(inherited)";
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				OTHER_CFLAGS = "";
 				OTHER_LDFLAGS = (
 					"-lssl",
@@ -3671,17 +3728,8 @@
 		08790E0E1D8BD7F100A04BC1 /* evloop-release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				HEADER_SEARCH_PATHS = (
-					/usr/local/opt/openssl/include,
-					"$(inherited)",
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
-					/usr/local/include,
-					include,
-				);
-				LIBRARY_SEARCH_PATHS = (
-					/usr/local/opt/openssl/lib,
-					/usr/local/lib,
-				);
+				HEADER_SEARCH_PATHS = "$(inherited)";
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				OTHER_CFLAGS = "";
 				OTHER_LDFLAGS = (
 					"-lssl",
@@ -3695,17 +3743,8 @@
 		08790E0F1D8BD7F100A04BC1 /* libuv-release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				HEADER_SEARCH_PATHS = (
-					/usr/local/opt/openssl/include,
-					"$(inherited)",
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
-					/usr/local/include,
-					include,
-				);
-				LIBRARY_SEARCH_PATHS = (
-					/usr/local/opt/openssl/lib,
-					/usr/local/lib,
-				);
+				HEADER_SEARCH_PATHS = "$(inherited)";
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				OTHER_CFLAGS = "";
 				OTHER_LDFLAGS = (
 					"-lssl",
@@ -3724,17 +3763,8 @@
 					"DEBUG=1",
 					"$(inherited)",
 				);
-				HEADER_SEARCH_PATHS = (
-					/usr/local/opt/openssl/include,
-					"$(inherited)",
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
-					/usr/local/include,
-					include,
-				);
-				LIBRARY_SEARCH_PATHS = (
-					/usr/local/opt/openssl/lib,
-					/usr/local/lib,
-				);
+				HEADER_SEARCH_PATHS = "$(inherited)";
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				OTHER_CFLAGS = "";
 				OTHER_LDFLAGS = (
 					"-lssl",
@@ -3752,17 +3782,8 @@
 					"DEBUG=1",
 					"$(inherited)",
 				);
-				HEADER_SEARCH_PATHS = (
-					/usr/local/opt/openssl/include,
-					"$(inherited)",
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
-					/usr/local/include,
-					include,
-				);
-				LIBRARY_SEARCH_PATHS = (
-					/usr/local/opt/openssl/lib,
-					/usr/local/lib,
-				);
+				HEADER_SEARCH_PATHS = "$(inherited)";
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				OTHER_CFLAGS = "";
 				OTHER_LDFLAGS = (
 					"-lssl",
@@ -3777,17 +3798,8 @@
 		08819C2A218C9FA90057ED23 /* evloop-release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				HEADER_SEARCH_PATHS = (
-					/usr/local/opt/openssl/include,
-					"$(inherited)",
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
-					/usr/local/include,
-					include,
-				);
-				LIBRARY_SEARCH_PATHS = (
-					/usr/local/opt/openssl/lib,
-					/usr/local/lib,
-				);
+				HEADER_SEARCH_PATHS = "$(inherited)";
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				OTHER_CFLAGS = "";
 				OTHER_LDFLAGS = (
 					"-lssl",
@@ -3801,17 +3813,8 @@
 		08819C2B218C9FA90057ED23 /* libuv-release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				HEADER_SEARCH_PATHS = (
-					/usr/local/opt/openssl/include,
-					"$(inherited)",
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
-					/usr/local/include,
-					include,
-				);
-				LIBRARY_SEARCH_PATHS = (
-					/usr/local/opt/openssl/lib,
-					/usr/local/lib,
-				);
+				HEADER_SEARCH_PATHS = "$(inherited)";
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				OTHER_CFLAGS = "";
 				OTHER_LDFLAGS = (
 					"-lssl",
@@ -3849,6 +3852,7 @@
 					"DEBUG=1",
 					"H2O_USE_MRUBY=1",
 					"H2O_ROOT=/mydev/h2o",
+					"kh_inline=\"inline __unused\"",
 					"$(inherited)",
 				);
 				GCC_SYMBOLS_PRIVATE_EXTERN = NO;
@@ -3859,9 +3863,23 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				HEADER_SEARCH_PATHS = (
-					deps/dcc/include,
+					include,
+					deps/brotli/c/include,
+					"deps/hiredis/**",
+					deps/mruby/include,
+					"deps/mruby-input-stream/src",
 					deps/picotls/include,
 					deps/quicly/include,
+					deps/yaml/include,
+					/usr/local/opt/openssl/include,
+					/opt/homebrew/opt/openssl/include,
+					/opt/homebrew/include,
+				);
+				LIBRARY_SEARCH_PATHS = (
+					build/default/mruby/host/lib,
+					/usr/local/opt/openssl/lib,
+					/opt/homebrew/opt/openssl/lib,
+					/opt/homebrew/lib,
 				);
 				MACOSX_DEPLOYMENT_TARGET = 10.9;
 				ONLY_ACTIVE_ARCH = YES;
@@ -3878,6 +3896,7 @@
 					"$(inherited)",
 					"PICOTLS_USE_DTRACE=1",
 					"QUICLY_USE_DTRACE=1",
+					"QUICLY_USE_TRACER=1",
 					"H2O_USE_DTRACE=1",
 				);
 				HEADER_SEARCH_PATHS = (
@@ -3886,7 +3905,7 @@
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
 					/usr/local/include,
 				);
-				LIBRARY_SEARCH_PATHS = /usr/local/opt/openssl/lib;
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
 			name = "libuv-debug";
@@ -3900,19 +3919,8 @@
 					"$(inherited)",
 					"H2O_USE_BROTLI=1",
 				);
-				HEADER_SEARCH_PATHS = (
-					/usr/local/opt/openssl/include,
-					deps/brotli/c/include,
-					deps/yaml/include,
-					"$(inherited)",
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
-					/usr/local/include,
-					include,
-				);
-				LIBRARY_SEARCH_PATHS = (
-					/usr/local/opt/openssl/lib,
-					/usr/local/lib,
-				);
+				HEADER_SEARCH_PATHS = "$(inherited)";
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				OTHER_LDFLAGS = (
 					"-lssl",
 					"-lcrypto",
@@ -3930,17 +3938,8 @@
 					"DEBUG=1",
 					"$(inherited)",
 				);
-				HEADER_SEARCH_PATHS = (
-					/usr/local/opt/openssl/include,
-					"$(inherited)",
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
-					/usr/local/include,
-					include,
-				);
-				LIBRARY_SEARCH_PATHS = (
-					/usr/local/opt/openssl/lib,
-					/usr/local/lib,
-				);
+				HEADER_SEARCH_PATHS = "$(inherited)";
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				OTHER_CFLAGS = "";
 				OTHER_LDFLAGS = (
 					"-lssl",
@@ -3959,17 +3958,8 @@
 					"DEBUG=1",
 					"$(inherited)",
 				);
-				HEADER_SEARCH_PATHS = (
-					/usr/local/opt/openssl/include,
-					"$(inherited)",
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
-					/usr/local/include,
-					include,
-				);
-				LIBRARY_SEARCH_PATHS = (
-					/usr/local/opt/openssl/lib,
-					/usr/local/lib,
-				);
+				HEADER_SEARCH_PATHS = "$(inherited)";
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				OTHER_LDFLAGS = (
 					"-lwslay",
 					"-lssl",
@@ -4006,6 +3996,7 @@
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"H2O_USE_MRUBY=1",
 					"H2O_ROOT=/mydev/h2o",
+					"kh_inline=\"inline __unused\"",
 					"$(inherited)",
 				);
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
@@ -4015,11 +4006,26 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				HEADER_SEARCH_PATHS = (
-					deps/dcc/include,
+					include,
+					deps/brotli/c/include,
+					"deps/hiredis/**",
+					deps/mruby/include,
+					"deps/mruby-input-stream/src",
 					deps/picotls/include,
 					deps/quicly/include,
+					deps/yaml/include,
+					/usr/local/opt/openssl/include,
+					/opt/homebrew/opt/openssl/include,
+					/opt/homebrew/include,
+				);
+				LIBRARY_SEARCH_PATHS = (
+					build/default/mruby/host/lib,
+					/usr/local/opt/openssl/lib,
+					/opt/homebrew/opt/openssl/lib,
+					/opt/homebrew/lib,
 				);
 				MACOSX_DEPLOYMENT_TARGET = 10.9;
+				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = macosx;
 			};
 			name = "libuv-release";
@@ -4033,6 +4039,7 @@
 					"$(inherited)",
 					"PICOTLS_USE_DTRACE=1",
 					"QUICLY_USE_DTRACE=1",
+					"QUICLY_USE_TRACER=1",
 					"H2O_USE_DTRACE=1",
 				);
 				HEADER_SEARCH_PATHS = (
@@ -4041,7 +4048,7 @@
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
 					/usr/local/include,
 				);
-				LIBRARY_SEARCH_PATHS = /usr/local/opt/openssl/lib;
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
 			name = "libuv-release";
@@ -4053,19 +4060,8 @@
 					"H2O_UNITTEST=1",
 					"H2O_USE_BROTLI=1",
 				);
-				HEADER_SEARCH_PATHS = (
-					/usr/local/opt/openssl/include,
-					deps/brotli/c/include,
-					deps/yaml/include,
-					"$(inherited)",
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
-					/usr/local/include,
-					include,
-				);
-				LIBRARY_SEARCH_PATHS = (
-					/usr/local/opt/openssl/lib,
-					/usr/local/lib,
-				);
+				HEADER_SEARCH_PATHS = "$(inherited)";
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				OTHER_LDFLAGS = (
 					"-lssl",
 					"-lcrypto",
@@ -4079,17 +4075,8 @@
 		1065E71719BF754100686E72 /* libuv-release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				HEADER_SEARCH_PATHS = (
-					/usr/local/opt/openssl/include,
-					"$(inherited)",
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
-					/usr/local/include,
-					include,
-				);
-				LIBRARY_SEARCH_PATHS = (
-					/usr/local/opt/openssl/lib,
-					/usr/local/lib,
-				);
+				HEADER_SEARCH_PATHS = "$(inherited)";
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				OTHER_CFLAGS = "";
 				OTHER_LDFLAGS = (
 					"-lssl",
@@ -4104,17 +4091,8 @@
 		1065E71819BF754100686E72 /* libuv-release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				HEADER_SEARCH_PATHS = (
-					/usr/local/opt/openssl/include,
-					"$(inherited)",
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
-					/usr/local/include,
-					include,
-				);
-				LIBRARY_SEARCH_PATHS = (
-					/usr/local/opt/openssl/lib,
-					/usr/local/lib,
-				);
+				HEADER_SEARCH_PATHS = "$(inherited)";
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				OTHER_LDFLAGS = (
 					"-lwslay",
 					"-lssl",
@@ -4154,6 +4132,7 @@
 					"H2O_USE_LIBUV=0",
 					"H2O_ROOT=/mydev/h2o",
 					"$(inherited)",
+					"kh_inline=\"inline __unused\"",
 				);
 				GCC_SYMBOLS_PRIVATE_EXTERN = NO;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
@@ -4163,9 +4142,23 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				HEADER_SEARCH_PATHS = (
-					deps/dcc/include,
+					include,
+					deps/brotli/c/include,
+					"deps/hiredis/**",
+					deps/mruby/include,
+					"deps/mruby-input-stream/src",
 					deps/picotls/include,
 					deps/quicly/include,
+					deps/yaml/include,
+					/usr/local/opt/openssl/include,
+					/opt/homebrew/opt/openssl/include,
+					/opt/homebrew/include,
+				);
+				LIBRARY_SEARCH_PATHS = (
+					build/default/mruby/host/lib,
+					/usr/local/opt/openssl/lib,
+					/opt/homebrew/opt/openssl/lib,
+					/opt/homebrew/lib,
 				);
 				MACOSX_DEPLOYMENT_TARGET = 10.9;
 				ONLY_ACTIVE_ARCH = YES;
@@ -4199,6 +4192,7 @@
 					"H2O_USE_MRUBY=1",
 					"H2O_USE_LIBUV=0",
 					"H2O_ROOT=/mydev/h2o",
+					"kh_inline=\"inline __unused\"",
 					"$(inherited)",
 				);
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
@@ -4208,11 +4202,26 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				HEADER_SEARCH_PATHS = (
-					deps/dcc/include,
+					include,
+					deps/brotli/c/include,
+					"deps/hiredis/**",
+					deps/mruby/include,
+					"deps/mruby-input-stream/src",
 					deps/picotls/include,
 					deps/quicly/include,
+					deps/yaml/include,
+					/usr/local/opt/openssl/include,
+					/opt/homebrew/opt/openssl/include,
+					/opt/homebrew/include,
+				);
+				LIBRARY_SEARCH_PATHS = (
+					build/default/mruby/host/lib,
+					/usr/local/opt/openssl/lib,
+					/opt/homebrew/opt/openssl/lib,
+					/opt/homebrew/lib,
 				);
 				MACOSX_DEPLOYMENT_TARGET = 10.9;
+				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = macosx;
 			};
 			name = "evloop-release";
@@ -4226,6 +4235,7 @@
 					"$(inherited)",
 					"PICOTLS_USE_DTRACE=1",
 					"QUICLY_USE_DTRACE=1",
+					"QUICLY_USE_TRACER=1",
 					"H2O_USE_DTRACE=1",
 				);
 				HEADER_SEARCH_PATHS = (
@@ -4234,7 +4244,7 @@
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
 					/usr/local/include,
 				);
-				LIBRARY_SEARCH_PATHS = /usr/local/opt/openssl/lib;
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
 			name = "evloop-debug";
@@ -4248,6 +4258,7 @@
 					"$(inherited)",
 					"PICOTLS_USE_DTRACE=1",
 					"QUICLY_USE_DTRACE=1",
+					"QUICLY_USE_TRACER=1",
 					"H2O_USE_DTRACE=1",
 				);
 				HEADER_SEARCH_PATHS = (
@@ -4256,7 +4267,7 @@
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
 					/usr/local/include,
 				);
-				LIBRARY_SEARCH_PATHS = /usr/local/opt/openssl/lib;
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
 			name = "evloop-release";
@@ -4268,17 +4279,8 @@
 					"DEBUG=1",
 					"$(inherited)",
 				);
-				HEADER_SEARCH_PATHS = (
-					/usr/local/opt/openssl/include,
-					"$(inherited)",
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
-					/usr/local/include,
-					include,
-				);
-				LIBRARY_SEARCH_PATHS = (
-					/usr/local/opt/openssl/lib,
-					/usr/local/lib,
-				);
+				HEADER_SEARCH_PATHS = "$(inherited)";
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				OTHER_CFLAGS = "";
 				OTHER_LDFLAGS = (
 					"-lssl",
@@ -4292,17 +4294,8 @@
 		107923E119A321F400C52AD6 /* evloop-release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				HEADER_SEARCH_PATHS = (
-					/usr/local/opt/openssl/include,
-					"$(inherited)",
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
-					/usr/local/include,
-					include,
-				);
-				LIBRARY_SEARCH_PATHS = (
-					/usr/local/opt/openssl/lib,
-					/usr/local/lib,
-				);
+				HEADER_SEARCH_PATHS = "$(inherited)";
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				OTHER_CFLAGS = "";
 				OTHER_LDFLAGS = (
 					"-lssl",
@@ -4320,17 +4313,8 @@
 					"DEBUG=1",
 					"$(inherited)",
 				);
-				HEADER_SEARCH_PATHS = (
-					/usr/local/opt/openssl/include,
-					"$(inherited)",
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
-					/usr/local/include,
-					include,
-				);
-				LIBRARY_SEARCH_PATHS = (
-					/usr/local/opt/openssl/lib,
-					/usr/local/lib,
-				);
+				HEADER_SEARCH_PATHS = "$(inherited)";
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				OTHER_LDFLAGS = (
 					"-lwslay",
 					"-lssl",
@@ -4344,17 +4328,8 @@
 		1079240C19A3247A00C52AD6 /* evloop-release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				HEADER_SEARCH_PATHS = (
-					/usr/local/opt/openssl/include,
-					"$(inherited)",
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
-					/usr/local/include,
-					include,
-				);
-				LIBRARY_SEARCH_PATHS = (
-					/usr/local/opt/openssl/lib,
-					/usr/local/lib,
-				);
+				HEADER_SEARCH_PATHS = "$(inherited)";
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				OTHER_LDFLAGS = (
 					"-lwslay",
 					"-lssl",
@@ -4374,19 +4349,8 @@
 					"$(inherited)",
 					"H2O_USE_BROTLI=1",
 				);
-				HEADER_SEARCH_PATHS = (
-					/usr/local/opt/openssl/include,
-					deps/brotli/c/include,
-					deps/yaml/include,
-					"$(inherited)",
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
-					/usr/local/include,
-					include,
-				);
-				LIBRARY_SEARCH_PATHS = (
-					/usr/local/opt/openssl/lib,
-					/usr/local/lib,
-				);
+				HEADER_SEARCH_PATHS = "$(inherited)";
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				OTHER_LDFLAGS = (
 					"-lssl",
 					"-lcrypto",
@@ -4404,19 +4368,8 @@
 					"H2O_USE_LIBUV=0",
 					"H2O_USE_BROTLI=1",
 				);
-				HEADER_SEARCH_PATHS = (
-					/usr/local/opt/openssl/include,
-					deps/brotli/c/include,
-					deps/yaml/include,
-					"$(inherited)",
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
-					/usr/local/include,
-					include,
-				);
-				LIBRARY_SEARCH_PATHS = (
-					/usr/local/opt/openssl/lib,
-					/usr/local/lib,
-				);
+				HEADER_SEARCH_PATHS = "$(inherited)";
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				OTHER_LDFLAGS = (
 					"-lssl",
 					"-lcrypto",
@@ -4433,17 +4386,8 @@
 					"DEBUG=1",
 					"$(inherited)",
 				);
-				HEADER_SEARCH_PATHS = (
-					/usr/local/opt/openssl/include,
-					"$(inherited)",
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
-					/usr/local/include,
-					include,
-				);
-				LIBRARY_SEARCH_PATHS = (
-					/usr/local/opt/openssl/lib,
-					/usr/local/lib,
-				);
+				HEADER_SEARCH_PATHS = "$(inherited)";
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				OTHER_CFLAGS = "";
 				OTHER_LDFLAGS = (
 					"-lssl",
@@ -4461,17 +4405,8 @@
 					"DEBUG=1",
 					"$(inherited)",
 				);
-				HEADER_SEARCH_PATHS = (
-					/usr/local/opt/openssl/include,
-					"$(inherited)",
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
-					/usr/local/include,
-					include,
-				);
-				LIBRARY_SEARCH_PATHS = (
-					/usr/local/opt/openssl/lib,
-					/usr/local/lib,
-				);
+				HEADER_SEARCH_PATHS = "$(inherited)";
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				OTHER_CFLAGS = "";
 				OTHER_LDFLAGS = (
 					"-lssl",
@@ -4486,17 +4421,8 @@
 		10D0904F19F0CA9C0043D458 /* evloop-release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				HEADER_SEARCH_PATHS = (
-					/usr/local/opt/openssl/include,
-					"$(inherited)",
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
-					/usr/local/include,
-					include,
-				);
-				LIBRARY_SEARCH_PATHS = (
-					/usr/local/opt/openssl/lib,
-					/usr/local/lib,
-				);
+				HEADER_SEARCH_PATHS = "$(inherited)";
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				OTHER_CFLAGS = "";
 				OTHER_LDFLAGS = (
 					"-lssl",
@@ -4510,17 +4436,8 @@
 		10D0905019F0CA9C0043D458 /* libuv-release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				HEADER_SEARCH_PATHS = (
-					/usr/local/opt/openssl/include,
-					"$(inherited)",
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
-					/usr/local/include,
-					include,
-				);
-				LIBRARY_SEARCH_PATHS = (
-					/usr/local/opt/openssl/lib,
-					/usr/local/lib,
-				);
+				HEADER_SEARCH_PATHS = "$(inherited)";
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				OTHER_CFLAGS = "";
 				OTHER_LDFLAGS = (
 					"-lssl",
@@ -4539,17 +4456,8 @@
 					"DEBUG=1",
 					"$(inherited)",
 				);
-				HEADER_SEARCH_PATHS = (
-					/usr/local/opt/openssl/include,
-					"$(inherited)",
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
-					/usr/local/include,
-					include,
-				);
-				LIBRARY_SEARCH_PATHS = (
-					/usr/local/opt/openssl/lib,
-					/usr/local/lib,
-				);
+				HEADER_SEARCH_PATHS = "$(inherited)";
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				OTHER_CFLAGS = "";
 				OTHER_LDFLAGS = (
 					"-lssl",
@@ -4567,17 +4475,8 @@
 					"DEBUG=1",
 					"$(inherited)",
 				);
-				HEADER_SEARCH_PATHS = (
-					/usr/local/opt/openssl/include,
-					"$(inherited)",
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
-					/usr/local/include,
-					include,
-				);
-				LIBRARY_SEARCH_PATHS = (
-					/usr/local/opt/openssl/lib,
-					/usr/local/lib,
-				);
+				HEADER_SEARCH_PATHS = "$(inherited)";
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				OTHER_CFLAGS = "";
 				OTHER_LDFLAGS = (
 					"-lssl",
@@ -4592,17 +4491,8 @@
 		10D0906719F38B2E0043D458 /* evloop-release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				HEADER_SEARCH_PATHS = (
-					/usr/local/opt/openssl/include,
-					"$(inherited)",
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
-					/usr/local/include,
-					include,
-				);
-				LIBRARY_SEARCH_PATHS = (
-					/usr/local/opt/openssl/lib,
-					/usr/local/lib,
-				);
+				HEADER_SEARCH_PATHS = "$(inherited)";
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				OTHER_CFLAGS = "";
 				OTHER_LDFLAGS = (
 					"-lssl",
@@ -4616,17 +4506,8 @@
 		10D0906819F38B2E0043D458 /* libuv-release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				HEADER_SEARCH_PATHS = (
-					/usr/local/opt/openssl/include,
-					"$(inherited)",
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
-					/usr/local/include,
-					include,
-				);
-				LIBRARY_SEARCH_PATHS = (
-					/usr/local/opt/openssl/lib,
-					/usr/local/lib,
-				);
+				HEADER_SEARCH_PATHS = "$(inherited)";
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				OTHER_CFLAGS = "";
 				OTHER_LDFLAGS = (
 					"-lssl",
@@ -4645,17 +4526,8 @@
 					"DEBUG=1",
 					"$(inherited)",
 				);
-				HEADER_SEARCH_PATHS = (
-					"$(inherited)",
-					/usr/local/opt/openssl/include,
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
-					/usr/local/include,
-					include,
-				);
-				LIBRARY_SEARCH_PATHS = (
-					/usr/local/opt/openssl/lib,
-					/usr/local/lib,
-				);
+				HEADER_SEARCH_PATHS = "$(inherited)";
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				OTHER_CFLAGS = "";
 				OTHER_LDFLAGS = (
 					"-lssl",
@@ -4673,17 +4545,8 @@
 					"DEBUG=1",
 					"$(inherited)",
 				);
-				HEADER_SEARCH_PATHS = (
-					"$(inherited)",
-					/usr/local/opt/openssl/include,
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
-					/usr/local/include,
-					include,
-				);
-				LIBRARY_SEARCH_PATHS = (
-					/usr/local/opt/openssl/lib,
-					/usr/local/lib,
-				);
+				HEADER_SEARCH_PATHS = "$(inherited)";
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				OTHER_CFLAGS = "";
 				OTHER_LDFLAGS = (
 					"-lssl",
@@ -4698,17 +4561,8 @@
 		10EA45DD1D0949BF00769A2B /* evloop-release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				HEADER_SEARCH_PATHS = (
-					"$(inherited)",
-					/usr/local/opt/openssl/include,
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
-					/usr/local/include,
-					include,
-				);
-				LIBRARY_SEARCH_PATHS = (
-					/usr/local/opt/openssl/lib,
-					/usr/local/lib,
-				);
+				HEADER_SEARCH_PATHS = "$(inherited)";
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				OTHER_CFLAGS = "";
 				OTHER_LDFLAGS = (
 					"-lssl",
@@ -4722,17 +4576,8 @@
 		10EA45DE1D0949BF00769A2B /* libuv-release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				HEADER_SEARCH_PATHS = (
-					"$(inherited)",
-					/usr/local/opt/openssl/include,
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
-					/usr/local/include,
-					include,
-				);
-				LIBRARY_SEARCH_PATHS = (
-					/usr/local/opt/openssl/lib,
-					/usr/local/lib,
-				);
+				HEADER_SEARCH_PATHS = "$(inherited)";
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				OTHER_CFLAGS = "";
 				OTHER_LDFLAGS = (
 					"-lssl",
@@ -4752,26 +4597,12 @@
 					"H2O_USE_PICOTLS=1",
 					"PICOTLS_USE_DTRACE=1",
 					"QUICLY_USE_DTRACE=1",
+					"QUICLY_USE_TRACER=1",
 					"H2O_USE_DTRACE=1",
 					"H2O_USE_BROTLI=1",
 				);
-				HEADER_SEARCH_PATHS = (
-					"$(inherited)",
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
-					deps/brotli/c/include,
-					"deps/hiredis/**",
-					deps/yaml/include,
-					deps/mruby/include,
-					"deps/mruby-input-stream/src",
-					/usr/local/opt/openssl/include,
-					/usr/local/include,
-					include,
-				);
-				LIBRARY_SEARCH_PATHS = (
-					build/default/mruby/host/lib,
-					/usr/local/opt/openssl/lib,
-					/usr/local/lib,
-				);
+				HEADER_SEARCH_PATHS = "$(inherited)";
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				OTHER_CFLAGS = "";
 				OTHER_LDFLAGS = (
 					"-lmruby",
@@ -4790,23 +4621,8 @@
 					"DEBUG=1",
 					"$(inherited)",
 				);
-				HEADER_SEARCH_PATHS = (
-					"$(inherited)",
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
-					deps/brotli/c/include,
-					"deps/hiredis/**",
-					deps/yaml/include,
-					deps/mruby/include,
-					"deps/mruby-input-stream/src",
-					/usr/local/opt/openssl/include,
-					/usr/local/include,
-					include,
-				);
-				LIBRARY_SEARCH_PATHS = (
-					build/default/mruby/host/lib,
-					/usr/local/opt/openssl/lib,
-					/usr/local/lib,
-				);
+				HEADER_SEARCH_PATHS = "$(inherited)";
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				OTHER_CFLAGS = "";
 				OTHER_LDFLAGS = (
 					"-lssl",
@@ -4826,26 +4642,12 @@
 					"H2O_USE_PICOTLS=1",
 					"PICOTLS_USE_DTRACE=1",
 					"QUICLY_USE_DTRACE=1",
+					"QUICLY_USE_TRACER=1",
 					"H2O_USE_DTRACE=1",
 					"H2O_USE_BROTLI=1",
 				);
-				HEADER_SEARCH_PATHS = (
-					"$(inherited)",
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
-					deps/brotli/c/include,
-					"deps/hiredis/**",
-					deps/yaml/include,
-					deps/mruby/include,
-					"deps/mruby-input-stream/src",
-					/usr/local/opt/openssl/include,
-					/usr/local/include,
-					include,
-				);
-				LIBRARY_SEARCH_PATHS = (
-					build/default/mruby/host/lib,
-					/usr/local/opt/openssl/lib,
-					/usr/local/lib,
-				);
+				HEADER_SEARCH_PATHS = "$(inherited)";
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				OTHER_CFLAGS = "";
 				OTHER_LDFLAGS = (
 					"-lmruby",
@@ -4860,23 +4662,8 @@
 		10F417D219C1907B00B6E31A /* libuv-release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				HEADER_SEARCH_PATHS = (
-					"$(inherited)",
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
-					deps/brotli/c/include,
-					"deps/hiredis/**",
-					deps/yaml/include,
-					deps/mruby/include,
-					"deps/mruby-input-stream/src",
-					/usr/local/opt/openssl/include,
-					/usr/local/include,
-					include,
-				);
-				LIBRARY_SEARCH_PATHS = (
-					build/default/mruby/host/lib,
-					/usr/local/opt/openssl/lib,
-					/usr/local/lib,
-				);
+				HEADER_SEARCH_PATHS = "$(inherited)";
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				OTHER_CFLAGS = "";
 				OTHER_LDFLAGS = (
 					"-lssl",
@@ -4895,18 +4682,8 @@
 					"DEBUG=1",
 					"$(inherited)",
 				);
-				HEADER_SEARCH_PATHS = (
-					/usr/local/opt/openssl/include,
-					deps/yaml/include,
-					"$(inherited)",
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
-					/usr/local/include,
-					include,
-				);
-				LIBRARY_SEARCH_PATHS = (
-					/usr/local/opt/openssl/lib,
-					/usr/local/lib,
-				);
+				HEADER_SEARCH_PATHS = "$(inherited)";
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				OTHER_LDFLAGS = (
 					"-lssl",
 					"-lcrypto",
@@ -4923,18 +4700,8 @@
 					"DEBUG=1",
 					"$(inherited)",
 				);
-				HEADER_SEARCH_PATHS = (
-					/usr/local/opt/openssl/include,
-					deps/yaml/include,
-					"$(inherited)",
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
-					/usr/local/include,
-					include,
-				);
-				LIBRARY_SEARCH_PATHS = (
-					/usr/local/opt/openssl/lib,
-					/usr/local/lib,
-				);
+				HEADER_SEARCH_PATHS = "$(inherited)";
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				OTHER_LDFLAGS = (
 					"-lssl",
 					"-lcrypto",
@@ -4949,18 +4716,8 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				GCC_PREPROCESSOR_DEFINITIONS = "H2O_USE_LIBUV=0";
-				HEADER_SEARCH_PATHS = (
-					/usr/local/opt/openssl/include,
-					deps/yaml/include,
-					"$(inherited)",
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
-					/usr/local/include,
-					include,
-				);
-				LIBRARY_SEARCH_PATHS = (
-					/usr/local/opt/openssl/lib,
-					/usr/local/lib,
-				);
+				HEADER_SEARCH_PATHS = "$(inherited)";
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				OTHER_LDFLAGS = (
 					"-lssl",
 					"-lcrypto",
@@ -4974,18 +4731,8 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				GCC_PREPROCESSOR_DEFINITIONS = "";
-				HEADER_SEARCH_PATHS = (
-					/usr/local/opt/openssl/include,
-					deps/yaml/include,
-					"$(inherited)",
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
-					/usr/local/include,
-					include,
-				);
-				LIBRARY_SEARCH_PATHS = (
-					/usr/local/opt/openssl/lib,
-					/usr/local/lib,
-				);
+				HEADER_SEARCH_PATHS = "$(inherited)";
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				OTHER_LDFLAGS = (
 					"-lssl",
 					"-lcrypto",

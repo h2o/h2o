@@ -273,7 +273,8 @@ h2o_socket_t *h2o_uv_socket_create(uv_handle_t *handle, uv_close_cb close_cb)
     sock->handle = handle;
     sock->close_cb = close_cb;
     sock->handle->data = sock;
-    if (h2o_socket_ebpf_lookup(sock->handle->loop, h2o_socket_ebpf_init_key, &sock->super).skip_tracing)
+    uint64_t flags = h2o_socket_ebpf_lookup_flags(sock->handle->loop, h2o_socket_ebpf_init_key, &sock->super);
+    if ((flags & H2O_EBPF_FLAGS_SKIP_TRACING_BIT) != 0)
         sock->super._skip_tracing = 1;
     return &sock->super;
 }
@@ -308,7 +309,7 @@ h2o_socket_t *h2o_socket_connect(h2o_loop_t *loop, struct sockaddr *addr, sockle
     return &sock->super;
 }
 
-socklen_t h2o_socket_getsockname(h2o_socket_t *_sock, struct sockaddr *sa)
+socklen_t get_sockname_uncached(h2o_socket_t *_sock, struct sockaddr *sa)
 {
     struct st_h2o_uv_socket_t *sock = (void *)_sock;
     assert(sock->handle->type == UV_TCP);
@@ -353,7 +354,7 @@ void h2o_timer_unlink(h2o_timer_t *timer)
     timer->is_linked = 0;
     if (timer->uv_timer != NULL) {
         uv_timer_stop(timer->uv_timer);
-        uv_close((uv_handle_t*)timer->uv_timer, (uv_close_cb)free);
+        uv_close((uv_handle_t *)timer->uv_timer, (uv_close_cb)free);
         timer->uv_timer = NULL;
     }
 }

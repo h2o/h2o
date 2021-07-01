@@ -98,8 +98,12 @@ static int check_amount_of_state(quicly_sendstate_t *state)
 {
     size_t num_ranges = state->acked.num_ranges + state->pending.num_ranges;
 
-    /* bail out if number of gaps are small */
-    if (PTLS_LIKELY(num_ranges < 32))
+    /* Bail out if number of gaps are small.
+     * In case of HTTP/3, the worst case is when each HTTP request is received as a separate QUIC packet, and sending a small STREAM
+     * frame carrying a HPACK encoder / decoder in response. If half of those STREAM frames are lost (note: loss of every other
+     * packet can happen during slow start), `num_ranges` can become as large as `request_concurrency * 2`, as each gaps will be
+     * recognized in `acked.num_ranges` and `pending.num_ranges`. */
+    if (PTLS_LIKELY(num_ranges < 256))
         return 0;
 
     /* When there are large number of gaps, make sure that the amount of state retained in quicly is relatively smaller than the
@@ -107,8 +111,8 @@ static int check_amount_of_state(quicly_sendstate_t *state)
      * assumption that the STREAM frames that have been sent are on average at least 512 bytes long, when seeing excess number of
      * gaps. */
     int64_t bytes_buffered = (int64_t)state->size_inflight - (int64_t)state->acked.ranges[0].end;
-    if ((int64_t)num_ranges * 512 > bytes_buffered)
-        return QUICLY_TRANSPORT_ERROR_PROTOCOL_VIOLATION;
+    if ((int64_t)num_ranges * 128 > bytes_buffered)
+        return QUICLY_ERROR_STATE_EXHAUSTION;
 
     return 0;
 }

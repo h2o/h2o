@@ -57,6 +57,7 @@ void test_lib__common__multithread_c(void);
 void test_lib__common__serverutil_c(void);
 void test_lib__common__socket_c(void);
 void test_lib__common__string_c(void);
+void test_lib__common__rand_c(void);
 void test_lib__common__time_c(void);
 void test_lib__common__timerwheel_c(void);
 void test_lib__common__url_c(void);

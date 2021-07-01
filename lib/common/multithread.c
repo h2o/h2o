@@ -324,3 +324,41 @@ void h2o_barrier_destroy(h2o_barrier_t *barrier)
     pthread_mutex_destroy(&barrier->_mutex);
     pthread_cond_destroy(&barrier->_cond);
 }
+
+void h2o_error_reporter__on_timeout(h2o_timer_t *_timer)
+{
+    h2o_error_reporter_t *reporter = H2O_STRUCT_FROM_MEMBER(h2o_error_reporter_t, _timer, _timer);
+
+    pthread_mutex_lock(&reporter->_mutex);
+
+    uint64_t total_successes = __sync_fetch_and_add(&reporter->_total_successes, 0),
+             cur_successes = total_successes - reporter->prev_successes;
+
+    reporter->_report_errors(reporter, total_successes, cur_successes);
+
+    reporter->prev_successes = total_successes;
+    reporter->cur_errors = 0;
+
+    pthread_mutex_unlock(&reporter->_mutex);
+}
+
+uintptr_t h2o_error_reporter_record_error(h2o_loop_t *loop, h2o_error_reporter_t *reporter, uint64_t delay_ticks,
+                                          uintptr_t new_data)
+{
+    uintptr_t old_data;
+
+    pthread_mutex_lock(&reporter->_mutex);
+
+    if (reporter->cur_errors == 0) {
+        reporter->prev_successes = __sync_fetch_and_add_8(&reporter->_total_successes, 0);
+        assert(!h2o_timer_is_linked(&reporter->_timer));
+        h2o_timer_link(loop, delay_ticks, &reporter->_timer);
+    }
+    ++reporter->cur_errors;
+    old_data = reporter->data;
+    reporter->data = new_data;
+
+    pthread_mutex_unlock(&reporter->_mutex);
+
+    return old_data;
+}
