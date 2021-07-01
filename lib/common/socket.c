@@ -632,7 +632,7 @@ static size_t calc_tls_write_size(h2o_socket_t *sock, size_t bufsize)
     switch (sock->_latency_optimization.state) {
     case H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_TBD:
     case H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_DISABLED:
-        recsize = sock->bytes_written < 200 * 1024 ? calc_suggested_tls_payload_size(sock, 1400) : SIZE_MAX;
+        recsize = sock->bytes_written < 64 * 1024 ? calc_suggested_tls_payload_size(sock, 1400) : SIZE_MAX;
         break;
     case H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_DETERMINED:
         sock->_latency_optimization.state = H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_NEEDS_UPDATE;
