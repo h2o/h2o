@@ -157,19 +157,35 @@ static void cubic_on_sent(quicly_cc_t *cc, const quicly_loss_t *loss, uint32_t b
     cc->state.cubic.last_sent_time = now;
 }
 
-static int cubic_on_switch(quicly_cc_t *cc)
-{
-    if (cc->type == &quicly_cc_type_cubic)
-        return 1;
-    return 0;
-}
-
-static void cubic_init(quicly_init_cc_t *self, quicly_cc_t *cc, uint32_t initcwnd, int64_t now)
+static void cubic_reset(quicly_cc_t *cc, uint32_t initcwnd)
 {
     memset(cc, 0, sizeof(quicly_cc_t));
     cc->type = &quicly_cc_type_cubic;
     cc->cwnd = cc->cwnd_initial = cc->cwnd_maximum = initcwnd;
     cc->ssthresh = cc->cwnd_minimum = UINT32_MAX;
+}
+
+static int cubic_on_switch(quicly_cc_t *cc)
+{
+    if (cc->type == &quicly_cc_type_cubic)
+        return 1;
+
+    if (cc->type == &quicly_cc_type_reno || cc->type == &quicly_cc_type_pico) {
+        /* When in slow start, state can be reused as-is; otherwise, restart. */
+        if (cc->cwnd_exiting_slow_start == 0) {
+            cc->type = &quicly_cc_type_cubic;
+        } else {
+            cubic_reset(cc, cc->cwnd_initial);
+        }
+        return 1;
+    }
+
+    return 0;
+}
+
+static void cubic_init(quicly_init_cc_t *self, quicly_cc_t *cc, uint32_t initcwnd, int64_t now)
+{
+    cubic_reset(cc, initcwnd);
 }
 
 quicly_cc_type_t quicly_cc_type_cubic = {

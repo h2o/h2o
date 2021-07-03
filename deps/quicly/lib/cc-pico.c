@@ -72,14 +72,11 @@ static void pico_on_acked(quicly_cc_t *cc, const quicly_loss_t *loss, uint32_t b
 
 static int pico_on_switch(quicly_cc_t *cc)
 {
-    if (cc->type == &quicly_cc_type_pico) {
-        return 1; /* nothing to do */
-    } else if (cc->type == &quicly_cc_type_reno) {
-        cc->type = &quicly_cc_type_pico;
-        return 1;
-    } else {
+    /* switch to reno then rewrite the type */
+    if (!quicly_cc_type_reno.cc_switch(cc))
         return 0;
-    }
+    cc->type = &quicly_cc_type_pico;
+    return 1;
 }
 
 static void pico_init(quicly_init_cc_t *self, quicly_cc_t *cc, uint32_t initcwnd, int64_t now)

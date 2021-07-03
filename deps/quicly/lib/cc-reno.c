@@ -82,6 +82,14 @@ void quicly_cc_reno_on_sent(quicly_cc_t *cc, const quicly_loss_t *loss, uint32_t
     /* Unused */
 }
 
+static void reno_reset(quicly_cc_t *cc, uint32_t initcwnd)
+{
+    memset(cc, 0, sizeof(quicly_cc_t));
+    cc->type = &quicly_cc_type_reno;
+    cc->cwnd = cc->cwnd_initial = cc->cwnd_maximum = initcwnd;
+    cc->ssthresh = cc->cwnd_minimum = UINT32_MAX;
+}
+
 static int reno_on_switch(quicly_cc_t *cc)
 {
     if (cc->type == &quicly_cc_type_reno) {
@@ -89,17 +97,22 @@ static int reno_on_switch(quicly_cc_t *cc)
     } else if (cc->type == &quicly_cc_type_pico) {
         cc->type = &quicly_cc_type_reno;
         return 1;
-    } else {
-        return 0;
+    } else if (cc->type == &quicly_cc_type_cubic) {
+        /* When in slow start, state can be reused as-is; otherwise, restart. */
+        if (cc->cwnd_exiting_slow_start == 0) {
+            cc->type = &quicly_cc_type_reno;
+        } else {
+            reno_reset(cc, cc->cwnd_initial);
+        }
+        return 1;
     }
+
+    return 0;
 }
 
 static void reno_init(quicly_init_cc_t *self, quicly_cc_t *cc, uint32_t initcwnd, int64_t now)
 {
-    memset(cc, 0, sizeof(quicly_cc_t));
-    cc->type = &quicly_cc_type_reno;
-    cc->cwnd = cc->cwnd_initial = cc->cwnd_maximum = initcwnd;
-    cc->ssthresh = cc->cwnd_minimum = UINT32_MAX;
+    reno_reset(cc, initcwnd);
 }
 
 quicly_cc_type_t quicly_cc_type_reno = {"reno",
