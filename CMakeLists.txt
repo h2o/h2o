@@ -242,7 +242,7 @@ IF (PKG_CONFIG_FOUND)
     ENDIF (BROTLI_DEC_FOUND AND BROTLI_ENC_FOUND)
 ENDIF (PKG_CONFIG_FOUND)
 
-SET(CC_WARNING_FLAGS "-Wall -Wno-unused-value -Wno-unused-function -Wno-nullability-completeness -Wno-expansion-to-defined")
+SET(CC_WARNING_FLAGS "-Wall -Wno-unused-value -Wno-unused-function -Wno-nullability-completeness -Wno-expansion-to-defined -Werror=implicit-function-declaration")
 IF ("${CMAKE_C_COMPILER_ID}" STREQUAL "GNU")
     IF (NOT ("${CMAKE_C_COMPILER_VERSION}" VERSION_LESS "4.6"))
         SET(CC_WARNING_FLAGS "${CC_WARNING_FLAGS} -Wno-unused-but-set-variable")
@@ -556,6 +556,24 @@ SET(FUZZED_SOURCE_FILES
     ${LIBYAML_SOURCE_FILES}
     ${BROTLI_SOURCE_FILES})
 
+# Remove some of quicly files for fuzzing to allow the mockup library to come in
+LIST(REMOVE_ITEM FUZZED_SOURCE_FILES
+    deps/quicly/lib/cc-cubic.c
+    deps/quicly/lib/frame.c
+    deps/quicly/lib/local_cid.c
+    deps/quicly/lib/loss.c
+    deps/quicly/lib/quicly.c
+    deps/quicly/lib/remote_cid.c
+    deps/quicly/lib/retire_cid.c
+    deps/quicly/lib/sentmap.c
+    deps/quicly/lib/streambuf.c
+    #deps/quicly/lib/cc-reno.c
+    #deps/quicly/lib/defaults.c
+    #deps/quicly/lib/sendstate.c
+    #deps/quicly/lib/ranges.c
+    #deps/quicly/lib/recvstate.c
+)
+
 SET(EXTRA_LIBS ${EXTRA_LIBS} m ${CMAKE_THREAD_LIBS_INIT})
 
 IF (ZLIB_FOUND)
@@ -859,11 +877,15 @@ IF (BUILD_FUZZER)
     IF(NOT CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
         MESSAGE(FATAL_ERROR "The fuzzer needs clang as a compiler")
     ENDIF()
-    ADD_EXECUTABLE(h2o-fuzzer-http1 fuzz/driver.cc)
-    ADD_EXECUTABLE(h2o-fuzzer-http2 fuzz/driver.cc)
+    ADD_EXECUTABLE(h2o-fuzzer-http1 fuzz/driver.cc fuzz/driver_common.cc)
+    ADD_EXECUTABLE(h2o-fuzzer-http2 fuzz/driver.cc fuzz/driver_common.cc)
+    ADD_EXECUTABLE(h2o-fuzzer-http3 fuzz/driver_h3.cc fuzz/driver_common.cc fuzz/quicly_mock.c ${FUZZED_SOURCE_FILES})
     ADD_EXECUTABLE(h2o-fuzzer-url fuzz/driver_url.cc)
+    ADD_EXECUTABLE(h3-header-generator fuzz/h3_header_generator.c)
     SET_TARGET_PROPERTIES(h2o-fuzzer-http1 PROPERTIES COMPILE_FLAGS "-DHTTP1")
     SET_TARGET_PROPERTIES(h2o-fuzzer-http2 PROPERTIES COMPILE_FLAGS "-DHTTP2")
+    SET_TARGET_PROPERTIES(h2o-fuzzer-http3 PROPERTIES COMPILE_FLAGS "-DH2O_USE_LIBUV=0")
+    SET_TARGET_PROPERTIES(h3-header-generator PROPERTIES COMPILE_FLAGS "-DH2O_USE_LIBUV=0")
     SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_C_FLAGS}")
     IF (OSS_FUZZ)
         # Use https://github.com/google/oss-fuzz compatible options
@@ -879,19 +901,20 @@ IF (BUILD_FUZZER)
             ADD_CUSTOM_TARGET(libFuzzer ${CMAKE_CURRENT_SOURCE_DIR}/misc/build_libFuzzer.sh WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
             ADD_DEPENDENCIES(h2o-fuzzer-http1 libFuzzer)
             ADD_DEPENDENCIES(h2o-fuzzer-http2 libFuzzer)
+            ADD_DEPENDENCIES(h2o-fuzzer-http3 libFuzzer)
             ADD_DEPENDENCIES(h2o-fuzzer-url libFuzzer)
 
             SET(LIB_FUZZER "${CMAKE_CURRENT_BINARY_DIR}/libFuzzer.a")
             SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fno-omit-frame-pointer -fsanitize=address -fsanitize-coverage=edge,indirect-calls,8bit-counters")
             SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-omit-frame-pointer -fsanitize=address -fsanitize-coverage=edge,indirect-calls,8bit-counters")
         ELSE()
-            SET(FUZZED_SOURCE_FILES "fuzz/driver.cc" "fuzz/driver_url.cc" ${FUZZED_SOURCE_FILES})
+            SET(FUZZED_SOURCE_FILES "fuzz/driver.cc" "fuzz/driver_h3.cc" "fuzz/driver_url.cc" ${FUZZED_SOURCE_FILES})
             IF (NOT CMAKE_SYSTEM_NAME STREQUAL "FreeBSD" AND "${CLANG_MAJOR}.${CLANG_MINOR}" VERSION_LESS "7.0")
               SET_SOURCE_FILES_PROPERTIES(${FUZZED_SOURCE_FILES} PROPERTIES COMPILE_FLAGS "-fno-omit-frame-pointer -fsanitize=fuzzer,address -fsanitize-coverage=trace-pc-guard")
             ELSE()
               SET_SOURCE_FILES_PROPERTIES(${FUZZED_SOURCE_FILES} PROPERTIES COMPILE_FLAGS "-fno-omit-frame-pointer -fsanitize=fuzzer,address")
             ENDIF()
-            SET_TARGET_PROPERTIES(h2o-fuzzer-http1 h2o-fuzzer-http2 h2o-fuzzer-url PROPERTIES LINK_FLAGS "-fsanitize=fuzzer,address")
+            SET_TARGET_PROPERTIES(h2o-fuzzer-http1 h2o-fuzzer-http2 h2o-fuzzer-http3 h2o-fuzzer-url PROPERTIES LINK_FLAGS "-fsanitize=fuzzer,address")
             IF (NOT CMAKE_SYSTEM_NAME STREQUAL "FreeBSD" AND "${CLANG_MAJOR}.${CLANG_MINOR}" VERSION_LESS "7.0")
               SET(CMAKE_EXE_LINKER_FLAGS "-fsanitize=address -fsanitize-coverage=trace-pc-guard")
             ELSE()
@@ -903,7 +926,10 @@ IF (BUILD_FUZZER)
 
     TARGET_LINK_LIBRARIES(h2o-fuzzer-http1 libh2o-evloop ${EXTRA_LIBS} ${LIB_FUZZER})
     TARGET_LINK_LIBRARIES(h2o-fuzzer-http2 libh2o-evloop ${EXTRA_LIBS} ${LIB_FUZZER})
+    # h3 fuzzer does not use libh2o so it can replace quicly with quicly_mock
+    TARGET_LINK_LIBRARIES(h2o-fuzzer-http3 ${EXTRA_LIBS} ${LIB_FUZZER} ${OPENSSL_LIBRARIES} ${CMAKE_DL_LIBS})
     TARGET_LINK_LIBRARIES(h2o-fuzzer-url libh2o-evloop ${EXTRA_LIBS} ${LIB_FUZZER})
+    TARGET_LINK_LIBRARIES(h3-header-generator libh2o-evloop ${EXTRA_LIBS})
 
 ENDIF (BUILD_FUZZER)
 
