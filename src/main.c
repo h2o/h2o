@@ -106,9 +106,12 @@ struct listener_ssl_config_t {
     SSL_CTX *ctx;
     h2o_iovec_t *http2_origin_frame;
     /**
-     * per-SNI CC
+     * per-SNI CC (nullable)
      */
-    h2o_iovec_t tcp_congestion_controller;
+    struct {
+        h2o_iovec_t tcp;
+        quicly_cc_type_t *quic;
+    } cc;
     /**
      * Optional alternate context. When both X.509 and raw public key certs are to be retained, this pointer points to the context
      * that retains the raw public key.
@@ -389,7 +392,7 @@ static int on_sni_callback(SSL *ssl, int *ad, void *arg)
         struct listener_ssl_config_t *resolved = resolve_sni(listener, server_name, server_name_len);
         if (resolved->ctx != SSL_get_SSL_CTX(ssl)) {
             SSL_set_SSL_CTX(ssl, resolved->ctx);
-            set_tcp_congestion_controller(sock, resolved->tcp_congestion_controller);
+            set_tcp_congestion_controller(sock, resolved->cc.tcp);
         }
     }
 
@@ -416,8 +419,12 @@ static int on_client_hello_ptls(ptls_on_client_hello_t *_self, ptls_t *tls, ptls
         ptls_context_t *newctx = h2o_socket_ssl_get_picotls_context(ssl_config->ctx);
         ptls_set_context(tls, newctx);
         ptls_set_server_name(tls, (const char *)params->server_name.base, params->server_name.len);
-        if (self->listener->quic.ctx == NULL)
-            set_tcp_congestion_controller(conn, ssl_config->tcp_congestion_controller);
+        if (self->listener->quic.ctx == NULL) {
+            set_tcp_congestion_controller(conn, ssl_config->cc.tcp);
+        } else {
+            if (ssl_config->cc.quic != NULL)
+                quicly_set_cc(conn, ssl_config->cc.quic);
+        }
     } else {
         ssl_config = self->listener->ssl.entries[0];
         assert(ssl_config != NULL);
@@ -1179,20 +1186,17 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
     if (cc_node != NULL) {
         if (listener->quic.ctx == NULL) {
             /* TCP; CC name is kept in the SSL config */
-            ssl_config->tcp_congestion_controller = h2o_strdup(NULL, (*cc_node)->data.scalar, SIZE_MAX);
+            ssl_config->cc.tcp = h2o_strdup(NULL, (*cc_node)->data.scalar, SIZE_MAX);
         } else {
-            /* QUIC; the context is modified directly */
-            if (listener->ssl.size > 1) {
-                h2o_configurator_errprintf(cmd, *cc_node,
-                                           "[warning] Setting ignored. At the moment, only the first listen entry for a given "
-                                           "address:port tuple can specify the QUIC congestion controller");
-            }
+            /* QUIC; set quicly_context_t::init_cc (used for initialization) and ::cc for changing the type upon receiving SNI */
             quicly_cc_type_t **cand;
             for (cand = quicly_cc_all_types; *cand != NULL; ++cand)
                 if (strcasecmp((*cand)->name, (*cc_node)->data.scalar) == 0)
                     break;
             if (*cand != NULL) {
-                listener->quic.ctx->init_cc = (*cand)->cc_init;
+                if (listener_is_new)
+                    listener->quic.ctx->init_cc = (*cand)->cc_init;
+                ssl_config->cc.quic = *cand;
             } else {
                 h2o_configurator_errprintf(cmd, *cc_node, "specified congestion controller is unknown or unsupported for QUIC");
                 goto Error;
