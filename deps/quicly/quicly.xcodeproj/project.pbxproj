@@ -7,6 +7,9 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		082195082683498900E3EFCF /* cc-pico.c in Sources */ = {isa = PBXBuildFile; fileRef = 082195072683498900E3EFCF /* cc-pico.c */; };
+		082195092683498900E3EFCF /* cc-pico.c in Sources */ = {isa = PBXBuildFile; fileRef = 082195072683498900E3EFCF /* cc-pico.c */; };
+		0821950A2683498900E3EFCF /* cc-pico.c in Sources */ = {isa = PBXBuildFile; fileRef = 082195072683498900E3EFCF /* cc-pico.c */; };
 		E904233D24AED0410072C5B7 /* loss.c in Sources */ = {isa = PBXBuildFile; fileRef = E904233C24AED0410072C5B7 /* loss.c */; };
 		E904233E24AED0410072C5B7 /* loss.c in Sources */ = {isa = PBXBuildFile; fileRef = E904233C24AED0410072C5B7 /* loss.c */; };
 		E904233F24AED0410072C5B7 /* loss.c in Sources */ = {isa = PBXBuildFile; fileRef = E904233C24AED0410072C5B7 /* loss.c */; };
@@ -141,6 +144,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		082195072683498900E3EFCF /* cc-pico.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = "cc-pico.c"; sourceTree = "<group>"; };
 		E904233C24AED0410072C5B7 /* loss.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = loss.c; sourceTree = "<group>"; };
 		E904234024AEFB980072C5B7 /* loss.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = loss.c; sourceTree = "<group>"; };
 		E9056C071F56965300E2B96C /* linklist.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = linklist.h; sourceTree = "<group>"; };
@@ -324,6 +328,7 @@
 			isa = PBXGroup;
 			children = (
 				E9DF012324E4BAC20002EEC7 /* cc-cubic.c */,
+				082195072683498900E3EFCF /* cc-pico.c */,
 				E98041C522383C62008B9745 /* cc-reno.c */,
 				E9736527246FD3AC0039AA49 /* remote_cid.c */,
 				E98042352244A5D7008B9745 /* defaults.c */,
@@ -698,6 +703,7 @@
 				E98042362244A5D7008B9745 /* defaults.c in Sources */,
 				E904233D24AED0410072C5B7 /* loss.c in Sources */,
 				E9F6A42E1F41375B0083F0B2 /* sendstate.c in Sources */,
+				082195082683498900E3EFCF /* cc-pico.c in Sources */,
 				E99F8C261F4E9EBF00C26B3D /* frame.c in Sources */,
 				E98448421EA490A500390927 /* quicly.c in Sources */,
 				E9DF012424E4BAC20002EEC7 /* cc-cubic.c in Sources */,
@@ -721,6 +727,7 @@
 				E984483B1EA48DD300390927 /* openssl.c in Sources */,
 				E973652E246FD3B40039AA49 /* remote_cid.c in Sources */,
 				E904233E24AED0410072C5B7 /* loss.c in Sources */,
+				082195092683498900E3EFCF /* cc-pico.c in Sources */,
 				E941428D23B0B839002D3CE0 /* frame.c in Sources */,
 				E941429123B0B86D002D3CE0 /* recvstate.c in Sources */,
 				E9B43E12246943D300824E51 /* fusion.c in Sources */,
@@ -771,6 +778,7 @@
 				E99B75E91F5D259400CF503E /* stream-concurrency.c in Sources */,
 				E920D22E1F4981E500799777 /* sentmap.c in Sources */,
 				E9CC44261EC1963100DC7D3E /* picotest.c in Sources */,
+				0821950A2683498900E3EFCF /* cc-pico.c in Sources */,
 				E95E953D22904A4C00215ACD /* picotls-probes.d in Sources */,
 				E9CC441C1EC195DF00DC7D3E /* picotls.c in Sources */,
 				E904233F24AED0410072C5B7 /* loss.c in Sources */,

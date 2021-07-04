@@ -1015,7 +1015,7 @@ static void usage(const char *cmd)
            "  -k key-file               specifies the credentials to be used for running the\n"
            "                            server. If omitted, the command runs as a client.\n"
            "  -C <algorithm>            the congestion control algorithm; either \"reno\"\n"
-           "                            (default) or \"cubic\"\n"
+           "                            (default), \"cubic\", or \"pico\"\n"
            "  -d draft-number           specifies the draft version number to be used (e.g.,\n"
            "                            29)\n"
            "  -e event-log-file         file to log events\n"
@@ -1110,16 +1110,18 @@ int main(int argc, char **argv)
         case 'c':
             cert_file = optarg;
             break;
-        case 'C':
-            if (strcmp(optarg, "reno") == 0) {
-                ctx.init_cc = &quicly_cc_reno_init;
-            } else if (strcmp(optarg, "cubic") == 0) {
-                ctx.init_cc = &quicly_cc_cubic_init;
+        case 'C': {
+            quicly_cc_type_t **cc;
+            for (cc = quicly_cc_all_types; *cc != NULL; ++cc)
+                if (strcmp((*cc)->name, optarg) == 0)
+                    break;
+            if (*cc != NULL) {
+                ctx.init_cc = (*cc)->cc_init;
             } else {
                 fprintf(stderr, "unknown congestion controller: %s\n", optarg);
                 exit(1);
             }
-            break;
+        } break;
         case 'G':
 #ifdef __linux__
             send_packets = send_packets_gso;

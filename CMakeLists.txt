@@ -351,6 +351,7 @@ SET(LIB_SOURCE_FILES
     deps/picotls/lib/cifra/random.c
     deps/picotls/lib/cifra/x25519.c
     deps/quicly/lib/cc-cubic.c
+    deps/quicly/lib/cc-pico.c
     deps/quicly/lib/cc-reno.c
     deps/quicly/lib/defaults.c
     deps/quicly/lib/frame.c
@@ -557,7 +558,6 @@ SET(FUZZED_SOURCE_FILES
 
 # Remove some of quicly files for fuzzing to allow the mockup library to come in
 LIST(REMOVE_ITEM FUZZED_SOURCE_FILES
-    deps/quicly/lib/cc-cubic.c
     deps/quicly/lib/frame.c
     deps/quicly/lib/local_cid.c
     deps/quicly/lib/loss.c
@@ -566,6 +566,7 @@ LIST(REMOVE_ITEM FUZZED_SOURCE_FILES
     deps/quicly/lib/retire_cid.c
     deps/quicly/lib/sentmap.c
     deps/quicly/lib/streambuf.c
+    #deps/quicly/lib/cc-cubic.c
     #deps/quicly/lib/cc-reno.c
     #deps/quicly/lib/defaults.c
     #deps/quicly/lib/sendstate.c
