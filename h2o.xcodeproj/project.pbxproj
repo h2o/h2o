@@ -680,6 +680,15 @@
 		0812AB291D7FD54700004F23 /* read.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = read.c; sourceTree = "<group>"; };
 		0812AB2A1D7FD54700004F23 /* read.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = read.h; sourceTree = "<group>"; };
 		0821950F2685262B00E3EFCF /* cc-pico.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = "cc-pico.c"; sourceTree = "<group>"; };
+		082E148C2692F51000603AED /* driver.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = driver.cc; sourceTree = "<group>"; };
+		082E1B402692F52100603AED /* driver_common.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = driver_common.h; sourceTree = "<group>"; };
+		082E1B412692F52100603AED /* quicly_mock.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = quicly_mock.h; sourceTree = "<group>"; };
+		082E1B422692F52100603AED /* driver_h3.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = driver_h3.cc; sourceTree = "<group>"; };
+		082E1C832692F52200603AED /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
+		082E1CCC2692F52200603AED /* driver_url.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = driver_url.cc; sourceTree = "<group>"; };
+		082E1CCD2692F52200603AED /* driver_common.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = driver_common.cc; sourceTree = "<group>"; };
+		082E1CCE2692F52200603AED /* h3_header_generator.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = h3_header_generator.c; sourceTree = "<group>"; };
+		082E224A2692F52E00603AED /* quicly_mock.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = quicly_mock.c; sourceTree = "<group>"; };
 		084FC7C01D54B90D00E89F66 /* http2_debug_state.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = http2_debug_state.c; sourceTree = "<group>"; };
 		084FC7C31D54BB9200E89F66 /* http2_debug_state.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = http2_debug_state.c; sourceTree = "<group>"; };
 		08790DD91D80153600A04BC1 /* net.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = net.c; sourceTree = "<group>"; };
@@ -1409,6 +1418,22 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		082E148B2692F51000603AED /* fuzz */ = {
+			isa = PBXGroup;
+			children = (
+				082E148C2692F51000603AED /* driver.cc */,
+				082E1B422692F52100603AED /* driver_h3.cc */,
+				082E1B402692F52100603AED /* driver_common.h */,
+				082E1CCC2692F52200603AED /* driver_url.cc */,
+				082E1CCD2692F52200603AED /* driver_common.cc */,
+				082E1CCE2692F52200603AED /* h3_header_generator.c */,
+				082E1B412692F52100603AED /* quicly_mock.h */,
+				082E224A2692F52E00603AED /* quicly_mock.c */,
+				082E1C832692F52200603AED /* README.md */,
+			);
+			path = fuzz;
+			sourceTree = "<group>";
+		};
 		08B4D4391D75A2950079DFB5 /* hiredis */ = {
 			isa = PBXGroup;
 			children = (
@@ -1797,6 +1822,7 @@
 				E95EBCD72281148C0022C32D /* h2o-probes.d */,
 				1079231E19A3210D00C52AD6 /* deps */,
 				10583BEC1AE5A353004A3AD6 /* doc */,
+				082E148B2692F51000603AED /* fuzz */,
 				1079239E19A3215F00C52AD6 /* include */,
 				107923AD19A3217300C52AD6 /* lib */,
 				107923AA19A3216B00C52AD6 /* misc */,
