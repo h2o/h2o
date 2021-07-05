@@ -1,0 +1,30 @@
+name: CI
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    name: "${{ matrix.name }}"
+    runs-on: [ubuntu-20.04]
+
+    # We want to run on external PRs, but not on our own internal PRs as they'll be run
+    # by the push to the branch.
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: default
+            command: make -f misc/docker-ci.mk
+
+    timeout-minutes: 10
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        submodules: recursive
+    - name: Run with Docker
+      shell: 'script -q -e -c "bash -xe {0}"'
+      run: |
+        chmod -R ugo+w .
+        ${{ matrix.command }}
