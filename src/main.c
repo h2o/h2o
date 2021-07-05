@@ -2748,15 +2748,19 @@ static h2o_quic_conn_t *on_http3_accept(h2o_quic_ctx_t *_ctx, quicly_address_t *
         }
         if (send_retry) {
             static __thread struct {
-                ptls_aead_context_t *current;
+                ptls_aead_context_t *v1;
+                ptls_aead_context_t *draft29;
                 ptls_aead_context_t *draft27;
             } retry_integrity_aead_cache;
             uint8_t scid[16], payload[QUICLY_MIN_CLIENT_INITIAL_SIZE], token_prefix;
             ptls_openssl_random_bytes(scid, sizeof(scid));
             ptls_aead_context_t *token_aead = quic_get_address_token_encryptor(&token_prefix), **retry_integrity_aead;
             switch (packet->version) {
-            case QUICLY_PROTOCOL_VERSION_CURRENT:
-                retry_integrity_aead = &retry_integrity_aead_cache.current;
+            case QUICLY_PROTOCOL_VERSION_1:
+                retry_integrity_aead = &retry_integrity_aead_cache.v1;
+                break;
+            case QUICLY_PROTOCOL_VERSION_DRAFT29:
+                retry_integrity_aead = &retry_integrity_aead_cache.draft29;
                 break;
             case QUICLY_PROTOCOL_VERSION_DRAFT27:
                 retry_integrity_aead = &retry_integrity_aead_cache.draft27;
