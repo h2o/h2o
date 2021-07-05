@@ -453,4 +453,5 @@ int quicly_foreach_stream(quicly_conn_t *conn, void *thunk, int (*cb)(void *thun
     return 0;
 }
 
-const uint32_t quicly_supported_versions[] = {QUICLY_PROTOCOL_VERSION_CURRENT, QUICLY_PROTOCOL_VERSION_DRAFT27, 0};
+const uint32_t quicly_supported_versions[] = {QUICLY_PROTOCOL_VERSION_1, QUICLY_PROTOCOL_VERSION_DRAFT29,
+                                              QUICLY_PROTOCOL_VERSION_DRAFT27, 0};

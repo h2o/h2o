@@ -42,7 +42,8 @@
 #endif
 #include "quicly/retire_cid.h"
 
-#define QUICLY_TLS_EXTENSION_TYPE_TRANSPORT_PARAMETERS 0xffa5
+#define QUICLY_TLS_EXTENSION_TYPE_TRANSPORT_PARAMETERS_FINAL 0x39
+#define QUICLY_TLS_EXTENSION_TYPE_TRANSPORT_PARAMETERS_DRAFT 0xffa5
 #define QUICLY_TRANSPORT_PARAMETER_ID_ORIGINAL_CONNECTION_ID 0
 #define QUICLY_TRANSPORT_PARAMETER_ID_MAX_IDLE_TIMEOUT 1
 #define QUICLY_TRANSPORT_PARAMETER_ID_STATELESS_RESET_TOKEN 2
@@ -451,22 +452,27 @@ static const quicly_transport_parameters_t default_transport_params = {.max_udp_
 
 static const struct st_ptls_salt_t *get_salt(uint32_t protocol_version)
 {
-    static const struct st_ptls_salt_t current = {.initial = {0xaf, 0xbf, 0xec, 0x28, 0x99, 0x93, 0xd2, 0x4c, 0x9e, 0x97,
-                                                              0x86, 0xf1, 0x9c, 0x61, 0x11, 0xe0, 0x43, 0x90, 0xa8, 0x99},
-                                                  .retry = {.key = {0xcc, 0xce, 0x18, 0x7e, 0xd0, 0x9a, 0x09, 0xd0, 0x57, 0x28,
-                                                                    0x15, 0x5a, 0x6c, 0xb9, 0x6b, 0xe1},
-                                                            .iv = {0xe5, 0x49, 0x30, 0xf9, 0x7f, 0x21, 0x36, 0xf0, 0x53, 0x0a, 0x8c,
-                                                                   0x1c}}},
-                                       draft27 = {.initial = {0xc3, 0xee, 0xf7, 0x12, 0xc7, 0x2e, 0xbb, 0x5a, 0x11, 0xa7,
-                                                              0xd2, 0x43, 0x2b, 0xb4, 0x63, 0x65, 0xbe, 0xf9, 0xf5, 0x02},
-                                                  .retry = {.key = {0x4d, 0x32, 0xec, 0xdb, 0x2a, 0x21, 0x33, 0xc8, 0x41, 0xe4,
-                                                                    0x04, 0x3d, 0xf2, 0x7d, 0x44, 0x30},
-                                                            .iv = {0x4d, 0x16, 0x11, 0xd0, 0x55, 0x13, 0xa5, 0x52, 0xc5, 0x87, 0xd5,
-                                                                   0x75}}};
+    static const struct st_ptls_salt_t
+        v1 = {.initial = {0x38, 0x76, 0x2c, 0xf7, 0xf5, 0x59, 0x34, 0xb3, 0x4d, 0x17,
+                          0x9a, 0xe6, 0xa4, 0xc8, 0x0c, 0xad, 0xcc, 0xbb, 0x7f, 0x0a},
+              .retry = {.key = {0xbe, 0x0c, 0x69, 0x0b, 0x9f, 0x66, 0x57, 0x5a, 0x1d, 0x76, 0x6b, 0x54, 0xe3, 0x68, 0xc8, 0x4e},
+                        .iv = {0x46, 0x15, 0x99, 0xd3, 0x5d, 0x63, 0x2b, 0xf2, 0x23, 0x98, 0x25, 0xbb}}},
+        draft29 = {.initial = {0xaf, 0xbf, 0xec, 0x28, 0x99, 0x93, 0xd2, 0x4c, 0x9e, 0x97,
+                               0x86, 0xf1, 0x9c, 0x61, 0x11, 0xe0, 0x43, 0x90, 0xa8, 0x99},
+                   .retry = {.key = {0xcc, 0xce, 0x18, 0x7e, 0xd0, 0x9a, 0x09, 0xd0, 0x57, 0x28, 0x15, 0x5a, 0x6c, 0xb9, 0x6b,
+                                     0xe1},
+                             .iv = {0xe5, 0x49, 0x30, 0xf9, 0x7f, 0x21, 0x36, 0xf0, 0x53, 0x0a, 0x8c, 0x1c}}},
+        draft27 = {
+            .initial = {0xc3, 0xee, 0xf7, 0x12, 0xc7, 0x2e, 0xbb, 0x5a, 0x11, 0xa7,
+                        0xd2, 0x43, 0x2b, 0xb4, 0x63, 0x65, 0xbe, 0xf9, 0xf5, 0x02},
+            .retry = {.key = {0x4d, 0x32, 0xec, 0xdb, 0x2a, 0x21, 0x33, 0xc8, 0x41, 0xe4, 0x04, 0x3d, 0xf2, 0x7d, 0x44, 0x30},
+                      .iv = {0x4d, 0x16, 0x11, 0xd0, 0x55, 0x13, 0xa5, 0x52, 0xc5, 0x87, 0xd5, 0x75}}};
 
     switch (protocol_version) {
-    case QUICLY_PROTOCOL_VERSION_CURRENT:
-        return &current;
+    case QUICLY_PROTOCOL_VERSION_1:
+        return &v1;
+    case QUICLY_PROTOCOL_VERSION_DRAFT29:
+        return &draft29;
     case QUICLY_PROTOCOL_VERSION_DRAFT27:
         return &draft27;
         break;
@@ -582,7 +588,13 @@ static int is_retry(quicly_conn_t *conn)
 
 static int needs_cid_auth(quicly_conn_t *conn)
 {
-    return conn->super.version > QUICLY_PROTOCOL_VERSION_DRAFT27;
+    switch (conn->super.version) {
+    case QUICLY_PROTOCOL_VERSION_1:
+    case QUICLY_PROTOCOL_VERSION_DRAFT29:
+        return 1;
+    default:
+        return 0;
+    }
 }
 
 static int recognize_delayed_ack(quicly_conn_t *conn)
@@ -657,7 +669,8 @@ size_t quicly_decode_packet(quicly_context_t *ctx, quicly_decoded_packet_t *pack
             break;
         }
         switch (packet->version) {
-        case QUICLY_PROTOCOL_VERSION_CURRENT:
+        case QUICLY_PROTOCOL_VERSION_1:
+        case QUICLY_PROTOCOL_VERSION_DRAFT29:
         case QUICLY_PROTOCOL_VERSION_DRAFT27:
             /* these are the recognized versions, and they share the same packet header format */
             if ((packet->octets.base[0] & QUICLY_PACKET_TYPE_BITMASK) == QUICLY_PACKET_TYPE_RETRY) {
@@ -2007,9 +2020,21 @@ Exit:
 #undef DECODE_CID_TP
 }
 
+static uint16_t get_transport_parameters_extension_id(uint32_t quic_version)
+{
+    switch (quic_version) {
+    case QUICLY_PROTOCOL_VERSION_DRAFT27:
+    case QUICLY_PROTOCOL_VERSION_DRAFT29:
+        return QUICLY_TLS_EXTENSION_TYPE_TRANSPORT_PARAMETERS_DRAFT;
+    default:
+        return QUICLY_TLS_EXTENSION_TYPE_TRANSPORT_PARAMETERS_FINAL;
+    }
+}
+
 static int collect_transport_parameters(ptls_t *tls, struct st_ptls_handshake_properties_t *properties, uint16_t type)
 {
-    return type == QUICLY_TLS_EXTENSION_TYPE_TRANSPORT_PARAMETERS;
+    quicly_conn_t *conn = (void *)((char *)properties - offsetof(quicly_conn_t, crypto.handshake_properties));
+    return type == get_transport_parameters_extension_id(conn->super.version);
 }
 
 static quicly_conn_t *create_connection(quicly_context_t *ctx, uint32_t protocol_version, const char *server_name,
@@ -2116,7 +2141,7 @@ static int client_collected_extensions(ptls_t *tls, ptls_handshake_properties_t 
         ret = PTLS_ALERT_MISSING_EXTENSION;
         goto Exit;
     }
-    assert(slots[0].type == QUICLY_TLS_EXTENSION_TYPE_TRANSPORT_PARAMETERS);
+    assert(slots[0].type == get_transport_parameters_extension_id(conn->super.version));
     assert(slots[1].type == UINT16_MAX);
 
     const uint8_t *src = slots[0].data.base, *end = src + slots[0].data.len;
@@ -2239,7 +2264,7 @@ int quicly_connect(quicly_conn_t **_conn, quicly_context_t *ctx, const char *ser
              NULL, NULL, conn->super.ctx->expand_client_hello ? conn->super.ctx->initial_egress_max_udp_payload_size : 0)) != 0)
         goto Exit;
     conn->crypto.transport_params.ext[0] =
-        (ptls_raw_extension_t){QUICLY_TLS_EXTENSION_TYPE_TRANSPORT_PARAMETERS,
+        (ptls_raw_extension_t){get_transport_parameters_extension_id(conn->super.version),
                                {conn->crypto.transport_params.buf.base, conn->crypto.transport_params.buf.off}};
     conn->crypto.transport_params.ext[1] = (ptls_raw_extension_t){UINT16_MAX};
     conn->crypto.handshake_properties.additional_extensions = conn->crypto.transport_params.ext;
@@ -2295,7 +2320,7 @@ static int server_collected_extensions(ptls_t *tls, ptls_handshake_properties_t 
         ret = PTLS_ALERT_MISSING_EXTENSION;
         goto Exit;
     }
-    assert(slots[0].type == QUICLY_TLS_EXTENSION_TYPE_TRANSPORT_PARAMETERS);
+    assert(slots[0].type == get_transport_parameters_extension_id(conn->super.version));
     assert(slots[1].type == UINT16_MAX);
 
     { /* decode transport_parameters extension */
@@ -2340,7 +2365,7 @@ static int server_collected_extensions(ptls_t *tls, ptls_handshake_properties_t 
         goto Exit;
     properties->additional_extensions = conn->crypto.transport_params.ext;
     conn->crypto.transport_params.ext[0] =
-        (ptls_raw_extension_t){QUICLY_TLS_EXTENSION_TYPE_TRANSPORT_PARAMETERS,
+        (ptls_raw_extension_t){get_transport_parameters_extension_id(conn->super.version),
                                {conn->crypto.transport_params.buf.base, conn->crypto.transport_params.buf.off}};
     conn->crypto.transport_params.ext[1] = (ptls_raw_extension_t){UINT16_MAX};
     conn->crypto.handshake_properties.additional_extensions = conn->crypto.transport_params.ext;
@@ -5046,9 +5071,10 @@ static int negotiate_using_version(quicly_conn_t *conn, uint32_t version)
 {
     int ret;
 
-    /* set selected version */
+    /* set selected version, update transport parameters extension ID */
     conn->super.version = version;
     QUICLY_PROBE(VERSION_SWITCH, conn, conn->stash.now, version);
+    conn->crypto.transport_params.ext[0].type = get_transport_parameters_extension_id(version);
 
     /* replace initial keys */
     if ((ret = reinstall_initial_encryption(conn, PTLS_ERROR_LIBRARY)) != 0)
@@ -5069,12 +5095,16 @@ static int handle_version_negotiation_packet(quicly_conn_t *conn, quicly_decoded
     if (src == end || (end - src) % 4 != 0)
         return QUICLY_TRANSPORT_ERROR_PROTOCOL_VIOLATION;
 
-    /* select in the precedence of _CURRENT -> _DRAFT27 -> fail */
+    /* select in the precedence of V1 -> draft29 -> draft27 -> fail */
     while (src != end) {
         uint32_t supported_version = quicly_decode32(&src);
         switch (supported_version) {
-        case QUICLY_PROTOCOL_VERSION_CURRENT:
-            selected_version = QUICLY_PROTOCOL_VERSION_CURRENT;
+        case QUICLY_PROTOCOL_VERSION_1:
+            selected_version = QUICLY_PROTOCOL_VERSION_1;
+            break;
+        case QUICLY_PROTOCOL_VERSION_DRAFT29:
+            if (selected_version == 0 || selected_version == QUICLY_PROTOCOL_VERSION_DRAFT27)
+                selected_version = QUICLY_PROTOCOL_VERSION_DRAFT29;
             break;
         case QUICLY_PROTOCOL_VERSION_DRAFT27:
             if (selected_version == 0)
@@ -6342,4 +6372,5 @@ void quicly__debug_printf(quicly_conn_t *conn, const char *function, int line, c
 #endif
 }
 
-const uint32_t quicly_supported_versions[] = {QUICLY_PROTOCOL_VERSION_CURRENT, QUICLY_PROTOCOL_VERSION_DRAFT27, 0};
+const uint32_t quicly_supported_versions[] = {QUICLY_PROTOCOL_VERSION_1, QUICLY_PROTOCOL_VERSION_DRAFT29,
+                                              QUICLY_PROTOCOL_VERSION_DRAFT27, 0};
