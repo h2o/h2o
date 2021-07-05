@@ -626,8 +626,8 @@ static h2o_iovec_t decode_header_value_literal(h2o_mem_pool_t *pool, unsigned *s
                                                const uint8_t *src_end, const char **err_desc)
 {
     h2o_iovec_t buf;
-    int is_huff = (**src & 0x80) != 0;
     int64_t len;
+    const uint8_t *src_head = *src;
 
     if (decode_int(&len, src, src_end, 7) != 0 || len > MAX_HEADER_VALUE_LENGTH) {
         *err_desc = h2o_qpack_err_header_value_too_long;
@@ -635,6 +635,8 @@ static h2o_iovec_t decode_header_value_literal(h2o_mem_pool_t *pool, unsigned *s
     }
     if (src_end - *src < len)
         goto Fail;
+
+    int is_huff = (*src_head & 0x80) != 0;
 
     buf.base = h2o_mem_alloc_pool(pool, char, is_huff ? len * 2 + 1 : len + 1);
     if ((buf.len = decode_value(buf.base, soft_errors, is_huff, *src, len, err_desc)) == SIZE_MAX)
