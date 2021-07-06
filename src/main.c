@@ -1952,7 +1952,7 @@ static int on_config_capabilities(h2o_configurator_command_t *cmd, h2o_configura
 #endif
 }
 
-static void on_before_setuidgid(void)
+static void capabilities_set_keepcaps(void)
 {
 #ifdef LIBCAP_FOUND
     if (conf.capabilities.size > 0) {
@@ -1964,7 +1964,7 @@ static void on_before_setuidgid(void)
 #endif
 }
 
-static void on_after_setuidgid(void)
+static void capabilities_drop(void)
 {
 #ifdef LIBCAP_FOUND
     if (conf.capabilities.size > 0) {
@@ -3637,12 +3637,12 @@ int main(int argc, char **argv)
 
     /* setuid */
     if (conf.globalconf.user != NULL) {
-        on_before_setuidgid();
+        capabilities_set_keepcaps();
         if (h2o_setuidgid(conf.globalconf.user) != 0) {
             fprintf(stderr, "failed to change the running user (are you sure you are running as root?)\n");
             return EX_OSERR;
         }
-        on_after_setuidgid();
+        capabilities_drop();
         if (neverbleed != NULL && neverbleed_setuidgid(neverbleed, conf.globalconf.user, 1) != 0) {
             fprintf(stderr, "failed to change the running user of neverbleed daemon\n");
             return EX_OSERR;
