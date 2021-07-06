@@ -308,7 +308,10 @@ typedef struct st_h2o_http3_read_frame_t {
 extern const ptls_iovec_t h2o_http3_alpn[3];
 
 /**
- * sends datagrams
+ * Sends UDP datagrams from specified source address to the specified destination. The returned value is a boolean indicating if the
+ * connection is still maintainable (false is returned when not being able to send a packet from the designated source address).
+ * When more than one datagram is provided, the size of all the datagrams must be the same except for the last datagram, so that
+ * the datagrams can be sent using GSO.
  */
 int h2o_quic_send_datagrams(h2o_quic_ctx_t *ctx, quicly_address_t *dest, quicly_address_t *src, struct iovec *datagrams,
                             size_t num_datagrams);
