@@ -1941,8 +1941,7 @@ static int on_config_capabilities(h2o_configurator_command_t *cmd, h2o_configura
             return -1;
         }
         cap_value_t cap;
-        int r = cap_from_name(element->data.scalar, &cap);
-        if (r != 0) {
+        if (cap_from_name(element->data.scalar, &cap) != 0) {
             h2o_configurator_errprintf(cmd, element, "unknown capability name `%s`", element->data.scalar);
             return -1;
         }
@@ -1957,8 +1956,7 @@ static void on_before_setuidgid(void)
 {
 #ifdef LIBCAP_FOUND
     if (conf.capabilities.size > 0) {
-        int r = prctl(PR_SET_KEEPCAPS, 1, 0, 0, 0);
-        if (r != 0) {
+        if (prctl(PR_SET_KEEPCAPS, 1, 0, 0, 0) != 0) {
             char buf[128];
             h2o_fatal("prctl(PR_SET_KEEPCAPS,1): %s", h2o_strerror_r(errno, buf, sizeof(buf)));
         }
@@ -1970,29 +1968,19 @@ static void on_after_setuidgid(void)
 {
 #ifdef LIBCAP_FOUND
     if (conf.capabilities.size > 0) {
-        int r;
         char buf[128];
         cap_t cap = cap_init();
-        if (cap == NULL) {
+        if (cap == NULL)
             h2o_fatal("cap_init: %s", h2o_strerror_r(errno, buf, sizeof(buf)));
-        }
-        r = cap_set_flag(cap, CAP_EFFECTIVE, conf.capabilities.size, conf.capabilities.entries, CAP_SET);
-        if (r != 0) {
+        if (cap_set_flag(cap, CAP_EFFECTIVE, conf.capabilities.size, conf.capabilities.entries, CAP_SET) != 0)
             h2o_fatal("cap_set_flag(CAP_EFFECTIVE): %s", h2o_strerror_r(errno, buf, sizeof(buf)));
-        }
-        r = cap_set_flag(cap, CAP_PERMITTED, conf.capabilities.size, conf.capabilities.entries, CAP_SET);
-        if (r != 0) {
+        if (cap_set_flag(cap, CAP_PERMITTED, conf.capabilities.size, conf.capabilities.entries, CAP_SET) != 0)
             h2o_fatal("cap_set_flag(CAP_PERMITTED): %s", h2o_strerror_r(errno, buf, sizeof(buf)));
-        }
-        r = cap_set_proc(cap);
-        if (r != 0) {
+        if (cap_set_proc(cap) != 0)
             h2o_fatal("cap_set_proc: %s", h2o_strerror_r(errno, buf, sizeof(buf)));
-        }
         cap_free(cap);
-        r = prctl(PR_SET_KEEPCAPS, 0, 0, 0, 0);
-        if (r != 0) {
+        if (prctl(PR_SET_KEEPCAPS, 0, 0, 0, 0) != 0)
             h2o_fatal("prctl(PR_SET_KEEPCAPS,0): %s", h2o_strerror_r(errno, buf, sizeof(buf)));
-        }
     }
 #endif
 }
