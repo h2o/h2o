@@ -51,7 +51,7 @@ struct st_h2o_http3_ingress_unistream_t {
                          const uint8_t *src_end, int is_eos);
 };
 
-const ptls_iovec_t h2o_http3_alpn[2] = {{(void *)H2O_STRLIT("h3-29")}, {(void *)H2O_STRLIT("h3-27")}};
+const ptls_iovec_t h2o_http3_alpn[3] = {{(void *)H2O_STRLIT("h3")}, {(void *)H2O_STRLIT("h3-29")}, {(void *)H2O_STRLIT("h3-27")}};
 
 static void report_sendmsg_errors(h2o_error_reporter_t *reporter, uint64_t total_successes, uint64_t cur_successes)
 {

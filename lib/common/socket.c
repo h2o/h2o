@@ -474,7 +474,7 @@ static void disable_latency_optimized_write(h2o_socket_t *sock, int (*adjust_not
         sock->_latency_optimization.notsent_is_minimized = 0;
     }
     sock->_latency_optimization.state = H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_DISABLED;
-    sock->_latency_optimization.suggested_tls_payload_size = 16384;
+    sock->_latency_optimization.suggested_tls_payload_size = SIZE_MAX;
     sock->_latency_optimization.suggested_write_size = SIZE_MAX;
 }
 
@@ -511,7 +511,7 @@ static inline void prepare_for_latency_optimized_write(h2o_socket_t *sock,
                 goto Disable;
             sock->_latency_optimization.notsent_is_minimized = 0;
         }
-        sock->_latency_optimization.suggested_tls_payload_size = 16384;
+        sock->_latency_optimization.suggested_tls_payload_size = SIZE_MAX;
         sock->_latency_optimization.suggested_write_size = SIZE_MAX;
     }
     return;
@@ -623,44 +623,49 @@ size_t h2o_socket_do_prepare_for_latency_optimized_write(h2o_socket_t *sock,
 #undef CALC_CWND_PAIR_FROM_BYTE_UNITS
 }
 
-void h2o_socket_write(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_socket_cb cb)
+static size_t calc_tls_write_size(h2o_socket_t *sock, size_t bufsize)
 {
-    size_t i;
-    uint64_t prev_bytes_written = sock->bytes_written;
+    size_t recsize;
 
-    for (i = 0; i != bufcnt; ++i) {
-        sock->bytes_written += bufs[i].len;
-#if H2O_SOCKET_DUMP_WRITE
-        h2o_error_printf("writing %zu bytes to fd:%d\n", bufs[i].len, h2o_socket_get_fd(sock));
-        h2o_dump_memory(stderr, bufs[i].base, bufs[i].len);
-#endif
+    /* set recsize to the maximum TLS record size by using the latency optimizer, or if the optimizer is not in action, based on the
+     * number of bytes that have already been sent */
+    switch (sock->_latency_optimization.state) {
+    case H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_TBD:
+    case H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_DISABLED:
+        recsize = sock->bytes_written < 64 * 1024 ? calc_suggested_tls_payload_size(sock, 1400) : SIZE_MAX;
+        break;
+    case H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_DETERMINED:
+        sock->_latency_optimization.state = H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_NEEDS_UPDATE;
+    /* fallthru */
+    default:
+        recsize = sock->_latency_optimization.suggested_tls_payload_size;
+        break;
     }
 
+    return recsize < bufsize ? recsize : bufsize;
+}
+
+void h2o_socket_write(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_socket_cb cb)
+{
+#if H2O_SOCKET_DUMP_WRITE
+    for (size_t i = 0; i != bufcnt; ++i) {
+        h2o_error_printf("writing %zu bytes to fd:%d\n", bufs[i].len, h2o_socket_get_fd(sock));
+        h2o_dump_memory(stderr, bufs[i].base, bufs[i].len);
+    }
+#endif
+
     if (sock->ssl == NULL) {
+        for (size_t i = 0; i != bufcnt; ++i)
+            sock->bytes_written += bufs[i].len;
         do_write(sock, bufs, bufcnt, cb);
     } else {
         assert(sock->ssl->output.bufs.size == 0);
-        /* fill in the data */
-        size_t ssl_record_size;
-        switch (sock->_latency_optimization.state) {
-        case H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_TBD:
-        case H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_DISABLED:
-            ssl_record_size = prev_bytes_written < 200 * 1024 ? calc_suggested_tls_payload_size(sock, 1400) : 16384;
-            break;
-        case H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_DETERMINED:
-            sock->_latency_optimization.state = H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_NEEDS_UPDATE;
-        /* fallthru */
-        default:
-            ssl_record_size = sock->_latency_optimization.suggested_tls_payload_size;
-            break;
-        }
+        /* encode all cleartext data into series of TLS records */
         for (; bufcnt != 0; ++bufs, --bufcnt) {
             size_t off = 0;
             while (off != bufs[0].len) {
                 int ret;
-                size_t sz = bufs[0].len - off;
-                if (sz > ssl_record_size)
-                    sz = ssl_record_size;
+                size_t sz = calc_tls_write_size(sock, bufs[0].len - off);
                 if (sock->ssl->ptls != NULL) {
                     size_t dst_size = sz + ptls_get_record_overhead(sock->ssl->ptls);
                     void *dst = h2o_mem_alloc_pool(&sock->ssl->output.pool, char, dst_size);
@@ -695,8 +700,10 @@ void h2o_socket_write(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_
                     }
                 }
                 off += sz;
+                sock->bytes_written += sz;
             }
         }
+        /* write the TLS records */
         flush_pending_ssl(sock, cb);
     }
 }

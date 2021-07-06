@@ -42,7 +42,8 @@
 #endif
 #include "quicly/retire_cid.h"
 
-#define QUICLY_TLS_EXTENSION_TYPE_TRANSPORT_PARAMETERS 0xffa5
+#define QUICLY_TLS_EXTENSION_TYPE_TRANSPORT_PARAMETERS_FINAL 0x39
+#define QUICLY_TLS_EXTENSION_TYPE_TRANSPORT_PARAMETERS_DRAFT 0xffa5
 #define QUICLY_TRANSPORT_PARAMETER_ID_ORIGINAL_CONNECTION_ID 0
 #define QUICLY_TRANSPORT_PARAMETER_ID_MAX_IDLE_TIMEOUT 1
 #define QUICLY_TRANSPORT_PARAMETER_ID_STATELESS_RESET_TOKEN 2
@@ -451,22 +452,27 @@ static const quicly_transport_parameters_t default_transport_params = {.max_udp_
 
 static const struct st_ptls_salt_t *get_salt(uint32_t protocol_version)
 {
-    static const struct st_ptls_salt_t current = {.initial = {0xaf, 0xbf, 0xec, 0x28, 0x99, 0x93, 0xd2, 0x4c, 0x9e, 0x97,
-                                                              0x86, 0xf1, 0x9c, 0x61, 0x11, 0xe0, 0x43, 0x90, 0xa8, 0x99},
-                                                  .retry = {.key = {0xcc, 0xce, 0x18, 0x7e, 0xd0, 0x9a, 0x09, 0xd0, 0x57, 0x28,
-                                                                    0x15, 0x5a, 0x6c, 0xb9, 0x6b, 0xe1},
-                                                            .iv = {0xe5, 0x49, 0x30, 0xf9, 0x7f, 0x21, 0x36, 0xf0, 0x53, 0x0a, 0x8c,
-                                                                   0x1c}}},
-                                       draft27 = {.initial = {0xc3, 0xee, 0xf7, 0x12, 0xc7, 0x2e, 0xbb, 0x5a, 0x11, 0xa7,
-                                                              0xd2, 0x43, 0x2b, 0xb4, 0x63, 0x65, 0xbe, 0xf9, 0xf5, 0x02},
-                                                  .retry = {.key = {0x4d, 0x32, 0xec, 0xdb, 0x2a, 0x21, 0x33, 0xc8, 0x41, 0xe4,
-                                                                    0x04, 0x3d, 0xf2, 0x7d, 0x44, 0x30},
-                                                            .iv = {0x4d, 0x16, 0x11, 0xd0, 0x55, 0x13, 0xa5, 0x52, 0xc5, 0x87, 0xd5,
-                                                                   0x75}}};
+    static const struct st_ptls_salt_t
+        v1 = {.initial = {0x38, 0x76, 0x2c, 0xf7, 0xf5, 0x59, 0x34, 0xb3, 0x4d, 0x17,
+                          0x9a, 0xe6, 0xa4, 0xc8, 0x0c, 0xad, 0xcc, 0xbb, 0x7f, 0x0a},
+              .retry = {.key = {0xbe, 0x0c, 0x69, 0x0b, 0x9f, 0x66, 0x57, 0x5a, 0x1d, 0x76, 0x6b, 0x54, 0xe3, 0x68, 0xc8, 0x4e},
+                        .iv = {0x46, 0x15, 0x99, 0xd3, 0x5d, 0x63, 0x2b, 0xf2, 0x23, 0x98, 0x25, 0xbb}}},
+        draft29 = {.initial = {0xaf, 0xbf, 0xec, 0x28, 0x99, 0x93, 0xd2, 0x4c, 0x9e, 0x97,
+                               0x86, 0xf1, 0x9c, 0x61, 0x11, 0xe0, 0x43, 0x90, 0xa8, 0x99},
+                   .retry = {.key = {0xcc, 0xce, 0x18, 0x7e, 0xd0, 0x9a, 0x09, 0xd0, 0x57, 0x28, 0x15, 0x5a, 0x6c, 0xb9, 0x6b,
+                                     0xe1},
+                             .iv = {0xe5, 0x49, 0x30, 0xf9, 0x7f, 0x21, 0x36, 0xf0, 0x53, 0x0a, 0x8c, 0x1c}}},
+        draft27 = {
+            .initial = {0xc3, 0xee, 0xf7, 0x12, 0xc7, 0x2e, 0xbb, 0x5a, 0x11, 0xa7,
+                        0xd2, 0x43, 0x2b, 0xb4, 0x63, 0x65, 0xbe, 0xf9, 0xf5, 0x02},
+            .retry = {.key = {0x4d, 0x32, 0xec, 0xdb, 0x2a, 0x21, 0x33, 0xc8, 0x41, 0xe4, 0x04, 0x3d, 0xf2, 0x7d, 0x44, 0x30},
+                      .iv = {0x4d, 0x16, 0x11, 0xd0, 0x55, 0x13, 0xa5, 0x52, 0xc5, 0x87, 0xd5, 0x75}}};
 
     switch (protocol_version) {
-    case QUICLY_PROTOCOL_VERSION_CURRENT:
-        return &current;
+    case QUICLY_PROTOCOL_VERSION_1:
+        return &v1;
+    case QUICLY_PROTOCOL_VERSION_DRAFT29:
+        return &draft29;
     case QUICLY_PROTOCOL_VERSION_DRAFT27:
         return &draft27;
         break;
@@ -582,7 +588,13 @@ static int is_retry(quicly_conn_t *conn)
 
 static int needs_cid_auth(quicly_conn_t *conn)
 {
-    return conn->super.version > QUICLY_PROTOCOL_VERSION_DRAFT27;
+    switch (conn->super.version) {
+    case QUICLY_PROTOCOL_VERSION_1:
+    case QUICLY_PROTOCOL_VERSION_DRAFT29:
+        return 1;
+    default:
+        return 0;
+    }
 }
 
 static int recognize_delayed_ack(quicly_conn_t *conn)
@@ -657,7 +669,8 @@ size_t quicly_decode_packet(quicly_context_t *ctx, quicly_decoded_packet_t *pack
             break;
         }
         switch (packet->version) {
-        case QUICLY_PROTOCOL_VERSION_CURRENT:
+        case QUICLY_PROTOCOL_VERSION_1:
+        case QUICLY_PROTOCOL_VERSION_DRAFT29:
         case QUICLY_PROTOCOL_VERSION_DRAFT27:
             /* these are the recognized versions, and they share the same packet header format */
             if ((packet->octets.base[0] & QUICLY_PACKET_TYPE_BITMASK) == QUICLY_PACKET_TYPE_RETRY) {
@@ -2007,9 +2020,21 @@ Exit:
 #undef DECODE_CID_TP
 }
 
+static uint16_t get_transport_parameters_extension_id(uint32_t quic_version)
+{
+    switch (quic_version) {
+    case QUICLY_PROTOCOL_VERSION_DRAFT27:
+    case QUICLY_PROTOCOL_VERSION_DRAFT29:
+        return QUICLY_TLS_EXTENSION_TYPE_TRANSPORT_PARAMETERS_DRAFT;
+    default:
+        return QUICLY_TLS_EXTENSION_TYPE_TRANSPORT_PARAMETERS_FINAL;
+    }
+}
+
 static int collect_transport_parameters(ptls_t *tls, struct st_ptls_handshake_properties_t *properties, uint16_t type)
 {
-    return type == QUICLY_TLS_EXTENSION_TYPE_TRANSPORT_PARAMETERS;
+    quicly_conn_t *conn = (void *)((char *)properties - offsetof(quicly_conn_t, crypto.handshake_properties));
+    return type == get_transport_parameters_extension_id(conn->super.version);
 }
 
 static quicly_conn_t *create_connection(quicly_context_t *ctx, uint32_t protocol_version, const char *server_name,
@@ -2116,7 +2141,7 @@ static int client_collected_extensions(ptls_t *tls, ptls_handshake_properties_t 
         ret = PTLS_ALERT_MISSING_EXTENSION;
         goto Exit;
     }
-    assert(slots[0].type == QUICLY_TLS_EXTENSION_TYPE_TRANSPORT_PARAMETERS);
+    assert(slots[0].type == get_transport_parameters_extension_id(conn->super.version));
     assert(slots[1].type == UINT16_MAX);
 
     const uint8_t *src = slots[0].data.base, *end = src + slots[0].data.len;
@@ -2239,7 +2264,7 @@ int quicly_connect(quicly_conn_t **_conn, quicly_context_t *ctx, const char *ser
              NULL, NULL, conn->super.ctx->expand_client_hello ? conn->super.ctx->initial_egress_max_udp_payload_size : 0)) != 0)
         goto Exit;
     conn->crypto.transport_params.ext[0] =
-        (ptls_raw_extension_t){QUICLY_TLS_EXTENSION_TYPE_TRANSPORT_PARAMETERS,
+        (ptls_raw_extension_t){get_transport_parameters_extension_id(conn->super.version),
                                {conn->crypto.transport_params.buf.base, conn->crypto.transport_params.buf.off}};
     conn->crypto.transport_params.ext[1] = (ptls_raw_extension_t){UINT16_MAX};
     conn->crypto.handshake_properties.additional_extensions = conn->crypto.transport_params.ext;
@@ -2295,7 +2320,7 @@ static int server_collected_extensions(ptls_t *tls, ptls_handshake_properties_t 
         ret = PTLS_ALERT_MISSING_EXTENSION;
         goto Exit;
     }
-    assert(slots[0].type == QUICLY_TLS_EXTENSION_TYPE_TRANSPORT_PARAMETERS);
+    assert(slots[0].type == get_transport_parameters_extension_id(conn->super.version));
     assert(slots[1].type == UINT16_MAX);
 
     { /* decode transport_parameters extension */
@@ -2340,7 +2365,7 @@ static int server_collected_extensions(ptls_t *tls, ptls_handshake_properties_t 
         goto Exit;
     properties->additional_extensions = conn->crypto.transport_params.ext;
     conn->crypto.transport_params.ext[0] =
-        (ptls_raw_extension_t){QUICLY_TLS_EXTENSION_TYPE_TRANSPORT_PARAMETERS,
+        (ptls_raw_extension_t){get_transport_parameters_extension_id(conn->super.version),
                                {conn->crypto.transport_params.buf.base, conn->crypto.transport_params.buf.off}};
     conn->crypto.transport_params.ext[1] = (ptls_raw_extension_t){UINT16_MAX};
     conn->crypto.handshake_properties.additional_extensions = conn->crypto.transport_params.ext;
@@ -2933,7 +2958,14 @@ struct st_quicly_send_context_t {
          * contains multiple QUIC packet.
          */
         uint8_t *first_byte_at;
+        /**
+         * if the target QUIC packet contains an ack-eliciting frame
+         */
         uint8_t ack_eliciting : 1;
+        /**
+         * if the target datagram sholud be padded to full size
+         */
+        uint8_t full_size : 1;
     } target;
     /**
      * output buffer into which list of datagrams is written
@@ -2979,13 +3011,7 @@ struct st_quicly_send_context_t {
     uint8_t *dst_payload_from;
 };
 
-enum en_quicly_send_packet_mode_t {
-    QUICLY_COMMIT_SEND_PACKET_MODE_FULL_SIZE,
-    QUICLY_COMMIT_SEND_PACKET_MODE_SMALL,
-    QUICLY_COMMIT_SEND_PACKET_MODE_COALESCED,
-};
-
-static int commit_send_packet(quicly_conn_t *conn, quicly_send_context_t *s, enum en_quicly_send_packet_mode_t mode)
+static int commit_send_packet(quicly_conn_t *conn, quicly_send_context_t *s, int coalesced)
 {
     size_t datagram_size, packet_bytes_in_flight;
 
@@ -2997,7 +3023,7 @@ static int commit_send_packet(quicly_conn_t *conn, quicly_send_context_t *s, enu
     while (s->dst - s->dst_payload_from < QUICLY_MAX_PN_SIZE - QUICLY_SEND_PN_SIZE)
         *s->dst++ = QUICLY_FRAME_TYPE_PADDING;
 
-    if (mode == QUICLY_COMMIT_SEND_PACKET_MODE_FULL_SIZE) {
+    if (!coalesced && s->target.full_size) {
         assert(s->num_datagrams == 0 || s->datagrams[s->num_datagrams - 1].iov_len == conn->egress.max_udp_payload_size);
         const size_t max_size = conn->egress.max_udp_payload_size - QUICLY_AEAD_TAG_SIZE;
         assert(s->dst - s->payload_buf.datagram <= max_size);
@@ -3031,7 +3057,7 @@ static int commit_send_packet(quicly_conn_t *conn, quicly_send_context_t *s, enu
                                                    s->target.cipher->aead, ptls_iovec_init(s->payload_buf.datagram, datagram_size),
                                                    s->target.first_byte_at - s->payload_buf.datagram,
                                                    s->dst_payload_from - s->payload_buf.datagram, conn->egress.packet_number,
-                                                   mode == QUICLY_COMMIT_SEND_PACKET_MODE_COALESCED);
+                                                   coalesced);
 
     /* update CC, commit sentmap */
     if (s->target.ack_eliciting) {
@@ -3043,14 +3069,14 @@ static int commit_send_packet(quicly_conn_t *conn, quicly_send_context_t *s, enu
     if (quicly_sentmap_is_open(&conn->egress.loss.sentmap))
         quicly_sentmap_commit(&conn->egress.loss.sentmap, (uint16_t)packet_bytes_in_flight);
 
-    conn->egress.cc.impl->cc_on_sent(&conn->egress.cc, &conn->egress.loss, (uint32_t)packet_bytes_in_flight, conn->stash.now);
+    conn->egress.cc.type->cc_on_sent(&conn->egress.cc, &conn->egress.loss, (uint32_t)packet_bytes_in_flight, conn->stash.now);
     QUICLY_PROBE(PACKET_SENT, conn, conn->stash.now, conn->egress.packet_number, s->dst - s->target.first_byte_at,
                  get_epoch(*s->target.first_byte_at), !s->target.ack_eliciting);
 
     ++conn->egress.packet_number;
     ++conn->super.stats.num_packets.sent;
 
-    if (mode != QUICLY_COMMIT_SEND_PACKET_MODE_COALESCED) {
+    if (!coalesced) {
         conn->super.stats.num_bytes.sent += datagram_size;
         s->datagrams[s->num_datagrams++] = (struct iovec){.iov_base = s->payload_buf.datagram, .iov_len = datagram_size};
         s->payload_buf.datagram += datagram_size;
@@ -3120,8 +3146,7 @@ static int _do_allocate_frame(quicly_conn_t *conn, quicly_send_context_t *s, siz
                 coalescible = 0;
         }
         /* close out packet under construction */
-        if ((ret = commit_send_packet(
-                 conn, s, coalescible ? QUICLY_COMMIT_SEND_PACKET_MODE_COALESCED : QUICLY_COMMIT_SEND_PACKET_MODE_FULL_SIZE)) != 0)
+        if ((ret = commit_send_packet(conn, s, coalescible)) != 0)
             return ret;
     } else {
         coalescible = 0;
@@ -3140,6 +3165,7 @@ static int _do_allocate_frame(quicly_conn_t *conn, quicly_send_context_t *s, siz
         if (s->payload_buf.end - s->payload_buf.datagram < conn->egress.max_udp_payload_size)
             return QUICLY_ERROR_SENDBUF_FULL;
         s->target.cipher = s->current.cipher;
+        s->target.full_size = 0;
         s->dst = s->payload_buf.datagram;
         s->dst_end = s->dst + conn->egress.max_udp_payload_size;
     }
@@ -3260,7 +3286,8 @@ Emit: /* emit an ACK frame */
             assert(s->target.first_byte_at != s->payload_buf.datagram);
             *s->dst++ = QUICLY_FRAME_TYPE_PADDING;
         }
-        if ((ret = commit_send_packet(conn, s, QUICLY_COMMIT_SEND_PACKET_MODE_FULL_SIZE)) != 0)
+        s->target.full_size = 1;
+        if ((ret = commit_send_packet(conn, s, 0)) != 0)
             return ret;
         goto Emit;
     }
@@ -3628,7 +3655,7 @@ static void on_loss_detected(quicly_loss_t *loss, const quicly_sent_packet_t *lo
     ++conn->super.stats.num_packets.lost;
     if (is_time_threshold)
         ++conn->super.stats.num_packets.lost_time_threshold;
-    conn->egress.cc.impl->cc_on_lost(&conn->egress.cc, &conn->egress.loss, lost_packet->cc_bytes_in_flight,
+    conn->egress.cc.type->cc_on_lost(&conn->egress.cc, &conn->egress.loss, lost_packet->cc_bytes_in_flight,
                                      lost_packet->packet_number, conn->egress.packet_number, conn->stash.now,
                                      conn->egress.max_udp_payload_size);
     QUICLY_PROBE(PACKET_LOST, conn, conn->stash.now, lost_packet->packet_number, lost_packet->ack_epoch);
@@ -4308,6 +4335,7 @@ static int do_send(quicly_conn_t *conn, quicly_send_context_t *s)
                         free(c);
                     } while (conn->egress.path_challenge.head != NULL);
                     conn->egress.path_challenge.tail_ref = &conn->egress.path_challenge.head;
+                    s->target.full_size = 1; /* datagrams carrying PATH_CHALLENGE / PATH_RESPONSE have to be full-sized */
                 }
                 /* send max_streams frames */
                 if ((ret = send_max_streams(conn, 1, s)) != 0)
@@ -4381,11 +4409,10 @@ Exit:
         ret = 0;
     if (ret == 0 && s->target.first_byte_at != NULL) {
         /* last packet can be small-sized, unless it is the first flight sent from the client */
-        enum en_quicly_send_packet_mode_t commit_mode = QUICLY_COMMIT_SEND_PACKET_MODE_SMALL;
         if ((s->payload_buf.datagram[0] & QUICLY_PACKET_TYPE_BITMASK) == QUICLY_PACKET_TYPE_INITIAL &&
             (quicly_is_client(conn) || !ack_only))
-            commit_mode = QUICLY_COMMIT_SEND_PACKET_MODE_FULL_SIZE;
-        commit_send_packet(conn, s, commit_mode);
+            s->target.full_size = 1;
+        commit_send_packet(conn, s, 0);
     }
     if (ret == 0) {
         if (conn->application == NULL || conn->application->super.unacked_count == 0)
@@ -4409,6 +4436,11 @@ void quicly_send_datagram_frames(quicly_conn_t *conn, ptls_iovec_t *datagrams, s
         conn->egress.datagram_frame_payloads.payloads[conn->egress.datagram_frame_payloads.count++] =
             ptls_iovec_init(copied, datagrams[i].len);
     }
+}
+
+int quicly_set_cc(quicly_conn_t *conn, quicly_cc_type_t *cc)
+{
+    return cc->cc_switch(&conn->egress.cc);
 }
 
 int quicly_send(quicly_conn_t *conn, quicly_address_t *dest, quicly_address_t *src, struct iovec *datagrams, size_t *num_datagrams,
@@ -4449,7 +4481,7 @@ int quicly_send(quicly_conn_t *conn, quicly_address_t *dest, quicly_address_t *s
                 if ((ret = send_connection_close(conn, epoch, &s)) != 0)
                     goto Exit;
             }
-            if ((ret = commit_send_packet(conn, &s, QUICLY_COMMIT_SEND_PACKET_MODE_SMALL)) != 0)
+            if ((ret = commit_send_packet(conn, &s, 0)) != 0)
                 goto Exit;
         }
         /* wait at least 1ms */
@@ -4830,7 +4862,7 @@ static int handle_ack_frame(quicly_conn_t *conn, struct st_quicly_handle_payload
 
     /* OnPacketAcked and OnPacketAckedCC */
     if (bytes_acked > 0) {
-        conn->egress.cc.impl->cc_on_acked(&conn->egress.cc, &conn->egress.loss, (uint32_t)bytes_acked, frame.largest_acknowledged,
+        conn->egress.cc.type->cc_on_acked(&conn->egress.cc, &conn->egress.loss, (uint32_t)bytes_acked, frame.largest_acknowledged,
                                           (uint32_t)(conn->egress.loss.sentmap.bytes_in_flight + bytes_acked), conn->stash.now,
                                           conn->egress.max_udp_payload_size);
         QUICLY_PROBE(QUICTRACE_CC_ACK, conn, conn->stash.now, &conn->egress.loss.rtt, conn->egress.cc.cwnd,
@@ -5039,9 +5071,10 @@ static int negotiate_using_version(quicly_conn_t *conn, uint32_t version)
 {
     int ret;
 
-    /* set selected version */
+    /* set selected version, update transport parameters extension ID */
     conn->super.version = version;
     QUICLY_PROBE(VERSION_SWITCH, conn, conn->stash.now, version);
+    conn->crypto.transport_params.ext[0].type = get_transport_parameters_extension_id(version);
 
     /* replace initial keys */
     if ((ret = reinstall_initial_encryption(conn, PTLS_ERROR_LIBRARY)) != 0)
@@ -5062,12 +5095,16 @@ static int handle_version_negotiation_packet(quicly_conn_t *conn, quicly_decoded
     if (src == end || (end - src) % 4 != 0)
         return QUICLY_TRANSPORT_ERROR_PROTOCOL_VIOLATION;
 
-    /* select in the precedence of _CURRENT -> _DRAFT27 -> fail */
+    /* select in the precedence of V1 -> draft29 -> draft27 -> fail */
     while (src != end) {
         uint32_t supported_version = quicly_decode32(&src);
         switch (supported_version) {
-        case QUICLY_PROTOCOL_VERSION_CURRENT:
-            selected_version = QUICLY_PROTOCOL_VERSION_CURRENT;
+        case QUICLY_PROTOCOL_VERSION_1:
+            selected_version = QUICLY_PROTOCOL_VERSION_1;
+            break;
+        case QUICLY_PROTOCOL_VERSION_DRAFT29:
+            if (selected_version == 0 || selected_version == QUICLY_PROTOCOL_VERSION_DRAFT27)
+                selected_version = QUICLY_PROTOCOL_VERSION_DRAFT29;
             break;
         case QUICLY_PROTOCOL_VERSION_DRAFT27:
             if (selected_version == 0)
@@ -6335,4 +6372,5 @@ void quicly__debug_printf(quicly_conn_t *conn, const char *function, int line, c
 #endif
 }
 
-const uint32_t quicly_supported_versions[] = {QUICLY_PROTOCOL_VERSION_CURRENT, QUICLY_PROTOCOL_VERSION_DRAFT27, 0};
+const uint32_t quicly_supported_versions[] = {QUICLY_PROTOCOL_VERSION_1, QUICLY_PROTOCOL_VERSION_DRAFT29,
+                                              QUICLY_PROTOCOL_VERSION_DRAFT27, 0};

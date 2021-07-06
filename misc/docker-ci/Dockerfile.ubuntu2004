@@ -14,6 +14,7 @@ RUN apt-get install --yes \
 	git \
 	libbrotli-dev \
 	libc-ares-dev \
+	libcap-dev \
 	libclang-dev \
 	libedit-dev \
 	libelf-dev \
@@ -26,6 +27,7 @@ RUN apt-get install --yes \
 	libclang-7-dev \
 	zlib1g-dev \
 	memcached \
+	net-tools \
 	netcat-openbsd \
 	nghttp2-client \
 	php-cgi \

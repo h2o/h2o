@@ -514,14 +514,8 @@ static h2o_iovec_t log_cc_name(h2o_req_t *req)
     struct st_h2o_http3_server_conn_t *conn = (struct st_h2o_http3_server_conn_t *)req->conn;
     quicly_stats_t stats;
 
-    if (quicly_get_stats(conn->h3.super.quic, &stats) == 0) {
-        switch (stats.cc.impl->type) {
-        case CC_RENO_MODIFIED:
-            return h2o_iovec_init(H2O_STRLIT("reno"));
-        case CC_CUBIC:
-            return h2o_iovec_init(H2O_STRLIT("cubic"));
-        }
-    }
+    if (quicly_get_stats(conn->h3.super.quic, &stats) == 0)
+        return h2o_iovec_init(stats.cc.type->name, strlen(stats.cc.type->name));
     return h2o_iovec_init(NULL, 0);
 }
 
@@ -626,6 +620,13 @@ Redo:
 #undef APPLY_NUM_FRAMES
 #undef FORMAT_OF_NUM_FRAMES
 #undef VALUE_OF_NUM_FRAMES
+}
+
+static h2o_iovec_t log_quic_version(h2o_req_t *_req)
+{
+    struct st_h2o_http3_server_stream_t *stream = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_stream_t, req, _req);
+    char *buf = h2o_mem_alloc_pool(&stream->req.pool, char, sizeof(H2O_UINT32_LONGEST_STR));
+    return h2o_iovec_init(buf, sprintf(buf, "%" PRIu32, quicly_get_protocol_version(stream->quic->conn)));
 }
 
 void on_stream_destroy(quicly_stream_t *qs, int err)
@@ -1777,6 +1778,7 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
                 {
                     .stream_id = log_stream_id,
                     .quic_stats = log_quic_stats,
+                    .quic_version = log_quic_version,
                 },
         }},
     };
