@@ -1,7 +1,7 @@
 use strict;
 use warnings;
 use File::Temp qw(tempdir);
-use Net::EmptyPort qw(empty_port wait_port);
+use Net::EmptyPort qw(empty_port);
 use Test::More;
 use Time::HiRes qw(time);
 use t::Util;
@@ -66,8 +66,12 @@ done_testing;
 
 sub spawn {
     my ($listen_ip, $server_id) = @_;
-    my $conf = {opts => [qw(-m worker)], conf => <<"EOT"};
+    my $port = empty_port(+{ host => '0.0.0.0' });
+    my $server = spawn_h2o_raw(<<"EOT", [$port, +{ port => $quic_port, proto => 'udp' }], [qw(-m worker)]);
 num-threads: 1
+listen: # for retrieving metrics
+  host: 0.0.0.0
+  port: $port
 listen:
   type: quic
   host: $listen_ip
@@ -95,7 +99,8 @@ hosts:
       "/server-status":
         status: ON
 EOT
-    spawn_h2o($conf);
+    $server->{port} = $port;
+    return $server;
 }
 
 sub fetch {

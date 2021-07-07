@@ -1,8 +1,8 @@
 use strict;
 use warnings;
 use Digest::MD5 qw(md5_hex);
-use Net::EmptyPort qw(empty_port wait_port);
 use File::Temp qw(tempdir);
+use Net::EmptyPort qw(empty_port);
 use Test::More;
 use Time::HiRes qw(sleep);
 use t::Util;
@@ -16,19 +16,8 @@ plan skip_all => "nc not found"
     unless prog_exists("nc");
 
 my $up_port = empty_port();
-my $quic_port = empty_port({
-    host  => "127.0.0.1",
-    proto => "udp",
-});
-
 
 my $server = spawn_h2o(<< "EOT");
-listen:
-  type: quic
-  port: $quic_port
-  ssl:
-    key-file: examples/h2o/server.key
-    certificate-file: examples/h2o/server.crt
 hosts:
   default:
     paths:
@@ -46,7 +35,7 @@ sleep 1;
 
 # open client, sending request body at 12KB/sec. The number is slightly greater than H2O_HTTP3_REQUEST_BODY_MIN_BYTES_TO_BLOCK, and
 # the expectation is that h2o would start streaming the request body
-open my $client_resp, '-|', "$client_prog -3 100 -b 120000 -c 12000 -i 1000 -m POST https://127.0.0.1:$quic_port 2>&1"
+open my $client_resp, '-|', "$client_prog -3 100 -b 120000 -c 12000 -i 1000 -m POST https://127.0.0.1:$server->{quic_port} 2>&1"
     or die "failed to launch $client_prog:$!";
 
 # wait until the request received by upstream is 3 seconds' worth of data

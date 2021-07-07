@@ -1,7 +1,6 @@
 use strict;
 use warnings;
 use Digest::MD5 qw(md5_hex);
-use Net::EmptyPort qw(empty_port wait_port);
 use File::Temp qw(tempdir);
 use Test::More;
 use t::Util;
@@ -23,21 +22,16 @@ plan skip_all => 'server is not compiled with dtrace support'
 
 my $tempdir = tempdir(CLEANUP => 1);
 
-my $quic_port = empty_port({
-    host  => "127.0.0.1",
-    proto => "udp",
-});
-
 subtest 'retry' => sub {
     subtest 'off' => sub {
         my $server = spawn_retry_server('OFF');
-        my @lines = fetch("https://127.0.0.1:$quic_port");
+        my @lines = fetch("https://127.0.0.1:$server->{quic_port}");
         like join("", @lines), qr{^HTTP/3 200}m;
         unlike join("", @lines), qr{^first-byte: f}m;
     };
     subtest 'on' => sub {
         my $server = spawn_retry_server('ON');
-        my @lines = fetch("https://127.0.0.1:$quic_port");
+        my @lines = fetch("https://127.0.0.1:$server->{quic_port}");
         like join("", @lines), qr{^HTTP/3 200}m;
         like +(grep {/^first-byte: /} @lines)[0], qr/^first-byte: f[0-9a-f]$/m;
     };
@@ -47,12 +41,7 @@ done_testing;
 
 sub spawn_retry_server {
     my $boolflag = shift;
-    my $server = spawn_h2o(<< "EOT");
-listen:
-  port: $quic_port
-  ssl:
-    key-file: examples/h2o/server.key
-    certificate-file: examples/h2o/server.crt
+    return spawn_h2o(<< "EOT");
   quic:
     retry: $boolflag
 hosts:
@@ -61,8 +50,6 @@ hosts:
       /:
         file.dir: t/assets/doc_root
 EOT
-    wait_port({port => $quic_port, proto => 'udp'});
-    $server;
 }
 
 sub fetch {

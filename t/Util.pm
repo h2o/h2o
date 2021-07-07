@@ -211,58 +211,86 @@ sub spawn_server {
 
 # returns a hash containing `port`, `tls_port`, `guard`
 sub spawn_h2o {
-    my ($conf) = @_;
-    my @opts;
+    my ($conf, $opts) = @_;
+    $opts ||= +{};
+    my @args;
     my $max_ssl_version;
+    my $quic = $opts->{quic} // 1; # enabled on default
 
     # decide the port numbers
     my ($port, $tls_port) = empty_ports(2, { host => "0.0.0.0" });
+    my $quic_port = $quic ? empty_port({ host => "0.0.0.0", proto => "udp" }) : undef;
 
     # setup the configuration file
-    $conf = $conf->($port, $tls_port)
+    $conf = $conf->($port, $tls_port, $quic_port)
         if ref $conf eq 'CODE';
     my $user = $< == 0 ? "root" : "";
     if (ref $conf eq 'HASH') {
-        @opts = @{$conf->{opts}}
-            if $conf->{opts};
+        @args = @{$conf->{args} || []};
         $max_ssl_version = $conf->{max_ssl_version} || undef;
         $user = $conf->{user} if exists $conf->{user};
         $conf = $conf->{conf};
     }
-    $conf = <<"EOT";
-$conf
+    my $ssl = <<"EOT";
+  ssl:
+    key-file: examples/h2o/server.key
+    certificate-file: examples/h2o/server.crt
+    @{[$max_ssl_version ? "max-version: $max_ssl_version" : ""]}
+EOT
+
+    my $user_and_listen = <<"EOT";
+@{[$user ? "user: $user" : ""]}
 listen:
   host: 0.0.0.0
   port: $port
 listen:
   host: 0.0.0.0
   port: $tls_port
-  ssl:
-    key-file: examples/h2o/server.key
-    certificate-file: examples/h2o/server.crt
-    @{[$max_ssl_version ? "max-version: $max_ssl_version" : ""]}
-@{[$user ? "user: $user" : ""]}
+$ssl
 EOT
+    if ($quic) {
+        $user_and_listen .= <<"EOT";
+listen:
+  type: quic
+  host: 0.0.0.0
+  port: $quic_port
+$ssl
+EOT
+    }
+    my $whole_conf = join("\n", $conf, $user_and_listen);
 
-    my $ret = spawn_h2o_raw($conf, [$port, $tls_port], \@opts);
+    my $port_defs = [
+        +{ port => $port, proto => 'tcp' },
+        +{ port => $tls_port, proto => 'tcp' },
+        ($quic ? (
+            +{ port => $quic_port, proto => 'udp' },
+        ) : ()),
+    ];
+    my $ret = spawn_h2o_raw($whole_conf, $port_defs, \@args);
     return {
         %$ret,
         port => $port,
         tls_port => $tls_port,
+        quic_port => $quic_port,
     };
 }
 
 sub spawn_h2o_raw {
-    my ($conf, $check_ports, $opts) = @_;
+    my ($conf, $port_defs, $args) = @_;
 
     my ($conffh, $conffn) = tempfile(UNLINK => 1);
     print $conffh $conf;
 
     # spawn the server
     my ($guard, $pid) = spawn_server(
-        argv     => [ bindir() . "/h2o", "-c", $conffn, @{$opts || []} ],
+        argv     => [ bindir() . "/h2o", "-c", $conffn, @{$args || []} ],
         is_ready => sub {
-            check_port($_) or return for @{ $check_ports || [] };
+            for my $port_def (@{ $port_defs || [] }) {
+                unless (ref $port_def eq 'HASH') {
+                    $port_def = +{ port => $port_def, proto => 'tcp' };
+                }
+                check_port($port_def) or return;
+            }
             1;
         },
     );

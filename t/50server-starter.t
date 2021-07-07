@@ -12,7 +12,7 @@ my $tempdir = tempdir(CLEANUP => 1);
 
 subtest "master-mode" => sub {
     my $server = spawn_h2o({
-        opts => [ qw(--mode=master) ],
+        args => [ qw(--mode=master) ],
         conf => << "EOT",
 pid-file: $tempdir/h2o.pid
 hosts:
@@ -41,7 +41,7 @@ EOT
 
 subtest "daemon-mode" => sub {
     my $server = spawn_h2o({
-        opts => [ qw(--mode=daemon) ],
+        args => [ qw(--mode=daemon) ],
         conf => << "EOT",
 pid-file: $tempdir/h2o.pid
 error-log: $tempdir/h2o.error

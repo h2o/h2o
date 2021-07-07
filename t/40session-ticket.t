@@ -69,7 +69,7 @@ EOT
         is test(), "New";
         is test(), "New";
         is test(), "New";
-    });
+    }, +{ quic => 0 }); # to avoid quic makes h2o stall with ticket file failure
 };
 
 subtest "memcached" => sub {
@@ -116,10 +116,10 @@ done_testing;
 my $server;
 
 sub spawn_with {
-    my ($opts, $cb) = @_;
-    $server = spawn_h2o(<< "EOT");
+    my ($resumption_conf, $cb, $opts) = @_;
+    $server = spawn_h2o(<< "EOT", $opts);
 ssl-session-resumption:
-$opts
+$resumption_conf
 hosts:
   default:
     paths:
