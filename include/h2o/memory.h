@@ -546,7 +546,7 @@ inline void h2o_vector__reserve(h2o_mem_pool_t *pool, h2o_vector_t *vector, size
 inline void h2o_vector__erase(h2o_vector_t *vector, size_t element_size, size_t index)
 {
     char *entries = (char *)vector->entries;
-    memmove(entries + element_size * index, entries + element_size * (index + 1), vector->size - index - 1);
+    memmove(entries + element_size * index, entries + element_size * (index + 1), element_size * (vector->size - index - 1));
     --vector->size;
 }
 
