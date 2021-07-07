@@ -19,6 +19,9 @@ plan skip_all => 'Starlet not found'
 plan skip_all => 'curl not found'
     unless prog_exists('curl');
 
+plan skip_all => 'mruby support is off'
+    unless server_features()->{mruby};
+
 my $tempdir = tempdir(CLEANUP => 1);
 
 sub create_http1_upstream {
