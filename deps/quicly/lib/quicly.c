@@ -3145,7 +3145,10 @@ static int _do_allocate_frame(quicly_conn_t *conn, quicly_send_context_t *s, siz
             if (overhead + packet_min_space > s->dst_end - s->dst)
                 coalescible = 0;
         }
-        /* close out packet under construction */
+        /* Close the packet under construction. Datagrams being returned by `quicly_send` are padded to full-size (except for the
+         * last one datagram) so that they can be sent at once using GSO. */
+        if (!coalescible)
+            s->target.full_size = 1;
         if ((ret = commit_send_packet(conn, s, coalescible)) != 0)
             return ret;
     } else {
