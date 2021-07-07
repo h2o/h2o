@@ -214,6 +214,60 @@ subtest "h2olog -A=127.0.0.2", sub {
   };
 };
 
+subtest "h2olog -N=localhost.examp1e.net", sub {
+  my $tracer = H2ologTracer->new({
+    pid => $server->{pid},
+    args => ["-N", "localhost.examp1e.net"],
+  });
+
+  subtest "with non-matched domain name", sub {
+    my ($headers) = run_prog("$client_prog -3 https://127.0.0.1:$quic_port/");
+    like $headers, qr{^HTTP/3 200\n}, "req: HTTP/3";
+
+    sleep(1);
+    my $trace = $tracer->get_trace();
+
+    if ($ENV{H2OLOG_DEBUG}) {
+      diag "h2olog output:\n", $trace;
+    }
+
+    my @logs = map { decode_json($_) } split /\n/, $trace;
+
+    is_deeply [
+      grep {
+        $_->{type} eq "h3s-accept"
+      } @logs
+    ], [], "no h3s-accept header in logs";
+
+    is_deeply [
+      grep {
+        $_->{type} eq "h3s-destroy"
+      } @logs
+    ], [], "no h3s-destroy header in logs";
+  };
+
+  subtest "with matched domain name", sub {
+    my ($headers) = run_prog("$client_prog -3 https://localhost.examp1e.net:$quic_port/");
+    like $headers, qr{^HTTP/3 200\n}, "req: HTTP/3";
+
+    sleep(1);
+    my $trace = $tracer->get_trace();
+
+    if ($ENV{H2OLOG_DEBUG}) {
+      diag "h2olog output:\n", $trace;
+    }
+
+    my @logs = map { decode_json($_) } split /\n/, $trace;
+
+    is_deeply scalar(grep {
+        $_->{type} eq "h3s-accept"
+      } @logs), 1, "h3s-accept header in logs";
+
+    is_deeply scalar(grep {
+        $_->{type} eq "h3s-destroy"
+      } @logs), 1, "h3s-destroy header in logs";
+  };
+};
 subtest "multiple h2olog with sampling filters", sub {
   my $tracer1 = H2ologTracer->new({
     pid => $server->{pid},
