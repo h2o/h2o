@@ -197,7 +197,10 @@ void do_write(h2o_socket_t *_sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_socket_
     assert(sock->super._cb.write == NULL);
     sock->super._cb.write = cb;
 
-    uv_write(&sock->stream._wreq, (uv_stream_t *)sock->handle, (uv_buf_t *)bufs, (int)bufcnt, on_do_write_complete);
+    if (bufcnt > 0)
+        uv_write(&sock->stream._wreq, (uv_stream_t *)sock->handle, (uv_buf_t *)bufs, (int)bufcnt, on_do_write_complete);
+    else
+        on_do_write_complete(&sock->stream._wreq, 0);
 }
 
 void h2o_socket_notify_write(h2o_socket_t *_sock, h2o_socket_cb cb)
