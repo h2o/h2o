@@ -49,6 +49,10 @@
 #include <sys/uio.h>
 #include <sys/un.h>
 #include <sys/wait.h>
+#ifdef LIBCAP_FOUND
+#include <sys/capability.h>
+#include <sys/prctl.h>
+#endif
 #include <openssl/crypto.h>
 #include <openssl/dh.h>
 #include <openssl/err.h>
@@ -106,9 +110,12 @@ struct listener_ssl_config_t {
     SSL_CTX *ctx;
     h2o_iovec_t *http2_origin_frame;
     /**
-     * per-SNI CC
+     * per-SNI CC (nullable)
      */
-    h2o_iovec_t tcp_congestion_controller;
+    struct {
+        h2o_iovec_t tcp;
+        quicly_cc_type_t *quic;
+    } cc;
     /**
      * Optional alternate context. When both X.509 and raw public key certs are to be retained, this pointer points to the context
      * that retains the raw public key.
@@ -246,6 +253,9 @@ static struct {
     char *crash_handler;
     int crash_handler_wait_pipe_close;
     int tcp_reuseport;
+#ifdef LIBCAP_FOUND
+    H2O_VECTOR(cap_value_t) capabilities;
+#endif
 } conf = {
     .globalconf = {0},
     .run_mode = RUN_MODE_WORKER,
@@ -389,7 +399,7 @@ static int on_sni_callback(SSL *ssl, int *ad, void *arg)
         struct listener_ssl_config_t *resolved = resolve_sni(listener, server_name, server_name_len);
         if (resolved->ctx != SSL_get_SSL_CTX(ssl)) {
             SSL_set_SSL_CTX(ssl, resolved->ctx);
-            set_tcp_congestion_controller(sock, resolved->tcp_congestion_controller);
+            set_tcp_congestion_controller(sock, resolved->cc.tcp);
         }
     }
 
@@ -416,8 +426,12 @@ static int on_client_hello_ptls(ptls_on_client_hello_t *_self, ptls_t *tls, ptls
         ptls_context_t *newctx = h2o_socket_ssl_get_picotls_context(ssl_config->ctx);
         ptls_set_context(tls, newctx);
         ptls_set_server_name(tls, (const char *)params->server_name.base, params->server_name.len);
-        if (self->listener->quic.ctx == NULL)
-            set_tcp_congestion_controller(conn, ssl_config->tcp_congestion_controller);
+        if (self->listener->quic.ctx == NULL) {
+            set_tcp_congestion_controller(conn, ssl_config->cc.tcp);
+        } else {
+            if (ssl_config->cc.quic != NULL)
+                quicly_set_cc(conn, ssl_config->cc.quic);
+        }
     } else {
         ssl_config = self->listener->ssl.entries[0];
         assert(ssl_config != NULL);
@@ -1179,18 +1193,17 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
     if (cc_node != NULL) {
         if (listener->quic.ctx == NULL) {
             /* TCP; CC name is kept in the SSL config */
-            ssl_config->tcp_congestion_controller = h2o_strdup(NULL, (*cc_node)->data.scalar, SIZE_MAX);
+            ssl_config->cc.tcp = h2o_strdup(NULL, (*cc_node)->data.scalar, SIZE_MAX);
         } else {
-            /* QUIC; the context is modified directly */
-            if (listener->ssl.size > 1) {
-                h2o_configurator_errprintf(cmd, *cc_node,
-                                           "[warning] Setting ignored. At the moment, only the first listen entry for a given "
-                                           "address:port tuple can specify the QUIC congestion controller");
-            }
-            if (strcasecmp((*cc_node)->data.scalar, "reno") == 0) {
-                listener->quic.ctx->init_cc = &quicly_cc_reno_init;
-            } else if (strcasecmp((*cc_node)->data.scalar, "cubic") == 0) {
-                listener->quic.ctx->init_cc = &quicly_cc_cubic_init;
+            /* QUIC; set quicly_context_t::init_cc (used for initialization) and ::cc for changing the type upon receiving SNI */
+            quicly_cc_type_t **cand;
+            for (cand = quicly_cc_all_types; *cand != NULL; ++cand)
+                if (strcasecmp((*cand)->name, (*cc_node)->data.scalar) == 0)
+                    break;
+            if (*cand != NULL) {
+                if (listener_is_new)
+                    listener->quic.ctx->init_cc = (*cand)->cc_init;
+                ssl_config->cc.quic = *cand;
             } else {
                 h2o_configurator_errprintf(cmd, *cc_node, "specified congestion controller is unknown or unsupported for QUIC");
                 goto Error;
@@ -1909,6 +1922,69 @@ static int on_config_user(h2o_configurator_command_t *cmd, h2o_configurator_cont
     return 0;
 }
 
+static int on_config_capabilities(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+#ifndef LIBCAP_FOUND
+    h2o_configurator_errprintf(cmd, node, "the platform does not support Linux capabilities"
+#ifdef __linux
+        " (hint: install libcap-dev or libcap-devel and rerun cmake)"
+#endif
+        );
+    return -1;
+#else
+
+    h2o_vector_reserve(NULL, &conf.capabilities, node->data.sequence.size);
+    for (size_t i = 0; i != node->data.sequence.size; ++i) {
+        yoml_t *element = node->data.sequence.elements[i];
+        if (element->type != YOML_TYPE_SCALAR) {
+            h2o_configurator_errprintf(cmd, element, "elements of `capability` must be strings");
+            return -1;
+        }
+        cap_value_t cap;
+        if (cap_from_name(element->data.scalar, &cap) != 0) {
+            h2o_configurator_errprintf(cmd, element, "unknown capability name `%s`", element->data.scalar);
+            return -1;
+        }
+        conf.capabilities.entries[i] = cap;
+    }
+    conf.capabilities.size = node->data.sequence.size;
+    return 0;
+#endif
+}
+
+static void capabilities_set_keepcaps(void)
+{
+#ifdef LIBCAP_FOUND
+    if (conf.capabilities.size > 0) {
+        if (prctl(PR_SET_KEEPCAPS, 1, 0, 0, 0) != 0) {
+            char buf[128];
+            h2o_fatal("prctl(PR_SET_KEEPCAPS,1): %s", h2o_strerror_r(errno, buf, sizeof(buf)));
+        }
+    }
+#endif
+}
+
+static void capabilities_drop(void)
+{
+#ifdef LIBCAP_FOUND
+    if (conf.capabilities.size > 0) {
+        char buf[128];
+        cap_t cap = cap_init();
+        if (cap == NULL)
+            h2o_fatal("cap_init: %s", h2o_strerror_r(errno, buf, sizeof(buf)));
+        if (cap_set_flag(cap, CAP_EFFECTIVE, conf.capabilities.size, conf.capabilities.entries, CAP_SET) != 0)
+            h2o_fatal("cap_set_flag(CAP_EFFECTIVE): %s", h2o_strerror_r(errno, buf, sizeof(buf)));
+        if (cap_set_flag(cap, CAP_PERMITTED, conf.capabilities.size, conf.capabilities.entries, CAP_SET) != 0)
+            h2o_fatal("cap_set_flag(CAP_PERMITTED): %s", h2o_strerror_r(errno, buf, sizeof(buf)));
+        if (cap_set_proc(cap) != 0)
+            h2o_fatal("cap_set_proc: %s", h2o_strerror_r(errno, buf, sizeof(buf)));
+        cap_free(cap);
+        if (prctl(PR_SET_KEEPCAPS, 0, 0, 0, 0) != 0)
+            h2o_fatal("prctl(PR_SET_KEEPCAPS,0): %s", h2o_strerror_r(errno, buf, sizeof(buf)));
+    }
+#endif
+}
+
 static int on_config_pid_file(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     conf.pid_file = h2o_strdup(NULL, node->data.scalar, SIZE_MAX).base;
@@ -2507,6 +2583,7 @@ static int forward_quic_packets(h2o_quic_ctx_t *h3ctx, const uint64_t *node_id, 
                 goto NodeFound;
             }
         }
+        H2O_PROBE(H3_PACKET_FORWARD_TO_NODE_IGNORE, *node_id);
         return 0;
     NodeFound:;
     } else {
@@ -2516,13 +2593,16 @@ static int forward_quic_packets(h2o_quic_ctx_t *h3ctx, const uint64_t *node_id, 
             if (thread_id == h3ctx->next_cid.thread_id) {
                 assert(h3ctx->acceptor == NULL);
                 /* FIXME forward packets to the newer generation process */
+                H2O_PROBE(H3_PACKET_FORWARD_TO_THREAD_IGNORE, thread_id);
                 return 0;
             }
         } else {
             /* intra-node, validate thread id */
             assert(thread_id != ctx->http3.ctx.super.next_cid.thread_id);
-            if (thread_id >= conf.quic.num_threads)
+            if (thread_id >= conf.quic.num_threads) {
+                H2O_PROBE(H3_PACKET_FORWARD_TO_THREAD_IGNORE, thread_id);
                 return 0;
+            }
         }
         fd = conf.listeners[ctx->listener_index]->quic.thread_fds[thread_id];
     }
@@ -2738,15 +2818,19 @@ static h2o_quic_conn_t *on_http3_accept(h2o_quic_ctx_t *_ctx, quicly_address_t *
         }
         if (send_retry) {
             static __thread struct {
-                ptls_aead_context_t *current;
+                ptls_aead_context_t *v1;
+                ptls_aead_context_t *draft29;
                 ptls_aead_context_t *draft27;
             } retry_integrity_aead_cache;
             uint8_t scid[16], payload[QUICLY_MIN_CLIENT_INITIAL_SIZE], token_prefix;
             ptls_openssl_random_bytes(scid, sizeof(scid));
             ptls_aead_context_t *token_aead = quic_get_address_token_encryptor(&token_prefix), **retry_integrity_aead;
             switch (packet->version) {
-            case QUICLY_PROTOCOL_VERSION_CURRENT:
-                retry_integrity_aead = &retry_integrity_aead_cache.current;
+            case QUICLY_PROTOCOL_VERSION_1:
+                retry_integrity_aead = &retry_integrity_aead_cache.v1;
+                break;
+            case QUICLY_PROTOCOL_VERSION_DRAFT29:
+                retry_integrity_aead = &retry_integrity_aead_cache.draft29;
                 break;
             case QUICLY_PROTOCOL_VERSION_DRAFT27:
                 retry_integrity_aead = &retry_integrity_aead_cache.draft27;
@@ -3186,6 +3270,8 @@ static void setup_configurators(void)
         h2o_configurator_t *c = h2o_configurator_create(&conf.globalconf, sizeof(*c));
         h2o_configurator_define_command(c, "user", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_user);
+        h2o_configurator_define_command(c, "capabilities", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SEQUENCE,
+                                        on_config_capabilities);
         h2o_configurator_define_command(c, "pid-file", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_pid_file);
         h2o_configurator_define_command(c, "error-log", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
@@ -3551,10 +3637,12 @@ int main(int argc, char **argv)
 
     /* setuid */
     if (conf.globalconf.user != NULL) {
+        capabilities_set_keepcaps();
         if (h2o_setuidgid(conf.globalconf.user) != 0) {
             fprintf(stderr, "failed to change the running user (are you sure you are running as root?)\n");
             return EX_OSERR;
         }
+        capabilities_drop();
         if (neverbleed != NULL && neverbleed_setuidgid(neverbleed, conf.globalconf.user, 1) != 0) {
             fprintf(stderr, "failed to change the running user of neverbleed daemon\n");
             return EX_OSERR;

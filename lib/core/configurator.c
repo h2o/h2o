@@ -454,6 +454,12 @@ static int on_config_http2_max_concurrent_requests_per_connection(h2o_configurat
     return h2o_configurator_scanf(cmd, node, "%zu", &ctx->globalconf->http2.max_concurrent_requests_per_connection);
 }
 
+static int on_config_http2_max_concurrent_streaming_requests_per_connection(h2o_configurator_command_t *cmd,
+                                                                            h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    return h2o_configurator_scanf(cmd, node, "%zu", &ctx->globalconf->http2.max_concurrent_streaming_requests_per_connection);
+}
+
 static int on_config_http2_input_window_size(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     uint32_t v;
@@ -1020,6 +1026,9 @@ void h2o_configurator__init_core(h2o_globalconf_t *conf)
         h2o_configurator_define_command(&c->super, "http2-max-concurrent-requests-per-connection",
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_http2_max_concurrent_requests_per_connection);
+        h2o_configurator_define_command(&c->super, "http2-max-concurrent-streaming-requests-per-connection",
+                                        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                        on_config_http2_max_concurrent_streaming_requests_per_connection);
         h2o_configurator_define_command(&c->super, "http2-input-window-size",
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_http2_input_window_size);

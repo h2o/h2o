@@ -130,7 +130,7 @@ for my $probe (@probes) {
             # build an array of [field-names => type-specifiers]
             my @fields;
             push @fields, map {["rtt.$_" => '%u']} qw(minimum smoothed variance);
-            push @fields, map {["cc.$_" => '%u']} qw(impl->type cwnd ssthresh cwnd_initial cwnd_exiting_slow_start cwnd_minimum cwnd_maximum num_loss_episodes);
+            push @fields, map {["cc.$_" => '%u']} qw(cwnd ssthresh cwnd_initial cwnd_exiting_slow_start cwnd_minimum cwnd_maximum num_loss_episodes);
             push @fields, map {["num_packets.$_" => $arch eq 'embedded' ? '%" PRIu64 "' : '%llu']} qw(sent ack_received lost lost_time_threshold late_acked received decryption_failed);
             push @fields, map {["num_bytes.$_" => $arch eq 'embedded' ? '%" PRIu64 "' : '%llu']} qw(sent received);
             for my $container (qw(num_frames_sent num_frames_received)) {
@@ -143,6 +143,15 @@ for my $probe (@probes) {
                 push @ap, map{"((struct st_quicly_stats_t *)arg$i)->" . $_->[0]} @fields;
             } else {
                 push @ap, map{"arg${i}->" . $_->[0]} @fields;
+            }
+            # special handling of cc.type
+            push @fmt, '"cc_type":"%s"';
+            if ($arch eq 'linux') {
+                push @ap, "str((struct st_quicly_stats_t *)arg$i)->cc.type->name)";
+            } elsif ($arch eq 'darwin') {
+                push @ap, "copyinstr(str(arg${i}->cc.type->name))";
+            } else {
+                push @ap, "arg${i}->cc.type->name";
             }
         } else {
             $name = 'time'

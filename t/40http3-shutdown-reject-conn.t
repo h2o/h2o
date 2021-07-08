@@ -6,6 +6,9 @@ use Net::EmptyPort qw(empty_port wait_port);
 use Test::More;
 use t::Util;
 
+plan skip_all => 'mruby support is off'
+    unless server_features()->{mruby};
+
 my $client_prog = bindir() . "/h2o-httpclient";
 plan skip_all => "$client_prog not found"
     unless -e $client_prog;

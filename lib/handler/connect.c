@@ -785,7 +785,7 @@ const char *h2o_connect_parse_acl(h2o_connect_acl_entry_t *output, const char *i
         for (i = 0; i < output->addr_mask / 8; ++i)
             output->addr.v6[i] = v6addr.s6_addr[i];
         if (output->addr_mask % 8 != 0)
-            output->addr.v6[i] = v6addr.s6_addr[i] & TO_BITMASK(uint8_t, v6addr.s6_addr[i]);
+            output->addr.v6[i] = v6addr.s6_addr[i] & TO_BITMASK(uint8_t, output->addr_mask % 8);
         for (++i; i < PTLS_ELEMENTSOF(output->addr.v6); ++i)
             output->addr.v6[i] = 0;
     } else {

@@ -101,6 +101,14 @@ provider h2o {
      */
     probe h3_packet_forward(struct sockaddr *dest, struct sockaddr *src, size_t num_packets, size_t num_bytes, int fd);
     /**
+     * HTTP/3 event, indicating that a QUIC packet forwarding to another node is triggered but ignored.
+     */
+    probe h3_packet_forward_to_node_ignore(uint64_t node_id);
+    /**
+     * HTTP/3 event, indicating that a QUIC packet forwarding to another thread is triggered but ignored.
+     */
+    probe h3_packet_forward_to_thread_ignore(uint32_t thread_id);
+    /**
      * HTTP/3 event, indicating that a forwarded QUIC packet has been received.
      */
     probe h3_forwarded_packet_receive(struct sockaddr *dest, struct sockaddr *src, size_t num_bytes);

@@ -13,6 +13,9 @@ use warnings;
 use Test::More;
 use t::Util;
 
+plan skip_all => 'mruby support is off'
+    unless server_features()->{mruby};
+
 sub test_priority_header {
     my ($input_streams, $expected_order) = @_;
     my $server = spawn_h2o(sub {

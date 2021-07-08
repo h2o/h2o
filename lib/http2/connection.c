@@ -222,8 +222,10 @@ static void run_pending_requests(h2o_http2_conn_t *conn)
 
             lnext = link->next;
 
-            /* handle no more than one streaming request at a time */
-            if (stream->req.proceed_req != NULL && conn->num_streams._req_streaming_in_progress - conn->num_streams.tunnel >= 1)
+            /* handle no more than specified number of streaming requests at a time */
+            if (stream->req.proceed_req != NULL &&
+                conn->num_streams._req_streaming_in_progress - conn->num_streams.tunnel >=
+                    conn->super.ctx->globalconf->http2.max_concurrent_streaming_requests_per_connection)
                 continue;
 
             /* handle it */

@@ -24,6 +24,7 @@
 #endif
 #include <errno.h>
 #include <netinet/in.h>
+#include <netinet/udp.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <sys/socket.h>
@@ -51,7 +52,7 @@ struct st_h2o_http3_ingress_unistream_t {
                          const uint8_t *src_end, int is_eos);
 };
 
-const ptls_iovec_t h2o_http3_alpn[2] = {{(void *)H2O_STRLIT("h3-29")}, {(void *)H2O_STRLIT("h3-27")}};
+const ptls_iovec_t h2o_http3_alpn[3] = {{(void *)H2O_STRLIT("h3")}, {(void *)H2O_STRLIT("h3-29")}, {(void *)H2O_STRLIT("h3-27")}};
 
 static void report_sendmsg_errors(h2o_error_reporter_t *reporter, uint64_t total_successes, uint64_t cur_successes)
 {
@@ -63,15 +64,9 @@ static void report_sendmsg_errors(h2o_error_reporter_t *reporter, uint64_t total
 
 static h2o_error_reporter_t track_sendmsg = H2O_ERROR_REPORTER_INITIALIZER(report_sendmsg_errors);
 
-/**
- * Sends a packet, returns if the connection is still maintainable (false is returned when not being able to send a packet from the
- * designated source address).
- */
 int h2o_quic_send_datagrams(h2o_quic_ctx_t *ctx, quicly_address_t *dest, quicly_address_t *src, struct iovec *datagrams,
                             size_t num_datagrams)
 {
-    int ret;
-    struct msghdr mess;
     union {
         struct cmsghdr hdr;
         char buf[
@@ -84,35 +79,38 @@ int h2o_quic_send_datagrams(h2o_quic_ctx_t *ctx, quicly_address_t *dest, quicly_
 #else
             CMSG_SPACE(1)
 #endif
+            +
+#ifdef UDP_SEGMENT
+            CMSG_SPACE(sizeof(uint16_t))
+#else
+            0
+#endif
         ];
-    } cmsg;
+    } cmsgbuf = {.buf = {}};
+    struct cmsghdr *cmsg = &cmsgbuf.hdr;
 
-    /* prepare the fields that remain constant across multiple datagrams */
-    memset(&mess, 0, sizeof(mess));
-    mess.msg_name = &dest->sa;
-    mess.msg_namelen = quicly_get_socklen(&dest->sa);
+    /* first CMSG is the source address */
     if (src->sa.sa_family != AF_UNSPEC) {
         size_t cmsg_bodylen = 0;
-        memset(&cmsg, 0, sizeof(cmsg));
         switch (src->sa.sa_family) {
         case AF_INET: {
 #if defined(IP_PKTINFO)
             if (*ctx->sock.port != src->sin.sin_port)
                 return 0;
-            cmsg.hdr.cmsg_level = IPPROTO_IP;
-            cmsg.hdr.cmsg_type = IP_PKTINFO;
+            cmsg->cmsg_level = IPPROTO_IP;
+            cmsg->cmsg_type = IP_PKTINFO;
             cmsg_bodylen = sizeof(struct in_pktinfo);
-            memcpy(&((struct in_pktinfo *)CMSG_DATA(&cmsg.hdr))->ipi_spec_dst, &src->sin.sin_addr, sizeof(struct in_addr));
+            memcpy(&((struct in_pktinfo *)CMSG_DATA(cmsg))->ipi_spec_dst, &src->sin.sin_addr, sizeof(struct in_addr));
 #elif defined(IP_SENDSRCADDR)
             if (*ctx->sock.port != src->sin.sin_port)
                 return 0;
             struct sockaddr_in *fdaddr = (struct sockaddr_in *)&ctx->sock.addr;
             assert(fdaddr->sin_family == AF_INET);
             if (fdaddr->sin_addr.s_addr == INADDR_ANY) {
-                cmsg.hdr.cmsg_level = IPPROTO_IP;
-                cmsg.hdr.cmsg_type = IP_SENDSRCADDR;
+                cmsg->cmsg_level = IPPROTO_IP;
+                cmsg->cmsg_type = IP_SENDSRCADDR;
                 cmsg_bodylen = sizeof(struct in_addr);
-                memcpy(CMSG_DATA(&cmsg.hdr), &src->sin.sin_addr, sizeof(struct in_addr));
+                memcpy(CMSG_DATA(cmsg), &src->sin.sin_addr, sizeof(struct in_addr));
             }
 #else
             h2o_fatal("IP_PKTINFO not available");
@@ -122,10 +120,10 @@ int h2o_quic_send_datagrams(h2o_quic_ctx_t *ctx, quicly_address_t *dest, quicly_
 #ifdef IPV6_PKTINFO
             if (*ctx->sock.port != src->sin6.sin6_port)
                 return 0;
-            cmsg.hdr.cmsg_level = IPPROTO_IPV6;
-            cmsg.hdr.cmsg_type = IPV6_PKTINFO;
+            cmsg->cmsg_level = IPPROTO_IPV6;
+            cmsg->cmsg_type = IPV6_PKTINFO;
             cmsg_bodylen = sizeof(struct in6_pktinfo);
-            memcpy(&((struct in6_pktinfo *)CMSG_DATA(&cmsg.hdr))->ipi6_addr, &src->sin6.sin6_addr, sizeof(struct in6_addr));
+            memcpy(&((struct in6_pktinfo *)CMSG_DATA(cmsg))->ipi6_addr, &src->sin6.sin6_addr, sizeof(struct in6_addr));
 #else
             h2o_fatal("IPV6_PKTINFO not available");
 #endif
@@ -134,12 +132,42 @@ int h2o_quic_send_datagrams(h2o_quic_ctx_t *ctx, quicly_address_t *dest, quicly_
             h2o_fatal("unexpected address family");
             break;
         }
-        mess.msg_control = &cmsg;
-        cmsg.hdr.cmsg_len = (socklen_t)CMSG_LEN(cmsg_bodylen);
-        mess.msg_controllen = (socklen_t)CMSG_SPACE(cmsg_bodylen);
+        cmsg->cmsg_len = (socklen_t)CMSG_LEN(cmsg_bodylen);
+        cmsg = (struct cmsghdr *)((char *)cmsg + CMSG_SPACE(cmsg_bodylen));
     }
 
+    /* next CMSG is UDP_SEGMENT size (for GSO) */
+#ifdef UDP_SEGMENT
+    if (num_datagrams > 1) {
+        for (size_t i = 1; i < num_datagrams - 1; ++i)
+            assert(datagrams[i].iov_len == datagrams[0].iov_len);
+        uint16_t segsize = (uint16_t)datagrams[0].iov_len;
+        cmsg->cmsg_level = SOL_UDP;
+        cmsg->cmsg_type = UDP_SEGMENT;
+        cmsg->cmsg_len = CMSG_LEN(sizeof(segsize));
+        memcpy(CMSG_DATA(cmsg), &segsize, sizeof(segsize));
+        cmsg = (struct cmsghdr *)((char *)cmsg + CMSG_SPACE(sizeof(segsize)));
+    }
+#endif
+
     /* send datagrams */
+    struct msghdr mess = {
+        .msg_name = &dest->sa,
+        .msg_namelen = quicly_get_socklen(&dest->sa),
+    };
+    if (cmsg != &cmsgbuf.hdr) {
+        mess.msg_control = &cmsgbuf.buf;
+        mess.msg_controllen = (socklen_t)((char *)cmsg - cmsgbuf.buf);
+    }
+    int ret;
+#ifdef UDP_SEGMENT
+    mess.msg_iov = datagrams;
+    mess.msg_iovlen = num_datagrams;
+    while ((ret = (int)sendmsg(h2o_socket_get_fd(ctx->sock.sock), &mess, 0)) == -1 && errno == EINTR)
+        ;
+    if (ret == -1)
+        goto SendmsgError;
+#else
     for (size_t i = 0; i < num_datagrams; ++i) {
         mess.msg_iov = datagrams + i;
         mess.msg_iovlen = 1;
@@ -148,6 +176,8 @@ int h2o_quic_send_datagrams(h2o_quic_ctx_t *ctx, quicly_address_t *dest, quicly_
         if (ret == -1)
             goto SendmsgError;
     }
+#endif
+
     h2o_error_reporter_record_success(&track_sendmsg);
 
     return 1;

@@ -54,8 +54,7 @@ Optional arguments:
   -t <tracepoint>   A tracepoint, or fully-qualified probe name to trace. Glob
                     patterns can be used; e.g., "quicly:accept", "h2o:*".
   -S <rate>         Enable random sampling per connection (0.0-1.0). Requires
-                    `usdt-selective-tracing: ON` must be specified in the h2o
-                    config file.
+                    use of `usdt-selective-tracing`.
   -A <ip-address>   Limit connections being traced to those coming from the
                     specified address. Requries use of `usdt-selective-tracing`.
   -N <server-name>  Limit connections being traced to those carrying the
