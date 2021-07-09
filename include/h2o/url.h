@@ -32,7 +32,12 @@ typedef struct st_h2o_url_scheme_t {
     int is_ssl;
 } h2o_url_scheme_t;
 
-extern const h2o_url_scheme_t H2O_URL_SCHEME_HTTP, H2O_URL_SCHEME_HTTPS, H2O_URL_SCHEME_FASTCGI;
+extern const h2o_url_scheme_t H2O_URL_SCHEME_HTTP, H2O_URL_SCHEME_HTTPS, H2O_URL_SCHEME_MASQUE;
+extern const h2o_url_scheme_t H2O_URL_SCHEME_MASQUE;
+/**
+ * used by fastcgi handler
+ */
+extern const h2o_url_scheme_t H2O_URL_SCHEME_FASTCGI;
 
 typedef struct st_h2o_url_t {
     const h2o_url_scheme_t *scheme;

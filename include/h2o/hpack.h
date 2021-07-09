@@ -86,11 +86,12 @@ int h2o_hpack_decode_header(h2o_mem_pool_t *pool, void *_hpack_header_table, h2o
 int h2o_hpack_parse_request(h2o_mem_pool_t *pool, h2o_hpack_decode_header_cb decode_cb, void *decode_ctx, h2o_iovec_t *method,
                             const h2o_url_scheme_t **scheme, h2o_iovec_t *authority, h2o_iovec_t *path, h2o_headers_t *headers,
                             int *pseudo_header_exists_map, size_t *content_length, h2o_cache_digests_t **digests,
-                            const uint8_t *src, size_t len, const char **err_desc);
+                            h2o_iovec_t *datagram_flow_id, const uint8_t *src, size_t len, const char **err_desc);
 /**
  * Response parser that uses given callback as the decoder.
  */
 int h2o_hpack_parse_response(h2o_mem_pool_t *pool, h2o_hpack_decode_header_cb decode_cb, void *decode_ctx, int *status,
-                             h2o_headers_t *headers, const uint8_t *src, size_t len, const char **err_desc);
+                             h2o_headers_t *headers, h2o_iovec_t *datagram_flow_id, const uint8_t *src, size_t len,
+                             const char **err_desc);
 
 #endif
