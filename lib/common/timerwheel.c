@@ -291,9 +291,10 @@ static int cascade_all(h2o_timerwheel_t *ctx, size_t wheel)
 
     for (; wheel < ctx->num_wheels; ++wheel) {
         size_t slot = timer_slot(wheel, ctx->last_run);
-        if (!h2o_linklist_is_empty(&ctx->wheels[wheel][slot]))
+        if (!h2o_linklist_is_empty(&ctx->wheels[wheel][slot])) {
             cascaded = 1;
-        cascade_one(ctx, wheel, slot);
+            cascade_one(ctx, wheel, slot);
+        }
         if (slot != 0)
             break;
     }
