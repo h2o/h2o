@@ -70,13 +70,13 @@ static size_t FN(FindBlocks)(const DataType* data, const size_t length,
                              double* insert_cost,
                              double* cost,
                              uint8_t* switch_signal,
-                             uint8_t *block_id) {
+                             uint8_t* block_id) {
   const size_t data_size = FN(HistogramDataSize)();
   const size_t bitmaplen = (num_histograms + 7) >> 3;
   size_t num_blocks = 1;
   size_t i;
   size_t j;
-  assert(num_histograms <= 256);
+  BROTLI_DCHECK(num_histograms <= 256);
   if (num_histograms <= 1) {
     for (i = 0; i < length; ++i) {
       block_id[i] = 0;
@@ -126,7 +126,7 @@ static size_t FN(FindBlocks)(const DataType* data, const size_t length,
       if (cost[k] >= block_switch_cost) {
         const uint8_t mask = (uint8_t)(1u << (k & 7));
         cost[k] = block_switch_cost;
-        assert((k >> 3) < bitmaplen);
+        BROTLI_DCHECK((k >> 3) < bitmaplen);
         switch_signal[ix + (k >> 3)] |= mask;
       }
     }
@@ -137,7 +137,7 @@ static size_t FN(FindBlocks)(const DataType* data, const size_t length,
     uint8_t cur_id = block_id[byte_ix];
     while (byte_ix > 0) {
       const uint8_t mask = (uint8_t)(1u << (cur_id & 7));
-      assert(((size_t)cur_id >> 3) < bitmaplen);
+      BROTLI_DCHECK(((size_t)cur_id >> 3) < bitmaplen);
       --byte_ix;
       ix -= bitmaplen;
       if (switch_signal[ix + (cur_id >> 3)] & mask) {
@@ -161,16 +161,16 @@ static size_t FN(RemapBlockIds)(uint8_t* block_ids, const size_t length,
     new_id[i] = kInvalidId;
   }
   for (i = 0; i < length; ++i) {
-    assert(block_ids[i] < num_histograms);
+    BROTLI_DCHECK(block_ids[i] < num_histograms);
     if (new_id[block_ids[i]] == kInvalidId) {
       new_id[block_ids[i]] = next_id++;
     }
   }
   for (i = 0; i < length; ++i) {
     block_ids[i] = (uint8_t)new_id[block_ids[i]];
-    assert(block_ids[i] < num_histograms);
+    BROTLI_DCHECK(block_ids[i] < num_histograms);
   }
-  assert(next_id <= num_histograms);
+  BROTLI_DCHECK(next_id <= num_histograms);
   return next_id;
 }
 
@@ -219,20 +219,25 @@ static void FN(ClusterBlocks)(MemoryManager* m,
   uint32_t symbols[HISTOGRAMS_PER_BATCH] = { 0 };
   uint32_t remap[HISTOGRAMS_PER_BATCH] = { 0 };
 
-  if (BROTLI_IS_OOM(m)) return;
+  if (BROTLI_IS_OOM(m) || BROTLI_IS_NULL(histogram_symbols) ||
+      BROTLI_IS_NULL(block_lengths) || BROTLI_IS_NULL(all_histograms) ||
+      BROTLI_IS_NULL(cluster_size) || BROTLI_IS_NULL(histograms) ||
+      BROTLI_IS_NULL(pairs)) {
+    return;
+  }
 
   memset(block_lengths, 0, num_blocks * sizeof(uint32_t));
 
   {
     size_t block_idx = 0;
     for (i = 0; i < length; ++i) {
-      assert(block_idx < num_blocks);
+      BROTLI_DCHECK(block_idx < num_blocks);
       ++block_lengths[block_idx];
       if (i + 1 == length || block_ids[i] != block_ids[i + 1]) {
         ++block_idx;
       }
     }
-    assert(block_idx == num_blocks);
+    BROTLI_DCHECK(block_idx == num_blocks);
   }
 
   for (i = 0; i < num_blocks; i += HISTOGRAMS_PER_BATCH) {
@@ -268,8 +273,8 @@ static void FN(ClusterBlocks)(MemoryManager* m,
       histogram_symbols[i + j] = (uint32_t)num_clusters + remap[symbols[j]];
     }
     num_clusters += num_new_clusters;
-    assert(num_clusters == cluster_size_size);
-    assert(num_clusters == all_histograms_size);
+    BROTLI_DCHECK(num_clusters == cluster_size_size);
+    BROTLI_DCHECK(num_clusters == all_histograms_size);
   }
   BROTLI_FREE(m, histograms);
 
@@ -278,11 +283,11 @@ static void FN(ClusterBlocks)(MemoryManager* m,
   if (pairs_capacity < max_num_pairs + 1) {
     BROTLI_FREE(m, pairs);
     pairs = BROTLI_ALLOC(m, HistogramPair, max_num_pairs + 1);
-    if (BROTLI_IS_OOM(m)) return;
+    if (BROTLI_IS_OOM(m) || BROTLI_IS_NULL(pairs)) return;
   }
 
   clusters = BROTLI_ALLOC(m, uint32_t, num_clusters);
-  if (BROTLI_IS_OOM(m)) return;
+  if (BROTLI_IS_OOM(m) || BROTLI_IS_NULL(clusters)) return;
   for (i = 0; i < num_clusters; ++i) {
     clusters[i] = (uint32_t)i;
   }
@@ -294,7 +299,7 @@ static void FN(ClusterBlocks)(MemoryManager* m,
   BROTLI_FREE(m, cluster_size);
 
   new_index = BROTLI_ALLOC(m, uint32_t, num_clusters);
-  if (BROTLI_IS_OOM(m)) return;
+  if (BROTLI_IS_OOM(m) || BROTLI_IS_NULL(new_index)) return;
   for (i = 0; i < num_clusters; ++i) new_index[i] = kInvalidIndex;
   pos = 0;
   {
@@ -386,7 +391,7 @@ static void FN(SplitByteVector)(MemoryManager* m,
     return;
   }
   histograms = BROTLI_ALLOC(m, HistogramType, num_histograms);
-  if (BROTLI_IS_OOM(m)) return;
+  if (BROTLI_IS_OOM(m) || BROTLI_IS_NULL(histograms)) return;
   /* Find good entropy codes. */
   FN(InitialEntropyCodes)(data, length,
                           sampling_stride_length,
@@ -405,7 +410,11 @@ static void FN(SplitByteVector)(MemoryManager* m,
     uint16_t* new_id = BROTLI_ALLOC(m, uint16_t, num_histograms);
     const size_t iters = params->quality < HQ_ZOPFLIFICATION_QUALITY ? 3 : 10;
     size_t i;
-    if (BROTLI_IS_OOM(m)) return;
+    if (BROTLI_IS_OOM(m) || BROTLI_IS_NULL(block_ids) ||
+        BROTLI_IS_NULL(insert_cost) || BROTLI_IS_NULL(cost) ||
+        BROTLI_IS_NULL(switch_signal) || BROTLI_IS_NULL(new_id)) {
+      return;
+    }
     for (i = 0; i < iters; ++i) {
       num_blocks = FN(FindBlocks)(data, length,
                                   block_switch_cost,

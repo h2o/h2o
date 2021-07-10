@@ -21,6 +21,9 @@ class TestDecompressor(_test_utils.TestCase):
     def setUp(self):
         self.decompressor = brotli.Decompressor()
 
+    def tearDown(self):
+        self.decompressor = None
+
     def _check_decompression(self, test_data):
         # Verify decompression matches the original.
         temp_uncompressed = _test_utils.get_temp_uncompressed_name(test_data)
@@ -39,6 +42,15 @@ class TestDecompressor(_test_utils.TestCase):
     def _test_decompress(self, test_data):
         self._decompress(test_data)
         self._check_decompression(test_data)
+
+    def test_garbage_appended(self):
+        with self.assertRaises(brotli.error):
+            self.decompressor.process(brotli.compress(b'a') + b'a')
+
+    def test_already_finished(self):
+        self.decompressor.process(brotli.compress(b'a'))
+        with self.assertRaises(brotli.error):
+            self.decompressor.process(b'a')
 
 
 _test_utils.generate_test_methods(TestDecompressor, for_decompression=True)

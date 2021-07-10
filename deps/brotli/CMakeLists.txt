@@ -4,35 +4,45 @@
 # support 2.8.7.
 cmake_minimum_required(VERSION 2.8.6)
 
-project(brotli)
+project(brotli C)
+
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+  message(STATUS "Setting build type to Release as none was specified.")
+  set(CMAKE_BUILD_TYPE "Release" CACHE STRING "Choose the type of build." FORCE)
+else()
+  message(STATUS "Build type is '${CMAKE_BUILD_TYPE}'")
+endif()
+
+include(CheckCSourceCompiles)
+check_c_source_compiles(
+  "#if defined(__EMSCRIPTEN__)
+   int main() {return 0;}
+   #endif"
+  BROTLI_EMSCRIPTEN
+)
+if (BROTLI_EMSCRIPTEN)
+  message("-- Compiler is EMSCRIPTEN")
+else()
+  message("-- Compiler is not EMSCRIPTEN")
+endif()
 
 # If Brotli is being bundled in another project, we don't want to
 # install anything.  However, we want to let people override this, so
 # we'll use the BROTLI_BUNDLED_MODE variable to let them do that; just
 # set it to OFF in your project before you add_subdirectory(brotli).
 get_directory_property(BROTLI_PARENT_DIRECTORY PARENT_DIRECTORY)
-if(BROTLI_BUNDLED_MODE STREQUAL "")
+if(NOT DEFINED BROTLI_BUNDLED_MODE)
   # Bundled mode hasn't been set one way or the other, set the default
   # depending on whether or not we are the top-level project.
   if(BROTLI_PARENT_DIRECTORY)
-    set(BROTLI_BUNDLED_MODE OFF)
-  else()
     set(BROTLI_BUNDLED_MODE ON)
+  else()
+    set(BROTLI_BUNDLED_MODE OFF)
   endif()
 endif()
 mark_as_advanced(BROTLI_BUNDLED_MODE)
 
 include(GNUInstallDirs)
-
-# When building shared libraries it is important to set the correct rpath.
-# See https://cmake.org/Wiki/CMake_RPATH_handling#Always_full_RPATH
-set(CMAKE_SKIP_BUILD_RPATH FALSE)
-set(CMAKE_BUILD_WITH_INSTALL_RPATH FALSE)
-set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
-list(FIND CMAKE_PLATFORM_IMPLICIT_LINK_DIRECTORIES "${CMAKE_INSTALL_LIBDIR}" isSystemDir)
-if ("${isSystemDir}" STREQUAL "-1")
-  set(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_LIBDIR}")
-endif()
 
 # Parse version information from common/version.h. Normally we would
 # define these values here and write them out to configuration file(s)
@@ -107,13 +117,16 @@ if(NOT LOG2_RES)
   CHECK_FUNCTION_EXISTS(log2 LOG2_LIBM_RES)
   if(LOG2_LIBM_RES)
     set(LIBM_LIBRARY "m")
+    add_definitions(-DBROTLI_HAVE_LOG2=1)
   else()
-    message(FATAL_ERROR "log2() not found")
+    add_definitions(-DBROTLI_HAVE_LOG2=0)
   endif()
 
   set(CMAKE_REQUIRED_LIBRARIES "${orig_req_libs}")
   unset(LOG2_LIBM_RES)
   unset(orig_req_libs)
+else()
+  add_definitions(-DBROTLI_HAVE_LOG2=1)
 endif()
 unset(LOG2_RES)
 
@@ -147,10 +160,16 @@ endfunction()
 transform_sources_list("scripts/sources.lst" "${CMAKE_CURRENT_BINARY_DIR}/sources.lst.cmake")
 include("${CMAKE_CURRENT_BINARY_DIR}/sources.lst.cmake")
 
-add_library(brotlicommon SHARED ${BROTLI_COMMON_C})
-add_library(brotlidec SHARED ${BROTLI_DEC_C})
-add_library(brotlienc SHARED ${BROTLI_ENC_C})
+if(BROTLI_EMSCRIPTEN)
+  set(BROTLI_SHARED_LIBS "")
+else()
+  set(BROTLI_SHARED_LIBS brotlicommon brotlidec brotlienc)
+  add_library(brotlicommon SHARED ${BROTLI_COMMON_C})
+  add_library(brotlidec SHARED ${BROTLI_DEC_C})
+  add_library(brotlienc SHARED ${BROTLI_ENC_C})
+endif()
 
+set(BROTLI_STATIC_LIBS brotlicommon-static brotlidec-static brotlienc-static)
 add_library(brotlicommon-static STATIC ${BROTLI_COMMON_C})
 add_library(brotlidec-static STATIC ${BROTLI_DEC_C})
 add_library(brotlienc-static STATIC ${BROTLI_ENC_C})
@@ -158,24 +177,28 @@ add_library(brotlienc-static STATIC ${BROTLI_ENC_C})
 # Older CMake versions does not understand INCLUDE_DIRECTORIES property.
 include_directories(${BROTLI_INCLUDE_DIRS})
 
-foreach(lib brotlicommon brotlidec brotlienc)
+foreach(lib IN LISTS BROTLI_SHARED_LIBS)
   target_compile_definitions(${lib} PUBLIC "BROTLI_SHARED_COMPILATION" )
   string(TOUPPER "${lib}" LIB)
-  set_target_properties (${lib} PROPERTIES DEFINE_SYMBOL "${LIB}_SHARED_COMPILATION" )
+  set_target_properties (${lib} PROPERTIES DEFINE_SYMBOL "${LIB}_SHARED_COMPILATION")
 endforeach()
 
-foreach(lib brotlicommon brotlidec brotlienc brotlicommon-static brotlidec-static brotlienc-static)
+foreach(lib IN LISTS BROTLI_SHARED_LIBS BROTLI_STATIC_LIBS)
   target_link_libraries(${lib} ${LIBM_LIBRARY})
   set_property(TARGET ${lib} APPEND PROPERTY INCLUDE_DIRECTORIES ${BROTLI_INCLUDE_DIRS})
   set_target_properties(${lib} PROPERTIES
     VERSION "${BROTLI_ABI_COMPATIBILITY}.${BROTLI_ABI_AGE}.${BROTLI_ABI_REVISION}"
-    SOVERSION "${BROTLI_ABI_COMPATIBILITY}"
-    POSITION_INDEPENDENT_CODE TRUE)
+    SOVERSION "${BROTLI_ABI_COMPATIBILITY}")
+  if(NOT BROTLI_EMSCRIPTEN)
+    set_target_properties(${lib} PROPERTIES POSITION_INDEPENDENT_CODE TRUE)
+  endif()
   set_property(TARGET ${lib} APPEND PROPERTY INTERFACE_INCLUDE_DIRECTORIES "${BROTLI_INCLUDE_DIRS}")
 endforeach()
 
+if(NOT BROTLI_EMSCRIPTEN)
 target_link_libraries(brotlidec brotlicommon)
 target_link_libraries(brotlienc brotlicommon)
+endif()
 
 target_link_libraries(brotlidec-static brotlicommon-static)
 target_link_libraries(brotlienc-static brotlicommon-static)
@@ -196,6 +219,7 @@ add_executable(brotli ${BROTLI_CLI_C})
 target_link_libraries(brotli ${BROTLI_LIBRARIES_STATIC})
 
 # Installation
+if(NOT BROTLI_EMSCRIPTEN)
 if(NOT BROTLI_BUNDLED_MODE)
   install(
     TARGETS brotli
@@ -220,7 +244,8 @@ if(NOT BROTLI_BUNDLED_MODE)
     DIRECTORY ${BROTLI_INCLUDE_DIRS}/brotli
     DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}"
   )
-endif()
+endif()  # BROTLI_BUNDLED_MODE
+endif()  # BROTLI_EMSCRIPTEN
 
 # Tests
 
@@ -228,12 +253,34 @@ endif()
 # to run the tests...
 if(NOT BROTLI_DISABLE_TESTS)
   if(WIN32 AND NOT CMAKE_HOST_WIN32)
-    find_program(BROTLI_WINE NAMES wine)
+    find_program(BROTLI_WRAPPER NAMES wine)
 
-    if(NOT BROTLI_WINE)
+    if(NOT BROTLI_WRAPPER)
       message(STATUS "wine not found, disabling tests")
       set(BROTLI_DISABLE_TESTS TRUE)
     endif()
+  endif()
+endif()
+
+# If our compiler is a cross-compiler that we know about (arm/aarch64),
+# then we need to use qemu to execute the tests.
+if(NOT BROTLI_DISABLE_TESTS)
+  if ("${CMAKE_C_COMPILER}" MATCHES "^.*/arm-linux-gnueabihf-.*$")
+    message(STATUS "Detected arm-linux-gnueabihf cross-compilation")
+    set(BROTLI_WRAPPER "qemu-arm")
+    set(BROTLI_WRAPPER_LD_PREFIX "/usr/arm-linux-gnueabihf")
+  endif()
+
+  if ("${CMAKE_C_COMPILER}" MATCHES "^.*/arm-linux-gnueabi-.*$")
+    message(STATUS "Detected arm-linux-gnueabi cross-compilation")
+    set(BROTLI_WRAPPER "qemu-arm")
+    set(BROTLI_WRAPPER_LD_PREFIX "/usr/arm-linux-gnueabi")
+  endif()
+
+  if ("${CMAKE_C_COMPILER}" MATCHES "^.*/aarch64-linux-gnu-.*$")
+    message(STATUS "Detected aarch64-linux-gnu cross-compilation")
+    set(BROTLI_WRAPPER "qemu-aarch64")
+    set(BROTLI_WRAPPER_LD_PREFIX "/usr/aarch64-linux-gnu")
   endif()
 endif()
 
@@ -256,16 +303,21 @@ if(NOT BROTLI_DISABLE_TESTS)
     set(OUTPUT_FILE "${CMAKE_CURRENT_BINARY_DIR}/${OUTPUT_NAME}")
     set(INPUT_FILE "${CMAKE_CURRENT_SOURCE_DIR}/${INPUT}")
 
-    foreach(quality 1 6 9 11)
-      add_test(NAME "${BROTLI_TEST_PREFIX}roundtrip/${INPUT}/${quality}"
-        COMMAND "${CMAKE_COMMAND}"
-          -DBROTLI_WRAPPER=${BROTLI_WINE}
-          -DBROTLI_CLI=$<TARGET_FILE:brotli>
-          -DQUALITY=${quality}
-          -DINPUT=${INPUT_FILE}
-          -DOUTPUT=${OUTPUT_FILE}.${quality}
-          -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run-roundtrip-test.cmake)
-    endforeach()
+    if (EXISTS "${INPUT_FILE}")
+      foreach(quality 1 6 9 11)
+        add_test(NAME "${BROTLI_TEST_PREFIX}roundtrip/${INPUT}/${quality}"
+          COMMAND "${CMAKE_COMMAND}"
+            -DBROTLI_WRAPPER=${BROTLI_WRAPPER}
+            -DBROTLI_WRAPPER_LD_PREFIX=${BROTLI_WRAPPER_LD_PREFIX}
+            -DBROTLI_CLI=$<TARGET_FILE:brotli>
+            -DQUALITY=${quality}
+            -DINPUT=${INPUT_FILE}
+            -DOUTPUT=${OUTPUT_FILE}.${quality}
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run-roundtrip-test.cmake)
+      endforeach()
+    else()
+      message(WARNING "Test file ${INPUT} does not exist.")
+    endif()
   endforeach()
 
   file(GLOB_RECURSE
@@ -276,7 +328,8 @@ if(NOT BROTLI_DISABLE_TESTS)
   foreach(INPUT ${COMPATIBILITY_INPUTS})
     add_test(NAME "${BROTLI_TEST_PREFIX}compatibility/${INPUT}"
       COMMAND "${CMAKE_COMMAND}"
-        -DBROTLI_WRAPPER=${BROTLI_WINE}
+        -DBROTLI_WRAPPER=${BROTLI_WRAPPER}
+        -DBROTLI_WRAPPER_LD_PREFIX=${BROTLI_WRAPPER_LD_PREFIX}
         -DBROTLI_CLI=$<TARGET_FILE:brotli>
         -DINPUT=${CMAKE_CURRENT_SOURCE_DIR}/${INPUT}
         -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run-compatibility-test.cmake)
@@ -352,6 +405,7 @@ transform_pc_file("scripts/libbrotlidec.pc.in" "${CMAKE_CURRENT_BINARY_DIR}/libb
 
 transform_pc_file("scripts/libbrotlienc.pc.in" "${CMAKE_CURRENT_BINARY_DIR}/libbrotlienc.pc" "${BROTLI_VERSION}")
 
+if(NOT BROTLI_EMSCRIPTEN)
 if(NOT BROTLI_BUNDLED_MODE)
   install(FILES "${CMAKE_CURRENT_BINARY_DIR}/libbrotlicommon.pc"
     DESTINATION "${CMAKE_INSTALL_LIBDIR}/pkgconfig")
@@ -359,7 +413,8 @@ if(NOT BROTLI_BUNDLED_MODE)
     DESTINATION "${CMAKE_INSTALL_LIBDIR}/pkgconfig")
   install(FILES "${CMAKE_CURRENT_BINARY_DIR}/libbrotlienc.pc"
     DESTINATION "${CMAKE_INSTALL_LIBDIR}/pkgconfig")
-endif()
+endif()  # BROTLI_BUNDLED_MODE
+endif()  # BROTLI_EMSCRIPTEN
 
 if (ENABLE_COVERAGE STREQUAL "yes")
   SETUP_TARGET_FOR_COVERAGE(coverage test coverage)
