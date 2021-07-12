@@ -76,7 +76,7 @@ assert('Fiber iteration') do
 end
 
 assert('Fiber with splat in the block argument list') {
-  Fiber.new{|*x|x}.resume(1) == [1]
+  assert_equal([1], Fiber.new{|*x|x}.resume(1))
 }
 
 assert('Fiber raises on resume when dead') do

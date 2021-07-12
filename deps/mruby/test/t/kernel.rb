@@ -29,11 +29,7 @@ assert('Kernel.block_given?', '15.3.1.2.2') do
   end
 end
 
-# Kernel.eval is provided by the mruby-gem mrbgem. '15.3.1.2.3'
-
-assert('Kernel.global_variables', '15.3.1.2.4') do
-  assert_equal Array, Kernel.global_variables.class
-end
+# Kernel.eval is provided by the mruby-eval mrbgem. '15.3.1.2.3'
 
 assert('Kernel.iterator?', '15.3.1.2.5') do
   assert_false Kernel.iterator?
@@ -63,20 +59,11 @@ assert('Kernel.loop', '15.3.1.2.8') do
   assert_equal 100, i
 end
 
-assert('Kernel.p', '15.3.1.2.9') do
-  # TODO search for a way to test p to stdio
-  assert_true true
-end
+# Kernel.p is provided by the mruby-print mrbgem. '15.3.1.2.9'
 
-assert('Kernel.print', '15.3.1.2.10') do
-  # TODO search for a way to test print to stdio
-  assert_true true
-end
+# Kernel.print is provided by the mruby-print mrbgem. '15.3.1.2.10'
 
-assert('Kernel.puts', '15.3.1.2.11') do
-  # TODO search for a way to test puts to stdio
-  assert_true true
-end
+# Kernel.puts is provided by the mruby-print mrbgem. '15.3.1.2.11'
 
 assert('Kernel.raise', '15.3.1.2.12') do
   assert_raise RuntimeError do
@@ -90,6 +77,24 @@ end
 
 assert('Kernel#__id__', '15.3.1.3.3') do
   assert_equal Fixnum, __id__.class
+end
+
+assert('Kernel#__send__', '15.3.1.3.4') do
+  # test with block
+  l = __send__(:lambda) do
+    true
+  end
+
+  assert_true l.call
+  assert_equal Proc, l.class
+  # test with argument
+  assert_true __send__(:respond_to?, :nil?)
+  # test without argument and without block
+  assert_equal String, __send__(:to_s).class
+
+  args = [:respond_to?, :nil?]
+  assert_true __send__(*args)
+  assert_equal [:respond_to?, :nil?], args
 end
 
 assert('Kernel#block_given?', '15.3.1.3.6') do
@@ -187,17 +192,6 @@ assert('Kernel#dup', '15.3.1.3.9') do
   a.set(2)
   c = a.dup
 
-  immutables = [ 1, :foo, true, false, nil ]
-  error_count = 0
-  immutables.each do |i|
-    begin
-      i.dup
-    rescue TypeError
-      error_count += 1
-    end
-  end
-
-  assert_equal immutables.size, error_count
   assert_equal 2, a.get
   assert_equal 1, b.get
   assert_equal 2, c.get
@@ -230,6 +224,9 @@ assert('Kernel#extend', '15.3.1.3.13') do
 
   assert_true a.respond_to?(:test_method)
   assert_false b.respond_to?(:test_method)
+
+  assert_raise(FrozenError) { Object.new.freeze.extend(Test4ExtendModule) }
+  assert_raise(FrozenError, TypeError) { :sym.extend(Test4ExtendModule) }
 end
 
 assert('Kernel#extend works on toplevel', '15.3.1.3.13') do
@@ -247,10 +244,23 @@ assert('Kernel#freeze') do
   assert_equal obj, obj.freeze
   assert_equal 0, 0.freeze
   assert_equal :a, :a.freeze
+  assert_equal true, true.freeze
+  assert_equal false, false.freeze
+  assert_equal nil, nil.freeze
+  skip unless Object.const_defined?(:Float)
+  assert_equal 0.0, 0.0.freeze
 end
 
-assert('Kernel#global_variables', '15.3.1.3.14') do
-  assert_equal Array, global_variables.class
+assert('Kernel#frozen?') do
+  assert_false "".frozen?
+  assert_true "".freeze.frozen?
+  assert_true 0.frozen?
+  assert_true :a.frozen?
+  assert_true true.frozen?
+  assert_true false.frozen?
+  assert_true nil.frozen?
+  skip unless Object.const_defined?(:Float)
+  assert_true 0.0.frozen?
 end
 
 assert('Kernel#hash', '15.3.1.3.15') do
@@ -329,17 +339,15 @@ assert('Kernel#method_missing', '15.3.1.3.30') do
     end
   end
   no_super_test = NoSuperMethodTestClass.new
-  begin
+  msg = "undefined method 'no_super_method_named_this'"
+  assert_raise_with_message(NoMethodError, msg) do
     no_super_test.no_super_method_named_this
-  rescue NoMethodError => e
-    assert_equal "undefined method 'no_super_method_named_this'", e.message
   end
 
   a = String.new
-  begin
+  msg = "undefined method 'no_method_named_this'"
+  assert_raise_with_message(NoMethodError, msg) do
     a.no_method_named_this
-  rescue NoMethodError => e
-    assert_equal "undefined method 'no_method_named_this'", e.message
   end
 end
 
@@ -391,11 +399,12 @@ assert('Kernel#remove_instance_variable', '15.3.1.3.41') do
 
   tri = Test4RemoveInstanceVar.new
   assert_equal 99, tri.var
-  tri.remove
+  assert_equal 99, tri.remove
   assert_equal nil, tri.var
-  assert_raise NameError do
-    tri.remove
-  end
+  assert_raise(NameError) { tri.remove }
+  assert_raise(NameError) { tri.remove_instance_variable(:var) }
+  assert_raise(FrozenError) { tri.freeze.remove }
+  assert_raise(FrozenError, NameError) { :a.remove_instance_variable(:@v) }
 end
 
 # Kernel#require is defined in mruby-require. '15.3.1.3.42'
@@ -470,13 +479,6 @@ assert('Kernel#respond_to_missing?') do
 
   assert_true Test4RespondToMissing.new.respond_to?(:a_method)
   assert_false Test4RespondToMissing.new.respond_to?(:no_method)
-end
-
-assert('Kernel#global_variables') do
-  variables = global_variables
-  1.upto(9) do |i|
-    assert_equal variables.include?(:"$#{i}"), true
-  end
 end
 
 assert('stack extend') do

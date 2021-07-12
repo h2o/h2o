@@ -3,7 +3,7 @@ module Kernel
     m = method(name)
     sc = (class <<self; self; end)
     if m.owner != sc
-      raise NameError, "undefined method `#{name}' for class `#{sc}'"
+      raise NameError, "undefined method '#{name}' for class '#{sc}'"
     end
     m
   end

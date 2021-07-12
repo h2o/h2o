@@ -1,19 +1,11 @@
 language: c
 
-sudo: false
-
-matrix:
-  include:
-    - os: linux
-      sudo: false
-    - os: osx
-      osx_image: xcode7.1
-
-addons:
-  apt:
-    packages:
-      - gperf
+jobs:
+  - os: linux
+  - os: osx
 
 env:
   - MRUBY_CONFIG=travis_config.rb
-script: "./minirake -j4 all test"
+
+script:
+  - rake -m && rake test

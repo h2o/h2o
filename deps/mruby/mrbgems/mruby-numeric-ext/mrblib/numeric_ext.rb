@@ -1,8 +1,4 @@
-module Integral
-  def div(other)
-    self.divmod(other)[0]
-  end
-
+class Numeric
   def zero?
     self == 0
   end

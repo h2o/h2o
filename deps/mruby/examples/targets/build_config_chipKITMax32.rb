@@ -39,7 +39,7 @@ MRuby::CrossBuild.new("chipKITMax32") do |conf|
     cc.flags = %w(-O2 -mno-smart-io -w -ffunction-sections -fdata-sections -g -mdebugger -Wcast-align
                 -fno-short-double -mprocessor=32MX795F512L -DF_CPU=80000000L -DARDUINO=23 -D_BOARD_MEGA_
                 -DMPIDEVER=0x01000202 -DMPIDE=23)
-    cc.compile_options = "%{flags} -o %{outfile} -c %{infile}"
+    cc.compile_options = %Q[%{flags} -o "%{outfile}" -c "%{infile}"]
 
     #configuration for low memory environment
     cc.defines << %w(MRB_HEAP_PAGE_SIZE=64)
@@ -60,7 +60,7 @@ MRuby::CrossBuild.new("chipKITMax32") do |conf|
 
   conf.archiver do |archiver|
     archiver.command = "#{PIC32_PATH}/compiler/pic32-tools/bin/pic32-ar"
-    archiver.archive_options = 'rcs %{outfile} %{objs}'
+    archiver.archive_options = 'rcs "%{outfile}" %{objs}'
   end
 
   #no executables

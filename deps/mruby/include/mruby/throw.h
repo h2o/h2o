@@ -1,5 +1,5 @@
-/*
-** mruby/throw.h - mruby exception throwing handler
+/**
+** @file mruby/throw.h - mruby exception throwing handler
 **
 ** See Copyright Notice in mruby.h
 */

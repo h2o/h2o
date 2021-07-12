@@ -89,7 +89,6 @@ os_count_objects(mrb_state *mrb, mrb_value self)
       COUNT_TYPE(T_STRING);
       COUNT_TYPE(T_RANGE);
       COUNT_TYPE(T_EXCEPTION);
-      COUNT_TYPE(T_FILE);
       COUNT_TYPE(T_ENV);
       COUNT_TYPE(T_DATA);
       COUNT_TYPE(T_FIBER);
@@ -161,11 +160,7 @@ os_each_object(mrb_state *mrb, mrb_value self)
 {
   mrb_value cls = mrb_nil_value();
   struct os_each_object_data d;
-  mrb_get_args(mrb, "&|C", &d.block, &cls);
-
-  if (mrb_nil_p(d.block)) {
-    mrb_raise(mrb, E_ARGUMENT_ERROR, "Expected block in ObjectSpace.each_object.");
-  }
+  mrb_get_args(mrb, "&!|C", &d.block, &cls);
 
   d.target_module = mrb_nil_p(cls) ? NULL : mrb_class_ptr(cls);
   d.count = 0;

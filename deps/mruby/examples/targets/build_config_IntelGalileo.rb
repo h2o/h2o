@@ -39,7 +39,7 @@ MRuby::CrossBuild.new("Galileo") do |conf|
     cc.flags = %w(-m32 -march=i586 -c -g -Os -w
               -ffunction-sections -fdata-sections -MMD -DARDUINO=153)
     cc.flags << "--sysroot=#{GALILEO_SYSROOT}"
-    cc.compile_options = "%{flags} -o %{outfile} -c %{infile}"
+    cc.compile_options = %Q[%{flags} -o "%{outfile}" -c "%{infile}"]
   end
 
   conf.cxx do |cxx|
@@ -54,7 +54,7 @@ MRuby::CrossBuild.new("Galileo") do |conf|
 
   conf.archiver do |archiver|
     archiver.command = "#{GALILEO_BIN_PATH}/i586-poky-linux-uclibc-ar"
-    archiver.archive_options = 'rcs %{outfile} %{objs}'
+    archiver.archive_options = 'rcs "%{outfile}" %{objs}'
   end
 
   conf.linker do |linker|

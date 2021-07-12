@@ -63,28 +63,25 @@ task :gitlab_config do
   configs = []
   [true, false].each do |mode_32|
     ['', 'MRB_USE_FLOAT'].each do |float_conf|
-      ['', 'MRB_INT16', 'MRB_INT64'].each do |int_conf|
-        ['', 'MRB_NAN_BOXING', 'MRB_WORD_BOXING'].each do |boxing_conf|
-          ['', 'MRB_UTF8_STRING'].each do |utf8_conf|
-            next if (float_conf == 'MRB_USE_FLOAT') && (boxing_conf == 'MRB_NAN_BOXING')
-            next if (int_conf == 'MRB_INT64') && (boxing_conf == 'MRB_NAN_BOXING')
-            next if (int_conf == 'MRB_INT16') && (boxing_conf == 'MRB_WORD_BOXING')
-            next if (int_conf == 'MRB_INT64') && (boxing_conf == 'MRB_WORD_BOXING') && mode_32
-            env = [float_conf, int_conf, boxing_conf, utf8_conf].map do |conf|
-              conf == '' ? nil : "-D#{conf}=1"
-            end.compact.join(' ')
-            bit = mode_32 ? '-m32 ' : ''
-            _info = ''
-            _info += mode_32 ? '32bit ' : '64bit '
-            _info += float_conf['USE'] ? 'float ' : ''
-            _info += int_conf['16'] ? 'int16 ' : ''
-            _info += int_conf['64'] ? 'int64 ' : ''
-            _info += boxing_conf['NAN'] ? 'nan ' : ''
-            _info += boxing_conf['word'] ? 'word ' : ''
-            _info += utf8_conf['UTF8'] ? 'utf8 ' : ''
-            _info = _info.gsub(/ +/, ' ').strip.tr(' ', '_')
-            configs << { '_info' => _info, 'CFLAGS' => "#{bit}#{env}", 'LDFLAGS' => bit.strip.to_s }
-          end
+      ['', 'MRB_NAN_BOXING', 'MRB_WORD_BOXING'].each do |boxing_conf|
+        ['', 'MRB_UTF8_STRING'].each do |utf8_conf|
+          next if (float_conf == 'MRB_USE_FLOAT') && (boxing_conf == 'MRB_NAN_BOXING')
+          next if (int_conf == 'MRB_INT64') && (boxing_conf == 'MRB_NAN_BOXING')
+          next if (int_conf == 'MRB_INT64') && (boxing_conf == 'MRB_WORD_BOXING') && mode_32
+          env = [float_conf, int_conf, boxing_conf, utf8_conf].map do |conf|
+            conf == '' ? nil : "-D#{conf}=1"
+          end.compact.join(' ')
+          bit = mode_32 ? '-m32 ' : ''
+          _info = ''
+          _info += mode_32 ? '32bit ' : '64bit '
+          _info += float_conf['USE'] ? 'float ' : ''
+          _info += int_conf['16'] ? 'int16 ' : ''
+          _info += int_conf['64'] ? 'int64 ' : ''
+          _info += boxing_conf['NAN'] ? 'nan ' : ''
+          _info += boxing_conf['WORD'] ? 'word ' : ''
+          _info += utf8_conf['UTF8'] ? 'utf8 ' : ''
+          _info = _info.gsub(/ +/, ' ').strip.tr(' ', '_')
+          configs << { '_info' => _info, 'CFLAGS' => "#{bit}#{env}", 'LDFLAGS' => bit.strip.to_s }
         end
       end
     end
@@ -110,7 +107,7 @@ task :gitlab_config do
         'stage' => 'test',
         'image' => ci_docker_tag(compiler),
         'variables' => hash,
-        'script' => 'env; ./minirake --verbose all test'
+        'script' => 'env; rake --verbose all test'
       }
     end
   end

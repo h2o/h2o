@@ -6,7 +6,9 @@
 
 #include <stddef.h>
 #include <stdarg.h>
+#ifndef MRB_WITHOUT_FLOAT
 #include <math.h>
+#endif
 #include <mruby.h>
 #include <mruby/array.h>
 #include <mruby/class.h>
@@ -150,7 +152,7 @@ envadjust(mrb_state *mrb, mrb_value *oldbase, mrb_value *newbase, size_t oldsize
     struct REnv *e = ci->env;
     mrb_value *st;
 
-    if (e && MRB_ENV_STACK_SHARED_P(e) &&
+    if (e && MRB_ENV_ONSTACK_P(e) &&
         (st = e->stack) && oldbase <= st && st < oldbase+oldsize) {
       ptrdiff_t off = e->stack - oldbase;
 
@@ -160,7 +162,7 @@ envadjust(mrb_state *mrb, mrb_value *oldbase, mrb_value *newbase, size_t oldsize
     if (ci->proc && MRB_PROC_ENV_P(ci->proc) && ci->env != MRB_PROC_ENV(ci->proc)) {
       e = MRB_PROC_ENV(ci->proc);
 
-      if (e && MRB_ENV_STACK_SHARED_P(e) &&
+      if (e && MRB_ENV_ONSTACK_P(e) &&
           (st = e->stack) && oldbase <= st && st < oldbase+oldsize) {
         ptrdiff_t off = e->stack - oldbase;
 
@@ -295,10 +297,10 @@ mrb_env_unshare(mrb_state *mrb, struct REnv *e)
 {
   if (e == NULL) return;
   else {
-    size_t len = (size_t)MRB_ENV_STACK_LEN(e);
+    size_t len = (size_t)MRB_ENV_LEN(e);
     mrb_value *p;
 
-    if (!MRB_ENV_STACK_SHARED_P(e)) return;
+    if (!MRB_ENV_ONSTACK_P(e)) return;
     if (e->cxt != mrb->c) return;
     if (e == mrb->c->cibase->env) return; /* for mirb */
     p = (mrb_value *)mrb_malloc(mrb, sizeof(mrb_value)*len);
@@ -306,7 +308,7 @@ mrb_env_unshare(mrb_state *mrb, struct REnv *e)
       stack_copy(p, e->stack, len);
     }
     e->stack = p;
-    MRB_ENV_UNSHARE_STACK(e);
+    MRB_ENV_CLOSE(e);
     mrb_write_barrier(mrb, (struct RBasic *)e);
   }
 }
@@ -322,6 +324,7 @@ cipop(mrb_state *mrb)
 }
 
 void mrb_exc_set(mrb_state *mrb, mrb_value exc);
+static mrb_value mrb_run(mrb_state *mrb, struct RProc* proc, mrb_value self);
 
 static void
 ecall(mrb_state *mrb)
@@ -333,10 +336,12 @@ ecall(mrb_state *mrb)
   struct REnv *env;
   ptrdiff_t cioff;
   int ai = mrb_gc_arena_save(mrb);
-  uint16_t i = --c->eidx;
+  uint16_t i;
   int nregs;
 
-  if (i<0) return;
+  if (c->eidx == 0) return;
+  i = --c->eidx;
+
   /* restrict total call depth of ecall() */
   if (++mrb->ecall_nest > MRB_ECALL_DEPTH_MAX) {
     mrb_exc_raise(mrb, mrb_obj_value(mrb->stack_err));
@@ -428,6 +433,7 @@ MRB_API mrb_value
 mrb_funcall_with_block(mrb_state *mrb, mrb_value self, mrb_sym mid, mrb_int argc, const mrb_value *argv, mrb_value blk)
 {
   mrb_value val;
+  int ai = mrb_gc_arena_save(mrb);
 
   if (!mrb->jmp) {
     struct mrb_jmpbuf c_jmp;
@@ -461,7 +467,7 @@ mrb_funcall_with_block(mrb_state *mrb, mrb_value self, mrb_sym mid, mrb_int argc
       stack_init(mrb);
     }
     if (argc < 0) {
-      mrb_raisef(mrb, E_ARGUMENT_ERROR, "negative argc for funcall (%S)", mrb_fixnum_value(argc));
+      mrb_raisef(mrb, E_ARGUMENT_ERROR, "negative argc for funcall (%i)", argc);
     }
     c = mrb_class(mrb, self);
     m = mrb_method_search_vm(mrb, &c, mid);
@@ -486,26 +492,25 @@ mrb_funcall_with_block(mrb_state *mrb, mrb_value self, mrb_sym mid, mrb_int argc
     ci->argc = (int)argc;
     ci->target_class = c;
     mrb->c->stack = mrb->c->stack + n;
+    if (argc < 0) argc = 1;
     if (mrb->c->stbase <= argv && argv < mrb->c->stend) {
       voff = argv - mrb->c->stbase;
     }
-    if (MRB_METHOD_CFUNC_P(m)) {
-      mrb_stack_extend(mrb, argc + 2);
-    }
-    else if (argc >= CALL_MAXARGS) {
+    if (argc >= CALL_MAXARGS) {
       mrb_value args = mrb_ary_new_from_values(mrb, argc, argv);
 
-      mrb_stack_extend(mrb, 3);
       mrb->c->stack[1] = args;
       ci->argc = -1;
       argc = 1;
     }
-    else {
+    mrb_stack_extend(mrb, argc + 2);
+    if (MRB_METHOD_PROC_P(m)) {
       struct RProc *p = MRB_METHOD_PROC(m);
 
       ci->proc = p;
-      if (argc < 0) argc = 1;
-      mrb_stack_extend(mrb, p->body.irep->nregs + argc);
+      if (!MRB_PROC_CFUNC_P(p)) {
+        mrb_stack_extend(mrb, p->body.irep->nregs + argc);
+      }
     }
     if (voff >= 0) {
       argv = mrb->c->stbase + voff;
@@ -517,22 +522,17 @@ mrb_funcall_with_block(mrb_state *mrb, mrb_value self, mrb_sym mid, mrb_int argc
     mrb->c->stack[argc+1] = blk;
 
     if (MRB_METHOD_CFUNC_P(m)) {
-      int ai = mrb_gc_arena_save(mrb);
-
       ci->acc = CI_ACC_DIRECT;
-      if (MRB_METHOD_PROC_P(m)) {
-        ci->proc = MRB_METHOD_PROC(m);
-      }
       val = MRB_METHOD_CFUNC(m)(mrb, self);
       mrb->c->stack = mrb->c->ci->stackent;
       cipop(mrb);
-      mrb_gc_arena_restore(mrb, ai);
     }
     else {
       ci->acc = CI_ACC_SKIP;
       val = mrb_run(mrb, MRB_METHOD_PROC(m), self);
     }
   }
+  mrb_gc_arena_restore(mrb, ai);
   mrb_gc_protect(mrb, val);
   return val;
 }
@@ -593,7 +593,7 @@ mrb_exec_irep(mrb_state *mrb, mrb_value self, struct RProc *p)
  *     k = Klass.new
  *     k.send :hello, "gentle", "readers"   #=> "Hello gentle readers"
  */
-MRB_API mrb_value
+mrb_value
 mrb_f_send(mrb_state *mrb, mrb_value self)
 {
   mrb_sym name;
@@ -627,7 +627,7 @@ mrb_f_send(mrb_state *mrb, mrb_value self)
     ci->argc--;
   }
   else {                     /* variable length arguments */
-    mrb_ary_shift(mrb, regs[0]);
+    regs[0] = mrb_ary_subseq(mrb, regs[0], 1, RARRAY_LEN(regs[0]) - 1);
   }
 
   if (MRB_METHOD_CFUNC_P(m)) {
@@ -651,8 +651,7 @@ eval_under(mrb_state *mrb, mrb_value self, mrb_value blk, struct RClass *c)
   }
   ci = mrb->c->ci;
   if (ci->acc == CI_ACC_DIRECT) {
-    ci->target_class = c;
-    return mrb_yield_cont(mrb, blk, self, 1, &self);
+    return mrb_yield_with_class(mrb, blk, 1, &self, self, c);
   }
   ci->target_class = c;
   p = mrb_proc_ptr(blk);
@@ -727,26 +726,11 @@ mrb_value
 mrb_obj_instance_eval(mrb_state *mrb, mrb_value self)
 {
   mrb_value a, b;
-  mrb_value cv;
-  struct RClass *c;
 
   if (mrb_get_args(mrb, "|S&", &a, &b) == 1) {
     mrb_raise(mrb, E_NOTIMP_ERROR, "instance_eval with string not implemented");
   }
-  switch (mrb_type(self)) {
-  case MRB_TT_SYMBOL:
-  case MRB_TT_FIXNUM:
-#ifndef MRB_WITHOUT_FLOAT
-  case MRB_TT_FLOAT:
-#endif
-    c = 0;
-    break;
-  default:
-    cv = mrb_singleton_class(mrb, self);
-    c = mrb_class_ptr(cv);
-    break;
-  }
-  return eval_under(mrb, self, b, c);
+  return eval_under(mrb, self, b, mrb_singleton_class_ptr(mrb, self));
 }
 
 MRB_API mrb_value
@@ -820,7 +804,7 @@ mrb_yield_cont(mrb_state *mrb, mrb_value b, mrb_value self, mrb_int argc, const 
   if (mrb_nil_p(b)) {
     mrb_raise(mrb, E_ARGUMENT_ERROR, "no block given");
   }
-  if (mrb_type(b) != MRB_TT_PROC) {
+  if (!mrb_proc_p(b)) {
     mrb_raise(mrb, E_TYPE_ERROR, "not a block");
   }
 
@@ -834,39 +818,14 @@ mrb_yield_cont(mrb_state *mrb, mrb_value b, mrb_value self, mrb_int argc, const 
   return mrb_exec_irep(mrb, self, p);
 }
 
-mrb_value
-mrb_mod_s_nesting(mrb_state *mrb, mrb_value mod)
-{
-  struct RProc *proc;
-  mrb_value ary;
-  struct RClass *c = NULL;
-
-  mrb_get_args(mrb, "");
-  ary = mrb_ary_new(mrb);
-  proc = mrb->c->ci[-1].proc;   /* callee proc */
-  mrb_assert(!MRB_PROC_CFUNC_P(proc));
-  while (proc) {
-    if (MRB_PROC_SCOPE_P(proc)) {
-      struct RClass *c2 = MRB_PROC_TARGET_CLASS(proc);
-
-      if (c2 != c) {
-        c = c2;
-        mrb_ary_push(mrb, ary, mrb_obj_value(c));
-      }
-    }
-    proc = proc->upper;
-  }
-  return ary;
-}
-
 static struct RBreak*
 break_new(mrb_state *mrb, struct RProc *p, mrb_value val)
 {
   struct RBreak *brk;
 
   brk = (struct RBreak*)mrb_obj_alloc(mrb, MRB_TT_BREAK, NULL);
-  brk->proc = p;
-  brk->val = val;
+  mrb_break_proc_set(brk, p);
+  mrb_break_value_set(brk, val);
 
   return brk;
 }
@@ -907,13 +866,11 @@ argnum_error(mrb_state *mrb, mrb_int num)
     }
   }
   if (mrb->c->ci->mid) {
-    str = mrb_format(mrb, "'%S': wrong number of arguments (%S for %S)",
-                  mrb_sym2str(mrb, mrb->c->ci->mid),
-                  mrb_fixnum_value(argc), mrb_fixnum_value(num));
+    str = mrb_format(mrb, "'%n': wrong number of arguments (%i for %i)",
+                     mrb->c->ci->mid, argc, num);
   }
   else {
-    str = mrb_format(mrb, "wrong number of arguments (%S for %S)",
-                     mrb_fixnum_value(argc), mrb_fixnum_value(num));
+    str = mrb_format(mrb, "wrong number of arguments (%i for %i)", argc, num);
   }
   exc = mrb_exc_new_str(mrb, E_ARGUMENT_ERROR, str);
   mrb_exc_set(mrb, exc);
@@ -1002,10 +959,10 @@ check_target_class(mrb_state *mrb)
 void mrb_hash_check_kdict(mrb_state *mrb, mrb_value self);
 
 MRB_API mrb_value
-mrb_vm_exec(mrb_state *mrb, struct RProc *proc, mrb_code *pc)
+mrb_vm_exec(mrb_state *mrb, struct RProc *proc, const mrb_code *pc)
 {
-  /* mrb_assert(mrb_proc_cfunc_p(proc)) */
-  mrb_code *pc0 = pc;
+  /* mrb_assert(MRB_PROC_CFUNC_P(proc)) */
+  const mrb_code *pc0 = pc;
   mrb_irep *irep = proc->body.irep;
   mrb_value *pool = irep->pool;
   mrb_sym *syms = irep->syms;
@@ -1092,6 +1049,11 @@ RETRY_TRY_BLOCK:
       NEXT;
     }
 
+    CASE(OP_LOADI16, BS) {
+      SET_INT_VALUE(regs[a], (mrb_int)(int16_t)b);
+      NEXT;
+    }
+
     CASE(OP_LOADSYM, BB) {
       SET_SYM_VALUE(regs[a], syms[b]);
       NEXT;
@@ -1129,13 +1091,13 @@ RETRY_TRY_BLOCK:
     }
 
     CASE(OP_GETSV, BB) {
-      mrb_value val = mrb_vm_special_get(mrb, b);
+      mrb_value val = mrb_vm_special_get(mrb, syms[b]);
       regs[a] = val;
       NEXT;
     }
 
     CASE(OP_SETSV, BB) {
-      mrb_vm_special_set(mrb, b, regs[a]);
+      mrb_vm_special_set(mrb, syms[b], regs[a]);
       NEXT;
     }
 
@@ -1198,7 +1160,7 @@ RETRY_TRY_BLOCK:
       mrb_value *regs_a = regs + a;
       struct REnv *e = uvenv(mrb, c);
 
-      if (e && b < MRB_ENV_STACK_LEN(e)) {
+      if (e && b < MRB_ENV_LEN(e)) {
         *regs_a = e->stack[b];
       }
       else {
@@ -1213,7 +1175,7 @@ RETRY_TRY_BLOCK:
       if (e) {
         mrb_value *regs_a = regs + a;
 
-        if (b < MRB_ENV_STACK_LEN(e)) {
+        if (b < MRB_ENV_LEN(e)) {
           e->stack[b] = *regs_a;
           mrb_write_barrier(mrb, (struct RBasic*)e);
         }
@@ -1418,7 +1380,7 @@ RETRY_TRY_BLOCK:
 
       recv = regs[a];
       blk = regs[bidx];
-      if (!mrb_nil_p(blk) && mrb_type(blk) != MRB_TT_PROC) {
+      if (!mrb_nil_p(blk) && !mrb_proc_p(blk)) {
         blk = mrb_convert_type(mrb, blk, MRB_TT_PROC, "Proc", "to_proc");
         /* The stack might have been reallocated during mrb_convert_type(),
            see #3622 */
@@ -1466,6 +1428,11 @@ RETRY_TRY_BLOCK:
           ci->proc = p;
           recv = p->body.func(mrb, recv);
         }
+        else if (MRB_METHOD_NOARG_P(m) &&
+                 (argc > 0 || (argc == -1 && RARRAY_LEN(regs[1]) != 0))) {
+          argnum_error(mrb, 0);
+          goto L_RAISE;
+        }
         else {
           recv = MRB_METHOD_FUNC(m)(mrb, recv);
         }
@@ -1473,7 +1440,7 @@ RETRY_TRY_BLOCK:
         mrb_gc_arena_shrink(mrb, ai);
         if (mrb->exc) goto L_RAISE;
         ci = mrb->c->ci;
-        if (mrb_type(blk) == MRB_TT_PROC) {
+        if (mrb_proc_p(blk)) {
           struct RProc *p = mrb_proc_ptr(blk);
           if (p && !MRB_PROC_STRICT_P(p) && MRB_PROC_ENV(p) == ci[-1].env) {
             p->flags |= MRB_PROC_ORPHAN;
@@ -1521,14 +1488,7 @@ RETRY_TRY_BLOCK:
       ci->target_class = MRB_PROC_TARGET_CLASS(m);
       ci->proc = m;
       if (MRB_PROC_ENV_P(m)) {
-        mrb_sym mid;
-        struct REnv *e = MRB_PROC_ENV(m);
-
-        mid = e->mid;
-        if (mid) ci->mid = mid;
-        if (!e->stack) {
-          e->stack = mrb->c->stack;
-        }
+        ci->mid = MRB_PROC_ENV(m)->mid;
       }
 
       /* prepare stack */
@@ -1584,9 +1544,13 @@ RETRY_TRY_BLOCK:
       struct RClass *cls;
       mrb_callinfo *ci = mrb->c->ci;
       mrb_value recv, blk;
+      struct RProc *p = ci->proc;
       mrb_sym mid = ci->mid;
-      struct RClass* target_class = MRB_PROC_TARGET_CLASS(ci->proc);
+      struct RClass* target_class = MRB_PROC_TARGET_CLASS(p);
 
+      if (MRB_PROC_ENV_P(p) && p->e.env->mid && p->e.env->mid != mid) { /* alias support */
+        mid = p->e.env->mid;    /* restore old mid */
+      }
       mrb_assert(bidx < irep->nregs);
 
       if (mid == 0 || !target_class) {
@@ -1610,7 +1574,7 @@ RETRY_TRY_BLOCK:
         goto L_RAISE;
       }
       blk = regs[bidx];
-      if (!mrb_nil_p(blk) && mrb_type(blk) != MRB_TT_PROC) {
+      if (!mrb_nil_p(blk) && !mrb_proc_p(blk)) {
         blk = mrb_convert_type(mrb, blk, MRB_TT_PROC, "Proc", "to_proc");
         /* The stack or ci stack might have been reallocated during
            mrb_convert_type(), see #3622 and #3784 */
@@ -1720,7 +1684,7 @@ RETRY_TRY_BLOCK:
       else {
         struct REnv *e = uvenv(mrb, lv-1);
         if (!e) goto L_NOSUPER;
-        if (MRB_ENV_STACK_LEN(e) <= m1+r+m2+kd+1)
+        if (MRB_ENV_LEN(e) <= m1+r+m2+kd+1)
           goto L_NOSUPER;
         stack = e->stack + 1;
       }
@@ -1897,7 +1861,7 @@ RETRY_TRY_BLOCK:
       mrb_value kdict = regs[mrb->c->ci->argc];
 
       if (!mrb_hash_p(kdict) || !mrb_hash_key_p(mrb, kdict, k)) {
-        mrb_value str = mrb_format(mrb, "missing keyword: %S", k);
+        mrb_value str = mrb_format(mrb, "missing keyword: %v", k);
         mrb_exc_set(mrb, mrb_exc_new_str(mrb, E_ARGUMENT_ERROR, str));
         goto L_RAISE;
       }
@@ -1924,7 +1888,7 @@ RETRY_TRY_BLOCK:
       if (mrb_hash_p(kdict) && !mrb_hash_empty_p(mrb, kdict)) {
         mrb_value keys = mrb_hash_keys(mrb, kdict);
         mrb_value key1 = RARRAY_PTR(keys)[0];
-        mrb_value str = mrb_format(mrb, "unknown keyword: %S", key1);
+        mrb_value str = mrb_format(mrb, "unknown keyword: %v", key1);
         mrb_exc_set(mrb, mrb_exc_new_str(mrb, E_ARGUMENT_ERROR, str));
         goto L_RAISE;
       }
@@ -1961,7 +1925,7 @@ RETRY_TRY_BLOCK:
         else {
           blk = regs[ci->argc+1];
         }
-        if (mrb_type(blk) == MRB_TT_PROC) {
+        if (mrb_proc_p(blk)) {
           struct RProc *p = mrb_proc_ptr(blk);
 
           if (!MRB_PROC_STRICT_P(p) &&
@@ -2046,7 +2010,7 @@ RETRY_TRY_BLOCK:
             if (MRB_PROC_ENV_P(dst)) {
               struct REnv *e = MRB_PROC_ENV(dst);
 
-              if (!MRB_ENV_STACK_SHARED_P(e) || e->cxt != mrb->c) {
+              if (!MRB_ENV_ONSTACK_P(e) || (e->cxt && e->cxt != mrb->c)) {
                 localjump_error(mrb, LOCALJUMP_ERROR_RETURN);
                 goto L_RAISE;
               }
@@ -2101,7 +2065,7 @@ RETRY_TRY_BLOCK:
             mrb_exc_set(mrb, exc);
             goto L_RAISE;
           }
-          if (!MRB_PROC_ENV_P(proc) || !MRB_ENV_STACK_SHARED_P(MRB_PROC_ENV(proc))) {
+          if (!MRB_PROC_ENV_P(proc) || !MRB_ENV_ONSTACK_P(MRB_PROC_ENV(proc))) {
             goto L_BREAK_ERROR;
           }
           else {
@@ -2131,8 +2095,8 @@ RETRY_TRY_BLOCK:
           }
           if (FALSE) {
           L_BREAK:
-            v = ((struct RBreak*)mrb->exc)->val;
-            proc = ((struct RBreak*)mrb->exc)->proc;
+            v = mrb_break_value_get((struct RBreak*)mrb->exc);
+            proc = mrb_break_proc_get((struct RBreak*)mrb->exc);
             mrb->exc = NULL;
             ci = mrb->c->ci;
           }
@@ -2178,7 +2142,7 @@ RETRY_TRY_BLOCK:
         }
         pc = ci->pc;
         ci = mrb->c->ci;
-        DEBUG(fprintf(stderr, "from :%s\n", mrb_sym2name(mrb, ci->mid)));
+        DEBUG(fprintf(stderr, "from :%s\n", mrb_sym_name(mrb, ci->mid)));
         proc = mrb->c->ci->proc;
         irep = proc->body.irep;
         pool = irep->pool;
@@ -2201,8 +2165,8 @@ RETRY_TRY_BLOCK:
       if (lv == 0) stack = regs + 1;
       else {
         struct REnv *e = uvenv(mrb, lv-1);
-        if (!e || (!MRB_ENV_STACK_SHARED_P(e) && e->mid == 0) ||
-            MRB_ENV_STACK_LEN(e) <= m1+r+m2+1) {
+        if (!e || (!MRB_ENV_ONSTACK_P(e) && e->mid == 0) ||
+            MRB_ENV_LEN(e) <= m1+r+m2+1) {
           localjump_error(mrb, LOCALJUMP_ERROR_YIELD);
           goto L_RAISE;
         }
@@ -2217,184 +2181,67 @@ RETRY_TRY_BLOCK:
     }
 
 #define TYPES2(a,b) ((((uint16_t)(a))<<8)|(((uint16_t)(b))&0xff))
-#define OP_MATH_BODY(op,v1,v2) do {\
-  v1(regs[a]) = v1(regs[a]) op v2(regs[a+1]);\
-} while(0)
+#define OP_MATH(op_name)                                                    \
+  /* need to check if op is overridden */                                   \
+  switch (TYPES2(mrb_type(regs[a]),mrb_type(regs[a+1]))) {                  \
+    OP_MATH_CASE_FIXNUM(op_name);                                           \
+    OP_MATH_CASE_FLOAT(op_name, fixnum, float);                             \
+    OP_MATH_CASE_FLOAT(op_name, float,  fixnum);                            \
+    OP_MATH_CASE_FLOAT(op_name, float,  float);                             \
+    OP_MATH_CASE_STRING_##op_name();                                        \
+    default:                                                                \
+      c = 1;                                                                \
+      mid = mrb_intern_lit(mrb, MRB_STRINGIZE(OP_MATH_OP_##op_name));       \
+      goto L_SEND_SYM;                                                      \
+  }                                                                         \
+  NEXT;
+#define OP_MATH_CASE_FIXNUM(op_name)                                        \
+  case TYPES2(MRB_TT_FIXNUM, MRB_TT_FIXNUM):                                \
+    {                                                                       \
+      mrb_int x = mrb_fixnum(regs[a]), y = mrb_fixnum(regs[a+1]), z;        \
+      if (mrb_int_##op_name##_overflow(x, y, &z))                           \
+        OP_MATH_OVERFLOW_INT(op_name, x, y, z);                             \
+      else                                                                  \
+        SET_INT_VALUE(regs[a], z);                                          \
+    }                                                                       \
+    break
+#ifdef MRB_WITHOUT_FLOAT
+#define OP_MATH_CASE_FLOAT(op_name, t1, t2) (void)0
+#define OP_MATH_OVERFLOW_INT(op_name, x, y, z) SET_INT_VALUE(regs[a], z)
+#else
+#define OP_MATH_CASE_FLOAT(op_name, t1, t2)                                     \
+  case TYPES2(OP_MATH_TT_##t1, OP_MATH_TT_##t2):                                \
+    {                                                                           \
+      mrb_float z = mrb_##t1(regs[a]) OP_MATH_OP_##op_name mrb_##t2(regs[a+1]); \
+      SET_FLOAT_VALUE(mrb, regs[a], z);                                         \
+    }                                                                           \
+    break
+#define OP_MATH_OVERFLOW_INT(op_name, x, y, z) \
+  SET_FLOAT_VALUE(mrb, regs[a], (mrb_float)x OP_MATH_OP_##op_name (mrb_float)y)
+#endif
+#define OP_MATH_CASE_STRING_add()                                           \
+  case TYPES2(MRB_TT_STRING, MRB_TT_STRING):                                \
+    regs[a] = mrb_str_plus(mrb, regs[a], regs[a+1]);                        \
+    mrb_gc_arena_restore(mrb, ai);                                          \
+    break
+#define OP_MATH_CASE_STRING_sub() (void)0
+#define OP_MATH_CASE_STRING_mul() (void)0
+#define OP_MATH_OP_add +
+#define OP_MATH_OP_sub -
+#define OP_MATH_OP_mul *
+#define OP_MATH_TT_fixnum MRB_TT_FIXNUM
+#define OP_MATH_TT_float  MRB_TT_FLOAT
 
     CASE(OP_ADD, B) {
-      /* need to check if op is overridden */
-      switch (TYPES2(mrb_type(regs[a]),mrb_type(regs[a+1]))) {
-      case TYPES2(MRB_TT_FIXNUM,MRB_TT_FIXNUM):
-        {
-          mrb_int x, y, z;
-          mrb_value *regs_a = regs + a;
-
-          x = mrb_fixnum(regs_a[0]);
-          y = mrb_fixnum(regs_a[1]);
-          if (mrb_int_add_overflow(x, y, &z)) {
-#ifndef MRB_WITHOUT_FLOAT
-            SET_FLOAT_VALUE(mrb, regs_a[0], (mrb_float)x + (mrb_float)y);
-            break;
-#endif
-          }
-          SET_INT_VALUE(regs[a], z);
-        }
-        break;
-#ifndef MRB_WITHOUT_FLOAT
-      case TYPES2(MRB_TT_FIXNUM,MRB_TT_FLOAT):
-        {
-          mrb_int x = mrb_fixnum(regs[a]);
-          mrb_float y = mrb_float(regs[a+1]);
-          SET_FLOAT_VALUE(mrb, regs[a], (mrb_float)x + y);
-        }
-        break;
-      case TYPES2(MRB_TT_FLOAT,MRB_TT_FIXNUM):
-#ifdef MRB_WORD_BOXING
-        {
-          mrb_float x = mrb_float(regs[a]);
-          mrb_int y = mrb_fixnum(regs[a+1]);
-          SET_FLOAT_VALUE(mrb, regs[a], x + y);
-        }
-#else
-        OP_MATH_BODY(+,mrb_float,mrb_fixnum);
-#endif
-        break;
-      case TYPES2(MRB_TT_FLOAT,MRB_TT_FLOAT):
-#ifdef MRB_WORD_BOXING
-        {
-          mrb_float x = mrb_float(regs[a]);
-          mrb_float y = mrb_float(regs[a+1]);
-          SET_FLOAT_VALUE(mrb, regs[a], x + y);
-        }
-#else
-        OP_MATH_BODY(+,mrb_float,mrb_float);
-#endif
-        break;
-#endif
-      case TYPES2(MRB_TT_STRING,MRB_TT_STRING):
-        regs[a] = mrb_str_plus(mrb, regs[a], regs[a+1]);
-        break;
-      default:
-        c = 1;
-        mid = mrb_intern_lit(mrb, "+");
-        goto L_SEND_SYM;
-      }
-      mrb_gc_arena_restore(mrb, ai);
-      NEXT;
+      OP_MATH(add);
     }
 
     CASE(OP_SUB, B) {
-      /* need to check if op is overridden */
-      switch (TYPES2(mrb_type(regs[a]),mrb_type(regs[a+1]))) {
-      case TYPES2(MRB_TT_FIXNUM,MRB_TT_FIXNUM):
-        {
-          mrb_int x, y, z;
-
-          x = mrb_fixnum(regs[a]);
-          y = mrb_fixnum(regs[a+1]);
-          if (mrb_int_sub_overflow(x, y, &z)) {
-#ifndef MRB_WITHOUT_FLOAT
-            SET_FLOAT_VALUE(mrb, regs[a], (mrb_float)x - (mrb_float)y);
-            break;
-#endif
-          }
-          SET_INT_VALUE(regs[a], z);
-        }
-        break;
-#ifndef MRB_WITHOUT_FLOAT
-      case TYPES2(MRB_TT_FIXNUM,MRB_TT_FLOAT):
-        {
-          mrb_int x = mrb_fixnum(regs[a]);
-          mrb_float y = mrb_float(regs[a+1]);
-          SET_FLOAT_VALUE(mrb, regs[a], (mrb_float)x - y);
-        }
-        break;
-      case TYPES2(MRB_TT_FLOAT,MRB_TT_FIXNUM):
-#ifdef MRB_WORD_BOXING
-        {
-          mrb_float x = mrb_float(regs[a]);
-          mrb_int y = mrb_fixnum(regs[a+1]);
-          SET_FLOAT_VALUE(mrb, regs[a], x - y);
-        }
-#else
-        OP_MATH_BODY(-,mrb_float,mrb_fixnum);
-#endif
-        break;
-      case TYPES2(MRB_TT_FLOAT,MRB_TT_FLOAT):
-#ifdef MRB_WORD_BOXING
-        {
-          mrb_float x = mrb_float(regs[a]);
-          mrb_float y = mrb_float(regs[a+1]);
-          SET_FLOAT_VALUE(mrb, regs[a], x - y);
-        }
-#else
-        OP_MATH_BODY(-,mrb_float,mrb_float);
-#endif
-        break;
-#endif
-      default:
-        c = 1;
-        mid = mrb_intern_lit(mrb, "-");
-        goto L_SEND_SYM;
-      }
-      NEXT;
+      OP_MATH(sub);
     }
 
     CASE(OP_MUL, B) {
-      /* need to check if op is overridden */
-      switch (TYPES2(mrb_type(regs[a]),mrb_type(regs[a+1]))) {
-      case TYPES2(MRB_TT_FIXNUM,MRB_TT_FIXNUM):
-        {
-          mrb_int x, y, z;
-
-          x = mrb_fixnum(regs[a]);
-          y = mrb_fixnum(regs[a+1]);
-          if (mrb_int_mul_overflow(x, y, &z)) {
-#ifndef MRB_WITHOUT_FLOAT
-            SET_FLOAT_VALUE(mrb, regs[a], (mrb_float)x * (mrb_float)y);
-            break;
-#endif
-          }
-          SET_INT_VALUE(regs[a], z);
-        }
-        break;
-#ifndef MRB_WITHOUT_FLOAT
-      case TYPES2(MRB_TT_FIXNUM,MRB_TT_FLOAT):
-        {
-          mrb_int x = mrb_fixnum(regs[a]);
-          mrb_float y = mrb_float(regs[a+1]);
-          SET_FLOAT_VALUE(mrb, regs[a], (mrb_float)x * y);
-        }
-        break;
-      case TYPES2(MRB_TT_FLOAT,MRB_TT_FIXNUM):
-#ifdef MRB_WORD_BOXING
-        {
-          mrb_float x = mrb_float(regs[a]);
-          mrb_int y = mrb_fixnum(regs[a+1]);
-          SET_FLOAT_VALUE(mrb, regs[a], x * y);
-        }
-#else
-        OP_MATH_BODY(*,mrb_float,mrb_fixnum);
-#endif
-        break;
-      case TYPES2(MRB_TT_FLOAT,MRB_TT_FLOAT):
-#ifdef MRB_WORD_BOXING
-        {
-          mrb_float x = mrb_float(regs[a]);
-          mrb_float y = mrb_float(regs[a+1]);
-          SET_FLOAT_VALUE(mrb, regs[a], x * y);
-        }
-#else
-        OP_MATH_BODY(*,mrb_float,mrb_float);
-#endif
-        break;
-#endif
-      default:
-        c = 1;
-        mid = mrb_intern_lit(mrb, "*");
-        goto L_SEND_SYM;
-      }
-      NEXT;
+      OP_MATH(mul);
     }
 
     CASE(OP_DIV, B) {
@@ -2449,84 +2296,46 @@ RETRY_TRY_BLOCK:
       NEXT;
     }
 
-    CASE(OP_ADDI, BB) {
-      /* need to check if + is overridden */
-      switch (mrb_type(regs[a])) {
-      case MRB_TT_FIXNUM:
-        {
-          mrb_int x = mrb_fixnum(regs[a]);
-          mrb_int y = (mrb_int)b;
-          mrb_int z;
-
-          if (mrb_int_add_overflow(x, y, &z)) {
-#ifndef MRB_WITHOUT_FLOAT
-            SET_FLOAT_VALUE(mrb, regs[a], (mrb_float)x + (mrb_float)y);
-            break;
-#endif
-          }
-          SET_INT_VALUE(regs[a], z);
-        }
-        break;
-#ifndef MRB_WITHOUT_FLOAT
-      case MRB_TT_FLOAT:
-#ifdef MRB_WORD_BOXING
-        {
-          mrb_float x = mrb_float(regs[a]);
-          SET_FLOAT_VALUE(mrb, regs[a], x + b);
-        }
+#define OP_MATHI(op_name)                                                   \
+  /* need to check if op is overridden */                                   \
+  switch (mrb_type(regs[a])) {                                              \
+    OP_MATHI_CASE_FIXNUM(op_name);                                          \
+    OP_MATHI_CASE_FLOAT(op_name);                                           \
+    default:                                                                \
+      SET_INT_VALUE(regs[a+1], b);                                          \
+      c = 1;                                                                \
+      mid = mrb_intern_lit(mrb, MRB_STRINGIZE(OP_MATH_OP_##op_name));       \
+      goto L_SEND_SYM;                                                      \
+  }                                                                         \
+  NEXT;
+#define OP_MATHI_CASE_FIXNUM(op_name)                                       \
+  case MRB_TT_FIXNUM:                                                       \
+    {                                                                       \
+      mrb_int x = mrb_fixnum(regs[a]), y = (mrb_int)b, z;                   \
+      if (mrb_int_##op_name##_overflow(x, y, &z))                           \
+        OP_MATH_OVERFLOW_INT(op_name, x, y, z);                             \
+      else                                                                  \
+        SET_INT_VALUE(regs[a], z);                                          \
+    }                                                                       \
+    break
+#ifdef MRB_WITHOUT_FLOAT
+#define OP_MATHI_CASE_FLOAT(op_name) (void)0
 #else
-        mrb_float(regs[a]) += b;
+#define OP_MATHI_CASE_FLOAT(op_name)                                        \
+  case MRB_TT_FLOAT:                                                        \
+    {                                                                       \
+      mrb_float z = mrb_float(regs[a]) OP_MATH_OP_##op_name b;              \
+      SET_FLOAT_VALUE(mrb, regs[a], z);                                     \
+    }                                                                       \
+    break
 #endif
-        break;
-#endif
-      default:
-        SET_INT_VALUE(regs[a+1], b);
-        c = 1;
-        mid = mrb_intern_lit(mrb, "+");
-        goto L_SEND_SYM;
-      }
-      NEXT;
+
+    CASE(OP_ADDI, BB) {
+      OP_MATHI(add);
     }
 
     CASE(OP_SUBI, BB) {
-      mrb_value *regs_a = regs + a;
-
-      /* need to check if + is overridden */
-      switch (mrb_type(regs_a[0])) {
-      case MRB_TT_FIXNUM:
-        {
-          mrb_int x = mrb_fixnum(regs_a[0]);
-          mrb_int y = (mrb_int)b;
-          mrb_int z;
-
-          if (mrb_int_sub_overflow(x, y, &z)) {
-#ifndef MRB_WITHOUT_FLOAT
-            SET_FLOAT_VALUE(mrb, regs_a[0], (mrb_float)x - (mrb_float)y);
-            break;
-#endif
-          }
-          SET_INT_VALUE(regs_a[0], z);
-        }
-        break;
-#ifndef MRB_WITHOUT_FLOAT
-      case MRB_TT_FLOAT:
-#ifdef MRB_WORD_BOXING
-        {
-          mrb_float x = mrb_float(regs[a]);
-          SET_FLOAT_VALUE(mrb, regs[a], (mrb_float)x - (mrb_float)b);
-        }
-#else
-        mrb_float(regs_a[0]) -= b;
-#endif
-        break;
-#endif
-      default:
-        SET_INT_VALUE(regs_a[1], b);
-        c = 1;
-        mid = mrb_intern_lit(mrb, "-");
-        goto L_SEND_SYM;
-      }
-      NEXT;
+      OP_MATHI(sub);
     }
 
 #define OP_CMP_BODY(op,v1,v2) (v1(regs[a]) op v2(regs[a+1]))
@@ -2627,7 +2436,12 @@ RETRY_TRY_BLOCK:
 
     CASE(OP_ARYCAT, B) {
       mrb_value splat = mrb_ary_splat(mrb, regs[a+1]);
-      mrb_ary_concat(mrb, regs[a], splat);
+      if (mrb_nil_p(regs[a])) {
+        regs[a] = splat;
+      }
+      else {
+        mrb_ary_concat(mrb, regs[a], splat);
+      }
       mrb_gc_arena_restore(mrb, ai);
       NEXT;
     }
@@ -2997,7 +2811,7 @@ RETRY_TRY_BLOCK:
   MRB_END_EXC(&c_jmp);
 }
 
-MRB_API mrb_value
+static mrb_value
 mrb_run(mrb_state *mrb, struct RProc *proc, mrb_value self)
 {
   if (mrb->c->ci->argc < 0) {
@@ -3018,14 +2832,15 @@ mrb_top_run(mrb_state *mrb, struct RProc *proc, mrb_value self, unsigned int sta
     return mrb_vm_run(mrb, proc, self, stack_keep);
   }
   if (mrb->c->ci == mrb->c->cibase) {
+    mrb->c->ci->env = NULL;
     return mrb_vm_run(mrb, proc, self, stack_keep);
   }
   ci = cipush(mrb);
+  ci->stackent = mrb->c->stack;
   ci->mid = 0;
   ci->acc = CI_ACC_SKIP;
   ci->target_class = mrb->object_class;
   v = mrb_vm_run(mrb, proc, self, stack_keep);
-  cipop(mrb);
 
   return v;
 }

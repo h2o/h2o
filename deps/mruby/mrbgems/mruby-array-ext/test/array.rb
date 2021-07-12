@@ -1,6 +1,23 @@
 ##
 # Array(Ext) Test
 
+def assert_permutation_combination(exp, receiver, meth, *args)
+  act = []
+  ret = receiver.__send__(meth, *args) { |v| act << v }
+  assert "assert_#{meth}" do
+    assert_equal(exp, act.sort)
+    assert_same(receiver, ret)
+  end
+end
+
+def assert_permutation(exp, receiver, *args)
+  assert_permutation_combination(exp, receiver, :permutation, *args)
+end
+
+def assert_combination(exp, receiver, *args)
+  assert_permutation_combination(exp, receiver, :combination, *args)
+end
+
 assert("Array#assoc") do
   s1 = [ "colors", "red", "blue", "green" ]
   s2 = [ "letters", "a", "b", "c" ]
@@ -76,6 +93,14 @@ assert("Array#union") do
   assert_equal [1, 2, 3, 4, 5], a.union(b,c)
 end
 
+assert("Array#difference") do
+  a = [1, 2, 3, 1, 6, 7]
+  b = [1, 4, 6]
+  c = [1, 5, 7]
+
+  assert_equal [2, 3], a.difference(b,c)
+end
+
 assert("Array#&") do
   a = [1, 2, 3, 1]
   b = [1, 4]
@@ -84,6 +109,14 @@ assert("Array#&") do
   assert_raise(TypeError) { a & c }
   assert_equal [1], (a & b)
   assert_equal [1, 2, 3, 1], a
+end
+
+assert("Array#intersection") do
+  a = [1, 2, 3, 1, 8, 6, 7, 8]
+  b = [1, 4, 6, 8]
+  c = [1, 5, 7, 8]
+
+  assert_equal [1, 8], a.intersection(b,c)
 end
 
 assert("Array#flatten") do
@@ -162,12 +195,6 @@ assert("Array#reverse_each") do
     b << i
   end
   assert_equal [ "d", "c", "b", "a" ], b
-
-  if Object.const_defined?(:Enumerator)
-    assert_equal [ "d", "c", "b", "a" ], a.reverse_each.to_a
-  else
-    true
-  end
 end
 
 assert("Array#rotate") do
@@ -268,22 +295,9 @@ assert("Array#bsearch") do
   end
 end
 
-assert("Array#bsearch_index") do
-  # tested through Array#bsearch
-end
-
-assert("Array#delete_if") do
-  a = [1, 2, 3, 4, 5]
-  assert_equal [1, 2, 3, 4, 5], a.delete_if { false }
-  assert_equal [1, 2, 3, 4, 5], a
-
-  a = [1, 2, 3, 4, 5]
-  assert_equal [], a.delete_if { true }
-  assert_equal [], a
-
-  a = [ 1, 2, 3, 4, 5 ]
-  assert_equal [1, 2, 3], a.delete_if { |val| val > 3 }
-end
+# tested through Array#bsearch
+#assert("Array#bsearch_index") do
+#end
 
 assert("Array#keep_if") do
   a = [1, 2, 3, 4, 5]
@@ -369,30 +383,24 @@ end
 
 assert("Array#permutation") do
   a = [1, 2, 3]
-  assert_equal([[1,2,3],[1,3,2],[2,1,3],[2,3,1],[3,1,2],[3,2,1]],
-               a.permutation.to_a)
-  assert_equal([[1],[2],[3]],
-               a.permutation(1).to_a)
-  assert_equal([[1,2],[1,3],[2,1],[2,3],[3,1],[3,2]],
-               a.permutation(2).to_a)
-  assert_equal([[1,2,3],[1,3,2],[2,1,3],[2,3,1],[3,1,2],[3,2,1]],
-               a.permutation(3).to_a)
-  assert_equal([[]], a.permutation(0).to_a)
-  assert_equal([], a.permutation(4).to_a)
+  assert_permutation([[1,2,3],[1,3,2],[2,1,3],[2,3,1],[3,1,2],[3,2,1]], a)
+  assert_permutation([[1],[2],[3]], a, 1)
+  assert_permutation([[1,2],[1,3],[2,1],[2,3],[3,1],[3,2]], a, 2)
+  assert_permutation([[1,2,3],[1,3,2],[2,1,3],[2,3,1],[3,1,2],[3,2,1]], a, 3)
+  assert_permutation([[]], a, 0)
+  assert_permutation([], a, 4)
+  assert_permutation([], a, -1)
 end
 
 assert("Array#combination") do
   a = [1, 2, 3, 4]
-  assert_equal([[1],[2],[3],[4]],
-               a.combination(1).to_a)
-  assert_equal([[1,2],[1,3],[1,4],[2,3],[2,4],[3,4]],
-               a.combination(2).to_a)
-  assert_equal([[1,2,3],[1,2,4],[1,3,4],[2,3,4]],
-               a.combination(3).to_a)
-  assert_equal([[1,2,3,4]],
-               a.combination(4).to_a)
-  assert_equal([[]], a.combination(0).to_a)
-  assert_equal([], a.combination(5).to_a)
+  assert_combination([[1],[2],[3],[4]], a, 1)
+  assert_combination([[1,2],[1,3],[1,4],[2,3],[2,4],[3,4]], a, 2)
+  assert_combination([[1,2,3],[1,2,4],[1,3,4],[2,3,4]], a, 3)
+  assert_combination([[1,2,3,4]], a, 4)
+  assert_combination([[]], a, 0)
+  assert_combination([], a, 5)
+  assert_combination([], a, -1)
 end
 
 assert('Array#transpose') do

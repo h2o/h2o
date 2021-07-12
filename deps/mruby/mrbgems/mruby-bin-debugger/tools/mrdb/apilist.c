@@ -181,7 +181,7 @@ mrb_debug_get_source(mrb_state *mrb, mrdb_state *mrdb, const char *srcpath, cons
   else srcname = filename;
 
   search_path[0] = srcpath;
-  search_path[1] = dirname(mrb, mrb_debug_get_filename(mrdb->dbg->irep, 0));
+  search_path[1] = dirname(mrb, mrb_debug_get_filename(mrb, mrdb->dbg->irep, 0));
   search_path[2] = ".";
 
   for (i = 0; i < 3; i++) {

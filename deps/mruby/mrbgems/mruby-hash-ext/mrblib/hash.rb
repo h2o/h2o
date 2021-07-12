@@ -494,4 +494,7 @@ class Hash
       self.fetch(k, &block)
     end
   end
+
+  alias filter select
+  alias filter! select!
 end

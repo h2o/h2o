@@ -1,16 +1,32 @@
 ##
 # Proc(Ext) Test
 
+def enable_debug_info?
+  return @enable_debug_info unless @enable_debug_info == nil
+  begin
+    raise
+  rescue => e
+    @enable_debug_info = !e.backtrace.empty?
+  end
+end
+
 assert('Proc#source_location') do
-  loc = Proc.new {}.source_location
-  next true if loc.nil?
-  assert_equal loc[0][-7, 7], 'proc.rb'
-  assert_equal loc[1], 5
+  skip unless enable_debug_info?
+  file, line = Proc.new{}.source_location
+  assert_equal __FILE__, file
+  assert_equal __LINE__ - 2, line
 end
 
 assert('Proc#inspect') do
   ins = Proc.new{}.inspect
-  assert_kind_of String, ins
+  if enable_debug_info?
+    metas = %w(\\ * ? [ ] { })
+    file = __FILE__.split("").map{|c| metas.include?(c) ? "\\#{c}" : c}.join
+    line = __LINE__ - 4
+  else
+    file = line = "-"
+  end
+  assert_match "#<Proc:0x*@#{file}:#{line}>", ins
 end
 
 assert('Proc#parameters') do

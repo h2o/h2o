@@ -1,5 +1,5 @@
-/*
-** mruby/boxing_nan.h - nan boxing mrb_value definition
+/**
+** @file mruby/boxing_nan.h - nan boxing mrb_value definition
 **
 ** See Copyright Notice in mruby.h
 */
@@ -20,13 +20,7 @@
 #endif
 
 #define MRB_FIXNUM_SHIFT 0
-#define MRB_TT_HAS_BASIC MRB_TT_OBJECT
-
-#ifdef MRB_ENDIAN_BIG
-#define MRB_ENDIAN_LOHI(a,b) a b
-#else
-#define MRB_ENDIAN_LOHI(a,b) b a
-#endif
+#define MRB_SYMBOL_SHIFT 0
 
 /* value representation by nan-boxing:
  *   float : FFFFFFFFFFFFFFFF FFFFFFFFFFFFFFFF FFFFFFFFFFFFFFFF FFFFFFFFFFFFFFFF
@@ -50,6 +44,9 @@ typedef struct mrb_value {
           };
         )
       };
+#ifdef MRB_64BIT
+      struct RCptr *vp;
+#endif
     } value;
   };
 } mrb_value;
@@ -60,13 +57,15 @@ typedef struct mrb_value {
 #define mrb_type(o)     (enum mrb_vtype)((uint32_t)0xfff00000 < (o).value.ttt ? mrb_tt(o) : MRB_TT_FLOAT)
 #define mrb_ptr(o)      ((void*)((((uintptr_t)0x3fffffffffff)&((uintptr_t)((o).value.p)))<<2))
 #define mrb_float(o)    (o).f
-#define mrb_cptr(o)     mrb_ptr(o)
 #define mrb_fixnum(o)   (o).value.i
 #define mrb_symbol(o)   (o).value.sym
 
 #ifdef MRB_64BIT
+MRB_API mrb_value mrb_nan_boxing_cptr_value(struct mrb_state*, void*);
+#define mrb_cptr(o)     (((struct RCptr*)mrb_ptr(o))->p)
 #define BOXNAN_SHIFT_LONG_POINTER(v) (((uintptr_t)(v)>>34)&0x3fff)
 #else
+#define mrb_cptr(o)     ((o).value.p)
 #define BOXNAN_SHIFT_LONG_POINTER(v) 0
 #endif
 
@@ -96,7 +95,11 @@ typedef struct mrb_value {
 #define SET_INT_VALUE(r,n) BOXNAN_SET_VALUE(r, MRB_TT_FIXNUM, value.i, (n))
 #define SET_SYM_VALUE(r,v) BOXNAN_SET_VALUE(r, MRB_TT_SYMBOL, value.sym, (v))
 #define SET_OBJ_VALUE(r,v) BOXNAN_SET_OBJ_VALUE(r, (((struct RObject*)(v))->tt), (v))
-#define SET_CPTR_VALUE(mrb,r,v) BOXNAN_SET_OBJ_VALUE(r, MRB_TT_CPTR, v)
+#ifdef MRB_64BIT
+#define SET_CPTR_VALUE(mrb,r,v) ((r) = mrb_nan_boxing_cptr_value(mrb, v))
+#else
+#define SET_CPTR_VALUE(mrb,r,v) BOXNAN_SET_VALUE(r, MRB_TT_CPTR, value.p, v)
+#endif
 #define SET_UNDEF_VALUE(r) BOXNAN_SET_VALUE(r, MRB_TT_UNDEF, value.i, 0)
 
 #endif  /* MRUBY_BOXING_NAN_H */

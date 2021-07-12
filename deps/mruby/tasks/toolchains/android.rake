@@ -10,6 +10,7 @@ class MRuby::Toolchain::Android
     ~/Android/Sdk/ndk-bundle
     %LOCALAPPDATA%/Android/android-sdk/ndk-bundle
     %LOCALAPPDATA%/Android/android-ndk
+    %LOCALAPPDATA%/Android/Sdk/ndk/*
     ~/Library/Android/sdk/ndk-bundle
     ~/Library/Android/ndk
   }
@@ -40,6 +41,19 @@ Set ANDROID_PLATFORM environment variable or set :platform parameter
     end
   end
 
+  class SysrootNotReady < StandardError
+    def message
+      <<-EOM
+Couldn't find standard header files
+Please Move/Copy important file inside
+  <NDK_HOME>/sysroot/usr/include/
+to
+  <NDK_HOME>/platforms/<ANDROID_VERSION>/<ARCH>/usr/include/
+Higher NDK version will be use.
+      EOM
+    end
+  end
+
   attr_reader :params
 
   def initialize(params)
@@ -67,13 +81,32 @@ Set ANDROID_PLATFORM environment variable or set :platform parameter
   end
 
   def home_path
-    @home_path ||= Pathname(
+    @home_path ||= Pathname.new(
       params[:ndk_home] ||
       ENV['ANDROID_NDK_HOME'] ||
       DEFAULT_NDK_HOMES.find { |path|
         path.gsub! '%LOCALAPPDATA%', ENV['LOCALAPPDATA'] || '%LOCALAPPDATA%'
         path.gsub! '\\', '/'
         path.gsub! '~', Dir.home || '~'
+        path.gsub!('*') do
+          next nil unless path[-1] == "*"
+          dirs = Dir.glob(path).collect do |d|
+            m = d.match(/(\d+)\.(\d+)\.(\d+)$/)
+            m ? [m[1], m[2], m[3]].collect { |v| v.to_i } : nil
+          end
+          dirs.compact!
+          dirs.sort! do |before, after|
+            f = 0
+            if (f = (after.first <=> before.first)) != 0
+              next f
+            elsif (f = (after[1] <=> before[1])) != 0
+              next f
+            else
+              next after.last <=> before.last
+            end
+          end
+          dirs.empty? ? nil.to_s : dirs.first.join(".")
+        end
         File.directory?(path)
       } || raise(AndroidNDKHomeNotFound)
     )
@@ -124,7 +157,7 @@ Set ANDROID_PLATFORM environment variable or set :platform parameter
         path = home_path.join('toolchains', 'llvm' , 'prebuilt', 'windows*')
         Dir.glob(path.to_s){ |item|
           next if File.file?(item)
-          path = Pathname(item)
+          path = Pathname.new(item)
           break
         }
         path.basename
@@ -146,7 +179,8 @@ Set ANDROID_PLATFORM environment variable or set :platform parameter
   end
 
   def sysroot
-    @sysroot ||= home_path.join('platforms', platform,
+    return @sysroot if @sysroot
+    sysroot_path = home_path.join('platforms', platform,
         case arch
         when /armeabi/    then 'arch-arm'
         when /arm64-v8a/  then 'arch-arm64'
@@ -156,6 +190,11 @@ Set ANDROID_PLATFORM environment variable or set :platform parameter
         when /mips/       then 'arch-mips'
         end
       ).to_s
+    if Dir.exist?(File.join(sysroot_path, "usr", "include"))
+      return @sysroot = sysroot_path
+    else
+      raise(SysrootNotReady)
+    end
   end
 
   def platform
@@ -258,6 +297,12 @@ Set ANDROID_PLATFORM environment variable or set :platform parameter
 
   def cflags
     flags = []
+
+    case RUBY_PLATFORM
+    when /mswin|mingw|win32/
+      # Build for Android dont need window flag
+      flags += %W(-U_WIN32 -U_WIN64)
+    end
 
     flags += %W(-MMD -MP -D__android__ -DANDROID --sysroot="#{sysroot}")
     flags += ctarget

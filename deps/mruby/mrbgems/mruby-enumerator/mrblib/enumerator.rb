@@ -89,7 +89,6 @@ class Enumerator
   include Enumerable
 
   ##
-  # @overload initialize(size = nil, &block)
   # @overload initialize(obj, method = :each, *args)
   #
   # Creates a new Enumerator object, which can be used as an
@@ -244,9 +243,10 @@ class Enumerator
   #
   # === Examples
   #
-  #   "Hello, world!".scan(/\w+/)                     #=> ["Hello", "world"]
-  #   "Hello, world!".to_enum(:scan, /\w+/).to_a      #=> ["Hello", "world"]
-  #   "Hello, world!".to_enum(:scan).each(/\w+/).to_a #=> ["Hello", "world"]
+  #   Array.new(3)                     #=> [nil, nil, nil]
+  #   Array.new(3) { |i| i }           #=> [0, 1, 2]
+  #   Array.to_enum(:new, 3).to_a      #=> [0, 1, 2]
+  #   Array.to_enum(:new).each(3).to_a #=> [0, 1, 2]
   #
   #   obj = Object.new
   #
@@ -555,6 +555,46 @@ class Enumerator
       self
     end
   end
+
+  ##
+  # call-seq:
+  #    Enumerator.produce(initial = nil) { |val| } -> enumerator
+  #
+  # Creates an infinite enumerator from any block, just called over and
+  # over.  Result of the previous iteration is passed to the next one.
+  # If +initial+ is provided, it is passed to the first iteration, and
+  # becomes the first element of the enumerator; if it is not provided,
+  # first iteration receives +nil+, and its result becomes first
+  # element of the iterator.
+  #
+  # Raising StopIteration from the block stops an iteration.
+  #
+  # Examples of usage:
+  #
+  #   Enumerator.produce(1, &:succ)   # => enumerator of 1, 2, 3, 4, ....
+  #
+  #   Enumerator.produce { rand(10) } # => infinite random number sequence
+  #
+  #   ancestors = Enumerator.produce(node) { |prev| node = prev.parent or raise StopIteration }
+  #   enclosing_section = ancestors.find { |n| n.type == :section }
+  def Enumerator.produce(init=NONE, &block)
+    raise ArgumentError, "no block given" if block.nil?
+    Enumerator.new do |y|
+      if init == NONE
+        val = nil
+      else
+        val = init
+        y.yield(val)
+      end
+      begin
+        while true
+          y.yield(val = block.call(val))
+        end
+      rescue StopIteration
+        # do nothing
+      end
+    end
+  end
 end
 
 module Kernel
@@ -562,14 +602,9 @@ module Kernel
   # call-seq:
   #   obj.to_enum(method = :each, *args)                 -> enum
   #   obj.enum_for(method = :each, *args)                -> enum
-  #   obj.to_enum(method = :each, *args) {|*args| block} -> enum
-  #   obj.enum_for(method = :each, *args){|*args| block} -> enum
   #
   # Creates a new Enumerator which will enumerate by calling +method+ on
   # +obj+, passing +args+ if any.
-  #
-  # If a block is given, it will be used to calculate the size of
-  # the enumerator without the need to iterate it (see Enumerator#size).
   #
   # === Examples
   #
@@ -588,17 +623,14 @@ module Kernel
   # It is typical to call to_enum when defining methods for
   # a generic Enumerable, in case no block is passed.
   #
-  # Here is such an example, with parameter passing and a sizing block:
+  # Here is such an example with parameter passing:
   #
   #     module Enumerable
   #       # a generic method to repeat the values of any enumerable
   #       def repeat(n)
   #         raise ArgumentError, "#{n} is negative!" if n < 0
   #         unless block_given?
-  #           return to_enum(__method__, n) do # __method__ is :repeat here
-  #             sz = size     # Call size and multiply by n...
-  #             sz * n if sz  # but return nil if size itself is nil
-  #           end
+  #           return to_enum(__method__, n) # __method__ is :repeat here
   #         end
   #         each do |*val|
   #           n.times { yield *val }

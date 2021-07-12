@@ -6,7 +6,9 @@ module MRuby
     ROOT = Pathname.new(File.expand_path('../../../',__FILE__))
 
     # Reads a constant defined at version.h
-    MRUBY_READ_VERSION_CONSTANT = Proc.new { |name| ROOT.join('include','mruby','version.h').read.match(/^#define #{name} +"?([\w\. ]+)"?$/)[1] }
+    MRUBY_READ_VERSION_CONSTANT = Proc.new do |name|
+      ROOT.join('include','mruby','version.h').read.match(/^#define #{name} +"?([\w\. ]+)"?\r?$/)[1]
+    end
 
     MRUBY_RUBY_VERSION = MRUBY_READ_VERSION_CONSTANT['MRUBY_RUBY_VERSION']
     MRUBY_RUBY_ENGINE = MRUBY_READ_VERSION_CONSTANT['MRUBY_RUBY_ENGINE']

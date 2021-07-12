@@ -36,19 +36,26 @@
 /* size of the method cache (need to be the power of 2) */
 //#define MRB_METHOD_CACHE_SIZE (1<<7)
 
-/* add -DMRB_METHOD_TABLE_INLINE to reduce the size of method table */
-/* MRB_METHOD_TABLE_INLINE requires LSB of function pointers to be zero */
-/* you might need to specify --falign-functions=n (where n>1) */
-//#define MRB_METHOD_TABLE_INLINE
+/* add -DMRB_METHOD_T_STRUCT on machines that use higher bits of pointers */
+/* no MRB_METHOD_T_STRUCT requires highest 2 bits of function pointers to be zero */
+#ifndef MRB_METHOD_T_STRUCT
+  // can't use highest 2 bits of function pointers at least on 32bit
+  // Windows and 32bit Linux.
+# ifdef MRB_32BIT
+#   define MRB_METHOD_T_STRUCT
+# endif
+#endif
 
-/* add -DMRB_INT16 to use 16bit integer for mrb_int; conflict with MRB_INT64 */
-//#define MRB_INT16
+/* add -DMRB_INT32 to use 32bit integer for mrb_int; conflict with MRB_INT64;
+   Default for 32-bit CPU mode. */
+//#define MRB_INT32
 
-/* add -DMRB_INT64 to use 64bit integer for mrb_int; conflict with MRB_INT16 */
+/* add -DMRB_INT64 to use 64bit integer for mrb_int; conflict with MRB_INT32;
+   Default for 64-bit CPU mode. */
 //#define MRB_INT64
 
 /* if no specific integer type is chosen */
-#if !defined(MRB_INT16) && !defined(MRB_INT32) && !defined(MRB_INT64)
+#if !defined(MRB_INT32) && !defined(MRB_INT64)
 # if defined(MRB_64BIT) && !defined(MRB_NAN_BOXING)
 /* Use 64bit integers on 64bit architecture (without MRB_NAN_BOXING) */
 #  define MRB_INT64
@@ -81,12 +88,13 @@
 /* number of object per heap page */
 //#define MRB_HEAP_PAGE_SIZE 1024
 
-/* if _etext and _edata available, mruby can reduce memory used by symbols */
-//#define MRB_USE_ETEXT_EDATA
+/* if __ehdr_start is available, mruby can reduce memory used by symbols */
+//#define MRB_USE_LINK_TIME_RO_DATA_P
 
-/* do not use __init_array_start to determine readonly data section;
-   effective only when MRB_USE_ETEXT_EDATA is defined */
-//#define MRB_NO_INIT_ARRAY_START
+/* if MRB_USE_LINK_TIME_RO_DATA_P does not work,
+   you can try mrb_ro_data_p() that you have implemented yourself in any file;
+   prototype is `mrb_bool mrb_ro_data_p(const char *ptr)` */
+//#define MRB_USE_CUSTOM_RO_DATA_P
 
 /* turn off generational GC by default */
 //#define MRB_GC_TURN_OFF_GENERATIONAL
@@ -144,6 +152,64 @@
 
 #ifndef TRUE
 # define TRUE 1
+#endif
+
+/*
+** mruby tuning profiles
+**/
+
+/* A profile for micro controllers */
+#if defined(MRB_CONSTRAINED_BASELINE_PROFILE)
+# ifndef KHASH_DEFAULT_SIZE
+#  define KHASH_DEFAULT_SIZE 16
+# endif
+
+# ifndef MRB_STR_BUF_MIN_SIZE
+#  define MRB_STR_BUF_MIN_SIZE 32
+# endif
+
+# ifndef MRB_HEAP_PAGE_SIZE
+#  define MRB_HEAP_PAGE_SIZE 256
+# endif
+
+/* A profile for default mruby */
+#elif defined(MRB_BASELINE_PROFILE)
+
+/* A profile for desktop computers or workstations; rich memory! */
+#elif defined(MRB_MAIN_PROFILE)
+# ifndef MRB_METHOD_CACHE
+#  define MRB_METHOD_CACHE
+# endif
+
+# ifndef MRB_METHOD_CACHE_SIZE
+#  define MRB_METHOD_CACHE_SIZE (1<<10)
+# endif
+
+# ifndef MRB_IV_SEGMENT_SIZE
+#  define MRB_IV_SEGMENT_SIZE 32
+# endif
+
+# ifndef MRB_HEAP_PAGE_SIZE
+#  define MRB_HEAP_PAGE_SIZE 4096
+# endif
+
+/* A profile for server; mruby vm is long life */
+#elif defined(MRB_HIGH_PROFILE)
+# ifndef MRB_METHOD_CACHE
+#  define MRB_METHOD_CACHE
+# endif
+
+# ifndef MRB_METHOD_CACHE_SIZE
+#  define MRB_METHOD_CACHE_SIZE (1<<12)
+# endif
+
+# ifndef MRB_IV_SEGMENT_SIZE
+#  define MRB_IV_SEGMENT_SIZE 64
+# endif
+
+# ifndef MRB_HEAP_PAGE_SIZE
+#  define MRB_HEAP_PAGE_SIZE 4096
+# endif
 #endif
 
 #endif  /* MRUBYCONF_H */

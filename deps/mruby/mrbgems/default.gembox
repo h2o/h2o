@@ -71,6 +71,10 @@ MRuby::GemBox.new do |conf|
   # Use toplevel object (main) methods extension
   conf.gem :core => "mruby-toplevel-ext"
 
+  # Use Rational/Complex numbers
+  conf.gem :core => "mruby-rational"
+  conf.gem :core => "mruby-complex"
+
   # Generate mirb command
   conf.gem :core => "mruby-bin-mirb"
 
@@ -85,6 +89,12 @@ MRuby::GemBox.new do |conf|
 
   # Use class/module extension
   conf.gem :core => "mruby-class-ext"
+
+  # Use Method/UnboundMethod class
+  conf.gem :core => "mruby-method"
+
+  # Use eval()
+  conf.gem :core => "mruby-eval"
 
   # Use mruby-compiler to build other mrbgems
   conf.gem :core => "mruby-compiler"

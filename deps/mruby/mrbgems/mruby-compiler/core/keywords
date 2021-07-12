@@ -1,8 +1,5 @@
 %{
 struct kwtable {const char *name; int id[2]; enum mrb_lex_state_enum state;};
-const struct kwtable *mrb_reserved_word(const char *, unsigned int);
-static const struct kwtable *reserved_word(const char *, unsigned int);
-#define mrb_reserved_word(str, len) reserved_word(str, len)
 %}
 
 struct kwtable;

@@ -50,15 +50,17 @@ You can use mrbconfs with following ways:
 * When defined single precision floating point type(C type `float`) is used as `mrb_float`.
 * Else double precision floating point type(C type `double`) is used as `mrb_float`.
 
-`MRB_INT16`
-* When defined `int16_t` will be defined as `mrb_int`.
+`MRB_WITHOUT_FLOAT`
+* When defined removes floating point numbers from mruby.
+* It makes mruby easier to handle in "Microcontroller without FPU" and "Kernel Space".
+
+`MRB_INT32`
+* When defined, or `MRB_INT64` are not defined on 32-bit CPU mode, `mrb_int` will be defined as `int32_t`.
 * Conflicts with `MRB_INT64`.
 
 `MRB_INT64`
-* When defined `int64_t` will be defined as `mrb_int`.
-* Conflicts with `MRB_INT16`.
-* When `MRB_INT16` or `MRB_INT64` isn't defined `int`(most of the times 32-bit integer)
-will be defined as `mrb_int`.
+* When defined, or `MRB_INT32` are not defined on 64-bit CPU mode, `mrb_int` will be defined as `int64_t`.
+* Conflicts with `MRB_INT32`.
 
 ## Garbage collector configuration.
 
@@ -115,7 +117,7 @@ largest value of required alignment.
 
 `MRB_NAN_BOXING`
 * If defined represent `mrb_value` in boxed `double`.
-* Conflicts with `MRB_USE_FLOAT`.
+* Conflicts with `MRB_USE_FLOAT` and `MRB_WITHOUT_FLOAT`.
 
 `MRB_WORD_BOXING`
 * If defined represent `mrb_value` as a word.
@@ -125,6 +127,22 @@ largest value of required alignment.
 `MRB_IV_SEGMENT_SIZE`
 * Default value is `4`.
 * Specifies size of each segment in segment list.
+
+## Reduce heap memory configuration.
+
+`MRB_USE_LINK_TIME_RO_DATA_P`
+* Only available on ELF platforms.
+* If you specify the address of a read-only section when creating a symbol or string, that string will be used as it is.
+* Heap memory can be saved.
+* Uses `__ehdr_start` and `__init_array_start`.
+* It must be `__ehdr_start < data_addr < __init_array_start`.
+
+`MRB_USE_CUSTOM_RO_DATA_P`
+* Takes precedence over `MRB_USE_LINK_TIME_RO_DATA_P`.
+* Please try if `MRB_USE_LINK_TIME_RO_DATA_P` is not available.
+* The `mrb_ro_data_p()` function is implemented by the user in an arbitrary file.
+* The prototype declaration is `mrb_bool mrb_ro_data_p(const char *ptr)`.
+* Return `TRUE` if `ptr` is in read-only section, otherwise return `FALSE`.
 
 ## Other configuration.
 `MRB_UTF8_STRING`
@@ -144,3 +162,20 @@ largest value of required alignment.
 `MRB_STR_BUF_MIN_SIZE`
 * Default value is `128`.
 * Specifies initial capacity of `RString` created by `mrb_str_buf_new` function..
+
+`MRB_METHOD_CACHE`
+* Improve performance for method dispatch.
+
+`MRB_METHOD_CACHE_SIZE`
+* Default value is `128`.
+* Ignored if `MRB_METHOD_CACHE` is not defined.
+* Need to be the power of 2.
+
+`MRB_METHOD_T_STRUCT`
+* Use C struct to represent `mrb_method_t`
+* No `MRB_METHOD_T_STRUCT` requires highest 2 bits of function pointers to be zero
+* Define this macro on machines that use higher bits of pointers
+
+`MRB_ENABLE_ALL_SYMBOLS`
+* Make it available `Symbols.all_symbols` in `mrbgems/mruby-symbol-ext`
+* Increase heap memory usage.

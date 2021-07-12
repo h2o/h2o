@@ -123,8 +123,8 @@ class IO
 
   def write(string)
     str = string.is_a?(String) ? string : string.to_s
-    return str.size unless str.size > 0
-    if 0 < @buf.length
+    return 0 if str.empty?
+    unless @buf.empty?
       # reset real pos ignore buf
       seek(pos, SEEK_SET)
     end
@@ -140,8 +140,8 @@ class IO
   def eof?
     _check_readable
     begin
-      buf = _read_buf
-      return buf.size == 0
+      _read_buf
+      return @buf.empty?
     rescue EOFError
       return true
     end
@@ -150,7 +150,7 @@ class IO
 
   def pos
     raise IOError if closed?
-    sysseek(0, SEEK_CUR) - @buf.length
+    sysseek(0, SEEK_CUR) - @buf.bytesize
   end
   alias_method :tell, :pos
 
@@ -170,16 +170,16 @@ class IO
   end
 
   def _read_buf
-    return @buf if @buf && @buf.size > 0
-    @buf = sysread(BUF_SIZE)
+    return @buf if @buf && @buf.bytesize > 0
+    sysread(BUF_SIZE, @buf)
   end
 
   def ungetc(substr)
     raise TypeError.new "expect String, got #{substr.class}" unless substr.is_a?(String)
     if @buf.empty?
-      @buf = substr.dup
+      @buf.replace(substr)
     else
-      @buf = substr + @buf
+      @buf[0,0] = substr
     end
     nil
   end
@@ -207,9 +207,8 @@ class IO
       end
 
       if length
-        consume = (length <= @buf.size) ? length : @buf.size
-        array.push @buf[0, consume]
-        @buf = @buf[consume, @buf.size - consume]
+        consume = (length <= @buf.bytesize) ? length : @buf.bytesize
+        array.push IO._bufread(@buf, consume)
         length -= consume
         break if length == 0
       else
@@ -226,12 +225,12 @@ class IO
     end
   end
 
-  def readline(arg = $/, limit = nil)
+  def readline(arg = "\n", limit = nil)
     case arg
     when String
       rs = arg
     when Fixnum
-      rs = $/
+      rs = "\n"
       limit = arg
     else
       raise ArgumentError
@@ -242,7 +241,7 @@ class IO
     end
 
     if rs == ""
-      rs = $/ + $/
+      rs = "\n\n"
     end
 
     array = []
@@ -256,12 +255,12 @@ class IO
 
       if limit && limit <= @buf.size
         array.push @buf[0, limit]
-        @buf = @buf[limit, @buf.size - limit]
+        @buf[0, limit] = ""
         break
       elsif idx = @buf.index(rs)
         len = idx + rs.size
         array.push @buf[0, len]
-        @buf = @buf[len, @buf.size - len]
+        @buf[0, len] = ""
         break
       else
         array.push @buf
@@ -284,21 +283,23 @@ class IO
 
   def readchar
     _read_buf
-    c = @buf[0]
-    @buf = @buf[1, @buf.size]
-    c
+    _readchar(@buf)
   end
 
   def getc
     begin
       readchar
     rescue EOFError
+      c = @buf[0]
+      @buf[0,1]="" if c
       nil
     end
   end
 
   # 15.2.20.5.3
   def each(&block)
+    return to_enum unless block
+
     while line = self.gets
       block.call(line)
     end
@@ -307,6 +308,8 @@ class IO
 
   # 15.2.20.5.4
   def each_byte(&block)
+    return to_enum(:each_byte) unless block
+
     while char = self.getc
       block.call(char)
     end
@@ -364,25 +367,3 @@ STDERR = IO.open(2, "w")
 $stdin  = STDIN
 $stdout = STDOUT
 $stderr = STDERR
-
-module Kernel
-  def print(*args)
-    $stdout.print(*args)
-  end
-
-  def puts(*args)
-    $stdout.puts(*args)
-  end
-
-  def printf(*args)
-    $stdout.printf(*args)
-  end
-
-  def gets(*args)
-    $stdin.gets(*args)
-  end
-
-  def getc(*args)
-    $stdin.getc(*args)
-  end
-end

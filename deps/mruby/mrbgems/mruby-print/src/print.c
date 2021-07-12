@@ -1,6 +1,10 @@
 #include <mruby.h>
+
+#ifdef MRB_DISABLE_STDIO
+# error print conflicts 'MRB_DISABLE_STDIO' configuration in your 'build_config.rb'
+#endif
+
 #include <mruby/string.h>
-#include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 #if defined(_WIN32)
@@ -41,9 +45,8 @@ printstr(mrb_state *mrb, mrb_value obj)
 mrb_value
 mrb_printstr(mrb_state *mrb, mrb_value self)
 {
-  mrb_value argv;
+  mrb_value argv = mrb_get_arg1(mrb);
 
-  mrb_get_args(mrb, "o", &argv);
   printstr(mrb, argv);
 
   return argv;
