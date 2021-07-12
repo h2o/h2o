@@ -64,6 +64,8 @@ RUN sudo cpanm --notest https://github.com/tokuhirom/Test-TCP.git@2.21
 
 # h2spec
 RUN curl -Ls https://github.com/i110/h2spec/releases/download/v2.2.0-4e8cc7e/h2spec_linux_amd64.tar.gz | tar zx -C /usr/local/bin
+# promtool
+RUN curl -Ls https://github.com/prometheus/prometheus/releases/download/v2.27.1/prometheus-2.27.1.linux-amd64.tar.gz | tar zxf - && mv prometheus-2.27.1.linux-amd64/promtool /usr/local/bin
 
 # bcc and bpftrace
 RUN apt-get install --yes \

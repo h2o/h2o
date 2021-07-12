@@ -143,7 +143,7 @@ static void initiate_graceful_shutdown(h2o_context_t *ctx)
 static void on_idle_timeout(h2o_timer_t *entry)
 {
     h2o_http2_conn_t *conn = H2O_STRUCT_FROM_MEMBER(h2o_http2_conn_t, _timeout_entry, entry);
-    conn->super.ctx->http2.events.idle_timeouts++;
+    conn->super.ctx->stats.http2.server.idle_timeouts.counter++;
 
     if (conn->_write.buf_in_flight != NULL) {
         close_connection_now(conn);
@@ -405,7 +405,7 @@ static void stream_send_error(h2o_http2_conn_t *conn, uint32_t stream_id, int er
     assert(stream_id != 0);
     assert(conn->state < H2O_HTTP2_CONN_STATE_IS_CLOSING);
 
-    conn->super.ctx->http2.events.protocol_level_errors[-errnum]++;
+    conn->super.ctx->stats.http2.server.protocol_level_errors[-errnum].counter++;
 
     h2o_http2_encode_rst_stream_frame(&conn->_write.buf, stream_id, -errnum);
     h2o_http2_conn_request_write(conn);
@@ -1202,7 +1202,7 @@ static void on_read(h2o_socket_t *sock, const char *err)
     h2o_http2_conn_t *conn = sock->data;
 
     if (err != NULL) {
-        conn->super.ctx->http2.events.read_closed++;
+        conn->super.ctx->stats.http2.server.read_closed.counter++;
         h2o_socket_read_stop(conn->sock);
         close_connection(conn);
         return;
@@ -1320,7 +1320,7 @@ static void on_write_complete(h2o_socket_t *sock, const char *err)
 
     /* close by error if necessary */
     if (err != NULL) {
-        conn->super.ctx->http2.events.write_closed++;
+        conn->super.ctx->stats.http2.server.write_closed.counter++;
         close_connection_now(conn);
         return;
     }

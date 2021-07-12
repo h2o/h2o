@@ -24,46 +24,114 @@
 #include <inttypes.h>
 
 struct st_events_status_ctx_t {
-    uint64_t emitted_status_errors[H2O_STATUS_ERROR_MAX];
-    uint64_t h2_protocol_level_errors[H2O_HTTP2_ERROR_MAX];
-    uint64_t h2_read_closed;
-    uint64_t h2_write_closed;
-    uint64_t h2_idle_timeout;
-    uint64_t h1_request_timeout;
-    uint64_t h1_request_io_timeout;
-    uint64_t ssl_errors;
-    struct {
-        uint64_t packet_forwarded;
-        uint64_t forwarded_packet_received;
-    } http3;
-    struct st_h2o_quic_aggregated_stats_t quic;
+    h2o_context_t agg;
     pthread_mutex_t mutex;
 };
+/* clang-format off */
+static const char *status_error_labels[] = {
+    "400",
+    "403",
+    "404",
+    "405",
+    "413",
+    "416",
+    "417",
+    "500",
+    "502",
+    "503",
+};
+/* clang-format on */
+_Static_assert(PTLS_ELEMENTSOF(status_error_labels) == PTLS_ELEMENTSOF(((struct st_h2o_context_t *)0)->stats.emitted_error_status),
+               "There must be as much error labels as error status");
 
+/* clang-format off */
+static const char *http2_error_labels[] = {
+    "none",
+    "protocol",
+    "internal",
+    "flow_control",
+    "settings_timeout",
+    "stream_closed",
+    "frame_size",
+    "refused_stream",
+    "cancel",
+    "compression",
+    "connect",
+    "enhance_your_calm",
+    "inadequate_security",
+};
+/* clang-format off */
+_Static_assert(PTLS_ELEMENTSOF(http2_error_labels) == PTLS_ELEMENTSOF(((struct st_h2o_context_t *)0)->stats.http2.server.protocol_level_errors), "There must be as much error labels as error status");
+
+static const struct st_h2o_stat_ops_t stat_ops[] = {
+#define ADD_HIST(name, desc, member)                                                                                               \
+    {                                                                                                                              \
+        {H2O_STRLIT(name)}, {H2O_STRLIT(desc)}, offsetof(struct st_h2o_context_t, member), 1, NULL, hist_aggregate, hist_stringify,      \
+            hist_prometheus,                                                                                                       \
+    }
+#define ADD_METRIC(name, desc, member)                                                                                             \
+    {                                                                                                                              \
+        {H2O_STRLIT(name)}, {H2O_STRLIT(desc)}, offsetof(struct st_h2o_context_t, member), 1, NULL, metric_aggregate, metric_stringify,  \
+            metric_prometheus,                                                                                                     \
+    }
+#define ADD_GAUGE(name, desc, member)                                                                                              \
+    {                                                                                                                              \
+        {H2O_STRLIT(name)}, {H2O_STRLIT(desc)}, offsetof(struct st_h2o_context_t, member), 1,  NULL,metric_aggregate, gauge_stringify,   \
+            gauge_prometheus,                                                                                                      \
+    }
+#define ADD_COUNTER(name, desc, member)                                                                                            \
+    {                                                                                                                              \
+        {H2O_STRLIT(name)}, {H2O_STRLIT(desc)}, offsetof(struct st_h2o_context_t, member), 1, NULL, metric_aggregate, counter_stringify, \
+            counter_prometheus,                                                                                                    \
+    }
+#define ADD_COUNTER_ARRAY(name, desc, member, labels)                                                                                      \
+    {                                                                                                                              \
+        {H2O_STRLIT(name)}, {H2O_STRLIT(desc)}, offsetof(struct st_h2o_context_t, member),                                         \
+            PTLS_ELEMENTSOF(((struct st_h2o_context_t *)0)->member), labels, metric_aggregate, counter_stringify, counter_prometheus       \
+    }
+    ADD_COUNTER_ARRAY("stats_emitted_error_status", "", stats.emitted_error_status, status_error_labels),
+    ADD_COUNTER("stats_ssl_server_handshake_errors", "", stats.ssl.server.handshake_errors),
+    ADD_COUNTER("stats_ssl_server_alpn_h1", "", stats.ssl.server.alpn_h1),
+    ADD_COUNTER("stats_ssl_server_alpn_h2", "", stats.ssl.server.alpn_h2),
+    ADD_COUNTER("stats_ssl_server_handshake_full", "", stats.ssl.server.handshake_full),
+    ADD_COUNTER("stats_ssl_server_handshake_resume", "", stats.ssl.server.handshake_resume),
+    ADD_COUNTER("stats_ssl_server_handshake_accum_time_full", "", stats.ssl.server.handshake_accum_time_full),
+    ADD_COUNTER("stats_ssl_server_handshake_accum_time_resume", "", stats.ssl.server.handshake_accum_time_resume),
+
+    ADD_COUNTER("stats_http1_server_request_timeouts", "", stats.http1.server.request_timeouts),
+    ADD_COUNTER("stats_http1_server_request_io_timeouts", "", stats.http1.server.request_io_timeouts),
+
+    ADD_COUNTER_ARRAY("stats_http2_server_protocol_level_errors", "", stats.http2.server.protocol_level_errors, http2_error_labels),
+    ADD_COUNTER("stats_http2_server_read_closed", "", stats.http2.server.read_closed),
+    ADD_COUNTER("stats_http2_server_write_closed", "", stats.http2.server.write_closed),
+    ADD_COUNTER("stats_http2_server_idle_timeouts", "", stats.http2.server.idle_timeouts),
+
+    ADD_COUNTER("stats_http3_server_packet_forwarded", "", stats.http3.server.packet_forwarded),
+    ADD_COUNTER("stats_http3_server_forwarded_packet_received", "", stats.http3.server.forwarded_packet_received),
+    ADD_COUNTER("stats_http3_server_quic_packets_received", "", stats.http3.server.quic.num_packets.received),
+    ADD_COUNTER("stats_http3_server_quic_packets_decryption_failed", "", stats.http3.server.quic.num_packets.decryption_failed),
+    ADD_COUNTER("stats_http3_server_quic_packets_sent", "", stats.http3.server.quic.num_packets.sent),
+    ADD_COUNTER("stats_http3_server_quic_packets_lost", "", stats.http3.server.quic.num_packets.lost),
+    ADD_COUNTER("stats_http3_server_quic_packets_lost_time_threshold", "", stats.http3.server.quic.num_packets.lost_time_threshold),
+    ADD_COUNTER("stats_http3_server_quic_packets_ack_received", "", stats.http3.server.quic.num_packets.ack_received),
+    ADD_COUNTER("stats_http3_server_quic_packets_late_acked", "", stats.http3.server.quic.num_packets.late_acked),
+    ADD_COUNTER("stats_http3_server_quic_received_bytes", "", stats.http3.server.quic.num_bytes.received),
+    ADD_COUNTER("stats_http3_server_quic_sent_bytes", "", stats.http3.server.quic.num_bytes.sent),
+#undef ADD_HIST
+#undef ADD_COUNTER
+#undef ADD_GAUGE
+#undef ADD_METRIC
+};
 static void events_status_per_thread(void *priv, h2o_context_t *ctx)
 {
-    size_t i;
     struct st_events_status_ctx_t *esc = priv;
 
     pthread_mutex_lock(&esc->mutex);
 
-    for (i = 0; i < H2O_STATUS_ERROR_MAX; i++) {
-        esc->emitted_status_errors[i] += ctx->emitted_error_status[i];
+    for (size_t i = 0; i < PTLS_ELEMENTSOF(stat_ops); i++) {
+        const struct st_h2o_stat_ops_t *op = stat_ops + i;
+        op->aggregate(op, &esc->agg, ctx);
     }
-    esc->ssl_errors += ctx->ssl.errors;
-    for (i = 0; i < H2O_HTTP2_ERROR_MAX; i++) {
-        esc->h2_protocol_level_errors[i] += ctx->http2.events.protocol_level_errors[i];
-    }
-    esc->h2_read_closed += ctx->http2.events.read_closed;
-    esc->h2_write_closed += ctx->http2.events.write_closed;
-    esc->h2_idle_timeout += ctx->http2.events.idle_timeouts;
-    esc->h1_request_timeout += ctx->http1.events.request_timeouts;
-    esc->h1_request_io_timeout += ctx->http1.events.request_io_timeouts;
-    esc->http3.packet_forwarded += ctx->http3.events.packet_forwarded;
-    esc->http3.forwarded_packet_received += ctx->http3.events.forwarded_packet_received;
-#define ACC(fld, _unused) esc->quic.fld += ctx->quic.fld;
-    H2O_QUIC_AGGREGATED_STATS_APPLY(ACC);
-#undef ACC
 
     pthread_mutex_unlock(&esc->mutex);
 }
@@ -79,68 +147,59 @@ static void *events_status_init(void)
     return ret;
 }
 
-static h2o_iovec_t events_status_final(void *priv, h2o_globalconf_t *gconf, h2o_req_t *req)
+static void ctx_dispose(struct st_events_status_ctx_t *esc)
+{
+    pthread_mutex_destroy(&esc->mutex);
+    free(esc);
+}
+
+static h2o_iovec_t events_status_json(void *priv, h2o_globalconf_t *gconf, h2o_req_t *req)
 {
     struct st_events_status_ctx_t *esc = priv;
     h2o_iovec_t ret;
+    h2o_buffer_t *buf;
+    h2o_buffer_init(&buf, &h2o_socket_buffer_prototype);
 
-#define H1_AGG_ERR(status_) esc->emitted_status_errors[H2O_STATUS_ERROR_##status_]
-#define H2_AGG_ERR(err_) esc->h2_protocol_level_errors[-H2O_HTTP2_ERROR_##err_]
-#define QUIC_FMT(_unused, label) " \"quic." label "\": %" PRIu64 ",\n"
-#define QUIC_VAL(fld, _unused) , esc->quic.fld
-#define BUFSIZE (8 * 1024)
-    ret.base = h2o_mem_alloc_pool(&req->pool, char, BUFSIZE);
-    ret.len =
-        snprintf(ret.base, BUFSIZE,
-                 ",\n"
-                 " \"status-errors.400\": %" PRIu64 ",\n"
-                 " \"status-errors.403\": %" PRIu64 ",\n"
-                 " \"status-errors.404\": %" PRIu64 ",\n"
-                 " \"status-errors.405\": %" PRIu64 ",\n"
-                 " \"status-errors.416\": %" PRIu64 ",\n"
-                 " \"status-errors.417\": %" PRIu64 ",\n"
-                 " \"status-errors.500\": %" PRIu64 ",\n"
-                 " \"status-errors.502\": %" PRIu64 ",\n"
-                 " \"status-errors.503\": %" PRIu64 ",\n"
-                 " \"http1-errors.request-timeout\": %" PRIu64 ",\n"
-                 " \"http1-errors.request-io-timeout\": %" PRIu64 ",\n"
-                 " \"http2-errors.protocol\": %" PRIu64 ",\n"
-                 " \"http2-errors.internal\": %" PRIu64 ",\n"
-                 " \"http2-errors.flow-control\": %" PRIu64 ",\n"
-                 " \"http2-errors.settings-timeout\": %" PRIu64 ",\n"
-                 " \"http2-errors.stream-closed\": %" PRIu64 ",\n"
-                 " \"http2-errors.frame-size\": %" PRIu64 ",\n"
-                 " \"http2-errors.refused-stream\": %" PRIu64 ",\n"
-                 " \"http2-errors.cancel\": %" PRIu64 ",\n"
-                 " \"http2-errors.compression\": %" PRIu64 ",\n"
-                 " \"http2-errors.connect\": %" PRIu64 ",\n"
-                 " \"http2-errors.enhance-your-calm\": %" PRIu64 ",\n"
-                 " \"http2-errors.inadequate-security\": %" PRIu64 ",\n"
-                 " \"http2.read-closed\": %" PRIu64 ",\n"
-                 " \"http2.write-closed\": %" PRIu64 ",\n"
-                 " \"http2.idle-timeout\": %" PRIu64 ",\n"
-                 " \"http3.packet-forwarded\": %" PRIu64 ",\n"
-                 " \"http3.forwarded-packet-received\": %" PRIu64
-                 ",\n" H2O_QUIC_AGGREGATED_STATS_APPLY(QUIC_FMT) " \"ssl.errors\": %" PRIu64 ",\n"
-                                                                 " \"memory.mmap_errors\": %zu\n",
-                 H1_AGG_ERR(400), H1_AGG_ERR(403), H1_AGG_ERR(404), H1_AGG_ERR(405), H1_AGG_ERR(416), H1_AGG_ERR(417),
-                 H1_AGG_ERR(500), H1_AGG_ERR(502), H1_AGG_ERR(503), esc->h1_request_timeout, esc->h1_request_io_timeout,
-                 H2_AGG_ERR(PROTOCOL), H2_AGG_ERR(INTERNAL), H2_AGG_ERR(FLOW_CONTROL), H2_AGG_ERR(SETTINGS_TIMEOUT),
-                 H2_AGG_ERR(STREAM_CLOSED), H2_AGG_ERR(FRAME_SIZE), H2_AGG_ERR(REFUSED_STREAM), H2_AGG_ERR(CANCEL),
-                 H2_AGG_ERR(COMPRESSION), H2_AGG_ERR(CONNECT), H2_AGG_ERR(ENHANCE_YOUR_CALM), H2_AGG_ERR(INADEQUATE_SECURITY),
-                 esc->h2_read_closed, esc->h2_write_closed, esc->h2_idle_timeout, esc->http3.packet_forwarded,
-                 esc->http3.forwarded_packet_received H2O_QUIC_AGGREGATED_STATS_APPLY(QUIC_VAL), esc->ssl_errors, h2o_mmap_errors);
-    assert(ret.len < BUFSIZE);
-#undef H1_AGG_ERR
-#undef H2_AGG_ERR
-#undef QUIC_FMT
-#undef QUIC_VAL
-#undef BUFSIZE
+    for (size_t i = 0; i < PTLS_ELEMENTSOF(stat_ops); i++) {
+        const h2o_iovec_t prefix = h2o_iovec_init(H2O_STRLIT(",\n"));
+        const struct st_h2o_stat_ops_t *op = stat_ops + i;
+        h2o_buffer_reserve(&buf, buf->size + prefix.len);
+        memcpy(buf->bytes + buf->size, prefix.base, prefix.len);
+        buf->size += prefix.len;
+        op->stringify(op, &esc->agg, &buf);
+    }
 
-    pthread_mutex_destroy(&esc->mutex);
-    free(esc);
+    ret.base = h2o_mem_alloc_pool(&req->pool, char, buf->size);
+    ret.len = buf->size;
+    memcpy(ret.base, buf->bytes, buf->size);
+    h2o_buffer_dispose(&buf);
+
+    ctx_dispose(esc);
+
+    return ret;
+}
+
+static h2o_iovec_t events_status_prometheus(void *priv, h2o_globalconf_t *gconf, h2o_req_t *req)
+{
+    struct st_events_status_ctx_t *esc = priv;
+    h2o_iovec_t ret;
+    h2o_buffer_t *buf;
+    h2o_buffer_init(&buf, &h2o_socket_buffer_prototype);
+
+    for (size_t i = 0; i < PTLS_ELEMENTSOF(stat_ops); i++) {
+        const struct st_h2o_stat_ops_t *op = stat_ops + i;
+        op->prometheus(op, &esc->agg, &buf);
+    }
+
+    ret.base = h2o_mem_alloc_pool(&req->pool, char, buf->size);
+    ret.len = buf->size;
+    memcpy(ret.base, buf->bytes, buf->size);
+
+    h2o_buffer_dispose(&buf);
+    ctx_dispose(esc);
+
     return ret;
 }
 
 h2o_status_handler_t h2o_events_status_handler = {
-    {H2O_STRLIT("events")}, events_status_final, events_status_init, events_status_per_thread};
+    {H2O_STRLIT("events")}, events_status_json, events_status_prometheus, events_status_init, events_status_per_thread};

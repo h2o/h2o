@@ -53,11 +53,11 @@ my $server2_port = ${server2}->{port};
 
 my $resp = `curl --silent -o /dev/stderr http://127.0.0.1:${server1_port}/server-status/json?show=events 2>&1 > /dev/null`;
 my $jresp = decode_json("$resp");
-my $num_forwarded_received = $jresp->{'http3.forwarded-packet-received'};
+my $num_forwarded_received = $jresp->{'stats_http3_server_forwarded_packet_received_total'};
 
 $resp = `curl --silent -o /dev/stderr http://127.0.0.1:${server2_port}/server-status/json?show=events 2>&1 > /dev/null`;
 $jresp = decode_json("$resp");
-my $num_forwarded = $jresp->{'http3.packet-forwarded'};
+my $num_forwarded = $jresp->{'stats_http3_server_packet_forwarded_total'};
 
 cmp_ok($num_forwarded, '>', 0, "some packets were forwarded");
 is($num_forwarded, $num_forwarded_received, "packets forwarded == packets received");

@@ -142,7 +142,7 @@ static void *requests_status_init(void)
     return rsc;
 }
 
-static h2o_iovec_t requests_status_final(void *priv, h2o_globalconf_t *gconf, h2o_req_t *req)
+static h2o_iovec_t requests_status_json(void *priv, h2o_globalconf_t *gconf, h2o_req_t *req)
 {
     h2o_iovec_t ret = {NULL};
     struct st_requests_status_ctx_t *rsc = priv;
@@ -160,4 +160,4 @@ static h2o_iovec_t requests_status_final(void *priv, h2o_globalconf_t *gconf, h2
 }
 
 h2o_status_handler_t h2o_requests_status_handler = {
-    {H2O_STRLIT("requests")}, requests_status_final, requests_status_init, requests_status_per_thread};
+    {H2O_STRLIT("requests")}, requests_status_json, NULL, requests_status_init, requests_status_per_thread};

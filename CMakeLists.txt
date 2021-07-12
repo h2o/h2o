@@ -409,6 +409,7 @@ SET(LIB_SOURCE_FILES
     lib/core/logconf.c
     lib/core/proxy.c
     lib/core/request.c
+    lib/core/stats.c
     lib/core/util.c
 
     lib/handler/access_log.c
@@ -431,7 +432,6 @@ SET(LIB_SOURCE_FILES
     lib/handler/headers_util.c
     lib/handler/status/events.c
     lib/handler/status/requests.c
-    lib/handler/status/ssl.c
     lib/handler/http2_debug_state.c
     lib/handler/status/durations.c
     lib/handler/configurator/access_log.c
