@@ -744,6 +744,10 @@ struct st_h2o_context_t {
              * counter for http2 idle timeouts
              */
             uint64_t idle_timeouts;
+            /**
+             * streaming request counter
+             */
+            uint64_t streaming_requests;
         } events;
     } http2;
 
