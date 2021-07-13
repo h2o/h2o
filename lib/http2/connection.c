@@ -202,6 +202,7 @@ static void run_pending_requests(h2o_http2_conn_t *conn)
                     conn->super.ctx->globalconf->http2.max_concurrent_streaming_requests_per_connection)
                     continue;
                 conn->num_streams._req_streaming_in_progress++;
+                conn->super.ctx->http2.events.streaming_requests++;
                 stream->_req_streaming_in_progress = 1;
                 update_stream_input_window(conn, stream,
                                            conn->super.ctx->globalconf->http2.active_stream_window_size -
