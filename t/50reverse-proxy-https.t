@@ -20,6 +20,14 @@ my $upstream = spawn_server(
     },
 );
 
+my $examp1e_server = spawn_h2o(<< "EOT");
+hosts:
+  default:
+    paths:
+      "/":
+        file.dir: @{[ DOC_ROOT ]}
+EOT
+
 subtest "reverse-proxy" => sub {
     my $server = spawn_h2o(<< "EOT");
 hosts:
@@ -30,8 +38,9 @@ hosts:
       "/no-verify":
         proxy.reverse.url: https://127.0.0.1:$upstream_port
         proxy.ssl.verify-peer: OFF
-      "/wikipedia":
-        proxy.reverse.url: https://en.wikipedia.org/wiki/Main_Page
+      "/examp1e":
+        proxy.reverse.url: https://localhost.examp1e.net:$examp1e_server->{tls_port}
+        proxy.ssl.verify-peer: OFF
 EOT
     run_with_curl($server, sub {
         my ($proto, $port, $curl) = @_;
@@ -39,7 +48,7 @@ EOT
         like $resp, qr{^HTTP/[^ ]* 502\s}is;
         $resp = `$curl --silent --dump-header /dev/stderr --max-redirs 0 $proto://127.0.0.1:$port/no-verify/ 2>&1 > /dev/null`;
         unlike $resp, qr{^HTTP/[^ ]* 502\s}is;
-        $resp = `$curl --silent --dump-header /dev/stderr --max-redirs 0 $proto://127.0.0.1:$port/wikipedia/ 2>&1 > /dev/null`;
+        $resp = `$curl --silent --dump-header /dev/stderr --max-redirs 0 $proto://127.0.0.1:$port/examp1e/ 2>&1 > /dev/null`;
         like $resp, qr{^HTTP/[^ ]* 200\s}is;
     });
 };
