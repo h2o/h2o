@@ -726,13 +726,11 @@ void h2o_quic_read_socket(h2o_quic_ctx_t *ctx, h2o_socket_t *sock)
         /* read datagrams */
 #ifdef __linux__
         {
-            struct timespec ts;
             int rret;
             do {
                 for (dgram_index = 0; dgram_index < PTLS_ELEMENTSOF(dgrams); ++dgram_index)
                     INIT_DGRAMS(dgram_index);
-                ts = (struct timespec){};
-            } while ((rret = recvmmsg(fd, mess, PTLS_ELEMENTSOF(mess), 0, &ts)) < 0 && errno == EINTR);
+            } while ((rret = recvmmsg(fd, mess, PTLS_ELEMENTSOF(mess), 0, NULL)) < 0 && errno == EINTR);
             if (rret <= 0)
                 break;
             num_dgrams = (size_t)rret;
