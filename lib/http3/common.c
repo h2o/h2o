@@ -683,9 +683,7 @@ void h2o_quic_read_socket(h2o_quic_ctx_t *ctx, h2o_socket_t *sock)
     int fd = h2o_socket_get_fd(sock);
 
     while (1) {
-        uint8_t buf[16384], *bufpt = buf;
         struct {
-            struct msghdr mess;
             quicly_address_t destaddr, srcaddr;
             struct iovec vec;
             uint8_t ttl;
@@ -700,32 +698,70 @@ void h2o_quic_read_socket(h2o_quic_ctx_t *ctx, h2o_socket_t *sock)
                 CMSG_SPACE(1)
 #endif
             ];
-        } dgrams[32];
+            uint8_t buf[1600];
+        } dgrams[10];
+#ifdef __linux__
+        struct mmsghdr mess[PTLS_ELEMENTSOF(dgrams)];
+#else
+        struct {
+            struct msghdr msg_hdr;
+        } mess[PTLS_ELEMENTSOF(dgrams)];
+#endif
         size_t dgram_index, num_dgrams;
-        ssize_t rret;
+
+#define INIT_DGRAMS(i)                                                                                                             \
+    do {                                                                                                                           \
+        mess[i].msg_hdr = (struct msghdr){                                                                                         \
+            .msg_name = &dgrams[i].srcaddr,                                                                                        \
+            .msg_namelen = sizeof(dgrams[i].srcaddr),                                                                              \
+            .msg_iov = &dgrams[i].vec,                                                                                             \
+            .msg_iovlen = 1,                                                                                                       \
+            .msg_control = &dgrams[i].controlbuf,                                                                                  \
+            .msg_controllen = sizeof(dgrams[i].controlbuf),                                                                        \
+        };                                                                                                                         \
+        dgrams[i].vec.iov_base = dgrams[i].buf;                                                                                    \
+        dgrams[i].vec.iov_len = sizeof(dgrams[i].buf);                                                                             \
+    } while (0)
 
         /* read datagrams */
-        for (dgram_index = 0; dgram_index < sizeof(dgrams) / sizeof(dgrams[0]) && buf + sizeof(buf) - bufpt > 2048; ++dgram_index) {
-            /* read datagram */
-        Read:
-            memset(dgrams + dgram_index, 0, sizeof(dgrams[dgram_index]));
-            dgrams[dgram_index].mess.msg_name = &dgrams[dgram_index].srcaddr;
-            dgrams[dgram_index].mess.msg_namelen = sizeof(dgrams[dgram_index].srcaddr);
-            dgrams[dgram_index].vec.iov_base = bufpt;
-            dgrams[dgram_index].vec.iov_len = buf + sizeof(buf) - bufpt;
-            dgrams[dgram_index].mess.msg_iov = &dgrams[dgram_index].vec;
-            dgrams[dgram_index].mess.msg_iovlen = 1;
-            dgrams[dgram_index].mess.msg_control = &dgrams[dgram_index].controlbuf;
-            dgrams[dgram_index].mess.msg_controllen = sizeof(dgrams[dgram_index].controlbuf);
-            while ((rret = recvmsg(fd, &dgrams[dgram_index].mess, 0)) <= 0 && errno == EINTR)
-                ;
+#ifdef __linux__
+        {
+            struct timespec ts;
+            int rret;
+            do {
+                for (dgram_index = 0; dgram_index < PTLS_ELEMENTSOF(dgrams); ++dgram_index)
+                    INIT_DGRAMS(dgram_index);
+                ts = (struct timespec){};
+            } while ((rret = recvmmsg(fd, mess, PTLS_ELEMENTSOF(mess), 0, &ts)) < 0 && errno == EINTR);
             if (rret <= 0)
                 break;
+            num_dgrams = (size_t)rret;
+            for (dgram_index = 0; dgram_index < num_dgrams; ++dgram_index)
+                dgrams[dgram_index].vec.iov_len = (size_t)mess[dgram_index].msg_len;
+        }
+#else
+        for (dgram_index = 0; dgram_index < PTLS_ELEMENTSOF(dgrams); ++dgram_index) {
+            ssize_t rret;
+            do {
+                INIT_DGRAMS(dgram_index);
+            } while ((rret = recvmsg(fd, &mess[dgram_index].msg_hdr, 0)) < 0 && errno == EINTR);
+            if (rret < 0)
+                break;
             dgrams[dgram_index].vec.iov_len = rret;
+        }
+        num_dgrams = dgram_index;
+        if (num_dgrams == 0)
+            break;
+#endif
+
+#undef INIT_DGRAMS
+
+        /* normalize and store the obtained data into `dgrams` */
+        for (dgram_index = 0; dgram_index < num_dgrams; ++dgram_index) {
             { /* fetch destination address */
                 struct cmsghdr *cmsg;
-                for (cmsg = CMSG_FIRSTHDR(&dgrams[dgram_index].mess); cmsg != NULL;
-                     cmsg = CMSG_NXTHDR(&dgrams[dgram_index].mess, cmsg)) {
+                for (cmsg = CMSG_FIRSTHDR(&mess[dgram_index].msg_hdr); cmsg != NULL;
+                     cmsg = CMSG_NXTHDR(&mess[dgram_index].msg_hdr, cmsg)) {
 #ifdef IP_PKTINFO
                     if (cmsg->cmsg_level == IPPROTO_IP && cmsg->cmsg_type == IP_PKTINFO) {
                         dgrams[dgram_index].destaddr.sin.sin_family = AF_INET;
@@ -755,18 +791,15 @@ void h2o_quic_read_socket(h2o_quic_ctx_t *ctx, h2o_socket_t *sock)
             DestAddrFound:;
             }
             dgrams[dgram_index].ttl = ctx->default_ttl;
-            if (ctx->preprocess_packet != NULL) {
-                /* preprocess (and drop the packet if it failed) */
-                if (!ctx->preprocess_packet(ctx, &dgrams[dgram_index].mess, &dgrams[dgram_index].destaddr,
-                                            &dgrams[dgram_index].srcaddr, &dgrams[dgram_index].ttl))
-                    goto Read;
+            /* preprocess (and drop the packet if it failed) */
+            if (ctx->preprocess_packet != NULL &&
+                !ctx->preprocess_packet(ctx, &mess[dgram_index].msg_hdr, &dgrams[dgram_index].destaddr,
+                                        &dgrams[dgram_index].srcaddr, &dgrams[dgram_index].ttl)) {
+                dgrams[dgram_index].vec.iov_len = 0; /* mark as unused */
+            } else {
+                assert(dgrams[dgram_index].srcaddr.sa.sa_family == AF_INET || dgrams[dgram_index].srcaddr.sa.sa_family == AF_INET6);
             }
-            assert(dgrams[dgram_index].srcaddr.sa.sa_family == AF_INET || dgrams[dgram_index].srcaddr.sa.sa_family == AF_INET6);
-            bufpt += rret;
         }
-        num_dgrams = dgram_index;
-        if (num_dgrams == 0)
-            break;
 
         /* convert dgrams to decoded packets and process them in group of (4-tuple, dcid) */
         quicly_decoded_packet_t packets[64];
@@ -775,6 +808,11 @@ void h2o_quic_read_socket(h2o_quic_ctx_t *ctx, h2o_socket_t *sock)
         while (dgram_index < num_dgrams) {
             int has_decoded = 0; /* indicates if a decoded packet belonging to a different connection is stored at
                                   * `packets[packet_index]` */
+            /* skip zero-sized datagrams (or the ones for which preprocessing failed) */
+            if (dgrams[dgram_index].vec.iov_len == 0) {
+                ++dgram_index;
+                continue;
+            }
             /* dispatch packets in `packets`, if the datagram at dgram_index is from a different path */
             if (packet_index != 0) {
                 assert(dgram_index != 0);
