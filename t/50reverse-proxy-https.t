@@ -40,7 +40,8 @@ hosts:
         proxy.ssl.verify-peer: OFF
       "/examp1e":
         proxy.reverse.url: https://localhost.examp1e.net:$examp1e_server->{tls_port}
-        proxy.ssl.verify-peer: OFF
+        proxy.ssl.verify-peer: ON
+        proxy.ssl.cafile: misc/test-ca/root/ca.crt
 EOT
     run_with_curl($server, sub {
         my ($proto, $port, $curl) = @_;
