@@ -20,36 +20,27 @@ my $upstream = spawn_server(
     },
 );
 
-my $examp1e_server = spawn_h2o(<< "EOT");
-hosts:
-  default:
-    paths:
-      "/":
-        file.dir: @{[ DOC_ROOT ]}
-EOT
-
 subtest "reverse-proxy" => sub {
     my $server = spawn_h2o(<< "EOT");
 hosts:
   default:
     paths:
-      "/verify":
+      "/verify-fail":
         proxy.reverse.url: https://127.0.0.1:$upstream_port
       "/no-verify":
         proxy.reverse.url: https://127.0.0.1:$upstream_port
         proxy.ssl.verify-peer: OFF
-      "/examp1e":
-        proxy.reverse.url: https://localhost.examp1e.net:$examp1e_server->{tls_port}
-        proxy.ssl.verify-peer: ON
+      "/verify-success":
+        proxy.reverse.url: https://localhost.examp1e.net:$upstream_port/echo
         proxy.ssl.cafile: misc/test-ca/root/ca.crt
 EOT
     run_with_curl($server, sub {
         my ($proto, $port, $curl) = @_;
-        my $resp = `$curl --silent --dump-header /dev/stderr --max-redirs 0 $proto://127.0.0.1:$port/verify/ 2>&1 > /dev/null`;
+        my $resp = `$curl --silent --dump-header /dev/stderr --max-redirs 0 $proto://127.0.0.1:$port/verify-fail/ 2>&1 > /dev/null`;
         like $resp, qr{^HTTP/[^ ]* 502\s}is;
         $resp = `$curl --silent --dump-header /dev/stderr --max-redirs 0 $proto://127.0.0.1:$port/no-verify/ 2>&1 > /dev/null`;
         unlike $resp, qr{^HTTP/[^ ]* 502\s}is;
-        $resp = `$curl --silent --dump-header /dev/stderr --max-redirs 0 $proto://127.0.0.1:$port/examp1e/ 2>&1 > /dev/null`;
+        $resp = `$curl --silent --dump-header /dev/stderr --max-redirs 0 $proto://localhost.examp1e.net:$port/verify-success 2>&1 > /dev/null`;
         like $resp, qr{^HTTP/[^ ]* 200\s}is;
     });
 };
