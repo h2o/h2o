@@ -680,34 +680,30 @@ static void process_packets(h2o_quic_ctx_t *ctx, quicly_address_t *destaddr, qui
 
 void h2o_quic_read_socket(h2o_quic_ctx_t *ctx, h2o_socket_t *sock)
 {
-    int fd = h2o_socket_get_fd(sock);
-
-    while (1) {
-        struct {
-            quicly_address_t destaddr, srcaddr;
-            struct iovec vec;
-            uint8_t ttl;
-            char controlbuf[
+    struct {
+        quicly_address_t destaddr, srcaddr;
+        struct iovec vec;
+        uint8_t ttl;
+        char controlbuf[
 #ifdef IPV6_PKTINFO
-                CMSG_SPACE(sizeof(struct in6_pktinfo))
+            CMSG_SPACE(sizeof(struct in6_pktinfo))
 #elif defined(IP_PKTINFO)
-                CMSG_SPACE(sizeof(struct in_pktinfo))
+            CMSG_SPACE(sizeof(struct in_pktinfo))
 #elif defined(IP_RECVDSTADDR)
-                CMSG_SPACE(sizeof(struct in_addr))
+            CMSG_SPACE(sizeof(struct in_addr))
 #else
-                CMSG_SPACE(1)
+            CMSG_SPACE(1)
 #endif
-            ];
-            uint8_t buf[1600];
-        } dgrams[10];
+        ];
+        uint8_t buf[1600];
+    } dgrams[10];
 #ifdef __linux__
-        struct mmsghdr mess[PTLS_ELEMENTSOF(dgrams)];
+    struct mmsghdr mess[PTLS_ELEMENTSOF(dgrams)];
 #else
-        struct {
-            struct msghdr msg_hdr;
-        } mess[PTLS_ELEMENTSOF(dgrams)];
+    struct {
+        struct msghdr msg_hdr;
+    } mess[PTLS_ELEMENTSOF(dgrams)];
 #endif
-        size_t dgram_index, num_dgrams;
 
 #define INIT_DGRAMS(i)                                                                                                             \
     do {                                                                                                                           \
@@ -722,6 +718,11 @@ void h2o_quic_read_socket(h2o_quic_ctx_t *ctx, h2o_socket_t *sock)
         dgrams[i].vec.iov_base = dgrams[i].buf;                                                                                    \
         dgrams[i].vec.iov_len = sizeof(dgrams[i].buf);                                                                             \
     } while (0)
+
+    int fd = h2o_socket_get_fd(sock);
+    size_t dgram_index, num_dgrams;
+
+    do {
 
         /* read datagrams */
 #ifdef __linux__
@@ -751,8 +752,6 @@ void h2o_quic_read_socket(h2o_quic_ctx_t *ctx, h2o_socket_t *sock)
         if (num_dgrams == 0)
             break;
 #endif
-
-#undef INIT_DGRAMS
 
         /* normalize and store the obtained data into `dgrams` */
         for (dgram_index = 0; dgram_index < num_dgrams; ++dgram_index) {
@@ -877,7 +876,10 @@ void h2o_quic_read_socket(h2o_quic_ctx_t *ctx, h2o_socket_t *sock)
         if (packet_index != 0)
             process_packets(ctx, &dgrams[dgram_index - 1].destaddr, &dgrams[dgram_index - 1].srcaddr, dgrams[dgram_index - 1].ttl,
                             packets, packet_index);
-    }
+
+    } while (num_dgrams == PTLS_ELEMENTSOF(dgrams));
+
+#undef INIT_DGRAMS
 }
 
 static void on_read(h2o_socket_t *sock, const char *err)
