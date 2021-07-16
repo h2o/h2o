@@ -3635,6 +3635,10 @@ int main(int argc, char **argv)
     /* call `bind()` before setuid(), different uids can't bind the same address */
     create_per_thread_listeners();
 
+    /* remove the pid file before setuid(), in case the program didn't exit cleanly */
+    if (conf.pid_file != NULL)
+        unlink(conf.pid_file);
+
     /* setuid */
     if (conf.globalconf.user != NULL) {
         capabilities_set_keepcaps();
@@ -3659,11 +3663,11 @@ int main(int argc, char **argv)
     if (conf.pid_file != NULL) {
         FILE *fp = fopen(conf.pid_file, "wt");
         if (fp == NULL) {
-            fprintf(stderr, "failed to open pid file:%s:%s\n", conf.pid_file, strerror(errno));
-            return EX_OSERR;
+            fprintf(stderr, "[warning] failed to open pid file:%s:%s\n", conf.pid_file, strerror(errno));
+        } else {
+            fprintf(fp, "%d\n", (int)getpid());
+            fclose(fp);
         }
-        fprintf(fp, "%d\n", (int)getpid());
-        fclose(fp);
     }
 
     /* build barrier to synchronize the start of all threads */
@@ -3754,7 +3758,8 @@ int main(int argc, char **argv)
 
     /* remove the pid file */
     if (conf.pid_file != NULL)
-        unlink(conf.pid_file);
+        if (unlink(conf.pid_file))
+            fprintf(stderr, "[warning] failed to delete pid file:%s:%s\n", conf.pid_file, strerror(errno));
 
     return 0;
 }
