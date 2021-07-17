@@ -1805,9 +1805,8 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                     yoml_t **retry_node, **sndbuf, **rcvbuf, **amp_limit, **qpack_encoder_table_capacity, **max_streams_bidi,
                         **max_udp_payload_size;
                     if (h2o_configurator_parse_mapping(cmd, *quic_node, NULL,
-                                                       "retry:s,sndbuf:s,rcvbuf:s,amp-limit:s,qpack-encoder-"
-                                                       "table-capacity:s,max-streams-bidi:s,max-udp-paylod-"
-                                                       "size:s",
+                                                       "retry:s,sndbuf:s,rcvbuf:s,amp-limit:s,qpack-encoder-table-capacity:s,max-"
+                                                       "streams-bidi:s,max-udp-payload-size:s",
                                                        &retry_node, &sndbuf, &rcvbuf, &amp_limit, &qpack_encoder_table_capacity,
                                                        &max_streams_bidi, &max_udp_payload_size) != 0)
                         return -1;
