@@ -722,7 +722,10 @@ void h2o_quic_read_socket(h2o_quic_ctx_t *ctx, h2o_socket_t *sock)
     int fd = h2o_socket_get_fd(sock);
     size_t dgram_index, num_dgrams;
 
-    do {
+    /* To avoid pulsation at the sender side, an ACK should be sent in a fraction of RTT. To guarantee that regardless of how slow
+     * the receiver is in comparsion to the sender, amount of data being read per each invocation is limited to 100 UDP datagrams.
+     */
+    for (size_t outer_loop = 0; outer_loop < 10; ++outer_loop) {
 
         /* read datagrams */
 #ifdef __linux__
@@ -877,7 +880,9 @@ void h2o_quic_read_socket(h2o_quic_ctx_t *ctx, h2o_socket_t *sock)
             process_packets(ctx, &dgrams[dgram_index - 1].destaddr, &dgrams[dgram_index - 1].srcaddr, dgrams[dgram_index - 1].ttl,
                             packets, packet_index);
 
-    } while (num_dgrams == PTLS_ELEMENTSOF(dgrams));
+        if (num_dgrams < PTLS_ELEMENTSOF(dgrams))
+            break;
+    }
 
 #undef INIT_DGRAMS
 }
