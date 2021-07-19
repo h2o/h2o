@@ -20,7 +20,7 @@ hosts:
         status: ON
 EOT
     sleep 1; # wait for the spawn checker to disconnect
-    my $resp = `curl --silent -o /dev/stderr http://127.0.0.1:$server->{port}/s/json 2>&1 > /dev/null`;
+    my $resp = `curl --silent -o /dev/stderr http://127.0.0.1:$server->{port}/s/json?show=main,requests 2>&1 > /dev/null`;
     my $jresp = decode_json("$resp");
     my @requests = @{$jresp->{'requests'}};
     is $jresp->{'connections'}, 1, "One connection";
@@ -38,12 +38,13 @@ hosts:
         status: ON
 EOT
 
+
     sleep 1; # wait for the spawn checker to disconnect
     my $resp = `curl --silent -o /dev/stderr 'http://127.0.0.1:$server->{port}/s/json?show=main,events' 2>&1 > /dev/null`;
     my $jresp = decode_json("$resp");
     is $jresp->{'connections'}, 1, "One connection";
     is $jresp->{'requests'}, undef, "Requests not present";
-    is $jresp->{'status-errors.404'}, 0, "Internal errors monitoring";
+    is $jresp->{'stats_emitted_error_status_404_total'}, 0, "Internal errors monitoring";
 };
 
 subtest "json hander check 404 error counter" => sub {
@@ -64,7 +65,7 @@ EOT
     my $jresp = decode_json("$resp");
     is $jresp->{'connections'}, undef, "Connections not present";
     is $jresp->{'requests'}, undef, "Requests not present";
-    is $jresp->{'status-errors.404'}, 1, "Found the 404 error";
+    is $jresp->{'stats_emitted_error_status_404_total'}, 1, "Found the 404 error";
 };
 
 subtest "duration stats" => sub {
@@ -80,12 +81,12 @@ hosts:
 EOT
 
     sleep 1; # wait for the spawn checker to disconnect
-    my $resp = `curl --silent -o /dev/stderr http://127.0.0.1:$server->{port}/s/json?noreqs 2>&1 > /dev/null`;
+    my $resp = `curl --silent -o /dev/stderr http://127.0.0.1:$server->{port}/s/json?show=main,events,requests,durations 2>&1 > /dev/null`;
     my $jresp = decode_json("$resp");
     my @nr_requests = @{ $jresp->{'requests'} };
     is $jresp->{'connections'}, 1, "One connection";
     is scalar @nr_requests, 1, "One request";
-    is $jresp->{'status-errors.404'}, 0, "Additional errors";
+    is $jresp->{'stats_emitted_error_status_404_total'}, 0, "No 404 error";
     is $jresp->{'connect-time-0'}, 0, "Duration stats";
 };
 
@@ -132,11 +133,11 @@ EOT
         system $build_req->('tls1_2', 'http/1.1');
         system $build_req->('tls1_2', 'h2');
 
-        my $resp = `curl --silent -o /dev/stderr http://127.0.0.1:$port/s/json?show=events,ssl 2>&1 > /dev/null`;
+        my $resp = `curl --silent -o /dev/stderr http://127.0.0.1:$port/s/json?show=events 2>&1 > /dev/null`;
         my $jresp = decode_json($resp);
-        is $jresp->{'ssl.errors'}, 1, 'ssl.errors';
-        is $jresp->{'ssl.alpn.h1'}, 1, 'ssl.alpn.h1';
-        is $jresp->{'ssl.alpn.h2'}, 1, 'ssl.alpn.h2';
+        is $jresp->{'stats_ssl_server_handshake_errors_total'}, 1, 'stats_ssl_server_handshake_errors';
+        is $jresp->{'stats_ssl_server_alpn_h1_total'}, 1, 'stats_ssl_server_alpn_h1';
+        is $jresp->{'stats_ssl_server_alpn_h2_total'}, 1, 'stats_ssl_server_alpn_h2';
     };
 
     subtest 'handshake' => sub {
@@ -151,12 +152,12 @@ EOT
         # resume handshake
         `openssl s_client -no_ticket -sess_in $tempdir/session  -connect 127.0.0.1:$tls_port < /dev/null`;
 
-        my $resp = `curl --silent -o /dev/stderr http://127.0.0.1:$port/s/json?show=ssl 2>&1 > /dev/null`;
+        my $resp = `curl --silent -o /dev/stderr http://127.0.0.1:$port/s/json?show=events 2>&1 > /dev/null`;
         my $jresp = decode_json($resp);
-        is $jresp->{'ssl.handshake.full'}, 1, 'ssl.handshake.full';
-        is $jresp->{'ssl.handshake.resume'}, 1, 'ssl.handshake.resume';
-        ok $jresp->{'ssl.handshake.accumulated-time.full'}, 'ssl.handshake.accumulated-time.full';
-        ok $jresp->{'ssl.handshake.accumulated-time.resume'}, 'ssl.handshake.accumulated-time.resume';
+        is $jresp->{'stats_ssl_server_handshake_full_total'}, 1, 'stats_ssl_server_handshake_full_total';
+        is $jresp->{'stats_ssl_server_handshake_resume_total'}, 1, 'stats_ssl_server_handshake_resume_total';
+        ok $jresp->{'stats_ssl_server_handshake_accum_time_full_total'}, 'stats_ssl_server_handshake_accum_time_full_total';
+        ok $jresp->{'stats_ssl_server_handshake_accum_time_resume_total'}, 'stats_ssl_server_handshake_accum_time_resume_total';
     };
 };
 
@@ -178,15 +179,37 @@ EOT
 
     {
         my $resp = `curl --silent -o /dev/stderr 'http://127.0.0.1:$server->{port}/server-status/json?show=durations,events,main' 2>&1 > /dev/null`;
-        is scalar @{[ $resp =~ m!"status-errors.400":!g ]}, 1, "only once";
+        is scalar @{[ $resp =~ m!"stats_emitted_error_status_400_total":!g ]}, 1, "only once";
         is scalar @{[ $resp =~ m!"connect-time-0":!g ]}, 1, "only once";
     }
 
     {
         my $resp = `curl --silent -o /dev/stderr 'http://127.0.0.1:$server->{port}/server-status2/json?show=durations,events,main' 2>&1 > /dev/null`;
-        is scalar @{[ $resp =~ m!"status-errors.400":!g ]}, 1, "only once";
+        is scalar @{[ $resp =~ m!"stats_emitted_error_status_400_total":!g ]}, 1, "only once";
         is scalar @{[ $resp =~ m!"connect-time-0":!g ]}, 1, "only once";
     }
+};
+
+subtest "prometheus" => sub {
+    plan skip_all => 'promtool not found' unless prog_exists('promtool');
+
+    my $server = spawn_h2o(sub {
+        my ($port, $tls_port) = @_;
+        << "EOT";
+duration-stats: ON
+hosts:
+  default:
+    paths:
+      /server-status:
+        status: ON
+EOT
+    });
+
+    # ignore missing help and naming convetions
+    my $resp = `curl --silent http://127.0.0.1:$server->{port}/server-status/metrics`;
+    print($resp);
+    $resp = `curl --silent http://127.0.0.1:$server->{port}/server-status/metrics | promtool check metrics 2>&1 | grep -v 'no help text' | grep -v 'should.*suffix\$'`;
+    is $resp, "", "No unexpected errors found by promtool";
 };
 
 

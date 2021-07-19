@@ -226,7 +226,7 @@ static void entity_read_do_send_error(struct st_h2o_http1_conn_t *conn, int stat
     /* FIXME We should check if `h2o_proceed_request` has been called, rather than trying to guess if we have (I'm unsure if the
      * contract is for h2o_req_t::_generator to become non-NULL immediately after `h2o_proceed_request` is being called). */
     if (conn->req._generator == NULL && conn->_ostr_final.state == OSTREAM_STATE_HEAD) {
-        conn->super.ctx->emitted_error_status[status_error_index]++;
+        conn->super.ctx->stats.emitted_error_status[status_error_index].counter++;
         h2o_send_error_generic(&conn->req, status, reason, body, H2O_SEND_ERROR_HTTP1_CLOSE_CONNECTION);
     } else {
         conn->req.http1_is_persistent = 0;
@@ -722,14 +722,14 @@ static void on_timeout(struct st_h2o_http1_conn_t *conn)
 static void req_io_on_timeout(h2o_timer_t *entry)
 {
     struct st_h2o_http1_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http1_conn_t, _io_timeout_entry, entry);
-    conn->super.ctx->http1.events.request_io_timeouts++;
+    conn->super.ctx->stats.http1.server.request_io_timeouts.counter++;
     on_timeout(conn);
 }
 
 static void reqread_on_timeout(h2o_timer_t *entry)
 {
     struct st_h2o_http1_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http1_conn_t, _timeout_entry, entry);
-    conn->super.ctx->http1.events.request_timeouts++;
+    conn->super.ctx->stats.http1.server.request_timeouts.counter++;
     on_timeout(conn);
 }
 

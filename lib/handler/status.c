@@ -24,7 +24,6 @@
 extern h2o_status_handler_t h2o_events_status_handler;
 extern h2o_status_handler_t h2o_requests_status_handler;
 extern h2o_status_handler_t h2o_durations_status_handler;
-extern h2o_status_handler_t h2o_ssl_status_handler;
 
 struct st_h2o_status_logger_t {
     h2o_logger_t super;
@@ -44,6 +43,7 @@ struct st_status_ctx_t {
     int active;
     void *ctx;
 };
+enum status_collector_type { JSON_COLLECTOR, PROMETHEUS_COLLECTOR };
 struct st_h2o_status_collector_t {
     struct {
         h2o_req_t *req;
@@ -51,6 +51,7 @@ struct st_h2o_status_collector_t {
     } src;
     size_t num_remaining_threads_atomic;
     H2O_VECTOR(struct st_status_ctx_t) status_ctx;
+    enum status_collector_type type;
 };
 
 struct st_h2o_status_message_t {
@@ -84,7 +85,8 @@ static void send_response(struct st_h2o_status_collector_t *collector)
     size_t nr_statuses;
     int i;
     int cur_resp = 0;
-
+    h2o_iovec_t *resp;
+    size_t nr_resp;
     req = collector->src.req;
     if (!req) {
         h2o_mem_release_shared(collector);
@@ -92,32 +94,46 @@ static void send_response(struct st_h2o_status_collector_t *collector)
     }
 
     nr_statuses = req->conn->ctx->globalconf->statuses.size;
-    size_t nr_resp = nr_statuses + 2; // 2 for the footer and header
-    h2o_iovec_t resp[nr_resp];
+    if (collector->type == JSON_COLLECTOR) {
+        nr_resp = nr_statuses + 2; // 2 for the footer and header
+        resp = alloca(sizeof(*resp) * nr_resp);
 
-    memset(resp, 0, sizeof(resp[0]) * nr_resp);
-    resp[cur_resp++] = (h2o_iovec_t){H2O_STRLIT("{\n")};
+        memset(resp, 0, sizeof(resp[0]) * nr_resp);
+        resp[cur_resp++] = (h2o_iovec_t){H2O_STRLIT("{\n")};
 
-    int coma_removed = 0;
-    for (i = 0; i < req->conn->ctx->globalconf->statuses.size; i++) {
-        h2o_status_handler_t *sh = req->conn->ctx->globalconf->statuses.entries[i];
-        if (!collector->status_ctx.entries[i].active) {
-            continue;
+        int coma_removed = 0;
+        for (i = 0; i < req->conn->ctx->globalconf->statuses.size; i++) {
+            h2o_status_handler_t *sh = req->conn->ctx->globalconf->statuses.entries[i];
+            if (!collector->status_ctx.entries[i].active) {
+                continue;
+            }
+            resp[cur_resp++] = sh->json(collector->status_ctx.entries[i].ctx, req->conn->ctx->globalconf, req);
+            if (resp[cur_resp - 1].len > 0 && !coma_removed) {
+                /* requests come in with a leading coma, replace if with a space */
+                resp[cur_resp - 1].base[0] = ' ';
+                coma_removed = 1;
+            }
         }
-        resp[cur_resp++] = sh->final(collector->status_ctx.entries[i].ctx, req->conn->ctx->globalconf, req);
-        if (resp[cur_resp - 1].len > 0 && !coma_removed) {
-            /* requests come in with a leading coma, replace if with a space */
-            resp[cur_resp - 1].base[0] = ' ';
-            coma_removed = 1;
+        resp[cur_resp++] = (h2o_iovec_t){H2O_STRLIT("\n}\n")};
+    } else if (collector->type == PROMETHEUS_COLLECTOR) {
+        nr_resp = nr_statuses;
+        resp = alloca(sizeof(*resp) * nr_statuses);
+        for (i = 0; i < req->conn->ctx->globalconf->statuses.size; i++) {
+            h2o_status_handler_t *sh = req->conn->ctx->globalconf->statuses.entries[i];
+            if (!collector->status_ctx.entries[i].active || !sh->prometheus) {
+                continue;
+            }
+            resp[cur_resp++] = sh->prometheus(collector->status_ctx.entries[i].ctx, req->conn->ctx->globalconf, req);
         }
+    } else {
+        assert(0);
     }
-    resp[cur_resp++] = (h2o_iovec_t){H2O_STRLIT("\n}\n")};
 
     req->res.status = 200;
     h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, NULL, H2O_STRLIT("text/plain; charset=utf-8"));
     h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CACHE_CONTROL, NULL, H2O_STRLIT("no-cache, no-store"));
     h2o_start_response(req, &generator);
-    h2o_send(req, resp, h2o_memis(req->input.method.base, req->input.method.len, H2O_STRLIT("HEAD")) ? 0 : nr_resp,
+    h2o_send(req, resp, h2o_memis(req->input.method.base, req->input.method.len, H2O_STRLIT("HEAD")) ? 0 : cur_resp,
              H2O_SEND_STATE_FINAL);
     h2o_mem_release_shared(collector);
 }
@@ -151,7 +167,7 @@ static void on_req_close(void *p)
     h2o_mem_release_shared(collector);
 }
 
-static int on_req_json(struct st_h2o_root_status_handler_t *self, h2o_req_t *req, h2o_iovec_t status_list)
+static int on_req_raw(struct st_h2o_root_status_handler_t *self, h2o_req_t *req, h2o_iovec_t status_list, int json)
 {
     { /* construct collector and send request to every thread */
         struct st_h2o_status_context_t *status_ctx = h2o_context_get_handler_context(req->conn->ctx, &self->super);
@@ -159,6 +175,11 @@ static int on_req_json(struct st_h2o_root_status_handler_t *self, h2o_req_t *req
         size_t i;
 
         memset(collector, 0, sizeof(*collector));
+        if (json) {
+            collector->type = JSON_COLLECTOR;
+        } else {
+            collector->type = PROMETHEUS_COLLECTOR;
+        }
         for (i = 0; i < req->conn->ctx->globalconf->statuses.size; i++) {
             h2o_status_handler_t *sh;
 
@@ -170,6 +191,16 @@ static int on_req_json(struct st_h2o_root_status_handler_t *self, h2o_req_t *req
                     collector->status_ctx.entries[collector->status_ctx.size].active = 0;
                     goto Skip;
                 }
+            } else {
+                /* disable the request status handler unless it's explicitely listed */
+                if (sh == &h2o_requests_status_handler) {
+                    collector->status_ctx.entries[collector->status_ctx.size].active = 0;
+                    goto Skip;
+                }
+            }
+            if (collector->type == PROMETHEUS_COLLECTOR && !sh->prometheus) {
+                collector->status_ctx.entries[collector->status_ctx.size].active = 0;
+                goto Skip;
             }
             if (sh->init) {
                 collector->status_ctx.entries[collector->status_ctx.size].ctx = sh->init();
@@ -212,7 +243,6 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
         h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CACHE_CONTROL, NULL, H2O_STRLIT("no-cache"));
         return h2o_file_send(req, 200, "OK", fn.base, h2o_iovec_init(H2O_STRLIT("text/html; charset=utf-8")), 0);
     } else if (h2o_memis(local_path.base, local_path.len, H2O_STRLIT("/json"))) {
-        int ret;
         /* "/json" maps to the JSON API */
         h2o_iovec_t status_list = {NULL, 0}; /* NULL means we'll show all statuses */
         if (req->query_at != SIZE_MAX && (req->path.len - req->query_at > 6)) {
@@ -220,8 +250,9 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
                 status_list = h2o_iovec_init(&req->path.base[req->query_at + 6], req->path.len - req->query_at - 6);
             }
         }
-        ret = on_req_json(self, req, status_list);
-        return ret;
+        return on_req_raw(self, req, status_list, 1);
+    } else if (h2o_memis(local_path.base, local_path.len, H2O_STRLIT("/metrics"))) {
+        return on_req_raw(self, req, (h2o_iovec_t){NULL, 0}, 0);
     }
 
     return -1;
@@ -267,6 +298,5 @@ void h2o_status_register(h2o_pathconf_t *conf)
     self->super.on_req = on_req;
     h2o_config_register_status_handler(conf->global, &h2o_requests_status_handler);
     h2o_config_register_status_handler(conf->global, &h2o_events_status_handler);
-    h2o_config_register_status_handler(conf->global, &h2o_ssl_status_handler);
     h2o_config_register_status_handler(conf->global, &h2o_durations_status_handler);
 }

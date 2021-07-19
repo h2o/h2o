@@ -2612,7 +2612,7 @@ static int forward_quic_packets(h2o_quic_ctx_t *h3ctx, const uint64_t *node_id, 
     for (size_t i = 0; i != num_packets; ++i) {
         struct iovec vec[2] = {{header_buf, header_len}, {packets[i].octets.base, packets[i].octets.len}};
         writev(fd, vec, 2);
-        ++h2octx->http3.events.packet_forwarded;
+        ++h2octx->stats.http3.server.packet_forwarded.counter;
     }
 
 #if H2O_USE_DTRACE
@@ -2666,7 +2666,7 @@ static int rewrite_forwarded_quic_datagram(h2o_quic_ctx_t *h3ctx, struct msghdr 
     *destaddr = encapsulated.destaddr;
     *srcaddr = encapsulated.srcaddr;
     *ttl = encapsulated.ttl;
-    ++h2octx->http3.events.forwarded_packet_received;
+    ++h2octx->stats.http3.server.forwarded_packet_received.counter;
     H2O_PROBE(H3_FORWARDED_PACKET_RECEIVE, &destaddr->sa, &srcaddr->sa, msg->msg_iov[0].iov_len);
     return 1;
 }
