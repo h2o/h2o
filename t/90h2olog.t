@@ -90,7 +90,7 @@ subtest "h2olog -t", sub {
   }
 
   my %group_by;
-  foreach my $event(map { decode_json($_) } split /\n/, $trace) {
+  foreach my $event (map { decode_json($_) } split /\n/, $trace) {
     $group_by{$event->{"type"}}++;
   }
 
