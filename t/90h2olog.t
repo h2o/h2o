@@ -69,6 +69,34 @@ subtest "h2olog", sub {
   ok is_uuidv4($h3s_accept->{"conn-uuid"}), "h3s-accept has a UUIDv4 field `conn-uuid`"
 };
 
+subtest "h2olog -t", sub {
+  my $tracer = H2ologTracer->new({
+    pid => $server->{pid},
+    args => [
+      "-t", "h2o:send_response_header",
+      "-t", "h2o:receive_request_header",
+      "-t", "h2o:h3s_destroy",
+    ],
+  });
+
+  my ($headers, $body) = run_prog("$client_prog -3 https://127.0.0.1:$quic_port/");
+  like $headers, qr{^HTTP/3 200\n}, "req: HTTP/3";
+
+  my $trace;
+  until (($trace = $tracer->get_trace()) =~ m{"h3s-destroy"}) {}
+
+  if ($ENV{H2OLOG_DEBUG}) {
+    diag "h2olog output:\n", $trace;
+  }
+
+  my %group_by;
+  foreach my $event (map { decode_json($_) } split /\n/, $trace) {
+    $group_by{$event->{"type"}}++;
+  }
+
+  is_deeply [sort keys %group_by], [sort qw(h3s-destroy send-response-header receive-request-header)];
+};
+
 subtest "h2olog -H", sub {
   my $tracer = H2ologTracer->new({
     pid => $server->{pid},
