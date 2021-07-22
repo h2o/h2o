@@ -715,6 +715,7 @@ void h2o_quic_read_socket(h2o_quic_ctx_t *ctx, h2o_socket_t *sock)
             .msg_control = &dgrams[i].controlbuf,                                                                                  \
             .msg_controllen = sizeof(dgrams[i].controlbuf),                                                                        \
         };                                                                                                                         \
+        memset(&dgrams[i].destaddr, 0, sizeof(dgrams[i].destaddr));                                                                \
         dgrams[i].vec.iov_base = dgrams[i].buf;                                                                                    \
         dgrams[i].vec.iov_len = sizeof(dgrams[i].buf);                                                                             \
     } while (0)
