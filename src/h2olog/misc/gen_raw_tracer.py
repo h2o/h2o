@@ -710,6 +710,7 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
     handle_event_func += '    json_write_pair_n(out_, STR_LIT("type"), STR_LIT("%s"));\n' % probe_name.replace("_", "-")
     handle_event_func += '    json_write_pair_c(out_, STR_LIT("tid"), event->tid);\n'
     handle_event_func += '    json_write_pair_c(out_, STR_LIT("seq"), seq_);\n'
+    handle_event_func += '    json_write_pair_c(out_, STR_LIT("h2olog-time"), time_milliseconds());\n'
 
     for field_name, field_type in flat_args_map.items():
       stmts = ""
@@ -742,9 +743,6 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
         handle_event_func += "    }\n"
       else:
         handle_event_func += stmts
-
-    if metadata["provider"] == "h2o":
-      handle_event_func += '    json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());\n'
 
     handle_event_func += "    break;\n"
     handle_event_func += "  }\n"
