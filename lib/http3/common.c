@@ -1149,28 +1149,25 @@ int h2o_quic_send(h2o_quic_conn_t *conn)
 {
     quicly_address_t dest, src;
     struct iovec datagrams[10];
-    size_t num_datagrams;
+    size_t num_datagrams = PTLS_ELEMENTSOF(datagrams);
     uint8_t datagram_buf[1500 * PTLS_ELEMENTSOF(datagrams)];
 
-    do {
-        num_datagrams = PTLS_ELEMENTSOF(datagrams);
-        int ret = quicly_send(conn->quic, &dest, &src, datagrams, &num_datagrams, datagram_buf, sizeof(datagram_buf));
-        switch (ret) {
-        case 0:
-            if (num_datagrams != 0 && !h2o_quic_send_datagrams(conn->ctx, &dest, &src, datagrams, num_datagrams)) {
-                /* FIXME close the connection immediately */
-                break;
-            }
+    int ret = quicly_send(conn->quic, &dest, &src, datagrams, &num_datagrams, datagram_buf, sizeof(datagram_buf));
+    switch (ret) {
+    case 0:
+        if (num_datagrams != 0 && !h2o_quic_send_datagrams(conn->ctx, &dest, &src, datagrams, num_datagrams)) {
+            /* FIXME close the connection immediately */
             break;
-        case QUICLY_ERROR_STATE_EXHAUSTION:
-        case QUICLY_ERROR_FREE_CONNECTION:
-            conn->callbacks->destroy_connection(conn);
-            return 0;
-        default:
-            fprintf(stderr, "quicly_send returned %d\n", ret);
-            abort();
         }
-    } while (num_datagrams == PTLS_ELEMENTSOF(datagrams));
+        break;
+    case QUICLY_ERROR_STATE_EXHAUSTION:
+    case QUICLY_ERROR_FREE_CONNECTION:
+        conn->callbacks->destroy_connection(conn);
+        return 0;
+    default:
+        fprintf(stderr, "quicly_send returned %d\n", ret);
+        abort();
+    }
 
     h2o_quic_schedule_timer(conn);
 
