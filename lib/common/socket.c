@@ -130,8 +130,7 @@ h2o_buffer_mmap_settings_t h2o_socket_buffer_mmap_settings = {
     "/tmp/h2o.b.XXXXXX"};
 
 __thread h2o_buffer_prototype_t h2o_socket_buffer_prototype = {
-    {16},                                       /* keep 16 recently used chunks */
-    {H2O_SOCKET_INITIAL_INPUT_BUFFER_SIZE * 2}, /* minimum initial capacity */
+    {H2O_SOCKET_INITIAL_INPUT_BUFFER_SIZE}, /* minimum initial capacity; actual initial size is ~8KB, see h2o_buffer_reserve */
     &h2o_socket_buffer_mmap_settings};
 
 const char h2o_socket_error_out_of_memory[] = "out of memory";

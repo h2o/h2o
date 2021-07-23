@@ -105,7 +105,7 @@ struct st_h2o_http2client_stream_t {
     } streaming;
 };
 
-static __thread h2o_buffer_prototype_t wbuf_buffer_prototype = {{16}, {H2O_HTTP2_DEFAULT_OUTBUF_SIZE}};
+static __thread h2o_buffer_prototype_t wbuf_buffer_prototype = {{H2O_HTTP2_DEFAULT_OUTBUF_SIZE}};
 
 static void do_emit_writereq(struct st_h2o_http2client_conn_t *conn);
 

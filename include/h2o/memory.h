@@ -148,7 +148,6 @@ typedef struct st_h2o_buffer_mmap_settings_t {
 } h2o_buffer_mmap_settings_t;
 
 struct st_h2o_buffer_prototype_t {
-    h2o_mem_recycle_t allocator;
     h2o_buffer_t _initial_buf;
     h2o_buffer_mmap_settings_t *mmap_settings;
 };
@@ -252,6 +251,10 @@ static void h2o_mem_addref_shared(void *p);
  * The chunk gets freed when the ref-count reaches zero.
  */
 static int h2o_mem_release_shared(void *p);
+/**
+ * frees unused memory being pooled for recycling
+ */
+void h2o_buffer_clear_recycle(void);
 /**
  * initialize the buffer using given prototype.
  */
