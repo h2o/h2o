@@ -210,7 +210,7 @@ void h2o_mem_free_recycle(h2o_mem_recycle_t *allocator, void *p);
 /**
  * release all the memory chunks cached in input allocator to system
  */
-void h2o_mem_clear_recycle(h2o_mem_recycle_t *allocator);
+void h2o_mem_clear_recycle(h2o_mem_recycle_t *allocator, int full);
 
 /**
  * initializes the memory pool.
@@ -254,7 +254,7 @@ static int h2o_mem_release_shared(void *p);
 /**
  * frees unused memory being pooled for recycling
  */
-void h2o_buffer_clear_recycle(void);
+void h2o_buffer_clear_recycle(int full);
 /**
  * initialize the buffer using given prototype.
  */

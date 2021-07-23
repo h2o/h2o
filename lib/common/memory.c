@@ -113,7 +113,7 @@ void h2o_mem_free_recycle(h2o_mem_recycle_t *allocator, void *p)
     ++allocator->cnt;
 }
 
-void h2o_mem_clear_recycle(h2o_mem_recycle_t *allocator)
+void h2o_mem_clear_recycle(h2o_mem_recycle_t *allocator, int full)
 {
     struct st_h2o_mem_recycle_chunk_t *chunk;
 
@@ -121,6 +121,8 @@ void h2o_mem_clear_recycle(h2o_mem_recycle_t *allocator)
         chunk = allocator->_link;
         allocator->_link = allocator->_link->next;
         free(chunk);
+        if (!full)
+            break;
     }
 }
 
@@ -245,14 +247,16 @@ static unsigned buffer_size_to_power(size_t sz)
     return power;
 }
 
-void h2o_buffer_clear_recycle(void)
+void h2o_buffer_clear_recycle(int full)
 {
-    while (buffer_recycle_bins.largest_power >= H2O_BUFFER_MIN_ALLOC_POWER) {
-        h2o_mem_clear_recycle(&buffer_recycle_bins.bins[buffer_recycle_bins.largest_power - H2O_BUFFER_MIN_ALLOC_POWER]);
-        --buffer_recycle_bins.largest_power;
+    for (unsigned i = H2O_BUFFER_MIN_ALLOC_POWER; i <= buffer_recycle_bins.largest_power; ++i)
+        h2o_mem_clear_recycle(&buffer_recycle_bins.bins[i - H2O_BUFFER_MIN_ALLOC_POWER], full);
+
+    if (full) {
+        free(buffer_recycle_bins.bins);
+        buffer_recycle_bins.bins = NULL;
+        buffer_recycle_bins.largest_power = H2O_BUFFER_MIN_ALLOC_POWER - 1;
     }
-    free(buffer_recycle_bins.bins);
-    buffer_recycle_bins.bins = NULL;
 }
 
 static h2o_mem_recycle_t *buffer_get_recycle(unsigned power)
