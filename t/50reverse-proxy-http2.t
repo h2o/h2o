@@ -7,6 +7,7 @@ use Protocol::HTTP2::Constants qw(:frame_types :errors :settings :flags :states 
 use Scope::Guard;
 use Time::HiRes;
 use t::Util;
+use JSON;
 $|=1;
 
 plan skip_all => 'curl not found'
@@ -103,18 +104,28 @@ subtest 'request body streaming' => sub {
     });
 
     my $server = create_h2o($upstream_port);
-    my $output = run_with_h2get_simple($server, <<"EOR");
-        req = { ":method" => "POST", ":authority" => authority, ":scheme" => "https", ":path" => "/" }
-        h2g.send_headers(req, 1, END_HEADERS)
-        h2g.send_data(1, 0, "a")
-        sleep 1
-        h2g.send_data(1, END_STREAM, "a" * 1024)
-        h2g.read_loop(100)
-EOR
+    my $streaming_request_count = 3;
+    for (my $i=0; $i < $streaming_request_count; $i++) {
+        my $output = run_with_h2get_simple($server, <<"        EOR");
+            req = { ":method" => "POST", ":authority" => authority, ":scheme" => "https", ":path" => "/" }
+            h2g.send_headers(req, 1, END_HEADERS)
+            h2g.send_data(1, 0, "a")
+            sleep 1
+            h2g.send_data(1, END_STREAM, "a" * 1024)
+            h2g.read_loop(100)
+        EOR
+    }
     $upstream->{kill}->();
     my $log = join('', readline($upstream->{stdout}));
     like $log, qr{TYPE = DATA\(0\), FLAGS = 00000000, STREAM_ID = 1, LENGTH = 1};
     like $log, qr{TYPE = DATA\(0\), FLAGS = 00000001, STREAM_ID = 1, LENGTH = 1024};
+    my $http2_streaming_requests_str = 'http2.streaming-requests';
+    my $resp = `curl --silent http://127.0.0.1:$server->{port}/s/json`;
+    my $jresp = decode_json("$resp");
+    my $http2_streaming_requests = $jresp->{$http2_streaming_requests_str};
+    ok $http2_streaming_requests == $streaming_request_count,
+            "Check $http2_streaming_requests_str, " .
+            "$http2_streaming_requests == $streaming_request_count"
 };
 
 sub create_h2o {
@@ -129,6 +140,8 @@ hosts:
       /:
         proxy.reverse.url: https://127.0.0.1:$upstream_port
         proxy.ssl.verify-peer: OFF
+      /s:
+        status: ON
 EOT
     return $server;
 }

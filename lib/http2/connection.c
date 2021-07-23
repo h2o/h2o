@@ -189,6 +189,7 @@ static void process_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
         assert(
             !(stream->req_body.state == H2O_HTTP2_REQ_BODY_NONE || stream->req_body.state == H2O_HTTP2_REQ_BODY_CLOSE_DELIVERED));
         conn->num_streams._req_streaming_in_progress++;
+        conn->super.ctx->http2.events.streaming_requests++;
         stream->req_body.streamed = 1;
         if (stream->req.is_tunnel_req)
             conn->num_streams.tunnel++;

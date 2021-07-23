@@ -136,6 +136,10 @@ enum h2olog_event_id_t {
   H2OLOG_EVENT_ID_QUICLY_STREAM_RECEIVE,
   H2OLOG_EVENT_ID_QUICLY_STREAM_ACKED,
   H2OLOG_EVENT_ID_QUICLY_STREAM_LOST,
+  H2OLOG_EVENT_ID_QUICLY_RESET_STREAM_SEND,
+  H2OLOG_EVENT_ID_QUICLY_RESET_STREAM_RECEIVE,
+  H2OLOG_EVENT_ID_QUICLY_STOP_SENDING_SEND,
+  H2OLOG_EVENT_ID_QUICLY_STOP_SENDING_RECEIVE,
   H2OLOG_EVENT_ID_QUICLY_MAX_DATA_SEND,
   H2OLOG_EVENT_ID_QUICLY_MAX_DATA_RECEIVE,
   H2OLOG_EVENT_ID_QUICLY_MAX_STREAMS_SEND,
@@ -416,6 +420,32 @@ struct h2olog_event_t {
       uint64_t off;
       size_t len;
     } stream_lost;
+    struct { // quicly:reset_stream_send
+      typeof_st_quicly_conn_t__master_id conn_master_id;
+      int64_t at;
+      int64_t stream_id;
+      uint16_t error_code;
+      uint64_t final_size;
+    } reset_stream_send;
+    struct { // quicly:reset_stream_receive
+      typeof_st_quicly_conn_t__master_id conn_master_id;
+      int64_t at;
+      int64_t stream_id;
+      uint16_t error_code;
+      uint64_t final_size;
+    } reset_stream_receive;
+    struct { // quicly:stop_sending_send
+      typeof_st_quicly_conn_t__master_id conn_master_id;
+      int64_t at;
+      int64_t stream_id;
+      uint16_t error_code;
+    } stop_sending_send;
+    struct { // quicly:stop_sending_receive
+      typeof_st_quicly_conn_t__master_id conn_master_id;
+      int64_t at;
+      int64_t stream_id;
+      uint16_t error_code;
+    } stop_sending_receive;
     struct { // quicly:max_data_send
       typeof_st_quicly_conn_t__master_id conn_master_id;
       int64_t at;
@@ -778,6 +808,10 @@ void h2o_raw_tracer::initialize() {
     h2o_tracer::usdt("quicly", "stream_receive", "trace_quicly__stream_receive"),
     h2o_tracer::usdt("quicly", "stream_acked", "trace_quicly__stream_acked"),
     h2o_tracer::usdt("quicly", "stream_lost", "trace_quicly__stream_lost"),
+    h2o_tracer::usdt("quicly", "reset_stream_send", "trace_quicly__reset_stream_send"),
+    h2o_tracer::usdt("quicly", "reset_stream_receive", "trace_quicly__reset_stream_receive"),
+    h2o_tracer::usdt("quicly", "stop_sending_send", "trace_quicly__stop_sending_send"),
+    h2o_tracer::usdt("quicly", "stop_sending_receive", "trace_quicly__stop_sending_receive"),
     h2o_tracer::usdt("quicly", "max_data_send", "trace_quicly__max_data_send"),
     h2o_tracer::usdt("quicly", "max_data_receive", "trace_quicly__max_data_receive"),
     h2o_tracer::usdt("quicly", "max_streams_send", "trace_quicly__max_streams_send"),
@@ -1216,6 +1250,48 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
     json_write_pair_c(out_, STR_LIT("stream-id"), event->stream_lost.stream_id);
     json_write_pair_c(out_, STR_LIT("off"), event->stream_lost.off);
     json_write_pair_c(out_, STR_LIT("len"), event->stream_lost.len);
+    break;
+  }
+  case H2OLOG_EVENT_ID_QUICLY_RESET_STREAM_SEND: { // quicly:reset_stream_send
+    json_write_pair_n(out_, STR_LIT("type"), STR_LIT("reset-stream-send"));
+    json_write_pair_c(out_, STR_LIT("tid"), event->tid);
+    json_write_pair_c(out_, STR_LIT("seq"), seq_);
+    json_write_pair_c(out_, STR_LIT("conn"), event->reset_stream_send.conn_master_id);
+    json_write_pair_c(out_, STR_LIT("time"), event->reset_stream_send.at);
+    json_write_pair_c(out_, STR_LIT("stream-id"), event->reset_stream_send.stream_id);
+    json_write_pair_c(out_, STR_LIT("error-code"), event->reset_stream_send.error_code);
+    json_write_pair_c(out_, STR_LIT("final-size"), event->reset_stream_send.final_size);
+    break;
+  }
+  case H2OLOG_EVENT_ID_QUICLY_RESET_STREAM_RECEIVE: { // quicly:reset_stream_receive
+    json_write_pair_n(out_, STR_LIT("type"), STR_LIT("reset-stream-receive"));
+    json_write_pair_c(out_, STR_LIT("tid"), event->tid);
+    json_write_pair_c(out_, STR_LIT("seq"), seq_);
+    json_write_pair_c(out_, STR_LIT("conn"), event->reset_stream_receive.conn_master_id);
+    json_write_pair_c(out_, STR_LIT("time"), event->reset_stream_receive.at);
+    json_write_pair_c(out_, STR_LIT("stream-id"), event->reset_stream_receive.stream_id);
+    json_write_pair_c(out_, STR_LIT("error-code"), event->reset_stream_receive.error_code);
+    json_write_pair_c(out_, STR_LIT("final-size"), event->reset_stream_receive.final_size);
+    break;
+  }
+  case H2OLOG_EVENT_ID_QUICLY_STOP_SENDING_SEND: { // quicly:stop_sending_send
+    json_write_pair_n(out_, STR_LIT("type"), STR_LIT("stop-sending-send"));
+    json_write_pair_c(out_, STR_LIT("tid"), event->tid);
+    json_write_pair_c(out_, STR_LIT("seq"), seq_);
+    json_write_pair_c(out_, STR_LIT("conn"), event->stop_sending_send.conn_master_id);
+    json_write_pair_c(out_, STR_LIT("time"), event->stop_sending_send.at);
+    json_write_pair_c(out_, STR_LIT("stream-id"), event->stop_sending_send.stream_id);
+    json_write_pair_c(out_, STR_LIT("error-code"), event->stop_sending_send.error_code);
+    break;
+  }
+  case H2OLOG_EVENT_ID_QUICLY_STOP_SENDING_RECEIVE: { // quicly:stop_sending_receive
+    json_write_pair_n(out_, STR_LIT("type"), STR_LIT("stop-sending-receive"));
+    json_write_pair_c(out_, STR_LIT("tid"), event->tid);
+    json_write_pair_c(out_, STR_LIT("seq"), seq_);
+    json_write_pair_c(out_, STR_LIT("conn"), event->stop_sending_receive.conn_master_id);
+    json_write_pair_c(out_, STR_LIT("time"), event->stop_sending_receive.at);
+    json_write_pair_c(out_, STR_LIT("stream-id"), event->stop_sending_receive.stream_id);
+    json_write_pair_c(out_, STR_LIT("error-code"), event->stop_sending_receive.error_code);
     break;
   }
   case H2OLOG_EVENT_ID_QUICLY_MAX_DATA_SEND: { // quicly:max_data_send
@@ -1841,6 +1917,10 @@ enum h2olog_event_id_t {
   H2OLOG_EVENT_ID_QUICLY_STREAM_RECEIVE,
   H2OLOG_EVENT_ID_QUICLY_STREAM_ACKED,
   H2OLOG_EVENT_ID_QUICLY_STREAM_LOST,
+  H2OLOG_EVENT_ID_QUICLY_RESET_STREAM_SEND,
+  H2OLOG_EVENT_ID_QUICLY_RESET_STREAM_RECEIVE,
+  H2OLOG_EVENT_ID_QUICLY_STOP_SENDING_SEND,
+  H2OLOG_EVENT_ID_QUICLY_STOP_SENDING_RECEIVE,
   H2OLOG_EVENT_ID_QUICLY_MAX_DATA_SEND,
   H2OLOG_EVENT_ID_QUICLY_MAX_DATA_RECEIVE,
   H2OLOG_EVENT_ID_QUICLY_MAX_STREAMS_SEND,
@@ -2121,6 +2201,32 @@ struct h2olog_event_t {
       uint64_t off;
       size_t len;
     } stream_lost;
+    struct { // quicly:reset_stream_send
+      typeof_st_quicly_conn_t__master_id conn_master_id;
+      int64_t at;
+      int64_t stream_id;
+      uint16_t error_code;
+      uint64_t final_size;
+    } reset_stream_send;
+    struct { // quicly:reset_stream_receive
+      typeof_st_quicly_conn_t__master_id conn_master_id;
+      int64_t at;
+      int64_t stream_id;
+      uint16_t error_code;
+      uint64_t final_size;
+    } reset_stream_receive;
+    struct { // quicly:stop_sending_send
+      typeof_st_quicly_conn_t__master_id conn_master_id;
+      int64_t at;
+      int64_t stream_id;
+      uint16_t error_code;
+    } stop_sending_send;
+    struct { // quicly:stop_sending_receive
+      typeof_st_quicly_conn_t__master_id conn_master_id;
+      int64_t at;
+      int64_t stream_id;
+      uint16_t error_code;
+    } stop_sending_receive;
     struct { // quicly:max_data_send
       typeof_st_quicly_conn_t__master_id conn_master_id;
       int64_t at;
@@ -3282,6 +3388,98 @@ int trace_quicly__stream_lost(struct pt_regs *ctx) {
 
   if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
     bpf_trace_printk("failed to perf_submit in trace_quicly__stream_lost\n");
+
+  return 0;
+}
+// quicly:reset_stream_send
+int trace_quicly__reset_stream_send(struct pt_regs *ctx) {
+  const void *buf = NULL;
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_RESET_STREAM_SEND, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
+
+  // struct st_quicly_conn_t * conn
+  uint8_t conn[sizeof_st_quicly_conn_t] = {};
+  bpf_usdt_readarg(1, ctx, &buf);
+  bpf_probe_read(&conn, sizeof_st_quicly_conn_t, buf);
+  event.reset_stream_send.conn_master_id = get_st_quicly_conn_t__master_id(conn);
+  // int64_t at
+  bpf_usdt_readarg(2, ctx, &event.reset_stream_send.at);
+  // int64_t stream_id
+  bpf_usdt_readarg(3, ctx, &event.reset_stream_send.stream_id);
+  // uint16_t error_code
+  bpf_usdt_readarg(4, ctx, &event.reset_stream_send.error_code);
+  // uint64_t final_size
+  bpf_usdt_readarg(5, ctx, &event.reset_stream_send.final_size);
+
+  if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
+    bpf_trace_printk("failed to perf_submit in trace_quicly__reset_stream_send\n");
+
+  return 0;
+}
+// quicly:reset_stream_receive
+int trace_quicly__reset_stream_receive(struct pt_regs *ctx) {
+  const void *buf = NULL;
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_RESET_STREAM_RECEIVE, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
+
+  // struct st_quicly_conn_t * conn
+  uint8_t conn[sizeof_st_quicly_conn_t] = {};
+  bpf_usdt_readarg(1, ctx, &buf);
+  bpf_probe_read(&conn, sizeof_st_quicly_conn_t, buf);
+  event.reset_stream_receive.conn_master_id = get_st_quicly_conn_t__master_id(conn);
+  // int64_t at
+  bpf_usdt_readarg(2, ctx, &event.reset_stream_receive.at);
+  // int64_t stream_id
+  bpf_usdt_readarg(3, ctx, &event.reset_stream_receive.stream_id);
+  // uint16_t error_code
+  bpf_usdt_readarg(4, ctx, &event.reset_stream_receive.error_code);
+  // uint64_t final_size
+  bpf_usdt_readarg(5, ctx, &event.reset_stream_receive.final_size);
+
+  if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
+    bpf_trace_printk("failed to perf_submit in trace_quicly__reset_stream_receive\n");
+
+  return 0;
+}
+// quicly:stop_sending_send
+int trace_quicly__stop_sending_send(struct pt_regs *ctx) {
+  const void *buf = NULL;
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_STOP_SENDING_SEND, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
+
+  // struct st_quicly_conn_t * conn
+  uint8_t conn[sizeof_st_quicly_conn_t] = {};
+  bpf_usdt_readarg(1, ctx, &buf);
+  bpf_probe_read(&conn, sizeof_st_quicly_conn_t, buf);
+  event.stop_sending_send.conn_master_id = get_st_quicly_conn_t__master_id(conn);
+  // int64_t at
+  bpf_usdt_readarg(2, ctx, &event.stop_sending_send.at);
+  // int64_t stream_id
+  bpf_usdt_readarg(3, ctx, &event.stop_sending_send.stream_id);
+  // uint16_t error_code
+  bpf_usdt_readarg(4, ctx, &event.stop_sending_send.error_code);
+
+  if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
+    bpf_trace_printk("failed to perf_submit in trace_quicly__stop_sending_send\n");
+
+  return 0;
+}
+// quicly:stop_sending_receive
+int trace_quicly__stop_sending_receive(struct pt_regs *ctx) {
+  const void *buf = NULL;
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_STOP_SENDING_RECEIVE, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
+
+  // struct st_quicly_conn_t * conn
+  uint8_t conn[sizeof_st_quicly_conn_t] = {};
+  bpf_usdt_readarg(1, ctx, &buf);
+  bpf_probe_read(&conn, sizeof_st_quicly_conn_t, buf);
+  event.stop_sending_receive.conn_master_id = get_st_quicly_conn_t__master_id(conn);
+  // int64_t at
+  bpf_usdt_readarg(2, ctx, &event.stop_sending_receive.at);
+  // int64_t stream_id
+  bpf_usdt_readarg(3, ctx, &event.stop_sending_receive.stream_id);
+  // uint16_t error_code
+  bpf_usdt_readarg(4, ctx, &event.stop_sending_receive.error_code);
+
+  if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
+    bpf_trace_printk("failed to perf_submit in trace_quicly__stop_sending_receive\n");
 
   return 0;
 }
