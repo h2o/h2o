@@ -453,5 +453,17 @@ int quicly_foreach_stream(quicly_conn_t *conn, void *thunk, int (*cb)(void *thun
     return 0;
 }
 
+quicly_stream_t *quicly_get_stream(quicly_conn_t *conn, quicly_stream_id_t stream_id)
+{
+    assert(0 && "unimplemented");
+    NULL;
+}
+
+void quicly_send_datagram_frames(quicly_conn_t *conn, ptls_iovec_t *datagrams, size_t num_datagrams)
+{
+    assert(0 && "unimplemented");
+    NULL;
+}
+
 const uint32_t quicly_supported_versions[] = {QUICLY_PROTOCOL_VERSION_1, QUICLY_PROTOCOL_VERSION_DRAFT29,
                                               QUICLY_PROTOCOL_VERSION_DRAFT27, 0};
