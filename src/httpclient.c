@@ -467,6 +467,7 @@ static void usage(const char *progname)
             "               sets the number of requests run at once (default: 1)\n"
             "  -c <size>    size of body chunk (in bytes; default: 10)\n"
             "  -d <delay>   request interval (in msec; default: 0)\n"
+            "  -D <draft>   Draft version to use for HTTP/3 (e.g. -D 29)\n"
             "  -H <name:value>\n"
             "               adds a request header\n"
             "  -i <delay>   I/O interval between sending chunks (in msec; default: 0)\n"
@@ -577,7 +578,7 @@ int main(int argc, char **argv)
                                 {"max-udp-payload-size", required_argument, &is_opt_max_udp_payload_size, 1},
                                 {"help", no_argument, NULL, 'h'},
                                 {NULL}};
-    const char *optstring = "t:m:o:b:x:C:c:d:H:i:k2:W:h3:"
+    const char *optstring = "t:m:o:b:x:C:c:d:D:H:i:k2:W:h3:"
 #ifdef __GNUC__
                             ":" /* for backward compatibility, optarg of -3 is optional when using glibc */
 #endif
@@ -690,6 +691,14 @@ int main(int argc, char **argv)
             h3ctx.quic.transport_params.max_stream_data.uni = v;
             h3ctx.quic.transport_params.max_stream_data.bidi_local = v;
             h3ctx.quic.transport_params.max_stream_data.bidi_remote = v;
+        } break;
+        case 'D': {
+            uint8_t draft_ver;
+            if (sscanf(optarg, "%" SCNu8, &draft_ver) != 1) {
+                fprintf(stderr, "failed to parse draft number: %s\n", optarg);
+                exit(1);
+            }
+            h3ctx.quic.initial_version = 0xff000000 | draft_ver;
         } break;
         case 'h':
             usage(argv[0]);
