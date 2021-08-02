@@ -871,10 +871,10 @@ void proceed_request(h2o_req_t *req, const char *errstr)
     if (errstr != NULL) {
         stream->req.proceed_req = NULL;
         set_req_body_state(conn, stream, H2O_HTTP2_REQ_BODY_CLOSE_DELIVERED);
-        if (conn->state < H2O_HTTP2_CONN_STATE_IS_CLOSING)
+        if (conn->state < H2O_HTTP2_CONN_STATE_IS_CLOSING) {
             stream_send_error(conn, stream->stream_id, H2O_HTTP2_ERROR_STREAM_CLOSED);
-        if (stream->state == H2O_HTTP2_STREAM_STATE_END_STREAM)
-            h2o_http2_stream_close(conn, stream);
+            h2o_http2_stream_reset(conn, stream);
+        }
         return;
     }
 
