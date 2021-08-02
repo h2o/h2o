@@ -279,7 +279,6 @@ struct st_h2o_httpclient_t {
         h2o_httpclient_head_cb on_head;
         h2o_httpclient_body_cb on_body;
     } _cb;
-    size_t _protocol_selector;
 };
 
 /**
