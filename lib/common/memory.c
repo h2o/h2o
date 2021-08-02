@@ -359,9 +359,17 @@ h2o_iovec_t h2o_buffer_try_reserve(h2o_buffer_t **_inbuf, size_t min_guarantee)
     h2o_iovec_t ret;
 
     if (inbuf->bytes == NULL) {
-        inbuf = buffer_allocate(inbuf->_prototype, min_guarantee, inbuf->capacity);
-        if (*_inbuf != &(*_inbuf)->_prototype->_initial_buf)
+        h2o_buffer_prototype_t *prototype;
+        size_t desired_capacity;
+        if (inbuf->_prototype == NULL) {
+            prototype = H2O_STRUCT_FROM_MEMBER(h2o_buffer_prototype_t, _initial_buf, inbuf);
+            desired_capacity = 0;
+        } else {
+            prototype = inbuf->_prototype;
+            desired_capacity = inbuf->capacity;
             h2o_buffer__do_free(*_inbuf);
+        }
+        inbuf = buffer_allocate(prototype, min_guarantee, desired_capacity);
         *_inbuf = inbuf;
     } else {
         if (min_guarantee <= inbuf->capacity - inbuf->size - (inbuf->bytes - inbuf->_buf)) {
