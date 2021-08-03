@@ -3579,6 +3579,10 @@ UpdateState:
     } else {
         ++stream->conn->super.stats.num_frames_sent.stream;
     }
+    stream->conn->super.stats.num_bytes.stream_data_sent += end_off - off;
+    if (off < stream->sendstate.size_inflight)
+        stream->conn->super.stats.num_bytes.stream_data_resent +=
+            (stream->sendstate.size_inflight < end_off ? stream->sendstate.size_inflight : end_off) - off;
     QUICLY_PROBE(STREAM_SEND, stream->conn, stream->conn->stash.now, stream, off, end_off - off, is_fin);
     QUICLY_PROBE(QUICTRACE_SEND_STREAM, stream->conn, stream->conn->stash.now, stream, off, end_off - off, is_fin);
     /* update sendstate (and also MAX_DATA counter) */
@@ -3665,6 +3669,7 @@ static void on_loss_detected(quicly_loss_t *loss, const quicly_sent_packet_t *lo
     ++conn->super.stats.num_packets.lost;
     if (is_time_threshold)
         ++conn->super.stats.num_packets.lost_time_threshold;
+    conn->super.stats.num_bytes.lost += lost_packet->cc_bytes_in_flight;
     conn->egress.cc.type->cc_on_lost(&conn->egress.cc, &conn->egress.loss, lost_packet->cc_bytes_in_flight,
                                      lost_packet->packet_number, conn->egress.packet_number, conn->stash.now,
                                      conn->egress.max_udp_payload_size);
