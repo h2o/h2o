@@ -303,7 +303,7 @@ static void buffer_init(h2o_buffer_t *buf, size_t size, char *bytes, size_t capa
 
 void h2o_buffer__do_free(h2o_buffer_t *buffer)
 {
-    assert(buffer != &buffer->_prototype->_initial_buf);
+    assert(buffer->_prototype != NULL);
 
     if (buffer->_fd != -1) {
         close(buffer->_fd);

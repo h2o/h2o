@@ -132,7 +132,7 @@ typedef struct st_h2o_buffer_t {
      */
     char *bytes;
     /**
-     * prototype (or NULL if the instance is part of the prototype (i.e. bytes == NULL))
+     * prototype (or NULL if the instance is part of the prototype)
      */
     h2o_buffer_prototype_t *_prototype;
     /**
@@ -468,7 +468,7 @@ inline void h2o_buffer_dispose(h2o_buffer_t **_buffer)
 {
     h2o_buffer_t *buffer = *_buffer;
     *_buffer = NULL;
-    if (buffer != &buffer->_prototype->_initial_buf)
+    if (buffer->_prototype != NULL)
         h2o_buffer__do_free(buffer);
 }
 
