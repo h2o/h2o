@@ -232,6 +232,17 @@ void h2o_multithread_create_thread(pthread_t *tid, const pthread_attr_t *attr, v
     }
 }
 
+h2o_loop_t *h2o_multithread_get_loop(h2o_multithread_queue_t *queue)
+{
+    if (queue == NULL)
+        return NULL;
+#if H2O_USE_LIBUV
+    return ((uv_handle_t *)&queue->async)->loop;
+#else
+    return h2o_socket_get_loop(queue->async.read);
+#endif
+}
+
 void h2o_sem_init(h2o_sem_t *sem, ssize_t capacity)
 {
     pthread_mutex_init(&sem->_mutex, NULL);
