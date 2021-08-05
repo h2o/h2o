@@ -311,7 +311,7 @@ static void tcp_on_write_complete(h2o_socket_t *_sock, const char *err)
 
     reset_io_timeout(self);
 
-    h2o_buffer_consume(&self->tcp.sendbuf, self->tcp.sendbuf->size);
+    h2o_buffer_consume_all(&self->tcp.sendbuf, 1);
     self->src_req->proceed_req(self->src_req, NULL);
 }
 

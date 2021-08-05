@@ -931,7 +931,7 @@ static void proceed_request_streaming(h2o_req_t *_req, const char *errstr)
 
     /* remove the bytes from the request body buffer */
     assert(stream->req.entity.len == stream->req_body->size);
-    h2o_buffer_consume(&stream->req_body, stream->req_body->size);
+    h2o_buffer_consume_all(&stream->req_body, 1);
     stream->req.entity = h2o_iovec_init(NULL, 0);
 
     /* unblock read until the next invocation of write_req, or after the final invocation */
