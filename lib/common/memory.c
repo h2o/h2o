@@ -117,7 +117,8 @@ void h2o_mem_clear_recycle(h2o_mem_recycle_t *allocator)
 {
     struct st_h2o_mem_recycle_chunk_t *chunk;
 
-    while (allocator->cnt-- > 0) {
+    while (allocator->cnt > 0) {
+        --allocator->cnt;
         chunk = allocator->_link;
         allocator->_link = allocator->_link->next;
         free(chunk);
