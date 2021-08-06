@@ -367,7 +367,7 @@ h2o_iovec_t h2o_buffer_try_reserve(h2o_buffer_t **_inbuf, size_t min_guarantee)
         } else {
             prototype = inbuf->_prototype;
             desired_capacity = inbuf->capacity;
-            h2o_buffer__do_free(*_inbuf);
+            h2o_mem_free_recycle(&buffer_recycle_bins.zero_sized, inbuf);
         }
         inbuf = buffer_allocate(prototype, min_guarantee, desired_capacity);
         *_inbuf = inbuf;
