@@ -113,14 +113,18 @@ void h2o_mem_free_recycle(h2o_mem_recycle_t *allocator, void *p)
     ++allocator->cnt;
 }
 
-void h2o_mem_clear_recycle(h2o_mem_recycle_t *allocator)
+void h2o_mem_clear_recycle(h2o_mem_recycle_t *allocator, int full)
 {
     struct st_h2o_mem_recycle_chunk_t *chunk;
 
-    while (allocator->cnt-- > 0) {
-        chunk = allocator->_link;
-        allocator->_link = allocator->_link->next;
-        free(chunk);
+    if (allocator->cnt != 0) {
+        do {
+            chunk = allocator->_link;
+            allocator->_link = allocator->_link->next;
+            free(chunk);
+            --allocator->cnt;
+        } while (full && allocator->cnt != 0);
+        assert((allocator->cnt != 0) == (allocator->_link != NULL));
     }
 }
 
@@ -222,16 +226,92 @@ static size_t topagesize(size_t capacity)
     return (offsetof(h2o_buffer_t, _buf) + capacity + pagesize - 1) / pagesize * pagesize;
 }
 
+/**
+ * size of the smallest bin is 4096 bytes (1<<12)
+ */
+#define H2O_BUFFER_MIN_ALLOC_POWER 12
+
+/**
+ * Retains recycle bins for `h2o_buffer_t`.
+ */
+static __thread struct {
+    /**
+     * Holds recycle bins for `h2o_buffer_t`. Bin for capacity 2^x is located at x - H2O_BUFFER_MIN_ALLOC_POWER.
+     */
+    h2o_mem_recycle_t *bins;
+    /**
+     * Bins for capacicties no greater than this value exist.
+     */
+    size_t largest_power;
+    /**
+     * Bin containing chunks of sizeof(h2o_buffer_t). This is used by empties buffers to retain the previous capacity.
+     */
+    h2o_mem_recycle_t zero_sized;
+} buffer_recycle_bins = {NULL, H2O_BUFFER_MIN_ALLOC_POWER - 1, {100}};
+
+static unsigned buffer_size_to_power(size_t sz)
+{
+    assert(sz != 0);
+
+    unsigned power = sizeof(unsigned long long) * 8 - __builtin_clzll(sz) - 1;
+    if (power < H2O_BUFFER_MIN_ALLOC_POWER) {
+        power = H2O_BUFFER_MIN_ALLOC_POWER;
+    } else if (sz != (1 << power)) {
+        ++power;
+    }
+    return power;
+}
+
+void h2o_buffer_clear_recycle(int full)
+{
+    for (unsigned i = H2O_BUFFER_MIN_ALLOC_POWER; i <= buffer_recycle_bins.largest_power; ++i)
+        h2o_mem_clear_recycle(&buffer_recycle_bins.bins[i - H2O_BUFFER_MIN_ALLOC_POWER], full);
+
+    if (full) {
+        free(buffer_recycle_bins.bins);
+        buffer_recycle_bins.bins = NULL;
+        buffer_recycle_bins.largest_power = H2O_BUFFER_MIN_ALLOC_POWER - 1;
+    }
+
+    h2o_mem_clear_recycle(&buffer_recycle_bins.zero_sized, full);
+}
+
+static h2o_mem_recycle_t *buffer_get_recycle(unsigned power, int only_if_exists)
+{
+    if (power > buffer_recycle_bins.largest_power) {
+        if (only_if_exists)
+            return NULL;
+        buffer_recycle_bins.bins =
+            h2o_mem_realloc(buffer_recycle_bins.bins, sizeof(*buffer_recycle_bins.bins) * (power - H2O_BUFFER_MIN_ALLOC_POWER + 1));
+        do {
+            ++buffer_recycle_bins.largest_power;
+            buffer_recycle_bins.bins[buffer_recycle_bins.largest_power - H2O_BUFFER_MIN_ALLOC_POWER] = (h2o_mem_recycle_t){16};
+        } while (buffer_recycle_bins.largest_power < power);
+    }
+
+    return &buffer_recycle_bins.bins[power - H2O_BUFFER_MIN_ALLOC_POWER];
+}
+
+static void buffer_init(h2o_buffer_t *buf, size_t size, char *bytes, size_t capacity, h2o_buffer_prototype_t *prototype, int fd)
+{
+    buf->size = size;
+    buf->bytes = bytes;
+    buf->capacity = capacity;
+    buf->_prototype = prototype;
+    buf->_fd = fd;
+}
+
 void h2o_buffer__do_free(h2o_buffer_t *buffer)
 {
-    /* caller should assert that the buffer is not part of the prototype */
-    if (buffer->capacity == buffer->_prototype->_initial_buf.capacity) {
-        h2o_mem_free_recycle(&buffer->_prototype->allocator, buffer);
-    } else if (buffer->_fd != -1) {
+    assert(buffer->_prototype != NULL);
+
+    if (buffer->_fd != -1) {
         close(buffer->_fd);
         munmap((void *)buffer, topagesize(buffer->capacity));
     } else {
-        free(buffer);
+        unsigned power = buffer_size_to_power(offsetof(h2o_buffer_t, _buf) + buffer->capacity);
+        assert(((size_t)1 << power) == offsetof(h2o_buffer_t, _buf) + buffer->capacity);
+        h2o_mem_free_recycle(buffer_get_recycle(power, 0), buffer);
     }
 }
 
@@ -244,25 +324,53 @@ h2o_iovec_t h2o_buffer_reserve(h2o_buffer_t **_inbuf, size_t min_guarantee)
     return reserved;
 }
 
+static h2o_buffer_t *buffer_allocate(h2o_buffer_prototype_t *prototype, size_t min_capacity, size_t desired_capacity)
+{
+    h2o_buffer_t *newp;
+    unsigned alloc_power;
+
+    /* normalize */
+    if (min_capacity < prototype->_initial_buf.capacity)
+        min_capacity = prototype->_initial_buf.capacity;
+
+    /* try to allocate at first using `desired_capacity`, otherwise bail out to AllocNormal */
+    if (desired_capacity <= min_capacity)
+        goto AllocNormal;
+    alloc_power = buffer_size_to_power(offsetof(h2o_buffer_t, _buf) + desired_capacity);
+    h2o_mem_recycle_t *allocator = buffer_get_recycle(alloc_power, 1);
+    if (allocator == NULL || allocator->cnt == 0)
+        goto AllocNormal;
+    newp = h2o_mem_alloc_recycle(allocator, (size_t)1 << alloc_power);
+    goto AllocDone;
+
+AllocNormal:
+    /* allocate using `min_capacity` */
+    alloc_power = buffer_size_to_power(offsetof(h2o_buffer_t, _buf) + min_capacity);
+    newp = h2o_mem_alloc_recycle(buffer_get_recycle(alloc_power, 0), (size_t)1 << alloc_power);
+
+AllocDone:
+    buffer_init(newp, 0, newp->_buf, ((size_t)1 << alloc_power) - offsetof(h2o_buffer_t, _buf), prototype, -1);
+    return newp;
+}
+
 h2o_iovec_t h2o_buffer_try_reserve(h2o_buffer_t **_inbuf, size_t min_guarantee)
 {
     h2o_buffer_t *inbuf = *_inbuf;
     h2o_iovec_t ret;
 
     if (inbuf->bytes == NULL) {
-        h2o_buffer_prototype_t *prototype = H2O_STRUCT_FROM_MEMBER(h2o_buffer_prototype_t, _initial_buf, inbuf);
-        if (min_guarantee <= prototype->_initial_buf.capacity) {
-            min_guarantee = prototype->_initial_buf.capacity;
-            inbuf = h2o_mem_alloc_recycle(&prototype->allocator, offsetof(h2o_buffer_t, _buf) + min_guarantee);
+        h2o_buffer_prototype_t *prototype;
+        size_t desired_capacity;
+        if (inbuf->_prototype == NULL) {
+            prototype = H2O_STRUCT_FROM_MEMBER(h2o_buffer_prototype_t, _initial_buf, inbuf);
+            desired_capacity = 0;
         } else {
-            inbuf = h2o_mem_alloc(offsetof(h2o_buffer_t, _buf) + min_guarantee);
+            prototype = inbuf->_prototype;
+            desired_capacity = inbuf->capacity;
+            h2o_mem_free_recycle(&buffer_recycle_bins.zero_sized, inbuf);
         }
+        inbuf = buffer_allocate(prototype, min_guarantee, desired_capacity);
         *_inbuf = inbuf;
-        inbuf->size = 0;
-        inbuf->bytes = inbuf->_buf;
-        inbuf->capacity = min_guarantee;
-        inbuf->_prototype = prototype;
-        inbuf->_fd = -1;
     } else {
         if (min_guarantee <= inbuf->capacity - inbuf->size - (inbuf->bytes - inbuf->_buf)) {
             /* ok */
@@ -306,11 +414,7 @@ h2o_iovec_t h2o_buffer_try_reserve(h2o_buffer_t **_inbuf, size_t min_guarantee)
                 }
                 if (inbuf->_fd == -1) {
                     /* copy data (moving from malloc to mmap) */
-                    newp->size = inbuf->size;
-                    newp->bytes = newp->_buf;
-                    newp->capacity = new_capacity;
-                    newp->_prototype = inbuf->_prototype;
-                    newp->_fd = fd;
+                    buffer_init(newp, inbuf->size, newp->_buf, new_capacity, inbuf->_prototype, fd);
                     memcpy(newp->_buf, inbuf->bytes, inbuf->size);
                     h2o_buffer__do_free(inbuf);
                     *_inbuf = inbuf = newp;
@@ -323,12 +427,10 @@ h2o_iovec_t h2o_buffer_try_reserve(h2o_buffer_t **_inbuf, size_t min_guarantee)
                     inbuf->bytes = newp->_buf + offset;
                 }
             } else {
-                h2o_buffer_t *newp = h2o_mem_alloc(offsetof(h2o_buffer_t, _buf) + new_capacity);
-                newp->size = inbuf->size;
-                newp->bytes = newp->_buf;
-                newp->capacity = new_capacity;
-                newp->_prototype = inbuf->_prototype;
-                newp->_fd = -1;
+                unsigned alloc_power = buffer_size_to_power(offsetof(h2o_buffer_t, _buf) + new_capacity);
+                new_capacity = ((size_t)1 << alloc_power) - offsetof(h2o_buffer_t, _buf);
+                h2o_buffer_t *newp = h2o_mem_alloc_recycle(buffer_get_recycle(alloc_power, 0), (size_t)1 << alloc_power);
+                buffer_init(newp, inbuf->size, newp->_buf, new_capacity, inbuf->_prototype, -1);
                 memcpy(newp->_buf, inbuf->bytes, inbuf->size);
                 h2o_buffer__do_free(inbuf);
                 *_inbuf = inbuf = newp;
@@ -348,18 +450,31 @@ MapError:
     return ret;
 }
 
-void h2o_buffer_consume(h2o_buffer_t **_inbuf, size_t delta)
+void h2o_buffer_consume(h2o_buffer_t **inbuf, size_t delta)
 {
-    h2o_buffer_t *inbuf = *_inbuf;
-
     if (delta != 0) {
-        assert(inbuf->bytes != NULL);
-        if (inbuf->size == delta) {
-            *_inbuf = &inbuf->_prototype->_initial_buf;
-            h2o_buffer__do_free(inbuf);
+        if ((*inbuf)->size == delta) {
+            h2o_buffer_consume_all(inbuf, 0);
         } else {
-            inbuf->size -= delta;
-            inbuf->bytes += delta;
+            assert((*inbuf)->bytes != NULL);
+            (*inbuf)->size -= delta;
+            (*inbuf)->bytes += delta;
+        }
+    }
+}
+
+void h2o_buffer_consume_all(h2o_buffer_t **inbuf, int record_capacity)
+{
+    if ((*inbuf)->size != 0) {
+        if (record_capacity) {
+            h2o_buffer_t *newp = h2o_mem_alloc_recycle(&buffer_recycle_bins.zero_sized, sizeof(*newp));
+            buffer_init(newp, 0, NULL, (*inbuf)->capacity, (*inbuf)->_prototype, -1);
+            h2o_buffer__do_free(*inbuf);
+            *inbuf = newp;
+        } else {
+            h2o_buffer_t *prototype_buf = &(*inbuf)->_prototype->_initial_buf;
+            h2o_buffer__do_free(*inbuf);
+            *inbuf = prototype_buf;
         }
     }
 }
