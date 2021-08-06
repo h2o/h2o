@@ -101,6 +101,14 @@ int quicly_stream_can_send(quicly_stream_t *stream, int at_stream_level)
     return 1;
 }
 
+quicly_stream_t *quicly_get_stream(quicly_conn_t *conn, quicly_stream_id_t stream_id)
+{
+     khiter_t iter = kh_get(quicly_stream_t, conn->streams, stream_id);
+     if (iter != kh_end(conn->streams))
+         return kh_val(conn->streams, iter);
+     return NULL;
+}
+
 ptls_t *quicly_get_tls(quicly_conn_t *conn)
 {
     /* TODO: is this okay */
@@ -446,6 +454,12 @@ Exit:
     *num_datagrams = 0;
     return ret;
 }
+
+void quicly_send_datagram_frames(quicly_conn_t *conn, ptls_iovec_t *datagrams, size_t num_datagrams)
+{
+    quicly_send(conn, NULL, NULL, (struct iovec *) datagrams, &num_datagrams, NULL, 0);
+}
+
 
 int quicly_foreach_stream(quicly_conn_t *conn, void *thunk, int (*cb)(void *thunk, quicly_stream_t *stream))
 {
