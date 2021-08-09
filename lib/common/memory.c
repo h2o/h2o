@@ -309,10 +309,15 @@ void h2o_buffer__do_free(h2o_buffer_t *buffer)
         close(buffer->_fd);
         munmap((void *)buffer, topagesize(buffer->capacity));
     } else {
-        unsigned power = buffer_size_to_power(offsetof(h2o_buffer_t, _buf) + buffer->capacity);
-        assert(((size_t)1 << power) == offsetof(h2o_buffer_t, _buf) + buffer->capacity);
-        h2o_mem_recycle_t *allocator = buffer_get_recycle(power, 0);
-        assert(allocator != NULL);
+        h2o_mem_recycle_t *allocator;
+        if (buffer->bytes == NULL) {
+            allocator = &buffer_recycle_bins.zero_sized;
+        } else {
+            unsigned power = buffer_size_to_power(offsetof(h2o_buffer_t, _buf) + buffer->capacity);
+            assert(((size_t)1 << power) == offsetof(h2o_buffer_t, _buf) + buffer->capacity);
+            allocator = buffer_get_recycle(power, 0);
+            assert(allocator != NULL);
+        }
         h2o_mem_free_recycle(allocator, buffer);
     }
 }
