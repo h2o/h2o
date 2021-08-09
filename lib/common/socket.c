@@ -693,9 +693,6 @@ void h2o_socket_write(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_
                          */
                         clear_output_buffer(sock->ssl);
                         flush_pending_ssl(sock, cb);
-#ifndef H2O_USE_LIBUV
-                        ((struct st_h2o_evloop_socket_t *)sock)->_flags |= H2O_SOCKET_FLAG_IS_WRITE_ERROR;
-#endif
                         return;
                     }
                 }
