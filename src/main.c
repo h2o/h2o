@@ -2913,7 +2913,7 @@ static void *run_loop(void *_thread_index)
         cpu_set_t cpu_set;
         CPU_ZERO(&cpu_set);
         CPU_SET(conf.thread_map.entries[thread_index], &cpu_set);
-        if (pthread_setaffinity_np(pthread_self(), sizeof(cpu_set), &cpu_set) != 0) {
+        if (pthread_setaffinity_np(pthread_self(), sizeof(cpu_set), &cpu_set) != 0)
 #else
         int r;
         cpuset_t *cpu_set = cpuset_create();
@@ -2924,8 +2924,9 @@ static void *run_loop(void *_thread_index)
         cpuset_set(conf.thread_map.entries[thread_index], cpu_set);
         r = pthread_setaffinity_np(pthread_self(), cpuset_size(cpu_set), cpu_set);
         cpuset_destroy(cpu_set);
-        if (r != 0) {
+        if (r != 0)
 #endif
+        {
             static int once;
             if (__sync_fetch_and_add(&once, 1) == 0) {
                 fprintf(stderr, "[warning] failed to set bind to CPU:%d\n", conf.thread_map.entries[thread_index]);

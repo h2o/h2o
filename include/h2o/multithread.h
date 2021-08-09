@@ -102,6 +102,10 @@ void h2o_multithread_send_message(h2o_multithread_receiver_t *receiver, h2o_mult
  * create a thread
  */
 void h2o_multithread_create_thread(pthread_t *tid, const pthread_attr_t *attr, void *(*func)(void *), void *arg);
+/**
+ * returns the event loop associated with provided queue
+ */
+h2o_loop_t *h2o_multithread_get_loop(h2o_multithread_queue_t *);
 
 /**
  * a variant of pthread_once, that does not require you to declare a callback, nor have a global variable

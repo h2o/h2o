@@ -692,9 +692,6 @@ void h2o_socket_write(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_
                          */
                         clear_output_buffer(sock->ssl);
                         flush_pending_ssl(sock, cb);
-#ifndef H2O_USE_LIBUV
-                        ((struct st_h2o_evloop_socket_t *)sock)->_flags |= H2O_SOCKET_FLAG_IS_WRITE_ERROR;
-#endif
                         return;
                     }
                 }
@@ -845,11 +842,9 @@ h2o_iovec_t h2o_socket_get_ssl_session_id(h2o_socket_t *sock)
 const char *h2o_socket_get_ssl_server_name(const h2o_socket_t *sock)
 {
     if (sock->ssl != NULL) {
-#if H2O_USE_PICOTLS
         if (sock->ssl->ptls != NULL) {
             return ptls_get_server_name(sock->ssl->ptls);
         } else
-#endif
             if (sock->ssl->ossl != NULL) {
             return SSL_get_servername(sock->ssl->ossl, TLSEXT_NAMETYPE_host_name);
         }

@@ -4628,7 +4628,6 @@
 			buildSettings = {
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"$(inherited)",
-					"H2O_USE_PICOTLS=1",
 					"PICOTLS_USE_DTRACE=1",
 					"QUICLY_USE_DTRACE=1",
 					"QUICLY_USE_TRACER=1",
@@ -4673,7 +4672,6 @@
 			buildSettings = {
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"$(inherited)",
-					"H2O_USE_PICOTLS=1",
 					"PICOTLS_USE_DTRACE=1",
 					"QUICLY_USE_DTRACE=1",
 					"QUICLY_USE_TRACER=1",
