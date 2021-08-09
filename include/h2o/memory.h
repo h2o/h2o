@@ -545,7 +545,11 @@ inline void h2o_doublebuffer_consume(h2o_doublebuffer_t *db)
     assert(db->inflight);
     db->inflight = 0;
 
-    h2o_buffer_consume(&db->buf, db->_bytes_inflight);
+    if (db->buf->size == db->_bytes_inflight) {
+        h2o_buffer_consume_all(&db->buf, 1);
+    } else {
+        h2o_buffer_consume(&db->buf, db->_bytes_inflight);
+    }
     db->_bytes_inflight = 0;
 }
 
