@@ -1721,6 +1721,7 @@ static void on_h3_destroy(h2o_quic_conn_t *h3_)
     if (h2o_timer_is_linked(&conn->timeout))
         h2o_timer_unlink(&conn->timeout);
     h2o_http3_dispose_conn(&conn->h3);
+    kh_destroy(stream, conn->datagram_flows);
 
     /* check consistency post-disposal */
     assert(conn->num_streams.recv_headers == 0);
@@ -1809,6 +1810,7 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
         if (accept_ret == QUICLY_ERROR_DECRYPTION_FAILED)
             ret = (h2o_http3_conn_t *)H2O_QUIC_ACCEPT_CONN_DECRYPTION_FAILED;
         h2o_http3_dispose_conn(&conn->h3);
+        kh_destroy(stream, conn->datagram_flows);
         free(conn);
         return ret;
     }
