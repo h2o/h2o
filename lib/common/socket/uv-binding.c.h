@@ -24,6 +24,7 @@ struct st_h2o_uv_socket_t {
     h2o_socket_t super;
     uv_handle_t *handle;
     uv_close_cb close_cb;
+    h2o_timer_t write_cb_timer;
     union {
         struct {
             union {
@@ -189,6 +190,12 @@ void do_read_stop(h2o_socket_t *_sock)
     }
 }
 
+static void on_call_write_complete(h2o_timer_t *timer)
+{
+    struct st_h2o_uv_socket_t *sock = H2O_STRUCT_FROM_MEMBER(struct st_h2o_uv_socket_t, write_cb_timer, timer);
+    on_do_write_complete(&sock->stream._wreq, 0);
+}
+
 void do_write(h2o_socket_t *_sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_socket_cb cb)
 {
     struct st_h2o_uv_socket_t *sock = (struct st_h2o_uv_socket_t *)_sock;
@@ -200,7 +207,7 @@ void do_write(h2o_socket_t *_sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_socket_
     if (bufcnt > 0)
         uv_write(&sock->stream._wreq, (uv_stream_t *)sock->handle, (uv_buf_t *)bufs, (int)bufcnt, on_do_write_complete);
     else
-        on_do_write_complete(&sock->stream._wreq, 0);
+        h2o_timer_link(sock->handle->loop, 0, &sock->write_cb_timer);
 }
 
 void h2o_socket_notify_write(h2o_socket_t *_sock, h2o_socket_cb cb)
@@ -276,6 +283,7 @@ h2o_socket_t *h2o_uv_socket_create(uv_handle_t *handle, uv_close_cb close_cb)
     sock->handle = handle;
     sock->close_cb = close_cb;
     sock->handle->data = sock;
+    h2o_timer_init(&sock->write_cb_timer, on_call_write_complete);
     uint64_t flags = h2o_socket_ebpf_lookup_flags(sock->handle->loop, h2o_socket_ebpf_init_key, &sock->super);
     if ((flags & H2O_EBPF_FLAGS_SKIP_TRACING_BIT) != 0)
         sock->super._skip_tracing = 1;
