@@ -626,8 +626,12 @@ static h2o_iovec_t decode_header_value_literal(h2o_mem_pool_t *pool, unsigned *s
                                                const uint8_t *src_end, const char **err_desc)
 {
     h2o_iovec_t buf;
-    int is_huff = (**src & 0x80) != 0;
     int64_t len;
+
+    /* validate *src pointer before dereferencing it for the huffman bit check */
+    if (!(*src < src_end))
+        goto Fail;
+    int is_huff = (**src & 0x80) != 0;
 
     if (decode_int(&len, src, src_end, 7) != 0 || len > MAX_HEADER_VALUE_LENGTH) {
         *err_desc = h2o_qpack_err_header_value_too_long;
