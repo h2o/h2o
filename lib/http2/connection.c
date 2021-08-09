@@ -202,6 +202,7 @@ static void run_pending_requests(h2o_http2_conn_t *conn)
                     conn->super.ctx->globalconf->http2.max_concurrent_streaming_requests_per_connection)
                     continue;
                 conn->num_streams._req_streaming_in_progress++;
+                conn->super.ctx->http2.events.streaming_requests++;
                 stream->_req_streaming_in_progress = 1;
                 update_stream_input_window(conn, stream,
                                            conn->super.ctx->globalconf->http2.active_stream_window_size -
@@ -736,10 +737,10 @@ static void proceed_request(h2o_req_t *req, size_t written, h2o_send_state_t sen
 
     if (send_state == H2O_SEND_STATE_ERROR) {
         finish_body_streaming(stream);
-        if (conn->state < H2O_HTTP2_CONN_STATE_IS_CLOSING)
+        if (conn->state < H2O_HTTP2_CONN_STATE_IS_CLOSING) {
             stream_send_error(conn, stream->stream_id, H2O_HTTP2_ERROR_STREAM_CLOSED);
-        if (stream->state == H2O_HTTP2_STREAM_STATE_END_STREAM)
-            h2o_http2_stream_close(conn, stream);
+            h2o_http2_stream_reset(conn, stream);
+        }
         return;
     }
 

@@ -621,6 +621,9 @@ struct st_h2o_quic_aggregated_stats_t {
     func(num_packets.late_acked, "num-packets.late-acked") \
     func(num_bytes.received, "num-bytes.received") \
     func(num_bytes.sent, "num-bytes.sent") \
+    func(num_bytes.lost, "num-bytes.lost") \
+    func(num_bytes.stream_data_sent, "num-bytes.stream-data-sent") \
+    func(num_bytes.stream_data_resent, "num-bytes.stream-data-resent") \
     func(num_frames_sent.padding, "num-frames-sent.padding") \
     func(num_frames_sent.ping, "num-frames-sent.ping") \
     func(num_frames_sent.ack, "num-frames-sent.ack") \
@@ -744,6 +747,10 @@ struct st_h2o_context_t {
              * counter for http2 idle timeouts
              */
             uint64_t idle_timeouts;
+            /**
+             * streaming request counter
+             */
+            uint64_t streaming_requests;
         } events;
     } http2;
 

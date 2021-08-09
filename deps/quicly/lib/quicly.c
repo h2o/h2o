@@ -357,7 +357,7 @@ struct st_quicly_conn_t {
         ptls_t *tls;
         ptls_handshake_properties_t handshake_properties;
         struct {
-            ptls_raw_extension_t ext[2];
+            ptls_raw_extension_t ext[3];
             ptls_buffer_t buf;
         } transport_params;
     } crypto;
@@ -2264,9 +2264,12 @@ int quicly_connect(quicly_conn_t **_conn, quicly_context_t *ctx, const char *ser
              NULL, NULL, conn->super.ctx->expand_client_hello ? conn->super.ctx->initial_egress_max_udp_payload_size : 0)) != 0)
         goto Exit;
     conn->crypto.transport_params.ext[0] =
-        (ptls_raw_extension_t){get_transport_parameters_extension_id(conn->super.version),
+        (ptls_raw_extension_t){QUICLY_TLS_EXTENSION_TYPE_TRANSPORT_PARAMETERS_FINAL,
                                {conn->crypto.transport_params.buf.base, conn->crypto.transport_params.buf.off}};
-    conn->crypto.transport_params.ext[1] = (ptls_raw_extension_t){UINT16_MAX};
+    conn->crypto.transport_params.ext[1] =
+        (ptls_raw_extension_t){QUICLY_TLS_EXTENSION_TYPE_TRANSPORT_PARAMETERS_DRAFT,
+                               {conn->crypto.transport_params.buf.base, conn->crypto.transport_params.buf.off}};
+    conn->crypto.transport_params.ext[2] = (ptls_raw_extension_t){UINT16_MAX};
     conn->crypto.handshake_properties.additional_extensions = conn->crypto.transport_params.ext;
     conn->crypto.handshake_properties.collected_extensions = client_collected_extensions;
 
@@ -3349,6 +3352,8 @@ static int send_control_frames_of_stream(quicly_stream_t *stream, quicly_send_co
             return ret;
         s->dst = quicly_encode_stop_sending_frame(s->dst, stream->stream_id, stream->_send_aux.stop_sending.error_code);
         ++stream->conn->super.stats.num_frames_sent.stop_sending;
+        QUICLY_PROBE(STOP_SENDING_SEND, stream->conn, stream->conn->stash.now, stream->stream_id,
+                     stream->_send_aux.stop_sending.error_code);
     }
 
     /* send MAX_STREAM_DATA if necessary */
@@ -3377,6 +3382,8 @@ static int send_control_frames_of_stream(quicly_stream_t *stream, quicly_send_co
         s->dst = quicly_encode_reset_stream_frame(s->dst, stream->stream_id, stream->_send_aux.reset_stream.error_code,
                                                   stream->sendstate.size_inflight);
         ++stream->conn->super.stats.num_frames_sent.reset_stream;
+        QUICLY_PROBE(RESET_STREAM_SEND, stream->conn, stream->conn->stash.now, stream->stream_id,
+                     stream->_send_aux.reset_stream.error_code, stream->sendstate.size_inflight);
     }
 
     /* send STREAM_DATA_BLOCKED if necessary */
@@ -3572,6 +3579,10 @@ UpdateState:
     } else {
         ++stream->conn->super.stats.num_frames_sent.stream;
     }
+    stream->conn->super.stats.num_bytes.stream_data_sent += end_off - off;
+    if (off < stream->sendstate.size_inflight)
+        stream->conn->super.stats.num_bytes.stream_data_resent +=
+            (stream->sendstate.size_inflight < end_off ? stream->sendstate.size_inflight : end_off) - off;
     QUICLY_PROBE(STREAM_SEND, stream->conn, stream->conn->stash.now, stream, off, end_off - off, is_fin);
     QUICLY_PROBE(QUICTRACE_SEND_STREAM, stream->conn, stream->conn->stash.now, stream, off, end_off - off, is_fin);
     /* update sendstate (and also MAX_DATA counter) */
@@ -3658,6 +3669,7 @@ static void on_loss_detected(quicly_loss_t *loss, const quicly_sent_packet_t *lo
     ++conn->super.stats.num_packets.lost;
     if (is_time_threshold)
         ++conn->super.stats.num_packets.lost_time_threshold;
+    conn->super.stats.num_bytes.lost += lost_packet->cc_bytes_in_flight;
     conn->egress.cc.type->cc_on_lost(&conn->egress.cc, &conn->egress.loss, lost_packet->cc_bytes_in_flight,
                                      lost_packet->packet_number, conn->egress.packet_number, conn->stash.now,
                                      conn->egress.max_udp_payload_size);
@@ -4744,6 +4756,7 @@ static int handle_reset_stream_frame(quicly_conn_t *conn, struct st_quicly_handl
 
     if ((ret = quicly_decode_reset_stream_frame(&state->src, state->end, &frame)) != 0)
         return ret;
+    QUICLY_PROBE(RESET_STREAM_RECEIVE, conn, conn->stash.now, frame.stream_id, frame.app_error_code, frame.final_size);
 
     if ((ret = quicly_get_or_open_stream(conn, frame.stream_id, &stream)) != 0 || stream == NULL)
         return ret;
@@ -5035,6 +5048,7 @@ static int handle_stop_sending_frame(quicly_conn_t *conn, struct st_quicly_handl
 
     if ((ret = quicly_decode_stop_sending_frame(&state->src, state->end, &frame)) != 0)
         return ret;
+    QUICLY_PROBE(STOP_SENDING_RECEIVE, conn, conn->stash.now, frame.stream_id, frame.app_error_code);
 
     if ((ret = quicly_get_or_open_stream(conn, frame.stream_id, &stream)) != 0 || stream == NULL)
         return ret;
@@ -5077,7 +5091,6 @@ static int negotiate_using_version(quicly_conn_t *conn, uint32_t version)
     /* set selected version, update transport parameters extension ID */
     conn->super.version = version;
     QUICLY_PROBE(VERSION_SWITCH, conn, conn->stash.now, version);
-    conn->crypto.transport_params.ext[0].type = get_transport_parameters_extension_id(version);
 
     /* replace initial keys */
     if ((ret = reinstall_initial_encryption(conn, PTLS_ERROR_LIBRARY)) != 0)
