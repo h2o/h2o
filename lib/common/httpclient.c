@@ -122,10 +122,13 @@ static void on_pool_connect(h2o_socket_t *sock, const char *errstr, void *data, 
     }
 
     h2o_iovec_t alpn_proto;
-    if (sock->ssl == NULL || (alpn_proto = h2o_socket_ssl_get_selected_protocol(sock)).len == 0) {
-        /* 100% means prior knowledge connect, force h2 */
-        if (client->ctx->protocol_selector.ratio.http2 == 100)
-            goto ForceH2;
+    if (client->ctx->force_cleartext_http2 && sock->ssl == NULL && client->ctx->protocol_selector.ratio.http2 == 100) {
+        /* The client has prior knowledge and wants to use http2 without
+         * discovery or upgrade. Make sure that we're using a 100%
+         * H2 context, to avoid having this connection reused for H1
+         * accidentaly */
+        goto ForceH2;
+    } else if (sock->ssl == NULL || (alpn_proto = h2o_socket_ssl_get_selected_protocol(sock)).len == 0) {
         h2o_httpclient__h1_on_connect(client, sock, origin);
     } else {
         if (h2o_memis(alpn_proto.base, alpn_proto.len, H2O_STRLIT("h2"))) {
