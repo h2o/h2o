@@ -1,10 +1,10 @@
 Proc.new do |env|
   rtt = nil
-  unless env["h2o.get_rtt_estimate"].nil?
-    rtt = env["h2o.get_rtt_estimate"].call()
+  unless env["h2o.get_rtt"].nil?
+    rtt = env["h2o.get_rtt"].call()
     while rtt.nil? do
       sleep(0.1)
-      rtt = env["h2o.get_rtt_estimate"].call()
+      rtt = env["h2o.get_rtt"].call()
     end
   end
   if rtt.nil?

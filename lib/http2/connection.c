@@ -1470,7 +1470,7 @@ static int skip_tracing(h2o_conn_t *_conn)
     return h2o_socket_skip_tracing(conn->sock);
 }
 
-static int64_t get_rtt_estimate(h2o_conn_t *_conn)
+static int64_t get_rtt(h2o_conn_t *_conn)
 {
     struct st_h2o_http2_conn_t *conn = (void *)_conn;
     if (conn->timestamps.settings_sent_at.tv_sec != 0 && conn->timestamps.settings_acked_at.tv_sec != 0) {
@@ -1582,7 +1582,7 @@ static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_hostconf_t **hosts,
         .skip_tracing = skip_tracing,
         .push_path = push_path,
         .get_debug_state = h2o_http2_get_debug_state,
-        .get_rtt_estimate = get_rtt_estimate,
+        .get_rtt = get_rtt,
         .log_ = {{
             .congestion_control =
                 {

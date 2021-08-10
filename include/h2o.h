@@ -998,7 +998,7 @@ typedef struct st_h2o_conn_callbacks_t {
      * when a SETTINGS-ack was received is used as the estimate. The callback will return a negative value if the information is not
      * yet available.
      */
-    int64_t (*get_rtt_estimate)(h2o_conn_t *conn);
+    int64_t (*get_rtt)(h2o_conn_t *conn);
     /**
      * logging callbacks (all of them are optional)
      */
