@@ -989,9 +989,16 @@ typedef struct st_h2o_conn_callbacks_t {
      */
     uint32_t (*num_reqs_inflight)(h2o_conn_t *conn);
     /**
-     * optional callbacks that returns the tracer regsitry
+     * optional callbacks that return the tracer registry
      */
     quicly_tracer_t *(*get_tracer)(h2o_conn_t *conn);
+    /**
+     * An optional callback reporting an estimate of the connection round-trip
+     * time in microseconds obtained by timing the acknowledgement of our
+     * settings frame in HTTP/2.  Only supported for H2.  The callback will
+     * return a negative value if the information is not yet available.
+     */
+    int64_t (*get_rtt_estimate)(h2o_conn_t *conn);
     /**
      * logging callbacks (all of them are optional)
      */
