@@ -992,7 +992,7 @@ static int handle_settings_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *fram
             return H2O_HTTP2_ERROR_FRAME_SIZE;
         }
         if (conn->timestamps.settings_acked_at.tv_sec == 0 && conn->timestamps.settings_sent_at.tv_sec != 0) {
-            gettimeofday(&conn->timestamps.settings_acked_at, NULL);
+            conn->timestamps.settings_acked_at = h2o_gettimeofday(conn->super.ctx->loop);
         }
     } else {
         uint32_t prev_initial_window_size = conn->peer_settings.initial_window_size;
@@ -1173,7 +1173,7 @@ static ssize_t expect_preface(h2o_http2_conn_t *conn, const uint8_t *src, size_t
             h2o_http2_encode_origin_frame(&conn->_write.buf, *conn->http2_origin_frame);
         }
         if (conn->timestamps.settings_sent_at.tv_sec == 0) {
-            gettimeofday(&conn->timestamps.settings_sent_at, NULL);
+            conn->timestamps.settings_sent_at = h2o_gettimeofday(conn->super.ctx->loop);
         }
         h2o_http2_conn_request_write(conn);
     }
