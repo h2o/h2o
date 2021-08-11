@@ -201,6 +201,10 @@ struct st_h2o_http2_conn_t {
         h2o_http2_stream_t *streams[HTTP2_CLOSED_STREAM_PRIORITIES];
         size_t next_slot;
     } _recently_closed_streams;
+    struct {
+        struct timeval settings_sent_at;
+        struct timeval settings_acked_at;
+    } timestamps;
 };
 
 /* connection */
