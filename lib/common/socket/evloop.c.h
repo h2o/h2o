@@ -127,7 +127,7 @@ static const char *on_read_core(int fd, h2o_buffer_t **input, size_t max_bytes)
             /* memory allocation failed */
             return h2o_socket_error_out_of_memory;
         }
-        size_t read_size = buf.len <= INT_MAX / 2 ? buf.len : INT_MAX / 2 + 1;
+        size_t read_size = buf.len;
         if (read_size > max_bytes)
             read_size = max_bytes;
         while ((rret = read(fd, buf.base, read_size)) == -1 && errno == EINTR)
@@ -489,6 +489,8 @@ h2o_socket_t *h2o_socket_connect(h2o_loop_t *loop, struct sockaddr *addr, sockle
 void h2o_evloop_socket_set_max_read_size(h2o_socket_t *_sock, size_t max_size)
 {
     struct st_h2o_evloop_socket_t *sock = (void *)_sock;
+    if (max_size > INT_MAX / 2 + 1)
+        max_size = INT_MAX / 2 + 1;
     sock->max_read_size = max_size;
 }
 
