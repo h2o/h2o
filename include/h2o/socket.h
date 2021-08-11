@@ -399,9 +399,6 @@ int h2o_socket_ebpf_init_key_raw(h2o_ebpf_map_key_t *key, int sock_type, struct 
  */
 int h2o_socket_ebpf_init_key(h2o_ebpf_map_key_t *key, void *sock);
 
-void h2o_socket__write_pending(h2o_socket_t *sock);
-void h2o_socket__write_on_complete(h2o_socket_t *sock, int status);
-
 /* inline defs */
 
 inline int h2o_socket_is_writing(h2o_socket_t *sock)
