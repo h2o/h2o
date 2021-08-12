@@ -738,7 +738,12 @@ static void proceed_request(h2o_req_t *req, size_t written, h2o_send_state_t sen
     if (send_state == H2O_SEND_STATE_ERROR) {
         finish_body_streaming(stream);
         if (conn->state < H2O_HTTP2_CONN_STATE_IS_CLOSING) {
+            /* Send error and close. State disposal is delayed so as to avoid freeing `req` within this function, which might
+             * trigger the destruction of the generator being the caller. */
             stream_send_error(conn, stream->stream_id, H2O_HTTP2_ERROR_STREAM_CLOSED);
+            h2o_http2_scheduler_deactivate(&stream->_scheduler);
+            if (!h2o_linklist_is_linked(&stream->_link))
+                h2o_linklist_insert(&conn->_write.streams_to_proceed, &stream->_link);
             h2o_http2_stream_reset(conn, stream);
         }
         return;
