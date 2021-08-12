@@ -35,8 +35,13 @@ struct st_connect_handler_t {
     } acl;
 };
 
-#define MAX_CONNECT_RETRIES 3
+#define MAX_CONNECT_RETRIES 24
 #define UDP_CHUNK_OVERHEAD 3
+
+#define HEV2_RES_DELAY_MS 50
+#define HEV2_CONN_DELAY_MS 250
+
+enum st_hev2_state { HEV2_INIT, HEV2_HAVE_IPV4, HEV2_HAVE_IPV6, HEV2_HAVE_BOTH, HEV2_CONN_CYCLE, HEV2_FIN };
 
 struct st_server_address_t {
     struct sockaddr *sa;
@@ -47,12 +52,20 @@ struct st_connect_generator_t {
     h2o_generator_t super;
     struct st_connect_handler_t *handler;
     h2o_req_t *src_req;
-    h2o_hostinfo_getaddr_req_t *getaddr_req;
+
+    h2o_hostinfo_getaddr_req_t *getaddr_v4_req;
+    h2o_hostinfo_getaddr_req_t *getaddr_v6_req;
+    const char *hev2_conn_err;
+    unsigned hev2_addrs : 2;
+    unsigned hev2_state : 5;
+    unsigned hev2_pick_v4 : 1;
+    h2o_timer_t hev2_delay;
+
     h2o_socket_t *sock;
     struct {
         struct st_server_address_t list[MAX_CONNECT_RETRIES];
         size_t size;
-        size_t next;
+        size_t used;
     } server_addresses;
     h2o_timer_t timeout;
     unsigned is_tcp : 1;
@@ -146,10 +159,15 @@ static h2o_loop_t *get_loop(struct st_connect_generator_t *self)
 
 static void dispose_generator(struct st_connect_generator_t *self)
 {
-    if (self->getaddr_req != NULL) {
-        h2o_hostinfo_getaddr_cancel(self->getaddr_req);
-        self->getaddr_req = NULL;
+    if (self->getaddr_v4_req != NULL) {
+        h2o_hostinfo_getaddr_cancel(self->getaddr_v4_req);
+        self->getaddr_v4_req = NULL;
     }
+    if (self->getaddr_v6_req != NULL) {
+        h2o_hostinfo_getaddr_cancel(self->getaddr_v6_req);
+        self->getaddr_v6_req = NULL;
+    }
+
     if (self->sock != NULL) {
         h2o_socket_close(self->sock);
         self->sock = NULL;
@@ -166,6 +184,7 @@ static void dispose_generator(struct st_connect_generator_t *self)
         h2o_timer_unlink(&self->udp.egress.delayed);
     }
     h2o_timer_unlink(&self->timeout);
+    h2o_timer_unlink(&self->hev2_delay);
 }
 
 static void close_socket(struct st_connect_generator_t *self)
@@ -184,6 +203,8 @@ static void close_readwrite(struct st_connect_generator_t *self)
         close_socket(self);
     if (h2o_timer_is_linked(&self->timeout))
         h2o_timer_unlink(&self->timeout);
+    if (h2o_timer_is_linked(&self->hev2_delay))
+        h2o_timer_unlink(&self->hev2_delay);
 
     /* immediately notify read-close if necessary, setting up delayed task to for destroying other items; the timer is reset if
      * `h2o_send` indirectly invokes `dispose_generator`. */
@@ -219,7 +240,18 @@ static void reset_io_timeout(struct st_connect_generator_t *self)
 
 static void on_connect_error(struct st_connect_generator_t *self, const char *errstr)
 {
+    if (self->getaddr_v4_req != NULL) {
+        h2o_hostinfo_getaddr_cancel(self->getaddr_v4_req);
+        self->getaddr_v4_req = NULL;
+    }
+    if (self->getaddr_v6_req != NULL) {
+        h2o_hostinfo_getaddr_cancel(self->getaddr_v6_req);
+        self->getaddr_v6_req = NULL;
+    }
+
     h2o_timer_unlink(&self->timeout);
+    h2o_timer_unlink(&self->hev2_delay);
+
     if (self->sock != NULL) {
         h2o_socket_close(self->sock);
         self->sock = NULL;
@@ -238,62 +270,164 @@ static void on_connect_timeout(h2o_timer_t *entry)
     on_connect_error(self, h2o_httpclient_error_io_timeout);
 }
 
+static void on_hev2_conn_cycle(h2o_timer_t *entry)
+{
+    struct st_connect_generator_t *self = H2O_STRUCT_FROM_MEMBER(struct st_connect_generator_t, hev2_delay, entry);
+    if (self->hev2_state == HEV2_FIN)
+        return;
+    if (self->server_addresses.used == self->server_addresses.size) {
+        if (self->hev2_addrs == HEV2_HAVE_BOTH) {
+            /* fallback to default connect timeout if conn has not yet failed */
+            if (self->hev2_conn_err == NULL) {
+                if (h2o_timer_is_linked(&self->timeout))
+                    return;
+                else
+                    self->hev2_conn_err = h2o_socket_error_conn_timed_out;
+            }
+            record_socket_error(self, self->hev2_conn_err);
+            on_connect_error(self, self->hev2_conn_err);
+            return;
+        } else if (self->hev2_addrs < HEV2_HAVE_BOTH) {
+            /* wait for other getaddr call */
+            self->hev2_delay.cb = on_hev2_conn_cycle;
+            h2o_timer_unlink(&self->hev2_delay);
+            h2o_timer_link(get_loop(self), HEV2_CONN_DELAY_MS, &self->hev2_delay);
+            return;
+        }
+    }
+    if (self->sock) {
+        h2o_socket_close(self->sock);
+        self->sock = NULL;
+    }
+    h2o_timer_unlink(&self->hev2_delay);
+    h2o_timer_link(get_loop(self), HEV2_CONN_DELAY_MS, &self->hev2_delay);
+    self->hev2_conn_err = NULL;
+
+    if (self->is_tcp) {
+        tcp_start_connect(self);
+    } else {
+        udp_connect(self);
+    }
+}
+
+static void on_hev2_res_delay(h2o_timer_t *entry)
+{
+    struct st_connect_generator_t *self = H2O_STRUCT_FROM_MEMBER(struct st_connect_generator_t, hev2_delay, entry);
+    self->hev2_state = HEV2_CONN_CYCLE;
+    self->hev2_delay.cb = on_hev2_conn_cycle;
+    on_hev2_conn_cycle(&self->hev2_delay);
+}
+
 static void store_server_addresses(struct st_connect_generator_t *self, struct addrinfo *res)
 {
     /* copy first entries in the response; ordering of addresses being returned by `getaddrinfo` is respected, as ordinary clients
      * (incl. forward proxy) are not expected to distribute the load among the addresses being returned. */
-    do {
+    while (self->server_addresses.size < PTLS_ELEMENTSOF(self->server_addresses.list) && res != NULL) {
         struct st_server_address_t *dst = self->server_addresses.list + self->server_addresses.size++;
         dst->sa = h2o_mem_alloc_pool_aligned(&self->src_req->pool, H2O_ALIGNOF(struct sockaddr), res->ai_addrlen);
         memcpy(dst->sa, res->ai_addr, res->ai_addrlen);
         dst->salen = res->ai_addrlen;
-    } while (self->server_addresses.size < PTLS_ELEMENTSOF(self->server_addresses.list) && (res = res->ai_next) != NULL);
+        res = res->ai_next;
+    }
 }
 
 static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errstr, struct addrinfo *res, void *_self)
 {
     struct st_connect_generator_t *self = _self;
+    if (getaddr_req == self->getaddr_v4_req) {
+        self->getaddr_v4_req = NULL;
+        self->hev2_addrs |= HEV2_HAVE_IPV4;
+    } else if (getaddr_req == self->getaddr_v6_req) {
+        self->getaddr_v6_req = NULL;
+        self->hev2_addrs |= HEV2_HAVE_IPV6;
+    }
+    if (errstr != NULL && self->hev2_addrs < HEV2_HAVE_BOTH)
+        return;
 
-    assert(getaddr_req == self->getaddr_req);
-    self->getaddr_req = NULL;
-
-    if (errstr != NULL) {
-        const char *rcode;
-        if (errstr == h2o_hostinfo_error_nxdomain)
-            rcode = "NXDOMAIN";
-        else if (errstr == h2o_hostinfo_error_nodata)
-            rcode = "NODATA";
-        else if (errstr == h2o_hostinfo_error_refused)
-            rcode = "REFUSED";
-        else if (errstr == h2o_hostinfo_error_servfail)
-            rcode = "SERVFAIL";
-        else
-            rcode = NULL;
-        record_error(self, "dns_error", errstr, rcode);
-        on_connect_error(self, errstr);
+    if (self->hev2_addrs == HEV2_HAVE_BOTH && errstr != NULL) {
+        if (self->server_addresses.size == 0) {
+            const char *rcode;
+            if (errstr == h2o_hostinfo_error_nxdomain)
+                rcode = "NXDOMAIN";
+            else if (errstr == h2o_hostinfo_error_nodata)
+                rcode = "NODATA";
+            else if (errstr == h2o_hostinfo_error_refused)
+                rcode = "REFUSED";
+            else if (errstr == h2o_hostinfo_error_servfail)
+                rcode = "SERVFAIL";
+            else
+                rcode = NULL;
+            record_error(self, "dns_error", errstr, rcode);
+            on_connect_error(self, errstr);
+        }
         return;
     }
 
-    store_server_addresses(self, res);
-
     if (self->is_tcp) {
         assert(res->ai_socktype == SOCK_STREAM);
-        tcp_start_connect(self);
     } else {
         assert(res->ai_socktype == SOCK_DGRAM);
-        udp_connect(self);
     }
+    store_server_addresses(self, res);
+
+    if ((self->hev2_addrs & HEV2_HAVE_IPV6) && self->hev2_state < HEV2_CONN_CYCLE) {
+        on_hev2_res_delay(&self->hev2_delay);
+    } else if (self->hev2_state < HEV2_CONN_CYCLE) {
+        self->hev2_delay.cb = on_hev2_res_delay;
+        h2o_timer_link(get_loop(self), HEV2_RES_DELAY_MS, &self->hev2_delay);
+    }
+}
+
+static struct st_server_address_t *pick_and_swap(struct st_connect_generator_t *self, int idx)
+{
+    struct st_server_address_t *server_address = NULL;
+
+    if (idx != self->server_addresses.used) {
+        struct st_server_address_t swap = self->server_addresses.list[idx];
+        self->server_addresses.list[idx] = self->server_addresses.list[self->server_addresses.used];
+        self->server_addresses.list[self->server_addresses.used] = swap;
+    }
+    server_address = &self->server_addresses.list[self->server_addresses.used];
+    self->server_addresses.used++;
+    self->hev2_pick_v4 = !self->hev2_pick_v4;
+    return server_address;
 }
 
 static struct st_server_address_t *grab_connect_address(struct st_connect_generator_t *self)
 {
-    struct st_server_address_t *server_address = self->server_addresses.list + self->server_addresses.next++;
+    struct st_server_address_t *server_address = NULL;
+
+    for (int i = self->server_addresses.used; i < self->server_addresses.size; i++) {
+        if (self->hev2_pick_v4 && self->server_addresses.list[i].sa->sa_family == AF_INET)
+            server_address = pick_and_swap(self, i);
+        else if (!self->hev2_pick_v4 && self->server_addresses.list[i].sa->sa_family == AF_INET6)
+            server_address = pick_and_swap(self, i);
+    }
+    if (server_address == NULL && self->server_addresses.used < self->server_addresses.size) {
+        server_address = &self->server_addresses.list[self->server_addresses.used];
+        self->server_addresses.used++;
+    }
+
+    if (server_address == NULL) {
+        self->hev2_conn_err = h2o_socket_error_conn_fail;
+        on_hev2_conn_cycle(&self->hev2_delay);
+        return NULL;
+    }
 
     if (h2o_connect_lookup_acl(self->handler->acl.entries, self->handler->acl.count, server_address->sa))
         return server_address;
 
+    if (self->getaddr_v4_req != NULL) {
+        h2o_hostinfo_getaddr_cancel(self->getaddr_v4_req);
+        self->getaddr_v4_req = NULL;
+    }
+    if (self->getaddr_v6_req != NULL) {
+        h2o_hostinfo_getaddr_cancel(self->getaddr_v6_req);
+        self->getaddr_v6_req = NULL;
+    }
     /* cannot connect, send error */
     h2o_timer_unlink(&self->timeout);
+    h2o_timer_unlink(&self->hev2_delay);
     record_error(self, "destination_ip_prohibited", NULL, NULL);
     h2o_send_error_403(self->src_req, "Access Forbidden", "Access Forbidden", H2O_SEND_ERROR_KEEP_HEADERS);
     return NULL;
@@ -388,17 +522,20 @@ static void tcp_on_connect(h2o_socket_t *_sock, const char *err)
     assert(self->sock == _sock);
 
     if (err != NULL) {
-        if (self->server_addresses.next == self->server_addresses.size) {
-            record_socket_error(self, err);
-            on_connect_error(self, err);
-            return;
-        }
-        h2o_socket_close(self->sock);
-        self->sock = NULL;
-        tcp_start_connect(self);
+        self->hev2_conn_err = err;
+        on_hev2_conn_cycle(&self->hev2_delay);
         return;
     }
 
+    if (self->getaddr_v4_req != NULL) {
+        h2o_hostinfo_getaddr_cancel(self->getaddr_v4_req);
+        self->getaddr_v4_req = NULL;
+    }
+    if (self->getaddr_v6_req != NULL) {
+        h2o_hostinfo_getaddr_cancel(self->getaddr_v6_req);
+        self->getaddr_v6_req = NULL;
+    }
+    self->hev2_state = HEV2_FIN;
     self->timeout.cb = on_io_timeout;
     reset_io_timeout(self);
 
@@ -414,25 +551,21 @@ static void tcp_on_connect(h2o_socket_t *_sock, const char *err)
 
 static void tcp_start_connect(struct st_connect_generator_t *self)
 {
-    /* repeat connect(pop_front(address_list)) until we run out of the list */
     const char *err = NULL;
-    do {
-        struct st_server_address_t *server_address;
-        if ((server_address = grab_connect_address(self)) == NULL)
-            return;
-        if ((self->sock = h2o_socket_connect(get_loop(self), server_address->sa, server_address->salen, tcp_on_connect, &err)) != NULL) {
-            self->sock->data = self;
+    struct st_server_address_t *server_address;
+    if ((server_address = grab_connect_address(self)) == NULL)
+        return;
+    if ((self->sock = h2o_socket_connect(get_loop(self), server_address->sa, server_address->salen, tcp_on_connect, &err)) !=
+        NULL) {
+        self->sock->data = self;
 #if !H2O_USE_LIBUV
-            /* This is the maximum amount of data that will be buffered within userspace. It is hard-coded to 64KB to balance
-             * throughput and latency, and because we do not expect the need to change the value. */
-            h2o_evloop_socket_set_max_read_size(self->sock, 64 * 1024);
+        /* This is the maximum amount of data that will be buffered within userspace. It is hard-coded to 64KB to balance
+         * throughput and latency, and because we do not expect the need to change the value. */
+        h2o_evloop_socket_set_max_read_size(self->sock, 64 * 1024);
 #endif
-            return;
-        }
-    } while (self->server_addresses.next < self->server_addresses.size);
-
-    record_socket_error(self, err);
-    on_connect_error(self, h2o_socket_error_conn_fail);
+        return;
+    }
+    on_hev2_conn_cycle(&self->hev2_delay);
 }
 
 static h2o_iovec_t udp_get_next_chunk(const char *start, size_t len, size_t *to_consume, int *skip)
@@ -616,11 +749,19 @@ static void udp_connect(struct st_connect_generator_t *self)
             err = h2o_socket_get_error_string(errno, err);
             close(fd);
         }
-        record_socket_error(self, err);
-        on_connect_error(self, "connection failure");
+        on_hev2_conn_cycle(&self->hev2_delay);
         return;
     }
 
+    if (self->getaddr_v4_req != NULL) {
+        h2o_hostinfo_getaddr_cancel(self->getaddr_v4_req);
+        self->getaddr_v4_req = NULL;
+    }
+    if (self->getaddr_v6_req != NULL) {
+        h2o_hostinfo_getaddr_cancel(self->getaddr_v6_req);
+        self->getaddr_v6_req = NULL;
+    }
+    self->hev2_state = HEV2_FIN;
     self->timeout.cb = on_io_timeout;
     reset_io_timeout(self);
 
@@ -703,9 +844,16 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
 
     char port_str[sizeof(H2O_UINT16_LONGEST_STR)];
     int port_strlen = sprintf(port_str, "%" PRIu16, port);
-    self->getaddr_req = h2o_hostinfo_getaddr(&self->src_req->conn->ctx->receivers.hostinfo_getaddr, host,
-                                             h2o_iovec_init(port_str, port_strlen), AF_UNSPEC, is_tcp ? SOCK_STREAM : SOCK_DGRAM,
-                                             is_tcp ? IPPROTO_TCP : IPPROTO_UDP, AI_ADDRCONFIG | AI_NUMERICSERV, on_getaddr, self);
+
+    self->getaddr_v6_req =
+        h2o_hostinfo_getaddr(&self->src_req->conn->ctx->receivers.hostinfo_getaddr, host, h2o_iovec_init(port_str, port_strlen),
+                             AF_INET6, is_tcp ? SOCK_STREAM : SOCK_DGRAM, is_tcp ? IPPROTO_TCP : IPPROTO_UDP,
+                             AI_ADDRCONFIG | AI_NUMERICSERV, on_getaddr, self);
+
+    self->getaddr_v4_req =
+        h2o_hostinfo_getaddr(&self->src_req->conn->ctx->receivers.hostinfo_getaddr, host, h2o_iovec_init(port_str, port_strlen),
+                             AF_INET, is_tcp ? SOCK_STREAM : SOCK_DGRAM, is_tcp ? IPPROTO_TCP : IPPROTO_UDP,
+                             AI_ADDRCONFIG | AI_NUMERICSERV, on_getaddr, self);
 
     return 0;
 }
