@@ -13,7 +13,8 @@ DOCKER_RUN_OPTS=--privileged \
 	-it
 
 ALL:
-	docker run $(DOCKER_RUN_OPTS) $(CONTAINER_NAME) make -f $(SRC_DIR)/misc/docker-ci/check.mk _check
+	docker run $(DOCKER_RUN_OPTS) $(CONTAINER_NAME) make -f $(SRC_DIR)/misc/docker-ci/check.mk _check \
+		CMAKE_ARGS=$(CMAKE_ARGS)
 
 fuzz:
 	docker run $(DOCKER_RUN_OPTS) $(CONTAINER_NAME) make -f $(SRC_DIR)/misc/docker-ci/check.mk _fuzz
@@ -41,8 +42,8 @@ _check:
 
 _do-check:
 	cmake $(CMAKE_ARGS) -H$(SRC_DIR) -B.
-	make all
-	make check
+	cmake --build .
+	cmake --build . --target check
 
 _fuzz:
 	$(FUZZ_ASAN) CC=clang CXX=clang++ $(MAKE) -f $(CHECK_MK) _check CMAKE_ARGS=-DBUILD_FUZZER=ON
