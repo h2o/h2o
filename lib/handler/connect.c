@@ -158,8 +158,9 @@ static h2o_loop_t *get_loop(struct st_connect_generator_t *self)
     return self->src_req->conn->ctx->loop;
 }
 
-static void cancel_resolvers(struct st_connect_generator_t *self)
+static void cancel_hev2(struct st_connect_generator_t *self)
 {
+    self->hev2_state = HEV2_FIN;
     if (self->getaddr_v4_req != NULL) {
         h2o_hostinfo_getaddr_cancel(self->getaddr_v4_req);
         self->getaddr_v4_req = NULL;
@@ -168,11 +169,13 @@ static void cancel_resolvers(struct st_connect_generator_t *self)
         h2o_hostinfo_getaddr_cancel(self->getaddr_v6_req);
         self->getaddr_v6_req = NULL;
     }
+    h2o_timer_unlink(&self->hev2_delay);
+    self->hev2_delay.cb = NULL;
 }
 
 static void dispose_generator(struct st_connect_generator_t *self)
 {
-    cancel_resolvers(self);
+    cancel_hev2(self);
     if (self->sock != NULL) {
         h2o_socket_close(self->sock);
         self->sock = NULL;
@@ -189,7 +192,6 @@ static void dispose_generator(struct st_connect_generator_t *self)
         h2o_timer_unlink(&self->udp.egress.delayed);
     }
     h2o_timer_unlink(&self->timeout);
-    h2o_timer_unlink(&self->hev2_delay);
 }
 
 static void close_socket(struct st_connect_generator_t *self)
@@ -208,8 +210,6 @@ static void close_readwrite(struct st_connect_generator_t *self)
         close_socket(self);
     if (h2o_timer_is_linked(&self->timeout))
         h2o_timer_unlink(&self->timeout);
-    if (h2o_timer_is_linked(&self->hev2_delay))
-        h2o_timer_unlink(&self->hev2_delay);
 
     /* immediately notify read-close if necessary, setting up delayed task to for destroying other items; the timer is reset if
      * `h2o_send` indirectly invokes `dispose_generator`. */
@@ -245,9 +245,8 @@ static void reset_io_timeout(struct st_connect_generator_t *self)
 
 static void send_connect_error(struct st_connect_generator_t *self, const char *msg, const char *errstr)
 {
-    cancel_resolvers(self);
+    cancel_hev2(self);
     h2o_timer_unlink(&self->timeout);
-    h2o_timer_unlink(&self->hev2_delay);
 
     if (self->sock != NULL) {
         h2o_socket_close(self->sock);
@@ -525,8 +524,7 @@ static void tcp_on_connect(h2o_socket_t *_sock, const char *err)
         return;
     }
 
-    cancel_resolvers(self);
-    self->hev2_state = HEV2_FIN;
+    cancel_hev2(self);
     self->timeout.cb = on_io_timeout;
     reset_io_timeout(self);
 
@@ -744,8 +742,7 @@ static void udp_connect(struct st_connect_generator_t *self)
         return;
     }
 
-    cancel_resolvers(self);
-    self->hev2_state = HEV2_FIN;
+    cancel_hev2(self);
     self->timeout.cb = on_io_timeout;
     reset_io_timeout(self);
 
