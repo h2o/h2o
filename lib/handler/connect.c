@@ -42,6 +42,7 @@ struct st_connect_handler_t {
 #define HEV2_CONN_DELAY_MS 250
 
 enum st_hev2_state { HEV2_INIT, HEV2_HAVE_IPV4, HEV2_HAVE_IPV6, HEV2_HAVE_BOTH, HEV2_CONN_CYCLE, HEV2_FIN };
+static const char destination_ip_prohibited[] = "destination_ip_prohibited";
 
 struct st_server_address_t {
     struct sockaddr *sa;
@@ -242,7 +243,7 @@ static void reset_io_timeout(struct st_connect_generator_t *self)
     }
 }
 
-static void on_connect_error(struct st_connect_generator_t *self, const char *errstr)
+static void send_connect_error(struct st_connect_generator_t *self, const char *msg, const char *errstr)
 {
     cancel_resolvers(self);
     h2o_timer_unlink(&self->timeout);
@@ -252,7 +253,13 @@ static void on_connect_error(struct st_connect_generator_t *self, const char *er
         h2o_socket_close(self->sock);
         self->sock = NULL;
     }
-    h2o_send_error_502(self->src_req, "Gateway Error", errstr, H2O_SEND_ERROR_KEEP_HEADERS);
+    //FIXME prohibited should be 403?
+    h2o_send_error_502(self->src_req, msg, errstr, H2O_SEND_ERROR_KEEP_HEADERS);
+}
+
+static void on_connect_error(struct st_connect_generator_t *self, const char *errstr)
+{
+    send_connect_error(self, "Gateway Error", errstr);
 }
 
 static void on_connect_timeout(h2o_timer_t *entry)
@@ -280,8 +287,13 @@ static void on_hev2_conn_cycle(h2o_timer_t *entry)
                 else
                     self->hev2_conn_err = h2o_socket_error_conn_timed_out;
             }
-            record_socket_error(self, self->hev2_conn_err);
-            on_connect_error(self, self->hev2_conn_err);
+            if (self->hev2_conn_err == destination_ip_prohibited) {
+                record_error(self, destination_ip_prohibited, NULL, NULL);
+                send_connect_error(self, "Destination IP Prohibited", "Destination IP Prohibited");
+            } else {
+                record_socket_error(self, self->hev2_conn_err);
+                on_connect_error(self, self->hev2_conn_err);
+            }
             return;
         } else if (self->hev2_addrs < HEV2_HAVE_BOTH) {
             /* wait for other getaddr call */
@@ -413,12 +425,9 @@ static struct st_server_address_t *grab_connect_address(struct st_connect_genera
     if (h2o_connect_lookup_acl(self->handler->acl.entries, self->handler->acl.count, server_address->sa))
         return server_address;
 
-    /* cannot connect, send error */
-    cancel_resolvers(self);
-    h2o_timer_unlink(&self->timeout);
-    h2o_timer_unlink(&self->hev2_delay);
-    record_error(self, "destination_ip_prohibited", NULL, NULL);
-    h2o_send_error_403(self->src_req, "Access Forbidden", "Access Forbidden", H2O_SEND_ERROR_KEEP_HEADERS);
+    /* cycle on acl match */
+    self->hev2_conn_err = destination_ip_prohibited;
+    on_hev2_conn_cycle(&self->hev2_delay);
     return NULL;
 }
 
