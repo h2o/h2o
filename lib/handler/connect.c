@@ -157,7 +157,7 @@ static h2o_loop_t *get_loop(struct st_connect_generator_t *self)
     return self->src_req->conn->ctx->loop;
 }
 
-static void dispose_generator(struct st_connect_generator_t *self)
+static void cancel_resolvers(struct st_connect_generator_t *self)
 {
     if (self->getaddr_v4_req != NULL) {
         h2o_hostinfo_getaddr_cancel(self->getaddr_v4_req);
@@ -167,7 +167,11 @@ static void dispose_generator(struct st_connect_generator_t *self)
         h2o_hostinfo_getaddr_cancel(self->getaddr_v6_req);
         self->getaddr_v6_req = NULL;
     }
+}
 
+static void dispose_generator(struct st_connect_generator_t *self)
+{
+    cancel_resolvers(self);
     if (self->sock != NULL) {
         h2o_socket_close(self->sock);
         self->sock = NULL;
@@ -240,15 +244,7 @@ static void reset_io_timeout(struct st_connect_generator_t *self)
 
 static void on_connect_error(struct st_connect_generator_t *self, const char *errstr)
 {
-    if (self->getaddr_v4_req != NULL) {
-        h2o_hostinfo_getaddr_cancel(self->getaddr_v4_req);
-        self->getaddr_v4_req = NULL;
-    }
-    if (self->getaddr_v6_req != NULL) {
-        h2o_hostinfo_getaddr_cancel(self->getaddr_v6_req);
-        self->getaddr_v6_req = NULL;
-    }
-
+    cancel_resolvers(self);
     h2o_timer_unlink(&self->timeout);
     h2o_timer_unlink(&self->hev2_delay);
 
@@ -417,15 +413,8 @@ static struct st_server_address_t *grab_connect_address(struct st_connect_genera
     if (h2o_connect_lookup_acl(self->handler->acl.entries, self->handler->acl.count, server_address->sa))
         return server_address;
 
-    if (self->getaddr_v4_req != NULL) {
-        h2o_hostinfo_getaddr_cancel(self->getaddr_v4_req);
-        self->getaddr_v4_req = NULL;
-    }
-    if (self->getaddr_v6_req != NULL) {
-        h2o_hostinfo_getaddr_cancel(self->getaddr_v6_req);
-        self->getaddr_v6_req = NULL;
-    }
     /* cannot connect, send error */
+    cancel_resolvers(self);
     h2o_timer_unlink(&self->timeout);
     h2o_timer_unlink(&self->hev2_delay);
     record_error(self, "destination_ip_prohibited", NULL, NULL);
@@ -527,14 +516,7 @@ static void tcp_on_connect(h2o_socket_t *_sock, const char *err)
         return;
     }
 
-    if (self->getaddr_v4_req != NULL) {
-        h2o_hostinfo_getaddr_cancel(self->getaddr_v4_req);
-        self->getaddr_v4_req = NULL;
-    }
-    if (self->getaddr_v6_req != NULL) {
-        h2o_hostinfo_getaddr_cancel(self->getaddr_v6_req);
-        self->getaddr_v6_req = NULL;
-    }
+    cancel_resolvers(self);
     self->hev2_state = HEV2_FIN;
     self->timeout.cb = on_io_timeout;
     reset_io_timeout(self);
@@ -753,14 +735,7 @@ static void udp_connect(struct st_connect_generator_t *self)
         return;
     }
 
-    if (self->getaddr_v4_req != NULL) {
-        h2o_hostinfo_getaddr_cancel(self->getaddr_v4_req);
-        self->getaddr_v4_req = NULL;
-    }
-    if (self->getaddr_v6_req != NULL) {
-        h2o_hostinfo_getaddr_cancel(self->getaddr_v6_req);
-        self->getaddr_v6_req = NULL;
-    }
+    cancel_resolvers(self);
     self->hev2_state = HEV2_FIN;
     self->timeout.cb = on_io_timeout;
     reset_io_timeout(self);
