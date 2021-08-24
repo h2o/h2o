@@ -763,7 +763,7 @@ sub spawn_dns_server {
                         sleep($delays->{$qtype});
                     }
                     @ans = shuffle(@ans);
-                    return ( $rcode, \@ans, \@auth, \@add, $headermask, $optionmask );
+                    return ($rcode, \@ans, \@auth, \@add, $headermask, $optionmask);
                 },
                 Verbose      => 0
             ) || die "couldn't create nameserver object\n";
