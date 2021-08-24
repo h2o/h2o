@@ -741,8 +741,8 @@ sub spawn_dns_server {
             my $ns = Net::DNS::Nameserver->new(
                 LocalPort    => $dns_port,
                 ReplyHandler => sub {
-                    my ( $qname, $qclass, $qtype, $peerhost, $query, $conn ) = @_;
-                    my ( $rcode, @ans, @auth, @add);
+                    my ($qname, $qclass, $qtype, $peerhost, $query, $conn) = @_;
+                    my ($rcode, @ans, @auth, @add);
 
                     foreach (@$zone_rrs) {
                         my $rr = Net::DNS::RR->new($_);
