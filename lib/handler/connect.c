@@ -243,7 +243,7 @@ static void reset_io_timeout(struct st_connect_generator_t *self)
     }
 }
 
-static void send_connect_error(struct st_connect_generator_t *self, const char *msg, const char *errstr)
+static void send_connect_error(struct st_connect_generator_t *self, int code, const char *msg, const char *errstr)
 {
     cancel_hev2(self);
     h2o_timer_unlink(&self->timeout);
@@ -252,13 +252,13 @@ static void send_connect_error(struct st_connect_generator_t *self, const char *
         h2o_socket_close(self->sock);
         self->sock = NULL;
     }
-    //FIXME prohibited should be 403?
-    h2o_send_error_502(self->src_req, msg, errstr, H2O_SEND_ERROR_KEEP_HEADERS);
+
+    h2o_send_error_generic(self->src_req, code, msg, errstr, H2O_SEND_ERROR_KEEP_HEADERS);
 }
 
 static void on_connect_error(struct st_connect_generator_t *self, const char *errstr)
 {
-    send_connect_error(self, "Gateway Error", errstr);
+    send_connect_error(self, 502, "Gateway Error", errstr);
 }
 
 static void on_connect_timeout(h2o_timer_t *entry)
@@ -288,7 +288,7 @@ static void on_hev2_conn_cycle(h2o_timer_t *entry)
             }
             if (self->hev2_conn_err == destination_ip_prohibited) {
                 record_error(self, destination_ip_prohibited, NULL, NULL);
-                send_connect_error(self, "Destination IP Prohibited", "Destination IP Prohibited");
+                send_connect_error(self, 403, "Destination IP Prohibited", "Destination IP Prohibited");
             } else {
                 record_socket_error(self, self->hev2_conn_err);
                 on_connect_error(self, self->hev2_conn_err);
