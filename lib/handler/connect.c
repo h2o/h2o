@@ -520,6 +520,10 @@ static void tcp_on_connect(h2o_socket_t *_sock, const char *err)
 
     if (err != NULL) {
         self->hev2_conn_err = err;
+        if (self->sock) {
+            h2o_socket_close(self->sock);
+            self->sock = NULL;
+        }
         on_hev2_conn_cycle(&self->hev2_delay);
         return;
     }
