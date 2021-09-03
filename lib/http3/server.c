@@ -615,15 +615,22 @@ static h2o_iovec_t log_quic_stats(h2o_req_t *req)
     size_t len, bufsize = 1400;
 Redo:
     buf = h2o_mem_alloc_pool(&req->pool, char, bufsize);
-    len = snprintf(buf, bufsize,
-                   "packets-received=%" PRIu64 ",packets-decryption-failed=%" PRIu64 ",packets-sent=%" PRIu64
-                   ",packets-lost=%" PRIu64 ",packets-ack-received=%" PRIu64 ",bytes-received=%" PRIu64 ",bytes-sent=%" PRIu64
-                   ",rtt-minimum=%" PRIu32 ",rtt-smoothed=%" PRIu32 ",rtt-variance=%" PRIu32 ",rtt-latest=%" PRIu32
-                   ",cwnd=%" PRIu32 APPLY_NUM_FRAMES(FORMAT_OF_NUM_FRAMES, received) APPLY_NUM_FRAMES(FORMAT_OF_NUM_FRAMES, sent),
-                   stats.num_packets.received, stats.num_packets.decryption_failed, stats.num_packets.sent, stats.num_packets.lost,
-                   stats.num_packets.ack_received, stats.num_bytes.received, stats.num_bytes.sent, stats.rtt.minimum,
-                   stats.rtt.smoothed, stats.rtt.variance, stats.rtt.latest,
-                   stats.cc.cwnd APPLY_NUM_FRAMES(VALUE_OF_NUM_FRAMES, received) APPLY_NUM_FRAMES(VALUE_OF_NUM_FRAMES, sent));
+    len = snprintf(
+        buf, bufsize,
+        "packets-received=%" PRIu64 ",packets-decryption-failed=%" PRIu64 ",packets-sent=%" PRIu64 ",packets-lost=%" PRIu64
+        ",packets-lost-time-threshold=%" PRIu64 ",packets-ack-received=%" PRIu64 ",late-acked=%" PRIu64 ",bytes-received=%" PRIu64
+        ",bytes-sent=%" PRIu64 ",bytes-lost=%" PRIu64 ",bytes-ack-received=%" PRIu64 ",bytes-stream-data-sent=%" PRIu64
+        ",bytes-stream-data-resent=%" PRIu64 ",rtt-minimum=%" PRIu32 ",rtt-smoothed=%" PRIu32 ",rtt-variance=%" PRIu32
+        ",rtt-latest=%" PRIu32 ",cwnd=%" PRIu32 ",num-ptos=%" PRIu64 ",delivery-rate-latest=%" PRIu64
+        ",delivery-rate-smoothed=%" PRIu64 ",delivery-rate-variance=%" PRIu64 APPLY_NUM_FRAMES(FORMAT_OF_NUM_FRAMES, received)
+            APPLY_NUM_FRAMES(FORMAT_OF_NUM_FRAMES, sent),
+        stats.num_packets.received, stats.num_packets.decryption_failed, stats.num_packets.sent, stats.num_packets.lost,
+        stats.num_packets.lost_time_threshold, stats.num_packets.ack_received, stats.num_packets.late_acked,
+        stats.num_bytes.received, stats.num_bytes.sent, stats.num_bytes.lost, stats.num_bytes.ack_received,
+        stats.num_bytes.stream_data_sent, stats.num_bytes.stream_data_resent, stats.rtt.minimum, stats.rtt.smoothed,
+        stats.rtt.variance, stats.rtt.latest, stats.cc.cwnd, stats.num_ptos, stats.delivery_rate.latest,
+        stats.delivery_rate.smoothed,
+        stats.delivery_rate.variance APPLY_NUM_FRAMES(VALUE_OF_NUM_FRAMES, received) APPLY_NUM_FRAMES(VALUE_OF_NUM_FRAMES, sent));
     if (len + 1 > bufsize) {
         bufsize = len + 1;
         goto Redo;
