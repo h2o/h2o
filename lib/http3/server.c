@@ -1760,9 +1760,9 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
         .num_reqs_inflight = num_reqs_inflight,
         .get_tracer = get_tracer,
         .log_ = {{
-            .congestion_control =
+            .transport =
                 {
-                    .name_ = log_cc_name,
+                    .cc_name = log_cc_name,
                 },
             .ssl =
                 {

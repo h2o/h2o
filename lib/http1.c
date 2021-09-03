@@ -1261,6 +1261,7 @@ static int skip_tracing(h2o_conn_t *_conn)
     }
 
 DEFINE_LOGGER(tcp_congestion_controller)
+DEFINE_LOGGER(tcp_delivery_rate)
 DEFINE_LOGGER(ssl_protocol_version)
 DEFINE_LOGGER(ssl_session_reused)
 DEFINE_LOGGER(ssl_cipher)
@@ -1298,9 +1299,10 @@ static const h2o_conn_callbacks_t h1_callbacks = {
     .get_ptls = get_ptls,
     .skip_tracing = skip_tracing,
     .log_ = {{
-        .congestion_control =
+        .transport =
             {
-                .name_ = log_tcp_congestion_controller,
+                .cc_name = log_tcp_congestion_controller,
+                .delivery_rate = log_tcp_delivery_rate,
             },
         .ssl =
             {
