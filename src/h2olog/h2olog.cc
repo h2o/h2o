@@ -394,7 +394,7 @@ int main(int argc, char **argv)
         cflags.push_back(generate_header_filter_cflag(response_header_filters));
     }
 
-    ebpf::BPF *bpf = new ebpf::BPF();
+    std::unique_ptr<ebpf::BPF> bpf(new ebpf::BPF());
     std::vector<ebpf::USDT> probes;
 
     bool selective_tracing = false;
