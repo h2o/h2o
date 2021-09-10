@@ -36,21 +36,20 @@ using typeof_quicly_rtt_t__latest = decltype(quicly_rtt_t::latest);
 using typeof_st_quicly_conn_t__master_id = decltype(st_quicly_conn_t::super.local.cid_set.plaintext.master_id);
 
 
-#define GEN_FIELD_INFO(type, field, name) gen_field_info(#type, #field, &((type *)NULL)->field, name)
+#define GEN_FIELD_INFO(type, field, name) gen_field_info(#type, #field, offsetof(type, field), name, static_cast<decltype(type::field)*>(nullptr))
 
 #define DEFINE_RESOLVE_FUNC(field_type) \
-std::string gen_field_info(const char *struct_type, const char *field_name, const field_type *field_ptr, const char *name) \
+static std::string gen_field_info(const char *struct_type, const char *field_name, size_t field_offset, const char *name, const field_type *_overload_resolver) \
 { \
-    return do_resolve(struct_type, field_name, #field_type, field_ptr, name); \
+    return do_resolve(struct_type, field_name, #field_type, field_offset, name); \
 }
 
-template <typename FieldType>
-static std::string do_resolve(const char *struct_type, const char *field_name, const char *field_type, const FieldType *field_ptr, const char *name) {
+static std::string do_resolve(const char *struct_type, const char *field_name, const char *field_type, size_t field_offset, const char *name) {
     char *buff = NULL;
     size_t buff_len = 0;
     FILE *mem = open_memstream(&buff, &buff_len);
     fprintf(mem, "/* %s (%s#%s) */\n", name, struct_type, field_name);
-    fprintf(mem, "#define offsetof_%s %zd\n", name, (const char *)field_ptr - (const char *)NULL);
+    fprintf(mem, "#define offsetof_%s %zd\n", name, field_offset);
     fprintf(mem, "#define typeof_%s %s\n", name, field_type);
     fprintf(mem, "#define get_%s(st) *((const %s *) ((const char*)st + offsetof_%s))\n", name, field_type, name);
     fprintf(mem, "\n");
@@ -71,16 +70,16 @@ static std::string gen_bpf_header() {
   std::string bpf;
 
   bpf += "#define sizeof_st_quicly_stream_t " + std::to_string(std::min<size_t>(sizeof(struct st_quicly_stream_t), 100)) + "\n";
-  bpf += GEN_FIELD_INFO(struct st_quicly_stream_t, stream_id, "st_quicly_stream_t__stream_id");
+  bpf += GEN_FIELD_INFO(st_quicly_stream_t, stream_id, "st_quicly_stream_t__stream_id");
 
   bpf += "#define sizeof_quicly_rtt_t " + std::to_string(std::min<size_t>(sizeof(struct quicly_rtt_t), 100)) + "\n";
-  bpf += GEN_FIELD_INFO(struct quicly_rtt_t, minimum, "quicly_rtt_t__minimum");
-  bpf += GEN_FIELD_INFO(struct quicly_rtt_t, smoothed, "quicly_rtt_t__smoothed");
-  bpf += GEN_FIELD_INFO(struct quicly_rtt_t, variance, "quicly_rtt_t__variance");
-  bpf += GEN_FIELD_INFO(struct quicly_rtt_t, latest, "quicly_rtt_t__latest");
+  bpf += GEN_FIELD_INFO(quicly_rtt_t, minimum, "quicly_rtt_t__minimum");
+  bpf += GEN_FIELD_INFO(quicly_rtt_t, smoothed, "quicly_rtt_t__smoothed");
+  bpf += GEN_FIELD_INFO(quicly_rtt_t, variance, "quicly_rtt_t__variance");
+  bpf += GEN_FIELD_INFO(quicly_rtt_t, latest, "quicly_rtt_t__latest");
 
   bpf += "#define sizeof_st_quicly_conn_t " + std::to_string(std::min<size_t>(sizeof(struct st_quicly_conn_t), 100)) + "\n";
-  bpf += GEN_FIELD_INFO(struct st_quicly_conn_t, super.local.cid_set.plaintext.master_id, "st_quicly_conn_t__master_id");
+  bpf += GEN_FIELD_INFO(st_quicly_conn_t, super.local.cid_set.plaintext.master_id, "st_quicly_conn_t__master_id");
 
   bpf += "#define sizeof_st_h2o_ebpf_map_key_t " + std::to_string(std::min<size_t>(sizeof(struct st_h2o_ebpf_map_key_t), 100)) + "\n";
 
@@ -90,7 +89,7 @@ static std::string gen_bpf_header() {
 
   bpf += "#define sizeof_sockaddr_in6 " + std::to_string(std::min<size_t>(sizeof(struct sockaddr_in6), 100)) + "\n";
 
-  bpf += GEN_FIELD_INFO(struct sockaddr, sa_family, "sockaddr__sa_family");
+  bpf += GEN_FIELD_INFO(sockaddr, sa_family, "sockaddr__sa_family");
   bpf += "#define AF_INET  " + std::to_string(AF_INET) + "\n";
   bpf += "#define AF_INET6 " + std::to_string(AF_INET6) + "\n";
 

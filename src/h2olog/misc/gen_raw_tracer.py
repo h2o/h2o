@@ -510,21 +510,20 @@ def prepare_context(d_files: list):
 
 def build_bpf_header_generator():
   generator = r"""
-#define GEN_FIELD_INFO(type, field, name) gen_field_info(#type, #field, &((type *)NULL)->field, name)
+#define GEN_FIELD_INFO(type, field, name) gen_field_info(#type, #field, offsetof(type, field), name, static_cast<decltype(type::field)*>(nullptr))
 
 #define DEFINE_RESOLVE_FUNC(field_type) \
-std::string gen_field_info(const char *struct_type, const char *field_name, const field_type *field_ptr, const char *name) \
+static std::string gen_field_info(const char *struct_type, const char *field_name, size_t field_offset, const char *name, const field_type *_overload_resolver) \
 { \
-    return do_resolve(struct_type, field_name, #field_type, field_ptr, name); \
+    return do_resolve(struct_type, field_name, #field_type, field_offset, name); \
 }
 
-template <typename FieldType>
-static std::string do_resolve(const char *struct_type, const char *field_name, const char *field_type, const FieldType *field_ptr, const char *name) {
+static std::string do_resolve(const char *struct_type, const char *field_name, const char *field_type, size_t field_offset, const char *name) {
     char *buff = NULL;
     size_t buff_len = 0;
     FILE *mem = open_memstream(&buff, &buff_len);
     fprintf(mem, "/* %s (%s#%s) */\n", name, struct_type, field_name);
-    fprintf(mem, "#define offsetof_%s %zd\n", name, (const char *)field_ptr - (const char *)NULL);
+    fprintf(mem, "#define offsetof_%s %zd\n", name, field_offset);
     fprintf(mem, "#define typeof_%s %s\n", name, field_type);
     fprintf(mem, "#define get_%s(st) *((const %s *) ((const char*)st + offsetof_%s))\n", name, field_type, name);
     fprintf(mem, "\n");
@@ -554,10 +553,10 @@ static std::string gen_bpf_header() {
 
     for st_field_access, st_field_name_alias in st_fields:
       name = "%s__%s" % (st_name, st_field_name_alias or st_field_access)
-      generator += """  bpf += GEN_FIELD_INFO(struct %s, %s, "%s");\n""" % (st_name, st_field_access, name)
+      generator += """  bpf += GEN_FIELD_INFO(%s, %s, "%s");\n""" % (st_name, st_field_access, name)
 
   generator += r"""
-  bpf += GEN_FIELD_INFO(struct sockaddr, sa_family, "sockaddr__sa_family");
+  bpf += GEN_FIELD_INFO(sockaddr, sa_family, "sockaddr__sa_family");
   bpf += "#define AF_INET  " + std::to_string(AF_INET) + "\n";
   bpf += "#define AF_INET6 " + std::to_string(AF_INET6) + "\n";
 """
