@@ -530,6 +530,7 @@ static std::string do_resolve(const char *struct_type, const char *field_name, c
     fflush(mem);
     std::string s(buff, buff_len);
     fclose(mem);
+    free(buff);
     return s;
 }
 
