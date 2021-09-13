@@ -83,7 +83,7 @@ typedef struct st_quicly_ratemeter_t {
 typedef struct st_quicly_rate_t {
     uint64_t latest;
     uint64_t smoothed;
-    uint64_t variance;
+    uint64_t stdev;
 } quicly_rate_t;
 
 /**

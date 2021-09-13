@@ -20,6 +20,7 @@
  * IN THE SOFTWARE.
  */
 
+#include <math.h>
 #include "picotls.h"
 #include "quicly/rate.h"
 
@@ -76,6 +77,8 @@ void quicly_ratemeter_on_ack(quicly_ratemeter_t *meter, int64_t now, uint64_t by
         if (meter->current.start.at == INT64_MAX) {
             start_sampling(meter, now, bytes_acked);
         } else {
+            /* Update current sample whenever receiving an ACK, so that the sample can be committed other than when receiving an ACK
+             * (i.e., when opening a new CWND-limited phase). */
             meter->current.sample = (struct st_quicly_rate_sample_t){
                 .elapsed = (uint32_t)(now - meter->current.start.at),
                 .bytes_acked = (uint32_t)(bytes_acked - meter->current.start.bytes_acked),
@@ -86,7 +89,7 @@ void quicly_ratemeter_on_ack(quicly_ratemeter_t *meter, int64_t now, uint64_t by
             }
         }
     } else if (meter->pn_cwnd_limited.end <= pn) {
-        /* We have exitted CWND-limited state. Save current value, if any. */
+        /* We have exited CWND-limited state. Save current value, if any. */
         if (meter->current.start.at != INT64_MAX) {
             if (meter->current.sample.elapsed != 0)
                 commit_sample(meter);
@@ -109,7 +112,7 @@ void quicly_ratemeter_report(quicly_ratemeter_t *meter, quicly_rate_t *rate)
         if (latest_sample->elapsed == 0) {
             latest_sample = &meter->current.sample;
             if (latest_sample->elapsed == 0) {
-                rate->latest = rate->smoothed = rate->variance = 0;
+                rate->latest = rate->smoothed = rate->stdev = 0;
                 return;
             }
         }
@@ -139,7 +142,7 @@ void quicly_ratemeter_report(quicly_ratemeter_t *meter, quicly_rate_t *rate)
         rate->smoothed = to_speed(total_acked, total_elapsed);
     }
 
-    { /* calculate variance */
+    { /* calculate stdev */
         uint64_t sum = 0;
         size_t count = 0;
         FOREACH_SAMPLE({
@@ -147,7 +150,7 @@ void quicly_ratemeter_report(quicly_ratemeter_t *meter, quicly_rate_t *rate)
             sum += (sample_speed - rate->smoothed) * (sample_speed - rate->smoothed);
             ++count;
         });
-        rate->variance = sum / count;
+        rate->stdev = sqrt(sum / count);
     }
 
 #undef FOREACH_SAMPLE

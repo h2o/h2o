@@ -5020,7 +5020,7 @@ static int handle_max_stream_data_frame(quicly_conn_t *conn, struct st_quicly_ha
     if ((stream = quicly_get_stream(conn, frame.stream_id)) == NULL)
         return 0;
 
-    if (frame.max_stream_data < stream->_send_aux.max_stream_data)
+    if (frame.max_stream_data <= stream->_send_aux.max_stream_data)
         return 0;
     stream->_send_aux.max_stream_data = frame.max_stream_data;
     stream->_send_aux.blocked = QUICLY_SENDER_STATE_NONE;

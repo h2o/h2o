@@ -29,7 +29,7 @@
         quicly_ratemeter_report(&meter, &rate);                                                                                    \
         ok(rate.latest == el);                                                                                                     \
         ok(rate.smoothed == es);                                                                                                   \
-        ok(rate.variance == ev);                                                                                                   \
+        ok(rate.stdev == ev);                                                                                                      \
     } while (0)
 
 static void test_basic(void)
