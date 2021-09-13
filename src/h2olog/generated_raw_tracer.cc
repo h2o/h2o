@@ -920,7 +920,7 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
   // The perf event data is not aligned, so we use a local copy to avoid UBSan errors.
   // cf. https://github.com/iovisor/bpftrace/pull/1520
   h2olog_event_t event;
-  assert(sizeof(event) <= data_len);
+  assert(sizeof(event) <= static_cast<size_t>(data_len));
   memcpy(&event, data, sizeof(event));
 
   if (event.id == H2OLOG_EVENT_ID_SCHED_SCHED_PROCESS_EXIT) {
