@@ -45,17 +45,12 @@ static std::string gen_field_info(const char *struct_type, const char *field_nam
 }
 
 static std::string do_resolve(const char *struct_type, const char *field_name, const char *field_type, size_t field_offset, const char *name) {
-    char *buff = NULL;
-    size_t buff_len = 0;
-    FILE *mem = open_memstream(&buff, &buff_len);
-    fprintf(mem, "/* %s (%s#%s) */\n", name, struct_type, field_name);
-    fprintf(mem, "#define offsetof_%s %zd\n", name, field_offset);
-    fprintf(mem, "#define typeof_%s %s\n", name, field_type);
-    fprintf(mem, "#define get_%s(st) *((const %s *) ((const char*)st + offsetof_%s))\n", name, field_type, name);
-    fprintf(mem, "\n");
-    fflush(mem);
-    std::string s(buff, buff_len);
-    fclose(mem);
+    std::string s; // BPF C source code
+    s += std::string("/* ") + name + " (" + struct_type + "#" + field_name + ") */\n";
+    s += std::string("#define offsetof_") + name + " " + std::to_string(field_offset) + "\n";
+    s += std::string("#define typeof_") + name + " " + field_type + "\n";
+    s += std::string("#define get_") + name + "(st) *((const " + field_type + " *)((const char*)(st) + offsetof_" + name + "))\n";
+    s += "\n";
     return s;
 }
 
