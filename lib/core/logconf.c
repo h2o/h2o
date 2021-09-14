@@ -292,7 +292,8 @@ h2o_logconf_t *h2o_logconf_compile(const char *fmt, int escape, char *errbuf)
                     MAP_EXT_TO_PROTO("http3.stream-id", http3.stream_id);
                     MAP_EXT_TO_PROTO("http3.quic-stats", http3.quic_stats);
                     MAP_EXT_TO_PROTO("http3.quic-version", http3.quic_version);
-                    MAP_EXT_TO_PROTO("cc.name", congestion_control.name_);
+                    MAP_EXT_TO_PROTO("cc.name", transport.cc_name);
+                    MAP_EXT_TO_PROTO("delivery-rate", transport.delivery_rate);
                     MAP_EXT_TO_PROTO("ssl.protocol-version", ssl.protocol_version);
                     MAP_EXT_TO_PROTO("ssl.session-reused", ssl.session_reused);
                     MAP_EXT_TO_PROTO("ssl.cipher", ssl.cipher);

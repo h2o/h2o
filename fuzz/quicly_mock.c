@@ -331,6 +331,13 @@ uint32_t quicly_num_streams_by_group(quicly_conn_t *conn, int uni, int locally_i
     return 0;
 }
 
+int quicly_get_delivery_rate(quicly_conn_t *conn, quicly_rate_t *delivery_rate)
+{
+    /* Do nothing */
+    *delivery_rate = (quicly_rate_t){};
+    return 0;
+}
+
 int quicly_get_stats(quicly_conn_t *conn, quicly_stats_t *stats)
 {
     /* Do nothing */

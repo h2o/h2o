@@ -1492,6 +1492,7 @@ static int64_t get_rtt(h2o_conn_t *_conn)
         return h2o_socket_log_##name(conn->sock, &req->pool);                                                                      \
     }
 DEFINE_LOGGER(tcp_congestion_controller)
+DEFINE_LOGGER(tcp_delivery_rate)
 DEFINE_LOGGER(ssl_protocol_version)
 DEFINE_LOGGER(ssl_session_reused)
 DEFINE_LOGGER(ssl_cipher)
@@ -1589,9 +1590,10 @@ static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_hostconf_t **hosts,
         .get_debug_state = h2o_http2_get_debug_state,
         .get_rtt = get_rtt,
         .log_ = {{
-            .congestion_control =
+            .transport =
                 {
-                    .name_ = log_tcp_congestion_controller,
+                    .cc_name = log_tcp_congestion_controller,
+                    .delivery_rate = log_tcp_delivery_rate,
                 },
             .ssl =
                 {

@@ -1005,8 +1005,9 @@ typedef struct st_h2o_conn_callbacks_t {
     union {
         struct {
             struct {
-                h2o_iovec_t (*name_)(h2o_req_t *req);
-            } congestion_control;
+                h2o_iovec_t (*cc_name)(h2o_req_t *req);
+                h2o_iovec_t (*delivery_rate)(h2o_req_t *req);
+            } transport;
             struct {
                 h2o_iovec_t (*protocol_version)(h2o_req_t *req);
                 h2o_iovec_t (*session_reused)(h2o_req_t *req);
