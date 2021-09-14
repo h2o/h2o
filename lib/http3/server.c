@@ -622,7 +622,7 @@ Redo:
         ",bytes-sent=%" PRIu64 ",bytes-lost=%" PRIu64 ",bytes-ack-received=%" PRIu64 ",bytes-stream-data-sent=%" PRIu64
         ",bytes-stream-data-resent=%" PRIu64 ",rtt-minimum=%" PRIu32 ",rtt-smoothed=%" PRIu32 ",rtt-variance=%" PRIu32
         ",rtt-latest=%" PRIu32 ",cwnd=%" PRIu32 ",num-ptos=%" PRIu64 ",delivery-rate-latest=%" PRIu64
-        ",delivery-rate-smoothed=%" PRIu64 ",delivery-rate-variance=%" PRIu64 APPLY_NUM_FRAMES(FORMAT_OF_NUM_FRAMES, received)
+        ",delivery-rate-smoothed=%" PRIu64 ",delivery-rate-stdev=%" PRIu64 APPLY_NUM_FRAMES(FORMAT_OF_NUM_FRAMES, received)
             APPLY_NUM_FRAMES(FORMAT_OF_NUM_FRAMES, sent),
         stats.num_packets.received, stats.num_packets.decryption_failed, stats.num_packets.sent, stats.num_packets.lost,
         stats.num_packets.lost_time_threshold, stats.num_packets.ack_received, stats.num_packets.late_acked,
@@ -630,7 +630,7 @@ Redo:
         stats.num_bytes.stream_data_sent, stats.num_bytes.stream_data_resent, stats.rtt.minimum, stats.rtt.smoothed,
         stats.rtt.variance, stats.rtt.latest, stats.cc.cwnd, stats.num_ptos, stats.delivery_rate.latest,
         stats.delivery_rate.smoothed,
-        stats.delivery_rate.variance APPLY_NUM_FRAMES(VALUE_OF_NUM_FRAMES, received) APPLY_NUM_FRAMES(VALUE_OF_NUM_FRAMES, sent));
+        stats.delivery_rate.stdev APPLY_NUM_FRAMES(VALUE_OF_NUM_FRAMES, received) APPLY_NUM_FRAMES(VALUE_OF_NUM_FRAMES, sent));
     if (len + 1 > bufsize) {
         bufsize = len + 1;
         goto Redo;
