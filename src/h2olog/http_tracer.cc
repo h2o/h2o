@@ -21,6 +21,8 @@
  */
 
 #include "h2olog.h"
+#include <memory.h>
+#include <assert.h>
 
 const char *HTTP_BPF = R"(
 #include <linux/sched.h>
@@ -149,31 +151,35 @@ typedef struct st_http_event_t {
 class h2o_http_tracer : public h2o_tracer
 {
   protected:
-    virtual void do_handle_event(const void *data, int len)
+    virtual void do_handle_event(const void *data, int data_len)
     {
-        const http_event_t *ev = (const http_event_t *)data;
+        // The perf event data is not aligned, so we use a local copy to avoid UBSan errors.
+        // cf. https://github.com/iovisor/bpftrace/pull/1520
+        http_event_t ev;
+        assert(sizeof(ev) <= static_cast<size_t>(data_len));
+        memcpy(&ev, data, sizeof(ev));
 
-        switch (ev->type) {
+        switch (ev.type) {
         case HTTP_EVENT_RECEIVE_REQ:
-            fprintf(out_, "%" PRIu64 " %" PRIu64 " RxProtocol HTTP/%" PRIu32 ".%" PRIu32 "\n", ev->conn_id, ev->req_id,
-                    ev->http_version / 256, ev->http_version % 256);
+            fprintf(out_, "%" PRIu64 " %" PRIu64 " RxProtocol HTTP/%" PRIu32 ".%" PRIu32 "\n", ev.conn_id, ev.req_id,
+                    ev.http_version / 256, ev.http_version % 256);
             break;
         case HTTP_EVENT_SEND_RESP:
-            fprintf(out_, "%" PRIu64 " %" PRIu64 " TxStatus   %" PRIu32 "\n", ev->conn_id, ev->req_id, ev->http_status);
+            fprintf(out_, "%" PRIu64 " %" PRIu64 " TxStatus   %" PRIu32 "\n", ev.conn_id, ev.req_id, ev.http_status);
             break;
         case HTTP_EVENT_RECEIVE_REQ_HDR:
         case HTTP_EVENT_SEND_RESP_HDR: {
-            int n_len = MIN(ev->header.name_len, MAX_HDR_LEN);
-            int v_len = MIN(ev->header.value_len, MAX_HDR_LEN);
-            const char *label = (ev->type == HTTP_EVENT_RECEIVE_REQ_HDR) ? "RxHeader" : "TxHeader";
-            fprintf(out_, "%" PRIu64 " %" PRIu64 " %s   %.*s %.*s\n", ev->conn_id, ev->req_id, label, n_len, ev->header.name, v_len,
-                    ev->header.value);
+            int n_len = MIN(ev.header.name_len, MAX_HDR_LEN);
+            int v_len = MIN(ev.header.value_len, MAX_HDR_LEN);
+            const char *label = (ev.type == HTTP_EVENT_RECEIVE_REQ_HDR) ? "RxHeader" : "TxHeader";
+            fprintf(out_, "%" PRIu64 " %" PRIu64 " %s   %.*s %.*s\n", ev.conn_id, ev.req_id, label, n_len, ev.header.name, v_len,
+                    ev.header.value);
         } break;
         case SCHED_PROCESS_EXIT: {
             exit(0);
         } break;
         default:
-            fprintf(out_, "unknown event: %u\n", ev->type);
+            fprintf(out_, "unknown event: %u\n", ev.type);
         }
     }
     virtual void do_handle_lost(uint64_t lost)
