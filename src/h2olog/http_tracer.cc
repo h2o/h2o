@@ -23,6 +23,7 @@
 #include "h2olog.h"
 #include <memory.h>
 #include <assert.h>
+#include <algorithm>
 
 const char *HTTP_BPF = R"(
 #include <linux/sched.h>
@@ -122,7 +123,6 @@ int trace_send_response_header(struct pt_regs *ctx) {
 )";
 
 #define MAX_HDR_LEN 128
-#define MIN(x, y) (((x) < (y)) ? (x) : (y))
 
 enum {
     HTTP_EVENT_RECEIVE_REQ,
@@ -169,8 +169,8 @@ class h2o_http_tracer : public h2o_tracer
             break;
         case HTTP_EVENT_RECEIVE_REQ_HDR:
         case HTTP_EVENT_SEND_RESP_HDR: {
-            int n_len = MIN(ev.header.name_len, MAX_HDR_LEN);
-            int v_len = MIN(ev.header.value_len, MAX_HDR_LEN);
+            int n_len = std::min(static_cast<int>(ev.header.name_len), MAX_HDR_LEN);
+            int v_len = std::min(static_cast<int>(ev.header.value_len), MAX_HDR_LEN);
             const char *label = (ev.type == HTTP_EVENT_RECEIVE_REQ_HDR) ? "RxHeader" : "TxHeader";
             fprintf(out_, "%" PRIu64 " %" PRIu64 " %s   %.*s %.*s\n", ev.conn_id, ev.req_id, label, n_len, ev.header.name, v_len,
                     ev.header.value);
