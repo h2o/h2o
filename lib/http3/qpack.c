@@ -556,6 +556,7 @@ static struct st_h2o_qpack_header_t *resolve_dynamic(struct st_h2o_qpack_header_
                                                      const uint8_t **src, const uint8_t *src_end, unsigned prefix_bits,
                                                      const char **err_desc)
 {
+    assert(base_index >= 0);
     int64_t off;
 
     if (decode_int(&off, src, src_end, prefix_bits) != 0 || off >= base_index) {
@@ -569,6 +570,7 @@ static struct st_h2o_qpack_header_t *resolve_dynamic_postbase(struct st_h2o_qpac
                                                               const uint8_t **src, const uint8_t *src_end, unsigned prefix_bits,
                                                               const char **err_desc)
 {
+    assert(base_index >= 0);
     int64_t off;
 
     if (decode_int(&off, src, src_end, prefix_bits) != 0 || off > INT64_MAX - (base_index + 1)) {
@@ -783,13 +785,32 @@ static int parse_decode_context(h2o_qpack_decoder_t *qpack, struct st_h2o_qpack_
             return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED;
     }
 
-    /* base index */
+    /* sign and delta base */
     if (*src >= src_end)
         return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED;
     int sign = (**src & 0x80) != 0;
-    if (decode_int(&ctx->base_index, src, src_end, 7) != 0)
+    int64_t delta_base;
+    if (decode_int(&delta_base, src, src_end, 7) != 0)
         return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED;
-    ctx->base_index = sign == 0 ? ctx->req_insert_count + ctx->base_index : ctx->req_insert_count - ctx->base_index - 1;
+
+    assert(0 <= ctx->req_insert_count && ctx->req_insert_count <= INT64_MAX);
+    assert(0 <= delta_base && delta_base <= INT64_MAX);
+
+    /* base index */
+    if (sign == 0) {
+        if (delta_base > INT64_MAX - ctx->req_insert_count) {
+            return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED;
+        }
+        ctx->base_index = ctx->req_insert_count + delta_base;
+    } else {
+        /* we don't accept negative base index though current QPACK specification doesn't mention to such case */
+        /* let's keep our eyes on https://github.com/quicwg/base-drafts/issues/4938 */
+        if (ctx->req_insert_count - 1 < delta_base) {
+            return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED;
+        }
+        ctx->base_index = ctx->req_insert_count - delta_base - 1;
+    }
+    assert(0 <= ctx->base_index && ctx->base_index <= INT64_MAX);
 
     /* is the stream blocked? */
     if (ctx->req_insert_count >= qpack_table_total_inserts(&qpack->table)) {
