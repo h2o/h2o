@@ -339,6 +339,9 @@ void h2o_http2_conn_unregister_stream(h2o_http2_conn_t *conn, h2o_http2_stream_t
 
 void close_connection_now(h2o_http2_conn_t *conn)
 {
+    /* mark as is_closing here to prevent sending any more frames */
+    conn->state = H2O_HTTP2_CONN_STATE_IS_CLOSING;
+
     h2o_http2_stream_t *stream;
 
     assert(!h2o_timer_is_linked(&conn->_write.timeout_entry));
