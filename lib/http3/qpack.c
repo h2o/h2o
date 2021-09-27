@@ -556,7 +556,6 @@ static struct st_h2o_qpack_header_t *resolve_dynamic(struct st_h2o_qpack_header_
                                                      const uint8_t **src, const uint8_t *src_end, unsigned prefix_bits,
                                                      const char **err_desc)
 {
-    assert(base_index >= 0);
     int64_t off;
 
     if (decode_int(&off, src, src_end, prefix_bits) != 0 || off >= base_index) {
@@ -570,7 +569,6 @@ static struct st_h2o_qpack_header_t *resolve_dynamic_postbase(struct st_h2o_qpac
                                                               const uint8_t **src, const uint8_t *src_end, unsigned prefix_bits,
                                                               const char **err_desc)
 {
-    assert(base_index >= 0);
     int64_t off;
 
     if (decode_int(&off, src, src_end, prefix_bits) != 0 || off > INT64_MAX - (base_index + 1)) {
