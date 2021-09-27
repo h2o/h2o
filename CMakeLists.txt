@@ -940,6 +940,7 @@ IF (BUILD_FUZZER)
     TARGET_LINK_LIBRARIES(h2o-fuzzer-http2 libh2o-evloop ${EXTRA_LIBS} ${LIB_FUZZER})
     # h3 fuzzer does not use libh2o so it can replace quicly with quicly_mock
     TARGET_LINK_LIBRARIES(h2o-fuzzer-http3 ${EXTRA_LIBS} ${LIB_FUZZER} ${OPENSSL_LIBRARIES} ${CMAKE_DL_LIBS})
+    TARGET_INCLUDE_DIRECTORIES(h2o-fuzzer-http3 PUBLIC ${OPENSSL_INCLUDE_DIR})
     TARGET_LINK_LIBRARIES(h2o-fuzzer-url libh2o-evloop ${EXTRA_LIBS} ${LIB_FUZZER})
     TARGET_LINK_LIBRARIES(h3-header-generator libh2o-evloop ${EXTRA_LIBS})
 
