@@ -787,7 +787,7 @@ static int parse_decode_context(h2o_qpack_decoder_t *qpack, struct st_h2o_qpack_
         return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED;
     }
 
-    /* sign and delta base */
+    /* sign and base index */
     if (*src >= src_end)
         return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED;
     int sign = (**src & 0x80) != 0;
