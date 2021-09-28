@@ -27,6 +27,7 @@
 #include "h2o/hpack.h"
 #include "h2o/qpack.h"
 #include "h2o/http3_common.h"
+#include "picotls.h"
 
 #define HEADER_ENTRY_SIZE_OFFSET 32
 
@@ -782,6 +783,9 @@ static int parse_decode_context(h2o_qpack_decoder_t *qpack, struct st_h2o_qpack_
         if (ctx->req_insert_count == 0)
             return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED;
     }
+    if (ctx->req_insert_count > PTLS_QUICINT_MAX) {
+        return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED;
+    }
 
     /* sign and delta base */
     if (*src >= src_end)
@@ -790,25 +794,16 @@ static int parse_decode_context(h2o_qpack_decoder_t *qpack, struct st_h2o_qpack_
     int64_t delta_base;
     if (decode_int(&delta_base, src, src_end, 7) != 0)
         return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED;
-
-    assert(0 <= ctx->req_insert_count && ctx->req_insert_count <= INT64_MAX);
-    assert(0 <= delta_base && delta_base <= INT64_MAX);
-
-    /* base index */
-    if (sign == 0) {
-        if (delta_base > INT64_MAX - ctx->req_insert_count) {
-            return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED;
-        }
-        ctx->base_index = ctx->req_insert_count + delta_base;
-    } else {
+    if (delta_base > PTLS_QUICINT_MAX) {
+        return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED;
+    }
+    ctx->base_index = sign == 0 ? ctx->req_insert_count + delta_base : ctx->req_insert_count - delta_base - 1;
+    if (ctx->base_index < 0) {
         /* we don't accept negative base index though current QPACK specification doesn't mention to such case */
         /* let's keep our eyes on https://github.com/quicwg/base-drafts/issues/4938 */
-        if (ctx->req_insert_count - 1 < delta_base) {
-            return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED;
-        }
-        ctx->base_index = ctx->req_insert_count - delta_base - 1;
+        return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED;
     }
-    assert(0 <= ctx->base_index && ctx->base_index <= INT64_MAX);
+    assert(ctx->base_index <= PTLS_QUICINT_MAX);
 
     /* is the stream blocked? */
     if (ctx->req_insert_count >= qpack_table_total_inserts(&qpack->table)) {
