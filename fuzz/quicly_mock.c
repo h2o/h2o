@@ -21,7 +21,6 @@
  */
 
 #include <assert.h>
-#include <malloc.h>
 #include "khash.h"
 #include "quicly.h"
 #include "quicly/sendstate.h"
