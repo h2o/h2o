@@ -782,9 +782,10 @@ static int parse_decode_context(h2o_qpack_decoder_t *qpack, struct st_h2o_qpack_
         }
         if (ctx->req_insert_count == 0)
             return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED;
-    }
-    if (ctx->req_insert_count > PTLS_QUICINT_MAX) {
-        return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED;
+        /* Peer cannot send no more than PTLS_QUICINT_MAX instructions. That is because one QPACK instruction is no smaller than one
+         * byte, and the maximum length of a QUIC stream (that conveys QPACK instructions) is 2^62 bytes in QUIC v1. */
+        if (ctx->req_insert_count > PTLS_QUICINT_MAX)
+            return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED;
     }
 
     /* sign and base index */
