@@ -6,11 +6,13 @@ use JSON;
 use Test::More;
 use t::Util;
 
-my $tempdir = tempdir(CLEANUP => 1);
-
 my $client_prog = bindir() . "/h2o-httpclient";
 plan skip_all => "$client_prog not found"
     unless -e $client_prog;
+plan skip_all => 'mruby support is off'
+    unless server_features()->{mruby};
+
+my $tempdir = tempdir(CLEANUP => 1);
 
 my $quic_port = empty_port({
     host  => "127.0.0.1",
@@ -19,7 +21,7 @@ my $quic_port = empty_port({
 
 my $conf = << "EOT";
 access-log:
-    format: '{"protocol":"%H","cc.name":"%{cc.name}x","delivery_rate":"%{delivery-rate}x"}'
+    format: '{"protocol":"%H","delivery_rate":"%{delivery-rate}x"}'
     escape: json
     path: "$tempdir/access_log"
 listen:
@@ -28,7 +30,6 @@ listen:
   ssl:
     key-file: examples/h2o/server.key
     certificate-file: examples/h2o/server.crt
-  cc: pico
 num-threads: 1
 hosts:
   default:
@@ -62,8 +63,6 @@ subtest "HTTP/1.1", sub {
     my ($log) = load_logs();
 
     is $log->{"protocol"}, "HTTP/1.1", "protocol";
-    ok $log->{"cc.name"}, "something is set in cc.name";
-
     cmp_ok $log->{"delivery_rate"}, ">", 0, "delivery_rate is greater than zero";
 };
 
@@ -76,8 +75,6 @@ subtest "HTTP/2", sub {
     my ($log) = load_logs();
 
     is $log->{"protocol"}, "HTTP/2", "protocol";
-    ok $log->{"cc.name"}, "something is set in cc.name";
-
     cmp_ok $log->{"delivery_rate"}, ">", 0, "delivery_rate is greater than zero";
 };
 
@@ -90,8 +87,6 @@ subtest "HTTP/3", sub {
     my ($log) = load_logs();
 
     is $log->{"protocol"}, "HTTP/3", "protocol";
-    is $log->{"cc.name"}, "pico", "cc.name is pico in QUIC";
-
     cmp_ok $log->{"delivery_rate"}, ">", 0, "delivery_rate is greater than zero";
 };
 
