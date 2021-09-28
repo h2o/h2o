@@ -35,7 +35,11 @@ hosts:
   default:
     paths:
       /:
-        file.dir: t/assets/doc_root
+        mruby.handler: |
+          Proc.new do |env|
+            payload = "." * (5 * 1024 * 1024)
+            [200, {}, [payload]]
+          end
 EOT
 my $server = spawn_h2o($conf);
 
@@ -43,64 +47,53 @@ sub truncate_access_log {
     open my $fh, ">", "$tempdir/access_log" or die $!;
 }
 
+sub load_logs {
+    open my $fh, "<", "$tempdir/access_log" or die $!;
+    my @json_logs = <$fh>;
+    diag(@json_logs) if $ENV{TEST_DEBUG};
+    return map { decode_json($_) } @json_logs;
+}
+
 subtest "HTTP/1.1", sub {
     truncate_access_log();
 
-    for (1 .. 3) {
-        my $resp = `$client_prog http://127.0.0.1:$server->{port} 2>&1`;
-        like $resp, qr{^HTTP/1\.1 .*\n\nhello\n}ms, "http/1 is ok";
-    }
+    my $resp = `$client_prog http://127.0.0.1:$server->{port} 2>&1`;
+    like $resp, qr{^HTTP/1\.1 200\b}ms, "http/1 is ok";
 
-    my @logs = map { decode_json($_) } do {
-        open my $fh, "<", "$tempdir/access_log" or die $!;
-        <$fh>;
-    };
-    diag(explain(\@logs)) if $ENV{TEST_DEBUG};
+    my ($log) = load_logs();
 
-    is $logs[0]{"protocol"}, "HTTP/1.1", "protocol";
-    ok $logs[0]{"cc.name"}, "cc.name";
-    ok exists($logs[0]{"delivery_rate"}), "delivery_rate";
-    # cmp_ok $logs[0]{"delivery_rate"}, ">", 0, "delivery_rate is greater than zero";
+    is $log->{"protocol"}, "HTTP/1.1", "protocol";
+    ok $log->{"cc.name"}, "something is set in cc.name";
+
+    cmp_ok $log->{"delivery_rate"}, ">", 0, "delivery_rate is greater than zero";
 };
 
 subtest "HTTP/2", sub {
     truncate_access_log();
 
-    for (1 .. 3) {
-        my $resp = `$client_prog -2 100 -k https://127.0.0.1:$server->{tls_port} 2>&1`;
-        like $resp, qr{^HTTP/2 .*\n\nhello\n}ms, "http/2 is ok";
-    }
+    my $resp = `$client_prog -2 100 -k https://127.0.0.1:$server->{tls_port} 2>&1`;
+    like $resp, qr{^HTTP/2 200\b}ms, "http/2 is ok";
 
-    my @logs = map { decode_json($_) } do {
-        open my $fh, "<", "$tempdir/access_log" or die $!;
-        <$fh>;
-    };
-    diag(explain(\@logs)) if $ENV{TEST_DEBUG};
+    my ($log) = load_logs();
 
-    is $logs[0]{"protocol"}, "HTTP/2", "protocol";
-    ok $logs[0]{"cc.name"}, "cc.name";
-    ok exists($logs[0]{"delivery_rate"}), "delivery_rate";
-    # cmp_ok $logs[0]{"delivery_rate"}, ">", 0, "delivery_rate is greater than zero";
+    is $log->{"protocol"}, "HTTP/2", "protocol";
+    ok $log->{"cc.name"}, "something is set in cc.name";
+
+    cmp_ok $log->{"delivery_rate"}, ">", 0, "delivery_rate is greater than zero";
 };
 
 subtest "HTTP/3", sub {
     truncate_access_log();
 
-    for (1 .. 3) {
-        my $resp = `$client_prog -3 100 -k https://127.0.0.1:$quic_port 2>&1`;
-        like $resp, qr{^HTTP/3 .*\n\nhello\n}ms, "http/3 is ok";
-    }
+    my $resp = `$client_prog -3 100 -k https://127.0.0.1:$quic_port 2>&1`;
+    like $resp, qr{^HTTP/3 200\b}ms, "http/3 is ok";
 
-    my @logs = map { decode_json($_) } do {
-        open my $fh, "<", "$tempdir/access_log" or die $!;
-        <$fh>;
-    };
-    diag(explain(\@logs)) if $ENV{TEST_DEBUG};
+    my ($log) = load_logs();
 
-    is $logs[0]{"protocol"}, "HTTP/3", "protocol";
-    ok $logs[0]{"cc.name"}, "cc.name";
-    ok exists($logs[0]{"delivery_rate"}), "delivery_rate";
-    # cmp_ok $logs[0]{"delivery_rate"}, ">", 0, "delivery_rate is greater than zero";
+    is $log->{"protocol"}, "HTTP/3", "protocol";
+    is $log->{"cc.name"}, "pico", "cc.name is pico in QUIC";
+
+    cmp_ok $log->{"delivery_rate"}, ">", 0, "delivery_rate is greater than zero";
 };
 
 done_testing;
