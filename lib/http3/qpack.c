@@ -799,8 +799,8 @@ static int parse_decode_context(h2o_qpack_decoder_t *qpack, struct st_h2o_qpack_
         return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED;
     ctx->base_index = sign == 0 ? ctx->req_insert_count + delta_base : ctx->req_insert_count - delta_base - 1;
     if (ctx->base_index < 0) {
-        /* we don't accept negative base index though current QPACK specification doesn't mention to such case */
-        /* let's keep our eyes on https://github.com/quicwg/base-drafts/issues/4938 */
+        /* Reject negative base index though current QPACK specification doesn't mention such case; let's keep our eyes on
+         * https://github.com/quicwg/base-drafts/issues/4938 */
         return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED;
     }
     assert(ctx->base_index <= PTLS_QUICINT_MAX);
