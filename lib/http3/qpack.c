@@ -572,7 +572,7 @@ static struct st_h2o_qpack_header_t *resolve_dynamic_postbase(struct st_h2o_qpac
 {
     int64_t off;
 
-    if (decode_int(&off, src, src_end, prefix_bits) != 0 || off > INT64_MAX - (base_index + 1)) {
+    if (decode_int(&off, src, src_end, prefix_bits) != 0 || off > INT64_MAX - base_index - 1) {
         *err_desc = h2o_qpack_err_invalid_dynamic_reference;
         return NULL;
     }
@@ -653,6 +653,9 @@ Fail:
 
 struct st_h2o_qpack_decode_header_ctx_t {
     h2o_qpack_decoder_t *qpack;
+    /**
+     * These values are non-negative.
+     */
     int64_t req_insert_count, base_index;
 };
 
@@ -803,7 +806,6 @@ static int parse_decode_context(h2o_qpack_decoder_t *qpack, struct st_h2o_qpack_
          * https://github.com/quicwg/base-drafts/issues/4938 */
         return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED;
     }
-    assert(ctx->base_index <= PTLS_QUICINT_MAX);
 
     /* is the stream blocked? */
     if (ctx->req_insert_count >= qpack_table_total_inserts(&qpack->table)) {
