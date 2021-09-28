@@ -168,6 +168,7 @@ extern "C" {
 #define PTLS_ALERT_CERTIFICATE_UNKNOWN 46
 #define PTLS_ALERT_ILLEGAL_PARAMETER 47
 #define PTLS_ALERT_UNKNOWN_CA 48
+#define PTLS_ALERT_ACCESS_DENIED 49
 #define PTLS_ALERT_DECODE_ERROR 50
 #define PTLS_ALERT_DECRYPT_ERROR 51
 #define PTLS_ALERT_PROTOCOL_VERSION 70
@@ -945,6 +946,9 @@ int ptls_buffer_push_asn1_ubigint(ptls_buffer_t *buf, const void *bignum, size_t
  */
 static uint8_t *ptls_encode_quicint(uint8_t *p, uint64_t v);
 #define PTLS_ENCODE_QUICINT_CAPACITY 8
+
+#define PTLS_QUICINT_MAX 4611686018427387903 // (1 << 62) - 1
+#define PTLS_QUICINT_LONGEST_STR "4611686018427387903"
 
 #define ptls_buffer_pushv(buf, src, len)                                                                                           \
     do {                                                                                                                           \
