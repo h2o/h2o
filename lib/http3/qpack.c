@@ -795,9 +795,8 @@ static int parse_decode_context(h2o_qpack_decoder_t *qpack, struct st_h2o_qpack_
     int64_t delta_base;
     if (decode_int(&delta_base, src, src_end, 7) != 0)
         return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED;
-    if (delta_base > PTLS_QUICINT_MAX) {
+    if (delta_base > PTLS_QUICINT_MAX)
         return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED;
-    }
     ctx->base_index = sign == 0 ? ctx->req_insert_count + delta_base : ctx->req_insert_count - delta_base - 1;
     if (ctx->base_index < 0) {
         /* we don't accept negative base index though current QPACK specification doesn't mention to such case */
