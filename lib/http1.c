@@ -1050,12 +1050,6 @@ static void encode_chunked(h2o_iovec_t *prefix, h2o_iovec_t *suffix, h2o_send_st
     }
 }
 
-static void on_delayed_send_complete(h2o_timer_t *entry)
-{
-    struct st_h2o_http1_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http1_conn_t, _timeout_entry, entry);
-    on_send_complete(conn->sock, 0);
-}
-
 static void allocate_pull_buf(struct st_h2o_http1_conn_t *conn, h2o_send_state_t send_state, size_t bytes_to_be_sent,
                               size_t size_add)
 {
@@ -1164,12 +1158,8 @@ void finalostream_send(h2o_ostream_t *_self, h2o_req_t *_req, h2o_sendvec_t *inb
     if (conn->_ostr_final.chunked_buf != NULL && chunked_suffix.len != 0)
         bufs[bufcnt++] = chunked_suffix;
 
-    if (bufcnt != 0) {
-        set_req_io_timeout(conn, conn->super.ctx->globalconf->http1.req_io_timeout, req_io_on_timeout);
-        h2o_socket_write(conn->sock, bufs, bufcnt, h2o_send_state_is_in_progress(send_state) ? on_send_next : on_send_complete);
-    } else {
-        set_req_timeout(conn, 0, on_delayed_send_complete);
-    }
+    set_req_io_timeout(conn, conn->super.ctx->globalconf->http1.req_io_timeout, req_io_on_timeout);
+    h2o_socket_write(conn->sock, bufs, bufcnt, h2o_send_state_is_in_progress(send_state) ? on_send_next : on_send_complete);
 }
 
 static void on_send_informational(h2o_socket_t *sock, const char *err);
