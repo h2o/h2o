@@ -724,6 +724,16 @@ SET(STANDALONE_SOURCE_FILES
     src/ssl.c)
 SET(STANDALONE_COMPILE_FLAGS "-DH2O_USE_LIBUV=0 -DH2O_USE_BROTLI=1 -DQUICLY_USE_TRACER=1")
 IF (WITH_MRUBY)
+    # Bundled mruby cannot be built with Ruby 3.x
+    EXECUTE_PROCESS(
+        COMMAND "${RUBY}" -e "puts RUBY_VERSION"
+        OUTPUT_VARIABLE RUBY_VERSION
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
+    IF (NOT ("${RUBY_VERSION}" VERSION_LESS "3.0.0"))
+        MESSAGE(FATAL_ERROR "Ruby 2.x needs for building mruby")
+    ENDIF()
+
     IF (${CMAKE_C_COMPILER_ID} STREQUAL "Clang")
         SET(MRUBY_TOOLCHAIN "clang")
     ELSE ()
