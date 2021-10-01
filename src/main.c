@@ -216,6 +216,11 @@ static struct {
      */
     int max_quic_connections;
     /**
+     * Controls how many pending connections in the kernel H2O will attempt to service. The kernel load-sheds excess connections
+     * beyond this value.
+     */
+    int max_conn_backlog;
+    /**
      * array size == number of worker threads to instantiate, the values indicate which CPU to pin, -1 if not
      */
     H2O_VECTOR(int) thread_map;
@@ -270,6 +275,7 @@ static struct {
     .error_log = NULL,
     .max_connections = 1024,
     .max_quic_connections = INT_MAX, /* (INT_MAX = i.e., allow up to max_connections) */
+    .max_conn_backlog = H2O_SOMAXCONN,
     .thread_map = {0},               /* initialized in main() */
     .quic = {0},                     /* 0 defaults to all, conn_callbacks (initialized in main() */
     .tfo_queues = 0,                 /* initialized in main() */
@@ -1406,7 +1412,7 @@ static int open_unix_listener(h2o_configurator_command_t *cmd, yoml_t *node, str
     }
 
     /* add new listener */
-    if ((fd = socket(AF_UNIX, SOCK_STREAM, 0)) == -1 || bind(fd, (void *)sa, sizeof(*sa)) != 0 || listen(fd, H2O_SOMAXCONN) != 0) {
+    if ((fd = socket(AF_UNIX, SOCK_STREAM, 0)) == -1 || bind(fd, (void *)sa, sizeof(*sa)) != 0 || listen(fd, conf.max_conn_backlog) != 0) {
         h2o_configurator_errprintf(NULL, node, "failed to listen to socket:%s: %s", sa->sun_path, strerror(errno));
         goto ErrorExit;
     }
@@ -1494,7 +1500,7 @@ static int open_listener(int domain, int type, int protocol, struct sockaddr *ad
         }
 #endif
         /* listen */
-        if (listen(fd, H2O_SOMAXCONN) != 0)
+        if (listen(fd, conf.max_conn_backlog) != 0)
             goto Error;
 #ifdef SO_ACCEPTFILTER
         { /* set SO_ACCEPTFILTER */
@@ -2006,6 +2012,11 @@ static int on_config_max_connections(h2o_configurator_command_t *cmd, h2o_config
 static int on_config_max_quic_connections(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     return h2o_configurator_scanf(cmd, node, "%d", &conf.max_quic_connections);
+}
+
+static int on_config_max_conn_backlog(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    return h2o_configurator_scanf(cmd, node, "%d", &conf.max_conn_backlog);
 }
 
 static inline int on_config_num_threads_add_cpu(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
@@ -3280,6 +3291,7 @@ static void setup_configurators(void)
                                         on_config_error_log);
         h2o_configurator_define_command(c, "max-connections", H2O_CONFIGURATOR_FLAG_GLOBAL, on_config_max_connections);
         h2o_configurator_define_command(c, "max-quic-connections", H2O_CONFIGURATOR_FLAG_GLOBAL, on_config_max_quic_connections);
+        h2o_configurator_define_command(c, "max-conn-backlog", H2O_CONFIGURATOR_FLAG_GLOBAL, on_config_max_conn_backlog);
         h2o_configurator_define_command(c, "num-threads", H2O_CONFIGURATOR_FLAG_GLOBAL, on_config_num_threads);
         h2o_configurator_define_command(c, "num-quic-threads", H2O_CONFIGURATOR_FLAG_GLOBAL, on_config_num_quic_threads);
         h2o_configurator_define_command(c, "num-name-resolution-threads", H2O_CONFIGURATOR_FLAG_GLOBAL,
