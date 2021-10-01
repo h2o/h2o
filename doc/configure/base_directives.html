@@ -88,6 +88,9 @@ This document describes the configuration directives common to all the protocols
 <li><a href="configure/base_directives.html#max-connections">
 <code>max-connections</code>
 </a></li>
+<li><a href="configure/base_directives.html#max-conn_backlog">
+<code>max-conn_backlog</code>
+</a></li>
 <li><a href="configure/base_directives.html#max-delegations">
 <code>max-delegations</code>
 </a></li>
@@ -554,6 +557,24 @@ Number of connections to handle at once at maximum.
 <dt>Default:</dt>
 <dd><code><pre>max-connections: 1024</pre></code>
 </dl>
+
+<div id="max-conn-backlog" class="directive-head">
+<h3><a href="configure/base_directives.html#max-conn-backlog"><code>"max-conn-backlog"</code></a></h3>
+</div>
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd><p>
+Number of incoming connections that may pend on a socket before the kernel discards additional arrivals.
+</p></dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global</dd>
+<dt>Default:</dt>
+<dd>
+<p><code><pre>max-conn-backlog: 65535</pre></code></p>
+<p>(or, if you build with a custom <code>-DH2O_SOMAXCONN</code>, the value of that macro)</p>
+</dd>
+</dl>
+
 <div id="max-delegations" class="directive-head">
 <h3><a href="configure/base_directives.html#max-delegations"><code>"max-delegations"</code></a></h3>
 </div>
