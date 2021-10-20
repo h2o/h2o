@@ -1440,7 +1440,7 @@ void do_emit_writereq(h2o_http2_conn_t *conn)
         conn->state = H2O_HTTP2_CONN_STATE_IS_CLOSING;
     /* fall-thru */
     case H2O_HTTP2_CONN_STATE_IS_CLOSING:
-        close_connection_now(conn);
+        close_connection(conn);
         break;
     }
 }
