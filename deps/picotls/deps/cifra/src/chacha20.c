@@ -52,7 +52,8 @@ void cf_chacha20_core(const uint8_t key0[16],
   a += b; d = rotl32(d ^ a, 8);  \
   c += d; b = rotl32(b ^ c, 7);
 
-  for (int i = 0; i < 10; i++)
+  int i;
+  for (i = 0; i < 10; i++)
   {
     QUARTER(z0, z4, z8, zc);
     QUARTER(z1, z5, z9, zd);

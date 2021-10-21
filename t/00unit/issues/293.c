@@ -36,7 +36,9 @@ static void register_authority(h2o_globalconf_t *globalconf, h2o_iovec_t host, u
     char *authority = h2o_mem_alloc(host.len + sizeof(":" H2O_UINT16_LONGEST_STR));
     sprintf(authority, "%.*s:%" PRIu16, (int)host.len, host.base, port);
     h2o_headers_command_t *cmds = h2o_mem_alloc(sizeof(*cmds) * 2);
-    cmds[0] = (h2o_headers_command_t){H2O_HEADERS_CMD_ADD, &x_authority, {authority, strlen(authority)}};
+    h2o_headers_command_arg_t *args = h2o_mem_alloc(sizeof(*args));
+    *args = (h2o_headers_command_arg_t){&x_authority, {authority, strlen(authority)}};
+    cmds[0] = (h2o_headers_command_t){H2O_HEADERS_CMD_ADD, args, 1};
     cmds[1] = (h2o_headers_command_t){H2O_HEADERS_CMD_NULL};
     h2o_headers_register(pathconf, cmds);
 }
@@ -52,10 +54,10 @@ static void check(const h2o_url_scheme_t *scheme, const char *host, const char *
     h2o_loopback_run_loop(conn);
     ok(conn->req.res.status == 200);
 
-    size_t index = h2o_find_header_by_str(&conn->req.res.headers, H2O_STRLIT("x-authority"), SIZE_MAX);
-    ok(index != SIZE_MAX);
+    ssize_t index = h2o_find_header_by_str(&conn->req.res.headers, H2O_STRLIT("x-authority"), -1);
+    ok(index != -1);
 
-    if (index != SIZE_MAX) {
+    if (index != -1) {
         ok(h2o_memis(conn->req.res.headers.entries[index].value.base, conn->req.res.headers.entries[index].value.len, expected,
                      strlen(expected)));
     }

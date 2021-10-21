@@ -20,6 +20,7 @@
  * IN THE SOFTWARE.
  */
 #include "h2o.h"
+#include "h2o/http2_internal.h"
 #include "h2o/http2_scheduler.h"
 
 struct st_h2o_http2_scheduler_queue_t {
@@ -47,7 +48,7 @@ static int queue_is_empty(h2o_http2_scheduler_queue_t *queue)
 static void queue_set(h2o_http2_scheduler_queue_t *queue, h2o_http2_scheduler_queue_node_t *node, uint16_t weight)
 {
     /* holds 257 entries of offsets (multiplied by 65536) where nodes with weights between 1..257 should go into
-     * each entry (expect for weight=256) is calculated as: round(N / weight), where N is adjusted so that the
+     * each entry (except for weight=256) is calculated as: round(N / weight), where N is adjusted so that the
      * value would become 63*65536 for weight=0.
      * weight=257 is used internally to send data before any of the streams being pulled, and therefore has the offset set to zero.
      */
@@ -159,7 +160,7 @@ static void decr_active_cnt(h2o_http2_scheduler_node_t *node)
 {
     h2o_http2_scheduler_openref_t *ref;
 
-    /* do notnig if node is the root */
+    /* do nothing if node is the root */
     if (node->_parent == NULL)
         return;
 
@@ -195,6 +196,7 @@ void h2o_http2_scheduler_open(h2o_http2_scheduler_openref_t *ref, h2o_http2_sche
     ref->_active_cnt = 0;
     ref->_self_is_active = 0;
     ref->_queue_node = (h2o_http2_scheduler_queue_node_t){{NULL}};
+    ref->_is_relocated = 0;
 
     h2o_linklist_insert(&parent->_all_refs, &ref->_all_link);
 
@@ -243,6 +245,46 @@ void h2o_http2_scheduler_close(h2o_http2_scheduler_openref_t *ref)
     }
 }
 
+void h2o_http2_scheduler_relocate(h2o_http2_scheduler_openref_t *dst, h2o_http2_scheduler_openref_t *src)
+{
+    init_node(&dst->node, src->node._parent);
+    dst->weight = src->weight;
+    dst->_all_link = (h2o_linklist_t){NULL};
+    dst->_active_cnt = src->_active_cnt;
+    dst->_self_is_active = src->_self_is_active;
+    dst->_queue_node._link = (h2o_linklist_t){NULL};
+    dst->_queue_node._deficit = src->_queue_node._deficit;
+    dst->_is_relocated = 1;
+
+    /* update refs from descendants */
+    if (!h2o_linklist_is_empty(&src->node._all_refs)) {
+        h2o_linklist_t *link;
+        /* update back reference */
+        for (link = src->node._all_refs.next; link != &src->node._all_refs; link = link->next) {
+            h2o_http2_scheduler_openref_t *child = H2O_STRUCT_FROM_MEMBER(h2o_http2_scheduler_openref_t, _all_link, link);
+            assert(child->node._parent == &src->node);
+            child->node._parent = &dst->node;
+        }
+        /* attach the list to dst */
+        h2o_linklist_insert_list(&dst->node._all_refs, &src->node._all_refs);
+        /* node._queue */
+        dst->node._queue = src->node._queue;
+    } else {
+        free(src->node._queue);
+    }
+    src->node._queue = NULL;
+
+    /* swap all_link */
+    h2o_linklist_insert(&src->_all_link, &dst->_all_link);
+    h2o_linklist_unlink(&src->_all_link);
+
+    /* swap _queue_node._link */
+    if (h2o_linklist_is_linked(&src->_queue_node._link)) {
+        h2o_linklist_insert(&src->_queue_node._link, &dst->_queue_node._link);
+        h2o_linklist_unlink(&src->_queue_node._link);
+    }
+}
+
 static void do_rebind(h2o_http2_scheduler_openref_t *ref, h2o_http2_scheduler_node_t *new_parent, int exclusive)
 {
     /* rebind _all_link */
@@ -276,8 +318,9 @@ void h2o_http2_scheduler_rebind(h2o_http2_scheduler_openref_t *ref, h2o_http2_sc
 
     ref->weight = weight;
 
-    { /* if new_parent is dependent to ref, make new_parent a sibling of ref before applying the final transition (see draft-16
-         5.3.3) */
+    /* if new_parent is dependent to ref, make new_parent a sibling of ref before applying the final transition (see draft-16
+       5.3.3) */
+    if (!h2o_linklist_is_empty(&ref->node._all_refs)) {
         h2o_http2_scheduler_node_t *t;
         for (t = new_parent; t->_parent != NULL; t = t->_parent) {
             if (t->_parent == &ref->node) {
@@ -303,9 +346,18 @@ void h2o_http2_scheduler_dispose(h2o_http2_scheduler_node_t *root)
     root->_queue = NULL;
 }
 
+void h2o_http2_scheduler_deactivate(h2o_http2_scheduler_openref_t *ref)
+{
+    if (!ref->_self_is_active)
+        return;
+    ref->_self_is_active = 0;
+    decr_active_cnt(&ref->node);
+}
+
 void h2o_http2_scheduler_activate(h2o_http2_scheduler_openref_t *ref)
 {
-    assert(!ref->_self_is_active);
+    if (ref->_self_is_active)
+        return;
     ref->_self_is_active = 1;
     incr_active_cnt(&ref->node);
 }
@@ -361,4 +413,22 @@ int h2o_http2_scheduler_run(h2o_http2_scheduler_node_t *root, h2o_http2_schedule
 int h2o_http2_scheduler_is_active(h2o_http2_scheduler_node_t *root)
 {
     return root->_queue != NULL && !queue_is_empty(root->_queue);
+}
+
+h2o_http2_scheduler_node_t *h2o_http2_scheduler_find_parent_by_weight(h2o_http2_scheduler_node_t *root, uint16_t new_weight)
+{
+    h2o_http2_scheduler_node_t *node = root;
+
+    while (!h2o_linklist_is_empty(&node->_all_refs)) {
+        /* This function (for now) assumes Chromium's dependency tree -- each stream shall have
+         * no more than one child. Thus it only looks at the first child (`_all_refs.next`) */
+        h2o_http2_scheduler_openref_t *child_ref =
+            H2O_STRUCT_FROM_MEMBER(h2o_http2_scheduler_openref_t, _all_link, node->_all_refs.next);
+        if (!child_ref->_is_relocated && child_ref->weight < new_weight) {
+            /* found a new parent */
+            break;
+        }
+        node = &child_ref->node;
+    }
+    return node;
 }

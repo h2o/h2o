@@ -44,7 +44,7 @@
 <tr>
 <td><a href="index.html">Top</a></td>
 <td><a href="install.html">Install</a></td>
-<td class="selected">Configure</td>
+<td class="selected"><a href="configure.html">Configure</a></td>
 <td><a href="faq.html">FAQ</a></td>
 <td><a href="http://blog.kazuhooku.com/search/label/H2O" target="_blank">Blog</a></td>
 <td><a href="http://github.com/h2o/h2o/" target="_blank">Source</a></td>
@@ -237,6 +237,9 @@ Since the API provides an asynchronous HTTP client, it is possible to effectivel
 <p>
 When HTTPS is used, servers are verified using the properties of <a href="configure/proxy_directives.html#proxy.ssl.cafile"><code>proxy.ssl.cafile</code></a> and <a href="configure/proxy_directives.html#proxy.ssl.verify-peer"><code>proxy.ssl.verify-peer</code></a> specified at the global level.
 </p>
+<p>
+Timeouts defined for the proxy handler (<a href="configure/proxy_directives.html#proxy.timeout.io"><code>proxy.timeout.*</code></a>) are applied to the requests that are issued by the <code>http_request</code> method.
+</p>
 
 <h3 id="logging-arbitrary-variable">Logging Arbitrary Variable</h3>
 
@@ -274,7 +277,7 @@ This example shows how to read request data, parse json and then log data from m
 </div>
 <div id="footer">
 <p>
-Copyright &copy; 2015 <a href="http://dena.com/intl/">DeNA Co., Ltd.</a> et al.
+Copyright &copy; 2015-2020 <a href="http://dena.com/intl/">DeNA Co., Ltd.</a> et al.
 </p>
 </div>
 </body>

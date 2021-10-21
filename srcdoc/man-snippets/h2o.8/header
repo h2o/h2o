@@ -1,0 +1,3 @@
+.TH H2O 8
+.SH NAME
+H2O \- the optimized HTTP/1.x, HTTP/2 server

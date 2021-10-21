@@ -34,7 +34,7 @@ assert('Kernel.eval', '15.3.1.2.3') do
   }
   assert_equal(2) {
     a = 10
-    Kernel.eval 'def f(a); b=a.send(:+, 1); end'
+    Kernel.eval 'def f(a); b=a+1; end'
     f(1)
   }
 end
@@ -58,7 +58,7 @@ end
 
 assert('String instance_eval') do
   obj = Object.new
-  obj.instance_variable_set :@test, 'test'
+  obj.instance_eval{ @test = 'test' }
   assert_raise(ArgumentError) { obj.instance_eval(0) { } }
   assert_raise(ArgumentError) { obj.instance_eval('0', 'test', 0, 'test') }
   assert_equal(['test.rb', 10]) { obj.instance_eval('[__FILE__, __LINE__]', 'test.rb', 10)}
@@ -98,4 +98,35 @@ assert('Object#instance_eval with begin-rescue-ensure execution order') do
 
   hell_raiser = HellRaiser.new
   assert_equal([:enter_raise_hell, :begin, :rescue, :ensure], hell_raiser.raise_hell)
+end
+
+assert('Kernel#instance_eval() to define singleton methods Issue #3141') do
+  foo_class = Class.new do
+    def bar(x)
+      instance_eval "def baz; #{x}; end"
+    end
+  end
+
+  f1 = foo_class.new
+  f2 = foo_class.new
+  f1.bar 1
+  f2.bar 2
+  assert_equal(1){f1.baz}
+  assert_equal(2){f2.baz}
+end
+
+assert('Kernel.#eval(string) Issue #4021') do
+  assert_equal('FOO') { (eval <<'EOS').call }
+foo = "FOO"
+Proc.new { foo }
+EOS
+  assert_equal('FOO') {
+    def do_eval(code)
+      eval(code)
+    end
+    do_eval(<<'EOS').call
+foo = "FOO"
+Proc.new { foo }
+EOS
+  }
 end

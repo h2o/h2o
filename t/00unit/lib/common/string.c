@@ -72,7 +72,7 @@ static void test_next_token(void)
     size_t token_len;
 
 #define NEXT()                                                                                                                     \
-    if ((token = h2o_next_token(&iter, ',', &token_len, NULL)) == NULL) {                                                          \
+    if ((token = h2o_next_token(&iter, ',', ',', &token_len, NULL)) == NULL) {                                                     \
         ok(0);                                                                                                                     \
         return;                                                                                                                    \
     }
@@ -84,7 +84,7 @@ static void test_next_token(void)
     ok(h2o_memis(token, token_len, H2O_STRLIT("max-age=86400")));
     NEXT();
     ok(h2o_memis(token, token_len, H2O_STRLIT("must-revalidate")));
-    token = h2o_next_token(&iter, ',', &token_len, NULL);
+    token = h2o_next_token(&iter, ',', ',', &token_len, NULL);
     ok(token == NULL);
 
     iter = h2o_iovec_init(H2O_STRLIT("  public  ,max-age=86400  ,"));
@@ -92,11 +92,11 @@ static void test_next_token(void)
     ok(h2o_memis(token, token_len, H2O_STRLIT("public")));
     NEXT();
     ok(h2o_memis(token, token_len, H2O_STRLIT("max-age=86400")));
-    token = h2o_next_token(&iter, ',', &token_len, NULL);
+    token = h2o_next_token(&iter, ',', ',', &token_len, NULL);
     ok(token == NULL);
 
     iter = h2o_iovec_init(H2O_STRLIT(""));
-    token = h2o_next_token(&iter, ',', &token_len, NULL);
+    token = h2o_next_token(&iter, ',', ',', &token_len, NULL);
     ok(token == NULL);
 
     iter = h2o_iovec_init(H2O_STRLIT(", ,a, "));
@@ -106,7 +106,7 @@ static void test_next_token(void)
     ok(token_len == 0);
     NEXT();
     ok(h2o_memis(token, token_len, H2O_STRLIT("a")));
-    token = h2o_next_token(&iter, ',', &token_len, NULL);
+    token = h2o_next_token(&iter, ',', ',', &token_len, NULL);
     ok(token == NULL);
 
 #undef NEXT
@@ -119,7 +119,7 @@ static void test_next_token2(void)
     size_t name_len;
 
 #define NEXT()                                                                                                                     \
-    if ((name = h2o_next_token(&iter, ',', &name_len, &value)) == NULL) {                                                          \
+    if ((name = h2o_next_token(&iter, ',', ',', &name_len, &value)) == NULL) {                                                     \
         ok(0);                                                                                                                     \
         return;                                                                                                                    \
     }
@@ -136,7 +136,7 @@ static void test_next_token2(void)
     ok(h2o_memis(name, name_len, H2O_STRLIT("must-revalidate")));
     ok(value.base == NULL);
     ok(value.len == 0);
-    name = h2o_next_token(&iter, ',', &name_len, &value);
+    name = h2o_next_token(&iter, ',', ',', &name_len, &value);
     ok(name == NULL);
 
     iter = h2o_iovec_init(H2O_STRLIT("public, max-age = 86400 = c , must-revalidate="));
@@ -149,7 +149,7 @@ static void test_next_token2(void)
     ok(h2o_memis(value.base, value.len, H2O_STRLIT("86400 = c")));
     NEXT();
     ok(h2o_memis(name, name_len, H2O_STRLIT("must-revalidate")));
-    name = h2o_next_token(&iter, ',', &name_len, &value);
+    name = h2o_next_token(&iter, ',', ',', &name_len, &value);
     ok(h2o_memis(value.base, value.len, H2O_STRLIT("")));
 
 #undef NEXT
@@ -162,7 +162,7 @@ static void test_next_token3(void)
     size_t name_len;
 
 #define NEXT()                                                                                                                     \
-    if ((name = h2o_next_token(&iter, ';', &name_len, &value)) == NULL) {                                                          \
+    if ((name = h2o_next_token(&iter, ';', ',', &name_len, &value)) == NULL) {                                                     \
         ok(0);                                                                                                                     \
         return;                                                                                                                    \
     }
@@ -195,7 +195,7 @@ static void test_next_token3(void)
     ok(h2o_memis(name, name_len, H2O_STRLIT("</zzz.js>")));
     ok(value.base == NULL);
     ok(value.len == 0);
-    name = h2o_next_token(&iter, ',', &name_len, &value);
+    name = h2o_next_token(&iter, ',', ',', &name_len, &value);
     ok(name == NULL);
 
 #undef NEXT
@@ -320,6 +320,46 @@ static void test_at_position(void)
     ok(ret != 0);
 }
 
+static void test_join_list(void)
+{
+    h2o_mem_pool_t pool;
+    h2o_mem_init_pool(&pool);
+
+    h2o_iovec_t list[5] = {
+        h2o_iovec_init(H2O_STRLIT("")),  h2o_iovec_init(H2O_STRLIT("a")), h2o_iovec_init(H2O_STRLIT("")),
+        h2o_iovec_init(H2O_STRLIT("b")), h2o_iovec_init(H2O_STRLIT("")),
+    };
+
+    h2o_iovec_t ret = h2o_join_list(&pool, list, sizeof(list) / sizeof(list[0]), h2o_iovec_init(H2O_STRLIT("...")));
+    ok(h2o_memis(ret.base, ret.len, H2O_STRLIT("...a......b...")));
+
+    h2o_mem_clear_pool(&pool);
+}
+
+static void test_split(void)
+{
+    h2o_mem_pool_t pool;
+    h2o_mem_init_pool(&pool);
+
+#define TEST(str, needle, ...)                                                                                                     \
+    do {                                                                                                                           \
+        const char *expected[] = {__VA_ARGS__};                                                                                    \
+        h2o_iovec_vector_t list = {0};                                                                                             \
+        h2o_split(&pool, &list, h2o_iovec_init(H2O_STRLIT((str))), (needle));                                                      \
+        size_t expected_len = sizeof(expected) / sizeof(expected[0]);                                                              \
+        ok(expected_len == list.size);                                                                                             \
+        size_t i;                                                                                                                  \
+        for (i = 0; i != list.size; ++i) {                                                                                         \
+            ok(h2o_memis(list.entries[i].base, list.entries[i].len, expected[i], strlen(expected[i])));                            \
+        }                                                                                                                          \
+    } while (0);
+
+    TEST("foo*bar*baz", '*', "foo", "bar", "baz");
+    TEST("***", '*', "", "", "", "");
+
+    h2o_mem_clear_pool(&pool);
+}
+
 void test_lib__common__string_c(void)
 {
     subtest("strstr", test_strstr);
@@ -332,4 +372,6 @@ void test_lib__common__string_c(void)
     subtest("htmlescape", test_htmlescape);
     subtest("uri_escape", test_uri_escape);
     subtest("at_position", test_at_position);
+    subtest("join_list", test_join_list);
+    subtest("split", test_split);
 }

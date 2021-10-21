@@ -6,6 +6,8 @@ The following are the configuration directives of the mruby handler.
 Please refer to <a href="configure/mruby.html">Using mruby</a> to find out how to write handlers using mruby.
 </p>
 
+? $ctx->{directive_list}->()->(sub {
+
 <?
 $ctx->{directive}->(
     name     => "mruby.handler",
@@ -53,6 +55,8 @@ EOT
 <p>
 Note that the provided expression is evaluated more than once (typically for every thread that accepts incoming connections).
 </p>
+? })
+
 ? })
 
 ? })

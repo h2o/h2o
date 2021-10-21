@@ -50,14 +50,13 @@
  * :param ciphertext: ciphertext output buffer, nbytes in length.
  * :param tag: authentication tag output buffer.
  */
-void cf_norx32_encrypt(const uint8_t key[static 16],
-                       const uint8_t nonce[static 8],
+void cf_norx32_encrypt(const uint8_t key[16],
+                       const uint8_t nonce[8],
                        const uint8_t *header, size_t nheader,
                        const uint8_t *plaintext, size_t nbytes,
                        const uint8_t *trailer, size_t ntrailer,
                        uint8_t *ciphertext,
-                       uint8_t tag[static 16]);
-
+                       uint8_t tag[16]);
 /* .. c:function:: $DECL
  * NORX32-4-1 one-shot decryption interface.
  *
@@ -74,12 +73,12 @@ void cf_norx32_encrypt(const uint8_t key[static 16],
  * :param plaintext: plaintext output buffer, nbytes in length.
  * :param tag: authentication tag output buffer.
  */
-int cf_norx32_decrypt(const uint8_t key[static 16],
-                      const uint8_t nonce[static 8],
+int cf_norx32_decrypt(const uint8_t key[16],
+                      const uint8_t nonce[8],
                       const uint8_t *header, size_t nheader,
                       const uint8_t *ciphertext, size_t nbytes,
                       const uint8_t *trailer, size_t ntrailer,
-                      const uint8_t tag[static 16],
+                      const uint8_t tag[16],
                       uint8_t *plaintext);
 
 #endif

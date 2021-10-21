@@ -39,6 +39,12 @@
 #endif
 
 /**
+ * environment variable name for listening socket's addr and fd
+ * example: 127.0.0.1:80=3;/tmp/sock=4
+ */
+#define SERVER_STARTER_PORT "SERVER_STARTER_PORT"
+
+/**
  * equivalent of signal(3)
  */
 void h2o_set_signal_handler(int signo, void (*cb)(int signo));

@@ -37,11 +37,11 @@ sub doit {
     my $msg = shift;
     my $x_compress_header = shift;
     my $expect_content_encoding = shift;
-    my $accept_gzip = shift;
+    my $accept_encoding = shift;
 
     my $ae_header = "";
-    if ($accept_gzip) {
-        $ae_header = "-Haccept-encoding:gzip";
+    if (defined $accept_encoding) {
+        $ae_header = "-Haccept-encoding:$accept_encoding";
     }
     open(CURL, "curl $ae_header -Hhost:host.example.com -svo /dev/null http://127.0.0.1:$server->{'port'}/ 2>&1 |");
 
@@ -52,34 +52,52 @@ sub doit {
     $client_socket->send("HTTP/1.1 200 Ok\r\ncontent-length:${cl}\r\ncontent-type:text/html\r\n${x_compress_header}Connection:close\r\n\r\n$msg");
     close($client_socket);
 
-    my $seen_content_encoding = 0;
+    my $seen_content_encoding = "";
     while(<CURL>) {
-        if (/< content-encoding/) {
-            $seen_content_encoding = 1;
+        if (/< content-encoding: (\w+)/) {
+            $seen_content_encoding = $1;
         }
     }
 
     my $neg = "";
-    if ($expect_content_encoding == 0) {
+    if ($expect_content_encoding ne "") {
         $neg = "not ";
     }
-    ok($seen_content_encoding == $expect_content_encoding, "The body was ${neg}encoded as expected");
+    ok($seen_content_encoding eq $expect_content_encoding, "The body was ${neg}encoded as expected");
 }
 
-doit("This is large enough to be compressed", "", 1, 1);
-doit("This is large enough to be compressed", "x-compress-hint: auto\r\n", 1, 1);
-doit("This is large enough to be compressed", "x-compress-hint: on\r\n", 1, 1);
-doit("This is large enough to be compressed", "x-compress-hint: off\r\n", 0, 1);
+subtest "compressible object" => sub {
+    doit("This is large enough to be compressed", "", "gzip", "gzip");
+    doit("This is large enough to be compressed", "x-compress-hint: auto\r\n", "gzip", "gzip");
+    doit("This is large enough to be compressed", "x-compress-hint: on\r\n", "gzip", "gzip");
+    doit("This is large enough to be compressed", "x-compress-hint: off\r\n", "", "gzip");
+};
 
-doit("too small", "", 0, 1);
-doit("too small", "x-compress-hint: auto\r\n", 0, 1);
-doit("too small", "x-compress-hint: on\r\n", 1, 1);
-doit("too small", "x-compress-hint: off\r\n", 0, 1);
+subtest "incompressible object" => sub {
+    doit("too small", "", "", "gzip");
+    doit("too small", "x-compress-hint: auto\r\n", "", "gzip");
+    doit("too small", "x-compress-hint: on\r\n", "gzip", "gzip");
+    doit("too small", "x-compress-hint: off\r\n", "", "gzip");
+};
 
-doit("This is large enough to be compressed", "", 0, 0);
-doit("This is large enough to be compressed", "x-compress-hint: auto\r\n", 0, 0);
-doit("This is large enough to be compressed", "x-compress-hint: on\r\n", 0, 0);
-doit("This is large enough to be compressed", "x-compress-hint: off\r\n", 0, 0);
+subtest "no accept-encoding, no compression" => sub {
+    doit("This is large enough to be compressed", "", "", "");
+    doit("This is large enough to be compressed", "x-compress-hint: auto\r\n", "", "");
+    doit("This is large enough to be compressed", "x-compress-hint: on\r\n", "", "");
+    doit("This is large enough to be compressed", "x-compress-hint: off\r\n", "", "");
+};
+
+subtest "br,gzip compresses to br by default" => sub {
+    doit("This is large enough to be compressed", "", "br", "br,gzip");
+    doit("This is large enough to be compressed", "x-compress-hint: auto\r\n", "br", "br,gzip");
+    doit("This is large enough to be compressed", "x-compress-hint: on\r\n", "br", "br,gzip");
+    doit("This is large enough to be compressed", "x-compress-hint: off\r\n", "", "br,gzip");
+};
+
+subtest "forcing gzip or br also works" => sub {
+    doit("This is large enough to be compressed", "x-compress-hint: gzip\r\n", "gzip", "br,gzip");
+    doit("This is large enough to be compressed", "x-compress-hint: br\r\n", "", "gzip");
+};
 
 $socket->close();
 done_testing();

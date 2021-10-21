@@ -23,6 +23,8 @@ class OnigRegexp
   # ISO 15.2.15.7.4
   def ===(str)
     not self.match(str).nil?
+  rescue TypeError
+    false
   end
 
   # ISO 15.2.15.7.5
@@ -46,10 +48,12 @@ class String
   end
 
   # redefine methods with oniguruma regexp version
-  [:sub, :gsub, :split, :scan].each do |v|
-    alias_method "string_#{v}".to_sym, v
-    alias_method v, "onig_regexp_#{v}".to_sym
+  %i[sub gsub split scan].each do |v|
+    alias_method :"string_#{v}", v
+    alias_method v, :"onig_regexp_#{v}"
   end
+
+  alias_method :match?, :onig_regexp_match?
 
   alias_method :old_slice, :slice
   alias_method :old_square_brancket, :[]

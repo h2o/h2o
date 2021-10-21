@@ -41,9 +41,9 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
 
     // stringify these variables to embed in Debug Header
     h2o_iovec_t conn_flow_in, conn_flow_out;
-    conn_flow_in.base = h2o_mem_alloc_pool(&req->pool, sizeof(H2O_INT64_LONGEST_STR));
+    conn_flow_in.base = h2o_mem_alloc_pool(&req->pool, char, sizeof(H2O_INT64_LONGEST_STR));
     conn_flow_in.len = sprintf(conn_flow_in.base, "%zd", debug_state->conn_flow_in);
-    conn_flow_out.base = h2o_mem_alloc_pool(&req->pool, sizeof(H2O_INT64_LONGEST_STR));
+    conn_flow_out.base = h2o_mem_alloc_pool(&req->pool, char, sizeof(H2O_INT64_LONGEST_STR));
     conn_flow_out.len = sprintf(conn_flow_out.base, "%zd", debug_state->conn_flow_out);
 
     req->res.status = 200;

@@ -199,7 +199,7 @@ static void *writer_main(void *_conn)
                     goto Error;
                 break;
             default:
-                fprintf(stderr, "[lib/common/memcached.c] unknown type:%d\n", (int)req->type);
+                h2o_error_printf("[lib/common/memcached.c] unknown type:%d\n", (int)req->type);
                 err = YRMCDS_NOT_IMPLEMENTED;
                 goto Error;
             }
@@ -213,7 +213,7 @@ static void *writer_main(void *_conn)
     return NULL;
 
 Error:
-    fprintf(stderr, "[lib/common/memcached.c] failed to send request; %s\n", yrmcds_strerror(err));
+    h2o_error_printf("[lib/common/memcached.c] failed to send request; %s\n", yrmcds_strerror(err));
     /* doc says the call can be used to interrupt yrmcds_recv */
     yrmcds_shutdown(&conn->yrmcds);
 
@@ -227,8 +227,8 @@ static void connect_to_server(h2o_memcached_context_t *ctx, yrmcds *yrmcds)
 
     for (failcnt = 0; (err = yrmcds_connect(yrmcds, ctx->host, ctx->port)) != YRMCDS_OK; ++failcnt) {
         if (failcnt == 0) {
-            fprintf(stderr, "[lib/common/memcached.c] failed to connect to memcached at %s:%" PRIu16 ", %s\n", ctx->host, ctx->port,
-                    yrmcds_strerror(err));
+            h2o_error_printf("[lib/common/memcached.c] failed to connect to memcached at %s:%" PRIu16 ", %s\n", ctx->host,
+                             ctx->port, yrmcds_strerror(err));
         }
         ++failcnt;
         usleep(2000000 + h2o_rand() % 3000000); /* sleep 2 to 5 seconds */
@@ -236,7 +236,7 @@ static void connect_to_server(h2o_memcached_context_t *ctx, yrmcds *yrmcds)
     /* connected */
     if (ctx->text_protocol)
         yrmcds_text_mode(yrmcds);
-    fprintf(stderr, "[lib/common/memcached.c] connected to memcached at %s:%" PRIu16 "\n", ctx->host, ctx->port);
+    h2o_error_printf("[lib/common/memcached.c] connected to memcached at %s:%" PRIu16 "\n", ctx->host, ctx->port);
 }
 
 static void reader_main(h2o_memcached_context_t *ctx)
@@ -245,12 +245,13 @@ static void reader_main(h2o_memcached_context_t *ctx)
     pthread_t writer_thread;
     yrmcds_response resp;
     yrmcds_error err;
+    int ret;
 
     /* connect to server and start the writer thread */
     connect_to_server(conn.ctx, &conn.yrmcds);
-    if (pthread_create(&writer_thread, NULL, writer_main, &conn) != 0) {
-        perror("pthread_create");
-        abort();
+    if ((ret = pthread_create(&writer_thread, NULL, writer_main, &conn)) != 0) {
+        char buf[128];
+        h2o_fatal("pthread_create: %s", h2o_strerror_r(ret, buf, sizeof(buf)));
     }
 
     pthread_mutex_lock(&conn.ctx->mutex);
@@ -260,14 +261,14 @@ static void reader_main(h2o_memcached_context_t *ctx)
     /* receive data until an error occurs */
     while (1) {
         if ((err = yrmcds_recv(&conn.yrmcds, &resp)) != YRMCDS_OK) {
-            fprintf(stderr, "[lib/common/memcached.c] yrmcds_recv:%s\n", yrmcds_strerror(err));
+            h2o_error_printf("[lib/common/memcached.c] yrmcds_recv:%s\n", yrmcds_strerror(err));
             break;
         }
         h2o_memcached_req_t *req = pop_inflight(&conn, resp.serial);
         if (req == NULL) {
             if (conn.yrmcds.text_mode)
                 continue;
-            fprintf(stderr, "[lib/common/memcached.c] received unexpected serial\n");
+            h2o_error_printf("[lib/common/memcached.c] received unexpected serial\n");
             break;
         }
         if (resp.status == YRMCDS_STATUS_OK) {

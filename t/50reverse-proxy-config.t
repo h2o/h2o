@@ -37,14 +37,16 @@ hosts:
         proxy.reverse.url: http://127.0.0.1:$upstream_port
         proxy.preserve-host: @{[ $flag ? 'ON' : 'OFF' ]}
 EOT
-        my $res = `curl --silent http://127.0.0.1:$server->{port}/echo-headers`;
-        like $res, qr/^host: 127.0.0.1:@{[ $flag ? $server->{port} : $upstream_port ]}$/im, 'host header';
+        run_with_curl($server, sub {
+            my ($proto, $port, $curl) = @_;
+            my ($headers, $body) = run_prog("$curl --silent --dump-header /dev/stderr $proto://127.0.0.1:$port/echo-headers");
+            like $body, qr/^host: 127.0.0.1:@{[ $flag ? $port : $upstream_port ]}$/im, 'host header';
 
-        $res = `curl --silent --dump-header /dev/stdout "http://127.0.0.1:$server->{port}/?resp:status=302&resp:location=http://127.0.0.1:$server->{port}/foo"`;
-        like $res, qr{^location: http://127\.0\.0\.1:$server->{port}/foo}im, 'location: :server_port';
-        warn qq{curl --silent --dump-header /dev/stdout "http://127.0.0.1:$server->{port}/?resp:status=302&resp:location=http://127.0.0.1:$upstream_port/foo"};
-        $res = `curl --silent --dump-header /dev/stdout "http://127.0.0.1:$server->{port}/?resp:status=302&resp:location=http://127.0.0.1:$upstream_port/foo"`;
-        like $res, qr{^location: http://127\.0\.0\.1:$server->{port}/foo}im, 'location :upstream_port';
+            ($headers, $body) = run_prog("$curl --silent --dump-header /dev/stderr '$proto://127.0.0.1:$port/?resp:status=302&resp:location=$proto://127.0.0.1:$port/foo'");
+            like $headers, qr{^location: $proto://127\.0\.0\.1:$port/foo}im, 'location: :server_port';
+            ($headers, $body) = run_prog("$curl --silent --dump-header /dev/stderr '$proto://127.0.0.1:$port/?resp:status=302&resp:location=http://127.0.0.1:$upstream_port/foo'");
+            like $headers, qr{^location: $proto://127\.0\.0\.1:$port/foo}im, 'location :upstream_port';
+        });
     };
 
     subtest 'ON' => sub {

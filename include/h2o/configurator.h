@@ -165,6 +165,20 @@ int h2o_configurator_scanf(h2o_configurator_command_t *cmd, yoml_t *node, const 
  */
 ssize_t h2o_configurator_get_one_of(h2o_configurator_command_t *cmd, yoml_t *node, const char *candidates);
 /**
+ * extracts values (required and optional) from a mapping by their keys, or prints an error upon failure
+ * @param configurator configurator
+ * @param node the mapping to parse
+ * @param keys_required comma-separated list of required keys (or NULL)
+ * @param keys_optional comma-separated list of optional keys (or NULL)
+ * @param ... pointers to `yoml_t **` for receiving the results; they should appear in the order they appear in the key names
+ * @return 0 if successful, -1 if not
+ */
+#define h2o_configurator_parse_mapping(cmd, node, keys_required, keys_optional, ...)                                               \
+    h2o_configurator__do_parse_mapping((cmd), (node), (keys_required), (keys_optional), (yoml_t * **[]){__VA_ARGS__},              \
+                                       sizeof((yoml_t ***[]){__VA_ARGS__}) / sizeof(yoml_t ***))
+int h2o_configurator__do_parse_mapping(h2o_configurator_command_t *cmd, yoml_t *node, const char *keys_required,
+                                       const char *keys_optional, yoml_t ****values, size_t num_values);
+/**
  * returns the absolute paths of supplementary commands
  */
 char *h2o_configurator_get_cmd_path(const char *cmd);

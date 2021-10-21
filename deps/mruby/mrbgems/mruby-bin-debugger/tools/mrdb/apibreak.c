@@ -112,23 +112,12 @@ check_file_lineno(struct mrb_irep *irep, const char *file, uint16_t lineno)
   return result;
 }
 
-static const char*
-get_class_name(mrb_state *mrb, struct RClass *class_obj)
-{
-  struct RClass *outer;
-  mrb_sym class_sym;
-
-  outer = mrb_class_outer_module(mrb, class_obj);
-  class_sym = mrb_class_sym(mrb, class_obj, outer);
-  return mrb_sym2name(mrb, class_sym);
-}
-
 static int32_t
 compare_break_method(mrb_state *mrb, mrb_debug_breakpoint *bp, struct RClass *class_obj, mrb_sym method_sym, mrb_bool* isCfunc)
 {
   const char* class_name;
   const char* method_name;
-  struct RProc* m;
+  mrb_method_t m;
   struct RClass* sc;
   const char* sn;
   mrb_sym ssym;
@@ -139,7 +128,7 @@ compare_break_method(mrb_state *mrb, mrb_debug_breakpoint *bp, struct RClass *cl
 
   method_p = &bp->point.methodpoint;
   if (strcmp(method_p->method_name, method_name) == 0) {
-    class_name = get_class_name(mrb, class_obj);
+    class_name = mrb_class_name(mrb, class_obj);
     if (class_name == NULL) {
       if (method_p->class_name == NULL) {
         return bp->bpno;
@@ -147,10 +136,10 @@ compare_break_method(mrb_state *mrb, mrb_debug_breakpoint *bp, struct RClass *cl
     }
     else if (method_p->class_name != NULL) {
       m = mrb_method_search_vm(mrb, &class_obj, method_sym);
-      if (m == NULL) {
+      if (MRB_METHOD_UNDEF_P(m)) {
         return MRB_DEBUG_OK;
       }
-      if (MRB_PROC_CFUNC_P(m)) {
+      if (MRB_METHOD_CFUNC_P(m)) {
         *isCfunc = TRUE;
       }
 
@@ -162,12 +151,12 @@ compare_break_method(mrb_state *mrb, mrb_debug_breakpoint *bp, struct RClass *cl
       sc = mrb_class_get(mrb, method_p->class_name);
       ssym = mrb_symbol(mrb_check_intern_cstr(mrb, method_p->method_name));
       m = mrb_method_search_vm(mrb, &sc, ssym);
-      if (m == NULL) {
+      if (MRB_METHOD_UNDEF_P(m)) {
         return MRB_DEBUG_OK;
       }
 
-      class_name = get_class_name(mrb, class_obj);
-      sn = get_class_name(mrb, sc);
+      class_name = mrb_class_name(mrb, class_obj);
+      sn = mrb_class_name(mrb, sc);
       if (strcmp(sn, class_name) == 0) {
         return bp->bpno;
       }
@@ -204,7 +193,7 @@ mrb_debug_set_break_line(mrb_state *mrb, mrb_debug_context *dbg, const char *fil
     return MRB_DEBUG_BREAK_INVALID_LINENO;
   }
 
-  set_file = mrb_malloc(mrb, strlen(file) + 1);
+  set_file = (char*)mrb_malloc(mrb, strlen(file) + 1);
 
   index = dbg->bpnum;
   dbg->bp[index].bpno = dbg->next_bpno;
@@ -241,14 +230,14 @@ mrb_debug_set_break_method(mrb_state *mrb, mrb_debug_context *dbg, const char *c
   }
 
   if (class_name != NULL) {
-    set_class = mrb_malloc(mrb, strlen(class_name) + 1);
+    set_class = (char*)mrb_malloc(mrb, strlen(class_name) + 1);
     strncpy(set_class, class_name, strlen(class_name) + 1);
   }
   else {
     set_class = NULL;
   }
 
-  set_method = mrb_malloc(mrb, strlen(method_name) + 1);
+  set_method = (char*)mrb_malloc(mrb, strlen(method_name) + 1);
 
   strncpy(set_method, method_name, strlen(method_name) + 1);
 
@@ -440,7 +429,7 @@ static mrb_bool
 check_start_pc_for_line(mrb_irep *irep, mrb_code *pc, uint16_t line)
 {
   if (pc > irep->iseq) {
-    if (line == mrb_debug_get_line(irep, (uint32_t)(pc - irep->iseq - 1))) {
+    if (line == mrb_debug_get_line(irep, pc - irep->iseq - 1)) {
       return FALSE;
     }
   }
@@ -514,5 +503,3 @@ mrb_debug_check_breakpoint_method(mrb_state *mrb, mrb_debug_context *dbg, struct
 
   return 0;
 }
-
-

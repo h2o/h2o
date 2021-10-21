@@ -3,7 +3,7 @@ require 'test/assert.rb'
 
 def cmd(s)
   case RbConfig::CONFIG['host_os']
-  when /mswin(?!ce)|mingw|cygwin|bccwin/
+  when /mswin(?!ce)|mingw|bccwin/
     "bin\\#{s}.exe"
   else
     "bin/#{s}"
@@ -12,7 +12,7 @@ end
 
 def shellquote(s)
   case RbConfig::CONFIG['host_os']
-  when /mswin(?!ce)|mingw|cygwin|bccwin/
+  when /mswin(?!ce)|mingw|bccwin/
     "\"#{s}\""
   else
     "'#{s}'"
@@ -20,8 +20,12 @@ def shellquote(s)
 end
 
 ARGV.each do |gem|
+  case gem
+  when '-v'; $mrbtest_verbose = true
+  end
+
   case RbConfig::CONFIG['host_os']
-  when /mswin(?!ce)|mingw|cygwin|bccwin/
+  when /mswin(?!ce)|mingw|bccwin/
     gem = gem.gsub('\\', '/')
   end
 

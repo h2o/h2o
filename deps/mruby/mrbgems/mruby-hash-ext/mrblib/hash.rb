@@ -27,9 +27,9 @@ class Hash
     length = object.length
     if length == 1
       o = object[0]
-      if o.respond_to?(:to_hash)
+      if Hash === o
         h = self.new
-        object[0].to_hash.each { |k, v| h[k] = v }
+        o.each { |k, v| h[k] = v }
         return h
       elsif o.respond_to?(:to_a)
         h = self.new
@@ -62,25 +62,6 @@ class Hash
 
   ##
   # call-seq:
-  #     Hash.try_convert(obj) -> hash or nil
-  #
-  # Try to convert <i>obj</i> into a hash, using to_hash method.
-  # Returns converted hash or nil if <i>obj</i> cannot be converted
-  # for any reason.
-  #
-  #     Hash.try_convert({1=>2})   # => {1=>2}
-  #     Hash.try_convert("1=>2")   # => nil
-  #
-  def self.try_convert(obj)
-    if obj.respond_to?(:to_hash)
-      obj.to_hash
-    else
-      nil
-    end
-  end
-
-  ##
-  # call-seq:
   #     hsh.merge!(other_hash)                                 -> hsh
   #     hsh.merge!(other_hash){|key, oldval, newval| block}    -> hsh
   #
@@ -101,7 +82,7 @@ class Hash
   #
 
   def merge!(other, &block)
-    raise TypeError, "can't convert argument into Hash" unless other.respond_to?(:to_hash)
+    raise TypeError, "Hash required (#{other.class} given)" unless Hash === other
     if block
       other.each_key{|k|
         self[k] = (self.has_key?(k))? block.call(k, self[k], other[k]): other[k]
@@ -113,6 +94,51 @@ class Hash
   end
 
   alias update merge!
+
+  ##
+  # call-seq:
+  #   hsh.compact!    -> hsh
+  #
+  # Removes all nil values from the hash. Returns the hash.
+  # Returns nil if the hash does not contain nil values.
+  #
+  #   h = { a: 1, b: false, c: nil }
+  #   h.compact!     #=> { a: 1, b: false }
+  #
+
+  def compact!
+    keys = self.keys
+    nk = keys.select{|k|
+      self[k] != nil
+    }
+    return nil if (keys.size == nk.size)
+    h = {}
+    nk.each {|k|
+      h[k] = self[k]
+    }
+    h
+    self.replace(h)
+  end
+
+  ##
+  # call-seq:
+  #    hsh.compact     -> new_hsh
+  #
+  # Returns a new hash with the nil values/key pairs removed
+  #
+  #    h = { a: 1, b: false, c: nil }
+  #    h.compact     #=> { a: 1, b: false }
+  #    h             #=> { a: 1, b: false, c: nil }
+  #
+  def compact
+    h = {}
+    self.keys.select{|k|
+      self[k] != nil
+    }.each {|k|
+      h[k] = self[k]
+    }
+    h
+  end
 
   ##
   #  call-seq:
@@ -149,7 +175,7 @@ class Hash
       elsif none != NONE
         none
       else
-        raise KeyError, "Key not found: #{key}"
+        raise KeyError, "Key not found: #{key.inspect}"
       end
     else
       self[key]
@@ -171,7 +197,7 @@ class Hash
   #
 
   def delete_if(&block)
-    return to_enum :delete_if unless block_given?
+    return to_enum :delete_if unless block
 
     self.each do |k, v|
       self.delete(k) if block.call(k, v)
@@ -228,7 +254,7 @@ class Hash
   #
 
   def keep_if(&block)
-    return to_enum :keep_if unless block_given?
+    return to_enum :keep_if unless block
 
     keys = []
     self.each do |k, v|
@@ -284,11 +310,7 @@ class Hash
   #     h1 < h1    #=> false
   #
   def <(hash)
-    begin
-      hash = hash.to_hash
-    rescue NoMethodError
-      raise TypeError, "can't convert #{hash.class} to Hash"
-    end
+    raise TypeError, "can't convert #{hash.class} to Hash" unless Hash === hash
     size < hash.size and all? {|key, val|
       hash.key?(key) and hash[key] == val
     }
@@ -308,11 +330,7 @@ class Hash
   #     h1 <= h1   #=> true
   #
   def <=(hash)
-    begin
-      hash = hash.to_hash
-    rescue NoMethodError
-      raise TypeError, "can't convert #{hash.class} to Hash"
-    end
+    raise TypeError, "can't convert #{hash.class} to Hash" unless Hash === hash
     size <= hash.size and all? {|key, val|
       hash.key?(key) and hash[key] == val
     }
@@ -332,11 +350,7 @@ class Hash
   #     h1 > h1    #=> false
   #
   def >(hash)
-    begin
-      hash = hash.to_hash
-    rescue NoMethodError
-      raise TypeError, "can't convert #{hash.class} to Hash"
-    end
+    raise TypeError, "can't convert #{hash.class} to Hash" unless Hash === hash
     size > hash.size and hash.all? {|key, val|
       key?(key) and self[key] == val
     }
@@ -356,11 +370,7 @@ class Hash
   #     h1 >= h1   #=> true
   #
   def >=(hash)
-    begin
-      hash = hash.to_hash
-    rescue NoMethodError
-      raise TypeError, "can't convert #{hash.class} to Hash"
-    end
+    raise TypeError, "can't convert #{hash.class} to Hash" unless Hash === hash
     size >= hash.size and hash.all? {|key, val|
       key?(key) and self[key] == val
     }
@@ -380,6 +390,108 @@ class Hash
       n&.dig(*args)
     else
       n
+    end
+  end
+
+  ##
+  # call-seq:
+  #    hsh.transform_keys {|key| block } -> new_hash
+  #    hsh.transform_keys                -> an_enumerator
+  #
+  # Returns a new hash, with the keys computed from running the block
+  # once for each key in the hash, and the values unchanged.
+  #
+  # If no block is given, an enumerator is returned instead.
+  #
+  def transform_keys(&block)
+    return to_enum :transform_keys unless block
+    hash = {}
+    self.keys.each do |k|
+      new_key = block.call(k)
+      hash[new_key] = self[k]
+    end
+    hash
+  end
+  ##
+  # call-seq:
+  #    hsh.transform_keys! {|key| block } -> hsh
+  #    hsh.transform_keys!                -> an_enumerator
+  #
+  # Invokes the given block once for each key in <i>hsh</i>, replacing it
+  # with the new key returned by the block, and then returns <i>hsh</i>.
+  #
+  # If no block is given, an enumerator is returned instead.
+  #
+  def transform_keys!(&block)
+    return to_enum :transform_keys! unless block
+    self.keys.each do |k|
+      value = self[k]
+      self.__delete(k)
+      k = block.call(k) if block
+      self[k] = value
+    end
+    self
+  end
+  ##
+  # call-seq:
+  #    hsh.transform_values {|value| block } -> new_hash
+  #    hsh.transform_values                  -> an_enumerator
+  #
+  # Returns a new hash with the results of running the block once for
+  # every value.
+  # This method does not change the keys.
+  #
+  # If no block is given, an enumerator is returned instead.
+  #
+  def transform_values(&b)
+    return to_enum :transform_values unless block_given?
+    hash = {}
+    self.keys.each do |k|
+      hash[k] = yield(self[k])
+    end
+    hash
+  end
+
+  ##
+  # call-seq:
+  #    hsh.transform_values! {|key| block } -> hsh
+  #    hsh.transform_values!                -> an_enumerator
+  #
+  # Invokes the given block once for each value in the hash, replacing
+  # with the new value returned by the block, and then returns <i>hsh</i>.
+  #
+  # If no block is given, an enumerator is returned instead.
+  #
+  def transform_values!(&b)
+    return to_enum :transform_values! unless block_given?
+    self.keys.each do |k|
+      self[k] = yield(self[k])
+    end
+    self
+  end
+
+  def to_proc
+    ->x{self[x]}
+  end
+
+  ##
+  # call-seq:
+  #   hsh.fetch_values(key, ...)                 -> array
+  #   hsh.fetch_values(key, ...) { |key| block } -> array
+  #
+  # Returns an array containing the values associated with the given keys
+  # but also raises <code>KeyError</code> when one of keys can't be found.
+  # Also see <code>Hash#values_at</code> and <code>Hash#fetch</code>.
+  #
+  #   h = { "cat" => "feline", "dog" => "canine", "cow" => "bovine" }
+  #
+  #   h.fetch_values("cow", "cat")                   #=> ["bovine", "feline"]
+  #   h.fetch_values("cow", "bird")                  # raises KeyError
+  #   h.fetch_values("cow", "bird") { |k| k.upcase } #=> ["bovine", "BIRD"]
+  #
+  def fetch_values(*keys, &block)
+    keys.map do |k|
+      self.fetch(k, &block)
     end
   end
 end

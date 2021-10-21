@@ -8,7 +8,8 @@ MRuby::Build.new do |conf|
     toolchain :gcc
   end
 
-  enable_debug
+  # Turn on `enable_debug` for better debugging
+  # enable_debug
 
   # Use mrbgems
   # conf.gem 'examples/mrbgems/ruby_extension_example'
@@ -124,17 +125,17 @@ MRuby::Build.new('test') do |conf|
   conf.gembox 'default'
 end
 
-MRuby::Build.new('bench') do |conf|
-  # Gets set by the VS command prompts.
-  if ENV['VisualStudioVersion'] || ENV['VSINSTALLDIR']
-    toolchain :visualcpp
-  else
-    toolchain :gcc
-    conf.cc.flags << '-O3'
-  end
-
-  conf.gembox 'default'
-end
+#MRuby::Build.new('bench') do |conf|
+#  # Gets set by the VS command prompts.
+#  if ENV['VisualStudioVersion'] || ENV['VSINSTALLDIR']
+#    toolchain :visualcpp
+#  else
+#    toolchain :gcc
+#    conf.cc.flags << '-O3'
+#  end
+#
+#  conf.gembox 'default'
+#end
 
 # Define cross build settings
 # MRuby::CrossBuild.new('32bit') do |conf|
@@ -148,5 +149,4 @@ end
 #   conf.gem 'examples/mrbgems/c_and_ruby_extension_example'
 #
 #   conf.test_runner.command = 'env'
-#
 # end

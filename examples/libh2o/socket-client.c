@@ -21,6 +21,7 @@
  */
 #include <errno.h>
 #include <netdb.h>
+#include <netinet/in.h>
 #include <stdio.h>
 #include <sys/socket.h>
 #include <sys/types.h>
@@ -82,7 +83,7 @@ static void on_connect(h2o_socket_t *sock, const char *err)
     }
 
     if (ssl_ctx != NULL) {
-        h2o_socket_ssl_handshake(sock, ssl_ctx, host, on_handshake_complete);
+        h2o_socket_ssl_handshake(sock, ssl_ctx, host, h2o_iovec_init(NULL, 0), on_handshake_complete);
     } else {
         h2o_socket_write(sock, sock->data, 1, on_write);
     }
@@ -109,7 +110,7 @@ int main(int argc, char **argv)
         SSL_load_error_strings();
         SSL_library_init();
         OpenSSL_add_all_algorithms();
-        ssl_ctx = SSL_CTX_new(TLSv1_client_method());
+        ssl_ctx = SSL_CTX_new(SSLv23_client_method());
         SSL_CTX_load_verify_locations(ssl_ctx, H2O_TO_STR(H2O_ROOT) "/share/h2o/ca-bundle.crt", NULL);
         SSL_CTX_set_verify(ssl_ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, NULL);
     }

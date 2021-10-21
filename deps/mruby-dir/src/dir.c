@@ -48,7 +48,7 @@ struct mrb_dir {
 void
 mrb_dir_free(mrb_state *mrb, void *ptr)
 {
-  struct mrb_dir *mdir = ptr;
+  struct mrb_dir *mdir = (struct mrb_dir *)ptr;
 
   if (mdir->dir) {
     closedir(mdir->dir);
@@ -181,6 +181,28 @@ mrb_dir_chdir(mrb_state *mrb, mrb_value klass)
 }
 
 mrb_value
+mrb_dir_chroot(mrb_state *mrb, mrb_value self)
+{
+  #if defined(_WIN32) || defined(_WIN64) || defined(__android__)
+  mrb_raise(mrb, E_NOTIMP_ERROR, "chroot() unreliable on Win platforms");
+  return mrb_fixnum_value(0);
+  #else
+  mrb_value spath;
+  char *path;
+  int res;
+
+  mrb_get_args(mrb, "S", &spath);
+  path = mrb_str_to_cstr(mrb, spath);
+  res = chroot(path);
+  if (res == -1) {
+    mrb_sys_fail(mrb, path);
+  }
+
+  return mrb_fixnum_value(res);
+  #endif
+}
+
+mrb_value
 mrb_dir_read(mrb_state *mrb, mrb_value self)
 {
   struct mrb_dir *mdir;
@@ -217,7 +239,7 @@ mrb_value
 mrb_dir_seek(mrb_state *mrb, mrb_value self)
 {
   #if defined(_WIN32) || defined(_WIN64) || defined(__android__)
-  mrb_raise(mrb, E_RUNTIME_ERROR, "dirseek() unreliable on Win platforms");
+  mrb_raise(mrb, E_NOTIMP_ERROR, "dirseek() unreliable on Win platforms");
   return self;
   #else
   struct mrb_dir *mdir;
@@ -238,7 +260,7 @@ mrb_value
 mrb_dir_tell(mrb_state *mrb, mrb_value self)
 {
   #if defined(_WIN32) || defined(_WIN64) || defined(__android__)
-  mrb_raise(mrb, E_RUNTIME_ERROR, "dirtell() unreliable on Win platforms");
+  mrb_raise(mrb, E_NOTIMP_ERROR, "dirtell() unreliable on Win platforms");
   return mrb_fixnum_value(0);
   #else
   struct mrb_dir *mdir;
@@ -266,6 +288,7 @@ mrb_mruby_dir_gem_init(mrb_state *mrb)
   mrb_define_class_method(mrb, d, "getwd",  mrb_dir_getwd,  MRB_ARGS_NONE());
   mrb_define_class_method(mrb, d, "mkdir",  mrb_dir_mkdir,  MRB_ARGS_REQ(1)|MRB_ARGS_OPT(1));
   mrb_define_class_method(mrb, d, "_chdir", mrb_dir_chdir,  MRB_ARGS_REQ(1));
+  mrb_define_class_method(mrb, d, "chroot", mrb_dir_chroot, MRB_ARGS_REQ(1));
 
   mrb_define_method(mrb, d, "close",      mrb_dir_close,  MRB_ARGS_NONE());
   mrb_define_method(mrb, d, "initialize", mrb_dir_init,   MRB_ARGS_REQ(1));

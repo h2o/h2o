@@ -1,3 +1,4 @@
+# coding: utf-8
 ##
 # Array
 #
@@ -10,7 +11,7 @@ class Array
   #
   # ISO 15.2.12.5.10
   def each(&block)
-    return to_enum :each unless block_given?
+    return to_enum :each unless block
 
     idx = 0
     while idx < length
@@ -26,7 +27,7 @@ class Array
   #
   # ISO 15.2.12.5.11
   def each_index(&block)
-    return to_enum :each_index unless block_given?
+    return to_enum :each_index unless block
 
     idx = 0
     while idx < length
@@ -43,9 +44,14 @@ class Array
   #
   # ISO 15.2.12.5.7
   def collect!(&block)
-    return to_enum :collect! unless block_given?
+    return to_enum :collect! unless block
 
-    self.each_index { |idx| self[idx] = block.call(self[idx]) }
+    idx = 0
+    len = size
+    while idx < len
+      self[idx] = block.call self[idx]
+      idx += 1
+    end
     self
   end
 
@@ -60,7 +66,7 @@ class Array
   #
   # ISO 15.2.12.5.15
   def initialize(size=0, obj=nil, &block)
-    raise TypeError, "expected Integer for 1st argument" unless size.kind_of? Integer
+    size = size.__to_int
     raise ArgumentError, "negative array size" if size < 0
 
     self.clear
@@ -78,8 +84,15 @@ class Array
   end
 
   def _inspect
-    return "[]" if self.size == 0
-    "["+self.map{|x|x.inspect}.join(", ")+"]"
+    size = self.size
+    return "[]" if size == 0
+    ary=[]
+    i=0
+    while i<size
+      ary<<self[i].inspect
+      i+=1
+    end
+    "["+ary.join(", ")+"]"
   end
   ##
   # Return the contents of this array as a string.
@@ -178,12 +191,6 @@ class Array
     return block.call if ret.nil? && block
     ret
   end
-
-  # internal method to convert multi-value to single value
-  def __svalue
-    return self.first if self.size < 2
-    self
-  end
 end
 
 ##
@@ -196,6 +203,63 @@ class Array
   # Sort all elements and replace +self+ with these
   # elements.
   def sort!(&block)
-    self.replace(self.sort(&block))
+    stack = [ [ 0, self.size - 1 ] ]
+    until stack.empty?
+      left, mid, right = stack.pop
+      if right == nil
+        right = mid
+        # sort self[left..right]
+        if left < right
+          if left + 1 == right
+            lval = self[left]
+            rval = self[right]
+            if (block&.call(lval, rval) || (lval <=> rval)) > 0
+              self[left]  = rval
+              self[right] = lval
+            end
+          else
+            mid = ((left + right + 1) / 2).floor
+            stack.push [ left, mid, right ]
+            stack.push [ mid, right ]
+            stack.push [ left, (mid - 1) ] if left < mid - 1
+          end
+        end
+      else
+        lary = self[left, mid - left]
+        lsize = lary.size
+
+        # The entity sharing between lary and self may cause a large memory
+        # copy operation in the merge loop below.  This harmless operation
+        # cancels the sharing and provides a huge performance gain.
+        lary[0] = lary[0]
+
+        # merge
+        lidx = 0
+        ridx = mid
+        (left..right).each { |i|
+          if lidx >= lsize
+            break
+          elsif ridx > right
+            self[i, lsize - lidx] = lary[lidx, lsize - lidx]
+            break
+          else
+            lval = lary[lidx]
+            rval = self[ridx]
+            if (block&.call(lval, rval) || (lval <=> rval)) <= 0
+              self[i] = lval
+              lidx += 1
+            else
+              self[i] = rval
+              ridx += 1
+            end
+          end
+        }
+      end
+    end
+    self
+  end
+
+  def sort(&block)
+    self.dup.sort!(&block)
   end
 end

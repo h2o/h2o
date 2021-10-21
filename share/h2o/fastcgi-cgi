@@ -78,6 +78,9 @@ use Socket qw(SOMAXCONN SOCK_STREAM);
 
 my $master_pid = $$;
 my %child_procs;
+my $base_dir = getcwd;
+my $pass_authz;
+my $verbose = 0;
 
 $SIG{CHLD} = sub {};
 $SIG{HUP} = sub {};
@@ -89,11 +92,14 @@ $SIG{TERM} = sub {
     exit 0;
 };
 
-my $base_dir = getcwd;
 chdir "/"
     or die "failed to chdir to /:$!";
 main();
-my $pass_authz;
+
+sub verbose_print {
+    return unless $verbose;
+    print STDERR "fastcgi-cgi:$$:@_\n";
+}
 
 sub main {
     my $sockfn;
@@ -103,6 +109,7 @@ sub main {
         "listen=s"      => \$sockfn,
         "max-workers=i" => \$max_workers,
         "pass-authz"    => \$pass_authz,
+        "verbose"       => sub { ++$verbose },
         "help"          => sub {
             print_help();
             exit 0;
@@ -124,11 +131,13 @@ sub main {
         $listen_sock->fdopen(fileno(STDIN), "w")
             or die "failed to open unix socket:$!";
     }
+    verbose_print("accepting connections");
 
     while (1) {
         my $wait_opt = 0;
         if (keys %child_procs < $max_workers) {
             if (my $sock = $listen_sock->accept) {
+                verbose_print("accepted new connection");
                 my $pid = fork;
                 die "fork failed:$!"
                     unless defined $pid;
@@ -142,10 +151,12 @@ sub main {
             }
             $wait_opt = WNOHANG;
         } else {
+            verbose_print("reached max-workers");
             $wait_opt = 0;
         }
         my $kid = waitpid(-1, $wait_opt);
         if ($kid > 0) {
+            verbose_print("collected pid $kid");
             delete $child_procs{$kid};
         }
     }
@@ -158,6 +169,8 @@ sub handle_connection {
     my $params = "";
     my $input_fh;
 
+    verbose_print("handling new request");
+
     # wait for FCGI_BEGIN_REQUEST
     ($type, $req_id, $content) = fetch_record($sock);
     die "expected FCGI_BEGIN_REQUEST, but got $type"
@@ -166,6 +179,7 @@ sub handle_connection {
     die "unexpected role:$role"
         unless $role == FCGI_RESPONDER;
     $cur_req_id = $req_id;
+    verbose_print("received FCGI_BEGIN_REQUEST");
 
     # accumulate FCGI_PARAMS
     while (1) {
@@ -182,6 +196,7 @@ sub handle_connection {
         if $env->{SCRIPT_FILENAME} !~ m{^/};
     delete $env->{HTTP_AUTHORIZATION}
         unless $pass_authz;
+    verbose_print("received FCGI_PARAMS");
 
     # accumulate FCGI_STDIN
     while (1) {
@@ -205,6 +220,7 @@ sub handle_connection {
         open $input_fh, "<", "/dev/null"
             or die "failed to open /dev/null:$!";
     }
+    verbose_print("received FCGI_STDIN");
 
     # create pipes for stdout and stderr
     pipe(my $stdout_rfh, my $stdout_wfh)
@@ -213,6 +229,7 @@ sub handle_connection {
         or die "pipe failed:$!";
 
     # fork the CGI application
+    verbose_print("spawning $env->{SCRIPT_FILENAME}");
     my $pid = fork;
     die "fork failed:$!"
         unless defined $pid;
@@ -233,10 +250,12 @@ sub handle_connection {
             for sort keys %$env;
         chdir dirname($env->{SCRIPT_FILENAME});
         exec $env->{SCRIPT_FILENAME};
-        exit 111;
+        die "failed to spawn $env->{SCRIPT_FILENAME}:$!";
     }
     close $stdout_wfh;
     close $stderr_wfh;
+
+    verbose_print("waiting for response");
 
     # send response
     while ($stdout_rfh || $stderr_rfh) {
@@ -250,15 +269,18 @@ sub handle_connection {
             next;
         }
         if ($stdout_rfh && vec($rin, fileno $stdout_rfh, 1)) {
+            verbose_print("forwarding STDOUT");
             transfer($sock, FCGI_STDOUT, $cur_req_id, $stdout_rfh)
                 or undef $stdout_rfh;
         }
         if ($stderr_rfh && vec($rin, fileno $stderr_rfh, 1)) {
+            verbose_print("forwarding STDERR");
             transfer($sock, FCGI_STDERR, $cur_req_id, $stderr_rfh)
                 or undef $stderr_rfh;
         }
         if (vec($rin, fileno $sock, 1)) {
             # atually means that the client has closed the connection, terminate the CGI process the same way apache does
+            verbose_print("client has closed connection; killing myself in 3 seconds");
             kill 'TERM', $pid;
             $SIG{ALRM} = sub {
                 kill 'KILL', $pid;
@@ -268,12 +290,16 @@ sub handle_connection {
         }
     }
 
+    verbose_print("response complete");
+
     # close (closing without sending FCGI_END_REQUEST indicates to the client that the connection is not persistent)
     close $sock;
 
     # wait for child process to die
+    verbose_print("waiting for CGI process to exit");
     while (waitpid($pid, 0) != $pid) {
     }
+    verbose_print("exitting");
 }
 
 sub fetch_record {
@@ -314,6 +340,7 @@ Options:
                      connections.
   --max-workers=nnn  maximum number of CGI processes (default: unlimited)
   --pass-authz       if set, preserves HTTP_AUTHORIZATION parameter
+  --verbose          verbose mode
 
 EOT
 }

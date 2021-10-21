@@ -34,7 +34,12 @@ struct st_duration_stats_t {
     struct gkc_summary *request_total_time;
     struct gkc_summary *process_time;
     struct gkc_summary *response_time;
-    struct gkc_summary *duration;
+    struct gkc_summary *total_time;
+
+    /**
+     * average event loop latency per worker thread
+     */
+    H2O_VECTOR(uint64_t) evloop_latency_nanosec;
 };
 
 struct st_duration_agg_stats_t {
@@ -62,8 +67,15 @@ static void durations_status_per_thread(void *priv, h2o_context_t *ctx)
         ADD_DURATION(request_total_time);
         ADD_DURATION(process_time);
         ADD_DURATION(response_time);
-        ADD_DURATION(duration);
+        ADD_DURATION(total_time);
 #undef ADD_DURATION
+
+#if !H2O_USE_LIBUV
+        h2o_vector_reserve(NULL, &agg_stats->stats.evloop_latency_nanosec, agg_stats->stats.evloop_latency_nanosec.size + 1);
+        agg_stats->stats.evloop_latency_nanosec.entries[agg_stats->stats.evloop_latency_nanosec.size] =
+            h2o_evloop_get_execution_time_nanosec(ctx->loop);
+        agg_stats->stats.evloop_latency_nanosec.size++;
+#endif
         pthread_mutex_unlock(&agg_stats->mutex);
     }
 }
@@ -76,7 +88,8 @@ static void duration_stats_init(struct st_duration_stats_t *stats)
     stats->request_total_time = gkc_summary_alloc(GK_EPSILON);
     stats->process_time = gkc_summary_alloc(GK_EPSILON);
     stats->response_time = gkc_summary_alloc(GK_EPSILON);
-    stats->duration = gkc_summary_alloc(GK_EPSILON);
+    stats->total_time = gkc_summary_alloc(GK_EPSILON);
+    memset(&stats->evloop_latency_nanosec, 0, sizeof(stats->evloop_latency_nanosec));
 }
 
 static void *durations_status_init(void)
@@ -99,7 +112,8 @@ static void duration_stats_free(struct st_duration_stats_t *stats)
     gkc_summary_free(stats->request_total_time);
     gkc_summary_free(stats->process_time);
     gkc_summary_free(stats->response_time);
-    gkc_summary_free(stats->duration);
+    gkc_summary_free(stats->total_time);
+    free(stats->evloop_latency_nanosec.entries);
 }
 
 static h2o_iovec_t durations_status_final(void *priv, h2o_globalconf_t *gconf, h2o_req_t *req)
@@ -118,18 +132,29 @@ static h2o_iovec_t durations_status_final(void *priv, h2o_globalconf_t *gconf, h
     gkc_query(agg_stats->stats.x, 0), gkc_query(agg_stats->stats.x, 0.25), gkc_query(agg_stats->stats.x, 0.5),                     \
         gkc_query(agg_stats->stats.x, 0.75), gkc_query(agg_stats->stats.x, 0.99)
 
-    ret.base = h2o_mem_alloc_pool(&req->pool, BUFSIZE);
+    ret.base = h2o_mem_alloc_pool(&req->pool, char, BUFSIZE);
     ret.len = snprintf(
         ret.base, BUFSIZE,
         ",\n" DURATION_FMT("connect-time") "," DURATION_FMT("header-time") "," DURATION_FMT("body-time") "," DURATION_FMT(
             "request-total-time") "," DURATION_FMT("process-time") "," DURATION_FMT("response-time") "," DURATION_FMT("duration"),
         DURATION_VALS(connect_time), DURATION_VALS(header_time), DURATION_VALS(body_time), DURATION_VALS(request_total_time),
-        DURATION_VALS(process_time), DURATION_VALS(response_time), DURATION_VALS(duration));
-
-#undef BUFSIZE
+        DURATION_VALS(process_time), DURATION_VALS(response_time), DURATION_VALS(total_time));
 #undef DURATION_FMT
 #undef DURATION_VALS
-
+    char *delim = "";
+    ret.len += sprintf(ret.base + ret.len, ",\n\"evloop-latency-nanosec\": [");
+    size_t i;
+    for (i = 0; i < agg_stats->stats.evloop_latency_nanosec.size; i++) {
+        size_t len = snprintf(NULL, 0, "%s%" PRIu64, delim, agg_stats->stats.evloop_latency_nanosec.entries[i]);
+        /* require that there's enough space for the closing "]\0" */
+        if (ret.len + len + 1 >= BUFSIZE)
+            break;
+        ret.len += snprintf(ret.base + ret.len, BUFSIZE - ret.len, "%s%" PRIu64, delim,
+                            agg_stats->stats.evloop_latency_nanosec.entries[i]);
+        delim = ",";
+    }
+    ret.len += snprintf(ret.base + ret.len, BUFSIZE - ret.len, "]");
+#undef BUFSIZE
     duration_stats_free(&agg_stats->stats);
     pthread_mutex_destroy(&agg_stats->mutex);
 
@@ -149,27 +174,28 @@ static void stat_access(h2o_logger_t *_self, h2o_req_t *req)
     } while (0)
 
     ADD_OBSERVATION(connect_time, &req->conn->connected_at, &req->timestamps.request_begin_at);
-    ADD_OBSERVATION(header_time, &req->timestamps.request_begin_at, h2o_timeval_is_null(&req->timestamps.request_body_begin_at)
-                                                                        ? &req->processed_at.at
-                                                                        : &req->timestamps.request_body_begin_at);
-    ADD_OBSERVATION(body_time, h2o_timeval_is_null(&req->timestamps.request_body_begin_at) ? &req->processed_at.at
-                                                                                           : &req->timestamps.request_body_begin_at,
+    ADD_OBSERVATION(header_time, &req->timestamps.request_begin_at,
+                    h2o_timeval_is_null(&req->timestamps.request_body_begin_at) ? &req->processed_at.at
+                                                                                : &req->timestamps.request_body_begin_at);
+    ADD_OBSERVATION(body_time,
+                    h2o_timeval_is_null(&req->timestamps.request_body_begin_at) ? &req->processed_at.at
+                                                                                : &req->timestamps.request_body_begin_at,
                     &req->processed_at.at);
     ADD_OBSERVATION(request_total_time, &req->timestamps.request_begin_at, &req->processed_at.at);
     ADD_OBSERVATION(process_time, &req->processed_at.at, &req->timestamps.response_start_at);
     ADD_OBSERVATION(response_time, &req->timestamps.response_start_at, &req->timestamps.response_end_at);
-    ADD_OBSERVATION(duration, &req->timestamps.request_begin_at, &req->timestamps.response_end_at);
+    ADD_OBSERVATION(total_time, &req->timestamps.request_begin_at, &req->timestamps.response_end_at);
 #undef ADD_OBSERVATION
 }
 
-void on_context_init(struct st_h2o_logger_t *self, h2o_context_t *ctx)
+static void on_context_init(struct st_h2o_logger_t *self, h2o_context_t *ctx)
 {
     struct st_duration_stats_t *duration_stats = h2o_mem_alloc(sizeof(struct st_duration_stats_t));
     duration_stats_init(duration_stats);
     h2o_context_set_logger_context(ctx, self, duration_stats);
 }
 
-void on_context_dispose(struct st_h2o_logger_t *self, h2o_context_t *ctx)
+static void on_context_dispose(struct st_h2o_logger_t *self, h2o_context_t *ctx)
 {
     struct st_duration_stats_t *duration_stats;
     duration_stats = h2o_context_get_logger_context(ctx, self);
@@ -193,15 +219,14 @@ void h2o_duration_stats_register(h2o_globalconf_t *conf)
         hconf = conf->hosts[k];
         for (i = 0; i < hconf->paths.size; i++) {
             int j;
-            for (j = 0; j < hconf->paths.entries[i].handlers.size; j++) {
-                h2o_pathconf_t *pathconf = &hconf->paths.entries[i];
-                h2o_vector_reserve(NULL, &pathconf->loggers, pathconf->loggers.size + 1);
-                pathconf->loggers.entries[pathconf->loggers.size++] = (void *)logger;
+            for (j = 0; j < hconf->paths.entries[i]->handlers.size; j++) {
+                h2o_pathconf_t *pathconf = hconf->paths.entries[i];
+                h2o_vector_reserve(NULL, &pathconf->_loggers, pathconf->_loggers.size + 1);
+                pathconf->_loggers.entries[pathconf->_loggers.size++] = (void *)logger;
             }
         }
     }
 }
 
-h2o_status_handler_t durations_status_handler = {
-    {H2O_STRLIT("durations")}, durations_status_init, durations_status_per_thread, durations_status_final,
-};
+h2o_status_handler_t h2o_durations_status_handler = {
+    {H2O_STRLIT("durations")}, durations_status_final, durations_status_init, durations_status_per_thread};

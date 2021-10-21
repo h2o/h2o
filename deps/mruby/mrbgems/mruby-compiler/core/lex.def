@@ -52,7 +52,7 @@ inline
 #endif
 #endif
 static unsigned int
-hash (register const char *str, register unsigned int len)
+hash (const char *str, unsigned int len)
 {
   static const unsigned char asso_values[] =
     {
@@ -83,7 +83,7 @@ hash (register const char *str, register unsigned int len)
       51, 51, 51, 51, 51, 51, 51, 51, 51, 51,
       51, 51, 51, 51, 51, 51
     };
-  register int hval = len;
+  int hval = len;
 
   switch (hval)
     {
@@ -105,7 +105,7 @@ __attribute__ ((__gnu_inline__))
 #endif
 #endif
 const struct kwtable *
-mrb_reserved_word (register const char *str, register unsigned int len)
+mrb_reserved_word (const char *str, unsigned int len)
 {
   static const struct kwtable wordlist[] =
     {
@@ -196,11 +196,11 @@ mrb_reserved_word (register const char *str, register unsigned int len)
 
   if (len <= MAX_WORD_LENGTH && len >= MIN_WORD_LENGTH)
     {
-      register int key = hash (str, len);
+      int key = hash (str, len);
 
       if (key <= MAX_HASH_VALUE && key >= 0)
         {
-          register const char *s = wordlist[key].name;
+          const char *s = wordlist[key].name;
 
           if (*str == *s && !strcmp (str + 1, s + 1))
             return &wordlist[key];
@@ -209,4 +209,3 @@ mrb_reserved_word (register const char *str, register unsigned int len)
   return 0;
 }
 #line 50 "/home/matz/work/mruby/mrbgems/mruby-compiler/core/keywords"
-

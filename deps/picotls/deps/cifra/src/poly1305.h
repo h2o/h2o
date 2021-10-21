@@ -69,8 +69,8 @@ typedef struct
  *
  */
 void cf_poly1305_init(cf_poly1305 *ctx,
-                      const uint8_t r[static 16],
-                      const uint8_t s[static 16]);
+    const uint8_t r[16],
+    const uint8_t s[16]);
 
 /* .. c:function:: $DECL
  * Processes `nbytes` at `data`.  Copies the data if there isn't enough to make
@@ -86,6 +86,6 @@ void cf_poly1305_update(cf_poly1305 *ctx,
  * This destroys `ctx`.
  */
 void cf_poly1305_finish(cf_poly1305 *ctx,
-                        uint8_t out[static 16]);
+                        uint8_t out[16]);
 
 #endif

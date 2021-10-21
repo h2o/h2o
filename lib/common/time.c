@@ -91,10 +91,10 @@ int h2o_time_parse_rfc1123(const char *s, size_t len, struct tm *tm)
     if (len != H2O_TIMESTR_RFC1123_LEN)
         return -1;
 
-/*           1         2
- * 01234567890123456789012345678
- * Fri, 19 Sep 2014 05:24:04 GMT
- */
+        /*           1         2
+         * 01234567890123456789012345678
+         * Fri, 19 Sep 2014 05:24:04 GMT
+         */
 
 #define FETCH(dst, pos, n)                                                                                                         \
     if ((dst = fetch_digits(s + pos, n)) == -1)                                                                                    \

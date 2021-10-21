@@ -57,7 +57,7 @@ os_count_objects(mrb_state *mrb, mrb_value self)
     hash = mrb_hash_new(mrb);
   }
 
-  if (!mrb_test(mrb_hash_empty_p(mrb, hash))) {
+  if (!mrb_hash_empty_p(mrb, hash)) {
     mrb_hash_clear(mrb, hash);
   }
 

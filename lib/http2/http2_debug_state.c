@@ -24,9 +24,9 @@
 #include "h2o/http2.h"
 #include "h2o/http2_internal.h"
 
-static const char *debug_state_string_open = "OPEN";
-static const char *debug_state_string_half_closed_remote = "HALF_CLOSED_REMOTE";
-static const char *debug_state_string_reserved_local = "RESERVED_LOCAL";
+static const char debug_state_string_open[] = "OPEN";
+static const char debug_state_string_half_closed_remote[] = "HALF_CLOSED_REMOTE";
+static const char debug_state_string_reserved_local[] = "RESERVED_LOCAL";
 
 static const char *get_debug_state_string(h2o_http2_stream_t *stream)
 {
@@ -74,7 +74,7 @@ __attribute__((format(printf, 3, 4))) static void append_chunk(h2o_mem_pool_t *p
     assert(size > 0);
 
     h2o_iovec_t v;
-    v.base = h2o_mem_alloc_pool(pool, size + 1);
+    v.base = h2o_mem_alloc_pool(pool, char, size + 1);
 
     va_start(args, fmt);
     v.len = vsnprintf(v.base, size + 1, fmt, args);
@@ -89,8 +89,9 @@ static void append_header_table_chunks(h2o_mem_pool_t *pool, h2o_iovec_vector_t 
     int i;
     for (i = 0; i < header_table->num_entries; i++) {
         h2o_hpack_header_table_entry_t *entry = h2o_hpack_header_table_get(header_table, i);
-        append_chunk(pool, chunks, "\n"
-                                   "      [ \"%.*s\", \"%.*s\" ],",
+        append_chunk(pool, chunks,
+                     "\n"
+                     "      [ \"%.*s\", \"%.*s\" ],",
                      (int)entry->name->len, entry->name->base, (int)entry->value->len, entry->value->base);
     }
 
@@ -103,36 +104,38 @@ static void append_header_table_chunks(h2o_mem_pool_t *pool, h2o_iovec_vector_t 
 h2o_http2_debug_state_t *h2o_http2_get_debug_state(h2o_req_t *req, int hpack_enabled)
 {
     h2o_http2_conn_t *conn = (h2o_http2_conn_t *)req->conn;
-    h2o_http2_debug_state_t *state = h2o_mem_alloc_pool(&req->pool, sizeof(*state));
+    h2o_http2_debug_state_t *state = h2o_mem_alloc_pool(&req->pool, *state, 1);
     *state = (h2o_http2_debug_state_t){{NULL}};
 
-    state->conn_flow_in = conn->_write.window._avail;
-    state->conn_flow_out = conn->_write.window._avail;
+    state->conn_flow_in = h2o_http2_window_get_avail(&conn->_input_window);
+    state->conn_flow_out = h2o_http2_window_get_avail(&conn->_write.window);
 
-    append_chunk(&req->pool, &state->json, "{\n"
-                                           "  \"version\": \"draft-01\",\n"
-                                           "  \"settings\": {\n"
-                                           "    \"SETTINGS_HEADER_TABLE_SIZE\": %" PRIu32 ",\n"
-                                           "    \"SETTINGS_ENABLE_PUSH\": %" PRIu32 ",\n"
-                                           "    \"SETTINGS_MAX_CONCURRENT_STREAMS\": %" PRIu32 ",\n"
-                                           "    \"SETTINGS_INITIAL_WINDOW_SIZE\": %" PRIu32 ",\n"
-                                           "    \"SETTINGS_MAX_FRAME_SIZE\": %" PRIu32 "\n"
-                                           "  },\n"
-                                           "  \"peerSettings\": {\n"
-                                           "    \"SETTINGS_HEADER_TABLE_SIZE\": %" PRIu32 ",\n"
-                                           "    \"SETTINGS_ENABLE_PUSH\": %" PRIu32 ",\n"
-                                           "    \"SETTINGS_MAX_CONCURRENT_STREAMS\": %" PRIu32 ",\n"
-                                           "    \"SETTINGS_INITIAL_WINDOW_SIZE\": %" PRIu32 ",\n"
-                                           "    \"SETTINGS_MAX_FRAME_SIZE\": %" PRIu32 "\n"
-                                           "  },\n"
-                                           "  \"connFlowIn\": %zd,\n"
-                                           "  \"connFlowOut\": %zd,\n"
-                                           "  \"streams\": {",
-                 H2O_HTTP2_SETTINGS_HOST.header_table_size, H2O_HTTP2_SETTINGS_HOST.enable_push,
-                 H2O_HTTP2_SETTINGS_HOST.max_concurrent_streams, H2O_HTTP2_SETTINGS_HOST.initial_window_size,
-                 H2O_HTTP2_SETTINGS_HOST.max_frame_size, conn->peer_settings.header_table_size, conn->peer_settings.enable_push,
+    append_chunk(&req->pool, &state->json,
+                 "{\n"
+                 "  \"version\": \"draft-01\",\n"
+                 "  \"settings\": {\n"
+                 "    \"SETTINGS_HEADER_TABLE_SIZE\": %" PRIu32 ",\n"
+                 "    \"SETTINGS_ENABLE_PUSH\": %" PRIu32 ",\n"
+                 "    \"SETTINGS_MAX_CONCURRENT_STREAMS\": %" PRIu32 ",\n"
+                 "    \"SETTINGS_INITIAL_WINDOW_SIZE\": %" PRIu32 ",\n"
+                 "    \"SETTINGS_MAX_FRAME_SIZE\": %" PRIu32 "\n"
+                 "  },\n"
+                 "  \"peerSettings\": {\n"
+                 "    \"SETTINGS_HEADER_TABLE_SIZE\": %" PRIu32 ",\n"
+                 "    \"SETTINGS_ENABLE_PUSH\": %" PRIu32 ",\n"
+                 "    \"SETTINGS_MAX_CONCURRENT_STREAMS\": %" PRIu32 ",\n"
+                 "    \"SETTINGS_INITIAL_WINDOW_SIZE\": %" PRIu32 ",\n"
+                 "    \"SETTINGS_MAX_FRAME_SIZE\": %" PRIu32 "\n"
+                 "  },\n"
+                 "  \"connFlowIn\": %zd,\n"
+                 "  \"connFlowOut\": %zd,\n"
+                 "  \"streams\": {",
+                 H2O_HTTP2_SETTINGS_HOST_HEADER_TABLE_SIZE, H2O_HTTP2_SETTINGS_HOST_ENABLE_PUSH,
+                 H2O_HTTP2_SETTINGS_HOST_MAX_CONCURRENT_STREAMS, H2O_HTTP2_SETTINGS_HOST_STREAM_INITIAL_WINDOW_SIZE,
+                 H2O_HTTP2_SETTINGS_HOST_MAX_FRAME_SIZE, conn->peer_settings.header_table_size, conn->peer_settings.enable_push,
                  conn->peer_settings.max_concurrent_streams, conn->peer_settings.initial_window_size,
-                 conn->peer_settings.max_frame_size, conn->_input_window._avail, conn->_write.window._avail);
+                 conn->peer_settings.max_frame_size, h2o_http2_window_get_avail(&conn->_input_window),
+                 h2o_http2_window_get_avail(&conn->_write.window));
 
     /* encode streams */
     {
@@ -142,18 +145,19 @@ h2o_http2_debug_state_t *h2o_http2_get_debug_state(h2o_req_t *req, int hpack_ena
             if (state_string == NULL)
                 continue;
 
-            append_chunk(&req->pool, &state->json, "\n"
-                                                   "    \"%" PRIu32 "\": {\n"
-                                                   "      \"state\": \"%s\",\n"
-                                                   "      \"flowIn\": %zd,\n"
-                                                   "      \"flowOut\": %zd,\n"
-                                                   "      \"dataIn\": %zu,\n"
-                                                   "      \"dataOut\": %zu,\n"
-                                                   "      \"created\": %" PRIu64 "\n"
-                                                   "    },",
-                         stream->stream_id, state_string, stream->input_window._avail, stream->output_window._avail,
-                         h2o_http2_stream_req_body_size(stream), stream->req.bytes_sent,
-                         (uint64_t)stream->req.timestamps.request_begin_at.tv_sec);
+            append_chunk(&req->pool, &state->json,
+                         "\n"
+                         "    \"%" PRIu32 "\": {\n"
+                         "      \"state\": \"%s\",\n"
+                         "      \"flowIn\": %zd,\n"
+                         "      \"flowOut\": %zd,\n"
+                         "      \"dataIn\": %zu,\n"
+                         "      \"dataOut\": %" PRIu64 ",\n"
+                         "      \"created\": %" PRIu64 "\n"
+                         "    },",
+                         stream->stream_id, state_string, h2o_http2_window_get_avail(&stream->input_window.window),
+                         h2o_http2_window_get_avail(&stream->output_window), stream->req.req_body_bytes_received,
+                         stream->req.bytes_sent, (uint64_t)stream->req.timestamps.request_begin_at.tv_sec);
         });
 
         if (conn->streams->size > 0) {
@@ -162,33 +166,38 @@ h2o_http2_debug_state_t *h2o_http2_get_debug_state(h2o_req_t *req, int hpack_ena
         }
     }
 
-    append_chunk(&req->pool, &state->json, "\n"
-                                           "  }");
+    append_chunk(&req->pool, &state->json,
+                 "\n"
+                 "  }");
 
     if (hpack_enabled) {
         /* encode inbound header table */
-        append_chunk(&req->pool, &state->json, ",\n"
-                                               "  \"hpack\": {\n"
-                                               "    \"inboundTableSize\": %zd,\n"
-                                               "    \"inboundDynamicHeaderTable\": [",
+        append_chunk(&req->pool, &state->json,
+                     ",\n"
+                     "  \"hpack\": {\n"
+                     "    \"inboundTableSize\": %zd,\n"
+                     "    \"inboundDynamicHeaderTable\": [",
                      conn->_input_header_table.num_entries);
         append_header_table_chunks(&req->pool, &state->json, &conn->_input_header_table);
 
         /* encode outbound header table */
-        append_chunk(&req->pool, &state->json, "\n"
-                                               "    ],\n"
-                                               "    \"outboundTableSize\": %zd,\n"
-                                               "    \"outboundDynamicHeaderTable\": [",
+        append_chunk(&req->pool, &state->json,
+                     "\n"
+                     "    ],\n"
+                     "    \"outboundTableSize\": %zd,\n"
+                     "    \"outboundDynamicHeaderTable\": [",
                      conn->_output_header_table.num_entries);
         append_header_table_chunks(&req->pool, &state->json, &conn->_output_header_table);
 
-        append_chunk(&req->pool, &state->json, "\n"
-                                               "    ]\n"
-                                               "  }");
+        append_chunk(&req->pool, &state->json,
+                     "\n"
+                     "    ]\n"
+                     "  }");
     }
 
-    append_chunk(&req->pool, &state->json, "\n"
-                                           "}\n");
+    append_chunk(&req->pool, &state->json,
+                 "\n"
+                 "}\n");
 
     return state;
 }

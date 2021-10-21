@@ -27,8 +27,8 @@ static h2o_context_t ctx;
 
 static int check_header(h2o_res_t *res, const h2o_token_t *header_name, const char *expected)
 {
-    size_t index = h2o_find_header(&res->headers, header_name, SIZE_MAX);
-    if (index == SIZE_MAX)
+    ssize_t index = h2o_find_header(&res->headers, header_name, -1);
+    if (index == -1)
         return 0;
     return h2o_lcstris(res->headers.entries[index].value.base, res->headers.entries[index].value.len, expected, strlen(expected));
 }

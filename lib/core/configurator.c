@@ -30,6 +30,7 @@ struct st_core_config_vars_t {
     struct {
         unsigned reprioritize_blocking_assets : 1;
         unsigned push_preload : 1;
+        unsigned allow_cross_origin_push : 1;
         h2o_casper_conf_t casper;
     } http2;
     struct {
@@ -84,6 +85,7 @@ static int on_core_exit(h2o_configurator_t *_self, h2o_configurator_context_t *c
         /* exitting from host-level configuration */
         ctx->hostconf->http2.reprioritize_blocking_assets = self->vars->http2.reprioritize_blocking_assets;
         ctx->hostconf->http2.push_preload = self->vars->http2.push_preload;
+        ctx->hostconf->http2.allow_cross_origin_push = self->vars->http2.allow_cross_origin_push;
         ctx->hostconf->http2.casper = self->vars->http2.casper;
     } else if (ctx->pathconf != NULL) {
         /* exitting from path or extension-level configuration */
@@ -320,6 +322,10 @@ static int on_config_paths(h2o_configurator_command_t *cmd, h2o_configurator_con
             h2o_configurator_errprintf(cmd, key, "key (representing the virtual path) must be a string");
             return -1;
         }
+        if (strlen(key->data.scalar) == 0) {
+            h2o_configurator_errprintf(cmd, key, "key (representing the virtual path) must not be an empty string");
+            return -1;
+        }
     }
     qsort(node->data.mapping.elements, node->data.mapping.size, sizeof(node->data.mapping.elements[0]),
           (int (*)(const void *, const void *))sort_from_longer_paths);
@@ -387,6 +393,17 @@ static int on_config_hosts(h2o_configurator_command_t *cmd, h2o_configurator_con
     return 0;
 }
 
+static int on_config_strict_match(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    h2o_hostconf_t *hostconf = ctx->hostconf;
+    ssize_t on;
+
+    if ((on = h2o_configurator_get_one_of(cmd, node, "OFF,ON")) == -1)
+        return -1;
+    hostconf->strict_match = (uint8_t)on;
+    return 0;
+}
+
 static int on_config_limit_request_body(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     return h2o_configurator_scanf(cmd, node, "%zu", &ctx->globalconf->max_request_entity_size);
@@ -405,6 +422,11 @@ static int on_config_handshake_timeout(h2o_configurator_command_t *cmd, h2o_conf
 static int on_config_http1_request_timeout(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     return config_timeout(cmd, node, &ctx->globalconf->http1.req_timeout);
+}
+
+static int on_config_http1_request_io_timeout(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    return config_timeout(cmd, node, &ctx->globalconf->http1.req_io_timeout);
 }
 
 static int on_config_http1_upgrade_to_http2(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
@@ -430,6 +452,26 @@ static int on_config_http2_max_concurrent_requests_per_connection(h2o_configurat
                                                                   yoml_t *node)
 {
     return h2o_configurator_scanf(cmd, node, "%zu", &ctx->globalconf->http2.max_concurrent_requests_per_connection);
+}
+
+static int on_config_http2_max_concurrent_streaming_requests_per_connection(h2o_configurator_command_t *cmd,
+                                                                            h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    return h2o_configurator_scanf(cmd, node, "%zu", &ctx->globalconf->http2.max_concurrent_streaming_requests_per_connection);
+}
+
+static int on_config_http2_input_window_size(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    uint32_t v;
+    if (h2o_configurator_scanf(cmd, node, "%" SCNu32, &v) != 0)
+        return -1;
+    if (!(H2O_HTTP2_MIN_STREAM_WINDOW_SIZE <= v && v <= H2O_HTTP2_MAX_STREAM_WINDOW_SIZE)) {
+        h2o_configurator_errprintf(cmd, node, "window size must be between %" PRIu32 " and %" PRIu32,
+                                   (uint32_t)H2O_HTTP2_MIN_STREAM_WINDOW_SIZE, (uint32_t)H2O_HTTP2_MAX_STREAM_WINDOW_SIZE);
+        return -1;
+    }
+    ctx->globalconf->http2.active_stream_window_size = v;
+    return 0;
 }
 
 static int on_config_http2_latency_optimization_min_rtt(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx,
@@ -483,6 +525,18 @@ static int on_config_http2_push_preload(h2o_configurator_command_t *cmd, h2o_con
     return 0;
 }
 
+static int on_config_http2_allow_cross_origin_push(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    struct st_core_configurator_t *self = (void *)cmd->configurator;
+    ssize_t on;
+
+    if ((on = h2o_configurator_get_one_of(cmd, node, "OFF,ON")) == -1)
+        return -1;
+    self->vars->http2.allow_cross_origin_push = (int)on;
+
+    return 0;
+}
+
 static int on_config_http2_casper(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     static const h2o_casper_conf_t defaults = {
@@ -504,30 +558,60 @@ static int on_config_http2_casper(h2o_configurator_command_t *cmd, h2o_configura
         /* set to default */
         self->vars->http2.casper = defaults;
         /* override the attributes defined */
-        yoml_t *t;
-        if ((t = yoml_get(node, "capacity-bits")) != NULL) {
-            if (!(t->type == YOML_TYPE_SCALAR && sscanf(t->data.scalar, "%u", &self->vars->http2.casper.capacity_bits) == 1 &&
+        yoml_t **capacity_bits, **tracking_types;
+        if (h2o_configurator_parse_mapping(cmd, node, NULL, "capacity-bits:s,tracking-types:*", &capacity_bits, &tracking_types) !=
+            0)
+            return -1;
+        if (capacity_bits != NULL) {
+            if (!(sscanf((*capacity_bits)->data.scalar, "%u", &self->vars->http2.casper.capacity_bits) == 1 &&
                   self->vars->http2.casper.capacity_bits < 16)) {
-                h2o_configurator_errprintf(cmd, t, "value of `capacity-bits` must be an integer between 0 to 15");
+                h2o_configurator_errprintf(cmd, *capacity_bits, "value of `capacity-bits` must be an integer between 0 to 15");
                 return -1;
             }
         }
-        if ((t = yoml_get(node, "tracking-types")) != NULL) {
-            if (t->type == YOML_TYPE_SCALAR && strcasecmp(t->data.scalar, "blocking-assets") == 0) {
-                self->vars->http2.casper.track_all_types = 0;
-            } else if (t->type == YOML_TYPE_SCALAR && strcasecmp(t->data.scalar, "all") == 0) {
-                self->vars->http2.casper.track_all_types = 1;
-            } else {
-                h2o_configurator_errprintf(cmd, t, "value of `tracking-types` must be either of: `blocking-assets` or `all`");
-                return -1;
-            }
-        }
+        if (tracking_types != NULL && (self->vars->http2.casper.track_all_types =
+                                           (int)h2o_configurator_get_one_of(cmd, *tracking_types, "blocking-assets,all")) == -1)
+            return -1;
     } break;
     default:
         h2o_configurator_errprintf(cmd, node, "value must be `OFF`,`ON` or a mapping containing the necessary attributes");
         return -1;
     }
 
+    return 0;
+}
+
+static int on_config_http3_idle_timeout(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    return config_timeout(cmd, node, &ctx->globalconf->http3.idle_timeout);
+}
+
+static int on_config_http3_graceful_shutdown_timeout(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    return config_timeout(cmd, node, &ctx->globalconf->http3.graceful_shutdown_timeout);
+}
+
+static int on_config_http3_input_window_size(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    uint32_t v;
+    if (h2o_configurator_scanf(cmd, node, "%" SCNu32, &v) != 0)
+        return -1;
+    if (v < H2O_HTTP3_INITIAL_REQUEST_STREAM_WINDOW_SIZE) {
+        h2o_configurator_errprintf(cmd, node, "window size must be no less than %u",
+                                   (unsigned)H2O_HTTP3_INITIAL_REQUEST_STREAM_WINDOW_SIZE);
+        return -1;
+    }
+    ctx->globalconf->http3.active_stream_window_size = v;
+    return 0;
+}
+
+static int on_config_http3_delayed_ack(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    ssize_t on;
+
+    if ((on = h2o_configurator_get_one_of(cmd, node, "OFF,ON")) == -1)
+        return -1;
+    ctx->globalconf->http3.use_delayed_ack = (uint8_t)on;
     return 0;
 }
 
@@ -552,6 +636,10 @@ static int assert_is_extension(h2o_configurator_command_t *cmd, yoml_t *node)
     }
     if (node->data.scalar[0] != '.') {
         h2o_configurator_errprintf(cmd, node, "given extension \"%s\" does not start with a \".\"", node->data.scalar);
+        return -1;
+    }
+    if (node->data.scalar[1] == '\0') {
+        h2o_configurator_errprintf(cmd, node, "given extension \".\" is invalid: at least 2 characters are required");
         return -1;
     }
     return 0;
@@ -583,47 +671,45 @@ static int set_mimetypes(h2o_configurator_command_t *cmd, h2o_mimemap_t *mimemap
             }
             break;
         case YOML_TYPE_MAPPING: {
-            yoml_t *t;
+            yoml_t **is_compressible, **priority, **extensions;
             h2o_mime_attributes_t attr;
             h2o_mimemap_get_default_attributes(key->data.scalar, &attr);
-            if ((t = yoml_get(value, "is_compressible")) != NULL) {
-                if (t->type == YOML_TYPE_SCALAR && strcasecmp(t->data.scalar, "YES") == 0) {
+            if (h2o_configurator_parse_mapping(cmd, value, "extensions:a", "is_compressible:*,priority:*", &extensions,
+                                               &is_compressible, &priority) != 0)
+                return -1;
+            if (is_compressible != NULL) {
+                switch (h2o_configurator_get_one_of(cmd, *is_compressible, "YES,NO")) {
+                case 0:
                     attr.is_compressible = 1;
-                } else if (t->type == YOML_TYPE_SCALAR && strcasecmp(t->data.scalar, "NO") == 0) {
+                    break;
+                case 1:
                     attr.is_compressible = 0;
-                } else {
-                    h2o_configurator_errprintf(cmd, t, "`is_compressible` attribute must be either of: `YES` or `NO`");
+                    break;
+                default:
                     return -1;
                 }
             }
-            if ((t = yoml_get(value, "priority")) != NULL) {
-                if (t->type == YOML_TYPE_SCALAR && strcasecmp(t->data.scalar, "normal") == 0) {
+            if (priority != NULL) {
+                switch (h2o_configurator_get_one_of(cmd, *priority, "normal,highest")) {
+                case 0:
                     attr.priority = H2O_MIME_ATTRIBUTE_PRIORITY_NORMAL;
-                } else if (t->type == YOML_TYPE_SCALAR && strcasecmp(t->data.scalar, "highest") == 0) {
+                    break;
+                case 1:
                     attr.priority = H2O_MIME_ATTRIBUTE_PRIORITY_HIGHEST;
-                } else {
-                    h2o_configurator_errprintf(cmd, t, "`priority` attribute must be either of: `normal` or `highest`");
+                    break;
+                default:
                     return -1;
                 }
             }
-            if ((t = yoml_get(value, "extensions")) == NULL) {
-                h2o_configurator_errprintf(cmd, value, "cannot find mandatory attribute `extensions`");
-                return -1;
-            }
-            if (t->type != YOML_TYPE_SEQUENCE) {
-                h2o_configurator_errprintf(cmd, t, "`extensions` attribute must be a sequence of scalars");
-                return -1;
-            }
-            for (j = 0; j != t->data.sequence.size; ++j) {
-                yoml_t *ext_node = t->data.sequence.elements[j];
+            for (j = 0; j != (*extensions)->data.sequence.size; ++j) {
+                yoml_t *ext_node = (*extensions)->data.sequence.elements[j];
                 if (assert_is_extension(cmd, ext_node) != 0)
                     return -1;
                 h2o_mimemap_define_mimetype(mimemap, ext_node->data.scalar + 1, key->data.scalar, &attr);
             }
         } break;
         default:
-            fprintf(stderr, "logic flaw at %s:%d\n", __FILE__, __LINE__);
-            abort();
+            h2o_fatal("logic flaw");
         }
     }
 
@@ -633,7 +719,7 @@ static int set_mimetypes(h2o_configurator_command_t *cmd, h2o_mimemap_t *mimemap
 static int on_config_mime_settypes(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     h2o_mimemap_t *newmap = h2o_mimemap_create();
-
+    h2o_mimemap_clear_types(newmap);
     h2o_mimemap_set_default_type(newmap, h2o_mimemap_get_default_type(*ctx->mimemap)->data.mimetype.base, NULL);
     if (set_mimetypes(cmd, newmap, node) != 0) {
         h2o_mem_release_shared(newmap);
@@ -688,6 +774,18 @@ static int on_config_mime_setdefaulttype(h2o_configurator_command_t *cmd, h2o_co
     return 0;
 }
 
+static const char *normalize_ext(h2o_configurator_command_t *cmd, yoml_t *node)
+{
+    if (strcmp(node->data.scalar, "default") == 0) {
+        /* empty string means default */
+        return "";
+    } else if (assert_is_extension(cmd, node) == 0) {
+        return node->data.scalar + 1;
+    } else {
+        return NULL;
+    }
+}
+
 static int on_config_custom_handler(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     static const char *ignore_commands[] = {"extension", NULL};
@@ -707,10 +805,9 @@ static int on_config_custom_handler(h2o_configurator_command_t *cmd, h2o_configu
     /* create dynamic type */
     switch (ext_node->type) {
     case YOML_TYPE_SCALAR:
-        if (assert_is_extension(cmd, ext_node) != 0)
-            return -1;
         exts = alloca(2 * sizeof(*exts));
-        exts[0] = ext_node->data.scalar + 1;
+        if ((exts[0] = normalize_ext(cmd, ext_node)) == NULL)
+            return -1;
         exts[1] = NULL;
         break;
     case YOML_TYPE_SEQUENCE: {
@@ -718,9 +815,8 @@ static int on_config_custom_handler(h2o_configurator_command_t *cmd, h2o_configu
         size_t i;
         for (i = 0; i != ext_node->data.sequence.size; ++i) {
             yoml_t *n = ext_node->data.sequence.elements[i];
-            if (assert_is_extension(cmd, n) != 0)
+            if ((exts[i] = normalize_ext(cmd, n)) == NULL)
                 return -1;
-            exts[i] = n->data.scalar + 1;
         }
         exts[i] = NULL;
     } break;
@@ -816,7 +912,7 @@ static int on_config_server_name(h2o_configurator_command_t *cmd, h2o_configurat
 
 static int on_config_send_server_name(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    switch(h2o_configurator_get_one_of(cmd, node, "OFF,ON,preserve")) {
+    switch (h2o_configurator_get_one_of(cmd, node, "OFF,ON,preserve")) {
     case 0: /* off */
         ctx->globalconf->server_name = h2o_iovec_init(H2O_STRLIT(""));
         break;
@@ -844,6 +940,39 @@ static int on_config_error_log_emit_request_errors(h2o_configurator_command_t *c
     return 0;
 }
 
+static int on_config_send_informational(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    switch (h2o_configurator_get_one_of(cmd, node, "except-h1,none,all")) {
+    case 0:
+        ctx->globalconf->send_informational_mode = H2O_SEND_INFORMATIONAL_MODE_EXCEPT_H1;
+        break;
+    case 1:
+        ctx->globalconf->send_informational_mode = H2O_SEND_INFORMATIONAL_MODE_NONE;
+        break;
+    case 2:
+        ctx->globalconf->send_informational_mode = H2O_SEND_INFORMATIONAL_MODE_ALL;
+        break;
+    default:
+        return -1;
+    }
+    return 0;
+}
+
+static int on_config_stash(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    /* do nothing */
+    return 0;
+}
+
+static int on_config_usdt_selective_tracing(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    ssize_t on;
+    if ((on = h2o_configurator_get_one_of(cmd, node, "OFF,ON")) == -1)
+        return -1;
+    ctx->globalconf->usdt_selective_tracing = (int)on;
+    return 0;
+}
+
 void h2o_configurator__init_core(h2o_globalconf_t *conf)
 {
     /* check if already initialized */
@@ -852,12 +981,14 @@ void h2o_configurator__init_core(h2o_globalconf_t *conf)
 
     { /* `hosts` and `paths` */
         h2o_configurator_t *c = h2o_configurator_create(conf, sizeof(*c));
-        h2o_configurator_define_command(c, "hosts", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING |
-                                                        H2O_CONFIGURATOR_FLAG_DEFERRED,
-                                        on_config_hosts);
-        h2o_configurator_define_command(c, "paths", H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING |
-                                                        H2O_CONFIGURATOR_FLAG_DEFERRED,
-                                        on_config_paths);
+        h2o_configurator_define_command(
+            c, "hosts", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING | H2O_CONFIGURATOR_FLAG_DEFERRED,
+            on_config_hosts);
+        h2o_configurator_define_command(
+            c, "paths", H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING | H2O_CONFIGURATOR_FLAG_DEFERRED,
+            on_config_paths);
+        h2o_configurator_define_command(c, "strict-match", H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                        on_config_strict_match);
     };
 
     { /* setup global configurators */
@@ -880,6 +1011,9 @@ void h2o_configurator__init_core(h2o_globalconf_t *conf)
         h2o_configurator_define_command(&c->super, "http1-request-timeout",
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_http1_request_timeout);
+        h2o_configurator_define_command(&c->super, "http1-request-io-timeout",
+                                        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                        on_config_http1_request_io_timeout);
         h2o_configurator_define_command(&c->super, "http1-upgrade-to-http2",
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_http1_upgrade_to_http2);
@@ -892,6 +1026,12 @@ void h2o_configurator__init_core(h2o_globalconf_t *conf)
         h2o_configurator_define_command(&c->super, "http2-max-concurrent-requests-per-connection",
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_http2_max_concurrent_requests_per_connection);
+        h2o_configurator_define_command(&c->super, "http2-max-concurrent-streaming-requests-per-connection",
+                                        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                        on_config_http2_max_concurrent_streaming_requests_per_connection);
+        h2o_configurator_define_command(&c->super, "http2-input-window-size",
+                                        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                        on_config_http2_input_window_size);
         h2o_configurator_define_command(&c->super, "http2-latency-optimization-min-rtt",
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_http2_latency_optimization_min_rtt);
@@ -905,11 +1045,28 @@ void h2o_configurator__init_core(h2o_globalconf_t *conf)
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST |
                                             H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_http2_reprioritize_blocking_assets);
-        h2o_configurator_define_command(&c->super, "http2-push-preload", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST |
-                                                                             H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+        h2o_configurator_define_command(&c->super, "http2-push-preload",
+                                        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST |
+                                            H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_http2_push_preload);
+        h2o_configurator_define_command(&c->super, "http2-allow-cross-origin-push",
+                                        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_PATH |
+                                            H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                        on_config_http2_allow_cross_origin_push);
         h2o_configurator_define_command(&c->super, "http2-casper", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST,
                                         on_config_http2_casper);
+        h2o_configurator_define_command(&c->super, "http3-idle-timeout",
+                                        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                        on_config_http3_idle_timeout);
+        h2o_configurator_define_command(&c->super, "http3-graceful-shutdown-timeout",
+                                        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                        on_config_http3_graceful_shutdown_timeout);
+        h2o_configurator_define_command(&c->super, "http3-input-window-size",
+                                        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                        on_config_http3_input_window_size);
+        h2o_configurator_define_command(&c->super, "http3-delayed-ack",
+                                        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                        on_config_http3_delayed_ack);
         h2o_configurator_define_command(&c->super, "file.mime.settypes",
                                         (H2O_CONFIGURATOR_FLAG_ALL_LEVELS & ~H2O_CONFIGURATOR_FLAG_EXTENSION) |
                                             H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING,
@@ -942,6 +1099,13 @@ void h2o_configurator__init_core(h2o_globalconf_t *conf)
         h2o_configurator_define_command(&c->super, "error-log.emit-request-errors",
                                         H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_error_log_emit_request_errors);
+        h2o_configurator_define_command(&c->super, "send-informational",
+                                        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                        on_config_send_informational);
+        h2o_configurator_define_command(&c->super, "stash", H2O_CONFIGURATOR_FLAG_ALL_LEVELS, on_config_stash);
+        h2o_configurator_define_command(&c->super, "usdt-selective-tracing",
+                                        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                        on_config_usdt_selective_tracing);
     }
 }
 
@@ -1019,15 +1183,16 @@ int h2o_configurator_apply(h2o_globalconf_t *config, yoml_t *node, int dry_run)
 
 void h2o_configurator_errprintf(h2o_configurator_command_t *cmd, yoml_t *node, const char *reason, ...)
 {
+    char buf[1024];
     va_list args;
 
-    fprintf(stderr, "[%s:%zu] ", node->filename ? node->filename : "-", node->line + 1);
+    h2o_error_printf("[%s:%zu] ", node->filename ? node->filename : "-", node->line + 1);
     if (cmd != NULL)
-        fprintf(stderr, "in command %s, ", cmd->name);
+        h2o_error_printf("in command %s, ", cmd->name);
     va_start(args, reason);
-    vfprintf(stderr, reason, args);
+    vsnprintf(buf, sizeof(buf), reason, args);
     va_end(args);
-    fputc('\n', stderr);
+    h2o_error_printf("%s\n", buf);
 }
 
 int h2o_configurator_scanf(h2o_configurator_command_t *cmd, yoml_t *node, const char *fmt, ...)
@@ -1072,11 +1237,130 @@ ssize_t h2o_configurator_get_one_of(h2o_configurator_command_t *cmd, yoml_t *nod
             goto Error;
         cand_str += 1; /* skip ',' */
     }
-/* not reached */
+    /* not reached */
 
 Error:
     h2o_configurator_errprintf(cmd, node, "argument must be one of: %s", candidates);
     return -1;
+}
+
+static const char *get_next_key(const char *start, h2o_iovec_t *output, unsigned *type_mask)
+{
+    const char *p = strchr(start, ':');
+    if (p == NULL)
+        goto Error;
+
+    /* set output */
+    *output = h2o_iovec_init(start, p - start);
+
+    /* parse attributes */
+    *type_mask = 0;
+    for (++p; *p != '\0'; ++p) {
+        switch (*p) {
+        case ',':
+            return p + 1;
+        case 's':
+            *type_mask |= 1u << YOML_TYPE_SCALAR;
+            break;
+        case 'a':
+            *type_mask |= 1u << YOML_TYPE_SEQUENCE;
+            break;
+        case 'm':
+            *type_mask |= 1u << YOML_TYPE_MAPPING;
+            break;
+        case '*':
+            *type_mask |= (1u << YOML_TYPE_SCALAR) | (1u << YOML_TYPE_SEQUENCE) | (1u << YOML_TYPE_MAPPING);
+            break;
+        default:
+            goto Error;
+        }
+    }
+
+    return NULL;
+
+Error:
+    h2o_fatal("detected invalid or missing type specifier; input is: %s\n", start);
+}
+
+int h2o_configurator__do_parse_mapping(h2o_configurator_command_t *cmd, yoml_t *node, const char *keys_required,
+                                       const char *keys_optional, yoml_t ****values, size_t num_values)
+{
+    struct {
+        h2o_iovec_t key;
+        int is_required;
+        unsigned type_mask;
+    } *keys = alloca(sizeof(keys[0]) * num_values);
+    size_t i, j;
+
+    assert(node->type == YOML_TYPE_MAPPING);
+
+    /* parse keys */
+    i = 0;
+    if (keys_required != NULL) {
+        const char *p = keys_required;
+        for (; p != NULL; ++i) {
+            assert(i < num_values);
+            p = get_next_key(p, &keys[i].key, &keys[i].type_mask);
+            keys[i].is_required = 1;
+        }
+    }
+    if (keys_optional != NULL) {
+        const char *p = keys_optional;
+        for (; p != NULL; ++i) {
+            assert(i < num_values);
+            p = get_next_key(p, &keys[i].key, &keys[i].type_mask);
+            keys[i].is_required = 0;
+        }
+    }
+    assert(i == num_values);
+
+    /* clear the output */
+    for (i = 0; i != num_values; ++i)
+        *values[i] = NULL;
+
+    /* extract the attributes */
+    for (i = 0; i != node->data.mapping.size; ++i) {
+        yoml_mapping_element_t *element = node->data.mapping.elements + i;
+        if (element->key->type != YOML_TYPE_SCALAR) {
+            h2o_configurator_errprintf(cmd, element->key, "key must be a scalar");
+            return -1;
+        }
+        size_t element_key_len = strlen(element->key->data.scalar);
+        for (j = 0; j != num_values; ++j)
+            if (keys[j].key.len == element_key_len &&
+                strncasecmp(keys[j].key.base, element->key->data.scalar, element_key_len) == 0)
+                goto Found;
+        /* not found */
+        h2o_configurator_errprintf(cmd, element->key, "unexpected key:%s", element->key->data.scalar);
+        return -1;
+    Found:
+        if (*values[j] != NULL) {
+            h2o_configurator_errprintf(cmd, element->key, "duplicate key found");
+            return -1;
+        }
+        if ((keys[j].type_mask & (1u << element->value->type)) == 0) {
+            char permitted_types[sizeof(" or a scalar or a sequence or a mapping")] = "";
+            snprintf(permitted_types, sizeof(permitted_types), "%s%s%s",
+                     (keys[j].type_mask & (1u << YOML_TYPE_SCALAR)) != 0 ? " or a scalar" : "",
+                     (keys[j].type_mask & (1u << YOML_TYPE_SEQUENCE)) != 0 ? " or a sequence" : "",
+                     (keys[j].type_mask & (1u << YOML_TYPE_MAPPING)) != 0 ? " or a mapping" : "");
+            assert(strlen(permitted_types) != 0);
+            h2o_configurator_errprintf(cmd, element->value, "attribute `%s` must be %s", element->key->data.scalar,
+                                       permitted_types + 4);
+            return -1;
+        }
+        *values[j] = &element->value;
+    }
+
+    /* check if any of the required keys are missing */
+    for (i = 0; i < num_values && keys[i].is_required; ++i) {
+        if (*values[i] == NULL) {
+            h2o_configurator_errprintf(cmd, node, "cannot find mandatory attribute: %.*s", (int)keys[i].key.len, keys[i].key.base);
+            return -1;
+        }
+    }
+
+    return 0;
 }
 
 char *h2o_configurator_get_cmd_path(const char *cmd)

@@ -19,7 +19,8 @@ file.custom-handler:
 EOT
 ?>
 
-The gateway also provides options to for tuning the behavior.  A full list of options can be obtained by running the gateway directly with <code>--help</code> option.
+The gateway also provides options to for tuning the behavior.
+A full list of options can be obtained by running the gateway directly with <code>--help</code> option.
 
 <?= $ctx->{example}->('Output of <code>share/h2o/fastcgi-cgi --help</code>', <<'EOT');
 $ share/h2o/fastcgi-cgi --help
@@ -34,6 +35,7 @@ Options:
                      connections.
   --max-workers=nnn  maximum number of CGI processes (default: unlimited)
   --pass-authz       if set, preserves HTTP_AUTHORIZATION parameter
+  --verbose          verbose mode
 EOT
 ?>
 

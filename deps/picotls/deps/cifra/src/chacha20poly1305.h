@@ -42,12 +42,12 @@
  * :param ciphertext: ciphertext output buffer, nbytes in length.
  * :param tag: authentication tag output buffer.
  */
-void cf_chacha20poly1305_encrypt(const uint8_t key[static 32],
-                                 const uint8_t nonce[static 12],
+void cf_chacha20poly1305_encrypt(const uint8_t key[32],
+                                 const uint8_t nonce[12],
                                  const uint8_t *header, size_t nheader,
                                  const uint8_t *plaintext, size_t nbytes,
                                  uint8_t *ciphertext,
-                                 uint8_t tag[static 16]);
+                                 uint8_t tag[16]);
 
 /* .. c:function:: $DECL
  * ChaCha20-Poly1305 authenticated decryption.
@@ -63,11 +63,11 @@ void cf_chacha20poly1305_encrypt(const uint8_t key[static 32],
  * :param plaintext: plaintext output buffer, nbytes in length.
  * :param tag: authentication tag output buffer.
  */
-int cf_chacha20poly1305_decrypt(const uint8_t key[static 32],
-                                const uint8_t nonce[static 12],
+int cf_chacha20poly1305_decrypt(const uint8_t key[32],
+                                const uint8_t nonce[12],
                                 const uint8_t *header, size_t nheader,
                                 const uint8_t *ciphertext, size_t nbytes,
-                                const uint8_t tag[static 16],
+                                const uint8_t tag[16],
                                 uint8_t *plaintext);
 
 #endif

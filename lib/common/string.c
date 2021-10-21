@@ -28,13 +28,16 @@
 
 h2o_iovec_t h2o_strdup(h2o_mem_pool_t *pool, const char *s, size_t slen)
 {
+    /* We do not need this check to be here, but it needs to be somewhere, see the definition of H2O_SIZE_T_LONGEST_STR */
+    H2O_BUILD_ASSERT(sizeof(size_t) <= sizeof(uint64_t));
+
     h2o_iovec_t ret;
 
     if (slen == SIZE_MAX)
         slen = strlen(s);
 
     if (pool != NULL) {
-        ret.base = h2o_mem_alloc_pool(pool, slen + 1);
+        ret.base = h2o_mem_alloc_pool(pool, char, slen + 1);
     } else {
         ret.base = h2o_mem_alloc(slen + 1);
     }
@@ -63,7 +66,7 @@ h2o_iovec_t h2o_strdup_slashed(h2o_mem_pool_t *pool, const char *src, size_t len
     h2o_iovec_t ret;
 
     ret.len = len != SIZE_MAX ? len : strlen(src);
-    ret.base = pool != NULL ? h2o_mem_alloc_pool(pool, ret.len + 2) : h2o_mem_alloc(ret.len + 2);
+    ret.base = pool != NULL ? h2o_mem_alloc_pool(pool, char, ret.len + 2) : h2o_mem_alloc(ret.len + 2);
     memcpy(ret.base, src, ret.len);
     if (ret.len != 0 && ret.base[ret.len - 1] != '/')
         ret.base[ret.len++] = '/';
@@ -188,7 +191,7 @@ h2o_iovec_t h2o_decode_base64url(h2o_mem_pool_t *pool, const char *src, size_t l
     char remaining_input[4];
 
     decoded.len = len * 3 / 4;
-    decoded.base = pool != NULL ? h2o_mem_alloc_pool(pool, decoded.len + 1) : h2o_mem_alloc(decoded.len + 1);
+    decoded.base = pool != NULL ? h2o_mem_alloc_pool(pool, char, decoded.len + 1) : h2o_mem_alloc(decoded.len + 1);
     dst = (uint8_t *)decoded.base;
 
     while (len >= 4) {
@@ -321,7 +324,7 @@ h2o_iovec_t h2o_uri_escape(h2o_mem_pool_t *pool, const char *s, size_t l, const 
     h2o_iovec_t encoded;
     size_t i, capacity = l * 3 + 1;
 
-    encoded.base = pool != NULL ? h2o_mem_alloc_pool(pool, capacity) : h2o_mem_alloc(capacity);
+    encoded.base = pool != NULL ? h2o_mem_alloc_pool(pool, char, capacity) : h2o_mem_alloc(capacity);
     encoded.len = 0;
 
     /* RFC 3986:
@@ -400,7 +403,7 @@ size_t h2o_strstr(const char *haysack, size_t haysack_len, const char *needle, s
 }
 
 /* note: returns a zero-width match as well */
-const char *h2o_next_token(h2o_iovec_t *iter, int separator, size_t *element_len, h2o_iovec_t *value)
+const char *h2o_next_token(h2o_iovec_t *iter, int inner, int outer, size_t *element_len, h2o_iovec_t *value)
 {
     const char *cur = iter->base, *end = iter->base + iter->len, *token_start, *token_end;
 
@@ -418,11 +421,11 @@ const char *h2o_next_token(h2o_iovec_t *iter, int separator, size_t *element_len
     for (;; ++cur) {
         if (cur == end)
             break;
-        if (*cur == separator) {
+        if (*cur == inner) {
             ++cur;
             break;
         }
-        if (*cur == ',') {
+        if (*cur == outer) {
             if (token_start == cur) {
                 ++cur;
                 token_end = cur;
@@ -447,7 +450,7 @@ const char *h2o_next_token(h2o_iovec_t *iter, int separator, size_t *element_len
 FindValue:
     *iter = h2o_iovec_init(cur, end - cur);
     *element_len = token_end - token_start;
-    if ((value->base = (char *)h2o_next_token(iter, separator, &value->len, NULL)) == NULL) {
+    if ((value->base = (char *)h2o_next_token(iter, inner, outer, &value->len, NULL)) == NULL) {
         *value = (h2o_iovec_t){"", 0};
     } else if (h2o_memis(value->base, value->len, H2O_STRLIT(","))) {
         *value = (h2o_iovec_t){"", 0};
@@ -463,7 +466,7 @@ int h2o_contains_token(const char *haysack, size_t haysack_len, const char *need
     const char *token = NULL;
     size_t token_len = 0;
 
-    while ((token = h2o_next_token(&iter, separator, &token_len, NULL)) != NULL) {
+    while ((token = h2o_next_token(&iter, separator, ',', &token_len, NULL)) != NULL) {
         if (h2o_lcstris(token, token_len, needle, needle_len)) {
             return 1;
         }
@@ -499,7 +502,7 @@ h2o_iovec_t h2o_htmlescape(h2o_mem_pool_t *pool, const char *src, size_t len)
     /* escape and return the result if necessary */
     if (add_size != 0) {
         /* allocate buffer and fill in the chars that are known not to require escaping */
-        h2o_iovec_t escaped = {h2o_mem_alloc_pool(pool, len + add_size + 1), 0};
+        h2o_iovec_t escaped = {h2o_mem_alloc_pool(pool, char, len + add_size + 1), 0};
         /* fill-in the rest */
         for (s = src; s != end; ++s) {
             switch (*s) {
@@ -539,7 +542,7 @@ h2o_iovec_t h2o_concat_list(h2o_mem_pool_t *pool, h2o_iovec_t *list, size_t coun
 
     /* allocate memory */
     if (pool != NULL)
-        ret.base = h2o_mem_alloc_pool(pool, ret.len + 1);
+        ret.base = h2o_mem_alloc_pool(pool, char, ret.len + 1);
     else
         ret.base = h2o_mem_alloc(ret.len + 1);
 
@@ -552,6 +555,38 @@ h2o_iovec_t h2o_concat_list(h2o_mem_pool_t *pool, h2o_iovec_t *list, size_t coun
     ret.base[ret.len] = '\0';
 
     return ret;
+}
+
+h2o_iovec_t h2o_join_list(h2o_mem_pool_t *pool, h2o_iovec_t *list, size_t count, h2o_iovec_t delimiter)
+{
+    if (count == 0) {
+        return h2o_iovec_init(NULL, 0);
+    }
+
+    size_t joined_len = 0;
+    h2o_iovec_t *joined = alloca(sizeof(*joined) * (count * 2 - 1));
+
+    size_t i;
+    for (i = 0; i != count; ++i) {
+        if (i != 0) {
+            joined[joined_len++] = delimiter;
+        }
+        joined[joined_len++] = list[i];
+    }
+    return h2o_concat_list(pool, joined, joined_len);
+}
+
+void h2o_split(h2o_mem_pool_t *pool, h2o_iovec_vector_t *list, h2o_iovec_t str, const char needle)
+{
+    const char *p = str.base, *end = str.base + str.len, *found;
+
+    while (p < end && (found = memchr(p, needle, end - p)) != NULL) {
+        h2o_vector_reserve(pool, list, list->size + 1);
+        list->entries[list->size++] = h2o_strdup(pool, p, found - p);
+        p = found + 1;
+    }
+    h2o_vector_reserve(pool, list, list->size + 1);
+    list->entries[list->size++] = h2o_strdup(pool, p, end - p);
 }
 
 int h2o_str_at_position(char *buf, const char *src, size_t src_len, int lineno, int column)

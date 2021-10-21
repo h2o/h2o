@@ -79,12 +79,12 @@ get_opt(mrb_state* mrb)
   mrb_get_args(mrb, "|o", &arg);
 
   if (!mrb_nil_p(arg)) {
-    arg = mrb_check_convert_type(mrb, arg, MRB_TT_FIXNUM, "Fixnum", "to_int");
-    if (mrb_nil_p(arg)) {
-      mrb_raise(mrb, E_ARGUMENT_ERROR, "invalid argument type");
-    }
-    if (mrb_fixnum(arg) < 0) {
-      arg = mrb_fixnum_value(0 - mrb_fixnum(arg));
+    mrb_int i;
+
+    arg = mrb_to_int(mrb, arg);
+    i = mrb_fixnum(arg);
+    if (i < 0) {
+      arg = mrb_fixnum_value(0 - i);
     }
   }
   return arg;
@@ -217,13 +217,15 @@ mrb_ary_shuffle_bang(mrb_state *mrb, mrb_value ary)
 
     for (i = RARRAY_LEN(ary) - 1; i > 0; i--)  {
       mrb_int j;
+      mrb_value *ptr = RARRAY_PTR(ary);
       mrb_value tmp;
+
 
       j = mrb_fixnum(mrb_random_mt_rand(mrb, random, mrb_fixnum_value(RARRAY_LEN(ary))));
 
-      tmp = RARRAY_PTR(ary)[i];
-      mrb_ary_ptr(ary)->ptr[i] = RARRAY_PTR(ary)[j];
-      mrb_ary_ptr(ary)->ptr[j] = tmp;
+      tmp = ptr[i];
+      ptr[i] = ptr[j];
+      ptr[j] = tmp;
     }
   }
 

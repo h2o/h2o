@@ -8,7 +8,7 @@
 #
 # For example, the following mruby code:
 #
-#   if i > 0 and i < 10 then
+#   if i > 0 and i < 10
 #
 # compiles to the following byte code:
 #
@@ -27,21 +27,21 @@
 
 assert('and', '11.2.3') do
   a = 1
-  if a > 0 and a < 10 then
+  if a > 0 and a < 10
     b = 1
   else
     b = 0
   end
   assert_equal 1, b
 
-  if a < 0 and a < 10 then
+  if a < 0 and a < 10
     b = 1
   else
     b = 0
   end
   assert_equal 0, b
 
-  if a < 0 and a > 10 then
+  if a < 0 and a > 10
     b = 1
   else
     b = 0
@@ -51,21 +51,21 @@ end
 
 assert('or','11.2.4') do
   a = 1
-  if a > 0 or a < 10 then
+  if a > 0 or a < 10
     b = 1
   else
     b = 0
   end
   assert_equal 1, b
 
-  if a < 0 or a < 10 then
+  if a < 0 or a < 10
     b = 1
   else
     b = 0
   end
   assert_equal 1, b
 
-  if a < 0 or a > 10 then
+  if a < 0 or a > 10
     b = 1
   else
     b = 0

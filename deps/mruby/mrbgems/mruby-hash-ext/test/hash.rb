@@ -45,12 +45,6 @@ assert('Hash.[] for sub class') do
   assert_equal(sub_hash_class, sub_hash.class)
 end
 
-assert('Hash.try_convert') do
-  assert_nil Hash.try_convert(nil)
-  assert_nil Hash.try_convert("{1=>2}")
-  assert_equal({1=>2}, Hash.try_convert({1=>2}))
-end
-
 assert('Hash#merge!') do
   a = { 'abc_key' => 'abc_value', 'cba_key' => 'cba_value' }
   b = { 'cba_key' => 'XXX',  'xyz_key' => 'xyz_value' }
@@ -80,6 +74,20 @@ assert('Hash#values_at') do
   (0...1000).each { |v| keys.push "#{v}" }
   h = Hash.new { |hash,k| hash[k] = k }
   assert_equal keys, h.values_at(*keys)
+end
+
+assert('Hash#compact') do
+  h = { "cat" => "feline", "dog" => nil, "cow" => false }
+
+  assert_equal({ "cat" => "feline", "cow" => false }, h.compact)
+  assert_equal({ "cat" => "feline", "dog" => nil, "cow" => false }, h)
+end
+
+assert('Hash#compact!') do
+  h = { "cat" => "feline", "dog" => nil, "cow" => false }
+
+  h.compact!
+  assert_equal({ "cat" => "feline", "cow" => false }, h)
 end
 
 assert('Hash#fetch') do
@@ -253,4 +261,34 @@ assert("Hash#dig") do
   h = {a:{b:{c:1}}}
   assert_equal(1, h.dig(:a, :b, :c))
   assert_nil(h.dig(:d))
+end
+
+assert("Hash#transform_keys") do
+  h = {"1" => 100, "2" => 200}
+  assert_equal({"1!" => 100, "2!" => 200},
+               h.transform_keys{|k| k+"!"})
+  assert_equal({1 => 100, 2 => 200},
+               h.transform_keys{|k|k.to_i})
+  assert_equal({"1.0" => 100, "2.1" => 200},
+               h.transform_keys.with_index{|k, i| "#{k}.#{i}"})
+  assert_equal(h, h.transform_keys!{|k|k.to_i})
+  assert_equal(h, {1 => 100, 2 => 200})
+end
+
+assert("Hash#transform_values") do
+  h = {a: 1, b: 2, c: 3}
+  assert_equal({a: 2, b: 5, c: 10},
+               h.transform_values{|v| v * v + 1})
+  assert_equal({a: "1", b: "2", c: "3"},
+               h.transform_values{|v|v.to_s})
+  assert_equal({a: "1.0", b: "2.1", c: "3.2"},
+               h.transform_values.with_index{|v, i| "#{v}.#{i}"})
+  assert_equal(h, h.transform_values!{|v|v.to_s})
+  assert_equal({a: "1", b: "2", c: "3"}, h)
+end
+
+assert("Hash#slice") do
+  h = { a: 100, b: 200, c: 300 }
+  assert_equal({:a=>100}, h.slice(:a))
+  assert_equal({:b=>200, :c=>300}, h.slice(:b, :c, :d))
 end

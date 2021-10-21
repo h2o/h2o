@@ -403,6 +403,9 @@ assert('External command execution.') do
     assert_equal 'test dynamic `', t
     assert_equal ['test', 'test dynamic `', 'test', 'test dynamic `'], results
 
+    results = []
+    assert_equal 'test sym test sym test', `test #{:sym} test #{:sym} test`
+
     alias_method sym, :old_cmd
   end
   true
@@ -451,18 +454,203 @@ assert('multiline comments work correctly') do
 =begin
 this is a comment with nothing after begin and end
 =end
-=begin  this is a comment 
+=begin  this is a comment
 this is a comment with extra after =begin
 =end
 =begin
 this is a comment that has =end with spaces after it
-=end  
+=end
 =begin this is a comment
 this is a comment that has extra after =begin and =end with spaces after it
-=end  
+=end
   line = __LINE__
 =begin	this is a comment
 this is a comment that has extra after =begin and =end with tabs after it
 =end	xxxxxxxxxxxxxxxxxxxxxxxxxx
   assert_equal(line + 4, __LINE__)
+end
+
+assert 'keyword arguments' do
+  def m(a, b:1) [a, b] end
+  assert_equal [1, 1], m(1)
+  assert_equal [1, 2], m(1, b: 2)
+
+  def m(a, b:) [a, b] end
+  assert_equal [1, 2], m(1, b: 2)
+  assert_raise(ArgumentError) { m b: 1 }
+  assert_raise(ArgumentError) { m 1 }
+
+  def m(a:) a end
+  assert_equal 1, m(a: 1)
+  assert_raise(ArgumentError) { m }
+  assert_raise(ArgumentError) { m 'a'  => 1, a: 1 }
+  h = { a: 1 }
+  assert_equal 1, m(h)
+  assert_equal({ a: 1 }, h)
+
+  def m(a: 1) a end
+  assert_equal 1, m
+  assert_equal 2, m(a: 2)
+  assert_raise(ArgumentError) { m 1 }
+
+  def m(**) end
+  assert_nil m
+  assert_nil m a: 1, b: 2
+  assert_raise(ArgumentError) { m 2 }
+
+  def m(a, **) a end
+  assert_equal 1, m(1)
+  assert_equal 1, m(1, a: 2, b: 3)
+  assert_equal({ 'a' => 1, b: 2 }, m('a' => 1, b: 2))
+
+  def m(a, **k) [a, k] end
+  assert_equal [1, {}], m(1)
+  assert_equal [1, {a: 2, b: 3}], m(1, a: 2, b: 3)
+  assert_equal [{'a' => 1, b: 2}, {}], m('a' => 1, b: 2)
+
+  def m(a=1, **) a end
+  assert_equal 1, m
+  assert_equal 2, m(2, a: 1, b: 0)
+  assert_raise(ArgumentError) { m('a' => 1, a: 2) }
+
+  def m(a=1, **k) [a, k] end
+  assert_equal [1, {}], m
+  assert_equal [1, {a: 1}], m(a: 1)
+  assert_equal [2, {a: 1, b: 2}], m(2, a: 1, b: 2)
+  assert_equal [{a: 1}, {b: 2}], m({a: 1}, {b: 2})
+
+  def m(*, a:) a end
+  assert_equal 1, m(a: 1)
+  assert_equal 3, m(1, 2, a: 3)
+  assert_raise(ArgumentError) { m('a' => 1, a: 2) }
+
+  def m(*a, b:) [a, b] end
+  assert_equal [[], 1], m(b: 1)
+  assert_equal [[1, 2], 3], m(1, 2, b: 3)
+  assert_raise(ArgumentError) { m('a' => 1, b: 2) }
+
+  def m(*a, b: 1) [a, b] end
+  assert_equal [[], 1], m
+  assert_equal [[1, 2, 3], 4], m(1, 2, 3, b: 4)
+  assert_raise(ArgumentError) { m('a' => 1, b: 2) }
+
+  def m(*, **) end
+  assert_nil m()
+  assert_nil m(a: 1, b: 2)
+  assert_nil m(1, 2, 3, a: 4, b: 5)
+
+  def m(*a, **) a end
+  assert_equal [], m()
+  assert_equal [1, 2, 3], m(1, 2, 3, a: 4, b: 5)
+  assert_raise(ArgumentError) { m("a" => 1, a: 1) }
+  assert_equal [1], m(1, **{a: 2})
+
+  def m(*, **k) k end
+  assert_equal({}, m())
+  assert_equal({a: 4, b: 5}, m(1, 2, 3, a: 4, b: 5))
+  assert_raise(ArgumentError) { m("a" => 1, a: 1) }
+
+  def m(a = nil, b = nil, **k) [a, k] end
+  assert_equal [nil, {}], m()
+  assert_equal([nil, {a: 1}], m(a: 1))
+  assert_raise(ArgumentError) { m("a" => 1, a: 1) }
+  assert_equal([{"a" => 1}, {a: 1}], m({ "a" => 1 }, a: 1))
+  assert_equal([{a: 1}, {}], m({a: 1}, {}))
+  assert_equal([nil, {}], m({}))
+
+  def m(*a, **k) [a, k] end
+  assert_equal([[], {}], m())
+  assert_equal([[1], {}], m(1))
+  assert_equal([[], {a: 1, b: 2}], m(a: 1, b: 2))
+  assert_equal([[1, 2, 3], {a: 2}], m(1, 2, 3, a: 2))
+  assert_raise(ArgumentError) { m("a" => 1, a: 1) }
+  assert_raise(ArgumentError) { m("a" => 1) }
+  assert_equal([[], {a: 1}], m(a: 1))
+  assert_raise(ArgumentError) { m("a" => 1, a: 1) }
+  assert_equal([[{"a" => 1}], {a: 1}], m({ "a" => 1 }, a: 1))
+  assert_equal([[{a: 1}], {}], m({a: 1}, {}))
+  assert_raise(ArgumentError) { m({a: 1}, {"a" => 1}) }
+
+  def m(a:, b:) [a, b] end
+  assert_equal([1, 2], m(a: 1, b: 2))
+  assert_raise(ArgumentError) { m("a" => 1, a: 1, b: 2) }
+
+  def m(a:, b: 1) [a, b] end
+  assert_equal([1, 1], m(a: 1))
+  assert_equal([1, 2], m(a: 1, b: 2))
+  assert_raise(ArgumentError) { m("a" => 1, a: 1, b: 2) }
+
+  def m(a:, **) a end
+  assert_equal(1, m(a: 1))
+  assert_equal(1, m(a: 1, b: 2))
+  assert_raise(ArgumentError) { m("a" => 1, a: 1, b: 2) }
+
+  def m(a:, **k) [a, k] end
+  assert_equal([1, {}], m(a: 1))
+  assert_equal([1, {b: 2, c: 3}], m(a: 1, b: 2, c: 3))
+  assert_raise(ArgumentError) { m("a" => 1, a: 1, b: 2) }
+
+=begin
+  def m(a:, &b) [a, b] end
+  assert_equal([1, nil], m(a: 1))
+  assert_equal([1, l], m(a: 1, &(l = ->{})))
+=end
+
+  def m(a: 1, b:) [a, b] end
+  assert_equal([1, 0], m(b: 0))
+  assert_equal([3, 2], m(b: 2, a: 3))
+  assert_raise(ArgumentError) { m a: 1 }
+
+  def m(a: def m(a: 1) a end, b:)
+    [a, b]
+  end
+  assert_equal([2, 3], m(a: 2, b: 3))
+  assert_equal([:m, 1], m(b: 1))
+  # Note the default value of a: in the original method.
+  assert_equal(1, m())
+
+  def m(a: 1, b: 2) [a, b] end
+  assert_equal([1, 2], m())
+  assert_equal([4, 3], m(b: 3, a: 4))
+
+  def m(a: 1, **) a end
+  assert_equal(1, m())
+  assert_equal(2, m(a: 2, b: 1))
+
+  def m(a: 1, **k) [a, k] end
+  assert_equal([1, {b: 2, c: 3}], m(b: 2, c: 3))
+
+  def m(a:, **) yield end
+  assert_raise(ArgumentError) { m { :blk } }
+  assert_equal :blk, m(a: 1){ :blk }
+
+  def m(a:, **k, &b) [b.call, k] end
+  assert_raise(ArgumentError) { m { :blk } }
+  assert_equal [:blk, {b: 2}], m(a: 1, b: 2){ :blk }
+
+  def m(**k, &b) [k, b] end
+  assert_equal([{ a: 1, b: 2}, nil], m(a: 1, b: 2))
+  assert_equal :blk, m{ :blk }[1].call
+
+  def m(hsh = {}) hsh end
+  assert_equal({ a: 1, b: 2 }, m(a: 1, b: 2))
+  assert_equal({ a: 1, 'b' => 2 }, m(a: 1, 'b' => 2))
+
+  def m(hsh) hsh end
+  assert_equal({ a: 1, b: 2 }, m(a: 1, b: 2))
+  assert_equal({ a: 1, 'b' => 2 }, m(a: 1, 'b' => 2))
+
+=begin
+  def m(a, b=1, *c, (*d, (e)), f: 2, g:, h:, **k, &l)
+    [a, b, c, d, e, f, g, h, k, l]
+  end
+  result = m(9, 8, 7, 6, f: 5, g: 4, h: 3, &(l = ->{}))
+  assert_equal([9, 8, [7], [], 6, 5, 4, 3, {}, l], result)
+
+  def m a, b=1, *c, d, e:, f: 2, g:, **k, &l
+    [a, b, c, d, e, f, g, k, l]
+  end
+  result = m(1, 2, e: 3, g: 4, h: 5, i: 6, &(l = ->{}))
+  assert_equal([1, 1, [], 2, 3, 2, 4, { h: 5, i: 6 }, l], result)
+=end
 end

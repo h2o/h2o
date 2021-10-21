@@ -88,6 +88,16 @@ if Object.const_defined?(:MTest)
       assert_equal(nil, ENV.delete('nosuchenv'))
     end
 
+    def test_env_fetch
+      set_dummy_env
+      assert_equal 'bar', ENV.fetch('FOO')
+      assert_equal 'val', ENV.fetch('BAR', 'val')
+      assert_equal 'val2', ENV.fetch('BAR') { |key| 'val2' }
+      assert_raise(KeyError) do
+        ENV.fetch('BAR')
+      end
+    end
+
     def test_env_subst_nil
       set_dummy_env
       ENV['FOO'] = nil

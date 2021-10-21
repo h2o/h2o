@@ -26,7 +26,8 @@ EOT
 my $output = run_with_h2get($server, <<"EOR");
     to_process = []
     h2g = H2.new
-    host = ARGV[0]
+    authority = ARGV[0]
+    host = "https://#{authority}"
     h2g.connect(host)
     h2g.send_prefix()
     h2g.send_settings()
@@ -66,7 +67,6 @@ my $output = run_with_h2get($server, <<"EOR");
 
         if f.type == "GOAWAY" or f.type == "RST_STREAM" then
           puts f.to_s
-          puts "error"
           exit 1
         end
 
@@ -93,7 +93,7 @@ my $output = run_with_h2get($server, <<"EOR");
     puts("ok")
 EOR
 
-like $output, qr{timeout\n}, "h2get script finished with a timeout";
+like $output, qr{GOAWAY.*idle timeout}s;
 
 done_testing();
 

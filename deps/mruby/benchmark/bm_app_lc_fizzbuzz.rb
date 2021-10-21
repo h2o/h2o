@@ -48,5 +48,4 @@ answer = to_array(solution).map do |p|
   to_string(p)
 end
 
-answer_str = answer.to_a
-# puts answer_str
+# puts answer

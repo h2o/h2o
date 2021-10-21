@@ -9,10 +9,11 @@ my $create_tab = sub {
     $cur_topic = "FAQ"
         if $cur_topic eq 'Frequently Asked Questions';
     if ($cur_topic eq $tab_topic) {
-        $html = qq{<td class="selected">@{[Text::MicroTemplate::escape_html($tab_topic)]}</td>};
+        $html = qq{<td class="selected">};
     } else {
-        $html = qq{<td><a href="@{[Text::MicroTemplate::escape_html($fn)]}">@{[Text::MicroTemplate::escape_html($tab_topic)]}</a></td>};
+        $html = qq{<td>};
     }
+    $html .= qq{<a href="@{[Text::MicroTemplate::escape_html($fn)]}">@{[Text::MicroTemplate::escape_html($tab_topic)]}</a></td>};
     Text::MicroTemplate::encoded_string($html);
 };
 
@@ -101,7 +102,7 @@ my $create_tab = sub {
 </div>
 <div id="footer">
 <p>
-Copyright &copy; 2015 <a href="http://dena.com/intl/">DeNA Co., Ltd.</a> et al.
+Copyright &copy; 2015-2020 <a href="http://dena.com/intl/">DeNA Co., Ltd.</a> et al.
 </p>
 </div>
 </body>

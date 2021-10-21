@@ -128,6 +128,8 @@ See also:
 The following describes the configuration directives for controlling the HTTP/2 protocol handler.
 </p>
 
+? $ctx->{directive_list}->()->(sub {
+
 <?
 $ctx->{directive}->(
     name    => "http2-casper",
@@ -227,11 +229,40 @@ EOT
 )->(sub {});
 
 $ctx->{directive}->(
+    name    => "http2-input-window-size",
+    levels  => [ qw(global) ],
+    default => '16777216',
+    since   => '2.3',
+    desc    => <<'EOT',
+Default window size for HTTP request body.
+EOT
+)->(sub {
+?>
+The value is the maximum amount of request body (in bytes) that can be sent by the client in 1 RTT (round-trip time).
+? });
+
+<?
+$ctx->{directive}->(
     name    => "http2-max-concurrent-requests-per-connection",
     levels  => [ qw(global) ],
     default => 'http2-max-concurrent-requests-per-connection: 100',
     desc    => <<'EOT',
 Maximum number of requests to be handled concurrently within a single HTTP/2 connection.
+EOT
+)->(sub {
+?>
+<p>
+The value cannot exceed 256.
+</p>
+? })
+
+<?
+$ctx->{directive}->(
+    name    => "http2-max-concurrent-streaming-requests-per-connection",
+    levels  => [ qw(global) ],
+    default => 'http2-max-concurrent-streaming-requests-per-connection: 1',
+    desc    => <<'EOT',
+Maximum number of streaming requests to be handled concurrently within a single HTTP/2 connection.
 EOT
 )->(sub {
 ?>
@@ -352,5 +383,20 @@ A timeout in seconds. How long to wait before closing the connection on graceful
 EOT
 )->(sub {});
 ?>
+
+<?
+$ctx->{directive}->(
+    name    => "http2-allow-cross-origin-push",
+    levels  => [ qw(global path) ],
+    since   => '2.3',
+    default => 'http2-allow-cross-origin-push: OFF',
+    desc    => << 'EOT',
+A boolean flag (<code>ON</code> or <code>OFF</code>) indicating whether if the server should push resources belonging to a different authority.
+EOT
+)->(sub {
+?>
+? })
+
+? })
 
 ? })

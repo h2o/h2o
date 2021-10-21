@@ -27,37 +27,35 @@ static int on_config(h2o_configurator_command_t *cmd, h2o_configurator_context_t
     const char *dest;
     int status = 302; /* default is temporary redirect */
     int internal = 0; /* default is external redirect */
-    yoml_t *t;
 
     switch (node->type) {
     case YOML_TYPE_SCALAR:
         dest = node->data.scalar;
         break;
-    case YOML_TYPE_MAPPING:
-        if ((t = yoml_get(node, "url")) == NULL) {
-            h2o_configurator_errprintf(cmd, node, "mandatory property `url` is missing");
+    case YOML_TYPE_MAPPING: {
+        yoml_t **url_node, **status_node, **internal_node;
+        if (h2o_configurator_parse_mapping(cmd, node, "url:s,status:*", "internal:*", &url_node, &status_node, &internal_node) != 0)
             return -1;
-        }
-        if (t->type != YOML_TYPE_SCALAR) {
-            h2o_configurator_errprintf(cmd, t, "property `url` must be a string");
-            return -1;
-        }
-        dest = t->data.scalar;
-        if ((t = yoml_get(node, "status")) == NULL) {
-            h2o_configurator_errprintf(cmd, node, "mandatory property `status` is missing");
-            return -1;
-        }
-        if (h2o_configurator_scanf(cmd, t, "%d", &status) != 0)
+        dest = (*url_node)->data.scalar;
+        if (h2o_configurator_scanf(cmd, *status_node, "%d", &status) != 0)
             return -1;
         if (!(300 <= status && status <= 399)) {
-            h2o_configurator_errprintf(cmd, t, "value of property `status` should be within 300 to 399");
+            h2o_configurator_errprintf(cmd, *status_node, "value of property `status` should be within 300 to 399");
             return -1;
         }
-        if ((t = yoml_get(node, "internal")) != NULL) {
-            if ((internal = (int)h2o_configurator_get_one_of(cmd, t, "NO,YES")) == -1)
+        if (internal_node != NULL) {
+            switch (h2o_configurator_get_one_of(cmd, *internal_node, "YES,NO")) {
+            case 0:
+                internal = 1;
+                break;
+            case 1:
+                internal = 0;
+                break;
+            default:
                 return -1;
+            }
         }
-        break;
+    } break;
     default:
         h2o_configurator_errprintf(cmd, node, "value must be a string or a mapping");
         return -1;

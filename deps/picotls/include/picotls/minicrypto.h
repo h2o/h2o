@@ -22,6 +22,10 @@
 #ifndef picotls_minicrypto_h
 #define picotls_minicrypto_h
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "picotls.h"
 
 #define SECP256R1_PRIVATE_KEY_SIZE 32
@@ -34,14 +38,33 @@ typedef struct st_ptls_minicrypto_secp256r1sha256_sign_certificate_t {
 } ptls_minicrypto_secp256r1sha256_sign_certificate_t;
 
 void ptls_minicrypto_random_bytes(void *buf, size_t len);
+
 int ptls_minicrypto_init_secp256r1sha256_sign_certificate(ptls_minicrypto_secp256r1sha256_sign_certificate_t *self,
                                                           ptls_iovec_t key);
 
 extern ptls_key_exchange_algorithm_t ptls_minicrypto_secp256r1, ptls_minicrypto_x25519;
 extern ptls_key_exchange_algorithm_t *ptls_minicrypto_key_exchanges[];
-extern ptls_aead_algorithm_t ptls_minicrypto_aes128gcm;
-extern ptls_hash_algorithm_t ptls_minicrypto_sha256;
-extern ptls_cipher_suite_t ptls_minicrypto_aes128gcmsha256;
+extern ptls_cipher_algorithm_t ptls_minicrypto_aes128ecb, ptls_minicrypto_aes256ecb, ptls_minicrypto_aes128ctr,
+    ptls_minicrypto_aes256ctr, ptls_minicrypto_chacha20;
+extern ptls_aead_algorithm_t ptls_minicrypto_aes128gcm, ptls_minicrypto_aes256gcm, ptls_minicrypto_chacha20poly1305;
+extern ptls_hash_algorithm_t ptls_minicrypto_sha256, ptls_minicrypto_sha384;
+extern ptls_cipher_suite_t ptls_minicrypto_aes128gcmsha256, ptls_minicrypto_aes256gcmsha384, ptls_minicrypto_chacha20poly1305sha256;
 extern ptls_cipher_suite_t *ptls_minicrypto_cipher_suites[];
+
+typedef struct st_ptls_asn1_pkcs8_private_key_t {
+    ptls_iovec_t vec;
+    size_t algorithm_index;
+    uint32_t algorithm_length;
+    size_t parameters_index;
+    uint32_t parameters_length;
+    size_t key_data_index;
+    uint32_t key_data_length;
+} ptls_asn1_pkcs8_private_key_t;
+
+int ptls_minicrypto_load_private_key(ptls_context_t *ctx, char const *pem_fname);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

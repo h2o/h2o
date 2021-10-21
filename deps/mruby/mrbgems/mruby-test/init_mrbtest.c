@@ -31,6 +31,7 @@ mrb_init_mrbtest(mrb_state *mrb)
 
   if (mrb->exc) {
     mrb_print_error(mrb);
+    mrb_close(mrb);
     exit(EXIT_FAILURE);
   }
   mrb_close(core_test);

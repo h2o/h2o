@@ -5,9 +5,10 @@ class Module
     attr_writer(*names)
   end
   # 15.2.2.4.11
-  def attr(name)
-    attr_reader(name)
-  end
+  alias attr attr_reader
+  #def attr(name)
+  #  attr_reader(name)
+  #end
 
   # 15.2.2.4.27
   def include(*args)
@@ -15,6 +16,7 @@ class Module
       m.append_features(self)
       m.included(self)
     end
+    self
   end
 
   def prepend(*args)
@@ -22,5 +24,6 @@ class Module
       m.prepend_features(self)
       m.prepended(self)
     end
+    self
   end
 end

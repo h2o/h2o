@@ -5,6 +5,8 @@
 This document describes the configuration directives of the expires handler.
 </p>
 
+? $ctx->{directive_list}->()->(sub {
+
 <?
 $ctx->{directive}->(
     name    => "expires",
@@ -27,6 +29,8 @@ EOT
 <p>
 You can also find an example that conditionally sets the header depending on the aspects of a request in <a href="configure/mruby.html#modifying-response">Modifying the Response section of the Mruby directives documentation</a>.
 </p>
+? })
+
 ? })
 
 ? })

@@ -1007,9 +1007,8 @@ void *redisvCommand(redisContext *c, const char *format, va_list ap) {
 
 void *redisCommand(redisContext *c, const char *format, ...) {
     va_list ap;
-    void *reply = NULL;
     va_start(ap,format);
-    reply = redisvCommand(c,format,ap);
+    void *reply = redisvCommand(c,format,ap);
     va_end(ap);
     return reply;
 }

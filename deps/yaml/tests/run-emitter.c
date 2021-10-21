@@ -139,7 +139,7 @@ int compare_events(yaml_event_t *event1, yaml_event_t *event2)
                         event1->data.scalar.length) != 0)
                 return 0;
             if ((event1->data.scalar.plain_implicit != event2->data.scalar.plain_implicit)
-                    || (event2->data.scalar.quoted_implicit != event2->data.scalar.quoted_implicit)
+                    || (event1->data.scalar.quoted_implicit != event2->data.scalar.quoted_implicit)
                     /* || (event2->data.scalar.style != event2->data.scalar.style) */)
                 return 0;
             return 1;
@@ -205,8 +205,8 @@ int print_output(char *name, unsigned char *buffer, size_t size, int count)
         if (feof(file)) break;
     }
     fclose(file);
-    printf("#### (length: %d)\n", total_size);
-    printf("OUTPUT:\n%s#### (length: %d)\n", buffer, size);
+    printf("#### (length: %ld)\n", (long)total_size);
+    printf("OUTPUT:\n%s#### (length: %ld)\n", buffer, (long)size);
     return 0;
 }
 
@@ -251,7 +251,7 @@ main(int argc, char *argv[])
         yaml_parser_t parser;
         yaml_emitter_t emitter;
         yaml_event_t event;
-        unsigned char buffer[BUFFER_SIZE];
+        unsigned char buffer[BUFFER_SIZE+1];
         size_t written = 0;
         yaml_event_t events[MAX_EVENTS];
         size_t event_number = 0;
@@ -259,7 +259,7 @@ main(int argc, char *argv[])
         int count = 0;
         int error = 0;
         int k;
-        memset(buffer, 0, BUFFER_SIZE);
+        memset(buffer, 0, BUFFER_SIZE+1);
         memset(events, 0, MAX_EVENTS*sizeof(yaml_event_t));
 
         printf("[%d] Parsing, emitting, and parsing again '%s': ", number, argv[number]);
@@ -290,7 +290,7 @@ main(int argc, char *argv[])
             assert(event_number < MAX_EVENTS);
             assert(copy_event(&(events[event_number++]), &event));
             assert(yaml_emitter_emit(&emitter, &event) || 
-                    (yaml_emitter_flush(&emitter) && print_output(argv[number], buffer, written, count)));
+                    print_output(argv[number], buffer, written, count));
             count ++;
         }
 
@@ -319,7 +319,7 @@ main(int argc, char *argv[])
             yaml_event_delete(events+k);
         }
 
-        printf("PASSED (length: %d)\n", written);
+        printf("PASSED (length: %ld)\n", (long)written);
         print_output(argv[number], buffer, written, -1);
     }
 

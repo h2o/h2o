@@ -5,7 +5,11 @@ use IO::Socket::INET;
 use Net::EmptyPort qw(check_port empty_port);
 use Socket qw(SOMAXCONN);
 use Test::More;
+use Time::HiRes qw(time);
 use t::Util;
+
+plan skip_all => 'nghttp not found'
+    unless prog_exists('nghttp');
 
 my $upstream_port = empty_port();
 
@@ -32,17 +36,15 @@ my $doit = sub {
     my ($proto, $opt, $port) = @_;
 
     my $before = time();
-    `nghttp -t 10 $opt -nv -d $huge_file $proto://127.0.0.1:$port/echo`;
+    `nghttp -t 5 $opt -nv -d $huge_file $proto://127.0.0.1:$port/echo`;
     my $after = time();
-    cmp_ok $after - $before, ">=", 10, "Timeout was triggered by nghttp";
+    cmp_ok $after - $before, ">=", 4, "Timeout was triggered by nghttp";
 };
 
 subtest 'http (upgrade)' => sub {
     $doit->('http', '-u', $server->{port});
 };
 subtest 'https' => sub {
-    plan skip_all => 'OpenSSL does not support protocol negotiation; it is too old'
-        unless openssl_can_negotiate();
     $doit->('https', '', $server->{tls_port});
 };
 

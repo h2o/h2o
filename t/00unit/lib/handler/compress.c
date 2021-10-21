@@ -26,7 +26,7 @@
 #include "../../../../lib/handler/compress/gzip.c"
 #include "../../../../lib/handler/compress.c"
 
-static void check_result(h2o_iovec_t *vecs, size_t num_vecs, const char *expected, size_t expectedlen)
+static void check_result(h2o_sendvec_t *vecs, size_t num_vecs, const char *expected, size_t expectedlen)
 {
     z_stream zs;
     char decbuf[expectedlen + 1];
@@ -42,7 +42,7 @@ static void check_result(h2o_iovec_t *vecs, size_t num_vecs, const char *expecte
     int inflate_ret = -1;
     size_t i;
     for (i = 0; i != num_vecs; ++i) {
-        zs.next_in = (void *)vecs[i].base;
+        zs.next_in = (void *)vecs[i].raw;
         zs.avail_in = (unsigned)vecs[i].len;
         inflate_ret = inflate(&zs, Z_NO_FLUSH);
         if (zs.avail_out == 0) {
@@ -65,14 +65,14 @@ static void check_result(h2o_iovec_t *vecs, size_t num_vecs, const char *expecte
 void test_gzip_simple(void)
 {
     h2o_mem_pool_t pool;
-    h2o_iovec_t inbuf, *outbufs;
+    h2o_sendvec_t inbuf, *outbufs;
     size_t outbufcnt;
 
     h2o_mem_init_pool(&pool);
 
     h2o_compress_context_t *compressor = h2o_compress_gzip_open(&pool, Z_BEST_SPEED);
-    inbuf = h2o_iovec_init(H2O_STRLIT("hello world"));
-    compressor->transform(compressor, &inbuf, 1, 1, &outbufs, &outbufcnt);
+    h2o_sendvec_init_raw(&inbuf, H2O_STRLIT("hello world"));
+    h2o_compress_transform(compressor, NULL, &inbuf, 1, 1, &outbufs, &outbufcnt);
 
     check_result(outbufs, outbufcnt, H2O_STRLIT("hello world"));
 
@@ -99,13 +99,17 @@ void test_gzip_multi(void)
     "hedge.\n\n"
 
     h2o_mem_pool_t pool;
-    h2o_iovec_t inbufs[] = {{H2O_STRLIT(P1)}, {H2O_STRLIT(P2)}, {H2O_STRLIT(P3)}}, *outbufs;
+    h2o_sendvec_t inbufs[3], *outbufs;
     size_t outbufcnt;
+
+    h2o_sendvec_init_raw(inbufs, H2O_STRLIT(P1));
+    h2o_sendvec_init_raw(inbufs + 1, H2O_STRLIT(P2));
+    h2o_sendvec_init_raw(inbufs + 2, H2O_STRLIT(P3));
 
     h2o_mem_init_pool(&pool);
 
     h2o_compress_context_t *compressor = h2o_compress_gzip_open(&pool, Z_BEST_SPEED);
-    compressor->transform(compressor, inbufs, sizeof(inbufs) / sizeof(inbufs[0]), 1, &outbufs, &outbufcnt);
+    h2o_compress_transform(compressor, NULL, inbufs, sizeof(inbufs) / sizeof(inbufs[0]), 1, &outbufs, &outbufcnt);
 
     assert(outbufcnt > 1); /* we want to test multi-vec output */
 

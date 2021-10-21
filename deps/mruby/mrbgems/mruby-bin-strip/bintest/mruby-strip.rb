@@ -67,7 +67,7 @@ EOS
 
   `#{cmd('mruby-strip')} -l #{without_lv.path}`
   assert_true without_lv.size < with_lv.size
-
-  assert_equal '[:a, :b]', `#{cmd('mruby')} -b #{with_lv.path}`.chomp
-  assert_equal '[]', `#{cmd('mruby')} -b #{without_lv.path}`.chomp
+#
+#  assert_equal '[:a, :b]', `#{cmd('mruby')} -b #{with_lv.path}`.chomp
+#  assert_equal '[]', `#{cmd('mruby')} -b #{without_lv.path}`.chomp
 end

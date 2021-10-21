@@ -27,7 +27,7 @@ class Proc
 
     pproc = self
     make_curry = proc do |given_args=[]|
-      send(type) do |*args|
+      __send__(type) do |*args|
         new_args = given_args + args
         if new_args.size >= arity
           pproc[*new_args]
@@ -37,6 +37,14 @@ class Proc
       end
     end
     make_curry.call
+  end
+
+  def <<(other)
+    ->(*args, &block) { call(other.call(*args, &block)) }
+  end
+
+  def >>(other)
+    ->(*args, &block) { other.call(call(*args, &block)) }
   end
 
 end

@@ -3,7 +3,7 @@ MRuby.each_target do
   relative_from_root = File.dirname(__FILE__).relative_path_from(MRUBY_ROOT)
   current_build_dir = "#{build_dir}/#{relative_from_root}"
 
-  self.libmruby << objfile("#{current_build_dir}/mrblib")
+  self.libmruby_objs << objfile("#{current_build_dir}/mrblib")
 
   file objfile("#{current_build_dir}/mrblib") => "#{current_build_dir}/mrblib.c"
   file "#{current_build_dir}/mrblib.c" => [mrbcfile, __FILE__] + Dir.glob("#{current_dir}/*.rb").sort do |t|

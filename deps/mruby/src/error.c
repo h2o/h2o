@@ -28,7 +28,7 @@ mrb_exc_new(mrb_state *mrb, struct RClass *c, const char *ptr, size_t len)
 MRB_API mrb_value
 mrb_exc_new_str(mrb_state *mrb, struct RClass* c, mrb_value str)
 {
-  str = mrb_str_to_str(mrb, str);
+  mrb_to_str(mrb, str);
   return mrb_obj_new(mrb, c, 1, &str);
 }
 
@@ -47,7 +47,7 @@ exc_initialize(mrb_state *mrb, mrb_value exc)
   mrb_int argc;
   mrb_value *argv;
 
-  if (mrb_get_args(mrb, "|o*", &mesg, &argv, &argc) >= 1) {
+  if (mrb_get_args(mrb, "|o*!", &mesg, &argv, &argc) >= 1) {
     mrb_iv_set(mrb, exc, mrb_intern_lit(mrb, "mesg"), mesg);
   }
   return exc;
@@ -71,7 +71,7 @@ exc_exception(mrb_state *mrb, mrb_value self)
 {
   mrb_value exc;
   mrb_value a;
-  int argc;
+  mrb_int argc;
 
   argc = mrb_get_args(mrb, "|o", &a);
   if (argc == 0) return self;
@@ -151,14 +151,14 @@ exc_inspect(mrb_state *mrb, mrb_value exc)
   str = mrb_str_new_cstr(mrb, cname);
   if (mrb_string_p(file) && mrb_fixnum_p(line)) {
     if (append_mesg) {
-      str = mrb_format(mrb, "%S:%S:%S (%S)", file, line, mesg, str);
+      str = mrb_format(mrb, "%S:%S: %S (%S)", file, line, mesg, str);
     }
     else {
-      str = mrb_format(mrb, "%S:%S:%S", file, line, str);
+      str = mrb_format(mrb, "%S:%S: %S", file, line, str);
     }
   }
   else if (append_mesg) {
-    str = mrb_format(mrb, "%S:%S", str, mesg);
+    str = mrb_format(mrb, "%S: %S", str, mesg);
   }
   return str;
 }
@@ -200,6 +200,7 @@ exc_debug_info(mrb_state *mrb, struct RObject *exc)
   mrb_callinfo *ci = mrb->c->ci;
   mrb_code *pc = ci->pc;
 
+  if (mrb_obj_iv_defined(mrb, exc, mrb_intern_lit(mrb, "file"))) return;
   while (ci >= mrb->c->cibase) {
     mrb_code *err = ci->err;
 
@@ -207,8 +208,8 @@ exc_debug_info(mrb_state *mrb, struct RObject *exc)
     if (err && ci->proc && !MRB_PROC_CFUNC_P(ci->proc)) {
       mrb_irep *irep = ci->proc->body.irep;
 
-      int32_t const line = mrb_debug_get_line(irep, (uint32_t)(err - irep->iseq));
-      char const* file = mrb_debug_get_filename(irep, (uint32_t)(err - irep->iseq));
+      int32_t const line = mrb_debug_get_line(irep, err - irep->iseq);
+      char const* file = mrb_debug_get_filename(irep, err - irep->iseq);
       if (line != -1 && file) {
         mrb_obj_iv_set(mrb, exc, mrb_intern_lit(mrb, "file"), mrb_str_new_cstr(mrb, file));
         mrb_obj_iv_set(mrb, exc, mrb_intern_lit(mrb, "line"), mrb_fixnum_value(line));
@@ -228,7 +229,11 @@ mrb_exc_set(mrb_state *mrb, mrb_value exc)
   }
   else {
     mrb->exc = mrb_obj_ptr(exc);
-    if (!mrb->gc.out_of_memory) {
+    if (mrb->gc.arena_idx > 0 &&
+        (struct RBasic*)mrb->exc == mrb->gc.arena[mrb->gc.arena_idx-1]) {
+      mrb->gc.arena_idx--;
+    }
+    if (!mrb->gc.out_of_memory && !MRB_FROZEN_P(mrb->exc)) {
       exc_debug_info(mrb, mrb->exc);
       mrb_keep_backtrace(mrb, exc);
     }
@@ -261,6 +266,7 @@ mrb_vformat(mrb_state *mrb, const char *format, va_list ap)
   const char *p = format;
   const char *b = p;
   ptrdiff_t size;
+  int ai0 = mrb_gc_arena_save(mrb);
   mrb_value ary = mrb_ary_new_capa(mrb, 4);
   int ai = mrb_gc_arena_save(mrb);
 
@@ -269,9 +275,12 @@ mrb_vformat(mrb_state *mrb, const char *format, va_list ap)
 
     if (c == '%') {
       if (*p == 'S') {
+        mrb_value val;
+
         size = p - b - 1;
         mrb_ary_push(mrb, ary, mrb_str_new(mrb, b, size));
-        mrb_ary_push(mrb, ary, va_arg(ap, mrb_value));
+        val = va_arg(ap, mrb_value);
+        mrb_ary_push(mrb, ary, mrb_obj_as_string(mrb, val));
         b = p + 1;
       }
     }
@@ -289,15 +298,20 @@ mrb_vformat(mrb_state *mrb, const char *format, va_list ap)
     mrb_gc_arena_restore(mrb, ai);
   }
   if (b == format) {
+    mrb_gc_arena_restore(mrb, ai0);
     return mrb_str_new_cstr(mrb, format);
   }
   else {
+    mrb_value val;
+
     size = p - b;
     if (size > 0) {
       mrb_ary_push(mrb, ary, mrb_str_new(mrb, b, size));
-      mrb_gc_arena_restore(mrb, ai);
     }
-    return mrb_ary_join(mrb, ary, mrb_nil_value());
+    val = mrb_ary_join(mrb, ary, mrb_nil_value());
+    mrb_gc_arena_restore(mrb, ai0);
+    mrb_gc_protect(mrb, val);
+    return val;
   }
 }
 
@@ -383,7 +397,7 @@ mrb_bug(mrb_state *mrb, const char *fmt, ...)
 }
 
 MRB_API mrb_value
-mrb_make_exception(mrb_state *mrb, int argc, const mrb_value *argv)
+mrb_make_exception(mrb_state *mrb, mrb_int argc, const mrb_value *argv)
 {
   mrb_value mesg;
   int n;

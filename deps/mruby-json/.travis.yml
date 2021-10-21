@@ -1,0 +1,10 @@
+sudo: false
+addons:
+  apt:
+    packages:
+      - gperf
+script:
+  - export MRUBY_CONFIG="$TRAVIS_BUILD_DIR/.travis_config.rb"
+  - git clone --depth 1 "https://github.com/mruby/mruby.git"
+  - cd mruby
+  - ./minirake all test

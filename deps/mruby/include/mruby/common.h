@@ -7,6 +7,11 @@
 #ifndef MRUBY_COMMON_H
 #define MRUBY_COMMON_H
 
+#ifdef __APPLE__
+  #ifndef __TARGETCONDITIONALS__
+  #include "TargetConditionals.h"
+  #endif
+#endif
 
 #ifdef __cplusplus
 #ifdef MRB_ENABLE_CXX_ABI
@@ -14,7 +19,7 @@
 #define MRB_END_DECL
 #else
 # define MRB_BEGIN_DECL extern "C" {
-# define MRB_END_DECL	}
+# define MRB_END_DECL }
 #endif
 #else
 /** Start declarations in C mode */
@@ -29,7 +34,7 @@
 MRB_BEGIN_DECL
 
 /** Declare a function that never returns. */
-#if __STDC_VERSION__ >= 201112L
+#if defined __STDC_VERSION__ && __STDC_VERSION__ >= 201112L
 # define mrb_noreturn _Noreturn
 #elif defined __GNUC__ && !defined __STRICT_ANSI__
 # define mrb_noreturn __attribute__((noreturn))

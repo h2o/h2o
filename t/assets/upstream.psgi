@@ -93,6 +93,17 @@ builder {
             ]
         ];
     };
+    mount "/custom-perl" => sub {
+        my $env = shift;
+        my $c = "";
+        if ($env->{'psgi.input'}) {
+            my $buf;
+            while ($env->{'psgi.input'}->read($buf, 65536)) {
+                $c = $c . $buf;
+            }
+        }
+        return eval($c);
+    };
     mount "/echo-server-header" => sub {
         my $env = shift;
         my @resph = [ 'content-type' => 'text/plain' ];
@@ -103,23 +114,61 @@ builder {
             200, @resph, [ "Ok" ]
         ];
     };
+    mount "/echo-request-uri" => sub {
+        my $env = shift;
+        return [
+            200,
+            [
+            ],
+            [$env->{"REQUEST_URI"} || ''],
+        ];
+    };
     mount "/echo-server-port" => sub {
         my $env = shift;
         return [
             200,
             [
                 'x-server' => $env->{"SERVER_PORT"},
+                'req-connection' => $env->{"HTTP_CONNECTION"} || '',
             ],
             [$env->{"SERVER_PORT"}],
         ];
     };
-    mount "/streaming-body" => sub {
+    mount "/echo-remote-port" => sub {
+        my $env = shift;
+        return [
+            200,
+            [
+            ],
+            [$env->{"REMOTE_PORT"} || ''],
+        ];
+    };
+    mount "/sni-name" => sub {
+        my $env = shift;
+        [200, [], [$env->{"psgix.io"}->get_servername]];
+    };
+    mount "/suspend-body" => sub {
         my $env = shift;
         return sub {
             my $responder = shift;
             my $writer = $responder->([ 200, [ 'content-type' => 'text/plain' ] ]);
-            for my $i (1..30) {
-                sleep 0.1;
+            sleep 1;
+            $writer->write('x');
+            sleep 1
+                if $env->{QUERY_STRING} =~ /delay-fin/;
+            $writer->close;
+        };
+    };
+    mount "/streaming-body" => sub {
+        my $env = shift;
+        my $query = Plack::Request->new($env)->query_parameters;
+        my $sleep = $query->{sleep} // 0.1;
+        my $count = $query->{count} // 30;
+        return sub {
+            my $responder = shift;
+            my $writer = $responder->([ 200, [ 'content-type' => 'text/plain' ] ]);
+            for my $i (1..$count) {
+                sleep $sleep;
                 $writer->write($i);
             }
             $writer->close;
@@ -212,6 +261,9 @@ builder {
             "HTTP/1.1 100 Continue",
             "link: </index.js>; rel=preload",
             "",
+            "HTTP/1.1 100 Continue",
+            "link: </index.js>; rel=preload",
+            "",
             "",
         );
         sleep 1.1;
@@ -221,5 +273,81 @@ builder {
         my $env = shift;
         my $query = Plack::Request->new($env)->query_parameters;
         [200, ["content-type" => "text/plain; charset=utf-8", "content-length" => 11, "link" => "$query->{'pushes'}"], ["hello world"]];
+    };
+    mount "/no-content" => sub {
+        my $env = shift;
+        return [
+            204,
+            [
+                'content-type' => 'text/plain',
+            ],
+            [],
+        ];
+    };
+    mount "/content" => sub {
+        my $env = shift;
+        my $query = Plack::Request->new($env)->query_parameters;
+        return [
+            200,
+            [
+                ($query->{cl} ? ( 'content-length' => $query->{cl}) : ())
+            ],
+            [ 'a' x ($query->{size} || 0) ],
+        ];
+    };
+    mount "/1xx" => sub {
+        my $env = shift;
+        my $query = Plack::Request->new($env)->query_parameters;
+        my $status = $query->get('status') || 100;
+        my $fh = $env->{"psgix.io"};
+        print $fh join(
+            "\r\n",
+            "HTTP/1.1 $status OK",
+            ($query->get('link') ? (
+                "link: </index.js>; rel=preload",
+            ) : ()),
+            "",
+            "HTTP/1.1 $status OK",
+            ($query->get('link') ? (
+                "link: </style.css>; rel=preload",
+            ) : ()),
+            "",
+            "HTTP/1.1 200 OK",
+            "connection: close",
+            "content-type: text/plain",
+            "content-length: 11",
+            "",
+            "hello world",
+        );
+        return sub {}; # do nothing
+    };
+    mount "/early-hints" => sub {
+        my $env = shift;
+        my $fh = $env->{"psgix.io"};
+        print $fh join(
+            "\r\n",
+            "HTTP/1.1 103 Early Hints",
+            "link: </index.js>; rel=preload",
+            "",
+            "",
+        );
+        sleep 0.1 if $env->{'QUERY_STRING'} eq 'sleep';
+        print $fh join(
+            "\r\n",
+            "HTTP/1.1 200 OK",
+            "connection: close",
+            "content-type: text/plain",
+            "content-length: 11",
+            "",
+            "hello world",
+        );
+        return sub {};
+    };
+    mount "/425" => sub {
+        my $env = shift;
+        if ($env->{HTTP_EARLY_DATA}) {
+            return [425, [], []];
+        }
+        return [200, ["content-type" => 'text/plain; charset=utf-8'], ["hello\n"]];
     };
 };

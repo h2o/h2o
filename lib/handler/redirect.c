@@ -24,40 +24,33 @@
 
 #define MODULE_NAME "lib/handler/redirect.c"
 
+typedef H2O_VECTOR(char *) char_vec;
+
 struct st_h2o_redirect_handler_t {
     h2o_handler_t super;
     int internal;
     int status;
-    h2o_iovec_t prefix;
+    h2o_iovec_vector_t prefix_list;
 };
 
 static void on_dispose(h2o_handler_t *_self)
 {
     h2o_redirect_handler_t *self = (void *)_self;
-    free(self->prefix.base);
+    size_t i;
+    for (i = 0; i != self->prefix_list.size; ++i) {
+        free(self->prefix_list.entries[i].base);
+    }
+    free(self->prefix_list.entries);
 }
 
 static void redirect_internally(h2o_redirect_handler_t *self, h2o_req_t *req, h2o_iovec_t dest)
 {
     h2o_iovec_t method;
-    h2o_url_t input, resolved;
-
-    /* resolve the URL */
-    if (h2o_url_parse_relative(dest.base, dest.len, &input) != 0) {
-        h2o_req_log_error(req, MODULE_NAME, "invalid destination:%.*s", (int)dest.len, dest.base);
-        goto SendInternalError;
-    }
-    if (input.scheme != NULL && input.authority.base != NULL) {
-        resolved = input;
-    } else {
-        h2o_url_t base;
-        /* we MUST to set authority to that of hostconf, or internal redirect might create a TCP connection */
-        if (h2o_url_init(&base, req->scheme, req->hostconf->authority.hostport, req->path) != 0) {
-            h2o_req_log_error(req, MODULE_NAME, "failed to parse current authority:%.*s", (int)req->authority.len,
-                              req->authority.base);
-            goto SendInternalError;
-        }
-        h2o_url_resolve(&req->pool, &base, &input, &resolved);
+    h2o_url_t resolved;
+    if (h2o_req_resolve_internal_redirect_url(req, dest, &resolved) != 0) {
+        h2o_req_log_error(req, MODULE_NAME, "failed to resolve internal redirect url for dest:%.*s", (int)dest.len, dest.base);
+        h2o_send_error_503(req, "Internal Server Error", "internal server error", 0);
+        return;
     }
 
     /* determine the method */
@@ -73,16 +66,16 @@ static void redirect_internally(h2o_redirect_handler_t *self, h2o_req_t *req, h2
     }
 
     h2o_reprocess_request_deferred(req, method, resolved.scheme, resolved.authority, resolved.path, NULL, 1);
-    return;
-
-SendInternalError:
-    h2o_send_error_503(req, "Internal Server Error", "internal server error", 0);
 }
 
 static int on_req(h2o_handler_t *_self, h2o_req_t *req)
 {
     h2o_redirect_handler_t *self = (void *)_self;
-    h2o_iovec_t dest = h2o_build_destination(req, self->prefix.base, self->prefix.len, 1);
+
+    h2o_iovec_t delimiter =
+        req->authority_wildcard_match.base == NULL ? h2o_iovec_init(H2O_STRLIT("*")) : req->authority_wildcard_match;
+    h2o_iovec_t prefix = h2o_join_list(&req->pool, self->prefix_list.entries, self->prefix_list.size, delimiter);
+    h2o_iovec_t dest = h2o_build_destination(req, prefix.base, prefix.len, 1);
 
     /* redirect */
     if (self->internal) {
@@ -101,6 +94,7 @@ h2o_redirect_handler_t *h2o_redirect_register(h2o_pathconf_t *pathconf, int inte
     self->super.on_req = on_req;
     self->internal = internal;
     self->status = status;
-    self->prefix = h2o_strdup(NULL, prefix, SIZE_MAX);
+    h2o_split(NULL, &self->prefix_list, h2o_iovec_init(prefix, strlen(prefix)), '*');
+
     return self;
 }

@@ -11,17 +11,19 @@ istruct_test_initialize(mrb_state *mrb, mrb_value self)
   mrb_value object;
   mrb_get_args(mrb, "o", &object);
 
-  if (mrb_float_p(object))
-  {
-    snprintf(string, size, "float(%.3f)", mrb_float(object));
+  if (mrb_fixnum_p(object)) {
+    strncpy(string, "fixnum", size-1);
   }
-  else if (mrb_fixnum_p(object))
-  {
-    snprintf(string, size, "fixnum(%" MRB_PRId ")", mrb_fixnum(object));
+#ifndef MRB_WITHOUT_FLOAT
+  else if (mrb_float_p(object)) {
+    strncpy(string, "float", size-1);
   }
-  else if (mrb_string_p(object))
-  {
-    snprintf(string, size, "string(%s)", mrb_string_value_cstr(mrb, &object));
+#endif
+  else if (mrb_string_p(object)) {
+    strncpy(string, "string", size-1);
+  }
+  else {
+    strncpy(string, "anything", size-1);
   }
 
   string[size - 1] = 0; // force NULL at the end
@@ -47,7 +49,7 @@ istruct_test_test_receive(mrb_state *mrb, mrb_value self)
   mrb_get_args(mrb, "o", &object);
   if (mrb_obj_class(mrb, object) != mrb_class_get(mrb, "InlineStructTest"))
   {
-    mrb_raisef(mrb, E_TYPE_ERROR, "Expected InlineStructTest");
+    mrb_raise(mrb, E_TYPE_ERROR, "Expected InlineStructTest");
   }
   return mrb_bool_value(((char*)mrb_istruct_ptr(object))[0] == 's');
 }

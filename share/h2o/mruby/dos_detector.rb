@@ -18,7 +18,7 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 # IN THE SOFTWARE.
 #
-require "lru_cache.rb"
+require File.expand_path(File.dirname(__FILE__)) + "/lru_cache.rb"
 
 class DoSDetector
 

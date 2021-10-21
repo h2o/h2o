@@ -336,7 +336,7 @@ end
 
 assert('BS Block 28') do
   assert_equal(10) do
-    3.times{|bl|
+    3.times{
       break 10
     }
   end

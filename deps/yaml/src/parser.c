@@ -605,7 +605,7 @@ yaml_parser_parse_node(yaml_parser_t *parser, yaml_event_t *event,
                     if (strcmp((char *)tag_directive->handle, (char *)tag_handle) == 0) {
                         size_t prefix_len = strlen((char *)tag_directive->prefix);
                         size_t suffix_len = strlen((char *)tag_suffix);
-                        tag = yaml_malloc(prefix_len+suffix_len+1);
+                        tag = YAML_MALLOC(prefix_len+suffix_len+1);
                         if (!tag) {
                             parser->error = YAML_MEMORY_ERROR;
                             goto error;
@@ -685,7 +685,7 @@ yaml_parser_parse_node(yaml_parser_t *parser, yaml_event_t *event,
                 return 1;
             }
             else if (anchor || tag) {
-                yaml_char_t *value = yaml_malloc(1);
+                yaml_char_t *value = YAML_MALLOC(1);
                 if (!value) {
                     parser->error = YAML_MEMORY_ERROR;
                     goto error;
@@ -759,9 +759,8 @@ yaml_parser_parse_block_sequence_entry(yaml_parser_t *parser,
 
     else if (token->type == YAML_BLOCK_END_TOKEN)
     {
-        yaml_mark_t dummy_mark;     /* Used to eliminate a compiler warning. */
         parser->state = POP(parser, parser->states);
-        dummy_mark = POP(parser, parser->marks);
+        (void)POP(parser, parser->marks);
         SEQUENCE_END_EVENT_INIT(*event, token->start_mark, token->end_mark);
         SKIP_TOKEN(parser);
         return 1;
@@ -869,9 +868,8 @@ yaml_parser_parse_block_mapping_key(yaml_parser_t *parser,
 
     else if (token->type == YAML_BLOCK_END_TOKEN)
     {
-        yaml_mark_t dummy_mark;     /* Used to eliminate a compiler warning. */
         parser->state = POP(parser, parser->states);
-        dummy_mark = POP(parser, parser->marks);
+        (void)POP(parser, parser->marks);
         MAPPING_END_EVENT_INIT(*event, token->start_mark, token->end_mark);
         SKIP_TOKEN(parser);
         return 1;
@@ -952,7 +950,6 @@ yaml_parser_parse_flow_sequence_entry(yaml_parser_t *parser,
         yaml_event_t *event, int first)
 {
     yaml_token_t *token;
-    yaml_mark_t dummy_mark;     /* Used to eliminate a compiler warning. */
 
     if (first) {
         token = PEEK_TOKEN(parser);
@@ -997,7 +994,7 @@ yaml_parser_parse_flow_sequence_entry(yaml_parser_t *parser,
     }
 
     parser->state = POP(parser, parser->states);
-    dummy_mark = POP(parser, parser->marks);
+    (void)POP(parser, parser->marks);
     SEQUENCE_END_EVENT_INIT(*event, token->start_mark, token->end_mark);
     SKIP_TOKEN(parser);
     return 1;
@@ -1104,7 +1101,6 @@ yaml_parser_parse_flow_mapping_key(yaml_parser_t *parser,
         yaml_event_t *event, int first)
 {
     yaml_token_t *token;
-    yaml_mark_t dummy_mark;     /* Used to eliminate a compiler warning. */
 
     if (first) {
         token = PEEK_TOKEN(parser);
@@ -1158,7 +1154,7 @@ yaml_parser_parse_flow_mapping_key(yaml_parser_t *parser,
     }
 
     parser->state = POP(parser, parser->states);
-    dummy_mark = POP(parser, parser->marks);
+    (void)POP(parser, parser->marks);
     MAPPING_END_EVENT_INIT(*event, token->start_mark, token->end_mark);
     SKIP_TOKEN(parser);
     return 1;
@@ -1212,7 +1208,7 @@ yaml_parser_process_empty_scalar(yaml_parser_t *parser, yaml_event_t *event,
 {
     yaml_char_t *value;
 
-    value = yaml_malloc(1);
+    value = YAML_MALLOC(1);
     if (!value) {
         parser->error = YAML_MEMORY_ERROR;
         return 0;
@@ -1249,7 +1245,7 @@ yaml_parser_process_directives(yaml_parser_t *parser,
     } tag_directives = { NULL, NULL, NULL };
     yaml_token_t *token;
 
-    if (!STACK_INIT(parser, tag_directives, INITIAL_STACK_SIZE))
+    if (!STACK_INIT(parser, tag_directives, yaml_tag_directive_t*))
         goto error;
 
     token = PEEK_TOKEN(parser);
@@ -1265,12 +1261,15 @@ yaml_parser_process_directives(yaml_parser_t *parser,
                 goto error;
             }
             if (token->data.version_directive.major != 1
-                    || token->data.version_directive.minor != 1) {
+                    || (
+                        token->data.version_directive.minor != 1
+                        && token->data.version_directive.minor != 2
+                    )) {
                 yaml_parser_set_parser_error(parser,
                         "found incompatible YAML document", token->start_mark);
                 goto error;
             }
-            version_directive = yaml_malloc(sizeof(yaml_version_directive_t));
+            version_directive = YAML_MALLOC_STATIC(yaml_version_directive_t);
             if (!version_directive) {
                 parser->error = YAML_MEMORY_ERROR;
                 goto error;
@@ -1295,7 +1294,7 @@ yaml_parser_process_directives(yaml_parser_t *parser,
         token = PEEK_TOKEN(parser);
         if (!token) goto error;
     }
-    
+
     for (default_tag_directive = default_tag_directives;
             default_tag_directive->handle; default_tag_directive++) {
         if (!yaml_parser_append_tag_directive(parser, *default_tag_directive, 1,
@@ -1320,6 +1319,8 @@ yaml_parser_process_directives(yaml_parser_t *parser,
         STACK_DEL(parser, tag_directives);
     }
 
+    if (!version_directive_ref)
+        yaml_free(version_directive);
     return 1;
 
 error:

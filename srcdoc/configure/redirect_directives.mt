@@ -5,6 +5,8 @@
 This document describes the configuration directives of the redirect handler.
 </p>
 
+? $ctx->{directive_list}->()->(sub {
+
 <?
 $ctx->{directive}->(
     name      => "redirect",
@@ -41,6 +43,8 @@ hosts:
                 file.dir: /path/to/rss
 EOT
 ?>
+
+? })
 
 ? })
 

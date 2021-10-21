@@ -6,5 +6,5 @@ libdir=@libdir@
 Name: LibYAML
 Description: Library to parse and emit YAML
 Version: @PACKAGE_VERSION@
-Cflags:
+Cflags: -I${includedir}
 Libs: -L${libdir} -lyaml

@@ -5,7 +5,7 @@ MRuby::Build.new('debug') do |conf|
   # include all core GEMs
   conf.gembox 'full-core'
   conf.compilers.each do |c|
-    c.defines += %w(MRB_GC_STRESS MRB_GC_FIXED_ARENA)
+    c.defines += %w(MRB_GC_STRESS MRB_GC_FIXED_ARENA MRB_METHOD_CACHE)
   end
 
   build_mrbc_exec

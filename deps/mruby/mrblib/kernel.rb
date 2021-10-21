@@ -6,7 +6,7 @@ module Kernel
 
   # 15.3.1.2.1 Kernel.`
   # provided by Kernel#`
-  # 15.3.1.3.5
+  # 15.3.1.3.3
   def `(s)
     raise NotImplementedError.new("backquotes not implemented")
   end

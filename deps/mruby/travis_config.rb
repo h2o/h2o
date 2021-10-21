@@ -6,7 +6,7 @@ MRuby::Build.new('debug') do |conf|
   conf.gembox 'full-core'
   conf.cc.flags += %w(-Werror=declaration-after-statement)
   conf.compilers.each do |c|
-    c.defines += %w(MRB_GC_STRESS MRB_GC_FIXED_ARENA)
+    c.defines += %w(MRB_GC_STRESS MRB_GC_FIXED_ARENA MRB_METHOD_CACHE)
   end
 
   build_mrbc_exec
@@ -40,7 +40,7 @@ MRuby::Build.new('cxx_abi') do |conf|
   toolchain :gcc
 
   conf.gembox 'full-core'
-  conf.cc.flags += %w(-Werror=declaration-after-statement)
+  conf.cc.flags += %w(-Werror=declaration-after-statement -fpermissive)
   conf.compilers.each do |c|
     c.defines += %w(MRB_GC_FIXED_ARENA)
   end

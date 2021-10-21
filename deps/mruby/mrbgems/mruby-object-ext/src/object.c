@@ -16,6 +16,7 @@ nil_to_a(mrb_state *mrb, mrb_value obj)
   return mrb_ary_new(mrb);
 }
 
+#ifndef MRB_WITHOUT_FLOAT
 /*
  *  call-seq:
  *     nil.to_f    -> 0.0
@@ -28,6 +29,7 @@ nil_to_f(mrb_state *mrb, mrb_value obj)
 {
   return mrb_float_value(mrb, 0.0);
 }
+#endif
 
 /*
  *  call-seq:
@@ -67,7 +69,6 @@ mrb_obj_instance_exec(mrb_state *mrb, mrb_value self)
   mrb_int argc;
   mrb_value blk;
   struct RClass *c;
-  mrb_value args;
 
   mrb_get_args(mrb, "*&", &argv, &argc, &blk);
 
@@ -78,15 +79,15 @@ mrb_obj_instance_exec(mrb_state *mrb, mrb_value self)
   switch (mrb_type(self)) {
   case MRB_TT_SYMBOL:
   case MRB_TT_FIXNUM:
+#ifndef MRB_WITHOUT_FLOAT
   case MRB_TT_FLOAT:
+#endif
     c = NULL;
     break;
   default:
     c = mrb_class_ptr(mrb_singleton_class(mrb, self));
     break;
   }
-  args = mrb_ary_new_from_values(mrb, argc, argv);
-  argv = RARRAY_PTR(args);
   mrb->c->ci->target_class = c;
   return mrb_yield_cont(mrb, blk, self, argc, argv);
 }
@@ -97,7 +98,9 @@ mrb_mruby_object_ext_gem_init(mrb_state* mrb)
   struct RClass * n = mrb->nil_class;
 
   mrb_define_method(mrb, n, "to_a", nil_to_a,       MRB_ARGS_NONE());
+#ifndef MRB_WITHOUT_FLOAT
   mrb_define_method(mrb, n, "to_f", nil_to_f,       MRB_ARGS_NONE());
+#endif
   mrb_define_method(mrb, n, "to_i", nil_to_i,       MRB_ARGS_NONE());
 
   mrb_define_method(mrb, mrb->kernel_module, "instance_exec", mrb_obj_instance_exec, MRB_ARGS_ANY() | MRB_ARGS_BLOCK());

@@ -44,7 +44,7 @@
 <tr>
 <td><a href="index.html">Top</a></td>
 <td><a href="install.html">Install</a></td>
-<td class="selected">Configure</td>
+<td class="selected"><a href="configure.html">Configure</a></td>
 <td><a href="faq.html">FAQ</a></td>
 <td><a href="http://blog.kazuhooku.com/search/label/H2O" target="_blank">Blog</a></td>
 <td><a href="http://github.com/h2o/h2o/" target="_blank">Source</a></td>
@@ -60,8 +60,33 @@ Headers Directives
 
 
 <p>
-This document describes the configuration directives of the headers handler.
+Headers directives can be used to manipulate response headers.
 </p>
+<p>
+This document describes the following configuration directives as well as <a href="configure/headers_directives.html#timing-of-application">when they are applied</a>.
+</p>
+
+<ul>
+<li><a href="configure/headers_directives.html#header.add">
+<code>header.add</code>
+</a></li>
+<li><a href="configure/headers_directives.html#header.append">
+<code>header.append</code>
+</a></li>
+<li><a href="configure/headers_directives.html#header.merge">
+<code>header.merge</code>
+</a></li>
+<li><a href="configure/headers_directives.html#header.set">
+<code>header.set</code>
+</a></li>
+<li><a href="configure/headers_directives.html#header.setifempty">
+<code>header.setifempty</code>
+</a></li>
+<li><a href="configure/headers_directives.html#header.unset">
+<code>header.unset</code>
+</a></li>
+</ul>
+
 
 <div id="header.add" class="directive-head">
 <h3><a href="configure/headers_directives.html#header.add"><code>"header.add"</code></a></h3>
@@ -193,11 +218,48 @@ Removes headers with given name.
 
 
 
+<h3 id="timing-of-application">Timing of Application</h3>
+
+<p>
+Starting from v2.3, it is possible to specify the timing when the headers directives is applied.
+All of the header directives can take either of the following two forms.
+</p>
+
+<div class="example">
+<div class="caption">Example. Scalar Form</div>
+<pre><code>header.add: &quot;X-Foo: FOO&quot;:
+</code></pre>
+</div>
+
+
+<div class="example">
+<div class="caption">Example. Mapping Form</div>
+<pre><code>header.add:
+  header: &quot;X-Foo: FOO&quot;:
+  when: final
+</code></pre>
+</div>
+
+
+<p>
+The above two are identical.
+</p>
+<p>
+<code>when</code> can be either of: <code>final</code>, <code>early</code>, <code>all</code>. Default is <code>final</code>.
+</p>
+<p>
+If the value is <code>final</code>, the header directive is only applied to final (i.e. non-1xx) response.
+If the value is <code>early</code>, it's only applied to 1xx informational responses.
+If <code>all</code> is set, it's applied to both of final and 1xx responses.
+</p>
+
+
+
 
 </div>
 <div id="footer">
 <p>
-Copyright &copy; 2015 <a href="http://dena.com/intl/">DeNA Co., Ltd.</a> et al.
+Copyright &copy; 2015-2020 <a href="http://dena.com/intl/">DeNA Co., Ltd.</a> et al.
 </p>
 </div>
 </body>

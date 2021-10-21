@@ -44,7 +44,7 @@
 <tr>
 <td><a href="index.html">Top</a></td>
 <td><a href="install.html">Install</a></td>
-<td class="selected">Configure</td>
+<td class="selected"><a href="configure.html">Configure</a></td>
 <td><a href="faq.html">FAQ</a></td>
 <td><a href="http://blog.kazuhooku.com/search/label/H2O" target="_blank">Blog</a></td>
 <td><a href="http://github.com/h2o/h2o/" target="_blank">Source</a></td>
@@ -67,6 +67,46 @@ Two directives: <a href="configure/file_directives.html#file.dir"><code>file.dir
 Other directives modify the behavior of the mappings defined by the two.
 </p>
 
+<ul>
+<li><a href="configure/file_directives.html#file.custom-handler">
+<code>file.custom-handler</code>
+</a></li>
+<li><a href="configure/file_directives.html#file.dir">
+<code>file.dir</code>
+</a></li>
+<li><a href="configure/file_directives.html#file.dirlisting">
+<code>file.dirlisting</code>
+</a></li>
+<li><a href="configure/file_directives.html#file.etag">
+<code>file.etag</code>
+</a></li>
+<li><a href="configure/file_directives.html#file.file">
+<code>file.file</code>
+</a></li>
+<li><a href="configure/file_directives.html#file.index">
+<code>file.index</code>
+</a></li>
+<li><a href="configure/file_directives.html#file.mime.addtypes">
+<code>file.mime.addtypes</code>
+</a></li>
+<li><a href="configure/file_directives.html#file.mime.removetypes">
+<code>file.mime.removetypes</code>
+</a></li>
+<li><a href="configure/file_directives.html#file.mime.setdefaulttype">
+<code>file.mime.setdefaulttype</code>
+</a></li>
+<li><a href="configure/file_directives.html#file.mime.settypes">
+<code>file.mime.settypes</code>
+</a></li>
+<li><a href="configure/file_directives.html#file.send-compressed">
+<code>file.send-compressed</code>
+</a></li>
+<li><a href="configure/file_directives.html#file.send-gzip">
+<code>file.send-gzip</code>
+</a></li>
+</ul>
+
+
 <div id="file.custom-handler" class="directive-head">
 <h3><a href="configure/file_directives.html#file.custom-handler"><code>"file.custom-handler"</code></a></h3>
 </div>
@@ -80,6 +120,7 @@ The directive maps extensions to a custom handler (e.g. FastCGI).
 
 <p>
 The directive accepts a mapping containing configuration directives that can be used at the <code>extension</code> level, together with a property named <code>extension</code> specifying a extension (starting with <code>.</code>) or a sequence of extensions to which the directives should be applied.
+If all the files (including those without extensions) shall be mapped, this property must be set to <code>default</code>. 
 Only one handler must exist within the directives.
 </p>
 <div class="example">
@@ -417,10 +458,12 @@ Synonym of <a href="configure/file_directives.html#file.send-compressed"><code>f
 
 
 
+
+
 </div>
 <div id="footer">
 <p>
-Copyright &copy; 2015 <a href="http://dena.com/intl/">DeNA Co., Ltd.</a> et al.
+Copyright &copy; 2015-2020 <a href="http://dena.com/intl/">DeNA Co., Ltd.</a> et al.
 </p>
 </div>
 </body>

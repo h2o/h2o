@@ -98,17 +98,30 @@ static void create_lookup_thread(void)
     pthread_attr_setdetachstate(&attr, 1);
     pthread_attr_setstacksize(&attr, 100 * 1024);
     if ((ret = pthread_create(&tid, NULL, lookup_thread_main, NULL)) != 0) {
+        char buf[128];
         if (queue.num_threads == 0) {
-            fprintf(stderr, "failed to start first thread for getaddrinfo:%s\n", strerror(ret));
-            abort();
+            h2o_fatal("failed to start first thread for getaddrinfo: %s", h2o_strerror_r(ret, buf, sizeof(buf)));
         } else {
-            perror("pthread_create(for getaddrinfo)");
+            h2o_error_printf("pthread_create(for getaddrinfo): %s", h2o_strerror_r(ret, buf, sizeof(buf)));
         }
         return;
     }
 
     ++queue.num_threads;
     ++queue.num_threads_idle;
+}
+
+static void dispatch_hostinfo_getaddr(h2o_hostinfo_getaddr_req_t *req)
+{
+    pthread_mutex_lock(&queue.mutex);
+
+    h2o_linklist_insert(&queue.pending, &req->_pending);
+
+    if (queue.num_threads_idle == 0 && queue.num_threads < h2o_hostinfo_max_threads)
+        create_lookup_thread();
+
+    pthread_cond_signal(&queue.cond);
+    pthread_mutex_unlock(&queue.mutex);
 }
 
 h2o_hostinfo_getaddr_req_t *h2o_hostinfo_getaddr(h2o_multithread_receiver_t *receiver, h2o_iovec_t name, h2o_iovec_t serv,
@@ -132,22 +145,9 @@ h2o_hostinfo_getaddr_req_t *h2o_hostinfo_getaddr(h2o_multithread_receiver_t *rec
     req->_in.hints.ai_protocol = protocol;
     req->_in.hints.ai_flags = flags;
 
-    h2o__hostinfo_getaddr_dispatch(req);
+    dispatch_hostinfo_getaddr(req);
 
     return req;
-}
-
-void h2o__hostinfo_getaddr_dispatch(h2o_hostinfo_getaddr_req_t *req)
-{
-    pthread_mutex_lock(&queue.mutex);
-
-    h2o_linklist_insert(&queue.pending, &req->_pending);
-
-    if (queue.num_threads_idle == 0 && queue.num_threads < h2o_hostinfo_max_threads)
-        create_lookup_thread();
-
-    pthread_cond_signal(&queue.cond);
-    pthread_mutex_unlock(&queue.mutex);
 }
 
 void h2o_hostinfo_getaddr_cancel(h2o_hostinfo_getaddr_req_t *req)

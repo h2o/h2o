@@ -7,7 +7,7 @@ f_exit(mrb_state *mrb, mrb_value self)
   mrb_int i = EXIT_SUCCESS;
 
   mrb_get_args(mrb, "|i", &i);
-  exit(i);
+  exit((int)i);
   /* not reached */
   return mrb_nil_value();
 }

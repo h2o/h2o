@@ -29,6 +29,7 @@
 #include "h2o/configurator.h"
 #include "h2o/http1.h"
 #include "h2o/http2.h"
+#include "h2o/http3_server.h"
 
 static h2o_hostconf_t *create_hostconf(h2o_globalconf_t *globalconf)
 {
@@ -49,8 +50,9 @@ static void destroy_hostconf(h2o_hostconf_t *hostconf)
         free(hostconf->authority.hostport.base);
     free(hostconf->authority.host.base);
     for (i = 0; i != hostconf->paths.size; ++i) {
-        h2o_pathconf_t *pathconf = hostconf->paths.entries + i;
+        h2o_pathconf_t *pathconf = hostconf->paths.entries[i];
         h2o_config_dispose_pathconf(pathconf);
+        free(pathconf);
     }
     free(hostconf->paths.entries);
     h2o_config_dispose_pathconf(&hostconf->fallback_path);
@@ -133,7 +135,6 @@ void h2o_config_init_pathconf(h2o_pathconf_t *pathconf, h2o_globalconf_t *global
 {
     memset(pathconf, 0, sizeof(*pathconf));
     pathconf->global = globalconf;
-    h2o_chunked_register(pathconf);
     if (path != NULL)
         pathconf->path = h2o_strdup(NULL, path, SIZE_MAX);
     h2o_mem_addref_shared(mimemap);
@@ -155,8 +156,8 @@ void h2o_config_dispose_pathconf(h2o_pathconf_t *pathconf)
         free(list.entries);                                                                                                        \
     } while (0)
     DESTROY_LIST(h2o_handler_t, pathconf->handlers);
-    DESTROY_LIST(h2o_filter_t, pathconf->filters);
-    DESTROY_LIST(h2o_logger_t, pathconf->loggers);
+    DESTROY_LIST(h2o_filter_t, pathconf->_filters);
+    DESTROY_LIST(h2o_logger_t, pathconf->_loggers);
 #undef DESTROY_LIST
 
     free(pathconf->path.base);
@@ -177,51 +178,62 @@ void h2o_config_init(h2o_globalconf_t *config)
     config->max_delegations = H2O_DEFAULT_MAX_DELEGATIONS;
     config->handshake_timeout = H2O_DEFAULT_HANDSHAKE_TIMEOUT;
     config->http1.req_timeout = H2O_DEFAULT_HTTP1_REQ_TIMEOUT;
+    config->http1.req_io_timeout = H2O_DEFAULT_HTTP1_REQ_IO_TIMEOUT;
     config->http1.upgrade_to_http2 = H2O_DEFAULT_HTTP1_UPGRADE_TO_HTTP2;
     config->http1.callbacks = H2O_HTTP1_CALLBACKS;
     config->http2.idle_timeout = H2O_DEFAULT_HTTP2_IDLE_TIMEOUT;
     config->http2.graceful_shutdown_timeout = H2O_DEFAULT_HTTP2_GRACEFUL_SHUTDOWN_TIMEOUT;
     config->proxy.io_timeout = H2O_DEFAULT_PROXY_IO_TIMEOUT;
+    config->proxy.connect_timeout = H2O_DEFAULT_PROXY_IO_TIMEOUT;
+    config->proxy.first_byte_timeout = H2O_DEFAULT_PROXY_IO_TIMEOUT;
     config->proxy.emit_x_forwarded_headers = 1;
     config->proxy.emit_via_header = 1;
-    config->http2.max_concurrent_requests_per_connection = H2O_HTTP2_SETTINGS_HOST.max_concurrent_streams;
+    config->proxy.emit_missing_date_header = 1;
+    config->http2.max_concurrent_requests_per_connection = H2O_HTTP2_SETTINGS_HOST_MAX_CONCURRENT_STREAMS;
+    config->http2.max_concurrent_streaming_requests_per_connection = H2O_HTTP2_SETTINGS_HOST_MAX_CONCURRENT_STREAMING_REQUESTS;
     config->http2.max_streams_for_priority = 16;
+    config->http2.active_stream_window_size = H2O_DEFAULT_HTTP2_ACTIVE_STREAM_WINDOW_SIZE;
     config->http2.latency_optimization.min_rtt = 50; // milliseconds
     config->http2.latency_optimization.max_additional_delay = 10;
     config->http2.latency_optimization.max_cwnd = 65535;
     config->http2.callbacks = H2O_HTTP2_CALLBACKS;
+    config->http3.idle_timeout = quicly_spec_context.transport_params.max_idle_timeout;
+    config->http3.active_stream_window_size = H2O_DEFAULT_HTTP3_ACTIVE_STREAM_WINDOW_SIZE;
+    config->http3.use_delayed_ack = 1;
+    config->http3.callbacks = H2O_HTTP3_SERVER_CALLBACKS;
+    config->send_informational_mode = H2O_SEND_INFORMATIONAL_MODE_EXCEPT_H1;
     config->mimemap = h2o_mimemap_create();
+    h2o_socketpool_init_global(&config->proxy.global_socketpool, SIZE_MAX);
 
     h2o_configurator__init_core(config);
+
+    config->fallback_host = create_hostconf(config);
+    config->fallback_host->authority.port = 65535;
+    config->fallback_host->authority.host = h2o_strdup(NULL, H2O_STRLIT("*"));
+    config->fallback_host->authority.hostport = h2o_strdup(NULL, H2O_STRLIT("*"));
 }
 
 h2o_pathconf_t *h2o_config_register_path(h2o_hostconf_t *hostconf, const char *path, int flags)
 {
-    h2o_pathconf_t *pathconf;
+    h2o_pathconf_t *pathconf = h2o_mem_alloc(sizeof(*pathconf));
+    h2o_config_init_pathconf(pathconf, hostconf->global, path, hostconf->mimemap);
 
     h2o_vector_reserve(NULL, &hostconf->paths, hostconf->paths.size + 1);
-    pathconf = hostconf->paths.entries + hostconf->paths.size++;
-
-    h2o_config_init_pathconf(pathconf, hostconf->global, path, hostconf->mimemap);
+    hostconf->paths.entries[hostconf->paths.size++] = pathconf;
 
     return pathconf;
 }
 
-void h2o_config_register_status_handler(h2o_globalconf_t *config, h2o_status_handler_t status_handler)
+void h2o_config_register_status_handler(h2o_globalconf_t *config, h2o_status_handler_t *status_handler)
 {
+    /* check if the status handler is already registered */
+    size_t i;
+    for (i = 0; i != config->statuses.size; ++i)
+        if (config->statuses.entries[i] == status_handler)
+            return;
+    /* register the new handler */
     h2o_vector_reserve(NULL, &config->statuses, config->statuses.size + 1);
     config->statuses.entries[config->statuses.size++] = status_handler;
-}
-
-void h2o_config_register_simple_status_handler(h2o_globalconf_t *config, h2o_iovec_t name, final_status_handler_cb status_handler)
-{
-    h2o_status_handler_t *sh;
-
-    h2o_vector_reserve(NULL, &config->statuses, config->statuses.size + 1);
-    sh = &config->statuses.entries[config->statuses.size++];
-    memset(sh, 0, sizeof(*sh));
-    sh->name = h2o_strdup(NULL, name.base, name.len);
-    sh->final = status_handler;
 }
 
 h2o_hostconf_t *h2o_config_register_host(h2o_globalconf_t *config, h2o_iovec_t host, uint16_t port)
@@ -279,6 +291,9 @@ void h2o_config_dispose(h2o_globalconf_t *config)
     }
     free(config->hosts);
 
+    destroy_hostconf(config->fallback_host);
+
+    h2o_socketpool_dispose(&config->proxy.global_socketpool);
     h2o_mem_release_shared(config->mimemap);
     h2o_configurator__dispose_configurators(config);
 }
@@ -303,10 +318,10 @@ h2o_filter_t *h2o_create_filter(h2o_pathconf_t *conf, size_t sz)
     memset(filter, 0, sz);
     filter->_config_slot = conf->global->_num_config_slots++;
 
-    h2o_vector_reserve(NULL, &conf->filters, conf->filters.size + 1);
-    memmove(conf->filters.entries + 1, conf->filters.entries, conf->filters.size * sizeof(conf->filters.entries[0]));
-    conf->filters.entries[0] = filter;
-    ++conf->filters.size;
+    h2o_vector_reserve(NULL, &conf->_filters, conf->_filters.size + 1);
+    memmove(conf->_filters.entries + 1, conf->_filters.entries, conf->_filters.size * sizeof(conf->_filters.entries[0]));
+    conf->_filters.entries[0] = filter;
+    ++conf->_filters.size;
 
     return filter;
 }
@@ -318,8 +333,8 @@ h2o_logger_t *h2o_create_logger(h2o_pathconf_t *conf, size_t sz)
     memset(logger, 0, sz);
     logger->_config_slot = conf->global->_num_config_slots++;
 
-    h2o_vector_reserve(NULL, &conf->loggers, conf->loggers.size + 1);
-    conf->loggers.entries[conf->loggers.size++] = logger;
+    h2o_vector_reserve(NULL, &conf->_loggers, conf->_loggers.size + 1);
+    conf->_loggers.entries[conf->_loggers.size++] = logger;
 
     return logger;
 }

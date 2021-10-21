@@ -336,7 +336,8 @@ static void __redisAsyncDisconnect(redisAsyncContext *ac) {
 
     if (ac->err == 0) {
         /* For clean disconnects, there should be no pending callbacks. */
-        assert(__redisShiftCallback(&ac->replies,NULL) == REDIS_ERR);
+        int ret = __redisShiftCallback(&ac->replies,NULL);
+        assert(ret == REDIS_ERR);
     } else {
         /* Disconnection is caused by an error, make sure that pending
          * callbacks cannot call new commands. */
@@ -676,6 +677,8 @@ int redisAsyncCommandArgv(redisAsyncContext *ac, redisCallbackFn *fn, void *priv
     int len;
     int status;
     len = redisFormatSdsCommandArgv(&cmd,argc,argv,argvlen);
+    if (len < 0)
+        return REDIS_ERR;
     status = __redisAsyncCommand(ac,fn,privdata,cmd,len);
     sdsfree(cmd);
     return status;

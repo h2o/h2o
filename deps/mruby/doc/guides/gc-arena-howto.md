@@ -114,14 +114,14 @@ inspect_ary(mrb_state *mrb, mrb_value ary, mrb_value list)
 
   mrb_ary_push(mrb, list, ary);
 
-  arystr = mrb_str_buf_new(mrb, 64);
-  mrb_str_buf_cat(mrb, arystr, head, sizeof(head));
+  arystr = mrb_str_new_capa(mrb, 64);
+  mrb_str_cat(mrb, arystr, head, sizeof(head));
 
   for(i=0; i<RARRAY_LEN(ary); i++) {
     int ai = mrb_gc_arena_save(mrb);
 
     if (i > 0) {
-      mrb_str_buf_cat(mrb, arystr, sep, sizeof(sep));
+      mrb_str_cat(mrb, arystr, sep, sizeof(sep));
     }
     if (mrb_array_p(RARRAY_PTR(ary)[i])) {
       s = inspect_ary(mrb, RARRAY_PTR(ary)[i], list);
@@ -129,11 +129,11 @@ inspect_ary(mrb_state *mrb, mrb_value ary, mrb_value list)
     else {
       s = mrb_inspect(mrb, RARRAY_PTR(ary)[i]);
     }
-    mrb_str_buf_cat(mrb, arystr, RSTRING_PTR(s), RSTRING_LEN(s));
+    mrb_str_cat(mrb, arystr, RSTRING_PTR(s), RSTRING_LEN(s));
     mrb_gc_arena_restore(mrb, ai);
   }
 
-  mrb_str_buf_cat(mrb, arystr, tail, sizeof(tail));
+  mrb_str_cat(mrb, arystr, tail, sizeof(tail));
   mrb_ary_pop(mrb, list);
 
   return arystr;

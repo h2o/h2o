@@ -3,12 +3,15 @@
 
 assert('String#%') do
   assert_equal "one=1", "one=%d" % 1
-  assert_equal "1 one 1.0", "%d %s %3.1f" % [ 1, "one", 1.01 ]
+  assert_equal "1 one", "%d %s" % [ 1, "one" ]
   assert_equal "123 < 456", "%{num} < %<str>s" % { num: 123, str: "456" }
   assert_equal 15, ("%b" % (1<<14)).size
+  skip unless Object.const_defined?(:Float)
+  assert_equal "1.0", "%3.1f" % 1.01
 end
 
 assert('String#% with inf') do
+  skip unless Object.const_defined?(:Float)
   inf = Float::INFINITY
 
   assert_equal "Inf", "%f" % inf
@@ -37,6 +40,7 @@ assert('String#% with inf') do
 end
 
 assert('String#% with nan') do
+  skip unless Object.const_defined?(:Float)
   nan = Float::NAN
 
   assert_equal "NaN", "%f" % nan
@@ -75,7 +79,7 @@ assert("String#% with invalid chr") do
     end
 
     assert_raise TypeError do
-      "%c" % 0
+      "%c" % 0x80
     end
   ensure
     class Fixnum
@@ -89,6 +93,12 @@ end
 
 assert("String#% %b") do
   assert_equal("..10115", "%0b5" % -5)
+end
+
+assert("String#% %d") do
+  assert_equal("  10",   "%4d" % 10)
+  assert_equal("1000",   "%4d" % 1000)
+  assert_equal("10000",  "%4d" % 10000)
 end
 
 assert("String#% invalid format") do

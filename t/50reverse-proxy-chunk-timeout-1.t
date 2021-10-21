@@ -5,10 +5,15 @@ use Net::EmptyPort qw(check_port empty_port);
 use Test::More;
 use t::Util;
 
+plan skip_all => "nc not found"
+    unless prog_exists("nc");
+plan skip_all => "h2get not found"
+    unless h2get_exists();
+
 my $upstream_port = empty_port();
 $| = 1;
 
-open(my $nc_out, "nc -q -1 -dl $upstream_port |");
+open(my $nc_out, "nc -dl $upstream_port |");
 
 my $server = spawn_h2o(<< "EOT");
 http2-idle-timeout: 2
@@ -24,7 +29,8 @@ my $before = time();
 my $output = run_with_h2get($server, <<"EOR");
     to_process = []
     h2g = H2.new
-    host = ARGV[0]
+    authority = ARGV[0]
+    host = "https://#{authority}"
     h2g.connect(host)
     h2g.send_prefix()
     h2g.send_settings()

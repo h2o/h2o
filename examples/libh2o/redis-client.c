@@ -22,12 +22,13 @@
 #include <inttypes.h>
 #include <unistd.h>
 #include "h2o/redis.h"
+#include "h2o/hiredis_.h"
 
 static h2o_loop_t *loop;
 static int exit_loop;
 const char *host;
 uint16_t port;
-h2o_redis_conn_t *conn;
+h2o_redis_client_t *client;
 
 static void usage(const char *cmd)
 {
@@ -43,7 +44,7 @@ static void dump_reply(redisReply *reply, unsigned indent)
     switch (reply->type) {
     case REDIS_REPLY_STRING:
 
-        fprintf(stderr, "string: %.*s\n", reply->len, reply->str);
+        fprintf(stderr, "string: %.*s\n", (int)reply->len, reply->str);
         break;
     case REDIS_REPLY_ARRAY:
         fprintf(stderr, "array: %zu\n", reply->elements);
@@ -58,29 +59,31 @@ static void dump_reply(redisReply *reply, unsigned indent)
         fprintf(stderr, "integer: %lld\n", reply->integer);
         break;
     case REDIS_REPLY_STATUS:
-        fprintf(stderr, "status: %.*s\n", reply->len, reply->str);
+        fprintf(stderr, "status: %.*s\n", (int)reply->len, reply->str);
         break;
     case REDIS_REPLY_ERROR:
-        fprintf(stderr, "error: %.*s\n", reply->len, reply->str);
+        fprintf(stderr, "error: %.*s\n", (int)reply->len, reply->str);
         break;
     default:
         fprintf(stderr, "invalid reply type: %d\n", reply->type);
     }
 }
 
-static void on_redis_command(redisReply *reply, void *cb_data)
+static void on_redis_command(redisReply *reply, void *cb_data, const char *errstr)
 {
-    if (reply == NULL) {
-        fprintf(stderr, "redis command failed due to some connection problems\n");
+    if (errstr != NULL) {
+        fprintf(stderr, "redis error: %s\n", errstr);
         return;
     }
-    dump_reply(reply, 0);
+    if (reply != NULL) {
+        dump_reply(reply, 0);
+    }
 }
 
 static void on_redis_connect(void)
 {
     fprintf(stderr, "connected to redis\n");
-    h2o_redis_command(conn, on_redis_command, "get server info", "INFO");
+    h2o_redis_command(client, on_redis_command, "get server info", "INFO");
 }
 
 static void on_redis_close(const char *errstr)
@@ -91,7 +94,7 @@ static void on_redis_close(const char *errstr)
         fprintf(stderr, "redis connection failure: %s\n", errstr);
         /* try to reconnect after 1 second */
         usleep(1000000);
-        h2o_redis_connect(conn, host, port);
+        h2o_redis_connect(client, host, port);
     }
 }
 
@@ -116,18 +119,18 @@ int main(int argc, char **argv)
     loop = h2o_evloop_create();
 #endif
 
-    conn = h2o_redis_create_connection(loop, sizeof(*conn));
-    conn->on_connect = on_redis_connect;
-    conn->on_close = on_redis_close;
+    client = h2o_redis_create_client(loop, sizeof(*client));
+    client->on_connect = on_redis_connect;
+    client->on_close = on_redis_close;
 
-    h2o_redis_connect(conn, host, port);
-    h2o_redis_command(conn, on_redis_command, "list all keys", "KEYS *");
+    h2o_redis_connect(client, host, port);
+    h2o_redis_command(client, on_redis_command, "list all keys", "KEYS *");
 
     while (!exit_loop) {
 #if H2O_USE_LIBUV
         uv_run(loop, UV_RUN_DEFAULT);
 #else
-        h2o_evloop_run(loop);
+        h2o_evloop_run(loop, INT32_MAX);
 #endif
     }
 
@@ -135,7 +138,7 @@ int main(int argc, char **argv)
 
 Exit:
 
-    h2o_redis_free(conn);
+    h2o_redis_free(client);
 
     if (loop != NULL) {
 #if H2O_USE_LIBUV

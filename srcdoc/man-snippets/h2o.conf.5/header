@@ -1,0 +1,9 @@
+.TH H2O.CONF 5
+.SH NAME
+h2o.conf \- The configuration file for H2O, the optimized HTTP/1.x, HTTP/2 server
+.SH SYNOPSIS
+.B /etc/h2o/h2o.conf
+.SH DESCRIPTION
+.B h2o.conf
+h2o.conf is a YAML configuration file.
+

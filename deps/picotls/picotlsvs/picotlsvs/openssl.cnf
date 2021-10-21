@@ -1,0 +1,35 @@
+[ req ]
+default_bits = 1024
+default_keyfile= privkey.pem
+distinguished_name = req_distinguished_name
+
+
+[ req_distinguished_name ]
+countryName= US
+countryName_min= 2
+countryName_max = 2
+stateOrProvinceName= Washington
+localityName = Seattle
+organizationName = Example
+commonName = Localhost
+commonName_max = 64
+emailAddress = localhost@example.com
+emailAddress_max = 40
+
+
+[ alternate_names ]
+
+DNS.1       = example.com
+DNS.2       = www.example.com
+DNS.3       = mail.example.com
+DNS.4       = ftp.example.com
+
+# Add these if you need them. But usually you don't want them or
+#   need them in production. You may need them for development.
+# DNS.5       = localhost
+# DNS.6       = localhost.localdomain
+# DNS.7       = 127.0.0.1
+
+# IPv6 localhost
+# DNS.8     = ::1
+

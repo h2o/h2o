@@ -7,6 +7,7 @@ class MRuby::Toolchain::Android
   DEFAULT_NDK_HOMES = %w{
     /usr/local/opt/android-sdk/ndk-bundle
     /usr/local/opt/android-ndk
+    ~/Android/Sdk/ndk-bundle
     %LOCALAPPDATA%/Android/android-sdk/ndk-bundle
     %LOCALAPPDATA%/Android/android-ndk
     ~/Library/Android/sdk/ndk-bundle
@@ -263,7 +264,7 @@ Set ANDROID_PLATFORM environment variable or set :platform parameter
     case toolchain
     when :gcc
     when :clang
-      flags += %W(-gcc-toolchain "#{gcc_toolchain_path.to_s}" -Wno-invalid-command-line-argument -Wno-unused-command-line-argument)
+      flags += %W(-gcc-toolchain "#{gcc_toolchain_path}" -Wno-invalid-command-line-argument -Wno-unused-command-line-argument)
     end
     flags += %W(-fpic -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes)
 

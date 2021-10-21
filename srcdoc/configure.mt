@@ -25,6 +25,7 @@
 <li><a href="configure/redirect_directives.html">Redirect</a>
 <li><a href="configure/reproxy_directives.html">Reproxy</a>
 <li><a href="configure/status_directives.html">Status</a>
+<li><a href="configure/server_timing_directives.html">Server Timing</a>
 <li><a href="configure/throttle_response_directives.html">Throttle Response</a>
 </ul>
 </li>
@@ -35,6 +36,7 @@
 <li><a href="configure/mruby.html">Using Mruby</a></li>
 <li><a href="configure/dos_detection.html">Using DoS Detection</a></li>
 <li><a href="configure/access_control.html">Access Control</a></li>
+<li><a href="configure/h2olog.html">Using h2olog for Tracing</a></li>
 </ul>
 </li>
 <li><a href="https://github.com/h2o/h2o/wiki#configuration-examples" target="_blank">Configuration Examples (Wiki)</a>
