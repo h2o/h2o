@@ -93,9 +93,22 @@ struct st_h2o_socket_ssl_t {
     struct {
         h2o_buffer_t *encrypted;
     } input;
+    /**
+     * Pending TLS data to be sent.
+     */
     struct {
-        H2O_VECTOR(h2o_iovec_t) bufs;
-        h2o_mem_pool_t pool; /* placed at the last */
+        /**
+         * This buffer is initialized when and only when pending data is stored. Otherwise, all the members are zero-cleared; see
+         * `has_pending_ssl_data`.
+         * To reduce the cost of repeating memory allocation, expansion, and release, this buffer points to a chunk of memory being
+         * allocated from `h2o_socket_ssl_buffer_allocator` when initialized. Upon disposal, the memory chunk being used by this
+         * buffer is returned to the memory pool, unless it has been further expanded. It is designed as such because sometimes it
+         * is hard to limit the amount of TLS records being generated at once (who knows how large the server's Handshake messages
+         * will be, or when it has to send a KeyUpdate message?), but when generating application traffic, we cap the maximum amount
+         * of TLS records being generated at once so that we can recycle the chunk; see `generate_tls_records`.
+         */
+        ptls_buffer_t buf;
+        size_t pending_off;
     } output;
 };
 
@@ -106,6 +119,10 @@ struct st_h2o_ssl_context_t {
 };
 
 /* backend functions */
+static void wreq_free_buffer_if_allocated(h2o_socket_t *sock);
+static void dispose_ssl_output_buffer(struct st_h2o_socket_ssl_t *ssl);
+static int has_pending_ssl_bytes(struct st_h2o_socket_ssl_t *ssl);
+static void generate_tls_records(h2o_socket_t *sock, h2o_iovec_t **bufs, size_t *bufcnt, size_t *first_buf_written);
 static void do_dispose_socket(h2o_socket_t *sock);
 static void do_write(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_socket_cb cb);
 static void do_read_start(h2o_socket_t *sock);
@@ -133,6 +150,9 @@ __thread h2o_buffer_prototype_t h2o_socket_buffer_prototype = {
     {16},                                       /* keep 16 recently used chunks */
     {H2O_SOCKET_INITIAL_INPUT_BUFFER_SIZE * 2}, /* minimum initial capacity */
     &h2o_socket_buffer_mmap_settings};
+
+size_t h2o_socket_ssl_buffer_size = H2O_SOCKET_DEFAULT_SSL_BUFFER_SIZE;
+__thread h2o_mem_recycle_t h2o_socket_ssl_buffer_allocator = {1024};
 
 const char h2o_socket_error_out_of_memory[] = "out of memory";
 const char h2o_socket_error_io[] = "I/O error";
@@ -168,13 +188,58 @@ static int read_bio(BIO *b, char *out, int len)
     return len;
 }
 
+static void wreq_free_buffer_if_allocated(h2o_socket_t *sock)
+{
+    if (sock->_wreq.smallbufs <= sock->_wreq.bufs &&
+        sock->_wreq.bufs <= sock->_wreq.smallbufs + sizeof(sock->_wreq.smallbufs) / sizeof(sock->_wreq.smallbufs[0])) {
+        /* no need to free */
+    } else {
+        free(sock->_wreq.alloced_ptr);
+        sock->_wreq.bufs = sock->_wreq.smallbufs;
+    }
+}
+
+static void init_ssl_output_buffer(struct st_h2o_socket_ssl_t *ssl)
+{
+    ptls_buffer_init(&ssl->output.buf, h2o_mem_alloc_recycle(&h2o_socket_ssl_buffer_allocator, h2o_socket_ssl_buffer_size),
+                     h2o_socket_ssl_buffer_size);
+    ssl->output.buf.is_allocated = 1; /* set to true, so that the allocated memory is freed when the buffer is expanded */
+    ssl->output.pending_off = 0;
+}
+
+static void dispose_ssl_output_buffer(struct st_h2o_socket_ssl_t *ssl)
+{
+    /* The destruction logic that we have here are different from `ptls_buffer_dispose` in following two aspects:
+     * - returns the allocated memory to the pool if possible
+     * - does not zero-clear the memory (there's no need to, because the content is something to be sent in clear) */
+
+    assert(ssl->output.buf.is_allocated);
+
+    if (ssl->output.buf.capacity == h2o_socket_ssl_buffer_size)
+        h2o_mem_free_recycle(&h2o_socket_ssl_buffer_allocator, ssl->output.buf.base);
+    ssl->output.buf = (ptls_buffer_t){};
+    ssl->output.pending_off = 0;
+}
+
+static int has_pending_ssl_bytes(struct st_h2o_socket_ssl_t *ssl)
+{
+    /* for convenience, this function can be invoked for non-TLS connections too, in which case ssl will be NULL */
+    if (ssl == NULL)
+        return 0;
+
+    /* the contract is that `dispose_ssl_output_buffer` is called immediately when all the data are written out */
+    return ssl->output.buf.base != NULL;
+}
+
 static void write_ssl_bytes(h2o_socket_t *sock, const void *in, size_t len)
 {
     if (len != 0) {
-        void *bytes_alloced = h2o_mem_alloc_pool(&sock->ssl->output.pool, char, len);
-        memcpy(bytes_alloced, in, len);
-        h2o_vector_reserve(&sock->ssl->output.pool, &sock->ssl->output.bufs, sock->ssl->output.bufs.size + 1);
-        sock->ssl->output.bufs.entries[sock->ssl->output.bufs.size++] = h2o_iovec_init(bytes_alloced, len);
+        if (!has_pending_ssl_bytes(sock->ssl))
+            init_ssl_output_buffer(sock->ssl);
+        if (ptls_buffer_reserve(&sock->ssl->output.buf, len) != 0)
+            h2o_fatal("no memory; tried to allocate %zu bytes", len);
+        memcpy(sock->ssl->output.buf.base + sock->ssl->output.buf.off, in, len);
+        sock->ssl->output.buf.off += len;
     }
 }
 
@@ -298,13 +363,7 @@ const char *decode_ssl_input(h2o_socket_t *sock)
 
 static void flush_pending_ssl(h2o_socket_t *sock, h2o_socket_cb cb)
 {
-    do_write(sock, sock->ssl->output.bufs.entries, sock->ssl->output.bufs.size, cb);
-}
-
-static void clear_output_buffer(struct st_h2o_socket_ssl_t *ssl)
-{
-    memset(&ssl->output.bufs, 0, sizeof(ssl->output.bufs));
-    h2o_mem_clear_pool(&ssl->output.pool);
+    do_write(sock, NULL, 0, cb);
 }
 
 static void destroy_ssl(struct st_h2o_socket_ssl_t *ssl)
@@ -322,7 +381,8 @@ static void destroy_ssl(struct st_h2o_socket_ssl_t *ssl)
         ssl->ossl = NULL;
     }
     h2o_buffer_dispose(&ssl->input.encrypted);
-    clear_output_buffer(ssl);
+    if (has_pending_ssl_bytes(ssl))
+        dispose_ssl_output_buffer(ssl);
     free(ssl);
 }
 
@@ -385,7 +445,7 @@ static void shutdown_ssl(h2o_socket_t *sock, const char *err)
         goto Close;
     }
 
-    if (sock->ssl->output.bufs.size != 0) {
+    if (has_pending_ssl_bytes(sock->ssl)) {
         h2o_socket_read_stop(sock);
         flush_pending_ssl(sock, ret == 1 ? dispose_socket : shutdown_ssl);
     } else if (ret == 2 && SSL_get_error(sock->ssl->ossl, ret) == SSL_ERROR_WANT_READ) {
@@ -645,8 +705,70 @@ static size_t calc_tls_write_size(h2o_socket_t *sock, size_t bufsize)
     return recsize < bufsize ? recsize : bufsize;
 }
 
+static size_t generate_tls_records_from_one_vec(h2o_socket_t *sock, const void *input, size_t inlen)
+{
+    static const size_t MAX_RECORD_PAYLOAD_SIZE = 16 * 1024, LARGE_RECORD_OVERHEAD = 5 + 32;
+
+    size_t tls_write_size = calc_tls_write_size(sock, inlen);
+    size_t space_left = sock->ssl->output.buf.capacity - sock->ssl->output.buf.off;
+
+    if (tls_write_size < inlen) {
+        /* Writing small TLS records, one by one. Bail out if we might fail to do so. */
+        if (space_left < tls_write_size + LARGE_RECORD_OVERHEAD)
+            return 0;
+    } else {
+        /* Writing full-sized records. Adjust tls_write_size to a multiple of full-sized TLS records, or bail out if we cannot
+         * write one. */
+        size_t rec_capacity = space_left / (MAX_RECORD_PAYLOAD_SIZE + LARGE_RECORD_OVERHEAD);
+        if (rec_capacity == 0)
+            return 0;
+        tls_write_size = MAX_RECORD_PAYLOAD_SIZE * rec_capacity;
+        if (tls_write_size > inlen)
+            tls_write_size = inlen;
+    }
+
+    /* Generate TLS record(s). */
+    if (sock->ssl->ptls != NULL) {
+        int ret = ptls_send(sock->ssl->ptls, &sock->ssl->output.buf, input, tls_write_size);
+        assert(ret == 0);
+    } else {
+        int ret = SSL_write(sock->ssl->ossl, input, (int)tls_write_size);
+        assert(ret == tls_write_size);
+    }
+
+    return tls_write_size;
+}
+
+static void generate_tls_records(h2o_socket_t *sock, h2o_iovec_t **bufs, size_t *bufcnt, size_t *first_buf_written)
+{
+    size_t buf_offset = 0;
+
+    assert(*bufcnt != 0);
+    assert(!has_pending_ssl_bytes(sock->ssl) && "we are filling encrypted bytes from the front, with no existing buffer, always");
+
+    init_ssl_output_buffer(sock->ssl);
+
+    while (1) {
+        size_t bytes_written = generate_tls_records_from_one_vec(sock, (*bufs)->base + buf_offset, (*bufs)->len - buf_offset);
+        if (bytes_written == 0)
+            break;
+        buf_offset += bytes_written;
+        if ((*bufs)->len == bytes_written) {
+            buf_offset = 0;
+            ++*bufs;
+            --*bufcnt;
+            if (*bufcnt == 0)
+                break;
+        }
+    }
+}
+
 void h2o_socket_write(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_socket_cb cb)
 {
+    assert(bufcnt > 0);
+    assert(sock->_cb.write == NULL);
+    assert(sock->_wreq.cnt == 0);
+
 #if H2O_SOCKET_DUMP_WRITE
     for (size_t i = 0; i != bufcnt; ++i) {
         h2o_error_printf("writing %zu bytes to fd:%d\n", bufs[i].len, h2o_socket_get_fd(sock));
@@ -654,63 +776,15 @@ void h2o_socket_write(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_
     }
 #endif
 
-    if (sock->ssl == NULL) {
-        for (size_t i = 0; i != bufcnt; ++i)
-            sock->bytes_written += bufs[i].len;
-        do_write(sock, bufs, bufcnt, cb);
-    } else {
-        assert(sock->ssl->output.bufs.size == 0);
-        /* encode all cleartext data into series of TLS records */
-        for (; bufcnt != 0; ++bufs, --bufcnt) {
-            size_t off = 0;
-            while (off != bufs[0].len) {
-                int ret;
-                size_t sz = calc_tls_write_size(sock, bufs[0].len - off);
-                if (sock->ssl->ptls != NULL) {
-                    size_t dst_size = sz + ptls_get_record_overhead(sock->ssl->ptls);
-                    void *dst = h2o_mem_alloc_pool(&sock->ssl->output.pool, char, dst_size);
-                    ptls_buffer_t wbuf;
-                    ptls_buffer_init(&wbuf, dst, dst_size);
-                    ret = ptls_send(sock->ssl->ptls, &wbuf, bufs[0].base + off, sz);
-                    assert(ret == 0);
-                    dst_size = wbuf.off;
-                    if (wbuf.is_allocated) {
-                        /* happens when ptls_send emits KeyUpdate message, for one case due to receiving one from peer */
-                        dst = h2o_mem_alloc_pool(&sock->ssl->output.pool, char, dst_size);
-                        memcpy(dst, wbuf.base, dst_size);
-                        ptls_buffer_dispose(&wbuf);
-                    }
-                    h2o_vector_reserve(&sock->ssl->output.pool, &sock->ssl->output.bufs, sock->ssl->output.bufs.size + 1);
-                    sock->ssl->output.bufs.entries[sock->ssl->output.bufs.size++] = h2o_iovec_init(dst, dst_size);
-                } else {
-                    ret = SSL_write(sock->ssl->ossl, bufs[0].base + off, (int)sz);
-                    if (ret != sz) {
-                        /* The error happens if SSL_write is called after SSL_read returns a fatal error (e.g. due to corrupt TCP
-                         * packet being received). We need to take care of this since some protocol implementations send data after
-                         * the read-side of the connection gets closed (note that protocol implementations are (yet) incapable of
-                         * distinguishing a normal shutdown and close due to an error using the `status` value of the read
-                         * callback).
-                         */
-                        clear_output_buffer(sock->ssl);
-                        flush_pending_ssl(sock, cb);
-                        return;
-                    }
-                }
-                off += sz;
-                sock->bytes_written += sz;
-            }
-        }
-        /* write the TLS records */
-        flush_pending_ssl(sock, cb);
-    }
+    do_write(sock, bufs, bufcnt, cb);
 }
 
 void on_write_complete(h2o_socket_t *sock, const char *err)
 {
     h2o_socket_cb cb;
 
-    if (sock->ssl != NULL)
-        clear_output_buffer(sock->ssl);
+    if (has_pending_ssl_bytes(sock->ssl))
+        dispose_ssl_output_buffer(sock->ssl);
 
     cb = sock->_cb.write;
     sock->_cb.write = NULL;
@@ -1228,7 +1302,8 @@ Redo:
             assert(ret < 0);
             SSL_free(sock->ssl->ossl);
             create_ossl(sock);
-            clear_output_buffer(sock->ssl);
+            if (has_pending_ssl_bytes(sock->ssl))
+                dispose_ssl_output_buffer(sock->ssl);
             h2o_buffer_consume(&sock->ssl->input.encrypted, sock->ssl->input.encrypted->size);
             h2o_buffer_reserve(&sock->ssl->input.encrypted, first_input.len);
             memcpy(sock->ssl->input.encrypted->bytes, first_input.base, first_input.len);
@@ -1253,7 +1328,7 @@ Redo:
             err = h2o_socket_error_ssl_handshake;
             /* OpenSSL 1.1.0 emits an alert immediately, we  send it now. 1.0.2 emits the error when SSL_shutdown is called in
              * shutdown_ssl. */
-            if (sock->ssl->output.bufs.size != 0) {
+            if (has_pending_ssl_bytes(sock->ssl)) {
                 h2o_socket_read_stop(sock);
                 flush_pending_ssl(sock, on_handshake_fail_complete);
                 return;
@@ -1262,7 +1337,7 @@ Redo:
         goto Complete;
     }
 
-    if (sock->ssl->output.bufs.size != 0) {
+    if (has_pending_ssl_bytes(sock->ssl)) {
         h2o_socket_read_stop(sock);
         flush_pending_ssl(sock, ret == 1 ? on_handshake_complete : proceed_handshake);
     } else {
@@ -1389,7 +1464,7 @@ void h2o_socket_ssl_handshake(h2o_socket_t *sock, SSL_CTX *ssl_ctx, const char *
                               h2o_socket_cb handshake_cb)
 {
     sock->ssl = h2o_mem_alloc(sizeof(*sock->ssl));
-    memset(sock->ssl, 0, offsetof(struct st_h2o_socket_ssl_t, output.pool));
+    *sock->ssl = (struct st_h2o_socket_ssl_t){};
 
     sock->ssl->ssl_ctx = ssl_ctx;
 
@@ -1400,8 +1475,6 @@ void h2o_socket_ssl_handshake(h2o_socket_t *sock, SSL_CTX *ssl_ctx, const char *
         sock->input = sock->ssl->input.encrypted;
         sock->ssl->input.encrypted = tmp;
     }
-
-    h2o_mem_init_pool(&sock->ssl->output.pool);
 
     sock->ssl->handshake.cb = handshake_cb;
     if (server_name == NULL) {

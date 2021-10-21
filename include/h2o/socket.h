@@ -60,6 +60,11 @@ extern "C" {
 #define H2O_USE_NPN 0
 #endif
 
+/**
+ * Maximum amount of TLS records to generate at once. Default is 4 full-sized TLS records using 32-byte tag.
+ */
+#define H2O_SOCKET_DEFAULT_SSL_BUFFER_SIZE ((5 + 16384 + 32) * 4)
+
 typedef struct st_h2o_sliding_counter_t {
     uint64_t average;
     struct {
@@ -133,10 +138,18 @@ struct st_h2o_socket_t {
     struct st_h2o_socket_addr_t *_peername;
     struct st_h2o_socket_addr_t *_sockname;
     struct {
+        size_t cnt;
+        h2o_iovec_t *bufs;
+        union {
+            h2o_iovec_t *alloced_ptr;
+            h2o_iovec_t smallbufs[4];
+        };
+    } _wreq;
+    struct {
         uint8_t state; /* one of H2O_SOCKET_LATENCY_STATE_* */
         uint8_t notsent_is_minimized : 1;
         size_t suggested_tls_payload_size; /* suggested TLS record payload size, or SIZE_MAX when no need to restrict */
-        size_t suggested_write_size; /* SIZE_MAX if no need to optimize for latency */
+        size_t suggested_write_size;       /* SIZE_MAX if no need to optimize for latency */
     } _latency_optimization;
 };
 
@@ -171,6 +184,9 @@ typedef void (*h2o_socket_ssl_resumption_remove_cb)(h2o_iovec_t session_id);
 extern h2o_buffer_mmap_settings_t h2o_socket_buffer_mmap_settings;
 extern __thread h2o_buffer_prototype_t h2o_socket_buffer_prototype;
 
+extern size_t h2o_socket_ssl_buffer_size;
+extern __thread h2o_mem_recycle_t h2o_socket_ssl_buffer_allocator;
+
 extern const char h2o_socket_error_out_of_memory[];
 extern const char h2o_socket_error_io[];
 extern const char h2o_socket_error_closed[];
@@ -202,7 +218,7 @@ void h2o_socket_dispose_export(h2o_socket_export_t *info);
  */
 void h2o_socket_close(h2o_socket_t *sock);
 /**
- * Schedules a callback to be notify we the socket can be written to
+ * Schedules a callback that would be invoked when the socket becomes immediately writable
  */
 void h2o_socket_notify_write(h2o_socket_t *sock, h2o_socket_cb cb);
 /**
