@@ -191,6 +191,7 @@ static int write_core(struct st_h2o_evloop_socket_t *sock, h2o_iovec_t **bufs, s
         return write_vecs(sock->fd, bufs, bufcnt, first_buf_written);
 
     /* SSL */
+    *first_buf_written = 0;
     while (1) {
         /* write bytes already encrypted, if any */
         if (has_pending_ssl_bytes(sock->super.ssl)) {
@@ -198,8 +199,10 @@ static int write_core(struct st_h2o_evloop_socket_t *sock, h2o_iovec_t **bufs, s
                                                 sock->super.ssl->output.buf.off - sock->super.ssl->output.pending_off);
             h2o_iovec_t *encbufs = &encbuf;
             size_t encbufcnt = 1, enc_written;
-            if (write_vecs(sock->fd, &encbufs, &encbufcnt, &enc_written) != 0)
+            if (write_vecs(sock->fd, &encbufs, &encbufcnt, &enc_written) != 0) {
+                dispose_ssl_output_buffer(sock->super.ssl);
                 return -1;
+            }
             /* if write is incomplete, record the advance and bail out */
             if (encbufcnt != 0) {
                 sock->super.ssl->output.pending_off += enc_written;
@@ -212,7 +215,7 @@ static int write_core(struct st_h2o_evloop_socket_t *sock, h2o_iovec_t **bufs, s
         if (*bufcnt == 0)
             return 0;
         /* convert cleartext input to TLS records */
-        generate_tls_records(&sock->super, bufs, bufcnt, first_buf_written);
+        *first_buf_written = generate_tls_records(&sock->super, bufs, bufcnt, *first_buf_written);
     }
 }
 

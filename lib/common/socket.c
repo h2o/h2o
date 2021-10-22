@@ -122,7 +122,7 @@ struct st_h2o_ssl_context_t {
 static void wreq_free_buffer_if_allocated(h2o_socket_t *sock);
 static void dispose_ssl_output_buffer(struct st_h2o_socket_ssl_t *ssl);
 static int has_pending_ssl_bytes(struct st_h2o_socket_ssl_t *ssl);
-static void generate_tls_records(h2o_socket_t *sock, h2o_iovec_t **bufs, size_t *bufcnt, size_t *first_buf_written);
+static size_t generate_tls_records(h2o_socket_t *sock, h2o_iovec_t **bufs, size_t *bufcnt, size_t first_buf_written);
 static void do_dispose_socket(h2o_socket_t *sock);
 static void do_write(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_socket_cb cb);
 static void do_read_start(h2o_socket_t *sock);
@@ -739,28 +739,29 @@ static size_t generate_tls_records_from_one_vec(h2o_socket_t *sock, const void *
     return tls_write_size;
 }
 
-static void generate_tls_records(h2o_socket_t *sock, h2o_iovec_t **bufs, size_t *bufcnt, size_t *first_buf_written)
+static size_t generate_tls_records(h2o_socket_t *sock, h2o_iovec_t **bufs, size_t *bufcnt, size_t first_buf_written)
 {
-    *first_buf_written = 0;
-
     assert(*bufcnt != 0);
     assert(!has_pending_ssl_bytes(sock->ssl) && "we are filling encrypted bytes from the front, with no existing buffer, always");
 
     init_ssl_output_buffer(sock->ssl);
 
     while (1) {
-        size_t bytes_written = generate_tls_records_from_one_vec(sock, (*bufs)->base + *first_buf_written, (*bufs)->len - *first_buf_written);
-        if (bytes_written == 0)
+        size_t bytes_newly_written =
+            generate_tls_records_from_one_vec(sock, (*bufs)->base + first_buf_written, (*bufs)->len - first_buf_written);
+        if (bytes_newly_written == 0)
             break;
-        *first_buf_written += bytes_written;
-        if ((*bufs)->len == bytes_written) {
-            *first_buf_written = 0;
+        first_buf_written += bytes_newly_written;
+        if ((*bufs)->len == first_buf_written) {
+            first_buf_written = 0;
             ++*bufs;
             --*bufcnt;
             if (*bufcnt == 0)
                 break;
         }
     }
+
+    return first_buf_written;
 }
 
 void h2o_socket_write(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_socket_cb cb)
