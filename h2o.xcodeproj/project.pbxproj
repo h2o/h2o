@@ -3917,15 +3917,17 @@
 					deps/picotls/include,
 					deps/quicly/include,
 					deps/yaml/include,
-					/usr/local/opt/openssl/include,
 					/opt/homebrew/opt/openssl/include,
+					/usr/local/opt/openssl/include,
 					/opt/homebrew/include,
+					/usr/local/include,
 				);
 				LIBRARY_SEARCH_PATHS = (
 					build/default/mruby/host/lib,
-					/usr/local/opt/openssl/lib,
 					/opt/homebrew/opt/openssl/lib,
+					/usr/local/opt/openssl/lib,
 					/opt/homebrew/lib,
+					/usr/local/lib,
 				);
 				MACOSX_DEPLOYMENT_TARGET = 10.9;
 				ONLY_ACTIVE_ARCH = YES;
@@ -4060,15 +4062,17 @@
 					deps/picotls/include,
 					deps/quicly/include,
 					deps/yaml/include,
-					/usr/local/opt/openssl/include,
 					/opt/homebrew/opt/openssl/include,
+					/usr/local/opt/openssl/include,
 					/opt/homebrew/include,
+					/usr/local/include,
 				);
 				LIBRARY_SEARCH_PATHS = (
 					build/default/mruby/host/lib,
-					/usr/local/opt/openssl/lib,
 					/opt/homebrew/opt/openssl/lib,
+					/usr/local/opt/openssl/lib,
 					/opt/homebrew/lib,
+					/usr/local/lib,
 				);
 				MACOSX_DEPLOYMENT_TARGET = 10.9;
 				ONLY_ACTIVE_ARCH = YES;
@@ -4196,15 +4200,17 @@
 					deps/picotls/include,
 					deps/quicly/include,
 					deps/yaml/include,
-					/usr/local/opt/openssl/include,
 					/opt/homebrew/opt/openssl/include,
+					/usr/local/opt/openssl/include,
 					/opt/homebrew/include,
+					/usr/local/include,
 				);
 				LIBRARY_SEARCH_PATHS = (
 					build/default/mruby/host/lib,
-					/usr/local/opt/openssl/lib,
 					/opt/homebrew/opt/openssl/lib,
+					/usr/local/opt/openssl/lib,
 					/opt/homebrew/lib,
+					/usr/local/lib,
 				);
 				MACOSX_DEPLOYMENT_TARGET = 10.9;
 				ONLY_ACTIVE_ARCH = YES;
@@ -4256,15 +4262,17 @@
 					deps/picotls/include,
 					deps/quicly/include,
 					deps/yaml/include,
-					/usr/local/opt/openssl/include,
 					/opt/homebrew/opt/openssl/include,
+					/usr/local/opt/openssl/include,
 					/opt/homebrew/include,
+					/usr/local/include,
 				);
 				LIBRARY_SEARCH_PATHS = (
 					build/default/mruby/host/lib,
-					/usr/local/opt/openssl/lib,
 					/opt/homebrew/opt/openssl/lib,
+					/usr/local/opt/openssl/lib,
 					/opt/homebrew/lib,
+					/usr/local/lib,
 				);
 				MACOSX_DEPLOYMENT_TARGET = 10.9;
 				ONLY_ACTIVE_ARCH = YES;
