@@ -227,11 +227,15 @@ void write_pending(struct st_h2o_evloop_socket_t *sock)
         goto Complete;
 
     /* write */
-    if (write_core(sock, &sock->super._wreq.bufs, &sock->super._wreq.cnt, &first_buf_written) == 0 && sock->super._wreq.cnt != 0) {
-        /* partial write */
-        sock->super._wreq.bufs[0].base += first_buf_written;
-        sock->super._wreq.bufs[0].len -= first_buf_written;
-        return;
+    if (write_core(sock, &sock->super._wreq.bufs, &sock->super._wreq.cnt, &first_buf_written) == 0) {
+        /* return if there's still pending data, adjusting buf[0] if necessary */
+        if (sock->super._wreq.cnt != 0) {
+            sock->super._wreq.bufs[0].base += first_buf_written;
+            sock->super._wreq.bufs[0].len -= first_buf_written;
+            return;
+        } else if (has_pending_ssl_bytes(sock->super.ssl)) {
+            return;
+        }
     }
 
     /* either completed or failed */
