@@ -144,54 +144,41 @@ static const char *on_read_core(int fd, h2o_buffer_t **input, size_t max_bytes)
     return NULL;
 }
 
-static int write_vecs(int fd, h2o_iovec_t **bufs, size_t *bufcnt, size_t *first_buf_written)
+static size_t write_vecs(int fd, h2o_iovec_t **bufs, size_t *bufcnt)
 {
-    int iovcnt;
     ssize_t wret;
-
-    *first_buf_written = 0;
 
     while (*bufcnt != 0) {
         /* write */
-        iovcnt = IOV_MAX;
-        if (*bufcnt < iovcnt)
-            iovcnt = (int)*bufcnt;
+        int iovcnt = *bufcnt < IOV_MAX ? (int)*bufcnt : IOV_MAX;
         while ((wret = writev(fd, (struct iovec *)*bufs, iovcnt)) == -1 && errno == EINTR)
             ;
-        if (wret == -1) {
-            if (errno != EAGAIN)
-                return -1;
-            break;
-        }
-        /* adjust the buffer */
-        while ((*bufs)->len < wret) {
+        if (wret == -1)
+            return errno == EAGAIN ? 0 : SIZE_MAX;
+
+        /* adjust the buffer, doing the write once again only if all IOV_MAX buffers being supplied were fully written */
+        while ((*bufs)->len <= wret) {
             wret -= (*bufs)->len;
             ++*bufs;
             --*bufcnt;
-            --iovcnt;
         }
-        assert(iovcnt > 0);
-        if ((*bufs)->len == wret) {
-            ++*bufs;
-            --*bufcnt;
-            if (--iovcnt != 0)
-                break;
-        } else {
-            *first_buf_written = wret;
-            break;
+        if (wret != 0) {
+            return wret;
+        } else if (iovcnt < IOV_MAX) {
+            return 0;
         }
     }
 
     return 0;
 }
 
-static int write_core(struct st_h2o_evloop_socket_t *sock, h2o_iovec_t **bufs, size_t *bufcnt, size_t *first_buf_written)
+static size_t write_core(struct st_h2o_evloop_socket_t *sock, h2o_iovec_t **bufs, size_t *bufcnt)
 {
     if (sock->super.ssl == NULL)
-        return write_vecs(sock->fd, bufs, bufcnt, first_buf_written);
+        return write_vecs(sock->fd, bufs, bufcnt);
 
     /* SSL */
-    *first_buf_written = 0;
+    size_t first_buf_written = 0;
     while (1) {
         /* write bytes already encrypted, if any */
         if (has_pending_ssl_bytes(sock->super.ssl)) {
@@ -199,29 +186,30 @@ static int write_core(struct st_h2o_evloop_socket_t *sock, h2o_iovec_t **bufs, s
                                                 sock->super.ssl->output.buf.off - sock->super.ssl->output.pending_off);
             h2o_iovec_t *encbufs = &encbuf;
             size_t encbufcnt = 1, enc_written;
-            if (write_vecs(sock->fd, &encbufs, &encbufcnt, &enc_written) != 0) {
+            if ((enc_written = write_vecs(sock->fd, &encbufs, &encbufcnt)) == SIZE_MAX) {
                 dispose_ssl_output_buffer(sock->super.ssl);
-                return -1;
+                return SIZE_MAX;
             }
             /* if write is incomplete, record the advance and bail out */
             if (encbufcnt != 0) {
                 sock->super.ssl->output.pending_off += enc_written;
-                return 0;
+                break;
             }
             /* succeeded in writing all the encrypted data; free the buffer */
             dispose_ssl_output_buffer(sock->super.ssl);
         }
         /* bail out if complete */
         if (*bufcnt == 0)
-            return 0;
+            break;
         /* convert cleartext input to TLS records */
-        *first_buf_written = generate_tls_records(&sock->super, bufs, bufcnt, *first_buf_written);
+        first_buf_written = generate_tls_records(&sock->super, bufs, bufcnt, first_buf_written);
     }
+
+    return first_buf_written;
 }
 
 void write_pending(struct st_h2o_evloop_socket_t *sock)
 {
-    size_t first_buf_written;
 
     assert(sock->super._cb.write != NULL);
 
@@ -229,15 +217,17 @@ void write_pending(struct st_h2o_evloop_socket_t *sock)
     if (sock->super._wreq.cnt == 0 && !has_pending_ssl_bytes(sock->super.ssl))
         goto Complete;
 
-    /* write */
-    if (write_core(sock, &sock->super._wreq.bufs, &sock->super._wreq.cnt, &first_buf_written) == 0) {
-        /* return if there's still pending data, adjusting buf[0] if necessary */
-        if (sock->super._wreq.cnt != 0) {
-            sock->super._wreq.bufs[0].base += first_buf_written;
-            sock->super._wreq.bufs[0].len -= first_buf_written;
-            return;
-        } else if (has_pending_ssl_bytes(sock->super.ssl)) {
-            return;
+    { /* write */
+        size_t first_buf_written;
+        if ((first_buf_written = write_core(sock, &sock->super._wreq.bufs, &sock->super._wreq.cnt)) != SIZE_MAX) {
+            /* return if there's still pending data, adjusting buf[0] if necessary */
+            if (sock->super._wreq.cnt != 0) {
+                sock->super._wreq.bufs[0].base += first_buf_written;
+                sock->super._wreq.bufs[0].len -= first_buf_written;
+                return;
+            } else if (has_pending_ssl_bytes(sock->super.ssl)) {
+                return;
+            }
         }
     }
 
@@ -296,7 +286,7 @@ void do_write(h2o_socket_t *_sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_socket_
     sock->super._cb.write = cb;
 
     /* try to write now */
-    if (write_core(sock, &bufs, &bufcnt, &first_buf_written) != 0) {
+    if ((first_buf_written = write_core(sock, &bufs, &bufcnt)) == SIZE_MAX) {
         /* fill in _wreq.bufs with fake data to indicate error */
         sock->super._wreq.bufs = sock->super._wreq.smallbufs;
         sock->super._wreq.cnt = 1;
