@@ -765,9 +765,7 @@ static void generate_tls_records(h2o_socket_t *sock, h2o_iovec_t **bufs, size_t 
 
 void h2o_socket_write(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_socket_cb cb)
 {
-    assert(bufcnt > 0);
     assert(sock->_cb.write == NULL);
-    assert(sock->_wreq.cnt == 0);
 
 #if H2O_SOCKET_DUMP_WRITE
     for (size_t i = 0; i != bufcnt; ++i) {
