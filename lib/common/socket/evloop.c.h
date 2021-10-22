@@ -306,10 +306,10 @@ void do_write(h2o_socket_t *_sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_socket_
     }
 
     /* setup the buffer to send pending data */
-    if (bufcnt <= sizeof(sock->super._wreq.smallbufs) / sizeof(sock->super._wreq.smallbufs[0])) {
+    if (bufcnt <= PTLS_ELEMENTSOF(sock->super._wreq.smallbufs)) {
         sock->super._wreq.bufs = sock->super._wreq.smallbufs;
     } else {
-        sock->super._wreq.bufs = h2o_mem_alloc(sizeof(h2o_iovec_t) * bufcnt);
+        sock->super._wreq.bufs = h2o_mem_alloc(sizeof(sock->super._wreq.bufs[0]) * bufcnt);
         sock->super._wreq.alloced_ptr = sock->super._wreq.bufs;
     }
     if (bufcnt != 0) {
