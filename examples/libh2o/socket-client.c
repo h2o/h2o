@@ -44,6 +44,7 @@ static void on_read(h2o_socket_t *sock, const char *err)
     }
 
     fwrite(sock->input->bytes, 1, sock->input->size, stdout);
+    h2o_buffer_consume(&sock->input, sock->input->size);
 }
 
 static void on_write(h2o_socket_t *sock, const char *err)
