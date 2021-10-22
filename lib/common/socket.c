@@ -741,7 +741,7 @@ static size_t generate_tls_records_from_one_vec(h2o_socket_t *sock, const void *
 
 static void generate_tls_records(h2o_socket_t *sock, h2o_iovec_t **bufs, size_t *bufcnt, size_t *first_buf_written)
 {
-    size_t buf_offset = 0;
+    *first_buf_written = 0;
 
     assert(*bufcnt != 0);
     assert(!has_pending_ssl_bytes(sock->ssl) && "we are filling encrypted bytes from the front, with no existing buffer, always");
@@ -749,12 +749,12 @@ static void generate_tls_records(h2o_socket_t *sock, h2o_iovec_t **bufs, size_t 
     init_ssl_output_buffer(sock->ssl);
 
     while (1) {
-        size_t bytes_written = generate_tls_records_from_one_vec(sock, (*bufs)->base + buf_offset, (*bufs)->len - buf_offset);
+        size_t bytes_written = generate_tls_records_from_one_vec(sock, (*bufs)->base + *first_buf_written, (*bufs)->len - *first_buf_written);
         if (bytes_written == 0)
             break;
-        buf_offset += bytes_written;
+        *first_buf_written += bytes_written;
         if ((*bufs)->len == bytes_written) {
-            buf_offset = 0;
+            *first_buf_written = 0;
             ++*bufs;
             --*bufcnt;
             if (*bufcnt == 0)
