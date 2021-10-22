@@ -161,6 +161,10 @@ static size_t write_vecs(int fd, h2o_iovec_t **bufs, size_t *bufcnt)
             wret -= (*bufs)->len;
             ++*bufs;
             --*bufcnt;
+            if (*bufcnt == 0) {
+                assert(wret == 0);
+                return 0;
+            }
         }
         if (wret != 0) {
             return wret;
