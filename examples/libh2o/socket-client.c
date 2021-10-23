@@ -98,9 +98,12 @@ int main(int argc, char **argv)
     h2o_socket_t *sock;
     h2o_iovec_t send_data = {H2O_STRLIT("GET / HTTP/1.0\r\n\r\n")};
 
-    static struct option longopts[] = {
-        {"tls", no_argument, NULL, 't'}, {"insecure", no_argument, NULL, 'k'}, {"help", no_argument, NULL, 'h'}, {}};
-    while ((optch = getopt_long(argc, argv, "tkh", longopts, NULL)) != -1) {
+    static struct option longopts[] = {{"tls", no_argument, NULL, 't'},
+                                       {"insecure", no_argument, NULL, 'k'},
+                                       {"stdin", no_argument, NULL, 's'},
+                                       {"help", no_argument, NULL, 'h'},
+                                       {}};
+    while ((optch = getopt_long(argc, argv, "tksh", longopts, NULL)) != -1) {
         switch (optch) {
         case 't':
             SSL_load_error_strings();
@@ -112,11 +115,20 @@ int main(int argc, char **argv)
         case 'k':
             skip_verify = 1;
             break;
+        case 's': {
+            send_data = h2o_iovec_init(NULL, 0);
+            int ch;
+            while ((ch = fgetc(stdin)) != EOF) {
+                send_data.base = realloc(send_data.base, send_data.len + 1);
+                send_data.base[send_data.len++] = ch;
+            }
+        } break;
         case 'h':
             printf("Usage: %s [options] host port\n"
                    "Options:\n"
                    "  -t, --tls       use TLS\n"
                    "  -k, --insecure  ignore TLS certificate errors\n"
+                   "  -s, --stdin     read data to be sent from STDIN\n"
                    "  -h, --help      print this help\n"
                    "\n",
                    argv[0]);
