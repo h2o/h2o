@@ -119,7 +119,8 @@ struct st_h2o_ssl_context_t {
 };
 
 /* backend functions */
-static void wreq_free_buffer_if_allocated(h2o_socket_t *sock);
+static void init_write_buf(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, size_t first_buf_written);
+static void dispose_write_buf(h2o_socket_t *sock);
 static void dispose_ssl_output_buffer(struct st_h2o_socket_ssl_t *ssl);
 static int has_pending_ssl_bytes(struct st_h2o_socket_ssl_t *ssl);
 static size_t generate_tls_records(h2o_socket_t *sock, h2o_iovec_t **bufs, size_t *bufcnt, size_t first_buf_written);
@@ -188,14 +189,32 @@ static int read_bio(BIO *b, char *out, int len)
     return len;
 }
 
-static void wreq_free_buffer_if_allocated(h2o_socket_t *sock)
+static void init_write_buf(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, size_t first_buf_written)
 {
-    if (sock->_wreq.smallbufs <= sock->_wreq.bufs &&
-        sock->_wreq.bufs <= sock->_wreq.smallbufs + sizeof(sock->_wreq.smallbufs) / sizeof(sock->_wreq.smallbufs[0])) {
+    if (bufcnt < PTLS_ELEMENTSOF(sock->_write_buf.smallbufs)) {
+        sock->_write_buf.bufs = sock->_write_buf.smallbufs;
+    } else {
+        sock->_write_buf.bufs = h2o_mem_alloc(sizeof(sock->_write_buf.bufs[0]) * bufcnt);
+        sock->_write_buf.alloced_ptr = sock->_write_buf.bufs;
+    }
+    if (bufcnt != 0) {
+        sock->_write_buf.bufs[0].base = bufs[0].base + first_buf_written;
+        sock->_write_buf.bufs[0].len = bufs[0].len - first_buf_written;
+        for (size_t i = 0; i < bufcnt; ++i)
+            sock->_write_buf.bufs[i] = bufs[i];
+    }
+    sock->_write_buf.cnt = bufcnt;
+}
+
+static void dispose_write_buf(h2o_socket_t *sock)
+{
+    if (sock->_write_buf.smallbufs <= sock->_write_buf.bufs &&
+        sock->_write_buf.bufs <=
+            sock->_write_buf.smallbufs + sizeof(sock->_write_buf.smallbufs) / sizeof(sock->_write_buf.smallbufs[0])) {
         /* no need to free */
     } else {
-        free(sock->_wreq.alloced_ptr);
-        sock->_wreq.bufs = sock->_wreq.smallbufs;
+        free(sock->_write_buf.alloced_ptr);
+        sock->_write_buf.bufs = sock->_write_buf.smallbufs;
     }
 }
 
