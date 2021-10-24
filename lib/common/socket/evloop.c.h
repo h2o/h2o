@@ -285,7 +285,7 @@ void do_dispose_socket(h2o_socket_t *_sock)
 void do_write(h2o_socket_t *_sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_socket_cb cb)
 {
     struct st_h2o_evloop_socket_t *sock = (struct st_h2o_evloop_socket_t *)_sock;
-    size_t first_buf_written, i;
+    size_t first_buf_written;
 
     sock->super._cb.write = cb;
 
