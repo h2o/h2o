@@ -100,12 +100,13 @@ struct st_h2o_socket_ssl_t {
         /**
          * This buffer is initialized when and only when pending data is stored. Otherwise, all the members are zero-cleared; see
          * `has_pending_ssl_data`.
-         * To reduce the cost of repeating memory allocation, expansion, and release, this buffer points to a chunk of memory being
+         * To reduce the cost of repeated memory allocation, expansion, and release, this buffer points to a chunk of memory being
          * allocated from `h2o_socket_ssl_buffer_allocator` when initialized. Upon disposal, the memory chunk being used by this
-         * buffer is returned to the memory pool, unless it has been further expanded. It is designed as such because sometimes it
-         * is hard to limit the amount of TLS records being generated at once (who knows how large the server's Handshake messages
-         * will be, or when it has to send a KeyUpdate message?), but when generating application traffic, we cap the maximum amount
-         * of TLS records being generated at once so that we can recycle the chunk; see `generate_tls_records`.
+         * buffer is returned to that memory pool, unless the chunk has been expanded. It is designed as such because sometimes it
+         * is hard to limit the amount of TLS records being generated at once (who knows how large the server's handshake messages
+         * will be, or when it has to send a KeyUpdate message?). But for most of the case, handshake messages will be smaller than
+         * the default size (H2O_SOCKET_DEFAULT_SSL_BUFFER_SIZE), and application traffic will not cause expansion (see
+         * * `generate_tls_records`). Therefore, the memory chunk will be recycled.
          */
         ptls_buffer_t buf;
         size_t pending_off;
@@ -724,6 +725,10 @@ static size_t calc_tls_write_size(h2o_socket_t *sock, size_t bufsize)
     return recsize < bufsize ? recsize : bufsize;
 }
 
+/**
+ * Given a vector, generate at least one TLS record if there's enough space in the buffer, and return the size of application data
+ * being encrypted. Otherwise, returns zero.
+ */
 static size_t generate_tls_records_from_one_vec(h2o_socket_t *sock, const void *input, size_t inlen)
 {
     static const size_t MAX_RECORD_PAYLOAD_SIZE = 16 * 1024, LARGE_RECORD_OVERHEAD = 5 + 32;
@@ -758,6 +763,10 @@ static size_t generate_tls_records_from_one_vec(h2o_socket_t *sock, const void *
     return tls_write_size;
 }
 
+/**
+ * Generate as many TLS records as possible, given a list of vectors. Upon return, `*bufs` and `*bufcnt` will be updated to point
+ * the buffers that still have pending data, and the number of bytes being already written within `(*buf)[0]` will be returned.
+ */
 static size_t generate_tls_records(h2o_socket_t *sock, h2o_iovec_t **bufs, size_t *bufcnt, size_t first_buf_written)
 {
     assert(!has_pending_ssl_bytes(sock->ssl) && "we are filling encrypted bytes from the front, with no existing buffer, always");
