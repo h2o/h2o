@@ -705,6 +705,7 @@
 		08790DE31D8276EA00A04BC1 /* redis.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = redis.c; sourceTree = "<group>"; };
 		08790DF41D8BD72500A04BC1 /* redis-client.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = "redis-client.c"; sourceTree = "<group>"; };
 		08790E101D8BD7F100A04BC1 /* examples-redis-client */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = "examples-redis-client"; sourceTree = BUILT_PRODUCTS_DIR; };
+		0879B8CC2724DBF400F77220 /* 10socket.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = 10socket.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		08819C2C218C9FA90057ED23 /* qif */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = qif; sourceTree = BUILT_PRODUCTS_DIR; };
 		08819C2D218C9FF70057ED23 /* qif.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = qif.c; sourceTree = "<group>"; };
 		08C7C365262AB30F009C944C /* 40mtls.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = 40mtls.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
@@ -2161,6 +2162,7 @@
 				105534F31A460EF600627ECB /* 00unit.libuv.t */,
 				109EEFDC1D77B350001F11D1 /* 00unit.mruby.t */,
 				105534F41A460EF600627ECB /* 10httpclient.t */,
+				0879B8CC2724DBF400F77220 /* 10socket.t */,
 				10FEF2481D6EC30800E11B1D /* 40bad-request.t */,
 				E9AFBF17212A9802000F5DB8 /* 40chunked.t */,
 				104CD5021CC465AF0057C62F /* 40env.t */,
