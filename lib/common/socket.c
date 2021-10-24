@@ -201,7 +201,7 @@ static void init_write_buf(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt,
     if (bufcnt != 0) {
         sock->_write_buf.bufs[0].base = bufs[0].base + first_buf_written;
         sock->_write_buf.bufs[0].len = bufs[0].len - first_buf_written;
-        for (size_t i = 0; i < bufcnt; ++i)
+        for (size_t i = 1; i < bufcnt; ++i)
             sock->_write_buf.bufs[i] = bufs[i];
     }
     sock->_write_buf.cnt = bufcnt;
