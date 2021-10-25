@@ -1041,7 +1041,7 @@ IF ("${VERSION_PRERELEASE}" STREQUAL "-DEV")
     # since only the script knows how to calculate the gitrev.
     EXECUTE_PROCESS(
         COMMAND perl ${CMAKE_CURRENT_SOURCE_DIR}/misc/generate_gitrev.pl
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
         RESULT_VARIABLE GITREV_RESULT_CODE
         OUTPUT_QUIET
         ERROR_QUIET
@@ -1051,7 +1051,7 @@ IF ("${VERSION_PRERELEASE}" STREQUAL "-DEV")
         ADD_DEFINITIONS("-DH2O_HAS_GITREV_H")
         ADD_CUSTOM_TARGET(gitrev ALL
             COMMAND perl ${CMAKE_CURRENT_SOURCE_DIR}/misc/generate_gitrev.pl
-            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+            WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
         ADD_DEPENDENCIES(libh2o gitrev)
         ADD_DEPENDENCIES(libh2o-evloop gitrev)
         ADD_DEPENDENCIES(h2o gitrev)
