@@ -442,6 +442,7 @@ h2o_socket_t *h2o_evloop_socket_accept(h2o_socket_t *_listener)
         struct sockaddr_storage storage;
         socklen_t len;
     } _peeraddr;
+    _peeraddr.len = sizeof(_peeraddr.storage);
     struct sockaddr_storage *peeraddr = &_peeraddr.storage;
     socklen_t *peeraddrlen = &_peeraddr.len;
 #else
