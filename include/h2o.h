@@ -447,6 +447,10 @@ struct st_h2o_globalconf_t {
          * the callbacks
          */
         h2o_protocol_callbacks_t callbacks;
+        /**
+         * a boolean indicating if UDP GSO should be used
+         */
+        uint8_t use_udp_gso;
     } http3;
 
     struct {
