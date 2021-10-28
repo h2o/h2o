@@ -188,7 +188,7 @@ struct st_h2o_quic_ctx_t {
      */
     h2o_quic_accept_cb acceptor;
     /**
-     * 0 to disable load distribution of accepting connections by h2o (i.e. relies on the kernel's disbirution based on 4-tuple)
+     * 0 to disable load distribution of accepting connections by h2o (i.e. relies on the kernel's distribution based on 4-tuple)
      */
     uint32_t accept_thread_divisor;
     /**
