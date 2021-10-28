@@ -980,16 +980,19 @@ void h2o_quic_init_context(h2o_quic_ctx_t *ctx, h2o_loop_t *loop, h2o_socket_t *
 {
     assert(quic->stream_open != NULL);
 
-    *ctx = (h2o_quic_ctx_t){loop,
-                            {sock},
-                            quic,
-                            {0} /* thread_id, node_id are set by h2o_http3_set_context_identifier */,
-                            kh_init_h2o_quic_idmap(),
-                            kh_init_h2o_quic_acceptmap(),
-                            notify_conn_update};
+    *ctx = (h2o_quic_ctx_t){
+        .loop = loop,
+        .sock = {.sock = sock},
+        .quic = quic,
+        .next_cid = {0} /* thread_id, node_id are set by h2o_http3_set_context_identifier */,
+        .conns_by_id = kh_init_h2o_quic_idmap(),
+        .conns_accepting = kh_init_h2o_quic_acceptmap(),
+        .notify_conn_update = notify_conn_update,
+        .acceptor = acceptor,
+        .use_udp_gso = use_udp_gso,
+    };
     ctx->sock.sock->data = ctx;
     ctx->sock.addrlen = h2o_socket_getsockname(ctx->sock.sock, (void *)&ctx->sock.addr);
-    ctx->use_udp_gso = use_udp_gso;
     assert(ctx->sock.addrlen != 0);
     switch (ctx->sock.addr.ss_family) {
     case AF_INET:
@@ -1002,7 +1005,6 @@ void h2o_quic_init_context(h2o_quic_ctx_t *ctx, h2o_loop_t *loop, h2o_socket_t *
         assert(!"unexpected address family");
         break;
     }
-    ctx->acceptor = acceptor;
 
     h2o_socket_read_start(ctx->sock.sock, on_read);
 }
