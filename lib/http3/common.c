@@ -137,6 +137,7 @@ int h2o_quic_send_datagrams(h2o_quic_ctx_t *ctx, quicly_address_t *dest, quicly_
     }
 
     /* next CMSG is UDP_SEGMENT size (for GSO) */
+    int using_gso = 0;
 #ifdef UDP_SEGMENT
     if (num_datagrams > 1 && ctx->use_gso) {
         for (size_t i = 1; i < num_datagrams - 1; ++i)
@@ -147,6 +148,7 @@ int h2o_quic_send_datagrams(h2o_quic_ctx_t *ctx, quicly_address_t *dest, quicly_
         cmsg->cmsg_len = CMSG_LEN(sizeof(segsize));
         memcpy(CMSG_DATA(cmsg), &segsize, sizeof(segsize));
         cmsg = (struct cmsghdr *)((char *)cmsg + CMSG_SPACE(sizeof(segsize)));
+        using_gso = 1;
     }
 #endif
 
@@ -161,30 +163,23 @@ int h2o_quic_send_datagrams(h2o_quic_ctx_t *ctx, quicly_address_t *dest, quicly_
     }
     int ret;
 
-#ifdef UDP_SEGMENT
-    /* a user of libh2o might accidentally set use_gso even if the libh2o build does not support GSO.
-     * the ifdef guard above is to safeguard such a case */
-    if (ctx->use_gso) {
+    if (using_gso) {
         mess.msg_iov = datagrams;
-        mess.msg_iovlen = num_datagrams;
+        mess.msg_iovlen = (int)num_datagrams;
         while ((ret = (int)sendmsg(h2o_socket_get_fd(ctx->sock.sock), &mess, 0)) == -1 && errno == EINTR)
             ;
         if (ret == -1)
             goto SendmsgError;
-        goto GsoSendDone;
+    } else {
+        for (size_t i = 0; i < num_datagrams; ++i) {
+            mess.msg_iov = datagrams + i;
+            mess.msg_iovlen = 1;
+            while ((ret = (int)sendmsg(h2o_socket_get_fd(ctx->sock.sock), &mess, 0)) == -1 && errno == EINTR)
+                ;
+            if (ret == -1)
+                goto SendmsgError;
+        }
     }
-#endif
-    for (size_t i = 0; i < num_datagrams; ++i) {
-        mess.msg_iov = datagrams + i;
-        mess.msg_iovlen = 1;
-        while ((ret = (int)sendmsg(h2o_socket_get_fd(ctx->sock.sock), &mess, 0)) == -1 && errno == EINTR)
-            ;
-        if (ret == -1)
-            goto SendmsgError;
-    }
-#ifdef UDP_SEGMENT
-GsoSendDone:
-#endif
 
     h2o_error_reporter_record_success(&track_sendmsg);
 
