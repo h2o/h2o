@@ -26,6 +26,23 @@
 #include "h2o/string_.h"
 #include "picotls/openssl.h"
 
+#if H2O_DEFINE_RAND
+int h2o_rand(void)
+{
+    static __thread struct {
+        unsigned seed;
+        unsigned initialized;
+    } state;
+
+    if (!state.initialized) {
+        ptls_openssl_random_bytes(&state.seed, sizeof(state.seed));
+        state.initialized = 1;
+    }
+
+    return rand_r(&state.seed);
+}
+#endif
+
 static void format_uuid_rfc4122(char *dst, uint8_t *octets, uint8_t version)
 {
     // Variant:
