@@ -442,15 +442,15 @@ struct st_h2o_globalconf_t {
         /**
          * a boolean indicating if the delayed ack extension should be used (default true)
          */
-        uint8_t use_delayed_ack;
+        uint8_t use_delayed_ack : 1;
+        /**
+         * a boolean indicating if UDP GSO should be used
+         */
+        uint8_t use_gso : 1;
         /**
          * the callbacks
          */
         h2o_protocol_callbacks_t callbacks;
-        /**
-         * a boolean indicating if UDP GSO should be used
-         */
-        uint8_t use_gso;
     } http3;
 
     struct {
