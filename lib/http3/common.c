@@ -161,6 +161,9 @@ int h2o_quic_send_datagrams(h2o_quic_ctx_t *ctx, quicly_address_t *dest, quicly_
     }
     int ret;
 
+#ifdef UDP_SEGMENT
+    /* a user of libh2o might accidentally set use_gso even if the libh2o build does not support GSO.
+     * the ifdef guard above is to safeguard such a case */
     if (ctx->use_gso) {
         mess.msg_iov = datagrams;
         mess.msg_iovlen = num_datagrams;
@@ -168,16 +171,20 @@ int h2o_quic_send_datagrams(h2o_quic_ctx_t *ctx, quicly_address_t *dest, quicly_
             ;
         if (ret == -1)
             goto SendmsgError;
-    } else {
-        for (size_t i = 0; i < num_datagrams; ++i) {
-            mess.msg_iov = datagrams + i;
-            mess.msg_iovlen = 1;
-            while ((ret = (int)sendmsg(h2o_socket_get_fd(ctx->sock.sock), &mess, 0)) == -1 && errno == EINTR)
-                ;
-            if (ret == -1)
-                goto SendmsgError;
-        }
+        goto GsoSendDone;
     }
+#endif
+    for (size_t i = 0; i < num_datagrams; ++i) {
+        mess.msg_iov = datagrams + i;
+        mess.msg_iovlen = 1;
+        while ((ret = (int)sendmsg(h2o_socket_get_fd(ctx->sock.sock), &mess, 0)) == -1 && errno == EINTR)
+            ;
+        if (ret == -1)
+            goto SendmsgError;
+    }
+#ifdef UDP_SEGMENT
+GsoSendDone:
+#endif
 
     h2o_error_reporter_record_success(&track_sendmsg);
 
