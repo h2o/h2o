@@ -628,7 +628,7 @@ static int on_config_http3_udp_gso(h2o_configurator_command_t *cmd, h2o_configur
         return -1;
     }
 #endif
-    ctx->globalconf->http3.use_udp_gso = (uint8_t)on;
+    ctx->globalconf->http3.use_gso = (uint8_t)on;
     return 0;
 }
 
@@ -1084,8 +1084,7 @@ void h2o_configurator__init_core(h2o_globalconf_t *conf)
         h2o_configurator_define_command(&c->super, "http3-delayed-ack",
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_http3_delayed_ack);
-        h2o_configurator_define_command(&c->super, "http3-udp-gso",
-                                        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+        h2o_configurator_define_command(&c->super, "http3-gso", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_http3_udp_gso);
         h2o_configurator_define_command(&c->super, "file.mime.settypes",
                                         (H2O_CONFIGURATOR_FLAG_ALL_LEVELS & ~H2O_CONFIGURATOR_FLAG_EXTENSION) |

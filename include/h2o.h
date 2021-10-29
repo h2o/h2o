@@ -450,7 +450,7 @@ struct st_h2o_globalconf_t {
         /**
          * a boolean indicating if UDP GSO should be used
          */
-        uint8_t use_udp_gso;
+        uint8_t use_gso;
     } http3;
 
     struct {

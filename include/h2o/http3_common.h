@@ -202,7 +202,7 @@ struct st_h2o_quic_ctx_t {
     /**
      * boolean to indicate whether to use UDP GSO
      */
-    uint8_t use_udp_gso;
+    uint8_t use_gso;
     /**
      * preprocessor that rewrites a forwarded datagram (optional)
      */
@@ -332,8 +332,7 @@ int h2o_http3_read_frame(h2o_http3_read_frame_t *frame, int is_client, uint64_t 
  * initializes the context
  */
 void h2o_quic_init_context(h2o_quic_ctx_t *ctx, h2o_loop_t *loop, h2o_socket_t *sock, quicly_context_t *quic,
-                           h2o_quic_accept_cb acceptor, h2o_quic_notify_connection_update_cb notify_conn_update,
-                           uint8_t use_udp_gso);
+                           h2o_quic_accept_cb acceptor, h2o_quic_notify_connection_update_cb notify_conn_update, uint8_t use_gso);
 /**
  *
  */
