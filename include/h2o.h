@@ -444,7 +444,7 @@ struct st_h2o_globalconf_t {
          */
         uint8_t use_delayed_ack : 1;
         /**
-         * a boolean indicating if UDP GSO should be used
+         * a boolean indicating if UDP GSO should be used when possible
          */
         uint8_t use_gso : 1;
         /**
