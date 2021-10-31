@@ -510,27 +510,21 @@ def prepare_context(d_files: list):
 
 def build_bpf_header_generator():
   generator = r"""
-#define GEN_FIELD_INFO(type, field, name) gen_field_info(#type, #field, &((type *)NULL)->field, name)
+#define GEN_FIELD_INFO(type, field, name) gen_field_info(#type, #field, offsetof(type, field), name, static_cast<decltype(type::field)*>(nullptr))
 
 #define DEFINE_RESOLVE_FUNC(field_type) \
-std::string gen_field_info(const char *struct_type, const char *field_name, const field_type *field_ptr, const char *name) \
+static std::string gen_field_info(const char *struct_type, const char *field_name, size_t field_offset, const char *name, const field_type *_overload_resolver) \
 { \
-    return do_resolve(struct_type, field_name, #field_type, field_ptr, name); \
+    return do_resolve(struct_type, field_name, #field_type, field_offset, name); \
 }
 
-template <typename FieldType>
-static std::string do_resolve(const char *struct_type, const char *field_name, const char *field_type, const FieldType *field_ptr, const char *name) {
-    char *buff = NULL;
-    size_t buff_len = 0;
-    FILE *mem = open_memstream(&buff, &buff_len);
-    fprintf(mem, "/* %s (%s#%s) */\n", name, struct_type, field_name);
-    fprintf(mem, "#define offsetof_%s %zd\n", name, (const char *)field_ptr - (const char *)NULL);
-    fprintf(mem, "#define typeof_%s %s\n", name, field_type);
-    fprintf(mem, "#define get_%s(st) *((const %s *) ((const char*)st + offsetof_%s))\n", name, field_type, name);
-    fprintf(mem, "\n");
-    fflush(mem);
-    std::string s(buff, buff_len);
-    fclose(mem);
+static std::string do_resolve(const char *struct_type, const char *field_name, const char *field_type, size_t field_offset, const char *name) {
+    std::string s; // BPF C source code
+    s += std::string("/* ") + name + " (" + struct_type + "#" + field_name + ") */\n";
+    s += std::string("#define offsetof_") + name + " " + std::to_string(field_offset) + "\n";
+    s += std::string("#define typeof_") + name + " " + field_type + "\n";
+    s += std::string("#define get_") + name + "(st) *((const " + field_type + " *)((const char*)(st) + offsetof_" + name + "))\n";
+    s += "\n";
     return s;
 }
 
@@ -554,10 +548,10 @@ static std::string gen_bpf_header() {
 
     for st_field_access, st_field_name_alias in st_fields:
       name = "%s__%s" % (st_name, st_field_name_alias or st_field_access)
-      generator += """  bpf += GEN_FIELD_INFO(struct %s, %s, "%s");\n""" % (st_name, st_field_access, name)
+      generator += """  bpf += GEN_FIELD_INFO(%s, %s, "%s");\n""" % (st_name, st_field_access, name)
 
   generator += r"""
-  bpf += GEN_FIELD_INFO(struct sockaddr, sa_family, "sockaddr__sa_family");
+  bpf += GEN_FIELD_INFO(sockaddr, sa_family, "sockaddr__sa_family");
   bpf += "#define AF_INET  " + std::to_string(AF_INET) + "\n";
   bpf += "#define AF_INET6 " + std::to_string(AF_INET6) + "\n";
 """
@@ -683,16 +677,20 @@ void h2o_raw_tracer::initialize() {
 
   handle_event_func = r"""
 void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
-  const h2olog_event_t *event = static_cast<const h2olog_event_t*>(data);
+  // The perf event data is not aligned, so we use a local copy to avoid UBSan errors.
+  // cf. https://github.com/iovisor/bpftrace/pull/1520
+  h2olog_event_t event;
+  assert(sizeof(event) <= static_cast<size_t>(data_len));
+  memcpy(&event, data, sizeof(event));
 
-  if (event->id == H2OLOG_EVENT_ID_SCHED_SCHED_PROCESS_EXIT) {
+  if (event.id == H2OLOG_EVENT_ID_SCHED_SCHED_PROCESS_EXIT) {
     exit(0);
   }
 
   // output JSON
   fprintf(out_, "{");
 
-  switch (event->id) {
+  switch (event.id) {
 """
 
   for probe_name in probe_metadata:
@@ -708,7 +706,7 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
     handle_event_func += "  case %s: { // %s\n" % (
         metadata['id'], fully_specified_probe_name)
     handle_event_func += '    json_write_pair_n(out_, STR_LIT("type"), STR_LIT("%s"));\n' % probe_name.replace("_", "-")
-    handle_event_func += '    json_write_pair_c(out_, STR_LIT("tid"), event->tid);\n'
+    handle_event_func += '    json_write_pair_c(out_, STR_LIT("tid"), event.tid);\n'
     handle_event_func += '    json_write_pair_c(out_, STR_LIT("seq"), seq_);\n'
 
     for field_name, field_type in flat_args_map.items():
@@ -716,7 +714,7 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
       json_field_name = rename_map.get(field_name, field_name).replace("_", "-")
       event_t_name = "%s.%s" % (probe_name, field_name)
       if not is_bin_type(field_type) and not is_str_type(field_type):
-        stmts += '    json_write_pair_c(out_, STR_LIT("%s"), event->%s);\n' % (
+        stmts += '    json_write_pair_c(out_, STR_LIT("%s"), event.%s);\n' % (
             json_field_name, event_t_name)
       else:  # bin or str type with "*_len" field
         len_names = set([field_name + "_len", "num_" + field_name])
@@ -728,13 +726,13 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
 
         if len_event_t_name:
           # A string might be truncated in STRLEN
-          stmts += '    json_write_pair_c(out_, STR_LIT("%s"), event->%s, (event->%s < STR_LEN ? event->%s : STR_LEN));\n' % (
+          stmts += '    json_write_pair_c(out_, STR_LIT("%s"), event.%s, (event.%s < STR_LEN ? event.%s : STR_LEN));\n' % (
               json_field_name, event_t_name, len_event_t_name, len_event_t_name)
         elif is_bin_type(field_type):
           stmts += '    # warning "missing `%s_len` param in the probe %s, ignored."\n' % (
               field_name, fully_specified_probe_name)
         else:  # str type
-          stmts += '    json_write_pair_c(out_, STR_LIT("%s"), event->%s, strlen(event->%s));\n' % (
+          stmts += '    json_write_pair_c(out_, STR_LIT("%s"), event.%s, strlen(event.%s));\n' % (
               json_field_name, event_t_name, event_t_name)
       if field_name in appdata_field_set:
         handle_event_func += "    if (include_appdata_) {\n"

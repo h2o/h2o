@@ -339,6 +339,9 @@ void h2o_http2_conn_unregister_stream(h2o_http2_conn_t *conn, h2o_http2_stream_t
 
 void close_connection_now(h2o_http2_conn_t *conn)
 {
+    /* mark as is_closing here to prevent sending any more frames */
+    conn->state = H2O_HTTP2_CONN_STATE_IS_CLOSING;
+
     h2o_http2_stream_t *stream;
 
     assert(!h2o_timer_is_linked(&conn->_write.timeout_entry));
@@ -738,7 +741,12 @@ static void proceed_request(h2o_req_t *req, size_t written, h2o_send_state_t sen
     if (send_state == H2O_SEND_STATE_ERROR) {
         finish_body_streaming(stream);
         if (conn->state < H2O_HTTP2_CONN_STATE_IS_CLOSING) {
+            /* Send error and close. State disposal is delayed so as to avoid freeing `req` within this function, which might
+             * trigger the destruction of the generator being the caller. */
             stream_send_error(conn, stream->stream_id, H2O_HTTP2_ERROR_STREAM_CLOSED);
+            h2o_http2_scheduler_deactivate(&stream->_scheduler);
+            if (!h2o_linklist_is_linked(&stream->_link))
+                h2o_linklist_insert(&conn->_write.streams_to_proceed, &stream->_link);
             h2o_http2_stream_reset(conn, stream);
         }
         return;
@@ -991,6 +999,9 @@ static int handle_settings_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *fram
             *err_desc = "invalid SETTINGS frame (+ACK)";
             return H2O_HTTP2_ERROR_FRAME_SIZE;
         }
+        if (conn->timestamps.settings_acked_at.tv_sec == 0 && conn->timestamps.settings_sent_at.tv_sec != 0) {
+            conn->timestamps.settings_acked_at = h2o_gettimeofday(conn->super.ctx->loop);
+        }
     } else {
         uint32_t prev_initial_window_size = conn->peer_settings.initial_window_size;
         /* FIXME handle SETTINGS_HEADER_TABLE_SIZE */
@@ -1168,6 +1179,9 @@ static ssize_t expect_preface(h2o_http2_conn_t *conn, const uint8_t *src, size_t
         if (conn->http2_origin_frame) {
             /* write origin frame */
             h2o_http2_encode_origin_frame(&conn->_write.buf, *conn->http2_origin_frame);
+        }
+        if (conn->timestamps.settings_sent_at.tv_sec == 0) {
+            conn->timestamps.settings_sent_at = h2o_gettimeofday(conn->super.ctx->loop);
         }
         h2o_http2_conn_request_write(conn);
     }
@@ -1426,7 +1440,7 @@ void do_emit_writereq(h2o_http2_conn_t *conn)
         conn->state = H2O_HTTP2_CONN_STATE_IS_CLOSING;
     /* fall-thru */
     case H2O_HTTP2_CONN_STATE_IS_CLOSING:
-        close_connection_now(conn);
+        close_connection(conn);
         break;
     }
 }
@@ -1464,6 +1478,16 @@ static int skip_tracing(h2o_conn_t *_conn)
     return h2o_socket_skip_tracing(conn->sock);
 }
 
+static int64_t get_rtt(h2o_conn_t *_conn)
+{
+    struct st_h2o_http2_conn_t *conn = (void *)_conn;
+    if (conn->timestamps.settings_sent_at.tv_sec != 0 && conn->timestamps.settings_acked_at.tv_sec != 0) {
+        return h2o_timeval_subtract(&conn->timestamps.settings_sent_at, &conn->timestamps.settings_acked_at);
+    } else {
+        return -1;
+    }
+}
+
 #define DEFINE_LOGGER(name)                                                                                                        \
     static h2o_iovec_t log_##name(h2o_req_t *req)                                                                                  \
     {                                                                                                                              \
@@ -1471,6 +1495,7 @@ static int skip_tracing(h2o_conn_t *_conn)
         return h2o_socket_log_##name(conn->sock, &req->pool);                                                                      \
     }
 DEFINE_LOGGER(tcp_congestion_controller)
+DEFINE_LOGGER(tcp_delivery_rate)
 DEFINE_LOGGER(ssl_protocol_version)
 DEFINE_LOGGER(ssl_session_reused)
 DEFINE_LOGGER(ssl_cipher)
@@ -1566,10 +1591,12 @@ static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_hostconf_t **hosts,
         .skip_tracing = skip_tracing,
         .push_path = push_path,
         .get_debug_state = h2o_http2_get_debug_state,
+        .get_rtt = get_rtt,
         .log_ = {{
-            .congestion_control =
+            .transport =
                 {
-                    .name_ = log_tcp_congestion_controller,
+                    .cc_name = log_tcp_congestion_controller,
+                    .delivery_rate = log_tcp_delivery_rate,
                 },
             .ssl =
                 {

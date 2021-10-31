@@ -442,7 +442,11 @@ struct st_h2o_globalconf_t {
         /**
          * a boolean indicating if the delayed ack extension should be used (default true)
          */
-        uint8_t use_delayed_ack;
+        uint8_t use_delayed_ack : 1;
+        /**
+         * a boolean indicating if UDP GSO should be used when possible
+         */
+        uint8_t use_gso : 1;
         /**
          * the callbacks
          */
@@ -989,17 +993,25 @@ typedef struct st_h2o_conn_callbacks_t {
      */
     uint32_t (*num_reqs_inflight)(h2o_conn_t *conn);
     /**
-     * optional callbacks that returns the tracer regsitry
+     * optional callbacks that return the tracer registry
      */
     quicly_tracer_t *(*get_tracer)(h2o_conn_t *conn);
+    /**
+     * An optional callback reporting an RTT estimate between the HTTP server and the HTTP client, measured in microseconds. At the
+     * moment, this callback is available only for HTTP/2. For HTTP/2, time difference between when the SETTINGS frame was sent and
+     * when a SETTINGS-ack was received is used as the estimate. The callback will return a negative value if the information is not
+     * yet available.
+     */
+    int64_t (*get_rtt)(h2o_conn_t *conn);
     /**
      * logging callbacks (all of them are optional)
      */
     union {
         struct {
             struct {
-                h2o_iovec_t (*name_)(h2o_req_t *req);
-            } congestion_control;
+                h2o_iovec_t (*cc_name)(h2o_req_t *req);
+                h2o_iovec_t (*delivery_rate)(h2o_req_t *req);
+            } transport;
             struct {
                 h2o_iovec_t (*protocol_version)(h2o_req_t *req);
                 h2o_iovec_t (*session_reused)(h2o_req_t *req);

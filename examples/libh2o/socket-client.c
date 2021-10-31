@@ -20,6 +20,7 @@
  * IN THE SOFTWARE.
  */
 #include <errno.h>
+#include <getopt.h>
 #include <netdb.h>
 #include <netinet/in.h>
 #include <stdio.h>
@@ -44,6 +45,7 @@ static void on_read(h2o_socket_t *sock, const char *err)
     }
 
     fwrite(sock->input->bytes, 1, sock->input->size, stdout);
+    h2o_buffer_consume(&sock->input, sock->input->size);
 }
 
 static void on_write(h2o_socket_t *sock, const char *err)
@@ -89,35 +91,63 @@ static void on_connect(h2o_socket_t *sock, const char *err)
     }
 }
 
-static void usage(const char *cmd)
-{
-    fprintf(stderr, "Usage: %s [--tls] <host> <port>\n", cmd);
-    exit(1);
-}
-
 int main(int argc, char **argv)
 {
     struct addrinfo hints, *res = NULL;
-    int err, ret = 1;
+    int optch, err, skip_verify = 0;
     h2o_socket_t *sock;
     h2o_iovec_t send_data = {H2O_STRLIT("GET / HTTP/1.0\r\n\r\n")};
 
-    const char *cmd = (--argc, *argv++);
-    if (argc < 2)
-        usage(cmd);
-    if (strcmp(*argv, "-t") == 0 || strcmp(*argv, "--tls") == 0) {
-        --argc, ++argv;
-        SSL_load_error_strings();
-        SSL_library_init();
-        OpenSSL_add_all_algorithms();
-        ssl_ctx = SSL_CTX_new(SSLv23_client_method());
-        SSL_CTX_load_verify_locations(ssl_ctx, H2O_TO_STR(H2O_ROOT) "/share/h2o/ca-bundle.crt", NULL);
-        SSL_CTX_set_verify(ssl_ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, NULL);
+    static struct option longopts[] = {{"tls", no_argument, NULL, 't'},
+                                       {"insecure", no_argument, NULL, 'k'},
+                                       {"stdin", no_argument, NULL, 's'},
+                                       {"help", no_argument, NULL, 'h'},
+                                       {}};
+    while ((optch = getopt_long(argc, argv, "tksh", longopts, NULL)) != -1) {
+        switch (optch) {
+        case 't':
+            SSL_load_error_strings();
+            SSL_library_init();
+            OpenSSL_add_all_algorithms();
+            ssl_ctx = SSL_CTX_new(SSLv23_client_method());
+            SSL_CTX_load_verify_locations(ssl_ctx, H2O_TO_STR(H2O_ROOT) "/share/h2o/ca-bundle.crt", NULL);
+            break;
+        case 'k':
+            skip_verify = 1;
+            break;
+        case 's': {
+            send_data = h2o_iovec_init(NULL, 0);
+            int ch;
+            while ((ch = fgetc(stdin)) != EOF) {
+                send_data.base = realloc(send_data.base, send_data.len + 1);
+                send_data.base[send_data.len++] = ch;
+            }
+        } break;
+        case 'h':
+            printf("Usage: %s [options] host port\n"
+                   "Options:\n"
+                   "  -t, --tls       use TLS\n"
+                   "  -k, --insecure  ignore TLS certificate errors\n"
+                   "  -s, --stdin     read data to be sent from STDIN\n"
+                   "  -h, --help      print this help\n"
+                   "\n",
+                   argv[0]);
+            exit(0);
+        default:
+            exit(1);
+        }
     }
-    if (argc != 2)
-        usage(cmd);
-    host = (--argc, *argv++);
-    const char *port = (--argc, *argv++);
+    argc -= optind;
+    argv += optind;
+
+    if (argc < 2) {
+        fprintf(stderr, "host port not provided\n");
+        exit(1);
+    }
+    host = argv[0];
+
+    if (ssl_ctx != NULL && !skip_verify)
+        SSL_CTX_set_verify(ssl_ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, NULL);
 
 #if H2O_USE_LIBUV
     loop = uv_loop_new();
@@ -130,14 +160,14 @@ int main(int argc, char **argv)
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_protocol = IPPROTO_TCP;
     hints.ai_flags = AI_ADDRCONFIG;
-    if ((err = getaddrinfo(host, port, &hints, &res)) != 0) {
-        fprintf(stderr, "failed to resolve %s:%s:%s\n", host, port, gai_strerror(err));
-        goto Exit;
+    if ((err = getaddrinfo(host, argv[1], &hints, &res)) != 0) {
+        fprintf(stderr, "failed to resolve %s:%s:%s\n", host, argv[1], gai_strerror(err));
+        exit(1);
     }
 
     if ((sock = h2o_socket_connect(loop, res->ai_addr, res->ai_addrlen, on_connect)) == NULL) {
         fprintf(stderr, "failed to create socket:%s\n", strerror(errno));
-        goto Exit;
+        exit(1);
     }
     sock->data = &send_data;
 
@@ -149,16 +179,5 @@ int main(int argc, char **argv)
 #endif
     }
 
-    ret = 0;
-
-Exit:
-    if (loop != NULL) {
-#if H2O_USE_LIBUV
-        uv_loop_delete(loop);
-#else
-// FIXME
-// h2o_evloop_destroy(loop);
-#endif
-    }
-    return ret;
+    return 0;
 }

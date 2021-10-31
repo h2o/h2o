@@ -567,7 +567,8 @@ int main(int argc, char **argv)
             exit(EXIT_FAILURE);
         }
         h2o_socket_t *sock = h2o_evloop_socket_create(ctx.loop, fd, H2O_SOCKET_FLAG_DONT_READ);
-        h2o_quic_init_context(&h3ctx.h3, ctx.loop, sock, &h3ctx.quic, NULL, h2o_httpclient_http3_notify_connection_update);
+        h2o_quic_init_context(&h3ctx.h3, ctx.loop, sock, &h3ctx.quic, NULL, h2o_httpclient_http3_notify_connection_update,
+                              1 /* use_gso */);
     }
 #endif
 
@@ -652,7 +653,10 @@ int main(int argc, char **argv)
             ssl_verify_none = 1;
             break;
         case '2':
-            if (sscanf(optarg, "%" SCNd8, &ctx.protocol_selector.ratio.http2) != 1 ||
+            if (!strcasecmp(optarg, "f")) {
+                ctx.protocol_selector.ratio.http2 = 100;
+                ctx.force_cleartext_http2 = 1;
+            } else if (sscanf(optarg, "%" SCNd8, &ctx.protocol_selector.ratio.http2) != 1 ||
                 !(0 <= ctx.protocol_selector.ratio.http2 && ctx.protocol_selector.ratio.http2 <= 100)) {
                 fprintf(stderr, "failed to parse HTTP/2 ratio (-2)\n");
                 exit(EXIT_FAILURE);

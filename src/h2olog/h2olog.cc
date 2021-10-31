@@ -394,7 +394,7 @@ int main(int argc, char **argv)
         cflags.push_back(generate_header_filter_cflag(response_header_filters));
     }
 
-    ebpf::BPF *bpf = new ebpf::BPF();
+    ebpf::BPF bpf;
     std::vector<ebpf::USDT> probes;
 
     bool selective_tracing = false;
@@ -495,23 +495,23 @@ int main(int argc, char **argv)
         fprintf(stderr, "<BPF>\n%s\n</BPF>\n", tracer->bpf_text().c_str());
     }
 
-    ebpf::StatusTuple ret = bpf->init(tracer->bpf_text(), cflags, probes);
+    ebpf::StatusTuple ret = bpf.init(tracer->bpf_text(), cflags, probes);
     if (ret.code() != 0) {
         fprintf(stderr, "Error: init: %s\n", ret.msg().c_str());
         return EXIT_FAILURE;
     }
 
-    bpf->attach_tracepoint("sched:sched_process_exit", "trace_sched_process_exit");
+    bpf.attach_tracepoint("sched:sched_process_exit", "trace_sched_process_exit");
 
     for (auto &probe : probes) {
-        ret = bpf->attach_usdt(probe);
+        ret = bpf.attach_usdt(probe);
         if (ret.code() != 0) {
             fprintf(stderr, "Error: attach_usdt: %s\n", ret.msg().c_str());
             return EXIT_FAILURE;
         }
     }
 
-    ret = bpf->open_perf_buffer("events", event_cb, lost_cb, tracer.get(), PERF_BUFFER_PAGE_COUNT);
+    ret = bpf.open_perf_buffer("events", event_cb, lost_cb, tracer.get(), PERF_BUFFER_PAGE_COUNT);
     if (ret.code() != 0) {
         fprintf(stderr, "Error: open_perf_buffer: %s\n", ret.msg().c_str());
         return EXIT_FAILURE;
@@ -524,7 +524,7 @@ int main(int argc, char **argv)
         drop_root_privilege();
     }
 
-    ebpf::BPFPerfBuffer *perf_buffer = bpf->get_perf_buffer("events");
+    ebpf::BPFPerfBuffer *perf_buffer = bpf.get_perf_buffer("events");
     if (perf_buffer) {
         time_t t0 = time(NULL);
 

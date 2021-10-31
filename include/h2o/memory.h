@@ -107,6 +107,7 @@ struct st_h2o_mem_pool_shared_entry_t {
 /**
  * the memory pool
  */
+union un_h2o_mem_pool_chunk_t;
 typedef struct st_h2o_mem_pool_t {
     union un_h2o_mem_pool_chunk_t *chunks;
     size_t chunk_offset;

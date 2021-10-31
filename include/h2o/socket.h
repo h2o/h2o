@@ -277,6 +277,7 @@ ptls_t *h2o_socket_get_ptls(h2o_socket_t *sock);
  *
  */
 h2o_iovec_t h2o_socket_log_tcp_congestion_controller(h2o_socket_t *sock, h2o_mem_pool_t *pool);
+h2o_iovec_t h2o_socket_log_tcp_delivery_rate(h2o_socket_t *sock, h2o_mem_pool_t *pool);
 const char *h2o_socket_get_ssl_protocol_version(h2o_socket_t *sock);
 int h2o_socket_get_ssl_session_reused(h2o_socket_t *sock);
 const char *h2o_socket_get_ssl_cipher(h2o_socket_t *sock);
@@ -398,9 +399,6 @@ int h2o_socket_ebpf_init_key_raw(h2o_ebpf_map_key_t *key, int sock_type, struct 
  * callback for initializing the ebpf lookup key from `h2o_socket_t`
  */
 int h2o_socket_ebpf_init_key(h2o_ebpf_map_key_t *key, void *sock);
-
-void h2o_socket__write_pending(h2o_socket_t *sock);
-void h2o_socket__write_on_complete(h2o_socket_t *sock, int status);
 
 /* inline defs */
 
