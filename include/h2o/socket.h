@@ -38,7 +38,7 @@ extern "C" {
 #include "h2o/string_.h"
 
 #ifndef H2O_USE_LIBUV
-#if H2O_USE_SELECT || H2O_USE_EPOLL || H2O_USE_KQUEUE
+#if H2O_USE_POLL || H2O_USE_EPOLL || H2O_USE_KQUEUE
 #define H2O_USE_LIBUV 0
 #else
 #define H2O_USE_LIBUV 1
@@ -169,7 +169,7 @@ typedef void (*h2o_socket_ssl_resumption_new_cb)(h2o_socket_t *sock, h2o_iovec_t
 typedef void (*h2o_socket_ssl_resumption_remove_cb)(h2o_iovec_t session_id);
 
 extern h2o_buffer_mmap_settings_t h2o_socket_buffer_mmap_settings;
-extern __thread h2o_buffer_prototype_t h2o_socket_buffer_prototype;
+extern h2o_buffer_prototype_t h2o_socket_buffer_prototype;
 
 extern const char h2o_socket_error_out_of_memory[];
 extern const char h2o_socket_error_io[];
@@ -277,6 +277,7 @@ ptls_t *h2o_socket_get_ptls(h2o_socket_t *sock);
  *
  */
 h2o_iovec_t h2o_socket_log_tcp_congestion_controller(h2o_socket_t *sock, h2o_mem_pool_t *pool);
+h2o_iovec_t h2o_socket_log_tcp_delivery_rate(h2o_socket_t *sock, h2o_mem_pool_t *pool);
 const char *h2o_socket_get_ssl_protocol_version(h2o_socket_t *sock);
 int h2o_socket_get_ssl_session_reused(h2o_socket_t *sock);
 const char *h2o_socket_get_ssl_cipher(h2o_socket_t *sock);
@@ -398,9 +399,6 @@ int h2o_socket_ebpf_init_key_raw(h2o_ebpf_map_key_t *key, int sock_type, struct 
  * callback for initializing the ebpf lookup key from `h2o_socket_t`
  */
 int h2o_socket_ebpf_init_key(h2o_ebpf_map_key_t *key, void *sock);
-
-void h2o_socket__write_pending(h2o_socket_t *sock);
-void h2o_socket__write_on_complete(h2o_socket_t *sock, int status);
 
 /* inline defs */
 

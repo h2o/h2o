@@ -114,6 +114,8 @@ void h2o_hpack_flatten_request(h2o_buffer_t **buf, h2o_hpack_header_table_t *hea
 void h2o_hpack_flatten_trailers(h2o_buffer_t **buf, h2o_hpack_header_table_t *header_table, uint32_t stream_id,
                                 size_t max_frame_size, const h2o_header_t *headers, size_t num_headers);
 
+extern h2o_buffer_prototype_t h2o_http2_wbuf_buffer_prototype;
+
 /* frames */
 
 #define H2O_HTTP2_FRAME_HEADER_SIZE 9

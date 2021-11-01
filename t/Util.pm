@@ -7,7 +7,9 @@ use File::Temp qw(tempfile tempdir);
 use IO::Socket::INET;
 use IO::Socket::SSL;
 use IO::Poll qw(POLLIN POLLOUT POLLHUP POLLERR);
+use List::Util qw(shuffle);
 use Net::EmptyPort qw(check_port empty_port);
+use Net::DNS::Nameserver;
 use POSIX ":sys_wait_h";
 use Path::Tiny;
 use Protocol::HTTP2::Connection;
@@ -48,6 +50,7 @@ our @EXPORT = qw(
     get_tracer
     check_dtrace_availability
     run_picotls_client
+    spawn_dns_server
 );
 
 use constant ASSETS_DIR => 't/assets';
@@ -729,6 +732,44 @@ EOT
         or die "failed to open file:$tempdir/resp.txt:$!";
     my $resp = do { local $/; <$fh> };
     return $resp;
+}
+
+sub spawn_dns_server {
+    my ($dns_port, $zone_rrs, $delays) = @_;
+
+    my $server = spawn_forked(sub {
+            my $ns = Net::DNS::Nameserver->new(
+                LocalPort    => $dns_port,
+                ReplyHandler => sub {
+                    my ($qname, $qclass, $qtype, $peerhost, $query, $conn) = @_;
+                    my ($rcode, @ans, @auth, @add);
+
+                    foreach (@$zone_rrs) {
+                        my $rr = Net::DNS::RR->new($_);
+                        if ($rr->owner eq $qname && $rr->class eq $qclass && $rr->type eq $qtype) {
+                            push @ans, $rr;
+                        }
+                    }
+
+                    if (!@ans) {
+                        $rcode = "NXDOMAIN";
+                    } else {
+                        $rcode = "NOERROR";
+                    }
+                    # mark the answer as authoritative (by setting the 'aa' flag)
+                    my $headermask = {aa => 1};
+                    my $optionmask = {};
+                    if ($delays && $delays->{$qtype} > 0) {
+                        sleep($delays->{$qtype});
+                    }
+                    @ans = shuffle(@ans);
+                    return ($rcode, \@ans, \@auth, \@add, $headermask, $optionmask);
+                },
+                Verbose      => 0
+            ) || die "couldn't create nameserver object\n";
+            $ns->main_loop;
+        });
+    return $server;
 }
 
 1;

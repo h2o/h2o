@@ -57,6 +57,7 @@ SET(QUICLY_LIBRARY_FILES
     lib/loss.c
     lib/quicly.c
     lib/ranges.c
+    lib/rate.c
     lib/recvstate.c
     lib/remote_cid.c
     lib/retire_cid.c
@@ -73,6 +74,7 @@ SET(UNITTEST_SOURCE_FILES
     t/lossy.c
     t/maxsender.c
     t/ranges.c
+    t/rate.c
     t/remote_cid.c
     t/retire_cid.c
     t/sentmap.c

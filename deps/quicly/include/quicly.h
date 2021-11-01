@@ -39,6 +39,7 @@ extern "C" {
 #include "quicly/linklist.h"
 #include "quicly/loss.h"
 #include "quicly/cc.h"
+#include "quicly/rate.h"
 #include "quicly/recvstate.h"
 #include "quicly/sendstate.h"
 #include "quicly/maxsender.h"
@@ -435,6 +436,22 @@ struct st_quicly_conn_streamgroup_state_t {
          * Total bytes sent, at UDP datagram-level.                                                                                \
          */                                                                                                                        \
         uint64_t sent;                                                                                                             \
+        /**                                                                                                                        \
+         * Total bytes sent but lost, at UDP datagram-level.                                                                       \
+         */                                                                                                                        \
+        uint64_t lost;                                                                                                             \
+        /**                                                                                                                        \
+         * Total number of bytes for which acknowledgements have been received.                                                    \
+         */                                                                                                                        \
+        uint64_t ack_received;                                                                                                     \
+        /**                                                                                                                        \
+         * Total amount of stream-level payload being sent                                                                         \
+         */                                                                                                                        \
+        uint64_t stream_data_sent;                                                                                                 \
+        /**                                                                                                                        \
+         * Total amount of stream-level payload being resent                                                                       \
+         */                                                                                                                        \
+        uint64_t stream_data_resent;                                                                                               \
     } num_bytes;                                                                                                                   \
     /**                                                                                                                            \
      * Total number of each frame being sent / received.                                                                           \
@@ -442,8 +459,8 @@ struct st_quicly_conn_streamgroup_state_t {
     struct {                                                                                                                       \
         uint64_t padding, ping, ack, reset_stream, stop_sending, crypto, new_token, stream, max_data, max_stream_data,             \
             max_streams_bidi, max_streams_uni, data_blocked, stream_data_blocked, streams_blocked, new_connection_id,              \
-            retire_connection_id, path_challenge, path_response, transport_close, application_close, handshake_done,               \
-            datagram, ack_frequency;                                                                                               \
+            retire_connection_id, path_challenge, path_response, transport_close, application_close, handshake_done, datagram,     \
+            ack_frequency;                                                                                                         \
     } num_frames_sent, num_frames_received;                                                                                        \
     /**                                                                                                                            \
      * Total number of PTOs observed during the connection.                                                                        \
@@ -463,6 +480,10 @@ typedef struct st_quicly_stats_t {
      * Congestion control stats (experimental; TODO cherry-pick what can be exposed as part of a stable API).
      */
     quicly_cc_t cc;
+    /**
+     * Estimated delivery rate, in bytes/second.
+     */
+    quicly_rate_t delivery_rate;
 } quicly_stats_t;
 
 /**
@@ -863,6 +884,10 @@ static struct sockaddr *quicly_get_peername(quicly_conn_t *conn);
  *
  */
 int quicly_get_stats(quicly_conn_t *conn, quicly_stats_t *stats);
+/**
+ *
+ */
+int quicly_get_delivery_rate(quicly_conn_t *conn, quicly_rate_t *delivery_rate);
 /**
  *
  */

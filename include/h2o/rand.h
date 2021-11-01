@@ -25,12 +25,18 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-#if defined(__APPLE__) || defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__)
+/**
+ * srand is a no-op
+ */
 #define h2o_srand()
+/**
+ * Wrapper of rand (3) or arc4random (3). Guaranteed to be multi-thread safe.
+ */
+#if defined(__APPLE__) || defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__)
 #define h2o_rand() arc4random()
 #else
-#define h2o_srand() srand(time(NULL) ^ getpid())
-#define h2o_rand() rand()
+#define H2O_DEFINE_RAND 1
+int h2o_rand(void);
 #endif
 
 /*

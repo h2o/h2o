@@ -154,6 +154,10 @@ struct listener_config_t {
          */
         unsigned send_retry : 1;
         /**
+         * SO_SNDBUF, SO_RCVBUF values to be set (or 0 to use default)
+         */
+        unsigned sndbuf, rcvbuf;
+        /**
          * QPACK settings
          */
         h2o_http3_qpack_context_t qpack;
@@ -1538,8 +1542,9 @@ static int open_inet_listener(h2o_configurator_command_t *cmd, yoml_t *node, con
     return fd;
 }
 
-static void setsockopt_recvpktinfo(int fd, int family)
+static void set_quic_sockopts(int fd, int family, unsigned sndbuf, unsigned rcvbuf)
 {
+    /* set the option for obtaining destination address */
     switch (family) {
     case AF_INET: {
 #if defined(IP_PKTINFO) /* this is the de-facto API (that works on both linux, macOS) */
@@ -1562,6 +1567,12 @@ static void setsockopt_recvpktinfo(int fd, int family)
     default:
         break;
     }
+
+    /* set sndbuf & rcvbuf */
+    if (sndbuf != 0 && setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &sndbuf, sizeof(sndbuf)) != 0)
+        h2o_fatal("failed to set SO_SNDBUF:%s", strerror(errno));
+    if (rcvbuf != 0 && setsockopt(fd, SOL_SOCKET, SO_RCVBUF, &rcvbuf, sizeof(rcvbuf)) != 0)
+        h2o_fatal("failed to set SO_RCVBUF:%s", strerror(errno));
 }
 
 static struct addrinfo *resolve_address(h2o_configurator_command_t *cmd, yoml_t *node, int socktype, int protocol,
@@ -1790,7 +1801,6 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                         freeaddrinfo(res);
                         return -1;
                     }
-                    setsockopt_recvpktinfo(fd, ai->ai_family);
                     break;
                 default:
                     break;
@@ -1816,20 +1826,10 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                             return -1;
                         listener->quic.send_retry = (unsigned)on;
                     }
-                    if (sndbuf != NULL) {
-                        unsigned sz;
-                        if (h2o_configurator_scanf(cmd, *sndbuf, "%u", &sz) != 0)
-                            return -1;
-                        if (setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &sz, sizeof(sz)) != 0)
-                            h2o_configurator_errprintf(cmd, *quic_node, "setsockopt(SO_SNDBUF) failed:%s", strerror(errno));
-                    }
-                    if (rcvbuf != NULL) {
-                        unsigned sz;
-                        if (h2o_configurator_scanf(cmd, *rcvbuf, "%u", &sz) != 0)
-                            return -1;
-                        if (setsockopt(fd, SOL_SOCKET, SO_RCVBUF, &sz, sizeof(sz)) != 0)
-                            h2o_configurator_errprintf(cmd, *quic_node, "setsockopt(SO_RCVBUF) failed:%s", strerror(errno));
-                    }
+                    if (sndbuf != NULL && h2o_configurator_scanf(cmd, *sndbuf, "%u", &listener->quic.sndbuf) != 0)
+                        return -1;
+                    if (rcvbuf != NULL && h2o_configurator_scanf(cmd, *rcvbuf, "%u", &listener->quic.rcvbuf) != 0)
+                        return -1;
                     if (amp_limit != NULL) {
                         if (h2o_configurator_scanf(cmd, *amp_limit, "%" SCNu16,
                                                    &listener->quic.ctx->pre_validation_amplification_limit) != 0)
@@ -1851,6 +1851,8 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                             return -1;
                     }
                 }
+                if (conf.run_mode == RUN_MODE_WORKER)
+                    set_quic_sockopts(fd, ai->ai_family, listener->quic.sndbuf, listener->quic.rcvbuf);
                 listener_is_new = 1;
             }
             if (listener_setup_ssl(cmd, ctx, node, ssl_node, cc_node, initcwnd_node, listener, listener_is_new) != 0) {
@@ -2911,7 +2913,7 @@ static void *run_loop(void *_thread_index)
         cpu_set_t cpu_set;
         CPU_ZERO(&cpu_set);
         CPU_SET(conf.thread_map.entries[thread_index], &cpu_set);
-        if (pthread_setaffinity_np(pthread_self(), sizeof(cpu_set), &cpu_set) != 0) {
+        if (pthread_setaffinity_np(pthread_self(), sizeof(cpu_set), &cpu_set) != 0)
 #else
         int r;
         cpuset_t *cpu_set = cpuset_create();
@@ -2922,8 +2924,9 @@ static void *run_loop(void *_thread_index)
         cpuset_set(conf.thread_map.entries[thread_index], cpu_set);
         r = pthread_setaffinity_np(pthread_self(), cpuset_size(cpu_set), cpu_set);
         cpuset_destroy(cpu_set);
-        if (r != 0) {
+        if (r != 0)
 #endif
+        {
             static int once;
             if (__sync_fetch_and_add(&once, 1) == 0) {
                 fprintf(stderr, "[warning] failed to set bind to CPU:%d\n", conf.thread_map.entries[thread_index]);
@@ -2950,7 +2953,7 @@ static void *run_loop(void *_thread_index)
         /* setup quic context and the unix socket to receive forwarded packets */
         if (thread_index < conf.quic.num_threads && listener_config->quic.ctx != NULL) {
             h2o_quic_init_context(&listeners[i].http3.ctx.super, conf.threads[thread_index].ctx.loop, listeners[i].sock,
-                                  listener_config->quic.ctx, on_http3_accept, NULL);
+                                  listener_config->quic.ctx, on_http3_accept, NULL, conf.globalconf.http3.use_gso);
             h2o_quic_set_context_identifier(&listeners[i].http3.ctx.super, 0, (uint32_t)thread_index, conf.quic.node_id, 4,
                                             forward_quic_packets, rewrite_forwarded_quic_datagram);
             listeners[i].http3.ctx.accept_ctx = &listeners[i].accept_ctx;
@@ -2982,13 +2985,19 @@ static void *run_loop(void *_thread_index)
         fprintf(stderr, "h2o server (pid:%d) is ready to serve requests with %zu threads\n", (int)getpid(), conf.thread_map.size);
 
     /* the main loop */
+    uint64_t last_buffer_gc_at = 0;
     while (1) {
         if (conf.shutdown_requested)
             break;
         update_listener_state(listeners);
         /* run the loop once */
         h2o_evloop_run(conf.threads[thread_index].ctx.loop, INT32_MAX);
+        /* cleanup */
         h2o_filecache_clear(conf.threads[thread_index].ctx.filecache);
+        if (last_buffer_gc_at + 1000 < h2o_now(conf.threads[thread_index].ctx.loop)) {
+            last_buffer_gc_at = h2o_now(conf.threads[thread_index].ctx.loop);
+            h2o_buffer_clear_recycle(0);
+        }
     }
 
     if (thread_index == 0)
@@ -3325,13 +3334,13 @@ static void setup_configurators(void)
     h2o_config_register_status_handler(&conf.globalconf, &extra_status_handler);
 }
 
-static int dup_listener(int listener)
+static int dup_listener(struct listener_config_t *config)
 {
     int reuseport = 0;
 
 #if H2O_USE_REUSEPORT
     socklen_t reuseportlen = sizeof(reuseport);
-    if (getsockopt(listener, SOL_SOCKET, H2O_SO_REUSEPORT, &reuseport, &reuseportlen) != 0) {
+    if (getsockopt(config->fds.entries[0], SOL_SOCKET, H2O_SO_REUSEPORT, &reuseport, &reuseportlen) != 0) {
         perror("gestockopt(SO_REUSEPORT) failed");
         abort();
     }
@@ -3345,26 +3354,26 @@ static int dup_listener(int listener)
         socklen_t typelen = sizeof(type);
         struct sockaddr_storage ss;
         socklen_t sslen = sizeof(ss);
-        if (getsockopt(listener, SOL_SOCKET, SO_TYPE, &type, &typelen) != 0) {
+        if (getsockopt(config->fds.entries[0], SOL_SOCKET, SO_TYPE, &type, &typelen) != 0) {
             perror("failed to obtain the type of a listening socket");
             abort();
         }
         assert(type == SOCK_DGRAM || type == SOCK_STREAM);
-        if (getsockname(listener, (struct sockaddr *)&ss, &sslen) != 0) {
+        if (getsockname(config->fds.entries[0], (struct sockaddr *)&ss, &sslen) != 0) {
             perror("failed to obtain local address of a listening socket");
             abort();
         }
         if ((fd = open_listener(ss.ss_family, type, type == SOCK_STREAM ? IPPROTO_TCP : IPPROTO_UDP, (struct sockaddr *)&ss,
                                 sslen)) != -1) {
             if (type == SOCK_DGRAM)
-                setsockopt_recvpktinfo(fd, ss.ss_family);
+                set_quic_sockopts(fd, ss.ss_family, config->quic.sndbuf, config->quic.rcvbuf);
         } else {
             perror("failed to bind additional listener");
             abort();
         }
     }
 #endif
-    if (!reuseport && (fd = dup(listener)) == -1) {
+    if (!reuseport && (fd = dup(config->fds.entries[0])) == -1) {
         perror("failed to dup listening socket");
         abort();
     }
@@ -3378,7 +3387,7 @@ static void create_per_thread_listeners(void)
         struct listener_config_t *listener_config = conf.listeners[i];
         h2o_vector_reserve(NULL, &listener_config->fds, conf.thread_map.size);
         while (listener_config->fds.size < conf.thread_map.size) {
-            int fd = dup_listener(listener_config->fds.entries[0]);
+            int fd = dup_listener(listener_config);
             listener_config->fds.entries[listener_config->fds.size++] = fd;
         }
     }

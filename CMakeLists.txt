@@ -127,7 +127,17 @@ OPTION(BUILD_SHARED_LIBS "whether to build a shared library" OFF)
 FIND_PROGRAM(RUBY ruby)
 FIND_PROGRAM(BISON bison)
 IF (RUBY AND BISON)
-    SET(WITH_MRUBY_DEFAULT "ON")
+    # Bundled mruby cannot be built with Ruby 3.x
+    EXECUTE_PROCESS(
+        COMMAND "${RUBY}" -e "puts RUBY_VERSION"
+        OUTPUT_VARIABLE RUBY_VERSION
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
+    IF ("${RUBY_VERSION}" VERSION_LESS "3.0.0")
+        SET(WITH_MRUBY_DEFAULT "ON")
+    ELSE ()
+        SET(WITH_MRUBY_DEFAULT "OFF")
+    ENDIF()
 ELSE ()
     SET(WITH_MRUBY_DEFAULT "OFF")
 ENDIF ()
@@ -252,7 +262,7 @@ IF (PKG_CONFIG_FOUND)
     ENDIF (LIBCAP_FOUND)
 ENDIF (PKG_CONFIG_FOUND)
 
-SET(CC_WARNING_FLAGS "-Wall -Wno-unused-value -Wno-unused-function -Wno-nullability-completeness -Wno-expansion-to-defined -Werror=implicit-function-declaration")
+SET(CC_WARNING_FLAGS "-Wall -Wno-unused-value -Wno-unused-function -Wno-nullability-completeness -Wno-expansion-to-defined -Werror=implicit-function-declaration -Werror=incompatible-pointer-types")
 
 IF ("${CMAKE_C_COMPILER_ID}" STREQUAL "GNU")
     IF (NOT ("${CMAKE_C_COMPILER_VERSION}" VERSION_LESS "4.6"))
@@ -370,6 +380,7 @@ SET(LIB_SOURCE_FILES
     deps/quicly/lib/loss.c
     deps/quicly/lib/quicly.c
     deps/quicly/lib/ranges.c
+    deps/quicly/lib/rate.c
     deps/quicly/lib/recvstate.c
     deps/quicly/lib/remote_cid.c
     deps/quicly/lib/retire_cid.c
@@ -939,6 +950,7 @@ IF (BUILD_FUZZER)
     TARGET_LINK_LIBRARIES(h2o-fuzzer-http2 libh2o-evloop ${EXTRA_LIBS} ${LIB_FUZZER})
     # h3 fuzzer does not use libh2o so it can replace quicly with quicly_mock
     TARGET_LINK_LIBRARIES(h2o-fuzzer-http3 ${EXTRA_LIBS} ${LIB_FUZZER} ${OPENSSL_LIBRARIES} ${CMAKE_DL_LIBS})
+    TARGET_INCLUDE_DIRECTORIES(h2o-fuzzer-http3 PUBLIC ${OPENSSL_INCLUDE_DIR})
     TARGET_LINK_LIBRARIES(h2o-fuzzer-url libh2o-evloop ${EXTRA_LIBS} ${LIB_FUZZER})
     TARGET_LINK_LIBRARIES(h3-header-generator libh2o-evloop ${EXTRA_LIBS})
 

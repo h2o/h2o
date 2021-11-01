@@ -23,6 +23,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include "picotls.h"
 #include "h2o.h"
 #include "h2o/hpack.h"
 #include "h2o/qpack.h"
@@ -571,7 +572,7 @@ static struct st_h2o_qpack_header_t *resolve_dynamic_postbase(struct st_h2o_qpac
 {
     int64_t off;
 
-    if (decode_int(&off, src, src_end, prefix_bits) != 0 || off > INT64_MAX - (base_index + 1)) {
+    if (decode_int(&off, src, src_end, prefix_bits) != 0 || off > INT64_MAX - base_index - 1) {
         *err_desc = h2o_qpack_err_invalid_dynamic_reference;
         return NULL;
     }
@@ -626,8 +627,12 @@ static h2o_iovec_t decode_header_value_literal(h2o_mem_pool_t *pool, unsigned *s
                                                const uint8_t *src_end, const char **err_desc)
 {
     h2o_iovec_t buf;
-    int is_huff = (**src & 0x80) != 0;
     int64_t len;
+
+    /* validate *src pointer before dereferencing it for the huffman bit check */
+    if (!(*src < src_end))
+        goto Fail;
+    int is_huff = (**src & 0x80) != 0;
 
     if (decode_int(&len, src, src_end, 7) != 0 || len > MAX_HEADER_VALUE_LENGTH) {
         *err_desc = h2o_qpack_err_header_value_too_long;
@@ -648,6 +653,9 @@ Fail:
 
 struct st_h2o_qpack_decode_header_ctx_t {
     h2o_qpack_decoder_t *qpack;
+    /**
+     * These values are non-negative.
+     */
     int64_t req_insert_count, base_index;
 };
 
@@ -777,15 +785,27 @@ static int parse_decode_context(h2o_qpack_decoder_t *qpack, struct st_h2o_qpack_
         }
         if (ctx->req_insert_count == 0)
             return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED;
+        /* Peer cannot send no more than PTLS_QUICINT_MAX instructions. That is because one QPACK instruction is no smaller than one
+         * byte, and the maximum length of a QUIC stream (that conveys QPACK instructions) is 2^62 bytes in QUIC v1. */
+        if (ctx->req_insert_count > PTLS_QUICINT_MAX)
+            return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED;
     }
 
-    /* base index */
+    /* sign and base index */
     if (*src >= src_end)
         return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED;
     int sign = (**src & 0x80) != 0;
-    if (decode_int(&ctx->base_index, src, src_end, 7) != 0)
+    int64_t delta_base;
+    if (decode_int(&delta_base, src, src_end, 7) != 0)
         return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED;
-    ctx->base_index = sign == 0 ? ctx->req_insert_count + ctx->base_index : ctx->req_insert_count - ctx->base_index - 1;
+    if (delta_base > PTLS_QUICINT_MAX)
+        return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED;
+    ctx->base_index = sign == 0 ? ctx->req_insert_count + delta_base : ctx->req_insert_count - delta_base - 1;
+    if (ctx->base_index < 0) {
+        /* Reject negative base index though current QPACK specification doesn't mention such case; let's keep our eyes on
+         * https://github.com/quicwg/base-drafts/issues/4938 */
+        return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED;
+    }
 
     /* is the stream blocked? */
     if (ctx->req_insert_count >= qpack_table_total_inserts(&qpack->table)) {
