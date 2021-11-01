@@ -144,15 +144,17 @@ static const char *on_read_core(int fd, h2o_buffer_t **input, size_t max_bytes)
     return NULL;
 }
 
-static size_t write_vecs(int fd, h2o_iovec_t **bufs, size_t *bufcnt)
+static size_t write_vecs(struct st_h2o_evloop_socket_t *sock, h2o_iovec_t **bufs, size_t *bufcnt)
 {
     ssize_t wret;
 
     while (*bufcnt != 0) {
         /* write */
         int iovcnt = *bufcnt < IOV_MAX ? (int)*bufcnt : IOV_MAX;
-        while ((wret = writev(fd, (struct iovec *)*bufs, iovcnt)) == -1 && errno == EINTR)
+        while ((wret = writev(sock->fd, (struct iovec *)*bufs, iovcnt)) == -1 && errno == EINTR)
             ;
+        H2O_PROBE(SOCKET_WRITEV, &sock->super, wret);
+
         if (wret == -1)
             return errno == EAGAIN ? 0 : SIZE_MAX;
 
@@ -179,7 +181,7 @@ static size_t write_vecs(int fd, h2o_iovec_t **bufs, size_t *bufcnt)
 static size_t write_core(struct st_h2o_evloop_socket_t *sock, h2o_iovec_t **bufs, size_t *bufcnt)
 {
     if (sock->super.ssl == NULL)
-        return write_vecs(sock->fd, bufs, bufcnt);
+        return write_vecs(sock, bufs, bufcnt);
 
     /* SSL */
     size_t first_buf_written = 0;
@@ -190,7 +192,7 @@ static size_t write_core(struct st_h2o_evloop_socket_t *sock, h2o_iovec_t **bufs
                                                 sock->super.ssl->output.buf.off - sock->super.ssl->output.pending_off);
             h2o_iovec_t *encbufs = &encbuf;
             size_t encbufcnt = 1, enc_written;
-            if ((enc_written = write_vecs(sock->fd, &encbufs, &encbufcnt)) == SIZE_MAX) {
+            if ((enc_written = write_vecs(sock, &encbufs, &encbufcnt)) == SIZE_MAX) {
                 dispose_ssl_output_buffer(sock->super.ssl);
                 return SIZE_MAX;
             }
@@ -239,6 +241,7 @@ void write_pending(struct st_h2o_evloop_socket_t *sock)
     dispose_write_buf(&sock->super);
 
 Complete:
+    H2O_PROBE(SOCKET_WRITE_COMPLETE, &sock->super, sock->super._write_buf.cnt == 0 && !has_pending_ssl_bytes(sock->super.ssl));
     sock->_flags |= H2O_SOCKET_FLAG_IS_WRITE_NOTIFY;
     link_to_pending(sock);
     link_to_statechanged(sock); /* might need to disable the write polling */

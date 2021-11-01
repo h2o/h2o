@@ -35,8 +35,10 @@
 #include <sys/ioctl.h>
 #endif
 #include "picotls.h"
+#include "quicly.h"
 #include "h2o/socket.h"
 #include "h2o/multithread.h"
+#include "../probes_.h"
 
 #if defined(__APPLE__) && defined(__clang__)
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
@@ -759,6 +761,7 @@ static size_t generate_tls_records_from_one_vec(h2o_socket_t *sock, const void *
         assert(ret == tls_write_size);
     }
 
+    H2O_PROBE(SOCKET_WRITE_TLS_RECORD, sock, tls_write_size, sock->ssl->output.buf.off);
     return tls_write_size;
 }
 
@@ -795,6 +798,8 @@ static size_t generate_tls_records(h2o_socket_t *sock, h2o_iovec_t **bufs, size_
 
 void h2o_socket_write(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_socket_cb cb)
 {
+    H2O_PROBE(SOCKET_WRITE, sock, bufs, bufcnt, cb);
+
     assert(sock->_cb.write == NULL);
 
     for (size_t i = 0; i != bufcnt; ++i) {
