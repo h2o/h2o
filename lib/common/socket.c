@@ -64,6 +64,13 @@
 #include "../../deps/ssl-conservatory/openssl/openssl_hostname_validation.c"
 #pragma GCC diagnostic pop
 
+#define SOCKET_PROBE(label, sock, ...)                                                                                             \
+    do {                                                                                                                           \
+        h2o_socket_t *_sock = (sock);                                                                                              \
+        if (!_sock->_skip_tracing)                                                                                                 \
+        H2O_PROBE(SOCKET_##label, sock, __VA_ARGS__);                                                                              \
+    } while (0)
+
 struct st_h2o_socket_ssl_t {
     SSL_CTX *ssl_ctx;
     SSL *ossl;
@@ -761,7 +768,7 @@ static size_t generate_tls_records_from_one_vec(h2o_socket_t *sock, const void *
         assert(ret == tls_write_size);
     }
 
-    H2O_PROBE(SOCKET_WRITE_TLS_RECORD, sock, tls_write_size, sock->ssl->output.buf.off);
+    SOCKET_PROBE(WRITE_TLS_RECORD, sock, tls_write_size, sock->ssl->output.buf.off);
     return tls_write_size;
 }
 
@@ -798,7 +805,7 @@ static size_t generate_tls_records(h2o_socket_t *sock, h2o_iovec_t **bufs, size_
 
 void h2o_socket_write(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_socket_cb cb)
 {
-    H2O_PROBE(SOCKET_WRITE, sock, bufs, bufcnt, cb);
+    SOCKET_PROBE(WRITE, sock, bufs, bufcnt, cb);
 
     assert(sock->_cb.write == NULL);
 
@@ -953,8 +960,7 @@ const char *h2o_socket_get_ssl_server_name(const h2o_socket_t *sock)
     if (sock->ssl != NULL) {
         if (sock->ssl->ptls != NULL) {
             return ptls_get_server_name(sock->ssl->ptls);
-        } else
-            if (sock->ssl->ossl != NULL) {
+        } else if (sock->ssl->ossl != NULL) {
             return SSL_get_servername(sock->ssl->ossl, TLSEXT_NAMETYPE_host_name);
         }
     }

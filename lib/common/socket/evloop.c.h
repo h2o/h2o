@@ -153,7 +153,7 @@ static size_t write_vecs(struct st_h2o_evloop_socket_t *sock, h2o_iovec_t **bufs
         int iovcnt = *bufcnt < IOV_MAX ? (int)*bufcnt : IOV_MAX;
         while ((wret = writev(sock->fd, (struct iovec *)*bufs, iovcnt)) == -1 && errno == EINTR)
             ;
-        H2O_PROBE(SOCKET_WRITEV, &sock->super, wret);
+        SOCKET_PROBE(WRITEV, &sock->super, wret);
 
         if (wret == -1)
             return errno == EAGAIN ? 0 : SIZE_MAX;
@@ -241,7 +241,7 @@ void write_pending(struct st_h2o_evloop_socket_t *sock)
     dispose_write_buf(&sock->super);
 
 Complete:
-    H2O_PROBE(SOCKET_WRITE_COMPLETE, &sock->super, sock->super._write_buf.cnt == 0 && !has_pending_ssl_bytes(sock->super.ssl));
+    SOCKET_PROBE(WRITE_COMPLETE, &sock->super, sock->super._write_buf.cnt == 0 && !has_pending_ssl_bytes(sock->super.ssl));
     sock->_flags |= H2O_SOCKET_FLAG_IS_WRITE_NOTIFY;
     link_to_pending(sock);
     link_to_statechanged(sock); /* might need to disable the write polling */
