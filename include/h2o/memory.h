@@ -120,7 +120,8 @@ typedef struct st_h2o_mem_pool_t {
  */
 typedef struct st_h2o_buffer_t {
     /**
-     * capacity of the buffer (or minimum initial capacity in case of a prototype (i.e. bytes == NULL))
+     * when `bytes` != NULL (and therefore `size` != 0), the capacity of the buffer, or otherwise the minimum initial capacity in
+     * case of a prototype, or the desired next capacity if not a prototype.
      */
     size_t capacity;
     /**
@@ -132,13 +133,16 @@ typedef struct st_h2o_buffer_t {
      */
     char *bytes;
     /**
-     * prototype (or NULL if the instance is part of the prototype (i.e. bytes == NULL))
+     * prototype (or NULL if the instance is part of the prototype)
      */
     h2o_buffer_prototype_t *_prototype;
     /**
-     * file descriptor (if not -1, used to store the buffer)
+     * file descriptor (if not -1, h2o_buffer_t is a memory map of the contents of this file descriptor)
      */
     int _fd;
+    /**
+     * memory used to store data
+     */
     char _buf[1];
 } h2o_buffer_t;
 
@@ -149,7 +153,6 @@ typedef struct st_h2o_buffer_mmap_settings_t {
 } h2o_buffer_mmap_settings_t;
 
 struct st_h2o_buffer_prototype_t {
-    h2o_mem_recycle_t allocator;
     h2o_buffer_t _initial_buf;
     h2o_buffer_mmap_settings_t *mmap_settings;
 };
@@ -212,7 +215,7 @@ void h2o_mem_free_recycle(h2o_mem_recycle_t *allocator, void *p);
 /**
  * release all the memory chunks cached in input allocator to system
  */
-void h2o_mem_clear_recycle(h2o_mem_recycle_t *allocator);
+void h2o_mem_clear_recycle(h2o_mem_recycle_t *allocator, int full);
 
 /**
  * initializes the memory pool.
@@ -254,6 +257,10 @@ static void h2o_mem_addref_shared(void *p);
  */
 static int h2o_mem_release_shared(void *p);
 /**
+ * frees unused memory being pooled for recycling
+ */
+void h2o_buffer_clear_recycle(int full);
+/**
  * initialize the buffer using given prototype.
  */
 static void h2o_buffer_init(h2o_buffer_t **buffer, h2o_buffer_prototype_t *prototype);
@@ -293,6 +300,13 @@ static int h2o_buffer_try_append(h2o_buffer_t **dst, const void *src, size_t len
  * @param delta number of octets to be drained from the buffer
  */
 void h2o_buffer_consume(h2o_buffer_t **inbuf, size_t delta);
+/**
+ * throws away entire data being store in the buffer
+ * @param record_capacity if set to true, retains the current capacity of the buffer, and when memory reservation is requested the
+ *                        next time, allocates memory as large as the recorded capacity. Otherwise, memory would be reserved based
+ *                        on the value of `min_guarantee`, current size, and the prototype.
+ */
+void h2o_buffer_consume_all(h2o_buffer_t **inbuf, int record_capacity);
 /**
  * resets the buffer prototype
  */
@@ -455,7 +469,7 @@ inline void h2o_buffer_dispose(h2o_buffer_t **_buffer)
 {
     h2o_buffer_t *buffer = *_buffer;
     *_buffer = NULL;
-    if (buffer->bytes != NULL)
+    if (buffer->_prototype != NULL)
         h2o_buffer__do_free(buffer);
 }
 
@@ -532,7 +546,11 @@ inline void h2o_doublebuffer_consume(h2o_doublebuffer_t *db)
     assert(db->inflight);
     db->inflight = 0;
 
-    h2o_buffer_consume(&db->buf, db->_bytes_inflight);
+    if (db->buf->size == db->_bytes_inflight) {
+        h2o_buffer_consume_all(&db->buf, 1);
+    } else {
+        h2o_buffer_consume(&db->buf, db->_bytes_inflight);
+    }
     db->_bytes_inflight = 0;
 }
 

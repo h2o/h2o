@@ -188,7 +188,7 @@ struct st_h2o_quic_ctx_t {
      */
     h2o_quic_accept_cb acceptor;
     /**
-     * 0 to disable load distribution of accepting connections by h2o (i.e. relies on the kernel's disbirution based on 4-tuple)
+     * 0 to disable load distribution of accepting connections by h2o (i.e. relies on the kernel's distribution based on 4-tuple)
      */
     uint32_t accept_thread_divisor;
     /**
@@ -199,6 +199,10 @@ struct st_h2o_quic_ctx_t {
      * TTL of a QUIC datagram. Used to prevent infinite forwarding of QUIC packets between nodes / threads.
      */
     uint8_t default_ttl;
+    /**
+     * boolean to indicate whether to use UDP GSO
+     */
+    uint8_t use_gso;
     /**
      * preprocessor that rewrites a forwarded datagram (optional)
      */
@@ -328,7 +332,7 @@ int h2o_http3_read_frame(h2o_http3_read_frame_t *frame, int is_client, uint64_t 
  * initializes the context
  */
 void h2o_quic_init_context(h2o_quic_ctx_t *ctx, h2o_loop_t *loop, h2o_socket_t *sock, quicly_context_t *quic,
-                           h2o_quic_accept_cb acceptor, h2o_quic_notify_connection_update_cb notify_conn_update);
+                           h2o_quic_accept_cb acceptor, h2o_quic_notify_connection_update_cb notify_conn_update, uint8_t use_gso);
 /**
  *
  */

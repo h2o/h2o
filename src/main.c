@@ -2953,7 +2953,7 @@ static void *run_loop(void *_thread_index)
         /* setup quic context and the unix socket to receive forwarded packets */
         if (thread_index < conf.quic.num_threads && listener_config->quic.ctx != NULL) {
             h2o_quic_init_context(&listeners[i].http3.ctx.super, conf.threads[thread_index].ctx.loop, listeners[i].sock,
-                                  listener_config->quic.ctx, on_http3_accept, NULL);
+                                  listener_config->quic.ctx, on_http3_accept, NULL, conf.globalconf.http3.use_gso);
             h2o_quic_set_context_identifier(&listeners[i].http3.ctx.super, 0, (uint32_t)thread_index, conf.quic.node_id, 4,
                                             forward_quic_packets, rewrite_forwarded_quic_datagram);
             listeners[i].http3.ctx.accept_ctx = &listeners[i].accept_ctx;
@@ -2985,13 +2985,19 @@ static void *run_loop(void *_thread_index)
         fprintf(stderr, "h2o server (pid:%d) is ready to serve requests with %zu threads\n", (int)getpid(), conf.thread_map.size);
 
     /* the main loop */
+    uint64_t last_buffer_gc_at = 0;
     while (1) {
         if (conf.shutdown_requested)
             break;
         update_listener_state(listeners);
         /* run the loop once */
         h2o_evloop_run(conf.threads[thread_index].ctx.loop, INT32_MAX);
+        /* cleanup */
         h2o_filecache_clear(conf.threads[thread_index].ctx.filecache);
+        if (last_buffer_gc_at + 1000 < h2o_now(conf.threads[thread_index].ctx.loop)) {
+            last_buffer_gc_at = h2o_now(conf.threads[thread_index].ctx.loop);
+            h2o_buffer_clear_recycle(0);
+        }
     }
 
     if (thread_index == 0)
