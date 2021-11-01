@@ -19,23 +19,13 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
+#include "h2o/rand.h"
 #include "h2o/balancer.h"
 
 struct best_of_two {
     h2o_balancer_t super;
     pthread_mutex_t mutex;
-    unsigned seed;
 };
-
-static inline uint64_t rdtscp(void)
-{
-    uint32_t eax, edx;
-    __asm__ __volatile__("rdtscp"
-              : "=a" (eax), "=d" (edx)
-              :
-              : "%ecx", "memory");
-    return (((uint64_t)edx << 32) | eax);
-}
 
 static size_t selector(h2o_balancer_t *_self, h2o_socketpool_target_vector_t *targets, char *tried)
 {
@@ -59,7 +49,7 @@ static size_t selector(h2o_balancer_t *_self, h2o_socketpool_target_vector_t *ta
     pthread_mutex_lock(&self->mutex);
     for (i = j - 1; i > 0; i--) {
       size_t tmp = idxs[i];
-      size_t k = rand_r(&self->seed) % (i+1);
+      size_t k = h2o_rand() % (i+1);
       idxs[i] = idxs[k];
       idxs[k] = tmp;
     }
@@ -84,7 +74,6 @@ h2o_balancer_t *h2o_balancer_create_bo2(void)
     static const h2o_balancer_callbacks_t bo2_callbacks = {selector, destroy};
     struct best_of_two *self = h2o_mem_alloc(sizeof(*self));
     self->super.callbacks = &bo2_callbacks;
-    self->seed = rdtscp();
     pthread_mutex_init(&self->mutex, NULL);
     return &self->super;
 }
