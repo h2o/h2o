@@ -47,6 +47,16 @@
 #define USE_POSIX_FALLOCATE 0
 #endif
 
+#if defined(__clang__)
+#if __has_feature(address_sanitizer)
+#define ASAN_IN_USE 1
+#endif
+#elif __SANITIZE_ADDRESS__ /* gcc */
+#define ASAN_IN_USE 1
+#else
+#define ASAN_IN_USE 0
+#endif
+
 struct st_h2o_mem_recycle_chunk_t {
     struct st_h2o_mem_recycle_chunk_t *next;
 };
@@ -101,16 +111,18 @@ void *h2o_mem_alloc_recycle(h2o_mem_recycle_t *allocator, size_t sz)
 
 void h2o_mem_free_recycle(h2o_mem_recycle_t *allocator, void *p)
 {
-    struct st_h2o_mem_recycle_chunk_t *chunk;
-    if (allocator->cnt == allocator->max) {
-        free(p);
+#if !ASAN_IN_USE
+    /* register the pointer to the pool and return unless the pool is full */
+    if (allocator->cnt < allocator->max) {
+        struct st_h2o_mem_recycle_chunk_t *chunk = p;
+        chunk->next = allocator->_link;
+        allocator->_link = chunk;
+        ++allocator->cnt;
         return;
     }
-    /* register the pointer to the pool */
-    chunk = p;
-    chunk->next = allocator->_link;
-    allocator->_link = chunk;
-    ++allocator->cnt;
+#endif
+
+    free(p);
 }
 
 void h2o_mem_clear_recycle(h2o_mem_recycle_t *allocator, int full)
