@@ -125,7 +125,6 @@ provider h2o {
     probe tunnel_proceed_read(struct st_h2o_tunnel_t *tunnel);
     probe tunnel_write(struct st_h2o_tunnel_t *tunnel, const void *bytes, size_t bytes_len);
     probe tunnel_on_write_complete(struct st_h2o_tunnel_t *tunnel, const char *err);
-
-    probe socket_tunnel_create(struct st_h2o_tunnel_t *tunnel);
-    probe socket_tunnel_start(struct st_h2o_tunnel_t *tunnel, size_t bytes_to_consume);
+    probe tunnel_create(struct st_h2o_tunnel_t *tunnel);
+    probe tunnel_start(struct st_h2o_tunnel_t *tunnel, size_t bytes_to_consume);
 };
