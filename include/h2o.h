@@ -440,9 +440,13 @@ struct st_h2o_globalconf_t {
          */
         uint32_t active_stream_window_size;
         /**
+         * See quicly_context_t::ack_frequency
+         */
+        uint16_t ack_frequency;
+        /**
          * a boolean indicating if the delayed ack extension should be used (default true)
          */
-        uint8_t use_delayed_ack : 1;
+        uint8_t allow_delayed_ack : 1;
         /**
          * a boolean indicating if UDP GSO should be used when possible
          */
