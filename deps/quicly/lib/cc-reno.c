@@ -24,7 +24,7 @@
 
 /* TODO: Avoid increase if sender was application limited. */
 static void reno_on_acked(quicly_cc_t *cc, const quicly_loss_t *loss, uint32_t bytes, uint64_t largest_acked, uint32_t inflight,
-                          int64_t now, uint32_t max_udp_payload_size)
+                          uint64_t next_pn, int64_t now, uint32_t max_udp_payload_size)
 {
     assert(inflight >= bytes);
     /* Do not increase congestion window while in recovery. */
@@ -96,6 +96,7 @@ static int reno_on_switch(quicly_cc_t *cc)
         return 1; /* nothing to do */
     } else if (cc->type == &quicly_cc_type_pico) {
         cc->type = &quicly_cc_type_reno;
+        cc->state.reno.stash = cc->state.pico.stash;
         return 1;
     } else if (cc->type == &quicly_cc_type_cubic) {
         /* When in slow start, state can be reused as-is; otherwise, restart. */

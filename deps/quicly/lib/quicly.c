@@ -1585,9 +1585,8 @@ void quicly_free(quicly_conn_t *conn)
         QUICLY_PROBE(CONN_STATS, conn, conn->stash.now, &stats, sizeof(stats));
     }
 #endif
-    update_open_count(conn->super.ctx, -1);
-
     destroy_all_streams(conn, 0, 1);
+    update_open_count(conn->super.ctx, -1);
     clear_datagram_frame_payloads(conn);
 
     quicly_maxsender_dispose(&conn->ingress.max_data.sender);
@@ -4985,8 +4984,8 @@ static int handle_ack_frame(quicly_conn_t *conn, struct st_quicly_handle_payload
     /* OnPacketAcked and OnPacketAckedCC */
     if (bytes_acked > 0) {
         conn->egress.cc.type->cc_on_acked(&conn->egress.cc, &conn->egress.loss, (uint32_t)bytes_acked, frame.largest_acknowledged,
-                                          (uint32_t)(conn->egress.loss.sentmap.bytes_in_flight + bytes_acked), conn->stash.now,
-                                          conn->egress.max_udp_payload_size);
+                                          (uint32_t)(conn->egress.loss.sentmap.bytes_in_flight + bytes_acked),
+                                          conn->egress.packet_number, conn->stash.now, conn->egress.max_udp_payload_size);
         QUICLY_PROBE(QUICTRACE_CC_ACK, conn, conn->stash.now, &conn->egress.loss.rtt, conn->egress.cc.cwnd,
                      conn->egress.loss.sentmap.bytes_in_flight);
     }
