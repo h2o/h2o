@@ -2687,9 +2687,7 @@ static void on_socketclose(void *data)
 static void on_accept(h2o_socket_t *listener, const char *err)
 {
     struct listener_ctx_t *ctx = listener->data;
-    size_t num_accepts = conf.max_connections / 16 / conf.thread_map.size;
-    if (num_accepts < 8)
-        num_accepts = 8;
+    size_t num_accepts = 10;
 
     if (err != NULL) {
         return;
