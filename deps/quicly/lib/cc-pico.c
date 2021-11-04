@@ -19,27 +19,21 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
+#include <math.h>
 #include "quicly/cc.h"
 #include "quicly.h"
 
 /**
- * Speed at which the multiplicative increase grows from BETA to 1. Unit is Hz.
+ * Calculates the increase ratio to be used in congestion avoidance phase.
  */
-#define QUICLY_PICO_MULT_HZ 1.0
-
-static uint32_t calc_bytes_per_mtu_increase(uint32_t cwnd, uint32_t ssthresh, uint32_t rtt, uint32_t mtu)
+static uint32_t calc_bytes_per_mtu_increase(uint32_t cwnd, uint32_t rtt, uint32_t mtu)
 {
-    /* Increase per byte acked is the sum of 1mtu/cwnd (additive part) and ... */
-    double increase_per_byte = (double)mtu / cwnd;
-    /* ... multiplicative part being 1 during slow start, and the RTT-compensated rate for recovery within ~1/QUICLY_PICO_MULT_HZ
-     * seconds congestion avoidance. */
-    if (cwnd < ssthresh) {
-        increase_per_byte += 1;
-    } else {
-        increase_per_byte += (1 / QUICLY_RENO_BETA - 1) * QUICLY_PICO_MULT_HZ / 1000 * rtt;
-    }
+    /* Reno: CWND size after reduction */
+    uint32_t reno = cwnd * QUICLY_RENO_BETA;
+    /* Cubic: Average of `(CWND / RTT) * K / 0.3CWND`, where K and CWND have two modes due to "fast convergence." */
+    uint32_t cubic = 1.447 / 0.3 * 1000 * cbrt(0.3 / 0.4 * cwnd / mtu) / rtt * mtu;
 
-    return (uint32_t)(mtu / increase_per_byte);
+    return reno < cubic ? reno : cubic;
 }
 
 /* TODO: Avoid increase if sender was application limited. */
@@ -55,7 +49,12 @@ static void pico_on_acked(quicly_cc_t *cc, const quicly_loss_t *loss, uint32_t b
     cc->state.pico.stash += bytes;
 
     /* Calculate the amount of bytes required to be acked for incrementing CWND by one MTU. */
-    uint32_t bytes_per_mtu_increase = calc_bytes_per_mtu_increase(cc->cwnd, cc->ssthresh, loss->rtt.smoothed, max_udp_payload_size);
+    uint32_t bytes_per_mtu_increase;
+    if (cc->cwnd < cc->ssthresh) {
+        bytes_per_mtu_increase = max_udp_payload_size;
+    } else {
+        bytes_per_mtu_increase = cc->state.pico.bytes_per_mtu_increase;
+    }
 
     /* Bail out if we do not yet have enough bytes being acked. */
     if (cc->state.pico.stash < bytes_per_mtu_increase)
@@ -82,6 +81,9 @@ static void pico_on_lost(quicly_cc_t *cc, const quicly_loss_t *loss, uint32_t by
     if (cc->cwnd_exiting_slow_start == 0)
         cc->cwnd_exiting_slow_start = cc->cwnd;
 
+    /* Calculate increase rate. */
+    cc->state.pico.bytes_per_mtu_increase = calc_bytes_per_mtu_increase(cc->cwnd, loss->rtt.smoothed, max_udp_payload_size);
+
     /* Reduce congestion window. */
     cc->cwnd *= QUICLY_RENO_BETA;
     if (cc->cwnd < QUICLY_MIN_CWND * max_udp_payload_size)
@@ -105,6 +107,7 @@ static void pico_on_sent(quicly_cc_t *cc, const quicly_loss_t *loss, uint32_t by
 static void pico_init_pico_state(quicly_cc_t *cc, uint32_t stash)
 {
     cc->state.pico.stash = stash;
+    cc->state.pico.bytes_per_mtu_increase = cc->cwnd * QUICLY_RENO_BETA; /* use Reno, for simplicity */
 }
 
 static void pico_reset(quicly_cc_t *cc, uint32_t initcwnd)

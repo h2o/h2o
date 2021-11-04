@@ -128,7 +128,7 @@ provider quicly {
     probe datagram_receive(struct st_quicly_conn_t *conn, int64_t at, const void *payload, size_t payload_len);
 
     probe ack_frequency_receive(struct st_quicly_conn_t *conn, int64_t at, uint64_t sequence, uint64_t packet_tolerance,
-                                uint64_t max_ack_delay, int ignore_order);
+                                uint64_t max_ack_delay, int ignore_order, int ignore_ce);
 
     probe quictrace_send_stream(struct st_quicly_conn_t *conn, int64_t at, struct st_quicly_stream_t *stream, uint64_t off,
                                 size_t len, int fin);
