@@ -10,10 +10,32 @@
 		082195082683498900E3EFCF /* cc-pico.c in Sources */ = {isa = PBXBuildFile; fileRef = 082195072683498900E3EFCF /* cc-pico.c */; };
 		082195092683498900E3EFCF /* cc-pico.c in Sources */ = {isa = PBXBuildFile; fileRef = 082195072683498900E3EFCF /* cc-pico.c */; };
 		0821950A2683498900E3EFCF /* cc-pico.c in Sources */ = {isa = PBXBuildFile; fileRef = 082195072683498900E3EFCF /* cc-pico.c */; };
+		0829876726D372B70053638F /* cc-cubic.c in Sources */ = {isa = PBXBuildFile; fileRef = E9DF012324E4BAC20002EEC7 /* cc-cubic.c */; };
+		0829876826D372B70053638F /* retire_cid.c in Sources */ = {isa = PBXBuildFile; fileRef = E9736528246FD3AC0039AA49 /* retire_cid.c */; };
+		0829876926D372B70053638F /* picotls-probes.d in Sources */ = {isa = PBXBuildFile; fileRef = E95E953A2290498E00215ACD /* picotls-probes.d */; };
+		0829876A26D372B70053638F /* ranges.c in Sources */ = {isa = PBXBuildFile; fileRef = E9F6A41F1F3C0B6D0083F0B2 /* ranges.c */; };
+		0829876B26D372B70053638F /* cc-reno.c in Sources */ = {isa = PBXBuildFile; fileRef = E98041C522383C62008B9745 /* cc-reno.c */; };
+		0829876C26D372B70053638F /* local_cid.c in Sources */ = {isa = PBXBuildFile; fileRef = E9736529246FD3AC0039AA49 /* local_cid.c */; };
+		0829876D26D372B70053638F /* openssl.c in Sources */ = {isa = PBXBuildFile; fileRef = E98448271EA48D0000390927 /* openssl.c */; };
+		0829876E26D372B70053638F /* remote_cid.c in Sources */ = {isa = PBXBuildFile; fileRef = E9736527246FD3AC0039AA49 /* remote_cid.c */; };
+		0829876F26D372B70053638F /* loss.c in Sources */ = {isa = PBXBuildFile; fileRef = E904233C24AED0410072C5B7 /* loss.c */; };
+		0829877026D372B70053638F /* cc-pico.c in Sources */ = {isa = PBXBuildFile; fileRef = 082195072683498900E3EFCF /* cc-pico.c */; };
+		0829877126D372B70053638F /* frame.c in Sources */ = {isa = PBXBuildFile; fileRef = E99F8C251F4E9EBF00C26B3D /* frame.c */; };
+		0829877226D372B70053638F /* recvstate.c in Sources */ = {isa = PBXBuildFile; fileRef = E920D21D1F43E05000799777 /* recvstate.c */; };
+		0829877326D372B70053638F /* fusion.c in Sources */ = {isa = PBXBuildFile; fileRef = E9B43E11246943D300824E51 /* fusion.c */; };
+		0829877426D372B70053638F /* defaults.c in Sources */ = {isa = PBXBuildFile; fileRef = E98042352244A5D7008B9745 /* defaults.c */; };
+		0829877526D372B70053638F /* streambuf.c in Sources */ = {isa = PBXBuildFile; fileRef = E9D3CCCE21D22F4300516202 /* streambuf.c */; };
+		0829877626D372B70053638F /* pembase64.c in Sources */ = {isa = PBXBuildFile; fileRef = E93E54681F663849001C50FE /* pembase64.c */; };
+		0829877826D372B70053638F /* sendstate.c in Sources */ = {isa = PBXBuildFile; fileRef = E9F6A42D1F41375B0083F0B2 /* sendstate.c */; };
+		0829877926D372B70053638F /* quicly.c in Sources */ = {isa = PBXBuildFile; fileRef = E98448411EA490A500390927 /* quicly.c */; };
+		0829877A26D372B70053638F /* sentmap.c in Sources */ = {isa = PBXBuildFile; fileRef = E920D22A1F49533800799777 /* sentmap.c */; };
+		0829877B26D372B70053638F /* picotls.c in Sources */ = {isa = PBXBuildFile; fileRef = E98448281EA48D0000390927 /* picotls.c */; };
+		0829878326D37E370053638F /* simulator.c in Sources */ = {isa = PBXBuildFile; fileRef = 0829878226D37E370053638F /* simulator.c */; };
 		0829878E26E03D4D0053638F /* rate.c in Sources */ = {isa = PBXBuildFile; fileRef = 0829878D26E03D4D0053638F /* rate.c */; };
 		0829878F26E03D4D0053638F /* rate.c in Sources */ = {isa = PBXBuildFile; fileRef = 0829878D26E03D4D0053638F /* rate.c */; };
 		0829879026E03D4D0053638F /* rate.c in Sources */ = {isa = PBXBuildFile; fileRef = 0829878D26E03D4D0053638F /* rate.c */; };
 		0829879226E0A9DF0053638F /* rate.c in Sources */ = {isa = PBXBuildFile; fileRef = 0829879126E0A9DF0053638F /* rate.c */; };
+		086001CB273271E80043886F /* rate.c in Sources */ = {isa = PBXBuildFile; fileRef = 0829878D26E03D4D0053638F /* rate.c */; };
 		E904233D24AED0410072C5B7 /* loss.c in Sources */ = {isa = PBXBuildFile; fileRef = E904233C24AED0410072C5B7 /* loss.c */; };
 		E904233E24AED0410072C5B7 /* loss.c in Sources */ = {isa = PBXBuildFile; fileRef = E904233C24AED0410072C5B7 /* loss.c */; };
 		E904233F24AED0410072C5B7 /* loss.c in Sources */ = {isa = PBXBuildFile; fileRef = E904233C24AED0410072C5B7 /* loss.c */; };
@@ -109,6 +131,15 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
+		0829877D26D372B70053638F /* CopyFiles */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = /usr/share/man/man1/;
+			dstSubfolderSpec = 0;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 1;
+		};
 		E9804223223952FD008B9745 /* CopyFiles */ = {
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
@@ -149,6 +180,8 @@
 
 /* Begin PBXFileReference section */
 		082195072683498900E3EFCF /* cc-pico.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = "cc-pico.c"; sourceTree = "<group>"; };
+		0829878126D372B70053638F /* simulator */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = simulator; sourceTree = BUILT_PRODUCTS_DIR; };
+		0829878226D37E370053638F /* simulator.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = simulator.c; sourceTree = "<group>"; };
 		0829878C26DF775B0053638F /* rate.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = rate.h; sourceTree = "<group>"; };
 		0829878D26E03D4D0053638F /* rate.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = rate.c; sourceTree = "<group>"; };
 		0829879126E0A9DF0053638F /* rate.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = rate.c; sourceTree = "<group>"; };
@@ -229,6 +262,13 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		0829877C26D372B70053638F /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		E9804221223952FD008B9745 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -318,6 +358,7 @@
 				E9CC44231EC195DF00DC7D3E /* test */,
 				E98F4CBB20E5CF1B00362F15 /* udpfw */,
 				E9804227223952FD008B9745 /* echo */,
+				0829878126D372B70053638F /* simulator */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -438,6 +479,7 @@
 				E9F6A4281F3C3B3F0083F0B2 /* test.h */,
 				E9CC44241EC1962700DC7D3E /* test.c */,
 				E98F4CBC20E5CF3A00362F15 /* udpfw.c */,
+				0829878226D37E370053638F /* simulator.c */,
 			);
 			path = t;
 			sourceTree = "<group>";
@@ -520,6 +562,24 @@
 /* End PBXHeadersBuildPhase section */
 
 /* Begin PBXNativeTarget section */
+		0829876426D372B70053638F /* simulator */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 0829877E26D372B70053638F /* Build configuration list for PBXNativeTarget "simulator" */;
+			buildPhases = (
+				0829876526D372B70053638F /* ShellScript */,
+				0829876626D372B70053638F /* Sources */,
+				0829877C26D372B70053638F /* Frameworks */,
+				0829877D26D372B70053638F /* CopyFiles */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = simulator;
+			productName = cli;
+			productReference = 0829878126D372B70053638F /* simulator */;
+			productType = "com.apple.product-type.tool";
+		};
 		E980421C223952FD008B9745 /* echo */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = E9804224223952FD008B9745 /* Build configuration list for PBXNativeTarget "echo" */;
@@ -643,11 +703,31 @@
 				E9CC44191EC195DF00DC7D3E /* test */,
 				E98F4C9D20E5CF1B00362F15 /* udpfw */,
 				E980421C223952FD008B9745 /* echo */,
+				0829876426D372B70053638F /* simulator */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXShellScriptBuildPhase section */
+		0829876526D372B70053638F /* ShellScript */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/quicly-probes.d",
+			);
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(DERIVED_FILES_DIR)/embedded-probes.h",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# Type a script or drag a script file from your workspace to insert its path.\n\nexec $SRCROOT/misc/probe2trace.pl -a embedded < $SRCROOT/quicly-probes.d > $DERIVED_FILES_DIR/embedded-probes.h\n";
+		};
 		08CEA9DF267B461700B4BB6B /* ShellScript */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
@@ -689,6 +769,35 @@
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		0829876626D372B70053638F /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				0829876726D372B70053638F /* cc-cubic.c in Sources */,
+				0829876826D372B70053638F /* retire_cid.c in Sources */,
+				0829876926D372B70053638F /* picotls-probes.d in Sources */,
+				0829876A26D372B70053638F /* ranges.c in Sources */,
+				0829876B26D372B70053638F /* cc-reno.c in Sources */,
+				0829876C26D372B70053638F /* local_cid.c in Sources */,
+				0829876D26D372B70053638F /* openssl.c in Sources */,
+				0829876E26D372B70053638F /* remote_cid.c in Sources */,
+				0829876F26D372B70053638F /* loss.c in Sources */,
+				0829877026D372B70053638F /* cc-pico.c in Sources */,
+				0829878326D37E370053638F /* simulator.c in Sources */,
+				0829877126D372B70053638F /* frame.c in Sources */,
+				0829877226D372B70053638F /* recvstate.c in Sources */,
+				0829877326D372B70053638F /* fusion.c in Sources */,
+				0829877426D372B70053638F /* defaults.c in Sources */,
+				086001CB273271E80043886F /* rate.c in Sources */,
+				0829877526D372B70053638F /* streambuf.c in Sources */,
+				0829877626D372B70053638F /* pembase64.c in Sources */,
+				0829877826D372B70053638F /* sendstate.c in Sources */,
+				0829877926D372B70053638F /* quicly.c in Sources */,
+				0829877A26D372B70053638F /* sentmap.c in Sources */,
+				0829877B26D372B70053638F /* picotls.c in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		E980421D223952FD008B9745 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -806,6 +915,40 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin XCBuildConfiguration section */
+		0829877F26D372B70053638F /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"QUICLY_USE_EMBEDDED_PROBES=1",
+					"QUICLY_HAVE_FUSION=1",
+				);
+				OTHER_CFLAGS = "-march=native";
+				OTHER_LDFLAGS = (
+					"-L/usr/local/opt/openssl@1.1/lib",
+					"-lcrypto",
+				);
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = Debug;
+		};
+		0829878026D372B70053638F /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"QUICLY_USE_EMBEDDED_PROBES=1",
+					"QUICLY_HAVE_FUSION=1",
+				);
+				OTHER_CFLAGS = "-march=native";
+				OTHER_LDFLAGS = (
+					"-L/usr/local/opt/openssl@1.1/lib",
+					"-lcrypto",
+				);
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = Release;
+		};
 		E9804225223952FD008B9745 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -1042,6 +1185,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		0829877E26D372B70053638F /* Build configuration list for PBXNativeTarget "simulator" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				0829877F26D372B70053638F /* Debug */,
+				0829878026D372B70053638F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		E9804224223952FD008B9745 /* Build configuration list for PBXNativeTarget "echo" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
