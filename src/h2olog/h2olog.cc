@@ -64,7 +64,7 @@ Optional arguments:
   -a                Include application data which are omitted by default.
   -r                Run without dropping root privilege.
   -w <path>         Path to write the output (default: stdout).
-  -D <flag>         Enables a BCC debug flag (supported flag: DEBUG_LLVM_IR,
+  -f <flag>         Enables a BCC debug flag (supported flag: DEBUG_LLVM_IR,
                     DEBUG_BPF, DEBUG_PREPROCESSOR, DEBUG_SOURCE,
                     DEBUG_BPF_REGISTER_STATE, DEBUG_BTF)
 
@@ -276,7 +276,7 @@ int main(int argc, char **argv)
     double sampling_rate = 1.0;
     std::vector<std::pair<std::vector<uint8_t> /* address */, unsigned /* netmask */>> sampling_addresses;
     std::vector<std::string> sampling_snis;
-    while ((c = getopt(argc, argv, "hHdrlap:t:s:w:S:A:N:D:")) != -1) {
+    while ((c = getopt(argc, argv, "hHdrlap:t:s:w:S:A:N:f:")) != -1) {
         switch (c) {
         case 'H':
             tracer.reset(create_http_tracer());
@@ -339,7 +339,7 @@ int main(int argc, char **argv)
         case 'd':
             debug++;
             break;
-        case 'D':
+        case 'f':
 #define BCC_FLAG(var, flag)                                                                                                        \
     if (strcmp(optarg, #flag) == 0) {                                                                                              \
         var |= ebpf::flag;                                                                                                         \
@@ -352,7 +352,7 @@ int main(int argc, char **argv)
             BCC_FLAG(bcc_flags, DEBUG_BTF)
             // else
             {
-                fprintf(stderr, "Error: unknown name for -D: %s\n", optarg);
+                fprintf(stderr, "Error: unknown name for -f: %s\n", optarg);
                 exit(EXIT_FAILURE);
             }
 #undef BCC_FLAG
