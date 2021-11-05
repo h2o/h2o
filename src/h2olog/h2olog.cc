@@ -64,7 +64,7 @@ Optional arguments:
   -a                Include application data which are omitted by default.
   -r                Run without dropping root privilege.
   -w <path>         Path to write the output (default: stdout).
-  -f <flag>         Enables a BCC debug flag (supported flag: DEBUG_LLVM_IR,
+  -f <flag>         Turn on a BCC debug flag (supported flag: DEBUG_LLVM_IR,
                     DEBUG_BPF, DEBUG_PREPROCESSOR, DEBUG_SOURCE,
                     DEBUG_BPF_REGISTER_STATE, DEBUG_BTF)
 
