@@ -814,11 +814,11 @@ inline int quicly_decode_ack_frequency_frame(const uint8_t **src, const uint8_t 
         goto Error;
     if (*src == end)
         goto Error;
-    uint8_t flags = *(*src)++;
-    if ((flags & ~QUICLY_ACK_FREQUENCY_ALL_BITS) != 0)
+    if ((**src & ~QUICLY_ACK_FREQUENCY_ALL_BITS) != 0)
         goto Error;
-    frame->ignore_order = (flags & QUICLY_ACK_FREQUENCY_IGNORE_ORDER_BIT) != 0;
-    frame->ignore_ce = (flags & QUICLY_ACK_FREQUENCY_IGNORE_CE_BIT) != 0;
+    frame->ignore_order = (**src & QUICLY_ACK_FREQUENCY_IGNORE_ORDER_BIT) != 0;
+    frame->ignore_ce = (**src & QUICLY_ACK_FREQUENCY_IGNORE_CE_BIT) != 0;
+    ++*src;
     return 0;
 
 Error:
