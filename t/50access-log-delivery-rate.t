@@ -3,6 +3,7 @@ use warnings;
 use Net::EmptyPort qw(empty_port wait_port);
 use File::Temp qw(tempdir);
 use JSON;
+use Time::HiRes qw(sleep);
 use Test::More;
 use t::Util;
 
@@ -60,6 +61,8 @@ subtest "HTTP/1.1", sub {
     my $resp = `$client_prog http://127.0.0.1:$server->{port} 2>&1`;
     like $resp, qr{^HTTP/1\.1 200\b}ms, "http/1 is ok";
 
+    sleep 0.1;
+
     my ($log) = load_logs();
 
     is $log->{"protocol"}, "HTTP/1.1", "protocol";
@@ -72,6 +75,8 @@ subtest "HTTP/2", sub {
     my $resp = `$client_prog -2 100 -k https://127.0.0.1:$server->{tls_port} 2>&1`;
     like $resp, qr{^HTTP/2 200\b}ms, "http/2 is ok";
 
+    sleep 0.1;
+
     my ($log) = load_logs();
 
     is $log->{"protocol"}, "HTTP/2", "protocol";
@@ -83,6 +88,8 @@ subtest "HTTP/3", sub {
 
     my $resp = `$client_prog -3 100 -k https://127.0.0.1:$quic_port 2>&1`;
     like $resp, qr{^HTTP/3 200\b}ms, "http/3 is ok";
+
+    sleep 0.1;
 
     my ($log) = load_logs();
 
