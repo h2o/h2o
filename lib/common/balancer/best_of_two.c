@@ -30,6 +30,7 @@ struct best_of_two {
 static size_t selector(h2o_balancer_t *_self, h2o_socketpool_target_vector_t *targets, char *tried)
 {
     size_t i, j;
+    size_t left, right;
     size_t result_index;
     size_t idxs[targets->size];
     struct best_of_two *self = (void *)_self;
@@ -40,23 +41,19 @@ static size_t selector(h2o_balancer_t *_self, h2o_socketpool_target_vector_t *ta
         idxs[j++] = i;
       }
     }
-    switch (j) {
-      case 0:
-        return -1;
-      case 1:
-        return idxs[0];
+    assert(j != 0);
+    if (j == 1) {
+      return idxs[0];
     }
+    left = h2o_rand() % j;
+    do {
+      right = h2o_rand() % j;
+    } while (left == right);
+    left = idxs[left];
+    right = idxs[right];
     pthread_mutex_lock(&self->mutex);
-    for (i = j - 1; i > 0; i--) {
-      size_t tmp = idxs[i];
-      size_t k = h2o_rand() % (i+1);
-      idxs[i] = idxs[k];
-      idxs[k] = tmp;
-    }
-    i = idxs[i];
-    j = idxs[j-1];
-    result_index = targets->entries[i]->_shared.leased_count / (((unsigned)targets->entries[i]->conf.weight_m1) + 1) <
-                   targets->entries[j]->_shared.leased_count / (((unsigned)targets->entries[j]->conf.weight_m1) + 1) ? i : j;
+    result_index = targets->entries[left]->_shared.leased_count / (((unsigned)targets->entries[left]->conf.weight_m1) + 1) <
+                   targets->entries[right]->_shared.leased_count / (((unsigned)targets->entries[right]->conf.weight_m1) + 1) ? left : right;
     pthread_mutex_unlock(&self->mutex);
     assert(result_index < targets->size);
     return result_index;
