@@ -78,7 +78,6 @@ static void test_when_backend_down(void)
         ok(!tried[selected]);
         tried[selected] = 1;
     }
-    ok(selector(balancer, &targets, tried) == -1);
     free_targets(&targets);
     destroy(balancer);
 }
