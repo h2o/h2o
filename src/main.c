@@ -103,11 +103,50 @@
 
 #define H2O_DEFAULT_OCSP_UPDATER_MAX_THREADS 10
 
+struct listener_ssl_ocsp_stapling_t {
+    uint64_t interval;
+    unsigned max_failures;
+    char *cmd;
+};
+
+/**
+ * Contains one identity (i.e., data being used to identify the endpoint).
+ */
+struct listener_ssl_identity_t {
+    /**
+     * The identity. Typically a certificate, though it could be raw public key as well.
+     */
+    char *certificate_file;
+    /**
+     * private key
+     */
+    char *key_file;
+    /**
+     * OpenSSL context used for accepting TLS 1.2 and below. This property will be non-NULL only for the first entry of
+     * `listen_ssl_config_t::identities`.
+     */
+    SSL_CTX *ossl;
+    /**
+     * Picotls context used for accepting TLS 1.3 handshakes. When TLS 1.3 is disabled, this property will be set to NULL.
+     */
+    ptls_context_t *ptls;
+    /**
+     * if non-NULL, points to OCSP stapling configuration
+     */
+    struct listener_ssl_ocsp_stapling_t *ocsp_stapling;
+    /**
+     * Retains up-to-date data to be sent in regard to server authentication (e.g., ocsp status, pre-compressed certs).
+     */
+    struct {
+        pthread_mutex_t mutex;
+        h2o_buffer_t *ocsp_status;
+        ptls_emit_compressed_certificate_t *emit_compressed_ptls;
+    } dynamic;
+};
+
 struct listener_ssl_config_t {
     H2O_VECTOR(h2o_iovec_t) hostnames;
-    char *certificate_file;
-    char *raw_pubkey_file;
-    SSL_CTX *ctx;
+    struct listener_ssl_identity_t **identities;
     h2o_iovec_t *http2_origin_frame;
     /**
      * per-SNI CC (nullable)
@@ -116,25 +155,6 @@ struct listener_ssl_config_t {
         h2o_iovec_t tcp;
         quicly_cc_type_t *quic;
     } cc;
-    /**
-     * Optional alternate context. When both X.509 and raw public key certs are to be retained, this pointer points to the context
-     * that retains the raw public key.
-     * */
-    ptls_context_t *alternate_ptls_ctx;
-    struct {
-        uint64_t interval;
-        unsigned max_failures;
-        char *cmd;
-        pthread_t updater_tid; /* should be valid when and only when interval != 0 */
-    } ocsp_stapling;
-    /**
-     * retains up-to-date data to be sent in regard to server authentication (e.g., ocsp status, pre-compressed certs)
-     */
-    struct {
-        pthread_mutex_t mutex;
-        h2o_buffer_t *ocsp_status;
-        ptls_emit_compressed_certificate_t *emit_compressed_ptls;
-    } dynamic;
 };
 
 struct listener_config_t {
@@ -401,8 +421,8 @@ static int on_sni_callback(SSL *ssl, int *ad, void *arg)
         h2o_socket_t *sock = SSL_get_app_data(ssl);
         on_sni_update_tracing(sock, 0, server_name, server_name_len);
         struct listener_ssl_config_t *resolved = resolve_sni(listener, server_name, server_name_len);
-        if (resolved->ctx != SSL_get_SSL_CTX(ssl)) {
-            SSL_set_SSL_CTX(ssl, resolved->ctx);
+        if (resolved->identities[0]->ossl != SSL_get_SSL_CTX(ssl)) {
+            SSL_set_SSL_CTX(ssl, resolved->identities[0]->ossl);
             set_tcp_congestion_controller(sock, resolved->cc.tcp);
         }
     }
@@ -418,38 +438,45 @@ struct st_on_client_hello_ptls_t {
 static int on_client_hello_ptls(ptls_on_client_hello_t *_self, ptls_t *tls, ptls_on_client_hello_parameters_t *params)
 {
     struct st_on_client_hello_ptls_t *self = (struct st_on_client_hello_ptls_t *)_self;
+    void *conn = *ptls_get_data_ptr(tls);
     struct listener_ssl_config_t *ssl_config;
     int ret = 0;
 
-    /* handle SNI */
+    /* determine ssl_config based on SNI */
     if (params->server_name.base != NULL) {
-        void *conn = *ptls_get_data_ptr(tls);
         on_sni_update_tracing(conn, self->listener->quic.ctx != NULL, (const char *)params->server_name.base,
                               params->server_name.len);
         ssl_config = resolve_sni(self->listener, (const char *)params->server_name.base, params->server_name.len);
-        ptls_context_t *newctx = h2o_socket_ssl_get_picotls_context(ssl_config->ctx);
-        ptls_set_context(tls, newctx);
         ptls_set_server_name(tls, (const char *)params->server_name.base, params->server_name.len);
-        if (self->listener->quic.ctx == NULL) {
-            set_tcp_congestion_controller(conn, ssl_config->cc.tcp);
-        } else {
-            if (ssl_config->cc.quic != NULL)
-                quicly_set_cc(conn, ssl_config->cc.quic);
-        }
     } else {
         ssl_config = self->listener->ssl.entries[0];
         assert(ssl_config != NULL);
     }
 
-    /* switch to raw public key context if requested and available */
+    /* apply config at ssl_config-level */
+    if (self->listener->quic.ctx == NULL) {
+        set_tcp_congestion_controller(conn, ssl_config->cc.tcp);
+    } else {
+        if (ssl_config->cc.quic != NULL)
+            quicly_set_cc(conn, ssl_config->cc.quic);
+    }
+
+    /* determine and set ptls_context_t */
     if (params->server_certificate_types.count > 0 &&
         memchr(params->server_certificate_types.list, PTLS_CERTIFICATE_TYPE_RAW_PUBLIC_KEY,
                params->server_certificate_types.count) != NULL) {
-        if (ssl_config->alternate_ptls_ctx != NULL) {
-            assert(ssl_config->alternate_ptls_ctx->use_raw_public_keys);
-            ptls_set_context(tls, ssl_config->alternate_ptls_ctx);
+        /* switch to raw public key context if requested and available */
+        for (struct listener_ssl_identity_t **identity = ssl_config->identities + 1; *identity != NULL; ++identity) {
+            if ((*identity)->ptls->use_raw_public_keys) {
+                ptls_set_context(tls, (*identity)->ptls);
+                goto SetContext;
+            }
         }
     }
+    /* TODO support ECDSA certs */
+    /* set default */
+    ptls_set_context(tls, ssl_config->identities[0]->ptls);
+SetContext:;
 
     /* handle ALPN */
     if (params->negotiated_protocols.count != 0) {
@@ -495,29 +522,27 @@ static ptls_emit_compressed_certificate_t *build_compressed_certificate_ptls(ptl
     return ecc;
 }
 
-static void build_ssl_dynamic_data(struct listener_ssl_config_t *ssl_conf, h2o_buffer_t *ocsp_status)
+static void build_ssl_dynamic_data(struct listener_ssl_identity_t *identity, h2o_buffer_t *ocsp_status)
 {
     ptls_emit_compressed_certificate_t *emit_cert_compressed_ptls = NULL;
-    ptls_context_t *ctx_ptls;
 
-    if ((ctx_ptls = h2o_socket_ssl_get_picotls_context(ssl_conf->ctx)) != NULL) {
+    if (identity->ptls != NULL)
         emit_cert_compressed_ptls = build_compressed_certificate_ptls(
-            h2o_socket_ssl_get_picotls_context(ssl_conf->ctx),
+            identity->ptls,
             ocsp_status != NULL ? ptls_iovec_init(ocsp_status->bytes, ocsp_status->size) : ptls_iovec_init(NULL, 0));
+
+    pthread_mutex_lock(&identity->dynamic.mutex);
+
+    if (identity->dynamic.ocsp_status != NULL)
+        h2o_buffer_dispose(&identity->dynamic.ocsp_status);
+    if (identity->dynamic.emit_compressed_ptls != NULL) {
+        ptls_dispose_compressed_certificate(identity->dynamic.emit_compressed_ptls);
+        free(identity->dynamic.emit_compressed_ptls);
     }
+    identity->dynamic.ocsp_status = ocsp_status;
+    identity->dynamic.emit_compressed_ptls = emit_cert_compressed_ptls;
 
-    pthread_mutex_lock(&ssl_conf->dynamic.mutex);
-
-    if (ssl_conf->dynamic.ocsp_status != NULL)
-        h2o_buffer_dispose(&ssl_conf->dynamic.ocsp_status);
-    if (ssl_conf->dynamic.emit_compressed_ptls != NULL) {
-        ptls_dispose_compressed_certificate(ssl_conf->dynamic.emit_compressed_ptls);
-        free(ssl_conf->dynamic.emit_compressed_ptls);
-    }
-    ssl_conf->dynamic.ocsp_status = ocsp_status;
-    ssl_conf->dynamic.emit_compressed_ptls = emit_cert_compressed_ptls;
-
-    pthread_mutex_unlock(&ssl_conf->dynamic.mutex);
+    pthread_mutex_unlock(&identity->dynamic.mutex);
 }
 
 static int get_ocsp_response(const char *cert_fn, const char *cmd, h2o_buffer_t **resp)
@@ -556,15 +581,15 @@ Exit:
 
 static h2o_sem_t ocsp_updater_semaphore;
 
-static void *ocsp_updater_thread(void *_ssl_conf)
+static void *ocsp_updater_thread(void *_identity)
 {
-    struct listener_ssl_config_t *ssl_conf = _ssl_conf;
+    struct listener_ssl_identity_t *identity = _identity;
     time_t next_at = 0, now;
     unsigned fail_cnt = 0;
     int status;
     h2o_buffer_t *resp;
 
-    assert(ssl_conf->ocsp_stapling.interval != 0);
+    assert(identity->ocsp_stapling->interval != 0);
 
     while (1) {
         /* sleep until next_at */
@@ -575,36 +600,36 @@ static void *ocsp_updater_thread(void *_ssl_conf)
         }
         /* fetch the response */
         h2o_sem_wait(&ocsp_updater_semaphore);
-        status = get_ocsp_response(ssl_conf->certificate_file, ssl_conf->ocsp_stapling.cmd, &resp);
+        status = get_ocsp_response(identity->certificate_file, identity->ocsp_stapling->cmd, &resp);
         h2o_sem_post(&ocsp_updater_semaphore);
         switch (status) {
         case 0: /* success */
             fail_cnt = 0;
-            build_ssl_dynamic_data(ssl_conf, resp);
+            build_ssl_dynamic_data(identity, resp);
             fprintf(stderr, "[OCSP Stapling] successfully updated the response for certificate file:%s\n",
-                    ssl_conf->certificate_file);
+                    identity->certificate_file);
             break;
         case EX_TEMPFAIL: /* temporary failure */
-            if (fail_cnt == ssl_conf->ocsp_stapling.max_failures) {
+            if (fail_cnt == identity->ocsp_stapling->max_failures) {
                 fprintf(stderr,
                         "[OCSP Stapling] OCSP stapling is temporary disabled due to repeated errors for certificate file:%s\n",
-                        ssl_conf->certificate_file);
-                build_ssl_dynamic_data(ssl_conf, NULL);
+                        identity->certificate_file);
+                build_ssl_dynamic_data(identity, NULL);
             } else {
                 fprintf(stderr,
                         "[OCSP Stapling] reusing old response due to a temporary error occurred while fetching OCSP "
                         "response for certificate file:%s\n",
-                        ssl_conf->certificate_file);
+                        identity->certificate_file);
                 ++fail_cnt;
             }
             break;
         default: /* permanent failure */
-            build_ssl_dynamic_data(ssl_conf, NULL);
-            fprintf(stderr, "[OCSP Stapling] disabled for certificate file:%s\n", ssl_conf->certificate_file);
+            build_ssl_dynamic_data(identity, NULL);
+            fprintf(stderr, "[OCSP Stapling] disabled for certificate file:%s\n", identity->certificate_file);
             goto Exit;
         }
         /* update next_at */
-        next_at = time(NULL) + ssl_conf->ocsp_stapling.interval;
+        next_at = time(NULL) + identity->ocsp_stapling->interval;
     }
 
 Exit:
@@ -613,22 +638,22 @@ Exit:
 
 #ifndef OPENSSL_NO_OCSP
 
-static int on_staple_ocsp_ossl(SSL *ssl, void *_ssl_conf)
+static int on_staple_ocsp_ossl(SSL *ssl, void *_identity)
 {
-    struct listener_ssl_config_t *ssl_conf = _ssl_conf;
+    struct listener_ssl_identity_t *identity = _identity;
     void *resp = NULL;
     size_t len = 0;
 
     /* fetch ocsp response */
-    pthread_mutex_lock(&ssl_conf->dynamic.mutex);
-    if (ssl_conf->dynamic.ocsp_status != NULL) {
-        resp = CRYPTO_malloc((int)ssl_conf->dynamic.ocsp_status->size, __FILE__, __LINE__);
+    pthread_mutex_lock(&identity->dynamic.mutex);
+    if (identity->dynamic.ocsp_status != NULL) {
+        resp = CRYPTO_malloc((int)identity->dynamic.ocsp_status->size, __FILE__, __LINE__);
         if (resp != NULL) {
-            len = ssl_conf->dynamic.ocsp_status->size;
-            memcpy(resp, ssl_conf->dynamic.ocsp_status->bytes, len);
+            len = identity->dynamic.ocsp_status->size;
+            memcpy(resp, identity->dynamic.ocsp_status->bytes, len);
         }
     }
-    pthread_mutex_unlock(&ssl_conf->dynamic.mutex);
+    pthread_mutex_unlock(&identity->dynamic.mutex);
 
     if (resp != NULL) {
         SSL_set_tlsext_status_ocsp_resp(ssl, resp, len);
@@ -642,7 +667,7 @@ static int on_staple_ocsp_ossl(SSL *ssl, void *_ssl_conf)
 
 struct st_emit_certificate_ptls_t {
     ptls_emit_certificate_t super;
-    struct listener_ssl_config_t *conf;
+    struct listener_ssl_identity_t *conf;
 };
 
 static int on_emit_certificate_ptls(ptls_emit_certificate_t *_self, ptls_t *tls, ptls_message_emitter_t *emitter,
@@ -677,8 +702,8 @@ Exit:
     return ret;
 }
 
-static const char *listener_setup_ssl_picotls(struct listener_config_t *listener, struct listener_ssl_config_t *ssl_config,
-                                              SSL_CTX *ssl_ctx, ptls_iovec_t raw_public_key, ptls_cipher_suite_t **cipher_suites,
+static const char *listener_setup_ssl_picotls(struct listener_config_t *listener, struct listener_ssl_identity_t *identity,
+                                              SSL_CTX *base_ctx, ptls_iovec_t raw_public_key, ptls_cipher_suite_t **cipher_suites,
                                               int server_cipher_preference)
 {
     static const ptls_key_exchange_algorithm_t *key_exchanges[] = {
@@ -744,7 +769,7 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
             },
         .ec =
             {
-                .conf = ssl_config,
+                .conf = identity,
                 .super =
                     {
                         .cb = on_emit_certificate_ptls,
@@ -752,7 +777,7 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
             },
     };
     { /* obtain key and cert (via fake connection for libressl compatibility) */
-        SSL *fakeconn = SSL_new(ssl_ctx);
+        SSL *fakeconn = SSL_new(base_ctx);
         assert(fakeconn != NULL);
         key = SSL_get_privatekey(fakeconn);
         assert(key != NULL);
@@ -765,7 +790,7 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
     if (use_client_verify) {
         pctx->ctx.require_client_authentication = 1;
         /* set verify callback */
-        X509_STORE *ca_store = SSL_CTX_get_cert_store(ssl_ctx);
+        X509_STORE *ca_store = SSL_CTX_get_cert_store(base_ctx);
         if (ptls_openssl_init_verify_certificate(&pctx->vc, ca_store) != 0) {
             free(pctx);
             return "failed to setup client certificate verification environment";
@@ -779,34 +804,25 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
         return "failed to setup private key";
     }
 
-    /* setup cert, if using X.509 certificates */
-    if (cert != NULL) {
-        SSL_CTX_get_extra_chain_certs(ssl_ctx, &cert_chain);
+    if (raw_public_key.base == NULL) {
+        /* setup X.509 certificates */
+        assert(cert != NULL);
+        SSL_CTX_get_extra_chain_certs(base_ctx, &cert_chain);
         ret = ptls_openssl_load_certificates(&pctx->ctx, cert, cert_chain);
         assert(ret == 0);
     } else {
-        assert(raw_public_key.base != NULL);
+        /* setup raw public key */
+        pctx->ctx.certificates.list = h2o_mem_alloc(sizeof(pctx->ctx.certificates.list[0]));
+        pctx->ctx.certificates.list[0] = raw_public_key;
+        pctx->ctx.certificates.count = 1;
+        pctx->ctx.use_raw_public_keys = 1;
+        pctx->ctx.emit_certificate = NULL;
     }
 
-    /* setup raw public key, using either `&pctx->ctx` or a copied entry in `ssl_config->alternate_ptls_ctx` depending on if x509
-     * cert occupies the former */
-    if (raw_public_key.base != NULL) {
-        ptls_context_t *raw_ctx;
-        if (cert != NULL) {
-            raw_ctx = h2o_mem_alloc(sizeof(*raw_ctx));
-            *raw_ctx = pctx->ctx;
-            ssl_config->alternate_ptls_ctx = raw_ctx;
-        } else {
-            raw_ctx = &pctx->ctx;
-        }
-        raw_ctx->certificates.list = h2o_mem_alloc(sizeof(raw_ctx->certificates.list[0]));
-        raw_ctx->certificates.list[0] = raw_public_key;
-        raw_ctx->certificates.count = 1;
-        raw_ctx->use_raw_public_keys = 1;
-        raw_ctx->emit_certificate = NULL;
-    }
+    if (listener->quic.ctx != NULL)
+        quicly_amend_ptls_context(&pctx->ctx);
 
-    h2o_socket_ssl_set_picotls_context(ssl_ctx, &pctx->ctx);
+    identity->ptls = &pctx->ctx;
 
     return NULL;
 }
@@ -885,6 +901,113 @@ static ptls_cipher_suite_t **parse_tls13_ciphers(h2o_configurator_command_t *cmd
     return ret.entries;
 }
 
+static struct listener_ssl_identity_t *create_ssl_identity(struct listener_ssl_identity_t ***list, const char *certificate_file,
+                                                           const char *key_file, struct listener_ssl_ocsp_stapling_t *ocsp_stapling)
+{
+    struct listener_ssl_identity_t *new_identity = h2o_mem_alloc(sizeof(*new_identity));
+    *new_identity = (struct listener_ssl_identity_t){
+        .certificate_file = h2o_strdup(NULL, certificate_file, SIZE_MAX).base,
+        .key_file = h2o_strdup(NULL, key_file, SIZE_MAX).base,
+        .ocsp_stapling = ocsp_stapling,
+        .dynamic =
+            {
+                .mutex = PTHREAD_MUTEX_INITIALIZER,
+            },
+    };
+    build_ssl_dynamic_data(new_identity, NULL);
+
+    size_t cnt = 0;
+    if (*list != NULL) {
+        for (; (*list)[cnt] != NULL; ++cnt)
+            ;
+    }
+    *list = h2o_mem_realloc(*list, sizeof(**list) * (cnt + 2));
+    (*list)[cnt] = new_identity;
+    (*list)[cnt + 1] = NULL;
+
+    return new_identity;
+}
+
+static int ssl_identity_is_equal(struct listener_ssl_config_t *conf, yoml_t *key_file, yoml_t **certificate_file,
+                                 yoml_t **raw_pubkey_file)
+{
+    struct listener_ssl_identity_t **identity = conf->identities;
+
+#define COMPARE(_cert)                                                                                                             \
+    do {                                                                                                                           \
+        if (*identity == NULL)                                                                                                     \
+            return 0;                                                                                                              \
+        if (strcmp((*identity)->key_file, key_file->data.scalar) != 0)                                                             \
+            return 0;                                                                                                              \
+        if (strcmp((*identity)->certificate_file, (*_cert)->data.scalar) != 0)                                                     \
+            return 0;                                                                                                              \
+    } while (0)
+
+    if (certificate_file != NULL) {
+        COMPARE(certificate_file);
+        ++identity;
+    }
+    if (raw_pubkey_file != NULL) {
+        COMPARE(raw_pubkey_file);
+        ++identity;
+    }
+    return *identity == NULL;
+
+#undef COMPARE
+}
+
+static int load_identity(h2o_configurator_command_t *cmd, SSL_CTX *ssl_ctx, int use_neverbleed, yoml_t *key_file,
+                         yoml_t **certificate_file, yoml_t **client_ca_file)
+{
+
+    if (use_neverbleed) {
+        char errbuf[NEVERBLEED_ERRBUF_SIZE];
+        if (neverbleed == NULL) {
+            neverbleed_post_fork_cb = on_neverbleed_fork;
+            neverbleed = h2o_mem_alloc(sizeof(*neverbleed));
+            if (neverbleed_init(neverbleed, errbuf) != 0) {
+                fprintf(stderr, "%s\n", errbuf);
+                abort();
+            }
+        }
+        if (neverbleed_load_private_key_file(neverbleed, ssl_ctx, key_file->data.scalar, errbuf) != 1) {
+            h2o_configurator_errprintf(cmd, key_file, "failed to load private key file:%s:%s\n", key_file->data.scalar, errbuf);
+            return -1;
+        }
+    } else {
+        if (SSL_CTX_use_PrivateKey_file(ssl_ctx, key_file->data.scalar, SSL_FILETYPE_PEM) != 1) {
+            h2o_configurator_errprintf(cmd, key_file, "failed to load private key file:%s\n", key_file->data.scalar);
+            ERR_print_errors_cb(on_openssl_print_errors, stderr);
+            return -1;
+        }
+    }
+
+    /* if requested, load the certificate chain */
+    if (certificate_file != NULL && SSL_CTX_use_certificate_chain_file(ssl_ctx, (*certificate_file)->data.scalar) != 1) {
+        h2o_configurator_errprintf(cmd, *certificate_file, "failed to load certificate file:%s\n",
+                                   (*certificate_file)->data.scalar);
+        ERR_print_errors_cb(on_openssl_print_errors, stderr);
+        return -1;
+    }
+
+    /* set up client certificate verification if client_ca_file is configured */
+    if (client_ca_file != NULL) {
+        SSL_CTX_set_verify(ssl_ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, NULL);
+        if (SSL_CTX_load_verify_locations(ssl_ctx, (*client_ca_file)->data.scalar, NULL) != 1) {
+            h2o_configurator_errprintf(cmd, *client_ca_file, "failed to load client CA file:%s\n", (*client_ca_file)->data.scalar);
+            ERR_print_errors_cb(on_openssl_print_errors, stderr);
+            return -1;
+        }
+        /* Enable partial chain verification. That is done at the cert-store level, as the store is shared by the verification
+         * callback of picotls for incoming TLS 1.3 connections. */
+        X509_VERIFY_PARAM *vpm = X509_STORE_get0_param(SSL_CTX_get_cert_store(ssl_ctx));
+        int ret = X509_VERIFY_PARAM_set_flags(vpm, X509_V_FLAG_PARTIAL_CHAIN);
+        assert(ret == 1);
+    }
+
+    return 0;
+}
+
 static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *listen_node,
                               yoml_t **ssl_node, yoml_t **cc_node, yoml_t **initcwnd_node, struct listener_config_t *listener,
                               int listener_is_new)
@@ -896,9 +1019,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
 
     h2o_iovec_t *http2_origin_frame = NULL;
     long ssl_options = SSL_OP_ALL;
-    uint64_t ocsp_update_interval = 4 * 60 * 60; /* defaults to 4 hours */
-    unsigned ocsp_max_failures = 3;              /* defaults to 3; permit 3 failures before temporary disabling OCSP stapling */
-    int use_neverbleed = 1, use_picotls = 1;     /* enabled by default */
+    int use_neverbleed = 1, use_picotls = 1; /* enabled by default */
     ptls_cipher_suite_t **cipher_suite_tls13 = NULL;
 
     if (!listener_is_new) {
@@ -992,39 +1113,34 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
             use_picotls = 0;
         }
     }
-    if (ocsp_update_interval_node != NULL) {
-        if (h2o_configurator_scanf(cmd, *ocsp_update_interval_node, "%" SCNu64, &ocsp_update_interval) != 0)
+
+    /* setup OCSP stapling context as `ocsp_stapling`, or set to NULL if disabled */
+    struct listener_ssl_ocsp_stapling_t *ocsp_stapling = h2o_mem_alloc(sizeof(*ocsp_stapling));
+    *ocsp_stapling = (struct listener_ssl_ocsp_stapling_t){
+        .interval = 4 * 60 * 60, /* default update interval of 4 hours */
+        .max_failures = 3,       /* by default, permit 3 consecutive failures before temporary disabling OCSP stapling */
+        .cmd = "share/h2o/fetch-ocsp-response",
+    };
+    if (ocsp_update_cmd != NULL)
+        ocsp_stapling->cmd = h2o_strdup(NULL, (*ocsp_update_cmd)->data.scalar, SIZE_MAX).base;
+    if (ocsp_max_failures_node != NULL) {
+        if (h2o_configurator_scanf(cmd, *ocsp_max_failures_node, "%u", &ocsp_stapling->max_failures) != 0)
             goto Error;
     }
-    if (ocsp_max_failures_node != NULL) {
-        if (h2o_configurator_scanf(cmd, *ocsp_max_failures_node, "%u", &ocsp_max_failures) != 0)
+    if (ocsp_update_interval_node != NULL) {
+        if (h2o_configurator_scanf(cmd, *ocsp_update_interval_node, "%" SCNu64, &ocsp_stapling->interval) != 0)
             goto Error;
+        if (ocsp_stapling->interval == 0)
+            ocsp_stapling = NULL;
     }
 
     /* add the host to the existing SSL config, if the certificate file is already registered */
     if (ctx->hostconf != NULL) {
-        size_t i;
-        for (i = 0; i != listener->ssl.size; ++i) {
+        for (size_t i = 0; i != listener->ssl.size; ++i) {
             struct listener_ssl_config_t *ssl_config = listener->ssl.entries[i];
             /* bail out if there's config mismatch */
-            if (ssl_config->certificate_file != NULL) {
-                if (certificate_file == NULL)
-                    continue;
-                if (strcmp(ssl_config->certificate_file, (*certificate_file)->data.scalar) != 0)
-                    continue;
-            } else {
-                if (certificate_file != NULL)
-                    continue;
-            }
-            if (ssl_config->raw_pubkey_file != NULL) {
-                if (raw_pubkey_file == NULL)
-                    continue;
-                if (strcmp(ssl_config->raw_pubkey_file, (*raw_pubkey_file)->data.scalar) != 0)
-                    continue;
-            } else {
-                if (raw_pubkey_file != NULL)
-                    continue;
-            }
+            if (!ssl_identity_is_equal(ssl_config, *key_file, certificate_file, raw_pubkey_file))
+                continue;
             /* matched! add host */
             listener_setup_ssl_add_host(ssl_config, ctx->hostconf->authority.hostport);
             return 0;
@@ -1040,36 +1156,8 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
     ssl_options |= SSL_OP_NO_RENEGOTIATION;
 #endif
 
-    /* setup */
-    ssl_ctx = SSL_CTX_new(SSLv23_server_method());
-    SSL_CTX_set_options(ssl_ctx, ssl_options);
-
-    /* set up client certificate verification if client_ca_file is configured */
-    if (client_ca_file != NULL) {
-        SSL_CTX_set_verify(ssl_ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, NULL);
-        if (SSL_CTX_load_verify_locations(ssl_ctx, (*client_ca_file)->data.scalar, NULL) != 1) {
-            h2o_configurator_errprintf(cmd, *client_ca_file, "failed to load client CA file:%s\n", (*client_ca_file)->data.scalar);
-            ERR_print_errors_cb(on_openssl_print_errors, stderr);
-            goto Error;
-        }
-        /* Enable partial chain verification. That is done at the cert-store level, as the store is shared by the verification
-         * callback of picotls for incoming TLS 1.3 connections. */
-        X509_VERIFY_PARAM *vpm = X509_STORE_get0_param(SSL_CTX_get_cert_store(ssl_ctx));
-        int ret = X509_VERIFY_PARAM_set_flags(vpm, X509_V_FLAG_PARTIAL_CHAIN);
-        assert(ret == 1);
-    }
-
-    SSL_CTX_set_session_id_context(ssl_ctx, H2O_SESSID_CTX, H2O_SESSID_CTX_LEN);
-
-    setup_ecc_key(ssl_ctx);
-    if (certificate_file != NULL && SSL_CTX_use_certificate_chain_file(ssl_ctx, (*certificate_file)->data.scalar) != 1) {
-        h2o_configurator_errprintf(cmd, *certificate_file, "failed to load certificate file:%s\n",
-                                   (*certificate_file)->data.scalar);
-        ERR_print_errors_cb(on_openssl_print_errors, stderr);
-        goto Error;
-    }
+    /* disable neverbleed in case the process is not going to serve requests */
     if (use_neverbleed) {
-        /* disable neverbleed in case the process is not going to serve requests */
         switch (conf.run_mode) {
         case RUN_MODE_DAEMON:
         case RUN_MODE_MASTER:
@@ -1079,27 +1167,12 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
             break;
         }
     }
-    if (use_neverbleed) {
-        char errbuf[NEVERBLEED_ERRBUF_SIZE];
-        if (neverbleed == NULL) {
-            neverbleed_post_fork_cb = on_neverbleed_fork;
-            neverbleed = h2o_mem_alloc(sizeof(*neverbleed));
-            if (neverbleed_init(neverbleed, errbuf) != 0) {
-                fprintf(stderr, "%s\n", errbuf);
-                abort();
-            }
-        }
-        if (neverbleed_load_private_key_file(neverbleed, ssl_ctx, (*key_file)->data.scalar, errbuf) != 1) {
-            h2o_configurator_errprintf(cmd, *key_file, "failed to load private key file:%s:%s\n", (*key_file)->data.scalar, errbuf);
-            goto Error;
-        }
-    } else {
-        if (SSL_CTX_use_PrivateKey_file(ssl_ctx, (*key_file)->data.scalar, SSL_FILETYPE_PEM) != 1) {
-            h2o_configurator_errprintf(cmd, *key_file, "failed to load private key file:%s\n", (*key_file)->data.scalar);
-            ERR_print_errors_cb(on_openssl_print_errors, stderr);
-            goto Error;
-        }
-    }
+
+    /* setup */
+    ssl_ctx = SSL_CTX_new(SSLv23_server_method());
+    SSL_CTX_set_options(ssl_ctx, ssl_options);
+    SSL_CTX_set_session_id_context(ssl_ctx, H2O_SESSID_CTX, H2O_SESSID_CTX_LEN);
+    setup_ecc_key(ssl_ctx);
     if (cipher_suite != NULL && SSL_CTX_set_cipher_list(ssl_ctx, (*cipher_suite)->data.scalar) != 1) {
         h2o_configurator_errprintf(cmd, *cipher_suite, "failed to setup SSL cipher suite\n");
         ERR_print_errors_cb(on_openssl_print_errors, stderr);
@@ -1136,11 +1209,16 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
     h2o_ssl_register_alpn_protocols(ssl_ctx, h2o_alpn_protocols);
 #endif
 
-    /* set SNI callback to the first SSL context, when and only when it should be used */
+    /* set SNI callback to the first SSL context, when we are about to add a second context */
     if (listener->ssl.size == 1) {
-        SSL_CTX_set_tlsext_servername_callback(listener->ssl.entries[0]->ctx, on_sni_callback);
-        SSL_CTX_set_tlsext_servername_arg(listener->ssl.entries[0]->ctx, listener);
+        SSL_CTX *ossl = listener->ssl.entries[0]->identities[0]->ossl;
+        SSL_CTX_set_tlsext_servername_callback(ossl, on_sni_callback);
+        SSL_CTX_set_tlsext_servername_arg(ossl, listener);
     }
+
+    /* load identity */
+    if (load_identity(cmd, ssl_ctx, use_neverbleed, *key_file, certificate_file, client_ca_file) != 0)
+        goto Error;
 
     /* create a new entry in the SSL context list */
     struct listener_ssl_config_t *ssl_config = h2o_mem_alloc(sizeof(*ssl_config));
@@ -1150,38 +1228,55 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
     if (ctx->hostconf != NULL) {
         listener_setup_ssl_add_host(ssl_config, ctx->hostconf->authority.hostport);
     }
-    ssl_config->ctx = ssl_ctx;
-    if (certificate_file != NULL)
-        ssl_config->certificate_file = h2o_strdup(NULL, (*certificate_file)->data.scalar, SIZE_MAX).base;
     ssl_config->http2_origin_frame = http2_origin_frame;
+
+    /* create first identity */
+    struct listener_ssl_identity_t *identity = create_ssl_identity(
+        &ssl_config->identities, certificate_file != NULL ? (*certificate_file)->data.scalar : (*raw_pubkey_file)->data.scalar,
+        (*key_file)->data.scalar, certificate_file != NULL ? ocsp_stapling : NULL);
+    identity->ossl = ssl_ctx;
 
 #ifndef OPENSSL_NO_OCSP
     SSL_CTX_set_tlsext_status_cb(ssl_ctx, on_staple_ocsp_ossl);
-    SSL_CTX_set_tlsext_status_arg(ssl_ctx, ssl_config);
+    SSL_CTX_set_tlsext_status_arg(ssl_ctx, identity);
 #endif
 
     if (use_picotls) {
-        ptls_iovec_t raw_pubkey = {};
+        /* if X.509 is used, register that as the current identity */
+        if (certificate_file != NULL) {
+            const char *errstr = listener_setup_ssl_picotls(listener, identity, ssl_ctx, ptls_iovec_init(NULL, 0),
+                                                            cipher_suite_tls13, !!(ssl_options & SSL_OP_CIPHER_SERVER_PREFERENCE));
+            if (errstr != NULL) {
+                /* error to setup TLS 1.3 context is a fatal error for QUIC, but non-fatal for TCP */
+                if (listener->quic.ctx != NULL) {
+                    h2o_configurator_errprintf(cmd, *ssl_node, "%s", errstr);
+                    goto Error;
+                }
+                h2o_configurator_errprintf(cmd, *ssl_node, "%s; TLS 1.3 will be disabled", errstr);
+            }
+            identity = NULL;
+        }
+        /* if raw public key is to be used, register that */
         if (raw_pubkey_file != NULL) {
+            ptls_iovec_t raw_pubkey = {};
             size_t count;
             if (ptls_load_pem_objects((*raw_pubkey_file)->data.scalar, "PUBLIC KEY", &raw_pubkey, 1, &count) != 0) {
                 h2o_configurator_errprintf(cmd, *raw_pubkey_file, "failed to load public key from file:%s:%s",
                                            (*raw_pubkey_file)->data.scalar, strerror(errno));
                 return -1;
             }
+            if (identity == NULL)
+                identity =
+                    create_ssl_identity(&ssl_config->identities, (*raw_pubkey_file)->data.scalar, (*key_file)->data.scalar, NULL);
+            const char *errstr = listener_setup_ssl_picotls(listener, identity, ssl_ctx, raw_pubkey, cipher_suite_tls13,
+                                                            !!(ssl_options & SSL_OP_CIPHER_SERVER_PREFERENCE));
+            if (errstr != NULL) {
+                h2o_configurator_errprintf(cmd, *ssl_node, "%s", errstr);
+                return -1;
+            }
         }
-        const char *errstr = listener_setup_ssl_picotls(listener, ssl_config, ssl_ctx, raw_pubkey, cipher_suite_tls13,
-                                                        !!(ssl_options & SSL_OP_CIPHER_SERVER_PREFERENCE));
-        if (errstr != NULL)
-            h2o_configurator_errprintf(cmd, *ssl_node, "%s; TLS 1.3 will be disabled\n", errstr);
-        if (listener->quic.ctx != NULL) {
-            listener->quic.ctx->tls = h2o_socket_ssl_get_picotls_context(ssl_ctx);
-            assert(listener->quic.ctx->tls != NULL);
-            assert(listener->quic.ctx->tls->update_traffic_key == NULL && "the TLS context has not been amended yet");
-            quicly_amend_ptls_context(listener->quic.ctx->tls);
-            if (ssl_config->alternate_ptls_ctx != NULL)
-                quicly_amend_ptls_context(ssl_config->alternate_ptls_ctx);
-        }
+        if (listener->quic.ctx != NULL && listener->quic.ctx->tls == NULL)
+            listener->quic.ctx->tls = ssl_config->identities[0]->ptls;
     } else {
         if (listener->quic.ctx != NULL) {
             h2o_configurator_errprintf(cmd, *ssl_node, "QUIC support requires TLS 1.3 using picotls");
@@ -1192,6 +1287,9 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
             goto Error;
         }
     }
+
+    if (ssl_config->identities[0]->ptls != NULL)
+        h2o_socket_ssl_set_picotls_context(ssl_config->identities[0]->ossl, ssl_config->identities[0]->ptls);
 
     /* congestion control is a concept of the transport but we want to control it per-host, hence defined here */
     if (cc_node != NULL) {
@@ -1228,19 +1326,14 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
         }
     }
 
-    if (certificate_file != NULL) {
-        pthread_mutex_init(&ssl_config->dynamic.mutex, NULL);
-        build_ssl_dynamic_data(ssl_config, NULL);
-        ssl_config->ocsp_stapling.cmd = ocsp_update_cmd != NULL ? h2o_strdup(NULL, (*ocsp_update_cmd)->data.scalar, SIZE_MAX).base
-                                                                : "share/h2o/fetch-ocsp-response";
-        if (ocsp_update_interval != 0) {
+    /* start OCSP fetcher */
+    for (struct listener_ssl_identity_t **identity = ssl_config->identities; *identity != NULL; ++identity) {
+        if ((*identity)->ocsp_stapling != NULL) {
             switch (conf.run_mode) {
-            case RUN_MODE_WORKER:
-                ssl_config->ocsp_stapling.interval =
-                    ocsp_update_interval; /* is also used as a flag for indicating if the updater thread was spawned */
-                ssl_config->ocsp_stapling.max_failures = ocsp_max_failures;
-                h2o_multithread_create_thread(&ssl_config->ocsp_stapling.updater_tid, NULL, ocsp_updater_thread, ssl_config);
-                break;
+            case RUN_MODE_WORKER: {
+                pthread_t tid;
+                h2o_multithread_create_thread(&tid, NULL, ocsp_updater_thread, *identity);
+            } break;
             case RUN_MODE_MASTER:
             case RUN_MODE_DAEMON:
                 /* nothing to do */
@@ -1248,7 +1341,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
             case RUN_MODE_TEST: {
                 h2o_buffer_t *respbuf;
                 fprintf(stderr, "[OCSP Stapling] testing for certificate file:%s\n", (*certificate_file)->data.scalar);
-                switch (get_ocsp_response((*certificate_file)->data.scalar, ssl_config->ocsp_stapling.cmd, &respbuf)) {
+                switch (get_ocsp_response((*certificate_file)->data.scalar, ocsp_stapling->cmd, &respbuf)) {
                 case 0:
                     h2o_buffer_dispose(&respbuf);
                     fprintf(stderr, "[OCSP Stapling] stapling works for file:%s\n", (*certificate_file)->data.scalar);
@@ -2944,7 +3037,7 @@ static void *run_loop(void *_thread_index)
                                                {&conf.threads[thread_index].ctx, listener_config->hosts, NULL, NULL,
                                                 listener_config->proxy_protocol, &conf.threads[thread_index].memcached}};
         if (listener_config->ssl.size != 0) {
-            listeners[i].accept_ctx.ssl_ctx = listener_config->ssl.entries[0]->ctx;
+            listeners[i].accept_ctx.ssl_ctx = listener_config->ssl.entries[0]->identities[0]->ossl;
             listeners[i].accept_ctx.http2_origin_frame = listener_config->ssl.entries[0]->http2_origin_frame;
         }
         listeners[i].sock = h2o_evloop_socket_create(conf.threads[thread_index].ctx.loop, fd, H2O_SOCKET_FLAG_DONT_READ);
@@ -3685,7 +3778,7 @@ int main(int argc, char **argv)
         for (i = 0; i != conf.num_listeners; ++i) {
             for (j = 0; j != conf.listeners[i]->ssl.size; ++j) {
                 h2o_vector_reserve(NULL, &ssl_contexts, ssl_contexts.size + 1);
-                ssl_contexts.entries[ssl_contexts.size++] = conf.listeners[i]->ssl.entries[j]->ctx;
+                ssl_contexts.entries[ssl_contexts.size++] = conf.listeners[i]->ssl.entries[j]->identities[0]->ossl;
             }
             if (conf.listeners[i]->quic.ctx != NULL)
                 has_quic = 1;
@@ -3704,7 +3797,7 @@ int main(int argc, char **argv)
         free(ssl_contexts.entries);
         for (i = 0; i != conf.num_listeners; ++i) {
             for (j = 0; j != conf.listeners[i]->ssl.size; ++j) {
-                ptls_context_t *ptls = h2o_socket_ssl_get_picotls_context(conf.listeners[i]->ssl.entries[j]->ctx);
+                ptls_context_t *ptls = conf.listeners[i]->ssl.entries[j]->identities[0]->ptls;
                 if (ptls != NULL)
                     ssl_setup_session_resumption_ptls(ptls, conf.listeners[i]->quic.ctx);
             }
