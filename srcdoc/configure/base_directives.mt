@@ -164,13 +164,31 @@ The <code style="font-weight: bold;">ssl</code> attribute must be defined as a m
 </p>
 <dl>
 <dt id="certificate-file">certificate-file:</dt>
-<dd>path of the SSL certificate file (mandatory)</dd>
+<dd>
+Path of the SSL certificate file (mandatory).
+This attribute can specify a PEM file containing either an X.509 certificate chain or a raw public key.
+When the latter form is being used, <a href="https://datatracker.ietf.org/doc/html/rfc7250">RFC 7250</a> handshake will be used.
+</dd>
 <dt id="key-file">key-file:</dt>
-<dd>path of the SSL private key file (mandatory)</dd>
+<dd>Path of the SSL private key file (mandatory).</dd>
+<dt>identity:</dt>
+<dd>List of certificate / key pairs.
+This attribute can be used in place of <code>certificate-file</code> and <code>key-file</code> to specify more than one pair of certificates and keys.
+The first pair designates the default.
+When a TLS handshake is performed, h2o iterates through the suceeding pairs one by one, and uses the first pair that contains a compatible certificate / key. If none of the succeeding pairs are compatible, the default (i.e., the first pair) will be used.
+<?= $ctx->{example}->('Using RSA and ECDSA certificates', <<'EOT')
+ssl:
+  identity:
+  - key-file: /path/to/rsa.key
+    certificate-file: /path/to/rsa.crt
+  - key-file: /path/to/ecdsa.key
+    certificate-file: /path/to/ecdsa.crt
+EOT
+?>
 <dt id="minimum-version">minimum-version:</dt>
 <dd>
 minimum protocol version, should be one of: <code>SSLv2</code>, <code>SSLv3</code>, <code>TLSv1</code>, <code>TLSv1.1</code>, <code>TLSv1.2</code>.
-Default is <code>TLSv1</code>
+Default is <code>TLSv1</code>.
 </dd>
 <dt id="min-version">min-version:</dt>
 <dd>
