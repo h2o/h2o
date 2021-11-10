@@ -1019,8 +1019,8 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
     { /* parse the command structure, building `identities` */
         yoml_t **identity_node, **certificate_file, **key_file;
         if (h2o_configurator_parse_mapping(cmd, *ssl_node, NULL,
-                                           "identity:ma,certificate-file:s,key-file:s,min-version:s,minimum-version:s,"
-                                           "max-version:s,maximum-version:s,cipher-suite:s,cipher-suite-tls1.3:a,ocsp-update-cmd:s,"
+                                           "identity:a,certificate-file:s,key-file:s,min-version:s,minimum-version:s,max-version:s,"
+                                           "maximum-version:s,cipher-suite:s,cipher-suite-tls1.3:a,ocsp-update-cmd:s,"
                                            "ocsp-update-interval:*,ocsp-max-failures:*,dh-file:s,cipher-preference:*,neverbleed:*,"
                                            "http2-origin-frame:*,client-ca-file:s",
                                            &identity_node, &certificate_file, &key_file, &min_version, &min_version, &max_version,
@@ -1034,29 +1034,18 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
                                            "either one of `identity` and `certificate-file`-`key-file` pair can be used");
                 return -1;
             }
-#define PARSE_IDENTITY(node, ident)                                                                                                \
-    h2o_configurator_parse_mapping(cmd, (node), "certificate-file:s,key-file:s", NULL, &(ident)->certificate_file,                 \
-                                   &(ident)->key_file)
-            if ((*identity_node)->type == YOML_TYPE_MAPPING) {
-                parsed_identities = alloca(sizeof(*parsed_identities));
-                num_parsed_identities = 1;
-                if (PARSE_IDENTITY(*identity_node, &parsed_identities[0]) != 0)
+            parsed_identities = alloca(sizeof(*parsed_identities) * (*identity_node)->data.sequence.size);
+            num_parsed_identities = (*identity_node)->data.sequence.size;
+            for (size_t i = 0; i != (*identity_node)->data.sequence.size; ++i) {
+                yoml_t *src = (*identity_node)->data.sequence.elements[i];
+                if (src->type != YOML_TYPE_MAPPING) {
+                    h2o_configurator_errprintf(cmd, src, "elements of `identity` must be a mapping");
                     return -1;
-            } else {
-                assert((*identity_node)->type == YOML_TYPE_SEQUENCE);
-                parsed_identities = alloca(sizeof(*parsed_identities) * (*identity_node)->data.sequence.size);
-                num_parsed_identities = (*identity_node)->data.sequence.size;
-                for (size_t i = 0; i != (*identity_node)->data.sequence.size; ++i) {
-                    yoml_t *src = (*identity_node)->data.sequence.elements[i];
-                    if (src->type != YOML_TYPE_MAPPING) {
-                        h2o_configurator_errprintf(cmd, src, "elements of `identity` must be a mapping");
-                        return -1;
-                    }
-                    if (PARSE_IDENTITY(src, &parsed_identities[i]) != 0)
-                        return -1;
                 }
+                if (h2o_configurator_parse_mapping(cmd, src, "certificate-file:s,key-file:s", NULL,
+                                                   &parsed_identities[i].certificate_file, &parsed_identities[i].key_file) != 0)
+                    return -1;
             }
-#undef PARSE_IDENTITY
         } else {
             if (certificate_file == NULL || key_file == NULL) {
                 h2o_configurator_errprintf(cmd, *ssl_node, "cannot find mandatory attribute: %s",
