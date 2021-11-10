@@ -707,6 +707,7 @@
 		086001C82730B8290043886F /* hello.rb */ = {isa = PBXFileReference; lastKnownFileType = text.script.ruby; path = hello.rb; sourceTree = "<group>"; };
 		086001C92730B8E20043886F /* 50mruby-h2-rtt.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50mruby-h2-rtt.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		086001CA2730B9B20043886F /* udp-generator.pl */ = {isa = PBXFileReference; lastKnownFileType = text.script.perl; path = "udp-generator.pl"; sourceTree = "<group>"; };
+		086001CC273BBBCF0043886F /* 40tls-multiple-certs.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "40tls-multiple-certs.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		08790DD91D80153600A04BC1 /* net.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = net.c; sourceTree = "<group>"; };
 		08790DDB1D80154C00A04BC1 /* sds.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = sds.c; sourceTree = "<group>"; };
 		08790DDD1D8015A400A04BC1 /* net.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = net.h; sourceTree = "<group>"; };
@@ -2223,6 +2224,7 @@
 				086001BF2730B6E30043886F /* 40session-ticket */,
 				107D4D501B58B342004A9B21 /* 40session-ticket.t */,
 				104B9A321A59E27A009EEE64 /* 40ssl-cipher-suite.t */,
+				086001CC273BBBCF0043886F /* 40tls-multiple-certs.t */,
 				E93BB6D025E09504009C24D8 /* 40tls-raw-pubkey.t */,
 				E9F677D82008686B006476D3 /* 40tls13-early-data.t */,
 				106C22FB1C0413DA00405689 /* 40tunnel.t */,
