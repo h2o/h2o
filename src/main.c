@@ -466,26 +466,28 @@ static int on_client_hello_ptls(ptls_on_client_hello_t *_self, ptls_t *tls, ptls
             quicly_set_cc(conn, ssl_config->cc.quic);
     }
 
-    /* If available, use an alternative context that matches the requested cert type and supported signature algorithms. */
+    /* Choose the identity, set the context. */
     int prefer_raw_public_key = params->server_certificate_types.count > 0 &&
                                 memchr(params->server_certificate_types.list, PTLS_CERTIFICATE_TYPE_RAW_PUBLIC_KEY,
                                        params->server_certificate_types.count) != NULL;
-    for (struct listener_ssl_identity_t *identity = ssl_config->identities + 1; identity->certificate_file != NULL; ++identity) {
+    struct listener_ssl_identity_t *identity;
+    for (identity = ssl_config->identities + 1; identity->certificate_file != NULL; ++identity) {
         if (prefer_raw_public_key == identity->ptls->use_raw_public_keys) {
             ptls_openssl_sign_certificate_t *signer = (ptls_openssl_sign_certificate_t *)identity->ptls->sign_certificate;
-            for (size_t signer_index = 0; signer->schemes[signer_index].scheme_id != UINT16_MAX; ++signer_index) {
-                for (size_t hello_index = 0; hello_index < params->signature_algorithms.count; ++hello_index) {
-                    if (signer->schemes[signer_index].scheme_id == params->signature_algorithms.list[hello_index]) {
-                        ptls_set_context(tls, identity->ptls);
-                        goto SetContext;
-                    }
-                }
-            }
+            /* If the client omits siganture_algorithms extension (using RFC 7250), use the first identity with the same certificate
+             * type. Otherwise, choose the first identity that contains a compatible signature scheme. */
+            if (params->signature_algorithms.count == 0)
+                goto IdentityFound;
+            for (size_t signer_index = 0; signer->schemes[signer_index].scheme_id != UINT16_MAX; ++signer_index)
+                for (size_t hello_index = 0; hello_index < params->signature_algorithms.count; ++hello_index)
+                    if (signer->schemes[signer_index].scheme_id == params->signature_algorithms.list[hello_index])
+                        goto IdentityFound;
         }
     }
-    /* set default */
-    ptls_set_context(tls, ssl_config->identities[0].ptls);
-SetContext:;
+    /* Compatible identity was not found within the alternatives. Use the default. */
+    identity = ssl_config->identities;
+IdentityFound:
+    ptls_set_context(tls, identity->ptls);
 
     /* handle ALPN */
     if (params->negotiated_protocols.count != 0) {
