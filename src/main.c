@@ -934,15 +934,6 @@ static int load_ssl_identity(h2o_configurator_command_t *cmd, SSL_CTX *ssl_ctx, 
 
     /* load private key */
     if (use_neverbleed) {
-        char errbuf[NEVERBLEED_ERRBUF_SIZE];
-        if (neverbleed == NULL) {
-            neverbleed_post_fork_cb = on_neverbleed_fork;
-            neverbleed = h2o_mem_alloc(sizeof(*neverbleed));
-            if (neverbleed_init(neverbleed, errbuf) != 0) {
-                fprintf(stderr, "%s\n", errbuf);
-                abort();
-            }
-        }
         if (neverbleed_load_private_key_file(neverbleed, ssl_ctx, (*parsed->key_file)->data.scalar, errbuf) != 1) {
             h2o_configurator_errprintf(cmd, *parsed->key_file, "failed to load private key file:%s:%s\n",
                                        (*parsed->key_file)->data.scalar, errbuf);
@@ -1165,7 +1156,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
     ssl_options |= SSL_OP_NO_RENEGOTIATION;
 #endif
 
-    /* disable neverbleed in case the process is not going to serve requests */
+    /* disable neverbleed in case the process is not going to serve requests, or initialize neverbleed */
     if (use_neverbleed) {
         switch (conf.run_mode) {
         case RUN_MODE_DAEMON:
@@ -1174,6 +1165,17 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
             break;
         default:
             break;
+        }
+    }
+    if (use_neverbleed) {
+        char errbuf[NEVERBLEED_ERRBUF_SIZE];
+        if (neverbleed == NULL) {
+            neverbleed_post_fork_cb = on_neverbleed_fork;
+            neverbleed = h2o_mem_alloc(sizeof(*neverbleed));
+            if (neverbleed_init(neverbleed, errbuf) != 0) {
+                fprintf(stderr, "%s\n", errbuf);
+                abort();
+            }
         }
     }
 
