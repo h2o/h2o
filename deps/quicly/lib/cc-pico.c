@@ -125,13 +125,13 @@ static int pico_on_switch(quicly_cc_t *cc)
     if (cc->type == &quicly_cc_type_pico) {
         return 1; /* nothing to do */
     } else if (cc->type == &quicly_cc_type_reno) {
-        cc->type = &quicly_cc_type_reno;
+        cc->type = &quicly_cc_type_pico;
         pico_init_pico_state(cc, cc->state.reno.stash);
         return 1;
     } else if (cc->type == &quicly_cc_type_cubic) {
         /* When in slow start, state can be reused as-is; otherwise, restart. */
         if (cc->cwnd_exiting_slow_start == 0) {
-            cc->type = &quicly_cc_type_reno;
+            cc->type = &quicly_cc_type_pico;
             pico_init_pico_state(cc, 0);
         } else {
             pico_reset(cc, cc->cwnd_initial);
