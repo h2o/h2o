@@ -1025,6 +1025,10 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
                                            "either one of `identity` and `certificate-file`-`key-file` pair can be used");
                 return -1;
             }
+            if ((*identity_node)->data.sequence.size == 0) {
+                h2o_configurator_errprintf(cmd, *identity_node, "at least one identity must be specified");
+                return -1;
+            }
             parsed_identities = alloca(sizeof(*parsed_identities) * (*identity_node)->data.sequence.size);
             num_parsed_identities = (*identity_node)->data.sequence.size;
             for (size_t i = 0; i != (*identity_node)->data.sequence.size; ++i) {
