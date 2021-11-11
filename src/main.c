@@ -127,8 +127,7 @@ struct listener_ssl_identity_t {
      */
     char *key_file;
     /**
-     * OpenSSL context used for accepting TLS 1.2 and below. This property will be non-NULL only for the first entry of
-     * `listen_ssl_config_t::identities`.
+     * OpenSSL context used for accepting TLS 1.2 and below (see `listener_ssl_config_t::identities`)
      */
     SSL_CTX *ossl;
     /**
@@ -151,6 +150,11 @@ struct listener_ssl_identity_t {
 
 struct listener_ssl_config_t {
     H2O_VECTOR(h2o_iovec_t) hostnames;
+    /**
+     * List of identities. First identity is the default and is used for handling ClientHello. Therefore it is guaranteed to contain
+     * a non-null SSL_CTX even when TLS below 1.3 is disabled. Rest of the identities are stored in the order of preference and do
+     * not have SSL_CTX.
+     */
     struct listener_ssl_identity_t *identities;
     h2o_iovec_t *http2_origin_frame;
     /**
@@ -1042,14 +1046,21 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
             }
             parsed_identities = alloca(sizeof(*parsed_identities) * (*identity_node)->data.sequence.size);
             num_parsed_identities = (*identity_node)->data.sequence.size;
-            for (size_t i = 0; i != (*identity_node)->data.sequence.size; ++i) {
-                yoml_t *src = (*identity_node)->data.sequence.elements[i];
+            for (size_t src_index = 0; src_index != (*identity_node)->data.sequence.size; ++src_index) {
+                yoml_t *src = (*identity_node)->data.sequence.elements[src_index];
                 if (src->type != YOML_TYPE_MAPPING) {
                     h2o_configurator_errprintf(cmd, src, "elements of `identity` must be a mapping");
                     return -1;
                 }
+                /* Calculate the destination slot as the index of `listener_ssl_config_t::identities`:
+                 * - in the configuration file, identities are listed in the order of preference, where the last entry acts as the
+                 *   default
+                 * - in `listener_ssl_config_t::indentities`, the default entry is the first entry and the rest are the alternatives
+                 *   stored in the order of preference. */
+                size_t dst_index = (src_index + 1) % (*identity_node)->data.sequence.size;
                 if (h2o_configurator_parse_mapping(cmd, src, "certificate-file:s,key-file:s", NULL,
-                                                   &parsed_identities[i].certificate_file, &parsed_identities[i].key_file) != 0)
+                                                   &parsed_identities[dst_index].certificate_file,
+                                                   &parsed_identities[dst_index].key_file) != 0)
                     return -1;
             }
         } else {

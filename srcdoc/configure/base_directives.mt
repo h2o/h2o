@@ -174,8 +174,8 @@ When the latter form is being used, <a href="https://datatracker.ietf.org/doc/ht
 <dt>identity:</dt>
 <dd>List of certificate / key pairs.
 This attribute can be used in place of <code>certificate-file</code> and <code>key-file</code> to specify more than one pair of certificates and keys.
-The first pair designates the default.
-When a TLS handshake is performed, h2o iterates through the suceeding pairs one by one, and uses the first pair that contains a compatible certificate / key. If none of the succeeding pairs are compatible, the default (i.e., the first pair) will be used.
+When a TLS handshake is performed, h2o uses the first pair that contains a compatible certificate / key.
+The last pair acts as the fallback.
 <?= $ctx->{example}->('Using RSA and ECDSA certificates', <<'EOT')
 ssl:
   identity:

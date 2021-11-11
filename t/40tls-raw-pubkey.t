@@ -67,13 +67,13 @@ listen:
   ssl: &ssl
     identity:
 EOT
-    $conf .= <<"EOT" if $use_cert;
-    - key-file: examples/h2o/server.key
-      certificate-file: examples/h2o/server.crt
-EOT
     $conf .= <<"EOT" if $use_raw;
     - key-file: examples/h2o/server.key
       certificate-file: examples/h2o/server.pub
+EOT
+    $conf .= <<"EOT" if $use_cert;
+    - key-file: examples/h2o/server.key
+      certificate-file: examples/h2o/server.crt
 EOT
     $conf .= << "EOT";
 listen:
