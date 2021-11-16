@@ -255,7 +255,7 @@ int h2o_read_command(const char *cmd, char **argv, h2o_buffer_t **resp, int *chi
     /* create pipe for reading the result */
     if (pipe(respfds) != 0)
         goto Exit;
-    if (fcntl(respfds[0], F_SETFD, O_CLOEXEC) < 0)
+    if (fcntl(respfds[0], F_SETFD, FD_CLOEXEC) < 0)
         goto Exit;
 
     /* spawn */
