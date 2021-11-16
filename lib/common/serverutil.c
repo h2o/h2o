@@ -233,6 +233,7 @@ Error:
     if (!cloexec_mutex_is_locked)
         pthread_mutex_unlock(&cloexec_mutex);
     free(env);
+    posix_spawn_file_actions_destroy(&file_actions);
     if (errno != 0)
         return -1;
 
