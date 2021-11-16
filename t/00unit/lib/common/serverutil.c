@@ -54,7 +54,7 @@ static void test_server_starter(void)
     ok(fds[0] == 4);
 }
 
-static void test_read_command(void)
+static void test_read_command_basic(void)
 {
     char *argv[] = {"t/00unit/assets/read_command.pl", "hello", NULL};
     h2o_buffer_t *resp;
@@ -86,6 +86,26 @@ static void test_read_command(void)
     argv[0] = "t/00unit/assets";
     ret = h2o_read_command(argv[0], argv, h2o_iovec_init(NULL, 0), &resp, &status);
     ok(ret != 0 || (ret == 0 && WIFEXITED(status) && WEXITSTATUS(status) == 127));
+}
+
+static void test_read_command_stdin(void)
+{
+    char *argv[] = {"tail", "-c", "5", NULL};
+    h2o_buffer_t *resp;
+    int ret, status;
+
+    ret = h2o_read_command(argv[0], argv, h2o_iovec_init(H2O_STRLIT("hello world")), &resp, &status);
+    ok(ret == 0);
+    ok(WIFEXITED(status));
+    ok(WEXITSTATUS(status) == 0);
+    ok(h2o_memis(resp->bytes, resp->size, H2O_STRLIT("world")));
+    h2o_buffer_dispose(&resp);
+}
+
+static void test_read_command(void)
+{
+    subtest("basic", test_read_command_basic);
+    subtest("stdin", test_read_command_stdin);
 }
 
 void test_lib__common__serverutil_c(void)
