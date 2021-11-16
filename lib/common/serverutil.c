@@ -233,6 +233,7 @@ Error:
     if (!cloexec_mutex_is_locked)
         pthread_mutex_unlock(&cloexec_mutex);
     free(env);
+    posix_spawn_file_actions_destroy(&file_actions);
     if (errno != 0)
         return -1;
 
@@ -255,7 +256,7 @@ int h2o_read_command(const char *cmd, char **argv, h2o_buffer_t **resp, int *chi
     /* create pipe for reading the result */
     if (pipe(respfds) != 0)
         goto Exit;
-    if (fcntl(respfds[0], F_SETFD, O_CLOEXEC) < 0)
+    if (fcntl(respfds[0], F_SETFD, FD_CLOEXEC) < 0)
         goto Exit;
 
     /* spawn */
