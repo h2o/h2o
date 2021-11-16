@@ -938,7 +938,20 @@ static int load_ssl_identity(h2o_configurator_command_t *cmd, SSL_CTX *ssl_ctx, 
 {
     *raw_pubkey = (ptls_iovec_t){};
 
-    /* load private key */
+    /* Load certificate. First, see if we can load the raw public key. If that fails, try to load the certificate chain. */
+    size_t raw_pubkey_count;
+    if (ptls_load_pem_objects((*parsed->certificate_file)->data.scalar, "PUBLIC KEY", raw_pubkey, 1, &raw_pubkey_count) != 0 ||
+        raw_pubkey_count == 0) {
+        if (SSL_CTX_use_certificate_chain_file(ssl_ctx, (*parsed->certificate_file)->data.scalar) != 1) {
+            h2o_configurator_errprintf(cmd, *parsed->certificate_file, "failed to load certificate file:%s\n",
+                                       (*parsed->certificate_file)->data.scalar);
+            ERR_print_errors_cb(on_openssl_print_errors, stderr);
+            return -1;
+        }
+    }
+
+    /* Load private key after the certificate. By doing so, openssl can reject keys that do not correspond to the public key being
+     * found in the certificate. */
     if (use_neverbleed) {
         char errbuf[NEVERBLEED_ERRBUF_SIZE];
         if (neverbleed == NULL) {
@@ -963,17 +976,6 @@ static int load_ssl_identity(h2o_configurator_command_t *cmd, SSL_CTX *ssl_ctx, 
         }
     }
 
-    /* Load certificate. First, see if we can load the raw public key. If that fails, try to load the certificate chain. */
-    size_t raw_pubkey_count;
-    if (ptls_load_pem_objects((*parsed->certificate_file)->data.scalar, "PUBLIC KEY", raw_pubkey, 1, &raw_pubkey_count) != 0 ||
-        raw_pubkey_count == 0) {
-        if (SSL_CTX_use_certificate_chain_file(ssl_ctx, (*parsed->certificate_file)->data.scalar) != 1) {
-            h2o_configurator_errprintf(cmd, *parsed->certificate_file, "failed to load certificate file:%s\n",
-                                       (*parsed->certificate_file)->data.scalar);
-            ERR_print_errors_cb(on_openssl_print_errors, stderr);
-            return -1;
-        }
-    }
 
     /* set up client certificate verification if client_ca_file is configured */
     if (client_ca_file != NULL) {
