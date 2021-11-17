@@ -34,14 +34,14 @@ sub create_upstream {
 };
 
 sub get {
-    my ($proto, $port, $curl, $path, $opts) = @_;
+    my ($port, $path, $opts) = @_;
     $opts ||= +{};
 
     # build curl command
-    my @curl_cmd = ($curl);
+    my @curl_cmd = ('curl');
     push(@curl_cmd, qw(--silent --dump-header /dev/stderr));
     push(@curl_cmd, map { ('-H', "'$_'") } @{ $opts->{headers} || [] });
-    push(@curl_cmd, "$proto://127.0.0.1:$port$path");
+    push(@curl_cmd, "http://127.0.0.1:$port$path");
     push(@curl_cmd, '--data-binary', "\@$opts->{data_file}") if $opts->{data_file};
     my $curl_cmd = join(' ', @curl_cmd);
 
@@ -138,10 +138,10 @@ EOT
     }
 
     my $live_check = sub {
-        my ($proto, $port, $curl) = @_;
+        my ($server) = @_;
         local $Test::Builder::Level = $Test::Builder::Level + 1;
         lives_ok {
-            my ($status, $headers, $body) = get($proto, $port, $curl, '/live-check');
+            my ($status, $headers, $body) = get($server->{port}, '/live-check');
             is $status, 200, 'live status check';
         } 'live check';
     };
@@ -161,16 +161,13 @@ EOT
               resp
             }
 EOT
-        run_with_curl($server, sub {
-            my ($proto, $port, $curl) = @_;
-            my ($status, $headers, $body) = get($proto, $port, $curl, "$path/$file");
-            is $status, 200;
-            is $headers->{'foo'}, 'FOO';
-            is length($body), $files{$file}->{size};
-            is md5_hex($body), $files{$file}->{md5};
-            $reprocess_check->($headers);
-            $live_check->($proto, $port, $curl);
-        });
+        my ($status, $headers, $body) = get($server->{port}, "$path/$file");
+        is $status, 200;
+        is $headers->{'foo'}, 'FOO';
+        is length($body), $files{$file}->{size};
+        is md5_hex($body), $files{$file}->{md5};
+        $reprocess_check->($headers);
+        $live_check->($server);
     };
 
     subtest 'content-length response body' => sub {
@@ -182,16 +179,13 @@ EOT
               resp
             }
 EOT
-        run_with_curl($server, sub {
-            my ($proto, $port, $curl) = @_;
-            my ($status, $headers, $body) = get($proto, $port, $curl, "$path/$file");
-            is $status, 200;
-            is $headers->{'content-length'} || '', $files{$file}->{size};
-            is length($body), $files{$file}->{size};
-            is md5_hex($body), $files{$file}->{md5};
-            $reprocess_check->($headers);
-            $live_check->($proto, $port, $curl);
-        });
+        my ($status, $headers, $body) = get($server->{port}, "$path/$file");
+        is $status, 200;
+        is $headers->{'content-length'} || '', $files{$file}->{size};
+        is length($body), $files{$file}->{size};
+        is md5_hex($body), $files{$file}->{md5};
+        $reprocess_check->($headers);
+        $live_check->($server);
     };
 
     subtest 'stream response body' => sub {
@@ -204,16 +198,13 @@ EOT
               resp
             }
 EOT
-        run_with_curl($server, sub {
-            my ($proto, $port, $curl) = @_;
-            my ($status, $headers, $body) = get($proto, $port, $curl, "$path/$file");
-            is $status, 200;
-            is $headers->{'content-length'} || '', '';
-            is length($body), $files{$file}->{size};
-            is md5_hex($body), $files{$file}->{md5};
-            $reprocess_check->($headers);
-            $live_check->($proto, $port, $curl);
-        });
+        my ($status, $headers, $body) = get($server->{port}, "$path/$file");
+        is $status, 200;
+        is $headers->{'content-length'} || '', '';
+        is length($body), $files{$file}->{size};
+        is md5_hex($body), $files{$file}->{md5};
+        $reprocess_check->($headers);
+        $live_check->($server);
     };
 
     subtest 'join response body' => sub {
@@ -226,16 +217,13 @@ EOT
               resp
             }
 EOT
-        run_with_curl($server, sub {
-            my ($proto, $port, $curl) = @_;
-            my ($status, $headers, $body) = get($proto, $port, $curl, "$path/$file");
-            is $status, 200;
-            is $headers->{'content-length'}, length($body);
-            is length($body), $files{$file}->{size};
-            is md5_hex($body), $files{$file}->{md5};
-            $reprocess_check->($headers);
-            $live_check->($proto, $port, $curl);
-        });
+        my ($status, $headers, $body) = get($server->{port}, "$path/$file");
+        is $status, 200;
+        is $headers->{'content-length'}, length($body);
+        is length($body), $files{$file}->{size};
+        is md5_hex($body), $files{$file}->{md5};
+        $reprocess_check->($headers);
+        $live_check->($server);
     };
 
     subtest 'discard response' => sub {
@@ -247,13 +235,10 @@ EOT
               [200, {}, ['mruby']]
             }
 EOT
-        run_with_curl($server, sub {
-            my ($proto, $port, $curl) = @_;
-            my ($status, $headers, $body) = get($proto, $port, $curl, "$path/$file");
-            is $status, 200;
-            is $body, 'mruby';
-            $live_check->($proto, $port, $curl);
-        });
+        my ($status, $headers, $body) = get($server->{port}, "$path/$file");
+        is $status, 200;
+        is $body, 'mruby';
+        $live_check->($server);
     };
 
     subtest 'discard response and each' => sub {
@@ -269,14 +254,11 @@ EOT
               end.new]
             }
 EOT
-        run_with_curl($server, sub {
-            my ($proto, $port, $curl) = @_;
-            my ($status, $headers, $body) = get($proto, $port, $curl, "$path/$file");
-            is $status, 200;
-            is $body, 'mruby';
-            $reprocess_check->($headers);
-            $live_check->($proto, $port, $curl);
-        });
+        my ($status, $headers, $body) = get($server->{port}, "$path/$file");
+        is $status, 200;
+        is $body, 'mruby';
+        $reprocess_check->($headers);
+        $live_check->($server);
     };
 
     subtest 'wrapped body' => sub {
@@ -295,15 +277,12 @@ EOT
               end.new(body)]
             }
 EOT
-        run_with_curl($server, sub {
-            my ($proto, $port, $curl) = @_;
-            my ($status, $headers, $body) = get($proto, $port, $curl, "$path/$file");
-            is $status, 200;
-            is length($body), $files{$file}->{size};
-            is md5_hex($body), $files{$file}->{md5};
-            $reprocess_check->($headers);
-            $live_check->($proto, $port, $curl);
-        });
+        my ($status, $headers, $body) = get($server->{port}, "$path/$file");
+        is $status, 200;
+        is length($body), $files{$file}->{size};
+        is md5_hex($body), $files{$file}->{md5};
+        $reprocess_check->($headers);
+        $live_check->($server);
     };
 
     subtest 'multiple one-by-one calls' => sub {
@@ -318,13 +297,10 @@ EOT
               [200, {}, [Digest::MD5.hexdigest(content1), Digest::MD5.hexdigest(content2)]]
             }
 EOT
-        run_with_curl($server, sub {
-            my ($proto, $port, $curl) = @_;
-            my ($status, $headers, $body) = get($proto, $port, $curl, "$path/$file");
-            is $status, 200;
-            is $body, $files{$file}->{md5} x 2;
-            $live_check->($proto, $port, $curl);
-        });
+        my ($status, $headers, $body) = get($server->{port}, "$path/$file");
+        is $status, 200;
+        is $body, $files{$file}->{md5} x 2;
+        $live_check->($server);
     };
 
     subtest 'multiple concurrent calls' => sub {
@@ -339,13 +315,10 @@ EOT
               [200, {}, [Digest::MD5.hexdigest(content1), Digest::MD5.hexdigest(content2)]]
             }
 EOT
-        run_with_curl($server, sub {
-            my ($proto, $port, $curl) = @_;
-            my ($status, $headers, $body) = get($proto, $port, $curl, "$path/$file");
-            is $status, 200;
-            is $body, $files{$file}->{md5} x 2;
-            $live_check->($proto, $port, $curl);
-        });
+        my ($status, $headers, $body) = get($server->{port}, "$path/$file");
+        is $status, 200;
+        is $body, $files{$file}->{md5} x 2;
+        $live_check->($server);
     };
 
     if ($mode eq 'call') {
@@ -368,15 +341,12 @@ EOT
               resp
             }
 EOT
-            run_with_curl($server, sub {
-                my ($proto, $port, $curl) = @_;
-                my ($status, $headers, $body) = get($proto, $port, $curl, "$path/$file");
-                is $status, 200;
-                is length($body), $files{$file}->{size};
-                is md5_hex($body), $files{$file}->{md5};
-                is $headers->{'x-middleware-order'}, '21', 'middleware order';
-                $live_check->($proto, $port, $curl);
-            });
+            my ($status, $headers, $body) = get($server->{port}, "$path/$file");
+            is $status, 200;
+            is length($body), $files{$file}->{size};
+            is md5_hex($body), $files{$file}->{md5};
+            is $headers->{'x-middleware-order'}, '21', 'middleware order';
+            $live_check->($server);
         };
     }
 
@@ -389,15 +359,12 @@ EOT
               H2O.$mode.call(env)
             }
 EOT
-            run_with_curl($server, sub {
-                my ($proto, $port, $curl) = @_;
-                my ($status, $headers, $body) = get($proto, $port, $curl, "$path/echo", +{ data_file => "@{[ DOC_ROOT ]}/$file" });
-                is $status, 200;
-                is length($body), $files{$file}->{size};
-                is md5_hex($body), $files{$file}->{md5};
-                $reprocess_check->($headers);
-                $live_check->($proto, $port, $curl);
-            });
+            my ($status, $headers, $body) = get($server->{port}, "$path/echo", +{ data_file => "@{[ DOC_ROOT ]}/$file" });
+            is $status, 200;
+            is length($body), $files{$file}->{size};
+            is md5_hex($body), $files{$file}->{md5};
+            $reprocess_check->($headers);
+            $live_check->($server);
         };
 
         subtest 'modify rack.input' => sub {
@@ -436,15 +403,12 @@ EOT
               H2O.$mode.call(env)
             }
 EOT
-            run_with_curl($server, sub {
-                my ($proto, $port, $curl) = @_;
-                my ($status, $headers, $body) = get($proto, $port, $curl, "$path/echo", +{ data_file => "@{[ DOC_ROOT ]}/$file" });
-                is $status, 200;
-                is length($body), $files{$file}->{size} + length('suffix');
-                is md5_hex($body), md5_hex($files{$file}->{content} . 'suffix');
-                $reprocess_check->($headers);
-                $live_check->($proto, $port, $curl);
-            });
+            my ($status, $headers, $body) = get($server->{port}, "$path/echo", +{ data_file => "@{[ DOC_ROOT ]}/$file" });
+            is $status, 200;
+            is length($body), $files{$file}->{size} + length('suffix');
+            is md5_hex($body), md5_hex($files{$file}->{content} . 'suffix');
+            $reprocess_check->($headers);
+            $live_check->($server);
         };
 
         subtest 'rack.input with smaller content-length' => sub {
@@ -456,15 +420,12 @@ EOT
               H2O.$mode.call(env)
             }
 EOT
-            run_with_curl($server, sub {
-                my ($proto, $port, $curl) = @_;
-                my ($status, $headers, $body) = get($proto, $port, $curl, "$path/echo", +{ data_file => "@{[ DOC_ROOT ]}/$file" });
-                is $status, 200;
-                is length($body), 3;
-                is $body, substr($files{$file}->{content}, 0, 3);
-                $reprocess_check->($headers);
-                $live_check->($proto, $port, $curl);
-            });
+            my ($status, $headers, $body) = get($server->{port}, "$path/echo", +{ data_file => "@{[ DOC_ROOT ]}/$file" });
+            is $status, 200;
+            is length($body), 3;
+            is $body, substr($files{$file}->{content}, 0, 3);
+            $reprocess_check->($headers);
+            $live_check->($server);
         };
 
         subtest 'rack.input with bigger content-length' => sub {
@@ -476,15 +437,12 @@ EOT
               H2O.$mode.call(env)
             }
 EOT
-            run_with_curl($server, sub {
-                my ($proto, $port, $curl) = @_;
-                my ($status, $headers, $body) = get($proto, $port, $curl, "$path/echo", +{ data_file => "@{[ DOC_ROOT ]}/$file" });
-                is $status, 200;
-                is length($body), $files{$file}->{size};
-                is md5_hex($body), $files{$file}->{md5};
-                $reprocess_check->($headers);
-                $live_check->($proto, $port, $curl);
-            });
+            my ($status, $headers, $body) = get($server->{port}, "$path/echo", +{ data_file => "@{[ DOC_ROOT ]}/$file" });
+            is $status, 200;
+            is length($body), $files{$file}->{size};
+            is md5_hex($body), $files{$file}->{md5};
+            $reprocess_check->($headers);
+            $live_check->($server);
         };
 
         subtest 'read rack.input partially' => sub {
@@ -496,15 +454,12 @@ EOT
               H2O.$mode.call(env)
             }
 EOT
-            run_with_curl($server, sub {
-                my ($proto, $port, $curl) = @_;
-                my ($status, $headers, $body) = get($proto, $port, $curl, "$path/echo", +{ data_file => "@{[ DOC_ROOT ]}/$file" });
-                is $status, 200;
-                is length($body), $files{$file}->{size} - 3;
-                is md5_hex($body), md5_hex(substr($files{$file}->{content}, 3));
-                $reprocess_check->($headers);
-                $live_check->($proto, $port, $curl);
-            });
+            my ($status, $headers, $body) = get($server->{port}, "$path/echo", +{ data_file => "@{[ DOC_ROOT ]}/$file" });
+            is $status, 200;
+            is length($body), $files{$file}->{size} - 3;
+            is md5_hex($body), md5_hex(substr($files{$file}->{content}, 3));
+            $reprocess_check->($headers);
+            $live_check->($server);
         };
     }
 
@@ -516,16 +471,13 @@ EOT
               H2O.$mode.request(env)
             }
 EOT
-        run_with_curl($server, sub {
-            my ($proto, $port, $curl) = @_;
-            my ($status, $headers, $body) = get($proto, $port, $curl, "$path/$file");
-            is $status, 200;
-            is $headers->{'content-length'}, length($body);
-            is length($body), $files{$file}->{size};
-            is md5_hex($body), $files{$file}->{md5};
-            $reprocess_check->($headers);
-            $live_check->($proto, $port, $curl);
-        });
+        my ($status, $headers, $body) = get($server->{port}, "$path/$file");
+        is $status, 200;
+        is $headers->{'content-length'}, length($body);
+        is length($body), $files{$file}->{size};
+        is md5_hex($body), $files{$file}->{md5};
+        $reprocess_check->($headers);
+        $live_check->($server);
     };
 
     subtest 'discard request' => sub {
@@ -537,13 +489,10 @@ EOT
               [200, {}, ['mruby']]
             }
 EOT
-        run_with_curl($server, sub {
-            my ($proto, $port, $curl) = @_;
-            my ($status, $headers, $body) = get($proto, $port, $curl, "$path/$file");
-            is $status, 200;
-            is $body, 'mruby';
-            $live_check->($proto, $port, $curl);
-        });
+        my ($status, $headers, $body) = get($server->{port}, "$path/$file");
+        is $status, 200;
+        is $body, 'mruby';
+        $live_check->($server);
     };
 
 }
@@ -604,12 +553,9 @@ hosts:
     paths: *paths
 EOT
     });
-    run_with_curl($server, sub {
-        my ($proto, $port, $curl) = @_;
-        my ($status, $headers, $body) = get($proto, $port, $curl, '/');
-        is $status, 502;
-        is $body, "too many internal delegations";
-    });
+    my ($status, $headers, $body) = get($server->{port}, '/');
+    is $status, 502;
+    is $body, "too many internal delegations";
 };
 
 subtest 'preserve original request headers' => sub {
@@ -638,25 +584,22 @@ access-log:
   format: "%{x-foo}i"
 EOT
     });
-    run_with_curl($server, sub {
-        my ($proto, $port, $curl) = @_;
-        truncate $access_log, 0;
+    truncate $access_log, 0;
 
-        my ($status, $headers, $body);
-        ($status, $headers, $body) = get($proto, $port, $curl, '/index.txt', +{ headers => ['X-Foo: FOO'] });
-        is $status, 200;
-        is $body, 'FOO';
-        ($status, $headers, $body) = get($proto, $port, $curl, '/index.txt?BAR', +{ headers => ['X-Foo: FOO'] });
-        is $status, 200;
-        is $body, 'BAR';
+    my ($status, $headers, $body);
+    ($status, $headers, $body) = get($server->{port}, '/index.txt', +{ headers => ['X-Foo: FOO'] });
+    is $status, 200;
+    is $body, 'FOO';
+    ($status, $headers, $body) = get($server->{port}, '/index.txt?BAR', +{ headers => ['X-Foo: FOO'] });
+    is $status, 200;
+    is $body, 'BAR';
 
-        my @log = do {
-            open my $fh, "<", "$tempdir/access.log" or die "failed to open access.log:$!";
-            map { my $l = $_; chomp $l; $l } <$fh>;
-        };
-        is $log[0], 'FOO';
-        is $log[1], 'FOO';
-    });
+    my @log = do {
+        open my $fh, "<", "$tempdir/access.log" or die "failed to open access.log:$!";
+        map { my $l = $_; chomp $l; $l } <$fh>;
+    };
+    is $log[0], 'FOO';
+    is $log[1], 'FOO';
 };
 
 subtest 'set and unset env' => sub {
@@ -683,14 +626,11 @@ hosts:
     paths: *paths
 EOT
     });
-    run_with_curl($server, sub {
-        my ($proto, $port, $curl) = @_;
 
-        my ($status, $headers, $body) = get($proto, $port, $curl, '/');
-        is $status, 200;
-        unlike $body, qr{^foo:FOO$}m;
-        like $body, qr{^bar:BAR$}m;
-    });
+    my ($status, $headers, $body) = get($server->{port}, '/');
+    is $status, 200;
+    unlike $body, qr{^foo:FOO$}m;
+    like $body, qr{^bar:BAR$}m;
 };
 
 subtest 'modify SCRIPT_NAME' => sub {
@@ -719,15 +659,12 @@ hosts:
     paths: *paths
 EOT
     });
-    run_with_curl($server, sub {
-        my ($proto, $port, $curl) = @_;
 
-        my ($status, $headers, $body);
-        ($status, $headers, $body) = get($proto, $port, $curl, '/next');
-        is $status, 500, 'next';
-        ($status, $headers, $body) = get($proto, $port, $curl, '/reprocess');
-        is $status, 200, 'reprocess';
-    });
+    my ($status, $headers, $body);
+    ($status, $headers, $body) = get($server->{port}, '/next');
+    is $status, 500, 'next';
+    ($status, $headers, $body) = get($server->{port}, '/reprocess');
+    is $status, 200, 'reprocess';
 };
 
 subtest 'non-blocking' => sub {
@@ -763,15 +700,12 @@ hosts:
     paths: *paths
 EOT
     });
-    run_with_curl($server, sub {
-        my ($proto, $port, $curl) = @_;
 
-        my ($status, $headers, $body);
-        ($status, $headers, $body) = get('http', $server->{port}, 'curl', '/blocking');
-        cmp_ok $body, '>', 1.9;
-        ($status, $headers, $body) = get('http', $server->{port}, 'curl', '/non-blocking');
-        cmp_ok $body, '<', 1.1;
-    });
+    my ($status, $headers, $body);
+    ($status, $headers, $body) = get($server->{port}, '/blocking');
+    cmp_ok $body, '>', 1.9;
+    ($status, $headers, $body) = get($server->{port}, '/non-blocking');
+    cmp_ok $body, '<', 1.1;
 };
 
 subtest 'invalid env' => sub {
@@ -797,7 +731,7 @@ EOT
     map {
         my $path = $_;
         subtest $path => sub {
-            my ($status) = get('http', $server->{port}, 'curl', $path);
+            my ($status) = get($server->{port}, $path);
             is $status, 500;
         };
     } qw(
@@ -836,7 +770,7 @@ hosts:
 EOT
     });
     my ($status, $headers, $body);
-    ($status, $headers, $body) = get('http', $server->{port}, 'curl', '/');
+    ($status, $headers, $body) = get($server->{port}, '/');
     is scalar(my @v = $headers->get_all('x-foo')), 1;
 };
 
@@ -864,7 +798,7 @@ hosts:
 EOT
     });
     my ($status, $headers, $body);
-    ($status, $headers, $body) = get('http', $server->{port}, 'curl', '/from');
+    ($status, $headers, $body) = get($server->{port}, '/from');
     is $body, 'bar';
 };
 
@@ -900,7 +834,7 @@ hosts:
 EOT
     });
     my ($status, $headers, $body);
-    ($status, $headers, $body) = get('http', $server->{port}, 'curl', '/1', +{ headers => ['content-type: OK'] });
+    ($status, $headers, $body) = get($server->{port}, '/1', +{ headers => ['content-type: OK'] });
     is $body, 'OK1OK2';
 };
 
