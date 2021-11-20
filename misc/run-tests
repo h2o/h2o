@@ -1,7 +1,7 @@
 #!/usr/bin/env perl
 use strict;
 use warnings;
-use feature qw(say);
+use feature qw/say/;
 use Errno qw/EAGAIN EWOULDBLOCK EINTR/;
 use IO::Select;
 use Path::Tiny;
@@ -10,6 +10,22 @@ use FindBin;
 use Term::ANSIColor;
 
 my $H2O_ROOT = $FindBin::Bin . '/../';
+
+my @noparallel = do {
+    my $fn = "$H2O_ROOT/t/.noparallel";
+    if (-e $fn) {
+        open my $fh, '<', $fn or die "failed to open $fn";
+        grep {
+            $_ # remove empty lines
+        } map {
+            s/^\s*(.*?)\s*$/$1/; $_ # trim
+        } grep {
+            $_ !~ /^\s*# / # remote comment lines
+        } <$fh>
+    } else {
+        ()
+    }
+};
 
 my @tests;
 my @prove_argv;
@@ -43,7 +59,16 @@ unless (@tests) {
     @tests = sort @tests;
 }
 
-$num_workers = scalar(@tests) if $num_workers > @tests;
+my (@para_tests, @seq_tests);
+for my $test (@tests) {
+    if (grep { $test eq $_ } @noparallel) {
+        push(@seq_tests, $test);
+    } else {
+        push(@para_tests, $test);
+    }
+}
+
+$num_workers = scalar(@para_tests) if $num_workers > @para_tests;
 
 my @workers = map {
     do_fork(sub {
@@ -95,8 +120,10 @@ my $sel = IO::Select->new;
 for my $worker (@workers) {
     $sel->add($worker->{stdout});
     $worker->{stdout}->blocking(0);
-    enqueue($worker, shift(@tests));
+    enqueue($worker, shift(@para_tests));
 }
+
+my $seq_worker = undef;
 
 # yield-resume loop
 while (1) {
@@ -113,7 +140,14 @@ while (1) {
         say 'v-------------------------------------------------------------------------------';
         print $out;
         say '^-------------------------------------------------------------------------------';
-        my $next = shift(@tests);
+
+        my $next = shift(@para_tests);
+        unless ($next) {
+            $seq_worker = $worker unless $seq_worker;
+            if ($worker == $seq_worker) {
+                $next = shift(@seq_tests);
+            }
+        }
         enqueue($worker, $next);
         $sel->remove($worker->{stdout}) unless $next;
     }
