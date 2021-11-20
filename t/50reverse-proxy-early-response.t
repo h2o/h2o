@@ -187,7 +187,7 @@ EOS
                 $client->send_headers('POST', '/', ['content-length' => 1 + 1024 * 10]) or die $!;
                 $client->send_data('a') or die $!;
                 sleep 1;
-                my $output = $client->read(100);
+                my $output = $client->read(1000);
                 for (1..10) {
                     $client->send_data('a' x 1024, 1000) or last;
                     Time::HiRes::sleep(0.01);
