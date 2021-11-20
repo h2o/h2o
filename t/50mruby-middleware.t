@@ -46,7 +46,7 @@ sub get {
     my $curl_cmd = join(' ', @curl_cmd);
 
     local $SIG{ALRM} = sub { die };
-    alarm(3);
+    alarm(60);
     my ($hstr, $body) = eval { run_prog($curl_cmd) };
     my $timeout = !! $@;
     alarm(0);

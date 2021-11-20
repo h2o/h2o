@@ -2,13 +2,12 @@ use strict;
 use warnings;
 use Net::EmptyPort qw(check_port empty_port);
 use Test::More;
-use Time::HiRes qw(alarm);
 use t::Util;
 
 
 sub nc_get {
     my ($server, $path) = @_;
-    my $resp = `echo 'GET $path HTTP/1.1\\r\\n\\r\\n' | nc -w 1 127.0.0.1 $server->{port}`;
+    my $resp = `echo 'GET $path HTTP/1.1\\r\\n\\r\\n' | nc 127.0.0.1 $server->{port}`;
     my ($headers) = split(/\r\n\r\n/, $resp, 2);
     (length($headers || ''), $headers);
 }
