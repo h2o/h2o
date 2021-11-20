@@ -70,6 +70,8 @@ for my $test (@tests) {
 
 $num_workers = scalar(@para_tests) if $num_workers > @para_tests;
 
+say colorize("# Running @{[ scalar(@tests) ]} tests (@{[ scalar(@para_tests)]} in parallel, @{[ scalar(@seq_tests) ]} sequential) ..", 'bright_cyan');
+
 my @workers = map {
     do_fork(sub {
         while (my $test = <STDIN>) {
@@ -124,6 +126,7 @@ for my $worker (@workers) {
 }
 
 my $seq_worker = undef;
+my $num_finishes = 0;
 
 # yield-resume loop
 while (1) {
@@ -137,6 +140,7 @@ while (1) {
         my $out = '';
         while ($stdout->sysread($out, 4096, length($out))) {};
         die 'oops' unless $! == EAGAIN || $! == EWOULDBLOCK;
+        ++$num_finishes;
         say 'v-------------------------------------------------------------------------------';
         print $out;
         say '^-------------------------------------------------------------------------------';
@@ -167,10 +171,6 @@ say '---------------------------------------------------------------------------
 
 # show final results
 
-sub colorize {
-    my ($msg, $color) = @_;
-    return -t STDOUT ? colored($msg, $color) : $msg;
-}
 if (@failures) {
     @failures = sort { $a->[0] cmp $b->[0] } @failures;
     say colorize("# Result: Fail", 'bright_red');
@@ -182,7 +182,17 @@ if (@failures) {
 }
 
 while (waitpid(-1, 0) > 0) {}
+
+if ($num_finishes != scalar(@tests)) {
+    say colorize("# Error: Only @{[ $num_finishes ]} tests were executed while we have @{[ scalar(@tests) ]} tests", 'bright_red');
+    exit 1;
+}
 exit @failures ? 1 : 0;
+
+sub colorize {
+    my ($msg, $color) = @_;
+    return -t STDOUT ? colored($msg, $color) : $msg;
+}
 
 sub do_fork {
     my ($code) = @_;
