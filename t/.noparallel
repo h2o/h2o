@@ -1,6 +1,7 @@
 t/40mtls.t
 t/40session-ticket.t
 t/40tls-raw-pubkey.t
+t/40tls13-early-data.t
 t/50graceful-shutdown.t
 t/50mruby-redis.t
 t/50mruby-sleep.t
