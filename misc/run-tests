@@ -1,0 +1,182 @@
+#!/usr/bin/env perl
+use strict;
+use warnings;
+use feature qw(say);
+use Errno qw/EAGAIN EWOULDBLOCK EINTR/;
+use IO::Select;
+use Path::Tiny;
+use POSIX ":sys_wait_h";
+use FindBin;
+use Term::ANSIColor;
+
+my $H2O_ROOT = $FindBin::Bin . '/../';
+
+my @tests;
+my @prove_argv;
+my $num_workers = 1;
+
+while (my $arg = shift(@ARGV)) {
+    if ($arg eq '-j' || $arg eq '--jobs') {
+        unless ($num_workers = shift(@ARGV)) {
+            STDERR->say('--jobs option must be an integer');
+            exit 1;
+        }
+    } elsif ($arg =~ /\.t$/) {
+        push(@tests, $arg);
+    } else {
+        push(@prove_argv, $arg);
+    }
+}
+
+my $prove = do {
+    my $formatter = -t STDOUT ? 'TAP::Formatter::Console' : 'TAP::Formatter::File';
+    my $color = -t STDOUT ? '--color' : '--nocolor';
+    "prove -I$H2O_ROOT $color --formatter $formatter @{[ join(' ', @prove_argv) ]}"
+};
+
+unless (@tests) {
+    my $iter = path('t')->iterator(+{ recurse => 0 });
+    while (my $path = $iter->()) {
+        next unless $path =~ /\.t$/;
+        push(@tests, $path);
+    }
+    @tests = sort @tests;
+}
+
+$num_workers = scalar(@tests) if $num_workers > @tests;
+
+my @workers = map {
+    do_fork(sub {
+        while (my $test = <STDIN>) {
+            chomp $test;
+            last if $test eq '';
+
+            my $prove = do_fork(sub {
+                exec("$prove $test 2>&1");
+                die 'unreachable';
+            });
+
+            my $out = '';
+            while ($prove->{stdout}->sysread($out, 4096, length($out)) || $! == EINTR) {};
+            STDOUT->syswrite($out);
+
+            waitpid($prove->{pid}, 0);
+            if ($? != 0) {
+                my $err;
+                if ($? == -1) {
+                    $err = "failed to execute: $!";
+                } elsif ($? & 127) {
+                    $err = "child died with signal @{[ $? & 127 ]}";
+                } else {
+                    $err = "child exited with value @{[ $? >> 8 ]}";
+                }
+                STDERR->syswrite(join("\t", $test, $err) . "\n");
+            }
+        }
+    })
+} (1..$num_workers);
+
+my %stdout2workers = map { fileno($_->{stdout}) => $_ } @workers;
+
+sub enqueue {
+    my ($worker, $test) = @_;
+    $test ||= '';
+    if ($test eq '') {
+        say "# terminating worker @{[$worker->{pid}]}";
+    } else {
+        say "# enqueuing test `$test` to worker @{[$worker->{pid}]}";
+    }
+    $worker->{stdin}->syswrite($test . "\n");
+}
+
+my $sel = IO::Select->new;
+
+# enqueue first tasks
+for my $worker (@workers) {
+    $sel->add($worker->{stdout});
+    $worker->{stdout}->blocking(0);
+    enqueue($worker, shift(@tests));
+}
+
+# yield-resume loop
+while (1) {
+    my @stdouts = $sel->can_read;
+    unless (@stdouts) {
+        next if $! && $! == EINTR;
+        last;
+    }
+    for my $stdout (@stdouts) {
+        my $worker = $stdout2workers{fileno($stdout)};
+        my $out = '';
+        while ($stdout->sysread($out, 4096, length($out))) {};
+        die 'oops' unless $! == EAGAIN || $! == EWOULDBLOCK;
+        say 'v-------------------------------------------------------------------------------';
+        print $out;
+        say '^-------------------------------------------------------------------------------';
+        my $next = shift(@tests);
+        enqueue($worker, $next);
+        $sel->remove($worker->{stdout}) unless $next;
+    }
+}
+
+# read failures from stderr
+my @failures;
+for my $worker (@workers) {
+    my $stderr = $worker->{stderr};
+    while (my $line = <$stderr>) {
+        chomp $line;
+        push(@failures, [ split("\t", $line) ]);
+    }
+}
+
+say '--------------------------------------------------------------------------------';
+
+# show final results
+
+sub colorize {
+    my ($msg, $color) = @_;
+    return -t STDOUT ? colored($msg, $color) : $msg;
+}
+if (@failures) {
+    @failures = sort { $a->[0] cmp $b->[0] } @failures;
+    say colorize("# Result: Fail", 'bright_red');
+    for my $f (@failures) {
+        say "\t" . colorize(join("\t", @$f), 'bright_red');
+    }
+} else {
+    say colorize("# Result: Success", 'bright_green');
+}
+
+while (waitpid(-1, 0) > 0) {}
+exit @failures ? 1 : 0;
+
+sub do_fork {
+    my ($code) = @_;
+
+    pipe(my $pin, my $cout);
+    pipe(my $pin2, my $cerr);
+    pipe(my $cin, my $pout);
+
+    my $pid = fork;
+    if ($pid) {
+        close $cout;
+        close $cerr;
+        close $cin;
+        return +{
+            pid => $pid,
+            stdin => $pout,
+            stdout => $pin,
+            stderr => $pin2,
+        };
+    }
+    close $pin;
+    close $pin2;
+    close $pout;
+    open(STDIN, '<&=', fileno($cin));
+    open(STDOUT, '>&=', fileno($cout)) or die $!;
+    open(STDERR, '>&=', fileno($cerr)) or die $!;
+
+    $code->();
+    exit;
+}
+

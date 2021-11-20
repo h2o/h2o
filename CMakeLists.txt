@@ -847,7 +847,7 @@ IF (BROTLI_FOUND)
     ADD_DEPENDENCIES(checkdepends lib-examples-evloop)
 ENDIF ()
 
-ADD_CUSTOM_TARGET(check env H2O_ROOT=. BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR} prove -I. -v t/*.t
+ADD_CUSTOM_TARGET(check env H2O_ROOT=. BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR} misc/run-tests -v
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     DEPENDS checkdepends)
 
