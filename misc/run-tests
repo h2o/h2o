@@ -33,7 +33,7 @@ my $num_workers = 1;
 
 while (my $arg = shift(@ARGV)) {
     if ($arg eq '-j' || $arg eq '--jobs') {
-        unless ($num_workers = shift(@ARGV)) {
+        unless ($num_workers = (shift(@ARGV) + 0)) {
             STDERR->say('--jobs option must be an integer');
             exit 1;
         }
@@ -58,6 +58,10 @@ unless (@tests) {
     }
     @tests = sort @tests;
 }
+unless (scalar(@tests)) {
+    say colorize("# Error: No tests to execute", 'bright_red');
+    exit 1;
+}
 
 my (@para_tests, @seq_tests);
 for my $test (@tests) {
@@ -68,7 +72,7 @@ for my $test (@tests) {
     }
 }
 
-$num_workers = scalar(@para_tests) if $num_workers > @para_tests;
+$num_workers = scalar(@para_tests) || 1 if $num_workers > @para_tests;
 
 say colorize("# Running @{[ scalar(@tests) ]} tests (@{[ scalar(@para_tests)]} in parallel, @{[ scalar(@seq_tests) ]} sequential) ..", 'bright_cyan');
 
@@ -122,7 +126,7 @@ my $sel = IO::Select->new;
 for my $worker (@workers) {
     $sel->add($worker->{stdout});
     $worker->{stdout}->blocking(0);
-    enqueue($worker, shift(@para_tests));
+    enqueue($worker, shift(@para_tests) || shift(@seq_tests));
 }
 
 my $seq_worker = undef;
