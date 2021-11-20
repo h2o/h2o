@@ -29,9 +29,9 @@ for my $comb (0..3) {
                     }
                     h2g.send_headers(req, 1, END_HEADERS)
                     h2g.send_data(1, 0, "a")
-                    h2g.read_loop(10000)
+                    h2g.read_loop(100)
                     h2g.send_data(1, END_STREAM, "a" * 1024)
-                    h2g.read_loop(10000)
+                    h2g.read_loop(100)
 EOS
                 like $output, qr/HEADERS frame .+':status' => '200'/s;
                 unlike $output, qr/RST_STREAM frame/s;
@@ -40,7 +40,7 @@ EOS
                 $client->send_headers('POST', '/', ['content-length' => 1 + 1024]) or die $!;
                 $client->send_data('a') or die $!;
                 $client->send_data('a' x 1024) or die $!;
-                my $output = $client->read(10000);
+                my $output = $client->read(1000);
                 like $output, qr{HTTP/1.1 200 }is;
                 sleep 1;
                 ok $client->is_alive;
@@ -57,12 +57,12 @@ EOS
                     req = { ":method" => "POST", ":authority" => authority, ":scheme" => "https", ":path" => "/" }
                     h2g.send_headers(req, 1, END_HEADERS)
                     h2g.send_data(1, 0, "a")
-                    h2g.read_loop(10000)
+                    h2g.read_loop(100)
                     sleep 1
                     # at this time h2o doesn't know the upstream connection is already closed
                     # so write 10 times to ensure we can get a write error
                     10.times { h2g.send_data(1, END_STREAM, "a" * 1024) }
-                    h2g.read_loop(10000)
+                    h2g.read_loop(100)
 EOS
                 like $output, qr/HEADERS frame .+':status' => '200'/s;
                 like $output, qr/RST_STREAM frame .+error_code => 5/s;
@@ -72,7 +72,7 @@ EOS
                 $client->send_data("1\r\na\r\n") or die $!;
                 # wait until the server writes the header and body, then read
                 sleep 1;
-                my $output = $client->read(10000);
+                my $output = $client->read(0);
                 for (1..10) {
                     $client->send_data("400\r\n" . 'a' x 1024 . "\r\n", 1000) or last;
                     sleep 0.01;
@@ -95,13 +95,13 @@ EOS
                     }
                     h2g.send_headers(req, 1, END_HEADERS)
                     h2g.send_data(1, 0, "a")
-                    h2g.read_loop(10000)
+                    h2g.read_loop(100)
                     sleep 1
                     h2g.send_data(1, 0, "a" * 1024)
-                    h2g.read_loop(10000)
+                    h2g.read_loop(100)
                     sleep 1
                     h2g.send_data(1, END_STREAM, "a" * 1024)
-                    h2g.read_loop(10000)
+                    h2g.read_loop(100)
 EOS
                 like $output, qr/HEADERS frame .+':status' => '200'/s;
                 unlike $output, qr/RST_STREAM frame/s;
@@ -109,7 +109,7 @@ EOS
                 my $client = H1Client->new($server);
                 $client->send_headers('POST', '/', ['content-length' => 1 + 1024 * 2]) or die $!;
                 $client->send_data('a') or die $!;
-                my $output = $client->read(10000);
+                my $output = $client->read(1000);
                 $client->send_data('a' x 1024) or die $!;
                 $client->send_data('a' x 1024) or die $!;
                 like $output, qr{HTTP/1.1 200 }is;
@@ -145,7 +145,7 @@ EOS
                     h2g.send_headers(req, 1, END_HEADERS)
                     h2g.send_data(1, 0, "a")
                     sleep 1
-                    h2g.read_loop(10000)
+                    h2g.read_loop(100)
 EOS
                 like $output, qr/HEADERS frame .+':status' => '502'/s;
                 like $output, qr/RST_STREAM frame .+error_code => 5/s;
@@ -154,7 +154,7 @@ EOS
                 $client->send_headers('POST', '/', ['content-length' => 1 + 1024]) or die $!;
                 $client->send_data('a') or die $!;
                 sleep 1;
-                my $output = $client->read(10000);
+                my $output = $client->read(1000);
                 like $output, qr{HTTP/1.1 502 }is;
                 sleep 1;
                 ok ! $client->is_alive;
@@ -187,7 +187,7 @@ EOS
                 $client->send_headers('POST', '/', ['content-length' => 1 + 1024 * 10]) or die $!;
                 $client->send_data('a') or die $!;
                 sleep 1;
-                my $output = $client->read(10000);
+                my $output = $client->read(100);
                 for (1..10) {
                     $client->send_data('a' x 1024, 1000) or last;
                     Time::HiRes::sleep(0.01);
@@ -209,7 +209,7 @@ subtest 'use-after-free of chunked encoding' => sub {
     my $client = H1Client->new($server);
     $client->send_headers('POST', '/', ['connection' => 'close', 'transfer-encoding' => 'chunked']) or die $!;
     $client->send_data("1\r\na\r\n") or die $!;
-    my $output = $client->read(10000);
+    my $output = $client->read(1000);
     Time::HiRes::sleep(0.1);
     $client->send_data("400\r\n" . 'a' x 1024 . "\r\n", 1000) or last;
     $client->send_data("0\r\n\r\n", 1000) or last;

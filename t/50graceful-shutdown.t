@@ -84,7 +84,7 @@ EOT
     h2g.send_data(1, END_STREAM, '')
 
     loop do
-        f = h2g.read(10000)
+        f = h2g.read(1000)
         if f == nil
             puts "timeout"
             exit 1
