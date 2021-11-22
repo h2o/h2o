@@ -2,229 +2,93 @@
 use strict;
 use warnings;
 use feature qw/say/;
-use Errno qw/EAGAIN EWOULDBLOCK EINTR/;
-use IO::Select;
-use Path::Tiny;
-use POSIX ":sys_wait_h";
-use FindBin;
+use File::Temp qw(tempdir);
+use Getopt::Long qw(:config posix_default no_ignore_case gnu_compat);
+use POSIX qw(:sys_wait_h);
 use Term::ANSIColor;
 
-my $H2O_ROOT = $FindBin::Bin . '/../';
+my $jobs = 1;
 
-my @noparallel = do {
-    my $fn = "$H2O_ROOT/t/.noparallel";
-    if (-e $fn) {
-        open my $fh, '<', $fn or die "failed to open $fn";
-        grep {
-            $_ # remove empty lines
-        } map {
-            s/^\s*(.*?)\s*$/$1/; $_ # trim
-        } grep {
-            $_ !~ /^\s*# / # remote comment lines
-        } <$fh>
-    } else {
-        ()
-    }
-};
+GetOptions(
+   "jobs|j=i" => \$jobs,
+) or die "error in command line arguments\n";
 
-my @tests;
-my @prove_argv;
-my $num_workers = 1;
-
-while (my $arg = shift(@ARGV)) {
-    if ($arg eq '-j' || $arg eq '--jobs') {
-        unless ($num_workers = (shift(@ARGV) + 0)) {
-            STDERR->say('--jobs option must be an integer');
-            exit 1;
-        }
-    } elsif ($arg =~ /\.t$/) {
-        push(@tests, $arg);
-    } else {
-        push(@prove_argv, $arg);
-    }
-}
-
-my $prove = do {
-    my $formatter = -t STDOUT ? 'TAP::Formatter::Console' : 'TAP::Formatter::File';
-    my $color = -t STDOUT ? '--color' : '--nocolor';
-    "time prove -I$H2O_ROOT $color --formatter $formatter @{[ join(' ', @prove_argv) ]}"
-};
-
-unless (@tests) {
-    my $iter = path('t')->iterator(+{ recurse => 0 });
-    while (my $path = $iter->()) {
-        next unless $path =~ /\.t$/;
-        push(@tests, $path);
-    }
-    @tests = sort @tests;
-}
-unless (scalar(@tests)) {
-    say colorize("# Error: No tests to run", 'bright_red');
-    exit 1;
-}
-
-my (@para_tests, @seq_tests);
-for my $test (@tests) {
-    if (grep { $test eq $_ } @noparallel) {
-        push(@seq_tests, $test);
-    } else {
-        push(@para_tests, $test);
-    }
-}
-
-$num_workers = scalar(@para_tests) || 1 if $num_workers > @para_tests;
-
-say colorize("# Running @{[ scalar(@tests) ]} tests (@{[ scalar(@para_tests)]} in parallel, @{[ scalar(@seq_tests) ]} sequential) ..", 'bright_cyan');
-
-my @workers = map {
-    do_fork(sub {
-        while (my $test = <STDIN>) {
-            chomp $test;
-            last if $test eq '';
-
-            my $prove = do_fork(sub {
-                exec("$prove $test 2>&1");
-                die 'unreachable';
-            });
-
-            my $out = '';
-            while ($prove->{stdout}->sysread($out, 4096, length($out)) || $! == EINTR) {};
-            STDOUT->syswrite($out);
-
-            waitpid($prove->{pid}, 0);
-            if ($? != 0) {
-                my $err;
-                if ($? == -1) {
-                    $err = "failed to execute: $!";
-                } elsif ($? & 127) {
-                    $err = "child died with signal @{[ $? & 127 ]}";
-                } else {
-                    $err = "child exited with value @{[ $? >> 8 ]}";
-                }
-                STDERR->syswrite(join("\t", $test, $err) . "\n");
-            }
-        }
-    })
-} (1..$num_workers);
-
-my %stdout2workers = map { fileno($_->{stdout}) => $_ } @workers;
-
-sub enqueue {
-    my ($worker, $test) = @_;
-    $test ||= '';
-    if ($test eq '') {
-        say "# terminating worker @{[$worker->{pid}]}";
-    } else {
-        say "# enqueuing test `$test` to worker @{[$worker->{pid}]}";
-    }
-    $worker->{stdin}->syswrite($test . "\n");
-}
-
-my $sel = IO::Select->new;
-
-# enqueue first tasks
-for my $worker (@workers) {
-    $sel->add($worker->{stdout});
-    $worker->{stdout}->blocking(0);
-    enqueue($worker, shift(@para_tests) || shift(@seq_tests));
-}
-
-my $seq_worker = undef;
-my $num_finishes = 0;
-
-# yield-resume loop
-while (1) {
-    my @stdouts = $sel->can_read;
-    unless (@stdouts) {
-        next if $! && $! == EINTR;
-        last;
-    }
-    for my $stdout (@stdouts) {
-        my $worker = $stdout2workers{fileno($stdout)};
-        my $out = '';
-        while ($stdout->sysread($out, 4096, length($out))) {};
-        die 'oops' unless $! == EAGAIN || $! == EWOULDBLOCK;
-        ++$num_finishes;
-        say 'v-------------------------------------------------------------------------------';
-        print $out;
-        say '^-------------------------------------------------------------------------------';
-
-        my $next = shift(@para_tests);
-        unless ($next) {
-            $seq_worker = $worker unless $seq_worker;
-            if ($worker == $seq_worker) {
-                $next = shift(@seq_tests);
-            }
-        }
-        enqueue($worker, $next);
-        $sel->remove($worker->{stdout}) unless $next;
-    }
-}
-
-# read failures from stderr
+my @scripts = @ARGV;
+my %pids;
 my @failures;
-for my $worker (@workers) {
-    my $stderr = $worker->{stderr};
-    while (my $line = <$stderr>) {
-        chomp $line;
-        push(@failures, [ split("\t", $line) ]);
+
+my $tempdir = tempdir(CLEANUP => 1);
+
+while (@scripts or %pids) {
+    # spawn
+    while (@scripts and keys %pids < $jobs) {
+        my $script = shift @scripts;
+        $pids{spawn_script($script)} = $script;
+    }
+
+    # wait for tasks to exit
+    my $kid = wait;
+    if ($pids{$kid}) {
+        my $script = delete $pids{$kid};
+        print STDERR colorize("# $script --------------------------------\n", 'cyan');
+
+        # print the output of the perl script being run
+        my $logfn = get_logfn($script);
+        open my $logfh, "<", $logfn
+            or die "failed to open script:$logfn:$!";
+        unlink $logfn;
+        print do { local $/; <$logfh> };
+
+        # add to the failed list, if necessary
+        if (WIFEXITED($?) and WEXITSTATUS($?) == 0) {
+            print STDERR colorize("# $script succeeded\n", 'bright_green');
+        } else {
+            print STDERR colorize("# $script failed\n", 'bright_red');
+            push @failures, $script;
+        }
+
     }
 }
 
-say '--------------------------------------------------------------------------------';
-
-# show final results
-
+print STDERR "--------------------------------------------------------\n";
 if (@failures) {
-    @failures = sort { $a->[0] cmp $b->[0] } @failures;
-    say colorize("# Result: Fail", 'bright_red');
-    for my $f (@failures) {
-        say "\t" . colorize(join("\t", @$f), 'bright_red');
-    }
-} else {
-    say colorize("# Result: Success", 'bright_green');
-}
-
-while (waitpid(-1, 0) > 0) {}
-
-if ($num_finishes != scalar(@tests)) {
-    say colorize("# Error: Only @{[ $num_finishes ]} tests were executed while we have @{[ scalar(@tests) ]} tests", 'bright_red');
+    print STDERR colorize(join("\n", '# Result: Fail', map { "# \t$_" } @failures), 'red');
     exit 1;
+} else {
+    print STDERR colorize(join("\n", '# Result: Success', map { "# \t$_" } @failures), 'green');
+    exit 0;
 }
-exit @failures ? 1 : 0;
+
+sub spawn_script {
+    my $script = shift;
+
+    my $logfn = get_logfn($script);
+    open my $logfh, ">", $logfn
+        or die "failed to create log file:$logfn:$!";
+
+    my $pid = fork;
+    die "fork failed:$!"
+        unless defined $pid;
+
+    # return the spawned PID if in parent process
+    return $pid if $pid != 0;
+
+    # child process, redirect STDOUT, STDERR to tempfile and exec
+    open STDOUT, ">&", $logfh
+        or die "failed to redirect STDOUT:$!";
+    open STDERR, ">&", $logfh
+        or die "failed to redirect STDERR:$!";
+    exec "sh -c 'time $^X $script'";
+    die "failed to exec $^X $script:$!";
+}
+
+sub get_logfn {
+    my $script = shift;
+    $script =~ s{/}{__}g;
+    "$tempdir/$script.out";
+}
 
 sub colorize {
     my ($msg, $color) = @_;
     return -t STDOUT ? colored($msg, $color) : $msg;
 }
-
-sub do_fork {
-    my ($code) = @_;
-
-    pipe(my $pin, my $cout);
-    pipe(my $pin2, my $cerr);
-    pipe(my $cin, my $pout);
-
-    my $pid = fork;
-    if ($pid) {
-        close $cout;
-        close $cerr;
-        close $cin;
-        return +{
-            pid => $pid,
-            stdin => $pout,
-            stdout => $pin,
-            stderr => $pin2,
-        };
-    }
-    close $pin;
-    close $pin2;
-    close $pout;
-    open(STDIN, '<&=', fileno($cin));
-    open(STDOUT, '>&=', fileno($cout)) or die $!;
-    open(STDERR, '>&=', fileno($cerr)) or die $!;
-
-    $code->();
-    exit;
-}
-
