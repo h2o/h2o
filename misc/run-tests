@@ -30,7 +30,7 @@ while (@scripts or %pids) {
     my $kid = wait;
     if ($pids{$kid}) {
         my $script = delete $pids{$kid};
-        print STDERR colorize("# $script --------------------------------\n", 'cyan');
+        print colorize("# $script --------------------------------\n", 'cyan');
 
         # print the output of the perl script being run
         my $logfn = get_logfn($script);
@@ -41,21 +41,21 @@ while (@scripts or %pids) {
 
         # add to the failed list, if necessary
         if (WIFEXITED($?) and WEXITSTATUS($?) == 0) {
-            print STDERR colorize("# $script succeeded\n", 'bright_green');
+            print colorize("# $script succeeded\n", 'bright_green');
         } else {
-            print STDERR colorize("# $script failed\n", 'bright_red');
+            print colorize("# $script failed\n", 'bright_red');
             push @failures, $script;
         }
 
     }
 }
 
-print STDERR "--------------------------------------------------------\n";
+print "--------------------------------------------------------\n";
 if (@failures) {
-    print STDERR colorize(join("\n", '# Result: Fail', map { "# \t$_" } @failures), 'red');
+    print colorize(join("\n", '# Result: Fail', map { "# \t$_" } @failures), 'red');
     exit 1;
 } else {
-    print STDERR colorize(join("\n", '# Result: Success', map { "# \t$_" } @failures), 'green');
+    print colorize(join("\n", '# Result: Success', map { "# \t$_" } @failures), 'green');
     exit 0;
 }
 
