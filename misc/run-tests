@@ -6,6 +6,7 @@ use File::Temp qw(tempdir);
 use Getopt::Long qw(:config posix_default no_ignore_case gnu_compat);
 use POSIX qw(:sys_wait_h);
 use Term::ANSIColor;
+use Time::HiRes qw(time);
 
 my $jobs = 1;
 
@@ -74,6 +75,7 @@ sub spawn_script {
     return $pid if $pid != 0;
 
     # child process, redirect STDOUT, STDERR to tempfile and exec
+    $logfh = log_add_timestamp($logfh);
     open STDOUT, ">&", $logfh
         or die "failed to redirect STDOUT:$!";
     open STDERR, ">&", $logfh
@@ -91,4 +93,28 @@ sub get_logfn {
 sub colorize {
     my ($msg, $color) = @_;
     return -t STDOUT ? colored($msg, $color) : $msg;
+}
+
+sub log_add_timestamp {
+    my $logfh = shift;
+
+    my ($readfh, $writefh);
+    pipe $readfh, $writefh
+        or die "pipe failed:$!";
+
+    my $pid = fork;
+    die "fork failed:$!"
+        unless defined $pid;
+
+    if ($pid == 0) {
+        # child process
+        close $writefh;
+        while (<$readfh>) {
+            printf $logfh "%.06f %s", time, $_;
+        }
+        exit 0;
+    }
+
+    close $readfh;
+    $writefh;
 }
