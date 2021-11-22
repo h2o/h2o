@@ -47,7 +47,7 @@ while (my $arg = shift(@ARGV)) {
 my $prove = do {
     my $formatter = -t STDOUT ? 'TAP::Formatter::Console' : 'TAP::Formatter::File';
     my $color = -t STDOUT ? '--color' : '--nocolor';
-    "prove -I$H2O_ROOT $color --formatter $formatter @{[ join(' ', @prove_argv) ]}"
+    "time prove -I$H2O_ROOT $color --formatter $formatter @{[ join(' ', @prove_argv) ]}"
 };
 
 unless (@tests) {
