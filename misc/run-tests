@@ -52,10 +52,10 @@ while (@scripts or %pids) {
 
 print "--------------------------------------------------------\n";
 if (@failures) {
-    print colorize(join("\n", '# Result: Fail', map { "# \t$_" } @failures), 'red');
+    print colorize(join('', "# Result: Fail\n", map { "# \t$_\n" } @failures), 'red');
     exit 1;
 } else {
-    print colorize(join("\n", '# Result: Success', map { "# \t$_" } @failures), 'green');
+    print colorize(join('', "# Result: Success\n", map { "# \t$_\n" } @failures), 'green');
     exit 0;
 }
 
