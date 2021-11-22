@@ -269,7 +269,6 @@ sub spawn_h2o_raw {
             1;
         },
     );
-    sleep 0.5;
     return {
         guard    => $guard,
         pid      => $pid,
