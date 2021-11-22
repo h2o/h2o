@@ -5,6 +5,7 @@ use warnings;
 use Digest::MD5 qw(md5_hex);
 use File::Temp qw(tempfile tempdir);
 use IO::Socket::INET;
+use IO::Socket::IP;
 use IO::Socket::SSL;
 use IO::Poll qw(POLLIN POLLOUT POLLHUP POLLERR);
 use List::Util qw(shuffle);
@@ -51,6 +52,7 @@ our @EXPORT = qw(
     check_dtrace_availability
     run_picotls_client
     spawn_dns_server
+    check_http_port
 );
 
 use constant ASSETS_DIR => 't/assets';
@@ -265,7 +267,11 @@ sub spawn_h2o_raw {
     my ($guard, $pid) = spawn_server(
         argv     => [ bindir() . "/h2o", "-c", $conffn, @{$opts || []} ],
         is_ready => sub {
-            check_port($_) or return for @{ $check_ports || [] };
+            # Send HTTP request on the first port and wait for the server to close. By waiting for close, we prevent our tests
+            # reporting timeouts while the server does the heavylifting of setting up TLS context *after* calling listen (2).
+            my @ports = @{$check_ports || []};
+            return if @ports and !check_http_port(shift @ports);
+            check_port($_) or return for @ports;
             1;
         },
     );
@@ -770,6 +776,34 @@ sub spawn_dns_server {
             $ns->main_loop;
         });
     return $server;
+}
+
+sub check_http_port {
+    my ($host, $port) = @_ && ref $_[0] eq 'HASH' ? ($_[0]->{host}, $_[0]->{port}) : (undef, @_);
+    $host = '127.0.0.1'
+        unless defined $host;
+
+    # try connecting, and if failed, return that the port is not ready
+    my $sock = IO::Socket::IP->new(
+        Proto    => 'tcp',
+        PeerAddr => $host,
+        PeerPort => $port,
+        V6Only => 1,
+    ) or return 0;
+
+    # send HTTP request and wait for the connection to close
+    $sock->syswrite("GET / HTTP/1.0\r\n\r\n");
+    while (1) {
+        my $rret = $sock->sysread(my $data, 65536);
+        if (!defined $rret) {
+            next if $! == Errno::EINTR;
+            last;
+        } elsif ($rret == 0) {
+            last;
+        }
+    }
+
+    1;
 }
 
 1;
