@@ -709,7 +709,7 @@ EOT
     run_with_curl($server, sub {
         my ($proto, $port, $curl) = @_;
         my ($status, $headers, $body);
-        ($status, $headers, $body) = get($proto, $port, $curl, , '/index.txt', +{ headers => ['X-Foo: FOO'] });
+        ($status, $headers, $body) = get($proto, $port, $curl, '/index.txt', +{ headers => ['X-Foo: FOO'] });
         is $status, 200;
         is $body, 'FOO';
         ($status, $headers, $body) = get($proto, $port, $curl, '/index.txt?BAR', +{ headers => ['X-Foo: FOO'] });
