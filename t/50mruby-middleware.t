@@ -811,7 +811,7 @@ hosts:
               et = Time.now
               [200, {}, [et - st]]
             }
-        - mruby.handler:  proc {|env| sleep 0.1; [200, {}, []] }
+        - mruby.handler:  proc {|env| sleep 1; [200, {}, []] }
       /non-blocking:
         - mruby.handler: |
             proc {|env|
@@ -823,7 +823,7 @@ hosts:
               et = Time.now
               [200, {}, [et - st]]
             }
-        - mruby.handler:  proc {|env| sleep 0.1; [200, {}, []] }
+        - mruby.handler:  proc {|env| sleep 1; [200, {}, []] }
   "127.0.0.1:$tls_port":
     paths: *paths
 EOT
@@ -833,9 +833,9 @@ EOT
 
         my ($status, $headers, $body);
         ($status, $headers, $body) = get($proto, $port, $curl, '/blocking');
-        cmp_ok $body, '>', 0.19;
+        cmp_ok $body, '>', 1.9;
         ($status, $headers, $body) = get($proto, $port, $curl, '/non-blocking');
-        cmp_ok $body, '<', 0.11;
+        cmp_ok $body, '<', 1.1;
     });
 };
 
