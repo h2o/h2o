@@ -912,8 +912,10 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
         }
     }
 
+    fprintf(stderr, "%s:%d\n", __FUNCTION__, __LINE__);
     if (ssl_node == NULL)
         return 0;
+    fprintf(stderr, "%s:%d parsing mapping\n", __FUNCTION__, __LINE__);
 
     /* parse */
     if (h2o_configurator_parse_mapping(cmd, *ssl_node, "key-file:s",
@@ -1026,7 +1028,9 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
                     continue;
             }
             /* matched! add host */
+            fprintf(stderr, "%s:%d\n calling listener_setup_ssl_add_host", __FUNCTION__, __LINE__);
             listener_setup_ssl_add_host(ssl_config, ctx->hostconf->authority.hostport);
+            fprintf(stderr, "%s:%d\n called listener_setup_ssl_add_host", __FUNCTION__, __LINE__);
             return 0;
         }
     }
@@ -1041,7 +1045,9 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
 #endif
 
     /* setup */
+    fprintf(stderr, "%s:%d\n calling SSL_CTX_new", __FUNCTION__, __LINE__);
     ssl_ctx = SSL_CTX_new(SSLv23_server_method());
+    fprintf(stderr, "%s:%d\n calling SSL_CTX_set_options", __FUNCTION__, __LINE__);
     SSL_CTX_set_options(ssl_ctx, ssl_options);
 
     /* set up client certificate verification if client_ca_file is configured */
@@ -1059,9 +1065,12 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
         assert(ret == 1);
     }
 
+    fprintf(stderr, "%s:%d\n calling SSL_CTX_set_session-id_context", __FUNCTION__, __LINE__);
     SSL_CTX_set_session_id_context(ssl_ctx, H2O_SESSID_CTX, H2O_SESSID_CTX_LEN);
 
+    fprintf(stderr, "%s:%d\n calling setup_ecc_key", __FUNCTION__, __LINE__);
     setup_ecc_key(ssl_ctx);
+    fprintf(stderr, "%s:%d\n calling use_certificate_chain_file", __FUNCTION__, __LINE__);
     if (certificate_file != NULL && SSL_CTX_use_certificate_chain_file(ssl_ctx, (*certificate_file)->data.scalar) != 1) {
         h2o_configurator_errprintf(cmd, *certificate_file, "failed to load certificate file:%s\n",
                                    (*certificate_file)->data.scalar);
@@ -1082,6 +1091,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
     if (use_neverbleed) {
         char errbuf[NEVERBLEED_ERRBUF_SIZE];
         if (neverbleed == NULL) {
+            fprintf(stderr, "%s:%d\n initializing neverbleed", __FUNCTION__, __LINE__);
             neverbleed_post_fork_cb = on_neverbleed_fork;
             neverbleed = h2o_mem_alloc(sizeof(*neverbleed));
             if (neverbleed_init(neverbleed, errbuf) != 0) {
@@ -1089,17 +1099,20 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
                 abort();
             }
         }
+        fprintf(stderr, "%s:%d\n loading private key", __FUNCTION__, __LINE__);
         if (neverbleed_load_private_key_file(neverbleed, ssl_ctx, (*key_file)->data.scalar, errbuf) != 1) {
             h2o_configurator_errprintf(cmd, *key_file, "failed to load private key file:%s:%s\n", (*key_file)->data.scalar, errbuf);
             goto Error;
         }
     } else {
+        fprintf(stderr, "%s:%d\n calling SSL_CTX_use_PrivateKeyFile", __FUNCTION__, __LINE__);
         if (SSL_CTX_use_PrivateKey_file(ssl_ctx, (*key_file)->data.scalar, SSL_FILETYPE_PEM) != 1) {
             h2o_configurator_errprintf(cmd, *key_file, "failed to load private key file:%s\n", (*key_file)->data.scalar);
             ERR_print_errors_cb(on_openssl_print_errors, stderr);
             goto Error;
         }
     }
+    fprintf(stderr, "%s:%d\n loaded private key", __FUNCTION__, __LINE__);
     if (cipher_suite != NULL && SSL_CTX_set_cipher_list(ssl_ctx, (*cipher_suite)->data.scalar) != 1) {
         h2o_configurator_errprintf(cmd, *cipher_suite, "failed to setup SSL cipher suite\n");
         ERR_print_errors_cb(on_openssl_print_errors, stderr);
@@ -1410,6 +1423,7 @@ static int open_unix_listener(h2o_configurator_command_t *cmd, yoml_t *node, str
         h2o_configurator_errprintf(NULL, node, "failed to listen to socket:%s: %s", sa->sun_path, strerror(errno));
         goto ErrorExit;
     }
+    fprintf(stderr, "%s:%d called listen\n", __FUNCTION__, __LINE__);
     set_cloexec(fd);
 
     /* set file owner and permission */
@@ -1496,6 +1510,7 @@ static int open_listener(int domain, int type, int protocol, struct sockaddr *ad
         /* listen */
         if (listen(fd, H2O_SOMAXCONN) != 0)
             goto Error;
+        fprintf(stderr, "%s:%d called listen\n", __FUNCTION__, __LINE__);
 #ifdef SO_ACCEPTFILTER
         { /* set SO_ACCEPTFILTER */
             struct accept_filter_arg arg = {0};
@@ -1712,8 +1727,10 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
         } else if (listener->proxy_protocol != proxy_protocol) {
             goto ProxyConflict;
         }
+        fprintf(stderr, "%s:%d calling listener_setup_ssl\n", __FUNCTION__, __LINE__);
         if (listener_setup_ssl(cmd, ctx, node, ssl_node, NULL, NULL, listener, listener_is_new) != 0)
             return -1;
+        fprintf(stderr, "%s:%d called listener_setup_ssl\n", __FUNCTION__, __LINE__);
         if (listener->hosts != NULL && ctx->hostconf != NULL)
             h2o_append_to_null_terminated_list((void *)&listener->hosts, ctx->hostconf);
 
@@ -1763,10 +1780,12 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                 freeaddrinfo(res);
                 goto ProxyConflict;
             }
+            fprintf(stderr, "%s:%d calling listener_setup_ssl\n", __FUNCTION__, __LINE__);
             if (listener_setup_ssl(cmd, ctx, node, ssl_node, cc_node, NULL, listener, listener_is_new) != 0) {
                 freeaddrinfo(res);
                 return -1;
             }
+            fprintf(stderr, "%s:%d called listener_setup_ssl\n", __FUNCTION__, __LINE__);
             if (listener->hosts != NULL && ctx->hostconf != NULL)
                 h2o_append_to_null_terminated_list((void *)&listener->hosts, ctx->hostconf);
         }
@@ -1855,10 +1874,12 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                     set_quic_sockopts(fd, ai->ai_family, listener->quic.sndbuf, listener->quic.rcvbuf);
                 listener_is_new = 1;
             }
+            fprintf(stderr, "%s:%d calling listener_setup_ssl\n", __FUNCTION__, __LINE__);
             if (listener_setup_ssl(cmd, ctx, node, ssl_node, cc_node, initcwnd_node, listener, listener_is_new) != 0) {
                 freeaddrinfo(res);
                 return -1;
             }
+            fprintf(stderr, "%s:%d called listener_setup_ssl\n", __FUNCTION__, __LINE__);
             if (listener->hosts != NULL && ctx->hostconf != NULL)
                 h2o_append_to_null_terminated_list((void *)&listener->hosts, ctx->hostconf);
         }
@@ -3532,6 +3553,7 @@ int main(int argc, char **argv)
             exit(EX_CONFIG);
         if (h2o_configurator_apply(&conf.globalconf, yoml, conf.run_mode != RUN_MODE_WORKER) != 0)
             exit(EX_CONFIG);
+        fprintf(stderr, "%s:%d called h2o_configurator_apply\n", __FUNCTION__, __LINE__);
 
         dispose_resolve_tag_arg(&resolve_tag_arg);
         yoml_free(yoml, NULL);
@@ -3578,10 +3600,13 @@ int main(int argc, char **argv)
 
     h2o_srand();
     /* handle run_mode == MASTER|TEST */
+    fprintf(stderr, "%s:%d\n", __FUNCTION__, __LINE__);
     switch (conf.run_mode) {
     case RUN_MODE_WORKER:
+        fprintf(stderr, "%s:%d\n", __FUNCTION__, __LINE__);
         break;
     case RUN_MODE_DAEMON:
+        fprintf(stderr, "%s:%d\n", __FUNCTION__, __LINE__);
         if (conf.error_log == NULL) {
             fprintf(stderr, "to run in `daemon` mode, `error-log` must be specified in the configuration file\n");
             return EX_CONFIG;
