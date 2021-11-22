@@ -6,6 +6,7 @@ FUZZ_ASAN=ASAN_OPTIONS=detect_leaks=0
 DOCKER_RUN_OPTS=--privileged \
 	--ulimit memlock=-1 \
 	-v `pwd`:$(SRC_DIR) \
+	-v /dev/urandom:/dev/random \
 	-v /sys/kernel/debug:/sys/kernel/debug \
 	-v /lib/modules:/lib/modules:ro \
 	-v /usr/src:/usr/src:ro \
