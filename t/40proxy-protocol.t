@@ -92,7 +92,7 @@ sub test_timeout {
         $gotsig = 1;
         die "gotsig";
     };
-    alarm(60);
+    alarm(5);
     eval { fetch("") };
     alarm(0);
     ok ! $gotsig;

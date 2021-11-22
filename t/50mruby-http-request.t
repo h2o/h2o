@@ -378,13 +378,13 @@ EOT
         $curl_cmd .= ' --silent --dump-header /dev/stderr';
 
         subtest "no content" => sub {
-            my ($headers, $body) = run_prog("$curl_cmd -m 60 $proto://127.0.0.1:$port/no-content");
+            my ($headers, $body) = run_prog("$curl_cmd -m 1 $proto://127.0.0.1:$port/no-content");
             like $headers, qr{HTTP/[^ ]+ 204\s}is;
             is $body, "";
         };
 
         subtest "head" => sub {
-            my ($headers, $body) = run_prog("$curl_cmd -m 60 $proto://127.0.0.1:$port/head");
+            my ($headers, $body) = run_prog("$curl_cmd -m 1 $proto://127.0.0.1:$port/head");
             like $headers, qr{HTTP/[^ ]+ 200\s}is;
             is $body, "";
         };

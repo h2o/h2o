@@ -605,7 +605,7 @@ EOT
     run_with_curl($server, sub {
         my ($proto, $port, $curl) = @_;
         my $fetch = sub {
-            run_prog("$curl --silent --dump-header /dev/stderr $proto://127.0.0.1:$port/?@{[unpack 'H*', $_[0]]}");
+            run_prog("$curl --silent --dump-header /dev/stderr -m 1 $proto://127.0.0.1:$port/?@{[unpack 'H*', $_[0]]}");
         };
         my ($headers, $body) = $fetch->('[200, {}, ["hello world"]]');
         subtest "verify the methodology" => sub {
@@ -652,7 +652,7 @@ hosts:
 EOT
     run_with_curl($server, sub {
         my ($proto, $port, $curl) = @_;
-        my ($headers) = run_prog("$curl --silent --dump-header /dev/stderr $proto://127.0.0.1:$port/");
+        my ($headers) = run_prog("$curl --silent --dump-header /dev/stderr -m 1 $proto://127.0.0.1:$port/");
         like $headers, qr{^link: </index.js>; rel=preload\r$}m;
         like $headers, qr{^link: </style.css>; rel=preload\r$}m;
         like $headers, qr{^foo: bar\r$}m;

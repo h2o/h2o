@@ -132,7 +132,7 @@ EOT
 sub test {
     my $lines = do {
         my $cmd_opts = (-e "$tempdir/session" ? "-sess_in $tempdir/session" : "") . " -sess_out $tempdir/session";
-        open2(my $outfh, my $infh, "timeout 60 openssl s_client $cmd_opts -connect 127.0.0.1:$server->{tls_port} 2>&1")
+        open2(my $outfh, my $infh, "timeout 1 openssl s_client $cmd_opts -connect 127.0.0.1:$server->{tls_port} 2>&1")
             or die "failed to open pipe:$!";
         local $/;
         <$outfh>;
