@@ -42,7 +42,7 @@ _check:
 
 _do-check:
 	cmake $(CMAKE_ARGS) -H$(SRC_DIR) -B.
-	make all
+	time make all
 	ulimit -n 1024; make check
 
 _fuzz:
