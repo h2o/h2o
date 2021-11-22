@@ -59,7 +59,7 @@ unless (@tests) {
     @tests = sort @tests;
 }
 unless (scalar(@tests)) {
-    say colorize("# Error: No tests to execute", 'bright_red');
+    say colorize("# Error: No tests to run", 'bright_red');
     exit 1;
 }
 
