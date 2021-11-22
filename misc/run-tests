@@ -1,0 +1,94 @@
+#!/usr/bin/env perl
+use strict;
+use warnings;
+use feature qw/say/;
+use File::Temp qw(tempdir);
+use Getopt::Long qw(:config posix_default no_ignore_case gnu_compat);
+use POSIX qw(:sys_wait_h);
+use Term::ANSIColor;
+
+my $jobs = 1;
+
+GetOptions(
+   "jobs|j=i" => \$jobs,
+) or die "error in command line arguments\n";
+
+my @scripts = @ARGV;
+my %pids;
+my @failures;
+
+my $tempdir = tempdir(CLEANUP => 1);
+
+while (@scripts or %pids) {
+    # spawn
+    while (@scripts and keys %pids < $jobs) {
+        my $script = shift @scripts;
+        $pids{spawn_script($script)} = $script;
+    }
+
+    # wait for tasks to exit
+    my $kid = wait;
+    if ($pids{$kid}) {
+        my $script = delete $pids{$kid};
+        print STDERR colorize("# $script --------------------------------\n", 'cyan');
+
+        # print the output of the perl script being run
+        my $logfn = get_logfn($script);
+        open my $logfh, "<", $logfn
+            or die "failed to open script:$logfn:$!";
+        unlink $logfn;
+        print do { local $/; <$logfh> };
+
+        # add to the failed list, if necessary
+        if (WIFEXITED($?) and WEXITSTATUS($?) == 0) {
+            print STDERR colorize("# $script succeeded\n", 'bright_green');
+        } else {
+            print STDERR colorize("# $script failed\n", 'bright_red');
+            push @failures, $script;
+        }
+
+    }
+}
+
+print STDERR "--------------------------------------------------------\n";
+if (@failures) {
+    print STDERR colorize(join("\n", '# Result: Fail', map { "# \t$_" } @failures), 'red');
+    exit 1;
+} else {
+    print STDERR colorize(join("\n", '# Result: Success', map { "# \t$_" } @failures), 'green');
+    exit 0;
+}
+
+sub spawn_script {
+    my $script = shift;
+
+    my $logfn = get_logfn($script);
+    open my $logfh, ">", $logfn
+        or die "failed to create log file:$logfn:$!";
+
+    my $pid = fork;
+    die "fork failed:$!"
+        unless defined $pid;
+
+    # return the spawned PID if in parent process
+    return $pid if $pid != 0;
+
+    # child process, redirect STDOUT, STDERR to tempfile and exec
+    open STDOUT, ">&", $logfh
+        or die "failed to redirect STDOUT:$!";
+    open STDERR, ">&", $logfh
+        or die "failed to redirect STDERR:$!";
+    exec "sh -c 'time $^X $script'";
+    die "failed to exec $^X $script:$!";
+}
+
+sub get_logfn {
+    my $script = shift;
+    $script =~ s{/}{__}g;
+    "$tempdir/$script.out";
+}
+
+sub colorize {
+    my ($msg, $color) = @_;
+    return -t STDOUT ? colored($msg, $color) : $msg;
+}
