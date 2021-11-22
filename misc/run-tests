@@ -1,7 +1,7 @@
 #!/usr/bin/env perl
 use strict;
 use warnings;
-use feature qw/say/;
+use FindBin;
 use File::Temp qw(tempdir);
 use Getopt::Long qw(:config posix_default no_ignore_case gnu_compat);
 use POSIX qw(:sys_wait_h);
@@ -78,7 +78,7 @@ sub spawn_script {
         or die "failed to redirect STDOUT:$!";
     open STDERR, ">&", $logfh
         or die "failed to redirect STDERR:$!";
-    exec "sh -c 'time $^X $script'";
+    exec "sh -c 'time $^X -I. $script'";
     die "failed to exec $^X $script:$!";
 }
 
