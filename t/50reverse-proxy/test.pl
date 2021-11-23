@@ -6,6 +6,7 @@ use Getopt::Long;
 use Net::EmptyPort qw(check_port empty_port);
 use Test::More;
 use URI::Escape;
+use lib '.';
 use t::Util;
 
 my ($aggregated_mode, $h2o_keepalive, $starlet_keepalive, $starlet_force_chunked, $unix_socket);
