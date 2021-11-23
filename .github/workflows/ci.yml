@@ -16,13 +16,13 @@ jobs:
       matrix:
         include:
           - name: default
-            command: make -f misc/docker-ci/check.mk ALL
+            command: make -f misc/docker-ci/check.mk ALL BUILD_ARGS=-j6
           - name: OpenSSL 1.1.0 + Fuzz
-            command: make -f misc/docker-ci/check.mk ossl1.1.0+fuzz
+            command: make -f misc/docker-ci/check.mk ossl1.1.0+fuzz BUILD_ARGS=-j6
           - name: OpenSSL 1.1.1
-            command: make -f misc/docker-ci/check.mk ossl1.1.1
+            command: make -f misc/docker-ci/check.mk ossl1.1.1 BUILD_ARGS=-j6
           - name: DTrace
-            command: make -f misc/docker-ci/check.mk dtrace CONTAINER_NAME=h2oserver/h2o-ci:ubuntu2004
+            command: make -f misc/docker-ci/check.mk dtrace CONTAINER_NAME=h2oserver/h2o-ci:ubuntu2004 BUILD_ARGS=-j6
 
     timeout-minutes: 60
     steps:
