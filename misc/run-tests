@@ -8,6 +8,8 @@ use POSIX qw(:sys_wait_h);
 use Term::ANSIColor;
 use Time::HiRes qw(time);
 
+$| = 1;
+
 my $jobs = 1;
 
 GetOptions(
