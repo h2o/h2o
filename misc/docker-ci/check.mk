@@ -41,7 +41,7 @@ _check:
 
 _do-check:
 	cmake $(CMAKE_ARGS) -H$(SRC_DIR) -B.
-	time komake -j4 all
+	time komake -j6 all checkdepends
 	ulimit -n 1024; make check
 
 _fuzz:
