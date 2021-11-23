@@ -41,6 +41,8 @@ jobs:
       run: |
         chmod -R ugo+w .
         ${{ matrix.command }}
+      env:
+        TEST_JOBS: 4
 
   # See https://github.com/google/oss-fuzz/tree/master/projects/h2o for details
   ossfuzz:

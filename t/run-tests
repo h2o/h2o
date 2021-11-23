@@ -7,7 +7,7 @@ use POSIX qw(:sys_wait_h);
 use Term::ANSIColor;
 use Time::HiRes qw(time);
 
-my $jobs = 1;
+my $jobs = $ENV{TEST_JOBS} || 1;
 
 GetOptions(
    "jobs|j=i" => \$jobs,
