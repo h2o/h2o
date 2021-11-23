@@ -18,7 +18,7 @@ ALL:
 
 ossl1.1.0+fuzz:
 	docker run $(DOCKER_RUN_OPTS) $(CONTAINER_NAME) \
-		env $(FUZZ_ASAN) CC=clang CXX=clang++ \
+		env CC=clang CXX=clang++ \
 		make -f $(SRC_DIR)/misc/docker-ci/check.mk _check \
 		CMAKE_ARGS='-DOPENSSL_ROOT_DIR=/opt/openssl-1.1.0\ -DBUILD_FUZZER=ON'
 
@@ -42,7 +42,9 @@ _check:
 _do-check:
 	cmake $(CMAKE_ARGS) -H$(SRC_DIR) -B.
 	time komake -j6 all checkdepends
-	ulimit -n 1024; make check
+	if [ -e h2o-fuzzer-http1 ] ; then export $(FUZZ_ASAN); fi; \
+		ulimit -n 1024; \
+		make check
 
 enter:
 	docker run $(DOCKER_RUN_OPTS) -it $(CONTAINER_NAME) bash
