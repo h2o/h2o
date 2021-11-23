@@ -112,8 +112,9 @@ sub log_add_timestamp {
     if ($pid == 0) {
         # child process
         close $writefh;
+        my $start_at = time;
         while (<$readfh>) {
-            printf $logfh "%.06f %s", time, $_;
+            printf $logfh '%10.06f %s', time - $start_at, $_;
         }
         exit 0;
     }
