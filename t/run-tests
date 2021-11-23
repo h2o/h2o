@@ -81,7 +81,7 @@ sub spawn_script {
         or die "failed to redirect STDOUT:$!";
     open STDERR, ">&", $logfh
         or die "failed to redirect STDERR:$!";
-    exec "time", $^X, $script;
+    exec "time", $^X, "-I.", $script;
     die "failed to exec $^X $script:$!";
 }
 
