@@ -909,6 +909,7 @@ IF (BUILD_FUZZER)
     SET_TARGET_PROPERTIES(h2o-fuzzer-http3 PROPERTIES COMPILE_FLAGS "-DH2O_USE_LIBUV=0")
     SET_TARGET_PROPERTIES(h3-header-generator PROPERTIES COMPILE_FLAGS "-DH2O_USE_LIBUV=0")
     SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_C_FLAGS}")
+    ADD_DEPENDENCIES(checkdepends h2o-fuzzer-http1 h2o-fuzzer-http2 h2o-fuzzer-http3 h2o-fuzzer-url)
     IF (OSS_FUZZ)
         # Use https://github.com/google/oss-fuzz compatible options
         SET(LIB_FUZZER FuzzingEngine)
