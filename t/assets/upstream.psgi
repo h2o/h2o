@@ -6,6 +6,7 @@ use Plack::Builder;
 use Plack::Request;
 use Plack::TempBuffer;
 use Time::HiRes qw(sleep);
+use lib '.';
 use t::Util;
 
 my $force_chunked = $ENV{FORCE_CHUNKED} || 0;
