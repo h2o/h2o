@@ -81,7 +81,8 @@ sub spawn_script {
         or die "failed to redirect STDOUT:$!";
     open STDERR, ">&", $logfh
         or die "failed to redirect STDERR:$!";
-    exec "time", $^X, "-I.", $script;
+    $ENV{PERL5LIB} = join ":", ".", split ":", $ENV{PERL5LIB} || "";
+    exec "time", $^X, $script;
     die "failed to exec $^X $script:$!";
 }
 
