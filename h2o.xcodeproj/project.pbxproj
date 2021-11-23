@@ -708,6 +708,10 @@
 		086001C92730B8E20043886F /* 50mruby-h2-rtt.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50mruby-h2-rtt.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		086001CA2730B9B20043886F /* udp-generator.pl */ = {isa = PBXFileReference; lastKnownFileType = text.script.perl; path = "udp-generator.pl"; sourceTree = "<group>"; };
 		086850B9274C6D7D00F8CAD1 /* run-tests */ = {isa = PBXFileReference; lastKnownFileType = text; path = "run-tests"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		086850BA274CA3CD00F8CAD1 /* 99fuzzer-url.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "99fuzzer-url.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		086850BB274CA3CD00F8CAD1 /* 99fuzzer-http3.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "99fuzzer-http3.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		086850BC274CA3CE00F8CAD1 /* 99fuzzer-http2.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "99fuzzer-http2.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		086850BD274CA3CE00F8CAD1 /* 99fuzzer-http1.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "99fuzzer-http1.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		08790DD91D80153600A04BC1 /* net.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = net.c; sourceTree = "<group>"; };
 		08790DDB1D80154C00A04BC1 /* sds.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = sds.c; sourceTree = "<group>"; };
 		08790DDD1D8015A400A04BC1 /* net.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = net.h; sourceTree = "<group>"; };
@@ -2345,6 +2349,10 @@
 				104B9A451A5D1004009EEE64 /* 90live-fetch-ocsp-response.t */,
 				109EEFE31D77B350001F11D1 /* 90live-sni.t */,
 				10C2117C1B8164B1005A9D02 /* 90root-fastcgi-php.t */,
+				086850BD274CA3CE00F8CAD1 /* 99fuzzer-http1.t */,
+				086850BC274CA3CE00F8CAD1 /* 99fuzzer-http2.t */,
+				086850BB274CA3CD00F8CAD1 /* 99fuzzer-http3.t */,
+				086850BA274CA3CD00F8CAD1 /* 99fuzzer-url.t */,
 				10AA2EC51AA0557A004322AC /* assets */,
 				086850B9274C6D7D00F8CAD1 /* run-tests */,
 				105534FB1A460F4200627ECB /* Util.pm */,
