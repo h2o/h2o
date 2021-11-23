@@ -17,12 +17,10 @@ jobs:
         include:
           - name: default
             command: make -f misc/docker-ci/check.mk ALL
-          - name: OpenSSL 1.1.0
-            command: make -f misc/docker-ci/check.mk ossl1.1.0
+          - name: OpenSSL 1.1.0 + Fuzz
+            command: make -f misc/docker-ci/check.mk ossl1.1.0+fuzz
           - name: OpenSSL 1.1.1
             command: make -f misc/docker-ci/check.mk ossl1.1.1
-          - name: Fuzz
-            command: make -f misc/docker-ci/check.mk fuzz
           - name: DTrace
             command: make -f misc/docker-ci/check.mk dtrace CONTAINER_NAME=h2oserver/h2o-ci:ubuntu2004
 

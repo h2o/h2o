@@ -13,14 +13,14 @@ DOCKER_RUN_OPTS=--privileged \
 	-it
 
 ALL:
-	docker run $(DOCKER_RUN_OPTS) $(CONTAINER_NAME) make -f $(SRC_DIR)/misc/docker-ci/check.mk _check
+	docker run $(DOCKER_RUN_OPTS) $(CONTAINER_NAME) \
+		make -f $(SRC_DIR)/misc/docker-ci/check.mk _check
 
-fuzz:
-	docker run $(DOCKER_RUN_OPTS) $(CONTAINER_NAME) make -f $(SRC_DIR)/misc/docker-ci/check.mk _fuzz
-
-ossl1.1.0:
-	docker run $(DOCKER_RUN_OPTS) $(CONTAINER_NAME) make -f $(SRC_DIR)/misc/docker-ci/check.mk _check \
-		CMAKE_ARGS='-DOPENSSL_ROOT_DIR=/opt/openssl-1.1.0'
+ossl1.1.0+fuzz:
+	docker run $(DOCKER_RUN_OPTS) $(CONTAINER_NAME) \
+		env $(FUZZ_ASAN) CC=clang CXX=clang++ \
+		make -f $(SRC_DIR)/misc/docker-ci/check.mk _check \
+		CMAKE_ARGS='-DOPENSSL_ROOT_DIR=/opt/openssl-1.1.0\ -DBUILD_FUZZER=ON'
 
 ossl1.1.1:
 	docker run $(DOCKER_RUN_OPTS) $(CONTAINER_NAME) make -f $(SRC_DIR)/misc/docker-ci/check.mk _check \
@@ -43,16 +43,6 @@ _do-check:
 	cmake $(CMAKE_ARGS) -H$(SRC_DIR) -B.
 	time komake -j6 all checkdepends
 	ulimit -n 1024; make check
-
-_fuzz:
-	$(FUZZ_ASAN) CC=clang CXX=clang++ $(MAKE) -f $(CHECK_MK) _check CMAKE_ARGS=-DBUILD_FUZZER=ON
-	$(FUZZ_ASAN) $(MAKE) -f $(CHECK_MK) -C build _do-fuzz-extra
-
-_do-fuzz-extra:
-	./h2o-fuzzer-http1 -close_fd_mask=3 -runs=1 -max_len=16384 $(SRC_DIR)/fuzz/http1-corpus < /dev/null
-	./h2o-fuzzer-http2 -close_fd_mask=3 -runs=1 -max_len=16384 $(SRC_DIR)/fuzz/http2-corpus < /dev/null
-	./h2o-fuzzer-http3 -close_fd_mask=3 -runs=1 -max_len=16384 $(SRC_DIR)/fuzz/http3-corpus < /dev/null
-	./h2o-fuzzer-url -close_fd_mask=3 -runs=1 -max_len=16384 $(SRC_DIR)/fuzz/url-corpus < /dev/null
 
 enter:
 	docker run $(DOCKER_RUN_OPTS) -it $(CONTAINER_NAME) bash
