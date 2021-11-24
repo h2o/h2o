@@ -39,6 +39,7 @@ RUN apt-get install --yes \
 	ruby-dev \
 	sudo \
 	systemtap-sdt-dev \
+	time \
 	wget
 
 # install curl 7.57.0 because t/50fastcgi.t depends on it.
@@ -82,6 +83,9 @@ RUN git clone --branch kazuho/usdt-attach-all-locations https://github.com/kazuh
 # use dumb-init
 RUN wget -O /usr/local/bin/dumb-init https://github.com/Yelp/dumb-init/releases/download/v1.2.1/dumb-init_1.2.1_amd64 \
  && chmod +x /usr/local/bin/dumb-init
+
+# komake
+RUN wget -O /usr/local/bin/komake https://raw.githubusercontent.com/kazuho/komake/main/komake && chmod +x /usr/local/bin/komake
 
 # create user
 RUN useradd --create-home ci
