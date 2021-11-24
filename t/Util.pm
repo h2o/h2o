@@ -28,6 +28,7 @@ our @EXPORT = qw(
     server_features
     exec_unittest
     exec_mruby_unittest
+    exec_fuzzer
     spawn_server
     spawn_h2o
     spawn_h2o_raw
@@ -51,6 +52,7 @@ our @EXPORT = qw(
     check_dtrace_availability
     run_picotls_client
     spawn_dns_server
+    run_fuzzer
 );
 
 use constant ASSETS_DIR => 't/assets';
@@ -155,6 +157,17 @@ sub exec_mruby_unittest {
     }, +{ recurse => 1 });
 
 	printf("1..%d\n", $k);
+}
+
+sub exec_fuzzer {
+    my $name = shift;
+    my $prog = bindir() . "/h2o-fuzzer-$name";
+
+    plan skip_all => "$prog does not exist"
+        if ! -e $prog;
+
+    is system("$prog -close_fd_mask=3 -runs=1 -max_len=16384 fuzz/$name-corpus < /dev/null"), 0;
+    done_testing;
 }
 
 # spawns a child process and returns a guard object that kills the process when destroyed
