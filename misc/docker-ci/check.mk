@@ -22,7 +22,7 @@ ossl1.1.0+fuzz:
 	docker run $(DOCKER_RUN_OPTS) $(CONTAINER_NAME) \
 		env CC=clang CXX=clang++ \
 		make -f $(SRC_DIR).ro/misc/docker-ci/check.mk _check \
-		CMAKE_ARGS='-DOPENSSL_ROOT_DIR=/opt/openssl-1.1.0\ -DBUILD_FUZZER=ON' \
+		CMAKE_ARGS='-DOPENSSL_ROOT_DIR=/opt/openssl-1.1.0 -DBUILD_FUZZER=ON' \
 		BUILD_ARGS='$(BUILD_ARGS)'
 
 ossl1.1.1:
