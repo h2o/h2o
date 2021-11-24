@@ -3,6 +3,7 @@ SRC_DIR=/h2o
 CHECK_MK=$(SRC_DIR)/misc/docker-ci/check.mk
 CMAKE_ARGS=
 BUILD_ARGS=
+TEST_ENV=
 FUZZ_ASAN=ASAN_OPTIONS=detect_leaks=0
 DOCKER_RUN_OPTS=--privileged \
 	--ulimit memlock=-1 \
@@ -16,26 +17,30 @@ DOCKER_RUN_OPTS=--privileged \
 ALL:
 	docker run $(DOCKER_RUN_OPTS) $(CONTAINER_NAME) \
 		make -f $(SRC_DIR).ro/misc/docker-ci/check.mk _check \
-		BUILD_ARGS='$(BUILD_ARGS)'
+		BUILD_ARGS='$(BUILD_ARGS)' \
+		TEST_ENV='$(TEST_ENV)'
 
 ossl1.1.0+fuzz:
 	docker run $(DOCKER_RUN_OPTS) $(CONTAINER_NAME) \
 		env CC=clang CXX=clang++ \
 		make -f $(SRC_DIR).ro/misc/docker-ci/check.mk _check \
 		CMAKE_ARGS='-DOPENSSL_ROOT_DIR=/opt/openssl-1.1.0 -DBUILD_FUZZER=ON' \
-		BUILD_ARGS='$(BUILD_ARGS)'
+		BUILD_ARGS='$(BUILD_ARGS)' \
+		TEST_ENV='$(TEST_ENV)'
 
 ossl1.1.1:
 	docker run $(DOCKER_RUN_OPTS) $(CONTAINER_NAME) \
 		make -f $(SRC_DIR).ro/misc/docker-ci/check.mk _check \
 		CMAKE_ARGS='-DOPENSSL_ROOT_DIR=/opt/openssl-1.1.1' \
-		BUILD_ARGS='$(BUILD_ARGS)'
+		BUILD_ARGS='$(BUILD_ARGS)' \
+		TEST_ENV='$(TEST_ENV)'
 
 dtrace:
 	docker run $(DOCKER_RUN_OPTS) $(CONTAINER_NAME) \
 		env DTRACE_TESTS=1 \
 		make -f $(SRC_DIR).ro/misc/docker-ci/check.mk _check \
-		BUILD_ARGS='$(BUILD_ARGS)'
+		BUILD_ARGS='$(BUILD_ARGS)' \
+		TEST_ENV='$(TEST_ENV)'
 
 _check: _mount _do_check
 
@@ -62,7 +67,7 @@ _do_check:
 	time komake $(BUILD_ARGS) all checkdepends
 	if [ -e h2o-fuzzer-http1 ] ; then export $(FUZZ_ASAN); fi; \
 		ulimit -n 1024; \
-		make check
+		env $(TEST_ENV) make check
 
 enter:
 	docker run $(DOCKER_RUN_OPTS) -it $(CONTAINER_NAME) bash

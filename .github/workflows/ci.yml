@@ -16,13 +16,13 @@ jobs:
       matrix:
         include:
           - name: default
-            command: make -f misc/docker-ci/check.mk ALL BUILD_ARGS=-j6
+            command: make -f misc/docker-ci/check.mk ALL BUILD_ARGS=-j6 TEST_ENV=TEST_JOBS=4
           - name: OpenSSL 1.1.0 + Fuzz
-            command: make -f misc/docker-ci/check.mk ossl1.1.0+fuzz BUILD_ARGS=-j6
+            command: make -f misc/docker-ci/check.mk ossl1.1.0+fuzz BUILD_ARGS=-j6 TEST_ENV=TEST_JOBS=4
           - name: OpenSSL 1.1.1
-            command: make -f misc/docker-ci/check.mk ossl1.1.1 BUILD_ARGS=-j6
+            command: make -f misc/docker-ci/check.mk ossl1.1.1 BUILD_ARGS=-j6 TEST_ENV=TEST_JOBS=4
           - name: DTrace
-            command: make -f misc/docker-ci/check.mk dtrace CONTAINER_NAME=h2oserver/h2o-ci:ubuntu2004 BUILD_ARGS=-j6
+            command: make -f misc/docker-ci/check.mk dtrace CONTAINER_NAME=h2oserver/h2o-ci:ubuntu2004 BUILD_ARGS=-j6 TEST_ENV=TEST_JOBS=4
 
     timeout-minutes: 60
     steps:
@@ -41,8 +41,6 @@ jobs:
       run: |
         chmod -R ugo+w .
         ${{ matrix.command }}
-      env:
-        TEST_JOBS: 4
 
   # See https://github.com/google/oss-fuzz/tree/master/projects/h2o for details
   ossfuzz:
