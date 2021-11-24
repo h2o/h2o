@@ -117,10 +117,13 @@ int main(int argc, char **argv)
             break;
         case 's': {
             send_data = h2o_iovec_init(NULL, 0);
-            int ch;
-            while ((ch = fgetc(stdin)) != EOF) {
-                send_data.base = realloc(send_data.base, send_data.len + 1);
-                send_data.base[send_data.len++] = ch;
+            while (1) {
+                size_t new_capacity = send_data.len == 0 ? 1024 : send_data.len * 2;
+                send_data.base = h2o_mem_realloc(send_data.base, new_capacity);
+                size_t nread = fread(send_data.base + send_data.len, 1, new_capacity - send_data.len, stdin);
+                if (nread == 0)
+                    break;
+                send_data.len += nread;
             }
         } break;
         case 'h':
