@@ -6,7 +6,7 @@ BUILD_ARGS=
 FUZZ_ASAN=ASAN_OPTIONS=detect_leaks=0
 DOCKER_RUN_OPTS=--privileged \
 	--ulimit memlock=-1 \
-	-v `pwd`:$(SRC_DIR) \
+	-v `pwd`:$(SRC_DIR).ro:ro \
 	-v /sys/kernel/debug:/sys/kernel/debug \
 	-v /lib/modules:/lib/modules:ro \
 	-v /usr/src:/usr/src:ro \
@@ -15,36 +15,49 @@ DOCKER_RUN_OPTS=--privileged \
 
 ALL:
 	docker run $(DOCKER_RUN_OPTS) $(CONTAINER_NAME) \
-		make -f $(SRC_DIR)/misc/docker-ci/check.mk _check \
+		make -f $(SRC_DIR).ro/misc/docker-ci/check.mk _check \
 		BUILD_ARGS='$(BUILD_ARGS)'
 
 ossl1.1.0+fuzz:
 	docker run $(DOCKER_RUN_OPTS) $(CONTAINER_NAME) \
 		env CC=clang CXX=clang++ \
-		make -f $(SRC_DIR)/misc/docker-ci/check.mk _check \
+		make -f $(SRC_DIR).ro/misc/docker-ci/check.mk _check \
 		CMAKE_ARGS='-DOPENSSL_ROOT_DIR=/opt/openssl-1.1.0\ -DBUILD_FUZZER=ON' \
 		BUILD_ARGS='$(BUILD_ARGS)'
 
 ossl1.1.1:
 	docker run $(DOCKER_RUN_OPTS) $(CONTAINER_NAME) \
-		make -f $(SRC_DIR)/misc/docker-ci/check.mk _check \
+		make -f $(SRC_DIR).ro/misc/docker-ci/check.mk _check \
 		CMAKE_ARGS='-DOPENSSL_ROOT_DIR=/opt/openssl-1.1.1' \
 		BUILD_ARGS='$(BUILD_ARGS)'
 
 dtrace:
 	docker run $(DOCKER_RUN_OPTS) $(CONTAINER_NAME) \
 		env DTRACE_TESTS=1 \
-		make -f $(SRC_DIR)/misc/docker-ci/check.mk _check \
+		make -f $(SRC_DIR).ro/misc/docker-ci/check.mk _check \
 		BUILD_ARGS='$(BUILD_ARGS)'
 
-_check:
+_check: _mount _do_check
+
+_mount:
 	uname -a
+	sudo mount -t tmpfs tmpfs -o size=1G /tmp
 	sudo mkdir -p /sys/fs/bpf
-	sudo mount -t bpf bpf /sys/fs/bpf -o mode=700
-	mkdir -p build
-	sudo mount -t tmpfs tmpfs build -o size=3G
-	sudo chown -R ci:ci build
-	sudo chmod 0755 build
+	sudo mount -t bpf bpf -o mode=700 /sys/fs/bpf
+	# create writable source directory using overlay
+	sudo mkdir /tmp/src /tmp/src/upper /tmp/src/work $(SRC_DIR)
+	sudo mount -t overlay overlay -o lowerdir=$(SRC_DIR).ro,upperdir=/tmp/src/upper,workdir=/tmp/src/work /tmp/src/upper
+	sudo mount --bind /tmp/src/upper $(SRC_DIR)
+	# allow overwrite of include/h2o/version.h
+	sudo chown ci:ci $(SRC_DIR)/include/h2o
+	# allow write of mruby executables being generated (FIXME don't generate here)
+	for i in deps/mruby/bin misc/h2get/deps/mruby-1.2.0/bin; do \
+		sudo rm -rf $(SRC_DIR)/$$i; \
+		sudo mkdir $(SRC_DIR)/$$i; \
+		sudo chown ci:ci $(SRC_DIR)/$$i; \
+	done
+
+_do_check:
 	cmake $(CMAKE_ARGS) -H$(SRC_DIR) -B.
 	time komake $(BUILD_ARGS) all checkdepends
 	if [ -e h2o-fuzzer-http1 ] ; then export $(FUZZ_ASAN); fi; \
