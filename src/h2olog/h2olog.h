@@ -29,11 +29,30 @@
 #include <string>
 extern "C" {
 #include <time.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
 }
-#include <bcc/BPF.h>
 
 class h2o_tracer
 {
+  public:
+    class usdt
+    {
+      public:
+        std::string provider;
+        std::string name;
+        std::string probe_func;
+        usdt(const std::string &provider, const std::string &name, const std::string &probe_func)
+            : provider(provider), name(name), probe_func(probe_func)
+        {
+        }
+
+        std::string fully_qualified_name() const
+        {
+            return provider + ":" + name;
+        }
+    };
+
   protected:
     /**
      * Where to output the results. Defaults to `stdout`.
@@ -50,6 +69,12 @@ class h2o_tracer
         uint64_t num_events;
         uint64_t num_lost;
     } stats_;
+
+    /**
+     * Whether or not to include application data.
+     */
+    bool include_appdata_ = false;
+
     /**
      * The stub function for handling an event.
      */
@@ -69,15 +94,19 @@ class h2o_tracer
         stats_.num_lost = 0;
     }
 
-    virtual ~h2o_tracer() {}
+    virtual ~h2o_tracer()
+    {
+    }
 
     /**
      * Performs post-construction initialization common to all the tracers.
      */
-    void init(FILE *fp)
+    void init(FILE *fp, bool include_appdata)
     {
         out_ = fp;
+        include_appdata_ = include_appdata;
     }
+
     /**
      * Handles an incoming BPF event.
      */
@@ -95,10 +124,18 @@ class h2o_tracer
         stats_.num_lost += lost;
         do_handle_lost(lost);
     }
+
+    /**
+     * Select a tracepoint with pattern, e.g. "quicly:*".
+     * It affects what `usdt_probes()` returns;
+     *
+     * @return an error message for failure, an empty string for success
+     */
+    virtual std::string select_usdts(const char *pattern) = 0;
     /**
      * Returns a vector of relevant USDT probes.
      */
-    virtual const std::vector<ebpf::USDT> &init_usdt_probes(pid_t h2o_pid) = 0;
+    virtual const std::vector<usdt> &usdt_probes() = 0;
     /**
      * Returns the code to be compiled into BPF bytecode.
      */
@@ -127,6 +164,6 @@ h2o_tracer *create_http_tracer();
 /**
  * Initializes a QUIC tracer.
  */
-h2o_tracer *create_quic_tracer();
+h2o_tracer *create_raw_tracer();
 
 #endif

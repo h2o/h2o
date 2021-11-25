@@ -4,6 +4,7 @@ use strict;
 use warnings;
 use Digest::MD5 qw(md5_hex);
 use File::Temp qw(tempdir);
+use IO::Socket::INET;
 use JSON;
 use Net::EmptyPort qw(empty_port);
 use POSIX ":sys_wait_h";
@@ -40,7 +41,7 @@ subtest "hello" => sub {
         my $events = slurp_file("$tempdir/events");
         complex $events, sub {
             $_ =~ /"type":"transport-close-send",.*?"type":"([^\"]*)",.*?"type":"([^\"]*)",.*?"type":"([^\"]*)",.*?"type":"([^\"]*)"/s
-                and $1 eq 'packet-commit' and $2 eq 'quictrace-sent' and $3 eq 'send' and $4 eq 'free';
+                and $1 eq 'packet-sent' and $2 eq 'send' and $3 eq 'free';
         };
     };
     # check if the client receives extra connection IDs
@@ -72,14 +73,20 @@ subtest "hello" => sub {
     };
 };
 
+subtest "datagram" => sub {
+    my $guard = spawn_server("-D");
+    my $resp = `$cli -D 127.0.0.1 $port 2> /dev/null`;
+    like $resp, qr/^DATAGRAM: hello datagram!$/m;
+};
+
 subtest "version-negotiation" => sub {
     my $guard = spawn_server();
     my $resp = `$cli -n -e $tempdir/events -p /12 127.0.0.1 $port 2> /dev/null`;
     is $resp, "hello world\n";
     my $events = slurp_file("$tempdir/events");
     if ($events =~ /"type":"connect",.*"version":(\d+)(?:.|\n)*"type":"version-switch",.*"new-version":(\d+)/m) {
-        is $2, 0xff00001d;
-        isnt $1, 0xff00001d;
+        is $2, 1;
+        isnt $1, 1;
     } else {
         fail "no quic-version-switch event";
         diag $events;
@@ -121,7 +128,7 @@ subtest "0-rtt" => sub {
     ok -e "$tempdir/session", "session saved";
     system "$cli -s $tempdir/session -e $tempdir/events 127.0.0.1 $port > /dev/null 2>&1";
     my $events = slurp_file("$tempdir/events");
-    like $events, qr/"type":"stream-send".*"stream-id":0,(.|\n)*"type":"packet-commit".*"pn":1,/m, "stream 0 on pn 1";
+    like $events, qr/"type":"stream-send".*"stream-id":0,(.|\n)*"type":"packet-sent".*"pn":1,/m, "stream 0 on pn 1";
     like $events, qr/"type":"cc-ack-received".*"largest-acked":1,/m, "pn 1 acked";
 };
 
@@ -153,7 +160,7 @@ subtest "retry-invalid-token" => sub {
 };
 
 subtest "stateless-reset" => sub {
-    my $guard = spawn_server(qw(-C deadbeef));
+    my $guard = spawn_server(qw(-B deadbeef));
     my $pid = fork;
     die "fork failed:$!"
         unless defined $pid;
@@ -167,13 +174,43 @@ subtest "stateless-reset" => sub {
     # parent process, let the client fetch the first response, then kill respawn the server using same CID encryption key
     sleep 1;
     undef $guard;
-    $guard = spawn_server(qw(-C deadbeef));
+    $guard = spawn_server(qw(-B deadbeef));
     # wait for the child to die
     while (waitpid($pid, 0) != $pid) {
     }
     # check that the stateless reset is logged
     my $events = slurp_file("$tempdir/events");
-    like $events, qr/"type":"stateless-reset-receive",/m;
+    like $events, qr/"type":"stateless-reset-receive",/m, 'got stateless reset';
+    unlike +($events =~ /"type":"stateless-reset-receive",.*?\n/ and $'), qr/"type":"packet-sent",/m, 'nothing sent after receiving stateless reset';
+};
+
+subtest "no-compatible-version" => sub {
+    # spawn a server that sends empty VN
+    my $sock = IO::Socket::INET->new(
+        LocalAddr => "127.0.0.1:$port",
+        Proto     => 'udp',
+    ) or die "failed to listen to port $port:$!";
+    # launch client
+    open my $client, "-|", "$cli -e $tempdir/events 127.0.0.1 $port 2>&1"
+        or die "failed to launch $cli:$!";
+    # server sends a VN packet in response to client's packet
+    while (1) {
+        if (my $peer = $sock->recv(my $input, 1500, 0)) {
+            my $server_cidl = ord substr $input, 5;
+            my $server_cid = substr $input, 6, $server_cidl;
+            my $client_cidl = ord substr $input, 6 + $server_cidl;
+            my $client_cid = substr $input, 7, $client_cidl;
+            $sock->send(sprintf("\x80\0\0\0\0" . '%c%s%c%s' . "\x0a\x0a\x0a\x0a", $client_cidl, $client_cid, $server_cidl, $server_cid), 0, $peer);
+            last;
+        }
+    }
+    # check the output of the client
+    my $result = do {local $/; join "", <$client>};
+    like $result, qr/no compatible version/;
+    # check the trace
+    my $events = slurp_file("$tempdir/events");
+    like $events, qr/"type":"receive",/m, "one receive event";
+    unlike +($events =~ /"type":"receive",.*?\n/ and $'), qr/"type":"packet-sent",/m, "nothing sent after receiving VN";
 };
 
 subtest "idle-timeout" => sub {
@@ -287,10 +324,22 @@ subtest "key-update" => sub {
     };
 };
 
+subtest "raw-certificates-ec" => sub {
+    my $guard = spawn_server(qw(-W -));
+    my $resp = `$cli -p /12 -W t/assets/ec256-pub.pem 127.0.0.1 $port 2> /dev/null`;
+    is $resp, "hello world\n";
+};
+
+
 done_testing;
 
 sub spawn_server {
-    my @cmd = ($cli, "-k", "t/assets/server.key", "-c", "t/assets/server.crt", @_, "127.0.0.1", $port);
+    my @cmd;
+    if (grep(/^-W$/, @_)) {
+        @cmd = ($cli, "-k", "t/assets/ec256-key-pair.pem", "-c", "t/assets/ec256-pub.pem", @_, "127.0.0.1", $port);
+    } else {
+        @cmd = ($cli, "-k", "t/assets/server.key", "-c", "t/assets/server.crt", @_, "127.0.0.1", $port);
+    }
     my $pid = fork;
     die "fork failed:$!"
         unless defined $pid;

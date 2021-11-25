@@ -269,14 +269,14 @@ hosts:
             case env["PATH_INFO"]
             when "/index.txt"
               push_paths = []
-              push_paths << "https://127.0.0.1.xip.io/index.js"
+              push_paths << "https://localhost.examp1e.net/index.js"
               [399, push_paths.empty? ? {} : {"link" => push_paths.map{|p| "<#{p}>; rel=preload"}.join("\\n")}, []]
             else
               [399, {}, []]
             end
           end
         file.dir: t/assets/doc_root
-  "127.0.0.1.xip.io:$tls_port":
+  "localhost.examp1e.net:$tls_port":
     paths:
       /:
         file.dir: t/assets/doc_root

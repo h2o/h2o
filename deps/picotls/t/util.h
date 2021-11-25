@@ -48,6 +48,15 @@ static inline void load_certificate_chain(ptls_context_t *ctx, const char *fn)
     }
 }
 
+static inline void load_raw_public_key(ptls_iovec_t *raw_public_key, char const *cert_pem_file)
+{
+    size_t count;
+    if (ptls_load_pem_objects(cert_pem_file, "PUBLIC KEY", raw_public_key, 1, &count) != 0) {
+        fprintf(stderr, "failed to load public key:%s:%s\n", cert_pem_file, strerror(errno));
+        exit(1);
+    }
+}
+
 static inline void load_private_key(ptls_context_t *ctx, const char *fn)
 {
     static ptls_openssl_sign_certificate_t sc;
@@ -115,10 +124,39 @@ static inline void setup_session_file(ptls_context_t *ctx, ptls_handshake_proper
     }
 }
 
-static inline void setup_verify_certificate(ptls_context_t *ctx)
+static inline X509_STORE* init_cert_store(char const *crt_file)
+{
+    int ret = 0;
+    X509_STORE *store = X509_STORE_new();
+
+    if (store != NULL) {
+        X509_LOOKUP *lookup = X509_STORE_add_lookup(store, X509_LOOKUP_file());
+        ret = X509_LOOKUP_load_file(lookup, crt_file, X509_FILETYPE_PEM);
+        if (ret != 1) {
+            fprintf(stderr, "Cannot load store (%s), ret = %d\n",
+                crt_file, ret);
+            X509_STORE_free(store);
+            exit(1);
+        }
+    } else {
+        fprintf(stderr, "Cannot get a new X509 store\n");
+        exit(1);
+    }
+
+    return store;
+}
+
+static inline void setup_verify_certificate(ptls_context_t *ctx, const char *ca_file)
 {
     static ptls_openssl_verify_certificate_t vc;
-    ptls_openssl_init_verify_certificate(&vc, NULL);
+    ptls_openssl_init_verify_certificate(&vc, ca_file != NULL ? init_cert_store(ca_file) : NULL);
+    ctx->verify_certificate = &vc.super;
+}
+
+static inline void setup_raw_pubkey_verify_certificate(ptls_context_t *ctx, EVP_PKEY *pubkey)
+{
+    static ptls_openssl_raw_pubkey_verify_certificate_t vc;
+    ptls_openssl_raw_pubkey_init_verify_certificate(&vc, pubkey);
     ctx->verify_certificate = &vc.super;
 }
 

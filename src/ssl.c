@@ -1295,6 +1295,12 @@ static size_t decrypt_cid(quicly_cid_encryptor_t *self, quicly_cid_plaintext_t *
 
     update_quic_keys();
 
+    /* precondition for calling `keyset->cid->decrypt_cid` is that the input of that callback is not zero-length; that is met when
+     * the input to this function is known to be capable of carrying full-sized V1 CID (i.e. len == 0) or the length is known (i.e.
+     * long header packet) and is at least 2 bytes long */
+    if (len == 1)
+        return SIZE_MAX;
+
     if ((keyset = find_quic_keyset(encrypted[0])) == NULL)
         return SIZE_MAX;
     if ((len = keyset->cid->decrypt_cid(keyset->cid, plaintext, encrypted + 1, len != 0 ? len - 1 : 0)) == SIZE_MAX)

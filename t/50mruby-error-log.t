@@ -57,6 +57,7 @@ subtest 'middleware' => sub {
         my ($port, $tls_port) = empty_ports(2, { host => "0.0.0.0" });
         my $empty_port = empty_port();
         my $server = spawn_h2o_raw(<<"EOT", [$port, $tls_port]);
+num-threads: 1
 hosts:
   "127.0.0.1:$port":
     paths: &paths
@@ -93,6 +94,7 @@ EOT
             my ($headers, $body) = get($proto, $port, $curl, '/');
             like $headers, qr{^HTTP/[0-9.]+ 502}is;
 
+            sleep 1;
             my ($access_logs, $error_logs) = read_logs($access_log_file, $error_log_file);
             note $_ for @$error_logs;
             is scalar(@$access_logs), 1, 'access log count';
@@ -106,6 +108,7 @@ EOT
         my $empty_port = empty_port();
         my ($port, $tls_port) = empty_ports(2, { host => "0.0.0.0" });
         my $server = spawn_h2o_raw(<< "EOT", [$port, $tls_port]);
+num-threads: 1
 hosts:
   "127.0.0.1:$port":
     paths: &paths
@@ -157,6 +160,7 @@ EOT
             my ($headers, $body) = get($proto, $port, $curl, '/');
             like $headers, qr{^HTTP/[0-9.]+ 502}is;
 
+            sleep 1;
             my ($access_logs, $error_logs) = read_logs($access_log_file, $error_log_file);
             note $_ for @$error_logs;
             is scalar(@$access_logs), 1, 'access log count';
@@ -200,6 +204,7 @@ EOT
             });
             my ($port, $tls_port) = empty_ports(2, { host => "0.0.0.0" });
             my $server = spawn_h2o_raw(<< "EOT", [$port, $tls_port]);
+num-threads: 1
 hosts:
   "127.0.0.1:$port":
     paths: &paths

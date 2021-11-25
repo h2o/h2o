@@ -107,6 +107,7 @@ struct st_h2o_mem_pool_shared_entry_t {
 /**
  * the memory pool
  */
+union un_h2o_mem_pool_chunk_t;
 typedef struct st_h2o_mem_pool_t {
     union un_h2o_mem_pool_chunk_t *chunks;
     size_t chunk_offset;
@@ -119,7 +120,8 @@ typedef struct st_h2o_mem_pool_t {
  */
 typedef struct st_h2o_buffer_t {
     /**
-     * capacity of the buffer (or minimum initial capacity in case of a prototype (i.e. bytes == NULL))
+     * when `bytes` != NULL (and therefore `size` != 0), the capacity of the buffer, or otherwise the minimum initial capacity in
+     * case of a prototype, or the desired next capacity if not a prototype.
      */
     size_t capacity;
     /**
@@ -131,13 +133,16 @@ typedef struct st_h2o_buffer_t {
      */
     char *bytes;
     /**
-     * prototype (or NULL if the instance is part of the prototype (i.e. bytes == NULL))
+     * prototype (or NULL if the instance is part of the prototype)
      */
     h2o_buffer_prototype_t *_prototype;
     /**
-     * file descriptor (if not -1, used to store the buffer)
+     * file descriptor (if not -1, h2o_buffer_t is a memory map of the contents of this file descriptor)
      */
     int _fd;
+    /**
+     * memory used to store data
+     */
     char _buf[1];
 } h2o_buffer_t;
 
@@ -148,10 +153,15 @@ typedef struct st_h2o_buffer_mmap_settings_t {
 } h2o_buffer_mmap_settings_t;
 
 struct st_h2o_buffer_prototype_t {
-    h2o_mem_recycle_t allocator;
     h2o_buffer_t _initial_buf;
     h2o_buffer_mmap_settings_t *mmap_settings;
 };
+
+typedef struct st_h2o_doublebuffer_t {
+    h2o_buffer_t *buf;
+    unsigned char inflight : 1;
+    size_t _bytes_inflight;
+} h2o_doublebuffer_t;
 
 #define H2O_VECTOR(type)                                                                                                           \
     struct {                                                                                                                       \
@@ -205,7 +215,7 @@ void h2o_mem_free_recycle(h2o_mem_recycle_t *allocator, void *p);
 /**
  * release all the memory chunks cached in input allocator to system
  */
-void h2o_mem_clear_recycle(h2o_mem_recycle_t *allocator);
+void h2o_mem_clear_recycle(h2o_mem_recycle_t *allocator, int full);
 
 /**
  * initializes the memory pool.
@@ -247,6 +257,10 @@ static void h2o_mem_addref_shared(void *p);
  */
 static int h2o_mem_release_shared(void *p);
 /**
+ * frees unused memory being pooled for recycling
+ */
+void h2o_buffer_clear_recycle(int full);
+/**
  * initialize the buffer using given prototype.
  */
 static void h2o_buffer_init(h2o_buffer_t **buffer, h2o_buffer_prototype_t *prototype);
@@ -266,7 +280,7 @@ h2o_iovec_t h2o_buffer_reserve(h2o_buffer_t **inbuf, size_t min_guarantee);
 /**
  * allocates a buffer.
  * @param inbuf - pointer to a pointer pointing to the structure (set *inbuf to NULL to allocate a new buffer)
- * @param min_guarantee minimum number of bytes to reserve
+ * @param min_guarantee minimum number of additional bytes to reserve
  * @return buffer to which the next data should be stored
  * @note When called against a new buffer, the function returns a buffer twice the size of requested guarantee.  The function uses
  * exponential backoff for already-allocated buffers.
@@ -287,6 +301,13 @@ static int h2o_buffer_try_append(h2o_buffer_t **dst, const void *src, size_t len
  */
 void h2o_buffer_consume(h2o_buffer_t **inbuf, size_t delta);
 /**
+ * throws away entire data being store in the buffer
+ * @param record_capacity if set to true, retains the current capacity of the buffer, and when memory reservation is requested the
+ *                        next time, allocates memory as large as the recorded capacity. Otherwise, memory would be reserved based
+ *                        on the value of `min_guarantee`, current size, and the prototype.
+ */
+void h2o_buffer_consume_all(h2o_buffer_t **inbuf, int record_capacity);
+/**
  * resets the buffer prototype
  */
 static void h2o_buffer_set_prototype(h2o_buffer_t **buffer, h2o_buffer_prototype_t *prototype);
@@ -296,6 +317,31 @@ static void h2o_buffer_set_prototype(h2o_buffer_t **buffer, h2o_buffer_prototype
  */
 static void h2o_buffer_link_to_pool(h2o_buffer_t *buffer, h2o_mem_pool_t *pool);
 void h2o_buffer__dispose_linked(void *p);
+/**
+ *
+ */
+static void h2o_doublebuffer_init(h2o_doublebuffer_t *db, h2o_buffer_prototype_t *prototype);
+/**
+ *
+ */
+static void h2o_doublebuffer_dispose(h2o_doublebuffer_t *db);
+/**
+ * Given a double buffer and a pointer to a buffer to which the caller is writing data, returns a vector containing data to be sent
+ * (e.g., by calling `h2o_send`).  `max_bytes` designates the maximum size of the vector to be returned.  When the double buffer is
+ * empty, `*receiving` is moved to the double buffer, and upon return `*receiving` will contain an empty buffer to which the caller
+ * should append new data.
+ */
+static h2o_iovec_t h2o_doublebuffer_prepare(h2o_doublebuffer_t *db, h2o_buffer_t **receiving, size_t max_bytes);
+/**
+ * Marks that empty data is inflight. This function can be called when making preparations to call `h2o_send` but when only the HTTP
+ * response header fields are available.
+ */
+static void h2o_doublebuffer_prepare_empty(h2o_doublebuffer_t *db);
+/**
+ * Consumes bytes being marked as inflight (by previous call to `h2o_doublebuffer_prepare`). The intended design pattern is to call
+ * this function and then the generator's `do_send` function in the `do_proceed` callback. See lib/handler/fastcgi.c.
+ */
+static void h2o_doublebuffer_consume(h2o_doublebuffer_t *db);
 /**
  * grows the vector so that it could store at least new_capacity elements of given size (or dies if impossible).
  * @param pool memory pool that the vector is using
@@ -423,7 +469,7 @@ inline void h2o_buffer_dispose(h2o_buffer_t **_buffer)
 {
     h2o_buffer_t *buffer = *_buffer;
     *_buffer = NULL;
-    if (buffer->bytes != NULL)
+    if (buffer->_prototype != NULL)
         h2o_buffer__do_free(buffer);
 }
 
@@ -458,6 +504,56 @@ inline int h2o_buffer_try_append(h2o_buffer_t **dst, const void *src, size_t len
     return 1;
 }
 
+inline void h2o_doublebuffer_init(h2o_doublebuffer_t *db, h2o_buffer_prototype_t *prototype)
+{
+    h2o_buffer_init(&db->buf, prototype);
+    db->inflight = 0;
+    db->_bytes_inflight = 0;
+}
+
+inline void h2o_doublebuffer_dispose(h2o_doublebuffer_t *db)
+{
+    h2o_buffer_dispose(&db->buf);
+}
+
+inline h2o_iovec_t h2o_doublebuffer_prepare(h2o_doublebuffer_t *db, h2o_buffer_t **receiving, size_t max_bytes)
+{
+    assert(!db->inflight);
+    assert(max_bytes != 0);
+
+    if (db->buf->size == 0) {
+        if ((*receiving)->size == 0)
+            return h2o_iovec_init(NULL, 0);
+        /* swap buffers */
+        h2o_buffer_t *t = db->buf;
+        db->buf = *receiving;
+        *receiving = t;
+    }
+    if ((db->_bytes_inflight = db->buf->size) > max_bytes)
+        db->_bytes_inflight = max_bytes;
+    db->inflight = 1;
+    return h2o_iovec_init(db->buf->bytes, db->_bytes_inflight);
+}
+
+inline void h2o_doublebuffer_prepare_empty(h2o_doublebuffer_t *db)
+{
+    assert(!db->inflight);
+    db->inflight = 1;
+}
+
+inline void h2o_doublebuffer_consume(h2o_doublebuffer_t *db)
+{
+    assert(db->inflight);
+    db->inflight = 0;
+
+    if (db->buf->size == db->_bytes_inflight) {
+        h2o_buffer_consume_all(&db->buf, 1);
+    } else {
+        h2o_buffer_consume(&db->buf, db->_bytes_inflight);
+    }
+    db->_bytes_inflight = 0;
+}
+
 inline void h2o_vector__reserve(h2o_mem_pool_t *pool, h2o_vector_t *vector, size_t alignment, size_t element_size,
                                 size_t new_capacity)
 {
@@ -469,7 +565,7 @@ inline void h2o_vector__reserve(h2o_mem_pool_t *pool, h2o_vector_t *vector, size
 inline void h2o_vector__erase(h2o_vector_t *vector, size_t element_size, size_t index)
 {
     char *entries = (char *)vector->entries;
-    memmove(entries + element_size * index, entries + element_size * (index + 1), vector->size - index - 1);
+    memmove(entries + element_size * index, entries + element_size * (index + 1), element_size * (vector->size - index - 1));
     --vector->size;
 }
 

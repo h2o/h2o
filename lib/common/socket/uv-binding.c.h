@@ -24,6 +24,7 @@ struct st_h2o_uv_socket_t {
     h2o_socket_t super;
     uv_handle_t *handle;
     uv_close_cb close_cb;
+    h2o_timer_t write_cb_timer;
     union {
         struct {
             union {
@@ -136,6 +137,7 @@ void do_dispose_socket(h2o_socket_t *_sock)
 {
     struct st_h2o_uv_socket_t *sock = (struct st_h2o_uv_socket_t *)_sock;
     sock->super._cb.write = NULL; /* avoid the write callback getting called when closing the socket (#1249) */
+    h2o_timer_unlink(&sock->write_cb_timer);
     uv_close(sock->handle, free_sock);
 }
 
@@ -189,6 +191,12 @@ void do_read_stop(h2o_socket_t *_sock)
     }
 }
 
+static void on_call_write_complete(h2o_timer_t *timer)
+{
+    struct st_h2o_uv_socket_t *sock = H2O_STRUCT_FROM_MEMBER(struct st_h2o_uv_socket_t, write_cb_timer, timer);
+    on_do_write_complete(&sock->stream._wreq, 0);
+}
+
 void do_write(h2o_socket_t *_sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_socket_cb cb)
 {
     struct st_h2o_uv_socket_t *sock = (struct st_h2o_uv_socket_t *)_sock;
@@ -197,7 +205,10 @@ void do_write(h2o_socket_t *_sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_socket_
     assert(sock->super._cb.write == NULL);
     sock->super._cb.write = cb;
 
-    uv_write(&sock->stream._wreq, (uv_stream_t *)sock->handle, (uv_buf_t *)bufs, (int)bufcnt, on_do_write_complete);
+    if (bufcnt > 0)
+        uv_write(&sock->stream._wreq, (uv_stream_t *)sock->handle, (uv_buf_t *)bufs, (int)bufcnt, on_do_write_complete);
+    else
+        h2o_timer_link(sock->handle->loop, 0, &sock->write_cb_timer);
 }
 
 void h2o_socket_notify_write(h2o_socket_t *_sock, h2o_socket_cb cb)
@@ -273,7 +284,9 @@ h2o_socket_t *h2o_uv_socket_create(uv_handle_t *handle, uv_close_cb close_cb)
     sock->handle = handle;
     sock->close_cb = close_cb;
     sock->handle->data = sock;
-    if (h2o_socket_ebpf_lookup(sock->handle->loop, h2o_socket_ebpf_init_key, &sock->super).skip_tracing)
+    h2o_timer_init(&sock->write_cb_timer, on_call_write_complete);
+    uint64_t flags = h2o_socket_ebpf_lookup_flags(sock->handle->loop, h2o_socket_ebpf_init_key, &sock->super);
+    if ((flags & H2O_EBPF_FLAGS_SKIP_TRACING_BIT) != 0)
         sock->super._skip_tracing = 1;
     return &sock->super;
 }
@@ -308,7 +321,7 @@ h2o_socket_t *h2o_socket_connect(h2o_loop_t *loop, struct sockaddr *addr, sockle
     return &sock->super;
 }
 
-socklen_t h2o_socket_getsockname(h2o_socket_t *_sock, struct sockaddr *sa)
+socklen_t get_sockname_uncached(h2o_socket_t *_sock, struct sockaddr *sa)
 {
     struct st_h2o_uv_socket_t *sock = (void *)_sock;
     assert(sock->handle->type == UV_TCP);
@@ -332,20 +345,28 @@ socklen_t get_peername_uncached(h2o_socket_t *_sock, struct sockaddr *sa)
 
 static void on_timeout(uv_timer_t *uv_timer)
 {
-    h2o_timer_t *timer = H2O_STRUCT_FROM_MEMBER(h2o_timer_t, uv_timer, uv_timer);
+    h2o_timer_t *timer = uv_timer->data;
     timer->is_linked = 0;
     timer->cb(timer);
 }
 
 void h2o_timer_link(h2o_loop_t *l, uint64_t delay_ticks, h2o_timer_t *timer)
 {
+    if (timer->uv_timer == NULL) {
+        timer->uv_timer = h2o_mem_alloc(sizeof(*timer->uv_timer));
+        uv_timer_init(l, timer->uv_timer);
+        timer->uv_timer->data = timer;
+    }
     timer->is_linked = 1;
-    uv_timer_init(l, &timer->uv_timer);
-    uv_timer_start(&timer->uv_timer, on_timeout, delay_ticks, 0);
+    uv_timer_start(timer->uv_timer, on_timeout, delay_ticks, 0);
 }
 
 void h2o_timer_unlink(h2o_timer_t *timer)
 {
     timer->is_linked = 0;
-    uv_timer_stop(&timer->uv_timer);
+    if (timer->uv_timer != NULL) {
+        uv_timer_stop(timer->uv_timer);
+        uv_close((uv_handle_t *)timer->uv_timer, (uv_close_cb)free);
+        timer->uv_timer = NULL;
+    }
 }

@@ -24,72 +24,74 @@
 
 static void test_should_use_h2(void)
 {
-    int8_t counter = -1;
-    int i;
-    for (i = 0; i != 110; ++i) {
-        int use_h2 = should_use_h2(5, &counter);
-        switch (counter) {
-        case 0:
-        case 20:
-        case 40:
-        case 60:
-        case 80:
-            ok(use_h2 == 1);
+    struct st_h2o_httpclient_protocol_selector_t selector = {.ratio = {.http2 = 5}};
+
+    for (int i = 0; i != 110; ++i) {
+        size_t selected = select_protocol(&selector);
+        switch (i) {
+        case 10:
+        case 30:
+        case 50:
+        case 70:
+        case 90:
+            ok(selected == PROTOCOL_SELECTOR_H2);
             break;
         default:
-            ok(use_h2 == 0);
+            ok(selected == PROTOCOL_SELECTOR_H1);
             break;
         }
     }
 
-    counter = 0;
-    for (i = 0; i != 110; ++i) {
-        int use_h2 = should_use_h2(7, &counter);
-        switch (counter) {
-        case 0:
-        case 15:
-        case 29:
-        case 43:
-        case 58:
-        case 72:
-        case 86:
-            ok(use_h2 == 1);
+    selector = (struct st_h2o_httpclient_protocol_selector_t){.ratio = {.http2 = 7}};
+    for (int i = 0; i != 110; ++i) {
+        size_t selected = select_protocol(&selector);
+        switch (i) {
+        case 7:
+        case 21:
+        case 35:
+        case 50:
+        case 64:
+        case 78:
+        case 92:
+        case 107:
+            ok(selected == PROTOCOL_SELECTOR_H2);
             break;
         default:
-            ok(use_h2 == 0);
+            ok(selected == PROTOCOL_SELECTOR_H1);
             break;
         }
     }
 
-    counter = 0;
-    for (i = 0; i != 110; ++i) {
-        int use_h2 = should_use_h2(93, &counter);
-        switch (counter) {
-        case 1:
-        case 15:
-        case 29:
-        case 43:
-        case 58:
-        case 72:
-        case 86:
-            ok(use_h2 == 0);
+    selector = (struct st_h2o_httpclient_protocol_selector_t){.ratio = {.http2 = 93}};
+    for (int i = 0; i != 110; ++i) {
+        size_t selected = select_protocol(&selector);
+        switch (i) {
+        case 7:
+        case 21:
+        case 35:
+        case 49:
+        case 64:
+        case 78:
+        case 92:
+        case 107:
+            ok(selected == PROTOCOL_SELECTOR_H1);
             break;
         default:
-            ok(use_h2 == 1);
+            ok(selected == PROTOCOL_SELECTOR_H2);
             break;
         }
     }
 
-    counter = 0;
-    for (i = 0; i != 110; ++i) {
-        int use_h2 = should_use_h2(0, &counter);
-        ok(use_h2 == 0);
+    selector = (struct st_h2o_httpclient_protocol_selector_t){.ratio = {.http2 = 0}};
+    for (int i = 0; i != 110; ++i) {
+        size_t selected = select_protocol(&selector);
+        ok(selected == PROTOCOL_SELECTOR_H1);
     }
 
-    counter = 0;
-    for (i = 0; i != 110; ++i) {
-        int use_h2 = should_use_h2(100, &counter);
-        ok(use_h2 == 1);
+    selector = (struct st_h2o_httpclient_protocol_selector_t){.ratio = {.http2 = 100}};
+    for (int i = 0; i != 110; ++i) {
+        size_t selected = select_protocol(&selector);
+        ok(selected == PROTOCOL_SELECTOR_H2);
     }
 }
 

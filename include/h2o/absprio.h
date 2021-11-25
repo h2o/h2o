@@ -26,15 +26,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define H2O_ABSPRIO_URGENCY_PREREQUISITE 0
-#define H2O_ABSPRIO_URGENCY_DEFAULT 1
-#define H2O_ABSPRIO_URGENCY_SUPPLEMENTARY_0 2
-#define H2O_ABSPRIO_URGENCY_SUPPLEMENTARY_1 3
-#define H2O_ABSPRIO_URGENCY_SUPPLEMENTARY_2 4
-#define H2O_ABSPRIO_URGENCY_SUPPLEMENTARY_3 5
-#define H2O_ABSPRIO_URGENCY_SUPPLEMENTARY_4 6
-#define H2O_ABSPRIO_URGENCY_BACKGROUND 7
-#define H2O_ABSPRIO_URGENCY_MAX H2O_ABSPRIO_URGENCY_BACKGROUND
+#define H2O_ABSPRIO_DEFAULT_URGENCY 3
+#define H2O_ABSPRIO_NUM_URGENCY_LEVELS 8
 
 typedef struct h2o_absprio_t {
     uint8_t urgency : 3;
@@ -54,8 +47,12 @@ static uint16_t h2o_absprio_urgency_to_chromium_weight(uint8_t urgency);
 inline uint16_t h2o_absprio_urgency_to_chromium_weight(uint8_t urgency)
 {
     uint16_t weight;
-    assert(urgency < 8);
-    weight = (8 - urgency) * 32;
+    assert(urgency < H2O_ABSPRIO_NUM_URGENCY_LEVELS);
+    /* formula excerpted from:
+     * https://quiche.googlesource.com/quiche/+/8cbe7bfa5c6efa7a42652e36fabf8d21879894be/spdy/core/spdy_protocol.cc#50 */
+    const float ksteps = 255.9f / (float)(H2O_ABSPRIO_NUM_URGENCY_LEVELS - 1);
+    weight = (uint16_t)(ksteps * ((H2O_ABSPRIO_NUM_URGENCY_LEVELS - 1) - urgency)) + 1;
     return weight;
 }
+
 #endif

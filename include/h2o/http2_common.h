@@ -95,7 +95,7 @@ typedef struct st_h2o_hpack_header_table_t {
 typedef struct st_h2o_hpack_header_table_entry_t {
     h2o_iovec_t *name;
     h2o_iovec_t *value;
-    const char *err_desc; /* the recorded soft error description */
+    unsigned soft_errors;
 } h2o_hpack_header_table_entry_t;
 
 void h2o_hpack_dispose_header_table(h2o_hpack_header_table_t *header_table);
@@ -113,6 +113,8 @@ void h2o_hpack_flatten_request(h2o_buffer_t **buf, h2o_hpack_header_table_t *hea
                                size_t num_headers, int is_end_stream);
 void h2o_hpack_flatten_trailers(h2o_buffer_t **buf, h2o_hpack_header_table_t *header_table, uint32_t stream_id,
                                 size_t max_frame_size, const h2o_header_t *headers, size_t num_headers);
+
+extern h2o_buffer_prototype_t h2o_http2_wbuf_buffer_prototype;
 
 /* frames */
 

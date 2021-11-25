@@ -26,6 +26,7 @@
 #define DEFAULT_MAX_UDP_PAYLOAD_SIZE 1472
 #define DEFAULT_MAX_PACKETS_PER_KEY 16777216
 #define DEFAULT_MAX_CRYPTO_BYTES 65536
+#define DEFAULT_INITCWND_PACKETS 10
 #define DEFAULT_PRE_VALIDATION_AMPLIFICATION_LIMIT 3
 
 /* profile that employs IETF specified values */
@@ -40,13 +41,14 @@ const quicly_context_t quicly_spec_context = {NULL,                             
                                                DEFAULT_MAX_UDP_PAYLOAD_SIZE},
                                               DEFAULT_MAX_PACKETS_PER_KEY,
                                               DEFAULT_MAX_CRYPTO_BYTES,
-                                              QUICLY_PROTOCOL_VERSION_CURRENT,
+                                              DEFAULT_INITCWND_PACKETS,
+                                              QUICLY_PROTOCOL_VERSION_1,
                                               DEFAULT_PRE_VALIDATION_AMPLIFICATION_LIMIT,
-                                              0, /* is_clustered */
                                               0, /* enlarge_client_hello */
                                               NULL,
                                               NULL, /* on_stream_open */
                                               &quicly_default_stream_scheduler,
+                                              NULL, /* receive_datagram_frame */
                                               NULL, /* on_conn_close */
                                               &quicly_default_now,
                                               NULL,
@@ -66,13 +68,14 @@ const quicly_context_t quicly_performant_context = {NULL,                       
                                                      DEFAULT_MAX_UDP_PAYLOAD_SIZE},
                                                     DEFAULT_MAX_PACKETS_PER_KEY,
                                                     DEFAULT_MAX_CRYPTO_BYTES,
-                                                    QUICLY_PROTOCOL_VERSION_CURRENT,
+                                                    DEFAULT_INITCWND_PACKETS,
+                                                    QUICLY_PROTOCOL_VERSION_1,
                                                     DEFAULT_PRE_VALIDATION_AMPLIFICATION_LIMIT,
-                                                    0, /* is_clustered */
                                                     0, /* enlarge_client_hello */
                                                     NULL,
                                                     NULL, /* on_stream_open */
                                                     &quicly_default_stream_scheduler,
+                                                    NULL, /* receive_datagram_frame */
                                                     NULL, /* on_conn_close */
                                                     &quicly_default_now,
                                                     NULL,
@@ -142,28 +145,24 @@ static size_t default_decrypt_cid(quicly_cid_encryptor_t *_self, quicly_cid_plai
                                   size_t len)
 {
     struct st_quicly_default_encrypt_cid_t *self = (void *)_self;
-    uint8_t ptbuf[16], tmpbuf[16];
+    uint8_t ptbuf[16];
     const uint8_t *p;
-    size_t cid_len;
 
-    cid_len = self->cid_decrypt_ctx->algo->block_size;
-
-    /* normalize the input, so that we would get consistent routing */
-    if (len != 0 && len != cid_len) {
-        if (len > cid_len)
-            len = cid_len;
-        memcpy(tmpbuf, encrypted, cid_len);
-        if (len < cid_len)
-            memset(tmpbuf + len, 0, cid_len - len);
-        encrypted = tmpbuf;
+    if (len != 0) {
+        /* long header packet; decrypt only if given Connection ID matches the expected size */
+        if (len != self->cid_decrypt_ctx->algo->block_size)
+            return SIZE_MAX;
+    } else {
+        /* short header packet; we are the one to name the size */
+        len = self->cid_decrypt_ctx->algo->block_size;
     }
 
     /* decrypt */
-    ptls_cipher_encrypt(self->cid_decrypt_ctx, ptbuf, encrypted, cid_len);
+    ptls_cipher_encrypt(self->cid_decrypt_ctx, ptbuf, encrypted, len);
 
     /* decode */
     p = ptbuf;
-    if (cid_len == 16) {
+    if (len == 16) {
         plaintext->node_id = quicly_decode64(&p);
     } else {
         plaintext->node_id = 0;
@@ -171,9 +170,9 @@ static size_t default_decrypt_cid(quicly_cid_encryptor_t *_self, quicly_cid_plai
     plaintext->master_id = quicly_decode32(&p);
     plaintext->thread_id = quicly_decode24(&p);
     plaintext->path_id = *p++;
-    assert(p - ptbuf == cid_len);
+    assert(p - ptbuf == len);
 
-    return cid_len;
+    return len;
 }
 
 static int default_generate_reset_token(quicly_cid_encryptor_t *_self, void *token, const void *cid)
@@ -262,7 +261,7 @@ static int default_stream_scheduler_can_send(quicly_stream_scheduler_t *self, qu
             while (quicly_linklist_is_linked(&sched->active)) {
                 quicly_stream_t *stream =
                     (void *)((char *)sched->active.next - offsetof(quicly_stream_t, _send_aux.pending_link.default_scheduler));
-                if (quicly_sendstate_can_send(&stream->sendstate, NULL))
+                if (quicly_stream_can_send(stream, 0))
                     return 1;
                 quicly_linklist_unlink(&stream->_send_aux.pending_link.default_scheduler);
                 quicly_linklist_insert(sched->blocked.prev, &stream->_send_aux.pending_link.default_scheduler);
@@ -273,11 +272,11 @@ static int default_stream_scheduler_can_send(quicly_stream_scheduler_t *self, qu
     return quicly_linklist_is_linked(&sched->active);
 }
 
-static void link_stream(struct st_quicly_default_scheduler_state_t *sched, quicly_stream_t *stream, int conn_is_flow_capped)
+static void link_stream(struct st_quicly_default_scheduler_state_t *sched, quicly_stream_t *stream, int conn_is_blocked)
 {
     if (!quicly_linklist_is_linked(&stream->_send_aux.pending_link.default_scheduler)) {
         quicly_linklist_t *slot = &sched->active;
-        if (conn_is_flow_capped && !quicly_sendstate_can_send(&stream->sendstate, NULL))
+        if (conn_is_blocked && !quicly_stream_can_send(stream, 0))
             slot = &sched->blocked;
         quicly_linklist_insert(slot->prev, &stream->_send_aux.pending_link.default_scheduler);
     }
@@ -289,18 +288,18 @@ static void link_stream(struct st_quicly_default_scheduler_state_t *sched, quicl
 static int default_stream_scheduler_do_send(quicly_stream_scheduler_t *self, quicly_conn_t *conn, quicly_send_context_t *s)
 {
     struct st_quicly_default_scheduler_state_t *sched = &((struct _st_quicly_conn_public_t *)conn)->_default_scheduler;
-    int conn_is_flow_capped = quicly_is_flow_capped(conn), ret = 0;
+    int conn_is_blocked = quicly_is_blocked(conn), ret = 0;
 
-    if (!conn_is_flow_capped)
+    if (!conn_is_blocked)
         quicly_linklist_insert_list(&sched->active, &sched->blocked);
 
-    while (quicly_can_send_stream_data((quicly_conn_t *)conn, s) && quicly_linklist_is_linked(&sched->active)) {
+    while (quicly_can_send_data((quicly_conn_t *)conn, s) && quicly_linklist_is_linked(&sched->active)) {
         /* detach the first active stream */
         quicly_stream_t *stream =
             (void *)((char *)sched->active.next - offsetof(quicly_stream_t, _send_aux.pending_link.default_scheduler));
         quicly_linklist_unlink(&stream->_send_aux.pending_link.default_scheduler);
         /* relink the stream to the blocked list if necessary */
-        if (conn_is_flow_capped && !quicly_sendstate_can_send(&stream->sendstate, NULL)) {
+        if (conn_is_blocked && !quicly_stream_can_send(stream, 0)) {
             quicly_linklist_insert(sched->blocked.prev, &stream->_send_aux.pending_link.default_scheduler);
             continue;
         }
@@ -309,15 +308,15 @@ static int default_stream_scheduler_do_send(quicly_stream_scheduler_t *self, qui
             /* FIXME Stop quicly_send_stream emitting SENDBUF_FULL (happpens when CWND is congested). Otherwise, we need to make
              * adjustments to the scheduler after popping a stream */
             if (ret == QUICLY_ERROR_SENDBUF_FULL) {
-                assert(quicly_sendstate_can_send(&stream->sendstate, &stream->_send_aux.max_stream_data));
-                link_stream(sched, stream, conn_is_flow_capped);
+                assert(quicly_stream_can_send(stream, 1));
+                link_stream(sched, stream, conn_is_blocked);
             }
             break;
         }
         /* reschedule */
-        conn_is_flow_capped = quicly_is_flow_capped(conn);
-        if (quicly_sendstate_can_send(&stream->sendstate, &stream->_send_aux.max_stream_data))
-            link_stream(sched, stream, conn_is_flow_capped);
+        conn_is_blocked = quicly_is_blocked(conn);
+        if (quicly_stream_can_send(stream, 1))
+            link_stream(sched, stream, conn_is_blocked);
     }
 
     return ret;
@@ -330,9 +329,9 @@ static int default_stream_scheduler_update_state(quicly_stream_scheduler_t *self
 {
     struct st_quicly_default_scheduler_state_t *sched = &((struct _st_quicly_conn_public_t *)stream->conn)->_default_scheduler;
 
-    if (quicly_sendstate_can_send(&stream->sendstate, &stream->_send_aux.max_stream_data)) {
+    if (quicly_stream_can_send(stream, 1)) {
         /* activate if not */
-        link_stream(sched, stream, quicly_is_flow_capped(stream->conn));
+        link_stream(sched, stream, quicly_is_blocked(stream->conn));
     } else {
         /* disactivate if active */
         if (quicly_linklist_is_linked(&stream->_send_aux.pending_link.default_scheduler))
@@ -412,7 +411,7 @@ Exit:
             ptls_aead_free(*aead_ctx);
             *aead_ctx = NULL;
         }
-        if (*hp_ctx != NULL) {
+        if (hp_ctx != NULL && *hp_ctx != NULL) {
             ptls_cipher_free(*hp_ctx);
             *hp_ctx = NULL;
         }
@@ -439,10 +438,3 @@ static void default_finalize_send_packet(quicly_crypto_engine_t *engine, quicly_
 }
 
 quicly_crypto_engine_t quicly_default_crypto_engine = {default_setup_cipher, default_finalize_send_packet};
-
-static void default_init_cc(quicly_init_cc_t *init_cc, quicly_cc_t *cc, uint32_t initcwnd, int64_t now)
-{
-    quicly_cc_reno_init(cc, initcwnd);
-}
-
-quicly_init_cc_t quicly_default_init_cc = {default_init_cc};

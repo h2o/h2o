@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2020 Fastly, Inc., Toru Maesaka, Goro Fuji
+ * Copyright (c) 2019-2021 Fastly, Inc., Toru Maesaka, Goro Fuji, Kazuho Oku
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to
@@ -22,12 +22,20 @@
 
 #include <memory>
 #include <vector>
+#include <algorithm>
+#include <bcc/BPF.h>
+#include <bcc/libbpf.h>
+#include <bcc/bpf_module.h>
+
 extern "C" {
 #include <unistd.h>
 #include <stdarg.h>
+#include <limits.h>
+#include <arpa/inet.h>
 #include <sys/time.h>
 #include "h2o/memory.h"
 #include "h2o/version.h"
+#include "h2o/ebpf.h"
 }
 #include "h2olog.h"
 
@@ -38,12 +46,33 @@ static void usage(void)
 {
     printf(R"(h2olog (h2o v%s)
 Usage: h2olog -p PID
-       h2olog quic -p PID
-       h2olog quic -s response_header_name -p PID
-Other options:
-    -h Print this help and exit
-    -d Print debugging information (-dd shows more)
-    -w Path to write the output (default: stdout)
+Optional arguments:
+  -d                Print debugging information (-dd shows more).
+  -h                Print this help and exit.
+  -l                Print the list of available tracepoints and exit.
+  -H                Trace HTTP requests and responses in varnishlog-like format.
+  -s <header-name>  A response header name to show, e.g. "content-type".
+  -t <tracepoint>   A tracepoint, or fully-qualified probe name to trace. Glob
+                    patterns can be used; e.g., "quicly:accept", "h2o:*".
+  -S <rate>         Enable random sampling per connection (0.0-1.0). Requires
+                    use of `usdt-selective-tracing`.
+  -A <ip-address>   Limit connections being traced to those coming from the
+                    specified address. Requries use of `usdt-selective-tracing`.
+  -N <server-name>  Limit connections being traced to those carrying the
+                    specified name in the TLS SNI extension. Requires use of
+                    `usdt-selective-tracing: ON`.
+  -a                Include application data which are omitted by default.
+  -r                Run without dropping root privilege.
+  -w <path>         Path to write the output (default: stdout).
+  -f <flag>         Turn on a BCC debug flag (supported flag: DEBUG_LLVM_IR,
+                    DEBUG_BPF, DEBUG_PREPROCESSOR, DEBUG_SOURCE,
+                    DEBUG_BPF_REGISTER_STATE, DEBUG_BTF)
+
+Examples:
+  h2olog -p $(pgrep -o h2o) -H
+  h2olog -p $(pgrep -o h2o) -t quicly:accept -t quicly:free
+  h2olog -p $(pgrep -o h2o) -t h2o:send_response_header -t h2o:h3s_accept \
+         -t h2o:h3s_destroy -s alt-svc
 )",
            H2O_VERSION);
     return;
@@ -125,6 +154,42 @@ static void show_process(pid_t pid)
     infof("Attaching pid=%d (%s)", pid, cmdline);
 }
 
+static void drop_root_privilege(void)
+{
+    if (getuid() == 0) {
+        const char *sudo_gid = getenv("SUDO_GID");
+        if (sudo_gid == NULL) {
+            fprintf(stderr, "Error: the SUDO_GID environment variable is not set\n");
+            exit(EXIT_FAILURE);
+        }
+        errno = 0;
+        gid_t gid = (gid_t)strtol(sudo_gid, NULL, 10);
+        if (errno != 0) {
+            fprintf(stderr, "Error: failed to parse SUDO_GID\n");
+            exit(EXIT_FAILURE);
+        }
+        if (setgid(gid) != 0) {
+            perror("Error: setgid(2) failed");
+            exit(EXIT_FAILURE);
+        }
+        const char *sudo_uid = getenv("SUDO_UID");
+        if (sudo_uid == NULL) {
+            fprintf(stderr, "Error: the SUDO_UID environment variable is not set\n");
+            exit(EXIT_FAILURE);
+        }
+        errno = 0;
+        uid_t uid = (uid_t)strtol(sudo_uid, NULL, 10);
+        if (errno != 0) {
+            fprintf(stderr, "Error: failed to parse SUDO_UID\n");
+            exit(EXIT_FAILURE);
+        }
+        if (setuid(uid) != 0) {
+            perror("Error: setuid(2) failed");
+            exit(EXIT_FAILURE);
+        }
+    }
+}
+
 static std::string join_str(const std::string &sep, const std::vector<std::string> &strs)
 {
     std::string s;
@@ -159,13 +224,6 @@ static std::string generate_header_filter_cflag(const std::vector<std::string> &
     return cflag;
 }
 
-static std::string make_pid_cflag(const char *macro_name, pid_t pid)
-{
-    char buf[256];
-    snprintf(buf, sizeof(buf), "-D%s=%d", macro_name, pid);
-    return std::string(buf);
-}
-
 static void event_cb(void *context, void *data, int len)
 {
     h2o_tracer *tracer = (h2o_tracer *)context;
@@ -178,31 +236,62 @@ static void lost_cb(void *context, uint64_t lost)
     tracer->handle_lost(lost);
 }
 
+/**
+ * Builds a `-D$name=$expr` style cc macro.
+ */
+static std::string build_cc_macro_expr(const char *name, const std::string &expr)
+{
+    return std::string("-D") + std::string(name) + "=" + expr;
+}
+
+template <typename T> static std::string build_cc_macro_expr(const char *name, const T &expr)
+{
+    return build_cc_macro_expr(name, std::to_string(expr));
+}
+
+/**
+ * Builds a `-D$name="$str"` style cc macro.
+ */
+static std::string build_cc_macro_str(const char *name, const std::string &str)
+{
+    return build_cc_macro_expr(name, "\"" + str + "\"");
+}
+
+#define CC_MACRO_EXPR(name) build_cc_macro_expr(#name, name)
+#define CC_MACRO_STR(name) build_cc_macro_str(#name, name)
+
 int main(int argc, char **argv)
 {
-    std::unique_ptr<h2o_tracer> tracer;
-    if (argc > 1 && strcmp(argv[1], "quic") == 0) {
-        tracer.reset(create_quic_tracer());
-        --argc;
-        ++argv;
-    } else {
-        tracer.reset(create_http_tracer());
-    }
+    std::unique_ptr<h2o_tracer> tracer(create_raw_tracer());
 
     int debug = 0;
+    unsigned int bcc_flags = 0;
+    bool preserve_root = false;
+    bool list_usdts = false;
+    bool include_appdata = false;
     FILE *outfp = stdout;
-    std::vector<std::string> event_type_filters;
     std::vector<std::string> response_header_filters;
     int c;
     pid_t h2o_pid = -1;
-    while ((c = getopt(argc, argv, "hdp:t:s:w:")) != -1) {
+    double sampling_rate = 1.0;
+    std::vector<std::pair<std::vector<uint8_t> /* address */, unsigned /* netmask */>> sampling_addresses;
+    std::vector<std::string> sampling_snis;
+    while ((c = getopt(argc, argv, "hHdrlap:t:s:w:S:A:N:f:")) != -1) {
         switch (c) {
+        case 'H':
+            tracer.reset(create_http_tracer());
+            break;
         case 'p':
             h2o_pid = atoi(optarg);
             break;
-        case 't':
-            event_type_filters.push_back(optarg);
+        case 't': {
+            std::string err = tracer->select_usdts(optarg);
+            if (!err.empty()) {
+                fprintf(stderr, "%s\n", err.c_str());
+                exit(EXIT_FAILURE);
+            }
             break;
+        }
         case 's':
             response_header_filters.push_back(optarg);
             break;
@@ -212,8 +301,67 @@ int main(int argc, char **argv)
                 exit(EXIT_FAILURE);
             }
             break;
+        case 'S': // can take 0.0 ... 1.0
+            sampling_rate = atof(optarg);
+            if (!(sampling_rate >= 0.0 && sampling_rate <= 1.0)) {
+                fprintf(stderr, "Error: the argument of -S must be in the range of 0.0 to 1.0\n");
+                exit(EXIT_FAILURE);
+            }
+            break;
+        case 'A': {
+            const char *slash = std::find(optarg, optarg + strlen(optarg), '/');
+            std::string addr(optarg, slash - optarg);
+            in_addr v4;
+            in6_addr v6;
+            if (inet_pton(AF_INET, addr.c_str(), (sockaddr *)&v4) == 1) {
+                const uint8_t *src = reinterpret_cast<const uint8_t *>(&v4);
+                sampling_addresses.emplace_back(std::vector<uint8_t>(src, src + 4), 32);
+            } else if (inet_pton(AF_INET6, addr.c_str(), (sockaddr *)&v6) == 1) {
+                const uint8_t *src = reinterpret_cast<const uint8_t *>(&v6);
+                sampling_addresses.emplace_back(std::vector<uint8_t>(src, src + 16), 128);
+            } else {
+                fprintf(stderr, "Error: invalid address supplied to -A: %s\n", optarg);
+                exit(EXIT_FAILURE);
+            }
+            if (*slash != '\0') {
+                if (sscanf(slash + 1, "%u", &sampling_addresses.back().second) != 1) {
+                    fprintf(stderr, "Error: invalid address mask supplied to -A: %s\n", optarg);
+                    exit(EXIT_FAILURE);
+                }
+            }
+        } break;
+        case 'N':
+            sampling_snis.emplace_back(optarg);
+            break;
+        case 'a':
+            include_appdata = true;
+            break;
         case 'd':
             debug++;
+            break;
+        case 'f':
+#define BCC_FLAG(var, flag)                                                                                                        \
+    if (strcmp(optarg, #flag) == 0) {                                                                                              \
+        var |= ebpf::flag;                                                                                                         \
+    } else
+            BCC_FLAG(bcc_flags, DEBUG_LLVM_IR)
+            BCC_FLAG(bcc_flags, DEBUG_BPF)
+            BCC_FLAG(bcc_flags, DEBUG_PREPROCESSOR)
+            BCC_FLAG(bcc_flags, DEBUG_SOURCE)
+            BCC_FLAG(bcc_flags, DEBUG_BPF_REGISTER_STATE)
+            BCC_FLAG(bcc_flags, DEBUG_BTF)
+            // else
+            {
+                fprintf(stderr, "Error: unknown name for -f: %s\n", optarg);
+                exit(EXIT_FAILURE);
+            }
+#undef BCC_FLAG
+            break;
+        case 'l':
+            list_usdts = true;
+            break;
+        case 'r':
+            preserve_root = true;
             break;
         case 'h':
             usage();
@@ -230,6 +378,13 @@ int main(int argc, char **argv)
         exit(EXIT_FAILURE);
     }
 
+    if (list_usdts) {
+        for (const auto &usdt : tracer->usdt_probes()) {
+            printf("%s\n", usdt.fully_qualified_name().c_str());
+        }
+        exit(EXIT_SUCCESS);
+    }
+
     if (h2o_pid == -1) {
         fprintf(stderr, "Error: -p option is missing\n");
         usage();
@@ -241,17 +396,117 @@ int main(int argc, char **argv)
         exit(EXIT_FAILURE);
     }
 
-    tracer->init(outfp);
+    tracer->init(outfp, include_appdata);
 
+    const char *h2o_root = getenv("H2O_ROOT");
+    if (h2o_root == NULL)
+        h2o_root = H2O_TO_STR(H2O_ROOT);
+    // BCC does not resolve a relative path, so h2olog does resolve it as an absolute path.
+    char h2o_root_resolved[PATH_MAX];
+    if (realpath(h2o_root, h2o_root_resolved) == NULL) {
+        h2o_perror("Error: realpath failed for H2O_ROOT");
+        exit(EXIT_FAILURE);
+    }
     std::vector<std::string> cflags({
-        make_pid_cflag("H2OLOG_H2O_PID", h2o_pid),
+        std::string("-I") + std::string(h2o_root_resolved) + "/include",
+        build_cc_macro_expr("H2OLOG_H2O_PID", h2o_pid),
+        CC_MACRO_EXPR(H2O_EBPF_RETURN_MAP_SIZE),
     });
 
     if (!response_header_filters.empty()) {
         cflags.push_back(generate_header_filter_cflag(response_header_filters));
     }
 
+    ebpf::BPF bpf(bcc_flags);
+    std::vector<ebpf::USDT> probes;
+
+    bool selective_tracing = false;
+    if (sampling_rate < 1.0) {
+        /* eBPF bytecode cannot handle floating point numbers see man bpf(2). We use uint32_t which maps to 0 <= value < 1. */
+        cflags.push_back(
+            build_cc_macro_expr("H2OLOG_SAMPLING_RATE_U32", static_cast<uint32_t>(sampling_rate * (UINT64_C(1) << 32))));
+        selective_tracing = true;
+    }
+    if (!sampling_addresses.empty()) {
+        std::string expr;
+        for (const auto &addrmask : sampling_addresses) {
+            if (!expr.empty())
+                expr += " || ";
+            expr += "((family) == ";
+            expr += addrmask.first.size() == 4 ? '4' : '6';
+            size_t off;
+            for (off = 0; off < addrmask.second / 8 * 8; off += 8) {
+                expr += " && (addr)[";
+                expr += std::to_string(off / 8);
+                expr += "] == ";
+                expr += std::to_string(addrmask.first[off / 8]);
+            }
+            if (addrmask.second % 8 != 0) {
+                expr += " && ((addr)[";
+                expr += std::to_string(off / 8);
+                expr += "] & ";
+                expr += std::to_string((uint8_t)(0xff << (8 - addrmask.second % 8)));
+                expr += ") == ";
+                expr += std::to_string(addrmask.first[off / 8]);
+            }
+            expr += ')';
+        }
+        cflags.push_back(build_cc_macro_expr("H2OLOG_IS_SAMPLING_ADDRESS(family, addr)", std::string("(") + expr + ")"));
+        selective_tracing = true;
+    }
+    if (!sampling_snis.empty()) {
+        /* if both address- and sni-based sampling are used, the output will be the union of both */
+        if (sampling_addresses.empty())
+            cflags.push_back(build_cc_macro_expr("H2OLOG_IS_SAMPLING_ADDRESS(family, addr)", 0));
+        std::string expr;
+        for (const auto &name : sampling_snis) {
+            if (!expr.empty())
+                expr += " || ";
+            expr += "((name_len) == ";
+            expr += std::to_string(name.size());
+            /* as string constants cannot be used in eBPF, do hand-written memcmp */
+            for (size_t i = 0; i < name.size(); i += 8) {
+                uint64_t u8 = 0, mask = 0;
+                memcpy(&u8, name.c_str() + i, std::min((size_t)8, name.size() - i));
+                expr += " && (*(uint64_t *)((name) + ";
+                expr += std::to_string(i);
+                expr += ")";
+                if (name.size() - i < 8) {
+                    static const uint8_t mask_bytes[14] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}; /* 7x 0xff, 7x 0x00 */
+                    memcpy(&mask, mask_bytes + 7 - (name.size() - i), 8);
+                    expr += " & ";
+                    expr += std::to_string(mask);
+                }
+                expr += ") == ";
+                expr += std::to_string(u8);
+            }
+            expr += ")";
+        }
+        cflags.push_back(build_cc_macro_expr("H2OLOG_IS_SAMPLING_SNI(name, name_len)", std::string("(") + expr + ")"));
+        selective_tracing = true;
+    }
+
+    if (selective_tracing) {
+        cflags.push_back(build_cc_macro_expr("H2OLOG_SELECTIVE_TRACING", 1));
+        probes.push_back(ebpf::USDT(h2o_pid, "h2o", "_private_socket_lookup_flags", "trace_h2o___private_socket_lookup_flags"));
+        probes.push_back(
+            ebpf::USDT(h2o_pid, "h2o", "_private_socket_lookup_flags_sni", "trace_h2o___private_socket_lookup_flags_sni"));
+    }
+
+    for (const auto &usdt : tracer->usdt_probes()) {
+        probes.push_back(ebpf::USDT(h2o_pid, usdt.provider, usdt.name, usdt.probe_func));
+    }
+
     if (debug >= 2) {
+        fprintf(stderr, "usdts=");
+        const auto &usdts = tracer->usdt_probes();
+        for (auto iter = usdts.cbegin(); iter != usdts.cend(); iter++) {
+            if (iter != usdts.cbegin()) {
+                fprintf(stderr, ",");
+            }
+            fprintf(stderr, "%s", iter->fully_qualified_name().c_str());
+        }
+        fprintf(stderr, "\n");
         fprintf(stderr, "cflags=");
         for (size_t i = 0; i < cflags.size(); i++) {
             if (i > 0) {
@@ -263,26 +518,23 @@ int main(int argc, char **argv)
         fprintf(stderr, "<BPF>\n%s\n</BPF>\n", tracer->bpf_text().c_str());
     }
 
-    ebpf::BPF *bpf = new ebpf::BPF();
-    std::vector<ebpf::USDT> probes = tracer->init_usdt_probes(h2o_pid);
-
-    ebpf::StatusTuple ret = bpf->init(tracer->bpf_text(), cflags, probes);
+    ebpf::StatusTuple ret = bpf.init(tracer->bpf_text(), cflags, probes);
     if (ret.code() != 0) {
         fprintf(stderr, "Error: init: %s\n", ret.msg().c_str());
         return EXIT_FAILURE;
     }
 
-    bpf->attach_tracepoint("sched:sched_process_exit", "trace_sched_process_exit");
+    bpf.attach_tracepoint("sched:sched_process_exit", "trace_sched_process_exit");
 
     for (auto &probe : probes) {
-        ret = bpf->attach_usdt(probe);
+        ret = bpf.attach_usdt(probe);
         if (ret.code() != 0) {
             fprintf(stderr, "Error: attach_usdt: %s\n", ret.msg().c_str());
             return EXIT_FAILURE;
         }
     }
 
-    ret = bpf->open_perf_buffer("events", event_cb, lost_cb, tracer.get(), PERF_BUFFER_PAGE_COUNT);
+    ret = bpf.open_perf_buffer("events", event_cb, lost_cb, tracer.get(), PERF_BUFFER_PAGE_COUNT);
     if (ret.code() != 0) {
         fprintf(stderr, "Error: open_perf_buffer: %s\n", ret.msg().c_str());
         return EXIT_FAILURE;
@@ -291,8 +543,11 @@ int main(int argc, char **argv)
     if (debug) {
         show_process(h2o_pid);
     }
+    if (!preserve_root) {
+        drop_root_privilege();
+    }
 
-    ebpf::BPFPerfBuffer *perf_buffer = bpf->get_perf_buffer("events");
+    ebpf::BPFPerfBuffer *perf_buffer = bpf.get_perf_buffer("events");
     if (perf_buffer) {
         time_t t0 = time(NULL);
 

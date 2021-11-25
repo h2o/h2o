@@ -47,6 +47,8 @@
 #include "h2o/url.h"
 #include "h2o/memcached.h"
 
+#include "driver_common.h"
+
 #if !defined(HTTP1) && !defined(HTTP2)
 #error "Please defined one of HTTP1 or HTTP2"
 #endif
@@ -60,17 +62,6 @@ static h2o_context_t ctx;
 static h2o_accept_ctx_t accept_ctx;
 static int client_timeout_ms;
 static char unix_listener[PATH_MAX];
-
-/*
- * Registers a request handler with h2o
- */
-static h2o_pathconf_t *register_handler(h2o_hostconf_t *hostconf, const char *path, int (*on_req)(h2o_handler_t *, h2o_req_t *))
-{
-    h2o_pathconf_t *pathconf = h2o_config_register_path(hostconf, path, 0);
-    h2o_handler_t *handler = h2o_create_handler(pathconf, sizeof(*handler));
-    handler->on_req = on_req;
-    return pathconf;
-}
 
 /*
  * Request handler used for testing. Returns a basic "200 OK" response.
@@ -131,67 +122,6 @@ static void read_fully(int fd, char *buf, size_t len)
     }
 }
 
-/*
- * Writes the writer_thread_args at buf to fd
- */
-static void write_fully(int fd, char *buf, size_t len, int abort_on_err)
-{
-    int done = 0;
-    while (len) {
-        int ret;
-        while ((ret = write(fd, buf + done, len)) == -1 && errno == EINTR)
-            ;
-        if (ret <= 0) {
-            if (abort_on_err)
-                abort();
-            else
-                return;
-        }
-        done += ret;
-        len -= ret;
-    }
-}
-
-#define OK_RESP                                                                                                                    \
-    "HTTP/1.0 200 OK\r\n"                                                                                                          \
-    "Connection: Close\r\n\r\nOk"
-#define OK_RESP_LEN (sizeof(OK_RESP) - 1)
-
-static h2o_barrier_t init_barrier;
-void *upstream_thread(void *arg)
-{
-    char *dirname = (char *)arg;
-    char path[PATH_MAX];
-    char rbuf[1 * 1024 * 1024];
-    snprintf(path, sizeof(path), "/%s/_.sock", dirname);
-    int sd = socket(AF_UNIX, SOCK_STREAM, 0);
-    if (sd < 0) {
-        abort();
-    }
-    struct sockaddr_un addr;
-    memset(&addr, 0, sizeof(addr));
-    addr.sun_family = AF_UNIX;
-    strncpy(addr.sun_path, path, sizeof(addr.sun_path) - 1);
-    if (bind(sd, (struct sockaddr *)&addr, sizeof(addr)) != 0) {
-        abort();
-    }
-    if (listen(sd, 100) != 0) {
-        abort();
-    }
-
-    h2o_barrier_wait(&init_barrier);
-    while (1) {
-        struct sockaddr_un caddr;
-        socklen_t slen = 0;
-        int cfs = accept(sd, (struct sockaddr *)&caddr, &slen);
-        if (cfs < 0) {
-            continue;
-        }
-        read(cfs, rbuf, sizeof(rbuf));
-        write_fully(cfs, (char *)OK_RESP, OK_RESP_LEN, 0);
-        close(cfs);
-    }
-}
 /*
  * Thread: Loops writing fuzzed req to socket and then reading results back.
  * Acts as a client to h2o. *arg points to file descripter to read
@@ -340,7 +270,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size)
         const char *client_timeout_ms_str;
         static char tmpname[] = "/tmp/h2o-fuzz-XXXXXX";
         char *dirname;
-        h2o_url_t upstream;
+
         h2o_barrier_init(&init_barrier, 2);
         signal(SIGPIPE, SIG_IGN);
 
@@ -355,23 +285,9 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size)
         h2o_config_init(&config);
         config.http2.idle_timeout = 10 * 1000;
         config.http1.req_timeout = 10 * 1000;
-        config.proxy.io_timeout = 10 * 1000;
-        config.proxy.connect_timeout = 0;
-        config.proxy.first_byte_timeout = 0;
-        h2o_proxy_config_vars_t proxy_config = {};
-
-        proxy_config.io_timeout = 10 * 1000;
-        proxy_config.connect_timeout = 0;
-        proxy_config.first_byte_timeout = 0;
         hostconf = h2o_config_register_host(&config, h2o_iovec_init(H2O_STRLIT(unix_listener)), 65535);
         register_handler(hostconf, "/chunked-test", chunked_test);
-        h2o_url_parse(unix_listener, strlen(unix_listener), &upstream);
-        h2o_socketpool_t *sockpool = new h2o_socketpool_t();
-        h2o_socketpool_target_t *target = h2o_socketpool_create_target(&upstream, NULL);
-        h2o_socketpool_init_specific(sockpool, SIZE_MAX /* FIXME */, &target, 1, NULL);
-        h2o_socketpool_set_timeout(sockpool, 2000);
-        h2o_socketpool_set_ssl_ctx(sockpool, NULL);
-        h2o_proxy_register_reverse_proxy(h2o_config_register_path(hostconf, "/reproxy-test", 0), &proxy_config, sockpool);
+        register_proxy(hostconf, unix_listener, NULL);
         h2o_file_register(h2o_config_register_path(hostconf, "/", 0), "./examples/doc_root", NULL, NULL, 0);
 
         loop = h2o_evloop_create();
@@ -406,7 +322,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size)
 
     /* Loop until the connection is closed by the client or server */
     while (is_valid_fd(c)) {
-        h2o_evloop_run(ctx.loop, 10);
+        h2o_evloop_run(ctx.loop, client_timeout_ms);
     }
 
     h2o_barrier_wait(end);

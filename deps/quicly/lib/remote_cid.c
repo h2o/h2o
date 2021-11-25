@@ -177,8 +177,8 @@ static size_t unregister_prior_to(quicly_remote_cid_set_t *set, uint64_t seq_unr
 }
 
 int quicly_remote_cid_register(quicly_remote_cid_set_t *set, uint64_t sequence, const uint8_t *cid, size_t cid_len,
-                                 const uint8_t srt[QUICLY_STATELESS_RESET_TOKEN_LEN], uint64_t retire_prior_to,
-                                 uint64_t unregistered_seqs[QUICLY_LOCAL_ACTIVE_CONNECTION_ID_LIMIT], size_t *num_unregistered_seqs)
+                               const uint8_t srt[QUICLY_STATELESS_RESET_TOKEN_LEN], uint64_t retire_prior_to,
+                               uint64_t unregistered_seqs[QUICLY_LOCAL_ACTIVE_CONNECTION_ID_LIMIT], size_t *num_unregistered_seqs)
 {
     quicly_remote_cid_t backup_cid = set->cids[0]; // preserve one valid entry in cids[0] to handle protocol violation
     int ret;

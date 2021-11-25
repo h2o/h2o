@@ -34,11 +34,10 @@ extern const h2o_protocol_callbacks_t H2O_HTTP2_CALLBACKS;
 #define H2O_HTTP2_SETTINGS_HOST_HEADER_TABLE_SIZE 4096
 #define H2O_HTTP2_SETTINGS_HOST_ENABLE_PUSH 0 /* _client_ is never allowed to push */
 #define H2O_HTTP2_SETTINGS_HOST_MAX_CONCURRENT_STREAMS 100
+#define H2O_HTTP2_SETTINGS_HOST_MAX_CONCURRENT_STREAMING_REQUESTS 1
 #define H2O_HTTP2_SETTINGS_HOST_CONNECTION_WINDOW_SIZE H2O_HTTP2_MAX_STREAM_WINDOW_SIZE
 #define H2O_HTTP2_SETTINGS_HOST_STREAM_INITIAL_WINDOW_SIZE H2O_HTTP2_MIN_STREAM_WINDOW_SIZE
 #define H2O_HTTP2_SETTINGS_HOST_MAX_FRAME_SIZE 16384
-
-extern __thread h2o_buffer_prototype_t h2o_http2_wbuf_buffer_prototype;
 
 void h2o_http2_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval connected_at);
 int h2o_http2_handle_upgrade(h2o_req_t *req, struct timeval connected_at);

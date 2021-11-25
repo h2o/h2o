@@ -77,7 +77,10 @@ At the time being, following packages are known to be actively maintained<sup><a
 <h3 id="from-source">Installing from Source</h3>
 
 <p>
-Download a release version from <a href="https://github.com/h2o/h2o/releases">the releases page</a> or clone the master branch from <a href="https://github.com/h2o/h2o/">the source repository</a>, and build it using <a href="http://www.cmake.org/">CMake</a><sup><a href="#note_2" id="#cite_2" title="CMake is a popular build tool that can be found as a binary package on most operating systems.">2</sup></a></sup>.
+First, either download a release version from <a href="https://github.com/h2o/h2o/releases">the releases page</a>, or clone the master branch from <a href="https://github.com/h2o/h2o/">the source repository</a>. When cloning, submodules should also be fetched, e.g., by running <code>git clone --recurse-submodules</code>.
+</p>
+<p>
+Then, build the obtained source using <a href="http://www.cmake.org/">CMake</a><sup><a href="#note_2" id="#cite_2" title="CMake is a popular build tool that can be found as a binary package on most operating systems.">2</sup></a></sup>.
 </p>
 
 <pre><code>% mkdir -p build
@@ -127,6 +130,18 @@ This option specifies the directory to which H2O will be installed (default: <co
 <dd>
 This option instructs whether or not to build the standalone server with support for <a href="configure/mruby.html">scripting using mruby</a>.
 It is turned on by default if the prerequisites (<a href="https://www.gnu.org/software/bison/">bison</a>, <a href="https://www.ruby-lang.org/">ruby</a> and the development files<sup><a href="#note_3" id="#cite_3" title="mkmf - a program for building ruby extensions is required.  In many distributions, the program is packaged as part of ruby-dev or ruby-devel package.">3</sup></a></sup>) are found.
+</dl>
+<dt><code>-DWITH_DTRACE=<i>on</i>|<i>off</i></code></dt>
+<dd>
+This option instructs whether or not to enable DTrace support.
+It is turned on by default if the prerequisites (<a href="https://sourceware.org/systemtap/">SystemTap</a> on Linux, or DTrace on macOS) are found.
+See also <a href="https://github.com/h2o/h2o/wiki/macOS">wiki/macOS</a> to use DTrace on macOS.
+</dl>
+<dt><code>-DWITH_H2OLOG=<i>on</i>|<i>off</i></code></dt>
+<dd>
+This option instructs whether or not to enable <code>h2olog(1)</code>> support.
+It is turned on by default if the prerequisites are found.
+See also <a href="./configure/h2olog.html">h2olog</a> for details.
 </dl>
 <dt><code>-DCMAKE_C_FLAGS=...</code></dt>
 <dd>

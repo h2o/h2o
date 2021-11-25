@@ -3,11 +3,13 @@ package t::Util;
 use strict;
 use warnings;
 use Digest::MD5 qw(md5_hex);
-use File::Temp qw(tempfile);
+use File::Temp qw(tempfile tempdir);
 use IO::Socket::INET;
 use IO::Socket::SSL;
 use IO::Poll qw(POLLIN POLLOUT POLLHUP POLLERR);
+use List::Util qw(shuffle);
 use Net::EmptyPort qw(check_port empty_port);
+use Net::DNS::Nameserver;
 use POSIX ":sys_wait_h";
 use Path::Tiny;
 use Protocol::HTTP2::Connection;
@@ -15,9 +17,43 @@ use Protocol::HTTP2::Constants;
 use Scope::Guard qw(scope_guard);
 use Test::More;
 use Time::HiRes qw(sleep gettimeofday tv_interval);
+use Carp;
 
 use base qw(Exporter);
-our @EXPORT = qw(ASSETS_DIR DOC_ROOT bindir run_as_root server_features exec_unittest exec_mruby_unittest spawn_server spawn_h2o spawn_h2o_raw empty_ports create_data_file md5_file prog_exists run_prog openssl_can_negotiate curl_supports_http2 run_with_curl h2get_exists run_with_h2get run_with_h2get_simple one_shot_http_upstream wait_debugger spawn_forked spawn_h2_server find_blackhole_ip);
+our @EXPORT = qw(
+    ASSETS_DIR
+    DOC_ROOT
+    bindir
+    run_as_root
+    server_features
+    exec_unittest
+    exec_mruby_unittest
+    exec_fuzzer
+    spawn_server
+    spawn_h2o
+    spawn_h2o_raw
+    empty_ports
+    create_data_file
+    md5_file
+    prog_exists
+    run_prog
+    openssl_can_negotiate
+    curl_supports_http2
+    run_with_curl
+    h2get_exists
+    run_with_h2get
+    run_with_h2get_simple
+    one_shot_http_upstream
+    wait_debugger
+    spawn_forked
+    spawn_h2_server
+    find_blackhole_ip
+    get_tracer
+    check_dtrace_availability
+    run_picotls_client
+    spawn_dns_server
+    run_fuzzer
+);
 
 use constant ASSETS_DIR => 't/assets';
 use constant DOC_ROOT   => ASSETS_DIR . "/doc_root";
@@ -28,7 +64,7 @@ sub bindir {
 
 sub run_as_root {
     return if $< == 0;
-    exec qw(sudo -E env PERL5LIB=.), $^X, $0;
+    exec qw(sudo -E env PERL5LIB=.), "PATH=$ENV{PATH}", $^X, $0;
     die "failed to invoke $0 using sudo:$!";
 }
 
@@ -123,6 +159,17 @@ sub exec_mruby_unittest {
 	printf("1..%d\n", $k);
 }
 
+sub exec_fuzzer {
+    my $name = shift;
+    my $prog = bindir() . "/h2o-fuzzer-$name";
+
+    plan skip_all => "$prog does not exist"
+        if ! -e $prog;
+
+    is system("$prog -close_fd_mask=3 -runs=1 -max_len=16384 fuzz/$name-corpus < /dev/null"), 0;
+    done_testing;
+}
+
 # spawns a child process and returns a guard object that kills the process when destroyed
 sub spawn_server {
     my %args = @_;
@@ -190,10 +237,12 @@ sub spawn_h2o {
     # setup the configuration file
     $conf = $conf->($port, $tls_port)
         if ref $conf eq 'CODE';
+    my $user = $< == 0 ? "root" : "";
     if (ref $conf eq 'HASH') {
         @opts = @{$conf->{opts}}
             if $conf->{opts};
         $max_ssl_version = $conf->{max_ssl_version} || undef;
+        $user = $conf->{user} if exists $conf->{user};
         $conf = $conf->{conf};
     }
     $conf = <<"EOT";
@@ -208,7 +257,7 @@ listen:
     key-file: examples/h2o/server.key
     certificate-file: examples/h2o/server.crt
     @{[$max_ssl_version ? "max-version: $max_ssl_version" : ""]}
-@{[$< == 0 ? "user: root" : ""]}
+@{[$user ? "user: $user" : ""]}
 EOT
 
     my $ret = spawn_h2o_raw($conf, [$port, $tls_port], \@opts);
@@ -451,6 +500,17 @@ sub spawn_forked {
 
 sub spawn_h2_server {
     my ($upstream_port, $stream_state_cbs, $stream_frame_cbs) = @_;
+
+    my $upstream = IO::Socket::SSL->new(
+        LocalAddr => '127.0.0.1',
+        LocalPort => $upstream_port,
+        Listen => 1,
+        ReuseAddr => 1,
+        SSL_cert_file => 'examples/h2o/server.crt',
+        SSL_key_file => 'examples/h2o/server.key',
+        SSL_alpn_protocols => ['h2'],
+    ) or die "cannot create socket: $!";
+
     my $server = spawn_forked(sub {
         my $conn; $conn = Protocol::HTTP2::Connection->new(Protocol::HTTP2::Constants::SERVER,
             on_new_peer_stream => sub {
@@ -471,15 +531,6 @@ sub spawn_h2_server {
         );
         $conn->{_state} = +{};
         $conn->enqueue(Protocol::HTTP2::Constants::SETTINGS, 0, 0, +{});
-        my $upstream = IO::Socket::SSL->new(
-            LocalAddr => '127.0.0.1',
-            LocalPort => $upstream_port,
-            Listen => 1,
-            ReuseAddr => 1,
-            SSL_cert_file => 'examples/h2o/server.crt',
-            SSL_key_file => 'examples/h2o/server.key',
-            SSL_alpn_protocols => ['h2'],
-        ) or die "cannot create socket: $!";
         my $sock = $upstream->accept or die "cannot accept socket: $!";
 
         my $input = '';
@@ -518,7 +569,72 @@ sub spawn_h2_server {
             }
         }
     });
+
+    close $upstream;
     return $server;
+}
+
+# usage: see t/90h2olog.t
+package H2ologTracer {
+    use POSIX ":sys_wait_h";
+
+    sub new {
+        my ($class, $opts) = @_;
+        my $h2o_pid = $opts->{pid} or Carp::croak("Missing pid in the opts");
+        my $h2olog_args = $opts->{args} // [];
+        my $h2olog_prog = t::Util::bindir() . "/h2olog";
+
+        my $tempdir = File::Temp::tempdir(CLEANUP => 1);
+        my $output_file = "$tempdir/h2olog.jsonl";
+
+        my $tracer_pid = open my($errfh), "-|", qq{exec $h2olog_prog @{$h2olog_args} -d -p $h2o_pid -w '$output_file' 2>&1};
+        die "failed to spawn $h2olog_prog: $!" unless defined $tracer_pid;
+
+        # wait until h2olog and the trace log becomes ready
+        while (1) {
+            my $errline = <$errfh>;
+            Carp::confess("h2olog[$tracer_pid] died unexpectedly")
+                unless defined $errline;
+            Test::More::diag("h2olog[$tracer_pid]: $errline");
+            last if $errline =~ /Attaching pid=/;
+        }
+
+        open my $fh, "<", $output_file or die "h2olog[$tracer_pid] does not create the output file ($output_file): $!";
+        my $off = 0;
+        my $get_trace = sub {
+            Carp::confess "h2olog[$tracer_pid] is down (got $?)"
+                if waitpid($tracer_pid, WNOHANG) != 0;
+
+            seek $fh, $off, 0 or die "seek failed: $!";
+            read $fh, my $bytes, 65000;
+            $bytes = ''
+                unless defined $bytes;
+            $off += length $bytes;
+            return $bytes;
+        };
+
+        my $guard = Scope::Guard->new(sub {
+            if (waitpid($tracer_pid, WNOHANG) == 0) {
+                Test::More::diag "killing h2olog[$tracer_pid] with SIGTERM";
+                kill("TERM", $tracer_pid)
+                    or warn("failed to kill h2olog[$tracer_pid]: $!");
+            } else {
+                Test::More::diag($_) while <$errfh>; # in case h2olog shows error messages, e.g. BPF program doesn't compile
+                Test::More::diag "h2olog[$tracer_pid] has already exited";
+            }
+        });
+
+        return bless {
+            _guard => $guard,
+            tracer_pid => $tracer_pid,
+            get_trace => $get_trace,
+        }, $class;
+    }
+
+    sub get_trace {
+        my($self) = @_;
+        return $self->{get_trace}->();
+    }
 }
 
 sub find_blackhole_ip {
@@ -551,6 +667,122 @@ sub find_blackhole_ip {
     }
     die unless $poll->handles() == 0;
     return $blackhole_ip;
+}
+
+sub check_dtrace_availability {
+    run_as_root();
+
+    plan skip_all => 'dtrace support is off'
+        unless server_features()->{dtrace};
+
+    if ($^O eq 'linux') {
+        plan skip_all => 'bpftrace not found'
+            unless prog_exists('bpftrace');
+        # NOTE: the test is likely to depend on https://github.com/iovisor/bpftrace/pull/864
+        plan skip_all => "skipping bpftrace tests (setenv DTRACE_TESTS=1 to run them)"
+            unless $ENV{DTRACE_TESTS};
+    } else {
+        plan skip_all => 'dtrace not found'
+            unless prog_exists('dtrace');
+        plan skip_all => 'unbuffer not found'
+            unless prog_exists('unbuffer');
+    }
+}
+
+sub get_tracer {
+    my $tracer_pid = shift;
+    my $fn = shift;
+    my $read_trace;
+    while (1) {
+        sleep 1;
+        if (open my $fh, "<", $fn) {
+            my $off = 0;
+            $read_trace = sub {
+                seek $fh, $off, 0
+                    or die "seek failed:$!";
+                read $fh, my $bytes, 1048576;
+                $bytes = ''
+                    unless defined $bytes;
+                $off += length $bytes;
+                if ($^O ne 'linux') {
+                    $bytes = join "", map { substr($_, 4) . "\n" } grep /^XXXX/, split /\n/, $bytes;
+                }
+                return $bytes;
+            };
+            last;
+        }
+        die "bpftrace failed to start\n"
+            if waitpid($tracer_pid, WNOHANG) == $tracer_pid;
+    }
+    return $read_trace;
+}
+
+sub run_picotls_client {
+    my($opts) = @_;
+    my $port = $opts->{port}; # required
+    my $host = $opts->{host} // '127.0.0.1';
+    my $path = $opts->{path} // '/';
+    my $cli_opts = $opts->{opts} // '';
+
+    my $cli = bindir() . "/picotls/cli";
+
+    my $tempdir = tempdir();
+    my $cmd = "exec $cli $cli_opts $host $port > $tempdir/resp.txt 2>&1";
+    diag $cmd;
+    open my $fh, "|-", $cmd
+        or die "failed to invoke command:$cmd:$!";
+    autoflush $fh 1;
+    print $fh <<"EOT";
+GET $path HTTP/1.1\r
+Host: $host:$port\r
+Connection: close\r
+\r
+EOT
+    sleep 1;
+    close $fh;
+
+    open $fh, "<", "$tempdir/resp.txt"
+        or die "failed to open file:$tempdir/resp.txt:$!";
+    my $resp = do { local $/; <$fh> };
+    return $resp;
+}
+
+sub spawn_dns_server {
+    my ($dns_port, $zone_rrs, $delays) = @_;
+
+    my $server = spawn_forked(sub {
+            my $ns = Net::DNS::Nameserver->new(
+                LocalPort    => $dns_port,
+                ReplyHandler => sub {
+                    my ($qname, $qclass, $qtype, $peerhost, $query, $conn) = @_;
+                    my ($rcode, @ans, @auth, @add);
+
+                    foreach (@$zone_rrs) {
+                        my $rr = Net::DNS::RR->new($_);
+                        if ($rr->owner eq $qname && $rr->class eq $qclass && $rr->type eq $qtype) {
+                            push @ans, $rr;
+                        }
+                    }
+
+                    if (!@ans) {
+                        $rcode = "NXDOMAIN";
+                    } else {
+                        $rcode = "NOERROR";
+                    }
+                    # mark the answer as authoritative (by setting the 'aa' flag)
+                    my $headermask = {aa => 1};
+                    my $optionmask = {};
+                    if ($delays && $delays->{$qtype} > 0) {
+                        sleep($delays->{$qtype});
+                    }
+                    @ans = shuffle(@ans);
+                    return ($rcode, \@ans, \@auth, \@add, $headermask, $optionmask);
+                },
+                Verbose      => 0
+            ) || die "couldn't create nameserver object\n";
+            $ns->main_loop;
+        });
+    return $server;
 }
 
 1;

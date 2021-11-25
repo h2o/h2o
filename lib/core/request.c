@@ -90,8 +90,7 @@ static h2o_hostconf_t *find_hostconf(h2o_hostconf_t **hostconfs, h2o_iovec_t aut
 
     /* convert supplied hostname to lower-case */
     hostname_lc = alloca(hostname.len);
-    memcpy(hostname_lc, hostname.base, hostname.len);
-    h2o_strtolower(hostname_lc, hostname.len);
+    h2o_strcopytolower(hostname_lc, hostname.base, hostname.len);
 
     do {
         h2o_hostconf_t *hostconf = *hostconfs;
@@ -115,6 +114,19 @@ static h2o_hostconf_t *find_hostconf(h2o_hostconf_t **hostconfs, h2o_iovec_t aut
     return NULL;
 }
 
+static h2o_hostconf_t *find_default_hostconf(h2o_hostconf_t **hostconfs)
+{
+    h2o_hostconf_t *fallback_host = hostconfs[0]->global->fallback_host;
+
+    do {
+        h2o_hostconf_t *hostconf = *hostconfs;
+        if (!hostconf->strict_match)
+            return hostconf;
+    } while (*++hostconfs != NULL);
+
+    return fallback_host;
+}
+
 h2o_hostconf_t *h2o_req_setup(h2o_req_t *req)
 {
     h2o_context_t *ctx = req->conn->ctx;
@@ -127,10 +139,10 @@ h2o_hostconf_t *h2o_req_setup(h2o_req_t *req)
         if (req->conn->hosts[1] == NULL ||
             (hostconf = find_hostconf(req->conn->hosts, req->input.authority, req->input.scheme->default_port,
                                       &req->authority_wildcard_match)) == NULL)
-            hostconf = *req->conn->hosts;
+            hostconf = find_default_hostconf(req->conn->hosts);
     } else {
         /* set the authority name to the default one */
-        hostconf = *req->conn->hosts;
+        hostconf = find_default_hostconf(req->conn->hosts);
         req->input.authority = hostconf->authority.hostport;
     }
 
@@ -494,8 +506,21 @@ void h2o_start_response(h2o_req_t *req, h2o_generator_t *generator)
 
 void h2o_sendvec_init_raw(h2o_sendvec_t *vec, const void *base, size_t len)
 {
-    static const h2o_sendvec_callbacks_t primitive_callbacks = {h2o_sendvec_flatten_raw};
-    vec->callbacks = &primitive_callbacks;
+    static const h2o_sendvec_callbacks_t callbacks = {h2o_sendvec_flatten_raw};
+    vec->callbacks = &callbacks;
+    vec->raw = (char *)base;
+    vec->len = len;
+}
+
+static void sendvec_immutable_update_refcnt(h2o_sendvec_t *vec, h2o_req_t *req, int is_incr)
+{
+    /* noop */
+}
+
+void h2o_sendvec_init_immutable(h2o_sendvec_t *vec, const void *base, size_t len)
+{
+    static const h2o_sendvec_callbacks_t callbacks = {h2o_sendvec_flatten_raw, sendvec_immutable_update_refcnt};
+    vec->callbacks = &callbacks;
     vec->raw = (char *)base;
     vec->len = len;
 }
@@ -821,6 +846,13 @@ void h2o_send_informational(h2o_req_t *req)
 
     if (req->_ostr_top->send_informational == NULL)
         goto Clear;
+
+    size_t index;
+    if ((index = h2o_find_header(&req->headers, H2O_TOKEN_NO_EARLY_HINTS, -1)) != -1) {
+        h2o_iovec_t value = req->headers.entries[index].value;
+        if (value.len == 1 && value.base[0] == '1')
+            goto Clear;
+    }
 
     int i = 0;
     for (i = 0; i != req->num_filters; ++i) {

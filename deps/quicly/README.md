@@ -1,4 +1,4 @@
-quicly [![Build Status](https://travis-ci.org/h2o/quicly.svg?branch=master)](https://travis-ci.org/h2o/quicly)
+quicly [![CI](https://github.com/h2o/quicly/actions/workflows/ci.yml/badge.svg)](https://github.com/h2o/quicly/actions/workflows/ci.yml)
 ===
 
 Quicly is a QUIC implementation, written from the ground up to be used within the H2O HTTP server.

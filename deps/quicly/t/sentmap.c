@@ -101,7 +101,6 @@ static void test_basic(void)
     quicly_sentmap_dispose(&map);
 }
 
-
 static void test_late_ack(void)
 {
     quicly_sentmap_t map;

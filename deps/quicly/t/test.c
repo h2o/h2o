@@ -241,7 +241,7 @@ static void test_vector(void)
     ok(off == sizeof(datagram));
 
     /* decrypt */
-    const struct st_ptls_salt_t *salt = get_salt(QUICLY_PROTOCOL_VERSION_CURRENT);
+    const struct st_ptls_salt_t *salt = get_salt(QUICLY_PROTOCOL_VERSION_DRAFT29);
     ret = setup_initial_encryption(&ptls_openssl_aes128gcmsha256, &ingress, &egress, packet.cid.dest.encrypted, 0,
                                    ptls_iovec_init(salt->initial, sizeof(salt->initial)), NULL);
     ok(ret == 0);
@@ -269,7 +269,7 @@ static void test_retry_aead(void)
     ok(off == sizeof(packet_bytes));
 
     /* decrypt */
-    ptls_aead_context_t *retry_aead = create_retry_aead(&quic_ctx, QUICLY_PROTOCOL_VERSION_CURRENT, 0);
+    ptls_aead_context_t *retry_aead = create_retry_aead(&quic_ctx, QUICLY_PROTOCOL_VERSION_DRAFT29, 0);
     ok(validate_retry_tag(&decoded, &odcid, retry_aead));
     ptls_aead_free(retry_aead);
 }
@@ -282,8 +282,8 @@ static void test_transport_parameters(void)
                                           0x07, 0x04, 0x80, 0x10, 0x00, 0x00, 0x04, 0x04, 0x81, 0x00, 0x00, 0x00,
                                           0x01, 0x04, 0x80, 0x00, 0x75, 0x30, 0x08, 0x01, 0x0a, 0x0a, 0x01, 0x0a};
     memset(&decoded, 0x55, sizeof(decoded));
-    ok(quicly_decode_transport_parameter_list(&decoded, NULL, NULL, NULL, NULL, valid_bytes, valid_bytes + sizeof(valid_bytes)) ==
-       0);
+    ok(quicly_decode_transport_parameter_list(&decoded, NULL, NULL, NULL, NULL, valid_bytes, valid_bytes + sizeof(valid_bytes),
+                                              1) == 0);
     ok(decoded.max_stream_data.bidi_local = 0x100000);
     ok(decoded.max_stream_data.bidi_remote = 0x100000);
     ok(decoded.max_stream_data.uni = 0x100000);
@@ -297,7 +297,7 @@ static void test_transport_parameters(void)
 
     static const uint8_t dup_bytes[] = {0x05, 0x04, 0x80, 0x10, 0x00, 0x00, 0x05, 0x04, 0x80, 0x10, 0x00, 0x00};
     memset(&decoded, 0x55, sizeof(decoded));
-    ok(quicly_decode_transport_parameter_list(&decoded, NULL, NULL, NULL, NULL, dup_bytes, dup_bytes + sizeof(dup_bytes)) ==
+    ok(quicly_decode_transport_parameter_list(&decoded, NULL, NULL, NULL, NULL, dup_bytes, dup_bytes + sizeof(dup_bytes), 1) ==
        QUICLY_TRANSPORT_ERROR_TRANSPORT_PARAMETER);
 }
 
@@ -430,11 +430,209 @@ static void test_address_token_codec(void)
     ptls_aead_free(dec);
 }
 
+static void do_test_record_receipt(size_t epoch)
+{
+    struct st_quicly_pn_space_t *space =
+        alloc_pn_space(sizeof(*space), epoch == QUICLY_EPOCH_1RTT ? QUICLY_DEFAULT_PACKET_TOLERANCE : 1);
+    uint64_t pn = 0;
+    int64_t now = 12345, send_ack_at = INT64_MAX;
+
+    if (epoch == QUICLY_EPOCH_1RTT) {
+        /* 2nd packet triggers an ack */
+        ok(record_receipt(space, pn++, 0, now, &send_ack_at) == 0);
+        ok(send_ack_at == now + QUICLY_DELAYED_ACK_TIMEOUT);
+        now += 1;
+        ok(record_receipt(space, pn++, 0, now, &send_ack_at) == 0);
+        ok(send_ack_at == now);
+        now += 1;
+    } else {
+        /* every packet triggers an ack */
+        ok(record_receipt(space, pn++, 0, now, &send_ack_at) == 0);
+        ok(send_ack_at == now);
+        now += 1;
+    }
+
+    /* reset */
+    space->unacked_count = 0;
+    send_ack_at = INT64_MAX;
+
+    /* ack-only packets do not elicit an ack */
+    ok(record_receipt(space, pn++, 1, now, &send_ack_at) == 0);
+    ok(send_ack_at == INT64_MAX);
+    now += 1;
+    ok(record_receipt(space, pn++, 1, now, &send_ack_at) == 0);
+    ok(send_ack_at == INT64_MAX);
+    now += 1;
+    pn++; /* gap */
+    ok(record_receipt(space, pn++, 1, now, &send_ack_at) == 0);
+    ok(send_ack_at == INT64_MAX);
+    now += 1;
+    ok(record_receipt(space, pn++, 1, now, &send_ack_at) == 0);
+    ok(send_ack_at == INT64_MAX);
+    now += 1;
+
+    /* gap triggers an ack */
+    pn += 1; /* gap */
+    ok(record_receipt(space, pn++, 0, now, &send_ack_at) == 0);
+    ok(send_ack_at == now);
+    now += 1;
+
+    /* reset */
+    space->unacked_count = 0;
+    send_ack_at = INT64_MAX;
+
+    /* if 1-RTT, test ignore-order */
+    if (epoch == QUICLY_EPOCH_1RTT) {
+        space->ignore_order = 1;
+        pn++; /* gap */
+        ok(record_receipt(space, pn++, 0, now, &send_ack_at) == 0);
+        ok(send_ack_at == now + QUICLY_DELAYED_ACK_TIMEOUT);
+        now += 1;
+        ok(record_receipt(space, pn++, 0, now, &send_ack_at) == 0);
+        ok(send_ack_at == now);
+        now += 1;
+    }
+
+    do_free_pn_space(space);
+}
+
+static void test_record_receipt(void)
+{
+    do_test_record_receipt(QUICLY_EPOCH_INITIAL);
+    do_test_record_receipt(QUICLY_EPOCH_1RTT);
+}
+
 static void test_cid(void)
 {
     subtest("received cid", test_received_cid);
     subtest("local cid", test_local_cid);
     subtest("retire cid", test_retire_cid);
+}
+
+/**
+ * test if quicly_accept correctly rejects a non-decryptable Initial packet with QUICLY_ERROR_DECRYPTION_FAILED
+ */
+static void test_nondecryptable_initial(void)
+{
+#define PACKET_LEN 1280
+#define HEADER_LEN 18
+#define LEN_HIGH (((PACKET_LEN - HEADER_LEN) & 0xff00) >> 8)
+#define LEN_LOW ((PACKET_LEN - HEADER_LEN) & 0xff)
+    uint8_t header[HEADER_LEN] = {
+        /* first byte for Initial: 0b1100???? */
+        0xc5,
+        /* version (29) */
+        0xff,
+        0x00,
+        0x00,
+        0x1d,
+        /* DCID len */
+        0x08,
+        /* DCID */
+        0x83,
+        0x94,
+        0xc8,
+        0xf0,
+        0x3e,
+        0x51,
+        0x57,
+        0x08,
+        /* SCID len */
+        0x00,
+        /* SCID does not appear */
+        /* token length */
+        0x00,
+        /* token does not appear */
+        /* length */
+        (0x40 | LEN_HIGH),
+        LEN_LOW,
+    };
+    quicly_conn_t *server;
+    uint8_t packetbuf[PACKET_LEN];
+    struct iovec packet = {.iov_base = packetbuf, .iov_len = sizeof(packetbuf)};
+    size_t num_decoded;
+    quicly_decoded_packet_t decoded;
+    int ret;
+
+    /* create an Initial packet, with its payload all set to zero */
+    memcpy(packetbuf, header, sizeof(header));
+    memset(packetbuf + sizeof(header), 0, sizeof(packetbuf) - sizeof(header));
+    num_decoded = decode_packets(&decoded, &packet, 1);
+    ok(num_decoded == 1);
+
+    /* decryption should fail */
+    ret = quicly_accept(&server, &quic_ctx, NULL, &fake_address.sa, &decoded, NULL, new_master_id(), NULL);
+    ok(ret == QUICLY_ERROR_DECRYPTION_FAILED);
+#undef PACKET_LEN
+#undef HEADER_LEN
+#undef LEN_HIGH
+#undef LEN_LOW
+}
+
+static void test_set_cc(void)
+{
+    quicly_conn_t *conn;
+    int ret;
+
+    ret = quicly_connect(&conn, &quic_ctx, "example.com", &fake_address.sa, NULL, new_master_id(), ptls_iovec_init(NULL, 0), NULL,
+                         NULL);
+    ok(ret == 0);
+
+    quicly_stats_t stats;
+
+    // init CC with pico
+    quicly_set_cc(conn, &quicly_cc_type_pico);
+    ret = quicly_get_stats(conn, &stats);
+    ok(ret == 0);
+    ok(strcmp(stats.cc.type->name, "pico") == 0);
+
+    // pico to pico
+    quicly_set_cc(conn, &quicly_cc_type_pico);
+    ret = quicly_get_stats(conn, &stats);
+    ok(ret == 0);
+    ok(strcmp(stats.cc.type->name, "pico") == 0);
+
+    // reno to pico
+    quicly_set_cc(conn, &quicly_cc_type_reno);
+    quicly_set_cc(conn, &quicly_cc_type_pico);
+    ret = quicly_get_stats(conn, &stats);
+    ok(ret == 0);
+    ok(strcmp(stats.cc.type->name, "pico") == 0);
+
+    // cubic to pico
+    quicly_set_cc(conn, &quicly_cc_type_cubic);
+    quicly_set_cc(conn, &quicly_cc_type_pico);
+    ret = quicly_get_stats(conn, &stats);
+    ok(ret == 0);
+    ok(strcmp(stats.cc.type->name, "pico") == 0);
+
+    // pico to reno
+    quicly_set_cc(conn, &quicly_cc_type_pico);
+    quicly_set_cc(conn, &quicly_cc_type_reno);
+    ret = quicly_get_stats(conn, &stats);
+    ok(ret == 0);
+    ok(strcmp(stats.cc.type->name, "reno") == 0);
+
+    // pico to cubic
+    quicly_set_cc(conn, &quicly_cc_type_pico);
+    quicly_set_cc(conn, &quicly_cc_type_cubic);
+    ret = quicly_get_stats(conn, &stats);
+    ok(ret == 0);
+    ok(strcmp(stats.cc.type->name, "cubic") == 0);
+
+    // reno to cubic
+    quicly_set_cc(conn, &quicly_cc_type_reno);
+    quicly_set_cc(conn, &quicly_cc_type_cubic);
+    ret = quicly_get_stats(conn, &stats);
+    ok(ret == 0);
+    ok(strcmp(stats.cc.type->name, "cubic") == 0);
+
+    // cubic to reno
+    quicly_set_cc(conn, &quicly_cc_type_cubic);
+    quicly_set_cc(conn, &quicly_cc_type_reno);
+    ret = quicly_get_stats(conn, &stats);
+    ok(ret == 0);
+    ok(strcmp(stats.cc.type->name, "reno") == 0);
 }
 
 int main(int argc, char **argv)
@@ -496,6 +694,8 @@ int main(int argc, char **argv)
     subtest("next-packet-number", test_next_packet_number);
     subtest("address-token-codec", test_address_token_codec);
     subtest("ranges", test_ranges);
+    subtest("rate", test_rate);
+    subtest("record-receipt", test_record_receipt);
     subtest("frame", test_frame);
     subtest("maxsender", test_maxsender);
     subtest("sentmap", test_sentmap);
@@ -507,6 +707,8 @@ int main(int argc, char **argv)
     subtest("simple", test_simple);
     subtest("stream-concurrency", test_stream_concurrency);
     subtest("lossy", test_lossy);
+    subtest("test-nondecryptable-initial", test_nondecryptable_initial);
+    subtest("set_cc", test_set_cc);
 
     return done_testing();
 }

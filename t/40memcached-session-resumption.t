@@ -57,6 +57,7 @@ EOT
             $lines =~ m{---\n(New|Reused),}s
                 or die "failed to parse the output of s_client:{{{$lines}}}";
             is $1, $expected;
+            sleep 1; # wait for h2o to commit to memcached
         };
         $spawn_and_connect->("-sess_out $tempdir/session", "New");
         $spawn_and_connect->("-sess_in $tempdir/session", "Reused");

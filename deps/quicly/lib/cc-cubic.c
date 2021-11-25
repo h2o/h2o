@@ -20,9 +20,9 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-
 #include <math.h>
 #include "quicly/cc.h"
+#include "quicly.h"
 
 #define QUICLY_MIN_CWND 2
 
@@ -61,7 +61,7 @@ static uint32_t calc_w_est(const quicly_cc_t *cc, cubic_float_t t_sec, cubic_flo
 
 /* TODO: Avoid increase if sender was application limited. */
 static void cubic_on_acked(quicly_cc_t *cc, const quicly_loss_t *loss, uint32_t bytes, uint64_t largest_acked, uint32_t inflight,
-                           int64_t now, uint32_t max_udp_payload_size)
+                           uint64_t next_pn, int64_t now, uint32_t max_udp_payload_size)
 {
     assert(inflight >= bytes);
     /* Do not increase congestion window while in recovery. */
@@ -142,12 +142,52 @@ static void cubic_on_persistent_congestion(quicly_cc_t *cc, const quicly_loss_t 
     /* TODO */
 }
 
-static const struct st_quicly_cc_impl_t cubic_impl = {CC_CUBIC, cubic_on_acked, cubic_on_lost, cubic_on_persistent_congestion};
+static void cubic_on_sent(quicly_cc_t *cc, const quicly_loss_t *loss, uint32_t bytes, int64_t now)
+{
+    /* Prevent extreme cwnd growth following an idle period caused by application limit.
+     * This fixes the W_cubic/W_est calculations by effectively subtracting the idle period
+     * The sender is coming out of quiescence if the current packet is the only one in flight.
+     * (see https://github.com/torvalds/linux/commit/30927520dbae297182990bb21d08762bcc35ce1d). */
+    if (loss->sentmap.bytes_in_flight <= bytes && cc->state.cubic.avoidance_start != 0 && cc->state.cubic.last_sent_time != 0) {
+        int64_t delta = now - cc->state.cubic.last_sent_time;
+        if (delta > 0)
+            cc->state.cubic.avoidance_start += delta;
+    }
 
-void quicly_cc_cubic_init(quicly_cc_t *cc, uint32_t initcwnd)
+    cc->state.cubic.last_sent_time = now;
+}
+
+static void cubic_reset(quicly_cc_t *cc, uint32_t initcwnd)
 {
     memset(cc, 0, sizeof(quicly_cc_t));
-    cc->impl = &cubic_impl;
+    cc->type = &quicly_cc_type_cubic;
     cc->cwnd = cc->cwnd_initial = cc->cwnd_maximum = initcwnd;
     cc->ssthresh = cc->cwnd_minimum = UINT32_MAX;
 }
+
+static int cubic_on_switch(quicly_cc_t *cc)
+{
+    if (cc->type == &quicly_cc_type_cubic)
+        return 1;
+
+    if (cc->type == &quicly_cc_type_reno || cc->type == &quicly_cc_type_pico) {
+        /* When in slow start, state can be reused as-is; otherwise, restart. */
+        if (cc->cwnd_exiting_slow_start == 0) {
+            cc->type = &quicly_cc_type_cubic;
+        } else {
+            cubic_reset(cc, cc->cwnd_initial);
+        }
+        return 1;
+    }
+
+    return 0;
+}
+
+static void cubic_init(quicly_init_cc_t *self, quicly_cc_t *cc, uint32_t initcwnd, int64_t now)
+{
+    cubic_reset(cc, initcwnd);
+}
+
+quicly_cc_type_t quicly_cc_type_cubic = {
+    "cubic", &quicly_cc_cubic_init, cubic_on_acked, cubic_on_lost, cubic_on_persistent_congestion, cubic_on_sent, cubic_on_switch};
+quicly_init_cc_t quicly_cc_cubic_init = {cubic_init};

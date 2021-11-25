@@ -44,6 +44,37 @@ static void test_is_ipaddr(void)
     ok(ptls_server_name_is_ipaddr("2001:db8::2:1"));
 }
 
+static void test_select_cipher(void)
+{
+#define C(x) ((x) >> 8) & 0xff, (x)&0xff
+
+    ptls_cipher_suite_t *selected,
+        *candidates[] = {&ptls_minicrypto_chacha20poly1305sha256, &ptls_minicrypto_aes128gcmsha256, NULL};
+
+    {
+        static const uint8_t input; /* `input[0]` is preferable, but prohibited by MSVC */
+        ok(select_cipher(&selected, candidates, &input, &input, 0) == PTLS_ALERT_HANDSHAKE_FAILURE);
+    }
+
+    {
+        static const uint8_t input[] = {C(PTLS_CIPHER_SUITE_AES_128_GCM_SHA256), C(PTLS_CIPHER_SUITE_CHACHA20_POLY1305_SHA256)};
+        ok(select_cipher(&selected, candidates, input, input + sizeof(input), 0) == 0);
+        ok(selected == &ptls_minicrypto_aes128gcmsha256);
+        ok(select_cipher(&selected, candidates, input, input + sizeof(input), 1) == 0);
+        ok(selected == &ptls_minicrypto_chacha20poly1305sha256);
+    }
+
+    {
+        static const uint8_t input[] = {C(PTLS_CIPHER_SUITE_AES_256_GCM_SHA384), C(PTLS_CIPHER_SUITE_AES_128_GCM_SHA256)};
+        ok(select_cipher(&selected, candidates, input, input + sizeof(input), 0) == 0);
+        ok(selected == &ptls_minicrypto_aes128gcmsha256);
+        ok(select_cipher(&selected, candidates, input, input + sizeof(input), 1) == 0);
+        ok(selected == &ptls_minicrypto_aes128gcmsha256);
+    }
+
+#undef C
+}
+
 ptls_context_t *ctx, *ctx_peer;
 ptls_verify_certificate_t *verify_certificate;
 struct st_ptls_ffx_test_variants_t ffx_variants[7];
@@ -192,6 +223,46 @@ static void test_aad_ciphersuite(ptls_cipher_suite_t *cs1, ptls_cipher_suite_t *
     ptls_aead_free(c);
 }
 
+static void test_aad96_ciphersuite(ptls_cipher_suite_t *cs1, ptls_cipher_suite_t *cs2)
+{
+    const char *traffic_secret = "012345678901234567890123456789012345678901234567", *src = "hello world", *aad = "my true aad";
+    ptls_aead_context_t *c;
+    char enc[256], dec[256];
+    uint8_t seq32[4] = {0xa1, 0xb2, 0xc3, 0xd4};
+    uint8_t seq32_bad[4] = {0xa2, 0xb3, 0xc4, 0xe5};
+    size_t enclen, declen;
+
+    /* encrypt */
+    c = ptls_aead_new(cs1->aead, cs1->hash, 1, traffic_secret, NULL);
+    assert(c != NULL);
+    ptls_aead_xor_iv(c, seq32, sizeof(seq32));
+    ptls_aead_encrypt_init(c, 123, aad, strlen(aad));
+    enclen = ptls_aead_encrypt_update(c, enc, src, strlen(src));
+    enclen += ptls_aead_encrypt_final(c, enc + enclen);
+    ptls_aead_free(c);
+
+    /* decrypt */
+    c = ptls_aead_new(cs2->aead, cs2->hash, 0, traffic_secret, NULL);
+    assert(c != NULL);
+    /* test first decryption */
+    ptls_aead_xor_iv(c, seq32, sizeof(seq32));
+    declen = ptls_aead_decrypt(c, dec, enc, enclen, 123, aad, strlen(aad));
+    ptls_aead_xor_iv(c, seq32, sizeof(seq32));
+    ok(declen == strlen(src));
+    ok(memcmp(src, dec, declen) == 0);
+    /* test that setting the wrong IV creates an error */
+    ptls_aead_xor_iv(c, seq32_bad, sizeof(seq32_bad));
+    declen = ptls_aead_decrypt(c, dec, enc, enclen, 123, aad, strlen(aad));
+    ptls_aead_xor_iv(c, seq32_bad, sizeof(seq32_bad));
+    ok(declen == SIZE_MAX);
+    /* test second decryption with correct IV to verify no side effect */
+    ptls_aead_xor_iv(c, seq32, sizeof(seq32));
+    declen = ptls_aead_decrypt(c, dec, enc, enclen, 123, aad, strlen(aad));
+    ok(declen == strlen(src));
+    ok(memcmp(src, dec, declen) == 0);
+    ptls_aead_free(c);
+}
+
 static void test_ecb(ptls_cipher_algorithm_t *algo, const void *expected, size_t expected_len)
 {
     static const uint8_t key[] = {0,  1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11, 12, 13, 14, 15,
@@ -285,31 +356,34 @@ static void test_chacha20(void)
 static void test_aes128gcm(void)
 {
     ptls_cipher_suite_t *cs = find_cipher(ctx, PTLS_CIPHER_SUITE_AES_128_GCM_SHA256),
-                        *cs_peer = find_cipher(ctx, PTLS_CIPHER_SUITE_AES_128_GCM_SHA256);
+                        *cs_peer = find_cipher(ctx_peer, PTLS_CIPHER_SUITE_AES_128_GCM_SHA256);
 
     test_ciphersuite(cs, cs_peer);
     test_aad_ciphersuite(cs, cs_peer);
+    test_aad96_ciphersuite(cs, cs_peer);
 }
 
 static void test_aes256gcm(void)
 {
     ptls_cipher_suite_t *cs = find_cipher(ctx, PTLS_CIPHER_SUITE_AES_256_GCM_SHA384),
-                        *cs_peer = find_cipher(ctx, PTLS_CIPHER_SUITE_AES_256_GCM_SHA384);
+                        *cs_peer = find_cipher(ctx_peer, PTLS_CIPHER_SUITE_AES_256_GCM_SHA384);
 
     if (cs != NULL && cs_peer != NULL) {
         test_ciphersuite(cs, cs_peer);
         test_aad_ciphersuite(cs, cs_peer);
+        test_aad96_ciphersuite(cs, cs_peer);
     }
 }
 
 static void test_chacha20poly1305(void)
 {
     ptls_cipher_suite_t *cs = find_cipher(ctx, PTLS_CIPHER_SUITE_CHACHA20_POLY1305_SHA256),
-                        *cs_peer = find_cipher(ctx, PTLS_CIPHER_SUITE_CHACHA20_POLY1305_SHA256);
+                        *cs_peer = find_cipher(ctx_peer, PTLS_CIPHER_SUITE_CHACHA20_POLY1305_SHA256);
 
     if (cs != NULL && cs_peer != NULL) {
         test_ciphersuite(cs, cs_peer);
         test_aad_ciphersuite(cs, cs_peer);
+        test_aad96_ciphersuite(cs, cs_peer);
     }
 }
 
@@ -1619,6 +1693,7 @@ static void test_tls12_hello(void)
 void test_picotls(void)
 {
     subtest("is_ipaddr", test_is_ipaddr);
+    subtest("select_cypher", test_select_cipher);
     subtest("sha256", test_sha256);
     subtest("sha384", test_sha384);
     subtest("hmac-sha256", test_hmac_sha256);

@@ -136,6 +136,14 @@ As an example, it is possible to log timestamps in millisecond resolution using 
 <tr><td><code>ssl.server-name</code><td>hostname provided in Server Name Indication (SNI) extension, if any
 </table>
 <table>
+<caption>Upstream Proxy Connection (since v2.3)</caption>
+<tr><th>Name<th>Description
+<tr><td><code>proxy.ssl.protocol-version</code><td>SSL protocol version obtained from <a href="https://www.openssl.og/docs/manmaster/ssl/SSL_get_version.html"><code>SSL_get_version</code></a>
+<tr><td><code>proxy.ssl.session-reused</code><td><code>1</code> if the <a href="configure/base_directives.html#ssl-session-resumption">SSL session was reused</a>, or <code>0</code> if not
+<tr><td><code>proxy.ssl.cipher</code><td>name of the <a href="https://tools.ietf.org/html/rfc5246#appendix-A.5">cipher suite</a> being used, obtained from <a href="https://www.openssl.org/docs/manmaster/ssl/SSL_CIPHER_get_name.html">SSL_CIPHER_get_name</a>
+<tr><td><code>proxy.ssl.cipher-bits</code><td>strength of the cipher suite in bits
+</table>
+<table>
 <caption>HTTP/2 (since v2.0)</caption>
 <tr><th>Name<th>Description
 <tr><td><code>http2.stream-id</code><td>stream ID

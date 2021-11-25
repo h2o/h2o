@@ -39,6 +39,7 @@ extern "C" {
 #include "quicly/linklist.h"
 #include "quicly/loss.h"
 #include "quicly/cc.h"
+#include "quicly/rate.h"
 #include "quicly/recvstate.h"
 #include "quicly/sendstate.h"
 #include "quicly/maxsender.h"
@@ -65,9 +66,13 @@ extern "C" {
 #define QUICLY_PACKET_IS_LONG_HEADER(first_byte) (((first_byte)&QUICLY_LONG_HEADER_BIT) != 0)
 
 /**
+ * Version 1.
+ */
+#define QUICLY_PROTOCOL_VERSION_1 0x1
+/**
  * The current version being supported. At the moment, it is draft-29.
  */
-#define QUICLY_PROTOCOL_VERSION_CURRENT 0xff00001d
+#define QUICLY_PROTOCOL_VERSION_DRAFT29 0xff00001d
 /**
  * Draft-27 is also supported.
  */
@@ -128,6 +133,10 @@ typedef struct st_quicly_stream_scheduler_t {
  */
 QUICLY_CALLBACK_TYPE(int, stream_open, quicly_stream_t *stream);
 /**
+ *
+ */
+QUICLY_CALLBACK_TYPE(void, receive_datagram_frame, quicly_conn_t *conn, ptls_iovec_t payload);
+/**
  * called when the connection is closed by remote peer
  */
 QUICLY_CALLBACK_TYPE(void, closed_by_remote, quicly_conn_t *conn, int err, uint64_t frame_type, const char *reason,
@@ -151,6 +160,12 @@ QUICLY_CALLBACK_TYPE(int, generate_resumption_token, quicly_conn_t *conn, ptls_b
  * should in turn call one of the quicly_cc_*_init functions from cc.h with customized parameters.
  */
 QUICLY_CALLBACK_TYPE(void, init_cc, quicly_cc_t *cc, uint32_t initcwnd, int64_t now);
+/**
+ * reference counting.
+ * delta must be either 1 or -1.
+ */
+QUICLY_CALLBACK_TYPE(void, update_open_count, ssize_t delta);
+
 /**
  * crypto offload API
  */
@@ -181,6 +196,20 @@ typedef struct st_quicly_crypto_engine_t {
                            ptls_aead_context_t *packet_protect_ctx, ptls_iovec_t datagram, size_t first_byte_at,
                            size_t payload_from, uint64_t packet_number, int coalesced);
 } quicly_crypto_engine_t;
+
+/**
+ * data structure used for self-tracing
+ */
+typedef struct st_quicly_tracer_t {
+    /**
+     * NULL when not used
+     */
+    void (*cb)(void *ctx, const char *fmt, ...) __attribute__((format(printf, 2, 3)));
+    /**
+     *
+     */
+    void *ctx;
+} quicly_tracer_t;
 
 typedef struct st_quicly_max_stream_data_t {
     uint64_t bidi_local, bidi_remote, uni;
@@ -223,7 +252,8 @@ typedef struct st_quicly_transport_parameters_t {
      */
     uint16_t max_ack_delay;
     /**
-     * quicly ignores the value set for quicly_context_t::transport_parameters. Set to UINT64_MAX when not specified by remote peer.
+     * Delayed-ack extension. UINT64_MAX indicates that the extension is disabled or that the peer does not support it. Any local
+     * value other than UINT64_MAX indicates that the use of the extension should be negotiated.
      */
     uint64_t min_ack_delay_usec;
     /**
@@ -234,6 +264,10 @@ typedef struct st_quicly_transport_parameters_t {
      *
      */
     uint64_t active_connection_id_limit;
+    /**
+     *
+     */
+    uint16_t max_datagram_frame_size;
 } quicly_transport_parameters_t;
 
 struct st_quicly_context_t {
@@ -264,6 +298,10 @@ struct st_quicly_context_t {
      */
     uint64_t max_crypto_bytes;
     /**
+     * initial CWND in terms of packet numbers
+     */
+    uint32_t initcwnd_packets;
+    /**
      * (client-only) Initial QUIC protocol version used by the client. Setting this to a greased version will enforce version
      * negotiation.
      */
@@ -272,10 +310,6 @@ struct st_quicly_context_t {
      * (server-only) amplification limit before the peer address is validated
      */
     uint16_t pre_validation_amplification_limit;
-    /**
-     * if inter-node routing is used (by utilising quicly_cid_plaintext_t::node_id)
-     */
-    unsigned is_clustered : 1;
     /**
      * expand client hello so that it does not fit into one datagram
      */
@@ -292,6 +326,10 @@ struct st_quicly_context_t {
      * callbacks for scheduling stream data
      */
     quicly_stream_scheduler_t *stream_scheduler;
+    /**
+     * callback for receiving datagram frame
+     */
+    quicly_receive_datagram_frame_t *receive_datagram_frame;
     /**
      * callback called when a connection is closed by remote peer
      */
@@ -316,6 +354,10 @@ struct st_quicly_context_t {
      * initializes a congestion controller for given connection.
      */
     quicly_init_cc_t *init_cc;
+    /**
+     * optional refcount callback
+     */
+    quicly_update_open_count_t *update_open_count;
 };
 
 /**
@@ -326,6 +368,11 @@ typedef enum {
      * before observing the first message from remote peer
      */
     QUICLY_STATE_FIRSTFLIGHT,
+    /**
+     * internal state used to indicate that the connection has not been provided to the application (and therefore might not have
+     * application data being associated)
+     */
+    QUICLY_STATE_ACCEPTING,
     /**
      * while connected
      */
@@ -389,11 +436,36 @@ struct st_quicly_conn_streamgroup_state_t {
          * Total bytes sent, at UDP datagram-level.                                                                                \
          */                                                                                                                        \
         uint64_t sent;                                                                                                             \
+        /**                                                                                                                        \
+         * Total bytes sent but lost, at UDP datagram-level.                                                                       \
+         */                                                                                                                        \
+        uint64_t lost;                                                                                                             \
+        /**                                                                                                                        \
+         * Total number of bytes for which acknowledgements have been received.                                                    \
+         */                                                                                                                        \
+        uint64_t ack_received;                                                                                                     \
+        /**                                                                                                                        \
+         * Total amount of stream-level payload being sent                                                                         \
+         */                                                                                                                        \
+        uint64_t stream_data_sent;                                                                                                 \
+        /**                                                                                                                        \
+         * Total amount of stream-level payload being resent                                                                       \
+         */                                                                                                                        \
+        uint64_t stream_data_resent;                                                                                               \
     } num_bytes;                                                                                                                   \
     /**                                                                                                                            \
-     * Total number of PTOs during the connections.                                                                                \
+     * Total number of each frame being sent / received.                                                                           \
      */                                                                                                                            \
-    uint32_t num_ptos
+    struct {                                                                                                                       \
+        uint64_t padding, ping, ack, reset_stream, stop_sending, crypto, new_token, stream, max_data, max_stream_data,             \
+            max_streams_bidi, max_streams_uni, data_blocked, stream_data_blocked, streams_blocked, new_connection_id,              \
+            retire_connection_id, path_challenge, path_response, transport_close, application_close, handshake_done, datagram,     \
+            ack_frequency;                                                                                                         \
+    } num_frames_sent, num_frames_received;                                                                                        \
+    /**                                                                                                                            \
+     * Total number of PTOs observed during the connection.                                                                        \
+     */                                                                                                                            \
+    uint64_t num_ptos
 
 typedef struct st_quicly_stats_t {
     /**
@@ -408,6 +480,10 @@ typedef struct st_quicly_stats_t {
      * Congestion control stats (experimental; TODO cherry-pick what can be exposed as part of a stable API).
      */
     quicly_cc_t cc;
+    /**
+     * Estimated delivery rate, in bytes/second.
+     */
+    quicly_rate_t delivery_rate;
 } quicly_stats_t;
 
 /**
@@ -422,6 +498,8 @@ struct st_quicly_default_scheduler_state_t {
     quicly_linklist_t active;
     quicly_linklist_t blocked;
 };
+
+typedef void (*quicly_trace_cb)(void *ctx, const char *fmt, ...) __attribute__((format(printf, 2, 3)));
 
 struct _st_quicly_conn_public_t {
     quicly_context_t *ctx;
@@ -478,6 +556,10 @@ struct _st_quicly_conn_public_t {
     } stats;
     uint32_t version;
     void *data;
+    /**
+     * trace callback (cb != NULL when used)
+     */
+    quicly_tracer_t tracer;
 };
 
 typedef enum {
@@ -596,6 +678,10 @@ struct st_quicly_stream_t {
          */
         quicly_maxsender_t max_stream_data_sender;
         /**
+         * send state of STREAM_DATA_BLOCKED frames corresponding to the current max_stream_data value
+         */
+        quicly_sender_state_t blocked;
+        /**
          * linklist of pending streams
          */
         struct {
@@ -639,11 +725,15 @@ typedef struct st_quicly_decoded_packet_t {
              */
             ptls_iovec_t encrypted;
             /**
-             * the decrypted CID; note that the value is not authenticated
+             * The decrypted CID, or `quicly_cid_plaintext_invalid`. Assuming that `cid_encryptor` is non-NULL, this variable would
+             * contain a valid value whenever `might_be_client_generated` is false. When `might_be_client_generated` is true, this
+             * value might be set to `quicly_cid_plaintext_invalid`. Note however that, as the CID itself is not authenticated,
+             * a packet might be bogus regardless of the value of the CID.
+             * When `cid_encryptor` is NULL, the value is always set to `quicly_cid_plaintext_invalid`.
              */
             quicly_cid_plaintext_t plaintext;
             /**
-             *
+             * If destination CID might be one generated by a client. This flag would be set for Initial and 0-RTT packets.
              */
             unsigned might_be_client_generated : 1;
         } dest;
@@ -718,6 +808,10 @@ typedef struct st_quicly_detached_send_packet_t {
 } quicly_detached_send_packet_t;
 
 /**
+ * zero-terminated list of protocol versions being supported by quicly
+ */
+extern const uint32_t quicly_supported_versions[];
+/**
  * returns a boolean indicating if given protocol version is supported
  */
 static int quicly_is_supported_version(uint32_t version);
@@ -775,6 +869,10 @@ static uint32_t quicly_num_streams(quicly_conn_t *conn);
 /**
  *
  */
+uint32_t quicly_num_streams_by_group(quicly_conn_t *conn, int uni, int locally_initiated);
+/**
+ *
+ */
 static int quicly_is_client(quicly_conn_t *conn);
 /**
  *
@@ -799,7 +897,11 @@ int quicly_get_stats(quicly_conn_t *conn, quicly_stats_t *stats);
 /**
  *
  */
+<<<<<<< HEAD
 static uint32_t quicly_get_version(quicly_conn_t *conn);
+=======
+int quicly_get_delivery_rate(quicly_conn_t *conn, quicly_rate_t *delivery_rate);
+>>>>>>> master
 /**
  *
  */
@@ -807,7 +909,15 @@ void quicly_get_max_data(quicly_conn_t *conn, uint64_t *send_permitted, uint64_t
 /**
  *
  */
+static uint32_t quicly_get_protocol_version(quicly_conn_t *conn);
+/**
+ *
+ */
 static void **quicly_get_data(quicly_conn_t *conn);
+/**
+ *
+ */
+static quicly_tracer_t *quicly_get_tracer(quicly_conn_t *conn);
 /**
  * destroys a connection object.
  */
@@ -827,14 +937,21 @@ int64_t quicly_get_first_timeout(quicly_conn_t *conn);
  */
 uint64_t quicly_get_next_expected_packet_number(quicly_conn_t *conn);
 /**
- * returns if the connection is currently capped by connection-level flow control.
+ * returns if the connection is currently blocked by connection-level flow control.
  */
-int quicly_is_flow_capped(quicly_conn_t *conn);
+int quicly_is_blocked(quicly_conn_t *conn);
+/**
+ * Returns if stream data can be sent.
+ * When the connection is blocked by the connection-level flow control (see `quicly_is_blocked`), `at_stream_level` should be set to
+ * false to see if any retransmissions are to be done. Otherwise, `at_stream_level` should be set to true to test the stream-level
+ * flow control.
+ */
+int quicly_stream_can_send(quicly_stream_t *stream, int at_stream_level);
 /**
  * checks if quicly_send_stream can be invoked
  * @return a boolean indicating if quicly_send_stream can be called immediately
  */
-int quicly_can_send_stream_data(quicly_conn_t *conn, quicly_send_context_t *s);
+int quicly_can_send_data(quicly_conn_t *conn, quicly_send_context_t *s);
 /**
  * Detaches the packet being built, so that the stream data can be incorporate by a different process.  This function can only be
  * called from the quicly_stream_callbacks_t::on_send_emit callback.
@@ -846,10 +963,12 @@ void quicly_stream_on_send_emit_detach_packet(quicly_detached_send_packet_t *det
  */
 int quicly_send_stream(quicly_stream_t *stream, quicly_send_context_t *s);
 /**
- *
+ * Builds a Version Negotiation packet. The generated packet might include a greasing version.
+ * * @param versions  zero-terminated list of versions to advertise; use `quicly_supported_versions` for sending the list of
+ *                    protocol versions supported by quicly
  */
-size_t quicly_send_version_negotiation(quicly_context_t *ctx, struct sockaddr *dest_addr, ptls_iovec_t dest_cid,
-                                       struct sockaddr *src_addr, ptls_iovec_t src_cid, void *payload);
+size_t quicly_send_version_negotiation(quicly_context_t *ctx, ptls_iovec_t dest_cid, ptls_iovec_t src_cid, const uint32_t *versions,
+                                       void *payload);
 /**
  *
  */
@@ -886,14 +1005,12 @@ int quicly_send(quicly_conn_t *conn, quicly_address_t *dest, quicly_address_t *s
 /**
  *
  */
-size_t quicly_send_close_invalid_token(quicly_context_t *ctx, uint32_t protocol_version, struct sockaddr *dest_addr,
-                                       ptls_iovec_t dest_cid, struct sockaddr *src_addr, ptls_iovec_t src_cid, const char *err_desc,
-                                       void *payload);
+size_t quicly_send_close_invalid_token(quicly_context_t *ctx, uint32_t protocol_version, ptls_iovec_t dest_cid,
+                                       ptls_iovec_t src_cid, const char *err_desc, void *datagram);
 /**
  *
  */
-size_t quicly_send_stateless_reset(quicly_context_t *ctx, struct sockaddr *dest_addr, struct sockaddr *src_addr,
-                                   const void *src_cid, void *payload);
+size_t quicly_send_stateless_reset(quicly_context_t *ctx, const void *src_cid, void *payload);
 /**
  *
  */
@@ -925,7 +1042,7 @@ int quicly_encode_transport_parameter_list(ptls_buffer_t *buf, const quicly_tran
  */
 int quicly_decode_transport_parameter_list(quicly_transport_parameters_t *params, quicly_cid_t *original_dcid,
                                            quicly_cid_t *initial_scid, quicly_cid_t *retry_scid, void *stateless_reset_token,
-                                           const uint8_t *src, const uint8_t *end);
+                                           const uint8_t *src, const uint8_t *end, int recognize_delayed_ack);
 /**
  * Initiates a new connection.
  * @param new_cid the CID to be used for the connection. path_id is ignored.
@@ -955,6 +1072,11 @@ ptls_t *quicly_get_tls(quicly_conn_t *conn);
  */
 quicly_stream_id_t quicly_get_ingress_max_streams(quicly_conn_t *conn, int uni);
 /**
+ * Iterates through each stream. When the callback returns a non-zero value, bails out from the iteration, returning the returned
+ * value.
+ */
+int quicly_foreach_stream(quicly_conn_t *conn, void *thunk, int (*cb)(void *thunk, quicly_stream_t *stream));
+/**
  *
  */
 quicly_stream_t *quicly_get_stream(quicly_conn_t *conn, quicly_stream_id_t stream_id);
@@ -962,6 +1084,15 @@ quicly_stream_t *quicly_get_stream(quicly_conn_t *conn, quicly_stream_id_t strea
  *
  */
 int quicly_open_stream(quicly_conn_t *conn, quicly_stream_t **stream, int unidirectional);
+/**
+ * This function returns a stream that is already open, or if the given ID refers to a stream that can be opened by the peer but is
+ * yet-to-be opened, the functions opens that stream and returns it. Otherwise, `*stream` is set to NULL.
+ * This function can be used when implementing application protocols that send references to other streams on a stream (e.g.,
+ * PRIORITY_UPDATE frame of HTTP/3), however note that the peer might complain if the endpoint sends a frame that refers to a peer-
+ * initiated stream for which the peer has not yet sent anything.
+ * Invocation of this function might open not only the stream that is referred to by the `stream_id` but also other streams.
+ */
+int quicly_get_or_open_stream(quicly_conn_t *conn, uint64_t stream_id, quicly_stream_t **stream);
 /**
  *
  */
@@ -985,6 +1116,14 @@ void quicly_stream_sync_recvbuf(quicly_stream_t *stream, size_t shift_amount);
 /**
  *
  */
+static uint32_t quicly_stream_get_receive_window(quicly_stream_t *stream);
+/**
+ *
+ */
+static void quicly_stream_set_receive_window(quicly_stream_t *stream, uint32_t window);
+/**
+ *
+ */
 static int quicly_stream_is_client_initiated(quicly_stream_id_t stream_id);
 /**
  *
@@ -1002,6 +1141,17 @@ static int quicly_stream_has_receive_side(int is_client, quicly_stream_id_t stre
  *
  */
 static int quicly_stream_is_self_initiated(quicly_stream_t *stream);
+/**
+ * Sends QUIC DATAGRAM frames. Some of the frames being provided may get dropped.
+ * Notes:
+ * * At the moment, emission of QUIC packets carrying DATAGRAM frames is not congestion controlled.
+ * * While the API is designed to look like synchronous, application still has to call `quicly_send` for the time being.
+ */
+void quicly_send_datagram_frames(quicly_conn_t *conn, ptls_iovec_t *datagrams, size_t num_datagrams);
+/**
+ * Sets CC to the specified type. Returns a boolean indicating if the operation was successful.
+ */
+int quicly_set_cc(quicly_conn_t *conn, quicly_cc_type_t *cc);
 /**
  *
  */
@@ -1079,7 +1229,8 @@ extern const quicly_stream_callbacks_t quicly_stream_noop_callbacks;
 inline int quicly_is_supported_version(uint32_t version)
 {
     switch (version) {
-    case QUICLY_PROTOCOL_VERSION_CURRENT:
+    case QUICLY_PROTOCOL_VERSION_1:
+    case QUICLY_PROTOCOL_VERSION_DRAFT29:
     case QUICLY_PROTOCOL_VERSION_DRAFT27:
         return 1;
     default:
@@ -1159,7 +1310,11 @@ inline struct sockaddr *quicly_get_peername(quicly_conn_t *conn)
     return &c->remote.address.sa;
 }
 
+<<<<<<< HEAD
 inline uint32_t quicly_get_version(quicly_conn_t *conn)
+=======
+inline uint32_t quicly_get_protocol_version(quicly_conn_t *conn)
+>>>>>>> master
 {
     struct _st_quicly_conn_public_t *c = (struct _st_quicly_conn_public_t *)conn;
     return c->version;
@@ -1171,9 +1326,25 @@ inline void **quicly_get_data(quicly_conn_t *conn)
     return &c->data;
 }
 
+inline quicly_tracer_t *quicly_get_tracer(quicly_conn_t *conn)
+{
+    struct _st_quicly_conn_public_t *c = (struct _st_quicly_conn_public_t *)conn;
+    return &c->tracer;
+}
+
 inline int quicly_stop_requested(quicly_stream_t *stream)
 {
     return stream->_send_aux.stop_sending.sender_state != QUICLY_SENDER_STATE_NONE;
+}
+
+inline uint32_t quicly_stream_get_receive_window(quicly_stream_t *stream)
+{
+    return stream->_recv_aux.window;
+}
+
+inline void quicly_stream_set_receive_window(quicly_stream_t *stream, uint32_t window)
+{
+    stream->_recv_aux.window = window;
 }
 
 inline int quicly_stream_is_client_initiated(quicly_stream_id_t stream_id)

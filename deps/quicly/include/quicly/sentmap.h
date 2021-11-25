@@ -91,12 +91,35 @@ typedef enum en_quicly_sentmap_event_t {
  */
 typedef int (*quicly_sent_acked_cb)(quicly_sentmap_t *map, const quicly_sent_packet_t *packet, int acked, quicly_sent_t *data);
 
+struct st_quicly_sent_ack_additional_t {
+    uint8_t gap;
+    uint8_t length;
+};
+
+/**
+ * Describes what is inside a packet or frame being sent. Within the sentmap, each packet-level entry (identified by .acked ==
+ * quicly_sentmap__type_packet) is followed by a number of frame-level entries. Size of `quicly_sent_t` is kept as 256 bits (64-bit
+ * * 4).
+ */
 struct st_quicly_sent_t {
     quicly_sent_acked_cb acked;
     union {
         quicly_sent_packet_t packet;
+        /**
+         * ACK frame. Represents up to 8 ack ranges. If not full, `additional` list is terminated by .gap = 0.
+         */
         struct {
-            quicly_range_t range;
+            uint64_t start;
+            union {
+                struct {
+                    uint64_t start_length;
+                    struct st_quicly_sent_ack_additional_t additional[4];
+                } ranges64;
+                struct {
+                    uint8_t start_length;
+                    struct st_quicly_sent_ack_additional_t additional[7];
+                } ranges8;
+            };
         } ack;
         struct {
             quicly_stream_id_t stream_id;
@@ -113,6 +136,13 @@ struct st_quicly_sent_t {
             int uni;
             quicly_maxsender_sent_t args;
         } max_streams;
+        struct {
+            uint64_t offset;
+        } data_blocked;
+        struct {
+            quicly_stream_id_t stream_id;
+            uint64_t offset;
+        } stream_data_blocked;
         struct {
             int uni;
             quicly_maxsender_sent_t args;

@@ -15,6 +15,13 @@
 		0812AB231D7FCFEB00004F23 /* hiredis.h in Headers */ = {isa = PBXBuildFile; fileRef = 0812AB1F1D7FCFEB00004F23 /* hiredis.h */; };
 		0812AB2B1D7FD54700004F23 /* read.c in Sources */ = {isa = PBXBuildFile; fileRef = 0812AB291D7FD54700004F23 /* read.c */; };
 		0812AB2C1D7FD54700004F23 /* read.h in Headers */ = {isa = PBXBuildFile; fileRef = 0812AB2A1D7FD54700004F23 /* read.h */; };
+		082195102685262B00E3EFCF /* cc-pico.c in Sources */ = {isa = PBXBuildFile; fileRef = 0821950F2685262B00E3EFCF /* cc-pico.c */; };
+		082195112685262B00E3EFCF /* cc-pico.c in Sources */ = {isa = PBXBuildFile; fileRef = 0821950F2685262B00E3EFCF /* cc-pico.c */; };
+		082195122685262B00E3EFCF /* cc-pico.c in Sources */ = {isa = PBXBuildFile; fileRef = 0821950F2685262B00E3EFCF /* cc-pico.c */; };
+		0829879426E1F3530053638F /* rate.h in Headers */ = {isa = PBXBuildFile; fileRef = 0829879326E1F3530053638F /* rate.h */; };
+		0829879626E1F3710053638F /* rate.c in Sources */ = {isa = PBXBuildFile; fileRef = 0829879526E1F3700053638F /* rate.c */; };
+		0829879726E1F3710053638F /* rate.c in Sources */ = {isa = PBXBuildFile; fileRef = 0829879526E1F3700053638F /* rate.c */; };
+		0829879826E1F3710053638F /* rate.c in Sources */ = {isa = PBXBuildFile; fileRef = 0829879526E1F3700053638F /* rate.c */; };
 		084FC7C11D54B90D00E89F66 /* http2_debug_state.c in Sources */ = {isa = PBXBuildFile; fileRef = 084FC7C01D54B90D00E89F66 /* http2_debug_state.c */; };
 		084FC7C51D54BB9200E89F66 /* http2_debug_state.c in Sources */ = {isa = PBXBuildFile; fileRef = 084FC7C31D54BB9200E89F66 /* http2_debug_state.c */; };
 		08790DDA1D80153600A04BC1 /* net.c in Sources */ = {isa = PBXBuildFile; fileRef = 08790DD91D80153600A04BC1 /* net.c */; };
@@ -27,6 +34,15 @@
 		08790E111D8BD85700A04BC1 /* redis-client.c in Sources */ = {isa = PBXBuildFile; fileRef = 08790DF41D8BD72500A04BC1 /* redis-client.c */; };
 		08819C25218C9FA90057ED23 /* libh2o.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 1079231519A320A700C52AD6 /* libh2o.a */; };
 		08819C2E218C9FF70057ED23 /* qif.c in Sources */ = {isa = PBXBuildFile; fileRef = 08819C2D218C9FF70057ED23 /* qif.c */; };
+		08CEA9D226701D7600B4BB6B /* rand.c in Sources */ = {isa = PBXBuildFile; fileRef = 08CEA9D126701D7600B4BB6B /* rand.c */; };
+		08CEA9D326701D7600B4BB6B /* rand.c in Sources */ = {isa = PBXBuildFile; fileRef = 08CEA9D126701D7600B4BB6B /* rand.c */; };
+		08CEA9D526701D8E00B4BB6B /* rand.c in Sources */ = {isa = PBXBuildFile; fileRef = 08CEA9D426701D8E00B4BB6B /* rand.c */; };
+		08CEA9D7267AF0EB00B4BB6B /* self_trace.c in Sources */ = {isa = PBXBuildFile; fileRef = 08CEA9D6267AF0EB00B4BB6B /* self_trace.c */; };
+		08CEA9D8267AF0EB00B4BB6B /* self_trace.c in Sources */ = {isa = PBXBuildFile; fileRef = 08CEA9D6267AF0EB00B4BB6B /* self_trace.c */; };
+		08CEA9D9267AF0EB00B4BB6B /* self_trace.c in Sources */ = {isa = PBXBuildFile; fileRef = 08CEA9D6267AF0EB00B4BB6B /* self_trace.c */; };
+		08CEA9DB267B0E3B00B4BB6B /* self_trace.c in Sources */ = {isa = PBXBuildFile; fileRef = 08CEA9DA267B0E3B00B4BB6B /* self_trace.c */; };
+		08CEA9DC267B0E3B00B4BB6B /* self_trace.c in Sources */ = {isa = PBXBuildFile; fileRef = 08CEA9DA267B0E3B00B4BB6B /* self_trace.c */; };
+		08CEA9DD267B0E3B00B4BB6B /* self_trace.c in Sources */ = {isa = PBXBuildFile; fileRef = 08CEA9DA267B0E3B00B4BB6B /* self_trace.c */; };
 		08E9CC4E1E41F6660049DD26 /* embedded.c.h in Headers */ = {isa = PBXBuildFile; fileRef = 08E9CC4D1E41F6660049DD26 /* embedded.c.h */; };
 		08F320DD1E7A9CA60038FA5A /* redis.c in Sources */ = {isa = PBXBuildFile; fileRef = 08790DE31D8276EA00A04BC1 /* redis.c */; };
 		08F320DE1E7A9CB80038FA5A /* async.c in Sources */ = {isa = PBXBuildFile; fileRef = 0812AB1C1D7FCFEB00004F23 /* async.c */; settings = {COMPILER_FLAGS = "-Wno-conversion"; }; };
@@ -275,6 +291,7 @@
 		E901C4402140CCB500D17C93 /* qpack.c in Sources */ = {isa = PBXBuildFile; fileRef = E901C43F2140CCB500D17C93 /* qpack.c */; };
 		E90A95F31E30795100483D6C /* headers_util.c in Sources */ = {isa = PBXBuildFile; fileRef = E90A95F21E30795100483D6C /* headers_util.c */; };
 		E90A95F51E30797D00483D6C /* headers_util.c in Sources */ = {isa = PBXBuildFile; fileRef = E90A95F41E30797D00483D6C /* headers_util.c */; };
+		E90BB43A24F369E4006507EA /* server.c in Sources */ = {isa = PBXBuildFile; fileRef = E90BB43924F369E4006507EA /* server.c */; };
 		E918FC322136583F00CCB252 /* libh2o.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 1079231519A320A700C52AD6 /* libh2o.a */; };
 		E918FC8721365AB700CCB252 /* theft_autoshrink.c in Sources */ = {isa = PBXBuildFile; fileRef = E918FC542136598400CCB252 /* theft_autoshrink.c */; };
 		E918FC8821365AB700CCB252 /* theft_aux_builtin.c in Sources */ = {isa = PBXBuildFile; fileRef = E918FC452136598300CCB252 /* theft_aux_builtin.c */; };
@@ -289,6 +306,8 @@
 		E918FC9121365AB700CCB252 /* theft_trial.c in Sources */ = {isa = PBXBuildFile; fileRef = E918FC552136598400CCB252 /* theft_trial.c */; };
 		E918FC9221365AB700CCB252 /* theft.c in Sources */ = {isa = PBXBuildFile; fileRef = E918FC492136598300CCB252 /* theft.c */; };
 		E918FC9321365ABC00CCB252 /* prop.c in Sources */ = {isa = PBXBuildFile; fileRef = E918FC3B213658BE00CCB252 /* prop.c */; };
+		E919227725C9447D00C2D79B /* connect.c in Sources */ = {isa = PBXBuildFile; fileRef = E919227625C9447D00C2D79B /* connect.c */; };
+		E919227925C9447D00C2D79B /* connect.c in Sources */ = {isa = PBXBuildFile; fileRef = E919227625C9447D00C2D79B /* connect.c */; };
 		E9316ED824417E0A00C9C127 /* certificate_compression.c in Sources */ = {isa = PBXBuildFile; fileRef = E9316ED724417E0A00C9C127 /* certificate_compression.c */; };
 		E9316EE624417EAA00C9C127 /* bit_reader.c in Sources */ = {isa = PBXBuildFile; fileRef = E9316EDB24417EA900C9C127 /* bit_reader.c */; };
 		E9316EE724417EAA00C9C127 /* bit_reader.c in Sources */ = {isa = PBXBuildFile; fileRef = E9316EDB24417EA900C9C127 /* bit_reader.c */; };
@@ -298,6 +317,10 @@
 		E9316EEB24417EAA00C9C127 /* huffman.c in Sources */ = {isa = PBXBuildFile; fileRef = E9316EDF24417EA900C9C127 /* huffman.c */; };
 		E9316EEC24417EAA00C9C127 /* state.c in Sources */ = {isa = PBXBuildFile; fileRef = E9316EE324417EA900C9C127 /* state.c */; };
 		E9316EED24417EAA00C9C127 /* state.c in Sources */ = {isa = PBXBuildFile; fileRef = E9316EE324417EA900C9C127 /* state.c */; };
+		E93BB45D25DA5792009C24D8 /* connect.c in Sources */ = {isa = PBXBuildFile; fileRef = E93BB45C25DA5792009C24D8 /* connect.c */; };
+		E93BB58E25DE3988009C24D8 /* pembase64.c in Sources */ = {isa = PBXBuildFile; fileRef = E93BB58D25DE3987009C24D8 /* pembase64.c */; };
+		E93BB58F25DE3988009C24D8 /* pembase64.c in Sources */ = {isa = PBXBuildFile; fileRef = E93BB58D25DE3987009C24D8 /* pembase64.c */; };
+		E93BB59025DE3988009C24D8 /* pembase64.c in Sources */ = {isa = PBXBuildFile; fileRef = E93BB58D25DE3987009C24D8 /* pembase64.c */; };
 		E93C7F96226EBEC9007BF39A /* frame.c in Sources */ = {isa = PBXBuildFile; fileRef = E93C7F95226EBEC9007BF39A /* frame.c */; };
 		E93C7F98226EBEC9007BF39A /* frame.c in Sources */ = {isa = PBXBuildFile; fileRef = E93C7F95226EBEC9007BF39A /* frame.c */; };
 		E93C7F9A22701806007BF39A /* frame.c in Sources */ = {isa = PBXBuildFile; fileRef = E93C7F9922701806007BF39A /* frame.c */; };
@@ -481,6 +504,9 @@
 		E9BCE68C1FF0CF98003CEA11 /* timerwheel.c in Sources */ = {isa = PBXBuildFile; fileRef = E9BCE68B1FF0CF98003CEA11 /* timerwheel.c */; };
 		E9BCE68D1FF0CFBB003CEA11 /* timerwheel.c in Sources */ = {isa = PBXBuildFile; fileRef = E9BCE68B1FF0CF98003CEA11 /* timerwheel.c */; };
 		E9BCE6901FF0CFEC003CEA11 /* timerwheel.c in Sources */ = {isa = PBXBuildFile; fileRef = E9BCE68E1FF0CFE4003CEA11 /* timerwheel.c */; };
+		E9DF012824E4CDEE0002EEC7 /* cc-cubic.c in Sources */ = {isa = PBXBuildFile; fileRef = E9DF012724E4CDEE0002EEC7 /* cc-cubic.c */; };
+		E9DF012924E4CDF60002EEC7 /* cc-cubic.c in Sources */ = {isa = PBXBuildFile; fileRef = E9DF012724E4CDEE0002EEC7 /* cc-cubic.c */; };
+		E9DF012A24E4CDF60002EEC7 /* cc-cubic.c in Sources */ = {isa = PBXBuildFile; fileRef = E9DF012724E4CDEE0002EEC7 /* cc-cubic.c */; };
 		E9E50473214A5B8A004DC170 /* http3client.c in Sources */ = {isa = PBXBuildFile; fileRef = E9E50472214A5B8A004DC170 /* http3client.c */; };
 		E9E50474214A5B9D004DC170 /* http3client.c in Sources */ = {isa = PBXBuildFile; fileRef = E9E50472214A5B8A004DC170 /* http3client.c */; };
 		E9E50479214C0385004DC170 /* common.c in Sources */ = {isa = PBXBuildFile; fileRef = E9E50476214C0385004DC170 /* common.c */; };
@@ -491,7 +517,6 @@
 		E9E5048E214EC5E2004DC170 /* picotls.c in Sources */ = {isa = PBXBuildFile; fileRef = E9708ADA1E499E040029E0A5 /* picotls.c */; };
 		E9E5049021501BBA004DC170 /* server.c in Sources */ = {isa = PBXBuildFile; fileRef = E9E5048F21501BBA004DC170 /* server.c */; };
 		E9E5049121501BBA004DC170 /* server.c in Sources */ = {isa = PBXBuildFile; fileRef = E9E5048F21501BBA004DC170 /* server.c */; };
-		E9E5049221501BC3004DC170 /* server.c in Sources */ = {isa = PBXBuildFile; fileRef = E9E5048F21501BBA004DC170 /* server.c */; };
 		E9E5049421501CA5004DC170 /* http3_server.h in Headers */ = {isa = PBXBuildFile; fileRef = E9E5049321501CA5004DC170 /* http3_server.h */; };
 		E9F20BDD22E03FD00018D260 /* send_state.h in Headers */ = {isa = PBXBuildFile; fileRef = 7D027BEE2242283B007ACE09 /* send_state.h */; };
 		E9F677D42007476D006476D3 /* least_conn.c in Sources */ = {isa = PBXBuildFile; fileRef = D08137381FD400F4004679DF /* least_conn.c */; };
@@ -662,8 +687,35 @@
 		0812AB1F1D7FCFEB00004F23 /* hiredis.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = hiredis.h; sourceTree = "<group>"; };
 		0812AB291D7FD54700004F23 /* read.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = read.c; sourceTree = "<group>"; };
 		0812AB2A1D7FD54700004F23 /* read.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = read.h; sourceTree = "<group>"; };
+		0821950F2685262B00E3EFCF /* cc-pico.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = "cc-pico.c"; sourceTree = "<group>"; };
+		0829879326E1F3530053638F /* rate.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = rate.h; sourceTree = "<group>"; };
+		0829879526E1F3700053638F /* rate.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = rate.c; sourceTree = "<group>"; };
+		082E148C2692F51000603AED /* driver.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = driver.cc; sourceTree = "<group>"; };
+		082E1B402692F52100603AED /* driver_common.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = driver_common.h; sourceTree = "<group>"; };
+		082E1B412692F52100603AED /* quicly_mock.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = quicly_mock.h; sourceTree = "<group>"; };
+		082E1B422692F52100603AED /* driver_h3.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = driver_h3.cc; sourceTree = "<group>"; };
+		082E1C832692F52200603AED /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
+		082E1CCC2692F52200603AED /* driver_url.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = driver_url.cc; sourceTree = "<group>"; };
+		082E1CCD2692F52200603AED /* driver_common.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = driver_common.cc; sourceTree = "<group>"; };
+		082E1CCE2692F52200603AED /* h3_header_generator.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = h3_header_generator.c; sourceTree = "<group>"; };
+		082E224A2692F52E00603AED /* quicly_mock.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = quicly_mock.c; sourceTree = "<group>"; };
 		084FC7C01D54B90D00E89F66 /* http2_debug_state.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = http2_debug_state.c; sourceTree = "<group>"; };
 		084FC7C31D54BB9200E89F66 /* http2_debug_state.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = http2_debug_state.c; sourceTree = "<group>"; };
+		086001BD2730B4450043886F /* 90h2olog-selective-tracing.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "90h2olog-selective-tracing.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		086001BE2730B6E30043886F /* 40http3-corrupted-scid-initial.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "40http3-corrupted-scid-initial.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		086001C02730B6E30043886F /* forever_ticket.yaml */ = {isa = PBXFileReference; lastKnownFileType = text.yaml; path = forever_ticket.yaml; sourceTree = "<group>"; };
+		086001C12730B6E30043886F /* 40reuse-port.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "40reuse-port.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		086001C22730B6E30043886F /* 50access-log-delivery-rate.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50access-log-delivery-rate.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		086001C42730B7170043886F /* 50dnsresolver.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = 50dnsresolver.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		086001C72730B8290043886F /* index.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = index.html; sourceTree = "<group>"; };
+		086001C82730B8290043886F /* hello.rb */ = {isa = PBXFileReference; lastKnownFileType = text.script.ruby; path = hello.rb; sourceTree = "<group>"; };
+		086001C92730B8E20043886F /* 50mruby-h2-rtt.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50mruby-h2-rtt.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		086001CA2730B9B20043886F /* udp-generator.pl */ = {isa = PBXFileReference; lastKnownFileType = text.script.perl; path = "udp-generator.pl"; sourceTree = "<group>"; };
+		086850B9274C6D7D00F8CAD1 /* run-tests */ = {isa = PBXFileReference; lastKnownFileType = text; path = "run-tests"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		086850BA274CA3CD00F8CAD1 /* 99fuzzer-url.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "99fuzzer-url.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		086850BB274CA3CD00F8CAD1 /* 99fuzzer-http3.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "99fuzzer-http3.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		086850BC274CA3CE00F8CAD1 /* 99fuzzer-http2.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "99fuzzer-http2.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		086850BD274CA3CE00F8CAD1 /* 99fuzzer-http1.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "99fuzzer-http1.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		08790DD91D80153600A04BC1 /* net.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = net.c; sourceTree = "<group>"; };
 		08790DDB1D80154C00A04BC1 /* sds.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = sds.c; sourceTree = "<group>"; };
 		08790DDD1D8015A400A04BC1 /* net.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = net.h; sourceTree = "<group>"; };
@@ -672,8 +724,16 @@
 		08790DE31D8276EA00A04BC1 /* redis.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = redis.c; sourceTree = "<group>"; };
 		08790DF41D8BD72500A04BC1 /* redis-client.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = "redis-client.c"; sourceTree = "<group>"; };
 		08790E101D8BD7F100A04BC1 /* examples-redis-client */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = "examples-redis-client"; sourceTree = BUILT_PRODUCTS_DIR; };
+		0879B8CC2724DBF400F77220 /* 10socket.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = 10socket.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		08819C2C218C9FA90057ED23 /* qif */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = qif; sourceTree = BUILT_PRODUCTS_DIR; };
 		08819C2D218C9FF70057ED23 /* qif.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = qif.c; sourceTree = "<group>"; };
+		08C7C365262AB30F009C944C /* 40mtls.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = 40mtls.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		08CEA9CF2662136B00B4BB6B /* 80http3-header-linefeed.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "80http3-header-linefeed.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		08CEA9D026643C4700B4BB6B /* 50timeout-on-max-concurrent-requests.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50timeout-on-max-concurrent-requests.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		08CEA9D126701D7600B4BB6B /* rand.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = rand.c; sourceTree = "<group>"; };
+		08CEA9D426701D8E00B4BB6B /* rand.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = rand.c; sourceTree = "<group>"; };
+		08CEA9D6267AF0EB00B4BB6B /* self_trace.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = self_trace.c; sourceTree = "<group>"; };
+		08CEA9DA267B0E3B00B4BB6B /* self_trace.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = self_trace.c; sourceTree = "<group>"; };
 		08E9CC4D1E41F6660049DD26 /* embedded.c.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = embedded.c.h; sourceTree = "<group>"; };
 		100A550C1C22857B00C4E3E0 /* 50mruby-htpasswd.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50mruby-htpasswd.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		100A550E1C2BB15100C4E3E0 /* http_request.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = http_request.c; sourceTree = "<group>"; };
@@ -780,7 +840,7 @@
 		1065E70719BF17FE00686E72 /* uv-binding.c.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = "uv-binding.c.h"; sourceTree = "<group>"; };
 		106C22F71C040F6400405689 /* tunnel.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = tunnel.c; sourceTree = "<group>"; };
 		106C22F91C040F7800405689 /* tunnel.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = tunnel.h; sourceTree = "<group>"; };
-		106C22FB1C0413DA00405689 /* 40websocket.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = 40websocket.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		106C22FB1C0413DA00405689 /* 40tunnel.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = 40tunnel.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		106C22FE1C05436100405689 /* errordoc.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = errordoc.c; sourceTree = "<group>"; };
 		106C23001C0544CE00405689 /* errordoc.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = errordoc.c; sourceTree = "<group>"; };
 		106C23021C06AB2F00405689 /* 50errordoc.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = 50errordoc.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
@@ -1015,14 +1075,10 @@
 		E901C43C213FAE0300D17C93 /* qpack.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = qpack.h; sourceTree = "<group>"; };
 		E901C43F2140CCB500D17C93 /* qpack.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = qpack.c; sourceTree = "<group>"; };
 		E904232E24AB2C9B0072C5B7 /* json.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = json.cc; sourceTree = "<group>"; };
-		E904232F24AB2C9B0072C5B7 /* http.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = http.cc; sourceTree = "<group>"; };
 		E904233024AB2C9C0072C5B7 /* json.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = json.h; sourceTree = "<group>"; };
-		E904233124AB2C9C0072C5B7 /* quic.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = quic.h; sourceTree = "<group>"; };
 		E904233224AB2C9C0072C5B7 /* h2olog.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = h2olog.cc; sourceTree = "<group>"; };
-		E904233324AB2C9C0072C5B7 /* generated-quic.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = "generated-quic.cc"; sourceTree = "<group>"; };
 		E904233424AB2C9C0072C5B7 /* h2olog.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = h2olog.h; sourceTree = "<group>"; };
 		E904233524AB2C9C0072C5B7 /* pyproject.toml */ = {isa = PBXFileReference; lastKnownFileType = text; path = pyproject.toml; sourceTree = "<group>"; };
-		E904233724AB2CBC0072C5B7 /* gen-quic-bpf.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = "gen-quic-bpf.py"; sourceTree = "<group>"; };
 		E908A2A923163CB70039BCEE /* ebpf.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = ebpf.h; sourceTree = "<group>"; };
 		E908A2AB231CF3D10039BCEE /* 50reverse-proxy-chunked-post-termination.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "50reverse-proxy-chunked-post-termination.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		E908A2AD2320AE4C0039BCEE /* Dockerfile */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = Dockerfile; sourceTree = "<group>"; };
@@ -1030,7 +1086,14 @@
 		E908A2AF2320AE4D0039BCEE /* Dockerfile.ubuntu1904 */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = Dockerfile.ubuntu1904; sourceTree = "<group>"; };
 		E90A95F21E30795100483D6C /* headers_util.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = headers_util.c; sourceTree = "<group>"; };
 		E90A95F41E30797D00483D6C /* headers_util.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = headers_util.c; sourceTree = "<group>"; };
+		E90BB43924F369E4006507EA /* server.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = server.c; sourceTree = "<group>"; };
+		E90BB43B24F38937006507EA /* 40http3-concurrency.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "40http3-concurrency.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		E90BB43C24F4834D006507EA /* 40http3-forward.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "40http3-forward.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		E90C514D230BB28800D6AD8E /* 90dtrace.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = 90dtrace.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		E915E87325D4A88D00FB20F7 /* http_tracer.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = http_tracer.cc; sourceTree = "<group>"; };
+		E915E87425D4A89700FB20F7 /* generated_raw_tracer.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = generated_raw_tracer.cc; sourceTree = "<group>"; };
+		E915E87525D4A89700FB20F7 /* raw_tracer.cc.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = raw_tracer.cc.h; sourceTree = "<group>"; };
+		E915E87625D4A8B700FB20F7 /* gen_raw_tracer.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = gen_raw_tracer.py; sourceTree = "<group>"; };
 		E918FC392136583F00CCB252 /* proptest */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = proptest; sourceTree = BUILT_PRODUCTS_DIR; };
 		E918FC3B213658BE00CCB252 /* prop.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = prop.c; sourceTree = "<group>"; };
 		E918FC412136597200CCB252 /* theft.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = theft.h; sourceTree = "<group>"; };
@@ -1061,6 +1124,7 @@
 		E918FC5C2136598500CCB252 /* theft_trial.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = theft_trial.h; sourceTree = "<group>"; };
 		E918FC5D2136598500CCB252 /* theft_autoshrink_internal.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = theft_autoshrink_internal.h; sourceTree = "<group>"; };
 		E918FC5E2136598600CCB252 /* theft_shrink_internal.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = theft_shrink_internal.h; sourceTree = "<group>"; };
+		E919227625C9447D00C2D79B /* connect.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = connect.c; sourceTree = "<group>"; };
 		E9316ED724417E0A00C9C127 /* certificate_compression.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = certificate_compression.c; sourceTree = "<group>"; };
 		E9316EDB24417EA900C9C127 /* bit_reader.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = bit_reader.c; sourceTree = "<group>"; };
 		E9316EDC24417EA900C9C127 /* decode.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = decode.c; sourceTree = "<group>"; };
@@ -1074,8 +1138,29 @@
 		E9316EE424417EAA00C9C127 /* state.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = state.h; sourceTree = "<group>"; };
 		E9316EE524417EAA00C9C127 /* transform.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = transform.h; sourceTree = "<group>"; };
 		E9316EEE2441C08100C9C127 /* certificate_compression.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = certificate_compression.h; sourceTree = "<group>"; };
+		E93BB45025DA530E009C24D8 /* 50connect.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = 50connect.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		E93BB45C25DA5792009C24D8 /* connect.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = connect.c; sourceTree = "<group>"; };
+		E93BB58D25DE3987009C24D8 /* pembase64.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = pembase64.c; sourceTree = "<group>"; };
+		E93BB6D025E09504009C24D8 /* 40tls-raw-pubkey.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "40tls-raw-pubkey.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		E93C7F95226EBEC9007BF39A /* frame.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = frame.c; sourceTree = "<group>"; };
 		E93C7F9922701806007BF39A /* frame.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = frame.c; sourceTree = "<group>"; };
+		E9414F8D24EBFBDA00273C59 /* 40http3-reconnect.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "40http3-reconnect.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		E9414F8E24ED1CD700273C59 /* 40http3-shutdown.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "40http3-shutdown.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		E9414F8F24ED1D5300273C59 /* 80reverse-proxy-truncated-chunked.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "80reverse-proxy-truncated-chunked.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		E9414F9024ED1D7400273C59 /* 50proxy-forward-close-connection.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50proxy-forward-close-connection.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		E9414F9124ED1D7400273C59 /* 50reverse-proxy-header-filtering.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50reverse-proxy-header-filtering.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		E9414F9224ED1D7500273C59 /* 50priority-headers.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50priority-headers.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		E9414F9324ED1D7500273C59 /* 50reverse-proxy-http2.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50reverse-proxy-http2.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		E9414F9424ED1D7500273C59 /* 40error-log-escape.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "40error-log-escape.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		E9414F9524ED1D7500273C59 /* 50reverse-proxy-response-bytes.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50reverse-proxy-response-bytes.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		E9414F9624ED1D7500273C59 /* 50reverse-proxy-early-response.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50reverse-proxy-early-response.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		E9414F9724ED1D7500273C59 /* 40http2-h2spec-client.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "40http2-h2spec-client.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		E9414F9824ED1D7500273C59 /* 50reverse-proxy-request-bytes.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50reverse-proxy-request-bytes.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		E9414F9924ED1D7500273C59 /* 40http1-timeouts.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "40http1-timeouts.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		E9414F9A24ED1D7600273C59 /* 50mruby-prometheus.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50mruby-prometheus.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		E9414F9B24ED1D7600273C59 /* 50priority-overwrite.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50priority-overwrite.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		E9414F9C24ED1D7600273C59 /* 50reverse-proxy-multiline-header.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50reverse-proxy-multiline-header.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		E9414F9D24ED4DD300273C59 /* 40http3-shutdown-reject-conn.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "40http3-shutdown-reject-conn.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		E9581B9922F001EB00299E8A /* x25519.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = x25519.c; sourceTree = "<group>"; };
 		E9581B9C22F0022900299E8A /* random.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = random.c; sourceTree = "<group>"; };
 		E95E953F22914F0600215ACD /* picotls-probes.d */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.dtrace; path = "picotls-probes.d"; sourceTree = "<group>"; };
@@ -1240,6 +1325,15 @@
 		E9CD04281F8F1D7500524877 /* CONTRIBUTING.md */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = net.daringfireball.markdown; path = CONTRIBUTING.md; sourceTree = "<group>"; };
 		E9CD04291F8F1D7F00524877 /* README.md */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
 		E9CD042A1F8F1D8A00524877 /* LICENSE */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = LICENSE; sourceTree = "<group>"; };
+		E9D4978E25E49FCA00F4A80D /* 40http1-pipeline.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "40http1-pipeline.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		E9D497C625E4DE1E00F4A80D /* 80chunked.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = 80chunked.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		E9D498B725EE684500F4A80D /* 50reverse-proxy-h3-early-response.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50reverse-proxy-h3-early-response.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		E9D49A4F25FB561A00F4A80D /* 40http1-streaming-framing.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "40http1-streaming-framing.t"; sourceTree = "<group>"; };
+		E9D49A5025FB561A00F4A80D /* 40http3-forward-initial.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "40http3-forward-initial.t"; sourceTree = "<group>"; };
+		E9D49A5125FB562800F4A80D /* 50http1-proxy-full-uri.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50http1-proxy-full-uri.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		E9D49A5225FB562800F4A80D /* 90h2olog.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = 90h2olog.t; sourceTree = "<group>"; };
+		E9D49A5325FB562800F4A80D /* quic-ndec-initial-gen.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = "quic-ndec-initial-gen.c"; sourceTree = "<group>"; };
+		E9DF012724E4CDEE0002EEC7 /* cc-cubic.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = "cc-cubic.c"; sourceTree = "<group>"; };
 		E9E50472214A5B8A004DC170 /* http3client.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = http3client.c; sourceTree = "<group>"; };
 		E9E50475214B3D28004DC170 /* http3_common.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = http3_common.h; sourceTree = "<group>"; };
 		E9E50476214C0385004DC170 /* common.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = common.c; sourceTree = "<group>"; };
@@ -1256,7 +1350,7 @@
 		E9F677D21FF62228006476D3 /* 50reverse-proxy-serialize-posts-2.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "50reverse-proxy-serialize-posts-2.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		E9F677D32004CCCA006476D3 /* 50zero-sized-timeout.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "50zero-sized-timeout.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		E9F677D82008686B006476D3 /* 40tls13-early-data.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "40tls13-early-data.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
-		E9FC525C234B0A630076F35D /* 40http3-asroot.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "40http3-asroot.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		E9FC525C234B0A630076F35D /* 40http3-retry.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "40http3-retry.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		E9FF84BB24C5AA46002577CA /* quicly-probes.d */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.dtrace; path = "quicly-probes.d"; sourceTree = "<group>"; };
 		E9FF84C624CF9811002577CA /* dsr.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = dsr.h; sourceTree = "<group>"; };
 		E9FF84C824CF9893002577CA /* dsr.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = dsr.c; sourceTree = "<group>"; };
@@ -1353,6 +1447,39 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		082E148B2692F51000603AED /* fuzz */ = {
+			isa = PBXGroup;
+			children = (
+				082E148C2692F51000603AED /* driver.cc */,
+				082E1B422692F52100603AED /* driver_h3.cc */,
+				082E1B402692F52100603AED /* driver_common.h */,
+				082E1CCC2692F52200603AED /* driver_url.cc */,
+				082E1CCD2692F52200603AED /* driver_common.cc */,
+				082E1CCE2692F52200603AED /* h3_header_generator.c */,
+				082E1B412692F52100603AED /* quicly_mock.h */,
+				082E224A2692F52E00603AED /* quicly_mock.c */,
+				082E1C832692F52200603AED /* README.md */,
+			);
+			path = fuzz;
+			sourceTree = "<group>";
+		};
+		086001BF2730B6E30043886F /* 40session-ticket */ = {
+			isa = PBXGroup;
+			children = (
+				086001C02730B6E30043886F /* forever_ticket.yaml */,
+			);
+			path = "40session-ticket";
+			sourceTree = "<group>";
+		};
+		086001C62730B8290043886F /* 50mruby */ = {
+			isa = PBXGroup;
+			children = (
+				086001C72730B8290043886F /* index.html */,
+				086001C82730B8290043886F /* hello.rb */,
+			);
+			path = 50mruby;
+			sourceTree = "<group>";
+		};
 		08B4D4391D75A2950079DFB5 /* hiredis */ = {
 			isa = PBXGroup;
 			children = (
@@ -1419,6 +1546,7 @@
 				7D0341FA1FE4D5B60052E0A1 /* http2client.c */,
 				E9E50472214A5B8A004DC170 /* http3client.c */,
 				10A3D3D11B4CDBDC00327CF9 /* memcached.c */,
+				08CEA9D126701D7600B4BB6B /* rand.c */,
 				08790DE31D8276EA00A04BC1 /* redis.c */,
 				107923BA19A3217300C52AD6 /* memory.c */,
 				10AA2EAB1A8DE0AE004322AC /* multithread.c */,
@@ -1444,6 +1572,7 @@
 				7D9372FD202AC70F005FE6AB /* server_timing.c */,
 				1070866B1B787D06002B8F18 /* compress.c */,
 				107E340E1C7EB10700AEF5F8 /* compress */,
+				E919227625C9447D00C2D79B /* connect.c */,
 				106C22FE1C05436100405689 /* errordoc.c */,
 				104B9A501A5FB096009EEE64 /* expires.c */,
 				10BCF2FC1B168CAE0076939D /* fastcgi.c */,
@@ -1451,6 +1580,7 @@
 				105534E91A42A83700627ECB /* file */,
 				10AA2EBD1AA019D8004322AC /* headers.c */,
 				E90A95F21E30795100483D6C /* headers_util.c */,
+				084FC7C01D54B90D00E89F66 /* http2_debug_state.c */,
 				107923BB19A3217300C52AD6 /* mimemap.c */,
 				108867731AD9061100987967 /* mimemap */,
 				10B38A651B8D345D007DC191 /* mruby.c */,
@@ -1458,10 +1588,10 @@
 				10D0907219F633B00043D458 /* proxy.c */,
 				10AA2EA41A8D9999004322AC /* redirect.c */,
 				10AA2EC31AA0403A004322AC /* reproxy.c */,
+				08CEA9D6267AF0EB00B4BB6B /* self_trace.c */,
 				10835E021C9A860000197E59 /* status.c */,
 				10C45D521CFE9B180096DB06 /* status */,
 				10C45D501CFD160A0096DB06 /* throttle_resp.c */,
-				084FC7C01D54B90D00E89F66 /* http2_debug_state.c */,
 			);
 			path = handler;
 			sourceTree = "<group>";
@@ -1490,6 +1620,7 @@
 				E9FF84CB24CF9958002577CA /* dsr.c */,
 				10F9F2661AFC5F550056F26B /* hostinfo.c */,
 				10AA2EAD1A8E22DA004322AC /* multithread.c */,
+				08CEA9D426701D8E00B4BB6B /* rand.c */,
 				104B9A271A4A5139009EEE64 /* serverutil.c */,
 				103BAB351B130666000694F4 /* socket.c */,
 				105534C61A3BB29100627ECB /* string.c */,
@@ -1514,9 +1645,10 @@
 		104B9A4F1A5FAAA5009EEE64 /* handler */ = {
 			isa = PBXGroup;
 			children = (
+				1070866F1B7925D5002B8F18 /* compress.c */,
+				E93BB45C25DA5792009C24D8 /* connect.c */,
 				10BCF3001B214C460076939D /* fastcgi.c */,
 				105534BD1A3B8F7700627ECB /* file.c */,
-				1070866F1B7925D5002B8F18 /* compress.c */,
 				105534C21A3B917000627ECB /* mimemap.c */,
 				1058C87C1AA41789008D6180 /* headers.c */,
 				10F9F2641AF4795D0056F26B /* redirect.c */,
@@ -1578,6 +1710,7 @@
 				10C45D4E1CFD15FA0096DB06 /* throttle_resp.c */,
 				084FC7C31D54BB9200E89F66 /* http2_debug_state.c */,
 				7D937301202AC7BA005FE6AB /* server_timing.c */,
+				08CEA9DA267B0E3B00B4BB6B /* self_trace.c */,
 			);
 			path = configurator;
 			sourceTree = "<group>";
@@ -1737,7 +1870,7 @@
 				E95EBCD72281148C0022C32D /* h2o-probes.d */,
 				1079231E19A3210D00C52AD6 /* deps */,
 				10583BEC1AE5A353004A3AD6 /* doc */,
-				E904232D24AB2C740072C5B7 /* h2olog */,
+				082E148B2692F51000603AED /* fuzz */,
 				1079239E19A3215F00C52AD6 /* include */,
 				107923AD19A3217300C52AD6 /* lib */,
 				107923AA19A3216B00C52AD6 /* misc */,
@@ -2071,34 +2204,54 @@
 				105534F31A460EF600627ECB /* 00unit.libuv.t */,
 				109EEFDC1D77B350001F11D1 /* 00unit.mruby.t */,
 				105534F41A460EF600627ECB /* 10httpclient.t */,
+				0879B8CC2724DBF400F77220 /* 10socket.t */,
 				10FEF2481D6EC30800E11B1D /* 40bad-request.t */,
 				E9AFBF17212A9802000F5DB8 /* 40chunked.t */,
 				104CD5021CC465AF0057C62F /* 40env.t */,
+				E9414F9424ED1D7500273C59 /* 40error-log-escape.t */,
+				E9D4978E25E49FCA00F4A80D /* 40http1-pipeline.t */,
+				E9414F9924ED1D7500273C59 /* 40http1-timeouts.t */,
+				E9D49A4F25FB561A00F4A80D /* 40http1-streaming-framing.t */,
+				E9414F9724ED1D7500273C59 /* 40http2-h2spec-client.t */,
 				E9F677CA1FF47BD0006476D3 /* 40http2-h2spec.t */,
 				E9BCE6921FF344D4003CEA11 /* 40http2-request-window-size.t */,
 				E98041C22230C45E008B9745 /* 40http3.t */,
-				E9FC525C234B0A630076F35D /* 40http3-asroot.t */,
+				086001BE2730B6E30043886F /* 40http3-corrupted-scid-initial.t */,
+				E90BB43B24F38937006507EA /* 40http3-concurrency.t */,
+				E90BB43C24F4834D006507EA /* 40http3-forward.t */,
+				E9D49A5025FB561A00F4A80D /* 40http3-forward-initial.t */,
+				E9414F8D24EBFBDA00273C59 /* 40http3-reconnect.t */,
+				E9FC525C234B0A630076F35D /* 40http3-retry.t */,
+				E9414F8E24ED1CD700273C59 /* 40http3-shutdown.t */,
+				E9414F9D24ED4DD300273C59 /* 40http3-shutdown-reject-conn.t */,
 				104B9A301A58F55E009EEE64 /* 40max-connections.t */,
 				10A3D3D71B4F4D0900327CF9 /* 40memcached-session-resumption.t */,
+				08C7C365262AB30F009C944C /* 40mtls.t */,
 				105534F51A460EF600627ECB /* 40protocol.t */,
 				1070E1641B451D43001CCAFA /* 40proxy-protocol.t */,
 				E9BC76BF1EE3D71000EB7A09 /* 40redis-session-resumption.t */,
+				086001C12730B6E30043886F /* 40reuse-port.t */,
 				104B9A311A59D7A2009EEE64 /* 40running-user.t */,
 				108215081AB14B1100D27E66 /* 40server-push.t */,
 				E9BC76C01EE3D8A100EB7A09 /* 40server-push-attrs.t */,
 				109EEFDE1D77B350001F11D1 /* 40server-push-multiple.t */,
+				086001BF2730B6E30043886F /* 40session-ticket */,
 				107D4D501B58B342004A9B21 /* 40session-ticket.t */,
 				104B9A321A59E27A009EEE64 /* 40ssl-cipher-suite.t */,
+				E93BB6D025E09504009C24D8 /* 40tls-raw-pubkey.t */,
 				E9F677D82008686B006476D3 /* 40tls13-early-data.t */,
+				106C22FB1C0413DA00405689 /* 40tunnel.t */,
 				104B9A221A47BBA1009EEE64 /* 40unix-socket.t */,
 				10AA2EB31A94B66D004322AC /* 40virtual-host.t */,
-				106C22FB1C0413DA00405689 /* 40websocket.t */,
 				10AA2EB11A931409004322AC /* 50access-log.t */,
+				086001C22730B6E30043886F /* 50access-log-delivery-rate.t */,
 				109EEFD91D77B336001F11D1 /* 50chunked-encoding-proxying.t */,
 				107086741B79A08D002B8F18 /* 50compress.t */,
 				E9BC76C11EE3D9A900EB7A09 /* 50compress-hint.t */,
 				E9AFBF18212A9802000F5DB8 /* 50config.t */,
+				E93BB45025DA530E009C24D8 /* 50connect.t */,
 				E9AFBF11212A9801000F5DB8 /* 50date-header.t */,
+				086001C42730B7170043886F /* 50dnsresolver.t */,
 				106C23021C06AB2F00405689 /* 50errordoc.t */,
 				104B9A541A60773E009EEE64 /* 50expires.t */,
 				10C5A6311B268632006094A6 /* 50fastcgi.t */,
@@ -2111,22 +2264,29 @@
 				100AE41A1B27D74800CE18BB /* 50file-range.t */,
 				E9AFBF13212A9801000F5DB8 /* 50graceful-shutdown.t */,
 				1058C87F1AA42568008D6180 /* 50headers.t */,
+				E9D49A5125FB562800F4A80D /* 50http1-proxy-full-uri.t */,
 				109EEFDB1D77B336001F11D1 /* 50http2_debug_state.t */,
 				E9AFBF22212A982D000F5DB8 /* 50internal-redirect.t */,
 				105534F71A460F2E00627ECB /* 50mimemap.t */,
+				086001C62730B8290043886F /* 50mruby */,
 				10A3D3D61B4F1E3200327CF9 /* 50mruby.t */,
 				109EEFDD1D77B350001F11D1 /* 50mruby-acl.t */,
+				086001C92730B8E20043886F /* 50mruby-h2-rtt.t */,
 				E9BCE6931FF35502003CEA11 /* 50mruby-channel.t */,
 				109EEFDF1D77B350001F11D1 /* 50mruby-dos-detector.t */,
 				E9AFBF14212A9801000F5DB8 /* 50mruby-error-log.t */,
 				100A550C1C22857B00C4E3E0 /* 50mruby-htpasswd.t */,
 				100A55131C2E5FAC00C4E3E0 /* 50mruby-http-request.t */,
 				E9AFBF15212A9801000F5DB8 /* 50mruby-middleware.t */,
+				E9414F9A24ED1D7600273C59 /* 50mruby-prometheus.t */,
 				E9AFBF10212A97AD000F5DB8 /* 50mruby-redis.t */,
 				E9AFBF24212A984B000F5DB8 /* 50mruby-sleep.t */,
 				E9AFBF23212A982E000F5DB8 /* 50mruby-task.t */,
 				E9AFBF16212A9801000F5DB8 /* 50origin-frame.t */,
 				105534F81A460F2E00627ECB /* 50post-size-limit.t */,
+				E9414F9224ED1D7500273C59 /* 50priority-headers.t */,
+				E9414F9B24ED1D7600273C59 /* 50priority-overwrite.t */,
+				E9414F9024ED1D7400273C59 /* 50proxy-forward-close-connection.t */,
 				E9AFBF26212A984B000F5DB8 /* 50proxy-max-buffer-size.t */,
 				10AA2EA81A8DAFD4004322AC /* 50redirect.t */,
 				108215061AAD41A000D27E66 /* 50reverse-proxy */,
@@ -2140,14 +2300,21 @@
 				104C65021A6DF36B000AC190 /* 50reverse-proxy-config.t */,
 				108102151C3DB05100C024CD /* 50reverse-proxy-disconnected-keepalive.t */,
 				E9F677CD1FF62216006476D3 /* 50reverse-proxy-drop-headers.t */,
+				E9414F9624ED1D7500273C59 /* 50reverse-proxy-early-response.t */,
+				E9D498B725EE684500F4A80D /* 50reverse-proxy-h3-early-response.t */,
+				E9414F9124ED1D7400273C59 /* 50reverse-proxy-header-filtering.t */,
+				E9414F9324ED1D7500273C59 /* 50reverse-proxy-http2.t */,
 				10DA969A1CCEF2C200679165 /* 50reverse-proxy-https.t */,
 				E9AFBF1B212A9814000F5DB8 /* 50reverse-proxy-informational.t */,
 				E9AFBF1D212A9814000F5DB8 /* 50reverse-proxy-invalid-transfer-encoding.t */,
+				E9414F9C24ED1D7600273C59 /* 50reverse-proxy-multiline-header.t */,
 				E9A410961F9EA2F100D9B0FB /* 50reverse-proxy-multiple-backends.t */,
 				E9A410951F9EA2E400D9B0FB /* 50reverse-proxy-multiple-backends-with-down.t */,
 				E9AFBF20212A9814000F5DB8 /* 50reverse-proxy-multiple-balancers.t */,
 				E9BC76C31EE4AA4600EB7A09 /* 50reverse-proxy-preserve-case.t */,
 				10FEF2441D6444E900E11B1D /* 50reverse-proxy-proxy-protocol.t */,
+				E9414F9824ED1D7500273C59 /* 50reverse-proxy-request-bytes.t */,
+				E9414F9524ED1D7500273C59 /* 50reverse-proxy-response-bytes.t */,
 				E9A410971F9EA2F200D9B0FB /* 50reverse-proxy-round-robin.t */,
 				E9AFBF1A212A9813000F5DB8 /* 50reverse-proxy-round-robin-weighted.t */,
 				E9F677D11FF62228006476D3 /* 50reverse-proxy-serialize-posts.t */,
@@ -2164,15 +2331,18 @@
 				E9AFBF1E212A9814000F5DB8 /* 50stop-opening-new-push-streams.t */,
 				E9AFBF19212A9813000F5DB8 /* 50suspend-body.t */,
 				10C45D4D1CFD15890096DB06 /* 50throttle-response.t */,
+				08CEA9D026643C4700B4BB6B /* 50timeout-on-max-concurrent-requests.t */,
 				E9AFBF2A212A985E000F5DB8 /* 50too-much-data.t */,
 				E9AFBF2B212A985E000F5DB8 /* 50too-much-headers.t */,
 				E9AFBF29212A985E000F5DB8 /* 50uncompressed-headers.t */,
 				E9AFBF1C212A9814000F5DB8 /* 50unexpected-upstream-body.t */,
 				E9AFBF27212A985D000F5DB8 /* 50zero-sized-streaming-body.t */,
 				E9F677D32004CCCA006476D3 /* 50zero-sized-timeout.t */,
+				E9D497C625E4DE1E00F4A80D /* 80chunked.t */,
 				109EEFE11D77B350001F11D1 /* 80dup-host-headers.t */,
 				E9BC76C51EE4AB6C00EB7A09 /* 80graceful-shutdown.t */,
 				E9AFBF2C212A985E000F5DB8 /* 80http2-idle-timeout-for-zero-window.t */,
+				08CEA9CF2662136B00B4BB6B /* 80http3-header-linefeed.t */,
 				109EEFE21D77B350001F11D1 /* 80invalid-h2-chars-in-headers.t */,
 				105534FE1A46134A00627ECB /* 80issues61.t */,
 				1092E0011BEB1DDC001074BF /* 80issues579.t */,
@@ -2181,14 +2351,24 @@
 				E9BCE6911FF326AC003CEA11 /* 80no-handler-vs-h2-post.t */,
 				109EEFD81D77B336001F11D1 /* 80one-byte-window.t */,
 				106530A81D8A21A7005B2C60 /* 80reverse-proxy-missing-content-length-for-post.t */,
+				E9414F8F24ED1D5300273C59 /* 80reverse-proxy-truncated-chunked.t */,
 				10B6D4501C727315005F0CF8 /* 80yaml-merge.t */,
 				E90C514D230BB28800D6AD8E /* 90dtrace.t */,
+				E9D49A5225FB562800F4A80D /* 90h2olog.t */,
+				086001BD2730B4450043886F /* 90h2olog-selective-tracing.t */,
 				104B9A451A5D1004009EEE64 /* 90live-fetch-ocsp-response.t */,
 				109EEFE31D77B350001F11D1 /* 90live-sni.t */,
 				10C2117C1B8164B1005A9D02 /* 90root-fastcgi-php.t */,
+				086850BD274CA3CE00F8CAD1 /* 99fuzzer-http1.t */,
+				086850BC274CA3CE00F8CAD1 /* 99fuzzer-http2.t */,
+				086850BB274CA3CD00F8CAD1 /* 99fuzzer-http3.t */,
+				086850BA274CA3CD00F8CAD1 /* 99fuzzer-url.t */,
 				10AA2EC51AA0557A004322AC /* assets */,
+				086850B9274C6D7D00F8CAD1 /* run-tests */,
 				105534FB1A460F4200627ECB /* Util.pm */,
 				08819C2D218C9FF70057ED23 /* qif.c */,
+				E9D49A5325FB562800F4A80D /* quic-ndec-initial-gen.c */,
+				086001CA2730B9B20043886F /* udp-generator.pl */,
 			);
 			path = t;
 			sourceTree = "<group>";
@@ -2196,6 +2376,7 @@
 		10F417D419C190DD00B6E31A /* src */ = {
 			isa = PBXGroup;
 			children = (
+				E904232D24AB2C740072C5B7 /* h2olog */,
 				10D0906A19F38B850043D458 /* httpclient.c */,
 				10A3D40E1B584BEC00327CF9 /* standalone.h */,
 				10F417D519C190F800B6E31A /* main.c */,
@@ -2314,6 +2495,8 @@
 		E901C3D7213E1BED00D17C93 /* lib */ = {
 			isa = PBXGroup;
 			children = (
+				E9DF012724E4CDEE0002EEC7 /* cc-cubic.c */,
+				0821950F2685262B00E3EFCF /* cc-pico.c */,
 				E98042152238D35B008B9745 /* cc-reno.c */,
 				E980423C2246304F008B9745 /* defaults.c */,
 				E901C3F0213E1C4000D17C93 /* frame.c */,
@@ -2321,6 +2504,7 @@
 				E9A8351424B1340C007D06C2 /* loss.c */,
 				E901C3F3213E1C4000D17C93 /* quicly.c */,
 				E901C3F2213E1C4000D17C93 /* ranges.c */,
+				0829879526E1F3700053638F /* rate.c */,
 				E98884CE21E7F3C80060F010 /* recvstate.c */,
 				E98403C72485172E00E3A6B1 /* remote_cid.c */,
 				E98403C82485172E00E3A6B1 /* retire_cid.c */,
@@ -2344,6 +2528,7 @@
 				E901C3DE213E1C3600D17C93 /* loss.h */,
 				E901C3DB213E1C3600D17C93 /* maxsender.h */,
 				E901C3DC213E1C3600D17C93 /* ranges.h */,
+				0829879326E1F3530053638F /* rate.h */,
 				E98884C321E7F3AE0060F010 /* recvstate.h */,
 				E98403D22485174A00E3A6B1 /* remote_cid.h */,
 				E98403D52485174B00E3A6B1 /* retire_cid.h */,
@@ -2370,6 +2555,7 @@
 			children = (
 				E901C43F2140CCB500D17C93 /* qpack.c */,
 				E93C7F9922701806007BF39A /* frame.c */,
+				E90BB43924F369E4006507EA /* server.c */,
 			);
 			path = http3;
 			sourceTree = "<group>";
@@ -2377,15 +2563,15 @@
 		E904232D24AB2C740072C5B7 /* h2olog */ = {
 			isa = PBXGroup;
 			children = (
-				E904233624AB2CA80072C5B7 /* misc */,
-				E904233324AB2C9C0072C5B7 /* generated-quic.cc */,
+				E915E87425D4A89700FB20F7 /* generated_raw_tracer.cc */,
 				E904233224AB2C9C0072C5B7 /* h2olog.cc */,
 				E904233424AB2C9C0072C5B7 /* h2olog.h */,
-				E904232F24AB2C9B0072C5B7 /* http.cc */,
+				E915E87325D4A88D00FB20F7 /* http_tracer.cc */,
 				E904232E24AB2C9B0072C5B7 /* json.cc */,
 				E904233024AB2C9C0072C5B7 /* json.h */,
+				E904233624AB2CA80072C5B7 /* misc */,
+				E915E87525D4A89700FB20F7 /* raw_tracer.cc.h */,
 				E904233524AB2C9C0072C5B7 /* pyproject.toml */,
-				E904233124AB2C9C0072C5B7 /* quic.h */,
 			);
 			path = h2olog;
 			sourceTree = "<group>";
@@ -2393,7 +2579,7 @@
 		E904233624AB2CA80072C5B7 /* misc */ = {
 			isa = PBXGroup;
 			children = (
-				E904233724AB2CBC0072C5B7 /* gen-quic-bpf.py */,
+				E915E87625D4A8B700FB20F7 /* gen_raw_tracer.py */,
 			);
 			path = misc;
 			sourceTree = "<group>";
@@ -2511,6 +2697,7 @@
 				E9316ED724417E0A00C9C127 /* certificate_compression.c */,
 				E9581B9822F001C000299E8A /* cifra */,
 				E9708AD91E499E040029E0A5 /* openssl.c */,
+				E93BB58D25DE3987009C24D8 /* pembase64.c */,
 				E9708ADA1E499E040029E0A5 /* picotls.c */,
 			);
 			path = lib;
@@ -2725,6 +2912,7 @@
 				107923A719A3215F00C52AD6 /* token.h in Headers */,
 				E901C3E8213E1C3600D17C93 /* loss.h in Headers */,
 				107923A919A3215F00C52AD6 /* h2o.h in Headers */,
+				0829879426E1F3530053638F /* rate.h in Headers */,
 				E96A24CD23E673F400CA970A /* absprio.h in Headers */,
 				108867751AD9069900987967 /* defaults.c.h in Headers */,
 				1058C8881AA6DE4B008D6180 /* hostinfo.h in Headers */,
@@ -2827,6 +3015,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 1079231919A320A700C52AD6 /* Build configuration list for PBXNativeTarget "h2o" */;
 			buildPhases = (
+				08CEA9E1267B620800B4BB6B /* ShellScript */,
 				1079231119A320A700C52AD6 /* Sources */,
 				1079231219A320A700C52AD6 /* Frameworks */,
 				1079231319A320A700C52AD6 /* Headers */,
@@ -2950,6 +3139,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 10F417CE19C1907B00B6E31A /* Build configuration list for PBXNativeTarget "server" */;
 			buildPhases = (
+				08CEA9E2267B626F00B4BB6B /* ShellScript */,
 				10F417C919C1907B00B6E31A /* Sources */,
 				10F417CB19C1907B00B6E31A /* Frameworks */,
 				10F417CD19C1907B00B6E31A /* CopyFiles */,
@@ -3018,6 +3208,47 @@
 		};
 /* End PBXProject section */
 
+/* Begin PBXShellScriptBuildPhase section */
+		08CEA9E1267B620800B4BB6B /* ShellScript */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/deps/quicly/quicly-probes.d",
+			);
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(DERIVED_FILE_DIR)/quicly-tracer.h",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# Type a script or drag a script file from your workspace to insert its path.\n\nexec $SRCROOT/deps/quicly/misc/probe2trace.pl -a tracer < $SRCROOT/deps/quicly/quicly-probes.d > $DERIVED_FILES_DIR/quicly-tracer.h\n";
+		};
+		08CEA9E2267B626F00B4BB6B /* ShellScript */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/deps/quicly/quicly-probes.d",
+			);
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(DERIVED_FILE_DIR)/quicly-tracer.h",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# Type a script or drag a script file from your workspace to insert its path.\n\nexec $SRCROOT/deps/quicly/misc/probe2trace.pl -a tracer < $SRCROOT/deps/quicly/quicly-probes.d > $DERIVED_FILES_DIR/quicly-tracer.h\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
 		08790E061D8BD7F100A04BC1 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
@@ -3067,6 +3298,7 @@
 				107923C619A3217300C52AD6 /* connection.c in Sources */,
 				1022E7C31CA8BCCE00CE2A05 /* text_mode.c in Sources */,
 				080D35EB1D5E060D0029B7E5 /* http2_debug_state.c in Sources */,
+				08CEA9D7267AF0EB00B4BB6B /* self_trace.c in Sources */,
 				10835E051C9B3C6200197E59 /* status.c in Sources */,
 				7D937302202AC7BA005FE6AB /* server_timing.c in Sources */,
 				E901C3F9213E1C4000D17C93 /* frame.c in Sources */,
@@ -3094,12 +3326,14 @@
 				10AA2EA11A88082E004322AC /* url.c in Sources */,
 				0812AB201D7FCFEB00004F23 /* async.c in Sources */,
 				E9BCE68C1FF0CF98003CEA11 /* timerwheel.c in Sources */,
+				E919227725C9447D00C2D79B /* connect.c in Sources */,
 				10EC2A381A0B4DC70083514F /* socketpool.c in Sources */,
 				1079239619A3210E00C52AD6 /* picohttpparser.c in Sources */,
 				E98403C92485172E00E3A6B1 /* local_cid.c in Sources */,
 				10AAAC651B6C9275004487C3 /* casper.c in Sources */,
 				E98403CF2485172E00E3A6B1 /* retire_cid.c in Sources */,
 				10AA2EC41AA0403A004322AC /* reproxy.c in Sources */,
+				0829879626E1F3710053638F /* rate.c in Sources */,
 				E96A24CF23E6743600CA970A /* absprio.c in Sources */,
 				10AA2EAC1A8DE0AE004322AC /* multithread.c in Sources */,
 				08790DDA1D80153600A04BC1 /* net.c in Sources */,
@@ -3122,6 +3356,7 @@
 				107D4D551B5B30EE004A9B21 /* file.c in Sources */,
 				10D0907319F633B00043D458 /* proxy.c in Sources */,
 				10A3D3D21B4CDBDC00327CF9 /* memcached.c in Sources */,
+				08CEA9DB267B0E3B00B4BB6B /* self_trace.c in Sources */,
 				0812AB221D7FCFEB00004F23 /* hiredis.c in Sources */,
 				7D0341FB1FE4D5B60052E0A1 /* http2client.c in Sources */,
 				107923CF19A3217300C52AD6 /* request.c in Sources */,
@@ -3138,8 +3373,10 @@
 				10C45D4F1CFD15FA0096DB06 /* throttle_resp.c in Sources */,
 				E9E5049021501BBA004DC170 /* server.c in Sources */,
 				10A3D4081B50DAB700327CF9 /* close.c in Sources */,
+				08CEA9D226701D7600B4BB6B /* rand.c in Sources */,
 				105534EF1A440FC800627ECB /* config.c in Sources */,
 				10E299581A67E68500701AA6 /* scheduler.c in Sources */,
+				082195102685262B00E3EFCF /* cc-pico.c in Sources */,
 				107923D319A3217300C52AD6 /* util.c in Sources */,
 				105534CA1A3BB46900627ECB /* string.c in Sources */,
 				1022E7C11CA8BC9E00CE2A05 /* send_text.c in Sources */,
@@ -3152,6 +3389,8 @@
 				E98884D021E7F3C80060F010 /* sentmap.c in Sources */,
 				E9FF84C924CF9893002577CA /* dsr.c in Sources */,
 				106C23011C0544CE00405689 /* errordoc.c in Sources */,
+				E93BB58E25DE3988009C24D8 /* pembase64.c in Sources */,
+				E9DF012824E4CDEE0002EEC7 /* cc-cubic.c in Sources */,
 				10FCC13E1B2E4A4500F13674 /* cloexec.c in Sources */,
 				105534DF1A3C7B9800627ECB /* proxy.c in Sources */,
 				10A3D4091B50DAB700327CF9 /* connect.c in Sources */,
@@ -3190,6 +3429,7 @@
 				E987E5EE1FD8C04D00DE4346 /* bit_cost.c in Sources */,
 				E98884D421E7F3D80060F010 /* sendstate.c in Sources */,
 				E901C42D213E52AB00D17C93 /* drbg.c in Sources */,
+				E93BB45D25DA5792009C24D8 /* connect.c in Sources */,
 				E987E5FA1FD8C04D00DE4346 /* metablock.c in Sources */,
 				E987E5FB1FD8C04D00DE4346 /* static_dict.c in Sources */,
 				1079244C19A3266700C52AD6 /* memory.c in Sources */,
@@ -3222,6 +3462,7 @@
 				10AA2EA31A88090B004322AC /* url.c in Sources */,
 				E9316EEA24417EAA00C9C127 /* huffman.c in Sources */,
 				1024A4001D23606300EB13F1 /* cache_digests.c in Sources */,
+				08CEA9D8267AF0EB00B4BB6B /* self_trace.c in Sources */,
 				E987E5F61FD8C04D00DE4346 /* entropy_encode.c in Sources */,
 				105534C91A3BB41C00627ECB /* proxy.c in Sources */,
 				E93C7F9A22701806007BF39A /* frame.c in Sources */,
@@ -3233,20 +3474,26 @@
 				1079245119A3266700C52AD6 /* token.c in Sources */,
 				E901C42B213E52A500D17C93 /* chash.c in Sources */,
 				E98884D321E7F3D80060F010 /* recvstate.c in Sources */,
+				082195112685262B00E3EFCF /* cc-pico.c in Sources */,
 				1070866A1B70A00F002B8F18 /* casper.c in Sources */,
 				E987E5F51FD8C04D00DE4346 /* encode.c in Sources */,
 				E901C429213E529F00D17C93 /* blockwise.c in Sources */,
 				E987E5FC1FD8C04D00DE4346 /* utf8_util.c in Sources */,
+				E93BB58F25DE3988009C24D8 /* pembase64.c in Sources */,
 				107D4D491B5880BC004A9B21 /* parser.c in Sources */,
+				08CEA9DC267B0E3B00B4BB6B /* self_trace.c in Sources */,
 				104B9A481A5F9472009EEE64 /* headers.c in Sources */,
 				E987E5F11FD8C04D00DE4346 /* cluster.c in Sources */,
 				E987E5F81FD8C04D00DE4346 /* literal_cost.c in Sources */,
 				E987E5F71FD8C04D00DE4346 /* histogram.c in Sources */,
 				E901C42C213E52A800D17C93 /* curve25519.c in Sources */,
+				E90BB43A24F369E4006507EA /* server.c in Sources */,
 				107086701B7925D5002B8F18 /* compress.c in Sources */,
 				E987E5F41FD8C04D00DE4346 /* dictionary_hash.c in Sources */,
 				E96A24D323E6747A00CA970A /* absprio.c in Sources */,
 				7D937300202AC717005FE6AB /* server_timing.c in Sources */,
+				E9DF012924E4CDF60002EEC7 /* cc-cubic.c in Sources */,
+				0829879726E1F3710053638F /* rate.c in Sources */,
 				107D4D4C1B5880BC004A9B21 /* writer.c in Sources */,
 				E987E5EC1FD8C04D00DE4346 /* backward_references_hq.c in Sources */,
 				10E2995A1A68D03100701AA6 /* scheduler.c in Sources */,
@@ -3263,8 +3510,8 @@
 				10F9F2651AF4795D0056F26B /* redirect.c in Sources */,
 				E987E5F21FD8C04D00DE4346 /* compress_fragment_two_pass.c in Sources */,
 				E901C436213E52CA00D17C93 /* openssl.c in Sources */,
-				E9E5049221501BC3004DC170 /* server.c in Sources */,
 				E901C407213E1C5400D17C93 /* ranges.c in Sources */,
+				08CEA9D526701D8E00B4BB6B /* rand.c in Sources */,
 				107D4D4A1B5880BC004A9B21 /* reader.c in Sources */,
 				E980423E22463057008B9745 /* defaults.c in Sources */,
 				1079244819A3265C00C52AD6 /* connection.c in Sources */,
@@ -3333,6 +3580,7 @@
 				E9708B8B1E52C85A0029E0A5 /* tunnel.c in Sources */,
 				7DE1DB38212B1CC00055F500 /* ssl.c in Sources */,
 				E9316ED824417E0A00C9C127 /* certificate_compression.c in Sources */,
+				082195122685262B00E3EFCF /* cc-pico.c in Sources */,
 				7D937303202AC7BA005FE6AB /* server_timing.c in Sources */,
 				E9708B531E52C7EE0029E0A5 /* config.c in Sources */,
 				08F320E11E7A9CBF0038FA5A /* read.c in Sources */,
@@ -3343,6 +3591,7 @@
 				E987E5D51FD7BEB500DE4346 /* backward_references_hq.c in Sources */,
 				E987E5D71FD7BEB500DE4346 /* bit_cost.c in Sources */,
 				E9708B631E52C80F0029E0A5 /* headers_util.c in Sources */,
+				08CEA9DD267B0E3B00B4BB6B /* self_trace.c in Sources */,
 				E9316EE924417EAA00C9C127 /* decode.c in Sources */,
 				E9708B541E52C7EE0029E0A5 /* configurator.c in Sources */,
 				E93C7F98226EBEC9007BF39A /* frame.c in Sources */,
@@ -3366,12 +3615,14 @@
 				E9708B7B1E52C83D0029E0A5 /* reproxy.c in Sources */,
 				08F320DF1E7A9CBB0038FA5A /* hiredis.c in Sources */,
 				E9708B5C1E52C80F0029E0A5 /* access_log.c in Sources */,
+				E919227925C9447D00C2D79B /* connect.c in Sources */,
 				E98042182238D363008B9745 /* cc-reno.c in Sources */,
 				100A55101C2BB15600C4E3E0 /* http_request.c in Sources */,
 				E987E5D61FD7BEB500DE4346 /* backward_references.c in Sources */,
 				E9708B1E1E49BAC10029E0A5 /* blockwise.c in Sources */,
 				E9581B9E22F0022D00299E8A /* random.c in Sources */,
 				E987E5D41FD7BE9F00DE4346 /* histogram.c in Sources */,
+				08CEA9D9267AF0EB00B4BB6B /* self_trace.c in Sources */,
 				08F320DE1E7A9CB80038FA5A /* async.c in Sources */,
 				E987E5DA1FD7BEB500DE4346 /* compress_fragment_two_pass.c in Sources */,
 				E987E5D11FD7BE9200DE4346 /* metablock.c in Sources */,
@@ -3395,13 +3646,16 @@
 				E9708B391E52C75A0029E0A5 /* cloexec.c in Sources */,
 				7DF26B091FBC020600FBE2E7 /* middleware.c in Sources */,
 				E9708B451E52C7DF0029E0A5 /* file.c in Sources */,
+				E93BB59025DE3988009C24D8 /* pembase64.c in Sources */,
 				E9708B6C1E52C81D0029E0A5 /* compress.c in Sources */,
+				0829879826E1F3710053638F /* rate.c in Sources */,
 				E9708B1F1E49BAC60029E0A5 /* chash.c in Sources */,
 				E9708B821E52C84E0029E0A5 /* http1.c in Sources */,
 				E9708B7E1E52C8430029E0A5 /* events.c in Sources */,
 				E9708B771E52C8330029E0A5 /* headers_util.c in Sources */,
 				E9708B781E52C8330029E0A5 /* mimemap.c in Sources */,
 				E9708B5D1E52C80F0029E0A5 /* compress.c in Sources */,
+				E9DF012A24E4CDF60002EEC7 /* cc-cubic.c in Sources */,
 				10FFEE0A1BB23A8C0087AD75 /* neverbleed.c in Sources */,
 				E9708B811E52C84A0029E0A5 /* http2_debug_state.c in Sources */,
 				E9708B7A1E52C83D0029E0A5 /* redirect.c in Sources */,
@@ -3446,6 +3700,7 @@
 				E9708B841E52C8560029E0A5 /* casper.c in Sources */,
 				E9581B9B22F001F300299E8A /* x25519.c in Sources */,
 				E987E5CF1FD7BE8800DE4346 /* utf8_util.c in Sources */,
+				08CEA9D326701D7600B4BB6B /* rand.c in Sources */,
 				107E34131C7FAC2000AEF5F8 /* brotli.c in Sources */,
 				E9708B4F1E52C7E50029E0A5 /* string.c in Sources */,
 				E98403CE2485172E00E3A6B1 /* remote_cid.c in Sources */,
@@ -3546,17 +3801,8 @@
 					"DEBUG=1",
 					"$(inherited)",
 				);
-				HEADER_SEARCH_PATHS = (
-					/usr/local/opt/openssl/include,
-					"$(inherited)",
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
-					/usr/local/include,
-					include,
-				);
-				LIBRARY_SEARCH_PATHS = (
-					/usr/local/opt/openssl/lib,
-					/usr/local/lib,
-				);
+				HEADER_SEARCH_PATHS = "$(inherited)";
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				OTHER_CFLAGS = "";
 				OTHER_LDFLAGS = (
 					"-lssl",
@@ -3574,17 +3820,8 @@
 					"DEBUG=1",
 					"$(inherited)",
 				);
-				HEADER_SEARCH_PATHS = (
-					/usr/local/opt/openssl/include,
-					"$(inherited)",
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
-					/usr/local/include,
-					include,
-				);
-				LIBRARY_SEARCH_PATHS = (
-					/usr/local/opt/openssl/lib,
-					/usr/local/lib,
-				);
+				HEADER_SEARCH_PATHS = "$(inherited)";
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				OTHER_CFLAGS = "";
 				OTHER_LDFLAGS = (
 					"-lssl",
@@ -3599,17 +3836,8 @@
 		08790E0E1D8BD7F100A04BC1 /* evloop-release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				HEADER_SEARCH_PATHS = (
-					/usr/local/opt/openssl/include,
-					"$(inherited)",
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
-					/usr/local/include,
-					include,
-				);
-				LIBRARY_SEARCH_PATHS = (
-					/usr/local/opt/openssl/lib,
-					/usr/local/lib,
-				);
+				HEADER_SEARCH_PATHS = "$(inherited)";
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				OTHER_CFLAGS = "";
 				OTHER_LDFLAGS = (
 					"-lssl",
@@ -3623,17 +3851,8 @@
 		08790E0F1D8BD7F100A04BC1 /* libuv-release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				HEADER_SEARCH_PATHS = (
-					/usr/local/opt/openssl/include,
-					"$(inherited)",
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
-					/usr/local/include,
-					include,
-				);
-				LIBRARY_SEARCH_PATHS = (
-					/usr/local/opt/openssl/lib,
-					/usr/local/lib,
-				);
+				HEADER_SEARCH_PATHS = "$(inherited)";
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				OTHER_CFLAGS = "";
 				OTHER_LDFLAGS = (
 					"-lssl",
@@ -3652,17 +3871,8 @@
 					"DEBUG=1",
 					"$(inherited)",
 				);
-				HEADER_SEARCH_PATHS = (
-					/usr/local/opt/openssl/include,
-					"$(inherited)",
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
-					/usr/local/include,
-					include,
-				);
-				LIBRARY_SEARCH_PATHS = (
-					/usr/local/opt/openssl/lib,
-					/usr/local/lib,
-				);
+				HEADER_SEARCH_PATHS = "$(inherited)";
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				OTHER_CFLAGS = "";
 				OTHER_LDFLAGS = (
 					"-lssl",
@@ -3680,17 +3890,8 @@
 					"DEBUG=1",
 					"$(inherited)",
 				);
-				HEADER_SEARCH_PATHS = (
-					/usr/local/opt/openssl/include,
-					"$(inherited)",
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
-					/usr/local/include,
-					include,
-				);
-				LIBRARY_SEARCH_PATHS = (
-					/usr/local/opt/openssl/lib,
-					/usr/local/lib,
-				);
+				HEADER_SEARCH_PATHS = "$(inherited)";
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				OTHER_CFLAGS = "";
 				OTHER_LDFLAGS = (
 					"-lssl",
@@ -3705,17 +3906,8 @@
 		08819C2A218C9FA90057ED23 /* evloop-release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				HEADER_SEARCH_PATHS = (
-					/usr/local/opt/openssl/include,
-					"$(inherited)",
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
-					/usr/local/include,
-					include,
-				);
-				LIBRARY_SEARCH_PATHS = (
-					/usr/local/opt/openssl/lib,
-					/usr/local/lib,
-				);
+				HEADER_SEARCH_PATHS = "$(inherited)";
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				OTHER_CFLAGS = "";
 				OTHER_LDFLAGS = (
 					"-lssl",
@@ -3729,17 +3921,8 @@
 		08819C2B218C9FA90057ED23 /* libuv-release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				HEADER_SEARCH_PATHS = (
-					/usr/local/opt/openssl/include,
-					"$(inherited)",
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
-					/usr/local/include,
-					include,
-				);
-				LIBRARY_SEARCH_PATHS = (
-					/usr/local/opt/openssl/lib,
-					/usr/local/lib,
-				);
+				HEADER_SEARCH_PATHS = "$(inherited)";
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				OTHER_CFLAGS = "";
 				OTHER_LDFLAGS = (
 					"-lssl",
@@ -3777,6 +3960,7 @@
 					"DEBUG=1",
 					"H2O_USE_MRUBY=1",
 					"H2O_ROOT=/mydev/h2o",
+					"kh_inline=\"inline __unused\"",
 					"$(inherited)",
 				);
 				GCC_SYMBOLS_PRIVATE_EXTERN = NO;
@@ -3787,9 +3971,25 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				HEADER_SEARCH_PATHS = (
-					deps/dcc/include,
+					include,
+					deps/brotli/c/include,
+					"deps/hiredis/**",
+					deps/mruby/include,
+					"deps/mruby-input-stream/src",
 					deps/picotls/include,
 					deps/quicly/include,
+					deps/yaml/include,
+					/opt/homebrew/opt/openssl/include,
+					/usr/local/opt/openssl/include,
+					/opt/homebrew/include,
+					/usr/local/include,
+				);
+				LIBRARY_SEARCH_PATHS = (
+					build/default/mruby/host/lib,
+					/opt/homebrew/opt/openssl/lib,
+					/usr/local/opt/openssl/lib,
+					/opt/homebrew/lib,
+					/usr/local/lib,
 				);
 				MACOSX_DEPLOYMENT_TARGET = 10.9;
 				ONLY_ACTIVE_ARCH = YES;
@@ -3806,6 +4006,7 @@
 					"$(inherited)",
 					"PICOTLS_USE_DTRACE=1",
 					"QUICLY_USE_DTRACE=1",
+					"QUICLY_USE_TRACER=1",
 					"H2O_USE_DTRACE=1",
 				);
 				HEADER_SEARCH_PATHS = (
@@ -3814,7 +4015,7 @@
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
 					/usr/local/include,
 				);
-				LIBRARY_SEARCH_PATHS = /usr/local/opt/openssl/lib;
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
 			name = "libuv-debug";
@@ -3828,19 +4029,8 @@
 					"$(inherited)",
 					"H2O_USE_BROTLI=1",
 				);
-				HEADER_SEARCH_PATHS = (
-					/usr/local/opt/openssl/include,
-					deps/brotli/c/include,
-					deps/yaml/include,
-					"$(inherited)",
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
-					/usr/local/include,
-					include,
-				);
-				LIBRARY_SEARCH_PATHS = (
-					/usr/local/opt/openssl/lib,
-					/usr/local/lib,
-				);
+				HEADER_SEARCH_PATHS = "$(inherited)";
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				OTHER_LDFLAGS = (
 					"-lssl",
 					"-lcrypto",
@@ -3858,17 +4048,8 @@
 					"DEBUG=1",
 					"$(inherited)",
 				);
-				HEADER_SEARCH_PATHS = (
-					/usr/local/opt/openssl/include,
-					"$(inherited)",
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
-					/usr/local/include,
-					include,
-				);
-				LIBRARY_SEARCH_PATHS = (
-					/usr/local/opt/openssl/lib,
-					/usr/local/lib,
-				);
+				HEADER_SEARCH_PATHS = "$(inherited)";
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				OTHER_CFLAGS = "";
 				OTHER_LDFLAGS = (
 					"-lssl",
@@ -3887,17 +4068,8 @@
 					"DEBUG=1",
 					"$(inherited)",
 				);
-				HEADER_SEARCH_PATHS = (
-					/usr/local/opt/openssl/include,
-					"$(inherited)",
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
-					/usr/local/include,
-					include,
-				);
-				LIBRARY_SEARCH_PATHS = (
-					/usr/local/opt/openssl/lib,
-					/usr/local/lib,
-				);
+				HEADER_SEARCH_PATHS = "$(inherited)";
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				OTHER_LDFLAGS = (
 					"-lwslay",
 					"-lssl",
@@ -3934,6 +4106,7 @@
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"H2O_USE_MRUBY=1",
 					"H2O_ROOT=/mydev/h2o",
+					"kh_inline=\"inline __unused\"",
 					"$(inherited)",
 				);
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
@@ -3943,11 +4116,28 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				HEADER_SEARCH_PATHS = (
-					deps/dcc/include,
+					include,
+					deps/brotli/c/include,
+					"deps/hiredis/**",
+					deps/mruby/include,
+					"deps/mruby-input-stream/src",
 					deps/picotls/include,
 					deps/quicly/include,
+					deps/yaml/include,
+					/opt/homebrew/opt/openssl/include,
+					/usr/local/opt/openssl/include,
+					/opt/homebrew/include,
+					/usr/local/include,
+				);
+				LIBRARY_SEARCH_PATHS = (
+					build/default/mruby/host/lib,
+					/opt/homebrew/opt/openssl/lib,
+					/usr/local/opt/openssl/lib,
+					/opt/homebrew/lib,
+					/usr/local/lib,
 				);
 				MACOSX_DEPLOYMENT_TARGET = 10.9;
+				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = macosx;
 			};
 			name = "libuv-release";
@@ -3961,6 +4151,7 @@
 					"$(inherited)",
 					"PICOTLS_USE_DTRACE=1",
 					"QUICLY_USE_DTRACE=1",
+					"QUICLY_USE_TRACER=1",
 					"H2O_USE_DTRACE=1",
 				);
 				HEADER_SEARCH_PATHS = (
@@ -3969,7 +4160,7 @@
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
 					/usr/local/include,
 				);
-				LIBRARY_SEARCH_PATHS = /usr/local/opt/openssl/lib;
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
 			name = "libuv-release";
@@ -3981,19 +4172,8 @@
 					"H2O_UNITTEST=1",
 					"H2O_USE_BROTLI=1",
 				);
-				HEADER_SEARCH_PATHS = (
-					/usr/local/opt/openssl/include,
-					deps/brotli/c/include,
-					deps/yaml/include,
-					"$(inherited)",
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
-					/usr/local/include,
-					include,
-				);
-				LIBRARY_SEARCH_PATHS = (
-					/usr/local/opt/openssl/lib,
-					/usr/local/lib,
-				);
+				HEADER_SEARCH_PATHS = "$(inherited)";
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				OTHER_LDFLAGS = (
 					"-lssl",
 					"-lcrypto",
@@ -4007,17 +4187,8 @@
 		1065E71719BF754100686E72 /* libuv-release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				HEADER_SEARCH_PATHS = (
-					/usr/local/opt/openssl/include,
-					"$(inherited)",
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
-					/usr/local/include,
-					include,
-				);
-				LIBRARY_SEARCH_PATHS = (
-					/usr/local/opt/openssl/lib,
-					/usr/local/lib,
-				);
+				HEADER_SEARCH_PATHS = "$(inherited)";
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				OTHER_CFLAGS = "";
 				OTHER_LDFLAGS = (
 					"-lssl",
@@ -4032,17 +4203,8 @@
 		1065E71819BF754100686E72 /* libuv-release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				HEADER_SEARCH_PATHS = (
-					/usr/local/opt/openssl/include,
-					"$(inherited)",
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
-					/usr/local/include,
-					include,
-				);
-				LIBRARY_SEARCH_PATHS = (
-					/usr/local/opt/openssl/lib,
-					/usr/local/lib,
-				);
+				HEADER_SEARCH_PATHS = "$(inherited)";
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				OTHER_LDFLAGS = (
 					"-lwslay",
 					"-lssl",
@@ -4082,6 +4244,7 @@
 					"H2O_USE_LIBUV=0",
 					"H2O_ROOT=/mydev/h2o",
 					"$(inherited)",
+					"kh_inline=\"inline __unused\"",
 				);
 				GCC_SYMBOLS_PRIVATE_EXTERN = NO;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
@@ -4091,9 +4254,25 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				HEADER_SEARCH_PATHS = (
-					deps/dcc/include,
+					include,
+					deps/brotli/c/include,
+					"deps/hiredis/**",
+					deps/mruby/include,
+					"deps/mruby-input-stream/src",
 					deps/picotls/include,
 					deps/quicly/include,
+					deps/yaml/include,
+					/opt/homebrew/opt/openssl/include,
+					/usr/local/opt/openssl/include,
+					/opt/homebrew/include,
+					/usr/local/include,
+				);
+				LIBRARY_SEARCH_PATHS = (
+					build/default/mruby/host/lib,
+					/opt/homebrew/opt/openssl/lib,
+					/usr/local/opt/openssl/lib,
+					/opt/homebrew/lib,
+					/usr/local/lib,
 				);
 				MACOSX_DEPLOYMENT_TARGET = 10.9;
 				ONLY_ACTIVE_ARCH = YES;
@@ -4127,6 +4306,7 @@
 					"H2O_USE_MRUBY=1",
 					"H2O_USE_LIBUV=0",
 					"H2O_ROOT=/mydev/h2o",
+					"kh_inline=\"inline __unused\"",
 					"$(inherited)",
 				);
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
@@ -4136,11 +4316,28 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				HEADER_SEARCH_PATHS = (
-					deps/dcc/include,
+					include,
+					deps/brotli/c/include,
+					"deps/hiredis/**",
+					deps/mruby/include,
+					"deps/mruby-input-stream/src",
 					deps/picotls/include,
 					deps/quicly/include,
+					deps/yaml/include,
+					/opt/homebrew/opt/openssl/include,
+					/usr/local/opt/openssl/include,
+					/opt/homebrew/include,
+					/usr/local/include,
+				);
+				LIBRARY_SEARCH_PATHS = (
+					build/default/mruby/host/lib,
+					/opt/homebrew/opt/openssl/lib,
+					/usr/local/opt/openssl/lib,
+					/opt/homebrew/lib,
+					/usr/local/lib,
 				);
 				MACOSX_DEPLOYMENT_TARGET = 10.9;
+				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = macosx;
 			};
 			name = "evloop-release";
@@ -4154,6 +4351,7 @@
 					"$(inherited)",
 					"PICOTLS_USE_DTRACE=1",
 					"QUICLY_USE_DTRACE=1",
+					"QUICLY_USE_TRACER=1",
 					"H2O_USE_DTRACE=1",
 				);
 				HEADER_SEARCH_PATHS = (
@@ -4162,7 +4360,7 @@
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
 					/usr/local/include,
 				);
-				LIBRARY_SEARCH_PATHS = /usr/local/opt/openssl/lib;
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
 			name = "evloop-debug";
@@ -4176,6 +4374,7 @@
 					"$(inherited)",
 					"PICOTLS_USE_DTRACE=1",
 					"QUICLY_USE_DTRACE=1",
+					"QUICLY_USE_TRACER=1",
 					"H2O_USE_DTRACE=1",
 				);
 				HEADER_SEARCH_PATHS = (
@@ -4184,7 +4383,7 @@
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
 					/usr/local/include,
 				);
-				LIBRARY_SEARCH_PATHS = /usr/local/opt/openssl/lib;
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
 			name = "evloop-release";
@@ -4196,17 +4395,8 @@
 					"DEBUG=1",
 					"$(inherited)",
 				);
-				HEADER_SEARCH_PATHS = (
-					/usr/local/opt/openssl/include,
-					"$(inherited)",
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
-					/usr/local/include,
-					include,
-				);
-				LIBRARY_SEARCH_PATHS = (
-					/usr/local/opt/openssl/lib,
-					/usr/local/lib,
-				);
+				HEADER_SEARCH_PATHS = "$(inherited)";
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				OTHER_CFLAGS = "";
 				OTHER_LDFLAGS = (
 					"-lssl",
@@ -4220,17 +4410,8 @@
 		107923E119A321F400C52AD6 /* evloop-release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				HEADER_SEARCH_PATHS = (
-					/usr/local/opt/openssl/include,
-					"$(inherited)",
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
-					/usr/local/include,
-					include,
-				);
-				LIBRARY_SEARCH_PATHS = (
-					/usr/local/opt/openssl/lib,
-					/usr/local/lib,
-				);
+				HEADER_SEARCH_PATHS = "$(inherited)";
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				OTHER_CFLAGS = "";
 				OTHER_LDFLAGS = (
 					"-lssl",
@@ -4248,17 +4429,8 @@
 					"DEBUG=1",
 					"$(inherited)",
 				);
-				HEADER_SEARCH_PATHS = (
-					/usr/local/opt/openssl/include,
-					"$(inherited)",
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
-					/usr/local/include,
-					include,
-				);
-				LIBRARY_SEARCH_PATHS = (
-					/usr/local/opt/openssl/lib,
-					/usr/local/lib,
-				);
+				HEADER_SEARCH_PATHS = "$(inherited)";
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				OTHER_LDFLAGS = (
 					"-lwslay",
 					"-lssl",
@@ -4272,17 +4444,8 @@
 		1079240C19A3247A00C52AD6 /* evloop-release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				HEADER_SEARCH_PATHS = (
-					/usr/local/opt/openssl/include,
-					"$(inherited)",
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
-					/usr/local/include,
-					include,
-				);
-				LIBRARY_SEARCH_PATHS = (
-					/usr/local/opt/openssl/lib,
-					/usr/local/lib,
-				);
+				HEADER_SEARCH_PATHS = "$(inherited)";
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				OTHER_LDFLAGS = (
 					"-lwslay",
 					"-lssl",
@@ -4302,19 +4465,8 @@
 					"$(inherited)",
 					"H2O_USE_BROTLI=1",
 				);
-				HEADER_SEARCH_PATHS = (
-					/usr/local/opt/openssl/include,
-					deps/brotli/c/include,
-					deps/yaml/include,
-					"$(inherited)",
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
-					/usr/local/include,
-					include,
-				);
-				LIBRARY_SEARCH_PATHS = (
-					/usr/local/opt/openssl/lib,
-					/usr/local/lib,
-				);
+				HEADER_SEARCH_PATHS = "$(inherited)";
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				OTHER_LDFLAGS = (
 					"-lssl",
 					"-lcrypto",
@@ -4332,19 +4484,8 @@
 					"H2O_USE_LIBUV=0",
 					"H2O_USE_BROTLI=1",
 				);
-				HEADER_SEARCH_PATHS = (
-					/usr/local/opt/openssl/include,
-					deps/brotli/c/include,
-					deps/yaml/include,
-					"$(inherited)",
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
-					/usr/local/include,
-					include,
-				);
-				LIBRARY_SEARCH_PATHS = (
-					/usr/local/opt/openssl/lib,
-					/usr/local/lib,
-				);
+				HEADER_SEARCH_PATHS = "$(inherited)";
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				OTHER_LDFLAGS = (
 					"-lssl",
 					"-lcrypto",
@@ -4361,17 +4502,8 @@
 					"DEBUG=1",
 					"$(inherited)",
 				);
-				HEADER_SEARCH_PATHS = (
-					/usr/local/opt/openssl/include,
-					"$(inherited)",
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
-					/usr/local/include,
-					include,
-				);
-				LIBRARY_SEARCH_PATHS = (
-					/usr/local/opt/openssl/lib,
-					/usr/local/lib,
-				);
+				HEADER_SEARCH_PATHS = "$(inherited)";
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				OTHER_CFLAGS = "";
 				OTHER_LDFLAGS = (
 					"-lssl",
@@ -4389,17 +4521,8 @@
 					"DEBUG=1",
 					"$(inherited)",
 				);
-				HEADER_SEARCH_PATHS = (
-					/usr/local/opt/openssl/include,
-					"$(inherited)",
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
-					/usr/local/include,
-					include,
-				);
-				LIBRARY_SEARCH_PATHS = (
-					/usr/local/opt/openssl/lib,
-					/usr/local/lib,
-				);
+				HEADER_SEARCH_PATHS = "$(inherited)";
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				OTHER_CFLAGS = "";
 				OTHER_LDFLAGS = (
 					"-lssl",
@@ -4414,17 +4537,8 @@
 		10D0904F19F0CA9C0043D458 /* evloop-release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				HEADER_SEARCH_PATHS = (
-					/usr/local/opt/openssl/include,
-					"$(inherited)",
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
-					/usr/local/include,
-					include,
-				);
-				LIBRARY_SEARCH_PATHS = (
-					/usr/local/opt/openssl/lib,
-					/usr/local/lib,
-				);
+				HEADER_SEARCH_PATHS = "$(inherited)";
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				OTHER_CFLAGS = "";
 				OTHER_LDFLAGS = (
 					"-lssl",
@@ -4438,17 +4552,8 @@
 		10D0905019F0CA9C0043D458 /* libuv-release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				HEADER_SEARCH_PATHS = (
-					/usr/local/opt/openssl/include,
-					"$(inherited)",
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
-					/usr/local/include,
-					include,
-				);
-				LIBRARY_SEARCH_PATHS = (
-					/usr/local/opt/openssl/lib,
-					/usr/local/lib,
-				);
+				HEADER_SEARCH_PATHS = "$(inherited)";
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				OTHER_CFLAGS = "";
 				OTHER_LDFLAGS = (
 					"-lssl",
@@ -4467,17 +4572,8 @@
 					"DEBUG=1",
 					"$(inherited)",
 				);
-				HEADER_SEARCH_PATHS = (
-					/usr/local/opt/openssl/include,
-					"$(inherited)",
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
-					/usr/local/include,
-					include,
-				);
-				LIBRARY_SEARCH_PATHS = (
-					/usr/local/opt/openssl/lib,
-					/usr/local/lib,
-				);
+				HEADER_SEARCH_PATHS = "$(inherited)";
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				OTHER_CFLAGS = "";
 				OTHER_LDFLAGS = (
 					"-lssl",
@@ -4495,17 +4591,8 @@
 					"DEBUG=1",
 					"$(inherited)",
 				);
-				HEADER_SEARCH_PATHS = (
-					/usr/local/opt/openssl/include,
-					"$(inherited)",
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
-					/usr/local/include,
-					include,
-				);
-				LIBRARY_SEARCH_PATHS = (
-					/usr/local/opt/openssl/lib,
-					/usr/local/lib,
-				);
+				HEADER_SEARCH_PATHS = "$(inherited)";
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				OTHER_CFLAGS = "";
 				OTHER_LDFLAGS = (
 					"-lssl",
@@ -4520,17 +4607,8 @@
 		10D0906719F38B2E0043D458 /* evloop-release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				HEADER_SEARCH_PATHS = (
-					/usr/local/opt/openssl/include,
-					"$(inherited)",
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
-					/usr/local/include,
-					include,
-				);
-				LIBRARY_SEARCH_PATHS = (
-					/usr/local/opt/openssl/lib,
-					/usr/local/lib,
-				);
+				HEADER_SEARCH_PATHS = "$(inherited)";
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				OTHER_CFLAGS = "";
 				OTHER_LDFLAGS = (
 					"-lssl",
@@ -4544,17 +4622,8 @@
 		10D0906819F38B2E0043D458 /* libuv-release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				HEADER_SEARCH_PATHS = (
-					/usr/local/opt/openssl/include,
-					"$(inherited)",
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
-					/usr/local/include,
-					include,
-				);
-				LIBRARY_SEARCH_PATHS = (
-					/usr/local/opt/openssl/lib,
-					/usr/local/lib,
-				);
+				HEADER_SEARCH_PATHS = "$(inherited)";
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				OTHER_CFLAGS = "";
 				OTHER_LDFLAGS = (
 					"-lssl",
@@ -4573,17 +4642,8 @@
 					"DEBUG=1",
 					"$(inherited)",
 				);
-				HEADER_SEARCH_PATHS = (
-					"$(inherited)",
-					/usr/local/opt/openssl/include,
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
-					/usr/local/include,
-					include,
-				);
-				LIBRARY_SEARCH_PATHS = (
-					/usr/local/opt/openssl/lib,
-					/usr/local/lib,
-				);
+				HEADER_SEARCH_PATHS = "$(inherited)";
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				OTHER_CFLAGS = "";
 				OTHER_LDFLAGS = (
 					"-lssl",
@@ -4601,17 +4661,8 @@
 					"DEBUG=1",
 					"$(inherited)",
 				);
-				HEADER_SEARCH_PATHS = (
-					"$(inherited)",
-					/usr/local/opt/openssl/include,
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
-					/usr/local/include,
-					include,
-				);
-				LIBRARY_SEARCH_PATHS = (
-					/usr/local/opt/openssl/lib,
-					/usr/local/lib,
-				);
+				HEADER_SEARCH_PATHS = "$(inherited)";
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				OTHER_CFLAGS = "";
 				OTHER_LDFLAGS = (
 					"-lssl",
@@ -4626,17 +4677,8 @@
 		10EA45DD1D0949BF00769A2B /* evloop-release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				HEADER_SEARCH_PATHS = (
-					"$(inherited)",
-					/usr/local/opt/openssl/include,
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
-					/usr/local/include,
-					include,
-				);
-				LIBRARY_SEARCH_PATHS = (
-					/usr/local/opt/openssl/lib,
-					/usr/local/lib,
-				);
+				HEADER_SEARCH_PATHS = "$(inherited)";
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				OTHER_CFLAGS = "";
 				OTHER_LDFLAGS = (
 					"-lssl",
@@ -4650,17 +4692,8 @@
 		10EA45DE1D0949BF00769A2B /* libuv-release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				HEADER_SEARCH_PATHS = (
-					"$(inherited)",
-					/usr/local/opt/openssl/include,
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
-					/usr/local/include,
-					include,
-				);
-				LIBRARY_SEARCH_PATHS = (
-					/usr/local/opt/openssl/lib,
-					/usr/local/lib,
-				);
+				HEADER_SEARCH_PATHS = "$(inherited)";
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				OTHER_CFLAGS = "";
 				OTHER_LDFLAGS = (
 					"-lssl",
@@ -4677,29 +4710,14 @@
 			buildSettings = {
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"$(inherited)",
-					"H2O_USE_PICOTLS=1",
 					"PICOTLS_USE_DTRACE=1",
 					"QUICLY_USE_DTRACE=1",
+					"QUICLY_USE_TRACER=1",
 					"H2O_USE_DTRACE=1",
 					"H2O_USE_BROTLI=1",
 				);
-				HEADER_SEARCH_PATHS = (
-					"$(inherited)",
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
-					deps/brotli/c/include,
-					"deps/hiredis/**",
-					deps/yaml/include,
-					deps/mruby/include,
-					"deps/mruby-input-stream/src",
-					/usr/local/opt/openssl/include,
-					/usr/local/include,
-					include,
-				);
-				LIBRARY_SEARCH_PATHS = (
-					build/default/mruby/host/lib,
-					/usr/local/opt/openssl/lib,
-					/usr/local/lib,
-				);
+				HEADER_SEARCH_PATHS = "$(inherited)";
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				OTHER_CFLAGS = "";
 				OTHER_LDFLAGS = (
 					"-lmruby",
@@ -4718,23 +4736,8 @@
 					"DEBUG=1",
 					"$(inherited)",
 				);
-				HEADER_SEARCH_PATHS = (
-					"$(inherited)",
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
-					deps/brotli/c/include,
-					"deps/hiredis/**",
-					deps/yaml/include,
-					deps/mruby/include,
-					"deps/mruby-input-stream/src",
-					/usr/local/opt/openssl/include,
-					/usr/local/include,
-					include,
-				);
-				LIBRARY_SEARCH_PATHS = (
-					build/default/mruby/host/lib,
-					/usr/local/opt/openssl/lib,
-					/usr/local/lib,
-				);
+				HEADER_SEARCH_PATHS = "$(inherited)";
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				OTHER_CFLAGS = "";
 				OTHER_LDFLAGS = (
 					"-lssl",
@@ -4751,29 +4754,14 @@
 			buildSettings = {
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"$(inherited)",
-					"H2O_USE_PICOTLS=1",
 					"PICOTLS_USE_DTRACE=1",
 					"QUICLY_USE_DTRACE=1",
+					"QUICLY_USE_TRACER=1",
 					"H2O_USE_DTRACE=1",
 					"H2O_USE_BROTLI=1",
 				);
-				HEADER_SEARCH_PATHS = (
-					"$(inherited)",
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
-					deps/brotli/c/include,
-					"deps/hiredis/**",
-					deps/yaml/include,
-					deps/mruby/include,
-					"deps/mruby-input-stream/src",
-					/usr/local/opt/openssl/include,
-					/usr/local/include,
-					include,
-				);
-				LIBRARY_SEARCH_PATHS = (
-					build/default/mruby/host/lib,
-					/usr/local/opt/openssl/lib,
-					/usr/local/lib,
-				);
+				HEADER_SEARCH_PATHS = "$(inherited)";
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				OTHER_CFLAGS = "";
 				OTHER_LDFLAGS = (
 					"-lmruby",
@@ -4788,23 +4776,8 @@
 		10F417D219C1907B00B6E31A /* libuv-release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				HEADER_SEARCH_PATHS = (
-					"$(inherited)",
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
-					deps/brotli/c/include,
-					"deps/hiredis/**",
-					deps/yaml/include,
-					deps/mruby/include,
-					"deps/mruby-input-stream/src",
-					/usr/local/opt/openssl/include,
-					/usr/local/include,
-					include,
-				);
-				LIBRARY_SEARCH_PATHS = (
-					build/default/mruby/host/lib,
-					/usr/local/opt/openssl/lib,
-					/usr/local/lib,
-				);
+				HEADER_SEARCH_PATHS = "$(inherited)";
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				OTHER_CFLAGS = "";
 				OTHER_LDFLAGS = (
 					"-lssl",
@@ -4823,18 +4796,8 @@
 					"DEBUG=1",
 					"$(inherited)",
 				);
-				HEADER_SEARCH_PATHS = (
-					/usr/local/opt/openssl/include,
-					deps/yaml/include,
-					"$(inherited)",
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
-					/usr/local/include,
-					include,
-				);
-				LIBRARY_SEARCH_PATHS = (
-					/usr/local/opt/openssl/lib,
-					/usr/local/lib,
-				);
+				HEADER_SEARCH_PATHS = "$(inherited)";
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				OTHER_LDFLAGS = (
 					"-lssl",
 					"-lcrypto",
@@ -4851,18 +4814,8 @@
 					"DEBUG=1",
 					"$(inherited)",
 				);
-				HEADER_SEARCH_PATHS = (
-					/usr/local/opt/openssl/include,
-					deps/yaml/include,
-					"$(inherited)",
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
-					/usr/local/include,
-					include,
-				);
-				LIBRARY_SEARCH_PATHS = (
-					/usr/local/opt/openssl/lib,
-					/usr/local/lib,
-				);
+				HEADER_SEARCH_PATHS = "$(inherited)";
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				OTHER_LDFLAGS = (
 					"-lssl",
 					"-lcrypto",
@@ -4877,18 +4830,8 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				GCC_PREPROCESSOR_DEFINITIONS = "H2O_USE_LIBUV=0";
-				HEADER_SEARCH_PATHS = (
-					/usr/local/opt/openssl/include,
-					deps/yaml/include,
-					"$(inherited)",
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
-					/usr/local/include,
-					include,
-				);
-				LIBRARY_SEARCH_PATHS = (
-					/usr/local/opt/openssl/lib,
-					/usr/local/lib,
-				);
+				HEADER_SEARCH_PATHS = "$(inherited)";
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				OTHER_LDFLAGS = (
 					"-lssl",
 					"-lcrypto",
@@ -4902,18 +4845,8 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				GCC_PREPROCESSOR_DEFINITIONS = "";
-				HEADER_SEARCH_PATHS = (
-					/usr/local/opt/openssl/include,
-					deps/yaml/include,
-					"$(inherited)",
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
-					/usr/local/include,
-					include,
-				);
-				LIBRARY_SEARCH_PATHS = (
-					/usr/local/opt/openssl/lib,
-					/usr/local/lib,
-				);
+				HEADER_SEARCH_PATHS = "$(inherited)";
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				OTHER_LDFLAGS = (
 					"-lssl",
 					"-lcrypto",

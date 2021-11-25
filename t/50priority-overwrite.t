@@ -10,7 +10,7 @@ my $server = spawn_h2o(sub {
 		my ($port, $tls_port) = @_;
 		return << "EOT";
 hosts:
-  "*.127.0.0.1.xip.io:$tls_port":
+  "*.localhost.examp1e.net:$tls_port":
     paths:
       /:
         file.dir: examples/doc_root

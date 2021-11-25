@@ -164,6 +164,7 @@ int main(int argc, char **argv)
         subtest("lib/common/serverutil.c", test_lib__common__serverutil_c);
         subtest("lib/common/serverutil.c", test_lib__common__socket_c);
         subtest("lib/common/string.c", test_lib__common__string_c);
+        subtest("lib/common/rand.c", test_lib__common__rand_c);
         subtest("lib/common/url.c", test_lib__common__url_c);
         subtest("lib/common/time.c", test_lib__common__time_c);
         subtest("lib/common/timerwheel.c", test_lib__common__timerwheel_c);
@@ -171,6 +172,7 @@ int main(int argc, char **argv)
         subtest("lib/core/headers.c", test_lib__core__headers_c);
         subtest("lib/core/proxy.c", test_lib__core__proxy_c);
         subtest("lib/core/util.c", test_lib__core__util_c);
+        subtest("lib/handler/connect.c", test_lib__handler__connect_c);
         subtest("lib/handler/headers.c", test_lib__handler__headers_c);
         subtest("lib/handler/mimemap.c", test_lib__handler__mimemap_c);
         subtest("lib/http2/hpack.c", test_lib__http2__hpack);
@@ -179,6 +181,7 @@ int main(int argc, char **argv)
         subtest("lib/http2/cache_digests.c", test_lib__http2__cache_digests);
         subtest("lib/http3/frame.c", test_lib__http3_frames);
         subtest("lib/http3/qpack.c", test_lib__http3_qpack);
+        subtest("lib/http3/server.c", test_lib__http3_server);
     }
 
     { /* tests that use the run loop */

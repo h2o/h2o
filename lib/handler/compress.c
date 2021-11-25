@@ -70,10 +70,10 @@ static void on_setup_ostream(h2o_filter_t *_self, h2o_req_t *req, h2o_ostream_t 
 
     switch (req->compress_hint) {
     case H2O_COMPRESS_HINT_DISABLE:
-        /* compression was explicitely disabled, skip */
+        /* compression was explicitly disabled, skip */
         goto Next;
     case H2O_COMPRESS_HINT_ENABLE:
-        /* compression was explicitely enabled */
+        /* compression was explicitly enabled */
         break;
     case H2O_COMPRESS_HINT_ENABLE_BR:
         compressible_types_mask = H2O_COMPRESSIBLE_BROTLI;

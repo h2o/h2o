@@ -47,12 +47,9 @@
 #define H2O_HTTP3_STREAM_TYPE_QPACK_DECODER 3
 #define H2O_HTTP3_STREAM_TYPE_REQUEST 0x4000000000000000 /* internal type */
 
-#define H2O_HTTP3_SETTINGS_HEADER_TABLE_SIZE 1
-#define H2O_HTTP3_SETTINGS_MAX_HEADER_LIST_SIZE 6
+#define H2O_HTTP3_SETTINGS_QPACK_MAX_TABLE_CAPACITY 1
+#define H2O_HTTP3_SETTINGS_MAX_FIELD_SECTION_SIZE 6
 #define H2O_HTTP3_SETTINGS_QPACK_BLOCKED_STREAMS 7
-
-#define H2O_HTTP3_DEFAULT_HEADER_TABLE_SIZE 4096
-#define H2O_HTTP3_MAX_HEADER_TABLE_SIZE ((1 << 30) + 1)
 
 #define H2O_HTTP3_ERROR_NONE QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(0x100)
 #define H2O_HTTP3_ERROR_GENERAL_PROTOCOL QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(0x101)
@@ -79,6 +76,13 @@
 #define H2O_HTTP3_ERROR_TRANSPORT -2
 #define H2O_HTTP3_ERROR_USER1 -256
 
+/**
+ * maximum payload size excluding DATA frame; stream receive window MUST be at least as big as this + 16 bytes to hold the type and
+ * the length
+ */
+#define H2O_HTTP3_MAX_FRAME_PAYLOAD_SIZE 16384
+#define H2O_HTTP3_INITIAL_REQUEST_STREAM_WINDOW_SIZE (H2O_HTTP3_MAX_FRAME_PAYLOAD_SIZE * 2)
+
 typedef struct st_h2o_quic_ctx_t h2o_quic_ctx_t;
 typedef struct st_h2o_quic_conn_t h2o_quic_conn_t;
 typedef struct st_h2o_http3_conn_t h2o_http3_conn_t;
@@ -103,11 +107,27 @@ typedef struct st_h2o_http3_priority_update_frame_t {
     h2o_absprio_t priority;
 } h2o_http3_priority_update_frame_t;
 
+typedef struct st_h2o_http3_goaway_frame_t {
+    uint64_t stream_or_push_id;
+} h2o_http3_goaway_frame_t;
+
 #define H2O_HTTP3_PRIORITY_UPDATE_FRAME_CAPACITY (1 /* len */ + 1 /* frame type */ + 8 + sizeof("u=1,i=?0") - 1)
 uint8_t *h2o_http3_encode_priority_update_frame(uint8_t *dst, const h2o_http3_priority_update_frame_t *frame);
 int h2o_http3_decode_priority_update_frame(h2o_http3_priority_update_frame_t *frame, const uint8_t *payload, size_t len,
                                            const char **err_desc);
+size_t h2o_http3_goaway_frame_capacity(quicly_stream_id_t stream_or_push_id);
+uint8_t *h2o_http3_encode_goaway_frame(uint8_t *buff, quicly_stream_id_t stream_or_push_id);
+int h2o_http3_decode_goaway_frame(h2o_http3_goaway_frame_t *frame, const uint8_t *payload, size_t len, const char **err_desc);
 
+/**
+ * special error value to be returned by h2o_quic_accept_cb, to indicate that packet decryption failed during quicly_accept
+ */
+#define H2O_QUIC_ACCEPT_CONN_DECRYPTION_FAILED ((h2o_quic_conn_t *)1)
+
+/**
+ * Accepts a new QUIC connection
+ * @return a pointer to a new connection object upon success, NULL or H2O_QUIC_ACCEPT_CONN_DECRYPTION_FAILED upon failure.
+ */
 typedef h2o_quic_conn_t *(*h2o_quic_accept_cb)(h2o_quic_ctx_t *ctx, quicly_address_t *destaddr, quicly_address_t *srcaddr,
                                                quicly_decoded_packet_t *packet);
 typedef void (*h2o_quic_notify_connection_update_cb)(h2o_quic_ctx_t *ctx, h2o_quic_conn_t *conn);
@@ -165,15 +185,11 @@ struct st_h2o_quic_ctx_t {
      */
     h2o_quic_notify_connection_update_cb notify_conn_update;
     /**
-     * linklist of clients (see st_h2o_http3client_conn_t::clients_link)
-     */
-    h2o_linklist_t clients;
-    /**
      * callback to accept new connections (optional)
      */
     h2o_quic_accept_cb acceptor;
     /**
-     * 0 to disable load distribution of accepting connections by h2o (i.e. relies on the kernel's disbirution based on 4-tuple)
+     * 0 to disable load distribution of accepting connections by h2o (i.e. relies on the kernel's distribution based on 4-tuple)
      */
     uint32_t accept_thread_divisor;
     /**
@@ -185,6 +201,10 @@ struct st_h2o_quic_ctx_t {
      */
     uint8_t default_ttl;
     /**
+     * boolean to indicate whether to use UDP GSO
+     */
+    uint8_t use_gso;
+    /**
      * preprocessor that rewrites a forwarded datagram (optional)
      */
     h2o_quic_preprocess_packet_cb preprocess_packet;
@@ -193,6 +213,16 @@ struct st_h2o_quic_ctx_t {
 typedef struct st_h2o_quic_conn_callbacks_t {
     void (*destroy_connection)(h2o_quic_conn_t *conn);
 } h2o_quic_conn_callbacks_t;
+
+/**
+ * states of an HTTP/3 connection (not stream)
+ * mainly to see if a new request can be accepted
+ */
+typedef enum enum_h2o_http3_conn_state_t {
+    H2O_HTTP3_CONN_STATE_OPEN,        /* accepting new connections */
+    H2O_HTTP3_CONN_STATE_HALF_CLOSED, /* no more accepting new streams */
+    H2O_HTTP3_CONN_STATE_IS_CLOSING   /* nothing should be sent */
+} h2o_http3_conn_state_t;
 
 struct st_h2o_quic_conn_t {
     /**
@@ -221,6 +251,14 @@ struct st_h2o_quic_conn_t {
     h2o_linklist_t _dsr_builders;
 };
 
+typedef struct st_h2o_http3_qpack_context_t {
+    /**
+     * Our preferred table capacity for the encoder. The value actually used is MIN(this_value,
+     * peer_settings.encoder_table_capacity).
+     */
+    uint32_t encoder_table_capacity;
+} h2o_http3_qpack_context_t;
+
 typedef struct st_h2o_http3_conn_callbacks_t {
     h2o_quic_conn_callbacks_t super;
     void (*handle_control_stream_frame)(h2o_http3_conn_t *conn, uint8_t type, const uint8_t *payload, size_t len);
@@ -232,9 +270,14 @@ struct st_h2o_http3_conn_t {
      */
     h2o_quic_conn_t super;
     /**
+     * connection state
+     */
+    h2o_http3_conn_state_t state;
+    /**
      * QPACK states
      */
     struct {
+        const h2o_http3_qpack_context_t *ctx;
         h2o_qpack_encoder_t *enc;
         h2o_qpack_decoder_t *dec;
     } qpack;
@@ -242,7 +285,7 @@ struct st_h2o_http3_conn_t {
      *
      */
     struct {
-        uint64_t max_header_list_size;
+        uint64_t max_field_section_size;
     } peer_settings;
     struct {
         struct {
@@ -258,30 +301,6 @@ struct st_h2o_http3_conn_t {
     } _control_streams;
 };
 
-#define h2o_http3_encode_frame(_pool_, _buf_, _type, _block)                                                                       \
-    do {                                                                                                                           \
-        h2o_mem_pool_t *_pool = (_pool_);                                                                                          \
-        h2o_byte_vector_t *_buf = (_buf_);                                                                                         \
-        h2o_vector_reserve(_pool, _buf, _buf->size + 9);                                                                           \
-        _buf->size += 2;                                                                                                           \
-        size_t _payload_off = _buf->size;                                                                                          \
-        _buf->entries[_payload_off - 2] = (_type);                                                                                 \
-        do {                                                                                                                       \
-            _block                                                                                                                 \
-        } while (0);                                                                                                               \
-        uint8_t _vbuf[8];                                                                                                          \
-        size_t _vlen = quicly_encodev(_vbuf, _buf->size - _payload_off) - _vbuf;                                                   \
-        if (_vlen != 1) {                                                                                                          \
-            h2o_vector_reserve(_pool, _buf, _buf->size + _vlen - 1);                                                               \
-            memmove(_buf->entries + _payload_off + _vlen - 1, _buf->entries + _payload_off, _buf->size - _payload_off);            \
-            _payload_off += _vlen - 1;                                                                                             \
-            _buf->size += _vlen - 1;                                                                                               \
-            memmove(_buf->entries + _payload_off - _vlen, _vbuf, _vlen);                                                           \
-        } else {                                                                                                                   \
-            _buf->entries[_payload_off - 1] = _vbuf[0];                                                                            \
-        }                                                                                                                          \
-    } while (0)
-
 #define H2O_HTTP3_CHECK_SUCCESS(expr)                                                                                              \
     do {                                                                                                                           \
         if (!(expr))                                                                                                               \
@@ -295,10 +314,13 @@ typedef struct st_h2o_http3_read_frame_t {
     uint64_t length;
 } h2o_http3_read_frame_t;
 
-extern const ptls_iovec_t h2o_http3_alpn[2];
+extern const ptls_iovec_t h2o_http3_alpn[3];
 
 /**
- * sends datagrams
+ * Sends UDP datagrams from specified source address to the specified destination. The returned value is a boolean indicating if the
+ * connection is still maintainable (false is returned when not being able to send a packet from the designated source address).
+ * When more than one datagram is provided, the size of all the datagrams must be the same except for the last datagram, so that
+ * the datagrams can be sent using GSO.
  */
 int h2o_quic_send_datagrams(h2o_quic_ctx_t *ctx, quicly_address_t *dest, quicly_address_t *src, struct iovec *datagrams,
                             size_t num_datagrams);
@@ -315,7 +337,7 @@ int h2o_http3_read_frame(h2o_http3_read_frame_t *frame, int is_client, uint64_t 
  * initializes the context
  */
 void h2o_quic_init_context(h2o_quic_ctx_t *ctx, h2o_loop_t *loop, h2o_socket_t *sock, quicly_context_t *quic,
-                           h2o_quic_accept_cb acceptor, h2o_quic_notify_connection_update_cb notify_conn_update);
+                           h2o_quic_accept_cb acceptor, h2o_quic_notify_connection_update_cb notify_conn_update, uint8_t use_gso);
 /**
  *
  */
@@ -357,7 +379,8 @@ void h2o_quic_setup(h2o_quic_conn_t *conn, quicly_conn_t *quic);
 /**
  * initializes a http3 connection
  */
-void h2o_http3_init_conn(h2o_http3_conn_t *conn, h2o_quic_ctx_t *ctx, const h2o_http3_conn_callbacks_t *callbacks);
+void h2o_http3_init_conn(h2o_http3_conn_t *conn, h2o_quic_ctx_t *ctx, const h2o_http3_conn_callbacks_t *callbacks,
+                         const h2o_http3_qpack_context_t *qpack_ctx);
 /**
  *
  */
@@ -391,6 +414,10 @@ void h2o_http3_send_qpack_stream_cancel(h2o_http3_conn_t *conn, quicly_stream_id
  *
  */
 void h2o_http3_send_qpack_header_ack(h2o_http3_conn_t *conn, const void *bytes, size_t len);
+/**
+ * Enqueue GOAWAY frame for sending
+ */
+void h2o_http3_send_goaway_frame(h2o_http3_conn_t *conn, uint64_t stream_or_push_id);
 /**
  *
  */
