@@ -75,9 +75,9 @@ typedef struct st_h2o_dsr_decoded_instruction_t {
              * length of the chunk to be sent
              */
             uint16_t body_len;
-            uint16_t _first_byte_at;
-            uint16_t _payload_from;
             uint64_t _packet_number;
+            uint16_t _packet_from;
+            uint16_t _packet_payload_from;
         } send_packet;
     } data;
 } h2o_dsr_decoded_instruction_t;
@@ -110,7 +110,7 @@ void h2o_dsr_destroy_instruction_builder(h2o_dsr_instruction_builder_t *builder)
  * Returns a boolean indication if the operation was successful.
  */
 int h2o_dsr_add_instruction(h2o_dsr_instruction_builder_t *builder, h2o_linklist_t *anchor, struct sockaddr *dest_addr,
-                            quicly_detached_send_packet_t *detached, uint16_t prefix_len, uint64_t body_off, uint16_t body_len);
+                            quicly_detached_send_packet_t *detached, uint64_t body_off, uint16_t body_len);
 /**
  *
  */

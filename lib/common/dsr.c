@@ -309,7 +309,7 @@ void on_instructions_write_complete(h2o_socket_t *sock, const char *err)
 }
 
 int h2o_dsr_add_instruction(h2o_dsr_instruction_builder_t *builder, h2o_linklist_t *anchor, struct sockaddr *dest_addr,
-                            quicly_detached_send_packet_t *detached, uint16_t prefix_len, uint64_t body_off, uint16_t body_len)
+                            quicly_detached_send_packet_t *detached, uint64_t body_off, uint16_t body_len)
 {
 #define APPEND_BYTE(b) builder->buf->bytes[builder->buf->size++] = (b)
 #define APPEND_VARINT(v)                                                                                                           \
@@ -344,24 +344,24 @@ int h2o_dsr_add_instruction(h2o_dsr_instruction_builder_t *builder, h2o_linklist
 
     /* calculate the size of the instruction */
     size_t inst_size = 1; /* for the type byte */
-    inst_size += quicly_encodev_capacity(prefix_len) + prefix_len;
-    inst_size += quicly_encodev_capacity(detached->first_byte_at);
-    inst_size += quicly_encodev_capacity(detached->payload_from);
-    inst_size += quicly_encodev_capacity(detached->packet_number);
+    inst_size += quicly_encodev_capacity(detached->datagram.len) + detached->datagram.len;
     inst_size += quicly_encodev_capacity(body_off);
     inst_size += quicly_encodev_capacity(body_len);
+    inst_size += quicly_encodev_capacity(detached->packet_number);
+    inst_size += quicly_encodev_capacity(detached->packet_from);
+    inst_size += quicly_encodev_capacity(detached->packet_payload_from);
 
     /* reserve memory */
     h2o_buffer_reserve(&builder->buf, inst_size);
 
     /* encode the instruction */
     APPEND_BYTE(H2O_DSR_DECODED_INSTRUCTION_SEND_PACKET);
-    APPEND_BLOCK(detached->datagram, prefix_len);
-    APPEND_VARINT(detached->first_byte_at);
-    APPEND_VARINT(detached->payload_from);
-    APPEND_VARINT(detached->packet_number);
+    APPEND_BLOCK(detached->datagram.base, detached->datagram.len);
     APPEND_VARINT(body_off);
     APPEND_VARINT(body_len);
+    APPEND_VARINT(detached->packet_number);
+    APPEND_VARINT(detached->packet_from);
+    APPEND_VARINT(detached->packet_payload_from);
     assert(builder->buf->size <= builder->buf->capacity);
 
     /* link */
@@ -419,18 +419,18 @@ ssize_t h2o_dsr_decode_instruction(h2o_dsr_decoded_instruction_t *instruction, c
         if ((ret = decode_block(src, end, &instruction->data.send_packet.prefix, UINT16_MAX)) <= 0)
             return ret;
         src += ret;
-        DECODE16(&instruction->data.send_packet._first_byte_at);
-        DECODE16(&instruction->data.send_packet._payload_from);
-        if ((instruction->data.send_packet._packet_number = ptls_decode_quicint(&src, end)) == UINT64_MAX)
-            goto Incomplete;
         if ((instruction->data.send_packet.body_off = ptls_decode_quicint(&src, end)) == UINT64_MAX)
             goto Incomplete;
         DECODE16(&instruction->data.send_packet.body_len);
+        if ((instruction->data.send_packet._packet_number = ptls_decode_quicint(&src, end)) == UINT64_MAX)
+            goto Incomplete;
+        DECODE16(&instruction->data.send_packet._packet_from);
+        DECODE16(&instruction->data.send_packet._packet_payload_from);
         /* check that the packet begins before the payload */
-        if (!(instruction->data.send_packet._first_byte_at < instruction->data.send_packet._payload_from))
+        if (!(instruction->data.send_packet._packet_from < instruction->data.send_packet._packet_payload_from))
             goto Invalid;
         /* check that the prefix expands into the payload */
-        if (!(instruction->data.send_packet._payload_from < instruction->data.send_packet.prefix.len))
+        if (!(instruction->data.send_packet._packet_payload_from < instruction->data.send_packet.prefix.len))
             goto Invalid;
         break;
     default:
@@ -509,7 +509,7 @@ void h2o_dsr_encrypt_quic_packet(h2o_dsr_quic_packet_encryptor_t *encryptor, h2o
 {
     assert(instruction->type == H2O_DSR_DECODED_INSTRUCTION_SEND_PACKET);
     encryptor->ctx->crypto_engine->encrypt_packet(encryptor->ctx->crypto_engine, NULL, encryptor->header_protection_ctx,
-                                                  encryptor->aead_ctx, datagram, instruction->data.send_packet._first_byte_at,
-                                                  instruction->data.send_packet._payload_from,
+                                                  encryptor->aead_ctx, datagram, instruction->data.send_packet._packet_from,
+                                                  instruction->data.send_packet._packet_payload_from,
                                                   instruction->data.send_packet._packet_number, 0);
 }

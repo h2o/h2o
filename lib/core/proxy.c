@@ -163,15 +163,7 @@ static void build_request(h2o_req_t *req, h2o_iovec_t *method, h2o_url_t *url, h
     if (props->connection_header != NULL) {
         if (upgrade_to != NULL && upgrade_to != h2o_httpclient_upgrade_to_connect) {
             *props->connection_header = h2o_iovec_init(H2O_STRLIT("upgrade"));
-<<<<<<< HEAD
-            h2o_add_header(&req->pool, headers, H2O_TOKEN_UPGRADE, NULL, H2O_STRLIT("websocket"));
-        } else if (req->dsr.req.base != NULL) {
-            *props->connection_header = h2o_iovec_init(H2O_STRLIT("upgrade, dsr"));
-            h2o_add_header(&req->pool, headers, H2O_TOKEN_UPGRADE, NULL, H2O_STRLIT("dsr"));
-            h2o_add_header(&req->pool, headers, H2O_TOKEN_DSR, NULL, req->dsr.req.base, req->dsr.req.len);
-=======
             h2o_add_header(&req->pool, headers, H2O_TOKEN_UPGRADE, NULL, upgrade_to, strlen(upgrade_to));
->>>>>>> master
         } else if (keepalive) {
             *props->connection_header = h2o_iovec_init(H2O_STRLIT("keep-alive"));
         } else {
@@ -527,21 +519,6 @@ static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errs
     if (!seen_date_header && emit_missing_date_header)
         h2o_resp_add_date_header(req);
 
-<<<<<<< HEAD
-    if (req->res.status == 101) {
-        if (self->is_websocket_handshake) {
-            h2o_httpclient_ctx_t *client_ctx = get_client_ctx(req);
-            assert(client_ctx->websocket_timeout != NULL);
-            h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_UPGRADE, NULL, H2O_STRLIT("websocket"));
-            on_websocket_upgrade(self, *client_ctx->websocket_timeout);
-            detach_client(self);
-            return NULL;
-        } else if (req->dsr.on_upgrade != NULL && client->steal_socket != NULL) {
-            req->dsr.on_upgrade(req, client->steal_socket(client));
-            detach_client(self);
-            return NULL;
-        }
-=======
     if (args->tunnel != NULL) {
         h2o_httpclient_ctx_t *client_ctx = get_client_ctx(req);
         assert(client_ctx->tunnel_enabled);
@@ -550,7 +527,6 @@ static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errs
         req->establish_tunnel(req, args->tunnel, client_ctx->io_timeout);
         detach_client(self);
         return NULL;
->>>>>>> master
     }
 
     /* declare the start of the response */

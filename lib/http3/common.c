@@ -1167,20 +1167,11 @@ int h2o_quic_send(h2o_quic_conn_t *conn)
         if (num_datagrams != 0 && !h2o_quic_send_datagrams(conn->ctx, &dest, &src, datagrams, num_datagrams)) {
             /* FIXME close the connection immediately */
             break;
-<<<<<<< HEAD
-        case QUICLY_ERROR_FREE_CONNECTION:
-            assert(h2o_linklist_is_empty(&conn->_dsr_builders));
-            conn->callbacks->destroy_connection(conn);
-            return 0;
-        default:
-            fprintf(stderr, "quicly_send returned %d\n", ret);
-            abort();
-=======
->>>>>>> master
         }
         break;
     case QUICLY_ERROR_STATE_EXHAUSTION:
     case QUICLY_ERROR_FREE_CONNECTION:
+        assert(h2o_linklist_is_empty(&conn->_dsr_builders));
         conn->callbacks->destroy_connection(conn);
         return 0;
     default:

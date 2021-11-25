@@ -65,10 +65,10 @@ static void test_encdec(void)
         .cipher = &ptls_openssl_aes256gcmsha384,
         .header_protection_secret = "0123456789abcdef0123456789abcdef0123456789abcdef",
         .aead_secret = "ABCDEFGHIJKLMNOPQRSTUVWXYZABCDEF0123456789abcdef",
-        .datagram = prefix,
-        .first_byte_at = 0,
-        .payload_from = 7,
         .packet_number = 0,
+        .datagram = ptls_iovec_init(prefix, sizeof(prefix) - 1),
+        .packet_from = 0,
+        .packet_payload_from = 7,
     };
 
     /* encode instructions */
@@ -80,7 +80,7 @@ static void test_encdec(void)
     h2o_linklist_init_anchor(&anchor);
 
     /* encode a group consisting of one instruction */
-    ok(h2o_dsr_add_instruction(&builder, &anchor, (struct sockaddr *)&dest_addr, &detached, sizeof(prefix) - 1, 0, 256));
+    ok(h2o_dsr_add_instruction(&builder, &anchor, (struct sockaddr *)&dest_addr, &detached, 1, 256));
     ok(!h2o_linklist_is_empty(&anchor));
 
     /* decode  */
@@ -91,6 +91,14 @@ static void test_encdec(void)
     inst_len = h2o_dsr_decode_instruction(&inst, (const uint8_t *)builder.buf->bytes, builder.buf->size);
     ok(inst_len > 0);
     ok(inst.type == H2O_DSR_DECODED_INSTRUCTION_SEND_PACKET);
+    ok(h2o_memis(inst.data.send_packet.prefix.base, inst.data.send_packet.prefix.len, detached.datagram.base,
+                 detached.datagram.len));
+    ok(inst.data.send_packet.body_off == 1);
+    ok(inst.data.send_packet.body_len == 256);
+    ok(inst.data.send_packet._packet_number == detached.packet_number);
+    ok(inst.data.send_packet._packet_from == 0);
+    ok(inst.data.send_packet._packet_payload_from == 7);
+
     h2o_buffer_consume(&builder.buf, inst_len);
     ok(builder.buf->size == 0);
 
