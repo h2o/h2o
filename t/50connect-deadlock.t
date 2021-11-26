@@ -121,6 +121,8 @@ sub test_tunnel {
         my $resp = read_until_blocked($readfh);
         is $resp, "hello\n";
     };
+    my $all_read = '';
+    my @all_lengths_written;
     for my $ch (1..5) {
         subtest "run $ch" => sub {
             my $bytes_written;
@@ -130,14 +132,28 @@ sub test_tunnel {
                     unless defined $bytes_written;
                 diag "stall after $bytes_written bytes";
                 pass "stalled";
+                push @all_lengths_written, $bytes_written;
             };
             subtest "read-all" => sub {
                 my $buf = read_until_blocked($readfh);
                 is length $buf, $bytes_written;
-                ok($buf =~ qr{^$ch*$}s);
+                $all_read .= $buf;
             };
         };
     }
+    my @all_lengths_read;
+    for my $ch (1..5) {
+        if ($all_read =~ /^($ch*)/s) {
+            push @all_lengths_read, length $1;
+            $all_read = $';
+        } else {
+            push @all_lengths_read, 0;
+        }
+    }
+    subtest "byte pattern" => sub {
+        is_deeply \@all_lengths_read, \@all_lengths_written, "lengths of each block";
+        is $all_read, '', "nothing excess";
+    };
 }
 
 sub write_until_blocked {
