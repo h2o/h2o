@@ -121,11 +121,11 @@ sub test_tunnel {
         my $resp = read_until_blocked($readfh);
         is $resp, "hello\n";
     };
-    for (1..5) {
-        subtest "run $_" => sub {
+    for my $ch (1..5) {
+        subtest "run $ch" => sub {
             my $bytes_written;
             subtest "write-much-as-possible" => sub {
-                $bytes_written = write_until_blocked($writefh);
+                $bytes_written = write_until_blocked($writefh, $ch);
                 die "unexpected close during write:" . ($errfh ? read_until_blocked($errfh) : "")
                     unless defined $bytes_written;
                 diag "stall after $bytes_written bytes";
@@ -134,21 +134,21 @@ sub test_tunnel {
             subtest "read-all" => sub {
                 my $buf = read_until_blocked($readfh);
                 is length $buf, $bytes_written;
-                ok($buf =~ qr{^1*$}s);
+                ok($buf =~ qr{^$ch*$}s);
             };
         };
     }
 }
 
 sub write_until_blocked {
-    my $sock = shift;
+    my ($sock, $ch) = @_;
     my $bytes_written = 0;
 
     fcntl $sock, F_SETFL, O_NONBLOCK
         or die "failed to set O_NONBLOCK:$!";
 
     while (1) {
-        my $ret = syswrite $sock, "1" x 65536;
+        my $ret = syswrite $sock, $ch x 65536;
         if (defined $ret) {
             return undef if $ret == 0;
             # continue writing
