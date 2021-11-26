@@ -127,7 +127,17 @@ OPTION(BUILD_SHARED_LIBS "whether to build a shared library" OFF)
 FIND_PROGRAM(RUBY ruby)
 FIND_PROGRAM(BISON bison)
 IF (RUBY AND BISON)
-    SET(WITH_MRUBY_DEFAULT "ON")
+    # Bundled mruby cannot be built with Ruby 3.x
+    EXECUTE_PROCESS(
+        COMMAND "${RUBY}" -e "puts RUBY_VERSION"
+        OUTPUT_VARIABLE RUBY_VERSION
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
+    IF ("${RUBY_VERSION}" VERSION_LESS "3.0.0")
+        SET(WITH_MRUBY_DEFAULT "ON")
+    ELSE ()
+        SET(WITH_MRUBY_DEFAULT "OFF")
+    ENDIF()
 ELSE ()
     SET(WITH_MRUBY_DEFAULT "OFF")
 ENDIF ()
@@ -252,7 +262,7 @@ IF (PKG_CONFIG_FOUND)
     ENDIF (LIBCAP_FOUND)
 ENDIF (PKG_CONFIG_FOUND)
 
-SET(CC_WARNING_FLAGS "-Wall -Wno-unused-value -Wno-unused-function -Wno-nullability-completeness -Wno-expansion-to-defined -Werror=implicit-function-declaration")
+SET(CC_WARNING_FLAGS "-Wall -Wno-unused-value -Wno-unused-function -Wno-nullability-completeness -Wno-expansion-to-defined -Werror=implicit-function-declaration -Werror=incompatible-pointer-types")
 
 IF ("${CMAKE_C_COMPILER_ID}" STREQUAL "GNU")
     IF (NOT ("${CMAKE_C_COMPILER_VERSION}" VERSION_LESS "4.6"))
@@ -370,6 +380,7 @@ SET(LIB_SOURCE_FILES
     deps/quicly/lib/loss.c
     deps/quicly/lib/quicly.c
     deps/quicly/lib/ranges.c
+    deps/quicly/lib/rate.c
     deps/quicly/lib/recvstate.c
     deps/quicly/lib/remote_cid.c
     deps/quicly/lib/retire_cid.c
@@ -834,7 +845,7 @@ IF (BROTLI_FOUND)
     ADD_DEPENDENCIES(checkdepends lib-examples-evloop)
 ENDIF ()
 
-ADD_CUSTOM_TARGET(check env H2O_ROOT=. BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR} prove -I. -v t/*.t
+ADD_CUSTOM_TARGET(check env H2O_ROOT=. BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR} time t/run-tests t/*.t
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     DEPENDS checkdepends)
 
@@ -896,6 +907,7 @@ IF (BUILD_FUZZER)
     SET_TARGET_PROPERTIES(h2o-fuzzer-http3 PROPERTIES COMPILE_FLAGS "-DH2O_USE_LIBUV=0")
     SET_TARGET_PROPERTIES(h3-header-generator PROPERTIES COMPILE_FLAGS "-DH2O_USE_LIBUV=0")
     SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_C_FLAGS}")
+    ADD_DEPENDENCIES(checkdepends h2o-fuzzer-http1 h2o-fuzzer-http2 h2o-fuzzer-http3 h2o-fuzzer-url)
     IF (OSS_FUZZ)
         # Use https://github.com/google/oss-fuzz compatible options
         SET(LIB_FUZZER FuzzingEngine)
@@ -937,6 +949,7 @@ IF (BUILD_FUZZER)
     TARGET_LINK_LIBRARIES(h2o-fuzzer-http2 libh2o-evloop ${EXTRA_LIBS} ${LIB_FUZZER})
     # h3 fuzzer does not use libh2o so it can replace quicly with quicly_mock
     TARGET_LINK_LIBRARIES(h2o-fuzzer-http3 ${EXTRA_LIBS} ${LIB_FUZZER} ${OPENSSL_LIBRARIES} ${CMAKE_DL_LIBS})
+    TARGET_INCLUDE_DIRECTORIES(h2o-fuzzer-http3 PUBLIC ${OPENSSL_INCLUDE_DIR})
     TARGET_LINK_LIBRARIES(h2o-fuzzer-url libh2o-evloop ${EXTRA_LIBS} ${LIB_FUZZER})
     TARGET_LINK_LIBRARIES(h3-header-generator libh2o-evloop ${EXTRA_LIBS})
 

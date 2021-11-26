@@ -53,7 +53,7 @@ subtest "h2olog", sub {
   });
 
   my ($headers, $body) = run_prog("$client_prog -3 https://127.0.0.1:$quic_port/");
-  like $headers, qr{^HTTP/3 200\n}, "req: HTTP/3";
+  like $headers, qr{^HTTP/3 200\n}m, "req: HTTP/3";
 
   my $trace;
   until (($trace = $tracer->get_trace()) =~ m{"h3s-destroy"}) {}
@@ -80,7 +80,7 @@ subtest "h2olog -t", sub {
   });
 
   my ($headers, $body) = run_prog("$client_prog -3 https://127.0.0.1:$quic_port/");
-  like $headers, qr{^HTTP/3 200\n}, "req: HTTP/3";
+  like $headers, qr{^HTTP/3 200\n}m, "req: HTTP/3";
 
   my $trace;
   until (($trace = $tracer->get_trace()) =~ m{"h3s-destroy"}) {}
@@ -104,7 +104,7 @@ subtest "h2olog -H", sub {
   });
 
   my ($headers, $body) = run_prog("$client_prog -3 https://127.0.0.1:$quic_port/");
-  like $headers, qr{^HTTP/3 200\n}, "req: HTTP/3";
+  like $headers, qr{^HTTP/3 200\n}m, "req: HTTP/3";
 
   my $trace;
   until (($trace = $tracer->get_trace()) =~ m{\bRxProtocol\b}) {}

@@ -57,6 +57,7 @@ SET(QUICLY_LIBRARY_FILES
     lib/loss.c
     lib/quicly.c
     lib/ranges.c
+    lib/rate.c
     lib/recvstate.c
     lib/remote_cid.c
     lib/retire_cid.c
@@ -73,6 +74,7 @@ SET(UNITTEST_SOURCE_FILES
     t/lossy.c
     t/maxsender.c
     t/ranges.c
+    t/rate.c
     t/remote_cid.c
     t/retire_cid.c
     t/sentmap.c
@@ -120,6 +122,10 @@ TARGET_LINK_LIBRARIES(cli ${OPENSSL_LIBRARIES} ${CMAKE_DL_LIBS} m)
 
 ADD_EXECUTABLE(test.t ${PICOTLS_OPENSSL_FILES} ${UNITTEST_SOURCE_FILES})
 TARGET_LINK_LIBRARIES(test.t quicly ${OPENSSL_LIBRARIES} ${CMAKE_DL_LIBS})
+
+ADD_EXECUTABLE(simulator ${PICOTLS_OPENSSL_FILES} ${QUICLY_LIBRARY_FILES} t/simulator.c embedded-probes.h)
+SET_TARGET_PROPERTIES(simulator PROPERTIES COMPILE_FLAGS "-DQUICLY_USE_EMBEDDED_PROBES=1")
+TARGET_LINK_LIBRARIES(simulator ${OPENSSL_LIBRARIES} ${CMAKE_DL_LIBS} m)
 
 ADD_EXECUTABLE(examples-echo ${PICOTLS_OPENSSL_FILES} examples/echo.c)
 TARGET_LINK_LIBRARIES(examples-echo quicly ${OPENSSL_LIBRARIES} ${CMAKE_DL_LIBS})

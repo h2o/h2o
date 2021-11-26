@@ -517,6 +517,20 @@ static h2o_iovec_t log_cc_name(h2o_req_t *req)
     return h2o_iovec_init(NULL, 0);
 }
 
+static h2o_iovec_t log_delivery_rate(h2o_req_t *req)
+{
+    struct st_h2o_http3_server_conn_t *conn = (struct st_h2o_http3_server_conn_t *)req->conn;
+    quicly_rate_t rate;
+
+    if (quicly_get_delivery_rate(conn->h3.super.quic, &rate) == 0 && rate.latest != 0) {
+        char *buf = h2o_mem_alloc_pool(&req->pool, char, sizeof(H2O_UINT64_LONGEST_STR));
+        size_t len = sprintf(buf, "%" PRIu64, rate.latest);
+        return h2o_iovec_init(buf, len);
+    }
+
+    return h2o_iovec_init(NULL, 0);
+}
+
 static h2o_iovec_t log_tls_protocol_version(h2o_req_t *_req)
 {
     return h2o_iovec_init(H2O_STRLIT("TLSv1.3"));
@@ -599,15 +613,25 @@ static h2o_iovec_t log_quic_stats(h2o_req_t *req)
     size_t len, bufsize = 1400;
 Redo:
     buf = h2o_mem_alloc_pool(&req->pool, char, bufsize);
-    len = snprintf(buf, bufsize,
-                   "packets-received=%" PRIu64 ",packets-decryption-failed=%" PRIu64 ",packets-sent=%" PRIu64
-                   ",packets-lost=%" PRIu64 ",packets-ack-received=%" PRIu64 ",bytes-received=%" PRIu64 ",bytes-sent=%" PRIu64
-                   ",rtt-minimum=%" PRIu32 ",rtt-smoothed=%" PRIu32 ",rtt-variance=%" PRIu32 ",rtt-latest=%" PRIu32
-                   ",cwnd=%" PRIu32 APPLY_NUM_FRAMES(FORMAT_OF_NUM_FRAMES, received) APPLY_NUM_FRAMES(FORMAT_OF_NUM_FRAMES, sent),
-                   stats.num_packets.received, stats.num_packets.decryption_failed, stats.num_packets.sent, stats.num_packets.lost,
-                   stats.num_packets.ack_received, stats.num_bytes.received, stats.num_bytes.sent, stats.rtt.minimum,
-                   stats.rtt.smoothed, stats.rtt.variance, stats.rtt.latest,
-                   stats.cc.cwnd APPLY_NUM_FRAMES(VALUE_OF_NUM_FRAMES, received) APPLY_NUM_FRAMES(VALUE_OF_NUM_FRAMES, sent));
+    len = snprintf(
+        buf, bufsize,
+        "packets-received=%" PRIu64 ",packets-decryption-failed=%" PRIu64 ",packets-sent=%" PRIu64 ",packets-lost=%" PRIu64
+        ",packets-lost-time-threshold=%" PRIu64 ",packets-ack-received=%" PRIu64 ",late-acked=%" PRIu64 ",bytes-received=%" PRIu64
+        ",bytes-sent=%" PRIu64 ",bytes-lost=%" PRIu64 ",bytes-ack-received=%" PRIu64 ",bytes-stream-data-sent=%" PRIu64
+        ",bytes-stream-data-resent=%" PRIu64 ",rtt-minimum=%" PRIu32 ",rtt-smoothed=%" PRIu32 ",rtt-variance=%" PRIu32
+        ",rtt-latest=%" PRIu32 ",cwnd=%" PRIu32 ",ssthresh=%" PRIu32 ",cwnd-initial=%" PRIu32 ",cwnd-exiting-slow-start=%" PRIu32
+        ",cwnd-minimum=%" PRIu32 ",cwnd-maximum=%" PRIu32 ",num-loss-episodes=%" PRIu32 ",num-ptos=%" PRIu64
+        ",delivery-rate-latest=%" PRIu64 ",delivery-rate-smoothed=%" PRIu64
+        ",delivery-rate-stdev=%" PRIu64 APPLY_NUM_FRAMES(FORMAT_OF_NUM_FRAMES, received)
+            APPLY_NUM_FRAMES(FORMAT_OF_NUM_FRAMES, sent),
+        stats.num_packets.received, stats.num_packets.decryption_failed, stats.num_packets.sent, stats.num_packets.lost,
+        stats.num_packets.lost_time_threshold, stats.num_packets.ack_received, stats.num_packets.late_acked,
+        stats.num_bytes.received, stats.num_bytes.sent, stats.num_bytes.lost, stats.num_bytes.ack_received,
+        stats.num_bytes.stream_data_sent, stats.num_bytes.stream_data_resent, stats.rtt.minimum, stats.rtt.smoothed,
+        stats.rtt.variance, stats.rtt.latest, stats.cc.cwnd, stats.cc.ssthresh, stats.cc.cwnd_initial,
+        stats.cc.cwnd_exiting_slow_start, stats.cc.cwnd_minimum, stats.cc.cwnd_maximum, stats.cc.num_loss_episodes, stats.num_ptos,
+        stats.delivery_rate.latest, stats.delivery_rate.smoothed,
+        stats.delivery_rate.stdev APPLY_NUM_FRAMES(VALUE_OF_NUM_FRAMES, received) APPLY_NUM_FRAMES(VALUE_OF_NUM_FRAMES, sent));
     if (len + 1 > bufsize) {
         bufsize = len + 1;
         goto Redo;
@@ -1753,9 +1777,10 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
         .num_reqs_inflight = num_reqs_inflight,
         .get_tracer = get_tracer,
         .log_ = {{
-            .congestion_control =
+            .transport =
                 {
-                    .name_ = log_cc_name,
+                    .cc_name = log_cc_name,
+                    .delivery_rate = log_delivery_rate,
                 },
             .ssl =
                 {

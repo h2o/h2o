@@ -21,7 +21,6 @@
  */
 
 #include <assert.h>
-#include <malloc.h>
 #include "khash.h"
 #include "quicly.h"
 #include "quicly/sendstate.h"
@@ -328,6 +327,13 @@ int quicly_is_destination(quicly_conn_t *conn, struct sockaddr *dest_addr, struc
 uint32_t quicly_num_streams_by_group(quicly_conn_t *conn, int uni, int locally_initiated)
 {
     assert(0 && "unimplemented");
+    return 0;
+}
+
+int quicly_get_delivery_rate(quicly_conn_t *conn, quicly_rate_t *delivery_rate)
+{
+    /* Do nothing */
+    *delivery_rate = (quicly_rate_t){};
     return 0;
 }
 

@@ -25,6 +25,7 @@
 #include <algorithm>
 #include <bcc/BPF.h>
 #include <bcc/libbpf.h>
+#include <bcc/bpf_module.h>
 
 extern "C" {
 #include <unistd.h>
@@ -63,6 +64,9 @@ Optional arguments:
   -a                Include application data which are omitted by default.
   -r                Run without dropping root privilege.
   -w <path>         Path to write the output (default: stdout).
+  -f <flag>         Turn on a BCC debug flag (supported flag: DEBUG_LLVM_IR,
+                    DEBUG_BPF, DEBUG_PREPROCESSOR, DEBUG_SOURCE,
+                    DEBUG_BPF_REGISTER_STATE, DEBUG_BTF)
 
 Examples:
   h2olog -p $(pgrep -o h2o) -H
@@ -261,6 +265,7 @@ int main(int argc, char **argv)
     std::unique_ptr<h2o_tracer> tracer(create_raw_tracer());
 
     int debug = 0;
+    unsigned int bcc_flags = 0;
     bool preserve_root = false;
     bool list_usdts = false;
     bool include_appdata = false;
@@ -271,7 +276,7 @@ int main(int argc, char **argv)
     double sampling_rate = 1.0;
     std::vector<std::pair<std::vector<uint8_t> /* address */, unsigned /* netmask */>> sampling_addresses;
     std::vector<std::string> sampling_snis;
-    while ((c = getopt(argc, argv, "hHdrlap:t:s:w:S:A:N:")) != -1) {
+    while ((c = getopt(argc, argv, "hHdrlap:t:s:w:S:A:N:f:")) != -1) {
         switch (c) {
         case 'H':
             tracer.reset(create_http_tracer());
@@ -334,6 +339,24 @@ int main(int argc, char **argv)
         case 'd':
             debug++;
             break;
+        case 'f':
+#define BCC_FLAG(var, flag)                                                                                                        \
+    if (strcmp(optarg, #flag) == 0) {                                                                                              \
+        var |= ebpf::flag;                                                                                                         \
+    } else
+            BCC_FLAG(bcc_flags, DEBUG_LLVM_IR)
+            BCC_FLAG(bcc_flags, DEBUG_BPF)
+            BCC_FLAG(bcc_flags, DEBUG_PREPROCESSOR)
+            BCC_FLAG(bcc_flags, DEBUG_SOURCE)
+            BCC_FLAG(bcc_flags, DEBUG_BPF_REGISTER_STATE)
+            BCC_FLAG(bcc_flags, DEBUG_BTF)
+            // else
+            {
+                fprintf(stderr, "Error: unknown name for -f: %s\n", optarg);
+                exit(EXIT_FAILURE);
+            }
+#undef BCC_FLAG
+            break;
         case 'l':
             list_usdts = true;
             break;
@@ -394,7 +417,7 @@ int main(int argc, char **argv)
         cflags.push_back(generate_header_filter_cflag(response_header_filters));
     }
 
-    ebpf::BPF *bpf = new ebpf::BPF();
+    ebpf::BPF bpf(bcc_flags);
     std::vector<ebpf::USDT> probes;
 
     bool selective_tracing = false;
@@ -495,23 +518,23 @@ int main(int argc, char **argv)
         fprintf(stderr, "<BPF>\n%s\n</BPF>\n", tracer->bpf_text().c_str());
     }
 
-    ebpf::StatusTuple ret = bpf->init(tracer->bpf_text(), cflags, probes);
+    ebpf::StatusTuple ret = bpf.init(tracer->bpf_text(), cflags, probes);
     if (ret.code() != 0) {
         fprintf(stderr, "Error: init: %s\n", ret.msg().c_str());
         return EXIT_FAILURE;
     }
 
-    bpf->attach_tracepoint("sched:sched_process_exit", "trace_sched_process_exit");
+    bpf.attach_tracepoint("sched:sched_process_exit", "trace_sched_process_exit");
 
     for (auto &probe : probes) {
-        ret = bpf->attach_usdt(probe);
+        ret = bpf.attach_usdt(probe);
         if (ret.code() != 0) {
             fprintf(stderr, "Error: attach_usdt: %s\n", ret.msg().c_str());
             return EXIT_FAILURE;
         }
     }
 
-    ret = bpf->open_perf_buffer("events", event_cb, lost_cb, tracer.get(), PERF_BUFFER_PAGE_COUNT);
+    ret = bpf.open_perf_buffer("events", event_cb, lost_cb, tracer.get(), PERF_BUFFER_PAGE_COUNT);
     if (ret.code() != 0) {
         fprintf(stderr, "Error: open_perf_buffer: %s\n", ret.msg().c_str());
         return EXIT_FAILURE;
@@ -524,7 +547,7 @@ int main(int argc, char **argv)
         drop_root_privilege();
     }
 
-    ebpf::BPFPerfBuffer *perf_buffer = bpf->get_perf_buffer("events");
+    ebpf::BPFPerfBuffer *perf_buffer = bpf.get_perf_buffer("events");
     if (perf_buffer) {
         time_t t0 = time(NULL);
 
