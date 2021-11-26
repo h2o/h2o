@@ -45,7 +45,6 @@ static quicly_save_resumption_token_t save_http3_token = {save_http3_token_cb};
 static int save_http3_ticket_cb(ptls_save_ticket_t *self, ptls_t *tls, ptls_iovec_t src);
 static ptls_save_ticket_t save_http3_ticket = {save_http3_ticket_cb};
 static h2o_httpclient_connection_pool_t *connpool;
-static h2o_mem_pool_t pool;
 struct {
     const char *target; /* either URL or host:port when the method is CONNECT or CONNECT_UDP */
     const char *method;
@@ -150,7 +149,7 @@ static void on_exit_deferred(h2o_timer_t *entry)
     exit(1);
 }
 
-static void on_error(h2o_httpclient_ctx_t *ctx, const char *fmt, ...)
+static void on_error(h2o_httpclient_ctx_t *ctx, h2o_mem_pool_t *pool, const char *fmt, ...)
 {
     char errbuf[2048];
     va_list args;
@@ -161,6 +160,9 @@ static void on_error(h2o_httpclient_ctx_t *ctx, const char *fmt, ...)
 
     /* defer using zero timeout to send pending GOAWAY frame */
     create_timeout(ctx->loop, 0, on_exit_deferred, NULL);
+
+    h2o_mem_clear_pool(pool);
+    free(pool);
 }
 
 static void stdin_on_read(h2o_socket_t *_sock, const char *err)
@@ -246,18 +248,20 @@ static void stdin_proceed_request(h2o_httpclient_t *client, const char *errstr)
 
 static void start_request(h2o_httpclient_ctx_t *ctx)
 {
+    h2o_mem_pool_t *pool;
     h2o_url_t *url_parsed;
     int is_connect = strcmp(req.method, "CONNECT") == 0 || strcmp(req.method, "CONNECT-UDP") == 0;
 
-    /* clear memory pool */
-    h2o_mem_clear_pool(&pool);
+    /* allocate memory pool */
+    pool = h2o_mem_alloc(sizeof(*pool));
+    h2o_mem_init_pool(pool);
 
     /* parse URL, or host:port if CONNECT */
-    url_parsed = h2o_mem_alloc_pool(&pool, *url_parsed, 1);
+    url_parsed = h2o_mem_alloc_pool(pool, *url_parsed, 1);
     if (is_connect) {
         if (h2o_url_init(url_parsed, NULL, h2o_iovec_init(req.target, strlen(req.target)), h2o_iovec_init(NULL, 0)) != 0 ||
             url_parsed->_port == 0 || url_parsed->_port == 65535) {
-            on_error(ctx, "CONNECT target should be in the form of host:port: %s", req.target);
+            on_error(ctx, pool, "CONNECT target should be in the form of host:port: %s", req.target);
             return;
         }
         if (strcmp(req.method, "CONNECT-UDP") == 0) {
@@ -266,7 +270,7 @@ static void start_request(h2o_httpclient_ctx_t *ctx)
         }
     } else {
         if (h2o_url_parse(req.target, SIZE_MAX, url_parsed) != 0) {
-            on_error(ctx, "unrecognized type of URL: %s", req.target);
+            on_error(ctx, pool, "unrecognized type of URL: %s", req.target);
             return;
         }
     }
@@ -300,7 +304,7 @@ static void start_request(h2o_httpclient_ctx_t *ctx)
         h2o_socketpool_set_ssl_ctx(sockpool, ssl_ctx);
         SSL_CTX_free(ssl_ctx);
     }
-    h2o_httpclient_connect(std_in.sock != NULL ? (h2o_httpclient_t **)&std_in.sock->data : NULL, &pool, url_parsed, ctx, connpool,
+    h2o_httpclient_connect(std_in.sock != NULL ? (h2o_httpclient_t **)&std_in.sock->data : NULL, pool, url_parsed, ctx, connpool,
                            url_parsed, is_connect ? h2o_httpclient_upgrade_to_connect : NULL, on_connect);
 }
 
@@ -319,7 +323,7 @@ static int on_body(h2o_httpclient_t *client, const char *errstr)
         if (udp_sock != NULL)
             h2o_socket_read_stop(udp_sock);
         if (errstr != h2o_httpclient_error_is_eos) {
-            on_error(client->ctx, errstr);
+            on_error(client->ctx, client->pool, errstr);
             return -1;
         }
     }
@@ -329,10 +333,11 @@ static int on_body(h2o_httpclient_t *client, const char *errstr)
     h2o_buffer_consume(&(*client->buf), (*client->buf)->size);
 
     if (errstr == h2o_httpclient_error_is_eos) {
+        h2o_mem_clear_pool(client->pool);
+        free(client->pool);
         --cnt_left;
         if (cnt_left >= concurrency) {
             /* next attempt */
-            h2o_mem_clear_pool(&pool);
             ftruncate(fileno(stdout), 0); /* ignore error when stdout is a tty */
             create_timeout(client->ctx->loop, req_interval, on_next_request, client->ctx);
         }
@@ -379,14 +384,14 @@ static int on_informational(h2o_httpclient_t *client, int version, int status, h
 h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, h2o_httpclient_on_head_t *args)
 {
     if (errstr != NULL && errstr != h2o_httpclient_error_is_eos) {
-        on_error(client->ctx, errstr);
+        on_error(client->ctx, client->pool, errstr);
         return NULL;
     }
 
     print_response_headers(args->version, args->status, args->msg, args->headers, args->num_headers);
 
     if (errstr == h2o_httpclient_error_is_eos) {
-        on_error(client->ctx, "no body");
+        on_error(client->ctx, client->pool, "no body");
         return NULL;
     }
 
@@ -431,14 +436,14 @@ h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *errstr, 
     h2o_headers_t headers_vec = {NULL};
     size_t i;
     if (errstr != NULL) {
-        on_error(client->ctx, errstr);
+        on_error(client->ctx, client->pool, errstr);
         return NULL;
     }
 
     *_method = h2o_iovec_init(req.method, strlen(req.method));
     *url = *(h2o_url_t *)client->data;
     for (i = 0; i != req.num_headers; ++i)
-        h2o_add_header_by_str(&pool, &headers_vec, req.headers[i].name.base, req.headers[i].name.len, 1, NULL,
+        h2o_add_header_by_str(client->pool, &headers_vec, req.headers[i].name.base, req.headers[i].name.len, 1, NULL,
                               req.headers[i].value.base, req.headers[i].value.len);
     *body = h2o_iovec_init(NULL, 0);
     *proceed_req_cb = NULL;
@@ -447,15 +452,15 @@ h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *errstr, 
         *proceed_req_cb = stdin_proceed_request;
         if (std_in.sock->input->size != 0) {
             body->len = std_in.sock->input->size;
-            body->base = h2o_mem_alloc_pool(&pool, char, body->len);
+            body->base = h2o_mem_alloc_pool(client->pool, char, body->len);
             memcpy(body->base, std_in.sock->input->bytes, body->len);
             h2o_buffer_consume(&std_in.sock->input, body->len);
         }
     } else if (req.body_size > 0) {
         *filler_remaining_bytes(client) = req.body_size;
-        char *clbuf = h2o_mem_alloc_pool(&pool, char, sizeof(H2O_UINT32_LONGEST_STR) - 1);
+        char *clbuf = h2o_mem_alloc_pool(client->pool, char, sizeof(H2O_UINT32_LONGEST_STR) - 1);
         size_t clbuf_len = sprintf(clbuf, "%zu", req.body_size);
-        h2o_add_header(&pool, &headers_vec, H2O_TOKEN_CONTENT_LENGTH, NULL, clbuf, clbuf_len);
+        h2o_add_header(client->pool, &headers_vec, H2O_TOKEN_CONTENT_LENGTH, NULL, clbuf, clbuf_len);
         *proceed_req_cb = filler_proceed_request;
         create_timeout(client->ctx->loop, io_interval, filler_on_io_timeout, client);
     }
@@ -590,7 +595,7 @@ int main(int argc, char **argv)
 #if !H2O_USE_LIBUV
     /* initialize QUIC context */
     h2o_quic_init_context(&h3ctx.h3, ctx.loop, create_udp_socket(ctx.loop, 0), &h3ctx.quic, NULL,
-                          h2o_httpclient_http3_notify_connection_update);
+                          h2o_httpclient_http3_notify_connection_update, 1 /* use_gso */);
 #endif
 
     int is_opt_initial_udp_payload_size = 0;
@@ -691,7 +696,10 @@ int main(int argc, char **argv)
             ssl_verify_none = 1;
             break;
         case '2':
-            if (sscanf(optarg, "%" SCNd8, &ctx.protocol_selector.ratio.http2) != 1 ||
+            if (!strcasecmp(optarg, "f")) {
+                ctx.protocol_selector.ratio.http2 = 100;
+                ctx.force_cleartext_http2 = 1;
+            } else if (sscanf(optarg, "%" SCNd8, &ctx.protocol_selector.ratio.http2) != 1 ||
                 !(0 <= ctx.protocol_selector.ratio.http2 && ctx.protocol_selector.ratio.http2 <= 100)) {
                 fprintf(stderr, "failed to parse HTTP/2 ratio (-2)\n");
                 exit(EXIT_FAILURE);
@@ -785,7 +793,6 @@ int main(int argc, char **argv)
         memset(iov_filler.base, 'a', chunk_size);
         iov_filler.len = chunk_size;
     }
-    h2o_mem_init_pool(&pool);
 
     /* setup context */
     queue = h2o_multithread_create_queue(ctx.loop);

@@ -9,6 +9,7 @@ use IO::Select;
 use IO::Socket::INET;
 use IPC::Open3;
 use Scope::Guard;
+use Socket qw(IPPROTO_TCP TCP_NODELAY);
 use Symbol qw(gensym);
 use Time::HiRes qw(sleep);
 use Test::More;
@@ -53,6 +54,9 @@ my $origin_guard = do {
         # child process
         while (1) {
             if (my $sock = $listener->accept) {
+                if (!defined setsockopt($sock, IPPROTO_TCP, TCP_NODELAY, 1)) {
+                    die "setsockopt(TCP_NODELAY) failed:$!";
+                }
                 while (sysread($sock, my $buf, 1024) > 0) {
                     while (length $buf != 0) {
                         my $ret = syswrite($sock, $buf, length $buf);
@@ -121,34 +125,50 @@ sub test_tunnel {
         my $resp = read_until_blocked($readfh);
         is $resp, "hello\n";
     };
-    for (1..5) {
-        subtest "run $_" => sub {
+    my $all_read = '';
+    my @all_lengths_written;
+    for my $ch (1..5) {
+        subtest "run $ch" => sub {
             my $bytes_written;
             subtest "write-much-as-possible" => sub {
-                $bytes_written = write_until_blocked($writefh);
+                $bytes_written = write_until_blocked($writefh, $ch);
                 die "unexpected close during write:" . ($errfh ? read_until_blocked($errfh) : "")
                     unless defined $bytes_written;
                 diag "stall after $bytes_written bytes";
                 pass "stalled";
+                push @all_lengths_written, $bytes_written;
             };
             subtest "read-all" => sub {
                 my $buf = read_until_blocked($readfh);
                 is length $buf, $bytes_written;
-                ok($buf =~ qr{^1*$}s);
+                $all_read .= $buf;
             };
         };
     }
+    my @all_lengths_read;
+    for my $ch (1..5) {
+        if ($all_read =~ /^($ch*)/s) {
+            push @all_lengths_read, length $1;
+            $all_read = $';
+        } else {
+            push @all_lengths_read, 0;
+        }
+    }
+    subtest "byte pattern" => sub {
+        is_deeply \@all_lengths_read, \@all_lengths_written, "lengths of each block";
+        is $all_read, '', "nothing excess";
+    };
 }
 
 sub write_until_blocked {
-    my $sock = shift;
+    my ($sock, $ch) = @_;
     my $bytes_written = 0;
 
     fcntl $sock, F_SETFL, O_NONBLOCK
         or die "failed to set O_NONBLOCK:$!";
 
     while (1) {
-        my $ret = syswrite $sock, "1" x 65536;
+        my $ret = syswrite $sock, $ch x 65536;
         if (defined $ret) {
             return undef if $ret == 0;
             # continue writing

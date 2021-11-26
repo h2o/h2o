@@ -2687,9 +2687,9 @@ static void on_socketclose(void *data)
 static void on_accept(h2o_socket_t *listener, const char *err)
 {
     struct listener_ctx_t *ctx = listener->data;
-    size_t num_accepts = conf.max_connections / 16 / conf.thread_map.size;
-    if (num_accepts < 8)
-        num_accepts = 8;
+
+    /* TLS Handshakes take about 1ms, this effectively limits the latency induced by TLS handshakes to 10ms per event loop. */
+    size_t num_accepts = 10;
 
     if (err != NULL) {
         return;
@@ -2701,8 +2701,7 @@ static void on_accept(h2o_socket_t *listener, const char *err)
             /* The accepting socket is disactivated before entering the next in `run_loop`.
              * Note: it is possible that the server would accept at most `max_connections + num_threads` connections, since the
              * server does not check if the number of connections has exceeded _after_ epoll notifies of a new connection _but_
-             * _before_ calling `accept`.  In other words t/40max-connections.t may fail.
-             */
+             * _before_ calling `accept`.  In other words t/40max-connections.t may fail. */
             num_connections(-1);
             break;
         }
@@ -2913,7 +2912,7 @@ static void *run_loop(void *_thread_index)
         cpu_set_t cpu_set;
         CPU_ZERO(&cpu_set);
         CPU_SET(conf.thread_map.entries[thread_index], &cpu_set);
-        if (pthread_setaffinity_np(pthread_self(), sizeof(cpu_set), &cpu_set) != 0) {
+        if (pthread_setaffinity_np(pthread_self(), sizeof(cpu_set), &cpu_set) != 0)
 #else
         int r;
         cpuset_t *cpu_set = cpuset_create();
@@ -2924,8 +2923,9 @@ static void *run_loop(void *_thread_index)
         cpuset_set(conf.thread_map.entries[thread_index], cpu_set);
         r = pthread_setaffinity_np(pthread_self(), cpuset_size(cpu_set), cpu_set);
         cpuset_destroy(cpu_set);
-        if (r != 0) {
+        if (r != 0)
 #endif
+        {
             static int once;
             if (__sync_fetch_and_add(&once, 1) == 0) {
                 fprintf(stderr, "[warning] failed to set bind to CPU:%d\n", conf.thread_map.entries[thread_index]);
@@ -2952,7 +2952,7 @@ static void *run_loop(void *_thread_index)
         /* setup quic context and the unix socket to receive forwarded packets */
         if (thread_index < conf.quic.num_threads && listener_config->quic.ctx != NULL) {
             h2o_quic_init_context(&listeners[i].http3.ctx.super, conf.threads[thread_index].ctx.loop, listeners[i].sock,
-                                  listener_config->quic.ctx, on_http3_accept, NULL);
+                                  listener_config->quic.ctx, on_http3_accept, NULL, conf.globalconf.http3.use_gso);
             h2o_quic_set_context_identifier(&listeners[i].http3.ctx.super, 0, (uint32_t)thread_index, conf.quic.node_id, 4,
                                             forward_quic_packets, rewrite_forwarded_quic_datagram);
             listeners[i].http3.ctx.accept_ctx = &listeners[i].accept_ctx;
@@ -2984,13 +2984,19 @@ static void *run_loop(void *_thread_index)
         fprintf(stderr, "h2o server (pid:%d) is ready to serve requests with %zu threads\n", (int)getpid(), conf.thread_map.size);
 
     /* the main loop */
+    uint64_t last_buffer_gc_at = 0;
     while (1) {
         if (conf.shutdown_requested)
             break;
         update_listener_state(listeners);
         /* run the loop once */
         h2o_evloop_run(conf.threads[thread_index].ctx.loop, INT32_MAX);
+        /* cleanup */
         h2o_filecache_clear(conf.threads[thread_index].ctx.filecache);
+        if (last_buffer_gc_at + 1000 < h2o_now(conf.threads[thread_index].ctx.loop)) {
+            last_buffer_gc_at = h2o_now(conf.threads[thread_index].ctx.loop);
+            h2o_buffer_clear_recycle(0);
+        }
     }
 
     if (thread_index == 0)

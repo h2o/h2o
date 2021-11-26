@@ -136,6 +136,7 @@ typedef struct st_h2o_httpclient_ctx_t {
     uint64_t keepalive_timeout; /* only used for http2 for now */
     size_t max_buffer_size;
     unsigned tunnel_enabled : 1;
+    unsigned force_cleartext_http2 : 1;
 
     struct st_h2o_httpclient_protocol_selector_t {
         h2o_httpclient_protocol_ratio_t ratio;

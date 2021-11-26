@@ -137,8 +137,9 @@ int h2o_quic_send_datagrams(h2o_quic_ctx_t *ctx, quicly_address_t *dest, quicly_
     }
 
     /* next CMSG is UDP_SEGMENT size (for GSO) */
+    int using_gso = 0;
 #ifdef UDP_SEGMENT
-    if (num_datagrams > 1) {
+    if (num_datagrams > 1 && ctx->use_gso) {
         for (size_t i = 1; i < num_datagrams - 1; ++i)
             assert(datagrams[i].iov_len == datagrams[0].iov_len);
         uint16_t segsize = (uint16_t)datagrams[0].iov_len;
@@ -147,6 +148,7 @@ int h2o_quic_send_datagrams(h2o_quic_ctx_t *ctx, quicly_address_t *dest, quicly_
         cmsg->cmsg_len = CMSG_LEN(sizeof(segsize));
         memcpy(CMSG_DATA(cmsg), &segsize, sizeof(segsize));
         cmsg = (struct cmsghdr *)((char *)cmsg + CMSG_SPACE(sizeof(segsize)));
+        using_gso = 1;
     }
 #endif
 
@@ -160,23 +162,24 @@ int h2o_quic_send_datagrams(h2o_quic_ctx_t *ctx, quicly_address_t *dest, quicly_
         mess.msg_controllen = (socklen_t)((char *)cmsg - cmsgbuf.buf);
     }
     int ret;
-#ifdef UDP_SEGMENT
-    mess.msg_iov = datagrams;
-    mess.msg_iovlen = num_datagrams;
-    while ((ret = (int)sendmsg(h2o_socket_get_fd(ctx->sock.sock), &mess, 0)) == -1 && errno == EINTR)
-        ;
-    if (ret == -1)
-        goto SendmsgError;
-#else
-    for (size_t i = 0; i < num_datagrams; ++i) {
-        mess.msg_iov = datagrams + i;
-        mess.msg_iovlen = 1;
+
+    if (using_gso) {
+        mess.msg_iov = datagrams;
+        mess.msg_iovlen = (int)num_datagrams;
         while ((ret = (int)sendmsg(h2o_socket_get_fd(ctx->sock.sock), &mess, 0)) == -1 && errno == EINTR)
             ;
         if (ret == -1)
             goto SendmsgError;
+    } else {
+        for (size_t i = 0; i < num_datagrams; ++i) {
+            mess.msg_iov = datagrams + i;
+            mess.msg_iovlen = 1;
+            while ((ret = (int)sendmsg(h2o_socket_get_fd(ctx->sock.sock), &mess, 0)) == -1 && errno == EINTR)
+                ;
+            if (ret == -1)
+                goto SendmsgError;
+        }
     }
-#endif
 
     h2o_error_reporter_record_success(&track_sendmsg);
 
@@ -974,17 +977,21 @@ Validation_Success:;
 }
 
 void h2o_quic_init_context(h2o_quic_ctx_t *ctx, h2o_loop_t *loop, h2o_socket_t *sock, quicly_context_t *quic,
-                           h2o_quic_accept_cb acceptor, h2o_quic_notify_connection_update_cb notify_conn_update)
+                           h2o_quic_accept_cb acceptor, h2o_quic_notify_connection_update_cb notify_conn_update, uint8_t use_gso)
 {
     assert(quic->stream_open != NULL);
 
-    *ctx = (h2o_quic_ctx_t){loop,
-                            {sock},
-                            quic,
-                            {0} /* thread_id, node_id are set by h2o_http3_set_context_identifier */,
-                            kh_init_h2o_quic_idmap(),
-                            kh_init_h2o_quic_acceptmap(),
-                            notify_conn_update};
+    *ctx = (h2o_quic_ctx_t){
+        .loop = loop,
+        .sock = {.sock = sock},
+        .quic = quic,
+        .next_cid = {0} /* thread_id, node_id are set by h2o_http3_set_context_identifier */,
+        .conns_by_id = kh_init_h2o_quic_idmap(),
+        .conns_accepting = kh_init_h2o_quic_acceptmap(),
+        .notify_conn_update = notify_conn_update,
+        .acceptor = acceptor,
+        .use_gso = use_gso,
+    };
     ctx->sock.sock->data = ctx;
     ctx->sock.addrlen = h2o_socket_getsockname(ctx->sock.sock, (void *)&ctx->sock.addr);
     assert(ctx->sock.addrlen != 0);
@@ -999,7 +1006,6 @@ void h2o_quic_init_context(h2o_quic_ctx_t *ctx, h2o_loop_t *loop, h2o_socket_t *
         assert(!"unexpected address family");
         break;
     }
-    ctx->acceptor = acceptor;
 
     h2o_socket_read_start(ctx->sock.sock, on_read);
 }
