@@ -9,6 +9,7 @@ use IO::Select;
 use IO::Socket::INET;
 use IPC::Open3;
 use Scope::Guard;
+use Socket qw(IPPROTO_TCP TCP_NODELAY);
 use Symbol qw(gensym);
 use Time::HiRes qw(sleep);
 use Test::More;
@@ -53,6 +54,9 @@ my $origin_guard = do {
         # child process
         while (1) {
             if (my $sock = $listener->accept) {
+                if (!defined setsockopt($sock, IPPROTO_TCP, TCP_NODELAY, 1)) {
+                    die "setsockopt(TCP_NODELAY) failed:$!";
+                }
                 while (sysread($sock, my $buf, 1024) > 0) {
                     while (length $buf != 0) {
                         my $ret = syswrite($sock, $buf, length $buf);
