@@ -56,18 +56,31 @@ struct st_connect_generator_t {
     struct {
         h2o_hostinfo_getaddr_req_t *v4, *v6;
     } getaddr_req;
-    const char *hev2_conn_err;
-    unsigned hev2_pick_v4 : 1;
-    h2o_timer_t hev2_delay;
-
-    h2o_socket_t *sock;
     struct {
         struct st_server_address_t list[MAX_CONNECT_RETRIES];
         size_t size;
         size_t used;
     } server_addresses;
+
+    h2o_socket_t *sock;
+    /**
+     * failure returned by the last attempt to establish the connection
+     */
+    const char *hev2_conn_err;
+
+    /**
+     * timer used to handle user-visible timeouts (i.e., connect- and io-timeout)
+     */
     h2o_timer_t timeout;
-    unsigned is_tcp : 1;
+    /**
+     * timer used to for RFC 8305-style happy eyeballs (resolution delay and connection attempt delay)
+     */
+    h2o_timer_t hev2_delay;
+
+    /**
+     * Pick v4 (or v6) address in the next connection attempt. RFC 8305 recommends trying the other family one by one.
+     */
+    unsigned hev2_pick_v4 : 1;
     /**
      * set when the send-side is closed by the user
      */
@@ -80,6 +93,13 @@ struct st_connect_generator_t {
      * if socket has been closed
      */
     unsigned socket_closed : 1;
+    /**
+     * if connecting using TCP (or UDP)
+     */
+    unsigned is_tcp : 1;
+    /**
+     * TCP- and UDP-specific data
+     */
     union {
         struct {
             h2o_buffer_t *sendbuf;
