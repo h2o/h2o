@@ -66,7 +66,7 @@ struct st_connect_generator_t {
     /**
      * failure returned by the last attempt to establish the connection
      */
-    const char *hev2_conn_err;
+    const char *last_conn_attempt_error;
 
     /**
      * timer used to handle user-visible timeouts (i.e., connect- and io-timeout)
@@ -75,12 +75,12 @@ struct st_connect_generator_t {
     /**
      * timer used to for RFC 8305-style happy eyeballs (resolution delay and connection attempt delay)
      */
-    h2o_timer_t hev2_delay;
+    h2o_timer_t eyeball_delay;
 
     /**
      * Pick v4 (or v6) address in the next connection attempt. RFC 8305 recommends trying the other family one by one.
      */
-    unsigned hev2_pick_v4 : 1;
+    unsigned pick_v4 : 1;
     /**
      * set when the send-side is closed by the user
      */
@@ -187,9 +187,9 @@ static void stop_eyeballs(struct st_connect_generator_t *self)
         h2o_hostinfo_getaddr_cancel(self->getaddr_req.v6);
         self->getaddr_req.v6 = NULL;
     }
-    if (self->hev2_delay.cb != NULL) {
-        h2o_timer_unlink(&self->hev2_delay);
-        self->hev2_delay.cb = NULL;
+    if (self->eyeball_delay.cb != NULL) {
+        h2o_timer_unlink(&self->eyeball_delay);
+        self->eyeball_delay.cb = NULL;
     }
 }
 
@@ -294,7 +294,7 @@ static void on_connect_timeout(h2o_timer_t *entry)
 
 static void on_resolution_delay_timeout(h2o_timer_t *entry)
 {
-    struct st_connect_generator_t *self = H2O_STRUCT_FROM_MEMBER(struct st_connect_generator_t, hev2_delay, entry);
+    struct st_connect_generator_t *self = H2O_STRUCT_FROM_MEMBER(struct st_connect_generator_t, eyeball_delay, entry);
 
     assert(self->server_addresses.used == 0);
 
@@ -303,7 +303,7 @@ static void on_resolution_delay_timeout(h2o_timer_t *entry)
 
 static void on_connection_attempt_delay_timeout(h2o_timer_t *entry)
 {
-    struct st_connect_generator_t *self = H2O_STRUCT_FROM_MEMBER(struct st_connect_generator_t, hev2_delay, entry);
+    struct st_connect_generator_t *self = H2O_STRUCT_FROM_MEMBER(struct st_connect_generator_t, eyeball_delay, entry);
 
     /* If no more address is available, continue trying the current attempt until the connect_timeout expires. */
     if (self->server_addresses.used == self->server_addresses.size)
@@ -371,7 +371,7 @@ static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errs
     /* If connection attempt has been under way for more than CONNECTION_ATTEMPT_DELAY_MS, stop that and try next address. Return
      * otherwise. */
     if (self->sock != NULL) {
-        if (h2o_timer_is_linked(&self->hev2_delay))
+        if (h2o_timer_is_linked(&self->eyeball_delay))
             return;
         h2o_socket_close(self->sock);
         self->sock = NULL;
@@ -379,8 +379,8 @@ static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errs
 
     /* Start an attempt now if v6 addresses are available. If v4 addresses are, wait for RESOLUTION_DELAY_MS. */
     if (self->getaddr_req.v6 != NULL) {
-        self->hev2_delay.cb = on_resolution_delay_timeout;
-        h2o_timer_link(get_loop(self), RESOLUTION_DELAY_MS, &self->hev2_delay);
+        self->eyeball_delay.cb = on_resolution_delay_timeout;
+        h2o_timer_link(get_loop(self), RESOLUTION_DELAY_MS, &self->eyeball_delay);
     } else {
         try_connect(self);
     }
@@ -397,7 +397,7 @@ static struct st_server_address_t *pick_and_swap(struct st_connect_generator_t *
     }
     server_address = &self->server_addresses.list[self->server_addresses.used];
     self->server_addresses.used++;
-    self->hev2_pick_v4 = !self->hev2_pick_v4;
+    self->pick_v4 = !self->pick_v4;
     return server_address;
 }
 
@@ -410,9 +410,9 @@ static void try_connect(struct st_connect_generator_t *self)
         while (self->server_addresses.used < self->server_addresses.size) {
             /* Fetch the next address from the list of resolved addresses. */
             for (size_t i = self->server_addresses.used; i < self->server_addresses.size; i++) {
-                if (self->hev2_pick_v4 && self->server_addresses.list[i].sa->sa_family == AF_INET)
+                if (self->pick_v4 && self->server_addresses.list[i].sa->sa_family == AF_INET)
                     server_address = pick_and_swap(self, i);
-                else if (!self->hev2_pick_v4 && self->server_addresses.list[i].sa->sa_family == AF_INET6)
+                else if (!self->pick_v4 && self->server_addresses.list[i].sa->sa_family == AF_INET6)
                     server_address = pick_and_swap(self, i);
             }
             if (server_address == NULL) {
@@ -423,19 +423,19 @@ static void try_connect(struct st_connect_generator_t *self)
             if (h2o_connect_lookup_acl(self->handler->acl.entries, self->handler->acl.count, server_address->sa))
                 break;
             server_address = NULL;
-            self->hev2_conn_err = destination_ip_prohibited;
+            self->last_conn_attempt_error = destination_ip_prohibited;
         }
 
         /* If no address has been selected, either send an HTTP error response or wait for address resolution. */
         if (server_address == NULL) {
             if (self->getaddr_req.v4 == NULL && self->getaddr_req.v6 == NULL) {
-                assert(self->hev2_conn_err != NULL);
-                if (self->hev2_conn_err == destination_ip_prohibited) {
+                assert(self->last_conn_attempt_error != NULL);
+                if (self->last_conn_attempt_error == destination_ip_prohibited) {
                     record_error(self, destination_ip_prohibited, NULL, NULL);
                     send_connect_error(self, 403, "Destination IP Prohibited", "Destination IP Prohibited");
                 } else {
-                    record_socket_error(self, self->hev2_conn_err);
-                    on_connect_error(self, self->hev2_conn_err);
+                    record_socket_error(self, self->last_conn_attempt_error);
+                    on_connect_error(self, self->last_conn_attempt_error);
                 }
             }
             return;
@@ -534,7 +534,7 @@ static void tcp_on_connect(h2o_socket_t *_sock, const char *err)
     assert(self->sock == _sock);
 
     if (err != NULL) {
-        self->hev2_conn_err = err;
+        self->last_conn_attempt_error = err;
         h2o_socket_close(self->sock);
         self->sock = NULL;
         try_connect(self);
@@ -558,7 +558,7 @@ static void tcp_on_connect(h2o_socket_t *_sock, const char *err)
 static int tcp_start_connect(struct st_connect_generator_t *self, struct st_server_address_t *server_address)
 {
     if ((self->sock = h2o_socket_connect(get_loop(self), server_address->sa, server_address->salen, tcp_on_connect,
-                                         &self->hev2_conn_err)) == NULL)
+                                         &self->last_conn_attempt_error)) == NULL)
         return 0;
 
     self->sock->data = self;
@@ -567,8 +567,8 @@ static int tcp_start_connect(struct st_connect_generator_t *self, struct st_serv
      * and latency, and because we do not expect the need to change the value. */
     h2o_evloop_socket_set_max_read_size(self->sock, 64 * 1024);
 #endif
-    self->hev2_delay.cb = on_connection_attempt_delay_timeout;
-    h2o_timer_link(get_loop(self), CONNECTION_ATTEMPT_DELAY_MS, &self->hev2_delay);
+    self->eyeball_delay.cb = on_connection_attempt_delay_timeout;
+    h2o_timer_link(get_loop(self), CONNECTION_ATTEMPT_DELAY_MS, &self->eyeball_delay);
 
     return 1;
 }
