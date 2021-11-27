@@ -41,8 +41,6 @@ struct st_connect_handler_t {
 #define RESOLUTION_DELAY_MS 50
 #define CONNECTION_ATTEMPT_DELAY_MS 250
 
-static const char destination_ip_prohibited[] = "destination_ip_prohibited";
-
 struct st_server_address_t {
     struct sockaddr *sa;
     socklen_t salen;
@@ -320,10 +318,12 @@ static void store_server_addresses(struct st_connect_generator_t *self, struct a
     /* copy first entries in the response; ordering of addresses being returned by `getaddrinfo` is respected, as ordinary clients
      * (incl. forward proxy) are not expected to distribute the load among the addresses being returned. */
     while (self->server_addresses.size < PTLS_ELEMENTSOF(self->server_addresses.list) && res != NULL) {
-        struct st_server_address_t *dst = self->server_addresses.list + self->server_addresses.size++;
-        dst->sa = h2o_mem_alloc_pool_aligned(&self->src_req->pool, H2O_ALIGNOF(struct sockaddr), res->ai_addrlen);
-        memcpy(dst->sa, res->ai_addr, res->ai_addrlen);
-        dst->salen = res->ai_addrlen;
+        if (h2o_connect_lookup_acl(self->handler->acl.entries, self->handler->acl.count, res->ai_addr)) {
+            struct st_server_address_t *dst = self->server_addresses.list + self->server_addresses.size++;
+            dst->sa = h2o_mem_alloc_pool_aligned(&self->src_req->pool, H2O_ALIGNOF(struct sockaddr), res->ai_addrlen);
+            memcpy(dst->sa, res->ai_addr, res->ai_addrlen);
+            dst->salen = res->ai_addrlen;
+        }
         res = res->ai_next;
     }
 }
@@ -339,35 +339,60 @@ static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errs
         h2o_fatal("unexpected getaddr_req");
     }
 
-    if (errstr != NULL) {
-        if (!(self->getaddr_req.v4 == NULL && self->getaddr_req.v6 == NULL))
-            return;
-        /* Last lookup completed with an error. If all of the lookups failed to obtain an address, return a error response. */
-        if (self->server_addresses.size == 0) {
-            const char *rcode;
-            if (errstr == h2o_hostinfo_error_nxdomain)
-                rcode = "NXDOMAIN";
-            else if (errstr == h2o_hostinfo_error_nodata)
-                rcode = "NODATA";
-            else if (errstr == h2o_hostinfo_error_refused)
-                rcode = "REFUSED";
-            else if (errstr == h2o_hostinfo_error_servfail)
-                rcode = "SERVFAIL";
-            else
-                rcode = NULL;
-            record_error(self, "dns_error", errstr, rcode);
-            on_connect_error(self, errstr);
+    /* Store addresses, or convert error to ACL denial. */
+    if (errstr == NULL) {
+        if (self->is_tcp) {
+            assert(res->ai_socktype == SOCK_STREAM);
+        } else {
+            assert(res->ai_socktype == SOCK_DGRAM);
         }
+        store_server_addresses(self, res);
+    }
+
+    if (self->getaddr_req.v4 == NULL) {
+        /* If v6 lookup is still running, that means that v4 lookup has *just* completed. Set the resolution delay timer if v4
+         * addresses are available. */
+        if (self->getaddr_req.v6 != NULL) {
+            assert(self->server_addresses.used == 0);
+            if (self->server_addresses.size != 0) {
+                self->eyeball_delay.cb = on_resolution_delay_timeout;
+                h2o_timer_link(get_loop(self), RESOLUTION_DELAY_MS, &self->eyeball_delay);
+            }
+            return;
+        }
+
+        /* Both v4 and v6 lookups are complete. If the resolution delay timer is running. Reset it. */
+        if (h2o_timer_is_linked(&self->eyeball_delay) && self->eyeball_delay.cb == on_resolution_delay_timeout) {
+            assert(self->server_addresses.used == 0);
+            h2o_timer_unlink(&self->eyeball_delay);
+        }
+        /* In case no addresses are available, send HTTP error. */
+        if (self->server_addresses.size == 0) {
+            if (errstr == NULL) {
+                record_error(self, "destination_ip_prohibited", NULL, NULL);
+                send_connect_error(self, 403, "Destination IP Prohibited", "Destination IP Prohibited");
+            } else {
+                const char *rcode;
+                if (errstr == h2o_hostinfo_error_nxdomain)
+                    rcode = "NXDOMAIN";
+                else if (errstr == h2o_hostinfo_error_nodata)
+                    rcode = "NODATA";
+                else if (errstr == h2o_hostinfo_error_refused)
+                    rcode = "REFUSED";
+                else if (errstr == h2o_hostinfo_error_servfail)
+                    rcode = "SERVFAIL";
+                else
+                    rcode = NULL;
+                record_error(self, "dns_error", errstr, rcode);
+                on_connect_error(self, errstr);
+            }
+            return;
+        }
+    }
+
+    /* Try connecting if possible. */
+    if (self->server_addresses.used == self->server_addresses.size)
         return;
-    }
-
-    if (self->is_tcp) {
-        assert(res->ai_socktype == SOCK_STREAM);
-    } else {
-        assert(res->ai_socktype == SOCK_DGRAM);
-    }
-    store_server_addresses(self, res);
-
     /* If connection attempt has been under way for more than CONNECTION_ATTEMPT_DELAY_MS, stop that and try next address. Return
      * otherwise. */
     if (self->sock != NULL) {
@@ -376,14 +401,7 @@ static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errs
         h2o_socket_close(self->sock);
         self->sock = NULL;
     }
-
-    /* Start an attempt now if v6 addresses are available. If v4 addresses are, wait for RESOLUTION_DELAY_MS. */
-    if (self->getaddr_req.v6 != NULL) {
-        self->eyeball_delay.cb = on_resolution_delay_timeout;
-        h2o_timer_link(get_loop(self), RESOLUTION_DELAY_MS, &self->eyeball_delay);
-    } else {
-        try_connect(self);
-    }
+    try_connect(self);
 }
 
 static struct st_server_address_t *pick_and_swap(struct st_connect_generator_t *self, size_t idx)
@@ -406,39 +424,27 @@ static void try_connect(struct st_connect_generator_t *self)
     struct st_server_address_t *server_address = NULL;
 
     do {
-        /* Select the next adddress. */
-        while (self->server_addresses.used < self->server_addresses.size) {
-            /* Fetch the next address from the list of resolved addresses. */
-            for (size_t i = self->server_addresses.used; i < self->server_addresses.size; i++) {
-                if (self->pick_v4 && self->server_addresses.list[i].sa->sa_family == AF_INET)
-                    server_address = pick_and_swap(self, i);
-                else if (!self->pick_v4 && self->server_addresses.list[i].sa->sa_family == AF_INET6)
-                    server_address = pick_and_swap(self, i);
-            }
-            if (server_address == NULL) {
-                server_address = &self->server_addresses.list[self->server_addresses.used];
-                self->server_addresses.used++;
-            }
-            /* Break if ACL allows access to the resolved address. Otherwise, record that access has been prohibited. */
-            if (h2o_connect_lookup_acl(self->handler->acl.entries, self->handler->acl.count, server_address->sa))
-                break;
-            server_address = NULL;
-            self->last_conn_attempt_error = destination_ip_prohibited;
+        /* Fetch the next address from the list of resolved addresses. */
+        for (size_t i = self->server_addresses.used; i < self->server_addresses.size; i++) {
+            if (self->pick_v4 && self->server_addresses.list[i].sa->sa_family == AF_INET)
+                server_address = pick_and_swap(self, i);
+            else if (!self->pick_v4 && self->server_addresses.list[i].sa->sa_family == AF_INET6)
+                server_address = pick_and_swap(self, i);
         }
 
-        /* If no address has been selected, either send an HTTP error response or wait for address resolution. */
+        /* If address of the preferred address family is not available, select one of the other family, if available. Otherwise,
+         * send an HTTP error response or wait for address resolution. */
         if (server_address == NULL) {
-            if (self->getaddr_req.v4 == NULL && self->getaddr_req.v6 == NULL) {
-                assert(self->last_conn_attempt_error != NULL);
-                if (self->last_conn_attempt_error == destination_ip_prohibited) {
-                    record_error(self, destination_ip_prohibited, NULL, NULL);
-                    send_connect_error(self, 403, "Destination IP Prohibited", "Destination IP Prohibited");
-                } else {
+            if (self->server_addresses.used == self->server_addresses.size) {
+                if (self->getaddr_req.v4 == NULL && self->getaddr_req.v6 == NULL) {
+                    assert(self->last_conn_attempt_error != NULL);
                     record_socket_error(self, self->last_conn_attempt_error);
                     on_connect_error(self, self->last_conn_attempt_error);
                 }
+                return;
             }
-            return;
+            server_address = &self->server_addresses.list[self->server_addresses.used];
+            self->server_addresses.used++;
         }
 
         /* Connect. Retry if the connect function returns error immediately. */
