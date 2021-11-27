@@ -385,7 +385,7 @@ static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errs
     }
 }
 
-static struct st_server_address_t *pick_and_swap(struct st_connect_generator_t *self, int idx)
+static struct st_server_address_t *pick_and_swap(struct st_connect_generator_t *self, size_t idx)
 {
     struct st_server_address_t *server_address = NULL;
 
@@ -404,7 +404,7 @@ static struct st_server_address_t *grab_connect_address(struct st_connect_genera
 {
     struct st_server_address_t *server_address = NULL;
 
-    for (int i = self->server_addresses.used; i < self->server_addresses.size; i++) {
+    for (size_t i = self->server_addresses.used; i < self->server_addresses.size; i++) {
         if (self->hev2_pick_v4 && self->server_addresses.list[i].sa->sa_family == AF_INET)
             server_address = pick_and_swap(self, i);
         else if (!self->hev2_pick_v4 && self->server_addresses.list[i].sa->sa_family == AF_INET6)
