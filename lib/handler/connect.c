@@ -38,9 +38,6 @@ struct st_connect_handler_t {
 #define MAX_CONNECT_RETRIES 24
 #define UDP_CHUNK_OVERHEAD 3
 
-#define RESOLUTION_DELAY_MS 50
-#define CONNECTION_ATTEMPT_DELAY_MS 250
-
 struct st_server_address_t {
     struct sockaddr *sa;
     socklen_t salen;
@@ -356,7 +353,7 @@ static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errs
             assert(self->server_addresses.used == 0);
             if (self->server_addresses.size != 0) {
                 self->eyeball_delay.cb = on_resolution_delay_timeout;
-                h2o_timer_link(get_loop(self), RESOLUTION_DELAY_MS, &self->eyeball_delay);
+                h2o_timer_link(get_loop(self), self->handler->config.happy_eyeballs.name_resolution_delay, &self->eyeball_delay);
             }
             return;
         }
@@ -574,7 +571,7 @@ static int tcp_start_connect(struct st_connect_generator_t *self, struct st_serv
     h2o_evloop_socket_set_max_read_size(self->sock, 64 * 1024);
 #endif
     self->eyeball_delay.cb = on_connection_attempt_delay_timeout;
-    h2o_timer_link(get_loop(self), CONNECTION_ATTEMPT_DELAY_MS, &self->eyeball_delay);
+    h2o_timer_link(get_loop(self), self->handler->config.happy_eyeballs.connection_attempt_delay, &self->eyeball_delay);
 
     return 1;
 }
