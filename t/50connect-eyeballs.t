@@ -49,7 +49,8 @@ hosts:
          proxy.connect:
            - "+*"
          proxy.timeout.connect: 10000
-         proxy.timeout.io: 10000
+         proxy.happy-eyeballs.name-resolution-delay: 500
+         proxy.happy-eyeballs.connection-attempt-delay: 1000
 EOT
 });
 
@@ -82,21 +83,32 @@ subtest "basic" => sub {
             close $wfh;
             like do { local $/; <$rfh> }, qr{^HTTP/[0-9\.]+ 200.*\n\n$expected_resp$}s;
             my $elapsed = time - $start_at;
+            note "elapsed: $elapsed";
             cmp_ok $elapsed, ">=", $expected_time->[0];
             cmp_ok $elapsed, "<=", $expected_time->[1];
         };
         subtest "one v4" => sub {
-            $check_access->("p$v4_port.4127-0-0-1", "127.0.0.1", [0, 1]);
+            $check_access->("p$v4_port.4127-0-0-1", "127.0.0.1", [0, 0.5]);
         };
         subtest "one v6" => sub {
-            $check_access->("p$v6_port.6--1", "::1", [0, 1]);
+            $check_access->("p$v6_port.6--1", "::1", [0, 0.5]);
         };
-        subtest "one v4, one v6" => sub {
-            $check_access->("p$v4_port.4127-0-0-1.p$v6_port.6--1", "::1", [0, 1]);
-            # TODO check delay by measuring time
+        subtest "v6 -> v4" => sub {
+            $check_access->("p$v6_port.6--1.d100.p$v4_port.4127-0-0-1", "::1", [0, 0.5]);
         };
-        subtest "one v4, one slow v6" => sub {
-            $check_access->("p$v4_port.4127-0-0-1.d500.p$v6_port.6--1", "127.0.0.1", [0, 1]);
+        subtest "v4 -> v6" => sub {
+            $check_access->("p$v4_port.4127-0-0-1.d250.p$v6_port.6--1", "::1", [0.25, 0.75]);
+        };
+        subtest "v4 -> name-resolution-delay -> v6" => sub {
+            $check_access->("p$v4_port.4127-0-0-1.d600.p$v6_port.6--1", "127.0.0.1", [0.5, 1]);
+        };
+        my $blackhole_ipv4_dash = $blackhole_ip_v4;
+        $blackhole_ipv4_dash =~ tr/./-/;
+        subtest "v4-blackhole -> v4" => sub {
+            $check_access->("4$blackhole_ipv4_dash.p$v4_port.4127-0-0-1", "127.0.0.1", [1, 2]);
+        };
+        subtest "v4-blackhole -> v6" => sub {
+            $check_access->("4$blackhole_ipv4_dash.p$v4_port.4127-0-0-1.d600.p$v6_port.6--1", "::1", [1, 2]);
         };
     });
 };
