@@ -38,6 +38,9 @@ ossl1.1.1:
 dtrace:
 	docker run $(DOCKER_RUN_OPTS) $(CONTAINER_NAME) \
 		env DTRACE_TESTS=1 \
+			CC=clang CXX=clang++  \
+			CFLAGS="-fsanitize=address,undefined" \
+			CXXFLAGS="-fsanitize=address,undefined" \
 		make -f $(SRC_DIR).ro/misc/docker-ci/check.mk _check \
 		BUILD_ARGS='$(BUILD_ARGS)' \
 		TEST_ENV='$(TEST_ENV)'
