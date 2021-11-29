@@ -54,6 +54,8 @@ hosts:
 EOT
 });
 
+sleep 1; # inject some delay, as the following tests are a bit time-sensitive
+
 foreach_http(sub {
     my ($scheme, $port, @opts) = @_;
     my $check_access = sub {
