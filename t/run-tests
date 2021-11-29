@@ -37,7 +37,8 @@ while (@scripts or %pids) {
         open my $logfh, "<", $logfn
             or die "failed to open script:$logfn:$!";
         unlink $logfn;
-        print do { local $/; <$logfh> };
+        print do { local $/; <$logfh> }
+            or die "print failed:$! (maybe STDIN has become non-blocking?)";
 
         # add to the failed list, if necessary
         if (WIFEXITED($?) and WEXITSTATUS($?) == 0) {
