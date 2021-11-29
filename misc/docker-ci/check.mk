@@ -39,11 +39,12 @@ dtrace:
 	docker run $(DOCKER_RUN_OPTS) $(CONTAINER_NAME) \
 		env DTRACE_TESTS=1 \
 			CC=clang CXX=clang++  \
-			CFLAGS="-fsanitize=address,undefined" \
-			CXXFLAGS="-fsanitize=address,undefined" \
+			CFLAGS="-fsanitize=address,undefined -O1 -fno-omit-frame-pointer" \
+			CXXFLAGS="-fsanitize=address,undefined -O1 -fno-omit-frame-pointer" \
+			LDFLAGS="-fsanitize=address,undefined" \
 		make -f $(SRC_DIR).ro/misc/docker-ci/check.mk _check \
 		BUILD_ARGS='$(BUILD_ARGS)' \
-		TEST_ENV='$(TEST_ENV)'
+		TEST_ENV='ASAN_OPTIONS=detect_leaks=0 $(TEST_ENV)'
 
 _check: _mount _do_check
 
