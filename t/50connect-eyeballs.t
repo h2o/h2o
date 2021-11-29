@@ -66,11 +66,15 @@ foreach_http(sub {
         die "fork failed:$!"
             unless defined $pid;
         if ($pid == 0) {
-            # child process (STDIN is changed to a ever-open pipe so that h2o-httpclient would read all data without sending
-            # anything).
+            # child process
             close $rfh;
-            pipe STDIN, my $fh
-                or die "pipe failed:$!";
+            # STDIN is changed to an ever-open pipe so that h2o-httpclient would read all data without sending anything)
+            my $fh = do {
+                local $^F = 255; # don't set O_CLOEXEC on $fh
+                pipe STDIN, my $fh
+                    or die "pipe failed:$!";
+                $fh;
+            };
             open STDOUT, ">&", $wfh
                 or die "failed to redirect STDERR:$!";
             open STDERR, ">&", $wfh
