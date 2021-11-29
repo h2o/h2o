@@ -54,64 +54,61 @@ hosts:
 EOT
 });
 
-# check that injection works
-subtest "basic" => sub {
-    foreach_http(sub {
-        my ($scheme, $port, @opts) = @_;
-        my $check_access = sub {
-            my ($host, $expected_resp, $expected_time) = @_;
-            my $start_at = time;
-            my ($rfh, $wfh);
-            pipe $rfh, $wfh
+foreach_http(sub {
+    my ($scheme, $port, @opts) = @_;
+    my $check_access = sub {
+        my ($host, $expected_resp, $expected_time) = @_;
+        my $start_at = time;
+        my ($rfh, $wfh);
+        pipe $rfh, $wfh
+            or die "pipe failed:$!";
+        my $pid = fork;
+        die "fork failed:$!"
+            unless defined $pid;
+        if ($pid == 0) {
+            # child process (STDIN is changed to a ever-open pipe so that h2o-httpclient would read all data without sending
+            # anything).
+            close $rfh;
+            pipe STDIN, my $fh
                 or die "pipe failed:$!";
-            my $pid = fork;
-            die "fork failed:$!"
-                unless defined $pid;
-            if ($pid == 0) {
-                # child process (STDIN is changed to a ever-open pipe so that h2o-httpclient would read all data without sending
-                # anything).
-                close $rfh;
-                pipe STDIN, my $fh
-                    or die "pipe failed:$!";
-                open STDOUT, ">&", $wfh
-                    or die "failed to redirect STDERR:$!";
-                open STDERR, ">&", $wfh
-                    or die "failed to redirect STDERR:$!";
-                exec $client_prog, "-k", @opts, qw(-m CONNECT -x), "$scheme://127.0.0.1:$port", "$host.inject.example.com:80";
-                die "failed to launch $client_prog:$!";
-            }
-            close $wfh;
-            like do { local $/; <$rfh> }, qr{^HTTP/[0-9\.]+ 200.*\n\n$expected_resp$}s;
-            my $elapsed = time - $start_at;
-            note "elapsed: $elapsed";
-            cmp_ok $elapsed, ">=", $expected_time->[0];
-            cmp_ok $elapsed, "<=", $expected_time->[1];
-        };
-        subtest "one v4" => sub {
-            $check_access->("p$v4_port.4127-0-0-1", "127.0.0.1", [0, 0.5]);
-        };
-        subtest "one v6" => sub {
-            $check_access->("p$v6_port.6--1", "::1", [0, 0.5]);
-        };
-        subtest "v6 -> v4" => sub {
-            $check_access->("p$v6_port.6--1.d100.p$v4_port.4127-0-0-1", "::1", [0, 0.5]);
-        };
-        subtest "v4 -> v6" => sub {
-            $check_access->("p$v4_port.4127-0-0-1.d250.p$v6_port.6--1", "::1", [0.25, 0.75]);
-        };
-        subtest "v4 -> name-resolution-delay -> v6" => sub {
-            $check_access->("p$v4_port.4127-0-0-1.d600.p$v6_port.6--1", "127.0.0.1", [0.5, 1]);
-        };
-        my $blackhole_ipv4_dash = $blackhole_ip_v4;
-        $blackhole_ipv4_dash =~ tr/./-/;
-        subtest "v4-blackhole -> v4" => sub {
-            $check_access->("4$blackhole_ipv4_dash.p$v4_port.4127-0-0-1", "127.0.0.1", [1, 2]);
-        };
-        subtest "v4-blackhole -> v6" => sub {
-            $check_access->("4$blackhole_ipv4_dash.p$v4_port.4127-0-0-1.d600.p$v6_port.6--1", "::1", [1, 2]);
-        };
-    });
-};
+            open STDOUT, ">&", $wfh
+                or die "failed to redirect STDERR:$!";
+            open STDERR, ">&", $wfh
+                or die "failed to redirect STDERR:$!";
+            exec $client_prog, "-k", @opts, qw(-m CONNECT -x), "$scheme://127.0.0.1:$port", "$host.inject.example.com:80";
+            die "failed to launch $client_prog:$!";
+        }
+        close $wfh;
+        like do { local $/; <$rfh> }, qr{^HTTP/[0-9\.]+ 200.*\n\n$expected_resp$}s;
+        my $elapsed = time - $start_at;
+        note "elapsed: $elapsed";
+        cmp_ok $elapsed, ">=", $expected_time->[0];
+        cmp_ok $elapsed, "<=", $expected_time->[1];
+    };
+    subtest "one v4" => sub {
+        $check_access->("p$v4_port.4127-0-0-1", "127.0.0.1", [0, 0.5]);
+    };
+    subtest "one v6" => sub {
+        $check_access->("p$v6_port.6--1", "::1", [0, 0.5]);
+    };
+    subtest "v6 -> v4" => sub {
+        $check_access->("p$v6_port.6--1.d100.p$v4_port.4127-0-0-1", "::1", [0, 0.5]);
+    };
+    subtest "v4 -> v6" => sub {
+        $check_access->("p$v4_port.4127-0-0-1.d250.p$v6_port.6--1", "::1", [0.25, 0.75]);
+    };
+    subtest "v4 -> name-resolution-delay -> v6" => sub {
+        $check_access->("p$v4_port.4127-0-0-1.d600.p$v6_port.6--1", "127.0.0.1", [0.5, 1]);
+    };
+    my $blackhole_ipv4_dash = $blackhole_ip_v4;
+    $blackhole_ipv4_dash =~ tr/./-/;
+    subtest "v4-blackhole -> v4" => sub {
+        $check_access->("4$blackhole_ipv4_dash.p$v4_port.4127-0-0-1", "127.0.0.1", [1, 2]);
+    };
+    subtest "v4-blackhole -> v6" => sub {
+        $check_access->("4$blackhole_ipv4_dash.p$v4_port.4127-0-0-1.d600.p$v6_port.6--1", "::1", [1, 2]);
+    };
+});
 
 undef $server;
 
