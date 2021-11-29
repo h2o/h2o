@@ -15,12 +15,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: default
-            command: make -f misc/docker-ci/check.mk ALL BUILD_ARGS=-j6 TEST_ENV=TEST_JOBS=4
-          - name: OpenSSL 1.1.0 + Fuzz
-            command: make -f misc/docker-ci/check.mk ossl1.1.0+fuzz BUILD_ARGS=-j6 TEST_ENV=TEST_JOBS=4
-          - name: OpenSSL 1.1.1
-            command: make -f misc/docker-ci/check.mk ossl1.1.1 BUILD_ARGS=-j6 TEST_ENV=TEST_JOBS=4
           - name: DTrace
             command: make -f misc/docker-ci/check.mk dtrace CONTAINER_NAME=h2oserver/h2o-ci:ubuntu2004 BUILD_ARGS=-j6 TEST_ENV=TEST_JOBS=4
 
@@ -40,29 +34,11 @@ jobs:
       shell: 'script -q -e -c "bash -xe {0}"'
       run: |
         chmod -R ugo+w .
-        ${{ matrix.command }}
+        ifconfig -a
+        cat /etc/docker/daemon.json | perl -pe 's| }|, "ipv6": true, "fixed-cidr-v6": "2001:db8:1::/64" }|' | sudo tee /etc/docker/daemon.json > /dev/null
+        cat /etc/docker/daemon.json
+        systemctl restart docker
 
-  # See https://github.com/google/oss-fuzz/tree/master/projects/h2o for details
-  ossfuzz:
-    name: OSS Fuzz
-    runs-on: ubuntu-latest
-
-    # see above
-    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
-
-    timeout-minutes: 60
-    steps:
-    - name: Build Fuzzers
-      uses: google/oss-fuzz/infra/cifuzz/actions/build_fuzzers@master
-      with:
-        oss-fuzz-project-name: 'h2o'
-        dry-run: false
-    - name: Run Fuzzers
-      uses: google/oss-fuzz/infra/cifuzz/actions/run_fuzzers@master
-      with:
-        oss-fuzz-project-name: 'h2o'
-        fuzz-seconds: 600
-        dry-run: false
     - name: Upload Crash
       uses: actions/upload-artifact@v1
       if: failure()
