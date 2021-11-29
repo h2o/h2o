@@ -26,8 +26,10 @@ my $injectaddr = do {
     };
 };
 
-my $v6_port = create_listener("::1");
-my $v4_port = create_listener("127.0.0.1");
+my $v6_port = create_listener("::1")
+    or plan skip_all => "IPv6 may not be available:$!";
+my $v4_port = create_listener("127.0.0.1")
+    or die "failed to create IPv4 listener:$!";
 my $blackhole_ip_v4 = find_blackhole_ip();
 my $quic_port = empty_port({
     host  => "127.0.0.1",
@@ -127,7 +129,7 @@ sub create_listener {
         LocalPort => 0,
         Type => SOCK_STREAM,
         Listen => 5,
-    ) or die "failed to create listener at $localhost:$!";
+    ) or return;
     my $pid = fork;
     die "fork failed:$pid"
         unless defined $pid;
