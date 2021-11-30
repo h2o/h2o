@@ -69,7 +69,7 @@ subtest "too-early" => sub {
         ],
         is_ready => sub { !! -e "$tempdir/upstream.sock" },
     );
-    open my $client_fh, "-|", "$client_prog -3 100 -d 5000 -t 2 https://127.0.0.1:$quic_port/proxy/425 2>&1"
+    open my $client_fh, "-|", "$client_prog -O /dev/stdout -3 100 -d 5000 -t 2 https://127.0.0.1:$quic_port/proxy/425"
         or die "failed to spawn $client_prog:$!";
     like do {local $/; join "", <$client_fh>}, qr{^HTTP/[0-9\.]+ 200.*\nhello\nHTTP/[0-9\.]+ 425}s, "2nd response is 425";
 };
