@@ -49,6 +49,8 @@ static quicly_save_resumption_token_t save_http3_token = {save_http3_token_cb};
 static int save_http3_ticket_cb(ptls_save_ticket_t *self, ptls_t *tls, ptls_iovec_t src);
 static ptls_save_ticket_t save_http3_ticket = {save_http3_ticket_cb};
 static h2o_httpclient_connection_pool_t *connpool;
+static FILE *headers_out;
+
 struct {
     const char *target; /* either URL or host:port when the method is CONNECT */
     const char *method;
@@ -333,15 +335,15 @@ static int on_body(h2o_httpclient_t *client, const char *errstr)
 
 static void print_status_line(int version, int status, h2o_iovec_t msg)
 {
-    fprintf(stderr, "HTTP/%d", (version >> 8));
+    fprintf(headers_out, "HTTP/%d", (version >> 8));
     if ((version & 0xff) != 0) {
-        fprintf(stderr, ".%d", version & 0xff);
+        fprintf(headers_out, ".%d", version & 0xff);
     }
-    fprintf(stderr, " %d", status);
+    fprintf(headers_out, " %d", status);
     if (msg.len != 0) {
-        fprintf(stderr, " %.*s\n", (int)msg.len, msg.base);
+        fprintf(headers_out, " %.*s\n", (int)msg.len, msg.base);
     } else {
-        fprintf(stderr, "\n");
+        fprintf(headers_out, "\n");
     }
 }
 
@@ -353,10 +355,10 @@ static void print_response_headers(int version, int status, h2o_iovec_t msg, h2o
         const char *name = headers[i].orig_name;
         if (name == NULL)
             name = headers[i].name->base;
-        fprintf(stderr, "%.*s: %.*s\n", (int)headers[i].name->len, name, (int)headers[i].value.len, headers[i].value.base);
+        fprintf(headers_out, "%.*s: %.*s\n", (int)headers[i].name->len, name, (int)headers[i].value.len, headers[i].value.base);
     }
-    fprintf(stderr, "\n");
-    fflush(stderr);
+    fprintf(headers_out, "\n");
+    fflush(headers_out);
 }
 
 static int on_informational(h2o_httpclient_t *client, int version, int status, h2o_iovec_t msg, h2o_header_t *headers,
@@ -479,6 +481,7 @@ static void usage(const char *progname)
             "  -m <method>  request method (default: GET). When method is CONNECT,\n"
             "               \"host:port\" should be specified in place of URL.\n"
             "  -o <path>    file to which the response body is written (default: stdout)\n"
+            "  -O <path>    file to which the response metadata is written (default: stderr)\n"
             "  -t <times>   number of requests to send the request (default: 1)\n"
             "  -W <bytes>   receive window size (HTTP/3 only)\n"
             "  -x <URL>     specifies the host and port to connect to. When the scheme is\n"
@@ -577,13 +580,14 @@ int main(int argc, char **argv)
     }
 #endif
 
+    headers_out = stderr;
     int is_opt_initial_udp_payload_size = 0;
     int is_opt_max_udp_payload_size = 0;
     struct option longopts[] = {{"initial-udp-payload-size", required_argument, &is_opt_initial_udp_payload_size, 1},
                                 {"max-udp-payload-size", required_argument, &is_opt_max_udp_payload_size, 1},
                                 {"help", no_argument, NULL, 'h'},
                                 {NULL}};
-    const char *optstring = "t:m:o:b:x:C:c:d:H:i:k2:W:h3:"
+    const char *optstring = "t:m:o:O:b:x:C:c:d:H:i:k2:W:h3:"
 #ifdef __GNUC__
                             ":" /* for backward compatibility, optarg of -3 is optional when using glibc */
 #endif
@@ -601,6 +605,13 @@ int main(int argc, char **argv)
             break;
         case 'o':
             if (freopen(optarg, "w", stdout) == NULL) {
+                fprintf(stderr, "failed to open file:%s:%s\n", optarg, strerror(errno));
+                exit(EXIT_FAILURE);
+            }
+            break;
+        case 'O':
+            headers_out = fopen(optarg, "w");
+            if (headers_out == NULL) {
                 fprintf(stderr, "failed to open file:%s:%s\n", optarg, strerror(errno));
                 exit(EXIT_FAILURE);
             }

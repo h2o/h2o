@@ -47,11 +47,11 @@ EOT
     wait_port({port => $quic_port, proto => 'udp'});
     for (1..100) {
         subtest "hello world" => sub {
-            my $resp = `$client_prog -3 100 https://127.0.0.1:$quic_port 2>&1`;
+            my $resp = `$client_prog -O /dev/stdout -3 100 https://127.0.0.1:$quic_port`;
             like $resp, qr{^HTTP/.*\n\nhello\n$}s;
         };
         subtest "large file" => sub {
-            my $resp = `$client_prog -3 100 https://127.0.0.1:$quic_port/halfdome.jpg 2> $tempdir/log`;
+            my $resp = `$client_prog -O $tempdir/log -3 100 https://127.0.0.1:$quic_port/halfdome.jpg`;
             is $?, 0;
             diag do {
                 open my $fh, "-|", "share/h2o/annotate-backtrace-symbols < $tempdir/log"
@@ -138,7 +138,7 @@ hosts:
 EOT
     my $fetch = sub {
         my $qp = shift;
-        open my $fh, "-|", "$client_prog -3 100 https://127.0.0.1:$quic_port/suspend-body$qp 2>&1"
+        open my $fh, "-|", "$client_prog -O /dev/stdout -3 100 https://127.0.0.1:$quic_port/suspend-body$qp"
             or die "failed to spawn $client_prog:$!";
         local $/;
         join "", <$fh>;
