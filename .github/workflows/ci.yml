@@ -37,7 +37,8 @@ jobs:
         ifconfig -a
         cat /etc/docker/daemon.json | perl -pe 's| }|, "ipv6": true, "fixed-cidr-v6": "2001:db8:1::/64" }|' | sudo tee /etc/docker/daemon.json > /dev/null
         cat /etc/docker/daemon.json
-        systemctl restart docker
+        sudo systemctl restart docker
+        sleep 10
 
     - name: Upload Crash
       uses: actions/upload-artifact@v1
