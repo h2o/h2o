@@ -46,7 +46,7 @@ sleep 1;
 
 # open client, sending request body at 12KB/sec. The number is slightly greater than H2O_HTTP3_REQUEST_BODY_MIN_BYTES_TO_BLOCK, and
 # the expectation is that h2o would start streaming the request body
-open my $client_resp, '-|', "$client_prog -3 100 -b 120000 -c 12000 -i 1000 -m POST https://127.0.0.1:$quic_port 2>&1"
+open my $client_resp, '-|', "$client_prog -O /dev/stdout -3 100 -b 120000 -c 12000 -i 1000 -m POST https://127.0.0.1:$quic_port"
     or die "failed to launch $client_prog:$!";
 
 # wait until the request received by upstream is 3 seconds' worth of data

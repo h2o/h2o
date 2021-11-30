@@ -74,7 +74,7 @@ EOT
                 unless -e $h3client;
             for my $sleep_secs (qw(0 2)) {
                 subtest "sleep $sleep_secs" => sub {
-                    open my $fh, "-|", "$h3client -3 100 https://127.0.0.1:$quic_port/async/sleep-and-respond?sleep=$sleep_secs 2>&1"
+                    open my $fh, "-|", "$h3client  -O /dev/stdout -3 100 'https://127.0.0.1:$quic_port/async/sleep-and-respond?sleep=$sleep_secs'"
                         or die "failed to invoke $h3client:$!";
                     like scalar(<$fh>), qr{^HTTP/3 103}, "103 resp";
                     ok wait_for_line($fh, qr{^foo: FOO$}s, qr{^$}s), "has foo: FOO";
@@ -101,7 +101,7 @@ EOT
         subtest 'http/3' => sub {
             plan skip_all => "$h3client not found"
                 unless -e $h3client;
-            my $resp = `$h3client -3 100 https://127.0.0.1:$quic_port/sync/index.txt 2>&1`;
+            my $resp = `$h3client  -O /dev/stdout -3 100 'https://127.0.0.1:$quic_port/sync/index.txt'`;
             like $resp, qr{^HTTP/3 200\n}s;
         };
     };
@@ -155,7 +155,7 @@ EOT
             like $resp, qr{^HTTP/[\d.]+ $status}mi;
             (my $eh, $resp) = split(/\r\n\r\n/, $resp, 2);
             like $eh, qr{^link: </index.js>; rel=preload}mi if $link;
-    
+
             subtest '103 with no hints' => sub {
                 $resp = `$curl --silent --dump-header /dev/stdout '$proto://127.0.0.1:$port/1xx?status=$status'`;
                 unlike $resp, qr{^HTTP/[\d.]+ $status}mi;
@@ -179,7 +179,7 @@ EOT
             };
         });
     };
-    
+
     subtest 'except-h1 (default)' => sub {
         my $server = spawn_h2o(<< "EOT");
 hosts:
@@ -198,7 +198,7 @@ EOT
             }
         });
     };
-    
+
     subtest 'none' => sub {
         my $server = spawn_h2o(<< "EOT");
 send-informational: none

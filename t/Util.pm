@@ -37,6 +37,7 @@ our @EXPORT = qw(
     md5_file
     prog_exists
     run_prog
+    run_client
     openssl_can_negotiate
     curl_supports_http2
     run_with_curl
@@ -328,6 +329,17 @@ sub run_prog {
     my $stdout = do { local $/; <$tempfh> };
     close $tempfh; # tempfile does not close the file automatically (see perldoc)
     return ($stderr, $stdout);
+}
+
+# like run_prog(), but for h2o-httpclient
+sub run_client {
+    my $opts = shift;
+    my $client_prog = bindir() . "/h2o-httpclient";
+    my ($tempfh, $tempfn) = tempfile(UNLINK => 1);
+    my $body = `$client_prog -O $tempfn $opts`;
+    my $headers = do { local $/; <$tempfh> };
+    close $tempfh; # tempfile does not close the file automatically (see perldoc)
+    return ($headers, $body);
 }
 
 sub openssl_can_negotiate {
