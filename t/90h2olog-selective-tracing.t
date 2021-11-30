@@ -66,7 +66,7 @@ EOT
   });
 
   my ($headers) = run_prog("$client_prog http://127.0.0.1:$server->{port}/");
-  like $headers, qr{^HTTP/1\.1 200\b}m, "req: HTTP/1.1";
+  like $headers, qr{^HTTP/1\.1 200\b}, "req: HTTP/1";
 
   my $trace;
   until (($trace = $tracer->get_trace()) =~ /\n/) {}
@@ -88,7 +88,7 @@ subtest "h2olog -S=1.00", sub {
   });
   subtest "TCP", sub {
     my ($headers) = run_prog("$client_prog http://127.0.0.1:$server->{port}/");
-    like $headers, qr{^HTTP/1\.1 200\b}m, "req: HTTP/1.1";
+    like $headers, qr{^HTTP/1\.1 200\b}, "req: HTTP/1";
 
     my $trace;
     until (($trace = $tracer->get_trace()) =~ /\n/) {}
@@ -100,7 +100,7 @@ subtest "h2olog -S=1.00", sub {
   };
   subtest "QUIC", sub {
     my ($headers) = run_prog("$client_prog -3 https://127.0.0.1:$quic_port/");
-    like $headers, qr{^HTTP/3 200\b}m, "req: HTTP/3";
+    like $headers, qr{^HTTP/3 200\b}, "req: HTTP/3";
 
     my $trace;
     until (($trace = $tracer->get_trace()) =~ /\n/) {}
@@ -120,7 +120,7 @@ subtest "h2olog -S=0.00", sub {
 
   subtest "TCP", sub {
     my ($headers) = run_prog("$client_prog http://127.0.0.1:$server->{port}/");
-    like $headers, qr{^HTTP/1\.1 200\b}m, "req: HTTP/1.1";
+    like $headers, qr{^HTTP/1\.1 200\b}, "req: HTTP/1";
 
     sleep(1);
     my $trace =  $tracer->get_trace();
@@ -134,7 +134,7 @@ subtest "h2olog -S=0.00", sub {
 
   subtest "QUIC", sub {
     my ($headers) = run_prog("$client_prog -3 https://127.0.0.1:$quic_port/");
-    like $headers, qr{^HTTP/3 200\b}m, "req: HTTP/3";
+    like $headers, qr{^HTTP/3 200\n}, "req: HTTP/3";
 
     sleep(1);
     my $trace = $tracer->get_trace();
@@ -167,7 +167,7 @@ subtest "h2olog -A=127.0.0.2", sub {
 
   subtest "with non-matched IP address", sub {
     my ($headers) = run_prog("$client_prog -3 https://127.0.0.1:$quic_port/");
-    like $headers, qr{^HTTP/3 200\b}m, "req: HTTP/3";
+    like $headers, qr{^HTTP/3 200\n}, "req: HTTP/3";
 
     sleep(1);
     my $trace = $tracer->get_trace();
@@ -193,7 +193,7 @@ subtest "h2olog -A=127.0.0.2", sub {
 
   subtest "with matched IP address", sub {
     my ($headers) = `curl --interface 127.0.0.2 --head -sSf http://127.0.0.1:$server->{port}/`;
-    like $headers, qr{^HTTP/1\.1 200\b}m, "req: HTTP/1.1";
+    like $headers, qr{^HTTP/1\.1 200\b}, "req: HTTP/1.1";
 
     sleep(1);
     my $trace = $tracer->get_trace();
@@ -222,7 +222,7 @@ subtest "h2olog -N=localhost.examp1e.net", sub {
 
   subtest "with non-matched domain name", sub {
     my ($headers) = run_prog("$client_prog -3 https://127.0.0.1:$quic_port/");
-    like $headers, qr{^HTTP/3 200\b}m, "req: HTTP/3";
+    like $headers, qr{^HTTP/3 200\n}, "req: HTTP/3";
 
     sleep(1);
     my $trace = $tracer->get_trace();
@@ -248,7 +248,7 @@ subtest "h2olog -N=localhost.examp1e.net", sub {
 
   subtest "with matched domain name", sub {
     my ($headers) = run_prog("$client_prog -3 https://localhost.examp1e.net:$quic_port/");
-    like $headers, qr{^HTTP/3 200\b}m, "req: HTTP/3";
+    like $headers, qr{^HTTP/3 200\n}, "req: HTTP/3";
 
     sleep(1);
     my $trace = $tracer->get_trace();
@@ -279,7 +279,7 @@ subtest "multiple h2olog with sampling filters", sub {
   });
 
   my ($headers) = run_prog("$client_prog -3 https://127.0.0.1:$quic_port/");
-  like $headers, qr{^HTTP/3 200\b}m, "req: HTTP/3";
+  like $headers, qr{^HTTP/3 200\n}, "req: HTTP/3";
 
   my($trace1, $trace2);
   until (($trace1 = $tracer1->get_trace()) =~ /\n/){}
@@ -308,7 +308,7 @@ subtest "h2o_return exists", sub {
   });
 
   my ($headers) = run_prog("$client_prog -3 100 https://127.0.0.1:$quic_port/");
-  like $headers, qr{^HTTP/3 200\b}m, "req: HTTP/3";
+  like $headers, qr{^HTTP/3 200\b}, "req: HTTP/3";
 
   my $trace;
   until (($trace = $tracer->get_trace()) =~ /\n/) {}
