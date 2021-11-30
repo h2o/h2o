@@ -59,9 +59,16 @@ struct st_connect_generator_t {
 
     h2o_socket_t *sock;
     /**
-     * failure returned by the last attempt to establish the connection
+     * Most significant and lastest error that occurred, if any. Sigificance is repsesented as `class`, in descending order.
      */
-    const char *last_conn_attempt_error;
+    struct {
+        enum error_class {
+            ERROR_CLASS_NAME_RESOLUTION,
+            ERROR_CLASS_ACCESS_PROHIBITED,
+            ERROR_CLASS_CONNECT
+        } class;
+        const char *str;
+    } last_error;
 
     /**
      * timer used to handle user-visible timeouts (i.e., connect- and io-timeout)
@@ -287,6 +294,14 @@ static void on_connect_timeout(h2o_timer_t *entry)
     on_connect_error(self, h2o_httpclient_error_io_timeout);
 }
 
+static void set_last_error(struct st_connect_generator_t *self, enum error_class class, const char *str)
+{
+    if (self->last_error.class <= class) {
+        self->last_error.class = class;
+        self->last_error.str = str;
+    }
+}
+
 static void on_resolution_delay_timeout(h2o_timer_t *entry)
 {
     struct st_connect_generator_t *self = H2O_STRUCT_FROM_MEMBER(struct st_connect_generator_t, eyeball_delay, entry);
@@ -310,8 +325,10 @@ static void on_connection_attempt_delay_timeout(h2o_timer_t *entry)
     try_connect(self);
 }
 
-static void store_server_addresses(struct st_connect_generator_t *self, struct addrinfo *res)
+static int store_server_addresses(struct st_connect_generator_t *self, struct addrinfo *res)
 {
+    int added = 0;
+
     /* copy first entries in the response; ordering of addresses being returned by `getaddrinfo` is respected, as ordinary clients
      * (incl. forward proxy) are not expected to distribute the load among the addresses being returned. */
     while (self->server_addresses.size < PTLS_ELEMENTSOF(self->server_addresses.list) && res != NULL) {
@@ -320,9 +337,12 @@ static void store_server_addresses(struct st_connect_generator_t *self, struct a
             dst->sa = h2o_mem_alloc_pool_aligned(&self->src_req->pool, H2O_ALIGNOF(struct sockaddr), res->ai_addrlen);
             memcpy(dst->sa, res->ai_addr, res->ai_addrlen);
             dst->salen = res->ai_addrlen;
+            added = 1;
         }
         res = res->ai_next;
     }
+
+    return added;
 }
 
 static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errstr, struct addrinfo *res, void *_self)
@@ -343,7 +363,10 @@ static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errs
         } else {
             assert(res->ai_socktype == SOCK_DGRAM);
         }
-        store_server_addresses(self, res);
+        if (!store_server_addresses(self, res))
+            set_last_error(self, ERROR_CLASS_ACCESS_PROHIBITED, "destination_ip_prohibited");
+    } else {
+        set_last_error(self, ERROR_CLASS_NAME_RESOLUTION, errstr);
     }
 
     if (self->getaddr_req.v4 == NULL) {
@@ -365,23 +388,24 @@ static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errs
         }
         /* In case no addresses are available, send HTTP error. */
         if (self->server_addresses.size == 0) {
-            if (errstr == NULL) {
-                record_error(self, "destination_ip_prohibited", NULL, NULL);
+            if (self->last_error.class == ERROR_CLASS_ACCESS_PROHIBITED) {
+                record_error(self, self->last_error.str, NULL, NULL);
                 send_connect_error(self, 403, "Destination IP Prohibited", "Destination IP Prohibited");
             } else {
                 const char *rcode;
-                if (errstr == h2o_hostinfo_error_nxdomain)
+                if (self->last_error.str == h2o_hostinfo_error_nxdomain) {
                     rcode = "NXDOMAIN";
-                else if (errstr == h2o_hostinfo_error_nodata)
+                } else if (self->last_error.str == h2o_hostinfo_error_nodata) {
                     rcode = "NODATA";
-                else if (errstr == h2o_hostinfo_error_refused)
+                } else if (self->last_error.str == h2o_hostinfo_error_refused) {
                     rcode = "REFUSED";
-                else if (errstr == h2o_hostinfo_error_servfail)
+                } else if (self->last_error.str == h2o_hostinfo_error_servfail) {
                     rcode = "SERVFAIL";
-                else
+                } else {
                     rcode = NULL;
-                record_error(self, "dns_error", errstr, rcode);
-                on_connect_error(self, errstr);
+                }
+                record_error(self, "dns_error", self->last_error.str, rcode);
+                on_connect_error(self, self->last_error.str);
             }
             return;
         }
@@ -434,9 +458,9 @@ static void try_connect(struct st_connect_generator_t *self)
         if (server_address == NULL) {
             if (self->server_addresses.used == self->server_addresses.size) {
                 if (self->getaddr_req.v4 == NULL && self->getaddr_req.v6 == NULL) {
-                    assert(self->last_conn_attempt_error != NULL);
-                    record_socket_error(self, self->last_conn_attempt_error);
-                    on_connect_error(self, self->last_conn_attempt_error);
+                    assert(self->last_error.class == ERROR_CLASS_CONNECT);
+                    record_socket_error(self, self->last_error.str);
+                    on_connect_error(self, self->last_error.str);
                 }
                 return;
             }
@@ -537,7 +561,7 @@ static void tcp_on_connect(h2o_socket_t *_sock, const char *err)
     assert(self->sock == _sock);
 
     if (err != NULL) {
-        self->last_conn_attempt_error = err;
+        set_last_error(self, ERROR_CLASS_CONNECT, err);
         h2o_socket_close(self->sock);
         self->sock = NULL;
         try_connect(self);
@@ -560,9 +584,12 @@ static void tcp_on_connect(h2o_socket_t *_sock, const char *err)
 
 static int tcp_start_connect(struct st_connect_generator_t *self, struct st_server_address_t *server_address)
 {
-    if ((self->sock = h2o_socket_connect(get_loop(self), server_address->sa, server_address->salen, tcp_on_connect,
-                                         &self->last_conn_attempt_error)) == NULL)
+    const char *errstr;
+    if ((self->sock = h2o_socket_connect(get_loop(self), server_address->sa, server_address->salen, tcp_on_connect, &errstr)) ==
+        NULL) {
+        set_last_error(self, ERROR_CLASS_CONNECT, errstr);
         return 0;
+    }
 
     self->sock->data = self;
 #if !H2O_USE_LIBUV
