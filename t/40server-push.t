@@ -55,8 +55,8 @@ EOT
         };
         subtest 'push-unprioritized' => sub {
             # index.txt is smaller than index.txt.gz, hence receiving the former always completes first
-            my $resp = `nghttp $opts -n --stat -w 1 '$proto://127.0.0.1:$port/index.txt?resp:link=</index.txt.gz>\%3b\%20rel=preload'`;
-            like $resp, qr{\nid\s*responseEnd\s.*\s/index\.txt\?.*\s/index\.txt.gz\n}is;
+            my $resp = `nghttp $opts -n --stat -w 10 '$proto://127.0.0.1:$port/halfdome.jpg?resp:link=</halfdome.jpg?pushed>\%3b\%20rel=preload'`;
+            like $resp, qr{\nid\s*responseEnd\s.*\s/halfdome\.jpg\?resp.*\s/halfdome\.jpg\?pushed}is;
         };
         subtest "push-1xx" => sub {
             my $out = `nghttp $opts -n --stat '$proto://127.0.0.1:$port/1xx-push/'`;
