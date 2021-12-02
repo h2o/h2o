@@ -178,7 +178,7 @@ struct st_h2o_http3_server_stream_t {
     struct {
         h2o_buffer_t *buf;
         int (*handle_input)(struct st_h2o_http3_server_stream_t *stream, const uint8_t **src, const uint8_t *src_end,
-                            const char **err_desc);
+                            int in_generator, const char **err_desc);
         uint64_t bytes_left_in_data_frame;
     } recvbuf;
     struct {
@@ -244,9 +244,9 @@ struct st_h2o_http3_server_stream_t {
 static void on_stream_destroy(quicly_stream_t *qs, int err);
 static int retain_sendvecs(struct st_h2o_http3_server_stream_t *stream);
 static int handle_input_post_trailers(struct st_h2o_http3_server_stream_t *stream, const uint8_t **src, const uint8_t *src_end,
-                                      const char **err_desc);
+                                      int in_generator, const char **err_desc);
 static int handle_input_expect_data(struct st_h2o_http3_server_stream_t *stream, const uint8_t **src, const uint8_t *src_end,
-                                    const char **err_desc);
+                                    int in_generator, const char **err_desc);
 static void tunnel_write(struct st_h2o_http3_server_stream_t *stream);
 static void tunnel_write_delayed(h2o_timer_t *timer);
 
@@ -834,7 +834,7 @@ static void handle_buffered_input(struct st_h2o_http3_server_stream_t *stream, i
         while (src != src_end) {
             int err;
             const char *err_desc = NULL;
-            if ((err = stream->recvbuf.handle_input(stream, &src, src_end, &err_desc)) != 0) {
+            if ((err = stream->recvbuf.handle_input(stream, &src, src_end, in_generator, &err_desc)) != 0) {
                 if (err == H2O_HTTP3_ERROR_INCOMPLETE) {
                     if (!quicly_recvstate_transfer_complete(&stream->quic->recvstate))
                         break;
@@ -1036,7 +1036,7 @@ static void run_delayed(h2o_timer_t *timer)
 }
 
 int handle_input_post_trailers(struct st_h2o_http3_server_stream_t *stream, const uint8_t **src, const uint8_t *src_end,
-                               const char **err_desc)
+                               int in_generator, const char **err_desc)
 {
     h2o_http3_read_frame_t frame;
     int ret;
@@ -1056,7 +1056,7 @@ int handle_input_post_trailers(struct st_h2o_http3_server_stream_t *stream, cons
 }
 
 static int handle_input_expect_data_payload(struct st_h2o_http3_server_stream_t *stream, const uint8_t **src,
-                                            const uint8_t *src_end, const char **err_desc)
+                                            const uint8_t *src_end, int in_generator, const char **err_desc)
 {
     size_t bytes_avail = src_end - *src;
 
@@ -1079,7 +1079,7 @@ static int handle_input_expect_data_payload(struct st_h2o_http3_server_stream_t 
 }
 
 int handle_input_expect_data(struct st_h2o_http3_server_stream_t *stream, const uint8_t **src, const uint8_t *src_end,
-                             const char **err_desc)
+                             int in_generator, const char **err_desc)
 {
     h2o_http3_read_frame_t frame;
     int ret;
@@ -1102,7 +1102,7 @@ int handle_input_expect_data(struct st_h2o_http3_server_stream_t *stream, const 
             stream->req.content_length - stream->req.req_body_bytes_received < frame.length) {
             /* The only viable option here is to reset the stream, as we might have already started streaming the request body
              * upstream. This behavior is consistent with what we do in HTTP/2. */
-            shutdown_stream(stream, H2O_HTTP3_ERROR_EARLY_RESPONSE, H2O_HTTP3_ERROR_GENERAL_PROTOCOL, 0);
+            shutdown_stream(stream, H2O_HTTP3_ERROR_EARLY_RESPONSE, H2O_HTTP3_ERROR_GENERAL_PROTOCOL, in_generator);
             return 0;
         }
         break;
@@ -1134,8 +1134,10 @@ static int handle_input_expect_headers_send_http_error(struct st_h2o_http3_serve
 }
 
 static int handle_input_expect_headers(struct st_h2o_http3_server_stream_t *stream, const uint8_t **src, const uint8_t *src_end,
-                                       const char **err_desc)
+                                       int in_generator, const char **err_desc)
 {
+    assert(!in_generator); /* this function is processing headers (before generators get assigned), not trailers */
+
     struct st_h2o_http3_server_conn_t *conn = get_conn(stream);
     h2o_http3_read_frame_t frame;
     int header_exists_map = 0, ret;
