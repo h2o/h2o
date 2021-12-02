@@ -1,6 +1,7 @@
 CONTAINER_NAME=h2oserver/h2o-ci:ubuntu1604
 SRC_DIR=/h2o
 CHECK_MK=$(SRC_DIR)/misc/docker-ci/check.mk
+CMAKE_ENV=
 CMAKE_ARGS=
 BUILD_ARGS=
 TEST_ENV=
@@ -35,6 +36,13 @@ ossl1.1.1:
 		BUILD_ARGS='$(BUILD_ARGS)' \
 		TEST_ENV='$(TEST_ENV)'
 
+ossl3.0:
+	docker run $(DOCKER_RUN_OPTS) $(CONTAINER_NAME) \
+		make -f $(SRC_DIR).ro/misc/docker-ci/check.mk _build_ossl3.0 _check \
+		CMAKE_ENV='PKG_CONFIG_PATH=/opt/openssl-3.0/lib64/pkgconfig' \
+		BUILD_ARGS='$(BUILD_ARGS)' \
+		TEST_ENV='$(TEST_ENV)'
+
 dtrace:
 	docker run $(DOCKER_RUN_OPTS) $(CONTAINER_NAME) \
 		env DTRACE_TESTS=1 \
@@ -63,11 +71,16 @@ _mount:
 	done
 
 _do_check:
-	cmake $(CMAKE_ARGS) -H$(SRC_DIR) -B.
+	$(CMAKE_ENV) cmake $(CMAKE_ARGS) -H$(SRC_DIR) -B.
 	time komake $(BUILD_ARGS) all checkdepends
 	if [ -e h2o-fuzzer-http1 ] ; then export $(FUZZ_ASAN); fi; \
 		ulimit -n 1024; \
 		env $(TEST_ENV) make check
+
+_build_ossl3.0:
+	curl -O https://www.openssl.org/source/openssl-3.0.0.tar.gz
+	tar xf openssl-3.0.0.tar.gz
+	cd openssl-3.0.0 && ./config --prefix=/opt/openssl-3.0 --openssldir=/opt/openssl-3.0 shared && make -j4 && sudo make install_sw install_ssldirs
 
 enter:
 	docker run $(DOCKER_RUN_OPTS) -it $(CONTAINER_NAME) bash
@@ -75,4 +88,4 @@ enter:
 pull:
 	docker pull $(CONTAINER_NAME)
 
-.PHONY: fuzz _check _do-check _fuzz _do-fuzz-extra enter pull
+.PHONY: fuzz _check _do-check _fuzz _build_ossl3.0 enter pull
