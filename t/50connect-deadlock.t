@@ -176,7 +176,7 @@ sub write_until_blocked {
         } else {
             if ($! == EAGAIN || $! == EWOULDBLOCK) {
                 # wait for max 0.5 seconds
-                last if !IO::Select->new([ $sock ])->can_write(0.5);
+                last if !IO::Select->new([ $sock ])->can_write(1);
             } elsif ($! == EINTR) {
                 # retry
             } else {
@@ -210,7 +210,7 @@ sub read_until_blocked {
         } else {
             if ($! == EAGAIN || $! == EWOULDBLOCK) {
                 # wait for max. 0.5 seconds for additional data
-                last if !IO::Select->new([ $sock ])->can_read(0.5);
+                last if !IO::Select->new([ $sock ])->can_read(1);
             } elsif ($! == EINTR) {
                 # retry
             } else {
