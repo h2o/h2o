@@ -36,9 +36,10 @@ ossl1.1.1:
 		TEST_ENV='$(TEST_ENV)'
 
 dtrace:
-	docker run $(DOCKER_RUN_OPTS) $(CONTAINER_NAME) \
+	docker run $(DOCKER_RUN_OPTS) h2oserver/h2o-ci:ubuntu2004  \
 		env DTRACE_TESTS=1 \
 		make -f $(SRC_DIR).ro/misc/docker-ci/check.mk _check \
+		CMAKE_ARGS='$(CMAKE_ARGS)' \
 		BUILD_ARGS='$(BUILD_ARGS)' \
 		TEST_ENV='$(TEST_ENV)'
 
