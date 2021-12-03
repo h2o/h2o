@@ -17,6 +17,8 @@ jobs:
         include:
           - name: default
             command: make -f misc/docker-ci.mk
+          - name: asan
+            command: make -f misc/docker-ci.mk CMAKE_ARGS='-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_FLAGS=-fsanitize=address -DCMAKE_CXX_FLAGS=-fsanitize=address' CHECK_ENVS='ASAN_OPTIONS=detect_leaks=0'
 
     timeout-minutes: 10
     steps:
