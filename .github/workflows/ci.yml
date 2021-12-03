@@ -21,8 +21,8 @@ jobs:
             command: make -f misc/docker-ci/check.mk ossl1.1.0+fuzz BUILD_ARGS=-j6 TEST_ENV=TEST_JOBS=4
           - name: OpenSSL 1.1.1
             command: make -f misc/docker-ci/check.mk ossl1.1.1 BUILD_ARGS=-j6 TEST_ENV=TEST_JOBS=4
-          - name: DTrace
-            command: make -f misc/docker-ci/check.mk dtrace CMAKE_ARGS='-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_FLAGS=-fsanitize=address -DCMAKE_CXX_FLAGS=-fsanitize=address' BUILD_ARGS=-j6 TEST_ENV='TEST_JOBS=4 ASAN_OPTIONS=detect_leaks=0:alloc_dealloc_mismatch=0'
+          - name: DTrace + ASan
+            command: make -f misc/docker-ci/check.mk dtrace BUILD_ARGS=-j6 TEST_ENV=TEST_JOBS=4
 
     timeout-minutes: 60
     steps:
