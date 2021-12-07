@@ -200,6 +200,7 @@ sub spawn_server {
                 my $i = 0;
                 while (1) {
                     if (waitpid($pid, WNOHANG) == $pid) {
+                        Test::More::fail "segmentation fault" if $? == 11;
                         print STDERR "killed (got $?)\n";
                         last;
                     }

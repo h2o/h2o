@@ -176,4 +176,22 @@ EOT
     }, qr/server failed to start/, 'duplicated statuses';
 };
 
+subtest 'issue/2753' => sub {
+   my ($port) = empty_ports(1, { host => "0.0.0.0" });
+   my $server = spawn_h2o_raw(<<"EOT", [$port]);
+hosts:
+  default:
+    listen:
+      port: $port
+    paths:
+      /:
+        file.dir: @{[DOC_ROOT]}
+error-doc:
+  - status: 400
+    url: 400.html
+EOT
+
+   my $resp = `curl --silent --dump-header /dev/stderr https://127.0.0.1:$port/nonexist 2>&1 > /dev/null`;
+   is $resp, "";
+};
 done_testing;

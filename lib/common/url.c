@@ -347,7 +347,7 @@ void h2o_url_resolve_path(h2o_iovec_t *base, h2o_iovec_t *relative)
 {
     size_t base_path_len = base->len, rel_path_offset = 0;
 
-    if (relative->len != 0 && relative->base[0] == '/') {
+    if (base->base == NULL || (relative->len != 0 && relative->base[0] == '/')) {
         base_path_len = 0;
     } else {
         /* relative path */
