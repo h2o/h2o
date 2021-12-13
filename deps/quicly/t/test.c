@@ -98,6 +98,70 @@ quicly_stream_callbacks_t stream_callbacks = {
     on_destroy, quicly_streambuf_egress_shift, quicly_streambuf_egress_emit, on_egress_stop, on_ingress_receive, on_ingress_reset};
 size_t on_destroy_callcnt;
 
+static void test_adjust_stream_frame_layout(void)
+{
+#define TEST(_is_crypto, _capacity, check)                                                                                         \
+    do {                                                                                                                           \
+        uint8_t buf[] = {0xff, 0x04, 'h', 'e', 'l', 'l', 'o', 0, 0, 0};                                                            \
+        uint8_t *dst = buf + 2, *const dst_end = buf + _capacity, *frame_at = buf;                                                 \
+        size_t len = 5;                                                                                                            \
+        int wrote_all = 1;                                                                                                         \
+        buf[0] = _is_crypto ? 0x06 : 0x08;                                                                                         \
+        adjust_stream_frame_layout(&dst, dst_end, &len, &wrote_all, &frame_at);                                                    \
+        do {                                                                                                                       \
+            check                                                                                                                  \
+        } while (0);                                                                                                               \
+    } while (0);
+
+    /* test CRYPTO frames that fit and don't when length is inserted */
+    TEST(1, 10, {
+        ok(dst == buf + 8);
+        ok(len == 5);
+        ok(wrote_all);
+        ok(frame_at == buf);
+        ok(memcmp(buf, "\x06\x04\x05hello", 8) == 0);
+    });
+    TEST(1, 8, {
+        ok(dst == buf + 8);
+        ok(len == 5);
+        ok(wrote_all);
+        ok(frame_at == buf);
+        ok(memcmp(buf, "\x06\x04\x05hello", 8) == 0);
+    });
+    TEST(1, 7, {
+        ok(dst == buf + 7);
+        ok(len == 4);
+        ok(!wrote_all);
+        ok(frame_at == buf);
+        ok(memcmp(buf, "\x06\x04\x04hell", 7) == 0);
+    });
+
+    /* test STREAM frames */
+    TEST(0, 9, {
+        ok(dst == buf + 8);
+        ok(len == 5);
+        ok(wrote_all);
+        ok(frame_at == buf);
+        ok(memcmp(buf, "\x0a\x04\x05hello", 8) == 0);
+    });
+    TEST(0, 8, {
+        ok(dst == buf + 8);
+        ok(len == 5);
+        ok(wrote_all);
+        ok(frame_at == buf + 1);
+        ok(memcmp(buf, "\x00\x08\x04hello", 8) == 0);
+    });
+    TEST(0, 7, {
+        ok(dst == buf + 7);
+        ok(len == 5);
+        ok(wrote_all);
+        ok(frame_at == buf);
+        ok(memcmp(buf, "\x08\x04hello", 7) == 0);
+    });
+
+#undef TEST
+}
+
 static int64_t get_now_cb(quicly_now_t *self)
 {
     return quic_now;
@@ -700,6 +764,7 @@ int main(int argc, char **argv)
     subtest("maxsender", test_maxsender);
     subtest("sentmap", test_sentmap);
     subtest("loss", test_loss);
+    subtest("adjust-stream-frame-layout", test_adjust_stream_frame_layout);
     subtest("test-vector", test_vector);
     subtest("test-retry-aead", test_retry_aead);
     subtest("transport-parameters", test_transport_parameters);
