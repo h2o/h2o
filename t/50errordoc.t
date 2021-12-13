@@ -176,4 +176,21 @@ EOT
     }, qr/server failed to start/, 'duplicated statuses';
 };
 
+subtest "bad request" => sub {
+    plan skip_all => "nc not found"
+        unless prog_exists("nc");
+    my $server = spawn_h2o(<<"EOT");
+hosts:
+  default:
+    paths:
+      /:
+        file.dir: @{[DOC_ROOT]}
+error-doc:
+  - status: 400
+    url: /index.txt
+EOT
+    my $resp = `(echo badrequest/1.0; echo) | nc 127.0.0.1 $server->{port}`;
+    like $resp, qr{^HTTP/1.1 400 .*bad request$}is;
+};
+
 done_testing;
