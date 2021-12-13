@@ -25,7 +25,7 @@ sub create_upstream {
     my @args = (
         qw(plackup -s), $server, qw(--keepalive-timeout 100 --access-log /dev/null --listen),
         "127.0.0.1:$port",
-        ASSETS_DIR . "/upstream.psgi",
+        ASSETS_DIR . "/50mruby-middleware.psgi",
     );
     spawn_server(
         argv     => \@args,
@@ -78,189 +78,139 @@ my %files = map { do {
     +($_ => { size => (stat $fn)[7], md5 => md5_hex($content), content => $content });
 } } qw(index.txt halfdome.jpg);
 
-sub doit {
-    my ($mode, $file, $next, $opts) = @_;
-    $opts ||= +{};
+sub into_path {
+    my ($testname) = @_;
+    $testname =~ s/[^a-z0-9]/-/g;
+    return '/' . $testname;
+}
 
-    my ($spawner, $path);
-    if ($mode eq 'next') {
-        $path = '';
-        $spawner = sub {
-            my $conf = shift;
-            spawn_h2o(sub {
-                my ($port, $tls_port) = @_;
-            << "EOT";
-hosts:
-  "127.0.0.1:$port":
-    paths: &paths
-      /live-check:
-        - mruby.handler: |
-            def modify_env(env)
-            end
-            proc {|env| [200, {}, []] }
-      /:
-$conf
-        - $next
-  "127.0.0.1:$tls_port":
-    paths: *paths
-EOT
-            });
-        };
-    } elsif ($mode eq 'reprocess') {
-        $path = '/for-reprocess';
-        $spawner = sub {
-            my $conf = shift;
-            spawn_h2o(sub {
-                my ($port, $tls_port) = @_;
-            << "EOT";
-fastcgi.send-delegated-uri: ON
-hosts:
-  "127.0.0.1:$port":
-    paths: &paths
-      /live-check:
-        - mruby.handler: |
-            def modify_env(env)
-              env["SCRIPT_NAME"] = ""
-            end
-            proc {|env| [200, {}, []] }
-      /:
-        - header.add: "x-reprocessed: true"
-        - $next
-      /for-reprocess:
-$conf
-  "127.0.0.1:$tls_port":
-    paths: *paths
-EOT
-            });
-        };
-    } else {
-        die "unexpected mode: $mode";
-    }
-
-    my $live_check = sub {
-        my ($proto, $port, $curl) = @_;
-        local $Test::Builder::Level = $Test::Builder::Level + 1;
-        lives_ok {
-            my ($status, $headers, $body) = get($proto, $port, $curl, '/live-check');
-            is $status, 200, 'live status check';
-        } 'live check';
-    };
-    my $reprocess_check = sub {
-        my ($headers) = @_;
-        return unless $mode eq 'reprocess';
-        is $headers->{'x-reprocessed'}, 'true', 'reprocess check';
-    };
-
-    subtest 'modify response header' => sub {
-        my $server = $spawner->(<< "EOT");
+my @testcases = (
+    +{
+        name => 'modify response header',
+        handler => sub { my $mode = shift; <<"EOT" },
         - mruby.handler: |
             proc {|env| 
-              modify_env(env) 
+              modify_env(env, '$mode')
               resp = H2O.$mode.call(env) 
               resp[1]['foo'] = 'FOO'
               resp
             }
 EOT
-        run_with_curl($server, sub {
-            my ($proto, $port, $curl) = @_;
-            my ($status, $headers, $body) = get($proto, $port, $curl, "$path/$file");
-            is $status, 200;
-            is $headers->{'foo'}, 'FOO';
-            is length($body), $files{$file}->{size};
-            is md5_hex($body), $files{$file}->{md5};
-            $reprocess_check->($headers);
-            $live_check->($proto, $port, $curl);
-        });
-    };
-
-    subtest 'content-length response body' => sub {
-        my $server = $spawner->(<< "EOT");
+        test => sub {
+            my ($server, $tc, $mode, $file, $gopts) = @_;
+            run_with_curl($server, sub {
+                my ($proto, $port, $curl) = @_;
+                my ($status, $headers, $body) = get($proto, $port, $curl, "@{[ into_path($tc->{name})]}/$file", $gopts);
+                is $status, 200;
+                is $headers->{'foo'}, 'FOO';
+                is length($body), $files{$file}->{size};
+                is md5_hex($body), $files{$file}->{md5};
+                reprocess_check($headers, $mode);
+                live_check($server);
+            });
+        },
+    },
+    +{
+        name => 'content-length response body',
+        handler => sub { my $mode = shift; <<"EOT" },
         - mruby.handler: |
             proc {|env|
-              modify_env(env)
+              modify_env(env, '$mode')
               resp = H2O.$mode.call(env)
               resp
             }
 EOT
-        run_with_curl($server, sub {
-            my ($proto, $port, $curl) = @_;
-            my ($status, $headers, $body) = get($proto, $port, $curl, "$path/$file");
-            is $status, 200;
-            is $headers->{'content-length'} || '', $files{$file}->{size};
-            is length($body), $files{$file}->{size};
-            is md5_hex($body), $files{$file}->{md5};
-            $reprocess_check->($headers);
-            $live_check->($proto, $port, $curl);
-        });
-    };
-
-    subtest 'stream response body' => sub {
-        my $server = $spawner->(<< "EOT");
+        test => sub {
+            my ($server, $tc, $mode, $file, $gopts) = @_;
+            run_with_curl($server, sub {
+                my ($proto, $port, $curl) = @_;
+                my ($status, $headers, $body) = get($proto, $port, $curl, "@{[ into_path($tc->{name})]}/$file", $gopts);
+                is $status, 200;
+                is $headers->{'content-length'} || '', $files{$file}->{size};
+                is length($body), $files{$file}->{size};
+                is md5_hex($body), $files{$file}->{md5};
+                reprocess_check($headers, $mode);
+                live_check($server);
+            });
+        },
+    },
+    +{
+        name => 'stream response body',
+        handler => sub { my $mode = shift; <<"EOT" },
         - mruby.handler: |
             proc {|env|
-              modify_env(env)
+              modify_env(env, '$mode')
               resp = H2O.$mode.call(env)
               resp[1].delete 'content-length'
               resp
             }
 EOT
-        run_with_curl($server, sub {
-            my ($proto, $port, $curl) = @_;
-            my ($status, $headers, $body) = get($proto, $port, $curl, "$path/$file");
-            is $status, 200;
-            is $headers->{'content-length'} || '', '';
-            is length($body), $files{$file}->{size};
-            is md5_hex($body), $files{$file}->{md5};
-            $reprocess_check->($headers);
-            $live_check->($proto, $port, $curl);
-        });
-    };
-
-    subtest 'join response body' => sub {
-        my $server = $spawner->(<< "EOT");
+        test => sub {
+            my ($server, $tc, $mode, $file, $gopts) = @_;
+            run_with_curl($server, sub {
+                my ($proto, $port, $curl) = @_;
+                my ($status, $headers, $body) = get($proto, $port, $curl, "@{[ into_path($tc->{name})]}/$file", $gopts);
+                is $status, 200;
+                is $headers->{'content-length'} || '', '';
+                is length($body), $files{$file}->{size};
+                is md5_hex($body), $files{$file}->{md5};
+                reprocess_check($headers, $mode);
+                live_check($server);
+            });
+        },
+    },
+    +{
+        name => 'join response body',
+        handler => sub { my $mode = shift; <<"EOT" },
         - mruby.handler: |
             proc {|env|
-              modify_env(env)
+              modify_env(env, '$mode')
               resp = H2O.$mode.call(env)
               resp[2] = [resp[2].join]
               resp
             }
 EOT
-        run_with_curl($server, sub {
-            my ($proto, $port, $curl) = @_;
-            my ($status, $headers, $body) = get($proto, $port, $curl, "$path/$file");
-            is $status, 200;
-            is $headers->{'content-length'}, length($body);
-            is length($body), $files{$file}->{size};
-            is md5_hex($body), $files{$file}->{md5};
-            $reprocess_check->($headers);
-            $live_check->($proto, $port, $curl);
-        });
-    };
-
-    subtest 'discard response' => sub {
-        my $server = $spawner->(<< "EOT");
+        test => sub {
+            my ($server, $tc, $mode, $file, $gopts) = @_;
+            run_with_curl($server, sub {
+                my ($proto, $port, $curl) = @_;
+                my ($status, $headers, $body) = get($proto, $port, $curl, "@{[ into_path($tc->{name})]}/$file", $gopts);
+                is $status, 200;
+                is $headers->{'content-length'}, length($body);
+                is length($body), $files{$file}->{size};
+                is md5_hex($body), $files{$file}->{md5};
+                reprocess_check($headers, $mode);
+                live_check($server);
+            });
+        },
+    },
+    +{
+        name => 'discard response',
+        handler => sub { my $mode = shift; <<"EOT" },
         - mruby.handler: |
             proc {|env|
-              modify_env(env)
+              modify_env(env, '$mode')
               resp = H2O.$mode.call(env)
               [200, {}, ['mruby']]
             }
 EOT
-        run_with_curl($server, sub {
-            my ($proto, $port, $curl) = @_;
-            my ($status, $headers, $body) = get($proto, $port, $curl, "$path/$file");
-            is $status, 200;
-            is $body, 'mruby';
-            $live_check->($proto, $port, $curl);
-        });
-    };
-
-    subtest 'discard response and each' => sub {
-        my $server = $spawner->(<< "EOT");
+        test => sub {
+            my ($server, $tc, $mode, $file, $gopts) = @_;
+            run_with_curl($server, sub {
+                my ($proto, $port, $curl) = @_;
+                my ($status, $headers, $body) = get($proto, $port, $curl, "@{[ into_path($tc->{name})]}/$file", $gopts);
+                is $status, 200;
+                is $body, 'mruby';
+                live_check($server);
+            });
+        },
+    },
+    +{
+        name => 'discard response and each',
+        handler => sub { my $mode = shift; <<"EOT" },
         - mruby.handler: |
             proc {|env|
-              modify_env(env)
+              modify_env(env, '$mode')
               status, headers, body = H2O.$mode.call(env)
               [status, headers, Class.new do
                 def each
@@ -269,21 +219,24 @@ EOT
               end.new]
             }
 EOT
-        run_with_curl($server, sub {
-            my ($proto, $port, $curl) = @_;
-            my ($status, $headers, $body) = get($proto, $port, $curl, "$path/$file");
-            is $status, 200;
-            is $body, 'mruby';
-            $reprocess_check->($headers);
-            $live_check->($proto, $port, $curl);
-        });
-    };
-
-    subtest 'wrapped body' => sub {
-        my $server = $spawner->(<< "EOT");
+        test => sub {
+            my ($server, $tc, $mode, $file, $gopts) = @_;
+            run_with_curl($server, sub {
+                my ($proto, $port, $curl) = @_;
+                my ($status, $headers, $body) = get($proto, $port, $curl, "@{[ into_path($tc->{name})]}/$file", $gopts);
+                is $status, 200;
+                is $body, 'mruby';
+                reprocess_check($headers, $mode);
+                live_check($server);
+            });
+        },
+    },
+    +{
+        name => 'wrapped body',
+        handler => sub { my $mode = shift; <<"EOT" },
         - mruby.handler: |
             proc {|env|
-              modify_env(env)
+              modify_env(env, '$mode')
               status, headers, body = H2O.$mode.call(env)
               [status, headers, Class.new do
                 def initialize(body)
@@ -295,22 +248,25 @@ EOT
               end.new(body)]
             }
 EOT
-        run_with_curl($server, sub {
-            my ($proto, $port, $curl) = @_;
-            my ($status, $headers, $body) = get($proto, $port, $curl, "$path/$file");
-            is $status, 200;
-            is length($body), $files{$file}->{size};
-            is md5_hex($body), $files{$file}->{md5};
-            $reprocess_check->($headers);
-            $live_check->($proto, $port, $curl);
-        });
-    };
-
-    subtest 'multiple one-by-one calls' => sub {
-        my $server = $spawner->(<< "EOT");
+        test => sub {
+            my ($server, $tc, $mode, $file, $gopts) = @_;
+            run_with_curl($server, sub {
+                my ($proto, $port, $curl) = @_;
+                my ($status, $headers, $body) = get($proto, $port, $curl, "@{[ into_path($tc->{name})]}/$file", $gopts);
+                is $status, 200;
+                is length($body), $files{$file}->{size};
+                is md5_hex($body), $files{$file}->{md5};
+                reprocess_check($headers, $mode);
+                live_check($server);
+            });
+        },
+    },
+    +{
+        name => 'multiple one-by-one calls',
+        handler => sub { my $mode = shift; <<"EOT" },
         - mruby.handler: |
             proc {|env|
-              modify_env(env)
+              modify_env(env, '$mode')
               resp1 = H2O.$mode.call(env)
               content1 = resp1[2].join
               resp2 = H2O.$mode.call(env)
@@ -318,20 +274,23 @@ EOT
               [200, {}, [Digest::MD5.hexdigest(content1), Digest::MD5.hexdigest(content2)]]
             }
 EOT
-        run_with_curl($server, sub {
-            my ($proto, $port, $curl) = @_;
-            my ($status, $headers, $body) = get($proto, $port, $curl, "$path/$file");
-            is $status, 200;
-            is $body, $files{$file}->{md5} x 2;
-            $live_check->($proto, $port, $curl);
-        });
-    };
-
-    subtest 'multiple concurrent calls' => sub {
-        my $server = $spawner->(<< "EOT");
+        test => sub {
+            my ($server, $tc, $mode, $file, $gopts) = @_;
+            run_with_curl($server, sub {
+                my ($proto, $port, $curl) = @_;
+                my ($status, $headers, $body) = get($proto, $port, $curl, "@{[ into_path($tc->{name})]}/$file", $gopts);
+                is $status, 200;
+                is $body, $files{$file}->{md5} x 2;
+                live_check($server);
+            });
+        },
+    },
+    +{
+        name => 'multiple concurrent calls',
+        handler => sub { my $mode = shift; <<"EOT" },
         - mruby.handler: |
             proc {|env|
-              modify_env(env)
+              modify_env(env, '$mode')
               resp1 = H2O.$mode.call(env)
               resp2 = H2O.$mode.call(env)
               content1 = resp1[2].join
@@ -339,21 +298,24 @@ EOT
               [200, {}, [Digest::MD5.hexdigest(content1), Digest::MD5.hexdigest(content2)]]
             }
 EOT
-        run_with_curl($server, sub {
-            my ($proto, $port, $curl) = @_;
-            my ($status, $headers, $body) = get($proto, $port, $curl, "$path/$file");
-            is $status, 200;
-            is $body, $files{$file}->{md5} x 2;
-            $live_check->($proto, $port, $curl);
-        });
-    };
-
-    if ($mode eq 'call') {
-        subtest 'multiple handlers' => sub {
-            my $server = $spawner->(<< "EOT");
+        test => sub {
+            my ($server, $tc, $mode, $file, $gopts) = @_;
+            run_with_curl($server, sub {
+                my ($proto, $port, $curl) = @_;
+                my ($status, $headers, $body) = get($proto, $port, $curl, "@{[ into_path($tc->{name})]}/$file", $gopts);
+                is $status, 200;
+                is $body, $files{$file}->{md5} x 2;
+                live_check($server);
+            });
+        },
+    },
+    +{
+        name => 'multiple handlers',
+        mode => 'next',
+        handler => sub { my $mode = shift; <<"EOT" },
         - mruby.handler: |
             proc {|env|
-              modify_env(env)
+              modify_env(env, '$mode')
               resp = H2O.$mode.call(env);
               resp[1]['x-middleware-order'] ||= ''
               resp[1]['x-middleware-order'] += '1'
@@ -361,50 +323,56 @@ EOT
             }
         - mruby.handler: |
             proc {|env|
-              modify_env(env)
+              modify_env(env, '$mode')
               resp = H2O.$mode.call(env);
               resp[1]['x-middleware-order'] ||= ''
               resp[1]['x-middleware-order'] += '2'
               resp
             }
 EOT
+        test => sub {
+            my ($server, $tc, $mode, $file, $gopts) = @_;
             run_with_curl($server, sub {
                 my ($proto, $port, $curl) = @_;
-                my ($status, $headers, $body) = get($proto, $port, $curl, "$path/$file");
+                my ($status, $headers, $body) = get($proto, $port, $curl, "@{[ into_path($tc->{name})]}/$file", $gopts);
                 is $status, 200;
                 is length($body), $files{$file}->{size};
                 is md5_hex($body), $files{$file}->{md5};
                 is $headers->{'x-middleware-order'}, '21', 'middleware order';
-                $live_check->($proto, $port, $curl);
+                live_check($server);
             });
-        };
-    }
-
-    if ($opts->{post}) {
-        subtest 'pass rack.input' => sub {
-            my $server = $spawner->(<< "EOT");
+        },
+    },
+    +{
+        name => 'pass rack.input',
+        when => 'post',
+        handler => sub { my $mode = shift; <<"EOT" },
         - mruby.handler: |
             proc {|env|
-              modify_env(env)
+              modify_env(env, '$mode')
               H2O.$mode.call(env)
             }
 EOT
+        test => sub {
+            my ($server, $tc, $mode, $file, $gopts) = @_;
             run_with_curl($server, sub {
                 my ($proto, $port, $curl) = @_;
-                my ($status, $headers, $body) = get($proto, $port, $curl, "$path/echo", +{ data_file => "@{[ DOC_ROOT ]}/$file" });
+                my ($status, $headers, $body) = get($proto, $port, $curl, "@{[ into_path($tc->{name})]}/echo", +{ %$gopts, data_file => "@{[ DOC_ROOT ]}/$file" });
                 is $status, 200;
                 is length($body), $files{$file}->{size};
                 is md5_hex($body), $files{$file}->{md5};
-                $reprocess_check->($headers);
-                $live_check->($proto, $port, $curl);
+                reprocess_check($headers, $mode);
+                live_check($server);
             });
-        };
-
-        subtest 'modify rack.input' => sub {
-            my $server = $spawner->(<< "EOT");
+        },
+    },
+    +{
+        name => 'modify rack.input',
+        when => 'post',
+        handler => sub { my $mode = shift; <<"EOT" },
         - mruby.handler: |
             proc {|env|
-              modify_env(env)
+              modify_env(env, '$mode')
               env.delete('CONTENT_LENGTH')
               original = env['rack.input']
               env['rack.input'] = Class.new do
@@ -436,124 +404,220 @@ EOT
               H2O.$mode.call(env)
             }
 EOT
+        test => sub {
+            my ($server, $tc, $mode, $file, $gopts) = @_;
             run_with_curl($server, sub {
                 my ($proto, $port, $curl) = @_;
-                my ($status, $headers, $body) = get($proto, $port, $curl, "$path/echo", +{ data_file => "@{[ DOC_ROOT ]}/$file" });
+                my ($status, $headers, $body) = get($proto, $port, $curl, "@{[ into_path($tc->{name})]}/echo", +{ %$gopts, data_file => "@{[ DOC_ROOT ]}/$file" });
                 is $status, 200;
                 is length($body), $files{$file}->{size} + length('suffix');
                 is md5_hex($body), md5_hex($files{$file}->{content} . 'suffix');
-                $reprocess_check->($headers);
-                $live_check->($proto, $port, $curl);
+                reprocess_check($headers, $mode);
+                live_check($server);
             });
-        };
-
-        subtest 'rack.input with smaller content-length' => sub {
-            my $server = $spawner->(<< "EOT");
+        },
+    },
+    +{
+        name => 'rack.input with smaller content-length',
+        when => 'post',
+        handler => sub { my $mode = shift; <<"EOT" },
         - mruby.handler: |
             proc {|env|
-              modify_env(env)
+              modify_env(env, '$mode')
               env['CONTENT_LENGTH'] = '3'
               H2O.$mode.call(env)
             }
 EOT
+        test => sub {
+            my ($server, $tc, $mode, $file, $gopts) = @_;
             run_with_curl($server, sub {
                 my ($proto, $port, $curl) = @_;
-                my ($status, $headers, $body) = get($proto, $port, $curl, "$path/echo", +{ data_file => "@{[ DOC_ROOT ]}/$file" });
+                my ($status, $headers, $body) = get($proto, $port, $curl, "@{[ into_path($tc->{name})]}/echo", +{ %$gopts, data_file => "@{[ DOC_ROOT ]}/$file" });
                 is $status, 200;
                 is length($body), 3;
                 is $body, substr($files{$file}->{content}, 0, 3);
-                $reprocess_check->($headers);
-                $live_check->($proto, $port, $curl);
+                reprocess_check($headers, $mode);
+                live_check($server);
             });
-        };
-
-        subtest 'rack.input with bigger content-length' => sub {
-            my $server = $spawner->(<< "EOT");
+        },
+    },
+    +{
+        name => 'rack.input with bigger content-length',
+        when => 'post',
+        handler => sub { my $mode = shift; <<"EOT" },
         - mruby.handler: |
             proc {|env|
-              modify_env(env)
+              modify_env(env, '$mode')
               env['CONTENT_LENGTH'] = '999999999'
               H2O.$mode.call(env)
             }
 EOT
+        test => sub {
+            my ($server, $tc, $mode, $file, $gopts) = @_;
             run_with_curl($server, sub {
                 my ($proto, $port, $curl) = @_;
-                my ($status, $headers, $body) = get($proto, $port, $curl, "$path/echo", +{ data_file => "@{[ DOC_ROOT ]}/$file" });
+                my ($status, $headers, $body) = get($proto, $port, $curl, "@{[ into_path($tc->{name})]}/echo", +{ %$gopts, data_file => "@{[ DOC_ROOT ]}/$file" });
                 is $status, 200;
                 is length($body), $files{$file}->{size};
                 is md5_hex($body), $files{$file}->{md5};
-                $reprocess_check->($headers);
-                $live_check->($proto, $port, $curl);
+                reprocess_check($headers, $mode);
+                live_check($server);
             });
-        };
-
-        subtest 'read rack.input partially' => sub {
-            my $server = $spawner->(<< "EOT");
+        },
+    },
+    +{
+        name => 'read rack.input partially',
+        when => 'post',
+        handler => sub { my $mode = shift; <<"EOT" },
         - mruby.handler: |
             proc {|env|
-              modify_env(env)
+              modify_env(env, '$mode')
               head = env['rack.input'].read(3)
               H2O.$mode.call(env)
             }
 EOT
+        test => sub {
+            my ($server, $tc, $mode, $file, $gopts) = @_;
             run_with_curl($server, sub {
                 my ($proto, $port, $curl) = @_;
-                my ($status, $headers, $body) = get($proto, $port, $curl, "$path/echo", +{ data_file => "@{[ DOC_ROOT ]}/$file" });
+                my ($status, $headers, $body) = get($proto, $port, $curl, "@{[ into_path($tc->{name})]}/echo", +{ %$gopts, data_file => "@{[ DOC_ROOT ]}/$file" });
                 is $status, 200;
                 is length($body), $files{$file}->{size} - 3;
                 is md5_hex($body), md5_hex(substr($files{$file}->{content}, 3));
-                $reprocess_check->($headers);
-                $live_check->($proto, $port, $curl);
+                reprocess_check($headers, $mode);
+                live_check($server);
             });
-        };
-    }
-
-    subtest 'response shortcut' => sub {
-        my $server = $spawner->(<< "EOT");
+        },
+    },
+    +{
+        name => 'response shortcut',
+        handler => sub { my $mode = shift; <<"EOT" },
         - mruby.handler: |
             proc {|env|
-              modify_env(env)
+              modify_env(env, '$mode')
               H2O.$mode.request(env)
             }
 EOT
-        run_with_curl($server, sub {
-            my ($proto, $port, $curl) = @_;
-            my ($status, $headers, $body) = get($proto, $port, $curl, "$path/$file");
-            is $status, 200;
-            is $headers->{'content-length'}, length($body);
-            is length($body), $files{$file}->{size};
-            is md5_hex($body), $files{$file}->{md5};
-            $reprocess_check->($headers);
-            $live_check->($proto, $port, $curl);
-        });
-    };
-
-    subtest 'discard request' => sub {
-        my $server = $spawner->(<< "EOT");
+        test => sub {
+            my ($server, $tc, $mode, $file, $gopts) = @_;
+            run_with_curl($server, sub {
+                my ($proto, $port, $curl) = @_;
+                my ($status, $headers, $body) = get($proto, $port, $curl, "@{[ into_path($tc->{name})]}/$file", $gopts);
+                is $status, 200;
+                is $headers->{'content-length'}, length($body);
+                is length($body), $files{$file}->{size};
+                is md5_hex($body), $files{$file}->{md5};
+                reprocess_check($headers, $mode);
+                live_check($server);
+            });
+        },
+    },
+    +{
+        name => 'discard request',
+        handler => sub { my $mode = shift; <<"EOT" },
         - mruby.handler: |
             proc {|env|
-              modify_env(env)
+              modify_env(env, '$mode')
               req = H2O.$mode.request(env)
               [200, {}, ['mruby']]
             }
 EOT
-        run_with_curl($server, sub {
-            my ($proto, $port, $curl) = @_;
-            my ($status, $headers, $body) = get($proto, $port, $curl, "$path/$file");
-            is $status, 200;
-            is $body, 'mruby';
-            $live_check->($proto, $port, $curl);
-        });
+        test => sub {
+            my ($server, $tc, $mode, $file, $gopts) = @_;
+            run_with_curl($server, sub {
+                my ($proto, $port, $curl) = @_;
+                my ($status, $headers, $body) = get($proto, $port, $curl, "@{[ into_path($tc->{name})]}/$file", $gopts);
+                is $status, 200;
+                is $body, 'mruby';
+                live_check($server);
+            });
+        },
+    },
+);
+
+sub create_h2o {
+    my ($next) = @_;
+
+    my $gen_pathconf = sub {
+        my ($tc, $mode) = @_;
+        my $handler = $tc->{handler}->($mode);
+        my $conf = <<"EOT";
+      @{[ into_path($tc->{name}) ]}:
+$handler
+EOT
+        if ($mode eq 'next') {
+            $conf .= <<"EOT";
+        - $next
+EOT
+        }
+        return $conf;
     };
 
+    my @filtered = grep { !$ENV{TESTCASE} || $ENV{TESTCASE} eq $_->{name} } @testcases;
+
+    return spawn_h2o(sub {
+        my ($port, $tls_port) = @_;
+        << "EOT";
+fastcgi.send-delegated-uri: ON
+hosts:
+  "livecheck.example.com":
+    paths:
+      /:
+        - mruby.handler: |
+            def modify_env(env, mode)
+              env["SCRIPT_NAME"] = "" if mode == 'reprocess'
+            end
+            proc {|env| [200, {}, []] }
+  "next.example.com":
+    paths:
+@{[ join("\n", map { $gen_pathconf->($_, 'next') } @filtered) ]}
+  "reprocess.example.com":
+    paths:
+      /: # redirected endpoint from the handler
+        - header.add: "x-reprocessed: true"
+        - $next
+@{[ join("\n", map { $gen_pathconf->($_, 'reprocess') } @filtered) ]}
+EOT
+    });
+}
+
+sub live_check {
+    my ($server) = @_;
+    local $Test::Builder::Level = $Test::Builder::Level + 1;
+    lives_ok {
+        my ($status, $headers, $body) = get('http', $server->{port}, 'curl', '/live-check', +{ headers => ['host: livecheck.example.com'] });
+        is $status, 200, 'live status check';
+    } 'live check';
+}
+
+sub reprocess_check {
+    my ($headers, $mode) = @_;
+    return unless $mode eq 'reprocess';
+    is $headers->{'x-reprocessed'}, 'true', 'reprocess check';
+}
+
+sub run_testcases {
+    my ($server, $mode, $file, $opts) = @_;
+    $opts ||= +{};
+
+    my $gopts = +{ headers => ["host: $mode.example.com"] };
+    for my $tc (@testcases) {
+        subtest $tc->{name} => sub {
+            plan skip_all => '' if $ENV{TESTCASE} && $ENV{TESTCASE} ne $tc->{name};
+            plan skip_all => '' if $tc->{when} && !$opts->{$tc->{when}};
+            plan skip_all => '' if $tc->{mode} && $mode ne $tc->{mode};
+            $tc->{test}->($server, $tc, $mode, $file, $gopts);
+        };
+    }
 }
 
 subtest 'file' => sub {
+    my $server = create_h2o("file.dir: @{[ ASSETS_DIR ]}/doc_root");
     for my $mode (qw/next reprocess/) {
         subtest $mode => sub {
             for my $file (keys %files) {
                 subtest $file => sub {
-                    doit($mode, $file, "file.dir: @{[ ASSETS_DIR ]}/doc_root", {});
+                    run_testcases($server, $mode, $file, {});
                 };
             }
         };
@@ -563,11 +627,12 @@ subtest 'file' => sub {
 subtest 'proxy' => sub {
     my $port = empty_port();
     my $guard = create_upstream($port, 'proxy');
+    my $server = create_h2o("proxy.reverse.url: http://127.0.0.1:$port/");
     for my $mode (qw/next reprocess/) {
         subtest $mode => sub {
             for my $file (keys %files) {
                 subtest $file => sub {
-                    doit($mode, $file, "proxy.reverse.url: http://127.0.0.1:$port/", { post => 1 });
+                    run_testcases($server, $mode, $file, { post => 1 });
                 };
             }
         };
@@ -577,11 +642,12 @@ subtest 'proxy' => sub {
 subtest 'fastcgi' => sub {
     my $port = empty_port();
     my $guard = create_upstream($port, 'fastcgi');
+    my $server = create_h2o("fastcgi.connect: $port");
     for my $mode (qw/next reprocess/) {
         subtest $mode => sub {
             for my $file (keys %files) {
                 subtest $file => sub {
-                    doit($mode, $file, "fastcgi.connect: $port", +{ remove_script_name => 1, post => 1 });
+                    run_testcases($server, $mode, $file, +{ post => 1 });
                 };
             }
         };
@@ -638,10 +704,10 @@ access-log:
   format: "%{x-foo}i"
 EOT
     });
+    truncate $access_log, 0;
+
     run_with_curl($server, sub {
         my ($proto, $port, $curl) = @_;
-        truncate $access_log, 0;
-
         my ($status, $headers, $body);
         ($status, $headers, $body) = get($proto, $port, $curl, '/index.txt', +{ headers => ['X-Foo: FOO'] });
         is $status, 200;
@@ -685,7 +751,6 @@ EOT
     });
     run_with_curl($server, sub {
         my ($proto, $port, $curl) = @_;
-
         my ($status, $headers, $body) = get($proto, $port, $curl, '/');
         is $status, 200;
         unlike $body, qr{^foo:FOO$}m;
@@ -767,9 +832,9 @@ EOT
         my ($proto, $port, $curl) = @_;
 
         my ($status, $headers, $body);
-        ($status, $headers, $body) = get('http', $server->{port}, 'curl', '/blocking');
+        ($status, $headers, $body) = get($proto, $port, $curl, '/blocking');
         cmp_ok $body, '>', 1.9;
-        ($status, $headers, $body) = get('http', $server->{port}, 'curl', '/non-blocking');
+        ($status, $headers, $body) = get($proto, $port, $curl, '/non-blocking');
         cmp_ok $body, '<', 1.1;
     });
 };

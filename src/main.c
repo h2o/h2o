@@ -2687,9 +2687,9 @@ static void on_socketclose(void *data)
 static void on_accept(h2o_socket_t *listener, const char *err)
 {
     struct listener_ctx_t *ctx = listener->data;
-    size_t num_accepts = conf.max_connections / 16 / conf.thread_map.size;
-    if (num_accepts < 8)
-        num_accepts = 8;
+
+    /* TLS Handshakes take about 1ms, this effectively limits the latency induced by TLS handshakes to 10ms per event loop. */
+    size_t num_accepts = 10;
 
     if (err != NULL) {
         return;
@@ -2701,8 +2701,7 @@ static void on_accept(h2o_socket_t *listener, const char *err)
             /* The accepting socket is disactivated before entering the next in `run_loop`.
              * Note: it is possible that the server would accept at most `max_connections + num_threads` connections, since the
              * server does not check if the number of connections has exceeded _after_ epoll notifies of a new connection _but_
-             * _before_ calling `accept`.  In other words t/40max-connections.t may fail.
-             */
+             * _before_ calling `accept`.  In other words t/40max-connections.t may fail. */
             num_connections(-1);
             break;
         }

@@ -66,8 +66,7 @@ typedef struct st_quicly_cc_t {
      */
     union {
         /**
-         * State information for Reno congestion control. Pico also uses this (and therefore we can switch between Reno and Pico
-         * mid-connection).
+         * State information for Reno congestion control.
          */
         struct {
             /**
@@ -75,6 +74,19 @@ typedef struct st_quicly_cc_t {
              */
             uint32_t stash;
         } reno;
+        /**
+         * State information for Pico.
+         */
+        struct {
+            /**
+             * Stash of acknowledged bytes, used during congestion avoidance.
+             */
+            uint32_t stash;
+            /**
+             * Number of bytes required to be acked in order to increase CWND by 1 MTU.
+             */
+            uint32_t bytes_per_mtu_increase;
+        } pico;
         /**
          * State information for CUBIC congestion control.
          */
@@ -136,7 +148,7 @@ struct st_quicly_cc_type_t {
      * Called when a packet is newly acknowledged.
      */
     void (*cc_on_acked)(quicly_cc_t *cc, const quicly_loss_t *loss, uint32_t bytes, uint64_t largest_acked, uint32_t inflight,
-                        int64_t now, uint32_t max_udp_payload_size);
+                        uint64_t next_pn, int64_t now, uint32_t max_udp_payload_size);
     /**
      * Called when a packet is detected as lost. |next_pn| is the next unsent packet number,
      * used for setting the recovery window.

@@ -3,6 +3,8 @@ use warnings;
 use Test::More;
 use t::Util;
 
+plan skip_all => "curl not found"
+    unless prog_exists("curl");
 plan skip_all => "ss not found"
     unless prog_exists("ss");
 
@@ -21,6 +23,7 @@ hosts:
       "/":
         file.dir: @{[ DOC_ROOT ]}
 EOT
+    `curl http://127.0.0.1:$port/`;
     my $out = `ss -tlnp | grep ":$port" 2>&1`;
     if ($reuseport eq 'ON') {
         my @lines = split(/\n/, $out);
