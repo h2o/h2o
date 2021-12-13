@@ -210,7 +210,10 @@ sub read_until_blocked {
         } else {
             if ($! == EAGAIN || $! == EWOULDBLOCK) {
                 # wait for max. 0.5 seconds for additional data
-                last if !IO::Select->new([ $sock ])->can_read(1);
+                $! = 0;
+                if (!IO::Select->new([ $sock ])->can_read(1)) {
+                    last unless $!; # timeout
+                }
             } elsif ($! == EINTR) {
                 # retry
             } else {
