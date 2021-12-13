@@ -1050,7 +1050,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
         if (identity_node != NULL) {
             if (certificate_file != NULL || key_file != NULL) {
                 h2o_configurator_errprintf(cmd, *identity_node,
-                                           "either one of `identity` and `certificate-file`-`key-file` pair can be used");
+                                           "either one of `identity` or `certificate-file`-`key-file` pair can be used");
                 return -1;
             }
             if ((*identity_node)->data.sequence.size == 0) {

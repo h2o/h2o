@@ -102,7 +102,7 @@ run_with_curl($server, sub {
 
 sub within_eps {
     my ($timings, $name, $expected, $eps) = @_;
-    $eps ||= $expected / 10;
+    $eps ||= $expected / 5;
     cmp_ok $timings->{$name}, '>=', $expected - $eps, ">= $name - eps";
     cmp_ok $timings->{$name}, '<=', $expected + $eps, "<= $name + eps";
 }
