@@ -1,8 +1,7 @@
 CONTAINER_NAME=h2oserver/h2o-ci:ubuntu2004
-SRC_DIR=/quicly
+SRC_DIR=/picotls
 CI_MK=$(SRC_DIR)/misc/docker-ci.mk
 CMAKE_ARGS=
-CHECK_ENVS=
 DOCKER_RUN_OPTS=--privileged \
 	-v `pwd`:$(SRC_DIR) \
 	-it
@@ -20,5 +19,5 @@ _check:
 
 _do-check:
 	cmake $(CMAKE_ARGS) "-H$(SRC_DIR)" -B.
-	$(MAKE) all VERBOSE=1
-	env $(CHECK_ENVS) $(MAKE) check
+	make all VERBOSE=1
+	env $(CHECK_ENVS) make check

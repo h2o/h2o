@@ -1,7 +1,7 @@
 picotls
 ===
 
-[![Build Status](https://travis-ci.org/h2o/picotls.svg?branch=master)](https://travis-ci.org/h2o/picotls)
+[![CI](https://github.com/h2o/picotls/actions/workflows/ci.yml/badge.svg)](https://github.com/h2o/picotls/actions/workflows/ci.yml)
 
 Picotls is a [TLS 1.3 (RFC 8446)](https://tools.ietf.org/html/rfc8446) protocol stack written in C, with the following features:
 * support for three crypto engines
