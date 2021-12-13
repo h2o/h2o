@@ -55,19 +55,19 @@ static inline uint64_t rotl64(uint64_t x, unsigned n)
 /** Read 4 bytes from buf, as a 32-bit big endian quantity. */
 static inline uint32_t read32_be(const uint8_t buf[4])
 {
-  return (buf[0] << 24) |
-         (buf[1] << 16) |
-         (buf[2] << 8) |
-         (buf[3]);
+  return ((uint32_t)buf[0] << 24) |
+         ((uint32_t)buf[1] << 16) |
+         ((uint32_t)buf[2] << 8) |
+         ((uint32_t)buf[3]);
 }
 
 /** Read 4 bytes from buf, as a 32-bit little endian quantity. */
 static inline uint32_t read32_le(const uint8_t buf[4])
 {
-  return (buf[3] << 24) |
-         (buf[2] << 16) |
-         (buf[1] << 8) |
-         (buf[0]);
+  return ((uint32_t)buf[3] << 24) |
+         ((uint32_t)buf[2] << 16) |
+         ((uint32_t)buf[1] << 8) |
+         ((uint32_t)buf[0]);
 }
 
 /** Read 8 bytes from buf, as a 64-bit big endian quantity. */
