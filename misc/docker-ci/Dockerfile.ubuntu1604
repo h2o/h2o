@@ -5,6 +5,7 @@ RUN apt-get --yes update
 # huge packages go first (for better cacheability)
 RUN apt-get install --yes bison ruby-dev
 RUN apt-get install --yes php-cgi
+RUN apt-get install --yes time
 
 # tools for building and testing
 RUN apt-get install --yes apache2-utils cmake cmake-data git memcached netcat-openbsd nghttp2-client redis-server wget sudo
@@ -41,7 +42,7 @@ RUN (cd openssl-${OPENSSL_VERSION} && \
 RUN apt-get install --yes cpanminus
 RUN apt-get install --yes libfcgi-perl libfcgi-procmanager-perl libipc-signal-perl libjson-perl liblist-moreutils-perl libplack-perl libscope-guard-perl libtest-exception-perl libwww-perl libio-socket-ssl-perl
 ENV PERL_CPANM_OPT="--mirror https://cpan.metacpan.org/"
-RUN sudo cpanm --notest Starlet Protocol::HTTP2
+RUN sudo cpanm --notest Test::More Starlet Protocol::HTTP2
 RUN sudo cpanm --notest Net::DNS::Nameserver
 
 # Test-TCP 2.21
@@ -62,6 +63,9 @@ ENV LD_LIBRARY_PATH="/usr/local/lib"
 # use dumb-init
 RUN wget -O /usr/local/bin/dumb-init https://github.com/Yelp/dumb-init/releases/download/v1.2.1/dumb-init_1.2.1_amd64 \
  && chmod +x /usr/local/bin/dumb-init
+
+# komake
+RUN wget -O /usr/local/bin/komake https://raw.githubusercontent.com/kazuho/komake/main/komake && chmod +x /usr/local/bin/komake
 
 # create user
 RUN useradd --create-home ci

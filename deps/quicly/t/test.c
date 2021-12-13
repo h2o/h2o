@@ -569,6 +569,72 @@ static void test_nondecryptable_initial(void)
 #undef LEN_LOW
 }
 
+static void test_set_cc(void)
+{
+    quicly_conn_t *conn;
+    int ret;
+
+    ret = quicly_connect(&conn, &quic_ctx, "example.com", &fake_address.sa, NULL, new_master_id(), ptls_iovec_init(NULL, 0), NULL,
+                         NULL);
+    ok(ret == 0);
+
+    quicly_stats_t stats;
+
+    // init CC with pico
+    quicly_set_cc(conn, &quicly_cc_type_pico);
+    ret = quicly_get_stats(conn, &stats);
+    ok(ret == 0);
+    ok(strcmp(stats.cc.type->name, "pico") == 0);
+
+    // pico to pico
+    quicly_set_cc(conn, &quicly_cc_type_pico);
+    ret = quicly_get_stats(conn, &stats);
+    ok(ret == 0);
+    ok(strcmp(stats.cc.type->name, "pico") == 0);
+
+    // reno to pico
+    quicly_set_cc(conn, &quicly_cc_type_reno);
+    quicly_set_cc(conn, &quicly_cc_type_pico);
+    ret = quicly_get_stats(conn, &stats);
+    ok(ret == 0);
+    ok(strcmp(stats.cc.type->name, "pico") == 0);
+
+    // cubic to pico
+    quicly_set_cc(conn, &quicly_cc_type_cubic);
+    quicly_set_cc(conn, &quicly_cc_type_pico);
+    ret = quicly_get_stats(conn, &stats);
+    ok(ret == 0);
+    ok(strcmp(stats.cc.type->name, "pico") == 0);
+
+    // pico to reno
+    quicly_set_cc(conn, &quicly_cc_type_pico);
+    quicly_set_cc(conn, &quicly_cc_type_reno);
+    ret = quicly_get_stats(conn, &stats);
+    ok(ret == 0);
+    ok(strcmp(stats.cc.type->name, "reno") == 0);
+
+    // pico to cubic
+    quicly_set_cc(conn, &quicly_cc_type_pico);
+    quicly_set_cc(conn, &quicly_cc_type_cubic);
+    ret = quicly_get_stats(conn, &stats);
+    ok(ret == 0);
+    ok(strcmp(stats.cc.type->name, "cubic") == 0);
+
+    // reno to cubic
+    quicly_set_cc(conn, &quicly_cc_type_reno);
+    quicly_set_cc(conn, &quicly_cc_type_cubic);
+    ret = quicly_get_stats(conn, &stats);
+    ok(ret == 0);
+    ok(strcmp(stats.cc.type->name, "cubic") == 0);
+
+    // cubic to reno
+    quicly_set_cc(conn, &quicly_cc_type_cubic);
+    quicly_set_cc(conn, &quicly_cc_type_reno);
+    ret = quicly_get_stats(conn, &stats);
+    ok(ret == 0);
+    ok(strcmp(stats.cc.type->name, "reno") == 0);
+}
+
 int main(int argc, char **argv)
 {
     static ptls_iovec_t cert;
@@ -642,6 +708,7 @@ int main(int argc, char **argv)
     subtest("stream-concurrency", test_stream_concurrency);
     subtest("lossy", test_lossy);
     subtest("test-nondecryptable-initial", test_nondecryptable_initial);
+    subtest("set_cc", test_set_cc);
 
     return done_testing();
 }

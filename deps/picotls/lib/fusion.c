@@ -203,6 +203,13 @@ static const uint8_t loadn_shuffle[31] = {0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x
                                           0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80,
                                           0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80}; // latter 15 bytes map to zero
 
+#if defined(__clang__)
+#if __has_feature(address_sanitizer)
+__attribute__((no_sanitize("address")))
+#endif
+#elif __SANITIZE_ADDRESS__ /* gcc */
+__attribute__((no_sanitize_address))
+#endif
 static inline __m128i loadn(const void *p, size_t l)
 {
     __m128i v, mask = _mm_loadu_si128((__m128i *)(loadn_mask + 16 - l));
