@@ -25,9 +25,13 @@
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
+#include <openssl/opensslv.h>
 #include <openssl/bio.h>
 #include <openssl/pem.h>
 #include <openssl/engine.h>
+#if !defined(LIBRESSL_VERSION_NUMBER) && OPENSSL_VERSION_NUMBER >= 0x30000000L
+#include <openssl/provider.h>
+#endif
 #include "picotls.h"
 #include "picotls/minicrypto.h"
 #include "../deps/picotest/picotest.h"
@@ -297,6 +301,12 @@ int main(int argc, char **argv)
     ENGINE_load_builtin_engines();
     ENGINE_register_all_ciphers();
     ENGINE_register_all_digests();
+#endif
+
+#if !defined(LIBRESSL_VERSION_NUMBER) && OPENSSL_VERSION_NUMBER >= 0x30000000L
+    /* Explicitly load the legacy provider in addition to default, as we test Blowfish in one of the tests. */
+    OSSL_PROVIDER *legacy = OSSL_PROVIDER_load(NULL, "legacy");
+    OSSL_PROVIDER *dflt = OSSL_PROVIDER_load(NULL, "default");
 #endif
 
     subtest("bf", test_bf);
