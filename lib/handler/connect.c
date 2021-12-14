@@ -59,7 +59,7 @@ struct st_connect_generator_t {
 
     h2o_socket_t *sock;
     /**
-     * Most significant and lastest error that occurred, if any. Sigificance is repsesented as `class`, in descending order.
+     * Most significant and latest error that occurred, if any. Significance is represented as `class`, in descending order.
      */
     struct {
         enum error_class {
