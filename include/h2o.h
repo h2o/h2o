@@ -1769,7 +1769,11 @@ enum {
     /**
      * if set, does not flush the registered response headers
      */
-    H2O_SEND_ERROR_KEEP_HEADERS = 0x2
+    H2O_SEND_ERROR_KEEP_HEADERS = 0x2,
+    /**
+     * indicates a broken or incomplete HTTP request, and that some fields of `h2o_req_t` e.g., `input` might be NULL
+     */
+    H2O_SEND_ERROR_BROKEN_REQUEST = 0x04
 };
 
 /**
