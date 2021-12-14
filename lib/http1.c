@@ -547,7 +547,7 @@ static int contains_crlf_only(const char *s, size_t len)
 static void send_bad_request(struct st_h2o_http1_conn_t *conn, const char *body)
 {
     h2o_socket_read_stop(conn->sock);
-    h2o_send_error_400(&conn->req, "Bad Request", body, H2O_SEND_ERROR_HTTP1_CLOSE_CONNECTION);
+    h2o_send_error_400(&conn->req, "Bad Request", body, H2O_SEND_ERROR_BROKEN_REQUEST | H2O_SEND_ERROR_HTTP1_CLOSE_CONNECTION);
 }
 
 static void resume_request_read(struct st_h2o_http1_conn_t *conn)
