@@ -315,7 +315,7 @@ static void on_connection_attempt_delay_timeout(h2o_timer_t *entry)
 {
     struct st_connect_generator_t *self = H2O_STRUCT_FROM_MEMBER(struct st_connect_generator_t, eyeball_delay, entry);
 
-    /* If no more address is available, continue trying the current attempt until the connect_timeout expires. */
+    /* If no more addresses are available, continue trying the current attempt until the connect_timeout expires. */
     if (self->server_addresses.used == self->server_addresses.size)
         return;
 
