@@ -445,9 +445,13 @@ struct st_h2o_globalconf_t {
          */
         uint32_t active_stream_window_size;
         /**
+         * See quicly_context_t::ack_frequency
+         */
+        uint16_t ack_frequency;
+        /**
          * a boolean indicating if the delayed ack extension should be used (default true)
          */
-        uint8_t use_delayed_ack : 1;
+        uint8_t allow_delayed_ack : 1;
         /**
          * a boolean indicating if UDP GSO should be used when possible
          */
@@ -1786,7 +1790,11 @@ enum {
     /**
      * if set, does not flush the registered response headers
      */
-    H2O_SEND_ERROR_KEEP_HEADERS = 0x2
+    H2O_SEND_ERROR_KEEP_HEADERS = 0x2,
+    /**
+     * indicates a broken or incomplete HTTP request, and that some fields of `h2o_req_t` e.g., `input` might be NULL
+     */
+    H2O_SEND_ERROR_BROKEN_REQUEST = 0x04
 };
 
 /**

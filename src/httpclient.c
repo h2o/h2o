@@ -598,10 +598,16 @@ int main(int argc, char **argv)
                           h2o_httpclient_http3_notify_connection_update, 1 /* use_gso */);
 #endif
 
-    int is_opt_initial_udp_payload_size = 0;
-    int is_opt_max_udp_payload_size = 0;
-    struct option longopts[] = {{"initial-udp-payload-size", required_argument, &is_opt_initial_udp_payload_size, 1},
-                                {"max-udp-payload-size", required_argument, &is_opt_max_udp_payload_size, 1},
+    enum {
+        OPT_INITIAL_UDP_PAYLOAD_SIZE = 0x100,
+        OPT_MAX_UDP_PAYLOAD_SIZE,
+        OPT_DISALLOW_DELAYED_ACK,
+        OPT_ACK_FREQUENCY,
+    };
+    struct option longopts[] = {{"initial-udp-payload-size", required_argument, NULL, OPT_INITIAL_UDP_PAYLOAD_SIZE},
+                                {"max-udp-payload-size", required_argument, NULL, OPT_MAX_UDP_PAYLOAD_SIZE},
+                                {"disallow-delayed-ack", no_argument, NULL, OPT_DISALLOW_DELAYED_ACK},
+                                {"ack-frequency", required_argument, NULL, OPT_ACK_FREQUENCY},
                                 {"help", no_argument, NULL, 'h'},
                                 {NULL}};
     const char *optstring = "t:m:o:b:x:X:C:c:d:H:i:k2:W:h3:"
@@ -700,7 +706,7 @@ int main(int argc, char **argv)
                 ctx.protocol_selector.ratio.http2 = 100;
                 ctx.force_cleartext_http2 = 1;
             } else if (sscanf(optarg, "%" SCNd8, &ctx.protocol_selector.ratio.http2) != 1 ||
-                !(0 <= ctx.protocol_selector.ratio.http2 && ctx.protocol_selector.ratio.http2 <= 100)) {
+                       !(0 <= ctx.protocol_selector.ratio.http2 && ctx.protocol_selector.ratio.http2 <= 100)) {
                 fprintf(stderr, "failed to parse HTTP/2 ratio (-2)\n");
                 exit(EXIT_FAILURE);
             }
@@ -742,21 +748,29 @@ int main(int argc, char **argv)
             usage(argv[0]);
             exit(0);
             break;
-        case 0:
-            if (is_opt_initial_udp_payload_size == 1) {
-                if (sscanf(optarg, "%" SCNu16, &h3ctx.quic.initial_egress_max_udp_payload_size) != 1) {
-                    fprintf(stderr, "failed to parse --initial-udp-payload-size\n");
-                    exit(EXIT_FAILURE);
-                }
-                is_opt_initial_udp_payload_size = 0;
-            } else if (is_opt_max_udp_payload_size == 1) {
-                if (sscanf(optarg, "%" SCNu64, &h3ctx.quic.transport_params.max_udp_payload_size) != 1) {
-                    fprintf(stderr, "failed to parse --max-udp-payload-size\n");
-                    exit(EXIT_FAILURE);
-                }
-                is_opt_max_udp_payload_size = 0;
+        case OPT_INITIAL_UDP_PAYLOAD_SIZE:
+            if (sscanf(optarg, "%" SCNu16, &h3ctx.quic.initial_egress_max_udp_payload_size) != 1) {
+                fprintf(stderr, "failed to parse --initial-udp-payload-size\n");
+                exit(EXIT_FAILURE);
             }
             break;
+        case OPT_MAX_UDP_PAYLOAD_SIZE:
+            if (sscanf(optarg, "%" SCNu64, &h3ctx.quic.transport_params.max_udp_payload_size) != 1) {
+                fprintf(stderr, "failed to parse --max-udp-payload-size\n");
+                exit(EXIT_FAILURE);
+            }
+            break;
+        case OPT_DISALLOW_DELAYED_ACK:
+            h3ctx.quic.transport_params.min_ack_delay_usec = UINT64_MAX;
+            break;
+        case OPT_ACK_FREQUENCY: {
+            double f;
+            if (sscanf(optarg, "%lf", &f) != 1 || !(0 <= f && f <= 1)) {
+                fprintf(stderr, "failed to parse --ack-frequency\n");
+                exit(EXIT_FAILURE);
+            }
+            h3ctx.quic.ack_frequency = (uint16_t)(f * 1024);
+        } break;
         default:
             exit(EXIT_FAILURE);
             break;
