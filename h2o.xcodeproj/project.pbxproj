@@ -761,7 +761,7 @@
 		104B9A301A58F55E009EEE64 /* 40max-connections.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "40max-connections.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		104B9A311A59D7A2009EEE64 /* 40running-user.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "40running-user.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		104B9A321A59E27A009EEE64 /* 40ssl-cipher-suite.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "40ssl-cipher-suite.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
-		104B9A401A5CD69B009EEE64 /* fetch-ocsp-response */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.script.perl; path = "fetch-ocsp-response"; sourceTree = "<group>"; };
+		104B9A401A5CD69B009EEE64 /* fetch-ocsp-response */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.script.perl; path = "fetch-ocsp-response"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		104B9A451A5D1004009EEE64 /* 90live-fetch-ocsp-response.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "90live-fetch-ocsp-response.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		104B9A471A5F9472009EEE64 /* headers.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = headers.c; sourceTree = "<group>"; };
 		104B9A501A5FB096009EEE64 /* expires.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = expires.c; sourceTree = "<group>"; };
