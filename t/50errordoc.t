@@ -176,4 +176,24 @@ EOT
     }, qr/server failed to start/, 'duplicated statuses';
 };
 
+subtest "bad request" => sub {
+    plan skip_all => "nc not found"
+        unless prog_exists("nc");
+    my $server = spawn_h2o(<<"EOT");
+hosts:
+  default:
+    paths:
+      /:
+        file.dir: @{[DOC_ROOT]}
+error-doc:
+  - status: 400
+    url: /index.txt
+EOT
+    my $resp = `(echo badrequest/1.0; echo) | nc 127.0.0.1 $server->{port}`;
+    like $resp, qr{^HTTP/1.1 400 .*\nbad request$}is, "broken request headers -> undecorated 400";
+
+    my $resp = `(echo POST / HTTP/1.1; echo Transfer-Encoding: chunked; echo; echo hello world; echo; echo) | nc 127.0.0.1 $server->{port}`;
+    like $resp, qr{^HTTP/1.1 400 .*\nhello\n$}is, "valid request headers but broken entity -> decorated 400";
+};
+
 done_testing;
