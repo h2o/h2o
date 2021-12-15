@@ -321,7 +321,7 @@ Exit:
     CLOSE_FD(respfds[0]);
     CLOSE_FD(respfds[1]);
     CLOSE_FD(inputfds[0]);
-    CLOSE_FD(inputfds[0]);
+    CLOSE_FD(inputfds[1]);
 #undef CLOSE_FD
     if (ret != 0)
         h2o_buffer_dispose(resp);
