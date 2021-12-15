@@ -146,6 +146,7 @@ static void on_context_init(h2o_handler_t *_self, h2o_context_t *ctx)
     client_ctx->first_byte_timeout = self->config.first_byte_timeout;
     client_ctx->keepalive_timeout = self->config.keepalive_timeout;
     client_ctx->tunnel_enabled = self->config.tunnel_enabled;
+    client_ctx->force_cleartext_http2 = 1;
 
     client_ctx->max_buffer_size = self->config.max_buffer_size;
     client_ctx->protocol_selector = (struct st_h2o_httpclient_protocol_selector_t){.ratio = self->config.protocol_ratio};
