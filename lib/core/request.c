@@ -660,6 +660,11 @@ void h2o_send_error_generic(h2o_req_t *req, int status, const char *reason, cons
         h2o_req_bind_conf(req, hostconf, &hostconf->fallback_path);
     }
 
+    /* If the request is broken or incomplete, do not apply filters, as it would be dangerous to do so. Legitimate clients would not
+     * send broken requests, so we do not need to decorate error responses using errordoc handler or anything else. */
+    if ((flags & H2O_SEND_ERROR_BROKEN_REQUEST) != 0)
+        req->_next_filter_index = SIZE_MAX;
+
     if ((flags & H2O_SEND_ERROR_HTTP1_CLOSE_CONNECTION) != 0)
         req->http1_is_persistent = 0;
 

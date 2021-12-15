@@ -277,8 +277,8 @@ struct st_quicly_context_t {
     ptls_context_t *tls;
     /**
      * Maximum size of packets that we are willing to send when path-specific information is unavailable. As a path-specific
-     * * optimization, quicly acting as a server expands this value to `min(local.tp.max_udp_payload_size,
-     * * remote.tp.max_udp_payload_size, max_size_of_incoming_datagrams)` when it receives the Transport Parameters from the client.
+     * optimization, quicly acting as a server expands this value to `min(local.tp.max_udp_payload_size,
+     * remote.tp.max_udp_payload_size, max_size_of_incoming_datagrams)` when it receives the Transport Parameters from the client.
      */
     uint16_t initial_egress_max_udp_payload_size;
     /**
@@ -310,6 +310,11 @@ struct st_quicly_context_t {
      * (server-only) amplification limit before the peer address is validated
      */
     uint16_t pre_validation_amplification_limit;
+    /**
+     * How frequent the endpoint should induce ACKs from the peer, relative to RTT (or CWND) multiplied by 1024. As an example, 128
+     * will request the peer to send one ACK every 1/8 RTT (or CWND). 0 disables the use of the delayed-ack extension.
+     */
+    uint16_t ack_frequency;
     /**
      * expand client hello so that it does not fit into one datagram
      */
@@ -1023,7 +1028,7 @@ int quicly_encode_transport_parameter_list(ptls_buffer_t *buf, const quicly_tran
  */
 int quicly_decode_transport_parameter_list(quicly_transport_parameters_t *params, quicly_cid_t *original_dcid,
                                            quicly_cid_t *initial_scid, quicly_cid_t *retry_scid, void *stateless_reset_token,
-                                           const uint8_t *src, const uint8_t *end, int recognize_delayed_ack);
+                                           const uint8_t *src, const uint8_t *end);
 /**
  * Initiates a new connection.
  * @param new_cid the CID to be used for the connection. path_id is ignored.
