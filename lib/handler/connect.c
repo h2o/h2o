@@ -35,7 +35,7 @@ struct st_connect_handler_t {
     } acl;
 };
 
-#define MAX_CONNECT_RETRIES 24
+#define MAX_ADDRESSES_PER_FAMILY 4
 #define UDP_CHUNK_OVERHEAD 3
 
 struct st_server_address_t {
@@ -52,7 +52,7 @@ struct st_connect_generator_t {
         h2o_hostinfo_getaddr_req_t *v4, *v6;
     } getaddr_req;
     struct {
-        struct st_server_address_t list[MAX_CONNECT_RETRIES];
+        struct st_server_address_t list[MAX_ADDRESSES_PER_FAMILY * 2];
         size_t size;
         size_t used;
     } server_addresses;
@@ -327,22 +327,22 @@ static void on_connection_attempt_delay_timeout(h2o_timer_t *entry)
 
 static int store_server_addresses(struct st_connect_generator_t *self, struct addrinfo *res)
 {
-    int added = 0;
+    size_t num_added = 0;
 
     /* copy first entries in the response; ordering of addresses being returned by `getaddrinfo` is respected, as ordinary clients
      * (incl. forward proxy) are not expected to distribute the load among the addresses being returned. */
-    while (self->server_addresses.size < PTLS_ELEMENTSOF(self->server_addresses.list) && res != NULL) {
+    do {
+        assert(self->server_addresses.size < PTLS_ELEMENTSOF(self->server_addresses.list));
         if (h2o_connect_lookup_acl(self->handler->acl.entries, self->handler->acl.count, res->ai_addr)) {
             struct st_server_address_t *dst = self->server_addresses.list + self->server_addresses.size++;
             dst->sa = h2o_mem_alloc_pool_aligned(&self->src_req->pool, H2O_ALIGNOF(struct sockaddr), res->ai_addrlen);
             memcpy(dst->sa, res->ai_addr, res->ai_addrlen);
             dst->salen = res->ai_addrlen;
-            added = 1;
+            ++num_added;
         }
-        res = res->ai_next;
-    }
+    } while ((res = res->ai_next) != NULL && num_added < MAX_ADDRESSES_PER_FAMILY);
 
-    return added;
+    return num_added != 0;
 }
 
 static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errstr, struct addrinfo *res, void *_self)
