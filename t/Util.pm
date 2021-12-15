@@ -178,6 +178,7 @@ sub spawn_server {
     die "fork failed:$!"
         unless defined $pid;
     if ($pid != 0) {
+        system("sudo prlimit --nofile=1048576:1048576 --pid $pid");
         print STDERR "spawning $args{argv}->[0]... ";
         if ($args{is_ready}) {
             while (1) {
