@@ -3119,6 +3119,7 @@ static void *run_loop(void *_thread_index)
         if (last_buffer_gc_at + 1000 < h2o_now(conf.threads[thread_index].ctx.loop)) {
             last_buffer_gc_at = h2o_now(conf.threads[thread_index].ctx.loop);
             h2o_buffer_clear_recycle(0);
+            h2o_mem_clear_recycle(&h2o_socket_ssl_buffer_allocator, 0);
         }
     }
 
