@@ -591,6 +591,7 @@ struct h2olog_event_t {
       uint64_t packet_tolerance;
       uint64_t max_ack_delay;
       int ignore_order;
+      int ignore_ce;
     } ack_frequency_receive;
     struct { // quicly:quictrace_send_stream
       typeof_st_quicly_conn_t__master_id conn_master_id;
@@ -1605,6 +1606,7 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
     json_write_pair_c(out_, STR_LIT("packet-tolerance"), event.ack_frequency_receive.packet_tolerance);
     json_write_pair_c(out_, STR_LIT("max-ack-delay"), event.ack_frequency_receive.max_ack_delay);
     json_write_pair_c(out_, STR_LIT("ignore-order"), event.ack_frequency_receive.ignore_order);
+    json_write_pair_c(out_, STR_LIT("ignore-ce"), event.ack_frequency_receive.ignore_ce);
     break;
   }
   case H2OLOG_EVENT_ID_QUICLY_QUICTRACE_SEND_STREAM: { // quicly:quictrace_send_stream
@@ -2566,6 +2568,7 @@ struct h2olog_event_t {
       uint64_t packet_tolerance;
       uint64_t max_ack_delay;
       int ignore_order;
+      int ignore_ce;
     } ack_frequency_receive;
     struct { // quicly:quictrace_send_stream
       typeof_st_quicly_conn_t__master_id conn_master_id;
@@ -4259,6 +4262,8 @@ int trace_quicly__ack_frequency_receive(struct pt_regs *ctx) {
   bpf_usdt_readarg(5, ctx, &event.ack_frequency_receive.max_ack_delay);
   // int ignore_order
   bpf_usdt_readarg(6, ctx, &event.ack_frequency_receive.ignore_order);
+  // int ignore_ce
+  bpf_usdt_readarg(7, ctx, &event.ack_frequency_receive.ignore_ce);
 
   if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
     bpf_trace_printk("failed to perf_submit in trace_quicly__ack_frequency_receive\n");
