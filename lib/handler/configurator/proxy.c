@@ -77,6 +77,20 @@ static int on_config_timeout_keepalive(h2o_configurator_command_t *cmd, h2o_conf
     return h2o_configurator_scanf(cmd, node, "%" SCNu64, &self->vars->conf.keepalive_timeout);
 }
 
+static int on_config_happy_eyeballs_name_resolution_delay(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx,
+                                                          yoml_t *node)
+{
+    struct proxy_configurator_t *self = (void *)cmd->configurator;
+    return h2o_configurator_scanf(cmd, node, "%" SCNu64, &self->vars->conf.happy_eyeballs.name_resolution_delay);
+}
+
+static int on_config_happy_eyeballs_connection_attempt_delay(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx,
+                                                             yoml_t *node)
+{
+    struct proxy_configurator_t *self = (void *)cmd->configurator;
+    return h2o_configurator_scanf(cmd, node, "%" SCNu64, &self->vars->conf.happy_eyeballs.connection_attempt_delay);
+}
+
 static int on_config_preserve_host(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct proxy_configurator_t *self = (void *)cmd->configurator;
@@ -588,14 +602,21 @@ void h2o_proxy_register_configurator(h2o_globalconf_t *conf)
 
     /* set default vars */
     c->vars = c->_vars_stack;
-    c->vars->conf.io_timeout = H2O_DEFAULT_PROXY_IO_TIMEOUT;
-    c->vars->conf.connect_timeout = H2O_DEFAULT_PROXY_IO_TIMEOUT;
-    c->vars->conf.first_byte_timeout = H2O_DEFAULT_PROXY_IO_TIMEOUT;
-    c->vars->conf.tunnel_enabled = 0; /* experimental support for tunneling (e.g., CONNECT, websocket) is disabled by default */
-    c->vars->conf.max_buffer_size = SIZE_MAX;
-    c->vars->conf.http2.max_concurrent_streams = H2O_DEFAULT_PROXY_HTTP2_MAX_CONCURRENT_STREAMS;
-    c->vars->conf.protocol_ratio.http2 = -1;
-    c->vars->conf.keepalive_timeout = h2o_socketpool_get_timeout(&conf->proxy.global_socketpool);
+    c->vars->conf = (h2o_proxy_config_vars_t){
+        .io_timeout = H2O_DEFAULT_PROXY_IO_TIMEOUT,
+        .connect_timeout = H2O_DEFAULT_PROXY_IO_TIMEOUT,
+        .first_byte_timeout = H2O_DEFAULT_PROXY_IO_TIMEOUT,
+        .happy_eyeballs =
+            {
+                .name_resolution_delay = H2O_DEFAULT_HAPPY_EYEBALLS_NAME_RESOLUTION_DELAY,
+                .connection_attempt_delay = H2O_DEFAULT_HAPPY_EYEBALLS_CONNECTION_ATTEMPT_DELAY,
+            },
+        .tunnel_enabled = 0, /* experimental support for tunneling (e.g., CONNECT, websocket) is disabled by default */
+        .max_buffer_size = SIZE_MAX,
+        .http2.max_concurrent_streams = H2O_DEFAULT_PROXY_HTTP2_MAX_CONCURRENT_STREAMS,
+        .protocol_ratio.http2 = -1,
+        .keepalive_timeout = h2o_socketpool_get_timeout(&conf->proxy.global_socketpool),
+    };
 
     /* setup handlers */
     c->super.enter = on_config_enter;
@@ -632,6 +653,12 @@ void h2o_proxy_register_configurator(h2o_globalconf_t *conf)
     h2o_configurator_define_command(&c->super, "proxy.timeout.keepalive",
                                     H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                     on_config_timeout_keepalive);
+    h2o_configurator_define_command(&c->super, "proxy.happy-eyeballs.name-resolution-delay",
+                                    H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                    on_config_happy_eyeballs_name_resolution_delay);
+    h2o_configurator_define_command(&c->super, "proxy.happy-eyeballs.connection-attempt-delay",
+                                    H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                    on_config_happy_eyeballs_connection_attempt_delay);
     h2o_configurator_define_command(&c->super, "proxy.tunnel",
                                     H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR, on_config_tunnel);
     h2o_configurator_define_command(&c->super, "proxy.ssl.verify-peer",

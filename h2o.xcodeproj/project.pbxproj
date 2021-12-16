@@ -710,6 +710,8 @@
 		086850BB274CA3CD00F8CAD1 /* 99fuzzer-http3.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "99fuzzer-http3.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		086850BC274CA3CE00F8CAD1 /* 99fuzzer-http2.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "99fuzzer-http2.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		086850BD274CA3CE00F8CAD1 /* 99fuzzer-http1.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "99fuzzer-http1.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		086850BE2752E20100F8CAD1 /* 50connect-eyeballs.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50connect-eyeballs.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		086850BF27535D7800F8CAD1 /* injectaddr.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = injectaddr.c; sourceTree = "<group>"; };
 		08790DD91D80153600A04BC1 /* net.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = net.c; sourceTree = "<group>"; };
 		08790DDB1D80154C00A04BC1 /* sds.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = sds.c; sourceTree = "<group>"; };
 		08790DDD1D8015A400A04BC1 /* net.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = net.h; sourceTree = "<group>"; };
@@ -2236,6 +2238,7 @@
 				E9BC76C11EE3D9A900EB7A09 /* 50compress-hint.t */,
 				E9AFBF18212A9802000F5DB8 /* 50config.t */,
 				E93BB45025DA530E009C24D8 /* 50connect.t */,
+				086850BE2752E20100F8CAD1 /* 50connect-eyeballs.t */,
 				08B3D43A26042CAF002F195C /* 50connect-deadlock.t */,
 				E9AFBF11212A9801000F5DB8 /* 50date-header.t */,
 				086001C42730B7170043886F /* 50dnsresolver.t */,
@@ -2351,6 +2354,7 @@
 				086850BB274CA3CD00F8CAD1 /* 99fuzzer-http3.t */,
 				086850BA274CA3CD00F8CAD1 /* 99fuzzer-url.t */,
 				10AA2EC51AA0557A004322AC /* assets */,
+				086850BF27535D7800F8CAD1 /* injectaddr.c */,
 				086850B9274C6D7D00F8CAD1 /* run-tests */,
 				105534FB1A460F4200627ECB /* Util.pm */,
 				08819C2D218C9FF70057ED23 /* qif.c */,

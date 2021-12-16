@@ -35,7 +35,7 @@ struct st_connect_handler_t {
     } acl;
 };
 
-#define MAX_CONNECT_RETRIES 3
+#define MAX_ADDRESSES_PER_FAMILY 4
 #define UDP_CHUNK_OVERHEAD 3
 
 struct st_server_address_t {
@@ -47,15 +47,42 @@ struct st_connect_generator_t {
     h2o_generator_t super;
     struct st_connect_handler_t *handler;
     h2o_req_t *src_req;
-    h2o_hostinfo_getaddr_req_t *getaddr_req;
-    h2o_socket_t *sock;
+
     struct {
-        struct st_server_address_t list[MAX_CONNECT_RETRIES];
+        h2o_hostinfo_getaddr_req_t *v4, *v6;
+    } getaddr_req;
+    struct {
+        struct st_server_address_t list[MAX_ADDRESSES_PER_FAMILY * 2];
         size_t size;
-        size_t next;
+        size_t used;
     } server_addresses;
+
+    h2o_socket_t *sock;
+    /**
+     * Most significant and latest error that occurred, if any. Significance is represented as `class`, in descending order.
+     */
+    struct {
+        enum error_class {
+            ERROR_CLASS_NAME_RESOLUTION,
+            ERROR_CLASS_ACCESS_PROHIBITED,
+            ERROR_CLASS_CONNECT
+        } class;
+        const char *str;
+    } last_error;
+
+    /**
+     * timer used to handle user-visible timeouts (i.e., connect- and io-timeout)
+     */
     h2o_timer_t timeout;
-    unsigned is_tcp : 1;
+    /**
+     * timer used to for RFC 8305-style happy eyeballs (resolution delay and connection attempt delay)
+     */
+    h2o_timer_t eyeball_delay;
+
+    /**
+     * Pick v4 (or v6) address in the next connection attempt. RFC 8305 recommends trying the other family one by one.
+     */
+    unsigned pick_v4 : 1;
     /**
      * set when the send-side is closed by the user
      */
@@ -68,6 +95,13 @@ struct st_connect_generator_t {
      * if socket has been closed
      */
     unsigned socket_closed : 1;
+    /**
+     * if connecting using TCP (or UDP)
+     */
+    unsigned is_tcp : 1;
+    /**
+     * TCP- and UDP-specific data
+     */
     union {
         struct {
             h2o_buffer_t *sendbuf;
@@ -136,20 +170,34 @@ static void record_socket_error(struct st_connect_generator_t *self, const char 
     record_error(self, error_type, details, NULL);
 }
 
-static void tcp_start_connect(struct st_connect_generator_t *self);
-static void udp_connect(struct st_connect_generator_t *self);
+static void try_connect(struct st_connect_generator_t *self);
+static int tcp_start_connect(struct st_connect_generator_t *self, struct st_server_address_t *server_address);
+static int udp_connect(struct st_connect_generator_t *self, struct st_server_address_t *server_address);
 
 static h2o_loop_t *get_loop(struct st_connect_generator_t *self)
 {
     return self->src_req->conn->ctx->loop;
 }
 
+static void stop_eyeballs(struct st_connect_generator_t *self)
+{
+    if (self->getaddr_req.v4 != NULL) {
+        h2o_hostinfo_getaddr_cancel(self->getaddr_req.v4);
+        self->getaddr_req.v4 = NULL;
+    }
+    if (self->getaddr_req.v6 != NULL) {
+        h2o_hostinfo_getaddr_cancel(self->getaddr_req.v6);
+        self->getaddr_req.v6 = NULL;
+    }
+    if (self->eyeball_delay.cb != NULL) {
+        h2o_timer_unlink(&self->eyeball_delay);
+        self->eyeball_delay.cb = NULL;
+    }
+}
+
 static void dispose_generator(struct st_connect_generator_t *self)
 {
-    if (self->getaddr_req != NULL) {
-        h2o_hostinfo_getaddr_cancel(self->getaddr_req);
-        self->getaddr_req = NULL;
-    }
+    stop_eyeballs(self);
     if (self->sock != NULL) {
         h2o_socket_close(self->sock);
         self->sock = NULL;
@@ -217,14 +265,22 @@ static void reset_io_timeout(struct st_connect_generator_t *self)
     }
 }
 
-static void on_connect_error(struct st_connect_generator_t *self, const char *errstr)
+static void send_connect_error(struct st_connect_generator_t *self, int code, const char *msg, const char *errstr)
 {
+    stop_eyeballs(self);
     h2o_timer_unlink(&self->timeout);
+
     if (self->sock != NULL) {
         h2o_socket_close(self->sock);
         self->sock = NULL;
     }
-    h2o_send_error_502(self->src_req, "Gateway Error", errstr, H2O_SEND_ERROR_KEEP_HEADERS);
+
+    h2o_send_error_generic(self->src_req, code, msg, errstr, H2O_SEND_ERROR_KEEP_HEADERS);
+}
+
+static void on_connect_error(struct st_connect_generator_t *self, const char *errstr)
+{
+    send_connect_error(self, 502, "Gateway Error", errstr);
 }
 
 static void on_connect_timeout(h2o_timer_t *entry)
@@ -238,65 +294,183 @@ static void on_connect_timeout(h2o_timer_t *entry)
     on_connect_error(self, h2o_httpclient_error_io_timeout);
 }
 
-static void store_server_addresses(struct st_connect_generator_t *self, struct addrinfo *res)
+static void set_last_error(struct st_connect_generator_t *self, enum error_class class, const char *str)
 {
+    if (self->last_error.class <= class) {
+        self->last_error.class = class;
+        self->last_error.str = str;
+    }
+}
+
+static void on_resolution_delay_timeout(h2o_timer_t *entry)
+{
+    struct st_connect_generator_t *self = H2O_STRUCT_FROM_MEMBER(struct st_connect_generator_t, eyeball_delay, entry);
+
+    assert(self->server_addresses.used == 0);
+
+    try_connect(self);
+}
+
+static void on_connection_attempt_delay_timeout(h2o_timer_t *entry)
+{
+    struct st_connect_generator_t *self = H2O_STRUCT_FROM_MEMBER(struct st_connect_generator_t, eyeball_delay, entry);
+
+    /* If no more addresses are available, continue trying the current attempt until the connect_timeout expires. */
+    if (self->server_addresses.used == self->server_addresses.size)
+        return;
+
+    /* close current connection attempt and try next. */
+    h2o_socket_close(self->sock);
+    self->sock = NULL;
+    try_connect(self);
+}
+
+static int store_server_addresses(struct st_connect_generator_t *self, struct addrinfo *res)
+{
+    size_t num_added = 0;
+
     /* copy first entries in the response; ordering of addresses being returned by `getaddrinfo` is respected, as ordinary clients
      * (incl. forward proxy) are not expected to distribute the load among the addresses being returned. */
     do {
-        struct st_server_address_t *dst = self->server_addresses.list + self->server_addresses.size++;
-        dst->sa = h2o_mem_alloc_pool_aligned(&self->src_req->pool, H2O_ALIGNOF(struct sockaddr), res->ai_addrlen);
-        memcpy(dst->sa, res->ai_addr, res->ai_addrlen);
-        dst->salen = res->ai_addrlen;
-    } while (self->server_addresses.size < PTLS_ELEMENTSOF(self->server_addresses.list) && (res = res->ai_next) != NULL);
+        assert(self->server_addresses.size < PTLS_ELEMENTSOF(self->server_addresses.list));
+        if (h2o_connect_lookup_acl(self->handler->acl.entries, self->handler->acl.count, res->ai_addr)) {
+            struct st_server_address_t *dst = self->server_addresses.list + self->server_addresses.size++;
+            dst->sa = h2o_mem_alloc_pool_aligned(&self->src_req->pool, H2O_ALIGNOF(struct sockaddr), res->ai_addrlen);
+            memcpy(dst->sa, res->ai_addr, res->ai_addrlen);
+            dst->salen = res->ai_addrlen;
+            ++num_added;
+        }
+    } while ((res = res->ai_next) != NULL && num_added < MAX_ADDRESSES_PER_FAMILY);
+
+    return num_added != 0;
 }
 
 static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errstr, struct addrinfo *res, void *_self)
 {
     struct st_connect_generator_t *self = _self;
-
-    assert(getaddr_req == self->getaddr_req);
-    self->getaddr_req = NULL;
-
-    if (errstr != NULL) {
-        const char *rcode;
-        if (errstr == h2o_hostinfo_error_nxdomain)
-            rcode = "NXDOMAIN";
-        else if (errstr == h2o_hostinfo_error_nodata)
-            rcode = "NODATA";
-        else if (errstr == h2o_hostinfo_error_refused)
-            rcode = "REFUSED";
-        else if (errstr == h2o_hostinfo_error_servfail)
-            rcode = "SERVFAIL";
-        else
-            rcode = NULL;
-        record_error(self, "dns_error", errstr, rcode);
-        on_connect_error(self, errstr);
-        return;
-    }
-
-    store_server_addresses(self, res);
-
-    if (self->is_tcp) {
-        assert(res->ai_socktype == SOCK_STREAM);
-        tcp_start_connect(self);
+    if (getaddr_req == self->getaddr_req.v4) {
+        self->getaddr_req.v4 = NULL;
+    } else if (getaddr_req == self->getaddr_req.v6) {
+        self->getaddr_req.v6 = NULL;
     } else {
-        assert(res->ai_socktype == SOCK_DGRAM);
-        udp_connect(self);
+        h2o_fatal("unexpected getaddr_req");
     }
+
+    /* Store addresses, or convert error to ACL denial. */
+    if (errstr == NULL) {
+        if (self->is_tcp) {
+            assert(res->ai_socktype == SOCK_STREAM);
+        } else {
+            assert(res->ai_socktype == SOCK_DGRAM);
+        }
+        assert(res != NULL && "upon successful return, getaddrinfo shall return at least one address (RFC 3493 Section 6.1)");
+        if (!store_server_addresses(self, res))
+            set_last_error(self, ERROR_CLASS_ACCESS_PROHIBITED, "destination_ip_prohibited");
+    } else {
+        set_last_error(self, ERROR_CLASS_NAME_RESOLUTION, errstr);
+    }
+
+    if (self->getaddr_req.v4 == NULL) {
+        /* If v6 lookup is still running, that means that v4 lookup has *just* completed. Set the resolution delay timer if v4
+         * addresses are available. */
+        if (self->getaddr_req.v6 != NULL) {
+            assert(self->server_addresses.used == 0);
+            if (self->server_addresses.size != 0) {
+                self->eyeball_delay.cb = on_resolution_delay_timeout;
+                h2o_timer_link(get_loop(self), self->handler->config.happy_eyeballs.name_resolution_delay, &self->eyeball_delay);
+            }
+            return;
+        }
+
+        /* Both v4 and v6 lookups are complete. If the resolution delay timer is running. Reset it. */
+        if (h2o_timer_is_linked(&self->eyeball_delay) && self->eyeball_delay.cb == on_resolution_delay_timeout) {
+            assert(self->server_addresses.used == 0);
+            h2o_timer_unlink(&self->eyeball_delay);
+        }
+        /* In case no addresses are available, send HTTP error. */
+        if (self->server_addresses.size == 0) {
+            if (self->last_error.class == ERROR_CLASS_ACCESS_PROHIBITED) {
+                record_error(self, self->last_error.str, NULL, NULL);
+                send_connect_error(self, 403, "Destination IP Prohibited", "Destination IP Prohibited");
+            } else {
+                const char *rcode;
+                if (self->last_error.str == h2o_hostinfo_error_nxdomain) {
+                    rcode = "NXDOMAIN";
+                } else if (self->last_error.str == h2o_hostinfo_error_nodata) {
+                    rcode = "NODATA";
+                } else if (self->last_error.str == h2o_hostinfo_error_refused) {
+                    rcode = "REFUSED";
+                } else if (self->last_error.str == h2o_hostinfo_error_servfail) {
+                    rcode = "SERVFAIL";
+                } else {
+                    rcode = NULL;
+                }
+                record_error(self, "dns_error", self->last_error.str, rcode);
+                on_connect_error(self, self->last_error.str);
+            }
+            return;
+        }
+    }
+
+    /* Try connecting if possible. */
+    if (self->server_addresses.used == self->server_addresses.size)
+        return;
+    /* If connection attempt has been under way for more than CONNECTION_ATTEMPT_DELAY_MS, stop that and try next address. Return
+     * otherwise. */
+    if (self->sock != NULL) {
+        if (h2o_timer_is_linked(&self->eyeball_delay))
+            return;
+        h2o_socket_close(self->sock);
+        self->sock = NULL;
+    }
+    try_connect(self);
 }
 
-static struct st_server_address_t *grab_connect_address(struct st_connect_generator_t *self)
+static struct st_server_address_t *pick_and_swap(struct st_connect_generator_t *self, size_t idx)
 {
-    struct st_server_address_t *server_address = self->server_addresses.list + self->server_addresses.next++;
+    struct st_server_address_t *server_address = NULL;
 
-    if (h2o_connect_lookup_acl(self->handler->acl.entries, self->handler->acl.count, server_address->sa))
-        return server_address;
+    if (idx != self->server_addresses.used) {
+        struct st_server_address_t swap = self->server_addresses.list[idx];
+        self->server_addresses.list[idx] = self->server_addresses.list[self->server_addresses.used];
+        self->server_addresses.list[self->server_addresses.used] = swap;
+    }
+    server_address = &self->server_addresses.list[self->server_addresses.used];
+    self->server_addresses.used++;
+    self->pick_v4 = !self->pick_v4;
+    return server_address;
+}
 
-    /* cannot connect, send error */
-    h2o_timer_unlink(&self->timeout);
-    record_error(self, "destination_ip_prohibited", NULL, NULL);
-    h2o_send_error_403(self->src_req, "Access Forbidden", "Access Forbidden", H2O_SEND_ERROR_KEEP_HEADERS);
-    return NULL;
+static void try_connect(struct st_connect_generator_t *self)
+{
+    struct st_server_address_t *server_address = NULL;
+
+    do {
+        /* Fetch the next address from the list of resolved addresses. */
+        for (size_t i = self->server_addresses.used; i < self->server_addresses.size; i++) {
+            if (self->pick_v4 && self->server_addresses.list[i].sa->sa_family == AF_INET)
+                server_address = pick_and_swap(self, i);
+            else if (!self->pick_v4 && self->server_addresses.list[i].sa->sa_family == AF_INET6)
+                server_address = pick_and_swap(self, i);
+        }
+
+        /* If address of the preferred address family is not available, select one of the other family, if available. Otherwise,
+         * send an HTTP error response or wait for address resolution. */
+        if (server_address == NULL) {
+            if (self->server_addresses.used == self->server_addresses.size) {
+                if (self->getaddr_req.v4 == NULL && self->getaddr_req.v6 == NULL) {
+                    assert(self->last_error.class == ERROR_CLASS_CONNECT);
+                    record_socket_error(self, self->last_error.str);
+                    on_connect_error(self, self->last_error.str);
+                }
+                return;
+            }
+            server_address = &self->server_addresses.list[self->server_addresses.used];
+            self->server_addresses.used++;
+        }
+
+        /* Connect. Retry if the connect function returns error immediately. */
+    } while (!(self->is_tcp ? tcp_start_connect : udp_connect)(self, server_address));
 }
 
 static void tcp_on_write_complete(h2o_socket_t *_sock, const char *err)
@@ -388,17 +562,14 @@ static void tcp_on_connect(h2o_socket_t *_sock, const char *err)
     assert(self->sock == _sock);
 
     if (err != NULL) {
-        if (self->server_addresses.next == self->server_addresses.size) {
-            record_socket_error(self, err);
-            on_connect_error(self, err);
-            return;
-        }
+        set_last_error(self, ERROR_CLASS_CONNECT, err);
         h2o_socket_close(self->sock);
         self->sock = NULL;
-        tcp_start_connect(self);
+        try_connect(self);
         return;
     }
 
+    stop_eyeballs(self);
     self->timeout.cb = on_io_timeout;
     reset_io_timeout(self);
 
@@ -412,27 +583,25 @@ static void tcp_on_connect(h2o_socket_t *_sock, const char *err)
     h2o_send(self->src_req, NULL, 0, H2O_SEND_STATE_IN_PROGRESS);
 }
 
-static void tcp_start_connect(struct st_connect_generator_t *self)
+static int tcp_start_connect(struct st_connect_generator_t *self, struct st_server_address_t *server_address)
 {
-    /* repeat connect(pop_front(address_list)) until we run out of the list */
-    const char *err = NULL;
-    do {
-        struct st_server_address_t *server_address;
-        if ((server_address = grab_connect_address(self)) == NULL)
-            return;
-        if ((self->sock = h2o_socket_connect(get_loop(self), server_address->sa, server_address->salen, tcp_on_connect, &err)) != NULL) {
-            self->sock->data = self;
-#if !H2O_USE_LIBUV
-            /* This is the maximum amount of data that will be buffered within userspace. It is hard-coded to 64KB to balance
-             * throughput and latency, and because we do not expect the need to change the value. */
-            h2o_evloop_socket_set_max_read_size(self->sock, 64 * 1024);
-#endif
-            return;
-        }
-    } while (self->server_addresses.next < self->server_addresses.size);
+    const char *errstr;
+    if ((self->sock = h2o_socket_connect(get_loop(self), server_address->sa, server_address->salen, tcp_on_connect, &errstr)) ==
+        NULL) {
+        set_last_error(self, ERROR_CLASS_CONNECT, errstr);
+        return 0;
+    }
 
-    record_socket_error(self, err);
-    on_connect_error(self, h2o_socket_error_conn_fail);
+    self->sock->data = self;
+#if !H2O_USE_LIBUV
+    /* This is the maximum amount of data that will be buffered within userspace. It is hard-coded to 64KB to balance throughput
+     * and latency, and because we do not expect the need to change the value. */
+    h2o_evloop_socket_set_max_read_size(self->sock, 64 * 1024);
+#endif
+    self->eyeball_delay.cb = on_connection_attempt_delay_timeout;
+    h2o_timer_link(get_loop(self), self->handler->config.happy_eyeballs.connection_attempt_delay, &self->eyeball_delay);
+
+    return 1;
 }
 
 static h2o_iovec_t udp_get_next_chunk(const char *start, size_t len, size_t *to_consume, int *skip)
@@ -601,14 +770,11 @@ static void udp_on_proceed(h2o_generator_t *_self, h2o_req_t *req)
     }
 }
 
-static void udp_connect(struct st_connect_generator_t *self)
+static int udp_connect(struct st_connect_generator_t *self, struct st_server_address_t *server_address)
 {
-    struct st_server_address_t *server_address;
     int fd;
 
-    /* determine server address an connect */
-    if ((server_address = grab_connect_address(self)) == NULL)
-        return;
+    /* connect */
     if ((fd = socket(server_address->sa->sa_family, SOCK_DGRAM, 0)) == -1 ||
         connect(fd, server_address->sa, server_address->salen) != 0) {
         const char *err = h2o_socket_error_conn_fail;
@@ -616,11 +782,10 @@ static void udp_connect(struct st_connect_generator_t *self)
             err = h2o_socket_get_error_string(errno, err);
             close(fd);
         }
-        record_socket_error(self, err);
-        on_connect_error(self, "connection failure");
-        return;
+        return 0;
     }
 
+    stop_eyeballs(self);
     self->timeout.cb = on_io_timeout;
     reset_io_timeout(self);
 
@@ -643,6 +808,8 @@ static void udp_connect(struct st_connect_generator_t *self)
     self->src_req->res.status = 200;
     h2o_start_response(self->src_req, &self->super);
     h2o_send(self->src_req, NULL, 0, H2O_SEND_STATE_IN_PROGRESS);
+
+    return 1;
 }
 
 static void on_stop(h2o_generator_t *_self, h2o_req_t *req)
@@ -703,9 +870,15 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
 
     char port_str[sizeof(H2O_UINT16_LONGEST_STR)];
     int port_strlen = sprintf(port_str, "%" PRIu16, port);
-    self->getaddr_req = h2o_hostinfo_getaddr(&self->src_req->conn->ctx->receivers.hostinfo_getaddr, host,
-                                             h2o_iovec_init(port_str, port_strlen), AF_UNSPEC, is_tcp ? SOCK_STREAM : SOCK_DGRAM,
-                                             is_tcp ? IPPROTO_TCP : IPPROTO_UDP, AI_ADDRCONFIG | AI_NUMERICSERV, on_getaddr, self);
+
+    self->getaddr_req.v6 =
+        h2o_hostinfo_getaddr(&self->src_req->conn->ctx->receivers.hostinfo_getaddr, host, h2o_iovec_init(port_str, port_strlen),
+                             AF_INET6, is_tcp ? SOCK_STREAM : SOCK_DGRAM, is_tcp ? IPPROTO_TCP : IPPROTO_UDP,
+                             AI_ADDRCONFIG | AI_NUMERICSERV, on_getaddr, self);
+    self->getaddr_req.v4 =
+        h2o_hostinfo_getaddr(&self->src_req->conn->ctx->receivers.hostinfo_getaddr, host, h2o_iovec_init(port_str, port_strlen),
+                             AF_INET, is_tcp ? SOCK_STREAM : SOCK_DGRAM, is_tcp ? IPPROTO_TCP : IPPROTO_UDP,
+                             AI_ADDRCONFIG | AI_NUMERICSERV, on_getaddr, self);
 
     return 0;
 }

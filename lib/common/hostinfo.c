@@ -66,6 +66,8 @@ const char h2o_hostinfo_error_gai_socktype[] = "ai_socktype not supported";
 const char h2o_hostinfo_error_gai_system[] = "system error";
 const char h2o_hostinfo_error_gai_other[] = "name resolution failed";
 
+static void create_lookup_thread_if_necessary(void);
+
 static const char *hostinfo_error_from_gai_error(int ret)
 {
     switch (ret) {
@@ -122,6 +124,7 @@ static void *lookup_thread_main(void *_unused)
         while (!h2o_linklist_is_empty(&queue.pending)) {
             h2o_hostinfo_getaddr_req_t *req = H2O_STRUCT_FROM_MEMBER(h2o_hostinfo_getaddr_req_t, _pending, queue.pending.next);
             h2o_linklist_unlink(&req->_pending);
+            create_lookup_thread_if_necessary();
             pthread_mutex_unlock(&queue.mutex);
             lookup_and_respond(req);
             pthread_mutex_lock(&queue.mutex);
@@ -134,12 +137,17 @@ static void *lookup_thread_main(void *_unused)
     return NULL;
 }
 
-static void create_lookup_thread(void)
+static void create_lookup_thread_if_necessary(void)
 {
+    /* do nothing if there's no need to, or if we are already at the maximum. */
+    if (queue.num_threads_idle != 0 || h2o_linklist_is_empty(&queue.pending))
+        return;
+     if (queue.num_threads == h2o_hostinfo_max_threads)
+         return;
+
     pthread_t tid;
     pthread_attr_t attr;
     int ret;
-
     pthread_attr_init(&attr);
     pthread_attr_setdetachstate(&attr, 1);
     pthread_attr_setstacksize(&attr, 100 * 1024);
@@ -163,8 +171,7 @@ static void dispatch_hostinfo_getaddr(h2o_hostinfo_getaddr_req_t *req)
 
     h2o_linklist_insert(&queue.pending, &req->_pending);
 
-    if (queue.num_threads_idle == 0 && queue.num_threads < h2o_hostinfo_max_threads)
-        create_lookup_thread();
+    create_lookup_thread_if_necessary();
 
     pthread_cond_signal(&queue.cond);
     pthread_mutex_unlock(&queue.mutex);
