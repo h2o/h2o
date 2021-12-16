@@ -148,10 +148,7 @@ static void on_context_init(h2o_handler_t *_self, h2o_context_t *ctx)
         .keepalive_timeout = self->config.keepalive_timeout,
         .max_buffer_size = self->config.max_buffer_size,
         .tunnel_enabled = self->config.tunnel_enabled,
-        .protocol_selector =
-            (struct st_h2o_httpclient_protocol_selector_t){
-                .ratio = self->config.protocol_ratio,
-            },
+        .protocol_selector = {.ratio = self->config.protocol_ratio},
         .http2 =
             {
                 .latency_optimization = ctx->globalconf->http2.latency_optimization, /* TODO provide config knob, or disable? */
