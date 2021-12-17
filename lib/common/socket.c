@@ -467,8 +467,7 @@ static void shutdown_ssl(h2o_socket_t *sock, const char *err)
         ret = 1; /* close the socket after sending close_notify */
     } else if (sock->ssl->ossl != NULL) {
         ERR_clear_error();
-        if ((ret = SSL_shutdown(sock->ssl->ossl)) == -1)
-            goto Close;
+        ret = SSL_shutdown(sock->ssl->ossl);
     } else {
         goto Close;
     }
