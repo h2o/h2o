@@ -438,14 +438,14 @@ EOT
             like $log[$#log], qr{\[h2o_mruby\] in request:/:mruby raised: .*:$expected:\s*hoge \(RuntimeError\)};
         };
     };
-    $tester->("flow style", <<"EOT", 5);
+    $tester->("flow style", <<"EOT", 6);
 hosts:
   default:
     paths:
       /:
         mruby.handler: Proc.new do |env| raise "hoge" end
 EOT
-    $tester->("block style", <<"EOT", 7);
+    $tester->("block style", <<"EOT", 8);
 hosts:
   default:
     paths:
