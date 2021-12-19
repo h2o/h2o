@@ -271,6 +271,13 @@ EOT
 sub spawn_h2o_raw {
     my ($conf, $check_ports, $opts) = @_;
 
+    # By default, h2o will launch as many threads as there are CPU cores on the
+    # host, unless 'num-threads' is specified. This results in the process
+    # running out of file descriptors, if the 'nofiles' limit is low and the
+    # host has a large number of CPU cores. So make sure the number of threads
+    # is bound.
+    $conf = "num-threads: 2\n$conf" unless $conf =~ /^num-threads:/m;
+
     my ($conffh, $conffn) = tempfile(UNLINK => 1);
     print $conffh $conf;
 

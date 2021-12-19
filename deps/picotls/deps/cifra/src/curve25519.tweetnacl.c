@@ -53,7 +53,7 @@ static void car25519(gf o)
     o[i] += (1LL << 16);
     c = o[i] >> 16;
     o[(i + 1) * (i < 15)] += c - 1 + 37 * (c - 1) * (i == 15);
-    o[i] -= c << 16;
+    o[i] -= (int64_t)((uint64_t)c << 16);
   }
 }
 
@@ -78,7 +78,7 @@ static void pack25519(uint8_t out[32], const gf n)
   car25519(t);
   car25519(t);
   car25519(t);
-  
+
   for(j = 0; j < 2; j++)
   {
     m[0] = t[0] - 0xffed;
@@ -157,7 +157,7 @@ static void inv25519(gf o, const gf i)
   int a;
   for (a = 0; a < 16; a++)
     c[a] = i[a];
-  
+
   for (a = 253; a >= 0; a--)
   {
     sqr(c, c);
@@ -182,7 +182,7 @@ void cf_curve25519_mul(uint8_t *q, const uint8_t *n, const uint8_t *p)
     z[i] = n[i];
   z[31] = (n[31] & 127) | 64;
   z[0] &= 248;
-  
+
   unpack25519(x, p);
 
   for(i = 0; i < 16; i++)
