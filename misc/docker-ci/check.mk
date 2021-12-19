@@ -78,7 +78,9 @@ _do_check:
 
 _install_cmake3.22:
 	sudo apt purge -y cmake
-	wget -O - https://github.com/Kitware/CMake/releases/download/v3.22.1/cmake-3.22.1-linux-x86_64.tar.gz | sudo tar xzf - --strip-components 1 -C /usr/local
+	sudo mkdir /usr/local/cmake-3.22
+	wget -O - https://github.com/Kitware/CMake/releases/download/v3.22.1/cmake-3.22.1-linux-x86_64.tar.gz | sudo tar xzf - --strip-components 1 -C /usr/local/cmake-3.22
+	sudo ln -s /usr/local/cmake-3.22/bin/cmake /usr/local/bin/cmake
 
 _build_ossl3.0:
 	curl -O https://www.openssl.org/source/openssl-3.0.0.tar.gz
