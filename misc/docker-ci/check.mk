@@ -1,7 +1,6 @@
 CONTAINER_NAME=h2oserver/h2o-ci:ubuntu1604
 SRC_DIR=/h2o
 CHECK_MK=$(SRC_DIR)/misc/docker-ci/check.mk
-CMAKE_ENV=
 CMAKE_ARGS=
 BUILD_ARGS=
 TEST_ENV=
@@ -38,8 +37,7 @@ ossl1.1.1:
 
 ossl3.0:
 	docker run $(DOCKER_RUN_OPTS) h2oserver/h2o-ci:ubuntu2004 \
-		make -f $(SRC_DIR).ro/misc/docker-ci/check.mk _build_ossl3.0 _check \
-		CMAKE_ENV='PKG_CONFIG_PATH=/opt/openssl-3.0/lib64/pkgconfig' \
+		make -f $(SRC_DIR).ro/misc/docker-ci/check.mk _install_cmake3.22 _build_ossl3.0 _check \
 		BUILD_ARGS='$(BUILD_ARGS)' \
 		TEST_ENV='$(TEST_ENV)'
 
@@ -72,11 +70,15 @@ _mount:
 	done
 
 _do_check:
-	$(CMAKE_ENV) cmake $(CMAKE_ARGS) -H$(SRC_DIR) -B.
+	cmake $(CMAKE_ARGS) -H$(SRC_DIR) -B.
 	time komake $(BUILD_ARGS) all checkdepends
 	if [ -e h2o-fuzzer-http1 ] ; then export $(FUZZ_ASAN); fi; \
 		ulimit -n 1024; \
 		env $(TEST_ENV) make check
+
+_install_cmake3.22:
+	sudo apt purge -y cmake
+	wget -O - https://github.com/Kitware/CMake/releases/download/v3.22.1/cmake-3.22.1-linux-x86_64.tar.gz | sudo tar xzf - --strip-components 1 -C /usr/local
 
 _build_ossl3.0:
 	curl -O https://www.openssl.org/source/openssl-3.0.0.tar.gz
@@ -89,4 +91,4 @@ enter:
 pull:
 	docker pull $(CONTAINER_NAME)
 
-.PHONY: fuzz _check _do-check _fuzz _build_ossl3.0 enter pull
+.PHONY: fuzz _check _do-check _fuzz _install_cmake3.22 _build_ossl3.0 enter pull
