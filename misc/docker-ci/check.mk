@@ -61,7 +61,7 @@ _mount:
 	sudo mount -t overlay overlay -o lowerdir=$(SRC_DIR).ro,upperdir=/tmp/src/upper,workdir=/tmp/src/work /tmp/src/upper
 	sudo mount --bind /tmp/src/upper $(SRC_DIR)
 	# allow overwrite of include/h2o/version.h
-	sudo chown ci:ci $(SRC_DIR)/include/h2o
+	sudo chown -R ci:ci $(SRC_DIR)/include/h2o
 	# allow write of mruby executables being generated (FIXME don't generate here)
 	for i in deps/mruby/bin misc/h2get/deps/mruby-1.2.0/bin; do \
 		sudo rm -rf $(SRC_DIR)/$$i; \
