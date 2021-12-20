@@ -467,6 +467,11 @@ static void shutdown_ssl(h2o_socket_t *sock, const char *err)
         ret = 1; /* close the socket after sending close_notify */
     } else if (sock->ssl->ossl != NULL) {
         ERR_clear_error();
+        /* Error from SSL_shutdown is ignored. When handshake fails, OpenSSL 1.1.0 and above emits an alert immediately. If that
+         * happens, the handshake completion callback supplied by the application is invoked with `sock->ssl->output.buf` containing
+         * the TLS alert. The application would call `h2o_socket_close` which in turn invokes `shutdown_ssl` and hence we end up
+         * here. Now, SSL_shutdown will return error (-1) because the TLS alert has already been sent, but we still need to send the
+         * TLS alert stored in the output buffer. */
         ret = SSL_shutdown(sock->ssl->ossl);
     } else {
         goto Close;
