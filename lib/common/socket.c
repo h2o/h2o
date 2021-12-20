@@ -444,8 +444,6 @@ static void dispose_socket(h2o_socket_t *sock, const char *err)
 
 static void shutdown_ssl(h2o_socket_t *sock, const char *err)
 {
-    int ret;
-
     if (err != NULL)
         goto Close;
 
@@ -460,14 +458,13 @@ static void shutdown_ssl(h2o_socket_t *sock, const char *err)
         ptls_buffer_t wbuf;
         uint8_t wbuf_small[32];
         ptls_buffer_init(&wbuf, wbuf_small, sizeof(wbuf_small));
-        if ((ret = ptls_send_alert(sock->ssl->ptls, &wbuf, PTLS_ALERT_LEVEL_WARNING, PTLS_ALERT_CLOSE_NOTIFY)) != 0)
+        if (ptls_send_alert(sock->ssl->ptls, &wbuf, PTLS_ALERT_LEVEL_WARNING, PTLS_ALERT_CLOSE_NOTIFY) != 0)
             goto Close;
         write_ssl_bytes(sock, wbuf.base, wbuf.off);
         ptls_buffer_dispose(&wbuf);
-        ret = 1; /* close the socket after sending close_notify */
     } else if (sock->ssl->ossl != NULL) {
         ERR_clear_error();
-        if ((ret = SSL_shutdown(sock->ssl->ossl)) == -1)
+        if (SSL_shutdown(sock->ssl->ossl) == -1)
             goto Close;
     } else {
         goto Close;
