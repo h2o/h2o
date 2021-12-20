@@ -1360,19 +1360,13 @@ Redo:
     }
 
     if (ret == 0 || (ret < 0 && SSL_get_error(sock->ssl->ossl, ret) != SSL_ERROR_WANT_READ)) {
-        /* failed */
+        /* Failed. Note that because OpenSSL 1.1.0 emits an alert immediately, we would be calling `on_handshake_complete` while the
+         * TLS alert is in `sock->ssl->output.buf`. */
         long verify_result = SSL_get_verify_result(sock->ssl->ossl);
         if (verify_result != X509_V_OK) {
             err = X509_verify_cert_error_string(verify_result);
         } else {
             err = h2o_socket_error_ssl_handshake;
-            /* OpenSSL 1.1.0 emits an alert immediately, we  send it now. 1.0.2 emits the error when SSL_shutdown is called in
-             * shutdown_ssl. */
-            if (has_pending_ssl_bytes(sock->ssl)) {
-                h2o_socket_read_stop(sock);
-                flush_pending_ssl(sock, on_handshake_fail_complete);
-                return;
-            }
         }
         goto Complete;
     }
