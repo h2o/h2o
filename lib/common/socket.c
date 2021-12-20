@@ -473,11 +473,9 @@ static void shutdown_ssl(h2o_socket_t *sock, const char *err)
     if (has_pending_ssl_bytes(sock->ssl)) {
         h2o_socket_read_stop(sock);
         flush_pending_ssl(sock, dispose_socket);
-    } else {
-        goto Close;
+        return;
     }
 
-    return;
 Close:
     dispose_socket(sock, err);
 }
