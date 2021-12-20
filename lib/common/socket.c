@@ -1263,9 +1263,22 @@ static void on_handshake_complete(h2o_socket_t *sock, const char *err)
     handshake_cb(sock, err);
 }
 
+const char *get_handshake_error(struct st_h2o_socket_ssl_t *ssl)
+{
+    const char *err = h2o_socket_error_ssl_handshake;
+    if (ssl->ossl != NULL) {
+        long verify_result = SSL_get_verify_result(ssl->ossl);
+        if (verify_result != X509_V_OK) {
+            err = X509_verify_cert_error_string(verify_result);
+            assert(err != NULL);
+        }
+    }
+    return err;
+}
+
 static void on_handshake_fail_complete(h2o_socket_t *sock, const char *err)
 {
-    on_handshake_complete(sock, h2o_socket_error_ssl_handshake);
+    on_handshake_complete(sock, get_handshake_error(sock->ssl));
 }
 
 static void proceed_handshake(h2o_socket_t *sock, const char *err);
@@ -1360,20 +1373,14 @@ Redo:
     }
 
     if (ret == 0 || (ret < 0 && SSL_get_error(sock->ssl->ossl, ret) != SSL_ERROR_WANT_READ)) {
-        /* failed */
-        long verify_result = SSL_get_verify_result(sock->ssl->ossl);
-        if (verify_result != X509_V_OK) {
-            err = X509_verify_cert_error_string(verify_result);
-        } else {
-            err = h2o_socket_error_ssl_handshake;
-            /* OpenSSL 1.1.0 emits an alert immediately, we  send it now. 1.0.2 emits the error when SSL_shutdown is called in
-             * shutdown_ssl. */
-            if (has_pending_ssl_bytes(sock->ssl)) {
-                h2o_socket_read_stop(sock);
-                flush_pending_ssl(sock, on_handshake_fail_complete);
-                return;
-            }
+        /* OpenSSL 1.1.0 emits an alert immediately, we  send it now. 1.0.2 emits the error when SSL_shutdown is called in
+         * shutdown_ssl. */
+        if (has_pending_ssl_bytes(sock->ssl)) {
+            h2o_socket_read_stop(sock);
+            flush_pending_ssl(sock, on_handshake_fail_complete);
+            return;
         }
+        err = get_handshake_error(sock->ssl);
         goto Complete;
     }
 
