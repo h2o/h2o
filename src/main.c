@@ -2492,12 +2492,14 @@ static void dispose_resolve_tag_arg(resolve_tag_arg_t *arg)
 
 static void on_sigterm(int signo)
 {
-    conf.shutdown_requested = 1;
-    if (!h2o_barrier_done(&conf.startup_sync_barrier)) {
-        /* initialization hasn't completed yet, exit right away */
-        exit(0);
+    if (conf.shutdown_requested == 0) {
+        conf.shutdown_requested = 1;
+        if (!h2o_barrier_done(&conf.startup_sync_barrier)) {
+            /* initialization hasn't completed yet, exit right away */
+            exit(0);
+        }
+        notify_all_threads();
     }
-    notify_all_threads();
 }
 
 #ifdef LIBC_HAS_BACKTRACE
