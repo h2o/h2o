@@ -308,11 +308,8 @@ int h2o_barrier_wait(h2o_barrier_t *barrier)
         ret = 0;
     }
     pthread_mutex_unlock(&barrier->_mutex);
-    /*
-     * this is needed to synchronize h2o_barrier_destroy with the
-     * exit of this function, so make sure that we can't destroy the
-     * mutex or the condition before all threads have exited wait()
-     */
+    /* This is needed to synchronize h2o_barrier_dispose with the exit of this function, so make sure that we can't destroy the
+     * mutex or the condition before all threads have exited wait(). */
     __sync_sub_and_fetch(&barrier->_out_of_wait, 1);
     return ret;
 }
@@ -327,7 +324,7 @@ void h2o_barrier_add(h2o_barrier_t *barrier, size_t delta)
     __sync_add_and_fetch(&barrier->_count, delta);
 }
 
-void h2o_barrier_destroy(h2o_barrier_t *barrier)
+void h2o_barrier_dispose(h2o_barrier_t *barrier)
 {
     while (__sync_add_and_fetch(&barrier->_out_of_wait, 0) != 0) {
         sched_yield();

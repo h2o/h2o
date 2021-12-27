@@ -143,7 +143,7 @@ void h2o_barrier_init(h2o_barrier_t *barrier, size_t count);
 int h2o_barrier_wait(h2o_barrier_t *barrier);
 int h2o_barrier_done(h2o_barrier_t *barrier);
 void h2o_barrier_add(h2o_barrier_t *barrier, size_t delta);
-void h2o_barrier_destroy(h2o_barrier_t *barrier);
+void h2o_barrier_dispose(h2o_barrier_t *barrier);
 
 void h2o_error_reporter__on_timeout(h2o_timer_t *timer);
 #define H2O_ERROR_REPORTER_INITIALIZER(s)                                                                                          \
