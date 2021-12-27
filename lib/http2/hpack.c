@@ -731,7 +731,8 @@ size_t h2o_hpack_encode_string(uint8_t *dst, const char *s, size_t len)
 
 static uint8_t *header_table_adjust_size(h2o_hpack_header_table_t *table, uint32_t new_capacity, uint8_t *dst)
 {
-    /* do nothing if the table size is smaller than current size */
+    /* Do nothing if user-supplied value is greater than the current value. Because we never allow the peer to increase the table
+     * size here, there is no need to worry about using excess memory. */
     if (new_capacity >= table->hpack_capacity)
         return dst;
 

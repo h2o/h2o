@@ -62,11 +62,6 @@ int h2o_http2_update_peer_settings(h2o_http2_settings_t *settings, const uint8_t
 
     if (len != 0)
         return H2O_HTTP2_ERROR_FRAME_SIZE;
-
-    /* cap dynamic table size to default (i.e., 4096 bytes) */
-    if (settings->header_table_size > H2O_HTTP2_SETTINGS_DEFAULT.header_table_size)
-        settings->header_table_size = H2O_HTTP2_SETTINGS_DEFAULT.header_table_size;
-
     return 0;
 }
 
