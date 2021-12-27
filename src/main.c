@@ -2490,16 +2490,22 @@ static void dispose_resolve_tag_arg(resolve_tag_arg_t *arg)
     free(arg->node_cache.entries);
 }
 
-static void on_sigterm(int signo)
+static void on_sigterm(int notify_threads)
 {
-    if (conf.shutdown_requested == 0) {
-        conf.shutdown_requested = 1;
-        if (!h2o_barrier_done(&conf.startup_sync_barrier)) {
-            /* initialization hasn't completed yet, exit right away */
-            exit(0);
-        }
+    conf.shutdown_requested = 1;
+    if (notify_threads)
         notify_all_threads();
-    }
+    h2o_set_signal_handler(SIGTERM, SIG_IGN);
+}
+
+static void on_sigterm_set_flag_only(int signo)
+{
+    on_sigterm(0);
+}
+
+static void on_sigterm_set_flag_notify_threads(int signo)
+{
+    on_sigterm(1);
 }
 
 #ifdef LIBC_HAS_BACKTRACE
@@ -2560,7 +2566,7 @@ static void on_sigfatal(int signo)
 
 static void setup_signal_handlers(void)
 {
-    h2o_set_signal_handler(SIGTERM, on_sigterm);
+    h2o_set_signal_handler(SIGTERM, on_sigterm_set_flag_only);
     h2o_set_signal_handler(SIGPIPE, SIG_IGN);
 #ifdef LIBC_HAS_BACKTRACE
     if ((crash_handler_fd = popen_crash_handler()) == -1)
@@ -3102,11 +3108,15 @@ static void *run_loop(void *_thread_index)
     /* and start listening */
     update_listener_state(listeners);
 
-    /* make sure all threads are initialized before starting to serve requests */
-    h2o_barrier_wait(&conf.startup_sync_barrier);
-
-    if (thread_index == 0)
+    /* Wait for all threads to become ready but before letting any of them serve connections, swap the signal handler for graceful
+     * shutdown, check (and exit) if SIGTERM has been received already. */
+    if (h2o_barrier_wait_pre_sync_point(&conf.startup_sync_barrier)) {
+        h2o_set_signal_handler(SIGTERM, on_sigterm_set_flag_notify_threads);
+        if (conf.shutdown_requested)
+            exit(0);
         fprintf(stderr, "h2o server (pid:%d) is ready to serve requests with %zu threads\n", (int)getpid(), conf.thread_map.size);
+    }
+    h2o_barrier_wait_post_sync_point(&conf.startup_sync_barrier);
 
     /* the main loop */
     uint64_t last_buffer_gc_at = 0;
