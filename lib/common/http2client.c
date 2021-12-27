@@ -595,7 +595,6 @@ static int handle_settings_frame(struct st_h2o_http2client_conn_t *conn, h2o_htt
         }
     } else {
         uint32_t prev_initial_window_size = conn->peer_settings.initial_window_size;
-        /* FIXME handle SETTINGS_HEADER_TABLE_SIZE */
         int ret = h2o_http2_update_peer_settings(&conn->peer_settings, frame->payload, frame->length, err_desc);
         if (ret != 0)
             return ret;
