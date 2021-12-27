@@ -137,13 +137,13 @@ void h2o_sem_set_capacity(h2o_sem_t *sem, ssize_t new_capacity);
 
 void h2o_barrier_init(h2o_barrier_t *barrier, size_t count);
 /**
- * Wait for all threads to enter the barrier.
+ * Waits for all threads to enter the barrier.
  */
 void h2o_barrier_wait(h2o_barrier_t *barrier);
 /**
- * Wait for all threads to enter the barrier, then returns before the barriers are released. True is returned on the thread that
- * returns first, while on other threads false would be returned. In the first thread, it is possible to run any action that has to
- * be taken after all threads enter the barrier. All threads must call `h2o_barrier_wait_post_sync_point`.
+ * Waits for all threads to enter the barrier, then returns before the barriers are released. True is returned on one thread, while
+ * while false is returned on other threads. On the thread that returned true, it is possible to run any action that has to be taken
+ * while all threads are within the barrier. All threads then must call `h2o_barrier_wait_post_sync_point`.
  */
 int h2o_barrier_wait_pre_sync_point(h2o_barrier_t *barrier);
 void h2o_barrier_wait_post_sync_point(h2o_barrier_t *barrier);
