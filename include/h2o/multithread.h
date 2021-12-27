@@ -135,10 +135,6 @@ void h2o_sem_wait(h2o_sem_t *sem);
 void h2o_sem_post(h2o_sem_t *sem);
 void h2o_sem_set_capacity(h2o_sem_t *sem, ssize_t new_capacity);
 
-#define H2O_BARRIER_INITIALIZER(count_)                                                                                            \
-    {                                                                                                                              \
-        PTHREAD_MUTEX_INITIALIZER, PTHREAD_COND_INITIALIZER, count_                                                                \
-    }
 void h2o_barrier_init(h2o_barrier_t *barrier, size_t count);
 /**
  * Wait for all threads to enter the barrier.
