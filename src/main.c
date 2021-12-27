@@ -309,7 +309,6 @@ static struct {
     .launch_time = 0,                /* initialized in main() */
     .threads = NULL,
     .shutdown_requested = 0,
-    .startup_sync_barrier = H2O_BARRIER_INITIALIZER(SIZE_MAX),
     .state = {{0}},
     .crash_handler = "share/h2o/annotate-backtrace-symbols",
     .crash_handler_wait_pipe_close = 0,
