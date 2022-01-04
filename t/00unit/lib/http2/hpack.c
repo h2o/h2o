@@ -616,6 +616,33 @@ static void test_inherit_invalid(void)
     }
 }
 
+static void test_dynamic_table_size_update(void)
+{
+    h2o_hpack_header_table_t encoder = {}, decoder = {};
+    encoder.hpack_capacity = encoder.hpack_max_capacity = decoder.hpack_capacity = decoder.hpack_max_capacity = 4096;
+    h2o_buffer_t *buf;
+    h2o_buffer_init(&buf, &h2o_socket_buffer_prototype);
+    h2o_mem_pool_t pool;
+    h2o_mem_init_pool(&pool);
+    h2o_headers_t headers = {};
+    const char *err_desc = NULL;
+    int status, ret;
+
+    /* first response */
+    h2o_hpack_flatten_response(&buf, &encoder, 1024, 1, H2O_HTTP2_SETTINGS_DEFAULT.max_frame_size, 200, NULL, 0, NULL, 12345);
+    ret = h2o_hpack_parse_response(&pool, h2o_hpack_decode_header, &decoder, &status, &headers, (uint8_t *)buf->bytes + 9,
+                                   buf->size - 9, &err_desc);
+    ok(ret == 0);
+    ok(decoder.hpack_capacity == 1024); /* check that capacity has changed */
+    ok(status == 200);
+    ok(headers.size == 1);
+    ok(headers.entries[0].name == &H2O_TOKEN_CONTENT_LENGTH->buf);
+    ok(h2o_memis(headers.entries[0].value.base, headers.entries[0].value.len, H2O_STRLIT("12345")));
+
+    h2o_mem_clear_pool(&pool);
+    h2o_buffer_dispose(&buf);
+}
+
 void test_lib__http2__hpack(void)
 {
     subtest("hpack", test_hpack);
@@ -623,4 +650,5 @@ void test_lib__http2__hpack(void)
     subtest("hpack-dynamic-table", test_hpack_dynamic_table);
     subtest("token-wo-hpack-id", test_token_wo_hpack_id);
     subtest("inherit-invalid", test_inherit_invalid);
+    subtest("dynamic-table-size-update", test_dynamic_table_size_update);
 }
