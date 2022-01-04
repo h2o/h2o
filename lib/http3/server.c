@@ -827,7 +827,10 @@ static void handle_buffered_input(struct st_h2o_http3_server_stream_t *stream, i
     if (stream->state >= H2O_HTTP3_SERVER_STREAM_STATE_CLOSE_WAIT)
         return;
 
-    { /* consume contiguous bytes */
+    { /* Process contiguous bytes in the receive buffer until one of the following conditions are reached:
+       * a) connection- or stream-level error (i.e., state advanced to CLOSE_WAIT) is detected - in which case we exit,
+       * b) incomplete frame is detected - wait for more (if the stream is open) or raise a connection error, or
+       * c) all bytes are processed - exit the loop. */
         size_t bytes_available = quicly_recvstate_bytes_available(&stream->quic->recvstate);
         assert(bytes_available <= stream->recvbuf.buf->size);
         const uint8_t *src = (const uint8_t *)stream->recvbuf.buf->bytes, *src_end = src + bytes_available;
@@ -843,8 +846,11 @@ static void handle_buffered_input(struct st_h2o_http3_server_stream_t *stream, i
                 }
                 h2o_quic_close_connection(&conn->h3.super, err, err_desc);
                 return;
+            } else if (stream->state >= H2O_HTTP3_SERVER_STREAM_STATE_CLOSE_WAIT) {
+                return;
             }
         }
+        /* Processed zero or more bytes without noticing an error; shift the bytes that have been processed as frames. */
         size_t bytes_consumed = src - (const uint8_t *)stream->recvbuf.buf->bytes;
         h2o_buffer_consume(&stream->recvbuf.buf, bytes_consumed);
         quicly_stream_sync_recvbuf(stream->quic, bytes_consumed);
