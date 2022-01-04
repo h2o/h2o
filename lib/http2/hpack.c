@@ -743,7 +743,7 @@ static uint8_t *header_table_adjust_size(h2o_hpack_header_table_t *table, uint32
 
     /* encode Dynamic Table Size Update */
     *dst = 0x20;
-    dst = h2o_hpack_encode_int(dst, table->hpack_capacity, 3);
+    dst = h2o_hpack_encode_int(dst, table->hpack_capacity, 5);
 
     return dst;
 }
