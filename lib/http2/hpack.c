@@ -28,6 +28,7 @@
 
 #define HEADER_TABLE_OFFSET 62
 #define HEADER_TABLE_ENTRY_SIZE_OFFSET 32
+#define DYNAMIC_TABLE_SIZE_UPDATE_MAX_SIZE 5
 #define STATUS_HEADER_MAX_SIZE 5
 #define CONTENT_LENGTH_HEADER_MAX_SIZE                                                                                             \
     (3 + sizeof(H2O_SIZE_T_LONGEST_STR) - 1) /* uses Literal Header Field without Indexing (RFC7541 6.2.2) */
@@ -728,6 +729,25 @@ size_t h2o_hpack_encode_string(uint8_t *dst, const char *s, size_t len)
     return encode_as_is(dst, s, len);
 }
 
+static uint8_t *header_table_adjust_size(h2o_hpack_header_table_t *table, uint32_t new_capacity, uint8_t *dst)
+{
+    /* Do nothing if user-supplied value is greater than the current value. Because we never allow the peer to increase the table
+     * size here, there is no need to worry about using excess memory. */
+    if (new_capacity >= table->hpack_capacity)
+        return dst;
+
+    /* update state */
+    table->hpack_capacity = new_capacity;
+    while (table->num_entries != 0 && table->hpack_size > table->hpack_capacity)
+        header_table_evict_one(table);
+
+    /* encode Dynamic Table Size Update */
+    *dst = 0x20;
+    dst = h2o_hpack_encode_int(dst, table->hpack_capacity, 5);
+
+    return dst;
+}
+
 static uint8_t *do_encode_header(h2o_hpack_header_table_t *header_table, uint8_t *dst, const h2o_iovec_t *name,
                                  const h2o_iovec_t *value, int dont_compress)
 {
@@ -914,12 +934,13 @@ static void fixup_frame_headers(h2o_buffer_t **buf, size_t start_at, uint8_t typ
     }
 }
 
-void h2o_hpack_flatten_request(h2o_buffer_t **buf, h2o_hpack_header_table_t *header_table, uint32_t stream_id,
-                               size_t max_frame_size, h2o_iovec_t method, h2o_url_t *url, const h2o_header_t *headers,
-                               size_t num_headers, int is_end_stream)
+void h2o_hpack_flatten_request(h2o_buffer_t **buf, h2o_hpack_header_table_t *header_table, uint32_t hpack_capacity,
+                               uint32_t stream_id, size_t max_frame_size, h2o_iovec_t method, h2o_url_t *url,
+                               const h2o_header_t *headers, size_t num_headers, int is_end_stream)
 {
     size_t capacity = calc_headers_capacity(headers, num_headers);
     capacity += H2O_HTTP2_FRAME_HEADER_SIZE;
+    capacity += DYNAMIC_TABLE_SIZE_UPDATE_MAX_SIZE;
     capacity += calc_capacity(H2O_TOKEN_METHOD->buf.len, method.len);
     capacity += calc_capacity(H2O_TOKEN_SCHEME->buf.len, url->scheme->name.len);
     capacity += calc_capacity(H2O_TOKEN_AUTHORITY->buf.len, url->authority.len);
@@ -929,12 +950,12 @@ void h2o_hpack_flatten_request(h2o_buffer_t **buf, h2o_hpack_header_table_t *hea
     uint8_t *dst = (void *)(h2o_buffer_reserve(buf, capacity).base + H2O_HTTP2_FRAME_HEADER_SIZE);
 
     /* encode */
+    dst = header_table_adjust_size(header_table, hpack_capacity, dst);
     dst = encode_method(header_table, dst, method);
     dst = encode_scheme(header_table, dst, url->scheme);
     dst = encode_header_token(header_table, dst, H2O_TOKEN_AUTHORITY, &url->authority);
     dst = encode_path(header_table, dst, url->path);
-    size_t i;
-    for (i = 0; i != num_headers; ++i) {
+    for (size_t i = 0; i != num_headers; ++i) {
         const h2o_header_t *header = headers + i;
         if (header->name == &H2O_TOKEN_ACCEPT_ENCODING->buf &&
             h2o_memis(header->value.base, header->value.len, H2O_STRLIT("gzip, deflate"))) {
@@ -950,14 +971,15 @@ void h2o_hpack_flatten_request(h2o_buffer_t **buf, h2o_hpack_header_table_t *hea
                         is_end_stream ? H2O_HTTP2_FRAME_FLAG_END_STREAM : 0);
 }
 
-void h2o_hpack_flatten_push_promise(h2o_buffer_t **buf, h2o_hpack_header_table_t *header_table, uint32_t stream_id,
-                                    size_t max_frame_size, const h2o_url_scheme_t *scheme, h2o_iovec_t authority,
-                                    h2o_iovec_t method, h2o_iovec_t path, const h2o_header_t *headers, size_t num_headers,
-                                    uint32_t parent_stream_id)
+void h2o_hpack_flatten_push_promise(h2o_buffer_t **buf, h2o_hpack_header_table_t *header_table, uint32_t hpack_capacity,
+                                    uint32_t stream_id, size_t max_frame_size, const h2o_url_scheme_t *scheme,
+                                    h2o_iovec_t authority, h2o_iovec_t method, h2o_iovec_t path, const h2o_header_t *headers,
+                                    size_t num_headers, uint32_t parent_stream_id)
 {
     size_t capacity = calc_headers_capacity(headers, num_headers);
     capacity += H2O_HTTP2_FRAME_HEADER_SIZE /* first frame header */
                 + 4;                        /* promised stream id */
+    capacity += DYNAMIC_TABLE_SIZE_UPDATE_MAX_SIZE;
     capacity += calc_capacity(H2O_TOKEN_METHOD->buf.len, method.len);
     capacity += calc_capacity(H2O_TOKEN_SCHEME->buf.len, scheme->name.len);
     capacity += calc_capacity(H2O_TOKEN_AUTHORITY->buf.len, authority.len);
@@ -968,12 +990,12 @@ void h2o_hpack_flatten_push_promise(h2o_buffer_t **buf, h2o_hpack_header_table_t
 
     /* encode */
     dst = h2o_http2_encode32u(dst, stream_id);
+    dst = header_table_adjust_size(header_table, hpack_capacity, dst);
     dst = encode_method(header_table, dst, method);
     dst = encode_scheme(header_table, dst, scheme);
     dst = encode_header_token(header_table, dst, H2O_TOKEN_AUTHORITY, &authority);
     dst = encode_path(header_table, dst, path);
-    size_t i;
-    for (i = 0; i != num_headers; ++i) {
+    for (size_t i = 0; i != num_headers; ++i) {
         const h2o_header_t *header = headers + i;
         if (header->name == &H2O_TOKEN_ACCEPT_ENCODING->buf &&
             h2o_memis(header->value.base, header->value.len, H2O_STRLIT("gzip, deflate"))) {
@@ -988,13 +1010,14 @@ void h2o_hpack_flatten_push_promise(h2o_buffer_t **buf, h2o_hpack_header_table_t
     fixup_frame_headers(buf, start_at, H2O_HTTP2_FRAME_TYPE_PUSH_PROMISE, parent_stream_id, max_frame_size, 0);
 }
 
-void h2o_hpack_flatten_response(h2o_buffer_t **buf, h2o_hpack_header_table_t *header_table, uint32_t stream_id,
-                                size_t max_frame_size, int status, const h2o_header_t *headers, size_t num_headers,
-                                const h2o_iovec_t *server_name, size_t content_length)
+void h2o_hpack_flatten_response(h2o_buffer_t **buf, h2o_hpack_header_table_t *header_table, uint32_t hpack_capacity,
+                                uint32_t stream_id, size_t max_frame_size, int status, const h2o_header_t *headers,
+                                size_t num_headers, const h2o_iovec_t *server_name, size_t content_length)
 {
     size_t capacity = calc_headers_capacity(headers, num_headers);
     capacity += H2O_HTTP2_FRAME_HEADER_SIZE; /* for the first header */
-    capacity += STATUS_HEADER_MAX_SIZE;      /* for :status: */
+    capacity += DYNAMIC_TABLE_SIZE_UPDATE_MAX_SIZE;
+    capacity += STATUS_HEADER_MAX_SIZE; /* for :status: */
 #ifndef H2O_UNITTEST
     if (server_name != NULL && server_name->len) {
         capacity += 5 + server_name->len; /* for Server: */
@@ -1007,6 +1030,7 @@ void h2o_hpack_flatten_response(h2o_buffer_t **buf, h2o_hpack_header_table_t *he
     uint8_t *dst = (void *)(h2o_buffer_reserve(buf, capacity).base + H2O_HTTP2_FRAME_HEADER_SIZE); /* skip frame header */
 
     /* encode */
+    dst = header_table_adjust_size(header_table, hpack_capacity, dst);
     dst = encode_status(dst, status);
 #ifndef H2O_UNITTEST
     /* TODO keep some kind of reference to the indexed Server header, and reuse it */
@@ -1014,8 +1038,7 @@ void h2o_hpack_flatten_response(h2o_buffer_t **buf, h2o_hpack_header_table_t *he
         dst = encode_header_token(header_table, dst, H2O_TOKEN_SERVER, server_name);
     }
 #endif
-    size_t i;
-    for (i = 0; i != num_headers; ++i)
+    for (size_t i = 0; i != num_headers; ++i)
         dst = encode_header(header_table, dst, headers + i);
     if (content_length != SIZE_MAX)
         dst = encode_content_length(dst, content_length);
@@ -1025,17 +1048,18 @@ void h2o_hpack_flatten_response(h2o_buffer_t **buf, h2o_hpack_header_table_t *he
     fixup_frame_headers(buf, start_at, H2O_HTTP2_FRAME_TYPE_HEADERS, stream_id, max_frame_size, 0);
 }
 
-void h2o_hpack_flatten_trailers(h2o_buffer_t **buf, h2o_hpack_header_table_t *header_table, uint32_t stream_id,
-                                size_t max_frame_size, const h2o_header_t *headers, size_t num_headers)
+void h2o_hpack_flatten_trailers(h2o_buffer_t **buf, h2o_hpack_header_table_t *header_table, uint32_t hpack_capacity,
+                                uint32_t stream_id, size_t max_frame_size, const h2o_header_t *headers, size_t num_headers)
 {
     size_t capacity = calc_headers_capacity(headers, num_headers);
     capacity += H2O_HTTP2_FRAME_HEADER_SIZE;
+    capacity += DYNAMIC_TABLE_SIZE_UPDATE_MAX_SIZE;
 
     size_t start_at = (*buf)->size;
     uint8_t *dst = (void *)(h2o_buffer_reserve(buf, capacity).base + H2O_HTTP2_FRAME_HEADER_SIZE); /* skip frame header */
 
-    size_t i;
-    for (i = 0; i != num_headers; ++i)
+    dst = header_table_adjust_size(header_table, hpack_capacity, dst);
+    for (size_t i = 0; i != num_headers; ++i)
         dst = encode_header(header_table, dst, headers + i);
     (*buf)->size = (char *)dst - (*buf)->bytes;
 

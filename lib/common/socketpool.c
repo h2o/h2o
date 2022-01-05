@@ -601,9 +601,9 @@ int h2o_socketpool_return(h2o_socketpool_t *pool, h2o_socket_t *sock)
     __sync_add_and_fetch(&pool->_shared.pooled_count, 1);
 
     pthread_mutex_lock(&pool->_shared.mutex);
-    check_pool_expired_locked(pool, h2o_socket_get_loop(sock));
     h2o_linklist_insert(&pool->_shared.sockets, &entry->all_link);
     h2o_linklist_insert(&pool->targets.entries[target]->_shared.sockets, &entry->target_link);
+    check_pool_expired_locked(pool, h2o_socket_get_loop(sock));
     pthread_mutex_unlock(&pool->_shared.mutex);
     return 0;
 }

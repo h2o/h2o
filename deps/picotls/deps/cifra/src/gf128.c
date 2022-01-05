@@ -45,7 +45,7 @@ void cf_gf128_double(const cf_gf128 in, cf_gf128 out)
   inword = in[2];   out[2] = (inword << 1) | borrow;  borrow = inword >> 31;
   inword = in[1];   out[1] = (inword << 1) | borrow;  borrow = inword >> 31;
   inword = in[0];   out[0] = (inword << 1) | borrow;  borrow = inword >> 31;
-  
+
 #if CF_CACHE_SIDE_CHANNEL_PROTECTION
   out[3] ^= select_u8(borrow, table, 2);
 #else
@@ -66,9 +66,9 @@ void cf_gf128_double_le(const cf_gf128 in, cf_gf128 out)
   inword = in[3];   out[3] = (inword >> 1) | (borrow << 31);  borrow = inword & 1;
 
 #if CF_CACHE_SIDE_CHANNEL_PROTECTION
-  out[0] ^= select_u8(borrow, table, 2) << 24;
+  out[0] ^= (uint32_t)select_u8(borrow, table, 2) << 24;
 #else
-  out[0] ^= table[borrow] << 24;
+  out[0] ^= (uint32_t)table[borrow] << 24;
 #endif
 }
 
@@ -87,9 +87,9 @@ void cf_gf128_mul(const cf_gf128 x, const cf_gf128 y, cf_gf128 out)
 #if CF_TIME_SIDE_CHANNEL_PROTECTION
   cf_gf128 zero = { 0 };
 #endif
- 
+
   /* Z_0 = 0^128
-   * V_0 = Y */ 
+   * V_0 = Y */
   cf_gf128 Z, V;
   memset(Z, 0, sizeof Z);
   memcpy(V, y, sizeof V);

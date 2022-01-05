@@ -119,14 +119,14 @@ h2o_socket_tunnel_t *h2o_socket_tunnel_create(h2o_socket_t *sock)
     tunnel->_sock->data = tunnel;
     h2o_doublebuffer_init(&tunnel->_buf, &h2o_socket_buffer_prototype);
 
-    H2O_PROBE(SOCKET_TUNNEL_CREATE, &tunnel->super);
+    H2O_PROBE(TUNNEL_CREATE, &tunnel->super);
 
     return tunnel;
 }
 
 void h2o_socket_tunnel_start(h2o_socket_tunnel_t *tunnel, size_t bytes_to_consume)
 {
-    H2O_PROBE(SOCKET_TUNNEL_START, &tunnel->super, bytes_to_consume);
+    H2O_PROBE(TUNNEL_START, &tunnel->super, bytes_to_consume);
 
     h2o_buffer_consume(&tunnel->_sock->input, bytes_to_consume);
     h2o_socket_read_stop(tunnel->_sock);

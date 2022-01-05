@@ -595,7 +595,6 @@ static int handle_settings_frame(struct st_h2o_http2client_conn_t *conn, h2o_htt
         }
     } else {
         uint32_t prev_initial_window_size = conn->peer_settings.initial_window_size;
-        /* FIXME handle SETTINGS_HEADER_TABLE_SIZE */
         int ret = h2o_http2_update_peer_settings(&conn->peer_settings, frame->payload, frame->length, err_desc);
         if (ret != 0)
             return ret;
@@ -966,8 +965,9 @@ static void on_connection_ready(struct st_h2o_http2client_stream_t *stream, stru
     }
 
     /* send headers */
-    h2o_hpack_flatten_request(&conn->output.buf, &conn->output.header_table, stream->stream_id, conn->peer_settings.max_frame_size,
-                              method, &url, headers, num_headers, body.base == NULL);
+    h2o_hpack_flatten_request(&conn->output.buf, &conn->output.header_table, conn->peer_settings.header_table_size,
+                              stream->stream_id, conn->peer_settings.max_frame_size, method, &url, headers, num_headers,
+                              body.base == NULL);
 
     if (body.base != NULL) {
         h2o_buffer_init(&stream->output.buf, &h2o_socket_buffer_prototype);

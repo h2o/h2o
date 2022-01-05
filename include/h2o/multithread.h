@@ -135,15 +135,21 @@ void h2o_sem_wait(h2o_sem_t *sem);
 void h2o_sem_post(h2o_sem_t *sem);
 void h2o_sem_set_capacity(h2o_sem_t *sem, ssize_t new_capacity);
 
-#define H2O_BARRIER_INITIALIZER(count_)                                                                                            \
-    {                                                                                                                              \
-        PTHREAD_MUTEX_INITIALIZER, PTHREAD_COND_INITIALIZER, count_                                                                \
-    }
 void h2o_barrier_init(h2o_barrier_t *barrier, size_t count);
-int h2o_barrier_wait(h2o_barrier_t *barrier);
+/**
+ * Waits for all threads to enter the barrier.
+ */
+void h2o_barrier_wait(h2o_barrier_t *barrier);
+/**
+ * Waits for all threads to enter the barrier, then returns before the barriers are released. True is returned on one thread, while
+ * while false is returned on other threads. On the thread that returned true, it is possible to run any action that has to be taken
+ * while all threads are within the barrier. All threads then must call `h2o_barrier_wait_post_sync_point`.
+ */
+int h2o_barrier_wait_pre_sync_point(h2o_barrier_t *barrier);
+void h2o_barrier_wait_post_sync_point(h2o_barrier_t *barrier);
 int h2o_barrier_done(h2o_barrier_t *barrier);
 void h2o_barrier_add(h2o_barrier_t *barrier, size_t delta);
-void h2o_barrier_destroy(h2o_barrier_t *barrier);
+void h2o_barrier_dispose(h2o_barrier_t *barrier);
 
 void h2o_error_reporter__on_timeout(h2o_timer_t *timer);
 #define H2O_ERROR_REPORTER_INITIALIZER(s)                                                                                          \

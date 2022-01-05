@@ -184,7 +184,7 @@ void *writer_thread(void *arg)
         }
         close(wta->fd);
         h2o_barrier_wait(&wta->barrier);
-        h2o_barrier_destroy(&wta->barrier);
+        h2o_barrier_dispose(&wta->barrier);
         free(wta);
     }
 }
