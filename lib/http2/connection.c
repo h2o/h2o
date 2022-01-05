@@ -1096,7 +1096,6 @@ static int handle_settings_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *fram
         }
     } else {
         uint32_t prev_initial_window_size = conn->peer_settings.initial_window_size;
-        /* FIXME handle SETTINGS_HEADER_TABLE_SIZE */
         int ret = h2o_http2_update_peer_settings(&conn->peer_settings, frame->payload, frame->length, err_desc);
         if (ret != 0)
             return ret;
@@ -1495,8 +1494,8 @@ static int emit_writereq_of_openref(h2o_http2_scheduler_openref_t *ref, int *sti
                 static const h2o_iovec_t name = {H2O_STRLIT("server-timing")};
                 trailers[num_trailers++] = (h2o_header_t){(h2o_iovec_t *)&name, NULL, server_timing};
             }
-            h2o_hpack_flatten_trailers(&conn->_write.buf, &conn->_output_header_table, stream->stream_id,
-                                       conn->peer_settings.max_frame_size, trailers, num_trailers);
+            h2o_hpack_flatten_trailers(&conn->_write.buf, &conn->_output_header_table, conn->peer_settings.header_table_size,
+                                       stream->stream_id, conn->peer_settings.max_frame_size, trailers, num_trailers);
         }
         h2o_linklist_insert(&conn->_write.streams_to_proceed, &stream->_link);
     }

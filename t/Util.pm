@@ -8,6 +8,7 @@ use IO::Socket::INET;
 use IO::Socket::SSL;
 use IO::Poll qw(POLLIN POLLOUT POLLHUP POLLERR);
 use List::Util qw(shuffle);
+use List::MoreUtils qw(firstidx);
 use Net::EmptyPort qw(check_port empty_port);
 use Net::DNS::Nameserver;
 use POSIX ":sys_wait_h";
@@ -198,8 +199,13 @@ sub spawn_server {
           Retry:
             if (kill $sig, $pid) {
                 my $i = 0;
+                my $sigterm = sig_num('TERM');
+                my $sigkill = sig_num('KILL');
+                my $sigzero = sig_num('ZERO');
                 while (1) {
                     if (waitpid($pid, WNOHANG) == $pid) {
+                        Test::More::fail "server die with signal $?"
+                            unless $? == $sigterm || $? == $sigkill || $? == $sigzero;
                         print STDERR "killed (got $?)\n";
                         last;
                     }
@@ -223,6 +229,11 @@ sub spawn_server {
     # child process
     exec @{$args{argv}};
     die "failed to exec $args{argv}->[0]:$!";
+}
+
+sub sig_num {
+    my $name = shift;
+    firstidx { $_ eq $name } split " ", $Config::Config{sig_name};
 }
 
 # returns a hash containing `port`, `tls_port`, `guard`
@@ -270,6 +281,13 @@ EOT
 
 sub spawn_h2o_raw {
     my ($conf, $check_ports, $opts) = @_;
+
+    # By default, h2o will launch as many threads as there are CPU cores on the
+    # host, unless 'num-threads' is specified. This results in the process
+    # running out of file descriptors, if the 'nofiles' limit is low and the
+    # host has a large number of CPU cores. So make sure the number of threads
+    # is bound.
+    $conf = "num-threads: 2\n$conf" unless $conf =~ /^num-threads:/m;
 
     my ($conffh, $conffn) = tempfile(UNLINK => 1);
     print $conffh $conf;

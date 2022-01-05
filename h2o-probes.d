@@ -43,6 +43,23 @@ provider h2o {
     probe _private_socket_lookup_flags_sni(pid_t tid, uint64_t original_flags, const char *server_name, size_t server_name_len);
 
     /**
+     * socket write at H2O socket abstraction layer
+     */
+    probe socket_write(struct st_h2o_socket_t *sock, struct st_h2o_iovec_t *bufs, size_t bufcnt, void *cb);
+    /**
+     * write complete
+     */
+    probe socket_write_complete(struct st_h2o_socket_t *sock, int success);
+    /**
+     * amount of bytes being written using writev(2)
+     */
+    probe socket_writev(struct st_h2o_socket_t *sock, ssize_t ret);
+    /**
+     * amount of payload being provided to the TLS layer, as well as amount of TLS records being buffered
+     */
+    probe socket_write_tls_record(struct st_h2o_socket_t *sock, size_t write_size, size_t bytes_buffered);
+
+    /**
      * HTTP-level event, indicating that a request has been received.
      */
     probe receive_request(uint64_t conn_id, uint64_t req_id, int http_version);

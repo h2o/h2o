@@ -131,6 +131,10 @@ struct listener_ssl_identity_t {
      */
     SSL_CTX *ossl;
     /**
+     * Certificate chain in PEM format. Used for fetching OCSP response.
+     */
+    h2o_iovec_t cert_chain_pem;
+    /**
      * Picotls context used for accepting TLS 1.3 handshakes. When TLS 1.3 is disabled, this property will be set to NULL.
      */
     ptls_context_t *ptls;
@@ -305,7 +309,6 @@ static struct {
     .launch_time = 0,                /* initialized in main() */
     .threads = NULL,
     .shutdown_requested = 0,
-    .startup_sync_barrier = H2O_BARRIER_INITIALIZER(SIZE_MAX),
     .state = {{0}},
     .crash_handler = "share/h2o/annotate-backtrace-symbols",
     .crash_handler_wait_pipe_close = 0,
@@ -560,12 +563,12 @@ static void build_ssl_dynamic_data(struct listener_ssl_identity_t *identity, h2o
     pthread_mutex_unlock(&identity->dynamic.mutex);
 }
 
-static int get_ocsp_response(const char *cert_fn, const char *cmd, h2o_buffer_t **resp)
+static int get_ocsp_response(const char *cmd, h2o_iovec_t cert_chain_pem, h2o_buffer_t **resp)
 {
-    char *cmd_fullpath = h2o_configurator_get_cmd_path(cmd), *argv[] = {cmd_fullpath, (char *)cert_fn, NULL};
+    char *cmd_fullpath = h2o_configurator_get_cmd_path(cmd), *argv[] = {cmd_fullpath, NULL};
     int child_status, ret;
 
-    if (h2o_read_command(cmd_fullpath, argv, resp, &child_status) != 0) {
+    if (h2o_read_command(cmd_fullpath, argv, cert_chain_pem, resp, &child_status) != 0) {
         fprintf(stderr, "[OCSP Stapling] failed to execute %s:%s\n", cmd, strerror(errno));
         switch (errno) {
         case EACCES:
@@ -615,7 +618,7 @@ static void *ocsp_updater_thread(void *_identity)
         }
         /* fetch the response */
         h2o_sem_wait(&ocsp_updater_semaphore);
-        status = get_ocsp_response(identity->certificate_file, identity->ocsp_stapling->cmd, &resp);
+        status = get_ocsp_response(identity->ocsp_stapling->cmd, identity->cert_chain_pem, &resp);
         h2o_sem_post(&ocsp_updater_semaphore);
         switch (status) {
         case 0: /* success */
@@ -933,19 +936,27 @@ static int ssl_identity_is_equal(struct listener_ssl_config_t *conf, struct list
     return identity->certificate_file == NULL;
 }
 
-static int load_ssl_identity(h2o_configurator_command_t *cmd, SSL_CTX *ssl_ctx, ptls_iovec_t *raw_pubkey, int use_neverbleed,
-                             struct listener_ssl_parsed_identity_t *parsed, yoml_t **client_ca_file)
+static int load_ssl_identity(h2o_configurator_command_t *cmd, SSL_CTX *ssl_ctx, h2o_iovec_t *cert_chain_pem,
+                             ptls_iovec_t *raw_pubkey, int use_neverbleed, struct listener_ssl_parsed_identity_t *parsed,
+                             yoml_t **client_ca_file)
 {
+    *cert_chain_pem = h2o_iovec_init(NULL, 0);
     *raw_pubkey = (ptls_iovec_t){};
 
     /* Load certificate. First, see if we can load the raw public key. If that fails, try to load the certificate chain. */
     size_t raw_pubkey_count;
     if (ptls_load_pem_objects((*parsed->certificate_file)->data.scalar, "PUBLIC KEY", raw_pubkey, 1, &raw_pubkey_count) != 0 ||
         raw_pubkey_count == 0) {
+        /* Load as certificate chain, then, if that succeeds, load PEM directly. */
         if (SSL_CTX_use_certificate_chain_file(ssl_ctx, (*parsed->certificate_file)->data.scalar) != 1) {
             h2o_configurator_errprintf(cmd, *parsed->certificate_file, "failed to load certificate file:%s\n",
                                        (*parsed->certificate_file)->data.scalar);
             ERR_print_errors_cb(on_openssl_print_errors, stderr);
+            return -1;
+        }
+        if ((*cert_chain_pem = h2o_file_read((*parsed->certificate_file)->data.scalar)).base == NULL) {
+            h2o_configurator_errprintf(cmd, *parsed->certificate_file, "failed to load certificate file:%s:%s",
+                                       (*parsed->certificate_file)->data.scalar, strerror(errno));
             return -1;
         }
     }
@@ -975,7 +986,6 @@ static int load_ssl_identity(h2o_configurator_command_t *cmd, SSL_CTX *ssl_ctx, 
             return -1;
         }
     }
-
 
     /* set up client certificate verification if client_ca_file is configured */
     if (client_ca_file != NULL) {
@@ -1270,7 +1280,8 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
 
         /* load identity */
         ptls_iovec_t raw_pubkey;
-        if (load_ssl_identity(cmd, identity->ossl, &raw_pubkey, use_neverbleed, parsed, client_ca_file) != 0)
+        if (load_ssl_identity(cmd, identity->ossl, &identity->cert_chain_pem, &raw_pubkey, use_neverbleed, parsed,
+                              client_ca_file) != 0)
             goto Error;
 
         if (use_picotls) {
@@ -1323,7 +1334,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
             case RUN_MODE_TEST: {
                 h2o_buffer_t *respbuf;
                 fprintf(stderr, "[OCSP Stapling] testing for certificate file:%s\n", identity->certificate_file);
-                switch (get_ocsp_response(identity->certificate_file, ocsp_stapling->cmd, &respbuf)) {
+                switch (get_ocsp_response(ocsp_stapling->cmd, identity->cert_chain_pem, &respbuf)) {
                 case 0:
                     h2o_buffer_dispose(&respbuf);
                     fprintf(stderr, "[OCSP Stapling] stapling works for file:%s\n", identity->certificate_file);
@@ -2478,14 +2489,22 @@ static void dispose_resolve_tag_arg(resolve_tag_arg_t *arg)
     free(arg->node_cache.entries);
 }
 
-static void on_sigterm(int signo)
+static void on_sigterm(int notify_threads)
 {
     conf.shutdown_requested = 1;
-    if (!h2o_barrier_done(&conf.startup_sync_barrier)) {
-        /* initialization hasn't completed yet, exit right away */
-        exit(0);
-    }
-    notify_all_threads();
+    if (notify_threads)
+        notify_all_threads();
+    h2o_set_signal_handler(SIGTERM, SIG_IGN);
+}
+
+static void on_sigterm_set_flag_only(int signo)
+{
+    on_sigterm(0);
+}
+
+static void on_sigterm_set_flag_notify_threads(int signo)
+{
+    on_sigterm(1);
 }
 
 #ifdef LIBC_HAS_BACKTRACE
@@ -2546,7 +2565,7 @@ static void on_sigfatal(int signo)
 
 static void setup_signal_handlers(void)
 {
-    h2o_set_signal_handler(SIGTERM, on_sigterm);
+    h2o_set_signal_handler(SIGTERM, on_sigterm_set_flag_only);
     h2o_set_signal_handler(SIGPIPE, SIG_IGN);
 #ifdef LIBC_HAS_BACKTRACE
     if ((crash_handler_fd = popen_crash_handler()) == -1)
@@ -3088,11 +3107,15 @@ static void *run_loop(void *_thread_index)
     /* and start listening */
     update_listener_state(listeners);
 
-    /* make sure all threads are initialized before starting to serve requests */
-    h2o_barrier_wait(&conf.startup_sync_barrier);
-
-    if (thread_index == 0)
+    /* Wait for all threads to become ready but before letting any of them serve connections, swap the signal handler for graceful
+     * shutdown, check (and exit) if SIGTERM has been received already. */
+    if (h2o_barrier_wait_pre_sync_point(&conf.startup_sync_barrier)) {
+        h2o_set_signal_handler(SIGTERM, on_sigterm_set_flag_notify_threads);
+        if (conf.shutdown_requested)
+            exit(0);
         fprintf(stderr, "h2o server (pid:%d) is ready to serve requests with %zu threads\n", (int)getpid(), conf.thread_map.size);
+    }
+    h2o_barrier_wait_post_sync_point(&conf.startup_sync_barrier);
 
     /* the main loop */
     uint64_t last_buffer_gc_at = 0;
@@ -3107,6 +3130,7 @@ static void *run_loop(void *_thread_index)
         if (last_buffer_gc_at + 1000 < h2o_now(conf.threads[thread_index].ctx.loop)) {
             last_buffer_gc_at = h2o_now(conf.threads[thread_index].ctx.loop);
             h2o_buffer_clear_recycle(0);
+            h2o_mem_clear_recycle(&h2o_socket_ssl_buffer_allocator, 0);
         }
     }
 
