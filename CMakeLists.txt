@@ -98,6 +98,19 @@ return 0;
 }" HAS_PTHREAD_SETAFFINITY_NP)
 CMAKE_POP_CHECK_STATE()
 
+CMAKE_PUSH_CHECK_STATE()
+CHECK_C_SOURCE_COMPILES("
+#include <mach/mach_types.h>
+#include <mach/thread_act.h>
+#include <mach/thread_policy.h>
+#include <pthread.h>
+int main(void)
+{
+thread_affinity_policy_data_t s = {0};
+thread_policy_set(pthread_mach_thread_np(pthread_self()), THREAD_AFFINITY_POLICY, (thread_policy_t)&s, 1);
+}" HAS_THREAD_POLICY_SET)
+CMAKE_POP_CHECK_STATE()
+
 # Find out if libc provices backtrace()
 CMAKE_PUSH_CHECK_STATE()
 FIND_LIBRARY(LIBC_BACKTRACE_LIB "execinfo")
@@ -292,6 +305,9 @@ ENDIF ()
 IF (HAS_PTHREAD_SETAFFINITY_NP)
     SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DH2O_HAS_PTHREAD_SETAFFINITY_NP")
 ENDIF (HAS_PTHREAD_SETAFFINITY_NP)
+IF (HAS_THREAD_POLICY_SET)
+    SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DH2O_HAS_THREAD_POLICY_SET")
+ENDIF ()
 
 # apply compile flags to C and C++
 SET(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS} ${CMAKE_CXX_FLAGS}")
