@@ -191,7 +191,7 @@ INCLUDE_DIRECTORIES(
     deps/picotls/deps/micro-ecc
     deps/picotls/include
     deps/quicly/include
-    deps/yaml/include
+    deps/libyaml/include
     deps/yoml
     ${CMAKE_CURRENT_BINARY_DIR})
 
@@ -308,14 +308,14 @@ SET(CMAKE_CXX_FLAGS_RELEASE  "-O2")
 
 
 SET(LIBYAML_SOURCE_FILES
-    deps/yaml/src/api.c
-    deps/yaml/src/dumper.c
-    deps/yaml/src/emitter.c
-    deps/yaml/src/loader.c
-    deps/yaml/src/parser.c
-    deps/yaml/src/reader.c
-    deps/yaml/src/scanner.c
-    deps/yaml/src/writer.c)
+    deps/libyaml/src/api.c
+    deps/libyaml/src/dumper.c
+    deps/libyaml/src/emitter.c
+    deps/libyaml/src/loader.c
+    deps/libyaml/src/parser.c
+    deps/libyaml/src/reader.c
+    deps/libyaml/src/scanner.c
+    deps/libyaml/src/writer.c)
 
 SET(BROTLI_SOURCE_FILES
     deps/brotli/c/common/dictionary.c

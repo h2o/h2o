@@ -18,3 +18,5 @@ tmp/
 include/h2o/gitrev.h
 
 mruby_config.rb.lock
+
+output/

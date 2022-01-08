@@ -4,6 +4,9 @@
 [submodule "misc/p5-Server-Starter"]
 	path = misc/p5-Server-Starter
 	url = https://github.com/kazuho/p5-Server-Starter.git
+[submodule "misc/p5-net-fastcgi"]
+	path = misc/p5-net-fastcgi
+	url = https://github.com/chansen/p5-net-fastcgi.git
 [submodule "misc/oktavia"]
 	path = misc/oktavia
 	url = https://github.com/shibukawa/oktavia.git
@@ -13,6 +16,9 @@
 [submodule "misc/h2get"]
 	path = misc/h2get
 	url = https://github.com/free-utils-ruby/h2get.git
+[submodule "misc/mruby-mtest"]
+	path = misc/mruby-mtest
+	url = https://github.com/iij/mruby-mtest.git
 [submodule "deps/theft"]
 	path = deps/theft
 	url = https://github.com/silentbicycle/theft
@@ -22,3 +28,24 @@
 [submodule "deps/mruby-file-stat"]
 	path = deps/mruby-file-stat
 	url = https://github.com/ksss/mruby-file-stat.git
+[submodule "deps/mruby-errno"]
+	path = deps/mruby-errno
+	url = https://github.com/iij/mruby-errno.git
+[submodule "deps/hiredis"]
+	path = deps/hiredis
+	url = https://github.com/redis/hiredis.git
+[submodule "deps/quicly"]
+	path = deps/quicly
+	url = https://github.com/h2o/quicly.git
+[submodule "deps/picotls"]
+	path = deps/picotls
+	url = https://github.com/h2o/picotls.git
+[submodule "deps/brotli"]
+	path = deps/brotli
+	url = https://github.com/google/brotli.git
+[submodule "deps/libyaml"]
+	path = deps/libyaml
+	url = https://github.com/yaml/libyaml.git
+[submodule "deps/ssl-conservatory"]
+	path = deps/ssl-conservatory
+	url = https://github.com/iSECPartners/ssl-conservatory.git
