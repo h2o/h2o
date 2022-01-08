@@ -1,9 +1,0 @@
-MRuby::GemBox.new do |conf|
-  conf.gem :core => "mruby-sprintf"
-  conf.gem :core => "mruby-print"
-
-  Dir.glob("#{root}/mrbgems/mruby-*/mrbgem.rake") do |x|
-    g = File.basename File.dirname x
-    conf.gem :core => g unless g =~ /^mruby-(print|sprintf|bin-debugger|test)$/
-  end
-end

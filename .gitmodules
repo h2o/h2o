@@ -16,3 +16,9 @@
 [submodule "deps/theft"]
 	path = deps/theft
 	url = https://github.com/silentbicycle/theft
+[submodule "deps/mruby"]
+	path = deps/mruby
+	url = https://github.com/mruby/mruby.git
+[submodule "deps/mruby-file-stat"]
+	path = deps/mruby-file-stat
+	url = https://github.com/ksss/mruby-file-stat.git

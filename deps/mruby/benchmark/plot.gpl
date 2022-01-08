@@ -1,5 +1,0 @@
-set yrange [0:]
-set terminal pngcairo font 'Sans, 8' lw 1 size 1400,1024
-set xtics rotate by -45
-set style histogram errorbars gap 2 lw 1
-set style fill solid border -1
