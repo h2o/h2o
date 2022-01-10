@@ -49,3 +49,7 @@
 [submodule "deps/ssl-conservatory"]
 	path = deps/ssl-conservatory
 	url = https://github.com/iSECPartners/ssl-conservatory.git
+[submodule "deps/yoml"]
+	path = deps/yoml
+	url = https://github.com/free-utils-cpp/yoml.git
+	branch = master
