@@ -82,3 +82,7 @@
 	path = deps/mruby-json
 	url = https://github.com/mattn/mruby-json.git
 	branch = master
+[submodule "deps/picohttpparser"]
+	path = deps/picohttpparser
+	url = https://github.com/h2o/picohttpparser.git
+	branch = master
