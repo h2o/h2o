@@ -90,3 +90,7 @@
 	path = deps/neverbleed
 	url = https://github.com/h2o/neverbleed.git
 	branch = master
+[submodule "deps/libyrmcds"]
+	path = deps/libyrmcds
+	url = https://github.com/cybozu/libyrmcds.git
+	branch = master
