@@ -70,3 +70,7 @@
 	path = deps/yoml
 	url = https://github.com/h2o/yoml.git
 	branch = master
+[submodule "deps/picotest"]
+	path = deps/picotest
+	url = https://github.com/h2o/picotest.git
+	branch = master
