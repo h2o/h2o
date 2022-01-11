@@ -39,6 +39,7 @@
 #include "h2o.h"
 #include "h2o/mruby_.h"
 #include "mruby/embedded.c.h"
+#include "mruby/numeric.h"
 
 #define STATUS_FALLTHRU 399
 #define FALLTHRU_SET_PREFIX "x-fallthru-set-"
@@ -122,6 +123,30 @@ mrb_value h2o_mruby_to_str(mrb_state *mrb, mrb_value v)
     if (!mrb_string_p(v))
         H2O_MRUBY_EXEC_GUARD({ v = mrb_str_to_str(mrb, v); });
     return v;
+}
+
+static mrb_value
+mrb_Integer(mrb_state *mrb, mrb_value val)
+{
+  if (mrb_nil_p(val)) {
+    mrb_raise(mrb, E_TYPE_ERROR, "can't convert nil into Integer");
+  }
+  switch (mrb_type(val)) {
+#ifndef MRB_WITHOUT_FLOAT
+    case MRB_TT_FLOAT:
+      return mrb_flo_to_fixnum(mrb, val);
+#endif
+
+    case MRB_TT_FIXNUM:
+      return val;
+
+    case MRB_TT_STRING:
+      return mrb_str_to_inum(mrb, val, 0, TRUE);
+
+    default:
+      break;
+  }
+  return mrb_to_int(mrb, val);
 }
 
 mrb_value h2o_mruby_to_int(mrb_state *mrb, mrb_value v)

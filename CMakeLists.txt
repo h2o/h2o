@@ -174,6 +174,10 @@ IF (WITH_DTRACE)
     MESSAGE(STATUS "Enabling USDT support")
 ENDIF ()
 
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/deps/libyaml)
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/deps/brotli)
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/deps/hiredis)
+
 INCLUDE_DIRECTORIES(
     include
     deps/cloexec
@@ -194,6 +198,16 @@ INCLUDE_DIRECTORIES(
     deps/libyaml/include
     deps/yoml
     ${CMAKE_CURRENT_BINARY_DIR})
+
+IF (PKG_CONFIG_FOUND)
+    PKG_CHECK_MODULES(LIBYAML libyaml)
+    IF (LIBYAML_FOUND)
+        INCLUDE_DIRECTORIES(${LIBYAML_INCLUDE_DIRS})
+        LINK_DIRECTORIES(${LIBYAML_LIBRARY_DIRS})
+    ELSE (LIBYAML_FOUND)
+        MESSAGE(STATUS "Got some problem to find libyaml" )
+    ENDIF (LIBYAML_FOUND)
+ENDIF (PKG_CONFIG_FOUND)
 
 IF (PKG_CONFIG_FOUND)
     PKG_CHECK_MODULES(LIBUV libuv>=1.0.0)
@@ -344,11 +358,14 @@ SET(BROTLI_SOURCE_FILES
 
 SET(LIB_SOURCE_FILES
     deps/cloexec/cloexec.c
-    deps/hiredis/async.c
-    deps/hiredis/hiredis.c
-    deps/hiredis/net.c
-    deps/hiredis/read.c
-    deps/hiredis/sds.c
+    #deps/hiredis/async.c
+    #deps/hiredis/hiredis.c
+    #deps/hiredis/net.c
+    #deps/hiredis/read.c
+    #deps/hiredis/sds.c
+    #deps/hiredis/alloc.c
+    #deps/hiredis/dict.c
+    #deps/hiredis/sockcompat.c
     deps/libgkc/gkc.c
     deps/libyrmcds/close.c
     deps/libyrmcds/connect.c
@@ -500,8 +517,8 @@ ENDIF ()
 
 SET(UNIT_TEST_SOURCE_FILES
     ${LIB_SOURCE_FILES}
-    ${LIBYAML_SOURCE_FILES}
-    ${BROTLI_SOURCE_FILES}
+    #${LIBYAML_SOURCE_FILES}
+    #${BROTLI_SOURCE_FILES}
     deps/picotest/picotest.c
     t/00unit/test.c
     t/00unit/lib/common/balancer/least_conn.c
@@ -575,8 +592,9 @@ LIST(REMOVE_ITEM UNIT_TEST_SOURCE_FILES
 
 SET(FUZZED_SOURCE_FILES
     ${LIB_SOURCE_FILES}
-    ${LIBYAML_SOURCE_FILES}
-    ${BROTLI_SOURCE_FILES})
+    #${LIBYAML_SOURCE_FILES}
+    #${BROTLI_SOURCE_FILES}
+    )
 
 # Remove some of quicly files for fuzzing to allow the mockup library to come in
 LIST(REMOVE_ITEM FUZZED_SOURCE_FILES
@@ -632,8 +650,8 @@ ENDIF (WSLAY_FOUND)
 
 TARGET_INCLUDE_DIRECTORIES(libh2o PUBLIC ${OPENSSL_INCLUDE_DIR})
 TARGET_INCLUDE_DIRECTORIES(libh2o-evloop PUBLIC ${OPENSSL_INCLUDE_DIR})
-TARGET_LINK_LIBRARIES(libh2o ${OPENSSL_LIBRARIES} ${CMAKE_DL_LIBS})
-TARGET_LINK_LIBRARIES(libh2o-evloop ${OPENSSL_LIBRARIES} ${CMAKE_DL_LIBS})
+TARGET_LINK_LIBRARIES(libh2o ${OPENSSL_LIBRARIES} ${CMAKE_DL_LIBS} "${CMAKE_CURRENT_BINARY_DIR}/deps/hiredis/libhiredis_static.a")
+TARGET_LINK_LIBRARIES(libh2o-evloop ${OPENSSL_LIBRARIES} ${CMAKE_DL_LIBS} "${CMAKE_CURRENT_BINARY_DIR}/deps/hiredis/libhiredis_static.a")
 IF (BROTLI_FOUND)
     TARGET_LINK_LIBRARIES(libh2o ${BROTLI_DEC_LIBRARIES} ${BROTLI_ENC_LIBRARIES})
     TARGET_LINK_LIBRARIES(libh2o-evloop ${BROTLI_DEC_LIBRARIES} ${BROTLI_ENC_LIBRARIES})
@@ -641,7 +659,7 @@ ENDIF ()
 
 ADD_CUSTOM_COMMAND(
     OUTPUT quicly-tracer.h
-    COMMAND ${PROJECT_SOURCE_DIR}/deps/quicly/misc/probe2trace.pl -a tracer < ${PROJECT_SOURCE_DIR}/deps/quicly/quicly-probes.d > ${CMAKE_CURRENT_BINARY_DIR}/quicly-tracer.h
+    COMMAND perl ${PROJECT_SOURCE_DIR}/deps/quicly/misc/probe2trace.pl -a tracer < ${PROJECT_SOURCE_DIR}/deps/quicly/quicly-probes.d > ${CMAKE_CURRENT_BINARY_DIR}/quicly-tracer.h
     DEPENDS deps/quicly/quicly-probes.d deps/quicly/misc/probe2trace.pl
     VERBATIM)
 
@@ -727,8 +745,9 @@ ENDIF()
 # standalone server directly links to libh2o using evloop
 SET(STANDALONE_SOURCE_FILES
     ${LIB_SOURCE_FILES}
-    ${LIBYAML_SOURCE_FILES}
-    ${BROTLI_SOURCE_FILES}
+    #${LIBYAML_SOURCE_FILES}
+    #${BROTLI_SOURCE_FILES}
+    lib/handler/compress/brotli.c
     deps/neverbleed/neverbleed.c
     src/main.c
     src/ssl.c)
@@ -761,8 +780,9 @@ IF (WITH_MRUBY)
 ENDIF (WITH_MRUBY)
 ADD_EXECUTABLE(h2o ${STANDALONE_SOURCE_FILES})
 SET_TARGET_PROPERTIES(h2o PROPERTIES COMPILE_FLAGS "${STANDALONE_COMPILE_FLAGS}")
-TARGET_INCLUDE_DIRECTORIES(h2o PUBLIC ${OPENSSL_INCLUDE_DIR})
-TARGET_LINK_LIBRARIES(h2o ${OPENSSL_LIBRARIES} ${CMAKE_DL_LIBS})
+TARGET_INCLUDE_DIRECTORIES(h2o PUBLIC ${OPENSSL_INCLUDE_DIR} ${LIBYAML_INCLUDE_DIR} ${BROTLI_DEC_INCLUDE_DIRS} ${BROTLI_ENC_INCLUDE_DIRS})
+TARGET_LINK_LIBRARIES(h2o ${OPENSSL_LIBRARIES} ${CMAKE_DL_LIBS} ${LIBYAML_LIBRARIES} ${BROTLI_DEC_LIBRARIES} ${BROTLI_ENC_LIBRARIES}
+    "${CMAKE_CURRENT_BINARY_DIR}/deps/libyaml/libyaml.a" "${CMAKE_CURRENT_BINARY_DIR}/deps/hiredis/libhiredis_static.a")
 IF (WITH_MRUBY)
     TARGET_INCLUDE_DIRECTORIES(h2o BEFORE PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/deps/mruby/include ${CMAKE_CURRENT_SOURCE_DIR}/deps/mruby-input-stream/src)
     # note: the paths need to be determined before libmruby.flags.mak is generated

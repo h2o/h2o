@@ -68,5 +68,5 @@
 	branch = master
 [submodule "deps/yoml"]
 	path = deps/yoml
-	url = https://github.com/free-utils-cpp/yoml.git
+	url = https://github.com/h2o/yoml.git
 	branch = master
