@@ -86,3 +86,7 @@
 	path = deps/picohttpparser
 	url = https://github.com/h2o/picohttpparser.git
 	branch = master
+[submodule "deps/neverbleed"]
+	path = deps/neverbleed
+	url = https://github.com/h2o/neverbleed.git
+	branch = master
