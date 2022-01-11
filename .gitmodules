@@ -106,3 +106,7 @@
 	path = deps/mruby-env
 	url = https://github.com/iij/mruby-env.git
 	branch = master
+[submodule "deps/mruby-dir"]
+	path = deps/mruby-dir
+	url = https://github.com/iij/mruby-dir.git
+	branch = master
