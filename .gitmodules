@@ -94,3 +94,7 @@
 	path = deps/libyrmcds
 	url = https://github.com/cybozu/libyrmcds.git
 	branch = master
+[submodule "deps/klib"]
+	path = deps/klib
+	url = https://github.com/attractivechaos/klib.git
+	branch = master
