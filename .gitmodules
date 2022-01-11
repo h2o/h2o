@@ -98,3 +98,7 @@
 	path = deps/klib
 	url = https://github.com/attractivechaos/klib.git
 	branch = master
+[submodule "deps/mruby-class-new-fiber-safe"]
+	path = deps/mruby-class-new-fiber-safe
+	url = https://github.com/kazuho/mruby-class-new-fiber-safe.git
+	branch = master
