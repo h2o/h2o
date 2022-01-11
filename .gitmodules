@@ -102,3 +102,7 @@
 	path = deps/mruby-class-new-fiber-safe
 	url = https://github.com/kazuho/mruby-class-new-fiber-safe.git
 	branch = master
+[submodule "deps/mruby-env"]
+	path = deps/mruby-env
+	url = https://github.com/iij/mruby-env.git
+	branch = master
