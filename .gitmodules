@@ -78,3 +78,7 @@
 	path = deps/mruby-input-stream
 	url = https://github.com/takahashim/mruby-input-stream.git
 	branch = master
+[submodule "deps/mruby-json"]
+	path = deps/mruby-json
+	url = https://github.com/mattn/mruby-json.git
+	branch = master
