@@ -2490,8 +2490,6 @@ static int do_decrypt_packet(ptls_cipher_context_t *header_protection,
 
     /* AEAD decryption */
     if ((ret = (*aead_cb)(aead_ctx, *pn, packet, aead_off, &ptlen)) != 0) {
-        if (QUICLY_DEBUG)
-            fprintf(stderr, "%s: aead decryption failure (pn: %" PRIu64 ",code:%d)\n", __FUNCTION__, *pn, ret);
         return ret;
     }
     if (*next_expected_pn <= *pn)
@@ -2529,20 +2527,10 @@ static int decrypt_packet(ptls_cipher_context_t *header_protection,
     if ((packet->octets.base[0] & (QUICLY_PACKET_IS_LONG_HEADER(packet->octets.base[0]) ? QUICLY_LONG_HEADER_RESERVED_BITS
                                                                                         : QUICLY_SHORT_HEADER_RESERVED_BITS)) !=
         0) {
-        if (QUICLY_DEBUG)
-            fprintf(stderr, "%s: non-zero reserved bits (pn: %" PRIu64 ")\n", __FUNCTION__, *pn);
         return QUICLY_TRANSPORT_ERROR_PROTOCOL_VIOLATION;
     }
     if (payload->len == 0) {
-        if (QUICLY_DEBUG)
-            fprintf(stderr, "%s: payload length is zero (pn: %" PRIu64 ")\n", __FUNCTION__, *pn);
         return QUICLY_TRANSPORT_ERROR_PROTOCOL_VIOLATION;
-    }
-
-    if (QUICLY_DEBUG) {
-        char *payload_hex = quicly_hexdump(payload->base, payload->len, 4);
-        fprintf(stderr, "%s: AEAD payload:\n%s", __FUNCTION__, payload_hex);
-        free(payload_hex);
     }
 
     return 0;
