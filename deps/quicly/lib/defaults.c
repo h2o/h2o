@@ -398,13 +398,6 @@ static int default_setup_cipher(quicly_crypto_engine_t *engine, quicly_conn_t *c
         ret = PTLS_ERROR_NO_MEMORY;
         goto Exit;
     }
-    if (QUICLY_DEBUG) {
-        char *secret_hex = quicly_hexdump(secret, hash->digest_size, SIZE_MAX),
-             *hpkey_hex = quicly_hexdump(hpkey, aead->ctr_cipher->key_size, SIZE_MAX);
-        fprintf(stderr, "%s:\n  aead-secret: %s\n  hp-key: %s\n", __FUNCTION__, secret_hex, hpkey_hex);
-        free(secret_hex);
-        free(hpkey_hex);
-    }
 
     ret = 0;
 Exit:

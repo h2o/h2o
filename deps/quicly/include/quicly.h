@@ -46,10 +46,6 @@ extern "C" {
 #include "quicly/cid.h"
 #include "quicly/remote_cid.h"
 
-#ifndef QUICLY_DEBUG
-#define QUICLY_DEBUG 0
-#endif
-
 /* invariants! */
 #define QUICLY_LONG_HEADER_BIT 0x80
 #define QUICLY_QUIC_BIT 0x40
