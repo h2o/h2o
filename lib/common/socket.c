@@ -758,6 +758,10 @@ static size_t generate_tls_records_from_one_vec(h2o_socket_t *sock, const void *
         assert(ret == 0);
     } else {
         int ret = SSL_write(sock->ssl->ossl, input, (int)tls_write_size);
+        /* The error happens if SSL_write is called after SSL_read returns a fatal error (e.g. due to corrupt TCP packet being
+         * received). We might be converting more and more TLS records on this side as read errors occur. */
+        if (ret <= 0)
+            return SIZE_MAX;
         assert(ret == tls_write_size);
     }
 
@@ -783,8 +787,11 @@ static size_t generate_tls_records(h2o_socket_t *sock, h2o_iovec_t **bufs, size_
             init_ssl_output_buffer(sock->ssl);
         size_t bytes_newly_written =
             generate_tls_records_from_one_vec(sock, (*bufs)->base + first_buf_written, (*bufs)->len - first_buf_written);
-        if (bytes_newly_written == 0)
+        if (bytes_newly_written == SIZE_MAX) {
+            return SIZE_MAX;
+        } else if (bytes_newly_written == 0) {
             break;
+        }
         first_buf_written += bytes_newly_written;
         if ((*bufs)->len == first_buf_written) {
             first_buf_written = 0;
