@@ -196,14 +196,21 @@ void do_read_stop(h2o_socket_t *_sock)
     }
 }
 
-static void on_call_write_complete(h2o_timer_t *timer)
+static void on_call_write_success(h2o_timer_t *timer)
 {
     struct st_h2o_uv_socket_t *sock = H2O_STRUCT_FROM_MEMBER(struct st_h2o_uv_socket_t, write_cb_timer, timer);
     on_do_write_complete(&sock->stream._wreq, 0);
 }
 
-static void call_write_complete_delayed(struct st_h2o_uv_socket_t *sock)
+static void on_call_write_error(h2o_timer_t *timer)
 {
+    struct st_h2o_uv_socket_t *sock = H2O_STRUCT_FROM_MEMBER(struct st_h2o_uv_socket_t, write_cb_timer, timer);
+    on_do_write_complete(&sock->stream._wreq, 1);
+}
+
+static void call_write_complete_delayed(struct st_h2o_uv_socket_t *sock, int status)
+{
+    sock->write_cb_timer.cb = status == 0 ? on_call_write_success : on_call_write_error;
     h2o_timer_link(sock->handle->loop, 0, &sock->write_cb_timer);
 }
 
@@ -237,14 +244,20 @@ void do_ssl_write(struct st_h2o_uv_socket_t *sock, int is_first_call, h2o_iovec_
 
     /* generate TLS records */
     size_t first_buf_written = 0;
-    if (!has_pending_ssl_bytes(sock->super.ssl))
-        first_buf_written = generate_tls_records(&sock->super, bufs, bufcnt, 0);
+    if (!has_pending_ssl_bytes(sock->super.ssl) &&
+        (first_buf_written = generate_tls_records(&sock->super, bufs, bufcnt, 0)) == SIZE_MAX) {
+        if (is_first_call) {
+            call_write_complete_delayed(sock, 1);
+        } else {
+            on_do_write_complete(&sock->stream._wreq, 1);
+        }
+    }
 
     if (*bufcnt == 0) {
         /* Bail out if nothing has to be sent */
         if (!has_pending_ssl_bytes(sock->super.ssl)) {
             if (is_first_call) {
-                call_write_complete_delayed(sock);
+                call_write_complete_delayed(sock, 0);
             } else {
                 on_do_write_complete(&sock->stream._wreq, 0);
             }
@@ -278,7 +291,7 @@ void do_write(h2o_socket_t *_sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_socket_
         if (bufcnt > 0) {
             uv_write(&sock->stream._wreq, (uv_stream_t *)sock->handle, (uv_buf_t *)bufs, (int)bufcnt, on_do_write_complete);
         } else {
-            call_write_complete_delayed(sock);
+            call_write_complete_delayed(sock, 0);
         }
     } else {
         do_ssl_write(sock, 1, bufs, bufcnt);
@@ -358,7 +371,7 @@ h2o_socket_t *h2o_uv_socket_create(uv_handle_t *handle, uv_close_cb close_cb)
     sock->handle = handle;
     sock->close_cb = close_cb;
     sock->handle->data = sock;
-    h2o_timer_init(&sock->write_cb_timer, on_call_write_complete);
+    h2o_timer_init(&sock->write_cb_timer, on_call_write_success);
     uint64_t flags = h2o_socket_ebpf_lookup_flags(sock->handle->loop, h2o_socket_ebpf_init_key, &sock->super);
     if ((flags & H2O_EBPF_FLAGS_SKIP_TRACING_BIT) != 0)
         sock->super._skip_tracing = 1;
