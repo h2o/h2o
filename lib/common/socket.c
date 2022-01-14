@@ -766,7 +766,7 @@ static size_t generate_tls_records_from_one_vec(h2o_socket_t *sock, const void *
          */
         assert(ret <= 0 || ret == tls_write_size);
         if (ret <= 0)
-            return 0;
+            return SIZE_MAX;
     }
 
     SOCKET_PROBE(WRITE_TLS_RECORD, sock, tls_write_size, sock->ssl->output.buf.off);
@@ -791,8 +791,11 @@ static size_t generate_tls_records(h2o_socket_t *sock, h2o_iovec_t **bufs, size_
             init_ssl_output_buffer(sock->ssl);
         size_t bytes_newly_written =
             generate_tls_records_from_one_vec(sock, (*bufs)->base + first_buf_written, (*bufs)->len - first_buf_written);
-        if (bytes_newly_written == 0)
+        if (bytes_newly_written == SIZE_MAX) {
+            return SIZE_MAX;
+        } else if (bytes_newly_written == 0) {
             break;
+        }
         first_buf_written += bytes_newly_written;
         if ((*bufs)->len == first_buf_written) {
             first_buf_written = 0;

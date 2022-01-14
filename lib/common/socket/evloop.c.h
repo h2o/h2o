@@ -185,7 +185,7 @@ static size_t write_core(struct st_h2o_evloop_socket_t *sock, h2o_iovec_t **bufs
 
     /* SSL */
     size_t first_buf_written = 0;
-    while (1) {
+    do {
         /* write bytes already encrypted, if any */
         if (has_pending_ssl_bytes(sock->super.ssl)) {
             h2o_iovec_t encbuf = h2o_iovec_init(sock->super.ssl->output.buf.base + sock->super.ssl->output.pending_off,
@@ -207,9 +207,8 @@ static size_t write_core(struct st_h2o_evloop_socket_t *sock, h2o_iovec_t **bufs
         /* bail out if complete */
         if (*bufcnt == 0)
             break;
-        /* convert cleartext input to TLS records */
-        first_buf_written = generate_tls_records(&sock->super, bufs, bufcnt, first_buf_written);
-    }
+        /* convert more cleartext to TLS records if possible, or bail out on fatal error */
+    } while ((first_buf_written = generate_tls_records(&sock->super, bufs, bufcnt, first_buf_written)) != SIZE_MAX);
 
     return first_buf_written;
 }
