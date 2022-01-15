@@ -26,6 +26,9 @@ my $injectaddr = do {
     };
 };
 
+plan skip_all => "injectaddr does not work (maybe ASAN is on?)" unless
+    $injectaddr->(sub { system("ls > /dev/null") == 0 });
+
 # IPv6 is not available on docker on GitHub Actions; see https://twitter.com/kazuho/status/1465310656303796224
 my $v6_port = create_listener("::1")
     or plan skip_all => "IPv6 may not be available:$!";
