@@ -1843,6 +1843,9 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
         free(conn);
         return ret;
     }
+    if (ctx->super.quic_stats != NULL) {
+        ++ctx->super.quic_stats->packet_processed;
+    }
     ++ctx->super.next_cid.master_id; /* FIXME check overlap */
     h2o_linklist_insert(&ctx->accept_ctx->ctx->http3._conns, &conn->_conns);
     h2o_http3_setup(&conn->h3, qconn);

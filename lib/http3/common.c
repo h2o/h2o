@@ -525,6 +525,10 @@ static void process_packets(h2o_quic_ctx_t *ctx, quicly_address_t *destaddr, qui
 
     assert(num_packets != 0);
 
+    if (ctx->quic_stats != NULL) {
+        ctx->quic_stats->packet_received += num_packets;
+    }
+
 #if H2O_USE_DTRACE
     if (PTLS_UNLIKELY(H2O_H3_PACKET_RECEIVE_ENABLED())) {
         for (size_t i = 0; i != num_packets; ++i)
@@ -671,6 +675,11 @@ static void process_packets(h2o_quic_ctx_t *ctx, quicly_address_t *destaddr, qui
                     fprintf(stderr, "%s: `quicly_receive()` returned ret:%d\n", __func__, ret);
                     conn->callbacks->destroy_connection(conn);
                     return;
+                }
+                if (ret != QUICLY_ERROR_PACKET_IGNORED && ret != QUICLY_ERROR_DECRYPTION_FAILED) {
+                    if (ctx->quic_stats != NULL) {
+                        ++ctx->quic_stats->packet_processed;
+                    }
                 }
             }
         }
@@ -976,8 +985,16 @@ Validation_Success:;
     return 0;
 }
 
+void h2o_http3_server_init_context(h2o_context_t *h2o, h2o_quic_ctx_t *ctx, h2o_loop_t *loop, h2o_socket_t *sock,
+                                   quicly_context_t *quic, h2o_quic_accept_cb acceptor,
+                                   h2o_quic_notify_connection_update_cb notify_conn_update, uint8_t use_gso)
+{
+    return h2o_quic_init_context(ctx, loop, sock, quic, acceptor, notify_conn_update, use_gso, &h2o->quic_stats);
+}
+
 void h2o_quic_init_context(h2o_quic_ctx_t *ctx, h2o_loop_t *loop, h2o_socket_t *sock, quicly_context_t *quic,
-                           h2o_quic_accept_cb acceptor, h2o_quic_notify_connection_update_cb notify_conn_update, uint8_t use_gso)
+                           h2o_quic_accept_cb acceptor, h2o_quic_notify_connection_update_cb notify_conn_update, uint8_t use_gso,
+                           h2o_quic_stats_t *quic_stats)
 {
     assert(quic->stream_open != NULL);
 
@@ -991,6 +1008,7 @@ void h2o_quic_init_context(h2o_quic_ctx_t *ctx, h2o_loop_t *loop, h2o_socket_t *
         .notify_conn_update = notify_conn_update,
         .acceptor = acceptor,
         .use_gso = use_gso,
+        .quic_stats = quic_stats,
     };
     ctx->sock.sock->data = ctx;
     ctx->sock.addrlen = h2o_socket_getsockname(ctx->sock.sock, (void *)&ctx->sock.addr);

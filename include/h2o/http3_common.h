@@ -149,6 +149,17 @@ typedef int (*h2o_quic_forward_packets_cb)(h2o_quic_ctx_t *ctx, const uint64_t *
 typedef int (*h2o_quic_preprocess_packet_cb)(h2o_quic_ctx_t *ctx, struct msghdr *msghdr, quicly_address_t *destaddr,
                                              quicly_address_t *srcaddr, uint8_t *ttl);
 
+typedef struct st_h2o_quic_stats_t {
+    /**
+     * number of quic packets received
+     */
+    uint64_t packet_received;
+    /**
+     * number of quic packets successfully used for a connection
+     */
+    uint64_t packet_processed;
+} h2o_quic_stats_t;
+
 struct st_h2o_quic_ctx_t {
     /**
      * the event loop
@@ -207,6 +218,10 @@ struct st_h2o_quic_ctx_t {
      * preprocessor that rewrites a forwarded datagram (optional)
      */
     h2o_quic_preprocess_packet_cb preprocess_packet;
+    /**
+     * quic stats
+     */
+    h2o_quic_stats_t *quic_stats;
 };
 
 typedef struct st_h2o_quic_conn_callbacks_t {
@@ -331,8 +346,13 @@ int h2o_http3_read_frame(h2o_http3_read_frame_t *frame, int is_client, uint64_t 
 /**
  * initializes the context
  */
+void h2o_http3_server_init_context(h2o_context_t *h2o, h2o_quic_ctx_t *ctx, h2o_loop_t *loop, h2o_socket_t *sock,
+                                   quicly_context_t *quic, h2o_quic_accept_cb acceptor,
+                                   h2o_quic_notify_connection_update_cb notify_conn_update, uint8_t use_gso);
+
 void h2o_quic_init_context(h2o_quic_ctx_t *ctx, h2o_loop_t *loop, h2o_socket_t *sock, quicly_context_t *quic,
-                           h2o_quic_accept_cb acceptor, h2o_quic_notify_connection_update_cb notify_conn_update, uint8_t use_gso);
+                           h2o_quic_accept_cb acceptor, h2o_quic_notify_connection_update_cb notify_conn_update, uint8_t use_gso,
+                           h2o_quic_stats_t *quic_stats);
 /**
  *
  */

@@ -822,6 +822,11 @@ struct st_h2o_context_t {
     struct st_h2o_quic_aggregated_stats_t quic;
 
     /**
+     * aggregated quic stats
+     */
+    h2o_quic_stats_t quic_stats;
+
+    /**
      * pointer to per-module configs
      */
     void **_module_configs;
