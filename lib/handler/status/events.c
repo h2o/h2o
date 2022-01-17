@@ -94,6 +94,7 @@ static h2o_iovec_t events_status_final(void *priv, h2o_globalconf_t *gconf, h2o_
 #define QUIC_VAL(fld, _unused) , esc->quic_stats.quicly.fld
 #define BUFSIZE (8 * 1024)
     ret.base = h2o_mem_alloc_pool(&req->pool, char, BUFSIZE);
+    /* clang-format off */
     ret.len = snprintf(ret.base, BUFSIZE, ",\n"
                                           " \"status-errors.400\": %" PRIu64 ",\n"
                                           " \"status-errors.403\": %" PRIu64 ",\n"
@@ -137,6 +138,7 @@ static h2o_iovec_t events_status_final(void *priv, h2o_globalconf_t *gconf, h2o_
                        esc->http3.packet_forwarded, esc->http3.forwarded_packet_received, esc->quic_stats.packet_received, esc->quic_stats.packet_processed
                        H2O_QUIC_AGGREGATED_STATS_APPLY(QUIC_VAL),
                        esc->ssl_errors, h2o_mmap_errors);
+    /* clang-format on */
     assert(ret.len < BUFSIZE);
 #undef H1_AGG_ERR
 #undef H2_AGG_ERR
