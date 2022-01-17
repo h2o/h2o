@@ -1744,7 +1744,7 @@ static void on_h3_destroy(h2o_quic_conn_t *h3_)
     H2O_PROBE_CONN0(H3S_DESTROY, &conn->super);
 
     if (quicly_get_stats(h3_->quic, &stats) == 0) {
-#define ACC(fld, _unused) conn->super.ctx->quic.fld += stats.fld;
+#define ACC(fld, _unused) conn->super.ctx->quic_stats.quicly.fld += stats.fld;
         H2O_QUIC_AGGREGATED_STATS_APPLY(ACC);
 #undef ACC
     }

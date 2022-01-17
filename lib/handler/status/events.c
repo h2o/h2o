@@ -38,7 +38,6 @@ struct st_events_status_ctx_t {
         uint64_t forwarded_packet_received;
     } http3;
     h2o_quic_stats_t quic_stats;
-    struct st_h2o_quic_aggregated_stats_t quic;
     pthread_mutex_t mutex;
 };
 
@@ -66,7 +65,7 @@ static void events_status_per_thread(void *priv, h2o_context_t *ctx)
     esc->http3.forwarded_packet_received += ctx->http3.events.forwarded_packet_received;
     esc->quic_stats.packet_received += ctx->quic_stats.packet_received;
     esc->quic_stats.packet_processed += ctx->quic_stats.packet_processed;
-#define ACC(fld, _unused) esc->quic.fld += ctx->quic.fld;
+#define ACC(fld, _unused) esc->quic_stats.quicly.fld += ctx->quic_stats.quicly.fld;
     H2O_QUIC_AGGREGATED_STATS_APPLY(ACC);
 #undef ACC
 
@@ -92,7 +91,7 @@ static h2o_iovec_t events_status_final(void *priv, h2o_globalconf_t *gconf, h2o_
 #define H1_AGG_ERR(status_) esc->emitted_status_errors[H2O_STATUS_ERROR_##status_]
 #define H2_AGG_ERR(err_) esc->h2_protocol_level_errors[-H2O_HTTP2_ERROR_##err_]
 #define QUIC_FMT(_unused, label) " \"quic." label "\": %" PRIu64 ",\n"
-#define QUIC_VAL(fld, _unused) , esc->quic.fld
+#define QUIC_VAL(fld, _unused) , esc->quic_stats.quicly.fld
 #define BUFSIZE (8 * 1024)
     ret.base = h2o_mem_alloc_pool(&req->pool, char, BUFSIZE);
     ret.len = snprintf(ret.base, BUFSIZE, ",\n"
