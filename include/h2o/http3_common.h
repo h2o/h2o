@@ -421,12 +421,6 @@ void h2o_http3_on_create_unidirectional_stream(quicly_stream_t *qs);
  */
 int h2o_http3_read_frame(h2o_http3_read_frame_t *frame, int is_client, uint64_t stream_type, const uint8_t **src,
                          const uint8_t *src_end, const char **err_desc);
-/**
- * initializes the context
- */
-void h2o_http3_server_init_context(h2o_context_t *h2o, h2o_quic_ctx_t *ctx, h2o_loop_t *loop, h2o_socket_t *sock,
-                                   quicly_context_t *quic, h2o_quic_accept_cb acceptor,
-                                   h2o_quic_notify_connection_update_cb notify_conn_update, uint8_t use_gso);
 
 void h2o_quic_init_context(h2o_quic_ctx_t *ctx, h2o_loop_t *loop, h2o_socket_t *sock, quicly_context_t *quic,
                            h2o_quic_accept_cb acceptor, h2o_quic_notify_connection_update_cb notify_conn_update, uint8_t use_gso,
