@@ -658,7 +658,7 @@ struct st_h2o_context_t {
         /**
          * link-list of h2o_http1_conn_t
          */
-        h2o_linklist_t _inactive_conns;
+        h2o_linklist_t _idle_conns;
 
         struct {
             uint64_t request_timeouts;
@@ -674,7 +674,7 @@ struct st_h2o_context_t {
         /**
          * link-list of h2o_http2_conn_t
          */
-        h2o_linklist_t _inactive_conns;
+        h2o_linklist_t _idle_conns;
 
         /**
          * timeout entry used for graceful shutdown
@@ -712,7 +712,7 @@ struct st_h2o_context_t {
         /**
          * link-list of h2o_http3_server_conn_t
          */
-        h2o_linklist_t _inactive_conns;
+        h2o_linklist_t _idle_conns;
         /**
          * timeout entry used for graceful shutdown
          */

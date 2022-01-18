@@ -83,7 +83,7 @@ static void enqueue_goaway(h2o_http2_conn_t *conn, int errnum, h2o_iovec_t addit
 static void graceful_shutdown_close_stragglers(h2o_timer_t *entry)
 {
     h2o_context_t *ctx = H2O_STRUCT_FROM_MEMBER(h2o_context_t, http2._graceful_shutdown_timeout, entry);
-    h2o_linklist_t *conn_list[] = {&ctx->http2._active_conns, &ctx->http2._inactive_conns};
+    h2o_linklist_t *conn_list[] = {&ctx->http2._active_conns, &ctx->http2._idle_conns};
     H2O_CONN_LIST_FOREACH(h2o_http2_conn_t *conn, conn_list, {
         /* We've sent two GOAWAY frames, close the remaining connections */
         close_connection(conn);
@@ -95,7 +95,7 @@ static void graceful_shutdown_resend_goaway(h2o_timer_t *entry)
     h2o_context_t *ctx = H2O_STRUCT_FROM_MEMBER(h2o_context_t, http2._graceful_shutdown_timeout, entry);
     int do_close_stragglers = 0;
 
-    h2o_linklist_t *conn_list[] = {&ctx->http2._active_conns, &ctx->http2._inactive_conns};
+    h2o_linklist_t *conn_list[] = {&ctx->http2._active_conns, &ctx->http2._idle_conns};
     H2O_CONN_LIST_FOREACH(h2o_http2_conn_t *conn, conn_list, {
         if (conn->state < H2O_HTTP2_CONN_STATE_HALF_CLOSED) {
             enqueue_goaway(conn, H2O_HTTP2_ERROR_NONE, (h2o_iovec_t){NULL});
@@ -133,7 +133,7 @@ static void initiate_graceful_shutdown(h2o_context_t *ctx)
         return;
     ctx->http2._graceful_shutdown_timeout.cb = graceful_shutdown_resend_goaway;
 
-    h2o_linklist_t *conn_list[] = {&ctx->http2._active_conns, &ctx->http2._inactive_conns};
+    h2o_linklist_t *conn_list[] = {&ctx->http2._active_conns, &ctx->http2._idle_conns};
     H2O_CONN_LIST_FOREACH(h2o_http2_conn_t *conn, conn_list, {
         if (conn->state < H2O_HTTP2_CONN_STATE_HALF_CLOSED) {
             h2o_http2_encode_goaway_frame(&conn->_write.buf, INT32_MAX, H2O_HTTP2_ERROR_NONE,
@@ -1849,7 +1849,7 @@ static void push_path(h2o_req_t *src_req, const char *abspath, size_t abspath_le
 
 static int foreach_request(h2o_context_t *ctx, int (*cb)(h2o_req_t *req, void *cbdata), void *cbdata)
 {
-    h2o_linklist_t *conn_list[] = {&ctx->http2._active_conns, &ctx->http2._inactive_conns};
+    h2o_linklist_t *conn_list[] = {&ctx->http2._active_conns, &ctx->http2._idle_conns};
     H2O_CONN_LIST_FOREACH(h2o_http2_conn_t *conn, conn_list, {
         h2o_http2_stream_t *stream;
         kh_foreach_value(conn->streams, stream, {

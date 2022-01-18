@@ -182,7 +182,7 @@ static void set_req_io_timeout(struct st_h2o_http1_conn_t *conn, uint64_t timeou
     h2o_linklist_unlink(&conn->super._conns);
     if (cb != NULL) {
         h2o_timer_link(conn->super.ctx->loop, timeout, &conn->_io_timeout_entry);
-        h2o_linklist_insert(&conn->super.ctx->http1._inactive_conns, &conn->super._conns);
+        h2o_linklist_insert(&conn->super.ctx->http1._idle_conns, &conn->super._conns);
     } else {
         h2o_linklist_insert(&conn->super.ctx->http1._active_conns, &conn->super._conns);
     }
@@ -1209,7 +1209,7 @@ static h2o_iovec_t log_request_index(h2o_req_t *req)
 
 static int foreach_request(h2o_context_t *ctx, int (*cb)(h2o_req_t *req, void *cbdata), void *cbdata)
 {
-    h2o_linklist_t *conn_list[] = {&ctx->http1._active_conns, &ctx->http1._inactive_conns};
+    h2o_linklist_t *conn_list[] = {&ctx->http1._active_conns, &ctx->http1._idle_conns};
     H2O_CONN_LIST_FOREACH(struct st_h2o_http1_conn_t *conn, conn_list, {
         int ret = cb(&conn->req, cbdata);
         if (ret != 0)
@@ -1263,7 +1263,7 @@ void h2o_http1_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval 
     /* init properties that need to be non-zero */
     conn->sock = sock;
     sock->data = conn;
-    h2o_linklist_insert(&ctx->ctx->http1._inactive_conns, &conn->super._conns);
+    h2o_linklist_insert(&ctx->ctx->http1._idle_conns, &conn->super._conns);
 
     H2O_PROBE_CONN(H1_ACCEPT, &conn->super, conn->sock, &conn->super, h2o_conn_get_uuid(&conn->super));
 

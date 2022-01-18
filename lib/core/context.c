@@ -94,11 +94,11 @@ void h2o_context_init(h2o_context_t *ctx, h2o_loop_t *loop, h2o_globalconf_t *co
     ctx->filecache = h2o_filecache_create(config->filecache.capacity);
 
     h2o_linklist_init_anchor(&ctx->http1._active_conns);
-    h2o_linklist_init_anchor(&ctx->http1._inactive_conns);
+    h2o_linklist_init_anchor(&ctx->http1._idle_conns);
     h2o_linklist_init_anchor(&ctx->http2._active_conns);
-    h2o_linklist_init_anchor(&ctx->http2._inactive_conns);
+    h2o_linklist_init_anchor(&ctx->http2._idle_conns);
     h2o_linklist_init_anchor(&ctx->http3._active_conns);
-    h2o_linklist_init_anchor(&ctx->http3._inactive_conns);
+    h2o_linklist_init_anchor(&ctx->http3._idle_conns);
     ctx->proxy.client_ctx.loop = loop;
     ctx->proxy.client_ctx.io_timeout = ctx->globalconf->proxy.io_timeout;
     ctx->proxy.client_ctx.connect_timeout = ctx->globalconf->proxy.connect_timeout;
@@ -201,9 +201,9 @@ int h2o_context_close_idle_connections(h2o_context_t *ctx, int max_connections_t
 
     int closed = 0;
     h2o_linklist_t *conn_list[] = {
-        &ctx->http1._inactive_conns,
-        &ctx->http2._inactive_conns,
-        &ctx->http3._inactive_conns,
+        &ctx->http1._idle_conns,
+        &ctx->http2._idle_conns,
+        &ctx->http3._idle_conns,
     };
     H2O_CONN_LIST_FOREACH(h2o_conn_t * conn, conn_list, {
         struct timeval now = h2o_gettimeofday(ctx->loop);

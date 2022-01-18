@@ -41,7 +41,7 @@ subtest 'the stats of active and inactive connections in HTTP/1.1' => sub {
     my $jresp = decode_json("$resp");
     is $jresp->{'connections'}, 4, 'connections';
     is $jresp->{'active-connections'}, 1, 'active-connections';
-    is $jresp->{'inactive-connections'}, 3, 'inactive-connections';
+    is $jresp->{'idle-connections'}, 3, 'idle-connections';
 };
 
 subtest 'connection cluing' => sub {
