@@ -1744,7 +1744,7 @@ static void on_h3_destroy(h2o_quic_conn_t *h3_)
     H2O_PROBE_CONN0(H3S_DESTROY, &conn->super);
 
     if (quicly_get_stats(h3_->quic, &stats) == 0) {
-#define ACC(fld, _unused) conn->super.ctx->quic.fld += stats.fld;
+#define ACC(fld, _unused) conn->super.ctx->quic_stats.quicly.fld += stats.fld;
         H2O_QUIC_AGGREGATED_STATS_APPLY(ACC);
 #undef ACC
     }
@@ -1770,6 +1770,13 @@ static void on_h3_destroy(h2o_quic_conn_t *h3_)
 
     /* free memory */
     free(conn);
+}
+
+void h2o_http3_server_init_context(h2o_context_t *h2o, h2o_quic_ctx_t *ctx, h2o_loop_t *loop, h2o_socket_t *sock,
+                                   quicly_context_t *quic, h2o_quic_accept_cb acceptor,
+                                   h2o_quic_notify_connection_update_cb notify_conn_update, uint8_t use_gso)
+{
+    return h2o_quic_init_context(ctx, loop, sock, quic, acceptor, notify_conn_update, use_gso, &h2o->quic_stats);
 }
 
 h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_address_t *destaddr, quicly_address_t *srcaddr,
@@ -1842,6 +1849,9 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
         h2o_http3_dispose_conn(&conn->h3);
         free(conn);
         return ret;
+    }
+    if (ctx->super.quic_stats != NULL) {
+        ++ctx->super.quic_stats->packet_processed;
     }
     ++ctx->super.next_cid.master_id; /* FIXME check overlap */
     h2o_linklist_insert(&ctx->accept_ctx->ctx->http3._conns, &conn->_conns);
