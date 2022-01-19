@@ -2828,6 +2828,13 @@ static void on_socketclose(void *data)
     num_connections(-1);
 }
 
+static void close_idle_connections(h2o_context_t *ctx)
+{
+    int excess_connections = (num_connections(0) - conf.soft_connection_limit) / conf.thread_map.size;
+    if (excess_connections > 0) {
+        h2o_context_close_idle_connections(ctx, excess_connections, conf.soft_connection_limit_min_age);
+    }
+}
 static void on_accept(h2o_socket_t *listener, const char *err)
 {
     struct listener_ctx_t *ctx = listener->data;
@@ -2841,10 +2848,7 @@ static void on_accept(h2o_socket_t *listener, const char *err)
 
     do {
         h2o_socket_t *sock;
-        int excess_connections = (num_connections(0) - conf.soft_connection_limit) / conf.thread_map.size;
-        if (excess_connections > 0) {
-            h2o_context_close_idle_connections(ctx->accept_ctx.ctx, excess_connections, conf.soft_connection_limit_min_age);
-        }
+        close_idle_connections(ctx->accept_ctx.ctx);
 
         if (num_connections(1) >= conf.max_connections) {
             /* The accepting socket is disactivated before entering the next in `run_loop`.
@@ -2913,6 +2917,9 @@ static int validate_token(h2o_http3_server_ctx_t *ctx, struct sockaddr *remote, 
 static h2o_quic_conn_t *on_http3_accept(h2o_quic_ctx_t *_ctx, quicly_address_t *destaddr, quicly_address_t *srcaddr,
                                         quicly_decoded_packet_t *packet)
 {
+    h2o_http3_server_ctx_t *ctx = (void *)_ctx;
+    close_idle_connections(ctx->accept_ctx->ctx);
+
     /* adjust number of connections, or drop the incoming packet when handling too many connections */
     if (num_connections(1) >= conf.max_connections) {
         num_connections(-1);
@@ -2924,7 +2931,6 @@ static h2o_quic_conn_t *on_http3_accept(h2o_quic_ctx_t *_ctx, quicly_address_t *
         return NULL;
     }
 
-    h2o_http3_server_ctx_t *ctx = (void *)_ctx;
     struct init_ebpf_key_info_t ebpf_key_info = {
         .local = &destaddr->sa,
         .remote = &srcaddr->sa,

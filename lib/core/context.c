@@ -205,9 +205,10 @@ int h2o_context_close_idle_connections(h2o_context_t *ctx, int max_connections_t
         if (now.tv_sec - conn->connected_at.tv_sec < min_age)
             continue;
         if (conn->callbacks->close_idle_connection == NULL) {
-            fprintf(stderr, "Unexpected! Missing .close_idle_connection()"); // FIXME
+            fprintf(stderr, "Unexpected! Missing h2o_conn_t `close_idle_connection` callback");
+            return 0;
         }
-        if (conn->callbacks->close_idle_connection && conn->callbacks->close_idle_connection(conn))
+        if (conn->callbacks->close_idle_connection(conn))
             closed++;
         if (closed == max_connections_to_close)
             return closed;

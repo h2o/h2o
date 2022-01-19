@@ -105,6 +105,7 @@ static void graceful_shutdown_resend_goaway(h2o_timer_t *entry)
 static int close_idle_connection(h2o_conn_t *_conn)
 {
     h2o_http2_conn_t *conn = (void *)_conn;
+    enqueue_goaway(conn, H2O_HTTP2_ERROR_NONE, h2o_iovec_init(H2O_STRLIT("idle timeout")));
     close_connection(conn);
     return 1;
 }
@@ -148,6 +149,16 @@ static void on_idle_timeout(h2o_timer_t *entry)
 
 static void update_idle_timeout(h2o_http2_conn_t *conn)
 {
+    h2o_linklist_unlink(&conn->super._conns);
+    if (kh_size(conn->streams) == conn->num_streams.priority.open + conn->num_streams.priority.half_closed +
+                                      conn->num_streams.pull.open + conn->num_streams.pull.half_closed +
+                                      conn->num_streams.push.open + conn->num_streams.push.half_closed) {
+        // all streams are idle
+        h2o_linklist_insert(&conn->super.ctx->_idle_conns, &conn->super._conns);
+    } else {
+        h2o_linklist_insert(&conn->super.ctx->_active_conns, &conn->super._conns);
+    }
+
     /* do nothing touch anything if write is in progress */
     if (conn->_write.buf_in_flight != NULL) {
         assert(h2o_timer_is_linked(&conn->_timeout_entry));

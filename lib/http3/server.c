@@ -454,6 +454,11 @@ static void set_state(struct st_h2o_http3_server_stream_t *stream, enum h2o_http
     default:
         break;
     }
+    /* all streams are either waiting on initial or finished processing */
+    if (quicly_num_streams_by_group(conn->h3.super.quic, 0, 0) == conn->num_streams.recv_headers + conn->num_streams.close_wait) {
+        h2o_linklist_unlink(&conn->super._conns);
+        h2o_linklist_insert(&conn->super.ctx->_idle_conns, &conn->super._conns);
+    }
 }
 
 /**
@@ -917,6 +922,11 @@ static void handle_buffered_input(struct st_h2o_http3_server_stream_t *stream, i
 static void on_receive(quicly_stream_t *qs, size_t off, const void *input, size_t len)
 {
     struct st_h2o_http3_server_stream_t *stream = qs->data;
+
+    /* start handling, mark as active */
+    struct st_h2o_http3_server_conn_t *conn = get_conn(stream);
+    h2o_linklist_unlink(&conn->super._conns);
+    h2o_linklist_insert(&conn->super.ctx->_active_conns, &conn->super._conns);
 
     /* save received data (FIXME avoid copying if possible; see hqclient.c) */
     h2o_http3_update_recvbuf(&stream->recvbuf.buf, off, input, len);
