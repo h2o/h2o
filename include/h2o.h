@@ -744,11 +744,6 @@ struct st_h2o_context_t {
     } ssl;
 
     /**
-     * aggregated quicly stats
-     */
-    struct st_h2o_quic_aggregated_stats_t quic;
-
-    /**
      * aggregated quic stats
      */
     h2o_quic_stats_t quic_stats;
