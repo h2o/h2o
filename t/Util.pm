@@ -15,7 +15,7 @@ use POSIX ":sys_wait_h";
 use Path::Tiny;
 use Protocol::HTTP2::Connection;
 use Protocol::HTTP2::Constants;
-use Scope::Guard qw(scope_guard);
+use Scope::Guard;
 use Test::More;
 use Time::HiRes qw(sleep gettimeofday tv_interval);
 use Carp;
@@ -193,7 +193,7 @@ sub spawn_server {
                 sleep 0.1;
             }
         }
-        my $guard = scope_guard(sub {
+        my $guard = guard(sub {
             return if $$ != $ppid;
             print STDERR "killing $args{argv}->[0]... ";
             my $sig = 'TERM';
@@ -453,7 +453,7 @@ sub one_shot_http_upstream {
     die "fork failed" unless defined $pid;
     if ($pid != 0) {
         close $listen;
-        my $guard = scope_guard(sub {
+        my $guard = guard(sub {
             kill 'KILL', $pid;
             while (waitpid($pid, WNOHANG) != $pid) {}
         });
