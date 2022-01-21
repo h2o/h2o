@@ -486,7 +486,7 @@ sub wait_debugger {
 sub make_guard {
     my $code = shift;
     return Scope::Guard->new(sub {
-        local $?;
+        # local $?;
         $code->();
     });
 }
