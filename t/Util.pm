@@ -486,7 +486,7 @@ sub wait_debugger {
 sub make_guard {
     my $code = shift;
     return Scope::Guard->new(sub {
-        # local $?;
+        local $?;
         $code->();
     });
 }
@@ -640,7 +640,7 @@ package H2ologTracer {
             return $bytes;
         };
 
-        my $guard = make_guard(sub {
+        my $guard = t::Util::make_guard(sub {
             if (waitpid($tracer_pid, WNOHANG) == 0) {
                 Test::More::diag "killing h2olog[$tracer_pid] with SIGTERM";
                 kill("TERM", $tracer_pid)
