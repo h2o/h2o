@@ -1041,7 +1041,7 @@ struct st_h2o_conn_t {
             _node_next = _node->next; \
             h2o_conn_t *_h2o_conn = H2O_STRUCT_FROM_MEMBER(h2o_conn_t, _conns, _node); \
             decl_var = (void *)_h2o_conn; \
-            do block while (0); \
+            { block } \
         } \
     } \
   } while (0)
