@@ -46,7 +46,7 @@ my ($unix_socket_file, $unix_socket_guard) = do {
     unlink $fn;
     +(
         $fn,
-        Scope::Guard->new(sub {
+        guard(sub {
             unlink $fn;
         }),
     );

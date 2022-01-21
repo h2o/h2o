@@ -46,6 +46,7 @@ our @EXPORT = qw(
     run_with_h2get_simple
     one_shot_http_upstream
     wait_debugger
+    guard
     spawn_forked
     spawn_h2_server
     find_blackhole_ip
@@ -482,6 +483,14 @@ sub wait_debugger {
     undef;
 }
 
+sub guard {
+    my $code = shift;
+    return Scope::Guard->new(sub {
+        local $?;
+        $code->();
+    });
+}
+
 sub spawn_forked {
     my ($code) = @_;
 
@@ -501,7 +510,7 @@ sub spawn_forked {
                 kill 'KILL', $pid;
                 undef $pid;
             },
-            guard => Scope::Guard->new(sub { $upstream->{kill}->() }),
+            guard => guard(sub { $upstream->{kill}->() }),
             stdout => $pin,
             stderr => $pin2,
         };
@@ -631,7 +640,7 @@ package H2ologTracer {
             return $bytes;
         };
 
-        my $guard = Scope::Guard->new(sub {
+        my $guard = guard(sub {
             if (waitpid($tracer_pid, WNOHANG) == 0) {
                 Test::More::diag "killing h2olog[$tracer_pid] with SIGTERM";
                 kill("TERM", $tracer_pid)
