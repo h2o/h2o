@@ -164,7 +164,7 @@ sub spawn_plack_server {
     while (!check_port($port)) {
         sleep 0.1;
     }
-    guard(sub {
+    make_guard(sub {
         kill 'TERM', $upstream_pid;
         while (waitpid($upstream_pid, 0) != $upstream_pid) {}
     });

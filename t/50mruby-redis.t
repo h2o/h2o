@@ -490,7 +490,7 @@ sub spawn_command_timeout_mock {
         }
     }
 
-    my $guard = guard(sub { kill 'KILL', $pid; });
+    my $guard = make_guard(sub { kill 'KILL', $pid; });
     return (+{ guard => $guard }, $port);
 }
 

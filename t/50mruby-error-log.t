@@ -197,7 +197,7 @@ EOT
                 $client->close;
                 exit 0;
             };
-            my $upstream = guard(sub {
+            my $upstream = make_guard(sub {
                 kill 'TERM', $upstream_pid;
                 while (waitpid($upstream_pid, 0) != $upstream_pid) {}
             });

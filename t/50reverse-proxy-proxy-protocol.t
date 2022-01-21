@@ -30,7 +30,7 @@ print STDERR "**** yeoh";
             }
         }
     }
-    guard(sub {
+    make_guard(sub {
         kill 'TERM', $pid;
     });
 };
