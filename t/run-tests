@@ -27,17 +27,26 @@ while (@scripts or %pids) {
     }
 
     # wait for tasks to exit
-    my $kid = wait;
+    my $kid = do {
+        local $SIG{ALRM} = sub { die };
+        alarm(600);
+        my $kid = eval { wait };
+        alarm(0);
+    };
+    if ($@) {
+        for my $kid (keys %pids) {
+            my $script = delete $pids{$kid};
+            print colorize("# $script --------------------------------\n", 'cyan');
+            print_log($script);
+            print colorize("# $script failed (timeout)\n", 'bright_red');
+            push @failures, $script;
+        }
+        next;
+    }
     if ($pids{$kid}) {
         my $script = delete $pids{$kid};
         print colorize("# $script --------------------------------\n", 'cyan');
-
-        # print the output of the perl script being run
-        my $logfn = get_logfn($script);
-        open my $logfh, "<", $logfn
-            or die "failed to open script:$logfn:$!";
-        unlink $logfn;
-        print do { local $/; <$logfh> };
+        print_log($script);
 
         # add to the failed list, if necessary
         if (WIFEXITED($?) and WEXITSTATUS($?) == 0) {
@@ -91,6 +100,16 @@ sub get_logfn {
     my $script = shift;
     $script =~ s{/}{__}g;
     "$tempdir/$script.out";
+}
+
+sub print_log {
+    my $script = shift;
+    # print the output of the perl script being run
+    my $logfn = get_logfn($script);
+    open my $logfh, "<", $logfn
+        or die "failed to open script:$logfn:$!";
+    unlink $logfn;
+    print do { local $/; <$logfh> };
 }
 
 sub colorize {
