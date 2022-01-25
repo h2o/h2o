@@ -2,7 +2,6 @@ use strict;
 use warnings;
 use File::Temp qw(tempdir);
 use Net::EmptyPort qw(check_port empty_port);
-use Scope::Guard qw(scope_guard);
 use Test::Requires qw(Plack::Runner Starlet);
 use Test::More;
 use Time::HiRes qw(sleep);
@@ -165,7 +164,7 @@ sub spawn_plack_server {
     while (!check_port($port)) {
         sleep 0.1;
     }
-    scope_guard(sub {
+    make_guard(sub {
         kill 'TERM', $upstream_pid;
         while (waitpid($upstream_pid, 0) != $upstream_pid) {}
     });

@@ -15,7 +15,7 @@ use POSIX ":sys_wait_h";
 use Path::Tiny;
 use Protocol::HTTP2::Connection;
 use Protocol::HTTP2::Constants;
-use Scope::Guard qw(scope_guard);
+use Scope::Guard;
 use Test::More;
 use Time::HiRes qw(sleep gettimeofday tv_interval);
 use Carp;
@@ -46,6 +46,7 @@ our @EXPORT = qw(
     run_with_h2get_simple
     one_shot_http_upstream
     wait_debugger
+    make_guard
     spawn_forked
     spawn_h2_server
     find_blackhole_ip
@@ -192,7 +193,7 @@ sub spawn_server {
                 sleep 0.1;
             }
         }
-        my $guard = scope_guard(sub {
+        my $guard = make_guard(sub {
             return if $$ != $ppid;
             print STDERR "killing $args{argv}->[0]... ";
             my $sig = 'TERM';
@@ -452,7 +453,7 @@ sub one_shot_http_upstream {
     die "fork failed" unless defined $pid;
     if ($pid != 0) {
         close $listen;
-        my $guard = scope_guard(sub {
+        my $guard = make_guard(sub {
             kill 'KILL', $pid;
             while (waitpid($pid, WNOHANG) != $pid) {}
         });
@@ -482,6 +483,14 @@ sub wait_debugger {
     undef;
 }
 
+sub make_guard {
+    my $code = shift;
+    return Scope::Guard->new(sub {
+        local $?;
+        $code->();
+    });
+}
+
 sub spawn_forked {
     my ($code) = @_;
 
@@ -501,7 +510,7 @@ sub spawn_forked {
                 kill 'KILL', $pid;
                 undef $pid;
             },
-            guard => Scope::Guard->new(sub { $upstream->{kill}->() }),
+            guard => make_guard(sub { $upstream->{kill}->() }),
             stdout => $pin,
             stderr => $pin2,
         };
@@ -631,7 +640,7 @@ package H2ologTracer {
             return $bytes;
         };
 
-        my $guard = Scope::Guard->new(sub {
+        my $guard = t::Util::make_guard(sub {
             if (waitpid($tracer_pid, WNOHANG) == 0) {
                 Test::More::diag "killing h2olog[$tracer_pid] with SIGTERM";
                 kill("TERM", $tracer_pid)
