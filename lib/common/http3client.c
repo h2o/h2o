@@ -522,9 +522,8 @@ static int handle_input_expect_headers(struct st_h2o_http3client_req_t *req, con
     /* handle 1xx */
     if (100 <= status && status <= 199) {
         if (status == 101) {
-            static const char unexpected_101[] = "unexpected 101";
-            notify_response_error(req, unexpected_101);
-            *err_desc = unexpected_101;
+            *err_desc = "unexpected 101";
+            notify_response_error(req, *err_desc);
             return H2O_HTTP3_ERROR_GENERAL_PROTOCOL;
         }
         if (frame_is_eos) {
