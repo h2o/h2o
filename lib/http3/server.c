@@ -1238,7 +1238,7 @@ static int handle_input_expect_headers(struct st_h2o_http3_server_stream_t *stre
 
     /* validate semantic requirement */
     if (!h2o_req_validate_pseudo_headers(&stream->req)) {
-        *err_desc = "Invalid pseudo headers";
+        *err_desc = "invalid pseudo headers";
         return H2O_HTTP3_ERROR_GENERAL_PROTOCOL;
     }
 
