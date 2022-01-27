@@ -513,7 +513,7 @@ static int handle_input_expect_headers(struct st_h2o_http3client_req_t *req, con
 
     if (datagram_flow_id.base != NULL) {
         if (!req->offered_datagram_flow_id) {
-            *err_desc = "No offered datagram flow id";
+            *err_desc = "no offered datagram-flow-id";
             return H2O_HTTP3_ERROR_GENERAL_PROTOCOL;
         }
         /* TODO validate the returned value */
