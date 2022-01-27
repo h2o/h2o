@@ -504,21 +504,28 @@ static int handle_input_expect_headers(struct st_h2o_http3client_req_t *req, con
             return 0;
         }
         notify_response_error(req, *err_desc != NULL ? *err_desc : "qpack error");
+        if (*err_desc == NULL) {
+            *err_desc = "qpack error";
+        }
         return H2O_HTTP3_ERROR_GENERAL_PROTOCOL; /* FIXME */
     }
     if (header_ack_len != 0)
         h2o_http3_send_qpack_header_ack(&req->conn->super, header_ack, header_ack_len);
 
     if (datagram_flow_id.base != NULL) {
-        if (!req->offered_datagram_flow_id)
+        if (!req->offered_datagram_flow_id) {
+            *err_desc = "No offered datagram flow id";
             return H2O_HTTP3_ERROR_GENERAL_PROTOCOL;
+        }
         /* TODO validate the returned value */
     }
 
     /* handle 1xx */
     if (100 <= status && status <= 199) {
         if (status == 101) {
-            notify_response_error(req, "unexpected 101");
+            static const char unexpected_101[] = "unexpected 101";
+            notify_response_error(req, unexpected_101);
+            *err_desc = unexpected_101;
             return H2O_HTTP3_ERROR_GENERAL_PROTOCOL;
         }
         if (frame_is_eos) {

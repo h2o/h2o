@@ -1144,8 +1144,10 @@ static int handle_input_expect_headers_process_connect(struct st_h2o_http3_serve
         /* CONNECT-UDP */
         if (datagram_flow_id_field->base != NULL) {
             /* check if it can be used */
-            if (!h2o_http3_can_use_h3_datagram(&get_conn(stream)->h3))
+            if (!h2o_http3_can_use_h3_datagram(&get_conn(stream)->h3)) {
+                *err_desc = "unexpected h3 datagram";
                 return H2O_HTTP3_ERROR_GENERAL_PROTOCOL;
+            }
             /* TODO implement proper parsing */
             datagram_flow_id = 0;
             for (const char *p = datagram_flow_id_field->base; p != datagram_flow_id_field->base + datagram_flow_id_field->len;
@@ -1235,8 +1237,10 @@ static int handle_input_expect_headers(struct st_h2o_http3_server_stream_t *stre
         return handle_input_expect_headers_send_http_error(stream, h2o_send_error_400, "Invalid Request", *err_desc, err_desc);
 
     /* validate semantic requirement */
-    if (!h2o_req_validate_pseudo_headers(&stream->req))
+    if (!h2o_req_validate_pseudo_headers(&stream->req)) {
+        *err_desc = "Invalid pseudo headers";
         return H2O_HTTP3_ERROR_GENERAL_PROTOCOL;
+    }
 
     /* check if content-length is within the permitted bounds */
     if (stream->req.content_length != SIZE_MAX && stream->req.content_length > conn->super.ctx->globalconf->max_request_entity_size)
