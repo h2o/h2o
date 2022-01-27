@@ -503,10 +503,9 @@ static int handle_input_expect_headers(struct st_h2o_http3client_req_t *req, con
             req->handle_input = NULL; /* FIXME */
             return 0;
         }
-        notify_response_error(req, *err_desc != NULL ? *err_desc : "qpack error");
-        if (*err_desc == NULL) {
+        if (*err_desc == NULL)
             *err_desc = "qpack error";
-        }
+        notify_response_error(req, *err_desc);
         return H2O_HTTP3_ERROR_GENERAL_PROTOCOL; /* FIXME */
     }
     if (header_ack_len != 0)
