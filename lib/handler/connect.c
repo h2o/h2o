@@ -533,9 +533,11 @@ static void tcp_on_read(h2o_socket_t *_sock, const char *err)
         h2o_iovec_t vec = h2o_iovec_init(self->sock->input->bytes, self->sock->input->size);
         h2o_send(self->src_req, &vec, 1, H2O_SEND_STATE_IN_PROGRESS);
     } else {
-        /* unidirectional close is signalled using H2O_SEND_STATE_FINAL, but the write side remains open */
-        self->read_closed = 1;
-        h2o_send(self->src_req, NULL, 0, H2O_SEND_STATE_FINAL);
+        if (self->read_closed) {
+            /* unidirectional close is signalled using H2O_SEND_STATE_FINAL, but the write side remains open */
+            self->read_closed = 1;
+            h2o_send(self->src_req, NULL, 0, H2O_SEND_STATE_FINAL);
+        }
     }
 }
 
@@ -550,8 +552,10 @@ static void tcp_on_proceed(h2o_generator_t *_self, h2o_req_t *req)
         reset_io_timeout(self);
         h2o_socket_read_start(self->sock, tcp_on_read);
     } else {
-        self->read_closed = 1;
-        h2o_send(self->src_req, NULL, 0, H2O_SEND_STATE_FINAL);
+        if (!self->read_closed) {
+            self->read_closed = 1;
+            h2o_send(self->src_req, NULL, 0, H2O_SEND_STATE_FINAL);
+        }
     }
 }
 
@@ -765,8 +769,10 @@ static void udp_on_proceed(h2o_generator_t *_self, h2o_req_t *req)
         reset_io_timeout(self);
         h2o_socket_read_start(self->sock, udp_on_read);
     } else {
-        self->read_closed = 1;
-        h2o_send(self->src_req, NULL, 0, H2O_SEND_STATE_FINAL);
+        if (!self->read_closed) {
+            self->read_closed = 1;
+            h2o_send(self->src_req, NULL, 0, H2O_SEND_STATE_FINAL);
+        }
     }
 }
 
