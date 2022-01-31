@@ -93,12 +93,8 @@ void h2o_context_init(h2o_context_t *ctx, h2o_loop_t *loop, h2o_globalconf_t *co
     h2o_multithread_register_receiver(ctx->queue, &ctx->receivers.hostinfo_getaddr, h2o_hostinfo_getaddr_receiver);
     ctx->filecache = h2o_filecache_create(config->filecache.capacity);
 
-    h2o_linklist_init_anchor(&ctx->http1._active_conns);
-    h2o_linklist_init_anchor(&ctx->http1._idle_conns);
-    h2o_linklist_init_anchor(&ctx->http2._active_conns);
-    h2o_linklist_init_anchor(&ctx->http2._idle_conns);
-    h2o_linklist_init_anchor(&ctx->http3._active_conns);
-    h2o_linklist_init_anchor(&ctx->http3._idle_conns);
+    h2o_linklist_init_anchor(&ctx->_active_conns);
+    h2o_linklist_init_anchor(&ctx->_idle_conns);
     ctx->proxy.client_ctx.loop = loop;
     ctx->proxy.client_ctx.io_timeout = ctx->globalconf->proxy.io_timeout;
     ctx->proxy.client_ctx.connect_timeout = ctx->globalconf->proxy.connect_timeout;
@@ -175,12 +171,13 @@ void h2o_context_dispose(h2o_context_t *ctx)
 void h2o_context_request_shutdown(h2o_context_t *ctx)
 {
     ctx->shutdown_requested = 1;
-    if (ctx->globalconf->http1.callbacks.request_shutdown != NULL)
-        ctx->globalconf->http1.callbacks.request_shutdown(ctx);
-    if (ctx->globalconf->http2.callbacks.request_shutdown != NULL)
-        ctx->globalconf->http2.callbacks.request_shutdown(ctx);
-    if (ctx->globalconf->http3.callbacks.request_shutdown != NULL)
-        ctx->globalconf->http3.callbacks.request_shutdown(ctx);
+
+    h2o_linklist_t *conn_list[] = {&ctx->_active_conns, &ctx->_idle_conns};
+    H2O_CONN_LIST_FOREACH(h2o_conn_t * conn, conn_list, {
+        if (conn->callbacks->request_shutdown != NULL) {
+            conn->callbacks->request_shutdown(conn);
+        }
+    });
 }
 
 void h2o_context_update_timestamp_string_cache(h2o_context_t *ctx)
@@ -201,9 +198,7 @@ int h2o_context_close_idle_connections(h2o_context_t *ctx, int max_connections_t
 
     int closed = 0;
     h2o_linklist_t *conn_list[] = {
-        &ctx->http1._idle_conns,
-        &ctx->http2._idle_conns,
-        &ctx->http3._idle_conns,
+        &ctx->_idle_conns,
     };
     H2O_CONN_LIST_FOREACH(h2o_conn_t * conn, conn_list, {
         struct timeval now = h2o_gettimeofday(ctx->loop);

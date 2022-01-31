@@ -220,6 +220,10 @@ struct st_h2o_http2_conn_t {
         struct timeval settings_sent_at;
         struct timeval settings_acked_at;
     } timestamps;
+    /**
+     * timeout entry used for graceful shutdown
+     */
+    h2o_timer_t _graceful_shutdown_timeout;
 };
 
 /* connection */

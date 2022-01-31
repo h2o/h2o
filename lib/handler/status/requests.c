@@ -69,12 +69,16 @@ static void requests_status_per_thread(void *priv, h2o_context_t *ctx)
         return;
 
     h2o_buffer_init(&cbdata.buffer, &h2o_socket_buffer_prototype);
-    if (ctx->globalconf->http1.callbacks.foreach_request(ctx, collect_req_status, &cbdata) != 0 ||
-        ctx->globalconf->http2.callbacks.foreach_request(ctx, collect_req_status, &cbdata) != 0 ||
-        ctx->globalconf->http3.callbacks.foreach_request(ctx, collect_req_status, &cbdata) != 0) {
-        h2o_buffer_dispose(&cbdata.buffer);
-        return;
-    }
+
+    h2o_linklist_t *conn_list[] = {&ctx->_active_conns, &ctx->_idle_conns};
+    H2O_CONN_LIST_FOREACH(h2o_conn_t * conn, conn_list, {
+        if (conn->callbacks->foreach_request != NULL) {
+            if (conn->callbacks->foreach_request(conn, collect_req_status, &cbdata) != 0) {
+                h2o_buffer_dispose(&cbdata.buffer);
+                return;
+            }
+        }
+    });
 
     /* concat JSON elements */
     if (cbdata.buffer->size != 0) {

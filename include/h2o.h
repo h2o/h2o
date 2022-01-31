@@ -308,11 +308,6 @@ struct st_h2o_hostconf_t {
     } http2;
 };
 
-typedef struct st_h2o_protocol_callbacks_t {
-    void (*request_shutdown)(h2o_context_t *ctx);
-    int (*foreach_request)(h2o_context_t *ctx, int (*cb)(h2o_req_t *req, void *cbdata), void *cbdata);
-} h2o_protocol_callbacks_t;
-
 typedef h2o_iovec_t (*final_status_handler_cb)(void *ctx, h2o_globalconf_t *gconf, h2o_req_t *req);
 typedef const struct st_h2o_status_handler_t {
     h2o_iovec_t name;
@@ -386,10 +381,6 @@ struct st_h2o_globalconf_t {
          * a boolean value indicating whether or not to upgrade to HTTP/2
          */
         int upgrade_to_http2;
-        /**
-         * list of callbacks
-         */
-        h2o_protocol_callbacks_t callbacks;
     } http1;
 
     struct {
@@ -423,10 +414,6 @@ struct st_h2o_globalconf_t {
          * conditions for latency optimization
          */
         h2o_socket_latency_optimization_conditions_t latency_optimization;
-        /**
-         * list of callbacks
-         */
-        h2o_protocol_callbacks_t callbacks;
         /* */
         h2o_iovec_t origin_frame;
     } http2;
@@ -456,10 +443,6 @@ struct st_h2o_globalconf_t {
          * a boolean indicating if UDP GSO should be used when possible
          */
         uint8_t use_gso : 1;
-        /**
-         * the callbacks
-         */
-        h2o_protocol_callbacks_t callbacks;
     } http3;
 
     struct {
@@ -649,16 +632,15 @@ struct st_h2o_context_t {
      * flag indicating if shutdown has been requested
      */
     int shutdown_requested;
-
+    /**
+     * link-list of h2o_conn_t
+     */
+    h2o_linklist_t _active_conns;
+    /**
+     * link-list of h2o_conn_t
+     */
+    h2o_linklist_t _idle_conns;
     struct {
-        /**
-         * link-list of h2o_http1_conn_t
-         */
-        h2o_linklist_t _active_conns;
-        /**
-         * link-list of h2o_http1_conn_t
-         */
-        h2o_linklist_t _idle_conns;
 
         struct {
             uint64_t request_timeouts;
@@ -667,19 +649,6 @@ struct st_h2o_context_t {
     } http1;
 
     struct {
-        /**
-         * link-list of h2o_http2_conn_t
-         */
-        h2o_linklist_t _active_conns;
-        /**
-         * link-list of h2o_http2_conn_t
-         */
-        h2o_linklist_t _idle_conns;
-
-        /**
-         * timeout entry used for graceful shutdown
-         */
-        h2o_timer_t _graceful_shutdown_timeout;
         struct {
             /**
              * counter for http2 errors internally emitted by h2o
@@ -705,18 +674,6 @@ struct st_h2o_context_t {
     } http2;
 
     struct {
-        /**
-         * link-list of h2o_http3_server_conn_t
-         */
-        h2o_linklist_t _active_conns;
-        /**
-         * link-list of h2o_http3_server_conn_t
-         */
-        h2o_linklist_t _idle_conns;
-        /**
-         * timeout entry used for graceful shutdown
-         */
-        h2o_timer_t _graceful_shutdown_timeout;
         struct {
             /**
              * number of packets forwarded to another node in a cluster
@@ -942,6 +899,14 @@ typedef struct st_h2o_conn_callbacks_t {
      * close connection if idle
      */
     int (*close_idle_connection)(h2o_conn_t *conn);
+    /**
+     * shutdown of connection is requested (optional)
+     */
+    void (*request_shutdown)(h2o_conn_t *conn);
+    /**
+     * for each request (optional)
+     */
+    int (*foreach_request)(h2o_conn_t *conn, int (*cb)(h2o_req_t *req, void *cbdata), void *cbdata);
     /**
      * returns number of requests inflight (optional, only supported by H2, H3)
      */
