@@ -1947,15 +1947,8 @@ static void graceful_shutdown_resend_goaway(h2o_timer_t *entry)
 static int close_idle_connection(h2o_conn_t *_conn)
 {
     struct st_h2o_http3_server_conn_t *conn = (void *)_conn;
-    if (conn->h3.state < H2O_HTTP3_CONN_STATE_HALF_CLOSED && quicly_get_state(conn->h3.super.quic) == QUICLY_STATE_CONNECTED) {
-        /* advertise the maximum stream ID to indicate that we will no longer accept new requests.
-         * HTTP/3 draft section 5.2.8 --
-         * "An endpoint that is attempting to gracefully shut down a connection can send a GOAWAY frame with a value set to the
-         * maximum possible value (2^62-4 for servers, 2^62-1 for clients). This ensures that the peer stops creating new
-         * requests or pushes." */
-        h2o_http3_send_goaway_frame(&conn->h3, (UINT64_C(1) << 62) - 4);
-    }
-    h2o_quic_close_connection(&conn->h3.super, 0, "shutting down");
+    h2o_http3_send_shutdown_goaway_frame(&conn->h3);
+    h2o_quic_close_connection(&conn->h3.super, H2O_HTTP3_ERROR_EXCESSIVE_LOAD, "shutting down");
     return 1;
 }
 
@@ -1968,16 +1961,8 @@ static void initiate_graceful_shutdown(h2o_conn_t *_conn)
         return;
     conn->_graceful_shutdown_timeout.cb = graceful_shutdown_resend_goaway;
 
-    /* There is a moment where the control stream is already closed while st_h2o_http3_server_conn_t is not.
-     * Check QUIC connection state to skip sending GOAWAY in such a case. */
-    if (conn->h3.state < H2O_HTTP3_CONN_STATE_HALF_CLOSED && quicly_get_state(conn->h3.super.quic) == QUICLY_STATE_CONNECTED) {
-        /* advertise the maximum stream ID to indicate that we will no longer accept new requests.
-         * HTTP/3 draft section 5.2.8 --
-         * "An endpoint that is attempting to gracefully shut down a connection can send a GOAWAY frame with a value set to the
-         * maximum possible value (2^62-4 for servers, 2^62-1 for clients). This ensures that the peer stops creating new
-         * requests or pushes." */
-        h2o_http3_send_goaway_frame(&conn->h3, (UINT64_C(1) << 62) - 4);
-    }
+    h2o_http3_send_shutdown_goaway_frame(&conn->h3);
+
     h2o_timer_link(conn->super.ctx->loop, 1000, &conn->_graceful_shutdown_timeout);
 }
 
