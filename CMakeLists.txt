@@ -19,7 +19,7 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 # IN THE SOFTWARE.
 
-CMAKE_MINIMUM_REQUIRED(VERSION 2.8.12)
+CMAKE_MINIMUM_REQUIRED(VERSION 3.1)
 CMAKE_POLICY(SET CMP0003 NEW)
 
 PROJECT(h2o)
@@ -77,26 +77,9 @@ __sync_add_and_fetch(&a, 1);
 return 0;
 }" ARCH_SUPPORTS_64BIT_ATOMICS)
 
-CMAKE_PUSH_CHECK_STATE()
-SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -pthread")
-CHECK_C_SOURCE_COMPILES("
-#define _GNU_SOURCE
-#include <sched.h>
-#include <pthread.h>
-int main(void) {
-#ifndef __NetBSD__
-cpu_set_t s;
-CPU_ZERO(&s);
-pthread_setaffinity_np(0, sizeof(s), &s);
-#else
-cpuset_t *s = cpuset_create();
-cpuset_zero(s);
-pthread_setaffinity_np(0, cpuset_size(s), s);
-cpuset_destroy(s);
-#endif
-return 0;
-}" HAS_PTHREAD_SETAFFINITY_NP)
-CMAKE_POP_CHECK_STATE()
+set(CMAKE_THREAD_PREFER_PTHREAD TRUE)
+set(THREADS_PREFER_PTHREAD_FLAG TRUE)
+find_package(Threads REQUIRED)
 
 # Find out if libc provices backtrace()
 CMAKE_PUSH_CHECK_STATE()
