@@ -770,7 +770,6 @@ static void on_timeout(struct st_h2o_http1_conn_t *conn)
         conn->req.res.reason = "Request Timeout";
     }
 
-    assert(conn->sock->input->size == 0);
     close_idle_connection(&conn->super);
 }
 
