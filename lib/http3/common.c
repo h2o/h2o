@@ -23,12 +23,12 @@
 #define __APPLE_USE_RFC_3542 /* to use IPV6_PKTINFO */
 #endif
 #include <errno.h>
+#include <sys/types.h>
 #include <netinet/in.h>
 #include <netinet/udp.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <sys/socket.h>
-#include <sys/types.h>
 #include "picotls/openssl.h"
 #include "h2o/string_.h"
 #include "h2o/http3_common.h"
