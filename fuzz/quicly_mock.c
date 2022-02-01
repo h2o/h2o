@@ -326,8 +326,11 @@ int quicly_is_destination(quicly_conn_t *conn, struct sockaddr *dest_addr, struc
 
 uint32_t quicly_num_streams_by_group(quicly_conn_t *conn, int uni, int locally_initiated)
 {
-    assert(0 && "unimplemented");
-    return 0;
+    int server_initiated = quicly_is_client(conn) != locally_initiated;
+    int stream_id = uni * 2 + server_initiated;
+    struct st_quicly_conn_streamgroup_state_t *state =
+        get_streamgroup_state(conn, !quicly_stream_is_client_initiated(stream_id), quicly_stream_is_unidirectional(stream_id));
+    return state->num_streams;
 }
 
 int quicly_get_delivery_rate(quicly_conn_t *conn, quicly_rate_t *delivery_rate)
