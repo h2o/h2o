@@ -25,6 +25,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/types.h>
 #include <netinet/udp.h>
 #include "h2o.h"
 #include "h2o/configurator.h"
