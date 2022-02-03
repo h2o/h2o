@@ -45,7 +45,7 @@ RUN apt-get install --yes \
 # install curl 7.57.0 because t/50fastcgi.t depends on it.
 RUN apt-get install --yes libnghttp2-dev \
 	&& wget --no-verbose -O - https://curl.haxx.se/download/curl-7.57.0.tar.gz | tar xzf - \
-	&& (cd curl-7.57.0 && ./configure --prefix=/usr/local --without-brotli --with-nghttp2 --disable-shared && make && sudo make install)
+	&& (cd curl-7.57.0 && ./configure --prefix=/usr/local --without-brotli --with-nghttp2 --disable-shared && make && make install)
 
 # perl
 RUN apt-get install --yes \
@@ -61,7 +61,7 @@ RUN apt-get install --yes \
 	libwww-perl \
 	libio-socket-ssl-perl
 ENV PERL_CPANM_OPT="--mirror https://cpan.metacpan.org/"
-RUN sudo cpanm -n Test::More Starlet Protocol::HTTP2 Net::DNS::Nameserver Test::TCP
+RUN cpanm -n Test::More Starlet Protocol::HTTP2 Net::DNS::Nameserver Test::TCP
 
 # h2spec
 RUN curl -Ls https://github.com/i110/h2spec/releases/download/v2.2.0-4e8cc7e/h2spec_linux_amd64.tar.gz | tar zx -C /usr/local/bin
