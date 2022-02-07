@@ -191,12 +191,12 @@ void h2o_context_update_timestamp_string_cache(h2o_context_t *ctx)
     h2o_time2str_log(ctx->_timestamp_cache.value->log, ctx->_timestamp_cache.tv_at.tv_sec);
 }
 
-int h2o_context_close_idle_connections(h2o_context_t *ctx, int max_connections_to_close, int min_age)
+size_t h2o_context_close_idle_connections(h2o_context_t *ctx, size_t max_connections_to_close, int min_age)
 {
     if (max_connections_to_close <= 0)
         return 0;
 
-    int closed = 0;
+    size_t closed = 0;
     h2o_linklist_t *conn_list[] = {
         &ctx->_idle_conns,
     };

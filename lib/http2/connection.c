@@ -102,7 +102,7 @@ static void graceful_shutdown_resend_goaway(h2o_timer_t *entry)
     }
 }
 
-static int close_idle_connection(h2o_conn_t *_conn)
+static size_t close_idle_connection(h2o_conn_t *_conn)
 {
     h2o_http2_conn_t *conn = (void *)_conn;
     enqueue_goaway(conn, H2O_HTTP2_ERROR_NONE, h2o_iovec_init(H2O_STRLIT("idle timeout")));

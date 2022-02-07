@@ -898,7 +898,7 @@ typedef struct st_h2o_conn_callbacks_t {
     /**
      * returns number of closed idle connections
      */
-    int (*close_idle_connection)(h2o_conn_t *conn);
+    size_t (*close_idle_connection)(h2o_conn_t *conn);
     /**
      * shutdown of connection is requested (optional)
      */
@@ -1687,7 +1687,7 @@ void h2o_context_update_timestamp_string_cache(h2o_context_t *ctx);
  * Closes at most @max_connections_to_close connections that have been inactive for @min_age seconds
  * @return number of closed connections
  */
-int h2o_context_close_idle_connections(h2o_context_t *ctx, int max_connections_to_close, int min_age);
+size_t h2o_context_close_idle_connections(h2o_context_t *ctx, size_t max_connections_to_close, int min_age);
 /**
  * returns per-module context set
  */
