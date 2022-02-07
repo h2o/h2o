@@ -49,6 +49,9 @@
 #include <sys/uio.h>
 #include <sys/un.h>
 #include <sys/wait.h>
+#ifdef __FreeBSD__
+#include <pthread_np.h>
+#endif
 #ifdef LIBCAP_FOUND
 #include <sys/capability.h>
 #include <sys/prctl.h>
@@ -97,6 +100,10 @@
 #define H2O_SO_REUSEPORT SO_REUSEPORT_LB
 #else
 #define H2O_USE_REUSEPORT 0
+#endif
+
+#if defined(__linux__) || defined(__FreeBSD__) || defined(__NetBSD__)
+#define H2O_HAS_PTHREAD_SETAFFINITY_NP 1
 #endif
 
 #define H2O_DEFAULT_NUM_NAME_RESOLUTION_THREADS 32
@@ -3040,14 +3047,9 @@ static void *run_loop(void *_thread_index)
                                       h2o_memcached_receiver);
 
     if (conf.thread_map.entries[thread_index] >= 0) {
-#ifdef H2O_HAS_PTHREAD_SETAFFINITY_NP
-#ifndef __NetBSD__
-        cpu_set_t cpu_set;
-        CPU_ZERO(&cpu_set);
-        CPU_SET(conf.thread_map.entries[thread_index], &cpu_set);
-        if (pthread_setaffinity_np(pthread_self(), sizeof(cpu_set), &cpu_set) != 0)
-#else
+#if H2O_HAS_PTHREAD_SETAFFINITY_NP
         int r;
+#ifdef __NetBSD__
         cpuset_t *cpu_set = cpuset_create();
         if (!cpu_set) {
             h2o_fatal("internal error; thread pinning failed at creation");
@@ -3056,9 +3058,17 @@ static void *run_loop(void *_thread_index)
         cpuset_set(conf.thread_map.entries[thread_index], cpu_set);
         r = pthread_setaffinity_np(pthread_self(), cpuset_size(cpu_set), cpu_set);
         cpuset_destroy(cpu_set);
-        if (r != 0)
+#else
+#if defined(__linux__)
+        cpu_set_t cpu_set;
+#else
+        cpuset_t cpu_set;
 #endif
-        {
+        CPU_ZERO(&cpu_set);
+        CPU_SET(conf.thread_map.entries[thread_index], &cpu_set);
+        r = pthread_setaffinity_np(pthread_self(), sizeof(cpu_set), &cpu_set);
+#endif
+        if (r != 0) {
             static int once;
             if (__sync_fetch_and_add(&once, 1) == 0) {
                 fprintf(stderr, "[warning] failed to set bind to CPU:%d\n", conf.thread_map.entries[thread_index]);
