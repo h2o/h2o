@@ -1208,6 +1208,11 @@ static int foreach_request(h2o_conn_t *_conn, int (*cb)(h2o_req_t *req, void *cb
     return cb(&conn->req, cbdata);
 }
 
+static void initiate_graceful_shutdown(h2o_conn_t *_conn)
+{
+    /* note: nothing special needs to be done for handling graceful shutdown */
+}
+
 static const h2o_conn_callbacks_t h1_callbacks = {
     .get_sockname = get_sockname,
     .get_peername = get_peername,
@@ -1215,7 +1220,7 @@ static const h2o_conn_callbacks_t h1_callbacks = {
     .skip_tracing = skip_tracing,
     .close_idle_connection = close_idle_connection,
     .foreach_request = foreach_request,
-    .request_shutdown = NULL, /* note: nothing special needs to be done for handling graceful shutdown */
+    .request_shutdown = initiate_graceful_shutdown,
     .log_ = {{
         .transport =
             {

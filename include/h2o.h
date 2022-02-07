@@ -900,7 +900,7 @@ typedef struct st_h2o_conn_callbacks_t {
      */
     size_t (*close_idle_connection)(h2o_conn_t *conn);
     /**
-     * shutdown of connection is requested (optional)
+     * shutdown of connection is requested
      */
     void (*request_shutdown)(h2o_conn_t *conn);
     /**
