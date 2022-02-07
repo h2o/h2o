@@ -464,8 +464,6 @@ SET(LIB_SOURCE_FILES
 
     lib/http1.c
 
-    lib/tunnel.c
-
     lib/http2/cache_digests.c
     lib/http2/casper.c
     lib/http2/connection.c
@@ -1074,3 +1072,13 @@ IF ("${VERSION_PRERELEASE}" STREQUAL "-DEV")
         ENDIF (TARGET h2olog)
     ENDIF ()
 ENDIF ()
+
+# injectaddr.so
+IF (CMAKE_SYSTEM_NAME STREQUAL "Linux" OR APPLE)
+    ADD_LIBRARY(injectaddr SHARED t/injectaddr.c)
+    SET_TARGET_PROPERTIES(injectaddr PROPERTIES EXCLUDE_FROM_ALL 1)
+    IF (CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        TARGET_LINK_LIBRARIES(injectaddr dl)
+    ENDIF ()
+    ADD_DEPENDENCIES(checkdepends injectaddr)
+ENDIF()

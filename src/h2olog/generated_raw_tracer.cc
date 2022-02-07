@@ -192,14 +192,6 @@ enum h2olog_event_id_t {
   H2OLOG_EVENT_ID_H2O_H3_PACKET_FORWARD_TO_NODE_IGNORE,
   H2OLOG_EVENT_ID_H2O_H3_PACKET_FORWARD_TO_THREAD_IGNORE,
   H2OLOG_EVENT_ID_H2O_H3_FORWARDED_PACKET_RECEIVE,
-  H2OLOG_EVENT_ID_H2O_H3C_TUNNEL_CREATE,
-  H2OLOG_EVENT_ID_H2O_TUNNEL_ON_DESTROY,
-  H2OLOG_EVENT_ID_H2O_TUNNEL_ON_READ,
-  H2OLOG_EVENT_ID_H2O_TUNNEL_PROCEED_READ,
-  H2OLOG_EVENT_ID_H2O_TUNNEL_WRITE,
-  H2OLOG_EVENT_ID_H2O_TUNNEL_ON_WRITE_COMPLETE,
-  H2OLOG_EVENT_ID_H2O_TUNNEL_CREATE,
-  H2OLOG_EVENT_ID_H2O_TUNNEL_START,
 };
 
 
@@ -726,7 +718,6 @@ struct h2olog_event_t {
       uint64_t conn_id;
       uint64_t req_id;
       int status;
-      struct st_h2o_tunnel_t * tunnel;
     } send_response;
     struct { // h2o:send_response_header
       uint64_t conn_id;
@@ -792,37 +783,6 @@ struct h2olog_event_t {
       quicly_address_t src;
       size_t num_bytes;
     } h3_forwarded_packet_receive;
-    struct { // h2o:h3c_tunnel_create
-      struct st_h2o_tunnel_t * tunnel;
-    } h3c_tunnel_create;
-    struct { // h2o:tunnel_on_destroy
-      struct st_h2o_tunnel_t * tunnel;
-    } tunnel_on_destroy;
-    struct { // h2o:tunnel_on_read
-      struct st_h2o_tunnel_t * tunnel;
-      char err[STR_LEN];
-      uint8_t bytes[STR_LEN]; // appdata
-      size_t bytes_len;
-    } tunnel_on_read;
-    struct { // h2o:tunnel_proceed_read
-      struct st_h2o_tunnel_t * tunnel;
-    } tunnel_proceed_read;
-    struct { // h2o:tunnel_write
-      struct st_h2o_tunnel_t * tunnel;
-      uint8_t bytes[STR_LEN]; // appdata
-      size_t bytes_len;
-    } tunnel_write;
-    struct { // h2o:tunnel_on_write_complete
-      struct st_h2o_tunnel_t * tunnel;
-      char err[STR_LEN];
-    } tunnel_on_write_complete;
-    struct { // h2o:tunnel_create
-      struct st_h2o_tunnel_t * tunnel;
-    } tunnel_create;
-    struct { // h2o:tunnel_start
-      struct st_h2o_tunnel_t * tunnel;
-      size_t bytes_to_consume;
-    } tunnel_start;
 
   };
 };
@@ -926,14 +886,6 @@ void h2o_raw_tracer::initialize() {
     h2o_tracer::usdt("h2o", "h3_packet_forward_to_node_ignore", "trace_h2o__h3_packet_forward_to_node_ignore"),
     h2o_tracer::usdt("h2o", "h3_packet_forward_to_thread_ignore", "trace_h2o__h3_packet_forward_to_thread_ignore"),
     h2o_tracer::usdt("h2o", "h3_forwarded_packet_receive", "trace_h2o__h3_forwarded_packet_receive"),
-    h2o_tracer::usdt("h2o", "h3c_tunnel_create", "trace_h2o__h3c_tunnel_create"),
-    h2o_tracer::usdt("h2o", "tunnel_on_destroy", "trace_h2o__tunnel_on_destroy"),
-    h2o_tracer::usdt("h2o", "tunnel_on_read", "trace_h2o__tunnel_on_read"),
-    h2o_tracer::usdt("h2o", "tunnel_proceed_read", "trace_h2o__tunnel_proceed_read"),
-    h2o_tracer::usdt("h2o", "tunnel_write", "trace_h2o__tunnel_write"),
-    h2o_tracer::usdt("h2o", "tunnel_on_write_complete", "trace_h2o__tunnel_on_write_complete"),
-    h2o_tracer::usdt("h2o", "tunnel_create", "trace_h2o__tunnel_create"),
-    h2o_tracer::usdt("h2o", "tunnel_start", "trace_h2o__tunnel_start"),
 
   });
 }
@@ -1829,7 +1781,6 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
     json_write_pair_c(out_, STR_LIT("conn-id"), event.send_response.conn_id);
     json_write_pair_c(out_, STR_LIT("req-id"), event.send_response.req_id);
     json_write_pair_c(out_, STR_LIT("status"), event.send_response.status);
-    json_write_pair_c(out_, STR_LIT("tunnel"), event.send_response.tunnel);
     json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
     break;
   }
@@ -1968,81 +1919,6 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
     json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
     break;
   }
-  case H2OLOG_EVENT_ID_H2O_H3C_TUNNEL_CREATE: { // h2o:h3c_tunnel_create
-    json_write_pair_n(out_, STR_LIT("type"), STR_LIT("h3c-tunnel-create"));
-    json_write_pair_c(out_, STR_LIT("tid"), event.tid);
-    json_write_pair_c(out_, STR_LIT("seq"), seq_);
-    json_write_pair_c(out_, STR_LIT("tunnel"), event.h3c_tunnel_create.tunnel);
-    json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
-    break;
-  }
-  case H2OLOG_EVENT_ID_H2O_TUNNEL_ON_DESTROY: { // h2o:tunnel_on_destroy
-    json_write_pair_n(out_, STR_LIT("type"), STR_LIT("tunnel-on-destroy"));
-    json_write_pair_c(out_, STR_LIT("tid"), event.tid);
-    json_write_pair_c(out_, STR_LIT("seq"), seq_);
-    json_write_pair_c(out_, STR_LIT("tunnel"), event.tunnel_on_destroy.tunnel);
-    json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
-    break;
-  }
-  case H2OLOG_EVENT_ID_H2O_TUNNEL_ON_READ: { // h2o:tunnel_on_read
-    json_write_pair_n(out_, STR_LIT("type"), STR_LIT("tunnel-on-read"));
-    json_write_pair_c(out_, STR_LIT("tid"), event.tid);
-    json_write_pair_c(out_, STR_LIT("seq"), seq_);
-    json_write_pair_c(out_, STR_LIT("tunnel"), event.tunnel_on_read.tunnel);
-    json_write_pair_c(out_, STR_LIT("err"), event.tunnel_on_read.err, strlen(event.tunnel_on_read.err));
-    if (include_appdata_) {
-      json_write_pair_c(out_, STR_LIT("bytes"), event.tunnel_on_read.bytes, (event.tunnel_on_read.bytes_len < STR_LEN ? event.tunnel_on_read.bytes_len : STR_LEN));
-    }
-    json_write_pair_c(out_, STR_LIT("bytes-len"), event.tunnel_on_read.bytes_len);
-    json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
-    break;
-  }
-  case H2OLOG_EVENT_ID_H2O_TUNNEL_PROCEED_READ: { // h2o:tunnel_proceed_read
-    json_write_pair_n(out_, STR_LIT("type"), STR_LIT("tunnel-proceed-read"));
-    json_write_pair_c(out_, STR_LIT("tid"), event.tid);
-    json_write_pair_c(out_, STR_LIT("seq"), seq_);
-    json_write_pair_c(out_, STR_LIT("tunnel"), event.tunnel_proceed_read.tunnel);
-    json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
-    break;
-  }
-  case H2OLOG_EVENT_ID_H2O_TUNNEL_WRITE: { // h2o:tunnel_write
-    json_write_pair_n(out_, STR_LIT("type"), STR_LIT("tunnel-write"));
-    json_write_pair_c(out_, STR_LIT("tid"), event.tid);
-    json_write_pair_c(out_, STR_LIT("seq"), seq_);
-    json_write_pair_c(out_, STR_LIT("tunnel"), event.tunnel_write.tunnel);
-    if (include_appdata_) {
-      json_write_pair_c(out_, STR_LIT("bytes"), event.tunnel_write.bytes, (event.tunnel_write.bytes_len < STR_LEN ? event.tunnel_write.bytes_len : STR_LEN));
-    }
-    json_write_pair_c(out_, STR_LIT("bytes-len"), event.tunnel_write.bytes_len);
-    json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
-    break;
-  }
-  case H2OLOG_EVENT_ID_H2O_TUNNEL_ON_WRITE_COMPLETE: { // h2o:tunnel_on_write_complete
-    json_write_pair_n(out_, STR_LIT("type"), STR_LIT("tunnel-on-write-complete"));
-    json_write_pair_c(out_, STR_LIT("tid"), event.tid);
-    json_write_pair_c(out_, STR_LIT("seq"), seq_);
-    json_write_pair_c(out_, STR_LIT("tunnel"), event.tunnel_on_write_complete.tunnel);
-    json_write_pair_c(out_, STR_LIT("err"), event.tunnel_on_write_complete.err, strlen(event.tunnel_on_write_complete.err));
-    json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
-    break;
-  }
-  case H2OLOG_EVENT_ID_H2O_TUNNEL_CREATE: { // h2o:tunnel_create
-    json_write_pair_n(out_, STR_LIT("type"), STR_LIT("tunnel-create"));
-    json_write_pair_c(out_, STR_LIT("tid"), event.tid);
-    json_write_pair_c(out_, STR_LIT("seq"), seq_);
-    json_write_pair_c(out_, STR_LIT("tunnel"), event.tunnel_create.tunnel);
-    json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
-    break;
-  }
-  case H2OLOG_EVENT_ID_H2O_TUNNEL_START: { // h2o:tunnel_start
-    json_write_pair_n(out_, STR_LIT("type"), STR_LIT("tunnel-start"));
-    json_write_pair_c(out_, STR_LIT("tid"), event.tid);
-    json_write_pair_c(out_, STR_LIT("seq"), seq_);
-    json_write_pair_c(out_, STR_LIT("tunnel"), event.tunnel_start.tunnel);
-    json_write_pair_c(out_, STR_LIT("bytes-to-consume"), event.tunnel_start.bytes_to_consume);
-    json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
-    break;
-  }
 
   default:
     std::abort();
@@ -2169,14 +2045,6 @@ enum h2olog_event_id_t {
   H2OLOG_EVENT_ID_H2O_H3_PACKET_FORWARD_TO_NODE_IGNORE,
   H2OLOG_EVENT_ID_H2O_H3_PACKET_FORWARD_TO_THREAD_IGNORE,
   H2OLOG_EVENT_ID_H2O_H3_FORWARDED_PACKET_RECEIVE,
-  H2OLOG_EVENT_ID_H2O_H3C_TUNNEL_CREATE,
-  H2OLOG_EVENT_ID_H2O_TUNNEL_ON_DESTROY,
-  H2OLOG_EVENT_ID_H2O_TUNNEL_ON_READ,
-  H2OLOG_EVENT_ID_H2O_TUNNEL_PROCEED_READ,
-  H2OLOG_EVENT_ID_H2O_TUNNEL_WRITE,
-  H2OLOG_EVENT_ID_H2O_TUNNEL_ON_WRITE_COMPLETE,
-  H2OLOG_EVENT_ID_H2O_TUNNEL_CREATE,
-  H2OLOG_EVENT_ID_H2O_TUNNEL_START,
 };
 
 
@@ -2703,7 +2571,6 @@ struct h2olog_event_t {
       uint64_t conn_id;
       uint64_t req_id;
       int status;
-      struct st_h2o_tunnel_t * tunnel;
     } send_response;
     struct { // h2o:send_response_header
       uint64_t conn_id;
@@ -2769,37 +2636,6 @@ struct h2olog_event_t {
       quicly_address_t src;
       size_t num_bytes;
     } h3_forwarded_packet_receive;
-    struct { // h2o:h3c_tunnel_create
-      struct st_h2o_tunnel_t * tunnel;
-    } h3c_tunnel_create;
-    struct { // h2o:tunnel_on_destroy
-      struct st_h2o_tunnel_t * tunnel;
-    } tunnel_on_destroy;
-    struct { // h2o:tunnel_on_read
-      struct st_h2o_tunnel_t * tunnel;
-      char err[STR_LEN];
-      uint8_t bytes[STR_LEN]; // appdata
-      size_t bytes_len;
-    } tunnel_on_read;
-    struct { // h2o:tunnel_proceed_read
-      struct st_h2o_tunnel_t * tunnel;
-    } tunnel_proceed_read;
-    struct { // h2o:tunnel_write
-      struct st_h2o_tunnel_t * tunnel;
-      uint8_t bytes[STR_LEN]; // appdata
-      size_t bytes_len;
-    } tunnel_write;
-    struct { // h2o:tunnel_on_write_complete
-      struct st_h2o_tunnel_t * tunnel;
-      char err[STR_LEN];
-    } tunnel_on_write_complete;
-    struct { // h2o:tunnel_create
-      struct st_h2o_tunnel_t * tunnel;
-    } tunnel_create;
-    struct { // h2o:tunnel_start
-      struct st_h2o_tunnel_t * tunnel;
-      size_t bytes_to_consume;
-    } tunnel_start;
 
   };
 };
@@ -4783,8 +4619,6 @@ int trace_h2o__send_response(struct pt_regs *ctx) {
   bpf_usdt_readarg(2, ctx, &event.send_response.req_id);
   // int status
   bpf_usdt_readarg(3, ctx, &event.send_response.status);
-  // struct st_h2o_tunnel_t * tunnel
-  bpf_usdt_readarg(4, ctx, &event.send_response.tunnel);
 
   if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
     bpf_trace_printk("failed to perf_submit in trace_h2o__send_response\n");
@@ -5057,128 +4891,6 @@ int trace_h2o__h3_forwarded_packet_receive(struct pt_regs *ctx) {
 
   if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
     bpf_trace_printk("failed to perf_submit in trace_h2o__h3_forwarded_packet_receive\n");
-
-  return 0;
-}
-// h2o:h3c_tunnel_create
-int trace_h2o__h3c_tunnel_create(struct pt_regs *ctx) {
-  const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_H2O_H3C_TUNNEL_CREATE, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
-
-  // struct st_h2o_tunnel_t * tunnel
-  bpf_usdt_readarg(1, ctx, &event.h3c_tunnel_create.tunnel);
-
-  if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
-    bpf_trace_printk("failed to perf_submit in trace_h2o__h3c_tunnel_create\n");
-
-  return 0;
-}
-// h2o:tunnel_on_destroy
-int trace_h2o__tunnel_on_destroy(struct pt_regs *ctx) {
-  const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_H2O_TUNNEL_ON_DESTROY, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
-
-  // struct st_h2o_tunnel_t * tunnel
-  bpf_usdt_readarg(1, ctx, &event.tunnel_on_destroy.tunnel);
-
-  if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
-    bpf_trace_printk("failed to perf_submit in trace_h2o__tunnel_on_destroy\n");
-
-  return 0;
-}
-// h2o:tunnel_on_read
-int trace_h2o__tunnel_on_read(struct pt_regs *ctx) {
-  const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_H2O_TUNNEL_ON_READ, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
-
-  // struct st_h2o_tunnel_t * tunnel
-  bpf_usdt_readarg(1, ctx, &event.tunnel_on_read.tunnel);
-  // const char * err
-  bpf_usdt_readarg(2, ctx, &buf);
-  bpf_probe_read(&event.tunnel_on_read.err, sizeof(event.tunnel_on_read.err), buf);
-  // const void * bytes (appdata)
-  bpf_usdt_readarg(3, ctx, &buf);
-  bpf_probe_read(&event.tunnel_on_read.bytes, sizeof(event.tunnel_on_read.bytes), buf);
-  // size_t bytes_len
-  bpf_usdt_readarg(4, ctx, &event.tunnel_on_read.bytes_len);
-
-  if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
-    bpf_trace_printk("failed to perf_submit in trace_h2o__tunnel_on_read\n");
-
-  return 0;
-}
-// h2o:tunnel_proceed_read
-int trace_h2o__tunnel_proceed_read(struct pt_regs *ctx) {
-  const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_H2O_TUNNEL_PROCEED_READ, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
-
-  // struct st_h2o_tunnel_t * tunnel
-  bpf_usdt_readarg(1, ctx, &event.tunnel_proceed_read.tunnel);
-
-  if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
-    bpf_trace_printk("failed to perf_submit in trace_h2o__tunnel_proceed_read\n");
-
-  return 0;
-}
-// h2o:tunnel_write
-int trace_h2o__tunnel_write(struct pt_regs *ctx) {
-  const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_H2O_TUNNEL_WRITE, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
-
-  // struct st_h2o_tunnel_t * tunnel
-  bpf_usdt_readarg(1, ctx, &event.tunnel_write.tunnel);
-  // const void * bytes (appdata)
-  bpf_usdt_readarg(2, ctx, &buf);
-  bpf_probe_read(&event.tunnel_write.bytes, sizeof(event.tunnel_write.bytes), buf);
-  // size_t bytes_len
-  bpf_usdt_readarg(3, ctx, &event.tunnel_write.bytes_len);
-
-  if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
-    bpf_trace_printk("failed to perf_submit in trace_h2o__tunnel_write\n");
-
-  return 0;
-}
-// h2o:tunnel_on_write_complete
-int trace_h2o__tunnel_on_write_complete(struct pt_regs *ctx) {
-  const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_H2O_TUNNEL_ON_WRITE_COMPLETE, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
-
-  // struct st_h2o_tunnel_t * tunnel
-  bpf_usdt_readarg(1, ctx, &event.tunnel_on_write_complete.tunnel);
-  // const char * err
-  bpf_usdt_readarg(2, ctx, &buf);
-  bpf_probe_read(&event.tunnel_on_write_complete.err, sizeof(event.tunnel_on_write_complete.err), buf);
-
-  if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
-    bpf_trace_printk("failed to perf_submit in trace_h2o__tunnel_on_write_complete\n");
-
-  return 0;
-}
-// h2o:tunnel_create
-int trace_h2o__tunnel_create(struct pt_regs *ctx) {
-  const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_H2O_TUNNEL_CREATE, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
-
-  // struct st_h2o_tunnel_t * tunnel
-  bpf_usdt_readarg(1, ctx, &event.tunnel_create.tunnel);
-
-  if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
-    bpf_trace_printk("failed to perf_submit in trace_h2o__tunnel_create\n");
-
-  return 0;
-}
-// h2o:tunnel_start
-int trace_h2o__tunnel_start(struct pt_regs *ctx) {
-  const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_H2O_TUNNEL_START, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
-
-  // struct st_h2o_tunnel_t * tunnel
-  bpf_usdt_readarg(1, ctx, &event.tunnel_start.tunnel);
-  // size_t bytes_to_consume
-  bpf_usdt_readarg(2, ctx, &event.tunnel_start.bytes_to_consume);
-
-  if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
-    bpf_trace_printk("failed to perf_submit in trace_h2o__tunnel_start\n");
 
   return 0;
 }

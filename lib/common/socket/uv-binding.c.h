@@ -394,14 +394,19 @@ h2o_loop_t *h2o_socket_get_loop(h2o_socket_t *_sock)
     return sock->handle->loop;
 }
 
-h2o_socket_t *h2o_socket_connect(h2o_loop_t *loop, struct sockaddr *addr, socklen_t addrlen, h2o_socket_cb cb)
+h2o_socket_t *h2o_socket_connect(h2o_loop_t *loop, struct sockaddr *addr, socklen_t addrlen, h2o_socket_cb cb, const char **err)
 {
     struct st_h2o_uv_socket_t *sock = create_socket(loop);
 
-    if (sock == NULL)
+    if (sock == NULL) {
+        if (err != NULL)
+            *err = h2o_socket_error_socket_fail;
         return NULL;
+    }
     if (uv_tcp_connect(&sock->stream._creq, (void *)sock->handle, addr, on_connect) != 0) {
         h2o_socket_close(&sock->super);
+        if (err != NULL)
+            *err = h2o_socket_error_socket_fail;
         return NULL;
     }
     sock->super._cb.write = cb;
