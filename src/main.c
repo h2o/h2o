@@ -3344,8 +3344,8 @@ static void count_connections(int *n_actives, int *n_idles)
     int active = 0, idle = 0;
     for (size_t i = 0; i < conf.thread_map.size; ++i) {
         const h2o_context_t *ctx = &conf.threads[i].ctx;
-        active += count_linklist(&ctx->_active_conns);
-        idle += count_linklist(&ctx->_idle_conns);
+        active += count_linklist(&ctx->_conns.active);
+        idle += count_linklist(&ctx->_conns.idle);
     }
     *n_actives = active;
     *n_idles = idle;

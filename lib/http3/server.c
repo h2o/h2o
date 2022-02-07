@@ -457,7 +457,7 @@ static void set_state(struct st_h2o_http3_server_stream_t *stream, enum h2o_http
     /* all streams are either waiting on initial or finished processing */
     if (quicly_num_streams_by_group(conn->h3.super.quic, 0, 0) == conn->num_streams.recv_headers + conn->num_streams.close_wait) {
         h2o_linklist_unlink(&conn->super._conns);
-        h2o_linklist_insert(&conn->super.ctx->_idle_conns, &conn->super._conns);
+        h2o_linklist_insert(&conn->super.ctx->_conns.idle, &conn->super._conns);
     }
 }
 
@@ -926,7 +926,7 @@ static void on_receive(quicly_stream_t *qs, size_t off, const void *input, size_
     /* start handling, mark as active */
     struct st_h2o_http3_server_conn_t *conn = get_conn(stream);
     h2o_linklist_unlink(&conn->super._conns);
-    h2o_linklist_insert(&conn->super.ctx->_active_conns, &conn->super._conns);
+    h2o_linklist_insert(&conn->super.ctx->_conns.active, &conn->super._conns);
 
     /* save received data (FIXME avoid copying if possible; see hqclient.c) */
     h2o_http3_update_recvbuf(&stream->recvbuf.buf, off, input, len);
@@ -1880,7 +1880,7 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
     }
     ++ctx->super.next_cid.master_id; /* FIXME check overlap */
     h2o_http3_setup(&conn->h3, qconn);
-    h2o_linklist_insert(&ctx->accept_ctx->ctx->_idle_conns, &conn->super._conns);
+    h2o_linklist_insert(&ctx->accept_ctx->ctx->_conns.idle, &conn->super._conns);
 
     H2O_PROBE_CONN(H3S_ACCEPT, &conn->super, &conn->super, conn->h3.super.quic, h2o_conn_get_uuid(&conn->super));
 

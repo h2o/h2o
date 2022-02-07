@@ -153,9 +153,9 @@ static void update_idle_timeout(h2o_http2_conn_t *conn)
     if (0 == conn->num_streams.priority.open + conn->num_streams.priority.half_closed + conn->num_streams.pull.open +
                  conn->num_streams.pull.half_closed + conn->num_streams.push.open + conn->num_streams.push.half_closed) {
         // all streams are idle
-        h2o_linklist_insert(&conn->super.ctx->_idle_conns, &conn->super._conns);
+        h2o_linklist_insert(&conn->super.ctx->_conns.idle, &conn->super._conns);
     } else {
-        h2o_linklist_insert(&conn->super.ctx->_active_conns, &conn->super._conns);
+        h2o_linklist_insert(&conn->super.ctx->_conns.active, &conn->super._conns);
     }
 
     /* do nothing touch anything if write is in progress */
@@ -1726,7 +1726,7 @@ static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_hostconf_t **hosts,
     conn->streams = kh_init(h2o_http2_stream_t);
     h2o_http2_scheduler_init(&conn->scheduler);
     conn->state = H2O_HTTP2_CONN_STATE_OPEN;
-    h2o_linklist_insert(&conn->super.ctx->_idle_conns, &conn->super._conns);
+    h2o_linklist_insert(&conn->super.ctx->_conns.idle, &conn->super._conns);
     conn->_read_expect = expect_preface;
     conn->_input_header_table.hpack_capacity = conn->_input_header_table.hpack_max_capacity =
         H2O_HTTP2_SETTINGS_DEFAULT.header_table_size;

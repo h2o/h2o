@@ -93,8 +93,8 @@ void h2o_context_init(h2o_context_t *ctx, h2o_loop_t *loop, h2o_globalconf_t *co
     h2o_multithread_register_receiver(ctx->queue, &ctx->receivers.hostinfo_getaddr, h2o_hostinfo_getaddr_receiver);
     ctx->filecache = h2o_filecache_create(config->filecache.capacity);
 
-    h2o_linklist_init_anchor(&ctx->_active_conns);
-    h2o_linklist_init_anchor(&ctx->_idle_conns);
+    h2o_linklist_init_anchor(&ctx->_conns.active);
+    h2o_linklist_init_anchor(&ctx->_conns.idle);
     ctx->proxy.client_ctx.loop = loop;
     ctx->proxy.client_ctx.io_timeout = ctx->globalconf->proxy.io_timeout;
     ctx->proxy.client_ctx.connect_timeout = ctx->globalconf->proxy.connect_timeout;
@@ -172,7 +172,7 @@ void h2o_context_request_shutdown(h2o_context_t *ctx)
 {
     ctx->shutdown_requested = 1;
 
-    H2O_CONN_LIST_FOREACH(h2o_conn_t * conn, ({&ctx->_active_conns, &ctx->_idle_conns}), {
+    H2O_CONN_LIST_FOREACH(h2o_conn_t * conn, ({&ctx->_conns.active, &ctx->_conns.idle}), {
         if (conn->callbacks->request_shutdown != NULL) {
             conn->callbacks->request_shutdown(conn);
         }
@@ -196,7 +196,7 @@ size_t h2o_context_close_idle_connections(h2o_context_t *ctx, size_t max_connect
         return 0;
 
     size_t closed = 0;
-    H2O_CONN_LIST_FOREACH(h2o_conn_t * conn, ({&ctx->_idle_conns}), {
+    H2O_CONN_LIST_FOREACH(h2o_conn_t * conn, ({&ctx->_conns.idle}), {
         struct timeval now = h2o_gettimeofday(ctx->loop);
         if (h2o_timeval_subtract(&conn->connected_at, &now) < min_age)
             continue;
