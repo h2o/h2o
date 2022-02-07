@@ -150,9 +150,8 @@ static void on_idle_timeout(h2o_timer_t *entry)
 static void update_idle_timeout(h2o_http2_conn_t *conn)
 {
     h2o_linklist_unlink(&conn->super._conns);
-    if (kh_size(conn->streams) == conn->num_streams.priority.open + conn->num_streams.priority.half_closed +
-                                      conn->num_streams.pull.open + conn->num_streams.pull.half_closed +
-                                      conn->num_streams.push.open + conn->num_streams.push.half_closed) {
+    if (0 == conn->num_streams.priority.open + conn->num_streams.priority.half_closed + conn->num_streams.pull.open +
+                 conn->num_streams.pull.half_closed + conn->num_streams.push.open + conn->num_streams.push.half_closed) {
         // all streams are idle
         h2o_linklist_insert(&conn->super.ctx->_idle_conns, &conn->super._conns);
     } else {
