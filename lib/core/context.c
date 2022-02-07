@@ -202,7 +202,7 @@ size_t h2o_context_close_idle_connections(h2o_context_t *ctx, size_t max_connect
     };
     H2O_CONN_LIST_FOREACH(h2o_conn_t * conn, conn_list, {
         struct timeval now = h2o_gettimeofday(ctx->loop);
-        if (now.tv_sec - conn->connected_at.tv_sec < min_age)
+        if (h2o_timeval_subtract(&conn->connected_at, &now) < min_age)
             continue;
         if (conn->callbacks->close_idle_connection == NULL) {
             fprintf(stderr, "Unexpected! Missing h2o_conn_t `close_idle_connection` callback");
