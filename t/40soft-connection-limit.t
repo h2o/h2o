@@ -60,7 +60,7 @@ my ($guard, $pid) = spawn_server(
 sub connections_count {
     my $resp = `curl --silent -o /dev/stderr http://127.0.0.1:$port/s/json 2>&1 > /dev/null`;
     my $jresp = decode_json("$resp");
-    return $jresp->{'connections'}, $jresp->{'active-connections'}, $jresp->{'idle-connections'}
+    return $jresp->{'connections'}, $jresp->{'active-connections'}, $jresp->{'idle-connections'}, $jresp->{'shutdown-connections'}
 }
 
 sub is_connections_count {
@@ -68,11 +68,13 @@ sub is_connections_count {
     my $expected_total = $args{total};
     my $expected_active = $args{active};
     my $expected_idle = $args{idle};
+    my $expected_shutdown = $args{shutdown};
 
-    my ($total, $active, $idle) = connections_count();
+    my ($total, $active, $idle, $shutdown) = connections_count();
     is $total, $expected_total, "assert total";
     is $active, $expected_active, "assert active";
     is $idle, $expected_idle, "assert idle";
+    is $shutdown, $expected_shutdown, "assert shutdown";
 }
 
 subtest 'test connection stats' => sub {
@@ -88,7 +90,7 @@ subtest 'test connection stats' => sub {
 
     sleep(2);
 
-    is_connections_count(total => 4, active => 1, idle => 3);
+    is_connections_count(total => 4, active => 1, idle => 3, shutdown => 0);
 };
 
 subtest 'test http1 soft-connection-limit' => sub {
@@ -104,7 +106,7 @@ subtest 'test http1 soft-connection-limit' => sub {
 
     sleep(2);
 
-    is_connections_count(total => 5, active => 1, idle => 4);
+    is_connections_count(total => 5, active => 1, idle => 4, shutdown => 0);
 };
 
 subtest 'test http2 soft-connection-limit' => sub {
@@ -132,7 +134,7 @@ subtest 'test http2 soft-connection-limit' => sub {
 
     sleep(2);
 
-    is_connections_count(total => 5, active => 1, idle => 4);
+    is_connections_count(total => 5, active => 1, idle => 0, shutdown => 4);
 };
 
 subtest 'test http3 soft-connection-limit' => sub {
@@ -140,20 +142,16 @@ subtest 'test http3 soft-connection-limit' => sub {
     for (1..10) {
         system("perl", "t/udp-generator.pl", "127.0.0.1", "$tls_port", "t/assets/quic-decryptable-initial.bin", "t/assets/quic-initial-w-corrupted-scid.bin") == 0 or die "Failed to launch udp-generator";
     }
+
     sleep(2);
 
-    # Note: QUIC connections are not disposed of imediatly
-    # send a request to trigger culling, then verify
-    system("perl", "t/udp-generator.pl", "127.0.0.1", "$tls_port", "t/assets/quic-decryptable-initial.bin", "t/assets/quic-initial-w-corrupted-scid.bin") == 0 or die "Failed to launch udp-generator";
-    sleep(2);
-
-    is_connections_count(total => 6, active => 1, idle => 5);
+    is_connections_count(total => 6, active => 1, idle => 5, shutdown => 0);
 
     # Create one more connection
     system("perl", "t/udp-generator.pl", "127.0.0.1", "$tls_port", "t/assets/quic-decryptable-initial.bin", "t/assets/quic-initial-w-corrupted-scid.bin") == 0 or die "Failed to launch udp-generator";
     sleep(2);
 
-    is_connections_count(total => 6, active => 1, idle => 5);
+    is_connections_count(total => 6, active => 1, idle => 5, shutdown => 0);
 };
 
 done_testing;

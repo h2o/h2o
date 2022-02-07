@@ -3339,16 +3339,18 @@ static int count_linklist(const h2o_linklist_t *list)
     return count;
 }
 
-static void count_connections(int *n_actives, int *n_idles)
+static void count_connections(int *n_actives, int *n_idles, int *n_shutdowns)
 {
-    int active = 0, idle = 0;
+    int active = 0, idle = 0, shutdown = 0;
     for (size_t i = 0; i < conf.thread_map.size; ++i) {
         const h2o_context_t *ctx = &conf.threads[i].ctx;
         active += count_linklist(&ctx->_conns.active);
         idle += count_linklist(&ctx->_conns.idle);
+        shutdown += count_linklist(&ctx->_conns.shutdown);
     }
     *n_actives = active;
     *n_idles = idle;
+    *n_shutdowns = shutdown;
 }
 
 static h2o_iovec_t on_extra_status(void *unused, h2o_globalconf_t *_conf, h2o_req_t *req)
@@ -3364,8 +3366,8 @@ static h2o_iovec_t on_extra_status(void *unused, h2o_globalconf_t *_conf, h2o_re
     if ((generation = getenv("SERVER_STARTER_GENERATION")) == NULL)
         generation = "null";
 
-    int n_actives, n_idles;
-    count_connections(&n_actives, &n_idles);
+    int n_actives, n_idles, n_shutdowns;
+    count_connections(&n_actives, &n_idles, &n_shutdowns);
 
     ret.base = h2o_mem_alloc_pool(&req->pool, char, BUFSIZE);
     ret.len = snprintf(ret.base, BUFSIZE,
@@ -3382,9 +3384,10 @@ static h2o_iovec_t on_extra_status(void *unused, h2o_globalconf_t *_conf, h2o_re
                        " \"worker-threads\": %zu,\n"
                        " \"active-connections\": %d,\n"
                        " \"idle-connections\": %d,\n"
+                       " \"shutdown-connections\": %d,\n"
                        " \"num-sessions\": %lu",
                        OpenSSL_version(OPENSSL_VERSION), current_time, restart_time, (uint64_t)(now - conf.launch_time), generation,
-                       num_connections(0), conf.max_connections, conf.num_listeners, conf.thread_map.size, n_actives, n_idles,
+                       num_connections(0), conf.max_connections, conf.num_listeners, conf.thread_map.size, n_actives, n_idles, n_shutdowns,
                        num_sessions(0));
     assert(ret.len < BUFSIZE);
 

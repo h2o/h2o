@@ -70,7 +70,7 @@ static void requests_status_per_thread(void *priv, h2o_context_t *ctx)
 
     h2o_buffer_init(&cbdata.buffer, &h2o_socket_buffer_prototype);
 
-    H2O_CONN_LIST_FOREACH(h2o_conn_t * conn, ({&ctx->_conns.active, &ctx->_conns.idle}), {
+    H2O_CONN_LIST_FOREACH(h2o_conn_t * conn, ({&ctx->_conns.active, &ctx->_conns.idle, &ctx->_conns.shutdown}), {
         if (conn->callbacks->foreach_request(conn, collect_req_status, &cbdata) != 0) {
             h2o_buffer_dispose(&cbdata.buffer);
             return;

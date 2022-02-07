@@ -1946,9 +1946,9 @@ static void graceful_shutdown_resend_goaway(h2o_timer_t *entry)
 
 static size_t close_idle_connection(h2o_conn_t *_conn)
 {
-    struct st_h2o_http3_server_conn_t *conn = (void *)_conn;
-    h2o_http3_send_shutdown_goaway_frame(&conn->h3);
-    h2o_quic_close_connection(&conn->h3.super, H2O_HTTP3_ERROR_EXCESSIVE_LOAD, "shutting down");
+    h2o_linklist_unlink(&_conn->_conns);
+    h2o_linklist_insert(&_conn->ctx->_conns.shutdown, &_conn->_conns);
+    initiate_graceful_shutdown(_conn);
     return 1;
 }
 

@@ -633,13 +633,13 @@ struct st_h2o_context_t {
      */
     int shutdown_requested;
     /**
-     * connections lists
+     * connection states
      */
     struct {
         /**
          * link-list of h2o_conn_t
          */
-        h2o_linklist_t active, idle;
+        h2o_linklist_t active, idle, shutdown;
     } _conns;
     struct {
 
