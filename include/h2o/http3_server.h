@@ -42,6 +42,13 @@ extern const h2o_protocol_callbacks_t H2O_HTTP3_SERVER_CALLBACKS;
 extern const h2o_http3_conn_callbacks_t H2O_HTTP3_CONN_CALLBACKS;
 
 /**
+ * initializes the context
+ */
+void h2o_http3_server_init_context(h2o_context_t *h2o, h2o_quic_ctx_t *ctx, h2o_loop_t *loop, h2o_socket_t *sock,
+                                   quicly_context_t *quic, h2o_quic_accept_cb acceptor,
+                                   h2o_quic_notify_connection_update_cb notify_conn_update, uint8_t use_gso);
+
+/**
  * the acceptor callback to be used together with h2o_http3_server_ctx_t
  * @return a pointer to a new connection object upon success, NULL or H2O_QUIC_ACCEPT_CONN_DECRYPTION_FAILED upon failure.
  */

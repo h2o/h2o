@@ -2973,6 +2973,9 @@ static h2o_quic_conn_t *on_http3_accept(h2o_quic_ctx_t *_ctx, quicly_address_t *
                 quicly_send_retry(ctx->super.quic, token_aead, packet->version, &srcaddr->sa, packet->cid.src, &destaddr->sa,
                                   ptls_iovec_init(scid, sizeof(scid)), packet->cid.dest.encrypted,
                                   ptls_iovec_init(&token_prefix, 1), ptls_iovec_init(NULL, 0), retry_integrity_aead, payload);
+            if (ctx->super.quic_stats != NULL) {
+                ++ctx->super.quic_stats->packet_processed;
+            }
             assert(payload_size != SIZE_MAX);
             struct iovec vec = {.iov_base = payload, .iov_len = payload_size};
             h2o_quic_send_datagrams(&ctx->super, srcaddr, destaddr, &vec, 1);
@@ -3081,8 +3084,9 @@ static void *run_loop(void *_thread_index)
         listeners[i].sock->data = listeners + i;
         /* setup quic context and the unix socket to receive forwarded packets */
         if (thread_index < conf.quic.num_threads && listener_config->quic.ctx != NULL) {
-            h2o_quic_init_context(&listeners[i].http3.ctx.super, conf.threads[thread_index].ctx.loop, listeners[i].sock,
-                                  listener_config->quic.ctx, on_http3_accept, NULL, conf.globalconf.http3.use_gso);
+            h2o_http3_server_init_context(listeners[i].accept_ctx.ctx, &listeners[i].http3.ctx.super,
+                                          conf.threads[thread_index].ctx.loop, listeners[i].sock, listener_config->quic.ctx,
+                                          on_http3_accept, NULL, conf.globalconf.http3.use_gso);
             h2o_quic_set_context_identifier(&listeners[i].http3.ctx.super, 0, (uint32_t)thread_index, conf.quic.node_id, 4,
                                             forward_quic_packets, rewrite_forwarded_quic_datagram);
             listeners[i].http3.ctx.accept_ctx = &listeners[i].accept_ctx;

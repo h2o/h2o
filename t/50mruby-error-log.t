@@ -3,7 +3,6 @@ use warnings;
 use Digest::MD5 qw(md5_hex);
 use File::Temp qw(tempdir);
 use Net::EmptyPort qw(empty_port check_port);
-use Scope::Guard qw(scope_guard);
 use Test::More;
 use Test::Exception;
 use Time::HiRes;
@@ -198,7 +197,7 @@ EOT
                 $client->close;
                 exit 0;
             };
-            my $upstream = scope_guard(sub {
+            my $upstream = make_guard(sub {
                 kill 'TERM', $upstream_pid;
                 while (waitpid($upstream_pid, 0) != $upstream_pid) {}
             });

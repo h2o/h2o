@@ -25,6 +25,7 @@
 #include "h2o.h"
 #include "h2o/socketpool.h"
 #include "h2o/balancer.h"
+#include "h2o/http3_server.h"
 
 struct rp_handler_t {
     h2o_handler_t super;
@@ -60,7 +61,7 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     return 0;
 }
 
-static h2o_http3client_ctx_t *create_http3_context(h2o_loop_t *loop, int use_gso)
+static h2o_http3client_ctx_t *create_http3_context(h2o_context_t *ctx, int use_gso)
 {
 #if H2O_USE_LIBUV
     fprintf(stderr, "no HTTP/3 support for libuv\n");
@@ -100,8 +101,9 @@ static h2o_http3client_ctx_t *create_http3_context(h2o_loop_t *loop, int use_gso
         perror("failed to bind default address to UDP socket");
         abort();
     }
-    h2o_socket_t *sock = h2o_evloop_socket_create(loop, sockfd, H2O_SOCKET_FLAG_DONT_READ);
-    h2o_quic_init_context(&h3ctx->h3, loop, sock, &h3ctx->quic, NULL, h2o_httpclient_http3_notify_connection_update, use_gso);
+    h2o_socket_t *sock = h2o_evloop_socket_create(ctx->loop, sockfd, H2O_SOCKET_FLAG_DONT_READ);
+    h2o_http3_server_init_context(ctx, &h3ctx->h3, ctx->loop, sock, &h3ctx->quic, NULL,
+                                  h2o_httpclient_http3_notify_connection_update, use_gso);
 
     h3ctx->load_session = NULL; /* TODO reuse session? */
 
@@ -154,7 +156,7 @@ static void on_context_init(h2o_handler_t *_self, h2o_context_t *ctx)
                 .latency_optimization = ctx->globalconf->http2.latency_optimization, /* TODO provide config knob, or disable? */
                 .max_concurrent_streams = self->config.http2.max_concurrent_streams,
             },
-        .http3 = self->config.protocol_ratio.http3 != 0 ? create_http3_context(ctx->loop, ctx->globalconf->http3.use_gso) : NULL,
+        .http3 = self->config.protocol_ratio.http3 != 0 ? create_http3_context(ctx, ctx->globalconf->http3.use_gso) : NULL,
     };
 
     handler_ctx->client_ctx = client_ctx;

@@ -672,9 +672,10 @@ static h2o_iovec_t build_request(struct st_h2o_http1client_t *client, h2o_iovec_
         APPEND_HEADER(&h);
     }
 
-    h2o_header_t *h, *h_end;
-    for (h = (h2o_header_t *)headers, h_end = h + num_headers; h != h_end; ++h)
-        APPEND_HEADER(h);
+    if (num_headers != 0) {
+        for (const h2o_header_t *h = headers, *h_end = h + num_headers; h != h_end; ++h)
+            APPEND_HEADER(h);
+    }
 
     APPEND_STRLIT("\r\n");
 

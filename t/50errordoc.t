@@ -192,7 +192,7 @@ EOT
     my $resp = `(echo badrequest/1.0; echo) | nc 127.0.0.1 $server->{port}`;
     like $resp, qr{^HTTP/1.1 400 .*\nbad request$}is, "broken request headers -> undecorated 400";
 
-    my $resp = `(echo POST / HTTP/1.1; echo Transfer-Encoding: chunked; echo; echo hello world; echo; echo) | nc 127.0.0.1 $server->{port}`;
+    $resp = `(echo POST / HTTP/1.1; echo Transfer-Encoding: chunked; echo; echo hello world; echo; echo) | nc 127.0.0.1 $server->{port}`;
     like $resp, qr{^HTTP/1.1 400 .*\nhello\n$}is, "valid request headers but broken entity -> decorated 400";
 };
 
