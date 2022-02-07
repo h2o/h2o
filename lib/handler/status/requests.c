@@ -72,11 +72,9 @@ static void requests_status_per_thread(void *priv, h2o_context_t *ctx)
 
     h2o_linklist_t *conn_list[] = {&ctx->_active_conns, &ctx->_idle_conns};
     H2O_CONN_LIST_FOREACH(h2o_conn_t * conn, conn_list, {
-        if (conn->callbacks->foreach_request != NULL) {
-            if (conn->callbacks->foreach_request(conn, collect_req_status, &cbdata) != 0) {
-                h2o_buffer_dispose(&cbdata.buffer);
-                return;
-            }
+        if (conn->callbacks->foreach_request(conn, collect_req_status, &cbdata) != 0) {
+            h2o_buffer_dispose(&cbdata.buffer);
+            return;
         }
     });
 

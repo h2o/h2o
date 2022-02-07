@@ -904,7 +904,7 @@ typedef struct st_h2o_conn_callbacks_t {
      */
     void (*request_shutdown)(h2o_conn_t *conn);
     /**
-     * for each request (optional)
+     * for each request
      */
     int (*foreach_request)(h2o_conn_t *conn, int (*cb)(h2o_req_t *req, void *cbdata), void *cbdata);
     /**
