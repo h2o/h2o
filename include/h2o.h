@@ -1687,7 +1687,7 @@ void h2o_context_update_timestamp_string_cache(h2o_context_t *ctx);
  * Closes at most @max_connections_to_close connections that have been inactive for @min_age seconds
  * @return number of closed connections
  */
-size_t h2o_context_close_idle_connections(h2o_context_t *ctx, size_t max_connections_to_close, int min_age);
+size_t h2o_context_close_idle_connections(h2o_context_t *ctx, size_t max_connections_to_close, uint64_t min_age);
 /**
  * returns per-module context set
  */
