@@ -1205,10 +1205,7 @@ static h2o_iovec_t log_request_index(h2o_req_t *req)
 static int foreach_request(h2o_conn_t *_conn, int (*cb)(h2o_req_t *req, void *cbdata), void *cbdata)
 {
     struct st_h2o_http1_conn_t *conn = (void *)_conn;
-    int ret = cb(&conn->req, cbdata);
-    if (ret != 0)
-        return ret;
-    return 0;
+    return cb(&conn->req, cbdata);
 }
 
 static const h2o_conn_callbacks_t h1_callbacks = {
