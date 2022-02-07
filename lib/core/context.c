@@ -172,8 +172,7 @@ void h2o_context_request_shutdown(h2o_context_t *ctx)
 {
     ctx->shutdown_requested = 1;
 
-    h2o_linklist_t *conn_list[] = {&ctx->_active_conns, &ctx->_idle_conns};
-    H2O_CONN_LIST_FOREACH(h2o_conn_t * conn, conn_list, {
+    H2O_CONN_LIST_FOREACH(h2o_conn_t * conn, ({&ctx->_active_conns, &ctx->_idle_conns}), {
         if (conn->callbacks->request_shutdown != NULL) {
             conn->callbacks->request_shutdown(conn);
         }
@@ -197,10 +196,7 @@ size_t h2o_context_close_idle_connections(h2o_context_t *ctx, size_t max_connect
         return 0;
 
     size_t closed = 0;
-    h2o_linklist_t *conn_list[] = {
-        &ctx->_idle_conns,
-    };
-    H2O_CONN_LIST_FOREACH(h2o_conn_t * conn, conn_list, {
+    H2O_CONN_LIST_FOREACH(h2o_conn_t * conn, ({&ctx->_idle_conns}), {
         struct timeval now = h2o_gettimeofday(ctx->loop);
         if (h2o_timeval_subtract(&conn->connected_at, &now) < min_age)
             continue;

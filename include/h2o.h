@@ -998,12 +998,14 @@ struct st_h2o_conn_t {
     h2o_linklist_t _conns;
 };
 
+#define NOPAREN(...) __VA_ARGS__
 #define H2O_CONN_LIST_FOREACH(decl_var, conn_list, block)                                                                          \
     do {                                                                                                                           \
-        size_t conn_list_len = sizeof(conn_list) / sizeof((conn_list)[0]);                                                         \
-        h2o_linklist_t **_conn_list = (conn_list);                                                                                 \
+        h2o_linklist_t *_conn_list[] = NOPAREN conn_list;                                                                          \
+        size_t conn_list_len = sizeof(_conn_list) / sizeof((_conn_list)[0]);                                                       \
+        h2o_linklist_t **_conn_list_iter = (_conn_list);                                                                           \
         for (size_t i = 0; i < conn_list_len; i++) {                                                                               \
-            for (h2o_linklist_t *_node = _conn_list[i]->next, *_node_next; _node != _conn_list[i]; _node = _node_next) {           \
+            for (h2o_linklist_t *_node = _conn_list_iter[i]->next, *_node_next; _node != _conn_list_iter[i]; _node = _node_next) { \
                 _node_next = _node->next;                                                                                          \
                 h2o_conn_t *_h2o_conn = H2O_STRUCT_FROM_MEMBER(h2o_conn_t, _conns, _node);                                         \
                 decl_var = (void *)_h2o_conn;                                                                                      \
