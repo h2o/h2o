@@ -197,6 +197,15 @@ size_t h2o_context_close_idle_connections(h2o_context_t *ctx, size_t max_connect
         return 0;
 
     size_t closed = 0;
+
+    // consider connections in shutdown state as closed
+    H2O_CONN_LIST_FOREACH(h2o_conn_t * conn, ({&ctx->_conns.shutdown}), {
+        conn;
+        closed++;
+        if (closed == max_connections_to_close)
+            return closed;
+    });
+
     H2O_CONN_LIST_FOREACH(h2o_conn_t * conn, ({&ctx->_conns.idle}), {
         struct timeval now = h2o_gettimeofday(ctx->loop);
         if (h2o_timeval_subtract(&conn->connected_at, &now) < (min_age*1000*1000))

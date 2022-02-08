@@ -149,13 +149,15 @@ static void on_idle_timeout(h2o_timer_t *entry)
 
 static void update_idle_timeout(h2o_http2_conn_t *conn)
 {
-    h2o_linklist_unlink(&conn->super._conns);
-    if (0 == conn->num_streams.priority.open + conn->num_streams.priority.half_closed + conn->num_streams.pull.open +
-                 conn->num_streams.pull.half_closed + conn->num_streams.push.open + conn->num_streams.push.half_closed) {
-        // all streams are idle
-        h2o_linklist_insert(&conn->super.ctx->_conns.idle, &conn->super._conns);
-    } else {
-        h2o_linklist_insert(&conn->super.ctx->_conns.active, &conn->super._conns);
+    if (!h2o_timer_is_linked(&conn->_graceful_shutdown_timeout)) {
+        h2o_linklist_unlink(&conn->super._conns);
+        if (0 == conn->num_streams.priority.open + conn->num_streams.priority.half_closed + conn->num_streams.pull.open +
+                conn->num_streams.pull.half_closed + conn->num_streams.push.open + conn->num_streams.push.half_closed) {
+            // all streams are idle
+            h2o_linklist_insert(&conn->super.ctx->_conns.idle, &conn->super._conns);
+        } else {
+            h2o_linklist_insert(&conn->super.ctx->_conns.active, &conn->super._conns);
+        }
     }
 
     /* do nothing touch anything if write is in progress */
@@ -396,6 +398,9 @@ void close_connection_now(h2o_http2_conn_t *conn)
     h2o_hpack_dispose_header_table(&conn->_output_header_table);
     assert(h2o_linklist_is_empty(&conn->_pending_reqs));
     h2o_timer_unlink(&conn->_timeout_entry);
+
+    if (h2o_timer_is_linked(&conn->_graceful_shutdown_timeout))
+        h2o_timer_unlink(&conn->_graceful_shutdown_timeout);
 
     h2o_buffer_dispose(&conn->_write.buf);
     if (conn->_write.buf_in_flight != NULL)

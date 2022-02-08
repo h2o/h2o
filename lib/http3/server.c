@@ -455,9 +455,11 @@ static void set_state(struct st_h2o_http3_server_stream_t *stream, enum h2o_http
         break;
     }
     /* all streams are either waiting on initial or finished processing */
-    if (quicly_num_streams_by_group(conn->h3.super.quic, 0, 0) == conn->num_streams.recv_headers + conn->num_streams.close_wait) {
-        h2o_linklist_unlink(&conn->super._conns);
-        h2o_linklist_insert(&conn->super.ctx->_conns.idle, &conn->super._conns);
+    if (!h2o_timer_is_linked(&conn->_graceful_shutdown_timeout)) {
+        if (quicly_num_streams_by_group(conn->h3.super.quic, 0, 0) == conn->num_streams.recv_headers + conn->num_streams.close_wait) {
+            h2o_linklist_unlink(&conn->super._conns);
+            h2o_linklist_insert(&conn->super.ctx->_conns.idle, &conn->super._conns);
+        }
     }
 }
 
@@ -1769,6 +1771,8 @@ static void on_h3_destroy(h2o_quic_conn_t *h3_)
     h2o_linklist_unlink(&conn->super._conns);
     if (h2o_timer_is_linked(&conn->timeout))
         h2o_timer_unlink(&conn->timeout);
+    if (h2o_timer_is_linked(&conn->_graceful_shutdown_timeout))
+        h2o_timer_unlink(&conn->_graceful_shutdown_timeout);
     h2o_http3_dispose_conn(&conn->h3);
     kh_destroy(stream, conn->datagram_flows);
 

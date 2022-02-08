@@ -104,13 +104,12 @@ subtest 'test http1 soft-connection-limit' => sub {
         push @conns, $conn;
     }
 
-    sleep(2);
+    sleep(3);
 
     is_connections_count(total => 5, active => 1, idle => 4, shutdown => 0);
 };
 
 subtest 'test http2 soft-connection-limit' => sub {
-
     my @conns;
     for (1..10) {
         my $conn = IO::Socket::INET->new(
@@ -132,26 +131,19 @@ subtest 'test http2 soft-connection-limit' => sub {
         push @conns, $conn;
     }
 
-    sleep(2);
+    sleep(3);
 
-    is_connections_count(total => 5, active => 1, idle => 0, shutdown => 4);
+    is_connections_count(total => 11, active => 1, idle => 4, shutdown => 6);
 };
 
 subtest 'test http3 soft-connection-limit' => sub {
-    # Create connections up to soft-connection-limit
     for (1..10) {
         system("perl", "t/udp-generator.pl", "127.0.0.1", "$tls_port", "t/assets/quic-decryptable-initial.bin", "t/assets/quic-initial-w-corrupted-scid.bin") == 0 or die "Failed to launch udp-generator";
     }
 
-    sleep(2);
+    sleep(3);
 
-    is_connections_count(total => 6, active => 1, idle => 5, shutdown => 0);
-
-    # Create one more connection
-    system("perl", "t/udp-generator.pl", "127.0.0.1", "$tls_port", "t/assets/quic-decryptable-initial.bin", "t/assets/quic-initial-w-corrupted-scid.bin") == 0 or die "Failed to launch udp-generator";
-    sleep(2);
-
-    is_connections_count(total => 6, active => 1, idle => 5, shutdown => 0);
+    is_connections_count(total => 11, active => 1, idle => 4, shutdown => 6);
 };
 
 done_testing;
