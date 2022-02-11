@@ -167,6 +167,10 @@ typedef struct st_h2o_quic_stats_t {
      * number of quic packets successfully used for a connection
      */
     uint64_t packet_processed;
+    /**
+     * maximum number of packets in quicly sentmap
+     */
+    size_t num_sentmap_packets_max;
 
     /**
      * aggregated quicly stats
