@@ -61,6 +61,8 @@ our @EXPORT = qw(
 use constant ASSETS_DIR => 't/assets';
 use constant DOC_ROOT   => ASSETS_DIR . "/doc_root";
 
+my %empty_ports_returned;
+
 sub bindir {
     $ENV{H2O_VALGRIND} || $ENV{BINARY_DIR} || '.';
 }
@@ -313,9 +315,18 @@ sub empty_ports {
     my ($n, @ep_args) = @_;
     my @ports;
     while (@ports < $n) {
-        my $t = empty_port(@ep_args);
-        push @ports, $t
-            unless grep { $_ == $t } @ports;
+        while (1) {
+            my $t = empty_port(@ep_args);
+            if ($empty_ports_returned{$t}) {
+                next;
+            } else {
+                unless (grep { $_ == $t } @ports) {
+                    push @ports, $t;
+                    $empty_ports_returned{$t} = 1;
+                }
+                last;
+            }
+        }
     }
     return @ports;
 }

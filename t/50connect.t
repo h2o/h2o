@@ -3,12 +3,12 @@ use warnings;
 use File::Temp qw(tempdir);
 use Time::HiRes qw(sleep);
 use Test::More;
-use Net::EmptyPort qw(check_port empty_port);
+use Net::EmptyPort qw(check_port);
 use t::Util;
 
 my $tempdir = tempdir(CLEANUP => 1);
 
-my $origin_port = empty_port();
+my ($origin_port) = empty_ports(1);
 my $origin = spawn_server(
     argv     => [
         qw(plackup -s Starlet --access-log /dev/null -p), $origin_port, ASSETS_DIR . "/upstream.psgi",
@@ -18,11 +18,11 @@ my $origin = spawn_server(
     },
 );
 
-my $quic_port = empty_port({
+my ($quic_port) = empty_ports(1,{
     host  => "127.0.0.1",
     proto => "udp",
 });
-my $one_shot_upstream = empty_port();
+my ($one_shot_upstream) = empty_ports(1);
 my $g2 = one_shot_http_upstream("It works!", $one_shot_upstream);
 my $server = spawn_h2o(<< "EOT");
 listen:

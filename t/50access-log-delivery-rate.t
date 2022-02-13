@@ -1,6 +1,6 @@
 use strict;
 use warnings;
-use Net::EmptyPort qw(empty_port wait_port);
+use Net::EmptyPort qw(wait_port);
 use File::Temp qw(tempdir);
 use JSON;
 use Time::HiRes qw(sleep);
@@ -15,7 +15,7 @@ plan skip_all => 'mruby support is off'
 
 my $tempdir = tempdir(CLEANUP => 1);
 
-my $quic_port = empty_port({
+my ($quic_port) = empty_ports(1, {
     host  => "127.0.0.1",
     proto => "udp",
 });

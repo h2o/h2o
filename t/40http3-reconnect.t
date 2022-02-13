@@ -2,7 +2,7 @@ use strict;
 use warnings;
 use File::Temp qw(tempdir);
 use JSON qw(decode_json);
-use Net::EmptyPort qw(empty_port wait_port);
+use Net::EmptyPort qw(wait_port);
 use Test::More;
 use t::Util;
 
@@ -11,7 +11,7 @@ plan skip_all => "$client_prog not found"
     unless -e $client_prog;
 
 my $tempdir = tempdir(CLEANUP => 1);
-my $quic_port = empty_port({
+my ($quic_port) = empty_ports(1, {
     host  => "127.0.0.1",
     proto => "udp",
 });

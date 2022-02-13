@@ -13,14 +13,14 @@ use Socket qw(IPPROTO_TCP TCP_NODELAY);
 use Symbol qw(gensym);
 use Time::HiRes qw(sleep);
 use Test::More;
-use Net::EmptyPort qw(check_port empty_port);
+use Net::EmptyPort qw(check_port);
 use t::Util;
 
 local $SIG{PIPE} = sub {};
 
-my $origin_port = empty_port();
+my ($origin_port) = empty_ports(1);
 
-my $quic_port = empty_port({
+my ($quic_port) = empty_ports(1, {
     host  => "127.0.0.1",
     proto => "udp",
 });

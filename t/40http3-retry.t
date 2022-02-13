@@ -1,7 +1,7 @@
 use strict;
 use warnings;
 use Digest::MD5 qw(md5_hex);
-use Net::EmptyPort qw(empty_port wait_port);
+use Net::EmptyPort qw(wait_port);
 use File::Temp qw(tempdir);
 use Test::More;
 use t::Util;
@@ -23,7 +23,7 @@ plan skip_all => 'server is not compiled with dtrace support'
 
 my $tempdir = tempdir(CLEANUP => 1);
 
-my $quic_port = empty_port({
+my ($quic_port) = empty_ports(1, {
     host  => "127.0.0.1",
     proto => "udp",
 });

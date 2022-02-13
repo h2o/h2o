@@ -1,7 +1,6 @@
 use strict;
 use warnings;
 use IO::Socket::IP;
-use Net::EmptyPort qw(empty_port);
 use Test::More;
 use Time::HiRes qw(time);
 use Socket qw(SOCK_STREAM);
@@ -35,7 +34,7 @@ my $v6_port = create_listener("::1")
 my $v4_port = create_listener("127.0.0.1")
     or die "failed to create IPv4 listener:$!";
 my $blackhole_ip_v4 = find_blackhole_ip();
-my $quic_port = empty_port({
+my ($quic_port) = empty_ports(1, {
     host  => "127.0.0.1",
     proto => "udp",
 });

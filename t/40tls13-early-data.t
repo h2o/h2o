@@ -1,14 +1,14 @@
 use strict;
 use warnings;
 use File::Temp qw(tempdir);
-use Net::EmptyPort qw(check_port empty_port);
+use Net::EmptyPort qw(check_port);
 use Test::Requires qw(Plack::Runner Starlet);
 use Test::More;
 use Time::HiRes qw(sleep);
 use t::Util;
 
 my $tempdir = tempdir(CLEANUP => 1);
-my $upstream_port = empty_port();
+my ($upstream_port) = empty_ports(1);
 
 subtest "http/1" => sub {
     my $fetch = sub {

@@ -3,7 +3,6 @@
 # H2OLOG_DEBUG=1 for more runtime logs
 use strict;
 use warnings FATAL => "all";
-use Net::EmptyPort qw(empty_port);
 use Test::More;
 use JSON;
 use t::Util;
@@ -24,7 +23,7 @@ unless ($ENV{DTRACE_TESTS})  {
       unless server_features()->{dtrace};
 }
 
-my $quic_port = empty_port({
+my ($quic_port) = empty_ports(1, {
     host  => "127.0.0.1",
     proto => "udp",
 });

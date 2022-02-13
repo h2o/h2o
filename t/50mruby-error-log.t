@@ -2,7 +2,7 @@ use strict;
 use warnings;
 use Digest::MD5 qw(md5_hex);
 use File::Temp qw(tempdir);
-use Net::EmptyPort qw(empty_port check_port);
+use Net::EmptyPort qw(check_port);
 use Test::More;
 use Test::Exception;
 use Time::HiRes;
@@ -54,7 +54,7 @@ sub read_logs {
 subtest 'middleware' => sub {
     subtest 'basic' => sub {
         my ($port, $tls_port) = empty_ports(2, { host => "0.0.0.0" });
-        my $empty_port = empty_port();
+        my $empty_port = empty_ports(1);
         my $server = spawn_h2o_raw(<<"EOT", [$port, $tls_port]);
 num-threads: 1
 hosts:
@@ -104,7 +104,7 @@ EOT
     };
 
     subtest 'wrap error stream' => sub {
-        my $empty_port = empty_port();
+        my $empty_port = empty_ports(1);
         my ($port, $tls_port) = empty_ports(2, { host => "0.0.0.0" });
         my $server = spawn_h2o_raw(<< "EOT", [$port, $tls_port]);
 num-threads: 1
@@ -172,7 +172,7 @@ EOT
 
     subtest 'parent request is disposed before subrequest emits error logs' => sub {
         my $spawner = sub {
-            my $upstream_port = empty_port();
+            my $upstream_port = empty_ports(1);
 
             # create upstream
             my $upstream_pid = fork;

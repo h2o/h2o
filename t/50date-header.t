@@ -1,6 +1,6 @@
 use strict;
 use warnings;
-use Net::EmptyPort qw(check_port empty_port);
+use Net::EmptyPort qw(check_port);
 use Test::More;
 use t::Util;
 
@@ -16,10 +16,7 @@ plan skip_all => 'cannot run perl -MPlack::Handler::FCGI'
     if system("perl -MPlack::Handler::FCGI /dev/null > /dev/null 2>&1") != 0;
 
 
-my $date_upstream_port = empty_port();
-my $no_date_upstream_port = empty_port();
-
-my $fcgi_port = empty_port();
+my ($date_upstream_port, $no_date_upstream_port, $fcgi_port) = empty_ports(3);
 my $fcgi_upstream = spawn_server(
     argv => [ qw(plackup -s FCGI --access-log /dev/stderr --listen), "127.0.0.1:$fcgi_port", ASSETS_DIR . "/upstream.psgi", ],
     is_ready => sub {

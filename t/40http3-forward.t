@@ -1,7 +1,7 @@
 use strict;
 use warnings;
 use File::Temp qw(tempdir);
-use Net::EmptyPort qw(empty_port wait_port);
+use Net::EmptyPort qw(wait_port);
 use Test::More;
 use Time::HiRes qw(time);
 use t::Util;
@@ -27,7 +27,7 @@ plan skip_all => "macOS has issues https://twitter.com/kazuho/status/12980731105
 #     can still receive packets at 127.0.0.2)
 #  3. check that the slow request completes *after* the new server is up
 
-my $quic_port = empty_port({ host  => "0.0.0.0", proto => "udp" });
+my ($quic_port) = empty_ports(1, { host  => "0.0.0.0", proto => "udp" });
 
 # start server1 at 0.0.0.0, check that it is up
 my $server1 = spawn("0.0.0.0", 1);
