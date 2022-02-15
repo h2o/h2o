@@ -2124,6 +2124,7 @@ typedef struct st_h2o_proxy_config_vars_t {
     size_t max_buffer_size;
     struct {
         uint32_t max_concurrent_streams;
+        unsigned force_cleartext : 1;
     } http2;
     h2o_httpclient_protocol_ratio_t protocol_ratio;
 } h2o_proxy_config_vars_t;
