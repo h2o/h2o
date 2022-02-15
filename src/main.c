@@ -3331,15 +3331,6 @@ err:
 #endif
 
 static void count_connections(size_t *n_actives, size_t *n_idles, size_t *n_shutdowns)
-static int count_linklist(const h2o_linklist_t *list)
-{
-    int count = 0;
-    for (const h2o_linklist_t *node = list->next; node != list; node = node->next) {
-        count++;
-    }
-    return count;
-}
-
 {
     size_t active = 0, idle = 0, shutdown = 0;
     for (size_t i = 0; i < conf.thread_map.size; ++i) {
