@@ -124,9 +124,7 @@ static void initiate_graceful_shutdown(h2o_conn_t *_conn)
      */
 
     h2o_http2_conn_t *conn = (void *)_conn;
-    /* only doit once */
-    if (conn->_graceful_shutdown_timeout.cb != NULL)
-        return;
+    assert(conn->_graceful_shutdown_timeout.cb == NULL);
     conn->_graceful_shutdown_timeout.cb = graceful_shutdown_resend_goaway;
 
     if (conn->state < H2O_HTTP2_CONN_STATE_HALF_CLOSED) {

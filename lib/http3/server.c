@@ -1964,11 +1964,9 @@ static void initiate_graceful_shutdown(h2o_conn_t *_conn)
     h2o_linklist_insert(&_conn->ctx->_conns.shutdown, &_conn->_conns);
     _conn->state = H2O_CONNECTION_STATE_SHUTDOWN;
     ++*get_connection_state_counter(_conn->ctx, _conn->state);
-    struct st_h2o_http3_server_conn_t *conn = (void *)_conn;
 
-    /* only doit once */
-    if (conn->_graceful_shutdown_timeout.cb != NULL)
-        return;
+    struct st_h2o_http3_server_conn_t *conn = (void *)_conn;
+    assert(conn->_graceful_shutdown_timeout.cb == NULL);
     conn->_graceful_shutdown_timeout.cb = graceful_shutdown_resend_goaway;
 
     h2o_http3_send_shutdown_goaway_frame(&conn->h3);
