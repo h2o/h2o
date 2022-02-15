@@ -1718,9 +1718,8 @@ static h2o_timestamp_t h2o_get_timestamp(h2o_context_t *ctx, h2o_mem_pool_t *poo
 void h2o_context_update_timestamp_string_cache(h2o_context_t *ctx);
 /**
  * Closes at most @max_connections_to_close connections that have been inactive for @min_age milliseconds
- * @return number of closed connections
  */
-size_t h2o_context_close_idle_connections(h2o_context_t *ctx, size_t max_connections_to_close, uint64_t min_age);
+void h2o_context_close_idle_connections(h2o_context_t *ctx, size_t max_connections_to_close, uint64_t min_age);
 /**
  * returns pointer to connection state counter
  */

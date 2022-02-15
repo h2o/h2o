@@ -191,20 +191,15 @@ void h2o_context_update_timestamp_string_cache(h2o_context_t *ctx)
     h2o_time2str_log(ctx->_timestamp_cache.value->log, ctx->_timestamp_cache.tv_at.tv_sec);
 }
 
-size_t h2o_context_close_idle_connections(h2o_context_t *ctx, size_t max_connections_to_close, uint64_t min_age)
+void h2o_context_close_idle_connections(h2o_context_t *ctx, size_t max_connections_to_close, uint64_t min_age)
 {
     if (max_connections_to_close <= 0)
-        return 0;
+        return;
 
-    size_t closed = 0;
+    size_t closed = ctx->_conns.num_conns.shutdown;
 
-    // consider connections in shutdown state as closed
-    H2O_CONN_LIST_FOREACH(h2o_conn_t * conn, ({&ctx->_conns.shutdown}), {
-        conn;
-        closed++;
-        if (closed == max_connections_to_close)
-            return closed;
-    });
+    if (closed == max_connections_to_close)
+        return;
 
     H2O_CONN_LIST_FOREACH(h2o_conn_t * conn, ({&ctx->_conns.idle}), {
         struct timeval now = h2o_gettimeofday(ctx->loop);
@@ -213,9 +208,8 @@ size_t h2o_context_close_idle_connections(h2o_context_t *ctx, size_t max_connect
         conn->callbacks->close_idle_connection(conn);
         closed++;
         if (closed == max_connections_to_close)
-            return closed;
+            return;
     });
-    return closed;
 }
 
 size_t *get_connection_state_counter(h2o_context_t *ctx, h2o_connection_state_t state)
