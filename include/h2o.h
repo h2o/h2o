@@ -928,7 +928,7 @@ typedef struct st_h2o_conn_callbacks_t {
     /**
      * returns number of closed idle connections
      */
-    size_t (*close_idle_connection)(h2o_conn_t *conn);
+    void (*close_idle_connection)(h2o_conn_t *conn);
     /**
      * shutdown of connection is requested
      */

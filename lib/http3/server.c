@@ -243,7 +243,7 @@ struct st_h2o_http3_server_stream_t {
 
 static int foreach_request(h2o_conn_t *_conn, int (*cb)(h2o_req_t *req, void *cbdata), void *cbdata);
 static void initiate_graceful_shutdown(h2o_conn_t *_conn);
-static size_t close_idle_connection(h2o_conn_t *_conn);
+static void close_idle_connection(h2o_conn_t *_conn);
 static void on_stream_destroy(quicly_stream_t *qs, int err);
 static int handle_input_post_trailers(struct st_h2o_http3_server_stream_t *stream, const uint8_t **src, const uint8_t *src_end,
                                       int in_generator, const char **err_desc);
@@ -1952,10 +1952,9 @@ static void graceful_shutdown_resend_goaway(h2o_timer_t *entry)
     }
 }
 
-static size_t close_idle_connection(h2o_conn_t *_conn)
+static void close_idle_connection(h2o_conn_t *_conn)
 {
     initiate_graceful_shutdown(_conn);
-    return 1;
 }
 
 static void initiate_graceful_shutdown(h2o_conn_t *_conn)

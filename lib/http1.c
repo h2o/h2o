@@ -760,15 +760,13 @@ void reqread_on_read(h2o_socket_t *sock, const char *err)
         conn->_req_entity_reader->handle_incoming_entity(conn);
 }
 
-static size_t close_idle_connection(h2o_conn_t *_conn)
+static void close_idle_connection(h2o_conn_t *_conn)
 {
     struct st_h2o_http1_conn_t *conn = (void *)_conn;
     if (conn->sock->input->size == 0) {
         conn->req.http1_is_persistent = 0;
         close_connection(conn, 1);
-        return 1;
     }
-    return 0;
 }
 
 static void on_timeout(struct st_h2o_http1_conn_t *conn)

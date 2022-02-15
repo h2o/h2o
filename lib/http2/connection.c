@@ -102,10 +102,9 @@ static void graceful_shutdown_resend_goaway(h2o_timer_t *entry)
     }
 }
 
-static size_t close_idle_connection(h2o_conn_t *_conn)
+static void close_idle_connection(h2o_conn_t *_conn)
 {
     initiate_graceful_shutdown(_conn);
-    return 1;
 }
 
 static void initiate_graceful_shutdown(h2o_conn_t *_conn)

@@ -210,8 +210,8 @@ size_t h2o_context_close_idle_connections(h2o_context_t *ctx, size_t max_connect
         struct timeval now = h2o_gettimeofday(ctx->loop);
         if (h2o_timeval_subtract(&conn->connected_at, &now) < (min_age*1000*1000))
             continue;
-        if (conn->callbacks->close_idle_connection(conn))
-            closed++;
+        conn->callbacks->close_idle_connection(conn);
+        closed++;
         if (closed == max_connections_to_close)
             return closed;
     });
