@@ -23,12 +23,12 @@
 #define __APPLE_USE_RFC_3542 /* to use IPV6_PKTINFO */
 #endif
 #include <errno.h>
+#include <sys/types.h>
 #include <netinet/in.h>
 #include <netinet/udp.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <sys/socket.h>
-#include <sys/types.h>
 #include "picotls/openssl.h"
 #include "h2o/string_.h"
 #include "h2o/http3_common.h"
@@ -1124,6 +1124,33 @@ void h2o_http3_dispose_conn(h2o_http3_conn_t *conn)
     h2o_quic_dispose_conn(&conn->super);
 }
 
+static size_t build_firstflight(h2o_http3_conn_t *conn, uint8_t *bytebuf, size_t capacity)
+{
+    ptls_buffer_t buf;
+    int ret = 0;
+
+    ptls_buffer_init(&buf, bytebuf, capacity);
+
+    /* push stream type */
+    ptls_buffer_push_quicint(&buf, H2O_HTTP3_STREAM_TYPE_CONTROL);
+
+    /* push SETTINGS frame */
+    ptls_buffer_push_quicint(&buf, H2O_HTTP3_FRAME_TYPE_SETTINGS);
+    ptls_buffer_push_block(&buf, -1, {
+        quicly_context_t *qctx = quicly_get_context(conn->super.quic);
+        if (qctx->transport_params.max_datagram_frame_size != 0) {
+            ptls_buffer_push_quicint(&buf, H2O_HTTP3_SETTINGS_H3_DATAGRAM);
+            ptls_buffer_push_quicint(&buf, 1);
+        };
+    });
+
+    assert(!buf.is_allocated);
+    return buf.off;
+
+Exit:
+    h2o_fatal("unreachable");
+}
+
 int h2o_http3_setup(h2o_http3_conn_t *conn, quicly_conn_t *quic)
 {
     int ret;
@@ -1139,12 +1166,10 @@ int h2o_http3_setup(h2o_http3_conn_t *conn, quicly_conn_t *quic)
     conn->qpack.dec = h2o_qpack_create_decoder(0, 100 /* FIXME */);
 
     { /* open control streams, send SETTINGS */
-        static const uint8_t client_first_flight[] = {H2O_HTTP3_STREAM_TYPE_CONTROL, H2O_HTTP3_FRAME_TYPE_SETTINGS, 0};
-        static const uint8_t server_first_flight[] = {H2O_HTTP3_STREAM_TYPE_CONTROL, H2O_HTTP3_FRAME_TYPE_SETTINGS, 0};
-        h2o_iovec_t first_flight = quicly_is_client(conn->super.quic)
-                                       ? h2o_iovec_init(client_first_flight, sizeof(client_first_flight))
-                                       : h2o_iovec_init(server_first_flight, sizeof(server_first_flight));
-        if ((ret = open_egress_unistream(conn, &conn->_control_streams.egress.control, first_flight)) != 0)
+        uint8_t firstflight[32];
+        size_t firstflight_len = build_firstflight(conn, firstflight, sizeof(firstflight));
+        if ((ret = open_egress_unistream(conn, &conn->_control_streams.egress.control,
+                                         h2o_iovec_init(firstflight, firstflight_len))) != 0)
             return ret;
     }
 
@@ -1243,6 +1268,20 @@ int h2o_http3_handle_settings_frame(h2o_http3_conn_t *conn, const uint8_t *paylo
         case H2O_HTTP3_SETTINGS_QPACK_BLOCKED_STREAMS:
             blocked_streams = value;
             break;
+        case H2O_HTTP3_SETTINGS_H3_DATAGRAM:
+            switch (value) {
+            case 0:
+                break;
+            case 1: {
+                const quicly_transport_parameters_t *remote_tp = quicly_get_remote_transport_parameters(conn->super.quic);
+                if (remote_tp->max_datagram_frame_size == 0)
+                    goto Malformed;
+                conn->peer_settings.h3_datagram = 1;
+            } break;
+            default:
+                goto Malformed;
+            }
+            break;
         default:
             break;
         }
@@ -1284,4 +1323,37 @@ void h2o_http3_send_goaway_frame(h2o_http3_conn_t *conn, uint64_t stream_or_push
     h2o_http3_encode_goaway_frame((uint8_t *)alloced.base, stream_or_push_id);
     conn->_control_streams.egress.control->sendbuf->size += cap;
     quicly_stream_sync_sendbuf(conn->_control_streams.egress.control->quic, 1);
+}
+
+int h2o_http3_can_use_h3_datagram(h2o_http3_conn_t *conn)
+{
+    if (!conn->peer_settings.h3_datagram)
+        return 0;
+    quicly_context_t *qctx = quicly_get_context(conn->super.quic);
+    return qctx->transport_params.max_datagram_frame_size != 0;
+}
+
+void h2o_http3_send_h3_datagrams(h2o_http3_conn_t *conn, uint64_t flow_id, h2o_iovec_t *datagrams, size_t num_datagrams)
+{
+    for (size_t i = 0; i < num_datagrams; ++i) {
+        h2o_iovec_t *src = datagrams + i;
+        uint8_t buf[quicly_encodev_capacity(flow_id) + src->len], *p = buf;
+        p = quicly_encodev(p, flow_id);
+        memcpy(p, src->base, src->len);
+        p += src->len;
+        ptls_iovec_t payload = ptls_iovec_init(buf, p - buf);
+        quicly_send_datagram_frames(conn->super.quic, &payload, 1);
+    }
+
+    h2o_quic_schedule_timer(&conn->super);
+}
+
+uint64_t h2o_http3_decode_h3_datagram(h2o_iovec_t *payload, const void *_src, size_t len)
+{
+    const uint8_t *src = _src, *end = src + len;
+    uint64_t flow_id;
+
+    if ((flow_id = ptls_decode_quicint(&src, end)) != UINT64_MAX)
+        *payload = h2o_iovec_init(src, end - src);
+    return flow_id;
 }

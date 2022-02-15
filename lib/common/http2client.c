@@ -100,8 +100,8 @@ struct st_h2o_http2client_stream_t {
 
     struct {
         h2o_httpclient_proceed_req_cb proceed_req;
-        size_t bytes_in_flight;
         unsigned char done : 1;
+        unsigned char inflight : 1;
     } streaming;
 };
 
@@ -269,7 +269,8 @@ static void call_callback_with_error(struct st_h2o_http2client_stream_t *stream,
         break;
     case STREAM_STATE_CLOSED:
         if (stream->streaming.proceed_req != NULL) {
-            stream->streaming.proceed_req(&stream->super, 0, H2O_SEND_STATE_ERROR);
+            stream->streaming.inflight = 0; /* proceed_req can be called to indicate error, regardless of write being inflight */
+            stream->streaming.proceed_req(&stream->super, errstr);
         }
         break;
     }
@@ -289,7 +290,7 @@ static int on_head(struct st_h2o_http2client_conn_t *conn, struct st_h2o_http2cl
     //    assert(stream->state == H2O_HTTP2CLIENT_STREAM_STATE_RECV_HEADERS);
 
     if ((ret = h2o_hpack_parse_response(stream->super.pool, h2o_hpack_decode_header, &conn->input.header_table,
-                                        &stream->input.status, &stream->input.headers, src, len, err_desc)) != 0) {
+                                        &stream->input.status, &stream->input.headers, NULL, src, len, err_desc)) != 0) {
         if (ret == H2O_HTTP2_ERROR_INVALID_HEADER_CHAR) {
             ret = H2O_HTTP2_ERROR_PROTOCOL;
             goto Failed;
@@ -958,7 +959,11 @@ static void on_connection_ready(struct st_h2o_http2client_stream_t *stream, stru
     h2o_http2_window_init(&stream->output.window, conn->peer_settings.initial_window_size);
 
     /* forward request state */
-    if (body.base != NULL || stream->streaming.proceed_req != NULL) {
+    if (stream->streaming.proceed_req != NULL) {
+        stream->state.req = STREAM_STATE_BODY;
+        if (body.len != 0)
+            stream->streaming.inflight = 1;
+    } else if (body.base != NULL) {
         stream->state.req = STREAM_STATE_BODY;
     } else {
         stream->state.req = STREAM_STATE_CLOSED;
@@ -967,9 +972,9 @@ static void on_connection_ready(struct st_h2o_http2client_stream_t *stream, stru
     /* send headers */
     h2o_hpack_flatten_request(&conn->output.buf, &conn->output.header_table, conn->peer_settings.header_table_size,
                               stream->stream_id, conn->peer_settings.max_frame_size, method, &url, headers, num_headers,
-                              body.base == NULL);
+                              stream->state.req == STREAM_STATE_CLOSED);
 
-    if (body.base != NULL) {
+    if (stream->state.req == STREAM_STATE_BODY) {
         h2o_buffer_init(&stream->output.buf, &h2o_socket_buffer_prototype);
         h2o_buffer_append(&stream->output.buf, body.base, body.len);
     }
@@ -1015,11 +1020,9 @@ static void on_write_complete(h2o_socket_t *sock, const char *err)
             H2O_STRUCT_FROM_MEMBER(struct st_h2o_http2client_stream_t, output.sending_link, link);
         h2o_linklist_unlink(link);
 
-        if (stream->streaming.proceed_req != NULL) {
-            size_t bytes_written = stream->streaming.bytes_in_flight;
-            stream->streaming.bytes_in_flight = 0;
-            stream->streaming.proceed_req(&stream->super, bytes_written,
-                                          stream->streaming.done ? H2O_SEND_STATE_FINAL : H2O_SEND_STATE_IN_PROGRESS);
+        if (stream->streaming.proceed_req != NULL && stream->streaming.inflight) {
+            stream->streaming.inflight = 0;
+            stream->streaming.proceed_req(&stream->super, NULL);
         }
 
         if (stream->streaming.proceed_req == NULL || stream->streaming.done) {
@@ -1102,9 +1105,6 @@ static void do_emit_writereq(struct st_h2o_http2client_conn_t *conn)
         } else if (h2o_http2_window_get_avail(&stream->output.window) > 0) {
             h2o_linklist_insert(&conn->output.sending_streams, node); /* move to the tail to rotate buffers */
         }
-
-        if (stream->streaming.proceed_req != NULL)
-            stream->streaming.bytes_in_flight += bytes_emitted;
 
         if (next == first)
             break;
@@ -1218,7 +1218,9 @@ static int do_write_req(h2o_httpclient_t *_client, h2o_iovec_t chunk, int is_end
 {
     struct st_h2o_http2client_stream_t *stream = (void *)_client;
     assert(stream->streaming.proceed_req != NULL);
+    assert(!stream->streaming.inflight);
 
+    stream->streaming.inflight = 1;
     if (is_end_stream)
         stream->streaming.done = 1;
 

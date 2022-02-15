@@ -60,17 +60,25 @@ sub doit {
         ok($cl_headers == 0, "Saw no content-length: header");
     }
 }
-my $file_size = 512;
-my $file = create_data_file($file_size);
-
 # curl doesn't add a CL header when using -X POST
-doit("curl -so /dev/null --http2 -X POST http://127.0.0.1:$server->{'port'}/ &", 1, 0);
+subtest "no cl" => sub {
+    doit("curl -so /dev/null --http2 -X POST http://127.0.0.1:$server->{'port'}/ &", 1, 0);
+};
+
 # curl adds a content-length:0 header when using --data ''
-doit("curl -so /dev/null --http2 --data '' http://127.0.0.1:$server->{'port'}/ &", 1, 0);
+subtest "cl: 0" => sub {
+    doit("curl -so /dev/null --http2 --data '' http://127.0.0.1:$server->{'port'}/ &", 1, 0);
+};
 
 # check that an existing CL header is preserved
-doit("curl -so /dev/null --http2 --data 'a=b' http://127.0.0.1:$server->{'port'}/ &", 1, 3);
-doit("curl -so /dev/null --http2 --header 'transfer-encoding: chunked' --data-binary \@$file -X POST http://127.0.0.1:$server->{'port'}/ &", 1, $file_size);
+subtest "cl-preserved" => sub {
+    doit("curl -so /dev/null --http2 --data 'a=b' http://127.0.0.1:$server->{'port'}/ &", 1, 3);
+};
+subtest "cl-preserved-2" => sub {
+    my $file_size = 512;
+    my $file = create_data_file($file_size);
+    doit("curl -so /dev/null --http2 --header 'transfer-encoding: chunked' --data-binary \@$file -X POST http://127.0.0.1:$server->{'port'}/ &", 1, $file_size);
+};
 
 $socket->close();
 done_testing();
