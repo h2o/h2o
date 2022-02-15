@@ -1318,7 +1318,7 @@ void h2o_http3_send_qpack_header_ack(h2o_http3_conn_t *conn, const void *bytes, 
 
 void h2o_http3_send_shutdown_goaway_frame(h2o_http3_conn_t *conn)
 {
-    /* There is a moment where the control stream is already closed while st_h2o_http3_server_conn_t is not.
+    /* There is a moment where the transport-level close has been initiated while st_h2o_http3_server_conn_t remains.
      * Check QUIC connection state to skip sending GOAWAY in such a case. */
     if (conn->state < H2O_HTTP3_CONN_STATE_HALF_CLOSED && quicly_get_state(conn->super.quic) == QUICLY_STATE_CONNECTED) {
         /* advertise the maximum stream ID to indicate that we will no longer accept new requests.
