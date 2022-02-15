@@ -182,17 +182,15 @@ static void set_req_io_timeout(struct st_h2o_http1_conn_t *conn, uint64_t timeou
     if (conn->_io_timeout_entry.cb != NULL)
         h2o_timer_unlink(&conn->_io_timeout_entry);
     conn->_io_timeout_entry.cb = cb;
-    h2o_linklist_unlink(&conn->super._conns);
-    --*get_connection_state_counter(conn->super.ctx, conn->super.state);
     if (cb != NULL) {
         h2o_timer_link(conn->super.ctx->loop, timeout, &conn->_io_timeout_entry);
-        h2o_linklist_insert(&conn->super.ctx->_conns.idle, &conn->super._conns);
-        conn->super.state = H2O_CONNECTION_STATE_IDLE;
     } else {
+        h2o_linklist_unlink(&conn->super._conns);
+        --*get_connection_state_counter(conn->super.ctx, conn->super.state);
         h2o_linklist_insert(&conn->super.ctx->_conns.active, &conn->super._conns);
         conn->super.state = H2O_CONNECTION_STATE_ACTIVE;
+        ++*get_connection_state_counter(conn->super.ctx, conn->super.state);
     }
-    ++*get_connection_state_counter(conn->super.ctx, conn->super.state);
 }
 
 static void clear_timeouts(struct st_h2o_http1_conn_t *conn)
