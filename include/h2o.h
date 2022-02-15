@@ -598,6 +598,12 @@ typedef struct st_h2o_context_storage_item_t {
 
 typedef H2O_VECTOR(h2o_context_storage_item_t) h2o_context_storage_t;
 
+typedef enum h2o_connection_state {
+    H2O_CONNECTION_STATE_IDLE,
+    H2O_CONNECTION_STATE_ACTIVE,
+    H2O_CONNECTION_STATE_SHUTDOWN,
+} h2o_connection_state_t;
+
 /**
  * context of the http server.
  */
@@ -638,8 +644,31 @@ struct st_h2o_context_t {
     struct {
         /**
          * link-list of h2o_conn_t
+         *
+         * list of connections in each state
+         *
+         * idle:
+         *  - newly created connections are `idle`
+         *  - `idle` connections become `active` as they receive requests
+         *  - `active` connections become `idle` when there are no pending requests
+         * active:
+         *  - connections that contain pending requests
+         * shutdown:
+         *  - connections that are shutting down
          */
-        h2o_linklist_t active, idle, shutdown;
+        h2o_linklist_t idle, active, shutdown;
+        /**
+         * number of connections in each state
+         */
+        union {
+            /**
+             * counters (the order MUST match that of h2o_connection_state_t; it is accessed by index via the use of counters[])
+             */
+            struct {
+                size_t idle, active, shutdown;
+            };
+            size_t counters[1];
+        } num_conns;
     } _conns;
     struct {
 
@@ -995,6 +1024,7 @@ struct st_h2o_conn_t {
         char str[H2O_UUID_STR_RFC4122_LEN + 1];
         uint8_t is_initialized;
     } _uuid;
+    h2o_connection_state_t state;
     /* internal structure */
     h2o_linklist_t _conns;
 };
@@ -1691,6 +1721,10 @@ void h2o_context_update_timestamp_string_cache(h2o_context_t *ctx);
  * @return number of closed connections
  */
 size_t h2o_context_close_idle_connections(h2o_context_t *ctx, size_t max_connections_to_close, uint64_t min_age);
+/**
+ * returns pointer to connection state counter
+ */
+size_t *get_connection_state_counter(h2o_context_t *ctx, h2o_connection_state_t state);
 /**
  * returns per-module context set
  */

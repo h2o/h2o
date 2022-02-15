@@ -104,14 +104,19 @@ static void graceful_shutdown_resend_goaway(h2o_timer_t *entry)
 
 static size_t close_idle_connection(h2o_conn_t *_conn)
 {
-    h2o_linklist_unlink(&_conn->_conns);
-    h2o_linklist_insert(&_conn->ctx->_conns.shutdown, &_conn->_conns);
     initiate_graceful_shutdown(_conn);
     return 1;
 }
 
 static void initiate_graceful_shutdown(h2o_conn_t *_conn)
 {
+
+    --*get_connection_state_counter(_conn->ctx, _conn->state);
+    h2o_linklist_unlink(&_conn->_conns);
+    h2o_linklist_insert(&_conn->ctx->_conns.shutdown, &_conn->_conns);
+    _conn->state = H2O_CONNECTION_STATE_SHUTDOWN;
+    ++*get_connection_state_counter(_conn->ctx, _conn->state);
+
     /* draft-16 6.8
      * A server that is attempting to gracefully shut down a connection SHOULD send an initial GOAWAY frame with the last stream
      * identifier set to 231-1 and a NO_ERROR code. This signals to the client that a shutdown is imminent and that no further
@@ -149,17 +154,6 @@ static void on_idle_timeout(h2o_timer_t *entry)
 
 static void update_idle_timeout(h2o_http2_conn_t *conn)
 {
-    if (!h2o_timer_is_linked(&conn->_graceful_shutdown_timeout)) {
-        h2o_linklist_unlink(&conn->super._conns);
-        if (0 == conn->num_streams.priority.open + conn->num_streams.priority.half_closed + conn->num_streams.pull.open +
-                conn->num_streams.pull.half_closed + conn->num_streams.push.open + conn->num_streams.push.half_closed) {
-            // all streams are idle
-            h2o_linklist_insert(&conn->super.ctx->_conns.idle, &conn->super._conns);
-        } else {
-            h2o_linklist_insert(&conn->super.ctx->_conns.active, &conn->super._conns);
-        }
-    }
-
     /* do nothing touch anything if write is in progress */
     if (conn->_write.buf_in_flight != NULL) {
         assert(h2o_timer_is_linked(&conn->_timeout_entry));
@@ -426,6 +420,7 @@ void close_connection_now(h2o_http2_conn_t *conn)
     if (conn->casper != NULL)
         h2o_http2_casper_destroy(conn->casper);
     h2o_linklist_unlink(&conn->super._conns);
+    --*get_connection_state_counter(conn->super.ctx, conn->super.state);
 
     if (conn->sock != NULL)
         h2o_socket_close(conn->sock);
@@ -1731,7 +1726,12 @@ static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_hostconf_t **hosts,
     conn->streams = kh_init(h2o_http2_stream_t);
     h2o_http2_scheduler_init(&conn->scheduler);
     conn->state = H2O_HTTP2_CONN_STATE_OPEN;
+
+    /* start connection as idle */
     h2o_linklist_insert(&conn->super.ctx->_conns.idle, &conn->super._conns);
+    conn->super.state = H2O_CONNECTION_STATE_IDLE;
+    ++*get_connection_state_counter(conn->super.ctx, conn->super.state);
+
     conn->_read_expect = expect_preface;
     conn->_input_header_table.hpack_capacity = conn->_input_header_table.hpack_max_capacity =
         H2O_HTTP2_SETTINGS_DEFAULT.header_table_size;
@@ -1921,6 +1921,7 @@ int h2o_http2_handle_upgrade(h2o_req_t *req, struct timeval connected_at)
     return 0;
 Error:
     h2o_linklist_unlink(&http2conn->super._conns);
+    --*get_connection_state_counter(http2conn->super.ctx, http2conn->super.state);
     kh_destroy(h2o_http2_stream_t, http2conn->streams);
     free(http2conn);
     return -1;

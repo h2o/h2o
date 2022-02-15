@@ -217,3 +217,8 @@ size_t h2o_context_close_idle_connections(h2o_context_t *ctx, size_t max_connect
     });
     return closed;
 }
+
+size_t *get_connection_state_counter(h2o_context_t *ctx, h2o_connection_state_t state)
+{
+    return ctx->_conns.num_conns.counters + (size_t)state;
+}

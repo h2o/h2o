@@ -454,12 +454,18 @@ static void set_state(struct st_h2o_http3_server_stream_t *stream, enum h2o_http
     default:
         break;
     }
-    /* all streams are either waiting on initial or finished processing */
+
     if (!h2o_timer_is_linked(&conn->_graceful_shutdown_timeout)) {
-        if (quicly_num_streams_by_group(conn->h3.super.quic, 0, 0) == conn->num_streams.recv_headers + conn->num_streams.close_wait) {
-            h2o_linklist_unlink(&conn->super._conns);
+        --*get_connection_state_counter(conn->super.ctx, conn->super.state);
+        h2o_linklist_unlink(&conn->super._conns);
+        if (quicly_num_streams_by_group(conn->h3.super.quic, 0, 0) == conn->num_streams.close_wait) {
             h2o_linklist_insert(&conn->super.ctx->_conns.idle, &conn->super._conns);
+            conn->super.state = H2O_CONNECTION_STATE_IDLE;
+        } else {
+            h2o_linklist_insert(&conn->super.ctx->_conns.active, &conn->super._conns);
+            conn->super.state = H2O_CONNECTION_STATE_ACTIVE;
         }
+        ++*get_connection_state_counter(conn->super.ctx, conn->super.state);
     }
 }
 
@@ -924,11 +930,6 @@ static void handle_buffered_input(struct st_h2o_http3_server_stream_t *stream, i
 static void on_receive(quicly_stream_t *qs, size_t off, const void *input, size_t len)
 {
     struct st_h2o_http3_server_stream_t *stream = qs->data;
-
-    /* start handling, mark as active */
-    struct st_h2o_http3_server_conn_t *conn = get_conn(stream);
-    h2o_linklist_unlink(&conn->super._conns);
-    h2o_linklist_insert(&conn->super.ctx->_conns.active, &conn->super._conns);
 
     /* save received data (FIXME avoid copying if possible; see hqclient.c) */
     h2o_http3_update_recvbuf(&stream->recvbuf.buf, off, input, len);
@@ -1769,6 +1770,7 @@ static void on_h3_destroy(h2o_quic_conn_t *h3_)
 
     /* unlink and dispose */
     h2o_linklist_unlink(&conn->super._conns);
+    --*get_connection_state_counter(conn->super.ctx, conn->super.state);
     if (h2o_timer_is_linked(&conn->timeout))
         h2o_timer_unlink(&conn->timeout);
     if (h2o_timer_is_linked(&conn->_graceful_shutdown_timeout))
@@ -1885,6 +1887,8 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
     ++ctx->super.next_cid.master_id; /* FIXME check overlap */
     h2o_http3_setup(&conn->h3, qconn);
     h2o_linklist_insert(&ctx->accept_ctx->ctx->_conns.idle, &conn->super._conns);
+    conn->super.state = H2O_CONNECTION_STATE_IDLE;
+    ++*get_connection_state_counter(conn->super.ctx, conn->super.state);
 
     H2O_PROBE_CONN(H3S_ACCEPT, &conn->super, &conn->super, conn->h3.super.quic, h2o_conn_get_uuid(&conn->super));
 
@@ -1950,14 +1954,17 @@ static void graceful_shutdown_resend_goaway(h2o_timer_t *entry)
 
 static size_t close_idle_connection(h2o_conn_t *_conn)
 {
-    h2o_linklist_unlink(&_conn->_conns);
-    h2o_linklist_insert(&_conn->ctx->_conns.shutdown, &_conn->_conns);
     initiate_graceful_shutdown(_conn);
     return 1;
 }
 
 static void initiate_graceful_shutdown(h2o_conn_t *_conn)
 {
+    --*get_connection_state_counter(_conn->ctx, _conn->state);
+    h2o_linklist_unlink(&_conn->_conns);
+    h2o_linklist_insert(&_conn->ctx->_conns.shutdown, &_conn->_conns);
+    _conn->state = H2O_CONNECTION_STATE_SHUTDOWN;
+    ++*get_connection_state_counter(_conn->ctx, _conn->state);
     struct st_h2o_http3_server_conn_t *conn = (void *)_conn;
 
     /* only doit once */

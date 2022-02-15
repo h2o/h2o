@@ -3330,6 +3330,7 @@ err:
 }
 #endif
 
+static void count_connections(size_t *n_actives, size_t *n_idles, size_t *n_shutdowns)
 static int count_linklist(const h2o_linklist_t *list)
 {
     int count = 0;
@@ -3339,14 +3340,13 @@ static int count_linklist(const h2o_linklist_t *list)
     return count;
 }
 
-static void count_connections(int *n_actives, int *n_idles, int *n_shutdowns)
 {
-    int active = 0, idle = 0, shutdown = 0;
+    size_t active = 0, idle = 0, shutdown = 0;
     for (size_t i = 0; i < conf.thread_map.size; ++i) {
         const h2o_context_t *ctx = &conf.threads[i].ctx;
-        active += count_linklist(&ctx->_conns.active);
-        idle += count_linklist(&ctx->_conns.idle);
-        shutdown += count_linklist(&ctx->_conns.shutdown);
+        active += ctx->_conns.num_conns.active;
+        idle += ctx->_conns.num_conns.idle;
+        shutdown += ctx->_conns.num_conns.shutdown;
     }
     *n_actives = active;
     *n_idles = idle;
@@ -3366,7 +3366,7 @@ static h2o_iovec_t on_extra_status(void *unused, h2o_globalconf_t *_conf, h2o_re
     if ((generation = getenv("SERVER_STARTER_GENERATION")) == NULL)
         generation = "null";
 
-    int n_actives, n_idles, n_shutdowns;
+    size_t n_actives, n_idles, n_shutdowns;
     count_connections(&n_actives, &n_idles, &n_shutdowns);
 
     ret.base = h2o_mem_alloc_pool(&req->pool, char, BUFSIZE);
@@ -3382,13 +3382,13 @@ static h2o_iovec_t on_extra_status(void *unused, h2o_globalconf_t *_conf, h2o_re
                        " \"max-connections\": %d,\n"
                        " \"listeners\": %zu,\n"
                        " \"worker-threads\": %zu,\n"
-                       " \"active-connections\": %d,\n"
-                       " \"idle-connections\": %d,\n"
-                       " \"shutdown-connections\": %d,\n"
+                       " \"active-connections\": %zu,\n"
+                       " \"idle-connections\": %zu,\n"
+                       " \"shutdown-connections\": %zu,\n"
                        " \"num-sessions\": %lu",
                        OpenSSL_version(OPENSSL_VERSION), current_time, restart_time, (uint64_t)(now - conf.launch_time), generation,
-                       num_connections(0), conf.max_connections, conf.num_listeners, conf.thread_map.size, n_actives, n_idles, n_shutdowns,
-                       num_sessions(0));
+                       num_connections(0), conf.max_connections, conf.num_listeners, conf.thread_map.size, n_actives, n_idles,
+                       n_shutdowns, num_sessions(0));
     assert(ret.len < BUFSIZE);
 
 #if JEMALLOC_STATS == 1
