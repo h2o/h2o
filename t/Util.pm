@@ -36,6 +36,7 @@ our @EXPORT = qw(
     empty_ports
     create_data_file
     md5_file
+    etag_file
     prog_exists
     run_prog
     openssl_can_negotiate
@@ -333,6 +334,13 @@ sub md5_file {
         or die "failed to open file:$fn:$!";
     local $/;
     return md5_hex(join '', <$fh>);
+}
+
+sub etag_file {
+    my $fn = shift;
+    my @st = stat $fn
+        or die "failed to stat file:$fn:$!";
+    return sprintf("\"%08x-%zx\"", $st[9], $st[7]);
 }
 
 sub prog_exists {

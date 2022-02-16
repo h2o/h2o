@@ -77,27 +77,6 @@ __sync_add_and_fetch(&a, 1);
 return 0;
 }" ARCH_SUPPORTS_64BIT_ATOMICS)
 
-CMAKE_PUSH_CHECK_STATE()
-SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -pthread")
-CHECK_C_SOURCE_COMPILES("
-#define _GNU_SOURCE
-#include <sched.h>
-#include <pthread.h>
-int main(void) {
-#ifndef __NetBSD__
-cpu_set_t s;
-CPU_ZERO(&s);
-pthread_setaffinity_np(0, sizeof(s), &s);
-#else
-cpuset_t *s = cpuset_create();
-cpuset_zero(s);
-pthread_setaffinity_np(0, cpuset_size(s), s);
-cpuset_destroy(s);
-#endif
-return 0;
-}" HAS_PTHREAD_SETAFFINITY_NP)
-CMAKE_POP_CHECK_STATE()
-
 # Find out if libc provices backtrace()
 CMAKE_PUSH_CHECK_STATE()
 FIND_LIBRARY(LIBC_BACKTRACE_LIB "execinfo")
@@ -463,8 +442,6 @@ SET(LIB_SOURCE_FILES
     lib/handler/configurator/headers_util.c
 
     lib/http1.c
-
-    lib/tunnel.c
 
     lib/http2/cache_digests.c
     lib/http2/casper.c
@@ -1074,3 +1051,13 @@ IF ("${VERSION_PRERELEASE}" STREQUAL "-DEV")
         ENDIF (TARGET h2olog)
     ENDIF ()
 ENDIF ()
+
+# injectaddr.so
+IF (CMAKE_SYSTEM_NAME STREQUAL "Linux" OR APPLE)
+    ADD_LIBRARY(injectaddr SHARED t/injectaddr.c)
+    SET_TARGET_PROPERTIES(injectaddr PROPERTIES EXCLUDE_FROM_ALL 1)
+    IF (CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        TARGET_LINK_LIBRARIES(injectaddr dl)
+    ENDIF ()
+    ADD_DEPENDENCIES(checkdepends injectaddr)
+ENDIF()

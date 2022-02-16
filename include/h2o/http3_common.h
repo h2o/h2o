@@ -49,6 +49,7 @@
 #define H2O_HTTP3_SETTINGS_QPACK_MAX_TABLE_CAPACITY 1
 #define H2O_HTTP3_SETTINGS_MAX_FIELD_SECTION_SIZE 6
 #define H2O_HTTP3_SETTINGS_QPACK_BLOCKED_STREAMS 7
+#define H2O_HTTP3_SETTINGS_H3_DATAGRAM 0x276
 
 #define H2O_HTTP3_ERROR_NONE QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(0x100)
 #define H2O_HTTP3_ERROR_GENERAL_PROTOCOL QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(0x101)
@@ -374,6 +375,7 @@ struct st_h2o_http3_conn_t {
      */
     struct {
         uint64_t max_field_section_size;
+        unsigned h3_datagram : 1;
     } peer_settings;
     struct {
         struct {
@@ -509,6 +511,18 @@ void h2o_http3_send_goaway_frame(h2o_http3_conn_t *conn, uint64_t stream_or_push
  *
  */
 static int h2o_http3_has_received_settings(h2o_http3_conn_t *conn);
+/**
+ * Returns a boolean indicating if the use of H3_DATAGRAM frame has been negotiated
+ */
+int h2o_http3_can_use_h3_datagram(h2o_http3_conn_t *conn);
+/**
+ * sends out H3 datagrams
+ */
+void h2o_http3_send_h3_datagrams(h2o_http3_conn_t *conn, uint64_t flow_id, h2o_iovec_t *datagrams, size_t num_datagrams);
+/**
+ * Decodes an H3 datagram. Returns the flow id if successful, or UINT64_MAX if not.
+ */
+uint64_t h2o_http3_decode_h3_datagram(h2o_iovec_t *payload, const void *_src, size_t len);
 
 /* inline definitions */
 
