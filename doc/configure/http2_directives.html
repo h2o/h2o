@@ -206,6 +206,9 @@ The following describes the configuration directives for controlling the HTTP/2 
 <li><a href="configure/http2_directives.html#http2-max-concurrent-requests-per-connection">
 <code>http2-max-concurrent-requests-per-connection</code>
 </a></li>
+<li><a href="configure/http2_directives.html#http2-max-concurrent-streaming-requests-per-connection">
+<code>http2-max-concurrent-streaming-requests-per-connection</code>
+</a></li>
 <li><a href="configure/http2_directives.html#http2-latency-optimization-min-rtt">
 <code>http2-latency-optimization-min-rtt</code>
 </a></li>
@@ -397,6 +400,29 @@ The value cannot exceed 256.
 <dd><code><pre>http2-max-concurrent-requests-per-connection: 100</pre></code>
 </dl>
 
+<div id="http2-max-concurrent-streaming-requests-per-connection" class="directive-head">
+<h3><a href="configure/http2_directives.html#http2-max-concurrent-streaming-requests-per-connection"><code>"http2-max-concurrent-streaming-requests-per-connection"</code></a></h3>
+</div>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+Maximum number of streaming requests to be handled concurrently within a single HTTP/2 connection.
+
+</p>
+
+<p>
+The value cannot exceed 256.
+</p>
+
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global</dd>
+<dt>Default:</dt>
+<dd><code><pre>http2-max-concurrent-streaming-requests-per-connection: 1</pre></code>
+</dl>
+    
 <div id="http2-latency-optimization-min-rtt" class="directive-head">
 <div class="directive-since">since v2.1</div>
 <h3><a href="configure/http2_directives.html#http2-latency-optimization-min-rtt"><code>"http2-latency-optimization-min-rtt"</code></a></h3>

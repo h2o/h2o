@@ -253,6 +253,20 @@ mrb_value send_early_hints_proc(mrb_state *mrb, mrb_value self)
     return mrb_nil_value();
 }
 
+static mrb_value get_rtt_proc(mrb_state *mrb, mrb_value self)
+{
+    h2o_mruby_generator_t *generator = h2o_mruby_get_generator(mrb, mrb_proc_cfunc_env_get(mrb, 0));
+    if (generator == NULL)
+        return mrb_nil_value();
+    if (generator->req->conn->callbacks->get_rtt != NULL) {
+        int64_t rtt_us = generator->req->conn->callbacks->get_rtt(generator->req->conn);
+        if (rtt_us >= 0) {
+            return mrb_fixnum_value(rtt_us);
+        }
+    }
+    return mrb_nil_value();
+}
+
 static mrb_value build_constants(mrb_state *mrb, const char *server_name, size_t server_name_len)
 {
     mrb_value ary = mrb_ary_new_capa(mrb, H2O_MRUBY_NUM_CONSTANTS);
@@ -319,6 +333,7 @@ static mrb_value build_constants(mrb_state *mrb, const char *server_name, size_t
     SET_LITERAL(H2O_MRUBY_LIT_SERVER_SOFTWARE, "SERVER_SOFTWARE");
     SET_LITERAL(H2O_MRUBY_LIT_H2O_REMAINING_DELEGATIONS, "h2o.remaining_delegations");
     SET_LITERAL(H2O_MRUBY_LIT_H2O_REMAINING_REPROCESSES, "h2o.remaining_reprocesses");
+    SET_LITERAL(H2O_MRUBY_LIT_H2O_GET_RTT, "h2o.get_rtt");
     SET_STRING(H2O_MRUBY_LIT_SERVER_SOFTWARE_VALUE, h2o_mruby_new_str(mrb, server_name, server_name_len));
 
 #undef SET_LITERAL
@@ -765,6 +780,10 @@ static mrb_value build_env(h2o_mruby_generator_t *generator)
             mrb_hash_set(mrb, env, mrb_ary_entry(shared->constants, H2O_MRUBY_LIT_REMOTE_ADDR), h);
         if (!mrb_nil_p(p))
             mrb_hash_set(mrb, env, mrb_ary_entry(shared->constants, H2O_MRUBY_LIT_REMOTE_PORT), p);
+    }
+    if (generator->req->conn->callbacks->get_rtt != NULL) {
+        mrb_hash_set(mrb, env, mrb_ary_entry(shared->constants, H2O_MRUBY_LIT_H2O_GET_RTT),
+                     mrb_obj_value(mrb_proc_new_cfunc_with_env(mrb, get_rtt_proc, 1, &generator->refs.generator)));
     }
     {
         size_t i;

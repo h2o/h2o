@@ -20,7 +20,45 @@
  * IN THE SOFTWARE.
  */
 
+/* @appdata
+{
+    "receive_request_header": ["name", "value"],
+    "send_response_header": ["name", "value"],
+    "h3_frame_receive": ["bytes"]
+}
+*/
+
 provider h2o {
+    /**
+     * When a new connection is accepted, h2o invokes this probe to obtain the flags to be associated to the new connection. The
+     * probe MUST write the result into the h2o_return map; see ebpf.h for details. `original_flags` contain the flags that will be
+     * associated when the probe is not attached.
+     *
+     * Do not use it for a tracing event.
+     */
+    probe _private_socket_lookup_flags(pid_t tid, uint64_t original_flags, struct st_h2o_ebpf_map_key_t *info);
+    /**
+     * Same as `_private_socket_lookup_flags`, expect that this probe is invoked when SNI is being obtained.
+     */
+    probe _private_socket_lookup_flags_sni(pid_t tid, uint64_t original_flags, const char *server_name, size_t server_name_len);
+
+    /**
+     * socket write at H2O socket abstraction layer
+     */
+    probe socket_write(struct st_h2o_socket_t *sock, struct st_h2o_iovec_t *bufs, size_t bufcnt, void *cb);
+    /**
+     * write complete
+     */
+    probe socket_write_complete(struct st_h2o_socket_t *sock, int success);
+    /**
+     * amount of bytes being written using writev(2)
+     */
+    probe socket_writev(struct st_h2o_socket_t *sock, ssize_t ret);
+    /**
+     * amount of payload being provided to the TLS layer, as well as amount of TLS records being buffered
+     */
+    probe socket_write_tls_record(struct st_h2o_socket_t *sock, size_t write_size, size_t bytes_buffered);
+
     /**
      * HTTP-level event, indicating that a request has been received.
      */
@@ -43,7 +81,7 @@ provider h2o {
     /**
      * HTTP/1 server-level event, indicating that a connection has been accepted.
      */
-    probe h1_accept(uint64_t conn_id, struct st_h2o_socket_t *sock, struct st_h2o_conn_t *conn);
+    probe h1_accept(uint64_t conn_id, struct st_h2o_socket_t *sock, struct st_h2o_conn_t *conn, const char *conn_uuid);
     /**
      * HTTP/1 server-level event, indicating that a connection has been closed.
      */
@@ -57,7 +95,7 @@ provider h2o {
     /**
      * HTTP/3 server-level event, indicating that a new connection has been accepted
      */
-    probe h3s_accept(uint64_t conn_id, struct st_h2o_conn_t *conn, struct st_quicly_conn_t *quic);
+    probe h3s_accept(uint64_t conn_id, struct st_h2o_conn_t *conn, struct st_quicly_conn_t *quic, const char *conn_uuid);
     /**
      * HTTP/3 server-level event, indicating that a connection has been destroyed
      */
@@ -68,16 +106,27 @@ provider h2o {
     probe h3s_stream_set_state(uint64_t conn_id, uint64_t req_id, unsigned state);
 
     /**
-     * HTTP/3 event, indicating that a H3 frame has been received. `base` is available except when frame_type is DATA.
+     * HTTP/3 event, indicating that a H3 frame has been received. `bytes` is available except when frame_type is DATA.
      */
-    probe h3_frame_receive(uint64_t frame_type, const void *base, size_t len);
+    probe h3_frame_receive(uint64_t frame_type, const void *bytes, size_t bytes_len);
     /**
      * HTTP/3 event, indicating that a QUIC packet has been received.
      */
-    probe h3_packet_receive(struct sockaddr *dest, struct sockaddr *src, const void *base, size_t len);
+    probe h3_packet_receive(struct sockaddr *dest, struct sockaddr *src, const void *bytes, size_t bytes_len);
     /**
      * HTTP/3 event, indicating that a QUIC packet has been forwarded.
      */
     probe h3_packet_forward(struct sockaddr *dest, struct sockaddr *src, size_t num_packets, size_t num_bytes, int fd);
-
+    /**
+     * HTTP/3 event, indicating that a QUIC packet forwarding to another node is triggered but ignored.
+     */
+    probe h3_packet_forward_to_node_ignore(uint64_t node_id);
+    /**
+     * HTTP/3 event, indicating that a QUIC packet forwarding to another thread is triggered but ignored.
+     */
+    probe h3_packet_forward_to_thread_ignore(uint32_t thread_id);
+    /**
+     * HTTP/3 event, indicating that a forwarded QUIC packet has been received.
+     */
+    probe h3_forwarded_packet_receive(struct sockaddr *dest, struct sockaddr *src, size_t num_bytes);
 };

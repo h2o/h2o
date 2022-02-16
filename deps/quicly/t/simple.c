@@ -292,6 +292,7 @@ static void tiny_stream_window(void)
     quicly_max_stream_data_t max_stream_data_orig = quic_ctx.transport_params.max_stream_data;
     quicly_stream_t *client_stream, *server_stream;
     test_streambuf_t *client_streambuf, *server_streambuf;
+    quicly_stats_t stats;
     int ret;
 
     quic_ctx.transport_params.max_stream_data = (quicly_max_stream_data_t){4, 4, 4};
@@ -308,6 +309,13 @@ static void tiny_stream_window(void)
 
     transmit(client, server);
 
+    quicly_get_stats(client, &stats);
+    ok(stats.num_frames_sent.stream_data_blocked == 1);
+    ok(stats.num_frames_sent.data_blocked == 0);
+    quicly_get_stats(server, &stats);
+    ok(stats.num_frames_received.stream_data_blocked == 1);
+    ok(stats.num_frames_received.data_blocked == 0);
+
     server_stream = quicly_get_stream(server, client_stream->stream_id);
     ok(server_stream != NULL);
     server_streambuf = server_stream->data;
@@ -316,6 +324,9 @@ static void tiny_stream_window(void)
 
     transmit(server, client);
     transmit(client, server);
+
+    quicly_get_stats(client, &stats);
+    ok(stats.num_frames_sent.stream_data_blocked == 2);
 
     ok(buffer_is(&server_streambuf->super.ingress, "lo w"));
     quicly_streambuf_ingress_shift(server_stream, 4);
@@ -329,6 +340,9 @@ static void tiny_stream_window(void)
     quicly_request_stop(client_stream, QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(12345));
 
     transmit(client, server);
+
+    quicly_get_stats(client, &stats);
+    ok(stats.num_frames_sent.stream_data_blocked == 2);
 
     /* client should have sent ACK(FIN),STOP_RESPONDING and waiting for response */
     ok(quicly_num_streams(client) == 1);
@@ -446,8 +460,8 @@ static void test_reset_during_loss(void)
 
 static uint16_t test_close_error_code;
 
-static void test_closeed_by_remote(quicly_closed_by_remote_t *self, quicly_conn_t *conn, int err, uint64_t frame_type,
-                                   const char *reason, size_t reason_len)
+static void test_closed_by_remote(quicly_closed_by_remote_t *self, quicly_conn_t *conn, int err, uint64_t frame_type,
+                                  const char *reason, size_t reason_len)
 {
     ok(QUICLY_ERROR_IS_QUIC_APPLICATION(err));
     test_close_error_code = QUICLY_ERROR_GET_ERROR_CODE(err);
@@ -458,7 +472,7 @@ static void test_closeed_by_remote(quicly_closed_by_remote_t *self, quicly_conn_
 
 static void test_close(void)
 {
-    quicly_closed_by_remote_t closed_by_remote = {test_closeed_by_remote}, *orig_closed_by_remote = quic_ctx.closed_by_remote;
+    quicly_closed_by_remote_t closed_by_remote = {test_closed_by_remote}, *orig_closed_by_remote = quic_ctx.closed_by_remote;
     quicly_address_t dest, src;
     struct iovec datagram;
     uint8_t datagram_buf[quic_ctx.transport_params.max_udp_payload_size];

@@ -3,7 +3,6 @@ use warnings;
 use Digest::MD5 qw(md5_hex);
 use File::Temp qw(tempdir);
 use Net::EmptyPort qw(empty_port check_port);
-use Scope::Guard qw(scope_guard);
 use Test::More;
 use Test::Exception;
 use Time::HiRes;
@@ -57,6 +56,7 @@ subtest 'middleware' => sub {
         my ($port, $tls_port) = empty_ports(2, { host => "0.0.0.0" });
         my $empty_port = empty_port();
         my $server = spawn_h2o_raw(<<"EOT", [$port, $tls_port]);
+num-threads: 1
 hosts:
   "127.0.0.1:$port":
     paths: &paths
@@ -93,12 +93,13 @@ EOT
             my ($headers, $body) = get($proto, $port, $curl, '/');
             like $headers, qr{^HTTP/[0-9.]+ 502}is;
 
+            sleep 1;
             my ($access_logs, $error_logs) = read_logs($access_log_file, $error_log_file);
             note $_ for @$error_logs;
             is scalar(@$access_logs), 1, 'access log count';
             isnt scalar(@$error_logs), 0, 'error log count';
-            is $access_logs->[0], '[lib/core/proxy.c] in request:/:connection failure', 'access log';
-            is $error_logs->[-1], '[lib/core/proxy.c] in request:/:connection failure', 'error log';
+            is $access_logs->[0], '[lib/core/proxy.c] in request:/:connection refused', 'access log';
+            is $error_logs->[-1], '[lib/core/proxy.c] in request:/:connection refused', 'error log';
         });
     };
 
@@ -106,6 +107,7 @@ EOT
         my $empty_port = empty_port();
         my ($port, $tls_port) = empty_ports(2, { host => "0.0.0.0" });
         my $server = spawn_h2o_raw(<< "EOT", [$port, $tls_port]);
+num-threads: 1
 hosts:
   "127.0.0.1:$port":
     paths: &paths
@@ -157,13 +159,14 @@ EOT
             my ($headers, $body) = get($proto, $port, $curl, '/');
             like $headers, qr{^HTTP/[0-9.]+ 502}is;
 
+            sleep 1;
             my ($access_logs, $error_logs) = read_logs($access_log_file, $error_log_file);
             note $_ for @$error_logs;
             is scalar(@$access_logs), 1, 'access log count';
             isnt scalar(@$error_logs), 0, 'error log count';
-            is $access_logs->[0], '[lib/core/proxy.c] in request:/:connection failure', 'access log';
-            is $error_logs->[-1], '[lib/core/proxy.c] in request:/:connection failure', 'error log';
-            is $body, '[lib/core/proxy.c] in request:/:connection failure', 'wrapped buffer';
+            is $access_logs->[0], '[lib/core/proxy.c] in request:/:connection refused', 'access log';
+            is $error_logs->[-1], '[lib/core/proxy.c] in request:/:connection refused', 'error log';
+            is $body, '[lib/core/proxy.c] in request:/:connection refused', 'wrapped buffer';
         });
     };
 
@@ -194,12 +197,13 @@ EOT
                 $client->close;
                 exit 0;
             };
-            my $upstream = scope_guard(sub {
+            my $upstream = make_guard(sub {
                 kill 'TERM', $upstream_pid;
                 while (waitpid($upstream_pid, 0) != $upstream_pid) {}
             });
             my ($port, $tls_port) = empty_ports(2, { host => "0.0.0.0" });
             my $server = spawn_h2o_raw(<< "EOT", [$port, $tls_port]);
+num-threads: 1
 hosts:
   "127.0.0.1:$port":
     paths: &paths

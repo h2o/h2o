@@ -38,7 +38,7 @@ extern "C" {
 #include "h2o/string_.h"
 
 #ifndef H2O_USE_LIBUV
-#if H2O_USE_SELECT || H2O_USE_EPOLL || H2O_USE_KQUEUE
+#if H2O_USE_POLL || H2O_USE_EPOLL || H2O_USE_KQUEUE
 #define H2O_USE_LIBUV 0
 #else
 #define H2O_USE_LIBUV 1
@@ -59,6 +59,11 @@ extern "C" {
 #define H2O_USE_ALPN 0
 #define H2O_USE_NPN 0
 #endif
+
+/**
+ * Maximum amount of TLS records to generate at once. Default is 4 full-sized TLS records using 32-byte tag.
+ */
+#define H2O_SOCKET_DEFAULT_SSL_BUFFER_SIZE ((5 + 16384 + 32) * 4)
 
 typedef struct st_h2o_sliding_counter_t {
     uint64_t average;
@@ -91,7 +96,7 @@ typedef void (*h2o_socket_cb)(h2o_socket_t *sock, const char *err);
 #include "socket/evloop.h"
 #endif
 
-struct st_h2o_socket_peername_t {
+struct st_h2o_socket_addr_t {
     socklen_t len;
     struct sockaddr addr;
 };
@@ -130,12 +135,21 @@ struct st_h2o_socket_t {
         h2o_socket_cb read;
         h2o_socket_cb write;
     } _cb;
-    struct st_h2o_socket_peername_t *_peername;
+    struct st_h2o_socket_addr_t *_peername;
+    struct st_h2o_socket_addr_t *_sockname;
+    struct {
+        size_t cnt;
+        h2o_iovec_t *bufs;
+        union {
+            h2o_iovec_t *alloced_ptr;
+            h2o_iovec_t smallbufs[4];
+        };
+    } _write_buf;
     struct {
         uint8_t state; /* one of H2O_SOCKET_LATENCY_STATE_* */
         uint8_t notsent_is_minimized : 1;
-        uint16_t suggested_tls_payload_size;
-        size_t suggested_write_size; /* SIZE_MAX if no need to optimize for latency */
+        size_t suggested_tls_payload_size; /* suggested TLS record payload size, or SIZE_MAX when no need to restrict */
+        size_t suggested_write_size;       /* SIZE_MAX if no need to optimize for latency */
     } _latency_optimization;
 };
 
@@ -168,12 +182,20 @@ typedef void (*h2o_socket_ssl_resumption_new_cb)(h2o_socket_t *sock, h2o_iovec_t
 typedef void (*h2o_socket_ssl_resumption_remove_cb)(h2o_iovec_t session_id);
 
 extern h2o_buffer_mmap_settings_t h2o_socket_buffer_mmap_settings;
-extern __thread h2o_buffer_prototype_t h2o_socket_buffer_prototype;
+extern h2o_buffer_prototype_t h2o_socket_buffer_prototype;
+
+extern size_t h2o_socket_ssl_buffer_size;
+extern __thread h2o_mem_recycle_t h2o_socket_ssl_buffer_allocator;
 
 extern const char h2o_socket_error_out_of_memory[];
 extern const char h2o_socket_error_io[];
 extern const char h2o_socket_error_closed[];
 extern const char h2o_socket_error_conn_fail[];
+extern const char h2o_socket_error_conn_refused[];
+extern const char h2o_socket_error_conn_timed_out[];
+extern const char h2o_socket_error_network_unreachable[];
+extern const char h2o_socket_error_host_unreachable[];
+extern const char h2o_socket_error_socket_fail[];
 extern const char h2o_socket_error_ssl_no_cert[];
 extern const char h2o_socket_error_ssl_cert_invalid[];
 extern const char h2o_socket_error_ssl_cert_name_mismatch[];
@@ -201,7 +223,7 @@ void h2o_socket_dispose_export(h2o_socket_export_t *info);
  */
 void h2o_socket_close(h2o_socket_t *sock);
 /**
- * Schedules a callback to be notify we the socket can be written to
+ * Schedules a callback that would be invoked when the socket becomes immediately writable
  */
 void h2o_socket_notify_write(h2o_socket_t *sock, h2o_socket_cb cb);
 /**
@@ -217,7 +239,7 @@ void h2o_socket_dont_read(h2o_socket_t *sock, int dont_read);
 /**
  * connects to peer
  */
-h2o_socket_t *h2o_socket_connect(h2o_loop_t *loop, struct sockaddr *addr, socklen_t addrlen, h2o_socket_cb cb);
+h2o_socket_t *h2o_socket_connect(h2o_loop_t *loop, struct sockaddr *addr, socklen_t addrlen, h2o_socket_cb cb, const char **err);
 /**
  * prepares for latency-optimized write and returns the number of octets that should be written, or SIZE_MAX if failed to prepare
  */
@@ -275,6 +297,8 @@ ptls_t *h2o_socket_get_ptls(h2o_socket_t *sock);
 /**
  *
  */
+h2o_iovec_t h2o_socket_log_tcp_congestion_controller(h2o_socket_t *sock, h2o_mem_pool_t *pool);
+h2o_iovec_t h2o_socket_log_tcp_delivery_rate(h2o_socket_t *sock, h2o_mem_pool_t *pool);
 const char *h2o_socket_get_ssl_protocol_version(h2o_socket_t *sock);
 int h2o_socket_get_ssl_session_reused(h2o_socket_t *sock);
 const char *h2o_socket_get_ssl_cipher(h2o_socket_t *sock);
@@ -297,11 +321,15 @@ int h2o_socket_compare_address(struct sockaddr *x, struct sockaddr *y, int check
 /**
  * getnameinfo (buf should be NI_MAXHOST in length), returns SIZE_MAX if failed
  */
-size_t h2o_socket_getnumerichost(struct sockaddr *sa, socklen_t salen, char *buf);
+size_t h2o_socket_getnumerichost(const struct sockaddr *sa, socklen_t salen, char *buf);
 /**
  * returns the port number, or -1 if failed
  */
-int32_t h2o_socket_getport(struct sockaddr *sa);
+int32_t h2o_socket_getport(const struct sockaddr *sa);
+/**
+ * converts given error number to string representation if known, otherwise returns `default_err`
+ */
+const char *h2o_socket_get_error_string(int errnum, const char *default_err);
 /**
  * performs SSL handshake on a socket
  * @param sock the socket
@@ -370,24 +398,32 @@ int h2o_socket_set_df_bit(int fd, int domain);
  * helper to check if socket the socket is target of tracing
  */
 static int h2o_socket_skip_tracing(h2o_socket_t *sock);
+/**
+ *
+ */
+void h2o_socket_set_skip_tracing(h2o_socket_t *sock, int skip_tracing);
 
-struct st_h2o_ebpf_map_key_t;
 /**
- * function to lookup if the connection is tagged for special treatment. At the moment, the results are: 0 - no, 1 - trace.
+ * Prepares eBPF maps. Requires root privileges and thus should be called before dropping the privileges. Returns a boolean
+ * indicating if operation succeeded.
  */
-h2o_ebpf_map_value_t h2o_socket_ebpf_lookup(h2o_loop_t *loop, int (*init_key)(struct st_h2o_ebpf_map_key_t *key, void *cbdata),
-                                            void *cbdata);
+int h2o_socket_ebpf_setup(void);
 /**
- * callback for initializing the ebpf lookup key from raw information
+ * Function to lookup if the connection is tagged for special treatment. The result is a union of `H2O_EBPF_FLAGS_*`.
  */
-int h2o_socket_ebpf_init_key_raw(struct st_h2o_ebpf_map_key_t *key, int sock_type, struct sockaddr *local, struct sockaddr *remote);
+uint64_t h2o_socket_ebpf_lookup_flags(h2o_loop_t *loop, int (*init_key)(h2o_ebpf_map_key_t *key, void *cbdata), void *cbdata);
+/**
+ *
+ */
+uint64_t h2o_socket_ebpf_lookup_flags_sni(h2o_loop_t *loop, uint64_t flags, const char *server_name, size_t server_name_len);
+/**
+ * function for initializing the ebpf lookup key from raw information
+ */
+int h2o_socket_ebpf_init_key_raw(h2o_ebpf_map_key_t *key, int sock_type, struct sockaddr *local, struct sockaddr *remote);
 /**
  * callback for initializing the ebpf lookup key from `h2o_socket_t`
  */
-int h2o_socket_ebpf_init_key(struct st_h2o_ebpf_map_key_t *key, void *_sock);
-
-void h2o_socket__write_pending(h2o_socket_t *sock);
-void h2o_socket__write_on_complete(h2o_socket_t *sock, int status);
+int h2o_socket_ebpf_init_key(h2o_ebpf_map_key_t *key, void *sock);
 
 /* inline defs */
 

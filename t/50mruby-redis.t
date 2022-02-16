@@ -3,7 +3,6 @@ use warnings;
 use IO::Socket::INET;
 use JSON;
 use Net::EmptyPort qw(check_port empty_port);
-use Scope::Guard qw/scope_guard/;
 use Time::HiRes;
 use Test::More;
 use t::Util;
@@ -491,7 +490,7 @@ sub spawn_command_timeout_mock {
         }
     }
 
-    my $guard = scope_guard(sub { kill 'KILL', $pid; });
+    my $guard = make_guard(sub { kill 'KILL', $pid; });
     return (+{ guard => $guard }, $port);
 }
 

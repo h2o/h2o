@@ -43,7 +43,7 @@
 
 FILE *quicly_trace_fp = NULL;
 static unsigned verbosity = 0;
-static int suppress_output = 0;
+static int suppress_output = 0, send_datagram_frame = 0;
 static int64_t enqueue_requests_at = 0, request_interval = 0;
 
 static void hexdump(const char *title, const uint8_t *p, size_t l)
@@ -491,6 +491,14 @@ static int send_pending(int fd, quicly_conn_t *conn)
     return ret;
 }
 
+static void on_receive_datagram_frame(quicly_receive_datagram_frame_t *self, quicly_conn_t *conn, ptls_iovec_t payload)
+{
+    printf("DATAGRAM: %.*s\n", (int)payload.len, payload.base);
+    /* send responds with a datagram frame */
+    if (!quicly_is_client(conn))
+        quicly_send_datagram_frames(conn, &payload, 1);
+}
+
 static void enqueue_requests(quicly_conn_t *conn)
 {
     size_t i;
@@ -588,6 +596,12 @@ static int run_client(int fd, struct sockaddr *sa, const char *host)
                     if (quicly_decode_packet(&ctx, &packet, buf, rret, &off) == SIZE_MAX)
                         break;
                     quicly_receive(conn, NULL, &sa, &packet);
+                    if (send_datagram_frame && quicly_connection_is_ready(conn)) {
+                        const char *message = "hello datagram!";
+                        ptls_iovec_t datagram = ptls_iovec_init(message, strlen(message));
+                        quicly_send_datagram_frames(conn, &datagram, 1);
+                        send_datagram_frame = 0;
+                    }
                 }
             }
         }
@@ -755,7 +769,7 @@ static int run_server(int fd, struct sockaddr *sa, socklen_t salen)
                     if (quicly_decode_packet(&ctx, &packet, buf, rret, &off) == SIZE_MAX)
                         break;
                     if (QUICLY_PACKET_IS_LONG_HEADER(packet.octets.base[0])) {
-                        if (!quicly_is_supported_version(packet.version)) {
+                        if (packet.version != 0 && !quicly_is_supported_version(packet.version)) {
                             uint8_t payload[ctx.transport_params.max_udp_payload_size];
                             size_t payload_len = quicly_send_version_negotiation(&ctx, packet.cid.src, packet.cid.dest.encrypted,
                                                                                  quicly_supported_versions, payload);
@@ -993,17 +1007,21 @@ static void usage(const char *cmd)
            "Options:\n"
            "  -a <alpn>                 ALPN identifier; repeat the option to set multiple\n"
            "                            candidates\n"
-           "  -b <buffer-size>          specifies the size of the send / receive buffer in bytes\n"
+           "  -b <buffer-size>          specifies the size of the send / receive buffer in\n"
+           "                            bytes\n"
            "  -B <cid-key>              CID encryption key (server-only). Randomly generated\n"
            "                            if omitted.\n"
            "  -c certificate-file\n"
            "  -k key-file               specifies the credentials to be used for running the\n"
            "                            server. If omitted, the command runs as a client.\n"
-           "  -C <algorithm>            the congestion control algorithm; either \"reno\" (default) or\n"
-           "                            \"cubic\"\n"
-           "  -d draft-number           specifies the draft version number to be used (e.g., 29)\n"
+           "  -C <algorithm>            the congestion control algorithm; either \"reno\"\n"
+           "                            (default), \"cubic\", or \"pico\"\n"
+           "  -d draft-number           specifies the draft version number to be used (e.g.,\n"
+           "                            29)\n"
            "  -e event-log-file         file to log events\n"
            "  -E                        expand Client Hello (sends multiple client Initials)\n"
+           "  -f fraction               increases the induced ack frequency to specified\n"
+           "                            fraction of CWND (default: 0)\n"
            "  -G                        enable UDP generic segmentation offload\n"
            "  -i interval               interval to reissue requests (in milliseconds)\n"
            "  -I timeout                idle timeout (in milliseconds; default: 600,000)\n"
@@ -1015,7 +1033,8 @@ static void usage(const char *cmd)
            "  -n                        enforce version negotiation (client-only)\n"
            "  -O                        suppress output\n"
            "  -p path                   path to request (can be set multiple times)\n"
-           "  -P path                   path to request, store response to file (can be set multiple times)\n"
+           "  -P path                   path to request, store response to file (can be set\n"
+           "                            multiple times)\n"
            "  -R                        require Retry (server only)\n"
            "  -r [initial-pto]          initial PTO (in milliseconds)\n"
            "  -S [num-speculative-ptos] number of speculative PTOs\n"
@@ -1024,6 +1043,11 @@ static void usage(const char *cmd)
            "  -U size                   maximum size of UDP datagarm payload\n"
            "  -V                        verify peer using the default certificates\n"
            "  -v                        verbose mode (-vv emits packet dumps as well)\n"
+           "  -w packets                initial congestion window (default: 10)\n"
+           "  -W public-key-file        use raw public keys (RFC 7250). When set and running\n"
+           "                            as a client, the argument specifies the public keys\n"
+           "                            that the server is expected to use. When running as\n"
+           "                            a server, the argument is ignored.\n"
            "  -x named-group            named group to be used (default: secp256r1)\n"
            "  -X                        max bidirectional stream count (default: 100)\n"
            "  -y cipher-suite           cipher-suite to be used (default: all)\n"
@@ -1045,7 +1069,7 @@ static void push_req(const char *path, int to_file)
 
 int main(int argc, char **argv)
 {
-    const char *host, *port, *cid_key = NULL;
+    const char *cert_file = NULL, *raw_pubkey_file = NULL, *host, *port, *cid_key = NULL;
     struct sockaddr_storage sa;
     socklen_t salen;
     unsigned udpbufsize = 0;
@@ -1070,7 +1094,7 @@ int main(int argc, char **argv)
         address_token_aead.dec = ptls_aead_new(&ptls_openssl_aes128gcm, &ptls_openssl_sha256, 0, secret, "");
     }
 
-    while ((ch = getopt(argc, argv, "a:b:B:c:C:d:k:Ee:Gi:I:K:l:M:m:NnOp:P:Rr:S:s:u:U:Vvx:X:y:h")) != -1) {
+    while ((ch = getopt(argc, argv, "a:b:B:c:C:Dd:k:Ee:f:Gi:I:K:l:M:m:NnOp:P:Rr:S:s:u:U:Vvw:W:x:X:y:h")) != -1) {
         switch (ch) {
         case 'a':
             assert(negotiated_protocols.count < PTLS_ELEMENTSOF(negotiated_protocols.list));
@@ -1086,18 +1110,20 @@ int main(int argc, char **argv)
             cid_key = optarg;
             break;
         case 'c':
-            load_certificate_chain(ctx.tls, optarg);
+            cert_file = optarg;
             break;
-        case 'C':
-            if (strcmp(optarg, "reno") == 0) {
-                ctx.init_cc = &quicly_cc_reno_init;
-            } else if (strcmp(optarg, "cubic") == 0) {
-                ctx.init_cc = &quicly_cc_cubic_init;
+        case 'C': {
+            quicly_cc_type_t **cc;
+            for (cc = quicly_cc_all_types; *cc != NULL; ++cc)
+                if (strcmp((*cc)->name, optarg) == 0)
+                    break;
+            if (*cc != NULL) {
+                ctx.init_cc = (*cc)->cc_init;
             } else {
                 fprintf(stderr, "unknown congestion controller: %s\n", optarg);
                 exit(1);
             }
-            break;
+        } break;
         case 'G':
 #ifdef __linux__
             send_packets = send_packets_gso;
@@ -1117,6 +1143,9 @@ int main(int argc, char **argv)
             }
             ctx.initial_version = 0xff000000 | draft_ver;
         } break;
+        case 'D':
+            send_datagram_frame = 1;
+            break;
         case 'E':
             ctx.expand_client_hello = 1;
             break;
@@ -1127,6 +1156,14 @@ int main(int argc, char **argv)
             }
             setvbuf(quicly_trace_fp, NULL, _IONBF, 0);
             break;
+        case 'f': {
+            double fraction;
+            if (sscanf(optarg, "%lf", &fraction) != 1) {
+                fprintf(stderr, "failed to parse ack frequency: %s\n", optarg);
+                exit(1);
+            }
+            ctx.ack_frequency = (uint32_t)(fraction * 1024);
+        } break;
         case 'i':
             if (sscanf(optarg, "%" SCNd64, &request_interval) != 1) {
                 fprintf(stderr, "failed to parse request interval: %s\n", optarg);
@@ -1211,10 +1248,19 @@ int main(int argc, char **argv)
             }
             break;
         case 'V':
-            setup_verify_certificate(ctx.tls);
+            setup_verify_certificate(ctx.tls, NULL);
             break;
         case 'v':
             ++verbosity;
+            break;
+        case 'w':
+            if (sscanf(optarg, "%" SCNu32, &ctx.initcwnd_packets) != 1) {
+                fprintf(stderr, "invalid argument passed to `-w`\n");
+                exit(1);
+            }
+            break;
+        case 'W':
+            raw_pubkey_file = optarg;
             break;
         case 'x': {
             size_t i;
@@ -1306,11 +1352,26 @@ int main(int argc, char **argv)
     MandatoryCipherFound:;
     }
 
-    if (ctx.tls->certificates.count != 0 || ctx.tls->sign_certificate != NULL) {
+    /* make adjustments for datagram frame support */
+    if (send_datagram_frame) {
+        static quicly_receive_datagram_frame_t cb = {on_receive_datagram_frame};
+        ctx.receive_datagram_frame = &cb;
+        ctx.transport_params.max_datagram_frame_size = ctx.transport_params.max_udp_payload_size;
+    }
+
+    if (cert_file != NULL || ctx.tls->sign_certificate != NULL) {
         /* server */
-        if (ctx.tls->certificates.count == 0 || ctx.tls->sign_certificate == NULL) {
+        if (cert_file == NULL || ctx.tls->sign_certificate == NULL) {
             fprintf(stderr, "-c and -k options must be used together\n");
             exit(1);
+        }
+        if (raw_pubkey_file != NULL) {
+            ctx.tls->certificates.list = malloc(sizeof(*ctx.tls->certificates.list));
+            load_raw_public_key(ctx.tls->certificates.list, cert_file);
+            ctx.tls->certificates.count = 1;
+            ctx.tls->use_raw_public_keys = 1;
+        } else {
+            load_certificate_chain(ctx.tls, cert_file);
         }
         if (cid_key == NULL) {
             static char random_key[17];
@@ -1321,6 +1382,19 @@ int main(int argc, char **argv)
                                                              ptls_iovec_init(cid_key, strlen(cid_key)));
     } else {
         /* client */
+        if (raw_pubkey_file != NULL) {
+            ptls_iovec_t raw_pub_key;
+            EVP_PKEY *pubkey;
+            load_raw_public_key(&raw_pub_key, raw_pubkey_file);
+            pubkey = d2i_PUBKEY(NULL, (const unsigned char **)&raw_pub_key.base, raw_pub_key.len);
+            if (pubkey == NULL) {
+                fprintf(stderr, "Failed to create an EVP_PKEY from the key found in %s\n", raw_pubkey_file);
+                return 1;
+            }
+            setup_raw_pubkey_verify_certificate(ctx.tls, pubkey);
+            EVP_PKEY_free(pubkey);
+            ctx.tls->use_raw_public_keys = 1;
+        }
         hs_properties.client.negotiated_protocols.list = negotiated_protocols.list;
         hs_properties.client.negotiated_protocols.count = negotiated_protocols.count;
         if (session_file != NULL)
@@ -1363,18 +1437,14 @@ int main(int argc, char **argv)
 #if defined(IP_DONTFRAG)
     {
         int on = 1;
-        if (setsockopt(fd, IPPROTO_IP, IP_DONTFRAG, &on, sizeof(on)) != 0) {
-            perror("setsockopt(IP_DONTFRAG) failed");
-            return 1;
-        }
+        if (setsockopt(fd, IPPROTO_IP, IP_DONTFRAG, &on, sizeof(on)) != 0)
+            perror("Warning: setsockopt(IP_DONTFRAG) failed");
     }
 #elif defined(IP_PMTUDISC_DO)
     {
         int opt = IP_PMTUDISC_DO;
-        if (setsockopt(fd, IPPROTO_IP, IP_MTU_DISCOVER, &opt, sizeof(opt)) != 0) {
-            perror("setsockopt(IP_MTU_DISCOVER) failed");
-            return 1;
-        }
+        if (setsockopt(fd, IPPROTO_IP, IP_MTU_DISCOVER, &opt, sizeof(opt)) != 0)
+            perror("Warning: setsockopt(IP_MTU_DISCOVER) failed");
     }
 #endif
 

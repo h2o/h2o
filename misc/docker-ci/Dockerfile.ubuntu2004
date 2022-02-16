@@ -10,10 +10,12 @@ RUN apt-get install --yes \
 	cmake \
 	cmake-data \
 	curl \
+	dnsutils \
 	flex \
 	git \
 	libbrotli-dev \
 	libc-ares-dev \
+	libcap-dev \
 	libclang-dev \
 	libedit-dev \
 	libelf-dev \
@@ -26,6 +28,7 @@ RUN apt-get install --yes \
 	libclang-7-dev \
 	zlib1g-dev \
 	memcached \
+	net-tools \
 	netcat-openbsd \
 	nghttp2-client \
 	php-cgi \
@@ -36,12 +39,13 @@ RUN apt-get install --yes \
 	ruby-dev \
 	sudo \
 	systemtap-sdt-dev \
+	time \
 	wget
 
 # install curl 7.57.0 because t/50fastcgi.t depends on it.
 RUN apt-get install --yes libnghttp2-dev \
 	&& wget --no-verbose -O - https://curl.haxx.se/download/curl-7.57.0.tar.gz | tar xzf - \
-	&& (cd curl-7.57.0 && ./configure --prefix=/usr/local --without-brotli --with-nghttp2 --disable-shared && make && sudo make install)
+	&& (cd curl-7.57.0 && ./configure --prefix=/usr/local --without-brotli --with-nghttp2 --disable-shared && make && make install)
 
 # perl
 RUN apt-get install --yes \
@@ -57,28 +61,19 @@ RUN apt-get install --yes \
 	libwww-perl \
 	libio-socket-ssl-perl
 ENV PERL_CPANM_OPT="--mirror https://cpan.metacpan.org/"
-RUN sudo cpanm --notest Starlet Protocol::HTTP2
-RUN sudo cpanm --notest https://github.com/tokuhirom/Test-TCP.git@2.21
+RUN cpanm -n Test::More Starlet Protocol::HTTP2 Net::DNS::Nameserver Test::TCP
 
 # h2spec
 RUN curl -Ls https://github.com/i110/h2spec/releases/download/v2.2.0-4e8cc7e/h2spec_linux_amd64.tar.gz | tar zx -C /usr/local/bin
 
 # bcc and bpftrace
-RUN git clone https://github.com/iovisor/bcc.git && \
-	cd bcc && \
-	git checkout 6021958a && \
-	mkdir build && \
-	cd build && \
-	cmake -DCMAKE_INSTALL_PREFIX=/usr -DPYTHON_CMD=python3 .. && \
-	make && \
-	make install && \
-	make clean
-RUN git clone https://github.com/kazuho/bpftrace.git && \
+RUN apt-get install --yes \
+	libbpfcc-dev
+RUN git clone --branch kazuho/usdt-attach-all-locations https://github.com/kazuho/bpftrace.git && \
 	cd bpftrace && \
-	git checkout kazuho/usdt-attach-all-locations && \
 	mkdir build &&  \
 	cd build && \
-	cmake .. && \
+	cmake -DLLVM_REQUESTED_VERSION=7 .. && \
 	make && \
 	make install && \
 	make clean
@@ -86,6 +81,9 @@ RUN git clone https://github.com/kazuho/bpftrace.git && \
 # use dumb-init
 RUN wget -O /usr/local/bin/dumb-init https://github.com/Yelp/dumb-init/releases/download/v1.2.1/dumb-init_1.2.1_amd64 \
  && chmod +x /usr/local/bin/dumb-init
+
+# komake
+RUN wget -O /usr/local/bin/komake https://raw.githubusercontent.com/kazuho/komake/main/komake && chmod +x /usr/local/bin/komake
 
 # create user
 RUN useradd --create-home ci

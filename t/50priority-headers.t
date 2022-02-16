@@ -13,6 +13,9 @@ use warnings;
 use Test::More;
 use t::Util;
 
+plan skip_all => 'mruby support is off'
+    unless server_features()->{mruby};
+
 sub test_priority_header {
     my ($input_streams, $expected_order) = @_;
     my $server = spawn_h2o(sub {
@@ -24,7 +27,7 @@ listen:
     key-file: examples/h2o/wildcard.key
     certificate-file: examples/h2o/wildcard.crt
 hosts:
-  "*.127.0.0.1.xip.io:$tls_port":
+  "*.localhost.examp1e.net:$tls_port":
     paths:
       /:
         file.dir: examples/doc_root

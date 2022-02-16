@@ -5,6 +5,8 @@ use Test::More;
 use Time::HiRes;
 use t::Util;
 
+plan skip_all => 'mruby support is off'
+    unless server_features()->{mruby};
 
 subtest 'basic' => sub {
     my $server = spawn_h2o(<< "EOT");

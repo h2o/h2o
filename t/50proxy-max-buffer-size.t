@@ -19,6 +19,9 @@ plan skip_all => 'Starlet not found'
 plan skip_all => 'curl not found'
     unless prog_exists('curl');
 
+plan skip_all => 'mruby support is off'
+    unless server_features()->{mruby};
+
 my $tempdir = tempdir(CLEANUP => 1);
 
 sub create_http1_upstream {
@@ -121,7 +124,7 @@ EOT
 diag $duration;
 diag $resp;
         if ($max_on) {
-            cmp_ok($duration - $resp, '<=', 2, "Writing to H2O was as fast as the curl download");
+            cmp_ok($duration - $resp, '<=', 2.2, "Writing to H2O was as fast as the curl download");
         } else {
             cmp_ok($duration - $resp, '>', 3, "Writing to H2O was much faster than the curl download");
         }

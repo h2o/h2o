@@ -41,7 +41,7 @@ subtest "hello" => sub {
         my $events = slurp_file("$tempdir/events");
         complex $events, sub {
             $_ =~ /"type":"transport-close-send",.*?"type":"([^\"]*)",.*?"type":"([^\"]*)",.*?"type":"([^\"]*)",.*?"type":"([^\"]*)"/s
-                and $1 eq 'packet-commit' and $2 eq 'quictrace-sent' and $3 eq 'send' and $4 eq 'free';
+                and $1 eq 'packet-sent' and $2 eq 'send' and $3 eq 'free';
         };
     };
     # check if the client receives extra connection IDs
@@ -73,14 +73,20 @@ subtest "hello" => sub {
     };
 };
 
+subtest "datagram" => sub {
+    my $guard = spawn_server("-D");
+    my $resp = `$cli -D 127.0.0.1 $port 2> /dev/null`;
+    like $resp, qr/^DATAGRAM: hello datagram!$/m;
+};
+
 subtest "version-negotiation" => sub {
     my $guard = spawn_server();
     my $resp = `$cli -n -e $tempdir/events -p /12 127.0.0.1 $port 2> /dev/null`;
     is $resp, "hello world\n";
     my $events = slurp_file("$tempdir/events");
     if ($events =~ /"type":"connect",.*"version":(\d+)(?:.|\n)*"type":"version-switch",.*"new-version":(\d+)/m) {
-        is $2, 0xff00001d;
-        isnt $1, 0xff00001d;
+        is $2, 1;
+        isnt $1, 1;
     } else {
         fail "no quic-version-switch event";
         diag $events;
@@ -122,7 +128,7 @@ subtest "0-rtt" => sub {
     ok -e "$tempdir/session", "session saved";
     system "$cli -s $tempdir/session -e $tempdir/events 127.0.0.1 $port > /dev/null 2>&1";
     my $events = slurp_file("$tempdir/events");
-    like $events, qr/"type":"stream-send".*"stream-id":0,(.|\n)*"type":"packet-commit".*"pn":1,/m, "stream 0 on pn 1";
+    like $events, qr/"type":"stream-send".*"stream-id":0,(.|\n)*"type":"packet-sent".*"pn":1,/m, "stream 0 on pn 1";
     like $events, qr/"type":"cc-ack-received".*"largest-acked":1,/m, "pn 1 acked";
 };
 
@@ -175,7 +181,7 @@ subtest "stateless-reset" => sub {
     # check that the stateless reset is logged
     my $events = slurp_file("$tempdir/events");
     like $events, qr/"type":"stateless-reset-receive",/m, 'got stateless reset';
-    unlike +($events =~ /"type":"stateless-reset-receive",.*?\n/ and $'), qr/"type":"packet-commit",/m, 'nothing sent after receiving stateless reset';
+    unlike +($events =~ /"type":"stateless-reset-receive",.*?\n/ and $'), qr/"type":"packet-sent",/m, 'nothing sent after receiving stateless reset';
 };
 
 subtest "no-compatible-version" => sub {
@@ -204,7 +210,7 @@ subtest "no-compatible-version" => sub {
     # check the trace
     my $events = slurp_file("$tempdir/events");
     like $events, qr/"type":"receive",/m, "one receive event";
-    unlike +($events =~ /"type":"receive",.*?\n/ and $'), qr/"type":"packet-commit",/m, "nothing sent after receiving VN";
+    unlike +($events =~ /"type":"receive",.*?\n/ and $'), qr/"type":"packet-sent",/m, "nothing sent after receiving VN";
 };
 
 subtest "idle-timeout" => sub {
@@ -318,10 +324,22 @@ subtest "key-update" => sub {
     };
 };
 
+subtest "raw-certificates-ec" => sub {
+    my $guard = spawn_server(qw(-W -));
+    my $resp = `$cli -p /12 -W t/assets/ec256-pub.pem 127.0.0.1 $port 2> /dev/null`;
+    is $resp, "hello world\n";
+};
+
+
 done_testing;
 
 sub spawn_server {
-    my @cmd = ($cli, "-k", "t/assets/server.key", "-c", "t/assets/server.crt", @_, "127.0.0.1", $port);
+    my @cmd;
+    if (grep(/^-W$/, @_)) {
+        @cmd = ($cli, "-k", "t/assets/ec256-key-pair.pem", "-c", "t/assets/ec256-pub.pem", @_, "127.0.0.1", $port);
+    } else {
+        @cmd = ($cli, "-k", "t/assets/server.key", "-c", "t/assets/server.crt", @_, "127.0.0.1", $port);
+    }
     my $pid = fork;
     die "fork failed:$!"
         unless defined $pid;

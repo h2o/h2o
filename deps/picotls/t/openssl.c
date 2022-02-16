@@ -25,9 +25,13 @@
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
+#include <openssl/opensslv.h>
 #include <openssl/bio.h>
 #include <openssl/pem.h>
 #include <openssl/engine.h>
+#if !defined(LIBRESSL_VERSION_NUMBER) && OPENSSL_VERSION_NUMBER >= 0x30000000L
+#include <openssl/provider.h>
+#endif
 #include "picotls.h"
 #include "picotls/minicrypto.h"
 #include "../deps/picotest/picotest.h"
@@ -65,23 +69,24 @@
 
 #define RSA_CERTIFICATE                                                                                                            \
     "-----BEGIN CERTIFICATE-----\n"                                                                                                \
-    "MIIDKzCCAhOgAwIBAgIBADANBgkqhkiG9w0BAQsFADAaMRgwFgYDVQQDEw9waWNv\n"                                                           \
-    "dGxzIHRlc3QgY2EwHhcNMTgwMjIzMDIzODEyWhcNMjgwMjIxMDIzODEyWjAbMRkw\n"                                                           \
+    "MIIDQjCCAiqgAwIBAgIBBTANBgkqhkiG9w0BAQsFADAaMRgwFgYDVQQDEw9waWNv\n"                                                           \
+    "dGxzIHRlc3QgY2EwHhcNMjExMjEzMDY1MzQwWhcNMzExMjExMDY1MzQwWjAbMRkw\n"                                                           \
     "FwYDVQQDExB0ZXN0LmV4YW1wbGUuY29tMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8A\n"                                                           \
     "MIIBCgKCAQEA5soWzSG7iyawQlHM1yaX2dUAATUkhpbg2WPFOEem7E3zYzc6A/Z+\n"                                                           \
     "bViFlfEgL37cbDUb4pnOAHrrsjGgkyBYh5i9iCTVfCk+H6SOHZJORO1Tq8X9C7Wc\n"                                                           \
     "NcshpSdm2Pa8hmv9hsHbLSeoPNeg8NkTPwMVaMZ2GpdmiyAmhzSZ2H9mzNI7ntPW\n"                                                           \
     "/XCchVf+ax2yt9haZ+mQE2NPYwHDjqCtdGkP5ZXXnYhJSBzSEhxfGckIiKDyOxiN\n"                                                           \
     "kLFLvUdT4ERSFBjauP2cSI0XoOUsiBxJNwHH310AU8jZbveSTcXGYgEuu2MIuDo7\n"                                                           \
-    "Vhkq5+TCqXsIFNbjy0taOoPRvUbPsbqFlQIDAQABo3sweTAJBgNVHRMEAjAAMCwG\n"                                                           \
-    "CWCGSAGG+EIBDQQfFh1PcGVuU1NMIEdlbmVyYXRlZCBDZXJ0aWZpY2F0ZTAdBgNV\n"                                                           \
-    "HQ4EFgQUE1vXDjBT8j2etP4brfHQ9DeKnpgwHwYDVR0jBBgwFoAUv3nKl7JgeCCW\n"                                                           \
-    "qkZXnN+nsiP1JWMwDQYJKoZIhvcNAQELBQADggEBAKwARsxOCiGPXU1xhvs+pq9I\n"                                                           \
-    "63mLi4rfnssOGzGnnAfuEaxggpozf3fOSgfyTaDbACdRPTZEStjQ5HMCcHvY7CH0\n"                                                           \
-    "8EYA+lkmFbuXXL8uHby1JBTzbTGf8pkRUsuF/Ie0SLChoDgt8oF3mY5pyU4HUaAw\n"                                                           \
-    "Zp6HBpIRMdmbwGcwm25bl9MQYTrTX3dBfp3XPzfXbVwjJ7bsiTwAGq+dKwzwOQeM\n"                                                           \
-    "2ZMZt4BQBoevsNopPrqG0S6kGUmJOIax0t13bKwDj21+Hp/O90HTFVCtAaDxRC56\n"                                                           \
-    "k0O8Q62ZxzjGJ7Zw6K3azXlH/BYE+CajxTUF+FKRRkkWL1GrFVUsYd9KLDAVry0=\n"                                                           \
+    "Vhkq5+TCqXsIFNbjy0taOoPRvUbPsbqFlQIDAQABo4GRMIGOMAkGA1UdEwQCMAAw\n"                                                           \
+    "LAYJYIZIAYb4QgENBB8WHU9wZW5TU0wgR2VuZXJhdGVkIENlcnRpZmljYXRlMB0G\n"                                                           \
+    "A1UdDgQWBBQTW9cOMFPyPZ60/hut8dD0N4qemDAfBgNVHSMEGDAWgBS/ecqXsmB4\n"                                                           \
+    "IJaqRlec36eyI/UlYzATBgNVHSUEDDAKBggrBgEFBQcDATANBgkqhkiG9w0BAQsF\n"                                                           \
+    "AAOCAQEAYTglgIYqxhbmErQar8yFmRRJp93Zul+PnCuq1nkGPokJoytszoQtGBfw\n"                                                           \
+    "ftgcMyTH3TOR22XThQafi/qWj3gz//oicZ09AuDfk/GMweWPjPGSs2lNUCbC9FqW\n"                                                           \
+    "75JpYWsKqk8s0GwetZ710rX/65wJQAb4EcibMdWq98C/HUwQspXiXBXkEMDbMF5Q\n"                                                           \
+    "s41vyeASk03jff+ofvTZl33sPurltO2oyRtDfUKWFAMBS7Bk/h/d3ZIwmv7DjXVw\n"                                                           \
+    "ZKjxMZbXSmlgdngzBCBYZb5p+VkGXHqVjd07KhZd4nn5sqLy2i1COWB4OCb0xUHr\n"                                                           \
+    "QxHvmJiqQ57FTFDypV0sKZRLuY9ovQ==\n"                                                                                           \
     "-----END CERTIFICATE-----\n"
 
 static void test_bf(void)
@@ -129,45 +134,72 @@ static void test_key_exchanges(void)
 #endif
 }
 
+static void test_sign_verify(EVP_PKEY *key, const struct st_ptls_openssl_signature_scheme_t *schemes)
+{
+    for (size_t i = 0; schemes[i].scheme_id != UINT16_MAX; ++i) {
+        note("scheme 0x%04x", schemes[i].scheme_id);
+        const void *message = "hello world";
+        ptls_buffer_t sigbuf;
+        uint8_t sigbuf_small[1024];
+
+        ptls_buffer_init(&sigbuf, sigbuf_small, sizeof(sigbuf_small));
+        ok(do_sign(key, schemes + i, &sigbuf, ptls_iovec_init(message, strlen(message))) == 0);
+        EVP_PKEY_up_ref(key);
+        ok(verify_sign(key, schemes[i].scheme_id, ptls_iovec_init(message, strlen(message)),
+                       ptls_iovec_init(sigbuf.base, sigbuf.off)) == 0);
+
+        ptls_buffer_dispose(&sigbuf);
+    }
+}
+
 static void test_rsa_sign(void)
 {
     ptls_openssl_sign_certificate_t *sc = (ptls_openssl_sign_certificate_t *)ctx->sign_certificate;
-
-    const void *message = "hello world";
-    ptls_buffer_t sigbuf;
-    uint8_t sigbuf_small[1024];
-
-    ptls_buffer_init(&sigbuf, sigbuf_small, sizeof(sigbuf_small));
-    ok(do_sign(sc->key, &sigbuf, ptls_iovec_init(message, strlen(message)), EVP_sha256()) == 0);
-    EVP_PKEY_up_ref(sc->key);
-    ok(verify_sign(sc->key, ptls_iovec_init(message, strlen(message)), ptls_iovec_init(sigbuf.base, sigbuf.off)) == 0);
-
-    ptls_buffer_dispose(&sigbuf);
+    test_sign_verify(sc->key, sc->schemes);
 }
 
-static void test_ecdsa_sign(void)
+static void do_test_ecdsa_sign(int nid, const struct st_ptls_openssl_signature_scheme_t *schemes)
 {
     EVP_PKEY *pkey;
 
     { /* create pkey */
-        EC_KEY *eckey = EC_KEY_new_by_curve_name(NID_X9_62_prime256v1);
+        EC_KEY *eckey = EC_KEY_new_by_curve_name(nid);
         EC_KEY_generate_key(eckey);
         pkey = EVP_PKEY_new();
         EVP_PKEY_set1_EC_KEY(pkey, eckey);
         EC_KEY_free(eckey);
     }
 
-    const char *message = "hello world";
-    ptls_buffer_t sigbuf;
-    uint8_t sigbuf_small[1024];
-
-    ptls_buffer_init(&sigbuf, sigbuf_small, sizeof(sigbuf_small));
-    ok(do_sign(pkey, &sigbuf, ptls_iovec_init(message, strlen(message)), EVP_sha256()) == 0);
-    EVP_PKEY_up_ref(pkey);
-    ok(verify_sign(pkey, ptls_iovec_init(message, strlen(message)), ptls_iovec_init(sigbuf.base, sigbuf.off)) == 0);
-
-    ptls_buffer_dispose(&sigbuf);
+    test_sign_verify(pkey, schemes);
     EVP_PKEY_free(pkey);
+}
+
+static void test_ecdsa_sign(void)
+{
+    do_test_ecdsa_sign(NID_X9_62_prime256v1, secp256r1_signature_schemes);
+#if PTLS_OPENSSL_HAVE_SECP384R1
+    do_test_ecdsa_sign(NID_secp384r1, secp384r1_signature_schemes);
+#endif
+#if PTLS_OPENSSL_HAVE_SECP521R1
+    do_test_ecdsa_sign(NID_secp521r1, secp521r1_signature_schemes);
+#endif
+}
+
+static void test_ed25519_sign(void)
+{
+#if PTLS_OPENSSL_HAVE_ED25519
+    EVP_PKEY *pkey = NULL;
+
+    { /* create pkey */
+        EVP_PKEY_CTX *pctx = EVP_PKEY_CTX_new_id(EVP_PKEY_ED25519, NULL);
+        EVP_PKEY_keygen_init(pctx);
+        EVP_PKEY_keygen(pctx, &pkey);
+        EVP_PKEY_CTX_free(pctx);
+    }
+
+    test_sign_verify(pkey, ed25519_signature_schemes);
+    EVP_PKEY_free(pkey);
+#endif
 }
 
 static X509 *x509_from_pem(const char *pem)
@@ -272,6 +304,12 @@ int main(int argc, char **argv)
     ENGINE_register_all_digests();
 #endif
 
+#if !defined(LIBRESSL_VERSION_NUMBER) && OPENSSL_VERSION_NUMBER >= 0x30000000L
+    /* Explicitly load the legacy provider in addition to default, as we test Blowfish in one of the tests. */
+    OSSL_PROVIDER *legacy = OSSL_PROVIDER_load(NULL, "legacy");
+    OSSL_PROVIDER *dflt = OSSL_PROVIDER_load(NULL, "default");
+#endif
+
     subtest("bf", test_bf);
 
     subtest("key-exchange", test_key_exchanges);
@@ -308,6 +346,7 @@ int main(int argc, char **argv)
 
     subtest("rsa-sign", test_rsa_sign);
     subtest("ecdsa-sign", test_ecdsa_sign);
+    subtest("ed25519-sign", test_ed25519_sign);
     subtest("cert-verify", test_cert_verify);
     subtest("picotls", test_picotls);
     test_picotls_esni(esni_private_keys);

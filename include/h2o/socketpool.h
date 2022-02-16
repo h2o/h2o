@@ -143,9 +143,13 @@ void h2o_socketpool_init_specific(h2o_socketpool_t *pool, size_t capacity, h2o_s
  */
 void h2o_socketpool_init_global(h2o_socketpool_t *pool, size_t capacity);
 /**
- * disposes of a socket loop
+ * disposes of a socket pool
  */
 void h2o_socketpool_dispose(h2o_socketpool_t *pool);
+/**
+ * if the socket is a global pool
+ */
+int h2o_socketpool_is_global(h2o_socketpool_t *pool);
 /**
  * create a target. If lb_target_conf is NULL, a default target conf would be created.
  */

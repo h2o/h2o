@@ -15,6 +15,6 @@ SCRIPT_DIR=$(realpath $(dirname $0))
 cd "$SCRIPT_DIR/docker-root"
 
 for variant  in $@ ; do
-    docker build --tag "${IMAGE_NAME}:${variant}" -f "${SCRIPT_DIR}/Dockerfile.${variant}" .
+    docker build --no-cache --tag "${IMAGE_NAME}:${variant}" -f "${SCRIPT_DIR}/Dockerfile.${variant}" .
     docker push "${IMAGE_NAME}:${variant}"
 done

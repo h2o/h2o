@@ -291,6 +291,9 @@ h2o_logconf_t *h2o_logconf_compile(const char *fmt, int escape, char *errbuf)
                     MAP_EXT_TO_PROTO("http2.priority.actual.weight", http2.priority_actual_weight);
                     MAP_EXT_TO_PROTO("http3.stream-id", http3.stream_id);
                     MAP_EXT_TO_PROTO("http3.quic-stats", http3.quic_stats);
+                    MAP_EXT_TO_PROTO("http3.quic-version", http3.quic_version);
+                    MAP_EXT_TO_PROTO("cc.name", transport.cc_name);
+                    MAP_EXT_TO_PROTO("delivery-rate", transport.delivery_rate);
                     MAP_EXT_TO_PROTO("ssl.protocol-version", ssl.protocol_version);
                     MAP_EXT_TO_PROTO("ssl.session-reused", ssl.session_reused);
                     MAP_EXT_TO_PROTO("ssl.cipher", ssl.cipher);
@@ -849,19 +852,19 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
             break;
         case ELEMENT_TYPE_PROXY_SSL_SESSION_REUSED:
             RESERVE(1);
-            *pos++ = (req->proxy_stats.ssl.session_reused) ? '1' : '0';
+            *pos++ = (req->proxy_stats.conn.ssl.session_reused) ? '1' : '0';
             break;
         case ELEMENT_TYPE_PROXY_SSL_CIPHER_BITS:
-            if (req->proxy_stats.ssl.cipher_bits == 0)
+            if (req->proxy_stats.conn.ssl.cipher_bits == 0)
                 goto EmitNull;
             RESERVE(sizeof(H2O_INT16_LONGEST_STR));
-            pos += sprintf(pos, "%" PRIu16, (uint16_t)req->proxy_stats.ssl.cipher_bits);
+            pos += sprintf(pos, "%" PRIu16, (uint16_t)req->proxy_stats.conn.ssl.cipher_bits);
             break;
         case ELEMENT_TYPE_PROXY_SSL_PROTOCOL_VERSION:
-            APPEND_SAFE_STRING(pos, req->proxy_stats.ssl.protocol_version);
+            APPEND_SAFE_STRING(pos, req->proxy_stats.conn.ssl.protocol_version);
             break;
         case ELEMENT_TYPE_PROXY_SSL_CIPHER:
-            APPEND_SAFE_STRING(pos, req->proxy_stats.ssl.cipher);
+            APPEND_SAFE_STRING(pos, req->proxy_stats.conn.ssl.cipher);
             break;
         case ELEMENT_TYPE_PROTOCOL_SPECIFIC: {
             h2o_iovec_t (*cb)(h2o_req_t *) = req->conn->callbacks->log_.callbacks[element->data.protocol_specific_callback_index];

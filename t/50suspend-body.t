@@ -76,6 +76,9 @@ EOT
 };
 
 subtest 'mruby-http-chunked' => sub {
+    plan skip_all => "mruby support is off"
+        unless server_features()->{mruby};
+
     my $upstream = create_upstream(qw(-s Starlet --max-workers 0));
     my $server = spawn_h2o(<< "EOT");
 hosts:
@@ -91,6 +94,9 @@ EOT
 };
 
 subtest 'mruby-callback-chunked' => sub {
+    plan skip_all => "mruby support is off"
+        unless server_features()->{mruby};
+
     my $upstream = create_upstream(qw(-s Starlet --max-workers 0));
     my $server = spawn_h2o(<< "EOT");
 hosts:
@@ -114,6 +120,9 @@ EOT
 };
 
 subtest 'mruby-middleware-chunked' => sub {
+    plan skip_all => "mruby support is off"
+        unless server_features()->{mruby};
+
     my $upstream = create_upstream(qw(-s Starlet --max-workers 0));
     my $server = spawn_h2o(<< "EOT");
 hosts:

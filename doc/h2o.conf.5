@@ -1668,6 +1668,19 @@ The value cannot exceed 256.
 .RE
 .RE
 
+.SS http2-max-concurrent-streaming-requests-per-connection
+Maximum number of streaming requests to be handled concurrently within a single HTTP/2 connection.
+
+
+.PP
+
+
+The value cannot exceed 256.
+
+
+.RE
+.RE
+
 .SS http2-latency-optimization-min-rtt
 (since v2.1)
 Minimum RTT (in milliseconds) to enable latency optimization.
@@ -3179,25 +3192,30 @@ The value should be set to something smaller than that being set at the upstream
 .RE
 .RE
 
-.SS proxy.websocket
-A boolean flag (ON or OFF) indicating whether or not to allow upgrading the proxied connection to the WebSocket protocol.
+.SS proxy.tunnel
+A boolean flag (ON or OFF) indicating whether or not to allow tunnelling to the backend server.
 
 .PP
 
 
-When set to ON, the proxied connection will be upgraded to a bi-directional tunnel stream if upgrading to WebSocket connection is permitted by the backend server (i.e. if the backend server responds to a WebSocket handshake with 101 status code).
+When set to ON, CONNECT requests and WebSocket handshakes are forwarded to the backend server.
+Then, if the backend server accepts those requests, H2O forwards the HTTP response to the client and acts as a bi-directional tunnel.
 
 
-Support for WebSocket is considered experimental for the time being and therefore is not yet turned on by default.
+Support for tunnelling is considered experimental for the time being and therefore is not yet turned on by default.
 
 
 .RE
 .RE
 
-.SS proxy.websocket.timeout
-Sets idle timeout of a WebSocket connection being proxied.
+.SS proxy.tunnel.timeout
+Sets the idle timeout of a tunnel.
 
 .PP
+
+.PP
+.BR See\ also:
+proxy.tunnel
 
 .RE
 .RE
@@ -4267,7 +4285,7 @@ This library currently supports only IPv4 addresses. TrieAddr#match? returns fal
 
 
 h2olog is an experimental BPF (kernel doc) backed tracing tool for the H2O server.
-It can be used for tracing HTTP-level or QUIC-level events.
+It can be used for tracing quicly and h2o USDT probes.
 
 Since h2olog is an experimental program, its command-line interface might change without notice.
 
@@ -4308,16 +4326,16 @@ $ sudo apt install clang cmake python3 libbpfcc-dev linux-headers-$(uname -r)
 For running h2olog
 
 Root privilege to execute h2olog
-Linux kernel (>= 4.9)
+Linux kernel (>= 4.10)
 
 
 Quickstart
-h2olog -p $H2O_PID shows varnishlog-like tracing.
+h2olog -H -p $H2O_PID shows varnishlog-like tracing.
 
 .PP
 .nf
 .RS
-$ sudo h2olog -p $(pgrep -o h2o)
+$ sudo h2olog -H -p $(pgrep -o h2o)
 
 11 0 RxProtocol HTTP/3.0
 11 0 RxHeader   :authority torumk.com
@@ -4333,16 +4351,14 @@ $ sudo h2olog -p $(pgrep -o h2o)
 .fi
 .PP
 
-Tracing QUIC events
+Tracing USDT events
 Server-side QUIC events can be traced using the quic subcommand.
-Events are rendered in JSON format.
+Events are rendered in JSON Lines format.
 
 .PP
 .nf
 .RS
-$ sudo h2olog quic -p $(pgrep -o h2o)
-              ^
-              |_ The quic subcommand
+$ sudo h2olog -p $(pgrep -o h2o)
 
 .RE
 .fi

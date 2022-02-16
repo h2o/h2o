@@ -142,11 +142,11 @@ Following sections describe the configuration directives defined for the module.
 <li><a href="configure/proxy_directives.html#proxy.timeout.keepalive">
 <code>proxy.timeout.keepalive</code>
 </a></li>
-<li><a href="configure/proxy_directives.html#proxy.websocket">
-<code>proxy.websocket</code>
+<li><a href="configure/proxy_directives.html#proxy.tunnel">
+<code>proxy.tunnel</code>
 </a></li>
-<li><a href="configure/proxy_directives.html#proxy.websocket.timeout">
-<code>proxy.websocket.timeout</code>
+<li><a href="configure/proxy_directives.html#proxy.tunnel.timeout">
+<code>proxy.tunnel.timeout</code>
 </a></li>
 </ul>
 
@@ -669,40 +669,41 @@ The value should be set to something smaller than that being set at the upstream
 <dd><code><pre>proxy.timeout.keepalive: 2000</pre></code>
 </dl>
 
-<div id="proxy.websocket" class="directive-head">
-<h3><a href="configure/proxy_directives.html#proxy.websocket"><code>"proxy.websocket"</code></a></h3>
+<div id="proxy.tunnel" class="directive-head">
+<h3><a href="configure/proxy_directives.html#proxy.tunnel"><code>"proxy.tunnel"</code></a></h3>
 </div>
 
 <dl class="directive-desc">
 <dt>Description:</dt>
 <dd>
 <p>
-A boolean flag (<code>ON</code> or <code>OFF</code>) indicating whether or not to allow upgrading the proxied connection to <a href="https://tools.ietf.org/html/rfc6455">the WebSocket protocol</a>.
+A boolean flag (<code>ON</code> or <code>OFF</code>) indicating whether or not to allow tunnelling to the backend server.
 </p>
 
 <p>
-When set to <code>ON</code>, the proxied connection will be upgraded to a bi-directional tunnel stream if upgrading to WebSocket connection is permitted by the backend server (i.e. if the backend server responds to a WebSocket handshake with <code>101</code> status code).
+When set to <code>ON</code>, CONNECT requests and <a href="https://tools.ietf.org/html/rfc6455">WebSocket</a> handshakes are forwarded to the backend server.
+Then, if the backend server accepts those requests, H2O forwards the HTTP response to the client and acts as a bi-directional tunnel.
 </p>
 <p>
-Support for WebSocket is considered experimental for the time being and therefore is not yet turned on by default.
+Support for tunnelling is considered experimental for the time being and therefore is not yet turned on by default.
 </p>
 
 </dd>
 <dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
 <dd>global, host, path, extension</dd>
 <dt>Default:</dt>
-<dd><code><pre>proxy.websocket: OFF</pre></code>
+<dd><code><pre>proxy.tunnel: OFF</pre></code>
 </dl>
 
-<div id="proxy.websocket.timeout" class="directive-head">
-<h3><a href="configure/proxy_directives.html#proxy.websocket.timeout"><code>"proxy.websocket.timeout"</code></a></h3>
+<div id="proxy.tunnel.timeout" class="directive-head">
+<h3><a href="configure/proxy_directives.html#proxy.tunnel.timeout"><code>"proxy.tunnel.timeout"</code></a></h3>
 </div>
 
 <dl class="directive-desc">
 <dt>Description:</dt>
 <dd>
 <p>
-Sets idle timeout of a WebSocket connection being proxied.
+Sets the idle timeout of a tunnel.
 </p>
 
 </dd>
@@ -710,6 +711,9 @@ Sets idle timeout of a WebSocket connection being proxied.
 <dd>global, host, path, extension</dd>
 <dt>Default:</dt>
 <dd><code><pre>proxy.websocket.timeout: 300000</pre></code>
+<dt>See also:</dt>
+<dd><a href="configure/proxy_directives.html#proxy.tunnel"><code>proxy.tunnel</code></a>
+</dd>
 </dl>
 
 

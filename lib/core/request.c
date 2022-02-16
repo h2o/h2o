@@ -90,8 +90,7 @@ static h2o_hostconf_t *find_hostconf(h2o_hostconf_t **hostconfs, h2o_iovec_t aut
 
     /* convert supplied hostname to lower-case */
     hostname_lc = alloca(hostname.len);
-    memcpy(hostname_lc, hostname.base, hostname.len);
-    h2o_strtolower(hostname_lc, hostname.len);
+    h2o_strcopytolower(hostname_lc, hostname.base, hostname.len);
 
     do {
         h2o_hostconf_t *hostconf = *hostconfs;
@@ -115,6 +114,19 @@ static h2o_hostconf_t *find_hostconf(h2o_hostconf_t **hostconfs, h2o_iovec_t aut
     return NULL;
 }
 
+static h2o_hostconf_t *find_default_hostconf(h2o_hostconf_t **hostconfs)
+{
+    h2o_hostconf_t *fallback_host = hostconfs[0]->global->fallback_host;
+
+    do {
+        h2o_hostconf_t *hostconf = *hostconfs;
+        if (!hostconf->strict_match)
+            return hostconf;
+    } while (*++hostconfs != NULL);
+
+    return fallback_host;
+}
+
 h2o_hostconf_t *h2o_req_setup(h2o_req_t *req)
 {
     h2o_context_t *ctx = req->conn->ctx;
@@ -127,10 +139,10 @@ h2o_hostconf_t *h2o_req_setup(h2o_req_t *req)
         if (req->conn->hosts[1] == NULL ||
             (hostconf = find_hostconf(req->conn->hosts, req->input.authority, req->input.scheme->default_port,
                                       &req->authority_wildcard_match)) == NULL)
-            hostconf = *req->conn->hosts;
+            hostconf = find_default_hostconf(req->conn->hosts);
     } else {
         /* set the authority name to the default one */
-        hostconf = *req->conn->hosts;
+        hostconf = find_default_hostconf(req->conn->hosts);
         req->input.authority = hostconf->authority.hostport;
     }
 
@@ -329,6 +341,21 @@ void h2o_dispose_request(h2o_req_t *req)
     h2o_mem_clear_pool(&req->pool);
 }
 
+int h2o_req_validate_pseudo_headers(h2o_req_t *req)
+{
+    if (h2o_memis(req->input.method.base, req->input.method.len, H2O_STRLIT("CONNECT-UDP"))) {
+        if (req->input.scheme != &H2O_URL_SCHEME_MASQUE)
+            return 0;
+        if (!h2o_memis(req->input.path.base, req->input.path.len, H2O_STRLIT("/")))
+            return 0;
+    } else {
+        if (req->input.scheme == &H2O_URL_SCHEME_MASQUE)
+            return 0;
+    }
+
+    return 1;
+}
+
 h2o_handler_t *h2o_get_first_handler(h2o_req_t *req)
 {
     h2o_hostconf_t *hostconf = h2o_req_setup(req);
@@ -484,18 +511,35 @@ void h2o_start_response(h2o_req_t *req, h2o_generator_t *generator)
     assert(req->_generator == NULL);
     req->_generator = generator;
 
-    /* setup response filters */
-    if (req->prefilters != NULL) {
-        req->prefilters->on_setup_ostream(req->prefilters, req, &req->_ostr_top);
+    if (req->is_tunnel_req && (req->res.status == 101 || req->res.status == 200)) {
+        /* a tunnel has been established; forward response as is */
     } else {
-        h2o_setup_next_ostream(req, &req->_ostr_top);
+        /* setup response filters */
+        if (req->prefilters != NULL) {
+            req->prefilters->on_setup_ostream(req->prefilters, req, &req->_ostr_top);
+        } else {
+            h2o_setup_next_ostream(req, &req->_ostr_top);
+        }
     }
 }
 
 void h2o_sendvec_init_raw(h2o_sendvec_t *vec, const void *base, size_t len)
 {
-    static const h2o_sendvec_callbacks_t primitive_callbacks = {h2o_sendvec_flatten_raw};
-    vec->callbacks = &primitive_callbacks;
+    static const h2o_sendvec_callbacks_t callbacks = {h2o_sendvec_flatten_raw};
+    vec->callbacks = &callbacks;
+    vec->raw = (char *)base;
+    vec->len = len;
+}
+
+static void sendvec_immutable_update_refcnt(h2o_sendvec_t *vec, h2o_req_t *req, int is_incr)
+{
+    /* noop */
+}
+
+void h2o_sendvec_init_immutable(h2o_sendvec_t *vec, const void *base, size_t len)
+{
+    static const h2o_sendvec_callbacks_t callbacks = {h2o_sendvec_flatten_raw, sendvec_immutable_update_refcnt};
+    vec->callbacks = &callbacks;
     vec->raw = (char *)base;
     vec->len = len;
 }
@@ -634,6 +678,11 @@ void h2o_send_error_generic(h2o_req_t *req, int status, const char *reason, cons
         h2o_hostconf_t *hostconf = h2o_req_setup(req);
         h2o_req_bind_conf(req, hostconf, &hostconf->fallback_path);
     }
+
+    /* If the request is broken or incomplete, do not apply filters, as it would be dangerous to do so. Legitimate clients would not
+     * send broken requests, so we do not need to decorate error responses using errordoc handler or anything else. */
+    if ((flags & H2O_SEND_ERROR_BROKEN_REQUEST) != 0)
+        req->_next_filter_index = SIZE_MAX;
 
     if ((flags & H2O_SEND_ERROR_HTTP1_CLOSE_CONNECTION) != 0)
         req->http1_is_persistent = 0;
@@ -821,6 +870,13 @@ void h2o_send_informational(h2o_req_t *req)
 
     if (req->_ostr_top->send_informational == NULL)
         goto Clear;
+
+    size_t index;
+    if ((index = h2o_find_header(&req->headers, H2O_TOKEN_NO_EARLY_HINTS, -1)) != -1) {
+        h2o_iovec_t value = req->headers.entries[index].value;
+        if (value.len == 1 && value.base[0] == '1')
+            goto Clear;
+    }
 
     int i = 0;
     for (i = 0; i != req->num_filters; ++i) {

@@ -70,6 +70,10 @@ static int h2o_tolower(int ch);
  */
 static void h2o_strtolower(char *s, size_t len);
 /**
+ * copies and converts the string to lower-case
+ */
+static void h2o_strcopytolower(char *d, const char *s, size_t len);
+/**
  * tr/a-z/A-Z/
  */
 static int h2o_toupper(int ch);
@@ -174,6 +178,15 @@ int h2o_str_at_position(char *buf, const char *src, size_t src_len, int lineno, 
 
 int h2o__lcstris_core(const char *target, const char *test, size_t test_len);
 
+/**
+ * Encode a Structured Field Value [RFC 8941] of type String ("sf-string" in the RFC)
+ * @param pool memory pool (or NULL to use malloc)
+ * @param s source string
+ * @param slen length of source string; if slen==SIZE_MAX, then strlen(s) will be used
+ * @return buffer pointing to the encoded string (buf is NUL-terminated but the length does not include the NUL char)
+ */
+h2o_iovec_t h2o_encode_sf_string(h2o_mem_pool_t *pool, const char *s, size_t slen);
+
 /* inline defs */
 
 inline int h2o_tolower(int ch)
@@ -183,8 +196,13 @@ inline int h2o_tolower(int ch)
 
 inline void h2o_strtolower(char *s, size_t len)
 {
-    for (; len != 0; ++s, --len)
-        *s = h2o_tolower(*s);
+    h2o_strcopytolower(s, s, len);
+}
+
+inline void h2o_strcopytolower(char *d, const char *s, size_t len)
+{
+    for (; len != 0; ++d, ++s, --len)
+        *d = h2o_tolower(*s);
 }
 
 inline int h2o_toupper(int ch)

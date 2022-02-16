@@ -61,7 +61,7 @@ static uint32_t calc_w_est(const quicly_cc_t *cc, cubic_float_t t_sec, cubic_flo
 
 /* TODO: Avoid increase if sender was application limited. */
 static void cubic_on_acked(quicly_cc_t *cc, const quicly_loss_t *loss, uint32_t bytes, uint64_t largest_acked, uint32_t inflight,
-                           int64_t now, uint32_t max_udp_payload_size)
+                           uint64_t next_pn, int64_t now, uint32_t max_udp_payload_size)
 {
     assert(inflight >= bytes);
     /* Do not increase congestion window while in recovery. */
@@ -157,15 +157,37 @@ static void cubic_on_sent(quicly_cc_t *cc, const quicly_loss_t *loss, uint32_t b
     cc->state.cubic.last_sent_time = now;
 }
 
-static const struct st_quicly_cc_impl_t cubic_impl = {CC_CUBIC, cubic_on_acked, cubic_on_lost, cubic_on_persistent_congestion,
-                                                      cubic_on_sent};
-
-static void cubic_init(quicly_init_cc_t *self, quicly_cc_t *cc, uint32_t initcwnd, int64_t now)
+static void cubic_reset(quicly_cc_t *cc, uint32_t initcwnd)
 {
     memset(cc, 0, sizeof(quicly_cc_t));
-    cc->impl = &cubic_impl;
+    cc->type = &quicly_cc_type_cubic;
     cc->cwnd = cc->cwnd_initial = cc->cwnd_maximum = initcwnd;
     cc->ssthresh = cc->cwnd_minimum = UINT32_MAX;
 }
 
+static int cubic_on_switch(quicly_cc_t *cc)
+{
+    if (cc->type == &quicly_cc_type_cubic)
+        return 1;
+
+    if (cc->type == &quicly_cc_type_reno || cc->type == &quicly_cc_type_pico) {
+        /* When in slow start, state can be reused as-is; otherwise, restart. */
+        if (cc->cwnd_exiting_slow_start == 0) {
+            cc->type = &quicly_cc_type_cubic;
+        } else {
+            cubic_reset(cc, cc->cwnd_initial);
+        }
+        return 1;
+    }
+
+    return 0;
+}
+
+static void cubic_init(quicly_init_cc_t *self, quicly_cc_t *cc, uint32_t initcwnd, int64_t now)
+{
+    cubic_reset(cc, initcwnd);
+}
+
+quicly_cc_type_t quicly_cc_type_cubic = {
+    "cubic", &quicly_cc_cubic_init, cubic_on_acked, cubic_on_lost, cubic_on_persistent_congestion, cubic_on_sent, cubic_on_switch};
 quicly_init_cc_t quicly_cc_cubic_init = {cubic_init};

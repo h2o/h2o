@@ -70,10 +70,10 @@ static void on_setup_ostream(h2o_filter_t *_self, h2o_req_t *req, h2o_ostream_t 
 
     switch (req->compress_hint) {
     case H2O_COMPRESS_HINT_DISABLE:
-        /* compression was explicitely disabled, skip */
+        /* compression was explicitly disabled, skip */
         goto Next;
     case H2O_COMPRESS_HINT_ENABLE:
-        /* compression was explicitely enabled */
+        /* compression was explicitly enabled */
         break;
     case H2O_COMPRESS_HINT_ENABLE_BR:
         compressible_types_mask = H2O_COMPRESSIBLE_BROTLI;
@@ -98,13 +98,15 @@ static void on_setup_ostream(h2o_filter_t *_self, h2o_req_t *req, h2o_ostream_t 
     if (compressible_types == 0)
         goto Next;
 
-    /* skip if content-encoding header is being set (as well as obtain the location of accept-ranges) */
-    size_t content_encoding_header_index = -1, accept_ranges_header_index = -1;
+    /* skip if content-encoding header is being set (as well as obtain the location of accept-ranges moreover identify index of etag to modified weaken) */
+    size_t content_encoding_header_index = -1, accept_ranges_header_index = -1, etag_header_index = -1;
     for (i = 0; i != req->res.headers.size; ++i) {
         if (req->res.headers.entries[i].name == &H2O_TOKEN_CONTENT_ENCODING->buf)
             content_encoding_header_index = i;
         else if (req->res.headers.entries[i].name == &H2O_TOKEN_ACCEPT_RANGES->buf)
             accept_ranges_header_index = i;
+        else if (req->res.headers.entries[i].name == &H2O_TOKEN_ETAG->buf)
+            etag_header_index = i;
         else
             continue;
     }
@@ -130,6 +132,9 @@ static void on_setup_ostream(h2o_filter_t *_self, h2o_req_t *req, h2o_ostream_t 
     req->res.content_length = SIZE_MAX;
     h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_ENCODING, NULL, compressor->name.base, compressor->name.len);
     h2o_set_header_token(&req->pool, &req->res.headers, H2O_TOKEN_VARY, H2O_STRLIT("accept-encoding"));
+    if (etag_header_index != -1) {
+        req->res.headers.entries[etag_header_index].value = h2o_concat(&req->pool, h2o_iovec_init(H2O_STRLIT("W/")), req->res.headers.entries[etag_header_index].value);
+    }
     if (accept_ranges_header_index != -1) {
         req->res.headers.entries[accept_ranges_header_index].value = h2o_iovec_init(H2O_STRLIT("none"));
     } else {

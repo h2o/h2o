@@ -48,6 +48,15 @@ static inline void load_certificate_chain(ptls_context_t *ctx, const char *fn)
     }
 }
 
+static inline void load_raw_public_key(ptls_iovec_t *raw_public_key, char const *cert_pem_file)
+{
+    size_t count;
+    if (ptls_load_pem_objects(cert_pem_file, "PUBLIC KEY", raw_public_key, 1, &count) != 0) {
+        fprintf(stderr, "failed to load public key:%s:%s\n", cert_pem_file, strerror(errno));
+        exit(1);
+    }
+}
+
 static inline void load_private_key(ptls_context_t *ctx, const char *fn)
 {
     static ptls_openssl_sign_certificate_t sc;
@@ -79,7 +88,7 @@ struct st_util_save_ticket_t {
 
 static int util_save_ticket_cb(ptls_save_ticket_t *_self, ptls_t *tls, ptls_iovec_t src)
 {
-    struct st_util_save_ticket_t *self = (void *)_self;
+    struct st_util_save_ticket_t *self = (struct st_util_save_ticket_t *)_self;
     FILE *fp;
 
     if ((fp = fopen(self->fn, "wb")) == NULL) {
@@ -115,10 +124,38 @@ static inline void setup_session_file(ptls_context_t *ctx, ptls_handshake_proper
     }
 }
 
-static inline void setup_verify_certificate(ptls_context_t *ctx)
+static inline X509_STORE *init_cert_store(char const *crt_file)
+{
+    int ret = 0;
+    X509_STORE *store = X509_STORE_new();
+
+    if (store != NULL) {
+        X509_LOOKUP *lookup = X509_STORE_add_lookup(store, X509_LOOKUP_file());
+        ret = X509_LOOKUP_load_file(lookup, crt_file, X509_FILETYPE_PEM);
+        if (ret != 1) {
+            fprintf(stderr, "Cannot load store (%s), ret = %d\n", crt_file, ret);
+            X509_STORE_free(store);
+            exit(1);
+        }
+    } else {
+        fprintf(stderr, "Cannot get a new X509 store\n");
+        exit(1);
+    }
+
+    return store;
+}
+
+static inline void setup_verify_certificate(ptls_context_t *ctx, const char *ca_file)
 {
     static ptls_openssl_verify_certificate_t vc;
-    ptls_openssl_init_verify_certificate(&vc, NULL);
+    ptls_openssl_init_verify_certificate(&vc, ca_file != NULL ? init_cert_store(ca_file) : NULL);
+    ctx->verify_certificate = &vc.super;
+}
+
+static inline void setup_raw_pubkey_verify_certificate(ptls_context_t *ctx, EVP_PKEY *pubkey)
+{
+    static ptls_openssl_raw_pubkey_verify_certificate_t vc;
+    ptls_openssl_raw_pubkey_init_verify_certificate(&vc, pubkey);
     ctx->verify_certificate = &vc.super;
 }
 
@@ -142,7 +179,8 @@ static inline void setup_esni(ptls_context_t *ctx, const char *esni_fn, ptls_key
         fclose(fp);
     }
 
-    if ((ctx->esni = malloc(sizeof(*ctx->esni) * 2)) == NULL || (*ctx->esni = malloc(sizeof(**ctx->esni))) == NULL) {
+    if ((ctx->esni = (ptls_esni_context_t **)malloc(sizeof(*ctx->esni) * 2)) == NULL ||
+        (*ctx->esni = (ptls_esni_context_t *)malloc(sizeof(**ctx->esni))) == NULL) {
         fprintf(stderr, "no memory\n");
         exit(1);
     }
@@ -160,7 +198,7 @@ struct st_util_log_event_t {
 
 static void log_event_cb(ptls_log_event_t *_self, ptls_t *tls, const char *type, const char *fmt, ...)
 {
-    struct st_util_log_event_t *self = (void *)_self;
+    struct st_util_log_event_t *self = (struct st_util_log_event_t *)_self;
     char randomhex[PTLS_HELLO_RANDOM_SIZE * 2 + 1];
     va_list args;
 
@@ -196,14 +234,14 @@ struct st_util_session_cache_t {
 
 static int encrypt_ticket_cb(ptls_encrypt_ticket_t *_self, ptls_t *tls, int is_encrypt, ptls_buffer_t *dst, ptls_iovec_t src)
 {
-    struct st_util_session_cache_t *self = (void *)_self;
+    struct st_util_session_cache_t *self = (struct st_util_session_cache_t *)_self;
     int ret;
 
     if (is_encrypt) {
 
         /* replace the cached entry along with a newly generated session id */
         free(self->data.base);
-        if ((self->data.base = malloc(src.len)) == NULL)
+        if ((self->data.base = (uint8_t *)malloc(src.len)) == NULL)
             return PTLS_ERROR_NO_MEMORY;
 
         ptls_get_context(tls)->random_bytes(self->id, sizeof(self->id));
@@ -299,7 +337,8 @@ static inline ptls_iovec_t resolve_esni_keys(const char *server_name)
     ptls_base64_decode_state_t ds;
     int answer_len;
 
-    ptls_buffer_init(&decode_buf, "", 0);
+    char *buf = "";
+    ptls_buffer_init(&decode_buf, buf, 0);
 
     if (snprintf(esni_name, sizeof(esni_name), "_esni.%s", server_name) > sizeof(esni_name) - 1)
         goto Error;
@@ -311,8 +350,8 @@ static inline ptls_iovec_t resolve_esni_keys(const char *server_name)
         goto Error;
     if (ns_parserr(&msg, ns_s_an, 0, &rr) != 0)
         goto Error;
-    base64 = (void *)ns_rr_rdata(rr);
-    if (!normalize_txt((void *)base64, ns_rr_rdlen(rr)))
+    base64 = (char *)ns_rr_rdata(rr);
+    if (!normalize_txt((uint8_t *)base64, ns_rr_rdlen(rr)))
         goto Error;
 
     ptls_base64_decode_init(&ds);

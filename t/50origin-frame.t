@@ -17,7 +17,7 @@ listen:
     certificate-file: examples/h2o/wildcard.crt
     $origin_conf
 hosts:
-  "*.127.0.0.1.xip.io:$tls_port":
+  "*.localhost.examp1e.net:$tls_port":
     paths:
       /:
         file.dir: examples/doc_root
@@ -54,6 +54,6 @@ EOR
 
 test_origin_frame('', '');
 test_origin_frame('http2-origin-frame: [ ]', "0\n\"\"");
-test_origin_frame('http2-origin-frame: [ "https://a.127.0.0.1.xip.io" ]', "28\n\"\\000\\032https://a.127.0.0.1.xip.io\"");
-test_origin_frame('http2-origin-frame: [ "https://a.127.0.0.1.xip.io", "https://b.127.0.0.1.xip.io" ]', "56\n\"\\000\\032https://a.127.0.0.1.xip.io\\000\\032https://b.127.0.0.1.xip.io\"");
+test_origin_frame('http2-origin-frame: [ "https://a.localhost.examp1e.net" ]', "33\n\"\\000\\037https://a.localhost.examp1e.net\"");
+test_origin_frame('http2-origin-frame: [ "https://a.localhost.examp1e.net", "https://b.localhost.examp1e.net" ]', "66\n\"\\000\\037https://a.localhost.examp1e.net\\000\\037https://b.localhost.examp1e.net\"");
 done_testing();

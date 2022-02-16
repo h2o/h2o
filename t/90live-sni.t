@@ -4,7 +4,7 @@ use Digest::MD5 qw(md5_hex);
 use Test::More;
 use t::Util;
 
-our $CA_CERT = "misc/test-ca/ca.crt";
+our $CA_CERT = "misc/test-ca/root/ca.crt";
 
 # using wget since curl of OS X 10.9.5 returns invalid certificate chain error with the test
 plan skip_all => 'wget not found'
@@ -21,11 +21,11 @@ subtest "basic" => sub {
         my ($port, $tls_port) = @_;
         return << "EOT";
 hosts:
-  "127.0.0.1.xip.io:$tls_port":
+  "localhost.examp1e.net:$tls_port":
     paths:
       /:
         file.dir: examples/doc_root
-  "alternate.127.0.0.1.xip.io:$tls_port":
+  "alternate.localhost.examp1e.net:$tls_port":
     listen:
       port: $tls_port
       ssl:
@@ -38,12 +38,12 @@ EOT
     });
 
     do_test(
-        "127.0.0.1.xip.io:$server->{tls_port}",
+        "localhost.examp1e.net:$server->{tls_port}",
         md5_file("examples/doc_root/index.html"),
     );
 
     do_test(
-        "alternate.127.0.0.1.xip.io:$server->{tls_port}",
+        "alternate.localhost.examp1e.net:$server->{tls_port}",
         md5_file("examples/doc_root.alternate/index.txt"),
     );
 };
@@ -53,11 +53,11 @@ subtest "wildcard" => sub {
         my ($port, $tls_port) = @_;
         return << "EOT";
 hosts:
-  "127.0.0.1.xip.io:$tls_port":
+  "localhost.examp1e.net:$tls_port":
     paths:
       /:
         file.dir: examples/doc_root
-  "*.127.0.0.1.xip.io:$tls_port":
+  "*.localhost.examp1e.net:$tls_port":
     listen:
       port: $tls_port
       ssl:
@@ -70,12 +70,12 @@ EOT
     });
 
     do_test(
-        "127.0.0.1.xip.io:$server->{tls_port}",
+        "localhost.examp1e.net:$server->{tls_port}",
         md5_file("examples/doc_root/index.html"),
     );
 
     do_test(
-        "alternate.127.0.0.1.xip.io:$server->{tls_port}",
+        "alternate.localhost.examp1e.net:$server->{tls_port}",
         md5_file("examples/doc_root.alternate/index.txt"),
     );
 };
