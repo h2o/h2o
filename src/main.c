@@ -3127,8 +3127,10 @@ static void *run_loop(void *_thread_index)
         h2o_set_signal_handler(SIGTERM, on_sigterm_set_flag_notify_threads);
         if (conf.shutdown_requested)
             exit(0);
-        fprintf(stderr, "h2o server (pid:%d) is ready to serve requests with %zu threads\n", (int)getpid(), conf.thread_map.size);
     }
+    if (thread_index == 0)
+        fprintf(stderr, "h2o server (pid:%d) is ready to serve requests with %zu threads\n", (int)getpid(), conf.thread_map.size);
+
     h2o_barrier_wait_post_sync_point(&conf.startup_sync_barrier);
 
     /* the main loop */
