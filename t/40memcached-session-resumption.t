@@ -48,7 +48,7 @@ hosts:
         file.dir: @{[ DOC_ROOT ]}
 EOT
             sleep 1; # wait for h2o to connect to memcached
-            my $lines = run_openssl_client_joined({ host => "127.0.0.1", port => $server->{tls_port}, opts => "-no_ticket $opts" });
+            my $lines = run_openssl_client({ host => "127.0.0.1", port => $server->{tls_port}, opts => "-no_ticket $opts" });
             $lines =~ m{---\n(New|Reused),}s
                 or die "failed to parse the output of s_client:{{{$lines}}}";
             is $1, $expected;

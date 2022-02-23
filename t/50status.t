@@ -124,7 +124,7 @@ EOT
         my $build_req = sub {
             my ($tlsver, $alpn) = @_;
             my $req = "GET / HTTP/1.0\r\r";
-            run_openssl_client_joined({ host => "127.0.0.1", port => $tls_port, opts => "-$tlsver -alpn $alpn", request => $req });
+            run_openssl_client({ host => "127.0.0.1", port => $tls_port, opts => "-$tlsver -alpn $alpn", request => $req });
         };
 
         # error by TLS minimum version
@@ -148,9 +148,9 @@ EOT
         my ($server, $port, $tls_port) = $setup->();
 
         # full handshake
-        run_openssl_client_joined({ host => "127.0.0.1", port => $tls_port, opts => "-no_ticket -sess_out $tempdir/session" });
+        run_openssl_client({ host => "127.0.0.1", port => $tls_port, opts => "-no_ticket -sess_out $tempdir/session" });
         # resume handshake
-        run_openssl_client_joined({ host => "127.0.0.1", port => $tls_port, opts => "-no_ticket -sess_in $tempdir/session" });
+        run_openssl_client({ host => "127.0.0.1", port => $tls_port, opts => "-no_ticket -sess_in $tempdir/session" });
 
         my $resp = `curl --silent -o /dev/stderr http://127.0.0.1:$port/s/json?show=ssl 2>&1 > /dev/null`;
         my $jresp = decode_json($resp);

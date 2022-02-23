@@ -33,7 +33,7 @@ sub test {
     my ($server, $client_opts, $expected) = @_;
     $expected = [ $expected ] unless ref $expected eq 'ARRAY';
     for my $exp (@$expected) {
-        my $lines = run_openssl_client_joined({ host => "127.0.0.1", port => $server->{tls_port}, opts => "-no_ticket $client_opts" });
+        my $lines = run_openssl_client({ host => "127.0.0.1", port => $server->{tls_port}, opts => "-no_ticket $client_opts" });
         if (ok $lines !~ qr/ssl handshake failure/, 'ssl handshake failure') {
             $lines =~ m{---\n(New|Reused),}s
                 or die "failed to parse the output of s_client:{{{$lines}}}";

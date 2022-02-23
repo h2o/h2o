@@ -130,7 +130,7 @@ EOT
 
 sub test {
     my $cmd_opts = (-e "$tempdir/session" ? "-sess_in $tempdir/session" : "") . " -sess_out $tempdir/session";
-    my $lines = run_openssl_client_joined({ host => "127.0.0.1", port => $server->{tls_port}, opts => "$cmd_opts" });
+    my $lines = run_openssl_client({ host => "127.0.0.1", port => $server->{tls_port}, opts => "$cmd_opts" });
     $lines =~ m{---\n(New|Reused),}s
         or die "failed to parse the output of s_client:{{{$lines}}}";
     $1;

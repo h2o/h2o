@@ -58,7 +58,6 @@ our @EXPORT = qw(
     run_picotls_client
     spawn_dns_server
     run_openssl_client
-    run_openssl_client_joined
     run_fuzzer
 );
 
@@ -835,15 +834,18 @@ sub run_openssl_client {
     my $request_default = $opts->{request_default} // undef;
     my $ossl_opts = $opts->{opts} // '';
     my $ossl_cmd = $opts->{ossl_cmd} // 'openssl';
+    my $split_return = $opts->{split_return} // undef;
 
     my $cmd = "$ossl_cmd s_client $ossl_opts -connect $host:$port";
     if (defined $san && $san ne '') {
         $cmd = $cmd." -servername $san";
     }
     diag("run_openssl_client: $cmd");
+
     my $cpid = open3(my $chld_in, my $chld_out, my $chld_err = gensym, $cmd);
     sleep $timeout;
     $chld_in->autoflush(1);
+
     if ($request_default) {
         $chld_in->eof() || print $chld_in <<"EOT";
 GET $path HTTP/1.1\r
@@ -875,11 +877,11 @@ EOT
         kill 'KILL', $cpid;
     }
 
-    return ($resp_out, $resp_err);
-}
+    if ($split_return) {
+        return ($resp_out, $resp_err);
+    }
 
-sub run_openssl_client_joined {
-  return join("\n", run_openssl_client(@_));
+    return join("\n", ($resp_out, $resp_err));
 }
 
 1;

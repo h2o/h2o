@@ -8,7 +8,7 @@ use t::Util;
 my $tls_port = empty_port();
 
 plan skip_all => 'openssl s_client does not support TLS 1.3 + ECDSA' unless do {
-    my $resp = run_openssl_client_joined({ host => "127.0.0.1", port => $tls_port, opts => "-tls1_3 -sigalgs ECDSA+SHA256" });
+    my $resp = run_openssl_client({ host => "127.0.0.1", port => $tls_port, opts => "-tls1_3 -sigalgs ECDSA+SHA256" });
     $resp =~ /^connect:errno=/m;
 };
 
@@ -36,7 +36,7 @@ EOT
 
 sub doit {
     my ($algs, $expected) = @_;
-    my $resp = run_openssl_client_joined({ host => "127.0.0.1", port => $tls_port, opts => "-sigalgs $algs" });
+    my $resp = run_openssl_client({ host => "127.0.0.1", port => $tls_port, opts => "-sigalgs $algs" });
     like $resp, qr/\nPeer signature type: $expected\n.*\nDONE/s, "$algs -> $expected";
 }
 
