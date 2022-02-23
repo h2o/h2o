@@ -832,7 +832,7 @@ sub run_openssl_client {
     my $path = $opts->{path} // '/';
     my $timeout = $opts->{timeout} // 2.0;
     my $request = $opts->{request};
-    my $request_default = $opts->{request_default} // 0;
+    my $request_default = $opts->{request_default} // undef;
     my $ossl_opts = $opts->{opts} // '';
     my $ossl_cmd = $opts->{ossl_cmd} // 'openssl';
 
