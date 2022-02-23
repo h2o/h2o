@@ -845,8 +845,6 @@ sub run_openssl_client {
     my $cpid = open3(my $chld_in, my $chld_out, my $chld_err = gensym, $cmd);
     sleep $timeout;
     $chld_in->autoflush(1);
-    $chld_out->autoflush(1);
-    $chld_err->autoflush(1);
     if ($request_default) {
         $chld_in->eof() || print $chld_in <<"EOT";
 GET $path HTTP/1.1\r
