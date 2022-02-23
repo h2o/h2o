@@ -836,7 +836,6 @@ sub run_openssl_client {
     my $ossl_opts = $opts->{opts} // '';
     my $ossl_cmd = $opts->{ossl_cmd} // 'openssl';
 
-    my $tempdir = tempdir();
     my $cmd = "$ossl_cmd s_client $ossl_opts -connect $host:$port";
     if (defined $san && $san ne '') {
         $cmd = $cmd." -servername $san";
