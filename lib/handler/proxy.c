@@ -151,6 +151,7 @@ static void on_context_init(h2o_handler_t *_self, h2o_context_t *ctx)
         .max_buffer_size = self->config.max_buffer_size,
         .tunnel_enabled = self->config.tunnel_enabled,
         .protocol_selector = {.ratio = self->config.protocol_ratio},
+        .force_cleartext_http2 = self->config.http2.force_cleartext,
         .http2 =
             {
                 .latency_optimization = ctx->globalconf->http2.latency_optimization, /* TODO provide config knob, or disable? */
