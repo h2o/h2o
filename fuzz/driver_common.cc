@@ -122,3 +122,7 @@ void register_proxy(h2o_hostconf_t *hostconf, const char *unix_path, h2o_access_
     if (logfh != NULL)
         h2o_access_log_register(pathconf, logfh);
 }
+
+void barrier_last_passed_cb(void)
+{
+}

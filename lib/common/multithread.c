@@ -286,32 +286,30 @@ void h2o_sem_set_capacity(h2o_sem_t *sem, ssize_t new_capacity)
 
 /* barrier */
 
-void h2o_barrier_init(h2o_barrier_t *barrier, size_t count)
+void h2o_barrier_init(h2o_barrier_t *barrier, size_t count, void (*cb)(void))
 {
     pthread_mutex_init(&barrier->_mutex, NULL);
     pthread_cond_init(&barrier->_cond, NULL);
     barrier->_count = count;
     barrier->_out_of_wait = count;
+    barrier->_last_pass_cb = cb;
 }
 
-int h2o_barrier_wait(h2o_barrier_t *barrier)
+void h2o_barrier_wait(h2o_barrier_t *barrier)
 {
-    int ret;
     pthread_mutex_lock(&barrier->_mutex);
     barrier->_count--;
     if (barrier->_count == 0) {
         pthread_cond_broadcast(&barrier->_cond);
-        ret = 1;
+        barrier->_last_pass_cb();
     } else {
         while (barrier->_count)
             pthread_cond_wait(&barrier->_cond, &barrier->_mutex);
-        ret = 0;
     }
     pthread_mutex_unlock(&barrier->_mutex);
     /* This is needed to synchronize h2o_barrier_dispose with the exit of this function, so make sure that we can't destroy the
      * mutex or the condition before all threads have exited wait(). */
     __sync_sub_and_fetch(&barrier->_out_of_wait, 1);
-    return ret;
 }
 
 int h2o_barrier_done(h2o_barrier_t *barrier)

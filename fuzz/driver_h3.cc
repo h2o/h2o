@@ -109,7 +109,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size)
         pthread_t tupstream;
         const char *client_timeout_ms_str, *log_access_str;
 
-        h2o_barrier_init(&init_barrier, 2);
+        h2o_barrier_init(&init_barrier, 2, barrier_last_passed_cb);
         signal(SIGPIPE, SIG_IGN);
 
         dirname = mkdtemp(tmpname);

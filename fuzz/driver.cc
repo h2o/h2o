@@ -205,7 +205,7 @@ static int feeder(int sfd, char *buf, size_t len, h2o_barrier_t **barrier)
     wta->fd = pair[0];
     wta->buf = buf;
     wta->len = len;
-    h2o_barrier_init(&wta->barrier, 2);
+    h2o_barrier_init(&wta->barrier, 2, barrier_last_passed_cb);
     *barrier = &wta->barrier;
 
     write_fully(sfd, (char *)&wta, sizeof(wta), 1);
@@ -271,7 +271,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size)
         static char tmpname[] = "/tmp/h2o-fuzz-XXXXXX";
         char *dirname;
 
-        h2o_barrier_init(&init_barrier, 2);
+        h2o_barrier_init(&init_barrier, 2, barrier_last_passed_cb);
         signal(SIGPIPE, SIG_IGN);
 
         dirname = mkdtemp(tmpname);

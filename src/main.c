@@ -2514,6 +2514,12 @@ static void on_sigterm_set_flag_notify_threads(int signo)
     on_sigterm(1);
 }
 
+static void on_barrier_last_passed_cb(void)
+{
+    h2o_set_signal_handler(SIGTERM, on_sigterm_set_flag_notify_threads);
+    fprintf(stderr, "h2o server (pid:%d) is ready to serve requests with %zu threads\n", (int)getpid(), conf.thread_map.size);
+}
+
 #ifdef LIBC_HAS_BACKTRACE
 
 static int popen_crash_handler(void)
@@ -3121,15 +3127,10 @@ static void *run_loop(void *_thread_index)
     /* and start listening */
     update_listener_state(listeners);
 
-    /* Wait for all threads to become ready but before letting any of them serve connections, swap the signal handler for graceful
-     * shutdown, check (and exit) if SIGTERM has been received already. */
-    if (h2o_barrier_wait_pre_sync_point(&conf.startup_sync_barrier)) {
-        h2o_set_signal_handler(SIGTERM, on_sigterm_set_flag_notify_threads);
-        if (conf.shutdown_requested)
-            exit(0);
-        fprintf(stderr, "h2o server (pid:%d) is ready to serve requests with %zu threads\n", (int)getpid(), conf.thread_map.size);
-    }
-    h2o_barrier_wait_post_sync_point(&conf.startup_sync_barrier);
+    /* make sure all threads are initialized before starting to serve requests */
+    h2o_barrier_wait(&conf.startup_sync_barrier);
+    if (conf.shutdown_requested)
+        exit(0);
 
     /* the main loop */
     uint64_t last_buffer_gc_at = 0;
@@ -3824,7 +3825,7 @@ int main(int argc, char **argv)
 
     /* build barrier to synchronize the start of all threads */
     assert(conf.thread_map.size != 0);
-    h2o_barrier_init(&conf.startup_sync_barrier, conf.thread_map.size);
+    h2o_barrier_init(&conf.startup_sync_barrier, conf.thread_map.size, on_barrier_last_passed_cb);
 
     { /* initialize SSL_CTXs for session resumption and ticket-based resumption (also starts memcached client threads for the
          purpose) */

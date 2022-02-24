@@ -32,5 +32,6 @@ h2o_pathconf_t *register_handler(h2o_hostconf_t *hostconf, const char *path, int
 void write_fully(int fd, char *buf, size_t len, int abort_on_err);
 void *upstream_thread(void *arg);
 void register_proxy(h2o_hostconf_t *hostconf, const char *unix_path, h2o_access_log_filehandle_t *logfh);
+void barrier_last_passed_cb(void);
 
 #endif

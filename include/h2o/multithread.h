@@ -54,6 +54,7 @@ typedef struct st_h2o_barrier_t {
     pthread_cond_t _cond;
     size_t _count;
     size_t _out_of_wait;
+    void (*_last_pass_cb)(void);
 } h2o_barrier_t;
 
 /**
@@ -135,11 +136,11 @@ void h2o_sem_wait(h2o_sem_t *sem);
 void h2o_sem_post(h2o_sem_t *sem);
 void h2o_sem_set_capacity(h2o_sem_t *sem, ssize_t new_capacity);
 
-void h2o_barrier_init(h2o_barrier_t *barrier, size_t count);
+void h2o_barrier_init(h2o_barrier_t *barrier, size_t count, void (*cb)(void));
 /**
  * Waits for all threads to enter the barrier.
  */
-int h2o_barrier_wait(h2o_barrier_t *barrier);
+void h2o_barrier_wait(h2o_barrier_t *barrier);
 int h2o_barrier_done(h2o_barrier_t *barrier);
 void h2o_barrier_add(h2o_barrier_t *barrier, size_t delta);
 void h2o_barrier_dispose(h2o_barrier_t *barrier);
