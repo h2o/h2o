@@ -337,6 +337,7 @@ void finalostream_send(h2o_ostream_t *self, h2o_req_t *req, h2o_sendvec_t *bufs,
     h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, _ostr_final, self);
     h2o_http2_conn_t *conn = (h2o_http2_conn_t *)req->conn;
 
+    assert(h2o_send_state_is_in_progress(stream->send_state));
     assert(stream->_data.size == 0);
 
     if (stream->blocked_by_server)
