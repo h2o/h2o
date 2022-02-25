@@ -198,7 +198,7 @@ void h2o_context_close_idle_connections(h2o_context_t *ctx, size_t max_connectio
 
     size_t closed = ctx->_conns.num_conns.shutdown;
 
-    if (closed == max_connections_to_close)
+    if (closed >= max_connections_to_close)
         return;
 
     H2O_CONN_LIST_FOREACH(h2o_conn_t * conn, ({&ctx->_conns.idle}), {
