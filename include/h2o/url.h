@@ -115,11 +115,14 @@ extern const char h2o_url_host_to_sun_err_is_not_unix_socket[];
 
 inline int h2o_url_init(h2o_url_t *url, const h2o_url_scheme_t *scheme, h2o_iovec_t authority, h2o_iovec_t path)
 {
-    if (h2o_url_parse_hostport(authority.base, authority.len, &url->host, &url->_port) != authority.base + authority.len)
-        return -1;
+    /* core/proxy.c does not check the result and generates upstream request
+       We init url with given arguments and this approach is cleaner than handle
+       the corner case from core/proxy.c */
     url->scheme = scheme;
     url->authority = authority;
     url->path = path;
+    if (h2o_url_parse_hostport(authority.base, authority.len, &url->host, &url->_port) != authority.base + authority.len)
+        return -1;
     return 0;
 }
 
