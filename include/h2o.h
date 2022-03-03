@@ -1629,6 +1629,27 @@ h2o_hostconf_t *h2o_config_register_host(h2o_globalconf_t *config, h2o_iovec_t h
  * * configuration path does not end with a `/`, and the request path begins with the configuration path followed by a `/`
  */
 h2o_pathconf_t *h2o_config_register_path(h2o_hostconf_t *hostconf, const char *path, int flags);
+
+
+/**
+ * registers a path context sorted.
+ * @param hostconf host-level configuration that the path-level configuration belongs to
+ * @param path path
+ * @param flags unused and must be set to zero
+ *
+ * Handling of the path argument has changed in version 2.0 (of the standard server).
+ *
+ * Before 2.0, the function implicitely added a trailing `/` to the supplied path (if it did not end with a `/`), and when receiving
+ * a HTTP request for a matching path without the trailing `/`, libh2o sent a 301 response redirecting the client to a URI with a
+ * trailing `/`.
+ *
+ * Since 2.0, the function retains the exact path given as the argument, and the handlers of the pathconf is invoked if one of the
+ * following conditions are met:
+ *
+ * * request path is an exact match to the configuration path
+ * * configuration path does not end with a `/`, and the request path begins with the configuration path followed by a `/`
+ */
+h2o_pathconf_t *h2o_config_register_path_sorted(h2o_hostconf_t *hostconf, const char *path, int flags);
 /**
  * registers an extra status handler
  */

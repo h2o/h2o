@@ -216,6 +216,8 @@ void h2o_config_init(h2o_globalconf_t *config)
     config->fallback_host->authority.hostport = h2o_strdup(NULL, H2O_STRLIT("*"));
 }
 
+
+
 h2o_pathconf_t *h2o_config_register_path(h2o_hostconf_t *hostconf, const char *path, int flags)
 {
     h2o_pathconf_t *pathconf = h2o_mem_alloc(sizeof(*pathconf));
@@ -226,6 +228,59 @@ h2o_pathconf_t *h2o_config_register_path(h2o_hostconf_t *hostconf, const char *p
 
     return pathconf;
 }
+
+static int is_prefix(const char *pre, const char *str)
+{
+    if(strlen(pre) < strlen(str)) {
+        if(strncmp(pre, str, strlen(pre)) == 0) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+h2o_pathconf_t *h2o_config_register_path_sorted(h2o_hostconf_t *hostconf, const char *path, int flags)
+{
+    h2o_pathconf_t *pathconf;
+
+    h2o_vector_reserve(NULL, &hostconf->paths, hostconf->paths.size + 1);
+
+    int lower_bound = hostconf->paths.size;
+    for(int i = hostconf->paths.size - 1; i >= 0; i--) {
+        if(hostconf->paths.entries[i].path.len > 0) {
+            if(is_prefix(hostconf->paths.entries[i].path.base, path)) {
+                lower_bound = i;
+            }
+        }
+    }
+
+    for(int i = hostconf->paths.size; i > lower_bound; i--) {
+        h2o_pathconf_t * dst_pathconf = &hostconf->paths.entries[i];
+
+        dst_pathconf->filters.size = hostconf->paths.entries[i-1].filters.size;
+        dst_pathconf->filters.capacity = hostconf->paths.entries[i-1].filters.capacity;
+        dst_pathconf->filters.entries = hostconf->paths.entries[i-1].filters.entries;
+
+        dst_pathconf->handlers.size = hostconf->paths.entries[i-1].handlers.size;
+        dst_pathconf->handlers.capacity = hostconf->paths.entries[i-1].handlers.capacity;
+        dst_pathconf->handlers.entries = hostconf->paths.entries[i-1].handlers.entries;
+
+        dst_pathconf->global = hostconf->paths.entries[i-1].global;
+        dst_pathconf->path = h2o_strdup(NULL, hostconf->paths.entries[i-1].path.base, SIZE_MAX);
+        free(hostconf->paths.entries[i-1].path.base);
+        dst_pathconf->mimemap = hostconf->paths.entries[i-1].mimemap;
+        dst_pathconf->env = hostconf->paths.entries[i-1].env;
+        dst_pathconf->error_log = hostconf->paths.entries[i-1].error_log;
+        dst_pathconf->loggers = hostconf->paths.entries[i-1].loggers;
+    }
+    hostconf->paths.size += 1;
+    pathconf = hostconf->paths.entries + lower_bound;
+
+    h2o_config_init_pathconf(pathconf, hostconf->global, path, hostconf->mimemap);
+
+    return pathconf;
+}
+
 
 void h2o_config_register_status_handler(h2o_globalconf_t *config, h2o_status_handler_t *status_handler)
 {
