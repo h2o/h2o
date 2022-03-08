@@ -186,16 +186,15 @@ sub spawn_server {
     if ($pid != 0) {
         print STDERR "spawning $args{argv}->[0]... ";
         if ($args{is_ready}) {
-            while (1) {
-                if ($args{is_ready}->()) {
-                    print STDERR "done\n";
-                    last;
-                }
+            for (my $i = 0; !$args{is_ready}->(); ++$i) {
                 if (waitpid($pid, WNOHANG) == $pid) {
                     die "server failed to start (got $?)\n";
                 }
+                die "server failed to boot in 10 seconds\n"
+                    if $i > 100;
                 sleep 0.1;
             }
+            print STDERR "done\n";
         }
         my $guard = make_guard(sub {
             return if $$ != $ppid;
