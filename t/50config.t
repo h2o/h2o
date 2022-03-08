@@ -103,8 +103,7 @@ EOT
     };
     
     subtest 'env' => sub {
-        my $spawn = sub {
-            spawn_h2o(<< "EOT");
+        my $conf = << "EOT";
 hosts:
   default:
     paths:
@@ -112,10 +111,9 @@ hosts:
         header.add: !env FOO
         file.dir: @{[DOC_ROOT]}
 EOT
-        };
         subtest 'exist' => sub {
             local $ENV{FOO} = "hello: world";
-            my $server = $spawn->();
+            my $server = spawn_h2o($conf);
             run_with_curl($server, sub {
                 my ($proto, $port, $curl) = @_;
                 my ($stderr, $stdout) = run_prog("$curl --silent --dump-header /dev/stderr $proto://127.0.0.1:$port/");
@@ -126,9 +124,11 @@ EOT
             local $@;
             delete local $ENV{FOO};
             eval {
-                $spawn->();
+                # Dummy port is specified to prevent spawn_h2o from returning before the configuration error is detected. This can
+                # happen because the `listen` directives are specified above the erroneous config line.
+                spawn_h2o({conf => $conf, extra_ports => [empty_port()]});
             };
-            ok $@;
+            ok $@, "server fails to start";
         };
     };
 };

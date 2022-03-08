@@ -249,6 +249,7 @@ sub spawn_h2o {
 
     # decide the port numbers
     my ($port, $tls_port) = empty_ports(2, { host => "0.0.0.0" });
+    my @all_ports = ($port, $tls_port);
 
     # setup the configuration file
     $conf = $conf->($port, $tls_port)
@@ -259,6 +260,7 @@ sub spawn_h2o {
             if $conf->{opts};
         $max_ssl_version = $conf->{max_ssl_version} || undef;
         $user = $conf->{user} if exists $conf->{user};
+        push @all_ports, $conf->{extra_ports} if exists $conf->{extra_ports};
         $conf = $conf->{conf};
     }
     $conf = <<"EOT";
@@ -276,7 +278,7 @@ listen:
 @{[$user ? "user: $user" : ""]}
 EOT
 
-    my $ret = spawn_h2o_raw($conf, [$port, $tls_port], \@opts);
+    my $ret = spawn_h2o_raw($conf, \@all_ports, \@opts);
     return {
         %$ret,
         port => $port,
