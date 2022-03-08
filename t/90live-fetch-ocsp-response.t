@@ -2,6 +2,7 @@ use strict;
 use warnings;
 use File::Temp qw(tempfile);
 use Test::More;
+use t::Util;
 
 plan skip_all => "skipping live tests (setenv LIVE_TESTS=1 to run them)"
     unless $ENV{LIVE_TESTS};
@@ -25,12 +26,7 @@ done_testing;
 
 sub doit {
     my $host = shift;
-    my $input = do {
-        open my $fh, "-|", "openssl s_client -showcerts -host $host -port 443 -CAfile /dev/null < /dev/null 2>&1"
-            or die "failed to invoke openssl:$!";
-        local $/;
-        <$fh>;
-    };
+    my $input = run_openssl_client({ host => $host, port => 443, opts => "-showcerts -CAfile /dev/null" });
     my @certs;
     while ($input =~ /(-----BEGIN CERTIFICATE-----.*?-----END CERTIFICATE-----)/sg) {
         push @certs, $1;
