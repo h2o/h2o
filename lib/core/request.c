@@ -134,14 +134,13 @@ h2o_hostconf_t *h2o_req_setup(h2o_req_t *req)
 
     req->processed_at = h2o_get_timestamp(ctx, &req->pool);
 
-    /* find the host context */
-    if (req->input.authority.base != NULL) {
+    /* find the host context (or use the default if authority is missing or is of zero-length) */
+    if (req->input.authority.len != 0) {
         if (req->conn->hosts[1] == NULL ||
             (hostconf = find_hostconf(req->conn->hosts, req->input.authority, req->input.scheme->default_port,
                                       &req->authority_wildcard_match)) == NULL)
             hostconf = find_default_hostconf(req->conn->hosts);
     } else {
-        /* set the authority name to the default one */
         hostconf = find_default_hostconf(req->conn->hosts);
         req->input.authority = hostconf->authority.hostport;
     }
