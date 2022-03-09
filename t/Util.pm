@@ -847,19 +847,20 @@ sub run_openssl_client {
     sleep $timeout;
     $chld_in->autoflush(1);
 
-    my $sig_pipe = $SIG{PIPE};
-    $SIG{PIPE} = 'IGNORE';
-    if ($request_default) {
-        print $chld_in <<"EOT";
+    {
+        local $SIG{PIPE} = 'IGNORE';
+
+        if ($request_default) {
+            print $chld_in <<"EOT";
 GET $path HTTP/1.1\r
 Host: $san:$port\r
 Connection: close\r
 \r
 EOT
-    } elsif (defined $request && $request ne '') {
-        print $chld_in "$request";
+        } elsif (defined $request && $request ne '') {
+            print $chld_in "$request";
+        }
     }
-    $SIG{PIPE} = $sig_pipe;
 
     while ($timeout > 0.0) {
         my $cpid_wait = waitpid($cpid, POSIX::WNOHANG);
