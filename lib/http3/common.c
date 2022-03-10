@@ -772,7 +772,8 @@ void h2o_quic_read_socket(h2o_quic_ctx_t *ctx, h2o_socket_t *sock)
 #ifdef IP_PKTINFO
                 if (cmsg->cmsg_level == IPPROTO_IP && cmsg->cmsg_type == IP_PKTINFO) {
                     dgrams[dgram_index].destaddr.sin.sin_family = AF_INET;
-                    dgrams[dgram_index].destaddr.sin.sin_addr = ((struct in_pktinfo *)CMSG_DATA(cmsg))->ipi_addr;
+                    memcpy(&dgrams[dgram_index].destaddr.sin.sin_addr, CMSG_DATA(cmsg) + offsetof(struct in_pktinfo, ipi_addr),
+                           sizeof(struct in_addr));
                     dgrams[dgram_index].destaddr.sin.sin_port = *ctx->sock.port;
                     goto DestAddrFound;
                 }
@@ -780,7 +781,7 @@ void h2o_quic_read_socket(h2o_quic_ctx_t *ctx, h2o_socket_t *sock)
 #ifdef IP_RECVDSTADDR
                 if (cmsg->cmsg_level == IPPROTO_IP && cmsg->cmsg_type == IP_RECVDSTADDR) {
                     dgrams[dgram_index].destaddr.sin.sin_family = AF_INET;
-                    dgrams[dgram_index].destaddr.sin.sin_addr = *(struct in_addr *)CMSG_DATA(cmsg);
+                    memcpy(&dgrams[dgram_index].destaddr.sin.sin_addr, CMSG_DATA(cmsg), sizeof(struct in_addr));
                     dgrams[dgram_index].destaddr.sin.sin_port = *ctx->sock.port;
                     goto DestAddrFound;
                 }
@@ -788,7 +789,8 @@ void h2o_quic_read_socket(h2o_quic_ctx_t *ctx, h2o_socket_t *sock)
 #ifdef IPV6_PKTINFO
                 if (cmsg->cmsg_level == IPPROTO_IPV6 && cmsg->cmsg_type == IPV6_PKTINFO) {
                     dgrams[dgram_index].destaddr.sin6.sin6_family = AF_INET6;
-                    dgrams[dgram_index].destaddr.sin6.sin6_addr = ((struct in6_pktinfo *)CMSG_DATA(cmsg))->ipi6_addr;
+                    memcpy(&dgrams[dgram_index].destaddr.sin6.sin6_addr, CMSG_DATA(cmsg) + offsetof(struct in6_pktinfo, ipi6_addr),
+                           sizeof(struct in6_addr));
                     dgrams[dgram_index].destaddr.sin6.sin6_port = *ctx->sock.port;
                     goto DestAddrFound;
                 }
