@@ -93,16 +93,16 @@ int h2o_quic_send_datagrams(h2o_quic_ctx_t *ctx, quicly_address_t *dest, quicly_
         .msg_control = cmsgbuf.buf,
         .msg_controllen = sizeof(cmsgbuf.buf),
     };
-    struct cmsghdr *cmsg = CMSG_FIRSTHDR(&mess);
+    struct cmsghdr *cmsg = NULL;
     int ret;
 
 #define PUSH_CMSG(level, type, value)                                                                                              \
     do {                                                                                                                           \
+        cmsg = cmsg == NULL ? CMSG_FIRSTHDR(&mess) : CMSG_NXTHDR(&mess, cmsg);                                                     \
         cmsg->cmsg_level = (level);                                                                                                \
         cmsg->cmsg_type = (type);                                                                                                  \
         cmsg->cmsg_len = CMSG_LEN(sizeof(value));                                                                                  \
         memcpy(CMSG_DATA(cmsg), &value, sizeof(value));                                                                            \
-        cmsg = CMSG_NXTHDR(&mess, cmsg);                                                                                           \
     } while (0)
 
     /* first CMSG is the source address */
@@ -154,7 +154,12 @@ int h2o_quic_send_datagrams(h2o_quic_ctx_t *ctx, quicly_address_t *dest, quicly_
 #endif
 
     /* commit CMSG length */
-    mess.msg_controllen = (socklen_t)((char *)cmsg - (char *)cmsgbuf.buf);
+    if (cmsg != NULL) {
+        mess.msg_controllen = (socklen_t)((char *)cmsg - (char *)cmsgbuf.buf) + cmsg->cmsg_len;
+    } else {
+        mess.msg_control = NULL;
+        mess.msg_controllen = 0;
+    }
 
     /* send datagrams */
     if (using_gso) {
