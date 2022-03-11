@@ -82,9 +82,9 @@ int h2o_quic_send_datagrams(h2o_quic_ctx_t *ctx, quicly_address_t *dest, quicly_
 #ifdef UDP_SEGMENT
             + CMSG_SPACE(sizeof(uint16_t))
 #endif
-            + CMSG_SPACE(1) /* this sentry makes sure that CMSG_NXTHDR succeeds; also for calculating msg_controllen at the end */
+            + CMSG_SPACE(1) /* sentry */
         ];
-    } cmsgbuf = {};
+    } cmsgbuf = {.buf = {} /* zero-cleared so that CMSG_NXTHDR can be used for locating the *next* cmsghdr */ };
     struct msghdr mess = {
         .msg_name = &dest->sa,
         .msg_namelen = quicly_get_socklen(&dest->sa),
