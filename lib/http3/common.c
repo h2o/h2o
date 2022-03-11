@@ -84,7 +84,7 @@ int h2o_quic_send_datagrams(h2o_quic_ctx_t *ctx, quicly_address_t *dest, quicly_
 #endif
             + CMSG_SPACE(1) /* this sentry makes sure that CMSG_NXTHDR succeeds; also for calculating msg_controllen at the end */
         ];
-    } cmsgbuf;
+    } cmsgbuf = {};
     struct msghdr mess = {
         .msg_name = &dest->sa,
         .msg_namelen = quicly_get_socklen(&dest->sa),
