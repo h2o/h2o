@@ -7,6 +7,7 @@ use File::Temp qw(tempfile tempdir);
 use IO::Socket::INET;
 use IO::Socket::SSL;
 use IO::Poll qw(POLLIN POLLOUT POLLHUP POLLERR);
+use IPC::Open3;
 use List::Util qw(shuffle);
 use List::MoreUtils qw(firstidx);
 use Net::EmptyPort qw(check_port empty_port);
@@ -16,6 +17,7 @@ use Path::Tiny;
 use Protocol::HTTP2::Connection;
 use Protocol::HTTP2::Constants;
 use Scope::Guard;
+use Symbol 'gensym';
 use Test::More;
 use Time::HiRes qw(sleep gettimeofday tv_interval);
 use Carp;
@@ -55,6 +57,7 @@ our @EXPORT = qw(
     check_dtrace_availability
     run_picotls_client
     spawn_dns_server
+    run_openssl_client
     run_fuzzer
 );
 
@@ -183,16 +186,15 @@ sub spawn_server {
     if ($pid != 0) {
         print STDERR "spawning $args{argv}->[0]... ";
         if ($args{is_ready}) {
-            while (1) {
-                if ($args{is_ready}->()) {
-                    print STDERR "done\n";
-                    last;
-                }
+            for (my $i = 0; !$args{is_ready}->(); ++$i) {
                 if (waitpid($pid, WNOHANG) == $pid) {
                     die "server failed to start (got $?)\n";
                 }
+                die "server failed to boot in 10 seconds\n"
+                    if $i > 100;
                 sleep 0.1;
             }
+            print STDERR "done\n";
         }
         my $guard = make_guard(sub {
             return if $$ != $ppid;
@@ -246,6 +248,7 @@ sub spawn_h2o {
 
     # decide the port numbers
     my ($port, $tls_port) = empty_ports(2, { host => "0.0.0.0" });
+    my @all_ports = ($port, $tls_port);
 
     # setup the configuration file
     $conf = $conf->($port, $tls_port)
@@ -256,6 +259,7 @@ sub spawn_h2o {
             if $conf->{opts};
         $max_ssl_version = $conf->{max_ssl_version} || undef;
         $user = $conf->{user} if exists $conf->{user};
+        push @all_ports, $conf->{extra_ports} if exists $conf->{extra_ports};
         $conf = $conf->{conf};
     }
     $conf = <<"EOT";
@@ -273,7 +277,7 @@ listen:
 @{[$user ? "user: $user" : ""]}
 EOT
 
-    my $ret = spawn_h2o_raw($conf, [$port, $tls_port], \@opts);
+    my $ret = spawn_h2o_raw($conf, \@all_ports, \@opts);
     return {
         %$ret,
         port => $port,
@@ -818,6 +822,71 @@ sub spawn_dns_server {
             $ns->main_loop;
         });
     return $server;
+}
+
+sub run_openssl_client {
+    my($opts) = @_;
+    my $port = $opts->{port} or croak("`port` is required!");
+    my $san = $opts->{san};
+    my $host = $opts->{host} // '127.0.0.1';
+    my $path = $opts->{path} // '/';
+    my $timeout = $opts->{timeout} // 2.0;
+    my $request = $opts->{request};
+    my $request_default = $opts->{request_default} // undef;
+    my $ossl_opts = $opts->{opts} // '';
+    my $ossl_cmd = $opts->{ossl_cmd} // 'openssl';
+    my $split_return = $opts->{split_return} // undef;
+
+    my $cmd = "$ossl_cmd s_client $ossl_opts -connect $host:$port";
+    if (defined $san && $san ne '') {
+        $cmd = $cmd." -servername $san";
+    }
+    diag("run_openssl_client: $cmd");
+
+    my $cpid = open3(my $chld_in, my $chld_out, my $chld_err = gensym, $cmd);
+    sleep $timeout;
+    $chld_in->autoflush(1);
+
+    {
+        local $SIG{PIPE} = 'IGNORE';
+
+        if ($request_default) {
+            print $chld_in <<"EOT";
+GET $path HTTP/1.1\r
+Host: $san:$port\r
+Connection: close\r
+\r
+EOT
+        } elsif (defined $request && $request ne '') {
+            print $chld_in "$request";
+        }
+    }
+
+    while ($timeout > 0.0) {
+        my $cpid_wait = waitpid($cpid, POSIX::WNOHANG);
+        if ($cpid_wait == $cpid || $cpid_wait == -1) {
+            last;
+        }
+
+        sleep 0.1;
+        $timeout -= 0.1
+    }
+
+    close $chld_in;
+    my $resp_out = do { local $/; <$chld_out> };
+    my $resp_err = do { local $/; <$chld_err> };
+    close $chld_out;
+    close $chld_err;
+
+    if ($timeout <= 0.0) {
+        kill 'KILL', $cpid;
+    }
+
+    if ($split_return) {
+        return ($resp_out, $resp_err);
+    }
+
+    return join("\n", ($resp_out, $resp_err));
 }
 
 1;

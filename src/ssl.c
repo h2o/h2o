@@ -1199,7 +1199,7 @@ static __thread struct {
 
 static void init_quic_keyset(struct st_quic_keyset_t *keyset, uint8_t name, ptls_iovec_t master_secret)
 {
-    uint8_t master_digestbuf[PTLS_MAX_DIGEST_SIZE], keybuf[PTLS_MAX_SECRET_SIZE];
+    uint8_t master_digestbuf[PTLS_MAX_DIGEST_SIZE], keybuf[PTLS_MAX_DIGEST_SIZE];
     int ret;
 
     if (master_secret.len > PTLS_SHA256_DIGEST_SIZE) {
@@ -1211,7 +1211,7 @@ static void init_quic_keyset(struct st_quic_keyset_t *keyset, uint8_t name, ptls
     keyset->cid = quicly_new_default_cid_encryptor(quic_is_clustered ? &ptls_openssl_aes128ecb : &ptls_openssl_bfecb,
                                                    &ptls_openssl_aes128ecb, &ptls_openssl_sha256, master_secret);
     assert(keyset->cid != NULL);
-    ret = ptls_hkdf_expand_label(&ptls_openssl_sha256, keybuf, ptls_openssl_aes128gcm.key_size, master_secret, "address-token",
+    ret = ptls_hkdf_expand_label(&ptls_openssl_sha256, keybuf, PTLS_SHA256_DIGEST_SIZE, master_secret, "address-token",
                                  ptls_iovec_init(NULL, 0), "");
     assert(ret == 0);
     keyset->address_token.enc = ptls_aead_new(&ptls_openssl_aes128gcm, &ptls_openssl_sha256, 1, keybuf, "");
