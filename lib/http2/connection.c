@@ -1322,6 +1322,8 @@ static void on_read(h2o_socket_t *sock, const char *err)
                 h2o_http2_stream_t *stream =
                     H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, _link, conn->early_data.blocked_streams.next);
                 h2o_linklist_unlink(&stream->_link);
+                if (!stream->blocked_by_server)
+                    h2o_http2_stream_set_blocked_by_server(conn, stream, 1);
                 h2o_replay_request(&stream->req);
             }
         }
