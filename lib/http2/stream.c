@@ -206,11 +206,6 @@ static void send_refused_stream(h2o_http2_conn_t *conn, h2o_http2_stream_t *stre
 
 static int send_headers(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
 {
-    if (stream->req.res.status == 425 && stream->req.reprocess_if_too_early) {
-        h2o_http2_conn_register_for_replay(conn, stream);
-        return -1;
-    }
-
     stream->req.timestamps.response_start_at = h2o_gettimeofday(conn->super.ctx->loop);
 
     /* cancel push with an error response */
@@ -339,6 +334,12 @@ void finalostream_send(h2o_ostream_t *self, h2o_req_t *req, h2o_sendvec_t *bufs,
 
     assert(h2o_send_state_is_in_progress(stream->send_state));
     assert(stream->_data.size == 0);
+
+    if (stream->req.res.status == 425 && stream->req.reprocess_if_too_early) {
+        assert(stream->state <= H2O_HTTP2_STREAM_STATE_SEND_HEADERS);
+        h2o_http2_conn_register_for_replay(conn, stream);
+        return;
+    }
 
     if (stream->blocked_by_server)
         h2o_http2_stream_set_blocked_by_server(conn, stream, 0);
