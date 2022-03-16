@@ -79,39 +79,46 @@ int h2o_quic_send_datagrams(h2o_quic_ctx_t *ctx, quicly_address_t *dest, quicly_
 #else
             CMSG_SPACE(1)
 #endif
-            +
 #ifdef UDP_SEGMENT
-            CMSG_SPACE(sizeof(uint16_t))
-#else
-            0
+            + CMSG_SPACE(sizeof(uint16_t))
 #endif
+            + CMSG_SPACE(1) /* sentry */
         ];
-    } cmsgbuf = {.buf = {}};
-    struct cmsghdr *cmsg = &cmsgbuf.hdr;
+    } cmsgbuf = {.buf = {} /* zero-cleared so that CMSG_NXTHDR can be used for locating the *next* cmsghdr */ };
+    struct msghdr mess = {
+        .msg_name = &dest->sa,
+        .msg_namelen = quicly_get_socklen(&dest->sa),
+        .msg_control = cmsgbuf.buf,
+        .msg_controllen = sizeof(cmsgbuf.buf),
+    };
+    struct cmsghdr *cmsg = CMSG_FIRSTHDR(&mess);
+    int ret;
+
+#define PUSH_CMSG(level, type, value)                                                                                              \
+    do {                                                                                                                           \
+        cmsg->cmsg_level = (level);                                                                                                \
+        cmsg->cmsg_type = (type);                                                                                                  \
+        cmsg->cmsg_len = CMSG_LEN(sizeof(value));                                                                                  \
+        memcpy(CMSG_DATA(cmsg), &value, sizeof(value));                                                                            \
+        cmsg = CMSG_NXTHDR(&mess, cmsg);                                                                                           \
+    } while (0)
 
     /* first CMSG is the source address */
     if (src->sa.sa_family != AF_UNSPEC) {
-        size_t cmsg_bodylen = 0;
         switch (src->sa.sa_family) {
         case AF_INET: {
 #if defined(IP_PKTINFO)
             if (*ctx->sock.port != src->sin.sin_port)
                 return 0;
-            cmsg->cmsg_level = IPPROTO_IP;
-            cmsg->cmsg_type = IP_PKTINFO;
-            cmsg_bodylen = sizeof(struct in_pktinfo);
-            memcpy(&((struct in_pktinfo *)CMSG_DATA(cmsg))->ipi_spec_dst, &src->sin.sin_addr, sizeof(struct in_addr));
+            struct in_pktinfo info = {.ipi_spec_dst = src->sin.sin_addr};
+            PUSH_CMSG(IPPROTO_IP, IP_PKTINFO, info);
 #elif defined(IP_SENDSRCADDR)
             if (*ctx->sock.port != src->sin.sin_port)
                 return 0;
             struct sockaddr_in *fdaddr = (struct sockaddr_in *)&ctx->sock.addr;
             assert(fdaddr->sin_family == AF_INET);
-            if (fdaddr->sin_addr.s_addr == INADDR_ANY) {
-                cmsg->cmsg_level = IPPROTO_IP;
-                cmsg->cmsg_type = IP_SENDSRCADDR;
-                cmsg_bodylen = sizeof(struct in_addr);
-                memcpy(CMSG_DATA(cmsg), &src->sin.sin_addr, sizeof(struct in_addr));
-            }
+            if (fdaddr->sin_addr.s_addr == INADDR_ANY)
+                PUSH_CMSG(IPPROTO_IP, IP_SENDSRCADDR, src->sin.sin_addr);
 #else
             h2o_fatal("IP_PKTINFO not available");
 #endif
@@ -120,10 +127,8 @@ int h2o_quic_send_datagrams(h2o_quic_ctx_t *ctx, quicly_address_t *dest, quicly_
 #ifdef IPV6_PKTINFO
             if (*ctx->sock.port != src->sin6.sin6_port)
                 return 0;
-            cmsg->cmsg_level = IPPROTO_IPV6;
-            cmsg->cmsg_type = IPV6_PKTINFO;
-            cmsg_bodylen = sizeof(struct in6_pktinfo);
-            memcpy(&((struct in6_pktinfo *)CMSG_DATA(cmsg))->ipi6_addr, &src->sin6.sin6_addr, sizeof(struct in6_addr));
+            struct in6_pktinfo info = {.ipi6_addr = src->sin6.sin6_addr};
+            PUSH_CMSG(IPPROTO_IPV6, IPV6_PKTINFO, info);
 #else
             h2o_fatal("IPV6_PKTINFO not available");
 #endif
@@ -132,8 +137,6 @@ int h2o_quic_send_datagrams(h2o_quic_ctx_t *ctx, quicly_address_t *dest, quicly_
             h2o_fatal("unexpected address family");
             break;
         }
-        cmsg->cmsg_len = (socklen_t)CMSG_LEN(cmsg_bodylen);
-        cmsg = (struct cmsghdr *)((char *)cmsg + CMSG_SPACE(cmsg_bodylen));
     }
 
     /* next CMSG is UDP_SEGMENT size (for GSO) */
@@ -143,26 +146,16 @@ int h2o_quic_send_datagrams(h2o_quic_ctx_t *ctx, quicly_address_t *dest, quicly_
         for (size_t i = 1; i < num_datagrams - 1; ++i)
             assert(datagrams[i].iov_len == datagrams[0].iov_len);
         uint16_t segsize = (uint16_t)datagrams[0].iov_len;
-        cmsg->cmsg_level = SOL_UDP;
-        cmsg->cmsg_type = UDP_SEGMENT;
-        cmsg->cmsg_len = CMSG_LEN(sizeof(segsize));
-        memcpy(CMSG_DATA(cmsg), &segsize, sizeof(segsize));
-        cmsg = (struct cmsghdr *)((char *)cmsg + CMSG_SPACE(sizeof(segsize)));
+        PUSH_CMSG(SOL_UDP, UDP_SEGMENT, segsize);
         using_gso = 1;
     }
 #endif
 
-    /* send datagrams */
-    struct msghdr mess = {
-        .msg_name = &dest->sa,
-        .msg_namelen = quicly_get_socklen(&dest->sa),
-    };
-    if (cmsg != &cmsgbuf.hdr) {
-        mess.msg_control = &cmsgbuf.buf;
-        mess.msg_controllen = (socklen_t)((char *)cmsg - cmsgbuf.buf);
-    }
-    int ret;
+    /* commit CMSG length */
+    if ((mess.msg_controllen = (socklen_t)((char *)cmsg - (char *)cmsgbuf.buf)) == 0)
+        mess.msg_control = NULL;
 
+    /* send datagrams */
     if (using_gso) {
         mess.msg_iov = datagrams;
         mess.msg_iovlen = (int)num_datagrams;
@@ -198,6 +191,8 @@ SendmsgError:
     h2o_error_reporter_record_error(ctx->loop, &track_sendmsg, 60000, errno);
 
     return 1;
+
+#undef PUSH_CMSG
 }
 
 static inline const h2o_http3_conn_callbacks_t *get_callbacks(h2o_http3_conn_t *conn)
@@ -776,7 +771,8 @@ void h2o_quic_read_socket(h2o_quic_ctx_t *ctx, h2o_socket_t *sock)
 #ifdef IP_PKTINFO
                 if (cmsg->cmsg_level == IPPROTO_IP && cmsg->cmsg_type == IP_PKTINFO) {
                     dgrams[dgram_index].destaddr.sin.sin_family = AF_INET;
-                    dgrams[dgram_index].destaddr.sin.sin_addr = ((struct in_pktinfo *)CMSG_DATA(cmsg))->ipi_addr;
+                    memcpy(&dgrams[dgram_index].destaddr.sin.sin_addr, CMSG_DATA(cmsg) + offsetof(struct in_pktinfo, ipi_addr),
+                           sizeof(struct in_addr));
                     dgrams[dgram_index].destaddr.sin.sin_port = *ctx->sock.port;
                     goto DestAddrFound;
                 }
@@ -784,7 +780,7 @@ void h2o_quic_read_socket(h2o_quic_ctx_t *ctx, h2o_socket_t *sock)
 #ifdef IP_RECVDSTADDR
                 if (cmsg->cmsg_level == IPPROTO_IP && cmsg->cmsg_type == IP_RECVDSTADDR) {
                     dgrams[dgram_index].destaddr.sin.sin_family = AF_INET;
-                    dgrams[dgram_index].destaddr.sin.sin_addr = *(struct in_addr *)CMSG_DATA(cmsg);
+                    memcpy(&dgrams[dgram_index].destaddr.sin.sin_addr, CMSG_DATA(cmsg), sizeof(struct in_addr));
                     dgrams[dgram_index].destaddr.sin.sin_port = *ctx->sock.port;
                     goto DestAddrFound;
                 }
@@ -792,7 +788,8 @@ void h2o_quic_read_socket(h2o_quic_ctx_t *ctx, h2o_socket_t *sock)
 #ifdef IPV6_PKTINFO
                 if (cmsg->cmsg_level == IPPROTO_IPV6 && cmsg->cmsg_type == IPV6_PKTINFO) {
                     dgrams[dgram_index].destaddr.sin6.sin6_family = AF_INET6;
-                    dgrams[dgram_index].destaddr.sin6.sin6_addr = ((struct in6_pktinfo *)CMSG_DATA(cmsg))->ipi6_addr;
+                    memcpy(&dgrams[dgram_index].destaddr.sin6.sin6_addr, CMSG_DATA(cmsg) + offsetof(struct in6_pktinfo, ipi6_addr),
+                           sizeof(struct in6_addr));
                     dgrams[dgram_index].destaddr.sin6.sin6_port = *ctx->sock.port;
                     goto DestAddrFound;
                 }
