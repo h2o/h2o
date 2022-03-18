@@ -42,8 +42,18 @@ struct st_h2o_http1_finalostream_t {
     char *chunked_buf; /* buffer used for chunked-encoding (NULL unless chunked encoding is used) */
     char *pull_buf;
     struct {
-        h2o_iovec_vector_t bufs;
-        unsigned sending : 1;
+        /**
+         * if `h2o_socket_write` is currently writing an informational response
+         */
+        unsigned write_inflight : 1;
+        /**
+         * buffer used to store informational responses to be sent, when write of an informational response is inflight
+         */
+        h2o_iovec_vector_t pending;
+        /**
+         * buffer used to delay the execution of `finalostream_send`, when write of an informational respnose is inflight;
+         * availability is indicated by `inbufs != NULL`
+         */
         struct {
             h2o_sendvec_t *inbufs;
             size_t inbufcnt;
@@ -989,7 +999,7 @@ void finalostream_send(h2o_ostream_t *_self, h2o_req_t *_req, h2o_sendvec_t *inb
     assert(&conn->req == _req);
     assert(_self == &conn->_ostr_final.super);
 
-    if (conn->_ostr_final.informational.sending) {
+    if (conn->_ostr_final.informational.write_inflight) {
         conn->_ostr_final.informational.pending_final.inbufs = h2o_mem_alloc_pool(&conn->req.pool, h2o_sendvec_t, inbufcnt);
         memcpy(conn->_ostr_final.informational.pending_final.inbufs, inbufs, sizeof(*inbufs) * inbufcnt);
         conn->_ostr_final.informational.pending_final.inbufcnt = inbufcnt;
@@ -1085,18 +1095,19 @@ void finalostream_send(h2o_ostream_t *_self, h2o_req_t *_req, h2o_sendvec_t *inb
     h2o_socket_write(conn->sock, bufs, bufcnt, h2o_send_state_is_in_progress(send_state) ? on_send_next : on_send_complete);
 }
 
-static void on_send_informational(h2o_socket_t *sock, const char *err);
+static void on_send_informational_complete(h2o_socket_t *sock, const char *err);
+
 static void do_send_informational(struct st_h2o_http1_finalostream_t *self, h2o_socket_t *sock)
 {
-    if (self->informational.sending || self->informational.bufs.size == 0)
+    if (self->informational.write_inflight || self->informational.pending.size == 0)
         return;
 
-    self->informational.sending = 1;
-    h2o_socket_write(sock, self->informational.bufs.entries, self->informational.bufs.size, on_send_informational);
-    self->informational.bufs.size = 0;
+    self->informational.write_inflight = 1;
+    h2o_socket_write(sock, self->informational.pending.entries, self->informational.pending.size, on_send_informational_complete);
+    self->informational.pending.size = 0;
 }
 
-static void on_send_informational(h2o_socket_t *sock, const char *err)
+static void on_send_informational_complete(h2o_socket_t *sock, const char *err)
 {
     struct st_h2o_http1_conn_t *conn = sock->data;
     struct st_h2o_http1_finalostream_t *self = (struct st_h2o_http1_finalostream_t *)conn->req._ostr_top;
@@ -1105,7 +1116,7 @@ static void on_send_informational(h2o_socket_t *sock, const char *err)
         return;
     }
 
-    self->informational.sending = 0;
+    self->informational.write_inflight = 0;
 
     if (self->informational.pending_final.inbufs != NULL) {
         finalostream_send(&self->super, &conn->req, self->informational.pending_final.inbufs,
@@ -1135,8 +1146,8 @@ static void finalostream_send_informational(h2o_ostream_t *_self, h2o_req_t *req
     *dst++ = '\r';
     *dst++ = '\n';
 
-    h2o_vector_reserve(&req->pool, &self->informational.bufs, self->informational.bufs.size + 1);
-    self->informational.bufs.entries[self->informational.bufs.size++] = buf;
+    h2o_vector_reserve(&req->pool, &self->informational.pending, self->informational.pending.size + 1);
+    self->informational.pending.entries[self->informational.pending.size++] = buf;
 
     do_send_informational(self, conn->sock);
 }
