@@ -1099,8 +1099,7 @@ static void on_send_informational_complete(h2o_socket_t *sock, const char *err);
 
 static void do_send_informational(struct st_h2o_http1_conn_t *conn)
 {
-    if (conn->_ostr_final.informational.write_inflight || conn->_ostr_final.informational.pending.size == 0)
-        return;
+    assert(!conn->_ostr_final.informational.write_inflight && conn->_ostr_final.informational.pending.size != 0);
 
     conn->_ostr_final.informational.write_inflight = 1;
     h2o_socket_write(conn->sock, conn->_ostr_final.informational.pending.entries, conn->_ostr_final.informational.pending.size,
@@ -1125,7 +1124,8 @@ static void on_send_informational_complete(h2o_socket_t *sock, const char *err)
         return;
     }
 
-    do_send_informational(conn);
+    if (conn->_ostr_final.informational.pending.size != 0)
+        do_send_informational(conn);
 }
 
 static void finalostream_send_informational(h2o_ostream_t *_self, h2o_req_t *req)
@@ -1150,7 +1150,8 @@ static void finalostream_send_informational(h2o_ostream_t *_self, h2o_req_t *req
     h2o_vector_reserve(&req->pool, &conn->_ostr_final.informational.pending, conn->_ostr_final.informational.pending.size + 1);
     conn->_ostr_final.informational.pending.entries[conn->_ostr_final.informational.pending.size++] = buf;
 
-    do_send_informational(conn);
+    if (!conn->_ostr_final.informational.write_inflight)
+        do_send_informational(conn);
 }
 
 static socklen_t get_sockname(h2o_conn_t *_conn, struct sockaddr *sa)
