@@ -1769,8 +1769,8 @@ static void on_h3_destroy(h2o_quic_conn_t *h3_)
     }
 
     /* unlink and dispose */
-    h2o_linklist_unlink(&conn->super._conns);
     --*get_connection_state_counter(conn->super.ctx, conn->super.state);
+    h2o_linklist_unlink(&conn->super._conns);
     if (h2o_timer_is_linked(&conn->timeout))
         h2o_timer_unlink(&conn->timeout);
     if (h2o_timer_is_linked(&conn->_graceful_shutdown_timeout))
@@ -1886,9 +1886,9 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
     }
     ++ctx->super.next_cid.master_id; /* FIXME check overlap */
     h2o_http3_setup(&conn->h3, qconn);
-    h2o_linklist_insert(&ctx->accept_ctx->ctx->_conns.idle, &conn->super._conns);
     conn->super.state = H2O_CONNECTION_STATE_IDLE;
     ++*get_connection_state_counter(conn->super.ctx, conn->super.state);
+    h2o_linklist_insert(&ctx->accept_ctx->ctx->_conns.idle, &conn->super._conns);
 
     H2O_PROBE_CONN(H3S_ACCEPT, &conn->super, &conn->super, conn->h3.super.quic, h2o_conn_get_uuid(&conn->super));
 

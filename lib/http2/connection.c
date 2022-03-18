@@ -416,8 +416,8 @@ void close_connection_now(h2o_http2_conn_t *conn)
         h2o_cache_destroy(conn->push_memo);
     if (conn->casper != NULL)
         h2o_http2_casper_destroy(conn->casper);
-    h2o_linklist_unlink(&conn->super._conns);
     --*get_connection_state_counter(conn->super.ctx, conn->super.state);
+    h2o_linklist_unlink(&conn->super._conns);
 
     if (conn->sock != NULL)
         h2o_socket_close(conn->sock);
@@ -1724,10 +1724,9 @@ static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_hostconf_t **hosts,
     h2o_http2_scheduler_init(&conn->scheduler);
     conn->state = H2O_HTTP2_CONN_STATE_OPEN;
 
-    /* start connection as idle */
-    h2o_linklist_insert(&conn->super.ctx->_conns.idle, &conn->super._conns);
     conn->super.state = H2O_CONNECTION_STATE_IDLE;
     ++*get_connection_state_counter(conn->super.ctx, conn->super.state);
+    h2o_linklist_insert(&conn->super.ctx->_conns.idle, &conn->super._conns);
 
     conn->_read_expect = expect_preface;
     conn->_input_header_table.hpack_capacity = conn->_input_header_table.hpack_max_capacity =
@@ -1917,8 +1916,8 @@ int h2o_http2_handle_upgrade(h2o_req_t *req, struct timeval connected_at)
 
     return 0;
 Error:
-    h2o_linklist_unlink(&http2conn->super._conns);
     --*get_connection_state_counter(http2conn->super.ctx, http2conn->super.state);
+    h2o_linklist_unlink(&http2conn->super._conns);
     kh_destroy(h2o_http2_stream_t, http2conn->streams);
     free(http2conn);
     return -1;

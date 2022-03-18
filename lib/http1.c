@@ -133,8 +133,8 @@ static void close_connection(struct st_h2o_http1_conn_t *conn, int close_socket)
     h2o_dispose_request(&conn->req);
     if (conn->sock != NULL && close_socket)
         h2o_socket_close(conn->sock);
-    h2o_linklist_unlink(&conn->super._conns);
     --*get_connection_state_counter(conn->super.ctx, conn->super.state);
+    h2o_linklist_unlink(&conn->super._conns);
     free(conn);
 }
 
@@ -145,8 +145,8 @@ static void cleanup_connection(struct st_h2o_http1_conn_t *conn)
         close_connection(conn, 1);
         return;
     } else {
-        h2o_linklist_unlink(&conn->super._conns);
         --*get_connection_state_counter(conn->super.ctx, conn->super.state);
+        h2o_linklist_unlink(&conn->super._conns);
         h2o_linklist_insert(&conn->super.ctx->_conns.idle, &conn->super._conns);
         conn->super.state = H2O_CONNECTION_STATE_IDLE;
         ++*get_connection_state_counter(conn->super.ctx, conn->super.state);
@@ -185,8 +185,8 @@ static void set_req_io_timeout(struct st_h2o_http1_conn_t *conn, uint64_t timeou
     if (cb != NULL) {
         h2o_timer_link(conn->super.ctx->loop, timeout, &conn->_io_timeout_entry);
     } else {
-        h2o_linklist_unlink(&conn->super._conns);
         --*get_connection_state_counter(conn->super.ctx, conn->super.state);
+        h2o_linklist_unlink(&conn->super._conns);
         h2o_linklist_insert(&conn->super.ctx->_conns.active, &conn->super._conns);
         conn->super.state = H2O_CONNECTION_STATE_ACTIVE;
         ++*get_connection_state_counter(conn->super.ctx, conn->super.state);
@@ -1265,9 +1265,9 @@ void h2o_http1_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval 
     /* init properties that need to be non-zero */
     conn->sock = sock;
     sock->data = conn;
-    h2o_linklist_insert(&ctx->ctx->_conns.idle, &conn->super._conns);
     conn->super.state = H2O_CONNECTION_STATE_IDLE;
     ++*get_connection_state_counter(conn->super.ctx, conn->super.state);
+    h2o_linklist_insert(&ctx->ctx->_conns.idle, &conn->super._conns);
 
     H2O_PROBE_CONN(H1_ACCEPT, &conn->super, conn->sock, &conn->super, h2o_conn_get_uuid(&conn->super));
 
