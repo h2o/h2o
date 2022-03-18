@@ -761,10 +761,8 @@ void reqread_on_read(h2o_socket_t *sock, const char *err)
 static void close_idle_connection(h2o_conn_t *_conn)
 {
     struct st_h2o_http1_conn_t *conn = (void *)_conn;
-    if (conn->sock->input->size == 0) {
-        conn->req.http1_is_persistent = 0;
-        close_connection(conn, 1);
-    }
+    conn->req.http1_is_persistent = 0;
+    close_connection(conn, 1);
 }
 
 static void on_timeout(struct st_h2o_http1_conn_t *conn)
