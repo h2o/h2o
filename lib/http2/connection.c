@@ -78,7 +78,7 @@ static void enqueue_goaway(h2o_http2_conn_t *conn, int errnum, h2o_iovec_t addit
     }
 }
 
-static void graceful_shutdown_close_stragglers(h2o_timer_t *entry)
+static void graceful_shutdown_close_straggler(h2o_timer_t *entry)
 {
     h2o_http2_conn_t *conn = H2O_STRUCT_FROM_MEMBER(h2o_http2_conn_t, _graceful_shutdown_timeout, entry);
     /* We've sent two GOAWAY frames, close the remaining connections */
@@ -92,10 +92,10 @@ static void graceful_shutdown_resend_goaway(h2o_timer_t *entry)
     if (conn->state < H2O_HTTP2_CONN_STATE_HALF_CLOSED) {
         enqueue_goaway(conn, H2O_HTTP2_ERROR_NONE, (h2o_iovec_t){NULL});
 
-        /* After waiting a second, we still had active connections. If configured, wait one
-         * final timeout before closing the connections */
+        /* After waiting a second, we still have an active connection. If configured, wait one
+         * final timeout before closing the connection */
         if (conn->super.ctx->globalconf->http2.graceful_shutdown_timeout > 0) {
-            conn->_graceful_shutdown_timeout.cb = graceful_shutdown_close_stragglers;
+            conn->_graceful_shutdown_timeout.cb = graceful_shutdown_close_straggler;
             h2o_timer_link(conn->super.ctx->loop, conn->super.ctx->globalconf->http2.graceful_shutdown_timeout,
                            &conn->_graceful_shutdown_timeout);
         }

@@ -1913,7 +1913,7 @@ void h2o_http3_server_amend_quicly_context(h2o_globalconf_t *conf, quicly_contex
     quic->receive_datagram_frame = &on_receive_datagram_frame;
 }
 
-static void graceful_shutdown_close_stragglers(h2o_timer_t *entry)
+static void graceful_shutdown_close_straggler(h2o_timer_t *entry)
 {
     struct st_h2o_http3_server_conn_t *conn =
         H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_conn_t, _graceful_shutdown_timeout, entry);
@@ -1940,10 +1940,10 @@ static void graceful_shutdown_resend_goaway(h2o_timer_t *entry)
         quicly_stream_id_t max_stream_id = next_stream_id < 4 ? 0 /* we haven't received any stream yet */ : next_stream_id - 4;
         h2o_http3_send_goaway_frame(&conn->h3, max_stream_id);
         conn->h3.state = H2O_HTTP3_CONN_STATE_HALF_CLOSED;
-        /* After waiting a second, we still had active connections. If configured, wait one
-         * final timeout before closing the connections */
+        /* After waiting a second, we still have an active connection. If configured, wait one
+         * final timeout before closing the connection */
         if (conn->super.ctx->globalconf->http3.graceful_shutdown_timeout > 0) {
-            conn->_graceful_shutdown_timeout.cb = graceful_shutdown_close_stragglers;
+            conn->_graceful_shutdown_timeout.cb = graceful_shutdown_close_straggler;
             h2o_timer_link(conn->super.ctx->loop, conn->super.ctx->globalconf->http3.graceful_shutdown_timeout,
                            &conn->_graceful_shutdown_timeout);
         } else {
