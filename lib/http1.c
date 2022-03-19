@@ -39,8 +39,17 @@ enum enum_h2o_http1_ostream_state {
 struct st_h2o_http1_finalostream_t {
     h2o_ostream_t super;
     enum enum_h2o_http1_ostream_state state;
-    char *chunked_buf; /* buffer used for chunked-encoding (NULL unless chunked encoding is used) */
+    /**
+     * buffer used for chunked-encoding (NULL unless chunked encoding is used)
+     */
+    char *chunked_buf;
+    /**
+     * buffer used for retaining bytes being pulled
+     */
     char *pull_buf;
+    /**
+     * structure used for handling informational response
+     */
     struct {
         /**
          * if `h2o_socket_write` is currently writing an informational response
