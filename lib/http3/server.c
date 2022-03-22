@@ -430,6 +430,7 @@ static void set_state(struct st_h2o_http3_server_stream_t *stream, enum h2o_http
         assert(conn->delayed_streams.recv_body_blocked.prev == &stream->link || !"stream is not registered to the recv_body list?");
         break;
     case H2O_HTTP3_SERVER_STREAM_STATE_CLOSE_WAIT: {
+        stream->req.timestamps.response_end_at = h2o_gettimeofday(conn->super.ctx->loop);
         if (h2o_linklist_is_linked(&stream->link))
             h2o_linklist_unlink(&stream->link);
         pre_dispose_request(stream);
@@ -1114,6 +1115,9 @@ int handle_input_expect_data(struct st_h2o_http3_server_stream_t *stream, const 
 
     /* got a DATA frame */
     if (frame.length != 0) {
+        if (h2o_timeval_is_null(&stream->req.timestamps.request_body_begin_at)) {
+            stream->req.timestamps.request_body_begin_at = h2o_gettimeofday(get_conn(stream)->super.ctx->loop);
+        }
         stream->recvbuf.handle_input = handle_input_expect_data_payload;
         stream->recvbuf.bytes_left_in_data_frame = frame.length;
     }
@@ -1199,6 +1203,11 @@ static int handle_input_expect_headers(struct st_h2o_http3_server_stream_t *stre
         }
         return 0;
     }
+
+    if (h2o_timeval_is_null(&stream->req.timestamps.request_begin_at)) {
+        stream->req.timestamps.request_begin_at = h2o_gettimeofday(conn->super.ctx->loop);
+    }
+
     stream->recvbuf.handle_input = handle_input_expect_data;
 
     /* parse the headers, and ack */
@@ -1358,6 +1367,7 @@ static void do_send(h2o_ostream_t *_ostr, h2o_req_t *_req, h2o_sendvec_t *bufs, 
 
     switch (stream->state) {
     case H2O_HTTP3_SERVER_STREAM_STATE_SEND_HEADERS:
+        stream->req.timestamps.response_start_at = h2o_gettimeofday(get_conn(stream)->super.ctx->loop);
         write_response(stream, finalize_do_send_setup_udp_tunnel(stream));
         h2o_probe_log_response(&stream->req, stream->quic->stream_id);
         set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_SEND_BODY, 1);
@@ -1403,6 +1413,8 @@ static void do_send(h2o_ostream_t *_ostr, h2o_req_t *_req, h2o_sendvec_t *bufs, 
     case H2O_SEND_STATE_IN_PROGRESS:
         break;
     case H2O_SEND_STATE_FINAL:
+        stream->req.timestamps.response_end_at = h2o_gettimeofday(get_conn(stream)->super.ctx->loop);
+        /* fall through */
     case H2O_SEND_STATE_ERROR:
         /* TODO consider how to forward error, pending resolution of https://github.com/quicwg/base-drafts/issues/3300 */
         shutdown_by_generator(stream);
