@@ -31,6 +31,7 @@ my $quic_port = empty_port({
 
 my $server = spawn_h2o({
     opts => [qw(--mode=worker)],
+    user => scalar(getpwuid($ENV{SUDO_UID})),
     conf => << "EOT",
 listen:
   type: quic
