@@ -1204,9 +1204,7 @@ static int handle_input_expect_headers(struct st_h2o_http3_server_stream_t *stre
         return 0;
     }
 
-    if (h2o_timeval_is_null(&stream->req.timestamps.request_begin_at)) {
-        stream->req.timestamps.request_begin_at = h2o_gettimeofday(conn->super.ctx->loop);
-    }
+    stream->req.timestamps.request_begin_at = h2o_gettimeofday(conn->super.ctx->loop);
 
     stream->recvbuf.handle_input = handle_input_expect_data;
 
