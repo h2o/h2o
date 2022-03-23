@@ -430,7 +430,6 @@ static void set_state(struct st_h2o_http3_server_stream_t *stream, enum h2o_http
         assert(conn->delayed_streams.recv_body_blocked.prev == &stream->link || !"stream is not registered to the recv_body list?");
         break;
     case H2O_HTTP3_SERVER_STREAM_STATE_CLOSE_WAIT: {
-        stream->req.timestamps.response_end_at = h2o_gettimeofday(conn->super.ctx->loop);
         if (h2o_linklist_is_linked(&stream->link))
             h2o_linklist_unlink(&stream->link);
         pre_dispose_request(stream);
@@ -801,6 +800,7 @@ static void on_send_emit(quicly_stream_t *qs, size_t off, void *_dst, size_t *le
     /* retain the payload of response body before calling `h2o_proceed_request`, as the generator might discard the buffer */
     if (stream->state == H2O_HTTP3_SERVER_STREAM_STATE_SEND_BODY && *wrote_all &&
         quicly_sendstate_is_open(&stream->quic->sendstate) && !stream->proceed_requested) {
+        stream->req.timestamps.response_end_at = h2o_gettimeofday(stream->req.conn->ctx->loop);
         if (!retain_sendvecs(stream))
             goto Error;
         stream->proceed_requested = 1;
@@ -1411,8 +1411,6 @@ static void do_send(h2o_ostream_t *_ostr, h2o_req_t *_req, h2o_sendvec_t *bufs, 
     case H2O_SEND_STATE_IN_PROGRESS:
         break;
     case H2O_SEND_STATE_FINAL:
-        stream->req.timestamps.response_end_at = h2o_gettimeofday(get_conn(stream)->super.ctx->loop);
-        /* fall through */
     case H2O_SEND_STATE_ERROR:
         /* TODO consider how to forward error, pending resolution of https://github.com/quicwg/base-drafts/issues/3300 */
         shutdown_by_generator(stream);
