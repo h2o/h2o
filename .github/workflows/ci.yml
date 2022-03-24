@@ -40,7 +40,6 @@ jobs:
       shell: 'script -q -e -c "bash -xe {0}"'
       run: |
         chmod -R ugo+w .
-        sudo sysctl kernel.unprivileged_bpf_disabled=2
         # restart docker with ipv6 support
         cat /etc/docker/daemon.json | perl -pe 's| }|, "ipv6": true, "fixed-cidr-v6": "2001:db8:1::/64" }|' | sudo tee /etc/docker/daemon.json > /dev/null; sudo systemctl restart docker; sleep 10
         ${{ matrix.command }}
