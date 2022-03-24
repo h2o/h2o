@@ -798,13 +798,19 @@ static void on_send_emit(quicly_stream_t *qs, size_t off, void *_dst, size_t *le
     *len = dst - (uint8_t *)_dst;
 
     /* retain the payload of response body before calling `h2o_proceed_request`, as the generator might discard the buffer */
-    if (stream->state == H2O_HTTP3_SERVER_STREAM_STATE_SEND_BODY && *wrote_all &&
-        quicly_sendstate_is_open(&stream->quic->sendstate) && !stream->proceed_requested) {
-        stream->req.timestamps.response_end_at = h2o_gettimeofday(stream->req.conn->ctx->loop);
-        if (!retain_sendvecs(stream))
-            goto Error;
-        stream->proceed_requested = 1;
-        stream->proceed_while_sending = 1;
+    if (stream->state == H2O_HTTP3_SERVER_STREAM_STATE_SEND_BODY && *wrote_all) {
+        if (quicly_sendstate_is_open(&stream->quic->sendstate)) {
+            if (!stream->proceed_requested) {
+                if (!retain_sendvecs(stream))
+                    goto Error;
+                stream->proceed_requested = 1;
+                stream->proceed_while_sending = 1;
+            }
+        } else {
+            if (h2o_timeval_is_null(&stream->req.timestamps.response_end_at)) {
+                stream->req.timestamps.response_end_at = h2o_gettimeofday(stream->req.conn->ctx->loop);
+            }
+        }
     }
 
     return;
