@@ -287,7 +287,7 @@ static int extract_content_length(const h2o_headers_t *headers, size_t *content_
 {
     *content_length = SIZE_MAX;
     for (size_t i = 0; i < headers->size; ++i) {
-        if ((const h2o_token_t *)headers->entries[i].name == H2O_TOKEN_CONTENT_LENGTH) {
+        if (headers->entries[i].name == &H2O_TOKEN_CONTENT_LENGTH->buf) {
             const h2o_iovec_t *value = &headers->entries[i].value;
             if (*content_length != SIZE_MAX) {
                 *err_desc = "duplicate content-length";
