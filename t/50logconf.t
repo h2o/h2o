@@ -12,8 +12,6 @@ use t::Util;
 my $client_prog = bindir() . "/h2o-httpclient";
 plan skip_all => "$client_prog not found"
     unless -e $client_prog;
-plan skip_all => 'mruby support is off'
-    unless server_features()->{mruby};
 
 my $tempdir = tempdir(CLEANUP => 1);
 
