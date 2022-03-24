@@ -62,7 +62,6 @@ _mount:
 		sudo mkdir $(SRC_DIR)/$$i; \
 		sudo chown ci:ci $(SRC_DIR)/$$i; \
 	done
-	sudo sysctl kernel.unprivileged_bpf_disabled=2
 
 _do_check:
 	cmake $(CMAKE_ARGS) -H$(SRC_DIR) -B.
