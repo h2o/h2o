@@ -454,7 +454,6 @@ static int handle_data_frame(struct st_h2o_http2client_conn_t *conn, h2o_http2_f
      */
     if (stream->input.remaining_content_length != SIZE_MAX) {
         if (payload.length > stream->input.remaining_content_length) {
-            *err_desc = "body size larger than content-length";
             stream_send_error(conn, frame->stream_id, H2O_HTTP2_ERROR_PROTOCOL);
             call_callback_with_error(stream, h2o_httpclient_error_protocol_violation);
             close_stream(stream);
