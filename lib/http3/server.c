@@ -798,19 +798,12 @@ static void on_send_emit(quicly_stream_t *qs, size_t off, void *_dst, size_t *le
     *len = dst - (uint8_t *)_dst;
 
     /* retain the payload of response body before calling `h2o_proceed_request`, as the generator might discard the buffer */
-    if (stream->state == H2O_HTTP3_SERVER_STREAM_STATE_SEND_BODY && *wrote_all) {
-        if (quicly_sendstate_is_open(&stream->quic->sendstate)) {
-            if (!stream->proceed_requested) {
-                if (!retain_sendvecs(stream))
-                    goto Error;
-                stream->proceed_requested = 1;
-                stream->proceed_while_sending = 1;
-            }
-        } else {
-            if (h2o_timeval_is_null(&stream->req.timestamps.response_end_at)) {
-                stream->req.timestamps.response_end_at = h2o_gettimeofday(stream->req.conn->ctx->loop);
-            }
-        }
+    if (stream->state == H2O_HTTP3_SERVER_STREAM_STATE_SEND_BODY && *wrote_all &&
+        quicly_sendstate_is_open(&stream->quic->sendstate) && !stream->proceed_requested) {
+        if (!retain_sendvecs(stream))
+            goto Error;
+        stream->proceed_requested = 1;
+        stream->proceed_while_sending = 1;
     }
 
     return;
@@ -1640,6 +1633,15 @@ static int scheduler_do_send(quicly_stream_scheduler_t *sched, quicly_conn_t *qc
             if ((ret = quicly_send_stream(stream->quic, s)) != 0)
                 goto Exit;
             ++stream->scheduler.call_cnt;
+
+            if (!quicly_sendstate_is_open(&stream->quic->sendstate)) {
+                if (stream->quic->sendstate.size_inflight == stream->quic->sendstate.final_size) {
+                    if (h2o_timeval_is_null(&stream->req.timestamps.response_end_at)) {
+                        stream->req.timestamps.response_end_at = h2o_gettimeofday(stream->req.conn->ctx->loop);
+                    }
+                }
+            }
+
             /* 4. invoke h2o_proceed_request synchronously, so that we could obtain additional data for the current (i.e. highest)
              *    stream. */
             if (stream->proceed_while_sending) {
