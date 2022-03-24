@@ -291,16 +291,16 @@ static int extract_content_length(const h2o_headers_t *headers, size_t *content_
             const h2o_iovec_t *value = &headers->entries[i].value;
             if (*content_length != SIZE_MAX) {
                 *err_desc = "duplicate content-length";
-                return -1;
+                return 0;
             }
             *content_length = h2o_strtosize(value->base, value->len);
             if (*content_length == SIZE_MAX) {
                 *err_desc = "malformed content-length";
-                return -1;
+                return 0;
             }
         }
     }
-    return 0;
+    return 1;
 }
 
 static int on_head(struct st_h2o_http2client_conn_t *conn, struct st_h2o_http2client_stream_t *stream, const uint8_t *src,
@@ -333,7 +333,7 @@ static int on_head(struct st_h2o_http2client_conn_t *conn, struct st_h2o_http2cl
         return 0;
     }
 
-    if (extract_content_length(&stream->input.headers, &stream->input.remaining_content_length, err_desc) != 0) {
+    if (!extract_content_length(&stream->input.headers, &stream->input.remaining_content_length, err_desc)) {
         ret = H2O_HTTP2_ERROR_PROTOCOL;
         goto Failed;
     }
