@@ -24,7 +24,7 @@ unless ($ENV{DTRACE_TEST})  {
   plan skip_all => 'dtrace support is off'
       unless server_features()->{dtrace};
   plan skip_all => 'capabilities(7) support is off'
-      unless server_features()->{dtrace};
+      unless server_features()->{capabilities};
 }
 
 # make sure the h2o_return map does not exist at first,
