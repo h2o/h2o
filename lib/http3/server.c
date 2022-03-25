@@ -1608,7 +1608,9 @@ static void normalize_data_to_be_sent(struct st_h2o_http3_server_stream_t *strea
     assert(stream->read_file.err == NULL);
 
     /* It might be the gap-filling data that will be encoded in the packet being built. But as an appoximation, we make sure that at
-     * least 1 MTU (2048 bytes ATM) of data is flattened past the largest offset being sent. */
+     * least 1 MTU (2048 bytes ATM) of data is flattened past the largest offset being sent.
+     * TODO: Discard loaded data as we transmit, reload the gaps when we need to retransmit. Assuming low average loss rate, such
+     * optimization would reduce memory usage with marginal increase in CPU cycles being used. */
     while (stream->sendbuf.next_flatten.offset < stream->quic->sendstate.size_inflight + 2048 &&
            stream->sendbuf.next_flatten.vec_index < stream->sendbuf.vecs.size) {
         struct st_h2o_http3_server_sendvec_t *vec = stream->sendbuf.vecs.entries + stream->sendbuf.next_flatten.vec_index;
