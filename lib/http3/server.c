@@ -686,7 +686,7 @@ static int retain_sendvecs(struct st_h2o_http3_server_stream_t *stream)
         struct st_h2o_http3_server_sendvec_t *vec = stream->sendbuf.vecs.entries + stream->sendbuf.min_index_to_addref;
         /* create a copy if it does not provide update_refcnt (update_refcnt is already called in do_send, if available) */
         if (vec->vec.callbacks->update_refcnt == NULL) {
-            static const h2o_sendvec_callbacks_t vec_callbacks = {h2o_sendvec_flatten_raw, allocated_vec_update_refcnt};
+            static const h2o_sendvec_callbacks_t vec_callbacks = {h2o_sendvec_flatten_raw, NULL, allocated_vec_update_refcnt};
             size_t off_within_vec = stream->sendbuf.min_index_to_addref == 0 ? stream->sendbuf.off_within_first_vec : 0;
             h2o_iovec_t copy = h2o_iovec_init(h2o_mem_alloc(vec->vec.len - off_within_vec), vec->vec.len - off_within_vec);
             if (!(*vec->vec.callbacks->flatten)(&vec->vec, &stream->req, copy, off_within_vec)) {
