@@ -90,6 +90,22 @@ typedef struct st_h2o_socket_t h2o_socket_t;
 
 typedef void (*h2o_socket_cb)(h2o_socket_t *sock, const char *err);
 
+typedef struct st_h2o_socket_read_file_t h2o_socket_read_file_cmd_t;
+typedef void (*h2o_socket_read_file_cb)(h2o_socket_read_file_cmd_t *);
+struct st_h2o_socket_read_file_t {
+    int fd;
+    uint64_t offset;
+    h2o_iovec_t vec;
+    struct {
+        h2o_socket_read_file_cb func;
+        void *data;
+    } cb;
+    /**
+     * result
+     */
+    const char *err;
+};
+
 #if H2O_USE_LIBUV
 #include "socket/uv-binding.h"
 #else
@@ -290,6 +306,18 @@ socklen_t h2o_socket_getpeername(h2o_socket_t *sock, struct sockaddr *sa);
  * sets the remote address (used for overriding the value)
  */
 void h2o_socket_setpeername(h2o_socket_t *sock, struct sockaddr *sa, socklen_t len);
+/**
+ * Reads file without blocking. Read can complete either synchronously or asynchronously.
+ * @param cmd  Upon return, `*cmd` points to an object that file read inflight. If the read completed synchronously, `*cmd` will be
+ *             set to NULL.
+ * @param cb   Callback function to be invoked when read is complete. This callback can get called synchronously.
+ */
+void h2o_socket_read_file(h2o_socket_read_file_cmd_t **cmd, h2o_loop_t *loop, int fd, uint64_t offset, h2o_iovec_t dst,
+                          h2o_socket_read_file_cb cb, void *data);
+/**
+ *
+ */
+void h2o_socket_read_file_cancel(h2o_socket_read_file_cmd_t *cmd);
 /**
  *
  */

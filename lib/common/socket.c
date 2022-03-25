@@ -2149,3 +2149,34 @@ uint64_t h2o_socket_ebpf_lookup_flags_sni(h2o_loop_t *loop, uint64_t flags, cons
 }
 
 #endif
+
+#if H2O_USE_LIBUV || !H2O_USE_IO_URING
+
+void h2o_socket_read_file(h2o_socket_read_file_cmd_t **_cmd, h2o_loop_t *loop, int _fd, uint64_t _offset, h2o_iovec_t _dst,
+                          h2o_socket_read_file_cb _cb, void *_data)
+{
+    h2o_socket_read_file_cmd_t cmd = {.fd = _fd, .offset = _offset, .vec = _dst, .cb = {.func = _cb, .data = _data}};
+
+    size_t off = 0;
+    while (off < cmd.vec.len) {
+        ssize_t ret;
+        while ((ret = pread(cmd.fd, cmd.vec.base + off, cmd.vec.len - off, cmd.offset + off)) == -1 && errno == EINTR)
+            ;
+        if (ret <= 0) {
+            cmd.err = h2o_socket_error_io;
+            break;
+        }
+        off += ret;
+    }
+
+    cmd.cb.func(&cmd);
+
+    *_cmd = NULL;
+}
+
+void h2o_socket_read_file_cancel(h2o_socket_read_file_cmd_t *cmd)
+{
+    h2o_fatal("synchronous implementation of `h2o_socket_read_file` never returns a cancelleable read command (got:%p)", cmd);
+}
+
+#endif

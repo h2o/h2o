@@ -66,6 +66,11 @@ static void evloop_do_on_socket_create(struct st_h2o_evloop_socket_t *sock);
 static void evloop_do_on_socket_close(struct st_h2o_evloop_socket_t *sock);
 static void evloop_do_on_socket_export(struct st_h2o_evloop_socket_t *sock);
 
+#if H2O_USE_IO_URING
+static void read_file_queue_init(struct st_h2o_evloop_read_file_queue_t *queue);
+static void read_file_on_notify(h2o_socket_t *_sock, const char *err);
+#endif
+
 #if H2O_USE_POLL || H2O_USE_EPOLL || H2O_USE_KQUEUE
 /* explicitly specified */
 #else
@@ -515,6 +520,20 @@ h2o_evloop_t *create_evloop(size_t sz)
     /* 3 levels * 32-slots => 1 second goes into 2nd, becomes O(N) above approx. 31 seconds */
     loop->_timeouts = h2o_timerwheel_create(3, loop->_now_millisec);
 
+#if H2O_USE_IO_URING
+    {
+        int ret;
+        if ((ret = io_uring_queue_init(16, &loop->_read_file.uring, 0)) != 0)
+            h2o_fatal("io_uring_queue_init:%s", strerror(-ret));
+
+        loop->_read_file.sock_notify = create_socket(loop, loop->_read_file.uring.ring_fd, H2O_SOCKET_FLAG_DONT_READ);
+        h2o_socket_read_start(&loop->_read_file.sock_notify->super, read_file_on_notify);
+
+        read_file_queue_init(&loop->_read_file.submission);
+        read_file_queue_init(&loop->_read_file.completion);
+    }
+#endif
+
     return loop;
 }
 
@@ -531,7 +550,10 @@ int32_t adjust_max_wait(h2o_evloop_t *loop, int32_t max_wait)
 
     update_now(loop);
 
-    if (wake_at <= loop->_now_millisec) {
+    /* Set max_wait depending on the timers and if there's pending read / write event. Even though `h2o_evloop_run` asserts that
+     * the "pending" slots are empty when exitting, applications might invoke functions that cause them to be registered outside
+     * of `h2o_evloop_run`. */
+    if (wake_at <= loop->_now_millisec || loop->_pending_as_client != NULL || loop->_pending_as_server != NULL) {
         max_wait = 0;
     } else {
         uint64_t delta = wake_at - loop->_now_millisec;
@@ -675,3 +697,145 @@ int h2o_evloop_run(h2o_evloop_t *loop, int32_t max_wait)
 
     return 0;
 }
+
+#if H2O_USE_IO_URING
+
+void read_file_queue_init(struct st_h2o_evloop_read_file_queue_t *queue)
+{
+    queue->head = NULL;
+    queue->tail = &queue->head;
+}
+
+static void read_file_queue_insert(struct st_h2o_evloop_read_file_queue_t *queue, struct st_h2o_evloop_read_file_cmd_t *cmd)
+{
+    assert(cmd->next == NULL);
+    *queue->tail = cmd;
+    queue->tail = &cmd->next;
+}
+
+static struct st_h2o_evloop_read_file_cmd_t *read_file_queue_pop(struct st_h2o_evloop_read_file_queue_t *queue)
+{
+    struct st_h2o_evloop_read_file_cmd_t *popped;
+
+    if ((popped = queue->head) != NULL) {
+        if ((queue->head = popped->next) == NULL)
+            queue->tail = &queue->head;
+    }
+    return popped;
+}
+
+static int read_file_submit(h2o_evloop_t *loop)
+{
+    int made_progress = 0;
+
+    while (loop->_read_file.submission.head != NULL) {
+        struct io_uring_sqe *sqe;
+        if ((sqe = io_uring_get_sqe(&loop->_read_file.uring)) == NULL)
+            break;
+        struct st_h2o_evloop_read_file_cmd_t *cmd = read_file_queue_pop(&loop->_read_file.submission);
+        assert(cmd != NULL);
+        io_uring_prep_read(sqe, cmd->super.fd, cmd->super.vec.base, cmd->super.vec.len, cmd->super.offset);
+        sqe->user_data = (uint64_t)cmd;
+        made_progress = 1;
+    }
+
+    if (made_progress) {
+        int ret;
+        while ((ret = io_uring_submit(&loop->_read_file.uring)) == -EINTR)
+            ;
+        if (ret < 0)
+            h2o_fatal("io_uring_submit:%s", strerror(-ret));
+    }
+
+    return made_progress;
+}
+
+static int read_file_check_completion(h2o_evloop_t *loop, struct st_h2o_evloop_read_file_cmd_t *cmd_sync)
+{
+    int cmd_sync_done = 0, ret;
+    struct io_uring_cqe *cqe;
+
+    while (1) {
+        while ((ret = io_uring_peek_cqe(&loop->_read_file.uring, &cqe)) == -EINTR)
+            ;
+        if (ret != 0)
+            break;
+        /* detach the completed command */
+        struct st_h2o_evloop_read_file_cmd_t *cmd = (struct st_h2o_evloop_read_file_cmd_t *)cqe->user_data;
+        if (cqe->res != cmd->super.vec.len)
+            cmd->super.err = h2o_socket_error_io; /* TODO notify partial read / eos? */
+        io_uring_cqe_seen(&loop->_read_file.uring, cqe);
+
+        /* link to completion list or indicate to the caller that `cmd_sync` has completed */
+        if (cmd == cmd_sync) {
+            cmd_sync_done = 1;
+        } else {
+            read_file_queue_insert(&loop->_read_file.completion, cmd);
+        }
+    }
+
+    return cmd_sync_done;
+}
+
+static int read_file_dispatch_completed(h2o_evloop_t *loop)
+{
+    if (loop->_read_file.completion.head == NULL)
+        return 0;
+
+    do {
+        struct st_h2o_evloop_read_file_cmd_t *cmd = read_file_queue_pop(&loop->_read_file.completion);
+        if (cmd->super.cb.func != NULL)
+            cmd->super.cb.func(&cmd->super);
+        free(cmd);
+    } while (loop->_read_file.completion.head != NULL);
+    return 1;
+}
+
+void h2o_socket_read_file(h2o_socket_read_file_cmd_t **_cmd, h2o_loop_t *loop, int _fd, uint64_t _offset, h2o_iovec_t _dst,
+                          h2o_socket_read_file_cb _cb, void *_data)
+{
+    /* build command and register */
+    struct st_h2o_evloop_read_file_cmd_t *cmd = h2o_mem_alloc(sizeof(*cmd));
+    *cmd = (struct st_h2o_evloop_read_file_cmd_t){{
+        .fd = _fd,
+        .offset = _offset,
+        .vec = _dst,
+        .cb = {.func = _cb, .data = _data},
+    }};
+    read_file_queue_insert(&loop->_read_file.submission, cmd);
+
+    /* Submit enqueued commands as much as possible, then read completed ones as much as possible. The hope here is that the read
+     * command generated right above gets issued and completes synchronously, which would be likely when the file is buffer cache.
+     * If that is the case, call the callback synchronously. */
+    if (read_file_submit(loop) && read_file_check_completion(loop, cmd)) {
+        cmd->super.cb.func(&cmd->super);
+        free(cmd);
+        cmd = NULL;
+    }
+
+    *_cmd = &cmd->super;
+}
+
+void h2o_socket_read_file_cancel(h2o_socket_read_file_cmd_t *cmd)
+{
+    assert(cmd != NULL && "tried to cancel a command that completed synchronously?");
+
+    cmd->cb.func = NULL;
+}
+
+void read_file_on_notify(h2o_socket_t *_sock, const char *err)
+{
+    assert(err == NULL);
+
+    struct st_h2o_evloop_socket_t *sock = (struct st_h2o_evloop_socket_t *)_sock;
+    h2o_evloop_t *loop = sock->loop;
+
+    /* Repeatedly read cqe, until we bocome certain we haven't issued more read commands. */
+    do {
+        read_file_check_completion(loop, NULL);
+    } while (read_file_dispatch_completed(loop) || read_file_submit(loop));
+
+    assert(loop->_read_file.completion.head == NULL);
+}
+
+#endif
