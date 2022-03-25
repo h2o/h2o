@@ -195,10 +195,18 @@ struct st_h2o_http3_server_stream_t {
     struct {
         H2O_VECTOR(struct st_h2o_http3_server_sendvec_t) vecs;
         size_t off_within_first_vec;
+        struct {
+            size_t vec_index;
+            uint64_t offset;
+        } next_flatten;
         size_t min_index_to_addref;
         uint64_t final_size, final_body_size;
         uint8_t data_frame_header_buf[9];
     } sendbuf;
+    struct {
+        h2o_socket_read_file_cmd_t *cmd;
+        const char *err;
+    } read_file;
     enum h2o_http3_server_stream_state state;
     h2o_linklist_t link;
     h2o_ostream_t ostr_final;
@@ -383,6 +391,10 @@ static void pre_dispose_request(struct st_h2o_http3_server_stream_t *stream)
 {
     struct st_h2o_http3_server_conn_t *conn = get_conn(stream);
     size_t i;
+
+    /* stop reading file */
+    if (stream->read_file.cmd != NULL)
+        h2o_socket_read_file_cancel(stream->read_file.cmd);
 
     /* release vectors */
     for (i = 0; i != stream->sendbuf.vecs.size; ++i) {
@@ -682,9 +694,12 @@ static void allocated_vec_update_refcnt(h2o_sendvec_t *vec, h2o_req_t *req, int 
 
 static int retain_sendvecs(struct st_h2o_http3_server_stream_t *stream)
 {
+    /* make sure that `update_refcnt` has been called or we've flattened all the filerefs */
+    assert(stream->sendbuf.next_flatten.vec_index == stream->sendbuf.vecs.size);
+
     for (; stream->sendbuf.min_index_to_addref != stream->sendbuf.vecs.size; ++stream->sendbuf.min_index_to_addref) {
         struct st_h2o_http3_server_sendvec_t *vec = stream->sendbuf.vecs.entries + stream->sendbuf.min_index_to_addref;
-        /* create a copy if it does not provide update_refcnt (update_refcnt is already called in do_send, if available) */
+        /* create a copy if it does not provide update_refcnt (else update_refcnt is called in normalize_data_to_be_sent) */
         if (vec->vec.callbacks->update_refcnt == NULL) {
             static const h2o_sendvec_callbacks_t vec_callbacks = {h2o_sendvec_flatten_raw, NULL, allocated_vec_update_refcnt};
             size_t off_within_vec = stream->sendbuf.min_index_to_addref == 0 ? stream->sendbuf.off_within_first_vec : 0;
@@ -734,6 +749,7 @@ static void on_send_shift(quicly_stream_t *qs, size_t delta)
     memmove(stream->sendbuf.vecs.entries, stream->sendbuf.vecs.entries + i,
             (stream->sendbuf.vecs.size - i) * sizeof(stream->sendbuf.vecs.entries[0]));
     stream->sendbuf.vecs.size -= i;
+    stream->sendbuf.next_flatten.vec_index -= i;
     if (stream->sendbuf.min_index_to_addref <= i) {
         stream->sendbuf.min_index_to_addref = 0;
     } else {
@@ -1375,8 +1391,7 @@ static void do_send(h2o_ostream_t *_ostr, h2o_req_t *_req, h2o_sendvec_t *bufs, 
         break;
     }
 
-    /* If vectors carrying response body are being provided, copy them, incrementing the reference count if possible (for future
-     * retransmissions), as well as prepending a DATA frame header */
+    /* If vectors carrying response body are being provided, ratain shallow copies, as well as prepending a DATA frame header */
     if (bufcnt != 0) {
         h2o_vector_reserve(&stream->req.pool, &stream->sendbuf.vecs, stream->sendbuf.vecs.size + 1 + bufcnt);
         uint64_t prev_body_size = stream->sendbuf.final_body_size;
@@ -1386,9 +1401,6 @@ static void do_send(h2o_ostream_t *_ostr, h2o_req_t *_req, h2o_sendvec_t *bufs, 
             dst->vec = bufs[i];
             dst->entity_offset = stream->sendbuf.final_body_size;
             stream->sendbuf.final_body_size += bufs[i].len;
-            /* retain reference count if possible */
-            if (bufs[i].callbacks->update_refcnt != NULL)
-                bufs[i].callbacks->update_refcnt(bufs + i, &stream->req, 1);
         }
         uint64_t payload_size = stream->sendbuf.final_body_size - prev_body_size;
         /* build DATA frame header */
@@ -1510,6 +1522,8 @@ static int stream_open_cb(quicly_stream_open_t *self, quicly_stream_t *qs)
     h2o_buffer_init(&stream->recvbuf.buf, &h2o_socket_buffer_prototype);
     stream->recvbuf.handle_input = handle_input_expect_headers;
     memset(&stream->sendbuf, 0, sizeof(stream->sendbuf));
+    stream->read_file.cmd = NULL;
+    stream->read_file.err = NULL;
     stream->state = H2O_HTTP3_SERVER_STREAM_STATE_RECV_HEADERS;
     stream->link = (h2o_linklist_t){NULL};
     stream->ostr_final = (h2o_ostream_t){NULL, do_send, NULL, do_send_informational};
@@ -1562,6 +1576,78 @@ static int scheduler_can_send(quicly_stream_scheduler_t *sched, quicly_conn_t *q
         return 1;
 
     return 0;
+}
+
+static void normalize_data_on_read_file_complete(h2o_socket_read_file_cmd_t *cmd)
+{
+    struct st_h2o_http3_server_stream_t *stream = cmd->cb.data;
+
+    /* if called synchronously, just save the error and exit */
+    if (stream->read_file.cmd == NULL) {
+        stream->read_file.err = cmd->err;
+        return;
+    }
+
+    assert(stream->read_file.cmd == cmd);
+    stream->read_file.cmd = NULL;
+
+    if (cmd->err != NULL) {
+        shutdown_stream(stream, H2O_HTTP3_ERROR_INTERNAL, H2O_HTTP3_ERROR_INTERNAL, 0);
+        return;
+    }
+
+    quicly_context_t *qctx = quicly_get_context(stream->quic->conn);
+    qctx->stream_scheduler->update_state(qctx->stream_scheduler, stream->quic);
+}
+
+static void normalize_data_to_be_sent(struct st_h2o_http3_server_stream_t *stream)
+{
+    static const h2o_sendvec_callbacks_t vec_callbacks = {h2o_sendvec_flatten_raw, NULL, allocated_vec_update_refcnt};
+
+    assert(stream->read_file.cmd == NULL);
+    assert(stream->read_file.err == NULL);
+
+    /* It might be the gap-filling data that will be encoded in the packet being built. But as an appoximation, we make sure that at
+     * least 1 MTU (2048 bytes ATM) of data is flattened past the largest offset being sent. */
+    while (stream->sendbuf.next_flatten.offset < stream->quic->sendstate.size_inflight + 2048 &&
+           stream->sendbuf.next_flatten.vec_index < stream->sendbuf.vecs.size) {
+        struct st_h2o_http3_server_sendvec_t *vec = stream->sendbuf.vecs.entries + stream->sendbuf.next_flatten.vec_index;
+
+        if (vec->vec.callbacks->get_fileref != NULL) {
+            /* flatten the file */
+            assert(vec->vec.callbacks->update_refcnt != NULL);
+            uint64_t file_offset;
+            int fd = vec->vec.callbacks->get_fileref(&vec->vec, &file_offset);
+            h2o_iovec_t buf = h2o_iovec_init(h2o_mem_alloc(vec->vec.len), vec->vec.len);
+            h2o_socket_read_file(&stream->read_file.cmd, get_conn(stream)->super.ctx->loop, fd, file_offset, buf,
+                                 normalize_data_on_read_file_complete, stream);
+            if (stream->read_file.cmd != NULL) {
+                /* read-file is asynchronously in progress, update `stream->sendbuf` to the post-read state, then return */
+                vec->vec = (h2o_sendvec_t){&vec_callbacks, buf.len, {buf.base}};
+                stream->sendbuf.next_flatten.offset += vec->vec.len;
+                ++stream->sendbuf.next_flatten.vec_index;
+                return;
+            }
+            if (stream->read_file.err != NULL) {
+                free(buf.base);
+                goto Fail;
+            }
+            vec->vec = (h2o_sendvec_t){&vec_callbacks, buf.len, {buf.base}};
+
+        } else if (vec->vec.callbacks->update_refcnt != NULL) {
+            /* increment reference counter, if provided */
+            vec->vec.callbacks->update_refcnt(&vec->vec, &stream->req, 1);
+
+        }
+
+        /* update position */
+        stream->sendbuf.next_flatten.offset += vec->vec.len;
+        ++stream->sendbuf.next_flatten.vec_index;
+    }
+
+    return;
+Fail:
+    shutdown_stream(stream, H2O_HTTP3_ERROR_INTERNAL, H2O_HTTP3_ERROR_INTERNAL, 0);
 }
 
 static int scheduler_do_send(quicly_stream_scheduler_t *sched, quicly_conn_t *qc, quicly_send_context_t *s)
@@ -1622,6 +1708,12 @@ static int scheduler_do_send(quicly_stream_scheduler_t *sched, quicly_conn_t *qc
                 req_scheduler_conn_blocked(&conn->scheduler.reqs, &stream->scheduler);
                 continue;
             }
+            /* 2. load file or addref data; if failed to load synchronously, deactivate the stream until read completes */
+            normalize_data_to_be_sent(stream);
+            if (stream->read_file.cmd != NULL) {
+                req_scheduler_deactivate(&conn->scheduler.reqs, &stream->scheduler);
+                continue;
+            }
             /* 3. send */
             if ((ret = quicly_send_stream(stream->quic, s)) != 0)
                 goto Exit;
@@ -1630,6 +1722,7 @@ static int scheduler_do_send(quicly_stream_scheduler_t *sched, quicly_conn_t *qc
              *    stream. */
             if (stream->proceed_while_sending) {
                 assert(stream->proceed_requested);
+                retain_sendvecs(stream);
                 h2o_proceed_response(&stream->req);
                 stream->proceed_while_sending = 0;
             }
@@ -1692,6 +1785,8 @@ static int scheduler_update_state(struct st_quicly_stream_scheduler_t *sched, qu
         struct st_h2o_http3_server_stream_t *stream = qs->data;
         if (stream->proceed_while_sending)
             return 0;
+        if (stream->read_file.cmd != NULL)
+            new_state = DEACTIVATE;
         switch (new_state) {
         case DEACTIVATE:
             req_scheduler_deactivate(&conn->scheduler.reqs, &stream->scheduler);
