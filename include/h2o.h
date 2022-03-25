@@ -802,9 +802,11 @@ typedef struct st_h2o_sendvec_callbacks_t {
      */
     int (*flatten)(h2o_sendvec_t *vec, h2o_req_t *req, h2o_iovec_t dst, size_t off);
     /**
-     *
+     * Wrapper of `h2o_socket_read_file`, allowing the provider to do additional mangling if necessary. When the callback is called,
+     * `cmd->cb.data` will point to `req` being provided.
      */
-    int (*get_fileref)(h2o_sendvec_t *vec, uint64_t *file_offset);
+    void (*read_)(h2o_sendvec_t *vec, h2o_req_t *req, h2o_socket_read_file_cmd_t **cmd, h2o_iovec_t dst, size_t off,
+                  h2o_socket_read_file_cb cb);
     /**
      * optional callback that can be used to retain the buffer after flattening all data. This allows H3 to re-flatten data upon
      * retransmission. Increments the reference counter if `is_incr` is set to true, otherwise the counter is decremented.

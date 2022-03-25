@@ -1028,7 +1028,7 @@ static void send_vecs_pending(struct st_h2o_http1_conn_t *conn)
 
 static void on_flatten_complete(h2o_socket_read_file_cmd_t *cmd)
 {
-    struct st_h2o_http1_conn_t *conn = cmd->cb.data;
+    struct st_h2o_http1_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http1_conn_t, req, cmd->cb.data);
 
     conn->read_file.err = cmd->err;
 
@@ -1132,11 +1132,9 @@ void finalostream_send(h2o_ostream_t *_self, h2o_req_t *_req, h2o_sendvec_t *inb
     } else if (inbufcnt != 0) {
         assert(inbufcnt == 1);
         assert(conn->_ostr_final.pull_buf != NULL);
-        assert(inbufs->callbacks->get_fileref != NULL); /* ATM, we assume that all the non-raw sendvecs supports this */
-        uint64_t file_offset;
-        int fd = inbufs->callbacks->get_fileref(inbufs, &file_offset);
-        h2o_socket_read_file(&conn->read_file.cmd, conn->super.ctx->loop, fd, file_offset,
-                             h2o_iovec_init(conn->_ostr_final.pull_buf + pullbuf_off, inbufs->len), on_flatten_complete, conn);
+        assert(inbufs->callbacks->read_ != NULL); /* ATM, we assume that all the non-raw sendvecs supports this interface */
+        inbufs->callbacks->read_(inbufs, &conn->req, &conn->read_file.cmd,
+                                 h2o_iovec_init(conn->_ostr_final.pull_buf + pullbuf_off, inbufs->len), 0, on_flatten_complete);
         if (pull_mode == IS_PULL) {
             conn->_ostr_final.vecs_pending.entries[conn->_ostr_final.vecs_pending.size++] =
                 h2o_iovec_init(conn->_ostr_final.pull_buf + pullbuf_off, inbufs->len);

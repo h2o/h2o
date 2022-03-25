@@ -147,12 +147,14 @@ static int sendvec_flatten(h2o_sendvec_t *src, h2o_req_t *req, h2o_iovec_t dst, 
     return 1;
 }
 
-static int sendvec_get_fileref(h2o_sendvec_t *src, uint64_t *file_offset)
+static void sendvec_read(h2o_sendvec_t *src, h2o_req_t *req, h2o_socket_read_file_cmd_t **cmd, h2o_iovec_t dst, size_t off,
+                         h2o_socket_read_file_cb cb)
 {
-    struct st_h2o_sendfile_generator_t *self = (void *)src->cb_arg[0];
+    assert(dst.len + off <= src->len);
 
-    *file_offset = src->cb_arg[1];
-    return self->file.ref->fd;
+    struct st_h2o_sendfile_generator_t *self = (void *)src->cb_arg[0];
+    uint64_t file_offset = src->cb_arg[1];
+    h2o_socket_read_file(cmd, req->conn->ctx->loop, self->file.ref->fd, file_offset + off, dst, cb, req);
 }
 
 static void sendvec_update_refcnt(h2o_sendvec_t *vec, h2o_req_t *req, int is_incr)
@@ -168,7 +170,7 @@ static void sendvec_update_refcnt(h2o_sendvec_t *vec, h2o_req_t *req, int is_inc
 
 static void do_proceed(h2o_generator_t *_self, h2o_req_t *req)
 {
-    static const h2o_sendvec_callbacks_t sendvec_callbacks = {sendvec_flatten, sendvec_get_fileref, sendvec_update_refcnt};
+    static const h2o_sendvec_callbacks_t sendvec_callbacks = {sendvec_flatten, sendvec_read, sendvec_update_refcnt};
 
     struct st_h2o_sendfile_generator_t *self = (void *)_self;
     h2o_sendvec_t vec;

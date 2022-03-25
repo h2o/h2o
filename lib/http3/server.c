@@ -1580,7 +1580,7 @@ static int scheduler_can_send(quicly_stream_scheduler_t *sched, quicly_conn_t *q
 
 static void normalize_data_on_read_file_complete(h2o_socket_read_file_cmd_t *cmd)
 {
-    struct st_h2o_http3_server_stream_t *stream = cmd->cb.data;
+    struct st_h2o_http3_server_stream_t *stream = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_stream_t, req, cmd->cb.data);
 
     /* if called synchronously, just save the error and exit */
     if (stream->read_file.cmd == NULL) {
@@ -1615,14 +1615,11 @@ static void normalize_data_to_be_sent(struct st_h2o_http3_server_stream_t *strea
            stream->sendbuf.next_flatten.vec_index < stream->sendbuf.vecs.size) {
         struct st_h2o_http3_server_sendvec_t *vec = stream->sendbuf.vecs.entries + stream->sendbuf.next_flatten.vec_index;
 
-        if (vec->vec.callbacks->get_fileref != NULL) {
+        if (vec->vec.callbacks->read_ != NULL) {
             /* flatten the file */
-            assert(vec->vec.callbacks->update_refcnt != NULL);
-            uint64_t file_offset;
-            int fd = vec->vec.callbacks->get_fileref(&vec->vec, &file_offset);
             h2o_iovec_t buf = h2o_iovec_init(h2o_mem_alloc(vec->vec.len), vec->vec.len);
-            h2o_socket_read_file(&stream->read_file.cmd, get_conn(stream)->super.ctx->loop, fd, file_offset, buf,
-                                 normalize_data_on_read_file_complete, stream);
+            vec->vec.callbacks->read_(&vec->vec, &stream->req, &stream->read_file.cmd, buf, 0,
+                                      normalize_data_on_read_file_complete);
             if (stream->read_file.cmd != NULL) {
                 /* read-file is asynchronously in progress, update `stream->sendbuf` to the post-read state, then return */
                 vec->vec = (h2o_sendvec_t){&vec_callbacks, buf.len, {buf.base}};
