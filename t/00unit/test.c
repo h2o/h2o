@@ -24,16 +24,26 @@
 #include "../../src/standalone.h"
 #include "./test.h"
 
+static void loopback_on_send_on_read_complete(h2o_socket_read_file_cmd_t *cmd)
+{
+    assert(cmd->err == NULL);
+
+    int *read_complete = cmd->cb.data;
+    *read_complete = 1;
+}
+
 static void loopback_on_send(h2o_ostream_t *self, h2o_req_t *req, h2o_sendvec_t *inbufs, size_t inbufcnt,
                              h2o_send_state_t send_state)
 {
     h2o_loopback_conn_t *conn = H2O_STRUCT_FROM_MEMBER(h2o_loopback_conn_t, _ostr_final, self);
-    size_t i;
+    h2o_socket_read_file_cmd_t *read_file;
+    size_t i, read_complete = 0;
 
     for (i = 0; i != inbufcnt; ++i) {
         h2o_buffer_reserve(&conn->body, inbufs[i].len);
-        assert(inbufs[i].callbacks->read_ == h2o_sendvec_read_raw);
-        h2o_memcpy(conn->body->bytes + conn->body->size, inbufs[i].raw, inbufs[i].len);
+        inbufs[i].callbacks->read_(inbufs + i, req, &read_file, h2o_iovec_init(conn->body->bytes + conn->body->size, inbufs[i].len),
+                                   0, loopback_on_send_on_read_complete, &read_complete);
+        assert(read_complete);
         conn->body->size += inbufs[i].len;
     }
 
