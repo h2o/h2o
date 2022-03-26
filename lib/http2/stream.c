@@ -175,7 +175,7 @@ static void send_data_on_read_complete(h2o_socket_read_file_cmd_t *cmd)
 void h2o_http2_stream_send_pending_data(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
 {
     if (stream->_data.size != 0) {
-        assert(stream->_data_off < stream->_data.entries[0].len);
+        assert(stream->_data.entries[0].len != 0 ? stream->_data_off < stream->_data.entries[0].len : stream->_data_off == 0);
     } else {
         assert(stream->_data_off == 0);
     }
@@ -206,6 +206,11 @@ void h2o_http2_stream_send_pending_data(h2o_http2_conn_t *conn, h2o_http2_stream
     size_t data_index = 0;
     while (data_index < stream->_data.size && dst.len != 0) {
         h2o_sendvec_t *vec = stream->_data.entries + data_index;
+        if (vec->len == 0) {
+            assert(stream->_data_off == 0);
+            ++data_index;
+            continue;
+        }
         size_t fill_size = sz_min(dst.len, vec->len - stream->_data_off);
         /* invoke the read callback */
         vec->callbacks->read_(vec, &stream->req, &stream->read_file.cmd, h2o_iovec_init(dst.base, fill_size), stream->_data_off,
