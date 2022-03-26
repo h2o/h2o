@@ -524,7 +524,7 @@ void h2o_start_response(h2o_req_t *req, h2o_generator_t *generator)
 
 void h2o_sendvec_init_raw(h2o_sendvec_t *vec, const void *base, size_t len)
 {
-    static const h2o_sendvec_callbacks_t callbacks = {h2o_sendvec_flatten_raw};
+    static const h2o_sendvec_callbacks_t callbacks = {h2o_sendvec_read_raw};
     vec->callbacks = &callbacks;
     vec->raw = (char *)base;
     vec->len = len;
@@ -537,17 +537,22 @@ static void sendvec_immutable_update_refcnt(h2o_sendvec_t *vec, h2o_req_t *req, 
 
 void h2o_sendvec_init_immutable(h2o_sendvec_t *vec, const void *base, size_t len)
 {
-    static const h2o_sendvec_callbacks_t callbacks = {h2o_sendvec_flatten_raw, NULL, sendvec_immutable_update_refcnt};
+    static const h2o_sendvec_callbacks_t callbacks = {h2o_sendvec_read_raw, sendvec_immutable_update_refcnt};
     vec->callbacks = &callbacks;
     vec->raw = (char *)base;
     vec->len = len;
 }
 
-int h2o_sendvec_flatten_raw(h2o_sendvec_t *src, h2o_req_t *req, h2o_iovec_t dst, size_t off)
+void h2o_sendvec_read_raw(h2o_sendvec_t *vec, h2o_req_t *req, h2o_socket_read_file_cmd_t **_cmd, h2o_iovec_t dst, size_t off,
+                          h2o_socket_read_file_cb cb, void *data)
 {
-    assert(off + dst.len <= src->len);
-    memcpy(dst.base, src->raw + off, dst.len);
-    return 1;
+    assert(off + dst.len <= vec->len);
+    memcpy(dst.base, vec->raw + off, dst.len);
+
+    h2o_socket_read_file_cmd_t cmd = {.fd = -1, .offset = UINT64_MAX, .vec = dst, .cb = {.func = cb, .data = data}, .err = NULL};
+    cb(&cmd);
+
+    _cmd = NULL;
 }
 
 static void do_sendvec(h2o_req_t *req, h2o_sendvec_t *bufs, size_t bufcnt, h2o_send_state_t state)
@@ -573,7 +578,7 @@ void h2o_send(h2o_req_t *req, h2o_iovec_t *bufs, size_t bufcnt, h2o_send_state_t
 
 void h2o_sendvec(h2o_req_t *req, h2o_sendvec_t *bufs, size_t bufcnt, h2o_send_state_t state)
 {
-    assert(bufcnt == 0 || (bufs[0].callbacks->flatten == &h2o_sendvec_flatten_raw || bufcnt == 1));
+    assert(bufcnt == 0 || (bufs[0].callbacks->read_ == &h2o_sendvec_read_raw || bufcnt == 1));
     do_sendvec(req, bufs, bufcnt, state);
 }
 

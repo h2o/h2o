@@ -37,6 +37,73 @@ struct st_compress_encoder_t {
     h2o_compress_context_t *compressor;
 };
 
+struct st_h2o_sendvec_flattener_t {
+    h2o_ostream_t super;
+    h2o_req_t *req;
+    h2o_send_state_t send_state;
+    h2o_socket_read_file_cmd_t *cmd;
+    char *buf;
+};
+
+static void flattener_on_read_complete(h2o_socket_read_file_cmd_t *cmd)
+{
+    struct st_h2o_sendvec_flattener_t *self = cmd->cb.data;
+
+    self->cmd = NULL;
+
+    if (cmd->err != NULL) {
+        h2o_ostream_send_next(&self->super, self->req, NULL, 0, H2O_SEND_STATE_ERROR);
+        return;
+    }
+
+    static const h2o_sendvec_callbacks_t callbacks = {h2o_sendvec_read_raw};
+    h2o_sendvec_t vec = {&callbacks, cmd->vec.len, {cmd->vec.base}};
+    h2o_ostream_send_next(&self->super, self->req, &vec, 1, self->send_state);
+}
+
+static void flattener_do_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_sendvec_t *inbufs, size_t inbufcnt, h2o_send_state_t state)
+{
+    struct st_h2o_sendvec_flattener_t *self = (void *)_self;
+
+    /* Pass through if the input is using raw sendvecs. Checking only the first one is fine, because non-raw and multivec are
+     * multually exclusive options. */
+    if (inbufs->callbacks->read_ == h2o_sendvec_read_raw) {
+        h2o_ostream_send_next(&self->super, req, inbufs, inbufcnt, state);
+        return;
+    }
+
+    assert(inbufcnt == 1);
+    assert(inbufs->len <= H2O_PULL_SENDVEC_MAX_SIZE);
+
+    self->send_state = state;
+
+    if (self->buf == NULL)
+        self->buf = h2o_mem_alloc_pool_aligned(&req->pool, 1,
+                                               h2o_send_state_is_in_progress(state) ? H2O_PULL_SENDVEC_MAX_SIZE : inbufs->len);
+    inbufs->callbacks->read_(inbufs, req, &self->cmd, h2o_iovec_init(self->buf, inbufs->len), 0, flattener_on_read_complete, self);
+}
+
+static void flattener_stop(struct st_h2o_ostream_t *_self, h2o_req_t *req)
+{
+    struct st_h2o_sendvec_flattener_t *self = (void *)_self;
+
+    if (self->cmd != NULL)
+        h2o_socket_read_file_cancel(self->cmd);
+}
+
+static void h2o_add_ostream_flattener(h2o_req_t *req, h2o_ostream_t **slot)
+{
+    struct st_h2o_sendvec_flattener_t *self = (void *)h2o_add_ostream(req, H2O_ALIGNOF(*self), sizeof(*self), slot);
+
+    self->super.do_send = flattener_do_send;
+    self->super.stop = flattener_stop;
+    self->req = req;
+    self->cmd = NULL;
+    self->buf = NULL;
+
+    slot = &self->super.next;
+}
+
 static void do_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_sendvec_t *inbufs, size_t inbufcnt, h2o_send_state_t state)
 {
     struct st_compress_encoder_t *self = (void *)_self;
@@ -144,8 +211,12 @@ static void on_setup_ostream(h2o_filter_t *_self, h2o_req_t *req, h2o_ostream_t 
     /* setup filter */
     encoder = (void *)h2o_add_ostream(req, H2O_ALIGNOF(*encoder), sizeof(*encoder), slot);
     encoder->super.do_send = do_send;
-    slot = &encoder->super.next;
     encoder->compressor = compressor;
+
+    /* add a ostream filter that converts non-raw vecs to raw vecs */
+    h2o_add_ostream_flattener(req, slot);
+
+    slot = &encoder->super.next;
 
     /* adjust preferred chunk size (compress by 8192 bytes) */
     if (req->preferred_chunk_size > BUF_SIZE)
@@ -165,21 +236,5 @@ void h2o_compress_register(h2o_pathconf_t *pathconf, h2o_compress_args_t *args)
 h2o_send_state_t h2o_compress_transform(h2o_compress_context_t *self, h2o_req_t *req, h2o_sendvec_t *inbufs, size_t inbufcnt,
                                         h2o_send_state_t state, h2o_sendvec_t **outbufs, size_t *outbufcnt)
 {
-    h2o_sendvec_t flattened;
-
-    if (inbufcnt != 0 && inbufs->callbacks->flatten != &h2o_sendvec_flatten_raw) {
-        assert(inbufcnt == 1);
-        assert(inbufs->len <= H2O_PULL_SENDVEC_MAX_SIZE);
-        if (self->push_buf == NULL)
-            self->push_buf = h2o_mem_alloc(h2o_send_state_is_in_progress(state) ? H2O_PULL_SENDVEC_MAX_SIZE : inbufs->len);
-        if (!(*inbufs->callbacks->flatten)(inbufs, req, h2o_iovec_init(self->push_buf, inbufs->len), 0)) {
-            *outbufs = NULL;
-            *outbufcnt = 0;
-            return H2O_SEND_STATE_ERROR;
-        }
-        h2o_sendvec_init_raw(&flattened, self->push_buf, inbufs->len);
-        inbufs = &flattened;
-    }
-
     return self->do_transform(self, inbufs, inbufcnt, state, outbufs, outbufcnt);
 }

@@ -153,7 +153,7 @@ static void send_data_on_payload_built(h2o_http2_conn_t *conn, h2o_http2_stream_
 
 static void send_data_on_read_complete(h2o_socket_read_file_cmd_t *cmd)
 {
-    h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, req, cmd->cb.data);
+    h2o_http2_stream_t *stream = cmd->cb.data;
     h2o_http2_conn_t *conn = (h2o_http2_conn_t *)stream->req.conn;
 
     /* if invoked synchronously, just set the result and return */
@@ -192,17 +192,7 @@ void h2o_http2_stream_send_pending_data(h2o_http2_conn_t *conn, h2o_http2_stream
         h2o_buffer_reserve(&conn->_write.buf, H2O_HTTP2_FRAME_HEADER_SIZE + max_payload_size).base + H2O_HTTP2_FRAME_HEADER_SIZE;
     dst.len = max_payload_size;
 
-#define ADVANCE()                                                                                                                  \
-    do {                                                                                                                           \
-        dst.base += fill_size;                                                                                                     \
-        dst.len -= fill_size;                                                                                                      \
-        stream->_data_off += fill_size;                                                                                            \
-        if (stream->_data_off == stream->_data.entries[data_index].len) {                                                          \
-            ++data_index;                                                                                                          \
-            stream->_data_off = 0;                                                                                                 \
-        }                                                                                                                          \
-    } while (0)
-#define FIXUP_DATA()                                                                                                               \
+#define SHIFT_DATA()                                                                                                               \
     do {                                                                                                                           \
         if (data_index != 0) {                                                                                                     \
             size_t new_size = stream->_data.size - data_index;                                                                     \
@@ -216,29 +206,30 @@ void h2o_http2_stream_send_pending_data(h2o_http2_conn_t *conn, h2o_http2_stream
     while (data_index < stream->_data.size && dst.len != 0) {
         h2o_sendvec_t *vec = stream->_data.entries + data_index;
         size_t fill_size = sz_min(dst.len, vec->len - stream->_data_off);
-        if (vec->callbacks->flatten == h2o_sendvec_flatten_raw) {
-            memcpy(dst.base, vec->raw + stream->_data_off, fill_size);
-            ADVANCE();
-        } else {
-            assert(vec->callbacks->read_ != NULL);
-            vec->callbacks->read_(vec, &stream->req, &stream->read_file.cmd, h2o_iovec_init(dst.base, fill_size), stream->_data_off,
-                                  send_data_on_read_complete);
-            if (stream->read_file.cmd != NULL) {
-                conn->read_file_stream = stream;
-                ADVANCE();
-                FIXUP_DATA();
-                return;
-            } else if (stream->read_file.err != NULL) {
-                dst.base = NULL; /* indicate error */
-                break;
-            }
-            ADVANCE();
+        /* invoke the read callback */
+        vec->callbacks->read_(vec, &stream->req, &stream->read_file.cmd, h2o_iovec_init(dst.base, fill_size), stream->_data_off,
+                              send_data_on_read_complete, stream);
+        /* adjust dst and stream to point to the next chunk */
+        dst.base += fill_size;
+        dst.len -= fill_size;
+        stream->_data_off += fill_size;
+        if (stream->_data_off == stream->_data.entries[data_index].len) {
+            ++data_index;
+            stream->_data_off = 0;
+        }
+        /* If read is asynchronous, record that and return, so that the completion callback can take care of the rest of the job. */
+        if (stream->read_file.cmd != NULL) {
+            conn->read_file_stream = stream;
+            SHIFT_DATA();
+            return;
+        } else if (stream->read_file.err != NULL) {
+            dst.base = NULL; /* indicate error */
+            break;
         }
     }
-    FIXUP_DATA();
+    SHIFT_DATA();
 
-#undef ADVANCE
-#undef FIXUP_DATA
+#undef SHIFT_DATA
 
     send_data_on_payload_built(conn, stream, dst.base);
 }

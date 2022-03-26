@@ -124,37 +124,14 @@ static void on_generator_dispose(void *_self)
     close_file(self);
 }
 
-static int sendvec_flatten(h2o_sendvec_t *src, h2o_req_t *req, h2o_iovec_t dst, size_t off)
-{
-    struct st_h2o_sendfile_generator_t *self = (void *)src->cb_arg[0];
-    uint64_t file_chunk_at = src->cb_arg[1];
-    size_t bytes_read = 0;
-    ssize_t rret;
-
-    assert(off + dst.len <= src->len);
-
-    /* read */
-    while (bytes_read < dst.len) {
-        while ((rret = pread(self->file.ref->fd, dst.base + bytes_read, dst.len - bytes_read, file_chunk_at + off + bytes_read)) ==
-                   -1 &&
-               errno == EINTR)
-            ;
-        if (rret == -1)
-            return 0;
-        bytes_read += rret;
-    }
-
-    return 1;
-}
-
 static void sendvec_read(h2o_sendvec_t *src, h2o_req_t *req, h2o_socket_read_file_cmd_t **cmd, h2o_iovec_t dst, size_t off,
-                         h2o_socket_read_file_cb cb)
+                         h2o_socket_read_file_cb cb, void *data)
 {
     assert(dst.len + off <= src->len);
 
     struct st_h2o_sendfile_generator_t *self = (void *)src->cb_arg[0];
     uint64_t file_offset = src->cb_arg[1];
-    h2o_socket_read_file(cmd, req->conn->ctx->loop, self->file.ref->fd, file_offset + off, dst, cb, req);
+    h2o_socket_read_file(cmd, req->conn->ctx->loop, self->file.ref->fd, file_offset + off, dst, cb, data);
 }
 
 static void sendvec_update_refcnt(h2o_sendvec_t *vec, h2o_req_t *req, int is_incr)
@@ -170,7 +147,7 @@ static void sendvec_update_refcnt(h2o_sendvec_t *vec, h2o_req_t *req, int is_inc
 
 static void do_proceed(h2o_generator_t *_self, h2o_req_t *req)
 {
-    static const h2o_sendvec_callbacks_t sendvec_callbacks = {sendvec_flatten, sendvec_read, sendvec_update_refcnt};
+    static const h2o_sendvec_callbacks_t sendvec_callbacks = {sendvec_read, sendvec_update_refcnt};
 
     struct st_h2o_sendfile_generator_t *self = (void *)_self;
     h2o_sendvec_t vec;

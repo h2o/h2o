@@ -796,17 +796,11 @@ typedef struct st_h2o_sendvec_t h2o_sendvec_t;
 
 typedef struct st_h2o_sendvec_callbacks_t {
     /**
-     * optional callback used to serialize the bytes held by the vector. Returns if the operation succeeded. When false is returned,
-     * the generator is considered as been error-closed by itself.  If the callback is NULL, the data is pre-flattened and available
-     * in `h2o_sendvec_t::raw`.
-     */
-    int (*flatten)(h2o_sendvec_t *vec, h2o_req_t *req, h2o_iovec_t dst, size_t off);
-    /**
-     * Wrapper of `h2o_socket_read_file`, allowing the provider to do additional mangling if necessary. When the callback is called,
-     * `cmd->cb.data` will point to `req` being provided.
+     * Reads the content of send vector into the specified memory buffer, either synchronously or asynchronously. The interface is
+     * designed to look like a wrapper of `h2o_socket_read_file`, allowing the provider to do additional mangling if necessary.
      */
     void (*read_)(h2o_sendvec_t *vec, h2o_req_t *req, h2o_socket_read_file_cmd_t **cmd, h2o_iovec_t dst, size_t off,
-                  h2o_socket_read_file_cb cb);
+                  h2o_socket_read_file_cb cb, void *data);
     /**
      * optional callback that can be used to retain the buffer after flattening all data. This allows H3 to re-flatten data upon
      * retransmission. Increments the reference counter if `is_incr` is set to true, otherwise the counter is decremented.
@@ -1540,7 +1534,8 @@ void h2o_sendvec_init_immutable(h2o_sendvec_t *vec, const void *base, size_t len
 /**
  *
  */
-int h2o_sendvec_flatten_raw(h2o_sendvec_t *vec, h2o_req_t *req, h2o_iovec_t dst, size_t off);
+void h2o_sendvec_read_raw(h2o_sendvec_t *vec, h2o_req_t *req, h2o_socket_read_file_cmd_t **cmd, h2o_iovec_t dst, size_t off,
+                          h2o_socket_read_file_cb cb, void *data);
 /**
  * called by the generators to send output
  * note: generators should free itself after sending the final chunk (i.e. calling the function with is_final set to true)
