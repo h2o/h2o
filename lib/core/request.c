@@ -950,9 +950,9 @@ static void flattener_do_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_sendvec_
 {
     struct st_h2o_sendvec_flattener_t *self = (void *)_self;
 
-    /* Pass through if the input is using raw sendvecs. Checking only the first one is fine, because non-raw and multivec are
+    /* Pass through if the input is using only raw sendvecs. Checking only the first one is fine, because non-raw and multivec are
      * multually exclusive options. */
-    if (inbufs->callbacks->read_ == h2o_sendvec_read_raw) {
+    if (inbufcnt == 0 || inbufs->callbacks->read_ == h2o_sendvec_read_raw) {
         h2o_ostream_send_next(&self->super, req, inbufs, inbufcnt, state);
         return;
     }
