@@ -141,6 +141,7 @@ static void send_data_on_payload_built(h2o_http2_conn_t *conn, h2o_http2_stream_
         if (payload_len != 0) {
             h2o_http2_window_consume_window(&conn->_write.window, payload_len);
             h2o_http2_window_consume_window(&stream->output_window, payload_len);
+            stream->req.bytes_sent += payload_len;
         }
     }
 
