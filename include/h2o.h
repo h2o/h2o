@@ -1510,6 +1510,10 @@ void h2o_start_response(h2o_req_t *req, h2o_generator_t *generator);
  */
 h2o_ostream_t *h2o_add_ostream(h2o_req_t *req, size_t alignment, size_t sz, h2o_ostream_t **slot);
 /**
+ * Adds a ostream filter that converts sendvecs to raw form. This is useful for filters that can only handle raw bytes.
+ */
+void h2o_add_ostream_flattener(h2o_req_t *req, h2o_ostream_t **slot);
+/**
  * prepares the request for processing by looking at the method, URI, headers
  */
 h2o_hostconf_t *h2o_req_setup(h2o_req_t *req);
