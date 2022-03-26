@@ -809,12 +809,11 @@ typedef struct st_h2o_sendvec_callbacks_t {
 } h2o_sendvec_callbacks_t;
 
 /**
- * send vector. Unlike an ordinary `h2o_iovec_t`, the vector has a callback that allows the sender to delay the flattening of data
- * until it becomes necessary.
+ * Send vector. Unlike an ordinary `h2o_iovec_t`, the vector has callbacks for optimizations.
  */
 struct st_h2o_sendvec_t {
     /**
-     *
+     * callbacks
      */
     const h2o_sendvec_callbacks_t *callbacks;
     /**
@@ -822,7 +821,9 @@ struct st_h2o_sendvec_t {
      */
     size_t len;
     /**
-     *
+     * If `callback->read_` is `h2o_sendvec_read_raw`, payload is stored in the buffer pointed to by `raw`. Otherwise, the payload
+     * cannot be accessed directly and callbacks have to be used. For convenience of output filters, the `h2o_add_ostream_flattener`
+     * function can be used for normalizing all the sendvecs to the raw form before being supplied.
      */
     union {
         char *raw;
