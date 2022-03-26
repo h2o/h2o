@@ -115,79 +115,132 @@ static size_t calc_max_payload_size(h2o_http2_conn_t *conn, h2o_http2_stream_t *
     return sz_min(sz_min(conn_max, stream_max), conn->peer_settings.max_frame_size);
 }
 
-static void commit_data_header(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, h2o_buffer_t **outbuf, size_t length,
-                               h2o_send_state_t send_state)
+static void send_data_on_payload_built(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, char *end_of_payload)
 {
-    assert(outbuf != NULL);
-    /* send a DATA frame if there's data or the END_STREAM flag to send */
-    if (length || send_state == H2O_SEND_STATE_FINAL) {
-        h2o_http2_encode_frame_header(
-            (void *)((*outbuf)->bytes + (*outbuf)->size), length, H2O_HTTP2_FRAME_TYPE_DATA,
-            (send_state == H2O_SEND_STATE_FINAL && !stream->req.send_server_timing) ? H2O_HTTP2_FRAME_FLAG_END_STREAM : 0,
-            stream->stream_id);
-        h2o_http2_window_consume_window(&conn->_write.window, length);
-        h2o_http2_window_consume_window(&stream->output_window, length);
-        (*outbuf)->size += length + H2O_HTTP2_FRAME_HEADER_SIZE;
-        stream->req.bytes_sent += length;
+    /* update stream states */
+    if (end_of_payload == NULL) {
+        stream->_data.size = 0;
+        stream->_data_off = 0;
+        stream->send_state = H2O_SEND_STATE_ERROR;
+        h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_END_STREAM);
+    } else if (stream->_data.size == 0 && stream->state == H2O_HTTP2_STREAM_STATE_SEND_BODY_IS_FINAL) {
+        h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_END_STREAM);
     }
-    /* send a RST_STREAM if there's an error */
-    if (send_state == H2O_SEND_STATE_ERROR) {
+
+    /* commit payload (write DATA frame header, update the size of the write buffer to include the payload, adjust flow control) */
+    if (end_of_payload != NULL) {
+        size_t payload_len = end_of_payload - (conn->_write.buf->bytes + conn->_write.buf->size + H2O_HTTP2_FRAME_HEADER_SIZE);
+        int send_end_stream =
+            stream->_data.size == 0 && stream->send_state == H2O_SEND_STATE_FINAL && !stream->req.send_server_timing;
+        if (payload_len != 0 || send_end_stream) {
+            h2o_http2_encode_frame_header((void *)(conn->_write.buf->bytes + conn->_write.buf->size), payload_len,
+                                          H2O_HTTP2_FRAME_TYPE_DATA, send_end_stream ? H2O_HTTP2_FRAME_FLAG_END_STREAM : 0,
+                                          stream->stream_id);
+            conn->_write.buf->size += H2O_HTTP2_FRAME_HEADER_SIZE + payload_len;
+        }
+        if (payload_len != 0) {
+            h2o_http2_window_consume_window(&conn->_write.window, payload_len);
+            h2o_http2_window_consume_window(&stream->output_window, payload_len);
+        }
+    }
+
+    /* send RST_STREAM after all data, if error occurred */
+    if (stream->send_state == H2O_SEND_STATE_ERROR && stream->_data.size == 0)
         h2o_http2_encode_rst_stream_frame(
-            outbuf, stream->stream_id, -(stream->req.upstream_refused ? H2O_HTTP2_ERROR_REFUSED_STREAM : H2O_HTTP2_ERROR_PROTOCOL));
-    }
+            &conn->_write.buf, stream->stream_id,
+            -(stream->req.upstream_refused ? H2O_HTTP2_ERROR_REFUSED_STREAM : H2O_HTTP2_ERROR_PROTOCOL));
 }
 
-static h2o_sendvec_t *send_data(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, h2o_sendvec_t *bufs, size_t bufcnt,
-                                size_t *off_within_buf, h2o_send_state_t send_state)
+static void send_data_on_read_complete(h2o_socket_read_file_cmd_t *cmd)
 {
-    h2o_iovec_t dst;
-    size_t max_payload_size;
+    h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, req, cmd->cb.data);
+    h2o_http2_conn_t *conn = (h2o_http2_conn_t *)stream->req.conn;
 
-    if ((max_payload_size = calc_max_payload_size(conn, stream)) == 0)
-        goto Exit;
+    /* if invoked synchronously, just set the result and return */
+    if (stream->read_file.cmd == NULL) {
+        stream->read_file.err = cmd->err;
+        return;
+    }
+
+    /* clear inflight indicators */
+    assert(conn->read_file_stream == stream);
+    stream->read_file.cmd = NULL;
+    conn->read_file_stream = NULL;
+
+    send_data_on_payload_built(conn, stream, cmd->err == NULL ? cmd->vec.base + cmd->vec.len : NULL);
+    h2o_http2_conn_on_read_complete(conn, stream);
+}
+
+void h2o_http2_stream_send_pending_data(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
+{
+    if (stream->_data.size != 0) {
+        assert(stream->_data_off < stream->_data.entries[0].len);
+    } else {
+        assert(stream->_data_off == 0);
+    }
+    assert(stream->read_file.cmd == NULL);
+    assert(conn->read_file_stream == NULL);
+
+    h2o_iovec_t dst;
+
+    /* Calculate maximum payload that we can generate. Note that we continue the operation even when `max_payload_size` is zero, as
+     * we should be sending END_STREAM even when the flow controls limit sending more payload. */
+    size_t max_payload_size = calc_max_payload_size(conn, stream);
 
     /* reserve buffer and point dst to the payload */
     dst.base =
         h2o_buffer_reserve(&conn->_write.buf, H2O_HTTP2_FRAME_HEADER_SIZE + max_payload_size).base + H2O_HTTP2_FRAME_HEADER_SIZE;
     dst.len = max_payload_size;
 
-    /* emit data */
-    while (bufcnt != 0) {
-        if (bufs->len != *off_within_buf)
-            break;
-        ++bufs;
-        --bufcnt;
-        *off_within_buf = 0;
-    }
-    while (bufcnt != 0) {
-        size_t fill_size = sz_min(dst.len, bufs->len - *off_within_buf);
-        if (!(*bufs->callbacks->flatten)(bufs, &stream->req, h2o_iovec_init(dst.base, fill_size), *off_within_buf))
-            return NULL;
-        dst.base += fill_size;
-        dst.len -= fill_size;
-        *off_within_buf += fill_size;
-        while (bufs->len == *off_within_buf) {
-            ++bufs;
-            --bufcnt;
-            *off_within_buf = 0;
-            if (bufcnt == 0)
+#define ADVANCE()                                                                                                                  \
+    do {                                                                                                                           \
+        dst.base += fill_size;                                                                                                     \
+        dst.len -= fill_size;                                                                                                      \
+        stream->_data_off += fill_size;                                                                                            \
+        if (stream->_data_off == stream->_data.entries[data_index].len) {                                                          \
+            ++data_index;                                                                                                          \
+            stream->_data_off = 0;                                                                                                 \
+        }                                                                                                                          \
+    } while (0)
+#define FIXUP_DATA()                                                                                                               \
+    do {                                                                                                                           \
+        if (data_index != 0) {                                                                                                     \
+            size_t new_size = stream->_data.size - data_index;                                                                     \
+            memmove(stream->_data.entries, stream->_data.entries + data_index, new_size);                                          \
+            stream->_data.size = new_size;                                                                                         \
+        }                                                                                                                          \
+    } while (0)
+
+    /* emit payload */
+    size_t data_index = 0;
+    while (data_index < stream->_data.size && dst.len != 0) {
+        h2o_sendvec_t *vec = stream->_data.entries + data_index;
+        size_t fill_size = sz_min(dst.len, vec->len - stream->_data_off);
+        if (vec->callbacks->flatten == h2o_sendvec_flatten_raw) {
+            memcpy(dst.base, vec->raw + stream->_data_off, fill_size);
+            ADVANCE();
+        } else {
+            assert(vec->callbacks->read_ != NULL);
+            vec->callbacks->read_(vec, &stream->req, &stream->read_file.cmd, h2o_iovec_init(dst.base, fill_size), stream->_data_off,
+                                  send_data_on_read_complete);
+            if (stream->read_file.cmd != NULL) {
+                conn->read_file_stream = stream;
+                ADVANCE();
+                FIXUP_DATA();
+                return;
+            } else if (stream->read_file.err != NULL) {
+                dst.base = NULL; /* indicate error */
                 break;
+            }
+            ADVANCE();
         }
-        if (dst.len == 0)
-            break;
     }
+    FIXUP_DATA();
 
-    /* commit the DATA frame if we have actually emitted payload */
-    if (dst.len != max_payload_size || !h2o_send_state_is_in_progress(send_state)) {
-        size_t payload_len = max_payload_size - dst.len;
-        if (bufcnt != 0) {
-            send_state = H2O_SEND_STATE_IN_PROGRESS;
-        }
-        commit_data_header(conn, stream, &conn->_write.buf, payload_len, send_state);
-    }
+#undef ADVANCE
+#undef FIXUP_DATA
 
-Exit:
-    return bufs;
+    send_data_on_payload_built(conn, stream, dst.base);
 }
 
 static int is_blocking_asset(h2o_req_t *req)
@@ -344,7 +397,6 @@ void finalostream_send(h2o_ostream_t *self, h2o_req_t *req, h2o_sendvec_t *bufs,
         return;
     }
 
-
     stream->send_state = state;
 
     /* send headers */
@@ -395,36 +447,6 @@ static void finalostream_send_informational(h2o_ostream_t *self, h2o_req_t *req)
                                stream->stream_id, conn->peer_settings.max_frame_size, req->res.status, req->res.headers.entries,
                                req->res.headers.size, NULL, SIZE_MAX);
     h2o_http2_conn_request_write(conn);
-}
-
-void h2o_http2_stream_send_pending_data(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
-{
-    if (h2o_http2_window_get_avail(&stream->output_window) <= 0)
-        return;
-
-    h2o_send_state_t send_state = stream->send_state;
-    h2o_sendvec_t *nextbuf =
-        send_data(conn, stream, stream->_data.entries, stream->_data.size, &stream->_data_off, stream->send_state);
-    if (nextbuf == NULL) {
-        /* error */
-        stream->_data.size = 0;
-        stream->send_state = H2O_SEND_STATE_ERROR;
-        h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_END_STREAM);
-    } else if (nextbuf == stream->_data.entries + stream->_data.size) {
-        /* sent all data */
-        stream->_data.size = 0;
-        if (stream->state == H2O_HTTP2_STREAM_STATE_SEND_BODY_IS_FINAL)
-            h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_END_STREAM);
-    } else if (nextbuf != stream->_data.entries) {
-        /* adjust the buffer */
-        size_t newsize = stream->_data.size - (nextbuf - stream->_data.entries);
-        memmove(stream->_data.entries, nextbuf, sizeof(stream->_data.entries[0]) * newsize);
-        stream->_data.size = newsize;
-    }
-
-    if (send_state == H2O_SEND_STATE_ERROR) {
-        stream->req.send_server_timing = 0; /* suppress sending trailers */
-    }
 }
 
 void h2o_http2_stream_proceed(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)

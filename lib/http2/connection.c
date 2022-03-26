@@ -452,9 +452,8 @@ static void stream_send_error(h2o_http2_conn_t *conn, uint32_t stream_id, int er
 static void request_gathered_write(h2o_http2_conn_t *conn)
 {
     assert(conn->state < H2O_HTTP2_CONN_STATE_IS_CLOSING);
-    if (!h2o_socket_is_writing(conn->sock) && !h2o_timer_is_linked(&conn->_write.timeout_entry)) {
+    if (!h2o_socket_is_writing(conn->sock) && conn->read_file_stream == NULL && !h2o_timer_is_linked(&conn->_write.timeout_entry))
         h2o_timer_link(conn->super.ctx->loop, 0, &conn->_write.timeout_entry);
-    }
 }
 
 static int update_stream_output_window(h2o_http2_stream_t *stream, ssize_t delta)
@@ -1471,24 +1470,21 @@ static void on_write_complete(h2o_socket_t *sock, const char *err)
     do_emit_writereq(conn);
 }
 
-static int emit_writereq_of_openref(h2o_http2_scheduler_openref_t *ref, int *still_is_active, void *cb_arg)
+static void emit_writereq_on_data_ready(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, int *is_active)
 {
-    h2o_http2_conn_t *conn = cb_arg;
-    h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, _scheduler, ref);
+    *is_active = 0;
 
-    assert(h2o_http2_stream_has_pending_data(stream) || stream->state >= H2O_HTTP2_STREAM_STATE_SEND_BODY_IS_FINAL);
-
-    *still_is_active = 0;
-
-    h2o_http2_stream_send_pending_data(conn, stream);
     if (h2o_http2_stream_has_pending_data(stream) || stream->state == H2O_HTTP2_STREAM_STATE_SEND_BODY_IS_FINAL) {
         if (h2o_http2_window_get_avail(&stream->output_window) <= 0) {
             /* is blocked */
         } else {
-            *still_is_active = 1;
+            *is_active = 1;
         }
     } else {
-        if (stream->state == H2O_HTTP2_STREAM_STATE_END_STREAM && stream->req.send_server_timing) {
+        /* Send trailers iff stream has been closed normally. We do not send trailers when the response is closed abruptly so as to
+         * avoid the risk of the trailer's existence interpreted as the end of a sucessful transfer. */
+        if (stream->state == H2O_HTTP2_STREAM_STATE_END_STREAM && stream->send_state == H2O_SEND_STATE_FINAL &&
+            stream->req.send_server_timing) {
             h2o_header_t trailers[1];
             size_t num_trailers = 0;
             h2o_iovec_t server_timing;
@@ -1501,18 +1497,10 @@ static int emit_writereq_of_openref(h2o_http2_scheduler_openref_t *ref, int *sti
         }
         h2o_linklist_insert(&conn->_write.streams_to_proceed, &stream->_link);
     }
-
-    return h2o_http2_conn_get_buffer_window(conn) > 0 ? 0 : -1;
 }
 
-void do_emit_writereq(h2o_http2_conn_t *conn)
+static void emit_writereq_send(h2o_http2_conn_t *conn)
 {
-    assert(conn->_write.buf_in_flight == NULL);
-
-    /* push DATA frames */
-    if (conn->state < H2O_HTTP2_CONN_STATE_IS_CLOSING && h2o_http2_conn_get_buffer_window(conn) > 0)
-        h2o_http2_scheduler_run(&conn->scheduler, emit_writereq_of_openref, conn);
-
     if (conn->_write.buf->size != 0) {
         /* write and wait for completion */
         h2o_iovec_t buf = {conn->_write.buf->bytes, conn->_write.buf->size};
@@ -1538,11 +1526,59 @@ void do_emit_writereq(h2o_http2_conn_t *conn)
     }
 }
 
+static int emit_writereq_of_openref(h2o_http2_scheduler_openref_t *ref, int *still_is_active, void *cb_arg)
+{
+    h2o_http2_conn_t *conn = cb_arg;
+    h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, _scheduler, ref);
+
+    assert(h2o_http2_stream_has_pending_data(stream) || stream->state >= H2O_HTTP2_STREAM_STATE_SEND_BODY_IS_FINAL);
+
+    h2o_http2_stream_send_pending_data(conn, stream);
+    if (stream->read_file.cmd != NULL) {
+        *still_is_active = 0;
+        return -1;
+    }
+
+    emit_writereq_on_data_ready(conn, stream, still_is_active);
+    return h2o_http2_conn_get_buffer_window(conn) > 0 ? 0 : -1;
+}
+
+void do_emit_writereq(h2o_http2_conn_t *conn)
+{
+    assert(conn->_write.buf_in_flight == NULL);
+    assert(conn->read_file_stream == NULL);
+
+    /* push stream-level frames */
+    if (conn->state < H2O_HTTP2_CONN_STATE_IS_CLOSING && h2o_http2_conn_get_buffer_window(conn) > 0)
+        h2o_http2_scheduler_run(&conn->scheduler, emit_writereq_of_openref, conn);
+
+    /* if async read is in flight, let it call send */
+    if (conn->read_file_stream != NULL)
+        return;
+
+    emit_writereq_send(conn);
+}
+
 static void emit_writereq(h2o_timer_t *entry)
 {
     h2o_http2_conn_t *conn = H2O_STRUCT_FROM_MEMBER(h2o_http2_conn_t, _write.timeout_entry, entry);
 
     do_emit_writereq(conn);
+}
+
+void h2o_http2_conn_on_read_complete(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
+{
+    assert(conn->read_file_stream == NULL);
+
+    int stream_is_active;
+
+    emit_writereq_on_data_ready(conn, stream, &stream_is_active);
+    if (stream_is_active) {
+        assert(!h2o_linklist_is_linked(&stream->_link));
+        h2o_http2_scheduler_activate(&stream->_scheduler);
+    }
+
+    emit_writereq_send(conn);
 }
 
 static socklen_t get_sockname(h2o_conn_t *_conn, struct sockaddr *sa)

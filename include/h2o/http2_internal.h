@@ -100,6 +100,15 @@ struct st_h2o_http2_stream_t {
     H2O_VECTOR(h2o_sendvec_t) _data;
     size_t _data_off; /* offset within _data.entries[0] */
     /**
+     * Holds information regarding file read. If `cmd` is non-NULL, it is a reference to an asynchronous file read currently
+     * inflight. As there can be only one file read at a time per each connection, `h2o_http2_conn_t::read_file_stream` will point
+     * to this stream. `err` is used for communicating the result when the read file completion callback is invoked synchronously.
+     */
+    struct {
+        h2o_socket_read_file_cmd_t *cmd;
+        const char *err;
+    } read_file;
+    /**
      * points to http2_conn_t::num_streams::* in which the stream is counted
      */
     h2o_http2_conn_num_streams_t *_num_streams_slot;
@@ -209,6 +218,10 @@ struct st_h2o_http2_conn_t {
     } early_data;
     h2o_iovec_t *http2_origin_frame;
     /**
+     * stream that has read file inflight (or NULL if none)
+     */
+    h2o_http2_stream_t *read_file_stream;
+    /**
      * Ring buffer of closed streams. `next_slot` points to the next write position. The stored object is shrinked to only contain
      * stream_id and _scheduler.
      */
@@ -234,6 +247,7 @@ static ssize_t h2o_http2_conn_get_buffer_window(h2o_http2_conn_t *conn);
 static void h2o_http2_conn_init_casper(h2o_http2_conn_t *conn, unsigned capacity_bits);
 void h2o_http2_conn_register_for_replay(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);
 void h2o_http2_conn_preserve_stream_scheduler(h2o_http2_conn_t *conn, h2o_http2_stream_t *src);
+void h2o_http2_conn_on_read_complete(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);
 
 /* stream */
 static int h2o_http2_stream_is_push(uint32_t stream_id);
