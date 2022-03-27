@@ -213,8 +213,8 @@ void h2o_http2_stream_send_pending_data(h2o_http2_conn_t *conn, h2o_http2_stream
         }
         size_t fill_size = sz_min(dst.len, vec->len - stream->_data_off);
         /* invoke the read callback */
-        vec->callbacks->read_(vec, &stream->req, &stream->read_file.cmd, h2o_iovec_init(dst.base, fill_size), stream->_data_off,
-                              send_data_on_read_complete, stream);
+        vec->callbacks->flatten(vec, &stream->req, &stream->read_file.cmd, h2o_iovec_init(dst.base, fill_size), stream->_data_off,
+                                send_data_on_read_complete, stream);
         /* adjust dst and stream to point to the next chunk */
         dst.base += fill_size;
         dst.len -= fill_size;

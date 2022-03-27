@@ -799,8 +799,8 @@ typedef struct st_h2o_sendvec_callbacks_t {
      * Reads the content of send vector into the specified memory buffer, either synchronously or asynchronously. The interface is
      * designed to look like a wrapper of `h2o_socket_read_file`, allowing the provider to do additional mangling if necessary.
      */
-    void (*read_)(h2o_sendvec_t *vec, h2o_req_t *req, h2o_socket_read_file_cmd_t **cmd, h2o_iovec_t dst, size_t off,
-                  h2o_socket_read_file_cb cb, void *data);
+    void (*flatten)(h2o_sendvec_t *vec, h2o_req_t *req, h2o_socket_read_file_cmd_t **cmd, h2o_iovec_t dst, size_t off,
+                    h2o_socket_read_file_cb cb, void *data);
     /**
      * optional callback that can be used to retain the buffer after flattening all data. This allows H3 to re-flatten data upon
      * retransmission. Increments the reference counter if `is_incr` is set to true, otherwise the counter is decremented.
@@ -821,9 +821,10 @@ struct st_h2o_sendvec_t {
      */
     size_t len;
     /**
-     * If `callback->read_` is `h2o_sendvec_read_raw`, payload is stored in the buffer pointed to by `raw`. Otherwise, the payload
-     * cannot be accessed directly and callbacks have to be used. For convenience of output filters, the `h2o_sendvec_flattener_t`
-     * and associated functions can be used for normalizing all the sendvecs to the raw form before being supplied.
+     * If `callback->read_` is `h2o_sendvec_flatten_raw`, payload is stored in the buffer pointed to by `raw`. Otherwise, the
+     * payload cannot be accessed directly and callbacks have to be used. For convenience of output filters, the
+     * `h2o_sendvec_flattener_t` and associated functions can be used for normalizing all the sendvecs to the raw form before being
+     * supplied.
      */
     union {
         char *raw;
@@ -1544,10 +1545,11 @@ void h2o_sendvec_init_raw(h2o_sendvec_t *vec, const void *base, size_t len);
  */
 void h2o_sendvec_init_immutable(h2o_sendvec_t *vec, const void *base, size_t len);
 /**
- *
+ * The flatten callback to be used when the data is stored in `h2o_sendvec_t::raw`. Applications can use access the raw buffer
+ * directly, if the flatten callback of a sendvec points to this function.
  */
-void h2o_sendvec_read_raw(h2o_sendvec_t *vec, h2o_req_t *req, h2o_socket_read_file_cmd_t **cmd, h2o_iovec_t dst, size_t off,
-                          h2o_socket_read_file_cb cb, void *data);
+void h2o_sendvec_flatten_raw(h2o_sendvec_t *vec, h2o_req_t *req, h2o_socket_read_file_cmd_t **cmd, h2o_iovec_t dst, size_t off,
+                             h2o_socket_read_file_cb cb, void *data);
 /**
  *
  */
@@ -2403,7 +2405,7 @@ inline void h2o_setup_next_ostream(h2o_req_t *req, h2o_ostream_t **slot)
 inline int h2o_sendvec_flatten(h2o_sendvec_flattener_t *self, h2o_sendvec_t *bufs, size_t bufcnt, h2o_send_state_t state)
 {
     /* skip unless we need to flatten the buffer */
-    if (!(bufcnt == 1 && bufs->callbacks->read_ != h2o_sendvec_read_raw))
+    if (!(bufcnt == 1 && bufs->callbacks->flatten != h2o_sendvec_flatten_raw))
         return 0;
 
     h2o_sendvec__do_flatten(self, bufs, bufcnt, state);

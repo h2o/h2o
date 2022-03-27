@@ -701,8 +701,8 @@ static void retain_sendvecs(struct st_h2o_http3_server_stream_t *stream)
         struct st_h2o_http3_server_sendvec_t *vec = stream->sendbuf.vecs.entries + stream->sendbuf.min_index_to_addref;
         /* create a copy if it does not provide update_refcnt (else update_refcnt is called in normalize_data_to_be_sent) */
         if (vec->vec.callbacks->update_refcnt == NULL) {
-            static const h2o_sendvec_callbacks_t vec_callbacks = {h2o_sendvec_read_raw, allocated_vec_update_refcnt};
-            assert(vec->vec.callbacks->read_ == h2o_sendvec_read_raw);
+            static const h2o_sendvec_callbacks_t vec_callbacks = {h2o_sendvec_flatten_raw, allocated_vec_update_refcnt};
+            assert(vec->vec.callbacks->flatten == h2o_sendvec_flatten_raw);
             size_t off_within_vec = stream->sendbuf.min_index_to_addref == 0 ? stream->sendbuf.off_within_first_vec : 0;
             h2o_sendvec_t newvec = {&vec_callbacks, vec->vec.len - off_within_vec, {h2o_mem_alloc(vec->vec.len - off_within_vec)}};
             h2o_memcpy(newvec.raw, vec->vec.raw, newvec.len);
@@ -787,7 +787,7 @@ static void on_send_emit(quicly_stream_t *qs, size_t off, void *_dst, size_t *le
     *wrote_all = 0;
     do {
         struct st_h2o_http3_server_sendvec_t *this_vec = stream->sendbuf.vecs.entries + vec_index;
-        assert(this_vec->vec.callbacks->read_ == h2o_sendvec_read_raw);
+        assert(this_vec->vec.callbacks->flatten == h2o_sendvec_flatten_raw);
         size_t sz = this_vec->vec.len - off;
         if (dst_end - dst < sz)
             sz = dst_end - dst;
@@ -1591,7 +1591,7 @@ static void normalize_data_on_read_file_complete(h2o_socket_read_file_cmd_t *cmd
 
 static void normalize_data_to_be_sent(struct st_h2o_http3_server_stream_t *stream)
 {
-    static const h2o_sendvec_callbacks_t vec_callbacks = {h2o_sendvec_read_raw, allocated_vec_update_refcnt};
+    static const h2o_sendvec_callbacks_t vec_callbacks = {h2o_sendvec_flatten_raw, allocated_vec_update_refcnt};
 
     assert(stream->read_file.cmd == NULL);
     assert(stream->read_file.err == NULL);
@@ -1604,11 +1604,11 @@ static void normalize_data_to_be_sent(struct st_h2o_http3_server_stream_t *strea
            stream->sendbuf.next_flatten.vec_index < stream->sendbuf.vecs.size) {
         struct st_h2o_http3_server_sendvec_t *vec = stream->sendbuf.vecs.entries + stream->sendbuf.next_flatten.vec_index;
 
-        if (vec->vec.callbacks->read_ != h2o_sendvec_read_raw) {
+        if (vec->vec.callbacks->flatten != h2o_sendvec_flatten_raw) {
             /* flatten the file */
             h2o_iovec_t buf = h2o_iovec_init(h2o_mem_alloc(vec->vec.len), vec->vec.len);
-            vec->vec.callbacks->read_(&vec->vec, &stream->req, &stream->read_file.cmd, buf, 0, normalize_data_on_read_file_complete,
-                                      stream);
+            vec->vec.callbacks->flatten(&vec->vec, &stream->req, &stream->read_file.cmd, buf, 0,
+                                        normalize_data_on_read_file_complete, stream);
             if (stream->read_file.cmd != NULL) {
                 /* read-file is asynchronously in progress, update `stream->sendbuf` to the post-read state, then return */
                 vec->vec = (h2o_sendvec_t){&vec_callbacks, buf.len, {buf.base}};

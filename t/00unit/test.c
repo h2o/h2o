@@ -41,8 +41,9 @@ static void loopback_on_send(h2o_ostream_t *self, h2o_req_t *req, h2o_sendvec_t 
 
     for (i = 0; i != inbufcnt; ++i) {
         h2o_buffer_reserve(&conn->body, inbufs[i].len);
-        inbufs[i].callbacks->read_(inbufs + i, req, &read_file, h2o_iovec_init(conn->body->bytes + conn->body->size, inbufs[i].len),
-                                   0, loopback_on_send_on_read_complete, &read_complete);
+        inbufs[i].callbacks->flatten(inbufs + i, req, &read_file,
+                                     h2o_iovec_init(conn->body->bytes + conn->body->size, inbufs[i].len), 0,
+                                     loopback_on_send_on_read_complete, &read_complete);
         assert(read_complete);
         conn->body->size += inbufs[i].len;
     }

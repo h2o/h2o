@@ -524,7 +524,7 @@ void h2o_start_response(h2o_req_t *req, h2o_generator_t *generator)
 
 void h2o_sendvec_init_raw(h2o_sendvec_t *vec, const void *base, size_t len)
 {
-    static const h2o_sendvec_callbacks_t callbacks = {h2o_sendvec_read_raw};
+    static const h2o_sendvec_callbacks_t callbacks = {h2o_sendvec_flatten_raw};
     vec->callbacks = &callbacks;
     vec->raw = (char *)base;
     vec->len = len;
@@ -537,7 +537,7 @@ static void sendvec_immutable_update_refcnt(h2o_sendvec_t *vec, h2o_req_t *req, 
 
 void h2o_sendvec_init_immutable(h2o_sendvec_t *vec, const void *base, size_t len)
 {
-    static const h2o_sendvec_callbacks_t callbacks = {h2o_sendvec_read_raw, sendvec_immutable_update_refcnt};
+    static const h2o_sendvec_callbacks_t callbacks = {h2o_sendvec_flatten_raw, sendvec_immutable_update_refcnt};
     vec->callbacks = &callbacks;
     vec->raw = (char *)base;
     vec->len = len;
@@ -563,7 +563,7 @@ static void sendvec_flattener_on_complete(h2o_socket_read_file_cmd_t *cmd)
     self->cmd = NULL;
 
     if (cmd->err == NULL) {
-        static const h2o_sendvec_callbacks_t callbacks = {h2o_sendvec_read_raw, NULL};
+        static const h2o_sendvec_callbacks_t callbacks = {h2o_sendvec_flatten_raw, NULL};
         h2o_sendvec_t vec = {&callbacks, cmd->vec.len, {cmd->vec.base}};
         self->ostream->do_send(self->ostream, self->req, &vec, 1, self->state);
     } else {
@@ -580,12 +580,12 @@ void h2o_sendvec__do_flatten(h2o_sendvec_flattener_t *self, h2o_sendvec_t *bufs,
                                                h2o_send_state_is_in_progress(state) ? H2O_PULL_SENDVEC_MAX_SIZE : bufs[0].len);
 
     /* flatten */
-    bufs->callbacks->read_(bufs, self->req, &self->cmd, h2o_iovec_init(self->buf, bufs[0].len), 0, sendvec_flattener_on_complete,
-                           self);
+    bufs->callbacks->flatten(bufs, self->req, &self->cmd, h2o_iovec_init(self->buf, bufs[0].len), 0, sendvec_flattener_on_complete,
+                             self);
 }
 
-void h2o_sendvec_read_raw(h2o_sendvec_t *vec, h2o_req_t *req, h2o_socket_read_file_cmd_t **_cmd, h2o_iovec_t dst, size_t off,
-                          h2o_socket_read_file_cb cb, void *data)
+void h2o_sendvec_flatten_raw(h2o_sendvec_t *vec, h2o_req_t *req, h2o_socket_read_file_cmd_t **_cmd, h2o_iovec_t dst, size_t off,
+                             h2o_socket_read_file_cb cb, void *data)
 {
     assert(off + dst.len <= vec->len);
     memcpy(dst.base, vec->raw + off, dst.len);
@@ -619,7 +619,7 @@ void h2o_send(h2o_req_t *req, h2o_iovec_t *bufs, size_t bufcnt, h2o_send_state_t
 
 void h2o_sendvec(h2o_req_t *req, h2o_sendvec_t *bufs, size_t bufcnt, h2o_send_state_t state)
 {
-    assert(bufcnt == 0 || (bufs[0].callbacks->read_ == &h2o_sendvec_read_raw || bufcnt == 1));
+    assert(bufcnt == 0 || (bufs[0].callbacks->flatten == &h2o_sendvec_flatten_raw || bufcnt == 1));
     do_sendvec(req, bufs, bufcnt, state);
 }
 
