@@ -822,14 +822,25 @@ struct st_h2o_sendvec_t {
     size_t len;
     /**
      * If `callback->read_` is `h2o_sendvec_read_raw`, payload is stored in the buffer pointed to by `raw`. Otherwise, the payload
-     * cannot be accessed directly and callbacks have to be used. For convenience of output filters, the `h2o_add_ostream_flattener`
-     * function can be used for normalizing all the sendvecs to the raw form before being supplied.
+     * cannot be accessed directly and callbacks have to be used. For convenience of output filters, the `h2o_sendvec_flattener_t`
+     * and associated functions can be used for normalizing all the sendvecs to the raw form before being supplied.
      */
     union {
         char *raw;
         uint64_t cb_arg[2];
     };
 };
+
+typedef struct st_h2o_sendvec_flattener_t {
+    h2o_ostream_t *ostream;
+    h2o_req_t *req;
+    h2o_send_state_t state;
+    h2o_socket_read_file_cmd_t *cmd;
+    char *buf;
+} h2o_sendvec_flattener_t;
+
+typedef void (*h2o_ostream_send_cb)(h2o_ostream_t *self, h2o_req_t *req, h2o_sendvec_t *bufs, size_t bufcnt,
+                                    h2o_send_state_t state);
 
 /**
  * an output stream that may alter the output.
@@ -845,7 +856,7 @@ struct st_h2o_ostream_t {
      * Intermediary output streams should process the given output and call the h2o_ostream_send_next function if any data can be
      * sent.
      */
-    void (*do_send)(struct st_h2o_ostream_t *self, h2o_req_t *req, h2o_sendvec_t *bufs, size_t bufcnt, h2o_send_state_t state);
+    h2o_ostream_send_cb do_send;
     /**
      * called by the core when there is a need to terminate the response abruptly
      */
@@ -1511,10 +1522,6 @@ void h2o_start_response(h2o_req_t *req, h2o_generator_t *generator);
  */
 h2o_ostream_t *h2o_add_ostream(h2o_req_t *req, size_t alignment, size_t sz, h2o_ostream_t **slot);
 /**
- * Adds a ostream filter that converts sendvecs to raw form. This is useful for filters that can only handle raw bytes.
- */
-void h2o_add_ostream_flattener(h2o_req_t *req, h2o_ostream_t **slot);
-/**
  * prepares the request for processing by looking at the method, URI, headers
  */
 h2o_hostconf_t *h2o_req_setup(h2o_req_t *req);
@@ -1541,6 +1548,21 @@ void h2o_sendvec_init_immutable(h2o_sendvec_t *vec, const void *base, size_t len
  */
 void h2o_sendvec_read_raw(h2o_sendvec_t *vec, h2o_req_t *req, h2o_socket_read_file_cmd_t **cmd, h2o_iovec_t dst, size_t off,
                           h2o_socket_read_file_cb cb, void *data);
+/**
+ *
+ */
+h2o_sendvec_flattener_t *h2o_sendvec_create_flattener(h2o_ostream_t *ostream, h2o_req_t *req);
+/**
+ * Converts sendvecs to raw form and then invokes the do_send callback. If given buffers are raw, false is returned and the caller
+ * must handle the sendvecs by itself. If true is returned, `h2o_sendvec_flatten` invokes (or already has invoked) `do_send` passing
+ * flattened sendvecs.
+ */
+static int h2o_sendvec_flatten(h2o_sendvec_flattener_t *self, h2o_sendvec_t *bufs, size_t bufcnt, h2o_send_state_t state);
+void h2o_sendvec__do_flatten(h2o_sendvec_flattener_t *self, h2o_sendvec_t *bufs, size_t bufcnt, h2o_send_state_t state);
+/**
+ *
+ */
+static void h2o_sendvec_flatten_cancel(h2o_sendvec_flattener_t *flattener);
 /**
  * called by the generators to send output
  * note: generators should free itself after sending the final chunk (i.e. calling the function with is_final set to true)
@@ -2375,6 +2397,24 @@ inline void h2o_setup_next_ostream(h2o_req_t *req, h2o_ostream_t **slot)
     if (req->_next_filter_index < req->num_filters) {
         next = req->filters[req->_next_filter_index++];
         next->on_setup_ostream(next, req, slot);
+    }
+}
+
+inline int h2o_sendvec_flatten(h2o_sendvec_flattener_t *self, h2o_sendvec_t *bufs, size_t bufcnt, h2o_send_state_t state)
+{
+    /* skip unless we need to flatten the buffer */
+    if (!(bufcnt == 1 && bufs->callbacks->read_ != h2o_sendvec_read_raw))
+        return 0;
+
+    h2o_sendvec__do_flatten(self, bufs, bufcnt, state);
+    return 1;
+}
+
+inline void h2o_sendvec_flatten_cancel(h2o_sendvec_flattener_t *flattener)
+{
+    if (flattener->cmd != NULL) {
+        h2o_socket_read_file_cancel(flattener->cmd);
+        flattener->cmd = NULL;
     }
 }
 

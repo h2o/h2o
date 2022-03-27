@@ -84,6 +84,7 @@ struct st_h2o_specific_file_handler_t {
 
 struct st_gzip_decompress_t {
     h2o_ostream_t super;
+    h2o_sendvec_flattener_t *flattener;
     h2o_compress_context_t *decompressor;
 };
 
@@ -304,17 +305,25 @@ static void add_headers_unconditional(struct st_h2o_sendfile_generator_t *self, 
 
 static void send_decompressed(h2o_ostream_t *_self, h2o_req_t *req, h2o_sendvec_t *inbufs, size_t inbufcnt, h2o_send_state_t state)
 {
-    if (inbufcnt == 0 && h2o_send_state_is_in_progress(state)) {
-        h2o_ostream_send_next(_self, req, inbufs, inbufcnt, state);
-        return;
-    }
-
     struct st_gzip_decompress_t *self = (void *)_self;
     h2o_sendvec_t *outbufs;
     size_t outbufcnt;
 
+    if (inbufcnt == 0 && h2o_send_state_is_in_progress(state)) {
+        h2o_ostream_send_next(_self, req, inbufs, inbufcnt, state);
+        return;
+    }
+    if (h2o_sendvec_flatten(self->flattener, inbufs, inbufcnt, state))
+        return;
+
     state = h2o_compress_transform(self->decompressor, req, inbufs, inbufcnt, state, &outbufs, &outbufcnt);
     h2o_ostream_send_next(&self->super, req, outbufs, outbufcnt, state);
+}
+
+static void send_decompressed_stop(h2o_ostream_t *_self, h2o_req_t *req)
+{
+    struct st_gzip_decompress_t *self = (void *)_self;
+    h2o_sendvec_flatten_cancel(self->flattener);
 }
 
 static void do_send_file(struct st_h2o_sendfile_generator_t *self, h2o_req_t *req, int status, const char *reason,
@@ -366,9 +375,10 @@ static void do_send_file(struct st_h2o_sendfile_generator_t *self, h2o_req_t *re
     if (self->gunzip) {
         struct st_gzip_decompress_t *decoder =
             (void *)h2o_add_ostream(req, H2O_ALIGNOF(*decoder), sizeof(*decoder), &req->_ostr_top);
+        decoder->flattener = h2o_sendvec_create_flattener(&decoder->super, req);
         decoder->decompressor = h2o_compress_gunzip_open(&req->pool);
         decoder->super.do_send = send_decompressed;
-        h2o_add_ostream_flattener(req, &req->_ostr_top);
+        decoder->super.stop = send_decompressed_stop;
     }
 
     if (self->ranged.range_count == 1)

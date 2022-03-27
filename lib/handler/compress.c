@@ -34,6 +34,7 @@ struct st_compress_filter_t {
 
 struct st_compress_encoder_t {
     h2o_ostream_t super;
+    h2o_sendvec_flattener_t *flattener;
     h2o_compress_context_t *compressor;
 };
 
@@ -48,8 +49,17 @@ static void do_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_sendvec_t *inbufs,
         return;
     }
 
+    if (h2o_sendvec_flatten(self->flattener, inbufs, inbufcnt, state))
+        return;
+
     state = h2o_compress_transform(self->compressor, req, inbufs, inbufcnt, state, &outbufs, &outbufcnt);
     h2o_ostream_send_next(&self->super, req, outbufs, outbufcnt, state);
+}
+
+static void do_stop(h2o_ostream_t *_self, h2o_req_t *req)
+{
+    struct st_compress_encoder_t *self = (void *)_self;
+    h2o_sendvec_flatten_cancel(self->flattener);
 }
 
 static void on_setup_ostream(h2o_filter_t *_self, h2o_req_t *req, h2o_ostream_t **slot)
@@ -144,10 +154,9 @@ static void on_setup_ostream(h2o_filter_t *_self, h2o_req_t *req, h2o_ostream_t 
     /* setup filter */
     encoder = (void *)h2o_add_ostream(req, H2O_ALIGNOF(*encoder), sizeof(*encoder), slot);
     encoder->super.do_send = do_send;
+    encoder->super.stop = do_stop;
+    encoder->flattener = h2o_sendvec_create_flattener(&encoder->super, req);
     encoder->compressor = compressor;
-
-    /* add a ostream filter that converts non-raw vecs to raw vecs */
-    h2o_add_ostream_flattener(req, slot);
 
     slot = &encoder->super.next;
 

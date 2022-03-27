@@ -59,6 +59,7 @@ struct st_mruby_subreq_t {
         h2o_mruby_generator_t *response;
         h2o_mruby_generator_t *body;
     } shortcut;
+    h2o_sendvec_flattener_t *sendvec_flattener;
     enum { INITIAL, RECEIVED, FINAL_RECEIVED } state;
     unsigned char chain_proceed : 1;
 };
@@ -91,6 +92,8 @@ static void dispose_subreq(struct st_mruby_subreq_t *subreq)
         DATA_PTR(subreq->refs.request) = NULL;
     if (!mrb_nil_p(subreq->refs.input_stream))
         DATA_PTR(subreq->refs.input_stream) = NULL;
+
+    h2o_sendvec_flatten_cancel(subreq->sendvec_flattener);
 
     h2o_dispose_request(&subreq->super);
     free(subreq);
@@ -225,6 +228,10 @@ static void subreq_ostream_send(h2o_ostream_t *_self, h2o_req_t *_subreq, h2o_se
                                 h2o_send_state_t state)
 {
     struct st_mruby_subreq_t *subreq = (void *)_subreq;
+
+    if (h2o_sendvec_flatten(subreq->sendvec_flattener, inbufs, inbufcnt, state))
+        return;
+
     mrb_state *mrb = subreq->ctx->shared->mrb;
 
     /* body shortcut */
@@ -642,6 +649,7 @@ static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_val
     h2o_init_request(&subreq->super, &subreq->conn.super, NULL);
     h2o_ostream_t *ostream = h2o_add_ostream(&subreq->super, H2O_ALIGNOF(*ostream), sizeof(*ostream), &subreq->super._ostr_top);
     ostream->do_send = subreq_ostream_send;
+    subreq->sendvec_flattener = h2o_sendvec_create_flattener(ostream, &subreq->super);
     subreq->conn.super.hosts = ctx->handler->pathconf->global->hosts;
     subreq->conn.super.connected_at = (struct timeval){0}; /* no need because subreq won't logged */
     subreq->conn.super.id = 0; /* currently conn->id is used only for logging, so set zero as a meaningless value */

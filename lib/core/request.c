@@ -543,6 +543,47 @@ void h2o_sendvec_init_immutable(h2o_sendvec_t *vec, const void *base, size_t len
     vec->len = len;
 }
 
+static void sendvec_flattener_on_dispose(void *_self)
+{
+    h2o_sendvec_flattener_t *self = _self;
+    h2o_sendvec_flatten_cancel(self);
+}
+
+h2o_sendvec_flattener_t *h2o_sendvec_create_flattener(h2o_ostream_t *ostream, h2o_req_t *req)
+{
+    h2o_sendvec_flattener_t *self = h2o_mem_alloc_shared(&req->pool, sizeof(*self), sendvec_flattener_on_dispose);
+    *self = (h2o_sendvec_flattener_t){.ostream = ostream, .req = req};
+    return self;
+}
+
+static void sendvec_flattener_on_complete(h2o_socket_read_file_cmd_t *cmd)
+{
+    h2o_sendvec_flattener_t *self = cmd->cb.data;
+
+    self->cmd = NULL;
+
+    if (cmd->err == NULL) {
+        static const h2o_sendvec_callbacks_t callbacks = {h2o_sendvec_read_raw, NULL};
+        h2o_sendvec_t vec = {&callbacks, cmd->vec.len, {cmd->vec.base}};
+        self->ostream->do_send(self->ostream, self->req, &vec, 1, self->state);
+    } else {
+        self->ostream->do_send(self->ostream, self->req, NULL, 0, H2O_SEND_STATE_ERROR);
+    }
+}
+
+void h2o_sendvec__do_flatten(h2o_sendvec_flattener_t *self, h2o_sendvec_t *bufs, size_t bufcnt, h2o_send_state_t state)
+{
+    /* retain args / prepare buffer */
+    self->state = state;
+    if (self->buf == NULL)
+        self->buf = h2o_mem_alloc_pool_aligned(&self->req->pool, 1,
+                                               h2o_send_state_is_in_progress(state) ? H2O_PULL_SENDVEC_MAX_SIZE : bufs[0].len);
+
+    /* flatten */
+    bufs->callbacks->read_(bufs, self->req, &self->cmd, h2o_iovec_init(self->buf, bufs[0].len), 0, sendvec_flattener_on_complete,
+                           self);
+}
+
 void h2o_sendvec_read_raw(h2o_sendvec_t *vec, h2o_req_t *req, h2o_socket_read_file_cmd_t **_cmd, h2o_iovec_t dst, size_t off,
                           h2o_socket_read_file_cb cb, void *data)
 {
@@ -920,71 +961,4 @@ int h2o_req_resolve_internal_redirect_url(h2o_req_t *req, h2o_iovec_t dest, h2o_
     }
 
     return 0;
-}
-
-struct st_h2o_sendvec_flattener_t {
-    h2o_ostream_t super;
-    h2o_req_t *req;
-    h2o_send_state_t send_state;
-    h2o_socket_read_file_cmd_t *cmd;
-    char *buf;
-};
-
-static void flattener_on_read_complete(h2o_socket_read_file_cmd_t *cmd)
-{
-    struct st_h2o_sendvec_flattener_t *self = cmd->cb.data;
-
-    self->cmd = NULL;
-
-    if (cmd->err != NULL) {
-        h2o_ostream_send_next(&self->super, self->req, NULL, 0, H2O_SEND_STATE_ERROR);
-        return;
-    }
-
-    static const h2o_sendvec_callbacks_t callbacks = {h2o_sendvec_read_raw};
-    h2o_sendvec_t vec = {&callbacks, cmd->vec.len, {cmd->vec.base}};
-    h2o_ostream_send_next(&self->super, self->req, &vec, 1, self->send_state);
-}
-
-static void flattener_do_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_sendvec_t *inbufs, size_t inbufcnt, h2o_send_state_t state)
-{
-    struct st_h2o_sendvec_flattener_t *self = (void *)_self;
-
-    /* Pass through if the input is using only raw sendvecs. Checking only the first one is fine, because non-raw and multivec are
-     * multually exclusive options. */
-    if (inbufcnt == 0 || inbufs->callbacks->read_ == h2o_sendvec_read_raw) {
-        h2o_ostream_send_next(&self->super, req, inbufs, inbufcnt, state);
-        return;
-    }
-
-    assert(inbufcnt == 1);
-    assert(inbufs->len <= H2O_PULL_SENDVEC_MAX_SIZE);
-
-    self->send_state = state;
-
-    if (self->buf == NULL)
-        self->buf = h2o_mem_alloc_pool_aligned(&req->pool, 1,
-                                               h2o_send_state_is_in_progress(state) ? H2O_PULL_SENDVEC_MAX_SIZE : inbufs->len);
-    inbufs->callbacks->read_(inbufs, req, &self->cmd, h2o_iovec_init(self->buf, inbufs->len), 0, flattener_on_read_complete, self);
-}
-
-static void flattener_stop(struct st_h2o_ostream_t *_self, h2o_req_t *req)
-{
-    struct st_h2o_sendvec_flattener_t *self = (void *)_self;
-
-    if (self->cmd != NULL)
-        h2o_socket_read_file_cancel(self->cmd);
-}
-
-void h2o_add_ostream_flattener(h2o_req_t *req, h2o_ostream_t **slot)
-{
-    struct st_h2o_sendvec_flattener_t *self = (void *)h2o_add_ostream(req, H2O_ALIGNOF(*self), sizeof(*self), slot);
-
-    self->super.do_send = flattener_do_send;
-    self->super.stop = flattener_stop;
-    self->req = req;
-    self->cmd = NULL;
-    self->buf = NULL;
-
-    slot = &self->super.next;
 }
