@@ -809,7 +809,8 @@ typedef struct st_h2o_sendvec_callbacks_t {
 } h2o_sendvec_callbacks_t;
 
 /**
- * Send vector. Unlike an ordinary `h2o_iovec_t`, the vector has callbacks for optimizations.
+ * Send vector. Unlike an ordinary `h2o_iovec_t`, the vector has a callback that allows the sender to delay the flattening of data
+ * until it becomes necessary.
  */
 struct st_h2o_sendvec_t {
     /**
@@ -840,9 +841,6 @@ typedef struct st_h2o_sendvec_flattener_t {
     char *buf;
 } h2o_sendvec_flattener_t;
 
-typedef void (*h2o_ostream_send_cb)(h2o_ostream_t *self, h2o_req_t *req, h2o_sendvec_t *bufs, size_t bufcnt,
-                                    h2o_send_state_t state);
-
 /**
  * an output stream that may alter the output.
  * The object is typically constructed by filters calling the h2o_prepend_ostream function.
@@ -857,7 +855,7 @@ struct st_h2o_ostream_t {
      * Intermediary output streams should process the given output and call the h2o_ostream_send_next function if any data can be
      * sent.
      */
-    h2o_ostream_send_cb do_send;
+    void (*do_send)(struct st_h2o_ostream_t *self, h2o_req_t *req, h2o_sendvec_t *bufs, size_t bufcnt, h2o_send_state_t state);
     /**
      * called by the core when there is a need to terminate the response abruptly
      */
