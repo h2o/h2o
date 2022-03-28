@@ -784,8 +784,10 @@ static int read_file_dispatch_completed(h2o_evloop_t *loop)
 
     do {
         struct st_h2o_evloop_read_file_cmd_t *cmd = read_file_queue_pop(&loop->_read_file.completion);
-        if (cmd->super.cb.func != NULL)
+        if (cmd->super.cb.func != NULL) {
+            H2O_PROBE(SOCKET_READ_FILE_ASYNC_END, cmd);
             cmd->super.cb.func(&cmd->super);
+        }
         free(cmd);
     } while (loop->_read_file.completion.head != NULL);
     return 1;
@@ -814,6 +816,9 @@ void h2o_socket_read_file(h2o_socket_read_file_cmd_t **_cmd, h2o_loop_t *loop, i
     }
 
     *_cmd = &cmd->super;
+
+    if (cmd != NULL)
+        H2O_PROBE(SOCKET_READ_FILE_ASYNC_START, cmd);
 }
 
 void h2o_socket_read_file_cancel(h2o_socket_read_file_cmd_t *cmd)
@@ -821,6 +826,7 @@ void h2o_socket_read_file_cancel(h2o_socket_read_file_cmd_t *cmd)
     assert(cmd != NULL && "tried to cancel a command that completed synchronously?");
 
     cmd->cb.func = NULL;
+    H2O_PROBE(SOCKET_READ_FILE_ASYNC_CANCEL, cmd);
 }
 
 void read_file_on_notify(h2o_socket_t *_sock, const char *err)

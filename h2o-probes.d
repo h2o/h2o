@@ -58,6 +58,18 @@ provider h2o {
      * amount of payload being provided to the TLS layer, as well as amount of TLS records being buffered
      */
     probe socket_write_tls_record(struct st_h2o_socket_t *sock, size_t write_size, size_t bytes_buffered);
+    /**
+     *
+     */
+    probe socket_read_file_async_start(struct st_h2o_socket_read_file_cmd_t *cmd);
+    /**
+     *
+     */
+    probe socket_read_file_async_end(struct st_h2o_socket_read_file_cmd_t *cmd);
+    /**
+     *
+     */
+    probe socket_read_file_async_cancel(struct st_h2o_socket_read_file_cmd_t *cmd);
 
     /**
      * HTTP-level event, indicating that a request has been received.
