@@ -179,6 +179,85 @@ subtest 'wrong content-length (not enough data)' => sub {
     close $conn;
 };
 
+subtest 'HEAD request with response body' => sub {
+    my $upstream_port = $ENV{UPSTREAM_PORT} || empty_port({ host => '0.0.0.0' });
+    my $upstream = spawn_h2_server($upstream_port, +{
+        &HALF_CLOSED => sub {
+            my ($conn, $stream_id) = @_;
+            $conn->send_headers($stream_id, [
+                ':status' => 200,
+                'content-length' => '11'
+            ], 0);
+            # It is wrong to send a body in response to a HEAD request.
+            $conn->send_data($stream_id, 'hello', 0);
+            $conn->send_data($stream_id, ' world', 1);
+        },
+    });
+    my $server = create_h2o($upstream_port);
+    my $conn = IO::Socket::INET->new(
+        PeerHost => '127.0.0.1',
+        PeerPort => $server->{port},
+        Proto    => 'tcp',
+    ) or die "failed to connect to 127.0.0.1:$server->{port}:$!";
+    print $conn "HEAD / HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n";
+    my $headers = read_header($conn);
+    like $headers, qr{^HTTP/[0-9.]+ 200}is, 'status';
+    expect_eof($conn);
+    close $conn;
+};
+
+subtest '204 response with body' => sub {
+    my $upstream_port = $ENV{UPSTREAM_PORT} || empty_port({ host => '0.0.0.0' });
+    my $upstream = spawn_h2_server($upstream_port, +{
+        &HALF_CLOSED => sub {
+            my ($conn, $stream_id) = @_;
+            $conn->send_headers($stream_id, [
+                ':status' => 204
+            ], 0);
+            # It is wrong to send a body in a status 204 response.
+            $conn->send_data($stream_id, 'hello', 0);
+            $conn->send_data($stream_id, ' world', 1);
+        },
+    });
+    my $server = create_h2o($upstream_port);
+    my $conn = IO::Socket::INET->new(
+        PeerHost => '127.0.0.1',
+        PeerPort => $server->{port},
+        Proto    => 'tcp',
+    ) or die "failed to connect to 127.0.0.1:$server->{port}:$!";
+    print $conn "GET / HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n";
+    my $headers = read_header($conn);
+    like $headers, qr{^HTTP/[0-9.]+ 204}is, 'status';
+    expect_eof($conn);
+    close $conn;
+};
+
+subtest '304 response with body' => sub {
+    my $upstream_port = $ENV{UPSTREAM_PORT} || empty_port({ host => '0.0.0.0' });
+    my $upstream = spawn_h2_server($upstream_port, +{
+        &HALF_CLOSED => sub {
+            my ($conn, $stream_id) = @_;
+            $conn->send_headers($stream_id, [
+                ':status' => 304
+            ], 0);
+            # It is wrong to send a body in a status 304 response.
+            $conn->send_data($stream_id, 'hello', 0);
+            $conn->send_data($stream_id, ' world', 1);
+        },
+    });
+    my $server = create_h2o($upstream_port);
+    my $conn = IO::Socket::INET->new(
+        PeerHost => '127.0.0.1',
+        PeerPort => $server->{port},
+        Proto    => 'tcp',
+    ) or die "failed to connect to 127.0.0.1:$server->{port}:$!";
+    print $conn "GET / HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n";
+    my $headers = read_header($conn);
+    like $headers, qr{^HTTP/[0-9.]+ 304}is, 'status';
+    expect_eof($conn);
+    close $conn;
+};
+
 subtest 'request body streaming' => sub {
     plan skip_all => "h2get not found"
         unless h2get_exists();

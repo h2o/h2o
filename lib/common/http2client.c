@@ -97,6 +97,7 @@ struct st_h2o_http2client_stream_t {
         h2o_headers_t headers;
         h2o_buffer_t *body;
         size_t remaining_content_length;
+        unsigned message_body_forbidden : 1;
     } input;
 
     struct {
@@ -333,6 +334,11 @@ static int on_head(struct st_h2o_http2client_conn_t *conn, struct st_h2o_http2cl
         return 0;
     }
 
+    if ((100 <= stream->input.status && stream->input.status <= 199) ||
+        (stream->input.status == 204 || stream->input.status == 304)) {
+        stream->input.message_body_forbidden = 1;
+    }
+
     if (!extract_content_length(&stream->input.headers, &stream->input.remaining_content_length, err_desc)) {
         ret = H2O_HTTP2_ERROR_PROTOCOL;
         goto Failed;
@@ -440,6 +446,31 @@ static int handle_data_frame(struct st_h2o_http2client_conn_t *conn, h2o_http2_f
     }
 
     if (stream->state.res != STREAM_STATE_BODY) {
+        stream_send_error(conn, frame->stream_id, H2O_HTTP2_ERROR_PROTOCOL);
+        call_callback_with_error(stream, h2o_httpclient_error_protocol_violation);
+        close_stream(stream);
+        return 0;
+    }
+
+    /**
+     * RFC7230 Section 3.3.
+     *
+     *  Responses to the HEAD request method (Section 4.3.2 of [RFC7231]) never
+     *  include a message body because the associated response header fields
+     *  (e.g., Transfer-Encoding, Content-Length, etc.), if present, indicate
+     *  only what their values would have been if the request method had been
+     *  GET (Section 4.3.1 of [RFC7231]).
+     *
+     *  2xx (Successful) responses to a CONNECT request method (Section 4.3.6
+     *  of [RFC7231]) switch to tunnel mode instead of having a message body.
+     *
+     *  All 1xx (Informational), 204 (No Content), and 304 (Not Modified)
+     *  responses do not include a message body.
+     *
+     *  All other responses do include a message body, although the body might
+     *  be of zero length.
+     */
+    if (stream->input.message_body_forbidden) {
         stream_send_error(conn, frame->stream_id, H2O_HTTP2_ERROR_PROTOCOL);
         call_callback_with_error(stream, h2o_httpclient_error_protocol_violation);
         close_stream(stream);
@@ -1011,6 +1042,10 @@ static void on_connection_ready(struct st_h2o_http2client_stream_t *stream, stru
         stream->state.req = STREAM_STATE_CLOSED;
     }
 
+    if (h2o_memis(method.base, method.len, H2O_STRLIT("HEAD"))) {
+        stream->input.message_body_forbidden = 1;
+    }
+
     /* send headers */
     h2o_hpack_flatten_request(&conn->output.buf, &conn->output.header_table, conn->peer_settings.header_table_size,
                               stream->stream_id, conn->peer_settings.max_frame_size, method, &url, headers, num_headers,
@@ -1290,6 +1325,7 @@ static void setup_stream(struct st_h2o_http2client_stream_t *stream)
     h2o_http2_window_init(&stream->input.window, get_max_buffer_size(stream->super.ctx));
     h2o_buffer_init(&stream->input.body, &h2o_socket_buffer_prototype);
     stream->input.remaining_content_length = SIZE_MAX;
+    stream->input.message_body_forbidden = 0;
 
     stream->super.buf = &stream->input.body;
     stream->super.cancel = do_cancel;
