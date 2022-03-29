@@ -90,9 +90,9 @@ typedef struct st_h2o_socket_t h2o_socket_t;
 
 typedef void (*h2o_socket_cb)(h2o_socket_t *sock, const char *err);
 
-typedef struct st_h2o_socket_read_file_t h2o_socket_read_file_cmd_t;
+typedef struct st_h2o_socket_read_file_cmd_t h2o_socket_read_file_cmd_t;
 typedef void (*h2o_socket_read_file_cb)(h2o_socket_read_file_cmd_t *);
-struct st_h2o_socket_read_file_t {
+struct st_h2o_socket_read_file_cmd_t {
     int fd;
     uint64_t offset;
     h2o_iovec_t vec;
