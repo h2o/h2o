@@ -16,9 +16,9 @@ my $tempdir = tempdir(CLEANUP => 1);
     local $@;
     eval {
         create_uncached_file("test", 4096);
-        plan skip_all => "create write temporary file with O_DIRECT set (tmpfs?)"
-            if $@;
-    }
+    };
+    plan skip_all => "create write temporary file with O_DIRECT set ($tempdir is tmpfs?)"
+        if $@;
 }
 
 # spawn server
