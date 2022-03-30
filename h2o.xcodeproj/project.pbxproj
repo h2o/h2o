@@ -732,6 +732,7 @@
 		08CEA9D6267AF0EB00B4BB6B /* self_trace.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = self_trace.c; sourceTree = "<group>"; };
 		08CEA9DA267B0E3B00B4BB6B /* self_trace.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = self_trace.c; sourceTree = "<group>"; };
 		08E9CC4D1E41F6660049DD26 /* embedded.c.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = embedded.c.h; sourceTree = "<group>"; };
+		08EFC4CE27F453BB004C532C /* 50file-async.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50file-async.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		100A550C1C22857B00C4E3E0 /* 50mruby-htpasswd.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50mruby-htpasswd.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		100A550E1C2BB15100C4E3E0 /* http_request.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = http_request.c; sourceTree = "<group>"; };
 		100A55131C2E5FAC00C4E3E0 /* 50mruby-http-request.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50mruby-http-request.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
@@ -2248,6 +2249,7 @@
 				10F4EB841C16BADD003DA150 /* 50fastcgi-cgi.t */,
 				10FCC1421B300A6800F13674 /* 50fastcgi-php.t */,
 				109EEFE41D77B360001F11D1 /* 50file.t */,
+				08EFC4CE27F453BB004C532C /* 50file-async.t */,
 				105534F61A460EF600627ECB /* 50file-config.t */,
 				E9AFBF12212A9801000F5DB8 /* 50file-custom-handler.t */,
 				107E34231C86801E00AEF5F8 /* 50file-file.t */,
