@@ -3,6 +3,7 @@ use warnings;
 use Digest::MD5 qw(md5_hex);
 use File::Temp qw(tempdir);
 use Net::EmptyPort qw(empty_port wait_port);
+use Scope::Guard qw(guard);
 use Test::More;
 use t::Util;
 
@@ -12,14 +13,18 @@ check_dtrace_availability();
 
 my $tempdir = tempdir(CLEANUP => 1);
 
-{ # check if uncached file can be created
-    local $@;
-    eval {
-        create_uncached_file("test", 4096);
-    };
-    plan skip_all => "create write temporary file with O_DIRECT set ($tempdir is tmpfs?)"
-        if $@;
-}
+# create disk image and mount at $tempdir/mnt; intent here is to force use of fs that supports O_DIRECT
+system(qw(dd if=/dev/zero bs=1M count=10), "of=$tempdir/image") == 0
+    or die "dd failed:$?";
+system("mke2fs", "$tempdir/image") == 0
+    or die "mke2fs failed:$?";
+mkdir "$tempdir/mnt"
+    or die "failed to create directory:$tempdir/mnt:$!";
+my $mount_guard = guard {
+    system("umount", "-f", "$tempdir/mnt");
+};
+system("mount", "$tempdir/image", "$tempdir/mnt") == 0
+    or die "mount failed:$?";
 
 # spawn server
 my $quic_port = empty_port({
@@ -38,7 +43,7 @@ hosts:
   default:
     paths:
       /:
-        file.dir: $tempdir
+        file.dir: $tempdir/mnt
 EOT
 wait_port({port => $quic_port, proto => "udp"});
 
@@ -77,7 +82,7 @@ my $doit = sub {
                 my $trace = $read_trace->();
                 like $trace, qr/read_file_async/, "async";
                 is length($resp), $size, "size";
-                is md5_hex($resp), md5_file("$tempdir/index.bin"), "md5";
+                is md5_hex($resp), md5_file("$tempdir/mnt/index.bin"), "md5";
             };
 
             subtest "second-access" => sub {
@@ -86,7 +91,7 @@ my $doit = sub {
                 my $trace = $read_trace->();
                 is $trace, "", "sync";
                 is length($resp), $size, "size";
-                is md5_hex($resp), md5_file("$tempdir/index.bin"), "md5";
+                is md5_hex($resp), md5_file("$tempdir/mnt/index.bin"), "md5";
             };
         };
     }
@@ -117,10 +122,10 @@ done_testing;
 
 sub create_uncached_file {
     my ($fn, $size) = @_;
-    system("dd if=/dev/random of=$tempdir/$fn count=" . int(($size + 4095) / 4096) . " bs=4096 oflag=direct 2> /dev/null") == 0
+    system("dd if=/dev/random of=$tempdir/mnt/$fn count=" . int(($size + 4095) / 4096) . " bs=4096 oflag=direct 2> /dev/null") == 0
         or die "dd failed:$?";
     if ($size % 4096 != 0) {
-        truncate("$tempdir/$fn", $size)
+        truncate("$tempdir/mnt/$fn", $size)
             or die "failed to truncate file:$!";
     }
 }
