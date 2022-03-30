@@ -78,6 +78,7 @@ extern "C" {
 
 #define H2O_DEFAULT_MAX_REQUEST_ENTITY_SIZE (1024 * 1024 * 1024)
 #define H2O_DEFAULT_MAX_DELEGATIONS 5
+#define H2O_DEFAULT_MAX_REPROCESSES 5
 #define H2O_DEFAULT_HANDSHAKE_TIMEOUT_IN_SECS 10
 #define H2O_DEFAULT_HANDSHAKE_TIMEOUT (H2O_DEFAULT_HANDSHAKE_TIMEOUT_IN_SECS * 1000)
 #define H2O_DEFAULT_HTTP1_REQ_TIMEOUT_IN_SECS 10
@@ -359,6 +360,10 @@ struct st_h2o_globalconf_t {
      * maximum count for delegations
      */
     unsigned max_delegations;
+    /**
+     * maximum count for reprocesses
+     */
+    unsigned max_reprocesses;
     /**
      * setuid user (or NULL)
      */
