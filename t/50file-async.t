@@ -4,22 +4,22 @@ use Digest::MD5 qw(md5_hex);
 use File::Temp qw(tempdir);
 use Net::EmptyPort qw(empty_port wait_port);
 use Test::More;
+use Scope::Guard qw(guard);
 use t::Util;
+
+my @FILESIZE = qw(11 4095 4096 1000000 2000000);
 
 plan skip_all => "io_uring is available only on linux"
     if $^O ne "linux";
 check_dtrace_availability();
 
+# setup
 my $tempdir = tempdir(CLEANUP => 1);
-
-{ # check if uncached file can be created
-    local $@;
-    eval {
-        create_uncached_file("test", 4096);
-    };
-    plan skip_all => "create write temporary file with O_DIRECT set ($tempdir is tmpfs?)"
-        if $@;
-}
+my $mount_point = "$tempdir/mnt";
+my $image = "$tempdir/tiny.img";
+mkdir $mount_point
+    or die "failed to create directory $mount_point:$!";
+create_diskimage($image, $mount_point);
 
 # spawn server
 my $quic_port = empty_port({
@@ -38,7 +38,7 @@ hosts:
   default:
     paths:
       /:
-        file.dir: $tempdir
+        file.dir: $tempdir/mnt
 EOT
 wait_port({port => $quic_port, proto => "udp"});
 
@@ -66,27 +66,29 @@ sleep 2;
 
 my $doit = sub {
     my $fetch = shift;
-    for my $size (qw(11 4095 4096 1000000 2000000)) {
+    my $guard = guard {
+        system "umount", "-f", $mount_point;
+    };
+    system("mount", $image, $mount_point) == 0
+        or die "failed to mount image:$?";
+    for my $size (@FILESIZE) {
         subtest "size=$size" => sub {
-            my $fn = "index.bin";
-            create_uncached_file($fn, $size);
-
+            my $fn = "$size.txt";
             subtest "first-access" => sub {
                 my $resp = $fetch->($fn);
                 sleep 1;
                 my $trace = $read_trace->();
                 like $trace, qr/read_file_async/, "async";
                 is length($resp), $size, "size";
-                is md5_hex($resp), md5_file("$tempdir/index.bin"), "md5";
+                is md5_hex($resp), md5_file("$mount_point/$fn"), "md5";
             };
-
             subtest "second-access" => sub {
                 my $resp = $fetch->($fn);
                 sleep 1;
                 my $trace = $read_trace->();
                 is $trace, "", "sync";
                 is length($resp), $size, "size";
-                is md5_hex($resp), md5_file("$tempdir/index.bin"), "md5";
+                is md5_hex($resp), md5_file("$mount_point/$fn"), "md5";
             };
         };
     }
@@ -115,12 +117,21 @@ while (waitpid($tracer_pid, 0) != $tracer_pid) {}
 
 done_testing;
 
-sub create_uncached_file {
-    my ($fn, $size) = @_;
-    system("dd if=/dev/random of=$tempdir/$fn count=" . int(($size + 4095) / 4096) . " bs=4096 oflag=direct 2> /dev/null") == 0
+sub create_diskimage {
+    my ($image, $mount_point) = @_;
+    system(qw(dd if=/dev/zero), "of=$image", qw(count=4 bs=1M)) == 0
         or die "dd failed:$?";
-    if ($size % 4096 != 0) {
-        truncate("$tempdir/$fn", $size)
-            or die "failed to truncate file:$!";
+    system("mke2fs", $image) == 0
+        or die "mke2fs failed:$?";
+    system("mount", $image, $mount_point) == 0
+        or die "failed to mount $image at $mount_point:$?";
+    for my $size (@FILESIZE) {
+        open my $fh, ">", "$mount_point/$size.txt"
+            or die "failed to open $mount_point/$size.txt:$!";
+        print $fh "1"
+            for 1..$size;
+        close $fh;
     }
+    system("umount", $mount_point) == 0
+        or die "failed to unmount:$?";
 }
