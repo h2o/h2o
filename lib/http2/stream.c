@@ -165,10 +165,12 @@ static void send_data_on_read_complete(h2o_socket_read_file_cmd_t *cmd)
 
     /* clear inflight indicators */
     assert(conn->read_file_stream == stream);
+    char *dst_end = stream->read_file.dst_end;
     stream->read_file.cmd = NULL;
+    stream->read_file.dst_end = NULL;
     conn->read_file_stream = NULL;
 
-    send_data_on_payload_built(conn, stream, cmd->err == NULL ? cmd->vec.base + cmd->vec.len : NULL);
+    send_data_on_payload_built(conn, stream, cmd->err == NULL ? dst_end : NULL);
     h2o_http2_conn_on_read_complete(conn, stream);
 }
 
@@ -225,6 +227,7 @@ void h2o_http2_stream_send_pending_data(h2o_http2_conn_t *conn, h2o_http2_stream
         }
         /* If read is asynchronous, record that and return, so that the completion callback can take care of the rest of the job. */
         if (stream->read_file.cmd != NULL) {
+            stream->read_file.dst_end = dst.base;
             conn->read_file_stream = stream;
             SHIFT_DATA();
             return;

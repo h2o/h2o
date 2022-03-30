@@ -107,6 +107,7 @@ struct st_h2o_http2_stream_t {
     struct {
         h2o_socket_read_file_cmd_t *cmd;
         const char *err;
+        char *dst_end;
     } read_file;
     /**
      * points to http2_conn_t::num_streams::* in which the stream is counted

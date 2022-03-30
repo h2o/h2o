@@ -40,6 +40,9 @@
 
 struct st_h2o_evloop_read_file_cmd_t {
     h2o_socket_read_file_cmd_t super;
+    int fd;
+    uint64_t offset;
+    h2o_iovec_t vec;
     struct st_h2o_evloop_read_file_cmd_t *next;
 };
 

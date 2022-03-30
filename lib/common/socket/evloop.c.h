@@ -734,7 +734,7 @@ static int read_file_submit(h2o_evloop_t *loop)
             break;
         struct st_h2o_evloop_read_file_cmd_t *cmd = read_file_queue_pop(&loop->_read_file.submission);
         assert(cmd != NULL);
-        io_uring_prep_read(sqe, cmd->super.fd, cmd->super.vec.base, cmd->super.vec.len, cmd->super.offset);
+        io_uring_prep_read(sqe, cmd->fd, cmd->vec.base, cmd->vec.len, cmd->offset);
         sqe->user_data = (uint64_t)cmd;
         made_progress = 1;
     }
@@ -753,18 +753,41 @@ static int read_file_submit(h2o_evloop_t *loop)
 static int read_file_check_completion(h2o_evloop_t *loop, struct st_h2o_evloop_read_file_cmd_t *cmd_sync)
 {
     int cmd_sync_done = 0, ret;
-    struct io_uring_cqe *cqe;
 
     while (1) {
-        while ((ret = io_uring_peek_cqe(&loop->_read_file.uring, &cqe)) == -EINTR)
-            ;
-        if (ret != 0)
-            break;
-        /* detach the completed command */
-        struct st_h2o_evloop_read_file_cmd_t *cmd = (struct st_h2o_evloop_read_file_cmd_t *)cqe->user_data;
-        if (cqe->res != cmd->super.vec.len)
-            cmd->super.err = h2o_socket_error_io; /* TODO notify partial read / eos? */
-        io_uring_cqe_seen(&loop->_read_file.uring, cqe);
+        struct st_h2o_evloop_read_file_cmd_t *cmd;
+        int res;
+
+        { /* obtain completed command and its result */
+            struct io_uring_cqe *cqe;
+            while ((ret = io_uring_peek_cqe(&loop->_read_file.uring, &cqe)) == -EINTR)
+                ;
+            if (ret != 0)
+                break;
+            cmd = (struct st_h2o_evloop_read_file_cmd_t *)cqe->user_data;
+            res = cqe->res;
+            io_uring_cqe_seen(&loop->_read_file.uring, cqe);
+        }
+
+        /* Check error. Or if partial read, schedule read of the remainder. */
+        if (res != cmd->vec.len) {
+            assert(res < cmd->vec.len);
+            if (res > 0) {
+                cmd->offset += res;
+                cmd->vec.base += res;
+                cmd->vec.len -= res;
+                read_file_queue_insert(&loop->_read_file.submission, cmd);
+                /* When this function is called synchronously, `read_file_submit` have to be called here, as the caller cannot tell
+                 * if partial read happened. Otherwise, `read_file_submit` is called after all entries are read from the completion
+                 * queue. */
+                if (cmd == cmd_sync)
+                    read_file_submit(loop);
+                continue;
+            } else {
+                cmd->super.err = h2o_socket_error_io; /* TODO notify partial read / eos? */
+            }
+        }
+
 
         /* link to completion list or indicate to the caller that `cmd_sync` has completed */
         if (cmd == cmd_sync) {
@@ -798,12 +821,12 @@ void h2o_socket_read_file(h2o_socket_read_file_cmd_t **_cmd, h2o_loop_t *loop, i
 {
     /* build command and register */
     struct st_h2o_evloop_read_file_cmd_t *cmd = h2o_mem_alloc(sizeof(*cmd));
-    *cmd = (struct st_h2o_evloop_read_file_cmd_t){{
+    *cmd = (struct st_h2o_evloop_read_file_cmd_t){
+        .super = {.cb = {.func = _cb, .data = _data}},
         .fd = _fd,
         .offset = _offset,
         .vec = _dst,
-        .cb = {.func = _cb, .data = _data},
-    }};
+    };
     read_file_queue_insert(&loop->_read_file.submission, cmd);
 
     /* Submit enqueued commands as much as possible, then read completed ones as much as possible. The hope here is that the read
