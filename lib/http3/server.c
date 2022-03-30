@@ -225,6 +225,10 @@ struct st_h2o_http3_server_stream_t {
      */
     uint8_t req_disposed : 1;
     /**
+     * indicates if the request is in streaming mode
+     */
+    uint8_t req_streaming : 1;
+    /**
      * buffer to hold the request body (or a chunk of, if in streaming mode), or CONNECT payload
      */
     h2o_buffer_t *req_body;
@@ -396,8 +400,9 @@ static void pre_dispose_request(struct st_h2o_http3_server_stream_t *stream)
         h2o_buffer_dispose(&stream->req_body);
 
     /* clean up request streaming */
-    if (stream->req.write_req.cb != NULL && !stream->req.is_tunnel_req) {
+    if (stream->req_streaming && !stream->req.is_tunnel_req) {
         assert(conn->num_streams_req_streaming != 0);
+        stream->req_streaming = 0;
         --conn->num_streams_req_streaming;
         check_run_blocked(conn);
     }
@@ -946,6 +951,7 @@ static void proceed_request_streaming(h2o_req_t *_req, const char *errstr)
         stream->req.write_req.cb = NULL;
         stream->req.write_req.ctx = NULL;
         stream->req.proceed_req = NULL;
+        stream->req_streaming = 0;
         if (!stream->req.is_tunnel_req)
             --conn->num_streams_req_streaming;
         check_run_blocked(conn);
@@ -988,6 +994,7 @@ static void run_delayed(h2o_timer_t *timer)
             quicly_stream_set_receive_window(stream->quic, conn->super.ctx->globalconf->http3.active_stream_window_size);
             if (h2o_req_can_stream_request(&stream->req)) {
                 /* use streaming mode */
+                stream->req_streaming = 1;
                 ++conn->num_streams_req_streaming;
                 stream->req.proceed_req = proceed_request_streaming;
                 set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_SEND_HEADERS, 0);
@@ -1522,6 +1529,7 @@ static int stream_open_cb(quicly_stream_open_t *self, quicly_stream_t *qs)
     stream->proceed_while_sending = 0;
     stream->received_priority_update = 0;
     stream->req_disposed = 0;
+    stream->req_streaming = 0;
     stream->req_body = NULL;
 
     h2o_init_request(&stream->req, &conn->super, NULL);
