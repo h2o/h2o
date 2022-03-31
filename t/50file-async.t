@@ -1,25 +1,22 @@
 use strict;
 use warnings;
 use Digest::MD5 qw(md5_hex);
+use File::Basename;
 use File::Temp qw(tempdir);
 use Net::EmptyPort qw(empty_port wait_port);
+use Scope::Guard qw(guard);
 use Test::More;
 use t::Util;
 
 plan skip_all => "io_uring is available only on linux"
     if $^O ne "linux";
+plan skip_all => "archivemount not found"
+    unless prog_exists("archivemount");
 check_dtrace_availability();
 
 my $tempdir = tempdir(CLEANUP => 1);
-
-{ # check if uncached file can be created
-    local $@;
-    eval {
-        create_uncached_file("test", 4096);
-    };
-    plan skip_all => "create write temporary file with O_DIRECT set ($tempdir is tmpfs?)"
-        if $@;
-}
+mkdir "$tempdir/mnt"
+    or die "failed to create directory:$tempdir/mnt:$!";
 
 # spawn server
 my $quic_port = empty_port({
@@ -38,7 +35,7 @@ hosts:
   default:
     paths:
       /:
-        file.dir: $tempdir
+        file.dir: $tempdir/mnt
 EOT
 wait_port({port => $quic_port, proto => "udp"});
 
@@ -66,28 +63,43 @@ sleep 2;
 
 my $doit = sub {
     my $fetch = shift;
-    for my $size (qw(11 4095 4096 1000000 2000000)) {
+    # mount
+    my $mount_guard = guard {
+        system(qw(umount -f), "$tempdir/mnt");
+    };
+    system(qw(archivemount t/assets/50file-async-disk.tar.gz), "$tempdir/mnt") == 0
+        or die "archivemount failed:$?";
+    # build list of sizes to test
+    my @size;
+    for (<$tempdir/mnt/*.txt>) {
+        m{/(\d+)\.txt$}
+            or die "unexpected filename:$_";
+        push @size, $1;
+    }
+    @size = sort { $a <=> $b } @size;
+    # test
+    for my $size (@size) {
         subtest "size=$size" => sub {
-            my $fn = "index.bin";
-            create_uncached_file($fn, $size);
-
             subtest "first-access" => sub {
-                my $resp = $fetch->($fn);
+                my $resp = $fetch->("$size.txt");
                 sleep 1;
                 my $trace = $read_trace->();
                 like $trace, qr/read_file_async/, "async";
                 is length($resp), $size, "size";
-                is md5_hex($resp), md5_file("$tempdir/index.bin"), "md5";
+                is md5_hex($resp), md5_file("$tempdir/mnt/$size.txt"), "md5";
             };
-
-            subtest "second-access" => sub {
-                my $resp = $fetch->($fn);
-                sleep 1;
-                my $trace = $read_trace->();
-                is $trace, "", "sync";
-                is length($resp), $size, "size";
-                is md5_hex($resp), md5_file("$tempdir/index.bin"), "md5";
-            };
+            # Disabled, because in case of archivemount, every access is async. This test can be run if the underlying image is
+            # ext2.
+            if (0) {
+                subtest "second-access" => sub {
+                    my $resp = $fetch->("$size.txt");
+                    sleep 1;
+                    my $trace = $read_trace->();
+                    is $trace, "", "sync";
+                    is length($resp), $size, "size";
+                    is md5_hex($resp), md5_file("$tempdir/mnt/$size.txt"), "md5";
+                };
+            }
         };
     }
 };
@@ -114,13 +126,3 @@ undef $server;
 while (waitpid($tracer_pid, 0) != $tracer_pid) {}
 
 done_testing;
-
-sub create_uncached_file {
-    my ($fn, $size) = @_;
-    system("dd if=/dev/random of=$tempdir/$fn count=" . int(($size + 4095) / 4096) . " bs=4096 oflag=direct 2> /dev/null") == 0
-        or die "dd failed:$?";
-    if ($size % 4096 != 0) {
-        truncate("$tempdir/$fn", $size)
-            or die "failed to truncate file:$!";
-    }
-}
