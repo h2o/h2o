@@ -1561,10 +1561,6 @@ h2o_sendvec_flattener_t *h2o_sendvec_create_flattener(h2o_ostream_t *ostream, h2
 static int h2o_sendvec_flatten(h2o_sendvec_flattener_t *self, h2o_sendvec_t *bufs, size_t bufcnt, h2o_send_state_t state);
 void h2o_sendvec__do_flatten(h2o_sendvec_flattener_t *self, h2o_sendvec_t *bufs, size_t bufcnt, h2o_send_state_t state);
 /**
- *
- */
-static void h2o_sendvec_flatten_cancel(h2o_sendvec_flattener_t *flattener);
-/**
  * called by the generators to send output
  * note: generators should free itself after sending the final chunk (i.e. calling the function with is_final set to true)
  * @param req the request
@@ -2409,14 +2405,6 @@ inline int h2o_sendvec_flatten(h2o_sendvec_flattener_t *self, h2o_sendvec_t *buf
 
     h2o_sendvec__do_flatten(self, bufs, bufcnt, state);
     return 1;
-}
-
-inline void h2o_sendvec_flatten_cancel(h2o_sendvec_flattener_t *flattener)
-{
-    if (flattener->cmd != NULL) {
-        h2o_socket_read_file_cancel(flattener->cmd);
-        flattener->cmd = NULL;
-    }
 }
 
 inline void h2o_setup_next_prefilter(h2o_req_prefilter_t *self, h2o_req_t *req, h2o_ostream_t **slot)

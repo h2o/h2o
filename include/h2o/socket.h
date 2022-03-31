@@ -314,10 +314,6 @@ void h2o_socket_read_file(h2o_socket_read_file_cmd_t **cmd, h2o_loop_t *loop, in
 /**
  *
  */
-void h2o_socket_read_file_cancel(h2o_socket_read_file_cmd_t *cmd);
-/**
- *
- */
 ptls_t *h2o_socket_get_ptls(h2o_socket_t *sock);
 /**
  *

@@ -2174,9 +2174,4 @@ void h2o_socket_read_file(h2o_socket_read_file_cmd_t **_cmd, h2o_loop_t *loop, i
     *_cmd = NULL;
 }
 
-void h2o_socket_read_file_cancel(h2o_socket_read_file_cmd_t *cmd)
-{
-    h2o_fatal("synchronous implementation of `h2o_socket_read_file` never returns a cancelleable read command (got:%p)", cmd);
-}
-
 #endif
