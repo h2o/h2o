@@ -93,8 +93,6 @@ static void dispose_subreq(struct st_mruby_subreq_t *subreq)
     if (!mrb_nil_p(subreq->refs.input_stream))
         DATA_PTR(subreq->refs.input_stream) = NULL;
 
-    h2o_sendvec_detach_flattener(subreq->sendvec_flattener);
-
     h2o_dispose_request(&subreq->super);
     free(subreq);
 }
