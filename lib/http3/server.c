@@ -463,13 +463,22 @@ static void set_state(struct st_h2o_http3_server_stream_t *stream, enum h2o_http
 static void shutdown_stream(struct st_h2o_http3_server_stream_t *stream, int stop_sending_code, int reset_code, int in_generator)
 {
     assert(stream->state < H2O_HTTP3_SERVER_STREAM_STATE_CLOSE_WAIT);
+
+    int has_signal_to_send = 0;
+
     if (quicly_stream_has_receive_side(0, stream->quic->stream_id)) {
         quicly_request_stop(stream->quic, stop_sending_code);
         h2o_buffer_consume(&stream->recvbuf.buf, stream->recvbuf.buf->size);
+        has_signal_to_send = 1;
     }
-    if (quicly_stream_has_send_side(0, stream->quic->stream_id) && !quicly_sendstate_transfer_complete(&stream->quic->sendstate))
+    if (quicly_stream_has_send_side(0, stream->quic->stream_id) && !quicly_sendstate_transfer_complete(&stream->quic->sendstate)) {
         quicly_reset_stream(stream->quic, reset_code);
+        has_signal_to_send = 1;
+    }
     set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_CLOSE_WAIT, in_generator);
+
+    if (has_signal_to_send)
+        h2o_quic_schedule_timer(&get_conn(stream)->h3.super);
 }
 
 static socklen_t get_sockname(h2o_conn_t *_conn, struct sockaddr *sa)
