@@ -1589,6 +1589,7 @@ static void normalize_data_on_read_file_complete(h2o_socket_read_file_cmd_t *cmd
 
     quicly_context_t *qctx = quicly_get_context(stream->quic->conn);
     qctx->stream_scheduler->update_state(qctx->stream_scheduler, stream->quic);
+    h2o_quic_schedule_timer(&get_conn(stream)->h3.super);
 }
 
 static void normalize_data_to_be_sent(struct st_h2o_http3_server_stream_t *stream)
