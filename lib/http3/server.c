@@ -247,6 +247,7 @@ struct st_h2o_http3_server_stream_t {
 };
 
 static void on_stream_destroy(quicly_stream_t *qs, int err);
+static void allocated_vec_update_refcnt(h2o_sendvec_t *vec, h2o_req_t *req, int is_incr);
 static int handle_input_post_trailers(struct st_h2o_http3_server_stream_t *stream, const uint8_t **src, const uint8_t *src_end,
                                       int in_generator, const char **err_desc);
 static int handle_input_expect_data(struct st_h2o_http3_server_stream_t *stream, const uint8_t **src, const uint8_t *src_end,
@@ -387,14 +388,26 @@ static void check_run_blocked(struct st_h2o_http3_server_conn_t *conn)
         request_run_delayed(conn);
 }
 
+static void on_read_file_complete_post_disposal(h2o_socket_read_file_cmd_t *cmd)
+{
+    free(cmd->cb.data);
+}
+
 static void pre_dispose_request(struct st_h2o_http3_server_stream_t *stream)
 {
     struct st_h2o_http3_server_conn_t *conn = get_conn(stream);
     size_t i;
 
     /* stop reading file */
-    if (stream->read_file.cmd != NULL)
-        h2o_socket_read_file_cancel(stream->read_file.cmd);
+    if (stream->read_file.cmd != NULL) {
+        assert(stream->sendbuf.next_flatten.vec_index - 1 < stream->sendbuf.vecs.size);
+        struct st_h2o_http3_server_sendvec_t *vec_inflight =
+            stream->sendbuf.vecs.entries + stream->sendbuf.next_flatten.vec_index - 1;
+        assert(vec_inflight->vec.callbacks->update_refcnt == allocated_vec_update_refcnt);
+        stream->read_file.cmd->cb.func = on_read_file_complete_post_disposal;
+        stream->read_file.cmd->cb.data = vec_inflight->vec.raw;
+        vec_inflight->vec.raw = NULL;
+    }
 
     /* release vectors */
     for (i = 0; i != stream->sendbuf.vecs.size; ++i) {
@@ -686,7 +699,7 @@ void on_stream_destroy(quicly_stream_t *qs, int err)
     free(stream);
 }
 
-static void allocated_vec_update_refcnt(h2o_sendvec_t *vec, h2o_req_t *req, int is_incr)
+void allocated_vec_update_refcnt(h2o_sendvec_t *vec, h2o_req_t *req, int is_incr)
 {
     assert(!is_incr);
     free(vec->raw);
