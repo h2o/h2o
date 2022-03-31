@@ -807,10 +807,8 @@ static int read_file_dispatch_completed(h2o_evloop_t *loop)
 
     do {
         struct st_h2o_evloop_read_file_cmd_t *cmd = read_file_queue_pop(&loop->_read_file.completion);
-        if (cmd->super.cb.func != NULL) {
-            H2O_PROBE(SOCKET_READ_FILE_ASYNC_END, cmd);
-            cmd->super.cb.func(&cmd->super);
-        }
+        H2O_PROBE(SOCKET_READ_FILE_ASYNC_END, cmd);
+        cmd->super.cb.func(&cmd->super);
         free(cmd);
     } while (loop->_read_file.completion.head != NULL);
     return 1;
