@@ -84,6 +84,12 @@ RUN wget -O /usr/local/bin/dumb-init https://github.com/Yelp/dumb-init/releases/
 # komake
 RUN wget -O /usr/local/bin/komake https://raw.githubusercontent.com/kazuho/komake/main/komake && chmod +x /usr/local/bin/komake
 
+# liburing
+RUN git clone --depth=1 https://github.com/axboe/liburing.git && \
+	cd liburing && \
+	make install && \
+	make clean
+
 # create user
 RUN useradd --create-home ci
 RUN echo 'ci ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
