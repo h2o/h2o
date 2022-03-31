@@ -768,6 +768,8 @@ static void on_send_emit(quicly_stream_t *qs, size_t off, void *_dst, size_t *le
     struct st_h2o_http3_server_stream_t *stream = qs->data;
 
     assert(stream->state == H2O_HTTP3_SERVER_STREAM_STATE_SEND_HEADERS || stream->state == H2O_HTTP3_SERVER_STREAM_STATE_SEND_BODY);
+    assert(stream->read_file.cmd == NULL); /* stream is detached from the prioritization logic while reading file, as the last
+                                            * vector might still be in the process of being flattened */
 
     uint8_t *dst = _dst, *dst_end = dst + *len;
     size_t vec_index = 0;
