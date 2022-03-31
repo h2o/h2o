@@ -156,12 +156,22 @@ static void init_request(struct st_h2o_http1_conn_t *conn)
     }};
 }
 
+static void on_flatten_complete_post_disposal(h2o_socket_read_file_cmd_t *cmd)
+{
+    free(cmd->cb.data);
+}
+
 static void close_connection(struct st_h2o_http1_conn_t *conn, int close_socket)
 {
     if (conn->sock != NULL)
         H2O_PROBE_CONN0(H1_CLOSE, &conn->super);
-    if (conn->read_file.cmd != NULL)
-        h2o_socket_read_file_cancel(conn->read_file.cmd);
+    if (conn->read_file.cmd != NULL) {
+        conn->read_file.cmd->cb.func = on_flatten_complete_post_disposal;
+        conn->read_file.cmd->cb.data = conn->_ostr_final.pull_buf;
+        conn->_ostr_final.pull_buf = NULL;
+    }
+    if (conn->_ostr_final.pull_buf != NULL)
+        free(conn->_ostr_final.pull_buf);
     h2o_timer_unlink(&conn->_timeout_entry);
     h2o_timer_unlink(&conn->_io_timeout_entry);
     if (conn->req_body != NULL)
@@ -181,6 +191,8 @@ static void cleanup_connection(struct st_h2o_http1_conn_t *conn)
         return;
     }
 
+    if (conn->_ostr_final.pull_buf != NULL)
+        free(conn->_ostr_final.pull_buf);
     assert(conn->req.proceed_req == NULL);
     assert(conn->_req_entity_reader == NULL);
     assert(conn->read_file.cmd == NULL);
@@ -1008,7 +1020,7 @@ static void allocate_pull_buf(struct st_h2o_http1_conn_t *conn, h2o_send_state_t
 {
     size_t sz = h2o_send_state_is_in_progress(send_state) ? H2O_PULL_SENDVEC_MAX_SIZE : bytes_to_be_sent;
     sz += size_add;
-    conn->_ostr_final.pull_buf = h2o_mem_alloc_pool(&conn->req.pool, char, sz);
+    conn->_ostr_final.pull_buf = h2o_mem_alloc(sz);
 }
 
 static void send_vecs_pending(struct st_h2o_http1_conn_t *conn)
