@@ -323,7 +323,7 @@ static void send_decompressed(h2o_ostream_t *_self, h2o_req_t *req, h2o_sendvec_
 static void send_decompressed_stop(h2o_ostream_t *_self, h2o_req_t *req)
 {
     struct st_gzip_decompress_t *self = (void *)_self;
-    h2o_sendvec_flatten_cancel(self->flattener);
+    h2o_sendvec_detach_flattener(self->flattener);
 }
 
 static void do_send_file(struct st_h2o_sendfile_generator_t *self, h2o_req_t *req, int status, const char *reason,

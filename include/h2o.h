@@ -1554,6 +1554,10 @@ void h2o_sendvec_flatten_raw(h2o_sendvec_t *vec, h2o_req_t *req, h2o_socket_read
  */
 h2o_sendvec_flattener_t *h2o_sendvec_create_flattener(h2o_ostream_t *ostream, h2o_req_t *req);
 /**
+ *
+ */
+void h2o_sendvec_detach_flattener(h2o_sendvec_flattener_t *self);
+/**
  * Converts sendvecs to raw form and then invokes the do_send callback. If given buffers are raw, false is returned and the caller
  * must handle the sendvecs by itself. If true is returned, `h2o_sendvec_flatten` invokes (or already has invoked) `do_send` passing
  * flattened sendvecs.

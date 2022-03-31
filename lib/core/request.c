@@ -543,10 +543,14 @@ void h2o_sendvec_init_immutable(h2o_sendvec_t *vec, const void *base, size_t len
     vec->len = len;
 }
 
-static void sendvec_flattener_on_dispose(void *_self)
+static void sendvec_flattener_on_complete_post_disposal(h2o_socket_read_file_cmd_t *cmd)
 {
-    h2o_sendvec_flattener_t *self = _self;
-    h2o_sendvec_flatten_cancel(self);
+    free(cmd->cb.data);
+}
+
+static void sendvec_flattener_on_dispose(void *self)
+{
+    h2o_sendvec_detach_flattener(self);
 }
 
 h2o_sendvec_flattener_t *h2o_sendvec_create_flattener(h2o_ostream_t *ostream, h2o_req_t *req)
@@ -554,6 +558,16 @@ h2o_sendvec_flattener_t *h2o_sendvec_create_flattener(h2o_ostream_t *ostream, h2
     h2o_sendvec_flattener_t *self = h2o_mem_alloc_shared(&req->pool, sizeof(*self), sendvec_flattener_on_dispose);
     *self = (h2o_sendvec_flattener_t){.ostream = ostream, .req = req};
     return self;
+}
+
+void h2o_sendvec_detach_flattener(h2o_sendvec_flattener_t *self)
+{
+    if (self->cmd != NULL) {
+        self->cmd->cb.func = sendvec_flattener_on_complete_post_disposal;
+        self->cmd->cb.data = self->buf;
+    } else {
+        free(self->buf);
+    }
 }
 
 static void sendvec_flattener_on_complete(h2o_socket_read_file_cmd_t *cmd)
@@ -576,8 +590,7 @@ void h2o_sendvec__do_flatten(h2o_sendvec_flattener_t *self, h2o_sendvec_t *bufs,
     /* retain args / prepare buffer */
     self->state = state;
     if (self->buf == NULL)
-        self->buf = h2o_mem_alloc_pool_aligned(&self->req->pool, 1,
-                                               h2o_send_state_is_in_progress(state) ? H2O_PULL_SENDVEC_MAX_SIZE : bufs[0].len);
+        self->buf = h2o_mem_alloc(h2o_send_state_is_in_progress(state) ? H2O_PULL_SENDVEC_MAX_SIZE : bufs[0].len);
 
     /* flatten */
     self->read_len = bufs[0].len;

@@ -59,7 +59,7 @@ static void do_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_sendvec_t *inbufs,
 static void do_stop(h2o_ostream_t *_self, h2o_req_t *req)
 {
     struct st_compress_encoder_t *self = (void *)_self;
-    h2o_sendvec_flatten_cancel(self->flattener);
+    h2o_sendvec_detach_flattener(self->flattener);
 }
 
 static void on_setup_ostream(h2o_filter_t *_self, h2o_req_t *req, h2o_ostream_t **slot)
