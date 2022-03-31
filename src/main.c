@@ -70,6 +70,9 @@
 #include "picotls/minicrypto.h"
 #include "picotls/openssl.h"
 #include "picotls/pembase64.h"
+#if H2O_USE_FUSION
+#include "picotls/fusion.h"
+#endif
 #include "cloexec.h"
 #include "yoml-parser.h"
 #include "neverbleed.h"
@@ -844,8 +847,37 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
         pctx->ctx.emit_certificate = NULL;
     }
 
-    if (listener->quic.ctx != NULL)
+    if (listener->quic.ctx != NULL) {
+#if H2O_USE_FUSION
+        /* rebuild and replace the cipher suite list, replacing the corresponding ones to fusion */
+        if (ptls_fusion_is_supported_by_cpu()) {
+            static const ptls_cipher_suite_t fusion_aes128gcmsha256 = {PTLS_CIPHER_SUITE_AES_128_GCM_SHA256, &ptls_fusion_aes128gcm,
+                                                                       &ptls_openssl_sha256},
+                                             fusion_aes256gcmsha384 = {PTLS_CIPHER_SUITE_AES_256_GCM_SHA384, &ptls_fusion_aes256gcm,
+                                                                       &ptls_openssl_sha384};
+            H2O_VECTOR(ptls_cipher_suite_t *) new_list = {};
+#define PUSH_NEW(x)                                                                                                                \
+    do {                                                                                                                           \
+        h2o_vector_reserve(NULL, &new_list, new_list.size + 1);                                                                    \
+        new_list.entries[new_list.size++] = (x);                                                                                   \
+    } while (0)
+            for (ptls_cipher_suite_t **input = pctx->ctx.cipher_suites; *input != NULL; ++input) {
+                h2o_vector_reserve(NULL, &new_list, new_list.size + 1);
+                if (*input == &ptls_openssl_aes128gcmsha256) {
+                    PUSH_NEW(&fusion_aes128gcmsha256);
+                } else if (*input == &ptls_openssl_aes256gcmsha384) {
+                    PUSH_NEW(&fusion_aes256gcmsha384);
+                } else {
+                    PUSH_NEW(*input);
+                }
+            }
+            PUSH_NEW(NULL);
+#undef PUSH_NEW
+            pctx->ctx.cipher_suites = new_list.entries;
+        }
+#endif
         quicly_amend_ptls_context(&pctx->ctx);
+    }
 
     identity->ptls = &pctx->ctx;
 
