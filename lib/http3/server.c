@@ -1319,7 +1319,7 @@ static void shutdown_by_generator(struct st_h2o_http3_server_stream_t *stream)
     if (stream->sendbuf.vecs.size == 0) {
         if (quicly_stream_has_receive_side(0, stream->quic->stream_id))
             quicly_request_stop(stream->quic, H2O_HTTP3_ERROR_EARLY_RESPONSE);
-        set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_CLOSE_WAIT, 0);
+        set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_CLOSE_WAIT, 1);
     }
 }
 
