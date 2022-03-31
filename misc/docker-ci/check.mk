@@ -64,6 +64,7 @@ _mount:
 	done
 
 _do_check:
+	sudo apt install archivemount
 	cmake $(CMAKE_ARGS) -H$(SRC_DIR) -B.
 	time komake $(BUILD_ARGS) all checkdepends
 	if [ -e h2o-fuzzer-http1 ] ; then export $(FUZZ_ASAN); fi; \
