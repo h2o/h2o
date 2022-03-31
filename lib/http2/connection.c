@@ -370,6 +370,8 @@ void h2o_http2_conn_unregister_stream(h2o_http2_conn_t *conn, h2o_http2_stream_t
 
 void close_connection_now(h2o_http2_conn_t *conn)
 {
+    assert(conn->read_file_stream == NULL);
+
     /* mark as is_closing here to prevent sending any more frames */
     conn->state = H2O_HTTP2_CONN_STATE_IS_CLOSING;
 
