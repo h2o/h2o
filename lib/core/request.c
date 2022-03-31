@@ -565,8 +565,9 @@ void h2o_sendvec_detach_flattener(h2o_sendvec_flattener_t *self)
     if (self->cmd != NULL) {
         self->cmd->cb.func = sendvec_flattener_on_complete_post_disposal;
         self->cmd->cb.data = self->buf;
-    } else {
+    } else if (self->buf != NULL) {
         free(self->buf);
+        self->buf = NULL;
     }
 }
 
