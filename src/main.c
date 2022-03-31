@@ -3614,6 +3614,9 @@ int main(int argc, char **argv)
 #if H2O_USE_DTRACE
                 printf("dtrace: YES\n");
 #endif
+#if H2O_USE_IO_URING
+                printf("io_uring: YES\n");
+#endif
                 exit(0);
             case 'h':
                 printf("h2o version " H2O_VERSION "\n"
