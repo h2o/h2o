@@ -454,8 +454,14 @@ static void finalostream_send_informational(h2o_ostream_t *self, h2o_req_t *req)
 void h2o_http2_stream_proceed(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
 {
     if (stream->state == H2O_HTTP2_STREAM_STATE_END_STREAM) {
-        if (stream->req_body.state == H2O_HTTP2_REQ_BODY_CLOSE_DELIVERED)
+        switch (stream->req_body.state) {
+        case H2O_HTTP2_REQ_BODY_NONE:
+        case H2O_HTTP2_REQ_BODY_CLOSE_DELIVERED:
             h2o_http2_stream_close(conn, stream);
+            break;
+        default:
+            break; /* the stream will be closed when the read side is done */
+        }
     } else {
         if (!stream->blocked_by_server)
             h2o_http2_stream_set_blocked_by_server(conn, stream, 1);
