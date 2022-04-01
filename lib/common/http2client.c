@@ -470,7 +470,7 @@ static int handle_data_frame(struct st_h2o_http2client_conn_t *conn, h2o_http2_f
      *  All other responses do include a message body, although the body might
      *  be of zero length.
      */
-    if (stream->input.message_body_forbidden) {
+    if (stream->input.message_body_forbidden && payload.length != 0) {
         stream_send_error(conn, frame->stream_id, H2O_HTTP2_ERROR_PROTOCOL);
         call_callback_with_error(stream, h2o_httpclient_error_protocol_violation);
         close_stream(stream);
