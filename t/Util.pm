@@ -297,6 +297,7 @@ sub spawn_h2o_raw {
 
     my ($conffh, $conffn) = tempfile(UNLINK => 1);
     print $conffh $conf;
+    Test::More::diag($conf) if $ENV{TEST_DEBUG};
 
     # spawn the server
     my ($guard, $pid) = spawn_server(
