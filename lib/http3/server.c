@@ -400,7 +400,6 @@ static void on_read_file_complete_post_disposal(h2o_socket_read_file_cmd_t *cmd)
 static void pre_dispose_request(struct st_h2o_http3_server_stream_t *stream)
 {
     struct st_h2o_http3_server_conn_t *conn = get_conn(stream);
-    size_t i;
 
     /* stop reading file */
     if (stream->read_file.cmd != NULL) {
@@ -413,8 +412,8 @@ static void pre_dispose_request(struct st_h2o_http3_server_stream_t *stream)
         vec_inflight->vec.raw = NULL;
     }
 
-    /* release vectors */
-    for (i = 0; i != stream->sendbuf.vecs.size; ++i) {
+    /* release vectors created by ourselves; vectors passed from the generator are freed when the request is disposed */
+    for (size_t i = 0; i < stream->sendbuf.next_flatten.vec_index; ++i) {
         struct st_h2o_http3_server_sendvec_t *vec = stream->sendbuf.vecs.entries + i;
         if (vec->vec.callbacks->update_refcnt != NULL)
             vec->vec.callbacks->update_refcnt(&vec->vec, &stream->req, 0);
@@ -1733,7 +1732,7 @@ static int scheduler_do_send(quicly_stream_scheduler_t *sched, quicly_conn_t *qc
              *    stream. */
             if (stream->proceed_while_sending) {
                 assert(stream->proceed_requested);
-                retain_sendvecs(stream);
+                //retain_sendvecs(stream);
                 h2o_proceed_response(&stream->req);
                 stream->proceed_while_sending = 0;
             }
