@@ -769,6 +769,7 @@ static struct st_h2o_evloop_read_file_cmd_t *read_file_queue_pop(struct st_h2o_e
         if ((queue->head = popped->next) == NULL)
             queue->tail = &queue->head;
         --queue->size;
+        popped->next = NULL;
     }
     return popped;
 }
