@@ -268,7 +268,7 @@ void h2o_init_request(h2o_req_t *req, h2o_conn_t *conn, h2o_req_t *src)
     req->preferred_chunk_size = SIZE_MAX;
     req->content_length = SIZE_MAX;
     req->remaining_delegations = conn == NULL ? 0 : conn->ctx->globalconf->max_delegations;
-    req->remaining_reprocesses = 5;
+    req->remaining_reprocesses = conn == NULL ? 0 : conn->ctx->globalconf->max_reprocesses;
     req->error_log_delegate.cb = on_default_error_callback;
     req->error_log_delegate.data = req;
 

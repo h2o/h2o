@@ -23,6 +23,8 @@ unless ($ENV{DTRACE_TEST})  {
 
   plan skip_all => 'dtrace support is off'
       unless server_features()->{dtrace};
+  plan skip_all => 'capabilities(7) support is off'
+      unless server_features()->{capabilities};
 }
 
 # make sure the h2o_return map does not exist at first,
@@ -33,8 +35,12 @@ sub spawn_my_h2o {
   my($quic_port) = @_;
   return spawn_h2o({
     opts => [qw(--mode=worker)],
-    user => getpwuid($ENV{SUDO_UID}),
+    user => scalar(getpwuid($ENV{SUDO_UID})),
     conf => << "EOT",
+# Either CAP_BPF or CAP_NET_ADMIN is required to use selective tracing if `kernel.unplivileged_bpf_disable` is set to true to
+# mitigate CVE-2022-0001 and CVE-2022-0001.
+capabilities:
+  - CAP_SYS_ADMIN
 usdt-selective-tracing: ON
 listen:
   type: quic
