@@ -723,7 +723,7 @@ static void retain_sendvecs(struct st_h2o_http3_server_stream_t *stream)
             assert(vec->vec.callbacks->flatten == h2o_sendvec_flatten_raw);
             size_t off_within_vec = stream->sendbuf.min_index_to_addref == 0 ? stream->sendbuf.off_within_first_vec : 0;
             h2o_sendvec_t newvec = {&vec_callbacks, vec->vec.len - off_within_vec, {h2o_mem_alloc(vec->vec.len - off_within_vec)}};
-            h2o_memcpy(newvec.raw, vec->vec.raw, newvec.len);
+            h2o_memcpy(newvec.raw, vec->vec.raw + off_within_vec, newvec.len);
             vec->vec = newvec;
             if (stream->sendbuf.min_index_to_addref == 0)
                 stream->sendbuf.off_within_first_vec = 0;
