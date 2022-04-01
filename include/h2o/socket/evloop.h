@@ -22,9 +22,6 @@
 #ifndef h2o__evloop_h
 #define h2o__evloop_h
 
-#if H2O_USE_IO_URING
-#include <liburing.h>
-#endif
 #include "h2o/linklist.h"
 #include "h2o/timerwheel.h"
 
@@ -37,19 +34,6 @@
 #define H2O_SOCKET_FLAG_IS_CONNECTING 0x40
 #define H2O_SOCKET_FLAG_IS_ACCEPTED_CONNECTION 0x80
 #define H2O_SOCKET_FLAG__EPOLL_IS_REGISTERED 0x1000
-
-struct st_h2o_evloop_read_file_cmd_t {
-    h2o_socket_read_file_cmd_t super;
-    int fd;
-    uint64_t offset;
-    h2o_iovec_t vec;
-    struct st_h2o_evloop_read_file_cmd_t *next;
-};
-
-struct st_h2o_evloop_read_file_queue_t {
-    struct st_h2o_evloop_read_file_cmd_t *head;
-    struct st_h2o_evloop_read_file_cmd_t **tail;
-};
 
 typedef struct st_h2o_evloop_t {
     struct st_h2o_evloop_socket_t *_pending_as_client;
@@ -64,11 +48,7 @@ typedef struct st_h2o_evloop_t {
     h2o_timerwheel_t *_timeouts;
     h2o_sliding_counter_t exec_time_nanosec_counter;
 #if H2O_USE_IO_URING
-    struct {
-        struct io_uring uring;
-        struct st_h2o_evloop_socket_t *sock_notify;
-        struct st_h2o_evloop_read_file_queue_t submission, completion;
-    } _read_file;
+    struct st_h2o_evloop_read_file_t *_read_file;
 #endif
 } h2o_evloop_t;
 
@@ -92,6 +72,10 @@ void h2o_evloop_destroy(h2o_evloop_t *loop);
  * rerun the event loop.
  */
 int h2o_evloop_run(h2o_evloop_t *loop, int32_t max_wait);
+
+#if H2O_USE_IO_URING
+void h2o_evloop_set_io_uring_batch_size(h2o_evloop_t *loop, size_t batch_size);
+#endif
 
 #define h2o_timer_init h2o_timerwheel_init_entry
 #define h2o_timer_is_linked h2o_timerwheel_is_linked

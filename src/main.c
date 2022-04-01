@@ -297,6 +297,7 @@ static struct {
     char *crash_handler;
     int crash_handler_wait_pipe_close;
     int tcp_reuseport;
+    size_t io_uring_batch_size;
 #ifdef LIBCAP_FOUND
     H2O_VECTOR(cap_value_t) capabilities;
 #endif
@@ -320,6 +321,7 @@ static struct {
     .crash_handler = "share/h2o/annotate-backtrace-symbols",
     .crash_handler_wait_pipe_close = 0,
     .tcp_reuseport = 0,
+    .io_uring_batch_size = 1,
 };
 
 static __thread size_t thread_index;
@@ -2374,6 +2376,25 @@ static int on_tcp_reuseport(h2o_configurator_command_t *cmd, h2o_configurator_co
     return on_config_onoff(cmd, node, &conf.tcp_reuseport);
 }
 
+static int on_io_uring_batch_size(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    size_t batch_size;
+
+    if (h2o_configurator_scanf(cmd, node, "%zu", &batch_size) != 0)
+        return -1;
+    if (batch_size == 0) {
+        h2o_configurator_errprintf(cmd, node, "batch size cannot be zero");
+        return -1;
+    }
+
+#if H2O_USE_IO_URING
+    conf.io_uring_batch_size = batch_size;
+#else
+    h2o_configurator_errprintf(cmd, node, "[warning] io_uring is not available, ignoring io_uring-batch-size");
+#endif
+    return 0;
+}
+
 static yoml_t *load_config(yoml_parse_args_t *parse_args, yoml_t *source)
 {
     FILE *fp;
@@ -3041,6 +3062,9 @@ static void *run_loop(void *_thread_index)
     size_t i;
 
     h2o_context_init(&conf.threads[thread_index].ctx, h2o_evloop_create(), &conf.globalconf);
+#if H2O_USE_IO_URING
+    h2o_evloop_set_io_uring_batch_size(conf.threads[thread_index].ctx.loop, conf.io_uring_batch_size);
+#endif
     h2o_multithread_register_receiver(conf.threads[thread_index].ctx.queue, &conf.threads[thread_index].server_notifications,
                                       on_server_notification);
     h2o_multithread_register_receiver(conf.threads[thread_index].ctx.queue, &conf.threads[thread_index].memcached,
@@ -3457,6 +3481,7 @@ static void setup_configurators(void)
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_crash_handler_wait_pipe_close);
         h2o_configurator_define_command(c, "tcp-reuseport", H2O_CONFIGURATOR_FLAG_GLOBAL, on_tcp_reuseport);
+        h2o_configurator_define_command(c, "io_uring-batch-size", H2O_CONFIGURATOR_FLAG_GLOBAL, on_io_uring_batch_size);
     }
 
     h2o_access_log_register_configurator(&conf.globalconf);
