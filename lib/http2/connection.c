@@ -1472,7 +1472,7 @@ static void on_write_complete(h2o_socket_t *sock, const char *err)
     do_emit_writereq(conn);
 }
 
-static void emit_writereq_on_data_ready(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, int *is_active)
+static void emit_writereq_on_stream_ready(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, int *is_active)
 {
     *is_active = 0;
 
@@ -1541,7 +1541,7 @@ static int emit_writereq_of_openref(h2o_http2_scheduler_openref_t *ref, int *sti
         return -1;
     }
 
-    emit_writereq_on_data_ready(conn, stream, still_is_active);
+    emit_writereq_on_stream_ready(conn, stream, still_is_active);
     return h2o_http2_conn_get_buffer_window(conn) > 0 ? 0 : -1;
 }
 
@@ -1574,7 +1574,7 @@ void h2o_http2_conn_on_read_complete(h2o_http2_conn_t *conn, h2o_http2_stream_t 
 
     int stream_is_active;
 
-    emit_writereq_on_data_ready(conn, stream, &stream_is_active);
+    emit_writereq_on_stream_ready(conn, stream, &stream_is_active);
     if (stream_is_active) {
         assert(!h2o_linklist_is_linked(&stream->_link));
         h2o_http2_scheduler_activate(&stream->_scheduler);
