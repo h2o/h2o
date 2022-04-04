@@ -1634,13 +1634,9 @@ static int scheduler_do_send(quicly_stream_scheduler_t *sched, quicly_conn_t *qc
                 goto Exit;
             ++stream->scheduler.call_cnt;
 
-            if (!quicly_sendstate_is_open(&stream->quic->sendstate)) {
-                if (stream->quic->sendstate.size_inflight == stream->quic->sendstate.final_size) {
-                    if (h2o_timeval_is_null(&stream->req.timestamps.response_end_at)) {
-                        stream->req.timestamps.response_end_at = h2o_gettimeofday(stream->req.conn->ctx->loop);
-                    }
-                }
-            }
+            if (stream->quic->sendstate.size_inflight == stream->quic->sendstate.final_size &&
+                h2o_timeval_is_null(&stream->req.timestamps.response_end_at))
+                stream->req.timestamps.response_end_at = h2o_gettimeofday(stream->req.conn->ctx->loop);
 
             /* 4. invoke h2o_proceed_request synchronously, so that we could obtain additional data for the current (i.e. highest)
              *    stream. */
