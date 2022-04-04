@@ -110,14 +110,14 @@ static size_t calc_max_payload_size(h2o_http2_conn_t *conn, h2o_http2_stream_t *
 {
     ssize_t conn_max, stream_max;
 
-    if ((conn_max = h2o_http2_conn_get_buffer_window(conn)) <= 0)
+    if ((conn_max = h2o_http2_conn_get_buffer_window(conn, conn->_write.buf_in_flight)) <= 0)
         return 0;
     if ((stream_max = h2o_http2_window_get_avail(&stream->output_window)) <= 0)
         return 0;
     return sz_min(sz_min(conn_max, stream_max), conn->peer_settings.max_frame_size);
 }
 
-static void send_data_on_payload_built(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, h2o_buffer_t *wbuf, char *end_of_payload)
+static void send_data_on_payload_built(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, char *end_of_payload)
 {
     /* update stream states */
     if (end_of_payload == NULL) {
@@ -131,13 +131,15 @@ static void send_data_on_payload_built(h2o_http2_conn_t *conn, h2o_http2_stream_
 
     /* commit payload (write DATA frame header, update the size of the write buffer to include the payload, adjust flow control) */
     if (end_of_payload != NULL) {
-        size_t payload_len = end_of_payload - (wbuf->bytes + wbuf->size + H2O_HTTP2_FRAME_HEADER_SIZE);
+        size_t payload_len =
+            end_of_payload - (conn->_write.buf_in_flight->bytes + conn->_write.buf_in_flight->size + H2O_HTTP2_FRAME_HEADER_SIZE);
         int send_end_stream =
             stream->_data.size == 0 && stream->send_state == H2O_SEND_STATE_FINAL && !stream->req.send_server_timing;
         if (payload_len != 0 || send_end_stream) {
-            h2o_http2_encode_frame_header((void *)(wbuf->bytes + wbuf->size), payload_len, H2O_HTTP2_FRAME_TYPE_DATA,
+            h2o_http2_encode_frame_header((void *)(conn->_write.buf_in_flight->bytes + conn->_write.buf_in_flight->size),
+                                          payload_len, H2O_HTTP2_FRAME_TYPE_DATA,
                                           send_end_stream ? H2O_HTTP2_FRAME_FLAG_END_STREAM : 0, stream->stream_id);
-            wbuf->size += H2O_HTTP2_FRAME_HEADER_SIZE + payload_len;
+            conn->_write.buf_in_flight->size += H2O_HTTP2_FRAME_HEADER_SIZE + payload_len;
         }
         if (payload_len != 0) {
             h2o_http2_window_consume_window(&conn->_write.window, payload_len);
@@ -146,10 +148,10 @@ static void send_data_on_payload_built(h2o_http2_conn_t *conn, h2o_http2_stream_
         }
     }
 
-    /* Send RST_STREAM after all data, if error occurred. This goes into `_write.buf` always. */
+    /* send RST_STREAM after all data, if error occurred */
     if (stream->send_state == H2O_SEND_STATE_ERROR && stream->_data.size == 0)
         h2o_http2_encode_rst_stream_frame(
-            &conn->_write.buf, stream->stream_id,
+            &conn->_write.buf_in_flight, stream->stream_id,
             -(stream->req.upstream_refused ? H2O_HTTP2_ERROR_REFUSED_STREAM : H2O_HTTP2_ERROR_PROTOCOL));
 }
 
@@ -171,7 +173,7 @@ static void send_data_on_read_complete(h2o_socket_read_file_cmd_t *cmd)
     conn->read_file.cmd = NULL;
     conn->read_file.dst_end = NULL;
 
-    send_data_on_payload_built(conn, stream, conn->_write.buf_in_flight, cmd->err == NULL ? dst_end : NULL);
+    send_data_on_payload_built(conn, stream, cmd->err == NULL ? dst_end : NULL);
     h2o_http2_conn_on_read_complete(conn, stream);
 }
 
@@ -184,7 +186,7 @@ void h2o_http2_stream_send_pending_data(h2o_http2_conn_t *conn, h2o_http2_stream
     }
     assert(conn->read_file.stream == NULL);
     assert(conn->read_file.cmd == NULL);
-    assert(conn->_write.buf_in_flight == NULL);
+    assert(conn->_write.buf_in_flight != NULL);
 
     h2o_iovec_t dst;
 
@@ -193,8 +195,8 @@ void h2o_http2_stream_send_pending_data(h2o_http2_conn_t *conn, h2o_http2_stream
     size_t max_payload_size = calc_max_payload_size(conn, stream);
 
     /* reserve buffer and point dst to the payload */
-    dst.base =
-        h2o_buffer_reserve(&conn->_write.buf, H2O_HTTP2_FRAME_HEADER_SIZE + max_payload_size).base + H2O_HTTP2_FRAME_HEADER_SIZE;
+    dst.base = h2o_buffer_reserve(&conn->_write.buf_in_flight, H2O_HTTP2_FRAME_HEADER_SIZE + max_payload_size).base +
+               H2O_HTTP2_FRAME_HEADER_SIZE;
     dst.len = max_payload_size;
 
 #define SHIFT_DATA()                                                                                                               \
@@ -231,8 +233,6 @@ void h2o_http2_stream_send_pending_data(h2o_http2_conn_t *conn, h2o_http2_stream
         if (conn->read_file.cmd != NULL) {
             conn->read_file.dst_end = dst.base;
             conn->read_file.stream = stream;
-            conn->_write.buf_in_flight = conn->_write.buf;
-            h2o_buffer_init(&conn->_write.buf, &h2o_http2_wbuf_buffer_prototype);
             SHIFT_DATA();
             return;
         } else if (conn->read_file.err != NULL) {
@@ -244,7 +244,7 @@ void h2o_http2_stream_send_pending_data(h2o_http2_conn_t *conn, h2o_http2_stream
 
 #undef SHIFT_DATA
 
-    send_data_on_payload_built(conn, stream, conn->_write.buf, dst.base);
+    send_data_on_payload_built(conn, stream, dst.base);
 }
 
 static int is_blocking_asset(h2o_req_t *req)

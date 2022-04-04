@@ -196,11 +196,10 @@ struct st_h2o_http2_conn_t {
     h2o_timer_t _timeout_entry;
     h2o_buffer_t *_headers_unparsed; /* for temporary storing HEADERS|CONTINUATION frames without END_HEADERS flag set */
     /**
-     * Holds to be sent.
-     * `buf` is where the data to be sent is built. All frames except DATA frames are written directly into `buf` and eventually
-     * gets sent through `do_emit_writereq` function, which is invoked either via a timeout or when a write currently inflight
-     * * completes. DATA frames are serialized via the prioritization callback when `do_emit_writereq` function is invoked. When an
-     * asynchronous file read commences, or when `h2o_socket_write` is called, the buffer is moved to `buf_in_flight`.
+     * Holds wire image being sent.
+     * All frames except DATA and HEADERS carrying trailers are written to `buf`, then a write is requested (see
+     * request_gathered_write). When write is requested, `buf` is moved to `buf_in_flight`, DATA and trailers are built, and
+     * h2o_socket_write gets called. When the write completes, `buf_in_flight` is disposed.
      */
     struct {
         h2o_buffer_t *buf;
@@ -248,7 +247,7 @@ static h2o_http2_stream_t *h2o_http2_conn_get_stream(h2o_http2_conn_t *conn, uin
 void h2o_http2_conn_push_path(h2o_http2_conn_t *conn, h2o_iovec_t path, h2o_http2_stream_t *src_stream);
 void h2o_http2_conn_request_write(h2o_http2_conn_t *conn);
 void h2o_http2_conn_register_for_proceed_callback(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);
-static ssize_t h2o_http2_conn_get_buffer_window(h2o_http2_conn_t *conn);
+static ssize_t h2o_http2_conn_get_buffer_window(h2o_http2_conn_t *conn, h2o_buffer_t *wbuf);
 static void h2o_http2_conn_init_casper(h2o_http2_conn_t *conn, unsigned capacity_bits);
 void h2o_http2_conn_register_for_replay(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);
 void h2o_http2_conn_preserve_stream_scheduler(h2o_http2_conn_t *conn, h2o_http2_stream_t *src);
@@ -285,20 +284,20 @@ inline int h2o_http2_stream_is_push(uint32_t stream_id)
     return stream_id % 2 == 0;
 }
 
-inline ssize_t h2o_http2_conn_get_buffer_window(h2o_http2_conn_t *conn)
+inline ssize_t h2o_http2_conn_get_buffer_window(h2o_http2_conn_t *conn, h2o_buffer_t *wbuf)
 {
     ssize_t ret, winsz;
     size_t capacity, cwnd_left;
 
-    capacity = conn->_write.buf->capacity;
+    capacity = wbuf->capacity;
     if ((cwnd_left = h2o_socket_prepare_for_latency_optimized_write(
              conn->sock, &conn->super.ctx->globalconf->http2.latency_optimization)) < capacity) {
         capacity = cwnd_left;
-        if (capacity < conn->_write.buf->size)
+        if (capacity < wbuf->size)
             return 0;
     }
 
-    ret = capacity - conn->_write.buf->size;
+    ret = capacity - wbuf->size;
     if (ret < H2O_HTTP2_FRAME_HEADER_SIZE)
         return 0;
     ret -= H2O_HTTP2_FRAME_HEADER_SIZE;

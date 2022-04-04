@@ -370,7 +370,7 @@ void h2o_http2_conn_unregister_stream(h2o_http2_conn_t *conn, h2o_http2_stream_t
 
 void close_connection_now(h2o_http2_conn_t *conn)
 {
-    assert(conn->read_file.stream == NULL);
+    assert(conn->read_file.stream == NULL); /* FIXME see on_idle_timeout */
 
     /* mark as is_closing here to prevent sending any more frames */
     conn->state = H2O_HTTP2_CONN_STATE_IS_CLOSING;
@@ -1071,7 +1071,7 @@ static int handle_priority_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *fram
 
 static void resume_send(h2o_http2_conn_t *conn)
 {
-    if (h2o_http2_conn_get_buffer_window(conn) <= 0)
+    if (h2o_http2_conn_get_buffer_window(conn, conn->_write.buf) <= 0)
         return;
 #if 0 /* TODO reenable this check for performance? */
     if (conn->scheduler.list.size == 0)
@@ -1494,8 +1494,9 @@ static void emit_writereq_on_stream_ready(h2o_http2_conn_t *conn, h2o_http2_stre
                 static const h2o_iovec_t name = {H2O_STRLIT("server-timing")};
                 trailers[num_trailers++] = (h2o_header_t){(h2o_iovec_t *)&name, NULL, server_timing};
             }
-            h2o_hpack_flatten_trailers(&conn->_write.buf, &conn->_output_header_table, conn->peer_settings.header_table_size,
-                                       stream->stream_id, conn->peer_settings.max_frame_size, trailers, num_trailers);
+            h2o_hpack_flatten_trailers(&conn->_write.buf_in_flight, &conn->_output_header_table,
+                                       conn->peer_settings.header_table_size, stream->stream_id, conn->peer_settings.max_frame_size,
+                                       trailers, num_trailers);
         }
         h2o_linklist_insert(&conn->_write.streams_to_proceed, &stream->_link);
     }
@@ -1503,11 +1504,7 @@ static void emit_writereq_on_stream_ready(h2o_http2_conn_t *conn, h2o_http2_stre
 
 static void emit_writereq_send(h2o_http2_conn_t *conn, int move_buffer)
 {
-    if (move_buffer) {
-        assert(conn->_write.buf_in_flight == NULL);
-        conn->_write.buf_in_flight = conn->_write.buf;
-        h2o_buffer_init(&conn->_write.buf, &h2o_http2_wbuf_buffer_prototype);
-    }
+    assert(conn->_write.buf_in_flight != NULL);
 
     if (conn->_write.buf_in_flight->size != 0) {
         h2o_iovec_t buf = {conn->_write.buf_in_flight->bytes, conn->_write.buf_in_flight->size};
@@ -1548,7 +1545,7 @@ static int emit_writereq_of_openref(h2o_http2_scheduler_openref_t *ref, int *sti
     }
 
     emit_writereq_on_stream_ready(conn, stream, still_is_active);
-    return h2o_http2_conn_get_buffer_window(conn) > 0 ? 0 : -1;
+    return h2o_http2_conn_get_buffer_window(conn, conn->_write.buf_in_flight) > 0 ? 0 : -1;
 }
 
 void do_emit_writereq(h2o_http2_conn_t *conn)
@@ -1556,8 +1553,12 @@ void do_emit_writereq(h2o_http2_conn_t *conn)
     assert(conn->_write.buf_in_flight == NULL);
     assert(conn->read_file.stream == NULL);
 
+    /* move data to buf_in_flight */
+    conn->_write.buf_in_flight = conn->_write.buf;
+    h2o_buffer_init(&conn->_write.buf, &h2o_http2_wbuf_buffer_prototype);
+
     /* push stream-level frames */
-    if (conn->state < H2O_HTTP2_CONN_STATE_IS_CLOSING && h2o_http2_conn_get_buffer_window(conn) > 0)
+    if (conn->state < H2O_HTTP2_CONN_STATE_IS_CLOSING && h2o_http2_conn_get_buffer_window(conn, conn->_write.buf_in_flight) > 0)
         h2o_http2_scheduler_run(&conn->scheduler, emit_writereq_of_openref, conn);
 
     /* if async read is in flight, let it call send */
@@ -1577,7 +1578,6 @@ static void emit_writereq(h2o_timer_t *entry)
 void h2o_http2_conn_on_read_complete(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
 {
     assert(conn->read_file.stream == NULL);
-    assert(conn->_write.buf_in_flight != NULL);
 
     int stream_is_active;
 
