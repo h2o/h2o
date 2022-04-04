@@ -368,10 +368,14 @@ void h2o_http2_conn_unregister_stream(h2o_http2_conn_t *conn, h2o_http2_stream_t
     }
 }
 
+static void on_read_file_complete_post_close(h2o_socket_read_file_cmd_t *cmd)
+{
+    h2o_buffer_t *buf = cmd->cb.data;
+    h2o_buffer_dispose(&buf);
+}
+
 void close_connection_now(h2o_http2_conn_t *conn)
 {
-    assert(conn->read_file.stream == NULL); /* FIXME see on_idle_timeout */
-
     /* mark as is_closing here to prevent sending any more frames */
     conn->state = H2O_HTTP2_CONN_STATE_IS_CLOSING;
 
@@ -398,8 +402,16 @@ void close_connection_now(h2o_http2_conn_t *conn)
     h2o_timer_unlink(&conn->_timeout_entry);
 
     h2o_buffer_dispose(&conn->_write.buf);
-    if (conn->_write.buf_in_flight != NULL)
-        h2o_buffer_dispose(&conn->_write.buf_in_flight);
+    if (conn->_write.buf_in_flight != NULL) {
+        if (conn->read_file.cmd != NULL) {
+            conn->read_file.cmd->cb.func = on_read_file_complete_post_close;
+            conn->read_file.cmd->cb.data = conn->_write.buf_in_flight;
+        } else {
+            h2o_buffer_dispose(&conn->_write.buf_in_flight);
+        }
+    } else {
+        assert(conn->read_file.cmd == NULL);
+    }
     {
         size_t i;
         for (i = 0; i < sizeof(conn->_recently_closed_streams.streams) / sizeof(conn->_recently_closed_streams.streams[0]); ++i) {
