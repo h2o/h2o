@@ -416,6 +416,11 @@ static int on_config_max_delegations(h2o_configurator_command_t *cmd, h2o_config
     return h2o_configurator_scanf(cmd, node, "%u", &ctx->globalconf->max_delegations);
 }
 
+static int on_config_max_reprocesses(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    return h2o_configurator_scanf(cmd, node, "%u", &ctx->globalconf->max_reprocesses);
+}
+
 static int on_config_handshake_timeout(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     return config_timeout(cmd, node, &ctx->globalconf->handshake_timeout);
@@ -1037,6 +1042,9 @@ void h2o_configurator__init_core(h2o_globalconf_t *conf)
         h2o_configurator_define_command(&c->super, "max-delegations",
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_max_delegations);
+        h2o_configurator_define_command(&c->super, "max-reprocesses",
+                                        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                        on_config_max_reprocesses);
         h2o_configurator_define_command(&c->super, "handshake-timeout",
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_handshake_timeout);

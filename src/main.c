@@ -3614,6 +3614,9 @@ int main(int argc, char **argv)
 #if H2O_USE_DTRACE
                 printf("dtrace: YES\n");
 #endif
+#if LIBCAP_FOUND
+                printf("capabilities: YES\n");
+#endif
                 exit(0);
             case 'h':
                 printf("h2o version " H2O_VERSION "\n"
