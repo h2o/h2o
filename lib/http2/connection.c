@@ -1501,16 +1501,22 @@ static void emit_writereq_on_stream_ready(h2o_http2_conn_t *conn, h2o_http2_stre
     }
 }
 
-static void emit_writereq_send(h2o_http2_conn_t *conn)
+static void emit_writereq_send(h2o_http2_conn_t *conn, int move_buffer)
 {
-    if (conn->_write.buf->size != 0) {
-        /* write and wait for completion */
-        h2o_iovec_t buf = {conn->_write.buf->bytes, conn->_write.buf->size};
-        h2o_socket_write(conn->sock, &buf, 1, on_write_complete);
+    if (move_buffer) {
+        assert(conn->_write.buf_in_flight == NULL);
         conn->_write.buf_in_flight = conn->_write.buf;
         h2o_buffer_init(&conn->_write.buf, &h2o_http2_wbuf_buffer_prototype);
+    }
+
+    if (conn->_write.buf_in_flight->size != 0) {
+        h2o_iovec_t buf = {conn->_write.buf_in_flight->bytes, conn->_write.buf_in_flight->size};
+        h2o_socket_write(conn->sock, &buf, 1, on_write_complete);
         h2o_timer_unlink(&conn->_timeout_entry);
         h2o_timer_link(conn->super.ctx->loop, H2O_HTTP2_DEFAULT_OUTBUF_WRITE_TIMEOUT, &conn->_timeout_entry);
+    } else {
+        h2o_buffer_dispose(&conn->_write.buf_in_flight);
+        assert(conn->_write.buf_in_flight == NULL);
     }
 
     /* close the connection if necessary */
@@ -1558,7 +1564,7 @@ void do_emit_writereq(h2o_http2_conn_t *conn)
     if (conn->read_file.stream != NULL)
         return;
 
-    emit_writereq_send(conn);
+    emit_writereq_send(conn, 1);
 }
 
 static void emit_writereq(h2o_timer_t *entry)
@@ -1571,6 +1577,7 @@ static void emit_writereq(h2o_timer_t *entry)
 void h2o_http2_conn_on_read_complete(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
 {
     assert(conn->read_file.stream == NULL);
+    assert(conn->_write.buf_in_flight != NULL);
 
     int stream_is_active;
 
@@ -1580,7 +1587,7 @@ void h2o_http2_conn_on_read_complete(h2o_http2_conn_t *conn, h2o_http2_stream_t 
         h2o_http2_scheduler_activate(&stream->_scheduler);
     }
 
-    emit_writereq_send(conn);
+    emit_writereq_send(conn, 0);
 }
 
 static socklen_t get_sockname(h2o_conn_t *_conn, struct sockaddr *sa)
