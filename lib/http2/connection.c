@@ -1514,7 +1514,7 @@ static void emit_writereq_on_stream_ready(h2o_http2_conn_t *conn, h2o_http2_stre
     }
 }
 
-static void emit_writereq_send(h2o_http2_conn_t *conn, int move_buffer)
+static void emit_writereq_send(h2o_http2_conn_t *conn)
 {
     assert(conn->_write.buf_in_flight != NULL);
 
@@ -1577,7 +1577,7 @@ void do_emit_writereq(h2o_http2_conn_t *conn)
     if (conn->read_file.stream != NULL)
         return;
 
-    emit_writereq_send(conn, 1);
+    emit_writereq_send(conn);
 }
 
 static void emit_writereq(h2o_timer_t *entry)
@@ -1599,7 +1599,7 @@ void h2o_http2_conn_on_read_complete(h2o_http2_conn_t *conn, h2o_http2_stream_t 
         h2o_http2_scheduler_activate(&stream->_scheduler);
     }
 
-    emit_writereq_send(conn, 0);
+    emit_writereq_send(conn);
 }
 
 static socklen_t get_sockname(h2o_conn_t *_conn, struct sockaddr *sa)
