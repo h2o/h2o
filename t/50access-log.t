@@ -150,10 +150,10 @@ subtest 'ltsv-related' => sub {
 };
 
 subtest 'timings' => sub {
-    # The path takes at least 0.050 sec in total.
+    # The path should take at least 0.050 sec in total.
     # See also 50reverse-proxy-timings.t for timing stats.
     my $path = "proxy/streaming-body?sleep=0.01&count=5";
-    my $least_duration = 0.01 * 5;
+    my $least_duration = 0.040; # 0.50 is too sensitive
 
     my $doit = sub {
         my ($opts, $expected_status_line, $expected_protocol) = @_;
