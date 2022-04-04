@@ -150,25 +150,71 @@ subtest 'ltsv-related' => sub {
 };
 
 subtest 'timings' => sub {
+    # The path takes at least 0.050 sec in total.
+    # See also 50reverse-proxy-timings.t for timing stats.
+    my $path = "proxy/streaming-body?sleep=0.01&count=5";
+    my $least_duration = 0.01 * 5;
+
     my $doit = sub {
-        my $opts = shift;
+        my ($opts, $expected_status_line, $expected_protocol) = @_;
         doit(
             sub {
-                my $server = shift;
-                system("curl $opts --silent --data helloworld http://127.0.0.1:$server->{port}/ > /dev/null");
-                system("curl $opts --silent --insecure --data helloworld https://127.0.0.1:$server->{tls_port}/ > /dev/null");
+                my ($server) = @_;
+                my $port = $expected_protocol ne "HTTP/3" ? $server->{tls_port} : $server->{quic_port};
+                my $resp = `$client_prog -k $opts 'https://127.0.0.1:$port/$path' 2>&1`;
+                like $resp, $expected_status_line, "HTTP request for $expected_protocol";
             },
-            '%{connect-time}x:%{request-header-time}x:%{request-body-time}x:%{response-time}x:%{request-total-time}x:%{duration}x:%{undefined}x',
-            map { qr{^[0-9\.]+:[0-9\.]+:[0-9\.]+:[0-9\.]+:[0-9\.]+:[0-9\.]+:-$} } (1..2),
+            {
+                format => '{
+                    "protocol":"%H"
+                    , "connect-time":%{connect-time}x
+                    , "request-total-time":%{request-total-time}x
+                    , "request-header-time":%{request-header-time}x
+                    , "request-body-time":%{request-body-time}x
+                    , "process-time":%{process-time}x
+                    , "response-time":%{response-time}x
+                    , "duration":%{duration}x
+                    , "total-time":%{total-time}x
+                    , "proxy.idle-time":%{proxy.idle-time}x
+                    , "proxy.connect-time":%{proxy.connect-time}x
+                    , "proxy.request-time":%{proxy.request-time}x
+                    , "proxy.process-time":%{proxy.process-time}x
+                    , "proxy.response-time":%{proxy.response-time}x
+                    , "proxy.total-time":%{proxy.total-time}x
+                }',
+                escape => 'json',
+            },
+            sub {
+                my($log_json) = @_;
+                my $log = decode_json($log_json);
+
+                is $log->{"protocol"}, $expected_protocol;
+
+                cmp_ok $log->{"connect-time"}, ">", 0;
+                cmp_ok $log->{"request-total-time"}, ">=", 0;
+                cmp_ok $log->{"request-header-time"}, ">=", 0;
+                cmp_ok $log->{"request-body-time"}, ">=", 0;
+                cmp_ok $log->{"process-time"}, ">=", 0;
+                cmp_ok $log->{"response-time"}, ">=", $least_duration;
+                cmp_ok $log->{"total-time"}, ">=", $least_duration;
+                cmp_ok $log->{"duration"}, ">=", $least_duration;
+                cmp_ok $log->{"proxy.idle-time"}, ">=", 0;
+                cmp_ok $log->{"proxy.connect-time"}, ">", 0;
+                cmp_ok $log->{"proxy.request-time"}, ">=", 0;
+                cmp_ok $log->{"proxy.process-time"}, ">", 0;
+                cmp_ok $log->{"proxy.response-time"}, ">", $least_duration;
+                cmp_ok $log->{"proxy.total-time"}, ">", $least_duration;
+            },
         );
     };
     subtest 'http1' => sub {
-        $doit->("");
+        $doit->("", qr{^HTTP/1\.1 200\b}ms, "HTTP/1.1");
     };
     subtest 'http2' => sub {
-        plan skip_all => "curl does not support HTTP/2"
-            unless curl_supports_http2();
-        $doit->("--http2");
+        $doit->("-2 100", qr{^HTTP/2 200\b}ms, "HTTP/2");
+    };
+    subtest 'http3' => sub {
+        $doit->("-3 100", qr{^HTTP/3 200\b}ms, "HTTP/3");
     };
 };
 
@@ -306,76 +352,6 @@ subtest 'compressed-body-size' => sub {
             unless curl_supports_http2();
         $doit->("--http2", 1661);
         $doit->("--http2 -H 'Accept-Encoding: gzip'", 908);
-    };
-};
-
-subtest 'various log variables' => sub {
-
-    # it takes at least 0.50 sec in total
-    my $path = "proxy/streaming-body?sleep=0.01&count=5";
-
-    my $doit = sub {
-        my ($opts, $expected_status_line, $expected_protocol) = @_;
-        doit(
-            sub {
-                my ($server) = @_;
-                my $port = $expected_protocol ne "HTTP/3" ? $server->{tls_port} : $server->{quic_port};
-                my $resp = `$client_prog -k $opts 'https://127.0.0.1:$port/$path' 2>&1`;
-                like $resp, $expected_status_line, "HTTP request for $expected_protocol";
-            },
-            {
-                format => '{
-                    "protocol":"%H"
-                    , "connection-id":%{connection-id}x
-                    , "connect-time":%{connect-time}x
-                    , "request-total-time":%{request-total-time}x
-                    , "request-header-time":%{request-header-time}x
-                    , "request-body-time":%{request-body-time}x
-                    , "process-time":%{process-time}x
-                    , "response-time":%{response-time}x
-                    , "duration":%{duration}x
-                    , "total-time":%{total-time}x
-                    , "proxy.idle-time":%{proxy.idle-time}x
-                    , "proxy.connect-time":%{proxy.connect-time}x
-                    , "proxy.request-time":%{proxy.request-time}x
-                    , "proxy.process-time":%{proxy.process-time}x
-                    , "proxy.response-time":%{proxy.response-time}x
-                    , "proxy.total-time":%{proxy.total-time}x
-                }',
-                escape => 'json',
-            },
-            sub {
-                my($log_json) = @_;
-                my $log = decode_json($log_json);
-
-                is $log->{"protocol"}, $expected_protocol;
-
-                cmp_ok $log->{"connection-id"}, ">", 0;
-                cmp_ok $log->{"connect-time"}, ">", 0;
-                cmp_ok $log->{"request-total-time"}, ">=", 0;
-                cmp_ok $log->{"request-header-time"}, ">=", 0;
-                cmp_ok $log->{"request-body-time"}, ">=", 0;
-                cmp_ok $log->{"process-time"}, ">=", 0;
-                cmp_ok $log->{"response-time"}, ">=", 0.050;
-                cmp_ok $log->{"total-time"}, ">=", 0.050;
-                cmp_ok $log->{"duration"}, ">=", 0.050;
-                cmp_ok $log->{"proxy.idle-time"}, ">=", 0;
-                cmp_ok $log->{"proxy.connect-time"}, ">", 0;
-                cmp_ok $log->{"proxy.request-time"}, ">=", 0;
-                cmp_ok $log->{"proxy.process-time"}, ">", 0;
-                cmp_ok $log->{"proxy.response-time"}, ">", 0.050;
-                cmp_ok $log->{"proxy.total-time"}, ">", 0.050;
-            },
-        );
-    };
-    subtest 'http1' => sub {
-        $doit->("", qr{^HTTP/1\.1 200\b}ms, "HTTP/1.1");
-    };
-    subtest 'http2' => sub {
-        $doit->("-2 100", qr{^HTTP/2 200\b}ms, "HTTP/2");
-    };
-    subtest 'http3' => sub {
-        $doit->("-3 100", qr{^HTTP/3 200\b}ms, "HTTP/3");
     };
 };
 
