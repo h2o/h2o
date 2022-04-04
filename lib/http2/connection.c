@@ -370,7 +370,7 @@ void h2o_http2_conn_unregister_stream(h2o_http2_conn_t *conn, h2o_http2_stream_t
 
 void close_connection_now(h2o_http2_conn_t *conn)
 {
-    assert(conn->read_file_stream == NULL);
+    assert(conn->read_file.stream == NULL);
 
     /* mark as is_closing here to prevent sending any more frames */
     conn->state = H2O_HTTP2_CONN_STATE_IS_CLOSING;
@@ -454,7 +454,7 @@ static void stream_send_error(h2o_http2_conn_t *conn, uint32_t stream_id, int er
 static void request_gathered_write(h2o_http2_conn_t *conn)
 {
     assert(conn->state < H2O_HTTP2_CONN_STATE_IS_CLOSING);
-    if (!h2o_socket_is_writing(conn->sock) && conn->read_file_stream == NULL && !h2o_timer_is_linked(&conn->_write.timeout_entry))
+    if (!h2o_socket_is_writing(conn->sock) && conn->read_file.stream == NULL && !h2o_timer_is_linked(&conn->_write.timeout_entry))
         h2o_timer_link(conn->super.ctx->loop, 0, &conn->_write.timeout_entry);
 }
 
@@ -1536,7 +1536,7 @@ static int emit_writereq_of_openref(h2o_http2_scheduler_openref_t *ref, int *sti
     assert(h2o_http2_stream_has_pending_data(stream) || stream->state >= H2O_HTTP2_STREAM_STATE_SEND_BODY_IS_FINAL);
 
     h2o_http2_stream_send_pending_data(conn, stream);
-    if (stream->read_file.cmd != NULL) {
+    if (stream == conn->read_file.stream) {
         *still_is_active = 0;
         return -1;
     }
@@ -1548,14 +1548,14 @@ static int emit_writereq_of_openref(h2o_http2_scheduler_openref_t *ref, int *sti
 void do_emit_writereq(h2o_http2_conn_t *conn)
 {
     assert(conn->_write.buf_in_flight == NULL);
-    assert(conn->read_file_stream == NULL);
+    assert(conn->read_file.stream == NULL);
 
     /* push stream-level frames */
     if (conn->state < H2O_HTTP2_CONN_STATE_IS_CLOSING && h2o_http2_conn_get_buffer_window(conn) > 0)
         h2o_http2_scheduler_run(&conn->scheduler, emit_writereq_of_openref, conn);
 
     /* if async read is in flight, let it call send */
-    if (conn->read_file_stream != NULL)
+    if (conn->read_file.stream != NULL)
         return;
 
     emit_writereq_send(conn);
@@ -1570,7 +1570,7 @@ static void emit_writereq(h2o_timer_t *entry)
 
 void h2o_http2_conn_on_read_complete(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
 {
-    assert(conn->read_file_stream == NULL);
+    assert(conn->read_file.stream == NULL);
 
     int stream_is_active;
 

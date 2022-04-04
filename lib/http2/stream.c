@@ -67,7 +67,7 @@ h2o_http2_stream_t *h2o_http2_stream_open(h2o_http2_conn_t *conn, uint32_t strea
 
 void h2o_http2_stream_close(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
 {
-    assert(stream->read_file.cmd == NULL);
+    assert(stream != conn->read_file.stream);
 
     h2o_http2_conn_unregister_stream(conn, stream);
     if (stream->cache_digests != NULL)
@@ -160,17 +160,17 @@ static void send_data_on_read_complete(h2o_socket_read_file_cmd_t *cmd)
     h2o_http2_conn_t *conn = (h2o_http2_conn_t *)stream->req.conn;
 
     /* if invoked synchronously, just set the result and return */
-    if (stream->read_file.cmd == NULL) {
-        stream->read_file.err = cmd->err;
+    if (conn->read_file.cmd == NULL) {
+        conn->read_file.err = cmd->err;
         return;
     }
 
     /* clear inflight indicators */
-    assert(conn->read_file_stream == stream);
-    char *dst_end = stream->read_file.dst_end;
-    stream->read_file.cmd = NULL;
-    stream->read_file.dst_end = NULL;
-    conn->read_file_stream = NULL;
+    assert(stream == conn->read_file.stream);
+    char *dst_end = conn->read_file.dst_end;
+    conn->read_file.stream = NULL;
+    conn->read_file.cmd = NULL;
+    conn->read_file.dst_end = NULL;
 
     send_data_on_payload_built(conn, stream, cmd->err == NULL ? dst_end : NULL);
     h2o_http2_conn_on_read_complete(conn, stream);
@@ -183,8 +183,8 @@ void h2o_http2_stream_send_pending_data(h2o_http2_conn_t *conn, h2o_http2_stream
     } else {
         assert(stream->_data_off == 0);
     }
-    assert(stream->read_file.cmd == NULL);
-    assert(conn->read_file_stream == NULL);
+    assert(conn->read_file.stream == NULL);
+    assert(conn->read_file.cmd == NULL);
 
     h2o_iovec_t dst;
 
@@ -217,7 +217,7 @@ void h2o_http2_stream_send_pending_data(h2o_http2_conn_t *conn, h2o_http2_stream
         }
         size_t fill_size = sz_min(dst.len, vec->len - stream->_data_off);
         /* invoke the read callback */
-        vec->callbacks->flatten(vec, &stream->req, &stream->read_file.cmd, h2o_iovec_init(dst.base, fill_size), stream->_data_off,
+        vec->callbacks->flatten(vec, &stream->req, &conn->read_file.cmd, h2o_iovec_init(dst.base, fill_size), stream->_data_off,
                                 send_data_on_read_complete, stream);
         /* adjust dst and stream to point to the next chunk */
         dst.base += fill_size;
@@ -228,12 +228,12 @@ void h2o_http2_stream_send_pending_data(h2o_http2_conn_t *conn, h2o_http2_stream
             stream->_data_off = 0;
         }
         /* If read is asynchronous, record that and return, so that the completion callback can take care of the rest of the job. */
-        if (stream->read_file.cmd != NULL) {
-            stream->read_file.dst_end = dst.base;
-            conn->read_file_stream = stream;
+        if (conn->read_file.cmd != NULL) {
+            conn->read_file.dst_end = dst.base;
+            conn->read_file.stream = stream;
             SHIFT_DATA();
             return;
-        } else if (stream->read_file.err != NULL) {
+        } else if (conn->read_file.err != NULL) {
             dst.base = NULL; /* indicate error */
             break;
         }

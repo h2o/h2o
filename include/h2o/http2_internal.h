@@ -100,16 +100,6 @@ struct st_h2o_http2_stream_t {
     H2O_VECTOR(h2o_sendvec_t) _data;
     size_t _data_off; /* offset within _data.entries[0] */
     /**
-     * Holds information regarding file read. If `cmd` is non-NULL, it is a reference to an asynchronous file read currently
-     * inflight. As there can be only one file read at a time per each connection, `h2o_http2_conn_t::read_file_stream` will point
-     * to this stream. `err` is used for communicating the result when the read file completion callback is invoked synchronously.
-     */
-    struct {
-        h2o_socket_read_file_cmd_t *cmd;
-        const char *err;
-        char *dst_end;
-    } read_file;
-    /**
      * points to http2_conn_t::num_streams::* in which the stream is counted
      */
     h2o_http2_conn_num_streams_t *_num_streams_slot;
@@ -219,9 +209,16 @@ struct st_h2o_http2_conn_t {
     } early_data;
     h2o_iovec_t *http2_origin_frame;
     /**
-     * stream that has read file inflight (or NULL if none)
+     * Holds information regarding file read.
+     * When an asynchronous read is in flight, `cmd` refers to the read command, and `stream` refers to the stream of which the read
+     * is in flight. Otherwise, `cmd` and `stream` are set to NULL. `err` is used to communicate the result.
      */
-    h2o_http2_stream_t *read_file_stream;
+    struct {
+        h2o_http2_stream_t *stream;
+        h2o_socket_read_file_cmd_t *cmd;
+        const char *err;
+        char *dst_end;
+    } read_file;
     /**
      * Ring buffer of closed streams. `next_slot` points to the next write position. The stored object is shrinked to only contain
      * stream_id and _scheduler.
