@@ -417,6 +417,13 @@ static void start_connect(h2o_socketpool_connect_request_t *req, struct sockaddr
     req->sock->data = req;
     req->sock->on_close.cb = on_close;
     req->sock->on_close.data = close_data;
+#if defined(__linux__)
+    /* This is a unix socket, it will be ready to be written to
+     * immediately, or fail immediately: either with ECONNREFUSED if the
+     * socket isn't present or EAGAIN if the listen queue is full */
+    if (addr->sa_family == AF_UNIX)
+        on_connect(req->sock, NULL);
+#endif
 }
 
 static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errstr, struct addrinfo *res, void *_req)
