@@ -315,7 +315,7 @@ static void call_connect_cb(h2o_socketpool_connect_request_t *req, const char *e
 
 struct st_deferred_action_t {
     h2o_timer_t timeout;
-    h2o_req_t *req;
+    h2o_socketpool_connect_request_t *req;
     const char *errstr;
 };
 
@@ -333,7 +333,6 @@ static void call_connect_cb_deferred(h2o_socketpool_connect_request_t *req, cons
     action->errstr = errstr;
     h2o_timer_init(&action->timeout, on_call_connect_cb_deferred);
     h2o_timer_link(req->loop, 0, &action->timeout);
-    return action;
 }
 
 static void try_connect(h2o_socketpool_connect_request_t *req)
