@@ -313,6 +313,29 @@ static void call_connect_cb(h2o_socketpool_connect_request_t *req, const char *e
     cb(sock, errstr, data, &selected_target->url);
 }
 
+struct st_deferred_action_t {
+    h2o_timer_t timeout;
+    h2o_req_t *req;
+    const char *errstr;
+};
+
+static void on_call_connect_cb_deferred(h2o_timer_t *entry)
+{
+    struct st_deferred_action_t *action = H2O_STRUCT_FROM_MEMBER(struct st_deferred_action_t, timeout, entry);
+    call_connect_cb(action->req, action->errstr);
+    free(action);
+}
+
+static void call_connect_cb_deferred(h2o_socketpool_connect_request_t *req, const char *errstr)
+{
+    struct st_deferred_action_t *action = h2o_mem_alloc(sizeof(*action));
+    action->req = req;
+    action->errstr = errstr;
+    h2o_timer_init(&action->timeout, on_call_connect_cb_deferred);
+    h2o_timer_link(req->loop, 0, &action->timeout);
+    return action;
+}
+
 static void try_connect(h2o_socketpool_connect_request_t *req)
 {
     h2o_socketpool_target_t *target;
@@ -408,7 +431,7 @@ static void start_connect(h2o_socketpool_connect_request_t *req, struct sockaddr
             return;
         }
         __sync_sub_and_fetch(&req->pool->_shared.count, 1);
-        call_connect_cb(req, h2o_socket_error_conn_fail);
+        call_connect_cb_deferred(req, h2o_socket_error_conn_fail);
         return;
     }
     close_data = h2o_mem_alloc(sizeof(*close_data));
