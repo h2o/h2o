@@ -139,7 +139,7 @@ static int do_pread(h2o_sendvec_t *src, h2o_req_t *req, h2o_iovec_t dst, size_t 
                    -1 &&
                errno == EINTR)
             ;
-        if (rret == -1)
+        if (rret <= 0)
             return 0;
         bytes_read += rret;
     }
