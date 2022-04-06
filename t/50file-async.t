@@ -9,8 +9,6 @@ use t::Util;
 
 plan skip_all => "use of io_uring not enabled"
     unless server_features()->{io_uring};
-plan skip_all => "io_uring is available only on linux"
-    if $^O ne "linux";
 check_dtrace_availability();
 
 my $tempdir = tempdir(CLEANUP => 1);
