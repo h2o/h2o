@@ -466,7 +466,8 @@ static void stream_send_error(h2o_http2_conn_t *conn, uint32_t stream_id, int er
 static void request_gathered_write(h2o_http2_conn_t *conn)
 {
     assert(conn->state < H2O_HTTP2_CONN_STATE_IS_CLOSING);
-    if (conn->_write.buf_in_flight == NULL && !h2o_timer_is_linked(&conn->_write.timeout_entry))
+    if (!h2o_socket_is_writing(conn->sock) && conn->_write.buf_in_flight == NULL &&
+        !h2o_timer_is_linked(&conn->_write.timeout_entry))
         h2o_timer_link(conn->super.ctx->loop, 0, &conn->_write.timeout_entry);
 }
 
@@ -1473,6 +1474,8 @@ static void on_write_complete(h2o_socket_t *sock, const char *err)
     }
 
 #if !H2O_USE_LIBUV
+    /* Rather than calling `do_emit_writereq` synchronously, invoke it via socket-level completion callack. The intent here is to
+     * let the generators complete reads from / write to TCP buffers, and provide more input to stream prioritization. */
     if (conn->state == H2O_HTTP2_CONN_STATE_OPEN) {
         if (conn->_write.buf->size != 0 || h2o_http2_scheduler_is_active(&conn->scheduler))
             h2o_socket_notify_write(sock, on_notify_write);
