@@ -823,9 +823,14 @@ static void on_send_complete(h2o_socket_t *sock, const char *err)
 {
     struct st_h2o_http1_conn_t *conn = sock->data;
 
-    assert(conn->req._ostr_top == &conn->_ostr_final.super);
-
-    conn->req.timestamps.response_end_at = h2o_gettimeofday(conn->super.ctx->loop);
+    if (err == NULL) {
+        if (conn->req._ostr_top != &conn->_ostr_final.super) {
+            err = "pull error";
+        } else {
+            /* success */
+            conn->req.timestamps.response_end_at = h2o_gettimeofday(conn->super.ctx->loop);
+        }
+    }
 
     if (err != NULL)
         conn->req.http1_is_persistent = 0;
