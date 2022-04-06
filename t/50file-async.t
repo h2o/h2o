@@ -15,25 +15,30 @@ check_dtrace_availability();
 
 my $tempdir = tempdir(CLEANUP => 1);
 
-# create disk image and mount at $tempdir/mnt; intent here is to force use of fs that supports O_DIRECT
-system(qw(dd if=/dev/zero bs=1M count=10), "of=$tempdir/image") == 0
-    or die "dd failed:$?";
-system("mke2fs", "$tempdir/image") == 0
-    or die "mke2fs failed:$?";
-mkdir "$tempdir/mnt"
-    or die "failed to create directory:$tempdir/mnt:$!";
-my $mount_guard = guard {
-    system("umount", "-f", "$tempdir/mnt");
-};
-system("mount", "$tempdir/image", "$tempdir/mnt") == 0
-    or die "mount failed:$?";
+# create content
+our @FILESIZE = qw(11 4095 4096 1000000 2000000);
+for my $s (@FILESIZE) {
+    open my $fh, ">", "$tempdir/$s.txt"
+        or die "failed to create file:$tempdir/$s.txt:$!";
+    print $fh "1" x $s;
+}
 
-# spawn server
-my $quic_port = empty_port({
-    host  => "127.0.0.1",
-    proto => "udp",
-});
-my $server = spawn_h2o(<< "EOT");
+subtest "no-batch" => sub {
+    run_tests(1);
+};
+
+subtest "batch=16" => sub {
+    run_tests(16);
+};
+
+sub run_tests {
+    my $batch_size = shift;
+    # spawn server
+    my $quic_port = empty_port({
+        host  => "127.0.0.1",
+        proto => "udp",
+    });
+    my $server = spawn_h2o(<< "EOT");
 listen:
   type: quic
   host: 127.0.0.1
@@ -45,89 +50,73 @@ hosts:
   default:
     paths:
       /:
-        file.dir: $tempdir/mnt
+        file.dir: $tempdir
+io_uring-batch-size: $batch_size
 EOT
-wait_port({port => $quic_port, proto => "udp"});
+    wait_port({port => $quic_port, proto => "udp"});
 
-# launch tracer
-my $tracer_pid = fork;
-die "fork(2) failed:$!"
-    unless defined $tracer_pid;
-if ($tracer_pid == 0) {
-    # child process, spawn bpftrace
-    close STDOUT;
-    open STDOUT, ">", "$tempdir/trace.out"
-        or die "failed to create temporary file:$tempdir/trace.out:$!";
-    exec qw(bpftrace -v -B none -p), $server->{pid}, "-e", <<'EOT';
+    # launch tracer
+    my $tracer_pid = fork;
+    die "fork(2) failed:$!"
+        unless defined $tracer_pid;
+    if ($tracer_pid == 0) {
+        # child process, spawn bpftrace
+        close STDOUT;
+        open STDOUT, ">", "$tempdir/trace.out"
+            or die "failed to create temporary file:$tempdir/trace.out:$!";
+        exec qw(bpftrace -v -B none -p), $server->{pid}, "-e", <<'EOT';
 usdt::h2o:socket_read_file_async_start { printf("read_file_async\n"); }
 EOT
-    die "failed to spawn dtrace:$!";
-}
+        die "failed to spawn dtrace:$!";
+    }
 
-# wait until bpftrace and the trace log becomes ready
-my $read_trace = get_tracer($tracer_pid, "$tempdir/trace.out");
-while ($read_trace->() eq '') {
-  sleep 1;
-}
-sleep 2;
+    # wait until bpftrace and the trace log becomes ready
+    my $read_trace = get_tracer($tracer_pid, "$tempdir/trace.out");
+    while ($read_trace->() eq '') {
+      sleep 1;
+    }
+    sleep 2;
 
-my $doit = sub {
-    my $fetch = shift;
-    for my $size (qw(11 4095 4096 1000000 2000000)) {
-        subtest "size=$size" => sub {
-            my $fn = "index.bin";
-            create_uncached_file($fn, $size);
-
-            subtest "first-access" => sub {
-                my $resp = $fetch->($fn);
+    my $doit = sub {
+        my $fetch = shift;
+        for my $size (@FILESIZE) {
+            subtest "size=$size" => sub {
+                my $resp = $fetch->("$size.txt");
                 sleep 1;
                 my $trace = $read_trace->();
-                like $trace, qr/read_file_async/, "async";
+                subtest "access type" => sub {
+                    if ($batch_size == 1) {
+                        unlike $trace, qr/read_file_async/;
+                    } else {
+                        like $trace, qr/read_file_async/;
+                    }
+                };
                 is length($resp), $size, "size";
-                is md5_hex($resp), md5_file("$tempdir/mnt/index.bin"), "md5";
-            };
-
-            subtest "second-access" => sub {
-                my $resp = $fetch->($fn);
-                sleep 1;
-                my $trace = $read_trace->();
-                is $trace, "", "sync";
-                is length($resp), $size, "size";
-                is md5_hex($resp), md5_file("$tempdir/mnt/index.bin"), "md5";
+                is md5_hex($resp), md5_file("$tempdir/$size.txt"), "md5";
             };
         };
-    }
-};
+    };
 
-# run test with each protocol
-run_with_curl($server, sub {
-    my ($proto, $port, $curl) = @_;
-    $doit->(sub {
-        my $fn = shift;
-        `$curl --silent --dump-header /dev/null '$proto://127.0.0.1:$port/$fn'`;
+    # run test with each protocol
+    run_with_curl($server, sub {
+        my ($proto, $port, $curl) = @_;
+        $doit->(sub {
+            my $fn = shift;
+            `$curl --silent --dump-header /dev/null '$proto://127.0.0.1:$port/$fn'`;
+        });
     });
-});
-subtest 'http/3' => sub {
-    my $h3client = bindir() . "/h2o-httpclient";
-    plan skip_all => "$h3client not found"
-        unless -e $h3client;
-    $doit->(sub {
-        my $fn = shift;
-        `$h3client -3 100 https://127.0.0.1:$quic_port/$fn 2> /dev/null`;
-    });
-};
+    subtest 'http/3' => sub {
+        my $h3client = bindir() . "/h2o-httpclient";
+        plan skip_all => "$h3client not found"
+            unless -e $h3client;
+        $doit->(sub {
+            my $fn = shift;
+            `$h3client -3 100 https://127.0.0.1:$quic_port/$fn 2> /dev/null`;
+        });
+    };
 
-undef $server;
-while (waitpid($tracer_pid, 0) != $tracer_pid) {}
+    undef $server;
+    while (waitpid($tracer_pid, 0) != $tracer_pid) {}
+}
 
 done_testing;
-
-sub create_uncached_file {
-    my ($fn, $size) = @_;
-    system("dd if=/dev/random of=$tempdir/mnt/$fn count=" . int(($size + 4095) / 4096) . " bs=4096 oflag=direct 2> /dev/null") == 0
-        or die "dd failed:$?";
-    if ($size % 4096 != 0) {
-        truncate("$tempdir/mnt/$fn", $size)
-            or die "failed to truncate file:$!";
-    }
-}
