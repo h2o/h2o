@@ -475,7 +475,7 @@ h2o_socket_t *h2o_evloop_socket_accept(h2o_socket_t *_listener)
 
 h2o_socket_t *h2o_socket_connect(h2o_loop_t *loop, struct sockaddr *addr, socklen_t addrlen, h2o_socket_cb cb, const char **err)
 {
-    int fd;
+    int fd, connect_ret;
     struct st_h2o_evloop_socket_t *sock;
 
     if ((fd = cloexec_socket(addr->sa_family, SOCK_STREAM, 0)) == -1) {
@@ -486,22 +486,19 @@ h2o_socket_t *h2o_socket_connect(h2o_loop_t *loop, struct sockaddr *addr, sockle
     }
     fcntl(fd, F_SETFL, O_NONBLOCK);
 
-    int flags = H2O_SOCKET_FLAG_IS_CONNECTING;
-    if (connect(fd, addr, addrlen) == 0) {
-        /* immediate success, adjust flags and call `link_to_pending` below */
-        flags |= H2O_SOCKET_FLAG_IS_WRITE_NOTIFY | H2O_SOCKET_FLAG_IS_CONNECTING_CONNECTED;
-    } else if (errno != EINPROGRESS) {
-        /* immediate failure */
+    if (!((connect_ret = connect(fd, addr, addrlen)) == 0 || errno == EINPROGRESS)) {
         if (err != NULL)
             *err = h2o_socket_get_error_string(errno, h2o_socket_error_conn_fail);
         close(fd);
         return NULL;
     }
 
-    sock = create_socket(loop, fd, flags);
+    sock = create_socket(loop, fd, H2O_SOCKET_FLAG_IS_CONNECTING);
     set_nodelay_if_likely_tcp(fd, addr);
 
-    if ((flags & H2O_SOCKET_FLAG_IS_CONNECTING_CONNECTED) != 0) {
+    if (connect_ret == 0) {
+        /* connection has been established synchronously; notify the fact without going back to epoll */
+        sock->_flags |= H2O_SOCKET_FLAG_IS_CONNECTING_CONNECTED;
         sock->super._cb.write = cb;
         link_to_pending(sock);
     } else {
