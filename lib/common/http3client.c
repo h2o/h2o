@@ -212,15 +212,16 @@ static void call_proceed_req(struct st_h2o_http3client_req_t *req, const char *e
     req->proceed_req.cb(&req->super, errstr);
 }
 
-static void destroy_connection(struct st_h2o_httpclient__h3_conn_t *conn)
+static void destroy_connection(struct st_h2o_httpclient__h3_conn_t *conn, const char *errstr)
 {
+    assert(errstr != NULL);
     if (h2o_linklist_is_linked(&conn->link))
         h2o_linklist_unlink(&conn->link);
     while (!h2o_linklist_is_empty(&conn->pending_requests)) {
         struct st_h2o_http3client_req_t *req =
             H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3client_req_t, link, conn->pending_requests.next);
         h2o_linklist_unlink(&req->link);
-        req->super._cb.on_connect(&req->super, h2o_socket_error_conn_fail, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
+        req->super._cb.on_connect(&req->super, errstr, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
         destroy_request(req);
     }
     assert(h2o_linklist_is_empty(&conn->pending_requests));
@@ -234,10 +235,19 @@ static void destroy_connection(struct st_h2o_httpclient__h3_conn_t *conn)
     free(conn);
 }
 
+static void destroy_connection_on_transport_close(h2o_quic_conn_t *_conn)
+{
+    struct st_h2o_httpclient__h3_conn_t *conn = (void *)_conn;
+
+    /* When a connection gets closed while request is inflight, the most probable cause is some error in the transport (or at the
+     * application protocol layer). But as we do not know the exact cause, we use a generic error here. */
+    destroy_connection(conn, h2o_httpclient_error_io);
+}
+
 static void on_connect_timeout(h2o_timer_t *timeout)
 {
     struct st_h2o_httpclient__h3_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_httpclient__h3_conn_t, timeout, timeout);
-    destroy_connection(conn);
+    destroy_connection(conn, h2o_httpclient_error_connect_timeout);
 }
 
 static void start_connect(struct st_h2o_httpclient__h3_conn_t *conn, struct sockaddr *sa)
@@ -277,7 +287,7 @@ static void start_connect(struct st_h2o_httpclient__h3_conn_t *conn, struct sock
     return;
 Fail:
     free(address_token.base);
-    destroy_connection(conn);
+    destroy_connection(conn, h2o_httpclient_error_internal);
 }
 
 static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errstr, struct addrinfo *res, void *_conn)
@@ -288,8 +298,8 @@ static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errs
     conn->getaddr_req = NULL;
 
     if (errstr != NULL) {
-        /* TODO reconnect */
-        abort();
+        destroy_connection(conn, errstr);
+        return;
     }
 
     struct addrinfo *selected = h2o_hostinfo_select_one(res);
@@ -343,7 +353,7 @@ struct st_h2o_httpclient__h3_conn_t *create_connection(h2o_httpclient_ctx_t *ctx
     if (!h2o_socketpool_is_global(pool->socketpool))
         origin = &pool->socketpool->targets.entries[0]->url;
 
-    static const h2o_http3_conn_callbacks_t callbacks = {{(void *)destroy_connection}, handle_control_stream_frame};
+    static const h2o_http3_conn_callbacks_t callbacks = {{destroy_connection_on_transport_close}, handle_control_stream_frame};
     static const h2o_http3_qpack_context_t qpack_ctx = {0 /* TODO */};
 
     struct st_h2o_httpclient__h3_conn_t *conn = h2o_mem_alloc(sizeof(*conn));
