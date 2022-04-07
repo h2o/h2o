@@ -136,6 +136,7 @@ static int has_pending_ssl_bytes(struct st_h2o_socket_ssl_t *ssl);
 static size_t generate_tls_records(h2o_socket_t *sock, h2o_iovec_t **bufs, size_t *bufcnt, size_t first_buf_written);
 static void do_dispose_socket(h2o_socket_t *sock);
 static void do_write(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_socket_cb cb);
+static int is_write_complete(h2o_socket_t *sock);
 static void do_read_start(h2o_socket_t *sock);
 static void do_read_stop(h2o_socket_t *sock);
 static int do_export(h2o_socket_t *_sock, h2o_socket_export_t *info);
@@ -826,6 +827,11 @@ void h2o_socket_write(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_
     }
 
     do_write(sock, bufs, bufcnt, cb);
+}
+
+int h2o_socket_is_write_complete(h2o_socket_t *sock)
+{
+    return is_write_complete(sock);
 }
 
 void on_write_complete(h2o_socket_t *sock, const char *err)
