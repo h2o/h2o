@@ -10,7 +10,7 @@ plan skip_all => 'curl not found'
 my $all_data = do {
     open my $fh, "<", "@{[DOC_ROOT]}/halfdome.jpg"
         or die "failed to open file:@{[DOC_ROOT]}/halfdome.jpg:$!";
-    undef $/;
+    local $/;
     <$fh>;
 };
 
