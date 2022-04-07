@@ -5,6 +5,7 @@ use File::Temp qw(tempdir);
 use IO::Handle;
 use Net::EmptyPort qw(empty_port wait_port);
 use Test::More;
+use Time::HiRes qw(time);
 use t::Util;
 
 my $tempdir = tempdir(CLEANUP => 1);
@@ -55,30 +56,35 @@ EOT
         print $fh $testdata;
         $fh->flush;
 
-        subtest "normal" => sub {
-            my $resp = $fetch->("index.txt");
-            is $?, 0, "exit status";
-            is md5_hex($resp), md5_hex($testdata), "data";
-        };
-        subtest "shrink" => sub {
-            # spawn child prcoess that truncates the file after 2 seconds
-            my $pid = fork;
-            die "fork failed:$!"
-                unless defined $pid;
-            if ($pid == 0) {
-                sleep 2;
-                truncate($fh, 800000)
-                    or die "truncate failed:$!";
-                exit 0;
-            }
-            # fetch file (which would return a partial result)
-            my $resp = $fetch->("index.txt");
-            isnt $?, 0, "exit status";
-            cmp_ok length($resp), "<", length($testdata), "length";
-            is md5_hex($resp), md5_hex(substr($testdata, 0, length($resp))), "data";
-            # reap pid
-            while (waitpid($pid, 0) != $pid) {}
-        };
+        my $normal_time = measure_elapsed(sub {
+            subtest "normal" => sub {
+                my $resp = $fetch->("index.txt");
+                is $?, 0, "exit status";
+                is md5_hex($resp), md5_hex($testdata), "data";
+            };
+        });
+        my $shrink_time = measure_elapsed(sub {
+            subtest "shrink" => sub {
+                # spawn child prcoess that truncates the file after 2 seconds
+                my $pid = fork;
+                die "fork failed:$!"
+                    unless defined $pid;
+                if ($pid == 0) {
+                    sleep 2;
+                    truncate($fh, 800000)
+                        or die "truncate failed:$!";
+                    exit 0;
+                }
+                # fetch file (which would return a partial result)
+                my $resp = $fetch->("index.txt");
+                isnt $?, 0, "exit status";
+                cmp_ok length($resp), "<", length($testdata), "length";
+                is md5_hex($resp), md5_hex(substr($testdata, 0, length($resp))), "data";
+                # reap pid
+                while (waitpid($pid, 0) != $pid) {}
+            };
+        });
+        cmp_ok $normal_time, ">", $shrink_time, "shrink should not wait until I/O timeout";
     };
 
     # run test with each protocol
@@ -103,3 +109,9 @@ EOT
 }
 
 done_testing;
+
+sub measure_elapsed {
+    my $start = time;
+    shift->();
+    return time - $start;
+}
