@@ -498,7 +498,7 @@ h2o_socket_t *h2o_socket_connect(h2o_loop_t *loop, struct sockaddr *addr, sockle
 
     if (connect_ret == 0) {
         /* connection has been established synchronously; notify the fact without going back to epoll */
-        sock->_flags |= H2O_SOCKET_FLAG_IS_CONNECTING_CONNECTED;
+        sock->_flags |= H2O_SOCKET_FLAG_IS_WRITE_NOTIFY | H2O_SOCKET_FLAG_IS_CONNECTING_CONNECTED;
         sock->super._cb.write = cb;
         link_to_pending(sock);
     } else {
