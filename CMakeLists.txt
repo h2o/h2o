@@ -515,6 +515,7 @@ SET(UNIT_TEST_SOURCE_FILES
     t/00unit/lib/handler/headers.c
     t/00unit/lib/handler/mimemap.c
     t/00unit/lib/handler/redirect.c
+    t/00unit/lib/handler/throttle_resp.c
     t/00unit/lib/http2/cache_digests.c
     t/00unit/lib/http2/casper.c
     t/00unit/lib/http2/hpack.c
@@ -552,6 +553,7 @@ LIST(REMOVE_ITEM UNIT_TEST_SOURCE_FILES
     lib/handler/headers.c
     lib/handler/mimemap.c
     lib/handler/redirect.c
+    lib/handler/throttle_resp.c
     lib/http2/cache_digests.c
     lib/http2/casper.c
     lib/http2/hpack.c
