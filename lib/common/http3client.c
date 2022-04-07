@@ -235,9 +235,13 @@ static void error_destroy_connection(struct st_h2o_httpclient__h3_conn_t *conn, 
     free(conn);
 }
 
-static void destroy_connection(struct st_h2o_httpclient__h3_conn_t *conn)
+static void destroy_connection_on_transport_close(h2o_quic_conn_t *_conn)
 {
-    error_destroy_connection(conn, h2o_socket_error_conn_fail);
+    struct st_h2o_httpclient__h3_conn_t *conn = (void *)_conn;
+
+    /* When a connection gets closed while request is inflight, the most probable cause is some error in the transport (or at the
+     * application protocol layer). But as we do not know the exact cause, we use a generic error here. */
+    error_destroy_connection(conn, h2o_httpclient_error_io);
 }
 
 static void on_connect_timeout(h2o_timer_t *timeout)
@@ -349,7 +353,7 @@ struct st_h2o_httpclient__h3_conn_t *create_connection(h2o_httpclient_ctx_t *ctx
     if (!h2o_socketpool_is_global(pool->socketpool))
         origin = &pool->socketpool->targets.entries[0]->url;
 
-    static const h2o_http3_conn_callbacks_t callbacks = {{(void *)destroy_connection}, handle_control_stream_frame};
+    static const h2o_http3_conn_callbacks_t callbacks = {{destroy_connection_on_transport_close}, handle_control_stream_frame};
     static const h2o_http3_qpack_context_t qpack_ctx = {0 /* TODO */};
 
     struct st_h2o_httpclient__h3_conn_t *conn = h2o_mem_alloc(sizeof(*conn));
