@@ -123,8 +123,11 @@ static void on_setup_ostream(h2o_filter_t *self, h2o_req_t *req, h2o_ostream_t *
 
     /* calculate the token increment per 100ms */
     throttle->token_inc = traffic_limit * HUNDRED_MS / ONE_SECOND;
-    if (req->preferred_chunk_size > throttle->token_inc)
+    if (req->preferred_chunk_size > throttle->token_inc) {
         req->preferred_chunk_size = throttle->token_inc;
+        if (req->preferred_chunk_size < 4096)
+            req->preferred_chunk_size = 4096;
+    }
 
     h2o_delete_header(&req->res.headers, xt_index);
 
