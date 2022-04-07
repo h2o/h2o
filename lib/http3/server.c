@@ -1602,17 +1602,17 @@ static void normalize_data_on_read_file_complete(h2o_socket_read_file_cmd_t *cmd
     assert(stream->read_file.cmd == cmd);
     stream->read_file.cmd = NULL;
 
-    if (cmd->err != NULL) {
+    if (cmd->err == NULL) {
+        quicly_context_t *qctx = quicly_get_context(stream->quic->conn);
+        qctx->stream_scheduler->update_state(qctx->stream_scheduler, stream->quic);
+    } else {
         shutdown_stream(stream, H2O_HTTP3_ERROR_INTERNAL, H2O_HTTP3_ERROR_INTERNAL, 0);
-        return;
     }
 
-    quicly_context_t *qctx = quicly_get_context(stream->quic->conn);
-    qctx->stream_scheduler->update_state(qctx->stream_scheduler, stream->quic);
     h2o_quic_schedule_timer(&get_conn(stream)->h3.super);
 }
 
-static void normalize_data_to_be_sent(struct st_h2o_http3_server_stream_t *stream)
+static int normalize_data_to_be_sent(struct st_h2o_http3_server_stream_t *stream)
 {
     static const h2o_sendvec_callbacks_t vec_callbacks = {h2o_sendvec_flatten_raw, allocated_vec_update_refcnt};
 
@@ -1637,7 +1637,7 @@ static void normalize_data_to_be_sent(struct st_h2o_http3_server_stream_t *strea
                 vec->vec = (h2o_sendvec_t){&vec_callbacks, buf.len, {buf.base}};
                 stream->sendbuf.next_flatten.offset += vec->vec.len;
                 ++stream->sendbuf.next_flatten.vec_index;
-                return;
+                return 0;
             }
             if (stream->read_file.err != NULL) {
                 free(buf.base);
@@ -1655,9 +1655,11 @@ static void normalize_data_to_be_sent(struct st_h2o_http3_server_stream_t *strea
         ++stream->sendbuf.next_flatten.vec_index;
     }
 
-    return;
+    return 1;
+
 Fail:
     shutdown_stream(stream, H2O_HTTP3_ERROR_INTERNAL, H2O_HTTP3_ERROR_INTERNAL, 0);
+    return 0;
 }
 
 static int scheduler_do_send(quicly_stream_scheduler_t *sched, quicly_conn_t *qc, quicly_send_context_t *s)
@@ -1718,9 +1720,9 @@ static int scheduler_do_send(quicly_stream_scheduler_t *sched, quicly_conn_t *qc
                 req_scheduler_conn_blocked(&conn->scheduler.reqs, &stream->scheduler);
                 continue;
             }
-            /* 2. load file or addref data; if failed to load synchronously, deactivate the stream until read completes */
-            normalize_data_to_be_sent(stream);
-            if (stream->read_file.cmd != NULL) {
+            /* 2. load file or addref data; if failed or async load has started, deactivate the stream. Upon error, resets are sent
+             * regardless of scheduler. Upon async load, the stream will be reactivated when the load completes. */
+            if (!normalize_data_to_be_sent(stream)) {
                 req_scheduler_deactivate(&conn->scheduler.reqs, &stream->scheduler);
                 continue;
             }
