@@ -502,6 +502,7 @@ h2o_socket_t *h2o_socket_connect(h2o_loop_t *loop, struct sockaddr *addr, sockle
     set_nodelay_if_likely_tcp(fd, addr);
 
     if ((flags & H2O_SOCKET_FLAG_IS_CONNECTING_CONNECTED) != 0) {
+        sock->super._cb.write = cb;
         link_to_pending(sock);
     } else {
         h2o_socket_notify_write(&sock->super, cb);
