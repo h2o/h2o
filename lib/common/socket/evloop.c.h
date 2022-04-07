@@ -587,7 +587,7 @@ static void run_socket(struct st_h2o_evloop_socket_t *sock)
             if (has_pending_ssl_bytes(sock->super.ssl))
                 dispose_ssl_output_buffer(sock->super.ssl);
         } else if ((sock->_flags & H2O_SOCKET_FLAG_IS_CONNECTING) != 0) {
-            /* completion of connect; determine error if we do not know if the connection has been successfully estabilshed */
+            /* completion of connect; determine error if we do not know whether the connection has been successfully estabilshed */
             if ((sock->_flags & H2O_SOCKET_FLAG_IS_CONNECTING_CONNECTED) == 0) {
                 int so_err = 0;
                 socklen_t l = sizeof(so_err);
