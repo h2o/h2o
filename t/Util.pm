@@ -2,6 +2,7 @@ package t::Util;
 
 use strict;
 use warnings;
+use feature qw(state);
 use Digest::MD5 qw(md5_hex);
 use File::Temp qw(tempfile tempdir);
 use IO::Socket::INET;
@@ -43,6 +44,7 @@ our @EXPORT = qw(
     run_prog
     openssl_can_negotiate
     curl_supports_http2
+    curl_supports_http3
     run_with_curl
     h2get_exists
     run_with_h2get
@@ -369,8 +371,17 @@ sub openssl_can_negotiate {
     return $openssl_ver >= 10001;
 }
 
+sub _curl_version {
+    state $curl_version = `curl --version`;
+    return $curl_version;
+}
+
 sub curl_supports_http2 {
-    return !! (`curl --version` =~ /^Features:.*\sHTTP2(?:\s|$)/m);
+    return !! (_curl_version =~ /^Features:.*\bHTTP2\b/m);
+}
+
+sub curl_supports_http3 {
+    return !! (_curl_version =~ /^Features:.*\bHTTP3\b/m);
 }
 
 sub run_with_curl {
