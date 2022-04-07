@@ -485,17 +485,27 @@ h2o_socket_t *h2o_socket_connect(h2o_loop_t *loop, struct sockaddr *addr, sockle
         return NULL;
     }
     fcntl(fd, F_SETFL, O_NONBLOCK);
-    if (!(connect(fd, addr, addrlen) == 0 || errno == EINPROGRESS)) {
+
+    int flags = H2O_SOCKET_FLAG_IS_CONNECTING;
+    if (connect(fd, addr, addrlen) == 0) {
+        /* immediate success, adjust flags and call `link_to_pending` below */
+        flags |= H2O_SOCKET_FLAG_IS_WRITE_NOTIFY | H2O_SOCKET_FLAG_IS_CONNECTING_CONNECTED;
+    } else if (errno != EINPROGRESS) {
+        /* immediate failure */
         if (err != NULL)
             *err = h2o_socket_get_error_string(errno, h2o_socket_error_conn_fail);
         close(fd);
         return NULL;
     }
 
-    sock = create_socket(loop, fd, H2O_SOCKET_FLAG_IS_CONNECTING);
+    sock = create_socket(loop, fd, flags);
     set_nodelay_if_likely_tcp(fd, addr);
 
-    h2o_socket_notify_write(&sock->super, cb);
+    if ((flags & H2O_SOCKET_FLAG_IS_CONNECTING_CONNECTED) != 0) {
+        link_to_pending(sock);
+    } else {
+        h2o_socket_notify_write(&sock->super, cb);
+    }
     return &sock->super;
 }
 
@@ -576,12 +586,15 @@ static void run_socket(struct st_h2o_evloop_socket_t *sock)
             if (has_pending_ssl_bytes(sock->super.ssl))
                 dispose_ssl_output_buffer(sock->super.ssl);
         } else if ((sock->_flags & H2O_SOCKET_FLAG_IS_CONNECTING) != 0) {
-            sock->_flags &= ~H2O_SOCKET_FLAG_IS_CONNECTING;
-            int so_err = 0;
-            socklen_t l = sizeof(so_err);
-            so_err = 0;
-            if (getsockopt(sock->fd, SOL_SOCKET, SO_ERROR, &so_err, &l) != 0 || so_err != 0)
-                err = h2o_socket_get_error_string(so_err, h2o_socket_error_conn_fail);
+            /* completion of connect; determine error if we do not know if the connection has been successfully estabilshed */
+            if ((sock->_flags & H2O_SOCKET_FLAG_IS_CONNECTING_CONNECTED) == 0) {
+                int so_err = 0;
+                socklen_t l = sizeof(so_err);
+                so_err = 0;
+                if (getsockopt(sock->fd, SOL_SOCKET, SO_ERROR, &so_err, &l) != 0 || so_err != 0)
+                    err = h2o_socket_get_error_string(so_err, h2o_socket_error_conn_fail);
+            }
+            sock->_flags &= ~(H2O_SOCKET_FLAG_IS_CONNECTING | H2O_SOCKET_FLAG_IS_CONNECTING_CONNECTED);
         }
         on_write_complete(&sock->super, err);
     }
