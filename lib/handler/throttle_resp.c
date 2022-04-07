@@ -35,7 +35,6 @@ typedef struct st_throttle_resp_t {
     h2o_timer_t timeout_entry;
     int64_t tokens;
     size_t token_inc;
-    h2o_context_t *ctx;
     h2o_req_t *req;
     struct {
         H2O_VECTOR(h2o_sendvec_t) bufs;
@@ -66,7 +65,7 @@ static void add_token(h2o_timer_t *entry)
 {
     throttle_resp_t *self = H2O_STRUCT_FROM_MEMBER(throttle_resp_t, timeout_entry, entry);
 
-    h2o_timer_link(self->ctx->loop, 100, &self->timeout_entry);
+    h2o_timer_link(self->req->conn->ctx->loop, 100, &self->timeout_entry);
     self->tokens += self->token_inc;
 
     if (self->tokens > 0)
@@ -131,7 +130,6 @@ static void on_setup_ostream(h2o_filter_t *self, h2o_req_t *req, h2o_ostream_t *
 
     throttle->super.do_send = on_send;
     throttle->super.stop = on_stop;
-    throttle->ctx = req->conn->ctx;
     throttle->req = req;
     throttle->state.bufs.capacity = 0;
     throttle->state.bufs.size = 0;
@@ -140,7 +138,7 @@ static void on_setup_ostream(h2o_filter_t *self, h2o_req_t *req, h2o_ostream_t *
     slot = &throttle->super.next;
 
     h2o_timer_init(&throttle->timeout_entry, add_token);
-    h2o_timer_link(throttle->ctx->loop, 100, &throttle->timeout_entry);
+    h2o_timer_link(throttle->req->conn->ctx->loop, 100, &throttle->timeout_entry);
 
 Next:
     h2o_setup_next_ostream(req, slot);
