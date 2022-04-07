@@ -726,9 +726,11 @@ static void start_request(struct st_h2o_http1client_t *client, h2o_iovec_t metho
     }
     client->super.bytes_written.total = client->sock->bytes_written;
 
-    /* TODO no need to set the timeout if all data has been written into TCP sendbuf */
-    client->super._timeout.cb = on_send_timeout;
-    h2o_timer_link(client->super.ctx->loop, client->super.ctx->io_timeout, &client->super._timeout);
+    /* no need to set the timeout if all data has been written into TCP sendbuf */
+    if (!h2o_socket_is_write_complete(client->sock)) {
+        client->super._timeout.cb = on_send_timeout;
+        h2o_timer_link(client->super.ctx->loop, client->super.ctx->io_timeout, &client->super._timeout);
+    }
 
     client->state.req = STREAM_STATE_BODY;
     client->super.timings.request_begin_at = h2o_gettimeofday(client->super.ctx->loop);
