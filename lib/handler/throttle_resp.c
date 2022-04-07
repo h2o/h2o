@@ -22,73 +22,79 @@
 #include <stdlib.h>
 #include "h2o.h"
 
-#ifndef HUNDRED_MS
-#define HUNDRED_MS 100
-#endif
-
-#ifndef ONE_SECOND
-#define ONE_SECOND 1000
-#endif
-
 typedef struct st_throttle_resp_t {
     h2o_ostream_t super;
     h2o_timer_t timeout_entry;
-    int64_t tokens;
-    size_t token_inc;
+    struct {
+        uint64_t at;
+        ssize_t bytes_left;
+    } window;
     h2o_req_t *req;
+    size_t bytes_per_sec;
     struct {
         H2O_VECTOR(h2o_sendvec_t) bufs;
         h2o_send_state_t stream_state;
     } state;
 } throttle_resp_t;
 
-static void real_send(throttle_resp_t *self)
+/**
+ * Given current deficit (`bytes_left` which would be negative) and bytes_per_sec, returns when the deficit would become
+ * non-negative.
+ */
+static uint64_t calc_delay(ssize_t bytes_left, size_t bytes_per_sec)
 {
-    /* a really simple token bucket implementation */
-    assert(self->tokens > 0);
-    size_t i, token_consume;
-
-    token_consume = 0;
-
-    for (i = 0; i < self->state.bufs.size; i++) {
-        token_consume += self->state.bufs.entries[i].len;
-    }
-
-    self->tokens -= token_consume;
-
-    h2o_ostream_send_next(&self->super, self->req, self->state.bufs.entries, self->state.bufs.size, self->state.stream_state);
-    if (!h2o_send_state_is_in_progress(self->state.stream_state))
-        h2o_timer_unlink(&self->timeout_entry);
+    return (-bytes_left * (uint64_t)1000 + bytes_per_sec - 1) / bytes_per_sec;
 }
 
-static void add_token(h2o_timer_t *entry)
+static void real_send(throttle_resp_t *self)
+{
+    uint64_t now = h2o_now(self->req->conn->ctx->loop);
+
+    /* if time has changed since previous invocation, update window */
+    if (self->window.at < now) {
+        /* burst rate (after upstream remains silent) is limited to 1-second worth of data */
+        uint64_t addition = (self->bytes_per_sec * (now - self->window.at)) / 1000;
+        if (addition > self->bytes_per_sec)
+            addition = self->bytes_per_sec;
+        self->window.bytes_left += addition;
+        self->window.at = now;
+    }
+
+    /* schedule the timer for delayed invocation, if window is negative at this moment */
+    if (self->window.bytes_left < 0) {
+        uint64_t delay = calc_delay(self->window.bytes_left, self->bytes_per_sec);
+        assert(delay > 0);
+        h2o_timer_link(self->req->conn->ctx->loop, delay, &self->timeout_entry);
+        return;
+    }
+
+    /* adjust window and send */
+    for (size_t i = 0; i < self->state.bufs.size; i++)
+        self->window.bytes_left -= self->state.bufs.entries[i].len;
+    h2o_ostream_send_next(&self->super, self->req, self->state.bufs.entries, self->state.bufs.size, self->state.stream_state);
+}
+
+static void on_timer(h2o_timer_t *entry)
 {
     throttle_resp_t *self = H2O_STRUCT_FROM_MEMBER(throttle_resp_t, timeout_entry, entry);
-
-    h2o_timer_link(self->req->conn->ctx->loop, 100, &self->timeout_entry);
-    self->tokens += self->token_inc;
-
-    if (self->tokens > 0)
-        real_send(self);
+    real_send(self);
 }
 
 static void on_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_sendvec_t *inbufs, size_t inbufcnt, h2o_send_state_t state)
 {
     throttle_resp_t *self = (void *)_self;
-    size_t i;
 
-    /* I don't know if this is a proper way. */
+    assert(!h2o_timer_is_linked(&self->timeout_entry));
+
+    /* save state */
     h2o_vector_reserve(&req->pool, &self->state.bufs, inbufcnt);
-    /* start to save state */
-    for (i = 0; i < inbufcnt; ++i) {
+    for (size_t i = 0; i < inbufcnt; ++i) {
         self->state.bufs.entries[i] = inbufs[i];
     }
     self->state.bufs.size = inbufcnt;
     self->state.stream_state = state;
 
-    /* if there's token, we try to send */
-    if (self->tokens > 0)
-        real_send(self);
+    real_send(self);
 }
 
 static void on_stop(h2o_ostream_t *_self, h2o_req_t *req)
@@ -101,47 +107,45 @@ static void on_stop(h2o_ostream_t *_self, h2o_req_t *req)
 static void on_setup_ostream(h2o_filter_t *self, h2o_req_t *req, h2o_ostream_t **slot)
 {
     throttle_resp_t *throttle;
-    h2o_iovec_t traffic_header_value;
-    size_t traffic_limit;
+    size_t bytes_per_sec;
 
+    /* only handle 200 OK with content */
     if (req->res.status != 200)
         goto Next;
     if (h2o_memis(req->input.method.base, req->input.method.len, H2O_STRLIT("HEAD")))
         goto Next;
 
-    ssize_t xt_index;
-    if ((xt_index = h2o_find_header(&req->res.headers, H2O_TOKEN_X_TRAFFIC, -1)) == -1)
-        goto Next;
-
-    traffic_header_value = req->res.headers.entries[xt_index].value;
-    char *buf = traffic_header_value.base;
-
-    if (H2O_UNLIKELY((traffic_limit = h2o_strtosizefwd(&buf, traffic_header_value.len)) == SIZE_MAX))
-        goto Next;
-
-    throttle = (void *)h2o_add_ostream(req, H2O_ALIGNOF(*throttle), sizeof(*throttle), slot);
-
-    /* calculate the token increment per 100ms */
-    throttle->token_inc = traffic_limit * HUNDRED_MS / ONE_SECOND;
-    if (req->preferred_chunk_size > throttle->token_inc) {
-        req->preferred_chunk_size = throttle->token_inc;
-        if (req->preferred_chunk_size < 4096)
-            req->preferred_chunk_size = 4096;
+    { /* obtain the rate from X-Traffic header field and delete the header field, or skip */
+        ssize_t xt_index;
+        if ((xt_index = h2o_find_header(&req->res.headers, H2O_TOKEN_X_TRAFFIC, -1)) == -1)
+            goto Next;
+        char *buf = req->res.headers.entries[xt_index].value.base;
+        if (H2O_UNLIKELY((bytes_per_sec = h2o_strtosizefwd(&buf, req->res.headers.entries[xt_index].value.len)) == SIZE_MAX))
+            goto Next;
+        h2o_delete_header(&req->res.headers, xt_index);
     }
 
-    h2o_delete_header(&req->res.headers, xt_index);
-
+    /* instantiate the ostream filter */
+    throttle = (void *)h2o_add_ostream(req, H2O_ALIGNOF(*throttle), sizeof(*throttle), slot);
     throttle->super.do_send = on_send;
     throttle->super.stop = on_stop;
+    h2o_timer_init(&throttle->timeout_entry, on_timer);
+    throttle->window.at = h2o_now(req->conn->ctx->loop);
+    throttle->window.bytes_left = 0;
     throttle->req = req;
+    throttle->bytes_per_sec = bytes_per_sec;
     memset(&throttle->state.bufs, 0, sizeof(throttle->state.bufs));
     throttle->state.stream_state = H2O_SEND_STATE_IN_PROGRESS;
 
-    throttle->tokens = throttle->token_inc;
-    slot = &throttle->super.next;
+    { /* reduce `preferred_chunk_size` so that we'd be sending one chunk every 100ms */
+        size_t chunk_size = bytes_per_sec / 10;
+        if (chunk_size < 4096)
+            chunk_size = 4096;
+        if (req->preferred_chunk_size > chunk_size)
+            req->preferred_chunk_size = chunk_size;
+    }
 
-    h2o_timer_init(&throttle->timeout_entry, add_token);
-    h2o_timer_link(throttle->req->conn->ctx->loop, 100, &throttle->timeout_entry);
+    slot = &throttle->super.next;
 
 Next:
     h2o_setup_next_ostream(req, slot);
