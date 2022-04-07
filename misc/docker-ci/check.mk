@@ -47,7 +47,6 @@ _check: _mount _do_check
 
 _mount:
 	uname -a
-	sudo mount -t tmpfs tmpfs -o size=1G /tmp
 	sudo mkdir -p /sys/fs/bpf
 	sudo mount -t bpf bpf -o mode=700 /sys/fs/bpf
 	# create writable source directory using overlay
