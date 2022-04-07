@@ -212,7 +212,7 @@ static void call_proceed_req(struct st_h2o_http3client_req_t *req, const char *e
     req->proceed_req.cb(&req->super, errstr);
 }
 
-static void error_destroy_connection(struct st_h2o_httpclient__h3_conn_t *conn, const char *errstr)
+static void destroy_connection(struct st_h2o_httpclient__h3_conn_t *conn, const char *errstr)
 {
     assert(errstr != NULL);
     if (h2o_linklist_is_linked(&conn->link))
@@ -241,13 +241,13 @@ static void destroy_connection_on_transport_close(h2o_quic_conn_t *_conn)
 
     /* When a connection gets closed while request is inflight, the most probable cause is some error in the transport (or at the
      * application protocol layer). But as we do not know the exact cause, we use a generic error here. */
-    error_destroy_connection(conn, h2o_httpclient_error_io);
+    destroy_connection(conn, h2o_httpclient_error_io);
 }
 
 static void on_connect_timeout(h2o_timer_t *timeout)
 {
     struct st_h2o_httpclient__h3_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_httpclient__h3_conn_t, timeout, timeout);
-    error_destroy_connection(conn, h2o_httpclient_error_connect_timeout);
+    destroy_connection(conn, h2o_httpclient_error_connect_timeout);
 }
 
 static void start_connect(struct st_h2o_httpclient__h3_conn_t *conn, struct sockaddr *sa)
@@ -287,7 +287,7 @@ static void start_connect(struct st_h2o_httpclient__h3_conn_t *conn, struct sock
     return;
 Fail:
     free(address_token.base);
-    error_destroy_connection(conn, h2o_httpclient_error_internal);
+    destroy_connection(conn, h2o_httpclient_error_internal);
 }
 
 static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errstr, struct addrinfo *res, void *_conn)
@@ -298,7 +298,7 @@ static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errs
     conn->getaddr_req = NULL;
 
     if (errstr != NULL) {
-        error_destroy_connection(conn, errstr);
+        destroy_connection(conn, errstr);
         return;
     }
 
