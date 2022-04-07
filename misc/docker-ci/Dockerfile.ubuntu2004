@@ -19,12 +19,12 @@ RUN apt-get install --yes \
 	libedit-dev \
 	libelf-dev \
 	libev-dev \
-	libssl-dev \
 	libuv1-dev \
 	llvm-dev \
 	libllvm7 \
 	llvm-7-dev \
 	libclang-7-dev \
+	libnghttp2-dev \
 	zlib1g-dev \
 	memcached \
 	net-tools \
@@ -41,10 +41,27 @@ RUN apt-get install --yes \
 	time \
 	wget
 
-# curl with http2 support
-RUN apt-get install --yes libnghttp2-dev \
-	&& wget --no-verbose -O - https://curl.haxx.se/download/curl-7.81.0.tar.gz | tar xzf - \
-	&& (cd curl-7.81.0 && ./configure --prefix=/usr/local --with-openssl --without-brotli --with-nghttp2 --disable-shared && make && make install)
+# curl with http2 and http3 support
+RUN wget --https-only --no-verbose -O - https://sh.rustup.rs | sh -s -- \
+		-y \
+		--profile minimal \
+		--default-toolchain 1.59.0 \
+	&& git clone --recursive --branch 0.12.0 --depth 1 https://github.com/cloudflare/quiche \
+	&& (cd quiche \
+		&& $HOME/.cargo/bin/cargo build --package quiche --release --features ffi,pkg-config-meta,qlog \
+		&& mkdir quiche/deps/boringssl/src/lib \
+		&& ln -vnf $(find target/release -name libcrypto.a -o -name libssl.a) quiche/deps/boringssl/src/lib/ \
+		&& find . -name '*.so' -delete) \
+	&& wget --no-verbose -O - https://curl.haxx.se/download/curl-7.82.0.tar.gz | tar xzf - \
+	&& (cd curl-7.82.0 \
+		&& ./configure --prefix=/usr/local --without-brotli --with-nghttp2 --disable-shared  CC=clang LDFLAGS="-Wl,-rpath,$PWD/../quiche/target/release" --with-openssl="$PWD/../quiche/quiche/deps/boringssl/src" --with-quiche="$PWD/../quiche/target/release" \
+		&& make -j4 V=1 && make -j4 install) \
+	&& (rm -rf quiche curl-7.82.0) \
+	&& curl --version
+
+
+# libssl-dev causes curl to fail to build with http3 (quiche)
+RUN apt-get install --yes libssl-dev
 
 # perl
 RUN apt-get install --yes \
