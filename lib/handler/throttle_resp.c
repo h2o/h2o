@@ -134,8 +134,8 @@ static void on_setup_ostream(h2o_filter_t *self, h2o_req_t *req, h2o_ostream_t *
     throttle->super.do_send = on_send;
     throttle->super.stop = on_stop;
     throttle->req = req;
-    throttle->state.bufs.capacity = 0;
-    throttle->state.bufs.size = 0;
+    memset(&throttle->state.bufs, 0, sizeof(throttle->state.bufs));
+    throttle->state.stream_state = H2O_SEND_STATE_IN_PROGRESS;
 
     throttle->tokens = throttle->token_inc;
     slot = &throttle->super.next;
