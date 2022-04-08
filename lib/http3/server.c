@@ -1208,9 +1208,7 @@ static int handle_input_expect_headers(struct st_h2o_http3_server_stream_t *stre
         }
         return 0;
     }
-
     stream->req.timestamps.request_begin_at = h2o_gettimeofday(conn->super.ctx->loop);
-
     stream->recvbuf.handle_input = handle_input_expect_data;
 
     /* parse the headers, and ack */
@@ -1640,11 +1638,9 @@ static int scheduler_do_send(quicly_stream_scheduler_t *sched, quicly_conn_t *qc
             if ((ret = quicly_send_stream(stream->quic, s)) != 0)
                 goto Exit;
             ++stream->scheduler.call_cnt;
-
             if (stream->quic->sendstate.size_inflight == stream->quic->sendstate.final_size &&
                 h2o_timeval_is_null(&stream->req.timestamps.response_end_at))
                 stream->req.timestamps.response_end_at = h2o_gettimeofday(stream->req.conn->ctx->loop);
-
             /* 4. invoke h2o_proceed_request synchronously, so that we could obtain additional data for the current (i.e. highest)
              *    stream. */
             if (stream->proceed_while_sending) {
