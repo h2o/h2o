@@ -1121,9 +1121,8 @@ int handle_input_expect_data(struct st_h2o_http3_server_stream_t *stream, const 
 
     /* got a DATA frame */
     if (frame.length != 0) {
-        if (h2o_timeval_is_null(&stream->req.timestamps.request_body_begin_at)) {
+        if (h2o_timeval_is_null(&stream->req.timestamps.request_body_begin_at))
             stream->req.timestamps.request_body_begin_at = h2o_gettimeofday(get_conn(stream)->super.ctx->loop);
-        }
         stream->recvbuf.handle_input = handle_input_expect_data_payload;
         stream->recvbuf.bytes_left_in_data_frame = frame.length;
     }
