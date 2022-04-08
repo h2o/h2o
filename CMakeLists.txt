@@ -153,6 +153,16 @@ IF (WITH_DTRACE)
     MESSAGE(STATUS "Enabling USDT support")
 ENDIF ()
 
+IF ((CMAKE_SIZEOF_VOID_P EQUAL 8) AND
+    (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64") OR
+     (CMAKE_SYSTEM_PROCESSOR STREQUAL "amd64") OR
+     (CMAKE_SYSTEM_PROCESSOR STREQUAL "AMD64"))
+    SET(WITH_FUSION_DEFAULT "ON")
+ELSE ()
+    SET(WITH_FUSION_DEFAULT "OFF")
+ENDIF ()
+OPTION(WITH_FUSION "build with fusion AES-GCM engine" ${WITH_FUSION_DEFAULT})
+
 INCLUDE_DIRECTORIES(
     include
     deps/cloexec
@@ -505,6 +515,7 @@ SET(UNIT_TEST_SOURCE_FILES
     t/00unit/lib/handler/headers.c
     t/00unit/lib/handler/mimemap.c
     t/00unit/lib/handler/redirect.c
+    t/00unit/lib/handler/throttle_resp.c
     t/00unit/lib/http2/cache_digests.c
     t/00unit/lib/http2/casper.c
     t/00unit/lib/http2/hpack.c
@@ -542,6 +553,7 @@ LIST(REMOVE_ITEM UNIT_TEST_SOURCE_FILES
     lib/handler/headers.c
     lib/handler/mimemap.c
     lib/handler/redirect.c
+    lib/handler/throttle_resp.c
     lib/http2/cache_digests.c
     lib/http2/casper.c
     lib/http2/hpack.c
@@ -736,6 +748,11 @@ IF (WITH_MRUBY)
     SET(STANDALONE_COMPILE_FLAGS "${STANDALONE_COMPILE_FLAGS} -DH2O_USE_MRUBY=1")
     SET_PROPERTY(DIRECTORY PROPERTY ADDITIONAL_MAKE_CLEAN_FILES ${CMAKE_CURRENT_BINARY_DIR}/mruby/)
 ENDIF (WITH_MRUBY)
+IF (WITH_FUSION)
+    SET(STANDALONE_COMPILE_FLAGS "${STANDALONE_COMPILE_FLAGS} -DH2O_USE_FUSION=1")
+    LIST(APPEND STANDALONE_SOURCE_FILES deps/picotls/lib/fusion.c)
+    SET_SOURCE_FILES_PROPERTIES(deps/picotls/lib/fusion.c PROPERTIES COMPILE_FLAGS "-mavx2 -maes -mpclmul")
+ENDIF ()
 ADD_EXECUTABLE(h2o ${STANDALONE_SOURCE_FILES})
 SET_TARGET_PROPERTIES(h2o PROPERTIES COMPILE_FLAGS "${STANDALONE_COMPILE_FLAGS}")
 TARGET_INCLUDE_DIRECTORIES(h2o PUBLIC ${OPENSSL_INCLUDE_DIR})
