@@ -1,14 +1,26 @@
 use strict;
 use warnings;
 use File::Temp qw(tempdir);
+use Net::EmptyPort qw(empty_port check_port);
+use JSON qw(decode_json);
 use Test::More;
 use t::Util;
 
+my $client_prog = bindir() . "/h2o-httpclient";
+plan skip_all => "$client_prog not found"
+    unless -e $client_prog;
 plan skip_all => 'curl not found'
     unless prog_exists('curl');
 plan skip_all => 'racy under valgrind' if $ENV{"H2O_VALGRIND"};
 
 my $tempdir = tempdir(CLEANUP => 1);
+my $upstream_port = empty_port();
+my $upstream = spawn_server(
+    argv     => [ qw(plackup -s Starlet --keepalive-timeout 100 --access-log /dev/null --listen), $upstream_port, ASSETS_DIR . "/upstream.psgi" ],
+    is_ready =>  sub {
+        check_port($upstream_port);
+    },
+);
 
 sub doit {
     my ($cmd, $args, @expected) = @_;
@@ -17,12 +29,15 @@ sub doit {
 
     $args = { format => $args }
         unless ref $args;
-
+    my $quic_port = empty_port({ host  => "0.0.0.0", proto => "udp" });
     my $server = spawn_h2o({conf => <<"EOT", max_ssl_version => 'TLSv1.2'});
 num-threads: 1
-ssl-session-resumption:
-  mode: cache
-  cache-store: internal
+listen:
+  type: quic
+  port: $quic_port
+  ssl:
+    key-file: examples/h2o/server.key
+    certificate-file: examples/h2o/server.crt
 hosts:
   default:
     paths:
@@ -42,12 +57,15 @@ hosts:
       /compress:
         file.dir: @{[ DOC_ROOT ]}
         compress: [gzip]
+      /proxy:
+        proxy.reverse.url: http://127.0.0.1:$upstream_port
     access-log:
-      format: "$args->{format}"
+      format: '$args->{format}'
 @{[$args->{escape} ? "      escape: $args->{escape}" : ""]}
       path: $tempdir/access_log
 EOT
 
+    $server->{quic_port} = $quic_port;
     $cmd->($server);
 
     undef $server->{guard}; # log will be emitted before the server exits
@@ -58,10 +76,13 @@ EOT
         map { my $l = $_; chomp $l; $l } <$fh>;
     };
 
+    local $Test::Builder::Level = $Test::Builder::Level + 1;
     for (my $i = 0; $i != @expected; ++$i) {
-        $expected[$i] = $expected[$i]->($server)
-            if ref $expected[$i] eq 'CODE';
-        like $log[$i], $expected[$i];
+        if (ref $expected[$i] eq 'CODE') {
+            $expected[$i]->($log[$i], $server);
+        } else {
+            like $log[$i], $expected[$i];
+        }
     }
 }
 
@@ -71,7 +92,7 @@ subtest "custom-log" => sub {
             my $server = shift;
             system("curl --silent --referer http://example.com/ http://127.0.0.1:$server->{port}/ > /dev/null");
         },
-        '%h %l %u %t \"%r\" %s %b \"%{Referer}i\" \"%{User-agent}i\"',
+        '%h %l %u %t "%r" %s %b "%{Referer}i" "%{User-agent}i"',
         qr{^127\.0\.0\.1 - - \[[0-9]{2}/[A-Z][a-z]{2}/20[0-9]{2}:[0-9]{2}:[0-9]{2}:[0-9]{2} [+\-][0-9]{4}\] "GET / HTTP/1\.1" 200 6 "http://example.com/" "curl/.*"$},
     );
 };
@@ -107,8 +128,11 @@ subtest "more-fields" => sub {
             like $resp, qr{,(\d+)$}s;
             $local_port = do { $resp =~ /,(\d+)$/s; $1 };
         },
-        '\"%A:%p\" \"%{local}p\" \"%{remote}p\"',
-        sub { my $server = shift; qr{^\"127\.0\.0\.1:$server->{port}\" \"$server->{port}\" \"$local_port\"$} },
+        '"%A:%p" "%{local}p" "%{remote}p"',
+        sub {
+            my($log, $server) = @_;
+            like $log, qr{^\"127\.0\.0\.1:$server->{port}\" \"$server->{port}\" \"$local_port\"$};
+        },
     );
 };
 
@@ -126,25 +150,71 @@ subtest 'ltsv-related' => sub {
 };
 
 subtest 'timings' => sub {
+    # The path should take at least 0.050 sec in total.
+    # See also 50reverse-proxy-timings.t for timing stats.
+    my $path = "proxy/streaming-body?sleep=0.01&count=5";
+    my $least_duration = 0.040; # 0.50 is too sensitive
+
     my $doit = sub {
-        my $opts = shift;
+        my ($opts, $expected_status_line, $expected_protocol) = @_;
         doit(
             sub {
-                my $server = shift;
-                system("curl $opts --silent --data helloworld http://127.0.0.1:$server->{port}/ > /dev/null");
-                system("curl $opts --silent --insecure --data helloworld https://127.0.0.1:$server->{tls_port}/ > /dev/null");
+                my ($server) = @_;
+                my $port = $expected_protocol ne "HTTP/3" ? $server->{tls_port} : $server->{quic_port};
+                my $resp = `$client_prog -k $opts 'https://127.0.0.1:$port/$path' 2>&1`;
+                like $resp, $expected_status_line, "HTTP request for $expected_protocol";
             },
-            '%{connect-time}x:%{request-header-time}x:%{request-body-time}x:%{response-time}x:%{request-total-time}x:%{duration}x:%{undefined}x',
-            map { qr{^[0-9\.]+:[0-9\.]+:[0-9\.]+:[0-9\.]+:[0-9\.]+:[0-9\.]+:-$} } (1..2),
+            {
+                format => '{
+                    "protocol":"%H"
+                    , "connect-time":%{connect-time}x
+                    , "request-total-time":%{request-total-time}x
+                    , "request-header-time":%{request-header-time}x
+                    , "request-body-time":%{request-body-time}x
+                    , "process-time":%{process-time}x
+                    , "response-time":%{response-time}x
+                    , "duration":%{duration}x
+                    , "total-time":%{total-time}x
+                    , "proxy.idle-time":%{proxy.idle-time}x
+                    , "proxy.connect-time":%{proxy.connect-time}x
+                    , "proxy.request-time":%{proxy.request-time}x
+                    , "proxy.process-time":%{proxy.process-time}x
+                    , "proxy.response-time":%{proxy.response-time}x
+                    , "proxy.total-time":%{proxy.total-time}x
+                }',
+                escape => 'json',
+            },
+            sub {
+                my($log_json) = @_;
+                my $log = decode_json($log_json);
+
+                is $log->{"protocol"}, $expected_protocol;
+
+                cmp_ok $log->{"connect-time"}, ">", 0;
+                cmp_ok $log->{"request-total-time"}, ">=", 0;
+                cmp_ok $log->{"request-header-time"}, ">=", 0;
+                cmp_ok $log->{"request-body-time"}, ">=", 0;
+                cmp_ok $log->{"process-time"}, ">=", 0;
+                cmp_ok $log->{"response-time"}, ">=", $least_duration;
+                cmp_ok $log->{"total-time"}, ">=", $least_duration;
+                cmp_ok $log->{"duration"}, ">=", $least_duration;
+                cmp_ok $log->{"proxy.idle-time"}, ">=", 0;
+                cmp_ok $log->{"proxy.connect-time"}, ">", 0;
+                cmp_ok $log->{"proxy.request-time"}, ">=", 0;
+                cmp_ok $log->{"proxy.process-time"}, ">", 0;
+                cmp_ok $log->{"proxy.response-time"}, ">", $least_duration;
+                cmp_ok $log->{"proxy.total-time"}, ">", $least_duration;
+            },
         );
     };
     subtest 'http1' => sub {
-        $doit->("");
+        $doit->("", qr{^HTTP/1\.1 200\b}ms, "HTTP/1.1");
     };
     subtest 'http2' => sub {
-        plan skip_all => "curl does not support HTTP/2"
-            unless curl_supports_http2();
-        $doit->("--http2");
+        $doit->("-2 100", qr{^HTTP/2 200\b}ms, "HTTP/2");
+    };
+    subtest 'http3' => sub {
+        $doit->("-3 100", qr{^HTTP/3 200\b}ms, "HTTP/3");
     };
 };
 
@@ -227,7 +297,7 @@ subtest 'set-cookie' => sub {
             my $server = shift;
             system("curl --silent http://127.0.0.1:$server->{port}/set-cookie/ > /dev/null");
         },
-        '\\"%<{set-cookie}o\\" \\"%>{set-cookie}o\\" \\"%{set-cookie}o\\" \\"%{cache-control}o\\"',
+        '"%<{set-cookie}o" "%>{set-cookie}o" "%{set-cookie}o" "%{cache-control}o"',
         qr{^"-" "a=b, c=d" "a=b, c=d" "must-revalidate"$}s,
     );
 };
@@ -256,7 +326,7 @@ subtest "json-null" => sub {
         },
         # single specifier surrounded by quotes that consist a string literal in JSON should be converted to `null` if the specifier
         # resolves to null
-        { format => '\\"%h\\" %l \\"%l\\" \'%l\' \'%l \' \'\\"%l\\"\'', escape => 'json' },
+        { format => q{"%h" %l "%l" ''%l'' ''%l '' ''"%l"''}, escape => 'json' },
         qr{^"127\.0\.0\.1" null null null 'null ' '"null"'$},
     );
 };

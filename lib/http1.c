@@ -632,7 +632,7 @@ static void handle_incoming_request(struct st_h2o_http1_conn_t *conn)
     h2o_iovec_t expect;
 
     /* need to set request_begin_at here for keep-alive connection */
-    if (conn->req.timestamps.request_begin_at.tv_sec == 0)
+    if (h2o_timeval_is_null(&conn->req.timestamps.request_begin_at))
         conn->req.timestamps.request_begin_at = h2o_gettimeofday(conn->super.ctx->loop);
 
     reqlen = phr_parse_request(conn->sock->input->bytes, inreqlen, (const char **)&conn->req.input.method.base,

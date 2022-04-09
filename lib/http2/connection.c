@@ -1091,7 +1091,7 @@ static int handle_settings_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *fram
             *err_desc = "invalid SETTINGS frame (+ACK)";
             return H2O_HTTP2_ERROR_FRAME_SIZE;
         }
-        if (conn->timestamps.settings_acked_at.tv_sec == 0 && conn->timestamps.settings_sent_at.tv_sec != 0) {
+        if (h2o_timeval_is_null(&conn->timestamps.settings_acked_at) && !h2o_timeval_is_null(&conn->timestamps.settings_sent_at)) {
             conn->timestamps.settings_acked_at = h2o_gettimeofday(conn->super.ctx->loop);
         }
     } else {
@@ -1271,7 +1271,7 @@ static ssize_t expect_preface(h2o_http2_conn_t *conn, const uint8_t *src, size_t
             /* write origin frame */
             h2o_http2_encode_origin_frame(&conn->_write.buf, *conn->http2_origin_frame);
         }
-        if (conn->timestamps.settings_sent_at.tv_sec == 0) {
+        if (h2o_timeval_is_null(&conn->timestamps.settings_sent_at)) {
             conn->timestamps.settings_sent_at = h2o_gettimeofday(conn->super.ctx->loop);
         }
         h2o_http2_conn_request_write(conn);
@@ -1574,7 +1574,7 @@ static int skip_tracing(h2o_conn_t *_conn)
 static int64_t get_rtt(h2o_conn_t *_conn)
 {
     struct st_h2o_http2_conn_t *conn = (void *)_conn;
-    if (conn->timestamps.settings_sent_at.tv_sec != 0 && conn->timestamps.settings_acked_at.tv_sec != 0) {
+    if (!h2o_timeval_is_null(&conn->timestamps.settings_sent_at) && !h2o_timeval_is_null(&conn->timestamps.settings_acked_at)) {
         return h2o_timeval_subtract(&conn->timestamps.settings_sent_at, &conn->timestamps.settings_acked_at);
     } else {
         return -1;
