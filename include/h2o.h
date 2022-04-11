@@ -811,6 +811,10 @@ typedef struct st_h2o_sendvec_callbacks_t {
      * retransmission. Increments the reference counter if `is_incr` is set to true, otherwise the counter is decremented.
      */
     void (*update_refcnt)(h2o_sendvec_t *vec, h2o_req_t *req, int is_incr);
+    /**
+     * optional
+     */
+    int (*get_fd)(h2o_sendvec_t *vec, h2o_req_t *req, off_t *off);
 } h2o_sendvec_callbacks_t;
 
 /**

@@ -34,6 +34,9 @@
 #if defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__)
 #include <sys/ioctl.h>
 #endif
+#ifdef __linux__
+#include <sys/sendfile.h>
+#endif
 #include "picotls.h"
 #include "quicly.h"
 #include "h2o/socket.h"
@@ -136,6 +139,7 @@ static int has_pending_ssl_bytes(struct st_h2o_socket_ssl_t *ssl);
 static size_t generate_tls_records(h2o_socket_t *sock, h2o_iovec_t **bufs, size_t *bufcnt, size_t first_buf_written);
 static void do_dispose_socket(h2o_socket_t *sock);
 static void do_write(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_socket_cb cb);
+static void do_sendfile(h2o_socket_t *sock, int fd, off_t off, size_t len, h2o_socket_cb cb);
 static void do_read_start(h2o_socket_t *sock);
 static void do_read_stop(h2o_socket_t *sock);
 static int do_export(h2o_socket_t *_sock, h2o_socket_export_t *info);
@@ -809,6 +813,13 @@ static size_t generate_tls_records(h2o_socket_t *sock, h2o_iovec_t **bufs, size_
     }
 
     return first_buf_written;
+}
+
+void h2o_socket_sendfile(h2o_socket_t *sock, int fd, off_t off, size_t len, h2o_socket_cb cb)
+{
+    assert(sock->_cb.write == NULL);
+    assert(sock->ssl == NULL);
+    do_sendfile(sock, fd, off, len, cb);
 }
 
 void h2o_socket_write(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_socket_cb cb)

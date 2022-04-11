@@ -54,6 +54,10 @@ struct st_h2o_evloop_socket_t {
     size_t max_read_size;
     struct st_h2o_evloop_socket_t *_next_pending;
     struct st_h2o_evloop_socket_t *_next_statechanged;
+    struct {
+        int fd;
+        off_t off;
+    } _sendfile;
 };
 
 #if H2O_USE_IO_URING
@@ -127,6 +131,31 @@ static void read_file_on_delayed(h2o_timer_t *timer);
 #else
 #error "poller not specified"
 #endif
+
+static ssize_t our_sendfile(int sockfd, int filefd, off_t off, size_t len)
+{
+    assert(len != 0);
+
+#ifdef __linux__
+    ssize_t ret;
+    while ((ret = sendfile(sockfd, filefd, &off, len)) == -1 && errno == EINTR)
+       ;
+    return ret;
+#else
+    off_t iolen;
+    int ret;
+    for (iolen = len; (ret = sendfile(filefd, sockfd, off, &iolen, NULL, 0)) != 0 && errno == EINTR;)
+        ;
+    if (ret != 0) {
+        if (errno == EAGAIN && iolen != 0)
+            return iolen;
+        return -1;
+    }
+    return iolen;
+#endif
+}
+
+static const char sendfile_marker[] = "sendfile";
 
 void link_to_pending(struct st_h2o_evloop_socket_t *sock)
 {
@@ -262,6 +291,23 @@ void write_pending(struct st_h2o_evloop_socket_t *sock)
     if (sock->super._write_buf.cnt == 0 && !has_pending_ssl_bytes(sock->super.ssl))
         goto Complete;
 
+    if (sock->super._write_buf.bufs[0].base == sendfile_marker) {
+        ssize_t ret = our_sendfile(sock->fd, sock->_sendfile.fd, sock->_sendfile.off, sock->super._write_buf.bufs[0].len);
+        if (ret <= 0) {
+            if (ret == -1 && errno == EAGAIN)
+                return;
+            goto Complete;
+        }
+        if (ret > 0) {
+            sock->_sendfile.off += ret;
+            if ((sock->super._write_buf.bufs[0].len -= ret) == 0) {
+                sock->super._write_buf.cnt = 0;
+                goto Complete;
+            }
+        }
+        return;
+    }
+
     { /* write */
         size_t first_buf_written;
         if ((first_buf_written = write_core(sock, &sock->super._write_buf.bufs, &sock->super._write_buf.cnt)) != SIZE_MAX) {
@@ -321,6 +367,42 @@ void do_dispose_socket(h2o_socket_t *_sock)
         sock->fd = -1;
     }
     sock->_flags = H2O_SOCKET_FLAG_IS_DISPOSED;
+    link_to_statechanged(sock);
+}
+
+void do_sendfile(h2o_socket_t *_sock, int fd, off_t off, size_t len, h2o_socket_cb cb)
+{
+    struct st_h2o_evloop_socket_t *sock = (struct st_h2o_evloop_socket_t *)_sock;
+
+    sock->super._cb.write = cb;
+
+    ssize_t ret = our_sendfile(sock->fd, fd, off, len);
+
+    if (ret == -1 && errno != EAGAIN) {
+        /* fill in _wreq.bufs with fake data to indicate error */
+        sock->super._write_buf.bufs = sock->super._write_buf.smallbufs;
+        sock->super._write_buf.cnt = 1;
+        *sock->super._write_buf.bufs = h2o_iovec_init(H2O_STRLIT("deadbeef"));
+        sock->_flags |= H2O_SOCKET_FLAG_IS_WRITE_NOTIFY;
+        link_to_pending(sock);
+        return;
+    }
+
+    if (ret == len) {
+        /* write complete */
+        sock->_flags |= H2O_SOCKET_FLAG_IS_WRITE_NOTIFY;
+        link_to_pending(sock);
+        return;
+    }
+    if (ret < 0)
+        ret = 0;
+
+    /* have some more */
+    sock->super._write_buf.bufs = sock->super._write_buf.smallbufs;
+    sock->super._write_buf.cnt = 1;
+    sock->super._write_buf.bufs[0] = h2o_iovec_init(sendfile_marker, len - ret);
+    sock->_sendfile.fd = fd;
+    sock->_sendfile.off = off + ret;
     link_to_statechanged(sock);
 }
 

@@ -50,6 +50,7 @@ struct st_h2o_sendfile_generator_t {
     unsigned send_vary : 1;
     unsigned send_etag : 1;
     unsigned gunzip : 1;
+    size_t sndcnt;
     struct {
         char *multirange_buf; /* multi-range mode uses push */
         size_t filesize;
@@ -146,15 +147,25 @@ static void sendvec_update_refcnt(h2o_sendvec_t *vec, h2o_req_t *req, int is_inc
     }
 }
 
+static int sendvec_get_fd(h2o_sendvec_t *src, h2o_req_t *req, off_t *off)
+{
+    struct st_h2o_sendfile_generator_t *self = (void *)src->cb_arg[0];
+
+    *off = (off_t)src->cb_arg[1];
+    return self->file.ref->fd;
+}
+
 static void do_proceed(h2o_generator_t *_self, h2o_req_t *req)
 {
-    static const h2o_sendvec_callbacks_t sendvec_callbacks = {sendvec_read, sendvec_update_refcnt};
+    static const h2o_sendvec_callbacks_t sendvec_callbacks = {sendvec_read, sendvec_update_refcnt, sendvec_get_fd};
 
     struct st_h2o_sendfile_generator_t *self = (void *)_self;
     h2o_sendvec_t vec;
     h2o_send_state_t send_state;
 
     vec.len = self->bytesleft < H2O_PULL_SENDVEC_MAX_SIZE ? self->bytesleft : H2O_PULL_SENDVEC_MAX_SIZE;
+    if (self->sndcnt++ != 0)
+        vec.len = self->bytesleft;
     vec.callbacks = &sendvec_callbacks;
     vec.cb_arg[0] = (uint64_t)self;
     vec.cb_arg[1] = self->file.off;
@@ -285,6 +296,7 @@ Opened:
     self->send_vary = (flags & H2O_FILE_FLAG_SEND_COMPRESSED) != 0;
     self->send_etag = (flags & H2O_FILE_FLAG_NO_ETAG) == 0;
     self->gunzip = gunzip;
+    self->sndcnt = 0;
 
     return self;
 }

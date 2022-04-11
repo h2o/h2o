@@ -1088,7 +1088,7 @@ void finalostream_send(h2o_ostream_t *_self, h2o_req_t *_req, h2o_sendvec_t *inb
         if (pull_mode == NOT_PULL && inbufs[i].callbacks->flatten != h2o_sendvec_flatten_raw)
             pull_mode = IS_PULL;
     }
-    assert(pull_mode == NOT_PULL || inbufcnt == 0 || (inbufcnt == 1 && inbufs[0].len <= H2O_PULL_SENDVEC_MAX_SIZE));
+    assert(pull_mode == NOT_PULL || inbufcnt == 0 || (inbufcnt == 1 && (inbufs[0].len <= H2O_PULL_SENDVEC_MAX_SIZE || inbufs[0].callbacks->get_fd != NULL)));
     conn->req.bytes_sent += bytes_to_be_sent;
 
     if (send_state == H2O_SEND_STATE_ERROR) {
@@ -1148,17 +1148,27 @@ void finalostream_send(h2o_ostream_t *_self, h2o_req_t *_req, h2o_sendvec_t *inb
                 h2o_iovec_init(inbufs[i].raw, inbufs[i].len);
     } else if (inbufcnt != 0) {
         assert(inbufcnt == 1);
-        assert(conn->_ostr_final.pull_buf != NULL);
-        assert(inbufs->callbacks->flatten != NULL); /* ATM, we assume that all the non-raw sendvecs supports this interface */
-        inbufs->callbacks->flatten(inbufs, &conn->req, &conn->read_file.cmd,
-                                   h2o_iovec_init(conn->_ostr_final.pull_buf + pullbuf_off, inbufs->len), 0, on_flatten_complete,
-                                   conn);
-        if (pull_mode == IS_PULL) {
-            conn->_ostr_final.vecs_pending.entries[conn->_ostr_final.vecs_pending.size++] =
-                h2o_iovec_init(conn->_ostr_final.pull_buf + pullbuf_off, inbufs->len);
+        if (conn->_ostr_final.vecs_pending.size == 0 && conn->sock->ssl == NULL && inbufs->callbacks->get_fd != NULL) {
+            off_t off;
+            int fd = inbufs->callbacks->get_fd(inbufs, &conn->req, &off);
+            if (conn->_ostr_final.vecs_pending.size != 0)
+                set_req_io_timeout(conn, conn->super.ctx->globalconf->http1.req_io_timeout, req_io_on_timeout);
+            h2o_socket_sendfile(conn->sock, fd, off, inbufs->len,
+                                conn->_ostr_final.state < OSTREAM_STATE_BODY_CLOSED ? on_send_next : on_send_complete);
+            return;
         } else {
-            assert(pull_mode == LASTBUF_IS_PULL);
-            conn->_ostr_final.vecs_pending.entries[conn->_ostr_final.vecs_pending.size - 1].len += inbufs->len;
+            assert(conn->_ostr_final.pull_buf != NULL);
+            assert(inbufs->callbacks->flatten != NULL); /* ATM, we assume that all the non-raw sendvecs supports this interface */
+            inbufs->callbacks->flatten(inbufs, &conn->req, &conn->read_file.cmd,
+                                       h2o_iovec_init(conn->_ostr_final.pull_buf + pullbuf_off, inbufs->len), 0, on_flatten_complete,
+                                       conn);
+            if (pull_mode == IS_PULL) {
+                conn->_ostr_final.vecs_pending.entries[conn->_ostr_final.vecs_pending.size++] =
+                    h2o_iovec_init(conn->_ostr_final.pull_buf + pullbuf_off, inbufs->len);
+            } else {
+                assert(pull_mode == LASTBUF_IS_PULL);
+                conn->_ostr_final.vecs_pending.entries[conn->_ostr_final.vecs_pending.size - 1].len += inbufs->len;
+            }
         }
     }
 

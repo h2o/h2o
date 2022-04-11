@@ -268,6 +268,7 @@ size_t h2o_socket_do_prepare_for_latency_optimized_write(h2o_socket_t *sock,
  * @param cb callback to be called when write is complete
  */
 void h2o_socket_write(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_socket_cb cb);
+void h2o_socket_sendfile(h2o_socket_t *sock, int fd, off_t off, size_t len, h2o_socket_cb cb);
 /**
  * starts polling on the socket (for read) and calls given callback when data arrives
  * @param sock the socket
