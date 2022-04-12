@@ -159,6 +159,11 @@ struct st_h2o_socket_t {
         };
     } _write_buf;
     struct {
+        h2o_iovec_t *bufs;
+        size_t bufcnt;
+        h2o_socket_read_file_cmd_t *cmd;
+    } _flatten;
+    struct {
         uint8_t state; /* one of H2O_SOCKET_LATENCY_STATE_* */
         uint8_t notsent_is_minimized : 1;
         size_t suggested_tls_payload_size; /* suggested TLS record payload size, or SIZE_MAX when no need to restrict */
@@ -316,6 +321,10 @@ size_t h2o_socket_do_prepare_for_latency_optimized_write(h2o_socket_t *sock,
  */
 void h2o_socket_write(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_socket_cb cb);
 /**
+ *
+ */
+void h2o_socket_sendvec(h2o_socket_t *sock, h2o_sendvec_t *vecs, size_t cnt, h2o_socket_cb cb);
+/**
  * starts polling on the socket (for read) and calls given callback when data arrives
  * @param sock the socket
  * @param cb callback to be called when data arrives
@@ -368,8 +377,8 @@ void h2o_sendvec_flatten_raw(h2o_sendvec_t *vec, h2o_loop_t *loop, h2o_socket_re
                              h2o_socket_read_file_cb cb, void *data);
 /**
  * Reads file without blocking. Read can complete either synchronously or asynchronously.
- * @param cmd  Upon return, `*cmd` points to an object that file read inflight. If the read completed synchronously, `*cmd` will be
- *             set to NULL.
+ * @param cmd  Upon return, `*cmd` points to an object that file read inflight. If the read completed synchronously, `*cmd` is set
+ *             to NULL when the callback is called as well as when this function returns.
  * @param cb   Callback function to be invoked when read is complete. This callback can get called synchronously.
  */
 void h2o_socket_read_file(h2o_socket_read_file_cmd_t **cmd, h2o_loop_t *loop, int fd, uint64_t offset, h2o_iovec_t dst,

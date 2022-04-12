@@ -324,21 +324,24 @@ void do_dispose_socket(h2o_socket_t *_sock)
     link_to_statechanged(sock);
 }
 
-void do_write(h2o_socket_t *_sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_socket_cb cb)
+static void report_write_error_pre_init_write_buf(struct st_h2o_evloop_socket_t *sock)
+{
+    /* fill in _wreq.bufs with fake data to indicate error */
+    sock->super._write_buf.bufs = sock->super._write_buf.smallbufs;
+    sock->super._write_buf.cnt = 1;
+    *sock->super._write_buf.bufs = h2o_iovec_init(H2O_STRLIT("deadbeef"));
+    sock->_flags |= H2O_SOCKET_FLAG_IS_WRITE_NOTIFY;
+    link_to_pending(sock);
+}
+
+void do_write(h2o_socket_t *_sock, h2o_iovec_t *bufs, size_t bufcnt)
 {
     struct st_h2o_evloop_socket_t *sock = (struct st_h2o_evloop_socket_t *)_sock;
     size_t first_buf_written;
 
-    sock->super._cb.write = cb;
-
     /* try to write now */
     if ((first_buf_written = write_core(sock, &bufs, &bufcnt)) == SIZE_MAX) {
-        /* fill in _wreq.bufs with fake data to indicate error */
-        sock->super._write_buf.bufs = sock->super._write_buf.smallbufs;
-        sock->super._write_buf.cnt = 1;
-        *sock->super._write_buf.bufs = h2o_iovec_init(H2O_STRLIT("deadbeef"));
-        sock->_flags |= H2O_SOCKET_FLAG_IS_WRITE_NOTIFY;
-        link_to_pending(sock);
+        report_write_error_pre_init_write_buf(sock);
         return;
     }
     if (bufcnt == 0 && !has_pending_ssl_bytes(sock->super.ssl)) {
@@ -353,6 +356,14 @@ void do_write(h2o_socket_t *_sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_socket_
 
     /* schedule the write */
     link_to_statechanged(sock);
+}
+
+void sendvec_report_flatten_error(h2o_socket_t *_sock, const char *err)
+{
+    struct st_h2o_evloop_socket_t *sock = (struct st_h2o_evloop_socket_t *)_sock;
+
+    /* TODO propagate err? */
+    report_write_error_pre_init_write_buf(sock);
 }
 
 int h2o_socket_get_fd(h2o_socket_t *_sock)

@@ -279,13 +279,10 @@ void do_ssl_write(struct st_h2o_uv_socket_t *sock, int is_first_call, h2o_iovec_
     uv_write(&sock->stream._wreq, (uv_stream_t *)sock->handle, &uvbuf, 1, on_ssl_write_complete);
 }
 
-void do_write(h2o_socket_t *_sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_socket_cb cb)
+void do_write(h2o_socket_t *_sock, h2o_iovec_t *bufs, size_t bufcnt)
 {
     struct st_h2o_uv_socket_t *sock = (struct st_h2o_uv_socket_t *)_sock;
     assert(sock->handle->type == UV_TCP);
-
-    assert(sock->super._cb.write == NULL);
-    sock->super._cb.write = cb;
 
     if (sock->super.ssl == NULL) {
         if (bufcnt > 0) {
@@ -296,6 +293,11 @@ void do_write(h2o_socket_t *_sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_socket_
     } else {
         do_ssl_write(sock, 1, bufs, bufcnt);
     }
+}
+
+void sendvec_report_flatten_error(h2o_socket_t *sock, const char *err)
+{
+    call_write_complete_delayed(sock, 1);
 }
 
 void h2o_socket_notify_write(h2o_socket_t *_sock, h2o_socket_cb cb)
