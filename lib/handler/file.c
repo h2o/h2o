@@ -125,17 +125,17 @@ static void on_generator_dispose(void *_self)
     close_file(self);
 }
 
-static void sendvec_read(h2o_sendvec_t *src, h2o_req_t *req, h2o_socket_read_file_cmd_t **cmd, h2o_iovec_t dst, size_t off,
+static void sendvec_read(h2o_sendvec_t *src, h2o_loop_t *loop, h2o_socket_read_file_cmd_t **cmd, h2o_iovec_t dst, size_t off,
                          h2o_socket_read_file_cb cb, void *data)
 {
     assert(dst.len + off <= src->len);
 
     struct st_h2o_sendfile_generator_t *self = (void *)src->cb_arg[0];
     uint64_t file_offset = src->cb_arg[1];
-    h2o_socket_read_file(cmd, req->conn->ctx->loop, self->file.ref->fd, file_offset + off, dst, cb, data);
+    h2o_socket_read_file(cmd, loop, self->file.ref->fd, file_offset + off, dst, cb, data);
 }
 
-static void sendvec_update_refcnt(h2o_sendvec_t *vec, h2o_req_t *req, int is_incr)
+static void sendvec_update_refcnt(h2o_sendvec_t *vec, int is_incr)
 {
     struct st_h2o_sendfile_generator_t *self = (void *)vec->cb_arg[0];
 

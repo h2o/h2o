@@ -530,7 +530,7 @@ void h2o_sendvec_init_raw(h2o_sendvec_t *vec, const void *base, size_t len)
     vec->len = len;
 }
 
-static void sendvec_immutable_update_refcnt(h2o_sendvec_t *vec, h2o_req_t *req, int is_incr)
+static void sendvec_immutable_update_refcnt(h2o_sendvec_t *vec, int is_incr)
 {
     /* noop */
 }
@@ -595,11 +595,11 @@ void h2o_sendvec__do_flatten(h2o_sendvec_flattener_t *self, h2o_sendvec_t *bufs,
 
     /* flatten */
     self->read_len = bufs[0].len;
-    bufs->callbacks->flatten(bufs, self->req, &self->cmd, h2o_iovec_init(self->buf, self->read_len), 0,
+    bufs->callbacks->flatten(bufs, self->req->conn->ctx->loop, &self->cmd, h2o_iovec_init(self->buf, self->read_len), 0,
                              sendvec_flattener_on_complete, self);
 }
 
-void h2o_sendvec_flatten_raw(h2o_sendvec_t *vec, h2o_req_t *req, h2o_socket_read_file_cmd_t **_cmd, h2o_iovec_t dst, size_t off,
+void h2o_sendvec_flatten_raw(h2o_sendvec_t *vec, h2o_loop_t *loop, h2o_socket_read_file_cmd_t **_cmd, h2o_iovec_t dst, size_t off,
                              h2o_socket_read_file_cb cb, void *data)
 {
     assert(off + dst.len <= vec->len);

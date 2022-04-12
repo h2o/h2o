@@ -1150,7 +1150,7 @@ void finalostream_send(h2o_ostream_t *_self, h2o_req_t *_req, h2o_sendvec_t *inb
         assert(inbufcnt == 1);
         assert(conn->_ostr_final.pull_buf != NULL);
         assert(inbufs->callbacks->flatten != NULL); /* ATM, we assume that all the non-raw sendvecs supports this interface */
-        inbufs->callbacks->flatten(inbufs, &conn->req, &conn->read_file.cmd,
+        inbufs->callbacks->flatten(inbufs, conn->super.ctx->loop, &conn->read_file.cmd,
                                    h2o_iovec_init(conn->_ostr_final.pull_buf + pullbuf_off, inbufs->len), 0, on_flatten_complete,
                                    conn);
         if (pull_mode == IS_PULL) {
