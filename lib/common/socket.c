@@ -129,8 +129,8 @@ struct st_h2o_ssl_context_t {
 };
 
 /* backend functions */
+static void dispose_write_buffers(h2o_socket_t *sock);
 static void init_write_buf(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, size_t first_buf_written);
-static void dispose_write_buf(h2o_socket_t *sock);
 static void dispose_ssl_output_buffer(struct st_h2o_socket_ssl_t *ssl);
 static int has_pending_ssl_bytes(struct st_h2o_socket_ssl_t *ssl);
 static size_t generate_tls_records(h2o_socket_t *sock, h2o_iovec_t **bufs, size_t *bufcnt, size_t first_buf_written);
@@ -204,6 +204,41 @@ static int read_bio(BIO *b, char *out, int len)
     return len;
 }
 
+static void on_flatten_complete_post_disposal(h2o_socket_read_file_cmd_t *cmd)
+{
+    char *buf = cmd->cb.data;
+    free(buf);
+}
+
+/**
+ * This function disposes of `_write_buf.bufs` and `_flatten`, but `dispose_ssl_output_buffer` has to be called separately. This is
+ * because `dispose_ssl_output_buffer` has to be invoked multiple times within one invocation of `h2o_socket_write`, as TLS records
+ * are generated and sent out.
+ */
+static void dispose_write_buffers(h2o_socket_t *sock)
+{
+    /* Dispose list of vectors, if that was allocated. Count is preserved as evloop uses count != 0 to detect errors. */
+    if (sock->_write_buf.smallbufs <= sock->_write_buf.bufs &&
+        sock->_write_buf.bufs <=
+            sock->_write_buf.smallbufs + sizeof(sock->_write_buf.smallbufs) / sizeof(sock->_write_buf.smallbufs[0])) {
+        /* no need to free */
+    } else {
+        free(sock->_write_buf.alloced_ptr);
+        sock->_write_buf.bufs = sock->_write_buf.smallbufs;
+    }
+
+    /* Unlink flatten buffer if read is inflight. */
+    if (sock->_flatten.bufs != NULL) {
+        if (sock->_flatten.cmd != NULL) {
+            sock->_flatten.cmd->cb.func = on_flatten_complete_post_disposal;
+            sock->_flatten.cmd->cb.data = sock->_flatten.bufs;
+        } else {
+            free(sock->_flatten.bufs);
+        }
+        sock->_flatten.bufs = NULL;
+    }
+}
+
 static void init_write_buf(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, size_t first_buf_written)
 {
     if (bufcnt < PTLS_ELEMENTSOF(sock->_write_buf.smallbufs)) {
@@ -219,34 +254,6 @@ static void init_write_buf(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt,
             sock->_write_buf.bufs[i] = bufs[i];
     }
     sock->_write_buf.cnt = bufcnt;
-}
-
-static void on_flatten_complete_post_disposal(h2o_socket_read_file_cmd_t *cmd)
-{
-    char *buf = cmd->cb.data;
-    free(buf);
-}
-
-static void dispose_write_buf(h2o_socket_t *sock)
-{
-    if (sock->_write_buf.smallbufs <= sock->_write_buf.bufs &&
-        sock->_write_buf.bufs <=
-            sock->_write_buf.smallbufs + sizeof(sock->_write_buf.smallbufs) / sizeof(sock->_write_buf.smallbufs[0])) {
-        /* no need to free */
-    } else {
-        free(sock->_write_buf.alloced_ptr);
-        sock->_write_buf.bufs = sock->_write_buf.smallbufs;
-    }
-
-    if (sock->_flatten.bufs != NULL) {
-        if (sock->_flatten.cmd != NULL) {
-            sock->_flatten.cmd->cb.func = on_flatten_complete_post_disposal;
-            sock->_flatten.cmd->cb.data = sock->_flatten.bufs;
-        } else {
-            free(sock->_flatten.bufs);
-        }
-        sock->_flatten.bufs = NULL;
-    }
 }
 
 static void init_ssl_output_buffer(struct st_h2o_socket_ssl_t *ssl)
@@ -875,13 +882,15 @@ void h2o_socket_sendvec(h2o_socket_t *sock, h2o_sendvec_t *vecs, size_t cnt, h2o
         h2o_iovec_t bufs[cnt];
         for (size_t i = 0; i < cnt; ++i)
             bufs[i] = h2o_iovec_init(vecs[i].raw, vecs[i].len);
-        h2o_socket_write(sock, bufs, cnt, cb);
+        do_write(sock, bufs, cnt);
         return;
     }
 
+    /* Last vector is a pull vector. At the moment, maximum size is limited to H2O_PULL_SENDVEC_MAX_SIZE bytes. */
     h2o_sendvec_t *src = &vecs[cnt - 1];
     assert(src->len <= H2O_PULL_SENDVEC_MAX_SIZE);
 
+    /* Allocate memory to store the shallow list of vectors + buffer to flatten the data. */
     size_t prefix_size = sizeof(sock->_flatten.bufs[0]) * cnt;
     sock->_flatten.bufs = h2o_mem_alloc(prefix_size + src->len);
     for (size_t i = 0; i < cnt - 1; ++i) {
@@ -890,6 +899,9 @@ void h2o_socket_sendvec(h2o_socket_t *sock, h2o_sendvec_t *vecs, size_t cnt, h2o
     }
     sock->_flatten.bufs[cnt - 1] = h2o_iovec_init((char *)sock->_flatten.bufs + prefix_size, src->len);
 
+    sock->_flatten.bufcnt = cnt;
+
+    /* Flatten the pull vector. `sendvec_on_flatten_complete` might get invoked synchronously; hence tail call. */
     src->callbacks->flatten(src, h2o_socket_get_loop(sock), &sock->_flatten.cmd, sock->_flatten.bufs[cnt - 1], 0,
                             sendvec_on_flatten_complete, sock);
 }

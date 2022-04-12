@@ -277,7 +277,7 @@ void write_pending(struct st_h2o_evloop_socket_t *sock)
     }
 
     /* either completed or failed */
-    dispose_write_buf(&sock->super);
+    dispose_write_buffers(&sock->super);
 
 Complete:
     SOCKET_PROBE(WRITE_COMPLETE, &sock->super, sock->super._write_buf.cnt == 0 && !has_pending_ssl_bytes(sock->super.ssl));
@@ -315,7 +315,7 @@ void do_dispose_socket(h2o_socket_t *_sock)
     struct st_h2o_evloop_socket_t *sock = (struct st_h2o_evloop_socket_t *)_sock;
 
     evloop_do_on_socket_close(sock);
-    dispose_write_buf(&sock->super);
+    dispose_write_buffers(&sock->super);
     if (sock->fd != -1) {
         close(sock->fd);
         sock->fd = -1;
@@ -341,11 +341,13 @@ void do_write(h2o_socket_t *_sock, h2o_iovec_t *bufs, size_t bufcnt)
 
     /* try to write now */
     if ((first_buf_written = write_core(sock, &bufs, &bufcnt)) == SIZE_MAX) {
+        dispose_write_buffers(&sock->super);
         report_write_error_pre_init_write_buf(sock);
         return;
     }
     if (bufcnt == 0 && !has_pending_ssl_bytes(sock->super.ssl)) {
         /* write complete, schedule the callback */
+        dispose_write_buffers(&sock->super);
         sock->_flags |= H2O_SOCKET_FLAG_IS_WRITE_NOTIFY;
         link_to_pending(sock);
         return;
@@ -641,6 +643,7 @@ static void run_socket(struct st_h2o_evloop_socket_t *sock)
     if ((sock->_flags & H2O_SOCKET_FLAG_IS_WRITE_NOTIFY) != 0) {
         const char *err = NULL;
         assert(sock->super._cb.write != NULL);
+        assert(sock->super._flatten.bufs == NULL);
         sock->_flags &= ~H2O_SOCKET_FLAG_IS_WRITE_NOTIFY;
         if (sock->super._write_buf.cnt != 0 || has_pending_ssl_bytes(sock->super.ssl)) {
             /* error */
