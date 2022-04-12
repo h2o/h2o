@@ -2150,6 +2150,39 @@ uint64_t h2o_socket_ebpf_lookup_flags_sni(h2o_loop_t *loop, uint64_t flags, cons
 
 #endif
 
+void h2o_sendvec_init_raw(h2o_sendvec_t *vec, const void *base, size_t len)
+{
+    static const h2o_sendvec_callbacks_t callbacks = {h2o_sendvec_flatten_raw};
+    vec->callbacks = &callbacks;
+    vec->raw = (char *)base;
+    vec->len = len;
+}
+
+void h2o_sendvec_flatten_raw(h2o_sendvec_t *vec, h2o_loop_t *loop, h2o_socket_read_file_cmd_t **_cmd, h2o_iovec_t dst, size_t off,
+                             h2o_socket_read_file_cb cb, void *data)
+{
+    assert(off + dst.len <= vec->len);
+    memcpy(dst.base, vec->raw + off, dst.len);
+
+    h2o_socket_read_file_cmd_t cmd = {.cb = {.func = cb, .data = data}, .err = NULL};
+    cb(&cmd);
+
+    _cmd = NULL;
+}
+
+static void sendvec_immutable_update_refcnt(h2o_sendvec_t *vec, int is_incr)
+{
+    /* noop */
+}
+
+void h2o_sendvec_init_immutable(h2o_sendvec_t *vec, const void *base, size_t len)
+{
+    static const h2o_sendvec_callbacks_t callbacks = {h2o_sendvec_flatten_raw, sendvec_immutable_update_refcnt};
+    vec->callbacks = &callbacks;
+    vec->raw = (char *)base;
+    vec->len = len;
+}
+
 #if H2O_USE_LIBUV || !H2O_USE_IO_URING
 
 void h2o_socket_read_file(h2o_socket_read_file_cmd_t **_cmd, h2o_loop_t *loop, int fd, uint64_t offset, h2o_iovec_t dst,

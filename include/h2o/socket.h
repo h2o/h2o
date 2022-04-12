@@ -166,6 +166,53 @@ struct st_h2o_socket_t {
     } _latency_optimization;
 };
 
+/**
+ * Maximum size of sendvec when a pull (i.e. non-raw) vector is used. Note also that bufcnt must be set to one when a pull mode
+ * vector is used. TODO lift the size and usage restrictions.
+ */
+#define H2O_PULL_SENDVEC_MAX_SIZE 65536
+
+typedef struct st_h2o_sendvec_t h2o_sendvec_t;
+
+typedef struct st_h2o_sendvec_callbacks_t {
+    /**
+     * Reads the content of send vector into the specified memory buffer, either synchronously or asynchronously. The interface is
+     * designed to look like a wrapper of `h2o_socket_read_file`, allowing the provider to do additional mangling if necessary.
+     */
+    void (*flatten)(h2o_sendvec_t *vec, h2o_loop_t *loop, h2o_socket_read_file_cmd_t **cmd, h2o_iovec_t dst, size_t off,
+                    h2o_socket_read_file_cb cb, void *data);
+    /**
+     * optional callback that can be used to retain the buffer after flattening all data. This allows H3 to re-flatten data upon
+     * retransmission. Increments the reference counter if `is_incr` is set to true, otherwise the counter is decremented.
+     */
+    void (*update_refcnt)(h2o_sendvec_t *vec, int is_incr);
+} h2o_sendvec_callbacks_t;
+
+/**
+ * Send vector. Unlike an ordinary `h2o_iovec_t`, the vector has a callback that allows the sender to delay the flattening of data
+ * until it becomes necessary.
+ */
+struct st_h2o_sendvec_t {
+    /**
+     * callbacks
+     */
+    const h2o_sendvec_callbacks_t *callbacks;
+    /**
+     * size of the vector
+     */
+    size_t len;
+    /**
+     * If `callback->read_` is `h2o_sendvec_flatten_raw`, payload is stored in the buffer pointed to by `raw`. Otherwise, the
+     * payload cannot be accessed directly and callbacks have to be used. For convenience of output filters, the
+     * `h2o_sendvec_flattener_t` and associated functions can be used for normalizing all the sendvecs to the raw form before being
+     * supplied.
+     */
+    union {
+        char *raw;
+        uint64_t cb_arg[2];
+    };
+};
+
 typedef struct st_h2o_socket_export_t {
     int fd;
     struct st_h2o_socket_ssl_t *ssl;
@@ -303,6 +350,22 @@ socklen_t h2o_socket_getpeername(h2o_socket_t *sock, struct sockaddr *sa);
  * sets the remote address (used for overriding the value)
  */
 void h2o_socket_setpeername(h2o_socket_t *sock, struct sockaddr *sa, socklen_t len);
+/**
+ * Initializes a send vector that refers to mutable memory region. When the `proceed` callback is invoked, it is possible for the
+ * generator to reuse (or release) that memory region.
+ */
+void h2o_sendvec_init_raw(h2o_sendvec_t *vec, const void *base, size_t len);
+/**
+ * Initializes a send vector that refers to immutable memory region. It is the responsible of the generator to preserve the contents
+ * of the specified memory region until the user of the send vector finishes using the send vector.
+ */
+void h2o_sendvec_init_immutable(h2o_sendvec_t *vec, const void *base, size_t len);
+/**
+ * The flatten callback to be used when the data is stored in `h2o_sendvec_t::raw`. Applications can use access the raw buffer
+ * directly, if the flatten callback of a sendvec points to this function.
+ */
+void h2o_sendvec_flatten_raw(h2o_sendvec_t *vec, h2o_loop_t *loop, h2o_socket_read_file_cmd_t **cmd, h2o_iovec_t dst, size_t off,
+                             h2o_socket_read_file_cb cb, void *data);
 /**
  * Reads file without blocking. Read can complete either synchronously or asynchronously.
  * @param cmd  Upon return, `*cmd` points to an object that file read inflight. If the read completed synchronously, `*cmd` will be
