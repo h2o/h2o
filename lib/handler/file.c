@@ -146,9 +146,17 @@ static void sendvec_update_refcnt(h2o_sendvec_t *vec, int is_incr)
     }
 }
 
+static int sendvec_get_fileref(h2o_sendvec_t *src, h2o_loop_t *loop, off_t *off)
+{
+    struct st_h2o_sendfile_generator_t *self = (void *)src->cb_arg[0];
+
+    *off = (off_t)src->cb_arg[1];
+    return self->file.ref->fd;
+}
+
 static void do_proceed(h2o_generator_t *_self, h2o_req_t *req)
 {
-    static const h2o_sendvec_callbacks_t sendvec_callbacks = {sendvec_read, sendvec_update_refcnt};
+    static const h2o_sendvec_callbacks_t sendvec_callbacks = {sendvec_read, sendvec_get_fileref, sendvec_update_refcnt};
 
     struct st_h2o_sendfile_generator_t *self = (void *)_self;
     h2o_sendvec_t vec;

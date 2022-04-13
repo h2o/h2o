@@ -2265,7 +2265,7 @@ static void sendvec_immutable_update_refcnt(h2o_sendvec_t *vec, int is_incr)
 
 void h2o_sendvec_init_immutable(h2o_sendvec_t *vec, const void *base, size_t len)
 {
-    static const h2o_sendvec_callbacks_t callbacks = {h2o_sendvec_flatten_raw, sendvec_immutable_update_refcnt};
+    static const h2o_sendvec_callbacks_t callbacks = {h2o_sendvec_flatten_raw, NULL, sendvec_immutable_update_refcnt};
     vec->callbacks = &callbacks;
     vec->raw = (char *)base;
     vec->len = len;
