@@ -297,7 +297,7 @@ void do_write(h2o_socket_t *_sock, h2o_iovec_t *bufs, size_t bufcnt)
 
 void sendvec_report_flatten_error(h2o_socket_t *sock, const char *err)
 {
-    call_write_complete_delayed(sock, 1);
+    call_write_complete_delayed((struct st_h2o_uv_socket_t *)sock, 1);
 }
 
 void h2o_socket_notify_write(h2o_socket_t *_sock, h2o_socket_cb cb)
