@@ -90,11 +90,11 @@ typedef struct st_h2o_socket_t h2o_socket_t;
 
 typedef void (*h2o_socket_cb)(h2o_socket_t *sock, const char *err);
 
-typedef struct st_h2o_socket_read_file_cmd_t h2o_socket_read_file_cmd_t;
-typedef void (*h2o_socket_read_file_cb)(h2o_socket_read_file_cmd_t *);
-struct st_h2o_socket_read_file_cmd_t {
+typedef struct st_h2o_aio_cmd_t h2o_aio_cmd_t;
+typedef void (*h2o_aio_cb)(h2o_aio_cmd_t *);
+struct st_h2o_aio_cmd_t {
     struct {
-        h2o_socket_read_file_cb func;
+        h2o_aio_cb func;
         void *data;
     } cb;
     /**
@@ -161,7 +161,7 @@ struct st_h2o_socket_t {
     struct {
         h2o_iovec_t *bufs;
         size_t bufcnt;
-        h2o_socket_read_file_cmd_t *cmd;
+        h2o_aio_cmd_t *cmd;
     } _flatten;
     struct {
         uint8_t state; /* one of H2O_SOCKET_LATENCY_STATE_* */
@@ -184,8 +184,8 @@ typedef struct st_h2o_sendvec_callbacks_t {
      * Reads the content of send vector into the specified memory buffer, either synchronously or asynchronously. The interface is
      * designed to look like a wrapper of `h2o_socket_read_file`, allowing the provider to do additional mangling if necessary.
      */
-    void (*flatten)(h2o_sendvec_t *vec, h2o_loop_t *loop, h2o_socket_read_file_cmd_t **cmd, h2o_iovec_t dst, size_t off,
-                    h2o_socket_read_file_cb cb, void *data);
+    void (*flatten)(h2o_sendvec_t *vec, h2o_loop_t *loop, h2o_aio_cmd_t **cmd, h2o_iovec_t dst, size_t off, h2o_aio_cb cb,
+                    void *data);
     /**
      * Optional callback that returns file reference of the vector.
      */
@@ -377,16 +377,16 @@ void h2o_sendvec_init_immutable(h2o_sendvec_t *vec, const void *base, size_t len
  * The flatten callback to be used when the data is stored in `h2o_sendvec_t::raw`. Applications can use access the raw buffer
  * directly, if the flatten callback of a sendvec points to this function.
  */
-void h2o_sendvec_flatten_raw(h2o_sendvec_t *vec, h2o_loop_t *loop, h2o_socket_read_file_cmd_t **cmd, h2o_iovec_t dst, size_t off,
-                             h2o_socket_read_file_cb cb, void *data);
+void h2o_sendvec_flatten_raw(h2o_sendvec_t *vec, h2o_loop_t *loop, h2o_aio_cmd_t **cmd, h2o_iovec_t dst, size_t off, h2o_aio_cb cb,
+                             void *data);
 /**
  * Reads file without blocking. Read can complete either synchronously or asynchronously.
  * @param cmd  Upon return, `*cmd` points to an object that file read inflight. If the read completed synchronously, `*cmd` is set
  *             to NULL when the callback is called as well as when this function returns.
  * @param cb   Callback function to be invoked when read is complete. This callback can get called synchronously.
  */
-void h2o_socket_read_file(h2o_socket_read_file_cmd_t **cmd, h2o_loop_t *loop, int fd, uint64_t offset, h2o_iovec_t dst,
-                          h2o_socket_read_file_cb cb, void *data);
+void h2o_socket_read_file(h2o_aio_cmd_t **cmd, h2o_loop_t *loop, int fd, uint64_t offset, h2o_iovec_t dst, h2o_aio_cb cb,
+                          void *data);
 /**
  *
  */

@@ -368,7 +368,7 @@ void h2o_http2_conn_unregister_stream(h2o_http2_conn_t *conn, h2o_http2_stream_t
     }
 }
 
-static void on_read_file_complete_post_close(h2o_socket_read_file_cmd_t *cmd)
+static void on_read_file_complete_post_close(h2o_aio_cmd_t *cmd)
 {
     h2o_buffer_t *buf = cmd->cb.data;
     h2o_buffer_dispose(&buf);

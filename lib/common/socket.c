@@ -204,7 +204,7 @@ static int read_bio(BIO *b, char *out, int len)
     return len;
 }
 
-static void on_flatten_complete_post_disposal(h2o_socket_read_file_cmd_t *cmd)
+static void on_flatten_complete_post_disposal(h2o_aio_cmd_t *cmd)
 {
     char *buf = cmd->cb.data;
     free(buf);
@@ -854,7 +854,7 @@ void h2o_socket_write(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_
     do_write(sock, bufs, bufcnt);
 }
 
-static void sendvec_on_flatten_complete(h2o_socket_read_file_cmd_t *cmd)
+static void sendvec_on_flatten_complete(h2o_aio_cmd_t *cmd)
 {
     h2o_socket_t *sock = cmd->cb.data;
 
@@ -2246,13 +2246,13 @@ void h2o_sendvec_init_raw(h2o_sendvec_t *vec, const void *base, size_t len)
     vec->len = len;
 }
 
-void h2o_sendvec_flatten_raw(h2o_sendvec_t *vec, h2o_loop_t *loop, h2o_socket_read_file_cmd_t **_cmd, h2o_iovec_t dst, size_t off,
-                             h2o_socket_read_file_cb cb, void *data)
+void h2o_sendvec_flatten_raw(h2o_sendvec_t *vec, h2o_loop_t *loop, h2o_aio_cmd_t **_cmd, h2o_iovec_t dst, size_t off, h2o_aio_cb cb,
+                             void *data)
 {
     assert(off + dst.len <= vec->len);
     memcpy(dst.base, vec->raw + off, dst.len);
 
-    h2o_socket_read_file_cmd_t cmd = {.cb = {.func = cb, .data = data}, .err = NULL};
+    h2o_aio_cmd_t cmd = {.cb = {.func = cb, .data = data}, .err = NULL};
     cb(&cmd);
 
     _cmd = NULL;
@@ -2273,10 +2273,10 @@ void h2o_sendvec_init_immutable(h2o_sendvec_t *vec, const void *base, size_t len
 
 #if H2O_USE_LIBUV || !H2O_USE_IO_URING
 
-void h2o_socket_read_file(h2o_socket_read_file_cmd_t **_cmd, h2o_loop_t *loop, int fd, uint64_t offset, h2o_iovec_t dst,
-                          h2o_socket_read_file_cb _cb, void *_data)
+void h2o_socket_read_file(h2o_aio_cmd_t **_cmd, h2o_loop_t *loop, int fd, uint64_t offset, h2o_iovec_t dst, h2o_aio_cb _cb,
+                          void *_data)
 {
-    h2o_socket_read_file_cmd_t cmd = {.cb = {.func = _cb, .data = _data}};
+    h2o_aio_cmd_t cmd = {.cb = {.func = _cb, .data = _data}};
 
     size_t off = 0;
     while (off < dst.len) {

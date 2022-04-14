@@ -155,7 +155,7 @@ static void send_data_on_payload_built(h2o_http2_conn_t *conn, h2o_http2_stream_
             -(stream->req.upstream_refused ? H2O_HTTP2_ERROR_REFUSED_STREAM : H2O_HTTP2_ERROR_PROTOCOL));
 }
 
-static void send_data_on_read_complete(h2o_socket_read_file_cmd_t *cmd)
+static void send_data_on_read_complete(h2o_aio_cmd_t *cmd)
 {
     h2o_http2_stream_t *stream = cmd->cb.data;
     h2o_http2_conn_t *conn = (h2o_http2_conn_t *)stream->req.conn;

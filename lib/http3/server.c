@@ -204,7 +204,7 @@ struct st_h2o_http3_server_stream_t {
         uint8_t data_frame_header_buf[9];
     } sendbuf;
     struct {
-        h2o_socket_read_file_cmd_t *cmd;
+        h2o_aio_cmd_t *cmd;
         const char *err;
     } read_file;
     enum h2o_http3_server_stream_state state;
@@ -392,7 +392,7 @@ static void check_run_blocked(struct st_h2o_http3_server_conn_t *conn)
         request_run_delayed(conn);
 }
 
-static void on_read_file_complete_post_disposal(h2o_socket_read_file_cmd_t *cmd)
+static void on_read_file_complete_post_disposal(h2o_aio_cmd_t *cmd)
 {
     free(cmd->cb.data);
 }
@@ -1589,7 +1589,7 @@ static int scheduler_can_send(quicly_stream_scheduler_t *sched, quicly_conn_t *q
     return 0;
 }
 
-static void normalize_data_on_read_file_complete(h2o_socket_read_file_cmd_t *cmd)
+static void normalize_data_on_read_file_complete(h2o_aio_cmd_t *cmd)
 {
     struct st_h2o_http3_server_stream_t *stream = cmd->cb.data;
 

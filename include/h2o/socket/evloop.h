@@ -48,7 +48,7 @@ typedef struct st_h2o_evloop_t {
     h2o_timerwheel_t *_timeouts;
     h2o_sliding_counter_t exec_time_nanosec_counter;
 #if H2O_USE_IO_URING
-    struct st_h2o_evloop_read_file_t *_read_file;
+    struct st_h2o_evloop_uring_t *_uring;
 #endif
 } h2o_evloop_t;
 

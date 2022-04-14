@@ -221,7 +221,7 @@ struct st_h2o_http2_conn_t {
      */
     struct {
         h2o_http2_stream_t *stream;
-        h2o_socket_read_file_cmd_t *cmd;
+        h2o_aio_cmd_t *cmd;
         const char *err;
         char *dst_end;
     } read_file;

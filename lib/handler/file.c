@@ -125,8 +125,8 @@ static void on_generator_dispose(void *_self)
     close_file(self);
 }
 
-static void sendvec_read(h2o_sendvec_t *src, h2o_loop_t *loop, h2o_socket_read_file_cmd_t **cmd, h2o_iovec_t dst, size_t off,
-                         h2o_socket_read_file_cb cb, void *data)
+static void sendvec_read(h2o_sendvec_t *src, h2o_loop_t *loop, h2o_aio_cmd_t **cmd, h2o_iovec_t dst, size_t off, h2o_aio_cb cb,
+                         void *data)
 {
     assert(dst.len + off <= src->len);
 

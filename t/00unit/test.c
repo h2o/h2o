@@ -24,7 +24,7 @@
 #include "../../src/standalone.h"
 #include "./test.h"
 
-static void loopback_on_send_on_read_complete(h2o_socket_read_file_cmd_t *cmd)
+static void loopback_on_send_on_read_complete(h2o_aio_cmd_t *cmd)
 {
     assert(cmd->err == NULL);
 
@@ -36,7 +36,7 @@ static void loopback_on_send(h2o_ostream_t *self, h2o_req_t *req, h2o_sendvec_t 
                              h2o_send_state_t send_state)
 {
     h2o_loopback_conn_t *conn = H2O_STRUCT_FROM_MEMBER(h2o_loopback_conn_t, _ostr_final, self);
-    h2o_socket_read_file_cmd_t *read_file;
+    h2o_aio_cmd_t *read_file;
     size_t i, read_complete = 0;
 
     for (i = 0; i != inbufcnt; ++i) {

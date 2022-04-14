@@ -795,7 +795,7 @@ typedef struct st_h2o_sendvec_flattener_t {
     h2o_ostream_t *ostream;
     h2o_req_t *req;
     h2o_send_state_t state;
-    h2o_socket_read_file_cmd_t *cmd;
+    h2o_aio_cmd_t *cmd;
     char *buf;
     size_t read_len;
 } h2o_sendvec_flattener_t;

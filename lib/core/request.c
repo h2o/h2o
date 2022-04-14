@@ -522,7 +522,7 @@ void h2o_start_response(h2o_req_t *req, h2o_generator_t *generator)
     }
 }
 
-static void sendvec_flattener_on_complete_post_disposal(h2o_socket_read_file_cmd_t *cmd)
+static void sendvec_flattener_on_complete_post_disposal(h2o_aio_cmd_t *cmd)
 {
     free(cmd->cb.data);
 }
@@ -550,7 +550,7 @@ void h2o_sendvec_detach_flattener(h2o_sendvec_flattener_t *self)
     }
 }
 
-static void sendvec_flattener_on_complete(h2o_socket_read_file_cmd_t *cmd)
+static void sendvec_flattener_on_complete(h2o_aio_cmd_t *cmd)
 {
     h2o_sendvec_flattener_t *self = cmd->cb.data;
 
