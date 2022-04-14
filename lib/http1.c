@@ -994,7 +994,7 @@ static void encode_chunked(h2o_sendvec_t *prefix, h2o_sendvec_t *suffix, h2o_sen
 void finalostream_send(h2o_ostream_t *_self, h2o_req_t *_req, h2o_sendvec_t *inbufs, size_t inbufcnt, h2o_send_state_t send_state)
 {
     struct st_h2o_http1_conn_t *conn = (struct st_h2o_http1_conn_t *)_req->conn;
-    h2o_sendvec_t *bufs = alloca(sizeof(h2o_iovec_t) * (inbufcnt + 1 + 2)) /* 1 for header, 2 for chunked encoding */;
+    h2o_sendvec_t *bufs = alloca(sizeof(*bufs) * (inbufcnt + 1 + 2)) /* 1 for header, 2 for chunked encoding */;
     size_t bufcnt = 0, chunked_prefix_index = 0;
 
     assert(&conn->req == _req);
