@@ -1072,8 +1072,7 @@ void finalostream_send(h2o_ostream_t *_self, h2o_req_t *_req, h2o_sendvec_t *inb
     } else if (inbufcnt != 0) {
         assert(inbufcnt == 1);
         assert(conn->_ostr_final.pull_buf != NULL);
-        if (!(inbufs->callbacks->flatten(inbufs, &conn->req, h2o_iovec_init(conn->_ostr_final.pull_buf + pullbuf_off, inbufs->len),
-                                         0))) {
+        if (!(inbufs->callbacks->flatten(inbufs, h2o_iovec_init(conn->_ostr_final.pull_buf + pullbuf_off, inbufs->len), 0))) {
             /* error, close abruptly */
             send_state = H2O_SEND_STATE_ERROR;
         } else {

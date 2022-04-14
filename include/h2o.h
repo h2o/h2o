@@ -805,12 +805,12 @@ typedef struct st_h2o_sendvec_callbacks_t {
      * the generator is considered as been error-closed by itself.  If the callback is NULL, the data is pre-flattened and available
      * in `h2o_sendvec_t::raw`.
      */
-    int (*flatten)(h2o_sendvec_t *vec, h2o_req_t *req, h2o_iovec_t dst, size_t off);
+    int (*flatten)(h2o_sendvec_t *vec, h2o_iovec_t dst, size_t off);
     /**
      * optional callback that can be used to retain the buffer after flattening all data. This allows H3 to re-flatten data upon
      * retransmission. Increments the reference counter if `is_incr` is set to true, otherwise the counter is decremented.
      */
-    void (*update_refcnt)(h2o_sendvec_t *vec, h2o_req_t *req, int is_incr);
+    void (*update_refcnt)(h2o_sendvec_t *vec, int is_incr);
 } h2o_sendvec_callbacks_t;
 
 /**
@@ -1539,7 +1539,7 @@ void h2o_sendvec_init_immutable(h2o_sendvec_t *vec, const void *base, size_t len
 /**
  *
  */
-int h2o_sendvec_flatten_raw(h2o_sendvec_t *vec, h2o_req_t *req, h2o_iovec_t dst, size_t off);
+int h2o_sendvec_flatten_raw(h2o_sendvec_t *vec, h2o_iovec_t dst, size_t off);
 /**
  * called by the generators to send output
  * note: generators should free itself after sending the final chunk (i.e. calling the function with is_final set to true)

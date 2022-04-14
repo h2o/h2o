@@ -530,7 +530,7 @@ void h2o_sendvec_init_raw(h2o_sendvec_t *vec, const void *base, size_t len)
     vec->len = len;
 }
 
-static void sendvec_immutable_update_refcnt(h2o_sendvec_t *vec, h2o_req_t *req, int is_incr)
+static void sendvec_immutable_update_refcnt(h2o_sendvec_t *vec, int is_incr)
 {
     /* noop */
 }
@@ -543,7 +543,7 @@ void h2o_sendvec_init_immutable(h2o_sendvec_t *vec, const void *base, size_t len
     vec->len = len;
 }
 
-int h2o_sendvec_flatten_raw(h2o_sendvec_t *src, h2o_req_t *req, h2o_iovec_t dst, size_t off)
+int h2o_sendvec_flatten_raw(h2o_sendvec_t *src, h2o_iovec_t dst, size_t off)
 {
     assert(off + dst.len <= src->len);
     memcpy(dst.base, src->raw + off, dst.len);
