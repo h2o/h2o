@@ -124,6 +124,10 @@ typedef struct st_h2o_sendvec_callbacks_t {
      */
     int (*flatten)(h2o_sendvec_t *vec, h2o_iovec_t dst, size_t off);
     /**
+     * Optional callback for sending contents of a vector directly to a socket. See `h2o_sendfile` regarding the interface.
+     */
+    size_t (*send_)(h2o_sendvec_t *vec, int sockfd, size_t off, size_t len);
+    /**
      * optional callback that can be used to retain the buffer after flattening all data. This allows H3 to re-flatten data upon
      * retransmission. Increments the reference counter if `is_incr` is set to true, otherwise the counter is decremented.
      */
@@ -466,6 +470,12 @@ void h2o_sendvec_init_immutable(h2o_sendvec_t *vec, const void *base, size_t len
  *
  */
 int h2o_sendvec_flatten_raw(h2o_sendvec_t *vec, h2o_iovec_t dst, size_t off);
+
+/**
+ * This is a thin wrapper around sendfile (2) that hides the differences between various OS implementations.
+ * @return number of bytes written (zero is a valid value indicating that the send buffer is full), or SIZE_MAX on error
+ */
+size_t h2o_sendfile(int sockfd, int filefd, off_t off, size_t len);
 
 /**
  * Prepares eBPF maps. Requires root privileges and thus should be called before dropping the privileges. Returns a boolean

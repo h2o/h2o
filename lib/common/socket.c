@@ -1884,7 +1884,7 @@ static void sendvec_immutable_update_refcnt(h2o_sendvec_t *vec, int is_incr)
 
 void h2o_sendvec_init_immutable(h2o_sendvec_t *vec, const void *base, size_t len)
 {
-    static const h2o_sendvec_callbacks_t callbacks = {h2o_sendvec_flatten_raw, sendvec_immutable_update_refcnt};
+    static const h2o_sendvec_callbacks_t callbacks = {h2o_sendvec_flatten_raw, NULL, sendvec_immutable_update_refcnt};
     vec->callbacks = &callbacks;
     vec->raw = (char *)base;
     vec->len = len;
@@ -1895,6 +1895,33 @@ int h2o_sendvec_flatten_raw(h2o_sendvec_t *src, h2o_iovec_t dst, size_t off)
     assert(off + dst.len <= src->len);
     memcpy(dst.base, src->raw + off, dst.len);
     return 1;
+}
+
+size_t h2o_sendfile(int sockfd, int filefd, off_t off, size_t len)
+{
+#if defined(__linux__)
+
+    off_t iooff = off;
+    ssize_t ret;
+    while ((ret = sendfile(sockfd, filefd, &iooff, len)) == -1 && errno == EINTR)
+        ;
+    if (ret <= 0)
+        return ret == -1 && errno == EAGAIN ? 0 : SIZE_MAX;
+    return ret;
+
+#elif defined(__APPLE__)
+
+    off_t iolen = len;
+    int ret;
+    while ((ret = sendfile(filefd, sockfd, off, &iolen, NULL, 0)) != 0 && errno == EINTR)
+        ;
+    if (ret != 0)
+        return errno == EAGAIN ? 0 : SIZE_MAX;
+    return iolen;
+
+#else
+#error "FIXME"
+#endif
 }
 
 #if H2O_USE_EBPF_MAP

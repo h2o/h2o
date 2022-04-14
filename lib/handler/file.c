@@ -147,6 +147,16 @@ static int do_pread(h2o_sendvec_t *src, h2o_iovec_t dst, size_t off)
     return 1;
 }
 
+static size_t sendvec_send(h2o_sendvec_t *src, int sockfd, size_t vec_off, size_t len)
+{
+    struct st_h2o_sendfile_generator_t *self = (void *)src->cb_arg[0];
+    off_t file_off = (off_t)src->cb_arg[1];
+
+    assert(vec_off + len <= src->len);
+
+    return h2o_sendfile(sockfd, self->file.ref->fd, file_off + vec_off, len);
+}
+
 static void sendvec_update_refcnt(h2o_sendvec_t *vec, int is_incr)
 {
     struct st_h2o_sendfile_generator_t *self = (void *)vec->cb_arg[0];
@@ -160,7 +170,7 @@ static void sendvec_update_refcnt(h2o_sendvec_t *vec, int is_incr)
 
 static void do_proceed(h2o_generator_t *_self, h2o_req_t *req)
 {
-    static const h2o_sendvec_callbacks_t sendvec_callbacks = {do_pread, sendvec_update_refcnt};
+    static const h2o_sendvec_callbacks_t sendvec_callbacks = {do_pread, sendvec_send, sendvec_update_refcnt};
 
     struct st_h2o_sendfile_generator_t *self = (void *)_self;
     h2o_sendvec_t vec;
