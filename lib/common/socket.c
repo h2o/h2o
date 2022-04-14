@@ -135,7 +135,8 @@ static void dispose_ssl_output_buffer(struct st_h2o_socket_ssl_t *ssl);
 static int has_pending_ssl_bytes(struct st_h2o_socket_ssl_t *ssl);
 static size_t generate_tls_records(h2o_socket_t *sock, h2o_iovec_t **bufs, size_t *bufcnt, size_t first_buf_written);
 static void do_dispose_socket(h2o_socket_t *sock);
-static void do_write(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_socket_cb cb);
+static void report_early_write_error(h2o_socket_t *sock);
+static void do_write(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt);
 static void do_read_start(h2o_socket_t *sock);
 static void do_read_stop(h2o_socket_t *sock);
 static int do_export(h2o_socket_t *_sock, h2o_socket_export_t *info);
@@ -229,6 +230,11 @@ static void dispose_write_buf(h2o_socket_t *sock)
     } else {
         free(sock->_write_buf.alloced_ptr);
         sock->_write_buf.bufs = sock->_write_buf.smallbufs;
+    }
+
+    if (sock->_write_buf.flattened != NULL) {
+        free(sock->_write_buf.flattened);
+        sock->_write_buf.flattened = NULL;
     }
 }
 
@@ -399,7 +405,8 @@ const char *decode_ssl_input(h2o_socket_t *sock)
 
 static void flush_pending_ssl(h2o_socket_t *sock, h2o_socket_cb cb)
 {
-    do_write(sock, NULL, 0, cb);
+    sock->_cb.write = cb;
+    do_write(sock, NULL, 0);
 }
 
 static void destroy_ssl(struct st_h2o_socket_ssl_t *ssl)
@@ -816,6 +823,7 @@ void h2o_socket_write(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_
     SOCKET_PROBE(WRITE, sock, bufs, bufcnt, cb);
 
     assert(sock->_cb.write == NULL);
+    sock->_cb.write = cb;
 
     for (size_t i = 0; i != bufcnt; ++i) {
         sock->bytes_written += bufs[i].len;
@@ -825,7 +833,44 @@ void h2o_socket_write(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_
 #endif
     }
 
-    do_write(sock, bufs, bufcnt, cb);
+    do_write(sock, bufs, bufcnt);
+}
+
+void h2o_socket_sendvec(h2o_socket_t *sock, h2o_sendvec_t *vecs, size_t cnt, h2o_socket_cb cb)
+{
+    assert(sock->_cb.write == NULL);
+    assert(sock->_write_buf.flattened == NULL);
+
+    sock->_cb.write = cb;
+
+    h2o_iovec_t bufs[cnt];
+    size_t flatten_index = SIZE_MAX;
+
+    /* copy vectors to bufs, while looking for one to flatten */
+    for (size_t i = 0; i < cnt; ++i) {
+        if (vecs[i].callbacks->flatten == h2o_sendvec_flatten_raw || vecs[i].len == 0) {
+            bufs[i] = h2o_iovec_init(vecs[i].raw, vecs[i].len);
+        } else {
+            assert(flatten_index == SIZE_MAX || !"h2o_socket_sendvec can only handle one pull vector at a time");
+            assert(vecs[i].len <= H2O_PULL_SENDVEC_MAX_SIZE); /* at the moment, this is our size limit */
+            flatten_index = i;
+        }
+    }
+
+    /* flatten the pull vector */
+    if (flatten_index != SIZE_MAX) {
+        sock->_write_buf.flattened = h2o_mem_alloc(vecs[flatten_index].len);
+        bufs[flatten_index] = h2o_iovec_init(sock->_write_buf.flattened, vecs[flatten_index].len);
+        if (!vecs[flatten_index].callbacks->flatten(vecs + flatten_index, bufs[flatten_index], 0)) {
+            /* failed */
+            free(sock->_write_buf.flattened);
+            sock->_write_buf.flattened = NULL;
+            report_early_write_error(sock);
+            return;
+        }
+    }
+
+    do_write(sock, bufs, cnt);
 }
 
 void on_write_complete(h2o_socket_t *sock, const char *err)
