@@ -896,6 +896,16 @@ void h2o_socket_sendvec(h2o_socket_t *sock, h2o_sendvec_t *vecs, size_t cnt, h2o
         return;
     }
 
+#if H2O_USE_IO_URING
+    /* If the last vector is file-backed, use sendfile for sending that vector. */
+    if (sock->ssl == NULL && flatten_index == cnt - 1 && vecs[flatten_index].callbacks->get_fileref != NULL) {
+        off_t off;
+        int fd = vecs[flatten_index].callbacks->get_fileref(&vecs[flatten_index], h2o_socket_get_loop(sock), &off);
+        do_sendfile(sock, bufs, flatten_index, fd, off, vecs[flatten_index].len);
+        return;
+    }
+#endif
+
     /* Flatten the pull vector. At the moment, maximum size is limited to H2O_PULL_SENDVEC_MAX_SIZE bytes. */
     h2o_sendvec_t *src = &vecs[flatten_index];
     assert(src->len <= H2O_PULL_SENDVEC_MAX_SIZE);

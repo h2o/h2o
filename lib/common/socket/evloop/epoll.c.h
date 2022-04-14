@@ -61,7 +61,7 @@ static int update_status(struct st_h2o_evloop_epoll_t *loop)
                     changed = 1;
                 }
             }
-            if (h2o_socket_is_writing(&sock->super)) {
+            if (should_poll_for_write(sock)) {
                 ev.events |= EPOLLOUT;
                 if ((sock->_flags & H2O_SOCKET_FLAG_IS_POLLED_FOR_WRITE) == 0) {
                     sock->_flags |= H2O_SOCKET_FLAG_IS_POLLED_FOR_WRITE;

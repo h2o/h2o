@@ -54,15 +54,49 @@ struct st_h2o_evloop_socket_t {
     size_t max_read_size;
     struct st_h2o_evloop_socket_t *_next_pending;
     struct st_h2o_evloop_socket_t *_next_statechanged;
+#if H2O_USE_IO_URING
+    struct {
+        /**
+         * Intermediary pipe. When using io_uring to do sendfile, we have to first splice the file to pipe, then splice from pipe to
+         * socket. This pipe is lazily allocated and kept open until the socket is closed.
+         */
+        int pipe_fds[2];
+        /**
+         * Source file. -1 if not in action.
+         */
+        struct {
+            int fd;
+            off_t off;
+            size_t len;
+        } src;
+        struct {
+            struct st_h2o_evloop_uring_cmd_t *cmd;
+            size_t bytes_transferred;
+        } splice_from_file, splice_to_sock;
+    } sendfile_;
+#endif
 };
 
 #if H2O_USE_IO_URING
 
 struct st_h2o_evloop_uring_cmd_t {
     h2o_aio_cmd_t super;
-    int fd;
-    uint64_t offset;
-    h2o_iovec_t vec;
+    enum { H2O_EVLOOP_URING_CMD_READ, H2O_EVLOOP_URING_CMD_SPLICE } cmd;
+    union {
+        struct {
+            int fd;
+            uint64_t offset;
+            h2o_iovec_t vec;
+        } read_;
+        struct {
+            int fd_in;
+            int64_t off_in;
+            int fd_out;
+            int64_t off_out;
+            size_t len; /* upon successful completion, this is set to the result */
+            unsigned flags;
+        } splice_;
+    };
     struct st_h2o_evloop_uring_cmd_t *next;
 };
 
@@ -87,6 +121,7 @@ struct st_h2o_evloop_uring_t {
 
 #endif
 
+static int should_poll_for_write(struct st_h2o_evloop_socket_t *sock);
 static void link_to_pending(struct st_h2o_evloop_socket_t *sock);
 static void write_pending(struct st_h2o_evloop_socket_t *sock);
 static h2o_evloop_t *create_evloop(size_t sz);
@@ -104,6 +139,10 @@ static void evloop_do_on_socket_export(struct st_h2o_evloop_socket_t *sock);
 static void uring_queue_init(struct st_h2o_evloop_uring_queue_t *queue);
 static void uring_on_notify(h2o_socket_t *_sock, const char *err);
 static void uring_on_delayed(h2o_timer_t *timer);
+static void sendfile_stop_splice(struct st_h2o_evloop_uring_cmd_t **cmd);
+static int sendfile_core(struct st_h2o_evloop_socket_t *sock);
+#else
+#define sendfile_core(sock) 1
 #endif
 
 #if H2O_USE_POLL || H2O_USE_EPOLL || H2O_USE_KQUEUE
@@ -127,6 +166,15 @@ static void uring_on_delayed(h2o_timer_t *timer);
 #else
 #error "poller not specified"
 #endif
+
+int should_poll_for_write(struct st_h2o_evloop_socket_t *sock)
+{
+#if H2O_USE_IO_URING
+    if (sock->sendfile_.splice_to_sock.cmd != NULL)
+        return 0;
+#endif
+    return h2o_socket_is_writing(&sock->super);
+}
 
 void link_to_pending(struct st_h2o_evloop_socket_t *sock)
 {
@@ -260,7 +308,7 @@ void write_pending(struct st_h2o_evloop_socket_t *sock)
 
     /* DONT_WRITE poll */
     if (sock->super._write_buf.cnt == 0 && !has_pending_ssl_bytes(sock->super.ssl))
-        goto Complete;
+        goto Sendfile;
 
     { /* write */
         size_t first_buf_written;
@@ -279,7 +327,15 @@ void write_pending(struct st_h2o_evloop_socket_t *sock)
     /* either completed or failed */
     dispose_write_buffers(&sock->super);
 
-Complete:
+Sendfile:
+#if H2O_USE_IO_URING
+    if (!sendfile_core(sock)) {
+        link_to_statechanged(sock);
+        return;
+    }
+#endif
+
+    /* everything is complete */
     SOCKET_PROBE(WRITE_COMPLETE, &sock->super, sock->super._write_buf.cnt == 0 && !has_pending_ssl_bytes(sock->super.ssl));
     sock->_flags |= H2O_SOCKET_FLAG_IS_WRITE_NOTIFY;
     link_to_pending(sock);
@@ -316,6 +372,16 @@ void do_dispose_socket(h2o_socket_t *_sock)
 
     evloop_do_on_socket_close(sock);
     dispose_write_buffers(&sock->super);
+#if H2O_USE_IO_URING
+    if (sock->sendfile_.pipe_fds[0] != -1) {
+        close(sock->sendfile_.pipe_fds[0]);
+        close(sock->sendfile_.pipe_fds[1]);
+    }
+    if (sock->sendfile_.splice_from_file.cmd != NULL)
+        sendfile_stop_splice(&sock->sendfile_.splice_from_file.cmd);
+    if (sock->sendfile_.splice_to_sock.cmd != NULL)
+        sendfile_stop_splice(&sock->sendfile_.splice_to_sock.cmd);
+#endif
     if (sock->fd != -1) {
         close(sock->fd);
         sock->fd = -1;
@@ -346,8 +412,11 @@ void do_write(h2o_socket_t *_sock, h2o_iovec_t *bufs, size_t bufcnt)
         return;
     }
     if (bufcnt == 0 && !has_pending_ssl_bytes(sock->super.ssl)) {
-        /* write complete, schedule the callback */
         dispose_write_buffers(&sock->super);
+        /* write from bufs is complete, try sendfile */
+        if (!sendfile_core(sock))
+            return;
+        /* sendfile done, schedule the callback */
         sock->_flags |= H2O_SOCKET_FLAG_IS_WRITE_NOTIFY;
         link_to_pending(sock);
         return;
@@ -456,6 +525,11 @@ static struct st_h2o_evloop_socket_t *create_socket(h2o_evloop_t *loop, int fd, 
     sock->max_read_size = 1024 * 1024; /* by default, we read up to 1MB at once */
     sock->_next_pending = sock;
     sock->_next_statechanged = sock;
+#if H2O_USE_IO_URING
+    sock->sendfile_.pipe_fds[0] = -1;
+    sock->sendfile_.pipe_fds[1] = -1;
+    sock->sendfile_.src.fd = -1;
+#endif
 
     evloop_do_on_socket_create(sock);
 
@@ -659,6 +733,15 @@ static void run_socket(struct st_h2o_evloop_socket_t *sock)
             if (getsockopt(sock->fd, SOL_SOCKET, SO_ERROR, &so_err, &l) != 0 || so_err != 0)
                 err = h2o_socket_get_error_string(so_err, h2o_socket_error_conn_fail);
         }
+#if H2O_USE_IO_URING
+        else if (sock->sendfile_.src.fd != -1) {
+            assert(sock->super._cb.write != NULL);
+            assert(sock->sendfile_.src.fd != -1);
+            link_to_statechanged(sock);
+            if (!sendfile_core(sock))
+                return;
+        }
+#endif
         on_write_complete(&sock->super, err);
     }
 }
@@ -790,8 +873,11 @@ static struct st_h2o_evloop_uring_cmd_t *uring_queue_pop(struct st_h2o_evloop_ur
 
 static int uring_submit(h2o_evloop_t *loop, int can_delay)
 {
-    if (can_delay && loop->_uring->submission.size < loop->_uring->batch_size)
+    if (can_delay && loop->_uring->submission.size < loop->_uring->batch_size) {
+        if (!h2o_timer_is_linked(&loop->_uring->delayed))
+            h2o_timer_link(loop, 0, &loop->_uring->delayed);
         return 0;
+    }
 
     int made_progress = 0;
 
@@ -801,7 +887,18 @@ static int uring_submit(h2o_evloop_t *loop, int can_delay)
             break;
         struct st_h2o_evloop_uring_cmd_t *cmd = uring_queue_pop(&loop->_uring->submission);
         assert(cmd != NULL);
-        io_uring_prep_read(sqe, cmd->fd, cmd->vec.base, cmd->vec.len, cmd->offset);
+        switch (cmd->cmd) {
+        case H2O_EVLOOP_URING_CMD_READ:
+            io_uring_prep_read(sqe, cmd->read_.fd, cmd->read_.vec.base, cmd->read_.vec.len, cmd->read_.offset);
+            break;
+        case H2O_EVLOOP_URING_CMD_SPLICE:
+            io_uring_prep_splice(sqe, cmd->splice_.fd_in, cmd->splice_.off_in, cmd->splice_.fd_out, cmd->splice_.off_out,
+                                 (unsigned)cmd->splice_.len, cmd->splice_.flags);
+            break;
+        default:
+            h2o_fatal("unknown command: %u", (unsigned)cmd->cmd);
+            break;
+        }
         sqe->user_data = (uint64_t)cmd;
         made_progress = 1;
     }
@@ -817,13 +914,13 @@ static int uring_submit(h2o_evloop_t *loop, int can_delay)
     return made_progress;
 }
 
-static int uring_check_completion(h2o_evloop_t *loop, struct st_h2o_evloop_uring_cmd_t *cmd_sync)
+static uint64_t uring_check_completion(h2o_evloop_t *loop, struct st_h2o_evloop_uring_cmd_t **cmd_sync, size_t num_cmd_sync)
 {
-    int cmd_sync_done = 0, ret;
+    uint64_t done_cmds = 0;
 
     while (1) {
         struct st_h2o_evloop_uring_cmd_t *cmd;
-        int res;
+        int ret;
 
         { /* obtain completed command and its result */
             struct io_uring_cqe *cqe;
@@ -832,35 +929,56 @@ static int uring_check_completion(h2o_evloop_t *loop, struct st_h2o_evloop_uring
             if (ret != 0)
                 break;
             cmd = (struct st_h2o_evloop_uring_cmd_t *)cqe->user_data;
-            res = cqe->res;
+            ret = cqe->res;
             io_uring_cqe_seen(&loop->_uring->uring, cqe);
         }
 
-        /* Check error. Or if partial read, schedule read of the remainder. */
-        if (res != cmd->vec.len) {
-            assert(res < cmd->vec.len);
-            if (res > 0) {
-                cmd->offset += res;
-                cmd->vec.base += res;
-                cmd->vec.len -= res;
-                uring_queue_insert(&loop->_uring->submission, cmd);
-                if (!h2o_timer_is_linked(&loop->_uring->delayed))
-                    h2o_timer_link(loop, 0, &loop->_uring->delayed);
-                continue;
+        /* handle the result */
+        switch (cmd->cmd) {
+        case H2O_EVLOOP_URING_CMD_READ:
+            /* if partial read, schedule read of the remainder */
+            if (ret != cmd->read_.vec.len) {
+                assert(ret < cmd->read_.vec.len);
+                if (ret > 0) {
+                    cmd->read_.offset += ret;
+                    cmd->read_.vec.base += ret;
+                    cmd->read_.vec.len -= ret;
+                    uring_queue_insert(&loop->_uring->submission, cmd);
+                    if (!h2o_timer_is_linked(&loop->_uring->delayed))
+                        h2o_timer_link(loop, 0, &loop->_uring->delayed);
+                    continue;
+                } else {
+                    cmd->super.err = h2o_socket_error_io; /* TODO notify partial read / eos? */
+                }
+            }
+            break;
+        case H2O_EVLOOP_URING_CMD_SPLICE:
+            /* for splice, we have to report short reads */
+            if (ret > 0) {
+                assert(ret <= cmd->splice_.len);
+                cmd->splice_.len = (size_t)ret;
             } else {
-                cmd->super.err = h2o_socket_error_io; /* TODO notify partial read / eos? */
+                cmd->super.err = h2o_socket_error_io; /* TODO notify eos? */
+            }
+            break;
+        default:
+            h2o_fatal("unexpected uring command: %u", (unsigned)cmd->cmd);
+            break;
+        }
+
+        /* link to completion list, or indicate to the caller that `cmd_sync` has completed */
+        size_t i;
+        for (i = 0; i < num_cmd_sync; ++i) {
+            if (cmd_sync[i] == cmd) {
+                done_cmds |= (uint64_t)1 << i;
+                break;
             }
         }
-
-        /* link to completion list or indicate to the caller that `cmd_sync` has completed */
-        if (cmd == cmd_sync) {
-            cmd_sync_done = 1;
-        } else {
+        if (i == num_cmd_sync)
             uring_queue_insert(&loop->_uring->completion, cmd);
-        }
     }
 
-    return cmd_sync_done;
+    return done_cmds;
 }
 
 static int uring_dispatch_completed(h2o_evloop_t *loop)
@@ -880,13 +998,14 @@ static int uring_dispatch_completed(h2o_evloop_t *loop)
 void h2o_socket_read_file(h2o_aio_cmd_t **_cmd, h2o_loop_t *loop, int _fd, uint64_t _offset, h2o_iovec_t _dst, h2o_aio_cb _cb,
                           void *_data)
 {
+    assert(_dst.len != 0);
+
     /* build command and register */
     struct st_h2o_evloop_uring_cmd_t *cmd = h2o_mem_alloc(sizeof(*cmd));
     *cmd = (struct st_h2o_evloop_uring_cmd_t){
         .super = {.cb = {.func = _cb, .data = _data}},
-        .fd = _fd,
-        .offset = _offset,
-        .vec = _dst,
+        .cmd = H2O_EVLOOP_URING_CMD_READ,
+        .read_ = {.fd = _fd, .offset = _offset, .vec = _dst},
     };
     uring_queue_insert(&loop->_uring->submission, cmd);
 
@@ -894,13 +1013,11 @@ void h2o_socket_read_file(h2o_aio_cmd_t **_cmd, h2o_loop_t *loop, int _fd, uint6
      * command generated right above gets issued and completes synchronously, which would be likely when the file is buffer cache.
      * If that is the case, call the callback synchronously. */
     if (uring_submit(loop, 1)) {
-        if (uring_check_completion(loop, cmd)) {
+        if (uring_check_completion(loop, &cmd, 1) != 0) {
             cmd->super.cb.func(&cmd->super);
             free(cmd);
             cmd = NULL;
         }
-    } else if (!h2o_timer_is_linked(&loop->_uring->delayed)) {
-        h2o_timer_link(loop, 0, &loop->_uring->delayed);
     }
 
     *_cmd = &cmd->super;
@@ -913,7 +1030,7 @@ static void uring_run(h2o_evloop_t *loop)
 {
     /* Repeatedly read cqe, until we bocome certain we haven't issued more read commands. */
     do {
-        uring_check_completion(loop, NULL);
+        uring_check_completion(loop, NULL, 0);
     } while (uring_dispatch_completed(loop) || uring_submit(loop, 0));
 
     assert(loop->_uring->completion.head == NULL);
@@ -935,6 +1052,195 @@ void uring_on_delayed(h2o_timer_t *_timer)
     h2o_evloop_t *loop = _read_file->loop;
 
     uring_run(loop);
+}
+
+static struct st_h2o_evloop_uring_cmd_t *uring_enqueue_splice(h2o_loop_t *loop, int fd_in, int64_t off_in, int fd_out,
+                                                              int64_t off_out, size_t len, unsigned flags, h2o_aio_cb cb,
+                                                              void *data)
+{
+    struct st_h2o_evloop_uring_cmd_t *cmd = h2o_mem_alloc(sizeof(*cmd));
+    *cmd = (struct st_h2o_evloop_uring_cmd_t){
+        .super = {.cb = {.func = cb, .data = data}},
+        .cmd = H2O_EVLOOP_URING_CMD_SPLICE,
+        .splice_ = {.fd_in = fd_in, .off_in = off_in, .fd_out = fd_out, .off_out = off_out, .len = len, .flags = flags},
+    };
+
+    uring_queue_insert(&loop->_uring->submission, cmd);
+    return cmd;
+}
+
+static void sendfile_on_splice_complete_post_close(h2o_aio_cmd_t *cmd)
+{
+    /* nothing to do */
+}
+
+void sendfile_stop_splice(struct st_h2o_evloop_uring_cmd_t **cmd)
+{
+    assert(*cmd != NULL);
+
+    (*cmd)->super.cb.func = sendfile_on_splice_complete_post_close;
+    *cmd = NULL;
+}
+
+static void sendfile_handle_error(struct st_h2o_evloop_socket_t *sock)
+{
+    assert(sock->sendfile_.src.fd != -1);
+
+    /* unmark sendfile inflight */
+    sock->sendfile_.src.fd = -1;
+
+    /* stop io_uring commands */
+    if (sock->sendfile_.splice_from_file.cmd != NULL)
+        sendfile_stop_splice(&sock->sendfile_.splice_from_file.cmd);
+    if (sock->sendfile_.splice_to_sock.cmd != NULL)
+        sendfile_stop_splice(&sock->sendfile_.splice_to_sock.cmd);
+
+    /* close pipes, as they cannot be reused due to the possibility of containing unsent data */
+    close(sock->sendfile_.pipe_fds[0]);
+    close(sock->sendfile_.pipe_fds[1]);
+    sock->sendfile_.pipe_fds[0] = -1;
+    sock->sendfile_.pipe_fds[1] = -1;
+
+    /* report error */
+    report_write_error_pre_init_write_buf(sock);
+}
+
+static void sendfile_on_splice_from_file_complete(h2o_aio_cmd_t *_cmd)
+{
+    struct st_h2o_evloop_socket_t *sock = _cmd->cb.data;
+    assert(&sock->sendfile_.splice_from_file.cmd->super == _cmd);
+
+    /* handle error */
+    if (sock->sendfile_.splice_from_file.cmd->super.err != NULL) {
+        sock->sendfile_.splice_from_file.cmd = NULL;
+        sendfile_handle_error(sock);
+        return;
+    }
+
+    /* Successfully read some bytes from file to pipe. Update the counter. If the read was short another command would be issued
+     * when the socket is recognized as writable; see `sendfile_core`. */
+    sock->sendfile_.splice_from_file.bytes_transferred += sock->sendfile_.splice_from_file.cmd->splice_.len;
+    sock->sendfile_.splice_from_file.cmd = NULL;
+}
+
+static void sendfile_on_splice_to_sock_complete(h2o_aio_cmd_t *_cmd)
+{
+    struct st_h2o_evloop_socket_t *sock = _cmd->cb.data;
+    assert(&sock->sendfile_.splice_to_sock.cmd->super == _cmd);
+
+    /* handle error */
+    if (sock->sendfile_.splice_to_sock.cmd->super.err != NULL) {
+        sock->sendfile_.splice_to_sock.cmd = NULL;
+        sendfile_handle_error(sock);
+        return;
+    }
+
+    /* Successfully transferred some bytes from pipe to socket. Update the counter. */
+    sock->sendfile_.splice_to_sock.bytes_transferred += sock->sendfile_.splice_to_sock.cmd->splice_.len;
+    sock->sendfile_.splice_to_sock.cmd = NULL;
+
+    /* If complete, clear states and schedule invocation of completion callback. Due to the asynchronous nature of io_uring,
+     * `splice_to_sock` might report full completion prior to `splice_from_file`. If that is the case,any reporting from the latter
+     * is suppressed. */
+    if (sock->sendfile_.splice_to_sock.bytes_transferred == sock->sendfile_.src.len) {
+        if (sock->sendfile_.splice_from_file.cmd != NULL) {
+            sendfile_stop_splice(&sock->sendfile_.splice_from_file.cmd);
+        } else {
+            assert(sock->sendfile_.splice_from_file.bytes_transferred == sock->sendfile_.src.len);
+        }
+        sock->sendfile_.src.fd = -1;
+        sock->_flags |= H2O_SOCKET_FLAG_IS_WRITE_NOTIFY;
+        link_to_pending(sock);
+    }
+
+    /* Make sure that the poll state change would be reflected. This is probably unnecessary in case of completion, but the cost is
+     * negligible for a heavy operation like sendfile. */
+    link_to_statechanged(sock);
+}
+
+/**
+ * Tries to make progress in sending the file. It is the responsibility of the caller to invoke `link_to_statechanged` if necessary.
+ *
+ * The design is based on the comment found at https://lwn.net/Articles/810482/, quote:
+ * axboe: As soon as the splice stuff is integrated, you'll have just that. When I initially wrote splice, at the same time I turned
+ *        sendfile() into a simple wrapper around it. So if you have splice, you have sendfile as well.
+ * farnz: There's special cases in the kernel (but not, it appears, in the manpage) to allow file to anything splicing by allocating
+ *        a secret internal pipe. Look at fs/splice.c, function splice_direct_to_actor for the code.
+ */
+int sendfile_core(struct st_h2o_evloop_socket_t *sock)
+{
+    if (sock->sendfile_.src.fd == -1)
+        goto Complete;
+
+    assert(sock->sendfile_.splice_to_sock.cmd == NULL);
+    assert(sock->sendfile_.splice_to_sock.bytes_transferred < sock->sendfile_.src.len);
+
+    /* Create pipe, if not yet being done. */
+    if (sock->sendfile_.pipe_fds[0] == -1) {
+        if (pipe(sock->sendfile_.pipe_fds) != 0) {
+            char buf[256];
+            h2o_fatal("pipe (2) failed:%s", h2o_strerror_r(errno, buf, sizeof(buf)));
+        }
+    }
+
+    h2o_loop_t *loop = h2o_socket_get_loop(&sock->super);
+
+    /* If necesssary, (re)queue read from disk. */
+    if (sock->sendfile_.splice_from_file.cmd == NULL &&
+        sock->sendfile_.splice_from_file.bytes_transferred < sock->sendfile_.src.len)
+        sock->sendfile_.splice_from_file.cmd = uring_enqueue_splice(
+            loop, sock->sendfile_.src.fd, sock->sendfile_.src.off + sock->sendfile_.splice_from_file.bytes_transferred,
+            sock->sendfile_.pipe_fds[1], -1, sock->sendfile_.src.len - sock->sendfile_.splice_from_file.bytes_transferred,
+            SPLICE_F_MORE, sendfile_on_splice_from_file_complete, sock);
+
+    /* (Re)queue send to socket. SPLICE_F_MOVE is not set; the hope is that entries in the pipe are references to the page cache and
+     * that those references would be moved regardless. */
+    sock->sendfile_.splice_to_sock.cmd = uring_enqueue_splice(
+        loop, sock->sendfile_.pipe_fds[0], -1, sock->fd, -1,
+        sock->sendfile_.src.len - sock->sendfile_.splice_to_sock.bytes_transferred, 0, sendfile_on_splice_to_sock_complete, sock);
+
+    /* Submit io_uring commands and let them complete synchronously. */
+    if (uring_submit(loop, 1)) {
+        struct st_h2o_evloop_uring_cmd_t *cmds[] = {sock->sendfile_.splice_from_file.cmd, sock->sendfile_.splice_to_sock.cmd};
+        uint64_t completed = uring_check_completion(loop, cmds, PTLS_ELEMENTSOF(cmds));
+        for (size_t i = 0; i < PTLS_ELEMENTSOF(cmds); ++i) {
+            if ((completed & ((uint64_t)1 << i)) != 0) {
+                cmds[i]->super.cb.func(&cmds[i]->super);
+                free(cmds[i]);
+            }
+        }
+    }
+
+    /* If complted synchronously, return. */
+    if (sock->sendfile_.src.fd == -1)
+        goto Complete;
+
+    /* Return that sendfile is incomplete. Either io_uring commands are running, or the socket is to be polled for write. */
+    return 0;
+
+Complete:
+    assert(sock->sendfile_.splice_from_file.cmd == NULL);
+    assert(sock->sendfile_.splice_to_sock.cmd == NULL);
+    return 1;
+}
+
+static void do_sendfile(h2o_socket_t *_sock, h2o_iovec_t *bufs, size_t cnt, int fd, off_t off, size_t len)
+{
+    assert(len != 0);
+
+    struct st_h2o_evloop_socket_t *sock = (struct st_h2o_evloop_socket_t *)_sock;
+
+    assert(sock->sendfile_.src.fd == -1);
+    assert(sock->sendfile_.splice_from_file.cmd == NULL);
+    assert(sock->sendfile_.splice_to_sock.cmd == NULL);
+
+    sock->sendfile_.src.fd = fd;
+    sock->sendfile_.src.off = off;
+    sock->sendfile_.src.len = len;
+    sock->sendfile_.splice_from_file.bytes_transferred = 0;
+    sock->sendfile_.splice_to_sock.bytes_transferred = 0;
+
+    do_write(&sock->super, bufs, cnt);
 }
 
 #endif
