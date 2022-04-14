@@ -877,32 +877,42 @@ void h2o_socket_sendvec(h2o_socket_t *sock, h2o_sendvec_t *vecs, size_t cnt, h2o
 
     sock->_cb.write = cb;
 
-    /* Short circuit unless pull vector is being provided. */
-    if (cnt == 0 || vecs[cnt - 1].callbacks->flatten == h2o_sendvec_flatten_raw) {
-        h2o_iovec_t bufs[cnt];
-        for (size_t i = 0; i < cnt; ++i)
+    h2o_iovec_t bufs[cnt];
+    size_t flatten_index = SIZE_MAX;
+
+    /* copy vectors to bufs, while looking for one to flatten */
+    for (size_t i = 0; i < cnt; ++i) {
+        if (vecs[i].callbacks->flatten == h2o_sendvec_flatten_raw || vecs[i].len == 0) {
             bufs[i] = h2o_iovec_init(vecs[i].raw, vecs[i].len);
+        } else {
+            assert(flatten_index == SIZE_MAX || !"h2o_socket_sendvec can only handle one pull vector at a time");
+            flatten_index = i;
+        }
+    }
+
+    /* Short circuit unless pull vector is being provided. */
+    if (flatten_index == SIZE_MAX) {
         do_write(sock, bufs, cnt);
         return;
     }
 
-    /* Last vector is a pull vector. At the moment, maximum size is limited to H2O_PULL_SENDVEC_MAX_SIZE bytes. */
-    h2o_sendvec_t *src = &vecs[cnt - 1];
+    /* Flatten the pull vector. At the moment, maximum size is limited to H2O_PULL_SENDVEC_MAX_SIZE bytes. */
+    h2o_sendvec_t *src = &vecs[flatten_index];
     assert(src->len <= H2O_PULL_SENDVEC_MAX_SIZE);
 
     /* Allocate memory to store the shallow list of vectors + buffer to flatten the data. */
     size_t prefix_size = sizeof(sock->_flatten.bufs[0]) * cnt;
     sock->_flatten.bufs = h2o_mem_alloc(prefix_size + src->len);
-    for (size_t i = 0; i < cnt - 1; ++i) {
-        assert(vecs[i].callbacks->flatten == h2o_sendvec_flatten_raw);
-        sock->_flatten.bufs[i] = h2o_iovec_init(vecs[i].raw, vecs[i].len);
-    }
-    sock->_flatten.bufs[cnt - 1] = h2o_iovec_init((char *)sock->_flatten.bufs + prefix_size, src->len);
+    for (size_t i = 0; i < flatten_index; ++i)
+        sock->_flatten.bufs[i] = bufs[i];
+    for (size_t i = flatten_index + 1; i < cnt; ++i)
+        sock->_flatten.bufs[i] = bufs[i];
+    sock->_flatten.bufs[flatten_index] = h2o_iovec_init((char *)sock->_flatten.bufs + prefix_size, src->len);
 
     sock->_flatten.bufcnt = cnt;
 
     /* Flatten the pull vector. `sendvec_on_flatten_complete` might get invoked synchronously; hence tail call. */
-    src->callbacks->flatten(src, h2o_socket_get_loop(sock), &sock->_flatten.cmd, sock->_flatten.bufs[cnt - 1], 0,
+    src->callbacks->flatten(src, h2o_socket_get_loop(sock), &sock->_flatten.cmd, sock->_flatten.bufs[flatten_index], 0,
                             sendvec_on_flatten_complete, sock);
 }
 
