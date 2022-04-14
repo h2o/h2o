@@ -109,6 +109,50 @@ enum {
 };
 
 /**
+ * the maximum size of sendvec when a pull (i.e. non-raw) vector is used. Note also that bufcnt must be set to one when a pull mode
+ * vector is used.
+ */
+#define H2O_PULL_SENDVEC_MAX_SIZE 65536
+
+typedef struct st_h2o_sendvec_t h2o_sendvec_t;
+
+typedef struct st_h2o_sendvec_callbacks_t {
+    /**
+     * optional callback used to serialize the bytes held by the vector. Returns if the operation succeeded. When false is returned,
+     * the generator is considered as been error-closed by itself.  If the callback is NULL, the data is pre-flattened and available
+     * in `h2o_sendvec_t::raw`.
+     */
+    int (*flatten)(h2o_sendvec_t *vec, h2o_iovec_t dst, size_t off);
+    /**
+     * optional callback that can be used to retain the buffer after flattening all data. This allows H3 to re-flatten data upon
+     * retransmission. Increments the reference counter if `is_incr` is set to true, otherwise the counter is decremented.
+     */
+    void (*update_refcnt)(h2o_sendvec_t *vec, int is_incr);
+} h2o_sendvec_callbacks_t;
+
+/**
+ * send vector. Unlike an ordinary `h2o_iovec_t`, the vector has a callback that allows the sender to delay the flattening of data
+ * until it becomes necessary.
+ */
+struct st_h2o_sendvec_t {
+    /**
+     *
+     */
+    const h2o_sendvec_callbacks_t *callbacks;
+    /**
+     * size of the vector
+     */
+    size_t len;
+    /**
+     *
+     */
+    union {
+        char *raw;
+        uint64_t cb_arg[2];
+    };
+};
+
+/**
  * abstraction layer for sockets (SSL vs. TCP)
  */
 struct st_h2o_socket_t {
@@ -402,6 +446,21 @@ static int h2o_socket_skip_tracing(h2o_socket_t *sock);
  *
  */
 void h2o_socket_set_skip_tracing(h2o_socket_t *sock, int skip_tracing);
+
+/**
+ * Initializes a send vector that refers to mutable memory region. When the `proceed` callback is invoked, it is possible for the
+ * generator to reuse (or release) that memory region.
+ */
+void h2o_sendvec_init_raw(h2o_sendvec_t *vec, const void *base, size_t len);
+/**
+ * Initializes a send vector that refers to immutable memory region. It is the responsible of the generator to preserve the contents
+ * of the specified memory region until the user of the send vector finishes using the send vector.
+ */
+void h2o_sendvec_init_immutable(h2o_sendvec_t *vec, const void *base, size_t len);
+/**
+ *
+ */
+int h2o_sendvec_flatten_raw(h2o_sendvec_t *vec, h2o_iovec_t dst, size_t off);
 
 /**
  * Prepares eBPF maps. Requires root privileges and thus should be called before dropping the privileges. Returns a boolean
