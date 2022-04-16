@@ -399,6 +399,7 @@ static void do_send_from_pipe(struct rp_generator_t *self)
     vec.cb_arg[1] = 0; /* unused */
 
     self->body_bytes_sent += vec.len;
+    self->pipe_inflight = 1;
     h2o_sendvec(self->src_req, &vec, 1, send_state);
 }
 
@@ -406,8 +407,13 @@ static void do_proceed(h2o_generator_t *generator, h2o_req_t *req)
 {
     struct rp_generator_t *self = (void *)generator;
 
-    if (self->sending.inflight)
+    if (self->sending.inflight) {
         h2o_doublebuffer_consume(&self->sending);
+    } else {
+        assert(self->pipe_reader.fds[0] != -1);
+        assert(self->pipe_inflight);
+        self->pipe_inflight = 0;
+    }
 
     if (self->pipe_reader.fds[0] != -1) {
         do_send_from_pipe(self);
@@ -786,6 +792,7 @@ static struct rp_generator_t *proxy_send_prepare(h2o_req_t *req)
     self->body_bytes_read = 0;
     self->body_bytes_sent = 0;
     self->pipe_reader.fds[0] = -1;
+    self->pipe_inflight = 0;
     self->req_done = 0;
     self->res_done = 0;
 
