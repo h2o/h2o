@@ -34,6 +34,9 @@
 #if defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__)
 #include <sys/ioctl.h>
 #endif
+#if defined(__linux__)
+#include <sys/sendfile.h>
+#endif
 #include "picotls.h"
 #include "quicly.h"
 #include "h2o/socket.h"
@@ -844,24 +847,30 @@ void h2o_socket_sendvec(h2o_socket_t *sock, h2o_sendvec_t *vecs, size_t cnt, h2o
     sock->_cb.write = cb;
 
     h2o_iovec_t bufs[cnt];
-    size_t flatten_index = SIZE_MAX;
+    size_t pull_index = SIZE_MAX;
 
     /* copy vectors to bufs, while looking for one to flatten */
     for (size_t i = 0; i < cnt; ++i) {
         if (vecs[i].callbacks->flatten == h2o_sendvec_flatten_raw || vecs[i].len == 0) {
             bufs[i] = h2o_iovec_init(vecs[i].raw, vecs[i].len);
         } else {
-            assert(flatten_index == SIZE_MAX || !"h2o_socket_sendvec can only handle one pull vector at a time");
+            assert(pull_index == SIZE_MAX || !"h2o_socket_sendvec can only handle one pull vector at a time");
             assert(vecs[i].len <= H2O_PULL_SENDVEC_MAX_SIZE); /* at the moment, this is our size limit */
-            flatten_index = i;
+            pull_index = i;
         }
     }
 
-    /* flatten the pull vector */
-    if (flatten_index != SIZE_MAX) {
-        sock->_write_buf.flattened = h2o_mem_alloc(vecs[flatten_index].len);
-        bufs[flatten_index] = h2o_iovec_init(sock->_write_buf.flattened, vecs[flatten_index].len);
-        if (!vecs[flatten_index].callbacks->flatten(vecs + flatten_index, bufs[flatten_index], 0)) {
+    if (pull_index != SIZE_MAX) {
+        /* If the pull vector has a send callback, and if we have the necessary conditions to utilize it, Let it write directly to
+         * the socket. */
+        if (sock->ssl == NULL && pull_index == cnt - 1 && vecs[pull_index].callbacks->send_ != NULL) {
+            do_write_with_sendvec(sock, bufs, cnt - 1, vecs + pull_index);
+            return;
+        }
+        /* Load the vector onto memory now. */
+        sock->_write_buf.flattened = h2o_mem_alloc(vecs[pull_index].len);
+        bufs[pull_index] = h2o_iovec_init(sock->_write_buf.flattened, vecs[pull_index].len);
+        if (!vecs[pull_index].callbacks->flatten(vecs + pull_index, bufs[pull_index], 0)) {
             /* failed */
             free(sock->_write_buf.flattened);
             sock->_write_buf.flattened = NULL;
@@ -1915,8 +1924,8 @@ size_t h2o_sendfile(int sockfd, int filefd, off_t off, size_t len)
     int ret;
     while ((ret = sendfile(filefd, sockfd, off, &iolen, NULL, 0)) != 0 && errno == EINTR)
         ;
-    if (ret != 0)
-        return errno == EAGAIN ? 0 : SIZE_MAX;
+    if (ret != 0 && errno != EAGAIN)
+        return SIZE_MAX;
     return iolen;
 
 #else
