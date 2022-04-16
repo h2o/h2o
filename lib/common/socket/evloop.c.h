@@ -231,7 +231,7 @@ static int sendvec_core(struct st_h2o_evloop_socket_t *sock)
     assert(sock->sendvec.off < sock->sendvec.vec.len);
 
     /* send, and return an error if failed */
-    if ((bytes_sent = sock->sendvec.vec.callbacks->send_(&sock->sendvec.vec, sock->fd, sock->sendvec.off,
+    if ((bytes_sent = sock->sendvec.vec.callbacks->send_(&sock->sendvec.vec, sock->fd,
                                                          sock->sendvec.vec.len - sock->sendvec.off)) == SIZE_MAX)
         return 0;
 

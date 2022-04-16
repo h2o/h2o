@@ -124,9 +124,10 @@ typedef struct st_h2o_sendvec_callbacks_t {
      */
     int (*flatten)(h2o_sendvec_t *vec, h2o_iovec_t dst, size_t off);
     /**
-     * Optional callback for sending contents of a vector directly to a socket. See `h2o_sendfile` regarding the interface.
+     * Optional callback for sending contents of a vector directly to a socket. This API provides one-pass, sequential access only.
+     * Returns number of bytes being sent (could be zero), or, upon error, SIZE_MAX.
      */
-    size_t (*send_)(h2o_sendvec_t *vec, int sockfd, size_t off, size_t len);
+    size_t (*send_)(h2o_sendvec_t *vec, int sockfd, size_t len);
     /**
      * optional callback that can be used to retain the buffer after flattening all data. This allows H3 to re-flatten data upon
      * retransmission. Increments the reference counter if `is_incr` is set to true, otherwise the counter is decremented.
