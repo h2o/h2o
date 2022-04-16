@@ -63,6 +63,8 @@ typedef struct st_h2o_httpclient_properties_t {
     h2o_iovec_t *connection_header;
 } h2o_httpclient_properties_t;
 
+typedef struct st_h2o_httpclient_pipe_reader_t h2o_httpclient_pipe_reader_t;
+
 typedef struct st_h2o_httpclient_on_head_t {
     int version;
     int status;
@@ -73,6 +75,13 @@ typedef struct st_h2o_httpclient_on_head_t {
     struct {
         h2o_httpclient_forward_datagram_cb write_, *read_;
     } forward_datagram;
+    /**
+     * If this pointer is set to non-NULL by the HTTP client, it is offering the user the opportunity to read content to a pipe,
+     * rather than suppliend them as bytes. To take that opportunity, users should set the members of the pointed struct to
+     * appropriate values. Note that even when the user opts in to using a pipe, first chunk of content may still be served through
+     * memory, as the content would be read into memory alongside the HTTP response headers.
+     */
+    h2o_httpclient_pipe_reader_t *pipe_reader;
 } h2o_httpclient_on_head_t;
 
 typedef void (*h2o_httpclient_proceed_req_cb)(h2o_httpclient_t *client, const char *errstr);
@@ -92,6 +101,11 @@ typedef int (*h2o_httpclient_informational_cb)(h2o_httpclient_t *client, int ver
                                                h2o_header_t *headers, size_t num_headers);
 
 typedef void (*h2o_httpclient_finish_cb)(h2o_httpclient_t *client);
+
+struct st_h2o_httpclient_pipe_reader_t {
+    int fd;
+    h2o_httpclient_body_cb on_body_piped;
+};
 
 typedef struct st_h2o_httpclient_connection_pool_t {
     /**
