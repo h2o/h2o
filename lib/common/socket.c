@@ -167,7 +167,6 @@ h2o_buffer_prototype_t h2o_socket_buffer_prototype = {
 
 size_t h2o_socket_ssl_buffer_size = H2O_SOCKET_DEFAULT_SSL_BUFFER_SIZE;
 __thread h2o_mem_recycle_t h2o_socket_ssl_buffer_allocator = {1024};
-__thread h2o_mem_recycle_t h2o_socket_pull_buffer_allocator = {1024};
 
 const char h2o_socket_error_out_of_memory[] = "out of memory";
 const char h2o_socket_error_io[] = "I/O error";
@@ -237,7 +236,7 @@ static void dispose_write_buf(h2o_socket_t *sock)
     }
 
     if (sock->_write_buf.flattened != NULL) {
-        h2o_mem_free_recycle(&h2o_socket_pull_buffer_allocator, sock->_write_buf.flattened);
+        h2o_mem_free_recycle(&h2o_socket_ssl_buffer_allocator, sock->_write_buf.flattened);
         sock->_write_buf.flattened = NULL;
     }
 }
@@ -870,11 +869,12 @@ void h2o_socket_sendvec(h2o_socket_t *sock, h2o_sendvec_t *vecs, size_t cnt, h2o
             return;
         }
         /* Load the vector onto memory now. */
-        sock->_write_buf.flattened = h2o_mem_alloc_recycle(&h2o_socket_pull_buffer_allocator, H2O_PULL_SENDVEC_MAX_SIZE);
+        assert(h2o_socket_ssl_buffer_size >= H2O_PULL_SENDVEC_MAX_SIZE);
+        sock->_write_buf.flattened = h2o_mem_alloc_recycle(&h2o_socket_ssl_buffer_allocator, h2o_socket_ssl_buffer_size);
         bufs[pull_index] = h2o_iovec_init(sock->_write_buf.flattened, vecs[pull_index].len);
         if (!vecs[pull_index].callbacks->flatten(vecs + pull_index, bufs[pull_index], 0)) {
             /* failed */
-            h2o_mem_free_recycle(&h2o_socket_pull_buffer_allocator, sock->_write_buf.flattened);
+            h2o_mem_free_recycle(&h2o_socket_ssl_buffer_allocator, sock->_write_buf.flattened);
             sock->_write_buf.flattened = NULL;
             report_early_write_error(sock);
             return;

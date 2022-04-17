@@ -219,7 +219,7 @@ static size_t write_core(struct st_h2o_evloop_socket_t *sock, h2o_iovec_t **bufs
             break;
         /* as anoptimization, if we have a flattened vector, release memory as soon as they have been encrypted */
         if (sock->super._write_buf.flattened != NULL) {
-            h2o_mem_free_recycle(&h2o_socket_pull_buffer_allocator, sock->super._write_buf.flattened);
+            h2o_mem_free_recycle(&h2o_socket_ssl_buffer_allocator, sock->super._write_buf.flattened);
             sock->super._write_buf.flattened = NULL;
         }
     }
@@ -352,7 +352,7 @@ void do_write(h2o_socket_t *_sock, h2o_iovec_t *bufs, size_t bufcnt)
     if (bufcnt == 0 && !has_pending_ssl_bytes(sock->super.ssl)) {
         /* write complete, schedule the callback */
         if (sock->super._write_buf.flattened != NULL) {
-            h2o_mem_free_recycle(&h2o_socket_pull_buffer_allocator, sock->super._write_buf.flattened);
+            h2o_mem_free_recycle(&h2o_socket_ssl_buffer_allocator, sock->super._write_buf.flattened);
             sock->super._write_buf.flattened = NULL;
         }
         if (sock->sendvec.vec.callbacks != NULL) {

@@ -61,7 +61,13 @@ extern "C" {
 #endif
 
 /**
- * Maximum amount of TLS records to generate at once. Default is 4 full-sized TLS records using 32-byte tag.
+ * Maximum size of sendvec when a pull (i.e. non-raw) vector is used. Note also that bufcnt must be set to one when a pull mode
+ * vector is used.
+ */
+#define H2O_PULL_SENDVEC_MAX_SIZE 65536
+/**
+ * Maximum amount of TLS records to generate at once. Default is 4 full-sized TLS records using 32-byte tag. This value is defined
+ * to be slightly greater than H2O_PULL_SENDVEC_MAX_SIZE, so that the two buffers can recycle the same memory buffers.
  */
 #define H2O_SOCKET_DEFAULT_SSL_BUFFER_SIZE ((5 + 16384 + 32) * 4)
 
@@ -107,12 +113,6 @@ enum {
     H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_DISABLED,
     H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_DETERMINED
 };
-
-/**
- * the maximum size of sendvec when a pull (i.e. non-raw) vector is used. Note also that bufcnt must be set to one when a pull mode
- * vector is used.
- */
-#define H2O_PULL_SENDVEC_MAX_SIZE 65536
 
 typedef struct st_h2o_sendvec_t h2o_sendvec_t;
 
@@ -234,9 +234,11 @@ typedef void (*h2o_socket_ssl_resumption_remove_cb)(h2o_iovec_t session_id);
 extern h2o_buffer_mmap_settings_t h2o_socket_buffer_mmap_settings;
 extern h2o_buffer_prototype_t h2o_socket_buffer_prototype;
 
+/**
+ * see H2O_SOCKET_DEFAULT_SSL_BUFFER_SIZE
+ */
 extern size_t h2o_socket_ssl_buffer_size;
 extern __thread h2o_mem_recycle_t h2o_socket_ssl_buffer_allocator;
-extern __thread h2o_mem_recycle_t h2o_socket_pull_buffer_allocator;
 
 extern const char h2o_socket_error_out_of_memory[];
 extern const char h2o_socket_error_io[];
