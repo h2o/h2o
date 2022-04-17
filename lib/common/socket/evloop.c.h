@@ -345,7 +345,7 @@ void do_write(h2o_socket_t *_sock, h2o_iovec_t *bufs, size_t bufcnt)
     if (bufcnt == 0 && !has_pending_ssl_bytes(sock->super.ssl)) {
         /* write complete, schedule the callback */
         if (sock->super._write_buf.flattened != NULL) {
-            free(sock->super._write_buf.flattened);
+            h2o_mem_free_recycle(&h2o_socket_pull_buffer_allocator, sock->super._write_buf.flattened);
             sock->super._write_buf.flattened = NULL;
         }
         if (sock->sendvec.vec.callbacks != NULL) {
