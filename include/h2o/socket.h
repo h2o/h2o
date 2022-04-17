@@ -236,6 +236,7 @@ extern h2o_buffer_prototype_t h2o_socket_buffer_prototype;
 
 extern size_t h2o_socket_ssl_buffer_size;
 extern __thread h2o_mem_recycle_t h2o_socket_ssl_buffer_allocator;
+extern __thread h2o_mem_recycle_t h2o_socket_pull_buffer_allocator;
 
 extern const char h2o_socket_error_out_of_memory[];
 extern const char h2o_socket_error_io[];
