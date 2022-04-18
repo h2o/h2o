@@ -30,6 +30,12 @@
 #include "h2o/httpclient.h"
 #include "h2o/token.h"
 
+#if !H2O_USE_LIBUV && defined(__linux__)
+#define USE_PIPE_READER 1
+#else
+#define USE_PIPE_READER 0
+#endif
+
 enum enum_h2o_http1client_stream_state {
     STREAM_STATE_HEAD,
     STREAM_STATE_BODY,
@@ -245,7 +251,7 @@ static void on_body_content_length(h2o_socket_t *sock, const char *err)
 
 void on_body_to_pipe(h2o_socket_t *_sock, const char *err)
 {
-#ifdef __linux__
+#if USE_PIPE_READER
     struct st_h2o_http1client_t *client = _sock->data;
 
     h2o_timer_unlink(&client->super._timeout);
@@ -512,7 +518,7 @@ static void on_head(h2o_socket_t *sock, const char *err)
         .num_headers = num_headers,
         .header_requires_dup = 1,
     };
-#if !H2O_USE_LIBUV && defined(__linux__)
+#if USE_PIPE_READER
     /* If there is no less than 64KB of data to be read from the socket, offer the application the opportunity to use pipe for
      * transferring the content zero-copy (TODO fine tune the threshold). */
     if (reader == on_body_content_length && client->sock->input->size + 65536 <= client->_body_decoder.content_length.bytesleft)
