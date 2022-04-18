@@ -353,8 +353,21 @@ static void do_send(struct rp_generator_t *self)
 
 static int from_pipe_flatten(h2o_sendvec_t *vec, h2o_iovec_t dst, size_t off)
 {
-    h2o_fatal("FIXME");
-    return 0;
+    /* FIXME we cannot support random access API, as implied by the argument: `off` */
+
+    struct rp_generator_t *self = (void *)vec->cb_arg[0];
+
+    while (dst.len != 0) {
+        ssize_t ret;
+        while ((ret = read(self->pipe_reader.fds[0], dst.base, dst.len)) == -1 && errno == EINTR)
+            ;
+        if (ret <= 0)
+            return 0;
+        dst.base += ret;
+        dst.len -= ret;
+    }
+
+    return 1;
 }
 
 static size_t from_pipe_send(h2o_sendvec_t *vec, int sockfd, size_t len)
