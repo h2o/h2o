@@ -71,13 +71,18 @@
     do {                                                                                                                           \
         h2o_socket_t *_sock = (sock);                                                                                              \
         if (!_sock->_skip_tracing)                                                                                                 \
-        H2O_PROBE(SOCKET_##label, sock, __VA_ARGS__);                                                                              \
+            H2O_PROBE(SOCKET_##label, sock, __VA_ARGS__);                                                                          \
     } while (0)
 
 struct st_h2o_socket_ssl_t {
     SSL_CTX *ssl_ctx;
     SSL *ossl;
     ptls_t *ptls;
+    enum {
+        H2O_SOCKET_SSL_OFFLOAD_NONE,
+        H2O_SOCKET_SSL_OFFLOAD_ON,
+        H2O_SOCKET_SSL_OFFLOAD_TBD,
+    } offload;
     int *did_write_in_read; /* used for detecting and closing the connection upon renegotiation (FIXME implement renegotiation) */
     size_t record_overhead;
     struct {
@@ -167,6 +172,8 @@ h2o_buffer_prototype_t h2o_socket_buffer_prototype = {
 
 size_t h2o_socket_ssl_buffer_size = H2O_SOCKET_DEFAULT_SSL_BUFFER_SIZE;
 __thread h2o_mem_recycle_t h2o_socket_ssl_buffer_allocator = {1024};
+
+int h2o_socket_use_ktls = 0;
 
 const char h2o_socket_error_out_of_memory[] = "out of memory";
 const char h2o_socket_error_io[] = "I/O error";
@@ -472,6 +479,11 @@ static void shutdown_ssl(h2o_socket_t *sock, const char *err)
         goto Close;
     }
 
+    /* at the moment, we do not send Close Notify Alert when kTLS is used (TODO) */
+    if (sock->ssl->offload == H2O_SOCKET_SSL_OFFLOAD_ON)
+        goto Close;
+
+    /* send Close Notify if necessary, depending on each TLS stack being used */
     if (sock->ssl->ptls != NULL) {
         ptls_buffer_t wbuf;
         uint8_t wbuf_small[32];
@@ -865,10 +877,9 @@ void h2o_socket_sendvec(h2o_socket_t *sock, h2o_sendvec_t *vecs, size_t cnt, h2o
         /* If the pull vector has a send callback, and if we have the necessary conditions to utilize it, Let it write directly to
          * the socket. */
 #if !H2O_USE_LIBUV
-        if (sock->ssl == NULL && pull_index == cnt - 1 && vecs[pull_index].callbacks->send_ != NULL) {
-            do_write_with_sendvec(sock, bufs, cnt - 1, vecs + pull_index);
+        if (pull_index == cnt - 1 && vecs[pull_index].callbacks->send_ != NULL &&
+            do_write_with_sendvec(sock, bufs, cnt - 1, vecs + pull_index))
             return;
-        }
 #endif
         /* Load the vector onto memory now. */
         assert(h2o_socket_ssl_buffer_size >= H2O_PULL_SENDVEC_MAX_SIZE);
@@ -1594,6 +1605,11 @@ void h2o_socket_ssl_handshake(h2o_socket_t *sock, SSL_CTX *ssl_ctx, const char *
 {
     sock->ssl = h2o_mem_alloc(sizeof(*sock->ssl));
     *sock->ssl = (struct st_h2o_socket_ssl_t){};
+#ifdef __linux__
+    /* Set offload state to TBD if kTLS is enabled. Otherwise, remains H2O_SOCKET_SSL_OFFLOAD_OFF. */
+    if (h2o_socket_use_ktls)
+        sock->ssl->offload = H2O_SOCKET_SSL_OFFLOAD_TBD;
+#endif
 
     sock->ssl->ssl_ctx = ssl_ctx;
 

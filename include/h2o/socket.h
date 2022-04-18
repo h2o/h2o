@@ -240,6 +240,11 @@ extern h2o_buffer_prototype_t h2o_socket_buffer_prototype;
 extern size_t h2o_socket_ssl_buffer_size;
 extern __thread h2o_mem_recycle_t h2o_socket_ssl_buffer_allocator;
 
+/**
+ * boolean flag indicating if kTLS should be used (when preferable)
+ */
+extern int h2o_socket_use_ktls;
+
 extern const char h2o_socket_error_out_of_memory[];
 extern const char h2o_socket_error_io[];
 extern const char h2o_socket_error_closed[];
