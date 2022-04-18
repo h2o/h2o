@@ -88,6 +88,7 @@ struct st_h2o_http1client_t {
 };
 
 static void on_body_to_pipe(h2o_socket_t *_sock, const char *err);
+
 static void req_body_send(struct st_h2o_http1client_t *client);
 static void do_update_window(h2o_httpclient_t *_client);
 
@@ -239,10 +240,12 @@ static void on_body_content_length(h2o_socket_t *sock, const char *err)
             close_client(client);
             return;
         }
+#if USE_PIPE_READER
         if (client->pipe_reader.on_body_piped != NULL) {
             h2o_socket_dont_read(client->sock, 1);
             client->reader = on_body_to_pipe;
         }
+#endif
         do_update_window(&client->super);
     }
 

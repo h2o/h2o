@@ -864,10 +864,12 @@ void h2o_socket_sendvec(h2o_socket_t *sock, h2o_sendvec_t *vecs, size_t cnt, h2o
     if (pull_index != SIZE_MAX) {
         /* If the pull vector has a send callback, and if we have the necessary conditions to utilize it, Let it write directly to
          * the socket. */
+#if !H2O_USE_LIBUV
         if (sock->ssl == NULL && pull_index == cnt - 1 && vecs[pull_index].callbacks->send_ != NULL) {
             do_write_with_sendvec(sock, bufs, cnt - 1, vecs + pull_index);
             return;
         }
+#endif
         /* Load the vector onto memory now. */
         assert(h2o_socket_ssl_buffer_size >= H2O_PULL_SENDVEC_MAX_SIZE);
         sock->_write_buf.flattened = h2o_mem_alloc_recycle(&h2o_socket_ssl_buffer_allocator, h2o_socket_ssl_buffer_size);
