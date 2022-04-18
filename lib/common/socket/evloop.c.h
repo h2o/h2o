@@ -95,6 +95,8 @@ static void evloop_do_on_socket_export(struct st_h2o_evloop_socket_t *sock);
 #error "poller not specified"
 #endif
 
+size_t h2o_evloop_socket_max_read_size = 1024 * 1024; /* by default, we read up to 1MB at once */
+
 void link_to_pending(struct st_h2o_evloop_socket_t *sock)
 {
     if (sock->_next_pending == sock) {
@@ -472,7 +474,7 @@ static struct st_h2o_evloop_socket_t *create_socket(h2o_evloop_t *loop, int fd, 
     sock->loop = loop;
     sock->fd = fd;
     sock->_flags = flags;
-    sock->max_read_size = 1024 * 1024; /* by default, we read up to 1MB at once */
+    sock->max_read_size = h2o_evloop_socket_max_read_size; /* by default, we read up to 1MB at once */
     sock->_next_pending = sock;
     sock->_next_statechanged = sock;
 

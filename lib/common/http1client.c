@@ -399,6 +399,11 @@ static void on_head(h2o_socket_t *sock, const char *err)
         return;
     }
 
+#if !H2O_USE_LIBUV
+    /* revert max read size to 1MB now that we have received the first chunk, presumably carrying all the response headers */
+    h2o_evloop_socket_set_max_read_size(client->sock, h2o_evloop_socket_max_read_size);
+#endif
+
     client->super._timeout.cb = on_head_timeout;
 
     headers = h2o_mem_alloc_pool(client->super.pool, *headers, MAX_HEADERS);
@@ -807,6 +812,13 @@ static void start_request(struct st_h2o_http1client_t *client, h2o_iovec_t metho
 
     client->state.req = STREAM_STATE_BODY;
     client->super.timings.request_begin_at = h2o_gettimeofday(client->super.ctx->loop);
+
+#if !H2O_USE_LIBUV
+    /* Reduce max read size before fetching headers. The intent here is to not do a full-sized read of 1MB when we have the chance
+     * of passing data zero-copy through pipe. 16KB has been chosen so that an almost full-sized HTTP/2 frame / TLS record can be
+     * generated for the first chunk of data that we pass through memory. */
+    h2o_evloop_socket_set_max_read_size(client->sock, 16384);
+#endif
 
     h2o_socket_read_start(client->sock, on_head);
 }
