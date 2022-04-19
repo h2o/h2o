@@ -529,12 +529,11 @@ static void on_head(h2o_socket_t *sock, const char *err)
         .header_requires_dup = 1,
     };
 #if USE_PIPE_READER
-    /* If there is no less than 16KB of data to be read from the socket, offer the application the opportunity to use pipe for
-     * transferring the content zero-copy. While we might want to further reduce the threshold (from 16KB), relative cost of
-     * skipping copy becomes small as the cost of request / response header processing becomes significant. Or so is the belief
-     * without any benchmark that proves the argument. */
+    /* If there is no less than 64KB of data to be read from the socket, offer the application the opportunity to use pipe for
+     * transferring the content zero-copy. As switching to pipe involves the cost of creating a pipe (and disposing it when the
+     * request is complete), we adopt this margin of 64KB, which offers clear improvement (5%) on 9th-gen Intel Core. */
     if (client->_app_prefers_pipe_reader && reader == on_body_content_length &&
-        client->sock->input->size + 16384 <= client->_body_decoder.content_length.bytesleft)
+        client->sock->input->size + 65536 <= client->_body_decoder.content_length.bytesleft)
         on_head.pipe_reader = &client->pipe_reader;
 #endif
 
