@@ -241,14 +241,15 @@ static void on_body_content_length(h2o_socket_t *sock, const char *err)
             close_client(client);
             return;
         }
-#if USE_PIPE_READER
-        if (client->pipe_reader.on_body_piped != NULL) {
-            h2o_socket_dont_read(client->sock, 1);
-            client->reader = on_body_to_pipe;
-        }
-#endif
-        do_update_window(&client->super);
     }
+
+#if USE_PIPE_READER
+    if (client->pipe_reader.on_body_piped != NULL) {
+        h2o_socket_dont_read(client->sock, 1);
+        client->reader = on_body_to_pipe;
+    }
+#endif
+    do_update_window(&client->super);
 
     h2o_timer_link(client->super.ctx->loop, client->super.ctx->io_timeout, &client->super._timeout);
 }
