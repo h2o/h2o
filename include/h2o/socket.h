@@ -359,6 +359,10 @@ ptls_t *h2o_socket_get_ptls(h2o_socket_t *sock);
 /**
  *
  */
+int h2o_socket_can_tls_offload(h2o_socket_t *sock);
+/**
+ *
+ */
 h2o_iovec_t h2o_socket_log_tcp_congestion_controller(h2o_socket_t *sock, h2o_mem_pool_t *pool);
 h2o_iovec_t h2o_socket_log_tcp_delivery_rate(h2o_socket_t *sock, h2o_mem_pool_t *pool);
 const char *h2o_socket_get_ssl_protocol_version(h2o_socket_t *sock);

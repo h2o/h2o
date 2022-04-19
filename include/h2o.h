@@ -330,6 +330,17 @@ typedef enum h2o_send_informational_mode {
     H2O_SEND_INFORMATIONAL_MODE_ALL
 } h2o_send_informational_mode_t;
 
+/**
+ * If zero copy should be used. "Always" indicates to the proxy handler that pipe-backed vectors should be used even when the http
+ * protocol handler does not support zero-copy. This mode delays the load of content to userspace, at the cost of moving around
+ * memory page between the socket connected to the origin and the pipe.
+ */
+typedef enum h2o_proxy_zero_copy_mode {
+    H2O_PROXY_ZERO_COPY_DISABLED,
+    H2O_PROXY_ZERO_COPY_ENABLED,
+    H2O_PROXY_ZERO_COPY_ALWAYS
+} h2o_proxy_zero_copy_mode_t;
+
 struct st_h2o_globalconf_t {
     /**
      * a NULL-terminated list of host contexts (h2o_hostconf_t)
@@ -512,6 +523,10 @@ struct st_h2o_globalconf_t {
          * maximum size to buffer for the response
          */
         size_t max_buffer_size;
+        /**
+         * a boolean flag if set to true, instructs to use zero copy (i.e., splice to pipe then splice to socket) if possible
+         */
+        h2o_proxy_zero_copy_mode_t zero_copy;
 
         struct {
             uint32_t max_concurrent_streams;
@@ -900,6 +915,10 @@ typedef struct st_h2o_conn_callbacks_t {
      * yet available.
      */
     int64_t (*get_rtt)(h2o_conn_t *conn);
+    /**
+     * optional callback that returns if zero copy is supported by the HTTP handler
+     */
+    int (*can_zero_copy)(h2o_conn_t *conn);
     /**
      * logging callbacks (all of them are optional)
      */

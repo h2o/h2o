@@ -383,6 +383,24 @@ Schedule_Write:
     link_to_statechanged(sock);
 }
 
+static int can_tls_offload(h2o_socket_t *sock)
+{
+#ifdef __linux__
+    if (sock->ssl->ptls != NULL) {
+        ptls_cipher_suite_t *cipher = ptls_get_cipher(sock->ssl->ptls);
+        switch (cipher->id) {
+        case PTLS_CIPHER_SUITE_AES_128_GCM_SHA256:
+        case PTLS_CIPHER_SUITE_AES_256_GCM_SHA384:
+            return 1;
+        default:
+            break;
+        }
+    }
+#endif
+
+    return 0;
+}
+
 #ifdef __linux__
 static void switch_to_ktls(struct st_h2o_evloop_socket_t *sock)
 {

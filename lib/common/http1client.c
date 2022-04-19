@@ -85,6 +85,7 @@ struct st_h2o_http1client_t {
     unsigned _is_chunked : 1;
     unsigned _seen_at_least_one_chunk : 1;
     unsigned _delay_free : 1;
+    unsigned _app_prefers_pipe_reader : 1;
 };
 
 static void on_body_to_pipe(h2o_socket_t *_sock, const char *err);
@@ -402,9 +403,10 @@ static void on_head(h2o_socket_t *sock, const char *err)
         return;
     }
 
-#if !H2O_USE_LIBUV
     /* revert max read size to 1MB now that we have received the first chunk, presumably carrying all the response headers */
-    h2o_evloop_socket_set_max_read_size(client->sock, h2o_evloop_socket_max_read_size);
+#if USE_PIPE_READER
+    if (client->_app_prefers_pipe_reader)
+        h2o_evloop_socket_set_max_read_size(client->sock, h2o_evloop_socket_max_read_size);
 #endif
 
     client->super._timeout.cb = on_head_timeout;
@@ -527,9 +529,12 @@ static void on_head(h2o_socket_t *sock, const char *err)
         .header_requires_dup = 1,
     };
 #if USE_PIPE_READER
-    /* If there is no less than 64KB of data to be read from the socket, offer the application the opportunity to use pipe for
-     * transferring the content zero-copy (TODO fine tune the threshold). */
-    if (reader == on_body_content_length && client->sock->input->size + 65536 <= client->_body_decoder.content_length.bytesleft)
+    /* If there is no less than 16KB of data to be read from the socket, offer the application the opportunity to use pipe for
+     * transferring the content zero-copy. While we might want to further reduce the threshold (from 16KB), relative cost of
+     * skipping copy becomes small as the cost of request / response header processing becomes significant. Or so is the belief
+     * without any benchmark that proves the argument. */
+    if (client->_app_prefers_pipe_reader && reader == on_body_content_length &&
+        client->sock->input->size + 16384 <= client->_body_decoder.content_length.bytesleft)
         on_head.pipe_reader = &client->pipe_reader;
 #endif
 
@@ -816,11 +821,13 @@ static void start_request(struct st_h2o_http1client_t *client, h2o_iovec_t metho
     client->state.req = STREAM_STATE_BODY;
     client->super.timings.request_begin_at = h2o_gettimeofday(client->super.ctx->loop);
 
-#if !H2O_USE_LIBUV
-    /* Reduce max read size before fetching headers. The intent here is to not do a full-sized read of 1MB when we have the chance
-     * of passing data zero-copy through pipe. 16KB has been chosen so that an almost full-sized HTTP/2 frame / TLS record can be
-     * generated for the first chunk of data that we pass through memory. */
-    h2o_evloop_socket_set_max_read_size(client->sock, 16384);
+    /* If there's possibility of using a pipe for forwarding the content, reduce maximum read size before fetching headers. The
+     * intent here is to not do a full-sized read of 1MB. 16KB has been chosen so that all HTTP response headers would be available,
+     * and that an almost full-sized HTTP/2 frame / TLS record can be generated for the first chunk of data that we pass through
+     * memory. */
+#if USE_PIPE_READER
+    if (client->_app_prefers_pipe_reader)
+        h2o_evloop_socket_set_max_read_size(client->sock, 16384);
 #endif
 
     h2o_socket_read_start(client->sock, on_head);
@@ -844,6 +851,7 @@ static void on_connection_ready(struct st_h2o_http1client_t *client)
 
     client->super._cb.on_head = client->super._cb.on_connect(&client->super, NULL, &method, &url, (const h2o_header_t **)&headers,
                                                              &num_headers, &body, &client->proceed_req, &props, client->_origin);
+    client->_app_prefers_pipe_reader = props.prefer_pipe_reader;
 
     if (client->super._cb.on_head == NULL) {
         close_client(client);

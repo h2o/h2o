@@ -61,6 +61,10 @@ typedef struct st_h2o_httpclient_properties_t {
      * value of the connection header field to be sent to the server. This can be used for upgrading an HTTP/1.1 connection.
      */
     h2o_iovec_t *connection_header;
+    /**
+     * defaults to false
+     */
+    unsigned prefer_pipe_reader : 1;
 } h2o_httpclient_properties_t;
 
 typedef struct st_h2o_httpclient_pipe_reader_t h2o_httpclient_pipe_reader_t;

@@ -1044,6 +1044,18 @@ const char *h2o_socket_get_ssl_server_name(const h2o_socket_t *sock)
     return NULL;
 }
 
+int h2o_socket_can_tls_offload(h2o_socket_t *sock)
+{
+    if (sock->ssl == NULL)
+        return 0;
+
+#if H2O_USE_LIBUV
+    return 0;
+#else
+    return can_tls_offload(sock);
+#endif
+}
+
 h2o_iovec_t h2o_socket_log_tcp_congestion_controller(h2o_socket_t *sock, h2o_mem_pool_t *pool)
 {
 #if defined(TCP_CONGESTION)

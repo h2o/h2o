@@ -1131,6 +1131,12 @@ static int skip_tracing(h2o_conn_t *_conn)
     return h2o_socket_skip_tracing(conn->sock);
 }
 
+static int can_zero_copy(h2o_conn_t *_conn)
+{
+    struct st_h2o_http1_conn_t *conn = (void *)_conn;
+    return conn->sock->ssl == NULL || h2o_socket_can_tls_offload(conn->sock);
+}
+
 #define DEFINE_LOGGER(name)                                                                                                        \
     static h2o_iovec_t log_##name(h2o_req_t *req)                                                                                  \
     {                                                                                                                              \
@@ -1176,6 +1182,7 @@ static const h2o_conn_callbacks_t h1_callbacks = {
     .get_peername = get_peername,
     .get_ptls = get_ptls,
     .skip_tracing = skip_tracing,
+    .can_zero_copy = can_zero_copy,
     .log_ = {{
         .transport =
             {

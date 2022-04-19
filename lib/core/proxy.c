@@ -774,6 +774,21 @@ static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *e
 
     client->get_conn_properties(client, &req->proxy_stats.conn);
 
+    { /* indicate to httpclient if use of pipe is preferred */
+        h2o_conn_t *conn = self->src_req->conn;
+        switch (conn->ctx->globalconf->proxy.zero_copy) {
+        case H2O_PROXY_ZERO_COPY_ALWAYS:
+            props->prefer_pipe_reader = 1;
+            break;
+        case H2O_PROXY_ZERO_COPY_ENABLED:
+            if (conn->callbacks->can_zero_copy != NULL && conn->callbacks->can_zero_copy(conn))
+                props->prefer_pipe_reader = 1;
+            break;
+        default:
+            break;
+        }
+    }
+
     return on_head;
 }
 
