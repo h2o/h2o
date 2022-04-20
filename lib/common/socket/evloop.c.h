@@ -26,7 +26,7 @@
 #include <sys/time.h>
 #include <sys/uio.h>
 #include <unistd.h>
-#ifdef __linux__
+#if H2O_USE_KTLS
 #include <linux/tls.h>
 #endif
 #include "cloexec.h"
@@ -385,7 +385,7 @@ Schedule_Write:
 
 static int can_tls_offload(h2o_socket_t *sock)
 {
-#ifdef __linux__
+#if H2O_USE_KTLS
     if (sock->ssl->ptls != NULL) {
         ptls_cipher_suite_t *cipher = ptls_get_cipher(sock->ssl->ptls);
         switch (cipher->id) {
@@ -401,7 +401,7 @@ static int can_tls_offload(h2o_socket_t *sock)
     return 0;
 }
 
-#ifdef __linux__
+#if H2O_USE_KTLS
 static void switch_to_ktls(struct st_h2o_evloop_socket_t *sock)
 {
     assert(sock->super.ssl->offload == H2O_SOCKET_SSL_OFFLOAD_TBD);
@@ -491,7 +491,7 @@ static int do_write_with_sendvec(h2o_socket_t *_sock, h2o_iovec_t *bufs, size_t 
 
     /* If userspace TLS is currently in use, either switch to kTLS or refuse. */
     if (sock->super.ssl != NULL) {
-#ifdef __linux__
+#if H2O_USE_KTLS
         if (sock->super.ssl->offload == H2O_SOCKET_SSL_OFFLOAD_TBD)
             switch_to_ktls(sock);
         if (sock->super.ssl->offload != H2O_SOCKET_SSL_OFFLOAD_ON)

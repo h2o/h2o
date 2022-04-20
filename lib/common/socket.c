@@ -1617,7 +1617,7 @@ void h2o_socket_ssl_handshake(h2o_socket_t *sock, SSL_CTX *ssl_ctx, const char *
 {
     sock->ssl = h2o_mem_alloc(sizeof(*sock->ssl));
     *sock->ssl = (struct st_h2o_socket_ssl_t){};
-#ifdef __linux__
+#if H2O_USE_KTLS
     /* Set offload state to TBD if kTLS is enabled. Otherwise, remains H2O_SOCKET_SSL_OFFLOAD_OFF. */
     if (h2o_socket_use_ktls)
         sock->ssl->offload = H2O_SOCKET_SSL_OFFLOAD_TBD;
