@@ -3680,6 +3680,9 @@ int main(int argc, char **argv)
 #if H2O_USE_FUSION
                 printf("fusion: YES\n");
 #endif
+#if H2O_USE_KTLS
+                printf("ktls: YES\n");
+#endif
                 exit(0);
             case 'h':
                 printf("h2o version " H2O_VERSION "\n"
