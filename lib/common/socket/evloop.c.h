@@ -225,8 +225,8 @@ static size_t write_core(struct st_h2o_evloop_socket_t *sock, h2o_iovec_t **bufs
         /* convert more cleartext to TLS records if possible, or bail out on fatal error */
         if ((first_buf_written = generate_tls_records(&sock->super, bufs, bufcnt, first_buf_written)) == SIZE_MAX)
             break;
-        /* as anoptimization, if we have a flattened vector, release memory as soon as they have been encrypted */
-        if (sock->super._write_buf.flattened != NULL) {
+        /* as an optimization, if we have a flattened vector, release memory as soon as they have been encrypted */
+        if (*bufcnt == 0 && sock->super._write_buf.flattened != NULL) {
             h2o_mem_free_recycle(&h2o_socket_ssl_buffer_allocator, sock->super._write_buf.flattened);
             sock->super._write_buf.flattened = NULL;
         }
