@@ -90,4 +90,4 @@ RUN echo 'ci ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
 WORKDIR /home/ci
 USER ci
 
-ENTRYPOINT ["/usr/local/bin/dumb-init"]
+ENTRYPOINT ["/usr/local/bin/dumb-init", "--rewrite", "1:0"]
