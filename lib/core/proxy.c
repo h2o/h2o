@@ -351,20 +351,19 @@ static void do_send(struct rp_generator_t *self)
     h2o_send(self->src_req, vecs, veccnt, ststate);
 }
 
-static int from_pipe_flatten(h2o_sendvec_t *vec, h2o_iovec_t dst, size_t off)
+static int from_pipe_read(h2o_sendvec_t *vec, void *dst, size_t len)
 {
-    /* FIXME we cannot support random access API, as implied by the argument: `off` */
-
     struct rp_generator_t *self = (void *)vec->cb_arg[0];
 
-    while (dst.len != 0) {
+    while (len != 0) {
         ssize_t ret;
-        while ((ret = read(self->pipe_reader.fds[0], dst.base, dst.len)) == -1 && errno == EINTR)
+        while ((ret = read(self->pipe_reader.fds[0], dst, len)) == -1 && errno == EINTR)
             ;
         if (ret <= 0)
             return 0;
-        dst.base += ret;
-        dst.len -= ret;
+        dst += ret;
+        len -= ret;
+        vec->len -= ret;
     }
 
     return 1;
@@ -382,6 +381,9 @@ static size_t from_pipe_send(h2o_sendvec_t *vec, int sockfd, size_t len)
         return 0;
     if (bytes_sent <= 0)
         return SIZE_MAX;
+
+    vec->len -= bytes_sent;
+
     return bytes_sent;
 #else
     h2o_fatal("%s:not implemented", __FUNCTION__);
@@ -400,11 +402,7 @@ static void do_send_from_pipe(struct rp_generator_t *self)
         return;
     }
 
-    static const h2o_sendvec_callbacks_t callbacks = {
-        .flatten = from_pipe_flatten,
-        .send_ = from_pipe_send,
-        .update_refcnt = NULL, /* FIXME - maybe we don't need refcounting of a pipe vector that does not support random access */
-    };
+    static const h2o_sendvec_callbacks_t callbacks = {.read_ = from_pipe_read, .send_ = from_pipe_send};
     h2o_sendvec_t vec = {.callbacks = &callbacks};
     if ((vec.len = self->body_bytes_read - self->body_bytes_sent) > H2O_PULL_SENDVEC_MAX_SIZE)
         vec.len = H2O_PULL_SENDVEC_MAX_SIZE;

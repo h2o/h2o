@@ -138,7 +138,7 @@ static void commit_data_header(h2o_http2_conn_t *conn, h2o_http2_stream_t *strea
 }
 
 static h2o_sendvec_t *send_data(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, h2o_sendvec_t *bufs, size_t bufcnt,
-                                size_t *off_within_buf, h2o_send_state_t send_state)
+                                h2o_send_state_t send_state)
 {
     h2o_iovec_t dst;
     size_t max_payload_size;
@@ -153,23 +153,14 @@ static h2o_sendvec_t *send_data(h2o_http2_conn_t *conn, h2o_http2_stream_t *stre
 
     /* emit data */
     while (bufcnt != 0) {
-        if (bufs->len != *off_within_buf)
-            break;
-        ++bufs;
-        --bufcnt;
-        *off_within_buf = 0;
-    }
-    while (bufcnt != 0) {
-        size_t fill_size = sz_min(dst.len, bufs->len - *off_within_buf);
-        if (!(*bufs->callbacks->flatten)(bufs, h2o_iovec_init(dst.base, fill_size), *off_within_buf))
+        size_t fill_size = sz_min(dst.len, bufs->len);
+        if (!(*bufs->callbacks->read_)(bufs, dst.base, fill_size))
             return NULL;
         dst.base += fill_size;
         dst.len -= fill_size;
-        *off_within_buf += fill_size;
-        while (bufs->len == *off_within_buf) {
+        if (bufs->len == 0) {
             ++bufs;
             --bufcnt;
-            *off_within_buf = 0;
             if (bufcnt == 0)
                 break;
         }
@@ -403,8 +394,7 @@ void h2o_http2_stream_send_pending_data(h2o_http2_conn_t *conn, h2o_http2_stream
         return;
 
     h2o_send_state_t send_state = stream->send_state;
-    h2o_sendvec_t *nextbuf =
-        send_data(conn, stream, stream->_data.entries, stream->_data.size, &stream->_data_off, stream->send_state);
+    h2o_sendvec_t *nextbuf = send_data(conn, stream, stream->_data.entries, stream->_data.size, stream->send_state);
     if (nextbuf == NULL) {
         /* error */
         stream->_data.size = 0;

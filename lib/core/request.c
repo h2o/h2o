@@ -545,7 +545,7 @@ void h2o_send(h2o_req_t *req, h2o_iovec_t *bufs, size_t bufcnt, h2o_send_state_t
 
 void h2o_sendvec(h2o_req_t *req, h2o_sendvec_t *bufs, size_t bufcnt, h2o_send_state_t state)
 {
-    assert(bufcnt == 0 || (bufs[0].callbacks->flatten == &h2o_sendvec_flatten_raw || bufcnt == 1));
+    assert(bufcnt == 0 || (bufs[0].callbacks->read_ == &h2o_sendvec_read_raw || bufcnt == 1));
     do_sendvec(req, bufs, bufcnt, state);
 }
 

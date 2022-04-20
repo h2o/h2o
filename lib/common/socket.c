@@ -864,7 +864,7 @@ void h2o_socket_sendvec(h2o_socket_t *sock, h2o_sendvec_t *vecs, size_t cnt, h2o
     /* copy vectors to bufs, while looking for one to flatten */
     for (size_t i = 0; i < cnt; ++i) {
         sock->bytes_written += bufs[i].len;
-        if (vecs[i].callbacks->flatten == h2o_sendvec_flatten_raw || vecs[i].len == 0) {
+        if (vecs[i].callbacks->read_ == h2o_sendvec_read_raw || vecs[i].len == 0) {
             bufs[i] = h2o_iovec_init(vecs[i].raw, vecs[i].len);
         } else {
             assert(pull_index == SIZE_MAX || !"h2o_socket_sendvec can only handle one pull vector at a time");
@@ -885,7 +885,7 @@ void h2o_socket_sendvec(h2o_socket_t *sock, h2o_sendvec_t *vecs, size_t cnt, h2o
         assert(h2o_socket_ssl_buffer_size >= H2O_PULL_SENDVEC_MAX_SIZE);
         sock->_write_buf.flattened = h2o_mem_alloc_recycle(&h2o_socket_ssl_buffer_allocator, h2o_socket_ssl_buffer_size);
         bufs[pull_index] = h2o_iovec_init(sock->_write_buf.flattened, vecs[pull_index].len);
-        if (!vecs[pull_index].callbacks->flatten(vecs + pull_index, bufs[pull_index], 0)) {
+        if (!vecs[pull_index].callbacks->read_(vecs + pull_index, bufs[pull_index].base, bufs[pull_index].len)) {
             /* failed */
             h2o_mem_free_recycle(&h2o_socket_ssl_buffer_allocator, sock->_write_buf.flattened);
             sock->_write_buf.flattened = NULL;
@@ -1912,29 +1912,18 @@ void h2o_sliding_counter_stop(h2o_sliding_counter_t *counter, uint64_t now)
 
 void h2o_sendvec_init_raw(h2o_sendvec_t *vec, const void *base, size_t len)
 {
-    static const h2o_sendvec_callbacks_t callbacks = {h2o_sendvec_flatten_raw};
+    static const h2o_sendvec_callbacks_t callbacks = {h2o_sendvec_read_raw};
     vec->callbacks = &callbacks;
     vec->raw = (char *)base;
     vec->len = len;
 }
 
-static void sendvec_immutable_update_refcnt(h2o_sendvec_t *vec, int is_incr)
+int h2o_sendvec_read_raw(h2o_sendvec_t *src, void *dst, size_t len)
 {
-    /* noop */
-}
-
-void h2o_sendvec_init_immutable(h2o_sendvec_t *vec, const void *base, size_t len)
-{
-    static const h2o_sendvec_callbacks_t callbacks = {h2o_sendvec_flatten_raw, NULL, sendvec_immutable_update_refcnt};
-    vec->callbacks = &callbacks;
-    vec->raw = (char *)base;
-    vec->len = len;
-}
-
-int h2o_sendvec_flatten_raw(h2o_sendvec_t *src, h2o_iovec_t dst, size_t off)
-{
-    assert(off + dst.len <= src->len);
-    memcpy(dst.base, src->raw + off, dst.len);
+    assert(len <= src->len);
+    memcpy(dst, src->raw, len);
+    src->raw += len;
+    src->len -= len;
     return 1;
 }
 

@@ -57,10 +57,7 @@ struct st_h2o_evloop_socket_t {
     /**
      * vector to be sent (or vec.callbacks is NULL when not used)
      */
-    struct {
-        h2o_sendvec_t vec;
-        size_t off;
-    } sendvec;
+    h2o_sendvec_t sendvec;
 };
 
 static void link_to_pending(struct st_h2o_evloop_socket_t *sock);
@@ -243,20 +240,18 @@ static int sendvec_core(struct st_h2o_evloop_socket_t *sock)
 {
     size_t bytes_sent;
 
-    assert(sock->sendvec.off < sock->sendvec.vec.len);
+    assert(sock->sendvec.len != 0);
 
     /* send, and return an error if failed */
-    if ((bytes_sent = sock->sendvec.vec.callbacks->send_(&sock->sendvec.vec, sock->fd,
-                                                         sock->sendvec.vec.len - sock->sendvec.off)) == SIZE_MAX)
+    if ((bytes_sent = sock->sendvec.callbacks->send_(&sock->sendvec, sock->fd, sock->sendvec.len)) == SIZE_MAX)
         return 0;
 
     /* update offset, and return if we are not done yet */
-    if ((sock->sendvec.off += bytes_sent) < sock->sendvec.vec.len)
+    if (sock->sendvec.len != 0)
         return 1;
 
     /* operation complete; mark as such */
-    assert(sock->sendvec.off == sock->sendvec.vec.len);
-    sock->sendvec.vec.callbacks = NULL;
+    sock->sendvec.callbacks = NULL;
     return 1;
 }
 
@@ -284,9 +279,9 @@ void write_pending(struct st_h2o_evloop_socket_t *sock)
     dispose_write_buf(&sock->super);
 
     /* send the vector, if we have one and if all buffered writes are complete */
-    if (sock->sendvec.vec.callbacks != NULL && sock->super._write_buf.cnt == 0 && !has_pending_ssl_bytes(sock->super.ssl)) {
+    if (sock->sendvec.callbacks != NULL && sock->super._write_buf.cnt == 0 && !has_pending_ssl_bytes(sock->super.ssl)) {
         /* send, and upon partial send, return without changing state for another round */
-        if (sendvec_core(sock) && sock->sendvec.vec.callbacks != NULL)
+        if (sendvec_core(sock) && sock->sendvec.callbacks != NULL)
             return;
     }
 
@@ -363,12 +358,12 @@ void do_write(h2o_socket_t *_sock, h2o_iovec_t *bufs, size_t bufcnt)
             h2o_mem_free_recycle(&h2o_socket_ssl_buffer_allocator, sock->super._write_buf.flattened);
             sock->super._write_buf.flattened = NULL;
         }
-        if (sock->sendvec.vec.callbacks != NULL) {
+        if (sock->sendvec.callbacks != NULL) {
             if (!sendvec_core(sock)) {
                 report_early_write_error(&sock->super);
                 return;
             }
-            if (sock->sendvec.vec.callbacks != NULL)
+            if (sock->sendvec.callbacks != NULL)
                 goto Schedule_Write;
         }
         sock->_flags |= H2O_SOCKET_FLAG_IS_WRITE_NOTIFY;
@@ -487,7 +482,7 @@ static int do_write_with_sendvec(h2o_socket_t *_sock, h2o_iovec_t *bufs, size_t 
     struct st_h2o_evloop_socket_t *sock = (struct st_h2o_evloop_socket_t *)_sock;
 
     assert(sendvec->callbacks->send_ != NULL);
-    assert(sock->sendvec.vec.callbacks == NULL);
+    assert(sock->sendvec.callbacks == NULL);
 
     /* If userspace TLS is currently in use, either switch to kTLS or refuse. */
     if (sock->super.ssl != NULL) {
@@ -502,8 +497,7 @@ static int do_write_with_sendvec(h2o_socket_t *_sock, h2o_iovec_t *bufs, size_t 
     }
 
     /* handling writes with sendvec, here */
-    sock->sendvec.vec = *sendvec;
-    sock->sendvec.off = 0;
+    sock->sendvec = *sendvec;
     do_write(&sock->super, bufs, bufcnt);
 
     return 1;
@@ -771,13 +765,13 @@ static void run_socket(struct st_h2o_evloop_socket_t *sock)
         const char *err = NULL;
         assert(sock->super._cb.write != NULL);
         sock->_flags &= ~H2O_SOCKET_FLAG_IS_WRITE_NOTIFY;
-        if (sock->super._write_buf.cnt != 0 || has_pending_ssl_bytes(sock->super.ssl) || sock->sendvec.vec.callbacks != NULL) {
+        if (sock->super._write_buf.cnt != 0 || has_pending_ssl_bytes(sock->super.ssl) || sock->sendvec.callbacks != NULL) {
             /* error */
             err = h2o_socket_error_io;
             sock->super._write_buf.cnt = 0;
             if (has_pending_ssl_bytes(sock->super.ssl))
                 dispose_ssl_output_buffer(sock->super.ssl);
-            sock->sendvec.vec.callbacks = NULL;
+            sock->sendvec.callbacks = NULL;
         } else if ((sock->_flags & H2O_SOCKET_FLAG_IS_CONNECTING) != 0) {
             /* completion of connect; determine error if we do not know whether the connection has been successfully estabilshed */
             if ((sock->_flags & H2O_SOCKET_FLAG_IS_CONNECTING_CONNECTED) == 0) {
