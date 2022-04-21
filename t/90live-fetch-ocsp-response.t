@@ -26,7 +26,7 @@ done_testing;
 
 sub doit {
     my $host = shift;
-    my $input = run_openssl_client({ host => $host, port => 443, opts => "-showcerts -CAfile /dev/null" });
+    my $input = run_openssl_client({ host => $host, port => 443, opts => "-showcerts" });
     my @certs;
     while ($input =~ /(-----BEGIN CERTIFICATE-----.*?-----END CERTIFICATE-----)/sg) {
         push @certs, $1;
