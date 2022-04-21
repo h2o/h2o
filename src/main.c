@@ -276,7 +276,8 @@ static struct {
         h2o_multithread_receiver_t memcached;
     } * threads;
     volatile sig_atomic_t shutdown_requested;
-    h2o_barrier_t startup_sync_barrier;
+    h2o_barrier_t startup_sync_barrier_init;
+    h2o_barrier_t startup_sync_barrier_post;
     struct {
         /* unused buffers exist to avoid false sharing of the cache line */
         char _unused1_avoir_false_sharing[32];
@@ -3155,13 +3156,15 @@ static void *run_loop(void *_thread_index)
 
     /* Wait for all threads to become ready but before letting any of them serve connections, swap the signal handler for graceful
      * shutdown, check (and exit) if SIGTERM has been received already. */
-    if (h2o_barrier_wait_pre_sync_point(&conf.startup_sync_barrier)) {
+    if (h2o_barrier_wait_pre_sync_point(&conf.startup_sync_barrier_init)) {
         h2o_set_signal_handler(SIGTERM, on_sigterm_set_flag_notify_threads);
         if (conf.shutdown_requested)
             exit(0);
         fprintf(stderr, "h2o server (pid:%d) is ready to serve requests with %zu threads\n", (int)getpid(), conf.thread_map.size);
     }
-    h2o_barrier_wait_post_sync_point(&conf.startup_sync_barrier);
+    h2o_barrier_wait_post_sync_point(&conf.startup_sync_barrier_init);
+
+    h2o_barrier_wait(&conf.startup_sync_barrier_post);
 
     /* the main loop */
     uint64_t last_buffer_gc_at = 0;
@@ -3862,7 +3865,8 @@ int main(int argc, char **argv)
 
     /* build barrier to synchronize the start of all threads */
     assert(conf.thread_map.size != 0);
-    h2o_barrier_init(&conf.startup_sync_barrier, conf.thread_map.size);
+    h2o_barrier_init(&conf.startup_sync_barrier_init, conf.thread_map.size);
+    h2o_barrier_init(&conf.startup_sync_barrier_post, conf.thread_map.size);
 
     { /* initialize SSL_CTXs for session resumption and ticket-based resumption (also starts memcached client threads for the
          purpose) */
@@ -3885,7 +3889,7 @@ int main(int argc, char **argv)
         if (has_quic) {
             quic_args = &quic_args_buf;
             quic_args->is_clustered = conf.quic.node_id != 0;
-            sync_barrier = &conf.startup_sync_barrier;
+            sync_barrier = &conf.startup_sync_barrier_post;
         }
         ssl_setup_session_resumption(ssl_contexts.entries, ssl_contexts.size, quic_args, sync_barrier);
         free(ssl_contexts.entries);
