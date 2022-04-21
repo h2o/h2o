@@ -3177,14 +3177,13 @@ static void *run_loop(void *_thread_index)
 
     /* Wait for all threads to become ready but before letting any of them serve connections, swap the signal handler for graceful
      * shutdown, check (and exit) if SIGTERM has been received already. */
-    if (h2o_barrier_wait_pre_sync_point(&conf.startup_sync_barrier_init)) {
+    h2o_barrier_wait(&conf.startup_sync_barrier_init);
+    if (thread_index == 0) {
         h2o_set_signal_handler(SIGTERM, on_sigterm_set_flag_notify_threads);
         if (conf.shutdown_requested)
             exit(0);
         fprintf(stderr, "h2o server (pid:%d) is ready to serve requests with %zu threads\n", (int)getpid(), conf.thread_map.size);
     }
-    h2o_barrier_wait_post_sync_point(&conf.startup_sync_barrier_init);
-
     h2o_barrier_wait(&conf.startup_sync_barrier_post);
 
     /* the main loop */
