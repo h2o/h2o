@@ -472,6 +472,10 @@ struct st_h2o_globalconf_t {
          */
         uint8_t use_gso : 1;
         /**
+         * if handshake does not complete within RTT multiplied by this value, we'll close a connection
+         */
+        uint32_t handshake_timeout_rtt_multiplier;
+        /**
          * the callbacks
          */
         h2o_protocol_callbacks_t callbacks;
