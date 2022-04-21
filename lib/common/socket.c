@@ -1949,6 +1949,17 @@ size_t h2o_sendfile(int sockfd, int filefd, off_t off, size_t len)
         return SIZE_MAX;
     return iolen;
 
+#elif defined(__FreeBSD__)
+
+    h2o_fatal("hoge");
+    off_t outlen;
+    int ret;
+    while ((ret = sendfile(filefd, sockfd, off, len, NULL, &outlen, 0)) != 0 && errno == EINTR)
+        ;
+    if (ret != 0 && errno != EAGAIN)
+        return SIZE_MAX;
+    return outlen;
+
 #else
 #error "FIXME"
 #endif
