@@ -34,9 +34,6 @@
 #if defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__)
 #include <sys/ioctl.h>
 #endif
-#if defined(__linux__)
-#include <sys/sendfile.h>
-#endif
 #include "picotls.h"
 #include "quicly.h"
 #include "h2o/socket.h"
@@ -1925,44 +1922,6 @@ int h2o_sendvec_read_raw(h2o_sendvec_t *src, void *dst, size_t len)
     src->raw += len;
     src->len -= len;
     return 1;
-}
-
-size_t h2o_sendfile(int sockfd, int filefd, off_t off, size_t len)
-{
-#if defined(__linux__)
-
-    off_t iooff = off;
-    ssize_t ret;
-    while ((ret = sendfile(sockfd, filefd, &iooff, len)) == -1 && errno == EINTR)
-        ;
-    if (ret <= 0)
-        return ret == -1 && errno == EAGAIN ? 0 : SIZE_MAX;
-    return ret;
-
-#elif defined(__APPLE__)
-
-    off_t iolen = len;
-    int ret;
-    while ((ret = sendfile(filefd, sockfd, off, &iolen, NULL, 0)) != 0 && errno == EINTR)
-        ;
-    if (ret != 0 && errno != EAGAIN)
-        return SIZE_MAX;
-    return iolen;
-
-#elif defined(__FreeBSD__)
-
-    h2o_fatal("hoge");
-    off_t outlen;
-    int ret;
-    while ((ret = sendfile(filefd, sockfd, off, len, NULL, &outlen, 0)) != 0 && errno == EINTR)
-        ;
-    if (ret != 0 && errno != EAGAIN)
-        return SIZE_MAX;
-    return outlen;
-
-#else
-#error "FIXME"
-#endif
 }
 
 #if H2O_USE_EBPF_MAP

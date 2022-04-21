@@ -27,6 +27,9 @@
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
+#if defined(__linux__)
+#include <sys/sendfile.h>
+#endif
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <time.h>
@@ -145,20 +148,63 @@ static int do_pread(h2o_sendvec_t *src, void *dst, size_t len)
     return 1;
 }
 
+#if defined(__linux__)
+size_t do_sendfile(int sockfd, int filefd, off_t off, size_t len)
+{
+    off_t iooff = off;
+    ssize_t ret;
+    while ((ret = sendfile(sockfd, filefd, &iooff, len)) == -1 && errno == EINTR)
+        ;
+    if (ret <= 0)
+        return ret == -1 && errno == EAGAIN ? 0 : SIZE_MAX;
+    return ret;
+}
+#elif defined(__APPLE__)
+size_t do_sendfile(int sockfd, int filefd, off_t off, size_t len)
+{
+    off_t iolen = len;
+    int ret;
+    while ((ret = sendfile(filefd, sockfd, off, &iolen, NULL, 0)) != 0 && errno == EINTR)
+        ;
+    if (ret != 0 && errno != EAGAIN)
+        return SIZE_MAX;
+    return iolen;
+}
+#elif defined(__FreeBSD__)
+size_t do_sendfile(int sockfd, int filefd, off_t off, size_t len)
+{
+    off_t outlen;
+    int ret;
+    while ((ret = sendfile(filefd, sockfd, off, len, NULL, &outlen, 0)) != 0 && errno == EINTR)
+        ;
+    if (ret != 0 && errno != EAGAIN)
+        return SIZE_MAX;
+    return outlen;
+}
+#else
+#define NO_SENDFILE 1
+#endif
+#if !NO_SENDFILE
 static size_t sendvec_send(h2o_sendvec_t *src, int sockfd, size_t len)
 {
     struct st_h2o_sendfile_generator_t *self = (void *)src->cb_arg[0];
-    ssize_t bytes_sent = h2o_sendfile(sockfd, self->file.ref->fd, (off_t)src->cb_arg[1], len);
+    ssize_t bytes_sent = do_sendfile(sockfd, self->file.ref->fd, (off_t)src->cb_arg[1], len);
     if (bytes_sent > 0) {
         src->cb_arg[1] += bytes_sent;
         src->len -= bytes_sent;
     }
     return bytes_sent;
 }
+#endif
 
 static void do_proceed(h2o_generator_t *_self, h2o_req_t *req)
 {
-    static const h2o_sendvec_callbacks_t sendvec_callbacks = {do_pread, sendvec_send};
+    static const h2o_sendvec_callbacks_t sendvec_callbacks = {
+        do_pread,
+#if !NO_SENDFILE
+        sendvec_send,
+#endif
+    };
 
     struct st_h2o_sendfile_generator_t *self = (void *)_self;
     h2o_sendvec_t vec;
