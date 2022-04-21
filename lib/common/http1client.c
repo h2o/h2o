@@ -826,7 +826,7 @@ static void start_request(struct st_h2o_http1client_t *client, h2o_iovec_t metho
      * and that an almost full-sized HTTP/2 frame / TLS record can be generated for the first chunk of data that we pass through
      * memory. */
 #if USE_PIPE_READER
-    if (client->_app_prefers_pipe_reader)
+    if (client->_app_prefers_pipe_reader && h2o_evloop_socket_max_read_size > 16384)
         h2o_evloop_socket_set_max_read_size(client->sock, 16384);
 #endif
 
