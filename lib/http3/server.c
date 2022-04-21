@@ -694,7 +694,7 @@ static int retain_sendvecs(struct st_h2o_http3_server_stream_t *stream)
     for (; stream->sendbuf.min_index_to_addref != stream->sendbuf.vecs.size; ++stream->sendbuf.min_index_to_addref) {
         struct st_h2o_http3_server_sendvec_t *vec = stream->sendbuf.vecs.entries + stream->sendbuf.min_index_to_addref;
         assert(vec->vec.callbacks->read_ == h2o_sendvec_read_raw);
-        if (vec->vec.callbacks != &self_allocated_vec_callbacks || vec->vec.callbacks != &immutable_vec_callbacks) {
+        if (!(vec->vec.callbacks == &self_allocated_vec_callbacks || vec->vec.callbacks == &immutable_vec_callbacks)) {
             size_t off_within_vec = stream->sendbuf.min_index_to_addref == 0 ? stream->sendbuf.off_within_first_vec : 0,
                    newlen = vec->vec.len - off_within_vec;
             void *newbuf = h2o_mem_alloc(newlen);
