@@ -197,14 +197,14 @@ struct listener_config_t {
          */
         unsigned send_retry : 1;
         /**
-         * SO_SNDBUF, SO_RCVBUF values to be set (or 0 to use default)
-         */
-        unsigned sndbuf, rcvbuf;
-        /**
          * QPACK settings
          */
         h2o_http3_qpack_context_t qpack;
     } quic;
+    /**
+     * SO_SNDBUF, SO_RCVBUF values to be set (or 0 to use default)
+     */
+    unsigned sndbuf, rcvbuf;
     int proxy_protocol;
     h2o_iovec_t tcp_congestion_controller; /* default CC for this address */
 };
@@ -1452,7 +1452,8 @@ static struct listener_config_t *find_listener(struct sockaddr *addr, socklen_t 
     return NULL;
 }
 
-static struct listener_config_t *add_listener(int fd, struct sockaddr *addr, socklen_t addrlen, int is_global, int proxy_protocol)
+static struct listener_config_t *add_listener(int fd, struct sockaddr *addr, socklen_t addrlen, int is_global, int proxy_protocol,
+                                              unsigned sndbuf, unsigned rcvbuf)
 {
     struct listener_config_t *listener = h2o_mem_alloc(sizeof(*listener));
 
@@ -1472,6 +1473,8 @@ static struct listener_config_t *add_listener(int fd, struct sockaddr *addr, soc
     listener->quic.qpack = (h2o_http3_qpack_context_t){.encoder_table_capacity = 4096 /* our default */};
     listener->proxy_protocol = proxy_protocol;
     listener->tcp_congestion_controller = h2o_iovec_init(NULL, 0);
+    listener->sndbuf = sndbuf;
+    listener->rcvbuf = rcvbuf;
 
     conf.listeners = h2o_mem_realloc(conf.listeners, sizeof(*conf.listeners) * (conf.num_listeners + 1));
     conf.listeners[conf.num_listeners++] = listener;
@@ -1800,6 +1803,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
     yoml_t **ssl_node = NULL, **owner_node = NULL, **permission_node = NULL, **quic_node = NULL, **cc_node = NULL,
            **initcwnd_node = NULL, **group_node = NULL;
     int proxy_protocol = 0;
+    unsigned stream_sndbuf = 0, stream_rcvbuf = 0;
 
     /* fetch servname (and hostname) */
     switch (node->type) {
@@ -1807,11 +1811,12 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
         servname = node->data.scalar;
         break;
     case YOML_TYPE_MAPPING: {
-        yoml_t **port_node, **host_node, **type_node, **proxy_protocol_node;
+        yoml_t **port_node, **host_node, **type_node, **proxy_protocol_node, **sndbuf_node, **rcvbuf_node;
         if (h2o_configurator_parse_mapping(
-                cmd, node, "port:s", "host:s,type:s,owner:s,group:s,permission:*,ssl:m,proxy-protocol:*,quic:m,cc:s,initcwnd:s",
+                cmd, node, "port:s",
+                "host:s,type:s,owner:s,group:s,permission:*,ssl:m,proxy-protocol:*,quic:m,cc:s,initcwnd:s,sndbuf:s,rcvbuf:s",
                 &port_node, &host_node, &type_node, &owner_node, &group_node, &permission_node, &ssl_node, &proxy_protocol_node,
-                &quic_node, &cc_node, &initcwnd_node) != 0)
+                &quic_node, &cc_node, &initcwnd_node, &sndbuf_node, &rcvbuf_node) != 0)
             return -1;
         servname = (*port_node)->data.scalar;
         if (host_node != NULL)
@@ -1823,6 +1828,10 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
         }
         if (proxy_protocol_node != NULL &&
             (proxy_protocol = (int)h2o_configurator_get_one_of(cmd, *proxy_protocol_node, "OFF,ON")) == -1)
+            return -1;
+        if (sndbuf_node != NULL && h2o_configurator_scanf(cmd, *sndbuf_node, "%u", &stream_sndbuf) != 0)
+            return -1;
+        if (rcvbuf_node != NULL && h2o_configurator_scanf(cmd, *rcvbuf_node, "%u", &stream_rcvbuf) != 0)
             return -1;
     } break;
     default:
@@ -1869,7 +1878,8 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
             default:
                 break;
             }
-            listener = add_listener(fd, (struct sockaddr *)&sa, sizeof(sa), ctx->hostconf == NULL, proxy_protocol);
+            listener = add_listener(fd, (struct sockaddr *)&sa, sizeof(sa), ctx->hostconf == NULL, proxy_protocol, stream_sndbuf,
+                                    stream_rcvbuf);
             listener_is_new = 1;
         } else if (listener->proxy_protocol != proxy_protocol) {
             goto ProxyConflict;
@@ -1917,7 +1927,8 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                 default:
                     break;
                 }
-                listener = add_listener(fd, ai->ai_addr, ai->ai_addrlen, ctx->hostconf == NULL, proxy_protocol);
+                listener = add_listener(fd, ai->ai_addr, ai->ai_addrlen, ctx->hostconf == NULL, proxy_protocol, stream_sndbuf,
+                                        stream_rcvbuf);
                 if (cc_node != NULL)
                     listener->tcp_congestion_controller = h2o_strdup(NULL, (*cc_node)->data.scalar, SIZE_MAX);
                 listener_is_new = 1;
@@ -1937,6 +1948,11 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
     } else if (strcmp(type, "quic") == 0) {
 
         /* QUIC socket */
+        if (stream_sndbuf != 0 || stream_rcvbuf != 0)
+            h2o_configurator_errprintf(cmd, node,
+                                       "[warning] QUIC ignores `sndbuf` and `rcvbuf` set as direct members of `listen`, as they "
+                                       "designate buffer size of each connection. For QUIC, `sndbuf` and `rcvbuf` of the `quic` "
+                                       "mapping defines the buffer sizes of the socket shared among all the QUIC connections.");
         struct addrinfo *res, *ai;
         if (ssl_node == NULL) {
             h2o_configurator_errprintf(cmd, node, "QUIC endpoint must have an accompanying SSL configuration");
@@ -1971,7 +1987,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                 *quic = quicly_spec_context;
                 quic->cid_encryptor = &quic_cid_encryptor;
                 quic->generate_resumption_token = &quic_resumption_token_generator;
-                listener = add_listener(fd, ai->ai_addr, ai->ai_addrlen, ctx->hostconf == NULL, 0);
+                listener = add_listener(fd, ai->ai_addr, ai->ai_addrlen, ctx->hostconf == NULL, 0, 0, 0);
                 listener->quic.ctx = quic;
                 if (quic_node != NULL) {
                     yoml_t **retry_node, **sndbuf, **rcvbuf, **amp_limit, **qpack_encoder_table_capacity, **max_streams_bidi,
@@ -1988,9 +2004,9 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                             return -1;
                         listener->quic.send_retry = (unsigned)on;
                     }
-                    if (sndbuf != NULL && h2o_configurator_scanf(cmd, *sndbuf, "%u", &listener->quic.sndbuf) != 0)
+                    if (sndbuf != NULL && h2o_configurator_scanf(cmd, *sndbuf, "%u", &listener->sndbuf) != 0)
                         return -1;
-                    if (rcvbuf != NULL && h2o_configurator_scanf(cmd, *rcvbuf, "%u", &listener->quic.rcvbuf) != 0)
+                    if (rcvbuf != NULL && h2o_configurator_scanf(cmd, *rcvbuf, "%u", &listener->rcvbuf) != 0)
                         return -1;
                     if (amp_limit != NULL) {
                         if (h2o_configurator_scanf(cmd, *amp_limit, "%" SCNu16,
@@ -2014,7 +2030,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                     }
                 }
                 if (conf.run_mode == RUN_MODE_WORKER)
-                    set_quic_sockopts(fd, ai->ai_family, listener->quic.sndbuf, listener->quic.rcvbuf);
+                    set_quic_sockopts(fd, ai->ai_family, listener->sndbuf, listener->rcvbuf);
                 listener_is_new = 1;
             }
             if (listener_setup_ssl(cmd, ctx, node, ssl_node, cc_node, initcwnd_node, listener, listener_is_new) != 0) {
@@ -2884,7 +2900,12 @@ static void on_accept(h2o_socket_t *listener, const char *err)
         sock->on_close.cb = on_socketclose;
         sock->on_close.data = ctx->accept_ctx.ctx;
 
-        set_tcp_congestion_controller(sock, conf.listeners[ctx->listener_index]->tcp_congestion_controller);
+        struct listener_config_t *listener_config = conf.listeners[ctx->listener_index];
+        if (listener_config->sndbuf != 0)
+            setsockopt(h2o_socket_get_fd(sock), SOL_SOCKET, SO_SNDBUF, &listener_config->sndbuf, sizeof(listener_config->sndbuf));
+        if (listener_config->rcvbuf != 0)
+            setsockopt(h2o_socket_get_fd(sock), SOL_SOCKET, SO_RCVBUF, &listener_config->rcvbuf, sizeof(listener_config->rcvbuf));
+        set_tcp_congestion_controller(sock, listener_config->tcp_congestion_controller);
 
         h2o_accept(&ctx->accept_ctx, sock);
 
@@ -3549,7 +3570,7 @@ static int dup_listener(struct listener_config_t *config)
         if ((fd = open_listener(ss.ss_family, type, type == SOCK_STREAM ? IPPROTO_TCP : IPPROTO_UDP, (struct sockaddr *)&ss,
                                 sslen)) != -1) {
             if (type == SOCK_DGRAM)
-                set_quic_sockopts(fd, ss.ss_family, config->quic.sndbuf, config->quic.rcvbuf);
+                set_quic_sockopts(fd, ss.ss_family, config->sndbuf, config->rcvbuf);
         } else {
             perror("failed to bind additional listener");
             abort();
