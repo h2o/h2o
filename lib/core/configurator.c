@@ -653,6 +653,20 @@ static int on_config_http3_handshake_timeout(h2o_configurator_command_t *cmd, h2
     return 0;
 }
 
+static int on_config_http3_max_initial_handshake(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    uint64_t v;
+
+    if (h2o_configurator_scanf(cmd, node, "%" SCNu64, &v) != 0)
+        return -1;
+    if (v == 0) {
+        h2o_configurator_errprintf(cmd, node, "max Initial/Handshake packets must be greater than 0");
+        return -1;
+    }
+    ctx->globalconf->http3.max_initial_handshake_packets = v;
+    return 0;
+}
+
 static int assert_is_mimetype(h2o_configurator_command_t *cmd, yoml_t *node)
 {
     if (node->type != YOML_TYPE_SCALAR) {
@@ -1115,6 +1129,8 @@ void h2o_configurator__init_core(h2o_globalconf_t *conf)
                                         on_config_http3_gso);
         h2o_configurator_define_command(&c->super, "http3-handshake-timeout-rtt-multiplier", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_http3_handshake_timeout);
+        h2o_configurator_define_command(&c->super, "http3-max-initial-handshake-packets", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                        on_config_http3_max_initial_handshake);
         h2o_configurator_define_command(&c->super, "file.mime.settypes",
                                         (H2O_CONFIGURATOR_FLAG_ALL_LEVELS & ~H2O_CONFIGURATOR_FLAG_EXTENSION) |
                                             H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING,

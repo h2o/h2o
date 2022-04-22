@@ -3184,6 +3184,9 @@ static void *run_loop(void *_thread_index)
             if (conf.globalconf.http3.handshake_timeout_rtt_multiplier > 0)
                 listener_config->quic.ctx->handshake_timeout_rtt_multiplier =
                     conf.globalconf.http3.handshake_timeout_rtt_multiplier;
+            if (conf.globalconf.http3.max_initial_handshake_packets > 0) {
+                listener_config->quic.ctx->max_initial_handshake_packets = conf.globalconf.http3.max_initial_handshake_packets;
+            }
             int fds[2];
             /* TODO switch to using named socket in temporary directory to forward packets between server generations */
             if (socketpair(AF_UNIX, SOCK_DGRAM, 0, fds) != 0) {

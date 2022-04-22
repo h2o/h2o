@@ -476,6 +476,10 @@ struct st_h2o_globalconf_t {
          */
         uint32_t handshake_timeout_rtt_multiplier;
         /**
+         * if the number of Initial/Handshake packets sent exceeds this limit, treat it as an error and close a connection
+         */
+        uint64_t max_initial_handshake_packets;
+        /**
          * the callbacks
          */
         h2o_protocol_callbacks_t callbacks;

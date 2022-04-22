@@ -102,6 +102,7 @@ enum h2olog_event_id_t {
   H2OLOG_EVENT_ID_QUICLY_VERSION_SWITCH,
   H2OLOG_EVENT_ID_QUICLY_IDLE_TIMEOUT,
   H2OLOG_EVENT_ID_QUICLY_HANDSHAKE_TIMEOUT,
+  H2OLOG_EVENT_ID_QUICLY_INITIAL_HANDSHAKE_PACKET_EXCEED,
   H2OLOG_EVENT_ID_QUICLY_STATELESS_RESET_RECEIVE,
   H2OLOG_EVENT_ID_QUICLY_CRYPTO_HANDSHAKE,
   H2OLOG_EVENT_ID_QUICLY_CRYPTO_UPDATE_SECRET,
@@ -242,6 +243,10 @@ struct h2olog_event_t {
       typeof_st_quicly_conn_t__master_id conn_master_id;
       int64_t at;
     } handshake_timeout;
+    struct { // quicly:initial_handshake_packet_exceed
+      typeof_st_quicly_conn_t__master_id conn_master_id;
+      int64_t at;
+    } initial_handshake_packet_exceed;
     struct { // quicly:stateless_reset_receive
       typeof_st_quicly_conn_t__master_id conn_master_id;
       int64_t at;
@@ -803,6 +808,7 @@ void h2o_raw_tracer::initialize() {
     h2o_tracer::usdt("quicly", "version_switch", "trace_quicly__version_switch"),
     h2o_tracer::usdt("quicly", "idle_timeout", "trace_quicly__idle_timeout"),
     h2o_tracer::usdt("quicly", "handshake_timeout", "trace_quicly__handshake_timeout"),
+    h2o_tracer::usdt("quicly", "initial_handshake_packet_exceed", "trace_quicly__initial_handshake_packet_exceed"),
     h2o_tracer::usdt("quicly", "stateless_reset_receive", "trace_quicly__stateless_reset_receive"),
     h2o_tracer::usdt("quicly", "crypto_handshake", "trace_quicly__crypto_handshake"),
     h2o_tracer::usdt("quicly", "crypto_update_secret", "trace_quicly__crypto_update_secret"),
@@ -983,6 +989,14 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
     json_write_pair_c(out_, STR_LIT("seq"), seq_);
     json_write_pair_c(out_, STR_LIT("conn"), event.handshake_timeout.conn_master_id);
     json_write_pair_c(out_, STR_LIT("time"), event.handshake_timeout.at);
+    break;
+  }
+  case H2OLOG_EVENT_ID_QUICLY_INITIAL_HANDSHAKE_PACKET_EXCEED: { // quicly:initial_handshake_packet_exceed
+    json_write_pair_n(out_, STR_LIT("type"), STR_LIT("initial-handshake-packet-exceed"));
+    json_write_pair_c(out_, STR_LIT("tid"), event.tid);
+    json_write_pair_c(out_, STR_LIT("seq"), seq_);
+    json_write_pair_c(out_, STR_LIT("conn"), event.initial_handshake_packet_exceed.conn_master_id);
+    json_write_pair_c(out_, STR_LIT("time"), event.initial_handshake_packet_exceed.at);
     break;
   }
   case H2OLOG_EVENT_ID_QUICLY_STATELESS_RESET_RECEIVE: { // quicly:stateless_reset_receive
@@ -1969,6 +1983,7 @@ enum h2olog_event_id_t {
   H2OLOG_EVENT_ID_QUICLY_VERSION_SWITCH,
   H2OLOG_EVENT_ID_QUICLY_IDLE_TIMEOUT,
   H2OLOG_EVENT_ID_QUICLY_HANDSHAKE_TIMEOUT,
+  H2OLOG_EVENT_ID_QUICLY_INITIAL_HANDSHAKE_PACKET_EXCEED,
   H2OLOG_EVENT_ID_QUICLY_STATELESS_RESET_RECEIVE,
   H2OLOG_EVENT_ID_QUICLY_CRYPTO_HANDSHAKE,
   H2OLOG_EVENT_ID_QUICLY_CRYPTO_UPDATE_SECRET,
@@ -2109,6 +2124,10 @@ struct h2olog_event_t {
       typeof_st_quicly_conn_t__master_id conn_master_id;
       int64_t at;
     } handshake_timeout;
+    struct { // quicly:initial_handshake_packet_exceed
+      typeof_st_quicly_conn_t__master_id conn_master_id;
+      int64_t at;
+    } initial_handshake_packet_exceed;
     struct { // quicly:stateless_reset_receive
       typeof_st_quicly_conn_t__master_id conn_master_id;
       int64_t at;
@@ -2846,6 +2865,24 @@ int trace_quicly__handshake_timeout(struct pt_regs *ctx) {
 
   if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
     bpf_trace_printk("failed to perf_submit in trace_quicly__handshake_timeout\n");
+
+  return 0;
+}
+// quicly:initial_handshake_packet_exceed
+int trace_quicly__initial_handshake_packet_exceed(struct pt_regs *ctx) {
+  const void *buf = NULL;
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_INITIAL_HANDSHAKE_PACKET_EXCEED, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
+
+  // struct st_quicly_conn_t * conn
+  uint8_t conn[sizeof_st_quicly_conn_t] = {};
+  bpf_usdt_readarg(1, ctx, &buf);
+  bpf_probe_read(&conn, sizeof_st_quicly_conn_t, buf);
+  event.initial_handshake_packet_exceed.conn_master_id = get_st_quicly_conn_t__master_id(conn);
+  // int64_t at
+  bpf_usdt_readarg(2, ctx, &event.initial_handshake_packet_exceed.at);
+
+  if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
+    bpf_trace_printk("failed to perf_submit in trace_quicly__initial_handshake_packet_exceed\n");
 
   return 0;
 }
