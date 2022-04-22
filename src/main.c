@@ -1706,6 +1706,14 @@ static int open_inet_listener(h2o_configurator_command_t *cmd, yoml_t *node, con
     return fd;
 }
 
+static void set_socket_buffers(int fd, unsigned sndbuf, unsigned rcvbuf)
+{
+    if (sndbuf != 0 && setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &sndbuf, sizeof(sndbuf)) != 0)
+        h2o_fatal("failed to set SO_SNDBUF:%s", strerror(errno));
+    if (rcvbuf != 0 && setsockopt(fd, SOL_SOCKET, SO_RCVBUF, &rcvbuf, sizeof(rcvbuf)) != 0)
+        h2o_fatal("failed to set SO_RCVBUF:%s", strerror(errno));
+}
+
 static void set_quic_sockopts(int fd, int family, unsigned sndbuf, unsigned rcvbuf)
 {
     /* set the option for obtaining destination address */
@@ -1732,11 +1740,7 @@ static void set_quic_sockopts(int fd, int family, unsigned sndbuf, unsigned rcvb
         break;
     }
 
-    /* set sndbuf & rcvbuf */
-    if (sndbuf != 0 && setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &sndbuf, sizeof(sndbuf)) != 0)
-        h2o_fatal("failed to set SO_SNDBUF:%s", strerror(errno));
-    if (rcvbuf != 0 && setsockopt(fd, SOL_SOCKET, SO_RCVBUF, &rcvbuf, sizeof(rcvbuf)) != 0)
-        h2o_fatal("failed to set SO_RCVBUF:%s", strerror(errno));
+    set_socket_buffers(fd, sndbuf, rcvbuf);
 }
 
 static struct addrinfo *resolve_address(h2o_configurator_command_t *cmd, yoml_t *node, int socktype, int protocol,
@@ -2905,10 +2909,7 @@ static void on_accept(h2o_socket_t *listener, const char *err)
         sock->on_close.data = ctx->accept_ctx.ctx;
 
         struct listener_config_t *listener_config = conf.listeners[ctx->listener_index];
-        if (listener_config->sndbuf != 0)
-            setsockopt(h2o_socket_get_fd(sock), SOL_SOCKET, SO_SNDBUF, &listener_config->sndbuf, sizeof(listener_config->sndbuf));
-        if (listener_config->rcvbuf != 0)
-            setsockopt(h2o_socket_get_fd(sock), SOL_SOCKET, SO_RCVBUF, &listener_config->rcvbuf, sizeof(listener_config->rcvbuf));
+        set_socket_buffers(h2o_socket_get_fd(sock), listener_config->sndbuf, listener_config->rcvbuf);
         set_tcp_congestion_controller(sock, listener_config->tcp_congestion_controller);
 
         h2o_accept(&ctx->accept_ctx, sock);
