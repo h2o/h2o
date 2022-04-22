@@ -860,7 +860,7 @@ void h2o_socket_sendvec(h2o_socket_t *sock, h2o_sendvec_t *vecs, size_t cnt, h2o
 
     /* copy vectors to bufs, while looking for one to flatten */
     for (size_t i = 0; i < cnt; ++i) {
-        sock->bytes_written += bufs[i].len;
+        sock->bytes_written += vecs[i].len;
         if (vecs[i].callbacks->read_ == h2o_sendvec_read_raw || vecs[i].len == 0) {
             bufs[i] = h2o_iovec_init(vecs[i].raw, vecs[i].len);
         } else {
