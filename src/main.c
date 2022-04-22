@@ -3974,5 +3974,8 @@ int main(int argc, char **argv)
     if (conf.pid_file != NULL)
         unlink(conf.pid_file);
 
-    return 0;
+    /* Use `_exit` to prevent functions registered via `atexit` from being invoked, otherwise we might see some threads die while
+     * trying to use whatever state that are cleaned up. Specifically, we see the ticket updater thread dying inside RAND_bytes,
+     * while or after `OpenSSL_cleanup` is invoked as an atexit callback. */
+    _exit(0);
 }
