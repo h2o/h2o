@@ -234,8 +234,8 @@ static void dispose_write_buf(h2o_socket_t *sock)
 
 static void init_ssl_output_buffer(struct st_h2o_socket_ssl_t *ssl)
 {
-    ptls_buffer_init(&ssl->output.buf, h2o_mem_alloc_recycle(&h2o_socket_ssl_buffer_allocator, h2o_socket_ssl_buffer_size),
-                     h2o_socket_ssl_buffer_size);
+    ptls_buffer_init(&ssl->output.buf, h2o_mem_alloc_recycle(&h2o_socket_ssl_buffer_allocator),
+                     h2o_socket_ssl_buffer_allocator.memsize);
     ssl->output.buf.is_allocated = 1; /* set to true, so that the allocated memory is freed when the buffer is expanded */
     ssl->output.pending_off = 0;
 }
