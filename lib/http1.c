@@ -1036,6 +1036,8 @@ void finalostream_send(h2o_ostream_t *_self, h2o_req_t *_req, h2o_sendvec_t *inb
             h2o_add_server_timing_header(&conn->req, conn->_ostr_final.chunked_buf != NULL);
 
         const char *connection = conn->req.http1_is_persistent ? "keep-alive" : "close";
+        if (conn->req.is_tunnel_req && conn->req.res.status == 101 && conn->req.upgrade.base)
+            connection = "upgrade";
         size_t headers_est_size =
             flatten_headers_estimate_size(&conn->req, conn->super.ctx->globalconf->server_name.len + strlen(connection));
         if (pull_mode != NOT_PULL) {
