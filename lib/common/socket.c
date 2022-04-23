@@ -248,7 +248,7 @@ static void dispose_ssl_output_buffer(struct st_h2o_socket_ssl_t *ssl)
 
     assert(ssl->output.buf.is_allocated);
 
-    if (ssl->output.buf.capacity == h2o_socket_ssl_buffer_size) {
+    if (ssl->output.buf.capacity == *h2o_socket_ssl_buffer_allocator.memsize) {
         h2o_mem_free_recycle(&h2o_socket_ssl_buffer_allocator, ssl->output.buf.base);
     } else {
         free(ssl->output.buf.base);
