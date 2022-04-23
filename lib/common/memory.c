@@ -99,15 +99,10 @@ void h2o__fatal(const char *file, int line, const char *msg, ...)
 
 void *h2o_mem_alloc_recycle(h2o_mem_recycle_t *allocator)
 {
-    struct st_h2o_mem_recycle_chunk_t *chunk;
     if (allocator->cnt == 0)
         return h2o_mem_alloc(*allocator->memsize);
     /* detach and return the pooled pointer */
-    chunk = allocator->_link;
-    assert(chunk != NULL);
-    allocator->_link = chunk->next;
-    --allocator->cnt;
-    return chunk;
+    return allocator->chunks[--allocator->cnt];
 }
 
 void h2o_mem_free_recycle(h2o_mem_recycle_t *allocator, void *p)
@@ -115,10 +110,9 @@ void h2o_mem_free_recycle(h2o_mem_recycle_t *allocator, void *p)
 #if !ASAN_IN_USE
     /* register the pointer to the pool and return unless the pool is full */
     if (allocator->cnt < allocator->max) {
-        struct st_h2o_mem_recycle_chunk_t *chunk = p;
-        chunk->next = allocator->_link;
-        allocator->_link = chunk;
-        ++allocator->cnt;
+        if (allocator->chunks == NULL)
+            allocator->chunks = h2o_mem_alloc(sizeof(*allocator->chunks) * allocator->max);
+        allocator->chunks[allocator->cnt++] = p;
         return;
     }
 #endif
@@ -128,16 +122,15 @@ void h2o_mem_free_recycle(h2o_mem_recycle_t *allocator, void *p)
 
 void h2o_mem_clear_recycle(h2o_mem_recycle_t *allocator, int full)
 {
-    struct st_h2o_mem_recycle_chunk_t *chunk;
-
     if (allocator->cnt != 0) {
         do {
-            chunk = allocator->_link;
-            allocator->_link = allocator->_link->next;
-            free(chunk);
-            --allocator->cnt;
+            free(allocator->chunks[--allocator->cnt]);
         } while (full && allocator->cnt != 0);
-        assert((allocator->cnt != 0) == (allocator->_link != NULL));
+    }
+
+    if (full) {
+        free(allocator->chunks);
+        allocator->chunks = NULL;
     }
 }
 
