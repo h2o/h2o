@@ -404,7 +404,6 @@ void h2o_http2_stream_send_pending_data(h2o_http2_conn_t *conn, h2o_http2_stream
     if (h2o_http2_window_get_avail(&stream->output_window) <= 0)
         return;
 
-    h2o_send_state_t send_state = stream->send_state;
     h2o_sendvec_t *nextbuf =
         send_data(conn, stream, stream->_data.entries, stream->_data.size, &stream->_data_off, stream->send_state);
     if (nextbuf == NULL) {
@@ -424,9 +423,9 @@ void h2o_http2_stream_send_pending_data(h2o_http2_conn_t *conn, h2o_http2_stream
         stream->_data.size = newsize;
     }
 
-    if (send_state == H2O_SEND_STATE_ERROR) {
-        stream->req.send_server_timing = 0; /* suppress sending trailers */
-    }
+    /* if the stream entered error state, suppress sending trailers */
+    if (stream->send_state == H2O_SEND_STATE_ERROR)
+        stream->req.send_server_timing = 0;
 }
 
 void h2o_http2_stream_proceed(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
