@@ -154,8 +154,10 @@ static h2o_sendvec_t *send_data(h2o_http2_conn_t *conn, h2o_http2_stream_t *stre
     /* emit data */
     while (bufcnt != 0) {
         size_t fill_size = sz_min(dst.len, bufs->len);
-        if (!(*bufs->callbacks->read_)(bufs, dst.base, fill_size))
+        if (!(*bufs->callbacks->read_)(bufs, dst.base, fill_size)) {
+            h2o_http2_encode_rst_stream_frame(&conn->_write.buf, stream->stream_id, -H2O_HTTP2_ERROR_INTERNAL);
             return NULL;
+        }
         dst.base += fill_size;
         dst.len -= fill_size;
         if (bufs->len == 0) {
@@ -393,7 +395,6 @@ void h2o_http2_stream_send_pending_data(h2o_http2_conn_t *conn, h2o_http2_stream
     if (h2o_http2_window_get_avail(&stream->output_window) <= 0)
         return;
 
-    h2o_send_state_t send_state = stream->send_state;
     h2o_sendvec_t *nextbuf = send_data(conn, stream, stream->_data.entries, stream->_data.size, stream->send_state);
     if (nextbuf == NULL) {
         /* error */
@@ -412,9 +413,9 @@ void h2o_http2_stream_send_pending_data(h2o_http2_conn_t *conn, h2o_http2_stream
         stream->_data.size = newsize;
     }
 
-    if (send_state == H2O_SEND_STATE_ERROR) {
-        stream->req.send_server_timing = 0; /* suppress sending trailers */
-    }
+    /* if the stream entered error state, suppress sending trailers */
+    if (stream->send_state == H2O_SEND_STATE_ERROR)
+        stream->req.send_server_timing = 0;
 }
 
 void h2o_http2_stream_proceed(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
