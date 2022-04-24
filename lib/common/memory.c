@@ -301,7 +301,7 @@ static h2o_mem_recycle_t *buffer_get_recycle(unsigned power, int only_if_exists)
             ++buffer_recycle_bins.largest_power;
             struct buffer_recycle_bin_t *newbin =
                 buffer_recycle_bins.bins + buffer_recycle_bins.largest_power - H2O_BUFFER_MIN_ALLOC_POWER;
-            newbin->memsize = (size_t)1 << power;
+            newbin->memsize = (size_t)1 << buffer_recycle_bins.largest_power;
             newbin->recycle = (h2o_mem_recycle_t){&newbin->memsize, 16};
         } while (buffer_recycle_bins.largest_power < power);
     }
