@@ -293,6 +293,10 @@ static h2o_mem_recycle_t *buffer_get_recycle(unsigned power, int only_if_exists)
             return NULL;
         buffer_recycle_bins.bins =
             h2o_mem_realloc(buffer_recycle_bins.bins, sizeof(*buffer_recycle_bins.bins) * (power - H2O_BUFFER_MIN_ALLOC_POWER + 1));
+        for (size_t p = H2O_BUFFER_MIN_ALLOC_POWER; p <= buffer_recycle_bins.largest_power; ++p) {
+            struct buffer_recycle_bin_t *bin = buffer_recycle_bins.bins + p - H2O_BUFFER_MIN_ALLOC_POWER;
+            bin->recycle.memsize = &bin->memsize;
+        }
         do {
             ++buffer_recycle_bins.largest_power;
             struct buffer_recycle_bin_t *newbin =
