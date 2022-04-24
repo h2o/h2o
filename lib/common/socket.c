@@ -168,7 +168,7 @@ h2o_buffer_prototype_t h2o_socket_buffer_prototype = {
     &h2o_socket_buffer_mmap_settings};
 
 size_t h2o_socket_ssl_buffer_size = H2O_SOCKET_DEFAULT_SSL_BUFFER_SIZE;
-__thread h2o_mem_recycle_t h2o_socket_ssl_buffer_allocator = {1024};
+__thread h2o_mem_recycle_t h2o_socket_ssl_buffer_allocator = {&h2o_socket_ssl_buffer_size, 1024};
 
 int h2o_socket_use_ktls = 0;
 
@@ -247,8 +247,8 @@ static void dispose_write_buf(h2o_socket_t *sock)
 
 static void init_ssl_output_buffer(struct st_h2o_socket_ssl_t *ssl)
 {
-    ptls_buffer_init(&ssl->output.buf, h2o_mem_alloc_recycle(&h2o_socket_ssl_buffer_allocator, h2o_socket_ssl_buffer_size),
-                     h2o_socket_ssl_buffer_size);
+    ptls_buffer_init(&ssl->output.buf, h2o_mem_alloc_recycle(&h2o_socket_ssl_buffer_allocator),
+                     *h2o_socket_ssl_buffer_allocator.memsize);
     ssl->output.buf.is_allocated = 1; /* set to true, so that the allocated memory is freed when the buffer is expanded */
     ssl->output.pending_off = 0;
 }
@@ -261,7 +261,7 @@ static void dispose_ssl_output_buffer(struct st_h2o_socket_ssl_t *ssl)
 
     assert(ssl->output.buf.is_allocated);
 
-    if (ssl->output.buf.capacity == h2o_socket_ssl_buffer_size) {
+    if (ssl->output.buf.capacity == *h2o_socket_ssl_buffer_allocator.memsize) {
         h2o_mem_free_recycle(&h2o_socket_ssl_buffer_allocator, ssl->output.buf.base);
     } else {
         free(ssl->output.buf.base);
@@ -880,7 +880,7 @@ void h2o_socket_sendvec(h2o_socket_t *sock, h2o_sendvec_t *vecs, size_t cnt, h2o
 #endif
         /* Load the vector onto memory now. */
         assert(h2o_socket_ssl_buffer_size >= H2O_PULL_SENDVEC_MAX_SIZE);
-        sock->_write_buf.flattened = h2o_mem_alloc_recycle(&h2o_socket_ssl_buffer_allocator, h2o_socket_ssl_buffer_size);
+        sock->_write_buf.flattened = h2o_mem_alloc_recycle(&h2o_socket_ssl_buffer_allocator);
         bufs[pull_index] = h2o_iovec_init(sock->_write_buf.flattened, vecs[pull_index].len);
         if (!vecs[pull_index].callbacks->read_(vecs + pull_index, bufs[pull_index].base, bufs[pull_index].len)) {
             /* failed */
