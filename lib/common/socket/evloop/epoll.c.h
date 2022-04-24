@@ -65,7 +65,7 @@ static int handle_zerocopy_notification(struct st_h2o_evloop_socket_t *sock)
         if (c64 < sock->super._zerocopy->first_counter)
             c64 += 0x100000000;
         void *p;
-        if ((p = zerocopy_buffers_release(sock->super._zerocopy, c64)) != NULL)
+        if ((p = zerocopy_buffers_release(sock->super._zerocopy, c64)) != NULL && p != sock->super.ssl->output.buf.base)
             h2o_mem_free_recycle(&h2o_socket_ssl_buffer_allocator, p);
     }
 
