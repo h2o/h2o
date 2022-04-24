@@ -330,6 +330,17 @@ typedef enum h2o_send_informational_mode {
     H2O_SEND_INFORMATIONAL_MODE_ALL
 } h2o_send_informational_mode_t;
 
+/**
+ * If zero copy should be used. "Always" indicates to the proxy handler that pipe-backed vectors should be used even when the http
+ * protocol handler does not support zero-copy. This mode delays the load of content to userspace, at the cost of moving around
+ * memory page between the socket connected to the origin and the pipe.
+ */
+typedef enum h2o_proxy_zero_copy_mode {
+    H2O_PROXY_ZERO_COPY_DISABLED,
+    H2O_PROXY_ZERO_COPY_ENABLED,
+    H2O_PROXY_ZERO_COPY_ALWAYS
+} h2o_proxy_zero_copy_mode_t;
+
 struct st_h2o_globalconf_t {
     /**
      * a NULL-terminated list of host contexts (h2o_hostconf_t)
@@ -512,6 +523,10 @@ struct st_h2o_globalconf_t {
          * maximum size to buffer for the response
          */
         size_t max_buffer_size;
+        /**
+         * a boolean flag if set to true, instructs to use zero copy (i.e., splice to pipe then splice to socket) if possible
+         */
+        h2o_proxy_zero_copy_mode_t zero_copy;
 
         struct {
             uint32_t max_concurrent_streams;
@@ -792,50 +807,6 @@ typedef struct st_h2o_generator_t {
 } h2o_generator_t;
 
 /**
- * the maximum size of sendvec when a pull (i.e. non-raw) vector is used. Note also that bufcnt must be set to one when a pull mode
- * vector is used.
- */
-#define H2O_PULL_SENDVEC_MAX_SIZE 65536
-
-typedef struct st_h2o_sendvec_t h2o_sendvec_t;
-
-typedef struct st_h2o_sendvec_callbacks_t {
-    /**
-     * optional callback used to serialize the bytes held by the vector. Returns if the operation succeeded. When false is returned,
-     * the generator is considered as been error-closed by itself.  If the callback is NULL, the data is pre-flattened and available
-     * in `h2o_sendvec_t::raw`.
-     */
-    int (*flatten)(h2o_sendvec_t *vec, h2o_req_t *req, h2o_iovec_t dst, size_t off);
-    /**
-     * optional callback that can be used to retain the buffer after flattening all data. This allows H3 to re-flatten data upon
-     * retransmission. Increments the reference counter if `is_incr` is set to true, otherwise the counter is decremented.
-     */
-    void (*update_refcnt)(h2o_sendvec_t *vec, h2o_req_t *req, int is_incr);
-} h2o_sendvec_callbacks_t;
-
-/**
- * send vector. Unlike an ordinary `h2o_iovec_t`, the vector has a callback that allows the sender to delay the flattening of data
- * until it becomes necessary.
- */
-struct st_h2o_sendvec_t {
-    /**
-     *
-     */
-    const h2o_sendvec_callbacks_t *callbacks;
-    /**
-     * size of the vector
-     */
-    size_t len;
-    /**
-     *
-     */
-    union {
-        char *raw;
-        uint64_t cb_arg[2];
-    };
-};
-
-/**
  * an output stream that may alter the output.
  * The object is typically constructed by filters calling the h2o_prepend_ostream function.
  */
@@ -944,6 +915,10 @@ typedef struct st_h2o_conn_callbacks_t {
      * yet available.
      */
     int64_t (*get_rtt)(h2o_conn_t *conn);
+    /**
+     * optional callback that returns if zero copy is supported by the HTTP handler
+     */
+    int (*can_zero_copy)(h2o_conn_t *conn);
     /**
      * logging callbacks (all of them are optional)
      */
@@ -1526,20 +1501,6 @@ void h2o_req_bind_conf(h2o_req_t *req, h2o_hostconf_t *hostconf, h2o_pathconf_t 
  *
  */
 static int h2o_send_state_is_in_progress(h2o_send_state_t s);
-/**
- * Initializes a send vector that refers to mutable memory region. When the `proceed` callback is invoked, it is possible for the
- * generator to reuse (or release) that memory region.
- */
-void h2o_sendvec_init_raw(h2o_sendvec_t *vec, const void *base, size_t len);
-/**
- * Initializes a send vector that refers to immutable memory region. It is the responsible of the generator to preserve the contents
- * of the specified memory region until the user of the send vector finishes using the send vector.
- */
-void h2o_sendvec_init_immutable(h2o_sendvec_t *vec, const void *base, size_t len);
-/**
- *
- */
-int h2o_sendvec_flatten_raw(h2o_sendvec_t *vec, h2o_req_t *req, h2o_iovec_t dst, size_t off);
 /**
  * called by the generators to send output
  * note: generators should free itself after sending the final chunk (i.e. calling the function with is_final set to true)
