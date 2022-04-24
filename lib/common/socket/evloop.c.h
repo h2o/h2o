@@ -153,15 +153,17 @@ static const char *on_read_core(int fd, h2o_buffer_t **input, size_t max_bytes)
     return NULL;
 }
 
-static size_t write_vecs(struct st_h2o_evloop_socket_t *sock, h2o_iovec_t **bufs, size_t *bufcnt)
+static size_t write_vecs(struct st_h2o_evloop_socket_t *sock, h2o_iovec_t **bufs, size_t *bufcnt, int sendmsg_flags)
 {
     ssize_t wret;
 
     while (*bufcnt != 0) {
         /* write */
         int iovcnt = *bufcnt < IOV_MAX ? (int)*bufcnt : IOV_MAX;
-        while ((wret = writev(sock->fd, (struct iovec *)*bufs, iovcnt)) == -1 && errno == EINTR)
-            ;
+        struct msghdr msg;
+        do {
+            msg = (struct msghdr){.msg_iov = (struct iovec *)*bufs, .msg_iovlen = iovcnt};
+        } while ((wret = sendmsg(sock->fd, &msg, sendmsg_flags)) == -1 && errno == EINTR);
         SOCKET_PROBE(WRITEV, &sock->super, wret);
 
         if (wret == -1)
@@ -192,7 +194,7 @@ static size_t write_core(struct st_h2o_evloop_socket_t *sock, h2o_iovec_t **bufs
     if (sock->super.ssl == NULL || sock->super.ssl->offload == H2O_SOCKET_SSL_OFFLOAD_ON) {
         if (sock->super.ssl != NULL)
             assert(!has_pending_ssl_bytes(sock->super.ssl));
-        return write_vecs(sock, bufs, bufcnt);
+        return write_vecs(sock, bufs, bufcnt, 0);
     }
 
     /* SSL */
@@ -204,9 +206,25 @@ static size_t write_core(struct st_h2o_evloop_socket_t *sock, h2o_iovec_t **bufs
                                                 sock->super.ssl->output.buf.off - sock->super.ssl->output.pending_off);
             h2o_iovec_t *encbufs = &encbuf;
             size_t encbufcnt = 1, enc_written;
-            if ((enc_written = write_vecs(sock, &encbufs, &encbufcnt)) == SIZE_MAX) {
+            int sendmsg_flags = 0;
+#if __linux__
+            /* Use zero copy if amount of data to be written is no less than 16KB, and if the memory can be returned to
+             * `h2o_socket_ssl_buffer_allocator`. Latter is a short-cut. It is only under exceptional conditions (e.g., TLS stack
+             * adding a post-handshake message) that we'd see the encrypted buffer grow to a size that cannot be returned to the
+             * recycling allocator. (Note: 16KB limit is fine only because we write to L1 cache. If we are to do non-temporal writes
+             * from AEAD, it might make sense to use zero copy regardless of `encbuf.len`, because copying from main memory is a
+             * cost. */
+            if (sock->super._zerocopy != NULL && encbuf.len >= 16384 &&
+                sock->super.ssl->output.buf.capacity == *h2o_socket_ssl_buffer_allocator.memsize)
+                sendmsg_flags = MSG_ZEROCOPY;
+#endif
+            if ((enc_written = write_vecs(sock, &encbufs, &encbufcnt, sendmsg_flags)) == SIZE_MAX) {
                 dispose_ssl_output_buffer(sock->super.ssl);
                 return SIZE_MAX;
+            }
+            if (sendmsg_flags != 0) {
+                zerocopy_buffers_push(sock->super._zerocopy, sock->super.ssl->output.buf.base);
+                sock->super.ssl->output.zerocopy_owned = 1;
             }
             /* if write is incomplete, record the advance and bail out */
             if (encbufcnt != 0) {

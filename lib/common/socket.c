@@ -124,6 +124,7 @@ struct st_h2o_socket_ssl_t {
          */
         ptls_buffer_t buf;
         size_t pending_off;
+        unsigned zerocopy_owned : 1;
     } output;
 };
 
@@ -264,6 +265,7 @@ static void init_ssl_output_buffer(struct st_h2o_socket_ssl_t *ssl)
                      *h2o_socket_ssl_buffer_allocator.memsize);
     ssl->output.buf.is_allocated = 1; /* set to true, so that the allocated memory is freed when the buffer is expanded */
     ssl->output.pending_off = 0;
+    ssl->output.zerocopy_owned = 0;
 }
 
 static void dispose_ssl_output_buffer(struct st_h2o_socket_ssl_t *ssl)
@@ -274,13 +276,16 @@ static void dispose_ssl_output_buffer(struct st_h2o_socket_ssl_t *ssl)
 
     assert(ssl->output.buf.is_allocated);
 
-    if (ssl->output.buf.capacity == *h2o_socket_ssl_buffer_allocator.memsize) {
-        h2o_mem_free_recycle(&h2o_socket_ssl_buffer_allocator, ssl->output.buf.base);
-    } else {
-        free(ssl->output.buf.base);
+    if (!ssl->output.zerocopy_owned) {
+        if (ssl->output.buf.capacity == *h2o_socket_ssl_buffer_allocator.memsize) {
+            h2o_mem_free_recycle(&h2o_socket_ssl_buffer_allocator, ssl->output.buf.base);
+        } else {
+            free(ssl->output.buf.base);
+        }
     }
     ssl->output.buf = (ptls_buffer_t){};
     ssl->output.pending_off = 0;
+    ssl->output.zerocopy_owned = 0;
 }
 
 static int has_pending_ssl_bytes(struct st_h2o_socket_ssl_t *ssl)
@@ -1067,10 +1072,20 @@ int h2o_socket_can_tls_offload(h2o_socket_t *sock)
 #endif
 }
 
-void h2o_socket_use_zero_copy(h2o_socket_t *sock)
+int h2o_socket_use_zero_copy(h2o_socket_t *sock)
 {
-    sock->_zerocopy = h2o_mem_alloc(sizeof(*sock->_zerocopy));
-    *sock->_zerocopy = (struct st_h2o_socket_zerocopy_buffers_t){};
+    assert(sock->_zerocopy == NULL);
+
+#if defined(__linux__) && !H2O_USE_LIBUV && H2O_USE_EPOLL
+    unsigned one = 1;
+    if (setsockopt(h2o_socket_get_fd(sock), SOL_SOCKET, SO_ZEROCOPY, &one, sizeof(one)) == 0) {
+        sock->_zerocopy = h2o_mem_alloc(sizeof(*sock->_zerocopy));
+        *sock->_zerocopy = (struct st_h2o_socket_zerocopy_buffers_t){};
+        return 1;
+    }
+#endif
+
+    return 0;
 }
 
 h2o_iovec_t h2o_socket_log_tcp_congestion_controller(h2o_socket_t *sock, h2o_mem_pool_t *pool)

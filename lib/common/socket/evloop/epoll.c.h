@@ -23,6 +23,7 @@
 #include <limits.h>
 #include <stdio.h>
 #include <sys/epoll.h>
+#include <linux/errqueue.h>
 
 #if 0
 #define DEBUG_LOG(...) h2o_error_printf(__VA_ARGS__)
@@ -34,6 +35,44 @@ struct st_h2o_evloop_epoll_t {
     h2o_evloop_t super;
     int ep;
 };
+
+static int handle_zerocopy_notification(struct st_h2o_evloop_socket_t *sock)
+{
+    struct sock_extended_err *ee;
+    struct msghdr msg;
+    char buf[CMSG_SPACE(sizeof(*ee))];
+    int ret;
+
+    do {
+        msg = (struct msghdr){
+            .msg_control = buf,
+            .msg_controllen = sizeof(buf),
+        };
+    } while ((ret = recvmsg(sock->fd, &msg, MSG_ERRQUEUE)) == -1 && errno == EINTR);
+    if (ret != 0)
+        goto Fail;
+
+    struct cmsghdr *cmsg = CMSG_FIRSTHDR(&msg);
+    if (cmsg == NULL)
+        goto Fail;
+    ee = (void *)CMSG_DATA(cmsg);
+
+    if (!(ee->ee_errno == 0 && ee->ee_origin == SO_EE_ORIGIN_ZEROCOPY))
+        goto Fail;
+
+    for (uint32_t c32 = ee->ee_info; c32 <= ee->ee_data; ++c32) {
+        uint64_t c64 = (sock->super._zerocopy->first_counter & 0xffffffff00000000) | c32;
+        if (c64 < sock->super._zerocopy->first_counter)
+            c64 += 0x100000000;
+        void *p;
+        if ((p = zerocopy_buffers_release(sock->super._zerocopy, c64)) != NULL)
+            h2o_mem_free_recycle(&h2o_socket_ssl_buffer_allocator, p);
+    }
+
+    return 1;
+Fail:
+    return 0;
+}
 
 static int update_status(struct st_h2o_evloop_epoll_t *loop)
 {
@@ -125,6 +164,12 @@ int evloop_do_proceed(h2o_evloop_t *_loop, int32_t max_wait)
     for (i = 0; i != nevents; ++i) {
         struct st_h2o_evloop_socket_t *sock = events[i].data.ptr;
         int notified = 0;
+#ifdef __linux__
+        if (sock->super._zerocopy != NULL && (events[i].events & EPOLLERR) != 0) {
+            if (handle_zerocopy_notification(sock))
+                events[i].events &= ~EPOLLERR;
+        }
+#endif
         if ((events[i].events & (EPOLLIN | EPOLLHUP | EPOLLERR)) != 0) {
             if ((sock->_flags & H2O_SOCKET_FLAG_IS_POLLED_FOR_READ) != 0) {
                 sock->_flags |= H2O_SOCKET_FLAG_IS_READ_READY;
