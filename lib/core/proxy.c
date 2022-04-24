@@ -303,7 +303,8 @@ static void do_close(struct rp_generator_t *self)
      *        stop callback calls this, but dispose callback does it later (after reprocessed request gets finished)
      *   3. Others
      *        Both of stop and dispose callbacks call this function in order
-     * Thus, to ensure to do closing things, both of dispose and stop callbacks call this function.
+     * Thus, to ensure to do closing things, both of dispose and stop callbacks call this function (reminder: that means that this
+     * function might get called multiple times).
      */
     if (self->client != NULL) {
         h2o_httpclient_t *client = detach_client(self);
@@ -313,6 +314,7 @@ static void do_close(struct rp_generator_t *self)
     if (self->pipe_reader.fds[0] != -1) {
         close(self->pipe_reader.fds[0]);
         close(self->pipe_reader.fds[1]);
+        self->pipe_reader.fds[0] = -1;
     }
 }
 
