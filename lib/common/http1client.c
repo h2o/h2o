@@ -272,8 +272,10 @@ void on_body_to_pipe(h2o_socket_t *_sock, const char *err)
                                 client->_body_decoder.content_length.bytesleft, SPLICE_F_NONBLOCK)) == -1 &&
            errno == EINTR)
         ;
-    assert(!(bytes_read == -1 && errno == EAGAIN)); /* The scary assumption here is that splice would never return EAGAIN, because
-                                                     * we invoke `h2o_socket_read_start` only when the pipe is empty. */
+    if (bytes_read == -1 && errno == EAGAIN) {
+        do_update_window(client);
+        return;
+    }
     if (bytes_read <= 0) {
         on_error(client, h2o_httpclient_error_io);
         return;
@@ -877,12 +879,16 @@ static void do_update_window(h2o_httpclient_t *_client)
          * checking if we are already reading; this is because we want to make sure that the read callback replaced to the current
          * one. */
         h2o_socket_read_start(client->sock, client->reader);
+        if (h2o_timer_is_linked(&client->super._timeout))
+            h2o_timer_unlink(&client->super._timeout);
+        h2o_timer_link(client->super.ctx->loop, client->super.ctx->io_timeout, &client->super._timeout);
     } else {
         /* When buffer is used, start / stop reading based on the amount of data being buffered. */
         if ((*client->super.buf)->size >= client->super.ctx->max_buffer_size) {
             if (h2o_socket_is_reading(client->sock)) {
                 client->reader = client->sock->_cb.read;
                 h2o_socket_read_stop(client->sock);
+                /* TODO should we unarm the timer here? */
             }
         } else {
             if (!h2o_socket_is_reading(client->sock)) {
