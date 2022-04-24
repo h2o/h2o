@@ -200,6 +200,7 @@ struct st_h2o_socket_t {
         size_t suggested_tls_payload_size; /* suggested TLS record payload size, or SIZE_MAX when no need to restrict */
         size_t suggested_write_size;       /* SIZE_MAX if no need to optimize for latency */
     } _latency_optimization;
+    struct st_h2o_socket_zerocopy_buffers_t *_zerocopy;
 };
 
 typedef struct st_h2o_socket_export_t {
@@ -359,6 +360,10 @@ ptls_t *h2o_socket_get_ptls(h2o_socket_t *sock);
  *
  */
 int h2o_socket_can_tls_offload(h2o_socket_t *sock);
+/**
+ * Switches the socket to zero copy mode. The socket can no longer be exported, once this function is called.
+ */
+void h2o_socket_use_zero_copy(h2o_socket_t *sock);
 /**
  *
  */

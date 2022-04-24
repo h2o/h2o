@@ -133,6 +133,15 @@ struct st_h2o_ssl_context_t {
     h2o_iovec_t _npn_list_of_protocols;
 };
 
+/**
+ * Holds list of buffers to be retain until notified by the kernel.
+ */
+struct st_h2o_socket_zerocopy_buffers_t {
+    void **bufs;
+    size_t first, last, capacity;
+    uint64_t first_counter;
+};
+
 /* backend functions */
 static void init_write_buf(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, size_t first_buf_written);
 static void dispose_write_buf(h2o_socket_t *sock);
@@ -148,6 +157,10 @@ static int do_export(h2o_socket_t *_sock, h2o_socket_export_t *info);
 static h2o_socket_t *do_import(h2o_loop_t *loop, h2o_socket_export_t *info);
 static socklen_t get_peername_uncached(h2o_socket_t *sock, struct sockaddr *sa);
 static socklen_t get_sockname_uncached(h2o_socket_t *sock, struct sockaddr *sa);
+static int zerocopy_buffers_is_empty(struct st_h2o_socket_zerocopy_buffers_t *buffers);
+static void zerocopy_buffers_dispose(struct st_h2o_socket_zerocopy_buffers_t *buffers);
+static void zerocopy_buffers_push(struct st_h2o_socket_zerocopy_buffers_t *buffers, void *p);
+static void *zerocopy_buffers_release(struct st_h2o_socket_zerocopy_buffers_t *buffers, uint64_t counter);
 
 /* internal functions called from the backend */
 static const char *decode_ssl_input(h2o_socket_t *sock);
@@ -523,6 +536,7 @@ int h2o_socket_export(h2o_socket_t *sock, h2o_socket_export_t *info)
 {
     static h2o_buffer_prototype_t nonpooling_prototype;
 
+    assert(sock->_zerocopy == NULL);
     assert(!h2o_socket_is_writing(sock));
 
     if (do_export(sock, info) == -1)
@@ -1051,6 +1065,12 @@ int h2o_socket_can_tls_offload(h2o_socket_t *sock)
 #else
     return can_tls_offload(sock);
 #endif
+}
+
+void h2o_socket_use_zero_copy(h2o_socket_t *sock)
+{
+    sock->_zerocopy = h2o_mem_alloc(sizeof(*sock->_zerocopy));
+    *sock->_zerocopy = (struct st_h2o_socket_zerocopy_buffers_t){};
 }
 
 h2o_iovec_t h2o_socket_log_tcp_congestion_controller(h2o_socket_t *sock, h2o_mem_pool_t *pool)
@@ -1922,6 +1942,94 @@ int h2o_sendvec_read_raw(h2o_sendvec_t *src, void *dst, size_t len)
     src->raw += len;
     src->len -= len;
     return 1;
+}
+
+int zerocopy_buffers_is_empty(struct st_h2o_socket_zerocopy_buffers_t *buffers)
+{
+    return buffers->first == buffers->last;
+}
+
+void zerocopy_buffers_dispose(struct st_h2o_socket_zerocopy_buffers_t *buffers)
+{
+    assert(zerocopy_buffers_is_empty(buffers));
+    if (buffers->bufs != NULL)
+        free(buffers->bufs);
+}
+
+void zerocopy_buffers_push(struct st_h2o_socket_zerocopy_buffers_t *buffers, void *p)
+{
+    if (buffers->last >= buffers->capacity) {
+        assert(buffers->last == buffers->capacity);
+        size_t new_capacity = (buffers->last - buffers->first) * 2;
+        if (new_capacity < 16)
+            new_capacity = 16;
+        if (new_capacity <= buffers->capacity) {
+            memmove(buffers->bufs, buffers->bufs + buffers->first, sizeof(buffers->bufs[0]) * (buffers->last - buffers->first));
+        } else {
+            void **newbufs = h2o_mem_alloc(sizeof(newbufs[0]) * new_capacity);
+            h2o_memcpy(newbufs, buffers->bufs + buffers->first, sizeof(newbufs[0]) * (buffers->last - buffers->first));
+            free(buffers->bufs);
+            buffers->bufs = newbufs;
+            buffers->capacity = new_capacity;
+        }
+        buffers->last -= buffers->first;
+        buffers->first = 0;
+    }
+    buffers->bufs[buffers->last++] = p;
+}
+
+void *zerocopy_buffers_release(struct st_h2o_socket_zerocopy_buffers_t *buffers, uint64_t counter)
+{
+    assert(buffers->first_counter <= counter);
+
+    size_t free_slot = buffers->first + (counter - buffers->first_counter);
+    assert(free_slot < buffers->last);
+
+    /* Determine the address represented by given counter. */
+    void *free_ptr = buffers->bufs[free_slot];
+    assert(free_ptr != NULL);
+
+    /* Search for adjacent entries that refer to the same address. If found, the address cannot be freed yet; hence set the return
+     * value to NULL. Rationale: when sendmsg returns partial write, one memory block would be registered multiple times in a
+     * consecutive manner. Such memory block can be freed only when the last entry is being released. */
+    for (size_t i = free_slot + 1; i < buffers->last; ++i) {
+        if (buffers->bufs[i] != NULL) {
+            if (buffers->bufs[i] == free_ptr)
+                free_ptr = NULL;
+            break;
+        }
+    }
+    if (free_ptr != NULL && free_slot > buffers->first) {
+        size_t i = free_slot - 1;
+        do {
+            if (buffers->bufs[i] != NULL) {
+                if (buffers->bufs[i] == free_ptr)
+                    free_ptr = NULL;
+                break;
+            }
+        } while (i-- > buffers->first);
+    }
+
+    if (buffers->first_counter == counter) {
+        /* Release is in-order. Move `first` and `first_counter` to the next valid entry. */
+        ++buffers->first;
+        ++buffers->first_counter;
+        while (buffers->first != buffers->last) {
+            if (buffers->bufs[buffers->first] != NULL)
+                break;
+            ++buffers->first;
+            ++buffers->first_counter;
+        }
+        if (buffers->first == buffers->last) {
+            buffers->first = 0;
+            buffers->last = 0;
+        }
+    } else {
+        /* Out-of-order: just clear the slot. */
+        buffers->bufs[free_slot] = NULL;
+    }
+
+    return free_ptr;
 }
 
 #if H2O_USE_EBPF_MAP

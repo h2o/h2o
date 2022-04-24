@@ -163,9 +163,51 @@ static void test_prepare_for_latency_optimization(void)
     ok(cb_ret_vars.minimize_notsent_lowat.cur == 0);
 }
 
+static void test_zerocopy_buffers(void)
+{
+    struct st_h2o_socket_zerocopy_buffers_t buffers = {};
+
+    /* push and release in-order */
+    ok(zerocopy_buffers_is_empty(&buffers));
+    for (uintptr_t i = 0; i < 100; ++i)
+        zerocopy_buffers_push(&buffers, (void *)(i + 1));
+    for (uintptr_t i = 0; i < 100; ++i) {
+        ok(!zerocopy_buffers_is_empty(&buffers));
+        ok(zerocopy_buffers_release(&buffers, i) == (void *)(i + 1));
+    }
+    ok(zerocopy_buffers_is_empty(&buffers));
+
+    /* push 2, release 1 in-order */
+    uintptr_t push = 100, release = 100;
+    for (int i = 0; i < 100; ++i) {
+        zerocopy_buffers_push(&buffers, (void *)push++);
+        zerocopy_buffers_push(&buffers, (void *)push++);
+        ok(zerocopy_buffers_release(&buffers, release) == (void *)release);
+        ++release;
+    }
+
+    /* gaps */
+    ok(zerocopy_buffers_release(&buffers, release + 1) == (void *)(release + 1));
+    ok(zerocopy_buffers_release(&buffers, release + 2) == (void *)(release + 2));
+    ok(buffers.first_counter == release);
+    ok(zerocopy_buffers_release(&buffers, release) == (void *)release);
+    ok(buffers.first_counter == release + 3);
+    release += 3;
+
+    while (!zerocopy_buffers_is_empty(&buffers)) {
+        ok(zerocopy_buffers_release(&buffers, release) == (void *)release);
+        ++release;
+    }
+
+    ok(push == release);
+
+    zerocopy_buffers_dispose(&buffers);
+}
+
 void test_lib__common__socket_c(void)
 {
     subtest("on_alpn_select", test_on_alpn_select);
     subtest("sliding_counter", test_sliding_counter);
     subtest("prepare_for_latency_optimization", test_prepare_for_latency_optimization);
+    subtest("zerocopy_buffers", test_zerocopy_buffers);
 }
