@@ -798,7 +798,8 @@ static void on_send_emit(quicly_stream_t *qs, size_t off, void *_dst, size_t *le
         /* convert vector into raw form, the first time it's being sent (TODO use ssl_buffer_recyle) */
         if (this_vec->vec.callbacks->read_ != h2o_sendvec_read_raw) {
             size_t newlen = this_vec->vec.len;
-            void *newbuf = h2o_mem_alloc(newlen);
+            void *newbuf = sendvec_size_is_for_recycle(newlen) ? h2o_mem_alloc_recycle(&h2o_socket_ssl_buffer_allocator)
+                                                               : h2o_mem_alloc(newlen);
             if (!this_vec->vec.callbacks->read_(&this_vec->vec, newbuf, newlen)) {
                 free(newbuf);
                 goto Error;
