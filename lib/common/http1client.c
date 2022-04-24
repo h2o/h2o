@@ -273,7 +273,7 @@ void on_body_to_pipe(h2o_socket_t *_sock, const char *err)
            errno == EINTR)
         ;
     if (bytes_read == -1 && errno == EAGAIN) {
-        do_update_window(client);
+        do_update_window(&client->super);
         return;
     }
     if (bytes_read <= 0) {
