@@ -198,8 +198,6 @@ static void on_body_until_close(h2o_socket_t *sock, const char *err)
         }
         do_update_window(&client->super);
     }
-
-    h2o_timer_link(client->super.ctx->loop, client->super.ctx->io_timeout, &client->super._timeout);
 }
 
 static void on_body_content_length(h2o_socket_t *sock, const char *err)
@@ -250,8 +248,6 @@ static void on_body_content_length(h2o_socket_t *sock, const char *err)
     }
 #endif
     do_update_window(&client->super);
-
-    h2o_timer_link(client->super.ctx->loop, client->super.ctx->io_timeout, &client->super._timeout);
 }
 
 void on_body_to_pipe(h2o_socket_t *_sock, const char *err)
@@ -272,8 +268,10 @@ void on_body_to_pipe(h2o_socket_t *_sock, const char *err)
                                 client->_body_decoder.content_length.bytesleft, SPLICE_F_NONBLOCK)) == -1 &&
            errno == EINTR)
         ;
-    assert(!(bytes_read == -1 && errno == EAGAIN)); /* The scary assumption here is that splice would never return EAGAIN, because
-                                                     * we invoke `h2o_socket_read_start` only when the pipe is empty. */
+    if (bytes_read == -1 && errno == EAGAIN) {
+        do_update_window(&client->super);
+        return;
+    }
     if (bytes_read <= 0) {
         on_error(client, h2o_httpclient_error_io);
         return;
@@ -376,8 +374,6 @@ static void on_body_chunked(h2o_socket_t *sock, const char *err)
         }
         do_update_window(&client->super);
     }
-
-    h2o_timer_link(client->super.ctx->loop, client->super.ctx->io_timeout, &client->super._timeout);
 }
 
 static void on_head_timeout(h2o_timer_t *entry)
@@ -885,10 +881,19 @@ static void do_update_window(h2o_httpclient_t *_client)
                 h2o_socket_read_stop(client->sock);
             }
         } else {
-            if (!h2o_socket_is_reading(client->sock)) {
+            if (!h2o_socket_is_reading(client->sock))
                 h2o_socket_read_start(client->sock, client->reader);
-            }
         }
+    }
+
+    /* arm or unarm i/o timeout depending on if we are reading */
+    if (h2o_socket_is_reading(client->sock)) {
+        if (h2o_timer_is_linked(&client->super._timeout))
+            h2o_timer_unlink(&client->super._timeout);
+        h2o_timer_link(client->super.ctx->loop, client->super.ctx->io_timeout, &client->super._timeout);
+    } else {
+        if (h2o_timer_is_linked(&client->super._timeout))
+            h2o_timer_unlink(&client->super._timeout);
     }
 }
 
