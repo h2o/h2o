@@ -49,50 +49,52 @@ static void unregister_socket(struct st_h2o_evloop_socket_t *sock, const char *f
 
 static int handle_zerocopy_notification(struct st_h2o_evloop_socket_t *sock)
 {
-    struct sock_extended_err *ee;
-    struct msghdr msg;
-    char buf[CMSG_SPACE(sizeof(*ee))];
-    int ret;
+    int made_progress = 0;
 
-Redo:
-    do {
-        msg = (struct msghdr){
-            .msg_control = buf,
-            .msg_controllen = sizeof(buf),
-        };
-    } while ((ret = recvmsg(sock->fd, &msg, MSG_ERRQUEUE)) == -1 && errno == EINTR);
-    if (ret != 0)
-        goto Fail;
+    /* Read the completion events and release buffers. `recvmmsg` with two entries is used as a cheap way of making sure that all
+     * notifications are read from the queue (this requirement comes from the us eof edge trigger once the socket is closed). */
+    while (1) {
+        struct mmsghdr msg[2];
+        char cbuf[2][CMSG_SPACE(sizeof(struct sock_extended_err))];
+        for (size_t i = 0; i < PTLS_ELEMENTSOF(msg); ++i)
+            msg[i] = (struct mmsghdr){.msg_hdr = {.msg_control = cbuf[i], .msg_controllen = sizeof(cbuf[i])}};
+        struct timespec timeout = {0};
 
-    struct cmsghdr *cmsg = CMSG_FIRSTHDR(&msg);
-    if (cmsg == NULL)
-        goto Fail;
-    ee = (void *)CMSG_DATA(cmsg);
+        ssize_t ret;
+        while ((ret = recvmmsg(sock->fd, msg, PTLS_ELEMENTSOF(msg), MSG_ERRQUEUE, &timeout)) == -1 && errno == EINTR)
+            ;
+        if (ret == -1)
+            break;
 
-    if (!(ee->ee_errno == 0 && ee->ee_origin == SO_EE_ORIGIN_ZEROCOPY))
-        goto Fail;
-
-    for (uint32_t c32 = ee->ee_info; c32 <= ee->ee_data; ++c32) {
-        uint64_t c64 = (sock->super._zerocopy->first_counter & 0xffffffff00000000) | c32;
-        if (c64 < sock->super._zerocopy->first_counter)
-            c64 += 0x100000000;
-        void *p;
-        if ((p = zerocopy_buffers_release(sock->super._zerocopy, c64)) != NULL &&
-            (sock->super.ssl == NULL || p != sock->super.ssl->output.buf.base))
-            h2o_mem_free_recycle(&h2o_socket_ssl_buffer_allocator, p);
-    }
-
-    if (sock->_flags == H2O_SOCKET_FLAG_IS_DISPOSED) {
-        if (zerocopy_buffers_is_empty(sock->super._zerocopy)) {
-            link_to_statechanged(sock);
-        } else {
-            goto Redo;
+        for (size_t i = 0; i < ret; ++i) {
+            struct cmsghdr *cmsg = CMSG_FIRSTHDR(&msg[i].msg_hdr);
+            if (cmsg != NULL) {
+                struct sock_extended_err *ee = (void *)CMSG_DATA(cmsg);
+                if (ee->ee_errno == 0 && ee->ee_origin == SO_EE_ORIGIN_ZEROCOPY) {
+                    /* for each range being obtained, convert the wrapped value to 64-bit, then release the memory */
+                    for (uint32_t c32 = ee->ee_info; c32 <= ee->ee_data; ++c32) {
+                        uint64_t c64 = (sock->super._zerocopy->first_counter & 0xffffffff00000000) | c32;
+                        if (c64 < sock->super._zerocopy->first_counter)
+                            c64 += 0x100000000;
+                        void *p = zerocopy_buffers_release(sock->super._zerocopy, c64);
+                        if (p != NULL && (sock->super.ssl == NULL || p != sock->super.ssl->output.buf.base))
+                            h2o_mem_free_recycle(&h2o_socket_ssl_buffer_allocator, p);
+                    }
+                }
+            }
+            made_progress = 1;
         }
+
+        /* partial read means that the notification queue has become empty */
+        if (ret < PTLS_ELEMENTSOF(msg))
+            break;
     }
 
-    return 1;
-Fail:
-    return 0;
+    /* if the socket has been shut down and zerocopy buffer has become empty, link the socket so that it would be destroyed */
+    if (made_progress && sock->_flags == H2O_SOCKET_FLAG_IS_DISPOSED && zerocopy_buffers_is_empty(sock->super._zerocopy))
+        link_to_statechanged(sock);
+
+    return made_progress;
 }
 
 static int update_status(struct st_h2o_evloop_epoll_t *loop)
