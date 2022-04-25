@@ -169,19 +169,20 @@ h2o_socketpool_target_type_t detect_target_type(h2o_url_t *url, struct sockaddr_
     }
 }
 
-h2o_socketpool_target_t *h2o_socketpool_create_target(h2o_url_t *origin, h2o_socketpool_target_conf_t *lb_target_conf)
+h2o_socketpool_target_t *h2o_socketpool_create_target(h2o_url_t *url, h2o_url_t *origin, h2o_socketpool_target_conf_t *lb_target_conf)
 {
     struct sockaddr_storage sa;
     socklen_t salen;
 
     h2o_socketpool_target_t *target = h2o_mem_alloc(sizeof(*target));
-    h2o_url_copy(NULL, &target->url, origin);
+    h2o_url_copy(NULL, &target->url, url);
     assert(target->url.host.base[target->url.host.len] == '\0'); /* needs to be null-terminated in order to be used in SNI */
-    target->type = detect_target_type(origin, &sa, &salen);
+    target->type = detect_target_type(url, &sa, &salen);
     if (!(target->type == H2O_SOCKETPOOL_TYPE_SOCKADDR && sa.ss_family == AF_UNIX)) {
         h2o_strtolower(target->url.authority.base, target->url.authority.len);
         h2o_strtolower(target->url.host.base, target->url.host.len);
     }
+    h2o_url_copy(NULL, &target->origin, origin);
 
     switch (target->type) {
     case H2O_SOCKETPOOL_TYPE_NAMED:
@@ -235,6 +236,9 @@ void h2o_socketpool_destroy_target(h2o_socketpool_target_t *target)
     free(target->url.authority.base);
     free(target->url.host.base);
     free(target->url.path.base);
+    free(target->origin.authority.base);
+    free(target->origin.host.base);
+    free(target->origin.path.base);
     free(target);
 }
 
@@ -376,7 +380,7 @@ static void on_connect(h2o_socket_t *sock, const char *err)
         __sync_sub_and_fetch(&req->pool->_shared.count, 1);
         req->sock = NULL;
     } else {
-        h2o_url_t *target_url = &req->pool->targets.entries[req->selected_target]->url;
+        h2o_url_t *target_url = &req->pool->targets.entries[req->selected_target]->origin;
         if (target_url->scheme->is_ssl) {
             assert(req->pool->_ssl_ctx != NULL && "h2o_socketpool_set_ssl_ctx must be called for a pool that contains SSL target");
             h2o_socket_ssl_handshake(sock, req->pool->_ssl_ctx, target_url->host.base, req->alpn_protos, on_handshake_complete);
@@ -399,10 +403,11 @@ static void on_close(void *data)
 static void start_connect(h2o_socketpool_connect_request_t *req, struct sockaddr *addr, socklen_t addrlen)
 {
     struct on_close_data_t *close_data;
+    h2o_socketpool_target_t *target = req->pool->targets.entries[req->selected_target];
 
     req->sock = h2o_socket_connect(req->loop, addr, addrlen, on_connect, NULL);
     if (req->sock == NULL) {
-        __sync_sub_and_fetch(&req->pool->targets.entries[req->selected_target]->_shared.leased_count, 1);
+        __sync_sub_and_fetch(&target->_shared.leased_count, 1);
         if (req->remaining_try_count > 0) {
             try_connect(req);
             return;
@@ -480,7 +485,7 @@ void h2o_socketpool_connect(h2o_socketpool_connect_request_t **_req, h2o_socketp
         target = lookup_target(pool, url);
         if (target == SIZE_MAX) {
             h2o_vector_reserve(NULL, &pool->targets, pool->targets.size + 1);
-            pool->targets.entries[pool->targets.size++] = h2o_socketpool_create_target(url, NULL);
+            pool->targets.entries[pool->targets.size++] = h2o_socketpool_create_target(url, url, NULL);
             target = pool->targets.size - 1;
         }
         sockets = &pool->targets.entries[target]->_shared.sockets;

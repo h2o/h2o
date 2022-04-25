@@ -207,6 +207,15 @@ struct listener_config_t {
     unsigned sndbuf, rcvbuf;
     int proxy_protocol;
     h2o_iovec_t tcp_congestion_controller; /* default CC for this address */
+    /**
+     * ESNI configuration
+     */
+    struct {
+        ptls_key_exchange_context_t **key_exchanges;
+        size_t key_exchanges_len;
+        uint8_t *rr;
+        size_t rr_len;
+    } esni;
 };
 
 struct listener_ctx_t {
@@ -544,6 +553,27 @@ IdentityFound:
     }
 
     return ret;
+}
+
+static inline void setup_esni_ptls(struct listener_config_t *listener, ptls_context_t *ctx)
+{
+    int rc = 0;
+
+    if (listener->esni.key_exchanges_len == 0)
+        return;
+
+    if ((ctx->esni = (ptls_esni_context_t **)malloc(sizeof(*ctx->esni) * 2)) == NULL ||
+        (*ctx->esni = (ptls_esni_context_t *)malloc(sizeof(**ctx->esni))) == NULL) {
+        fprintf(stderr, "Failed to allocate memory\n");
+        return;
+    }
+
+    rc = ptls_esni_init_context(ctx, ctx->esni[0], ptls_iovec_init(listener->esni.rr, listener->esni.rr_len),
+                                listener->esni.key_exchanges);
+    if (rc != 0) {
+        fprintf(stderr, "failed to parse ESNI data, error:[%d]\n", rc);
+        return;
+    }
 }
 
 static ptls_emit_compressed_certificate_t *build_compressed_certificate_ptls(ptls_context_t *ctx, ptls_iovec_t ocsp_status)
@@ -888,6 +918,8 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
 
     identity->ptls = &pctx->ctx;
 
+    setup_esni_ptls(listener, &pctx->ctx);
+
     return NULL;
 }
 
@@ -1051,13 +1083,111 @@ static int load_ssl_identity(h2o_configurator_command_t *cmd, SSL_CTX *ssl_ctx, 
     return 0;
 }
 
+/* caller to release returned value */
+static ptls_key_exchange_context_t ** on_config_esni_keys(h2o_configurator_command_t *cmd, yoml_t *node)
+{
+    H2O_VECTOR(ptls_key_exchange_context_t *) ret = {};
+
+    if (node->type != YOML_TYPE_SEQUENCE) {
+        h2o_configurator_errprintf(cmd, node, "value must be a list of strings");
+        return NULL;
+    }
+
+    for (size_t i = 0; i < node->data.sequence.size; ++i) {
+        char *key_path = NULL;
+        FILE *fp = NULL;
+        EVP_PKEY *pkey = NULL;
+        int rc = 0;
+        yoml_t *elem_node = NULL;
+        ptls_key_exchange_context_t *key_exchange = NULL;
+
+        elem_node = node->data.sequence.elements[i];
+        if (elem_node->type != YOML_TYPE_SCALAR) {
+            continue;
+        }
+
+        key_path = elem_node->data.scalar;
+
+        if ((fp = fopen(key_path, "rb")) == NULL) {
+            h2o_configurator_errprintf(cmd, node, "Failed to open ESNI private key file:'%s', error:[%d]:'%s'", key_path, errno,
+                                       strerror(errno));
+            goto on_config_esni_keys_1;
+        }
+
+        if ((pkey = PEM_read_PrivateKey(fp, NULL, NULL, NULL)) == NULL) {
+            h2o_configurator_errprintf(cmd, node, "Failed to load private key from file:'%s'", key_path);
+            goto on_config_esni_keys_1;
+        }
+
+        rc = ptls_openssl_create_key_exchange(&key_exchange, pkey);
+        if (rc != 0) {
+            h2o_configurator_errprintf(cmd, node, "Failed to load private key from file:'%s', picotls-error:[%d]", key_path, rc);
+            goto on_config_esni_keys_1;
+        }
+
+        h2o_vector_reserve(NULL, &ret, ret.size + 1);
+        ret.entries[ret.size++] = key_exchange;
+
+on_config_esni_keys_1:
+
+        if (pkey != NULL)
+            EVP_PKEY_free(pkey);
+
+        if (fp != NULL)
+            fclose(fp);
+    }
+
+    h2o_vector_reserve(NULL, &ret, ret.size + 1);
+    ret.entries[ret.size] = NULL;
+
+    return ret.entries;
+}
+
+/* caller to release returned value */
+static ptls_iovec_t on_config_esni_rr(h2o_configurator_command_t *cmd, yoml_t *node)
+{
+    char *rr_path = NULL;
+    FILE *fp = NULL;
+    size_t rc = 0;
+    uint8_t rr[65536] = {0};
+    ptls_iovec_t ret = ptls_iovec_init(NULL, 0);
+
+    if (node->type != YOML_TYPE_SCALAR) {
+        return ret;
+    }
+
+    rr_path = node->data.scalar;
+
+    fp = fopen(rr_path, "rb");
+    if (fp == NULL) {
+        fprintf(stderr, "Failed to open file:'%s', error:[%d]:'%s'\n", rr_path, errno, strerror(errno));
+        goto on_config_esni_rr_1;
+    }
+
+    rc = fread(rr, 1, sizeof(rr), fp);
+    if (rc == 0 || !feof(fp)) {
+        fprintf(stderr, "Failed to load ESNI data from file:'%s'\n", rr_path);
+        goto on_config_esni_rr_1;
+    }
+
+    ret = ptls_iovec_init(h2o_mem_alloc(rc), rc);
+    h2o_memcpy(ret.base, rr, rc);
+
+on_config_esni_rr_1:
+
+    if (fp != NULL)
+        fclose(fp);
+
+    return ret;
+}
+
 static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *listen_node,
                               yoml_t **ssl_node, yoml_t **cc_node, yoml_t **initcwnd_node, struct listener_config_t *listener,
                               int listener_is_new)
 {
     yoml_t **dh_file, **min_version, **max_version, **cipher_suite, **cipher_suite_tls13_node, **ocsp_update_cmd,
         **ocsp_update_interval_node, **ocsp_max_failures_node, **cipher_preference_node, **neverbleed_node,
-        **http2_origin_frame_node, **client_ca_file;
+        **http2_origin_frame_node, **client_ca_file, **esni_keys, **esni_rr;
     struct listener_ssl_parsed_identity_t *parsed_identities;
     size_t num_parsed_identities;
 
@@ -1086,11 +1216,11 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
                                            "identity:a,certificate-file:s,key-file:s,min-version:s,minimum-version:s,max-version:s,"
                                            "maximum-version:s,cipher-suite:s,cipher-suite-tls1.3:a,ocsp-update-cmd:s,"
                                            "ocsp-update-interval:*,ocsp-max-failures:*,dh-file:s,cipher-preference:*,neverbleed:*,"
-                                           "http2-origin-frame:*,client-ca-file:s",
+                                           "http2-origin-frame:*,client-ca-file:s,esni-keys:a,esni-rr:s",
                                            &identity_node, &certificate_file, &key_file, &min_version, &min_version, &max_version,
                                            &max_version, &cipher_suite, &cipher_suite_tls13_node, &ocsp_update_cmd,
                                            &ocsp_update_interval_node, &ocsp_max_failures_node, &dh_file, &cipher_preference_node,
-                                           &neverbleed_node, &http2_origin_frame_node, &client_ca_file) != 0)
+                                           &neverbleed_node, &http2_origin_frame_node, &client_ca_file, &esni_keys, &esni_rr) != 0)
             return -1;
         if (identity_node != NULL) {
             if (certificate_file != NULL || key_file != NULL) {
@@ -1258,6 +1388,32 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
     } else if (listener->quic.ctx != NULL) {
         h2o_configurator_errprintf(cmd, *ssl_node, "QUIC support requires TLS 1.3 using picotls");
         goto Error;
+    }
+
+    if (esni_keys != NULL) {
+        size_t i = 0;
+
+        listener->esni.key_exchanges = on_config_esni_keys(cmd, *esni_keys);
+        if (listener->esni.key_exchanges == NULL)
+            goto Error;
+
+        while (1) {
+            ptls_key_exchange_context_t *p = (ptls_key_exchange_context_t *)listener->esni.key_exchanges[i++];
+            if (p == NULL)
+                break;
+            listener->esni.key_exchanges_len++;
+        }
+
+        if(listener->esni.key_exchanges_len == 0)
+            goto Error;
+    }
+    if (esni_rr != NULL) {
+        ptls_iovec_t rr = on_config_esni_rr(cmd, *esni_rr);
+        if (rr.base == NULL)
+            goto Error;
+
+        listener->esni.rr = rr.base;
+        listener->esni.rr_len = rr.len;
     }
 
     /* create a new entry in the SSL context list */
@@ -3974,6 +4130,19 @@ int main(int argc, char **argv)
             char errbuf[256];
             h2o_fatal("pthread_join: %s", h2o_strerror_r(errno, errbuf, sizeof(errbuf)));
         }
+    }
+
+    for (size_t i = 0; i != conf.num_listeners; ++i) {
+        struct listener_config_t *listener_config = conf.listeners[i];
+        for (size_t j = 0; j != conf.listeners[i]->ssl.size; ++j) {
+            ptls_context_t *ptls = conf.listeners[i]->ssl.entries[j]->identities[0].ptls;
+            if (ptls != NULL && ptls->esni != NULL) {
+                ptls_esni_dispose_context(*ptls->esni);
+                ptls->esni = NULL;
+            }
+        }
+        free(listener_config->esni.key_exchanges);
+        free(listener_config->esni.rr);
     }
 
     /* remove the pid file */

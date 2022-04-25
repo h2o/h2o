@@ -1397,6 +1397,12 @@ void ptls_esni_dispose_context(ptls_esni_context_t *esni);
  */
 ptls_esni_secret_t *ptls_get_esni_secret(ptls_t *ctx);
 /**
+ * Resolve and decode the ESNI DNS record for server_name
+ *
+ * Caller to release returned value
+ */
+ptls_iovec_t ptls_resolve_esni_keys(ptls_iovec_t server_name);
+/**
  *
  */
 char *ptls_hexdump(char *dst, const void *src, size_t len);
