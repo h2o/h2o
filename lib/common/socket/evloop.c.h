@@ -61,6 +61,7 @@ struct st_h2o_evloop_socket_t {
 };
 
 static void link_to_pending(struct st_h2o_evloop_socket_t *sock);
+static void link_to_statechanged(struct st_h2o_evloop_socket_t *sock);
 static void write_pending(struct st_h2o_evloop_socket_t *sock);
 static h2o_evloop_t *create_evloop(size_t sz);
 static void update_now(h2o_evloop_t *loop);
@@ -70,7 +71,7 @@ static int32_t adjust_max_wait(h2o_evloop_t *loop, int32_t max_wait);
 static int evloop_do_proceed(h2o_evloop_t *loop, int32_t max_wait);
 static void evloop_do_dispose(h2o_evloop_t *loop);
 static void evloop_do_on_socket_create(struct st_h2o_evloop_socket_t *sock);
-static void evloop_do_on_socket_close(struct st_h2o_evloop_socket_t *sock);
+static int evloop_do_on_socket_close(struct st_h2o_evloop_socket_t *sock);
 static void evloop_do_on_socket_export(struct st_h2o_evloop_socket_t *sock);
 
 #if H2O_USE_POLL || H2O_USE_EPOLL || H2O_USE_KQUEUE
@@ -108,7 +109,7 @@ void link_to_pending(struct st_h2o_evloop_socket_t *sock)
     }
 }
 
-static void link_to_statechanged(struct st_h2o_evloop_socket_t *sock)
+void link_to_statechanged(struct st_h2o_evloop_socket_t *sock)
 {
     if (sock->_next_statechanged == sock) {
         sock->_next_statechanged = NULL;
@@ -222,7 +223,7 @@ static size_t write_core(struct st_h2o_evloop_socket_t *sock, h2o_iovec_t **bufs
                 dispose_ssl_output_buffer(sock->super.ssl);
                 return SIZE_MAX;
             }
-            if (sendmsg_flags != 0) {
+            if (sendmsg_flags != 0 && (encbufcnt == 0 || enc_written > 0)) {
                 zerocopy_buffers_push(sock->super._zerocopy, sock->super.ssl->output.buf.base);
                 sock->super.ssl->output.zerocopy_owned = 1;
             }
@@ -338,13 +339,20 @@ void do_dispose_socket(h2o_socket_t *_sock)
 {
     struct st_h2o_evloop_socket_t *sock = (struct st_h2o_evloop_socket_t *)_sock;
 
-    evloop_do_on_socket_close(sock);
     dispose_write_buf(&sock->super);
+
+    sock->_flags = H2O_SOCKET_FLAG_IS_DISPOSED;
+
+    /* Give backends chance to do the necessary cleanup, as well as giving them chance to switch to their own disposal method; e.g.,
+     * connect(AF_UNSPEC) with delays to reclaim all zero copy buffers. */
+    if (evloop_do_on_socket_close(sock))
+        return;
+
+    /* immediate close */
     if (sock->fd != -1) {
         close(sock->fd);
         sock->fd = -1;
     }
-    sock->_flags = H2O_SOCKET_FLAG_IS_DISPOSED;
     link_to_statechanged(sock);
 }
 
