@@ -48,7 +48,7 @@ static void unregister_socket(struct st_h2o_evloop_socket_t *sock, const char *f
 
 static int handle_zerocopy_notification(struct st_h2o_evloop_socket_t *sock)
 {
-#if H2O_USE_ZEROCOPY
+#if H2O_USE_MSG_ZEROCOPY
     int made_progress = 0;
 
     /* Read the completion events and release buffers. `recvmmsg` with two entries is used as a cheap way of making sure that all

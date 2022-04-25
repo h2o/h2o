@@ -85,14 +85,14 @@ static void evloop_do_on_socket_export(struct st_h2o_evloop_socket_t *sock);
 #elif defined(__linux)
 #define H2O_USE_EPOLL 1
 #if defined(SO_ZEROCOPY) && defined(SO_EE_ORIGIN_ZEROCOPY)
-#define H2O_USE_ZEROCOPY 1
+#define H2O_USE_MSG_ZEROCOPY 1
 #endif
 #else
 #define H2O_USE_POLL 1
 #endif
 #endif
-#if !defined(H2O_USE_ZEROCOPY)
-#define H2O_USE_ZEROCOPY 0
+#if !defined(H2O_USE_MSG_ZEROCOPY)
+#define H2O_USE_MSG_ZEROCOPY 0
 #endif
 
 #if H2O_USE_POLL
@@ -217,7 +217,7 @@ static size_t write_core(struct st_h2o_evloop_socket_t *sock, h2o_iovec_t **bufs
             h2o_iovec_t *encbufs = &encbuf;
             size_t encbufcnt = 1, enc_written;
             int sendmsg_flags = 0;
-#if H2O_USE_ZEROCOPY
+#if H2O_USE_MSG_ZEROCOPY
             /* Use zero copy if amount of data to be written is no less than 16KB, and if the memory can be returned to
              * `h2o_socket_ssl_buffer_allocator`. Latter is a short-cut. It is only under exceptional conditions (e.g., TLS stack
              * adding a post-handshake message) that we'd see the encrypted buffer grow to a size that cannot be returned to the
