@@ -1076,7 +1076,7 @@ int h2o_socket_use_zero_copy(h2o_socket_t *sock)
 {
     assert(sock->_zerocopy == NULL);
 
-#if defined(__linux__) && !H2O_USE_LIBUV && H2O_USE_EPOLL
+#if H2O_USE_ZEROCOPY
     unsigned one = 1;
     if (setsockopt(h2o_socket_get_fd(sock), SOL_SOCKET, SO_ZEROCOPY, &one, sizeof(one)) == 0) {
         sock->_zerocopy = h2o_mem_alloc(sizeof(*sock->_zerocopy));

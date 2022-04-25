@@ -23,7 +23,6 @@
 #include <limits.h>
 #include <stdio.h>
 #include <sys/epoll.h>
-#include <linux/errqueue.h>
 
 #if 0
 #define DEBUG_LOG(...) h2o_error_printf(__VA_ARGS__)
@@ -49,6 +48,7 @@ static void unregister_socket(struct st_h2o_evloop_socket_t *sock, const char *f
 
 static int handle_zerocopy_notification(struct st_h2o_evloop_socket_t *sock)
 {
+#if H2O_USE_ZEROCOPY
     int made_progress = 0;
 
     /* Read the completion events and release buffers. `recvmmsg` with two entries is used as a cheap way of making sure that all
@@ -95,6 +95,9 @@ static int handle_zerocopy_notification(struct st_h2o_evloop_socket_t *sock)
         link_to_statechanged(sock);
 
     return made_progress;
+#else
+    return 0;
+#endif
 }
 
 static int update_status(struct st_h2o_evloop_epoll_t *loop)
