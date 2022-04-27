@@ -35,13 +35,31 @@ struct st_h2o_evloop_epoll_t {
     int ep;
 };
 
-static int set_epoll_mode(struct st_h2o_evloop_socket_t *sock, int op, uint32_t events)
+static int change_epoll_mode(struct st_h2o_evloop_socket_t *sock, uint32_t events)
 {
     struct st_h2o_evloop_epoll_t *loop = (void *)sock->loop;
     struct epoll_event ev = {.events = events, .data = {.ptr = sock}};
+    int op, ret;
+
+    if ((sock->_flags & H2O_SOCKET_FLAG__EPOLL_IS_REGISTERED) == 0) {
+        op = EPOLL_CTL_ADD;
+        sock->_flags |= H2O_SOCKET_FLAG__EPOLL_IS_REGISTERED;
+    } else {
+        op = EPOLL_CTL_MOD;
+    }
+    while ((ret = epoll_ctl(loop->ep, op, sock->fd, &ev)) != 0 && errno == EINTR)
+        ;
+    return ret == 0;
+}
+
+static int delete_from_epoll_on_close(struct st_h2o_evloop_socket_t *sock)
+{
+    struct st_h2o_evloop_epoll_t *loop = (void *)sock->loop;
     int ret;
 
-    while ((ret = epoll_ctl(loop->ep, op, sock->fd, &ev)) != 0 && errno == EINTR)
+    if ((sock->_flags & H2O_SOCKET_FLAG__EPOLL_IS_REGISTERED) == 0)
+        return 1;
+    while ((ret = epoll_ctl(loop->ep, EPOLL_CTL_DEL, sock->fd, NULL)) != 0 && errno == EINTR)
         ;
     return ret == 0;
 }
@@ -91,7 +109,7 @@ static int handle_zerocopy_notification(struct st_h2o_evloop_socket_t *sock)
     }
 
     /* if the socket has been shut down and zerocopy buffer has become empty, link the socket so that it would be destroyed */
-    if (made_progress && sock->_flags == H2O_SOCKET_FLAG_IS_DISPOSED && zerocopy_buffers_is_empty(sock->super._zerocopy))
+    if (made_progress && (sock->_flags & H2O_SOCKET_FLAG_IS_DISPOSED) != 0 && zerocopy_buffers_is_empty(sock->super._zerocopy))
         link_to_statechanged(sock);
 
     return made_progress;
@@ -116,7 +134,7 @@ static int update_status(struct st_h2o_evloop_epoll_t *loop)
                     free(sock->super._zerocopy);
                 }
                 if (sock->fd != -1) {
-                    if (!set_epoll_mode(sock, EPOLL_CTL_DEL, 0))
+                    if (!delete_from_epoll_on_close(sock))
                         h2o_error_printf("update_status: epoll(DEL) returned error %d (fd=%d)\n", errno, sock->fd);
                     close(sock->fd);
                 }
@@ -150,7 +168,7 @@ static int update_status(struct st_h2o_evloop_epoll_t *loop)
                 }
             }
             if (changed) {
-                if (!set_epoll_mode(sock, EPOLL_CTL_MOD, events))
+                if (!change_epoll_mode(sock, events))
                     return -1;
             }
         }
@@ -190,7 +208,7 @@ int evloop_do_proceed(h2o_evloop_t *_loop, int32_t max_wait)
          * socket and at that point detect that the socket has become unusable. */
         if ((events[i].events & EPOLLHUP) != 0 &&
             (sock->_flags & (H2O_SOCKET_FLAG_IS_POLLED_FOR_READ | H2O_SOCKET_FLAG_IS_POLLED_FOR_WRITE)) == 0) {
-            if (!set_epoll_mode(sock, EPOLL_CTL_MOD, EPOLLET))
+            if (!change_epoll_mode(sock, EPOLLET))
                 h2o_fatal("do_proceed:epoll_ctl(MOD) failed for fd %d,errno=%d\n", sock->fd, errno);
             notified = 1;
         }
@@ -218,7 +236,7 @@ int evloop_do_proceed(h2o_evloop_t *_loop, int32_t max_wait)
         /* Report events that could be notified, as that would help us debug issues. This mechanism is disabled once the socket is
          * closed, as there will be misfires due to the nature of edge triggers (race between us draining between events queued up).
          */
-        if (!notified && sock->_flags != H2O_SOCKET_FLAG_IS_DISPOSED) {
+        if (!notified && (sock->_flags & H2O_SOCKET_FLAG_IS_DISPOSED) == 0) {
             static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
             static time_t last_reported = 0;
             time_t now = time(NULL);
@@ -237,8 +255,6 @@ int evloop_do_proceed(h2o_evloop_t *_loop, int32_t max_wait)
 
 static void evloop_do_on_socket_create(struct st_h2o_evloop_socket_t *sock)
 {
-    if (!set_epoll_mode(sock, EPOLL_CTL_ADD, 0))
-        h2o_fatal("socket_create:epoll_ctl(ADD) failed for fd %d, errno=%d\n", sock->fd, errno);
 }
 
 static int evloop_do_on_socket_close(struct st_h2o_evloop_socket_t *sock)
@@ -257,7 +273,7 @@ static int evloop_do_on_socket_close(struct st_h2o_evloop_socket_t *sock)
             ;
         if (ret != 0 && errno != ENOTCONN)
             h2o_error_printf("socket_close: connect(AF_UNSPEC) failed; errno=%d, fd=%d\n", errno, sock->fd);
-        if (!set_epoll_mode(sock, EPOLL_CTL_MOD, EPOLLET))
+        if (!change_epoll_mode(sock, EPOLLET))
             h2o_fatal("socket_close: epoll_ctl(MOD) failed; errno=%d, fd=%d\n", errno, sock->fd);
         /* drain error notifications after registering the edge trigger, otherwise there's chance of stall */
         handle_zerocopy_notification(sock);
@@ -265,7 +281,7 @@ static int evloop_do_on_socket_close(struct st_h2o_evloop_socket_t *sock)
     }
 
     /* Unregister from epoll. */
-    if (!set_epoll_mode(sock, EPOLL_CTL_DEL, 0))
+    if (!delete_from_epoll_on_close(sock))
         h2o_error_printf("socket_close: epoll(DEL) returned error %d (fd=%d)\n", errno, sock->fd);
 
     return 0;
@@ -273,7 +289,7 @@ static int evloop_do_on_socket_close(struct st_h2o_evloop_socket_t *sock)
 
 static void evloop_do_on_socket_export(struct st_h2o_evloop_socket_t *sock)
 {
-    if (!set_epoll_mode(sock, EPOLL_CTL_DEL, 0))
+    if (!delete_from_epoll_on_close(sock))
         h2o_error_printf("socket_export: epoll(DEL) returned error %d (fd=%d)\n", errno, sock->fd);
 }
 

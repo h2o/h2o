@@ -350,7 +350,7 @@ void do_dispose_socket(h2o_socket_t *_sock)
 
     dispose_write_buf(&sock->super);
 
-    sock->_flags = H2O_SOCKET_FLAG_IS_DISPOSED;
+    sock->_flags = H2O_SOCKET_FLAG_IS_DISPOSED | (sock->_flags & H2O_SOCKET_FLAG__EPOLL_IS_REGISTERED);
 
     /* Give backends chance to do the necessary cleanup, as well as giving them chance to switch to their own disposal method; e.g.,
      * connect(AF_UNSPEC) with delays to reclaim all zero copy buffers. */
@@ -576,7 +576,7 @@ int do_export(h2o_socket_t *_sock, h2o_socket_export_t *info)
 
     assert((sock->_flags & H2O_SOCKET_FLAG_IS_DISPOSED) == 0);
     evloop_do_on_socket_export(sock);
-    sock->_flags = H2O_SOCKET_FLAG_IS_DISPOSED;
+    sock->_flags = H2O_SOCKET_FLAG_IS_DISPOSED | (sock->_flags & H2O_SOCKET_FLAG__EPOLL_IS_REGISTERED);
 
     info->fd = sock->fd;
     sock->fd = -1;
