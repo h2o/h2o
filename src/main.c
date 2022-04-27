@@ -461,6 +461,12 @@ struct st_on_client_hello_ptls_t {
 
 static int on_client_hello_ptls(ptls_on_client_hello_t *_self, ptls_t *tls, ptls_on_client_hello_parameters_t *params)
 {
+    /* `on_client_hello_ptls` can be called even when OpenSSL is going to be used, due to client supporting only TLS/1.2 (see
+     * https://github.com/h2o/picotls/pull/311). If that is the case, there is nothing to do here, as everything will be done in
+     * `on_sni_callback`. */
+    if (params->incompatible_version)
+        return 0;
+
     struct st_on_client_hello_ptls_t *self = (struct st_on_client_hello_ptls_t *)_self;
     void *conn = *ptls_get_data_ptr(tls);
     struct listener_ssl_config_t *ssl_config;
