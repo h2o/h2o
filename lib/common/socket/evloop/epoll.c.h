@@ -225,7 +225,8 @@ int evloop_do_proceed(h2o_evloop_t *_loop, int32_t max_wait)
             pthread_mutex_lock(&lock);
             if (last_reported + 60 < now) {
                 last_reported = now;
-                h2o_error_printf("ignoring epoll event (fd:%d,event:%x)\n", sock->fd, (int)events[i].events);
+                h2o_error_printf("ignoring epoll event (fd:%d,event:0x%x,flags:0x%x)\n", sock->fd, (int)events[i].events,
+                                 sock->_flags);
             }
             pthread_mutex_unlock(&lock);
         }
