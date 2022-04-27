@@ -205,8 +205,7 @@ struct listener_config_t {
      * SO_SNDBUF, SO_RCVBUF values to be set (or 0 to use default)
      */
     unsigned sndbuf, rcvbuf;
-    unsigned proxy_protocol : 1;
-    unsigned zerocopy : 1;
+    int proxy_protocol;
     h2o_iovec_t tcp_congestion_controller; /* default CC for this address */
 };
 
@@ -1460,7 +1459,7 @@ static struct listener_config_t *find_listener(struct sockaddr *addr, socklen_t 
 }
 
 static struct listener_config_t *add_listener(int fd, struct sockaddr *addr, socklen_t addrlen, int is_global, int proxy_protocol,
-                                              unsigned sndbuf, unsigned rcvbuf, int zerocopy)
+                                              unsigned sndbuf, unsigned rcvbuf)
 {
     struct listener_config_t *listener = h2o_mem_alloc(sizeof(*listener));
 
@@ -1482,7 +1481,6 @@ static struct listener_config_t *add_listener(int fd, struct sockaddr *addr, soc
     listener->tcp_congestion_controller = h2o_iovec_init(NULL, 0);
     listener->sndbuf = sndbuf;
     listener->rcvbuf = rcvbuf;
-    listener->zerocopy = zerocopy;
 
     conf.listeners = h2o_mem_realloc(conf.listeners, sizeof(*conf.listeners) * (conf.num_listeners + 1));
     conf.listeners[conf.num_listeners++] = listener;
@@ -1810,7 +1808,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
     const char *hostname = NULL, *servname, *type = "tcp";
     yoml_t **ssl_node = NULL, **owner_node = NULL, **permission_node = NULL, **quic_node = NULL, **cc_node = NULL,
            **initcwnd_node = NULL, **group_node = NULL;
-    int proxy_protocol = 0, zerocopy = 0;
+    int proxy_protocol = 0;
     unsigned stream_sndbuf = 0, stream_rcvbuf = 0;
 
     /* fetch servname (and hostname) */
@@ -1819,13 +1817,12 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
         servname = node->data.scalar;
         break;
     case YOML_TYPE_MAPPING: {
-        yoml_t **port_node, **host_node, **type_node, **proxy_protocol_node, **sndbuf_node, **rcvbuf_node, **zerocopy_node;
-        if (h2o_configurator_parse_mapping(cmd, node, "port:s",
-                                           "host:s,type:s,owner:s,group:s,permission:*,ssl:m,proxy-protocol:*,quic:m,cc:s,initcwnd:"
-                                           "s,sndbuf:s,rcvbuf:s,zerocopy:s",
-                                           &port_node, &host_node, &type_node, &owner_node, &group_node, &permission_node,
-                                           &ssl_node, &proxy_protocol_node, &quic_node, &cc_node, &initcwnd_node, &sndbuf_node,
-                                           &rcvbuf_node, &zerocopy_node) != 0)
+        yoml_t **port_node, **host_node, **type_node, **proxy_protocol_node, **sndbuf_node, **rcvbuf_node;
+        if (h2o_configurator_parse_mapping(
+                cmd, node, "port:s",
+                "host:s,type:s,owner:s,group:s,permission:*,ssl:m,proxy-protocol:*,quic:m,cc:s,initcwnd:s,sndbuf:s,rcvbuf:s",
+                &port_node, &host_node, &type_node, &owner_node, &group_node, &permission_node, &ssl_node, &proxy_protocol_node,
+                &quic_node, &cc_node, &initcwnd_node, &sndbuf_node, &rcvbuf_node) != 0)
             return -1;
         servname = (*port_node)->data.scalar;
         if (host_node != NULL)
@@ -1842,14 +1839,6 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
             return -1;
         if (rcvbuf_node != NULL && h2o_configurator_scanf(cmd, *rcvbuf_node, "%u", &stream_rcvbuf) != 0)
             return -1;
-        if (zerocopy_node != NULL) {
-            if ((zerocopy = h2o_configurator_get_one_of(cmd, *zerocopy_node, "OFF,ON")) == -1)
-                return -1;
-            if (zerocopy && !(strcmp(type, "tcp") == 0 && ssl_node != NULL)) {
-                zerocopy = 0;
-                h2o_configurator_errprintf(cmd, *zerocopy_node, "[warning] zero copy is only available for TCP socket using SSL");
-            }
-        }
     } break;
     default:
         h2o_configurator_errprintf(cmd, node, "value must be a string or a mapping (with keys: `port` and optionally `host`)");
@@ -1896,7 +1885,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                 break;
             }
             listener = add_listener(fd, (struct sockaddr *)&sa, sizeof(sa), ctx->hostconf == NULL, proxy_protocol, stream_sndbuf,
-                                    stream_rcvbuf, 0);
+                                    stream_rcvbuf);
             listener_is_new = 1;
         } else if (listener->proxy_protocol != proxy_protocol) {
             goto ProxyConflict;
@@ -1945,7 +1934,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                     break;
                 }
                 listener = add_listener(fd, ai->ai_addr, ai->ai_addrlen, ctx->hostconf == NULL, proxy_protocol, stream_sndbuf,
-                                        stream_rcvbuf, zerocopy);
+                                        stream_rcvbuf);
                 if (cc_node != NULL)
                     listener->tcp_congestion_controller = h2o_strdup(NULL, (*cc_node)->data.scalar, SIZE_MAX);
                 listener_is_new = 1;
@@ -2004,7 +1993,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                 *quic = quicly_spec_context;
                 quic->cid_encryptor = &quic_cid_encryptor;
                 quic->generate_resumption_token = &quic_resumption_token_generator;
-                listener = add_listener(fd, ai->ai_addr, ai->ai_addrlen, ctx->hostconf == NULL, 0, 0, 0, 0);
+                listener = add_listener(fd, ai->ai_addr, ai->ai_addrlen, ctx->hostconf == NULL, 0, 0, 0);
                 listener->quic.ctx = quic;
                 if (quic_node != NULL) {
                     yoml_t **retry_node, **sndbuf, **rcvbuf, **amp_limit, **qpack_encoder_table_capacity, **max_streams_bidi,
@@ -2928,9 +2917,6 @@ static void on_accept(h2o_socket_t *listener, const char *err)
         if (listener_config->rcvbuf != 0)
             setsockopt(h2o_socket_get_fd(sock), SOL_SOCKET, SO_RCVBUF, &listener_config->rcvbuf, sizeof(listener_config->rcvbuf));
         set_tcp_congestion_controller(sock, listener_config->tcp_congestion_controller);
-
-        if (listener_config->zerocopy)
-            h2o_socket_use_zero_copy(sock);
 
         h2o_accept(&ctx->accept_ctx, sock);
 
