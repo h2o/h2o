@@ -189,7 +189,7 @@ int evloop_do_proceed(h2o_evloop_t *_loop, int32_t max_wait)
          * otherwise epoll_wait() would continue raising the HUP event. The application will eventually try to read or write to the
          * socket and at that point detect that the socket has become unusable. */
         if ((events[i].events & EPOLLHUP) != 0 &&
-            (sock->_flags & (H2O_SOCKET_FLAG_IS_POLLED_FOR_READ | H2O_SOCKET_FLAG_IS_POLLED_FOR_WRITE)) != 0) {
+            (sock->_flags & (H2O_SOCKET_FLAG_IS_POLLED_FOR_READ | H2O_SOCKET_FLAG_IS_POLLED_FOR_WRITE)) == 0) {
             if (!set_epoll_mode(sock, EPOLL_CTL_MOD, EPOLLET))
                 h2o_fatal("do_proceed:epoll_ctl(MOD) failed for fd %d,errno=%d\n", sock->fd, errno);
             notified = 1;
