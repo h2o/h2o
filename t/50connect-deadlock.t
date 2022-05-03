@@ -175,8 +175,8 @@ sub write_until_blocked {
             $bytes_written += $ret;
         } else {
             if ($! == EAGAIN || $! == EWOULDBLOCK) {
-                # wait for max 0.5 seconds
-                last if !IO::Select->new([ $sock ])->can_write(1);
+                # wait for max 0.5 seconds (see read_until_blocked for rationale)
+                last if !IO::Select->new([ $sock ])->can_write(0.5);
             } elsif ($! == EINTR) {
                 # retry
             } else {
@@ -209,9 +209,14 @@ sub read_until_blocked {
             }
         } else {
             if ($! == EAGAIN || $! == EWOULDBLOCK) {
-                # wait for max. 0.5 seconds for additional data
+                # Wait for max. 2 seconds for additional data. Due to `h2o-httpclient` using blocked write to emit what is being
+                # received, this timeout should be more than 2x greater than that of `write_until_blocked`. That is because the
+                # cause of write stall is the blocked write, which could keep the QUIC stack within `h2o-httpclient` in an
+                # unresponsive state for the timeout specified in `write_until_blocked` (0.5 seconds). That would lead to h2o
+                # sending multiple PTO probes doing an exponential back-off by 2x for 0.5 seconds. Hence 1 second is the minimum
+                # here. We use 2 seconds to be on the safe side (TODO: use non-blocking write in `h2o-httpclient`).
                 $! = 0;
-                if (!IO::Select->new([ $sock ])->can_read(1)) {
+                if (!IO::Select->new([ $sock ])->can_read(2)) {
                     last unless $!; # timeout
                 }
             } elsif ($! == EINTR) {

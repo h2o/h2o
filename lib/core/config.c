@@ -25,6 +25,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/types.h>
 #include <netinet/udp.h>
 #include "h2o.h"
 #include "h2o/configurator.h"
@@ -177,6 +178,7 @@ void h2o_config_init(h2o_globalconf_t *config)
     config->server_name = h2o_iovec_init(H2O_STRLIT("h2o/" H2O_VERSION));
     config->max_request_entity_size = H2O_DEFAULT_MAX_REQUEST_ENTITY_SIZE;
     config->max_delegations = H2O_DEFAULT_MAX_DELEGATIONS;
+    config->max_reprocesses = H2O_DEFAULT_MAX_REPROCESSES;
     config->handshake_timeout = H2O_DEFAULT_HANDSHAKE_TIMEOUT;
     config->http1.req_timeout = H2O_DEFAULT_HTTP1_REQ_TIMEOUT;
     config->http1.req_io_timeout = H2O_DEFAULT_HTTP1_REQ_IO_TIMEOUT;

@@ -134,14 +134,13 @@ h2o_hostconf_t *h2o_req_setup(h2o_req_t *req)
 
     req->processed_at = h2o_get_timestamp(ctx, &req->pool);
 
-    /* find the host context */
-    if (req->input.authority.base != NULL) {
+    /* find the host context (or use the default if authority is missing or is of zero-length) */
+    if (req->input.authority.len != 0) {
         if (req->conn->hosts[1] == NULL ||
             (hostconf = find_hostconf(req->conn->hosts, req->input.authority, req->input.scheme->default_port,
                                       &req->authority_wildcard_match)) == NULL)
             hostconf = find_default_hostconf(req->conn->hosts);
     } else {
-        /* set the authority name to the default one */
         hostconf = find_default_hostconf(req->conn->hosts);
         req->input.authority = hostconf->authority.hostport;
     }
@@ -269,7 +268,7 @@ void h2o_init_request(h2o_req_t *req, h2o_conn_t *conn, h2o_req_t *src)
     req->preferred_chunk_size = SIZE_MAX;
     req->content_length = SIZE_MAX;
     req->remaining_delegations = conn == NULL ? 0 : conn->ctx->globalconf->max_delegations;
-    req->remaining_reprocesses = 5;
+    req->remaining_reprocesses = conn == NULL ? 0 : conn->ctx->globalconf->max_reprocesses;
     req->error_log_delegate.cb = on_default_error_callback;
     req->error_log_delegate.data = req;
 

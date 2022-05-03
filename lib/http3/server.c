@@ -228,6 +228,10 @@ struct st_h2o_http3_server_stream_t {
      */
     uint8_t req_disposed : 1;
     /**
+     * indicates if the request is in streaming mode
+     */
+    uint8_t req_streaming : 1;
+    /**
      * buffer to hold the request body (or a chunk of, if in streaming mode), or CONNECT payload
      */
     h2o_buffer_t *req_body;
@@ -402,8 +406,9 @@ static void pre_dispose_request(struct st_h2o_http3_server_stream_t *stream)
         h2o_buffer_dispose(&stream->req_body);
 
     /* clean up request streaming */
-    if (stream->req.write_req.cb != NULL && !stream->req.is_tunnel_req) {
+    if (stream->req_streaming && !stream->req.is_tunnel_req) {
         assert(conn->num_streams_req_streaming != 0);
+        stream->req_streaming = 0;
         --conn->num_streams_req_streaming;
         check_run_blocked(conn);
     }
@@ -965,6 +970,7 @@ static void proceed_request_streaming(h2o_req_t *_req, const char *errstr)
         stream->req.write_req.cb = NULL;
         stream->req.write_req.ctx = NULL;
         stream->req.proceed_req = NULL;
+        stream->req_streaming = 0;
         if (!stream->req.is_tunnel_req)
             --conn->num_streams_req_streaming;
         check_run_blocked(conn);
@@ -1007,6 +1013,7 @@ static void run_delayed(h2o_timer_t *timer)
             quicly_stream_set_receive_window(stream->quic, conn->super.ctx->globalconf->http3.active_stream_window_size);
             if (h2o_req_can_stream_request(&stream->req)) {
                 /* use streaming mode */
+                stream->req_streaming = 1;
                 ++conn->num_streams_req_streaming;
                 stream->req.proceed_req = proceed_request_streaming;
                 set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_SEND_HEADERS, 0);
@@ -1133,6 +1140,8 @@ int handle_input_expect_data(struct st_h2o_http3_server_stream_t *stream, const 
 
     /* got a DATA frame */
     if (frame.length != 0) {
+        if (h2o_timeval_is_null(&stream->req.timestamps.request_body_begin_at))
+            stream->req.timestamps.request_body_begin_at = h2o_gettimeofday(get_conn(stream)->super.ctx->loop);
         stream->recvbuf.handle_input = handle_input_expect_data_payload;
         stream->recvbuf.bytes_left_in_data_frame = frame.length;
     }
@@ -1218,6 +1227,7 @@ static int handle_input_expect_headers(struct st_h2o_http3_server_stream_t *stre
         }
         return 0;
     }
+    stream->req.timestamps.request_begin_at = h2o_gettimeofday(conn->super.ctx->loop);
     stream->recvbuf.handle_input = handle_input_expect_data;
 
     /* parse the headers, and ack */
@@ -1331,7 +1341,7 @@ static void shutdown_by_generator(struct st_h2o_http3_server_stream_t *stream)
     if (stream->sendbuf.vecs.size == 0) {
         if (quicly_stream_has_receive_side(0, stream->quic->stream_id))
             quicly_request_stop(stream->quic, H2O_HTTP3_ERROR_EARLY_RESPONSE);
-        set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_CLOSE_WAIT, 0);
+        set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_CLOSE_WAIT, 1);
     }
 }
 
@@ -1377,6 +1387,7 @@ static void do_send(h2o_ostream_t *_ostr, h2o_req_t *_req, h2o_sendvec_t *bufs, 
 
     switch (stream->state) {
     case H2O_HTTP3_SERVER_STREAM_STATE_SEND_HEADERS:
+        stream->req.timestamps.response_start_at = h2o_gettimeofday(get_conn(stream)->super.ctx->loop);
         write_response(stream, finalize_do_send_setup_udp_tunnel(stream));
         h2o_probe_log_response(&stream->req, stream->quic->stream_id);
         set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_SEND_BODY, 1);
@@ -1541,6 +1552,7 @@ static int stream_open_cb(quicly_stream_open_t *self, quicly_stream_t *qs)
     stream->proceed_while_sending = 0;
     stream->received_priority_update = 0;
     stream->req_disposed = 0;
+    stream->req_streaming = 0;
     stream->req_body = NULL;
 
     h2o_init_request(&stream->req, &conn->super, NULL);
@@ -1645,6 +1657,9 @@ static int scheduler_do_send(quicly_stream_scheduler_t *sched, quicly_conn_t *qc
             if ((ret = quicly_send_stream(stream->quic, s)) != 0)
                 goto Exit;
             ++stream->scheduler.call_cnt;
+            if (stream->quic->sendstate.size_inflight == stream->quic->sendstate.final_size &&
+                h2o_timeval_is_null(&stream->req.timestamps.response_end_at))
+                stream->req.timestamps.response_end_at = h2o_gettimeofday(stream->req.conn->ctx->loop);
             /* 4. invoke h2o_proceed_request synchronously, so that we could obtain additional data for the current (i.e. highest)
              *    stream. */
             if (stream->proceed_while_sending) {

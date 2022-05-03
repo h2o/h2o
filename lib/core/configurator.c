@@ -23,6 +23,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <inttypes.h>
+#include <sys/types.h>
 #include <netinet/udp.h>
 #include "h2o.h"
 #include "h2o/configurator.h"
@@ -413,6 +414,11 @@ static int on_config_limit_request_body(h2o_configurator_command_t *cmd, h2o_con
 static int on_config_max_delegations(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     return h2o_configurator_scanf(cmd, node, "%u", &ctx->globalconf->max_delegations);
+}
+
+static int on_config_max_reprocesses(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    return h2o_configurator_scanf(cmd, node, "%u", &ctx->globalconf->max_reprocesses);
 }
 
 static int on_config_handshake_timeout(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
@@ -1036,6 +1042,9 @@ void h2o_configurator__init_core(h2o_globalconf_t *conf)
         h2o_configurator_define_command(&c->super, "max-delegations",
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_max_delegations);
+        h2o_configurator_define_command(&c->super, "max-reprocesses",
+                                        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                        on_config_max_reprocesses);
         h2o_configurator_define_command(&c->super, "handshake-timeout",
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_handshake_timeout);

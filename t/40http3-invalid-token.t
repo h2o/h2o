@@ -9,8 +9,10 @@ my $client_prog = bindir() . "/h2o-httpclient";
 plan skip_all => "$client_prog not found"
     unless -e $client_prog;
 
-my $port = empty_port();
-my $quic_port = empty_port();
+my $quic_port = empty_port({
+    host  => "127.0.0.1",
+    proto => "udp",
+});
 
 my $server = spawn_h2o(<< "EOT");
 listen:

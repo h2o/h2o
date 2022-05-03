@@ -73,14 +73,18 @@ static const char *hostinfo_error_from_gai_error(int ret)
     switch (ret) {
     case EAI_NONAME:
         return h2o_hostinfo_error_nxdomain;
+#ifdef EAI_NODATA /* obsoleted in RFC 3493 and not supported by FreeBSD */
     case EAI_NODATA:
         return h2o_hostinfo_error_nodata;
+#endif
     case EAI_FAIL:
         return h2o_hostinfo_error_refused;
     case EAI_AGAIN:
         return h2o_hostinfo_error_servfail;
+#ifdef EAI_ADDRFAMILY
     case EAI_ADDRFAMILY:
         return h2o_hostinfo_error_gai_addrfamily;
+#endif
     case EAI_BADFLAGS:
         return h2o_hostinfo_error_gai_badflags;
     case EAI_FAMILY:
