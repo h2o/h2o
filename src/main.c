@@ -2892,9 +2892,10 @@ static void on_socketclose(void *data)
 
 static void close_idle_connections(h2o_context_t *ctx)
 {
-    int excess_connections = (num_connections(0) - conf.soft_connection_limit) / conf.thread_map.size;
+    int excess_connections = num_connections(0) - conf.soft_connection_limit;
     if (excess_connections > 0) {
-        h2o_context_close_idle_connections(ctx, excess_connections, conf.soft_connection_limit_min_age * 1000);
+        h2o_context_close_idle_connections(ctx, excess_connections / conf.thread_map.size,
+                                           conf.soft_connection_limit_min_age * 1000);
     }
 }
 static void on_accept(h2o_socket_t *listener, const char *err)
