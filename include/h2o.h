@@ -760,6 +760,13 @@ struct st_h2o_context_t {
     h2o_quic_stats_t quic_stats;
 
     /**
+     * connection stats
+     */
+    struct {
+        uint64_t idle_closed;
+    } connection_stats;
+
+    /**
      * pointer to per-module configs
      */
     void **_module_configs;

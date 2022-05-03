@@ -3401,20 +3401,6 @@ err:
 }
 #endif
 
-static void count_connections(size_t *n_actives, size_t *n_idles, size_t *n_shutdowns)
-{
-    size_t active = 0, idle = 0, shutdown = 0;
-    for (size_t i = 0; i < conf.thread_map.size; ++i) {
-        const h2o_context_t *ctx = &conf.threads[i].ctx;
-        active += ctx->_conns.num_conns.active;
-        idle += ctx->_conns.num_conns.idle;
-        shutdown += ctx->_conns.num_conns.shutdown;
-    }
-    *n_actives = active;
-    *n_idles = idle;
-    *n_shutdowns = shutdown;
-}
-
 static h2o_iovec_t on_extra_status(void *unused, h2o_globalconf_t *_conf, h2o_req_t *req)
 {
 #define BUFSIZE (16 * 1024)
@@ -3428,9 +3414,6 @@ static h2o_iovec_t on_extra_status(void *unused, h2o_globalconf_t *_conf, h2o_re
     if ((generation = getenv("SERVER_STARTER_GENERATION")) == NULL)
         generation = "null";
 
-    size_t n_actives, n_idles, n_shutdowns;
-    count_connections(&n_actives, &n_idles, &n_shutdowns);
-
     ret.base = h2o_mem_alloc_pool(&req->pool, char, BUFSIZE);
     ret.len = snprintf(ret.base, BUFSIZE,
                        ",\n"
@@ -3442,15 +3425,14 @@ static h2o_iovec_t on_extra_status(void *unused, h2o_globalconf_t *_conf, h2o_re
                        " \"generation\": %s,\n"
                        " \"connections\": %d,\n"
                        " \"max-connections\": %d,\n"
+                       " \"soft-connection-limit\": %d,\n"
+                       " \"soft-connection-limit.min-age\": %d,\n"
                        " \"listeners\": %zu,\n"
                        " \"worker-threads\": %zu,\n"
-                       " \"active-connections\": %zu,\n"
-                       " \"idle-connections\": %zu,\n"
-                       " \"shutdown-connections\": %zu,\n"
                        " \"num-sessions\": %lu",
                        OpenSSL_version(OPENSSL_VERSION), current_time, restart_time, (uint64_t)(now - conf.launch_time), generation,
-                       num_connections(0), conf.max_connections, conf.num_listeners, conf.thread_map.size, n_actives, n_idles,
-                       n_shutdowns, num_sessions(0));
+                       num_connections(0), conf.max_connections, conf.soft_connection_limit, conf.soft_connection_limit_min_age,
+                       conf.num_listeners, conf.thread_map.size, num_sessions(0));
     assert(ret.len < BUFSIZE);
 
 #if JEMALLOC_STATS == 1

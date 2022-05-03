@@ -60,7 +60,7 @@ my ($guard, $pid) = spawn_server(
 sub connections_count {
     my $resp = `curl --silent -o /dev/stderr http://127.0.0.1:$port/s/json 2>&1 > /dev/null`;
     my $jresp = decode_json("$resp");
-    return $jresp->{'connections'}, $jresp->{'active-connections'}, $jresp->{'idle-connections'}, $jresp->{'shutdown-connections'}
+    return $jresp->{'connections'}, $jresp->{'connections.active'}, $jresp->{'connections.idle'}, $jresp->{'connections.shutdown'}, $jresp->{'connections.idle-closed'}
 }
 
 sub is_connections_count {
@@ -69,12 +69,14 @@ sub is_connections_count {
     my $expected_active = $args{active};
     my $expected_idle = $args{idle};
     my $expected_shutdown = $args{shutdown};
+    my $expected_idle_closed = $args{idle_closed} || 0;
 
-    my ($total, $active, $idle, $shutdown) = connections_count();
+    my ($total, $active, $idle, $shutdown, $idle_closed) = connections_count();
     is $total, $expected_total, "assert total";
     is $active, $expected_active, "assert active";
     is $idle, $expected_idle, "assert idle";
     is $shutdown, $expected_shutdown, "assert shutdown";
+    is $idle_closed, $expected_idle_closed, "assert idle closed";
 }
 
 subtest 'test connection stats' => sub {
@@ -104,9 +106,9 @@ subtest 'test http1 soft-connection-limit' => sub {
         push @conns, $conn;
     }
 
-    sleep(3);
+    sleep(4);
 
-    is_connections_count(total => 5, active => 1, idle => 4, shutdown => 0);
+    is_connections_count(total => 5, active => 1, idle => 4, shutdown => 0, idle_closed => 6);
 };
 
 subtest 'test http2 soft-connection-limit' => sub {
@@ -131,9 +133,9 @@ subtest 'test http2 soft-connection-limit' => sub {
         push @conns, $conn;
     }
 
-    sleep(3);
+    sleep(4);
 
-    is_connections_count(total => 11, active => 1, idle => 4, shutdown => 6);
+    is_connections_count(total => 11, active => 1, idle => 4, shutdown => 6, idle_closed => 12);
 };
 
 subtest 'test http3 soft-connection-limit' => sub {
@@ -141,9 +143,9 @@ subtest 'test http3 soft-connection-limit' => sub {
         system("perl", "t/udp-generator.pl", "127.0.0.1", "$tls_port", "t/assets/quic-decryptable-initial.bin", "t/assets/quic-initial-w-corrupted-scid.bin") == 0 or die "Failed to launch udp-generator";
     }
 
-    sleep(3);
+    sleep(4);
 
-    is_connections_count(total => 11, active => 1, idle => 4, shutdown => 6);
+    is_connections_count(total => 11, active => 1, idle => 4, shutdown => 6, idle_closed => 18);
 };
 
 done_testing;
