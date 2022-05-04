@@ -745,9 +745,44 @@ Exit:
     return ret;
 }
 
+#if H2O_USE_FUSION
+
+static ptls_cipher_suite_t **replace_ciphersuites(ptls_cipher_suite_t **input, ptls_cipher_suite_t **replacements)
+{
+    H2O_VECTOR(ptls_cipher_suite_t *) new_list = {NULL};
+
+    for (; *input != NULL; ++input) {
+        ptls_cipher_suite_t *cs = *input;
+        for (ptls_cipher_suite_t **cand = replacements; *cand != NULL; ++cand) {
+            if (cs->id == (*cand)->id) {
+                cs = *cand;
+                break;
+            }
+        }
+        h2o_vector_reserve(NULL, &new_list, new_list.size + 1);
+        new_list.entries[new_list.size++] = cs;
+    }
+
+    h2o_vector_reserve(NULL, &new_list, new_list.size + 1);
+    new_list.entries[new_list.size++] = NULL;
+
+    return new_list.entries;
+}
+
+static int setup_chimera_crypto(ptls_aead_context_t *ctx, int is_enc, const void *key, const void *iv)
+{
+    if (is_enc) {
+        return ptls_fastls_aes128gcm.setup_crypto(ctx, 1, key, iv);
+    } else {
+        return ptls_openssl_aes128gcm.setup_crypto(ctx, 0, key, iv);
+    }
+}
+
+#endif
+
 static const char *listener_setup_ssl_picotls(struct listener_config_t *listener, struct listener_ssl_identity_t *identity,
                                               ptls_iovec_t raw_public_key, ptls_cipher_suite_t **cipher_suites,
-                                              int server_cipher_preference)
+                                              int server_cipher_preference, int use_zerocopy)
 {
     static const ptls_key_exchange_algorithm_t *key_exchanges[] = {
 #ifdef PTLS_OPENSSL_HAVE_X25519
@@ -866,32 +901,30 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
 #if H2O_USE_FUSION
         /* rebuild and replace the cipher suite list, replacing the corresponding ones to fusion */
         if (ptls_fusion_is_supported_by_cpu()) {
-            static const ptls_cipher_suite_t fusion_aes128gcmsha256 = {PTLS_CIPHER_SUITE_AES_128_GCM_SHA256, &ptls_fusion_aes128gcm,
-                                                                       &ptls_openssl_sha256},
-                                             fusion_aes256gcmsha384 = {PTLS_CIPHER_SUITE_AES_256_GCM_SHA384, &ptls_fusion_aes256gcm,
-                                                                       &ptls_openssl_sha384};
-            H2O_VECTOR(ptls_cipher_suite_t *) new_list = {};
-#define PUSH_NEW(x)                                                                                                                \
-    do {                                                                                                                           \
-        h2o_vector_reserve(NULL, &new_list, new_list.size + 1);                                                                    \
-        new_list.entries[new_list.size++] = (x);                                                                                   \
-    } while (0)
-            for (ptls_cipher_suite_t **input = pctx->ctx.cipher_suites; *input != NULL; ++input) {
-                h2o_vector_reserve(NULL, &new_list, new_list.size + 1);
-                if (*input == &ptls_openssl_aes128gcmsha256) {
-                    PUSH_NEW(&fusion_aes128gcmsha256);
-                } else if (*input == &ptls_openssl_aes256gcmsha384) {
-                    PUSH_NEW(&fusion_aes256gcmsha384);
-                } else {
-                    PUSH_NEW(*input);
-                }
-            }
-            PUSH_NEW(NULL);
-#undef PUSH_NEW
-            pctx->ctx.cipher_suites = new_list.entries;
+            static ptls_cipher_suite_t aes128gcmsha256 = {PTLS_CIPHER_SUITE_AES_128_GCM_SHA256, &ptls_fusion_aes128gcm,
+                                                          &ptls_openssl_sha256},
+                                       aes256gcmsha384 = {PTLS_CIPHER_SUITE_AES_256_GCM_SHA384, &ptls_fusion_aes256gcm,
+                                                          &ptls_openssl_sha384},
+                                       *fusion_all[] = {&aes128gcmsha256, &aes256gcmsha384, NULL};
+            pctx->ctx.cipher_suites = replace_ciphersuites(pctx->ctx.cipher_suites, fusion_all);
         }
 #endif
         quicly_amend_ptls_context(&pctx->ctx);
+    } else {
+#if H2O_USE_FUSION
+        if (ptls_fusion_is_supported_by_cpu()) {
+            static struct st_ptls_aead_algorithm_t aes128gcm;
+            H2O_MULTITHREAD_ONCE({
+                memcpy(&aes128gcm, &ptls_fastls_aes128gcm, sizeof(aes128gcm));
+                if (aes128gcm.context_size < ptls_openssl_aes128gcm.context_size)
+                    aes128gcm.context_size = ptls_openssl_aes128gcm.context_size;
+                aes128gcm.setup_crypto = setup_chimera_crypto;
+            });
+            static ptls_cipher_suite_t aes128gcmsha256 = {PTLS_CIPHER_SUITE_AES_128_GCM_SHA256, &aes128gcm, &ptls_openssl_sha256},
+                                       *fastls_all[] = {&aes128gcmsha256, NULL};
+            pctx->ctx.cipher_suites = replace_ciphersuites(pctx->ctx.cipher_suites, fastls_all);
+        }
+#endif
     }
 
     identity->ptls = &pctx->ctx;
@@ -1343,8 +1376,9 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
             goto Error;
 
         if (use_picotls) {
-            const char *errstr = listener_setup_ssl_picotls(listener, identity, raw_pubkey, cipher_suite_tls13,
-                                                            !!(ssl_options & SSL_OP_CIPHER_SERVER_PREFERENCE));
+            const char *errstr =
+                listener_setup_ssl_picotls(listener, identity, raw_pubkey, cipher_suite_tls13,
+                                           !!(ssl_options & SSL_OP_CIPHER_SERVER_PREFERENCE), ssl_config->use_zerocopy);
             if (errstr != NULL) {
                 /* It is a fatal error to setup TLS 1.3 context, when setting up alternative identities, or a QUIC context. */
                 if (identity != ssl_config->identities || listener->quic.ctx != NULL) {
