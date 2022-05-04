@@ -230,7 +230,7 @@ static void gcm_iv96(void)
     ptls_aead_free(aead);
 }
 
-static void test_generated(int aes256, int iv96)
+static void test_generated(ptls_aead_algorithm_t *encryptor, ptls_aead_algorithm_t *decryptor, int iv96)
 {
     ptls_cipher_context_t *rand = ptls_cipher_new(&ptls_minicrypto_aes128ctr, 1, zero);
     ptls_cipher_init(rand, zero);
@@ -262,32 +262,24 @@ static void test_generated(int aes256, int iv96)
         memset(decrypted, 0xcc, sizeof(decrypted));
 
         { /* check using fusion */
-            ptls_aead_context_t *fusion =
-                ptls_aead_new_direct(aes256 ? &ptls_fusion_aes256gcm : &ptls_fusion_aes128gcm, 1, key, iv);
-            if (iv96) {
-                ptls_aead_xor_iv(fusion, seq32, sizeof(seq32));
-            }
-            ptls_aead_encrypt(fusion, encrypted, text, textlen, seq, aad, aadlen);
-            if (ptls_aead_decrypt(fusion, decrypted, encrypted, textlen + 16, seq, aad, aadlen) != textlen)
-                goto Fail;
-            if (memcmp(decrypted, text, textlen) != 0)
-                goto Fail;
-            ptls_aead_free(fusion);
+            ptls_aead_context_t *ctx = ptls_aead_new_direct(encryptor, 1, key, iv);
+            if (iv96)
+                ptls_aead_xor_iv(ctx, seq32, sizeof(seq32));
+            ptls_aead_encrypt(ctx, encrypted, text, textlen, seq, aad, aadlen);
+            ptls_aead_free(ctx);
         }
 
         memset(decrypted, 0xcc, sizeof(decrypted));
 
-        { /* check that the encrypted text can be decrypted by OpenSSL */
-            ptls_aead_context_t *mc =
-                ptls_aead_new_direct(aes256 ? &ptls_minicrypto_aes256gcm : &ptls_minicrypto_aes128gcm, 0, key, iv);
-            if (iv96) {
-                ptls_aead_xor_iv(mc, seq32, sizeof(seq32));
-            }
-            if (ptls_aead_decrypt(mc, decrypted, encrypted, textlen + 16, seq, aad, aadlen) != textlen)
+        { /* check that the encrypted text can be decrypted by the decryptor */
+            ptls_aead_context_t *ctx = ptls_aead_new_direct(decryptor, 0, key, iv);
+            if (iv96)
+                ptls_aead_xor_iv(ctx, seq32, sizeof(seq32));
+            if (ptls_aead_decrypt(ctx, decrypted, encrypted, textlen + 16, seq, aad, aadlen) != textlen)
                 goto Fail;
             if (memcmp(decrypted, text, textlen) != 0)
                 goto Fail;
-            ptls_aead_free(mc);
+            ptls_aead_free(ctx);
         }
     }
 
@@ -302,23 +294,37 @@ Fail:
 
 static void test_generated_aes128(void)
 {
-    test_generated(0, 0);
+    test_generated(&ptls_fusion_aes128gcm, &ptls_minicrypto_aes128gcm, 0);
 }
 
 static void test_generated_aes256(void)
 {
-    test_generated(1, 0);
+    test_generated(&ptls_fusion_aes256gcm, &ptls_minicrypto_aes256gcm, 0);
 }
 
 static void test_generated_aes128_iv96(void)
 {
-    test_generated(0, 1);
+    test_generated(&ptls_fusion_aes128gcm, &ptls_minicrypto_aes128gcm, 1);
 }
 
 static void test_generated_aes256_iv96(void)
 {
-    test_generated(1, 1);
+    test_generated(&ptls_fusion_aes256gcm, &ptls_minicrypto_aes256gcm, 1);
 }
+
+static void test_aesgcm(void)
+{
+    subtest("aes128gcm", test_generated_aes128);
+    subtest("aes256gcm", test_generated_aes256);
+    subtest("aes128gcm-iv96", test_generated_aes128_iv96);
+    subtest("aes256gcm-iv96", test_generated_aes256_iv96);
+}
+
+static void test_fastls(void)
+{
+    test_generated(&ptls_fastls_aes128gcm, &ptls_minicrypto_aes128gcm, 0);
+}
+
 int main(int argc, char **argv)
 {
     if (!ptls_fusion_is_supported_by_cpu()) {
@@ -332,10 +338,8 @@ int main(int argc, char **argv)
     subtest("gcm-capacity", gcm_capacity);
     subtest("gcm-test-vectors", gcm_test_vectors);
     subtest("gcm-iv96", gcm_iv96);
-    subtest("generated-128", test_generated_aes128);
-    subtest("generated-256", test_generated_aes256);
-    subtest("generated-128-iv96", test_generated_aes128_iv96);
-    subtest("generated-256-iv96", test_generated_aes256_iv96);
+    subtest("aesgcm", test_aesgcm);
+    subtest("fastls", test_fastls);
 
     return done_testing();
 }

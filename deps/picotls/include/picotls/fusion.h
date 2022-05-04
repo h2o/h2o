@@ -86,6 +86,7 @@ int ptls_fusion_aesgcm_decrypt(ptls_fusion_aesgcm_context_t *ctx, void *output, 
 
 extern ptls_cipher_algorithm_t ptls_fusion_aes128ctr, ptls_fusion_aes256ctr;
 extern ptls_aead_algorithm_t ptls_fusion_aes128gcm, ptls_fusion_aes256gcm;
+extern ptls_aead_algorithm_t ptls_fastls_aes128gcm, ptls_fastls_aes256gcm;
 
 /**
  * Returns a boolean indicating if fusion can be used.
