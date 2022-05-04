@@ -912,7 +912,7 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
         quicly_amend_ptls_context(&pctx->ctx);
     } else {
 #if H2O_USE_FUSION
-        if (ptls_fusion_is_supported_by_cpu()) {
+        if (use_zerocopy && ptls_fusion_is_supported_by_cpu()) {
             static struct st_ptls_aead_algorithm_t aes128gcm;
             H2O_MULTITHREAD_ONCE({
                 memcpy(&aes128gcm, &ptls_fastls_aes128gcm, sizeof(aes128gcm));
