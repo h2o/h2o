@@ -2066,10 +2066,8 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
 {
     if (node->type == YOML_TYPE_SEQUENCE) {
         for (size_t i = 0; i != node->data.sequence.size; ++i) {
-            int ret = on_config_listen_element(cmd, ctx, node->data.sequence.elements[i]);
-            if (ret != 0) {
-                return ret;
-            }
+            if (on_config_listen_element(cmd, ctx, node->data.sequence.elements[i]) != 0)
+                return -1;
         }
         return 0;
     } else {
