@@ -443,9 +443,11 @@ static struct st_server_address_t *pick_and_swap(struct st_connect_generator_t *
 
 static void try_connect(struct st_connect_generator_t *self)
 {
-    struct st_server_address_t *server_address = NULL;
+    struct st_server_address_t *server_address;
 
     do {
+        server_address = NULL;
+
         /* Fetch the next address from the list of resolved addresses. */
         for (size_t i = self->server_addresses.used; i < self->server_addresses.size; i++) {
             if (self->pick_v4 && self->server_addresses.list[i].sa->sa_family == AF_INET)
