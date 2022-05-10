@@ -32,6 +32,7 @@
 #include "h2o/http1.h"
 #include "h2o/http2.h"
 #include "h2o/http3_server.h"
+#include "h2o/version.h"
 
 static h2o_hostconf_t *create_hostconf(h2o_globalconf_t *globalconf)
 {

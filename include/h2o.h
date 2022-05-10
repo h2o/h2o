@@ -51,7 +51,6 @@ extern "C" {
 #include "h2o/time_.h"
 #include "h2o/token.h"
 #include "h2o/url.h"
-#include "h2o/version.h"
 #include "h2o/balancer.h"
 #include "h2o/http2_common.h"
 #include "h2o/send_state.h"
