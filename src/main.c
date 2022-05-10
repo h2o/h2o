@@ -1803,7 +1803,7 @@ static void on_http3_conn_destroy(h2o_quic_conn_t *conn)
     H2O_HTTP3_CONN_CALLBACKS.super.destroy_connection(conn);
 }
 
-static int config_listener(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     const char *hostname = NULL, *servname, *type = "tcp";
     yoml_t **ssl_node = NULL, **owner_node = NULL, **permission_node = NULL, **quic_node = NULL, **cc_node = NULL,
@@ -2066,14 +2066,14 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
 {
     if (node->type == YOML_TYPE_SEQUENCE) {
         for (size_t i = 0; i != node->data.sequence.size; ++i) {
-            int ret = config_listener(cmd, ctx, node->data.sequence.elements[i]);
+            int ret = on_config_listen_element(cmd, ctx, node->data.sequence.elements[i]);
             if (ret != 0) {
                 return ret;
             }
         }
         return 0;
     } else {
-        return config_listener(cmd, ctx, node);
+        return on_config_listen_element(cmd, ctx, node);
     }
 }
 
