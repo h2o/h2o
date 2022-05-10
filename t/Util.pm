@@ -265,15 +265,14 @@ sub spawn_h2o {
     $conf = <<"EOT";
 $conf
 listen:
-  host: 0.0.0.0
-  port: $port
-listen:
-  host: 0.0.0.0
-  port: $tls_port
-  ssl:
-    key-file: examples/h2o/server.key
-    certificate-file: examples/h2o/server.crt
-    @{[$max_ssl_version ? "max-version: $max_ssl_version" : ""]}
+  - host: 0.0.0.0
+    port: $port
+  - host: 0.0.0.0
+    port: $tls_port
+    ssl:
+      key-file: examples/h2o/server.key
+      certificate-file: examples/h2o/server.crt
+      @{[$max_ssl_version ? "max-version: $max_ssl_version" : ""]}
 @{[$user ? "user: $user" : ""]}
 EOT
 
