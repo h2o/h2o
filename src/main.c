@@ -83,6 +83,7 @@
 #include "h2o/http3_server.h"
 #include "h2o/serverutil.h"
 #include "h2o/file.h"
+#include "h2o/version.h"
 #if H2O_USE_MRUBY
 #include "h2o/mruby_.h"
 #endif
