@@ -38,6 +38,7 @@ hosts:
         proxy.connect:
           - "+127.0.0.1:$origin_port"
           - "+127.0.0.1:$one_shot_upstream"
+          - "+255.255.255.255:$origin_port"
         proxy.timeout.io: 2000
 EOT
 
@@ -101,6 +102,10 @@ subtest "curl-h1" => sub {
         my $content = `curl --http1.1 -p -x 127.0.0.1:$server->{port} --silent -v --show-error https://8.8.8.8/ 2>&1 2>&1`;
         like $content, qr{Received HTTP code 403 from proxy after CONNECT};
         unlike $content, qr{proxy-status:}i;
+    };
+    subtest "immediate connect failure" => sub {
+        my $content = `curl --http1.1 -p -x 127.0.0.1:$server->{port} --silent -v --show-error http://255.255.255.255:$origin_port/ 2>&1 2>&1`;
+        like $content, qr{Received HTTP code 502 from proxy after CONNECT};
     };
 };
 
