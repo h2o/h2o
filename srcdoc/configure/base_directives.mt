@@ -430,13 +430,16 @@ $ctx->{directive}->(
     name     => "send-server-name",
     levels   => [ qw(global) ],
     since    => '2.0',
-    desc     => q{A boolean flag (<code>ON</code> or <code>OFF</code>) indicating whether if the <code>server</code> response header should be sent.},
+    desc     => q{Sets whether if the <code>server</code> response header should be sent or forwarded from backend.},
     default  => q{send-server-name: ON},
     see_also => render_mt(<<'EOT'),
 <a href="configure/base_directives.html#server-name"><code>server-name</code></a>
 EOT
 )->(sub {
 ?>
+<p>
+By setting the value to (<code>ON</code> or <code>OFF</code>) indicating whether if the <code>server</code> response header should be sent. And by setting the value to <code>preserve</code>, it forwards the value received from the backend when proxying.
+</p>
 ? })
 
 <?
