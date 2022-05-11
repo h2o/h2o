@@ -773,15 +773,6 @@ static ptls_cipher_suite_t **replace_ciphersuites(ptls_cipher_suite_t **input, p
     return new_list.entries;
 }
 
-static int setup_chimera_crypto(ptls_aead_context_t *ctx, int is_enc, const void *key, const void *iv)
-{
-    if (is_enc) {
-        return ptls_fastls_aes128gcm.setup_crypto(ctx, 1, key, iv);
-    } else {
-        return ptls_openssl_aes128gcm.setup_crypto(ctx, 0, key, iv);
-    }
-}
-
 #endif
 
 static const char *listener_setup_ssl_picotls(struct listener_config_t *listener, struct listener_ssl_identity_t *identity,
@@ -917,16 +908,12 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
     } else {
 #if H2O_USE_FUSION
         if (use_non_temporal_aead && ptls_fusion_is_supported_by_cpu()) {
-            static struct st_ptls_aead_algorithm_t aes128gcm;
-            H2O_MULTITHREAD_ONCE({
-                memcpy(&aes128gcm, &ptls_fastls_aes128gcm, sizeof(aes128gcm));
-                if (aes128gcm.context_size < ptls_openssl_aes128gcm.context_size)
-                    aes128gcm.context_size = ptls_openssl_aes128gcm.context_size;
-                aes128gcm.setup_crypto = setup_chimera_crypto;
-            });
-            static ptls_cipher_suite_t aes128gcmsha256 = {PTLS_CIPHER_SUITE_AES_128_GCM_SHA256, &aes128gcm, &ptls_openssl_sha256},
-                                       *fastls_all[] = {&aes128gcmsha256, NULL};
-            pctx->ctx.cipher_suites = replace_ciphersuites(pctx->ctx.cipher_suites, fastls_all);
+            static ptls_cipher_suite_t aes128gcmsha256 = {PTLS_CIPHER_SUITE_AES_128_GCM_SHA256, &ptls_non_temporal_aes128gcm,
+                                                          &ptls_openssl_sha256},
+                                       aes256gcmsha384 = {PTLS_CIPHER_SUITE_AES_128_GCM_SHA256, &ptls_non_temporal_aes256gcm,
+                                                          &ptls_openssl_sha384},
+                                       *non_temporal_all[] = {&aes128gcmsha256, &aes256gcmsha384, NULL};
+            pctx->ctx.cipher_suites = replace_ciphersuites(pctx->ctx.cipher_suites, non_temporal_all);
         }
 #endif
     }
