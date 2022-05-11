@@ -1236,13 +1236,24 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
         case 0:
             zerocopy_mode = SSL_ZEROCOPY_NONE;
             break;
+        case 1:
+#if H2O_USE_FUSION
+            zerocopy_mode = SSL_ZEROCOPY_NON_TEMPORAL_AEAD;
+#else
+            zerocopy_mode = SSL_ZEROCOPY_LIBCRYPTO;
+#endif
+            break;
         case 2:
             zerocopy_mode = SSL_ZEROCOPY_LIBCRYPTO;
             break;
-        case 1: /* ON is use non-temporal AEAD engine */
         case 3:
+#if H2O_USE_FUSION
             zerocopy_mode = SSL_ZEROCOPY_NON_TEMPORAL_AEAD;
             break;
+#else
+            h2o_configurator_errprintf(cmd, *zerocopy_node, "non-temporal aes-gcm engine is not available");
+            goto Error;
+#endif
         default:
             goto Error;
         }
