@@ -253,7 +253,7 @@ static const h2o_sendvec_callbacks_t self_allocated_vec_callbacks = {h2o_sendvec
 
 static int sendvec_size_is_for_recycle(size_t size)
 {
-    if (h2o_socket_ssl_buffer_size / 2 <= size && size <= h2o_socket_ssl_buffer_size)
+    if (*h2o_socket_ssl_buffer_allocator.memsize / 2 <= size && size <= *h2o_socket_ssl_buffer_allocator.memsize)
         return 1;
     return 0;
 }
@@ -709,9 +709,8 @@ static int retain_sendvecs(struct st_h2o_http3_server_stream_t *stream)
         if (!(vec->vec.callbacks == &self_allocated_vec_callbacks || vec->vec.callbacks == &immutable_vec_callbacks)) {
             size_t off_within_vec = stream->sendbuf.min_index_to_addref == 0 ? stream->sendbuf.off_within_first_vec : 0,
                    newlen = vec->vec.len - off_within_vec;
-            void *newbuf = sendvec_size_is_for_recycle(newlen)
-                               ? h2o_mem_alloc_recycle(&h2o_socket_ssl_buffer_allocator, h2o_socket_ssl_buffer_size)
-                               : h2o_mem_alloc(newlen);
+            void *newbuf = sendvec_size_is_for_recycle(newlen) ? h2o_mem_alloc_recycle(&h2o_socket_ssl_buffer_allocator)
+                                                               : h2o_mem_alloc(newlen);
             memcpy(newbuf, vec->vec.raw + off_within_vec, newlen);
             vec->vec = (h2o_sendvec_t){&self_allocated_vec_callbacks, newlen, {newbuf}};
             if (stream->sendbuf.min_index_to_addref == 0)
@@ -799,9 +798,8 @@ static void on_send_emit(quicly_stream_t *qs, size_t off, void *_dst, size_t *le
         /* convert vector into raw form, the first time it's being sent (TODO use ssl_buffer_recyle) */
         if (this_vec->vec.callbacks->read_ != h2o_sendvec_read_raw) {
             size_t newlen = this_vec->vec.len;
-            void *newbuf = sendvec_size_is_for_recycle(newlen)
-                               ? h2o_mem_alloc_recycle(&h2o_socket_ssl_buffer_allocator, h2o_socket_ssl_buffer_size)
-                               : h2o_mem_alloc(newlen);
+            void *newbuf = sendvec_size_is_for_recycle(newlen) ? h2o_mem_alloc_recycle(&h2o_socket_ssl_buffer_allocator)
+                                                               : h2o_mem_alloc(newlen);
             if (!this_vec->vec.callbacks->read_(&this_vec->vec, newbuf, newlen)) {
                 free(newbuf);
                 goto Error;
