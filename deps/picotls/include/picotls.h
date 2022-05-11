@@ -1553,7 +1553,7 @@ inline void ptls_aead__do_encrypt(ptls_aead_context_t *ctx, void *output, const 
 inline void ptls_aead__do_encrypt_v(ptls_aead_context_t *ctx, void *_output, ptls_iovec_t *input, size_t incnt, uint64_t seq,
                                     const void *aad, size_t aadlen)
 {
-    uint8_t *output = _output;
+    uint8_t *output = (uint8_t *)_output;
 
     ctx->do_encrypt_init(ctx, seq, aad, aadlen);
     for (size_t i = 0; i < incnt; ++i)
