@@ -822,9 +822,14 @@ static void on_send_complete(h2o_socket_t *sock, const char *err)
 {
     struct st_h2o_http1_conn_t *conn = sock->data;
 
-    assert(conn->req._ostr_top == &conn->_ostr_final.super);
-
-    conn->req.timestamps.response_end_at = h2o_gettimeofday(conn->super.ctx->loop);
+    if (err == NULL) {
+        if (conn->req._ostr_top != &conn->_ostr_final.super) {
+            err = "pull error";
+        } else {
+            /* success */
+            conn->req.timestamps.response_end_at = h2o_gettimeofday(conn->super.ctx->loop);
+        }
+    }
 
     if (err != NULL)
         conn->req.http1_is_persistent = 0;
@@ -1015,6 +1020,8 @@ void finalostream_send(h2o_ostream_t *_self, h2o_req_t *_req, h2o_sendvec_t *inb
             h2o_add_server_timing_header(&conn->req, conn->_ostr_final.chunked_buf != NULL);
 
         const char *connection = conn->req.http1_is_persistent ? "keep-alive" : "close";
+        if (conn->req.is_tunnel_req && conn->req.res.status == 101 && conn->req.upgrade.base)
+            connection = "upgrade";
         size_t headers_est_size =
             flatten_headers_estimate_size(&conn->req, conn->super.ctx->globalconf->server_name.len + strlen(connection));
         h2o_sendvec_init_raw(bufs + bufcnt, h2o_mem_alloc_pool(&conn->req.pool, char, headers_est_size), 0);

@@ -168,7 +168,7 @@ h2o_buffer_prototype_t h2o_socket_buffer_prototype = {
     &h2o_socket_buffer_mmap_settings};
 
 size_t h2o_socket_ssl_buffer_size = H2O_SOCKET_DEFAULT_SSL_BUFFER_SIZE;
-__thread h2o_mem_recycle_t h2o_socket_ssl_buffer_allocator = {1024};
+__thread h2o_mem_recycle_t h2o_socket_ssl_buffer_allocator = {&h2o_socket_ssl_buffer_size, 1024};
 
 int h2o_socket_use_ktls = 0;
 
@@ -247,8 +247,8 @@ static void dispose_write_buf(h2o_socket_t *sock)
 
 static void init_ssl_output_buffer(struct st_h2o_socket_ssl_t *ssl)
 {
-    ptls_buffer_init(&ssl->output.buf, h2o_mem_alloc_recycle(&h2o_socket_ssl_buffer_allocator, h2o_socket_ssl_buffer_size),
-                     h2o_socket_ssl_buffer_size);
+    ptls_buffer_init(&ssl->output.buf, h2o_mem_alloc_recycle(&h2o_socket_ssl_buffer_allocator),
+                     *h2o_socket_ssl_buffer_allocator.memsize);
     ssl->output.buf.is_allocated = 1; /* set to true, so that the allocated memory is freed when the buffer is expanded */
     ssl->output.pending_off = 0;
 }
@@ -261,7 +261,7 @@ static void dispose_ssl_output_buffer(struct st_h2o_socket_ssl_t *ssl)
 
     assert(ssl->output.buf.is_allocated);
 
-    if (ssl->output.buf.capacity == h2o_socket_ssl_buffer_size) {
+    if (ssl->output.buf.capacity == *h2o_socket_ssl_buffer_allocator.memsize) {
         h2o_mem_free_recycle(&h2o_socket_ssl_buffer_allocator, ssl->output.buf.base);
     } else {
         free(ssl->output.buf.base);

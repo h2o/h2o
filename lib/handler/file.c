@@ -138,7 +138,7 @@ static int do_pread(h2o_sendvec_t *src, void *dst, size_t len)
     while (bytes_read < len) {
         while ((rret = pread(self->file.ref->fd, dst + bytes_read, len - bytes_read, *file_chunk_at)) == -1 && errno == EINTR)
             ;
-        if (rret == -1)
+        if (rret <= 0)
             return 0;
         bytes_read += rret;
         *file_chunk_at += rret;
