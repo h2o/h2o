@@ -83,6 +83,7 @@
 #include "h2o/http3_server.h"
 #include "h2o/serverutil.h"
 #include "h2o/file.h"
+#include "h2o/version.h"
 #if H2O_USE_MRUBY
 #include "h2o/mruby_.h"
 #endif
@@ -1853,7 +1854,7 @@ static void on_http3_conn_destroy(h2o_quic_conn_t *conn)
     H2O_HTTP3_CONN_CALLBACKS.super.destroy_connection(conn);
 }
 
-static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     const char *hostname = NULL, *servname, *type = "tcp";
     yoml_t **ssl_node = NULL, **owner_node = NULL, **permission_node = NULL, **quic_node = NULL, **cc_node = NULL,
@@ -2110,6 +2111,19 @@ ProxyConflict:
     h2o_configurator_errprintf(cmd, node, "`proxy-protocol` cannot be turned %s, already defined as opposite",
                                proxy_protocol ? "on" : "off");
     return -1;
+}
+
+static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    if (node->type == YOML_TYPE_SEQUENCE) {
+        for (size_t i = 0; i != node->data.sequence.size; ++i) {
+            if (on_config_listen_element(cmd, ctx, node->data.sequence.elements[i]) != 0)
+                return -1;
+        }
+        return 0;
+    } else {
+        return on_config_listen_element(cmd, ctx, node);
+    }
 }
 
 static int on_config_listen_enter(h2o_configurator_t *_configurator, h2o_configurator_context_t *ctx, yoml_t *node)
