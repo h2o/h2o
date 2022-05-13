@@ -430,7 +430,7 @@ static void do_proceed(h2o_generator_t *generator, h2o_req_t *req)
         self->pipe_inflight = 0;
     }
 
-    if (self->pipe_reader.fds[0] != -1) {
+    if (self->pipe_reader.fds[0] != -1 && self->sending.buf->size == 0) {
         do_send_from_pipe(self);
     } else {
         do_send(self);
