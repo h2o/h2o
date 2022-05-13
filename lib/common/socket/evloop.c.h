@@ -247,7 +247,6 @@ static int sendvec_core(struct st_h2o_evloop_socket_t *sock)
         return 0;
 
     /* update offset, and return if we are not done yet */
-    sock->sendvec.len -= bytes_sent;
     if (sock->sendvec.len != 0)
         return 1;
 
