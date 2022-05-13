@@ -3,8 +3,6 @@ CMAKE_POLICY(SET CMP0003 NEW)
 
 PROJECT(quicly)
 
-INCLUDE(CMakePushCheckState)
-INCLUDE(CheckCSourceCompiles)
 INCLUDE(deps/picotls/cmake/dtrace-utils.cmake)
 
 FIND_PACKAGE(OpenSSL REQUIRED)
