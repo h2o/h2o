@@ -646,12 +646,14 @@ static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errs
 
     /* switch to using pipe reader, if the opportunity is provided */
     if (args->pipe_reader != NULL) {
+#ifdef __linux__
         if (pipe2(self->pipe_reader.fds, O_NONBLOCK | O_CLOEXEC) != 0) {
             char errbuf[256];
-            h2o_fatal("pipe(2) failed:%s", h2o_strerror_r(errno, errbuf, sizeof(errbuf)));
+            h2o_fatal("pipe2(2) failed:%s", h2o_strerror_r(errno, errbuf, sizeof(errbuf)));
         }
         args->pipe_reader->fd = self->pipe_reader.fds[1];
         args->pipe_reader->on_body_piped = on_body_piped;
+#endif
     }
 
     /* if httpclient has no received body at this time, immediately send only headers using zero timeout */
