@@ -381,10 +381,8 @@ static size_t from_pipe_send(h2o_sendvec_t *vec, int sockfd, size_t len)
     ssize_t bytes_sent;
     while ((bytes_sent = splice(self->pipe_reader.fds[0], NULL, sockfd, NULL, len, SPLICE_F_NONBLOCK)) == -1 && errno == EINTR)
         ;
-    if (bytes_sent == -1) {
-        assert(errno != EAGAIN);
+    if (bytes_sent == -1 && errno == EAGAIN)
         return 0;
-    }
     if (bytes_sent <= 0)
         return SIZE_MAX;
 
