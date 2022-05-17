@@ -61,8 +61,8 @@ RUN wget --https-only --no-verbose -O - https://sh.rustup.rs | sh -s -- \
 	&& curl --version
 
 
-# libssl-dev causes curl to fail to build with http3 (quiche)
-# curl is statically linked to BoringSSL's libssl.a and libcrypto.a statically, so libssl-dev can be installe safely after curl is built.
+# libssl-dev causes curl to fail to build with http3 (quiche).
+# Once curl is built with BoringSSL's static libraries, libssl-dev can be installed without affecting curl.
 RUN apt-get install --yes libssl-dev
 
 # perl
