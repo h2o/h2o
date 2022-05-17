@@ -402,6 +402,11 @@ sub run_with_curl {
             unless curl_supports_http2();
         $cb->("https", $server->{tls_port}, "curl --insecure --http2", 512);
     };
+    subtest "https/3" => sub {
+        plan skip_all => "curl does not support HTTP/3"
+            unless curl_supports_http3();
+        $cb->("https", $server->{tls_port}, "curl --insecure --http3", 768);
+    };
 }
 
 sub h2get_exists {
