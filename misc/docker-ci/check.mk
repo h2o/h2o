@@ -7,6 +7,7 @@ TEST_ENV=
 FUZZ_ASAN=ASAN_OPTIONS=detect_leaks=0
 DOCKER_RUN_OPTS=--privileged \
 	--ulimit memlock=-1 \
+	--memory 2g \
 	-v `pwd`:$(SRC_DIR).ro:ro \
 	-v /sys/kernel/debug:/sys/kernel/debug \
 	-v /lib/modules:/lib/modules:ro \
