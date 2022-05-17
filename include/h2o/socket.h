@@ -61,7 +61,13 @@ extern "C" {
 #endif
 
 /**
- * Maximum amount of TLS records to generate at once. Default is 4 full-sized TLS records using 32-byte tag.
+ * Maximum size of sendvec when a pull (i.e. non-raw) vector is used. Note also that bufcnt must be set to one when a pull mode
+ * vector is used.
+ */
+#define H2O_PULL_SENDVEC_MAX_SIZE 65536
+/**
+ * Maximum amount of TLS records to generate at once. Default is 4 full-sized TLS records using 32-byte tag. This value is defined
+ * to be slightly greater than H2O_PULL_SENDVEC_MAX_SIZE, so that the two buffers can recycle the same memory buffers.
  */
 #define H2O_SOCKET_DEFAULT_SSL_BUFFER_SIZE ((5 + 16384 + 32) * 4)
 
@@ -108,6 +114,48 @@ enum {
     H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_DETERMINED
 };
 
+typedef struct st_h2o_sendvec_t h2o_sendvec_t;
+
+/**
+ * Callbacks of `h2o_sendvec_t`. Random access capability has been removed. `read_` and `send_` only provide one-pass sequential
+ * access. Properties of `h2o_sendvec_t` (e.g., `len`, `raw`) are adjusted as bytes are read / sent from the vector.
+ */
+typedef struct st_h2o_sendvec_callbacks_t {
+    /**
+     * Mandatory callback used to load the bytes held by the vector. Returns if the operation succeeded. When false is returned, the
+     * generator is considered as been error-closed by itself.  If the callback is `h2o_sendvec_read_raw`, the data is available as
+     * raw bytes in `h2o_sendvec_t::raw`.
+     */
+    int (*read_)(h2o_sendvec_t *vec, void *dst, size_t len);
+    /**
+     * Optional callback for sending contents of a vector directly to a socket. Returns number of bytes being sent (could be zero),
+     * or, upon error, SIZE_MAX.
+     */
+    size_t (*send_)(h2o_sendvec_t *vec, int sockfd, size_t len);
+} h2o_sendvec_callbacks_t;
+
+/**
+ * send vector. Unlike an ordinary `h2o_iovec_t`, the vector has a callback that allows the sender to delay the flattening of data
+ * until it becomes necessary.
+ */
+struct st_h2o_sendvec_t {
+    /**
+     *
+     */
+    const h2o_sendvec_callbacks_t *callbacks;
+    /**
+     * size of the vector
+     */
+    size_t len;
+    /**
+     *
+     */
+    union {
+        char *raw;
+        uint64_t cb_arg[2];
+    };
+};
+
 /**
  * abstraction layer for sockets (SSL vs. TCP)
  */
@@ -144,6 +192,7 @@ struct st_h2o_socket_t {
             h2o_iovec_t *alloced_ptr;
             h2o_iovec_t smallbufs[4];
         };
+        char *flattened;
     } _write_buf;
     struct {
         uint8_t state; /* one of H2O_SOCKET_LATENCY_STATE_* */
@@ -184,8 +233,16 @@ typedef void (*h2o_socket_ssl_resumption_remove_cb)(h2o_iovec_t session_id);
 extern h2o_buffer_mmap_settings_t h2o_socket_buffer_mmap_settings;
 extern h2o_buffer_prototype_t h2o_socket_buffer_prototype;
 
+/**
+ * see H2O_SOCKET_DEFAULT_SSL_BUFFER_SIZE
+ */
 extern size_t h2o_socket_ssl_buffer_size;
 extern __thread h2o_mem_recycle_t h2o_socket_ssl_buffer_allocator;
+
+/**
+ * boolean flag indicating if kTLS should be used (when preferable)
+ */
+extern int h2o_socket_use_ktls;
 
 extern const char h2o_socket_error_out_of_memory[];
 extern const char h2o_socket_error_io[];
@@ -256,6 +313,10 @@ size_t h2o_socket_do_prepare_for_latency_optimized_write(h2o_socket_t *sock,
  */
 void h2o_socket_write(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_socket_cb cb);
 /**
+ *
+ */
+void h2o_socket_sendvec(h2o_socket_t *sock, h2o_sendvec_t *bufs, size_t bufcnt, h2o_socket_cb cb);
+/**
  * starts polling on the socket (for read) and calls given callback when data arrives
  * @param sock the socket
  * @param cb callback to be called when data arrives
@@ -294,6 +355,10 @@ void h2o_socket_setpeername(h2o_socket_t *sock, struct sockaddr *sa, socklen_t l
  *
  */
 ptls_t *h2o_socket_get_ptls(h2o_socket_t *sock);
+/**
+ *
+ */
+int h2o_socket_can_tls_offload(h2o_socket_t *sock);
 /**
  *
  */
@@ -402,6 +467,22 @@ static int h2o_socket_skip_tracing(h2o_socket_t *sock);
  *
  */
 void h2o_socket_set_skip_tracing(h2o_socket_t *sock, int skip_tracing);
+
+/**
+ * Initializes a send vector that refers to mutable memory region. When the `proceed` callback is invoked, it is possible for the
+ * generator to reuse (or release) that memory region.
+ */
+void h2o_sendvec_init_raw(h2o_sendvec_t *vec, const void *base, size_t len);
+/**
+ *
+ */
+int h2o_sendvec_read_raw(h2o_sendvec_t *vec, void *dst, size_t len);
+
+/**
+ * This is a thin wrapper around sendfile (2) that hides the differences between various OS implementations.
+ * @return number of bytes written (zero is a valid value indicating that the send buffer is full), or SIZE_MAX on error
+ */
+size_t h2o_sendfile(int sockfd, int filefd, off_t off, size_t len);
 
 /**
  * Prepares eBPF maps. Requires root privileges and thus should be called before dropping the privileges. Returns a boolean

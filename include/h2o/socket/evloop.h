@@ -55,6 +55,8 @@ typedef h2o_evloop_t h2o_loop_t;
 typedef h2o_timerwheel_entry_t h2o_timer_t;
 typedef h2o_timerwheel_cb h2o_timer_cb;
 
+extern size_t h2o_evloop_socket_max_read_size;
+
 h2o_socket_t *h2o_evloop_socket_create(h2o_evloop_t *loop, int fd, int flags);
 h2o_socket_t *h2o_evloop_socket_accept(h2o_socket_t *listener);
 /**

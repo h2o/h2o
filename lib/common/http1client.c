@@ -20,6 +20,7 @@
  * IN THE SOFTWARE.
  */
 #include <arpa/inet.h>
+#include <fcntl.h>
 #include <netdb.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
@@ -28,6 +29,12 @@
 #include "picohttpparser.h"
 #include "h2o/httpclient.h"
 #include "h2o/token.h"
+
+#if !H2O_USE_LIBUV && defined(__linux__)
+#define USE_PIPE_READER 1
+#else
+#define USE_PIPE_READER 0
+#endif
 
 enum enum_h2o_http1client_stream_state {
     STREAM_STATE_HEAD,
@@ -68,15 +75,23 @@ struct st_h2o_http1client_t {
         int is_end_stream;
     } body_buf;
     /**
+     * `on_body_piped` is non-NULL iff used
+     */
+    h2o_httpclient_pipe_reader_t pipe_reader;
+    /**
      * maintain the number of bytes being already processed on the associated socket
      */
     uint64_t _socket_bytes_processed;
     unsigned _is_chunked : 1;
     unsigned _seen_at_least_one_chunk : 1;
     unsigned _delay_free : 1;
+    unsigned _app_prefers_pipe_reader : 1;
 };
 
+static void on_body_to_pipe(h2o_socket_t *_sock, const char *err);
+
 static void req_body_send(struct st_h2o_http1client_t *client);
+static void do_update_window(h2o_httpclient_t *_client);
 
 static void close_client(struct st_h2o_http1client_t *client)
 {
@@ -120,7 +135,8 @@ static int call_on_body(struct st_h2o_http1client_t *client, const char *errstr)
 {
     assert(!client->_delay_free);
     client->_delay_free = 1;
-    int ret = client->super._cb.on_body(&client->super, errstr);
+    int ret =
+        (client->reader == on_body_to_pipe ? client->pipe_reader.on_body_piped : client->super._cb.on_body)(&client->super, errstr);
     client->_delay_free = 0;
     return ret;
 }
@@ -156,7 +172,6 @@ static void on_body_timeout(h2o_timer_t *entry)
     on_error(client, h2o_httpclient_error_io_timeout);
 }
 
-static void do_update_window(h2o_httpclient_t *_client);
 static void on_body_until_close(h2o_socket_t *sock, const char *err)
 {
     struct st_h2o_http1client_t *client = sock->data;
@@ -183,8 +198,6 @@ static void on_body_until_close(h2o_socket_t *sock, const char *err)
         }
         do_update_window(&client->super);
     }
-
-    h2o_timer_link(client->super.ctx->loop, client->super.ctx->io_timeout, &client->super._timeout);
 }
 
 static void on_body_content_length(h2o_socket_t *sock, const char *err)
@@ -226,10 +239,67 @@ static void on_body_content_length(h2o_socket_t *sock, const char *err)
             close_client(client);
             return;
         }
-        do_update_window(&client->super);
     }
 
-    h2o_timer_link(client->super.ctx->loop, client->super.ctx->io_timeout, &client->super._timeout);
+#if USE_PIPE_READER
+    if (client->pipe_reader.on_body_piped != NULL) {
+        h2o_socket_dont_read(client->sock, 1);
+        client->reader = on_body_to_pipe;
+    }
+#endif
+    do_update_window(&client->super);
+}
+
+void on_body_to_pipe(h2o_socket_t *_sock, const char *err)
+{
+#if USE_PIPE_READER
+    struct st_h2o_http1client_t *client = _sock->data;
+
+    h2o_timer_unlink(&client->super._timeout);
+    h2o_socket_read_stop(client->sock);
+
+    if (err != NULL) {
+        on_error(client, h2o_httpclient_error_io);
+        return;
+    }
+
+    ssize_t bytes_read;
+    while ((bytes_read = splice(h2o_socket_get_fd(client->sock), NULL, client->pipe_reader.fd, NULL,
+                                client->_body_decoder.content_length.bytesleft, SPLICE_F_NONBLOCK)) == -1 &&
+           errno == EINTR)
+        ;
+    if (bytes_read == -1 && errno == EAGAIN) {
+        do_update_window(&client->super);
+        return;
+    }
+    if (bytes_read <= 0) {
+        on_error(client, h2o_httpclient_error_io);
+        return;
+    }
+
+    client->_socket_bytes_processed += bytes_read;
+    client->sock->bytes_read += bytes_read;
+    client->super.bytes_read.body += bytes_read;
+    client->super.bytes_read.total += bytes_read;
+
+    client->_body_decoder.content_length.bytesleft -= bytes_read;
+    if (client->_body_decoder.content_length.bytesleft == 0) {
+        client->state.res = STREAM_STATE_CLOSED;
+        client->super.timings.response_end_at = h2o_gettimeofday(client->super.ctx->loop);
+        h2o_socket_dont_read(client->sock, 0);
+    }
+
+    int ret = call_on_body(client, client->state.res == STREAM_STATE_CLOSED ? h2o_httpclient_error_is_eos : NULL);
+
+    if (client->state.res == STREAM_STATE_CLOSED) {
+        close_response(client);
+    } else if (ret != 0) {
+        client->_do_keepalive = 0;
+        close_client(client);
+    }
+#else
+    h2o_fatal("%s cannot be called", __FUNCTION__);
+#endif
 }
 
 static void on_body_chunked(h2o_socket_t *sock, const char *err)
@@ -304,8 +374,6 @@ static void on_body_chunked(h2o_socket_t *sock, const char *err)
         }
         do_update_window(&client->super);
     }
-
-    h2o_timer_link(client->super.ctx->loop, client->super.ctx->io_timeout, &client->super._timeout);
 }
 
 static void on_head_timeout(h2o_timer_t *entry)
@@ -331,6 +399,12 @@ static void on_head(h2o_socket_t *sock, const char *err)
         on_error(client, h2o_httpclient_error_io);
         return;
     }
+
+    /* revert max read size to 1MB now that we have received the first chunk, presumably carrying all the response headers */
+#if USE_PIPE_READER
+    if (client->_app_prefers_pipe_reader)
+        h2o_evloop_socket_set_max_read_size(client->sock, h2o_evloop_socket_max_read_size);
+#endif
 
     client->super._timeout.cb = on_head_timeout;
 
@@ -443,12 +517,22 @@ static void on_head(h2o_socket_t *sock, const char *err)
             client->_do_keepalive = 0;
     }
 
-    h2o_httpclient_on_head_t on_head = {.version = version,
-                                        .status = http_status,
-                                        .msg = h2o_iovec_init(msg, msg_len),
-                                        .headers = headers,
-                                        .num_headers = num_headers,
-                                        .header_requires_dup = 1};
+    h2o_httpclient_on_head_t on_head = {
+        .version = version,
+        .status = http_status,
+        .msg = h2o_iovec_init(msg, msg_len),
+        .headers = headers,
+        .num_headers = num_headers,
+        .header_requires_dup = 1,
+    };
+#if USE_PIPE_READER
+    /* If there is no less than 64KB of data to be read from the socket, offer the application the opportunity to use pipe for
+     * transferring the content zero-copy. As switching to pipe involves the cost of creating a pipe (and disposing it when the
+     * request is complete), we adopt this margin of 64KB, which offers clear improvement (5%) on 9th-gen Intel Core. */
+    if (client->_app_prefers_pipe_reader && reader == on_body_content_length &&
+        client->sock->input->size + 65536 <= client->_body_decoder.content_length.bytesleft)
+        on_head.pipe_reader = &client->pipe_reader;
+#endif
 
     /* call the callback */
     client->super._cb.on_body =
@@ -733,6 +817,15 @@ static void start_request(struct st_h2o_http1client_t *client, h2o_iovec_t metho
     client->state.req = STREAM_STATE_BODY;
     client->super.timings.request_begin_at = h2o_gettimeofday(client->super.ctx->loop);
 
+    /* If there's possibility of using a pipe for forwarding the content, reduce maximum read size before fetching headers. The
+     * intent here is to not do a full-sized read of 1MB. 16KB has been chosen so that all HTTP response headers would be available,
+     * and that an almost full-sized HTTP/2 frame / TLS record can be generated for the first chunk of data that we pass through
+     * memory. */
+#if USE_PIPE_READER
+    if (client->_app_prefers_pipe_reader && h2o_evloop_socket_max_read_size > 16384)
+        h2o_evloop_socket_set_max_read_size(client->sock, 16384);
+#endif
+
     h2o_socket_read_start(client->sock, on_head);
 }
 
@@ -754,6 +847,7 @@ static void on_connection_ready(struct st_h2o_http1client_t *client)
 
     client->super._cb.on_head = client->super._cb.on_connect(&client->super, NULL, &method, &url, (const h2o_header_t **)&headers,
                                                              &num_headers, &body, &client->proceed_req, &props, client->_origin);
+    client->_app_prefers_pipe_reader = props.prefer_pipe_reader;
 
     if (client->super._cb.on_head == NULL) {
         close_client(client);
@@ -773,15 +867,33 @@ static void do_cancel(h2o_httpclient_t *_client)
 static void do_update_window(h2o_httpclient_t *_client)
 {
     struct st_h2o_http1client_t *client = (void *)_client;
-    if ((*client->super.buf)->size >= client->super.ctx->max_buffer_size) {
-        if (h2o_socket_is_reading(client->sock)) {
-            client->reader = client->sock->_cb.read;
-            h2o_socket_read_stop(client->sock);
-        }
+
+    if (client->pipe_reader.on_body_piped != NULL) {
+        /* When pipe is being used, resume read when consumption is notified from user. `h2o_socket_read_start` is invoked without
+         * checking if we are already reading; this is because we want to make sure that the read callback replaced to the current
+         * one. */
+        h2o_socket_read_start(client->sock, client->reader);
     } else {
-        if (!h2o_socket_is_reading(client->sock)) {
-            h2o_socket_read_start(client->sock, client->reader);
+        /* When buffer is used, start / stop reading based on the amount of data being buffered. */
+        if ((*client->super.buf)->size >= client->super.ctx->max_buffer_size) {
+            if (h2o_socket_is_reading(client->sock)) {
+                client->reader = client->sock->_cb.read;
+                h2o_socket_read_stop(client->sock);
+            }
+        } else {
+            if (!h2o_socket_is_reading(client->sock))
+                h2o_socket_read_start(client->sock, client->reader);
         }
+    }
+
+    /* arm or unarm i/o timeout depending on if we are reading */
+    if (h2o_socket_is_reading(client->sock)) {
+        if (h2o_timer_is_linked(&client->super._timeout))
+            h2o_timer_unlink(&client->super._timeout);
+        h2o_timer_link(client->super.ctx->loop, client->super.ctx->io_timeout, &client->super._timeout);
+    } else {
+        if (h2o_timer_is_linked(&client->super._timeout))
+            h2o_timer_unlink(&client->super._timeout);
     }
 }
 

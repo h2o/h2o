@@ -2443,6 +2443,11 @@ static int on_tcp_reuseport(h2o_configurator_command_t *cmd, h2o_configurator_co
     return on_config_onoff(cmd, node, &conf.tcp_reuseport);
 }
 
+static int on_config_tls_offload(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    return on_config_onoff(cmd, node, &h2o_socket_use_ktls);
+}
+
 static yoml_t *load_config(yoml_parse_args_t *parse_args, yoml_t *source)
 {
     FILE *fp;
@@ -3532,6 +3537,8 @@ static void setup_configurators(void)
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_crash_handler_wait_pipe_close);
         h2o_configurator_define_command(c, "tcp-reuseport", H2O_CONFIGURATOR_FLAG_GLOBAL, on_tcp_reuseport);
+        h2o_configurator_define_command(c, "tls-offload", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                        on_config_tls_offload);
     }
 
     h2o_access_log_register_configurator(&conf.globalconf);
@@ -3694,6 +3701,9 @@ int main(int argc, char **argv)
 #endif
 #if H2O_USE_FUSION
                 printf("fusion: YES\n");
+#endif
+#if H2O_USE_KTLS
+                printf("ktls: YES\n");
 #endif
                 exit(0);
             case 'h':

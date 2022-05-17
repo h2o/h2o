@@ -31,11 +31,11 @@ static void loopback_on_send(h2o_ostream_t *self, h2o_req_t *req, h2o_sendvec_t 
     size_t i;
 
     for (i = 0; i != inbufcnt; ++i) {
-        h2o_buffer_reserve(&conn->body, inbufs[i].len);
-        if (!(*inbufs[i].callbacks->flatten)(inbufs + i, req, h2o_iovec_init(conn->body->bytes + conn->body->size, inbufs[i].len),
-                                             0))
+        size_t len = inbufs[i].len;
+        h2o_buffer_reserve(&conn->body, len);
+        if (!(*inbufs[i].callbacks->read_)(inbufs + i, conn->body->bytes + conn->body->size, len))
             h2o_fatal("ohoh");
-        conn->body->size += inbufs[i].len;
+        conn->body->size += len;
     }
 
     if (h2o_send_state_is_in_progress(send_state))
