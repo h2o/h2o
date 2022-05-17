@@ -405,6 +405,8 @@ sub run_with_curl {
     subtest "https/3" => sub {
         plan skip_all => "curl does not support HTTP/3"
             unless curl_supports_http3();
+        plan skip_all => "http/3 of run_with_curl is not enabled by default. Set RUN_WITH_CURL_HTTP3=1 to enable it."
+            unless $ENV{RUN_WITH_CURL_HTTP3};
         $cb->("https", $server->{tls_port}, "curl --insecure --http3", 768);
     };
 }
