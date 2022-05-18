@@ -203,13 +203,19 @@ int evloop_do_proceed(h2o_evloop_t *_loop, int32_t max_wait)
     for (i = 0; i != nevents; ++i) {
         struct st_h2o_evloop_socket_t *sock = events[i].data.ptr;
         int notified = 0;
-        /* When receiving HUP (indicating reset) while the socket is polled neither for read or write, switch to edge trigger, as
-         * otherwise epoll_wait() would continue raising the HUP event. The application will eventually try to read or write to the
-         * socket and at that point detect that the socket has become unusable. */
+        /* When receiving HUP (indicating reset) while the socket is polled neither for read nor write, unregister the socket from
+         * epoll, otherwise epoll_wait() would continue raising the HUP event. This problem cannot be avoided by using edge trigger.
+         * The application will eventually try to read or write to the socket and at that point close the socket, detecting that it
+         * has become unusable. */
         if ((events[i].events & EPOLLHUP) != 0 &&
             (sock->_flags & (H2O_SOCKET_FLAG_IS_POLLED_FOR_READ | H2O_SOCKET_FLAG_IS_POLLED_FOR_WRITE)) == 0) {
-            if (!change_epoll_mode(sock, EPOLLET))
-                h2o_fatal("do_proceed:epoll_ctl(MOD) failed for fd %d,errno=%d\n", sock->fd, errno);
+            assert((sock->_flags & H2O_SOCKET_FLAG__EPOLL_IS_REGISTERED) != 0);
+            int ret;
+            while ((ret = epoll_ctl(loop->ep, EPOLL_CTL_DEL, sock->fd, NULL)) != 0 && errno == EINTR)
+                ;
+            if (ret != 0)
+                h2o_error_printf("failed to unregister socket (fd:%d) that raised HUP; errno=%d\n", sock->fd, errno);
+            sock->_flags &= ~H2O_SOCKET_FLAG__EPOLL_IS_REGISTERED;
             notified = 1;
         }
         /* If the error event was a zerocopy notification, hide the error notification to application. Doing so is fine because
