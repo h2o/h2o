@@ -459,7 +459,7 @@ static int on_sni_callback(SSL *ssl, int *ad, void *arg)
     }
 
     if (zerocopy_mode != SSL_ZEROCOPY_NONE)
-        h2o_socket_use_zero_copy(sock);
+        h2o_socket_use_zerocopy(sock);
 
     return SSL_TLSEXT_ERR_OK;
 }
@@ -497,7 +497,7 @@ static int on_client_hello_ptls(ptls_on_client_hello_t *_self, ptls_t *tls, ptls
     if (self->listener->quic.ctx == NULL) {
         set_tcp_congestion_controller(conn, ssl_config->cc.tcp);
         if (ssl_config->zerocopy_mode != SSL_ZEROCOPY_NONE)
-            h2o_socket_use_zero_copy(conn);
+            h2o_socket_use_zerocopy(conn);
     } else {
         if (ssl_config->cc.quic != NULL)
             quicly_set_cc(conn, ssl_config->cc.quic);

@@ -8,7 +8,7 @@ use Test::More;
 use URI::Escape;
 use t::Util;
 
-my ($aggregated_mode, $h2o_keepalive, $starlet_keepalive, $starlet_force_chunked, $unix_socket, $zero_copy, $tls_offload);
+my ($aggregated_mode, $h2o_keepalive, $starlet_keepalive, $starlet_force_chunked, $unix_socket, $zerocopy, $tls_offload);
 
 GetOptions(
     "mode=i"                  => sub {
@@ -17,14 +17,14 @@ GetOptions(
         $starlet_keepalive = ($m & 2) != 0;
         $starlet_force_chunked = ($m & 4) != 0;
         $unix_socket = ($m & 8) != 0;
-        $zero_copy = ($m & 16) != 0;
+        $zerocopy = ($m & 16) != 0;
         $tls_offload = ($m & 32) != 0;
     },
     "h2o-keepalive=i"         => \$h2o_keepalive,
     "starlet-keepalive=i"     => \$starlet_keepalive,
     "starlet-force-chunked=i" => \$starlet_force_chunked,
     "unix-socket=i"           => \$unix_socket,
-    "zero-copy=i"             => \$zero_copy,
+    "zerocopy=i"              => \$zerocopy,
     "tls-offload=i"           => \$tls_offload,
 ) or exit(1);
 
@@ -35,8 +35,8 @@ plan skip_all => 'Starlet not found'
     unless system('perl -MStarlet /dev/null > /dev/null 2>&1') == 0;
 plan skip_all => 'skipping unix-socket tests, requires Starlet >= 0.25'
     if $unix_socket && `perl -MStarlet -e 'print \$Starlet::VERSION'` < 0.25;
-plan skip_all => 'zero copy requires linux'
-    if $zero_copy and $^O ne 'linux';
+plan skip_all => 'zerocopy requires linux'
+    if $zerocopy and $^O ne 'linux';
 plan skip_all => 'ktls not supported'
     if $tls_offload and !server_features()->{ktls};
 
@@ -102,7 +102,7 @@ hosts:
         file.dir: @{[ DOC_ROOT ]}
 reproxy: ON
 @{[ $h2o_keepalive ? "" : "proxy.timeout.keepalive: 0" ]}
-proxy.zero-copy: @{[ $zero_copy ? "ALWAYS" : "OFF" ]}
+proxy.zerocopy: @{[ $zerocopy ? "ALWAYS" : "OFF" ]}
 @{[$tls_offload ? "tls-offload: ON" : ""]}
 EOT
 

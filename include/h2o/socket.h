@@ -361,10 +361,10 @@ ptls_t *h2o_socket_get_ptls(h2o_socket_t *sock);
  */
 int h2o_socket_can_tls_offload(h2o_socket_t *sock);
 /**
- * Switches the socket to zero copy mode, returning if successful. The socket can no longer be exported, once this function is
+ * Switches the socket to zerocopy mode, returning if successful. The socket can no longer be exported, once this function is
  * called.
  */
-int h2o_socket_use_zero_copy(h2o_socket_t *sock);
+int h2o_socket_use_zerocopy(h2o_socket_t *sock);
 /**
  *
  */

@@ -1072,7 +1072,7 @@ int h2o_socket_can_tls_offload(h2o_socket_t *sock)
 #endif
 }
 
-int h2o_socket_use_zero_copy(h2o_socket_t *sock)
+int h2o_socket_use_zerocopy(h2o_socket_t *sock)
 {
     assert(sock->_zerocopy == NULL);
 
