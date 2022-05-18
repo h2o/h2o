@@ -9,6 +9,7 @@ use URI::Escape;
 use t::Util;
 
 my ($aggregated_mode, $h2o_keepalive, $starlet_keepalive, $starlet_force_chunked, $unix_socket, $zero_copy, $tls_offload);
+my $ssl_zerocopy = "off";
 
 GetOptions(
     "mode=i"                  => sub {
@@ -19,6 +20,17 @@ GetOptions(
         $unix_socket = ($m & 8) != 0;
         $zero_copy = ($m & 16) != 0;
         $tls_offload = ($m & 32) != 0;
+        for (($m >> 6) & 3) {
+            if (/^0$/) {
+                $ssl_zerocopy = "off";
+            } elsif (/^1$/) {
+                $ssl_zerocopy = "libcrypto";
+            } elsif (/^2$/) {
+                $ssl_zerocopy = "non-temporal";
+            } else {
+                die "unexpected tls.zero-copy mode:$m";
+            }
+        }
     },
     "h2o-keepalive=i"         => \$h2o_keepalive,
     "starlet-keepalive=i"     => \$starlet_keepalive,
@@ -26,6 +38,7 @@ GetOptions(
     "unix-socket=i"           => \$unix_socket,
     "zero-copy=i"             => \$zero_copy,
     "tls-offload=i"           => \$tls_offload,
+    "ssl-zerocopy=s"          => \$ssl_zerocopy,
 ) or exit(1);
 
 plan skip_all => 'plackup not found'
@@ -38,7 +51,11 @@ plan skip_all => 'skipping unix-socket tests, requires Starlet >= 0.25'
 plan skip_all => 'zero copy requires linux'
     if $zero_copy and $^O ne 'linux';
 plan skip_all => 'ktls not supported'
-    if $tls_offload and !server_features()->{ktls};
+    if $tls_offload and not server_features()->{ktls};
+plan skip_all => 'ssl/zerocopy requires linux'
+    if $ssl_zerocopy and $^O ne 'linux';
+plan skip_all => 'non-temporal aes-gcm engine is unavailable'
+    if $ssl_zerocopy eq 'non-temporal' and not server_features()->{fusion};
 
 my %files = map { do {
     my $fn = DOC_ROOT . "/$_";
@@ -83,7 +100,7 @@ my $guard = do {
     );
 };
 
-my $server = spawn_h2o(<< "EOT");
+my $server = spawn_h2o({conf => << "EOT", ssl_zerocopy => $ssl_zerocopy});
 hosts:
   default:
     paths:
