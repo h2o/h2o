@@ -172,11 +172,6 @@ struct listener_ssl_config_t {
      */
     struct listener_ssl_identity_t *identities;
     h2o_iovec_t *http2_origin_frame;
-    enum en_listener_ssl_zerocopy_mode_t {
-        SSL_ZEROCOPY_NONE,
-        SSL_ZEROCOPY_LIBCRYPTO,
-        SSL_ZEROCOPY_NON_TEMPORAL_AEAD,
-    } zerocopy_mode;
     /**
      * per-SNI CC (nullable)
      */
@@ -307,6 +302,11 @@ static struct {
     char *crash_handler;
     int crash_handler_wait_pipe_close;
     int tcp_reuseport;
+    enum {
+        SSL_ZEROCOPY_NONE,
+        SSL_ZEROCOPY_LIBCRYPTO,
+        SSL_ZEROCOPY_NON_TEMPORAL_AEAD,
+    } ssl_zerocopy;
 #ifdef LIBCAP_FOUND
     H2O_VECTOR(cap_value_t) capabilities;
 #endif
@@ -330,6 +330,7 @@ static struct {
     .crash_handler = "share/h2o/annotate-backtrace-symbols",
     .crash_handler_wait_pipe_close = 0,
     .tcp_reuseport = 0,
+    .ssl_zerocopy = SSL_ZEROCOPY_NONE,
 };
 
 static __thread size_t thread_index;
@@ -444,22 +445,17 @@ static int on_sni_callback(SSL *ssl, int *ad, void *arg)
 {
     struct listener_config_t *listener = arg;
     const char *server_name = SSL_get_servername(ssl, TLSEXT_NAMETYPE_host_name);
-    h2o_socket_t *sock = SSL_get_app_data(ssl);
-    enum en_listener_ssl_zerocopy_mode_t zerocopy_mode = listener->ssl.entries[0]->zerocopy_mode;
 
     if (server_name != NULL) {
         size_t server_name_len = strlen(server_name);
+        h2o_socket_t *sock = SSL_get_app_data(ssl);
         on_sni_update_tracing(sock, 0, server_name, server_name_len);
         struct listener_ssl_config_t *resolved = resolve_sni(listener, server_name, server_name_len);
         if (resolved->identities[0].ossl != SSL_get_SSL_CTX(ssl)) {
             SSL_set_SSL_CTX(ssl, resolved->identities[0].ossl);
             set_tcp_congestion_controller(sock, resolved->cc.tcp);
-            zerocopy_mode = resolved->zerocopy_mode;
         }
     }
-
-    if (zerocopy_mode != SSL_ZEROCOPY_NONE)
-        h2o_socket_use_zerocopy(sock);
 
     return SSL_TLSEXT_ERR_OK;
 }
@@ -496,8 +492,6 @@ static int on_client_hello_ptls(ptls_on_client_hello_t *_self, ptls_t *tls, ptls
     /* apply config at ssl_config-level */
     if (self->listener->quic.ctx == NULL) {
         set_tcp_congestion_controller(conn, ssl_config->cc.tcp);
-        if (ssl_config->zerocopy_mode != SSL_ZEROCOPY_NONE)
-            h2o_socket_use_zerocopy(conn);
     } else {
         if (ssl_config->cc.quic != NULL)
             quicly_set_cc(conn, ssl_config->cc.quic);
@@ -778,7 +772,7 @@ static ptls_cipher_suite_t **replace_ciphersuites(ptls_cipher_suite_t **input, p
 
 static const char *listener_setup_ssl_picotls(struct listener_config_t *listener, struct listener_ssl_identity_t *identity,
                                               ptls_iovec_t raw_public_key, ptls_cipher_suite_t **cipher_suites,
-                                              int server_cipher_preference, int use_non_temporal_aead)
+                                              int server_cipher_preference)
 {
     static const ptls_key_exchange_algorithm_t *key_exchanges[] = {
 #ifdef PTLS_OPENSSL_HAVE_X25519
@@ -906,17 +900,6 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
         }
 #endif
         quicly_amend_ptls_context(&pctx->ctx);
-    } else {
-#if H2O_USE_FUSION
-        if (use_non_temporal_aead && ptls_fusion_is_supported_by_cpu()) {
-            static ptls_cipher_suite_t aes128gcmsha256 = {PTLS_CIPHER_SUITE_AES_128_GCM_SHA256, &ptls_non_temporal_aes128gcm,
-                                                          &ptls_openssl_sha256},
-                                       aes256gcmsha384 = {PTLS_CIPHER_SUITE_AES_128_GCM_SHA256, &ptls_non_temporal_aes256gcm,
-                                                          &ptls_openssl_sha384},
-                                       *non_temporal_all[] = {&aes128gcmsha256, &aes256gcmsha384, NULL};
-            pctx->ctx.cipher_suites = replace_ciphersuites(pctx->ctx.cipher_suites, non_temporal_all);
-        }
-#endif
     }
 
     identity->ptls = &pctx->ctx;
@@ -1090,14 +1073,13 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
 {
     yoml_t **dh_file, **min_version, **max_version, **cipher_suite, **cipher_suite_tls13_node, **ocsp_update_cmd,
         **ocsp_update_interval_node, **ocsp_max_failures_node, **cipher_preference_node, **neverbleed_node,
-        **http2_origin_frame_node, **client_ca_file, **zerocopy_node;
+        **http2_origin_frame_node, **client_ca_file;
     struct listener_ssl_parsed_identity_t *parsed_identities;
     size_t num_parsed_identities;
 
     h2o_iovec_t *http2_origin_frame = NULL;
     long ssl_options = SSL_OP_ALL;
     int use_neverbleed = 1, use_picotls = 1; /* enabled by default */
-    enum en_listener_ssl_zerocopy_mode_t zerocopy_mode = SSL_ZEROCOPY_NONE;
     ptls_cipher_suite_t **cipher_suite_tls13 = NULL;
 
     if (!listener_is_new) {
@@ -1120,11 +1102,11 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
                                            "identity:a,certificate-file:s,key-file:s,min-version:s,minimum-version:s,max-version:s,"
                                            "maximum-version:s,cipher-suite:s,cipher-suite-tls1.3:a,ocsp-update-cmd:s,"
                                            "ocsp-update-interval:*,ocsp-max-failures:*,dh-file:s,cipher-preference:*,neverbleed:*,"
-                                           "http2-origin-frame:*,client-ca-file:s,zerocopy:s",
+                                           "http2-origin-frame:*,client-ca-file:s",
                                            &identity_node, &certificate_file, &key_file, &min_version, &min_version, &max_version,
                                            &max_version, &cipher_suite, &cipher_suite_tls13_node, &ocsp_update_cmd,
                                            &ocsp_update_interval_node, &ocsp_max_failures_node, &dh_file, &cipher_preference_node,
-                                           &neverbleed_node, &http2_origin_frame_node, &client_ca_file, &zerocopy_node) != 0)
+                                           &neverbleed_node, &http2_origin_frame_node, &client_ca_file) != 0)
             return -1;
         if (identity_node != NULL) {
             if (certificate_file != NULL || key_file != NULL) {
@@ -1231,33 +1213,6 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
             use_picotls = 0;
         }
     }
-    if (zerocopy_node != NULL) {
-        switch (h2o_configurator_get_one_of(cmd, *zerocopy_node, "OFF,ON,libcrypto,non-temporal")) {
-        case 0:
-            zerocopy_mode = SSL_ZEROCOPY_NONE;
-            break;
-        case 1:
-#if H2O_USE_FUSION
-            zerocopy_mode = SSL_ZEROCOPY_NON_TEMPORAL_AEAD;
-#else
-            zerocopy_mode = SSL_ZEROCOPY_LIBCRYPTO;
-#endif
-            break;
-        case 2:
-            zerocopy_mode = SSL_ZEROCOPY_LIBCRYPTO;
-            break;
-        case 3:
-#if H2O_USE_FUSION
-            zerocopy_mode = SSL_ZEROCOPY_NON_TEMPORAL_AEAD;
-            break;
-#else
-            h2o_configurator_errprintf(cmd, *zerocopy_node, "non-temporal aes-gcm engine is not available");
-            goto Error;
-#endif
-        default:
-            goto Error;
-        }
-    }
 
     /* setup OCSP stapling context as `ocsp_stapling`, or set to NULL if disabled */
     struct listener_ssl_ocsp_stapling_t *ocsp_stapling = h2o_mem_alloc(sizeof(*ocsp_stapling));
@@ -1326,10 +1281,10 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
     memset(ssl_config, 0, sizeof(*ssl_config));
     h2o_vector_reserve(NULL, &listener->ssl, listener->ssl.size + 1);
     listener->ssl.entries[listener->ssl.size++] = ssl_config;
-    if (ctx->hostconf != NULL)
+    if (ctx->hostconf != NULL) {
         listener_setup_ssl_add_host(ssl_config, ctx->hostconf->authority.hostport);
+    }
     ssl_config->http2_origin_frame = http2_origin_frame;
-    ssl_config->zerocopy_mode = zerocopy_mode;
     ssl_config->identities = h2o_mem_alloc(sizeof(*ssl_config->identities) * (num_parsed_identities + 1));
 
     /* load identities */
@@ -1393,8 +1348,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
 
         if (use_picotls) {
             const char *errstr = listener_setup_ssl_picotls(listener, identity, raw_pubkey, cipher_suite_tls13,
-                                                            !!(ssl_options & SSL_OP_CIPHER_SERVER_PREFERENCE),
-                                                            ssl_config->zerocopy_mode == SSL_ZEROCOPY_NON_TEMPORAL_AEAD);
+                                                            !!(ssl_options & SSL_OP_CIPHER_SERVER_PREFERENCE));
             if (errstr != NULL) {
                 /* It is a fatal error to setup TLS 1.3 context, when setting up alternative identities, or a QUIC context. */
                 if (identity != ssl_config->identities || listener->quic.ctx != NULL) {
@@ -2504,9 +2458,40 @@ static int on_tcp_reuseport(h2o_configurator_command_t *cmd, h2o_configurator_co
     return on_config_onoff(cmd, node, &conf.tcp_reuseport);
 }
 
-static int on_config_tls_offload(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+static int on_config_ssl_offload(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     return on_config_onoff(cmd, node, &h2o_socket_use_ktls);
+}
+
+static int on_config_ssl_zerocopy(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    switch (h2o_configurator_get_one_of(cmd, node, "OFF,ON,libcrypto,non-temporal")) {
+    case 0:
+        conf.ssl_zerocopy = SSL_ZEROCOPY_NONE;
+        return 0;
+    case 1:
+#if H2O_USE_FUSION
+        conf.ssl_zerocopy = SSL_ZEROCOPY_NON_TEMPORAL_AEAD;
+#else
+        conf.ssl_zerocopy = SSL_ZEROCOPY_LIBCRYPTO;
+#endif
+        return 0;
+    case 2:
+        conf.ssl_zerocopy = SSL_ZEROCOPY_LIBCRYPTO;
+        return 0;
+    case 3:
+#if H2O_USE_FUSION
+        if (ptls_fusion_is_supported_by_cpu()) {
+            conf.ssl_zerocopy = SSL_ZEROCOPY_NON_TEMPORAL_AEAD;
+            return 0;
+        }
+#else
+        h2o_configurator_errprintf(cmd, node, "non-temporal aes-gcm engine is not available");
+        return -1;
+#endif
+    default:
+        return -1;
+    }
 }
 
 static yoml_t *load_config(yoml_parse_args_t *parse_args, yoml_t *source)
@@ -2992,6 +2977,9 @@ static void on_accept(h2o_socket_t *listener, const char *err)
         if (listener_config->rcvbuf != 0)
             setsockopt(h2o_socket_get_fd(sock), SOL_SOCKET, SO_RCVBUF, &listener_config->rcvbuf, sizeof(listener_config->rcvbuf));
         set_tcp_congestion_controller(sock, listener_config->tcp_congestion_controller);
+
+        if (ctx->accept_ctx.ssl_ctx != NULL && conf.ssl_zerocopy != SSL_ZEROCOPY_NONE)
+            h2o_socket_use_zerocopy(sock);
 
         h2o_accept(&ctx->accept_ctx, sock);
 
@@ -3598,8 +3586,10 @@ static void setup_configurators(void)
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_crash_handler_wait_pipe_close);
         h2o_configurator_define_command(c, "tcp-reuseport", H2O_CONFIGURATOR_FLAG_GLOBAL, on_tcp_reuseport);
-        h2o_configurator_define_command(c, "tls-offload", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
-                                        on_config_tls_offload);
+        h2o_configurator_define_command(c, "ssl-offload", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                        on_config_ssl_offload);
+        h2o_configurator_define_command(c, "ssl-zerocopy", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                        on_config_ssl_zerocopy);
     }
 
     h2o_access_log_register_configurator(&conf.globalconf);
@@ -3833,12 +3823,11 @@ int main(int argc, char **argv)
             exit(EX_CONFIG);
         if (h2o_configurator_apply(&conf.globalconf, yoml, conf.run_mode != RUN_MODE_WORKER) != 0)
             exit(EX_CONFIG);
-
         dispose_resolve_tag_arg(&resolve_tag_arg);
         yoml_free(yoml, NULL);
     }
 
-    {
+    { /* test if temporary files can be created */
         int fd = h2o_file_mktemp(h2o_socket_buffer_mmap_settings.fn_template);
         if (fd == -1) {
             fprintf(stderr, "temp-buffer-path: failed to create temporary file from the mkstemp(3) template '%s': %s\n",
@@ -3847,6 +3836,28 @@ int main(int argc, char **argv)
         }
         close(fd);
     }
+
+#if H2O_USE_FUSION
+    /* swap aes-gcm cipher suites to non-temporal */
+    if (conf.ssl_zerocopy == SSL_ZEROCOPY_NON_TEMPORAL_AEAD) {
+        static ptls_cipher_suite_t aes128gcmsha256 = {PTLS_CIPHER_SUITE_AES_128_GCM_SHA256, &ptls_non_temporal_aes128gcm,
+                                                      &ptls_openssl_sha256},
+                                   aes256gcmsha384 = {PTLS_CIPHER_SUITE_AES_128_GCM_SHA256, &ptls_non_temporal_aes256gcm,
+                                                      &ptls_openssl_sha384},
+                                   *non_temporal_all[] = {&aes128gcmsha256, &aes256gcmsha384, NULL};
+        for (size_t listener_index = 0; listener_index != conf.num_listeners; ++listener_index) {
+            struct listener_config_t *listener = conf.listeners[listener_index];
+            for (size_t ssl_index = 0; ssl_index != listener->ssl.size; ++ssl_index) {
+                struct listener_ssl_config_t *ssl = listener->ssl.entries[ssl_index];
+                for (struct listener_ssl_identity_t *identity = ssl->identities; identity->certificate_file != NULL; ++identity) {
+                    fprintf(stderr, "%s:%d %p\n", __FUNCTION__, __LINE__, identity->ptls->cipher_suites);
+                    if (identity->ptls != NULL)
+                        identity->ptls->cipher_suites = replace_ciphersuites(identity->ptls->cipher_suites, non_temporal_all);
+                }
+            }
+        }
+    }
+#endif
 
     /* calculate defaults (note: open file cached is purged once every loop) */
     conf.globalconf.filecache.capacity = conf.globalconf.http2.max_concurrent_requests_per_connection * 2;
