@@ -245,7 +245,6 @@ sub spawn_h2o {
     my ($conf) = @_;
     my @opts;
     my $max_ssl_version;
-    my $ssl_zerocopy = "off";
 
     # decide the port numbers
     my ($port, $tls_port) = empty_ports(2, { host => "0.0.0.0" });
@@ -260,7 +259,6 @@ sub spawn_h2o {
             if $conf->{opts};
         $max_ssl_version = $conf->{max_ssl_version} || undef;
         $user = $conf->{user} if exists $conf->{user};
-        $ssl_zerocopy = $conf->{ssl_zerocopy} if exists $conf->{ssl_zerocopy};
         push @all_ports, $conf->{extra_ports} if exists $conf->{extra_ports};
         $conf = $conf->{conf};
     }
@@ -275,7 +273,6 @@ listen:
       key-file: examples/h2o/server.key
       certificate-file: examples/h2o/server.crt
       @{[$max_ssl_version ? "max-version: $max_ssl_version" : ""]}
-      zerocopy: $ssl_zerocopy
 @{[$user ? "user: $user" : ""]}
 EOT
 

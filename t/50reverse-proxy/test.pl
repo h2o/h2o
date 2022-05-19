@@ -100,7 +100,7 @@ my $guard = do {
     );
 };
 
-my $server = spawn_h2o({conf => << "EOT", ssl_zerocopy => $ssl_zerocopy});
+my $server = spawn_h2o(<< "EOT");
 hosts:
   default:
     paths:
@@ -120,7 +120,8 @@ hosts:
 reproxy: ON
 @{[ $h2o_keepalive ? "" : "proxy.timeout.keepalive: 0" ]}
 proxy.zerocopy: @{[ $zerocopy ? "ALWAYS" : "OFF" ]}
-@{[$tls_offload ? "tls-offload: ON" : ""]}
+@{[$tls_offload ? "ssl-offload: ON" : ""]}
+ssl-zerocopy: $ssl_zerocopy
 EOT
 
 run_with_curl($server, sub {
