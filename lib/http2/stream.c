@@ -396,7 +396,7 @@ void h2o_http2_stream_send_pending_data(h2o_http2_conn_t *conn, h2o_http2_stream
         return;
 
     h2o_sendvec_t *nextbuf = send_data(conn, stream, stream->_data.entries, stream->_data.size, stream->send_state);
-    if (nextbuf == NULL) {
+    if (nextbuf == NULL && stream->_data.entries != NULL) {
         /* error */
         stream->_data.size = 0;
         stream->send_state = H2O_SEND_STATE_ERROR;
