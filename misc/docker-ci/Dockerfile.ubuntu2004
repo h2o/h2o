@@ -43,23 +43,51 @@ RUN apt-get install --yes \
 
 # curl with http2 and http3 support
 # https://curl.se/docs/http3.html
+ENV CURL_VERSION=7.83.1
+ENV CURL_INSTALL_DIR=/usr/local
+
+# curl-quiche (HTTP/3 using Quiche and BoringSSL)
 RUN wget --https-only --no-verbose -O - https://sh.rustup.rs | sh -s -- \
 		-y \
 		--profile minimal \
 		--default-toolchain 1.60.0 \
-	&& git clone --recursive --branch 0.13.0 --depth 1 https://github.com/cloudflare/quiche \
-	&& (cd quiche \
+	&& (git clone --recursive --branch 0.13.0 --depth 1 https://github.com/cloudflare/quiche \
+		&& cd quiche \
 		&& $HOME/.cargo/bin/cargo build --package quiche --release --features ffi,pkg-config-meta,qlog \
 		&& mkdir quiche/deps/boringssl/src/lib \
 		&& ln -vnf $(find target/release -name libcrypto.a -o -name libssl.a) quiche/deps/boringssl/src/lib/ \
 		&& find . -name '*.so' -delete) \
-	&& wget --https-only --no-verbose -O - https://curl.se/download/curl-7.83.1.tar.bz2 | tar xjf - \
-	&& (cd curl-7.83.1 \
-		&& ./configure --prefix=/usr/local --without-brotli --with-nghttp2 --disable-shared  CC=clang LDFLAGS="-Wl,-rpath,$PWD/../quiche/target/release" --with-openssl="$PWD/../quiche/quiche/deps/boringssl/src" --with-quiche="$PWD/../quiche/target/release" \
-		&& make -j4 V=1 && make -j4 V=1 install) \
-	&& (rm -rf quiche curl-7.83.1) \
-	&& curl --version
+	&& (wget --https-only --no-verbose -O - "https://curl.se/download/curl-${CURL_VERSION}.tar.bz2" | tar xjf - \
+		&& cd "curl-${CURL_VERSION}" \
+		&& USE_CURL_SSLKEYLOGFILE=true ./configure --prefix="${CURL_INSTALL_DIR}" --with-nghttp2 --disable-shared  CC=clang LDFLAGS="-Wl,-rpath,$PWD/../quiche/target/release" --with-openssl="$PWD/../quiche/quiche/deps/boringssl/src" --with-quiche="$PWD/../quiche/target/release" --program-suffix="-quiche" \
+		&& make -j"$(nproc)" V=1 && make -j"$(nproc)" V=1 install) \
+	&& (rm -rf quiche "curl-${CURL_VERSION}") \
+	&& curl-quiche --version
 
+# curl-ngtcp2 (HTTP/3 using ngtcp2+nghttp3 and a patched OpenSSL)
+RUN (git clone --depth 1 --branch openssl-3.0.0+quic https://github.com/quictls/openssl \
+		&& cd openssl \
+		&& ./config enable-tls1_3 no-shared --prefix="${CURL_INSTALL_DIR}" \
+		&& make -j"$(nproc)" V=1 && make -j"$(nproc)" V=1 install) \
+	&& (git clone --depth 1 --branch v0.4.1 https://github.com/ngtcp2/nghttp3 \
+		&& cd nghttp3 \
+		&& autoreconf -fi \
+		&& ./configure PKG_CONFIG_PATH="${CURL_INSTALL_DIR}/lib/pkgconfig:${CURL_INSTALL_DIR}/lib64/pkgconfig" LDFLAGS="-Wl,-rpath,${CURL_INSTALL_DIR}/lib:${CURL_INSTALL_DIR}/lib64" --prefix="${CURL_INSTALL_DIR}" --enable-lib-only --disable-shared \
+		&& make -j"$(nproc)" V=1 && make -j"$(nproc)" V=1 install) \
+	&& (git clone --depth 1 --branch v0.5.0 https://github.com/ngtcp2/ngtcp2 \
+		&& cd ngtcp2 \
+		&& autoreconf -fi \
+		&& ./configure PKG_CONFIG_PATH="${CURL_INSTALL_DIR}/lib/pkgconfig:${CURL_INSTALL_DIR}/lib64/pkgconfig" LDFLAGS="-Wl,-rpath,${CURL_INSTALL_DIR}/lib:${CURL_INSTALL_DIR}/lib64" "--prefix=${CURL_INSTALL_DIR}" --enable-lib-only --disable-shared \
+		&& make -j"$(nproc)" V=1 && make -j"$(nproc)" V=1 install) \
+	&& (wget --https-only --no-verbose -O - "https://curl.se/download/curl-${CURL_VERSION}.tar.bz2" | tar xjf - \
+		&& cd "curl-${CURL_VERSION}" \
+		&& USE_CURL_SSLKEYLOGFILE=true ./configure --prefix="${CURL_INSTALL_DIR}" --with-nghttp2 --disable-shared --with-openssl="${CURL_INSTALL_DIR}" --with-ngtcp2="${CURL_INSTALL_DIR}" --with-nghttp3="${CURL_INSTALL_DIR}" --program-suffix="-ngtcp2" \
+		&& make -j"$(nproc)" V=1 && make -j"$(nproc)" V=1 install) \
+	&& (rm -rf openssl nghttp3 ngtcp2 "curl-${CURL_VERSION}") \
+	&& curl-ngtcp2 --version \
+	&& cp "${CURL_INSTALL_DIR}/bin/curl-ngtcp2" "${CURL_INSTALL_DIR}/bin/curl"
+
+#  % LDFLAGS="-Wl,-rpath,<somewhere1>/lib" ./configure --with-openssl=<somewhere1> --with-nghttp3=<somewhere2> --with-ngtcp2=<somewhere3>
 
 # libssl-dev causes curl to fail to build with http3 (quiche).
 # Once curl is built with BoringSSL's static libraries, libssl-dev can be installed without affecting curl.
