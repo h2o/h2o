@@ -45,6 +45,7 @@ RUN apt-get install --yes \
 # https://curl.se/docs/http3.html
 ENV CURL_VERSION=7.83.1
 ENV CURL_INSTALL_DIR=/usr/local
+RUN apt install --yes libltdl-dev autoconf
 
 # curl-quiche (HTTP/3 using Quiche and BoringSSL)
 RUN wget --https-only --no-verbose -O - https://sh.rustup.rs | sh -s -- \
