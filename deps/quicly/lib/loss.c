@@ -32,14 +32,23 @@ int quicly_loss_init_sentmap_iter(quicly_loss_t *loss, quicly_sentmap_iter_t *it
      * below 32 packets. This exception (the threshold of 32) exists to be capable of recognizing excessively late-ACKs when under
      * heavy loss; in such case, 32 is more than enough, yet small enough that the memory footprint does not matter. */
     const quicly_sent_packet_t *sent;
-    while ((sent = quicly_sentmap_get(iter))->sent_at <= retire_before && sent->cc_bytes_in_flight == 0) {
-        int ret;
+    int ret = 0;
+    while ((sent = quicly_sentmap_get(iter))->sent_at <= retire_before) {
         if (!is_closing && loss->sentmap.num_packets < 32)
             break;
+        if (sent->cc_bytes_in_flight != 0) {
+            /* cannot retire packets with cc_bytes_in_flight, but we may find retirable ones later in the map */
+            quicly_sentmap_skip(iter);
+            continue;
+        }
         if ((ret = quicly_sentmap_update(&loss->sentmap, iter, QUICLY_SENTMAP_EVENT_EXPIRED)) != 0)
-            return ret;
+            break;
     }
-    return 0;
+
+    /* rewind iter to the head of the sentmap, before returning it to the caller */
+    quicly_sentmap_init_iter(&loss->sentmap, iter);
+
+    return ret;
 }
 
 int quicly_loss_detect_loss(quicly_loss_t *loss, int64_t now, uint32_t max_ack_delay, int is_1rtt_only,

@@ -312,6 +312,15 @@ struct st_quicly_context_t {
      */
     uint16_t ack_frequency;
     /**
+     * if the handshake does not complete within this value * RTT, close connection
+     */
+    uint32_t handshake_timeout_rtt_multiplier;
+    /**
+     * if the number of Initial/Handshake packets sent during the handshake phase exceeds this limit, treat it as an error and close
+     * the connection.
+     */
+    uint64_t max_initial_handshake_packets;
+    /**
      * expand client hello so that it does not fit into one datagram
      */
     unsigned expand_client_hello : 1;
@@ -427,6 +436,10 @@ struct st_quicly_conn_streamgroup_state_t {
          * Total number of packets for which acknowledgements were received after being marked lost.                               \
          */                                                                                                                        \
         uint64_t late_acked;                                                                                                       \
+        /**                                                                                                                        \
+         * Total number of Initial and Handshake packets sent.                                                                     \
+         */                                                                                                                        \
+        uint64_t initial_handshake_sent;                                                                                           \
     } num_packets;                                                                                                                 \
     struct {                                                                                                                       \
         /**                                                                                                                        \
@@ -466,7 +479,19 @@ struct st_quicly_conn_streamgroup_state_t {
     /**                                                                                                                            \
      * Total number of PTOs observed during the connection.                                                                        \
      */                                                                                                                            \
-    uint64_t num_ptos
+    uint64_t num_ptos;                                                                                                             \
+    /**                                                                                                                            \
+     * Time spent during handshake. UINT64_MAX if still in handshake.                                                              \
+     */                                                                                                                            \
+    uint64_t handshake_msec;                                                                                                       \
+    /**                                                                                                                            \
+     * number of timeouts occurred during handshake due to no progress being made (see `handshake_timeout_rtt_multiplier`)         \
+     */                                                                                                                            \
+    uint64_t num_handshake_timeouts;                                                                                               \
+    /**                                                                                                                            \
+     * Total number of events where `initial_handshake_sent` exceeds limit.                                                        \
+     */                                                                                                                            \
+    uint64_t num_initial_handshake_exceeded
 
 typedef struct st_quicly_stats_t {
     /**
@@ -485,6 +510,10 @@ typedef struct st_quicly_stats_t {
      * Estimated delivery rate, in bytes/second.
      */
     quicly_rate_t delivery_rate;
+    /**
+     * maximum number of packets contained in the sentmap
+     */
+    size_t num_sentmap_packets_max;
 } quicly_stats_t;
 
 /**
