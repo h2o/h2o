@@ -1293,6 +1293,8 @@ static int handle_input_expect_headers(struct st_h2o_http3_server_stream_t *stre
         if ((index = h2o_find_header(&stream->req.headers, H2O_TOKEN_PRIORITY, -1)) != -1) {
             h2o_iovec_t *value = &stream->req.headers.entries[index].value;
             h2o_absprio_parse_priority(value->base, value->len, &stream->scheduler.priority);
+        } else if (is_connect) {
+            stream->scheduler.priority.incremental = 1;
         }
     }
 
