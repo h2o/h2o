@@ -53,7 +53,7 @@ plan skip_all => 'zerocopy requires linux'
 plan skip_all => 'ktls not supported'
     if $tls_offload and not server_features()->{ktls};
 plan skip_all => 'ssl/zerocopy requires linux'
-    if $ssl_zerocopy and $^O ne 'linux';
+    if $ssl_zerocopy and not server_features()->{"ssl-zerocopy"};
 plan skip_all => 'non-temporal aes-gcm engine is unavailable'
     if $ssl_zerocopy eq 'non-temporal' and not server_features()->{fusion};
 
