@@ -2,8 +2,7 @@ FROM ubuntu:20.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-RUN apt-get --yes update
-RUN apt-get install --yes \
+RUN apt-get --yes update && apt-get install --yes \
 	apache2-utils \
 	bison \
 	clang \
@@ -45,7 +44,8 @@ RUN apt-get install --yes \
 # https://curl.se/docs/http3.html
 ENV CURL_VERSION=7.83.1
 ENV CURL_INSTALL_DIR=/usr/local
-RUN apt install --yes libltdl-dev autoconf
+RUN apt-get install --yes libltdl-dev autoconf
+WORKDIR /root
 
 # curl-quiche (HTTP/3 using Quiche and BoringSSL)
 RUN wget --https-only --no-verbose -O - https://sh.rustup.rs | sh -s -- \
