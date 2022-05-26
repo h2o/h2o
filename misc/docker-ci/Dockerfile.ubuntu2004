@@ -44,8 +44,8 @@ RUN apt-get --yes update && apt-get install --yes \
 # https://curl.se/docs/http3.html
 ENV CURL_VERSION=7.83.1
 ENV CURL_INSTALL_DIR=/usr/local
-RUN apt-get install --yes libltdl-dev autoconf
 WORKDIR /root
+RUN apt-get install --yes libtool autoconf && chmod 777 /root
 
 # curl-quiche (HTTP/3 using Quiche and BoringSSL)
 RUN wget --https-only --no-verbose -O - https://sh.rustup.rs | sh -s -- \
@@ -63,32 +63,33 @@ RUN wget --https-only --no-verbose -O - https://sh.rustup.rs | sh -s -- \
 		&& USE_CURL_SSLKEYLOGFILE=true ./configure --prefix="${CURL_INSTALL_DIR}" --with-nghttp2 --disable-shared  CC=clang LDFLAGS="-Wl,-rpath,$PWD/../quiche/target/release" --with-openssl="$PWD/../quiche/quiche/deps/boringssl/src" --with-quiche="$PWD/../quiche/target/release" --program-suffix="-quiche" \
 		&& make -j"$(nproc)" V=1 && make -j"$(nproc)" V=1 install) \
 	&& (rm -rf quiche "curl-${CURL_VERSION}") \
-	&& curl-quiche --version
+	&& curl-quiche --version \
+	&& curl-quiche -sSfv --http3 https://http3.is > /dev/null
 
 # curl-ngtcp2 (HTTP/3 using ngtcp2+nghttp3 and a patched OpenSSL)
-RUN (git clone --depth 1 --branch openssl-3.0.0+quic https://github.com/quictls/openssl \
+RUN (git clone --depth 1 --branch openssl-3.0.3+quic https://github.com/quictls/openssl \
 		&& cd openssl \
-		&& ./config enable-tls1_3 no-shared --prefix="${CURL_INSTALL_DIR}" \
+		&& ./config enable-tls1_3 --prefix="${HOME}/curl" \
 		&& make -j"$(nproc)" V=1 && make -j"$(nproc)" V=1 install) \
 	&& (git clone --depth 1 --branch v0.4.1 https://github.com/ngtcp2/nghttp3 \
 		&& cd nghttp3 \
 		&& autoreconf -fi \
-		&& ./configure PKG_CONFIG_PATH="${CURL_INSTALL_DIR}/lib/pkgconfig:${CURL_INSTALL_DIR}/lib64/pkgconfig" LDFLAGS="-Wl,-rpath,${CURL_INSTALL_DIR}/lib:${CURL_INSTALL_DIR}/lib64" --prefix="${CURL_INSTALL_DIR}" --enable-lib-only --disable-shared \
+		&& ./configure CC=clang CXX=clang++ PKG_CONFIG_PATH="${HOME}/curl/lib/pkgconfig:${HOME}/curl/lib64/pkgconfig" LDFLAGS="-Wl,-rpath,${HOME}/curl/lib:${HOME}/curl/lib64" --prefix="${HOME}/curl" --enable-lib-only --disable-shared \
 		&& make -j"$(nproc)" V=1 && make -j"$(nproc)" V=1 install) \
 	&& (git clone --depth 1 --branch v0.5.0 https://github.com/ngtcp2/ngtcp2 \
 		&& cd ngtcp2 \
 		&& autoreconf -fi \
-		&& ./configure PKG_CONFIG_PATH="${CURL_INSTALL_DIR}/lib/pkgconfig:${CURL_INSTALL_DIR}/lib64/pkgconfig" LDFLAGS="-Wl,-rpath,${CURL_INSTALL_DIR}/lib:${CURL_INSTALL_DIR}/lib64" "--prefix=${CURL_INSTALL_DIR}" --enable-lib-only --disable-shared \
+		&& ./configure CC=clang CXX=clang++ PKG_CONFIG_PATH="${HOME}/curl/lib/pkgconfig:${HOME}/curl/lib64/pkgconfig" LDFLAGS="-Wl,-rpath,${HOME}/curl/lib:${HOME}/curl/lib64" "--prefix=${HOME}/curl" --enable-lib-only --disable-shared \
 		&& make -j"$(nproc)" V=1 && make -j"$(nproc)" V=1 install) \
+	&& (find "${HOME}/curl" -name '*.so*' -delete) \
 	&& (wget --https-only --no-verbose -O - "https://curl.se/download/curl-${CURL_VERSION}.tar.bz2" | tar xjf - \
 		&& cd "curl-${CURL_VERSION}" \
-		&& USE_CURL_SSLKEYLOGFILE=true ./configure --prefix="${CURL_INSTALL_DIR}" --with-nghttp2 --disable-shared --with-openssl="${CURL_INSTALL_DIR}" --with-ngtcp2="${CURL_INSTALL_DIR}" --with-nghttp3="${CURL_INSTALL_DIR}" --program-suffix="-ngtcp2" \
+		&& USE_CURL_SSLKEYLOGFILE=true ./configure CC=clang CXX=clang++ LDFLAGS="-Wl,-rpath,${HOME}/curl/lib:${HOME}/curl/lib64" --prefix="${CURL_INSTALL_DIR}" --with-nghttp2 --disable-shared --with-openssl="${HOME}/curl" --with-ngtcp2="${HOME}/curl" --with-nghttp3="${HOME}/curl" --program-suffix="-ngtcp2" \
 		&& make -j"$(nproc)" V=1 && make -j"$(nproc)" V=1 install) \
-	&& (rm -rf openssl nghttp3 ngtcp2 "curl-${CURL_VERSION}") \
+	&& (rm -rf openssl nghttp3 ngtcp2 "curl-${CURL_VERSION}" curl) \
 	&& curl-ngtcp2 --version \
-	&& cp "${CURL_INSTALL_DIR}/bin/curl-ngtcp2" "${CURL_INSTALL_DIR}/bin/curl"
-
-#  % LDFLAGS="-Wl,-rpath,<somewhere1>/lib" ./configure --with-openssl=<somewhere1> --with-nghttp3=<somewhere2> --with-ngtcp2=<somewhere3>
+	&& curl-ngtcp2 -sSfv --http3 https://http3.is > /dev/null \
+	&& ln -s "${CURL_INSTALL_DIR}/bin/curl-ngtcp2" "${CURL_INSTALL_DIR}/bin/curl"
 
 # libssl-dev causes curl to fail to build with http3 (quiche).
 # Once curl is built with BoringSSL's static libraries, libssl-dev can be installed without affecting curl.
