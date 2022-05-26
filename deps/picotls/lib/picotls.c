@@ -1195,6 +1195,20 @@ static int get_traffic_key(ptls_hash_algorithm_t *algo, void *key, size_t key_si
                                   label_prefix);
 }
 
+static int get_traffic_keys(ptls_aead_algorithm_t *aead, ptls_hash_algorithm_t *hash, void *key, void *iv, const void *secret,
+                            ptls_iovec_t hash_value, const char *label_prefix)
+{
+    int ret;
+
+    if ((ret = get_traffic_key(hash, key, aead->key_size, 0, secret, hash_value, label_prefix)) != 0 ||
+        (ret = get_traffic_key(hash, iv, aead->iv_size, 1, secret, hash_value, label_prefix)) != 0) {
+        ptls_clear_memory(key, aead->key_size);
+        ptls_clear_memory(iv, aead->iv_size);
+    }
+
+    return ret;
+}
+
 static int setup_traffic_protection(ptls_t *tls, int is_enc, const char *secret_label, size_t epoch, int skip_notify)
 {
     static const char *log_labels[2][4] = {
@@ -4425,6 +4439,18 @@ ptls_cipher_suite_t *ptls_get_cipher(ptls_t *tls)
     return tls->cipher_suite;
 }
 
+int ptls_get_traffic_keys(ptls_t *tls, int is_enc, uint8_t *key, uint8_t *iv, uint64_t *seq)
+{
+    struct st_ptls_traffic_protection_t *ctx = is_enc ? &tls->traffic_protection.enc : &tls->traffic_protection.dec;
+    int ret;
+
+    if ((ret = get_traffic_keys(tls->cipher_suite->aead, tls->cipher_suite->hash, key, iv, ctx->secret, ptls_iovec_init(NULL, 0),
+                                NULL)) != 0)
+        return ret;
+    *seq = ctx->seq;
+    return 0;
+}
+
 const char *ptls_get_server_name(ptls_t *tls)
 {
     return tls->server_name;
@@ -5218,17 +5244,18 @@ ptls_aead_context_t *new_aead(ptls_aead_algorithm_t *aead, ptls_hash_algorithm_t
                               ptls_iovec_t hash_value, const char *label_prefix)
 {
     ptls_aead_context_t *ctx = NULL;
-    uint8_t key_iv[PTLS_MAX_SECRET_SIZE + PTLS_MAX_IV_SIZE];
+    struct {
+        uint8_t key[PTLS_MAX_SECRET_SIZE];
+        uint8_t iv[PTLS_MAX_IV_SIZE];
+    } key_iv;
     int ret;
 
-    if ((ret = get_traffic_key(hash, key_iv, aead->key_size, 0, secret, hash_value, label_prefix)) != 0)
+    if ((ret = get_traffic_keys(aead, hash, key_iv.key, key_iv.iv, secret, hash_value, label_prefix)) != 0)
         goto Exit;
-    if ((ret = get_traffic_key(hash, key_iv + aead->key_size, aead->iv_size, 1, secret, hash_value, label_prefix)) != 0)
-        goto Exit;
-    ctx = ptls_aead_new_direct(aead, is_enc, key_iv, key_iv + aead->key_size);
+    ctx = ptls_aead_new_direct(aead, is_enc, key_iv.key, key_iv.iv);
 
 Exit:
-    ptls_clear_memory(key_iv, sizeof(key_iv));
+    ptls_clear_memory(&key_iv, sizeof(key_iv));
     return ctx;
 }
 

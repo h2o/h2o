@@ -93,9 +93,10 @@ typedef struct st_h2o_iovec_t {
 } h2o_iovec_t;
 
 typedef struct st_h2o_mem_recycle_t {
+    const size_t *memsize;
     size_t max;
     size_t cnt;
-    struct st_h2o_mem_recycle_chunk_t *_link;
+    void **chunks;
 } h2o_mem_recycle_t;
 
 struct st_h2o_mem_pool_shared_entry_t {
@@ -207,7 +208,7 @@ static void *h2o_mem_realloc(void *oldp, size_t sz);
 /**
  * allocates memory using the reusing allocator
  */
-void *h2o_mem_alloc_recycle(h2o_mem_recycle_t *allocator, size_t sz);
+void *h2o_mem_alloc_recycle(h2o_mem_recycle_t *allocator);
 /**
  * returns the memory to the reusing allocator
  */
