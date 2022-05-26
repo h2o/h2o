@@ -154,11 +154,13 @@ static void cleanup_connection(struct st_h2o_http1_conn_t *conn)
         close_connection(conn, 1);
         return;
     } else {
-        --*get_connection_state_counter(conn->super.ctx, conn->super.state);
-        h2o_linklist_unlink(&conn->super._conns);
-        h2o_linklist_insert(&conn->super.ctx->_conns.idle, &conn->super._conns);
-        conn->super.state = H2O_CONNECTION_STATE_IDLE;
-        ++*get_connection_state_counter(conn->super.ctx, conn->super.state);
+        if (conn->sock->input->size == 0) {
+            --*get_connection_state_counter(conn->super.ctx, conn->super.state);
+            h2o_linklist_unlink(&conn->super._conns);
+            h2o_linklist_insert(&conn->super.ctx->_conns.idle, &conn->super._conns);
+            conn->super.state = H2O_CONNECTION_STATE_IDLE;
+            ++*get_connection_state_counter(conn->super.ctx, conn->super.state);
+        }
     }
 
     assert(conn->req.proceed_req == NULL);
