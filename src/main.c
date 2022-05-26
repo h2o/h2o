@@ -3866,7 +3866,6 @@ int main(int argc, char **argv)
                     struct listener_ssl_config_t *ssl = listener->ssl.entries[ssl_index];
                     for (struct listener_ssl_identity_t *identity = ssl->identities; identity->certificate_file != NULL;
                          ++identity) {
-                        fprintf(stderr, "%s:%d %p\n", __FUNCTION__, __LINE__, identity->ptls->cipher_suites);
                         if (identity->ptls != NULL)
                             identity->ptls->cipher_suites = replace_ciphersuites(identity->ptls->cipher_suites, non_temporal_all);
                     }
