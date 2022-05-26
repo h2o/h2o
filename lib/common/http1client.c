@@ -810,7 +810,8 @@ static void start_request(struct st_h2o_http1client_t *client, h2o_iovec_t metho
     }
     client->super.bytes_written.total = client->sock->bytes_written;
 
-    /* TODO no need to set the timeout if all data has been written into TCP sendbuf */
+    /* Even all data highly likely has been written into TCP sendbuf, it is our practice to assume the socket write operation is
+     * asynchronous and link the timer. */
     client->super._timeout.cb = on_send_timeout;
     h2o_timer_link(client->super.ctx->loop, client->super.ctx->io_timeout, &client->super._timeout);
 
