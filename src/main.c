@@ -3856,7 +3856,7 @@ int main(int argc, char **argv)
     if (conf.ssl_zerocopy == SSL_ZEROCOPY_NON_TEMPORAL_AEAD) {
         static ptls_cipher_suite_t aes128gcmsha256 = {PTLS_CIPHER_SUITE_AES_128_GCM_SHA256, &ptls_non_temporal_aes128gcm,
                                                       &ptls_openssl_sha256},
-                                   aes256gcmsha384 = {PTLS_CIPHER_SUITE_AES_128_GCM_SHA256, &ptls_non_temporal_aes256gcm,
+                                   aes256gcmsha384 = {PTLS_CIPHER_SUITE_AES_256_GCM_SHA384, &ptls_non_temporal_aes256gcm,
                                                       &ptls_openssl_sha384},
                                    *non_temporal_all[] = {&aes128gcmsha256, &aes256gcmsha384, NULL};
         for (size_t listener_index = 0; listener_index != conf.num_listeners; ++listener_index) {
