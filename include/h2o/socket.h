@@ -28,6 +28,9 @@ extern "C" {
 
 #include <stdint.h>
 #include <sys/socket.h>
+#ifdef __linux__
+#include <linux/errqueue.h>
+#endif
 #include <openssl/ssl.h>
 #include <openssl/opensslconf.h>
 #include "picotls.h"
@@ -43,6 +46,10 @@ extern "C" {
 #else
 #define H2O_USE_LIBUV 1
 #endif
+#endif
+
+#if defined(SO_ZEROCOPY) && defined(SO_EE_ORIGIN_ZEROCOPY)
+#define H2O_USE_MSG_ZEROCOPY 1
 #endif
 
 #if OPENSSL_VERSION_NUMBER >= 0x10002000L

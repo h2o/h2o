@@ -2465,25 +2465,26 @@ static int on_config_ssl_offload(h2o_configurator_command_t *cmd, h2o_configurat
 
 static int on_config_ssl_zerocopy(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
+    /* set conf.ssl_zerocopy to the desired value */
     switch (h2o_configurator_get_one_of(cmd, node, "OFF,ON,libcrypto,non-temporal")) {
     case 0:
         conf.ssl_zerocopy = SSL_ZEROCOPY_NONE;
-        return 0;
+        break;
     case 1:
 #if H2O_USE_FUSION
         conf.ssl_zerocopy = SSL_ZEROCOPY_NON_TEMPORAL_AEAD;
 #else
         conf.ssl_zerocopy = SSL_ZEROCOPY_LIBCRYPTO;
 #endif
-        return 0;
+        break;
     case 2:
         conf.ssl_zerocopy = SSL_ZEROCOPY_LIBCRYPTO;
-        return 0;
+        break;
     case 3:
 #if H2O_USE_FUSION
         if (ptls_fusion_is_supported_by_cpu()) {
             conf.ssl_zerocopy = SSL_ZEROCOPY_NON_TEMPORAL_AEAD;
-            return 0;
+            break;
         }
 #else
         h2o_configurator_errprintf(cmd, node, "non-temporal aes-gcm engine is not available");
@@ -2492,6 +2493,16 @@ static int on_config_ssl_zerocopy(h2o_configurator_command_t *cmd, h2o_configura
     default:
         return -1;
     }
+
+    /* report config error if zerocopy is not supported */
+#if !H2O_USE_MSG_ZEROCOPY
+    if (conf.ssl_zerocopy != SSL_ZEROCOPY_NONE) {
+        h2o_configurator_errprintf(cmd, node, "SO_ZEROCOPY is not available");
+        return -1;
+    }
+#endif
+
+    return 0;
 }
 
 static yoml_t *load_config(yoml_parse_args_t *parse_args, yoml_t *source)
@@ -3752,6 +3763,9 @@ int main(int argc, char **argv)
 #endif
 #if H2O_USE_FUSION
                 printf("fusion: YES\n");
+#endif
+#if H2O_USE_MSG_ZEROCOPY
+                printf("ssl-zerocopy: YES\n");
 #endif
 #if H2O_USE_KTLS
                 printf("ktls: YES\n");

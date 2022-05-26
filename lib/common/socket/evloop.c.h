@@ -22,15 +22,11 @@
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <stdlib.h>
-#include <sys/socket.h>
 #include <sys/time.h>
 #include <sys/uio.h>
 #include <unistd.h>
 #if H2O_USE_KTLS
 #include <linux/tls.h>
-#endif
-#ifdef __linux__
-#include <linux/errqueue.h>
 #endif
 #include "cloexec.h"
 #include "h2o/linklist.h"
