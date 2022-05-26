@@ -3852,7 +3852,7 @@ int main(int argc, char **argv)
     }
 
 #if H2O_USE_FUSION
-    /* swap aes-gcm cipher suites to non-temporal */
+    /* Swap aes-gcm cipher suites of TLS-over-TCP listeners to non-temporal aesgcm engine, if it is to be used. */
     if (conf.ssl_zerocopy == SSL_ZEROCOPY_NON_TEMPORAL_AEAD) {
         static ptls_cipher_suite_t aes128gcmsha256 = {PTLS_CIPHER_SUITE_AES_128_GCM_SHA256, &ptls_non_temporal_aes128gcm,
                                                       &ptls_openssl_sha256},
@@ -3861,12 +3861,15 @@ int main(int argc, char **argv)
                                    *non_temporal_all[] = {&aes128gcmsha256, &aes256gcmsha384, NULL};
         for (size_t listener_index = 0; listener_index != conf.num_listeners; ++listener_index) {
             struct listener_config_t *listener = conf.listeners[listener_index];
-            for (size_t ssl_index = 0; ssl_index != listener->ssl.size; ++ssl_index) {
-                struct listener_ssl_config_t *ssl = listener->ssl.entries[ssl_index];
-                for (struct listener_ssl_identity_t *identity = ssl->identities; identity->certificate_file != NULL; ++identity) {
-                    fprintf(stderr, "%s:%d %p\n", __FUNCTION__, __LINE__, identity->ptls->cipher_suites);
-                    if (identity->ptls != NULL)
-                        identity->ptls->cipher_suites = replace_ciphersuites(identity->ptls->cipher_suites, non_temporal_all);
+            if (listener->quic.ctx == NULL) {
+                for (size_t ssl_index = 0; ssl_index != listener->ssl.size; ++ssl_index) {
+                    struct listener_ssl_config_t *ssl = listener->ssl.entries[ssl_index];
+                    for (struct listener_ssl_identity_t *identity = ssl->identities; identity->certificate_file != NULL;
+                         ++identity) {
+                        fprintf(stderr, "%s:%d %p\n", __FUNCTION__, __LINE__, identity->ptls->cipher_suites);
+                        if (identity->ptls != NULL)
+                            identity->ptls->cipher_suites = replace_ciphersuites(identity->ptls->cipher_suites, non_temporal_all);
+                    }
                 }
             }
         }
