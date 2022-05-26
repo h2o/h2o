@@ -7,7 +7,7 @@ plan skip_all => 'h2spec not found'
     unless prog_exists('h2spec');
 
 for my $offload (qw(OFF ON)) {
-    subtest "tls_offload=$offload" => sub {
+    subtest "ssl-offload=$offload" => sub {
         run_tests($offload);
     };
 }
@@ -20,7 +20,7 @@ hosts:
     paths:
       "/":
         file.dir: @{[DOC_ROOT]}
-tls-offload: $offload
+ssl-offload: $offload
 EOT
 
     my $output = `h2spec -t -k -p $server->{tls_port} 2>&1`;
