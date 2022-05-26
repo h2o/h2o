@@ -3926,10 +3926,9 @@ int main(int argc, char **argv)
         conf.error_log = NULL;
     }
 
-    {
+    { /* raise RLIMIT_NOFILE, making sure that we can reach max_connections */
         struct rlimit limit = {0};
         if (getrlimit(RLIMIT_NOFILE, &limit) == 0) {
-            /* raise RLIMIT_NOFILE, making sure that we can reach max_connections */
             if (conf.max_connections > limit.rlim_max) {
                 fprintf(stderr, "[error] 'max-connections'=[%d] configuration value should not exceed the hard limit of file "
                                 "descriptors 'RLIMIT_NOFILE'=[%llu]\n",
@@ -3950,6 +3949,32 @@ int main(int argc, char **argv)
             fprintf(stderr, "[warning] getrlimit(RLIMIT_NOFILE) failed:%s\n", strerror(errno));
         }
     }
+
+    /* Raise RLIMIT_MEMLOCK when zerocopy is to be used, or emit an warning if it is capped and cannot be raised. */
+#if H2O_USE_MSG_ZEROCOPY
+    if (conf.ssl_zerocopy != SSL_ZEROCOPY_NONE) {
+        struct rlimit limit = {0};
+        if (getuid() == 0) {
+            limit.rlim_cur = RLIM_INFINITY;
+            limit.rlim_max = RLIM_INFINITY;
+            if (setrlimit(RLIMIT_MEMLOCK, &limit) != 0) {
+                fprintf(stderr, "[error] failed to raise RLIMIT_MEMLOCK:%s\n", strerror(errno));
+                return EX_CONFIG;
+            }
+            fprintf(stderr, "[INFO] raised RLIMIT_MEMLOCK to unlimited\n");
+        } else {
+            if (getrlimit(RLIMIT_MEMLOCK, &limit) != 0) {
+                fprintf(stderr, "[error] getrlimit(RLIMIT_MEMLOCK) failed:%s\n", strerror(errno));
+                return EX_CONFIG;
+            }
+            if (limit.rlim_cur != RLIM_INFINITY)
+                fprintf(stderr,
+                        "[warning] Beaware of the possibility of running out of locked pages. Even though MSG_ZEROCOPY is enabled, "
+                        "RLIMIT_MEMLOCK is set to %zu bytes, and cannot be raised due to lack of root privileges.\n",
+                        (size_t)limit.rlim_cur);
+        }
+    }
+#endif
 
     setup_signal_handlers();
     if (conf.globalconf.usdt_selective_tracing && !h2o_socket_ebpf_setup()) {
