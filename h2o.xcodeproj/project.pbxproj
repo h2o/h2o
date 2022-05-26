@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		080B3CC327E1AF6C004AC8E6 /* config.c in Sources */ = {isa = PBXBuildFile; fileRef = 080B3CC227E1AF6C004AC8E6 /* config.c */; };
 		080D35EB1D5E060D0029B7E5 /* http2_debug_state.c in Sources */ = {isa = PBXBuildFile; fileRef = 080D35EA1D5E060D0029B7E5 /* http2_debug_state.c */; };
 		0812174E1E07B89600712F36 /* redis.c in Sources */ = {isa = PBXBuildFile; fileRef = 0812174C1E07B89600712F36 /* redis.c */; };
 		0812AB201D7FCFEB00004F23 /* async.c in Sources */ = {isa = PBXBuildFile; fileRef = 0812AB1C1D7FCFEB00004F23 /* async.c */; };
@@ -673,6 +674,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		080B3CC227E1AF6C004AC8E6 /* config.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = config.c; sourceTree = "<group>"; };
 		080D35EA1D5E060D0029B7E5 /* http2_debug_state.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = http2_debug_state.c; sourceTree = "<group>"; };
 		0812174C1E07B89600712F36 /* redis.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = redis.c; sourceTree = "<group>"; };
 		0812AB1C1D7FCFEB00004F23 /* async.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = async.c; sourceTree = "<group>"; };
@@ -1629,6 +1631,7 @@
 		104B9A4E1A5FAA91009EEE64 /* core */ = {
 			isa = PBXGroup;
 			children = (
+				080B3CC227E1AF6C004AC8E6 /* config.c */,
 				104B9A471A5F9472009EEE64 /* headers.c */,
 				105534C81A3BB41C00627ECB /* proxy.c */,
 				1070E1621B4508B0001CCAFA /* util.c */,
@@ -3431,6 +3434,7 @@
 				105534C71A3BB29100627ECB /* string.c in Sources */,
 				E9316EE824417EAA00C9C127 /* decode.c in Sources */,
 				E98403CD2485172E00E3A6B1 /* remote_cid.c in Sources */,
+				080B3CC327E1AF6C004AC8E6 /* config.c in Sources */,
 				E987E5ED1FD8C04D00DE4346 /* backward_references.c in Sources */,
 				107D4D4B1B5880BC004A9B21 /* scanner.c in Sources */,
 				1079244E19A3266700C52AD6 /* request.c in Sources */,
