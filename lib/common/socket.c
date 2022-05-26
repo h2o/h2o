@@ -672,18 +672,6 @@ static int obtain_tcp_info(int fd, uint32_t *rtt, uint32_t *mss, uint32_t *cwnd_
     *cwnd_avail = tcpi.tcpi_snd_cwnd > tcpi.tcpi_unacked ? tcpi.tcpi_snd_cwnd - tcpi.tcpi_unacked + 2 : 2;
     return 0;
 
-#elif defined(__FreeBSD__) && defined(TCP_INFO) && 0 /* disabled since we wouldn't use it anyways; OS lacks TCP_NOTSENT_LOWAT */
-
-    struct tcp_info tcpi;
-    socklen_t tcpisz = sizeof(tcpi);
-    int bytes_inflight;
-    if (getsockopt(fd, IPPROTO_TCP, TCP_INFO, &tcpi, &tcpisz) != 0 || ioctl(fd, FIONWRITE, &bytes_inflight) == -1)
-        return -1;
-    *rtt = tcpi.tcpi_rtt;
-    *mss = tcpi.tcpi_snd_mss;
-    CALC_CWND_PAIR_FROM_BYTE_UNITS(tcpi.tcpi_snd_cwnd, bytes_inflight);
-    return 0;
-
 #elif defined(__APPLE__) && defined(TCP_CONNECTION_INFO)
 
     struct tcp_connection_info tcpi;
@@ -696,10 +684,11 @@ static int obtain_tcp_info(int fd, uint32_t *rtt, uint32_t *mss, uint32_t *cwnd_
     return 0;
 
 #else
-    /* TODO add support for NetBSD; note that the OS returns the number of packets for tcpi_snd_cwnd; see
-     * http://twitter.com/n_soda/status/740719125878575105
-     */
+
+    /* For other operating systems that do not have TCP_NOTSENT_LOWAT, it is meaningless to return information. Return -1 to disable
+     * the low latency optimization. */
     return -1;
+
 #endif
 
 #undef CALC_CWND_PAIR_FROM_BYTE_UNITS
