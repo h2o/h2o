@@ -11,6 +11,8 @@ use t::Util;
 my ($aggregated_mode, $h2o_keepalive, $starlet_keepalive, $starlet_force_chunked, $unix_socket, $zerocopy, $tls_offload);
 my $ssl_zerocopy = "off";
 
+my @orig_argv = @ARGV;
+
 GetOptions(
     "mode=i"                  => sub {
         (undef, my $m) = @_;
@@ -53,9 +55,15 @@ plan skip_all => 'zerocopy requires linux'
 plan skip_all => 'ktls not supported'
     if $tls_offload and not server_features()->{ktls};
 plan skip_all => 'ssl/zerocopy requires linux'
-    if $ssl_zerocopy and not server_features()->{"ssl-zerocopy"};
+    if $ssl_zerocopy ne "off" and not server_features()->{"ssl-zerocopy"};
 plan skip_all => 'non-temporal aes-gcm engine is unavailable'
     if $ssl_zerocopy eq 'non-temporal' and not server_features()->{fusion};
+
+# when zerocopy is about to be tested, restart as root so that RLIMIT_MEMLOCK would be raised to unlimited
+if ($ssl_zerocopy ne "off" && $< != 0) {
+    @ARGV = @orig_argv;
+    run_as_root()
+}
 
 my %files = map { do {
     my $fn = DOC_ROOT . "/$_";
