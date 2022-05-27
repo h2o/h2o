@@ -4356,12 +4356,12 @@ static int do_send(quicly_conn_t *conn, quicly_send_context_t *s)
     if ((conn->initial != NULL || conn->handshake != NULL) &&
         conn->created_at + (uint64_t)conn->super.ctx->handshake_timeout_rtt_multiplier * conn->egress.loss.rtt.smoothed <=
             conn->stash.now) {
-        QUICLY_PROBE(HANDSHAKE_TIMEOUT, conn, conn->stash.now);
+        QUICLY_PROBE(HANDSHAKE_TIMEOUT, conn, conn->stash.now, conn->stash.now - conn->created_at, conn->egress.loss.rtt.smoothed);
         conn->super.stats.num_handshake_timeouts++;
         goto CloseNow;
     }
     if (conn->super.stats.num_packets.initial_handshake_sent >= conn->super.ctx->max_initial_handshake_packets) {
-        QUICLY_PROBE(INITIAL_HANDSHAKE_PACKET_EXCEED, conn, conn->stash.now);
+        QUICLY_PROBE(INITIAL_HANDSHAKE_PACKET_EXCEED, conn, conn->stash.now, conn->super.stats.num_packets.initial_handshake_sent);
         conn->super.stats.num_initial_handshake_exceeded++;
         goto CloseNow;
     }
