@@ -95,8 +95,15 @@ static int handle_zerocopy_notification(struct st_h2o_evloop_socket_t *sock)
                         if (c64 < sock->super._zerocopy->first_counter)
                             c64 += 0x100000000;
                         void *p = zerocopy_buffers_release(sock->super._zerocopy, c64);
-                        if (p != NULL && (sock->super.ssl == NULL || p != sock->super.ssl->output.buf.base))
-                            h2o_mem_free_recycle(&h2o_socket_ssl_buffer_allocator, p);
+                        if (p != NULL) {
+                            if (sock->super.ssl != NULL && p == sock->super.ssl->output.buf.base) {
+                                /* buffer being released from zerocopy still has some pending data to be written */
+                                assert(sock->super.ssl->output.zerocopy_owned);
+                                sock->super.ssl->output.zerocopy_owned = 0;
+                            } else {
+                                h2o_mem_free_recycle(&h2o_socket_ssl_buffer_allocator, p);
+                            }
+                        }
                     }
                 }
             }
