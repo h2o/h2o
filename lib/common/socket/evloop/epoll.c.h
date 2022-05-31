@@ -215,7 +215,8 @@ int evloop_do_proceed(h2o_evloop_t *_loop, int32_t max_wait)
          * The application will eventually try to read or write to the socket and at that point close the socket, detecting that it
          * has become unusable. */
         if ((events[i].events & EPOLLHUP) != 0 &&
-            (sock->_flags & (H2O_SOCKET_FLAG_IS_POLLED_FOR_READ | H2O_SOCKET_FLAG_IS_POLLED_FOR_WRITE)) == 0) {
+            (sock->_flags & (H2O_SOCKET_FLAG_IS_POLLED_FOR_READ | H2O_SOCKET_FLAG_IS_POLLED_FOR_WRITE)) == 0 &&
+            !(sock->super._zerocopy != NULL && (sock->_flags & H2O_SOCKET_FLAG_IS_DISPOSED) != 0)) {
             assert((sock->_flags & H2O_SOCKET_FLAG__EPOLL_IS_REGISTERED) != 0);
             int ret;
             while ((ret = epoll_ctl(loop->ep, EPOLL_CTL_DEL, sock->fd, NULL)) != 0 && errno == EINTR)
