@@ -214,6 +214,12 @@ static void call_write_complete_delayed(struct st_h2o_uv_socket_t *sock, int sta
     h2o_timer_link(sock->handle->loop, 0, &sock->write_cb_timer);
 }
 
+void report_early_write_error(h2o_socket_t *_sock)
+{
+    struct st_h2o_uv_socket_t *sock = (struct st_h2o_uv_socket_t *)_sock;
+    call_write_complete_delayed(sock, 1);
+}
+
 static void on_ssl_write_complete(uv_write_t *wreq, int status)
 {
     struct st_h2o_uv_socket_t *sock = H2O_STRUCT_FROM_MEMBER(struct st_h2o_uv_socket_t, stream._wreq, wreq);
@@ -279,13 +285,10 @@ void do_ssl_write(struct st_h2o_uv_socket_t *sock, int is_first_call, h2o_iovec_
     uv_write(&sock->stream._wreq, (uv_stream_t *)sock->handle, &uvbuf, 1, on_ssl_write_complete);
 }
 
-void do_write(h2o_socket_t *_sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_socket_cb cb)
+void do_write(h2o_socket_t *_sock, h2o_iovec_t *bufs, size_t bufcnt)
 {
     struct st_h2o_uv_socket_t *sock = (struct st_h2o_uv_socket_t *)_sock;
     assert(sock->handle->type == UV_TCP);
-
-    assert(sock->super._cb.write == NULL);
-    sock->super._cb.write = cb;
 
     if (sock->super.ssl == NULL) {
         if (bufcnt > 0) {

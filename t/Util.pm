@@ -301,15 +301,14 @@ EOT
 
     $conf .= <<"EOT";
 listen:
-  host: 0.0.0.0
-  port: $port
-listen:
-  host: 0.0.0.0
-  port: $tls_port
-  ssl:
-    key-file: examples/h2o/server.key
-    certificate-file: examples/h2o/server.crt
-    @{[$max_ssl_version ? "max-version: $max_ssl_version" : ""]}
+  - host: 0.0.0.0
+    port: $port
+  - host: 0.0.0.0
+    port: $tls_port
+    ssl:
+      key-file: examples/h2o/server.key
+      certificate-file: examples/h2o/server.crt
+      @{[$max_ssl_version ? "max-version: $max_ssl_version" : ""]}
 @{[$user ? "user: $user" : ""]}
 EOT
 
@@ -334,6 +333,7 @@ sub spawn_h2o_raw {
 
     my ($conffh, $conffn) = tempfile(UNLINK => 1);
     print $conffh $conf;
+    Test::More::diag($conf) if $ENV{TEST_DEBUG};
 
     # spawn the server
     my ($guard, $pid) = spawn_server(

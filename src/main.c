@@ -70,6 +70,9 @@
 #include "picotls/minicrypto.h"
 #include "picotls/openssl.h"
 #include "picotls/pembase64.h"
+#if H2O_USE_FUSION
+#include "picotls/fusion.h"
+#endif
 #include "cloexec.h"
 #include "yoml-parser.h"
 #include "neverbleed.h"
@@ -80,6 +83,7 @@
 #include "h2o/http3_server.h"
 #include "h2o/serverutil.h"
 #include "h2o/file.h"
+#include "h2o/version.h"
 #if H2O_USE_MRUBY
 #include "h2o/mruby_.h"
 #endif
@@ -194,14 +198,14 @@ struct listener_config_t {
          */
         unsigned send_retry : 1;
         /**
-         * SO_SNDBUF, SO_RCVBUF values to be set (or 0 to use default)
-         */
-        unsigned sndbuf, rcvbuf;
-        /**
          * QPACK settings
          */
         h2o_http3_qpack_context_t qpack;
     } quic;
+    /**
+     * SO_SNDBUF, SO_RCVBUF values to be set (or 0 to use default)
+     */
+    unsigned sndbuf, rcvbuf;
     int proxy_protocol;
     h2o_iovec_t tcp_congestion_controller; /* default CC for this address */
 };
@@ -273,7 +277,8 @@ static struct {
         h2o_multithread_receiver_t memcached;
     } * threads;
     volatile sig_atomic_t shutdown_requested;
-    h2o_barrier_t startup_sync_barrier;
+    h2o_barrier_t startup_sync_barrier_init;
+    h2o_barrier_t startup_sync_barrier_post;
     struct {
         /* unused buffers exist to avoid false sharing of the cache line */
         char _unused1_avoir_false_sharing[32];
@@ -456,6 +461,12 @@ struct st_on_client_hello_ptls_t {
 
 static int on_client_hello_ptls(ptls_on_client_hello_t *_self, ptls_t *tls, ptls_on_client_hello_parameters_t *params)
 {
+    /* `on_client_hello_ptls` can be called even when OpenSSL is going to be used, due to client supporting only TLS/1.2 (see
+     * https://github.com/h2o/picotls/pull/311). If that is the case, there is nothing to do here, as everything will be done in
+     * `on_sni_callback`. */
+    if (params->incompatible_version)
+        return 0;
+
     struct st_on_client_hello_ptls_t *self = (struct st_on_client_hello_ptls_t *)_self;
     void *conn = *ptls_get_data_ptr(tls);
     struct listener_ssl_config_t *ssl_config;
@@ -844,8 +855,37 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
         pctx->ctx.emit_certificate = NULL;
     }
 
-    if (listener->quic.ctx != NULL)
+    if (listener->quic.ctx != NULL) {
+#if H2O_USE_FUSION
+        /* rebuild and replace the cipher suite list, replacing the corresponding ones to fusion */
+        if (ptls_fusion_is_supported_by_cpu()) {
+            static const ptls_cipher_suite_t fusion_aes128gcmsha256 = {PTLS_CIPHER_SUITE_AES_128_GCM_SHA256, &ptls_fusion_aes128gcm,
+                                                                       &ptls_openssl_sha256},
+                                             fusion_aes256gcmsha384 = {PTLS_CIPHER_SUITE_AES_256_GCM_SHA384, &ptls_fusion_aes256gcm,
+                                                                       &ptls_openssl_sha384};
+            H2O_VECTOR(ptls_cipher_suite_t *) new_list = {};
+#define PUSH_NEW(x)                                                                                                                \
+    do {                                                                                                                           \
+        h2o_vector_reserve(NULL, &new_list, new_list.size + 1);                                                                    \
+        new_list.entries[new_list.size++] = (x);                                                                                   \
+    } while (0)
+            for (ptls_cipher_suite_t **input = pctx->ctx.cipher_suites; *input != NULL; ++input) {
+                h2o_vector_reserve(NULL, &new_list, new_list.size + 1);
+                if (*input == &ptls_openssl_aes128gcmsha256) {
+                    PUSH_NEW(&fusion_aes128gcmsha256);
+                } else if (*input == &ptls_openssl_aes256gcmsha384) {
+                    PUSH_NEW(&fusion_aes256gcmsha384);
+                } else {
+                    PUSH_NEW(*input);
+                }
+            }
+            PUSH_NEW(NULL);
+#undef PUSH_NEW
+            pctx->ctx.cipher_suites = new_list.entries;
+        }
+#endif
         quicly_amend_ptls_context(&pctx->ctx);
+    }
 
     identity->ptls = &pctx->ctx;
 
@@ -1419,7 +1459,8 @@ static struct listener_config_t *find_listener(struct sockaddr *addr, socklen_t 
     return NULL;
 }
 
-static struct listener_config_t *add_listener(int fd, struct sockaddr *addr, socklen_t addrlen, int is_global, int proxy_protocol)
+static struct listener_config_t *add_listener(int fd, struct sockaddr *addr, socklen_t addrlen, int is_global, int proxy_protocol,
+                                              unsigned sndbuf, unsigned rcvbuf)
 {
     struct listener_config_t *listener = h2o_mem_alloc(sizeof(*listener));
 
@@ -1439,6 +1480,8 @@ static struct listener_config_t *add_listener(int fd, struct sockaddr *addr, soc
     listener->quic.qpack = (h2o_http3_qpack_context_t){.encoder_table_capacity = 4096 /* our default */};
     listener->proxy_protocol = proxy_protocol;
     listener->tcp_congestion_controller = h2o_iovec_init(NULL, 0);
+    listener->sndbuf = sndbuf;
+    listener->rcvbuf = rcvbuf;
 
     conf.listeners = h2o_mem_realloc(conf.listeners, sizeof(*conf.listeners) * (conf.num_listeners + 1));
     conf.listeners[conf.num_listeners++] = listener;
@@ -1761,12 +1804,13 @@ static void on_http3_conn_destroy(h2o_quic_conn_t *conn)
     H2O_HTTP3_CONN_CALLBACKS.super.destroy_connection(conn);
 }
 
-static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     const char *hostname = NULL, *servname, *type = "tcp";
     yoml_t **ssl_node = NULL, **owner_node = NULL, **permission_node = NULL, **quic_node = NULL, **cc_node = NULL,
            **initcwnd_node = NULL, **group_node = NULL;
     int proxy_protocol = 0;
+    unsigned stream_sndbuf = 0, stream_rcvbuf = 0;
 
     /* fetch servname (and hostname) */
     switch (node->type) {
@@ -1774,11 +1818,12 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
         servname = node->data.scalar;
         break;
     case YOML_TYPE_MAPPING: {
-        yoml_t **port_node, **host_node, **type_node, **proxy_protocol_node;
+        yoml_t **port_node, **host_node, **type_node, **proxy_protocol_node, **sndbuf_node, **rcvbuf_node;
         if (h2o_configurator_parse_mapping(
-                cmd, node, "port:s", "host:s,type:s,owner:s,group:s,permission:*,ssl:m,proxy-protocol:*,quic:m,cc:s,initcwnd:s",
+                cmd, node, "port:s",
+                "host:s,type:s,owner:s,group:s,permission:*,ssl:m,proxy-protocol:*,quic:m,cc:s,initcwnd:s,sndbuf:s,rcvbuf:s",
                 &port_node, &host_node, &type_node, &owner_node, &group_node, &permission_node, &ssl_node, &proxy_protocol_node,
-                &quic_node, &cc_node, &initcwnd_node) != 0)
+                &quic_node, &cc_node, &initcwnd_node, &sndbuf_node, &rcvbuf_node) != 0)
             return -1;
         servname = (*port_node)->data.scalar;
         if (host_node != NULL)
@@ -1790,6 +1835,10 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
         }
         if (proxy_protocol_node != NULL &&
             (proxy_protocol = (int)h2o_configurator_get_one_of(cmd, *proxy_protocol_node, "OFF,ON")) == -1)
+            return -1;
+        if (sndbuf_node != NULL && h2o_configurator_scanf(cmd, *sndbuf_node, "%u", &stream_sndbuf) != 0)
+            return -1;
+        if (rcvbuf_node != NULL && h2o_configurator_scanf(cmd, *rcvbuf_node, "%u", &stream_rcvbuf) != 0)
             return -1;
     } break;
     default:
@@ -1836,7 +1885,8 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
             default:
                 break;
             }
-            listener = add_listener(fd, (struct sockaddr *)&sa, sizeof(sa), ctx->hostconf == NULL, proxy_protocol);
+            listener = add_listener(fd, (struct sockaddr *)&sa, sizeof(sa), ctx->hostconf == NULL, proxy_protocol, stream_sndbuf,
+                                    stream_rcvbuf);
             listener_is_new = 1;
         } else if (listener->proxy_protocol != proxy_protocol) {
             goto ProxyConflict;
@@ -1884,7 +1934,8 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                 default:
                     break;
                 }
-                listener = add_listener(fd, ai->ai_addr, ai->ai_addrlen, ctx->hostconf == NULL, proxy_protocol);
+                listener = add_listener(fd, ai->ai_addr, ai->ai_addrlen, ctx->hostconf == NULL, proxy_protocol, stream_sndbuf,
+                                        stream_rcvbuf);
                 if (cc_node != NULL)
                     listener->tcp_congestion_controller = h2o_strdup(NULL, (*cc_node)->data.scalar, SIZE_MAX);
                 listener_is_new = 1;
@@ -1904,6 +1955,11 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
     } else if (strcmp(type, "quic") == 0) {
 
         /* QUIC socket */
+        if (stream_sndbuf != 0 || stream_rcvbuf != 0)
+            h2o_configurator_errprintf(cmd, node,
+                                       "[warning] QUIC ignores `sndbuf` and `rcvbuf` set as direct members of `listen`, as they "
+                                       "designate buffer size of each connection. For QUIC, `sndbuf` and `rcvbuf` of the `quic` "
+                                       "mapping defines the buffer sizes of the socket shared among all the QUIC connections.");
         struct addrinfo *res, *ai;
         if (ssl_node == NULL) {
             h2o_configurator_errprintf(cmd, node, "QUIC endpoint must have an accompanying SSL configuration");
@@ -1938,7 +1994,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                 *quic = quicly_spec_context;
                 quic->cid_encryptor = &quic_cid_encryptor;
                 quic->generate_resumption_token = &quic_resumption_token_generator;
-                listener = add_listener(fd, ai->ai_addr, ai->ai_addrlen, ctx->hostconf == NULL, 0);
+                listener = add_listener(fd, ai->ai_addr, ai->ai_addrlen, ctx->hostconf == NULL, 0, 0, 0);
                 listener->quic.ctx = quic;
                 if (quic_node != NULL) {
                     yoml_t **retry_node, **sndbuf, **rcvbuf, **amp_limit, **qpack_encoder_table_capacity, **max_streams_bidi,
@@ -1955,9 +2011,9 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                             return -1;
                         listener->quic.send_retry = (unsigned)on;
                     }
-                    if (sndbuf != NULL && h2o_configurator_scanf(cmd, *sndbuf, "%u", &listener->quic.sndbuf) != 0)
+                    if (sndbuf != NULL && h2o_configurator_scanf(cmd, *sndbuf, "%u", &listener->sndbuf) != 0)
                         return -1;
-                    if (rcvbuf != NULL && h2o_configurator_scanf(cmd, *rcvbuf, "%u", &listener->quic.rcvbuf) != 0)
+                    if (rcvbuf != NULL && h2o_configurator_scanf(cmd, *rcvbuf, "%u", &listener->rcvbuf) != 0)
                         return -1;
                     if (amp_limit != NULL) {
                         if (h2o_configurator_scanf(cmd, *amp_limit, "%" SCNu16,
@@ -1981,7 +2037,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                     }
                 }
                 if (conf.run_mode == RUN_MODE_WORKER)
-                    set_quic_sockopts(fd, ai->ai_family, listener->quic.sndbuf, listener->quic.rcvbuf);
+                    set_quic_sockopts(fd, ai->ai_family, listener->sndbuf, listener->rcvbuf);
                 listener_is_new = 1;
             }
             if (listener_setup_ssl(cmd, ctx, node, ssl_node, cc_node, initcwnd_node, listener, listener_is_new) != 0) {
@@ -2005,6 +2061,19 @@ ProxyConflict:
     h2o_configurator_errprintf(cmd, node, "`proxy-protocol` cannot be turned %s, already defined as opposite",
                                proxy_protocol ? "on" : "off");
     return -1;
+}
+
+static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    if (node->type == YOML_TYPE_SEQUENCE) {
+        for (size_t i = 0; i != node->data.sequence.size; ++i) {
+            if (on_config_listen_element(cmd, ctx, node->data.sequence.elements[i]) != 0)
+                return -1;
+        }
+        return 0;
+    } else {
+        return on_config_listen_element(cmd, ctx, node);
+    }
 }
 
 static int on_config_listen_enter(h2o_configurator_t *_configurator, h2o_configurator_context_t *ctx, yoml_t *node)
@@ -2372,6 +2441,11 @@ static int on_config_crash_handler_wait_pipe_close(h2o_configurator_command_t *c
 static int on_tcp_reuseport(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     return on_config_onoff(cmd, node, &conf.tcp_reuseport);
+}
+
+static int on_config_tls_offload(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    return on_config_onoff(cmd, node, &h2o_socket_use_ktls);
 }
 
 static yoml_t *load_config(yoml_parse_args_t *parse_args, yoml_t *source)
@@ -2851,7 +2925,12 @@ static void on_accept(h2o_socket_t *listener, const char *err)
         sock->on_close.cb = on_socketclose;
         sock->on_close.data = ctx->accept_ctx.ctx;
 
-        set_tcp_congestion_controller(sock, conf.listeners[ctx->listener_index]->tcp_congestion_controller);
+        struct listener_config_t *listener_config = conf.listeners[ctx->listener_index];
+        if (listener_config->sndbuf != 0)
+            setsockopt(h2o_socket_get_fd(sock), SOL_SOCKET, SO_SNDBUF, &listener_config->sndbuf, sizeof(listener_config->sndbuf));
+        if (listener_config->rcvbuf != 0)
+            setsockopt(h2o_socket_get_fd(sock), SOL_SOCKET, SO_RCVBUF, &listener_config->rcvbuf, sizeof(listener_config->rcvbuf));
+        set_tcp_congestion_controller(sock, listener_config->tcp_congestion_controller);
 
         h2o_accept(&ctx->accept_ctx, sock);
 
@@ -3123,13 +3202,14 @@ static void *run_loop(void *_thread_index)
 
     /* Wait for all threads to become ready but before letting any of them serve connections, swap the signal handler for graceful
      * shutdown, check (and exit) if SIGTERM has been received already. */
-    if (h2o_barrier_wait_pre_sync_point(&conf.startup_sync_barrier)) {
+    h2o_barrier_wait(&conf.startup_sync_barrier_init);
+    if (thread_index == 0) {
         h2o_set_signal_handler(SIGTERM, on_sigterm_set_flag_notify_threads);
         if (conf.shutdown_requested)
             exit(0);
         fprintf(stderr, "h2o server (pid:%d) is ready to serve requests with %zu threads\n", (int)getpid(), conf.thread_map.size);
     }
-    h2o_barrier_wait_post_sync_point(&conf.startup_sync_barrier);
+    h2o_barrier_wait(&conf.startup_sync_barrier_post);
 
     /* the main loop */
     uint64_t last_buffer_gc_at = 0;
@@ -3457,6 +3537,8 @@ static void setup_configurators(void)
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_crash_handler_wait_pipe_close);
         h2o_configurator_define_command(c, "tcp-reuseport", H2O_CONFIGURATOR_FLAG_GLOBAL, on_tcp_reuseport);
+        h2o_configurator_define_command(c, "tls-offload", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                        on_config_tls_offload);
     }
 
     h2o_access_log_register_configurator(&conf.globalconf);
@@ -3514,7 +3596,7 @@ static int dup_listener(struct listener_config_t *config)
         if ((fd = open_listener(ss.ss_family, type, type == SOCK_STREAM ? IPPROTO_TCP : IPPROTO_UDP, (struct sockaddr *)&ss,
                                 sslen)) != -1) {
             if (type == SOCK_DGRAM)
-                set_quic_sockopts(fd, ss.ss_family, config->quic.sndbuf, config->quic.rcvbuf);
+                set_quic_sockopts(fd, ss.ss_family, config->sndbuf, config->rcvbuf);
         } else {
             perror("failed to bind additional listener");
             abort();
@@ -3616,6 +3698,12 @@ int main(int argc, char **argv)
 #endif
 #if LIBCAP_FOUND
                 printf("capabilities: YES\n");
+#endif
+#if H2O_USE_FUSION
+                printf("fusion: YES\n");
+#endif
+#if H2O_USE_KTLS
+                printf("ktls: YES\n");
 #endif
                 exit(0);
             case 'h':
@@ -3827,7 +3915,8 @@ int main(int argc, char **argv)
 
     /* build barrier to synchronize the start of all threads */
     assert(conf.thread_map.size != 0);
-    h2o_barrier_init(&conf.startup_sync_barrier, conf.thread_map.size);
+    h2o_barrier_init(&conf.startup_sync_barrier_init, conf.thread_map.size);
+    h2o_barrier_init(&conf.startup_sync_barrier_post, conf.thread_map.size);
 
     { /* initialize SSL_CTXs for session resumption and ticket-based resumption (also starts memcached client threads for the
          purpose) */
@@ -3850,7 +3939,7 @@ int main(int argc, char **argv)
         if (has_quic) {
             quic_args = &quic_args_buf;
             quic_args->is_clustered = conf.quic.node_id != 0;
-            sync_barrier = &conf.startup_sync_barrier;
+            sync_barrier = &conf.startup_sync_barrier_post;
         }
         ssl_setup_session_resumption(ssl_contexts.entries, ssl_contexts.size, quic_args, sync_barrier);
         free(ssl_contexts.entries);
@@ -3915,5 +4004,8 @@ int main(int argc, char **argv)
     if (conf.pid_file != NULL)
         unlink(conf.pid_file);
 
-    return 0;
+    /* Use `_exit` to prevent functions registered via `atexit` from being invoked, otherwise we might see some threads die while
+     * trying to use whatever state that are cleaned up. Specifically, we see the ticket updater thread dying inside RAND_bytes,
+     * while or after `OpenSSL_cleanup` is invoked as an atexit callback. */
+    _exit(0);
 }

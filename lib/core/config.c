@@ -32,6 +32,7 @@
 #include "h2o/http1.h"
 #include "h2o/http2.h"
 #include "h2o/http3_server.h"
+#include "h2o/version.h"
 
 static h2o_hostconf_t *create_hostconf(h2o_globalconf_t *globalconf)
 {
@@ -192,6 +193,7 @@ void h2o_config_init(h2o_globalconf_t *config)
     config->proxy.emit_x_forwarded_headers = 1;
     config->proxy.emit_via_header = 1;
     config->proxy.emit_missing_date_header = 1;
+    config->proxy.zero_copy = H2O_PROXY_ZERO_COPY_ENABLED;
     config->http2.max_concurrent_requests_per_connection = H2O_HTTP2_SETTINGS_HOST_MAX_CONCURRENT_STREAMS;
     config->http2.max_concurrent_streaming_requests_per_connection = H2O_HTTP2_SETTINGS_HOST_MAX_CONCURRENT_STREAMING_REQUESTS;
     config->http2.max_streams_for_priority = 16;
@@ -222,8 +224,24 @@ h2o_pathconf_t *h2o_config_register_path(h2o_hostconf_t *hostconf, const char *p
     h2o_pathconf_t *pathconf = h2o_mem_alloc(sizeof(*pathconf));
     h2o_config_init_pathconf(pathconf, hostconf->global, path, hostconf->mimemap);
 
+    /* Find the slot to insert the new pathconf. Sort order is descending by the path length so that longer pathconfs overriding
+     * subdirectories of shorter ones would work, regardless of the regisration order. Pathconfs sharing the same length are sorted
+     * in the ascending order of memcmp / strcmp (as we have always done in the h2o standalone server). */
+    size_t slot;
+    for (slot = 0; slot < hostconf->paths.size; ++slot) {
+        if (pathconf->path.len > hostconf->paths.entries[slot]->path.len)
+            break;
+        if (pathconf->path.len == hostconf->paths.entries[slot]->path.len &&
+            memcmp(pathconf->path.base, hostconf->paths.entries[slot]->path.base, pathconf->path.len) < 0)
+            break;
+    }
+
     h2o_vector_reserve(NULL, &hostconf->paths, hostconf->paths.size + 1);
-    hostconf->paths.entries[hostconf->paths.size++] = pathconf;
+    if (slot < hostconf->paths.size)
+        memmove(hostconf->paths.entries + slot + 1, hostconf->paths.entries + slot,
+                (hostconf->paths.size - slot) * sizeof(hostconf->paths.entries[0]));
+    hostconf->paths.entries[slot] = pathconf;
+    ++hostconf->paths.size;
 
     return pathconf;
 }

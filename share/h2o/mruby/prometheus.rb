@@ -43,6 +43,7 @@ module H2O
       status, headers, body = @app.call(env)
       stats = JSON.parse(body.join)
       version = stats.delete('server-version') || ''
+      requests = stats.delete('requests') || ''
       stats = stats.select {|k, v| v.kind_of?(Numeric) || v.kind_of?(Array) }
       s = ""
       stats.each {|k, v|
