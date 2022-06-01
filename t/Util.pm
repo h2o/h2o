@@ -242,18 +242,39 @@ sub sig_num {
     firstidx { $_ eq $name } split " ", $Config::Config{sig_name};
 }
 
-# returns a hash containing `port`, `tls_port`, `guard`
+# returns a hash containing `port`, `tls_port`, `quic_port`, `guard`
+# Set { quic => { disable => 1} } to disable QUIC support.
 sub spawn_h2o {
     my ($conf) = @_;
     my @opts;
     my $max_ssl_version;
 
+    my $quic = (ref($conf) eq 'HASH' ? $conf->{quic} : undef) // {};
+
     # decide the port numbers
     my ($port, $tls_port) = empty_ports(2, { host => "0.0.0.0" });
-    my @all_ports = ($port, $tls_port);
+    my $quic_port;
+    my @all_ports = (
+        {
+            port => $port,
+            proto => 'tcp',
+        },
+        {
+            port => $tls_port,
+            proto => 'tcp',
+        },
+    );
+
+    if (!$quic->{disable}) {
+        $quic_port = $quic->{port} // empty_port({ host  => "0.0.0.0", proto => "udp" });
+        push @all_ports, {
+            port => $quic_port,
+            proto => 'udp',
+        };
+    }
 
     # setup the configuration file
-    $conf = $conf->($port, $tls_port)
+    $conf = $conf->($port, $tls_port, $quic_port)
         if ref $conf eq 'CODE';
     my $user = $< == 0 ? "root" : "";
     if (ref $conf eq 'HASH') {
@@ -264,8 +285,21 @@ sub spawn_h2o {
         push @all_ports, $conf->{extra_ports} if exists $conf->{extra_ports};
         $conf = $conf->{conf};
     }
-    $conf = <<"EOT";
-$conf
+
+    if ($quic_port && $conf !~ /^\s*type:\s*\bquic\b/) {
+        my $quic_host = $quic->{host} // '0.0.0.0';
+        $conf .= <<"EOT";
+listen:
+  type: quic
+  host: $quic_host
+  port: $quic_port
+  ssl:
+    key-file: examples/h2o/server.key
+    certificate-file: examples/h2o/server.crt
+EOT
+    }
+
+    $conf .= <<"EOT";
 listen:
   host: 0.0.0.0
   port: $port
@@ -284,6 +318,7 @@ EOT
         %$ret,
         port => $port,
         tls_port => $tls_port,
+        quic_port => $quic_port,
     };
 }
 
@@ -388,26 +423,26 @@ sub run_with_curl {
     my ($server, $cb) = @_;
     plan skip_all => "curl not found"
         unless prog_exists("curl");
-    subtest "http/1" => sub {
+    subtest "http/1.1" => sub {
         $cb->("http", $server->{port}, "curl", 257);
     };
-    subtest "https/1" => sub {
+    subtest "http/1.1 (https)" => sub {
         my $cmd = "curl --insecure";
         $cmd .= " --http1.1"
             if curl_supports_http2();
         $cb->("https", $server->{tls_port}, $cmd, 257);
     };
-    subtest "https/2" => sub {
+    subtest "http/2" => sub {
         plan skip_all => "curl does not support HTTP/2"
             unless curl_supports_http2();
         $cb->("https", $server->{tls_port}, "curl --insecure --http2", 512);
     };
-    subtest "https/3" => sub {
+    subtest "http/3" => sub {
         plan skip_all => "curl does not support HTTP/3"
             unless curl_supports_http3();
-        plan skip_all => "http/3 of run_with_curl is not enabled by default. Set RUN_WITH_CURL_HTTP3=1 to enable it."
-            unless $ENV{RUN_WITH_CURL_HTTP3};
-        $cb->("https", $server->{tls_port}, "curl --insecure --http3", 768);
+        plan skip_all => "the server does not serve HTTP/3 (requires quic_port)"
+            unless $server->{quic_port};
+        $cb->("https", $server->{quic_port}, "curl --insecure --http3", 768);
     };
 }
 
