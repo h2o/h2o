@@ -102,6 +102,7 @@ typedef struct st_h2o_socketpool_t {
     uint64_t timeout; /* in milliseconds */
     struct {
         h2o_loop_t *loop;
+        h2o_loop_t *sock_loop;
         h2o_timer_t timeout;
     } _interval_cb;
     SSL_CTX *_ssl_ctx;

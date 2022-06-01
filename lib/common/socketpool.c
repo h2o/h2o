@@ -85,10 +85,10 @@ static void destroy_attached(struct pool_entry_t *entry)
 }
 
 /* caller should lock the mutex */
-static uint64_t destroy_expired_locked(h2o_socketpool_t *pool)
+static uint64_t destroy_expired_locked(h2o_socketpool_t *pool, h2o_loop_t *socket_loop)
 {
     if (pool->_interval_cb.loop != NULL) {
-        uint64_t now_ms = h2o_now(pool->_interval_cb.loop);
+        uint64_t now_ms = h2o_now(socket_loop);
         uint64_t expire_before = now_ms - pool->timeout;
         while (!h2o_linklist_is_empty(&pool->_shared.sockets)) {
             struct pool_entry_t *entry = H2O_STRUCT_FROM_MEMBER(struct pool_entry_t, all_link, pool->_shared.sockets.next);
@@ -106,12 +106,13 @@ static uint64_t destroy_expired_locked(h2o_socketpool_t *pool)
 /* caller should lock the mutex */
 static void check_pool_expired_locked(h2o_socketpool_t *pool, h2o_loop_t *this_loop)
 {
-    uint64_t next_expired = destroy_expired_locked(pool);
+    uint64_t next_expired = destroy_expired_locked(pool, this_loop);
     if (next_expired != UINT64_MAX) {
-        if (this_loop == pool->_interval_cb.loop && !h2o_timer_is_linked(&pool->_interval_cb.timeout)) {
+        if (!h2o_timer_is_linked(&pool->_interval_cb.timeout)) {
             if (next_expired < CHECK_EXPIRATION_MIN_INTERVAL)
                 next_expired = CHECK_EXPIRATION_MIN_INTERVAL;
-            h2o_timer_link(pool->_interval_cb.loop, next_expired, &pool->_interval_cb.timeout);
+            pool->_interval_cb.sock_loop = this_loop;
+            h2o_timer_link(this_loop, next_expired, &pool->_interval_cb.timeout);
         }
     }
 }
@@ -124,7 +125,11 @@ static void on_timeout(h2o_timer_t *timeout)
     h2o_socketpool_t *pool = H2O_STRUCT_FROM_MEMBER(h2o_socketpool_t, _interval_cb.timeout, timeout);
 
     if (pthread_mutex_trylock(&pool->_shared.mutex) == 0) {
-        check_pool_expired_locked(pool, pool->_interval_cb.loop);
+        h2o_loop_t *sock_loop = pool->_interval_cb.sock_loop;
+        if (sock_loop != NULL)
+          check_pool_expired_locked(pool, sock_loop);
+        else
+          check_pool_expired_locked(pool, pool->_interval_cb.loop);
         pthread_mutex_unlock(&pool->_shared.mutex);
     }
 }
