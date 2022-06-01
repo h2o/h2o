@@ -350,7 +350,7 @@ void do_dispose_socket(h2o_socket_t *_sock)
     sock->_flags = H2O_SOCKET_FLAG_IS_DISPOSED | (sock->_flags & H2O_SOCKET_FLAG__EPOLL_IS_REGISTERED);
 
     /* Give backends chance to do the necessary cleanup, as well as giving them chance to switch to their own disposal method; e.g.,
-     * connect(AF_UNSPEC) with delays to reclaim all zero copy buffers. */
+     * shutdown(SHUT_RDWR) with delays to reclaim all zero copy buffers. */
     if (evloop_do_on_socket_close(sock))
         return;
 

@@ -278,14 +278,13 @@ static int evloop_do_on_socket_close(struct st_h2o_evloop_socket_t *sock)
     if (sock->fd == -1)
         return 0;
 
-    /* If zero copy is in action, disconnect using AF_UNSPEC. Then, poll the socket until all zero copy buffers are reclaimed, at
+    /* If zero copy is in action, disconnect using shutdown(). Then, poll the socket until all zero copy buffers are reclaimed, at
      * which point we dispose of the socket. Edge trigger is used, as in level trigger EPOLLHUP will be notified continuously. */
     if (sock->super._zerocopy != NULL && !zerocopy_buffers_is_empty(sock->super._zerocopy)) {
-        struct sockaddr close_sa = {.sa_family = AF_UNSPEC};
-        while ((ret = connect(sock->fd, &close_sa, sizeof(close_sa))) == -1 && errno == EINTR)
+        while ((ret = shutdown(sock->fd, SHUT_RDWR)) == -1 && errno == EINTR)
             ;
         if (ret != 0 && errno != ENOTCONN)
-            h2o_error_printf("socket_close: connect(AF_UNSPEC) failed; errno=%d, fd=%d\n", errno, sock->fd);
+            h2o_error_printf("socket_close: shutdown(SHUT_RDWR) failed; errno=%d, fd=%d\n", errno, sock->fd);
         if (!change_epoll_mode(sock, EPOLLET))
             h2o_fatal("socket_close: epoll_ctl(MOD) failed; errno=%d, fd=%d\n", errno, sock->fd);
         /* drain error notifications after registering the edge trigger, otherwise there's chance of stall */
