@@ -51,8 +51,8 @@ RUN apt-get install --yes libtool autoconf && chmod 777 /root
 RUN wget --https-only --no-verbose -O - https://sh.rustup.rs | sh -s -- \
 		-y \
 		--profile minimal \
-		--default-toolchain 1.60.0 \
-	&& (git clone --recursive --branch 0.13.0 --depth 1 https://github.com/cloudflare/quiche \
+		--default-toolchain 1.61.0 \
+	&& (git clone --recursive --branch 0.14.0 --depth 1 https://github.com/cloudflare/quiche \
 		&& cd quiche \
 		&& CC=clang CXX=clang++ $HOME/.cargo/bin/cargo build --package quiche --release --features ffi,pkg-config-meta,qlog \
 		&& mkdir quiche/deps/boringssl/src/lib \
