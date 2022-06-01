@@ -48,7 +48,7 @@ EOT
 
 run_with_curl($server, sub {
         my ($proto, $port, $curl) = @_;
-        open(CURL, "$curl -HUpper-Case:TheValue -kv $proto://127.0.0.1:$port/ 2>&1 |");
+        open(CURL, "$curl -HUpper-Case:TheValue -sSfkv $proto://127.0.0.1:$port/ 2>&1 |");
         my $forwarded = handler_curl($upstream);
         my @lines;
         while (<CURL>) {
@@ -56,7 +56,7 @@ run_with_curl($server, sub {
 
         }
         my $resp = join("", @lines);
-        if ($curl =~ /http2/) {
+        if ($curl =~ /--http[23]/) {
             like($forwarded, qr{upper-case:\s*TheValue}, "Request header name is lowercased");
             like($resp, qr{myresponseheader:\s*1}, "Response header name is lowercase");
         } else {

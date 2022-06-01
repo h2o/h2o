@@ -64,6 +64,9 @@ EOT
 run_with_curl($server, sub {
     my ($proto, $port, $curl) = @_;
 
+    plan skip_all => "HTTP/3 doesn't perfectly support server-timing"
+        if $curl =~ /--http3/;
+
     open(CURL, "$curl --silent --dump-header /dev/stdout $proto://127.0.0.1:$port/ |");
 
     do_upstream($upstream);

@@ -65,8 +65,8 @@ EOT
             run_with_curl($server, sub {
                 my ($proto, $port, $curl) = @_;
                 plan skip_all => "skip due to curl bug #659"
-                    if $curl =~ /--http2/;
-                my $content = `$curl --silent --show-error -H foo:@{["0123456789"x7000]} $proto://127.0.0.1:$port/echo-headers`;
+                    if $curl =~ /--http[23]/;
+                my $content = `$curl --max-time 2 --silent --show-error -H foo:@{["0123456789"x7000]} $proto://127.0.0.1:$port/echo-headers`;
                 like $content, qr/^foo: (0123456789){7000,7000}$/mi;
                 if ($proto eq 'https') {
                     like $content, qr/^https: on$/m;
@@ -124,7 +124,7 @@ $dropconf
 EOT
         run_with_curl($server, sub {
             my ($proto, $port, $curl) = @_;
-            my $content = `$curl --silent --show-error -H proxy:foobar $proto://127.0.0.1:$port/echo-headers`;
+            my $content = `$curl --silent --show-error --max-time 2 -H proxy:foobar $proto://127.0.0.1:$port/echo-headers`;
             $cb->($content);
         });
     };

@@ -14,7 +14,7 @@ my $origin = spawn_server(
     },
 );
 
-my $server = spawn_h2o(<< "EOT");
+my $server = spawn_h2o({ conf => << "EOT", quic => { disable => 1 }});
 proxy-status.identity: "h2o/test"
 hosts:
   default:

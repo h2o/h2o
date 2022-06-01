@@ -116,7 +116,7 @@ my $server;
 
 sub spawn_with {
     my ($opts, $cb) = @_;
-    $server = spawn_h2o(<< "EOT");
+    $server = spawn_h2o({ conf => << "EOT", quic => { disable => 1 }});
 ssl-session-resumption:
 $opts
 hosts:

@@ -155,7 +155,7 @@ EOT
             like $resp, qr{^HTTP/[\d.]+ $status}mi;
             (my $eh, $resp) = split(/\r\n\r\n/, $resp, 2);
             like $eh, qr{^link: </index.js>; rel=preload}mi if $link;
-    
+
             subtest '103 with no hints' => sub {
                 $resp = `$curl --silent --dump-header /dev/stdout '$proto://127.0.0.1:$port/1xx?status=$status'`;
                 unlike $resp, qr{^HTTP/[\d.]+ $status}mi;
@@ -179,7 +179,7 @@ EOT
             };
         });
     };
-    
+
     subtest 'except-h1 (default)' => sub {
         my $server = spawn_h2o(<< "EOT");
 hosts:
@@ -191,14 +191,14 @@ EOT
         run_with_curl($server, sub {
             my ($proto, $port, $curl) = @_;
             my $resp = `$curl --silent --dump-header /dev/stdout '$proto://127.0.0.1:$port/1xx?status=$status&link=$link'`;
-            if ($curl =~ /http2/) {
+            if ($curl =~ /--http[23]/) {
                 like $resp, qr{^HTTP/[\d.]+ $status}mi;
             } else {
                 unlike $resp, qr{^HTTP/[\d.]+ $status}mi;
             }
         });
     };
-    
+
     subtest 'none' => sub {
         my $server = spawn_h2o(<< "EOT");
 send-informational: none
@@ -210,7 +210,8 @@ hosts:
 EOT
         run_with_curl($server, sub {
             my ($proto, $port, $curl) = @_;
-            my $resp = `$curl --silent --dump-header /dev/stdout '$proto://127.0.0.1:$port/1xx?status=$status&link=$link'`;
+            local $TODO = "HTTP/3" if $curl =~ /--http3/;
+            my $resp = `$curl -sS --dump-header /dev/stdout '$proto://127.0.0.1:$port/1xx?status=$status&link=$link'`;
             unlike $resp, qr{^HTTP/[\d.]+ $status}mi;
         });
     };
