@@ -34,7 +34,7 @@ EOT
         } else {
             subtest "return_404_when_http1" => sub {
                 my ($headers, $body) = run_prog("$curl_cmd --dump-header /dev/stderr $url");
-                like($headers, qr!^HTTP/1.1 404!);
+                like($headers, qr!^HTTP/[\d\.]+ 404!);
             };
         }
     });
