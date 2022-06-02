@@ -286,16 +286,16 @@ sub spawn_h2o {
         $conf = $conf->{conf};
     }
 
+    my $listen_quic = '';
     if ($quic_port && $conf !~ /^\s*type:\s*\bquic\b/) {
         my $quic_host = $quic->{host} // '0.0.0.0';
-        $conf .= <<"EOT";
-listen:
-  type: quic
-  host: $quic_host
-  port: $quic_port
-  ssl:
-    key-file: examples/h2o/server.key
-    certificate-file: examples/h2o/server.crt
+        $listen_quic = <<"EOT";
+  - type: quic
+    host: $quic_host
+    port: $quic_port
+    ssl:
+      key-file: examples/h2o/server.key
+      certificate-file: examples/h2o/server.crt
 EOT
     }
 
@@ -309,6 +309,7 @@ listen:
       key-file: examples/h2o/server.key
       certificate-file: examples/h2o/server.crt
       @{[$max_ssl_version ? "max-version: $max_ssl_version" : ""]}
+$listen_quic
 @{[$user ? "user: $user" : ""]}
 EOT
 
