@@ -14,6 +14,7 @@ plan skip_all => 'curl not found'
 my $tempdir = tempdir(CLEANUP => 1);
 
 my $server = spawn_h2o({
+    quic => { disable => 1 }, # TODO: enable it later
     opts => [qw(--mode=worker)],
     user => "nobody",
     conf => << 'EOT',
@@ -103,7 +104,7 @@ run_with_curl($server, sub {
     my ($proto, $port, $cmd, $http_ver) = @_;
     my $get_trace = sub {
         # access
-        my ($headers, $body) = run_prog("$cmd --silent --dump-header silent --dump-header /dev/stderr $proto://127.0.0.1:$port/");
+        my ($headers, $body) = run_prog("$cmd --silent --show-error --dump-header silent --dump-header /dev/stderr $proto://127.0.0.1:$port/");
         is $body, "hello\n";
         like $headers, qr{^HTTP/[0-9\.]+ 200 }s;
         # read the trace

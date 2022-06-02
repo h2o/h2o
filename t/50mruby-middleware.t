@@ -6,6 +6,7 @@ use Net::EmptyPort qw(empty_port check_port);
 use Test::More;
 use Test::Exception;
 use Hash::MultiValue;
+use Carp;
 use t::Util;
 
 plan skip_all => 'mruby support is off'
@@ -39,7 +40,7 @@ sub get {
 
     # build curl command
     my @curl_cmd = ($curl);
-    push(@curl_cmd, qw(--silent --dump-header /dev/stderr));
+    push(@curl_cmd, qw(--silent --show-error --dump-header /dev/stderr));
     push(@curl_cmd, map { ('-H', "'$_'") } @{ $opts->{headers} || [] });
     push(@curl_cmd, "$proto://127.0.0.1:$port$path");
     push(@curl_cmd, '--data-binary', "\@$opts->{data_file}") if $opts->{data_file};
@@ -54,9 +55,12 @@ sub get {
         die "timeout";
     }
     $hstr =~ s!HTTP/[0-9.]+ 100 Continue\r\n\r\n!!;
+    ($hstr, my $curl_warnings) = split(/\r\n\r\n/, $hstr, 2);
+    diag "Warning: $curl_warnings" if $curl_warnings;
     my ($sline, @hlines) = split(/\r\n/, $hstr);
-    unless (($sline || '') =~ m{^HTTP/[\d\.]+ (\d+)}) {
-        die "failed to get $path: @{[$sline || '']}";
+    chomp($sline //= '');
+    unless ($sline =~ m{^HTTP/[\d\.]+ (\d+)}) {
+        confess("failed to get `$curl_cmd`: @{[ $sline // '' ]}");
     }
     my $status = $1 + 0;
     my $headers = Hash::MultiValue->new(map { (lc($_->[0]), $_->[1]) } map { [ split(': ', $_, 2) ] } @hlines);
@@ -89,9 +93,9 @@ my @testcases = (
         name => 'modify response header',
         handler => sub { my $mode = shift; <<"EOT" },
         - mruby.handler: |
-            proc {|env| 
+            proc {|env|
               modify_env(env, '$mode')
-              resp = H2O.$mode.call(env) 
+              resp = H2O.$mode.call(env)
               resp[1]['foo'] = 'FOO'
               resp
             }
@@ -223,6 +227,7 @@ EOT
             my ($server, $tc, $mode, $file, $gopts) = @_;
             run_with_curl($server, sub {
                 my ($proto, $port, $curl) = @_;
+                plan skip_all => "TODO: HTTP/3" if $curl =~ /--http3/;
                 my ($status, $headers, $body) = get($proto, $port, $curl, "@{[ into_path($tc->{name})]}/$file", $gopts);
                 is $status, 200;
                 is $body, 'mruby';
@@ -733,7 +738,7 @@ hosts:
   "127.0.0.1:$port":
     paths: &paths
       /:
-        - setenv: 
+        - setenv:
             foo: FOO
         - mruby.handler: |
             proc {|env|

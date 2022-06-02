@@ -19,7 +19,7 @@ hosts:
       /:
         mruby.handler-file: t/50mruby/hello.rb
 EOT
-    my ($headers, $body) = run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
+    my ($headers, $body) = run_prog("curl --silent --show-error --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
     is $body, "hello from h2o_mruby\n";
     like $headers, qr{^HTTP/1\.1 200 OK\r\n}s;
     like $headers, qr{^content-type: text/plain; charset=utf-8\r$}im;
@@ -65,7 +65,7 @@ hosts:
 EOT
     my $fetch = sub {
         my $path = shift;
-        run_prog("curl --silent -A h2o_mruby_test --dump-header /dev/stderr http://127.0.0.1:$server->{port}$path");
+        run_prog("curl --silent --show-error -A h2o_mruby_test --dump-header /dev/stderr http://127.0.0.1:$server->{port}$path");
     };
     my ($headers, $body) = $fetch->("/inline/");
     is $body, "hello from h2o_mruby\n", "inline";
@@ -101,8 +101,10 @@ EOT
         run_with_curl($server, sub {
                 my ($proto, $port, $curl) = @_;
                 my $content = `$curl --silent --show-error $proto://127.0.0.1:$port/echo`;
-                if ($curl =~ /http2/) {
+                if ($curl =~ /--http2/) {
                     like $content, qr{"SERVER_PROTOCOL":"HTTP/2"}, "SERVER_PROTOCOL";
+                } elsif ($curl =~ /--http3/) {
+                    like $content, qr{"SERVER_PROTOCOL":"HTTP/3"}, "SERVER_PROTOCOL";
                 } else {
                     like $content, qr{"SERVER_PROTOCOL":"HTTP/1\.1"}, "SERVER_PROTOCOL";
                 }
@@ -143,16 +145,16 @@ hosts:
             [200, {}, ["#{env["SCRIPT_NAME"]}#{env["PATH_INFO"]};#{env["CONTENT_LENGTH"]}"]]
           end
 EOT
-    my ($stderr, $stdout) = run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
+    my ($stderr, $stdout) = run_prog("curl --silent --show-error --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
     is $stdout, "/dest/;";
-    ($stderr, $stdout) = run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/hoge");
+    ($stderr, $stdout) = run_prog("curl --silent --show-error --dump-header /dev/stderr http://127.0.0.1:$server->{port}/hoge");
     is $stdout, "/dest/hoge;";
     subtest "preserve-method" => sub {
-        ($stderr, $stdout) = run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/307/");
+        ($stderr, $stdout) = run_prog("curl --silent --show-error --dump-header /dev/stderr http://127.0.0.1:$server->{port}/307/");
         is $stdout, "/dest/;";
-        ($stderr, $stdout) = run_prog("curl --data hello --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/307/");
+        ($stderr, $stdout) = run_prog("curl --silent --show-error --data hello --dump-header /dev/stderr http://127.0.0.1:$server->{port}/307/");
         is $stdout, "/dest/;5";
-        ($stderr, $stdout) = run_prog("curl --data hello --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
+        ($stderr, $stdout) = run_prog("curl --silent --show-error --data hello --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
         is $stdout, "/dest/;";
     };
 };
@@ -217,7 +219,7 @@ hosts:
           end
 EOT
     });
-    my ($stderr, $stdout) = run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
+    my ($stderr, $stdout) = run_prog("curl --silent --show-error --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
     like $stderr, qr{^HTTP\/1.1 502 }s, "502 response";
     like $stdout, qr{too many internal delegations}, "reason";
 };
@@ -233,7 +235,7 @@ hosts:
             [200,{}, File::open("t/50mruby/index.html")]
           end
 EOT
-    my ($headers, $body) = run_prog("curl --silent -A h2o_mruby_test --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
+    my ($headers, $body) = run_prog("curl --silent --show-error -A h2o_mruby_test --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
     like $headers, qr{^HTTP/1\.1 200 OK\r\n}is;
     is md5_hex($body), md5_file("t/50mruby/index.html");
 };
@@ -257,7 +259,7 @@ hosts:
           end
 EOT
     my $fetch = sub {
-        run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}");
+        run_prog("curl --silent --show-error --dump-header /dev/stderr http://127.0.0.1:$server->{port}");
     };
     for (1..3) {
         my ($headers, $body) = $fetch->();
@@ -286,7 +288,7 @@ hosts:
             [200, {}, body]
           end
 EOT
-    my ($headers, $body) = run_prog("curl --silent --data 'hello' --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
+    my ($headers, $body) = run_prog("curl --silent --show-error --data 'hello' --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
     like $headers, qr{^HTTP/1\.1 200 OK\r\n}is;
     is $body, "hello\n" x 3;
 };
@@ -315,10 +317,10 @@ hosts:
             [200, {}, [resp]]
           end
 EOT
-    my ($headers, $body) = run_prog("curl --silent --data 'hello' --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
+    my ($headers, $body) = run_prog("curl --silent --show-error --data 'hello' --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
     like $headers, qr{^HTTP/1\.1 200 OK\r\n}is;
     is $body, "not cached";
-    ($headers, $body) = run_prog("curl --silent --data 'hello' --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
+    ($headers, $body) = run_prog("curl --silent --show-error --data 'hello' --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
     like $headers, qr{^HTTP/1\.1 200 OK\r\n}is;
     is $body, "got IOError";
 };
@@ -337,7 +339,7 @@ hosts:
 EOT
     run_with_curl($server, sub {
         my ($proto, $port, $curl) = @_;
-        my ($headers, $body) = run_prog("$curl --silent -H 'cookie: a=b' -H 'cookie: c=d' --dump-header /dev/stderr $proto://127.0.0.1:$port/");
+        my ($headers, $body) = run_prog("$curl --silent --show-error -H 'cookie: a=b' -H 'cookie: c=d' --dump-header /dev/stderr $proto://127.0.0.1:$port/");
         like $headers, qr{^HTTP/\S+ 200}is;
         like $body, qr{^a=b;\s*c=d$}is;
     });
@@ -371,10 +373,10 @@ hosts:
             ]
           end
 EOT
-    my ($headers, $body) = run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
+    my ($headers, $body) = run_prog("curl --silent --show-error --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
     like $headers, qr{^HTTP/1\.1 200 }is;
     is $body, "hello";
-    ($headers, $body) = run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
+    ($headers, $body) = run_prog("curl --silent --show-error --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
     like $headers, qr{^HTTP/1\.1 200 }is;
     is $body, "hello";
 };
@@ -408,10 +410,10 @@ hosts:
             ]
           end
 EOT
-    my ($headers, $body) = run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
+    my ($headers, $body) = run_prog("curl --silent --show-error --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
     like $headers, qr{^HTTP/1\.1 200 }is;
     is $body, "hello";
-    ($headers, $body) = run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
+    ($headers, $body) = run_prog("curl --silent --show-error --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
     like $headers, qr{^HTTP/1\.1 200 }is;
     is $body, "hello";
 };
@@ -427,7 +429,7 @@ subtest "log lineno" => sub {
 $conf
 error-log: $tempdir/error_log
 EOT
-            run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
+            run_prog("curl --silent --show-error --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
             undef $server; # wait for the server to terminate
             my @log = do {
                 open my $fh, "<", "$tempdir/error_log"
@@ -474,7 +476,7 @@ hosts:
             [200, {}, ["#{Foo.name},#{Bar.name}"]]
           }
 EOT
-        (undef, my $body) = run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
+        (undef, my $body) = run_prog("curl --silent --show-error --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
         is $body, "Foo,Bar";
     };
     subtest 'require works as the same' => sub {
@@ -491,7 +493,7 @@ hosts:
             [200, {}, ["#{Foo.name},#{Bar.name}"]]
           }
 EOT
-        (undef, my $body) = run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
+        (undef, my $body) = run_prog("curl --silent --show-error --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
         is $body, "Foo,Bar";
     };
     subtest 'self must be top_self' => sub {
@@ -506,7 +508,7 @@ hosts:
             [200, {}, [self.to_s]]
           }
 EOT
-        (undef, my $body) = run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
+        (undef, my $body) = run_prog("curl --silent --show-error --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
         is $body, "main";
     };
 };
@@ -523,7 +525,7 @@ hosts:
             [204, {}, []]
           }
 EOT
-    my ($headers, $body) = run_prog("curl --silent --data 'hello' --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
+    my ($headers, $body) = run_prog("curl --silent --show-error --data 'hello' --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
     like $headers, qr{^HTTP/1\.1 204 OK\r\n}is;
     unlike $headers, qr{^content-length:}im;
 };
@@ -605,7 +607,7 @@ EOT
     run_with_curl($server, sub {
         my ($proto, $port, $curl) = @_;
         my $fetch = sub {
-            run_prog("$curl --silent --dump-header /dev/stderr -m 1 $proto://127.0.0.1:$port/?@{[unpack 'H*', $_[0]]}");
+            run_prog("$curl --silent --show-error --dump-header /dev/stderr -m 1 $proto://127.0.0.1:$port/?@{[unpack 'H*', $_[0]]}");
         };
         my ($headers, $body) = $fetch->('[200, {}, ["hello world"]]');
         subtest "verify the methodology" => sub {
@@ -652,7 +654,7 @@ hosts:
 EOT
     run_with_curl($server, sub {
         my ($proto, $port, $curl) = @_;
-        my ($headers) = run_prog("$curl --silent --dump-header /dev/stderr -m 1 $proto://127.0.0.1:$port/");
+        my ($headers) = run_prog("$curl --silent --show-error --dump-header /dev/stderr -m 1 $proto://127.0.0.1:$port/");
         like $headers, qr{^link: </index.js>; rel=preload\r$}m;
         like $headers, qr{^link: </style.css>; rel=preload\r$}m;
         like $headers, qr{^foo: bar\r$}m;

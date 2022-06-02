@@ -392,7 +392,9 @@ sub prog_exists {
 sub run_prog {
     my $cmd = shift;
     my ($tempfh, $tempfn) = tempfile(UNLINK => 1);
+    Test::More::diag("run_prog: $cmd") if $ENV{TEST_DEBUG};
     my $stderr = `$cmd 2>&1 > $tempfn`;
+    Test::More::diag("run_prog failed with $?: $stderr") if $? != 0;
     my $stdout = do { local $/; <$tempfh> };
     close $tempfh; # tempfile does not close the file automatically (see perldoc)
     return ($stderr, $stdout);
@@ -407,7 +409,7 @@ sub openssl_can_negotiate {
 }
 
 sub _curl_version {
-    state $curl_version = `curl --version`;
+    state $curl_version = `@{[ $ENV{CURL} // "curl" ]} --version`;
     return $curl_version;
 }
 
@@ -421,28 +423,30 @@ sub curl_supports_http3 {
 
 sub run_with_curl {
     my ($server, $cb) = @_;
+    local $Test::Builder::Level = $Test::Builder::Level + 1;
+    my $curl = $ENV{CURL} // "curl";
     plan skip_all => "curl not found"
-        unless prog_exists("curl");
+        unless prog_exists($curl);
     subtest "http/1.1" => sub {
-        $cb->("http", $server->{port}, "curl", 257);
+        $cb->("http", $server->{port}, $curl, 257);
     };
     subtest "http/1.1 (https)" => sub {
-        my $cmd = "curl --insecure";
+        my $cmd = "$curl --insecure";
         $cmd .= " --http1.1"
             if curl_supports_http2();
         $cb->("https", $server->{tls_port}, $cmd, 257);
     };
     subtest "http/2" => sub {
-        plan skip_all => "curl does not support HTTP/2"
+        plan skip_all => "$curl does not support HTTP/2"
             unless curl_supports_http2();
-        $cb->("https", $server->{tls_port}, "curl --insecure --http2", 512);
+        $cb->("https", $server->{tls_port}, "$curl --insecure --http2", 512);
     };
     subtest "http/3" => sub {
-        plan skip_all => "curl does not support HTTP/3"
+        plan skip_all => "$curl does not support HTTP/3"
             unless curl_supports_http3();
         plan skip_all => "the server does not serve HTTP/3 (requires quic_port)"
             unless $server->{quic_port};
-        $cb->("https", $server->{quic_port}, "curl --insecure --http3", 768);
+        $cb->("https", $server->{quic_port}, "$curl --insecure --http3", 768);
     };
 }
 
