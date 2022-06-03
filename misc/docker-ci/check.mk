@@ -43,6 +43,19 @@ dtrace+asan:
 		BUILD_ARGS='$(BUILD_ARGS)' \
 		TEST_ENV='ASAN_OPTIONS=detect_leaks=0:alloc_dealloc_mismatch=0 $(TEST_ENV)'
 
+# https://clang.llvm.org/docs/SourceBasedCodeCoverage.html
+coverage:
+	docker run $(DOCKER_RUN_OPTS) h2oserver/h2o-ci:ubuntu2004  \
+		make -f $(SRC_DIR).ro/misc/docker-ci/check.mk _check_and_cov \
+		CMAKE_ARGS='-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_FLAGS="-fprofile-instr-generate -fcoverage-mapping -mllvm -runtime-counter-relocation" -DCMAKE_CXX_FLAGS=' \
+		BUILD_ARGS='$(BUILD_ARGS)' \
+		TEST_ENV='LLVM_PROFILE_FILE=./profraw/%c%p.profraw $(TEST_ENV)'
+
+_check_and_cov: _check
+	llvm-profdata merge -sparse -o h2o.profdata ./profraw/*.profraw
+	llvm-cov report -instr-profile h2o.profdata b/h2o lib/**/*.c src/**/*.c
+	# TODO: send the coverage report to Codecov
+
 _check: _mount _do_check
 
 _mount:
