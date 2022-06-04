@@ -99,8 +99,14 @@ void h2o__fatal(const char *file, int line, const char *msg, ...)
 
 void *h2o_mem_alloc_recycle(h2o_mem_recycle_t *allocator)
 {
-    if (allocator->cnt == 0)
-        return h2o_mem_alloc(*allocator->memsize);
+    if (allocator->cnt == 0) {
+        /* Tentative fix that prevents the non-temporal aes-gcm engine from overwriting the cache line (of 64B) that is shared with
+         * other threads. */
+        void *p;
+        if (posix_memalign(&p, 64, *allocator->memsize) != 0)
+            h2o_fatal("no memory");
+        return p;
+    }
     /* detach and return the pooled pointer */
     return allocator->chunks[--allocator->cnt];
 }
