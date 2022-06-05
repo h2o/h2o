@@ -70,6 +70,10 @@ extern "C" {
 #define PTLS_FUZZ_HANDSHAKE 0
 #endif
 
+#ifndef PTLS_SIZEOF_CACHE_LINE
+#define PTLS_SIZEOF_CACHE_LINE 64
+#endif
+
 #define PTLS_HELLO_RANDOM_SIZE 32
 
 #define PTLS_AES128_KEY_SIZE 16

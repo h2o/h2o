@@ -519,14 +519,14 @@ int ptls_buffer_reserve(ptls_buffer_t *buf, size_t delta)
         return PTLS_ERROR_NO_MEMORY;
 
     if (PTLS_MEMORY_DEBUG || buf->capacity < buf->off + delta) {
-        uint8_t *newp;
+        void *newp;
         size_t new_capacity = buf->capacity;
         if (new_capacity < 1024)
             new_capacity = 1024;
         while (new_capacity < buf->off + delta) {
             new_capacity *= 2;
         }
-        if ((newp = malloc(new_capacity)) == NULL)
+        if (posix_memalign(&newp, PTLS_SIZEOF_CACHE_LINE, new_capacity) != 0)
             return PTLS_ERROR_NO_MEMORY;
         memcpy(newp, buf->base, buf->off);
         ptls_buffer__release_memory(buf);
