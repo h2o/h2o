@@ -92,8 +92,13 @@ typedef struct st_h2o_iovec_t {
     size_t len;
 } h2o_iovec_t;
 
+typedef struct st_h2o_mem_recycle_conf_t {
+    size_t size;
+    size_t alignment;
+} h2o_mem_recycle_conf_t;
+
 typedef struct st_h2o_mem_recycle_t {
-    const size_t *memsize;
+    const h2o_mem_recycle_conf_t *conf;
     size_t max;
     size_t cnt;
     void **chunks;
@@ -200,6 +205,10 @@ static h2o_iovec_t h2o_iovec_init(const void *base, size_t len);
  * wrapper of malloc; allocates given size of memory or dies if impossible
  */
 H2O_RETURNS_NONNULL static void *h2o_mem_alloc(size_t sz);
+/**
+ * wrapper of posix_memalign; if alignment is zero, calls `malloc`
+ */
+H2O_RETURNS_NONNULL static void *h2o_mem_aligned_alloc(size_t alignment, size_t sz);
 /**
  * warpper of realloc; reallocs the given chunk or dies if impossible
  */
@@ -422,6 +431,18 @@ inline void *h2o_mem_alloc(size_t sz)
         h2o_fatal("no memory");
     return p;
 }
+
+inline void *h2o_mem_aligned_alloc(size_t alignment, size_t sz)
+{
+    if (alignment == 0)
+        return h2o_mem_alloc(sz);
+
+    void *p;
+    if (posix_memalign(&p, alignment, sz) != 0)
+        h2o_fatal("no memory");
+    return p;
+}
+
 
 inline void *h2o_mem_realloc(void *oldp, size_t sz)
 {

@@ -79,8 +79,8 @@ struct st_h2o_mem_pool_shared_ref_t {
 
 void *(*volatile h2o_mem__set_secure)(void *, int, size_t) = memset;
 
-static const size_t mem_pool_allocator_memsize = sizeof(union un_h2o_mem_pool_chunk_t);
-__thread h2o_mem_recycle_t h2o_mem_pool_allocator = {&mem_pool_allocator_memsize, 16};
+static const h2o_mem_recycle_conf_t mem_pool_allocator_conf = {sizeof(union un_h2o_mem_pool_chunk_t)};
+__thread h2o_mem_recycle_t h2o_mem_pool_allocator = {&mem_pool_allocator_conf, 16};
 size_t h2o_mmap_errors = 0;
 
 void h2o__fatal(const char *file, int line, const char *msg, ...)
@@ -99,14 +99,8 @@ void h2o__fatal(const char *file, int line, const char *msg, ...)
 
 void *h2o_mem_alloc_recycle(h2o_mem_recycle_t *allocator)
 {
-    if (allocator->cnt == 0) {
-        /* Tentative fix that prevents the non-temporal aes-gcm engine from overwriting the cache line (of 64B) that is shared with
-         * other threads. */
-        void *p;
-        if (posix_memalign(&p, 64, *allocator->memsize) != 0)
-            h2o_fatal("no memory");
-        return p;
-    }
+    if (allocator->cnt == 0)
+        return h2o_mem_aligned_alloc(allocator->conf->alignment, allocator->conf->size);
     /* detach and return the pooled pointer */
     return allocator->chunks[--allocator->cnt];
 }
@@ -243,7 +237,7 @@ static size_t topagesize(size_t capacity)
  */
 #define H2O_BUFFER_MIN_ALLOC_POWER 12
 
-static size_t buffer_recycle_bins_sizeof_zero_sized = sizeof(h2o_buffer_t);
+static const h2o_mem_recycle_conf_t buffer_recycle_bins_zero_sized_conf = {sizeof(h2o_buffer_t)};
 /**
  * Retains recycle bins for `h2o_buffer_t`.
  */
@@ -252,7 +246,7 @@ static __thread struct {
      * Holds recycle bins for `h2o_buffer_t`. Bin for capacity 2^x is located at x - H2O_BUFFER_MIN_ALLOC_POWER.
      */
     struct buffer_recycle_bin_t {
-        size_t memsize;
+        h2o_mem_recycle_conf_t conf;
         h2o_mem_recycle_t recycle;
     } * bins;
     /**
@@ -263,7 +257,7 @@ static __thread struct {
      * Bin containing chunks of sizeof(h2o_buffer_t). This is used by empties buffers to retain the previous capacity.
      */
     h2o_mem_recycle_t zero_sized;
-} buffer_recycle_bins = {NULL, H2O_BUFFER_MIN_ALLOC_POWER - 1, {&buffer_recycle_bins_sizeof_zero_sized, 100}};
+} buffer_recycle_bins = {NULL, H2O_BUFFER_MIN_ALLOC_POWER - 1, {&buffer_recycle_bins_zero_sized_conf, 100}};
 
 static unsigned buffer_size_to_power(size_t sz)
 {
@@ -301,14 +295,14 @@ static h2o_mem_recycle_t *buffer_get_recycle(unsigned power, int only_if_exists)
             h2o_mem_realloc(buffer_recycle_bins.bins, sizeof(*buffer_recycle_bins.bins) * (power - H2O_BUFFER_MIN_ALLOC_POWER + 1));
         for (size_t p = H2O_BUFFER_MIN_ALLOC_POWER; p <= buffer_recycle_bins.largest_power; ++p) {
             struct buffer_recycle_bin_t *bin = buffer_recycle_bins.bins + p - H2O_BUFFER_MIN_ALLOC_POWER;
-            bin->recycle.memsize = &bin->memsize;
+            bin->recycle.conf = &bin->conf;
         }
         do {
             ++buffer_recycle_bins.largest_power;
             struct buffer_recycle_bin_t *newbin =
                 buffer_recycle_bins.bins + buffer_recycle_bins.largest_power - H2O_BUFFER_MIN_ALLOC_POWER;
-            newbin->memsize = (size_t)1 << buffer_recycle_bins.largest_power;
-            newbin->recycle = (h2o_mem_recycle_t){&newbin->memsize, 16};
+            newbin->conf = (h2o_mem_recycle_conf_t){(size_t)1 << buffer_recycle_bins.largest_power};
+            newbin->recycle = (h2o_mem_recycle_t){&newbin->conf, 16};
         } while (buffer_recycle_bins.largest_power < power);
     }
 
@@ -370,7 +364,7 @@ static h2o_buffer_t *buffer_allocate(h2o_buffer_prototype_t *prototype, size_t m
     h2o_mem_recycle_t *allocator = buffer_get_recycle(alloc_power, 1);
     if (allocator == NULL || allocator->cnt == 0)
         goto AllocNormal;
-    assert(*allocator->memsize == (size_t)1 << alloc_power);
+    assert(allocator->conf->size == (size_t)1 << alloc_power);
     newp = h2o_mem_alloc_recycle(allocator);
     goto AllocDone;
 
