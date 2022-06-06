@@ -101,7 +101,7 @@ static int handle_zerocopy_notification(struct st_h2o_evloop_socket_t *sock)
                                 assert(sock->super.ssl->output.zerocopy_owned);
                                 sock->super.ssl->output.zerocopy_owned = 0;
                             } else {
-                                h2o_mem_free_recycle(&h2o_socket_ssl_buffer_allocator, p);
+                                h2o_mem_free_recycle(&zerocopy_buffer_allocator, p);
                             }
                         }
                     }
