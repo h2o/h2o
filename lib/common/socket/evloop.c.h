@@ -223,7 +223,7 @@ static size_t write_core(struct st_h2o_evloop_socket_t *sock, h2o_iovec_t **bufs
              * copying sendmsg is going to be more costly than what the kernel documentation assumes. In an artificial benchmark,
              * changing from 16KB to 4KB increased the throughput by ~10%. */
             if (sock->super._zerocopy != NULL && encbuf.len >= 4096 &&
-                sock->super.ssl->output.buf.capacity == *h2o_socket_ssl_buffer_allocator.memsize)
+                sock->super.ssl->output.buf.capacity == h2o_socket_ssl_buffer_allocator.conf->memsize)
                 sendmsg_flags = MSG_ZEROCOPY;
 #endif
             if ((enc_written = write_vecs(sock, &encbufs, &encbufcnt, sendmsg_flags)) == SIZE_MAX) {
