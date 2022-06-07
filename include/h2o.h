@@ -617,11 +617,11 @@ typedef struct st_h2o_context_storage_item_t {
 
 typedef H2O_VECTOR(h2o_context_storage_item_t) h2o_context_storage_t;
 
-typedef enum h2o_connection_state {
-    H2O_CONNECTION_STATE_IDLE,
-    H2O_CONNECTION_STATE_ACTIVE,
-    H2O_CONNECTION_STATE_SHUTDOWN,
-} h2o_connection_state_t;
+typedef enum h2o_conn_state {
+    H2O_CONN_STATE_IDLE,
+    H2O_CONN_STATE_ACTIVE,
+    H2O_CONN_STATE_SHUTDOWN,
+} h2o_conn_state_t;
 
 /**
  * context of the http server.
@@ -1010,7 +1010,7 @@ struct st_h2o_conn_t {
         char str[H2O_UUID_STR_RFC4122_LEN + 1];
         uint8_t is_initialized;
     } _uuid;
-    h2o_connection_state_t state;
+    h2o_conn_state_t state;
     /* internal structure */
     h2o_linklist_t _conns;
 };
@@ -1695,15 +1695,15 @@ void h2o_context_close_idle_connections(h2o_context_t *ctx, size_t max_connectio
 /**
  * initialize connection state
  */
-void h2o_connection_state_init(h2o_conn_t *conn, h2o_connection_state_t state);
+void h2o_conn_init_state(h2o_conn_t *conn, h2o_conn_state_t state);
 /**
  * finalize connection state
  */
-void h2o_connection_state_fin(h2o_conn_t *conn);
+void h2o_conn_fin_state(h2o_conn_t *conn);
 /**
  * transition connection state
  */
-void h2o_connection_state_set(h2o_conn_t *conn, h2o_connection_state_t state);
+void h2o_conn_set_state(h2o_conn_t *conn, h2o_conn_state_t state);
 /**
  * returns per-module context set
  */

@@ -142,7 +142,7 @@ static void close_connection(struct st_h2o_http1_conn_t *conn, int close_socket)
     h2o_dispose_request(&conn->req);
     if (conn->sock != NULL && close_socket)
         h2o_socket_close(conn->sock);
-    h2o_connection_state_fin(&conn->super);
+    h2o_conn_fin_state(&conn->super);
     free(conn);
 }
 
@@ -155,7 +155,7 @@ static void cleanup_connection(struct st_h2o_http1_conn_t *conn)
     }
 
     if (conn->sock->input->size == 0) {
-        h2o_connection_state_set(&conn->super, H2O_CONNECTION_STATE_SHUTDOWN);
+        h2o_conn_set_state(&conn->super, H2O_CONN_STATE_SHUTDOWN);
     }
 
     assert(conn->req.proceed_req == NULL);
@@ -630,7 +630,7 @@ static void handle_incoming_request(struct st_h2o_http1_conn_t *conn)
     h2o_iovec_t expect;
 
     if (conn->sock->input->size != 0)
-        h2o_connection_state_set(&conn->super, H2O_CONNECTION_STATE_ACTIVE);
+        h2o_conn_set_state(&conn->super, H2O_CONN_STATE_ACTIVE);
 
     /* need to set request_begin_at here for keep-alive connection */
     if (h2o_timeval_is_null(&conn->req.timestamps.request_begin_at))
@@ -1238,7 +1238,7 @@ void h2o_http1_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval 
     /* init properties that need to be non-zero */
     conn->sock = sock;
     sock->data = conn;
-    h2o_connection_state_init(&conn->super, H2O_CONNECTION_STATE_IDLE);
+    h2o_conn_init_state(&conn->super, H2O_CONN_STATE_IDLE);
 
     H2O_PROBE_CONN(H1_ACCEPT, &conn->super, conn->sock, &conn->super, h2o_conn_get_uuid(&conn->super));
 
