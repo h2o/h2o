@@ -190,8 +190,6 @@ static void set_req_io_timeout(struct st_h2o_http1_conn_t *conn, uint64_t timeou
     conn->_io_timeout_entry.cb = cb;
     if (cb != NULL) {
         h2o_timer_link(conn->super.ctx->loop, timeout, &conn->_io_timeout_entry);
-    } else {
-        h2o_connection_state_set(&conn->super, H2O_CONNECTION_STATE_ACTIVE);
     }
 }
 
@@ -630,6 +628,9 @@ static void handle_incoming_request(struct st_h2o_http1_conn_t *conn)
     size_t num_headers = H2O_MAX_HEADERS;
     ssize_t entity_body_header_index;
     h2o_iovec_t expect;
+
+    if (conn->sock->input->size != 0)
+        h2o_connection_state_set(&conn->super, H2O_CONNECTION_STATE_ACTIVE);
 
     /* need to set request_begin_at here for keep-alive connection */
     if (h2o_timeval_is_null(&conn->req.timestamps.request_begin_at))
