@@ -212,6 +212,7 @@ EOT
                 };
             };
             subtest "chunked" => sub {
+                plan skip_all => "HTTP/3 is not yet supported" if $curl_cmd =~ /--http3/;
                 for my $i (0..30) {
                     subtest "cl=$i" => sub {
                         my ($headers, $body) = run_prog("$curl_cmd $proto://127.0.0.1:$port/cl/$i/chunked");
@@ -223,6 +224,7 @@ EOT
             };
         };
         subtest "esi" => sub {
+            plan skip_all => "HTTP/3 is not yet supported" if $curl_cmd =~ /--http3/;
             my ($headers, $body) = run_prog("$curl_cmd $proto://127.0.0.1:$port/esi/");
             like $headers, qr{HTTP/[^ ]+ 200\s}is;
             is $body, "Hello to the world, from H2O!\n";
