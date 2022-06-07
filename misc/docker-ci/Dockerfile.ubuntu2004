@@ -47,9 +47,8 @@ RUN apt-get install --yes gnupg \
 	clang-14 \
 	libclang-14-dev \
 	llvm-14 \
-	llvm-14-dev \
-	&& update-alternatives --install /usr/bin/clang clang /usr/bin/clang-14 100 \
-	&& update-alternatives --install /usr/bin/clang++ clang++ /usr/bin/clang++-14 100
+	llvm-14-dev
+ENV PATH="/usr/lib/llvm-14/bin:$PATH"
 
 # curl with http2 support
 RUN apt-get install --yes libnghttp2-dev \
