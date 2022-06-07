@@ -1693,9 +1693,17 @@ void h2o_context_update_timestamp_string_cache(h2o_context_t *ctx);
  */
 void h2o_context_close_idle_connections(h2o_context_t *ctx, size_t max_connections_to_close, uint64_t min_age);
 /**
- * returns pointer to connection state counter
+ * initialize connection state
  */
-size_t *get_connection_state_counter(h2o_context_t *ctx, h2o_connection_state_t state);
+void h2o_connection_state_init(h2o_conn_t *conn, h2o_connection_state_t state);
+/**
+ * finalize connection state
+ */
+void h2o_connection_state_fin(h2o_conn_t *conn);
+/**
+ * transition connection state
+ */
+void h2o_connection_state_set(h2o_conn_t *conn, h2o_connection_state_t state);
 /**
  * returns per-module context set
  */

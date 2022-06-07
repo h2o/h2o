@@ -109,12 +109,7 @@ static void close_idle_connection(h2o_conn_t *_conn)
 
 static void initiate_graceful_shutdown(h2o_conn_t *_conn)
 {
-
-    --*get_connection_state_counter(_conn->ctx, _conn->state);
-    h2o_linklist_unlink(&_conn->_conns);
-    h2o_linklist_insert(&_conn->ctx->_conns.shutdown, &_conn->_conns);
-    _conn->state = H2O_CONNECTION_STATE_SHUTDOWN;
-    ++*get_connection_state_counter(_conn->ctx, _conn->state);
+    h2o_connection_state_set(_conn, H2O_CONNECTION_STATE_SHUTDOWN);
 
     /* draft-16 6.8
      * A server that is attempting to gracefully shut down a connection SHOULD send an initial GOAWAY frame with the last stream
@@ -416,8 +411,7 @@ void close_connection_now(h2o_http2_conn_t *conn)
         h2o_cache_destroy(conn->push_memo);
     if (conn->casper != NULL)
         h2o_http2_casper_destroy(conn->casper);
-    --*get_connection_state_counter(conn->super.ctx, conn->super.state);
-    h2o_linklist_unlink(&conn->super._conns);
+    h2o_connection_state_fin(&conn->super);
 
     if (conn->sock != NULL)
         h2o_socket_close(conn->sock);
@@ -1726,9 +1720,7 @@ static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_hostconf_t **hosts,
     h2o_http2_scheduler_init(&conn->scheduler);
     conn->state = H2O_HTTP2_CONN_STATE_OPEN;
 
-    conn->super.state = H2O_CONNECTION_STATE_IDLE;
-    ++*get_connection_state_counter(conn->super.ctx, conn->super.state);
-    h2o_linklist_insert(&conn->super.ctx->_conns.idle, &conn->super._conns);
+    h2o_connection_state_init(&conn->super, H2O_CONNECTION_STATE_IDLE);
 
     conn->_read_expect = expect_preface;
     conn->_input_header_table.hpack_capacity = conn->_input_header_table.hpack_max_capacity =
@@ -1918,8 +1910,7 @@ int h2o_http2_handle_upgrade(h2o_req_t *req, struct timeval connected_at)
 
     return 0;
 Error:
-    --*get_connection_state_counter(http2conn->super.ctx, http2conn->super.state);
-    h2o_linklist_unlink(&http2conn->super._conns);
+    h2o_connection_state_fin(&http2conn->super);
     kh_destroy(h2o_http2_stream_t, http2conn->streams);
     free(http2conn);
     return -1;

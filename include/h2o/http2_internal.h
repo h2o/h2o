@@ -383,18 +383,13 @@ inline void h2o_http2_stream_set_state(h2o_http2_conn_t *conn, h2o_http2_stream_
     }
 
     if (!h2o_timer_is_linked(&conn->_graceful_shutdown_timeout)) {
-        --*get_connection_state_counter(conn->super.ctx, conn->super.state);
-        h2o_linklist_unlink(&conn->super._conns);
         if (0 == conn->num_streams.pull.open + conn->num_streams.pull.half_closed + conn->num_streams.push.open +
                      conn->num_streams.push.half_closed) {
             // all streams are idle
-            h2o_linklist_insert(&conn->super.ctx->_conns.idle, &conn->super._conns);
-            conn->super.state = H2O_CONNECTION_STATE_IDLE;
+            h2o_connection_state_set(&conn->super, H2O_CONNECTION_STATE_IDLE);
         } else {
-            h2o_linklist_insert(&conn->super.ctx->_conns.active, &conn->super._conns);
-            conn->super.state = H2O_CONNECTION_STATE_ACTIVE;
+            h2o_connection_state_set(&conn->super, H2O_CONNECTION_STATE_ACTIVE);
         }
-        ++*get_connection_state_counter(conn->super.ctx, conn->super.state);
     }
 }
 
