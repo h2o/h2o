@@ -154,9 +154,8 @@ static void cleanup_connection(struct st_h2o_http1_conn_t *conn)
         return;
     }
 
-    if (conn->sock->input->size == 0) {
+    if (conn->sock->input->size == 0)
         h2o_conn_set_state(&conn->super, H2O_CONN_STATE_SHUTDOWN);
-    }
 
     assert(conn->req.proceed_req == NULL);
     assert(conn->_req_entity_reader == NULL);
@@ -188,9 +187,8 @@ static void set_req_io_timeout(struct st_h2o_http1_conn_t *conn, uint64_t timeou
     if (conn->_io_timeout_entry.cb != NULL)
         h2o_timer_unlink(&conn->_io_timeout_entry);
     conn->_io_timeout_entry.cb = cb;
-    if (cb != NULL) {
+    if (cb != NULL)
         h2o_timer_link(conn->super.ctx->loop, timeout, &conn->_io_timeout_entry);
-    }
 }
 
 static void clear_timeouts(struct st_h2o_http1_conn_t *conn)
