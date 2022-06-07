@@ -167,7 +167,7 @@ h2o_buffer_prototype_t h2o_socket_buffer_prototype = {
     {H2O_SOCKET_INITIAL_INPUT_BUFFER_SIZE}, /* minimum initial capacity; actual initial size is ~8KB, see h2o_buffer_reserve */
     &h2o_socket_buffer_mmap_settings};
 
-h2o_mem_recycle_conf_t h2o_socket_ssl_buffer_conf = {.memsize = H2O_SOCKET_DEFAULT_SSL_BUFFER_SIZE, .max_cnt = 1024};
+h2o_mem_recycle_conf_t h2o_socket_ssl_buffer_conf = {.memsize = H2O_SOCKET_DEFAULT_SSL_BUFFER_SIZE};
 __thread h2o_mem_recycle_t h2o_socket_ssl_buffer_allocator = {&h2o_socket_ssl_buffer_conf};
 
 int h2o_socket_use_ktls = 0;

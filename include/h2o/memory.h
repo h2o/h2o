@@ -92,16 +92,26 @@ typedef struct st_h2o_iovec_t {
     size_t len;
 } h2o_iovec_t;
 
+#define H2O_VECTOR(type)                                                                                                           \
+    struct {                                                                                                                       \
+        type *entries;                                                                                                             \
+        size_t size;                                                                                                               \
+        size_t capacity;                                                                                                           \
+    }
+
+typedef H2O_VECTOR(void) h2o_vector_t;
+typedef H2O_VECTOR(uint8_t) h2o_byte_vector_t;
+typedef H2O_VECTOR(h2o_iovec_t) h2o_iovec_vector_t;
+
 typedef struct st_h2o_mem_recycle_conf_t {
     size_t memsize;
-    size_t max_cnt;
     size_t alignment;
 } h2o_mem_recycle_conf_t;
 
 typedef struct st_h2o_mem_recycle_t {
     const h2o_mem_recycle_conf_t *conf;
-    void **chunks;
-    size_t cnt;
+    H2O_VECTOR(void *) chunks;
+    size_t low_watermark;
 } h2o_mem_recycle_t;
 
 struct st_h2o_mem_pool_shared_entry_t {
@@ -168,17 +178,6 @@ typedef struct st_h2o_doublebuffer_t {
     unsigned char inflight : 1;
     size_t _bytes_inflight;
 } h2o_doublebuffer_t;
-
-#define H2O_VECTOR(type)                                                                                                           \
-    struct {                                                                                                                       \
-        type *entries;                                                                                                             \
-        size_t size;                                                                                                               \
-        size_t capacity;                                                                                                           \
-    }
-
-typedef H2O_VECTOR(void) h2o_vector_t;
-typedef H2O_VECTOR(uint8_t) h2o_byte_vector_t;
-typedef H2O_VECTOR(h2o_iovec_t) h2o_iovec_vector_t;
 
 extern void *(*volatile h2o_mem__set_secure)(void *, int, size_t);
 
