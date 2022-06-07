@@ -2,7 +2,7 @@ FROM ubuntu:20.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-RUN apt-get --yes update && apt-get install --yes \
+RUN apt-get update --yes && apt-get install --yes \
 	apache2-utils \
 	bison \
 	clang \
@@ -23,7 +23,6 @@ RUN apt-get --yes update && apt-get install --yes \
 	libllvm7 \
 	llvm-7-dev \
 	libclang-7-dev \
-	libnghttp2-dev \
 	zlib1g-dev \
 	memcached \
 	net-tools \
@@ -45,10 +44,10 @@ RUN apt-get --yes update && apt-get install --yes \
 ENV CURL_VERSION=7.83.1
 ENV CURL_INSTALL_DIR=/usr/local
 WORKDIR /root
-RUN apt-get install --yes libtool autoconf && chmod 777 /root
+RUN apt-get install --yes libtool autoconf libnghttp2-dev && chmod 777 /root
 
 # curl-quiche (HTTP/3 using Quiche and BoringSSL)
-RUN wget --https-only --no-verbose -O - https://sh.rustup.rs | sh -s -- \
+RUN wget --https-only --quiet -O - https://sh.rustup.rs | sh -s -- \
 		-y \
 		--profile minimal \
 		--default-toolchain 1.61.0 \
@@ -82,7 +81,7 @@ RUN (git clone --depth 1 --branch openssl-3.0.3+quic https://github.com/quictls/
 		&& ./configure CC=clang CXX=clang++ PKG_CONFIG_PATH="${HOME}/curl/lib/pkgconfig:${HOME}/curl/lib64/pkgconfig" LDFLAGS="-Wl,-rpath,${HOME}/curl/lib:${HOME}/curl/lib64" "--prefix=${HOME}/curl" --enable-lib-only --disable-shared \
 		&& make -j"$(nproc)" V=1 && make -j"$(nproc)" V=1 install) \
 	&& (find "${HOME}/curl" -name '*.so*' -delete) \
-	&& (wget --https-only --no-verbose -O - "https://curl.se/download/curl-${CURL_VERSION}.tar.bz2" | tar xjf - \
+	&& (wget --https-only --quiet -O - "https://curl.se/download/curl-${CURL_VERSION}.tar.bz2" | tar xjf - \
 		&& cd "curl-${CURL_VERSION}" \
 		&& USE_CURL_SSLKEYLOGFILE=true ./configure CC=clang CXX=clang++ LDFLAGS="-Wl,-rpath,${HOME}/curl/lib:${HOME}/curl/lib64" --prefix="${CURL_INSTALL_DIR}" --with-nghttp2 --disable-shared --with-openssl="${HOME}/curl" --with-ngtcp2="${HOME}/curl" --with-nghttp3="${HOME}/curl" --program-suffix="-ngtcp2" \
 		&& make -j"$(nproc)" V=1 && make -j"$(nproc)" V=1 install) \
