@@ -2,11 +2,13 @@ FROM ubuntu:20.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-RUN apt-get --yes update
-RUN apt-get install --yes \
+RUN apt-get update --yes && apt-get install --yes \
 	apache2-utils \
 	bison \
-	clang \
+	lsb-release \
+	libclang-7-dev \
+	llvm-7 \
+	llvm-7-dev \
 	cmake \
 	cmake-data \
 	dnsutils \
@@ -15,16 +17,11 @@ RUN apt-get install --yes \
 	libbrotli-dev \
 	libc-ares-dev \
 	libcap-dev \
-	libclang-dev \
 	libedit-dev \
 	libelf-dev \
 	libev-dev \
 	libssl-dev \
 	libuv1-dev \
-	llvm-dev \
-	libllvm7 \
-	llvm-7-dev \
-	libclang-7-dev \
 	zlib1g-dev \
 	memcached \
 	net-tools \
@@ -40,6 +37,19 @@ RUN apt-get install --yes \
 	systemtap-sdt-dev \
 	time \
 	wget
+
+# the latest version of curl and llvm to use the LLVM source-based code coverage
+RUN apt-get install --yes gnupg \
+	&& wget --quiet --https-only -O - https://apt.llvm.org/llvm-snapshot.gpg.key | apt-key add \
+	&& echo "deb http://apt.llvm.org/$(lsb_release -sc)/ llvm-toolchain-$(lsb_release -sc)-14 main" > /etc/apt/sources.list.d/llvm.list \
+	&& apt-get update --yes \
+	&& apt-get install --yes \
+	clang-14 \
+	libclang-14-dev \
+	llvm-14 \
+	llvm-14-dev \
+	&& update-alternatives --install /usr/bin/clang clang /usr/bin/clang-14 100 \
+	&& update-alternatives --install /usr/bin/clang++ clang++ /usr/bin/clang++-14 100
 
 # curl with http2 support
 RUN apt-get install --yes libnghttp2-dev \
