@@ -152,10 +152,10 @@ static void cleanup_connection(struct st_h2o_http1_conn_t *conn)
         /* TODO use lingering close */
         close_connection(conn, 1);
         return;
-    } else {
-        if (conn->sock->input->size == 0) {
-            h2o_connection_state_set(&conn->super, H2O_CONNECTION_STATE_SHUTDOWN);
-        }
+    }
+
+    if (conn->sock->input->size == 0) {
+        h2o_connection_state_set(&conn->super, H2O_CONNECTION_STATE_SHUTDOWN);
     }
 
     assert(conn->req.proceed_req == NULL);
