@@ -46,6 +46,7 @@ dtrace+asan:
 # https://clang.llvm.org/docs/SourceBasedCodeCoverage.html
 coverage:
 	docker run $(DOCKER_RUN_OPTS) h2oserver/h2o-ci:ubuntu2004  \
+		env DTRACE_TESTS=0 \
 		make -f $(SRC_DIR).ro/misc/docker-ci/check.mk _check _coverage_report \
 		CMAKE_ARGS='-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_FLAGS="-fprofile-instr-generate -fcoverage-mapping -mllvm -runtime-counter-relocation" -DCMAKE_CXX_FLAGS= -DCMAKE_BUILD_TYPE=Debug' \
 		BUILD_ARGS='$(BUILD_ARGS)' \
