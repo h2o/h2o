@@ -50,11 +50,11 @@ coverage:
 		make -f $(SRC_DIR).ro/misc/docker-ci/check.mk _check _coverage_report \
 		CMAKE_ARGS='-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_FLAGS="-fprofile-instr-generate -fcoverage-mapping -mllvm -runtime-counter-relocation" -DCMAKE_CXX_FLAGS= -DCMAKE_BUILD_TYPE=Debug' \
 		BUILD_ARGS='$(BUILD_ARGS)' \
-		TEST_ENV='LLVM_PROFILE_FILE=./profraw/%c%p.profraw $(TEST_ENV)'
+		TEST_ENV='LLVM_PROFILE_FILE=/home/ci/profraw/%c%p.profraw $(TEST_ENV)'
 
 _coverage_report:
-	llvm-profdata merge -sparse -o h2o.profdata ./profraw/*.profraw
-	llvm-cov report -instr-profile h2o.profdata b/h2o lib src deps/quicly/lib deps/picotls/lib
+	llvm-profdata merge -sparse -o h2o.profdata /home/ci/profraw/*.profraw
+	llvm-cov report -instr-profile h2o.profdata h2o $(SRC_DIR)/lib $(SRC_DIR)/src $(SRC_DIR)/deps/quicly/lib $(SRC_DIR)/deps/picotls/lib
 	# TODO: send the coverage report to a coverage analyzing service
 
 _check: _mount _do_check
