@@ -262,8 +262,15 @@ static void dispose_write_buf(h2o_socket_t *sock)
     }
 }
 
-static void init_ssl_output_buffer(struct st_h2o_socket_ssl_t *ssl, int zerocopy)
+static void init_ssl_output_buffer(struct st_h2o_socket_ssl_t *ssl, int zerocopy_requested)
 {
+    int zerocopy = 0;
+    if (zerocopy_requested && ssl->ptls != NULL) {
+        ptls_cipher_suite_t *cipher = ptls_get_cipher(ssl->ptls);
+        if (cipher->aead->non_temporal)
+            zerocopy = 1;
+    }
+
     h2o_mem_recycle_t *allocator = zerocopy ? &zerocopy_buffer_allocator : &h2o_socket_ssl_buffer_allocator;
     ptls_buffer_init(&ssl->output.buf, h2o_mem_alloc_recycle(allocator), allocator->conf->memsize);
     ssl->output.buf.is_allocated = 1; /* set to true, so that the allocated memory is freed when the buffer is expanded */
