@@ -16,6 +16,7 @@ GetOptions(
 my @scripts = @ARGV;
 my %pids;
 my @failures;
+my $single_test_timeout_sec = 15 * 60;
 
 my $tempdir = tempdir(CLEANUP => 1);
 
@@ -29,7 +30,7 @@ while (@scripts or %pids) {
     # wait for tasks to exit
     my $kid = do {
         local $SIG{ALRM} = sub { die };
-        alarm(600);
+        alarm($single_test_timeout_sec);
         my $kid = eval { wait };
         alarm(0);
         $kid;
