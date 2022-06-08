@@ -970,7 +970,8 @@ static void proceed_request_streaming(h2o_req_t *_req, const char *errstr)
     assert(!h2o_linklist_is_linked(&stream->link));
     assert(conn->num_streams_req_streaming != 0 || stream->req.is_tunnel_req);
 
-    if (errstr != NULL || quicly_recvstate_transfer_complete(&stream->quic->recvstate)) {
+    if (errstr != NULL || (quicly_recvstate_bytes_available(&stream->quic->recvstate) == 0 &&
+                           quicly_recvstate_transfer_complete(&stream->quic->recvstate))) {
         /* tidy up the request streaming */
         stream->req.write_req.cb = NULL;
         stream->req.write_req.ctx = NULL;
