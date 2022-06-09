@@ -16,7 +16,7 @@ GetOptions(
 my @scripts = @ARGV;
 my %pids;
 my @failures;
-my $single_test_timeout_sec = 20 * 60;
+my $single_test_timeout_sec = 15 * 60;
 
 my $tempdir = tempdir(CLEANUP => 1);
 
