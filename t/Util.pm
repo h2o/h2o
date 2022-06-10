@@ -295,7 +295,8 @@ sub spawn_h2o_raw {
     $conf = "num-threads: 2\n$conf" unless $conf =~ /^num-threads:/m;
 
     my ($conffh, $conffn) = tempfile(UNLINK => 1);
-    print $conffh $conf;
+    print $conffh $conf or confess("failed to write to $conffn: $!");
+    $conffh->flush or confess("failed to write to $conffn: $!");
     Test::More::diag($conf) if $ENV{TEST_DEBUG};
 
     # spawn the server
