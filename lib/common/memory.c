@@ -129,12 +129,19 @@ void h2o_mem_clear_recycle(h2o_mem_recycle_t *allocator, int full)
     if (allocator->chunks.capacity == 0)
         return;
 
-    /* Set new watermark to (current-size + watermark) / 2 and clear if we have more entries than that. The intent of this design
-     * are:
+    /* Update waterwark. New watermark is set to max(low_watermark,current) / 2, in order to:
      * - under stable condition, reduce exponentially the number of buffers being kept
-     * - adopt to the increase of the buffers being kept
-     */
-    allocator->low_watermark = full ? 0 : (allocator->chunks.size + allocator->low_watermark) / 2;
+     * - adopt to the increase of the buffers being kept */
+    size_t new_watermark;
+    if (full) {
+        new_watermark = 0;
+    } else {
+        new_watermark = allocator->low_watermark;
+        if (new_watermark < allocator->chunks.size)
+            new_watermark = allocator->chunks.size;
+        new_watermark /= 2;
+    }
+    allocator->low_watermark = new_watermark;
 
     while (allocator->chunks.size > allocator->low_watermark)
         free(allocator->chunks.entries[--allocator->chunks.size]);
@@ -295,6 +302,17 @@ void h2o_buffer_clear_recycle(int full)
     }
 
     h2o_mem_clear_recycle(&buffer_recycle_bins.zero_sized, full);
+}
+
+int h2o_buffer_recycle_is_empty(void)
+{
+    for (unsigned i = H2O_BUFFER_MIN_ALLOC_POWER; i <= buffer_recycle_bins.largest_power; ++i) {
+        if (!h2o_mem_recycle_is_empty(&buffer_recycle_bins.bins[i - H2O_BUFFER_MIN_ALLOC_POWER].recycle))
+            return 0;
+    }
+    if (!h2o_mem_recycle_is_empty(&buffer_recycle_bins.zero_sized))
+        return 0;
+    return 1;
 }
 
 static h2o_mem_recycle_t *buffer_get_recycle(unsigned power, int only_if_exists)
