@@ -155,7 +155,7 @@ static void cleanup_connection(struct st_h2o_http1_conn_t *conn)
     }
 
     if (conn->sock->input->size == 0)
-        h2o_conn_set_state(&conn->super, H2O_CONN_STATE_SHUTDOWN);
+        h2o_conn_set_state(&conn->super, H2O_CONN_STATE_IDLE);
 
     assert(conn->req.proceed_req == NULL);
     assert(conn->_req_entity_reader == NULL);
