@@ -1019,7 +1019,7 @@ struct st_h2o_conn_t {
 #define H2O_CONN_LIST_FOREACH(decl_var, conn_list, block)                                                                          \
     do {                                                                                                                           \
         h2o_linklist_t *_conn_list[] = NOPAREN conn_list;                                                                          \
-        size_t conn_list_len = sizeof(_conn_list) / sizeof((_conn_list)[0]);                                                       \
+        size_t conn_list_len = PTLS_ELEMENTSOF(_conn_list);                                                                        \
         h2o_linklist_t **_conn_list_iter = (_conn_list);                                                                           \
         for (size_t i = 0; i < conn_list_len; i++) {                                                                               \
             for (h2o_linklist_t *_node = _conn_list_iter[i]->next, *_node_next; _node != _conn_list_iter[i]; _node = _node_next) { \
