@@ -495,6 +495,10 @@ int h2o_sendvec_read_raw(h2o_sendvec_t *vec, void *dst, size_t len);
  * GC resources
  */
 void h2o_socket_clear_recycle(int full);
+/**
+ *
+ */
+int h2o_socket_recycle_is_empty(void);
 
 /**
  * This is a thin wrapper around sendfile (2) that hides the differences between various OS implementations.
