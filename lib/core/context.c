@@ -218,11 +218,14 @@ static size_t *get_connection_state_counter(h2o_context_t *ctx, h2o_conn_state_t
     return ctx->_conns.num_conns.counters + (size_t)state;
 }
 
-static void _connection_state_set(h2o_conn_t *conn, h2o_conn_state_t state)
+static void unset_conn_state(h2o_conn_t *conn)
 {
-    if (h2o_linklist_is_linked(&conn->_conns)) {
-        h2o_linklist_unlink(&conn->_conns);
-    }
+    --*get_connection_state_counter(conn->ctx, conn->state);
+    h2o_linklist_unlink(&conn->_conns);
+}
+
+static void set_conn_state(h2o_conn_t *conn, h2o_conn_state_t state)
+{
     switch (state) {
     case H2O_CONN_STATE_IDLE:
         h2o_linklist_insert(&conn->ctx->_conns.idle, &conn->_conns);
@@ -234,25 +237,22 @@ static void _connection_state_set(h2o_conn_t *conn, h2o_conn_state_t state)
         h2o_linklist_insert(&conn->ctx->_conns.shutdown, &conn->_conns);
         break;
     }
+    conn->state = state;
+    ++*get_connection_state_counter(conn->ctx, conn->state);
 }
 
 void h2o_conn_init_state(h2o_conn_t *conn, h2o_conn_state_t state)
 {
-    conn->state = state;
-    ++*get_connection_state_counter(conn->ctx, conn->state);
-    _connection_state_set(conn, state);
+    set_conn_state(conn, state);
 }
 
 void h2o_conn_fin_state(h2o_conn_t *conn)
 {
-    --*get_connection_state_counter(conn->ctx, conn->state);
-    h2o_linklist_unlink(&conn->_conns);
+    unset_conn_state(conn);
 }
 
 void h2o_conn_set_state(h2o_conn_t *conn, h2o_conn_state_t state)
 {
-    --*get_connection_state_counter(conn->ctx, conn->state);
-    conn->state = state;
-    ++*get_connection_state_counter(conn->ctx, conn->state);
-    _connection_state_set(conn, state);
+    unset_conn_state(conn);
+    set_conn_state(conn, state);
 }
