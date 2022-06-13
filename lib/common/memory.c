@@ -304,6 +304,17 @@ void h2o_buffer_clear_recycle(int full)
     h2o_mem_clear_recycle(&buffer_recycle_bins.zero_sized, full);
 }
 
+int h2o_buffer_recycle_is_empty(void)
+{
+    for (unsigned i = H2O_BUFFER_MIN_ALLOC_POWER; i <= buffer_recycle_bins.largest_power; ++i) {
+        if (!h2o_mem_recycle_is_empty(&buffer_recycle_bins.bins[i - H2O_BUFFER_MIN_ALLOC_POWER].recycle))
+            return 0;
+    }
+    if (!h2o_mem_recycle_is_empty(&buffer_recycle_bins.zero_sized))
+        return 0;
+    return 1;
+}
+
 static h2o_mem_recycle_t *buffer_get_recycle(unsigned power, int only_if_exists)
 {
     if (power > buffer_recycle_bins.largest_power) {

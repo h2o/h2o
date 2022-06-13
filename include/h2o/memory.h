@@ -225,6 +225,10 @@ void h2o_mem_free_recycle(h2o_mem_recycle_t *allocator, void *p);
  * release all the memory chunks cached in input allocator to system
  */
 void h2o_mem_clear_recycle(h2o_mem_recycle_t *allocator, int full);
+/**
+ *
+ */
+static int h2o_mem_recycle_is_empty(h2o_mem_recycle_t *allocator);
 
 /**
  * initializes the memory pool.
@@ -269,6 +273,10 @@ static int h2o_mem_release_shared(void *p);
  * frees unused memory being pooled for recycling
  */
 void h2o_buffer_clear_recycle(int full);
+/**
+ *
+ */
+int h2o_buffer_recycle_is_empty(void);
 /**
  * initialize the buffer using given prototype.
  */
@@ -412,6 +420,11 @@ inline void *h2o_memcpy(void *dst, const void *src, size_t n)
     else if (n != 0)
         h2o_fatal("null pointer passed to memcpy");
     return dst;
+}
+
+inline int h2o_mem_recycle_is_empty(h2o_mem_recycle_t *allocator)
+{
+    return allocator->chunks.size == 0;
 }
 
 inline h2o_iovec_t h2o_iovec_init(const void *base, size_t len)
