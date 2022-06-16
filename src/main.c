@@ -3224,12 +3224,11 @@ static void *run_loop(void *_thread_index)
         if (h2o_now(conf.threads[thread_index].ctx.loop) >= next_buffer_gc_at) {
             h2o_buffer_clear_recycle(0);
             h2o_mem_clear_recycle(&h2o_socket_ssl_buffer_allocator, 0);
-        }
-        if (h2o_buffer_recycle_is_empty() && h2o_mem_recycle_is_empty(&h2o_socket_ssl_buffer_allocator)) {
             next_buffer_gc_at = UINT64_MAX;
-        } else if (next_buffer_gc_at == UINT64_MAX) {
-            next_buffer_gc_at = h2o_now(conf.threads[thread_index].ctx.loop) + 1000;
         }
+        if (next_buffer_gc_at == UINT64_MAX &&
+            (!h2o_buffer_recycle_is_empty() || !h2o_mem_recycle_is_empty(&h2o_socket_ssl_buffer_allocator)))
+            next_buffer_gc_at = h2o_now(conf.threads[thread_index].ctx.loop) + 1000;
     }
 
     if (thread_index == 0)
