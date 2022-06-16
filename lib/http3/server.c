@@ -479,7 +479,6 @@ static void set_state(struct st_h2o_http3_server_stream_t *stream, enum h2o_http
     }
 
     if (!h2o_timer_is_linked(&conn->_graceful_shutdown_timeout)) {
-        h2o_linklist_unlink(&conn->super._conns);
         if (quicly_num_streams_by_group(conn->h3.super.quic, 0, 0) == conn->num_streams.close_wait) {
             h2o_conn_set_state(&conn->super, H2O_CONN_STATE_IDLE);
         } else {
