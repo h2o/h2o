@@ -138,7 +138,6 @@ void h2o_mem_clear_recycle(h2o_mem_recycle_t *allocator, int full)
         size_t delta = (allocator->low_watermark + 1) / 2;
         assert(allocator->chunks.size >= delta);
         allocator->low_watermark = allocator->chunks.size - delta;
-        allocator->low_watermark = allocator->chunks.size;
     }
 
     while (allocator->chunks.size > allocator->low_watermark)
