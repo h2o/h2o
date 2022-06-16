@@ -129,19 +129,17 @@ void h2o_mem_clear_recycle(h2o_mem_recycle_t *allocator, int full)
     if (allocator->chunks.capacity == 0)
         return;
 
-    /* Update waterwark. New watermark is set to max(low_watermark,current) / 2, in order to:
-     * - under stable condition, reduce exponentially the number of buffers being kept
-     * - adopt to the increase of the buffers being kept */
-    size_t new_watermark;
     if (full) {
-        new_watermark = 0;
+        allocator->low_watermark = 0;
     } else {
-        new_watermark = allocator->low_watermark;
-        if (new_watermark < allocator->chunks.size)
-            new_watermark = allocator->chunks.size;
-        new_watermark /= 2;
+        /* Since the last invocation of `h2o_mem_clear_recycle`, at any given point, there was at least `low_watermark` buffers
+         * being cached for reuse. Release half of them. Division by 2 is rounded up so that `low_watermark` eventually reaches zero
+         * (instead of one) when there is no traffic. */
+        size_t delta = (allocator->low_watermark + 1) / 2;
+        assert(allocator->chunks.size >= delta);
+        allocator->low_watermark = allocator->chunks.size - delta;
+        allocator->low_watermark = allocator->chunks.size;
     }
-    allocator->low_watermark = new_watermark;
 
     while (allocator->chunks.size > allocator->low_watermark)
         free(allocator->chunks.entries[--allocator->chunks.size]);
