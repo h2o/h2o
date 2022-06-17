@@ -262,15 +262,8 @@ static void dispose_write_buf(h2o_socket_t *sock)
     }
 }
 
-static void init_ssl_output_buffer(struct st_h2o_socket_ssl_t *ssl, int zerocopy_requested)
+static void init_ssl_output_buffer(struct st_h2o_socket_ssl_t *ssl, int zerocopy)
 {
-    int zerocopy = 0;
-    if (zerocopy_requested && ssl->ptls != NULL) {
-        ptls_cipher_suite_t *cipher = ptls_get_cipher(ssl->ptls);
-        if (cipher->aead->non_temporal)
-            zerocopy = 1;
-    }
-
     h2o_mem_recycle_t *allocator = zerocopy ? &zerocopy_buffer_allocator : &h2o_socket_ssl_buffer_allocator;
     ptls_buffer_init(&ssl->output.buf, h2o_mem_alloc_recycle(allocator), allocator->conf->memsize);
     ssl->output.buf.is_allocated = 1; /* set to true, so that the allocated memory is freed when the buffer is expanded */
@@ -1074,22 +1067,6 @@ int h2o_socket_can_tls_offload(h2o_socket_t *sock)
 #endif
 }
 
-int h2o_socket_use_zerocopy(h2o_socket_t *sock)
-{
-    assert(sock->_zerocopy == NULL);
-
-#if H2O_USE_MSG_ZEROCOPY
-    unsigned one = 1;
-    if (setsockopt(h2o_socket_get_fd(sock), SOL_SOCKET, SO_ZEROCOPY, &one, sizeof(one)) == 0) {
-        sock->_zerocopy = h2o_mem_alloc(sizeof(*sock->_zerocopy));
-        *sock->_zerocopy = (struct st_h2o_socket_zerocopy_buffers_t){};
-        return 1;
-    }
-#endif
-
-    return 0;
-}
-
 h2o_iovec_t h2o_socket_log_tcp_congestion_controller(h2o_socket_t *sock, h2o_mem_pool_t *pool)
 {
 #if defined(TCP_CONGESTION)
@@ -1367,6 +1344,17 @@ static void on_handshake_complete(h2o_socket_t *sock, const char *err)
     if (err == NULL) {
         if (sock->ssl->ptls != NULL) {
             sock->ssl->record_overhead = ptls_get_record_overhead(sock->ssl->ptls);
+#if H2O_USE_MSG_ZEROCOPY
+            assert(sock->_zerocopy == NULL);
+            ptls_cipher_suite_t *cipher = ptls_get_cipher(sock->ssl->ptls);
+            if (cipher->aead->non_temporal) {
+                unsigned one = 1;
+                if (setsockopt(h2o_socket_get_fd(sock), SOL_SOCKET, SO_ZEROCOPY, &one, sizeof(one)) == 0) {
+                    sock->_zerocopy = h2o_mem_alloc(sizeof(*sock->_zerocopy));
+                    *sock->_zerocopy = (struct st_h2o_socket_zerocopy_buffers_t){};
+                }
+            }
+#endif
         } else {
             const SSL_CIPHER *cipher = SSL_get_current_cipher(sock->ssl->ossl);
             switch (SSL_CIPHER_get_id(cipher)) {
