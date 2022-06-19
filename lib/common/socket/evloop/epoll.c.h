@@ -196,6 +196,13 @@ h2o_evloop_t *h2o_evloop_create(void)
     struct st_h2o_evloop_epoll_t *loop = (struct st_h2o_evloop_epoll_t *)create_evloop(sizeof(*loop));
 
     pthread_mutex_lock(&cloexec_mutex);
+#if defined(EPOLL_CLOEXEC) && (!defined(__ANDROID__) || (defined(__ANDROID__) && __ANDROID_API__ >= 21))
+    loop->ep = epoll_create1(EPOLL_CLOEXEC);
+    if (loop->ep == -1) {
+        fprintf(stderr, "h2o_evloop_create: failed to create the epoll fd (errno=%d)\n", errno);
+        abort();
+    }
+#else
     loop->ep = epoll_create(10);
     while (fcntl(loop->ep, F_SETFD, FD_CLOEXEC) == -1) {
         if (errno != EAGAIN) {
@@ -203,6 +210,7 @@ h2o_evloop_t *h2o_evloop_create(void)
             h2o_fatal("h2o_evloop_create: failed to set FD_CLOEXEC: %s\n", h2o_strerror_r(errno, buf, sizeof(buf)));
         }
     }
+#endif
     pthread_mutex_unlock(&cloexec_mutex);
 
     return &loop->super;
