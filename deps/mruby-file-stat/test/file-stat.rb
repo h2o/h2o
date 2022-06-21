@@ -134,7 +134,7 @@ assert 'File::Stat#birthtime' do
   stat = File::Stat.new('README.md')
   begin
     assert_kind_of Time, stat.birthtime
-  rescue NameError
+  rescue NotImplementedError
     skip 'This system not support `struct stat.birthtimespec`'
   end
 end
