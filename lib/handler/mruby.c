@@ -31,6 +31,7 @@
 #include <mruby/compile.h>
 #include <mruby/error.h>
 #include <mruby/hash.h>
+#include <mruby/numeric.h>
 #include <mruby/opcode.h>
 #include <mruby/string.h>
 #include <mruby/throw.h>
@@ -124,9 +125,29 @@ mrb_value h2o_mruby_to_str(mrb_state *mrb, mrb_value v)
     return v;
 }
 
+/* This function is a simplified copy of `mrb_convert_to_integer` that existed in the earlier versions of mruby and is covered by
+ * the MIT License as stated in deps/mruby/README.md. */
+static mrb_value convert_to_integer(mrb_state *mrb, mrb_value val)
+{
+    if (mrb_nil_p(val))
+        mrb_raise(mrb, E_TYPE_ERROR, "can't convert nil into Integer");
+    switch (mrb_type(val)) {
+    case MRB_TT_FLOAT:
+        return mrb_float_to_integer(mrb, val);
+    case MRB_TT_INTEGER:
+        return val;
+    case MRB_TT_STRING:
+        return mrb_str_to_inum(mrb, val, 0, TRUE);
+    default:
+        break;
+    }
+    /* to raise TypeError */
+    return mrb_to_int(mrb, val);
+}
+
 mrb_value h2o_mruby_to_int(mrb_state *mrb, mrb_value v)
 {
-    H2O_MRUBY_EXEC_GUARD({ v = mrb_Integer(mrb, v); });
+    H2O_MRUBY_EXEC_GUARD({ v = convert_to_integer(mrb, v); });
     return v;
 }
 
