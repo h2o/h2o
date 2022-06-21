@@ -5,14 +5,14 @@ end
 $dat_files = []
 
 def bm_files
-  Dir.glob("#{MRUBY_ROOT}/benchmark/bm_*.rb")
+  Dir.glob("#{MRUBY_ROOT}/benchmark/bm_*.rb").sort
 end
 
 def build_config_name
-  if ENV['MRUBY_CONFIG']
+  if !ENV['MRUBY_CONFIG'].to_s.empty?
     File.basename(ENV['MRUBY_CONFIG'], '.rb').gsub('build_config_', '')
   else
-    "build"
+    "bm"
   end
 end
 
@@ -50,7 +50,7 @@ end
 
 
 MRuby.each_target do |target|
-  next if target.name == 'host'
+  next if target.name == 'host' || target.internal?
   mruby_bin = "#{target.build_dir}/bin/mruby"
 
   bm_files.each do |bm_file|
@@ -67,8 +67,8 @@ MRuby.each_target do |target|
       puts "..."
 
       data = (0...MRuby::BENCHMARK_REPEAT).map do |n|
-        str = %x{(time -f "%e %S %U" #{mruby_bin} #{bm_file}) 2>&1 >/dev/null}
-        str.split(' ').map(&:to_f)
+        str = %x{(time -p #{mruby_bin} #{bm_file}) 2>&1 >/dev/null}
+        str.scan(/\d+\.\d+$/).map(&:to_f) # [real, user, sys]
       end
 
       File.open(task.name, "w") do |f|

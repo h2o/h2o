@@ -2,8 +2,8 @@
 class ArgumentError < StandardError
 end
 
-# ISO 15.2.25 says "LocalJumpError < StandardError"
-class LocalJumpError < ScriptError
+# ISO 15.2.25
+class LocalJumpError < StandardError
 end
 
 # ISO 15.2.26
@@ -19,6 +19,10 @@ end
 
 # ISO 15.2.29
 class TypeError < StandardError
+end
+
+# ISO 15.2.30
+class ZeroDivisionError < StandardError
 end
 
 # ISO 15.2.31

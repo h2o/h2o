@@ -13,9 +13,6 @@
   #include <winerror.h>
 
   #define SHUT_RDWR SD_BOTH
-  #ifndef _SSIZE_T_DEFINED
-  typedef int ssize_t;
-  #endif
   typedef int fsize_t;
 #else
   #include <sys/types.h>
@@ -31,16 +28,17 @@
   typedef size_t fsize_t;
 #endif
 
-#include <stddef.h>
 #include <string.h>
 
 #include "mruby.h"
 #include "mruby/array.h"
 #include "mruby/class.h"
 #include "mruby/data.h"
+#include "mruby/numeric.h"
 #include "mruby/string.h"
 #include "mruby/variable.h"
-#include "error.h"
+#include "mruby/error.h"
+#include "mruby/presym.h"
 
 #include "mruby/ext/io.h"
 
@@ -52,7 +50,7 @@
 #endif
 #endif
 
-#define E_SOCKET_ERROR             (mrb_class_get(mrb, "SocketError"))
+#define E_SOCKET_ERROR             mrb_class_get_id(mrb, MRB_SYM(SocketError))
 
 #if !defined(mrb_cptr)
 #define mrb_cptr_value(m,p) mrb_voidp_value((m),(p))
@@ -63,52 +61,52 @@
 #ifdef _WIN32
 static const char *inet_ntop(int af, const void *src, char *dst, socklen_t cnt)
 {
-    if (af == AF_INET)
-    {
-	struct sockaddr_in in;
-	memset(&in, 0, sizeof(in));
-	in.sin_family = AF_INET;
-	memcpy(&in.sin_addr, src, sizeof(struct in_addr));
-	getnameinfo((struct sockaddr *)&in, sizeof(struct
-		    sockaddr_in), dst, cnt, NULL, 0, NI_NUMERICHOST);
-	return dst;
-    }
-    else if (af == AF_INET6)
-    {
-	struct sockaddr_in6 in;
-	memset(&in, 0, sizeof(in));
-	in.sin6_family = AF_INET6;
-	memcpy(&in.sin6_addr, src, sizeof(struct in_addr6));
-	getnameinfo((struct sockaddr *)&in, sizeof(struct
-		    sockaddr_in6), dst, cnt, NULL, 0, NI_NUMERICHOST);
-	return dst;
-    }
-    return NULL;
+  if (af == AF_INET)
+  {
+    struct sockaddr_in in = {0};
+
+    in.sin_family = AF_INET;
+    memcpy(&in.sin_addr, src, sizeof(struct in_addr));
+    getnameinfo((struct sockaddr *)&in, sizeof(struct
+                sockaddr_in), dst, cnt, NULL, 0, NI_NUMERICHOST);
+    return dst;
+  }
+  else if (af == AF_INET6)
+  {
+    struct sockaddr_in6 in = {0};
+
+    in.sin6_family = AF_INET6;
+    memcpy(&in.sin6_addr, src, sizeof(struct in_addr6));
+    getnameinfo((struct sockaddr *)&in, sizeof(struct
+                sockaddr_in6), dst, cnt, NULL, 0, NI_NUMERICHOST);
+    return dst;
+  }
+  return NULL;
 }
 
 static int inet_pton(int af, const char *src, void *dst)
 {
-    struct addrinfo hints, *res, *ressave;
+  struct addrinfo hints = {0};
+  struct addrinfo *res, *ressave;
 
-    memset(&hints, 0, sizeof(struct addrinfo));
-    hints.ai_family = af;
+  hints.ai_family = af;
 
-    if (getaddrinfo(src, NULL, &hints, &res) != 0)
-    {
-	printf("Couldn't resolve host %s\n", src);
-	return -1;
-    }
+  if (getaddrinfo(src, NULL, &hints, &res) != 0)
+  {
+    printf("Couldn't resolve host %s\n", src);
+    return -1;
+  }
 
-    ressave = res;
+  ressave = res;
 
-    while (res)
-    {
-	memcpy(dst, res->ai_addr, res->ai_addrlen);
-	res = res->ai_next;
-    }
+  while (res)
+  {
+    memcpy(dst, res->ai_addr, res->ai_addrlen);
+    res = res->ai_next;
+  }
 
-    freeaddrinfo(ressave);
-    return 0;
+  freeaddrinfo(ressave);
+  return 0;
 }
 
 #endif
@@ -116,7 +114,7 @@ static int inet_pton(int af, const char *src, void *dst)
 static mrb_value
 mrb_addrinfo_getaddrinfo(mrb_state *mrb, mrb_value klass)
 {
-  struct addrinfo hints, *res0, *res;
+  struct addrinfo hints = {0}, *res0, *res;
   mrb_value ai, ary, family, lastai, nodename, protocol, sa, service, socktype;
   mrb_int flags;
   int arena_idx, error;
@@ -130,7 +128,7 @@ mrb_addrinfo_getaddrinfo(mrb_state *mrb, mrb_value klass)
   mrb_get_args(mrb, "oo|oooi", &nodename, &service, &family, &socktype, &protocol, &flags);
 
   if (mrb_string_p(nodename)) {
-    hostname = mrb_str_to_cstr(mrb, nodename);
+    hostname = RSTRING_CSTR(mrb, nodename);
   } else if (mrb_nil_p(nodename)) {
     hostname = NULL;
   } else {
@@ -138,51 +136,50 @@ mrb_addrinfo_getaddrinfo(mrb_state *mrb, mrb_value klass)
   }
 
   if (mrb_string_p(service)) {
-    servname = mrb_str_to_cstr(mrb, service);
-  } else if (mrb_fixnum_p(service)) {
-    servname = mrb_str_to_cstr(mrb, mrb_funcall(mrb, service, "to_s", 0));
+    servname = RSTRING_CSTR(mrb, service);
+  } else if (mrb_integer_p(service)) {
+    servname = RSTRING_PTR(mrb_integer_to_str(mrb, service, 10));
   } else if (mrb_nil_p(service)) {
     servname = NULL;
   } else {
-    mrb_raise(mrb, E_TYPE_ERROR, "service must be String, Fixnum, or nil");
+    mrb_raise(mrb, E_TYPE_ERROR, "service must be String, Integer, or nil");
   }
 
-  memset(&hints, 0, sizeof(hints));
   hints.ai_flags = (int)flags;
 
-  if (mrb_fixnum_p(family)) {
-    hints.ai_family = (int)mrb_fixnum(family);
+  if (mrb_integer_p(family)) {
+    hints.ai_family = (int)mrb_integer(family);
   }
 
-  if (mrb_fixnum_p(socktype)) {
-    hints.ai_socktype = (int)mrb_fixnum(socktype);
+  if (mrb_integer_p(socktype)) {
+    hints.ai_socktype = (int)mrb_integer(socktype);
   }
 
-  if (mrb_fixnum_p(protocol)) {
-    hints.ai_protocol = (int)mrb_fixnum(protocol);
+  if (mrb_integer_p(protocol)) {
+    hints.ai_protocol = (int)mrb_integer(protocol);
   }
 
-  lastai = mrb_cv_get(mrb, klass, mrb_intern_lit(mrb, "_lastai"));
+  lastai = mrb_cv_get(mrb, klass, MRB_SYM(_lastai));
   if (mrb_cptr_p(lastai)) {
     freeaddrinfo((struct addrinfo*)mrb_cptr(lastai));
-    mrb_cv_set(mrb, klass, mrb_intern_lit(mrb, "_lastai"), mrb_nil_value());
+    mrb_cv_set(mrb, klass, MRB_SYM(_lastai), mrb_nil_value());
   }
 
   error = getaddrinfo(hostname, servname, &hints, &res0);
   if (error) {
-    mrb_raisef(mrb, E_SOCKET_ERROR, "getaddrinfo: %S", mrb_str_new_cstr(mrb, gai_strerror(error)));
+    mrb_raisef(mrb, E_SOCKET_ERROR, "getaddrinfo: %s", gai_strerror(error));
   }
-  mrb_cv_set(mrb, klass, mrb_intern_lit(mrb, "_lastai"), mrb_cptr_value(mrb, res0));
+  mrb_cv_set(mrb, klass, MRB_SYM(_lastai), mrb_cptr_value(mrb, res0));
 
   for (res = res0; res != NULL; res = res->ai_next) {
     sa = mrb_str_new(mrb, (char*)res->ai_addr, res->ai_addrlen);
-    ai = mrb_funcall(mrb, klass, "new", 4, sa, mrb_fixnum_value(res->ai_family), mrb_fixnum_value(res->ai_socktype), mrb_fixnum_value(res->ai_protocol));
+    ai = mrb_funcall_id(mrb, klass, MRB_SYM(new), 4, sa, mrb_fixnum_value(res->ai_family), mrb_fixnum_value(res->ai_socktype), mrb_fixnum_value(res->ai_protocol));
     mrb_ary_push(mrb, ary, ai);
     mrb_gc_arena_restore(mrb, arena_idx);
   }
 
   freeaddrinfo(res0);
-  mrb_cv_set(mrb, klass, mrb_intern_lit(mrb, "_lastai"), mrb_nil_value());
+  mrb_cv_set(mrb, klass, MRB_SYM(_lastai), mrb_nil_value());
 
   return ary;
 }
@@ -196,16 +193,16 @@ mrb_addrinfo_getnameinfo(mrb_state *mrb, mrb_value self)
 
   flags = 0;
   mrb_get_args(mrb, "|i", &flags);
-  host = mrb_str_buf_new(mrb, NI_MAXHOST);
-  serv = mrb_str_buf_new(mrb, NI_MAXSERV);
+  host = mrb_str_new_capa(mrb, NI_MAXHOST);
+  serv = mrb_str_new_capa(mrb, NI_MAXSERV);
 
-  sastr = mrb_iv_get(mrb, self, mrb_intern_lit(mrb, "@sockaddr"));
+  sastr = mrb_iv_get(mrb, self, MRB_IVSYM(sockaddr));
   if (!mrb_string_p(sastr)) {
     mrb_raise(mrb, E_SOCKET_ERROR, "invalid sockaddr");
   }
   error = getnameinfo((struct sockaddr *)RSTRING_PTR(sastr), (socklen_t)RSTRING_LEN(sastr), RSTRING_PTR(host), NI_MAXHOST, RSTRING_PTR(serv), NI_MAXSERV, (int)flags);
   if (error) {
-    mrb_raisef(mrb, E_SOCKET_ERROR, "getnameinfo: %S", mrb_str_new_cstr(mrb, gai_strerror(error)));
+    mrb_raisef(mrb, E_SOCKET_ERROR, "getnameinfo: %s", gai_strerror(error));
   }
   ary = mrb_ary_new_capa(mrb, 2);
   mrb_str_resize(mrb, host, strlen(RSTRING_PTR(host)));
@@ -221,7 +218,7 @@ mrb_addrinfo_unix_path(mrb_state *mrb, mrb_value self)
 {
   mrb_value sastr;
 
-  sastr = mrb_iv_get(mrb, self, mrb_intern_lit(mrb, "@sockaddr"));
+  sastr = mrb_iv_get(mrb, self, MRB_IVSYM(sockaddr));
   if (((struct sockaddr *)RSTRING_PTR(sastr))->sa_family != AF_UNIX)
     mrb_raise(mrb, E_SOCKET_ERROR, "need AF_UNIX address");
   if (RSTRING_LEN(sastr) < (mrb_int)offsetof(struct sockaddr_un, sun_path) + 1) {
@@ -253,7 +250,7 @@ sa2addrlist(mrb_state *mrb, const struct sockaddr *sa, socklen_t salen)
     return mrb_nil_value();
   }
   port = ntohs(port);
-  host = mrb_str_buf_new(mrb, NI_MAXHOST);
+  host = mrb_str_new_capa(mrb, NI_MAXHOST);
   if (getnameinfo(sa, salen, RSTRING_PTR(host), NI_MAXHOST, NULL, 0, NI_NUMERICHOST) == -1)
     mrb_sys_fail(mrb, "getnameinfo");
   mrb_str_resize(mrb, host, strlen(RSTRING_PTR(host)));
@@ -268,7 +265,7 @@ sa2addrlist(mrb_state *mrb, const struct sockaddr *sa, socklen_t salen)
 static int
 socket_fd(mrb_state *mrb, mrb_value sock)
 {
-  return (int)mrb_fixnum(mrb_funcall(mrb, sock, "fileno", 0));
+  return (int)mrb_integer(mrb_funcall_id(mrb, sock, MRB_SYM(fileno), 0));
 }
 
 static int
@@ -346,10 +343,10 @@ mrb_basicsocket_getsockopt(mrb_state *mrb, mrb_value self)
   optlen = sizeof(opt);
   if (getsockopt(s, (int)level, (int)optname, opt, &optlen) == -1)
     mrb_sys_fail(mrb, "getsockopt");
-  c = mrb_const_get(mrb, mrb_obj_value(mrb_class_get(mrb, "Socket")), mrb_intern_lit(mrb, "Option"));
+  c = mrb_const_get(mrb, mrb_obj_value(mrb_class_get_id(mrb, MRB_SYM(Socket))), MRB_SYM(Option));
   family = socket_family(s);
   data = mrb_str_new(mrb, opt, optlen);
-  return mrb_funcall(mrb, c, "new", 4, mrb_fixnum_value(family), mrb_fixnum_value(level), mrb_fixnum_value(optname), data);
+  return mrb_funcall_id(mrb, c, MRB_SYM(new), 4, mrb_fixnum_value(family), mrb_fixnum_value(level), mrb_fixnum_value(optname), data);
 }
 
 static mrb_value
@@ -360,7 +357,7 @@ mrb_basicsocket_recv(mrb_state *mrb, mrb_value self)
   mrb_value buf;
 
   mrb_get_args(mrb, "i|i", &maxlen, &flags);
-  buf = mrb_str_buf_new(mrb, maxlen);
+  buf = mrb_str_new_capa(mrb, maxlen);
   n = recv(socket_fd(mrb, self), RSTRING_PTR(buf), (fsize_t)maxlen, (int)flags);
   if (n == -1)
     mrb_sys_fail(mrb, "recv");
@@ -377,9 +374,9 @@ mrb_basicsocket_recvfrom(mrb_state *mrb, mrb_value self)
   socklen_t socklen;
 
   mrb_get_args(mrb, "i|i", &maxlen, &flags);
-  buf = mrb_str_buf_new(mrb, maxlen);
+  buf = mrb_str_new_capa(mrb, maxlen);
   socklen = sizeof(struct sockaddr_storage);
-  sa = mrb_str_buf_new(mrb, socklen);
+  sa = mrb_str_new_capa(mrb, socklen);
   n = recvfrom(socket_fd(mrb, self), RSTRING_PTR(buf), (fsize_t)maxlen, (int)flags, (struct sockaddr *)RSTRING_PTR(sa), &socklen);
   if (n == -1)
     mrb_sys_fail(mrb, "recvfrom");
@@ -448,21 +445,21 @@ mrb_basicsocket_setsockopt(mrb_state *mrb, mrb_value self)
 
   argc = mrb_get_args(mrb, "o|io", &so, &optname, &optval);
   if (argc == 3) {
-    if (!mrb_fixnum_p(so)) {
+    if (!mrb_integer_p(so)) {
       mrb_raise(mrb, E_ARGUMENT_ERROR, "level is not an integer");
     }
-    level = mrb_fixnum(so);
+    level = mrb_integer(so);
     if (mrb_string_p(optval)) {
       /* that's good */
-    } else if (mrb_type(optval) == MRB_TT_TRUE || mrb_type(optval) == MRB_TT_FALSE) {
+    } else if (mrb_true_p(optval) || mrb_false_p(optval)) {
       mrb_int i = mrb_test(optval) ? 1 : 0;
       optval = mrb_str_new(mrb, (char*)&i, sizeof(i));
-    } else if (mrb_fixnum_p(optval)) {
+    } else if (mrb_integer_p(optval)) {
       if (optname == IP_MULTICAST_TTL || optname == IP_MULTICAST_LOOP) {
-        char uc = (char)mrb_fixnum(optval);
+        char uc = (char)mrb_integer(optval);
         optval = mrb_str_new(mrb, &uc, sizeof(uc));
       } else {
-        mrb_int i = mrb_fixnum(optval);
+        mrb_int i = mrb_integer(optval);
         optval = mrb_str_new(mrb, (char*)&i, sizeof(i));
       }
     } else {
@@ -471,11 +468,11 @@ mrb_basicsocket_setsockopt(mrb_state *mrb, mrb_value self)
   } else if (argc == 1) {
     if (strcmp(mrb_obj_classname(mrb, so), "Socket::Option") != 0)
       mrb_raise(mrb, E_ARGUMENT_ERROR, "not an instance of Socket::Option");
-    level = mrb_fixnum(mrb_funcall(mrb, so, "level", 0));
-    optname = mrb_fixnum(mrb_funcall(mrb, so, "optname", 0));
-    optval = mrb_funcall(mrb, so, "data", 0);
+    level = mrb_integer(mrb_funcall_id(mrb, so, MRB_SYM(level), 0));
+    optname = mrb_integer(mrb_funcall_id(mrb, so, MRB_SYM(optname), 0));
+    optval = mrb_funcall_id(mrb, so, MRB_SYM(data), 0);
   } else {
-    mrb_raisef(mrb, E_ARGUMENT_ERROR, "wrong number of arguments (%S for 3)", mrb_fixnum_value(argc));
+    mrb_argnum_error(mrb, argc, 3, 3);
   }
 
   s = socket_fd(mrb, self);
@@ -514,7 +511,8 @@ static mrb_value
 mrb_ipsocket_ntop(mrb_state *mrb, mrb_value klass)
 {
   mrb_int af, n;
-  char *addr, buf[50];
+  const char *addr;
+  char buf[50];
 
   mrb_get_args(mrb, "is", &af, &addr, &n);
   if ((af == AF_INET && n != 4) || (af == AF_INET6 && n != 16))
@@ -528,7 +526,8 @@ static mrb_value
 mrb_ipsocket_pton(mrb_state *mrb, mrb_value klass)
 {
   mrb_int af, n;
-  char *bp, buf[50];
+  const char *bp;
+  char buf[50];
 
   mrb_get_args(mrb, "is", &af, &bp, &n);
   if ((size_t)n > sizeof(buf) - 1)
@@ -567,10 +566,10 @@ mrb_ipsocket_recvfrom(mrb_state *mrb, mrb_value self)
   fd = socket_fd(mrb, self);
   flags = 0;
   mrb_get_args(mrb, "i|i", &maxlen, &flags);
-  buf = mrb_str_buf_new(mrb, maxlen);
+  buf = mrb_str_new_capa(mrb, maxlen);
   socklen = sizeof(ss);
   n = recvfrom(fd, RSTRING_PTR(buf), (fsize_t)maxlen, (int)flags,
-  	       (struct sockaddr *)&ss, &socklen);
+               (struct sockaddr *)&ss, &socklen);
   if (n == -1) {
     mrb_sys_fail(mrb, "recvfrom");
   }
@@ -593,7 +592,7 @@ mrb_socket_gethostname(mrb_state *mrb, mrb_value cls)
 #else
   bufsize = 256;
 #endif
-  buf = mrb_str_buf_new(mrb, (mrb_int)bufsize);
+  buf = mrb_str_new_capa(mrb, (mrb_int)bufsize);
   if (gethostname(RSTRING_PTR(buf), (fsize_t)bufsize) != 0)
     mrb_sys_fail(mrb, "gethostname");
   mrb_str_resize(mrb, buf, (mrb_int)strlen(RSTRING_PTR(buf)));
@@ -624,7 +623,7 @@ mrb_socket_accept2(mrb_state *mrb, mrb_value klass)
 
   mrb_get_args(mrb, "i", &s0);
   socklen = sizeof(struct sockaddr_storage);
-  sastr = mrb_str_buf_new(mrb, socklen);
+  sastr = mrb_str_new_capa(mrb, socklen);
   s1 = (int)accept(s0, (struct sockaddr *)RSTRING_PTR(sastr), &socklen);
   if (s1 == -1) {
     mrb_sys_fail(mrb, "accept");
@@ -701,9 +700,9 @@ mrb_socket_sockaddr_un(mrb_state *mrb, mrb_value klass)
 
   mrb_get_args(mrb, "S", &path);
   if ((size_t)RSTRING_LEN(path) > sizeof(sunp->sun_path) - 1) {
-    mrb_raisef(mrb, E_ARGUMENT_ERROR, "too long unix socket path (max: %S bytes)", mrb_fixnum_value(sizeof(sunp->sun_path) - 1));
+    mrb_raisef(mrb, E_ARGUMENT_ERROR, "too long unix socket path (max: %d bytes)", (int)sizeof(sunp->sun_path) - 1);
   }
-  s = mrb_str_buf_new(mrb, sizeof(struct sockaddr_un));
+  s = mrb_str_new_capa(mrb, sizeof(struct sockaddr_un));
   sunp = (struct sockaddr_un *)RSTRING_PTR(s);
 #if HAVE_SA_LEN
   sunp->sun_len = sizeof(struct sockaddr_un);
@@ -777,7 +776,6 @@ mrb_win32_basicsocket_close(mrb_state *mrb, mrb_value self)
   return mrb_nil_value();
 }
 
-#define E_EOF_ERROR                (mrb_class_get(mrb, "EOFError"))
 static mrb_value
 mrb_win32_basicsocket_sysread(mrb_state *mrb, mrb_value self)
 {
@@ -840,7 +838,7 @@ mrb_win32_basicsocket_syswrite(mrb_state *mrb, mrb_value self)
   n = send(sd, RSTRING_PTR(str), (int)RSTRING_LEN(str), 0);
   if (n == SOCKET_ERROR)
     mrb_sys_fail(mrb, "send");
-  return mrb_fixnum_value(n);
+  return mrb_int_value(mrb, n);
 }
 
 #endif
@@ -860,14 +858,14 @@ mrb_mruby_socket_gem_init(mrb_state* mrb)
 #endif
 
   ai = mrb_define_class(mrb, "Addrinfo", mrb->object_class);
-  mrb_mod_cv_set(mrb, ai, mrb_intern_lit(mrb, "_lastai"), mrb_nil_value());
+  mrb_mod_cv_set(mrb, ai, MRB_SYM(_lastai), mrb_nil_value());
   mrb_define_class_method(mrb, ai, "getaddrinfo", mrb_addrinfo_getaddrinfo, MRB_ARGS_REQ(2)|MRB_ARGS_OPT(4));
   mrb_define_method(mrb, ai, "getnameinfo", mrb_addrinfo_getnameinfo, MRB_ARGS_OPT(1));
 #ifndef _WIN32
   mrb_define_method(mrb, ai, "unix_path", mrb_addrinfo_unix_path, MRB_ARGS_NONE());
 #endif
 
-  io = mrb_class_get(mrb, "IO");
+  io = mrb_class_get_id(mrb, MRB_SYM(IO));
 
   bsock = mrb_define_class(mrb, "BasicSocket", io);
   mrb_define_method(mrb, bsock, "_recvfrom", mrb_basicsocket_recvfrom, MRB_ARGS_REQ(1)|MRB_ARGS_OPT(1));
@@ -935,8 +933,8 @@ mrb_mruby_socket_gem_init(mrb_state* mrb)
   constants = mrb_define_module_under(mrb, sock, "Constants");
 
 #define define_const(SYM) \
-  do {								\
-    mrb_define_const(mrb, constants, #SYM, mrb_fixnum_value(SYM));	\
+  do {                                                                \
+    mrb_define_const(mrb, constants, #SYM, mrb_int_value(mrb, SYM));  \
   } while (0)
 
 #include "const.cstub"
@@ -946,7 +944,7 @@ void
 mrb_mruby_socket_gem_final(mrb_state* mrb)
 {
   mrb_value ai;
-  ai = mrb_mod_cv_get(mrb, mrb_class_get(mrb, "Addrinfo"), mrb_intern_lit(mrb, "_lastai"));
+  ai = mrb_mod_cv_get(mrb, mrb_class_get_id(mrb, MRB_SYM(Addrinfo)), MRB_SYM(_lastai));
   if (mrb_cptr_p(ai)) {
     freeaddrinfo((struct addrinfo*)mrb_cptr(ai));
   }

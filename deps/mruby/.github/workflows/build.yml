@@ -1,0 +1,155 @@
+name: Build & Test
+
+on: [push, pull_request]
+
+jobs:
+  Ubuntu-1804-gcc:
+    runs-on: ubuntu-18.04
+    timeout-minutes: 10
+    env:
+      MRUBY_CONFIG: ci/gcc-clang
+      CC: gcc
+    steps:
+      - uses: actions/checkout@v2.4.0
+      - name: Ruby version
+        run: ruby -v
+      - name: Compiler version
+        run: ${{ env.CC }} --version
+      - name: Build and test
+        run: rake -m test:build && rake test:run
+
+  Ubuntu-1804-clang:
+    runs-on: ubuntu-18.04
+    timeout-minutes: 10
+    env:
+      MRUBY_CONFIG: ci/gcc-clang
+      CC: clang
+    steps:
+      - uses: actions/checkout@v2.4.0
+      - name: Ruby version
+        run: ruby -v
+      - name: Compiler version
+        run: ${{ env.CC }} --version
+      - name: Build and test
+        run: rake -m test:build && rake test:run
+
+  Ubuntu-2004-gcc:
+    runs-on: ubuntu-20.04
+    timeout-minutes: 10
+    env:
+      MRUBY_CONFIG: ci/gcc-clang
+      CC: gcc
+    steps:
+      - uses: actions/checkout@v2.4.0
+      - name: Ruby version
+        run: ruby -v
+      - name: Compiler version
+        run: ${{ env.CC }} --version
+      - name: Build and test
+        run: rake -m test:build && rake test:run
+
+  Ubuntu-2004-clang:
+    runs-on: ubuntu-20.04
+    timeout-minutes: 10
+    env:
+      MRUBY_CONFIG: ci/gcc-clang
+      CC: clang
+    steps:
+      - uses: actions/checkout@v2.4.0
+      - name: Ruby version
+        run: ruby -v
+      - name: Compiler version
+        run: ${{ env.CC }} --version
+      - name: Build and test
+        run: rake -m test:build && rake test:run
+
+  macOS:
+    runs-on: macos-latest
+    timeout-minutes: 10
+    env:
+      MRUBY_CONFIG: ci/gcc-clang
+      CC: clang
+    steps:
+      - uses: actions/checkout@v2.4.0
+      - name: Ruby version
+        run: ruby -v
+      - name: Compiler version
+        run: ${{ env.CC }} --version
+      - name: Build and test
+        run: rake -m test:build && rake test:run
+
+  Windows-MinGW:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    env:
+      MRUBY_CONFIG: ci/gcc-clang
+      CC: gcc
+    steps:
+      - uses: actions/checkout@v2.4.0
+      - name: Ruby version
+        run: ruby -v
+      - name: Compiler version
+        run: ${{ env.CC }} --version
+      - name: Build and test
+        run: rake -m test:build && rake test:run
+
+  Windows-Cygwin:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    env:
+      ACTIONS_ALLOW_UNSECURE_COMMANDS: true
+      MRUBY_CONFIG: ci/gcc-clang
+      CC: gcc
+      installer-path: '%TMP%\cygwin-setup.exe'
+      cygwin-root: C:\cygwin
+      package-dir: C:\cygwin-package
+      cache-version: v1
+    steps:
+      - uses: actions/checkout@v2.4.0
+      - uses: actions/cache@v2.1.7
+        with:
+          path: ${{ env.package-dir }}
+          key: ${{ runner.os }}-cygwin-${{ env.cache-version }}
+      - name: Download Cygwin installer
+        shell: cmd
+        run: >
+          bitsadmin /transfer download /priority foreground
+          https://cygwin.com/setup-x86_64.exe ${{ env.installer-path }}
+      - name: Install Cygwin
+        shell: cmd
+        run: >
+          ${{ env.installer-path }}
+          --quiet-mode --no-shortcuts --no-startmenu --no-desktop --no-admin
+          --only-site --site http://mirrors.kernel.org/sourceware/cygwin/
+          --root ${{ env.cygwin-root }}
+          --local-package-dir ${{ env.package-dir }}
+          --packages gcc-core,gcc-g++,ruby
+      - name: Set PATH for Cygwin
+        run: |
+          echo '::set-env name=PATH::${{ env.cygwin-root }}\bin;${{ env.cygwin-root }}\usr\bin'
+      - name: Ruby version
+        shell: cmd
+        run: ruby -v
+      - name: Compiler version
+        run: ${{ env.CC }} --version
+      - name: Build and test
+        shell: cmd
+        run: ruby /usr/bin/rake -m test:build && ruby /usr/bin/rake test:run
+      - name: Set PATH for cache archiving (tar)
+        # set Windows path so that Cygwin tar is not used for cache archiving
+        run: echo '::set-env name=PATH::C:\windows\System32'
+
+  Windows-VC:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    env:
+      MRUBY_CONFIG: ci/msvc
+    steps:
+      - uses: actions/checkout@v2.4.0
+      - name: Ruby version
+        run: ruby -v
+      - name: Build and test
+        shell: cmd
+        run: |
+          call "C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
+          rake -m test:build && rake test:run

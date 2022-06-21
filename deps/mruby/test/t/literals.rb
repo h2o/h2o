@@ -90,7 +90,7 @@ assert('Literals Strings Here documents', '8.7.6.3.6') do
   a = <<AAA
 aaa
 AAA
-   b = <<b_b
+  b = <<b_b
 bbb
 b_b
     c = [<<CCC1, <<"CCC2", <<'CCC3']
@@ -162,6 +162,47 @@ qq
 QQ2
       "o")
 
+  r = <<~RRR
+    rrr
+      rrr
+  RRR
+  s = <<~"SSS"
+    sss
+      sss
+  SSS
+  t = <<~'TTT'
+    ttt
+      ttt
+  TTT
+  u = [<<~UUU1   , <<~"UUU2"   , <<~'UUU3' ]
+    u#{1}u
+  UUU1
+    u#{2}u
+  UUU2
+    u#{3}u
+  UUU3
+  v1 = <<~VVV
+
+    vvv
+    #{"vvv"}
+  VVV
+  v2 = <<~VVV
+\tvvv
+  vvv
+  VVV
+  v3 = <<~VVV
+    v v v
+      vvv
+  VVV
+  v4 = <<~VVV
+    vvv \
+    vvv
+  VVV
+  v5 = <<~VVV
+      vvv \
+    vvv
+  VVV
+
   w = %W( 1 #{<<WWW} 3
 www
 WWW
@@ -197,10 +238,18 @@ ZZZ
   assert_equal [1, "nn1\n", 3, 4], n
   assert_equal "a $ q\n $ c $ d", q1
   assert_equal "l $ mqq\nn $ o", q2
+  assert_equal "rrr\n  rrr\n", r
+  assert_equal "sss\n  sss\n", s
+  assert_equal "ttt\n  ttt\n", t
+  assert_equal ["u1u\n", "u2u\n", "u\#{3}u\n"], u
+  assert_equal "\nvvv\nvvv\n", v1
+  assert_equal "\tvvv\n  vvv\n", v2
+  assert_equal "v v v\n  vvv\n", v3
+  assert_equal "vvv vvv\n", v4
+  assert_equal "  vvv vvv\n", v5
   assert_equal ["1", "www\n", "3", "4", "5"], w
   assert_equal [1, "foo 222 333\n 444\n5\n bar\n6\n", 9], x
   assert_equal "", z
-
 end
 
 

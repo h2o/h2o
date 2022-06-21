@@ -13,13 +13,15 @@ module MRuby
     end
 
     def gem(gemdir, &block)
-      caller_dir = File.expand_path(File.dirname(/^(.*?):\d/.match(caller.first).to_a[1]))
-
       if gemdir.is_a?(Hash)
         gemdir = load_special_path_gem(gemdir)
-      elsif GemBox.path && gemdir.is_a?(String)
+      elsif GemBox.path
         gemdir = File.expand_path(gemdir, File.dirname(GemBox.path))
       else
+        caller_dir = File.expand_path(File.dirname(caller(1,1)[0][/^(.*?):\d/,1]))
+        if caller_dir == "#{MRUBY_ROOT}/build_config"
+          caller_dir = MRUBY_ROOT
+        end
         gemdir = File.expand_path(gemdir, caller_dir)
       end
 
@@ -29,18 +31,17 @@ module MRuby
       Gem.current = nil
       load gemrake
       return nil unless Gem.current
+      current = Gem.current
 
-      Gem.current.dir = gemdir
-      Gem.current.build = self.is_a?(MRuby::Build) ? self : MRuby::Build.current
-      Gem.current.build_config_initializer = block
-      gems << Gem.current
+      current.dir = gemdir
+      current.build = self.is_a?(MRuby::Build) ? self : MRuby::Build.current
+      current.build_config_initializer = block
+      gems << current
 
-      cxx_srcs = ['src', 'test', 'tools'].map do |subdir|
-        Dir.glob("#{Gem.current.dir}/#{subdir}/*.{cpp,cxx,cc}")
-      end.flatten
+      cxx_srcs = Dir.glob("#{current.dir}/{src,test,tools}/*.{cpp,cxx,cc}")
       enable_cxx_exception unless cxx_srcs.empty?
 
-      Gem.current
+      current
     end
 
     def load_special_path_gem(params)
@@ -58,7 +59,7 @@ module MRuby
         if File.exist? mgem_list_dir
           git.run_pull mgem_list_dir, mgem_list_url if $pull_gems
         else
-          FileUtils.mkdir_p mgem_list_dir
+          mkdir_p mgem_list_dir
           git.run_clone mgem_list_dir, mgem_list_url, "--depth 1"
         end
 
@@ -83,27 +84,41 @@ module MRuby
         # by default the 'master' branch is used
         branch = params[:branch] ? params[:branch] : 'master'
 
+        lock = locks[url] if lock_enabled?
+
         if File.exist?(gemdir)
           if $pull_gems
+            # Jump to the top of the branch
+            git.run_checkout gemdir, branch
             git.run_pull gemdir, url
-          else
-            gemdir
+          elsif params[:checksum_hash]
+            git.run_checkout_detach gemdir, params[:checksum_hash]
+          elsif lock
+            git.run_checkout_detach gemdir, lock['commit']
           end
         else
           options = [params[:options]] || []
           options << "--recursive"
           options << "--branch \"#{branch}\""
-          options << "--depth 1" unless params[:checksum_hash]
-          FileUtils.mkdir_p "#{gem_clone_dir}"
+          options << "--depth 1" unless params[:checksum_hash] || lock
+          mkdir_p "#{gem_clone_dir}"
           git.run_clone gemdir, url, options
+
+          # Jump to the specified commit
+          if params[:checksum_hash]
+            git.run_checkout_detach gemdir, params[:checksum_hash]
+          elsif lock
+            git.run_checkout_detach gemdir, lock['commit']
+          end
         end
 
-        if params[:checksum_hash]
-          # Jump to the specified commit
-          git.run_checkout gemdir, params[:checksum_hash]
-        else
-          # Jump to the top of the branch
-          git.run_checkout gemdir, branch if $pull_gems
+        if lock_enabled?
+          @gem_dir_to_repo_url[gemdir] = url unless params[:path]
+          locks[url] = {
+            'url' => url,
+            'branch' => git.current_branch(gemdir),
+            'commit' => git.commit_hash(gemdir),
+          }
         end
 
         gemdir << "/#{params[:path]}" if params[:path]

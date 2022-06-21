@@ -35,7 +35,7 @@ static mrb_value
 cfunc_env_get(mrb_state *mrb, mrb_value self)
 {
   mrb_sym n;
-  mrb_value *argv; mrb_int argc;
+  const mrb_value *argv; mrb_int argc;
   mrb_method_t m;
   struct RProc *p;
   mrb_get_args(mrb, "na", &n, &argv, &argc);

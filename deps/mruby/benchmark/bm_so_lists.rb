@@ -1,4 +1,4 @@
-#from http://www.bagley.org/~doug/shootout/bench/lists/lists.ruby
+# from http://www.bagley.org/~doug/shootout/bench/lists/lists.ruby
 
 NUM = 300
 SIZE = 10000

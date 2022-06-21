@@ -3,6 +3,7 @@
 #include <mruby/array.h>
 #include <mruby/range.h>
 #include <mruby/hash.h>
+#include <mruby/presym.h>
 
 /*
  *  call-seq:
@@ -28,9 +29,8 @@ static mrb_value
 mrb_ary_assoc(mrb_state *mrb, mrb_value ary)
 {
   mrb_int i;
-  mrb_value v, k;
-
-  mrb_get_args(mrb, "o", &k);
+  mrb_value v;
+  mrb_value k = mrb_get_arg1(mrb);
 
   for (i = 0; i < RARRAY_LEN(ary); ++i) {
     v = mrb_check_array_type(mrb, RARRAY_PTR(ary)[i]);
@@ -59,13 +59,12 @@ static mrb_value
 mrb_ary_rassoc(mrb_state *mrb, mrb_value ary)
 {
   mrb_int i;
-  mrb_value v, value;
-
-  mrb_get_args(mrb, "o", &value);
+  mrb_value v;
+  mrb_value value = mrb_get_arg1(mrb);
 
   for (i = 0; i < RARRAY_LEN(ary); ++i) {
     v = RARRAY_PTR(ary)[i];
-    if (mrb_type(v) == MRB_TT_ARRAY &&
+    if (mrb_array_p(v) &&
         RARRAY_LEN(v) > 1 &&
         mrb_equal(mrb, RARRAY_PTR(v)[1], value))
       return v;
@@ -96,16 +95,21 @@ mrb_ary_at(mrb_state *mrb, mrb_value ary)
 }
 
 static mrb_value
+ary_ref(mrb_state *mrb, mrb_value ary, mrb_int n)
+{
+  return mrb_ary_entry(ary, n);
+}
+
+static mrb_value
 mrb_ary_values_at(mrb_state *mrb, mrb_value self)
 {
   mrb_int argc;
-  mrb_value *argv;
+  const mrb_value *argv;
 
   mrb_get_args(mrb, "*", &argv, &argc);
 
-  return mrb_get_values_at(mrb, self, RARRAY_LEN(self), argc, argv, mrb_ary_ref);
+  return mrb_get_values_at(mrb, self, RARRAY_LEN(self), argc, argv, ary_ref);
 }
-
 
 /*
  *  call-seq:
@@ -140,22 +144,21 @@ mrb_ary_slice_bang(mrb_state *mrb, mrb_value self)
   mrb_ary_modify(mrb, a);
 
   if (mrb_get_argc(mrb) == 1) {
-    mrb_value index;
+    mrb_value index = mrb_get_arg1(mrb);
 
-    mrb_get_args(mrb, "o|i", &index, &len);
     switch (mrb_type(index)) {
     case MRB_TT_RANGE:
-      if (mrb_range_beg_len(mrb, index, &i, &len, ARY_LEN(a), TRUE) == 1) {
+      if (mrb_range_beg_len(mrb, index, &i, &len, ARY_LEN(a), TRUE) == MRB_RANGE_OK) {
         goto delete_pos_len;
       }
       else {
         return mrb_nil_value();
       }
-    case MRB_TT_FIXNUM:
-      val = mrb_funcall(mrb, self, "delete_at", 1, index);
+    case MRB_TT_INTEGER:
+      val = mrb_funcall_id(mrb, self, MRB_SYM(delete_at), 1, index);
       return val;
     default:
-      val = mrb_funcall(mrb, self, "delete_at", 1, index);
+      val = mrb_funcall_id(mrb, self, MRB_SYM(delete_at), 1, index);
       return val;
     }
   }
@@ -185,6 +188,172 @@ mrb_ary_slice_bang(mrb_state *mrb, mrb_value self)
   return ary;
 }
 
+/*
+ * call-seq:
+ *    ary.compact     -> new_ary
+ *
+ * Returns a copy of +self+ with all +nil+ elements removed.
+ *
+ *   [ "a", nil, "b", nil, "c", nil ].compact
+ *                      #=> [ "a", "b", "c" ]
+ */
+
+static mrb_value
+mrb_ary_compact(mrb_state *mrb, mrb_value self)
+{
+  mrb_value ary = mrb_ary_new(mrb);
+  mrb_int len = RARRAY_LEN(self);
+  mrb_value *p = RARRAY_PTR(self);
+
+  for (mrb_int i = 0; i < len; ++i) {
+    if (!mrb_nil_p(p[i])) {
+      mrb_ary_push(mrb, ary, p[i]);
+    }
+  }
+  return ary;
+}
+
+/*
+ * call-seq:
+ *    ary.compact!    -> ary  or  nil
+ *
+ * Removes +nil+ elements from the array.
+ * Returns +nil+ if no changes were made, otherwise returns
+ * <i>ary</i>.
+ *
+ *    [ "a", nil, "b", nil, "c" ].compact! #=> [ "a", "b", "c" ]
+ *    [ "a", "b", "c" ].compact!           #=> nil
+ */
+static mrb_value
+mrb_ary_compact_bang(mrb_state *mrb, mrb_value self)
+{
+  struct RArray *a = mrb_ary_ptr(self);
+  mrb_int i, j = 0;
+  mrb_int len = ARY_LEN(a);
+  mrb_value *p = ARY_PTR(a);
+
+  mrb_ary_modify(mrb, a);
+  for (i = 0; i < len; ++i) {
+    if (!mrb_nil_p(p[i])) {
+      if (i != j) p[j] = p[i];
+      j++;
+    }
+  }
+  if (i == j) return mrb_nil_value();
+  if (j < len) ARY_SET_LEN(RARRAY(self), j);
+  return self;
+}
+
+
+/*
+ *  call-seq:
+ *     ary.rotate(count=1)    -> new_ary
+ *
+ *  Returns a new array by rotating +self+ so that the element at +count+ is
+ *  the first element of the new array.
+ *
+ *  If +count+ is negative then it rotates in the opposite direction, starting
+ *  from the end of +self+ where +-1+ is the last element.
+ *
+ *     a = [ "a", "b", "c", "d" ]
+ *     a.rotate         #=> ["b", "c", "d", "a"]
+ *     a                #=> ["a", "b", "c", "d"]
+ *     a.rotate(2)      #=> ["c", "d", "a", "b"]
+ *     a.rotate(-3)     #=> ["b", "c", "d", "a"]
+ */
+static mrb_value
+mrb_ary_rotate(mrb_state *mrb, mrb_value self)
+{
+  mrb_int count=1;
+  mrb_get_args(mrb, "|i", &count);
+
+  mrb_value ary = mrb_ary_new(mrb);
+  mrb_int len = RARRAY_LEN(self);
+  mrb_value *p = RARRAY_PTR(self);
+  mrb_int idx;
+
+  if (len <= 0) return ary;
+  if (count < 0) {
+    idx = len - (~count % len) - 1;
+  }
+  else {
+    idx = count % len;
+  }
+  for (mrb_int i = 0; i<len; i++) {
+    mrb_ary_push(mrb, ary, p[idx++]);
+    if (idx == len) idx = 0;
+  }
+  return ary;
+}
+
+static void
+rev(mrb_value *p, mrb_int beg, mrb_int end)
+{
+  for (mrb_int i=beg,j=end-1; i<j; i++,j--) {
+    mrb_value v = p[i];
+    p[i] = p[j];
+    p[j] = v;
+  }
+}
+
+/*
+ *  call-seq:
+ *     ary.rotate!(count=1)   -> ary
+ *
+ *  Rotates +self+ in place so that the element at +count+ comes first, and
+ *  returns +self+.
+ *
+ *  If +count+ is negative then it rotates in the opposite direction, starting
+ *  from the end of the array where +-1+ is the last element.
+ *
+ *     a = [ "a", "b", "c", "d" ]
+ *     a.rotate!        #=> ["b", "c", "d", "a"]
+ *     a                #=> ["b", "c", "d", "a"]
+ *     a.rotate!(2)     #=> ["d", "a", "b", "c"]
+ *     a.rotate!(-3)    #=> ["a", "b", "c", "d"]
+ */
+static mrb_value
+mrb_ary_rotate_bang(mrb_state *mrb, mrb_value self)
+{
+  mrb_int count=1;
+  mrb_get_args(mrb, "|i", &count);
+
+  struct RArray *a = mrb_ary_ptr(self);
+  mrb_int len = ARY_LEN(a);
+  mrb_value *p = ARY_PTR(a);
+  mrb_int idx;
+
+  mrb_ary_modify(mrb, a);
+  if (len == 0 || count == 0) return self;
+  if (count == 1) {
+    mrb_value v = p[0];
+    for (mrb_int i=1; i<len; i++) {
+      p[i-1] = p[i];
+    }
+    p[len-1] = v;
+    return self;
+  }
+  if (count < 0) {
+    idx = len - (~count % len) - 1;
+  }
+  else {
+    idx = count % len;
+  }
+  /* e.g. [1,2,3,4,5].rotate!(2) -> [3,4,5,1,2] */
+  /* first, reverse the whole array */
+  /* [1,2,3,4,5] -> [5,4,3,2,1] */
+  rev(p, 0, len);
+  /* then, re-reverse part before idx */
+  /* [5,4,3,2,1] -> [3,4,5,2,1] */
+  /*        ^idx     ~~~~~      */
+  rev(p, 0, len-idx);
+  /* finally, re-reverse part after idx */
+  /* [3,4,5,2,1] -> [3,4,5,1,2] */
+  /*        ^idx           ~~~  */
+  rev(p, len-idx, len);
+  return self;
+}
+
 void
 mrb_mruby_array_ext_gem_init(mrb_state* mrb)
 {
@@ -194,7 +363,11 @@ mrb_mruby_array_ext_gem_init(mrb_state* mrb)
   mrb_define_method(mrb, a, "at",     mrb_ary_at,     MRB_ARGS_REQ(1));
   mrb_define_method(mrb, a, "rassoc", mrb_ary_rassoc, MRB_ARGS_REQ(1));
   mrb_define_method(mrb, a, "values_at", mrb_ary_values_at, MRB_ARGS_ANY());
-  mrb_define_method(mrb, a, "slice!", mrb_ary_slice_bang,   MRB_ARGS_ANY());
+  mrb_define_method(mrb, a, "slice!", mrb_ary_slice_bang, MRB_ARGS_ARG(1,1));
+  mrb_define_method(mrb, a, "compact", mrb_ary_compact, MRB_ARGS_NONE());
+  mrb_define_method(mrb, a, "compact!", mrb_ary_compact_bang, MRB_ARGS_NONE());
+  mrb_define_method(mrb, a, "rotate", mrb_ary_rotate, MRB_ARGS_OPT(1));
+  mrb_define_method(mrb, a, "rotate!", mrb_ary_rotate_bang, MRB_ARGS_OPT(1));
 }
 
 void

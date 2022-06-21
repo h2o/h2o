@@ -100,7 +100,6 @@ end
 assert("Enumerable#none?") do
   assert_true %w(ant bear cat).none? { |word| word.length == 5 }
   assert_false %w(ant bear cat).none? { |word| word.length >= 4 }
-  assert_false [1, 3.14, 42].none?(Float)
   assert_true [].none?
   assert_true [nil, false].none?
   assert_false [nil, true].none?
@@ -110,32 +109,32 @@ assert("Enumerable#one?") do
   assert_true %w(ant bear cat).one? { |word| word.length == 4 }
   assert_false %w(ant bear cat).one? { |word| word.length > 4 }
   assert_false %w(ant bear cat).one? { |word| word.length < 4 }
-  assert_true [1, 3.14, 42].one?(Float)
   assert_false [nil, true, 99].one?
   assert_true [nil, true, false].one?
   assert_true [ nil, true, 99 ].one?(Integer)
   assert_false [].one?
+  assert_true [nil, true, false].one?(NilClass)
 end
 
 assert("Enumerable#all? (enhancement)") do
-  assert_false [1, 2, 3.14].all?(Integer)
-  assert_true [1, 2, 3.14].all?(Numeric)
+  assert_false [1, 2, nil].all?(Integer)
+  assert_true [1, 2, 3].all?(Numeric)
 end
 
 assert("Enumerable#any? (enhancement)") do
-  assert_false [1, 2, 3].all?(Float)
   assert_true [nil, true, 99].any?(Integer)
+  assert_false [1, 2, 3].any?(Array)
 end
 
 assert("Enumerable#each_with_object") do
-  assert_true [2, 4, 6, 8, 10, 12, 14, 16, 18, 20], (1..10).each_with_object([]) { |i, a| a << i*2 }
+  assert_equal [2, 4, 6, 8, 10, 12, 14, 16, 18, 20], (1..10).each_with_object([]) { |i, a| a << i*2 }
   assert_raise(ArgumentError) { (1..10).each_with_object() { |i, a| a << i*2 } }
 end
 
 assert("Enumerable#reverse_each") do
   r = (1..3)
   a = []
-  assert_equal (1..3), r.reverse_each { |v| a << v }
+  assert_same r, r.reverse_each { |v| a << v }
   assert_equal [3, 2, 1], a
 end
 
@@ -186,8 +185,13 @@ assert("Enumerable#to_h") do
   h = c.new.to_h
   assert_equal Hash, h.class
   assert_equal h0, h
-  # mruby-enum-ext also provides nil.to_h
-  assert_equal Hash.new, nil.to_h
-
   assert_equal({1=>4,3=>8}, c.new.to_h{|k,v|[k,v*2]})
+end
+
+assert("Enumerable#filter_map") do
+  assert_equal [4, 8, 12, 16, 20], (1..10).filter_map{|i| i * 2 if i%2==0}
+end
+
+assert("Enumerable#tally") do
+  assert_equal({"a"=>1, "b"=>2, "c"=>1}, ["a", "b", "c", "b"].tally)
 end

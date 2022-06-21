@@ -1,0 +1,54 @@
+# It also works with MRB_NO_STDIO and MRB_NO_FLOAT.
+
+MRuby::GemBox.new do |conf|
+  # Use Comparable module extension
+  conf.gem :core => "mruby-compar-ext"
+
+  # Use Enumerable module extension
+  conf.gem :core => "mruby-enum-ext"
+
+  # Use String class extension
+  conf.gem :core => "mruby-string-ext"
+
+  # Use Numeric class extension
+  conf.gem :core => "mruby-numeric-ext"
+
+  # Use Array class extension
+  conf.gem :core => "mruby-array-ext"
+
+  # Use Hash class extension
+  conf.gem :core => "mruby-hash-ext"
+
+  # Use Range class extension
+  conf.gem :core => "mruby-range-ext"
+
+  # Use Proc class extension
+  conf.gem :core => "mruby-proc-ext"
+
+  # Use Symbol class extension
+  conf.gem :core => "mruby-symbol-ext"
+
+  # Use Object class extension
+  conf.gem :core => "mruby-object-ext"
+
+  # Use ObjectSpace class
+  conf.gem :core => "mruby-objectspace"
+
+  # Use Fiber class
+  conf.gem :core => "mruby-fiber"
+
+  # Use Enumerator class (require mruby-fiber)
+  conf.gem :core => "mruby-enumerator"
+
+  # Use Enumerator::Lazy class (require mruby-enumerator)
+  conf.gem :core => "mruby-enum-lazy"
+
+  # Use toplevel object (main) methods extension
+  conf.gem :core => "mruby-toplevel-ext"
+
+  # Use Kernel module extension
+  conf.gem :core => "mruby-kernel-ext"
+
+  # Use class/module extension
+  conf.gem :core => "mruby-class-ext"
+end

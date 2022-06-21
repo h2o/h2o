@@ -1,37 +1,43 @@
-#include <stdio.h>
+#include <mruby.h>
+
+#ifdef MRB_NO_STDIO
+# error mruby-bin-mruby conflicts 'MRB_NO_STDIO' in your build configuration
+#endif
+
 #include <stdlib.h>
 #include <string.h>
-#include <mruby.h>
 #include <mruby/array.h>
 #include <mruby/compile.h>
 #include <mruby/dump.h>
 #include <mruby/variable.h>
+#include <mruby/proc.h>
 
-#ifdef MRB_DISABLE_STDIO
-static void
-p(mrb_state *mrb, mrb_value obj)
-{
-  mrb_value val = mrb_inspect(mrb, obj);
-
-  fwrite(RSTRING_PTR(val), RSTRING_LEN(val), 1, stdout);
-  putc('\n', stdout);
-}
-#else
-#define p(mrb,obj) mrb_p(mrb,obj)
+#if defined(_WIN32) || defined(_WIN64)
+# include <io.h> /* for setmode */
+# include <fcntl.h>
 #endif
 
 struct _args {
   FILE *rfp;
-  char* cmdline;
+  char *cmdline;
   mrb_bool fname        : 1;
   mrb_bool mrbfile      : 1;
   mrb_bool check_syntax : 1;
   mrb_bool verbose      : 1;
+  mrb_bool version      : 1;
   mrb_bool debug        : 1;
   int argc;
-  char** argv;
+  char **argv;
   int libc;
   char **libv;
+};
+
+struct options {
+  int argc;
+  char **argv;
+  char *program;
+  char *opt;
+  char short_opt[2];
 };
 
 static void
@@ -52,9 +58,67 @@ usage(const char *name)
   };
   const char *const *p = usage_msg;
 
-  printf("Usage: %s [switches] programfile\n", name);
+  printf("Usage: %s [switches] [programfile] [arguments]\n", name);
   while (*p)
     printf("  %s\n", *p++);
+}
+
+static void
+options_init(struct options *opts, int argc, char **argv)
+{
+  opts->argc = argc;
+  opts->argv = argv;
+  opts->program = *argv;
+  *opts->short_opt = 0;
+}
+
+static const char *
+options_opt(struct options *opts)
+{
+  /* concatenated short options (e.g. `-cv`) */
+  if (*opts->short_opt && *++opts->opt) {
+   short_opt:
+    opts->short_opt[0] = *opts->opt;
+    opts->short_opt[1] = 0;
+    return opts->short_opt;
+  }
+
+  while (++opts->argv, --opts->argc) {
+    opts->opt = *opts->argv;
+
+    /*  empty         || not start with `-`  || `-` */
+    if (!opts->opt[0] || opts->opt[0] != '-' || !opts->opt[1]) return NULL;
+
+    if (opts->opt[1] == '-') {
+      /* `--` */
+      if (!opts->opt[2]) {
+        ++opts->argv, --opts->argc;
+        return NULL;
+      }
+      /* long option */
+      opts->opt += 2;
+      *opts->short_opt = 0;
+      return opts->opt;
+    }
+    else {
+      /* short option */
+      ++opts->opt;
+      goto short_opt;
+    }
+  }
+  return NULL;
+}
+
+static const char *
+options_arg(struct options *opts)
+{
+  if (*opts->short_opt && opts->opt[1]) {
+    /* concatenated short option and option argument (e.g. `-rLIBRARY`) */
+    *opts->short_opt = 0;
+    return opts->opt + 1;
+  }
+  --opts->argc, ++opts->argv;
+  return opts->argc ? *opts->argv : NULL;
 }
 
 static char *
@@ -69,40 +133,24 @@ dup_arg_item(mrb_state *mrb, const char *item)
 static int
 parse_args(mrb_state *mrb, int argc, char **argv, struct _args *args)
 {
-  char **origargv = argv;
   static const struct _args args_zero = { 0 };
+  struct options opts[1];
+  const char *opt, *item;
 
   *args = args_zero;
-
-  for (argc--,argv++; argc > 0; argc--,argv++) {
-    char *item;
-    if (argv[0][0] != '-') break;
-
-    if (strlen(*argv) <= 1) {
-      argc--; argv++;
-      args->rfp = stdin;
-      break;
-    }
-
-    item = argv[0] + 1;
-    switch (*item++) {
-    case 'b':
+  options_init(opts, argc, argv);
+  while ((opt = options_opt(opts))) {
+    if (strcmp(opt, "b") == 0) {
       args->mrbfile = TRUE;
-      break;
-    case 'c':
+    }
+    else if (strcmp(opt, "c") == 0) {
       args->check_syntax = TRUE;
-      break;
-    case 'd':
+    }
+    else if (strcmp(opt, "d") == 0) {
       args->debug = TRUE;
-      break;
-    case 'e':
-      if (item[0]) {
-        goto append_cmdline;
-      }
-      else if (argc > 1) {
-        argc--; argv++;
-        item = argv[0];
-append_cmdline:
+    }
+    else if (strcmp(opt, "e") == 0) {
+      if ((item = options_arg(opts))) {
         if (!args->cmdline) {
           args->cmdline = dup_arg_item(mrb, item);
         }
@@ -119,55 +167,65 @@ append_cmdline:
         }
       }
       else {
-        printf("%s: No code specified for -e\n", *origargv);
-        return EXIT_SUCCESS;
+        fprintf(stderr, "%s: No code specified for -e\n", opts->program);
+        return EXIT_FAILURE;
       }
-      break;
-    case 'r':
-      if (!item[0]) {
-        if (argc <= 1) {
-          printf("%s: No library specified for -r\n", *origargv);
-          return EXIT_FAILURE;
+    }
+    else if (strcmp(opt, "h") == 0) {
+      usage(opts->program);
+      exit(EXIT_SUCCESS);
+    }
+    else if (strcmp(opt, "r") == 0) {
+      if ((item = options_arg(opts))) {
+        if (args->libc == 0) {
+          args->libv = (char**)mrb_malloc(mrb, sizeof(char*));
         }
-        argc--; argv++;
-        item = argv[0];
-      }
-      if (args->libc == 0) {
-        args->libv = (char**)mrb_malloc(mrb, sizeof(char*));
+        else {
+          args->libv = (char**)mrb_realloc(mrb, args->libv, sizeof(char*) * (args->libc + 1));
+        }
+        args->libv[args->libc++] = dup_arg_item(mrb, item);
       }
       else {
-        args->libv = (char**)mrb_realloc(mrb, args->libv, sizeof(char*) * (args->libc + 1));
+        fprintf(stderr, "%s: No library specified for -r\n", opts->program);
+        return EXIT_FAILURE;
       }
-      args->libv[args->libc++] = dup_arg_item(mrb, item);
-      break;
-    case 'v':
-      if (!args->verbose) mrb_show_version(mrb);
-      args->verbose = TRUE;
-      break;
-    case '-':
-      if (strcmp((*argv) + 2, "version") == 0) {
+    }
+    else if (strcmp(opt, "v") == 0) {
+      if (!args->verbose) {
         mrb_show_version(mrb);
-        exit(EXIT_SUCCESS);
+        args->version = TRUE;
       }
-      else if (strcmp((*argv) + 2, "verbose") == 0) {
-        args->verbose = TRUE;
-        break;
-      }
-      else if (strcmp((*argv) + 2, "copyright") == 0) {
-        mrb_show_copyright(mrb);
-        exit(EXIT_SUCCESS);
-      }
-    default:
+      args->verbose = TRUE;
+    }
+    else if (strcmp(opt, "version") == 0) {
+      mrb_show_version(mrb);
+      exit(EXIT_SUCCESS);
+    }
+    else if (strcmp(opt, "verbose") == 0) {
+      args->verbose = TRUE;
+    }
+    else if (strcmp(opt, "copyright") == 0) {
+      mrb_show_copyright(mrb);
+      exit(EXIT_SUCCESS);
+    }
+    else {
+      fprintf(stderr, "%s: invalid option %s%s (-h will show valid options)\n",
+              opts->program, opt[1] ? "--" : "-", opt);
       return EXIT_FAILURE;
     }
   }
 
-  if (args->rfp == NULL && args->cmdline == NULL) {
-    if (*argv == NULL) args->rfp = stdin;
+  argc = opts->argc; argv = opts->argv;
+  if (args->cmdline == NULL) {
+    if (*argv == NULL) {
+      if (args->version) exit(EXIT_SUCCESS);
+      args->rfp = stdin;
+    }
     else {
-      args->rfp = fopen(argv[0], args->mrbfile ? "rb" : "r");
+      args->rfp = strcmp(argv[0], "-") == 0 ?
+        stdin : fopen(argv[0], "rb");
       if (args->rfp == NULL) {
-        printf("%s: Cannot open program file. (%s)\n", *origargv, *argv);
+        fprintf(stderr, "%s: Cannot open program file: %s\n", opts->program, argv[0]);
         return EXIT_FAILURE;
       }
       args->fname = TRUE;
@@ -175,6 +233,11 @@ append_cmdline:
       argc--; argv++;
     }
   }
+#if defined(_WIN32) || defined(_WIN64)
+  if (args->rfp == stdin) {
+    _setmode(_fileno(stdin), O_BINARY);
+  }
+#endif
   args->argv = (char **)mrb_realloc(mrb, args->argv, sizeof(char*) * (argc + 1));
   memcpy(args->argv, argv, (argc+1) * sizeof(char*));
   args->argc = argc;
@@ -209,17 +272,15 @@ main(int argc, char **argv)
   mrb_value ARGV;
   mrbc_context *c;
   mrb_value v;
-  mrb_sym zero_sym;
 
   if (mrb == NULL) {
-    fputs("Invalid mrb_state, exiting mruby\n", stderr);
+    fprintf(stderr, "%s: Invalid mrb_state, exiting mruby\n", *argv);
     return EXIT_FAILURE;
   }
 
   n = parse_args(mrb, argc, argv, &args);
   if (n == EXIT_FAILURE || (args.cmdline == NULL && args.rfp == NULL)) {
     cleanup(mrb, &args);
-    usage(argv[0]);
     return n;
   }
   else {
@@ -242,42 +303,48 @@ main(int argc, char **argv)
       c->no_exec = TRUE;
 
     /* Set $0 */
-    zero_sym = mrb_intern_lit(mrb, "$0");
+    const char *cmdline;
     if (args.rfp) {
-      const char *cmdline;
       cmdline = args.cmdline ? args.cmdline : "-";
-      mrbc_filename(mrb, c, cmdline);
-      mrb_gv_set(mrb, zero_sym, mrb_str_new_cstr(mrb, cmdline));
     }
     else {
-      mrbc_filename(mrb, c, "-e");
-      mrb_gv_set(mrb, zero_sym, mrb_str_new_lit(mrb, "-e"));
+      cmdline = "-e";
     }
+    mrb_gv_set(mrb, mrb_intern_lit(mrb, "$0"), mrb_str_new_cstr(mrb, cmdline));
 
     /* Load libraries */
     for (i = 0; i < args.libc; i++) {
-      FILE *lfp = fopen(args.libv[i], args.mrbfile ? "rb" : "r");
+      struct REnv *e;
+      FILE *lfp = fopen(args.libv[i], "rb");
       if (lfp == NULL) {
-        printf("Cannot open library file: %s\n", args.libv[i]);
+        fprintf(stderr, "%s: Cannot open library file: %s\n", *argv, args.libv[i]);
         mrbc_context_free(mrb, c);
         cleanup(mrb, &args);
         return EXIT_FAILURE;
       }
+      mrbc_filename(mrb, c, args.libv[i]);
       if (args.mrbfile) {
         v = mrb_load_irep_file_cxt(mrb, lfp, c);
       }
       else {
-        v = mrb_load_file_cxt(mrb, lfp, c);
+        v = mrb_load_detect_file_cxt(mrb, lfp, c);
       }
       fclose(lfp);
+      e = mrb_vm_ci_env(mrb->c->cibase);
+      mrb_vm_ci_env_set(mrb->c->cibase, NULL);
+      mrb_env_unshare(mrb, e);
+      mrbc_cleanup_local_variables(mrb, c);
     }
+
+    /* set program file name */
+    mrbc_filename(mrb, c, cmdline);
 
     /* Load program */
     if (args.mrbfile) {
       v = mrb_load_irep_file_cxt(mrb, args.rfp, c);
     }
     else if (args.rfp) {
-      v = mrb_load_file_cxt(mrb, args.rfp, c);
+      v = mrb_load_detect_file_cxt(mrb, args.rfp, c);
     }
     else {
       char* utf8 = mrb_utf8_from_locale(args.cmdline, -1);
@@ -289,19 +356,16 @@ main(int argc, char **argv)
     mrb_gc_arena_restore(mrb, ai);
     mrbc_context_free(mrb, c);
     if (mrb->exc) {
-      if (mrb_undef_p(v)) {
-        mrb_p(mrb, mrb_obj_value(mrb->exc));
-      }
-      else {
+      if (!mrb_undef_p(v)) {
         mrb_print_error(mrb);
       }
-      n = -1;
+      n = EXIT_FAILURE;
     }
     else if (args.check_syntax) {
-      printf("Syntax OK\n");
+      puts("Syntax OK");
     }
   }
   cleanup(mrb, &args);
 
-  return n == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
+  return n;
 }

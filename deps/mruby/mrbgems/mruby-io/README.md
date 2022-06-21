@@ -1,21 +1,20 @@
-mruby-io
-========
-[![Build Status](https://travis-ci.org/iij/mruby-io.svg?branch=master)](https://travis-ci.org/iij/mruby-io)
-
+# mruby-io
 
 `IO` and `File` classes for mruby
 
 ## Installation
-Add the line below to your `build_config.rb`:
+
+Add the line below to your build configuration.
 
 ```
-  conf.gem :github => 'iij/mruby-io'
+  conf.gem core: 'mruby-io'
 ```
 
 ## Implemented methods
 
 ### IO
- - http://doc.ruby-lang.org/ja/1.9.3/class/IO.html
+
+* <https://doc.ruby-lang.org/ja/1.9.3/class/IO.html>
 
 | method                     | mruby-io | memo |
 | -------------------------  | -------- | ---- |
@@ -59,7 +58,7 @@ Add the line below to your `build_config.rb`:
 | IO#fileno, IO#to_i         |    o     |      |
 | IO#flush                   |    o     |      |
 | IO#fsync                   |          |      |
-| IO#getbyte                 |          |      |
+| IO#getbyte                 |    o     |      |
 | IO#getc                    |    o     |      |
 | IO#gets                    |    o     |      |
 | IO#internal_encoding       |          |      |
@@ -77,7 +76,7 @@ Add the line below to your `build_config.rb`:
 | IO#puts                    |    o     |      |
 | IO#read                    |    o     |      |
 | IO#read_nonblock           |          |      |
-| IO#readbyte                |          |      |
+| IO#readbyte                |    o     |      |
 | IO#readchar                |    o     |      |
 | IO#readline                |    o     |      |
 | IO#readlines               |    o     |      |
@@ -93,13 +92,14 @@ Add the line below to your `build_config.rb`:
 | IO#sysseek                 |    o     |      |
 | IO#syswrite                |    o     |      |
 | IO#to_io                   |          |      |
-| IO#ungetbyte               |          |      |
+| IO#ungetbyte               |    o     |      |
 | IO#ungetc                  |    o     |      |
 | IO#write                   |    o     |      |
 | IO#write_nonblock          |          |      |
 
 ### File
- - http://doc.ruby-lang.org/ja/1.9.3/class/File.html
+
+* <https://doc.ruby-lang.org/ja/1.9.3/class/File.html>
 
 | method                      | mruby-io | memo |
 | --------------------------- | -------- | ---- |
@@ -169,25 +169,25 @@ Add the line below to your `build_config.rb`:
 | File#size                   |          |      |
 | File#truncate               |          |      |
 
-
 ## License
 
 Copyright (c) 2013 Internet Initiative Japan Inc.
+Copyright (c) 2017 mruby developers
 
-Permission is hereby granted, free of charge, to any person obtaining a 
-copy of this software and associated documentation files (the "Software"), 
-to deal in the Software without restriction, including without limitation 
-the rights to use, copy, modify, merge, publish, distribute, sublicense, 
-and/or sell copies of the Software, and to permit persons to whom the 
+Permission is hereby granted, free of charge, to any person obtaining a
+copy of this software and associated documentation files (the "Software"),
+to deal in the Software without restriction, including without limitation
+the rights to use, copy, modify, merge, publish, distribute, sublicense,
+and/or sell copies of the Software, and to permit persons to whom the
 Software is furnished to do so, subject to the following conditions:
 
-The above copyright notice and this permission notice shall be included in 
+The above copyright notice and this permission notice shall be included in
 all copies or substantial portions of the Software.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR 
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, 
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE 
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER 
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING 
-FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER 
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.

@@ -20,9 +20,9 @@ assert('NameError#name', '15.2.31.2.1') do
 end
 
 assert('NameError#initialize', '15.2.31.2.2') do
-   e = NameError.new('a', :foo)
+  e = NameError.new('a', :foo)
 
-   assert_equal NameError, e.class
-   assert_equal 'a', e.message
-   assert_equal :foo, e.name
+  assert_equal NameError, e.class
+  assert_equal 'a', e.message
+  assert_equal :foo, e.name
 end

@@ -107,3 +107,32 @@ assert('The undef statement (method undefined)', '13.3.7 a) 5)') do
     undef :non_existing_method
   end
 end
+
+assert('method_added hook') do
+  c = Class.new do
+    # method to retrieve @name
+    def self.name; @name; end
+    # hook method on method definition
+    def self.method_added(name) @name = name; end
+    # method definition
+    def foo; end
+  end
+  assert_equal(:foo, c.name)
+  c.define_method(:bar){}
+  assert_equal(:bar, c.name)
+end
+
+assert('singleton_method_added hook') do
+  a = Object.new
+  # method to retrieve @name
+  def a.name; @name; end
+  # hook method on singleton method definition
+  def a.singleton_method_added(name) @name = name; end
+  # singleton method definition
+  def a.foo; end
+  assert_equal(:foo, a.name)
+  class <<a
+    def bar; end
+  end
+  assert_equal(:bar, a.name)
+end

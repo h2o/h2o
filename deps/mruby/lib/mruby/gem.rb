@@ -1,14 +1,12 @@
-require 'pathname'
 require 'forwardable'
-require 'tsort'
-require 'shellwords'
+autoload :TSort, 'tsort'
+autoload :Shellwords, 'shellwords'
 
 module MRuby
   module Gem
     class << self
       attr_accessor :current
     end
-    LinkerConfig = Struct.new(:libraries, :library_paths, :flags, :flags_before_libraries, :flags_after_libraries)
 
     class Specification
       include Rake::DSL
@@ -18,7 +16,6 @@ module MRuby
       attr_accessor :name, :dir, :build
       alias mruby build
       attr_accessor :build_config_initializer
-      attr_accessor :mrblib_dir, :objs_dir
 
       attr_accessor :version
       attr_accessor :description, :summary
@@ -28,8 +25,8 @@ module MRuby
       alias :author= :authors=
 
       attr_accessor :rbfiles, :objs
-      attr_accessor :test_objs, :test_rbfiles, :test_args
-      attr_accessor :test_preload
+      attr_writer :test_objs, :test_rbfiles
+      attr_accessor :test_args, :test_preload
 
       attr_accessor :bins
 
@@ -46,37 +43,30 @@ module MRuby
         @name = name
         @initializer = block
         @version = "0.0.0"
-        @mrblib_dir = "mrblib"
-        @objs_dir = "src"
+        @dependencies = []
+        @conflicts = []
         MRuby::Gem.current = self
       end
 
       def setup
-        return if defined?(@linker)  # return if already set up
+        return if defined?(@bins)  # return if already set up
 
         MRuby::Gem.current = self
         MRuby::Build::COMMANDS.each do |command|
           instance_variable_set("@#{command}", @build.send(command).clone)
         end
-        @linker = LinkerConfig.new([], [], [], [], [])
+        @linker.run_attrs.each(&:clear)
 
-        @rbfiles = Dir.glob("#{@dir}/#{@mrblib_dir}/**/*.rb").sort
-        @objs = Dir.glob("#{@dir}/#{@objs_dir}/*.{c,cpp,cxx,cc,m,asm,s,S}").map do |f|
-          objfile(f.relative_path_from(@dir).to_s.pathmap("#{build_dir}/%X"))
-        end
+        @rbfiles = Dir.glob("#{@dir}/mrblib/**/*.rb").sort
+        @objs = srcs_to_objs("src")
 
-        @test_rbfiles = Dir.glob("#{dir}/test/**/*.rb").sort
-        @test_objs = Dir.glob("#{dir}/test/*.{c,cpp,cxx,cc,m,asm,s,S}").map do |f|
-          objfile(f.relative_path_from(dir).to_s.pathmap("#{build_dir}/%X"))
-        end
-        @custom_test_init = !@test_objs.empty?
         @test_preload = nil # 'test/assert.rb'
         @test_args = {}
 
         @bins = []
+        @cdump = true
 
         @requirements = []
-        @dependencies, @conflicts = [], []
         @export_include_paths = []
         @export_include_paths << "#{dir}/include" if File.directory? "#{dir}/include"
 
@@ -92,16 +82,45 @@ module MRuby
         build.libmruby_objs << @objs
 
         instance_eval(&@build_config_initializer) if @build_config_initializer
+
+        repo_url = build.gem_dir_to_repo_url[dir]
+        build.locks[repo_url]['version'] = version if repo_url
       end
 
       def setup_compilers
-        compilers.each do |compiler|
-          compiler.define_rules build_dir, "#{dir}"
+        (core? ? [@cc, *(@cxx if build.cxx_exception_enabled?)] : compilers).each do |compiler|
+          compiler.define_rules build_dir, @dir, @build.exts.presym_preprocessed if build.presym_enabled?
+          compiler.define_rules build_dir, @dir, @build.exts.object
           compiler.defines << %Q[MRBGEM_#{funcname.upcase}_VERSION=#{version}]
-          compiler.include_paths << "#{dir}/include" if File.directory? "#{dir}/include"
+          compiler.include_paths << "#{@dir}/include" if File.directory? "#{@dir}/include"
         end
 
         define_gem_init_builder if @generate_functions
+      end
+
+      def for_windows?
+        if build.kind_of?(MRuby::CrossBuild)
+          return %w(x86_64-w64-mingw32 i686-w64-mingw32).include?(build.host_target)
+        elsif build.kind_of?(MRuby::Build)
+          return ('A'..'Z').to_a.any? { |vol| Dir.exist?("#{vol}:") }
+        end
+        return false
+      end
+
+      def disable_cdump
+        @cdump = false
+      end
+
+      def cdump?
+        build.presym_enabled? && @cdump
+      end
+
+      def core?
+        @dir.start_with?("#{MRUBY_ROOT}/mrbgems/")
+      end
+
+      def bin?
+        @bins.size > 0
       end
 
       def add_dependency(name, *requirements)
@@ -112,15 +131,11 @@ module MRuby
       end
 
       def add_test_dependency(*args)
-        add_dependency(*args) if build.test_enabled?
+        add_dependency(*args) if build.test_enabled? || build.bintest_enabled?
       end
 
       def add_conflict(name, *req)
         @conflicts << {:gem => name, :requirements => req.empty? ? nil : req}
-      end
-
-      def self.bin=(bin)
-        @bins = [bin].flatten
       end
 
       def build_dir
@@ -129,6 +144,14 @@ module MRuby
 
       def test_rbireps
         "#{build_dir}/gem_test.c"
+      end
+
+      def test_objs
+        @test_objs ||= srcs_to_objs("test")
+      end
+
+      def test_rbfiles
+        @test_rbfiles ||= Dir["#{@dir}/test/**/*.rb"].sort!
       end
 
       def search_package(name, version_query=nil)
@@ -156,31 +179,53 @@ module MRuby
         end
       end
 
+      def srcs_to_objs(src_dir_from_gem_dir)
+        exts = compilers.flat_map{|c| c.source_exts} * ","
+        Dir["#{@dir}/#{src_dir_from_gem_dir}/*{#{exts}}"].map do |f|
+          objfile(f.relative_path_from(@dir).to_s.pathmap("#{build_dir}/%X"))
+        end
+      end
+
       def define_gem_init_builder
-        file objfile("#{build_dir}/gem_init") => [ "#{build_dir}/gem_init.c", File.join(dir, "mrbgem.rake") ]
         file "#{build_dir}/gem_init.c" => [build.mrbcfile, __FILE__] + [rbfiles].flatten do |t|
-          FileUtils.mkdir_p build_dir
+          mkdir_p build_dir
           generate_gem_init("#{build_dir}/gem_init.c")
         end
       end
 
       def generate_gem_init(fname)
+        _pp "GEN", fname.relative_path
         open(fname, 'w') do |f|
           print_gem_init_header f
-          build.mrbc.run f, rbfiles, "gem_mrblib_irep_#{funcname}" unless rbfiles.empty?
+          unless rbfiles.empty?
+            opts = {cdump: cdump?, static: true}
+            if cdump?
+              build.mrbc.run f, rbfiles, "gem_mrblib_#{funcname}_proc", **opts
+            else
+              build.mrbc.run f, rbfiles, "gem_mrblib_irep_#{funcname}", **opts
+            end
+          end
           f.puts %Q[void mrb_#{funcname}_gem_init(mrb_state *mrb);]
           f.puts %Q[void mrb_#{funcname}_gem_final(mrb_state *mrb);]
           f.puts %Q[]
           f.puts %Q[void GENERATED_TMP_mrb_#{funcname}_gem_init(mrb_state *mrb) {]
           f.puts %Q[  int ai = mrb_gc_arena_save(mrb);]
+          f.puts %Q[  gem_mrblib_#{funcname}_proc_init_syms(mrb);] if !rbfiles.empty? && cdump?
           f.puts %Q[  mrb_#{funcname}_gem_init(mrb);] if objs != [objfile("#{build_dir}/gem_init")]
           unless rbfiles.empty?
-            f.puts %Q[  mrb_load_irep(mrb, gem_mrblib_irep_#{funcname});]
+            if cdump?
+              f.puts %Q[  mrb_load_proc(mrb, gem_mrblib_#{funcname}_proc);]
+            else
+              f.puts %Q[  mrb_load_irep(mrb, gem_mrblib_irep_#{funcname});]
+            end
             f.puts %Q[  if (mrb->exc) {]
             f.puts %Q[    mrb_print_error(mrb);]
             f.puts %Q[    mrb_close(mrb);]
             f.puts %Q[    exit(EXIT_FAILURE);]
             f.puts %Q[  }]
+            f.puts %Q[  struct REnv *e = mrb_vm_ci_env(mrb->c->cibase);]
+            f.puts %Q[  mrb_vm_ci_env_set(mrb->c->cibase, NULL);]
+            f.puts %Q[  mrb_env_unshare(mrb, e);]
           end
           f.puts %Q[  mrb_gc_arena_restore(mrb, ai);]
           f.puts %Q[}]
@@ -204,9 +249,15 @@ module MRuby
 
       def print_gem_init_header(f)
         print_gem_comment(f)
-        f.puts %Q[#include <stdlib.h>] unless rbfiles.empty?
-        f.puts %Q[#include <mruby.h>]
-        f.puts %Q[#include <mruby/irep.h>] unless rbfiles.empty?
+        if rbfiles.empty?
+          f.puts %Q[#include <mruby.h>]
+        else
+          f.puts %Q[#include <stdlib.h>]
+          unless cdump?
+            f.puts %Q[#include <mruby.h>]
+            f.puts %Q[#include <mruby/proc.h>]
+          end
+        end
       end
 
       def print_gem_test_header(f)
@@ -219,12 +270,8 @@ module MRuby
         f.puts %Q[#include <mruby/hash.h>] unless test_args.empty?
       end
 
-      def test_dependencies
-        [@name]
-      end
-
       def custom_test_init?
-        @custom_test_init
+        !test_objs.empty?
       end
 
       def version_ok?(req_versions)
@@ -271,16 +318,18 @@ module MRuby
       # ~> compare algorithm
       #
       # Example:
+      #    ~> 2     means >= 2.0.0 and < 3.0.0
       #    ~> 2.2   means >= 2.2.0 and < 3.0.0
-      #    ~> 2.2.0 means >= 2.2.0 and < 2.3.0
+      #    ~> 2.2.2 means >= 2.2.2 and < 2.3.0
       def twiddle_wakka_ok?(other)
         gr_or_eql = (self <=> other) >= 0
-        still_minor = (self <=> other.skip_minor) < 0
-        gr_or_eql and still_minor
+        still_major_or_minor = (self <=> other.skip_major_or_minor) < 0
+        gr_or_eql and still_major_or_minor
       end
 
-      def skip_minor
+      def skip_major_or_minor
         a = @ary.dup
+        a << 0 if a.size == 1 # ~> 2 can also be represented as ~> 2.0
         a.slice!(-1)
         a[-1] = a[-1].succ
         a
@@ -312,6 +361,10 @@ module MRuby
 
       def each(&b)
         @ary.each(&b)
+      end
+
+      def [](name)
+        @ary.detect {|g| g.name == name}
       end
 
       def <<(gem)
@@ -446,6 +499,12 @@ module MRuby
             g.export_include_paths.uniq!
           end
         end
+      end
+
+      def linker_attrs(gem=nil)
+        gems = self.reject{|g| g.bin?}  # library gems
+        gems << gem unless gem.nil?
+        gems.map{|g| g.linker.run_attrs}.transpose
       end
     end # List
   end # Gem

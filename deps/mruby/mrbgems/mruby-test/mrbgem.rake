@@ -3,30 +3,24 @@ MRuby::Gem::Specification.new('mruby-test') do |spec|
   spec.author  = 'mruby developers'
   spec.summary = 'mruby test'
 
-  build.bins << 'mrbtest'
-  spec.add_dependency('mruby-compiler', :core => 'mruby-compiler')
-
   spec.test_rbfiles = Dir.glob("#{MRUBY_ROOT}/test/t/*.rb")
 
   clib = "#{build_dir}/mrbtest.c"
   mlib = clib.ext(exts.object)
   exec = exefile("#{build.build_dir}/bin/mrbtest")
-
-  mrbtest_lib = libfile("#{build_dir}/mrbtest")
-  mrbtest_objs = []
-
-  driver_obj = objfile("#{build_dir}/driver")
-  # driver = "#{spec.dir}/driver.c"
-
   assert_c = "#{build_dir}/assert.c"
   assert_rb = "#{MRUBY_ROOT}/test/assert.rb"
   assert_lib = assert_c.ext(exts.object)
-  mrbtest_objs << assert_lib
+  mrbtest_lib = libfile("#{build_dir}/mrbtest")
+  mrbtest_objs = [assert_lib]
+  driver_objs = srcs_to_objs(".")
 
   file assert_lib => assert_c
   file assert_c => [assert_rb, build.mrbcfile] do |t|
+    _pp "GEN", t.name.relative_path
+    mkdir_p File.dirname(t.name)
     open(t.name, 'w') do |f|
-      mrbc.run f, assert_rb, 'mrbtest_assert_irep'
+      mrbc.run f, assert_rb, 'mrbtest_assert_irep', cdump: false
     end
   end
 
@@ -34,12 +28,14 @@ MRuby::Gem::Specification.new('mruby-test') do |spec|
 
   build.gems.each do |g|
     test_rbobj = g.test_rbireps.ext(exts.object)
-    g.test_objs << test_rbobj
-    dep_list = build.gems.tsort_dependencies(g.test_dependencies, gem_table).select(&:generate_functions)
+    mrbtest_objs.concat(g.test_objs)
+    mrbtest_objs << test_rbobj
+    dep_list = build.gems.tsort_dependencies([g.name], gem_table).select(&:generate_functions)
 
     file test_rbobj => g.test_rbireps
     file g.test_rbireps => [g.test_rbfiles, build.mrbcfile].flatten do |t|
-      FileUtils.mkdir_p File.dirname(t.name)
+      _pp "GEN", t.name.relative_path
+      mkdir_p File.dirname(t.name)
       open(t.name, 'w') do |f|
         g.print_gem_test_header(f)
         test_preload = g.test_preload and [g.dir, MRUBY_ROOT].map {|dir|
@@ -56,12 +52,12 @@ MRuby::Gem::Specification.new('mruby-test') do |spec|
         if test_preload.nil?
           f.puts %Q[extern const uint8_t mrbtest_assert_irep[];]
         else
-          g.build.mrbc.run f, test_preload, "gem_test_irep_#{g.funcname}_preload"
+          g.build.mrbc.run f, test_preload, "gem_test_irep_#{g.funcname}_preload", cdump: false
         end
         g.test_rbfiles.flatten.each_with_index do |rbfile, i|
-          g.build.mrbc.run f, rbfile, "gem_test_irep_#{g.funcname}_#{i}"
+          g.build.mrbc.run f, rbfile, "gem_test_irep_#{g.funcname}_#{i}", cdump: false, static: true
         end
-        f.puts %Q[void mrb_#{g.funcname}_gem_test(mrb_state *mrb);] unless g.test_objs.empty?
+        f.puts %Q[void mrb_#{g.funcname}_gem_test(mrb_state *mrb);] if g.custom_test_init?
         dep_list.each do |d|
           f.puts %Q[void GENERATED_TMP_mrb_#{d.funcname}_gem_init(mrb_state *mrb);]
           f.puts %Q[void GENERATED_TMP_mrb_#{d.funcname}_gem_final(mrb_state *mrb);]
@@ -79,7 +75,7 @@ MRuby::Gem::Specification.new('mruby-test') do |spec|
             f.puts %Q[  ai = mrb_gc_arena_save(mrb);]
             f.puts %Q[  mrb2 = mrb_open_core(mrb_default_allocf, NULL);]
             f.puts %Q[  if (mrb2 == NULL) {]
-            f.puts %Q[    fprintf(stderr, "Invalid mrb_state, exiting \%s", __FUNCTION__);]
+            f.puts %Q[    fprintf(stderr, "Invalid mrb_state, exiting \%s", __func__);]
             f.puts %Q[    exit(EXIT_FAILURE);]
             f.puts %Q[  }]
             dep_list.each do |d|
@@ -124,49 +120,20 @@ MRuby::Gem::Specification.new('mruby-test') do |spec|
     end
   end
 
-  build.gems.each do |v|
-    mrbtest_objs.concat v.test_objs
-  end
-
   file mrbtest_lib => mrbtest_objs do |t|
     build.archiver.run t.name, t.prerequisites
   end
 
   unless build.build_mrbtest_lib_only?
-    file exec => [driver_obj, mlib, mrbtest_lib, build.libmruby_static] do |t|
-      gem_flags = build.gems.map { |g| g.linker.flags }
-      gem_flags_before_libraries = build.gems.map { |g| g.linker.flags_before_libraries }
-      gem_flags_after_libraries = build.gems.map { |g| g.linker.flags_after_libraries }
-      gem_libraries = build.gems.map { |g| g.linker.libraries }
-      gem_library_paths = build.gems.map { |g| g.linker.library_paths }
-      build.linker.run t.name, t.prerequisites, gem_libraries, gem_library_paths, gem_flags,
-                       gem_flags_before_libraries, gem_flags_after_libraries
+    file exec => [*driver_objs, mlib, mrbtest_lib, build.libmruby_static] do |t|
+      build.linker.run t.name, t.prerequisites, *build.gems.linker_attrs
     end
   end
 
-  init = "#{spec.dir}/init_mrbtest.c"
-
-  # store the last gem selection and make the re-build
-  # of the test gem depending on a change to the gem
-  # selection
-  active_gems_path = "#{build_dir}/active_gems_path.lst"
-  active_gem_list = if File.exist? active_gems_path
-                      File.read active_gems_path
-                    else
-                      FileUtils.mkdir_p File.dirname(active_gems_path)
-                      nil
-                    end
-  current_gem_list = build.gems.map(&:name).join("\n")
-  task active_gems_path do |_t|
-    FileUtils.mkdir_p File.dirname(active_gems_path)
-    File.write active_gems_path, current_gem_list
-  end
-  file clib => active_gems_path if active_gem_list != current_gem_list
-
   file mlib => clib
-  file clib => [init, build.mrbcfile, __FILE__] do |_t|
-    _pp "GEN", "*.rb", "#{clib.relative_path}"
-    FileUtils.mkdir_p File.dirname(clib)
+  file clib => ["#{build.build_dir}/mrbgems/active_gems.txt", build.mrbcfile, __FILE__] do |_t|
+    _pp "GEN", clib.relative_path
+    mkdir_p File.dirname(clib)
     open(clib, 'w') do |f|
       f.puts %Q[/*]
       f.puts %Q[ * This file contains a list of all]
@@ -177,7 +144,8 @@ MRuby::Gem::Specification.new('mruby-test') do |spec|
       f.puts %Q[ *   All manual changes will get lost.]
       f.puts %Q[ */]
       f.puts %Q[]
-      f.puts IO.read(init)
+      f.puts %Q[struct mrb_state;]
+      f.puts %Q[typedef struct mrb_state mrb_state;]
       build.gems.each do |g|
         f.puts %Q[void GENERATED_TMP_mrb_#{g.funcname}_gem_test(mrb_state *mrb);]
       end

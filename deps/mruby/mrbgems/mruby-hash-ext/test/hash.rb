@@ -269,10 +269,8 @@ assert("Hash#transform_keys") do
                h.transform_keys{|k| k+"!"})
   assert_equal({1 => 100, 2 => 200},
                h.transform_keys{|k|k.to_i})
-  assert_equal({"1.0" => 100, "2.1" => 200},
-               h.transform_keys.with_index{|k, i| "#{k}.#{i}"})
-  assert_equal(h, h.transform_keys!{|k|k.to_i})
-  assert_equal(h, {1 => 100, 2 => 200})
+  assert_same(h, h.transform_keys!{|k|k.to_i})
+  assert_equal({1 => 100, 2 => 200}, h)
 end
 
 assert("Hash#transform_values") do
@@ -281,9 +279,7 @@ assert("Hash#transform_values") do
                h.transform_values{|v| v * v + 1})
   assert_equal({a: "1", b: "2", c: "3"},
                h.transform_values{|v|v.to_s})
-  assert_equal({a: "1.0", b: "2.1", c: "3.2"},
-               h.transform_values.with_index{|v, i| "#{v}.#{i}"})
-  assert_equal(h, h.transform_values!{|v|v.to_s})
+  assert_same(h, h.transform_values!{|v|v.to_s})
   assert_equal({a: "1", b: "2", c: "3"}, h)
 end
 
@@ -291,4 +287,11 @@ assert("Hash#slice") do
   h = { a: 100, b: 200, c: 300 }
   assert_equal({:a=>100}, h.slice(:a))
   assert_equal({:b=>200, :c=>300}, h.slice(:b, :c, :d))
+end
+
+assert("Hash#except") do
+  h = { a: 100, b: 200, c: 300 }
+  assert_equal({:b=>200, :c=>300}, h.except(:a))
+  assert_equal({:a=>100}, h.except(:b, :c, :d))
+  assert_equal(h, h.except)
 end

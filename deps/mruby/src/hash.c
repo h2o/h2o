@@ -4,576 +4,968 @@
 ** See Copyright Notice in mruby.h
 */
 
+#include <string.h>
 #include <mruby.h>
 #include <mruby/array.h>
 #include <mruby/class.h>
 #include <mruby/hash.h>
 #include <mruby/string.h>
 #include <mruby/variable.h>
+#include <mruby/presym.h>
 
-#ifndef MRB_WITHOUT_FLOAT
-/* a function to get hash value of a float number */
-mrb_int mrb_float_id(mrb_float f);
-#endif
+/*
+ * === Glossary
+ *
+ * [EA]
+ *   Entry Array. Store `Hash' entries in insertion order.
+ *
+ * [AR]
+ *   Array Table Implementation. The structure of `Hash` that doesn't have a
+ *   hash table and linearly searches EA. It is used when `Hash` size <= 16.
+ *
+ * [IB]
+ *   Index Buckets. The buckets of hash table, where the bucket value is EA
+ *   index. The index is represented by variable length bits according to
+ *   the capacity.
+ *
+ * [HT]
+ *   Hash Table Implementation. The structure of `Hash` that has IB and is
+ *   searched by hash table algorithm. It is used when `Hash` size > 16.
+ *   Collision resolution strategy is open addressing method.
+ *
+ * [size]
+ *   The number of `Hash` entries (value of `Hash#size`).
+ *
+ * [slot]
+ *   The generic term for EA or IB elements.
+ *
+ * [active]
+ *   The state in which a slot is recognized as a `Hash` entry.
+ *
+ * [deleted]
+ *   The state in which a slot is marked as deleted.
+ *
+ * [used]
+ *   The state in which a slot is active or deleted.
+ *
+ * [empty]
+ *   The state in which a slot is not used. Capacity is equal to the sum of
+ *   the number of used slots and the number of empty slots.
+ */
 
-#ifndef MRB_HT_INIT_SIZE
-#define MRB_HT_INIT_SIZE 4
-#endif
-#define HT_SEG_INCREASE_RATIO 6 / 5
+#define EA_N_RESERVED_INDICES 2  /* empty and deleted */
+#define EA_INCREASE_RATIO 6 / 5 + 6
+#define EA_MAX_INCREASE UINT16_MAX
+#define EA_MAX_CAPA U32(lesser(IB_MAX_CAPA - EA_N_RESERVED_INDICES, MRB_INT_MAX))
+#define IB_MAX_CAPA (U32(1) << IB_MAX_BIT)
+#define IB_TYPE_BIT 32
+#define IB_INIT_BIT (                                                         \
+  ib_upper_bound_for(32) <= AR_MAX_SIZE ? 6 :                                 \
+  ib_upper_bound_for(16) <= AR_MAX_SIZE ? 5 :                                 \
+  4                                                                           \
+)
+#define IB_MAX_BIT (IB_TYPE_BIT - 1)
+#define AR_DEFAULT_CAPA 4
+#define AR_MAX_SIZE 16
+#define H_MAX_SIZE EA_MAX_CAPA
 
-struct segkv {
+mrb_static_assert(offsetof(struct RHash, iv) == offsetof(struct RObject, iv));
+mrb_static_assert(AR_MAX_SIZE < (1 << MRB_HASH_AR_EA_CAPA_BIT));
+
+typedef struct hash_entry {
   mrb_value key;
   mrb_value val;
-};
+} hash_entry;
 
-typedef struct segment {
-  uint16_t size;
-  struct segment *next;
-  struct segkv e[];
-} segment;
+typedef struct hash_table {
+  hash_entry *ea;
+#ifdef MRB_32BIT
+  uint32_t ea_capa;
+  uint32_t ea_n_used;
+#endif
+  uint32_t ib[];
+} hash_table;
 
-typedef struct segindex {
-  size_t size;
-  size_t capa;
-  struct segkv *table[];
-} segindex;
+typedef struct index_buckets_iter {
+  struct RHash *h;
+  uint32_t bit;
+  uint32_t mask;
+  uint32_t pos;
+  uint32_t ary_index;
+  uint32_t ea_index;
+  uint32_t shift1;
+  uint32_t shift2;
+  uint32_t step;
+} index_buckets_iter;
 
-/* hash table structure */
-typedef struct htable {
-  segment *rootseg;
-  segment *lastseg;
-  mrb_int size;
-  uint16_t last_len;
-  segindex *index;
-} htable;
+/*
+ * `c_` :: receiver class (category)
+ * `n_` :: attribute name
+ * `t_` :: attribute type
+ * `p_` :: struct member path
+ * `k_` :: macro key
+ */
+#define DEFINE_GETTER(c_, n_, t_, p_)                                         \
+  MRB_INLINE t_ c_##_##n_(const struct RHash *h) {return h->p_;}
+#define DEFINE_SETTER(c_, n_, t_, p_)                                         \
+  MRB_INLINE void c_##_set_##n_(struct RHash *h, t_ v) {h->p_ = v;}
+#define DEFINE_ACCESSOR(c_, n_, t_, p_)                                       \
+  DEFINE_GETTER(c_, n_, t_, p_)                                               \
+  DEFINE_SETTER(c_, n_, t_, p_)
+#define DEFINE_FLAG_GETTER(c_, n_, t_, k_)                                    \
+  MRB_INLINE t_ c_##_##n_(const struct RHash *h) {                            \
+    return (t_)((h->flags & MRB_HASH_##k_##_MASK) >> MRB_HASH_##k_##_SHIFT);  \
+  }
+#define DEFINE_FLAG_SETTER(c_, n_, t_, k_)                                    \
+  MRB_INLINE void c_##_set_##n_(struct RHash *h, t_ v) {                      \
+    h->flags &= ~MRB_HASH_##k_##_MASK;                                        \
+    h->flags |= v << MRB_HASH_##k_##_SHIFT;                                   \
+  }
+#define DEFINE_FLAG_ACCESSOR(c_, n_, t_, k_)                                  \
+  DEFINE_FLAG_GETTER(c_, n_, t_, k_)                                          \
+  DEFINE_FLAG_SETTER(c_, n_, t_, k_)
+#define DEFINE_INCREMENTER(c_, n_)                                            \
+  MRB_INLINE void c_##_inc_##n_(struct RHash *h) {                            \
+    c_##_set_##n_(h, c_##_##n_(h) + 1);                                       \
+  }
+#define DEFINE_DECREMENTER(c_, n_)                                            \
+  MRB_INLINE void c_##_dec_##n_(struct RHash *h) {                            \
+    c_##_set_##n_(h, c_##_##n_(h) - 1);                                       \
+  }
+#define DEFINE_SWITCHER(n_, k_)                                               \
+  MRB_INLINE void h_##n_##_on(struct RHash *h) {                              \
+    h->flags |= MRB_HASH_##k_;                                                \
+  }                                                                           \
+  MRB_INLINE void h_##n_##_off(struct RHash *h) {                             \
+    h->flags &= ~MRB_HASH_##k_;                                               \
+  }                                                                           \
+  MRB_INLINE mrb_bool h_##n_##_p(const struct RHash *h) {                     \
+    return (h->flags & MRB_HASH_##k_) == MRB_HASH_##k_;                       \
+  }
 
-static /* inline */ size_t
-ht_hash_func(mrb_state *mrb, htable *t, mrb_value key)
+#ifdef MRB_64BIT
+DEFINE_ACCESSOR(ar, ea_capa, uint32_t, ea_capa)
+DEFINE_ACCESSOR(ar, ea_n_used, uint32_t, ea_n_used)
+DEFINE_ACCESSOR(ht, ea_capa, uint32_t, ea_capa)
+DEFINE_ACCESSOR(ht, ea_n_used, uint32_t, ea_n_used)
+#else
+DEFINE_FLAG_ACCESSOR(ar, ea_capa, uint32_t, AR_EA_CAPA)
+DEFINE_FLAG_ACCESSOR(ar, ea_n_used, uint32_t, AR_EA_N_USED)
+DEFINE_ACCESSOR(ht, ea_capa, uint32_t, hsh.ht->ea_capa)
+DEFINE_ACCESSOR(ht, ea_n_used, uint32_t, hsh.ht->ea_n_used)
+#endif
+DEFINE_FLAG_ACCESSOR(ib, bit, uint32_t, IB_BIT)
+DEFINE_ACCESSOR(ar, size, uint32_t, size)
+DEFINE_ACCESSOR(ar, ea, hash_entry*, hsh.ea)
+DEFINE_DECREMENTER(ar, size)
+DEFINE_ACCESSOR(ht, size, uint32_t, size)
+DEFINE_ACCESSOR(ht, ea, hash_entry*, hsh.ht->ea)
+DEFINE_GETTER(ht, ib, uint32_t*, hsh.ht->ib)
+DEFINE_INCREMENTER(ht, size)
+DEFINE_DECREMENTER(ht, size)
+DEFINE_GETTER(h, size, uint32_t, size)
+DEFINE_ACCESSOR(h, ht, hash_table*, hsh.ht)
+DEFINE_SWITCHER(ht, HT)
+
+#define ea_each_used(ea, n_used, entry_var, code) do {                        \
+  hash_entry *entry_var = ea, *ea_end__ = entry_var + (n_used);               \
+  for (; entry_var < ea_end__; ++entry_var) {                                 \
+    code;                                                                     \
+  }                                                                           \
+} while (0)
+
+#define ea_each(ea, size, entry_var, code) do {                               \
+  hash_entry *entry_var = ea;                                                 \
+  uint32_t size__ = size;                                                     \
+  for (; 0 < size__; ++entry_var) {                                           \
+    if (entry_deleted_p(entry_var)) continue;                                 \
+    --size__;                                                                 \
+    code;                                                                     \
+  }                                                                           \
+} while (0)
+
+#define ib_cycle_by_key(mrb, h, key, it_var, code) do {                       \
+  index_buckets_iter it_var[1];                                               \
+  ib_it_init(mrb, it_var, h, key);                                            \
+  for (;;) {                                                                  \
+    ib_it_next(it_var);                                                       \
+    code;                                                                     \
+  }                                                                           \
+} while (0)
+
+#define ib_find_by_key(mrb, h_, key_, it_var, code) do {                      \
+  mrb_value ib_fbk_key__ = key_;                                              \
+  ib_cycle_by_key(mrb, h_, ib_fbk_key__, it_var, {                            \
+    if (ib_it_empty_p(it_var)) break;                                         \
+    if (ib_it_deleted_p(it_var)) continue;                                    \
+    if (obj_eql(mrb, ib_fbk_key__, ib_it_entry(it_var)->key, it_var->h)) {    \
+      code;                                                                   \
+      break;                                                                  \
+    }                                                                         \
+  });                                                                         \
+} while (0)
+
+#define h_each(h, entry_var, code) do {                                       \
+  struct RHash *h__ = h;                                                      \
+  hash_entry *h_e_ea__;                                                       \
+  uint32_t h_e_size__;                                                        \
+  h_ar_p(h) ? (h_e_ea__ = ar_ea(h__), h_e_size__ = ar_size(h__)) :            \
+              (h_e_ea__ = ht_ea(h__), h_e_size__ = ht_size(h__));             \
+  ea_each(h_e_ea__, h_e_size__, entry_var, code);                             \
+} while (0)
+
+/*
+ * In `h_check_modified()`, in the case of `MRB_NO_BOXING`, `ht_ea()` or
+ * `ht_ea_capa()` for AR may read uninitialized area (#5332). Therefore, do
+ * not use those macros for AR in `MRB_NO_BOXING` (but in the case of
+ * `MRB_64BIT`, `ht_ea_capa()` is the same as `ar_ea_capa()`, so use it).
+ */
+#ifdef MRB_NO_BOXING
+# define H_CHECK_MODIFIED_USE_HT_EA_FOR_AR FALSE
+# ifdef MRB_64BIT
+#  define H_CHECK_MODIFIED_USE_HT_EA_CAPA_FOR_AR TRUE
+# else
+#  define H_CHECK_MODIFIED_USE_HT_EA_CAPA_FOR_AR FALSE
+# endif  /* MRB_64BIT */
+#else
+# define H_CHECK_MODIFIED_USE_HT_EA_FOR_AR TRUE
+# define H_CHECK_MODIFIED_USE_HT_EA_CAPA_FOR_AR TRUE
+ /*
+  * `h_check_modified` raises an exception when a dangerous modification is
+  * made to `h` by executing `code`.
+  *
+  * `h_check_modified` macro is not called if `h->hsh.ht` (`h->hsh.ea`) is `NULL`
+  * (`Hash` size is zero). And because the `hash_entry` is rather large,
+  * `h->hsh.ht->ea` and `h->hsh.ht->ea_capa` are able to be safely accessed even for
+  * AR. This nature is used to eliminate branch of AR or HT.
+  *
+  * `HT_ASSERT_SAFE_READ` checks if members can be accessed according to its
+  * assumptions.
+  */
+# define HT_ASSERT_SAFE_READ(attr_name)                                       \
+  mrb_static_assert(                                                          \
+    offsetof(hash_table, attr_name) + sizeof(((hash_table*)0)->attr_name) <=  \
+    sizeof(hash_entry))
+HT_ASSERT_SAFE_READ(ea);
+# ifdef MRB_32BIT
+HT_ASSERT_SAFE_READ(ea_capa);
+# endif
+# undef HT_ASSERT_SAFE_READ
+#endif  /* MRB_NO_BOXING */
+
+/*
+ * `h_check_modified` raises an exception when a dangerous modification is
+ * made to `h` by executing `code`.
+ */
+#define h_check_modified(mrb, h, code) do {                                     \
+  struct RHash *h__ = h;                                                        \
+  uint32_t mask__ = MRB_HASH_HT|MRB_HASH_IB_BIT_MASK|MRB_HASH_AR_EA_CAPA_MASK;  \
+  uint32_t flags__ = h__->flags & mask__;                                       \
+  void* tbl__ = (mrb_assert(h__->hsh.ht), h__->hsh.ht);                         \
+  uint32_t ht_ea_capa__ = 0;                                                    \
+  hash_entry *ht_ea__ = NULL;                                                   \
+  if (H_CHECK_MODIFIED_USE_HT_EA_CAPA_FOR_AR || h_ht_p(h__)) {                  \
+    ht_ea_capa__ = ht_ea_capa(h__);                                             \
+  }                                                                             \
+  if (H_CHECK_MODIFIED_USE_HT_EA_FOR_AR || h_ht_p(h__)) {                       \
+    ht_ea__ = ht_ea(h__);                                                       \
+  }                                                                             \
+  code;                                                                         \
+  if (flags__ != (h__->flags & mask__) ||                                       \
+      tbl__ != h__->hsh.ht ||                                                       \
+      ((H_CHECK_MODIFIED_USE_HT_EA_CAPA_FOR_AR || h_ht_p(h__)) &&               \
+       ht_ea_capa__ != ht_ea_capa(h__)) ||                                      \
+      ((H_CHECK_MODIFIED_USE_HT_EA_FOR_AR || h_ht_p(h__)) &&                    \
+       ht_ea__ != ht_ea(h__))) {                                                \
+    mrb_raise(mrb, E_RUNTIME_ERROR, "hash modified");                           \
+  }                                                                             \
+} while (0)
+
+#define U32(v) ((uint32_t)(v))
+#define h_ar_p(h) (!h_ht_p(h))
+#define h_ar_on(h) h_ht_off(h)
+#define lesser(a, b) ((a) < (b) ? (a) : (b))
+#define RHASH_IFNONE(hash) mrb_iv_get(mrb, (hash), MRB_SYM(ifnone))
+#define RHASH_PROCDEFAULT(hash) RHASH_IFNONE(hash)
+
+static uint32_t ib_upper_bound_for(uint32_t capa);
+static uint32_t ib_bit_to_capa(uint32_t bit);
+static void ht_init(
+  mrb_state *mrb, struct RHash *h, uint32_t size,
+  hash_entry *ea, uint32_t ea_capa, hash_table *ht, uint32_t ib_bit);
+static void ht_set_without_ib_adjustment(
+  mrb_state *mrb, struct RHash *h, mrb_value key, mrb_value val);
+
+static uint32_t
+next_power2(uint32_t v)
+{
+  mrb_assert(v != 0);
+#ifdef __GNUC__
+  return U32(1) << ((sizeof(unsigned) * CHAR_BIT) - __builtin_clz(v));
+#else
+  v |= v >> 1;
+  v |= v >> 2;
+  v |= v >> 4;
+  v |= v >> 8;
+  v |= v >> 16;
+  ++v;
+  return v;
+#endif
+}
+
+static uint32_t
+obj_hash_code(mrb_state *mrb, mrb_value key, struct RHash *h)
 {
   enum mrb_vtype tt = mrb_type(key);
-  mrb_value hv;
-  size_t h;
-  segindex *index = t->index;
-  size_t capa = index ? index->capa : 0;
-
+  uint32_t hash_code;
+  mrb_value hash_code_obj;
   switch (tt) {
   case MRB_TT_STRING:
-    h = mrb_str_hash(mrb, key);
+    hash_code = mrb_str_hash(mrb, key);
     break;
-
   case MRB_TT_TRUE:
   case MRB_TT_FALSE:
   case MRB_TT_SYMBOL:
-  case MRB_TT_FIXNUM:
-#ifndef MRB_WITHOUT_FLOAT
+    hash_code = U32(mrb_fixnum(key));
+    break;
+  case MRB_TT_INTEGER:
+    if (mrb_fixnum_p(key)) {
+      hash_code = U32(mrb_fixnum(key));
+      break;
+    }
+#ifndef MRB_NO_FLOAT
+    /* fall through */
   case MRB_TT_FLOAT:
 #endif
-    h = (size_t)mrb_obj_id(key);
+    hash_code = U32(mrb_obj_id(key));
     break;
-
   default:
-    hv = mrb_funcall(mrb, key, "hash", 0);
-    h = (size_t)t ^ (size_t)mrb_fixnum(hv);
+    h_check_modified(mrb, h, {
+      hash_code_obj = mrb_funcall_argv(mrb, key, MRB_SYM(hash), 0, NULL);
+    });
+
+    hash_code = U32(tt) ^ U32(mrb_integer(hash_code_obj));
     break;
   }
-  if (index && (index != t->index || capa != index->capa)) {
-    mrb_raise(mrb, E_RUNTIME_ERROR, "hash modified");
-  }
-  return ((h)^((h)<<2)^((h)>>2));
+  return hash_code ^ (hash_code << 2) ^ (hash_code >> 2);
 }
 
-static inline mrb_bool
-ht_hash_equal(mrb_state *mrb, htable *t, mrb_value a, mrb_value b)
+static mrb_bool
+obj_eql(mrb_state *mrb, mrb_value a, mrb_value b, struct RHash *h)
 {
   enum mrb_vtype tt = mrb_type(a);
+  mrb_bool eql;
 
   switch (tt) {
   case MRB_TT_STRING:
     return mrb_str_equal(mrb, a, b);
 
   case MRB_TT_SYMBOL:
-    if (mrb_type(b) != MRB_TT_SYMBOL) return FALSE;
+    if (!mrb_symbol_p(b)) return FALSE;
     return mrb_symbol(a) == mrb_symbol(b);
 
-  case MRB_TT_FIXNUM:
-    switch (mrb_type(b)) {
-    case MRB_TT_FIXNUM:
-      return mrb_fixnum(a) == mrb_fixnum(b);
-#ifndef MRB_WITHOUT_FLOAT
-    case MRB_TT_FLOAT:
-      return (mrb_float)mrb_fixnum(a) == mrb_float(b);
-#endif
-    default:
-      return FALSE;
-    }
+  case MRB_TT_INTEGER:
+    if (!mrb_integer_p(b)) return FALSE;
+    return mrb_integer(a) == mrb_integer(b);
 
-#ifndef MRB_WITHOUT_FLOAT
+#ifndef MRB_NO_FLOAT
   case MRB_TT_FLOAT:
-    switch (mrb_type(b)) {
-    case MRB_TT_FIXNUM:
-      return mrb_float(a) == (mrb_float)mrb_fixnum(b);
-    case MRB_TT_FLOAT:
-      return mrb_float(a) == mrb_float(b);
-    default:
-      return FALSE;
-    }
+    if (!mrb_float_p(b)) return FALSE;
+    return mrb_float(a) == mrb_float(b);
 #endif
 
   default:
-    {
-      segindex *index = t->index;
-      size_t capa = index ? index->capa : 0;
-      mrb_bool eql = mrb_eql(mrb, a, b);
-      if (index && (index != t->index || capa != index->capa)) {
-        mrb_raise(mrb, E_RUNTIME_ERROR, "hash modified");
-      }
-      return eql;
-    }
-  } 
+    h_check_modified(mrb, h, {eql = mrb_eql(mrb, a, b);});
+    return eql;
+  }
 }
 
-/* Creates the hash table. */
-static htable*
-ht_new(mrb_state *mrb)
+static mrb_bool
+entry_deleted_p(const hash_entry* entry)
 {
-  htable *t;
-
-  t = (htable*)mrb_malloc(mrb, sizeof(htable));
-  t->size = 0;
-  t->rootseg =  NULL;
-  t->lastseg =  NULL;
-  t->last_len = 0;
-  t->index = NULL;
-
-  return t;
+  return mrb_undef_p(entry->key);
 }
 
-#define power2(v) do { \
-  v--;\
-  v |= v >> 1;\
-  v |= v >> 2;\
-  v |= v >> 4;\
-  v |= v >> 8;\
-  v |= v >> 16;\
-  v++;\
-} while (0)
-
-#ifndef UPPER_BOUND
-#define UPPER_BOUND(x) ((x)>>2|(x)>>1)
-#endif
-
-#define HT_MASK(index) ((index->capa)-1)
-
-/* Build index for the hash table */
 static void
-ht_index(mrb_state *mrb, htable *t)
+entry_delete(hash_entry* entry)
 {
-  size_t size = (size_t)t->size;
-  size_t mask;
-  segindex *index = t->index;
-  segment *seg;
-  size_t i;
+  entry->key = mrb_undef_value();
+}
 
-  /* allocate index table */
-  if (index && index->size >= UPPER_BOUND(index->capa)) {
-    size = index->capa+1;
+static uint32_t
+ea_next_capa_for(uint32_t size, uint32_t max_capa)
+{
+  if (size < AR_DEFAULT_CAPA) {
+    return AR_DEFAULT_CAPA;
   }
-  power2(size);
-  if (!index || index->capa < size) {
-    index = (segindex*)mrb_realloc_simple(mrb, index, sizeof(segindex)+sizeof(struct segkv*)*size);
-    if (index == NULL) {
-      mrb_free(mrb, index);
-      t->index = NULL;
-      return;
-    }
-    t->index = index;
-  }
-  index->size = t->size;
-  index->capa = size;
-  for (i=0; i<size; i++) {
-    index->table[i] = NULL;
-  }
-
-  /* rebuld index */
-  mask = HT_MASK(index);
-  seg = t->rootseg;
-  while (seg) {
-    for (i=0; i<seg->size; i++) {
-      mrb_value key;
-      size_t k, step = 0;
-
-      if (!seg->next && i >= (size_t)t->last_len) {
-        return;
-      }
-      key = seg->e[i].key;
-      if (mrb_undef_p(key)) continue;
-      k = ht_hash_func(mrb, t, key) & mask;
-      while (index->table[k]) {
-        k = (k+(++step)) & mask;
-      }
-      index->table[k] = &seg->e[i];
-    }
-    seg = seg->next;
+  else {
+    /*
+     * For 32-bit CPU, the theoretical value of maximum EA capacity is
+     * `UINT32_MAX / sizeof (hash_entry)`. At this time, if
+     * `EA_INCREASE_RATIO` is the current value, 32-bit range will not be
+     * exceeded during the calculation of `capa`, so `size_t` is used.
+     */
+    size_t capa = (size_t)size * EA_INCREASE_RATIO, inc = capa - size;
+    if (EA_MAX_INCREASE < inc) capa = size + EA_MAX_INCREASE;
+    return capa <= max_capa ? U32(capa) : max_capa;
   }
 }
 
-/* Compacts the hash table removing deleted entries. */
-static void
-ht_compact(mrb_state *mrb, htable *t)
+static hash_entry*
+ea_resize(mrb_state *mrb, hash_entry *ea, uint32_t capa)
 {
-  segment *seg;
-  mrb_int i;
-  segment *seg2 = NULL;
-  mrb_int i2;
-  mrb_int size = 0;
+  return (hash_entry*)mrb_realloc(mrb, ea, sizeof(hash_entry) * capa);
+}
 
-  if (t == NULL) return;
-  seg = t->rootseg;
-  if (t->index && (size_t)t->size == t->index->size) {
-    ht_index(mrb, t);
-    return;
+static void
+ea_compress(hash_entry *ea, uint32_t n_used)
+{
+  hash_entry *w_entry = ea;
+  ea_each_used(ea, n_used, r_entry, {
+    if (entry_deleted_p(r_entry)) continue;
+    if (r_entry != w_entry) *w_entry = *r_entry;
+    ++w_entry;
+  });
+}
+
+/*
+ * Increase or decrease capacity of `ea` to a standard size that can
+ * accommodate `*capap + 1` entries (but, not exceed `max_capa`). Set the
+ * changed capacity to `*capap` and return a pointer to `mrb_realloc`ed EA.
+ */
+static hash_entry*
+ea_adjust(mrb_state *mrb, hash_entry *ea, uint32_t *capap, uint32_t max_capa)
+{
+  *capap = ea_next_capa_for(*capap, max_capa);
+  return ea_resize(mrb, ea, *capap);
+}
+
+static hash_entry*
+ea_dup(mrb_state *mrb, const hash_entry *ea, uint32_t capa)
+{
+  size_t byte_size = sizeof(hash_entry) * capa;
+  hash_entry *new_ea = (hash_entry*)mrb_malloc(mrb, byte_size);
+  return (hash_entry*)memcpy(new_ea, ea, byte_size);
+}
+
+static hash_entry*
+ea_get_by_key(mrb_state *mrb, hash_entry *ea, uint32_t size, mrb_value key,
+              struct RHash *h)
+{
+  ea_each(ea, size, entry, {
+    if (obj_eql(mrb, key, entry->key, h)) return entry;
+  });
+  return NULL;
+}
+
+static hash_entry*
+ea_get(hash_entry *ea, uint32_t index)
+{
+  return &ea[index];
+}
+
+static void
+ea_set(hash_entry *ea, uint32_t index, mrb_value key, mrb_value val)
+{
+  ea[index].key = key;
+  ea[index].val = val;
+}
+
+static void
+ar_init(struct RHash *h, uint32_t size,
+        hash_entry *ea, uint32_t ea_capa, uint32_t ea_n_used)
+{
+  h_ar_on(h);
+  ar_set_size(h, size);
+  ar_set_ea(h, ea);
+  ar_set_ea_capa(h, ea_capa);
+  ar_set_ea_n_used(h, ea_n_used);
+}
+
+static void
+ar_free(mrb_state *mrb, struct RHash *h)
+{
+  mrb_free(mrb, ar_ea(h));
+}
+
+static void
+ar_adjust_ea(mrb_state *mrb, struct RHash *h, uint32_t size, uint32_t max_ea_capa)
+{
+  uint32_t ea_capa = size;
+  hash_entry *ea = ea_adjust(mrb, ar_ea(h), &ea_capa, max_ea_capa);
+  ar_set_ea(h, ea);
+  ar_set_ea_capa(h, ea_capa);
+}
+
+static void
+ar_compress(mrb_state *mrb, struct RHash *h)
+{
+  uint32_t size = ar_size(h);
+  ea_compress(ar_ea(h), ar_ea_n_used(h));
+  ar_set_ea_n_used(h, size);
+  ar_adjust_ea(mrb, h, size, lesser(ar_ea_capa(h), AR_MAX_SIZE));
+}
+
+static mrb_bool
+ar_get(mrb_state *mrb, struct RHash *h, mrb_value key, mrb_value *valp)
+{
+  ea_each(ar_ea(h), ar_size(h), entry, {
+    if (!obj_eql(mrb, key, entry->key, h)) continue;
+    *valp = entry->val;
+    return TRUE;
+  });
+  return FALSE;
+}
+
+static void
+ar_set(mrb_state *mrb, struct RHash *h, mrb_value key, mrb_value val)
+{
+  uint32_t size = ar_size(h);
+  hash_entry *entry;
+  if ((entry = ea_get_by_key(mrb, ar_ea(h), size, key, h))) {
+    entry->val = val;
   }
-  while (seg) {
-    for (i=0; i<seg->size; i++) {
-      mrb_value k = seg->e[i].key;
-
-      if (!seg->next && i >= t->last_len) {
-        goto exit;
-      }
-      if (mrb_undef_p(k)) {     /* found delete key */
-        if (seg2 == NULL) {
-          seg2 = seg;
-          i2 = i;
+  else {
+    uint32_t ea_capa = ar_ea_capa(h), ea_n_used = ar_ea_n_used(h);
+    if (ea_capa == ea_n_used) {
+      if (size == ea_n_used) {
+        if (size == AR_MAX_SIZE) {
+          hash_entry *ea = ea_adjust(mrb, ar_ea(h), &ea_capa, EA_MAX_CAPA);
+          ea_set(ea, ea_n_used, key, val);
+          ht_init(mrb, h, ++size, ea, ea_capa, NULL, IB_INIT_BIT);
+          return;
+        }
+        else {
+          ar_adjust_ea(mrb, h, size, AR_MAX_SIZE);
         }
       }
       else {
-        size++;
-        if (seg2 != NULL) {
-          seg2->e[i2++] = seg->e[i];
-          if (i2 >= seg2->size) {
-            seg2 = seg2->next;
-            i2 = 0;
-          }
-        }
+        ar_compress(mrb, h);
+        ea_n_used = size;
       }
     }
-    seg = seg->next;
-  }
- exit:
-  /* reached at end */
-  t->size = size;
-  if (seg2) {
-    seg = seg2->next;
-    seg2->next = NULL;
-    t->last_len = i2;
-    t->lastseg = seg2;
-    while (seg) {
-      seg2 = seg->next;
-      mrb_free(mrb, seg);
-      seg = seg2;
-    }
-  }
-  if (t->index) {
-    ht_index(mrb, t);
+    ea_set(ar_ea(h), ea_n_used, key, val);
+    ar_set_size(h, ++size);
+    ar_set_ea_n_used(h, ++ea_n_used);
   }
 }
 
-static segment*
-segment_alloc(mrb_state *mrb, segment *seg)
+static mrb_bool
+ar_delete(mrb_state *mrb, struct RHash *h, mrb_value key, mrb_value *valp)
 {
-  uint32_t size;
-
-  if (!seg) size = MRB_HT_INIT_SIZE;
-  else {
-    size = seg->size*HT_SEG_INCREASE_RATIO + 1;
-    if (size > UINT16_MAX) size = UINT16_MAX;
-  }
-
-  seg = (segment*)mrb_malloc(mrb, sizeof(segment)+sizeof(struct segkv)*size);
-  seg->size = size;
-  seg->next = NULL;
-
-  return seg;
+  hash_entry *entry = ea_get_by_key(mrb, ar_ea(h), ar_size(h), key, h);
+  if (!entry) return FALSE;
+  *valp = entry->val;
+  entry_delete(entry);
+  ar_dec_size(h);
+  return TRUE;
 }
 
-/* Set the value for the key in the indexed table. */
 static void
-ht_index_put(mrb_state *mrb, htable *t, mrb_value key, mrb_value val)
+ar_shift(mrb_state *mrb, struct RHash *h, mrb_value *keyp, mrb_value *valp)
 {
-  segindex *index = t->index;
-  size_t k, sp, step = 0, mask;
-  segment *seg;
-
-  if (index->size >= UPPER_BOUND(index->capa)) {
-    /* need to expand table */
-    ht_compact(mrb, t);
-    index = t->index;
-  }
-  mask = HT_MASK(index);
-  sp = index->capa;
-  k = ht_hash_func(mrb, t, key) & mask;
-  while (index->table[k]) {
-    mrb_value key2 = index->table[k]->key;
-    if (mrb_undef_p(key2)) {
-      if (sp == index->capa) sp = k;
-    }
-    else if (ht_hash_equal(mrb, t, key, key2)) {
-      index->table[k]->val = val;
-      return;
-    }
-    k = (k+(++step)) & mask;
-  }
-  if (sp < index->capa) {
-    k = sp;
-  }
-
-  /* put the value at the last */
-  seg = t->lastseg;
-  if (t->last_len < seg->size) {
-    index->table[k] = &seg->e[t->last_len++];
-  }
-  else {                        /* append a new segment */
-    seg->next = segment_alloc(mrb, seg);
-    seg = seg->next;
-    seg->next = NULL;
-    t->lastseg = seg;
-    t->last_len = 1;
-    index->table[k] = &seg->e[0];
-  }
-  index->table[k]->key = key;
-  index->table[k]->val = val;
-  index->size++;
-  t->size++;
-}
-
-/* Set the value for the key in the hash table. */
-static void
-ht_put(mrb_state *mrb, htable *t, mrb_value key, mrb_value val)
-{
-  segment *seg;
-  mrb_int i, deleted = 0;
-
-  if (t == NULL) return;
-  if (t->index) {
-    ht_index_put(mrb, t, key, val);
+  uint32_t size = ar_size(h);
+  ea_each(ar_ea(h), size, entry, {
+    *keyp = entry->key;
+    *valp = entry->val;
+    entry_delete(entry);
+    ar_set_size(h, --size);
     return;
-  }
-  seg = t->rootseg;
-  while (seg) {
-    for (i=0; i<seg->size; i++) {
-      mrb_value k = seg->e[i].key;
-      /* Found room in last segment after last_len */
-      if (!seg->next && i >= t->last_len) {
-        seg->e[i].key = key;
-        seg->e[i].val = val;
-        t->last_len = i+1;
-        t->size++;
-        return;
-      }
-      if (mrb_undef_p(k)) {
-        deleted++;
-        continue;
-      }
-      if (ht_hash_equal(mrb, t, k, key)) {
-        seg->e[i].val = val;
-        return;
-      }
-    }
-    seg = seg->next;
-  }
-  /* Not found */
+  });
+}
 
-  /* Compact if last segment has room */
-  if (deleted > 0 && deleted > MRB_HT_INIT_SIZE) {
-    ht_compact(mrb, t);
-  }
-  t->size++;
-
-  /* check if thre's room after compaction */
-  if (t->lastseg && t->last_len < t->lastseg->size) {
-    seg = t->lastseg;
-    i = t->last_len;
-  }
-  else {
-    /* append new segment */
-    seg = segment_alloc(mrb, t->lastseg);
-    i = 0;
-    if (t->rootseg == NULL) {
-      t->rootseg = seg;
+static void
+ar_rehash(mrb_state *mrb, struct RHash *h)
+{
+  /* see comments in `h_rehash` */
+  uint32_t size = ar_size(h), w_size = 0, ea_capa = ar_ea_capa(h);
+  hash_entry *ea = ar_ea(h), *w_entry;
+  ea_each(ea, size, r_entry, {
+    if ((w_entry = ea_get_by_key(mrb, ea, w_size, r_entry->key, h))) {
+      w_entry->val = r_entry->val;
+      ar_set_size(h, --size);
+      entry_delete(r_entry);
     }
     else {
-      t->lastseg->next = seg;
+      if (w_size != U32(r_entry - ea)) {
+        ea_set(ea, w_size, r_entry->key, r_entry->val);
+        entry_delete(r_entry);
+      }
+      ++w_size;
     }
-    t->lastseg = seg;
-  }
-  seg->e[i].key = key;
-  seg->e[i].val = val;
-  t->last_len = i+1;
-  if (t->index == NULL && t->size > MRB_HT_INIT_SIZE*4) {
-    ht_index(mrb, t);
-  }
+  });
+  mrb_assert(size == w_size);
+  ar_set_ea_n_used(h, size);
+  ar_adjust_ea(mrb, h, size, ea_capa);
 }
 
-/* Get a value for a key from the indexed table. */
-static mrb_bool
-ht_index_get(mrb_state *mrb, htable *t, mrb_value key, mrb_value *vp)
+static uint32_t
+ib_it_pos_for(index_buckets_iter *it, uint32_t v)
 {
-  segindex *index = t->index;
-  size_t mask = HT_MASK(index);
-  size_t k = ht_hash_func(mrb, t, key) & mask;
-  size_t step = 0;
-
-  while (index->table[k]) {
-    mrb_value key2 = index->table[k]->key;
-    if (!mrb_undef_p(key2) && ht_hash_equal(mrb, t, key, key2)) {
-      if (vp) *vp = index->table[k]->val;
-      return TRUE;
-    }
-    k = (k+(++step)) & mask;
-  }
-  return FALSE;
+  return v & it->mask;
 }
 
-/* Get a value for a key from the hash table. */
-static mrb_bool
-ht_get(mrb_state *mrb, htable *t, mrb_value key, mrb_value *vp)
+static uint32_t
+ib_it_empty_value(const index_buckets_iter *it)
 {
-  segment *seg;
-  mrb_int i;
-
-  if (t == NULL) return FALSE;
-  if (t->index) {
-    return ht_index_get(mrb, t, key, vp);
-  }
-
-  seg = t->rootseg;
-  while (seg) {
-    for (i=0; i<seg->size; i++) {
-      mrb_value k = seg->e[i].key;
-
-      if (!seg->next && i >= t->last_len) {
-        return FALSE;
-      }
-      if (mrb_undef_p(k)) continue;
-      if (ht_hash_equal(mrb, t, k, key)) {
-        if (vp) *vp = seg->e[i].val;
-        return TRUE;
-      }
-    }
-    seg = seg->next;
-  }
-  return FALSE;
+  return it->mask;
 }
 
-/* Deletes the value for the symbol from the hash table. */
-/* Deletion is done by overwriting keys by `undef`. */
-static mrb_bool
-ht_del(mrb_state *mrb, htable *t, mrb_value key, mrb_value *vp)
+static uint32_t
+ib_it_deleted_value(const index_buckets_iter *it)
 {
-  segment *seg;
-  mrb_int i;
-
-  if (t == NULL) return FALSE;
-  seg = t->rootseg;
-  while (seg) {
-    for (i=0; i<seg->size; i++) {
-      mrb_value key2;
-
-      if (!seg->next && i >= t->last_len) {
-        /* not found */
-        return FALSE;
-      }
-      key2 = seg->e[i].key;
-      if (!mrb_undef_p(key2) && ht_hash_equal(mrb, t, key, key2)) {
-        if (vp) *vp = seg->e[i].val;
-        seg->e[i].key = mrb_undef_value();
-        t->size--;
-        return TRUE;
-      }
-    }
-    seg = seg->next;
-  }
-  return FALSE;
+  return it->mask - 1;
 }
 
-/* Iterates over the hash table. */
+static mrb_bool
+ib_it_empty_p(const index_buckets_iter *it)
+{
+  return it->ea_index == ib_it_empty_value(it);
+}
+
+static mrb_bool
+ib_it_deleted_p(const index_buckets_iter *it)
+{
+  return it->ea_index == ib_it_deleted_value(it);
+}
+
+static mrb_bool
+ib_it_active_p(const index_buckets_iter *it)
+{
+  return it->ea_index < ib_it_deleted_value(it);
+}
+
 static void
-ht_foreach(mrb_state *mrb, htable *t, mrb_hash_foreach_func *func, void *p)
+ib_it_init(mrb_state *mrb, index_buckets_iter *it, struct RHash *h, mrb_value key)
 {
-  segment *seg;
-  mrb_int i;
-
-  if (t == NULL) return;
-  seg = t->rootseg;
-  while (seg) {
-    for (i=0; i<seg->size; i++) {
-      /* no value in last segment after last_len */
-      if (!seg->next && i >= t->last_len) {
-        return;
-      }
-      if (mrb_undef_p(seg->e[i].key)) continue;
-      if ((*func)(mrb, seg->e[i].key, seg->e[i].val, p) != 0)
-        return;
-    }
-    seg = seg->next;
-  }
+  it->h = h;
+  it->bit = ib_bit(h);
+  it->mask = ib_bit_to_capa(it->bit) - 1;
+  it->pos = ib_it_pos_for(it, obj_hash_code(mrb, key, h));
+  it->step = 0;
 }
 
-/* Iterates over the hash table. */
-MRB_API void
-mrb_hash_foreach(mrb_state *mrb, struct RHash *hash, mrb_hash_foreach_func *func, void *p)
-{
-  ht_foreach(mrb, hash->ht, func, p);
-}
-
-/* Copy the hash table. */
-static htable*
-ht_copy(mrb_state *mrb, htable *t)
-{
-  segment *seg;
-  htable *t2;
-  mrb_int i;
-
-  seg = t->rootseg;
-  t2 = ht_new(mrb);
-  if (t->size == 0) return t2;
-
-  while (seg) {
-    for (i=0; i<seg->size; i++) {
-      mrb_value key = seg->e[i].key;
-      mrb_value val = seg->e[i].val;
-
-      if ((seg->next == NULL) && (i >= t->last_len)) {
-        return t2;
-      }
-      ht_put(mrb, t2, key, val);
-    }
-    seg = seg->next;
-  }
-  return t2;
-}
-
-/* Free memory of the hash table. */
 static void
-ht_free(mrb_state *mrb, htable *t)
+ib_it_next(index_buckets_iter *it)
 {
-  segment *seg;
+  /*
+   * [IB image]
+   *
+   *                  ary_index(1) --.
+   *                                  \          .-- shift1(3)  .-- shift2(29)
+   *                     pos(6) --.    \        /              /
+   *  View    |                    \    \    <-o-> <----------o---------->
+   * -------- +---------------------\----\--+-----------------------------+-----
+   *  array   |               0      `--. `-|--- o          1             | ...
+   *          +---------+---------+-----+\--+-----+---------+---------+---+-----
+   *  buckets |    0    |    1    | ... | o  6    |    7    |    8    |     ...
+   *          +---------+---------+-----+=========+---------+---------+---------
+   *  bit set |1 1 1 0 0|0 0 0 1 1| ... |0 1 0 1 1|0 1 1 1 0|0 1 0 1 0|     ...
+   *          +---------+---------+-----+========*+---------+---------+---------
+   *           <---o--->                          \
+   *                \                              `-- bit_pos(34)
+   *                 `-- bit(5)
+   */
 
-  if (!t) return;
-  seg = t->rootseg;
-  while (seg) {
-    segment *p = seg;
-    seg = seg->next;
-    mrb_free(mrb, p);
+  /* Slide to handle as `capa == 32` to avoid 64-bit operations */
+  uint32_t slid_pos = it->pos & (IB_TYPE_BIT - 1);
+  uint32_t slid_bit_pos = it->bit * (slid_pos + 1) - 1;
+  uint32_t slid_ary_index = slid_bit_pos / IB_TYPE_BIT;
+  it->ary_index = slid_ary_index + it->pos / IB_TYPE_BIT * it->bit;
+  it->shift2 = (slid_ary_index + 1) * IB_TYPE_BIT - slid_bit_pos - 1;
+  it->ea_index = (ht_ib(it->h)[it->ary_index] >> it->shift2) & it->mask;
+  if (IB_TYPE_BIT - it->bit < it->shift2) {
+    it->shift1 = IB_TYPE_BIT - it->shift2;
+    it->ea_index |= (ht_ib(it->h)[it->ary_index - 1] << it->shift1) & it->mask;
   }
-  if (t->index) mrb_free(mrb, t->index);
-  mrb_free(mrb, t);
+  else {
+    it->shift1 = 0;
+  }
+  it->pos = ib_it_pos_for(it, it->pos + (++it->step));
 }
 
-static void mrb_hash_modify(mrb_state *mrb, mrb_value hash);
+static uint32_t
+ib_it_get(const index_buckets_iter *it)
+{
+  return it->ea_index;
+}
 
-static inline mrb_value
-ht_key(mrb_state *mrb, mrb_value key)
+static void
+ib_it_set(index_buckets_iter *it, uint32_t ea_index)
+{
+  uint32_t mask, i;
+  it->ea_index = ea_index;
+  if (it->shift1) {
+    i = it->ary_index - 1;
+    mask = it->mask >> it->shift1;
+    ht_ib(it->h)[i] = (ht_ib(it->h)[i] & ~mask) | (ea_index >> it->shift1);
+  }
+  i = it->ary_index;
+  mask = it->mask << it->shift2;
+  ht_ib(it->h)[i] = (ht_ib(it->h)[i] & ~mask) | (ea_index << it->shift2);
+}
+
+static void
+ib_it_delete(index_buckets_iter *it)
+{
+  ib_it_set(it, ib_it_deleted_value(it));
+}
+
+static hash_entry*
+ib_it_entry(index_buckets_iter *it)
+{
+  return ea_get(ht_ea(it->h), it->ea_index);
+}
+
+static uint32_t
+ib_capa_to_bit(uint32_t capa)
+{
+#ifdef __GNUC__
+  return U32(__builtin_ctz(capa));
+#else
+  /* http://graphics.stanford.edu/~seander/bithacks.html#IntegerLogDeBruijn */
+  static const uint32_t MultiplyDeBruijnBitPosition2[] = {
+    0, 1, 28, 2, 29, 14, 24, 3, 30, 22, 20, 15, 25, 17, 4, 8,
+    31, 27, 13, 23, 21, 19, 16, 7, 26, 12, 18, 6, 11, 5, 10, 9
+  };
+  return MultiplyDeBruijnBitPosition2[U32(capa * 0x077CB531U) >> 27];
+#endif
+}
+
+static uint32_t
+ib_bit_to_capa(uint32_t bit)
+{
+  return U32(1) << bit;
+}
+
+static uint32_t
+ib_upper_bound_for(uint32_t capa)
+{
+  return (capa >> 2) | (capa >> 1);  /* 3/4 */
+}
+
+static uint32_t
+ib_bit_for(uint32_t size)
+{
+  uint32_t capa = next_power2(size);
+  if (capa != IB_MAX_CAPA && ib_upper_bound_for(capa) < size) capa *= 2;
+  return ib_capa_to_bit(capa);
+}
+
+static uint32_t
+ib_byte_size_for(uint32_t ib_bit)
+{
+  mrb_assert(IB_INIT_BIT <= ib_bit);
+  uint32_t ary_size = IB_INIT_BIT == 4 ?
+    ib_bit_to_capa(ib_bit) * 2 / IB_TYPE_BIT * ib_bit / 2 :
+    ib_bit_to_capa(ib_bit) / IB_TYPE_BIT * ib_bit;
+  return U32(sizeof(uint32_t) * ary_size);
+}
+
+static void
+ib_init(mrb_state *mrb, struct RHash *h, uint32_t ib_bit, size_t ib_byte_size)
+{
+  hash_entry *ea = ht_ea(h);
+  memset(ht_ib(h), 0xff, ib_byte_size);
+  ib_set_bit(h, ib_bit);
+  ea_each_used(ea, ht_ea_n_used(h), entry, {
+    ib_cycle_by_key(mrb, h, entry->key, it, {
+      if (!ib_it_empty_p(it)) continue;
+      ib_it_set(it, U32(entry - ea));
+      break;
+    });
+  });
+}
+
+static void
+ht_init(mrb_state *mrb, struct RHash *h, uint32_t size,
+        hash_entry *ea, uint32_t ea_capa, hash_table *ht, uint32_t ib_bit)
+{
+  size_t ib_byte_size = ib_byte_size_for(ib_bit);
+  size_t ht_byte_size = sizeof(hash_table) + ib_byte_size;
+  h_ht_on(h);
+  h_set_ht(h, (hash_table*)mrb_realloc(mrb, ht, ht_byte_size));
+  ht_set_size(h, size);
+  ht_set_ea(h, ea);
+  ht_set_ea_capa(h, ea_capa);
+  ht_set_ea_n_used(h, size);
+  ib_init(mrb, h, ib_bit, ib_byte_size);
+}
+
+static void
+ht_free(mrb_state *mrb, struct RHash *h)
+{
+  mrb_free(mrb, ht_ea(h));
+  mrb_free(mrb, h_ht(h));
+}
+
+static hash_table*
+ht_dup(mrb_state *mrb, const struct RHash *h)
+{
+  size_t ib_byte_size = ib_byte_size_for(ib_bit(h));
+  size_t ht_byte_size = sizeof(hash_table) + ib_byte_size;
+  hash_table *new_ht = (hash_table*)mrb_malloc(mrb, ht_byte_size);
+  return (hash_table*)memcpy(new_ht, h_ht(h), ht_byte_size);
+}
+
+static void
+ht_adjust_ea(mrb_state *mrb, struct RHash *h, uint32_t size, uint32_t max_ea_capa)
+{
+  uint32_t ea_capa = size;
+  hash_entry *ea = ea_adjust(mrb, ht_ea(h), &ea_capa, max_ea_capa);
+  ht_set_ea(h, ea);
+  ht_set_ea_capa(h, ea_capa);
+}
+
+static void
+ht_to_ar(mrb_state *mrb, struct RHash *h)
+{
+  uint32_t size = ht_size(h), ea_capa = size;
+  hash_entry *ea = ht_ea(h);
+  ea_compress(ea, ht_ea_n_used(h));
+  ea = ea_adjust(mrb, ea, &ea_capa, AR_MAX_SIZE);
+  mrb_free(mrb, h_ht(h));
+  ar_init(h, size, ea, ea_capa, size);
+}
+
+static mrb_bool
+ht_get(mrb_state *mrb, struct RHash *h, mrb_value key, mrb_value *valp)
+{
+  ib_find_by_key(mrb, h, key, it, {
+    *valp = ib_it_entry(it)->val;
+    return TRUE;
+  });
+  return FALSE;
+}
+
+static void
+ht_set_as_ar(mrb_state *mrb, struct RHash *h, mrb_value key, mrb_value val)
+{
+  ht_to_ar(mrb, h);
+  ar_set(mrb, h, key, val);
+}
+
+static void
+ht_set_without_ib_adjustment(mrb_state *mrb, struct RHash *h,
+                             mrb_value key, mrb_value val)
+{
+  mrb_assert(ht_size(h) < ib_bit_to_capa(ib_bit(h)));
+  ib_cycle_by_key(mrb, h, key, it, {
+    if (ib_it_active_p(it)) {
+      if (!obj_eql(mrb, key, ib_it_entry(it)->key, h)) continue;
+      ib_it_entry(it)->val = val;
+    }
+    else {
+      uint32_t ea_n_used = ht_ea_n_used(h);
+      if (ea_n_used == H_MAX_SIZE) {
+        mrb_assert(ht_size(h) == ea_n_used);
+        mrb_raise(mrb, E_ARGUMENT_ERROR, "hash too big");
+      }
+      if (ea_n_used == ht_ea_capa(h)) ht_adjust_ea(mrb, h, ea_n_used, EA_MAX_CAPA);
+      ib_it_set(it, ea_n_used);
+      ea_set(ht_ea(h), ea_n_used, key, val);
+      ht_inc_size(h);
+      ht_set_ea_n_used(h, ++ea_n_used);
+    }
+    return;
+  });
+}
+
+static void
+ht_set(mrb_state *mrb, struct RHash *h, mrb_value key, mrb_value val)
+{
+  uint32_t size = ht_size(h);
+  uint32_t ib_bit_width = ib_bit(h), ib_capa = ib_bit_to_capa(ib_bit_width);
+  if (ib_upper_bound_for(ib_capa) <= size) {
+    if (size != ht_ea_n_used(h)) ea_compress(ht_ea(h), ht_ea_n_used(h));
+    ht_init(mrb, h, size, ht_ea(h), ht_ea_capa(h), h_ht(h), ++ib_bit_width);
+  }
+  else if (size != ht_ea_n_used(h)) {
+    if (ib_capa - EA_N_RESERVED_INDICES <= ht_ea_n_used(h)) goto compress;
+    if (ht_ea_capa(h) == ht_ea_n_used(h)) {
+      if (size <= AR_MAX_SIZE) {ht_set_as_ar(mrb, h, key, val); return;}
+      if (ea_next_capa_for(size, EA_MAX_CAPA) <= ht_ea_capa(h)) {
+       compress:
+        ea_compress(ht_ea(h), ht_ea_n_used(h));
+        ht_adjust_ea(mrb, h, size, ht_ea_capa(h));
+        ht_init(mrb, h, size, ht_ea(h), ht_ea_capa(h), h_ht(h), ib_bit_width);
+      }
+    }
+  }
+  ht_set_without_ib_adjustment(mrb, h, key, val);
+}
+
+static mrb_bool
+ht_delete(mrb_state *mrb, struct RHash *h, mrb_value key, mrb_value *valp)
+{
+  ib_find_by_key(mrb, h, key, it, {
+    hash_entry *entry = ib_it_entry(it);
+    *valp = entry->val;
+    ib_it_delete(it);
+    entry_delete(entry);
+    ht_dec_size(h);
+    return TRUE;
+  });
+  return FALSE;
+}
+
+static void
+ht_shift(mrb_state *mrb, struct RHash *h, mrb_value *keyp, mrb_value *valp)
+{
+  hash_entry *ea = ht_ea(h);
+  ea_each(ea, ht_size(h), entry, {
+    ib_cycle_by_key(mrb, h, entry->key, it, {
+      if (ib_it_get(it) != U32(entry - ea)) continue;
+      *keyp = entry->key;
+      *valp = entry->val;
+      ib_it_delete(it);
+      entry_delete(entry);
+      ht_dec_size(h);
+      return;
+    });
+  });
+}
+
+static void
+ht_rehash(mrb_state *mrb, struct RHash *h)
+{
+  /* see comments in `h_rehash` */
+  uint32_t size = ht_size(h);
+  if (size <= AR_MAX_SIZE) {
+    ht_to_ar(mrb, h);
+    ar_rehash(mrb, h);
+    return;
+  }
+  uint32_t w_size = 0, ea_capa = ht_ea_capa(h);
+  hash_entry *ea = ht_ea(h);
+  ht_init(mrb, h, 0, ea, ea_capa, h_ht(h), ib_bit_for(size));
+  ht_set_size(h, size);
+  ht_set_ea_n_used(h, ht_ea_n_used(h));
+  ea_each(ea, size, r_entry, {
+    ib_cycle_by_key(mrb, h, r_entry->key, it, {
+      if (ib_it_active_p(it)) {
+        if (!obj_eql(mrb, r_entry->key, ib_it_entry(it)->key, h)) continue;
+        ib_it_entry(it)->val = r_entry->val;
+        ht_set_size(h, --size);
+        entry_delete(r_entry);
+      }
+      else {
+        if (w_size != U32(r_entry - ea)) {
+          ea_set(ea, w_size, r_entry->key, r_entry->val);
+          entry_delete(r_entry);
+        }
+        ib_it_set(it, w_size++);
+      }
+      break;
+    });
+  });
+  mrb_assert(size == w_size);
+  ht_set_ea_n_used(h, size);
+  size <= AR_MAX_SIZE ? ht_to_ar(mrb, h) : ht_adjust_ea(mrb, h, size, ea_capa);
+}
+
+static mrb_value
+h_key_for(mrb_state *mrb, mrb_value key)
 {
   if (mrb_string_p(key) && !MRB_FROZEN_P(mrb_str_ptr(key))) {
     key = mrb_str_dup(mrb, key);
@@ -582,123 +974,236 @@ ht_key(mrb_state *mrb, mrb_value key)
   return key;
 }
 
-#define KEY(key) ht_key(mrb, key)
-
-static int
-hash_mark_i(mrb_state *mrb, mrb_value key, mrb_value val, void *p)
+static struct RHash*
+h_alloc(mrb_state *mrb)
 {
-  mrb_gc_mark_value(mrb, key);
-  mrb_gc_mark_value(mrb, val);
-  return 0;
+  return MRB_OBJ_ALLOC(mrb, MRB_TT_HASH, mrb->hash_class);
+}
+
+static void
+h_init(struct RHash *h)
+{
+  ar_init(h, 0, NULL, 0, 0);
+}
+
+static void
+h_free_table(mrb_state *mrb, struct RHash *h)
+{
+  (h_ar_p(h) ? ar_free : ht_free)(mrb, h);
+}
+
+static void
+h_clear(mrb_state *mrb, struct RHash *h)
+{
+  h_free_table(mrb, h);
+  h_init(h);
+}
+
+static mrb_bool
+h_get(mrb_state *mrb, struct RHash *h, mrb_value key, mrb_value *valp)
+{
+  return (h_ar_p(h) ? ar_get : ht_get)(mrb, h, key, valp);
+}
+
+static void
+h_set(mrb_state *mrb, struct RHash *h, mrb_value key, mrb_value val)
+{
+  (h_ar_p(h) ? ar_set : ht_set)(mrb, h, key, val);
+}
+
+static mrb_bool
+h_delete(mrb_state *mrb, struct RHash *h, mrb_value key, mrb_value *valp)
+{
+  return (h_ar_p(h) ? ar_delete : ht_delete)(mrb, h, key, valp);
+}
+
+/* find first element in the table, and remove it. */
+static void
+h_shift(mrb_state *mrb, struct RHash *h, mrb_value *keyp, mrb_value *valp)
+{
+  (h_ar_p(h) ? ar_shift : ht_shift)(mrb, h, keyp, valp);
+}
+
+static void
+h_rehash(mrb_state *mrb, struct RHash *h)
+{
+  /*
+   * ==== Comments common to `ar_rehash` and `ht_rehash`
+   *
+   * - Because reindex (such as elimination of duplicate keys) must be
+   *   guaranteed, it is necessary to set one by one.
+   *
+   * - To prevent EA from breaking if an exception occurs in the middle,
+   *   delete the slot before moving when moving the entry, and update size
+   *   at any time when overwriting.
+   */
+  (h_size(h) == 0 ? h_clear : h_ar_p(h) ? ar_rehash : ht_rehash)(mrb, h);
+}
+
+static void
+h_replace(mrb_state *mrb, struct RHash *h, struct RHash *orig_h)
+{
+  uint32_t size = h_size(orig_h);
+  if (size == 0) {
+    h_clear(mrb, h);
+  }
+  else if (h_ar_p(orig_h)) {
+    uint32_t ea_capa = ar_ea_capa(orig_h);
+    hash_entry *ea = ea_dup(mrb, ar_ea(orig_h), ea_capa);
+    h_free_table(mrb, h);
+    ar_init(h, size, ea, ea_capa, ar_ea_n_used(orig_h));
+  }
+  else { /* HT */
+    uint32_t ea_capa = ht_ea_capa(orig_h);
+    hash_entry *ea = ea_dup(mrb, ht_ea(orig_h), ea_capa);
+    hash_table *ht = ht_dup(mrb, orig_h);
+    h_free_table(mrb, h);
+    h_ht_on(h);
+    h_set_ht(h, ht);
+    ht_set_size(h, size);
+    ht_set_ea(h, ea);
+#ifdef MRB_64BIT
+    ht_set_ea_capa(h, ea_capa);
+    ht_set_ea_n_used(h, ht_ea_n_used(orig_h));
+#endif
+    ib_set_bit(h, ib_bit(orig_h));
+  }
 }
 
 void
-mrb_gc_mark_hash(mrb_state *mrb, struct RHash *hash)
+mrb_gc_mark_hash(mrb_state *mrb, struct RHash *h)
 {
-  ht_foreach(mrb, hash->ht, hash_mark_i, NULL);
+  h_each(h, entry, {
+    mrb_gc_mark_value(mrb, entry->key);
+    mrb_gc_mark_value(mrb, entry->val);
+  });
 }
 
 size_t
-mrb_gc_mark_hash_size(mrb_state *mrb, struct RHash *hash)
+mrb_gc_mark_hash_size(mrb_state *mrb, struct RHash *h)
 {
-  if (!hash->ht) return 0;
-  return hash->ht->size*2;
+  return h_size(h) * 2;
 }
 
 void
-mrb_gc_free_hash(mrb_state *mrb, struct RHash *hash)
+mrb_gc_free_hash(mrb_state *mrb, struct RHash *h)
 {
-  ht_free(mrb, hash->ht);
+  h_free_table(mrb, h);
+}
+
+size_t
+mrb_hash_memsize(mrb_value self)
+{
+  struct RHash *h = mrb_hash_ptr(self);
+  return mrb_obj_iv_tbl_memsize(self) +
+         (h_ar_p(h) ? (ar_ea_capa(h) * sizeof(hash_entry)) :
+                      (ht_ea_capa(h) * sizeof(hash_entry) +
+                       sizeof(hash_table) +
+                       ib_byte_size_for(ib_bit(h))));
+}
+
+/* Iterates over the key/value pairs. */
+MRB_API void
+mrb_hash_foreach(mrb_state *mrb, struct RHash *h, mrb_hash_foreach_func *func, void *data)
+{
+  h_each(h, entry, {
+    if (func(mrb, entry->key, entry->val, data) != 0) return;
+  });
 }
 
 MRB_API mrb_value
 mrb_hash_new(mrb_state *mrb)
 {
-  struct RHash *h;
-
-  h = (struct RHash*)mrb_obj_alloc(mrb, MRB_TT_HASH, mrb->hash_class);
-  h->ht = 0;
-  h->iv = 0;
+  struct RHash *h = h_alloc(mrb);
   return mrb_obj_value(h);
 }
 
+/*
+ * Set the capacity of EA and IB to minimum capacity (and appropriate load
+ * factor) that does not cause expansion when inserting `capa` elements.
+ */
 MRB_API mrb_value
 mrb_hash_new_capa(mrb_state *mrb, mrb_int capa)
 {
-  struct RHash *h;
-
-  h = (struct RHash*)mrb_obj_alloc(mrb, MRB_TT_HASH, mrb->hash_class);
-  /* preallocate hash table */
-  h->ht = ht_new(mrb);
-  /* capacity ignored */
-  h->iv = 0;
-  return mrb_obj_value(h);
+  if (capa < 0 || EA_MAX_CAPA < capa) {
+    mrb_raise(mrb, E_ARGUMENT_ERROR, "hash too big");
+    return mrb_nil_value();  /* not reached */
+  }
+  else if (capa == 0) {
+    return mrb_hash_new(mrb);
+  }
+  else {
+    uint32_t size = U32(capa);
+    struct RHash *h = h_alloc(mrb);
+    hash_entry *ea = ea_resize(mrb, NULL, size);
+    if (size <= AR_MAX_SIZE) {
+      ar_init(h, 0, ea, size, 0);
+    }
+    else {
+      ht_init(mrb, h, 0, ea, size, NULL, ib_bit_for(size));
+    }
+    return mrb_obj_value(h);
+  }
 }
 
 static mrb_value mrb_hash_default(mrb_state *mrb, mrb_value hash);
-static mrb_value hash_default(mrb_state *mrb, mrb_value hash, mrb_value key);
+
+static void
+hash_modify(mrb_state *mrb, mrb_value hash)
+{
+  mrb_check_frozen(mrb, mrb_hash_ptr(hash));
+}
+
+static mrb_value
+hash_default(mrb_state *mrb, mrb_value hash, mrb_value key)
+{
+  if (MRB_RHASH_DEFAULT_P(hash)) {
+    if (MRB_RHASH_PROCDEFAULT_P(hash)) {
+      return mrb_funcall_id(mrb, RHASH_PROCDEFAULT(hash), MRB_SYM(call), 2, hash, key);
+    }
+    else {
+      return RHASH_IFNONE(hash);
+    }
+  }
+  return mrb_nil_value();
+}
+
+static void
+hash_replace(mrb_state *mrb, mrb_value self, mrb_value orig)
+{
+  struct RHash *h = mrb_hash_ptr(self), *orig_h = mrb_hash_ptr(orig);
+  uint32_t mask = MRB_HASH_DEFAULT | MRB_HASH_PROC_DEFAULT;
+  mrb_sym name;
+  h_replace(mrb, h, orig_h);
+  name = MRB_SYM(ifnone);
+  if (orig_h->flags & MRB_HASH_DEFAULT) {
+    mrb_iv_set(mrb, self, name, mrb_iv_get(mrb, orig, name));
+  }
+  else {
+    mrb_iv_remove(mrb, self, name);
+  }
+  h->flags &= ~mask;
+  h->flags |= orig_h->flags & mask;
+}
 
 static mrb_value
 mrb_hash_init_copy(mrb_state *mrb, mrb_value self)
 {
   mrb_value orig;
-  struct RHash* copy;
-  htable *orig_h;
-  mrb_value ifnone, vret;
-
-  mrb_get_args(mrb, "o", &orig);
-  if (mrb_obj_equal(mrb, self, orig)) return self;
-  if ((mrb_type(self) != mrb_type(orig)) || (mrb_obj_class(mrb, self) != mrb_obj_class(mrb, orig))) {
-      mrb_raise(mrb, E_TYPE_ERROR, "initialize_copy should take same class object");
-  }
-
-  orig_h = RHASH_TBL(self);
-  copy = (struct RHash*)mrb_obj_alloc(mrb, MRB_TT_HASH, mrb->hash_class);
-  copy->ht = ht_copy(mrb, orig_h);
-
-  if (MRB_RHASH_DEFAULT_P(self)) {
-    copy->flags |= MRB_HASH_DEFAULT;
-  }
-  if (MRB_RHASH_PROCDEFAULT_P(self)) {
-    copy->flags |= MRB_HASH_PROC_DEFAULT;
-  }
-  vret = mrb_obj_value(copy);
-  ifnone = RHASH_IFNONE(self);
-  if (!mrb_nil_p(ifnone)) {
-      mrb_iv_set(mrb, vret, mrb_intern_lit(mrb, "ifnone"), ifnone);
-  }
-  return vret;
-}
-
-static int
-check_kdict_i(mrb_state *mrb, mrb_value key, mrb_value val, void *data)
-{
-  if (!mrb_symbol_p(key)) {
-    mrb_raise(mrb, E_ARGUMENT_ERROR, "keyword argument hash with non symbol keys");
-  }
-  return 0;
-}
-
-void
-mrb_hash_check_kdict(mrb_state *mrb, mrb_value self)
-{
-  htable *t;
-
-  t = RHASH_TBL(self);
-  if (!t || t->size == 0) return;
-  ht_foreach(mrb, t, check_kdict_i, NULL);
+  mrb_get_args(mrb, "H", &orig);
+  hash_modify(mrb, self);
+  if (mrb_hash_ptr(self) != mrb_hash_ptr(orig)) hash_replace(mrb, self, orig);
+  return self;
 }
 
 MRB_API mrb_value
 mrb_hash_dup(mrb_state *mrb, mrb_value self)
 {
-  struct RHash* copy;
-  htable *orig_h;
-
-  orig_h = RHASH_TBL(self);
-  copy = (struct RHash*)mrb_obj_alloc(mrb, MRB_TT_HASH, mrb->hash_class);
-  copy->ht = orig_h ? ht_copy(mrb, orig_h) : NULL;
-  return mrb_obj_value(copy);
+  struct RHash* copy_h = h_alloc(mrb);
+  mrb_value copy = mrb_obj_value(copy_h);
+  copy_h->c = mrb_hash_ptr(self)->c;
+  hash_replace(mrb, copy, self);
+  return copy;
 }
 
 MRB_API mrb_value
@@ -707,11 +1212,11 @@ mrb_hash_get(mrb_state *mrb, mrb_value hash, mrb_value key)
   mrb_value val;
   mrb_sym mid;
 
-  if (ht_get(mrb, RHASH_TBL(hash), key, &val)) {
+  if (h_get(mrb, mrb_hash_ptr(hash), key, &val)) {
     return val;
   }
 
-  mid = mrb_intern_lit(mrb, "default");
+  mid = MRB_SYM(default);
   if (mrb_func_basic_p(mrb, hash, mid, mrb_hash_default)) {
     return hash_default(mrb, hash, key);
   }
@@ -724,7 +1229,7 @@ mrb_hash_fetch(mrb_state *mrb, mrb_value hash, mrb_value key, mrb_value def)
 {
   mrb_value val;
 
-  if (ht_get(mrb, RHASH_TBL(hash), key, &val)) {
+  if (h_get(mrb, mrb_hash_ptr(hash), key, &val)) {
     return val;
   }
   /* not found */
@@ -734,25 +1239,11 @@ mrb_hash_fetch(mrb_state *mrb, mrb_value hash, mrb_value key, mrb_value def)
 MRB_API void
 mrb_hash_set(mrb_state *mrb, mrb_value hash, mrb_value key, mrb_value val)
 {
-  mrb_hash_modify(mrb, hash);
-
-  key = KEY(key);
-  ht_put(mrb, RHASH_TBL(hash), key, val);
-  mrb_field_write_barrier_value(mrb, (struct RBasic*)RHASH(hash), key);
-  mrb_field_write_barrier_value(mrb, (struct RBasic*)RHASH(hash), val);
-  return;
-}
-
-static void
-mrb_hash_modify(mrb_state *mrb, mrb_value hash)
-{
-  if (MRB_FROZEN_P(mrb_hash_ptr(hash))) {
-    mrb_raise(mrb, E_FROZEN_ERROR, "can't modify frozen hash");
-  }
-
-  if (!RHASH_TBL(hash)) {
-    RHASH_TBL(hash) = ht_new(mrb);
-  }
+  hash_modify(mrb, hash);
+  key = h_key_for(mrb, key);
+  h_set(mrb, mrb_hash_ptr(hash), key, val);
+  mrb_field_write_barrier_value(mrb, mrb_basic_ptr(hash), key);
+  mrb_field_write_barrier_value(mrb, mrb_basic_ptr(hash), val);
 }
 
 /* 15.2.13.4.16 */
@@ -799,17 +1290,17 @@ mrb_hash_init(mrb_state *mrb, mrb_value hash)
 
   ifnone = mrb_nil_value();
   mrb_get_args(mrb, "&|o?", &block, &ifnone, &ifnone_p);
-  mrb_hash_modify(mrb, hash);
+  hash_modify(mrb, hash);
   if (!mrb_nil_p(block)) {
     if (ifnone_p) {
-      mrb_raise(mrb, E_ARGUMENT_ERROR, "wrong number of arguments");
+      mrb_argnum_error(mrb, 1, 0, 0);
     }
     RHASH(hash)->flags |= MRB_HASH_PROC_DEFAULT;
     ifnone = block;
   }
   if (!mrb_nil_p(ifnone)) {
     RHASH(hash)->flags |= MRB_HASH_DEFAULT;
-    mrb_iv_set(mrb, hash, mrb_intern_lit(mrb, "ifnone"), ifnone);
+    mrb_iv_set(mrb, hash, MRB_SYM(ifnone), ifnone);
   }
   return hash;
 }
@@ -831,24 +1322,9 @@ mrb_hash_init(mrb_state *mrb, mrb_value hash)
 static mrb_value
 mrb_hash_aget(mrb_state *mrb, mrb_value self)
 {
-  mrb_value key;
+  mrb_value key = mrb_get_arg1(mrb);
 
-  mrb_get_args(mrb, "o", &key);
   return mrb_hash_get(mrb, self, key);
-}
-
-static mrb_value
-hash_default(mrb_state *mrb, mrb_value hash, mrb_value key)
-{
-  if (MRB_RHASH_DEFAULT_P(hash)) {
-    if (MRB_RHASH_PROCDEFAULT_P(hash)) {
-      return mrb_funcall(mrb, RHASH_PROCDEFAULT(hash), "call", 2, hash, key);
-    }
-    else {
-      return RHASH_IFNONE(hash);
-    }
-  }
-  return mrb_nil_value();
 }
 
 /* 15.2.13.4.5  */
@@ -883,7 +1359,7 @@ mrb_hash_default(mrb_state *mrb, mrb_value hash)
   if (MRB_RHASH_DEFAULT_P(hash)) {
     if (MRB_RHASH_PROCDEFAULT_P(hash)) {
       if (!given) return mrb_nil_value();
-      return mrb_funcall(mrb, RHASH_PROCDEFAULT(hash), "call", 2, hash, key);
+      return mrb_funcall_id(mrb, RHASH_PROCDEFAULT(hash), MRB_SYM(call), 2, hash, key);
     }
     else {
       return RHASH_IFNONE(hash);
@@ -916,11 +1392,10 @@ mrb_hash_default(mrb_state *mrb, mrb_value hash)
 static mrb_value
 mrb_hash_set_default(mrb_state *mrb, mrb_value hash)
 {
-  mrb_value ifnone;
+  mrb_value ifnone = mrb_get_arg1(mrb);
 
-  mrb_get_args(mrb, "o", &ifnone);
-  mrb_hash_modify(mrb, hash);
-  mrb_iv_set(mrb, hash, mrb_intern_lit(mrb, "ifnone"), ifnone);
+  hash_modify(mrb, hash);
+  mrb_iv_set(mrb, hash, MRB_SYM(ifnone), ifnone);
   RHASH(hash)->flags &= ~MRB_HASH_PROC_DEFAULT;
   if (!mrb_nil_p(ifnone)) {
     RHASH(hash)->flags |= MRB_HASH_DEFAULT;
@@ -945,7 +1420,6 @@ mrb_hash_set_default(mrb_state *mrb, mrb_value hash)
  *     p.call(a, 2)
  *     a                                  #=> [nil, nil, 4]
  */
-
 
 static mrb_value
 mrb_hash_default_proc(mrb_state *mrb, mrb_value hash)
@@ -972,11 +1446,10 @@ mrb_hash_default_proc(mrb_state *mrb, mrb_value hash)
 static mrb_value
 mrb_hash_set_default_proc(mrb_state *mrb, mrb_value hash)
 {
-  mrb_value ifnone;
+  mrb_value ifnone = mrb_get_arg1(mrb);
 
-  mrb_get_args(mrb, "o", &ifnone);
-  mrb_hash_modify(mrb, hash);
-  mrb_iv_set(mrb, hash, mrb_intern_lit(mrb, "ifnone"), ifnone);
+  hash_modify(mrb, hash);
+  mrb_iv_set(mrb, hash, MRB_SYM(ifnone), ifnone);
   if (!mrb_nil_p(ifnone)) {
     RHASH(hash)->flags |= MRB_HASH_PROC_DEFAULT;
     RHASH(hash)->flags |= MRB_HASH_DEFAULT;
@@ -992,10 +1465,10 @@ mrb_hash_set_default_proc(mrb_state *mrb, mrb_value hash)
 MRB_API mrb_value
 mrb_hash_delete_key(mrb_state *mrb, mrb_value hash, mrb_value key)
 {
-  htable *t = RHASH_TBL(hash);
   mrb_value del_val;
 
-  if (ht_del(mrb, t, key, &del_val)) {
+  hash_modify(mrb, hash);
+  if (h_delete(mrb, mrb_hash_ptr(hash), key, &del_val)) {
     return del_val;
   }
 
@@ -1006,38 +1479,9 @@ mrb_hash_delete_key(mrb_state *mrb, mrb_value hash, mrb_value key)
 static mrb_value
 mrb_hash_delete(mrb_state *mrb, mrb_value self)
 {
-  mrb_value key;
-
-  mrb_get_args(mrb, "o", &key);
-  mrb_hash_modify(mrb, self);
+  mrb_value key = mrb_get_arg1(mrb);
+  mrb->c->ci->mid = 0;
   return mrb_hash_delete_key(mrb, self, key);
-}
-
-/* find first element in the hash table, and remove it. */
-static void
-ht_shift(mrb_state *mrb, htable *t, mrb_value *kp, mrb_value *vp)
-{
-  segment *seg = t->rootseg;
-  mrb_int i;
-
-  while (seg) {
-    for (i=0; i<seg->size; i++) {
-      mrb_value key;
-
-      if (!seg->next && i >= t->last_len) {
-        return;
-      }
-      key = seg->e[i].key;
-      if (mrb_undef_p(key)) continue;
-      *kp = key;
-      *vp = seg->e[i].val;
-      /* delete element */
-      seg->e[i].key = mrb_undef_value();
-      t->size--;
-      return;
-    }
-    seg = seg->next;
-  }
 }
 
 /* 15.2.13.4.24 */
@@ -1057,27 +1501,19 @@ ht_shift(mrb_state *mrb, htable *t, mrb_value *kp, mrb_value *vp)
 static mrb_value
 mrb_hash_shift(mrb_state *mrb, mrb_value hash)
 {
-  htable *t = RHASH_TBL(hash);
+  struct RHash *h = mrb_hash_ptr(hash);
 
-  mrb_hash_modify(mrb, hash);
-  if (t && t->size > 0) {
+  hash_modify(mrb, hash);
+  if (h_size(h) == 0) {
+    return mrb_nil_value();
+  }
+  else {
     mrb_value del_key, del_val;
-
-    ht_shift(mrb, t, &del_key, &del_val);
+    h_shift(mrb, h, &del_key, &del_val);
     mrb_gc_protect(mrb, del_key);
     mrb_gc_protect(mrb, del_val);
     return mrb_assoc_new(mrb, del_key, del_val);
   }
-
-  if (MRB_RHASH_DEFAULT_P(hash)) {
-    if (MRB_RHASH_PROCDEFAULT_P(hash)) {
-      return mrb_funcall(mrb, RHASH_PROCDEFAULT(hash), "call", 2, hash, mrb_nil_value());
-    }
-    else {
-      return RHASH_IFNONE(hash);
-    }
-  }
-  return mrb_nil_value();
 }
 
 /* 15.2.13.4.4  */
@@ -1095,13 +1531,8 @@ mrb_hash_shift(mrb_state *mrb, mrb_value hash)
 MRB_API mrb_value
 mrb_hash_clear(mrb_state *mrb, mrb_value hash)
 {
-  htable *t = RHASH_TBL(hash);
-
-  mrb_hash_modify(mrb, hash);
-  if (t) {
-    ht_free(mrb, t);
-    RHASH_TBL(hash) = NULL;
-  }
+  hash_modify(mrb, hash);
+  h_clear(mrb, mrb_hash_ptr(hash));
   return hash;
 }
 
@@ -1137,18 +1568,15 @@ mrb_hash_aset(mrb_state *mrb, mrb_value self)
 MRB_API mrb_int
 mrb_hash_size(mrb_state *mrb, mrb_value hash)
 {
-  htable *t = RHASH_TBL(hash);
-
-  if (!t) return 0;
-  return t->size;
+  return (mrb_int)h_size(mrb_hash_ptr(hash));
 }
 
 /* 15.2.13.4.20 */
 /* 15.2.13.4.25 */
 /*
  *  call-seq:
- *     hsh.length    ->  fixnum
- *     hsh.size      ->  fixnum
+ *     hsh.length    ->  integer
+ *     hsh.size      ->  integer
  *
  *  Returns the number of key-value pairs in the hash.
  *
@@ -1161,16 +1589,13 @@ static mrb_value
 mrb_hash_size_m(mrb_state *mrb, mrb_value self)
 {
   mrb_int size = mrb_hash_size(mrb, self);
-  return mrb_fixnum_value(size);
+  return mrb_int_value(mrb, size);
 }
 
 MRB_API mrb_bool
 mrb_hash_empty_p(mrb_state *mrb, mrb_value self)
 {
-  htable *t = RHASH_TBL(self);
-
-  if (!t) return TRUE;
-  return t->size == 0;
+  return h_size(mrb_hash_ptr(self)) == 0;
 }
 
 /* 15.2.13.4.12 */
@@ -1189,13 +1614,6 @@ mrb_hash_empty_m(mrb_state *mrb, mrb_value self)
   return mrb_bool_value(mrb_hash_empty_p(mrb, self));
 }
 
-static int
-hash_keys_i(mrb_state *mrb, mrb_value key, mrb_value val, void *p)
-{
-  mrb_ary_push(mrb, *(mrb_value*)p, key);
-  return 0;
-}
-
 /* 15.2.13.4.19 */
 /*
  *  call-seq:
@@ -1212,22 +1630,12 @@ hash_keys_i(mrb_state *mrb, mrb_value key, mrb_value val, void *p)
 MRB_API mrb_value
 mrb_hash_keys(mrb_state *mrb, mrb_value hash)
 {
-  htable *t = RHASH_TBL(hash);
-  mrb_int size;
-  mrb_value ary;
-
-  if (!t || (size = t->size) == 0)
-    return mrb_ary_new(mrb);
-  ary = mrb_ary_new_capa(mrb, size);
-  ht_foreach(mrb, t, hash_keys_i, (void*)&ary);
+  struct RHash *h = mrb_hash_ptr(hash);
+  mrb_value ary = mrb_ary_new_capa(mrb, (mrb_int)h_size(h));
+  h_each(h, entry, {
+    mrb_ary_push(mrb, ary, entry->key);
+  });
   return ary;
-}
-
-static int
-hash_vals_i(mrb_state *mrb, mrb_value key, mrb_value val, void *p)
-{
-  mrb_ary_push(mrb, *(mrb_value*)p, val);
-  return 0;
 }
 
 /* 15.2.13.4.28 */
@@ -1246,14 +1654,11 @@ hash_vals_i(mrb_state *mrb, mrb_value key, mrb_value val, void *p)
 MRB_API mrb_value
 mrb_hash_values(mrb_state *mrb, mrb_value hash)
 {
-  htable *t = RHASH_TBL(hash);
-  mrb_int size;
-  mrb_value ary;
-
-  if (!t || (size = t->size) == 0)
-    return mrb_ary_new(mrb);
-  ary = mrb_ary_new_capa(mrb, size);
-  ht_foreach(mrb, t, hash_vals_i, (void*)&ary);
+  struct RHash *h = mrb_hash_ptr(hash);
+  mrb_value ary = mrb_ary_new_capa(mrb, (mrb_int)h_size(h));
+  h_each(h, entry, {
+    mrb_ary_push(mrb, ary, entry->val);
+  });
   return ary;
 }
 
@@ -1279,41 +1684,18 @@ mrb_hash_values(mrb_state *mrb, mrb_value hash)
 MRB_API mrb_bool
 mrb_hash_key_p(mrb_state *mrb, mrb_value hash, mrb_value key)
 {
-  htable *t;
-
-  t = RHASH_TBL(hash);
-  if (ht_get(mrb, t, key, NULL)) {
-    return TRUE;
-  }
-  return FALSE;
+  mrb_value val;
+  return h_get(mrb, mrb_hash_ptr(hash), key, &val);
 }
 
 static mrb_value
 mrb_hash_has_key(mrb_state *mrb, mrb_value hash)
 {
-  mrb_value key;
+  mrb_value key = mrb_get_arg1(mrb);
   mrb_bool key_p;
 
-  mrb_get_args(mrb, "o", &key);
   key_p = mrb_hash_key_p(mrb, hash, key);
   return mrb_bool_value(key_p);
-}
-
-struct has_v_arg {
-  mrb_bool found;
-  mrb_value val;
-};
-
-static int
-hash_has_value_i(mrb_state *mrb, mrb_value key, mrb_value val, void *p)
-{
-  struct has_v_arg *arg = (struct has_v_arg*)p;
-  
-  if (mrb_equal(mrb, arg->val, val)) {
-    arg->found = TRUE;
-    return 1;
-  }
-  return 0;
 }
 
 /* 15.2.13.4.14 */
@@ -1334,43 +1716,33 @@ hash_has_value_i(mrb_state *mrb, mrb_value key, mrb_value val, void *p)
 static mrb_value
 mrb_hash_has_value(mrb_state *mrb, mrb_value hash)
 {
-  mrb_value val;
-  struct has_v_arg arg;
-  
-  mrb_get_args(mrb, "o", &val);
-  arg.found = FALSE;
-  arg.val = val;
-  ht_foreach(mrb, RHASH_TBL(hash), hash_has_value_i, &arg);
-  return mrb_bool_value(arg.found);
-}
-
-static int
-merge_i(mrb_state *mrb, mrb_value key, mrb_value val, void *data)
-{
-  htable *h1 = (htable*)data;
-
-  ht_put(mrb, h1, key, val);
-  return 0;
+  mrb_value val = mrb_get_arg1(mrb);
+  struct RHash *h = mrb_hash_ptr(hash);
+  h_each(h, entry, {
+    h_check_modified(mrb, h, {
+      if (mrb_equal(mrb, val, entry->val)) return mrb_true_value();
+    });
+  });
+  return mrb_false_value();
 }
 
 MRB_API void
 mrb_hash_merge(mrb_state *mrb, mrb_value hash1, mrb_value hash2)
 {
-  htable *h1, *h2;
+  struct RHash *h1, *h2;
 
-  mrb_hash_modify(mrb, hash1);
-  hash2 = mrb_ensure_hash_type(mrb, hash2);
-  h1 = RHASH_TBL(hash1);
-  h2 = RHASH_TBL(hash2);
+  hash_modify(mrb, hash1);
+  mrb_ensure_hash_type(mrb, hash2);
+  h1 = mrb_hash_ptr(hash1);
+  h2 = mrb_hash_ptr(hash2);
 
-  if (!h2) return;
-  if (!h1) {
-    RHASH_TBL(hash1) = ht_copy(mrb, h2);
-    return;
-  }
-  ht_foreach(mrb, h2, merge_i, h1);
-  mrb_write_barrier(mrb, (struct RBasic*)RHASH(hash1));
-  return;
+  if (h1 == h2) return;
+  if (h_size(h2) == 0) return;
+  h_each(h2, entry, {
+    h_check_modified(mrb, h2, {h_set(mrb, h1, entry->key, entry->val);});
+    mrb_field_write_barrier_value(mrb, (struct RBasic *)h1, entry->key);
+    mrb_field_write_barrier_value(mrb, (struct RBasic *)h1, entry->val);
+  });
 }
 
 /*
@@ -1381,15 +1753,22 @@ mrb_hash_merge(mrb_state *mrb, mrb_value hash1, mrb_value hash2)
  *  values of key objects have changed since they were inserted, this
  *  method will reindex <i>hsh</i>.
  *
- *     h = {"AAA" => "b"}
- *     h.keys[0].chop!
- *     h.rehash   #=> {"AA"=>"b"}
- *     h["AA"]    #=> "b"
+ *     keys = (1..17).map{|n| [n]}
+ *     k = keys[0]
+ *     h = {}
+ *     keys.each{|key| h[key] = key[0]}
+ *     h     #=> { [1]=>1, [2]=>2, ... [16]=>16, [17]=>17}
+ *     h[k]  #=> 1
+ *     k[0] = keys.size + 1
+ *     h     #=> {[18]=>1, [2]=>2, ... [16]=>16, [17]=>17}
+ *     h[k]  #=> nil
+ *     h.rehash
+ *     h[k]  #=> 1
  */
 static mrb_value
 mrb_hash_rehash(mrb_state *mrb, mrb_value self)
 {
-  ht_compact(mrb, RHASH_TBL(self));
+  h_rehash(mrb, mrb_hash_ptr(self));
   return self;
 }
 
@@ -1401,11 +1780,10 @@ mrb_init_hash(mrb_state *mrb)
   mrb->hash_class = h = mrb_define_class(mrb, "Hash", mrb->object_class);              /* 15.2.13 */
   MRB_SET_INSTANCE_TT(h, MRB_TT_HASH);
 
-  mrb_define_method(mrb, h, "initialize_copy", mrb_hash_init_copy,   MRB_ARGS_REQ(1));
   mrb_define_method(mrb, h, "[]",              mrb_hash_aget,        MRB_ARGS_REQ(1)); /* 15.2.13.4.2  */
   mrb_define_method(mrb, h, "[]=",             mrb_hash_aset,        MRB_ARGS_REQ(2)); /* 15.2.13.4.3  */
   mrb_define_method(mrb, h, "clear",           mrb_hash_clear,       MRB_ARGS_NONE()); /* 15.2.13.4.4  */
-  mrb_define_method(mrb, h, "default",         mrb_hash_default,     MRB_ARGS_ANY());  /* 15.2.13.4.5  */
+  mrb_define_method(mrb, h, "default",         mrb_hash_default,     MRB_ARGS_OPT(1)); /* 15.2.13.4.5  */
   mrb_define_method(mrb, h, "default=",        mrb_hash_set_default, MRB_ARGS_REQ(1)); /* 15.2.13.4.6  */
   mrb_define_method(mrb, h, "default_proc",    mrb_hash_default_proc,MRB_ARGS_NONE()); /* 15.2.13.4.7  */
   mrb_define_method(mrb, h, "default_proc=",   mrb_hash_set_default_proc,MRB_ARGS_REQ(1)); /* 15.2.13.4.7  */
@@ -1414,11 +1792,13 @@ mrb_init_hash(mrb_state *mrb)
   mrb_define_method(mrb, h, "has_key?",        mrb_hash_has_key,     MRB_ARGS_REQ(1)); /* 15.2.13.4.13 */
   mrb_define_method(mrb, h, "has_value?",      mrb_hash_has_value,   MRB_ARGS_REQ(1)); /* 15.2.13.4.14 */
   mrb_define_method(mrb, h, "include?",        mrb_hash_has_key,     MRB_ARGS_REQ(1)); /* 15.2.13.4.15 */
-  mrb_define_method(mrb, h, "initialize",      mrb_hash_init,        MRB_ARGS_OPT(1)); /* 15.2.13.4.16 */
+  mrb_define_method(mrb, h, "initialize",      mrb_hash_init,        MRB_ARGS_OPT(1)|MRB_ARGS_BLOCK()); /* 15.2.13.4.16 */
+  mrb_define_method(mrb, h, "initialize_copy", mrb_hash_init_copy,   MRB_ARGS_REQ(1)); /* 15.2.13.4.17 */
   mrb_define_method(mrb, h, "key?",            mrb_hash_has_key,     MRB_ARGS_REQ(1)); /* 15.2.13.4.18 */
   mrb_define_method(mrb, h, "keys",            mrb_hash_keys,        MRB_ARGS_NONE()); /* 15.2.13.4.19 */
   mrb_define_method(mrb, h, "length",          mrb_hash_size_m,      MRB_ARGS_NONE()); /* 15.2.13.4.20 */
   mrb_define_method(mrb, h, "member?",         mrb_hash_has_key,     MRB_ARGS_REQ(1)); /* 15.2.13.4.21 */
+  mrb_define_method(mrb, h, "replace",         mrb_hash_init_copy,   MRB_ARGS_REQ(1)); /* 15.2.13.4.23 */
   mrb_define_method(mrb, h, "shift",           mrb_hash_shift,       MRB_ARGS_NONE()); /* 15.2.13.4.24 */
   mrb_define_method(mrb, h, "size",            mrb_hash_size_m,      MRB_ARGS_NONE()); /* 15.2.13.4.25 */
   mrb_define_method(mrb, h, "store",           mrb_hash_aset,        MRB_ARGS_REQ(2)); /* 15.2.13.4.26 */

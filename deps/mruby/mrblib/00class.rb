@@ -1,5 +1,15 @@
+class BasicObject
+  def !=(other)
+    if self == other
+      false
+    else
+      true
+    end
+  end
+end
+
 class Module
-   # 15.2.2.4.12
+  # 15.2.2.4.12
   def attr_accessor(*names)
     attr_reader(*names)
     attr_writer(*names)

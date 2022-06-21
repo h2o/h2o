@@ -1,0 +1,26 @@
+# https://github.com/DavidAnson/markdownlint#rules--aliases
+# markdownlint -c .github/linters/.markdown-lint.yml .
+
+# MD001 heading-increment/header-increment - Heading levels should only increment by one level at a time
+MD001: false
+
+# MD010 no-hard-tabs - Hard tabs
+MD010: false
+
+# MD013 line-length - Line length
+MD013: false
+
+# MD014 commands-show-output - Dollar signs used before commands without showing output
+MD014: false
+
+# MD024 no-duplicate-heading/no-duplicate-header - Multiple headings with the same content
+MD024: false
+
+# MD025 single-title/single-h1 - Multiple top-level headings in the same document
+MD025: false
+
+# MD026 no-trailing-punctuation - Trailing punctuation in heading
+MD026: false
+
+# MD040 fenced-code-language - Fenced code blocks should have a language specified
+MD040: false

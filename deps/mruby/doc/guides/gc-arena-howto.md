@@ -3,7 +3,7 @@
 _This is an English translation of [Matz's blog post][matz blog post]
 written in Japanese._
 _Some parts are updated to reflect recent changes._
-[matz blog post]: http://www.rubyist.net/~matz/20130731.html
+[matz blog post]: <https://www.rubyist.net/~matz/20130731.html>
 
 When you are extending mruby using C language, you may encounter
 mysterious "arena overflow error" or memory leak or very slow
@@ -11,13 +11,13 @@ execution speed.  This is an error indicating overflow of "GC arena"
 implementing "conservative GC".
 
 GC (garbage collector) must ensure that object is "alive", in other
-words, that it is referenced by somewhere from program.  This can be
+words, that it is referenced by somewhere from the program.  This can be
 determined by checking if the object can be directly or indirectly
 referenced by root.  The local variables, global variables and
 constants etc are root.
 
 If program execution is performed inside mruby VM, there is nothing to
-worry about because GC can access all roots owned by VM.
+worry about because GC can access all roots owned by the VM.
 
 The problem arises when executing C functions.  The object referenced
 by C variable is also "alive", but mruby GC cannot aware of this, so
@@ -38,7 +38,7 @@ The biggest problem is we have no way to access to the stack area in
 portable way.  Therefore, we cannot use this method if we'd like to
 implement highly portable runtime, like mruby.
 
-So we came up with an another plan to implement "conservative GC" in mruby.
+So we came up with another plan to implement "conservative GC" in mruby.
 
 Again, the problem is when an object which was created in C function, becomes
 no longer referenced in the Ruby world, and cannot be treated as garbage.
@@ -46,7 +46,7 @@ no longer referenced in the Ruby world, and cannot be treated as garbage.
 In mruby, we recognize all objects created in C function are alive.
 Then we have no problem such as confusing a live object as dead.
 
-This means that because we cannot collect truly dead object, we may
+This means that because we cannot collect a truly dead object, we may
 lose efficiency, but as a trade-off the GC itself is highly portable.
 We can say goodbye to the problem that GC deletes live objects due to
 optimization which sometimes occurs in CRuby.
@@ -140,7 +140,7 @@ inspect_ary(mrb_state *mrb, mrb_value ary, mrb_value list)
 }
 ```
 
-This is a real example, so a little bit complicated, but bear with me.
+This is a real example, so slightly complicated, but bear with me.
 The essence of `Array#inspect` is that after stringifying each element
 of array using `inspect` method, we join them together so that we can
 get `inspect` representation of the entire array.
@@ -161,7 +161,7 @@ Please note that the final `inspect` representation of entire array
 was created before the call of `mrb_gc_arena_restore()`.  Otherwise,
 required temporal object may be deleted by GC.
 
-We may have a usecase where after creating many temporal objects, we'd
+We may have an usecase where after creating many temporal objects, we'd
 like to keep some of them.  In this case, we cannot use the same idea
 in `ary_inspect()` like appending objects to existing one.
 Instead, after `mrb_gc_arena_restore()`, we must re-register the objects we

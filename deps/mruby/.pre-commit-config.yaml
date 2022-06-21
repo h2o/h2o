@@ -1,0 +1,58 @@
+---
+default_stages: [commit, push]
+default_language_version:
+  # force all unspecified Python hooks to run python3
+  python: python3
+minimum_pre_commit_version: "1.20.0"
+repos:
+  - repo: meta
+    hooks:
+      - id: identity
+      - id: check-hooks-apply
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.1.0
+    hooks:
+      - id: check-added-large-files
+      - id: check-case-conflict
+      - id: check-executables-have-shebangs
+        exclude: ^test/t/lang\.rb$
+      - id: check-merge-conflict
+      - id: check-vcs-permalinks
+      - id: check-yaml
+      - id: detect-private-key
+      - id: end-of-file-fixer
+      - id: file-contents-sorter
+        files: ^codespell\.txt$
+      - id: fix-byte-order-marker
+      - id: mixed-line-ending
+      - id: trailing-whitespace
+  # - repo: git://github.com/Lucas-C/pre-commit-hooks
+  #  rev: v1.1.9
+  #  hooks:
+  #    - id: forbid-tabs
+  #    - id: remove-tabs
+  - repo: https://github.com/codespell-project/codespell
+    rev: v2.1.0
+    hooks:
+      - id: codespell
+        name: Run codespell
+        description: Check spelling with codespell
+        entry: codespell --ignore-words=codespell.txt
+  - repo: https://github.com/igorshubovych/markdownlint-cli
+    rev: v0.30.0
+    hooks:
+      - id: markdownlint
+        name: Run markdownlint
+        description: Checks the style of Markdown files
+        entry: markdownlint -c .github/linters/.markdown-lint.yml .
+        types: [markdown]
+        files: \.(md|mdown|markdown)$
+  - repo: https://github.com/adrienverge/yamllint
+    rev: v1.26.3
+    hooks:
+      - id: yamllint
+        name: Run yamllint
+        description: Check YAML files with yamllint
+        entry: yamllint --strict -c .github/linters/.yaml-lint.yml
+        types: [yaml]
+        files: \.(yaml|yml)$

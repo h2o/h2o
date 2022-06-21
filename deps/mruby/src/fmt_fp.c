@@ -1,388 +1,363 @@
-#ifndef MRB_WITHOUT_FLOAT
-#ifdef MRB_DISABLE_STDIO
-/*
-
-Most code in this file originates from musl (src/stdio/vfprintf.c)
-which, just like mruby itself, is licensed under the MIT license.
-
-Copyright (c) 2005-2014 Rich Felker, et al.
-
-Permission is hereby granted, free of charge, to any person obtaining
-a copy of this software and associated documentation files (the
-"Software"), to deal in the Software without restriction, including
-without limitation the rights to use, copy, modify, merge, publish,
-distribute, sublicense, and/or sell copies of the Software, and to
-permit persons to whom the Software is furnished to do so, subject to
-the following conditions:
-
-The above copyright notice and this permission notice shall be
-included in all copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
-EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
-MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
-IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
-CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
-TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
-SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-
-*/
-
-#include <limits.h>
+#include <mruby.h>
 #include <string.h>
-#include <stdint.h>
+
+#ifndef MRB_NO_FLOAT
+/***********************************************************************
+
+  Routine for converting a single-precision
+  floating point number into a string.
+
+  The code in this function was inspired from Fred Bayer's pdouble.c.
+  Since pdouble.c was released as Public Domain, I'm releasing this
+  code as public domain as well.
+
+  Dave Hylands
+
+  The original code can be found in https://github.com/dhylands/format-float
+***********************************************************************/
+
+/***********************************************************************
+
+  I modified the routine for mruby:
+
+  * support `double`
+  * support `#` (alt_form) modifier
+
+  My modifications in this file are also placed in the public domain.
+
+  Matz (Yukihiro Matsumoto)
+
+***********************************************************************/
+
 #include <math.h>
-#include <float.h>
-#include <ctype.h>
 
-#include <mruby.h>
-#include <mruby/string.h>
+#ifdef MRB_USE_FLOAT32
 
-struct fmt_args {
-  mrb_state *mrb;
-  mrb_value str;
-};
+// 1 sign bit, 8 exponent bits, and 23 mantissa bits.
+// exponent values 0 and 255 are reserved, exponent can be 1 to 254.
+// exponent is stored with a bias of 127.
+// The min and max floats are on the order of 1x10^37 and 1x10^-37
 
-#define MAX(a,b) ((a)>(b) ? (a) : (b))
-#define MIN(a,b) ((a)<(b) ? (a) : (b))
+#define FLT_DECEXP      32
+#define FLT_ROUND_TO_ONE 0.9999995F
+#define FLT_MIN_BUF_SIZE 6 // -9e+99
 
-/* Convenient bit representation for modifier flags, which all fall
- * within 31 codepoints of the space character. */
+#else
 
-#define ALT_FORM   (1U<<('#'-' '))
-#define ZERO_PAD   (1U<<('0'-' '))
-#define LEFT_ADJ   (1U<<('-'-' '))
-#define PAD_POS    (1U<<(' '-' '))
-#define MARK_POS   (1U<<('+'-' '))
+// 1 sign bit, 11 exponent bits, and 52 mantissa bits.
 
-static void
-out(struct fmt_args *f, const char *s, size_t l)
-{
-  mrb_str_cat(f->mrb, f->str, s, l);
-}
+#define FLT_DECEXP      256
+#define FLT_ROUND_TO_ONE 0.999999999995
+#define FLT_MIN_BUF_SIZE  7 // -9e+199
 
-#define PAD_SIZE 256
-static void
-pad(struct fmt_args *f, char c, ptrdiff_t w, ptrdiff_t l, uint8_t fl)
-{
-  char pad[PAD_SIZE];
-  if (fl & (LEFT_ADJ | ZERO_PAD) || l >= w) return;
-  l = w - l;
-  memset(pad, c, l>PAD_SIZE ? PAD_SIZE : l);
-  for (; l >= PAD_SIZE; l -= PAD_SIZE)
-    out(f, pad, PAD_SIZE);
-  out(f, pad, l);
-}
+#endif  /* MRB_USE_FLOAT32 */
 
-static const char xdigits[16] = {
-  '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F'
-};
-
-static char*
-fmt_u(uint32_t x, char *s)
-{
-  for (; x; x /= 10) *--s = '0' + x % 10;
-  return s;
-}
-
-/* Do not override this check. The floating point printing code below
- * depends on the float.h constants being right. If they are wrong, it
- * may overflow the stack. */
-#if LDBL_MANT_DIG == 53
-typedef char compiler_defines_long_double_incorrectly[9-(int)sizeof(long double)];
+static const mrb_float g_pos_pow[] = {
+#ifndef MRB_USE_FLOAT32
+    1e256, 1e128, 1e64,
 #endif
+    1e32, 1e16, 1e8, 1e4, 1e2, 1e1
+};
+static const mrb_float g_neg_pow[] = {
+#ifndef MRB_USE_FLOAT32
+    1e-256, 1e-128, 1e-64,
+#endif
+    1e-32, 1e-16, 1e-8, 1e-4, 1e-2, 1e-1
+};
 
-static int
-fmt_fp(struct fmt_args *f, long double y, ptrdiff_t p, uint8_t fl, int t)
-{
-  uint32_t big[(LDBL_MANT_DIG+28)/29 + 1          // mantissa expansion
-    + (LDBL_MAX_EXP+LDBL_MANT_DIG+28+8)/9]; // exponent expansion
-  uint32_t *a, *d, *r, *z;
-  uint32_t i;
-  int e2=0, e, j;
-  ptrdiff_t l;
-  char buf[9+LDBL_MANT_DIG/4], *s;
-  const char *prefix="-0X+0X 0X-0x+0x 0x";
-  ptrdiff_t pl;
-  char ebuf0[3*sizeof(int)], *ebuf=&ebuf0[3*sizeof(int)], *estr;
+/*
+ * mrb_format_float(mrb_float f, char *buf, size_t buf_size, char fmt, int prec, char sign)
+ *
+ * fmt: should be one of 'e', 'E', 'f', 'F', 'g', or 'G'. (|0x80 for '#')
+ * prec: is the precision (as specified in printf)
+ * sign: should be '\0', '+', or ' '  ('\0' is the normal one - only print
+ *       a sign if ```f``` is negative. Anything else is printed as the
+ *       sign character for positive numbers.
+ */
 
-  pl=1;
-  if (signbit(y)) {
-    y=-y;
-  } else if (fl & MARK_POS) {
-    prefix+=3;
-  } else if (fl & PAD_POS) {
-    prefix+=6;
-  } else prefix++, pl=0;
+int
+mrb_format_float(mrb_float f, char *buf, size_t buf_size, char fmt, int prec, char sign) {
+  char *s = buf;
+  int buf_remaining = buf_size - 1;
+  int alt_form = 0;
 
-  if (!isfinite(y)) {
-    const char *ss = (t&32)?"inf":"INF";
-    if (y!=y) ss=(t&32)?"nan":"NAN";
-    pad(f, ' ', 0, 3+pl, fl&~ZERO_PAD);
-    out(f, prefix, pl);
-    out(f, ss, 3);
-    pad(f, ' ', 0, 3+pl, fl^LEFT_ADJ);
-    return 3+(int)pl;
+  if ((uint8_t)fmt & 0x80) {
+    fmt &= 0x7f;  /* turn off alt_form flag */
+    alt_form = 1;
+  }
+  if (buf_size <= FLT_MIN_BUF_SIZE) {
+    // Smallest exp notion is -9e+99 (-9e+199) which is 6 (7) chars plus terminating
+    // null.
+
+    if (buf_size >= 2) {
+      *s++ = '?';
+    }
+    if (buf_size >= 1) {
+      *s++ = '\0';
+    }
+    return buf_size >= 2;
+  }
+  if (signbit(f)) {
+    *s++ = '-';
+    f = -f;
+  } else if (sign) {
+    *s++ = sign;
+  }
+  buf_remaining -= (s - buf); // Adjust for sign
+
+  {
+    char uc = fmt & 0x20;
+    if (isinf(f)) {
+      *s++ = 'I' ^ uc;
+      *s++ = 'N' ^ uc;
+      *s++ = 'F' ^ uc;
+      goto ret;
+    } else if (isnan(f)) {
+      *s++ = 'N' ^ uc;
+      *s++ = 'A' ^ uc;
+      *s++ = 'N' ^ uc;
+    ret:
+      *s = '\0';
+      return s - buf;
+    }
   }
 
-  y = frexp((double)y, &e2) * 2;
-  if (y) e2--;
+  if (prec < 0) {
+    prec = 6;
+  }
+  char e_char = 'E' | (fmt & 0x20);   // e_char will match case of fmt
+  fmt |= 0x20; // Force fmt to be lowercase
+  char org_fmt = fmt;
+  if (fmt == 'g' && prec == 0) {
+    prec = 1;
+  }
+  int e, e1;
+  int dec = 0;
+  char e_sign = '\0';
+  int num_digits = 0;
+  const mrb_float *pos_pow = g_pos_pow;
+  const mrb_float *neg_pow = g_neg_pow;
 
-  if ((t|32)=='a') {
-    long double round = 8.0;
-    ptrdiff_t re;
+  if (f == 0.0) {
+    e = 0;
+    if (fmt == 'e') {
+      e_sign = '+';
+    } else if (fmt == 'f') {
+      num_digits = prec + 1;
+    }
+  } else if (f < 1.0) { // f < 1.0
+    char first_dig = '0';
+    if (f >= FLT_ROUND_TO_ONE) {
+      first_dig = '1';
+    }
 
-    if (t&32) prefix += 9;
-    pl += 2;
-
-    if (p<0 || p>=LDBL_MANT_DIG/4-1) re=0;
-    else re=LDBL_MANT_DIG/4-1-p;
-
-    if (re) {
-      while (re--) round*=16;
-      if (*prefix=='-') {
-        y=-y;
-        y-=round;
-        y+=round;
-        y=-y;
+    // Build negative exponent
+    for (e = 0, e1 = FLT_DECEXP; e1; e1 >>= 1, pos_pow++, neg_pow++) {
+      if (*neg_pow > f) {
+        e += e1;
+        f *= *pos_pow;
       }
-      else {
-        y+=round;
-        y-=round;
-      }
     }
-
-    estr=fmt_u(e2<0 ? -e2 : e2, ebuf);
-    if (estr==ebuf) *--estr='0';
-    *--estr = (e2<0 ? '-' : '+');
-    *--estr = t+('p'-'a');
-
-    s=buf;
-    do {
-      int x=(int)y;
-      *s++=xdigits[x]|(t&32);
-      y=16*(y-x);
-      if (s-buf==1 && (y||p>0||(fl&ALT_FORM))) *s++='.';
-    } while (y);
-
-    if (p && s-buf-2 < p)
-      l = (p+2) + (ebuf-estr);
-    else
-      l = (s-buf) + (ebuf-estr);
-
-    pad(f, ' ', 0, pl+l, fl);
-    out(f, prefix, pl);
-    pad(f, '0', 0, pl+l, fl^ZERO_PAD);
-    out(f, buf, s-buf);
-    pad(f, '0', l-(ebuf-estr)-(s-buf), 0, 0);
-    out(f, estr, ebuf-estr);
-    pad(f, ' ', 0, pl+l, fl^LEFT_ADJ);
-    return (int)pl+(int)l;
-  }
-  if (p<0) p=6;
-
-  if (y) y *= 268435456.0, e2-=28;
-
-  if (e2<0) a=r=z=big;
-  else a=r=z=big+sizeof(big)/sizeof(*big) - LDBL_MANT_DIG - 1;
-
-  do {
-    *z = (uint32_t)y;
-    y = 1000000000*(y-*z++);
-  } while (y);
-
-  while (e2>0) {
-    uint32_t carry=0;
-    int sh=MIN(29,e2);
-    for (d=z-1; d>=a; d--) {
-      uint64_t x = ((uint64_t)*d<<sh)+carry;
-      *d = x % 1000000000;
-      carry = (uint32_t)(x / 1000000000);
-    }
-    if (carry) *--a = carry;
-    while (z>a && !z[-1]) z--;
-    e2-=sh;
-  }
-  while (e2<0) {
-    uint32_t carry=0, *b;
-    int sh=MIN(9,-e2), need=1+((int)p+LDBL_MANT_DIG/3+8)/9;
-    for (d=a; d<z; d++) {
-      uint32_t rm = *d & ((1<<sh)-1);
-      *d = (*d>>sh) + carry;
-      carry = (1000000000>>sh) * rm;
-    }
-    if (!*a) a++;
-    if (carry) *z++ = carry;
-    /* Avoid (slow!) computation past requested precision */
-    b = (t|32)=='f' ? r : a;
-    if (z-b > need) z = b+need;
-    e2+=sh;
-  }
-
-  if (a<z) for (i=10, e=9*(int)(r-a); *a>=i; i*=10, e++);
-  else e=0;
-
-  /* Perform rounding: j is precision after the radix (possibly neg) */
-  j = (int)p - ((t|32)!='f')*e - ((t|32)=='g' && p);
-  if (j < 9*(z-r-1)) {
-    uint32_t x;
-    /* We avoid C's broken division of negative numbers */
-    d = r + 1 + ((j+9*LDBL_MAX_EXP)/9 - LDBL_MAX_EXP);
-    j += 9*LDBL_MAX_EXP;
-    j %= 9;
-    for (i=10, j++; j<9; i*=10, j++);
-    x = *d % i;
-    /* Are there any significant digits past j? */
-    if (x || d+1!=z) {
-      long double round = 2/LDBL_EPSILON;
-      long double small;
-      if (*d/i & 1) round += 2;
-      if (x<i/2) small=0.5;
-      else if (x==i/2 && d+1==z) small=1.0;
-      else small=1.5;
-      if (pl && *prefix=='-') round*=-1, small*=-1;
-      *d -= x;
-      /* Decide whether to round by probing round+small */
-      if (round+small != round) {
-        *d = *d + i;
-        while (*d > 999999999) {
-          *d--=0;
-          if (d<a) *--a=0;
-          (*d)++;
+    char e_sign_char = '-';
+    if (f < 1.0) {
+      if (f >= FLT_ROUND_TO_ONE) {
+        f = 1.0;
+        if (e == 0) {
+          e_sign_char = '+';
         }
-        for (i=10, e=9*(int)(r-a); *a>=i; i*=10, e++);
+      } else {
+        e++;
+        f *= 10.0;
       }
     }
-    if (z>d+1) z=d+1;
-  }
-  for (; z>a && !z[-1]; z--);
 
-  if ((t|32)=='g') {
-    if (!p) p++;
-    if (p>e && e>=-4) {
-      t--;
-      p-=e+1;
-    }
-    else {
-      t-=2;
-      p--;
-    }
-    if (!(fl&ALT_FORM)) {
-      /* Count trailing zeros in last place */
-      if (z>a && z[-1]) for (i=10, j=0; z[-1]%i==0; i*=10, j++);
-      else j=9;
-      if ((t|32)=='f')
-        p = MIN(p,MAX(0,9*(z-r-1)-j));
-      else
-        p = MIN(p,MAX(0,9*(z-r-1)+e-j));
-    }
-  }
-  l = 1 + p + (p || (fl&ALT_FORM));
-  if ((t|32)=='f') {
-    if (e>0) l+=e;
-  }
-  else {
-    estr=fmt_u(e<0 ? -e : e, ebuf);
-    while(ebuf-estr<2) *--estr='0';
-    *--estr = (e<0 ? '-' : '+');
-    *--estr = t;
-    l += ebuf-estr;
-  }
+    // If the user specified 'g' format, and e is <= 4, then we'll switch
+    // to the fixed format ('f')
 
-  pad(f, ' ', 0, pl+l, fl);
-  out(f, prefix, pl);
-  pad(f, '0', 0, pl+l, fl^ZERO_PAD);
+    if (fmt == 'f' || (fmt == 'g' && e <= 4)) {
+      fmt = 'f';
+      dec = -1;
+      *s++ = first_dig;
 
-  if ((t|32)=='f') {
-    if (a>r) a=r;
-    for (d=a; d<=r; d++) {
-      char *ss = fmt_u(*d, buf+9);
-      if (d!=a) while (ss>buf) *--ss='0';
-      else if (ss==buf+9) *--ss='0';
-      out(f, ss, buf+9-ss);
-    }
-    if (p || (fl&ALT_FORM)) out(f, ".", 1);
-    for (; d<z && p>0; d++, p-=9) {
-      char *ss = fmt_u(*d, buf+9);
-      while (ss>buf) *--ss='0';
-      out(f, ss, MIN(9,p));
-    }
-    pad(f, '0', p+9, 9, 0);
-  }
-  else {
-    if (z<=a) z=a+1;
-    for (d=a; d<z && p>=0; d++) {
-      char *ss = fmt_u(*d, buf+9);
-      if (ss==buf+9) *--ss='0';
-      if (d!=a) while (ss>buf) *--ss='0';
-      else {
-        out(f, ss++, 1);
-        if (p>0||(fl&ALT_FORM)) out(f, ".", 1);
+      if (org_fmt == 'g') {
+        prec += (e - 1);
       }
-      out(f, ss, MIN(buf+9-ss, p));
-      p -= (int)(buf+9-ss);
+      // truncate precision to prevent buffer overflow
+      if (prec + 2 > buf_remaining) {
+        prec = buf_remaining - 2;
+      }
+      num_digits = prec;
+      if (num_digits || alt_form) {
+        *s++ = '.';
+        while (--e && num_digits) {
+          *s++ = '0';
+          num_digits--;
+        }
+      }
+    } else {
+      // For e & g formats, we'll be printing the exponent, so set the
+      // sign.
+      e_sign = e_sign_char;
+      dec = 0;
+
+      if (prec > (buf_remaining - FLT_MIN_BUF_SIZE)) {
+        prec = buf_remaining - FLT_MIN_BUF_SIZE;
+        if (fmt == 'g') {
+          prec++;
+        }
+      }
     }
-    pad(f, '0', p+18, 18, 0);
-    out(f, estr, ebuf-estr);
-  }
+  } else {
+    // Build positive exponent
+    for (e = 0, e1 = FLT_DECEXP; e1; e1 >>= 1, pos_pow++, neg_pow++) {
+      if (*pos_pow <= f) {
+        e += e1;
+        f *= *neg_pow;
+      }
+    }
 
-  pad(f, ' ', 0, pl+l, fl^LEFT_ADJ);
+    // If the user specified fixed format (fmt == 'f') and e makes the
+    // number too big to fit into the available buffer, then we'll
+    // switch to the 'e' format.
 
-  return (int)pl+(int)l;
-}
+    if (fmt == 'f') {
+      if (e >= buf_remaining) {
+        fmt = 'e';
+      } else if ((e + prec + 2) > buf_remaining) {
+        prec = buf_remaining - e - 2;
+        if (prec < 0) {
+          // This means no decimal point, so we can add one back
+          // for the decimal.
+          prec++;
+        }
+      }
+    }
+    if (fmt == 'e' && prec > (buf_remaining - 6)) {
+      prec = buf_remaining - 6;
+    }
+    // If the user specified 'g' format, and e is < prec, then we'll switch
+    // to the fixed format.
 
-static int
-fmt_core(struct fmt_args *f, const char *fmt, mrb_float flo)
-{
-  ptrdiff_t p;
-
-  if (*fmt != '%') {
-    return -1;
-  }
-  ++fmt;
-
-  if (*fmt == '.') {
-    ++fmt;
-    for (p = 0; ISDIGIT(*fmt); ++fmt) {
-      p = 10 * p + (*fmt - '0');
+    if (fmt == 'g' && e < prec) {
+      fmt = 'f';
+      prec -= (e + 1);
+    }
+    if (fmt == 'f') {
+      dec = e;
+      num_digits = prec + e + 1;
+    } else {
+      e_sign = '+';
     }
   }
-  else {
-    p = -1;
+  if (prec < 0) {
+    // This can happen when the prec is trimmed to prevent buffer overflow
+    prec = 0;
   }
 
-  switch (*fmt) {
-  case 'e': case 'f': case 'g': case 'a':
-  case 'E': case 'F': case 'G': case 'A':
-    return fmt_fp(f, flo, p, 0, *fmt);
-  default:
-    return -1;
+  // We now have f as a floating point number between >= 1 and < 10
+  // (or equal to zero), and e contains the absolute value of the power of
+  // 10 exponent. and (dec + 1) == the number of dgits before the decimal.
+
+  // For e, prec is # digits after the decimal
+  // For f, prec is # digits after the decimal
+  // For g, prec is the max number of significant digits
+  //
+  // For e & g there will be a single digit before the decimal
+  // for f there will be e digits before the decimal
+
+  if (fmt == 'e') {
+    num_digits = prec + 1;
+  } else if (fmt == 'g') {
+    if (prec == 0) {
+      prec = 1;
+    }
+    num_digits = prec;
   }
-}
 
-mrb_value
-mrb_float_to_str(mrb_state *mrb, mrb_value flo, const char *fmt)
-{
-  struct fmt_args f;
-
-  f.mrb = mrb;
-  f.str = mrb_str_new_capa(mrb, 24);
-  if (fmt_core(&f, fmt, mrb_float(flo)) < 0) {
-    mrb_raise(mrb, E_ARGUMENT_ERROR, "invalid format string");
+  // Print the digits of the mantissa
+  for (int i = 0; i < num_digits; ++i, --dec) {
+    int8_t d = (int8_t)((int)f)%10;
+    *s++ = '0' + d;
+    if (dec == 0 && (prec > 0 || alt_form)) {
+      *s++ = '.';
+    }
+    f -= (mrb_float)d;
+    f *= 10.0;
   }
-  return f.str;
-}
-#else   /* MRB_DISABLE_STDIO */
-#include <mruby.h>
-#include <stdio.h>
 
-mrb_value
-mrb_float_to_str(mrb_state *mrb, mrb_value flo, const char *fmt)
-{
-  char buf[25];
+  // Round
+  if (f >= 5.0) {
+    char *rs = s;
+    rs--;
+    while (1) {
+      if (*rs == '.') {
+        rs--;
+        continue;
+      }
+      if (*rs < '0' || *rs > '9') {
+        // + or -
+        rs++; // So we sit on the digit to the right of the sign
+        break;
+      }
+      if (*rs < '9') {
+        (*rs)++;
+        break;
+      }
+      *rs = '0';
+      if (rs == buf) {
+        break;
+      }
+      rs--;
+    }
+    if (*rs == '0') {
+      // We need to insert a 1
+      if (rs[1] == '.' && fmt != 'f') {
+        // We're going to round 9.99 to 10.00
+        // Move the decimal point
+        rs[0] = '.';
+        rs[1] = '0';
+        if (e_sign == '-') {
+          e--;
+        } else {
+          e++;
+        }
+      }
+      s++;
+      char *ss = s;
+      while (ss > rs) {
+        *ss = ss[-1];
+        ss--;
+      }
+      *rs = '1';
+      if (f < 1.0 && fmt == 'f') {
+        // We rounded up to 1.0
+        prec--;
+      }
+    }
+  }
 
-  snprintf(buf, sizeof(buf), fmt, mrb_float(flo));
-  return mrb_str_new_cstr(mrb, buf);
+  if (org_fmt == 'g' && prec > 0 && !alt_form) {
+    // Remove trailing zeros and a trailing decimal point
+    while (s[-1] == '0') {
+      s--;
+    }
+    if (s[-1] == '.') {
+      s--;
+    }
+  }
+  // Append the exponent
+  if (e_sign) {
+    *s++ = e_char;
+    *s++ = e_sign;
+    if (e >= 100) {
+      *s++ = '0' + (e / 100);
+      e %= 100;
+    }
+    *s++ = '0' + (e / 10);
+    *s++ = '0' + (e % 10);
+  }
+  *s = '\0';
+
+  return s - buf;
 }
-#endif  /* MRB_DISABLE_STDIO */
 #endif

@@ -35,43 +35,70 @@ get_file(mrb_irep_debug_info *info, uint32_t pc)
   return *ret;
 }
 
-static mrb_debug_line_type
-select_line_type(const uint16_t *lines, size_t lines_len)
+size_t
+mrb_packed_int_len(uint32_t num)
 {
-  size_t line_count = 0;
-  int prev_line = -1;
-  size_t i;
-  for (i = 0; i < lines_len; ++i) {
-    if (lines[i] != prev_line) {
-      ++line_count;
-    }
-  }
-  return (sizeof(uint16_t) * lines_len) <= (sizeof(mrb_irep_debug_info_line) * line_count)
-      ? mrb_debug_line_ary : mrb_debug_line_flat_map;
+  size_t llen = 0;
+
+  do {
+    llen++;
+  } while (num >>= 7);
+  return llen;
+}
+
+size_t
+mrb_packed_int_encode(uint32_t num, uint8_t *p, uint8_t *pend)
+{
+  size_t llen = 0;
+
+  do {
+    uint8_t byte = num & 0x7f;
+    num >>= 7;
+    if (num != 0) byte |= 0x80;
+    if (p < pend) *p++ = byte;
+    llen++;
+  } while (num != 0);
+
+  return llen;
+}
+
+uint32_t
+mrb_packed_int_decode(uint8_t *p, uint8_t **newpos)
+{
+  size_t i = 0, shift = 0;
+  uint32_t n = 0;
+
+  do {
+    n |= ((uint32_t)(p[i] & 0x7f)) << shift;
+    i++;
+    shift += 7;
+  } while (shift < sizeof(uint32_t) * 8 && (p[i - 1] & 0x80));
+  if (newpos) *newpos = p + i;
+  return n;
 }
 
 MRB_API char const*
-mrb_debug_get_filename(mrb_irep *irep, ptrdiff_t pc)
+mrb_debug_get_filename(mrb_state *mrb, const mrb_irep *irep, uint32_t pc)
 {
-  if (irep && pc >= 0 && pc < irep->ilen) {
+  if (irep && pc < irep->ilen) {
     mrb_irep_debug_info_file* f = NULL;
     if (!irep->debug_info) return NULL;
-    else if ((f = get_file(irep->debug_info, (uint32_t)pc))) {
-      return f->filename;
+    else if ((f = get_file(irep->debug_info, pc))) {
+      return mrb_sym_name_len(mrb, f->filename_sym, NULL);
     }
   }
   return NULL;
 }
 
 MRB_API int32_t
-mrb_debug_get_line(mrb_irep *irep, ptrdiff_t pc)
+mrb_debug_get_line(mrb_state *mrb, const mrb_irep *irep, uint32_t pc)
 {
-  if (irep && pc >= 0 && pc < irep->ilen) {
+  if (irep && pc < irep->ilen) {
     mrb_irep_debug_info_file* f = NULL;
     if (!irep->debug_info) {
       return -1;
     }
-    else if ((f = get_file(irep->debug_info, (uint32_t)pc))) {
+    else if ((f = get_file(irep->debug_info, pc))) {
       switch (f->line_type) {
         case mrb_debug_line_ary:
           mrb_assert(f->start_pos <= pc && pc < (f->start_pos + f->line_entry_count));
@@ -102,6 +129,19 @@ mrb_debug_get_line(mrb_irep *irep, ptrdiff_t pc)
 
           return ret->line;
         }
+
+        case mrb_debug_line_packed_map: {
+          uint8_t *p = f->lines.packed_map;
+          uint8_t *pend = p + f->line_entry_count;
+          uint32_t pos = 0, line = 0, line_diff;
+          while (p < pend) {
+            pos += mrb_packed_int_decode(p, &p);
+            line_diff = mrb_packed_int_decode(p, &p);
+            if (pc < pos) break;
+            line += line_diff;
+          }
+          return line;
+        }
       }
     }
   }
@@ -129,7 +169,6 @@ mrb_debug_info_append_file(mrb_state *mrb, mrb_irep_debug_info *d,
   mrb_irep_debug_info_file *f;
   uint32_t file_pc_count;
   size_t fn_len;
-  mrb_int len;
   uint32_t i;
 
   if (!d) return NULL;
@@ -138,15 +177,14 @@ mrb_debug_info_append_file(mrb_state *mrb, mrb_irep_debug_info *d,
   mrb_assert(filename);
   mrb_assert(lines);
 
-  if (d->flen > 0 && strcmp(filename, d->files[d->flen - 1]->filename) == 0) {
-    return NULL;
+  if (d->flen > 0) {
+    const char *fn = mrb_sym_name_len(mrb, d->files[d->flen - 1]->filename_sym, NULL);
+    if (strcmp(filename, fn) == 0)
+      return NULL;
   }
 
   f = (mrb_irep_debug_info_file*)mrb_malloc(mrb, sizeof(*f));
-  d->files = (mrb_irep_debug_info_file**)(
-          d->files
-          ? mrb_realloc(mrb, d->files, sizeof(mrb_irep_debug_info_file*) * (d->flen + 1))
-          : mrb_malloc(mrb, sizeof(mrb_irep_debug_info_file*)));
+  d->files = (mrb_irep_debug_info_file**)mrb_realloc(mrb, d->files, sizeof(mrb_irep_debug_info_file*) * (d->flen + 1));
   d->files[d->flen++] = f;
 
   file_pc_count = end_pos - start_pos;
@@ -156,44 +194,32 @@ mrb_debug_info_append_file(mrb_state *mrb, mrb_irep_debug_info *d,
 
   fn_len = strlen(filename);
   f->filename_sym = mrb_intern(mrb, filename, fn_len);
-  len = 0;
-  f->filename = mrb_sym2name_len(mrb, f->filename_sym, &len);
-
-  f->line_type = select_line_type(lines + start_pos, end_pos - start_pos);
+  f->line_type = mrb_debug_line_packed_map;
   f->lines.ptr = NULL;
 
-  switch (f->line_type) {
-    case mrb_debug_line_ary:
-      f->line_entry_count = file_pc_count;
-      f->lines.ary = (uint16_t*)mrb_malloc(mrb, sizeof(uint16_t) * file_pc_count);
-      for (i = 0; i < file_pc_count; ++i) {
-        f->lines.ary[i] = lines[start_pos + i];
-      }
-      break;
+  uint16_t prev_line = 0;
+  uint32_t prev_pc = 0;
+  size_t packed_size = 0;
+  uint8_t *p, *pend;
 
-    case mrb_debug_line_flat_map: {
-      uint16_t prev_line = 0;
-      mrb_irep_debug_info_line m;
-      f->lines.flat_map = (mrb_irep_debug_info_line*)mrb_malloc(mrb, sizeof(mrb_irep_debug_info_line) * 1);
-      f->line_entry_count = 0;
-      for (i = 0; i < file_pc_count; ++i) {
-        if (lines[start_pos + i] == prev_line) { continue; }
-
-        f->lines.flat_map = (mrb_irep_debug_info_line*)mrb_realloc(
-            mrb, f->lines.flat_map,
-            sizeof(mrb_irep_debug_info_line) * (f->line_entry_count + 1));
-        m.start_pos = start_pos + i;
-        m.line = lines[start_pos + i];
-        f->lines.flat_map[f->line_entry_count] = m;
-
-        /* update */
-        ++f->line_entry_count;
-        prev_line = lines[start_pos + i];
-      }
-    } break;
-
-    default: mrb_assert(0); break;
+  for (i = 0; i < file_pc_count; ++i) {
+    if (lines[start_pos + i] == prev_line) continue;
+    packed_size += mrb_packed_int_len(start_pos+i-prev_pc);
+    prev_pc = start_pos+i;
+    packed_size += mrb_packed_int_len(lines[start_pos+i]-prev_line);
+    prev_line = lines[start_pos + i];
   }
+  p = f->lines.packed_map = (uint8_t*)mrb_malloc(mrb, packed_size);
+  pend = p + packed_size;
+  prev_line = 0; prev_pc = 0;
+  for (i = 0; i < file_pc_count; ++i) {
+    if (lines[start_pos + i] == prev_line) continue;
+    p += mrb_packed_int_encode(start_pos+i-prev_pc, p, pend);
+    prev_pc = start_pos + i;
+    p += mrb_packed_int_encode(lines[start_pos + i]-prev_line, p, pend);
+    prev_line = lines[start_pos + i];
+  }
+  f->line_entry_count = (uint32_t)packed_size;
 
   return f;
 }
@@ -205,11 +231,14 @@ mrb_debug_info_free(mrb_state *mrb, mrb_irep_debug_info *d)
 
   if (!d) { return; }
 
-  for (i = 0; i < d->flen; ++i) {
-    mrb_assert(d->files[i]);
-    mrb_free(mrb, d->files[i]->lines.ptr);
-    mrb_free(mrb, d->files[i]);
+  if (d->files) {
+    for (i = 0; i < d->flen; ++i) {
+      if (d->files[i]) {
+        mrb_free(mrb, d->files[i]->lines.ptr);
+        mrb_free(mrb, d->files[i]);
+      }
+    }
+    mrb_free(mrb, d->files);
   }
-  mrb_free(mrb, d->files);
   mrb_free(mrb, d);
 }

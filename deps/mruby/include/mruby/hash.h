@@ -1,5 +1,5 @@
-/*
-** mruby/hash.h - Hash class
+/**
+** @file mruby/hash.h - Hash class
 **
 ** See Copyright Notice in mruby.h
 */
@@ -14,18 +14,29 @@
  */
 MRB_BEGIN_DECL
 
+/* offset of `iv` must be 3 words */
 struct RHash {
   MRB_OBJECT_HEADER;
+#ifdef MRB_64BIT
+  uint32_t size;
   struct iv_tbl *iv;
-  struct htable *ht;
+  uint32_t ea_capa;
+  uint32_t ea_n_used;
+#else
+  struct iv_tbl *iv;
+  uint32_t size;
+#endif
+  union {
+    struct hash_entry *ea;
+    struct hash_table *ht;
+  } hsh;
 };
 
 #define mrb_hash_ptr(v)    ((struct RHash*)(mrb_ptr(v)))
 #define mrb_hash_value(p)  mrb_obj_value((void*)(p))
 
-MRB_API mrb_value mrb_hash_new_capa(mrb_state*, mrb_int);
-MRB_API mrb_value mrb_ensure_hash_type(mrb_state *mrb, mrb_value hash);
-MRB_API mrb_value mrb_check_hash_type(mrb_state *mrb, mrb_value hash);
+size_t mrb_hash_memsize(mrb_value obj);
+MRB_API mrb_value mrb_hash_new_capa(mrb_state *mrb, mrb_int capa);
 
 /*
  * Initializes a new hash.
@@ -95,7 +106,7 @@ MRB_API mrb_value mrb_hash_fetch(mrb_state *mrb, mrb_value hash, mrb_value key, 
  * @param mrb The mruby state reference.
  * @param hash The target hash.
  * @param key The key to delete.
- * @return The deleted value.
+ * @return The deleted value. This value is not protected from GC. Use `mrb_gc_protect()` if necessary.
  */
 MRB_API mrb_value mrb_hash_delete_key(mrb_state *mrb, mrb_value hash, mrb_value key);
 
@@ -178,8 +189,9 @@ MRB_API mrb_value mrb_hash_clear(mrb_state *mrb, mrb_value hash);
 MRB_API mrb_int mrb_hash_size(mrb_state *mrb, mrb_value hash);
 
 /*
- * Copies the hash.
- *
+ * Copies the hash. This function does NOT copy the instance variables
+ * (except for the default value). Use mrb_obj_dup() to copy the instance
+ * variables as well.
  *
  * @param mrb The mruby state reference.
  * @param hash The target hash.
@@ -197,23 +209,22 @@ MRB_API mrb_value mrb_hash_dup(mrb_state *mrb, mrb_value hash);
  */
 MRB_API void mrb_hash_merge(mrb_state *mrb, mrb_value hash1, mrb_value hash2);
 
-/* declaration of struct mrb_hash_value */
-/* be careful when you touch the internal */
-typedef struct {
-  mrb_value v;
-  mrb_int n;
-} mrb_hash_value;
+#define RHASH(hash) ((struct RHash*)(mrb_ptr(hash)))
 
-/* RHASH_TBL allocates st_table if not available. */
-#define RHASH(obj)   ((struct RHash*)(mrb_ptr(obj)))
-#define RHASH_TBL(h)          (RHASH(h)->ht)
-#define RHASH_IFNONE(h)       mrb_iv_get(mrb, (h), mrb_intern_lit(mrb, "ifnone"))
-#define RHASH_PROCDEFAULT(h)  RHASH_IFNONE(h)
-
-#define MRB_HASH_DEFAULT      1
-#define MRB_HASH_PROC_DEFAULT 2
-#define MRB_RHASH_DEFAULT_P(h) (RHASH(h)->flags & MRB_HASH_DEFAULT)
-#define MRB_RHASH_PROCDEFAULT_P(h) (RHASH(h)->flags & MRB_HASH_PROC_DEFAULT)
+#define MRB_HASH_IB_BIT_BIT         5
+#define MRB_HASH_AR_EA_CAPA_BIT     5
+#define MRB_HASH_IB_BIT_SHIFT       0
+#define MRB_HASH_AR_EA_CAPA_SHIFT   0
+#define MRB_HASH_AR_EA_N_USED_SHIFT MRB_HASH_AR_EA_CAPA_BIT
+#define MRB_HASH_SIZE_FLAGS_SHIFT   (MRB_HASH_AR_EA_CAPA_BIT * 2)
+#define MRB_HASH_IB_BIT_MASK        ((1 << MRB_HASH_IB_BIT_BIT) - 1)
+#define MRB_HASH_AR_EA_CAPA_MASK    ((1 << MRB_HASH_AR_EA_CAPA_BIT) - 1)
+#define MRB_HASH_AR_EA_N_USED_MASK  (MRB_HASH_AR_EA_CAPA_MASK << MRB_HASH_AR_EA_N_USED_SHIFT)
+#define MRB_HASH_DEFAULT            (1 << (MRB_HASH_SIZE_FLAGS_SHIFT + 0))
+#define MRB_HASH_PROC_DEFAULT       (1 << (MRB_HASH_SIZE_FLAGS_SHIFT + 1))
+#define MRB_HASH_HT                 (1 << (MRB_HASH_SIZE_FLAGS_SHIFT + 2))
+#define MRB_RHASH_DEFAULT_P(hash) (RHASH(hash)->flags & MRB_HASH_DEFAULT)
+#define MRB_RHASH_PROCDEFAULT_P(hash) (RHASH(hash)->flags & MRB_HASH_PROC_DEFAULT)
 
 /* GC functions */
 void mrb_gc_mark_hash(mrb_state*, struct RHash*);

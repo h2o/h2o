@@ -1,5 +1,5 @@
-/*
-** mruby/class.h - Class class
+/**
+** @file mruby/class.h - Class class
 **
 ** See Copyright Notice in mruby.h
 */
@@ -17,13 +17,13 @@ MRB_BEGIN_DECL
 struct RClass {
   MRB_OBJECT_HEADER;
   struct iv_tbl *iv;
-  struct kh_mt *mt;
+  struct mt_tbl *mt;
   struct RClass *super;
 };
 
 #define mrb_class_ptr(v)    ((struct RClass*)(mrb_ptr(v)))
 
-static inline struct RClass*
+MRB_INLINE struct RClass*
 mrb_class(mrb_state *mrb, mrb_value v)
 {
   switch (mrb_type(v)) {
@@ -35,9 +35,9 @@ mrb_class(mrb_state *mrb, mrb_value v)
     return mrb->true_class;
   case MRB_TT_SYMBOL:
     return mrb->symbol_class;
-  case MRB_TT_FIXNUM:
-    return mrb->fixnum_class;
-#ifndef MRB_WITHOUT_FLOAT
+  case MRB_TT_INTEGER:
+    return mrb->integer_class;
+#ifndef MRB_NO_FLOAT
   case MRB_TT_FLOAT:
     return mrb->float_class;
 #endif
@@ -73,24 +73,35 @@ mrb_class(mrb_state *mrb, mrb_value v)
 #define MRB_SET_INSTANCE_TT(c, tt) ((c)->flags = (((c)->flags & ~MRB_INSTANCE_TT_MASK) | (char)(tt)))
 #define MRB_INSTANCE_TT(c) (enum mrb_vtype)((c)->flags & MRB_INSTANCE_TT_MASK)
 
-MRB_API struct RClass* mrb_define_class_id(mrb_state*, mrb_sym, struct RClass*);
-MRB_API struct RClass* mrb_define_module_id(mrb_state*, mrb_sym);
-MRB_API struct RClass *mrb_vm_define_class(mrb_state*, mrb_value, mrb_value, mrb_sym);
-MRB_API struct RClass *mrb_vm_define_module(mrb_state*, mrb_value, mrb_sym);
+struct RClass *mrb_vm_define_class(mrb_state*, mrb_value, mrb_value, mrb_sym);
+struct RClass *mrb_vm_define_module(mrb_state*, mrb_value, mrb_sym);
 MRB_API void mrb_define_method_raw(mrb_state*, struct RClass*, mrb_sym, mrb_method_t);
-MRB_API void mrb_define_method_id(mrb_state *mrb, struct RClass *c, mrb_sym mid, mrb_func_t func, mrb_aspec aspec);
 MRB_API void mrb_alias_method(mrb_state*, struct RClass *c, mrb_sym a, mrb_sym b);
+MRB_API void mrb_remove_method(mrb_state *mrb, struct RClass *c, mrb_sym sym);
 
 MRB_API mrb_method_t mrb_method_search_vm(mrb_state*, struct RClass**, mrb_sym);
 MRB_API mrb_method_t mrb_method_search(mrb_state*, struct RClass*, mrb_sym);
 
 MRB_API struct RClass* mrb_class_real(struct RClass* cl);
+mrb_value mrb_instance_new(mrb_state *mrb, mrb_value cv);
 
 void mrb_class_name_class(mrb_state*, struct RClass*, struct RClass*, mrb_sym);
+mrb_bool mrb_const_name_p(mrb_state*, const char*, mrb_int);
 mrb_value mrb_class_find_path(mrb_state*, struct RClass*);
+mrb_value mrb_mod_to_s(mrb_state*, mrb_value);
 void mrb_gc_mark_mt(mrb_state*, struct RClass*);
 size_t mrb_gc_mark_mt_size(mrb_state*, struct RClass*);
 void mrb_gc_free_mt(mrb_state*, struct RClass*);
+
+#ifndef MRB_NO_METHOD_CACHE
+void mrb_mc_clear_by_class(mrb_state *mrb, struct RClass* c);
+#else
+#define mrb_mc_clear_by_class(mrb,c)
+#endif
+
+/* return non zero to break the loop */
+typedef int (mrb_mt_foreach_func)(mrb_state*,mrb_sym,mrb_method_t,void*);
+MRB_API void mrb_mt_foreach(mrb_state*, struct RClass*, mrb_mt_foreach_func*, void*);
 
 MRB_END_DECL
 

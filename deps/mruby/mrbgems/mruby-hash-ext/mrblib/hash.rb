@@ -116,7 +116,6 @@ class Hash
     nk.each {|k|
       h[k] = self[k]
     }
-    h
     self.replace(h)
   end
 
@@ -256,7 +255,6 @@ class Hash
   def keep_if(&block)
     return to_enum :keep_if unless block
 
-    keys = []
     self.each do |k, v|
       unless block.call([k, v])
         self.delete(k)
@@ -494,4 +492,7 @@ class Hash
       self.fetch(k, &block)
     end
   end
+
+  alias filter select
+  alias filter! select!
 end

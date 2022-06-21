@@ -10,7 +10,7 @@ Gem::Specification.new do |spec|
 
   spec.summary       = %q{MRuby source code wrapper.}
   spec.description   = %q{MRuby source code wrapper for use with Ruby libs.}
-  spec.homepage      = "http://www.mruby.org/"
+  spec.homepage      = "https://mruby.org"
   spec.license       = "MIT"
 
   spec.files         = `git ls-files -z`.split("\x0")

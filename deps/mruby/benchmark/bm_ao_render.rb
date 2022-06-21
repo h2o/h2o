@@ -1,29 +1,29 @@
 # AO render benchmark
-# Original program (C) Syoyo Fujita in Javascript (and other languages)
+# Original program (C) Syoyo Fujita in JavaScript (and other languages)
 #      https://code.google.com/p/aobench/
 # Ruby(yarv2llvm) version by Hideki Miura
 # mruby version by Hideki Miura
 #
 
-IMAGE_WIDTH = 64
-IMAGE_HEIGHT = 64
+IMAGE_WIDTH = Integer(ARGV[0] || 64)
+IMAGE_HEIGHT = IMAGE_WIDTH
 NSUBSAMPLES = 2
 NAO_SAMPLES = 8
 
 module Rand
   # Use xorshift
-  @@x = 123456789
-  @@y = 362436069
-  @@z = 521288629
-  @@w = 88675123
+  @x = 123456789
+  @y = 362436069
+  @z = 521288629
+  @w = 88675123
   BNUM = 1 << 29
   BNUMF = BNUM.to_f
   def self.rand
-    x = @@x
+    x = @x
     t = x ^ ((x & 0xfffff) << 11)
-    w = @@w
-    @@x, @@y, @@z = @@y, @@z, w
-    w = @@w = (w ^ (w >> 19) ^ (t ^ (t >> 8)))
+    w = @w
+    @x, @y, @z = @y, @z, w
+    w = @w = (w ^ (w >> 19) ^ (t ^ (t >> 8)))
     (w % BNUM) / BNUMF
   end
 end
@@ -260,7 +260,7 @@ class Scene
       w.times do |x|
         rad = Vec.new(0.0, 0.0, 0.0)
 
-        # Subsmpling
+        # Subsampling
         nsubsamples.times do |v|
           nsubsamples.times do |u|
             cnt = cnt + 1

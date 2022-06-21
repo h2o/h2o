@@ -4,6 +4,12 @@
 # ISO 15.2.13
 class Hash
   ##
+  # Hash is enumerable
+  #
+  # ISO 15.2.13.3
+  include Enumerable
+
+  ##
   #  Equality---Two hashes are equal if they each contain the same number
   #  of keys and if each key-value pair is equal to (according to
   #  <code>Object#==</code>) the corresponding elements in the other
@@ -140,29 +146,9 @@ class Hash
   def each_value(&block)
     return to_enum :each_value unless block
 
-    self.keys.each{|k| block.call(self[k])}
+    self.values.each{|v| block.call(v)}
     self
   end
-
-  ##
-  # Replaces the contents of <i>hsh</i> with the contents of other hash
-  #
-  # ISO 15.2.13.4.23
-  def replace(hash)
-    raise TypeError, "Hash required (#{hash.class} given)" unless Hash === hash
-    self.clear
-    hash.each_key{|k|
-      self[k] = hash[k]
-    }
-    if hash.default_proc
-      self.default_proc = hash.default_proc
-    else
-      self.default = hash.default
-    end
-    self
-  end
-  # ISO 15.2.13.4.17
-  alias initialize_copy replace
 
   ##
   # Return a hash which contains the content of
@@ -186,29 +172,27 @@ class Hash
   end
 
   # internal method for Hash inspection
-  def _inspect
+  def _inspect(recur_list)
     return "{}" if self.size == 0
+    return "{...}" if recur_list[self.object_id]
+    recur_list[self.object_id] = true
     ary=[]
     keys=self.keys
+    vals=self.values
     size=keys.size
     i=0
     while i<size
-      k=keys[i]
-      ary<<(k._inspect + "=>" + self[k]._inspect)
+      ary<<(keys[i]._inspect(recur_list) + "=>" + vals[i]._inspect(recur_list))
       i+=1
     end
     "{"+ary.join(", ")+"}"
   end
   ##
   # Return the contents of this hash as a string.
- #
+  #
   # ISO 15.2.13.4.30 (x)
   def inspect
-    begin
-      self._inspect
-    rescue SystemStackError
-      "{...}"
-    end
+    self._inspect({})
   end
   # ISO 15.2.13.4.31 (x)
   alias to_s inspect
@@ -318,12 +302,4 @@ class Hash
     }
     h
   end
-end
-
-##
-# Hash is enumerable
-#
-# ISO 15.2.13.3
-class Hash
-  include Enumerable
 end
