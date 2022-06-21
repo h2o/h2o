@@ -106,17 +106,7 @@ OPTION(BUILD_SHARED_LIBS "whether to build a shared library" OFF)
 FIND_PROGRAM(RUBY ruby)
 FIND_PROGRAM(BISON bison)
 IF (RUBY AND BISON)
-    # Bundled mruby cannot be built with Ruby 3.x
-    EXECUTE_PROCESS(
-        COMMAND "${RUBY}" -e "puts RUBY_VERSION"
-        OUTPUT_VARIABLE RUBY_VERSION
-        OUTPUT_STRIP_TRAILING_WHITESPACE
-    )
-    IF ("${RUBY_VERSION}" VERSION_LESS "3.0.0")
-        SET(WITH_MRUBY_DEFAULT "ON")
-    ELSE ()
-        SET(WITH_MRUBY_DEFAULT "OFF")
-    ENDIF()
+    SET(WITH_MRUBY_DEFAULT "ON")
 ELSE ()
     SET(WITH_MRUBY_DEFAULT "OFF")
 ENDIF ()
