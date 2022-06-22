@@ -35,66 +35,16 @@ assert('Float#*', '15.2.9.3.3') do
 end
 
 assert('Float#/', '15.2.9.3.4') do
-  assert_float(1.0, 3.123456789 / 3.123456789)
-  assert_float(3.123456789, 3.123456789 / 1)
-  assert_float(2.875, -5.75 / -2.0)
-  assert_float(-2.875, 5.75 / -2)
-  assert_float(-2.875, -5.75 / 2.0)
-  assert_float(Float::NAN, 0.0 / 0.0)
-  assert_float(Float::NAN, -0.0 / -0.0)
-  assert_float(Float::NAN, -0.0 / 0.0)
-  assert_float(Float::NAN, Float::NAN / Float::NAN)
-  assert_float(Float::NAN, Float::NAN / 0.0)
-  assert_float(Float::NAN, Float::NAN / -0.0)
-  assert_float(Float::NAN, Float::NAN / 2.0)
-  assert_float(Float::NAN, Float::NAN / -2.0)
-  assert_float(Float::NAN, 0.0 / Float::NAN)
-  assert_float(Float::NAN, -0.0 / Float::NAN)
-  assert_float(Float::NAN, 2.0 / Float::NAN)
-  assert_float(Float::NAN, -2.0 / Float::NAN)
-  assert_float(Float::NAN, Float::INFINITY / Float::INFINITY)
-  assert_float(Float::NAN, -Float::INFINITY / Float::INFINITY)
-  assert_float(Float::NAN, Float::INFINITY / -Float::INFINITY)
-  assert_float(Float::NAN, -Float::INFINITY / -Float::INFINITY)
-  assert_float(Float::INFINITY, 1.0 / 0.0)
-  assert_float(Float::INFINITY, -1.0 / -0.0)
-  assert_float(-Float::INFINITY, 1.0 / -0.0)
-  assert_float(-Float::INFINITY, -1.0 / 0.0)
-  assert_float(0.0, 1.0 / Float::INFINITY)
-  assert_float(0.0, -1.0 / -Float::INFINITY)
-  assert_float(-0.0, -1.0 / Float::INFINITY)
-  assert_float(-0.0, 1.0 / -Float::INFINITY)
+  a = 3.123456789 / 3.123456789
+  b = 3.123456789 / 1
+
+  assert_float(1.0        , a)
+  assert_float(3.123456789, b)
 end
 assert('Float#quo') do
-  assert_float(1.0, 3.123456789.quo(3.123456789))
-  assert_float(3.123456789, 3.123456789.quo(1))
-  assert_float(2.875, -5.75.quo(-2.0))
-  assert_float(-2.875, 5.75.quo(-2))
-  assert_float(-2.875, -5.75.quo(2.0))
-  assert_float(Float::NAN, 0.0.quo(0.0))
-  assert_float(Float::NAN, -0.0.quo(-0.0))
-  assert_float(Float::NAN, -0.0.quo(0.0))
-  assert_float(Float::NAN, Float::NAN.quo(Float::NAN))
-  assert_float(Float::NAN, Float::NAN.quo(0.0))
-  assert_float(Float::NAN, Float::NAN.quo(-0.0))
-  assert_float(Float::NAN, Float::NAN.quo(2.0))
-  assert_float(Float::NAN, Float::NAN.quo(-2.0))
-  assert_float(Float::NAN, 0.0.quo(Float::NAN))
-  assert_float(Float::NAN, -0.0.quo(Float::NAN))
-  assert_float(Float::NAN, 2.0.quo(Float::NAN))
-  assert_float(Float::NAN, -2.0.quo(Float::NAN))
-  assert_float(Float::NAN, Float::INFINITY.quo(Float::INFINITY))
-  assert_float(Float::NAN, -Float::INFINITY.quo(Float::INFINITY))
-  assert_float(Float::NAN, Float::INFINITY.quo(-Float::INFINITY))
-  assert_float(Float::NAN, -Float::INFINITY.quo(-Float::INFINITY))
-  assert_float(Float::INFINITY, 1.0.quo(0.0))
-  assert_float(Float::INFINITY, -1.0.quo(-0.0))
-  assert_float(-Float::INFINITY, 1.0.quo(-0.0))
-  assert_float(-Float::INFINITY, -1.0.quo(0.0))
-  assert_float(0.0, 1.0.quo(Float::INFINITY))
-  assert_float(0.0, -1.0.quo(-Float::INFINITY))
-  assert_float(-0.0, -1.0.quo(Float::INFINITY))
-  assert_float(-0.0, 1.0.quo(-Float::INFINITY))
+  a = 3.123456789.quo(3.123456789)
+
+  assert_float(1.0        , a)
 end
 
 assert('Float#%', '15.2.9.3.5') do
@@ -277,6 +227,8 @@ assert('Float#to_s') do
   assert_equal("-1.0e-10", -0.0000000001.to_s)
   assert_equal("1.0e+20", 1e20.to_s)
   assert_equal("-1.0e+20", -1e20.to_s)
+  assert_equal("1.0e+16", 10000000000000000.0.to_s)
+  assert_equal("-1.0e+16", -10000000000000000.0.to_s)
   assert_equal("100000.0", 100000.0.to_s)
   assert_equal("-100000.0", -100000.0.to_s)
   if uses_float
@@ -301,18 +253,6 @@ assert('Float#eql?') do
   assert_operator(5.0, :eql?, 5.0)
   assert_not_operator(5.0, :eql?, 5)
   assert_not_operator(5.0, :eql?, "5.0")
-end
-
-assert('Float#abs') do
-  f = 1.0
-  assert_equal(1.0, f.abs)
-  f = -1.0
-  assert_equal(1.0, f.abs)
-  f = 0.0
-  assert_equal(0.0, f.abs)
-  # abs(negative zero) should be positive zero
-  f = -0.0
-  assert_equal(0.0, f.abs)
 end
 
 end # const_defined?(:Float)

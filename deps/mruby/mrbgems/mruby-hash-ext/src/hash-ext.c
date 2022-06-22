@@ -74,7 +74,7 @@ hash_slice(mrb_state *mrb, mrb_value hash)
  *     hsh.except(*keys) -> a_hash
  *
  *  Returns a hash excluding the given keys and their values.
- *
+ * 
  *     h = { a: 100, b: 200, c: 300 }
  *     h.except(:a)          #=> {:b=>200, :c=>300}
  *     h.except(:b, :c, :d)  #=> {:a=>100}

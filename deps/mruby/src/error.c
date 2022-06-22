@@ -5,6 +5,7 @@
 */
 
 #include <errno.h>
+#include <stdarg.h>
 #include <stdlib.h>
 #include <mruby.h>
 #include <mruby/array.h>
@@ -17,51 +18,18 @@
 #include <mruby/throw.h>
 #include <mruby/presym.h>
 
-static void
-exc_mesg_set(mrb_state *mrb, struct RException *exc, mrb_value mesg)
+MRB_API mrb_value
+mrb_exc_new(mrb_state *mrb, struct RClass *c, const char *ptr, size_t len)
 {
-  if (mrb_string_p(mesg)) {
-    exc->flags |= MRB_EXC_MESG_STRING_FLAG;
-    exc->mesg = RSTRING(mesg);
-    mrb_field_write_barrier_value(mrb, (struct RBasic*)exc, mesg);
-  }
-  else {
-    exc->flags &= ~MRB_EXC_MESG_STRING_FLAG;
-    if (mrb_nil_p(mesg)) {
-      exc->mesg = 0;
-    }
-    else {
-      mrb_obj_iv_set(mrb, (struct RObject*)exc, MRB_SYM(mesg), mesg);
-    }
-  }
-}
-
-static mrb_value
-exc_mesg_get(mrb_state *mrb, struct RException *exc)
-{
-  if ((exc->flags & MRB_EXC_MESG_STRING_FLAG) != 0) {
-    return mrb_obj_value(exc->mesg);
-  }
-  else {
-    return mrb_obj_iv_get(mrb, (struct RObject*)exc, MRB_SYM(mesg));
-  }
+  mrb_value arg = mrb_str_new(mrb, ptr, len);
+  return mrb_obj_new(mrb, c, 1, &arg);
 }
 
 MRB_API mrb_value
 mrb_exc_new_str(mrb_state *mrb, struct RClass* c, mrb_value str)
 {
-  mrb_ensure_string_type(mrb, str);
-
-  struct RBasic* e = mrb_obj_alloc(mrb, MRB_TT_EXCEPTION, c);
-  mrb_value exc = mrb_obj_value(e);
-  mrb_iv_set(mrb, exc, MRB_SYM(mesg), str);
-  return exc;
-}
-
-MRB_API mrb_value
-mrb_exc_new(mrb_state *mrb, struct RClass *c, const char *ptr, size_t len)
-{
-  return mrb_exc_new_str(mrb, c, mrb_str_new(mrb, ptr, len));
+  mrb_to_str(mrb, str);
+  return mrb_obj_new(mrb, c, 1, &str);
 }
 
 /*
@@ -78,7 +46,7 @@ exc_initialize(mrb_state *mrb, mrb_value exc)
   mrb_value mesg;
 
   if (mrb_get_args(mrb, "|o", &mesg) == 1) {
-    exc_mesg_set(mrb, mrb_exc_ptr(exc), mesg);
+    mrb_iv_set(mrb, exc, MRB_SYM(mesg), mesg);
   }
   return exc;
 }
@@ -107,7 +75,7 @@ exc_exception(mrb_state *mrb, mrb_value self)
   if (argc == 0) return self;
   if (mrb_obj_equal(mrb, self, a)) return self;
   exc = mrb_obj_clone(mrb, self);
-  exc_mesg_set(mrb, mrb_exc_ptr(exc), a);
+  mrb_iv_set(mrb, exc, MRB_SYM(mesg), a);
 
   return exc;
 }
@@ -120,10 +88,10 @@ exc_exception(mrb_state *mrb, mrb_value self)
  * no message is set).
  */
 
-static mrb_value
+mrb_value
 exc_to_s(mrb_state *mrb, mrb_value exc)
 {
-  mrb_value mesg = exc_mesg_get(mrb, mrb_exc_ptr(exc));
+  mrb_value mesg = mrb_attr_get(mrb, exc, MRB_SYM(mesg));
   struct RObject *p;
 
   if (!mrb_string_p(mesg)) {
@@ -163,7 +131,7 @@ exc_message(mrb_state *mrb, mrb_value exc)
 mrb_value
 mrb_exc_inspect(mrb_state *mrb, mrb_value exc)
 {
-  mrb_value mesg = exc_mesg_get(mrb, mrb_exc_ptr(exc));
+  mrb_value mesg = mrb_attr_get(mrb, exc, MRB_SYM(mesg));
   mrb_value cname = mrb_mod_to_s(mrb, mrb_obj_value(mrb_obj_class(mrb, exc)));
   mesg = mrb_obj_as_string(mrb, mesg);
   return RSTRING_LEN(mesg) == 0 ? cname : mrb_format(mrb, "%v (%v)", mesg, cname);
@@ -319,7 +287,7 @@ mrb_vformat(mrb_state *mrb, const char *format, va_list ap)
 #else
           i = *p == 'd' ? (mrb_int)va_arg(ap, int) : va_arg(ap, mrb_int);
 #endif
-          obj = mrb_int_value(mrb, i);
+          obj = mrb_fixnum_value(i);
           goto L_cat_obj;
 #ifndef MRB_NO_FLOAT
         case 'f':
@@ -334,7 +302,6 @@ mrb_vformat(mrb_state *mrb, const char *format, va_list ap)
             obj = mrb_str_new(mrb, chars, len);
             goto L_cat_obj;
           }
-        L_cat_plain:
           mrb_str_cat(mrb, result, b,  e - b - 1);
           mrb_str_cat(mrb, result, chars, len);
           b = ++p;
@@ -358,15 +325,10 @@ mrb_vformat(mrb_state *mrb, const char *format, va_list ap)
           obj = va_arg(ap, mrb_value);
         L_cat_obj:
           str = (inspect ? mrb_inspect : mrb_obj_as_string)(mrb, obj);
-          if (mrb_type(str) != MRB_TT_STRING) {
-            chars = "void (no string conversion)";
-            len = strlen(chars);
-          }
-          else {
-            chars = RSTRING_PTR(str);
-            len = RSTRING_LEN(str);
-          }
-          goto L_cat_plain;
+          chars = RSTRING_PTR(str);
+          len = RSTRING_LEN(str);
+          inspect = FALSE;
+          goto L_cat;
         case 'C':
           cls = va_arg(ap, struct RClass*);
         L_cat_class:
@@ -390,7 +352,7 @@ mrb_vformat(mrb_state *mrb, const char *format, va_list ap)
         L_cat_current:
           chars = p;
           len = 1;
-          goto L_cat_plain;
+          goto L_cat;
         default:
           mrb_raisef(mrb, E_ARGUMENT_ERROR, "malformed format string - %%%c", *p);
       }
@@ -419,37 +381,41 @@ mrb_format(mrb_state *mrb, const char *format, ...)
   return str;
 }
 
-static mrb_value
-error_va(mrb_state *mrb, struct RClass *c, const char *fmt, va_list ap)
+static mrb_noreturn void
+raise_va(mrb_state *mrb, struct RClass *c, const char *fmt, va_list ap, int argc, mrb_value *argv)
 {
-  mrb_value mesg = mrb_vformat(mrb, fmt, ap);
-  return mrb_exc_new_str(mrb, c, mesg);
+  mrb_value mesg;
+
+  mesg = mrb_vformat(mrb, fmt, ap);
+  if (argv == NULL) {
+    argv = &mesg;
+  }
+  else {
+    argv[0] = mesg;
+  }
+  mrb_exc_raise(mrb, mrb_obj_new(mrb, c, argc+1, argv));
 }
 
 MRB_API mrb_noreturn void
 mrb_raisef(mrb_state *mrb, struct RClass *c, const char *fmt, ...)
 {
-  va_list ap;
-  mrb_value exc;
+  va_list args;
 
-  va_start(ap, fmt);
-  exc = error_va(mrb, c, fmt, ap);
-  va_end(ap);
-
-  mrb_exc_raise(mrb, exc);
+  va_start(args, fmt);
+  raise_va(mrb, c, fmt, args, 0, NULL);
+  va_end(args);
 }
 
 MRB_API mrb_noreturn void
 mrb_name_error(mrb_state *mrb, mrb_sym id, const char *fmt, ...)
 {
-  va_list ap;
-  mrb_value exc;
+  mrb_value argv[2];
+  va_list args;
 
-  va_start(ap, fmt);
-  exc = error_va(mrb, E_NAME_ERROR, fmt, ap);
-  va_end(ap);
-  mrb_iv_set(mrb, exc, MRB_IVSYM(name), mrb_symbol_value(id));
-  mrb_exc_raise(mrb, exc);
+  va_start(args, fmt);
+  argv[1] = mrb_symbol_value(id);
+  raise_va(mrb, E_NAME_ERROR, fmt, args, 1, argv);
+  va_end(args);
 }
 
 MRB_API void
@@ -558,14 +524,16 @@ mrb_sys_fail(mrb_state *mrb, const char *mesg)
 MRB_API mrb_noreturn void
 mrb_no_method_error(mrb_state *mrb, mrb_sym id, mrb_value args, char const* fmt, ...)
 {
-  va_list ap;
   mrb_value exc;
+  mrb_value argv[3];
+  va_list ap;
 
   va_start(ap, fmt);
-  exc = error_va(mrb, E_NOMETHOD_ERROR, fmt, ap);
+  argv[0] = mrb_vformat(mrb, fmt, ap);
+  argv[1] = mrb_symbol_value(id);
+  argv[2] = args;
   va_end(ap);
-  mrb_iv_set(mrb, exc, MRB_IVSYM(name), mrb_symbol_value(id));
-  mrb_iv_set(mrb, exc, MRB_IVSYM(args), args);
+  exc = mrb_obj_new(mrb, E_NOMETHOD_ERROR, 3, argv);
   mrb_exc_raise(mrb, exc);
 }
 

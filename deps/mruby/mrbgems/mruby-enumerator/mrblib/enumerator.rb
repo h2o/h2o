@@ -89,7 +89,7 @@ class Enumerator
   include Enumerable
 
   ##
-  # @overload initialize(obj, method = :each, *args, **kwd)
+  # @overload initialize(obj, method = :each, *args)
   #
   # Creates a new Enumerator object, which can be used as an
   # Enumerable.
@@ -114,7 +114,7 @@ class Enumerator
   #
   # Use of this form is discouraged.  Use Kernel#enum_for or Kernel#to_enum
   # instead.
-  def initialize(obj=NONE, meth=:each, *args, **kwd, &block)
+  def initialize(obj=NONE, meth=:each, *args, &block)
     if block
       obj = Generator.new(&block)
     elsif obj == NONE
@@ -124,7 +124,6 @@ class Enumerator
     @obj = obj
     @meth = meth
     @args = args
-    @kwd = kwd
     @fib = nil
     @dst = nil
     @lookahead = nil
@@ -132,7 +131,7 @@ class Enumerator
     @stop_exc = false
   end
 
-  attr_accessor :obj, :meth, :args, :kwd
+  attr_accessor :obj, :meth, :args
   attr_reader :fib
 
   def initialize_copy(obj)
@@ -141,7 +140,6 @@ class Enumerator
     @obj = obj.obj
     @meth = obj.meth
     @args = obj.args
-    @kwd = obj.kwd
     @fib = nil
     @lookahead = nil
     @feedvalue = nil
@@ -288,7 +286,7 @@ class Enumerator
   end
 
   def enumerator_block_call(&block)
-    @obj.__send__ @meth, *@args, **@kwd, &block
+    @obj.__send__ @meth, *@args, &block
   end
   private :enumerator_block_call
 
@@ -633,7 +631,7 @@ module Kernel
   #       def repeat(n)
   #         raise ArgumentError, "#{n} is negative!" if n < 0
   #         unless block_given?
-  #           return to_enum(__callee__, n) do # __callee__ is :repeat here
+  #           return to_enum(__method__, n) # __method__ is :repeat here
   #         end
   #         each do |*val|
   #           n.times { yield *val }

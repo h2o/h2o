@@ -29,17 +29,52 @@ class String
     string = dup
     self_len = length
     sep_len = separator.length
+    should_yield_subclass_instances = self.class != String
 
     while (pointer = string.index(separator, start))
       pointer += sep_len
       pointer += 1 while paragraph_mode && string[pointer] == "\n"
-      block.call(string[start, pointer - start])
+      if should_yield_subclass_instances
+        block.call(self.class.new(string[start, pointer - start]))
+      else
+        block.call(string[start, pointer - start])
+      end
       start = pointer
     end
     return self if start == self_len
 
-    block.call(string[start, self_len - start])
+    if should_yield_subclass_instances
+      block.call(self.class.new(string[start, self_len - start]))
+    else
+      block.call(string[start, self_len - start])
+    end
     self
+  end
+
+  # private method for gsub/sub
+  def __sub_replace(pre, m, post)
+    s = ""
+    i = 0
+    while j = index("\\", i)
+      break if j == length-1
+      t = case self[j+1]
+          when "\\"
+            "\\"
+          when "`"
+            pre
+          when "&", "0"
+            m
+          when "'"
+            post
+          when "1", "2", "3", "4", "5", "6", "7", "8", "9"
+            ""
+          else
+            self[j, 2]
+          end
+      s += self[i, j-i] + t
+      i = j + 2
+    end
+    s + self[i, length-i]
   end
 
   ##
@@ -51,12 +86,15 @@ class String
   # ISO 15.2.10.5.18
   def gsub(*args, &block)
     return to_enum(:gsub, *args) if args.length == 1 && !block
-    raise ArgumentError, "wrong number of arguments (given #{args.length}, expected 1..2)" unless (1..2).include?(args.length)
+    raise ArgumentError, "wrong number of arguments" unless (1..2).include?(args.length)
 
     pattern, replace = *args
     plen = pattern.length
     if args.length == 2 && block
       block = nil
+    end
+    if !replace.nil? || !block
+      replace.__to_str
     end
     offset = 0
     result = []
@@ -66,7 +104,7 @@ class String
       result << if block
         block.call(pattern).to_s
       else
-        self.__sub_replace(replace, pattern, found)
+        replace.__sub_replace(self[0, found], pattern, self[offset..-1] || "")
       end
       if plen == 0
         result << self[offset, 1]
@@ -115,20 +153,25 @@ class String
     end
 
     pattern, replace = *args
+    pattern.__to_str
     if args.length == 2 && block
       block = nil
     end
+    unless block
+      replace.__to_str
+    end
     result = []
+    this = dup
     found = index(pattern)
-    return self.dup unless found
-    result << self[0, found]
+    return this unless found
+    result << this[0, found]
     offset = found + pattern.length
     result << if block
       block.call(pattern).to_s
     else
-      self.__sub_replace(replace, pattern, found)
+      replace.__sub_replace(this[0, found], pattern, this[offset..-1] || "")
     end
-    result << self[offset..-1] if offset < length
+    result << this[offset..-1] if offset < length
     result.join
   end
 

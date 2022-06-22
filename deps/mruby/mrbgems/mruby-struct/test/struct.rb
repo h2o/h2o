@@ -136,7 +136,7 @@ end
 
 assert('Struct#to_h') do
   s = Struct.new(:white, :red, :green).new('ruuko', 'yuzuki', 'hitoe')
-  assert_equal({:white => 'ruuko', :red => 'yuzuki', :green => 'hitoe'}) { s.to_h }
+  assert_equal(:white => 'ruuko', :red => 'yuzuki', :green => 'hitoe') { s.to_h }
 end
 
 assert('Struct#values_at') do

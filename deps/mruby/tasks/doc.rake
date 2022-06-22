@@ -18,10 +18,7 @@ namespace :doc do
       sh "doxygen Doxyfile"
     rescue
       puts "ERROR: To generate C API documents, you need Doxygen."
-      puts "On Debian-based systems:"
       puts "  $ sudo apt-get install doxygen"
-      puts "On RHEL-based systems:"
-      puts "  $ sudo dnf install doxygen"
     end
   end
 

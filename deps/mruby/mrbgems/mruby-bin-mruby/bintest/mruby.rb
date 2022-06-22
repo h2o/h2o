@@ -2,7 +2,7 @@ require 'tempfile'
 require 'open3'
 
 def assert_mruby(exp_out, exp_err, exp_success, args)
-  out, err, stat = Open3.capture3( *(cmd_list("mruby") + args))
+  out, err, stat = Open3.capture3(cmd("mruby"), *args)
   assert "assert_mruby" do
     assert_operator(exp_out, :===, out, "standard output")
     assert_operator(exp_err, :===, err, "standard error")
@@ -42,6 +42,13 @@ end
 assert 'ARGV value' do
   assert_mruby(%{["ab", "cde"]\n}, "", true, %w[-e p(ARGV) ab cde])
   assert_mruby("[]\n", "", true, %w[-e p(ARGV)])
+end
+
+assert('float literal') do
+  script, bin = Tempfile.new('test.rb'), Tempfile.new('test.mrb')
+  File.write script.path, 'p [3.21, 2e308.infinite?, -2e308.infinite?]'
+  system "#{cmd('mrbc')} -g -o #{bin.path} #{script.path}"
+  assert_equal "[3.21, 1, -1]", `#{cmd('mruby')} #{bin.path}`.chomp!
 end
 
 assert '__END__', '8.6' do
@@ -87,7 +94,7 @@ assert('mruby -e option (no code specified)') do
 end
 
 assert('mruby -h option') do
-  assert_mruby(/\AUsage: #{Regexp.escape cmd_bin("mruby")} .*/m, "", true, %w[-h])
+  assert_mruby(/\AUsage: #{Regexp.escape cmd("mruby")} .*/m, "", true, %w[-h])
 end
 
 assert('mruby -r option') do
@@ -153,7 +160,7 @@ end
 
 assert('codegen error') do
   code = "def f(#{(1..100).map{|n| "a#{n}"} * ","}); end"
-  assert_mruby("", /\A.*\n\z/, false, ["-e", code])
+  assert_mruby("", /\Acodegen error:.*\n\z/, false, ["-e", code])
 end
 
 assert('top level local variables are in file scope') do

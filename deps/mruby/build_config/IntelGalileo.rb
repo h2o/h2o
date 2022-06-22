@@ -74,7 +74,7 @@ MRuby::CrossBuild.new("Galileo") do |conf|
   conf.gem :core => "mruby-fiber"
   conf.gem :core => "mruby-toplevel-ext"
 
-  #lightweight regular expression
+  #lightweigh regular expression
   conf.gem :github => "masamitsu-murase/mruby-hs-regexp", :branch => "master"
 
   #Arduino API

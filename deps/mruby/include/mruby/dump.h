@@ -16,10 +16,7 @@
  */
 MRB_BEGIN_DECL
 
-/* flags for mrb_dump_irep{,_binary,_cfunc,_cstruct} */
-#define MRB_DUMP_DEBUG_INFO 1
-#define MRB_DUMP_STATIC 2
-#define DUMP_DEBUG_INFO MRB_DUMP_DEBUG_INFO  /* deprecated */
+#define DUMP_DEBUG_INFO 1
 
 int mrb_dump_irep(mrb_state *mrb, const mrb_irep *irep, uint8_t flags, uint8_t **bin, size_t *bin_size);
 #ifndef MRB_NO_STDIO
@@ -54,7 +51,7 @@ MRB_API mrb_irep *mrb_read_irep_buf(mrb_state*, const void*, size_t);
 /* Binary Format Version Major:Minor */
 /*   Major: Incompatible to prior versions */
 /*   Minor: Upper-compatible to prior versions */
-#define RITE_BINARY_MAJOR_VER          "03"
+#define RITE_BINARY_MAJOR_VER          "02"
 #define RITE_BINARY_MINOR_VER          "00"
 #define RITE_BINARY_FORMAT_VER         RITE_BINARY_MAJOR_VER RITE_BINARY_MINOR_VER
 #define RITE_COMPILER_NAME             "MATZ"

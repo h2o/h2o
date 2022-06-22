@@ -5,8 +5,6 @@ MRuby::Gem::Specification.new('mruby-bin-mirb') do |spec|
 
   if spec.build.cc.search_header_path 'readline/readline.h'
     spec.cc.defines << "MRB_USE_READLINE"
-    spec.cc.defines << "MRB_READLINE_HEADER='<readline/readline.h>'"
-    spec.cc.defines << "MRB_READLINE_HISTORY='<readline/history.h>'"
     if spec.build.cc.search_header_path 'termcap.h'
       if MRUBY_BUILD_HOST_IS_CYGWIN || MRUBY_BUILD_HOST_IS_OPENBSD
         if spec.build.cc.search_header_path 'termcap.h'
@@ -35,11 +33,6 @@ MRuby::Gem::Specification.new('mruby-bin-mirb') do |spec|
         spec.linker.libraries << 'ncurses'
       end
     end
-  elsif spec.build.cc.search_header_path 'edit/readline/readline.h'
-    spec.cc.defines << "MRB_USE_READLINE"
-    spec.cc.defines << "MRB_READLINE_HEADER='<edit/readline/readline.h>'"
-    spec.cc.defines << "MRB_READLINE_HISTORY='<edit/readline/history.h>'"
-    spec.linker.libraries << "edit"
   elsif spec.build.cc.search_header_path 'linenoise.h'
     spec.cc.defines << "MRB_USE_LINENOISE"
   end

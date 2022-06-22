@@ -4,6 +4,7 @@
 ** See Copyright Notice in mruby.h
 */
 
+#include <limits.h>
 #include <string.h>
 #include <mruby.h>
 #include <mruby/khash.h>
@@ -53,6 +54,13 @@ presym_sym2name(mrb_sym sym, mrb_int *lenp)
 #endif  /* MRB_NO_PRESYM */
 
 /* ------------------------------------------------------ */
+typedef struct symbol_name {
+  mrb_bool lit : 1;
+  uint8_t prev;
+  uint16_t len;
+  const char *name;
+} symbol_name;
+
 static void
 sym_validate_len(mrb_state *mrb, size_t len)
 {
@@ -73,11 +81,7 @@ static const char pack_table[] = "_abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRS
 static mrb_sym
 sym_inline_pack(const char *name, size_t len)
 {
-#if defined(MRB_WORD_BOXING) && defined(MRB_32BIT) && !defined(MRB_WORDBOX_NO_FLOAT_TRUNCATE)
-  const size_t pack_length_max = 4;
-#else
   const size_t pack_length_max = 5;
-#endif
 
   char c;
   const char *p;
@@ -134,38 +138,11 @@ symhash(const char *key, size_t len)
     return hash & 0xff;
 }
 
-size_t mrb_packed_int_len(uint32_t num);
-size_t mrb_packed_int_encode(uint32_t num, uint8_t *p, uint8_t *pend);
-uint32_t mrb_packed_int_decode(uint8_t *p, uint8_t **newpos);
-
-#define sym_lit_p(mrb, i) (mrb->symflags[i>>3]&(1<<(i&7)))
-#define sym_lit_set(mrb, i) mrb->symflags[i>>3]|=(1<<(i&7))
-#define sym_flags_clear(mrb, i) mrb->symflags[i>>3]&=~(1<<(i&7))
-#define sym_len(mrb, i) (size_t)(sym_lit_p(mrb, i)?strlen(mrb->symtbl[i]):mrb_packed_int_decode(mrb->symtbl[i],NULL))
-
-static mrb_bool
-sym_check(mrb_state *mrb, const char *name, size_t len, mrb_sym i)
-{
-  const char *symname = mrb->symtbl[i];
-  size_t symlen;
-
-  if (sym_lit_p(mrb, i)) {
-    symlen = strlen(symname);
-  }
-  else {
-    /* length in BER */
-    symlen = mrb_packed_int_decode((uint8_t*)symname, (uint8_t**)&symname);
-  }
-  if (len == symlen && memcmp(symname, name, len) == 0) {
-    return TRUE;
-  }
-  return FALSE;
-}
-
 static mrb_sym
 find_symbol(mrb_state *mrb, const char *name, size_t len, uint8_t *hashp)
 {
   mrb_sym i;
+  symbol_name *sname;
   uint8_t hash;
 
 #ifndef MRB_NO_PRESYM
@@ -183,24 +160,24 @@ find_symbol(mrb_state *mrb, const char *name, size_t len, uint8_t *hashp)
 
   i = mrb->symhash[hash];
   if (i == 0) return 0;
-  for (;;) {
-    if (sym_check(mrb, name, len, i)) {
+  do {
+    sname = &mrb->symtbl[i];
+    if (sname->len == len && memcmp(sname->name, name, len) == 0) {
       return (i+MRB_PRESYM_MAX);
     }
-    uint8_t diff = mrb->symlink[i];
-    if (diff == 0xff) {
+    if (sname->prev == 0xff) {
       i -= 0xff;
-      while (i > 0) {
-        if (sym_check(mrb, name, len, i)) {
-          return (i+MRB_PRESYM_MAX);
+      sname = &mrb->symtbl[i];
+      while (mrb->symtbl < sname) {
+        if (sname->len == len && memcmp(sname->name, name, len) == 0) {
+          return (mrb_sym)((sname - mrb->symtbl)+MRB_PRESYM_MAX);
         }
-        i--;
+        sname--;
       }
       return 0;
     }
-    if (diff == 0) return 0;
-    i -= diff;
-  }
+    i -= sname->prev;
+  } while (sname->prev > 0);
   return 0;
 }
 
@@ -208,6 +185,7 @@ static mrb_sym
 sym_intern(mrb_state *mrb, const char *name, size_t len, mrb_bool lit)
 {
   mrb_sym sym;
+  symbol_name *sname;
   uint8_t hash;
 
   sym_validate_len(mrb, len);
@@ -216,38 +194,35 @@ sym_intern(mrb_state *mrb, const char *name, size_t len, mrb_bool lit)
 
   /* registering a new symbol */
   sym = mrb->symidx + 1;
-  if (mrb->symcapa <= sym) {
+  if (mrb->symcapa < sym) {
     size_t symcapa = mrb->symcapa;
     if (symcapa == 0) symcapa = 100;
     else symcapa = (size_t)(symcapa * 6 / 5);
-    mrb->symtbl = (const char**)mrb_realloc(mrb, mrb->symtbl, sizeof(char*)*symcapa);
-    mrb->symflags = (uint8_t*)mrb_realloc(mrb, mrb->symflags, symcapa/8+1);
-    memset(mrb->symflags+mrb->symcapa/8+1, 0, (symcapa-mrb->symcapa)/8);
-    mrb->symlink = (uint8_t*)mrb_realloc(mrb, mrb->symlink, symcapa);
+    mrb->symtbl = (symbol_name*)mrb_realloc(mrb, mrb->symtbl, sizeof(symbol_name)*(symcapa+1));
     mrb->symcapa = symcapa;
   }
-  sym_flags_clear(mrb, sym);
-  if ((lit || mrb_ro_data_p(name)) && strlen(name) == len) {
-    sym_lit_set(mrb, sym);
-    mrb->symtbl[sym] = name;
+  sname = &mrb->symtbl[sym];
+  sname->len = (uint16_t)len;
+  if (lit || mrb_ro_data_p(name)) {
+    sname->name = name;
+    sname->lit = TRUE;
   }
   else {
-    int ilen = mrb_packed_int_len(len);
-    char *p = (char *)mrb_malloc(mrb, len+ilen+1);
-    mrb_packed_int_encode(len, (uint8_t*)p, (uint8_t*)p+ilen);
-    memcpy(p+ilen, name, len);
-    p[ilen+len] = 0;
-    mrb->symtbl[sym] = p;
+    char *p = (char *)mrb_malloc(mrb, len+1);
+    memcpy(p, name, len);
+    p[len] = 0;
+    sname->name = (const char*)p;
+    sname->lit = FALSE;
   }
   if (mrb->symhash[hash]) {
     mrb_sym i = sym - mrb->symhash[hash];
     if (i > 0xff)
-      mrb->symlink[sym] = 0xff;
+      sname->prev = 0xff;
     else
-      mrb->symlink[sym] = i;
+      sname->prev = i;
   }
   else {
-    mrb->symlink[sym] = 0;
+    sname->prev = 0;
   }
   mrb->symhash[hash] = mrb->symidx = sym;
 
@@ -345,15 +320,8 @@ sym2name_len(mrb_state *mrb, mrb_sym sym, char *buf, mrb_int *lenp)
     return NULL;
   }
 
-  const char *symname = mrb->symtbl[sym];
-  if (!sym_lit_p(mrb, sym)) {
-    size_t len = mrb_packed_int_decode((uint8_t*)symname, (uint8_t**)&symname);
-    if (lenp) *lenp = (mrb_int)len;
-  }
-  else if (lenp) {
-    *lenp = (mrb_int)strlen(symname);
-  }
-  return symname;
+  if (lenp) *lenp = mrb->symtbl[sym].len;
+  return mrb->symtbl[sym].name;
 }
 
 MRB_API const char*
@@ -366,19 +334,25 @@ mrb_sym_name_len(mrb_state *mrb, mrb_sym sym, mrb_int *lenp)
 #endif
 }
 
+mrb_bool
+mrb_sym_static_p(mrb_state *mrb, mrb_sym sym)
+{
+  if (SYMBOL_INLINE_P(sym)) return TRUE;
+  if (sym > MRB_PRESYM_MAX) return FALSE;
+  return TRUE;
+}
+
 void
 mrb_free_symtbl(mrb_state *mrb)
 {
   mrb_sym i, lim;
 
   for (i=1, lim=mrb->symidx+1; i<lim; i++) {
-    if (!sym_lit_p(mrb, i)) {
-      mrb_free(mrb, (char*)mrb->symtbl[i]);
+    if (!mrb->symtbl[i].lit) {
+      mrb_free(mrb, (char*)mrb->symtbl[i].name);
     }
   }
   mrb_free(mrb, mrb->symtbl);
-  mrb_free(mrb, mrb->symlink);
-  mrb_free(mrb, mrb->symflags);
 }
 
 void
@@ -423,40 +397,17 @@ mrb_init_symtbl(mrb_state *mrb)
 /* 15.2.11.3.3  */
 /*
  *  call-seq:
+ *     sym.id2name   -> string
  *     sym.to_s      -> string
  *
  *  Returns the name or string corresponding to <i>sym</i>.
  *
- *     :fred.to_s   #=> "fred"
+ *     :fred.id2name   #=> "fred"
  */
 static mrb_value
 sym_to_s(mrb_state *mrb, mrb_value sym)
 {
   return mrb_sym_str(mrb, mrb_symbol(sym));
-}
-
-/*
- *  call-seq:
- *     sym.name   -> string
- *
- *  Returns the name or string corresponding to <i>sym</i>. Unlike #to_s, the
- *  returned string is frozen.
- *
- *     :fred.name         #=> "fred"
- *     :fred.name.frozen? #=> true
- */
-static mrb_value
-sym_name(mrb_state *mrb, mrb_value vsym)
-{
-  mrb_sym sym = mrb_symbol(vsym);
-  mrb_int len;
-  const char *name = mrb_sym_name_len(mrb, sym, &len);
-
-  mrb_assert(name != NULL);
-  if (SYMBOL_INLINE_P(sym)) {
-    return mrb_str_new_frozen(mrb, name, len);
-  }
-  return mrb_str_new_static_frozen(mrb, name, len);
 }
 
 /* 15.2.11.3.4  */
@@ -645,7 +596,7 @@ mrb_sym_str(mrb_state *mrb, mrb_sym sym)
 }
 
 static const char*
-sym_cstr(mrb_state *mrb, mrb_sym sym, mrb_bool dump)
+sym_name(mrb_state *mrb, mrb_sym sym, mrb_bool dump)
 {
   mrb_int len;
   const char *name = mrb_sym_name_len(mrb, sym, &len);
@@ -664,13 +615,13 @@ sym_cstr(mrb_state *mrb, mrb_sym sym, mrb_bool dump)
 MRB_API const char*
 mrb_sym_name(mrb_state *mrb, mrb_sym sym)
 {
-  return sym_cstr(mrb, sym, FALSE);
+  return sym_name(mrb, sym, FALSE);
 }
 
 MRB_API const char*
 mrb_sym_dump(mrb_state *mrb, mrb_sym sym)
 {
-  return sym_cstr(mrb, sym, TRUE);
+  return sym_name(mrb, sym, TRUE);
 }
 
 #define lesser(a,b) (((a)>(b))?(b):(a))
@@ -714,8 +665,8 @@ mrb_init_symbol(mrb_state *mrb)
   MRB_SET_INSTANCE_TT(sym, MRB_TT_SYMBOL);
   mrb_undef_class_method(mrb,  sym, "new");
 
+  mrb_define_method(mrb, sym, "id2name", sym_to_s,    MRB_ARGS_NONE());          /* 15.2.11.3.2 */
   mrb_define_method(mrb, sym, "to_s",    sym_to_s,    MRB_ARGS_NONE());          /* 15.2.11.3.3 */
-  mrb_define_method(mrb, sym, "name",    sym_name,    MRB_ARGS_NONE());
   mrb_define_method(mrb, sym, "to_sym",  sym_to_sym,  MRB_ARGS_NONE());          /* 15.2.11.3.4 */
   mrb_define_method(mrb, sym, "inspect", sym_inspect, MRB_ARGS_NONE());          /* 15.2.11.3.5(x) */
   mrb_define_method(mrb, sym, "<=>",     sym_cmp,     MRB_ARGS_REQ(1));

@@ -9,12 +9,11 @@
 #include <mruby/range.h>
 #include <mruby/string.h>
 #include <mruby/array.h>
-#include <mruby/numeric.h>
 #include <mruby/presym.h>
 
-#define RANGE_INITIALIZED_FLAG 1
-#define RANGE_INITIALIZED(p) ((p)->flags |= RANGE_INITIALIZED_FLAG)
-#define RANGE_INITIALIZED_P(p) ((p)->flags & RANGE_INITIALIZED_FLAG)
+#define RANGE_INITIALIZED_MASK 1
+#define RANGE_INITIALIZED(p) ((p)->flags |= RANGE_INITIALIZED_MASK)
+#define RANGE_INITIALIZED_P(p) ((p)->flags & RANGE_INITIALIZED_MASK)
 
 static void
 r_check(mrb_state *mrb, mrb_value a, mrb_value b)
@@ -26,13 +25,13 @@ r_check(mrb_state *mrb, mrb_value a, mrb_value b)
   ta = mrb_type(a);
   tb = mrb_type(b);
 #ifdef MRB_NO_FLOAT
-  if (ta == MRB_TT_INTEGER && tb == MRB_TT_INTEGER ) return;
+  if (ta == MRB_TT_INTEGER && tb == MRB_TT_INTEGER ) {
 #else
   if ((ta == MRB_TT_INTEGER || ta == MRB_TT_FLOAT) &&
       (tb == MRB_TT_INTEGER || tb == MRB_TT_FLOAT)) {
+#endif
     return;
   }
-#endif
 
   if (mrb_nil_p(a) || mrb_nil_p(b)) return;
 
@@ -89,7 +88,7 @@ range_ptr_init(mrb_state *mrb, struct RRange *r, mrb_value beg, mrb_value end, m
     }
   }
   else {
-    r = MRB_OBJ_ALLOC(mrb, MRB_TT_RANGE, mrb->range_class);
+    r = (struct RRange*)mrb_obj_alloc(mrb, MRB_TT_RANGE, mrb->range_class);
     range_ptr_alloc_edges(mrb, r);
   }
 
@@ -343,59 +342,6 @@ range_initialize_copy(mrb_state *mrb, mrb_value copy)
   return copy;
 }
 
-static mrb_value
-range_num_to_a(mrb_state *mrb, mrb_value range)
-{
-  struct RRange *r = mrb_range_ptr(mrb, range);
-  mrb_value beg = RANGE_BEG(r);
-  mrb_value end = RANGE_END(r);
-  mrb_value ary;
-
-  mrb->c->ci->mid = 0;
-  if (mrb_nil_p(end)) {
-    mrb_raise(mrb, E_RANGE_ERROR, "cannot convert endless range to an array");
-  }
-  if (mrb_integer_p(beg)) {
-    if (mrb_integer_p(end)) {
-      mrb_int a = mrb_integer(beg);
-      mrb_int b = mrb_integer(end);
-      mrb_int len;
-
-      if (mrb_int_sub_overflow(b, a, &len)) {
-        mrb_raise(mrb, E_RANGE_ERROR, "integer range too long");
-      }
-      if (!RANGE_EXCL(r)) len++;
-      ary = mrb_ary_new_capa(mrb, len);
-      for (mrb_int i=0; i<len; i++) {
-        mrb_ary_push(mrb, ary, mrb_int_value(mrb, a+i));
-      }
-      return ary;
-    }
-#ifndef MRB_NO_FLOAT
-    if (mrb_float_p(end)) {
-      mrb_float a = (mrb_float)mrb_integer(beg);
-      mrb_float b = mrb_float(end);
-
-      ary = mrb_ary_new_capa(mrb, (mrb_int)(b - a) + 1);
-      if (RANGE_EXCL(r)) {
-        while (a < b) {
-          mrb_ary_push(mrb, ary, mrb_int_value(mrb, (mrb_int)a));
-          a += 1.0;
-        }
-      }
-      else {
-        while (a <= b) {
-          mrb_ary_push(mrb, ary, mrb_int_value(mrb, (mrb_int)a));
-          a += 1.0;
-        }
-      }
-      return ary;
-    }
-#endif
-  }
-  return mrb_nil_value();
-}
-
 mrb_value
 mrb_get_values_at(mrb_state *mrb, mrb_value obj, mrb_int olen, mrb_int argc, const mrb_value *argv, mrb_value (*func)(mrb_state*, mrb_value, mrb_int))
 {
@@ -463,8 +409,8 @@ mrb_range_beg_len(mrb_state *mrb, mrb_value range, mrb_int *begp, mrb_int *lenp,
   if (!mrb_range_p(range)) return MRB_RANGE_TYPE_MISMATCH;
   r = mrb_range_ptr(mrb, range);
 
-  beg = mrb_nil_p(RANGE_BEG(r)) ? 0 : mrb_as_int(mrb, RANGE_BEG(r));
-  end = mrb_nil_p(RANGE_END(r)) ? -1 : mrb_as_int(mrb, RANGE_END(r));
+  beg = mrb_int(mrb, RANGE_BEG(r));
+  end = mrb_nil_p(RANGE_END(r)) ? -1 : mrb_int(mrb, RANGE_END(r));
   excl = mrb_nil_p(RANGE_END(r)) ? 0 : RANGE_EXCL(r);
 
   if (beg < 0) {
@@ -510,5 +456,4 @@ mrb_init_range(mrb_state *mrb)
   mrb_define_method(mrb, r, "inspect",         range_inspect,         MRB_ARGS_NONE()); /* 15.2.14.4.13(x) */
   mrb_define_method(mrb, r, "eql?",            range_eql,             MRB_ARGS_REQ(1)); /* 15.2.14.4.14(x) */
   mrb_define_method(mrb, r, "initialize_copy", range_initialize_copy, MRB_ARGS_REQ(1)); /* 15.2.14.4.15(x) */
-  mrb_define_method(mrb, r, "__num_to_a",      range_num_to_a,        MRB_ARGS_NONE());
 }

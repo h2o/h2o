@@ -775,7 +775,7 @@ assert('Hash#shift', '15.2.13.4.24') do
     assert_equal(0, h.size)
 
     h.default = -456
-    assert_equal(nil, h.shift)
+    assert_equal(-456, h.shift)
     assert_equal(0, h.size)
 
     h.freeze
@@ -783,8 +783,8 @@ assert('Hash#shift', '15.2.13.4.24') do
   end
 
   h = Hash.new{|h, k| [h, k]}
+  assert_operator(h.shift, :eql?, [h, nil])
   assert_equal(0, h.size)
-  assert_equal(nil, h.shift)
 end
 
 # Not ISO specified
@@ -944,14 +944,6 @@ assert('Hash#rehash') do
   h = {}
   assert_same(h, h.rehash)
   assert_predicate(h, :empty?)
-
-  h = {}
-  (1..17).each{h[_1] = _1 * 2}
-  (2..16).each{h.delete(_1)}
-  assert_same(h, h.rehash)
-  assert_equal([[1, 2], [17, 34]], h.to_a)
-  assert_equal(2, h.size)
-  [1, 17].each{assert_equal(_1 * 2, h[_1])}
 end
 
 assert('#eql? receiver should be specified key') do
@@ -1005,10 +997,4 @@ assert('#== receiver should be specified value') do
     v1.error = false
     %i[has_value? value?].each{|m| assert_nothing_raised{h.__send__(m, v1)}}
   end
-end
-
-assert('test value ommision') do
-  x = 1
-  y = 2
-  assert_equal({x:1, y:2}, {x:, y:})
 end

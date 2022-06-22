@@ -10,7 +10,7 @@ namespace :test do |test_ns|
   end
 
   desc "build and run command binaries tests"
-  task :bin => "rake:all" do
+  task :bin => :all do
     test_ns["run:bin"].invoke
   end
 
@@ -19,10 +19,9 @@ namespace :test do |test_ns|
 
   namespace :build do |test_build_ns|
     desc "build library tests"
-    task :lib => "rake:all" do
+    task :lib => :all do
       MRuby.each_target{|build| build.gem(core: 'mruby-test')}
-      test = test_build_ns["lib_without_loading_gem"]
-      test.invoke if test
+      test_build_ns["lib_without_loading_gem"].invoke
     end
   end
 

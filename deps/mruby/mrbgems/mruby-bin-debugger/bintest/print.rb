@@ -264,7 +264,7 @@ SRC
   BinTest_MrubyBinDebugger.test(src, tc)
 end
 
-assert('mruby-bin-debugger(print) same name:instance variable') do
+assert('mruby-bin-debugger(print) same name:instance variabe') do
   # ruby source (bp is break point)
   src = <<"SRC"
 @iv = 'top'
@@ -296,7 +296,7 @@ SRC
   BinTest_MrubyBinDebugger.test(src, tc)
 end
 
-# Kernel#instance_eval(string) doesn't work const.
+# Kernel#instance_eval(string) does't work const.
 =begin
 assert('mruby-bin-debugger(print) same name:const') do
   # ruby source (bp is break point)

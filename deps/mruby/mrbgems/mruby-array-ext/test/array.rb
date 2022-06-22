@@ -18,14 +18,6 @@ def assert_combination(exp, receiver, *args)
   assert_permutation_combination(exp, receiver, :combination, *args)
 end
 
-def assert_repeated_permutation(exp, receiver, *args)
-  assert_permutation_combination(exp, receiver, :repeated_permutation, *args)
-end
-
-def assert_repeated_combination(exp, receiver, *args)
-  assert_permutation_combination(exp, receiver, :repeated_combination, *args)
-end
-
 assert("Array#assoc") do
   s1 = [ "colors", "red", "blue", "green" ]
   s2 = [ "letters", "a", "b", "c" ]
@@ -125,14 +117,6 @@ assert("Array#intersection") do
   c = [1, 5, 7, 8]
 
   assert_equal [1, 8], a.intersection(b,c)
-end
-
-assert("Array#intersect?") do
-  a = [ 1, 2, 3 ]
-  b = [ 3, 4, 5 ]
-  c = [ 5, 6, 7 ]
-  assert_true(a.intersect?(b))
-  assert_false(a.intersect?(c))
 end
 
 assert("Array#flatten") do
@@ -428,74 +412,4 @@ assert('Array#transpose') do
   assert_equal([[1,2], [3,4], [5,6]].transpose, [[1,3,5], [2,4,6]])
   assert_raise(TypeError) { [1].transpose }
   assert_raise(IndexError) { [[1], [2,3,4]].transpose }
-end
-
-assert "Array#product" do
-  assert_equal [[1], [2], [3]], [1, 2, 3].product
-  assert_equal [], [1, 2, 3].product([])
-  assert_equal [], [1, 2, 3].product([4, 5, 6], [])
-
-  expect = [[1, 5, 8], [1, 5, 9], [1, 6, 8], [1, 6, 9], [1, 7, 8], [1, 7, 9],
-            [2, 5, 8], [2, 5, 9], [2, 6, 8], [2, 6, 9], [2, 7, 8], [2, 7, 9],
-            [3, 5, 8], [3, 5, 9], [3, 6, 8], [3, 6, 9], [3, 7, 8], [3, 7, 9],
-            [4, 5, 8], [4, 5, 9], [4, 6, 8], [4, 6, 9], [4, 7, 8], [4, 7, 9]]
-  assert_equal expect, [1, 2, 3, 4].product([5, 6, 7], [8, 9])
-
-  expect = [[1, 4, 7], [1, 4, 8], [1, 4, 9], [1, 5, 7], [1, 5, 8], [1, 5, 9], [1, 6, 7], [1, 6, 8], [1, 6, 9],
-            [2, 4, 7], [2, 4, 8], [2, 4, 9], [2, 5, 7], [2, 5, 8], [2, 5, 9], [2, 6, 7], [2, 6, 8], [2, 6, 9],
-            [3, 4, 7], [3, 4, 8], [3, 4, 9], [3, 5, 7], [3, 5, 8], [3, 5, 9], [3, 6, 7], [3, 6, 8], [3, 6, 9]]
-
-  assert_equal expect, [1, 2, 3].product([4, 5, 6], [7, 8, 9])
-  base = [1, 2, 3]
-  x = []
-  assert_equal base, base.product([4, 5, 6], [7, 8, 9]) { |e| x << e }
-  assert_equal expect, x
-end
-
-assert("Array#repeated_combination") do
-  a = [1, 2, 3]
-  assert_raise(ArgumentError) { a.repeated_combination }
-  #assert_kind_of(Enumerator, a.repeated_combination(1))
-  assert_repeated_combination([[1],[2],[3]], a, 1)
-  assert_repeated_combination([[1,1],[1,2],[1,3],[2,2],[2,3],[3,3]], a, 2)
-  assert_repeated_combination([[1,1,1],[1,1,2],[1,1,3],[1,2,2],[1,2,3],[1,3,3],[2,2,2],
-                               [2,2,3],[2,3,3],[3,3,3]], a, 3)
-  assert_repeated_combination([[1,1,1,1],[1,1,1,2],[1,1,1,3],[1,1,2,2],[1,1,2,3],[1,1,3,3],
-                               [1,2,2,2],[1,2,2,3],[1,2,3,3],[1,3,3,3],[2,2,2,2],[2,2,2,3],
-                               [2,2,3,3],[2,3,3,3],[3,3,3,3]], a, 4)
-  assert_repeated_combination([[1,1,1,1,1],[1,1,1,1,2],[1,1,1,1,3],[1,1,1,2,2],[1,1,1,2,3],
-                               [1,1,1,3,3],[1,1,2,2,2],[1,1,2,2,3],[1,1,2,3,3],[1,1,3,3,3],
-                               [1,2,2,2,2],[1,2,2,2,3],[1,2,2,3,3],[1,2,3,3,3],[1,3,3,3,3],
-                               [2,2,2,2,2],[2,2,2,2,3],[2,2,2,3,3],[2,2,3,3,3],[2,3,3,3,3],
-                               [3,3,3,3,3]], a, 5)
-  assert_repeated_combination([[]], a, 0)
-  assert_repeated_combination([], a, -1)
-end
-
-assert("Array#repeated_permutation") do
-  a = [1, 2, 3]
-  assert_raise(ArgumentError) { a.repeated_permutation }
-  #assert_kind_of(Enumerator, a.repeated_permutation(1))
-  assert_repeated_permutation([[1],[2],[3]], a, 1)
-  assert_repeated_permutation([[1,1],[1,2],[1,3],[2,1],[2,2],[2,3],[3,1],[3,2],[3,3]], a, 2)
-  assert_repeated_permutation([[1,1,1],[1,1,2],[1,1,3],[1,2,1],[1,2,2],[1,2,3],[1,3,1],[1,3,2],[1,3,3],
-                               [2,1,1],[2,1,2],[2,1,3],[2,2,1],[2,2,2],[2,2,3],[2,3,1],[2,3,2],[2,3,3],
-                               [3,1,1],[3,1,2],[3,1,3],[3,2,1],[3,2,2],[3,2,3],[3,3,1],[3,3,2],[3,3,3]],
-                              a, 3)
-  assert_repeated_permutation([[1,1,1,1],[1,1,1,2],[1,1,1,3],[1,1,2,1],[1,1,2,2],[1,1,2,3],
-                               [1,1,3,1],[1,1,3,2],[1,1,3,3],[1,2,1,1],[1,2,1,2],[1,2,1,3],
-                               [1,2,2,1],[1,2,2,2],[1,2,2,3],[1,2,3,1],[1,2,3,2],[1,2,3,3],
-                               [1,3,1,1],[1,3,1,2],[1,3,1,3],[1,3,2,1],[1,3,2,2],[1,3,2,3],
-                               [1,3,3,1],[1,3,3,2],[1,3,3,3],[2,1,1,1],[2,1,1,2],[2,1,1,3],
-                               [2,1,2,1],[2,1,2,2],[2,1,2,3],[2,1,3,1],[2,1,3,2],[2,1,3,3],
-                               [2,2,1,1],[2,2,1,2],[2,2,1,3],[2,2,2,1],[2,2,2,2],[2,2,2,3],
-                               [2,2,3,1],[2,2,3,2],[2,2,3,3],[2,3,1,1],[2,3,1,2],[2,3,1,3],
-                               [2,3,2,1],[2,3,2,2],[2,3,2,3],[2,3,3,1],[2,3,3,2],[2,3,3,3],
-                               [3,1,1,1],[3,1,1,2],[3,1,1,3],[3,1,2,1],[3,1,2,2],[3,1,2,3],
-                               [3,1,3,1],[3,1,3,2],[3,1,3,3],[3,2,1,1],[3,2,1,2],[3,2,1,3],
-                               [3,2,2,1],[3,2,2,2],[3,2,2,3],[3,2,3,1],[3,2,3,2],[3,2,3,3],
-                               [3,3,1,1],[3,3,1,2],[3,3,1,3],[3,3,2,1],[3,3,2,2],[3,3,2,3],
-                               [3,3,3,1],[3,3,3,2],[3,3,3,3]], a, 4)
-  assert_repeated_permutation([[]], a, 0)
-  assert_repeated_permutation([], a, -1)
 end

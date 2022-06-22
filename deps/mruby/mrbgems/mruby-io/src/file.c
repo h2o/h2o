@@ -14,6 +14,7 @@
 #include <sys/stat.h>
 
 #include <fcntl.h>
+#include <limits.h>
 
 #include <errno.h>
 #include <stdlib.h>
@@ -88,7 +89,7 @@ flock(int fd, int operation) {
   DWORD flags;
   flags = ((operation & LOCK_NB) ? LOCKFILE_FAIL_IMMEDIATELY : 0)
           | ((operation & LOCK_SH) ? LOCKFILE_EXCLUSIVE_LOCK : 0);
-  ov = (OVERLAPPED){0};
+  memset(&ov, 0, sizeof(ov));
   return LockFileEx(h, flags, 0, 0xffffffff, 0xffffffff, &ov) ? 0 : -1;
 }
 #endif
@@ -116,14 +117,14 @@ static mrb_value
 mrb_file_s_unlink(mrb_state *mrb, mrb_value obj)
 {
   const mrb_value *argv;
+  mrb_value pathv;
   mrb_int argc, i;
   char *path;
 
   mrb_get_args(mrb, "*", &argv, &argc);
   for (i = 0; i < argc; i++) {
     const char *utf8_path;
-    mrb_value pathv = argv[i];
-    mrb_ensure_string_type(mrb, pathv);
+    pathv = mrb_ensure_string_type(mrb, argv[i]);
     utf8_path = RSTRING_CSTR(mrb, pathv);
     path = mrb_locale_from_utf8(utf8_path, -1);
     if (UNLINK(path) < 0) {
@@ -496,7 +497,7 @@ mrb_file_truncate(mrb_state *mrb, mrb_value self)
   mrb_value lenv = mrb_get_arg1(mrb);
 
   fd = mrb_io_fileno(mrb, self);
-  length = mrb_as_int(mrb, lenv);
+  length = mrb_int(mrb, lenv);
   if (mrb_ftruncate(fd, length) != 0) {
     mrb_raise(mrb, E_IO_ERROR, "ftruncate failed");
   }
@@ -592,7 +593,7 @@ mrb_init_file(mrb_state *mrb)
 {
   struct RClass *io, *file, *cnst;
 
-  io   = mrb_class_get_id(mrb, MRB_SYM(IO));
+  io   = mrb_class_get(mrb, "IO");
   file = mrb_define_class(mrb, "File", io);
   MRB_SET_INSTANCE_TT(file, MRB_TT_DATA);
   mrb_define_class_method(mrb, file, "umask",  mrb_file_s_umask, MRB_ARGS_OPT(1));

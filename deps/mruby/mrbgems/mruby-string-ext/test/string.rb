@@ -474,14 +474,6 @@ assert('String#rjust') do
   assert_equal "hello", "hello".rjust(-3)
 end
 
-assert('String#center') do
-  assert_equal "hello", "hello".center(4)
-  assert_equal "       hello        ", "hello".center(20)
-  assert_equal 20, "hello".center(20).length
-  assert_equal "1231231hello12312312", "hello".center(20, '123')
-  assert_equal "hello", "hello".center(-3)
-end
-
 if UTF8STRING
   assert('String#ljust with UTF8') do
     assert_equal "helloん              ", "helloん".ljust(20)

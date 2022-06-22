@@ -14,18 +14,17 @@
 #define C_EXT       ".c"
 
 struct mrbc_args {
+  int argc;
+  char **argv;
+  int idx;
   const char *prog;
   const char *outfile;
   const char *initname;
-  char **argv;
-  int argc;
-  int idx;
   mrb_bool dump_struct  : 1;
   mrb_bool check_syntax : 1;
   mrb_bool verbose      : 1;
   mrb_bool remove_lv    : 1;
-  mrb_bool no_ext_ops   : 1;
-  uint8_t flags         : 4;
+  unsigned int flags    : 4;
 };
 
 static void
@@ -39,9 +38,7 @@ usage(const char *name)
   "-g           produce debugging information",
   "-B<symbol>   binary <symbol> output in C language format",
   "-S           dump C struct (requires -B)",
-  "-s           define <symbol> as static variable",
   "--remove-lv  remove local variables",
-  "--no-ext-ops prohibit using OP_EXTs",
   "--verbose    run at verbose mode",
   "--version    print the version",
   "--copyright  print the copyright",
@@ -134,10 +131,7 @@ parse_args(mrb_state *mrb, int argc, char **argv, struct mrbc_args *args)
         args->verbose = TRUE;
         break;
       case 'g':
-        args->flags |= MRB_DUMP_DEBUG_INFO;
-        break;
-      case 's':
-        args->flags |= MRB_DUMP_STATIC;
+        args->flags |= DUMP_DEBUG_INFO;
         break;
       case 'E':
       case 'e':
@@ -163,10 +157,6 @@ parse_args(mrb_state *mrb, int argc, char **argv, struct mrbc_args *args)
         }
         else if (strcmp(argv[i] + 2, "remove-lv") == 0) {
           args->remove_lv = TRUE;
-          break;
-        }
-        else if (strcmp(argv[i] + 2, "no-ext-ops") == 0) {
-          args->no_ext_ops = TRUE;
           break;
         }
         return -1;
@@ -223,7 +213,6 @@ load_file(mrb_state *mrb, struct mrbc_args *args)
   if (args->verbose)
     c->dump_result = TRUE;
   c->no_exec = TRUE;
-  c->no_ext_ops = args->no_ext_ops;
   if (input[0] == '-' && input[1] == '\0') {
     infile = stdin;
   }
@@ -364,33 +353,5 @@ mrb_init_mrbgems(mrb_state *mrb)
 void
 mrb_final_mrbgems(mrb_state *mrb)
 {
-}
-#endif
-
-#ifdef MRB_USE_COMPLEX
-mrb_value mrb_complex_to_i(mrb_state *mrb, mrb_value comp)
-{
-  /* dummy method */
-  return mrb_nil_value();
-}
-mrb_value mrb_complex_to_f(mrb_state *mrb, mrb_value comp)
-{
-  /* dummy method */
-  return mrb_nil_value();
-}
-#endif
-
-#ifdef MRB_USE_RATIONAL
-mrb_value
-mrb_rational_to_i(mrb_state *mrb, mrb_value rat)
-{
-  /* dummy method */
-  return mrb_nil_value();
-}
-mrb_value
-mrb_rational_to_f(mrb_state *mrb, mrb_value rat)
-{
-  /* dummy method */
-  return mrb_nil_value();
 }
 #endif

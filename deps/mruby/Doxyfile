@@ -6,7 +6,7 @@
 
 DOXYFILE_ENCODING      = UTF-8
 PROJECT_NAME           = "mruby"
-PROJECT_NUMBER         = 3.1.0
+PROJECT_NUMBER         = 3.0.0
 
 PROJECT_BRIEF          = "mruby is the lightweight implementation of the Ruby language"
 

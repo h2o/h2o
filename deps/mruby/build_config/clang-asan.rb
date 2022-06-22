@@ -1,7 +1,7 @@
 MRuby::Build.new do |conf|
   conf.toolchain :clang
   # include the GEM box
-  conf.gembox 'full-core'
+  conf.gembox 'default'
 
   # Turn on `enable_debug` for better debugging
   conf.enable_sanitizer "address,undefined"

@@ -14,17 +14,15 @@
  */
 MRB_BEGIN_DECL
 
+
 typedef struct mrb_shared_array {
   int refcnt;
   mrb_ssize len;
   mrb_value *ptr;
 } mrb_shared_array;
 
-#if defined(MRB_32BIT) && defined(MRB_NO_BOXING) && !defined(MRB_USE_FLOAT32) && !defined(MRB_ARY_NO_EMBED)
+#if defined(MRB_32BIT) && defined(MRB_NO_BOXING)
 # define MRB_ARY_NO_EMBED
-#endif
-
-#ifdef MRB_ARY_NO_EMBED
 # define MRB_ARY_EMBED_LEN_MAX 0
 #else
 # define MRB_ARY_EMBED_LEN_MAX ((mrb_int)(sizeof(void*)*3/sizeof(mrb_value)))
@@ -67,7 +65,7 @@ struct RArray {
 #define ARY_EMBED_PTR(a) ((a)->as.ary)
 #endif
 
-#define ARY_LEN(a) (ARY_EMBED_P(a)?ARY_EMBED_LEN(a):(mrb_int)(a)->as.heap.len)
+#define ARY_LEN(a) (ARY_EMBED_P(a)?ARY_EMBED_LEN(a):(a)->as.heap.len)
 #define ARY_PTR(a) (ARY_EMBED_P(a)?ARY_EMBED_PTR(a):(a)->as.heap.ptr)
 #define RARRAY_LEN(a) ARY_LEN(RARRAY(a))
 #define RARRAY_PTR(a) ARY_PTR(RARRAY(a))
@@ -109,7 +107,7 @@ MRB_API mrb_value mrb_ary_new(mrb_state *mrb);
  *      Array[value1, value2, ...]
  *
  * @param mrb The mruby state reference.
- * @param size The number of values.
+ * @param size The numer of values.
  * @param vals The actual values.
  * @return The initialized array.
  */
@@ -179,6 +177,20 @@ MRB_API void mrb_ary_push(mrb_state *mrb, mrb_value array, mrb_value value);
 MRB_API mrb_value mrb_ary_pop(mrb_state *mrb, mrb_value ary);
 
 /*
+ * Returns a reference to an element of the array on the given index.
+ *
+ * Equivalent to:
+ *
+ *      ary[n]
+ *
+ * @param mrb The mruby state reference.
+ * @param ary The target array.
+ * @param n The array index being referenced
+ * @return The referenced value.
+ */
+MRB_API mrb_value mrb_ary_ref(mrb_state *mrb, mrb_value ary, mrb_int n);
+
+/*
  * Sets a value on an array at the given index
  *
  * Equivalent to:
@@ -188,7 +200,7 @@ MRB_API mrb_value mrb_ary_pop(mrb_state *mrb, mrb_value ary);
  * @param mrb The mruby state reference.
  * @param ary The target array.
  * @param n The array index being referenced.
- * @param val The value being set.
+ * @param val The value being setted.
  */
 MRB_API void mrb_ary_set(mrb_state *mrb, mrb_value ary, mrb_int n, mrb_value val);
 
@@ -204,6 +216,8 @@ MRB_API void mrb_ary_set(mrb_state *mrb, mrb_value ary, mrb_int n, mrb_value val
  * @param other The array to replace it with.
  */
 MRB_API void mrb_ary_replace(mrb_state *mrb, mrb_value self, mrb_value other);
+MRB_API mrb_value mrb_ensure_array_type(mrb_state *mrb, mrb_value self);
+MRB_API mrb_value mrb_check_array_type(mrb_state *mrb, mrb_value self);
 
 /*
  * Unshift an element into the array
@@ -229,7 +243,6 @@ MRB_API mrb_value mrb_ary_unshift(mrb_state *mrb, mrb_value self, mrb_value item
  * @param offset The element position (negative counts from the tail).
  */
 MRB_API mrb_value mrb_ary_entry(mrb_value ary, mrb_int offset);
-#define mrb_ary_ref(mrb, ary, n) mrb_ary_entry(ary, n)
 
 /*
  * Replace subsequence of an array.

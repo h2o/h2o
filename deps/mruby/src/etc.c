@@ -15,7 +15,7 @@ mrb_data_object_alloc(mrb_state *mrb, struct RClass *klass, void *ptr, const mrb
 {
   struct RData *data;
 
-  data = MRB_OBJ_ALLOC(mrb, MRB_TT_DATA, klass);
+  data = (struct RData*)mrb_obj_alloc(mrb, MRB_TT_DATA, klass);
   data->data = ptr;
   data->type = type;
 
@@ -103,47 +103,29 @@ mrb_float_id(mrb_float f)
 MRB_API mrb_int
 mrb_obj_id(mrb_value obj)
 {
-#if defined(MRB_NAN_BOXING)
-#ifdef MRB_INT64
-  return obj.u;
-#else
-  uint64_t u = obj.u;
-  return (mrb_int)(u>>32)^u;
-#endif
-#elif defined(MRB_WORD_BOXING)
-  if (!mrb_immediate_p(obj)) {
-    if (mrb_integer_p(obj)) return mrb_integer(obj);
-#ifndef MRB_NO_FLOAT
-    if (mrb_float_p(obj)) {
-      return mrb_float_id(mrb_float(obj));
-    }
-#endif
-  }
-  return (mrb_int)obj.w;
-#else  /* MRB_NO_BOXING */
+  mrb_int tt = mrb_type(obj);
 
-#define MakeID(p,t) (mrb_int)(((intptr_t)(p))^(t))
-
-  enum mrb_vtype tt = mrb_type(obj);
+#define MakeID2(p,t) (mrb_int)(((intptr_t)(p))^(t))
+#define MakeID(p)    MakeID2(p,tt)
 
   switch (tt) {
   case MRB_TT_FREE:
   case MRB_TT_UNDEF:
-    return MakeID(0, tt); /* should not happen */
+    return MakeID(0); /* not define */
   case MRB_TT_FALSE:
     if (mrb_nil_p(obj))
-      return MakeID(4, tt);
+      return MakeID(4);
     else
-      return MakeID(0, tt);
+      return MakeID(0);
   case MRB_TT_TRUE:
-    return MakeID(2, tt);
+    return MakeID(2);
   case MRB_TT_SYMBOL:
-    return MakeID(mrb_symbol(obj), tt);
+    return MakeID(mrb_symbol(obj));
   case MRB_TT_INTEGER:
-    return MakeID(mrb_int_id(mrb_integer(obj)), tt);
+    return MakeID(mrb_int_id(mrb_integer(obj)));
 #ifndef MRB_NO_FLOAT
   case MRB_TT_FLOAT:
-    return MakeID(mrb_float_id(mrb_float(obj)), tt);
+    return MakeID(mrb_float_id(mrb_float(obj)));
 #endif
   case MRB_TT_STRING:
   case MRB_TT_OBJECT:
@@ -159,76 +141,55 @@ mrb_obj_id(mrb_value obj)
   case MRB_TT_DATA:
   case MRB_TT_ISTRUCT:
   default:
-    return MakeID(mrb_ptr(obj), tt);
+    return MakeID(mrb_ptr(obj));
   }
-#endif
 }
 
+#if defined(MRB_NAN_BOXING) && defined(MRB_64BIT)
+#define mrb_xxx_boxing_cptr_value mrb_nan_boxing_cptr_value
+#endif
+
 #ifdef MRB_WORD_BOXING
+#define mrb_xxx_boxing_cptr_value mrb_word_boxing_cptr_value
+
 #ifndef MRB_NO_FLOAT
 MRB_API mrb_value
 mrb_word_boxing_float_value(mrb_state *mrb, mrb_float f)
 {
   union mrb_value_ v;
 
-#ifdef MRB_WORDBOX_NO_FLOAT_TRUNCATE
   v.p = mrb_obj_alloc(mrb, MRB_TT_FLOAT, mrb->float_class);
   v.fp->f = f;
   MRB_SET_FROZEN_FLAG(v.bp);
-#elif defined(MRB_64BIT) && defined(MRB_USE_FLOAT32)
-  v.w = 0;
-  v.f = f;
-  v.w = ((v.w<<2) & ~3) | 2;
-#else
-  v.f = f;
-  v.w = (v.w & ~3) | 2;
-#endif
   return v.value;
 }
-
-
-#ifndef MRB_WORDBOX_NO_FLOAT_TRUNCATE
-MRB_API mrb_float
-mrb_word_boxing_value_float(mrb_value v)
-{
-  union mrb_value_ u;
-  u.value = v;
-  u.w = u.w & ~3;
-#if defined(MRB_64BIT) && defined(MRB_USE_FLOAT32)
-  u.w >>= 2;
-#endif
-  return u.f;
-}
-#endif
 #endif  /* MRB_NO_FLOAT */
 
 MRB_API mrb_value
-mrb_word_boxing_cptr_value(mrb_state *mrb, void *p)
+mrb_word_boxing_int_value(mrb_state *mrb, mrb_int n)
+{
+  if (FIXABLE(n)) return mrb_fixnum_value(n);
+  else {
+    union mrb_value_ v;
+
+    v.p = mrb_obj_alloc(mrb, MRB_TT_INTEGER, mrb->integer_class);
+    v.ip->i = n;
+    MRB_SET_FROZEN_FLAG(v.ip);
+    return v.value;
+  }
+}
+#endif  /* MRB_WORD_BOXING */
+
+#if defined(MRB_WORD_BOXING) || (defined(MRB_NAN_BOXING) && defined(MRB_64BIT))
+MRB_API mrb_value
+mrb_xxx_boxing_cptr_value(mrb_state *mrb, void *p)
 {
   mrb_value v;
-  struct RCptr *cptr = MRB_OBJ_ALLOC(mrb, MRB_TT_CPTR, mrb->object_class);
+  struct RCptr *cptr = (struct RCptr*)mrb_obj_alloc(mrb, MRB_TT_CPTR, mrb->object_class);
 
   SET_OBJ_VALUE(v, cptr);
   cptr->p = p;
   return v;
-}
-#endif  /* MRB_WORD_BOXING */
-
-#if defined(MRB_WORD_BOXING) || (defined(MRB_NAN_BOXING) && defined(MRB_INT64))
-MRB_API mrb_value
-mrb_boxing_int_value(mrb_state *mrb, mrb_int n)
-{
-  if (FIXABLE(n)) return mrb_fixnum_value(n);
-  else {
-    mrb_value v;
-    struct RInteger *p;
-
-    p = (struct RInteger*)mrb_obj_alloc(mrb, MRB_TT_INTEGER, mrb->integer_class);
-    p->i = n;
-    MRB_SET_FROZEN_FLAG((struct RBasic*)p);
-    SET_OBJ_VALUE(v, p);
-    return v;
-  }
 }
 #endif
 

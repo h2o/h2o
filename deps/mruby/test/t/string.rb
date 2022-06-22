@@ -148,9 +148,9 @@ assert('String#[]=') do
   end
 
   if Object.const_defined?(:Float)
-    e = 'abc'
-    e[1.1] = 'X'
-    assert_equal 'aXc', e
+   e = 'abc'
+   e[1.1] = 'X'
+   assert_equal 'aXc', e
   end
 
   assert_raise(TypeError) { 'a'[0] = 1 }

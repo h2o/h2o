@@ -30,18 +30,20 @@ MRB_BEGIN_DECL
 #endif
 #endif
 
+#ifndef MRB_NO_FLOAT
+MRB_API mrb_value mrb_flo_to_fixnum(mrb_state *mrb, mrb_value val);
+#endif
+MRB_API mrb_value mrb_fixnum_to_str(mrb_state *mrb, mrb_value x, mrb_int base);
+/* ArgumentError if format string doesn't match /%(\.[0-9]+)?[aAeEfFgG]/ */
+#ifndef MRB_NO_FLOAT
+MRB_API mrb_value mrb_float_to_str(mrb_state *mrb, mrb_value x, const char *fmt);
+MRB_API int mrb_float_to_cstr(mrb_state *mrb, char *buf, size_t len, const char *fmt, mrb_float f);
+MRB_API mrb_float mrb_to_flo(mrb_state *mrb, mrb_value x);
+#endif
+
 MRB_API mrb_value mrb_num_plus(mrb_state *mrb, mrb_value x, mrb_value y);
 MRB_API mrb_value mrb_num_minus(mrb_state *mrb, mrb_value x, mrb_value y);
 MRB_API mrb_value mrb_num_mul(mrb_state *mrb, mrb_value x, mrb_value y);
-
-MRB_API mrb_value mrb_integer_to_str(mrb_state *mrb, mrb_value x, mrb_int base);
-MRB_API char *mrb_int_to_cstr(char *buf, size_t len, mrb_int n, mrb_int base);
-
-/* internal function(s) */
-mrb_int mrb_div_int(mrb_state *mrb, mrb_int x, mrb_int y);
-
-/* obsolete function(s); will be removed */
-#define mrb_fixnum_to_str(mrb, x, base) mrb_integer_to_str(mrb, x, base)
 
 #ifndef __has_builtin
   #define __has_builtin(x) 0
@@ -133,6 +135,8 @@ mrb_int_mul_overflow(mrb_int a, mrb_int b, mrb_int *c)
 #endif
 
 #ifndef MRB_NO_FLOAT
+# include <stdint.h>
+# include <float.h>
 
 # define MRB_FLT_RADIX          FLT_RADIX
 
@@ -158,18 +162,6 @@ mrb_int_mul_overflow(mrb_int a, mrb_int b, mrb_int *c)
 #  define MRB_FLT_MAX           DBL_MAX
 #  define MRB_FLT_MAX_10_EXP    DBL_MAX_10_EXP
 # endif /* MRB_USE_FLOAT32 */
-
-MRB_API mrb_value mrb_float_to_integer(mrb_state *mrb, mrb_value val);
-
-/* internal functions */
-mrb_float mrb_div_float(mrb_float x, mrb_float y);
-mrb_value mrb_float_to_str(mrb_state *mrb, mrb_value x, const char *fmt);
-int mrb_format_float(mrb_float f, char *buf, size_t buf_size, char fmt, int prec, char sign);
-
-/* obsolete functions; will be removed */
-#define mrb_flo_to_fixnum(mrb, val) mrb_float_to_integer(mrb, val)
-#define mrb_to_flo(mrb, x) mrb_as_float(mrb, x)
-
 #endif /* MRB_NO_FLOAT */
 
 MRB_END_DECL

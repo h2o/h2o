@@ -34,6 +34,12 @@
   typedef long fsuseconds_t;
   typedef int fmode_t;
   typedef int mrb_io_read_write_size;
+  #ifndef MRB_MINGW32_LEGACY
+    #if !defined(_SSIZE_T_) && !defined(_SSIZE_T_DEFINED) && \
+        !defined(__have_typedef_ssize_t)
+    typedef SSIZE_T ssize_t;
+    #endif
+  #endif
 
   #ifndef O_TMPFILE
     #define O_TMPFILE O_TEMPORARY
@@ -82,10 +88,10 @@ io_get_open_fptr(mrb_state *mrb, mrb_value self)
 
   fptr = (struct mrb_io *)mrb_data_get_ptr(mrb, self, &mrb_io_type);
   if (fptr == NULL) {
-    mrb_raise(mrb, E_IO_ERROR, "uninitialized stream");
+    mrb_raise(mrb, E_IO_ERROR, "uninitialized stream.");
   }
   if (fptr->fd < 0) {
-    mrb_raise(mrb, E_IO_ERROR, "closed stream");
+    mrb_raise(mrb, E_IO_ERROR, "closed stream.");
   }
   return fptr;
 }
@@ -163,7 +169,7 @@ mrb_io_mode_to_flags(mrb_state *mrb, mrb_value mode)
   }
   else {
     int flags = 0;
-    mrb_int flags0 = mrb_as_int(mrb, mode);
+    mrb_int flags0 = mrb_int(mrb, mode);
 
     switch (flags0 & MRB_O_ACCMODE) {
       case MRB_O_RDONLY:
@@ -357,7 +363,7 @@ mrb_io_s_popen_args(mrb_state *mrb, mrb_value klass,
     NULL,
   };
 
-  mrb_get_args(mrb, "zo:", cmd, &mode, &kw);
+  mrb_get_args(mrb, "z|o:", cmd, &mode, &kw);
 
   *flags = mrb_io_mode_to_flags(mrb, mode);
   *doexec = (strcmp("-", *cmd) != 0);
@@ -391,7 +397,6 @@ mrb_io_s_popen(mrb_state *mrb, mrb_value klass)
   ofd[0] = INVALID_HANDLE_VALUE;
   ofd[1] = INVALID_HANDLE_VALUE;
 
-  mrb->c->ci->mid = 0;
   io = mrb_io_s_popen_args(mrb, klass, &cmd, &flags, &doexec,
                            &opt_in, &opt_out, &opt_err);
 
@@ -471,7 +476,6 @@ mrb_io_s_popen(mrb_state *mrb, mrb_value klass)
   int pw[2] = { -1, -1 };
   int saved_errno;
 
-  mrb->c->ci->mid = 0;
   io = mrb_io_s_popen_args(mrb, klass, &cmd, &flags, &doexec,
                            &opt_in, &opt_out, &opt_err);
 
@@ -577,7 +581,7 @@ mrb_io_s_popen(mrb_state *mrb, mrb_value klass)
         close(pw[1]);
       }
       errno = saved_errno;
-      mrb_sys_fail(mrb, "pipe_open failed");
+      mrb_sys_fail(mrb, "pipe_open failed.");
       break;
   }
   return result;
@@ -791,7 +795,7 @@ fptr_finalize(mrb_state *mrb, struct mrb_io *fptr, int quiet)
 
   if (!quiet && saved_errno != 0) {
     errno = saved_errno;
-    mrb_sys_fail(mrb, "fptr_finalize failed");
+    mrb_sys_fail(mrb, "fptr_finalize failed.");
   }
 }
 
@@ -833,7 +837,6 @@ static mrb_value
 mrb_io_s_sysclose(mrb_state *mrb, mrb_value klass)
 {
   mrb_int fd;
-  mrb->c->ci->mid = 0;
   mrb_get_args(mrb, "i", &fd);
   if (close((int)fd) == -1) {
     mrb_sys_fail(mrb, "close");
@@ -1412,7 +1415,7 @@ mrb_io_sync(mrb_state *mrb, mrb_value self)
 static off_t
 value2off(mrb_state *mrb, mrb_value offv)
 {
-  return (off_t)mrb_as_int(mrb, offv);
+  return (off_t)mrb_int(mrb, offv);
 }
 
 /*
@@ -1472,11 +1475,7 @@ mrb_io_bufread(mrb_state *mrb, mrb_value self)
   mrb_value str;
   mrb_int len;
 
-  mrb->c->ci->mid = 0;
   mrb_get_args(mrb, "Si", &str, &len);
-  mrb_assert(RSTRING_LEN(str) > 0);
-  mrb_assert(RSTRING_PTR(str) != NULL);
-  mrb_str_modify(mrb, RSTRING(str));
   return io_bufread(mrb, str, len);
 }
 
@@ -1489,7 +1488,6 @@ mrb_io_readchar(mrb_state *mrb, mrb_value self)
   unsigned char c;
 #endif
 
-  mrb->c->ci->mid = 0;
   mrb_get_args(mrb, "S", &buf);
   mrb_assert(RSTRING_LEN(buf) > 0);
   mrb_assert(RSTRING_PTR(buf) != NULL);

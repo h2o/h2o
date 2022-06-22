@@ -23,7 +23,7 @@ MRuby::Build.new do |conf|
 
   # file extensions
   conf.exts do |exts|
-    exts.library = '.so'
+     exts.library = '.so'
   end
 
   # file separator

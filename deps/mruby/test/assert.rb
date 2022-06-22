@@ -290,7 +290,7 @@ def assert_float(exp, act, msg = nil)
   if e.finite? && a.finite? && (n = (e - a).abs) > Mrbtest::FLOAT_TOLERANCE
     flunk(msg, "    Expected |#{exp} - #{act}| (#{n}) to be <= #{Mrbtest::FLOAT_TOLERANCE}.")
   elsif (e.infinite? || a.infinite?) && e != a ||
-    e.nan? && !a.nan? || !e.nan? && a.nan?
+     e.nan? && !a.nan? || !e.nan? && a.nan?
     flunk(msg, "    Expected #{act} to be #{exp}.")
   else
     pass

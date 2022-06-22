@@ -79,7 +79,12 @@ os_count_objects(mrb_state *mrb, mrb_value self)
     mrb_value type;
     switch (i) {
 #define COUNT_TYPE(t) case (MRB_T ## t): type = mrb_symbol_value(mrb_intern_lit(mrb, #t)); break;
+      COUNT_TYPE(T_FALSE);
+      COUNT_TYPE(T_FREE);
+      COUNT_TYPE(T_TRUE);
       COUNT_TYPE(T_INTEGER);
+      COUNT_TYPE(T_SYMBOL);
+      COUNT_TYPE(T_UNDEF);
       COUNT_TYPE(T_FLOAT);
       COUNT_TYPE(T_CPTR);
       COUNT_TYPE(T_OBJECT);
@@ -97,8 +102,6 @@ os_count_objects(mrb_state *mrb, mrb_value self)
       COUNT_TYPE(T_DATA);
       COUNT_TYPE(T_FIBER);
       COUNT_TYPE(T_ISTRUCT);
-      COUNT_TYPE(T_COMPLEX);
-      COUNT_TYPE(T_RATIONAL);
 #undef COUNT_TYPE
     default:
       type = mrb_fixnum_value(i); break;

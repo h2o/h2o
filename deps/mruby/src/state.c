@@ -110,12 +110,6 @@ void
 mrb_irep_incref(mrb_state *mrb, mrb_irep *irep)
 {
   if (irep->flags & MRB_IREP_NO_FREE) return;
-  if (irep->refcnt == UINT16_MAX) {
-    mrb_garbage_collect(mrb);
-    if (irep->refcnt == UINT16_MAX) {
-      mrb_raise(mrb, E_RUNTIME_ERROR, "too many irep references");
-    }
-  }
   irep->refcnt++;
 }
 
@@ -154,8 +148,7 @@ mrb_irep_free(mrb_state *mrb, mrb_irep *irep)
     mrb_free(mrb, (void*)irep->iseq);
   if (irep->pool) {
     for (i=0; i<irep->plen; i++) {
-      if ((irep->pool[i].tt & 3) == IREP_TT_STR ||
-          irep->pool[i].tt == IREP_TT_BIGINT) {
+      if ((irep->pool[i].tt & 3) == IREP_TT_STR) {
         mrb_free(mrb, (void*)irep->pool[i].u.str);
       }
     }
@@ -183,7 +176,7 @@ mrb_free_context(mrb_state *mrb, struct mrb_context *c)
   mrb_free(mrb, c);
 }
 
-void mrb_protect_atexit(mrb_state *mrb);
+int mrb_protect_atexit(mrb_state *mrb);
 
   MRB_API void
 mrb_close(mrb_state *mrb)

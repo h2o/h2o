@@ -69,8 +69,8 @@
 #define AR_MAX_SIZE 16
 #define H_MAX_SIZE EA_MAX_CAPA
 
-mrb_static_assert(offsetof(struct RHash, iv) == offsetof(struct RObject, iv));
-mrb_static_assert(AR_MAX_SIZE < (1 << MRB_HASH_AR_EA_CAPA_BIT));
+mrb_static_assert1(offsetof(struct RHash, iv) == offsetof(struct RObject, iv));
+mrb_static_assert1(AR_MAX_SIZE < (1 << MRB_HASH_AR_EA_CAPA_BIT));
 
 typedef struct hash_entry {
   mrb_value key;
@@ -151,20 +151,20 @@ DEFINE_ACCESSOR(ht, ea_n_used, uint32_t, ea_n_used)
 #else
 DEFINE_FLAG_ACCESSOR(ar, ea_capa, uint32_t, AR_EA_CAPA)
 DEFINE_FLAG_ACCESSOR(ar, ea_n_used, uint32_t, AR_EA_N_USED)
-DEFINE_ACCESSOR(ht, ea_capa, uint32_t, hsh.ht->ea_capa)
-DEFINE_ACCESSOR(ht, ea_n_used, uint32_t, hsh.ht->ea_n_used)
+DEFINE_ACCESSOR(ht, ea_capa, uint32_t, ht->ea_capa)
+DEFINE_ACCESSOR(ht, ea_n_used, uint32_t, ht->ea_n_used)
 #endif
 DEFINE_FLAG_ACCESSOR(ib, bit, uint32_t, IB_BIT)
 DEFINE_ACCESSOR(ar, size, uint32_t, size)
-DEFINE_ACCESSOR(ar, ea, hash_entry*, hsh.ea)
+DEFINE_ACCESSOR(ar, ea, hash_entry*, ea)
 DEFINE_DECREMENTER(ar, size)
 DEFINE_ACCESSOR(ht, size, uint32_t, size)
-DEFINE_ACCESSOR(ht, ea, hash_entry*, hsh.ht->ea)
-DEFINE_GETTER(ht, ib, uint32_t*, hsh.ht->ib)
+DEFINE_ACCESSOR(ht, ea, hash_entry*, ht->ea)
+DEFINE_GETTER(ht, ib, uint32_t*, ht->ib)
 DEFINE_INCREMENTER(ht, size)
 DEFINE_DECREMENTER(ht, size)
 DEFINE_GETTER(h, size, uint32_t, size)
-DEFINE_ACCESSOR(h, ht, hash_table*, hsh.ht)
+DEFINE_ACCESSOR(h, ht, hash_table*, ht)
 DEFINE_SWITCHER(ht, HT)
 
 #define ea_each_used(ea, n_used, entry_var, code) do {                        \
@@ -215,70 +215,40 @@ DEFINE_SWITCHER(ht, HT)
 } while (0)
 
 /*
- * In `h_check_modified()`, in the case of `MRB_NO_BOXING`, `ht_ea()` or
- * `ht_ea_capa()` for AR may read uninitialized area (#5332). Therefore, do
- * not use those macros for AR in `MRB_NO_BOXING` (but in the case of
- * `MRB_64BIT`, `ht_ea_capa()` is the same as `ar_ea_capa()`, so use it).
+ * `h_check_modified` raises an exception when a dangerous modification is
+ * made to `h` by executing `code`.
+ *
+ * This macro is not called if `h->ht` (`h->ea`) is `NULL` (`Hash` size is
+ * zero). And because the `hash_entry` is rather large, `h->ht->ea` and
+ * `h->ht->ea_capa` are able to be safely accessed even in AR. This nature
+ * is used to eliminate branch of AR or HT.
+ *
+ * `HT_ASSERT_SAFE_READ` checks if members can be accessed according to its
+ * assumptions.
  */
-#ifdef MRB_NO_BOXING
-# define H_CHECK_MODIFIED_USE_HT_EA_FOR_AR FALSE
-# ifdef MRB_64BIT
-#  define H_CHECK_MODIFIED_USE_HT_EA_CAPA_FOR_AR TRUE
-# else
-#  define H_CHECK_MODIFIED_USE_HT_EA_CAPA_FOR_AR FALSE
-# endif  /* MRB_64BIT */
-#else
-# define H_CHECK_MODIFIED_USE_HT_EA_FOR_AR TRUE
-# define H_CHECK_MODIFIED_USE_HT_EA_CAPA_FOR_AR TRUE
- /*
-  * `h_check_modified` raises an exception when a dangerous modification is
-  * made to `h` by executing `code`.
-  *
-  * `h_check_modified` macro is not called if `h->hsh.ht` (`h->hsh.ea`) is `NULL`
-  * (`Hash` size is zero). And because the `hash_entry` is rather large,
-  * `h->hsh.ht->ea` and `h->hsh.ht->ea_capa` are able to be safely accessed even for
-  * AR. This nature is used to eliminate branch of AR or HT.
-  *
-  * `HT_ASSERT_SAFE_READ` checks if members can be accessed according to its
-  * assumptions.
-  */
-# define HT_ASSERT_SAFE_READ(attr_name)                                       \
-  mrb_static_assert(                                                          \
+#define HT_ASSERT_SAFE_READ(attr_name)                                        \
+  mrb_static_assert1(                                                         \
     offsetof(hash_table, attr_name) + sizeof(((hash_table*)0)->attr_name) <=  \
     sizeof(hash_entry))
 HT_ASSERT_SAFE_READ(ea);
-# ifdef MRB_32BIT
+#ifdef MRB_32BIT
 HT_ASSERT_SAFE_READ(ea_capa);
-# endif
-# undef HT_ASSERT_SAFE_READ
-#endif  /* MRB_NO_BOXING */
-
-/*
- * `h_check_modified` raises an exception when a dangerous modification is
- * made to `h` by executing `code`.
- */
-#define h_check_modified(mrb, h, code) do {                                     \
-  struct RHash *h__ = h;                                                        \
-  uint32_t mask__ = MRB_HASH_HT|MRB_HASH_IB_BIT_MASK|MRB_HASH_AR_EA_CAPA_MASK;  \
-  uint32_t flags__ = h__->flags & mask__;                                       \
-  void* tbl__ = (mrb_assert(h__->hsh.ht), h__->hsh.ht);                         \
-  uint32_t ht_ea_capa__ = 0;                                                    \
-  hash_entry *ht_ea__ = NULL;                                                   \
-  if (H_CHECK_MODIFIED_USE_HT_EA_CAPA_FOR_AR || h_ht_p(h__)) {                  \
-    ht_ea_capa__ = ht_ea_capa(h__);                                             \
-  }                                                                             \
-  if (H_CHECK_MODIFIED_USE_HT_EA_FOR_AR || h_ht_p(h__)) {                       \
-    ht_ea__ = ht_ea(h__);                                                       \
-  }                                                                             \
-  code;                                                                         \
-  if (flags__ != (h__->flags & mask__) ||                                       \
-      tbl__ != h__->hsh.ht ||                                                       \
-      ((H_CHECK_MODIFIED_USE_HT_EA_CAPA_FOR_AR || h_ht_p(h__)) &&               \
-       ht_ea_capa__ != ht_ea_capa(h__)) ||                                      \
-      ((H_CHECK_MODIFIED_USE_HT_EA_FOR_AR || h_ht_p(h__)) &&                    \
-       ht_ea__ != ht_ea(h__))) {                                                \
-    mrb_raise(mrb, E_RUNTIME_ERROR, "hash modified");                           \
-  }                                                                             \
+#endif
+#undef HT_ASSERT_SAFE_READ
+#define h_check_modified(mrb, h, code) do {                                   \
+  struct RHash *h__ = h;                                                      \
+  uint32_t mask = MRB_HASH_HT|MRB_HASH_IB_BIT_MASK|MRB_HASH_AR_EA_CAPA_MASK;  \
+  uint32_t flags = h__->flags & mask;                                         \
+  void* tbl__ = (mrb_assert(h__->ht), h__->ht);                               \
+  uint32_t ht_ea_capa__ = ht_ea_capa(h__);                                    \
+  hash_entry *ht_ea__ = ht_ea(h__);                                           \
+  code;                                                                       \
+  if (flags != (h__->flags & mask) ||                                         \
+      tbl__ != h__->ht ||                                                     \
+      ht_ea_capa__ != ht_ea_capa(h__) ||                                      \
+      ht_ea__ != ht_ea(h__)) {                                                \
+    mrb_raise(mrb, E_RUNTIME_ERROR, "hash modified");                         \
+  }                                                                           \
 } while (0)
 
 #define U32(v) ((uint32_t)(v))
@@ -326,15 +296,8 @@ obj_hash_code(mrb_state *mrb, mrb_value key, struct RHash *h)
   case MRB_TT_TRUE:
   case MRB_TT_FALSE:
   case MRB_TT_SYMBOL:
-    hash_code = U32(mrb_fixnum(key));
-    break;
   case MRB_TT_INTEGER:
-    if (mrb_fixnum_p(key)) {
-      hash_code = U32(mrb_fixnum(key));
-      break;
-    }
 #ifndef MRB_NO_FLOAT
-    /* fall through */
   case MRB_TT_FLOAT:
 #endif
     hash_code = U32(mrb_obj_id(key));
@@ -755,7 +718,6 @@ ib_bit_for(uint32_t size)
 static uint32_t
 ib_byte_size_for(uint32_t ib_bit)
 {
-  mrb_assert(IB_INIT_BIT <= ib_bit);
   uint32_t ary_size = IB_INIT_BIT == 4 ?
     ib_bit_to_capa(ib_bit) * 2 / IB_TYPE_BIT * ib_bit / 2 :
     ib_bit_to_capa(ib_bit) / IB_TYPE_BIT * ib_bit;
@@ -930,13 +892,7 @@ static void
 ht_rehash(mrb_state *mrb, struct RHash *h)
 {
   /* see comments in `h_rehash` */
-  uint32_t size = ht_size(h);
-  if (size <= AR_MAX_SIZE) {
-    ht_to_ar(mrb, h);
-    ar_rehash(mrb, h);
-    return;
-  }
-  uint32_t w_size = 0, ea_capa = ht_ea_capa(h);
+  uint32_t size = ht_size(h), w_size = 0, ea_capa = ht_ea_capa(h);
   hash_entry *ea = ht_ea(h);
   ht_init(mrb, h, 0, ea, ea_capa, h_ht(h), ib_bit_for(size));
   ht_set_size(h, size);
@@ -977,7 +933,7 @@ h_key_for(mrb_state *mrb, mrb_value key)
 static struct RHash*
 h_alloc(mrb_state *mrb)
 {
-  return MRB_OBJ_ALLOC(mrb, MRB_TT_HASH, mrb->hash_class);
+  return (struct RHash*)mrb_obj_alloc(mrb, MRB_TT_HASH, mrb->hash_class);
 }
 
 static void
@@ -1194,6 +1150,15 @@ mrb_hash_init_copy(mrb_state *mrb, mrb_value self)
   hash_modify(mrb, self);
   if (mrb_hash_ptr(self) != mrb_hash_ptr(orig)) hash_replace(mrb, self, orig);
   return self;
+}
+
+void
+mrb_hash_check_kdict(mrb_state *mrb, mrb_value self)
+{
+  h_each(mrb_hash_ptr(self), entry, {
+    if (mrb_symbol_p(entry->key)) continue;
+    mrb_raise(mrb, E_ARGUMENT_ERROR, "keyword argument hash with non symbol keys");
+  });
 }
 
 MRB_API mrb_value
@@ -1480,7 +1445,6 @@ static mrb_value
 mrb_hash_delete(mrb_state *mrb, mrb_value self)
 {
   mrb_value key = mrb_get_arg1(mrb);
-  mrb->c->ci->mid = 0;
   return mrb_hash_delete_key(mrb, self, key);
 }
 
@@ -1505,7 +1469,7 @@ mrb_hash_shift(mrb_state *mrb, mrb_value hash)
 
   hash_modify(mrb, hash);
   if (h_size(h) == 0) {
-    return mrb_nil_value();
+    return hash_default(mrb, hash, mrb_nil_value());
   }
   else {
     mrb_value del_key, del_val;

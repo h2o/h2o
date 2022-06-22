@@ -8,15 +8,56 @@ class Complex < Numeric
   end
 
   def to_s
-    "#{real}#{'+' unless imaginary < 0}#{imaginary}#{'*' unless imaginary.finite?}i"
+    "#{real}#{'+' unless imaginary < 0}#{imaginary}i"
   end
 
   def +@
-    self
+    Complex(real, imaginary)
   end
 
   def -@
     Complex(-real, -imaginary)
+  end
+
+  def +(rhs)
+    if rhs.is_a? Complex
+      Complex(real + rhs.real, imaginary + rhs.imaginary)
+    elsif rhs.is_a? Numeric
+      Complex(real + rhs, imaginary)
+    end
+  end
+
+  def -(rhs)
+    if rhs.is_a? Complex
+      Complex(real - rhs.real, imaginary - rhs.imaginary)
+    elsif rhs.is_a? Numeric
+      Complex(real - rhs, imaginary)
+    end
+  end
+
+  def *(rhs)
+    if rhs.is_a? Complex
+      Complex(real * rhs.real - imaginary * rhs.imaginary, real * rhs.imaginary + rhs.real * imaginary)
+    elsif rhs.is_a? Numeric
+      Complex(real * rhs, imaginary * rhs)
+    end
+  end
+
+  def /(rhs)
+    if rhs.is_a? Complex
+      __div__(rhs)
+    elsif rhs.is_a? Numeric
+      Complex(real / rhs, imaginary / rhs)
+    end
+  end
+  alias_method :quo, :/
+
+  def ==(rhs)
+    if rhs.is_a? Complex
+      real == rhs.real && imaginary == rhs.imaginary
+    elsif rhs.is_a? Numeric
+      imaginary == 0 && real == rhs
+    end
   end
 
   def abs
@@ -40,7 +81,7 @@ class Complex < Numeric
   alias_method :conj, :conjugate
 
   def fdiv(numeric)
-    Complex(real / numeric, imaginary / numeric)
+    Complex(real.to_f / numeric, imaginary.to_f / numeric)
   end
 
   def polar
@@ -56,10 +97,6 @@ class Complex < Numeric
   end
   alias_method :rect, :rectangular
 
-  def to_c
-    self
-  end
-
   def to_r
     raise RangeError.new "can't convert #{to_s} into Rational" unless imaginary.zero?
     Rational(real, 1)
@@ -67,10 +104,19 @@ class Complex < Numeric
 
   alias_method :imag, :imaginary
 
-  Numeric.class_eval do
-    def i
-      Complex(0, self)
+  [Integer, Float].each do |cls|
+    [:+, :-, :*, :/, :==].each do |op|
+      cls.instance_eval do
+        original_operator_name = :"__original_operator_#{op}_complex"
+        alias_method original_operator_name, op
+        define_method op do |rhs|
+          if rhs.is_a? Complex
+            Complex(self).__send__(op, rhs)
+          else
+            __send__(original_operator_name, rhs)
+          end
+        end
+      end
     end
   end
-  undef i
 end

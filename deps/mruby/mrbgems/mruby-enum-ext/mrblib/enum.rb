@@ -428,7 +428,7 @@ module Enumerable
         max = min = val.__svalue
         max_cmp = min_cmp = block.call(*val)
         first = false
-      else
+     else
         if (cmp = block.call(*val)) > max_cmp
           max = val.__svalue
           max_cmp = cmp

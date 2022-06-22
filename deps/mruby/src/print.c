@@ -28,6 +28,10 @@ printstr(mrb_value obj, FILE *stream)
     printcstr(RSTRING_PTR(obj), RSTRING_LEN(obj), stream);
   }
 }
+#else
+# define printcstr(str, len, stream) (void)0
+# define printstr(obj, stream) (void)0
+#endif
 
 void
 mrb_core_init_printabort(void)
@@ -48,7 +52,6 @@ mrb_p(mrb_state *mrb, mrb_value obj)
   }
 }
 
-
 MRB_API void
 mrb_print_error(mrb_state *mrb)
 {
@@ -66,30 +69,3 @@ mrb_show_copyright(mrb_state *mrb)
 {
   printstr(mrb_const_get(mrb, mrb_obj_value(mrb->object_class), MRB_SYM(MRUBY_COPYRIGHT)), stdout);
 }
-
-#else
-void
-mrb_core_init_printabort(void)
-{
-}
-
-MRB_API void
-mrb_p(mrb_state *mrb, mrb_value obj)
-{
-}
-
-MRB_API void
-mrb_print_error(mrb_state *mrb)
-{
-}
-
-MRB_API void
-mrb_show_version(mrb_state *mrb)
-{
-}
-
-MRB_API void
-mrb_show_copyright(mrb_state *mrb)
-{
-}
-#endif

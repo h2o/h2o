@@ -391,15 +391,15 @@ assert('Module#undef_method', '15.2.2.4.42') do
     class Parent
       def hello
       end
-    end
+     end
 
-    class Child < Parent
+     class Child < Parent
       def hello
       end
-    end
+     end
 
-    class GrandChild < Child
-    end
+     class GrandChild < Child
+     end
   end
   Test4UndefMethod::Child.class_eval{ undef_method :hello }
 
@@ -736,9 +736,9 @@ assert('Issue 1467') do
 
   class C1
     include M1
-      def initialize()
-        super()
-      end
+     def initialize()
+       super()
+     end
   end
 
   class C2

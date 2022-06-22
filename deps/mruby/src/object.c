@@ -14,18 +14,12 @@
 MRB_API mrb_bool
 mrb_obj_eq(mrb_state *mrb, mrb_value v1, mrb_value v2)
 {
-#if defined(MRB_NAN_BOXING)
-  return v1.u == v2.u;
-#elif defined(MRB_WORD_BOXING)
-  return v1.w == v2.w;
-#else  /* MRB_NO_BOXING */
   if (mrb_type(v1) != mrb_type(v2)) return FALSE;
   switch (mrb_type(v1)) {
   case MRB_TT_TRUE:
     return TRUE;
 
   case MRB_TT_FALSE:
-    return (mrb_fixnum(v1) == mrb_fixnum(v2));
   case MRB_TT_INTEGER:
     return (mrb_integer(v1) == mrb_integer(v2));
   case MRB_TT_SYMBOL:
@@ -39,7 +33,6 @@ mrb_obj_eq(mrb_state *mrb, mrb_value v1, mrb_value v2)
   default:
     return (mrb_ptr(v1) == mrb_ptr(v2));
   }
-#endif
 }
 
 MRB_API mrb_bool
@@ -295,7 +288,7 @@ mrb_init_object(mrb_state *mrb)
   struct RClass *f;
 
   mrb->nil_class   = n = mrb_define_class(mrb, "NilClass",   mrb->object_class);
-  MRB_SET_INSTANCE_TT(n, MRB_TT_FALSE);
+  MRB_SET_INSTANCE_TT(n, MRB_TT_TRUE);
   mrb_undef_class_method(mrb, n, "new");
   mrb_define_method(mrb, n, "&",    false_and,      MRB_ARGS_REQ(1));  /* 15.2.4.3.1  */
   mrb_define_method(mrb, n, "^",    false_xor,      MRB_ARGS_REQ(1));  /* 15.2.4.3.2  */
@@ -314,7 +307,7 @@ mrb_init_object(mrb_state *mrb)
   mrb_define_method(mrb, t, "inspect", true_to_s,   MRB_ARGS_NONE());
 
   mrb->false_class = f = mrb_define_class(mrb, "FalseClass", mrb->object_class);
-  MRB_SET_INSTANCE_TT(f, MRB_TT_FALSE);
+  MRB_SET_INSTANCE_TT(f, MRB_TT_TRUE);
   mrb_undef_class_method(mrb, f, "new");
   mrb_define_method(mrb, f, "&",    false_and,      MRB_ARGS_REQ(1));  /* 15.2.6.3.1  */
   mrb_define_method(mrb, f, "^",    false_xor,      MRB_ARGS_REQ(1));  /* 15.2.6.3.2  */
@@ -323,15 +316,44 @@ mrb_init_object(mrb_state *mrb)
   mrb_define_method(mrb, f, "inspect", false_to_s,  MRB_ARGS_NONE());
 }
 
+static const struct types {
+  const enum mrb_vtype type;
+  const char *name;
+} builtin_types[] = {
+/*    {MRB_TT_NIL,  "nil"}, */
+  {MRB_TT_FALSE,  "false"},
+  {MRB_TT_TRUE,   "true"},
+  {MRB_TT_INTEGER,"Integer"},
+  {MRB_TT_SYMBOL, "Symbol"},  /* :symbol */
+  {MRB_TT_MODULE, "Module"},
+  {MRB_TT_OBJECT, "Object"},
+  {MRB_TT_CLASS,  "Class"},
+  {MRB_TT_ICLASS, "iClass"},  /* internal use: mixed-in module holder */
+  {MRB_TT_SCLASS, "SClass"},
+  {MRB_TT_PROC,   "Proc"},
+#ifndef MRB_NO_FLOAT
+  {MRB_TT_FLOAT,  "Float"},
+#endif
+  {MRB_TT_ARRAY,  "Array"},
+  {MRB_TT_HASH,   "Hash"},
+  {MRB_TT_STRING, "String"},
+  {MRB_TT_RANGE,  "Range"},
+/*    {MRB_TT_BIGNUM,  "Bignum"}, */
+  {MRB_TT_DATA,   "Data"},  /* internal use: wrapped C pointers */
+/*    {MRB_TT_UNDEF,  "undef"}, */ /* internal use: #undef; should not happen */
+  {MRB_TT_MAXDEFINE,  0}
+};
+
 static const char*
 type_name(enum mrb_vtype t)
 {
-  switch (t) {
-#define MRB_VTYPE_NAME(tt, type, name) case tt: return name;
-    MRB_VTYPE_FOREACH(MRB_VTYPE_NAME)
-#undef MRB_VTYPE_NAME
-    default: return NULL;
+  const struct types *type = builtin_types;
+
+  while (type->type < MRB_TT_MAXDEFINE) {
+    if (type->type == t) return type->name;
+    type++;
   }
+  return NULL;
 }
 
 static mrb_value
@@ -387,7 +409,7 @@ mrb_check_type(mrb_state *mrb, mrb_value x, enum mrb_vtype t)
     ename = "nil";
   }
   else if (mrb_integer_p(x)) {
-    ename = "Integer";
+    ename = "Fixnum";
   }
   else if (mrb_symbol_p(x)) {
     ename = "Symbol";
@@ -484,48 +506,70 @@ mrb_obj_is_kind_of(mrb_state *mrb, mrb_value obj, struct RClass *c)
   return FALSE;
 }
 
-#ifdef MRB_USE_RATIONAL
-// provided by mruby-rational with MRB_USE_RATIONAL
-mrb_value mrb_rational_to_i(mrb_state *mrb, mrb_value rat);
-mrb_value mrb_rational_to_f(mrb_state *mrb, mrb_value rat);
-#endif
-#ifdef MRB_USE_COMPLEX
-// provided by mruby-complex with MRB_USE_COMPLEX
-mrb_value mrb_complex_to_f(mrb_state *mrb, mrb_value comp);
-mrb_value mrb_complex_to_i(mrb_state *mrb, mrb_value comp);
-#endif
-
 MRB_API mrb_value
-mrb_ensure_int_type(mrb_state *mrb, mrb_value val)
+mrb_to_int(mrb_state *mrb, mrb_value val)
 {
+
   if (!mrb_integer_p(val)) {
 #ifndef MRB_NO_FLOAT
     if (mrb_float_p(val)) {
-      return mrb_float_to_integer(mrb, val);
-    }
-    else {
-      switch (mrb_type(val)) {
-#ifdef MRB_USE_RATIONAL
-      case MRB_TT_RATIONAL:
-        return mrb_rational_to_i(mrb, val);
-#endif
-#ifdef MRB_USE_COMPLEX
-      case MRB_TT_COMPLEX:
-        return mrb_complex_to_i(mrb, val);
-#endif
-      default:
-        break;
-      }
+      return mrb_flo_to_fixnum(mrb, val);
     }
 #endif
-    mrb_raisef(mrb, E_TYPE_ERROR, "%Y cannot be converted to Integer", val);
+    mrb_raisef(mrb, E_TYPE_ERROR, "can't convert %Y to Integer", val);
   }
   return val;
 }
 
+MRB_API mrb_value
+mrb_convert_to_integer(mrb_state *mrb, mrb_value val, mrb_int base)
+{
+  mrb_value tmp;
+
+  if (mrb_nil_p(val)) {
+    if (base != 0) goto arg_error;
+    mrb_raise(mrb, E_TYPE_ERROR, "can't convert nil into Integer");
+  }
+  switch (mrb_type(val)) {
+#ifndef MRB_NO_FLOAT
+    case MRB_TT_FLOAT:
+      if (base != 0) goto arg_error;
+      return mrb_flo_to_fixnum(mrb, val);
+#endif
+
+    case MRB_TT_INTEGER:
+      if (base != 0) goto arg_error;
+      return val;
+
+    case MRB_TT_STRING:
+    string_conv:
+      return mrb_str_to_inum(mrb, val, base, TRUE);
+
+    default:
+      break;
+  }
+  if (base != 0) {
+    tmp = mrb_check_string_type(mrb, val);
+    if (!mrb_nil_p(tmp)) {
+      val = tmp;
+      goto string_conv;
+    }
+arg_error:
+    mrb_raise(mrb, E_ARGUMENT_ERROR, "base specified for non string value");
+  }
+  /* to raise TypeError */
+  return mrb_to_int(mrb, val);
+}
+
+MRB_API mrb_value
+mrb_Integer(mrb_state *mrb, mrb_value val)
+{
+  return mrb_convert_to_integer(mrb, val, 0);
+}
+
 #ifndef MRB_NO_FLOAT
 MRB_API mrb_value
-mrb_ensure_float_type(mrb_state *mrb, mrb_value val)
+mrb_Float(mrb_state *mrb, mrb_value val)
 {
   if (mrb_nil_p(val)) {
     mrb_raise(mrb, E_TYPE_ERROR, "can't convert nil into Float");
@@ -537,23 +581,27 @@ mrb_ensure_float_type(mrb_state *mrb, mrb_value val)
     case MRB_TT_FLOAT:
       return val;
 
-#ifdef MRB_USE_RATIONAL
-    case MRB_TT_RATIONAL:
-      return mrb_rational_to_f(mrb, val);
-#endif
-
-#ifdef MRB_USE_COMPLEX
-    case MRB_TT_COMPLEX:
-      return mrb_complex_to_f(mrb, val);
-#endif
+    case MRB_TT_STRING:
+      return mrb_float_value(mrb, mrb_str_to_dbl(mrb, val, TRUE));
 
     default:
-      mrb_raisef(mrb, E_TYPE_ERROR, "%Y cannot be converted to Float", val);
-      /* not reached */
-      return val;
+      return mrb_type_convert(mrb, val, MRB_TT_FLOAT, MRB_SYM(to_f));
   }
 }
 #endif
+
+MRB_API mrb_value
+mrb_to_str(mrb_state *mrb, mrb_value val)
+{
+  return mrb_ensure_string_type(mrb, val);
+}
+
+/* obsolete: use mrb_ensure_string_type() instead */
+MRB_API mrb_value
+mrb_string_type(mrb_state *mrb, mrb_value str)
+{
+  return mrb_ensure_string_type(mrb, str);
+}
 
 MRB_API mrb_value
 mrb_ensure_string_type(mrb_state *mrb, mrb_value str)

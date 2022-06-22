@@ -51,7 +51,7 @@ class Array
   #    b.uniq { |s| s.first } # => [["student", "sam"], ["teacher", "matz"]]
   #
   def uniq(&block)
-    ary = self[0..-1]
+    ary = self.dup
     ary.uniq!(&block)
     ary
   end
@@ -150,7 +150,7 @@ class Array
   #    [ 1, 1, 3, 5 ] & [ 1, 2, 3 ]   #=> [ 1, 3 ]
   #
   def &(elem)
-    raise TypeError, "cannot convert #{elem.class} into Array" unless elem.class == Array
+    raise TypeError, "can't convert #{elem.class} into Array" unless elem.class == Array
 
     hash = {}
     array = []
@@ -189,47 +189,6 @@ class Array
       ary = ary & x
     end
     ary
-  end
-
-  ##
-  # call-seq:
-  #   ary.intersect?(other_ary)   -> true or false
-  #
-  # Returns +true+ if the array and +other_ary+ have at least one element in
-  # common, otherwise returns +false+.
-  #
-  #    a = [ 1, 2, 3 ]
-  #    b = [ 3, 4, 5 ]
-  #    c = [ 5, 6, 7 ]
-  #    a.intersect?(b)   #=> true
-  #    a.intersect?(c)   #=> false
-  def intersect?(ary)
-    raise TypeError, "cannot convert #{ary.class} into Array" unless ary.class == Array
-
-    hash = {}
-    if self.length > ary.length
-      shorter = ary
-      longer = self
-    else
-      shorter = self
-      longer = ary
-    end
-    idx = 0
-    len = shorter.size
-    while idx < len
-      hash[shorter[idx]] = true
-      idx += 1
-    end
-    idx = 0
-    len = size
-    while idx < len
-      v = longer[idx]
-      if hash[v]
-        return true
-      end
-      idx += 1
-    end
-    false
   end
 
   ##
@@ -294,6 +253,41 @@ class Array
     end
   end
 
+  ##
+  # call-seq:
+  #    ary.compact     -> new_ary
+  #
+  # Returns a copy of +self+ with all +nil+ elements removed.
+  #
+  #    [ "a", nil, "b", nil, "c", nil ].compact
+  #                      #=> [ "a", "b", "c" ]
+  #
+  def compact
+    result = self.dup
+    result.compact!
+    result
+  end
+
+  ##
+  # call-seq:
+  #    ary.compact!    -> ary  or  nil
+  #
+  # Removes +nil+ elements from the array.
+  # Returns +nil+ if no changes were made, otherwise returns
+  # <i>ary</i>.
+  #
+  #    [ "a", nil, "b", nil, "c" ].compact! #=> [ "a", "b", "c" ]
+  #    [ "a", "b", "c" ].compact!           #=> nil
+  #
+  def compact!
+    result = self.select { |e| !e.nil? }
+    if result.size == self.size
+      nil
+    else
+      self.replace(result)
+    end
+  end
+
   # for efficiency
   def reverse_each(&block)
     return to_enum :reverse_each unless block
@@ -331,7 +325,7 @@ class Array
   #
 
   def fetch(n, ifnone=NONE, &block)
-    #warn "block supersedes default value argument" if !n.nil? && ifnone != NONE && block
+    warn "block supersedes default value argument" if !n.nil? && ifnone != NONE && block
 
     idx = n
     if idx < 0
@@ -382,10 +376,11 @@ class Array
 
   def fill(arg0=nil, arg1=nil, arg2=nil, &block)
     if arg0.nil? && arg1.nil? && arg2.nil? && !block
-      raise ArgumentError, "wrong number of arguments (given 0, expected 1..3)"
+      raise ArgumentError, "wrong number of arguments (0 for 1..3)"
     end
 
     beg = len = 0
+    ary = []
     if block
       if arg0.nil? && arg1.nil? && arg2.nil?
         # ary.fill { |index| block }                    -> ary
@@ -445,6 +440,57 @@ class Array
       end
     end
     self
+  end
+
+  ##
+  #  call-seq:
+  #     ary.rotate(count=1)    -> new_ary
+  #
+  #  Returns a new array by rotating +self+ so that the element at +count+ is
+  #  the first element of the new array.
+  #
+  #  If +count+ is negative then it rotates in the opposite direction, starting
+  #  from the end of +self+ where +-1+ is the last element.
+  #
+  #     a = [ "a", "b", "c", "d" ]
+  #     a.rotate         #=> ["b", "c", "d", "a"]
+  #     a                #=> ["a", "b", "c", "d"]
+  #     a.rotate(2)      #=> ["c", "d", "a", "b"]
+  #     a.rotate(-3)     #=> ["b", "c", "d", "a"]
+
+  def rotate(count=1)
+    ary = []
+    len = self.length
+
+    if len > 0
+      idx = (count < 0) ? (len - (~count % len) - 1) : (count % len) # rotate count
+      len.times do
+        ary << self[idx]
+        idx += 1
+        idx = 0 if idx > len-1
+      end
+    end
+    ary
+  end
+
+  ##
+  #  call-seq:
+  #     ary.rotate!(count=1)   -> ary
+  #
+  #  Rotates +self+ in place so that the element at +count+ comes first, and
+  #  returns +self+.
+  #
+  #  If +count+ is negative then it rotates in the opposite direction, starting
+  #  from the end of the array where +-1+ is the last element.
+  #
+  #     a = [ "a", "b", "c", "d" ]
+  #     a.rotate!        #=> ["b", "c", "d", "a"]
+  #     a                #=> ["b", "c", "d", "a"]
+  #     a.rotate!(2)     #=> ["d", "a", "b", "c"]
+  #     a.rotate!(-3)    #=> ["a", "b", "c", "d"]
+
+  def rotate!(count=1)
+    self.replace(self.rotate(count))
   end
 
   ##
@@ -659,6 +705,7 @@ class Array
     return to_enum :keep_if unless block
 
     idx = 0
+    len = self.size
     while idx < self.size do
       if block.call(self[idx])
         idx += 1
@@ -873,7 +920,7 @@ class Array
   #    ary.to_h                ->   Hash
   #    ary.to_h{|item| ... }   ->   Hash
   #
-  # Returns the result of interpreting <i>array</i> as an array of
+  # Returns the result of interpreting <i>aray</i> as an array of
   # <tt>[key, value]</tt> pairs. If a block is given, it should
   # return <tt>[key, value]</tt> pairs to construct a hash.
   #
@@ -896,124 +943,4 @@ class Array
   alias append push
   alias prepend unshift
   alias filter! select!
-
-  ##
-  # call-seq:
-  #   ary.product(*arys)                  ->   array
-  #   ary.product(*arys) { |item| ... }   ->   self
-  def product(*arys, &block)
-    size = arys.size
-    i = size
-    while i > 0
-      i -= 1
-      unless arys[i].kind_of?(Array)
-        raise TypeError, "no implicit conversion into Array"
-      end
-    end
-
-    i = size
-    total = self.size
-    total *= arys[i -= 1].size while i > 0
-
-    if block
-      result = self
-      list = ->(*, e) { block.call e }
-      class << list; alias []= call; end
-    else
-      result = [nil] * total
-      list = result
-    end
-
-    i = 0
-    while i < total
-      group = [nil] * (size + 1)
-      j = size
-      n = i
-      while j > 0
-        j -= 1
-        a = arys[j]
-        b = a.size
-        group[j + 1] = a[n % b]
-        n /= b
-      end
-      group[0] = self[n]
-      list[i] = group
-      i += 1
-    end
-
-    result
-  end
-
-  ##
-  # call-seq:
-  #   ary.repeated_combination(n) { |combination| ... }   ->   self
-  #   ary.repeated_combination(n)                         ->   enumerator
-  #
-  # A +combination+ method that contains the same elements.
-  def repeated_combination(n, &block)
-    raise TypeError, "no implicit conversion into Integer" unless 0 <=> n
-    return to_enum(:repeated_combination, n) unless block
-    __repeated_combination(n, false, &block)
-  end
-
-  ##
-  # call-seq:
-  #   ary.repeated_permutation(n) { |permutation| ... }   ->   self
-  #   ary.repeated_permutation(n)                         ->   enumerator
-  #
-  # A +permutation+ method that contains the same elements.
-  def repeated_permutation(n, &block)
-    raise TypeError, "no implicit conversion into Integer" unless 0 <=> n
-    return to_enum(:repeated_permutation, n) unless block
-    __repeated_combination(n, true, &block)
-  end
-
-  def __repeated_combination(n, permutation, &block)
-    case n
-    when 0
-      yield []
-    when 1
-      i = 0
-      while i < self.size
-        yield [self[i]]
-        i += 1
-      end
-    else
-      if n > 0
-        v = [0] * n
-        while true
-          tmp = [nil] * n
-          i = 0
-          while i < n
-            tmp[i] = self[v[i]]
-            i += 1
-          end
-
-          yield tmp
-
-          tmp = self.size
-          i = n - 1
-          while i >= 0
-            v[i] += 1
-            break if v[i] < tmp
-            i -= 1
-          end
-          break unless v[0] < tmp
-          i = 1
-          while i < n
-            unless v[i] < tmp
-              if permutation
-                v[i] = 0
-              else
-                v[i] = v[i - 1]
-              end
-            end
-            i += 1
-          end
-        end
-      end
-    end
-
-    self
-  end
 end

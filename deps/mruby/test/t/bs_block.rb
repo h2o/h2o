@@ -520,15 +520,3 @@ assert('BS Block 38') do
 
   assert_equal [1,2,3,4,5], iter{|a,b,c=:c,d,e| [a,b,c,d,e]}
 end
-
-assert('BS Block 39') do
-  def iter
-    yield 1
-  end
-
-  assert_equal([1, 2, nil]) do
-    iter{|a, b=2, c|
-      [a, b, c]
-    }
-  end
-end

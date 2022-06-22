@@ -64,8 +64,6 @@ end
 
 assert('Kernel#methods', '15.3.1.3.31') do
   assert_equal Array, methods.class
-  assert_equal [:foo], Class.new{def self.foo; end}.methods(false)
-  assert_equal [], Class.new{}.methods(false)
 end
 
 assert('Kernel#private_methods', '15.3.1.3.36') do
@@ -102,17 +100,6 @@ assert('Kernel#global_variables', '15.3.1.3.14') do
   variables2 = global_variables
   assert_include(variables2, :$kernel_global_variables_test)
   assert_equal(1, variables2.size - variables1.size)
-end
-
-assert('Kernel#local_variables', '15.3.1.3.28') do
-  assert_equal Array, local_variables.class
-
-  def local_var_list
-    a = "hello"
-    local_variables
-  end
-
-  assert_equal [:a], local_var_list
 end
 
 assert('Kernel.local_variables', '15.3.1.2.7') do

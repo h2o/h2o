@@ -346,7 +346,7 @@ assert('Kernel#method_missing', '15.3.1.3.30') do
     end
   end
   no_super_test = NoSuperMethodTestClass.new
-  msg = "no superclass method 'no_super_method_named_this'"
+  msg = "undefined method 'no_super_method_named_this'"
   assert_raise_with_message(NoMethodError, msg) do
     no_super_test.no_super_method_named_this
   end

@@ -13,6 +13,9 @@
   #include <winerror.h>
 
   #define SHUT_RDWR SD_BOTH
+  #ifndef _SSIZE_T_DEFINED
+  typedef int ssize_t;
+  #endif
   typedef int fsize_t;
 #else
   #include <sys/types.h>
@@ -28,6 +31,7 @@
   typedef size_t fsize_t;
 #endif
 
+#include <stddef.h>
 #include <string.h>
 
 #include "mruby.h"
@@ -61,52 +65,52 @@
 #ifdef _WIN32
 static const char *inet_ntop(int af, const void *src, char *dst, socklen_t cnt)
 {
-  if (af == AF_INET)
-  {
-    struct sockaddr_in in = {0};
-
-    in.sin_family = AF_INET;
-    memcpy(&in.sin_addr, src, sizeof(struct in_addr));
-    getnameinfo((struct sockaddr *)&in, sizeof(struct
-                sockaddr_in), dst, cnt, NULL, 0, NI_NUMERICHOST);
-    return dst;
-  }
-  else if (af == AF_INET6)
-  {
-    struct sockaddr_in6 in = {0};
-
-    in.sin6_family = AF_INET6;
-    memcpy(&in.sin6_addr, src, sizeof(struct in_addr6));
-    getnameinfo((struct sockaddr *)&in, sizeof(struct
-                sockaddr_in6), dst, cnt, NULL, 0, NI_NUMERICHOST);
-    return dst;
-  }
-  return NULL;
+    if (af == AF_INET)
+    {
+	struct sockaddr_in in;
+	memset(&in, 0, sizeof(in));
+	in.sin_family = AF_INET;
+	memcpy(&in.sin_addr, src, sizeof(struct in_addr));
+	getnameinfo((struct sockaddr *)&in, sizeof(struct
+		    sockaddr_in), dst, cnt, NULL, 0, NI_NUMERICHOST);
+	return dst;
+    }
+    else if (af == AF_INET6)
+    {
+	struct sockaddr_in6 in;
+	memset(&in, 0, sizeof(in));
+	in.sin6_family = AF_INET6;
+	memcpy(&in.sin6_addr, src, sizeof(struct in_addr6));
+	getnameinfo((struct sockaddr *)&in, sizeof(struct
+		    sockaddr_in6), dst, cnt, NULL, 0, NI_NUMERICHOST);
+	return dst;
+    }
+    return NULL;
 }
 
 static int inet_pton(int af, const char *src, void *dst)
 {
-  struct addrinfo hints = {0};
-  struct addrinfo *res, *ressave;
+    struct addrinfo hints, *res, *ressave;
 
-  hints.ai_family = af;
+    memset(&hints, 0, sizeof(struct addrinfo));
+    hints.ai_family = af;
 
-  if (getaddrinfo(src, NULL, &hints, &res) != 0)
-  {
-    printf("Couldn't resolve host %s\n", src);
-    return -1;
-  }
+    if (getaddrinfo(src, NULL, &hints, &res) != 0)
+    {
+	printf("Couldn't resolve host %s\n", src);
+	return -1;
+    }
 
-  ressave = res;
+    ressave = res;
 
-  while (res)
-  {
-    memcpy(dst, res->ai_addr, res->ai_addrlen);
-    res = res->ai_next;
-  }
+    while (res)
+    {
+	memcpy(dst, res->ai_addr, res->ai_addrlen);
+	res = res->ai_next;
+    }
 
-  freeaddrinfo(ressave);
-  return 0;
+    freeaddrinfo(ressave);
+    return 0;
 }
 
 #endif
@@ -114,7 +118,7 @@ static int inet_pton(int af, const char *src, void *dst)
 static mrb_value
 mrb_addrinfo_getaddrinfo(mrb_state *mrb, mrb_value klass)
 {
-  struct addrinfo hints = {0}, *res0, *res;
+  struct addrinfo hints, *res0, *res;
   mrb_value ai, ary, family, lastai, nodename, protocol, sa, service, socktype;
   mrb_int flags;
   int arena_idx, error;
@@ -138,13 +142,14 @@ mrb_addrinfo_getaddrinfo(mrb_state *mrb, mrb_value klass)
   if (mrb_string_p(service)) {
     servname = RSTRING_CSTR(mrb, service);
   } else if (mrb_integer_p(service)) {
-    servname = RSTRING_PTR(mrb_integer_to_str(mrb, service, 10));
+    servname = RSTRING_PTR(mrb_fixnum_to_str(mrb, service, 10));
   } else if (mrb_nil_p(service)) {
     servname = NULL;
   } else {
     mrb_raise(mrb, E_TYPE_ERROR, "service must be String, Integer, or nil");
   }
 
+  memset(&hints, 0, sizeof(hints));
   hints.ai_flags = (int)flags;
 
   if (mrb_integer_p(family)) {
@@ -569,7 +574,7 @@ mrb_ipsocket_recvfrom(mrb_state *mrb, mrb_value self)
   buf = mrb_str_new_capa(mrb, maxlen);
   socklen = sizeof(ss);
   n = recvfrom(fd, RSTRING_PTR(buf), (fsize_t)maxlen, (int)flags,
-               (struct sockaddr *)&ss, &socklen);
+  	       (struct sockaddr *)&ss, &socklen);
   if (n == -1) {
     mrb_sys_fail(mrb, "recvfrom");
   }
@@ -933,8 +938,8 @@ mrb_mruby_socket_gem_init(mrb_state* mrb)
   constants = mrb_define_module_under(mrb, sock, "Constants");
 
 #define define_const(SYM) \
-  do {                                                                \
-    mrb_define_const(mrb, constants, #SYM, mrb_int_value(mrb, SYM));  \
+  do {								\
+    mrb_define_const(mrb, constants, #SYM, mrb_int_value(mrb, SYM));	\
   } while (0)
 
 #include "const.cstub"

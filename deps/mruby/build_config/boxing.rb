@@ -3,6 +3,8 @@ bits = [64, 32]
 ints = [64, 32]
 
 boxings.product(bits, ints) do |boxing, bit, int|
+  next if boxing == "nan" && int == 64
+
   MRuby::Build.new("boxing-#{boxing}-m#{bit}-i#{int}") do |conf|
     conf.toolchain :gcc
     conf.gembox 'default'

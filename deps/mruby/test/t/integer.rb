@@ -37,42 +37,40 @@ end
 
 assert('Integer#/', '15.2.8.3.4') do
   a = 2/1
-  assert_equal 2, a
-  a = 5/2
-  assert_equal 2, a
-  skip unless Object.const_defined?(:Float)
   b = 2/1.0
+
+  assert_equal 2, a
   assert_equal 2.0, b
 end
 
 assert('Integer#quo') do
   a = 6.quo(5)
+
   assert_equal 1.2, a
-end if Object.const_defined?(:Float)
+end
 
 assert('Integer#%', '15.2.8.3.5') do
   a = 1%1
-  b = 2%4
-  c = 2%5
-  d = 2%-5
-  e = -2%5
-  f = -2%-5
-  g =  2%-2
-  h = -2%2
-  i = -2%-2
+  b = 1%1.0
+  c = 2%4
+  d = 2%5
+  e = 2%-5
+  f = -2%5
+  g = -2%-5
+  h =  2%-2
+  i = -2%2
+  j = -2%-2
 
   assert_equal 0, a
-  assert_equal 2, b
+  assert_equal 0.0, b
   assert_equal 2, c
-  assert_equal(-3, d)
-  assert_equal 3, e
-  assert_equal(-2, f)
-  assert_equal 0, g
+  assert_equal 2, d
+  assert_equal(-3, e)
+  assert_equal 3, f
+  assert_equal(-2, g)
   assert_equal 0, h
   assert_equal 0, i
-  skip unless Object.const_defined?(:Float)
-  j = 1%1.0
-  assert_equal 0.0, j
+  assert_equal 0, j
 end
 
 assert('Integer#<=>', '15.2.9.3.6') do

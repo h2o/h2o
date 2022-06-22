@@ -6,6 +6,7 @@
 
 #include <mruby/string.h>
 #include <string.h>
+#include <stdlib.h>
 #if defined(_WIN32)
 # include <windows.h>
 # include <io.h>
@@ -46,12 +47,53 @@ mrb_printstr(mrb_state *mrb, mrb_value self)
   return s;
 }
 
+/* 15.3.1.2.10  */
+/* 15.3.1.3.35 */
+static mrb_value
+mrb_print(mrb_state *mrb, mrb_value self)
+{
+  mrb_int argc, i;
+  const mrb_value *argv;
+
+  mrb_get_args(mrb, "*", &argv, &argc);
+  for (i=0; i<argc; i++) {
+    mrb_value s = mrb_obj_as_string(mrb, argv[i]);
+    printstr(mrb, RSTRING_PTR(s), RSTRING_LEN(s));
+  }
+  return mrb_nil_value();
+}
+
+/* 15.3.1.2.11  */
+/* 15.3.1.3.39 */
+static mrb_value
+mrb_puts(mrb_state *mrb, mrb_value self)
+{
+  mrb_int argc, i;
+  const mrb_value *argv;
+
+  mrb_get_args(mrb, "*", &argv, &argc);
+  for (i=0; i<argc; i++) {
+    mrb_value s = mrb_obj_as_string(mrb, argv[i]);
+    mrb_int len = RSTRING_LEN(s);
+    printstr(mrb, RSTRING_PTR(s), len);
+    if (len == 0 || RSTRING_PTR(s)[len-1] != '\n') {
+      printstr(mrb, "\n", 1);
+    }
+  }
+  if (argc == 0) {
+    printstr(mrb, "\n", 1);
+  }
+  return mrb_nil_value();
+}
+
 void
 mrb_mruby_print_gem_init(mrb_state* mrb)
 {
   struct RClass *krn;
   krn = mrb->kernel_module;
   mrb_define_method(mrb, krn, "__printstr__", mrb_printstr, MRB_ARGS_REQ(1));
+  mrb_define_method(mrb, krn, "print", mrb_print, MRB_ARGS_ANY());
+  mrb_define_method(mrb, krn, "puts", mrb_puts, MRB_ARGS_ANY());
 }
 
 void

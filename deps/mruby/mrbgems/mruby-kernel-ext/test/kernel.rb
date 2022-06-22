@@ -20,9 +20,6 @@ assert('Kernel.caller, Kernel#caller') do
       bar(*args)
     end
   end
-
-  skip "backtrace isn't available" if (c.new.baz(0)[0].include?("unknown"))
-
   assert_equal "kernel.rb:#{caller_lineno}:in foo", c.new.baz(0)[0][-19..-1]
   assert_equal "bar", c.new.baz[0][-3..-1]
   assert_equal "foo", c.new.baz(0)[0][-3..-1]
@@ -38,29 +35,17 @@ assert('Kernel.caller, Kernel#caller') do
 end
 
 assert('Kernel#__method__') do
+  assert_equal(:m, Class.new {def m; __method__; end}.new.m)
+  assert_equal(:m, Class.new {define_method(:m) {__method__}}.new.m)
   c = Class.new do
-    def m1; __method__ end
-    define_method(:m2) {__method__}
-    alias m3 m1
-    alias_method :m4, :m2
+    [:m1, :m2].each do |m|
+      define_method(m) do
+        __method__
+      end
+    end
   end
   assert_equal(:m1, c.new.m1)
   assert_equal(:m2, c.new.m2)
-  assert_equal(:m1, c.new.m3)
-  assert_equal(:m2, c.new.m4)
-end
-
-assert('Kernel#__callee__') do
-  c = Class.new do
-    def m1; __callee__ end
-    define_method(:m2) {__callee__}
-    alias m3 m1
-    alias_method :m4, :m2
-  end
-  assert_equal(:m1, c.new.m1)
-  assert_equal(:m2, c.new.m2)
-  assert_equal(:m3, c.new.m3)
-  assert_equal(:m4, c.new.m4)
 end
 
 assert('Kernel#Integer') do

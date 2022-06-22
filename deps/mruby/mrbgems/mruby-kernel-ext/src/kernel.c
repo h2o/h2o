@@ -3,99 +3,75 @@
 #include <mruby/array.h>
 #include <mruby/hash.h>
 #include <mruby/range.h>
-#include <mruby/string.h>
-#include <mruby/numeric.h>
-#include <mruby/proc.h>
 #include <mruby/presym.h>
 
 static mrb_value
 mrb_f_caller(mrb_state *mrb, mrb_value self)
 {
-  mrb_value bt, v;
+  mrb_value bt, v, length;
   mrb_int bt_len, argc, lev, n;
-
-  argc = mrb_get_args(mrb, "|oi", &v, &n);
 
   bt = mrb_get_backtrace(mrb);
   bt_len = RARRAY_LEN(bt);
+  argc = mrb_get_args(mrb, "|oo", &v, &length);
 
   switch (argc) {
-  case 0:
-    lev = 1;
-    n = bt_len - 1;
-    break;
-  case 1:
-    if (mrb_range_p(v)) {
-      mrb_int beg, len;
-      if (mrb_range_beg_len(mrb, v, &beg, &len, bt_len, TRUE) == MRB_RANGE_OK) {
-        lev = beg;
-        n = len;
+    case 0:
+      lev = 1;
+      n = bt_len - lev;
+      break;
+    case 1:
+      if (mrb_range_p(v)) {
+        mrb_int beg, len;
+        if (mrb_range_beg_len(mrb, v, &beg, &len, bt_len, TRUE) == MRB_RANGE_OK) {
+          lev = beg;
+          n = len;
+        }
+        else {
+          return mrb_nil_value();
+        }
       }
       else {
-        return mrb_nil_value();
+        lev = mrb_int(mrb, v);
+        if (lev < 0) {
+          mrb_raisef(mrb, E_ARGUMENT_ERROR, "negative level (%v)", v);
+        }
+        n = bt_len - lev;
       }
-    }
-    else {
-      lev = mrb_as_int(mrb, v);
+      break;
+    case 2:
+      lev = mrb_int(mrb, v);
+      n = mrb_int(mrb, length);
       if (lev < 0) {
         mrb_raisef(mrb, E_ARGUMENT_ERROR, "negative level (%v)", v);
       }
-      n = bt_len - lev;
-    }
-    break;
-  case 2:
-    lev = mrb_as_int(mrb, v);
-    break;
-  default:
-    /* not reached */
-    lev = n = 0;
-    break;
+      if (n < 0) {
+        mrb_raisef(mrb, E_ARGUMENT_ERROR, "negative size (%v)", length);
+      }
+      break;
+    default:
+      lev = n = 0;
+      break;
   }
-  if (lev >= bt_len) return mrb_nil_value();
-  if (lev < 0) {
-    mrb_raisef(mrb, E_ARGUMENT_ERROR, "negative level (%v)", v);
-  }
-  if (n < 0) {
-    mrb_raisef(mrb, E_ARGUMENT_ERROR, "negative size (%d)", n);
-  }
-  if (n == 0 || bt_len <= lev) {
+
+  if (n == 0) {
     return mrb_ary_new(mrb);
   }
-  if (bt_len <= n + lev) n = bt_len - lev - 1;
-  return mrb_ary_new_from_values(mrb, n, RARRAY_PTR(bt)+lev+1);
+
+  return mrb_funcall_id(mrb, bt, MRB_OPSYM(aref), 2, mrb_fixnum_value(lev), mrb_fixnum_value(n));
 }
 
 /*
  *  call-seq:
  *     __method__         -> symbol
  *
- *  Returns the called name of the current method as a Symbol.
+ *  Returns the name at the definition of the current method as a
+ *  Symbol.
  *  If called outside of a method, it returns <code>nil</code>.
  *
  */
 static mrb_value
 mrb_f_method(mrb_state *mrb, mrb_value self)
-{
-  mrb_callinfo *ci = mrb->c->ci;
-  ci--;
-  if (ci->proc->e.env->tt == MRB_TT_ENV && ci->proc->e.env->mid)
-    return mrb_symbol_value(ci->proc->e.env->mid);
-  else if (ci->mid)
-    return mrb_symbol_value(ci->mid);
-  else
-    return mrb_nil_value();
-}
-
-/*
- *  call-seq:
- *     __callee__         -> symbol
- *
- *  Returns the called name of the current method as a Symbol.
- *  If called outside of a method, it returns <code>nil</code>.
- *
- */
-static mrb_value
-mrb_f_callee(mrb_state *mrb, mrb_value self)
 {
   mrb_callinfo *ci = mrb->c->ci;
   ci--;
@@ -110,7 +86,7 @@ mrb_f_callee(mrb_state *mrb, mrb_value self)
  *     Integer(arg,base=0)    -> integer
  *
  *  Converts <i>arg</i> to a <code>Integer</code>.
- *  Numeric types are converted directly (with floating-point numbers
+ *  Numeric types are converted directly (with floating point numbers
  *  being truncated).    <i>base</i> (0, or between 2 and 36) is a base for
  *  integer string representation.  If <i>arg</i> is a <code>String</code>,
  *  when <i>base</i> is omitted or equals to zero, radix indicators
@@ -130,43 +106,11 @@ mrb_f_callee(mrb_state *mrb, mrb_value self)
 static mrb_value
 mrb_f_integer(mrb_state *mrb, mrb_value self)
 {
-  mrb_value val, tmp;
+  mrb_value arg;
   mrb_int base = 0;
 
-  mrb_get_args(mrb, "o|i", &val, &base);
-  if (mrb_nil_p(val)) {
-    if (base != 0) goto arg_error;
-    mrb_raise(mrb, E_TYPE_ERROR, "can't convert nil into Integer");
-  }
-  switch (mrb_type(val)) {
-#ifndef MRB_NO_FLOAT
-    case MRB_TT_FLOAT:
-      if (base != 0) goto arg_error;
-      return mrb_float_to_integer(mrb, val);
-#endif
-
-    case MRB_TT_INTEGER:
-      if (base != 0) goto arg_error;
-      return val;
-
-    case MRB_TT_STRING:
-    string_conv:
-      return mrb_str_to_integer(mrb, val, base, TRUE);
-
-    default:
-      break;
-  }
-  if (base != 0) {
-    tmp = mrb_obj_as_string(mrb, val);
-    if (mrb_string_p(tmp)) {
-      val = tmp;
-      goto string_conv;
-    }
-arg_error:
-    mrb_raise(mrb, E_ARGUMENT_ERROR, "base specified for non string value");
-  }
-  /* to raise TypeError */
-  return mrb_to_integer(mrb, val);
+  mrb_get_args(mrb, "o|i", &arg, &base);
+  return mrb_convert_to_integer(mrb, arg, base);
 }
 
 #ifndef MRB_NO_FLOAT
@@ -187,10 +131,7 @@ mrb_f_float(mrb_state *mrb, mrb_value self)
 {
   mrb_value arg = mrb_get_arg1(mrb);
 
-  if (mrb_string_p(arg)) {
-    return mrb_float_value(mrb, mrb_str_to_dbl(mrb, arg, TRUE));
-  }
-  return mrb_to_float(mrb, arg);
+  return mrb_Float(mrb, arg);
 }
 #endif
 
@@ -260,8 +201,7 @@ mrb_f_hash(mrb_state *mrb, mrb_value self)
   if (mrb_nil_p(arg) || (mrb_array_p(arg) && RARRAY_LEN(arg) == 0)) {
     return mrb_hash_new(mrb);
   }
-  mrb_ensure_hash_type(mrb, arg);
-  return arg;
+  return mrb_ensure_hash_type(mrb, arg);
 }
 
 void
@@ -272,7 +212,6 @@ mrb_mruby_kernel_ext_gem_init(mrb_state *mrb)
   mrb_define_module_function(mrb, krn, "fail", mrb_f_raise, MRB_ARGS_OPT(2));
   mrb_define_module_function(mrb, krn, "caller", mrb_f_caller, MRB_ARGS_OPT(2));
   mrb_define_method(mrb, krn, "__method__", mrb_f_method, MRB_ARGS_NONE());
-  mrb_define_method(mrb, krn, "__callee__", mrb_f_callee, MRB_ARGS_NONE());
   mrb_define_module_function(mrb, krn, "Integer", mrb_f_integer, MRB_ARGS_ARG(1,1));
 #ifndef MRB_NO_FLOAT
   mrb_define_module_function(mrb, krn, "Float", mrb_f_float, MRB_ARGS_REQ(1));

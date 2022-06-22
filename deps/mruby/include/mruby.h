@@ -44,9 +44,6 @@
 #include <limits.h>
 
 #ifdef __cplusplus
-#ifndef UINTPTR_MAX
-#error Must be placed `#include <mruby.h>` before `#include <stdint.h>`
-#endif
 #ifndef SIZE_MAX
 #ifdef __SIZE_MAX__
 #define SIZE_MAX __SIZE_MAX__
@@ -69,18 +66,14 @@
 #define mrb_assert_int_fit(t1,n,t2,max) ((void)0)
 #endif
 
-#if (defined __cplusplus && __cplusplus >= 201703L)
-# define mrb_static_assert(...) static_assert(__VA_ARGS__)
-# define mrb_static_assert1(exp) static_assert(exp)
-# define mrb_static_assert2(exp, str) static_assert(exp, str)
-#elif (defined __cplusplus && __cplusplus >= 201103L) || \
+#if (defined __cplusplus && __cplusplus >= 201103L) || \
     (defined _MSC_VER) || \
     (defined __GXX_EXPERIMENTAL_CXX0X__)  /* for old G++/Clang++ */
-# define mrb_static_assert2(exp, str) static_assert(exp, str)
+# define mrb_static_assert(exp, str) static_assert(exp, str)
 #elif defined __STDC_VERSION__ && \
         ((__STDC_VERSION__ >= 201112L) || \
          (defined __GNUC__ && __GNUC__ * 100 + __GNUC_MINOR__ >= 406))
-# define mrb_static_assert2(exp, str) _Static_assert(exp, str)
+# define mrb_static_assert(exp, str) _Static_assert(exp, str)
 #else
 # /* alternative implementation of static_assert() */
 # define _mrb_static_assert_cat0(a, b) a##b
@@ -90,26 +83,10 @@
 # else
 #  define _mrb_static_assert_id(prefix) _mrb_static_assert_cat(prefix, __LINE__)
 # endif
-# define mrb_static_assert2(exp, str) \
+# define mrb_static_assert(exp, str) \
    struct _mrb_static_assert_id(_mrb_static_assert_) { char x[(exp) ? 1 : -1]; }
 #endif
-
-#ifndef mrb_static_assert
-# define mrb_static_assert1(exp) mrb_static_assert2(exp, #exp)
-# define mrb_static_assert_expand(...) __VA_ARGS__ /* for MSVC behaviour - https://stackoverflow.com/q/5530505 */
-# define mrb_static_assert_selector(a, b, name, ...) name
-/**
- * The `mrb_static_assert()` macro function takes one or two arguments.
- *
- *      !!!c
- *      mrb_static_assert(expect_condition);
- *      mrb_static_assert(expect_condition, error_message);
- */
-# define mrb_static_assert(...) \
-    mrb_static_assert_expand(mrb_static_assert_selector(__VA_ARGS__, mrb_static_assert2, mrb_static_assert1, _)(__VA_ARGS__))
-#endif
-
-#define mrb_static_assert_powerof2(num) mrb_static_assert((num) > 0 && (num) == ((num) & -(num)), "need power of 2 for " #num)
+#define mrb_static_assert1(exp) mrb_static_assert(exp, #exp)
 
 #include "mrbconf.h"
 
@@ -119,7 +96,6 @@
 #include <mruby/version.h>
 
 #ifndef MRB_NO_FLOAT
-#include <math.h>
 #include <float.h>
 #ifndef FLT_EPSILON
 #define FLT_EPSILON (1.19209290e-07f)
@@ -173,10 +149,9 @@ typedef void* (*mrb_allocf) (struct mrb_state *mrb, void*, size_t, void *ud);
 #endif
 
 typedef struct {
-  uint8_t n:4;                  /* (15=*) c=n|nk<<4 */
-  uint8_t nk:4;                 /* (15=*) */
-  uint8_t cci;                  /* called from C function */
   mrb_sym mid;
+  int16_t argc;
+  int16_t acc;
   const struct RProc *proc;
   mrb_value *stack;
   const mrb_code *pc;           /* current address on iseq of this proc */
@@ -210,7 +185,6 @@ struct mrb_context {
 
 #ifdef MRB_METHOD_CACHE_SIZE
 # undef MRB_NO_METHOD_CACHE
-mrb_static_assert_powerof2(MRB_METHOD_CACHE_SIZE);
 #else
 /* default method cache size: 256 */
 /* cache size needs to be power of 2 */
@@ -291,9 +265,7 @@ typedef struct mrb_state {
 #endif
 
   mrb_sym symidx;
-  const char **symtbl;
-  uint8_t *symlink;
-  uint8_t *symflags;
+  struct symbol_name *symtbl;   /* symbol table */
   mrb_sym symhash[256];
   size_t symcapa;
 #ifndef MRB_USE_ALL_SYMBOLS
@@ -914,20 +886,19 @@ MRB_API struct RClass* mrb_define_module_under_id(mrb_state *mrb, struct RClass 
  * | char | Ruby type      | C types           | Notes                                              |
  * |:----:|----------------|-------------------|----------------------------------------------------|
  * | `o`  | {Object}       | {mrb_value}       | Could be used to retrieve any type of argument     |
- * | `C`  | {Class}/{Module} | {mrb_value}     | when `!` follows, the value may be `nil`           |
+ * | `C`  | {Class}/{Module} | {mrb_value}     |                                                    |
  * | `S`  | {String}       | {mrb_value}       | when `!` follows, the value may be `nil`           |
  * | `A`  | {Array}        | {mrb_value}       | when `!` follows, the value may be `nil`           |
  * | `H`  | {Hash}         | {mrb_value}       | when `!` follows, the value may be `nil`           |
  * | `s`  | {String}       | const char *, {mrb_int} | Receive two arguments; `s!` gives (`NULL`,`0`) for `nil` |
  * | `z`  | {String}       | const char *      | `NULL` terminated string; `z!` gives `NULL` for `nil` |
  * | `a`  | {Array}        | const {mrb_value} *, {mrb_int} | Receive two arguments; `a!` gives (`NULL`,`0`) for `nil` |
- * | `c`  | {Class}/{Module} | strcut RClass * | `c!` gives `NULL` for `nil`                        |
  * | `f`  | {Integer}/{Float} | {mrb_float}    |                                                    |
  * | `i`  | {Integer}/{Float} | {mrb_int}      |                                                    |
  * | `b`  | boolean        | {mrb_bool}        |                                                    |
  * | `n`  | {String}/{Symbol} | {mrb_sym}         |                                                    |
  * | `d`  | data           | void *, {mrb_data_type} const | 2nd argument will be used to check data type so it won't be modified; when `!` follows, the value may be `nil` |
- * | `I`  | inline struct  | void *, struct RClass | `I!` gives `NULL` for `nil`                    |
+ * | `I`  | inline struct  | void *          |                                                    |
  * | `&`  | block          | {mrb_value}       | &! raises exception if no block given.             |
  * | `*`  | rest arguments | const {mrb_value} *, {mrb_int} | Receive the rest of arguments as an array; `*!` avoid copy of the stack.  |
  * | <code>\|</code> | optional     |                   | After this spec following specs would be optional. |
@@ -935,13 +906,6 @@ MRB_API struct RClass* mrb_define_module_under_id(mrb_state *mrb, struct RClass 
  * | `:`  | keyword args   | {mrb_kwargs} const | Get keyword arguments. @see mrb_kwargs |
  *
  * @see mrb_get_args
- *
- * Immediately after format specifiers it can add format modifiers:
- *
- * | char | Notes                                                                                   |
- * |:----:|-----------------------------------------------------------------------------------------|
- * | `!`  | Switch to the alternate mode; The behaviour changes depending on the format specifier   |
- * | `+`  | Request a not frozen object; However, except nil value                                  |
  */
 typedef const char *mrb_args_format;
 
@@ -1039,11 +1003,6 @@ MRB_API const mrb_value *mrb_get_argv(mrb_state *mrb);
  * Correctly handles *splat arguments.
  */
 MRB_API mrb_value mrb_get_arg1(mrb_state *mrb);
-
-/**
- * Check if a block argument is given from mrb_state.
- */
-MRB_API mrb_bool mrb_block_given_p(mrb_state *mrb);
 
 /* `strlen` for character string literals (use with caution or `strlen` instead)
     Adjacent string literals are concatenated in C/C++ in translation phase 6.
@@ -1167,17 +1126,6 @@ MRB_API void *mrb_malloc_simple(mrb_state*, size_t);  /* return NULL if no memor
 MRB_API struct RBasic *mrb_obj_alloc(mrb_state*, enum mrb_vtype, struct RClass*);
 MRB_API void mrb_free(mrb_state*, void*);
 
-/**
- * Allocates a Ruby object that matches the constant literal defined in
- * `enum mrb_vtype` and returns a pointer to the corresponding C type.
- *
- * @param mrb   The current mruby state
- * @param tt    The constant literal of `enum mrb_vtype`
- * @param klass A Class object
- * @return      Reference to the newly created object
- */
-#define MRB_OBJ_ALLOC(mrb, tt, klass) ((MRB_VTYPE_TYPEOF(tt)*)mrb_obj_alloc(mrb, tt, klass))
-
 MRB_API mrb_value mrb_str_new(mrb_state *mrb, const char *p, size_t len);
 
 /**
@@ -1271,11 +1219,10 @@ MRB_API mrb_sym mrb_obj_to_sym(mrb_state *mrb, mrb_value name);
 MRB_API mrb_bool mrb_obj_eq(mrb_state *mrb, mrb_value a, mrb_value b);
 MRB_API mrb_bool mrb_obj_equal(mrb_state *mrb, mrb_value a, mrb_value b);
 MRB_API mrb_bool mrb_equal(mrb_state *mrb, mrb_value obj1, mrb_value obj2);
+MRB_API mrb_value mrb_convert_to_integer(mrb_state *mrb, mrb_value val, mrb_int base);
+MRB_API mrb_value mrb_Integer(mrb_state *mrb, mrb_value val);
 #ifndef MRB_NO_FLOAT
-MRB_API mrb_value mrb_ensure_float_type(mrb_state *mrb, mrb_value val);
-#define mrb_as_float(mrb, x) mrb_float(mrb_ensure_float_type(mrb, x))
-/* obsolete: use mrb_ensure_float_type() instead */
-#define mrb_to_float(mrb, val) mrb_ensure_float_type(mrb, val)
+MRB_API mrb_value mrb_Float(mrb_state *mrb, mrb_value val);
 #endif
 MRB_API mrb_value mrb_inspect(mrb_state *mrb, mrb_value obj);
 MRB_API mrb_bool mrb_eql(mrb_state *mrb, mrb_value obj1, mrb_value obj2);
@@ -1392,25 +1339,10 @@ MRB_API void mrb_gc_register(mrb_state *mrb, mrb_value obj);
 /* mrb_gc_unregister() removes the object from GC root. */
 MRB_API void mrb_gc_unregister(mrb_state *mrb, mrb_value obj);
 
-/* type conversion/check functions */
-MRB_API mrb_value mrb_ensure_array_type(mrb_state *mrb, mrb_value self);
-MRB_API mrb_value mrb_check_array_type(mrb_state *mrb, mrb_value self);
-MRB_API mrb_value mrb_ensure_hash_type(mrb_state *mrb, mrb_value hash);
-MRB_API mrb_value mrb_check_hash_type(mrb_state *mrb, mrb_value hash);
-MRB_API mrb_value mrb_ensure_string_type(mrb_state *mrb, mrb_value str);
-MRB_API mrb_value mrb_check_string_type(mrb_state *mrb, mrb_value str);
-/* obsolete: use mrb_ensure_string_type() instead */
-#define mrb_string_type(mrb, str) mrb_ensure_string_type(mrb,str)
-#define mrb_to_str(mrb, str) mrb_ensure_string_type(mrb,str)
-/* obsolete: use mrb_obj_as_string() instead */
-#define mrb_str_to_str(mrb, str) mrb_obj_as_string(mrb, str)
-MRB_API mrb_value mrb_ensure_int_type(mrb_state *mrb, mrb_value val);
-#define mrb_as_int(mrb, val) mrb_integer(mrb_ensure_int_type(mrb, val))
-/* obsolete: use mrb_ensure_int_type() instead */
-#define mrb_to_integer(mrb, val) mrb_ensure_int_type(mrb, val)
-#define mrb_to_int(mrb, val) mrb_ensure_int_type(mrb, val)
-
+MRB_API mrb_value mrb_to_int(mrb_state *mrb, mrb_value val);
+#define mrb_int(mrb, val) mrb_integer(mrb_to_int(mrb, val))
 /* string type checking (contrary to the name, it doesn't convert) */
+MRB_API mrb_value mrb_to_str(mrb_state *mrb, mrb_value val);
 MRB_API void mrb_check_type(mrb_state *mrb, mrb_value x, enum mrb_vtype t);
 
 MRB_INLINE void mrb_check_frozen(mrb_state *mrb, void *o)
@@ -1429,8 +1361,6 @@ MRB_API mrb_bool mrb_respond_to(mrb_state *mrb, mrb_value obj, mrb_sym mid);
 MRB_API mrb_bool mrb_obj_is_instance_of(mrb_state *mrb, mrb_value obj, struct RClass* c);
 MRB_API mrb_bool mrb_func_basic_p(mrb_state *mrb, mrb_value obj, mrb_sym mid, mrb_func_t func);
 
-/* obsolete function(s); will be removed */
-#define mrb_int(mrb, val) mrb_as_int(mrb, val)
 
 /**
  * Resume a Fiber

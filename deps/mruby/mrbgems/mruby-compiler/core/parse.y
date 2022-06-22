@@ -13,6 +13,7 @@
 
 #include <ctype.h>
 #include <errno.h>
+#include <stdlib.h>
 #include <string.h>
 #include <mruby.h>
 #include <mruby/compile.h>
@@ -33,6 +34,7 @@ typedef struct mrb_parser_heredoc_info parser_heredoc_info;
 static int yyparse(parser_state *p);
 static int yylex(void *lval, parser_state *p);
 static void yyerror(parser_state *p, const char *s);
+static void yywarn(parser_state *p, const char *s);
 static void yywarning(parser_state *p, const char *s);
 static void backref_error(parser_state *p, node *n);
 static void void_expr_error(parser_state *p, node *n);
@@ -104,7 +106,7 @@ parser_palloc(parser_state *p, size_t size)
   void *m = mrb_pool_alloc(p->pool, size);
 
   if (!m) {
-    MRB_THROW(p->mrb->jmp);
+    MRB_THROW(p->jmp);
   }
   return m;
 }
@@ -284,10 +286,9 @@ local_var_p(parser_state *p, mrb_sym sym)
     const mrb_sym *v = ir->lv;
     int i;
 
-    if (v) {
-      for (i=0; i+1 < ir->nlocals; i++) {
-        if (v[i] == sym) return TRUE;
-      }
+    if (!v) break;
+    for (i=0; i+1 < ir->nlocals; i++) {
+      if (v[i] == sym) return TRUE;
     }
     if (MRB_PROC_SCOPE_P(u)) break;
     u = u->upper;
@@ -299,18 +300,6 @@ static void
 local_add_f(parser_state *p, mrb_sym sym)
 {
   if (p->locals) {
-    node *n = p->locals->car;
-    while (n) {
-      if (sym(n->car) == sym) {
-        mrb_int len;
-        const char* name = mrb_sym_name_len(p->mrb, sym, &len);
-        if (len > 0 && name[0] != '_') {
-          yyerror(p, "duplicated argument name");
-          return;
-        }
-      }
-      n = n->cdr;
-    }
     p->locals->car = push(p->locals->car, nsym(sym));
   }
 }
@@ -511,16 +500,11 @@ new_call(parser_state *p, node *a, mrb_sym b, node *c, int pass)
 static node*
 new_fcall(parser_state *p, mrb_sym b, node *c)
 {
-  node *n = list4((node*)NODE_FCALL, 0, nsym(b), c);
+  node *n = new_self(p);
+  NODE_LINENO(n, c);
+  n = list4((node*)NODE_FCALL, n, nsym(b), c);
   NODE_LINENO(n, c);
   return n;
-}
-
-/* (a b . c) */
-static node*
-new_callargs(parser_state *p, node *a, node *b, node *c)
-{
-  return cons(a, cons(b, c));
 }
 
 /* (:super . c) */
@@ -534,7 +518,7 @@ new_super(parser_state *p, node *c)
 static node*
 new_zsuper(parser_state *p)
 {
-  return cons((node*)NODE_ZSUPER, 0);
+  return list1((node*)NODE_ZSUPER);
 }
 
 /* (:yield . c) */
@@ -543,12 +527,7 @@ new_yield(parser_state *p, node *c)
 {
   if (c) {
     if (c->cdr) {
-      if (c->cdr->cdr) {
-        yyerror(p, "both block arg and actual block given");
-      }
-      if (c->cdr->car) {
-        return cons((node*)NODE_YIELD, push(c->car, c->cdr->car));
-      }
+      yyerror(p, "both block arg and actual block given");
     }
     return cons((node*)NODE_YIELD, c->car);
   }
@@ -623,7 +602,6 @@ new_colon3(parser_state *p, mrb_sym c)
 static node*
 new_and(parser_state *p, node *a, node *b)
 {
-  void_expr_error(p, a);
   return cons((node*)NODE_AND, cons(a, b));
 }
 
@@ -631,7 +609,6 @@ new_and(parser_state *p, node *a, node *b)
 static node*
 new_or(parser_state *p, node *a, node *b)
 {
-  void_expr_error(p, a);
   return cons((node*)NODE_OR, cons(a, b));
 }
 
@@ -646,7 +623,6 @@ new_array(parser_state *p, node *a)
 static node*
 new_splat(parser_state *p, node *a)
 {
-  void_expr_error(p, a);
   return cons((node*)NODE_SPLAT, a);
 }
 
@@ -712,6 +688,9 @@ new_cvar(parser_state *p, mrb_sym sym)
 static node*
 new_nvar(parser_state *p, int num)
 {
+  int nvars = intn(p->nvars->car);
+
+  p->nvars->car = nint(nvars > num ? nvars : num);
   return cons((node*)NODE_NVAR, nint(num));
 }
 
@@ -896,17 +875,6 @@ new_kw_rest_args(parser_state *p, node *a)
   return cons((node*)NODE_KW_REST_ARGS, a);
 }
 
-static node*
-new_args_dots(parser_state *p, node *m)
-{
-  mrb_sym r = intern_op(mul);
-  mrb_sym k = intern_op(pow);
-  mrb_sym b = intern_op(and);
-  local_add_f(p, r);
-  return new_args(p, m, 0, r, 0,
-                  new_args_tail(p, 0, new_kw_rest_args(p, nsym(k)), b));
-}
-
 /* (:block_arg . a) */
 static node*
 new_block_arg(parser_state *p, node *a)
@@ -993,14 +961,13 @@ new_op_asgn(parser_state *p, node *a, mrb_sym op, node *b)
 static node*
 new_imaginary(parser_state *p, node *imaginary)
 {
-  return new_call(p, new_const(p, MRB_SYM_2(p->mrb, Kernel)), MRB_SYM_2(p->mrb, Complex),
-                  new_callargs(p, list2(list3((node*)NODE_INT, (node*)strdup("0"), nint(10)), imaginary), 0, 0), 1);
+  return new_call(p, new_const(p, MRB_SYM_2(p->mrb, Kernel)), MRB_SYM_2(p->mrb, Complex), list1(list2(list3((node*)NODE_INT, (node*)strdup("0"), nint(10)), imaginary)), 1);
 }
 
 static node*
 new_rational(parser_state *p, node *rational)
 {
-  return new_call(p, new_const(p, MRB_SYM_2(p->mrb, Kernel)), MRB_SYM_2(p->mrb, Rational), new_callargs(p, list1(rational), 0, 0), 1);
+  return new_call(p, new_const(p, MRB_SYM_2(p->mrb, Kernel)), MRB_SYM_2(p->mrb, Rational), list1(list1(rational)), 1);
 }
 
 /* (:int . i) */
@@ -1223,32 +1190,17 @@ call_uni_op(parser_state *p, node *recv, const char *m)
 static node*
 call_bin_op(parser_state *p, node *recv, const char *m, node *arg1)
 {
-  return new_call(p, recv, intern_cstr(m), new_callargs(p, list1(arg1), 0, 0), 1);
+  return new_call(p, recv, intern_cstr(m), list1(list1(arg1)), 1);
 }
 
 static void
 args_with_block(parser_state *p, node *a, node *b)
 {
   if (b) {
-    if (a->cdr && a->cdr->cdr) {
+    if (a->cdr) {
       yyerror(p, "both block arg and actual block given");
     }
-    a->cdr->cdr = b;
-  }
-}
-
-static void
-endless_method_name(parser_state *p, node *defn)
-{
-  mrb_sym sym = sym(defn->cdr->car);
-  mrb_int len;
-  const char *name = mrb_sym_name_len(p->mrb, sym, &len);
-
-  if (len > 1 && name[len-1] == '=') {
-    for (int i=0; i<len-1; i++) {
-      if (!identchar(name[i])) return;
-    }
-    yyerror(p, "setter method cannot be defined by endless method definition");
+    a->cdr = b;
   }
 }
 
@@ -1260,16 +1212,19 @@ call_with_block(parser_state *p, node *a, node *b)
   switch (typen(a->car)) {
   case NODE_SUPER:
   case NODE_ZSUPER:
-    if (!a->cdr) a->cdr = new_callargs(p, 0, 0, b);
-    else args_with_block(p, a->cdr, b);
+    if (!a->cdr) a->cdr = cons(0, b);
+    else {
+      args_with_block(p, a->cdr, b);
+    }
     break;
   case NODE_CALL:
   case NODE_FCALL:
   case NODE_SCALL:
-    /* (NODE_CALL recv mid (args kw . blk)) */
-    n = a->cdr->cdr->cdr; /* (args kw . blk) */
-    if (!n->car) n->car = new_callargs(p, 0, 0, b);
-    else args_with_block(p, n->car, b);
+    n = a->cdr->cdr->cdr;
+    if (!n->car) n->car = cons(0, b);
+    else {
+      args_with_block(p, n->car, b);
+    }
     break;
   default:
     break;
@@ -1277,7 +1232,7 @@ call_with_block(parser_state *p, node *a, node *b)
 }
 
 static node*
-new_negate(parser_state *p, node *n)
+negate_lit(parser_state *p, node *n)
 {
   return cons((node*)NODE_NEGATE, n);
 }
@@ -1291,11 +1246,10 @@ cond(node *n)
 static node*
 ret_args(parser_state *p, node *n)
 {
-  if (n->cdr->cdr) {
+  if (n->cdr) {
     yyerror(p, "block argument should not be given");
     return NULL;
   }
-  if (!n->car) return NULL;
   if (!n->car->cdr) return n->car->car;
   return new_array(p, n->car);
 }
@@ -1322,24 +1276,6 @@ var_reference(parser_state *p, node *lhs)
   }
 
   return lhs;
-}
-
-static node*
-label_reference(parser_state *p, mrb_sym sym)
-{
-  const char *name = mrb_sym_name(p->mrb, sym);
-  node *n;
-
-  if (local_var_p(p, sym)) {
-    n = new_lvar(p, sym);
-  }
-  else if (ISUPPER(name[0])) {
-    n = new_const(p, sym);
-  }
-  else {
-    n = new_fcall(p, sym, 0);
-  }
-  return n;
 }
 
 typedef enum mrb_string_type  string_type;
@@ -1514,7 +1450,7 @@ heredoc_end(parser_state *p)
 %token <nd>  tSTRING tSTRING_PART tSTRING_MID
 %token <nd>  tNTH_REF tBACK_REF
 %token <num> tREGEXP_END
-%token <num> tNUMPARAM "numbered parameter"
+%token <num> tNUMPARAM "numbered paraemeter"
 
 %type <nd> singleton string string_fragment string_rep string_interp xstring regexp
 %type <nd> literal numeric cpath symbol defn_head defs_head
@@ -1527,8 +1463,7 @@ heredoc_end(parser_state *p)
 %type <nd> command_args aref_args opt_block_arg block_arg var_ref var_lhs
 %type <nd> command_asgn command_rhs mrhs superclass block_call block_command
 %type <nd> f_block_optarg f_block_opt
-%type <nd> f_opt_arglist_paren f_arglist_paren f_arglist
-%type <nd> f_args f_arg f_arg_item f_optarg f_margs
+%type <nd> f_arglist_paren f_arglist f_args f_arg f_arg_item f_optarg f_margs
 %type <nd> assoc_list assocs assoc undef_list backref for_var
 %type <nd> block_param opt_block_param block_param_def f_opt
 %type <nd> bv_decls opt_bv_decl bvar f_larglist lambda_body
@@ -1672,7 +1607,7 @@ bodystmt        : compstmt
                         NODE_LINENO($$, $1);
                       }
                       else if ($3) {
-                        yywarning(p, "else without rescue is useless");
+                        yywarn(p, "else without rescue is useless");
                         $$ = push($1, $3);
                       }
                       else {
@@ -1767,6 +1702,7 @@ stmt            : keyword_alias fsym {p->lstate = EXPR_FNAME;} fsym
                 | arg tASSOC tIDENTIFIER
                     {
                       node *lhs = new_lvar(p, $3);
+                      void_expr_error(p, $1);
                       assignable(p, lhs);
                       $$ = new_asgn(p, lhs, $1);
                     }
@@ -1801,42 +1737,6 @@ command_asgn    : lhs '=' command_rhs
                 | primary_value tCOLON2 tIDENTIFIER tOP_ASGN command_rhs
                     {
                       $$ = new_op_asgn(p, new_call(p, $1, $3, 0, tCOLON2), $4, $5);
-                    }
-                | defn_head f_opt_arglist_paren '=' command
-                    {
-                      $$ = $1;
-                      endless_method_name(p, $1);
-                      void_expr_error(p, $4);
-                      defn_setup(p, $$, $2, $4);
-                      nvars_unnest(p);
-                      p->in_def--;
-                    }
-                | defn_head f_opt_arglist_paren '=' command modifier_rescue arg
-                    {
-                      $$ = $1;
-                      endless_method_name(p, $1);
-                      void_expr_error(p, $4);
-                      defn_setup(p, $$, $2, new_mod_rescue(p, $4, $6));
-                      nvars_unnest(p);
-                      p->in_def--;
-                    }
-                | defs_head f_opt_arglist_paren '=' command
-                    {
-                      $$ = $1;
-                      void_expr_error(p, $4);
-                      defs_setup(p, $$, $2, $4);
-                      nvars_unnest(p);
-                      p->in_def--;
-                      p->in_single--;
-                    }
-                | defs_head f_opt_arglist_paren '=' command modifier_rescue arg
-                    {
-                      $$ = $1;
-                      void_expr_error(p, $4);
-                      defs_setup(p, $$, $2, new_mod_rescue(p, $4, $6));
-                      nvars_unnest(p);
-                      p->in_def--;
-                      p->in_single--;
                     }
                 | backref tOP_ASGN command_rhs
                     {
@@ -2337,11 +2237,11 @@ arg             : lhs '=' arg_rhs
                     }
                 | tUMINUS_NUM tINTEGER tPOW arg
                     {
-                      $$ = new_negate(p, call_bin_op(p, $2, "**", $4));
+                      $$ = call_uni_op(p, call_bin_op(p, $2, "**", $4), "-@");
                     }
                 | tUMINUS_NUM tFLOAT tPOW arg
                     {
-                      $$ = new_negate(p, call_bin_op(p, $2, "**", $4));
+                      $$ = call_uni_op(p, call_bin_op(p, $2, "**", $4), "-@");
                     }
                 | tUPLUS arg
                     {
@@ -2349,7 +2249,7 @@ arg             : lhs '=' arg_rhs
                     }
                 | tUMINUS arg
                     {
-                      $$ = new_negate(p, $2);
+                      $$ = call_uni_op(p, $2, "-@");
                     }
                 | arg '|' arg
                     {
@@ -2435,25 +2335,24 @@ arg             : lhs '=' arg_rhs
                     {
                       $$ = new_if(p, cond($1), $3, $6);
                     }
-                | defn_head f_opt_arglist_paren '=' arg
+                | defn_head f_arglist_paren '=' arg
                     {
                       $$ = $1;
-                      endless_method_name(p, $1);
                       void_expr_error(p, $4);
                       defn_setup(p, $$, $2, $4);
                       nvars_unnest(p);
                       p->in_def--;
                     }
-                | defn_head f_opt_arglist_paren '=' arg modifier_rescue arg
+                | defn_head f_arglist_paren '=' arg modifier_rescue arg
                     {
                       $$ = $1;
-                      endless_method_name(p, $1);
                       void_expr_error(p, $4);
+                      void_expr_error(p, $6);
                       defn_setup(p, $$, $2, new_mod_rescue(p, $4, $6));
                       nvars_unnest(p);
                       p->in_def--;
                     }
-                | defs_head f_opt_arglist_paren '=' arg
+                | defs_head f_arglist_paren '=' arg
                     {
                       $$ = $1;
                       void_expr_error(p, $4);
@@ -2462,10 +2361,11 @@ arg             : lhs '=' arg_rhs
                       p->in_def--;
                       p->in_single--;
                     }
-                | defs_head f_opt_arglist_paren '=' arg modifier_rescue arg
+                | defs_head f_arglist_paren '=' arg modifier_rescue arg
                     {
                       $$ = $1;
                       void_expr_error(p, $4);
+                      void_expr_error(p, $6);
                       defs_setup(p, $$, $2, new_mod_rescue(p, $4, $6));
                       nvars_unnest(p);
                       p->in_def--;
@@ -2485,7 +2385,7 @@ aref_args       : none
                     }
                 | args comma assocs trailer
                     {
-                      $$ = push($1, new_hash(p, $3));
+                      $$ = push($1, new_kw_hash(p, $3));
                     }
                 | assocs trailer
                     {
@@ -2501,6 +2401,7 @@ arg_rhs         : arg %prec tOP_ASGN
                 | arg modifier_rescue arg
                     {
                       void_expr_error(p, $1);
+                      void_expr_error(p, $3);
                       $$ = new_mod_rescue(p, $1, $3);
                     }
                 ;
@@ -2511,23 +2412,39 @@ paren_args      : '(' opt_call_args ')'
                     }
                 | '(' args comma tBDOT3 rparen
                     {
+#if 1
+                      mrb_sym r = intern_op(mul);
+                      mrb_sym b = intern_op(and);
+                      $$ = cons(push($2, new_splat(p, new_lvar(p, r))),
+                                new_block_arg(p, new_lvar(p, b)));
+#else
                       mrb_sym r = intern_op(mul);
                       mrb_sym k = intern_op(pow);
                       mrb_sym b = intern_op(and);
-                      $$ = new_callargs(p, push($2, new_splat(p, new_lvar(p, r))),
-                                        new_kw_hash(p, list1(cons(new_kw_rest_args(p, 0), new_lvar(p, k)))),
-                                        new_block_arg(p, new_lvar(p, b)));
+                      $$ = cons(list2(push($2, new_splat(p, new_lvar(p, r))),
+                                      new_kw_hash(p, list1(cons(new_kw_rest_args(p, 0), new_lvar(p, k))))),
+                                new_block_arg(p, new_lvar(p, b)));
+#endif
                     }
                 | '(' tBDOT3 rparen
                     {
+#if 1
+                      mrb_sym r = intern_op(mul);
+                      mrb_sym b = intern_op(and);
+                      if (local_var_p(p, r)  && local_var_p(p, b)) {
+                        $$ = cons(list1(new_splat(p, new_lvar(p, r))),
+                                  new_block_arg(p, new_lvar(p, b)));
+                      }
+#else
                       mrb_sym r = intern_op(mul);
                       mrb_sym k = intern_op(pow);
                       mrb_sym b = intern_op(and);
                       if (local_var_p(p, r) && local_var_p(p, k) && local_var_p(p, b)) {
-                        $$ = new_callargs(p, list1(new_splat(p, new_lvar(p, r))),
-                                          new_kw_hash(p, list1(cons(new_kw_rest_args(p, 0), new_lvar(p, k)))),
-                                          new_block_arg(p, new_lvar(p, b)));
+                        $$ = cons(list2(new_splat(p, new_lvar(p, r)),
+                                        new_kw_hash(p, list1(cons(new_kw_rest_args(p, 0), new_lvar(p, k))))),
+                                  new_block_arg(p, new_lvar(p, b)));
                       }
+#endif
                       else {
                         yyerror(p, "unexpected argument forwarding ...");
                         $$ = 0;
@@ -2543,17 +2460,17 @@ opt_call_args   : none
                 | call_args opt_terms
                 | args comma
                     {
-                      $$ = new_callargs(p,$1,0,0);
+                      $$ = cons($1,0);
                       NODE_LINENO($$, $1);
                     }
                 | args comma assocs comma
                     {
-                      $$ = new_callargs(p,$1,new_kw_hash(p,$3),0);
+                      $$ = cons(push($1, new_kw_hash(p, $3)), 0);
                       NODE_LINENO($$, $1);
                     }
                 | assocs comma
                     {
-                      $$ = new_callargs(p,0,new_kw_hash(p,$1),0);
+                      $$ = cons(list1(new_kw_hash(p, $1)), 0);
                       NODE_LINENO($$, $1);
                     }
                 ;
@@ -2561,27 +2478,27 @@ opt_call_args   : none
 call_args       : command
                     {
                       void_expr_error(p, $1);
-                      $$ = new_callargs(p, list1($1), 0, 0);
+                      $$ = cons(list1($1), 0);
                       NODE_LINENO($$, $1);
                     }
                 | args opt_block_arg
                     {
-                      $$ = new_callargs(p, $1, 0, $2);
+                      $$ = cons($1, $2);
                       NODE_LINENO($$, $1);
                     }
                 | assocs opt_block_arg
                     {
-                      $$ = new_callargs(p, 0, new_kw_hash(p, $1), $2);
+                      $$ = cons(list1(new_kw_hash(p, $1)), $2);
                       NODE_LINENO($$, $1);
                     }
                 | args comma assocs opt_block_arg
                     {
-                      $$ = new_callargs(p, $1, new_kw_hash(p, $3), $4);
+                      $$ = cons(push($1, new_kw_hash(p, $3)), $4);
                       NODE_LINENO($$, $1);
                     }
                 | block_arg
                     {
-                      $$ = new_callargs(p, 0, 0, $1);
+                      $$ = cons(0, $1);
                       NODE_LINENO($$, $1);
                     }
                 ;
@@ -2601,10 +2518,6 @@ block_arg       : tAMPER arg
                     {
                       $$ = new_block_arg(p, $2);
                     }
-                | tAMPER
-                    {
-                      $$ = new_block_arg(p, 0);
-                    }
                 ;
 
 opt_block_arg   : comma block_arg
@@ -2617,18 +2530,20 @@ opt_block_arg   : comma block_arg
                     }
                 ;
 
-comma           : ','  opt_nl
+comma           : ','
+                | ','  opt_nl heredoc_bodies
                 ;
 
 args            : arg
                     {
                       void_expr_error(p, $1);
-                      $$ = list1($1);
+                      $$ = cons($1, 0);
                       NODE_LINENO($$, $1);
                     }
                 | tSTAR arg
                     {
-                      $$ = list1(new_splat(p, $2));
+                      void_expr_error(p, $2);
+                      $$ = cons(new_splat(p, $2), 0);
                       NODE_LINENO($$, $2);
                     }
                 | args comma arg
@@ -2638,6 +2553,7 @@ args            : arg
                     }
                 | args comma tSTAR arg
                     {
+                      void_expr_error(p, $4);
                       $$ = push($1, new_splat(p, $4));
                     }
                 ;
@@ -2649,10 +2565,12 @@ mrhs            : args comma arg
                     }
                 | args comma tSTAR arg
                     {
+                      void_expr_error(p, $4);
                       $$ = push($1, new_splat(p, $4));
                     }
                 | tSTAR arg
                     {
+                      void_expr_error(p, $2);
                       $$ = list1(new_splat(p, $2));
                     }
                 ;
@@ -2737,7 +2655,7 @@ primary         : literal
                     }
                 | operation brace_block
                     {
-                      $$ = new_fcall(p, $1, new_callargs(p, 0, 0, $2));
+                      $$ = new_fcall(p, $1, cons(0, $2));
                     }
                 | method_call
                 | method_call brace_block
@@ -2748,7 +2666,6 @@ primary         : literal
                 | tLAMBDA
                     {
                       local_nest(p);
-                      nvars_nest(p);
                       $<num>$ = p->lpar_beg;
                       p->lpar_beg = ++p->paren_nest;
                     }
@@ -2762,7 +2679,6 @@ primary         : literal
                       p->lpar_beg = $<num>2;
                       $$ = new_lambda(p, $3, $5);
                       local_unnest(p);
-                      nvars_unnest(p);
                       p->cmdarg_stack = $<stack>4;
                       CMDARG_LEXPOP();
                     }
@@ -2962,7 +2878,7 @@ f_margs         : f_arg
                     }
                 | f_arg ',' tSTAR
                     {
-                      local_add_f(p, intern_op(mul));
+                      local_add_f(p, 0);
                       $$ = list3($1, nint(-1), 0);
                     }
                 | f_arg ',' tSTAR ',' f_arg
@@ -2979,12 +2895,12 @@ f_margs         : f_arg
                     }
                 | tSTAR
                     {
-                      local_add_f(p, intern_op(mul));
+                      local_add_f(p, 0);
                       $$ = list3(0, nint(-1), 0);
                     }
                 | tSTAR ','
                     {
-                      local_add_f(p, intern_op(mul));
+                      local_add_f(p, 0);
                     }
                   f_arg
                     {
@@ -3334,14 +3250,7 @@ string_fragment : tCHAR
                     }
                 | tSTRING_BEG string_rep tSTRING
                     {
-                      node *n = $2;
-                      if (intn($3->cdr->cdr) > 0) {
-                        n = push(n, $3);
-                      }
-                      else {
-                        cons_free($3);
-                      }
-                      $$ = new_dstr(p, n);
+                      $$ = new_dstr(p, push($2, $3));
                     }
                 ;
 
@@ -3383,14 +3292,7 @@ xstring         : tXSTRING_BEG tXSTRING
                     }
                 | tXSTRING_BEG string_rep tXSTRING
                     {
-                      node *n = $2;
-                      if (intn($3->cdr->cdr) > 0) {
-                        n = push(n, $3);
-                      }
-                      else {
-                        cons_free($3);
-                      }
-                      $$ = new_dxstr(p, n);
+                      $$ = new_dxstr(p, push($2, $3));
                     }
                 ;
 
@@ -3453,14 +3355,7 @@ words           : tWORDS_BEG tSTRING
                     }
                 | tWORDS_BEG string_rep tSTRING
                     {
-                      node *n = $2;
-                      if (intn($3->cdr->cdr) > 0) {
-                        n = push(n, $3);
-                      }
-                      else {
-                        cons_free($3);
-                      }
-                      $$ = new_words(p, n);
+                      $$ = new_words(p, push($2, $3));
                     }
                 ;
 
@@ -3472,15 +3367,8 @@ symbol          : basic_symbol
                     }
                 | tSYMBEG tSTRING_BEG string_rep tSTRING
                     {
-                      node *n = $3;
                       p->lstate = EXPR_ENDARG;
-                      if (intn($4->cdr->cdr) > 0) {
-                        n = push(n, $4);
-                      }
-                      else {
-                        cons_free($4);
-                      }
-                      $$ = new_dsym(p, new_dstr(p, n));
+                      $$ = new_dsym(p, new_dstr(p, push($3, $4)));
                     }
                 ;
 
@@ -3510,11 +3398,7 @@ symbols         : tSYMBOLS_BEG tSTRING
                     }
                 | tSYMBOLS_BEG string_rep tSTRING
                     {
-                      node *n = $2;
-                      if (intn($3->cdr->cdr) > 0) {
-                        n = push(n, $3);
-                      }
-                      $$ = new_symbols(p, n);
+                      $$ = new_symbols(p, push($2, $3));
                     }
                 ;
 
@@ -3522,11 +3406,11 @@ numeric         : tINTEGER
                 | tFLOAT
                 | tUMINUS_NUM tINTEGER          %prec tLOWEST
                     {
-                      $$ = new_negate(p, $2);
+                      $$ = negate_lit(p, $2);
                     }
                 | tUMINUS_NUM tFLOAT            %prec tLOWEST
                     {
-                      $$ = new_negate(p, $2);
+                      $$ = negate_lit(p, $2);
                     }
                 ;
 
@@ -3599,7 +3483,12 @@ var_ref         : variable
                     }
                 | keyword__ENCODING__
                     {
-                      $$ = new_fcall(p, MRB_SYM_2(p->mrb, __ENCODING__), 0);
+#ifdef MRB_UTF8_STRING
+                      const char *enc = "UTF-8";
+#else
+                      const char *enc = "ASCII-8BIT";
+#endif
+                      $$ = new_str(p, enc, strlen(enc));
                     }
                 ;
 
@@ -3627,11 +3516,6 @@ superclass      : /* term */
                     } */
                 ;
 
-f_opt_arglist_paren
-                : f_arglist_paren
-                | none
-                ;
-
 f_arglist_paren : '(' f_args rparen
                     {
                       $$ = $2;
@@ -3640,11 +3524,39 @@ f_arglist_paren : '(' f_args rparen
                     }
                 | '(' f_arg ',' tBDOT3 rparen
                     {
-                      $$ = new_args_dots(p, $2);
+#if 1
+                      /* til real keyword args implemented */
+                      mrb_sym r = intern_op(mul);
+                      mrb_sym b = intern_op(and);
+                      local_add_f(p, r);
+                      $$ = new_args(p, $2, 0, r, 0,
+                                    new_args_tail(p, 0, 0, b));
+#else
+                      mrb_sym r = intern_op(mul);
+                      mrb_sym k = intern_op(pow);
+                      mrb_sym b = intern_op(and);
+                      local_add_f(p, r); local_add_f(p, k);
+                      $$ = new_args(p, $2, 0, r, 0,
+                                    new_args_tail(p, 0, new_kw_rest_args(p, nsym(k)), b));
+#endif
                     }
                 | '(' tBDOT3 rparen
                     {
-                      $$ = new_args_dots(p, 0);
+#if 1
+                      /* til real keyword args implemented */
+                      mrb_sym r = intern_op(mul);
+                      mrb_sym b = intern_op(and);
+                      local_add_f(p, r);
+                      $$ = new_args(p, 0, 0, r, 0,
+                                    new_args_tail(p, 0, 0, b));
+#else
+                      mrb_sym r = intern_op(mul);
+                      mrb_sym k = intern_op(pow);
+                      mrb_sym b = intern_op(and);
+                      local_add_f(p, r); local_add_f(p, k);
+                      $$ = new_args(p, 0, 0, r, 0,
+                                    new_args_tail(p, 0, new_kw_rest_args(p, nsym(k)), b));
+#endif
                     }
                 ;
 
@@ -3652,14 +3564,6 @@ f_arglist       : f_arglist_paren
                 | f_args term
                     {
                       $$ = $1;
-                    }
-                | f_arg ',' tBDOT3 term
-                    {
-                      $$ = new_args_dots(p, $1);
-                    }
-                | tDOT3 term
-                    {
-                      $$ = new_args_dots(p, 0);
                     }
                 ;
 
@@ -3684,7 +3588,6 @@ f_kw            : f_label arg
 
 f_block_kw      : f_label primary_value
                     {
-                      void_expr_error(p, $2);
                       $$ = new_kw_arg(p, $1, cons($2, locals_node(p)));
                       local_unnest(p);
                     }
@@ -3939,8 +3842,8 @@ f_rest_arg      : restarg_mark tIDENTIFIER
                     }
                 | restarg_mark
                     {
-                      $$ = intern_op(mul);
-                      local_add_f(p, $$);
+                      local_add_f(p, intern_op(mul));
+                      $$ = -1;
                     }
                 ;
 
@@ -3951,10 +3854,6 @@ blkarg_mark     : '&'
 f_block_arg     : blkarg_mark tIDENTIFIER
                     {
                       $$ = $2;
-                    }
-                | blkarg_mark
-                    {
-                      $$ = intern_op(and);
                     }
                 ;
 
@@ -4016,22 +3915,22 @@ assocs          : assoc
                     }
                 ;
 
+label_tag       : tLABEL_TAG
+                | tLABEL_TAG heredoc_bodies
+                ;
+
 assoc           : arg tASSOC arg
                     {
                       void_expr_error(p, $1);
                       void_expr_error(p, $3);
                       $$ = cons($1, $3);
                     }
-                | tIDENTIFIER tLABEL_TAG arg
+                | tIDENTIFIER label_tag arg
                     {
                       void_expr_error(p, $3);
                       $$ = cons(new_sym(p, $1), $3);
                     }
-                | tIDENTIFIER tLABEL_TAG
-                    {
-                      $$ = cons(new_sym(p, $1), label_reference(p, $1));
-                    }
-                | string_fragment tLABEL_TAG arg
+                | string_fragment label_tag arg
                     {
                       void_expr_error(p, $3);
                       if (typen($1->car) == NODE_DSTR) {
@@ -4090,7 +3989,7 @@ opt_terms       : /* none */
                 ;
 
 opt_nl          : /* none */
-                | opt_nl nl
+                | nl
                 ;
 
 rparen          : opt_terms ')'
@@ -4103,6 +4002,7 @@ trailer         : /* none */
 
 term            : ';' {yyerrok;}
                 | nl
+                | heredoc_body
                 ;
 
 nl              : '\n'
@@ -4110,7 +4010,6 @@ nl              : '\n'
                       p->lineno += $<num>1;
                       p->column = 0;
                     }
-                | heredoc_body
                 ;
 
 terms           : term
@@ -4165,7 +4064,7 @@ yyerror_c(parser_state *p, const char *msg, char c)
 }
 
 static void
-yywarning(parser_state *p, const char *s)
+yywarn(parser_state *p, const char *s)
 {
   char* c;
   size_t n;
@@ -4190,6 +4089,12 @@ yywarning(parser_state *p, const char *s)
     p->warn_buffer[p->nwarn].column = p->column;
   }
   p->nwarn++;
+}
+
+static void
+yywarning(parser_state *p, const char *s)
+{
+  yywarn(p, s);
 }
 
 static void
@@ -4777,7 +4682,6 @@ heredoc_remove_indent(parser_state *p, parser_heredoc_info *hinf)
       start = 0;
       while (start < len) {
         end = escaped ? (size_t)escaped->car : len;
-        if (end > len) end = len;
         spaces = (size_t)nspaces->car;
         size_t esclen = end - start;
         heredoc_count_indent(hinf, str + start, esclen, spaces, &offset);
@@ -4856,7 +4760,7 @@ parse_string(parser_state *p)
             --len;
           }
         }
-        if (hinf->term_len > 0 && len-1 == hinf->term_len && strncmp(s, hinf->term, len-1) == 0) {
+        if ((len-1 == hinf->term_len) && (strncmp(s, hinf->term, len-1) == 0)) {
           heredoc_remove_indent(p, hinf);
           return tHEREDOC_END;
         }
@@ -5706,7 +5610,7 @@ parser_yylex(parser_state *p)
   case '.':
     {
       int is_beg = IS_BEG();
-      p->lstate = EXPR_MID;
+      p->lstate = EXPR_BEG;
       if ((c = nextc(p)) == '.') {
         if ((c = nextc(p)) == '.') {
           return is_beg ? tBDOT3 : tDOT3;
@@ -5715,7 +5619,6 @@ parser_yylex(parser_state *p)
         return is_beg ? tBDOT2 : tDOT2;
       }
       pushback(p, c);
-      p->lstate = EXPR_BEG;
       if (c >= 0 && ISDIGIT(c)) {
         yyerror(p, "no .<digit> floating literal anymore; put 0 before dot");
       }
@@ -5938,7 +5841,7 @@ parser_yylex(parser_state *p)
     tokfix(p);
     if (is_float) {
 #ifdef MRB_NO_FLOAT
-      yywarning_s(p, "floating-point numbers are not supported", tok(p));
+      yywarning_s(p, "floating point numbers are not supported", tok(p));
       pylval.nd = new_int(p, "0", 10, 0);
       return tINTEGER;
 #else
@@ -6298,10 +6201,10 @@ parser_yylex(parser_state *p)
       if (last_state == EXPR_FNAME) goto gvar;
       tokfix(p);
       {
-        mrb_int n = mrb_int_read(tok(p), NULL, NULL);
-        if (n > INT32_MAX) {
-          yywarning(p, "capture group index too big; always nil");
-          return keyword_nil;
+        unsigned long n = strtoul(tok(p), NULL, 10);
+        if (n > INT_MAX) {
+          yyerror(p, "capture group index must be <= " MRB_STRINGIZE(INT_MAX));
+          return 0;
         }
         pylval.nd = new_nth_ref(p, (int)n);
       }
@@ -6429,16 +6332,16 @@ parser_yylex(parser_state *p)
             nvars = nvars->cdr;
           }
           nvar = intn(p->nvars->car);
-          if (nvar != -2) {     /* numbered parameters never appear on toplevel */
-            if (nvar == -1) {
-              yywarning(p, "numbered parameter used in inner block");
-            }
-            else {
-              p->nvars->car = nint(nvar > n ? nvar : n);
-            }
+          if (nvar == -1) {
+            yywarning(p, "numbered parameter used in inner block");
+          }
+          if (nvar >= -1) {
             pylval.num = n;
             p->lstate = EXPR_END;
             return tNUMPARAM;
+          }
+          else {
+            yywarning(p, "identifier for numbered parameter; consider another name");
           }
         }
       }
@@ -6573,7 +6476,6 @@ parser_init_cxt(parser_state *p, mrbc_context *cxt)
   }
   p->capture_errors = cxt->capture_errors;
   p->no_optimize = cxt->no_optimize;
-  p->no_ext_ops = cxt->no_ext_ops;
   p->upper = cxt->upper;
   if (cxt->partial_hook) {
     p->cxt = cxt;
@@ -6587,7 +6489,6 @@ parser_update_cxt(parser_state *p, mrbc_context *cxt)
   int i = 0;
 
   if (!cxt) return;
-  if (!p->tree) return;
   if (intn(p->tree->car) != NODE_SCOPE) return;
   n0 = n = p->tree->cdr->car;
   while (n) {
@@ -6608,39 +6509,53 @@ MRB_API void
 mrb_parser_parse(parser_state *p, mrbc_context *c)
 {
   struct mrb_jmpbuf buf1;
-  struct mrb_jmpbuf *prev = p->mrb->jmp;
-  p->mrb->jmp = &buf1;
+  p->jmp = &buf1;
 
-  MRB_TRY(p->mrb->jmp) {
+  MRB_TRY(p->jmp) {
     int n = 1;
 
     p->cmd_start = TRUE;
     p->in_def = p->in_single = 0;
     p->nerr = p->nwarn = 0;
     p->lex_strterm = NULL;
+
     parser_init_cxt(p, c);
 
-    n = yyparse(p);
+    if (p->mrb->jmp) {
+      n = yyparse(p);
+    }
+    else {
+      struct mrb_jmpbuf buf2;
+
+      p->mrb->jmp = &buf2;
+      MRB_TRY(p->mrb->jmp) {
+        n = yyparse(p);
+      }
+      MRB_CATCH(p->mrb->jmp) {
+        p->nerr++;
+      }
+      MRB_END_EXC(p->mrb->jmp);
+      p->mrb->jmp = 0;
+    }
     if (n != 0 || p->nerr > 0) {
       p->tree = 0;
-      p->mrb->jmp = prev;
       return;
+    }
+    if (!p->tree) {
+      p->tree = new_nil(p);
     }
     parser_update_cxt(p, c);
     if (c && c->dump_result) {
       mrb_parser_dump(p->mrb, p->tree, 0);
     }
   }
-  MRB_CATCH(p->mrb->jmp) {
+  MRB_CATCH(p->jmp) {
+    yyerror(p, "memory allocation error");
     p->nerr++;
-    if (p->mrb->exc == NULL) {
-      yyerror(p, "memory allocation error");
-      p->nerr++;
-      p->tree = 0;
-    }
+    p->tree = 0;
+    return;
   }
   MRB_END_EXC(p->jmp);
-  p->mrb->jmp = prev;
 }
 
 MRB_API parser_state*
@@ -7025,13 +6940,8 @@ dump_args(mrb_state *mrb, node *n, int offset)
   }
   n = n->cdr;
   if (n->car) {
-    mrb_sym rest = sym(n->car);
-
     dump_prefix(n, offset+1);
-    if (rest == MRB_OPSYM(mul))
-      printf("rest=*\n");
-    else
-      printf("rest=*%s\n", mrb_sym_name(mrb, rest));
+    printf("rest=*%s\n", mrb_sym_name(mrb, sym(n->car)));
   }
   n = n->cdr;
   if (n->car) {
@@ -7308,16 +7218,9 @@ mrb_parser_dump(mrb_state *mrb, node *tree, int offset)
       printf("args:\n");
       dump_recur(mrb, tree->car, offset+2);
       if (tree->cdr) {
-        if (tree->cdr->car) {
-          dump_prefix(tree, offset+1);
-          printf("kwargs:\n");
-          mrb_parser_dump(mrb, tree->cdr->car, offset+2);
-        }
-        if (tree->cdr->cdr) {
-          dump_prefix(tree, offset+1);
-          printf("block:\n");
-          mrb_parser_dump(mrb, tree->cdr->cdr, offset+2);
-        }
+        dump_prefix(tree, offset+1);
+        printf("block:\n");
+        mrb_parser_dump(mrb, tree->cdr, offset+2);
       }
     }
     break;
@@ -7458,17 +7361,7 @@ mrb_parser_dump(mrb_state *mrb, node *tree, int offset)
     break;
 
   case NODE_ZSUPER:
-    printf("NODE_ZSUPER:\n");
-    if (tree) {
-      dump_prefix(tree, offset+1);
-      printf("args:\n");
-      dump_recur(mrb, tree->car, offset+2);
-      if (tree->cdr) {
-        dump_prefix(tree, offset+1);
-        printf("block:\n");
-        mrb_parser_dump(mrb, tree->cdr, offset+2);
-      }
-    }
+    printf("NODE_ZSUPER\n");
     break;
 
   case NODE_RETURN:
@@ -7794,10 +7687,7 @@ mrb_parser_dump(mrb_state *mrb, node *tree, int offset)
     break;
 
   case NODE_KW_REST_ARGS:
-    if (tree)
-      printf("NODE_KW_REST_ARGS %s\n", mrb_sym_name(mrb, sym(tree)));
-    else
-      printf("NODE_KW_REST_ARGS\n");
+    printf("NODE_KW_REST_ARGS %s\n", mrb_sym_name(mrb, sym(tree)));
     break;
 
   default:
@@ -7805,20 +7695,4 @@ mrb_parser_dump(mrb_state *mrb, node *tree, int offset)
     break;
   }
 #endif
-}
-
-typedef mrb_bool mrb_parser_foreach_top_variable_func(mrb_state *mrb, mrb_sym sym, void *user);
-void mrb_parser_foreach_top_variable(mrb_state *mrb, struct mrb_parser_state *p, mrb_parser_foreach_top_variable_func *func, void *user);
-
-void
-mrb_parser_foreach_top_variable(mrb_state *mrb, struct mrb_parser_state *p, mrb_parser_foreach_top_variable_func *func, void *user)
-{
-  const mrb_ast_node *n = p->tree;
-  if ((intptr_t)n->car == NODE_SCOPE) {
-    n = n->cdr->car;
-    for (; n; n = n->cdr) {
-      mrb_sym sym = sym(n->car);
-      if (sym && !func(mrb, sym, user)) break;
-    }
-  }
 }

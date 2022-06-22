@@ -30,8 +30,3 @@ assert("'wrong number of arguments' from mrb_get_args") do
   assert_argnum_error(1, 2){Object.const_set(:B)}
   assert_argnum_error(3, 2){Object.const_set(:C, 1, 2)}
 end
-
-assert('Call to MRB_ARGS_NONE method') do
-  assert_raise(ArgumentError) { nil.__id__ 1 }
-  assert_raise(ArgumentError) { nil.__id__ opts: 1 }
-end

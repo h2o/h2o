@@ -18,10 +18,6 @@ class String
   def relative_path
     relative_path_from(Dir.pwd)
   end
-
-  def remove_leading_parents
-    Pathname.new(".#{Pathname.new("/#{self}").cleanpath}").cleanpath.to_s
-  end
 end
 
 def install_D(src, dst)

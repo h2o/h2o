@@ -28,7 +28,7 @@ MRuby.each_target do
         f.puts %Q[#include <mruby.h>]
         f.puts %Q[#include <mruby/irep.h>]
       end
-      mrbc.run f, rbfiles, "mrblib_#{suffix}", cdump: cdump, static: true
+      mrbc.run f, rbfiles, "mrblib_#{suffix}", cdump
       f.puts %Q[void]
       f.puts %Q[mrb_init_mrblib(mrb_state *mrb)]
       f.puts %Q[{]

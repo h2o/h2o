@@ -90,7 +90,7 @@ assert('Literals Strings Here documents', '8.7.6.3.6') do
   a = <<AAA
 aaa
 AAA
-  b = <<b_b
+   b = <<b_b
 bbb
 b_b
     c = [<<CCC1, <<"CCC2", <<'CCC3']
@@ -250,6 +250,7 @@ ZZZ
   assert_equal ["1", "www\n", "3", "4", "5"], w
   assert_equal [1, "foo 222 333\n 444\n5\n bar\n6\n", 9], x
   assert_equal "", z
+
 end
 
 

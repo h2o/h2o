@@ -103,7 +103,7 @@ mrb_obj_instance_exec(mrb_state *mrb, mrb_value self)
 
   mrb_get_args(mrb, "*&!", &argv, &argc, &blk);
   c = mrb_singleton_class_ptr(mrb, self);
-  if (mrb->c->ci->cci > 0) {
+  if (mrb->c->ci->acc < 0) {
     return mrb_yield_with_class(mrb, blk, argc, argv, self, c);
   }
   mrb_vm_ci_target_class_set(mrb->c->ci, c);

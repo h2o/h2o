@@ -39,8 +39,8 @@
 #endif
 
 #ifdef MRB_USE_READLINE
-#include MRB_READLINE_HEADER
-#include MRB_READLINE_HISTORY
+#include <readline/readline.h>
+#include <readline/history.h>
 #define MIRB_ADD_HISTORY(line) add_history(line)
 #define MIRB_READLINE(ch) readline(ch)
 #if !defined(RL_READLINE_VERSION) || RL_READLINE_VERSION < 0x600
@@ -63,7 +63,7 @@
 #define MIRB_USING_HISTORY()
 #endif
 
-#if !defined(_WIN32) && defined(_POSIX_C_SOURCE)
+#ifndef _WIN32
 #define MIRB_SIGSETJMP(env) sigsetjmp(env, 1)
 #define MIRB_SIGLONGJMP(env, val) siglongjmp(env, val)
 #define SIGJMP_BUF sigjmp_buf
@@ -134,7 +134,7 @@ p(mrb_state *mrb, mrb_value obj, int prompt)
 }
 
 /* Guess if the user might want to enter more
- * or if they wants an evaluation of their code now */
+ * or if he wants an evaluation of his code now */
 static mrb_bool
 is_code_block_open(struct mrb_parser_state *parser)
 {
@@ -211,7 +211,7 @@ is_code_block_open(struct mrb_parser_state *parser)
     /* an expression was ended */
     break;
   case EXPR_ENDARG:
-    /* closing parenthesis */
+    /* closing parenthese */
     break;
   case EXPR_ENDFN:
     /* definition end */

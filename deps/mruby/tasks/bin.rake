@@ -6,8 +6,8 @@ MRuby.each_target do |build|
 
   build.bins.each{|bin| build.products << define_installer_if_needed(bin)}
 
+  linker_attrs = build.gems.linker_attrs
   build.gems.each do |gem|
-    linker_attrs = build.gems.linker_attrs(gem)
     gem.bins.each do |bin|
       exe = build.exefile("#{build.build_dir}/bin/#{bin}")
       objs = Dir["#{gem.dir}/tools/#{bin}/*.{c,cpp,cxx,cc}"].map do |f|

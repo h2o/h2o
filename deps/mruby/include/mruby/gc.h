@@ -87,8 +87,6 @@ typedef struct mrb_gc {
 MRB_API mrb_bool
 mrb_object_dead_p(struct mrb_state *mrb, struct RBasic *object);
 
-#define MRB_GC_RED 7
-
 MRB_END_DECL
 
 #endif  /* MRUBY_GC_H */

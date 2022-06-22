@@ -1,28 +1,28 @@
-# mruby configuration macros
+# mruby configuration macros.
 
-## How to use these macros
+## How to use these macros.
 
 You can use mrbconfs with following ways:
 
 * Write them in `mrbconf.h`.
-  * Using compiler flags is preferred  when building a cross binaries or multiple mruby binaries
-    since it's easier to use different mrbconf per each `MRuby::Build`.
-  * Most flags can be enabled by just commenting in.
+ * Using compiler flags is preferred  when building a cross binaries or multiple mruby binaries
+ since it's easier to use different mrbconf per each `MRuby::Build`.
+ * Most flags can be enabled by just commenting in.
 * Pass them as compiler flags.
-  * Make sure you pass the same flags to all compilers since some mrbconf(e.g., `MRB_GC_FIXED_ARENA`)
-    changes `struct` layout and cause memory access error when C and other language(e.g., C++) is mixed.
+ * Make sure you pass the same flags to all compilers since some mrbconf(e.g., `MRB_GC_FIXED_ARENA`)
+ changes `struct` layout and cause memory access error when C and other language(e.g., C++) is mixed.
 
-## stdio setting
+## stdio setting.
 
 `MRB_NO_STDIO`
 
 * When defined `<stdio.h>` functions won't be used.
 * Some features will be disabled when this is enabled:
   * `mrb_irep` load/dump from/to file.
-  * Compiling mruby script from a file.
+  * Compiling mruby script from file.
   * Printing features in **src/print.c**.
 
-## Debug macros
+## Debug macros.
 
 `MRB_USE_DEBUG_HOOK`
 
@@ -54,16 +54,16 @@ You can use mrbconfs with following ways:
 * Default value is `0x40000 - MRB_STACK_GROWTH`.
 * Raises `RuntimeError` when stack size exceeds this value.
 
-## Primitive type configuration
+## Primitive type configuration.
 
 `MRB_USE_FLOAT32`
 
-* When defined single precision floating-point type(C type `float`) is used as `mrb_float`.
-* Otherwise, double precision floating-point type(C type `double`) is used as `mrb_float`.
+* When defined single precision floating point type(C type `float`) is used as `mrb_float`.
+* Otherwise double precision floating point type(C type `double`) is used as `mrb_float`.
 
 `MRB_NO_FLOAT`
 
-* When defined removes floating-point numbers from mruby.
+* When defined removes floating point numbers from mruby.
 * It makes mruby easier to handle in "Microcontroller without FPU" and "Kernel Space".
 
 `MRB_INT32`
@@ -76,7 +76,7 @@ You can use mrbconfs with following ways:
 * When defined, or `MRB_INT32` are not defined on 64-bit CPU mode, `mrb_int` will be defined as `int64_t`.
 * Conflicts with `MRB_INT32`.
 
-## Garbage collector configuration
+## Garbage collector configuration.
 
 `MRB_GC_STRESS`
 
@@ -104,7 +104,7 @@ You can use mrbconfs with following ways:
 * Defines value is `1024`.
 * Specifies number of `RBasic` per each heap page.
 
-## Memory pool configuration
+## Memory pool configuration.
 
 `POOL_ALIGNMENT`
 
@@ -118,7 +118,7 @@ largest value of required alignment.
 * Specifies page size of pool page.
 * Smaller the value is increases memory overhead.
 
-## State atexit configuration
+## State atexit configuration.
 
 `MRB_FIXED_STATE_ATEXIT_STACK`
 
@@ -131,7 +131,7 @@ largest value of required alignment.
 * Default value is `5`.
 * If `MRB_FIXED_STATE_ATEXIT_STACK` isn't defined this macro is ignored.
 
-## `mrb_value` configuration
+## `mrb_value` configuration.
 
 `MRB_ENDIAN_BIG`
 
@@ -149,26 +149,25 @@ largest value of required alignment.
 * If defined represent `mrb_value` as a word.
 * If defined `Float` will be a mruby object with `RBasic`.
 
-## Reduce heap memory configuration
+## Reduce heap memory configuration.
 
-`MRB_USE_ETEXT_RO_DATA_P`
+`MRB_USE_LINK_TIME_RO_DATA_P`
 
-* Use `etext` and `edata` section addresses defined by the linker to detect read-only data.
-* Those addresses are widely available, but not portable, nor standardized.
-* This macro is defined by default on User-mode Linux.
-
-`MRB_NO_DEFAULT_RO_DATA_P`
-
-* Define this macro when the default `mrb_ro_data_p()` does not work for any reason.
+* Only available on ELF platforms.
+* If you specify the address of a read-only section when creating a symbol or string, that string will be used as it is.
+* Heap memory can be saved.
+* Uses `__ehdr_start` and `__init_array_start`.
+* It must be `__ehdr_start < data_addr < __init_array_start`.
 
 `MRB_USE_CUSTOM_RO_DATA_P`
 
+* Takes precedence over `MRB_USE_LINK_TIME_RO_DATA_P`.
 * Please try if `MRB_USE_LINK_TIME_RO_DATA_P` is not available.
 * The `mrb_ro_data_p()` function is implemented by the user in an arbitrary file.
 * The prototype declaration is `mrb_bool mrb_ro_data_p(const char *ptr)`.
-* Return `TRUE` if `ptr` is in the read-only section, otherwise return `FALSE`.
+* Return `TRUE` if `ptr` is in read-only section, otherwise return `FALSE`.
 
-## Other configuration
+## Other configuration.
 
 `MRB_UTF8_STRING`
 

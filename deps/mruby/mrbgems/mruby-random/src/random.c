@@ -11,7 +11,6 @@
 #include <mruby/array.h>
 #include <mruby/istruct.h>
 #include <mruby/presym.h>
-#include <mruby/string.h>
 
 #include <time.h>
 
@@ -22,6 +21,8 @@ and related and neighboring rights to this software to the public domain
 worldwide. This software is distributed without any warranty.
 
 See <https://creativecommons.org/publicdomain/zero/1.0/>. */
+
+#include <stdint.h>
 
 /* This is xoshiro128++ 1.0, one of our 32-bit all-purpose, rock-solid
    generators. It has excellent speed, a state size (128 bits) that is
@@ -59,17 +60,12 @@ rand_init(rand_state *t)
 #endif
 }
 
-static uint32_t rand_uint32(rand_state *state);
-
 static uint32_t
 rand_seed(rand_state *t, uint32_t seed)
 {
   uint32_t old_seed = t->seed[SEEDPOS];
   rand_init(t);
   t->seed[SEEDPOS] = seed;
-  for (int i = 0; i < 10; i++) {
-    rand_uint32(t);
-  }
   return old_seed;
 }
 
@@ -124,40 +120,55 @@ rand_real(rand_state *t)
 #endif
 
 static mrb_value
-random_rand(mrb_state *mrb, rand_state *t, mrb_int max)
+random_rand(mrb_state *mrb, rand_state *t, mrb_value max)
 {
-  if (max == 0) {
+  mrb_value value;
+
+  if (mrb_integer(max) == 0) {
 #ifndef MRB_NO_FLOAT
-    return mrb_float_value(mrb, rand_real(t));
+    value = mrb_float_value(mrb, rand_real(t));
 #else
-    max = 100;
+    mrb_raise(mrb, E_ARGUMENT_ERROR, "Float not supported");
 #endif
   }
-  return mrb_int_value(mrb, rand_uint32(t) % max);
+  else {
+    value = mrb_int_value(mrb, rand_uint32(t) % mrb_integer(max));
+  }
+
+  return value;
 }
 
-static mrb_int
-random_rand_i(mrb_state *mrb, rand_state *t, mrb_int max)
-{
-  return rand_uint32(t) % max;
-}
-
-static mrb_int
+static mrb_value
 get_opt(mrb_state* mrb)
 {
-  mrb_int arg;
+  mrb_value arg;
 
-  arg = 0;
-  mrb_get_args(mrb, "|i", &arg);
-  if (arg < 0) {
-    mrb_raise(mrb, E_ARGUMENT_ERROR, "invalid argument");
+  arg = mrb_nil_value();
+  mrb_get_args(mrb, "|o", &arg);
+
+  if (!mrb_nil_p(arg)) {
+    mrb_int i;
+
+    arg = mrb_to_int(mrb, arg);
+    i = mrb_integer(arg);
+    if (i < 0) {
+      arg = mrb_fixnum_value(0 - i);
+    }
   }
   return arg;
 }
 
+static void
+random_check(mrb_state *mrb, mrb_value random) {
+  struct RClass *c = mrb_class_get_id(mrb, MRB_SYM(Random));
+  if (!mrb_obj_is_kind_of(mrb, random, c) || !mrb_istruct_p(random)) {
+    mrb_raise(mrb, E_TYPE_ERROR, "Random instance required");
+  }
+}
+
 static mrb_value
 random_default(mrb_state *mrb) {
-  struct RClass *c = mrb_class_get_id(mrb, MRB_SYM(Random));
+  struct RClass *c = mrb_class_get(mrb, "Random");
   mrb_value d = mrb_const_get(mrb, mrb_obj_value(c), MRB_SYM(DEFAULT));
   if (!mrb_obj_is_kind_of(mrb, d, c)) {
     mrb_raise(mrb, E_TYPE_ERROR, "Random::DEFAULT replaced");
@@ -171,15 +182,17 @@ random_default(mrb_state *mrb) {
 static mrb_value
 random_m_init(mrb_state *mrb, mrb_value self)
 {
-  mrb_int seed;
+  mrb_value seed;
   rand_state *t;
 
+  seed = get_opt(mrb);
+  /* avoid memory leaks */
   t = random_ptr(self);
-  if (mrb_get_args(mrb, "|i", &seed) == 0) {
+  if (mrb_nil_p(seed)) {
     rand_init(t);
   }
   else {
-    rand_seed(t, (uint32_t)seed);
+    rand_seed(t, (uint32_t)mrb_integer(seed));
   }
 
   return self;
@@ -188,7 +201,7 @@ random_m_init(mrb_state *mrb, mrb_value self)
 static mrb_value
 random_m_rand(mrb_state *mrb, mrb_value self)
 {
-  mrb_int max;
+  mrb_value max;
   rand_state *t = random_ptr(self);
 
   max = get_opt(mrb);
@@ -200,35 +213,19 @@ random_m_srand(mrb_state *mrb, mrb_value self)
 {
   uint32_t seed;
   uint32_t old_seed;
-  mrb_int i;
+  mrb_value sv;
   rand_state *t = random_ptr(self);
 
-  if (mrb_get_args(mrb, "|i", &i) == 0) {
+  sv = get_opt(mrb);
+  if (mrb_nil_p(sv)) {
     seed = (uint32_t)time(NULL) + rand_uint32(t);
   }
   else {
-    seed = (uint32_t)i;
+    seed = (uint32_t)mrb_integer(sv);
   }
   old_seed = rand_seed(t, seed);
 
   return mrb_int_value(mrb, (mrb_int)old_seed);
-}
-
-static mrb_value
-random_m_bytes(mrb_state *mrb, mrb_value self)
-{
-  rand_state *t = random_ptr(self);
-
-  mrb_int i;
-  mrb_get_args(mrb, "i", &i);
-
-  mrb_value bytes = mrb_str_new(mrb, NULL, i);
-  uint8_t *p = (uint8_t*)RSTRING_PTR(bytes);
-  for (; i > 0; i--, p++) {
-    *p = (uint8_t)rand_uint32(t);
-  }
-
-  return bytes;
 }
 
 /*
@@ -241,22 +238,57 @@ random_m_bytes(mrb_state *mrb, mrb_value self)
 static mrb_value
 mrb_ary_shuffle_bang(mrb_state *mrb, mrb_value ary)
 {
-  mrb_int i, max;
+  mrb_int i;
+  mrb_value max;
+  mrb_value r = mrb_nil_value();
   rand_state *random;
 
+ /*
+ * MSC compiler bug generating invalid instructions with optimization
+ * enabled. MSC errantly uses a hardcoded value with optimizations on
+ * when using a fixed value from a union.
+ * Creating a temp volatile variable and reassigning back to the original
+ * value tricks the compiler to not perform this optimization;
+ */
+#if defined _MSC_VER && _MSC_VER >= 1923
+  /* C++ will not cast away volatile easily, so we cannot do something like
+   * volatile mrb_value rr = r; r = (mrb_value)rr; with C++.
+   * That cast does work with C.
+   * We also have to trick the compiler to not optimize away the const_cast entirely
+   * by creating and manipulating an intermediate volatile pointer.
+   */
+  volatile mrb_value *v_r;
+  volatile mrb_int ii;
+  mrb_value *p_r;
+  v_r = &r;
+  ii = 2;
+  v_r = v_r + 2;
+#if defined __cplusplus
+  p_r = const_cast<mrb_value*>(v_r - ii);
+#else
+  p_r = (mrb_value*)v_r - ii;
+#endif
+  r = *p_r;
+#endif
+
   if (RARRAY_LEN(ary) > 1) {
-    struct RClass *c = mrb_class_get_id(mrb, MRB_SYM(Random));
-    if (mrb_get_args(mrb, "|I", &random, c) == 0) {
+    mrb_get_args(mrb, "|o", &r);
+
+    if (mrb_nil_p(r)) {
       random = random_default_state(mrb);
     }
+    else {
+      random_check(mrb, r);
+      random = random_ptr(r);
+    }
     mrb_ary_modify(mrb, mrb_ary_ptr(ary));
-    max = RARRAY_LEN(ary);
+    max = mrb_fixnum_value(RARRAY_LEN(ary));
     for (i = RARRAY_LEN(ary) - 1; i > 0; i--)  {
       mrb_int j;
       mrb_value *ptr = RARRAY_PTR(ary);
       mrb_value tmp;
 
-      j = random_rand_i(mrb, random, max);
+      j = mrb_integer(random_rand(mrb, random, max));
 
       tmp = ptr[i];
       ptr[i] = ptr[j];
@@ -303,12 +335,17 @@ mrb_ary_sample(mrb_state *mrb, mrb_value ary)
 {
   mrb_int n = 0;
   mrb_bool given;
+  mrb_value r = mrb_nil_value();
   rand_state *random;
   mrb_int len;
-  struct RClass *c = mrb_class_get_id(mrb, MRB_SYM(Random));
 
-  if (mrb_get_args(mrb, "|i?I", &n, &given, &random, c) < 2) {
+  mrb_get_args(mrb, "|i?o", &n, &given, &r);
+  if (mrb_nil_p(r)) {
     random = random_default_state(mrb);
+  }
+  else {
+    random_check(mrb, r);
+    random = random_ptr(r);
   }
   len = RARRAY_LEN(ary);
   if (!given) {                 /* pick one element */
@@ -367,20 +404,13 @@ random_f_srand(mrb_state *mrb, mrb_value self)
   return random_m_srand(mrb, random);
 }
 
-static mrb_value
-random_f_bytes(mrb_state *mrb, mrb_value self)
-{
-  mrb_value random = random_default(mrb);
-  return random_m_bytes(mrb, random);
-}
-
 
 void mrb_mruby_random_gem_init(mrb_state *mrb)
 {
   struct RClass *random;
   struct RClass *array = mrb->array_class;
 
-  mrb_static_assert(sizeof(rand_state) <= ISTRUCT_DATA_SIZE);
+  mrb_static_assert1(sizeof(rand_state) <= ISTRUCT_DATA_SIZE);
 
   mrb_define_method(mrb, mrb->kernel_module, "rand", random_f_rand, MRB_ARGS_OPT(1));
   mrb_define_method(mrb, mrb->kernel_module, "srand", random_f_srand, MRB_ARGS_OPT(1));
@@ -389,12 +419,10 @@ void mrb_mruby_random_gem_init(mrb_state *mrb)
   MRB_SET_INSTANCE_TT(random, MRB_TT_ISTRUCT);
   mrb_define_class_method(mrb, random, "rand", random_f_rand, MRB_ARGS_OPT(1));
   mrb_define_class_method(mrb, random, "srand", random_f_srand, MRB_ARGS_OPT(1));
-  mrb_define_class_method(mrb, random, "bytes", random_f_bytes, MRB_ARGS_REQ(1));
 
   mrb_define_method(mrb, random, "initialize", random_m_init, MRB_ARGS_OPT(1));
   mrb_define_method(mrb, random, "rand", random_m_rand, MRB_ARGS_OPT(1));
   mrb_define_method(mrb, random, "srand", random_m_srand, MRB_ARGS_OPT(1));
-  mrb_define_method(mrb, random, "bytes", random_m_bytes, MRB_ARGS_REQ(1));
 
   mrb_define_method(mrb, array, "shuffle", mrb_ary_shuffle, MRB_ARGS_OPT(1));
   mrb_define_method(mrb, array, "shuffle!", mrb_ary_shuffle_bang, MRB_ARGS_OPT(1));

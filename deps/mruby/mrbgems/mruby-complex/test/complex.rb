@@ -31,8 +31,6 @@ assert 'Complex#*' do
   assert_complex Complex(-2, 9) * Complex(-9, 2), (0     - 85i)
   assert_complex Complex(9, 8)  * 4,              (36    + 32i)
   assert_complex Complex(20, 9) * 9.8,            (196.0 + 88.2i)
-  assert_complex 4 * Complex(9, 8),               (36    + 32i)
-  assert_complex 9.8 * Complex(20, 9),            (196.0 + 88.2i)
 end
 
 assert 'Complex#+' do
@@ -41,8 +39,6 @@ assert 'Complex#+' do
   assert_complex Complex(-2, 9) + Complex(-9, 2), (-11  + 11i)
   assert_complex Complex(9, 8)  + 4             , (13   + 8i)
   assert_complex Complex(20, 9) + 9.8           , (29.8 + 9i)
-  assert_complex 4 + Complex(9, 8)              , (13   + 8i)
-  assert_complex 9.8 + Complex(20, 9)           , (29.8 + 9i)
 end
 
 assert 'Complex#-' do
@@ -51,12 +47,10 @@ assert 'Complex#-' do
   assert_complex Complex(-2, 9) - Complex(-9, 2), (7    + 7i)
   assert_complex Complex(9, 8)  - 4             , (5    + 8i)
   assert_complex Complex(20, 9) - 9.8           , (10.2 + 9i)
-  assert_complex 4 - Complex(9, 8)              , (-5   - 8i)
-  assert_complex 10.5 - Complex(20, 9)          , (-9.5 - 9i)
 end
 
 assert 'Complex#-@' do
-  assert_complex((-1 - 2i), -Complex(1, 2))
+  assert_complex(-Complex(1, 2), (-1 - 2i))
 end
 
 assert 'Complex#/' do
@@ -65,8 +59,6 @@ assert 'Complex#/' do
   assert_complex Complex(-2, 9) / Complex(-9, 2), ((36.0 / 85)        - (77i / 85))
   assert_complex Complex(9, 8)  / 4             , ((9.0 / 4)          + 2i)
   assert_complex Complex(20, 9) / 9.8           , (2.0408163265306123 + 0.9183673469387754i)
-  assert_complex 4 / Complex(9, 8)              , (0.2482758620689655 - 0.2206896551724138i)
-  assert_complex 9.8 / Complex(20, 9)           , (0.4074844074844075 - 0.1833679833679834i)
   if 1e39.infinite? then
     # MRB_USE_FLOAT32 in effect
     ten = 1e21
@@ -82,8 +74,6 @@ assert 'Complex#==' do
   assert_true  Complex(2, 3)  == Complex(2, 3)
   assert_true  Complex(5)     == 5
   assert_true  Complex(0)     == 0.0
-  assert_true  5 == Complex(5)
-  assert_true  0.0 == Complex(0)
 end
 
 assert 'Complex#abs' do

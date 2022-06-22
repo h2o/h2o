@@ -119,10 +119,6 @@ module MRuby
         @dir.start_with?("#{MRUBY_ROOT}/mrbgems/")
       end
 
-      def bin?
-        @bins.size > 0
-      end
-
       def add_dependency(name, *requirements)
         default_gem = requirements.last.kind_of?(Hash) ? requirements.pop : nil
         requirements = ['>= 0.0.0'] if requirements.empty?
@@ -198,11 +194,10 @@ module MRuby
         open(fname, 'w') do |f|
           print_gem_init_header f
           unless rbfiles.empty?
-            opts = {cdump: cdump?, static: true}
             if cdump?
-              build.mrbc.run f, rbfiles, "gem_mrblib_#{funcname}_proc", **opts
+              build.mrbc.run f, rbfiles, "gem_mrblib_#{funcname}_proc"
             else
-              build.mrbc.run f, rbfiles, "gem_mrblib_irep_#{funcname}", **opts
+              build.mrbc.run f, rbfiles, "gem_mrblib_irep_#{funcname}", false
             end
           end
           f.puts %Q[void mrb_#{funcname}_gem_init(mrb_state *mrb);]
@@ -253,7 +248,7 @@ module MRuby
           f.puts %Q[#include <mruby.h>]
         else
           f.puts %Q[#include <stdlib.h>]
-          unless cdump?
+          unless build.presym_enabled?
             f.puts %Q[#include <mruby.h>]
             f.puts %Q[#include <mruby/proc.h>]
           end
@@ -501,10 +496,8 @@ module MRuby
         end
       end
 
-      def linker_attrs(gem=nil)
-        gems = self.reject{|g| g.bin?}  # library gems
-        gems << gem unless gem.nil?
-        gems.map{|g| g.linker.run_attrs}.transpose
+      def linker_attrs
+        map{|g| g.linker.run_attrs}.transpose
       end
     end # List
   end # Gem

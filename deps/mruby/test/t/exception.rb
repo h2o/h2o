@@ -382,8 +382,7 @@ def backtrace_available?
   begin
     raise "XXX"
   rescue => exception
-    return false if exception.backtrace.empty?
-    not exception.backtrace[0].include?("unknown")
+    not exception.backtrace.empty?
   end
 end
 

@@ -8,6 +8,14 @@
 # define _CRT_NONSTDC_NO_DEPRECATE
 #endif
 
+#ifndef MRB_NO_FLOAT
+#include <float.h>
+#include <math.h>
+#endif
+#include <limits.h>
+#include <stddef.h>
+#include <stdlib.h>
+#include <string.h>
 #include <mruby.h>
 #include <mruby/array.h>
 #include <mruby/class.h>
@@ -15,7 +23,6 @@
 #include <mruby/string.h>
 #include <mruby/numeric.h>
 #include <mruby/presym.h>
-#include <string.h>
 
 typedef struct mrb_shared_string {
   int refcnt;
@@ -25,7 +32,7 @@ typedef struct mrb_shared_string {
 
 const char mrb_digitmap[] = "0123456789abcdefghijklmnopqrstuvwxyz";
 
-#define mrb_obj_alloc_string(mrb) MRB_OBJ_ALLOC((mrb), MRB_TT_STRING, (mrb)->string_class)
+#define mrb_obj_alloc_string(mrb) ((struct RString*)mrb_obj_alloc((mrb), MRB_TT_STRING, (mrb)->string_class))
 
 static struct RString*
 str_init_normal_capa(mrb_state *mrb, struct RString *s,
@@ -134,6 +141,21 @@ str_new(mrb_state *mrb, const char *p, size_t len)
   return str_init_normal(mrb, mrb_obj_alloc_string(mrb), p, len);
 }
 
+static inline void
+str_with_class(struct RString *s, mrb_value obj)
+{
+  s->c = mrb_str_ptr(obj)->c;
+}
+
+static mrb_value
+mrb_str_new_empty(mrb_state *mrb, mrb_value str)
+{
+  struct RString *s = str_new(mrb, 0, 0);
+
+  str_with_class(s, str);
+  return mrb_obj_value(s);
+}
+
 MRB_API mrb_value
 mrb_str_new_capa(mrb_state *mrb, size_t capa)
 {
@@ -237,7 +259,7 @@ str_modify_keep_ascii(mrb_state *mrb, struct RString *s)
 static void
 check_null_byte(mrb_state *mrb, mrb_value str)
 {
-  mrb_ensure_string_type(mrb, str);
+  mrb_to_str(mrb, str);
   if (memchr(RSTRING_PTR(str), '\0', RSTRING_LEN(str))) {
     mrb_raise(mrb, E_ARGUMENT_ERROR, "string contains null byte");
   }
@@ -832,15 +854,8 @@ mrb_str_to_cstr(mrb_state *mrb, mrb_value str0)
 {
   struct RString *s;
 
-  const char *p = RSTRING_PTR(str0);
-  size_t len = RSTRING_LEN(str0);
   check_null_byte(mrb, str0);
-  if (RSTR_EMBEDDABLE_P(len)) {
-    s = str_init_embed(mrb_obj_alloc_string(mrb), p, len);
-  }
-  else {
-    s = str_init_normal(mrb, mrb_obj_alloc_string(mrb), p, len);
-  }
+  s = str_new(mrb, RSTRING_PTR(str0), RSTRING_LEN(str0));
   return RSTR_PTR(s);
 }
 
@@ -897,14 +912,14 @@ static mrb_value
 mrb_str_size(mrb_state *mrb, mrb_value self)
 {
   mrb_int len = RSTRING_CHAR_LEN(self);
-  return mrb_int_value(mrb, len);
+  return mrb_fixnum_value(len);
 }
 
 static mrb_value
 mrb_str_bytesize(mrb_state *mrb, mrb_value self)
 {
   mrb_int len = RSTRING_LEN(self);
-  return mrb_int_value(mrb, len);
+  return mrb_fixnum_value(len);
 }
 
 /* 15.2.10.5.1  */
@@ -934,6 +949,7 @@ mrb_str_times(mrb_state *mrb, mrb_value self)
 
   len = RSTRING_LEN(self)*times;
   str2 = str_new(mrb, 0, len);
+  str_with_class(str2, self);
   p = RSTR_PTR(str2);
   if (len > 0) {
     n = RSTRING_LEN(self);
@@ -1018,7 +1034,7 @@ mrb_str_cmp_m(mrb_state *mrb, mrb_value str1)
   else {
     result = mrb_str_cmp(mrb, str1, str2);
   }
-  return mrb_int_value(mrb, result);
+  return mrb_fixnum_value(result);
 }
 
 static mrb_bool
@@ -1071,7 +1087,7 @@ mrb_string_value_ptr(mrb_state *mrb, mrb_value str)
 MRB_API mrb_int
 mrb_string_value_len(mrb_state *mrb, mrb_value ptr)
 {
-  mrb_ensure_string_type(mrb, ptr);
+  mrb_to_str(mrb, ptr);
   return RSTRING_LEN(ptr);
 }
 
@@ -1081,6 +1097,7 @@ mrb_str_dup(mrb_state *mrb, mrb_value str)
   struct RString *s = mrb_str_ptr(str);
   struct RString *dup = str_new(mrb, 0, 0);
 
+  str_with_class(dup, str);
   return str_replace(mrb, dup, s);
 }
 
@@ -1102,15 +1119,12 @@ static enum str_convert_range
 str_convert_range(mrb_state *mrb, mrb_value str, mrb_value indx, mrb_value alen, mrb_int *beg, mrb_int *len)
 {
   if (!mrb_undef_p(alen)) {
-    *beg = mrb_as_int(mrb, indx);
-    *len = mrb_as_int(mrb, alen);
+    *beg = mrb_int(mrb, indx);
+    *len = mrb_int(mrb, alen);
     return STR_CHAR_RANGE;
   }
   else {
     switch (mrb_type(indx)) {
-      default:
-        indx = mrb_ensure_int_type(mrb, indx);
-        /* fall through */
       case MRB_TT_INTEGER:
         *beg = mrb_integer(indx);
         *len = 1;
@@ -1123,6 +1137,16 @@ str_convert_range(mrb_state *mrb, mrb_value str, mrb_value indx, mrb_value alen,
         return STR_BYTE_RANGE_CORRECTED;
 
       case MRB_TT_RANGE:
+        goto range_arg;
+
+      default:
+        indx = mrb_to_int(mrb, indx);
+        if (mrb_integer_p(indx)) {
+          *beg = mrb_integer(indx);
+          *len = 1;
+          return STR_CHAR_RANGE;
+        }
+range_arg:
         *len = RSTRING_CHAR_LEN(str);
         switch (mrb_range_beg_len(mrb, indx, beg, len, *len, TRUE)) {
           case MRB_RANGE_OK:
@@ -1132,12 +1156,14 @@ str_convert_range(mrb_state *mrb, mrb_value str, mrb_value indx, mrb_value alen,
           default:
             break;
         }
+
+        mrb_raise(mrb, E_TYPE_ERROR, "can't convert to Integer");
     }
   }
   return STR_OUT_OF_RANGE;
 }
 
-mrb_value
+static mrb_value
 mrb_str_aref(mrb_state *mrb, mrb_value str, mrb_value indx, mrb_value alen)
 {
   mrb_int beg, len;
@@ -1166,14 +1192,14 @@ mrb_str_aref(mrb_state *mrb, mrb_value str, mrb_value indx, mrb_value alen)
 /* 15.2.10.5.34 */
 /*
  *  call-seq:
- *     str[int]                 => int or nil
- *     str[int, int]            => new_str or nil
- *     str[range]               => new_str or nil
- *     str[other_str]           => new_str or nil
- *     str.slice(int)           => int or nil
- *     str.slice(int, int)      => new_str or nil
- *     str.slice(range)         => new_str or nil
- *     str.slice(other_str)     => new_str or nil
+ *     str[fixnum]                 => fixnum or nil
+ *     str[fixnum, fixnum]         => new_str or nil
+ *     str[range]                  => new_str or nil
+ *     str[other_str]              => new_str or nil
+ *     str.slice(fixnum)           => fixnum or nil
+ *     str.slice(fixnum, fixnum)   => new_str or nil
+ *     str.slice(range)            => new_str or nil
+ *     str.slice(other_str)        => new_str or nil
  *
  *  Element Reference---If passed a single <code>Integer</code>, returns the code
  *  of the character at that position. If passed two <code>Integer</code>
@@ -1230,11 +1256,13 @@ str_replace_partial(mrb_state *mrb, mrb_value src, mrb_int pos, mrb_int end, mrb
   if (end > len) { end = len; }
 
   if (pos < 0 || pos > len) {
-    str_out_of_index(mrb, mrb_int_value(mrb, pos));
+    str_out_of_index(mrb, mrb_fixnum_value(pos));
   }
 
   replen = (mrb_nil_p(rep) ? 0 : RSTRING_LEN(rep));
-  if (mrb_int_add_overflow(replen, len - (end - pos), &newlen) || newlen >= MRB_SSIZE_MAX) {
+  newlen = replen + (len - (end - pos));
+
+  if (newlen >= MRB_SSIZE_MAX || newlen < replen /* overflowed */) {
     mrb_raise(mrb, E_RUNTIME_ERROR, "string size too big");
   }
 
@@ -1347,7 +1375,8 @@ mrb_str_aset(mrb_state *mrb, mrb_value str, mrb_value indx, mrb_value alen, mrb_
 {
   mrb_int beg, len, charlen;
 
-  mrb_ensure_string_type(mrb, replace);
+  mrb_to_str(mrb, replace);
+
   switch (str_convert_range(mrb, str, indx, alen, &beg, &len)) {
     case STR_OUT_OF_RANGE:
     default:
@@ -1364,17 +1393,14 @@ mrb_str_aset(mrb_state *mrb, mrb_value str, mrb_value indx, mrb_value alen, mrb_
       str_range_to_bytes(str, &beg, &len);
       /* fall through */
     case STR_BYTE_RANGE_CORRECTED:
-      if (mrb_int_add_overflow(beg, len, &len)) {
-        mrb_raise(mrb, E_RUNTIME_ERROR, "string index too big");
-      }
-      str_replace_partial(mrb, str, beg, len, replace);
+      str_replace_partial(mrb, str, beg, beg + len, replace);
   }
 }
 
 /*
  * call-seq:
- *    str[int] = replace
- *    str[int, int] = replace
+ *    str[fixnum] = replace
+ *    str[fixnum, fixnum] = replace
  *    str[range] = replace
  *    str[other_str] = replace
  *
@@ -1722,43 +1748,30 @@ mrb_str_substr(mrb_state *mrb, mrb_value str, mrb_int beg, mrb_int len)
   return str_substr(mrb, str, beg, len);
 }
 
-/*
- * 32 bit magic FNV-0 and FNV-1 prime
- */
-#define FNV_32_PRIME ((uint32_t)0x01000193)
-#define FNV1_32_INIT ((uint32_t)0x811c9dc5)
-
 uint32_t
 mrb_str_hash(mrb_state *mrb, mrb_value str)
 {
+  /* 1-8-7 */
   struct RString *s = mrb_str_ptr(str);
-  const unsigned char *bp = (unsigned char*)RSTR_PTR(s); /* start of buffer */
-  const unsigned char *be = bp + RSTR_LEN(s);            /* beyond end of buffer */
-  uint32_t hval = FNV1_32_INIT;
+  mrb_int len = RSTR_LEN(s);
+  char *p = RSTR_PTR(s);
+  uint32_t hash = 0;
 
-  /*
-   * FNV-1 hash each octet in the buffer
-   */
-  while (bp < be) {
-    /* multiply by the 32 bit FNV magic prime mod 2^32 */
-#if defined(NO_FNV_GCC_OPTIMIZATION)
-    hval *= FNV_32_PRIME;
-#else
-    hval += (hval<<1) + (hval<<4) + (hval<<7) + (hval<<8) + (hval<<24);
-#endif
-
-    /* xor the bottom with the current octet */
-    hval ^= (uint32_t)*bp++;
+  for(int i = 0; i < len; ++i) {
+    hash += p[i];
+    hash += (hash << 10);
+    hash ^= (hash >> 6);
   }
-
-  /* return our new hash value */
-  return hval;
+  hash += (hash << 3);
+  hash ^= (hash >> 11);
+  hash += (hash << 15);
+  return hash;
 }
 
 /* 15.2.10.5.20 */
 /*
  * call-seq:
- *    str.hash   => int
+ *    str.hash   => fixnum
  *
  * Return a hash based on the string's length and content.
  */
@@ -1766,14 +1779,14 @@ static mrb_value
 mrb_str_hash_m(mrb_state *mrb, mrb_value self)
 {
   mrb_int key = mrb_str_hash(mrb, self);
-  return mrb_int_value(mrb, key);
+  return mrb_fixnum_value(key);
 }
 
 /* 15.2.10.5.21 */
 /*
  *  call-seq:
  *     str.include? other_str   => true or false
- *     str.include? int         => true or false
+ *     str.include? fixnum      => true or false
  *
  *  Returns <code>true</code> if <i>str</i> contains the given string or
  *  character.
@@ -1796,7 +1809,7 @@ mrb_str_include(mrb_state *mrb, mrb_value self)
 /* 15.2.10.5.22 */
 /*
  *  call-seq:
- *     str.index(substring [, offset])   => int or nil
+ *     str.index(substring [, offset])   => fixnum or nil
  *
  *  Returns the index of the first occurrence of the given
  *  <i>substring</i>. Returns <code>nil</code> if not found.
@@ -1828,7 +1841,7 @@ mrb_str_index_m(mrb_state *mrb, mrb_value str)
 
   if (pos == -1) return mrb_nil_value();
   BYTES_ALIGN_CHECK(pos);
-  return mrb_int_value(mrb, pos);
+  return mrb_fixnum_value(pos);
 }
 
 /* 15.2.10.5.24 */
@@ -1877,7 +1890,7 @@ mrb_str_init(mrb_state *mrb, mrb_value self)
  *     str.to_sym   => symbol
  *
  *  Returns the <code>Symbol</code> corresponding to <i>str</i>, creating the
- *  symbol if it did not previously exist.
+ *  symbol if it did not previously exist. See <code>Symbol#id2name</code>.
  *
  *     "Koala".intern         #=> :Koala
  *     s = 'cat'.to_sym       #=> :cat
@@ -1905,7 +1918,7 @@ mrb_obj_as_string(mrb_state *mrb, mrb_value obj)
   case MRB_TT_SYMBOL:
     return mrb_sym_str(mrb, mrb_symbol(obj));
   case MRB_TT_INTEGER:
-    return mrb_integer_to_str(mrb, obj, 10);
+    return mrb_fixnum_to_str(mrb, obj, 10);
   case MRB_TT_SCLASS:
   case MRB_TT_CLASS:
   case MRB_TT_MODULE:
@@ -2022,7 +2035,7 @@ mrb_str_reverse(mrb_state *mrb, mrb_value str)
 /* 15.2.10.5.31 */
 /*
  *  call-seq:
- *     str.rindex(substring [, offset])   => int or nil
+ *     str.rindex(substring [, offset])   => fixnum or nil
  *
  *  Returns the index of the last occurrence of the given <i>substring</i>.
  *  Returns <code>nil</code> if not found. If the second parameter is
@@ -2038,11 +2051,9 @@ static mrb_value
 mrb_str_rindex(mrb_state *mrb, mrb_value str)
 {
   mrb_value sub;
-  mrb_int pos;
-  int argc = mrb_get_args(mrb, "S|i", &sub, &pos);
-  mrb_int len = RSTRING_CHAR_LEN(str);
+  mrb_int pos, len = RSTRING_CHAR_LEN(str);
 
-  if (argc == 1) {
+  if (mrb_get_args(mrb, "S|i", &sub, &pos) == 1) {
     pos = len;
   }
   else {
@@ -2059,7 +2070,7 @@ mrb_str_rindex(mrb_state *mrb, mrb_value str)
   if (pos >= 0) {
     pos = bytes2chars(RSTRING_PTR(str), RSTRING_LEN(str), pos);
     BYTES_ALIGN_CHECK(pos);
-    return mrb_int_value(mrb, pos);
+    return mrb_fixnum_value(pos);
   }
   return mrb_nil_value();
 }
@@ -2188,7 +2199,7 @@ mrb_str_split_m(mrb_state *mrb, mrb_value str)
   }
   if (RSTRING_LEN(str) > 0 && (lim_p || RSTRING_LEN(str) > beg || lim < 0)) {
     if (RSTRING_LEN(str) == beg) {
-      tmp = mrb_str_new(mrb, 0, 0);
+      tmp = mrb_str_new_empty(mrb, str);
     }
     else {
       tmp = mrb_str_byte_subseq(mrb, str, beg, RSTRING_LEN(str)-beg);
@@ -2205,8 +2216,8 @@ mrb_str_split_m(mrb_state *mrb, mrb_value str)
   return result;
 }
 
-static mrb_value
-mrb_str_len_to_integer(mrb_state *mrb, const char *str, size_t len, mrb_int base, int badcheck)
+mrb_value
+mrb_str_len_to_inum(mrb_state *mrb, const char *str, size_t len, mrb_int base, int badcheck)
 {
   const char *p = str;
   const char *pend = str + len;
@@ -2369,6 +2380,12 @@ mrb_str_len_to_integer(mrb_state *mrb, const char *str, size_t len, mrb_int base
   return mrb_fixnum_value(0);
 }
 
+MRB_API mrb_value
+mrb_cstr_to_inum(mrb_state *mrb, const char *str, mrb_int base, mrb_bool badcheck)
+{
+  return mrb_str_len_to_inum(mrb, str, strlen(str), base, badcheck);
+}
+
 /* obslete: use RSTRING_CSTR() or mrb_string_cstr() */
 MRB_API const char*
 mrb_string_value_cstr(mrb_state *mrb, mrb_value *ptr)
@@ -2401,15 +2418,15 @@ mrb_string_cstr(mrb_state *mrb, mrb_value str)
 }
 
 MRB_API mrb_value
-mrb_str_to_integer(mrb_state *mrb, mrb_value str, mrb_int base, mrb_bool badcheck)
+mrb_str_to_inum(mrb_state *mrb, mrb_value str, mrb_int base, mrb_bool badcheck)
 {
   const char *s;
   mrb_int len;
 
-  mrb_ensure_string_type(mrb, str);
+  mrb_to_str(mrb, str);
   s = RSTRING_PTR(str);
   len = RSTRING_LEN(str);
-  return mrb_str_len_to_integer(mrb, s, len, base, badcheck);
+  return mrb_str_len_to_inum(mrb, s, len, base, badcheck);
 }
 
 /* 15.2.10.5.38 */
@@ -2439,14 +2456,14 @@ mrb_str_to_i(mrb_state *mrb, mrb_value self)
   mrb_int base = 10;
 
   mrb_get_args(mrb, "|i", &base);
-  if (base < 0 || 36 < base) {
+  if (base < 0) {
     mrb_raisef(mrb, E_ARGUMENT_ERROR, "illegal radix %i", base);
   }
-  return mrb_str_to_integer(mrb, self, base, FALSE);
+  return mrb_str_to_inum(mrb, self, base, FALSE);
 }
 
 #ifndef MRB_NO_FLOAT
-static double
+double
 mrb_str_len_to_dbl(mrb_state *mrb, const char *s, size_t len, mrb_bool badcheck)
 {
   char buf[DBL_DIG * 4 + 20];
@@ -2466,7 +2483,7 @@ mrb_str_len_to_dbl(mrb_state *mrb, const char *s, size_t len, mrb_bool badcheck)
     mrb_value x;
 
     if (!badcheck) return 0.0;
-    x = mrb_str_len_to_integer(mrb, p, pend-p, 0, badcheck);
+    x = mrb_str_len_to_inum(mrb, p, pend-p, 0, badcheck);
     if (mrb_integer_p(x))
       d = (double)mrb_integer(x);
     else /* if (mrb_float_p(x)) */
@@ -2536,6 +2553,12 @@ bad:
 }
 
 MRB_API double
+mrb_cstr_to_dbl(mrb_state *mrb, const char *s, mrb_bool badcheck)
+{
+  return mrb_str_len_to_dbl(mrb, s, strlen(s), badcheck);
+}
+
+MRB_API double
 mrb_str_to_dbl(mrb_state *mrb, mrb_value str, mrb_bool badcheck)
 {
   return mrb_str_len_to_dbl(mrb, RSTRING_PTR(str), RSTRING_LEN(str), badcheck);
@@ -2547,7 +2570,7 @@ mrb_str_to_dbl(mrb_state *mrb, mrb_value str, mrb_bool badcheck)
  *     str.to_f   => float
  *
  *  Returns the result of interpreting leading characters in <i>str</i> as a
- *  floating-point number. Extraneous characters past the end of a valid number
+ *  floating point number. Extraneous characters past the end of a valid number
  *  are ignored. If there is not a valid number at the start of <i>str</i>,
  *  <code>0.0</code> is returned. This method never raises an exception.
  *
@@ -2705,7 +2728,7 @@ mrb_str_cat_str(mrb_state *mrb, mrb_value str, mrb_value str2)
 MRB_API mrb_value
 mrb_str_append(mrb_state *mrb, mrb_value str1, mrb_value str2)
 {
-  mrb_ensure_string_type(mrb, str2);
+  mrb_to_str(mrb, str2);
   return mrb_str_cat_str(mrb, str1, str2);
 }
 
@@ -2728,7 +2751,7 @@ mrb_str_inspect(mrb_state *mrb, mrb_value str)
 
 /*
  * call-seq:
- *   str.bytes   -> array of int
+ *   str.bytes   -> array of fixnums
  *
  * Returns an array of bytes in _str_.
  *
@@ -2821,25 +2844,23 @@ static mrb_value
 mrb_str_byteslice(mrb_state *mrb, mrb_value str)
 {
   mrb_value a1;
-  mrb_int str_len, beg, len;
+  mrb_int str_len = RSTRING_LEN(str), beg, len;
   mrb_bool empty = TRUE;
 
   len = mrb_get_argc(mrb);
   switch (len) {
   case 2:
     mrb_get_args(mrb, "ii", &beg, &len);
-    str_len = RSTRING_LEN(str);
     break;
   case 1:
     a1 = mrb_get_arg1(mrb);
-    str_len = RSTRING_LEN(str);
     if (mrb_range_p(a1)) {
       if (mrb_range_beg_len(mrb, a1, &beg, &len, str_len, TRUE) != MRB_RANGE_OK) {
         return mrb_nil_value();
       }
     }
     else {
-      beg = mrb_as_int(mrb, a1);
+      beg = mrb_integer(mrb_to_int(mrb, a1));
       len = 1;
       empty = FALSE;
     }
@@ -2854,51 +2875,6 @@ mrb_str_byteslice(mrb_state *mrb, mrb_value str)
   else {
     return mrb_nil_value();
   }
-}
-
-static mrb_value
-sub_replace(mrb_state *mrb, mrb_value self)
-{
-  char *p, *match;
-  mrb_int plen, mlen;
-  mrb_int found, offset;
-  mrb_value result;
-
-  mrb_get_args(mrb, "ssi", &p, &plen, &match, &mlen, &found);
-  result = mrb_str_new(mrb, 0, 0);
-  for (mrb_int i=0; i<plen; i++) {
-    if (p[i] != '\\' || i+1==plen) {
-      mrb_str_cat(mrb, result, p+i, 1);
-      continue;
-    }
-    i++;
-    switch (p[i]) {
-    case '\\':
-      mrb_str_cat(mrb, result, "\\", 1);
-      break;
-    case '`':
-      mrb_str_cat(mrb, result, RSTRING_PTR(self), chars2bytes(self, 0, found));
-      break;
-    case '&': case '0':
-      mrb_str_cat(mrb, result, match, mlen);
-      break;
-    case '\'':
-      offset = chars2bytes(self, 0, found) + mlen;
-      if (RSTRING_LEN(self) > offset) {
-        mrb_str_cat(mrb, result, RSTRING_PTR(self)+offset, RSTRING_LEN(self)-offset);
-      }
-      break;
-    case '1': case '2': case '3':
-    case '4': case '5': case '6':
-    case '7': case '8': case '9':
-      /* ignore sub-group match (no Regexp supported) */
-      break;
-    default:
-      mrb_str_cat(mrb, result, &p[i-1], 2);
-      break;
-    }
-  }
-  return result;
 }
 
 /* ---------------------------*/
@@ -2962,6 +2938,251 @@ mrb_init_string(mrb_state *mrb)
   mrb_define_method(mrb, s, "getbyte",         mrb_str_getbyte,         MRB_ARGS_REQ(1));
   mrb_define_method(mrb, s, "setbyte",         mrb_str_setbyte,         MRB_ARGS_REQ(2));
   mrb_define_method(mrb, s, "byteslice",       mrb_str_byteslice,       MRB_ARGS_ARG(1,1));
-
-  mrb_define_method(mrb, s, "__sub_replace",   sub_replace,             MRB_ARGS_REQ(3)); /* internal */
 }
+
+#ifndef MRB_NO_FLOAT
+/*
+ * Source code for the "strtod" library procedure.
+ *
+ * Copyright (c) 1988-1993 The Regents of the University of California.
+ * Copyright (c) 1994 Sun Microsystems, Inc.
+ *
+ * Permission to use, copy, modify, and distribute this
+ * software and its documentation for any purpose and without
+ * fee is hereby granted, provided that the above copyright
+ * notice appear in all copies.  The University of California
+ * makes no representations about the suitability of this
+ * software for any purpose.  It is provided "as is" without
+ * express or implied warranty.
+ *
+ * RCS: @(#) $Id: strtod.c 11708 2007-02-12 23:01:19Z shyouhei $
+ */
+
+#include <ctype.h>
+#include <errno.h>
+
+static const int maxExponent = 511; /* Largest possible base 10 exponent.  Any
+                                     * exponent larger than this will already
+                                     * produce underflow or overflow, so there's
+                                     * no need to worry about additional digits.
+                                     */
+static const double powersOf10[] = {/* Table giving binary powers of 10.  Entry */
+    10.,                            /* is 10^2^i.  Used to convert decimal */
+    100.,                           /* exponents into floating-point numbers. */
+    1.0e4,
+    1.0e8,
+    1.0e16,
+    1.0e32,
+    1.0e64,
+    1.0e128,
+    1.0e256
+};
+
+MRB_API double
+mrb_float_read(const char *string, char **endPtr)
+/*  const char *string;            A decimal ASCII floating-point number,
+                                 * optionally preceded by white space.
+                                 * Must have form "-I.FE-X", where I is the
+                                 * integer part of the mantissa, F is the
+                                 * fractional part of the mantissa, and X
+                                 * is the exponent.  Either of the signs
+                                 * may be "+", "-", or omitted.  Either I
+                                 * or F may be omitted, or both.  The decimal
+                                 * point isn't necessary unless F is present.
+                                 * The "E" may actually be an "e".  E and X
+                                 * may both be omitted (but not just one).
+                                 */
+/*  char **endPtr;                 If non-NULL, store terminating character's
+                                 * address here. */
+{
+    int sign, expSign = FALSE;
+    double fraction, dblExp;
+    const double *d;
+    const char *p;
+    int c;
+    int exp = 0;                /* Exponent read from "EX" field. */
+    int fracExp = 0;            /* Exponent that derives from the fractional
+                                 * part.  Under normal circumstances, it is
+                                 * the negative of the number of digits in F.
+                                 * However, if I is very long, the last digits
+                                 * of I get dropped (otherwise a long I with a
+                                 * large negative exponent could cause an
+                                 * unnecessary overflow on I alone).  In this
+                                 * case, fracExp is incremented one for each
+                                 * dropped digit. */
+    int mantSize;               /* Number of digits in mantissa. */
+    int decPt;                  /* Number of mantissa digits BEFORE decimal
+                                 * point. */
+    const char *pExp;           /* Temporarily holds location of exponent
+                                 * in string. */
+
+    /*
+     * Strip off leading blanks and check for a sign.
+     */
+
+    p = string;
+    while (ISSPACE(*p)) {
+      p += 1;
+    }
+    if (*p == '-') {
+      sign = TRUE;
+      p += 1;
+    }
+    else {
+      if (*p == '+') {
+        p += 1;
+      }
+      sign = FALSE;
+    }
+
+    /*
+     * Count the number of digits in the mantissa (including the decimal
+     * point), and also locate the decimal point.
+     */
+
+    decPt = -1;
+    for (mantSize = 0; ; mantSize += 1)
+    {
+      c = *p;
+      if (!ISDIGIT(c)) {
+        if ((c != '.') || (decPt >= 0)) {
+          break;
+        }
+        decPt = mantSize;
+      }
+      p += 1;
+    }
+
+    /*
+     * Now suck up the digits in the mantissa.  Use two integers to
+     * collect 9 digits each (this is faster than using floating-point).
+     * If the mantissa has more than 18 digits, ignore the extras, since
+     * they can't affect the value anyway.
+     */
+
+    pExp  = p;
+    p -= mantSize;
+    if (decPt < 0) {
+      decPt = mantSize;
+    }
+    else {
+      mantSize -= 1; /* One of the digits was the point. */
+    }
+    if (mantSize > 18) {
+      if (decPt - 18 > 29999) {
+        fracExp = 29999;
+      }
+      else {
+        fracExp = decPt - 18;
+      }
+      mantSize = 18;
+    }
+    else {
+      fracExp = decPt - mantSize;
+    }
+    if (mantSize == 0) {
+      fraction = 0.0;
+      p = string;
+      goto done;
+    }
+    else {
+      int frac1, frac2;
+      frac1 = 0;
+      for ( ; mantSize > 9; mantSize -= 1)
+      {
+        c = *p;
+        p += 1;
+        if (c == '.') {
+          c = *p;
+          p += 1;
+        }
+        frac1 = 10*frac1 + (c - '0');
+      }
+      frac2 = 0;
+      for (; mantSize > 0; mantSize -= 1)
+      {
+        c = *p;
+        p += 1;
+        if (c == '.') {
+          c = *p;
+          p += 1;
+        }
+        frac2 = 10*frac2 + (c - '0');
+      }
+      fraction = (1.0e9 * frac1) + frac2;
+    }
+
+    /*
+     * Skim off the exponent.
+     */
+
+    p = pExp;
+    if ((*p == 'E') || (*p == 'e')) {
+      p += 1;
+      if (*p == '-') {
+        expSign = TRUE;
+        p += 1;
+      }
+      else {
+        if (*p == '+') {
+          p += 1;
+        }
+        expSign = FALSE;
+      }
+      while (ISDIGIT(*p)) {
+        exp = exp * 10 + (*p - '0');
+        if (exp > 19999) {
+          exp = 19999;
+        }
+        p += 1;
+      }
+    }
+    if (expSign) {
+      exp = fracExp - exp;
+    }
+    else {
+      exp = fracExp + exp;
+    }
+
+    /*
+     * Generate a floating-point number that represents the exponent.
+     * Do this by processing the exponent one bit at a time to combine
+     * many powers of 2 of 10. Then combine the exponent with the
+     * fraction.
+     */
+
+    if (exp < 0) {
+      expSign = TRUE;
+      exp = -exp;
+    }
+    else {
+      expSign = FALSE;
+    }
+    if (exp > maxExponent) {
+      exp = maxExponent;
+      errno = ERANGE;
+    }
+    dblExp = 1.0;
+    for (d = powersOf10; exp != 0; exp >>= 1, d += 1) {
+      if (exp & 01) {
+        dblExp *= *d;
+      }
+    }
+    if (expSign) {
+      fraction /= dblExp;
+    }
+    else {
+      fraction *= dblExp;
+    }
+
+done:
+    if (endPtr != NULL) {
+      *endPtr = (char *) p;
+    }
+
+    if (sign) {
+      return -fraction;
+    }
+    return fraction;
+}
+#endif

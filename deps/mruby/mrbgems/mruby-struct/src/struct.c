@@ -18,8 +18,6 @@
 #define RSTRUCT_LEN(st) RARRAY_LEN(st)
 #define RSTRUCT_PTR(st) RARRAY_PTR(st)
 
-#define mrb_struct_p(o) (mrb_type(o) == MRB_TT_STRUCT)
-
 static struct RClass *
 struct_class(mrb_state *mrb)
 {
@@ -60,13 +58,18 @@ static mrb_value
 struct_members(mrb_state *mrb, mrb_value s)
 {
   mrb_value members = struct_s_members(mrb, mrb_obj_class(mrb, s));
-  if (!mrb_struct_p(s) || RSTRUCT_LEN(s) == 0) {
+  if (!mrb_array_p(s)) {
     mrb_raise(mrb, E_TYPE_ERROR, "corrupted struct");
   }
   if (RSTRUCT_LEN(s) != RARRAY_LEN(members)) {
-    mrb_raisef(mrb, E_TYPE_ERROR,
-               "struct size differs (%i required %i given)",
-               RARRAY_LEN(members), RSTRUCT_LEN(s));
+    if (RSTRUCT_LEN(s) == 0) {  /* probably uninitialized */
+      mrb_ary_resize(mrb, s, RARRAY_LEN(members));
+    }
+    else {
+      mrb_raisef(mrb, E_TYPE_ERROR,
+                 "struct size differs (%i required %i given)",
+                 RARRAY_LEN(members), RSTRUCT_LEN(s));
+    }
   }
   return members;
 }
@@ -199,7 +202,7 @@ make_struct(mrb_state *mrb, mrb_value name, mrb_value members, struct RClass *kl
   }
   else {
     /* old style: should we warn? */
-    mrb_ensure_string_type(mrb, name);
+    mrb_to_str(mrb, name);
     id = mrb_obj_to_sym(mrb, name);
     if (!mrb_const_name_p(mrb, RSTRING_PTR(name), RSTRING_LEN(name))) {
       mrb_name_error(mrb, id, "identifier %v needs to be constant", name);
@@ -210,7 +213,7 @@ make_struct(mrb_state *mrb, mrb_value name, mrb_value members, struct RClass *kl
     }
     c = mrb_define_class_under(mrb, klass, RSTRING_PTR(name), klass);
   }
-  MRB_SET_INSTANCE_TT(c, MRB_TT_STRUCT);
+  MRB_SET_INSTANCE_TT(c, MRB_TT_ARRAY);
   nstr = mrb_obj_value(c);
   mrb_iv_set(mrb, nstr, MRB_SYM(__members__), members);
 
@@ -359,7 +362,7 @@ mrb_struct_init_copy(mrb_state *mrb, mrb_value copy)
   if (!mrb_obj_is_instance_of(mrb, s, mrb_obj_class(mrb, copy))) {
     mrb_raise(mrb, E_TYPE_ERROR, "wrong argument class");
   }
-  if (!mrb_struct_p(s)) {
+  if (!mrb_array_p(s)) {
     mrb_raise(mrb, E_TYPE_ERROR, "corrupted struct");
   }
   mrb_ary_replace(mrb, copy, s);
@@ -432,7 +435,7 @@ mrb_struct_aref(mrb_state *mrb, mrb_value s)
   if (mrb_symbol_p(idx)) {
     return struct_aref_sym(mrb, s, mrb_symbol(idx));
   }
-  return struct_aref_int(mrb, s, mrb_as_int(mrb, idx));
+  return struct_aref_int(mrb, s, mrb_int(mrb, idx));
 }
 
 static mrb_value
@@ -496,7 +499,7 @@ mrb_struct_aset(mrb_state *mrb, mrb_value s)
     return mrb_struct_aset_sym(mrb, s, mrb_symbol(idx), val);
   }
 
-  i = mrb_as_int(mrb, idx);
+  i = mrb_int(mrb, idx);
   if (i < 0) i = RSTRUCT_LEN(s) + i;
   if (i < 0) {
     mrb_raisef(mrb, E_INDEX_ERROR,

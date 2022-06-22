@@ -375,20 +375,6 @@ assert('clone Class') do
   assert_true(Foo.clone.new.func)
 end
 
-assert('class definition in singleton class') do
-  class AClassS
-    class << self
-      class BClass
-      end
-
-      def iclass
-        BClass
-      end
-    end
-  end
-  assert_equal(Class, AClassS.iclass.class)
-end
-
 assert('class variable and class << self style class method') do
   class ClassVariableTest
     @@class_variable = "value"

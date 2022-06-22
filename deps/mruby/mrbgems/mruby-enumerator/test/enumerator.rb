@@ -552,10 +552,10 @@ assert 'Range#each' do
 end
 
 assert 'Enumerable#zip' do
-  assert_equal [[1, 10], [2, 11], [3, 12]], [1,2,3].zip(10..)
+  assert_equal [[1, 10], [2, 11], [3, 12]], [1,2,3].zip(10..Float::INFINITY)
 
   ret = []
-  assert_equal nil, [1,2,3].zip(10..) { |i| ret << i }
+  assert_equal nil, [1,2,3].zip(10..Float::INFINITY) { |i| ret << i }
   assert_equal [[1, 10], [2, 11], [3, 12]], ret
 
   assert_raise(TypeError) { [1].zip(1) }

@@ -11,7 +11,7 @@ MRuby::CrossBuild.new("ArduinoDue") do |conf|
   # ARDUINO_PATH = '/Applications/Arduino.app/Contents/Java'
   # GNU Linux
   ARDUINO_PATH = '/opt/arduino'
-  # Arduino IDE <= 1.5.6
+   # Arduino IDE <= 1.5.6
   BIN_PATH = "#{ARDUINO_PATH}/hardware/tools/g++_arm_none_eabi/bin"
   # Arduino IDE >= 1.5.7
   # BIN_PATH = "#{ARDUINO_PATH}/hardware/tools/gcc-arm-none-eabi-4.8.3-2014q1/bin"
@@ -32,7 +32,7 @@ MRuby::CrossBuild.new("ArduinoDue") do |conf|
     cc.defines << %w(MRB_HEAP_PAGE_SIZE=64)
     cc.defines << %w(KHASH_DEFAULT_SIZE=8)
     cc.defines << %w(MRB_GC_STRESS)
-    #cc.defines << %w(MRB_NO_STDIO) #if you don't need stdio.
+    #cc.defines << %w(MRB_NO_STDIO) #if you dont need stdio.
     #cc.defines << %w(POOL_PAGE_SIZE=1000) #effective only for use with mruby-eval
   end
 

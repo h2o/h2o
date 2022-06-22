@@ -37,7 +37,7 @@ MRuby.each_target do
         f.puts %Q[]
         f.write gem_func_decls
         unless gem_final_calls.empty?
-          f.puts %Q[]
+        f.puts %Q[]
           f.puts %Q[static void]
           f.puts %Q[mrb_final_mrbgems(mrb_state *mrb) {]
           f.write gem_final_calls
@@ -67,7 +67,7 @@ MRuby.each_target do
   file "#{build_dir}/LEGAL" => [MRUBY_CONFIG, __FILE__] do |t|
     mkdir_p File.dirname t.name
     open(t.name, 'w+') do |f|
-      f.puts <<LEGAL
+     f.puts <<LEGAL
 Copyright (c) #{Time.now.year} mruby developers
 
 Permission is hereby granted, free of charge, to any person obtaining a
@@ -94,7 +94,7 @@ LEGAL
 
 Additional Licenses
 
-Due to the reason that you chose additional mruby packages (GEMS),
+Due to the reason that you choosed additional mruby packages (GEMS),
 please check the following additional licenses too:
 GEMS_LEGAL
 

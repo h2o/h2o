@@ -324,6 +324,20 @@ MRB_API mrb_value mrb_str_resize(mrb_state *mrb, mrb_value str, mrb_int len);
  */
 MRB_API mrb_value mrb_str_substr(mrb_state *mrb, mrb_value str, mrb_int beg, mrb_int len);
 
+/**
+ * Returns a Ruby string type.
+ *
+ *
+ * @param mrb The current mruby state.
+ * @param str Ruby string.
+ * @return [mrb_value] A Ruby string.
+ */
+MRB_API mrb_value mrb_ensure_string_type(mrb_state *mrb, mrb_value str);
+MRB_API mrb_value mrb_check_string_type(mrb_state *mrb, mrb_value str);
+/* obsolete: use mrb_ensure_string_type() instead */
+MRB_API mrb_value mrb_string_type(mrb_state *mrb, mrb_value str);
+
+
 MRB_API mrb_value mrb_str_new_capa(mrb_state *mrb, size_t capa);
 #define mrb_str_buf_new(mrb, capa) mrb_str_new_capa(mrb, (capa))
 
@@ -355,10 +369,17 @@ MRB_API mrb_value mrb_str_dup(mrb_state *mrb, mrb_value str);
  */
 MRB_API mrb_value mrb_str_intern(mrb_state *mrb, mrb_value self);
 
-MRB_API mrb_value mrb_str_to_integer(mrb_state *mrb, mrb_value str, mrb_int base, mrb_bool badcheck);
-/* obsolete: use mrb_str_to_integer() */
-#define mrb_str_to_inum(mrb, str, base, badcheck) mrb_str_to_integer(mrb, str, base, badcheck)
+MRB_API mrb_value mrb_str_to_inum(mrb_state *mrb, mrb_value str, mrb_int base, mrb_bool badcheck);
+MRB_API mrb_value mrb_cstr_to_inum(mrb_state *mrb, const char *s, mrb_int base, mrb_bool badcheck);
 MRB_API double mrb_str_to_dbl(mrb_state *mrb, mrb_value str, mrb_bool badcheck);
+MRB_API double mrb_cstr_to_dbl(mrb_state *mrb, const char *s, mrb_bool badcheck);
+
+/**
+ * Returns a converted string type.
+ * For type checking, non converting `mrb_to_str` is recommended.
+ * obsolete: use `mrb_obj_as_string()` instead.
+ */
+#define mrb_str_to_str(mrb, str) mrb_obj_as_string(mrb, str)
 
 /**
  * Returns true if the strings match and false if the strings don't match.

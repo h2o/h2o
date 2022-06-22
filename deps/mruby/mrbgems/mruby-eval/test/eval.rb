@@ -44,7 +44,7 @@ assert('Kernel#eval', '15.3.1.3.12') do
 end
 
 assert('rest arguments of eval') do
-  assert_raise(TypeError) { Kernel.eval('0', 0, 'test', 0) }
+  assert_raise(ArgumentError) { Kernel.eval('0', 0, 'test', 0) }
   assert_equal ['test', 'test.rb', 10] do
     Kernel.eval('[\'test\', __FILE__, __LINE__]', nil, 'test.rb', 10)
   end
@@ -150,15 +150,4 @@ assert('Access numbered parameter from eval') do
   assert_equal(6) {
     hoge.fuga(3) { _1 + eval("_1") }
   }
-end
-
-assert('Module#class_eval with string') do
-  c = Class.new
-  c.class_eval "def foo() 42; end"
-  cc = c.new
-  assert_true cc.respond_to?(:foo)
-  assert_equal 42, c.new.foo
-
-  b = c.class_eval("class A; def a; 55; end; end; class B; def b; A; end; end; B")
-  assert_equal 55, b.new.b.new.a
 end

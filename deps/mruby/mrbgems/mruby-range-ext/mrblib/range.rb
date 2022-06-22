@@ -56,7 +56,7 @@ class Range
   def max(&block)
     val = self.begin
     last = self.end
-    return super(&block) if block
+    return super if block
 
     raise RangeError, "cannot get the maximum of endless range" if last.nil?
 
@@ -72,7 +72,7 @@ class Range
     end
 
     # delegate to Enumerable
-    super()
+    super
   end
 
   def min(&block)
@@ -80,7 +80,7 @@ class Range
     last = self.end
     if block
       raise RangeError, "cannot get the minimum of endless range with custom comparison method" if last.nil?
-      return super(&block)
+      return super
     end
     return val if last.nil?
 
@@ -94,6 +94,6 @@ class Range
     end
 
     # delegate to Enumerable
-    super()
+    super
   end
 end

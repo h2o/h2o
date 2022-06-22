@@ -300,7 +300,7 @@ Higher NDK version will be use.
 
     case RUBY_PLATFORM
     when /mswin|mingw|win32/
-      # Build for Android don't need window flag
+      # Build for Android dont need window flag
       flags += %W(-U_WIN32 -U_WIN64)
     end
 

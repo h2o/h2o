@@ -24,7 +24,6 @@ end
 
 def assert_rational(exp, real)
   assert "assert_rational" do
-    assert_kind_of Rational, real
     assert_float exp.numerator,   real.numerator
     assert_float exp.denominator, real.denominator
   end
@@ -47,16 +46,6 @@ def assert_cmp(exp, o1, o2)
     pass
   else
     flunk "", "    Expected #{o1.inspect} <=> #{o2.inspect} to be #{exp}."
-  end
-end
-
-def assert_complex(real, imag)
-  if Object.const_defined?(:Complex)
-    assert "assert_complex" do
-      c = yield
-      assert_float(real, c.real)
-      assert_float(imag, c.imaginary)
-    end
   end
 end
 
@@ -100,9 +89,6 @@ assert 'Rational#*' do
   assert_rational(Rational(1, 1),    Rational(-2, 9) * Rational(-9, 2))
   assert_rational(Rational(9, 2),    Rational(9, 8)  * 4)
   assert_float(   21.77777777777778, Rational(20, 9) * 9.8)
-  assert_float(   21.77777777777778, 9.8 * Rational(20, 9))
-  assert_complex(5.2, 2.6) {Rational(13,5)*(2.0+1i)}
-  assert_complex(5.2, 2.6) {(2.0+1i)*Rational(13,5)}
 end
 
 assert 'Rational#+' do
@@ -110,22 +96,15 @@ assert 'Rational#+' do
   assert_rational(Rational(901, 1),   Rational(900)   + Rational(1))
   assert_rational(Rational(-85, 18),  Rational(-2, 9) + Rational(-9, 2))
   assert_rational(Rational(41, 8),    Rational(9, 8)  + 4)
-  assert_rational(Rational(41, 8),    4 + Rational(9, 8))
   assert_float(   12.022222222222222, Rational(20, 9) + 9.8)
-  assert_float(   12.022222222222222, 9.8 + Rational(20, 9))
-  assert_complex(24.0, 0) {Rational(24,2)+(12.0+0i)}
-  assert_complex(24.0, 0) {(12.0+0i)+Rational(24,2)}
 end
 
 assert 'Rational#-' do
   assert_rational(Rational(0, 1),     Rational(2, 3)  - Rational(2, 3))
   assert_rational(Rational(899, 1),   Rational(900)   - Rational(1))
   assert_rational(Rational(77, 18),   Rational(-2, 9) - Rational(-9, 2))
-  assert_rational(Rational(23, 8),    4 - Rational(9, 8))
+  assert_rational(Rational(-23, 8),   Rational(9, 8)  - 4)
   assert_float(   -7.577777777777778, Rational(20, 9) - 9.8)
-  assert_float(    7.577777777777778, 9.8 - Rational(20, 9))
-  assert_complex(2.0, 0) {Rational(24,2)-(10.0+0i)}
-  assert_complex(2.0, 0) {(14.0+0i)-Rational(24,2)}
 end
 
 assert 'Rational#/' do
@@ -133,11 +112,7 @@ assert 'Rational#/' do
   assert_rational(Rational(900, 1),    Rational(900)   / Rational(1))
   assert_rational(Rational(4, 81),     Rational(-2, 9) / Rational(-9, 2))
   assert_rational(Rational(9, 32),     Rational(9, 8)  / 4)
-  assert_rational(Rational(32, 9),     4 / Rational(9, 8))
   assert_float(   0.22675736961451246, Rational(20, 9) / 9.8)
-  assert_float(   4.41,                9.8 / Rational(20, 9))
-  assert_complex(1.92, 1.44) {Rational(24,2)/(4.0-3i)}
-  assert_complex(0.25, 0.25) {(3.0+3i)/Rational(24,2)}
 end
 
 assert 'Rational#==, Rational#!=' do

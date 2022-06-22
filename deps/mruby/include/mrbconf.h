@@ -7,6 +7,9 @@
 #ifndef MRUBYCONF_H
 #define MRUBYCONF_H
 
+#include <limits.h>
+#include <stdint.h>
+
 /* architecture selection: */
 /* specify -DMRB_32BIT or -DMRB_64BIT to override */
 #if !defined(MRB_32BIT) && !defined(MRB_64BIT)
@@ -22,10 +25,10 @@
 #endif
 
 /* configuration options: */
-/* add -DMRB_USE_FLOAT32 to use float instead of double for floating-point numbers */
+/* add -DMRB_USE_FLOAT32 to use float instead of double for floating point numbers */
 //#define MRB_USE_FLOAT32
 
-/* exclude floating-point numbers */
+/* exclude floating point numbers */
 //#define MRB_NO_FLOAT
 
 /* obsolete configuration */
@@ -79,9 +82,6 @@
 # define MRB_WORD_BOXING
 #endif
 
-/* if defined mruby allocates Float objects in the heap to keep full precision if needed */
-//#define MRB_WORDBOX_NO_FLOAT_TRUNCATE
-
 /* add -DMRB_INT32 to use 32bit integer for mrb_int; conflict with MRB_INT64;
    Default for 32-bit CPU mode. */
 //#define MRB_INT32
@@ -113,17 +113,11 @@
 /* number of object per heap page */
 //#define MRB_HEAP_PAGE_SIZE 1024
 
-/* define if your platform does not support etext, edata */
-//#define MRB_NO_DEFAULT_RO_DATA_P
+/* if __ehdr_start is available, mruby can reduce memory used by symbols */
+//#define MRB_USE_LINK_TIME_RO_DATA_P
 
-/* define if your platform supports etext, edata */
-//#define MRB_USE_RO_DATA_P_ETEXT
-/* use MRB_USE_ETEXT_RO_DATA_P by default on Linux */
-#if (defined(__linux__) && !defined(__KERNEL__))
-#define MRB_USE_ETEXT_RO_DATA_P
-#endif
-
-/* you can provide and use mrb_ro_data_p() for your platform.
+/* if MRB_USE_LINK_TIME_RO_DATA_P does not work,
+   you can try mrb_ro_data_p() that you have implemented yourself in any file;
    prototype is `mrb_bool mrb_ro_data_p(const char *ptr)` */
 //#define MRB_USE_CUSTOM_RO_DATA_P
 
@@ -185,6 +179,14 @@
 
 #ifndef MRB_NO_STDIO
 # include <stdio.h>
+#endif
+
+#ifndef FALSE
+# define FALSE 0
+#endif
+
+#ifndef TRUE
+# define TRUE 1
 #endif
 
 /*

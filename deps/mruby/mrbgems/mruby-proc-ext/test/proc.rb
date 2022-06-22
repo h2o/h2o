@@ -7,10 +7,6 @@ def enable_debug_info?
     raise
   rescue => e
     @enable_debug_info = !e.backtrace.empty?
-    if(@enable_debug_info && e.backtrace[0].include?("(unknown)"))
-       @enable_debug_info = false
-    end
-    return @enable_debug_info
   end
 end
 

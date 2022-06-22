@@ -12,6 +12,7 @@
 
 #include <mruby/array.h>
 #include <mruby/presym.h>
+#include <math.h>
 
 static void
 domain_error(mrb_state *mrb, const char *func)
@@ -23,6 +24,8 @@ domain_error(mrb_state *mrb, const char *func)
 
 /* math functions not provided by Microsoft Visual C++ 2012 or older */
 #if defined _MSC_VER && _MSC_VER <= 1700
+
+#include <float.h>
 
 double
 asinh(double x)

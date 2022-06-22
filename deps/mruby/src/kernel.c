@@ -84,8 +84,8 @@ mrb_equal_m(mrb_state *mrb, mrb_value self)
  *  Document-method: object_id
  *
  *  call-seq:
- *     obj.__id__       -> int
- *     obj.object_id    -> int
+ *     obj.__id__       -> fixnum
+ *     obj.object_id    -> fixnum
  *
  *  Returns an integer identifier for <i>obj</i>. The same number will
  *  be returned on all calls to <code>id</code> for a given object, and
@@ -97,7 +97,7 @@ mrb_equal_m(mrb_state *mrb, mrb_value self)
 mrb_value
 mrb_obj_id_m(mrb_state *mrb, mrb_value self)
 {
-  return mrb_fixnum_value(mrb_obj_id(self));
+  return mrb_int_value(mrb, mrb_obj_id(self));
 }
 
 static int
@@ -186,10 +186,13 @@ mrb_f_block_given_p_m(mrb_state *mrb, mrb_value self)
     bp = &e->stack[bidx];
   }
   else {
-    uint8_t n = ci->n == 15 ? 1 : ci->n;
-    uint8_t k = ci->nk == 15 ? 1 : ci->nk*2;
-    bidx = n + k + 1;      /* self + args + kargs => bidx */
-    bp = &ci->stack[bidx];
+    bp = ci->stack+1;
+    if (ci->argc >= 0) {
+      bp += ci->argc;
+    }
+    else {
+      bp++;
+    }
   }
  block_given:
   if (mrb_nil_p(*bp))
@@ -290,7 +293,7 @@ mrb_obj_frozen(mrb_state *mrb, mrb_value self)
 /* 15.3.1.3.15 */
 /*
  *  call-seq:
- *     obj.hash    -> int
+ *     obj.hash    -> fixnum
  *
  *  Generates a <code>Integer</code> hash value for this object. This
  *  function must have the property that <code>a.eql?(b)</code> implies
@@ -420,8 +423,8 @@ mrb_f_raise(mrb_state *mrb, mrb_value self)
   mrb_value a[2], exc;
   mrb_int argc;
 
+
   argc = mrb_get_args(mrb, "|oo", &a[0], &a[1]);
-  mrb->c->ci->mid = 0;
   switch (argc) {
   case 0:
     mrb_raise(mrb, E_RUNTIME_ERROR, "");
@@ -507,7 +510,7 @@ mrb_method_missing(mrb_state *mrb, mrb_sym name, mrb_value self, mrb_value args)
  *         # ...
  *       end
  *       def method_missing(methId)
- *         str = methId.to_s
+ *         str = methId.id2name
  *         romanToInt(str)
  *       end
  *     end
@@ -517,14 +520,13 @@ mrb_method_missing(mrb_state *mrb, mrb_sym name, mrb_value self, mrb_value args)
  *     r.xxiii   #=> 23
  *     r.mm      #=> 2000
  */
-mrb_value
+static mrb_value
 mrb_obj_missing(mrb_state *mrb, mrb_value mod)
 {
   mrb_sym name;
   const mrb_value *a;
   mrb_int alen;
 
-  mrb->c->ci->mid = 0;
   mrb_get_args(mrb, "n*!", &name, &a, &alen);
   mrb_method_missing(mrb, name, mod, mrb_ary_new_from_values(mrb, alen, a));
   /* not reached */
@@ -582,7 +584,6 @@ mrb_obj_ceqq(mrb_state *mrb, mrb_value self)
   mrb_sym eqq = MRB_OPSYM(eqq);
   mrb_value ary;
 
-  mrb->c->ci->mid = 0;
   if (mrb_array_p(self)) {
     ary = self;
   }
@@ -607,17 +608,6 @@ mrb_obj_ceqq(mrb_state *mrb, mrb_value self)
     if (mrb_test(c)) return mrb_true_value();
   }
   return mrb_false_value();
-}
-
-static mrb_value
-mrb_encoding(mrb_state *mrb, mrb_value self)
-{
-  mrb_get_args(mrb, "");
-#ifdef MRB_UTF8_STRING
-  return mrb_str_new_lit(mrb, "UTF-8");
-#else
-  return mrb_str_new_lit(mrb, "ASCII-8BIT");
-#endif
 }
 
 mrb_value mrb_obj_equal_m(mrb_state *mrb, mrb_value);
@@ -659,8 +649,8 @@ mrb_init_kernel(mrb_state *mrb)
   mrb_define_method(mrb, krn, "respond_to?",                obj_respond_to,                  MRB_ARGS_ARG(1,1));     /* 15.3.1.3.43 */
   mrb_define_method(mrb, krn, "to_s",                       mrb_any_to_s,                    MRB_ARGS_NONE());    /* 15.3.1.3.46 */
   mrb_define_method(mrb, krn, "__case_eqq",                 mrb_obj_ceqq,                    MRB_ARGS_REQ(1));    /* internal */
-  mrb_define_method(mrb, krn, "__to_int",                   mrb_ensure_int_type,             MRB_ARGS_NONE());    /* internal */
-  mrb_define_method(mrb, krn, "__ENCODING__",               mrb_encoding,                    MRB_ARGS_NONE());
+  mrb_define_method(mrb, krn, "__to_int",                   mrb_to_int,                      MRB_ARGS_NONE()); /* internal */
+  mrb_define_method(mrb, krn, "__to_str",                   mrb_to_str,                      MRB_ARGS_NONE()); /* internal */
 
   mrb_include_module(mrb, mrb->object_class, mrb->kernel_module);
 }

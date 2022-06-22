@@ -88,7 +88,6 @@ os_memsize_of_object(mrb_state* mrb, mrb_value obj)
               mrb_hash_memsize(obj);
       break;
     }
-    case MRB_TT_STRUCT:
     case MRB_TT_ARRAY: {
       mrb_int len = RARRAY_LEN(obj);
       /* Arrays that do not fit within an RArray perform a heap allocation
@@ -127,25 +126,8 @@ os_memsize_of_object(mrb_state* mrb, mrb_value obj)
     case MRB_TT_INTEGER:
       if (mrb_immediate_p(obj))
         break;
-  case MRB_TT_RATIONAL:
-#if defined(MRB_USE_RATIONAL)
-#if defined(MRB_INT64) && defined(MRB_32BIT)
-    size += sizeof(mrb_int)*2;
-#endif
-    size += mrb_objspace_page_slot_size();
-#endif
-    break;
-
-  case MRB_TT_COMPLEX:
-#if defined(MRB_USE_COMPLEX)
-#if defined(MRB_32BIT) && !defined(MRB_USE_FLOAT32)
-    size += sizeof(mrb_float)*2;
-#endif
-    size += mrb_objspace_page_slot_size();
-#endif
-    break;
     case MRB_TT_DATA:
-    case MRB_TT_ISTRUCT:
+  case MRB_TT_ISTRUCT:
       size += mrb_objspace_page_slot_size();
       break;
     /*  zero heap size types.

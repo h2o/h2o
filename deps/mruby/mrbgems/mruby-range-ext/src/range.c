@@ -1,5 +1,6 @@
 #include <mruby.h>
 #include <mruby/range.h>
+#include <math.h>
 
 static mrb_bool
 r_le(mrb_state *mrb, mrb_value a, mrb_value b)
@@ -80,7 +81,7 @@ range_size(mrb_state *mrb, mrb_value range)
 
   beg = RANGE_BEG(r);
   end = RANGE_END(r);
-  if ((mrb_integer_p(beg) || mrb_float_p(beg)) && mrb_nil_p(end)) {
+  if ((mrb_fixnum_p(beg) || mrb_float_p(beg)) && mrb_nil_p(end)) {
     return mrb_float_value(mrb, INFINITY);
   }
 
@@ -135,7 +136,7 @@ range_size(mrb_state *mrb, mrb_value range)
 
   beg = RANGE_BEG(r);
   end = RANGE_END(r);
-  if (mrb_integer_p(beg) && mrb_nil_p(end)) {
+  if (mrb_fixnum_p(beg) && mrb_nil_p(end)) {
     return mrb_nil_value();
   }
 
@@ -146,7 +147,7 @@ range_size(mrb_state *mrb, mrb_value range)
     mrb_int b = mrb_integer(end);
     mrb_int c = b - a + excl;
 
-    return mrb_int_value(mrb, c);
+    return mrb_fixnum_value(c);
   }
   return mrb_nil_value();
 }

@@ -58,7 +58,6 @@ assert('Array#[]', '15.2.12.5.4') do
   assert_equal(["b", "c"], a[1,2])
   assert_equal(["b", "c", "d"], a[1..-2])
   assert_equal(["b", "c", "d", "e"], a[1..])
-  assert_equal(["a", "b", "c"], a[..2])
   skip unless Object.const_defined?(:Float)
   assert_equal("b", a[1.1])
 end
@@ -295,24 +294,6 @@ assert('Array#shift', '15.2.12.5.27') do
   assert_equal(1, b)
 
   assert_raise(FrozenError) { [].freeze.shift }
-
-  # Array#shift with argument
-  assert_equal([], [].shift(1))
-
-  a = [1,2,3]
-  b = a.shift(1)
-  assert_equal([2,3], a)
-  assert_equal([1], b)
-
-  a = [1,2,3,4]
-  b = a.shift(3)
-  assert_equal([4], a)
-  assert_equal([1,2,3], b)
-
-  a = [1,2,3]
-  b = a.shift(4)
-  assert_equal([], a)
-  assert_equal([1,2,3], b)
 end
 
 assert('Array#size', '15.2.12.5.28') do

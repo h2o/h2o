@@ -12,27 +12,24 @@ MRuby::Gem::Specification.new 'mruby-compiler' do |spec|
     end
   end
   build.libmruby_core_objs << objs
-end
 
-if MRuby::Build.current.name == "host"
-  dir = __dir__
   lex_def = "#{dir}/core/lex.def"
 
   # Parser
   file "#{dir}/core/y.tab.c" => ["#{dir}/core/parse.y", lex_def] do |t|
-    MRuby.targets["host"].yacc.run t.name, t.prerequisites.first
+    yacc.run t.name, t.prerequisites.first
     replace_line_directive(t.name)
   end
 
   # Lexical analyzer
   file lex_def => "#{dir}/core/keywords" do |t|
-    MRuby.targets["host"].gperf.run t.name, t.prerequisites.first
+    gperf.run t.name, t.prerequisites.first
     replace_line_directive(t.name)
   end
 
   def replace_line_directive(path)
     content = File.read(path).gsub(%r{
-      ^\#line\s+\d+\s+"\K.*(?="$) |             # #line directive
+      ^\#line\s+\d+\s+"\K.*$ |                  # #line directive
       ^/\*\s+Command-line:.*\s\K\S+(?=\s+\*/$)  # header comment in lex.def
     }x, &:relative_path)
     File.write(path, content)

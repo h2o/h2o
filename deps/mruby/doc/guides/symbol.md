@@ -4,7 +4,7 @@ Symbols in `mruby` C source code is represented by `mrb_sym` which is alias of
 `uint32_t`.  Lower 30 bits are used for symbols so that higher 2 bits can be
 used as flags, e.g. `struct mt_elem` in `class.c`.
 
-```c
+```C
 struct mt_elem {
   union mt_ptr ptr;
   size_t func_p:1;
@@ -57,13 +57,13 @@ To save RAM, `mruby` can use compile-time allocation of some symbols. You can
 use following macros to get preallocated symbols by including `mruby/presym.h`
 header.
 
-* `MRB_SYM(xor)`    //=> xor    (Word characters)
-* `MRB_SYM_B(xor)`  //=> xor!   (Method with Bang)
-* `MRB_SYM_Q(xor)`  //=> xor?   (Method with Question mark)
-* `MRB_SYM_E(xor)`  //=> xor=   (Method with Equal)
-* `MRB_CVSYM(xor)`  //=> @@xor  (Class Variable)
-* `MRB_IVSYM(xor)`  //=> @xor   (Instance Variable)
-* `MRB_OPSYM(xor)`  //=> ^      (Operator)
+ * `MRB_SYM(xor)`    //=> xor    (Word characters)
+ * `MRB_SYM_B(xor)`  //=> xor!   (Method with Bang)
+ * `MRB_SYM_Q(xor)`  //=> xor?   (Method with Question mark)
+ * `MRB_SYM_E(xor)`  //=> xor=   (Method with Equal)
+ * `MRB_CVSYM(xor)`  //=> @@xor  (Class Variable)
+ * `MRB_IVSYM(xor)`  //=> @xor   (Instance Variable)
+ * `MRB_OPSYM(xor)`  //=> ^      (Operator)
 
 For `MRB_OPSYM()`, specify the names corresponding to operators (see
 `MRuby::Presym::OPERATORS` in `lib/mruby/presym.rb` for the names that

@@ -12,7 +12,6 @@ end
 assert('Time.at', '15.2.19.6.1') do
   assert_kind_of(Time, Time.at(1300000000.0))
 
-  skip unless Object.const_defined?(:Float)
   assert_raise(FloatDomainError) { Time.at(Float::NAN) }
   assert_raise(FloatDomainError) { Time.at(Float::INFINITY) }
   assert_raise(FloatDomainError) { Time.at(-Float::INFINITY) }
@@ -70,33 +69,31 @@ assert('Time.utc', '15.2.19.6.6') do
 end
 
 assert('Time#+', '15.2.19.7.1') do
-  t1 = Time.at(1300000000)
+  t1 = Time.at(1300000000.0)
   t2 = t1.+(60)
 
   assert_equal("Sun Mar 13 07:07:40 2011", t2.utc.asctime)
 
-  skip unless Object.const_defined?(:Float)
   assert_raise(FloatDomainError) { Time.at(0) + Float::NAN }
   assert_raise(FloatDomainError) { Time.at(0) + Float::INFINITY }
   assert_raise(FloatDomainError) { Time.at(0) + -Float::INFINITY }
 end
 
 assert('Time#-', '15.2.19.7.2') do
-  t1 = Time.at(1300000000)
+  t1 = Time.at(1300000000.0)
   t2 = t1.-(60)
 
   assert_equal("Sun Mar 13 07:05:40 2011", t2.utc.asctime)
 
-  skip unless Object.const_defined?(:Float)
   assert_raise(FloatDomainError) { Time.at(0) - Float::NAN }
   assert_raise(FloatDomainError) { Time.at(0) - Float::INFINITY }
   assert_raise(FloatDomainError) { Time.at(0) - -Float::INFINITY }
 end
 
 assert('Time#<=>', '15.2.19.7.3') do
-  t1 = Time.at(1300000000)
-  t2 = Time.at(1400000000)
-  t3 = Time.at(1500000000)
+  t1 = Time.at(1300000000.0)
+  t2 = Time.at(1400000000.0)
+  t3 = Time.at(1500000000.0)
 
   assert_equal(1, t2 <=> t1)
   assert_equal(0, t2 <=> t2)
@@ -121,7 +118,7 @@ assert('Time#dst?', '15.2.19.7.7') do
 end
 
 assert('Time#getgm', '15.2.19.7.8') do
-  assert_equal("Sun Mar 13 07:06:40 2011", Time.at(1300000000).getgm.asctime)
+  assert_equal("Sun Mar 13 07:06:40 2011", Time.at(1300000000.0).getgm.asctime)
 end
 
 assert('Time#getlocal', '15.2.19.7.9') do
@@ -134,11 +131,11 @@ assert('Time#getlocal', '15.2.19.7.9') do
 end
 
 assert('Time#getutc', '15.2.19.7.10') do
-  assert_equal("Sun Mar 13 07:06:40 2011", Time.at(1300000000).getutc.asctime)
+  assert_equal("Sun Mar 13 07:06:40 2011", Time.at(1300000000.0).getutc.asctime)
 end
 
 assert('Time#gmt?', '15.2.19.7.11') do
-  assert_predicate(Time.at(1300000000).utc, :gmt?)
+  assert_predicate(Time.at(1300000000.0).utc, :gmt?)
 end
 
 # ATM not implemented
@@ -195,17 +192,14 @@ assert('Times#sec', '15.2.19.7.23') do
 end
 
 assert('Time#to_f', '15.2.19.7.24') do
-  skip unless Object.const_defined?(:Float)
   assert_operator(2.0, :eql?, Time.at(2).to_f)
 end
 
 assert('Time#to_i', '15.2.19.7.25') do
-  assert_operator(2, :eql?, Time.at(2).to_i)
+  assert_operator(2, :eql?, Time.at(2.0).to_i)
 end
 
 assert('Time#usec', '15.2.19.7.26') do
-  assert_equal(0, Time.at(1300000000).usec)
-  skip unless Object.const_defined?(:Float)
   assert_equal(0, Time.at(1300000000.0).usec)
 end
 
@@ -216,7 +210,7 @@ assert('Time#utc', '15.2.19.7.27') do
 end
 
 assert('Time#utc?', '15.2.19.7.28') do
-  assert_predicate(Time.at(1300000000).utc, :utc?)
+  assert_predicate(Time.at(1300000000.0).utc, :utc?)
 end
 
 # ATM not implemented
@@ -235,7 +229,7 @@ assert('Time#year', '15.2.19.7.32') do
 end
 
 assert('Time#zone', '15.2.19.7.33') do
-  assert_equal('UTC', Time.at(1300000000).utc.zone)
+  assert_equal('UTC', Time.at(1300000000.0).utc.zone)
 end
 
 # Not ISO specified
