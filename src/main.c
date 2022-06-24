@@ -302,11 +302,7 @@ static struct {
     char *crash_handler;
     int crash_handler_wait_pipe_close;
     int tcp_reuseport;
-    enum {
-        SSL_ZEROCOPY_NONE,
-        SSL_ZEROCOPY_LIBCRYPTO,
-        SSL_ZEROCOPY_NON_TEMPORAL_AEAD,
-    } ssl_zerocopy;
+    int ssl_zerocopy;
 #ifdef LIBCAP_FOUND
     H2O_VECTOR(cap_value_t) capabilities;
 #endif
@@ -330,7 +326,7 @@ static struct {
     .crash_handler = "share/h2o/annotate-backtrace-symbols",
     .crash_handler_wait_pipe_close = 0,
     .tcp_reuseport = 0,
-    .ssl_zerocopy = SSL_ZEROCOPY_NONE,
+    .ssl_zerocopy = 0,
 };
 
 static __thread size_t thread_index;
@@ -2460,47 +2456,31 @@ static int on_tcp_reuseport(h2o_configurator_command_t *cmd, h2o_configurator_co
 
 static int on_config_ssl_offload(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    return on_config_onoff(cmd, node, &h2o_socket_use_ktls);
-}
-
-static int on_config_ssl_zerocopy(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
-{
-    /* set conf.ssl_zerocopy to the desired value */
-    switch (h2o_configurator_get_one_of(cmd, node, "OFF,ON,libcrypto,non-temporal")) {
+    switch (h2o_configurator_get_one_of(cmd, node, "OFF,kernel,zerocopy")) {
     case 0:
-        conf.ssl_zerocopy = SSL_ZEROCOPY_NONE;
+        h2o_socket_use_ktls = 0;
+        conf.ssl_zerocopy = 0;
         break;
     case 1:
-#if H2O_USE_FUSION
-        conf.ssl_zerocopy = SSL_ZEROCOPY_NON_TEMPORAL_AEAD;
-#else
-        conf.ssl_zerocopy = SSL_ZEROCOPY_LIBCRYPTO;
-#endif
+        h2o_socket_use_ktls = 1;
         break;
     case 2:
-        conf.ssl_zerocopy = SSL_ZEROCOPY_LIBCRYPTO;
-        break;
-    case 3:
-#if H2O_USE_FUSION
-        if (ptls_fusion_is_supported_by_cpu()) {
-            conf.ssl_zerocopy = SSL_ZEROCOPY_NON_TEMPORAL_AEAD;
-            break;
-        }
-#else
-        h2o_configurator_errprintf(cmd, node, "non-temporal aes-gcm engine is not available");
+#if !H2O_USE_MSG_ZEROCOPY
+        h2o_configurator_errprintf(cmd, node, "SO_ZEROCOPY is not available");
         return -1;
 #endif
+#if H2O_USE_FUSION
+        if (ptls_fusion_is_supported_by_cpu()) {
+            h2o_socket_use_ktls = 0;
+            conf.ssl_zerocopy = 1;
+            break;
+        }
+#endif
+        h2o_configurator_errprintf(cmd, node, "zerocopy cannot be used, as non-temporal aes-gcm engine is unavailable");
+        return -1;
     default:
         return -1;
     }
-
-    /* report config error if zerocopy is not supported */
-#if !H2O_USE_MSG_ZEROCOPY
-    if (conf.ssl_zerocopy != SSL_ZEROCOPY_NONE) {
-        h2o_configurator_errprintf(cmd, node, "SO_ZEROCOPY is not available");
-        return -1;
-    }
-#endif
 
     return 0;
 }
@@ -3598,8 +3578,6 @@ static void setup_configurators(void)
         h2o_configurator_define_command(c, "tcp-reuseport", H2O_CONFIGURATOR_FLAG_GLOBAL, on_tcp_reuseport);
         h2o_configurator_define_command(c, "ssl-offload", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_ssl_offload);
-        h2o_configurator_define_command(c, "ssl-zerocopy", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
-                                        on_config_ssl_zerocopy);
     }
 
     h2o_access_log_register_configurator(&conf.globalconf);
@@ -3852,7 +3830,7 @@ int main(int argc, char **argv)
 
 #if H2O_USE_FUSION
     /* Swap aes-gcm cipher suites of TLS-over-TCP listeners to non-temporal aesgcm engine, if it is to be used. */
-    if (conf.ssl_zerocopy == SSL_ZEROCOPY_NON_TEMPORAL_AEAD) {
+    if (conf.ssl_zerocopy) {
         static ptls_cipher_suite_t aes128gcmsha256 = {PTLS_CIPHER_SUITE_AES_128_GCM_SHA256, &ptls_non_temporal_aes128gcm,
                                                       &ptls_openssl_sha256},
                                    aes256gcmsha384 = {PTLS_CIPHER_SUITE_AES_256_GCM_SHA384, &ptls_non_temporal_aes256gcm,
@@ -3953,7 +3931,7 @@ int main(int argc, char **argv)
 
     /* Raise RLIMIT_MEMLOCK when zerocopy is to be used, or emit an warning if it is capped and cannot be raised. */
 #if H2O_USE_MSG_ZEROCOPY
-    if (conf.ssl_zerocopy != SSL_ZEROCOPY_NONE) {
+    if (conf.ssl_zerocopy) {
         struct rlimit limit = {0};
         if (getuid() == 0) {
             limit.rlim_cur = RLIM_INFINITY;
