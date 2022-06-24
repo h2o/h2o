@@ -79,6 +79,8 @@ struct st_h2o_mem_pool_shared_ref_t {
 
 void *(*volatile h2o_mem__set_secure)(void *, int, size_t) = memset;
 
+static const size_t mem_req_allocator_memsize = 2048;
+__thread h2o_mem_recycle_t h2o_mem_req_allocator = {&mem_req_allocator_memsize, 10000};
 static const size_t mem_pool_allocator_memsize = sizeof(union un_h2o_mem_pool_chunk_t);
 __thread h2o_mem_recycle_t h2o_mem_pool_allocator = {&mem_pool_allocator_memsize, 16};
 size_t h2o_mmap_errors = 0;

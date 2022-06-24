@@ -1715,7 +1715,9 @@ static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_hostconf_t **hosts,
         }},
     };
 
-    h2o_http2_conn_t *conn = (void *)h2o_create_connection(sizeof(*conn), ctx, hosts, connected_at, &callbacks);
+    void *_conn = h2o_mem_alloc_recycle(&h2o_mem_req_allocator);
+    h2o_http2_conn_t *conn = (void *)h2o_create_connection_in_place(_conn, ctx, hosts, connected_at, &callbacks);
+    H2O_BUILD_ASSERT(sizeof(*conn) < *h2o_mem_req_allocator.memsize);
 
     memset((char *)conn + sizeof(conn->super), 0, sizeof(*conn) - sizeof(conn->super));
     conn->sock = sock;
