@@ -82,8 +82,8 @@ assert('Float#ceil', '15.2.9.3.8') do
 end
 
 assert('Float#finite?', '15.2.9.3.9') do
-  assert_true 3.123456789.finite?
-  assert_false (1.0 / 0.0).finite?
+  assert_predicate 3.123456789, :finite?
+  assert_not_predicate 1.0 / 0.0, :finite?
 end
 
 assert('Float#floor', '15.2.9.3.10') do
@@ -139,7 +139,7 @@ assert('Float#round', '15.2.9.3.12') do
   nan = 0.0/0.0
   assert_raise(FloatDomainError){ nan.round }
   assert_raise(FloatDomainError){ nan.round(-1) }
-  assert_true(nan.round(1).nan?)
+  assert_predicate(nan.round(1), :nan?)
 end
 
 assert('Float#to_f', '15.2.9.3.13') do
@@ -178,10 +178,10 @@ assert('Float#divmod') do
 end
 
 assert('Float#nan?') do
-  assert_true (0.0/0.0).nan?
-  assert_false 0.0.nan?
-  assert_false (1.0/0.0).nan?
-  assert_false (-1.0/0.0).nan?
+  assert_predicate(0.0/0.0, :nan?)
+  assert_not_predicate(0.0, :nan?)
+  assert_not_predicate(1.0/0.0, :nan?)
+  assert_not_predicate(-1.0/0.0, :nan?)
 end
 
 assert('Float#<<') do
@@ -212,20 +212,20 @@ assert('Float#to_s') do
   assert_equal("Infinity", Float::INFINITY.to_s)
   assert_equal("-Infinity", (-Float::INFINITY).to_s)
   assert_equal("NaN", Float::NAN.to_s)
-  assert_equal("0.0", 0.0.to_s)
-  assert_equal("-0.0", -0.0.to_s)
-  assert_equal("-3.21", -3.21.to_s)
-  assert_equal("50.0", 50.0.to_s)
-  assert_equal("0.00021", 0.00021.to_s)
-  assert_equal("-0.00021", -0.00021.to_s)
-  assert_equal("2.1e-05", 0.000021.to_s)
-  assert_equal("-2.1e-05", -0.000021.to_s)
+  assert_equal("0", 0.0.to_s)
+  assert_equal("-0", -0.0.to_s)
+  assert_equal("-3.25", -3.25.to_s)
+  assert_equal("50", 50.0.to_s)
+  assert_equal("0.0125", 0.0125.to_s)
+  assert_equal("-0.0125", -0.0125.to_s)
+  assert_equal("1.0e-10", 0.0000000001.to_s)
+  assert_equal("-1.0e-10", -0.0000000001.to_s)
   assert_equal("1.0e+20", 1e20.to_s)
   assert_equal("-1.0e+20", -1e20.to_s)
   assert_equal("1.0e+16", 10000000000000000.0.to_s)
   assert_equal("-1.0e+16", -10000000000000000.0.to_s)
-  assert_equal("100000.0", 100000.0.to_s)
-  assert_equal("-100000.0", -100000.0.to_s)
+  assert_equal("100000", 100000.0.to_s)
+  assert_equal("-100000", -100000.0.to_s)
   if uses_float
     assert_equal("1.0e+08", 100000000.0.to_s)
     assert_equal("-1.0e+08", -100000000.0.to_s)
@@ -234,9 +234,15 @@ assert('Float#to_s') do
   else
     assert_equal("1.0e+15", 1000000000000000.0.to_s)
     assert_equal("-1.0e+15", -1000000000000000.0.to_s)
-    assert_equal("100000000000000.0", 100000000000000.0.to_s)
-    assert_equal("-100000000000000.0", -100000000000000.0.to_s)
+    assert_equal("100000000000000", 100000000000000.0.to_s)
+    assert_equal("-100000000000000", -100000000000000.0.to_s)
   end
+end
+
+assert('Float#eql?') do
+  assert_operator(5.0, :eql?, 5.0)
+  assert_not_operator(5.0, :eql?, 5)
+  assert_not_operator(5.0, :eql?, "5.0")
 end
 
 end # const_defined?(:Float)

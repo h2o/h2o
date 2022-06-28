@@ -84,7 +84,7 @@ free_breakpoint(mrb_state *mrb, mrb_debug_breakpoint *bp)
 }
 
 static uint16_t
-check_file_lineno(struct mrb_irep *irep, const char *file, uint16_t lineno)
+check_file_lineno(mrb_state *mrb, struct mrb_irep *irep, const char *file, uint16_t lineno)
 {
   mrb_irep_debug_info_file *info_file;
   uint16_t result = 0;
@@ -93,8 +93,10 @@ check_file_lineno(struct mrb_irep *irep, const char *file, uint16_t lineno)
   uint16_t i;
 
   for (f_idx = 0; f_idx < irep->debug_info->flen; ++f_idx) {
+    const char *filename;
     info_file = irep->debug_info->files[f_idx];
-    if (!strcmp(info_file->filename, file)) {
+    filename = mrb_sym_name_len(mrb, info_file->filename_sym, NULL);
+    if (!strcmp(filename, file)) {
       result = MRB_DEBUG_BP_FILE_OK;
 
       fix_lineno = check_lineno(info_file, lineno);
@@ -103,7 +105,7 @@ check_file_lineno(struct mrb_irep *irep, const char *file, uint16_t lineno)
       }
     }
     for (i=0; i < irep->rlen; ++i) {
-      result  |= check_file_lineno(irep->reps[i], file, lineno);
+      result  |= check_file_lineno(mrb, irep->reps[i], file, lineno);
       if (result == (MRB_DEBUG_BP_FILE_OK | MRB_DEBUG_BP_LINENO_OK)) {
         return result;
       }
@@ -124,7 +126,7 @@ compare_break_method(mrb_state *mrb, mrb_debug_breakpoint *bp, struct RClass *cl
   mrb_debug_methodpoint *method_p;
   mrb_bool is_defined;
 
-  method_name = mrb_sym2name(mrb, method_sym);
+  method_name = mrb_sym_name(mrb, method_sym);
 
   method_p = &bp->point.methodpoint;
   if (strcmp(method_p->method_name, method_name) == 0) {
@@ -185,7 +187,7 @@ mrb_debug_set_break_line(mrb_state *mrb, mrb_debug_context *dbg, const char *fil
   }
 
   /* file and lineno check (line type mrb_debug_line_ary only.) */
-  result = check_file_lineno(dbg->root_irep, file, lineno);
+  result = check_file_lineno(mrb, dbg->root_irep, file, lineno);
   if (result == 0) {
     return MRB_DEBUG_BREAK_INVALID_FILE;
   }
@@ -426,10 +428,10 @@ mrb_debug_disable_break_all(mrb_state *mrb, mrb_debug_context *dbg)
 }
 
 static mrb_bool
-check_start_pc_for_line(mrb_irep *irep, mrb_code *pc, uint16_t line)
+check_start_pc_for_line(mrb_state *mrb, mrb_irep *irep, const mrb_code *pc, uint16_t line)
 {
   if (pc > irep->iseq) {
-    if (line == mrb_debug_get_line(irep, pc - irep->iseq - 1)) {
+    if (line == mrb_debug_get_line(mrb, irep, pc - irep->iseq - 1)) {
       return FALSE;
     }
   }
@@ -447,7 +449,7 @@ mrb_debug_check_breakpoint_line(mrb_state *mrb, mrb_debug_context *dbg, const ch
     return MRB_DEBUG_INVALID_ARGUMENT;
   }
 
-  if (!check_start_pc_for_line(dbg->irep, dbg->pc, line)) {
+  if (!check_start_pc_for_line(mrb, dbg->irep, dbg->pc, line)) {
     return MRB_DEBUG_OK;
   }
 

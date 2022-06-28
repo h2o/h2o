@@ -140,7 +140,7 @@ class Hash
   def each_value(&block)
     return to_enum :each_value unless block
 
-    self.keys.each{|k| block.call(self[k])}
+    self.values.each{|v| block.call(v)}
     self
   end
 
@@ -186,15 +186,17 @@ class Hash
   end
 
   # internal method for Hash inspection
-  def _inspect
+  def _inspect(recur_list)
     return "{}" if self.size == 0
+    return "{...}" if recur_list[self.object_id]
+    recur_list[self.object_id] = true
     ary=[]
     keys=self.keys
+    vals=self.values
     size=keys.size
     i=0
     while i<size
-      k=keys[i]
-      ary<<(k._inspect + "=>" + self[k]._inspect)
+      ary<<(keys[i]._inspect(recur_list) + "=>" + vals[i]._inspect(recur_list))
       i+=1
     end
     "{"+ary.join(", ")+"}"
@@ -204,11 +206,7 @@ class Hash
  #
   # ISO 15.2.13.4.30 (x)
   def inspect
-    begin
-      self._inspect
-    rescue SystemStackError
-      "{...}"
-    end
+    self._inspect({})
   end
   # ISO 15.2.13.4.31 (x)
   alias to_s inspect

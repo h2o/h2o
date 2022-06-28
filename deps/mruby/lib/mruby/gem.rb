@@ -1,7 +1,6 @@
-require 'pathname'
 require 'forwardable'
-require 'tsort'
-require 'shellwords'
+autoload :TSort, 'tsort'
+autoload :Shellwords, 'shellwords'
 
 module MRuby
   module Gem
@@ -92,6 +91,9 @@ module MRuby
         build.libmruby_objs << @objs
 
         instance_eval(&@build_config_initializer) if @build_config_initializer
+
+        repo_url = build.gem_dir_to_repo_url[dir]
+        build.locks[repo_url]['version'] = version if repo_url
       end
 
       def setup_compilers
@@ -104,6 +106,15 @@ module MRuby
         define_gem_init_builder if @generate_functions
       end
 
+      def for_windows?
+        if build.kind_of?(MRuby::CrossBuild)
+          return %w(x86_64-w64-mingw32 i686-w64-mingw32).include?(build.host_target)
+        elsif build.kind_of?(MRuby::Build)
+          return ('A'..'Z').to_a.any? { |vol| Dir.exist?("#{vol}:") }
+        end
+        return false
+      end
+
       def add_dependency(name, *requirements)
         default_gem = requirements.last.kind_of?(Hash) ? requirements.pop : nil
         requirements = ['>= 0.0.0'] if requirements.empty?
@@ -112,15 +123,11 @@ module MRuby
       end
 
       def add_test_dependency(*args)
-        add_dependency(*args) if build.test_enabled?
+        add_dependency(*args) if build.test_enabled? || build.bintest_enabled?
       end
 
       def add_conflict(name, *req)
         @conflicts << {:gem => name, :requirements => req.empty? ? nil : req}
-      end
-
-      def self.bin=(bin)
-        @bins = [bin].flatten
       end
 
       def build_dir
@@ -159,7 +166,7 @@ module MRuby
       def define_gem_init_builder
         file objfile("#{build_dir}/gem_init") => [ "#{build_dir}/gem_init.c", File.join(dir, "mrbgem.rake") ]
         file "#{build_dir}/gem_init.c" => [build.mrbcfile, __FILE__] + [rbfiles].flatten do |t|
-          FileUtils.mkdir_p build_dir
+          mkdir_p build_dir
           generate_gem_init("#{build_dir}/gem_init.c")
         end
       end
@@ -271,16 +278,18 @@ module MRuby
       # ~> compare algorithm
       #
       # Example:
+      #    ~> 2     means >= 2.0.0 and < 3.0.0
       #    ~> 2.2   means >= 2.2.0 and < 3.0.0
-      #    ~> 2.2.0 means >= 2.2.0 and < 2.3.0
+      #    ~> 2.2.2 means >= 2.2.2 and < 2.3.0
       def twiddle_wakka_ok?(other)
         gr_or_eql = (self <=> other) >= 0
-        still_minor = (self <=> other.skip_minor) < 0
-        gr_or_eql and still_minor
+        still_major_or_minor = (self <=> other.skip_major_or_minor) < 0
+        gr_or_eql and still_major_or_minor
       end
 
-      def skip_minor
+      def skip_major_or_minor
         a = @ary.dup
+        a << 0 if a.size == 1 # ~> 2 can also be represented as ~> 2.0
         a.slice!(-1)
         a[-1] = a[-1].succ
         a

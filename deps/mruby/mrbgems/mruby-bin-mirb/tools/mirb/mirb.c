@@ -6,9 +6,22 @@
 ** immediately. It's a REPL...
 */
 
+#include <mruby.h>
+
+#ifdef MRB_DISABLE_STDIO
+# error mruby-bin-mirb conflicts 'MRB_DISABLE_STDIO' configuration in your 'build_config.rb'
+#endif
+
+#include <mruby/array.h>
+#include <mruby/proc.h>
+#include <mruby/compile.h>
+#include <mruby/dump.h>
+#include <mruby/string.h>
+#include <mruby/variable.h>
+#include <mruby/throw.h>
+
 #include <stdlib.h>
 #include <string.h>
-#include <stdio.h>
 #include <ctype.h>
 
 #include <signal.h>
@@ -48,15 +61,6 @@
 #define MIRB_SIGLONGJMP(env, val) longjmp(env, val)
 #define SIGJMP_BUF jmp_buf
 #endif
-
-#include <mruby.h>
-#include <mruby/array.h>
-#include <mruby/proc.h>
-#include <mruby/compile.h>
-#include <mruby/dump.h>
-#include <mruby/string.h>
-#include <mruby/variable.h>
-#include <mruby/throw.h>
 
 #ifdef ENABLE_READLINE
 
@@ -240,7 +244,7 @@ usage(const char *name)
   };
   const char *const *p = usage_msg;
 
-  printf("Usage: %s [switches]\n", name);
+  printf("Usage: %s [switches] [programfile] [arguments]\n", name);
   while (*p)
     printf("  %s\n", *p++);
 }
@@ -373,7 +377,7 @@ check_keyword(const char *buf, const char *word)
   size_t len = strlen(word);
 
   /* skip preceding spaces */
-  while (*p && isspace((unsigned char)*p)) {
+  while (*p && ISSPACE(*p)) {
     p++;
   }
   /* check keyword */
@@ -383,7 +387,7 @@ check_keyword(const char *buf, const char *word)
   p += len;
   /* skip trailing spaces */
   while (*p) {
-    if (!isspace((unsigned char)*p)) return 0;
+    if (!ISSPACE(*p)) return 0;
     p++;
   }
   return 1;
@@ -403,6 +407,26 @@ void
 ctrl_c_handler(int signo)
 {
   MIRB_SIGLONGJMP(ctrl_c_buf, 1);
+}
+#endif
+
+#ifndef DISABLE_MIRB_UNDERSCORE
+void decl_lv_underscore(mrb_state *mrb, mrbc_context *cxt)
+{
+  struct RProc *proc;
+  struct mrb_parser_state *parser;
+
+  parser = mrb_parse_string(mrb, "_=nil", cxt);
+  if (parser == NULL) {
+    fputs("create parser state error\n", stderr);
+    mrb_close(mrb);
+    exit(EXIT_FAILURE);
+  }
+
+  proc = mrb_generate_code(mrb, parser);
+  mrb_vm_run(mrb, proc, mrb_top_self(mrb), 0);
+
+  mrb_parser_free(parser);
 }
 #endif
 
@@ -470,6 +494,10 @@ main(int argc, char **argv)
   print_hint();
 
   cxt = mrbc_context_new(mrb);
+
+#ifndef DISABLE_MIRB_UNDERSCORE
+  decl_lv_underscore(mrb, cxt);
+#endif
 
   /* Load libraries */
   for (i = 0; i < args.libc; i++) {
@@ -621,8 +649,8 @@ main(int argc, char **argv)
         /* adjust stack length of toplevel environment */
         if (mrb->c->cibase->env) {
           struct REnv *e = mrb->c->cibase->env;
-          if (e && MRB_ENV_STACK_LEN(e) < proc->body.irep->nlocals) {
-            MRB_ENV_SET_STACK_LEN(e, proc->body.irep->nlocals);
+          if (e && MRB_ENV_LEN(e) < proc->body.irep->nlocals) {
+            MRB_ENV_SET_LEN(e, proc->body.irep->nlocals);
           }
         }
         /* pass a proc for evaluation */
@@ -643,6 +671,9 @@ main(int argc, char **argv)
             result = mrb_any_to_s(mrb, result);
           }
           p(mrb, result, 1);
+#ifndef DISABLE_MIRB_UNDERSCORE
+          *(mrb->c->stack + 1) = result;
+#endif
         }
       }
       ruby_code[0] = '\0';

@@ -1,4 +1,4 @@
-/* ANSI-C code produced by gperf version 3.0.4 */
+/* ANSI-C code produced by gperf version 3.1 */
 /* Command-line: gperf -L ANSI-C -C -p -j1 -i 1 -g -o -t -N mrb_reserved_word -k'1,3,$' /home/matz/work/mruby/mrbgems/mruby-compiler/core/keywords  */
 
 #if !((' ' == 32) && ('!' == 33) && ('"' == 34) && ('#' == 35) \
@@ -25,16 +25,13 @@
       && ('w' == 119) && ('x' == 120) && ('y' == 121) && ('z' == 122) \
       && ('{' == 123) && ('|' == 124) && ('}' == 125) && ('~' == 126))
 /* The character set is not based on ISO-646.  */
-#error "gperf generated tables don't work with this execution character set. Please report a bug to <bug-gnu-gperf@gnu.org>."
+#error "gperf generated tables don't work with this execution character set. Please report a bug to <bug-gperf@gnu.org>."
 #endif
 
 #line 1 "/home/matz/work/mruby/mrbgems/mruby-compiler/core/keywords"
 
 struct kwtable {const char *name; int id[2]; enum mrb_lex_state_enum state;};
-const struct kwtable *mrb_reserved_word(const char *, unsigned int);
-static const struct kwtable *reserved_word(const char *, unsigned int);
-#define mrb_reserved_word(str, len) reserved_word(str, len)
-#line 8 "/home/matz/work/mruby/mrbgems/mruby-compiler/core/keywords"
+#line 5 "/home/matz/work/mruby/mrbgems/mruby-compiler/core/keywords"
 struct kwtable;
 
 #define TOTAL_KEYWORDS 40
@@ -52,7 +49,7 @@ inline
 #endif
 #endif
 static unsigned int
-hash (const char *str, unsigned int len)
+hash (register const char *str, register size_t len)
 {
   static const unsigned char asso_values[] =
     {
@@ -83,7 +80,7 @@ hash (const char *str, unsigned int len)
       51, 51, 51, 51, 51, 51, 51, 51, 51, 51,
       51, 51, 51, 51, 51, 51
     };
-  int hval = len;
+  register unsigned int hval = len;
 
   switch (hval)
     {
@@ -98,109 +95,103 @@ hash (const char *str, unsigned int len)
   return hval + asso_values[(unsigned char)str[len - 1]];
 }
 
-#ifdef __GNUC__
-__inline
-#if defined __GNUC_STDC_INLINE__ || defined __GNUC_GNU_INLINE__
-__attribute__ ((__gnu_inline__))
-#endif
-#endif
 const struct kwtable *
-mrb_reserved_word (const char *str, unsigned int len)
+mrb_reserved_word (register const char *str, register size_t len)
 {
   static const struct kwtable wordlist[] =
     {
       {""}, {""}, {""}, {""}, {""}, {""}, {""}, {""},
-#line 18 "/home/matz/work/mruby/mrbgems/mruby-compiler/core/keywords"
-      {"break",        {keyword_break,       keyword_break},       EXPR_MID},
-#line 23 "/home/matz/work/mruby/mrbgems/mruby-compiler/core/keywords"
-      {"else",         {keyword_else,        keyword_else},        EXPR_BEG},
-#line 33 "/home/matz/work/mruby/mrbgems/mruby-compiler/core/keywords"
-      {"nil",          {keyword_nil,         keyword_nil},         EXPR_END},
-#line 26 "/home/matz/work/mruby/mrbgems/mruby-compiler/core/keywords"
-      {"ensure",       {keyword_ensure,      keyword_ensure},      EXPR_BEG},
-#line 25 "/home/matz/work/mruby/mrbgems/mruby-compiler/core/keywords"
-      {"end",          {keyword_end,         keyword_end},         EXPR_END},
-#line 42 "/home/matz/work/mruby/mrbgems/mruby-compiler/core/keywords"
-      {"then",         {keyword_then,        keyword_then},        EXPR_BEG},
-#line 34 "/home/matz/work/mruby/mrbgems/mruby-compiler/core/keywords"
-      {"not",          {keyword_not,         keyword_not},         EXPR_ARG},
-#line 27 "/home/matz/work/mruby/mrbgems/mruby-compiler/core/keywords"
-      {"false",        {keyword_false,       keyword_false},       EXPR_END},
-#line 40 "/home/matz/work/mruby/mrbgems/mruby-compiler/core/keywords"
-      {"self",         {keyword_self,        keyword_self},        EXPR_END},
-#line 24 "/home/matz/work/mruby/mrbgems/mruby-compiler/core/keywords"
-      {"elsif",        {keyword_elsif,       keyword_elsif},       EXPR_VALUE},
-#line 37 "/home/matz/work/mruby/mrbgems/mruby-compiler/core/keywords"
-      {"rescue",       {keyword_rescue,      modifier_rescue},     EXPR_MID},
-#line 43 "/home/matz/work/mruby/mrbgems/mruby-compiler/core/keywords"
-      {"true",         {keyword_true,        keyword_true},        EXPR_END},
-#line 46 "/home/matz/work/mruby/mrbgems/mruby-compiler/core/keywords"
-      {"until",        {keyword_until,       modifier_until},      EXPR_VALUE},
-#line 45 "/home/matz/work/mruby/mrbgems/mruby-compiler/core/keywords"
-      {"unless",       {keyword_unless,      modifier_unless},     EXPR_VALUE},
-#line 39 "/home/matz/work/mruby/mrbgems/mruby-compiler/core/keywords"
-      {"return",       {keyword_return,      keyword_return},      EXPR_MID},
-#line 21 "/home/matz/work/mruby/mrbgems/mruby-compiler/core/keywords"
-      {"def",          {keyword_def,         keyword_def},         EXPR_FNAME},
-#line 16 "/home/matz/work/mruby/mrbgems/mruby-compiler/core/keywords"
-      {"and",          {keyword_and,         keyword_and},         EXPR_VALUE},
-#line 22 "/home/matz/work/mruby/mrbgems/mruby-compiler/core/keywords"
-      {"do",           {keyword_do,          keyword_do},          EXPR_BEG},
-#line 49 "/home/matz/work/mruby/mrbgems/mruby-compiler/core/keywords"
-      {"yield",        {keyword_yield,       keyword_yield},       EXPR_ARG},
-#line 28 "/home/matz/work/mruby/mrbgems/mruby-compiler/core/keywords"
-      {"for",          {keyword_for,         keyword_for},         EXPR_VALUE},
-#line 44 "/home/matz/work/mruby/mrbgems/mruby-compiler/core/keywords"
-      {"undef",        {keyword_undef,       keyword_undef},       EXPR_FNAME},
-#line 35 "/home/matz/work/mruby/mrbgems/mruby-compiler/core/keywords"
-      {"or",           {keyword_or,          keyword_or},          EXPR_VALUE},
-#line 30 "/home/matz/work/mruby/mrbgems/mruby-compiler/core/keywords"
-      {"in",           {keyword_in,          keyword_in},          EXPR_VALUE},
-#line 47 "/home/matz/work/mruby/mrbgems/mruby-compiler/core/keywords"
-      {"when",         {keyword_when,        keyword_when},        EXPR_VALUE},
-#line 38 "/home/matz/work/mruby/mrbgems/mruby-compiler/core/keywords"
-      {"retry",        {keyword_retry,       keyword_retry},       EXPR_END},
-#line 29 "/home/matz/work/mruby/mrbgems/mruby-compiler/core/keywords"
-      {"if",           {keyword_if,          modifier_if},         EXPR_VALUE},
-#line 19 "/home/matz/work/mruby/mrbgems/mruby-compiler/core/keywords"
-      {"case",         {keyword_case,        keyword_case},        EXPR_VALUE},
-#line 36 "/home/matz/work/mruby/mrbgems/mruby-compiler/core/keywords"
-      {"redo",         {keyword_redo,        keyword_redo},        EXPR_END},
-#line 32 "/home/matz/work/mruby/mrbgems/mruby-compiler/core/keywords"
-      {"next",         {keyword_next,        keyword_next},        EXPR_MID},
-#line 41 "/home/matz/work/mruby/mrbgems/mruby-compiler/core/keywords"
-      {"super",        {keyword_super,       keyword_super},       EXPR_ARG},
-#line 31 "/home/matz/work/mruby/mrbgems/mruby-compiler/core/keywords"
-      {"module",       {keyword_module,      keyword_module},      EXPR_VALUE},
-#line 17 "/home/matz/work/mruby/mrbgems/mruby-compiler/core/keywords"
-      {"begin",        {keyword_begin,       keyword_begin},       EXPR_BEG},
-#line 12 "/home/matz/work/mruby/mrbgems/mruby-compiler/core/keywords"
-      {"__LINE__",     {keyword__LINE__,     keyword__LINE__},     EXPR_END},
-#line 11 "/home/matz/work/mruby/mrbgems/mruby-compiler/core/keywords"
-      {"__FILE__",     {keyword__FILE__,     keyword__FILE__},     EXPR_END},
-#line 10 "/home/matz/work/mruby/mrbgems/mruby-compiler/core/keywords"
-      {"__ENCODING__", {keyword__ENCODING__, keyword__ENCODING__}, EXPR_END},
-#line 14 "/home/matz/work/mruby/mrbgems/mruby-compiler/core/keywords"
-      {"END",          {keyword_END,         keyword_END},         EXPR_END},
 #line 15 "/home/matz/work/mruby/mrbgems/mruby-compiler/core/keywords"
-      {"alias",        {keyword_alias,       keyword_alias},       EXPR_FNAME},
+      {"break",        {keyword_break,       keyword_break},       EXPR_MID},
+#line 20 "/home/matz/work/mruby/mrbgems/mruby-compiler/core/keywords"
+      {"else",         {keyword_else,        keyword_else},        EXPR_BEG},
+#line 30 "/home/matz/work/mruby/mrbgems/mruby-compiler/core/keywords"
+      {"nil",          {keyword_nil,         keyword_nil},         EXPR_END},
+#line 23 "/home/matz/work/mruby/mrbgems/mruby-compiler/core/keywords"
+      {"ensure",       {keyword_ensure,      keyword_ensure},      EXPR_BEG},
+#line 22 "/home/matz/work/mruby/mrbgems/mruby-compiler/core/keywords"
+      {"end",          {keyword_end,         keyword_end},         EXPR_END},
+#line 39 "/home/matz/work/mruby/mrbgems/mruby-compiler/core/keywords"
+      {"then",         {keyword_then,        keyword_then},        EXPR_BEG},
+#line 31 "/home/matz/work/mruby/mrbgems/mruby-compiler/core/keywords"
+      {"not",          {keyword_not,         keyword_not},         EXPR_ARG},
+#line 24 "/home/matz/work/mruby/mrbgems/mruby-compiler/core/keywords"
+      {"false",        {keyword_false,       keyword_false},       EXPR_END},
+#line 37 "/home/matz/work/mruby/mrbgems/mruby-compiler/core/keywords"
+      {"self",         {keyword_self,        keyword_self},        EXPR_END},
+#line 21 "/home/matz/work/mruby/mrbgems/mruby-compiler/core/keywords"
+      {"elsif",        {keyword_elsif,       keyword_elsif},       EXPR_VALUE},
+#line 34 "/home/matz/work/mruby/mrbgems/mruby-compiler/core/keywords"
+      {"rescue",       {keyword_rescue,      modifier_rescue},     EXPR_MID},
+#line 40 "/home/matz/work/mruby/mrbgems/mruby-compiler/core/keywords"
+      {"true",         {keyword_true,        keyword_true},        EXPR_END},
+#line 43 "/home/matz/work/mruby/mrbgems/mruby-compiler/core/keywords"
+      {"until",        {keyword_until,       modifier_until},      EXPR_VALUE},
+#line 42 "/home/matz/work/mruby/mrbgems/mruby-compiler/core/keywords"
+      {"unless",       {keyword_unless,      modifier_unless},     EXPR_VALUE},
+#line 36 "/home/matz/work/mruby/mrbgems/mruby-compiler/core/keywords"
+      {"return",       {keyword_return,      keyword_return},      EXPR_MID},
+#line 18 "/home/matz/work/mruby/mrbgems/mruby-compiler/core/keywords"
+      {"def",          {keyword_def,         keyword_def},         EXPR_FNAME},
 #line 13 "/home/matz/work/mruby/mrbgems/mruby-compiler/core/keywords"
+      {"and",          {keyword_and,         keyword_and},         EXPR_VALUE},
+#line 19 "/home/matz/work/mruby/mrbgems/mruby-compiler/core/keywords"
+      {"do",           {keyword_do,          keyword_do},          EXPR_BEG},
+#line 46 "/home/matz/work/mruby/mrbgems/mruby-compiler/core/keywords"
+      {"yield",        {keyword_yield,       keyword_yield},       EXPR_ARG},
+#line 25 "/home/matz/work/mruby/mrbgems/mruby-compiler/core/keywords"
+      {"for",          {keyword_for,         keyword_for},         EXPR_VALUE},
+#line 41 "/home/matz/work/mruby/mrbgems/mruby-compiler/core/keywords"
+      {"undef",        {keyword_undef,       keyword_undef},       EXPR_FNAME},
+#line 32 "/home/matz/work/mruby/mrbgems/mruby-compiler/core/keywords"
+      {"or",           {keyword_or,          keyword_or},          EXPR_VALUE},
+#line 27 "/home/matz/work/mruby/mrbgems/mruby-compiler/core/keywords"
+      {"in",           {keyword_in,          keyword_in},          EXPR_VALUE},
+#line 44 "/home/matz/work/mruby/mrbgems/mruby-compiler/core/keywords"
+      {"when",         {keyword_when,        keyword_when},        EXPR_VALUE},
+#line 35 "/home/matz/work/mruby/mrbgems/mruby-compiler/core/keywords"
+      {"retry",        {keyword_retry,       keyword_retry},       EXPR_END},
+#line 26 "/home/matz/work/mruby/mrbgems/mruby-compiler/core/keywords"
+      {"if",           {keyword_if,          modifier_if},         EXPR_VALUE},
+#line 16 "/home/matz/work/mruby/mrbgems/mruby-compiler/core/keywords"
+      {"case",         {keyword_case,        keyword_case},        EXPR_VALUE},
+#line 33 "/home/matz/work/mruby/mrbgems/mruby-compiler/core/keywords"
+      {"redo",         {keyword_redo,        keyword_redo},        EXPR_END},
+#line 29 "/home/matz/work/mruby/mrbgems/mruby-compiler/core/keywords"
+      {"next",         {keyword_next,        keyword_next},        EXPR_MID},
+#line 38 "/home/matz/work/mruby/mrbgems/mruby-compiler/core/keywords"
+      {"super",        {keyword_super,       keyword_super},       EXPR_ARG},
+#line 28 "/home/matz/work/mruby/mrbgems/mruby-compiler/core/keywords"
+      {"module",       {keyword_module,      keyword_module},      EXPR_VALUE},
+#line 14 "/home/matz/work/mruby/mrbgems/mruby-compiler/core/keywords"
+      {"begin",        {keyword_begin,       keyword_begin},       EXPR_BEG},
+#line 9 "/home/matz/work/mruby/mrbgems/mruby-compiler/core/keywords"
+      {"__LINE__",     {keyword__LINE__,     keyword__LINE__},     EXPR_END},
+#line 8 "/home/matz/work/mruby/mrbgems/mruby-compiler/core/keywords"
+      {"__FILE__",     {keyword__FILE__,     keyword__FILE__},     EXPR_END},
+#line 7 "/home/matz/work/mruby/mrbgems/mruby-compiler/core/keywords"
+      {"__ENCODING__", {keyword__ENCODING__, keyword__ENCODING__}, EXPR_END},
+#line 11 "/home/matz/work/mruby/mrbgems/mruby-compiler/core/keywords"
+      {"END",          {keyword_END,         keyword_END},         EXPR_END},
+#line 12 "/home/matz/work/mruby/mrbgems/mruby-compiler/core/keywords"
+      {"alias",        {keyword_alias,       keyword_alias},       EXPR_FNAME},
+#line 10 "/home/matz/work/mruby/mrbgems/mruby-compiler/core/keywords"
       {"BEGIN",        {keyword_BEGIN,       keyword_BEGIN},       EXPR_END},
       {""},
-#line 20 "/home/matz/work/mruby/mrbgems/mruby-compiler/core/keywords"
+#line 17 "/home/matz/work/mruby/mrbgems/mruby-compiler/core/keywords"
       {"class",        {keyword_class,       keyword_class},       EXPR_CLASS},
       {""}, {""},
-#line 48 "/home/matz/work/mruby/mrbgems/mruby-compiler/core/keywords"
+#line 45 "/home/matz/work/mruby/mrbgems/mruby-compiler/core/keywords"
       {"while",        {keyword_while,       modifier_while},      EXPR_VALUE}
     };
 
   if (len <= MAX_WORD_LENGTH && len >= MIN_WORD_LENGTH)
     {
-      int key = hash (str, len);
+      register unsigned int key = hash (str, len);
 
-      if (key <= MAX_HASH_VALUE && key >= 0)
+      if (key <= MAX_HASH_VALUE)
         {
-          const char *s = wordlist[key].name;
+          register const char *s = wordlist[key].name;
 
           if (*str == *s && !strcmp (str + 1, s + 1))
             return &wordlist[key];
@@ -208,4 +199,5 @@ mrb_reserved_word (const char *str, unsigned int len)
     }
   return 0;
 }
-#line 50 "/home/matz/work/mruby/mrbgems/mruby-compiler/core/keywords"
+#line 47 "/home/matz/work/mruby/mrbgems/mruby-compiler/core/keywords"
+

@@ -154,11 +154,11 @@ assert('Integer#<<', '15.2.8.3.12') do
   # Left Shift by a negative is Right Shift
   assert_equal 23, 46 << -1
 
-  # Left Shift by 31 is bitShift overflow to SignedInt
-  assert_equal 2147483648, 1 << 31
+  skip unless Object.const_defined?(:Float)
 
-  # -3 Left Shift by 30 is bitShift overflow to SignedInt
-  assert_equal(-3221225472, -3 << 30)
+  # Overflow to Fixnum
+  assert_float 9223372036854775808.0, 1 << 63
+  assert_float(-13835058055282163712.0, -3 << 62)
 end
 
 assert('Integer#>>', '15.2.8.3.13') do
@@ -232,8 +232,16 @@ assert('Integer#to_i', '15.2.8.3.24') do
 end
 
 assert('Integer#to_s', '15.2.8.3.25') do
-  assert_equal '1', 1.to_s
-  assert_equal("-1", -1.to_s)
+  assert_equal "1", 1.to_s
+  assert_equal "-1", -1.to_s
+  assert_equal "1010", 10.to_s(2)
+  assert_equal "a", 10.to_s(36)
+  assert_equal "-a", -10.to_s(36)
+  assert_equal "30071", 12345.to_s(8)
+  assert_raise(ArgumentError) { 10.to_s(-1) }
+  assert_raise(ArgumentError) { 10.to_s(0) }
+  assert_raise(ArgumentError) { 10.to_s(1) }
+  assert_raise(ArgumentError) { 10.to_s(37) }
 end
 
 assert('Integer#truncate', '15.2.8.3.26') do

@@ -4,7 +4,7 @@ module MRuby
   class Command
     include Rake::DSL
     extend Forwardable
-    def_delegators :@build, :filename, :objfile, :libfile, :exefile, :cygwin_filename
+    def_delegators :@build, :filename, :objfile, :libfile, :exefile
     attr_accessor :build, :command
 
     def initialize(build)
@@ -24,6 +24,14 @@ module MRuby
       target
     end
 
+    def shellquote(s)
+      if ENV['OS'] == 'Windows_NT'
+        "\"#{s}\""
+      else
+        "#{s}"
+      end
+    end
+
     NotFoundCommands = {}
 
     private
@@ -41,7 +49,7 @@ module MRuby
   class Command::Compiler < Command
     attr_accessor :flags, :include_paths, :defines, :source_exts
     attr_accessor :compile_options, :option_define, :option_include_path, :out_ext
-    attr_accessor :cxx_compile_flag, :cxx_exception_flag
+    attr_accessor :cxx_compile_flag, :cxx_exception_flag, :cxx_invalid_flags
 
     def initialize(build, source_exts=[])
       super(build)
@@ -50,9 +58,10 @@ module MRuby
       @source_exts = source_exts
       @include_paths = ["#{MRUBY_ROOT}/include"]
       @defines = %w()
-      @option_include_path = '-I%s'
-      @option_define = '-D%s'
-      @compile_options = '%{flags} -o %{outfile} -c %{infile}'
+      @option_include_path = %q[-I"%s"]
+      @option_define = %q[-D"%s"]
+      @compile_options = %q[%{flags} -o "%{outfile}" -c "%{infile}"]
+      @cxx_invalid_flags = []
     end
 
     alias header_search_paths include_paths
@@ -67,28 +76,19 @@ module MRuby
       path && build.filename("#{path}/#{name}").sub(/^"(.*)"$/, '\1')
     end
 
-    def all_flags(_defineds=[], _include_paths=[], _flags=[])
-      define_flags = [defines, _defineds].flatten.map{ |d| option_define % d }
+    def all_flags(_defines=[], _include_paths=[], _flags=[])
+      define_flags = [defines, _defines].flatten.map{ |d| option_define % d }
       include_path_flags = [include_paths, _include_paths].flatten.map do |f|
-        if MRUBY_BUILD_HOST_IS_CYGWIN
-          option_include_path % cygwin_filename(f)
-        else
-          option_include_path % filename(f)
-        end
+        option_include_path % filename(f)
       end
       [flags, define_flags, include_path_flags, _flags].flatten.join(' ')
     end
 
-    def run(outfile, infile, _defineds=[], _include_paths=[], _flags=[])
-      FileUtils.mkdir_p File.dirname(outfile)
+    def run(outfile, infile, _defines=[], _include_paths=[], _flags=[])
+      mkdir_p File.dirname(outfile)
       _pp "CC", infile.relative_path, outfile.relative_path
-      if MRUBY_BUILD_HOST_IS_CYGWIN
-        _run compile_options, { :flags => all_flags(_defineds, _include_paths, _flags),
-                                :infile => cygwin_filename(infile), :outfile => cygwin_filename(outfile) }
-      else
-        _run compile_options, { :flags => all_flags(_defineds, _include_paths, _flags),
-                                :infile => filename(infile), :outfile => filename(outfile) }
-      end
+      _run compile_options, { :flags => all_flags(_defines, _include_paths, _flags),
+                              :infile => filename(infile), :outfile => filename(outfile) }
     end
 
     def define_rules(build_dir, source_dir='')
@@ -127,13 +127,40 @@ module MRuby
     end
 
     private
+
+    #
+    # === Example of +.d+ file
+    #
+    # ==== Without <tt>-MP</tt> compiler flag
+    #
+    #   /build/host/src/array.o: \
+    #     /src/array.c \
+    #     /include/mruby/common.h \
+    #     /include/mruby/value.h \
+    #     /src/value_array.h
+    #
+    # ==== With <tt>-MP</tt> compiler flag
+    #
+    #   /build/host/src/array.o: \
+    #     /src/array.c \
+    #     /include/mruby/common.h \
+    #     /include/mruby/value.h \
+    #     /src/value_array.h
+    #
+    #   /include/mruby/common.h:
+    #
+    #   /include/mruby/value.h:
+    #
+    #   /src/value_array.h:
+    #
     def get_dependencies(file)
       file = file.ext('d') unless File.extname(file) == '.d'
+      deps = []
       if File.exist?(file)
-        File.read(file).gsub("\\\n ", "").scan(/^\S+:\s+(.+)$/).flatten.map {|s| s.split(' ') }.flatten
-      else
-        []
-      end + [ MRUBY_CONFIG ]
+        File.foreach(file){|line| deps << $1 if /^ +(.*?)(?: *\\)?$/ =~ line}
+        deps.uniq!
+      end
+      deps << MRUBY_CONFIG
     end
   end
 
@@ -148,18 +175,14 @@ module MRuby
       @flags_before_libraries, @flags_after_libraries = [], []
       @libraries = []
       @library_paths = []
-      @option_library = '-l%s'
-      @option_library_path = '-L%s'
-      @link_options = "%{flags} -o %{outfile} %{objs} %{flags_before_libraries} %{libs} %{flags_after_libraries}"
+      @option_library = %q[-l"%s"]
+      @option_library_path = %q[-L"%s"]
+      @link_options = %Q[%{flags} -o "%{outfile}" %{objs} %{flags_before_libraries} %{libs} %{flags_after_libraries}]
     end
 
     def all_flags(_library_paths=[], _flags=[])
       library_path_flags = [library_paths, _library_paths].flatten.map do |f|
-        if MRUBY_BUILD_HOST_IS_CYGWIN
-          option_library_path % cygwin_filename(f)
-        else
-          option_library_path % filename(f)
-        end
+        option_library_path % filename(f)
       end
       [flags, library_path_flags, _flags].flatten.join(' ')
     end
@@ -169,23 +192,15 @@ module MRuby
     end
 
     def run(outfile, objfiles, _libraries=[], _library_paths=[], _flags=[], _flags_before_libraries=[], _flags_after_libraries=[])
-      FileUtils.mkdir_p File.dirname(outfile)
+      mkdir_p File.dirname(outfile)
       library_flags = [libraries, _libraries].flatten.map { |d| option_library % d }
 
       _pp "LD", outfile.relative_path
-      if MRUBY_BUILD_HOST_IS_CYGWIN
-        _run link_options, { :flags => all_flags(_library_paths, _flags),
-                             :outfile => cygwin_filename(outfile) , :objs => cygwin_filename(objfiles).join(' '),
-                             :flags_before_libraries => [flags_before_libraries, _flags_before_libraries].flatten.join(' '),
-                             :flags_after_libraries => [flags_after_libraries, _flags_after_libraries].flatten.join(' '),
-                             :libs => library_flags.join(' ') }
-      else
-        _run link_options, { :flags => all_flags(_library_paths, _flags),
-                             :outfile => filename(outfile) , :objs => filename(objfiles).join(' '),
-                             :flags_before_libraries => [flags_before_libraries, _flags_before_libraries].flatten.join(' '),
-                             :flags_after_libraries => [flags_after_libraries, _flags_after_libraries].flatten.join(' '),
-                             :libs => library_flags.join(' ') }
-      end
+      _run link_options, { :flags => all_flags(_library_paths, _flags),
+                            :outfile => filename(outfile) , :objs => filename(objfiles).map{|f| %Q["#{f}"]}.join(' '),
+                            :flags_before_libraries => [flags_before_libraries, _flags_before_libraries].flatten.join(' '),
+                            :flags_after_libraries => [flags_after_libraries, _flags_after_libraries].flatten.join(' '),
+                            :libs => library_flags.join(' ') }
     end
   end
 
@@ -195,17 +210,13 @@ module MRuby
     def initialize(build)
       super
       @command = ENV['AR'] || 'ar'
-      @archive_options = 'rs %{outfile} %{objs}'
+      @archive_options = 'rs "%{outfile}" %{objs}'
     end
 
     def run(outfile, objfiles)
-      FileUtils.mkdir_p File.dirname(outfile)
+      mkdir_p File.dirname(outfile)
       _pp "AR", outfile.relative_path
-      if MRUBY_BUILD_HOST_IS_CYGWIN
-        _run archive_options, { :outfile => cygwin_filename(outfile), :objs => cygwin_filename(objfiles).join(' ') }
-      else
-        _run archive_options, { :outfile => filename(outfile), :objs => filename(objfiles).join(' ') }
-      end
+      _run archive_options, { :outfile => filename(outfile), :objs => filename(objfiles).map{|f| %Q["#{f}"]}.join(' ') }
     end
   end
 
@@ -215,11 +226,11 @@ module MRuby
     def initialize(build)
       super
       @command = 'bison'
-      @compile_options = '-o %{outfile} %{infile}'
+      @compile_options = %q[-o "%{outfile}" "%{infile}"]
     end
 
     def run(outfile, infile)
-      FileUtils.mkdir_p File.dirname(outfile)
+      mkdir_p File.dirname(outfile)
       _pp "YACC", infile.relative_path, outfile.relative_path
       _run compile_options, { :outfile => filename(outfile) , :infile => filename(infile) }
     end
@@ -231,11 +242,11 @@ module MRuby
     def initialize(build)
       super
       @command = 'gperf'
-      @compile_options = '-L ANSI-C -C -p -j1 -i 1 -g -o -t -N mrb_reserved_word -k"1,3,$" %{infile} > %{outfile}'
+      @compile_options = %q[-L ANSI-C -C -p -j1 -i 1 -g -o -t -N mrb_reserved_word -k"1,3,$" "%{infile}" > "%{outfile}"]
     end
 
     def run(outfile, infile)
-      FileUtils.mkdir_p File.dirname(outfile)
+      mkdir_p File.dirname(outfile)
       _pp "GPERF", infile.relative_path, outfile.relative_path
       _run compile_options, { :outfile => filename(outfile) , :infile => filename(infile) }
     end
@@ -243,36 +254,50 @@ module MRuby
 
   class Command::Git < Command
     attr_accessor :flags
-    attr_accessor :clone_options, :pull_options, :checkout_options
+    attr_accessor :clone_options, :pull_options, :checkout_options, :checkout_detach_options, :reset_options
 
     def initialize(build)
       super
       @command = 'git'
       @flags = %w[]
       @clone_options = "clone %{flags} %{url} %{dir}"
-      @pull_options = "pull"
-      @checkout_options = "checkout %{checksum_hash}"
+      @pull_options = "--git-dir %{repo_dir}/.git --work-tree %{repo_dir} pull"
+      @checkout_options = "--git-dir %{repo_dir}/.git --work-tree %{repo_dir} checkout %{checksum_hash}"
+      @checkout_detach_options = "--git-dir %{repo_dir}/.git --work-tree %{repo_dir} checkout --detach %{checksum_hash}"
+      @reset_options = "--git-dir %{repo_dir}/.git --work-tree %{repo_dir} reset %{checksum_hash}"
     end
 
     def run_clone(dir, url, _flags = [])
       _pp "GIT", url, dir.relative_path
-      _run clone_options, { :flags => [flags, _flags].flatten.join(' '), :url => url, :dir => filename(dir) }
+      _run clone_options, { :flags => [flags, _flags].flatten.join(' '), :url => shellquote(url), :dir => shellquote(filename(dir)) }
     end
 
     def run_pull(dir, url)
-      root = Dir.pwd
-      Dir.chdir dir
       _pp "GIT PULL", url, dir.relative_path
-      _run pull_options
-      Dir.chdir root
+      _run pull_options, { :repo_dir => shellquote(dir) }
     end
 
     def run_checkout(dir, checksum_hash)
-      root = Dir.pwd
-      Dir.chdir dir
-      _pp "GIT CHECKOUT", checksum_hash
-      _run checkout_options, { :checksum_hash => checksum_hash }
-      Dir.chdir root
+      _pp "GIT CHECKOUT", dir, checksum_hash
+      _run checkout_options, { :checksum_hash => checksum_hash, :repo_dir => shellquote(dir) }
+    end
+
+    def run_checkout_detach(dir, checksum_hash)
+      _pp "GIT CHECKOUT DETACH", dir, checksum_hash
+      _run checkout_detach_options, { :checksum_hash => checksum_hash, :repo_dir => shellquote(dir) }
+    end
+
+    def run_reset_hard(dir, checksum_hash)
+      _pp "GIT RESET", dir, checksum_hash
+      _run reset_options, { :checksum_hash => checksum_hash, :repo_dir => shellquote(dir) }
+    end
+
+    def commit_hash(dir)
+      `#{@command} --git-dir #{shellquote(dir +'/.git')} --work-tree #{shellquote(dir)} rev-parse --verify HEAD`.strip
+    end
+
+    def current_branch(dir)
+      `#{@command} --git-dir #{shellquote(dir + '/.git')} --work-tree #{shellquote(dir)} rev-parse --abbrev-ref HEAD`.strip
     end
   end
 
@@ -291,7 +316,9 @@ module MRuby
       infiles.each do |f|
         _pp "MRBC", f.relative_path, nil, :indent => 2
       end
-      IO.popen("#{filename @command} #{@compile_options % {:funcname => funcname}} #{filename(infiles).join(' ')}", 'r+') do |io|
+      cmd = %Q["#{filename @command}" #{@compile_options % {:funcname => funcname}} #{filename(infiles).map{|f| %Q["#{f}"]}.join(' ')}]
+      puts cmd if Rake.verbose
+      IO.popen(cmd, 'r+') do |io|
         out.puts io.read
       end
       # if mrbc execution fail, drop the file

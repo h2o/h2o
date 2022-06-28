@@ -1,5 +1,5 @@
-/*
-** mruby/data.h - Data class
+/**
+** @file mruby/data.h - Data class
 **
 ** See Copyright Notice in mruby.h
 */
@@ -41,7 +41,7 @@ MRB_API struct RData *mrb_data_object_alloc(mrb_state *mrb, struct RClass* klass
 
 #define Data_Make_Struct(mrb,klass,strct,type,sval,data_obj) do { \
   (data_obj) = Data_Wrap_Struct(mrb,klass,type,NULL);\
-  (sval) = mrb_malloc(mrb, sizeof(strct));                     \
+  (sval) = (strct *)mrb_malloc(mrb, sizeof(strct));                     \
   { static const strct zero = { 0 }; *(sval) = zero; };\
   (data_obj)->data = (sval);\
 } while (0)
@@ -63,10 +63,10 @@ MRB_API void *mrb_data_check_get_ptr(mrb_state *mrb, mrb_value, const mrb_data_t
   *(void**)&sval = mrb_data_get_ptr(mrb, obj, type); \
 } while (0)
 
-static inline void
+MRB_INLINE void
 mrb_data_init(mrb_value v, void *ptr, const mrb_data_type *type)
 {
-  mrb_assert(mrb_type(v) == MRB_TT_DATA);
+  mrb_assert(mrb_data_p(v));
   DATA_PTR(v) = ptr;
   DATA_TYPE(v) = type;
 }

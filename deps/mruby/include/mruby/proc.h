@@ -1,5 +1,5 @@
-/*
-** mruby/proc.h - Proc class
+/**
+** @file mruby/proc.h - Proc class
 **
 ** See Copyright Notice in mruby.h
 */
@@ -22,14 +22,19 @@ struct REnv {
   mrb_sym mid;
 };
 
-/* flags (21bits): 1(shared flag):10(cioff/bidx):10(stack_len) */
-#define MRB_ENV_SET_STACK_LEN(e,len) ((e)->flags = (((e)->flags & ~0x3ff)|((unsigned int)(len) & 0x3ff)))
-#define MRB_ENV_STACK_LEN(e) ((mrb_int)((e)->flags & 0x3ff))
-#define MRB_ENV_STACK_UNSHARED (1<<20)
-#define MRB_ENV_UNSHARE_STACK(e) ((e)->flags |= MRB_ENV_STACK_UNSHARED)
-#define MRB_ENV_STACK_SHARED_P(e) (((e)->flags & MRB_ENV_STACK_UNSHARED) == 0)
-#define MRB_ENV_BIDX(e) (((e)->flags >> 10) & 0x3ff)
-#define MRB_ENV_SET_BIDX(e,idx) ((e)->flags = (((e)->flags & ~(0x3ff<<10))|((unsigned int)(idx) & 0x3ff)<<10))
+/* flags (21bits): 1(close):1(touched):1(heap):8(cioff/bidx):8(stack_len) */
+#define MRB_ENV_SET_LEN(e,len) ((e)->flags = (((e)->flags & ~0xff)|((unsigned int)(len) & 0xff)))
+#define MRB_ENV_LEN(e) ((mrb_int)((e)->flags & 0xff))
+#define MRB_ENV_CLOSED (1<<20)
+#define MRB_ENV_TOUCHED (1<<19)
+#define MRB_ENV_HEAPED (1<<18)
+#define MRB_ENV_CLOSE(e) ((e)->flags |= MRB_ENV_CLOSED)
+#define MRB_ENV_TOUCH(e) ((e)->flags |= MRB_ENV_TOUCHED)
+#define MRB_ENV_HEAP(e) ((e)->flags |= MRB_ENV_HEAPED)
+#define MRB_ENV_HEAP_P(e) ((e)->flags & MRB_ENV_HEAPED)
+#define MRB_ENV_ONSTACK_P(e) (((e)->flags & MRB_ENV_CLOSED) == 0)
+#define MRB_ENV_BIDX(e) (((e)->flags >> 8) & 0xff)
+#define MRB_ENV_SET_BIDX(e,idx) ((e)->flags = (((e)->flags & ~(0xff<<8))|((unsigned int)(idx) & 0xff)<<10))
 
 void mrb_env_unshare(mrb_state*, struct REnv*);
 
@@ -86,38 +91,44 @@ struct RProc *mrb_closure_new(mrb_state*, mrb_irep*);
 MRB_API struct RProc *mrb_proc_new_cfunc(mrb_state*, mrb_func_t);
 MRB_API struct RProc *mrb_closure_new_cfunc(mrb_state *mrb, mrb_func_t func, int nlocals);
 void mrb_proc_copy(struct RProc *a, struct RProc *b);
+mrb_int mrb_proc_arity(const struct RProc *p);
 
 /* implementation of #send method */
 mrb_value mrb_f_send(mrb_state *mrb, mrb_value self);
 
 /* following functions are defined in mruby-proc-ext so please include it when using */
-MRB_API struct RProc *mrb_proc_new_cfunc_with_env(mrb_state*, mrb_func_t, mrb_int, const mrb_value*);
-MRB_API mrb_value mrb_proc_cfunc_env_get(mrb_state*, mrb_int);
+MRB_API struct RProc *mrb_proc_new_cfunc_with_env(mrb_state *mrb, mrb_func_t func, mrb_int argc, const mrb_value *argv);
+MRB_API mrb_value mrb_proc_cfunc_env_get(mrb_state *mrb, mrb_int idx);
 /* old name */
 #define mrb_cfunc_env_get(mrb, idx) mrb_proc_cfunc_env_get(mrb, idx)
 
-#ifdef MRB_METHOD_TABLE_INLINE
+#define MRB_METHOD_FUNC_FL 1
+#define MRB_METHOD_NOARG_FL 2
+#ifndef MRB_METHOD_T_STRUCT
 
-#define MRB_METHOD_FUNC_FL ((uintptr_t)1)
 #define MRB_METHOD_FUNC_P(m) (((uintptr_t)(m))&MRB_METHOD_FUNC_FL)
-#define MRB_METHOD_FUNC(m) ((mrb_func_t)((uintptr_t)(m)&(~MRB_METHOD_FUNC_FL)))
-#define MRB_METHOD_FROM_FUNC(m,fn) ((m)=(mrb_method_t)((struct RProc*)((uintptr_t)(fn)|MRB_METHOD_FUNC_FL)))
-#define MRB_METHOD_FROM_PROC(m,pr) ((m)=(mrb_method_t)(struct RProc*)(pr))
+#define MRB_METHOD_NOARG_P(m) (((uintptr_t)(m))&MRB_METHOD_NOARG_FL)
+#define MRB_METHOD_NOARG_SET(m) ((m)=(mrb_method_t)(((uintptr_t)(m))|MRB_METHOD_NOARG_FL))
+#define MRB_METHOD_FUNC(m) ((mrb_func_t)((uintptr_t)(m)>>2))
+#define MRB_METHOD_FROM_FUNC(m,fn) ((m)=(mrb_method_t)((((uintptr_t)(fn))<<2)|MRB_METHOD_FUNC_FL))
+#define MRB_METHOD_FROM_PROC(m,pr) ((m)=(mrb_method_t)(pr))
 #define MRB_METHOD_PROC_P(m) (!MRB_METHOD_FUNC_P(m))
 #define MRB_METHOD_PROC(m) ((struct RProc*)(m))
 #define MRB_METHOD_UNDEF_P(m) ((m)==0)
 
 #else
 
-#define MRB_METHOD_FUNC_P(m) ((m).func_p)
+#define MRB_METHOD_FUNC_P(m) ((m).flags&MRB_METHOD_FUNC_FL)
+#define MRB_METHOD_NOARG_P(m) ((m).flags&MRB_METHOD_NOARG_FL)
 #define MRB_METHOD_FUNC(m) ((m).func)
-#define MRB_METHOD_FROM_FUNC(m,fn) do{(m).func_p=TRUE;(m).func=(fn);}while(0)
-#define MRB_METHOD_FROM_PROC(m,pr) do{(m).func_p=FALSE;(m).proc=(pr);}while(0)
+#define MRB_METHOD_NOARG_SET(m) do{(m).flags|=MRB_METHOD_NOARG_FL;}while(0)
+#define MRB_METHOD_FROM_FUNC(m,fn) do{(m).flags=MRB_METHOD_FUNC_FL;(m).func=(fn);}while(0)
+#define MRB_METHOD_FROM_PROC(m,pr) do{(m).flags=0;(m).proc=(pr);}while(0)
 #define MRB_METHOD_PROC_P(m) (!MRB_METHOD_FUNC_P(m))
 #define MRB_METHOD_PROC(m) ((m).proc)
 #define MRB_METHOD_UNDEF_P(m) ((m).proc==NULL)
 
-#endif /* MRB_METHOD_TABLE_INLINE */
+#endif /* MRB_METHOD_T_STRUCT */
 
 #define MRB_METHOD_CFUNC_P(m) (MRB_METHOD_FUNC_P(m)?TRUE:(MRB_METHOD_PROC(m)?(MRB_PROC_CFUNC_P(MRB_METHOD_PROC(m))):FALSE))
 #define MRB_METHOD_CFUNC(m) (MRB_METHOD_FUNC_P(m)?MRB_METHOD_FUNC(m):((MRB_METHOD_PROC(m)&&MRB_PROC_CFUNC_P(MRB_METHOD_PROC(m)))?MRB_PROC_CFUNC(MRB_METHOD_PROC(m)):NULL))

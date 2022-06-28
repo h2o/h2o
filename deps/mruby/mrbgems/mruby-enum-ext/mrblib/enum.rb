@@ -811,10 +811,6 @@ module Enumerable
     h
   end
 
-  def nil.to_h
-    {}
-  end
-
   def uniq(&block)
     hash = {}
     if block
@@ -829,5 +825,35 @@ module Enumerable
       end
     end
     hash.values
+  end
+
+  def filter_map(&blk)
+    return to_enum(:filter_map) unless blk
+
+    ary = []
+    self.each do |x|
+      x = blk.call(x)
+      ary.push x if x
+    end
+    ary
+  end
+
+  alias filter select
+
+  ##
+  # call-seq:
+  #   enum.tally -> a_hash
+  #
+  # Tallys the collection.  Returns a hash where the keys are the
+  # elements and the values are numbers of elements in the collection
+  # that correspond to the key.
+  #
+  #    ["a", "b", "c", "b"].tally #=> {"a"=>1, "b"=>2, "c"=>1}
+  def tally
+    hash = {}
+    self.each do |x|
+      hash[x] = (hash[x]||0)+1
+    end
+    hash
   end
 end

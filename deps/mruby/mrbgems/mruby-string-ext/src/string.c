@@ -5,82 +5,90 @@
 #include <mruby/string.h>
 #include <mruby/range.h>
 
-static mrb_value
-mrb_str_getbyte(mrb_state *mrb, mrb_value str)
-{
-  mrb_int pos;
-  mrb_get_args(mrb, "i", &pos);
+#define ENC_ASCII_8BIT "ASCII-8BIT"
+#define ENC_BINARY     "BINARY"
+#define ENC_UTF8       "UTF-8"
 
-  if (pos < 0)
-    pos += RSTRING_LEN(str);
-  if (pos < 0 ||  RSTRING_LEN(str) <= pos)
-    return mrb_nil_value();
+#define ENC_COMP_P(enc, enc_lit) \
+  str_casecmp_p(RSTRING_PTR(enc), RSTRING_LEN(enc), enc_lit, sizeof(enc_lit"")-1)
 
-  return mrb_fixnum_value((unsigned char)RSTRING_PTR(str)[pos]);
-}
-
-static mrb_value
-mrb_str_setbyte(mrb_state *mrb, mrb_value str)
-{
-  mrb_int pos, byte;
-  mrb_int len;
-
-  mrb_get_args(mrb, "ii", &pos, &byte);
-
-  len = RSTRING_LEN(str);
-  if (pos < -len || len <= pos)
-    mrb_raisef(mrb, E_INDEX_ERROR, "index %S is out of array", mrb_fixnum_value(pos));
-  if (pos < 0)
-    pos += len;
-
-  mrb_str_modify(mrb, mrb_str_ptr(str));
-  byte &= 0xff;
-  RSTRING_PTR(str)[pos] = (unsigned char)byte;
-  return mrb_fixnum_value((unsigned char)byte);
-}
-
-static mrb_value
-mrb_str_byteslice(mrb_state *mrb, mrb_value str)
-{
-  mrb_value a1;
-  mrb_int len;
-
-  if (mrb_get_argc(mrb) == 2) {
-    mrb_int pos;
-    mrb_get_args(mrb, "ii", &pos, &len);
-    return mrb_str_substr(mrb, str, pos, len);
-  }
-  mrb_get_args(mrb, "o|i", &a1, &len);
-  switch (mrb_type(a1)) {
-  case MRB_TT_RANGE:
-    {
-      mrb_int beg;
-
-      len = RSTRING_LEN(str);
-      switch (mrb_range_beg_len(mrb, a1, &beg, &len, len, TRUE)) {
-      case 0:                   /* not range */
-        break;
-      case 1:                   /* range */
-        return mrb_str_substr(mrb, str, beg, len);
-      case 2:                   /* out of range */
-        mrb_raisef(mrb, E_RANGE_ERROR, "%S out of range", a1);
-        break;
-      }
-      return mrb_nil_value();
-    }
-#ifndef MRB_WITHOUT_FLOAT
-  case MRB_TT_FLOAT:
-    a1 = mrb_fixnum_value((mrb_int)mrb_float(a1));
-    /* fall through */
+#ifdef MRB_WITHOUT_FLOAT
+# define mrb_float_p(o) FALSE
 #endif
-  case MRB_TT_FIXNUM:
-    return mrb_str_substr(mrb, str, mrb_fixnum(a1), 1);
-  default:
-    mrb_raise(mrb, E_TYPE_ERROR, "wrong type of argument");
+
+static mrb_bool
+str_casecmp_p(const char *s1, mrb_int len1, const char *s2, mrb_int len2)
+{
+  const char *e1, *e2;
+
+  if (len1 != len2) return FALSE;
+  e1 = s1 + len1;
+  e2 = s2 + len2;
+  while (s1 < e1 && s2 < e2) {
+    if (*s1 != *s2 && TOUPPER(*s1) != TOUPPER(*s2)) return FALSE;
+    ++s1;
+    ++s2;
   }
-  /* not reached */
-  return mrb_nil_value();
+  return TRUE;
 }
+
+static mrb_value
+int_chr_binary(mrb_state *mrb, mrb_value num)
+{
+  mrb_int cp = mrb_int(mrb, num);
+  char c;
+  mrb_value str;
+
+  if (cp < 0 || 0xff < cp) {
+    mrb_raisef(mrb, E_RANGE_ERROR, "%v out of char range", num);
+  }
+  c = (char)cp;
+  str = mrb_str_new(mrb, &c, 1);
+  RSTR_SET_ASCII_FLAG(mrb_str_ptr(str));
+  return str;
+}
+
+#ifdef MRB_UTF8_STRING
+static mrb_value
+int_chr_utf8(mrb_state *mrb, mrb_value num)
+{
+  mrb_int cp = mrb_int(mrb, num);
+  char utf8[4];
+  mrb_int len;
+  mrb_value str;
+  uint32_t ascii_flag = 0;
+
+  if (cp < 0 || 0x10FFFF < cp) {
+    mrb_raisef(mrb, E_RANGE_ERROR, "%v out of char range", num);
+  }
+  if (cp < 0x80) {
+    utf8[0] = (char)cp;
+    len = 1;
+    ascii_flag = MRB_STR_ASCII;
+  }
+  else if (cp < 0x800) {
+    utf8[0] = (char)(0xC0 | (cp >> 6));
+    utf8[1] = (char)(0x80 | (cp & 0x3F));
+    len = 2;
+  }
+  else if (cp < 0x10000) {
+    utf8[0] = (char)(0xE0 |  (cp >> 12));
+    utf8[1] = (char)(0x80 | ((cp >>  6) & 0x3F));
+    utf8[2] = (char)(0x80 | ( cp        & 0x3F));
+    len = 3;
+  }
+  else {
+    utf8[0] = (char)(0xF0 |  (cp >> 18));
+    utf8[1] = (char)(0x80 | ((cp >> 12) & 0x3F));
+    utf8[2] = (char)(0x80 | ((cp >>  6) & 0x3F));
+    utf8[3] = (char)(0x80 | ( cp        & 0x3F));
+    len = 4;
+  }
+  str = mrb_str_new(mrb, utf8, len);
+  mrb_str_ptr(str)->flags |= ascii_flag;
+  return str;
+}
+#endif
 
 /*
  *  call-seq:
@@ -137,8 +145,6 @@ mrb_str_swapcase(mrb_state *mrb, mrb_value self)
   return str;
 }
 
-static mrb_value mrb_fixnum_chr(mrb_state *mrb, mrb_value num);
-
 /*
  *  call-seq:
  *     str << integer       -> str
@@ -148,7 +154,8 @@ static mrb_value mrb_fixnum_chr(mrb_state *mrb, mrb_value num);
  *
  *  Append---Concatenates the given object to <i>str</i>. If the object is a
  *  <code>Integer</code>, it is considered as a codepoint, and is converted
- *  to a character before concatenation.
+ *  to a character before concatenation
+ *  (equivalent to <code>str.concat(integer.chr(__ENCODING__))</code>).
  *
  *     a = "hello "
  *     a << "world"   #=> "hello world"
@@ -157,14 +164,17 @@ static mrb_value mrb_fixnum_chr(mrb_state *mrb, mrb_value num);
 static mrb_value
 mrb_str_concat_m(mrb_state *mrb, mrb_value self)
 {
-  mrb_value str;
+  mrb_value str = mrb_get_arg1(mrb);
 
-  mrb_get_args(mrb, "o", &str);
-  if (mrb_fixnum_p(str))
-    str = mrb_fixnum_chr(mrb, str);
+  if (mrb_fixnum_p(str) || mrb_float_p(str))
+#ifdef MRB_UTF8_STRING
+    str = int_chr_utf8(mrb, str);
+#else
+    str = int_chr_binary(mrb, str);
+#endif
   else
-    str = mrb_ensure_string_type(mrb, str);
-  mrb_str_concat(mrb, self, str);
+    mrb_ensure_string_type(mrb, str);
+  mrb_str_cat_str(mrb, self, str);
   return self;
 }
 
@@ -324,7 +334,7 @@ tr_parse_pattern(mrb_state *mrb, struct tr_pattern *ret, const mrb_value v_patte
 
       len = i - start_pos;
       if (len > UINT16_MAX) {
-        mrb_raise(mrb, E_ARGUMENT_ERROR, "tr pattern too long (max 65536)");
+        mrb_raise(mrb, E_ARGUMENT_ERROR, "tr pattern too long (max 65535)");
       }
       if (pat1 == NULL && ret) {
         goto nomem;
@@ -332,9 +342,9 @@ tr_parse_pattern(mrb_state *mrb, struct tr_pattern *ret, const mrb_value v_patte
       pat1->type = TR_IN_ORDER;
       pat1->flag_reverse = flag_reverse;
       pat1->flag_on_heap = !ret_uninit;
-      pat1->n = len;
+      pat1->n = (uint16_t)len;
       pat1->next = NULL;
-      pat1->val.start_pos = start_pos;
+      pat1->val.start_pos = (uint16_t)start_pos;
     }
 
     if (ret == NULL || ret_uninit) {
@@ -507,8 +517,7 @@ str_tr(mrb_state *mrb, mrb_value str, mrb_value p1, mrb_value p2, mrb_bool squee
           continue;
         }
         if (c > 0x80) {
-          mrb_raisef(mrb, E_ARGUMENT_ERROR, "character (%S) out of range",
-                     mrb_fixnum_value((mrb_int)c));
+          mrb_raisef(mrb, E_ARGUMENT_ERROR, "character (%i) out of range", c);
         }
 	lastch = c;
 	s[i] = (char)c;
@@ -812,7 +821,7 @@ mrb_str_count(mrb_state *mrb, mrb_value str)
   tr_parse_pattern(mrb, &pat, v_pat, TRUE);
   tr_compile_pattern(&pat, v_pat, bitmap);
   tr_free_pattern(mrb, &pat);
-  
+
   s = RSTRING_PTR(str);
   len = RSTRING_LEN(str);
   for (i = 0; i < len; i++) {
@@ -848,49 +857,42 @@ mrb_str_chr(mrb_state *mrb, mrb_value self)
   return mrb_str_substr(mrb, self, 0, 1);
 }
 
+/*
+ *  call-seq:
+ *     int.chr([encoding])  ->  string
+ *
+ *  Returns a string containing the character represented by the +int+'s value
+ *  according to +encoding+. +"ASCII-8BIT"+ (+"BINARY"+) and +"UTF-8"+ (only
+ *  with +MRB_UTF8_STRING+) can be specified as +encoding+ (default is
+ *  +"ASCII-8BIT"+).
+ *
+ *     65.chr                  #=> "A"
+ *     230.chr                 #=> "\xE6"
+ *     230.chr("ASCII-8BIT")   #=> "\xE6"
+ *     230.chr("UTF-8")        #=> "\u00E6"
+ */
 static mrb_value
-mrb_fixnum_chr(mrb_state *mrb, mrb_value num)
+mrb_int_chr(mrb_state *mrb, mrb_value num)
 {
-  mrb_int cp = mrb_fixnum(num);
+  mrb_value enc;
+  mrb_bool enc_given;
+
+  mrb_get_args(mrb, "|S?", &enc, &enc_given);
+  if (!enc_given ||
+      ENC_COMP_P(enc, ENC_ASCII_8BIT) ||
+      ENC_COMP_P(enc, ENC_BINARY)) {
+    return int_chr_binary(mrb, num);
+  }
 #ifdef MRB_UTF8_STRING
-  char utf8[4];
-  mrb_int len;
-
-  if (cp < 0 || 0x10FFFF < cp) {
-    mrb_raisef(mrb, E_RANGE_ERROR, "%S out of char range", num);
+  else if (ENC_COMP_P(enc, ENC_UTF8)) {
+    return int_chr_utf8(mrb, num);
   }
-  if (cp < 0x80) {
-    utf8[0] = (char)cp;
-    len = 1;
-  }
-  else if (cp < 0x800) {
-    utf8[0] = (char)(0xC0 | (cp >> 6));
-    utf8[1] = (char)(0x80 | (cp & 0x3F));
-    len = 2;
-  }
-  else if (cp < 0x10000) {
-    utf8[0] = (char)(0xE0 |  (cp >> 12));
-    utf8[1] = (char)(0x80 | ((cp >>  6) & 0x3F));
-    utf8[2] = (char)(0x80 | ( cp        & 0x3F));
-    len = 3;
-  }
-  else {
-    utf8[0] = (char)(0xF0 |  (cp >> 18));
-    utf8[1] = (char)(0x80 | ((cp >> 12) & 0x3F));
-    utf8[2] = (char)(0x80 | ((cp >>  6) & 0x3F));
-    utf8[3] = (char)(0x80 | ( cp        & 0x3F));
-    len = 4;
-  }
-  return mrb_str_new(mrb, utf8, len);
-#else
-  char c;
-
-  if (cp < 0 || 0xff < cp) {
-    mrb_raisef(mrb, E_RANGE_ERROR, "%S out of char range", num);
-  }
-  c = (char)cp;
-  return mrb_str_new(mrb, &c, 1);
 #endif
+  else {
+    mrb_raisef(mrb, E_ARGUMENT_ERROR, "unknown encoding name - %v", enc);
+  }
+  /* not reached */
+  return mrb_nil_value();
 }
 
 /*
@@ -1078,7 +1080,7 @@ mrb_str_del_prefix_bang(mrb_state *mrb, mrb_value self)
   if (plen > slen) return mrb_nil_value();
   s = RSTR_PTR(str);
   if (memcmp(s, ptr, plen) != 0) return mrb_nil_value();
-  if (!MRB_FROZEN_P(str) && (RSTR_SHARED_P(str) || RSTR_FSHARED_P(str))) {
+  if (!mrb_frozen_p(str) && (RSTR_SHARED_P(str) || RSTR_FSHARED_P(str))) {
     str->as.heap.ptr += plen;
   }
   else {
@@ -1135,7 +1137,7 @@ mrb_str_del_suffix_bang(mrb_state *mrb, mrb_value self)
   if (plen > slen) return mrb_nil_value();
   s = RSTR_PTR(str);
   if (memcmp(s+slen-plen, ptr, plen) != 0) return mrb_nil_value();
-  if (!MRB_FROZEN_P(str) && (RSTR_SHARED_P(str) || RSTR_FSHARED_P(str))) {
+  if (!mrb_frozen_p(str) && (RSTR_SHARED_P(str) || RSTR_FSHARED_P(str))) {
     /* no need to modify string */
   }
   else {
@@ -1178,8 +1180,6 @@ mrb_str_lines(mrb_state *mrb, mrb_value self)
   char *p = b, *t;
   char *e = b + RSTRING_LEN(self);
 
-  mrb_get_args(mrb, "");
-
   result = mrb_ary_new(mrb);
   ai = mrb_gc_arena_save(mrb);
   while (p < e) {
@@ -1199,9 +1199,6 @@ mrb_mruby_string_ext_gem_init(mrb_state* mrb)
   struct RClass * s = mrb->string_class;
 
   mrb_define_method(mrb, s, "dump",            mrb_str_dump,            MRB_ARGS_NONE());
-  mrb_define_method(mrb, s, "getbyte",         mrb_str_getbyte,         MRB_ARGS_REQ(1));
-  mrb_define_method(mrb, s, "setbyte",         mrb_str_setbyte,         MRB_ARGS_REQ(2));
-  mrb_define_method(mrb, s, "byteslice",       mrb_str_byteslice,       MRB_ARGS_REQ(1)|MRB_ARGS_OPT(1));
   mrb_define_method(mrb, s, "swapcase!",       mrb_str_swapcase_bang,   MRB_ARGS_NONE());
   mrb_define_method(mrb, s, "swapcase",        mrb_str_swapcase,        MRB_ARGS_NONE());
   mrb_define_method(mrb, s, "concat",          mrb_str_concat_m,        MRB_ARGS_REQ(1));
@@ -1222,8 +1219,8 @@ mrb_mruby_string_ext_gem_init(mrb_state* mrb)
   mrb_define_method(mrb, s, "chr",             mrb_str_chr,             MRB_ARGS_NONE());
   mrb_define_method(mrb, s, "succ",            mrb_str_succ,            MRB_ARGS_NONE());
   mrb_define_method(mrb, s, "succ!",           mrb_str_succ_bang,       MRB_ARGS_NONE());
-  mrb_define_alias(mrb,  s, "next",            "succ");
-  mrb_define_alias(mrb,  s, "next!",           "succ!");
+  mrb_define_method(mrb, s, "next",            mrb_str_succ,            MRB_ARGS_NONE());
+  mrb_define_method(mrb, s, "next!",           mrb_str_succ_bang,       MRB_ARGS_NONE());
   mrb_define_method(mrb, s, "ord",             mrb_str_ord,             MRB_ARGS_NONE());
   mrb_define_method(mrb, s, "delete_prefix!",  mrb_str_del_prefix_bang, MRB_ARGS_REQ(1));
   mrb_define_method(mrb, s, "delete_prefix",   mrb_str_del_prefix,      MRB_ARGS_REQ(1));
@@ -1231,7 +1228,8 @@ mrb_mruby_string_ext_gem_init(mrb_state* mrb)
   mrb_define_method(mrb, s, "delete_suffix",   mrb_str_del_suffix,      MRB_ARGS_REQ(1));
 
   mrb_define_method(mrb, s, "__lines",         mrb_str_lines,           MRB_ARGS_NONE());
-  mrb_define_method(mrb, mrb->fixnum_class, "chr", mrb_fixnum_chr, MRB_ARGS_NONE());
+
+  mrb_define_method(mrb, mrb_module_get(mrb, "Integral"), "chr", mrb_int_chr, MRB_ARGS_OPT(1));
 }
 
 void

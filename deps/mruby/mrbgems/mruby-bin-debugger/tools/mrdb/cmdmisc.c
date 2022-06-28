@@ -82,6 +82,12 @@ static help_msg help_msg_list[] = {
     "Arguments are breakpoint numbers with spaces in between.\n"
   },
   {
+    "i[nfo]", "l[ocals]", "Print name of local variables",
+    "Usage: info locals\n"
+    "\n"
+    "Print name of local variables.\n"
+  },
+  {
     "l[ist]", NULL, "List specified line",
     "Usage: list\n"
     "       list first[,last]\n"

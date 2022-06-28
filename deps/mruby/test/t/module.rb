@@ -21,8 +21,27 @@ def labeled_class(name, supklass = Object, &block)
   end
 end
 
+def assert_uninitialized_const(&block)
+  assert_raise_with_message_pattern(NameError, "uninitialized constant *", &block)
+end
+
+def assert_wrong_const_name(&block)
+  assert_raise_with_message_pattern(NameError, "wrong constant name *", &block)
+end
+
 assert('Module', '15.2.2') do
   assert_equal Class, Module.class
+end
+
+assert('Module#alias_method', '15.2.2.4.8') do
+  cls = Class.new do
+    def foo
+      "FOO"
+    end
+  end
+
+  assert_same(cls, cls.alias_method(:bar, :foo))
+  assert_equal("FOO", cls.new.bar)
 end
 
 # TODO not implemented ATM assert('Module.constants', '15.2.2.3.1') do
@@ -48,6 +67,7 @@ assert('Module#append_features', '15.2.2.4.10') do
   end
 
   assert_equal Test4AppendFeatures2, Test4AppendFeatures2.const_get(:Const4AppendFeatures2)
+  assert_raise(FrozenError) { Module.new.append_features Class.new.freeze }
 end
 
 assert('Module#attr NameError') do
@@ -210,6 +230,7 @@ assert('Module#const_defined?', '15.2.2.4.20') do
 
   assert_true Test4ConstDefined.const_defined?(:Const4Test4ConstDefined)
   assert_false Test4ConstDefined.const_defined?(:NotExisting)
+  assert_wrong_const_name{ Test4ConstDefined.const_defined?(:wrong_name) }
 end
 
 assert('Module#const_get', '15.2.2.4.21') do
@@ -222,8 +243,9 @@ assert('Module#const_get', '15.2.2.4.21') do
   assert_equal 42, Object.const_get("Test4ConstGet::Const4Test4ConstGet")
 
   assert_raise(TypeError){ Test4ConstGet.const_get(123) }
-  assert_raise(NameError){ Test4ConstGet.const_get(:I_DO_NOT_EXIST) }
-  assert_raise(NameError){ Test4ConstGet.const_get("I_DO_NOT_EXIST::ME_NEITHER") }
+  assert_uninitialized_const{ Test4ConstGet.const_get(:I_DO_NOT_EXIST) }
+  assert_uninitialized_const{ Test4ConstGet.const_get("I_DO_NOT_EXIST::ME_NEITHER") }
+  assert_wrong_const_name{ Test4ConstGet.const_get(:wrong_name) }
 end
 
 assert('Module#const_set', '15.2.2.4.23') do
@@ -231,8 +253,11 @@ assert('Module#const_set', '15.2.2.4.23') do
     Const4Test4ConstSet = 42
   end
 
-  assert_true Test4ConstSet.const_set(:Const4Test4ConstSet, 23)
+  assert_equal 23, Test4ConstSet.const_set(:Const4Test4ConstSet, 23)
   assert_equal 23, Test4ConstSet.const_get(:Const4Test4ConstSet)
+  ["", "wrongNAME", "Wrong-Name"].each do |n|
+    assert_wrong_const_name { Test4ConstSet.const_set(n, 1) }
+  end
 end
 
 assert('Module#remove_const', '15.2.2.4.40') do
@@ -240,21 +265,15 @@ assert('Module#remove_const', '15.2.2.4.40') do
     ExistingConst = 23
   end
 
-  result = Test4RemoveConst.module_eval { remove_const :ExistingConst }
-
-  name_error = false
-  begin
-    Test4RemoveConst.module_eval { remove_const :NonExistingConst }
-  rescue NameError
-    name_error = true
+  assert_equal 23, Test4RemoveConst.remove_const(:ExistingConst)
+  assert_false Test4RemoveConst.const_defined?(:ExistingConst)
+  assert_raise_with_message_pattern(NameError, "constant * not defined") do
+    Test4RemoveConst.remove_const(:NonExistingConst)
   end
-
-  # Constant removed from Module
-  assert_false Test4RemoveConst.const_defined? :ExistingConst
-  # Return value of binding
-  assert_equal 23, result
-  # Name Error raised when Constant doesn't exist
-  assert_true name_error
+  %i[x X!].each do |n|
+    assert_wrong_const_name { Test4RemoveConst.remove_const(n) }
+  end
+  assert_raise(FrozenError) { Test4RemoveConst.freeze.remove_const(:A) }
 end
 
 assert('Module#const_missing', '15.2.2.4.22') do
@@ -265,6 +284,18 @@ assert('Module#const_missing', '15.2.2.4.22') do
   end
 
   assert_equal 42, Test4ConstMissing.const_get(:ConstDoesntExist)
+end
+
+assert('Module#extend_object', '15.2.2.4.25') do
+  cls = Class.new
+  mod = Module.new { def foo; end }
+  a = cls.new
+  b = cls.new
+  mod.extend_object(b)
+  assert_false a.respond_to?(:foo)
+  assert_true b.respond_to?(:foo)
+  assert_raise(FrozenError) { mod.extend_object(cls.new.freeze) }
+  assert_raise(FrozenError, TypeError) { mod.extend_object(1) }
 end
 
 assert('Module#include', '15.2.2.4.27') do
@@ -280,6 +311,7 @@ assert('Module#include', '15.2.2.4.27') do
 
   assert_equal 42, Test4Include2.const_get(:Const4Include)
   assert_equal Test4Include2, Test4Include2.include_result
+  assert_raise(FrozenError) { Module.new.freeze.include Test4Include }
 end
 
 assert('Module#include?', '15.2.2.4.28') do
@@ -378,6 +410,29 @@ end
 
 # Not ISO specified
 
+assert('Module#dup') do
+  module TestModuleDup
+    @@cvar = :cvar
+    class << self
+      attr_accessor :cattr
+      def cmeth; :cmeth end
+    end
+    def cvar; @@cvar end
+    def imeth; :imeth end
+    self.cattr = :cattr
+  end
+
+  m = TestModuleDup.dup
+  o = Object.include(m).new
+  assert_equal(:cattr, m.cattr)
+  assert_equal(:cmeth, m.cmeth)
+  assert_equal(:cvar, o.cvar)
+  assert_equal(:imeth, o.imeth)
+  assert_match("#<Module:0x*>", m.to_s)
+  assert_not_predicate(m, :frozen?)
+  assert_not_predicate(TestModuleDup.freeze.dup, :frozen?)
+end
+
 assert('Module#define_method') do
   c = Class.new {
     define_method(:m1) { :ok }
@@ -388,6 +443,15 @@ assert('Module#define_method') do
   assert_raise(TypeError) do
     Class.new { define_method(:n1, nil) }
   end
+end
+
+assert 'Module#prepend_features' do
+  mod = Module.new { def m; :mod end }
+  cls = Class.new { def m; :cls end }
+  assert_equal :cls, cls.new.m
+  mod.prepend_features(cls)
+  assert_equal :mod, cls.new.m
+  assert_raise(FrozenError) { Module.new.prepend_features(Class.new.freeze) }
 end
 
 # @!group prepend
@@ -624,6 +688,10 @@ end
   #    end
   #  end;
   #end
+
+  assert 'Module#prepend to frozen class' do
+    assert_raise(FrozenError) { Class.new.freeze.prepend Module.new }
+  end
 # @!endgroup prepend
 
 assert('Module#to_s') do
@@ -644,11 +712,12 @@ assert('Module#to_s') do
   assert_equal 'SetOuter', SetOuter.to_s
   assert_equal 'SetOuter::SetInner', SetOuter::SetInner.to_s
 
-  mod = Module.new
-  cls = Class.new
+  assert_match "#<Module:0x*>", Module.new.to_s
+  assert_match "#<Class:0x*>", Class.new.to_s
 
-  assert_equal "#<Module:0x", mod.to_s[0,11]
-  assert_equal "#<Class:0x", cls.to_s[0,10]
+  assert_equal "FrozenClassToS", (FrozenClassToS = Class.new.freeze).to_s
+  assert_equal "Outer::A", (Outer::A = Module.new.freeze).to_s
+  assert_match "#<Module:0x*>::A", (Module.new::A = Class.new.freeze).to_s
 end
 
 assert('Module#inspect') do
@@ -676,8 +745,8 @@ assert('Issue 1467') do
     include M1
   end
 
-  C1.new
-  C2.new
+  assert_kind_of(M1, C1.new)
+  assert_kind_of(M1, C2.new)
 end
 
 assert('clone Module') do
@@ -691,7 +760,7 @@ assert('clone Module') do
     include M1.clone
   end
 
-  B.new.foo
+  assert_true(B.new.foo)
 end
 
 assert('Module#module_function') do

@@ -72,13 +72,10 @@ fiber_init(mrb_state *mrb, mrb_value self)
   mrb_value blk;
   size_t slen;
 
-  mrb_get_args(mrb, "&", &blk);
+  mrb_get_args(mrb, "&!", &blk);
 
   if (f->cxt) {
     mrb_raise(mrb, E_RUNTIME_ERROR, "cannot initialize twice");
-  }
-  if (mrb_nil_p(blk)) {
-    mrb_raise(mrb, E_ARGUMENT_ERROR, "tried to create Fiber object without a block");
   }
   p = mrb_proc_ptr(blk);
   if (MRB_PROC_CFUNC_P(p)) {
@@ -191,14 +188,21 @@ fiber_switch(mrb_state *mrb, mrb_value self, mrb_int len, const mrb_value *a, mr
 
   fiber_check_cfunc(mrb, c);
   status = c->status;
-  if (resume && status == MRB_FIBER_TRANSFERRED) {
-    mrb_raise(mrb, E_FIBER_ERROR, "resuming transferred fiber");
-  }
-  if (status == MRB_FIBER_RUNNING || status == MRB_FIBER_RESUMED) {
+  switch (status) {
+  case MRB_FIBER_TRANSFERRED:
+    if (resume) {
+      mrb_raise(mrb, E_FIBER_ERROR, "resuming transferred fiber");
+    }
+    break;
+  case MRB_FIBER_RUNNING:
+  case MRB_FIBER_RESUMED:
     mrb_raise(mrb, E_FIBER_ERROR, "double resume");
-  }
-  if (status == MRB_FIBER_TERMINATED) {
+    break;
+  case MRB_FIBER_TERMINATED:
     mrb_raise(mrb, E_FIBER_ERROR, "resuming dead fiber");
+    break;
+  default:
+    break;
   }
   old_c->status = resume ? MRB_FIBER_RESUMED : MRB_FIBER_TRANSFERRED;
   c->prev = resume ? mrb->c : (c->prev ? c->prev : mrb->root_c);
@@ -287,10 +291,9 @@ mrb_fiber_alive_p(mrb_state *mrb, mrb_value self)
 static mrb_value
 fiber_eq(mrb_state *mrb, mrb_value self)
 {
-  mrb_value other;
-  mrb_get_args(mrb, "o", &other);
+  mrb_value other = mrb_get_arg1(mrb);
 
-  if (mrb_type(other) != MRB_TT_FIBER) {
+  if (!mrb_fiber_p(other)) {
     return mrb_false_value();
   }
   return mrb_bool_value(fiber_ptr(self) == fiber_ptr(other));
@@ -405,7 +408,7 @@ mrb_mruby_fiber_gem_init(mrb_state* mrb)
   c = mrb_define_class(mrb, "Fiber", mrb->object_class);
   MRB_SET_INSTANCE_TT(c, MRB_TT_FIBER);
 
-  mrb_define_method(mrb, c, "initialize", fiber_init,    MRB_ARGS_NONE());
+  mrb_define_method(mrb, c, "initialize", fiber_init,    MRB_ARGS_NONE()|MRB_ARGS_BLOCK());
   mrb_define_method(mrb, c, "resume",     fiber_resume,  MRB_ARGS_ANY());
   mrb_define_method(mrb, c, "transfer",   fiber_transfer, MRB_ARGS_ANY());
   mrb_define_method(mrb, c, "alive?",     fiber_alive_p, MRB_ARGS_NONE());

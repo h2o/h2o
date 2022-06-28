@@ -1,5 +1,5 @@
-/*
-** mruby/array.h - Array class
+/**
+** @file mruby/array.h - Array class
 **
 ** See Copyright Notice in mruby.h
 */
@@ -17,7 +17,7 @@ MRB_BEGIN_DECL
 
 typedef struct mrb_shared_array {
   int refcnt;
-  mrb_int len;
+  mrb_ssize len;
   mrb_value *ptr;
 } mrb_shared_array;
 
@@ -26,14 +26,14 @@ struct RArray {
   MRB_OBJECT_HEADER;
   union {
     struct {
-      mrb_int len;
+      mrb_ssize len;
       union {
-        mrb_int capa;
+        mrb_ssize capa;
         mrb_shared_array *shared;
       } aux;
       mrb_value *ptr;
     } heap;
-    mrb_value embed[MRB_ARY_EMBED_LEN_MAX];
+    void *ary[3];
   } as;
 };
 
@@ -46,7 +46,7 @@ struct RArray {
 #define ARY_UNSET_EMBED_FLAG(a) ((a)->flags &= ~(MRB_ARY_EMBED_MASK))
 #define ARY_EMBED_LEN(a) ((mrb_int)(((a)->flags & MRB_ARY_EMBED_MASK) - 1))
 #define ARY_SET_EMBED_LEN(a,len) ((a)->flags = ((a)->flags&~MRB_ARY_EMBED_MASK) | ((uint32_t)(len) + 1))
-#define ARY_EMBED_PTR(a) (&((a)->as.embed[0]))
+#define ARY_EMBED_PTR(a) ((mrb_value*)(&(a)->as.ary))
 
 #define ARY_LEN(a) (ARY_EMBED_P(a)?ARY_EMBED_LEN(a):(a)->as.heap.len)
 #define ARY_PTR(a) (ARY_EMBED_P(a)?ARY_EMBED_PTR(a):(a)->as.heap.ptr)
@@ -228,6 +228,23 @@ MRB_API mrb_value mrb_ary_unshift(mrb_state *mrb, mrb_value self, mrb_value item
 MRB_API mrb_value mrb_ary_entry(mrb_value ary, mrb_int offset);
 
 /*
+ * Replace subsequence of an array.
+ *
+ * Equivalent to:
+ *
+ *      ary.shift
+ *
+ * @param mrb The mruby state reference.
+ * @param self The array from which the value will be shifted.
+ * @param head Beginning position of a replacement subsequence.
+ * @param len Length of a replacement subsequence.
+ * @param rpl The array of replacement elements.
+ *            It is possible to pass `mrb_undef_value()` instead of an empty array.
+ * @return The receiver array.
+ */
+MRB_API mrb_value mrb_ary_splice(mrb_state *mrb, mrb_value self, mrb_int head, mrb_int len, mrb_value rpl);
+
+/*
  * Shifts the first element from the array.
  *
  * Equivalent to:
@@ -274,6 +291,9 @@ MRB_API mrb_value mrb_ary_join(mrb_state *mrb, mrb_value ary, mrb_value sep);
  * @param new_len The new capacity of the array
  */
 MRB_API mrb_value mrb_ary_resize(mrb_state *mrb, mrb_value ary, mrb_int new_len);
+
+/* helper functions */
+mrb_value mrb_ary_subseq(mrb_state *mrb, mrb_value ary, mrb_int beg, mrb_int len);
 
 MRB_END_DECL
 

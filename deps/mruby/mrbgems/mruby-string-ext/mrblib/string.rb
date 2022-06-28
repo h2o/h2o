@@ -93,7 +93,7 @@ class String
   #    "hello".rstrip!      #=> nil
   #
   def rstrip!
-    raise RuntimeError, "can't modify frozen String" if frozen?
+    raise FrozenError, "can't modify frozen String" if frozen?
     s = self.rstrip
     (s == self) ? nil : self.replace(s)
   end
@@ -310,11 +310,15 @@ class String
     end
   end
 
+  ##
+  # Call the given block for each character of
+  # +self+.
   def each_char(&block)
     return to_enum :each_char unless block
-
-    split('').each do |i|
-      block.call(i)
+    pos = 0
+    while pos < self.size
+      block.call(self[pos])
+      pos += 1
     end
     self
   end
@@ -410,7 +414,7 @@ class String
       e = max.ord
       while c <= e
         break if exclusive and c == e
-        yield c.chr
+        yield c.chr(__ENCODING__)
         c += 1
       end
       return self

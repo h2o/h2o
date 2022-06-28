@@ -92,7 +92,7 @@ ht_hash_equal(mrb_state *mrb, htable *t, mrb_value a, mrb_value b)
     return mrb_str_equal(mrb, a, b);
 
   case MRB_TT_SYMBOL:
-    if (mrb_type(b) != MRB_TT_SYMBOL) return FALSE;
+    if (!mrb_symbol_p(b)) return FALSE;
     return mrb_symbol(a) == mrb_symbol(b);
 
   case MRB_TT_FIXNUM:
@@ -182,7 +182,7 @@ ht_index(mrb_state *mrb, htable *t)
   if (!index || index->capa < size) {
     index = (segindex*)mrb_realloc_simple(mrb, index, sizeof(segindex)+sizeof(struct segkv*)*size);
     if (index == NULL) {
-      mrb_free(mrb, index);
+      mrb_free(mrb, t->index);
       t->index = NULL;
       return;
     }
@@ -222,9 +222,8 @@ static void
 ht_compact(mrb_state *mrb, htable *t)
 {
   segment *seg;
-  mrb_int i;
+  uint16_t i, i2;
   segment *seg2 = NULL;
-  mrb_int i2;
   mrb_int size = 0;
 
   if (t == NULL) return;
@@ -240,7 +239,7 @@ ht_compact(mrb_state *mrb, htable *t)
       if (!seg->next && i >= t->last_len) {
         goto exit;
       }
-      if (mrb_undef_p(k)) {     /* found delete key */
+      if (mrb_undef_p(k)) {     /* found deleted key */
         if (seg2 == NULL) {
           seg2 = seg;
           i2 = i;
@@ -366,7 +365,7 @@ ht_put(mrb_state *mrb, htable *t, mrb_value key, mrb_value val)
       if (!seg->next && i >= t->last_len) {
         seg->e[i].key = key;
         seg->e[i].val = val;
-        t->last_len = i+1;
+        t->last_len = (uint16_t)i+1;
         t->size++;
         return;
       }
@@ -374,7 +373,7 @@ ht_put(mrb_state *mrb, htable *t, mrb_value key, mrb_value val)
         deleted++;
         continue;
       }
-      if (ht_hash_equal(mrb, t, k, key)) {
+      if (ht_hash_equal(mrb, t, key, k)) {
         seg->e[i].val = val;
         return;
       }
@@ -408,7 +407,7 @@ ht_put(mrb_state *mrb, htable *t, mrb_value key, mrb_value val)
   }
   seg->e[i].key = key;
   seg->e[i].val = val;
-  t->last_len = i+1;
+  t->last_len = (uint16_t)i+1;
   if (t->index == NULL && t->size > MRB_HT_INIT_SIZE*4) {
     ht_index(mrb, t);
   }
@@ -455,7 +454,7 @@ ht_get(mrb_state *mrb, htable *t, mrb_value key, mrb_value *vp)
         return FALSE;
       }
       if (mrb_undef_p(k)) continue;
-      if (ht_hash_equal(mrb, t, k, key)) {
+      if (ht_hash_equal(mrb, t, key, k)) {
         if (vp) *vp = seg->e[i].val;
         return TRUE;
       }
@@ -546,6 +545,7 @@ ht_copy(mrb_state *mrb, htable *t)
       if ((seg->next == NULL) && (i >= t->last_len)) {
         return t2;
       }
+      if (mrb_undef_p(key)) continue; /* skip deleted key */
       ht_put(mrb, t2, key, val);
     }
     seg = seg->next;
@@ -575,7 +575,7 @@ static void mrb_hash_modify(mrb_state *mrb, mrb_value hash);
 static inline mrb_value
 ht_key(mrb_state *mrb, mrb_value key)
 {
-  if (mrb_string_p(key) && !MRB_FROZEN_P(mrb_str_ptr(key))) {
+  if (mrb_string_p(key) && !mrb_frozen_p(mrb_str_ptr(key))) {
     key = mrb_str_dup(mrb, key);
     MRB_SET_FROZEN_FLAG(mrb_str_ptr(key));
   }
@@ -641,12 +641,11 @@ static mrb_value hash_default(mrb_state *mrb, mrb_value hash, mrb_value key);
 static mrb_value
 mrb_hash_init_copy(mrb_state *mrb, mrb_value self)
 {
-  mrb_value orig;
+  mrb_value orig = mrb_get_arg1(mrb);
   struct RHash* copy;
   htable *orig_h;
   mrb_value ifnone, vret;
 
-  mrb_get_args(mrb, "o", &orig);
   if (mrb_obj_equal(mrb, self, orig)) return self;
   if ((mrb_type(self) != mrb_type(orig)) || (mrb_obj_class(mrb, self) != mrb_obj_class(mrb, orig))) {
       mrb_raise(mrb, E_TYPE_ERROR, "initialize_copy should take same class object");
@@ -746,10 +745,7 @@ mrb_hash_set(mrb_state *mrb, mrb_value hash, mrb_value key, mrb_value val)
 static void
 mrb_hash_modify(mrb_state *mrb, mrb_value hash)
 {
-  if (MRB_FROZEN_P(mrb_hash_ptr(hash))) {
-    mrb_raise(mrb, E_FROZEN_ERROR, "can't modify frozen hash");
-  }
-
+  mrb_check_frozen(mrb, mrb_hash_ptr(hash));
   if (!RHASH_TBL(hash)) {
     RHASH_TBL(hash) = ht_new(mrb);
   }
@@ -802,7 +798,7 @@ mrb_hash_init(mrb_state *mrb, mrb_value hash)
   mrb_hash_modify(mrb, hash);
   if (!mrb_nil_p(block)) {
     if (ifnone_p) {
-      mrb_raise(mrb, E_ARGUMENT_ERROR, "wrong number of arguments");
+      mrb_argnum_error(mrb, 1, 0, 0);
     }
     RHASH(hash)->flags |= MRB_HASH_PROC_DEFAULT;
     ifnone = block;
@@ -831,9 +827,8 @@ mrb_hash_init(mrb_state *mrb, mrb_value hash)
 static mrb_value
 mrb_hash_aget(mrb_state *mrb, mrb_value self)
 {
-  mrb_value key;
+  mrb_value key = mrb_get_arg1(mrb);
 
-  mrb_get_args(mrb, "o", &key);
   return mrb_hash_get(mrb, self, key);
 }
 
@@ -916,9 +911,8 @@ mrb_hash_default(mrb_state *mrb, mrb_value hash)
 static mrb_value
 mrb_hash_set_default(mrb_state *mrb, mrb_value hash)
 {
-  mrb_value ifnone;
+  mrb_value ifnone = mrb_get_arg1(mrb);
 
-  mrb_get_args(mrb, "o", &ifnone);
   mrb_hash_modify(mrb, hash);
   mrb_iv_set(mrb, hash, mrb_intern_lit(mrb, "ifnone"), ifnone);
   RHASH(hash)->flags &= ~MRB_HASH_PROC_DEFAULT;
@@ -972,9 +966,8 @@ mrb_hash_default_proc(mrb_state *mrb, mrb_value hash)
 static mrb_value
 mrb_hash_set_default_proc(mrb_state *mrb, mrb_value hash)
 {
-  mrb_value ifnone;
+  mrb_value ifnone = mrb_get_arg1(mrb);
 
-  mrb_get_args(mrb, "o", &ifnone);
   mrb_hash_modify(mrb, hash);
   mrb_iv_set(mrb, hash, mrb_intern_lit(mrb, "ifnone"), ifnone);
   if (!mrb_nil_p(ifnone)) {
@@ -1006,9 +999,8 @@ mrb_hash_delete_key(mrb_state *mrb, mrb_value hash, mrb_value key)
 static mrb_value
 mrb_hash_delete(mrb_state *mrb, mrb_value self)
 {
-  mrb_value key;
+  mrb_value key = mrb_get_arg1(mrb);
 
-  mrb_get_args(mrb, "o", &key);
   mrb_hash_modify(mrb, self);
   return mrb_hash_delete_key(mrb, self, key);
 }
@@ -1291,10 +1283,9 @@ mrb_hash_key_p(mrb_state *mrb, mrb_value hash, mrb_value key)
 static mrb_value
 mrb_hash_has_key(mrb_state *mrb, mrb_value hash)
 {
-  mrb_value key;
+  mrb_value key = mrb_get_arg1(mrb);
   mrb_bool key_p;
 
-  mrb_get_args(mrb, "o", &key);
   key_p = mrb_hash_key_p(mrb, hash, key);
   return mrb_bool_value(key_p);
 }
@@ -1334,10 +1325,9 @@ hash_has_value_i(mrb_state *mrb, mrb_value key, mrb_value val, void *p)
 static mrb_value
 mrb_hash_has_value(mrb_state *mrb, mrb_value hash)
 {
-  mrb_value val;
+  mrb_value val = mrb_get_arg1(mrb);
   struct has_v_arg arg;
   
-  mrb_get_args(mrb, "o", &val);
   arg.found = FALSE;
   arg.val = val;
   ht_foreach(mrb, RHASH_TBL(hash), hash_has_value_i, &arg);
@@ -1381,10 +1371,21 @@ mrb_hash_merge(mrb_state *mrb, mrb_value hash1, mrb_value hash2)
  *  values of key objects have changed since they were inserted, this
  *  method will reindex <i>hsh</i>.
  *
- *     h = {"AAA" => "b"}
- *     h.keys[0].chop!
- *     h.rehash   #=> {"AA"=>"b"}
- *     h["AA"]    #=> "b"
+ *     keys = (1..17).map{|n| [n]}
+ *     k = keys[0]
+ *     h = {}
+ *     keys.each{|key| h[key] = key[0]}
+ *     h     #=> { [1]=> 1, [2]=> 2, [3]=> 3, [4]=> 4, [5]=> 5, [6]=> 6, [7]=> 7,
+ *                 [8]=> 8, [9]=> 9,[10]=>10,[11]=>11,[12]=>12,[13]=>13,[14]=>14,
+ *                [15]=>15,[16]=>16,[17]=>17}
+ *     h[k]  #=> 1
+ *     k[0] = keys.size + 1
+ *     h     #=> {[18]=> 1, [2]=> 2, [3]=> 3, [4]=> 4, [5]=> 5, [6]=> 6, [7]=> 7,
+ *                 [8]=> 8, [9]=> 9,[10]=>10,[11]=>11,[12]=>12,[13]=>13,[14]=>14,
+ *                [15]=>15,[16]=>16,[17]=>17}
+ *     h[k]  #=> nil
+ *     h.rehash
+ *     h[k]  #=> 1
  */
 static mrb_value
 mrb_hash_rehash(mrb_state *mrb, mrb_value self)
@@ -1405,7 +1406,7 @@ mrb_init_hash(mrb_state *mrb)
   mrb_define_method(mrb, h, "[]",              mrb_hash_aget,        MRB_ARGS_REQ(1)); /* 15.2.13.4.2  */
   mrb_define_method(mrb, h, "[]=",             mrb_hash_aset,        MRB_ARGS_REQ(2)); /* 15.2.13.4.3  */
   mrb_define_method(mrb, h, "clear",           mrb_hash_clear,       MRB_ARGS_NONE()); /* 15.2.13.4.4  */
-  mrb_define_method(mrb, h, "default",         mrb_hash_default,     MRB_ARGS_ANY());  /* 15.2.13.4.5  */
+  mrb_define_method(mrb, h, "default",         mrb_hash_default,     MRB_ARGS_OPT(1));  /* 15.2.13.4.5  */
   mrb_define_method(mrb, h, "default=",        mrb_hash_set_default, MRB_ARGS_REQ(1)); /* 15.2.13.4.6  */
   mrb_define_method(mrb, h, "default_proc",    mrb_hash_default_proc,MRB_ARGS_NONE()); /* 15.2.13.4.7  */
   mrb_define_method(mrb, h, "default_proc=",   mrb_hash_set_default_proc,MRB_ARGS_REQ(1)); /* 15.2.13.4.7  */
@@ -1414,7 +1415,7 @@ mrb_init_hash(mrb_state *mrb)
   mrb_define_method(mrb, h, "has_key?",        mrb_hash_has_key,     MRB_ARGS_REQ(1)); /* 15.2.13.4.13 */
   mrb_define_method(mrb, h, "has_value?",      mrb_hash_has_value,   MRB_ARGS_REQ(1)); /* 15.2.13.4.14 */
   mrb_define_method(mrb, h, "include?",        mrb_hash_has_key,     MRB_ARGS_REQ(1)); /* 15.2.13.4.15 */
-  mrb_define_method(mrb, h, "initialize",      mrb_hash_init,        MRB_ARGS_OPT(1)); /* 15.2.13.4.16 */
+  mrb_define_method(mrb, h, "initialize",      mrb_hash_init,        MRB_ARGS_OPT(1)|MRB_ARGS_BLOCK()); /* 15.2.13.4.16 */
   mrb_define_method(mrb, h, "key?",            mrb_hash_has_key,     MRB_ARGS_REQ(1)); /* 15.2.13.4.18 */
   mrb_define_method(mrb, h, "keys",            mrb_hash_keys,        MRB_ARGS_NONE()); /* 15.2.13.4.19 */
   mrb_define_method(mrb, h, "length",          mrb_hash_size_m,      MRB_ARGS_NONE()); /* 15.2.13.4.20 */

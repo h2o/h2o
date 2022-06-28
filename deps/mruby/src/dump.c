@@ -13,9 +13,6 @@
 #include <mruby/numeric.h>
 #include <mruby/debug.h>
 
-#define FLAG_BYTEORDER_NATIVE 2
-#define FLAG_BYTEORDER_NONATIVE 0
-
 #ifndef MRB_WITHOUT_FLOAT
 #ifdef MRB_USE_FLOAT
 #define MRB_FLOAT_FMT "%.9g"
@@ -220,7 +217,7 @@ get_syms_block_size(mrb_state *mrb, mrb_irep *irep)
   for (sym_no = 0; sym_no < irep->slen; sym_no++) {
     size += sizeof(uint16_t); /* snl(n) */
     if (irep->syms[sym_no] != 0) {
-      mrb_sym2name_len(mrb, irep->syms[sym_no], &len);
+      mrb_sym_name_len(mrb, irep->syms[sym_no], &len);
       size += len + 1; /* sn(n) + null char */
     }
   }
@@ -241,7 +238,7 @@ write_syms_block(mrb_state *mrb, mrb_irep *irep, uint8_t *buf)
     if (irep->syms[sym_no] != 0) {
       mrb_int len;
 
-      name = mrb_sym2name_len(mrb, irep->syms[sym_no], &len);
+      name = mrb_sym_name_len(mrb, irep->syms[sym_no], &len);
 
       mrb_assert_int_fit(mrb_int, len, uint16_t, UINT16_MAX);
       cur += uint16_to_bin((uint16_t)len, cur); /* length of symbol name */
@@ -436,7 +433,7 @@ get_filename_table_size(mrb_state *mrb, mrb_irep *irep, mrb_sym **fp, uint16_t *
       filenames[*lp - 1] = file->filename_sym;
 
       /* filename */
-      mrb_sym2name_len(mrb, file->filename_sym, &filename_len);
+      mrb_sym_name_len(mrb, file->filename_sym, &filename_len);
       size += sizeof(uint16_t) + (size_t)filename_len;
     }
   }
@@ -540,7 +537,7 @@ write_section_debug(mrb_state *mrb, mrb_irep *irep, uint8_t *cur, mrb_sym const 
   cur += uint16_to_bin(filenames_len, cur);
   section_size += sizeof(uint16_t);
   for (i = 0; i < filenames_len; ++i) {
-    sym = mrb_sym2name_len(mrb, filenames[i], &sym_len);
+    sym = mrb_sym_name_len(mrb, filenames[i], &sym_len);
     mrb_assert(sym);
     cur += uint16_to_bin((uint16_t)sym_len, cur);
     memcpy(cur, sym, sym_len);
@@ -594,7 +591,7 @@ write_lv_sym_table(mrb_state *mrb, uint8_t **start, mrb_sym const *syms, uint32_
   cur += uint32_to_bin(syms_len, cur);
 
   for (i = 0; i < syms_len; ++i) {
-    str = mrb_sym2name_len(mrb, syms[i], &str_len);
+    str = mrb_sym_name_len(mrb, syms[i], &str_len);
     cur += uint16_to_bin((uint16_t)str_len, cur);
     memcpy(cur, str, str_len);
     cur += str_len;
@@ -658,7 +655,7 @@ get_lv_section_size(mrb_state *mrb, mrb_irep *irep, mrb_sym const *syms, uint32_
   ret += sizeof(uint16_t) * syms_len; /* symbol name lengths */
   for (i = 0; i < syms_len; ++i) {
     mrb_int str_len;
-    mrb_sym2name_len(mrb, syms[i], &str_len);
+    mrb_sym_name_len(mrb, syms[i], &str_len);
     ret += str_len;
   }
 
@@ -709,22 +706,7 @@ write_rite_binary_header(mrb_state *mrb, size_t binary_size, uint8_t *bin, uint8
   uint16_t crc;
   uint32_t offset;
 
-  switch (flags & DUMP_ENDIAN_NAT) {
-  endian_big:
-  case DUMP_ENDIAN_BIG:
-    memcpy(header->binary_ident, RITE_BINARY_IDENT, sizeof(header->binary_ident));
-    break;
-  endian_little:
-  case DUMP_ENDIAN_LIL:
-    memcpy(header->binary_ident, RITE_BINARY_IDENT_LIL, sizeof(header->binary_ident));
-    break;
-
-  case DUMP_ENDIAN_NAT:
-    if (bigendian_p()) goto endian_big;
-    goto endian_little;
-    break;
-  }
-
+  memcpy(header->binary_ident, RITE_BINARY_IDENT, sizeof(header->binary_ident));
   memcpy(header->binary_version, RITE_BINARY_FORMAT_VER, sizeof(header->binary_version));
   memcpy(header->compiler_name, RITE_COMPILER_NAME, sizeof(header->compiler_name));
   memcpy(header->compiler_version, RITE_COMPILER_VERSION, sizeof(header->compiler_version));
@@ -762,21 +744,6 @@ lv_defined_p(mrb_irep *irep)
   }
 
   return FALSE;
-}
-
-static uint8_t
-dump_flags(uint8_t flags, uint8_t native)
-{
-  if (native == FLAG_BYTEORDER_NATIVE) {
-    if ((flags & DUMP_ENDIAN_NAT) == 0) {
-      return (flags & DUMP_DEBUG_INFO) | DUMP_ENDIAN_NAT;
-    }
-    return flags;
-  }
-  if ((flags & DUMP_ENDIAN_NAT) == 0) {
-    return (flags & DUMP_DEBUG_INFO) | DUMP_ENDIAN_BIG;
-  }
-  return flags;
 }
 
 static int
@@ -870,7 +837,7 @@ error_exit:
 int
 mrb_dump_irep(mrb_state *mrb, mrb_irep *irep, uint8_t flags, uint8_t **bin, size_t *bin_size)
 {
-  return dump_irep(mrb, irep, dump_flags(flags, FLAG_BYTEORDER_NONATIVE), bin, bin_size);
+  return dump_irep(mrb, irep, flags, bin, bin_size);
 }
 
 #ifndef MRB_DISABLE_STDIO
@@ -886,7 +853,7 @@ mrb_dump_irep_binary(mrb_state *mrb, mrb_irep *irep, uint8_t flags, FILE* fp)
     return MRB_DUMP_INVALID_ARGUMENT;
   }
 
-  result = dump_irep(mrb, irep, dump_flags(flags, FLAG_BYTEORDER_NONATIVE), &bin, &bin_size);
+  result = dump_irep(mrb, irep, flags, &bin, &bin_size);
   if (result == MRB_DUMP_OK) {
     if (fwrite(bin, sizeof(bin[0]), bin_size, fp) != bin_size) {
       result = MRB_DUMP_WRITE_FAULT;
@@ -895,20 +862,6 @@ mrb_dump_irep_binary(mrb_state *mrb, mrb_irep *irep, uint8_t flags, FILE* fp)
 
   mrb_free(mrb, bin);
   return result;
-}
-
-static mrb_bool
-dump_bigendian_p(uint8_t flags)
-{
-  switch (flags & DUMP_ENDIAN_NAT) {
-  case DUMP_ENDIAN_BIG:
-    return TRUE;
-  case DUMP_ENDIAN_LIL:
-    return FALSE;
-  default:
-  case DUMP_ENDIAN_NAT:
-    return bigendian_p();
-  }
 }
 
 int
@@ -921,29 +874,16 @@ mrb_dump_irep_cfunc(mrb_state *mrb, mrb_irep *irep, uint8_t flags, FILE *fp, con
   if (fp == NULL || initname == NULL || initname[0] == '\0') {
     return MRB_DUMP_INVALID_ARGUMENT;
   }
-  flags = dump_flags(flags, FLAG_BYTEORDER_NATIVE);
   result = dump_irep(mrb, irep, flags, &bin, &bin_size);
   if (result == MRB_DUMP_OK) {
-    if (!dump_bigendian_p(flags)) {
-      if (fprintf(fp, "/* dumped in little endian order.\n"
-                  "   use `mrbc -E` option for big endian CPU. */\n") < 0) {
-        mrb_free(mrb, bin);
-        return MRB_DUMP_WRITE_FAULT;
-      }
-    }
-    else {
-      if (fprintf(fp, "/* dumped in big endian order.\n"
-                  "   use `mrbc -e` option for better performance on little endian CPU. */\n") < 0) {
-        mrb_free(mrb, bin);
-        return MRB_DUMP_WRITE_FAULT;
-      }
-    }
     if (fprintf(fp, "#include <stdint.h>\n") < 0) { /* for uint8_t under at least Darwin */
       mrb_free(mrb, bin);
       return MRB_DUMP_WRITE_FAULT;
     }
     if (fprintf(fp,
+          "#ifdef __cplusplus\n"
           "extern const uint8_t %s[];\n"
+          "#endif\n"
           "const uint8_t\n"
           "#if defined __GNUC__\n"
           "__attribute__((aligned(%u)))\n"

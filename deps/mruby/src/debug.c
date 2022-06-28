@@ -51,20 +51,20 @@ select_line_type(const uint16_t *lines, size_t lines_len)
 }
 
 MRB_API char const*
-mrb_debug_get_filename(mrb_irep *irep, ptrdiff_t pc)
+mrb_debug_get_filename(mrb_state *mrb, mrb_irep *irep, ptrdiff_t pc)
 {
   if (irep && pc >= 0 && pc < irep->ilen) {
     mrb_irep_debug_info_file* f = NULL;
     if (!irep->debug_info) return NULL;
     else if ((f = get_file(irep->debug_info, (uint32_t)pc))) {
-      return f->filename;
+      return mrb_sym_name_len(mrb, f->filename_sym, NULL);
     }
   }
   return NULL;
 }
 
 MRB_API int32_t
-mrb_debug_get_line(mrb_irep *irep, ptrdiff_t pc)
+mrb_debug_get_line(mrb_state *mrb, mrb_irep *irep, ptrdiff_t pc)
 {
   if (irep && pc >= 0 && pc < irep->ilen) {
     mrb_irep_debug_info_file* f = NULL;
@@ -129,7 +129,6 @@ mrb_debug_info_append_file(mrb_state *mrb, mrb_irep_debug_info *d,
   mrb_irep_debug_info_file *f;
   uint32_t file_pc_count;
   size_t fn_len;
-  mrb_int len;
   uint32_t i;
 
   if (!d) return NULL;
@@ -138,8 +137,10 @@ mrb_debug_info_append_file(mrb_state *mrb, mrb_irep_debug_info *d,
   mrb_assert(filename);
   mrb_assert(lines);
 
-  if (d->flen > 0 && strcmp(filename, d->files[d->flen - 1]->filename) == 0) {
-    return NULL;
+  if (d->flen > 0) {
+    const char *fn = mrb_sym_name_len(mrb, d->files[d->flen - 1]->filename_sym, NULL);
+    if (strcmp(filename, fn) == 0)
+      return NULL;
   }
 
   f = (mrb_irep_debug_info_file*)mrb_malloc(mrb, sizeof(*f));
@@ -156,8 +157,6 @@ mrb_debug_info_append_file(mrb_state *mrb, mrb_irep_debug_info *d,
 
   fn_len = strlen(filename);
   f->filename_sym = mrb_intern(mrb, filename, fn_len);
-  len = 0;
-  f->filename = mrb_sym2name_len(mrb, f->filename_sym, &len);
 
   f->line_type = select_line_type(lines + start_pos, end_pos - start_pos);
   f->lines.ptr = NULL;
@@ -205,11 +204,14 @@ mrb_debug_info_free(mrb_state *mrb, mrb_irep_debug_info *d)
 
   if (!d) { return; }
 
-  for (i = 0; i < d->flen; ++i) {
-    mrb_assert(d->files[i]);
-    mrb_free(mrb, d->files[i]->lines.ptr);
-    mrb_free(mrb, d->files[i]);
+  if (d->files) {
+    for (i = 0; i < d->flen; ++i) {
+      if (d->files[i]) {
+        mrb_free(mrb, d->files[i]->lines.ptr);
+        mrb_free(mrb, d->files[i]);
+      }
+    }
+    mrb_free(mrb, d->files);
   }
-  mrb_free(mrb, d->files);
   mrb_free(mrb, d);
 }

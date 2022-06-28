@@ -53,10 +53,8 @@ hash_slice(mrb_state *mrb, mrb_value hash)
   mrb_int argc, i;
 
   mrb_get_args(mrb, "*", &argv, &argc);
-  if (argc == 0) {
-    return mrb_hash_new_capa(mrb, argc);
-  }
   result = mrb_hash_new_capa(mrb, argc);
+  if (argc == 0) return result; /* empty hash */
   for (i = 0; i < argc; i++) {
     mrb_value key = argv[i];
     mrb_value val;

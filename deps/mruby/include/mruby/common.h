@@ -1,5 +1,5 @@
-/*
-**"common.h - mruby common platform definition"
+/**
+** @file common.h - mruby common platform definition"
 **
 ** See Copyright Notice in mruby.h
 */
@@ -54,14 +54,15 @@ MRB_BEGIN_DECL
 #endif
 
 /** Declare a function as always inlined. */
-#if defined(_MSC_VER)
-# define MRB_INLINE static __inline
-#else
-# define MRB_INLINE static inline
+#if defined _MSC_VER && _MSC_VER < 1900
+# ifndef __cplusplus
+#  define inline __inline
+# endif
 #endif
-
+#define MRB_INLINE static inline
 
 /** Declare a public MRuby API function. */
+#ifndef MRB_API
 #if defined(MRB_BUILD_AS_DLL)
 #if defined(MRB_CORE) || defined(MRB_LIB)
 # define MRB_API __declspec(dllexport)
@@ -70,6 +71,17 @@ MRB_BEGIN_DECL
 #endif
 #else
 # define MRB_API extern
+#endif
+#endif
+
+/** Declare mingw versions */
+#if defined(__MINGW32__) || defined(__MINGW64__)
+# include <_mingw.h>
+# if defined(__MINGW64_VERSION_MAJOR)
+#  define MRB_MINGW64_VERSION  (__MINGW64_VERSION_MAJOR * 1000 + __MINGW64_VERSION_MINOR)
+# elif defined(__MINGW32_MAJOR_VERSION)
+#  define MRB_MINGW32_VERSION  (__MINGW32_MAJOR_VERSION * 1000 + __MINGW32_MINOR_VERSION)
+# endif
 #endif
 
 MRB_END_DECL

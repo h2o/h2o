@@ -5,7 +5,6 @@
 
 #include <stdlib.h>
 #include <string.h>
-#include <stdio.h>
 #include <ctype.h>
 
 #include <mruby.h>
@@ -52,6 +51,7 @@ static const debug_command debug_command_list[] = {
   {"eval",      NULL,           2, 0, 0, DBGCMD_EVAL,           dbgcmd_eval},            /* ev[al] */
   {"help",      NULL,           1, 0, 1, DBGCMD_HELP,           dbgcmd_help},            /* h[elp] */
   {"info",      "breakpoints",  1, 1, 1, DBGCMD_INFO_BREAK,     dbgcmd_info_break},      /* i[nfo] b[reakpoints] */
+  {"info",      "locals",       1, 1, 0, DBGCMD_INFO_LOCAL,     dbgcmd_info_local},      /* i[nfo] l[ocals] */
   {"list",      NULL,           1, 0, 1, DBGCMD_LIST,           dbgcmd_list},            /* l[ist] */
   {"print",     NULL,           1, 0, 0, DBGCMD_PRINT,          dbgcmd_print},           /* p[rint] */
   {"quit",      NULL,           1, 0, 0, DBGCMD_QUIT,           dbgcmd_quit},            /* q[uit] */
@@ -504,7 +504,7 @@ get_and_parse_command(mrb_state *mrb, mrdb_state *mrdb)
 }
 
 static int32_t
-check_method_breakpoint(mrb_state *mrb, mrb_irep *irep, mrb_code *pc, mrb_value *regs)
+check_method_breakpoint(mrb_state *mrb, mrb_irep *irep, const mrb_code *pc, mrb_value *regs)
 {
   struct RClass* c;
   mrb_sym sym;
@@ -545,7 +545,7 @@ check_method_breakpoint(mrb_state *mrb, mrb_irep *irep, mrb_code *pc, mrb_value 
 }
 
 static void
-mrb_code_fetch_hook(mrb_state *mrb, mrb_irep *irep, mrb_code *pc, mrb_value *regs)
+mrb_code_fetch_hook(mrb_state *mrb, mrb_irep *irep, const mrb_code *pc, mrb_value *regs)
 {
   const char *file;
   int32_t line;
@@ -568,8 +568,8 @@ mrb_code_fetch_hook(mrb_state *mrb, mrb_irep *irep, mrb_code *pc, mrb_value *reg
     dbg->xphase = DBG_PHASE_RUNNING;
   }
 
-  file = mrb_debug_get_filename(irep, pc - irep->iseq);
-  line = mrb_debug_get_line(irep, pc - irep->iseq);
+  file = mrb_debug_get_filename(mrb, irep, pc - irep->iseq);
+  line = mrb_debug_get_line(mrb, irep, pc - irep->iseq);
 
   switch (dbg->xm) {
   case DBG_STEP:

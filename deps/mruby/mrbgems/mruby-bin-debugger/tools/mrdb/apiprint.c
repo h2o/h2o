@@ -31,9 +31,9 @@ mrdb_check_syntax(mrb_state *mrb, mrb_debug_context *dbg, const char *expr, size
 }
 
 mrb_value
-mrb_debug_eval(mrb_state *mrb, mrb_debug_context *dbg, const char *expr, size_t len, mrb_bool *exc)
+mrb_debug_eval(mrb_state *mrb, mrb_debug_context *dbg, const char *expr, size_t len, mrb_bool *exc, int direct_eval)
 {
-  void (*tmp)(struct mrb_state *, struct mrb_irep *, mrb_code *, mrb_value *);
+  void (*tmp)(struct mrb_state *, struct mrb_irep *, const mrb_code *, mrb_value *);
   mrb_value ruby_code;
   mrb_value s;
   mrb_value v;
@@ -47,6 +47,11 @@ mrb_debug_eval(mrb_state *mrb, mrb_debug_context *dbg, const char *expr, size_t 
   if (mrb->exc) {
     v = mrb_obj_value(mrb->exc);
     mrb->exc = 0;
+  }
+  else if (direct_eval) {
+    recv = dbg->regs[0];
+
+    v = mrb_funcall(mrb, recv, expr, 0);
   }
   else {
     /*
@@ -69,7 +74,7 @@ mrb_debug_eval(mrb_state *mrb, mrb_debug_context *dbg, const char *expr, size_t 
     *exc = mrb_obj_is_kind_of(mrb, v, mrb->eException_class);
   }
 
-  s = mrb_funcall(mrb, v, "inspect", 0);
+  s = mrb_inspect(mrb, v);
 
   /* enable code_fetch_hook */
   mrb->code_fetch_hook = tmp;
