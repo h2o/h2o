@@ -5,15 +5,12 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update --yes && apt-get install --yes \
 	apache2-utils \
 	bison \
-	lsb-release \
-	libclang-7-dev \
-	llvm-7 \
-	llvm-7-dev \
 	cmake \
 	cmake-data \
 	dnsutils \
 	flex \
 	git \
+	lsb-release \
 	libbrotli-dev \
 	libc-ares-dev \
 	libcap-dev \
@@ -22,6 +19,9 @@ RUN apt-get update --yes && apt-get install --yes \
 	libev-dev \
 	libssl-dev \
 	libuv1-dev \
+	llvm-7 \
+	llvm-7-dev \
+	libclang-7-dev \
 	zlib1g-dev \
 	memcached \
 	net-tools \
@@ -38,7 +38,7 @@ RUN apt-get update --yes && apt-get install --yes \
 	time \
 	wget
 
-# the latest version of curl and llvm to use the LLVM source-based code coverage
+# the latest version of clang and llvm are required for LLVM source-based code coverage, but they cannot be used to build bpftrace.
 RUN apt-get install --yes gnupg \
 	&& wget --quiet --https-only -O - https://apt.llvm.org/llvm-snapshot.gpg.key | apt-key add \
 	&& echo "deb http://apt.llvm.org/$(lsb_release -sc)/ llvm-toolchain-$(lsb_release -sc)-14 main" > /etc/apt/sources.list.d/llvm.list \
@@ -74,7 +74,7 @@ RUN cpanm -n Test::More Starlet Protocol::HTTP2 Net::DNS::Nameserver Test::TCP
 # h2spec
 RUN curl -Ls https://github.com/i110/h2spec/releases/download/v2.2.0-4e8cc7e/h2spec_linux_amd64.tar.gz | tar zx -C /usr/local/bin
 
-# bcc and bpftrace
+# bcc and bpftrace (depending on llvm-7)
 RUN apt-get install --yes \
 	libbpfcc-dev
 RUN git clone --branch kazuho/usdt-attach-all-locations https://github.com/kazuho/bpftrace.git && \
