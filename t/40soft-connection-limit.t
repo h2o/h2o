@@ -133,6 +133,8 @@ subtest "http1" => sub {
 
 };
 
+sleep(2); # add wait so that h2o will recognize the clos eof idle connections created above
+
 subtest 'http2 soft-connection-limit' => sub {
     my @conns;
     for (1..10) {
@@ -159,6 +161,8 @@ subtest 'http2 soft-connection-limit' => sub {
 
     is_connections_count(total => 11, active => 1, idle => 4, shutdown => 6, idle_closed => 12);
 };
+
+sleep(2); # add wait so that h2o will recognize the clos eof idle connections created above
 
 subtest 'http3 soft-connection-limit' => sub {
     my @conns;
