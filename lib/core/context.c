@@ -240,15 +240,35 @@ static void link_conn(h2o_conn_t *conn)
     ++*get_connection_state_counter(conn->ctx, conn->state);
 }
 
-void h2o_conn_init_state(h2o_conn_t *conn)
+h2o_conn_t *h2o_create_connection(size_t sz, h2o_context_t *ctx, h2o_hostconf_t **hosts, struct timeval connected_at,
+                                  const h2o_conn_callbacks_t *callbacks)
 {
+    h2o_conn_t *conn = (h2o_conn_t *)h2o_mem_alloc(sz);
+
+    conn->ctx = ctx;
+    conn->hosts = hosts;
+    conn->connected_at = connected_at;
+#ifdef H2O_NO_64BIT_ATOMICS
+    pthread_mutex_lock(&h2o_conn_id_mutex);
+    conn->id = ++h2o_connection_id;
+    pthread_mutex_unlock(&h2o_conn_id_mutex);
+#else
+    conn->id = __sync_add_and_fetch(&h2o_connection_id, 1);
+#endif
+    conn->callbacks = callbacks;
+    conn->_uuid.is_initialized = 0;
+
     conn->state = H2O_CONN_STATE_ACTIVE;
+    conn->_conns = (h2o_linklist_t){};
     link_conn(conn);
+
+    return conn;
 }
 
-void h2o_conn_dispose_state(h2o_conn_t *conn)
+void h2o_destroy_connection(h2o_conn_t *conn)
 {
     unlink_conn(conn);
+    free(conn);
 }
 
 void h2o_conn_set_state(h2o_conn_t *conn, h2o_conn_state_t state)

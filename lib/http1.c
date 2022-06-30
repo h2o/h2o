@@ -142,8 +142,7 @@ static void close_connection(struct st_h2o_http1_conn_t *conn, int close_socket)
     h2o_dispose_request(&conn->req);
     if (conn->sock != NULL && close_socket)
         h2o_socket_close(conn->sock);
-    h2o_conn_dispose_state(&conn->super);
-    free(conn);
+    h2o_destroy_connection(&conn->super);
 }
 
 static void cleanup_connection(struct st_h2o_http1_conn_t *conn)
@@ -1236,7 +1235,6 @@ void h2o_http1_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval 
     /* init properties that need to be non-zero */
     conn->sock = sock;
     sock->data = conn;
-    h2o_conn_init_state(&conn->super);
 
     H2O_PROBE_CONN(H1_ACCEPT, &conn->super, conn->sock, &conn->super, h2o_conn_get_uuid(&conn->super));
 

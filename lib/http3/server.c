@@ -1819,7 +1819,6 @@ static void on_h3_destroy(h2o_quic_conn_t *h3_)
     }
 
     /* unlink and dispose */
-    h2o_conn_dispose_state(&conn->super);
     if (h2o_timer_is_linked(&conn->timeout))
         h2o_timer_unlink(&conn->timeout);
     if (h2o_timer_is_linked(&conn->_graceful_shutdown_timeout))
@@ -1842,7 +1841,7 @@ static void on_h3_destroy(h2o_quic_conn_t *h3_)
     assert(h2o_linklist_is_empty(&conn->scheduler.reqs.conn_blocked));
 
     /* free memory */
-    free(conn);
+    h2o_destroy_connection(&conn->super);
 }
 
 void h2o_http3_server_init_context(h2o_context_t *h2o, h2o_quic_ctx_t *ctx, h2o_loop_t *loop, h2o_socket_t *sock,
@@ -1927,7 +1926,7 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
             ret = (h2o_http3_conn_t *)H2O_QUIC_ACCEPT_CONN_DECRYPTION_FAILED;
         h2o_http3_dispose_conn(&conn->h3);
         kh_destroy(stream, conn->datagram_flows);
-        free(conn);
+        h2o_destroy_connection(&conn->super);
         return ret;
     }
     if (ctx->super.quic_stats != NULL) {
@@ -1935,7 +1934,6 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
     }
     ++ctx->super.next_cid.master_id; /* FIXME check overlap */
     h2o_http3_setup(&conn->h3, qconn);
-    h2o_conn_init_state(&conn->super);
 
     H2O_PROBE_CONN(H3S_ACCEPT, &conn->super, &conn->super, conn->h3.super.quic, h2o_conn_get_uuid(&conn->super));
 

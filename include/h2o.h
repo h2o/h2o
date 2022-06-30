@@ -1400,8 +1400,12 @@ void h2o_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock);
 /**
  * creates a new connection
  */
-static h2o_conn_t *h2o_create_connection(size_t sz, h2o_context_t *ctx, h2o_hostconf_t **hosts, struct timeval connected_at,
-                                         const h2o_conn_callbacks_t *callbacks);
+h2o_conn_t *h2o_create_connection(size_t sz, h2o_context_t *ctx, h2o_hostconf_t **hosts, struct timeval connected_at,
+                                  const h2o_conn_callbacks_t *callbacks);
+/**
+ * destroys a connection
+ */
+void h2o_destroy_connection(h2o_conn_t *conn);
 /**
  * returns the uuid of the connection as a null-terminated string.
  */
@@ -1692,15 +1696,6 @@ void h2o_context_update_timestamp_string_cache(h2o_context_t *ctx);
  * Closes at most @max_connections_to_close connections that have been inactive for @min_age milliseconds
  */
 void h2o_context_close_idle_connections(h2o_context_t *ctx, size_t max_connections_to_close, uint64_t min_age);
-/**
- * Initialize connection state. All connections start in the ACTIVE state, as we do not want to cull connections on which we have
- * not received a request.
- */
-void h2o_conn_init_state(h2o_conn_t *conn);
-/**
- * disposes of the state assigned to the connection
- */
-void h2o_conn_dispose_state(h2o_conn_t *conn);
 /**
  * transition connection state
  */
@@ -2301,28 +2296,6 @@ void h2o_self_trace_register_configurator(h2o_globalconf_t *conf);
 #ifdef H2O_NO_64BIT_ATOMICS
 extern pthread_mutex_t h2o_conn_id_mutex;
 #endif
-
-inline h2o_conn_t *h2o_create_connection(size_t sz, h2o_context_t *ctx, h2o_hostconf_t **hosts, struct timeval connected_at,
-                                         const h2o_conn_callbacks_t *callbacks)
-{
-    h2o_conn_t *conn = (h2o_conn_t *)h2o_mem_alloc(sz);
-
-    conn->ctx = ctx;
-    conn->hosts = hosts;
-    conn->connected_at = connected_at;
-#ifdef H2O_NO_64BIT_ATOMICS
-    pthread_mutex_lock(&h2o_conn_id_mutex);
-    conn->id = ++h2o_connection_id;
-    pthread_mutex_unlock(&h2o_conn_id_mutex);
-#else
-    conn->id = __sync_add_and_fetch(&h2o_connection_id, 1);
-#endif
-    conn->callbacks = callbacks;
-    conn->_uuid.is_initialized = 0;
-    conn->_conns = (h2o_linklist_t){};
-
-    return conn;
-}
 
 inline const char *h2o_conn_get_uuid(h2o_conn_t *conn)
 {

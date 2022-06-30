@@ -411,11 +411,11 @@ void close_connection_now(h2o_http2_conn_t *conn)
         h2o_cache_destroy(conn->push_memo);
     if (conn->casper != NULL)
         h2o_http2_casper_destroy(conn->casper);
-    h2o_conn_dispose_state(&conn->super);
 
     if (conn->sock != NULL)
         h2o_socket_close(conn->sock);
-    free(conn);
+
+    h2o_destroy_connection(&conn->super);
 }
 
 int close_connection(h2o_http2_conn_t *conn)
@@ -1720,7 +1720,6 @@ static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_hostconf_t **hosts,
     conn->streams = kh_init(h2o_http2_stream_t);
     h2o_http2_scheduler_init(&conn->scheduler);
     conn->state = H2O_HTTP2_CONN_STATE_OPEN;
-    h2o_conn_init_state(&conn->super);
     conn->_read_expect = expect_preface;
     conn->_input_header_table.hpack_capacity = conn->_input_header_table.hpack_max_capacity =
         H2O_HTTP2_SETTINGS_DEFAULT.header_table_size;
@@ -1910,8 +1909,7 @@ int h2o_http2_handle_upgrade(h2o_req_t *req, struct timeval connected_at)
 
     return 0;
 Error:
-    h2o_conn_dispose_state(&http2conn->super);
     kh_destroy(h2o_http2_stream_t, http2conn->streams);
-    free(http2conn);
+    h2o_destroy_connection(&http2conn->super);
     return -1;
 }
