@@ -25,6 +25,7 @@
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
+#define OPENSSL_API_COMPAT 0x00908000L
 #include <openssl/opensslv.h>
 #include <openssl/bio.h>
 #include <openssl/pem.h>
@@ -384,5 +385,10 @@ int main(int argc, char **argv)
     subtest("minicrypto vs.", test_picotls);
 
     esni_private_keys[0]->on_exchange(esni_private_keys, 1, NULL, ptls_iovec_init(NULL, 0));
-    return done_testing();
+    int ret = done_testing();
+#if !defined(LIBRESSL_VERSION_NUMBER) && OPENSSL_VERSION_NUMBER >= 0x30000000L
+    OSSL_PROVIDER_unload(dflt);
+    OSSL_PROVIDER_unload(legacy);
+#endif
+    return ret;
 }

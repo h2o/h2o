@@ -40,7 +40,7 @@ typedef struct ptls_fusion_aesecb_context {
         __m256i m256[PTLS_FUSION_AES256_ROUNDS + 1];
     } keys;
     unsigned rounds;
-    uint8_t avx256;
+    uint8_t aesni256;
 } __attribute__((aligned(32))) ptls_fusion_aesecb_context_t;
 
 typedef struct ptls_fusion_aesgcm_context ptls_fusion_aesgcm_context_t;
@@ -94,7 +94,7 @@ int ptls_fusion_aesgcm_decrypt(ptls_fusion_aesgcm_context_t *ctx, void *output, 
  * when `ptls_fusion_is_supported_by_cpu` is called. Users can update the flag to enforce behavior. Engines that do not have support
  * for these 256-bit instructions will continue using the 128-bit ones, even when this flag is set.
  */
-extern int ptls_fusion_can_avx256;
+extern int ptls_fusion_can_aesni256;
 extern ptls_cipher_algorithm_t ptls_fusion_aes128ctr, ptls_fusion_aes256ctr;
 extern ptls_aead_algorithm_t ptls_fusion_aes128gcm, ptls_fusion_aes256gcm;
 extern ptls_aead_algorithm_t ptls_non_temporal_aes128gcm, ptls_non_temporal_aes256gcm;

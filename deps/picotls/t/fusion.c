@@ -89,14 +89,14 @@ static void test_gfmul(void)
     ptls_fusion_aesgcm_context_t *ctx;
     size_t ghash_cnt = 4;
 
-    ctx = malloc(calc_aesgcm_context_size(&ghash_cnt, ptls_fusion_can_avx256));
+    ctx = malloc(calc_aesgcm_context_size(&ghash_cnt, ptls_fusion_can_aesni256));
     *ctx = (ptls_fusion_aesgcm_context_t){
-        .ecb = {.avx256 = ptls_fusion_can_avx256},
+        .ecb = {.aesni256 = ptls_fusion_can_aesni256},
         .capacity = ghash_cnt * 16,
     };
 
     __m128i H0 = _mm_loadu_si128((void *)"hello world bye");
-    if (ctx->ecb.avx256) {
+    if (ctx->ecb.aesni256) {
         ((struct ptls_fusion_aesgcm_context256 *)ctx)->ghash[0].H[1] = H0;
     } else {
         ((struct ptls_fusion_aesgcm_context128 *)ctx)->ghash[0].H = H0;
@@ -111,7 +111,7 @@ static void test_gfmul(void)
     {                                                     /* one block */
         static const char input[32] = "deaddeadbeefbeef"; /* latter 16-byte is NUL */
         __m128i hash;
-        if (ctx->ecb.avx256) {
+        if (ctx->ecb.aesni256) {
             struct ptls_fusion_gfmul_state256 state;
             state.lo = _mm256_setzero_si256();
             gfmul_firststep256(&state, _mm256_loadu_si256((void *)input), 1, GHASH256);
@@ -130,7 +130,7 @@ static void test_gfmul(void)
     { /* two blocks */
         static const char input[32] = "Lorem ipsum dolor sit amet, con";
         __m128i hash;
-        if (ctx->ecb.avx256) {
+        if (ctx->ecb.aesni256) {
             struct ptls_fusion_gfmul_state256 state;
             state.lo = _mm256_setzero_si256();
             gfmul_firststep256(&state, _mm256_loadu_si256((void *)input), 0, GHASH256);
@@ -150,7 +150,7 @@ static void test_gfmul(void)
     { /* three blocks */
         static const char input[64] = "The quick brown fox jumps over the lazy dog.";
         __m128i hash;
-        if (ctx->ecb.avx256) {
+        if (ctx->ecb.aesni256) {
             struct ptls_fusion_gfmul_state256 state;
             state.lo = _mm256_setzero_si256();
             gfmul_firststep256(&state, _mm256_loadu_si256((void *)input), 1, GHASH256 + 1);
@@ -172,7 +172,7 @@ static void test_gfmul(void)
     { /* five blocks */
         static const char input[80] = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor ";
         __m128i hash;
-        if (ctx->ecb.avx256) {
+        if (ctx->ecb.aesni256) {
             struct ptls_fusion_gfmul_state256 state;
             state.lo = _mm256_setzero_si256();
             gfmul_firststep256(&state, _mm256_loadu_si256((void *)input), 0, GHASH256 + 1);
@@ -200,7 +200,7 @@ static void test_gfmul(void)
         static const char input[96] =
             "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut la";
         __m128i hash;
-        if (ctx->ecb.avx256) {
+        if (ctx->ecb.aesni256) {
             struct ptls_fusion_gfmul_state256 state;
             state.lo = _mm256_setzero_si256();
             gfmul_firststep256(&state, _mm256_loadu_si256((void *)input), 0, GHASH256 + 1);
@@ -378,7 +378,7 @@ static void gcm_iv96(void)
 }
 
 static ptls_aead_algorithm_t *test_generated_encryptor, *test_generated_decryptor;
-static int test_generated_iv96;
+static int test_generated_iv96, test_generated_multivec;
 
 static void test_generated(void)
 {
@@ -415,7 +415,19 @@ static void test_generated(void)
             ptls_aead_context_t *ctx = ptls_aead_new_direct(test_generated_encryptor, 1, key, iv);
             if (test_generated_iv96)
                 ptls_aead_xor_iv(ctx, seq32, sizeof(seq32));
-            ptls_aead_encrypt(ctx, encrypted, text, textlen, seq, aad, aadlen);
+            if (test_generated_multivec) {
+                uint8_t pos1, pos2;
+                do {
+                    ptls_cipher_encrypt(rand, &pos2, zero, sizeof(pos2));
+                } while (pos2 > textlen);
+                do {
+                    ptls_cipher_encrypt(rand, &pos1, zero, sizeof(pos1));
+                } while (pos1 > pos2);
+                ptls_iovec_t textvec[3] = {{text, pos1}, {text + pos1, pos2 - pos1}, {text + pos2, textlen - pos2}};
+                ptls_aead_encrypt_v(ctx, encrypted, textvec, 3, seq, aad, aadlen);
+            } else {
+                ptls_aead_encrypt(ctx, encrypted, text, textlen, seq, aad, aadlen);
+            }
             ptls_aead_free(ctx);
         }
 
@@ -442,17 +454,28 @@ Fail:
     ok(0);
 }
 
-static void test_generated_all(ptls_aead_algorithm_t *e1, ptls_aead_algorithm_t *e2)
+static void test_generated_all(ptls_aead_algorithm_t *e1, ptls_aead_algorithm_t *e2, int can_multivec)
 {
     test_generated_encryptor = e1;
     test_generated_decryptor = e2;
+
     test_generated_iv96 = 0;
     subtest("encrypt", test_generated);
     test_generated_iv96 = 1;
     subtest("encrypt-iv96", test_generated);
 
+    if (can_multivec) {
+        test_generated_multivec = 1;
+        test_generated_iv96 = 0;
+        subtest("encrypt", test_generated);
+        test_generated_iv96 = 1;
+        subtest("encrypt-iv96", test_generated);
+        test_generated_multivec = 0;
+    }
+
     test_generated_encryptor = e2;
     test_generated_decryptor = e1;
+
     test_generated_iv96 = 0;
     subtest("decrypt", test_generated);
     test_generated_iv96 = 1;
@@ -461,12 +484,12 @@ static void test_generated_all(ptls_aead_algorithm_t *e1, ptls_aead_algorithm_t 
 
 static void test_fusion_aes128gcm(void)
 {
-    test_generated_all(&ptls_fusion_aes128gcm, &ptls_minicrypto_aes128gcm);
+    test_generated_all(&ptls_fusion_aes128gcm, &ptls_minicrypto_aes128gcm, 0);
 }
 
 static void test_fusion_aes256gcm(void)
 {
-    test_generated_all(&ptls_fusion_aes256gcm, &ptls_minicrypto_aes256gcm);
+    test_generated_all(&ptls_fusion_aes256gcm, &ptls_minicrypto_aes256gcm, 0);
 }
 
 static void test_fusion_aesgcm(void)
@@ -477,12 +500,12 @@ static void test_fusion_aesgcm(void)
 
 static void test_non_temporal_aes128gcm(void)
 {
-    test_generated_all(&ptls_non_temporal_aes128gcm, &ptls_minicrypto_aes128gcm);
+    test_generated_all(&ptls_non_temporal_aes128gcm, &ptls_minicrypto_aes128gcm, 1);
 }
 
 static void test_non_temporal_aes256gcm(void)
 {
-    test_generated_all(&ptls_non_temporal_aes256gcm, &ptls_minicrypto_aes256gcm);
+    test_generated_all(&ptls_non_temporal_aes256gcm, &ptls_minicrypto_aes256gcm, 1);
 }
 
 static void test_non_temporal(void)
@@ -497,8 +520,8 @@ int main(int argc, char **argv)
         note("CPU does have the necessary features (avx2, aes, pclmul)\n");
         return done_testing();
     }
-    int can256bit = ptls_fusion_can_avx256;
-    ptls_fusion_can_avx256 = 0;
+    int can256bit = ptls_fusion_can_aesni256;
+    ptls_fusion_can_aesni256 = 0;
 
     subtest("loadn128", test_loadn128);
     subtest("ecb", test_ecb);
@@ -511,10 +534,10 @@ int main(int argc, char **argv)
     subtest("non-temporal-avx128", test_non_temporal);
 
     if (can256bit) {
-        ptls_fusion_can_avx256 = 1;
+        ptls_fusion_can_aesni256 = 1;
         subtest("gfmul256", test_gfmul);
         subtest("non-temporal-avx256", test_non_temporal);
-        ptls_fusion_can_avx256 = 0;
+        ptls_fusion_can_aesni256 = 0;
     } else {
         note("gfmul256: skipping, CPU does not support 256-bit aes / clmul");
     }

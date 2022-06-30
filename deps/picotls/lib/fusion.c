@@ -318,7 +318,7 @@ static inline __m128i gfmul_get_tag256(struct ptls_fusion_gfmul_state256 *gstate
 
 static inline __m128i aesecb_encrypt(ptls_fusion_aesecb_context_t *ctx, __m128i v)
 {
-#define ROUNDKEY(i) (ctx->avx256 ? _mm256_castsi256_si128(ctx->keys.m256[i]) : ctx->keys.m128[i])
+#define ROUNDKEY(i) (ctx->aesni256 ? _mm256_castsi256_si128(ctx->keys.m256[i]) : ctx->keys.m128[i])
 
     v = _mm_xor_si128(v, ROUNDKEY(0));
     for (size_t i = 1; i < ctx->rounds; ++i)
@@ -851,7 +851,7 @@ static __m128i expand_key(__m128i key, __m128i temp)
     return key;
 }
 
-void ptls_fusion_aesecb_init(ptls_fusion_aesecb_context_t *ctx, int is_enc, const void *key, size_t key_size, int avx256)
+void ptls_fusion_aesecb_init(ptls_fusion_aesecb_context_t *ctx, int is_enc, const void *key, size_t key_size, int aesni256)
 {
     assert(is_enc && "decryption is not supported (yet)");
 
@@ -868,7 +868,7 @@ void ptls_fusion_aesecb_init(ptls_fusion_aesecb_context_t *ctx, int is_enc, cons
         assert(!"invalid key size; AES128 / AES256 are supported");
         break;
     }
-    ctx->avx256 = avx256;
+    ctx->aesni256 = aesni256;
 
     /* load and expand keys using keys.m128 */
     ctx->keys.m128[i++] = _mm_loadu_si128((__m128i *)key);
@@ -903,8 +903,8 @@ void ptls_fusion_aesecb_init(ptls_fusion_aesecb_context_t *ctx, int is_enc, cons
 #undef EXPAND
     }
 
-    /* convert to keys.m256 if avx256 is used */
-    if (ctx->avx256) {
+    /* convert to keys.m256 if aesni256 is used */
+    if (ctx->aesni256) {
         size_t i = ctx->rounds;
         do {
             ctx->keys.m256[i] = _mm256_broadcastsi128_si256(ctx->keys.m128[i]);
@@ -937,7 +937,7 @@ static void setup_one_ghash_entry(ptls_fusion_aesgcm_context_t *ctx)
 {
     __m128i *H, *r, *Hprev, H0;
 
-    if (ctx->ecb.avx256) {
+    if (ctx->ecb.aesni256) {
         struct ptls_fusion_aesgcm_context256 *ctx256 = (void *)ctx;
 #define GET_SLOT(i, mem) (&ctx256->ghash[(i) / 2].mem[(i) % 2 == 0])
         H = GET_SLOT(ctx->ghash_cnt, H);
@@ -962,11 +962,11 @@ static void setup_one_ghash_entry(ptls_fusion_aesgcm_context_t *ctx)
     ++ctx->ghash_cnt;
 }
 
-static size_t calc_aesgcm_context_size(size_t *ghash_cnt, int avx256)
+static size_t calc_aesgcm_context_size(size_t *ghash_cnt, int aesni256)
 {
     size_t sz;
 
-    if (avx256) {
+    if (aesni256) {
         if (*ghash_cnt % 2 != 0)
             ++*ghash_cnt;
         sz = offsetof(struct ptls_fusion_aesgcm_context256, ghash) +
@@ -978,22 +978,22 @@ static size_t calc_aesgcm_context_size(size_t *ghash_cnt, int avx256)
     return sz;
 }
 
-static ptls_fusion_aesgcm_context_t *new_aesgcm(const void *key, size_t key_size, size_t capacity, int avx256)
+static ptls_fusion_aesgcm_context_t *new_aesgcm(const void *key, size_t key_size, size_t capacity, int aesni256)
 {
     ptls_fusion_aesgcm_context_t *ctx;
-    size_t ghash_cnt = aesgcm_calc_ghash_cnt(capacity), ctx_size = calc_aesgcm_context_size(&ghash_cnt, avx256);
+    size_t ghash_cnt = aesgcm_calc_ghash_cnt(capacity), ctx_size = calc_aesgcm_context_size(&ghash_cnt, aesni256);
 
     if ((ctx = aligned_alloc(32, ctx_size)) == NULL)
         return NULL;
 
-    ptls_fusion_aesecb_init(&ctx->ecb, 1, key, key_size, avx256);
+    ptls_fusion_aesecb_init(&ctx->ecb, 1, key, key_size, aesni256);
 
     ctx->capacity = capacity;
 
     __m128i H0 = aesecb_encrypt(&ctx->ecb, _mm_setzero_si128());
     H0 = _mm_shuffle_epi8(H0, byteswap128);
     H0 = transformH(H0);
-    if (ctx->ecb.avx256) {
+    if (ctx->ecb.aesni256) {
         ((struct ptls_fusion_aesgcm_context256 *)ctx)->ghash[0].H[1] = H0;
     } else {
         ((struct ptls_fusion_aesgcm_context128 *)ctx)->ghash[0].H = H0;
@@ -1018,7 +1018,7 @@ ptls_fusion_aesgcm_context_t *ptls_fusion_aesgcm_set_capacity(ptls_fusion_aesgcm
     if (ghash_cnt <= ctx->ghash_cnt)
         return ctx;
 
-    size_t ctx_size = calc_aesgcm_context_size(&ghash_cnt, ctx->ecb.avx256);
+    size_t ctx_size = calc_aesgcm_context_size(&ghash_cnt, ctx->ecb.aesni256);
     ptls_fusion_aesgcm_context_t *newp;
     if ((newp = aligned_alloc(32, ctx_size)) == NULL)
         return NULL;
@@ -1035,7 +1035,7 @@ ptls_fusion_aesgcm_context_t *ptls_fusion_aesgcm_set_capacity(ptls_fusion_aesgcm
 
 void ptls_fusion_aesgcm_free(ptls_fusion_aesgcm_context_t *ctx)
 {
-    ptls_clear_memory(ctx, calc_aesgcm_context_size(&ctx->ghash_cnt, ctx->ecb.avx256));
+    ptls_clear_memory(ctx, calc_aesgcm_context_size(&ctx->ghash_cnt, ctx->ecb.aesni256));
     /* skip ptls_fusion_aesecb_dispose, based on the knowledge that it does not allocate memory elsewhere */
 
     free(ctx);
@@ -1077,7 +1077,7 @@ static int aesctr_setup(ptls_cipher_context_t *_ctx, int is_enc, const void *key
     ctx->super.do_dispose = ctr_dispose;
     ctx->super.do_init = ctr_init;
     ctx->super.do_transform = ctr_transform;
-    ptls_fusion_aesecb_init(&ctx->fusion, 1, key, key_size, 0 /* probably we do not need avx256 for CTR? */);
+    ptls_fusion_aesecb_init(&ctx->fusion, 1, key, key_size, 0 /* probably we do not need aesni256 for CTR? */);
     ctx->is_ready = 0;
 
     return 0;
@@ -1185,7 +1185,7 @@ static int aesgcm_setup(ptls_aead_context_t *_ctx, int is_enc, const void *key, 
     ctx->super.do_encrypt_v = aead_do_encrypt_v;
     ctx->super.do_decrypt = aead_do_decrypt;
 
-    ctx->aesgcm = new_aesgcm(key, key_size, 1500 /* assume ordinary packet size */, 0 /* no support for avx256 yet */);
+    ctx->aesgcm = new_aesgcm(key, key_size, 1500 /* assume ordinary packet size */, 0 /* no support for aesni256 yet */);
 
     return 0;
 }
@@ -1200,7 +1200,7 @@ static int aes256gcm_setup(ptls_aead_context_t *ctx, int is_enc, const void *key
     return aesgcm_setup(ctx, is_enc, key, iv, PTLS_AES256_KEY_SIZE);
 }
 
-int ptls_fusion_can_avx256 = 0;
+int ptls_fusion_can_aesni256 = 0;
 ptls_cipher_algorithm_t ptls_fusion_aes128ctr = {"AES128-CTR",
                                                  PTLS_AES128_KEY_SIZE,
                                                  1, // block size
@@ -1472,14 +1472,16 @@ static void non_temporal_encrypt_v128(struct st_ptls_aead_context_t *_ctx, void 
                         --srclen;
                     }
                     if (PTLS_UNLIKELY(srclen == 0)) {
-                        if (src_vecleft == 0) {
-                            break;
-                        } else {
+                        do {
+                            if (src_vecleft == 0)
+                                break;
                             src = (void *)input[0].base;
                             srclen = input[0].len;
                             ++input;
                             --src_vecleft;
-                        }
+                        } while (srclen == 0);
+                        if (srclen == 0)
+                            break;
                     }
                 } while (bytes_copied < 6 * 16);
 #define APPLY(i) _mm_storeu_si128((void *)(encp + i * 16), _mm_xor_si128(_mm_loadu_si128((void *)(encp + i * 16)), bits##i))
@@ -1973,14 +1975,16 @@ static void non_temporal_encrypt_v256(struct st_ptls_aead_context_t *_ctx, void 
                         --srclen;
                     }
                     if (PTLS_UNLIKELY(srclen == 0)) {
-                        if (src_vecleft == 0) {
-                            break;
-                        } else {
+                        do {
+                            if (src_vecleft == 0)
+                                break;
                             src = (void *)input[0].base;
                             srclen = input[0].len;
                             ++input;
                             --src_vecleft;
-                        }
+                        } while (srclen == 0);
+                        if (srclen == 0)
+                            break;
                     }
                 } while (bytes_copied < 6 * 32);
 #define APPLY(i)                                                                                                                   \
@@ -2086,7 +2090,7 @@ static void non_temporal_encrypt_v256(struct st_ptls_aead_context_t *_ctx, void 
 static int non_temporal_setup(ptls_aead_context_t *_ctx, int is_enc, const void *key, const void *iv, size_t key_size)
 {
     struct aesgcm_context *ctx = (struct aesgcm_context *)_ctx;
-    int avx256 = is_enc && ptls_fusion_can_avx256;
+    int aesni256 = is_enc && ptls_fusion_can_aesni256;
 
     ctx->static_iv = loadn128(iv, PTLS_AESGCM_IV_SIZE);
     ctx->static_iv = _mm_shuffle_epi8(ctx->static_iv, byteswap128);
@@ -2100,18 +2104,19 @@ static int non_temporal_setup(ptls_aead_context_t *_ctx, int is_enc, const void 
     ctx->super.do_encrypt_final = NULL;
     if (is_enc) {
         ctx->super.do_encrypt = ptls_aead__do_encrypt;
-        ctx->super.do_encrypt_v = avx256 ? non_temporal_encrypt_v256 : non_temporal_encrypt_v128;
+        ctx->super.do_encrypt_v = aesni256 ? non_temporal_encrypt_v256 : non_temporal_encrypt_v128;
         ctx->super.do_decrypt = NULL;
     } else {
-        assert(!avx256);
+        assert(!aesni256);
         ctx->super.do_encrypt = NULL;
         ctx->super.do_encrypt_v = NULL;
         ctx->super.do_decrypt = non_temporal_decrypt128;
     }
 
-    ctx->aesgcm = new_aesgcm(key, key_size,
-                             7 * (ptls_fusion_can_avx256 ? 32 : 16), // 6 blocks at once, plus len(A) | len(C) that we might append
-                             avx256);
+    ctx->aesgcm =
+        new_aesgcm(key, key_size,
+                   7 * (ptls_fusion_can_aesni256 ? 32 : 16), // 6 blocks at once, plus len(A) | len(C) that we might append
+                   aesni256);
 
     return 0;
 }
@@ -2180,8 +2185,8 @@ int ptls_fusion_is_supported_by_cpu(void)
             is_supported = /* AVX2 */ (leaf7_ebx & (1 << 5)) != 0;
 
             /* enable 256-bit mode if possible */
-            if (is_supported && (leaf7_ecx & 0x600) != 0 && !ptls_fusion_can_avx256)
-                ptls_fusion_can_avx256 = 1;
+            if (is_supported && (leaf7_ecx & 0x600) != 0 && !ptls_fusion_can_aesni256)
+                ptls_fusion_can_aesni256 = 1;
         }
     }
 
@@ -2212,8 +2217,8 @@ int ptls_fusion_is_supported_by_cpu(void)
         return 0;
 
     /* enable 256-bit mode if possible */
-    if ((leaf7_ecx & 0x600) != 0 && !ptls_fusion_can_avx256)
-        ptls_fusion_can_avx256 = 1;
+    if ((leaf7_ecx & 0x600) != 0 && !ptls_fusion_can_aesni256)
+        ptls_fusion_can_aesni256 = 1;
 
     return 1;
 }
