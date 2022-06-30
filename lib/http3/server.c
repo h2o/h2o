@@ -443,23 +443,6 @@ static void pre_dispose_request(struct st_h2o_http3_server_stream_t *stream)
         --get_conn(stream)->num_streams_tunnelling;
 }
 
-static void update_conn_state(struct st_h2o_http3_server_conn_t *conn)
-{
-    if (h2o_timer_is_linked(&conn->_graceful_shutdown_timeout)) {
-        assert(conn->super.state == H2O_CONN_STATE_SHUTDOWN);
-        return;
-    }
-
-    /* Set to IDLE state if any request have been processed and if there are no requests to be processed, or otherwise to ACTIVE. We
-     * switch to IDLE state as soon as all request streams enter CLOSE_WAIT state to be on par with HTTP/1 and 2. */
-    if (quicly_num_streams_by_group(conn->h3.super.quic, 0, 0) == conn->num_streams.close_wait &&
-        quicly_get_remote_next_stream_id(conn->h3.super.quic, 0) > 0) {
-        h2o_conn_set_state(&conn->super, H2O_CONN_STATE_IDLE);
-    } else {
-        h2o_conn_set_state(&conn->super, H2O_CONN_STATE_ACTIVE);
-    }
-}
-
 static void set_state(struct st_h2o_http3_server_stream_t *stream, enum h2o_http3_server_stream_state state, int in_generator)
 {
     struct st_h2o_http3_server_conn_t *conn = get_conn(stream);
@@ -494,8 +477,6 @@ static void set_state(struct st_h2o_http3_server_stream_t *stream, enum h2o_http
     default:
         break;
     }
-
-    update_conn_state(conn);
 }
 
 /**
@@ -723,6 +704,12 @@ void on_stream_destroy(quicly_stream_t *qs, int err)
     h2o_buffer_dispose(&stream->recvbuf.buf);
 
     free(stream);
+
+    uint32_t num_req_streams_incl_self = quicly_num_streams_by_group(conn->h3.super.quic, 0, 0);
+    assert(num_req_streams_incl_self > 0 &&
+           "during the invocation of the destroy callback, stream count should include the number of the stream being destroyed");
+    if (num_req_streams_incl_self == 1)
+        h2o_conn_set_state(&get_conn(stream)->super, H2O_CONN_STATE_IDLE);
 }
 
 /**
@@ -1596,7 +1583,7 @@ static int stream_open_cb(quicly_stream_open_t *self, quicly_stream_t *qs)
     stream->quic->callbacks = &callbacks;
 
     ++*get_state_counter(get_conn(stream), stream->state);
-    update_conn_state(conn);
+    h2o_conn_set_state(&get_conn(stream)->super, H2O_CONN_STATE_ACTIVE);
 
     return 0;
 }
