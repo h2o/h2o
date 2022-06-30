@@ -676,6 +676,11 @@
 /* Begin PBXFileReference section */
 		080B3CC227E1AF6C004AC8E6 /* config.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = config.c; sourceTree = "<group>"; };
 		080D35EA1D5E060D0029B7E5 /* http2_debug_state.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = http2_debug_state.c; sourceTree = "<group>"; };
+		0810E6A7286DACB600333FA4 /* 50reverse-proxy-null-host-header.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50reverse-proxy-null-host-header.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		0810E6A8286DACB600333FA4 /* 50connect-proxy-status.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50connect-proxy-status.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		0810E6A9286DACB600333FA4 /* 10httpclient-lowercase.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "10httpclient-lowercase.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		0810E6AA286DACB600333FA4 /* 40http3-invalid-token.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "40http3-invalid-token.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		0810E6AB286DACB600333FA4 /* 40soft-connection-limit.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "40soft-connection-limit.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		0812174C1E07B89600712F36 /* redis.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = redis.c; sourceTree = "<group>"; };
 		0812AB1C1D7FCFEB00004F23 /* async.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = async.c; sourceTree = "<group>"; };
 		0812AB1D1D7FCFEB00004F23 /* async.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = async.h; sourceTree = "<group>"; };
@@ -2199,6 +2204,7 @@
 				105534F31A460EF600627ECB /* 00unit.libuv.t */,
 				109EEFDC1D77B350001F11D1 /* 00unit.mruby.t */,
 				105534F41A460EF600627ECB /* 10httpclient.t */,
+				0810E6A9286DACB600333FA4 /* 10httpclient-lowercase.t */,
 				0879B8CC2724DBF400F77220 /* 10socket.t */,
 				10FEF2481D6EC30800E11B1D /* 40bad-request.t */,
 				E9AFBF17212A9802000F5DB8 /* 40chunked.t */,
@@ -2215,6 +2221,7 @@
 				E90BB43B24F38937006507EA /* 40http3-concurrency.t */,
 				E90BB43C24F4834D006507EA /* 40http3-forward.t */,
 				E9D49A5025FB561A00F4A80D /* 40http3-forward-initial.t */,
+				0810E6AA286DACB600333FA4 /* 40http3-invalid-token.t */,
 				E9414F8D24EBFBDA00273C59 /* 40http3-reconnect.t */,
 				E9FC525C234B0A630076F35D /* 40http3-retry.t */,
 				E9414F8E24ED1CD700273C59 /* 40http3-shutdown.t */,
@@ -2232,6 +2239,7 @@
 				109EEFDE1D77B350001F11D1 /* 40server-push-multiple.t */,
 				086001BF2730B6E30043886F /* 40session-ticket */,
 				107D4D501B58B342004A9B21 /* 40session-ticket.t */,
+				0810E6AB286DACB600333FA4 /* 40soft-connection-limit.t */,
 				104B9A321A59E27A009EEE64 /* 40ssl-cipher-suite.t */,
 				086001CC273BBBCF0043886F /* 40tls-multiple-certs.t */,
 				E93BB6D025E09504009C24D8 /* 40tls-raw-pubkey.t */,
@@ -2248,6 +2256,7 @@
 				E93BB45025DA530E009C24D8 /* 50connect.t */,
 				086850BE2752E20100F8CAD1 /* 50connect-eyeballs.t */,
 				08B3D43A26042CAF002F195C /* 50connect-deadlock.t */,
+				0810E6A8286DACB600333FA4 /* 50connect-proxy-status.t */,
 				E9AFBF11212A9801000F5DB8 /* 50date-header.t */,
 				086001C42730B7170043886F /* 50dnsresolver.t */,
 				106C23021C06AB2F00405689 /* 50errordoc.t */,
@@ -2310,6 +2319,7 @@
 				E9A410961F9EA2F100D9B0FB /* 50reverse-proxy-multiple-backends.t */,
 				E9A410951F9EA2E400D9B0FB /* 50reverse-proxy-multiple-backends-with-down.t */,
 				E9AFBF20212A9814000F5DB8 /* 50reverse-proxy-multiple-balancers.t */,
+				0810E6A7286DACB600333FA4 /* 50reverse-proxy-null-host-header.t */,
 				E9BC76C31EE4AA4600EB7A09 /* 50reverse-proxy-preserve-case.t */,
 				10FEF2441D6444E900E11B1D /* 50reverse-proxy-proxy-protocol.t */,
 				E9414F9824ED1D7500273C59 /* 50reverse-proxy-request-bytes.t */,
