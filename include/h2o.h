@@ -1362,6 +1362,11 @@ void h2o_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock);
 static h2o_conn_t *h2o_create_connection(size_t sz, h2o_context_t *ctx, h2o_hostconf_t **hosts, struct timeval connected_at,
                                          const h2o_conn_callbacks_t *callbacks);
 /**
+ * creates a new connection in a buffer
+ */
+static h2o_conn_t *h2o_create_connection_in_place(void *buf, h2o_context_t *ctx, h2o_hostconf_t **hosts, struct timeval connected_at,
+                                                  const h2o_conn_callbacks_t *callbacks);
+/**
  * returns the uuid of the connection as a null-terminated string.
  */
 static const char *h2o_conn_get_uuid(h2o_conn_t *conn);
@@ -2244,10 +2249,10 @@ void h2o_self_trace_register_configurator(h2o_globalconf_t *conf);
 extern pthread_mutex_t h2o_conn_id_mutex;
 #endif
 
-inline h2o_conn_t *h2o_create_connection(size_t sz, h2o_context_t *ctx, h2o_hostconf_t **hosts, struct timeval connected_at,
+inline h2o_conn_t *h2o_create_connection_in_place(void *buf, h2o_context_t *ctx, h2o_hostconf_t **hosts, struct timeval connected_at,
                                          const h2o_conn_callbacks_t *callbacks)
 {
-    h2o_conn_t *conn = (h2o_conn_t *)h2o_mem_alloc(sz);
+    h2o_conn_t *conn = (h2o_conn_t *)buf;
 
     conn->ctx = ctx;
     conn->hosts = hosts;
@@ -2263,6 +2268,13 @@ inline h2o_conn_t *h2o_create_connection(size_t sz, h2o_context_t *ctx, h2o_host
     conn->_uuid.is_initialized = 0;
 
     return conn;
+}
+
+inline h2o_conn_t *h2o_create_connection(size_t sz, h2o_context_t *ctx, h2o_hostconf_t **hosts, struct timeval connected_at,
+                                         const h2o_conn_callbacks_t *callbacks)
+{
+    h2o_conn_t *conn = (h2o_conn_t *)h2o_mem_alloc(sz);
+    return h2o_create_connection_in_place(conn, ctx, hosts, connected_at, callbacks);
 }
 
 inline const char *h2o_conn_get_uuid(h2o_conn_t *conn)

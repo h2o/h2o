@@ -393,6 +393,7 @@ void h2o_dump_memory(FILE *fp, const char *buf, size_t len);
 void h2o_append_to_null_terminated_list(void ***list, void *element);
 
 extern __thread h2o_mem_recycle_t h2o_mem_pool_allocator;
+extern __thread h2o_mem_recycle_t h2o_mem_req_allocator;
 extern size_t h2o_mmap_errors;
 
 /* inline defs */

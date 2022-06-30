@@ -149,7 +149,7 @@ static void close_connection(struct st_h2o_http1_conn_t *conn, int close_socket)
     if (conn->sock != NULL && close_socket)
         h2o_socket_close(conn->sock);
     h2o_linklist_unlink(&conn->_conns);
-    free(conn);
+    h2o_mem_free_recycle(&h2o_mem_req_allocator, conn);
 }
 
 static void cleanup_connection(struct st_h2o_http1_conn_t *conn)
@@ -1220,8 +1220,10 @@ static int conn_is_h1(h2o_conn_t *conn)
 
 void h2o_http1_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval connected_at)
 {
+    void *_conn = h2o_mem_alloc_recycle(&h2o_mem_req_allocator);
     struct st_h2o_http1_conn_t *conn =
-        (void *)h2o_create_connection(sizeof(*conn), ctx->ctx, ctx->hosts, connected_at, &h1_callbacks);
+        (void *)h2o_create_connection_in_place(_conn, ctx->ctx, ctx->hosts, connected_at, &h1_callbacks);
+    H2O_BUILD_ASSERT(sizeof(*conn) < *h2o_mem_req_allocator.memsize);
 
     /* zero-fill all properties expect req */
     memset((char *)conn + sizeof(conn->super), 0, offsetof(struct st_h2o_http1_conn_t, req) - sizeof(conn->super));

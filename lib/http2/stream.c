@@ -33,10 +33,13 @@ static size_t sz_min(size_t x, size_t y)
     return x < y ? x : y;
 }
 
+
+
 h2o_http2_stream_t *h2o_http2_stream_open(h2o_http2_conn_t *conn, uint32_t stream_id, h2o_req_t *src_req,
                                           const h2o_http2_priority_t *received_priority)
 {
-    h2o_http2_stream_t *stream = h2o_mem_alloc(sizeof(*stream));
+    h2o_http2_stream_t *stream = h2o_mem_alloc_recycle(&h2o_mem_req_allocator);
+    H2O_BUILD_ASSERT(sizeof(*stream) < *h2o_mem_req_allocator.memsize);
 
     /* init properties (other than req) */
     memset(stream, 0, offsetof(h2o_http2_stream_t, req));
@@ -75,7 +78,7 @@ void h2o_http2_stream_close(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
     h2o_dispose_request(&stream->req);
     if (stream->stream_id == 1 && conn->_http1_req_input != NULL)
         h2o_buffer_dispose(&conn->_http1_req_input);
-    free(stream);
+    h2o_mem_free_recycle(&h2o_mem_req_allocator, stream);
 }
 
 void h2o_http2_stream_reset(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
