@@ -994,6 +994,7 @@ static int handle_headers_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame
             stream->received_priority = payload.priority;
         }
     } else {
+        conn->received_any_request = 1;
         stream = h2o_http2_stream_open(conn, frame->stream_id, NULL, &payload.priority);
         set_priority(conn, stream, &payload.priority, 0);
     }
@@ -1732,6 +1733,7 @@ static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_hostconf_t **hosts,
     h2o_http2_window_init(&conn->_write.window, conn->peer_settings.initial_window_size);
     h2o_linklist_init_anchor(&conn->early_data.blocked_streams);
     conn->is_chromium_dependency_tree = 1; /* initially assume the client is Chromium until proven otherwise */
+    conn->received_any_request = 0;
 
     return conn;
 }

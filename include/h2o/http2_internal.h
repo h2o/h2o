@@ -179,11 +179,13 @@ struct st_h2o_http2_conn_t {
     /* internal */
     h2o_http2_scheduler_node_t scheduler;
     h2o_http2_conn_state_t state;
-    int is_chromium_dependency_tree; /* indicates whether the client-generated dependency tree is from Chromium
-                                      * Dependency tree from Chromium satisfies the following properties:
-                                      * 1) Every stream has the exclusive bit set
-                                      * 2) On a dependency tree, child's weight is lower than or equal to parent's
-                                      */
+    unsigned is_chromium_dependency_tree : 1; /* indicates whether the client-generated dependency tree is from Chromium. The
+                                               * denpendency tree of Chromium satisfies the following properties:
+                                               * 1) Every stream has the exclusive bit set
+                                               * 2) On a dependency tree, child's weight is lower than or equal to parent's
+                                               */
+    unsigned received_any_request : 1; /* if any request has been received. The connection is not subject to culling until at least
+                                        * one request has been processed. */
 
     ssize_t (*_read_expect)(h2o_http2_conn_t *conn, const uint8_t *src, size_t len, const char **err_desc);
     h2o_buffer_t *_http1_req_input; /* contains data referred to by original request via HTTP/1.1 */
@@ -382,10 +384,12 @@ inline void h2o_http2_stream_set_state(h2o_http2_conn_t *conn, h2o_http2_stream_
         break;
     }
 
+    /* Unless the connection is already in shutdown state, set the connection to ether IDLE or ACTIVE state depending on if there is
+     * any request in flight. */
     if (!h2o_timer_is_linked(&conn->_graceful_shutdown_timeout)) {
-        if (0 == conn->num_streams.pull.open + conn->num_streams.pull.half_closed + conn->num_streams.push.open +
-                     conn->num_streams.push.half_closed) {
-            // all streams are idle
+        size_t num_reqs_inflight = conn->num_streams.pull.open + conn->num_streams.pull.half_closed + conn->num_streams.push.open +
+                                   conn->num_streams.push.half_closed;
+        if (conn->received_any_request && num_reqs_inflight == 0) {
             h2o_conn_set_state(&conn->super, H2O_CONN_STATE_IDLE);
         } else {
             h2o_conn_set_state(&conn->super, H2O_CONN_STATE_ACTIVE);
