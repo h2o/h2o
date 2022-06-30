@@ -411,7 +411,7 @@ void close_connection_now(h2o_http2_conn_t *conn)
         h2o_cache_destroy(conn->push_memo);
     if (conn->casper != NULL)
         h2o_http2_casper_destroy(conn->casper);
-    h2o_conn_fin_state(&conn->super);
+    h2o_conn_dispose_state(&conn->super);
 
     if (conn->sock != NULL)
         h2o_socket_close(conn->sock);
@@ -1908,7 +1908,7 @@ int h2o_http2_handle_upgrade(h2o_req_t *req, struct timeval connected_at)
 
     return 0;
 Error:
-    h2o_conn_fin_state(&http2conn->super);
+    h2o_conn_dispose_state(&http2conn->super);
     kh_destroy(h2o_http2_stream_t, http2conn->streams);
     free(http2conn);
     return -1;

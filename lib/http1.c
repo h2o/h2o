@@ -142,7 +142,7 @@ static void close_connection(struct st_h2o_http1_conn_t *conn, int close_socket)
     h2o_dispose_request(&conn->req);
     if (conn->sock != NULL && close_socket)
         h2o_socket_close(conn->sock);
-    h2o_conn_fin_state(&conn->super);
+    h2o_conn_dispose_state(&conn->super);
     free(conn);
 }
 

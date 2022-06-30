@@ -246,7 +246,7 @@ void h2o_conn_init_state(h2o_conn_t *conn, h2o_conn_state_t state)
     set_conn_state(conn, state);
 }
 
-void h2o_conn_fin_state(h2o_conn_t *conn)
+void h2o_conn_dispose_state(h2o_conn_t *conn)
 {
     unset_conn_state(conn);
 }

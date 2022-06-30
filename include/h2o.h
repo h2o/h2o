@@ -1697,9 +1697,9 @@ void h2o_context_close_idle_connections(h2o_context_t *ctx, size_t max_connectio
  */
 void h2o_conn_init_state(h2o_conn_t *conn, h2o_conn_state_t state);
 /**
- * finalize connection state
+ * disposes of the state assigned to the connection
  */
-void h2o_conn_fin_state(h2o_conn_t *conn);
+void h2o_conn_dispose_state(h2o_conn_t *conn);
 /**
  * transition connection state
  */
