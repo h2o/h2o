@@ -164,7 +164,7 @@ subtest 'http3 soft-connection-limit' => sub {
     my @conns;
     for (1..10) {
         # launch h2o-httpclient that immediately issues a request and then idles for 10 seconds before sending the next request
-        open my $fh, "-|", bindir() . "/h2o-httpclient", qw(-3 100 -t 2 -d 10000), "https://127.0.0.1:$tls_port/"
+        open my $fh, "-|", "@{[bindir()]}/h2o-httpclient -3 100 -t 2 -d 10000 https://127.0.0.1:$tls_port/ 2> /dev/null"
             or die "failed to launch h2o-httpclient:$!";
         push @conns, $fh;
     }
