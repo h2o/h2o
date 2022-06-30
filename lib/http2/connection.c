@@ -1719,7 +1719,7 @@ static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_hostconf_t **hosts,
     conn->streams = kh_init(h2o_http2_stream_t);
     h2o_http2_scheduler_init(&conn->scheduler);
     conn->state = H2O_HTTP2_CONN_STATE_OPEN;
-    h2o_conn_init_state(&conn->super, H2O_CONN_STATE_IDLE);
+    h2o_conn_init_state(&conn->super);
     conn->_read_expect = expect_preface;
     conn->_input_header_table.hpack_capacity = conn->_input_header_table.hpack_max_capacity =
         H2O_HTTP2_SETTINGS_DEFAULT.header_table_size;

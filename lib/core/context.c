@@ -241,9 +241,9 @@ static void set_conn_state(h2o_conn_t *conn, h2o_conn_state_t state)
     ++*get_connection_state_counter(conn->ctx, conn->state);
 }
 
-void h2o_conn_init_state(h2o_conn_t *conn, h2o_conn_state_t state)
+void h2o_conn_init_state(h2o_conn_t *conn)
 {
-    set_conn_state(conn, state);
+    set_conn_state(conn, H2O_CONN_STATE_ACTIVE);
 }
 
 void h2o_conn_dispose_state(h2o_conn_t *conn)

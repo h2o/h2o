@@ -1693,9 +1693,10 @@ void h2o_context_update_timestamp_string_cache(h2o_context_t *ctx);
  */
 void h2o_context_close_idle_connections(h2o_context_t *ctx, size_t max_connections_to_close, uint64_t min_age);
 /**
- * initialize connection state
+ * Initialize connection state. All connections start in the ACTIVE state, as we do not want to cull connections on which we have
+ * not received a request.
  */
-void h2o_conn_init_state(h2o_conn_t *conn, h2o_conn_state_t state);
+void h2o_conn_init_state(h2o_conn_t *conn);
 /**
  * disposes of the state assigned to the connection
  */
