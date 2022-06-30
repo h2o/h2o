@@ -31,10 +31,11 @@ typedef struct mrb_irep_debug_info_file {
   uint32_t line_entry_count;
   mrb_debug_line_type line_type;
   union {
+    const char *s;
     void *ptr;
-    uint16_t *ary;
-    mrb_irep_debug_info_line *flat_map;
-    uint8_t *packed_map;
+    const uint16_t *ary;
+    const mrb_irep_debug_info_line *flat_map;
+    const uint8_t *packed_map;
   } lines;
 } mrb_irep_debug_info_file;
 

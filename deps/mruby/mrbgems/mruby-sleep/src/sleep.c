@@ -95,7 +95,7 @@ mrb_f_usleep(mrb_state *mrb, mrb_value self)
     if (usec >= 0) {
         usleep(usec);
     } else {
-        mrb_raise(mrb, E_ARGUMENT_ERROR, "time interval must not be negative integer");
+        mrb_raise(mrb, E_ARGUMENT_ERROR, "time interval must not be negative");
     }
 
 #ifdef _WIN32

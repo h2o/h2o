@@ -89,11 +89,8 @@ struct RProc {
 #define mrb_proc_ptr(v)    ((struct RProc*)(mrb_ptr(v)))
 
 struct RProc *mrb_proc_new(mrb_state*, const mrb_irep*);
-struct RProc *mrb_closure_new(mrb_state*, const mrb_irep*);
 MRB_API struct RProc *mrb_proc_new_cfunc(mrb_state*, mrb_func_t);
 MRB_API struct RProc *mrb_closure_new_cfunc(mrb_state *mrb, mrb_func_t func, int nlocals);
-void mrb_proc_copy(mrb_state *mrb, struct RProc *a, struct RProc *b);
-mrb_int mrb_proc_arity(const struct RProc *p);
 
 /* following functions are defined in mruby-proc-ext so please include it when using */
 MRB_API struct RProc *mrb_proc_new_cfunc_with_env(mrb_state *mrb, mrb_func_t func, mrb_int argc, const mrb_value *argv);
@@ -138,73 +135,11 @@ MRB_API mrb_value mrb_proc_cfunc_env_get(mrb_state *mrb, mrb_int idx);
 
 MRB_API mrb_value mrb_load_proc(mrb_state *mrb, const struct RProc *proc);
 
-static inline void
-mrb_vm_ci_proc_set(mrb_callinfo *ci, const struct RProc *p)
-{
-  ci->proc = p;
-  ci->pc = (p && !MRB_PROC_CFUNC_P(p)) ? p->body.irep->iseq : NULL;
-}
-
-static inline struct RClass *
-mrb_vm_ci_target_class(const mrb_callinfo *ci)
-{
-  if (ci->u.env && ci->u.env->tt == MRB_TT_ENV) {
-    return ci->u.env->c;
-  }
-  else {
-    return ci->u.target_class;
-  }
-}
-
-static inline void
-mrb_vm_ci_target_class_set(mrb_callinfo *ci, struct RClass *tc)
-{
-  struct REnv *e = ci->u.env;
-  if (e) {
-    if (e->tt == MRB_TT_ENV) {
-      e->c = tc;
-    }
-    else {
-      ci->u.target_class = tc;
-    }
-  }
-}
-
-static inline struct REnv *
-mrb_vm_ci_env(const mrb_callinfo *ci)
-{
-  if (ci->u.env && ci->u.env->tt == MRB_TT_ENV) {
-    return ci->u.env;
-  }
-  else {
-    return NULL;
-  }
-}
-
-static inline void
-mrb_vm_ci_env_set(mrb_callinfo *ci, struct REnv *e)
-{
-  if (ci->u.env) {
-    if (ci->u.env->tt == MRB_TT_ENV) {
-      if (e) {
-        e->c = ci->u.env->c;
-        ci->u.env = e;
-      }
-      else {
-        ci->u.target_class = ci->u.env->c;
-      }
-    }
-    else {
-      if (e) {
-        e->c = ci->u.target_class;
-        ci->u.env = e;
-      }
-    }
-  }
-  else {
-    ci->u.env = e;
-  }
-}
+void mrb_vm_ci_proc_set(mrb_callinfo *ci, const struct RProc *p);
+struct RClass * mrb_vm_ci_target_class(const mrb_callinfo *ci);
+void mrb_vm_ci_target_class_set(mrb_callinfo *ci, struct RClass *tc);
+struct REnv * mrb_vm_ci_env(const mrb_callinfo *ci);
+void mrb_vm_ci_env_set(mrb_callinfo *ci, struct REnv *e);
 
 MRB_END_DECL
 

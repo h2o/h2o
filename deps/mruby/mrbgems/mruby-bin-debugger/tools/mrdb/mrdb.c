@@ -14,6 +14,7 @@
 #include <mruby/opcode.h>
 #include <mruby/variable.h>
 #include <mruby/proc.h>
+#include <mruby/internal.h>
 
 #include "mrdb.h"
 #include "apibreak.h"

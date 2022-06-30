@@ -85,7 +85,6 @@ struct RArray {
 #define ARY_SET_SHARED_FLAG(a) ((a)->flags |= MRB_ARY_SHARED)
 #define ARY_UNSET_SHARED_FLAG(a) ((a)->flags &= ~MRB_ARY_SHARED)
 
-void mrb_ary_decref(mrb_state*, mrb_shared_array*);
 MRB_API void mrb_ary_modify(mrb_state*, struct RArray*);
 MRB_API mrb_value mrb_ary_new_capa(mrb_state*, mrb_int);
 
@@ -296,8 +295,6 @@ MRB_API mrb_value mrb_ary_join(mrb_state *mrb, mrb_value ary, mrb_value sep);
  */
 MRB_API mrb_value mrb_ary_resize(mrb_state *mrb, mrb_value ary, mrb_int new_len);
 
-/* helper functions */
-mrb_value mrb_ary_subseq(mrb_state *mrb, mrb_value ary, mrb_int beg, mrb_int len);
 
 MRB_END_DECL
 

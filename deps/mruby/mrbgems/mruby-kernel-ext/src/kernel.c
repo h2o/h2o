@@ -6,6 +6,7 @@
 #include <mruby/string.h>
 #include <mruby/numeric.h>
 #include <mruby/proc.h>
+#include <mruby/internal.h>
 #include <mruby/presym.h>
 
 static mrb_value
@@ -78,7 +79,7 @@ mrb_f_method(mrb_state *mrb, mrb_value self)
 {
   mrb_callinfo *ci = mrb->c->ci;
   ci--;
-  if (ci->proc->e.env->tt == MRB_TT_ENV && ci->proc->e.env->mid)
+  if (ci->proc && ci->proc->e.env && ci->proc->e.env->tt == MRB_TT_ENV && ci->proc->e.env->mid)
     return mrb_symbol_value(ci->proc->e.env->mid);
   else if (ci->mid)
     return mrb_symbol_value(ci->mid);
@@ -166,7 +167,7 @@ arg_error:
     mrb_raise(mrb, E_ARGUMENT_ERROR, "base specified for non string value");
   }
   /* to raise TypeError */
-  return mrb_to_integer(mrb, val);
+  return mrb_ensure_integer_type(mrb, val);
 }
 
 #ifndef MRB_NO_FLOAT
@@ -190,7 +191,7 @@ mrb_f_float(mrb_state *mrb, mrb_value self)
   if (mrb_string_p(arg)) {
     return mrb_float_value(mrb, mrb_str_to_dbl(mrb, arg, TRUE));
   }
-  return mrb_to_float(mrb, arg);
+  return mrb_ensure_float_type(mrb, arg);
 }
 #endif
 

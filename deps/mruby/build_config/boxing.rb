@@ -5,7 +5,7 @@ ints = [64, 32]
 boxings.product(bits, ints) do |boxing, bit, int|
   MRuby::Build.new("boxing-#{boxing}-m#{bit}-i#{int}") do |conf|
     conf.toolchain :gcc
-    conf.gembox 'default'
+    conf.gembox 'full-core'
     conf.compilers.each do |c|
       c.defines << "MRB_#{boxing.upcase}_BOXING"
       c.defines << "MRB_INT#{int}"

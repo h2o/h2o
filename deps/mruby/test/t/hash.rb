@@ -676,6 +676,11 @@ assert('Hash#merge', '15.2.13.4.22') do
     h1, h2 = entries1.hash_for, entries2.hash_for
     k2.callback = ->(name, *){h2.clear if name == :hash}
     assert_nothing_crashed{h1.merge(h2)}
+
+    # single arguments
+    assert_equal({a:1,b:2}, {a:1}.merge({b:2}))
+    # multiple arguments
+    assert_equal({a:1,b:2,c:3}, {a:1}.merge({b:2},{c:3}))
   end
 end
 

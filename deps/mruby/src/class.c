@@ -16,6 +16,7 @@
 #include <mruby/data.h>
 #include <mruby/istruct.h>
 #include <mruby/opcode.h>
+#include <mruby/internal.h>
 #include <mruby/presym.h>
 
 union mt_ptr {
@@ -72,9 +73,9 @@ mt_rehash(mrb_state *mrb, mt_tbl *t)
   khash_power2(new_alloc);
   if (old_alloc == new_alloc) return;
 
+  t->ptr = (union mt_ptr*)mrb_calloc(mrb, sizeof(union mt_ptr)+sizeof(mrb_sym), new_alloc);
   t->alloc = new_alloc;
   t->size = 0;
-  t->ptr = (union mt_ptr*)mrb_calloc(mrb, sizeof(union mt_ptr)+sizeof(mrb_sym), new_alloc);
   if (old_alloc == 0) return;
 
   mrb_sym *keys = (mrb_sym*)&old_ptr[old_alloc];
@@ -150,9 +151,11 @@ mt_get(mrb_state *mrb, mt_tbl *t, mrb_sym sym, union mt_ptr *pp)
   hash = kh_int_hash_func(mrb, sym);
 #ifdef MRB_USE_INLINE_METHOD_CACHE
   int cpos = (hash^(uintptr_t)t) % MT_CACHE_SIZE;
+  mrb_sym key;
   pos = mt_cache[cpos];
-  if (cpos < t->alloc && t->table[cpos].key == sym) {
-    return &t->table[cpos];
+  if (cpos < t->alloc && key = keys[pos] && MT_KEY_SYM(key) == sym) {
+    *pp = vals[pos];
+    return key;
   }
 #endif
   start = pos = hash & (t->alloc-1);
@@ -161,7 +164,7 @@ mt_get(mrb_state *mrb, mt_tbl *t, mrb_sym sym, union mt_ptr *pp)
     if (MT_KEY_SYM(key) == sym) {
       *pp = vals[pos];
 #ifdef MRB_USE_INLINE_METHOD_CACHE
-      if (pos < 0xff) {
+      if (pos < 0x100) {
         mt_cache[cpos] = pos;
       }
 #endif
@@ -545,7 +548,7 @@ mrb_define_class(mrb_state *mrb, const char *name, struct RClass *super)
   return mrb_define_class_id(mrb, mrb_intern_cstr(mrb, name), super);
 }
 
-static mrb_value mrb_bob_init(mrb_state *mrb, mrb_value);
+static mrb_value mrb_do_nothing(mrb_state *mrb, mrb_value);
 #ifndef MRB_NO_METHOD_CACHE
 static void mc_clear(mrb_state *mrb);
 #else
@@ -564,7 +567,7 @@ mrb_class_inherited(mrb_state *mrb, struct RClass *super, struct RClass *klass)
   s = mrb_obj_value(super);
   mrb_mc_clear_by_class(mrb, klass);
   mid = MRB_SYM(inherited);
-  if (!mrb_func_basic_p(mrb, s, mid, mrb_bob_init)) {
+  if (!mrb_func_basic_p(mrb, s, mid, mrb_do_nothing)) {
     mrb_value c = mrb_obj_value(klass);
     mrb_funcall_argv(mrb, s, mid, 1, &c);
   }
@@ -877,8 +880,6 @@ mrb_get_arg1(mrb_state *mrb)
   return array_argv[0];
 }
 
-mrb_int mrb_ci_bidx(mrb_callinfo *ci);
-
 MRB_API mrb_bool
 mrb_block_given_p(mrb_state *mrb)
 {
@@ -913,7 +914,6 @@ mrb_block_given_p(mrb_state *mrb)
     b:      boolean        [mrb_bool]
     n:      String/Symbol  [mrb_sym]
     d:      data           [void*,mrb_data_type const] 2nd argument will be used to check data type so it won't be modified; when ! follows, the value may be nil
-    I:      inline struct  [void*,struct RClass]  I! gives NULL for nil
     &:      block          [mrb_value]            &! raises exception if no block given
     *:      rest argument  [const mrb_value*,mrb_int] The rest of the arguments as an array; *! avoid copy of the stack
     |:      optional                              Following arguments are optional
@@ -932,10 +932,10 @@ mrb_get_args(mrb_state *mrb, const char *format, ...)
 {
   const char *fmt = format;
   char c;
-  int i = 0;
+  mrb_int i = 0;
   va_list ap;
   mrb_callinfo *ci = mrb->c->ci;
-  int argc = ci->n;
+  mrb_int argc = ci->n;
   const mrb_value *argv = ci->stack+1;
   mrb_bool argv_on_stack;
   mrb_bool opt = FALSE;
@@ -1161,29 +1161,6 @@ mrb_get_args(mrb_state *mrb, const char *format, ...)
         }
       }
       break;
-    case 'I':
-      {
-        void* *p;
-        struct RClass *klass;
-
-        p = va_arg(ap, void**);
-        klass = va_arg(ap, struct RClass*);
-        if (pickarg) {
-          if (altmode && mrb_nil_p(*pickarg)) {
-            *p = NULL;
-          }
-          else {
-            if (!mrb_obj_is_kind_of(mrb, *pickarg, klass)) {
-              mrb_raisef(mrb, E_TYPE_ERROR, "%v is not a %C", *pickarg, klass);
-            }
-            if (!mrb_istruct_p(*pickarg)) {
-              mrb_raisef(mrb, E_TYPE_ERROR, "%v is not inline struct", *pickarg);
-            }
-            *p = mrb_istruct_ptr(*pickarg);
-          }
-        }
-      }
-      break;
 #ifndef MRB_NO_FLOAT
     case 'f':
       {
@@ -1376,6 +1353,7 @@ boot_defclass(mrb_state *mrb, struct RClass *super)
   if (super) {
     c->super = super;
     mrb_field_write_barrier(mrb, (struct RBasic*)c, (struct RBasic*)super);
+    c->flags |= MRB_FL_CLASS_IS_INHERITED;
   }
   else {
     c->super = mrb->object_class;
@@ -1970,7 +1948,7 @@ mrb_instance_new(mrb_state *mrb, mrb_value cv)
   mrb_get_args(mrb, "*!&", &argv, &argc, &blk);
   obj = mrb_instance_alloc(mrb, cv);
   init = MRB_SYM(initialize);
-  if (!mrb_func_basic_p(mrb, obj, init, mrb_bob_init)) {
+  if (!mrb_func_basic_p(mrb, obj, init, mrb_do_nothing)) {
     mrb_funcall_with_block(mrb, obj, init, argc, argv, blk);
   }
   return obj;
@@ -1984,7 +1962,7 @@ mrb_obj_new(mrb_state *mrb, struct RClass *c, mrb_int argc, const mrb_value *arg
 
   obj = mrb_instance_alloc(mrb, mrb_obj_value(c));
   mid = MRB_SYM(initialize);
-  if (!mrb_func_basic_p(mrb, obj, mid, mrb_bob_init)) {
+  if (!mrb_func_basic_p(mrb, obj, mid, mrb_do_nothing)) {
     mrb_funcall_argv(mrb, obj, mid, argc, argv);
   }
   return obj;
@@ -2041,7 +2019,7 @@ mrb_class_superclass(mrb_state *mrb, mrb_value klass)
 }
 
 static mrb_value
-mrb_bob_init(mrb_state *mrb, mrb_value cv)
+mrb_do_nothing(mrb_state *mrb, mrb_value cv)
 {
   return mrb_nil_value();
 }
@@ -2305,8 +2283,6 @@ mrb_mod_to_s(mrb_state *mrb, mrb_value klass)
   }
 }
 
-void mrb_method_added(mrb_state *mrb, struct RClass *c, mrb_sym mid);
-
 static mrb_value
 mrb_mod_alias(mrb_state *mrb, mrb_value mod)
 {
@@ -2363,7 +2339,10 @@ mrb_remove_method(mrb_state *mrb, struct RClass *c, mrb_sym mid)
   MRB_CLASS_ORIGIN(c);
   h = c->mt;
 
-  if (h && mt_del(mrb, h, mid)) return;
+  if (h && mt_del(mrb, h, mid)) {
+    mrb_mc_clear_by_class(mrb, c);
+    return;
+  }
   mrb_name_error(mrb, mid, "method '%n' not defined in %C", mid, c);
 }
 
@@ -2930,32 +2909,32 @@ mrb_init_class(mrb_state *mrb)
   MRB_SET_INSTANCE_TT(mrb->proc_class, MRB_TT_PROC);
 
   MRB_SET_INSTANCE_TT(cls, MRB_TT_CLASS);
-  mrb_define_method(mrb, bob, "initialize",              mrb_bob_init,             MRB_ARGS_NONE());
+  mrb_define_method(mrb, bob, "initialize",              mrb_do_nothing,           MRB_ARGS_NONE());
   mrb_define_method(mrb, bob, "!",                       mrb_bob_not,              MRB_ARGS_NONE());
   mrb_define_method(mrb, bob, "==",                      mrb_obj_equal_m,          MRB_ARGS_REQ(1)); /* 15.3.1.3.1  */
   mrb_define_method(mrb, bob, "__id__",                  mrb_obj_id_m,             MRB_ARGS_NONE()); /* 15.3.1.3.4  */
   mrb_define_method(mrb, bob, "__send__",                mrb_f_send,               MRB_ARGS_REQ(1)|MRB_ARGS_REST()|MRB_ARGS_BLOCK());  /* 15.3.1.3.5  */
   mrb_define_method(mrb, bob, "equal?",                  mrb_obj_equal_m,          MRB_ARGS_REQ(1)); /* 15.3.1.3.11 */
   mrb_define_method(mrb, bob, "instance_eval",           mrb_obj_instance_eval,    MRB_ARGS_OPT(1)|MRB_ARGS_BLOCK());  /* 15.3.1.3.18 */
-  mrb_define_method(mrb, bob, "singleton_method_added",  mrb_bob_init,             MRB_ARGS_REQ(1));
+  mrb_define_method(mrb, bob, "singleton_method_added",  mrb_do_nothing,           MRB_ARGS_REQ(1));
 
   mrb_define_class_method(mrb, cls, "new",               mrb_class_new_class,      MRB_ARGS_OPT(1)|MRB_ARGS_BLOCK());
   mrb_define_method(mrb, cls, "allocate",                mrb_instance_alloc,       MRB_ARGS_NONE());
   mrb_define_method(mrb, cls, "superclass",              mrb_class_superclass,     MRB_ARGS_NONE()); /* 15.2.3.3.4 */
   mrb_define_method(mrb, cls, "initialize",              mrb_class_initialize,     MRB_ARGS_OPT(1)); /* 15.2.3.3.1 */
-  mrb_define_method(mrb, cls, "inherited",               mrb_bob_init,             MRB_ARGS_REQ(1));
+  mrb_define_method(mrb, cls, "inherited",               mrb_do_nothing,           MRB_ARGS_REQ(1));
 
   init_class_new(mrb, cls);
 
   MRB_SET_INSTANCE_TT(mod, MRB_TT_MODULE);
   mrb_define_method(mrb, mod, "extend_object",           mrb_mod_extend_object,    MRB_ARGS_REQ(1)); /* 15.2.2.4.25 */
-  mrb_define_method(mrb, mod, "extended",                mrb_bob_init,             MRB_ARGS_REQ(1)); /* 15.2.2.4.26 */
-  mrb_define_method(mrb, mod, "prepended",               mrb_bob_init,             MRB_ARGS_REQ(1));
+  mrb_define_method(mrb, mod, "extended",                mrb_do_nothing,           MRB_ARGS_REQ(1)); /* 15.2.2.4.26 */
+  mrb_define_method(mrb, mod, "prepended",               mrb_do_nothing,           MRB_ARGS_REQ(1));
   mrb_define_method(mrb, mod, "prepend_features",        mrb_mod_prepend_features, MRB_ARGS_REQ(1));
   mrb_define_method(mrb, mod, "include?",                mrb_mod_include_p,        MRB_ARGS_REQ(1)); /* 15.2.2.4.28 */
   mrb_define_method(mrb, mod, "append_features",         mrb_mod_append_features,  MRB_ARGS_REQ(1)); /* 15.2.2.4.10 */
   mrb_define_method(mrb, mod, "class_eval",              mrb_mod_module_eval,      MRB_ARGS_ANY());  /* 15.2.2.4.15 */
-  mrb_define_method(mrb, mod, "included",                mrb_bob_init,             MRB_ARGS_REQ(1)); /* 15.2.2.4.29 */
+  mrb_define_method(mrb, mod, "included",                mrb_do_nothing,           MRB_ARGS_REQ(1)); /* 15.2.2.4.29 */
   mrb_define_method(mrb, mod, "initialize",              mrb_mod_initialize,       MRB_ARGS_NONE()); /* 15.2.2.4.31 */
   mrb_define_method(mrb, mod, "module_eval",             mrb_mod_module_eval,      MRB_ARGS_ANY());  /* 15.2.2.4.35 */
   mrb_define_method(mrb, mod, "module_function",         mrb_mod_module_function,  MRB_ARGS_ANY());
@@ -2978,7 +2957,7 @@ mrb_init_class(mrb_state *mrb)
   mrb_define_method(mrb, mod, "define_method",           mod_define_method,        MRB_ARGS_ARG(1,1));
   mrb_define_method(mrb, mod, "===",                     mrb_mod_eqq,              MRB_ARGS_REQ(1)); /* 15.2.2.4.7 */
   mrb_define_method(mrb, mod, "dup",                     mrb_mod_dup,              MRB_ARGS_NONE());
-  mrb_define_method(mrb, bob, "method_added",            mrb_bob_init,             MRB_ARGS_REQ(1));
+  mrb_define_method(mrb, mod, "method_added",            mrb_do_nothing,           MRB_ARGS_REQ(1));
 
   mrb_undef_method(mrb, cls, "append_features");
   mrb_undef_method(mrb, cls, "prepend_features");

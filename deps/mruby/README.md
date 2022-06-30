@@ -67,7 +67,7 @@ rake view_capi
 mruby contains a package manager called *mrbgems*. To create extensions
 in C and/or Ruby you should create a *GEM*. For a documentation of how to
 use mrbgems consult the file [mrbgems.md](doc/guides/mrbgems.md).
-For example code of how to use mrbgems look into the folder *examples/mrbgems/*.
+For example code of how to use mrbgems look into the folder [examples/mrbgems/](examples/mrbgems).
 
 ## License
 

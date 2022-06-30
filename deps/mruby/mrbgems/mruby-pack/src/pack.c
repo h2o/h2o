@@ -387,13 +387,13 @@ static int
 pack_BER(mrb_state *mrb, mrb_value o, mrb_value str, mrb_int sidx, unsigned int flags)
 {
   mrb_int n = mrb_integer(o);
-  size_t i;
+  int i;
   char *p;
 
   if (n < 0) {
     mrb_raise(mrb, E_ARGUMENT_ERROR, "can't compress negative numbers");
   }
-  for (i=1; i<sizeof(mrb_int)+1; i++) {
+  for (i=1; i<(int)sizeof(mrb_int)+1; i++) {
     mrb_int mask = ~((1L<<(7*i))-1);
     if ((n & mask) == 0) break;
   }
@@ -410,10 +410,12 @@ pack_BER(mrb_state *mrb, mrb_value o, mrb_value str, mrb_int sidx, unsigned int 
 static int
 unpack_BER(mrb_state *mrb, const unsigned char *src, int srclen, mrb_value ary, unsigned int flags)
 {
-  mrb_int i, n = 0;
+  int i;
+  mrb_int n = 0;
   const unsigned char *p = src;
   const unsigned char *e = p + srclen;
 
+  if (srclen == 0) return 0;
   for (i=1; p<e; p++,i++) {
     if (n > (MRB_INT_MAX>>7)) {
       mrb_raise(mrb, E_RANGE_ERROR, "BER unpacking 'w' overflow");
@@ -620,6 +622,7 @@ utf8_to_uv(mrb_state *mrb, const char *p, long *lenp)
   }
   if (!(uv & 0x40)) {
     *lenp = 1;
+  malformed:
     mrb_raise(mrb, E_ARGUMENT_ERROR, "malformed UTF-8 character");
   }
 
@@ -630,7 +633,7 @@ utf8_to_uv(mrb_state *mrb, const char *p, long *lenp)
   else if (!(uv & 0x02)) { n = 6; uv &= 0x01; }
   else {
     *lenp = 1;
-    mrb_raise(mrb, E_ARGUMENT_ERROR, "malformed UTF-8 character");
+    goto malformed;
   }
   if (n > *lenp) {
     mrb_raisef(mrb, E_ARGUMENT_ERROR, "malformed UTF-8 character (expected %d bytes, given %d bytes)",
@@ -642,7 +645,7 @@ utf8_to_uv(mrb_state *mrb, const char *p, long *lenp)
       c = *p++ & 0xff;
       if ((c & 0xc0) != 0x80) {
         *lenp -= n + 1;
-        mrb_raise(mrb, E_ARGUMENT_ERROR, "malformed UTF-8 character");
+        goto malformed;
       }
       else {
         c &= 0x3f;
@@ -1300,7 +1303,7 @@ alias:
         mrb_raise(mrb, E_RUNTIME_ERROR, "too big template length");
       }
       count = (int)n;
-      tmpl->idx = e - tptr;
+      tmpl->idx = (int)(e - tptr);
       continue;
     } else if (ch == '*')  {
       if (type == PACK_TYPE_NONE)
@@ -1387,13 +1390,12 @@ mrb_pack_pack(mrb_state *mrb, mrb_value ary)
 
       o = mrb_ary_ref(mrb, ary, aidx);
       if (type == PACK_TYPE_INTEGER) {
-        o = mrb_to_integer(mrb, o);
+        o = mrb_ensure_int_type(mrb, o);
       }
 #ifndef MRB_NO_FLOAT
       else if (type == PACK_TYPE_FLOAT) {
         if (!mrb_float_p(o)) {
-          mrb_float f = mrb_as_float(mrb, o);
-          o = mrb_float_value(mrb, f);
+          o = mrb_ensure_float_type(mrb, o);
         }
       }
 #endif
@@ -1524,7 +1526,7 @@ pack_unpack(mrb_state *mrb, mrb_value str, int single)
       break;
     }
 
-    while (count != 0) {
+    while (count != 0 && srcidx < srclen) {
       if (srclen - srcidx < size) {
         while (count-- > 0) {
           mrb_ary_push(mrb, result, mrb_nil_value());

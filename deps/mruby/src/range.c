@@ -362,9 +362,13 @@ range_num_to_a(mrb_state *mrb, mrb_value range)
       mrb_int len;
 
       if (mrb_int_sub_overflow(b, a, &len)) {
+      too_long:
         mrb_raise(mrb, E_RANGE_ERROR, "integer range too long");
       }
-      if (!RANGE_EXCL(r)) len++;
+      if (!RANGE_EXCL(r)) {
+        if (len == MRB_INT_MAX) goto too_long;
+        len++;
+      }
       ary = mrb_ary_new_capa(mrb, len);
       for (mrb_int i=0; i<len; i++) {
         mrb_ary_push(mrb, ary, mrb_int_value(mrb, a+i));

@@ -30,15 +30,16 @@ MRB_BEGIN_DECL
 #endif
 #endif
 
-MRB_API mrb_value mrb_num_plus(mrb_state *mrb, mrb_value x, mrb_value y);
-MRB_API mrb_value mrb_num_minus(mrb_state *mrb, mrb_value x, mrb_value y);
+/* utility functions */
+MRB_API mrb_value mrb_num_add(mrb_state *mrb, mrb_value x, mrb_value y);
+MRB_API mrb_value mrb_num_sub(mrb_state *mrb, mrb_value x, mrb_value y);
 MRB_API mrb_value mrb_num_mul(mrb_state *mrb, mrb_value x, mrb_value y);
+/* obsolete old names */
+#define mrb_num_plus(mrb, x, y) mrb_num_add(mrb, x, y)
+#define mrb_num_minus(mrb, x, y) mrb_num_sub(mrb, x, y)
 
 MRB_API mrb_value mrb_integer_to_str(mrb_state *mrb, mrb_value x, mrb_int base);
 MRB_API char *mrb_int_to_cstr(char *buf, size_t len, mrb_int n, mrb_int base);
-
-/* internal function(s) */
-mrb_int mrb_div_int(mrb_state *mrb, mrb_int x, mrb_int y);
 
 /* obsolete function(s); will be removed */
 #define mrb_fixnum_to_str(mrb, x, base) mrb_integer_to_str(mrb, x, base)
@@ -165,10 +166,6 @@ MRB_API mrb_value mrb_float_to_integer(mrb_state *mrb, mrb_value val);
 mrb_float mrb_div_float(mrb_float x, mrb_float y);
 mrb_value mrb_float_to_str(mrb_state *mrb, mrb_value x, const char *fmt);
 int mrb_format_float(mrb_float f, char *buf, size_t buf_size, char fmt, int prec, char sign);
-
-/* obsolete functions; will be removed */
-#define mrb_flo_to_fixnum(mrb, val) mrb_float_to_integer(mrb, val)
-#define mrb_to_flo(mrb, x) mrb_as_float(mrb, x)
 
 #endif /* MRB_NO_FLOAT */
 

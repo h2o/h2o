@@ -9,11 +9,8 @@ def bm_files
 end
 
 def build_config_name
-  if !ENV['MRUBY_CONFIG'].to_s.empty?
-    File.basename(ENV['MRUBY_CONFIG'], '.rb').gsub('build_config_', '')
-  else
-    "bm"
-  end
+  path = MRuby::Build.mruby_config_path
+  File.basename(path, '.rb').gsub('build_config_', '')
 end
 
 def plot_file
@@ -21,6 +18,8 @@ def plot_file
 end
 
 def plot
+  raise "no build target to benchmark against" if $dat_files.empty?
+
   opts_file = "#{MRUBY_ROOT}/benchmark/plot.gpl"
   opts = File.read(opts_file).each_line.to_a.map(&:strip).join(';')
 
@@ -46,11 +45,13 @@ def plot
       p.puts "e"
     end
   end
+
+  puts "Benchmark results output to #{plot_file}"
 end
 
 
 MRuby.each_target do |target|
-  next if target.name == 'host' || target.internal?
+  next if !target.benchmark_enabled? || target.internal?
   mruby_bin = "#{target.build_dir}/bin/mruby"
 
   bm_files.each do |bm_file|

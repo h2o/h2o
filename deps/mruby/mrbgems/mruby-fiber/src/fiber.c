@@ -224,7 +224,7 @@ fiber_switch(mrb_state *mrb, mrb_value self, mrb_int len, const mrb_value *a, mr
         *b++ = *a++;
       }
     }
-    c->cibase->n = len;
+    c->cibase->n = (uint8_t)len;
     value = c->stbase[0] = MRB_PROC_ENV(c->cibase->proc)->stack[0];
   }
   else {

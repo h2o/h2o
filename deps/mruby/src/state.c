@@ -12,6 +12,7 @@
 #include <mruby/debug.h>
 #include <mruby/string.h>
 #include <mruby/class.h>
+#include <mruby/internal.h>
 
 void mrb_init_core(mrb_state*);
 void mrb_init_mrbgems(mrb_state*);
@@ -137,6 +138,7 @@ mrb_irep_cutref(mrb_state *mrb, mrb_irep *irep)
 
   if (irep->flags & MRB_IREP_NO_FREE) return;
   reps = (mrb_irep**)irep->reps;
+  if (!reps) return;
   for (i=0; i<irep->rlen; i++) {
     mrb_irep *tmp = reps[i];
     reps[i] = NULL;

@@ -63,6 +63,16 @@ usage(const char *name)
     printf("  %s\n", *p++);
 }
 
+static mrb_bool
+mrb_extension_p(const char *path)
+{
+  const char *e = strrchr(path, '.');
+  if (e && e[1] == 'm' && e[2] == 'r' && e[3] == 'b' && e[4] == '\0') {
+    return TRUE;
+  }
+  return FALSE;
+}
+
 static void
 options_init(struct options *opts, int argc, char **argv)
 {
@@ -323,7 +333,7 @@ main(int argc, char **argv)
         return EXIT_FAILURE;
       }
       mrbc_filename(mrb, c, args.libv[i]);
-      if (args.mrbfile) {
+      if (mrb_extension_p(args.libv[i])) {
         v = mrb_load_irep_file_cxt(mrb, lfp, c);
       }
       else {
@@ -340,7 +350,7 @@ main(int argc, char **argv)
     mrbc_filename(mrb, c, cmdline);
 
     /* Load program */
-    if (args.mrbfile) {
+    if (args.mrbfile || mrb_extension_p(cmdline)) {
       v = mrb_load_irep_file_cxt(mrb, args.rfp, c);
     }
     else if (args.rfp) {

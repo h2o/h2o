@@ -3,7 +3,7 @@ MRuby::Build.new do |conf|
   toolchain :gcc
 
   # include the GEM box
-  conf.gembox 'default'
+  conf.gembox 'full-core'
 
   conf.cc.flags << '-pg'
   conf.linker.flags << '-pg'

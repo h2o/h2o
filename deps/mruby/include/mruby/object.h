@@ -40,4 +40,8 @@ struct RFiber {
   struct mrb_context *cxt;
 };
 
+#define mrb_static_assert_object_size(st) \
+  mrb_static_assert(sizeof(st) <= sizeof(void*) * 6, \
+                    #st " size must be within 6 words")
+
 #endif  /* MRUBY_OBJECT_H */

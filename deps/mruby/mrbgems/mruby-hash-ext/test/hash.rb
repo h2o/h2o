@@ -64,6 +64,9 @@ assert('Hash#merge!') do
   assert_raise(TypeError) do
     { 'abc_key' => 'abc_value' }.merge! "a"
   end
+
+  # multiple arguments
+  assert_equal({a:1,b:2,c:3}, {a:1}.merge!({b:2},{c:3}))
 end
 
 assert('Hash#values_at') do

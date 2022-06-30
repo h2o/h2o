@@ -4,6 +4,7 @@
 #include "mruby/variable.h"
 #include "mruby/proc.h"
 #include "mruby/string.h"
+#include "mruby/internal.h"
 #include "mruby/presym.h"
 
 mrb_noreturn void mrb_method_missing(mrb_state *mrb, mrb_sym name, mrb_value self, mrb_value args);

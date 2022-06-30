@@ -3,14 +3,14 @@ default_stages: [commit, push]
 default_language_version:
   # force all unspecified Python hooks to run python3
   python: python3
-minimum_pre_commit_version: "1.20.0"
+minimum_pre_commit_version: '2.18.1'
 repos:
   - repo: meta
     hooks:
       - id: identity
       - id: check-hooks-apply
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.1.0
+    rev: v4.2.0
     hooks:
       - id: check-added-large-files
       - id: check-case-conflict
@@ -39,7 +39,7 @@ repos:
         description: Check spelling with codespell
         entry: codespell --ignore-words=codespell.txt
   - repo: https://github.com/igorshubovych/markdownlint-cli
-    rev: v0.30.0
+    rev: v0.31.1
     hooks:
       - id: markdownlint
         name: Run markdownlint

@@ -33,6 +33,9 @@ conf.gem :github => 'masuidrive/mrbgems-example', :branch => 'master'
 conf.gem :bitbucket => 'mruby/mrbgems-example', :branch => 'master'
 ```
 
+NOTE: `:bitbucket` option supports only git. Hg is unsupported in this
+version.
+
 You can specify the subdirectory of the repository with `:path` option:
 
 ```ruby
@@ -55,10 +58,24 @@ conf.gem mgem: 'mruby-redis', checksum_hash: '3446d19fc4a3f9697b5ddbf2a904f301c4
 If there are missing dependencies, mrbgem dependencies solver will reference
 mrbgem from the core or mgem-list.
 
-To pull all gems from remote GIT repository on build, call `rake -p`,
-or `rake --pull-gems`.
+Note that if more than one git-based gem has the same base name
+(i.e. the default checkout directory name), it is (now) an error
+**UNLESS** they have the same repository URL, branch name and
+commit-id (i.e. checksum hash).  You can bypass this by explicitly
+importing your preferred version **first** and setting the
+`canonical:` option to `true`:
 
-NOTE: `:bitbucket` option supports only git. Hg is unsupported in this version.
+```ruby
+conf.gem github: 'me/mruby-yaml', branch: 'my-hacked-branch', canonical: true
+```
+
+If you do this, the system will (mostly) silently ignore other
+attempts to clone a gem with this name.
+
+Note that this only affects cloning the gem from git.  It does not
+resolve version conflicts.  If the version as specified in the gem's
+rakefile is incompatible with a dependency, your build will still
+fail.
 
 ## GemBox
 
@@ -94,7 +111,7 @@ conf.gembox 'custom'
 This will cause the `custom` GemBox to be read in during the build process,
 adding `mruby-time` and `mrbgems-example` to the build.
 
-If you want, you can put GemBox outside of mruby directory. In that case you must
+If you want, you can put GemBox outside the mruby directory. In that case you must
 specify an absolute path like below.
 
 ```ruby
@@ -143,7 +160,7 @@ GEM directory. A typical GEM specification could look like this for example:
 MRuby::Gem::Specification.new('c_and_ruby_extension_example') do |spec|
   spec.license = 'MIT'
   spec.author  = 'mruby developers'
-  spec.summary = 'Example mrbgem using C and ruby'
+  spec.summary = 'Example mrbgem using C and Ruby'
 end
 ```
 
@@ -397,21 +414,21 @@ binary gems, to separate normal gems and binary gems.
 ```
 +- mruby-bin-example/
     |
-    +- README.md        (Optional)
+    +- README.md          (Optional)
     |
     +- bintest/
     |   |
-    |   +- example.rb   <- Test code for binary gem
+    |   +- example.rb     <- Test code for binary gem
     |
-    +- mrbgem.rake      <- Gem specification
+    +- mrbgem.rake        <- Gem specification
     |
-    +- mrblib/          <- Source for Ruby extension (Optional)
+    +- mrblib/            <- Source for Ruby extension (Optional)
     |
-    +- src/             <- Source for C extension (Optional)
+    +- src/               <- Source for C extension (Optional)
     |
     +- tools/
         |
-        +- example/     <- Executable name directory
-        |
-        +- example.c    <- Source for Executable (includes main)
+        +- example/       <- Executable name directory
+            |
+            +- example.c  <- Source for Executable (includes main)
 ```

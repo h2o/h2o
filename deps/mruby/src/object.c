@@ -9,6 +9,7 @@
 #include <mruby/numeric.h>
 #include <mruby/string.h>
 #include <mruby/class.h>
+#include <mruby/internal.h>
 #include <mruby/presym.h>
 
 MRB_API mrb_bool
@@ -496,7 +497,7 @@ mrb_value mrb_complex_to_i(mrb_state *mrb, mrb_value comp);
 #endif
 
 MRB_API mrb_value
-mrb_ensure_int_type(mrb_state *mrb, mrb_value val)
+mrb_ensure_integer_type(mrb_state *mrb, mrb_value val)
 {
   if (!mrb_integer_p(val)) {
 #ifndef MRB_NO_FLOAT
@@ -505,6 +506,10 @@ mrb_ensure_int_type(mrb_state *mrb, mrb_value val)
     }
     else {
       switch (mrb_type(val)) {
+#ifdef MRB_USE_BIGINT
+      case MRB_TT_BIGINT:
+        return val;
+#endif
 #ifdef MRB_USE_RATIONAL
       case MRB_TT_RATIONAL:
         return mrb_rational_to_i(mrb, val);
@@ -520,6 +525,18 @@ mrb_ensure_int_type(mrb_state *mrb, mrb_value val)
 #endif
     mrb_raisef(mrb, E_TYPE_ERROR, "%Y cannot be converted to Integer", val);
   }
+  return val;
+}
+
+MRB_API mrb_value
+mrb_ensure_int_type(mrb_state *mrb, mrb_value val)
+{
+  val = mrb_ensure_integer_type(mrb, val);
+#ifdef MRB_USE_BIGINT
+  if (mrb_bigint_p(val)) {
+    return mrb_int_value(mrb, mrb_bint_as_int(mrb, val));
+  }
+#endif
   return val;
 }
 
@@ -545,6 +562,11 @@ mrb_ensure_float_type(mrb_state *mrb, mrb_value val)
 #ifdef MRB_USE_COMPLEX
     case MRB_TT_COMPLEX:
       return mrb_complex_to_f(mrb, val);
+#endif
+
+#ifdef MRB_USE_BIGINT
+    case MRB_TT_BIGINT:
+      return mrb_float_value(mrb, mrb_bint_as_float(mrb, val));
 #endif
 
     default:
@@ -606,7 +628,11 @@ mrb_check_hash_type(mrb_state *mrb, mrb_value hash)
 MRB_API mrb_value
 mrb_inspect(mrb_state *mrb, mrb_value obj)
 {
-  return mrb_obj_as_string(mrb, mrb_funcall_id(mrb, obj, MRB_SYM(inspect), 0));
+  mrb_value v = mrb_funcall_id(mrb, obj, MRB_SYM(inspect), 0);
+  if (!mrb_string_p(v)) {
+    v = mrb_obj_as_string(mrb, obj);
+  }
+  return v;
 }
 
 MRB_API mrb_bool

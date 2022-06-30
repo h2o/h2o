@@ -71,8 +71,6 @@ enum mrb_range_beg_len {
 };
 
 MRB_API enum mrb_range_beg_len mrb_range_beg_len(mrb_state *mrb, mrb_value range, mrb_int *begp, mrb_int *lenp, mrb_int len, mrb_bool trunc);
-mrb_value mrb_get_values_at(mrb_state *mrb, mrb_value obj, mrb_int olen, mrb_int argc, const mrb_value *argv, mrb_value (*func)(mrb_state*, mrb_value, mrb_int));
-void mrb_gc_mark_range(mrb_state *mrb, struct RRange *r);
 
 MRB_END_DECL
 

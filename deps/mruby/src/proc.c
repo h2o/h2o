@@ -9,9 +9,10 @@
 #include <mruby/proc.h>
 #include <mruby/opcode.h>
 #include <mruby/data.h>
-#include <mruby/presym.h>
 #include <mruby/array.h>
 #include <mruby/hash.h>
+#include <mruby/internal.h>
+#include <mruby/presym.h>
 
 static const mrb_code call_iseq[] = {
   OP_CALL,
@@ -51,15 +52,7 @@ mrb_proc_new(mrb_state *mrb, const mrb_irep *irep)
     struct RClass *tc = NULL;
 
     if (ci->proc) {
-      if (ci->proc->color != MRB_GC_RED) {
-        tc = MRB_PROC_TARGET_CLASS(ci->proc);
-      }
-      else {
-        tc = mrb_vm_ci_target_class(ci);
-        if (tc && tc->tt == MRB_TT_ICLASS) {
-          tc = tc->c;
-        }
-      }
+      tc = MRB_PROC_TARGET_CLASS(ci->proc);
     }
     if (tc == NULL) {
       tc = mrb_vm_ci_target_class(ci);
@@ -83,7 +76,8 @@ mrb_env_new(mrb_state *mrb, struct mrb_context *c, mrb_callinfo *ci, int nstacks
   int n = ci->n;
   int nk = ci->nk;
 
-  e = MRB_OBJ_ALLOC(mrb, MRB_TT_ENV, tc);
+  e = MRB_OBJ_ALLOC(mrb, MRB_TT_ENV, NULL);
+  e->c = tc;
   MRB_ENV_SET_LEN(e, nstacks);
   bidx += (n == 15) ? 1 : n;
   bidx += (nk == 15) ? 1 : (2*nk);
@@ -106,7 +100,7 @@ closure_setup(mrb_state *mrb, struct RProc *p)
     /* do nothing, because e is assigned already */
   }
   else if (up) {
-    struct RClass *tc = MRB_PROC_TARGET_CLASS(p);
+    struct RClass *tc = ci->u.target_class;
 
     e = mrb_env_new(mrb, mrb->c, ci, up->body.irep->nlocals, ci->stack, tc);
     ci->u.env = e;
@@ -236,14 +230,20 @@ mrb_proc_s_new(mrb_state *mrb, mrb_value proc_class)
   return proc;
 }
 
+static void
+check_proc(mrb_state *mrb, mrb_value proc)
+{
+  if (!mrb_proc_p(proc)) {
+    mrb_raise(mrb, E_ARGUMENT_ERROR, "not a proc");
+  }
+}
+
 static mrb_value
 mrb_proc_init_copy(mrb_state *mrb, mrb_value self)
 {
   mrb_value proc = mrb_get_arg1(mrb);
 
-  if (!mrb_proc_p(proc)) {
-    mrb_raise(mrb, E_ARGUMENT_ERROR, "not a proc");
-  }
+  check_proc(mrb, proc);
   mrb_proc_copy(mrb, mrb_proc_ptr(self), mrb_proc_ptr(proc));
   return self;
 }
@@ -274,9 +274,7 @@ proc_lambda(mrb_state *mrb, mrb_value self)
   if (mrb_nil_p(blk)) {
     mrb_raise(mrb, E_ARGUMENT_ERROR, "tried to create Proc object without a block");
   }
-  if (!mrb_proc_p(blk)) {
-    mrb_raise(mrb, E_ARGUMENT_ERROR, "not a proc");
-  }
+  check_proc(mrb, blk);
   p = mrb_proc_ptr(blk);
   if (!MRB_PROC_STRICT_P(p)) {
     struct RProc *p2 = MRB_OBJ_ALLOC(mrb, MRB_TT_PROC, p->c);

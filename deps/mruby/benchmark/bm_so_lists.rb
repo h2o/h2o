@@ -1,4 +1,6 @@
 # from http://www.bagley.org/~doug/shootout/bench/lists/lists.ruby
+# which is lost long time ago. The past content can be retrieved from
+# https://web.archive.org/web/20040805115204/http://www.bagley.org/~doug/shootout/bench/lists/lists.ruby
 
 NUM = 300
 SIZE = 10000

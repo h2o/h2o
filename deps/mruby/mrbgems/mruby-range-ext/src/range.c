@@ -2,29 +2,33 @@
 #include <mruby/range.h>
 
 static mrb_bool
-r_le(mrb_state *mrb, mrb_value a, mrb_value b)
+r_less(mrb_state *mrb, mrb_value a, mrb_value b, mrb_bool excl)
 {
-  mrb_int n = mrb_cmp(mrb, a, b);
-
-  if (n == 0 || n == -1) return TRUE;
-  return FALSE;
-}
-
-static mrb_bool
-r_lt(mrb_state *mrb, mrb_value a, mrb_value b)
-{
-  return mrb_cmp(mrb, a, b) == -1;
+  switch (mrb_cmp(mrb, a, b)) {
+  case -2:                      /* failure */
+  case 1:
+    return FALSE;
+  case 0:
+    return !excl;
+  case -1:
+  default:                      /* just in case */
+    return TRUE;
+  }
 }
 
 /*
  *  call-seq:
  *     rng.cover?(obj)  ->  true or false
+ *     rng.cover?(range) -> true or false
  *
- *  Returns <code>true</code> if +obj+ is between the begin and end of
- *  the range.
+ *  Returns +true+ if the given argument is within +self+, +false+ otherwise.
  *
- *  This tests <code>begin <= obj <= end</code> when #exclude_end? is +false+
- *  and <code>begin <= obj < end</code> when #exclude_end? is +true+.
+ *  With non-range argument +object+, evaluates with <tt><=</tt> and <tt><</tt>.
+ *
+ *  For range +self+ with included end value (<tt>#exclude_end? == false</tt>),
+ *  evaluates thus:
+ *
+ *    self.begin <= object <= self.end
  *
  *     ("a".."z").cover?("c")    #=> true
  *     ("a".."z").cover?("5")    #=> false
@@ -40,20 +44,53 @@ range_cover(mrb_state *mrb, mrb_value range)
   beg = RANGE_BEG(r);
   end = RANGE_END(r);
 
-  if (r_le(mrb, beg, val)) {
-    if (mrb_nil_p(end)) {
+  if (mrb_nil_p(beg) && mrb_nil_p(end)) return mrb_true_value();
+
+  if (mrb_range_p(val)) {
+    struct RRange *r2 = mrb_range_ptr(mrb, val);
+    mrb_value beg2 = RANGE_BEG(r2);
+    mrb_value end2 = RANGE_END(r2);
+
+    /* range.cover?(nil..nil) => true */
+    if (mrb_nil_p(beg2) && mrb_nil_p(end2)) return mrb_true_value();
+
+    /* (a..b).cover?(c..d) */
+    if (mrb_nil_p(end)) {       /* a.. */
+      /* (a..).cover?(c..) => true */
+      if (mrb_nil_p(end2)) return mrb_bool_value(mrb_cmp(mrb, beg, beg2) != -2);
+      /* (a..).cover?(c..d) where d<a => false */
+      if (r_less(mrb, end2, beg, RANGE_EXCL(r2))) return mrb_false_value();
       return mrb_true_value();
     }
-    if (RANGE_EXCL(r)) {
-      if (r_lt(mrb, val, end))
-        return mrb_true_value();
+    else if (mrb_nil_p(beg)) {  /* ..b */
+      /* (..b).cover?(..d) => true */
+      if (mrb_nil_p(beg2)) return mrb_bool_value(mrb_cmp(mrb, end, end2) != -2);
+      /* (..b).cover?(c..d) where b<c => false */
+      if (r_less(mrb, end, beg2, RANGE_EXCL(r))) return mrb_false_value();
+      return mrb_true_value();
     }
-    else {
-      if (r_le(mrb, val, end))
-        return mrb_true_value();
+    else {                      /* a..b */
+      /* (a..b).cover?(c..) => (c<b) */
+      if (mrb_nil_p(end2))
+        return mrb_bool_value(r_less(mrb, beg2, end, RANGE_EXCL(r)));
+      /* (a..b).cover?(..d) => (a<d) */
+      if (mrb_nil_p(beg2))
+        return mrb_bool_value(r_less(mrb, beg, end2, RANGE_EXCL(r2)));
+      /* (a..b).cover?(c..d) where (b<c) => false */
+      if (r_less(mrb, end, beg2, RANGE_EXCL(r))) return mrb_false_value();
+      /* (a..b).cover?(c..d) where (d<a) => false */
+      if (r_less(mrb, end2, beg, RANGE_EXCL(r2))) return mrb_false_value();
+      return mrb_true_value();
     }
   }
 
+  if (mrb_nil_p(beg) || r_less(mrb, beg, val, FALSE)) {
+    if (mrb_nil_p(end)) {
+      return mrb_true_value();
+    }
+    if (r_less(mrb, val, end, RANGE_EXCL(r)))
+      return mrb_true_value();
+  }
   return mrb_false_value();
 }
 

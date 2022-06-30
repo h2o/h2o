@@ -267,7 +267,3 @@ assert('2000 times 500us make a second') do
   end
   assert_equal(0, t.usec)
 end
-
-assert('Time.gm with Dec 31 23:59:59 1969 raise ArgumentError') do
-  assert_raise(ArgumentError) {Time.gm(1969, 12, 31, 23, 59, 59)}
-end

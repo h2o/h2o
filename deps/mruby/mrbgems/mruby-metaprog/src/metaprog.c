@@ -5,6 +5,7 @@
 #include "mruby/proc.h"
 #include "mruby/class.h"
 #include "mruby/string.h"
+#include <mruby/internal.h>
 #include "mruby/presym.h"
 
 typedef enum {
@@ -575,6 +576,39 @@ mrb_mod_instance_methods(mrb_state *mrb, mrb_value mod)
   return mrb_class_instance_method_list(mrb, recur, c);
 }
 
+static int
+undefined_method_i(mrb_state *mrb, mrb_sym mid, mrb_method_t m, void *p)
+{
+  mrb_value ary = *(mrb_value*)p;
+
+  if (MRB_METHOD_UNDEF_P(m)) {
+    mrb_ary_push(mrb, ary, mrb_symbol_value(mid));
+  }
+  return 0;
+}
+
+/*
+ *  call-seq:
+ *     mod.undefined_methods()   -> array
+ *
+ *  Returns an array containing the names of the undefined methods of the module/class.
+ */
+static mrb_value
+mrb_mod_undefined_methods(mrb_state *mrb, mrb_value mod)
+{
+  struct RClass *m = mrb_class_ptr(mod);
+  mrb_get_args(mrb, "");        /* no argument */
+
+  mrb_value ary = mrb_ary_new(mrb);
+
+  if (m->flags & MRB_FL_CLASS_IS_PREPENDED) {
+    MRB_CLASS_ORIGIN(m);
+  }
+  mrb_mt_foreach(mrb, m, undefined_method_i, (void*)&ary);
+
+  return ary;
+}
+
 /* 15.2.2.4.41 */
 /*
  *  call-seq:
@@ -663,6 +697,7 @@ mrb_mruby_metaprog_gem_init(mrb_state* mrb)
   mrb_define_method(mrb, mod, "class_variable_set", mrb_mod_cvar_set, MRB_ARGS_REQ(2)); /* 15.2.2.4.18 */
   mrb_define_method(mrb, mod, "included_modules", mrb_mod_included_modules, MRB_ARGS_NONE()); /* 15.2.2.4.30 */
   mrb_define_method(mrb, mod, "instance_methods", mrb_mod_instance_methods, MRB_ARGS_ANY()); /* 15.2.2.4.33 */
+  mrb_define_method(mrb, mod, "undefined_instance_methods", mrb_mod_undefined_methods, MRB_ARGS_NONE());
   mrb_define_method(mrb, mod, "remove_method", mrb_mod_remove_method, MRB_ARGS_ANY()); /* 15.2.2.4.41 */
   mrb_define_method(mrb, mod, "method_removed", mrb_f_nil, MRB_ARGS_REQ(1));
   mrb_define_method(mrb, mod, "constants", mrb_mod_constants, MRB_ARGS_OPT(1)); /* 15.2.2.4.24 */

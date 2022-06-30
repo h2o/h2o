@@ -14,7 +14,7 @@ GC (garbage collector) must ensure that object is "alive", in other
 words, that it is referenced by somewhere from the program.  This can be
 determined by checking if the object can be directly or indirectly
 referenced by root.  The local variables, global variables and
-constants etc are root.
+constants etc. are root.
 
 If program execution is performed inside mruby VM, there is nothing to
 worry about because GC can access all roots owned by the VM.
@@ -29,7 +29,7 @@ This can be a fatal bug if the GC tries to collect a live object.
 In CRuby, we scan C stack area, and use C variable as root to check
 whether object is alive or not.  Of course, because we are accessing C
 stack just as memory region, we never know it is an integer or a
-pointer.  We workaround this by assuming that if it looks like a
+pointer.  We work around this by assuming that if it looks like a
 pointer, then assume it as a pointer.  We call it "conservative".
 
 By the way, CRuby's "conservative GC" has some problems.
@@ -65,14 +65,14 @@ objects (See `MRB_GC_FIXED_ARENA` and `MRB_GC_ARENA_SIZE` in
 doc/guides/mrbconf.md).
 
 If you create many objects in C functions, memory usage will increase, since
-GC never kick in.  This memory usage may look like memory leak, but will also
+GC never kicks in.  This memory usage may look like memory leaks, but will also
 make execution slower as more memory will need to be allocated.
 
 With the build time configuration, you can limit the maximum size of
 arena (e.g., 100).  Then if you create many objects, arena overflows,
 thus you will get an "arena overflow error".
 
-To workaround these problems, we have `mrb_gc_arena_save()` and
+To work around these problems, we have `mrb_gc_arena_save()` and
 `mrb_gc_arena_restore()` functions.
 
 `int mrb_gc_arena_save(mrb)` returns the current position of the stack

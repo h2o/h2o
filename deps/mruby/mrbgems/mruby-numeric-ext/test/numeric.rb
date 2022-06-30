@@ -19,3 +19,9 @@ assert('Integer#nonzero?') do
   assert_equal nil, 0.nonzero?
   assert_equal 1000, 1000.nonzero?
 end
+
+assert('Integer#pow') do
+  assert_equal(8, 2.pow(3))
+  assert_equal(-8, (-2).pow(3))
+  assert_equal(361, 9.pow(1024,1000))
+end

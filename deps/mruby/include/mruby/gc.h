@@ -84,8 +84,7 @@ typedef struct mrb_gc {
   size_t majorgc_old_threshold;
 } mrb_gc;
 
-MRB_API mrb_bool
-mrb_object_dead_p(struct mrb_state *mrb, struct RBasic *object);
+MRB_API mrb_bool mrb_object_dead_p(struct mrb_state *mrb, struct RBasic *object);
 
 #define MRB_GC_RED 7
 

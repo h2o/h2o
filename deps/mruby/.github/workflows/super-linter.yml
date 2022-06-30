@@ -1,19 +1,14 @@
 name: Super Linter
 
-on:
-  push:
-    branches-ignore: [master]
-    # Remove the line above to run when pushing to master
-  pull_request:
-    branches: [master]
+on: [pull_request]
 
 jobs:
   build:
     name: Lint Code Base
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2.4.0
-      - uses: github/super-linter@v4.8.5
+      - uses: actions/checkout@v3
+      - uses: github/super-linter@v4.9.4
         env:
           ERROR_ON_MISSING_EXEC_BIT: true
           VALIDATE_BASH: true

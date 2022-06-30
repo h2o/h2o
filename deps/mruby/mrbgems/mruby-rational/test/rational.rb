@@ -331,3 +331,18 @@ assert 'Rational#frozen?' do
   assert_predicate(Rational(2,3), :frozen?)
   assert_predicate(4/5r, :frozen?)
 end
+
+assert 'Rational#**' do
+  assert_rational(1r, (14/2r)**0)
+  assert_rational(14/2r, (14/2r)**1)
+  assert_rational(49r, (14/2r)**2)
+  assert_rational(27r, (6/2r)**3)
+  assert_float(2.0, (4r)**(1/2r))
+  assert_rational(4r, (4r)**(2/2r))
+  assert_rational(16r, (4r)**(4/2r))
+  assert_float(1.0, (4r)**(0.0))
+  assert_float(2.0, (4r)**(0.5))
+  assert_float(4.0, (4r)**(1.0))
+  assert_float(16.0, (4r)**(2.0))
+  assert_float(3.5**1.5, (7/2r)**(1.5))
+end

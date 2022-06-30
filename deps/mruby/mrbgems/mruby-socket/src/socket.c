@@ -38,6 +38,7 @@
 #include "mruby/string.h"
 #include "mruby/variable.h"
 #include "mruby/error.h"
+#include "mruby/internal.h"
 #include "mruby/presym.h"
 
 #include "mruby/ext/io.h"
@@ -51,12 +52,6 @@
 #endif
 
 #define E_SOCKET_ERROR             mrb_class_get_id(mrb, MRB_SYM(SocketError))
-
-#if !defined(mrb_cptr)
-#define mrb_cptr_value(m,p) mrb_voidp_value((m),(p))
-#define mrb_cptr(o) mrb_voidp(o)
-#define mrb_cptr_p(o) mrb_voidp_p(o)
-#endif
 
 #ifdef _WIN32
 static const char *inet_ntop(int af, const void *src, char *dst, socklen_t cnt)
@@ -262,10 +257,12 @@ sa2addrlist(mrb_state *mrb, const struct sockaddr *sa, socklen_t salen)
   return ary;
 }
 
+int mrb_io_fileno(mrb_state *mrb, mrb_value io);
+
 static int
 socket_fd(mrb_state *mrb, mrb_value sock)
 {
-  return (int)mrb_integer(mrb_funcall_id(mrb, sock, MRB_SYM(fileno), 0));
+  return mrb_io_fileno(mrb, sock);
 }
 
 static int
@@ -468,9 +465,10 @@ mrb_basicsocket_setsockopt(mrb_state *mrb, mrb_value self)
   } else if (argc == 1) {
     if (strcmp(mrb_obj_classname(mrb, so), "Socket::Option") != 0)
       mrb_raise(mrb, E_ARGUMENT_ERROR, "not an instance of Socket::Option");
-    level = mrb_integer(mrb_funcall_id(mrb, so, MRB_SYM(level), 0));
-    optname = mrb_integer(mrb_funcall_id(mrb, so, MRB_SYM(optname), 0));
+    level = mrb_as_int(mrb, mrb_funcall_id(mrb, so, MRB_SYM(level), 0));
+    optname = mrb_as_int(mrb, mrb_funcall_id(mrb, so, MRB_SYM(optname), 0));
     optval = mrb_funcall_id(mrb, so, MRB_SYM(data), 0);
+    mrb_ensure_string_type(mrb, optval);
   } else {
     mrb_argnum_error(mrb, argc, 3, 3);
   }
@@ -515,9 +513,8 @@ mrb_ipsocket_ntop(mrb_state *mrb, mrb_value klass)
   char buf[50];
 
   mrb_get_args(mrb, "is", &af, &addr, &n);
-  if ((af == AF_INET && n != 4) || (af == AF_INET6 && n != 16))
-    mrb_raise(mrb, E_ARGUMENT_ERROR, "invalid address");
-  if (inet_ntop((int)af, addr, buf, sizeof(buf)) == NULL)
+  if ((af == AF_INET && n != 4) || (af == AF_INET6 && n != 16) ||
+      inet_ntop((int)af, addr, buf, sizeof(buf)) == NULL)
     mrb_raise(mrb, E_ARGUMENT_ERROR, "invalid address");
   return mrb_str_new_cstr(mrb, buf);
 }
@@ -530,8 +527,7 @@ mrb_ipsocket_pton(mrb_state *mrb, mrb_value klass)
   char buf[50];
 
   mrb_get_args(mrb, "is", &af, &bp, &n);
-  if ((size_t)n > sizeof(buf) - 1)
-    mrb_raise(mrb, E_ARGUMENT_ERROR, "invalid address");
+  if ((size_t)n > sizeof(buf) - 1) goto invalid;
   memcpy(buf, bp, n);
   buf[n] = '\0';
 
@@ -623,7 +619,7 @@ mrb_socket_accept2(mrb_state *mrb, mrb_value klass)
 
   mrb_get_args(mrb, "i", &s0);
   socklen = sizeof(struct sockaddr_storage);
-  sastr = mrb_str_new_capa(mrb, socklen);
+  sastr = mrb_str_new_capa(mrb, (mrb_int)socklen);
   s1 = (int)accept(s0, (struct sockaddr *)RSTRING_PTR(sastr), &socklen);
   if (s1 == -1) {
     mrb_sys_fail(mrb, "accept");

@@ -312,7 +312,7 @@ typedef struct mrb_state {
   struct RClass *eException_class;
   struct RClass *eStandardError_class;
   struct RObject *nomem_err;              /* pre-allocated NoMemoryError */
-  struct RObject *stack_err;              /* pre-allocated SysStackError */
+  struct RObject *stack_err;              /* pre-allocated SystemStackError */
 #ifdef MRB_GC_FIXED_ARENA
   struct RObject *arena_err;              /* pre-allocated arena overflow error */
 #endif
@@ -948,14 +948,14 @@ typedef const char *mrb_args_format;
 /**
  * Get keyword arguments by `mrb_get_args()` with `:` specifier.
  *
- * `mrb_kwargs::num` indicates that the number of keyword values.
+ * `mrb_kwargs::num` indicates that the total number of keyword values.
  *
- * `mrb_kwargs::values` is an object array, and the keyword argument corresponding to the string array is assigned.
- * Note that `undef` is assigned if there is no keyword argument corresponding to `mrb_kwargs::optional`.
+ * `mrb_kwargs::required` indicates that the specified number of keywords starting from the beginning of the `mrb_sym` array are required.
  *
- * `mrb_kwargs::table` accepts a string array.
+ * `mrb_kwargs::table` accepts a `mrb_sym` array of C.
  *
- * `mrb_kwargs::required` indicates that the specified number of keywords starting from the beginning of the string array are required.
+ * `mrb_kwargs::values` is an object array of C, and the keyword argument corresponding to the `mrb_sym` array is assigned.
+ * Note that `undef` is assigned if there is no keyword argument corresponding over `mrb_kwargs::required` to `mrb_kwargs::num`.
  *
  * `mrb_kwargs::rest` is the remaining keyword argument that can be accepted as `**rest` in Ruby.
  * If `NULL` is specified, `ArgumentError` is raised when there is an undefined keyword.
@@ -965,10 +965,10 @@ typedef const char *mrb_args_format;
  *      // def method(a: 1, b: 2)
  *
  *      uint32_t kw_num = 2;
- *      const char *kw_names[kw_num] = { "a", "b" };
  *      uint32_t kw_required = 0;
+ *      mrb_sym kw_names[] = { mrb_intern_lit(mrb, "a"), mrb_intern_lit(mrb, "b") };
  *      mrb_value kw_values[kw_num];
- *      const mrb_kwargs kwargs = { kw_num, kw_required, kw_names, kw_values, NULL };
+ *      mrb_kwargs kwargs = { kw_num, kw_required, kw_names, kw_values, NULL };
  *
  *      mrb_get_args(mrb, ":", &kwargs);
  *      if (mrb_undef_p(kw_values[0])) { kw_values[0] = mrb_fixnum_value(1); }
@@ -979,10 +979,12 @@ typedef const char *mrb_args_format;
  *
  *      mrb_value str, kw_rest;
  *      uint32_t kw_num = 3;
- *      const mrb_sym kw_names[kw_num] = { MRB_SYM(x), MRB_SYM(y), MRB_SYM(z) };
  *      uint32_t kw_required = 1;
+ *      // Note that `#include <mruby/presym.h>` is required beforehand because `MRB_SYM()` is used.
+ *      // If the usage of `MRB_SYM()` is not desired, replace it with `mrb_intern_lit()`.
+ *      mrb_sym kw_names[] = { MRB_SYM(x), MRB_SYM(y), MRB_SYM(z) };
  *      mrb_value kw_values[kw_num];
- *      const mrb_kwargs kwargs = { kw_num, kw_required, kw_names, kw_values, &kw_rest };
+ *      mrb_kwargs kwargs = { kw_num, kw_required, kw_names, kw_values, &kw_rest };
  *
  *      mrb_get_args(mrb, "S:", &str, &kwargs);
  *      // or: mrb_get_args(mrb, ":S", &kwargs, &str);
@@ -1178,13 +1180,13 @@ MRB_API void mrb_free(mrb_state*, void*);
  */
 #define MRB_OBJ_ALLOC(mrb, tt, klass) ((MRB_VTYPE_TYPEOF(tt)*)mrb_obj_alloc(mrb, tt, klass))
 
-MRB_API mrb_value mrb_str_new(mrb_state *mrb, const char *p, size_t len);
+MRB_API mrb_value mrb_str_new(mrb_state *mrb, const char *p, mrb_int len);
 
 /**
  * Turns a C string into a Ruby string value.
  */
 MRB_API mrb_value mrb_str_new_cstr(mrb_state*, const char*);
-MRB_API mrb_value mrb_str_new_static(mrb_state *mrb, const char *p, size_t len);
+MRB_API mrb_value mrb_str_new_static(mrb_state *mrb, const char *p, mrb_int len);
 #define mrb_str_new_lit(mrb, lit) mrb_str_new_static(mrb, (lit), mrb_strlen_lit(lit))
 
 MRB_API mrb_value mrb_obj_freeze(mrb_state*, mrb_value);
@@ -1336,7 +1338,7 @@ MRB_API mrb_value mrb_obj_clone(mrb_state *mrb, mrb_value self);
 #define TOLOWER(c) (ISUPPER(c) ? ((c) | 0x20) : (c))
 #endif
 
-MRB_API mrb_value mrb_exc_new(mrb_state *mrb, struct RClass *c, const char *ptr, size_t len);
+MRB_API mrb_value mrb_exc_new(mrb_state *mrb, struct RClass *c, const char *ptr, mrb_int len);
 MRB_API mrb_noreturn void mrb_exc_raise(mrb_state *mrb, mrb_value exc);
 
 MRB_API mrb_noreturn void mrb_raise(mrb_state *mrb, struct RClass *c, const char *msg);
@@ -1404,6 +1406,9 @@ MRB_API mrb_value mrb_check_string_type(mrb_state *mrb, mrb_value str);
 #define mrb_to_str(mrb, str) mrb_ensure_string_type(mrb,str)
 /* obsolete: use mrb_obj_as_string() instead */
 #define mrb_str_to_str(mrb, str) mrb_obj_as_string(mrb, str)
+/* check if val is an integer (including Bigint) */
+MRB_API mrb_value mrb_ensure_integer_type(mrb_state *mrb, mrb_value val);
+/* check if val fit in mrb_int */
 MRB_API mrb_value mrb_ensure_int_type(mrb_state *mrb, mrb_value val);
 #define mrb_as_int(mrb, val) mrb_integer(mrb_ensure_int_type(mrb, val))
 /* obsolete: use mrb_ensure_int_type() instead */

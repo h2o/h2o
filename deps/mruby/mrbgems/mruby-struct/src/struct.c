@@ -13,6 +13,7 @@
 #include <mruby/hash.h>
 #include <mruby/range.h>
 #include <mruby/proc.h>
+#include <mruby/internal.h>
 #include <mruby/presym.h>
 
 #define RSTRUCT_LEN(st) RARRAY_LEN(st)

@@ -11,6 +11,7 @@
 #include <mruby/hash.h>
 #include <mruby/string.h>
 #include <mruby/variable.h>
+#include <mruby/internal.h>
 #include <mruby/presym.h>
 
 /*
@@ -1745,6 +1746,19 @@ mrb_hash_merge(mrb_state *mrb, mrb_value hash1, mrb_value hash2)
   });
 }
 
+static mrb_value
+mrb_hash_merge_m(mrb_state *mrb, mrb_value hash)
+{
+  mrb_int argc;
+  mrb_value *argv;
+
+  mrb_get_args(mrb, "*", &argv, &argc);
+  while (argc--) {
+    mrb_hash_merge(mrb, hash, *argv++);
+  }
+  return hash;
+}
+
 /*
  *  call-seq:
  *    hsh.rehash -> hsh
@@ -1805,4 +1819,5 @@ mrb_init_hash(mrb_state *mrb)
   mrb_define_method(mrb, h, "value?",          mrb_hash_has_value,   MRB_ARGS_REQ(1)); /* 15.2.13.4.27 */
   mrb_define_method(mrb, h, "values",          mrb_hash_values,      MRB_ARGS_NONE()); /* 15.2.13.4.28 */
   mrb_define_method(mrb, h, "rehash",          mrb_hash_rehash,      MRB_ARGS_NONE());
+  mrb_define_method(mrb, h, "__merge",         mrb_hash_merge_m,     MRB_ARGS_REQ(1));
 }

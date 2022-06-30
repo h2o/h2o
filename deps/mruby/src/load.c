@@ -13,6 +13,7 @@
 #include <mruby/error.h>
 #include <mruby/data.h>
 #include <mruby/endian.h>
+#include <mruby/internal.h>
 #include <string.h>
 
 #if SIZE_MAX < UINT32_MAX
@@ -162,17 +163,16 @@ read_irep_record_1(mrb_state *mrb, const uint8_t *bin, const uint8_t *end, size_
 #endif
 
       case IREP_TT_BIGINT:
-        pool_data_len = bin_to_uint8(src); /* pool data length */
-        src += sizeof(uint8_t);
+        pool_data_len = bin_to_uint8(src) + 2; /* pool data length */
         if (src + pool_data_len > end) return FALSE;
-        {
+        else {
           char *p;
           pool[i].tt = IREP_TT_BIGINT;
-          p = (char*)mrb_malloc(mrb, pool_data_len+2);
-          memcpy(p, src, pool_data_len+2);
+          p = (char*)mrb_malloc(mrb, pool_data_len);
+          memcpy(p, src, pool_data_len);
           pool[i].u.str = (const char*)p;
         }
-        src += pool_data_len + 2;
+        src += pool_data_len;
         break;
 
       case IREP_TT_FLOAT:
@@ -352,11 +352,12 @@ read_debug_record(mrb_state *mrb, const uint8_t *start, const uint8_t *end, mrb_
         size_t l = sizeof(uint16_t) * (size_t)file->line_entry_count;
 
         if (bin + l > end) return MRB_DUMP_GENERAL_FAILURE;
-        file->lines.ary = (uint16_t *)mrb_malloc(mrb, l);
+        uint16_t *ary = (uint16_t *)mrb_malloc(mrb, l);
         for (l = 0; l < file->line_entry_count; ++l) {
-          file->lines.ary[l] = bin_to_uint16(bin);
+          ary[l] = bin_to_uint16(bin);
           bin += sizeof(uint16_t);
         }
+        file->lines.ary = ary;
       } break;
 
       case mrb_debug_line_flat_map: {
@@ -364,21 +365,23 @@ read_debug_record(mrb_state *mrb, const uint8_t *start, const uint8_t *end, mrb_
         size_t n = sizeof(mrb_irep_debug_info_line);
 
         if (bin + c*n > end) return MRB_DUMP_GENERAL_FAILURE;
-        file->lines.flat_map = (mrb_irep_debug_info_line*)mrb_calloc(mrb, c, n);
+        mrb_irep_debug_info_line *flat_map = (mrb_irep_debug_info_line*)mrb_calloc(mrb, c, n);
         for (size_t l = 0; l < file->line_entry_count; ++l) {
-          file->lines.flat_map[l].start_pos = bin_to_uint32(bin);
+          flat_map[l].start_pos = bin_to_uint32(bin);
           bin += sizeof(uint32_t);
-          file->lines.flat_map[l].line = bin_to_uint16(bin);
+          flat_map[l].line = bin_to_uint16(bin);
           bin += sizeof(uint16_t);
         }
+        file->lines.flat_map = flat_map;
       } break;
 
       case mrb_debug_line_packed_map: {
         size_t l = (size_t)file->line_entry_count;
 
         if (bin + l > end) return MRB_DUMP_GENERAL_FAILURE;
-        file->lines.packed_map = (uint8_t*)mrb_calloc(mrb, 1, l);
-        memcpy(file->lines.packed_map, bin, file->line_entry_count);
+        uint8_t *packed_map = (uint8_t*)mrb_malloc(mrb, l);
+        memcpy(packed_map, bin, file->line_entry_count);
+        file->lines.packed_map = packed_map;
         bin += file->line_entry_count;
       } break;
 

@@ -45,7 +45,7 @@ binding_eval_error_check(mrb_state *mrb, struct mrb_parser_state *p, const char 
 struct expand_lvspace {
   mrb_irep *irep;
   struct REnv *env;
-  size_t numvar;
+  int numvar;
   mrb_sym syms[LV_BUFFERS];
 };
 

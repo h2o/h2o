@@ -75,7 +75,7 @@ to be default `mrb_value` representation. Now the default is
 ## `MRB_WORD_BOXING`
 
 Pack `mrb_value` in an `intptr_t` integer. Consumes less
-memory compared to `MRB_NO_BOXING` especially on 32 bit
+memory compared to `MRB_NO_BOXING` especially on 32-bit
 platforms. `Fixnum` size is 31 bits so some integer values
 does not fit in `Fixnum` integers.
 
@@ -116,7 +116,7 @@ Instructions that access pool[i]/syms[i] where i>255.
 * `OP_STRING16`
 * `OP_LOADSYM16`
 
-Instructions that load a 32 bit integer.
+Instructions that load a 32-bit integer.
 
 * `OP_LOADI32`
 

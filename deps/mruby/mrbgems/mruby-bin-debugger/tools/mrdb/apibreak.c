@@ -12,6 +12,7 @@
 #include <mruby/class.h>
 #include <mruby/proc.h>
 #include <mruby/variable.h>
+#include <mruby/internal.h>
 #include "mrdberror.h"
 #include "apibreak.h"
 #include "apistring.h"
@@ -19,8 +20,6 @@
 #define MAX_BREAKPOINTNO (MAX_BREAKPOINT * 1024)
 #define MRB_DEBUG_BP_FILE_OK   (0x0001)
 #define MRB_DEBUG_BP_LINENO_OK (0x0002)
-
-uint32_t mrb_packed_int_decode(uint8_t *p, uint8_t **newpos);
 
 static uint16_t
 check_lineno(mrb_irep_debug_info_file *info_file, uint16_t lineno)
@@ -47,8 +46,8 @@ check_lineno(mrb_irep_debug_info_file *info_file, uint16_t lineno)
 
   case mrb_debug_line_packed_map:
     {
-      uint8_t *p = info_file->lines.packed_map;
-      uint8_t *pend = p + count;
+      const uint8_t *p = info_file->lines.packed_map;
+      const uint8_t *pend = p + count;
       uint32_t line = 0;
       while (p < pend) {
         mrb_packed_int_decode(p, &p);

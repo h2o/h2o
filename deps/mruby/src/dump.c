@@ -110,7 +110,7 @@ get_pool_block_size(mrb_state *mrb, const mrb_irep *irep)
 
     switch (irep->pool[pool_no].tt) {
     case IREP_TT_INT64:
-#ifdef MRB_64BIT
+#if defined(MRB_64BIT) || defined(MRB_INT64)
       {
         int64_t i = irep->pool[pool_no].u.i64;
 
@@ -131,7 +131,6 @@ get_pool_block_size(mrb_state *mrb, const mrb_irep *irep)
       {
         mrb_int len = irep->pool[pool_no].u.str[0];
         mrb_assert_int_fit(mrb_int, len, size_t, SIZE_MAX);
-        size += sizeof(uint8_t);
         size += (size_t)len+2;
       }
       break;
@@ -173,8 +172,8 @@ write_pool_block(mrb_state *mrb, const mrb_irep *irep, uint8_t *buf)
     int ai = mrb_gc_arena_save(mrb);
 
     switch (irep->pool[pool_no].tt) {
-#ifdef MRB_64BIT
     case IREP_TT_INT64:
+#if defined(MRB_64BIT) || defined(MRB_INT64)
       {
         int64_t i = irep->pool[pool_no].u.i64;
         if (i < INT32_MIN || INT32_MAX < i) {
@@ -199,7 +198,6 @@ write_pool_block(mrb_state *mrb, const mrb_irep *irep, uint8_t *buf)
       len = irep->pool[pool_no].u.str[0];
       memcpy(cur, irep->pool[pool_no].u.str, (size_t)len+2);
       cur += len+2;
-      *cur++ = '\0';
       break;
 
     case IREP_TT_FLOAT:

@@ -21,6 +21,7 @@
 #include <mruby/gc.h>
 #include <mruby/error.h>
 #include <mruby/throw.h>
+#include <mruby/internal.h>
 #include <mruby/presym.h>
 
 #ifdef MRB_GC_STRESS
@@ -192,7 +193,7 @@ gettimeofday_time(void)
 
 #define GC_STEP_SIZE 1024
 
-/* white: 001 or 010, black: 100, gray: 000 */
+/* white: 001 or 010, black: 100, gray: 000, red:111 */
 #define GC_GRAY 0
 #define GC_WHITE_A 1
 #define GC_WHITE_B (1 << 1)
@@ -292,7 +293,7 @@ MRB_API void*
 mrb_alloca(mrb_state *mrb, size_t size)
 {
   struct RString *s;
-  s = MRB_OBJ_ALLOC(mrb, MRB_TT_STRING, mrb->string_class);
+  s = MRB_OBJ_ALLOC(mrb, MRB_TT_STRING, NULL);
   return s->as.heap.ptr = (char*)mrb_malloc(mrb, size);
 }
 
@@ -306,7 +307,7 @@ heap_p(mrb_gc *gc, struct RBasic *object)
     RVALUE *p;
 
     p = objects(page);
-    if (&p[0].as.basic <= object && object <= &p[MRB_HEAP_PAGE_SIZE].as.basic) {
+    if (&p[0].as.basic <= object && object <= &p[MRB_HEAP_PAGE_SIZE - 1].as.basic) {
       return TRUE;
     }
     page = page->next;
@@ -448,6 +449,7 @@ mrb_gc_destroy(mrb_state *mrb, mrb_gc *gc)
 static void
 gc_protect(mrb_state *mrb, mrb_gc *gc, struct RBasic *p)
 {
+  if (is_red(p)) return;
 #ifdef MRB_GC_FIXED_ARENA
   if (gc->arena_idx >= MRB_GC_ARENA_SIZE) {
     /* arena overflow error */
@@ -457,8 +459,9 @@ gc_protect(mrb_state *mrb, mrb_gc *gc, struct RBasic *p)
 #else
   if (gc->arena_idx >= gc->arena_capa) {
     /* extend arena */
-    gc->arena_capa = (int)(gc->arena_capa * 3 / 2);
-    gc->arena = (struct RBasic**)mrb_realloc(mrb, gc->arena, sizeof(struct RBasic*)*gc->arena_capa);
+    int newcapa = gc->arena_capa * 3 / 2;
+    gc->arena = (struct RBasic**)mrb_realloc(mrb, gc->arena, sizeof(struct RBasic*)*newcapa);
+    gc->arena_capa = newcapa;
   }
 #endif
   gc->arena[gc->arena_idx++] = p;
@@ -553,6 +556,7 @@ mrb_obj_alloc(mrb_state *mrb, enum mrb_vtype ttype, struct RClass *cls)
         ttype != MRB_TT_SCLASS &&
         ttype != MRB_TT_ICLASS &&
         ttype != MRB_TT_ENV &&
+        ttype != MRB_TT_BIGINT &&
         ttype != tt) {
       mrb_raisef(mrb, E_TYPE_ERROR, "allocation failure of %C", cls);
     }
@@ -760,9 +764,10 @@ gc_mark_children(mrb_state *mrb, mrb_gc *gc, struct RBasic *obj)
 
   case MRB_TT_EXCEPTION:
     mrb_gc_mark_iv(mrb, (struct RObject*)obj);
-    if ((obj->flags & MRB_EXC_MESG_STRING_FLAG) != 0) {
+    if (((struct RException*)obj)->mesg) {
       mrb_gc_mark(mrb, (struct RBasic*)((struct RException*)obj)->mesg);
     }
+    mrb_gc_mark(mrb, (struct RBasic*)((struct RException*)obj)->backtrace);
     break;
 
   default:
@@ -904,6 +909,12 @@ obj_free(mrb_state *mrb, struct RBasic *obj, int end)
       struct RData *o = (struct RData*)obj;
       mrb_free(mrb, o->iv);
     }
+    break;
+#endif
+
+#ifdef MRB_USE_BIGINT
+  case MRB_TT_BIGINT:
+    mrb_gc_free_bint(mrb, obj);
     break;
 #endif
 
@@ -1049,7 +1060,10 @@ gc_gray_counts(mrb_state *mrb, mrb_gc *gc, struct RBasic *obj)
 
   case MRB_TT_EXCEPTION:
     children += mrb_gc_mark_iv_size(mrb, (struct RObject*)obj);
-    if ((obj->flags & MRB_EXC_MESG_STRING_FLAG) != 0) {
+    if (((struct RException*)obj)->mesg) {
+      children++;
+    }
+    if (((struct RException*)obj)->backtrace) {
       children++;
     }
     break;
@@ -1637,8 +1651,7 @@ mrb_init_gc(mrb_state *mrb)
 {
   struct RClass *gc;
 
-  mrb_static_assert(sizeof(RVALUE) <= sizeof(void*) * 6,
-                    "RVALUE size must be within 6 words");
+  mrb_static_assert_object_size(RVALUE);
 
   gc = mrb_define_module(mrb, "GC");
 

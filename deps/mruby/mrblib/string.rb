@@ -27,18 +27,18 @@ class String
     end
     start = 0
     string = dup
-    self_len = length
-    sep_len = separator.length
+    self_len = self.bytesize
+    sep_len = separator.bytesize
 
-    while (pointer = string.index(separator, start))
+    while (pointer = string.byteindex(separator, start))
       pointer += sep_len
-      pointer += 1 while paragraph_mode && string[pointer] == "\n"
-      block.call(string[start, pointer - start])
+      pointer += 1 while paragraph_mode && string.getbyte(pointer) == 10 # 10 == \n
+      block.call(string.byteslice(start, pointer - start))
       start = pointer
     end
     return self if start == self_len
 
-    block.call(string[start, self_len - start])
+    block.call(string.byteslice(start, self_len - start))
     self
   end
 
@@ -60,8 +60,8 @@ class String
     end
     offset = 0
     result = []
-    while found = index(pattern, offset)
-      result << self[offset, found - offset]
+    while found = self.byteindex(pattern, offset)
+      result << self.byteslice(offset, found - offset)
       offset = found + plen
       result << if block
         block.call(pattern).to_s
@@ -69,11 +69,11 @@ class String
         self.__sub_replace(replace, pattern, found)
       end
       if plen == 0
-        result << self[offset, 1]
+        result << self.byteslice(offset, 1)
         offset += 1
       end
     end
-    result << self[offset..-1] if offset < length
+    result << self.byteslice(offset..-1) if offset < length
     result.join
   end
 
@@ -119,16 +119,16 @@ class String
       block = nil
     end
     result = []
-    found = index(pattern)
+    found = self.index(pattern)
     return self.dup unless found
-    result << self[0, found]
+    result << self.byteslice(0, found)
     offset = found + pattern.length
     result << if block
       block.call(pattern).to_s
     else
       self.__sub_replace(replace, pattern, found)
     end
-    result << self[offset..-1] if offset < length
+    result << self.byteslice(offset..-1) if offset < length
     result.join
   end
 
@@ -150,10 +150,9 @@ class String
   # Call the given block for each byte of +self+.
   def each_byte(&block)
     return to_enum(:each_byte, &block) unless block
-    bytes = self.bytes
     pos = 0
-    while pos < bytes.size
-      block.call(bytes[pos])
+    while pos < bytesize
+      block.call(getbyte(pos))
       pos += 1
     end
     self

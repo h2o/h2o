@@ -4,9 +4,6 @@
 # MD001 heading-increment/header-increment - Heading levels should only increment by one level at a time
 MD001: false
 
-# MD010 no-hard-tabs - Hard tabs
-MD010: false
-
 # MD013 line-length - Line length
 MD013: false
 

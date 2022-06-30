@@ -99,7 +99,7 @@ MRB_API mrb_value mrb_load_irep(mrb_state*, const uint8_t*);
 
 /*
  * @param [const void*] irep code
- * @param [size_t] size of irep buffer. If -1 is given, it is considered unrestricted.
+ * @param [size_t] size of irep buffer.
  */
 MRB_API mrb_value mrb_load_irep_buf(mrb_state*, const void*, size_t);
 
@@ -108,15 +108,9 @@ MRB_API mrb_value mrb_load_irep_cxt(mrb_state*, const uint8_t*, mrbc_context*);
 
 /*
  * @param [const void*] irep code
- * @param [size_t] size of irep buffer. If -1 is given, it is considered unrestricted.
+ * @param [size_t] size of irep buffer.
  */
 MRB_API mrb_value mrb_load_irep_buf_cxt(mrb_state*, const void*, size_t, mrbc_context*);
-
-void mrb_irep_free(mrb_state*, struct mrb_irep*);
-void mrb_irep_incref(mrb_state*, struct mrb_irep*);
-void mrb_irep_decref(mrb_state*, struct mrb_irep*);
-void mrb_irep_cutref(mrb_state*, struct mrb_irep*);
-void mrb_irep_remove_lv(mrb_state *mrb, mrb_irep *irep);
 
 struct mrb_insn_data {
   uint8_t insn;
@@ -126,21 +120,12 @@ struct mrb_insn_data {
   const mrb_code *addr;
 };
 
-struct mrb_insn_data mrb_decode_insn(const mrb_code *pc);
-
-static inline const struct mrb_irep_catch_handler *
-mrb_irep_catch_handler_table(const struct mrb_irep *irep)
-{
-  if (irep->clen > 0) {
-    return (const struct mrb_irep_catch_handler*)(irep->iseq + irep->ilen);
-  }
-  else {
-    return (const struct mrb_irep_catch_handler*)NULL;
-  }
-}
-
 #define mrb_irep_catch_handler_pack(n, v)   uint32_to_bin(n, v)
 #define mrb_irep_catch_handler_unpack(v)    bin_to_uint32(v)
+
+void mrb_irep_incref(mrb_state*, struct mrb_irep*);
+void mrb_irep_decref(mrb_state*, struct mrb_irep*);
+void mrb_irep_cutref(mrb_state*, struct mrb_irep*);
 
 MRB_END_DECL
 

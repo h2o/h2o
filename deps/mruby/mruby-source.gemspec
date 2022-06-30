@@ -8,8 +8,8 @@ Gem::Specification.new do |spec|
   spec.version       = MRuby::Source::MRUBY_VERSION
   spec.authors       = [ MRuby::Source::MRUBY_AUTHOR ]
 
-  spec.summary       = %q{MRuby source code wrapper.}
-  spec.description   = %q{MRuby source code wrapper for use with Ruby libs.}
+  spec.summary       = %q{mruby source code wrapper.}
+  spec.description   = %q{mruby source code wrapper for use with Ruby libs.}
   spec.homepage      = "https://mruby.org"
   spec.license       = "MIT"
 

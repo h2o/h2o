@@ -78,7 +78,7 @@ static const mrb_float g_neg_pow[] = {
 int
 mrb_format_float(mrb_float f, char *buf, size_t buf_size, char fmt, int prec, char sign) {
   char *s = buf;
-  int buf_remaining = buf_size - 1;
+  int buf_remaining = (int)buf_size - 1;
   int alt_form = 0;
 
   if ((uint8_t)fmt & 0x80) {
@@ -103,7 +103,7 @@ mrb_format_float(mrb_float f, char *buf, size_t buf_size, char fmt, int prec, ch
   } else if (sign) {
     *s++ = sign;
   }
-  buf_remaining -= (s - buf); // Adjust for sign
+  buf_remaining -= (int)(s - buf); // Adjust for sign
 
   {
     char uc = fmt & 0x20;
@@ -118,7 +118,7 @@ mrb_format_float(mrb_float f, char *buf, size_t buf_size, char fmt, int prec, ch
       *s++ = 'N' ^ uc;
     ret:
       *s = '\0';
-      return s - buf;
+      return (int)(s - buf);
     }
   }
 
@@ -358,6 +358,6 @@ mrb_format_float(mrb_float f, char *buf, size_t buf_size, char fmt, int prec, ch
   }
   *s = '\0';
 
-  return s - buf;
+  return (int)(s - buf);
 }
 #endif

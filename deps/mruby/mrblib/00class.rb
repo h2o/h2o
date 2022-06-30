@@ -22,7 +22,8 @@ class Module
 
   # 15.2.2.4.27
   def include(*args)
-    args.reverse.each do |m|
+    args.reverse!
+    args.each do |m|
       m.append_features(self)
       m.included(self)
     end
@@ -30,7 +31,8 @@ class Module
   end
 
   def prepend(*args)
-    args.reverse.each do |m|
+    args.reverse!
+    args.each do |m|
       m.prepend_features(self)
       m.prepended(self)
     end

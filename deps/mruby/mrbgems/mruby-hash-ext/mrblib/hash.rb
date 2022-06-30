@@ -62,8 +62,8 @@ class Hash
 
   ##
   # call-seq:
-  #     hsh.merge!(other_hash)                                 -> hsh
-  #     hsh.merge!(other_hash){|key, oldval, newval| block}    -> hsh
+  #     hsh.merge!(other_hash..)                                 -> hsh
+  #     hsh.merge!(other_hash..){|key, oldval, newval| block}    -> hsh
   #
   #  Adds the contents of _other_hash_ to _hsh_.  If no block is specified,
   #  entries with duplicate keys are overwritten with the values from
@@ -81,14 +81,20 @@ class Hash
   #                     #=> {"a"=>100, "b"=>200, "c"=>300}
   #
 
-  def merge!(other, &block)
-    raise TypeError, "Hash required (#{other.class} given)" unless Hash === other
-    if block
-      other.each_key{|k|
-        self[k] = (self.has_key?(k))? block.call(k, self[k], other[k]): other[k]
-      }
-    else
-      other.each_key{|k| self[k] = other[k]}
+  def merge!(*others, &block)
+    i = 0; len=others.size
+    return self.__merge(*others) unless block
+    while i<len
+      other = others[i]
+      i += 1
+      raise TypeError, "Hash required (#{other.class} given)" unless Hash === other
+      if block
+        other.each_key{|k|
+          self[k] = (self.has_key?(k))? block.call(k, self[k], other[k]): other[k]
+        }
+      else
+        other.each_key{|k| self[k] = other[k]}
+      end
     end
     self
   end
