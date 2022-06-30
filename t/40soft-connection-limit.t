@@ -161,8 +161,12 @@ subtest 'http2 soft-connection-limit' => sub {
 };
 
 subtest 'http3 soft-connection-limit' => sub {
+    my @conns;
     for (1..10) {
-        system("perl", "t/udp-generator.pl", "127.0.0.1", "$tls_port", "t/assets/quic-decryptable-initial.bin", "t/assets/quic-initial-w-corrupted-scid.bin") == 0 or die "Failed to launch udp-generator";
+        # launch h2o-httpclient that immediately issues a request and then idles for 10 seconds before sending the next request
+        open my $fh, "-|", bindir() . "/h2o-httpclient", qw(-3 100 -t 2 -d 10000), "https://127.0.0.1:$tls_port/"
+            or die "failed to launch h2o-httpclient:$!";
+        push @conns, $fh;
     }
 
     sleep(4);
