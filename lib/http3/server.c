@@ -709,7 +709,7 @@ void on_stream_destroy(quicly_stream_t *qs, int err)
     assert(num_req_streams_incl_self > 0 &&
            "during the invocation of the destroy callback, stream count should include the number of the stream being destroyed");
     if (num_req_streams_incl_self == 1)
-        h2o_conn_set_state(&get_conn(stream)->super, H2O_CONN_STATE_IDLE);
+        h2o_conn_set_state(&conn->super, H2O_CONN_STATE_IDLE);
 }
 
 /**
