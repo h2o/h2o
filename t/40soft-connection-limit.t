@@ -79,36 +79,58 @@ sub is_connections_count {
     is $idle_closed, $expected_idle_closed, "assert idle closed";
 }
 
-subtest 'test connection stats' => sub {
-    my @conns;
+subtest "http1" => sub {
 
-    for (1..3) {
-        my $conn = IO::Socket::INET->new(
-            PeerAddr => "127.0.0.1:$port",
-            Proto    => "tcp",
-        ) or die "connection failed:$!";
-        push @conns, $conn;
-    }
+    subtest 'stats-initial' => sub {
+        my @conns;
 
-    sleep(2);
+        for (1..3) {
+            my $conn = IO::Socket::INET->new(
+                PeerAddr => "127.0.0.1:$port",
+                Proto    => "tcp",
+            ) or die "connection failed:$!";
+            push @conns, $conn;
+        }
 
-    is_connections_count(total => 4, active => 1, idle => 3, shutdown => 0);
-};
+        sleep(2);
 
-subtest 'test http1 soft-connection-limit' => sub {
-    my @conns;
+        is_connections_count(total => 4, active => 4, idle => 0, shutdown => 0);
+    };
 
-    for (1..10) {
-        my $conn = IO::Socket::INET->new(
-            PeerAddr => "127.0.0.1:$port",
-            Proto    => "tcp",
-        ) or die "connection failed:$!";
-        push @conns, $conn;
-    }
+    subtest 'stats-after-first-req' => sub {
+        my @conns;
 
-    sleep(4);
+        for (1..3) {
+            my $conn = IO::Socket::INET->new(
+                PeerAddr => "127.0.0.1:$port",
+                Proto    => "tcp",
+            ) or die "connection failed:$!";
+            $conn->syswrite("GET / HTTP/1.1\r\n\r\n");
+            push @conns, $conn;
+        }
 
-    is_connections_count(total => 5, active => 1, idle => 4, shutdown => 0, idle_closed => 6);
+        sleep(2);
+
+        is_connections_count(total => 4, active => 1, idle => 3, shutdown => 0);
+    };
+
+    subtest 'test http1 soft-connection-limit' => sub {
+        my @conns;
+
+        for (1..10) {
+            my $conn = IO::Socket::INET->new(
+                PeerAddr => "127.0.0.1:$port",
+                Proto    => "tcp",
+            ) or die "connection failed:$!";
+            $conn->syswrite("GET / HTTP/1.1\r\n\r\n");
+            push @conns, $conn;
+        }
+
+        sleep(4);
+
+        is_connections_count(total => 5, active => 1, idle => 4, shutdown => 0, idle_closed => 6);
+    };
+
 };
 
 subtest 'test http2 soft-connection-limit' => sub {
