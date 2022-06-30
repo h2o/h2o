@@ -3238,20 +3238,23 @@ static void *run_loop(void *_thread_index)
     h2o_barrier_wait(&conf.startup_sync_barrier_post);
 
     /* the main loop */
-    uint64_t last_buffer_gc_at = 0;
+    uint64_t next_buffer_gc_at = UINT64_MAX;
     while (1) {
         if (conf.shutdown_requested)
             break;
         update_listener_state(listeners);
         /* run the loop once */
-        h2o_evloop_run(conf.threads[thread_index].ctx.loop, INT32_MAX);
+        h2o_evloop_run(conf.threads[thread_index].ctx.loop, next_buffer_gc_at == UINT64_MAX ? INT32_MAX : 1000);
         /* cleanup */
         h2o_filecache_clear(conf.threads[thread_index].ctx.filecache);
-        if (last_buffer_gc_at + 1000 < h2o_now(conf.threads[thread_index].ctx.loop)) {
-            last_buffer_gc_at = h2o_now(conf.threads[thread_index].ctx.loop);
+        if (h2o_now(conf.threads[thread_index].ctx.loop) >= next_buffer_gc_at) {
             h2o_buffer_clear_recycle(0);
             h2o_mem_clear_recycle(&h2o_socket_ssl_buffer_allocator, 0);
+            next_buffer_gc_at = UINT64_MAX;
         }
+        if (next_buffer_gc_at == UINT64_MAX &&
+            (!h2o_buffer_recycle_is_empty() || !h2o_mem_recycle_is_empty(&h2o_socket_ssl_buffer_allocator)))
+            next_buffer_gc_at = h2o_now(conf.threads[thread_index].ctx.loop) + 1000;
     }
 
     if (thread_index == 0)

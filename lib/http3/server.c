@@ -259,7 +259,7 @@ static const h2o_sendvec_callbacks_t self_allocated_vec_callbacks = {h2o_sendvec
 
 static int sendvec_size_is_for_recycle(size_t size)
 {
-    if (*h2o_socket_ssl_buffer_allocator.memsize / 2 <= size && size <= *h2o_socket_ssl_buffer_allocator.memsize)
+    if (h2o_socket_ssl_buffer_allocator.conf->memsize / 2 <= size && size <= h2o_socket_ssl_buffer_allocator.conf->memsize)
         return 1;
     return 0;
 }

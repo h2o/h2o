@@ -236,7 +236,7 @@ extern h2o_buffer_prototype_t h2o_socket_buffer_prototype;
 /**
  * see H2O_SOCKET_DEFAULT_SSL_BUFFER_SIZE
  */
-extern size_t h2o_socket_ssl_buffer_size;
+extern h2o_mem_recycle_conf_t h2o_socket_ssl_buffer_conf;
 extern __thread h2o_mem_recycle_t h2o_socket_ssl_buffer_allocator;
 
 /**

@@ -1140,14 +1140,14 @@ static size_t calc_max_payload_size(struct st_h2o_http2client_stream_t *stream)
     return sz_min(sz_min(conn_max, stream_max), stream->conn->peer_settings.max_frame_size);
 }
 
-static size_t stream_emit_pending_data(struct st_h2o_http2client_stream_t *stream)
+static void stream_emit_pending_data(struct st_h2o_http2client_stream_t *stream)
 {
     size_t max_payload_size = calc_max_payload_size(stream);
     size_t payload_size = sz_min(max_payload_size, stream->output.buf->size);
-    if (payload_size == 0)
-        return 0;
-    char *dst = h2o_buffer_reserve(&stream->conn->output.buf, H2O_HTTP2_FRAME_HEADER_SIZE + payload_size).base;
     int end_stream = (stream->streaming.proceed_req == NULL || stream->streaming.done) && payload_size == stream->output.buf->size;
+    if (payload_size == 0 && !end_stream)
+        return;
+    char *dst = h2o_buffer_reserve(&stream->conn->output.buf, H2O_HTTP2_FRAME_HEADER_SIZE + payload_size).base;
     h2o_http2_encode_frame_header((void *)dst, stream->output.buf->size, H2O_HTTP2_FRAME_TYPE_DATA,
                                   end_stream ? H2O_HTTP2_FRAME_FLAG_END_STREAM : 0, stream->stream_id);
     h2o_memcpy(dst + H2O_HTTP2_FRAME_HEADER_SIZE, stream->output.buf->bytes, payload_size);
@@ -1156,8 +1156,6 @@ static size_t stream_emit_pending_data(struct st_h2o_http2client_stream_t *strea
 
     h2o_http2_window_consume_window(&stream->conn->output.window, payload_size);
     h2o_http2_window_consume_window(&stream->output.window, payload_size);
-
-    return payload_size;
 }
 
 static void do_emit_writereq(struct st_h2o_http2client_conn_t *conn)
@@ -1173,9 +1171,8 @@ static void do_emit_writereq(struct st_h2o_http2client_conn_t *conn)
             H2O_STRUCT_FROM_MEMBER(struct st_h2o_http2client_stream_t, output.sending_link, node);
         h2o_linklist_unlink(node);
 
-        size_t bytes_emitted = 0;
-        if (stream->output.buf != NULL && stream->output.buf->size != 0)
-            bytes_emitted = stream_emit_pending_data(stream);
+        if (stream->output.buf != NULL)
+            stream_emit_pending_data(stream);
 
         if (stream->output.buf != NULL && stream->output.buf->size == 0) {
             h2o_linklist_insert(&conn->output.sent_streams, node);
