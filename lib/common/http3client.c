@@ -744,7 +744,7 @@ void start_request(struct st_h2o_http3client_req_t *req)
     /* send request (TODO optimize) */
     h2o_iovec_t datagram_flow_id = {};
     if (req->super.upgrade_to == h2o_httpclient_upgrade_to_connect &&
-        h2o_memis(method.base, method.len, H2O_STRLIT("CONNECT-UDP")) && h2o_http3_can_use_h3_datagram(&req->conn->super)) {
+        h2o_memis(method.base, method.len, H2O_STRLIT("CONNECT-UDP")) && req->conn->super.peer_settings.h3_datagram) {
         datagram_flow_id.len = sprintf(datagram_flow_id_buf, "%" PRIu64, req->quic->stream_id);
         datagram_flow_id.base = datagram_flow_id_buf;
         req->offered_datagram_flow_id = 1;
