@@ -249,6 +249,10 @@ void h2o_socketpool_dispose(h2o_socketpool_t *pool)
 {
     size_t i;
 
+    if (pool->_interval_cb.loop != NULL) {
+        h2o_error_printf("Bug: Must call h2o_socketpool_unregister_loop() in the same evloop thread when registered before dispose\n");
+        return;
+    }
     pthread_mutex_lock(&pool->_shared.mutex);
     while (!h2o_linklist_is_empty(&pool->_shared.sockets)) {
         struct pool_entry_t *entry = H2O_STRUCT_FROM_MEMBER(struct pool_entry_t, all_link, pool->_shared.sockets.next);
@@ -265,9 +269,6 @@ void h2o_socketpool_dispose(h2o_socketpool_t *pool)
 
     if (pool->_ssl_ctx != NULL)
         SSL_CTX_free(pool->_ssl_ctx);
-
-    if (pool->_interval_cb.loop != NULL)
-        h2o_socketpool_unregister_loop(pool, pool->_interval_cb.loop);
 
     for (i = 0; i < pool->targets.size; i++) {
         h2o_socketpool_destroy_target(pool->targets.entries[i]);
