@@ -52,7 +52,7 @@ coverage:
 
 _coverage_report:
 	llvm-profdata merge -sparse -o h2o.profdata /home/ci/profraw/*.profraw
-	llvm-cov report -show-region-summary=0 -show-functions=1 -instr-profile h2o.profdata h2o $(SRC_DIR)/lib $(SRC_DIR)/src $(SRC_DIR)/deps/quicly/lib $(SRC_DIR)/deps/picotls/lib | tee /home/ci/summary.txt
+	llvm-cov report -show-region-summary=0 -instr-profile h2o.profdata h2o $(SRC_DIR)/lib $(SRC_DIR)/src $(SRC_DIR)/deps/quicly/lib $(SRC_DIR)/deps/picotls/lib | tee /home/ci/summary.txt
 	echo '~~~' > /home/ci/summary.md
 	cat /home/ci/summary.txt >> /home/ci/summary.md
 	echo '~~~' >> /home/ci/summary.md
