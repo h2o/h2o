@@ -8,8 +8,8 @@ use Test::More;
 use URI::Escape;
 use t::Util;
 
-my ($aggregated_mode, $h2o_keepalive, $starlet_keepalive, $starlet_force_chunked, $unix_socket, $zerocopy, $tls_offload);
-my $ssl_zerocopy = "off";
+my ($aggregated_mode, $h2o_keepalive, $starlet_keepalive, $starlet_force_chunked, $unix_socket, $zerocopy);
+my $ssl_offload = "off";
 
 my @orig_argv = @ARGV;
 
@@ -21,14 +21,13 @@ GetOptions(
         $starlet_force_chunked = ($m & 4) != 0;
         $unix_socket = ($m & 8) != 0;
         $zerocopy = ($m & 16) != 0;
-        $tls_offload = ($m & 32) != 0;
-        for (($m >> 6) & 3) {
+        for (($m >> 5) & 3) {
             if (/^0$/) {
-                $ssl_zerocopy = "off";
+                $ssl_offload = "off";
             } elsif (/^1$/) {
-                $ssl_zerocopy = "libcrypto";
+                $ssl_offload = "kernel";
             } elsif (/^2$/) {
-                $ssl_zerocopy = "non-temporal";
+                $ssl_offload = "zerocopy";
             } else {
                 die "unexpected tls.zerocopy mode:$m";
             }
@@ -39,8 +38,7 @@ GetOptions(
     "starlet-force-chunked=i" => \$starlet_force_chunked,
     "unix-socket=i"           => \$unix_socket,
     "zerocopy=i"              => \$zerocopy,
-    "tls-offload=i"           => \$tls_offload,
-    "ssl-zerocopy=s"          => \$ssl_zerocopy,
+    "ssl-offload=s"           => \$ssl_offload,
 ) or exit(1);
 
 plan skip_all => 'plackup not found'
@@ -53,14 +51,12 @@ plan skip_all => 'skipping unix-socket tests, requires Starlet >= 0.25'
 plan skip_all => 'zerocopy requires linux'
     if $zerocopy and $^O ne 'linux';
 plan skip_all => 'ktls not supported'
-    if $tls_offload and not server_features()->{ktls};
-plan skip_all => 'ssl/zerocopy requires linux'
-    if $ssl_zerocopy ne "off" and not server_features()->{"ssl-zerocopy"};
-plan skip_all => 'non-temporal aes-gcm engine is unavailable'
-    if $ssl_zerocopy eq 'non-temporal' and not server_features()->{fusion};
+    if $ssl_offload eq "kernel" and not server_features()->{ktls};
+plan skip_all => 'SO_ZEROCOPY requires linux'
+    if $ssl_offload eq "zerocopy" and not server_features()->{"ssl-zerocopy"};
 
 # when zerocopy is about to be tested, restart as root so that RLIMIT_MEMLOCK would be raised to unlimited
-if ($ssl_zerocopy ne "off" && $< != 0) {
+if ($ssl_offload eq "zerocopy" && $< != 0) {
     @ARGV = @orig_argv;
     run_as_root()
 }
@@ -128,8 +124,7 @@ hosts:
 reproxy: ON
 @{[ $h2o_keepalive ? "" : "proxy.timeout.keepalive: 0" ]}
 proxy.zerocopy: @{[ $zerocopy ? "ALWAYS" : "OFF" ]}
-@{[$tls_offload ? "ssl-offload: ON" : ""]}
-ssl-zerocopy: $ssl_zerocopy
+ssl-offload: $ssl_offload
 EOT
 
 run_with_curl($server, sub {
