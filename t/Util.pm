@@ -70,7 +70,7 @@ sub bindir {
 
 sub run_as_root {
     return if $< == 0;
-    exec qw(sudo -E env PERL5LIB=.), "PATH=$ENV{PATH}", $^X, $0;
+    exec qw(sudo -E env PERL5LIB=.), "PATH=$ENV{PATH}", $^X, $0, @ARGV;
     die "failed to invoke $0 using sudo:$!";
 }
 
