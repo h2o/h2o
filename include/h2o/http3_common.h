@@ -485,7 +485,7 @@ void h2o_http3_dispose_conn(h2o_http3_conn_t *conn);
  */
 int h2o_http3_setup(h2o_http3_conn_t *conn, quicly_conn_t *quic);
 /**
- * sends packets immediately by calling quicly_send, sendmsg (returns 1 if success, 0 if the connection was destroyed)
+ * sends packets immediately by calling quicly_send, sendmsg (returns true if success, false if the connection was destroyed)
  */
 int h2o_quic_send(h2o_quic_conn_t *conn);
 /**
