@@ -1906,8 +1906,6 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
     H2O_PROBE_CONN(H3S_ACCEPT, &conn->super, &conn->super, conn->h3.super.quic, h2o_conn_get_uuid(&conn->super));
 
     if (h2o_quic_send(&conn->h3.super) == 0) {
-        kh_destroy(stream, conn->datagram_flows);
-        h2o_linklist_unlink(&conn->_conns);
         return NULL;
     }
 
