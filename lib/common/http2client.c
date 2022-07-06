@@ -1103,13 +1103,21 @@ static void on_write_complete(h2o_socket_t *sock, const char *err)
         }
 
         if (stream->streaming.proceed_req == NULL || stream->streaming.done) {
-            stream->state.req = STREAM_STATE_CLOSED;
-            h2o_timer_link(stream->super.ctx->loop, stream->super.ctx->first_byte_timeout, &stream->super._timeout);
+            if (stream->output.buf->size == 0) {
+                stream->state.req = STREAM_STATE_CLOSED;
+                if (h2o_timer_is_linked(&stream->super._timeout))
+                    h2o_timer_unlink(&stream->super._timeout);
+                h2o_timer_link(stream->super.ctx->loop, stream->super.ctx->first_byte_timeout, &stream->super._timeout);
+            }
         }
     }
 
     /* reset the other buffer */
     h2o_buffer_dispose(&conn->output.buf_in_flight);
+
+    /* we'll request write below, unlink the defer_timeout */
+    if (h2o_timer_is_linked(&conn->output.defer_timeout))
+        h2o_timer_unlink(&conn->output.defer_timeout);
 
 #if !H2O_USE_LIBUV
     if (conn->state == H2O_HTTP2CLIENT_CONN_STATE_OPEN) {
