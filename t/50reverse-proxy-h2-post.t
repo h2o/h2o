@@ -44,7 +44,8 @@ for my $size (1, 100, 1_000, 10_000, 100_000, 1_000_000) {
 
     for (1..10) {
         my $output = `curl -XPOST -d \@$file -sk --http2 https://127.0.0.1:$server->{tls_port}/echo`;
-        is length($output), $size, "request body $size bytes";
+        is length($output), $size, "request body $size bytes"
+          and is $output, $bytes;
     }
 }
 
