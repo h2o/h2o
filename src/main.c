@@ -3186,7 +3186,7 @@ static void *run_loop(void *_thread_index)
             listeners[i].http3.ctx.accept_ctx = &listeners[i].accept_ctx;
             listeners[i].http3.ctx.send_retry = listener_config->quic.send_retry;
             listeners[i].http3.ctx.qpack = listener_config->quic.qpack;
-            if (conf.globalconf.http3.handshake_timeout_rtt_multiplier > 0)
+            if (conf.globalconf.http3.handshake_timeout_rtt_multiplier < UINT32_MAX)
                 listener_config->quic.ctx->handshake_timeout_rtt_multiplier =
                     conf.globalconf.http3.handshake_timeout_rtt_multiplier;
             if (conf.globalconf.http3.max_initial_handshake_packets > 0) {

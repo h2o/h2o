@@ -472,7 +472,8 @@ struct st_h2o_globalconf_t {
          */
         uint8_t use_gso : 1;
         /**
-         * if handshake does not complete within RTT multiplied by this value, we'll close a connection
+         * if handshake does not complete within RTT multiplied by this value, we'll close a connection.
+         * UINT32_MAX indicates the value is not initialized.
          */
         uint32_t handshake_timeout_rtt_multiplier;
         /**
