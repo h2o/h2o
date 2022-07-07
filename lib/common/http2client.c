@@ -1111,6 +1111,11 @@ static void on_write_complete(h2o_socket_t *sock, const char *err)
     /* reset the other buffer */
     h2o_buffer_dispose(&conn->output.buf_in_flight);
 
+    /* `proceed_req` called in the above loop may invoke `do_write_req` synchronously, and that would set the `defer_timeout`.
+     * Unlink it, as we will request write below. */
+    if (h2o_timer_is_linked(&conn->output.defer_timeout))
+        h2o_timer_unlink(&conn->output.defer_timeout);
+
 #if !H2O_USE_LIBUV
     if (conn->state == H2O_HTTP2CLIENT_CONN_STATE_OPEN) {
         if (conn->output.buf->size != 0 || !h2o_linklist_is_empty(&conn->output.sending_streams))
