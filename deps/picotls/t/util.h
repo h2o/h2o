@@ -148,7 +148,7 @@ static inline X509_STORE *init_cert_store(char const *crt_file)
 static inline void setup_verify_certificate(ptls_context_t *ctx, const char *ca_file)
 {
     static ptls_openssl_verify_certificate_t vc;
-    ptls_openssl_init_verify_certificate(&vc, ca_file != NULL ? init_cert_store(ca_file) : NULL);
+    ptls_openssl_init_verify_certificate(&vc, ca_file != NULL ? init_cert_store(ca_file) : NULL, NULL);
     ctx->verify_certificate = &vc.super;
 }
 
