@@ -1148,7 +1148,7 @@ static void stream_emit_pending_data(struct st_h2o_http2client_stream_t *stream)
     if (payload_size == 0 && !end_stream)
         return;
     char *dst = h2o_buffer_reserve(&stream->conn->output.buf, H2O_HTTP2_FRAME_HEADER_SIZE + payload_size).base;
-    h2o_http2_encode_frame_header((void *)dst, stream->output.buf->size, H2O_HTTP2_FRAME_TYPE_DATA,
+    h2o_http2_encode_frame_header((void *)dst, payload_size, H2O_HTTP2_FRAME_TYPE_DATA,
                                   end_stream ? H2O_HTTP2_FRAME_FLAG_END_STREAM : 0, stream->stream_id);
     h2o_memcpy(dst + H2O_HTTP2_FRAME_HEADER_SIZE, stream->output.buf->bytes, payload_size);
     stream->conn->output.buf->size += H2O_HTTP2_FRAME_HEADER_SIZE + payload_size;
