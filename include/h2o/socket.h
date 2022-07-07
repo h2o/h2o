@@ -251,6 +251,10 @@ extern __thread h2o_mem_recycle_t h2o_socket_ssl_buffer_allocator;
  * boolean flag indicating if kTLS should be used (when preferable)
  */
 extern int h2o_socket_use_ktls;
+/**
+ * boolean flag indicating if picotls should be used for the record layer of TLS 1.2 (if possible)
+ */
+extern int h2o_socket_use_picotls_for_tls12;
 
 extern const char h2o_socket_error_out_of_memory[];
 extern const char h2o_socket_error_io[];
