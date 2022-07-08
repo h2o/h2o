@@ -1101,9 +1101,12 @@ static void on_write_complete(h2o_socket_t *sock, const char *err)
         if (stream->output.proceed_req != NULL) {
             stream->notify_destroyed = &stream_destroyed;
             stream->output.proceed_req(&stream->super, NULL);
+            if (stream_destroyed)
+                continue;
+            stream->notify_destroyed = NULL;
         }
 
-        if (!stream_destroyed && stream->output.proceed_req == NULL && !h2o_linklist_is_linked(&stream->output.sending_link)) {
+        if (stream->output.proceed_req == NULL && !h2o_linklist_is_linked(&stream->output.sending_link)) {
             stream->state.req = STREAM_STATE_CLOSED;
             h2o_timer_link(stream->super.ctx->loop, stream->super.ctx->first_byte_timeout, &stream->super._timeout);
         }
