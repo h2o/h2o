@@ -95,6 +95,7 @@ __attribute__((noinline)) static void h2o_probe_response_header(h2o_req_t *req, 
 
 static inline void h2o_probe_log_request(h2o_req_t *req, uint64_t req_index)
 {
+    req->req_index = req_index;
     H2O_PROBE_CONN(RECEIVE_REQUEST, req->conn, req_index, req->version);
     if (H2O_CONN_IS_PROBED(RECEIVE_REQUEST_HEADER, req->conn)) {
         if (req->input.authority.base != NULL)

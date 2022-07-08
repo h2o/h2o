@@ -1357,6 +1357,9 @@ struct st_h2o_req_t {
     size_t _next_filter_index;
     h2o_timer_t _timeout_entry;
 
+    /* a number that identifies the request on the connection (in h2olog output) */
+    uint64_t req_index;
+
     /* per-request memory pool (placed at the last since the structure is large) */
     h2o_mem_pool_t pool;
 };
