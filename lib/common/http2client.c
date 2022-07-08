@@ -100,6 +100,8 @@ struct st_h2o_http2client_stream_t {
         size_t remaining_content_length;
         unsigned message_body_forbidden : 1;
     } input;
+
+    int *notify_destroyed;
 };
 
 static void do_emit_writereq(struct st_h2o_http2client_conn_t *conn);
@@ -240,6 +242,9 @@ static void close_stream(struct st_h2o_http2client_stream_t *stream)
     if (stream->output.buf != NULL)
         h2o_buffer_dispose(&stream->output.buf);
     h2o_buffer_dispose(&stream->input.body);
+
+    if (stream->notify_destroyed != NULL)
+        *stream->notify_destroyed = 1;
 
     free(stream);
 }
@@ -1092,10 +1097,13 @@ static void on_write_complete(h2o_socket_t *sock, const char *err)
 
         /* request the app to send more, unless the stream is already closed (note: invocation of `proceed_req` might invoke
          * `do_write_req` synchronously) */
-        if (stream->output.proceed_req != NULL)
+        int stream_destroyed = 0;
+        if (stream->output.proceed_req != NULL) {
+            stream->notify_destroyed = &stream_destroyed;
             stream->output.proceed_req(&stream->super, NULL);
+        }
 
-        if (stream->output.proceed_req == NULL && !h2o_linklist_is_linked(&stream->output.sending_link)) {
+        if (!stream_destroyed && stream->output.proceed_req == NULL && !h2o_linklist_is_linked(&stream->output.sending_link)) {
             stream->state.req = STREAM_STATE_CLOSED;
             h2o_timer_link(stream->super.ctx->loop, stream->super.ctx->first_byte_timeout, &stream->super._timeout);
         }
