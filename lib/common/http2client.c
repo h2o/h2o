@@ -1099,11 +1099,13 @@ static void on_write_complete(h2o_socket_t *sock, const char *err)
 
         if (stream->streaming.inflight) {
             stream->streaming.inflight = 0;
-            if (stream->streaming.proceed_req != NULL && !stream->streaming.done)
+            if (stream->streaming.proceed_req != NULL && !stream->streaming.done) {
+                /* note: invocation of `proceed_req` might invoke `do_write_req` synchronously */
                 stream->streaming.proceed_req(&stream->super, NULL);
+            }
         }
 
-        if (stream->streaming.proceed_req == NULL || stream->streaming.done) {
+        if (stream->streaming.proceed_req == NULL || (!stream->streaming.inflight && stream->streaming.done)) {
             stream->state.req = STREAM_STATE_CLOSED;
             h2o_timer_link(stream->super.ctx->loop, stream->super.ctx->first_byte_timeout, &stream->super._timeout);
         }
@@ -1112,8 +1114,7 @@ static void on_write_complete(h2o_socket_t *sock, const char *err)
     /* reset the other buffer */
     h2o_buffer_dispose(&conn->output.buf_in_flight);
 
-    /* `proceed_req` called in the above loop may invoke `do_write_req` synchronously, and that would set the `defer_timeout`.
-     * Unlink it, as we will request write below. */
+    /* as request write, unlink the deferred timeout that might have been set by `proceed_req` called above */
     if (h2o_timer_is_linked(&conn->output.defer_timeout))
         h2o_timer_unlink(&conn->output.defer_timeout);
 
