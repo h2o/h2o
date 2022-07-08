@@ -1097,9 +1097,10 @@ static void on_write_complete(h2o_socket_t *sock, const char *err)
             H2O_STRUCT_FROM_MEMBER(struct st_h2o_http2client_stream_t, output.sending_link, link);
         h2o_linklist_unlink(link);
 
-        if (stream->streaming.proceed_req != NULL && stream->streaming.inflight) {
+        if (stream->streaming.inflight) {
             stream->streaming.inflight = 0;
-            stream->streaming.proceed_req(&stream->super, NULL);
+            if (stream->streaming.proceed_req != NULL && !stream->streaming.done)
+                stream->streaming.proceed_req(&stream->super, NULL);
         }
 
         if (stream->streaming.proceed_req == NULL || stream->streaming.done) {
