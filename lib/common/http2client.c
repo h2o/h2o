@@ -1171,7 +1171,7 @@ static void do_emit_writereq(struct st_h2o_http2client_conn_t *conn)
         if (stream->output.buf != NULL)
             stream_emit_pending_data(stream);
 
-        if (stream->output.buf != NULL && stream->output.buf->size == 0) {
+        if (stream->output.buf == NULL || stream->output.buf->size == 0) {
             h2o_linklist_insert(&conn->output.sent_streams, &stream->output.sending_link);
         } else if (h2o_http2_window_get_avail(&stream->output.window) > 0) {
             /* re-insert to tail so that streams would be sent round-robin */
