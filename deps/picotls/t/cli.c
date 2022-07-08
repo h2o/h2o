@@ -39,6 +39,7 @@
 #include <sys/time.h>
 #include <sys/types.h>
 #include <unistd.h>
+#define OPENSSL_API_COMPAT 0x00908000L
 #include <openssl/err.h>
 #include <openssl/evp.h>
 #include <openssl/engine.h>
