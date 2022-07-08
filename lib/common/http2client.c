@@ -90,6 +90,7 @@ struct st_h2o_http2client_stream_t {
         h2o_buffer_t *buf;
         h2o_linklist_t sending_link;
         unsigned char fin : 1;
+        h2o_httpclient_proceed_req_cb proceed_req;
     } output;
 
     struct {
@@ -100,10 +101,6 @@ struct st_h2o_http2client_stream_t {
         size_t remaining_content_length;
         unsigned message_body_forbidden : 1;
     } input;
-
-    struct {
-        h2o_httpclient_proceed_req_cb proceed_req;
-    } streaming;
 };
 
 static void do_emit_writereq(struct st_h2o_http2client_conn_t *conn);
@@ -270,9 +267,9 @@ static void call_callback_with_error(struct st_h2o_http2client_stream_t *stream,
         break;
     case STREAM_STATE_CLOSED:
         /* proceed_req can be called to indicate error, regardless of write being inflight */
-        if (!stream->output.fin && stream->streaming.proceed_req != NULL) {
+        if (!stream->output.fin && stream->output.proceed_req != NULL) {
             stream->output.fin = 1;
-            stream->streaming.proceed_req(&stream->super, errstr);
+            stream->output.proceed_req(&stream->super, errstr);
         }
         break;
     }
@@ -1021,7 +1018,7 @@ static void on_connection_ready(struct st_h2o_http2client_stream_t *stream, stru
 
     stream->super._cb.on_head =
         stream->super._cb.on_connect(&stream->super, NULL, &method, &url, (const h2o_header_t **)&headers, &num_headers, &body,
-                                     &stream->streaming.proceed_req, &props, &conn->super.origin_url);
+                                     &stream->output.proceed_req, &props, &conn->super.origin_url);
     if (stream->super._cb.on_head == NULL) {
         close_stream(stream);
         return;
@@ -1030,7 +1027,7 @@ static void on_connection_ready(struct st_h2o_http2client_stream_t *stream, stru
     h2o_http2_window_init(&stream->output.window, conn->peer_settings.initial_window_size);
 
     /* forward request state */
-    if (stream->streaming.proceed_req != NULL) {
+    if (stream->output.proceed_req != NULL) {
         stream->state.req = STREAM_STATE_BODY;
     } else if (body.base != NULL) {
         stream->state.req = STREAM_STATE_BODY;
@@ -1098,8 +1095,8 @@ static void on_write_complete(h2o_socket_t *sock, const char *err)
         /* request the app to send more, unless the stream is already closed (note: invocation of `proceed_req` might invoke
          * `do_write_req` synchronously) */
         if (!stream->output.fin) {
-            assert(stream->streaming.proceed_req != NULL);
-            stream->streaming.proceed_req(&stream->super, NULL);
+            assert(stream->output.proceed_req != NULL);
+            stream->output.proceed_req(&stream->super, NULL);
         }
 
         if (!h2o_linklist_is_linked(&stream->output.sending_link) && stream->output.fin) {
@@ -1295,7 +1292,7 @@ static void do_update_window(h2o_httpclient_t *_client)
 static int do_write_req(h2o_httpclient_t *_client, h2o_iovec_t chunk, int is_end_stream)
 {
     struct st_h2o_http2client_stream_t *stream = (void *)_client;
-    assert(stream->streaming.proceed_req != NULL);
+    assert(stream->output.proceed_req != NULL);
     assert(!stream->output.fin);
     assert(!h2o_linklist_is_linked(&stream->output.sending_link));
 
