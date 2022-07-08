@@ -1159,27 +1159,26 @@ static void do_emit_writereq(struct st_h2o_http2client_conn_t *conn)
 {
     assert(conn->output.buf_in_flight == NULL);
 
-    /* emit DATA frames */
-    h2o_linklist_t *node = conn->output.sending_streams.next;
-    h2o_linklist_t *first = node;
-    while (node != &conn->output.sending_streams) {
-        h2o_linklist_t *next = node->next;
+    /* send DATA frames */
+    h2o_linklist_t pending;
+    h2o_linklist_init_anchor(&pending);
+    h2o_linklist_insert_list(&pending, &conn->output.sending_streams);
+    while (!h2o_linklist_is_empty(&pending)) {
         struct st_h2o_http2client_stream_t *stream =
-            H2O_STRUCT_FROM_MEMBER(struct st_h2o_http2client_stream_t, output.sending_link, node);
-        h2o_linklist_unlink(node);
+            H2O_STRUCT_FROM_MEMBER(struct st_h2o_http2client_stream_t, output.sending_link, pending.next);
+        h2o_linklist_unlink(&stream->output.sending_link);
 
         if (stream->output.buf != NULL)
             stream_emit_pending_data(stream);
 
         if (stream->output.buf != NULL && stream->output.buf->size == 0) {
-            h2o_linklist_insert(&conn->output.sent_streams, node);
+            h2o_linklist_insert(&conn->output.sent_streams, &stream->output.sending_link);
         } else if (h2o_http2_window_get_avail(&stream->output.window) > 0) {
-            h2o_linklist_insert(&conn->output.sending_streams, node); /* move to the tail to rotate buffers */
+            /* re-insert to tail so that streams would be sent round-robin */
+            h2o_linklist_insert(&conn->output.sending_streams, &stream->output.sending_link);
+        } else {
+            /* stream is flow-control-blocked; is not linked until WINDOW_UPDATE frame is received */
         }
-
-        if (next == first)
-            break;
-        node = next;
     }
 
     if (conn->output.buf->size != 0) {
