@@ -34,6 +34,10 @@ extern "C" {
 #define PTLS_FUSION_AES128_ROUNDS 10
 #define PTLS_FUSION_AES256_ROUNDS 14
 
+#ifndef PTLS_X86_CACHE_LINE_ALIGN_BITS
+#define PTLS_X86_CACHE_LINE_ALIGN_BITS 6 /* 64-bytes */
+#endif
+
 typedef struct ptls_fusion_aesecb_context {
     union {
         __m128i m128[PTLS_FUSION_AES256_ROUNDS + 1];
