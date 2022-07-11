@@ -649,7 +649,7 @@ static int on_config_http3_handshake_timeout(h2o_configurator_command_t *cmd, h2
         h2o_configurator_errprintf(cmd, node,
                                    "[WARNING] handshake timeout multiplier == 0 is not recommended except for testing.");
     } else if (v == UINT32_MAX) {
-        h2o_configurator_errprintf(cmd, node, "handshake timeout multiplier should not be UINT32_MAX");
+        h2o_configurator_errprintf(cmd, node, "handshake timeout multiplier must not be UINT32_MAX");
         return -1;
     }
     ctx->globalconf->http3.handshake_timeout_rtt_multiplier = v;
