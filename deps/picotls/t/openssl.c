@@ -232,22 +232,22 @@ static void test_cert_verify(void)
     X509 *cert = x509_from_pem(RSA_CERTIFICATE);
     STACK_OF(X509) *chain = sk_X509_new_null();
     X509_STORE *store = X509_STORE_new();
-    int ret;
+    int ret, ossl_x509_err;
 
     /* expect fail when no CA is registered */
-    ret = verify_cert_chain(store, cert, chain, 0, "test.example.com");
+    ret = verify_cert_chain(store, cert, chain, 0, "test.example.com", &ossl_x509_err);
     ok(ret == PTLS_ALERT_UNKNOWN_CA);
 
     /* expect success after registering the CA */
     X509_LOOKUP *lookup = X509_STORE_add_lookup(store, X509_LOOKUP_file());
     ret = X509_LOOKUP_load_file(lookup, "t/assets/test-ca.crt", X509_FILETYPE_PEM);
     ok(ret);
-    ret = verify_cert_chain(store, cert, chain, 0, "test.example.com");
+    ret = verify_cert_chain(store, cert, chain, 0, "test.example.com", &ossl_x509_err);
     ok(ret == 0);
 
 #ifdef X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS
     /* different server_name */
-    ret = verify_cert_chain(store, cert, chain, 0, "test2.example.com");
+    ret = verify_cert_chain(store, cert, chain, 0, "test2.example.com", &ossl_x509_err);
     ok(ret == PTLS_ALERT_BAD_CERTIFICATE);
 #else
     fprintf(stderr, "**** skipping test for hostname validation failure ***\n");
