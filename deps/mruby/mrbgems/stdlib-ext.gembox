@@ -1,0 +1,18 @@
+# It also works with MRB_NO_STDIO and MRB_NO_FLOAT.
+
+MRuby::GemBox.new do |conf|
+  # Use standard Array#pack, String#unpack methods
+  conf.gem :core => "mruby-pack"
+
+  # Use standard Kernel#sprintf method
+  conf.gem :core => "mruby-sprintf"
+
+  # Use standard Time class
+  conf.gem :core => "mruby-time"
+
+  # Use standard Struct class
+  conf.gem :core => "mruby-struct"
+
+  # Use Random class
+  conf.gem :core => "mruby-random"
+end

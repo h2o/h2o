@@ -1219,10 +1219,12 @@ Exit:
     return ret;
 }
 
-static int verify_cert_chain(X509_STORE *store, X509 *cert, STACK_OF(X509) * chain, int is_server, const char *server_name)
+static int verify_cert_chain(X509_STORE *store, X509 *cert, STACK_OF(X509) * chain, int is_server, const char *server_name,
+                             int *ossl_x509_err)
 {
     X509_STORE_CTX *verify_ctx;
     int ret;
+    *ossl_x509_err = 0;
 
     /* verify certificate chain */
     if ((verify_ctx = X509_STORE_CTX_new()) == NULL) {
@@ -1251,8 +1253,8 @@ static int verify_cert_chain(X509_STORE *store, X509 *cert, STACK_OF(X509) * cha
     }
 
     if (X509_verify_cert(verify_ctx) != 1) {
-        int x509_err = X509_STORE_CTX_get_error(verify_ctx);
-        switch (x509_err) {
+        *ossl_x509_err = X509_STORE_CTX_get_error(verify_ctx);
+        switch (*ossl_x509_err) {
         case X509_V_ERR_OUT_OF_MEM:
             ret = PTLS_ERROR_NO_MEMORY;
             break;
@@ -1296,26 +1298,34 @@ static int verify_cert(ptls_verify_certificate_t *_self, ptls_t *tls,
     X509 *cert = NULL;
     STACK_OF(X509) *chain = sk_X509_new_null();
     size_t i;
-    int ret = 0;
+    int ossl_x509_err, ret;
 
-    assert(num_certs != 0);
-
-    /* convert certificates to OpenSSL representation */
-    if ((cert = to_x509(certs[0])) == NULL) {
-        ret = PTLS_ALERT_BAD_CERTIFICATE;
-        goto Exit;
-    }
-    for (i = 1; i != num_certs; ++i) {
-        X509 *interm = to_x509(certs[i]);
-        if (interm == NULL) {
+    /* If any certs are given, convert them to OpenSSL representation, then verify the cert chain. If no certs are given, just give
+     * the override_callback to see if we want to stay fail open. */
+    if (num_certs != 0) {
+        if ((cert = to_x509(certs[0])) == NULL) {
             ret = PTLS_ALERT_BAD_CERTIFICATE;
             goto Exit;
         }
-        sk_X509_push(chain, interm);
+        for (i = 1; i != num_certs; ++i) {
+            X509 *interm = to_x509(certs[i]);
+            if (interm == NULL) {
+                ret = PTLS_ALERT_BAD_CERTIFICATE;
+                goto Exit;
+            }
+            sk_X509_push(chain, interm);
+        }
+        ret = verify_cert_chain(self->cert_store, cert, chain, ptls_is_server(tls), ptls_get_server_name(tls), &ossl_x509_err);
+    } else {
+        ret = PTLS_ALERT_CERTIFICATE_REQUIRED;
+        ossl_x509_err = 0;
     }
 
-    /* verify the chain */
-    if ((ret = verify_cert_chain(self->cert_store, cert, chain, ptls_is_server(tls), ptls_get_server_name(tls))) != 0)
+    /* When override callback is available, let it override the error. */
+    if (self->override_callback != NULL)
+        ret = self->override_callback->cb(self->override_callback, tls, ret, ossl_x509_err, cert, chain);
+
+    if (ret != 0 || num_certs == 0)
         goto Exit;
 
     /* extract public key for verifying the TLS handshake signature */
@@ -1335,7 +1345,7 @@ Exit:
 
 int ptls_openssl_init_verify_certificate(ptls_openssl_verify_certificate_t *self, X509_STORE *store)
 {
-    *self = (ptls_openssl_verify_certificate_t){{verify_cert, default_signature_schemes}};
+    *self = (ptls_openssl_verify_certificate_t){{verify_cert, default_signature_schemes}, NULL};
 
     if (store != NULL) {
         X509_STORE_up_ref(store);
@@ -1595,6 +1605,7 @@ ptls_aead_algorithm_t ptls_openssl_aes128gcm = {"AES128-GCM",
                                                 PTLS_AESGCM_IV_SIZE,
                                                 PTLS_AESGCM_TAG_SIZE,
                                                 0,
+                                                0,
                                                 sizeof(struct aead_crypto_context_t),
                                                 aead_aes128gcm_setup_crypto};
 ptls_cipher_algorithm_t ptls_openssl_aes256ecb = {
@@ -1611,6 +1622,7 @@ ptls_aead_algorithm_t ptls_openssl_aes256gcm = {"AES256-GCM",
                                                 PTLS_AES256_KEY_SIZE,
                                                 PTLS_AESGCM_IV_SIZE,
                                                 PTLS_AESGCM_TAG_SIZE,
+                                                0,
                                                 0,
                                                 sizeof(struct aead_crypto_context_t),
                                                 aead_aes256gcm_setup_crypto};
@@ -1638,6 +1650,7 @@ ptls_aead_algorithm_t ptls_openssl_chacha20poly1305 = {"CHACHA20-POLY1305",
                                                        PTLS_CHACHA20_KEY_SIZE,
                                                        PTLS_CHACHA20POLY1305_IV_SIZE,
                                                        PTLS_CHACHA20POLY1305_TAG_SIZE,
+                                                       0,
                                                        0,
                                                        sizeof(struct aead_crypto_context_t),
                                                        aead_chacha20poly1305_setup_crypto};

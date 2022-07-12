@@ -1,50 +1,38 @@
 #include <mruby.h>
-#include <mruby/throw.h>
 #include <mruby/error.h>
+
+struct protect_data {
+  mrb_func_t body;
+  mrb_value data;
+};
+
+static mrb_value
+protect_body(mrb_state *mrb, void *p)
+{
+  struct protect_data *dp = (struct protect_data*)p;
+  return dp->body(mrb, dp->data);
+}
 
 MRB_API mrb_value
 mrb_protect(mrb_state *mrb, mrb_func_t body, mrb_value data, mrb_bool *state)
 {
-  struct mrb_jmpbuf *prev_jmp = mrb->jmp;
-  struct mrb_jmpbuf c_jmp;
-  mrb_value result = mrb_nil_value();
-
-  if (state) { *state = FALSE; }
-
-  MRB_TRY(&c_jmp) {
-    mrb->jmp = &c_jmp;
-    result = body(mrb, data);
-    mrb->jmp = prev_jmp;
-  } MRB_CATCH(&c_jmp) {
-    mrb->jmp = prev_jmp;
-    result = mrb_obj_value(mrb->exc);
-    mrb->exc = NULL;
-    if (state) { *state = TRUE; }
-  } MRB_END_EXC(&c_jmp);
-
-  mrb_gc_protect(mrb, result);
-  return result;
+  struct protect_data protect_data = { body, data };
+  return mrb_protect_error(mrb, protect_body, &protect_data, state);
 }
 
 MRB_API mrb_value
 mrb_ensure(mrb_state *mrb, mrb_func_t body, mrb_value b_data, mrb_func_t ensure, mrb_value e_data)
 {
-  struct mrb_jmpbuf *prev_jmp = mrb->jmp;
-  struct mrb_jmpbuf c_jmp;
-  mrb_value result;
-
-  MRB_TRY(&c_jmp) {
-    mrb->jmp = &c_jmp;
-    result = body(mrb, b_data);
-    mrb->jmp = prev_jmp;
-  } MRB_CATCH(&c_jmp) {
-    mrb->jmp = prev_jmp;
-    ensure(mrb, e_data);
-    MRB_THROW(mrb->jmp); /* rethrow catched exceptions */
-  } MRB_END_EXC(&c_jmp);
-
+  int ai = mrb_gc_arena_save(mrb);
+  struct protect_data protect_data = { body, b_data };
+  mrb_bool error;
+  mrb_value result = mrb_protect_error(mrb, protect_body, &protect_data, &error);
   ensure(mrb, e_data);
+  mrb_gc_arena_restore(mrb, ai);
   mrb_gc_protect(mrb, result);
+  if (error) {
+    mrb_exc_raise(mrb, result); /* rethrow caught exceptions */
+  }
   return result;
 }
 
@@ -59,33 +47,26 @@ MRB_API mrb_value
 mrb_rescue_exceptions(mrb_state *mrb, mrb_func_t body, mrb_value b_data, mrb_func_t rescue, mrb_value r_data,
                       mrb_int len, struct RClass **classes)
 {
-  struct mrb_jmpbuf *prev_jmp = mrb->jmp;
-  struct mrb_jmpbuf c_jmp;
-  mrb_value result;
-  mrb_bool error_matched = FALSE;
-  mrb_int i;
-
-  MRB_TRY(&c_jmp) {
-    mrb->jmp = &c_jmp;
-    result = body(mrb, b_data);
-    mrb->jmp = prev_jmp;
-  } MRB_CATCH(&c_jmp) {
-    mrb->jmp = prev_jmp;
-
-    for (i = 0; i < len; ++i) {
-      if (mrb_obj_is_kind_of(mrb, mrb_obj_value(mrb->exc), classes[i])) {
+  int ai = mrb_gc_arena_save(mrb);
+  struct protect_data protect_data = { body, b_data };
+  mrb_bool error;
+  mrb_value result = mrb_protect_error(mrb, protect_body, &protect_data, &error);
+  if (error) {
+    mrb_bool error_matched = FALSE;
+    for (mrb_int i = 0; i < len; ++i) {
+      if (mrb_obj_is_kind_of(mrb, result, classes[i])) {
         error_matched = TRUE;
         break;
       }
     }
 
-    if (!error_matched) { MRB_THROW(mrb->jmp); }
+    if (!error_matched) { mrb_exc_raise(mrb, result); }
 
     mrb->exc = NULL;
     result = rescue(mrb, r_data);
-  } MRB_END_EXC(&c_jmp);
-
-  mrb_gc_protect(mrb, result);
+    mrb_gc_arena_restore(mrb, ai);
+    mrb_gc_protect(mrb, result);
+  }
   return result;
 }
 

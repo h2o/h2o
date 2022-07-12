@@ -1195,8 +1195,9 @@ static int handle_input_expect_headers_process_connect(struct st_h2o_http3_serve
     if (datagram_flow_id_field != NULL) {
         /* CONNECT-UDP */
         if (datagram_flow_id_field->base != NULL) {
-            /* check if it can be used */
-            if (!h2o_http3_can_use_h3_datagram(&get_conn(stream)->h3)) {
+            /* check if the peer is permitted to send datagram frames, by consulting our SETTINGS.H3_DATAGRAM parameter */
+            quicly_context_t *qctx = quicly_get_context(get_conn(stream)->h3.super.quic);
+            if (qctx->transport_params.max_datagram_frame_size == 0) {
                 *err_desc = "unexpected h3 datagram";
                 return H2O_HTTP3_ERROR_GENERAL_PROTOCOL;
             }
@@ -1370,27 +1371,35 @@ static void shutdown_by_generator(struct st_h2o_http3_server_stream_t *stream)
 
 static h2o_iovec_t finalize_do_send_setup_udp_tunnel(struct st_h2o_http3_server_stream_t *stream)
 {
-    /* check requirements */
-    if (!(stream->datagram_flow_id != UINT64_MAX && (200 <= stream->req.res.status && stream->req.res.status <= 299) &&
-          stream->req.forward_datagram.write_ != NULL)) {
+    /* Bail out if we cannot receive or send datagrams. */
+    if (!((200 <= stream->req.res.status && stream->req.res.status <= 299) && stream->req.forward_datagram.write_ != NULL)) {
         stream->datagram_flow_id = UINT64_MAX;
         return h2o_iovec_init(NULL, 0);
     }
 
-    /* register to the map */
-    struct st_h2o_http3_server_conn_t *conn = get_conn(stream);
-    int r;
-    khiter_t iter = kh_put(stream, conn->datagram_flows, stream->datagram_flow_id, &r);
-    assert(iter != kh_end(conn->datagram_flows));
-    kh_val(conn->datagram_flows, iter) = stream;
-    /* set the callback */
-    stream->req.forward_datagram.read_ = tunnel_on_udp_read;
+    /* Register the flow id to the connection so that datagram frames being received from the client would be dispatched to
+     * `req->forward_datagram.write_`. */
+    if (stream->datagram_flow_id != UINT64_MAX) {
+        struct st_h2o_http3_server_conn_t *conn = get_conn(stream);
+        int r;
+        khiter_t iter = kh_put(stream, conn->datagram_flows, stream->datagram_flow_id, &r);
+        assert(iter != kh_end(conn->datagram_flows));
+        kh_val(conn->datagram_flows, iter) = stream;
+    }
 
-    /* build and return the value of datagram-flow-id header field */
-    h2o_iovec_t datagram_flow_id;
-    datagram_flow_id.base = h2o_mem_alloc_pool(&stream->req.pool, char, sizeof(H2O_UINT64_LONGEST_STR));
-    datagram_flow_id.len = sprintf(datagram_flow_id.base, "%" PRIu64, stream->datagram_flow_id);
-    return datagram_flow_id;
+    /* If `datagram-flow-id` was provided and the peer is willing to accept datagrams as well, use the same flow ID for sending
+     * datagrams from us. Otherwise, do not use  */
+    if (stream->datagram_flow_id != UINT64_MAX && get_conn(stream)->h3.peer_settings.h3_datagram) {
+        /* register the route that would be used by the CONNECT handler for forwarding datagrams */
+        stream->req.forward_datagram.read_ = tunnel_on_udp_read;
+        /* build and return the value of datagram-flow-id header field */
+        h2o_iovec_t datagram_flow_id;
+        datagram_flow_id.base = h2o_mem_alloc_pool(&stream->req.pool, char, sizeof(H2O_UINT64_LONGEST_STR));
+        datagram_flow_id.len = sprintf(datagram_flow_id.base, "%" PRIu64, stream->datagram_flow_id);
+        return datagram_flow_id;
+    } else {
+        return h2o_iovec_init(NULL, 0);
+    }
 }
 
 static void finalize_do_send(struct st_h2o_http3_server_stream_t *stream)

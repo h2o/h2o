@@ -100,7 +100,7 @@ void h2o__fatal(const char *file, int line, const char *msg, ...)
 void *h2o_mem_alloc_recycle(h2o_mem_recycle_t *allocator)
 {
     if (allocator->chunks.size == 0)
-        return h2o_mem_aligned_alloc(allocator->conf->alignment, allocator->conf->memsize);
+        return h2o_mem_aligned_alloc(1 << allocator->conf->align_bits, allocator->conf->memsize);
 
     /* detach and return the pooled pointer */
     void *p = allocator->chunks.entries[--allocator->chunks.size];

@@ -35,6 +35,9 @@
 #include <sys/ioctl.h>
 #endif
 #include "picotls.h"
+#if H2O_USE_FUSION
+#include "picotls/fusion.h"
+#endif
 #include "quicly.h"
 #include "h2o/socket.h"
 #include "h2o/multithread.h"
@@ -177,7 +180,13 @@ h2o_buffer_prototype_t h2o_socket_buffer_prototype = {
     &h2o_socket_buffer_mmap_settings};
 
 h2o_mem_recycle_conf_t h2o_socket_ssl_buffer_conf = {.memsize = H2O_SOCKET_DEFAULT_SSL_BUFFER_SIZE,
-                                                     .alignment = PTLS_SIZEOF_CACHE_LINE};
+                                                     .align_bits =
+#ifdef H2O_USE_FUSION
+                                                         PTLS_X86_CACHE_LINE_ALIGN_BITS
+#else
+                                                         0
+#endif
+};
 __thread h2o_mem_recycle_t h2o_socket_ssl_buffer_allocator = {&h2o_socket_ssl_buffer_conf};
 static __thread h2o_mem_recycle_t zerocopy_buffer_allocator = {&h2o_socket_ssl_buffer_conf};
 
@@ -267,6 +276,7 @@ static void init_ssl_output_buffer(struct st_h2o_socket_ssl_t *ssl, int zerocopy
     h2o_mem_recycle_t *allocator = zerocopy ? &zerocopy_buffer_allocator : &h2o_socket_ssl_buffer_allocator;
     ptls_buffer_init(&ssl->output.buf, h2o_mem_alloc_recycle(allocator), allocator->conf->memsize);
     ssl->output.buf.is_allocated = 1; /* set to true, so that the allocated memory is freed when the buffer is expanded */
+    ssl->output.buf.align_bits = allocator->conf->align_bits;
     ssl->output.pending_off = 0;
     ssl->output.zerocopy_owned = 0;
     ssl->output.allocated_for_zerocopy = zerocopy;

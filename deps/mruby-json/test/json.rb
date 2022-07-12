@@ -31,9 +31,6 @@ end
 assert('stringify object with nil value') do
   assert_equal '{"foo":null}', JSON.stringify({"foo"=> nil})
 end
-assert('stringify object with boolean key and float value') do
-  assert_equal '{"true":5}', JSON.stringify({true=> 5.0})
-end
 assert('stringify object with object key and float value') do
   assert_equal '{"{\"foo\"=>\"bar\"}":1.5}', JSON.stringify({{"foo"=> "bar"}=> 1.5})
 end

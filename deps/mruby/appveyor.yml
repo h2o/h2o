@@ -1,38 +1,45 @@
 version: "{build}"
 
-os: Visual Studio 2015
-
-clone_depth: 50
-
-
-cache:
-  - win_flex_bison-2.5.10.zip
-
+shallow_clone: true
 
 environment:
   matrix:
-    # Visual Studio 2015 64bit
-    - visualcpp: C:\Program Files (x86)\Microsoft Visual Studio 14.0\VC\vcvarsall.bat
-      machine: amd64
+    - job_name: Visual Studio 2019 64bit
+      visualcpp: C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Auxiliary\Build\vcvars64.bat
+      appveyor_build_worker_image: Visual Studio 2019
 
-    # Visual Studio 2013 64bit
-    - visualcpp: C:\Program Files (x86)\Microsoft Visual Studio 12.0\VC\vcvarsall.bat
-      machine: amd64
+    - job_name: Visual Studio 2019 32bit
+      visualcpp: C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Auxiliary\Build\vcvars32.bat
+      appveyor_build_worker_image: Visual Studio 2019
 
+    - job_name: Visual Studio 2017 64bit
+      visualcpp: C:\Program Files (x86)\Microsoft Visual Studio\2017\Community\VC\Auxiliary\Build\vcvars64.bat
+      appveyor_build_worker_image: Visual Studio 2017
+
+    - job_name: Visual Studio 2017 32bit
+      visualcpp: C:\Program Files (x86)\Microsoft Visual Studio\2017\Community\VC\Auxiliary\Build\vcvars32.bat
+      appveyor_build_worker_image: Visual Studio 2017
+
+    - job_name: Visual Studio 2015 64bit
+      visualcpp: C:\Program Files (x86)\Microsoft Visual Studio 14.0\VC\vcvarsall.bat
+      appveyor_build_worker_image: Visual Studio 2015
+      machine: x86_amd64
+
+    - job_name: Visual Studio 2015 32bit
+      visualcpp: C:\Program Files (x86)\Microsoft Visual Studio 14.0\VC\vcvarsall.bat
+      appveyor_build_worker_image: Visual Studio 2015
+      machine: x86
 
 init:
   - call "%visualcpp%" %machine%
-  # For using Rubyinstaller's Ruby 2.4 64bit
-  - set PATH=C:\Ruby24-x64\bin;%PATH%
+  # For using RubyInstaller's Ruby 2.6 64bit
+  # 2.6 is the highest supported Ruby version across all historical
+  # Visual Studio AppVeyor images. Ruby 2.7 is only on the 2019 image.
+  - set PATH=C:\Ruby26-x64\bin;%PATH%
   - ruby --version
 
 
-install:
-  - if not exist win_flex_bison-2.5.10.zip appveyor DownloadFile "https://github.com/lexxmark/winflexbison/releases/download/v.2.5.10/win_flex_bison-2.5.10.zip"
-  - 7z x -y -owin_flex_bison win_flex_bison-2.5.10.zip > nul
-
-
 build_script:
-  - set YACC=.\win_flex_bison\win_bison.exe
-  - set MRUBY_CONFIG=appveyor_config.rb
-  - ruby .\minirake test all
+  - set MRUBY_CONFIG=ci/msvc
+  - rake -m test:build
+  - rake test:run

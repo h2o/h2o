@@ -21,7 +21,7 @@ class Proc
       self_arity = self.arity
       if (self_arity >= 0 && arity != self_arity) ||
          (self_arity < 0 && abs[self_arity] > arity)
-        raise ArgumentError, "wrong number of arguments (#{arity} for #{abs[self_arity]})"
+        raise ArgumentError, "wrong number of arguments (given #{arity}, expected #{abs[self_arity]})"
       end
     end
 
@@ -40,11 +40,11 @@ class Proc
   end
 
   def <<(other)
-    ->(*args, &block) { call(other.call(*args, &block)) }
+    ->(*args, **opts, &block) { call(other.call(*args, **opts, &block)) }
   end
 
   def >>(other)
-    ->(*args, &block) { other.call(call(*args, &block)) }
+    ->(*args, **opts, &block) { other.call(call(*args, **opts, &block)) }
   end
 
 end

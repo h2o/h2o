@@ -34,11 +34,11 @@ class Numeric
 end
 
 ##
-# Integral
+# Integer
 #
-# mruby special - module to share methods between Floats and Integers
-#                 to make them compatible
-module Integral
+# ISO 15.2.8
+##
+class Integer
   ##
   # Calls the given block once for each Integer
   # from +self+ downto +num+.
@@ -105,14 +105,14 @@ module Integral
     return to_enum(:step, num, step) unless block
 
     i = __coerce_step_counter(num, step)
-    if num == nil
+    if num == self || step.infinite?
+      block.call(i) if step > 0 && i <= (num||i) || step < 0 && i >= (num||-i)
+    elsif num == nil
       while true
         block.call(i)
         i += step
       end
-      return self
-    end
-    if step > 0
+    elsif step > 0
       while i <= num
         block.call(i)
         i += step
@@ -125,19 +125,12 @@ module Integral
     end
     self
   end
-end
 
-##
-# Integer
-#
-# ISO 15.2.8
-class Integer
-  include Integral
   ##
   # Returns the receiver simply.
   #
   # ISO 15.2.8.3.14
-  def ceil
+  def ceil(n=0)
     self
   end
 
@@ -145,7 +138,7 @@ class Integer
   # Returns the receiver simply.
   #
   # ISO 15.2.8.3.17
-  def floor
+  def floor(n=0)
     self
   end
 
@@ -161,3 +154,35 @@ class Integer
   # ISO 15.2.8.3.26
   alias truncate floor
 end
+
+class Float
+  ##
+  # Calls the given block from +self+ to +num+
+  # incremented by +step+ (default 1).
+  #
+  def step(num=nil, step=1, &block)
+    raise ArgumentError, "step can't be 0" if step == 0
+    return to_enum(:step, num, step) unless block
+
+    i = self
+    if num == self || step.infinite?
+      block.call(i) if step > 0 && i <= (num||i) || step < 0 && i >= (num||-i)
+    elsif num == nil
+      while true
+        block.call(i)
+        i += step
+      end
+    elsif step > 0
+      while i <= num
+        block.call(i)
+        i += step
+      end
+    else
+      while i >= num
+        block.call(i)
+        i += step
+      end
+    end
+    self
+  end
+end if Object.const_defined?(:Float)

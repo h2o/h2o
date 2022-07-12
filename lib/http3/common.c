@@ -1336,14 +1336,6 @@ void h2o_http3_send_goaway_frame(h2o_http3_conn_t *conn, uint64_t stream_or_push
     quicly_stream_sync_sendbuf(conn->_control_streams.egress.control->quic, 1);
 }
 
-int h2o_http3_can_use_h3_datagram(h2o_http3_conn_t *conn)
-{
-    if (!conn->peer_settings.h3_datagram)
-        return 0;
-    quicly_context_t *qctx = quicly_get_context(conn->super.quic);
-    return qctx->transport_params.max_datagram_frame_size != 0;
-}
-
 void h2o_http3_send_h3_datagrams(h2o_http3_conn_t *conn, uint64_t flow_id, h2o_iovec_t *datagrams, size_t num_datagrams)
 {
     for (size_t i = 0; i < num_datagrams; ++i) {
