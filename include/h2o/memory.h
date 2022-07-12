@@ -105,7 +105,7 @@ typedef H2O_VECTOR(h2o_iovec_t) h2o_iovec_vector_t;
 
 typedef struct st_h2o_mem_recycle_conf_t {
     size_t memsize;
-    size_t alignment;
+    uint8_t align_bits;
 } h2o_mem_recycle_conf_t;
 
 typedef struct st_h2o_mem_recycle_t {
@@ -446,7 +446,7 @@ inline void *h2o_mem_alloc(size_t sz)
 
 inline void *h2o_mem_aligned_alloc(size_t alignment, size_t sz)
 {
-    if (alignment == 0)
+    if (alignment <= 1)
         return h2o_mem_alloc(sz);
 
     void *p;
