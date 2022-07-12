@@ -418,7 +418,7 @@ EOT
 
 subtest "log lineno" => sub {
     my $tester = sub {
-        my ($name, $conf, $expected) = @_;
+        my ($name, $conf, $lineno) = @_;
 
         subtest $name => sub {
             my $tempdir = tempdir(CLEANUP => 1);
@@ -435,7 +435,7 @@ EOT
                 map { my $l = $_; chomp $l; $l } <$fh>;
             };
             @log = grep { $_ =~ /^\[h2o_mruby\]/ } @log;
-            like $log[$#log], qr{\[h2o_mruby\] in request:/:mruby raised: .*:$expected:\s*hoge \(RuntimeError\)};
+            like $log[$#log], qr{\[h2o_mruby\] in request:/:mruby raised:\s+(:$lineno:|)\s*hoge \(RuntimeError\)};
         };
     };
     $tester->("flow style", <<"EOT", 6);
@@ -492,7 +492,7 @@ hosts:
           }
 EOT
         (undef, my $body) = run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
-        is $body, "Foo,Bar";
+        like $body, qr{(Kernel::|)Foo,(Kernel::|)Bar};
     };
     subtest 'self must be top_self' => sub {
         my $server = spawn_h2o(<< "EOT");
