@@ -1115,19 +1115,22 @@ static void on_write_complete(h2o_socket_t *sock, const char *err)
     /* reset the other buffer */
     h2o_buffer_dispose(&conn->output.buf_in_flight);
 
-    /* as request write, unlink the deferred timeout that might have been set by `proceed_req` called above */
+    /* bail out if nothing can be written */
+    if (conn->output.buf->size == 0 && h2o_linklist_is_empty(&conn->output.sending_streams)) {
+        assert(!h2o_timer_is_linked(&conn->output.defer_timeout));
+        close_connection_if_necessary(conn);
+        return;
+    }
+
+    /* run next write now instead of relying on the deferred timeout */
     if (h2o_timer_is_linked(&conn->output.defer_timeout))
         h2o_timer_unlink(&conn->output.defer_timeout);
-
 #if !H2O_USE_LIBUV
     if (conn->state == H2O_HTTP2CLIENT_CONN_STATE_OPEN) {
-        if (conn->output.buf->size != 0 || !h2o_linklist_is_empty(&conn->output.sending_streams))
-            h2o_socket_notify_write(sock, on_notify_write);
+        h2o_socket_notify_write(sock, on_notify_write);
         return;
     }
 #endif
-
-    /* write more, if possible */
     do_emit_writereq(conn);
     close_connection_if_necessary(conn);
 }
