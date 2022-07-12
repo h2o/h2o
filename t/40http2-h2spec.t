@@ -32,6 +32,7 @@ EOT
 
     my $output = `h2spec -t -k -p $server->{tls_port} 2>&1`;
     unlike $output, qr/Failures:/;
+    like $output, qr/ 0 failed/;
 }
 
 done_testing();
