@@ -70,10 +70,6 @@ extern "C" {
 #define PTLS_FUZZ_HANDSHAKE 0
 #endif
 
-#ifndef PTLS_SIZEOF_CACHE_LINE
-#define PTLS_SIZEOF_CACHE_LINE 64
-#endif
-
 #define PTLS_HELLO_RANDOM_SIZE 32
 
 #define PTLS_AES128_KEY_SIZE 16
@@ -268,7 +264,8 @@ typedef struct st_ptls_buffer_t {
     uint8_t *base;
     size_t capacity;
     size_t off;
-    int is_allocated;
+    uint8_t is_allocated; /* boolean */
+    uint8_t align_bits;   /* if particular alignment is required, set to log2(alignment); otherwize zero */
 } ptls_buffer_t;
 
 /**
@@ -415,6 +412,10 @@ typedef const struct st_ptls_aead_algorithm_t {
      * if encrypted bytes are going to be written using non-temporal store instructions (i.e., skip cache)
      */
     unsigned non_temporal : 1;
+    /**
+     * log2(alignment) being required
+     */
+    uint8_t align_bits;
     /**
      * size of memory allocated for ptls_aead_context_t. AEAD implementations can set this value to something greater than
      * sizeof(ptls_aead_context_t) and stuff additional data at the bottom of the struct.
@@ -952,6 +953,10 @@ void ptls_buffer__release_memory(ptls_buffer_t *buf);
  * reserves space for additional amount of memory
  */
 int ptls_buffer_reserve(ptls_buffer_t *buf, size_t delta);
+/**
+ * reserves space for additional amount of memory, requiring `buf->base` to follow specified alignment
+ */
+int ptls_buffer_reserve_aligned(ptls_buffer_t *buf, size_t delta, uint8_t align_bits);
 /**
  * internal
  */
@@ -1494,6 +1499,7 @@ inline void ptls_buffer_init(ptls_buffer_t *buf, void *smallbuf, size_t smallbuf
     buf->off = 0;
     buf->capacity = smallbuf_size;
     buf->is_allocated = 0;
+    buf->align_bits = 0;
 }
 
 inline void ptls_buffer_dispose(ptls_buffer_t *buf)

@@ -320,7 +320,7 @@ int main(int argc, char **argv)
     setup_sign_certificate(&openssl_sign_certificate);
     X509_STORE *cert_store = X509_STORE_new();
     X509_STORE_set_verify_cb(cert_store, verify_cert_cb);
-    ptls_openssl_init_verify_certificate(&openssl_verify_certificate, cert_store, NULL);
+    ptls_openssl_init_verify_certificate(&openssl_verify_certificate, cert_store);
     /* we should call X509_STORE_free on OpenSSL 1.1 or in prior versions decrement refount then call _free */
     ptls_context_t openssl_ctx = {ptls_openssl_random_bytes,
                                   &ptls_get_time,

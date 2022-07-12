@@ -788,6 +788,7 @@ ptls_aead_algorithm_t ptls_bcrypt_aes128gcm = {"AES128-GCM",
                                                PTLS_AESGCM_TAG_SIZE,
                                                {PTLS_TLS12_AESGCM_FIXED_IV_SIZE, PTLS_TLS12_AESGCM_RECORD_IV_SIZE},
                                                0,
+                                               0,
                                                sizeof(struct ptls_bcrypt_aead_context_t),
                                                ptls_bcrypt_aead_setup_crypto_aesgcm};
 
@@ -800,6 +801,7 @@ ptls_aead_algorithm_t ptls_bcrypt_aes256gcm = {"AES256-GCM",
                                                PTLS_AESGCM_IV_SIZE,
                                                PTLS_AESGCM_TAG_SIZE,
                                                {PTLS_TLS12_AESGCM_FIXED_IV_SIZE, PTLS_TLS12_AESGCM_RECORD_IV_SIZE},
+                                               0,
                                                0,
                                                sizeof(struct ptls_bcrypt_aead_context_t),
                                                ptls_bcrypt_aead_setup_crypto_aesgcm};

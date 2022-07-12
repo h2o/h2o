@@ -1343,10 +1343,9 @@ Exit:
     return ret;
 }
 
-int ptls_openssl_init_verify_certificate(ptls_openssl_verify_certificate_t *self, X509_STORE *store,
-                                         ptls_openssl_override_verify_certificate_t *override_callback)
+int ptls_openssl_init_verify_certificate(ptls_openssl_verify_certificate_t *self, X509_STORE *store)
 {
-    *self = (ptls_openssl_verify_certificate_t){{verify_cert, default_signature_schemes}, NULL, override_callback};
+    *self = (ptls_openssl_verify_certificate_t){{verify_cert, default_signature_schemes}, NULL};
 
     if (store != NULL) {
         X509_STORE_up_ref(store);
@@ -1607,6 +1606,7 @@ ptls_aead_algorithm_t ptls_openssl_aes128gcm = {"AES128-GCM",
                                                 PTLS_AESGCM_TAG_SIZE,
                                                 {PTLS_TLS12_AESGCM_FIXED_IV_SIZE, PTLS_TLS12_AESGCM_RECORD_IV_SIZE},
                                                 0,
+                                                0,
                                                 sizeof(struct aead_crypto_context_t),
                                                 aead_aes128gcm_setup_crypto};
 ptls_cipher_algorithm_t ptls_openssl_aes256ecb = {
@@ -1624,6 +1624,7 @@ ptls_aead_algorithm_t ptls_openssl_aes256gcm = {"AES256-GCM",
                                                 PTLS_AESGCM_IV_SIZE,
                                                 PTLS_AESGCM_TAG_SIZE,
                                                 {PTLS_TLS12_AESGCM_FIXED_IV_SIZE, PTLS_TLS12_AESGCM_RECORD_IV_SIZE},
+                                                0,
                                                 0,
                                                 sizeof(struct aead_crypto_context_t),
                                                 aead_aes256gcm_setup_crypto};
@@ -1652,6 +1653,7 @@ ptls_aead_algorithm_t ptls_openssl_chacha20poly1305 = {"CHACHA20-POLY1305",
                                                        PTLS_CHACHA20POLY1305_IV_SIZE,
                                                        PTLS_CHACHA20POLY1305_TAG_SIZE,
                                                        {PTLS_TLS12_CHACHAPOLY_FIXED_IV_SIZE, PTLS_TLS12_CHACHAPOLY_RECORD_IV_SIZE},
+                                                       0,
                                                        0,
                                                        sizeof(struct aead_crypto_context_t),
                                                        aead_chacha20poly1305_setup_crypto};

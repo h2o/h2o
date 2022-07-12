@@ -519,7 +519,11 @@ void ptls_buffer__release_memory(ptls_buffer_t *buf)
     ptls_clear_memory(buf->base, buf->off);
     if (buf->is_allocated) {
 #ifdef _WINDOWS
-        _aligned_free(buf->base);
+        if (buf->align_bits != 0) {
+            _aligned_free(buf->base);
+        } else {
+            free(buf->base);
+        }
 #else
         free(buf->base);
 #endif
@@ -528,10 +532,16 @@ void ptls_buffer__release_memory(ptls_buffer_t *buf)
 
 int ptls_buffer_reserve(ptls_buffer_t *buf, size_t delta)
 {
+    return ptls_buffer_reserve_aligned(buf, delta, 0);
+}
+
+int ptls_buffer_reserve_aligned(ptls_buffer_t *buf, size_t delta, uint8_t align_bits)
+{
     if (buf->base == NULL)
         return PTLS_ERROR_NO_MEMORY;
 
-    if (PTLS_MEMORY_DEBUG || buf->capacity < buf->off + delta) {
+    if (PTLS_MEMORY_DEBUG || buf->capacity < buf->off + delta ||
+        (buf->align_bits < align_bits && ((uintptr_t)buf->base & (((uintptr_t)1 << align_bits) - 1)) != 0)) {
         void *newp;
         size_t new_capacity = buf->capacity;
         if (new_capacity < 1024)
@@ -539,18 +549,24 @@ int ptls_buffer_reserve(ptls_buffer_t *buf, size_t delta)
         while (new_capacity < buf->off + delta) {
             new_capacity *= 2;
         }
+        if (align_bits != 0) {
 #ifdef _WINDOWS
-        if ((newp = _aligned_malloc(new_capacity, PTLS_SIZEOF_CACHE_LINE)) == NULL)
-            return PTLS_ERROR_NO_MEMORY;
+            if ((newp = _aligned_malloc(new_capacity, (size_t)1 << align_bits)) == NULL)
+                return PTLS_ERROR_NO_MEMORY;
 #else
-        if (posix_memalign(&newp, PTLS_SIZEOF_CACHE_LINE, new_capacity) != 0)
-            return PTLS_ERROR_NO_MEMORY;
+            if (posix_memalign(&newp, 1 << align_bits, new_capacity) != 0)
+                return PTLS_ERROR_NO_MEMORY;
 #endif
+        } else {
+            if ((newp = malloc(new_capacity)) == NULL)
+                return PTLS_ERROR_NO_MEMORY;
+        }
         memcpy(newp, buf->base, buf->off);
         ptls_buffer__release_memory(buf);
         buf->base = newp;
         buf->capacity = new_capacity;
         buf->is_allocated = 1;
+        buf->align_bits = align_bits;
     }
 
     return 0;
@@ -707,8 +723,9 @@ static int buffer_push_encrypted_records(ptls_buffer_t *buf, uint8_t type, const
         if (enc->tls12) {
             buffer_push_record(buf, type, {
                 /* reserve memory */
-                if ((ret = ptls_buffer_reserve(buf, enc->aead->algo->tls12.record_iv_size + chunk_size +
-                                                        enc->aead->algo->tag_size)) != 0)
+                if ((ret = ptls_buffer_reserve_aligned(
+                         buf, enc->aead->algo->tls12.record_iv_size + chunk_size + enc->aead->algo->tag_size,
+                         enc->aead->algo->align_bits)) != 0)
                     goto Exit;
                 /* determine nonce, as well as prepending that walue as the record IV (AES-GCM) */
                 uint64_t nonce;
@@ -729,7 +746,8 @@ static int buffer_push_encrypted_records(ptls_buffer_t *buf, uint8_t type, const
             });
         } else {
             buffer_push_record(buf, PTLS_CONTENT_TYPE_APPDATA, {
-                if ((ret = ptls_buffer_reserve(buf, chunk_size + enc->aead->algo->tag_size + 1)) != 0)
+                if ((ret = ptls_buffer_reserve_aligned(buf, chunk_size + enc->aead->algo->tag_size + 1,
+                                                       enc->aead->algo->align_bits)) != 0)
                     goto Exit;
                 buf->off += aead_encrypt(enc, buf->base + buf->off, src, chunk_size, type);
             });
@@ -752,7 +770,7 @@ static int buffer_encrypt_record(ptls_buffer_t *buf, size_t rec_start, struct st
      * is used, as this function will be called no more than once per connection, for encrypting an alert.) */
     if (!enc->tls12 && bodylen <= PTLS_MAX_PLAINTEXT_RECORD_SIZE) {
         size_t overhead = 1 + enc->aead->algo->tag_size;
-        if ((ret = ptls_buffer_reserve(buf, overhead)) != 0)
+        if ((ret = ptls_buffer_reserve_aligned(buf, overhead, enc->aead->algo->align_bits)) != 0)
             return ret;
         size_t encrypted_len = aead_encrypt(enc, buf->base + rec_start + 5, buf->base + rec_start + 5, bodylen, type);
         assert(encrypted_len == bodylen + overhead);
@@ -1974,7 +1992,7 @@ static int emit_esni_extension(ptls_esni_secret_t *esni, ptls_buffer_t *buf, ptl
             buf->off += bytes_to_pad;
         }
         /* encrypt */
-        if ((ret = ptls_buffer_reserve(buf, aead->algo->tag_size)) != 0)
+        if ((ret = ptls_buffer_reserve_aligned(buf, aead->algo->tag_size, aead->algo->align_bits)) != 0)
             goto Exit;
         ptls_aead_encrypt(aead, buf->base + start_off, buf->base + start_off, buf->off - start_off, 0, buf->base + key_share_ch_off,
                           key_share_ch_len);
