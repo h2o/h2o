@@ -1213,7 +1213,7 @@ int quicly_get_stats(quicly_conn_t *conn, quicly_stats_t *stats)
     stats->rtt = conn->egress.loss.rtt;
     stats->cc = conn->egress.cc;
     quicly_ratemeter_report(&conn->egress.ratemeter, &stats->delivery_rate);
-    stats->num_sentmap_packets_max = conn->egress.loss.sentmap.num_packets_max;
+    stats->num_sentmap_packets_largest = conn->egress.loss.sentmap.num_packets_largest;
 
     return 0;
 }
@@ -1480,7 +1480,7 @@ static int discard_handshake_context(quicly_conn_t *conn, size_t epoch)
     destroy_handshake_flow(conn, epoch);
     if (epoch == QUICLY_EPOCH_HANDSHAKE) {
         assert(conn->stash.now != 0);
-        conn->super.stats.handshake_msec = conn->stash.now - conn->created_at;
+        conn->super.stats.handshake_confirmed_msec = conn->stash.now - conn->created_at;
     }
     free_handshake_space(epoch == QUICLY_EPOCH_INITIAL ? &conn->initial : &conn->handshake);
 
@@ -2094,7 +2094,7 @@ static quicly_conn_t *create_connection(quicly_context_t *ctx, uint32_t protocol
     conn->super.ctx = ctx;
     lock_now(conn, 0);
     conn->created_at = conn->stash.now;
-    conn->super.stats.handshake_msec = UINT64_MAX;
+    conn->super.stats.handshake_confirmed_msec = UINT64_MAX;
     set_address(&conn->super.local.address, local_addr);
     set_address(&conn->super.remote.address, remote_addr);
     quicly_local_cid_init_set(&conn->super.local.cid_set, ctx->cid_encryptor, local_cid);
@@ -4360,7 +4360,7 @@ static int do_send(quicly_conn_t *conn, quicly_send_context_t *s)
         conn->super.stats.num_handshake_timeouts++;
         goto CloseNow;
     }
-    if (conn->super.stats.num_packets.initial_handshake_sent >= conn->super.ctx->max_initial_handshake_packets) {
+    if (conn->super.stats.num_packets.initial_handshake_sent > conn->super.ctx->max_initial_handshake_packets) {
         QUICLY_PROBE(INITIAL_HANDSHAKE_PACKET_EXCEED, conn, conn->stash.now, conn->super.stats.num_packets.initial_handshake_sent);
         conn->super.stats.num_initial_handshake_exceeded++;
         goto CloseNow;
@@ -4623,7 +4623,8 @@ int quicly_send(quicly_conn_t *conn, quicly_address_t *dest, quicly_address_t *s
 
     if (conn->super.state >= QUICLY_STATE_CLOSING) {
         quicly_sentmap_iter_t iter;
-        init_acks_iter(conn, &iter);
+        if ((ret = init_acks_iter(conn, &iter)) != 0)
+            goto Exit;
         /* check if the connection can be closed now (after 3 pto) */
         if (conn->super.state == QUICLY_STATE_DRAINING ||
             conn->super.stats.num_frames_sent.transport_close + conn->super.stats.num_frames_sent.application_close != 0) {
@@ -4950,7 +4951,8 @@ static int handle_ack_frame(quicly_conn_t *conn, struct st_quicly_handle_payload
         break;
     }
 
-    init_acks_iter(conn, &iter);
+    if ((ret = init_acks_iter(conn, &iter)) != 0)
+        return ret;
 
     /* TODO log PNs being ACKed too late */
 

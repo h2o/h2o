@@ -312,7 +312,8 @@ struct st_quicly_context_t {
      */
     uint16_t ack_frequency;
     /**
-     * if the handshake does not complete within this value * RTT, close connection
+     * If the handshake does not complete within this value * RTT, close connection.
+     * When RTT is not observed, timeout is calculated relative to initial RTT (333ms by default).
      */
     uint32_t handshake_timeout_rtt_multiplier;
     /**
@@ -403,10 +404,10 @@ struct st_quicly_conn_streamgroup_state_t {
 };
 
 /**
- * Values that do not need to be gathered upon the invocation of `quicly_get_stats`. We use typedef to define the same fields in
- * the same order for quicly_stats_t and `struct st_quicly_conn_public_t::stats`.
+ * Aggregatable counters that do not need to be gathered upon the invocation of `quicly_get_stats`. We use typedef to define the
+ * same fields in the same order for quicly_stats_t and `struct st_quicly_conn_public_t::stats`.
  */
-#define QUICLY_STATS_PREBUILT_FIELDS                                                                                               \
+#define QUICLY_STATS_PREBUILT_COUNTERS                                                                                             \
     struct {                                                                                                                       \
         /**                                                                                                                        \
          * Total number of packets received.                                                                                       \
@@ -481,10 +482,6 @@ struct st_quicly_conn_streamgroup_state_t {
      */                                                                                                                            \
     uint64_t num_ptos;                                                                                                             \
     /**                                                                                                                            \
-     * Time spent during handshake. UINT64_MAX if still in handshake.                                                              \
-     */                                                                                                                            \
-    uint64_t handshake_msec;                                                                                                       \
-    /**                                                                                                                            \
      * number of timeouts occurred during handshake due to no progress being made (see `handshake_timeout_rtt_multiplier`)         \
      */                                                                                                                            \
     uint64_t num_handshake_timeouts;                                                                                               \
@@ -497,7 +494,7 @@ typedef struct st_quicly_stats_t {
     /**
      * The pre-built fields. This MUST be the first member of `quicly_stats_t` so that we can use `memcpy`.
      */
-    QUICLY_STATS_PREBUILT_FIELDS;
+    QUICLY_STATS_PREBUILT_COUNTERS;
     /**
      * RTT stats.
      */
@@ -511,9 +508,9 @@ typedef struct st_quicly_stats_t {
      */
     quicly_rate_t delivery_rate;
     /**
-     * maximum number of packets contained in the sentmap
+     * largest number of packets contained in the sentmap
      */
-    size_t num_sentmap_packets_max;
+    size_t num_sentmap_packets_largest;
 } quicly_stats_t;
 
 /**
@@ -582,7 +579,11 @@ struct _st_quicly_conn_public_t {
     quicly_cid_t original_dcid;
     struct st_quicly_default_scheduler_state_t _default_scheduler;
     struct {
-        QUICLY_STATS_PREBUILT_FIELDS;
+        QUICLY_STATS_PREBUILT_COUNTERS;
+        /**
+         * Time took until handshake is confirmed. UINT64_MAX if handshake is not confirmed yet.
+         */
+        uint64_t handshake_confirmed_msec;
     } stats;
     uint32_t version;
     void *data;
