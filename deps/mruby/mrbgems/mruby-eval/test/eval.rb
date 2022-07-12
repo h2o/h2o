@@ -44,7 +44,7 @@ assert('Kernel#eval', '15.3.1.3.12') do
 end
 
 assert('rest arguments of eval') do
-  assert_raise(ArgumentError) { Kernel.eval('0', 0, 'test', 0) }
+  assert_raise(TypeError) { Kernel.eval('0', 0, 'test', 0) }
   assert_equal ['test', 'test.rb', 10] do
     Kernel.eval('[\'test\', __FILE__, __LINE__]', nil, 'test.rb', 10)
   end
@@ -80,7 +80,7 @@ assert('Kernel.#eval(string) context') do
   assert_equal('class') { obj.const_string }
 end
 
-assert('Object#instance_eval with begin-rescue-ensure execution order') do
+assert('BasicObject#instance_eval with begin-rescue-ensure execution order') do
   class HellRaiser
     def raise_hell
       order = [:enter_raise_hell]
@@ -100,7 +100,7 @@ assert('Object#instance_eval with begin-rescue-ensure execution order') do
   assert_equal([:enter_raise_hell, :begin, :rescue, :ensure], hell_raiser.raise_hell)
 end
 
-assert('Kernel#instance_eval() to define singleton methods Issue #3141') do
+assert('BasicObject#instance_eval to define singleton methods Issue #3141') do
   foo_class = Class.new do
     def bar(x)
       instance_eval "def baz; #{x}; end"
@@ -129,4 +129,36 @@ foo = "FOO"
 Proc.new { foo }
 EOS
   }
+end
+
+assert('Calling the same method as the variable name') do
+  hoge = Object.new
+  def hoge.fuga
+    "Hit!"
+  end
+  assert_equal("Hit!") { fuga = "Miss!"; eval "hoge.fuga" }
+  assert_equal("Hit!") { fuga = "Miss!"; -> { eval "hoge.fuga" }.call }
+  assert_equal("Hit!") { -> { fuga = "Miss!"; eval "hoge.fuga" }.call }
+  assert_equal("Hit!") { fuga = "Miss!"; eval("-> { hoge.fuga }").call }
+end
+
+assert('Access numbered parameter from eval') do
+  hoge = Object.new
+  def hoge.fuga(a, &b)
+    b.call(a)
+  end
+  assert_equal(6) {
+    hoge.fuga(3) { _1 + eval("_1") }
+  }
+end
+
+assert('Module#class_eval with string') do
+  c = Class.new
+  c.class_eval "def foo() 42; end"
+  cc = c.new
+  assert_true cc.respond_to?(:foo)
+  assert_equal 42, c.new.foo
+
+  b = c.class_eval("class A; def a; 55; end; end; class B; def b; A; end; end; B")
+  assert_equal 55, b.new.b.new.a
 end

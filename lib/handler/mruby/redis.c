@@ -292,7 +292,7 @@ static mrb_value redis_join_reply_callback(h2o_mruby_context_t *mctx, mrb_value 
     struct st_h2o_mruby_redis_command_context_t *ctx;
 
     if ((ctx = mrb_data_check_get_ptr(mrb, mrb_ary_entry(args, 0), &command_type)) == NULL)
-        return mrb_exc_new_str_lit(mrb, E_ARGUMENT_ERROR, "Redis::Command#join wrong self");
+        return mrb_exc_new_lit(mrb, E_ARGUMENT_ERROR, "Redis::Command#join wrong self");
 
     attach_receiver(ctx, *receiver);
     return mrb_nil_value();

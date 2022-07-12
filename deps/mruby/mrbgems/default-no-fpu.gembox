@@ -1,0 +1,3 @@
+MRuby::GemBox.new do |conf|
+  conf.gembox "stdlib"
+end

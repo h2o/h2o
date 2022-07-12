@@ -7,6 +7,12 @@
 #include <math.h>
 #include "parson.h"
 
+#ifdef MRB_WITHOUT_FLOAT
+#ifndef JSON_FIXED_NUMBER
+#error "Without float, fixed number must be turned on!"
+#endif
+#endif
+
 #if 1
 #define ARENA_SAVE \
   int ai = mrb_gc_arena_save(mrb); \
@@ -62,7 +68,9 @@ mrb_value_to_string(mrb_state* mrb, mrb_value value, int pretty) {
 
   switch (mrb_type(value)) {
   case MRB_TT_FIXNUM:
+#ifndef MRB_WITHOUT_FLOAT
   case MRB_TT_FLOAT:
+#endif
   case MRB_TT_TRUE:
   case MRB_TT_FALSE:
   case MRB_TT_UNDEF:
@@ -195,7 +203,11 @@ json_value_to_mrb_value(mrb_state* mrb, JSON_Value* value) {
     ret = mrb_fixnum_value((mrb_int)json_value_get_fixed(value));
     break;
   case JSONNumber:
+#ifndef MRB_WITHOUT_FLOAT
     ret = mrb_float_value(mrb, json_value_get_number(value));
+#else
+    mrb_raise(mrb, E_ARGUMENT_ERROR, "float value received in non-float environment!");
+#endif
     break;
 #else
   case JSONNumber:

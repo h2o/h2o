@@ -183,8 +183,8 @@ mrb_dir_chdir(mrb_state *mrb, mrb_value klass)
 mrb_value
 mrb_dir_chroot(mrb_state *mrb, mrb_value self)
 {
-  #if defined(_WIN32) || defined(_WIN64) || defined(__android__)
-  mrb_raise(mrb, E_NOTIMP_ERROR, "chroot() unreliable on Win platforms");
+  #if defined(_WIN32) || defined(_WIN64) || defined(__ANDROID__)
+  mrb_raise(mrb, E_NOTIMP_ERROR, "chroot() unreliable on your system");
   return mrb_fixnum_value(0);
   #else
   mrb_value spath;
@@ -238,8 +238,8 @@ mrb_dir_rewind(mrb_state *mrb, mrb_value self)
 mrb_value
 mrb_dir_seek(mrb_state *mrb, mrb_value self)
 {
-  #if defined(_WIN32) || defined(_WIN64) || defined(__android__)
-  mrb_raise(mrb, E_NOTIMP_ERROR, "dirseek() unreliable on Win platforms");
+  #if defined(_WIN32) || defined(_WIN64) || defined(__ANDROID__)
+  mrb_raise(mrb, E_NOTIMP_ERROR, "dirseek() unreliable on your system");
   return self;
   #else
   struct mrb_dir *mdir;
@@ -259,8 +259,8 @@ mrb_dir_seek(mrb_state *mrb, mrb_value self)
 mrb_value
 mrb_dir_tell(mrb_state *mrb, mrb_value self)
 {
-  #if defined(_WIN32) || defined(_WIN64) || defined(__android__)
-  mrb_raise(mrb, E_NOTIMP_ERROR, "dirtell() unreliable on Win platforms");
+  #if defined(_WIN32) || defined(_WIN64) || defined(__ANDROID__)
+  mrb_raise(mrb, E_NOTIMP_ERROR, "dirtell() unreliable on your system");
   return mrb_fixnum_value(0);
   #else
   struct mrb_dir *mdir;

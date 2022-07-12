@@ -1,0 +1,12 @@
+# It also works with MRB_NO_FLOAT.
+
+MRuby::GemBox.new do |conf|
+  # Use standard IO/File class
+  conf.gem :core => "mruby-io"
+
+  # Use standard IO/File class
+  conf.gem :core => "mruby-socket"
+
+  # Use standard print/puts/p
+  conf.gem :core => "mruby-print"
+end
