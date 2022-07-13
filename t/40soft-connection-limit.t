@@ -95,6 +95,10 @@ subtest "http1" => sub {
         sleep(2);
 
         is_connections_count(total => 4, active => 4, idle => 0, shutdown => 0);
+
+        # make sure that h2o sees the @conns being actively closed by the client (rather than evicting them as idle)
+        undef @conns;
+        sleep 1;
     };
 
     subtest 'stats-after-first-req' => sub {
@@ -112,6 +116,10 @@ subtest "http1" => sub {
         sleep(2);
 
         is_connections_count(total => 4, active => 1, idle => 3, shutdown => 0);
+
+        # make sure that h2o sees the @conns being actively closed by the client (rather than evicting them as idle)
+        undef @conns;
+        sleep 1;
     };
 
     subtest 'soft-connection-limit' => sub {
