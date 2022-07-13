@@ -53,17 +53,15 @@ h2o_buffer_prototype_t h2o_http2_wbuf_buffer_prototype = {{H2O_HTTP2_DEFAULT_OUT
 
 static void update_stream_input_window(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, size_t bytes);
 static void proceed_request(h2o_req_t *req, const char *errstr);
-static void initiate_graceful_shutdown(h2o_context_t *ctx);
+static void initiate_graceful_shutdown(h2o_conn_t *_conn);
 static void close_connection_now(h2o_http2_conn_t *conn);
 static int close_connection(h2o_http2_conn_t *conn);
 static ssize_t expect_default(h2o_http2_conn_t *conn, const uint8_t *src, size_t len, const char **err_desc);
 static void do_emit_writereq(h2o_http2_conn_t *conn);
 static void on_read(h2o_socket_t *sock, const char *err);
 static void push_path(h2o_req_t *src_req, const char *abspath, size_t abspath_len, int is_critical);
-static int foreach_request(h2o_context_t *ctx, int (*cb)(h2o_req_t *req, void *cbdata), void *cbdata);
+static int foreach_request(h2o_conn_t *_conn, int (*cb)(h2o_req_t *req, void *cbdata), void *cbdata);
 static void stream_send_error(h2o_http2_conn_t *conn, uint32_t stream_id, int errnum);
-
-const h2o_protocol_callbacks_t H2O_HTTP2_CALLBACKS = {initiate_graceful_shutdown, foreach_request};
 
 static int is_idle_stream_id(h2o_http2_conn_t *conn, uint32_t stream_id)
 {
@@ -80,65 +78,57 @@ static void enqueue_goaway(h2o_http2_conn_t *conn, int errnum, h2o_iovec_t addit
     }
 }
 
-static void graceful_shutdown_close_stragglers(h2o_timer_t *entry)
+static void graceful_shutdown_close_straggler(h2o_timer_t *entry)
 {
-    h2o_context_t *ctx = H2O_STRUCT_FROM_MEMBER(h2o_context_t, http2._graceful_shutdown_timeout, entry);
-    h2o_linklist_t *node, *next;
-
+    h2o_http2_conn_t *conn = H2O_STRUCT_FROM_MEMBER(h2o_http2_conn_t, _graceful_shutdown_timeout, entry);
     /* We've sent two GOAWAY frames, close the remaining connections */
-    for (node = ctx->http2._conns.next; node != &ctx->http2._conns; node = next) {
-        h2o_http2_conn_t *conn = H2O_STRUCT_FROM_MEMBER(h2o_http2_conn_t, _conns, node);
-        next = node->next;
-        close_connection(conn);
-    }
+    close_connection(conn);
 }
 
 static void graceful_shutdown_resend_goaway(h2o_timer_t *entry)
 {
-    h2o_context_t *ctx = H2O_STRUCT_FROM_MEMBER(h2o_context_t, http2._graceful_shutdown_timeout, entry);
-    h2o_linklist_t *node;
-    int do_close_stragglers = 0;
+    h2o_http2_conn_t *conn = H2O_STRUCT_FROM_MEMBER(h2o_http2_conn_t, _graceful_shutdown_timeout, entry);
 
-    for (node = ctx->http2._conns.next; node != &ctx->http2._conns; node = node->next) {
-        h2o_http2_conn_t *conn = H2O_STRUCT_FROM_MEMBER(h2o_http2_conn_t, _conns, node);
-        if (conn->state < H2O_HTTP2_CONN_STATE_HALF_CLOSED) {
-            enqueue_goaway(conn, H2O_HTTP2_ERROR_NONE, (h2o_iovec_t){NULL});
-            do_close_stragglers = 1;
+    if (conn->state < H2O_HTTP2_CONN_STATE_HALF_CLOSED) {
+        enqueue_goaway(conn, H2O_HTTP2_ERROR_NONE, (h2o_iovec_t){NULL});
+
+        /* After waiting a second, we still have an active connection. If configured, wait one
+         * final timeout before closing the connection */
+        if (conn->super.ctx->globalconf->http2.graceful_shutdown_timeout > 0) {
+            conn->_graceful_shutdown_timeout.cb = graceful_shutdown_close_straggler;
+            h2o_timer_link(conn->super.ctx->loop, conn->super.ctx->globalconf->http2.graceful_shutdown_timeout,
+                           &conn->_graceful_shutdown_timeout);
         }
-    }
-
-    /* After waiting a second, we still had active connections. If configured, wait one
-     * final timeout before closing the connections */
-    if (do_close_stragglers && ctx->globalconf->http2.graceful_shutdown_timeout > 0) {
-        ctx->http2._graceful_shutdown_timeout.cb = graceful_shutdown_close_stragglers;
-        h2o_timer_link(ctx->loop, ctx->globalconf->http2.graceful_shutdown_timeout, &ctx->http2._graceful_shutdown_timeout);
     }
 }
 
-static void initiate_graceful_shutdown(h2o_context_t *ctx)
+static void close_idle_connection(h2o_conn_t *_conn)
 {
+    initiate_graceful_shutdown(_conn);
+}
+
+static void initiate_graceful_shutdown(h2o_conn_t *_conn)
+{
+    h2o_conn_set_state(_conn, H2O_CONN_STATE_SHUTDOWN);
+
     /* draft-16 6.8
      * A server that is attempting to gracefully shut down a connection SHOULD send an initial GOAWAY frame with the last stream
      * identifier set to 231-1 and a NO_ERROR code. This signals to the client that a shutdown is imminent and that no further
      * requests can be initiated. After waiting at least one round trip time, the server can send another GOAWAY frame with an
      * updated last stream identifier. This ensures that a connection can be cleanly shut down without losing requests.
      */
-    h2o_linklist_t *node;
 
-    /* only doit once */
-    if (ctx->http2._graceful_shutdown_timeout.cb != NULL)
-        return;
-    ctx->http2._graceful_shutdown_timeout.cb = graceful_shutdown_resend_goaway;
+    h2o_http2_conn_t *conn = (void *)_conn;
+    assert(conn->_graceful_shutdown_timeout.cb == NULL);
+    conn->_graceful_shutdown_timeout.cb = graceful_shutdown_resend_goaway;
 
-    for (node = ctx->http2._conns.next; node != &ctx->http2._conns; node = node->next) {
-        h2o_http2_conn_t *conn = H2O_STRUCT_FROM_MEMBER(h2o_http2_conn_t, _conns, node);
-        if (conn->state < H2O_HTTP2_CONN_STATE_HALF_CLOSED) {
-            h2o_http2_encode_goaway_frame(&conn->_write.buf, INT32_MAX, H2O_HTTP2_ERROR_NONE,
-                                          (h2o_iovec_t){H2O_STRLIT("graceful shutdown")});
-            h2o_http2_conn_request_write(conn);
-        }
+    if (conn->state < H2O_HTTP2_CONN_STATE_HALF_CLOSED) {
+        h2o_http2_encode_goaway_frame(&conn->_write.buf, INT32_MAX, H2O_HTTP2_ERROR_NONE,
+                                      (h2o_iovec_t){H2O_STRLIT("graceful shutdown")});
+        h2o_http2_conn_request_write(conn);
     }
-    h2o_timer_link(ctx->loop, 1000, &ctx->http2._graceful_shutdown_timeout);
+
+    h2o_timer_link(conn->super.ctx->loop, 1000, &conn->_graceful_shutdown_timeout);
 }
 
 static void on_idle_timeout(h2o_timer_t *entry)
@@ -395,6 +385,9 @@ void close_connection_now(h2o_http2_conn_t *conn)
     assert(h2o_linklist_is_empty(&conn->_pending_reqs));
     h2o_timer_unlink(&conn->_timeout_entry);
 
+    if (h2o_timer_is_linked(&conn->_graceful_shutdown_timeout))
+        h2o_timer_unlink(&conn->_graceful_shutdown_timeout);
+
     h2o_buffer_dispose(&conn->_write.buf);
     if (conn->_write.buf_in_flight != NULL)
         h2o_buffer_dispose(&conn->_write.buf_in_flight);
@@ -418,11 +411,11 @@ void close_connection_now(h2o_http2_conn_t *conn)
         h2o_cache_destroy(conn->push_memo);
     if (conn->casper != NULL)
         h2o_http2_casper_destroy(conn->casper);
-    h2o_linklist_unlink(&conn->_conns);
 
     if (conn->sock != NULL)
         h2o_socket_close(conn->sock);
-    free(conn);
+
+    h2o_destroy_connection(&conn->super);
 }
 
 int close_connection(h2o_http2_conn_t *conn)
@@ -1001,6 +994,7 @@ static int handle_headers_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame
             stream->received_priority = payload.priority;
         }
     } else {
+        conn->received_any_request = 1;
         stream = h2o_http2_stream_open(conn, frame->stream_id, NULL, &payload.priority);
         set_priority(conn, stream, &payload.priority, 0);
     }
@@ -1684,6 +1678,9 @@ static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_hostconf_t **hosts,
         .skip_tracing = skip_tracing,
         .push_path = push_path,
         .get_debug_state = h2o_http2_get_debug_state,
+        .close_idle_connection = close_idle_connection,
+        .foreach_request = foreach_request,
+        .request_shutdown = initiate_graceful_shutdown,
         .get_rtt = get_rtt,
         .log_ = {{
             .transport =
@@ -1723,7 +1720,6 @@ static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_hostconf_t **hosts,
     conn->streams = kh_init(h2o_http2_stream_t);
     h2o_http2_scheduler_init(&conn->scheduler);
     conn->state = H2O_HTTP2_CONN_STATE_OPEN;
-    h2o_linklist_insert(&ctx->http2._conns, &conn->_conns);
     conn->_read_expect = expect_preface;
     conn->_input_header_table.hpack_capacity = conn->_input_header_table.hpack_max_capacity =
         H2O_HTTP2_SETTINGS_DEFAULT.header_table_size;
@@ -1736,6 +1732,7 @@ static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_hostconf_t **hosts,
     h2o_http2_window_init(&conn->_write.window, conn->peer_settings.initial_window_size);
     h2o_linklist_init_anchor(&conn->early_data.blocked_streams);
     conn->is_chromium_dependency_tree = 1; /* initially assume the client is Chromium until proven otherwise */
+    conn->received_any_request = 0;
 
     return conn;
 }
@@ -1844,19 +1841,15 @@ static void push_path(h2o_req_t *src_req, const char *abspath, size_t abspath_le
         h2o_http2_stream_send_push_promise(conn, stream);
 }
 
-static int foreach_request(h2o_context_t *ctx, int (*cb)(h2o_req_t *req, void *cbdata), void *cbdata)
+static int foreach_request(h2o_conn_t *_conn, int (*cb)(h2o_req_t *req, void *cbdata), void *cbdata)
 {
-    h2o_linklist_t *node;
-
-    for (node = ctx->http2._conns.next; node != &ctx->http2._conns; node = node->next) {
-        h2o_http2_conn_t *conn = H2O_STRUCT_FROM_MEMBER(h2o_http2_conn_t, _conns, node);
-        h2o_http2_stream_t *stream;
-        kh_foreach_value(conn->streams, stream, {
-            int ret = cb(&stream->req, cbdata);
-            if (ret != 0)
-                return ret;
-        });
-    }
+    h2o_http2_conn_t *conn = (void *)_conn;
+    h2o_http2_stream_t *stream;
+    kh_foreach_value(conn->streams, stream, {
+        int ret = cb(&stream->req, cbdata);
+        if (ret != 0)
+            return ret;
+    });
     return 0;
 }
 
@@ -1916,8 +1909,7 @@ int h2o_http2_handle_upgrade(h2o_req_t *req, struct timeval connected_at)
 
     return 0;
 Error:
-    h2o_linklist_unlink(&http2conn->_conns);
     kh_destroy(h2o_http2_stream_t, http2conn->streams);
-    free(http2conn);
+    h2o_destroy_connection(&http2conn->super);
     return -1;
 }

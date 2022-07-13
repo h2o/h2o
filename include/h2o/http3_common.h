@@ -515,6 +515,10 @@ void h2o_http3_send_qpack_stream_cancel(h2o_http3_conn_t *conn, quicly_stream_id
  */
 void h2o_http3_send_qpack_header_ack(h2o_http3_conn_t *conn, const void *bytes, size_t len);
 /**
+ * Enqueue GOAWAY frame crafted for graceful shutdown
+ */
+void h2o_http3_send_shutdown_goaway_frame(h2o_http3_conn_t *conn);
+/**
  * Enqueue GOAWAY frame for sending
  */
 void h2o_http3_send_goaway_frame(h2o_http3_conn_t *conn, uint64_t stream_or_push_id);
@@ -522,10 +526,6 @@ void h2o_http3_send_goaway_frame(h2o_http3_conn_t *conn, uint64_t stream_or_push
  *
  */
 static int h2o_http3_has_received_settings(h2o_http3_conn_t *conn);
-/**
- * Returns a boolean indicating if the use of H3_DATAGRAM frame has been negotiated
- */
-int h2o_http3_can_use_h3_datagram(h2o_http3_conn_t *conn);
 /**
  * sends out H3 datagrams
  */

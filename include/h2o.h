@@ -308,11 +308,6 @@ struct st_h2o_hostconf_t {
     } http2;
 };
 
-typedef struct st_h2o_protocol_callbacks_t {
-    void (*request_shutdown)(h2o_context_t *ctx);
-    int (*foreach_request)(h2o_context_t *ctx, int (*cb)(h2o_req_t *req, void *cbdata), void *cbdata);
-} h2o_protocol_callbacks_t;
-
 typedef h2o_iovec_t (*final_status_handler_cb)(void *ctx, h2o_globalconf_t *gconf, h2o_req_t *req);
 typedef const struct st_h2o_status_handler_t {
     h2o_iovec_t name;
@@ -331,14 +326,14 @@ typedef enum h2o_send_informational_mode {
 
 /**
  * If zero copy should be used. "Always" indicates to the proxy handler that pipe-backed vectors should be used even when the http
- * protocol handler does not support zero-copy. This mode delays the load of content to userspace, at the cost of moving around
+ * protocol handler does not support zerocopy. This mode delays the load of content to userspace, at the cost of moving around
  * memory page between the socket connected to the origin and the pipe.
  */
-typedef enum h2o_proxy_zero_copy_mode {
-    H2O_PROXY_ZERO_COPY_DISABLED,
-    H2O_PROXY_ZERO_COPY_ENABLED,
-    H2O_PROXY_ZERO_COPY_ALWAYS
-} h2o_proxy_zero_copy_mode_t;
+typedef enum h2o_proxy_zerocopy_mode {
+    H2O_PROXY_ZEROCOPY_DISABLED,
+    H2O_PROXY_ZEROCOPY_ENABLED,
+    H2O_PROXY_ZEROCOPY_ALWAYS
+} h2o_proxy_zerocopy_mode_t;
 
 struct st_h2o_globalconf_t {
     /**
@@ -401,10 +396,6 @@ struct st_h2o_globalconf_t {
          * a boolean value indicating whether or not to upgrade to HTTP/2
          */
         int upgrade_to_http2;
-        /**
-         * list of callbacks
-         */
-        h2o_protocol_callbacks_t callbacks;
     } http1;
 
     struct {
@@ -438,10 +429,6 @@ struct st_h2o_globalconf_t {
          * conditions for latency optimization
          */
         h2o_socket_latency_optimization_conditions_t latency_optimization;
-        /**
-         * list of callbacks
-         */
-        h2o_protocol_callbacks_t callbacks;
         /* */
         h2o_iovec_t origin_frame;
     } http2;
@@ -480,10 +467,6 @@ struct st_h2o_globalconf_t {
          * if the number of Initial/Handshake packets sent exceeds this limit, treat it as an error and close a connection
          */
         uint64_t max_initial_handshake_packets;
-        /**
-         * the callbacks
-         */
-        h2o_protocol_callbacks_t callbacks;
     } http3;
 
     struct {
@@ -534,7 +517,7 @@ struct st_h2o_globalconf_t {
         /**
          * a boolean flag if set to true, instructs to use zero copy (i.e., splice to pipe then splice to socket) if possible
          */
-        h2o_proxy_zero_copy_mode_t zero_copy;
+        h2o_proxy_zerocopy_mode_t zerocopy;
 
         struct {
             uint32_t max_concurrent_streams;
@@ -643,6 +626,12 @@ typedef struct st_h2o_context_storage_item_t {
 
 typedef H2O_VECTOR(h2o_context_storage_item_t) h2o_context_storage_t;
 
+typedef enum h2o_conn_state {
+    H2O_CONN_STATE_IDLE,
+    H2O_CONN_STATE_ACTIVE,
+    H2O_CONN_STATE_SHUTDOWN,
+} h2o_conn_state_t;
+
 /**
  * context of the http server.
  */
@@ -677,12 +666,40 @@ struct st_h2o_context_t {
      * flag indicating if shutdown has been requested
      */
     int shutdown_requested;
-
+    /**
+     * connection states
+     */
     struct {
         /**
-         * link-list of h2o_http1_conn_t
+         * link-list of h2o_conn_t
+         *
+         * list of connections in each state
+         *
+         * idle:
+         *  - newly created connections are `idle`
+         *  - `idle` connections become `active` as they receive requests
+         *  - `active` connections become `idle` when there are no pending requests
+         * active:
+         *  - connections that contain pending requests
+         * shutdown:
+         *  - connections that are shutting down
          */
-        h2o_linklist_t _conns;
+        h2o_linklist_t idle, active, shutdown;
+        /**
+         * number of connections in each state
+         */
+        union {
+            /**
+             * counters (the order MUST match that of h2o_connection_state_t; it is accessed by index via the use of counters[])
+             */
+            struct {
+                size_t idle, active, shutdown;
+            };
+            size_t counters[1];
+        } num_conns;
+    } _conns;
+    struct {
+
         struct {
             uint64_t request_timeouts;
             uint64_t request_io_timeouts;
@@ -690,14 +707,6 @@ struct st_h2o_context_t {
     } http1;
 
     struct {
-        /**
-         * link-list of h2o_http2_conn_t
-         */
-        h2o_linklist_t _conns;
-        /**
-         * timeout entry used for graceful shutdown
-         */
-        h2o_timer_t _graceful_shutdown_timeout;
         struct {
             /**
              * counter for http2 errors internally emitted by h2o
@@ -723,14 +732,6 @@ struct st_h2o_context_t {
     } http2;
 
     struct {
-        /**
-         * link-list of h2o_http3_server_conn_t
-         */
-        h2o_linklist_t _conns;
-        /**
-         * timeout entry used for graceful shutdown
-         */
-        h2o_timer_t _graceful_shutdown_timeout;
         struct {
             /**
              * number of packets forwarded to another node in a cluster
@@ -780,6 +781,13 @@ struct st_h2o_context_t {
      * aggregated quic stats
      */
     h2o_quic_stats_t quic_stats;
+
+    /**
+     * connection stats
+     */
+    struct {
+        uint64_t idle_closed;
+    } connection_stats;
 
     /**
      * pointer to per-module configs
@@ -909,6 +917,18 @@ typedef struct st_h2o_conn_callbacks_t {
      */
     h2o_http2_debug_state_t *(*get_debug_state)(h2o_req_t *req, int hpack_enabled);
     /**
+     * returns number of closed idle connections
+     */
+    void (*close_idle_connection)(h2o_conn_t *conn);
+    /**
+     * shutdown of connection is requested
+     */
+    void (*request_shutdown)(h2o_conn_t *conn);
+    /**
+     * for each request
+     */
+    int (*foreach_request)(h2o_conn_t *conn, int (*cb)(h2o_req_t *req, void *cbdata), void *cbdata);
+    /**
      * returns number of requests inflight (optional, only supported by H2, H3)
      */
     uint32_t (*num_reqs_inflight)(h2o_conn_t *conn);
@@ -926,7 +946,7 @@ typedef struct st_h2o_conn_callbacks_t {
     /**
      * optional callback that returns if zero copy is supported by the HTTP handler
      */
-    int (*can_zero_copy)(h2o_conn_t *conn);
+    int (*can_zerocopy)(h2o_conn_t *conn);
     /**
      * logging callbacks (all of them are optional)
      */
@@ -999,7 +1019,28 @@ struct st_h2o_conn_t {
         char str[H2O_UUID_STR_RFC4122_LEN + 1];
         uint8_t is_initialized;
     } _uuid;
+    h2o_conn_state_t state;
+    /* internal structure */
+    h2o_linklist_t _conns;
 };
+
+#define NOPAREN(...) __VA_ARGS__
+#define H2O_CONN_LIST_FOREACH(decl_var, conn_list, block)                                                                          \
+    do {                                                                                                                           \
+        h2o_linklist_t *_conn_list[] = NOPAREN conn_list;                                                                          \
+        size_t conn_list_len = PTLS_ELEMENTSOF(_conn_list);                                                                        \
+        h2o_linklist_t **_conn_list_iter = (_conn_list);                                                                           \
+        for (size_t i = 0; i < conn_list_len; i++) {                                                                               \
+            for (h2o_linklist_t *_node = _conn_list_iter[i]->next, *_node_next; _node != _conn_list_iter[i]; _node = _node_next) { \
+                _node_next = _node->next;                                                                                          \
+                h2o_conn_t *_h2o_conn = H2O_STRUCT_FROM_MEMBER(h2o_conn_t, _conns, _node);                                         \
+                decl_var = (void *)_h2o_conn;                                                                                      \
+                {                                                                                                                  \
+                    block                                                                                                          \
+                }                                                                                                                  \
+            }                                                                                                                      \
+        }                                                                                                                          \
+    } while (0)
 
 /**
  * filter used for capturing a response (can be used to implement subreq)
@@ -1368,8 +1409,12 @@ void h2o_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock);
 /**
  * creates a new connection
  */
-static h2o_conn_t *h2o_create_connection(size_t sz, h2o_context_t *ctx, h2o_hostconf_t **hosts, struct timeval connected_at,
-                                         const h2o_conn_callbacks_t *callbacks);
+h2o_conn_t *h2o_create_connection(size_t sz, h2o_context_t *ctx, h2o_hostconf_t **hosts, struct timeval connected_at,
+                                  const h2o_conn_callbacks_t *callbacks);
+/**
+ * destroys a connection
+ */
+void h2o_destroy_connection(h2o_conn_t *conn);
 /**
  * returns the uuid of the connection as a null-terminated string.
  */
@@ -1656,6 +1701,14 @@ void h2o_context_dispose_pathconf_context(h2o_context_t *ctx, h2o_pathconf_t *pa
  */
 static h2o_timestamp_t h2o_get_timestamp(h2o_context_t *ctx, h2o_mem_pool_t *pool);
 void h2o_context_update_timestamp_string_cache(h2o_context_t *ctx);
+/**
+ * Closes at most @max_connections_to_close connections that have been inactive for @min_age milliseconds
+ */
+void h2o_context_close_idle_connections(h2o_context_t *ctx, size_t max_connections_to_close, uint64_t min_age);
+/**
+ * transition connection state
+ */
+void h2o_conn_set_state(h2o_conn_t *conn, h2o_conn_state_t state);
 /**
  * returns per-module context set
  */
@@ -2252,27 +2305,6 @@ void h2o_self_trace_register_configurator(h2o_globalconf_t *conf);
 #ifdef H2O_NO_64BIT_ATOMICS
 extern pthread_mutex_t h2o_conn_id_mutex;
 #endif
-
-inline h2o_conn_t *h2o_create_connection(size_t sz, h2o_context_t *ctx, h2o_hostconf_t **hosts, struct timeval connected_at,
-                                         const h2o_conn_callbacks_t *callbacks)
-{
-    h2o_conn_t *conn = (h2o_conn_t *)h2o_mem_alloc(sz);
-
-    conn->ctx = ctx;
-    conn->hosts = hosts;
-    conn->connected_at = connected_at;
-#ifdef H2O_NO_64BIT_ATOMICS
-    pthread_mutex_lock(&h2o_conn_id_mutex);
-    conn->id = ++h2o_connection_id;
-    pthread_mutex_unlock(&h2o_conn_id_mutex);
-#else
-    conn->id = __sync_add_and_fetch(&h2o_connection_id, 1);
-#endif
-    conn->callbacks = callbacks;
-    conn->_uuid.is_initialized = 0;
-
-    return conn;
-}
 
 inline const char *h2o_conn_get_uuid(h2o_conn_t *conn)
 {

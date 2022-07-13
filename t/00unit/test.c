@@ -83,7 +83,7 @@ void h2o_loopback_destroy(h2o_loopback_conn_t *conn)
 {
     h2o_buffer_dispose(&conn->body);
     h2o_dispose_request(&conn->req);
-    free(conn);
+    h2o_destroy_connection(&conn->super);
 }
 
 void h2o_loopback_run_loop(h2o_loopback_conn_t *conn)

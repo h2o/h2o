@@ -106,17 +106,7 @@ OPTION(BUILD_SHARED_LIBS "whether to build a shared library" OFF)
 FIND_PROGRAM(RUBY ruby)
 FIND_PROGRAM(BISON bison)
 IF (RUBY AND BISON)
-    # Bundled mruby cannot be built with Ruby 3.x
-    EXECUTE_PROCESS(
-        COMMAND "${RUBY}" -e "puts RUBY_VERSION"
-        OUTPUT_VARIABLE RUBY_VERSION
-        OUTPUT_STRIP_TRAILING_WHITESPACE
-    )
-    IF ("${RUBY_VERSION}" VERSION_LESS "3.0.0")
-        SET(WITH_MRUBY_DEFAULT "ON")
-    ELSE ()
-        SET(WITH_MRUBY_DEFAULT "OFF")
-    ENDIF()
+    SET(WITH_MRUBY_DEFAULT "ON")
 ELSE ()
     SET(WITH_MRUBY_DEFAULT "OFF")
 ENDIF ()
@@ -153,10 +143,11 @@ IF (WITH_DTRACE)
     MESSAGE(STATUS "Enabling USDT support")
 ENDIF ()
 
-IF ((CMAKE_SIZEOF_VOID_P EQUAL 8) AND
-    (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64") OR
-     (CMAKE_SYSTEM_PROCESSOR STREQUAL "amd64") OR
-     (CMAKE_SYSTEM_PROCESSOR STREQUAL "AMD64"))
+CMAKE_PUSH_CHECK_STATE()
+SET(CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS} -mavx2 -maes -mpclmul -mvaes -mvpclmulqdq")
+CHECK_C_SOURCE_COMPILES("int main(void) {}" CC_HAS_AESNI256)
+CMAKE_POP_CHECK_STATE()
+IF (CC_HAS_AESNI256)
     SET(WITH_FUSION_DEFAULT "ON")
 ELSE ()
     SET(WITH_FUSION_DEFAULT "OFF")
@@ -755,7 +746,7 @@ IF (WITH_MRUBY)
         MRUBY_TOOLCHAIN=${MRUBY_TOOLCHAIN} CC=${CMAKE_C_COMPILER} CXX=${CMAKE_CXX_COMPILER} LD=${CMAKE_C_COMPILER} MRUBY_CONFIG=${CMAKE_CURRENT_SOURCE_DIR}/misc/mruby_config.rb MRUBY_BUILD_DIR=${CMAKE_CURRENT_BINARY_DIR}/mruby MRUBY_ADDITIONAL_CONFIG=${MRUBY_ADDITIONAL_CONFIG} ruby minirake
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/deps/mruby
         BYPRODUCTS "${CMAKE_CURRENT_BINARY_DIR}/mruby/host/lib/libmruby.a"
-                   "${CMAKE_CURRENT_BINARY_DIR}/mruby/host/mrbgems/mruby-onig-regexp/onigmo-6.1.2/.libs/libonigmo.a"
+                   "${CMAKE_CURRENT_BINARY_DIR}/mruby/host/mrbgems/mruby-onig-regexp/onigmo-6.2.0/.libs/libonigmo.a"
     )
     LIST(APPEND STANDALONE_SOURCE_FILES
         lib/handler/mruby.c
@@ -772,7 +763,7 @@ ENDIF (WITH_MRUBY)
 IF (WITH_FUSION)
     SET(STANDALONE_COMPILE_FLAGS "${STANDALONE_COMPILE_FLAGS} -DH2O_USE_FUSION=1")
     LIST(APPEND STANDALONE_SOURCE_FILES deps/picotls/lib/fusion.c)
-    SET_SOURCE_FILES_PROPERTIES(deps/picotls/lib/fusion.c PROPERTIES COMPILE_FLAGS "-mavx2 -maes -mpclmul")
+    SET_SOURCE_FILES_PROPERTIES(deps/picotls/lib/fusion.c PROPERTIES COMPILE_FLAGS "-mavx2 -maes -mpclmul -mvaes -mvpclmulqdq")
 ENDIF ()
 IF (WITH_KTLS)
     SET(STANDALONE_COMPILE_FLAGS "${STANDALONE_COMPILE_FLAGS} -DH2O_USE_KTLS=1")
@@ -786,7 +777,7 @@ IF (WITH_MRUBY)
     # note: the paths need to be determined before libmruby.flags.mak is generated
     TARGET_LINK_LIBRARIES(h2o
         "${CMAKE_CURRENT_BINARY_DIR}/mruby/host/lib/libmruby.a"
-        "${CMAKE_CURRENT_BINARY_DIR}/mruby/host/mrbgems/mruby-onig-regexp/onigmo-6.1.2/.libs/libonigmo.a"
+        "${CMAKE_CURRENT_BINARY_DIR}/mruby/host/mrbgems/mruby-onig-regexp/onigmo-6.2.0/.libs/libonigmo.a"
         "m")
     ADD_DEPENDENCIES(h2o mruby)
 ENDIF (WITH_MRUBY)

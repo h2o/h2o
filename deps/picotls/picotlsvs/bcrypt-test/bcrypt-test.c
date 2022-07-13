@@ -374,6 +374,78 @@ int test_encrypt(ptls_aead_algorithm_t *aead, wchar_t *name, wchar_t *chain_mode
     return ret;
 }
 
+int test_encrypt_vector(ptls_aead_algorithm_t *aead, wchar_t *name, wchar_t *chain_mode, size_t chain_mode_sz)
+{
+    BYTE key[32];
+    BYTE iv[PTLS_MAX_IV_SIZE];
+    BYTE data[123];
+    uint64_t nonce;
+    BYTE authData[9];
+    BYTE encryptedRef[256];
+    ULONG encryptedRefLength;
+    BYTE encrypted[256];
+    size_t encryptedLength;
+    ULONG authTagLength = (ULONG)aead->tag_size;
+    ptls_aead_context_t *ctx = NULL;
+    int ret = 0;
+
+    assert(sizeof(key) >= aead->key_size);
+    assert(sizeof(iv) >= aead->iv_size);
+    assert(sizeof(data) + authTagLength <= sizeof(encrypted));
+    assert(sizeof(data) + authTagLength <= sizeof(encryptedRef));
+
+    memset(key, 'k', sizeof(key));
+    memset(iv, 'n', sizeof(iv));
+    memset(data, 'd', sizeof(data));
+    nonce = 0;
+    memset(authData, 'a', sizeof(authData));
+
+    /* Create an encryption context */
+    ctx = new_test_aead_context(aead, 1, key, iv);
+    if (ctx == NULL) {
+        ret = -1;
+    }
+
+    if (ret == 0) {
+        ret = EncodeOneShot(aead, name, chain_mode, chain_mode_sz, key, (ULONG)aead->key_size, iv, (ULONG)aead->iv_size, data, 123,
+                            nonce, authData, 9, authTagLength, encryptedRef, 256, &encryptedRefLength);
+    }
+
+    /* Try encrypt with vector procedure */
+    if (ret == 0) {
+        ptls_iovec_t input_vec[2];
+
+        input_vec[0].base = data;
+        input_vec[0].len = 23;
+        input_vec[1].base = data + 23;
+        input_vec[1].len = 100;
+
+        ptls_aead_encrypt_v(ctx, encrypted, input_vec, 2, nonce, authData, 9);
+        encryptedLength = 123 + authTagLength;
+
+        if (encryptedLength != encryptedRefLength) {
+            printf("For %s, encrypt_v returns %d instead of %d\n", aead->name, (int)encryptedLength, encryptedRefLength);
+            ret = -1;
+        } else if (memcmp(encryptedRef, encrypted, encryptedRefLength) != 0) {
+            printf("For %s, vector encrypted does not match ref\n", aead->name);
+            for (ULONG i = 0; i < encryptedRefLength; i++) {
+                if (encryptedRef[i] != encrypted[i]) {
+                    printf("For %s, vector encrypted[%d] = 0x%02x vs encryptedRef[%d] = 0x%02x\n", aead->name, i, encrypted[i], i,
+                           encryptedRef[i]);
+                    break;
+                }
+            }
+            ret = -1;
+        } else {
+            printf("For %s, vector encrypting test passes.\n", aead->name);
+        }
+    }
+
+    delete_test_aead_context(ctx);
+
+    return ret;
+}
+
 int test_for_size(ptls_aead_algorithm_t *aead, wchar_t *name, wchar_t *chain_mode, size_t chain_mode_sz)
 {
     BYTE key[32];
@@ -480,6 +552,13 @@ int test_one_aead(ptls_aead_algorithm_t *aead, wchar_t *name, wchar_t *chain_mod
 
         printf("For %s, test encrypt returns %d\n", aead->name, ret);
     }
+
+    if (ret == 0) {
+        ret = test_encrypt_vector(aead, name, chain_mode, chain_mode_sz);
+
+        printf("For %s, test encrypt returns %d\n", aead->name, ret);
+    }
+
 
     if (ret == 0) {
         ret = test_for_size(aead, name, chain_mode, chain_mode_sz);
