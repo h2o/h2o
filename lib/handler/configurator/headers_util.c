@@ -187,6 +187,7 @@ static int on_config_unset_core(h2o_configurator_command_t *cmd, h2o_configurato
             *args[i].name = h2o_strdup(NULL, tmp.base, tmp.len);
         }
     }
+    args[i].value = h2o_iovec_init(NULL, 0);
     if (add_cmd(cmd, cmd_id, args, num_headers, when, self->get_commands(self->child)) != 0) {
         for (i = 0; i != num_headers; i++) {
             if (!h2o_iovec_is_token(args[i].name))
