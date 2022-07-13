@@ -1313,6 +1313,20 @@ void h2o_http3_send_qpack_header_ack(h2o_http3_conn_t *conn, const void *bytes, 
     H2O_HTTP3_CHECK_SUCCESS(quicly_stream_sync_sendbuf(stream->quic, 1));
 }
 
+void h2o_http3_send_shutdown_goaway_frame(h2o_http3_conn_t *conn)
+{
+    /* There is a moment where the transport-level close has been initiated while st_h2o_http3_server_conn_t remains.
+     * Check QUIC connection state to skip sending GOAWAY in such a case. */
+    if (conn->state < H2O_HTTP3_CONN_STATE_HALF_CLOSED && quicly_get_state(conn->super.quic) == QUICLY_STATE_CONNECTED) {
+        /* advertise the maximum stream ID to indicate that we will no longer accept new requests.
+         * HTTP/3 draft section 5.2.8 --
+         * "An endpoint that is attempting to gracefully shut down a connection can send a GOAWAY frame with a value set to the
+         * maximum possible value (2^62-4 for servers, 2^62-1 for clients). This ensures that the peer stops creating new
+         * requests or pushes." */
+        h2o_http3_send_goaway_frame(conn, (UINT64_C(1) << 62) - 4);
+    }
+}
+
 void h2o_http3_send_goaway_frame(h2o_http3_conn_t *conn, uint64_t stream_or_push_id)
 {
     size_t cap = h2o_http3_goaway_frame_capacity(stream_or_push_id);

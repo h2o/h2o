@@ -64,8 +64,6 @@ struct st_h2o_http1_finalostream_t {
 struct st_h2o_http1_conn_t {
     h2o_conn_t super;
     h2o_socket_t *sock;
-    /* internal structure */
-    h2o_linklist_t _conns;
     h2o_timer_t _timeout_entry;
     h2o_timer_t _io_timeout_entry;
     uint64_t _req_index;
@@ -107,11 +105,7 @@ static void reqread_on_read(h2o_socket_t *sock, const char *err);
 static void reqread_on_timeout(h2o_timer_t *entry);
 static void req_io_on_timeout(h2o_timer_t *entry);
 static void reqread_start(struct st_h2o_http1_conn_t *conn);
-static int foreach_request(h2o_context_t *ctx, int (*cb)(h2o_req_t *req, void *cbdata), void *cbdata);
-
-const h2o_protocol_callbacks_t H2O_HTTP1_CALLBACKS = {
-    NULL, /* graceful_shutdown (note: nothing special needs to be done for handling graceful shutdown) */
-    foreach_request};
+static int foreach_request(h2o_conn_t *_conn, int (*cb)(h2o_req_t *req, void *cbdata), void *cbdata);
 
 static void init_request(struct st_h2o_http1_conn_t *conn)
 {
@@ -148,8 +142,7 @@ static void close_connection(struct st_h2o_http1_conn_t *conn, int close_socket)
     h2o_dispose_request(&conn->req);
     if (conn->sock != NULL && close_socket)
         h2o_socket_close(conn->sock);
-    h2o_linklist_unlink(&conn->_conns);
-    free(conn);
+    h2o_destroy_connection(&conn->super);
 }
 
 static void cleanup_connection(struct st_h2o_http1_conn_t *conn)
@@ -170,6 +163,10 @@ static void cleanup_connection(struct st_h2o_http1_conn_t *conn)
     conn->req.proceed_req = NULL;
     conn->_prevreqlen = 0;
     conn->_unconsumed_request_size = 0;
+
+    if (conn->sock->input->size == 0)
+        h2o_conn_set_state(&conn->super, H2O_CONN_STATE_IDLE);
+
     reqread_start(conn);
 }
 
@@ -630,6 +627,9 @@ static void handle_incoming_request(struct st_h2o_http1_conn_t *conn)
     ssize_t entity_body_header_index;
     h2o_iovec_t expect;
 
+    if (conn->sock->input->size != 0)
+        h2o_conn_set_state(&conn->super, H2O_CONN_STATE_ACTIVE);
+
     /* need to set request_begin_at here for keep-alive connection */
     if (h2o_timeval_is_null(&conn->req.timestamps.request_begin_at))
         conn->req.timestamps.request_begin_at = h2o_gettimeofday(conn->super.ctx->loop);
@@ -759,6 +759,13 @@ void reqread_on_read(h2o_socket_t *sock, const char *err)
         conn->_req_entity_reader->handle_incoming_entity(conn);
 }
 
+static void close_idle_connection(h2o_conn_t *_conn)
+{
+    struct st_h2o_http1_conn_t *conn = (void *)_conn;
+    conn->req.http1_is_persistent = 0;
+    close_connection(conn, 1);
+}
+
 static void on_timeout(struct st_h2o_http1_conn_t *conn)
 {
     if (conn->_req_index == 1) {
@@ -769,8 +776,7 @@ static void on_timeout(struct st_h2o_http1_conn_t *conn)
         conn->req.res.reason = "Request Timeout";
     }
 
-    conn->req.http1_is_persistent = 0;
-    close_connection(conn, 1);
+    close_idle_connection(&conn->super);
 }
 
 static void req_io_on_timeout(h2o_timer_t *entry)
@@ -1171,17 +1177,15 @@ static h2o_iovec_t log_request_index(h2o_req_t *req)
     return h2o_iovec_init(s, len);
 }
 
-static int foreach_request(h2o_context_t *ctx, int (*cb)(h2o_req_t *req, void *cbdata), void *cbdata)
+static int foreach_request(h2o_conn_t *_conn, int (*cb)(h2o_req_t *req, void *cbdata), void *cbdata)
 {
-    h2o_linklist_t *node;
+    struct st_h2o_http1_conn_t *conn = (void *)_conn;
+    return cb(&conn->req, cbdata);
+}
 
-    for (node = ctx->http1._conns.next; node != &ctx->http1._conns; node = node->next) {
-        struct st_h2o_http1_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http1_conn_t, _conns, node);
-        int ret = cb(&conn->req, cbdata);
-        if (ret != 0)
-            return ret;
-    }
-    return 0;
+static void initiate_graceful_shutdown(h2o_conn_t *_conn)
+{
+    /* note: nothing special needs to be done for handling graceful shutdown */
 }
 
 static const h2o_conn_callbacks_t h1_callbacks = {
@@ -1189,6 +1193,9 @@ static const h2o_conn_callbacks_t h1_callbacks = {
     .get_peername = get_peername,
     .get_ptls = get_ptls,
     .skip_tracing = skip_tracing,
+    .close_idle_connection = close_idle_connection,
+    .foreach_request = foreach_request,
+    .request_shutdown = initiate_graceful_shutdown,
     .can_zerocopy = can_zerocopy,
     .log_ = {{
         .transport =
@@ -1229,7 +1236,6 @@ void h2o_http1_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval 
     /* init properties that need to be non-zero */
     conn->sock = sock;
     sock->data = conn;
-    h2o_linklist_insert(&ctx->ctx->http1._conns, &conn->_conns);
 
     H2O_PROBE_CONN(H1_ACCEPT, &conn->super, conn->sock, &conn->super, h2o_conn_get_uuid(&conn->super));
 
