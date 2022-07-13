@@ -175,9 +175,7 @@ static int on_config_unset_core(h2o_configurator_command_t *cmd, h2o_configurato
                 return -1;
             }
         } else {
-            h2o_iovec_t tmp;
-
-            tmp = h2o_str_stripws(args[i].node->data.scalar, strlen(args[i].node->data.scalar));
+            h2o_iovec_t tmp = h2o_str_stripws(args[i].node->data.scalar, strlen(args[i].node->data.scalar));
             if (tmp.len == 0) {
                 h2o_configurator_errprintf(cmd, args[i].node, "invalid header name");
                 return -1;
