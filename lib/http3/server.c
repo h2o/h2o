@@ -657,7 +657,7 @@ Redo:
         stats.cc.cwnd_exiting_slow_start, stats.cc.cwnd_minimum, stats.cc.cwnd_maximum, stats.cc.num_loss_episodes, stats.num_ptos,
         stats.delivery_rate.latest, stats.delivery_rate.smoothed,
         stats.delivery_rate.stdev APPLY_NUM_FRAMES(VALUE_OF_NUM_FRAMES, received) APPLY_NUM_FRAMES(VALUE_OF_NUM_FRAMES, sent),
-        stats.num_sentmap_packets_max);
+        stats.num_sentmap_packets_largest);
     if (len + 1 > bufsize) {
         bufsize = len + 1;
         goto Redo;
@@ -1786,8 +1786,8 @@ static void on_h3_destroy(h2o_quic_conn_t *h3_)
 #define ACC(fld, _unused) conn->super.ctx->quic_stats.quicly.fld += stats.fld;
         H2O_QUIC_AGGREGATED_STATS_APPLY(ACC);
 #undef ACC
-        if (conn->super.ctx->quic_stats.num_sentmap_packets_max < stats.num_sentmap_packets_max)
-            conn->super.ctx->quic_stats.num_sentmap_packets_max = stats.num_sentmap_packets_max;
+        if (conn->super.ctx->quic_stats.num_sentmap_packets_max < stats.num_sentmap_packets_largest)
+            conn->super.ctx->quic_stats.num_sentmap_packets_max = stats.num_sentmap_packets_largest;
     }
 
     /* unlink and dispose */
