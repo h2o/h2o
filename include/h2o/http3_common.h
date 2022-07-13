@@ -173,9 +173,9 @@ typedef struct st_h2o_quic_stats_t {
      */
     uint64_t packet_processed;
     /**
-     * maximum number of packets in quicly sentmap
+     * largest number of packets observed in quicly sentmap
      */
-    size_t num_sentmap_packets_max;
+    size_t num_sentmap_packets_largest;
 
     /**
      * aggregated quicly stats

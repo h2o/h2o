@@ -1786,8 +1786,8 @@ static void on_h3_destroy(h2o_quic_conn_t *h3_)
 #define ACC(fld, _unused) conn->super.ctx->quic_stats.quicly.fld += stats.fld;
         H2O_QUIC_AGGREGATED_STATS_APPLY(ACC);
 #undef ACC
-        if (conn->super.ctx->quic_stats.num_sentmap_packets_max < stats.num_sentmap_packets_largest)
-            conn->super.ctx->quic_stats.num_sentmap_packets_max = stats.num_sentmap_packets_largest;
+        if (conn->super.ctx->quic_stats.num_sentmap_packets_largest < stats.num_sentmap_packets_largest)
+            conn->super.ctx->quic_stats.num_sentmap_packets_largest = stats.num_sentmap_packets_largest;
     }
 
     /* unlink and dispose */

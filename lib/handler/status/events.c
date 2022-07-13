@@ -65,8 +65,8 @@ static void events_status_per_thread(void *priv, h2o_context_t *ctx)
     esc->http3.forwarded_packet_received += ctx->http3.events.forwarded_packet_received;
     esc->quic_stats.packet_received += ctx->quic_stats.packet_received;
     esc->quic_stats.packet_processed += ctx->quic_stats.packet_processed;
-    if (esc->quic_stats.num_sentmap_packets_max < ctx->quic_stats.num_sentmap_packets_max)
-        esc->quic_stats.num_sentmap_packets_max = ctx->quic_stats.num_sentmap_packets_max;
+    if (esc->quic_stats.num_sentmap_packets_largest < ctx->quic_stats.num_sentmap_packets_largest)
+        esc->quic_stats.num_sentmap_packets_largest = ctx->quic_stats.num_sentmap_packets_largest;
 #define ACC(fld, _unused) esc->quic_stats.quicly.fld += ctx->quic_stats.quicly.fld;
     H2O_QUIC_AGGREGATED_STATS_APPLY(ACC);
 #undef ACC
@@ -129,7 +129,7 @@ static h2o_iovec_t events_status_final(void *priv, h2o_globalconf_t *gconf, h2o_
                                           " \"http3.forwarded-packet-received\": %" PRIu64 ",\n"
                                           " \"quic.packet-received\": %" PRIu64 ",\n"
                                           " \"quic.packet-processed\": %" PRIu64 ",\n"
-                                          " \"quic.num-sentmap-packets-max\": %zu"
+                                          " \"quic.num-sentmap-packets-largest\": %zu"
                                           ",\n" H2O_QUIC_AGGREGATED_STATS_APPLY(QUIC_FMT) " \"ssl.errors\": %" PRIu64 ",\n"
                                                                                           " \"memory.mmap_errors\": %zu\n",
                        H1_AGG_ERR(400), H1_AGG_ERR(403), H1_AGG_ERR(404), H1_AGG_ERR(405), H1_AGG_ERR(416), H1_AGG_ERR(417),
@@ -139,7 +139,7 @@ static h2o_iovec_t events_status_final(void *priv, h2o_globalconf_t *gconf, h2o_
                        H2_AGG_ERR(COMPRESSION), H2_AGG_ERR(CONNECT), H2_AGG_ERR(ENHANCE_YOUR_CALM), H2_AGG_ERR(INADEQUATE_SECURITY),
                        esc->h2_read_closed, esc->h2_write_closed, esc->h2_idle_timeout, esc->h2_streaming_requests,
                        esc->http3.packet_forwarded, esc->http3.forwarded_packet_received, esc->quic_stats.packet_received, esc->quic_stats.packet_processed,
-                       esc->quic_stats.num_sentmap_packets_max
+                       esc->quic_stats.num_sentmap_packets_largest
                        H2O_QUIC_AGGREGATED_STATS_APPLY(QUIC_VAL),
                        esc->ssl_errors, h2o_mmap_errors);
     /* clang-format on */
