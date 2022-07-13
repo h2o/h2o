@@ -57,7 +57,7 @@ _mount:
 	# allow overwrite of include/h2o/version.h
 	sudo chown ci:ci $(SRC_DIR)/include/h2o
 	# allow write of mruby executables being generated (FIXME don't generate here)
-	for i in deps/mruby/bin misc/h2get/deps/mruby-1.2.0/bin; do \
+	for i in deps/mruby/bin misc/h2get/deps/mruby/bin; do \
 		sudo rm -rf $(SRC_DIR)/$$i; \
 		sudo mkdir $(SRC_DIR)/$$i; \
 		sudo chown ci:ci $(SRC_DIR)/$$i; \
