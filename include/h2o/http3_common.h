@@ -124,8 +124,8 @@ int h2o_http3_decode_goaway_frame(h2o_http3_goaway_frame_t *frame, const uint8_t
  */
 #define H2O_QUIC_ACCEPT_CONN_DECRYPTION_FAILED ((h2o_quic_conn_t *)1)
 /**
- * special error value to be returned by h2o_http3_server_accept, indicating that a connection was accepted but already closed due to an error.
- * In this case connection counter decrements are already done.
+ * special error value to be returned by h2o_http3_server_accept, indicating that a connection was accepted but already closed due
+ * to an error. In this case connection counter decrements are already done.
  */
 #define H2O_QUIC_ACCEPT_CONN_CLOSED ((h2o_http3_conn_t *)2)
 
