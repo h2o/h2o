@@ -458,15 +458,6 @@ struct st_h2o_globalconf_t {
          * a boolean indicating if UDP GSO should be used when possible
          */
         uint8_t use_gso : 1;
-        /**
-         * if handshake does not complete within RTT multiplied by this value, we'll close a connection.
-         * UINT32_MAX indicates the value is not initialized.
-         */
-        uint32_t handshake_timeout_rtt_multiplier;
-        /**
-         * if the number of Initial/Handshake packets sent exceeds this limit, treat it as an error and close a connection
-         */
-        uint64_t max_initial_handshake_packets;
     } http3;
 
     struct {

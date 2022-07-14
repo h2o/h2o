@@ -204,7 +204,6 @@ void h2o_config_init(h2o_globalconf_t *config)
     config->http3.active_stream_window_size = H2O_DEFAULT_HTTP3_ACTIVE_STREAM_WINDOW_SIZE;
     config->http3.allow_delayed_ack = 1;
     config->http3.use_gso = 1;
-    config->http3.handshake_timeout_rtt_multiplier = UINT32_MAX;
     config->send_informational_mode = H2O_SEND_INFORMATIONAL_MODE_EXCEPT_H1;
     config->mimemap = h2o_mimemap_create();
     h2o_socketpool_init_global(&config->proxy.global_socketpool, SIZE_MAX);

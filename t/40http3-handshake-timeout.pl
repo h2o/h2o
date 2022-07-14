@@ -33,11 +33,12 @@ listen:
   ssl:
     key-file: examples/h2o/server.key
     certificate-file: examples/h2o/server.crt
+  quic:
+    # handshake timeout set to zero -- any QUIC connection will result in handshake timeout immediately
+    handshake-timeout-rtt-multiplier: 0
 listen:
   host: 127.0.0.1
   port: $tcp_port
-# handshake timeout set to zero -- any QUIC connection will result in handshake timeout immediately
-http3-handshake-timeout-rtt-multiplier: 0
 ssl-session-resumption:
   mode: ticket
   ticket-store: file

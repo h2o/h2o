@@ -2013,12 +2013,14 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
                 listener->quic.ctx = quic;
                 if (quic_node != NULL) {
                     yoml_t **retry_node, **sndbuf, **rcvbuf, **amp_limit, **qpack_encoder_table_capacity, **max_streams_bidi,
-                        **max_udp_payload_size;
+                        **max_udp_payload_size, **handshake_timeout_rtt_multiplier, **max_initial_handshake_packets;
                     if (h2o_configurator_parse_mapping(cmd, *quic_node, NULL,
                                                        "retry:s,sndbuf:s,rcvbuf:s,amp-limit:s,qpack-encoder-table-capacity:s,max-"
-                                                       "streams-bidi:s,max-udp-payload-size:s",
+                                                       "streams-bidi:s,max-udp-payload-size:s,handshake-timeout-rtt-multiplier:s,"
+                                                       "max-initial-handshake-packets:s",
                                                        &retry_node, &sndbuf, &rcvbuf, &amp_limit, &qpack_encoder_table_capacity,
-                                                       &max_streams_bidi, &max_udp_payload_size) != 0)
+                                                       &max_streams_bidi, &max_udp_payload_size, &handshake_timeout_rtt_multiplier,
+                                                       &max_initial_handshake_packets) != 0)
                         return -1;
                     if (retry_node != NULL) {
                         ssize_t on = h2o_configurator_get_one_of(cmd, *retry_node, "OFF,ON");
@@ -2049,6 +2051,31 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
                         if (h2o_configurator_scanf(cmd, *max_udp_payload_size, "%" SCNu64,
                                                    &listener->quic.ctx->transport_params.max_udp_payload_size) != 0)
                             return -1;
+                    }
+                    if (handshake_timeout_rtt_multiplier != NULL) {
+                        uint32_t v;
+
+                        if (h2o_configurator_scanf(cmd, *handshake_timeout_rtt_multiplier, "%" SCNu32, &v) != 0)
+                            return -1;
+
+                        if (v == 0) {
+                            h2o_configurator_errprintf(
+                                cmd, *handshake_timeout_rtt_multiplier,
+                                "[WARNING] handshake timeout multiplier == 0 is not recommended except for testing.");
+                        }
+                        listener->quic.ctx->handshake_timeout_rtt_multiplier = v;
+                    }
+                    if (max_initial_handshake_packets != NULL) {
+                        uint64_t v;
+
+                        if (h2o_configurator_scanf(cmd, *max_initial_handshake_packets, "%" SCNu64, &v) != 0)
+                            return -1;
+                        if (v == 0) {
+                            h2o_configurator_errprintf(cmd, *max_initial_handshake_packets,
+                                                       "max Initial/Handshake packets must be greater than 0");
+                            return -1;
+                        }
+                        listener->quic.ctx->max_initial_handshake_packets = v;
                     }
                 }
                 if (conf.run_mode == RUN_MODE_WORKER)
@@ -3249,12 +3276,6 @@ static void *run_loop(void *_thread_index)
             listeners[i].http3.ctx.accept_ctx = &listeners[i].accept_ctx;
             listeners[i].http3.ctx.send_retry = listener_config->quic.send_retry;
             listeners[i].http3.ctx.qpack = listener_config->quic.qpack;
-            if (conf.globalconf.http3.handshake_timeout_rtt_multiplier < UINT32_MAX)
-                listener_config->quic.ctx->handshake_timeout_rtt_multiplier =
-                    conf.globalconf.http3.handshake_timeout_rtt_multiplier;
-            if (conf.globalconf.http3.max_initial_handshake_packets > 0) {
-                listener_config->quic.ctx->max_initial_handshake_packets = conf.globalconf.http3.max_initial_handshake_packets;
-            }
             int fds[2];
             /* TODO switch to using named socket in temporary directory to forward packets between server generations */
             if (socketpair(AF_UNIX, SOCK_DGRAM, 0, fds) != 0) {
