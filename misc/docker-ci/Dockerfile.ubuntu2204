@@ -7,6 +7,7 @@ RUN apt-get install --yes \
 	apache2-utils \
 	bison \
 	bpftrace \
+	brotli \
 	clang \
 	cmake \
 	cmake-data \
@@ -29,6 +30,7 @@ RUN apt-get install --yes \
 	net-tools \
 	netcat-openbsd \
 	nghttp2-client \
+	nodejs \
 	php-cgi \
 	pkgconf \
 	python3 \
