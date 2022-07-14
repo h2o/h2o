@@ -35,8 +35,15 @@ ossl1.1.1:
 		BUILD_ARGS='$(BUILD_ARGS)' \
 		TEST_ENV='$(TEST_ENV)'
 
+ossl3.0:
+	docker run $(DOCKER_RUN_OPTS) h2oserver/h2o-ci:ubuntu2004 \
+		make -f $(SRC_DIR).ro/misc/docker-ci/check.mk _install_cmake3.22 _build_ossl3.0 _check \
+		CMAKE_ARGS='-DOPENSSL_ROOT_DIR=/opt/openssl-3.0' \
+		BUILD_ARGS='$(BUILD_ARGS)' \
+		TEST_ENV='$(TEST_ENV)'
+
 dtrace+asan:
-	docker run $(DOCKER_RUN_OPTS) h2oserver/h2o-ci:ubuntu2004  \
+	docker run $(DOCKER_RUN_OPTS) h2oserver/h2o-ci:ubuntu2004 \
 		env DTRACE_TESTS=1 \
 		make -f $(SRC_DIR).ro/misc/docker-ci/check.mk _check \
 		CMAKE_ARGS='-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_FLAGS=-fsanitize=address -DCMAKE_CXX_FLAGS=-fsanitize=address' \
@@ -55,7 +62,7 @@ _mount:
 	sudo mount -t overlay overlay -o lowerdir=$(SRC_DIR).ro,upperdir=/tmp/src/upper,workdir=/tmp/src/work /tmp/src/upper
 	sudo mount --bind /tmp/src/upper $(SRC_DIR)
 	# allow overwrite of include/h2o/version.h
-	sudo chown ci:ci $(SRC_DIR)/include/h2o
+	sudo chown -R ci:ci $(SRC_DIR)/include/h2o
 	# allow write of mruby executables being generated (FIXME don't generate here)
 	for i in deps/mruby/bin misc/h2get/deps/mruby-1.2.0/bin; do \
 		sudo rm -rf $(SRC_DIR)/$$i; \
@@ -70,10 +77,21 @@ _do_check:
 		ulimit -n 1024; \
 		env $(TEST_ENV) make check
 
+_install_cmake3.22:
+	sudo apt purge -y cmake
+	sudo mkdir /usr/local/cmake-3.22
+	wget -O - https://github.com/Kitware/CMake/releases/download/v3.22.1/cmake-3.22.1-linux-x86_64.tar.gz | sudo tar xzf - --strip-components 1 -C /usr/local/cmake-3.22
+	sudo ln -s /usr/local/cmake-3.22/bin/cmake /usr/local/bin/cmake
+
+_build_ossl3.0:
+	curl -O https://www.openssl.org/source/openssl-3.0.0.tar.gz
+	tar xf openssl-3.0.0.tar.gz
+	cd openssl-3.0.0 && ./config --prefix=/opt/openssl-3.0 --openssldir=/opt/openssl-3.0 shared && make -j4 && sudo make install_sw install_ssldirs
+
 enter:
 	docker run $(DOCKER_RUN_OPTS) -it $(CONTAINER_NAME) bash
 
 pull:
 	docker pull $(CONTAINER_NAME)
 
-.PHONY: fuzz _check _do-check _fuzz _do-fuzz-extra enter pull
+.PHONY: fuzz _check _do-check _fuzz _install_cmake3.22 _build_ossl3.0 enter pull
