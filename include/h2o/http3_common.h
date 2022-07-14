@@ -120,7 +120,7 @@ uint8_t *h2o_http3_encode_goaway_frame(uint8_t *buff, quicly_stream_id_t stream_
 int h2o_http3_decode_goaway_frame(h2o_http3_goaway_frame_t *frame, const uint8_t *payload, size_t len, const char **err_desc);
 
 /*
- * Special delimiter values for http3 acceptor
+ * Special dummy values for representing errors from http3 acceptor
  */
 extern h2o_quic_conn_t h2o_quic_accept_conn_decryption_failed;
 extern h2o_http3_conn_t h2o_quic_accept_conn_closed;
