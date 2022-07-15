@@ -2054,20 +2054,16 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
                     }
                     if (handshake_timeout_rtt_multiplier != NULL) {
                         uint32_t v;
-
                         if (h2o_configurator_scanf(cmd, *handshake_timeout_rtt_multiplier, "%" SCNu32, &v) != 0)
                             return -1;
-
-                        if (v == 0) {
+                        if (v == 0)
                             h2o_configurator_errprintf(
                                 cmd, *handshake_timeout_rtt_multiplier,
                                 "[WARNING] handshake timeout multiplier == 0 is not recommended except for testing.");
-                        }
                         listener->quic.ctx->handshake_timeout_rtt_multiplier = v;
                     }
                     if (max_initial_handshake_packets != NULL) {
                         uint64_t v;
-
                         if (h2o_configurator_scanf(cmd, *max_initial_handshake_packets, "%" SCNu64, &v) != 0)
                             return -1;
                         if (v == 0) {
