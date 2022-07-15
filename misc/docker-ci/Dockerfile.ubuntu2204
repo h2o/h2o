@@ -26,6 +26,7 @@ RUN apt-get install --yes \
 	libssl-dev \
 	liburing-dev \
 	libuv1-dev \
+	llvm \
 	memcached \
 	net-tools \
 	netcat-openbsd \

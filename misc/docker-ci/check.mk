@@ -48,15 +48,16 @@ dtrace+asan:
 		make -f $(SRC_DIR).ro/misc/docker-ci/check.mk _check \
 		CMAKE_ARGS='-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_FLAGS=-fsanitize=address -DCMAKE_CXX_FLAGS=-fsanitize=address' \
 		BUILD_ARGS='$(BUILD_ARGS)' \
-		TEST_ENV='ASAN_OPTIONS=detect_leaks=0:alloc_dealloc_mismatch=0 DTRACE_TESTS=1 $(TEST_ENV)'
+		TEST_ENV='ASAN_OPTIONS=detect_leaks=0:alloc_dealloc_mismatch=0 $(TEST_ENV)'
 
 # https://clang.llvm.org/docs/SourceBasedCodeCoverage.html
 coverage:
-	docker run $(DOCKER_RUN_OPTS) h2oserver/h2o-ci:ubuntu2004-canary  \
+	docker run $(DOCKER_RUN_OPTS) h2oserver/h2o-ci:ubuntu2204  \
+		env DTRACE_TESTS=0 \
 		make -f $(SRC_DIR).ro/misc/docker-ci/check.mk _check _coverage_report \
-		CMAKE_ARGS='-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++- -DCMAKE_C_FLAGS="-fprofile-instr-generate -fcoverage-mapping -mllvm -runtime-counter-relocation" -DCMAKE_CXX_FLAGS= -DCMAKE_BUILD_TYPE=Debug' \
+		CMAKE_ARGS='-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_FLAGS="-fprofile-instr-generate -fcoverage-mapping -mllvm -runtime-counter-relocation" -DCMAKE_CXX_FLAGS= -DCMAKE_BUILD_TYPE=Debug' \
 		BUILD_ARGS='$(BUILD_ARGS)' \
-		TEST_ENV='LLVM_PROFILE_FILE=/home/ci/profraw/%c%p.profraw DTRACE_TESTS=0 $(TEST_ENV)'
+		TEST_ENV='LLVM_PROFILE_FILE=/home/ci/profraw/%c%p.profraw $(TEST_ENV)'
 
 _coverage_report:
 	llvm-profdata merge -sparse -o h2o.profdata /home/ci/profraw/*.profraw
