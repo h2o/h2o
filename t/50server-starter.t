@@ -44,7 +44,7 @@ subtest "daemon-mode" => sub {
         opts => [ qw(--mode=daemon) ],
         conf => << "EOT",
 pid-file: $tempdir/h2o.pid
-error-log: $tempdir/h2o.error
+error-log: /dev/stderr # $tempdir/h2o.error
 hosts:
   default:
     paths:
