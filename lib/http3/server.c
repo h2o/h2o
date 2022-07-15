@@ -1922,7 +1922,7 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
     if (accept_ret != 0) {
         h2o_http3_conn_t *ret = NULL;
         if (accept_ret == QUICLY_ERROR_DECRYPTION_FAILED)
-            ret = (h2o_http3_conn_t *)H2O_QUIC_ACCEPT_CONN_DECRYPTION_FAILED;
+            ret = (h2o_http3_conn_t *)&h2o_quic_accept_conn_decryption_failed;
         h2o_http3_dispose_conn(&conn->h3);
         kh_destroy(stream, conn->datagram_flows);
         h2o_destroy_connection(&conn->super);
@@ -1938,7 +1938,7 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
 
     if (!h2o_quic_send(&conn->h3.super)) {
         /* When `h2o_quic_send` fails, it destroys the connection object. */
-        return H2O_HTTP3_ACCEPT_CONN_CLOSED;
+        return &h2o_http3_accept_conn_closed;
     }
 
     return &conn->h3;
