@@ -654,7 +654,7 @@ Redo:
         ",cwnd-minimum=%" PRIu32 ",cwnd-maximum=%" PRIu32 ",num-loss-episodes=%" PRIu32 ",num-ptos=%" PRIu64
         ",delivery-rate-latest=%" PRIu64 ",delivery-rate-smoothed=%" PRIu64
         ",delivery-rate-stdev=%" PRIu64 APPLY_NUM_FRAMES(FORMAT_OF_NUM_FRAMES, received)
-            APPLY_NUM_FRAMES(FORMAT_OF_NUM_FRAMES, sent) ",num-sentmap-packets-max=%zu",
+            APPLY_NUM_FRAMES(FORMAT_OF_NUM_FRAMES, sent) ",num-sentmap-packets-largest=%zu",
         stats.num_packets.received, stats.num_packets.decryption_failed, stats.num_packets.sent, stats.num_packets.lost,
         stats.num_packets.lost_time_threshold, stats.num_packets.ack_received, stats.num_packets.late_acked,
         stats.num_bytes.received, stats.num_bytes.sent, stats.num_bytes.lost, stats.num_bytes.ack_received,
