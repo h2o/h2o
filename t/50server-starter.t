@@ -71,7 +71,7 @@ EOT
     };
 
     kill 'TERM', $pid;
-    sleep 5;
+    sleep 3;
     ok ! stat("$tempdir/h2o.pid"), "pid-file is unlinked";
 };
 
