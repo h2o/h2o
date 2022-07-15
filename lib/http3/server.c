@@ -1938,7 +1938,7 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
 
     if (!h2o_quic_send(&conn->h3.super)) {
         /* When `h2o_quic_send` fails, it destroys the connection object. */
-        return H2O_QUIC_ACCEPT_CONN_CLOSED;
+        return H2O_HTTP3_ACCEPT_CONN_CLOSED;
     }
 
     return &conn->h3;

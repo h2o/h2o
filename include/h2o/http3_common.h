@@ -123,7 +123,7 @@ int h2o_http3_decode_goaway_frame(h2o_http3_goaway_frame_t *frame, const uint8_t
  * Special dummy values for representing errors from http3 acceptor
  */
 extern h2o_quic_conn_t h2o_quic_accept_conn_decryption_failed;
-extern h2o_http3_conn_t h2o_quic_accept_conn_closed;
+extern h2o_http3_conn_t h2o_http3_accept_conn_closed;
 
 /**
  * special error value to be returned by h2o_quic_accept_cb, to indicate that packet decryption failed during quicly_accept
@@ -133,7 +133,7 @@ extern h2o_http3_conn_t h2o_quic_accept_conn_closed;
  * special error value to be returned by h2o_http3_server_accept, indicating that a connection was accepted but already closed due
  * to an error. In this case connection counter decrements are already done.
  */
-#define H2O_QUIC_ACCEPT_CONN_CLOSED (&h2o_quic_accept_conn_closed)
+#define H2O_HTTP3_ACCEPT_CONN_CLOSED (&h2o_http3_accept_conn_closed)
 
 /**
  * Accepts a new QUIC connection

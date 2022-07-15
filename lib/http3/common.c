@@ -37,7 +37,7 @@
 #include "../probes_.h"
 
 h2o_quic_conn_t h2o_quic_accept_conn_decryption_failed;
-h2o_http3_conn_t h2o_quic_accept_conn_closed;
+h2o_http3_conn_t h2o_http3_accept_conn_closed;
 
 struct st_h2o_http3_ingress_unistream_t {
     /**
