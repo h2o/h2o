@@ -36,6 +36,9 @@
 #include "h2o/multithread.h"
 #include "../probes_.h"
 
+h2o_quic_conn_t h2o_quic_accept_conn_decryption_failed;
+h2o_http3_conn_t h2o_http3_accept_conn_closed;
+
 struct st_h2o_http3_ingress_unistream_t {
     /**
      * back pointer
@@ -612,7 +615,7 @@ static void process_packets(h2o_quic_ctx_t *ctx, quicly_address_t *destaddr, qui
                 if ((packets[i].octets.base[0] & QUICLY_PACKET_TYPE_BITMASK) == QUICLY_PACKET_TYPE_INITIAL)
                     if ((conn = ctx->acceptor(ctx, destaddr, srcaddr, packets + i)) != NULL) {
                         /* non-null generally means success, except for H2O_QUIC_ACCEPT_CONN_DECRYPTION_FAILED */
-                        if (conn == (h2o_quic_conn_t *)H2O_QUIC_ACCEPT_CONN_DECRYPTION_FAILED) {
+                        if (conn == &h2o_quic_accept_conn_decryption_failed) {
                             /* failed to decrypt Initial packet <=> it could belong to a connection on a different node; forward it
                              * to the destination being claimed by the DCID */
                             uint64_t offending_node_id = packets[i].cid.dest.plaintext.node_id;

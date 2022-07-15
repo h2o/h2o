@@ -2013,12 +2013,14 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
                 listener->quic.ctx = quic;
                 if (quic_node != NULL) {
                     yoml_t **retry_node, **sndbuf, **rcvbuf, **amp_limit, **qpack_encoder_table_capacity, **max_streams_bidi,
-                        **max_udp_payload_size;
+                        **max_udp_payload_size, **handshake_timeout_rtt_multiplier, **max_initial_handshake_packets;
                     if (h2o_configurator_parse_mapping(cmd, *quic_node, NULL,
                                                        "retry:s,sndbuf:s,rcvbuf:s,amp-limit:s,qpack-encoder-table-capacity:s,max-"
-                                                       "streams-bidi:s,max-udp-payload-size:s",
+                                                       "streams-bidi:s,max-udp-payload-size:s,handshake-timeout-rtt-multiplier:s,"
+                                                       "max-initial-handshake-packets:s",
                                                        &retry_node, &sndbuf, &rcvbuf, &amp_limit, &qpack_encoder_table_capacity,
-                                                       &max_streams_bidi, &max_udp_payload_size) != 0)
+                                                       &max_streams_bidi, &max_udp_payload_size, &handshake_timeout_rtt_multiplier,
+                                                       &max_initial_handshake_packets) != 0)
                         return -1;
                     if (retry_node != NULL) {
                         ssize_t on = h2o_configurator_get_one_of(cmd, *retry_node, "OFF,ON");
@@ -2049,6 +2051,27 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
                         if (h2o_configurator_scanf(cmd, *max_udp_payload_size, "%" SCNu64,
                                                    &listener->quic.ctx->transport_params.max_udp_payload_size) != 0)
                             return -1;
+                    }
+                    if (handshake_timeout_rtt_multiplier != NULL) {
+                        uint32_t v;
+                        if (h2o_configurator_scanf(cmd, *handshake_timeout_rtt_multiplier, "%" SCNu32, &v) != 0)
+                            return -1;
+                        if (v == 0)
+                            h2o_configurator_errprintf(
+                                cmd, *handshake_timeout_rtt_multiplier,
+                                "[WARNING] handshake timeout multiplier == 0 is not recommended except for testing.");
+                        listener->quic.ctx->handshake_timeout_rtt_multiplier = v;
+                    }
+                    if (max_initial_handshake_packets != NULL) {
+                        uint64_t v;
+                        if (h2o_configurator_scanf(cmd, *max_initial_handshake_packets, "%" SCNu64, &v) != 0)
+                            return -1;
+                        if (v == 0) {
+                            h2o_configurator_errprintf(cmd, *max_initial_handshake_packets,
+                                                       "max Initial/Handshake packets must be greater than 0");
+                            return -1;
+                        }
+                        listener->quic.ctx->max_initial_handshake_packets = v;
                     }
                 }
                 if (conf.run_mode == RUN_MODE_WORKER)
@@ -3136,16 +3159,21 @@ static h2o_quic_conn_t *on_http3_accept(h2o_quic_ctx_t *_ctx, quicly_address_t *
     /* accept the connection */
     conn = h2o_http3_server_accept(ctx, destaddr, srcaddr, packet, token, (H2O_EBPF_FLAGS_SKIP_TRACING_BIT & flags) != 0,
                                    &conf.quic.conn_callbacks);
-    if (conn == NULL || &conn->super == H2O_QUIC_ACCEPT_CONN_DECRYPTION_FAILED)
+    if (conn == NULL || &conn->super == &h2o_quic_accept_conn_decryption_failed) {
         goto Exit;
+    } else if (conn == &h2o_http3_accept_conn_closed) {
+        conn = NULL;
+        goto ExitNoDecrements;
+    }
     num_sessions(1);
 
 Exit:
-    if (conn == NULL || &conn->super == H2O_QUIC_ACCEPT_CONN_DECRYPTION_FAILED) {
+    if (conn == NULL || &conn->super == &h2o_quic_accept_conn_decryption_failed) {
         /* revert the changes to the connection counts */
         num_connections(-1);
         num_quic_connections(-1);
     }
+ExitNoDecrements:
     return &conn->super;
 }
 
