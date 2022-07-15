@@ -1,0 +1,78 @@
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get --yes update
+RUN apt-get install --yes \
+	apache2-utils \
+	bison \
+	bpftrace \
+	brotli \
+	clang \
+	cmake \
+	cmake-data \
+	curl \
+	dnsutils \
+	flex \
+	git \
+	libbpfcc-dev \
+	libbrotli-dev \
+	libc-ares-dev \
+	libcap-dev \
+	libclang-dev \
+	libedit-dev \
+	libelf-dev \
+	libev-dev \
+	libssl-dev \
+	liburing-dev \
+	libuv1-dev \
+	memcached \
+	net-tools \
+	netcat-openbsd \
+	nghttp2-client \
+	nodejs \
+	php-cgi \
+	pkgconf \
+	python3 \
+	python3-distutils \
+	redis-server \
+	ruby-dev \
+	sudo \
+	systemtap-sdt-dev \
+	time \
+	wget \
+	zlib1g-dev
+
+# perl
+RUN apt-get install --yes \
+	cpanminus \
+	libfcgi-perl \
+	libfcgi-procmanager-perl \
+	libipc-signal-perl \
+	libjson-perl \
+	liblist-moreutils-perl \
+	libplack-perl \
+	libscope-guard-perl \
+	libtest-exception-perl \
+	libwww-perl \
+	libio-socket-ssl-perl
+ENV PERL_CPANM_OPT="--mirror https://cpan.metacpan.org/"
+RUN cpanm -n Test::More Starlet Protocol::HTTP2 Net::DNS::Nameserver Test::TCP
+
+# h2spec
+RUN curl -Ls https://github.com/summerwind/h2spec/releases/download/v2.6.0/h2spec_linux_amd64.tar.gz | tar zx -C /usr/local/bin
+
+# use dumb-init
+RUN wget -O /usr/local/bin/dumb-init https://github.com/Yelp/dumb-init/releases/download/v1.2.1/dumb-init_1.2.1_amd64 \
+ && chmod +x /usr/local/bin/dumb-init
+
+# komake
+RUN wget -O /usr/local/bin/komake https://raw.githubusercontent.com/kazuho/komake/main/komake && chmod +x /usr/local/bin/komake
+
+# create user
+RUN useradd --create-home ci
+RUN echo 'ci ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
+WORKDIR /home/ci
+USER ci
+
+ENTRYPOINT ["/usr/local/bin/dumb-init", "--rewrite", "1:0"]

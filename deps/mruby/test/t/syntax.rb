@@ -35,9 +35,10 @@ assert('super', '11.3.4') do
 end
 
 assert('yield', '11.3.5') do
-  assert_raise LocalJumpError do
-    yield
-  end
+# it's syntax error now
+#  assert_raise LocalJumpError do
+#    yield
+#  end
   assert_raise LocalJumpError do
     o = Object.new
     def o.foo
@@ -47,7 +48,32 @@ assert('yield', '11.3.5') do
   end
 end
 
-assert('redo in a for loop (#3275)') do
+assert('break', '11.5.2.4.3') do
+  n = 0
+  a = []
+  while true
+    n += 1
+    a.push(n)
+    if n > 3
+      break
+    end
+  end
+
+  assert_equal [1,2,3,4], a
+
+  n = 0
+  a = []
+  6.times do
+    n += 1
+    a.push(n)
+    if n > 3
+      break
+    end
+  end
+  assert_equal [1,2,3,4], a
+end
+
+assert('redo', '11.5.2.4.5') do
   sum = 0
   for i in 1..10
     sum += i
@@ -58,6 +84,17 @@ assert('redo in a for loop (#3275)') do
   end
 
   assert_equal 220, sum
+
+  n = 0
+  a = []
+  3.times do
+    n += 1
+    if n == 2
+      redo
+    end
+    a.push(n)
+  end
+  assert_equal [1,3,4], a
 end
 
 assert('Abbreviated variable assignment', '11.4.2.3.2') do
@@ -185,6 +222,18 @@ assert('Abbreviated variable assignment as returns') do
     end
   end
   assert_equal 1, Syntax4AbbrVarAsgnAsReturns::A.new.b
+end
+
+assert('Abbreviated variable assignment of object attribute') do
+  module Syntax4AbbrVarAsgnObjectAttr
+    class A
+      attr_accessor :c
+      def b
+        self.c ||= 1
+      end
+    end
+  end
+  assert_equal 1, Syntax4AbbrVarAsgnObjectAttr::A.new.b
 end
 
 assert('Splat and multiple assignment') do
@@ -345,6 +394,11 @@ assert('splat object in assignment') do
   assert_equal [2], (a = *o)
 end
 
+assert('one-line pattern match') do
+  1 => a
+  assert_equal(1, a)
+end
+
 assert('splat object in case statement') do
   o = Object.new
   def o.to_a
@@ -423,10 +477,11 @@ assert('parenthesed do-block in cmdarg') do
 end
 
 assert('method definition in cmdarg') do
-  if false
+  result = class MethodDefinitionInCmdarg
+    def self.bar(arg); arg end
     bar def foo; self.each do end end
   end
-  true
+  assert_equal(:foo, result)
 end
 
 assert('optional argument in the rhs default expressions') do
@@ -448,6 +503,18 @@ end
 
 assert('optional block argument in the rhs default expressions') do
   assert_nil(Proc.new {|foo = foo| foo}.call)
+end
+
+assert('local variable definition in default value and subsequent arguments') do
+  def m(a = b = 1, c) [a, b, c] end
+  assert_equal([1, 1, :c], m(:c))
+  assert_equal([:a, nil, :c], m(:a, :c))
+
+  def m(a = b = 1, &c) [a, b, c ? true : nil] end
+  assert_equal([1, 1, nil], m)
+  assert_equal([1, 1, true], m{})
+  assert_equal([:a, nil, nil], m(:a))
+  assert_equal([:a, nil, true], m(:a){})
 end
 
 assert('multiline comments work correctly') do
@@ -485,8 +552,7 @@ assert 'keyword arguments' do
   assert_raise(ArgumentError) { m }
   assert_raise(ArgumentError) { m 'a'  => 1, a: 1 }
   h = { a: 1 }
-  assert_equal 1, m(h)
-  assert_equal({ a: 1 }, h)
+  assert_equal 1, m(**h)
 
   def m(a: 1) a end
   assert_equal 1, m
@@ -501,23 +567,23 @@ assert 'keyword arguments' do
   def m(a, **) a end
   assert_equal 1, m(1)
   assert_equal 1, m(1, a: 2, b: 3)
-  assert_equal({ 'a' => 1, b: 2 }, m('a' => 1, b: 2))
+  assert_raise(ArgumentError) { m('a' => 1, b: 2) }
 
   def m(a, **k) [a, k] end
   assert_equal [1, {}], m(1)
   assert_equal [1, {a: 2, b: 3}], m(1, a: 2, b: 3)
-  assert_equal [{'a' => 1, b: 2}, {}], m('a' => 1, b: 2)
+  assert_raise(ArgumentError) { m('a' => 1, b: 2) }
 
   def m(a=1, **) a end
   assert_equal 1, m
   assert_equal 2, m(2, a: 1, b: 0)
-  assert_raise(ArgumentError) { m('a' => 1, a: 2) }
 
   def m(a=1, **k) [a, k] end
   assert_equal [1, {}], m
   assert_equal [1, {a: 1}], m(a: 1)
   assert_equal [2, {a: 1, b: 2}], m(2, a: 1, b: 2)
-  assert_equal [{a: 1}, {b: 2}], m({a: 1}, {b: 2})
+  assert_equal [{a: 1}, {b: 2}], m({a: 1}, b: 2)
+  assert_raise(ArgumentError) { m({a: 1}, {b: 2}) }
 
   def m(*, a:) a end
   assert_equal 1, m(a: 1)
@@ -542,34 +608,27 @@ assert 'keyword arguments' do
   def m(*a, **) a end
   assert_equal [], m()
   assert_equal [1, 2, 3], m(1, 2, 3, a: 4, b: 5)
-  assert_raise(ArgumentError) { m("a" => 1, a: 1) }
   assert_equal [1], m(1, **{a: 2})
 
   def m(*, **k) k end
   assert_equal({}, m())
   assert_equal({a: 4, b: 5}, m(1, 2, 3, a: 4, b: 5))
-  assert_raise(ArgumentError) { m("a" => 1, a: 1) }
 
   def m(a = nil, b = nil, **k) [a, k] end
   assert_equal [nil, {}], m()
   assert_equal([nil, {a: 1}], m(a: 1))
-  assert_raise(ArgumentError) { m("a" => 1, a: 1) }
   assert_equal([{"a" => 1}, {a: 1}], m({ "a" => 1 }, a: 1))
   assert_equal([{a: 1}, {}], m({a: 1}, {}))
-  assert_equal([nil, {}], m({}))
+  assert_equal([{}, {}], m({}))
 
   def m(*a, **k) [a, k] end
   assert_equal([[], {}], m())
   assert_equal([[1], {}], m(1))
   assert_equal([[], {a: 1, b: 2}], m(a: 1, b: 2))
   assert_equal([[1, 2, 3], {a: 2}], m(1, 2, 3, a: 2))
-  assert_raise(ArgumentError) { m("a" => 1, a: 1) }
-  assert_raise(ArgumentError) { m("a" => 1) }
   assert_equal([[], {a: 1}], m(a: 1))
-  assert_raise(ArgumentError) { m("a" => 1, a: 1) }
   assert_equal([[{"a" => 1}], {a: 1}], m({ "a" => 1 }, a: 1))
-  assert_equal([[{a: 1}], {}], m({a: 1}, {}))
-  assert_raise(ArgumentError) { m({a: 1}, {"a" => 1}) }
+  assert_equal([[{a: 1}, {}], {}], m({a: 1}, {}))
 
   def m(a:, b:) [a, b] end
   assert_equal([1, 2], m(a: 1, b: 2))
@@ -578,23 +637,21 @@ assert 'keyword arguments' do
   def m(a:, b: 1) [a, b] end
   assert_equal([1, 1], m(a: 1))
   assert_equal([1, 2], m(a: 1, b: 2))
+  assert_raise(ArgumentError) { m(b: 1) }
   assert_raise(ArgumentError) { m("a" => 1, a: 1, b: 2) }
 
   def m(a:, **) a end
   assert_equal(1, m(a: 1))
   assert_equal(1, m(a: 1, b: 2))
-  assert_raise(ArgumentError) { m("a" => 1, a: 1, b: 2) }
 
   def m(a:, **k) [a, k] end
   assert_equal([1, {}], m(a: 1))
   assert_equal([1, {b: 2, c: 3}], m(a: 1, b: 2, c: 3))
-  assert_raise(ArgumentError) { m("a" => 1, a: 1, b: 2) }
 
-=begin
   def m(a:, &b) [a, b] end
   assert_equal([1, nil], m(a: 1))
-  assert_equal([1, l], m(a: 1, &(l = ->{})))
-=end
+  result = m(a: 1, &(l = ->{}))
+  assert_equal([1, l], result)
 
   def m(a: 1, b:) [a, b] end
   assert_equal([1, 0], m(b: 0))
@@ -632,25 +689,84 @@ assert 'keyword arguments' do
   assert_equal([{ a: 1, b: 2}, nil], m(a: 1, b: 2))
   assert_equal :blk, m{ :blk }[1].call
 
-  def m(hsh = {}) hsh end
-  assert_equal({ a: 1, b: 2 }, m(a: 1, b: 2))
-  assert_equal({ a: 1, 'b' => 2 }, m(a: 1, 'b' => 2))
-
-  def m(hsh) hsh end
-  assert_equal({ a: 1, b: 2 }, m(a: 1, b: 2))
-  assert_equal({ a: 1, 'b' => 2 }, m(a: 1, 'b' => 2))
-
 =begin
   def m(a, b=1, *c, (*d, (e)), f: 2, g:, h:, **k, &l)
     [a, b, c, d, e, f, g, h, k, l]
   end
   result = m(9, 8, 7, 6, f: 5, g: 4, h: 3, &(l = ->{}))
   assert_equal([9, 8, [7], [], 6, 5, 4, 3, {}, l], result)
-
   def m a, b=1, *c, d, e:, f: 2, g:, **k, &l
     [a, b, c, d, e, f, g, k, l]
   end
   result = m(1, 2, e: 3, g: 4, h: 5, i: 6, &(l = ->{}))
   assert_equal([1, 1, [], 2, 3, 2, 4, { h: 5, i: 6 }, l], result)
 =end
+
+  def m(a: b = 1, c:) [a, b, c] end
+  assert_equal([1, 1, :c], m(c: :c))
+  assert_equal([:a, nil, :c], m(a: :a, c: :c))
+end
+
+assert('numbered parameters') do
+  assert_equal(15, [1,2,3,4,5].reduce {_1+_2})
+  assert_equal(45, Proc.new do _1 + _2 + _3 + _4 + _5 + _6 + _7 + _8 + _9 end.call(*[1, 2, 3, 4, 5, 6, 7, 8, 9]))
+end
+
+assert('_0 is not numbered parameter') do
+  _0 = :l
+  assert_equal(:l, ->{_0}.call)
+end
+
+assert('argument forwarding') do
+  c = Class.new {
+    def a0(*a,&b)
+      assert_equal([1,2,3], a)
+      assert_not_nil(b)
+    end
+    def a(...)
+      a0(...)
+    end
+    def b(a,...)
+      assert_equal(a,1)
+      a0(1,...)
+    end
+    def c ...
+      a(...)
+    end
+    def d a,...
+      assert_equal(a,1)
+      b(1,...)
+    end
+  }
+  o = c.new
+  o.a(1,2,3){}
+  o.b(1,2,3){}
+  o.c(1,2,3){}
+  o.d(1,2,3){}
+end
+
+assert('endless def') do
+  c = Class.new {
+    def m1 = 42
+    def m2() = 42
+    def m3(x) = x+1
+    def self.s1 = 42
+    def self.s2() = 42
+    def self.s3(x) = x + 1
+    def cm1 = m3 42
+    def cm2() = m3 42
+    def cm3(x) = m3 x+1
+    def self.cs1 = s3 42
+    def self.cs2() = s3 42
+    def self.cs3(x) = s3 x + 1
+  }
+  o = c.new
+  assert_equal(42, o.m1)
+  assert_equal(43, o.m3(o.m2))
+  assert_equal(42, c.s1)
+  assert_equal(43, c.s3(c.s2))
+  assert_equal(43, o.cm1)
+  assert_equal(45, o.cm3(o.cm2))
+  assert_equal(43, c.cs1)
+  assert_equal(45, c.cs3(c.cs2))
 end

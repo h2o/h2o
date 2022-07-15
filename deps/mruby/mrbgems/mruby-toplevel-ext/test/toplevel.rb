@@ -21,4 +21,3 @@ assert('Toplevel#include') do
   assert_equal :foo, method_foo
   assert_equal :bar2, CONST_BAR
 end
-

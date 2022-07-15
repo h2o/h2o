@@ -62,9 +62,8 @@ static mrb_value sleep_callback(h2o_mruby_context_t *mctx, mrb_value input, mrb_
     if (mrb->exc) {
         *run_again = 1;
         mrb_value exc = mrb_obj_value(mrb->exc);
-        if (mrb_obj_is_kind_of(mrb, exc, E_NOMETHOD_ERROR)) {
-            exc = mrb_exc_new_str_lit(mrb, E_ARGUMENT_ERROR, "the argument of the sleep function must respond to 'to_f' method");
-        }
+        if (mrb_obj_is_kind_of(mrb, exc, E_NOMETHOD_ERROR))
+            exc = mrb_exc_new_lit(mrb, E_ARGUMENT_ERROR, "the argument of the sleep function must respond to 'to_f' method");
         mrb->exc = NULL;
         return exc;
     }

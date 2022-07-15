@@ -6,8 +6,15 @@ use t::Util;
 plan skip_all => 'h2spec not found'
     unless prog_exists('h2spec');
 
-for my $offload (qw(OFF ON)) {
-    subtest "tls_offload=$offload" => sub {
+my @offload_modes = qw(off);
+if ($^O eq 'linux') {
+    push @offload_modes, "kernel";
+    push @offload_modes, "zerocopy"
+        if server_features()->{"ssl-zerocopy"} && cpuinfo_can_ntaes();
+}
+
+for my $offload (@offload_modes) {
+    subtest "ssl-offload=$offload" => sub {
         run_tests($offload);
     };
 }
@@ -20,11 +27,16 @@ hosts:
     paths:
       "/":
         file.dir: @{[DOC_ROOT]}
-tls-offload: $offload
+ssl-offload: $offload
 EOT
 
     my $output = `h2spec -t -k -p $server->{tls_port} 2>&1`;
     unlike $output, qr/Failures:/;
+    like $output, qr/ 0 failed/;
 }
 
 done_testing();
+
+sub cpuinfo_can_ntaes {
+    system("egrep '^flags.* aes .* avx2 ' /proc/cpuinfo > /dev/null") == 0;
+}

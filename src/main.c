@@ -259,6 +259,8 @@ static struct {
      * Can be set to INT_MAX so that only max_connections would be used.
      */
     int max_quic_connections;
+    int soft_connection_limit;
+    int soft_connection_limit_min_age;
     /**
      * array size == number of worker threads to instantiate, the values indicate which CPU to pin, -1 if not
      */
@@ -302,6 +304,7 @@ static struct {
     char *crash_handler;
     int crash_handler_wait_pipe_close;
     int tcp_reuseport;
+    int ssl_zerocopy;
 #ifdef LIBCAP_FOUND
     H2O_VECTOR(cap_value_t) capabilities;
 #endif
@@ -315,6 +318,8 @@ static struct {
     .error_log = NULL,
     .max_connections = 1024,
     .max_quic_connections = INT_MAX, /* (INT_MAX = i.e., allow up to max_connections) */
+    .soft_connection_limit = INT_MAX,
+    .soft_connection_limit_min_age = 30,
     .thread_map = {0},               /* initialized in main() */
     .quic = {0},                     /* 0 defaults to all, conn_callbacks (initialized in main() */
     .tfo_queues = 0,                 /* initialized in main() */
@@ -325,6 +330,7 @@ static struct {
     .crash_handler = "share/h2o/annotate-backtrace-symbols",
     .crash_handler_wait_pipe_close = 0,
     .tcp_reuseport = 0,
+    .ssl_zerocopy = 0,
 };
 
 static __thread size_t thread_index;
@@ -738,6 +744,32 @@ Exit:
     return ret;
 }
 
+#if H2O_USE_FUSION
+
+static ptls_cipher_suite_t **replace_ciphersuites(ptls_cipher_suite_t **input, ptls_cipher_suite_t **replacements)
+{
+    H2O_VECTOR(ptls_cipher_suite_t *) new_list = {NULL};
+
+    for (; *input != NULL; ++input) {
+        ptls_cipher_suite_t *cs = *input;
+        for (ptls_cipher_suite_t **cand = replacements; *cand != NULL; ++cand) {
+            if (cs->id == (*cand)->id) {
+                cs = *cand;
+                break;
+            }
+        }
+        h2o_vector_reserve(NULL, &new_list, new_list.size + 1);
+        new_list.entries[new_list.size++] = cs;
+    }
+
+    h2o_vector_reserve(NULL, &new_list, new_list.size + 1);
+    new_list.entries[new_list.size++] = NULL;
+
+    return new_list.entries;
+}
+
+#endif
+
 static const char *listener_setup_ssl_picotls(struct listener_config_t *listener, struct listener_ssl_identity_t *identity,
                                               ptls_iovec_t raw_public_key, ptls_cipher_suite_t **cipher_suites,
                                               int server_cipher_preference)
@@ -859,29 +891,12 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
 #if H2O_USE_FUSION
         /* rebuild and replace the cipher suite list, replacing the corresponding ones to fusion */
         if (ptls_fusion_is_supported_by_cpu()) {
-            static const ptls_cipher_suite_t fusion_aes128gcmsha256 = {PTLS_CIPHER_SUITE_AES_128_GCM_SHA256, &ptls_fusion_aes128gcm,
-                                                                       &ptls_openssl_sha256},
-                                             fusion_aes256gcmsha384 = {PTLS_CIPHER_SUITE_AES_256_GCM_SHA384, &ptls_fusion_aes256gcm,
-                                                                       &ptls_openssl_sha384};
-            H2O_VECTOR(ptls_cipher_suite_t *) new_list = {};
-#define PUSH_NEW(x)                                                                                                                \
-    do {                                                                                                                           \
-        h2o_vector_reserve(NULL, &new_list, new_list.size + 1);                                                                    \
-        new_list.entries[new_list.size++] = (x);                                                                                   \
-    } while (0)
-            for (ptls_cipher_suite_t **input = pctx->ctx.cipher_suites; *input != NULL; ++input) {
-                h2o_vector_reserve(NULL, &new_list, new_list.size + 1);
-                if (*input == &ptls_openssl_aes128gcmsha256) {
-                    PUSH_NEW(&fusion_aes128gcmsha256);
-                } else if (*input == &ptls_openssl_aes256gcmsha384) {
-                    PUSH_NEW(&fusion_aes256gcmsha384);
-                } else {
-                    PUSH_NEW(*input);
-                }
-            }
-            PUSH_NEW(NULL);
-#undef PUSH_NEW
-            pctx->ctx.cipher_suites = new_list.entries;
+            static ptls_cipher_suite_t aes128gcmsha256 = {PTLS_CIPHER_SUITE_AES_128_GCM_SHA256, &ptls_fusion_aes128gcm,
+                                                          &ptls_openssl_sha256},
+                                       aes256gcmsha384 = {PTLS_CIPHER_SUITE_AES_256_GCM_SHA384, &ptls_fusion_aes256gcm,
+                                                          &ptls_openssl_sha384},
+                                       *fusion_all[] = {&aes128gcmsha256, &aes256gcmsha384, NULL};
+            pctx->ctx.cipher_suites = replace_ciphersuites(pctx->ctx.cipher_suites, fusion_all);
         }
 #endif
         quicly_amend_ptls_context(&pctx->ctx);
@@ -2206,6 +2221,16 @@ static int on_config_max_quic_connections(h2o_configurator_command_t *cmd, h2o_c
     return h2o_configurator_scanf(cmd, node, "%d", &conf.max_quic_connections);
 }
 
+static int on_config_soft_connection_limit(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    return h2o_configurator_scanf(cmd, node, "%d", &conf.soft_connection_limit);
+}
+
+static int on_config_soft_connection_limit_min_age(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    return h2o_configurator_scanf(cmd, node, "%d", &conf.soft_connection_limit_min_age);
+}
+
 static inline int on_config_num_threads_add_cpu(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     if (node->type != YOML_TYPE_SCALAR) {
@@ -2443,9 +2468,35 @@ static int on_tcp_reuseport(h2o_configurator_command_t *cmd, h2o_configurator_co
     return on_config_onoff(cmd, node, &conf.tcp_reuseport);
 }
 
-static int on_config_tls_offload(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+static int on_config_ssl_offload(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    return on_config_onoff(cmd, node, &h2o_socket_use_ktls);
+    switch (h2o_configurator_get_one_of(cmd, node, "OFF,kernel,zerocopy")) {
+    case 0:
+        h2o_socket_use_ktls = 0;
+        conf.ssl_zerocopy = 0;
+        break;
+    case 1:
+        h2o_socket_use_ktls = 1;
+        break;
+    case 2:
+#if !H2O_USE_MSG_ZEROCOPY
+        h2o_configurator_errprintf(cmd, node, "SO_ZEROCOPY is not available");
+        return -1;
+#endif
+#if H2O_USE_FUSION
+        if (ptls_fusion_is_supported_by_cpu()) {
+            h2o_socket_use_ktls = 0;
+            conf.ssl_zerocopy = 1;
+            break;
+        }
+#endif
+        h2o_configurator_errprintf(cmd, node, "zerocopy cannot be used, as non-temporal aes-gcm engine is unavailable");
+        return -1;
+    default:
+        return -1;
+    }
+
+    return 0;
 }
 
 static yoml_t *load_config(yoml_parse_args_t *parse_args, yoml_t *source)
@@ -2697,6 +2748,7 @@ static uint8_t *encode_quic_address(uint8_t *dst, quicly_address_t *addr)
         break;
     case AF_UNSPEC:
         *dst++ = 0;
+        break;
     default:
         h2o_fatal("unknown protocol family");
         break;
@@ -2895,6 +2947,14 @@ static void on_socketclose(void *data)
     num_connections(-1);
 }
 
+static void close_idle_connections(h2o_context_t *ctx)
+{
+    int excess_connections = num_connections(0) - conf.soft_connection_limit;
+    if (excess_connections > 0) {
+        h2o_context_close_idle_connections(ctx, excess_connections / conf.thread_map.size,
+                                           conf.soft_connection_limit_min_age * 1000);
+    }
+}
 static void on_accept(h2o_socket_t *listener, const char *err)
 {
     struct listener_ctx_t *ctx = listener->data;
@@ -2908,6 +2968,8 @@ static void on_accept(h2o_socket_t *listener, const char *err)
 
     do {
         h2o_socket_t *sock;
+        close_idle_connections(ctx->accept_ctx.ctx);
+
         if (num_connections(1) >= conf.max_connections) {
             /* The accepting socket is disactivated before entering the next in `run_loop`.
              * Note: it is possible that the server would accept at most `max_connections + num_threads` connections, since the
@@ -2980,6 +3042,9 @@ static int validate_token(h2o_http3_server_ctx_t *ctx, struct sockaddr *remote, 
 static h2o_quic_conn_t *on_http3_accept(h2o_quic_ctx_t *_ctx, quicly_address_t *destaddr, quicly_address_t *srcaddr,
                                         quicly_decoded_packet_t *packet)
 {
+    h2o_http3_server_ctx_t *ctx = (void *)_ctx;
+    close_idle_connections(ctx->accept_ctx->ctx);
+
     /* adjust number of connections, or drop the incoming packet when handling too many connections */
     if (num_connections(1) >= conf.max_connections) {
         num_connections(-1);
@@ -2991,7 +3056,6 @@ static h2o_quic_conn_t *on_http3_accept(h2o_quic_ctx_t *_ctx, quicly_address_t *
         return NULL;
     }
 
-    h2o_http3_server_ctx_t *ctx = (void *)_ctx;
     struct init_ebpf_key_info_t ebpf_key_info = {
         .local = &destaddr->sa,
         .remote = &srcaddr->sa,
@@ -3223,11 +3287,10 @@ static void *run_loop(void *_thread_index)
         h2o_filecache_clear(conf.threads[thread_index].ctx.filecache);
         if (h2o_now(conf.threads[thread_index].ctx.loop) >= next_buffer_gc_at) {
             h2o_buffer_clear_recycle(0);
-            h2o_mem_clear_recycle(&h2o_socket_ssl_buffer_allocator, 0);
+            h2o_socket_clear_recycle(0);
             next_buffer_gc_at = UINT64_MAX;
         }
-        if (next_buffer_gc_at == UINT64_MAX &&
-            (!h2o_buffer_recycle_is_empty() || !h2o_mem_recycle_is_empty(&h2o_socket_ssl_buffer_allocator)))
+        if (next_buffer_gc_at == UINT64_MAX && (!h2o_buffer_recycle_is_empty() || !h2o_socket_recycle_is_empty()))
             next_buffer_gc_at = h2o_now(conf.threads[thread_index].ctx.loop) + 1000;
     }
 
@@ -3422,11 +3485,14 @@ static h2o_iovec_t on_extra_status(void *unused, h2o_globalconf_t *_conf, h2o_re
                        " \"generation\": %s,\n"
                        " \"connections\": %d,\n"
                        " \"max-connections\": %d,\n"
+                       " \"soft-connection-limit\": %d,\n"
+                       " \"soft-connection-limit.min-age\": %d,\n"
                        " \"listeners\": %zu,\n"
                        " \"worker-threads\": %zu,\n"
                        " \"num-sessions\": %lu",
                        OpenSSL_version(OPENSSL_VERSION), current_time, restart_time, (uint64_t)(now - conf.launch_time), generation,
-                       num_connections(0), conf.max_connections, conf.num_listeners, conf.thread_map.size, num_sessions(0));
+                       num_connections(0), conf.max_connections, conf.soft_connection_limit, conf.soft_connection_limit_min_age,
+                       conf.num_listeners, conf.thread_map.size, num_sessions(0));
     assert(ret.len < BUFSIZE);
 
 #if JEMALLOC_STATS == 1
@@ -3517,6 +3583,9 @@ static void setup_configurators(void)
                                         on_config_error_log);
         h2o_configurator_define_command(c, "max-connections", H2O_CONFIGURATOR_FLAG_GLOBAL, on_config_max_connections);
         h2o_configurator_define_command(c, "max-quic-connections", H2O_CONFIGURATOR_FLAG_GLOBAL, on_config_max_quic_connections);
+        h2o_configurator_define_command(c, "soft-connection-limit", H2O_CONFIGURATOR_FLAG_GLOBAL, on_config_soft_connection_limit);
+        h2o_configurator_define_command(c, "soft-connection-limit.min-age", H2O_CONFIGURATOR_FLAG_GLOBAL,
+                                        on_config_soft_connection_limit_min_age);
         h2o_configurator_define_command(c, "num-threads", H2O_CONFIGURATOR_FLAG_GLOBAL, on_config_num_threads);
         h2o_configurator_define_command(c, "num-quic-threads", H2O_CONFIGURATOR_FLAG_GLOBAL, on_config_num_quic_threads);
         h2o_configurator_define_command(c, "num-name-resolution-threads", H2O_CONFIGURATOR_FLAG_GLOBAL,
@@ -3540,8 +3609,8 @@ static void setup_configurators(void)
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_crash_handler_wait_pipe_close);
         h2o_configurator_define_command(c, "tcp-reuseport", H2O_CONFIGURATOR_FLAG_GLOBAL, on_tcp_reuseport);
-        h2o_configurator_define_command(c, "tls-offload", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
-                                        on_config_tls_offload);
+        h2o_configurator_define_command(c, "ssl-offload", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                        on_config_ssl_offload);
     }
 
     h2o_access_log_register_configurator(&conf.globalconf);
@@ -3705,6 +3774,9 @@ int main(int argc, char **argv)
 #if H2O_USE_FUSION
                 printf("fusion: YES\n");
 #endif
+#if H2O_USE_MSG_ZEROCOPY
+                printf("ssl-zerocopy: YES\n");
+#endif
 #if H2O_USE_KTLS
                 printf("ktls: YES\n");
 #endif
@@ -3775,12 +3847,11 @@ int main(int argc, char **argv)
             exit(EX_CONFIG);
         if (h2o_configurator_apply(&conf.globalconf, yoml, conf.run_mode != RUN_MODE_WORKER) != 0)
             exit(EX_CONFIG);
-
         dispose_resolve_tag_arg(&resolve_tag_arg);
         yoml_free(yoml, NULL);
     }
 
-    {
+    { /* test if temporary files can be created */
         int fd = h2o_file_mktemp(h2o_socket_buffer_mmap_settings.fn_template);
         if (fd == -1) {
             fprintf(stderr, "temp-buffer-path: failed to create temporary file from the mkstemp(3) template '%s': %s\n",
@@ -3789,6 +3860,30 @@ int main(int argc, char **argv)
         }
         close(fd);
     }
+
+#if H2O_USE_FUSION
+    /* Swap aes-gcm cipher suites of TLS-over-TCP listeners to non-temporal aesgcm engine, if it is to be used. */
+    if (conf.ssl_zerocopy) {
+        static ptls_cipher_suite_t aes128gcmsha256 = {PTLS_CIPHER_SUITE_AES_128_GCM_SHA256, &ptls_non_temporal_aes128gcm,
+                                                      &ptls_openssl_sha256},
+                                   aes256gcmsha384 = {PTLS_CIPHER_SUITE_AES_256_GCM_SHA384, &ptls_non_temporal_aes256gcm,
+                                                      &ptls_openssl_sha384},
+                                   *non_temporal_all[] = {&aes128gcmsha256, &aes256gcmsha384, NULL};
+        for (size_t listener_index = 0; listener_index != conf.num_listeners; ++listener_index) {
+            struct listener_config_t *listener = conf.listeners[listener_index];
+            if (listener->quic.ctx == NULL) {
+                for (size_t ssl_index = 0; ssl_index != listener->ssl.size; ++ssl_index) {
+                    struct listener_ssl_config_t *ssl = listener->ssl.entries[ssl_index];
+                    for (struct listener_ssl_identity_t *identity = ssl->identities; identity->certificate_file != NULL;
+                         ++identity) {
+                        if (identity->ptls != NULL)
+                            identity->ptls->cipher_suites = replace_ciphersuites(identity->ptls->cipher_suites, non_temporal_all);
+                    }
+                }
+            }
+        }
+    }
+#endif
 
     /* calculate defaults (note: open file cached is purged once every loop) */
     conf.globalconf.filecache.capacity = conf.globalconf.http2.max_concurrent_requests_per_connection * 2;
@@ -3843,10 +3938,9 @@ int main(int argc, char **argv)
         conf.error_log = NULL;
     }
 
-    {
+    { /* raise RLIMIT_NOFILE, making sure that we can reach max_connections */
         struct rlimit limit = {0};
         if (getrlimit(RLIMIT_NOFILE, &limit) == 0) {
-            /* raise RLIMIT_NOFILE, making sure that we can reach max_connections */
             if (conf.max_connections > limit.rlim_max) {
                 fprintf(stderr, "[error] 'max-connections'=[%d] configuration value should not exceed the hard limit of file "
                                 "descriptors 'RLIMIT_NOFILE'=[%llu]\n",
@@ -3867,6 +3961,32 @@ int main(int argc, char **argv)
             fprintf(stderr, "[warning] getrlimit(RLIMIT_NOFILE) failed:%s\n", strerror(errno));
         }
     }
+
+    /* Raise RLIMIT_MEMLOCK when zerocopy is to be used, or emit an warning if it is capped and cannot be raised. */
+#if H2O_USE_MSG_ZEROCOPY
+    if (conf.ssl_zerocopy) {
+        struct rlimit limit = {0};
+        if (getuid() == 0) {
+            limit.rlim_cur = RLIM_INFINITY;
+            limit.rlim_max = RLIM_INFINITY;
+            if (setrlimit(RLIMIT_MEMLOCK, &limit) != 0) {
+                fprintf(stderr, "[error] failed to raise RLIMIT_MEMLOCK:%s\n", strerror(errno));
+                return EX_CONFIG;
+            }
+            fprintf(stderr, "[INFO] raised RLIMIT_MEMLOCK to unlimited\n");
+        } else {
+            if (getrlimit(RLIMIT_MEMLOCK, &limit) != 0) {
+                fprintf(stderr, "[error] getrlimit(RLIMIT_MEMLOCK) failed:%s\n", strerror(errno));
+                return EX_CONFIG;
+            }
+            if (limit.rlim_cur != RLIM_INFINITY)
+                fprintf(stderr,
+                        "[warning] Beaware of the possibility of running out of locked pages. Even though MSG_ZEROCOPY is enabled, "
+                        "RLIMIT_MEMLOCK is set to %zu bytes, and cannot be raised due to lack of root privileges.\n",
+                        (size_t)limit.rlim_cur);
+        }
+    }
+#endif
 
     setup_signal_handlers();
     if (conf.globalconf.usdt_selective_tracing && !h2o_socket_ebpf_setup()) {

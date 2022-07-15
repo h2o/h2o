@@ -28,6 +28,9 @@ extern "C" {
 
 #include <stdint.h>
 #include <sys/socket.h>
+#ifdef __linux__
+#include <linux/errqueue.h>
+#endif
 #include <openssl/ssl.h>
 #include <openssl/opensslconf.h>
 #include "picotls.h"
@@ -43,6 +46,10 @@ extern "C" {
 #else
 #define H2O_USE_LIBUV 1
 #endif
+#endif
+
+#if defined(SO_ZEROCOPY) && defined(SO_EE_ORIGIN_ZEROCOPY)
+#define H2O_USE_MSG_ZEROCOPY 1
 #endif
 
 #if OPENSSL_VERSION_NUMBER >= 0x10002000L
@@ -200,6 +207,7 @@ struct st_h2o_socket_t {
         size_t suggested_tls_payload_size; /* suggested TLS record payload size, or SIZE_MAX when no need to restrict */
         size_t suggested_write_size;       /* SIZE_MAX if no need to optimize for latency */
     } _latency_optimization;
+    struct st_h2o_socket_zerocopy_buffers_t *_zerocopy;
 };
 
 typedef struct st_h2o_socket_export_t {
@@ -477,6 +485,15 @@ void h2o_sendvec_init_raw(h2o_sendvec_t *vec, const void *base, size_t len);
  *
  */
 int h2o_sendvec_read_raw(h2o_sendvec_t *vec, void *dst, size_t len);
+
+/**
+ * GC resources
+ */
+void h2o_socket_clear_recycle(int full);
+/**
+ *
+ */
+int h2o_socket_recycle_is_empty(void);
 
 /**
  * This is a thin wrapper around sendfile (2) that hides the differences between various OS implementations.

@@ -3,7 +3,9 @@
 :top
 shift
 if "%0" equ "" goto :eof
+if "%0" equ "--cc" goto cc
 if "%0" equ "--cflags" goto cflags
+if "%0" equ "--ld" goto ld
 if "%0" equ "--ldflags" goto ldflags
 if "%0" equ "--ldflags-before-libs" goto ldflagsbeforelibs
 if "%0" equ "--libs" goto libs
@@ -12,8 +14,16 @@ if "%0" equ "--help" goto showhelp
 echo Invalid Option
 goto :eof
 
+:cc
+echo MRUBY_CC
+goto top
+
 :cflags
 echo MRUBY_CFLAGS
+goto top
+
+:ld
+echo MRUBY_LD
 goto top
 
 :libs
@@ -35,7 +45,9 @@ goto top
 :showhelp
 echo Usage: mruby-config [switches]
 echo   switches:
+echo   --cc                       print compiler name
 echo   --cflags                   print flags passed to compiler
+echo   --ld                       print linker name
 echo   --ldflags                  print flags passed to linker
 echo   --ldflags-before-libs      print flags passed to linker before linked libraries
 echo   --libs                     print linked libraries

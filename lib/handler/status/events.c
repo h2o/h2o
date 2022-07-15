@@ -37,6 +37,12 @@ struct st_events_status_ctx_t {
         uint64_t packet_forwarded;
         uint64_t forwarded_packet_received;
     } http3;
+    struct {
+        uint64_t idle_closed;
+        uint64_t num_idle;
+        uint64_t num_active;
+        uint64_t num_shutdown;
+    } connection_stats;
     h2o_quic_stats_t quic_stats;
     pthread_mutex_t mutex;
 };
@@ -63,6 +69,10 @@ static void events_status_per_thread(void *priv, h2o_context_t *ctx)
     esc->h1_request_io_timeout += ctx->http1.events.request_io_timeouts;
     esc->http3.packet_forwarded += ctx->http3.events.packet_forwarded;
     esc->http3.forwarded_packet_received += ctx->http3.events.forwarded_packet_received;
+    esc->connection_stats.idle_closed += ctx->connection_stats.idle_closed;
+    esc->connection_stats.num_idle += ctx->_conns.num_conns.idle;
+    esc->connection_stats.num_active += ctx->_conns.num_conns.active;
+    esc->connection_stats.num_shutdown += ctx->_conns.num_conns.shutdown;
     esc->quic_stats.packet_received += ctx->quic_stats.packet_received;
     esc->quic_stats.packet_processed += ctx->quic_stats.packet_processed;
 #define ACC(fld, _unused) esc->quic_stats.quicly.fld += ctx->quic_stats.quicly.fld;
@@ -125,6 +135,10 @@ static h2o_iovec_t events_status_final(void *priv, h2o_globalconf_t *gconf, h2o_
                                           " \"http2.streaming-requests\": %" PRIu64 ",\n"
                                           " \"http3.packet-forwarded\": %" PRIu64 ",\n"
                                           " \"http3.forwarded-packet-received\": %" PRIu64 ",\n"
+                                          " \"connections.idle-closed\": %" PRIu64 ",\n"
+                                          " \"connections.idle\": %" PRIu64 ",\n"
+                                          " \"connections.active\": %" PRIu64 ",\n"
+                                          " \"connections.shutdown\": %" PRIu64 ",\n"
                                           " \"quic.packet-received\": %" PRIu64 ",\n"
                                           " \"quic.packet-processed\": %" PRIu64
                                           ",\n" H2O_QUIC_AGGREGATED_STATS_APPLY(QUIC_FMT) " \"ssl.errors\": %" PRIu64 ",\n"
@@ -135,7 +149,9 @@ static h2o_iovec_t events_status_final(void *priv, h2o_globalconf_t *gconf, h2o_
                        H2_AGG_ERR(STREAM_CLOSED), H2_AGG_ERR(FRAME_SIZE), H2_AGG_ERR(REFUSED_STREAM), H2_AGG_ERR(CANCEL),
                        H2_AGG_ERR(COMPRESSION), H2_AGG_ERR(CONNECT), H2_AGG_ERR(ENHANCE_YOUR_CALM), H2_AGG_ERR(INADEQUATE_SECURITY),
                        esc->h2_read_closed, esc->h2_write_closed, esc->h2_idle_timeout, esc->h2_streaming_requests,
-                       esc->http3.packet_forwarded, esc->http3.forwarded_packet_received, esc->quic_stats.packet_received, esc->quic_stats.packet_processed
+                       esc->http3.packet_forwarded, esc->http3.forwarded_packet_received,
+                       esc->connection_stats.idle_closed, esc->connection_stats.num_idle, esc->connection_stats.num_active, esc->connection_stats.num_shutdown,
+                       esc->quic_stats.packet_received, esc->quic_stats.packet_processed
                        H2O_QUIC_AGGREGATED_STATS_APPLY(QUIC_VAL),
                        esc->ssl_errors, h2o_mmap_errors);
     /* clang-format on */

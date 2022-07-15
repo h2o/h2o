@@ -35,8 +35,16 @@ ossl1.1.1:
 		BUILD_ARGS='$(BUILD_ARGS)' \
 		TEST_ENV='$(TEST_ENV)'
 
+ossl3.0:
+	docker run $(DOCKER_RUN_OPTS) h2oserver/h2o-ci:ubuntu2204 \
+		env DTRACE_TESTS=1 \
+		make -f $(SRC_DIR).ro/misc/docker-ci/check.mk _check \
+		BUILD_ARGS='$(BUILD_ARGS)' \
+		TEST_ENV='$(TEST_ENV)'
+
 dtrace+asan:
-	docker run $(DOCKER_RUN_OPTS) h2oserver/h2o-ci:ubuntu2004-canary  \
+	docker run $(DOCKER_RUN_OPTS) h2oserver/h2o-ci:ubuntu2004 \
+		env DTRACE_TESTS=1 \
 		make -f $(SRC_DIR).ro/misc/docker-ci/check.mk _check \
 		CMAKE_ARGS='-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_FLAGS=-fsanitize=address -DCMAKE_CXX_FLAGS=-fsanitize=address' \
 		BUILD_ARGS='$(BUILD_ARGS)' \
@@ -46,7 +54,7 @@ dtrace+asan:
 coverage:
 	docker run $(DOCKER_RUN_OPTS) h2oserver/h2o-ci:ubuntu2004-canary  \
 		make -f $(SRC_DIR).ro/misc/docker-ci/check.mk _check _coverage_report \
-		CMAKE_ARGS='-DCMAKE_C_COMPILER=clang-14 -DCMAKE_CXX_COMPILER=clang++-14 -DCMAKE_C_FLAGS="-fprofile-instr-generate -fcoverage-mapping -mllvm -runtime-counter-relocation" -DCMAKE_CXX_FLAGS= -DCMAKE_BUILD_TYPE=Debug' \
+		CMAKE_ARGS='-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++- -DCMAKE_C_FLAGS="-fprofile-instr-generate -fcoverage-mapping -mllvm -runtime-counter-relocation" -DCMAKE_CXX_FLAGS= -DCMAKE_BUILD_TYPE=Debug' \
 		BUILD_ARGS='$(BUILD_ARGS)' \
 		TEST_ENV='LLVM_PROFILE_FILE=/home/ci/profraw/%c%p.profraw DTRACE_TESTS=0 $(TEST_ENV)'
 
@@ -70,12 +78,15 @@ _mount:
 	sudo mount -t overlay overlay -o lowerdir=$(SRC_DIR).ro,upperdir=/tmp/src/upper,workdir=/tmp/src/work /tmp/src/upper
 	sudo mount --bind /tmp/src/upper $(SRC_DIR)
 	# allow overwrite of include/h2o/version.h
-	sudo chown ci:ci $(SRC_DIR)/include/h2o
+	sudo chown -R ci:ci $(SRC_DIR)/include/h2o
+	# allow taking lock: mruby_config.rb.lock (which might or might not exist)
+	sudo touch $(SRC_DIR)/misc/mruby_config.rb.lock $(SRC_DIR)/misc/h2get/misc/mruby_config.rb.lock
+	sudo chown ci:ci $(SRC_DIR)/misc/mruby_config.rb.lock $(SRC_DIR)/misc/h2get/misc/mruby_config.rb.lock
 	# allow write of mruby executables being generated (FIXME don't generate here)
-	for i in deps/mruby/bin misc/h2get/deps/mruby-1.2.0/bin; do \
+	for i in deps/mruby/bin misc/h2get/deps/mruby/bin; do \
 		sudo rm -rf $(SRC_DIR)/$$i; \
 		sudo mkdir $(SRC_DIR)/$$i; \
-		sudo chown ci:ci $(SRC_DIR)/$$i; \
+		sudo chown -R ci:ci $(SRC_DIR)/$$i; \
 	done
 
 _do_check:

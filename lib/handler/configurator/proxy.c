@@ -483,18 +483,18 @@ static int on_config_emit_missing_date_header(h2o_configurator_command_t *cmd, h
     return 0;
 }
 
-static int on_config_zero_copy(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+static int on_config_zerocopy(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     ssize_t ret = h2o_configurator_get_one_of(cmd, node, "OFF,ON,ALWAYS");
     switch (ret) {
     case 0:
-        ctx->globalconf->proxy.zero_copy = H2O_PROXY_ZERO_COPY_DISABLED;
+        ctx->globalconf->proxy.zerocopy = H2O_PROXY_ZEROCOPY_DISABLED;
         break;
     case 1:
-        ctx->globalconf->proxy.zero_copy = H2O_PROXY_ZERO_COPY_ENABLED;
+        ctx->globalconf->proxy.zerocopy = H2O_PROXY_ZEROCOPY_ENABLED;
         break;
     case 2:
-        ctx->globalconf->proxy.zero_copy = H2O_PROXY_ZERO_COPY_ALWAYS;
+        ctx->globalconf->proxy.zerocopy = H2O_PROXY_ZEROCOPY_ALWAYS;
         break;
     default:
         return -1;
@@ -713,8 +713,8 @@ void h2o_proxy_register_configurator(h2o_globalconf_t *conf)
     h2o_configurator_define_command(&c->super, "proxy.emit-missing-date-header",
                                     H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                     on_config_emit_missing_date_header);
-    h2o_configurator_define_command(&c->super, "proxy.zero-copy",
-                                    H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR, on_config_zero_copy);
+    h2o_configurator_define_command(&c->super, "proxy.zerocopy", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                    on_config_zerocopy);
     h2o_configurator_define_headers_commands(conf, &c->super, "proxy.header", get_headers_commands);
     h2o_configurator_define_command(&c->super, "proxy.max-buffer-size",
                                     H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,

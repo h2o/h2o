@@ -70,7 +70,7 @@ sub bindir {
 
 sub run_as_root {
     return if $< == 0;
-    exec qw(sudo -E env PERL5LIB=.), "PATH=$ENV{PATH}", $^X, $0;
+    exec qw(sudo -E env PERL5LIB=.), "PATH=$ENV{PATH}", $^X, $0, @ARGV;
     die "failed to invoke $0 using sudo:$!";
 }
 
@@ -295,7 +295,8 @@ sub spawn_h2o_raw {
     $conf = "num-threads: 2\n$conf" unless $conf =~ /^num-threads:/m;
 
     my ($conffh, $conffn) = tempfile(UNLINK => 1);
-    print $conffh $conf;
+    print $conffh $conf or confess("failed to write to $conffn: $!");
+    $conffh->flush or confess("failed to write to $conffn: $!");
     Test::More::diag($conf) if $ENV{TEST_DEBUG};
 
     # spawn the server
