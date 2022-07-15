@@ -3341,13 +3341,13 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
     }
     h2o_context_request_shutdown(&conf.threads[thread_index].ctx);
 
-    /* Wait until all the connection gets closed. At least one worker thread that closed the last connection, turning
-     * `num_connections(0)`to zero, will exit from this loop. That worker threads does the cleanup. Other worker threads might get
-     * stuck, as `h2o_evloop_run` does not return when a different worker thread closes a connection. */
+    /* Wait until all the connections get closed. At least one worker thread that closed the last connection, turning
+     * `num_connections(0)` to zero, will exit from this loop. Other worker threads might get stuck, as `h2o_evloop_run` does not
+     * return when a different worker thread closes a connection. */
     while (num_connections(0) != 0)
         h2o_evloop_run(conf.threads[thread_index].ctx.loop, INT32_MAX);
 
-    /* Take a lock so that only one thread does the cleanup. */
+    /* More than one thread might reach here; take a lock so that the first thread does the cleanup. */
     static pthread_mutex_t cleanup_lock = PTHREAD_MUTEX_INITIALIZER;
     pthread_mutex_lock(&cleanup_lock);
 
