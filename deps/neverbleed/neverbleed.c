@@ -32,13 +32,20 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#ifdef __linux__
-#include <sys/prctl.h>
-#endif
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <sys/uio.h>
 #include <unistd.h>
+#include <signal.h>
+#if defined(__linux__)
+#include <sys/prctl.h>
+#elif defined(__APPLE__)
+#include <sys/ptrace.h>
+#elif defined(__FreeBSD__)
+#include <sys/procctl.h>
+#elif defined(__sun)
+#include <priv.h>
+#endif
 
 #include <openssl/opensslconf.h>
 #include <openssl/opensslv.h>
@@ -227,7 +234,7 @@ static void expbuf_reserve(struct expbuf_t *buf, size_t extra)
         buf->capacity *= 2;
     if ((n = realloc(buf->buf, buf->capacity)) == NULL)
         dief("realloc failed");
-    buf->start = n + (buf->start - buf->end);
+    buf->start = n + (buf->start - buf->buf);
     buf->end = n + (buf->end - buf->buf);
     buf->buf = n;
 }
@@ -1069,7 +1076,7 @@ static int load_key_stub(struct expbuf_t *buf)
         const EC_POINT *ec_pubkey;
         EC_KEY *ec_key;
 
-        ec_key = EVP_PKEY_get0_EC_KEY(pkey);
+        ec_key = (EC_KEY *)EVP_PKEY_get0_EC_KEY(pkey);
         type = NEVERBLEED_TYPE_ECDSA;
         key_index = daemon_set_ecdsa(ec_key);
         ec_group = EC_KEY_get0_group(ec_key);
@@ -1425,6 +1432,16 @@ __attribute__((noreturn)) static void daemon_main(int listen_fd, int close_notif
     }
 }
 
+static void set_signal_handler(int signo, void (*cb)(int signo))
+{
+    struct sigaction action;
+
+    memset(&action, 0, sizeof(action));
+    sigemptyset(&action.sa_mask);
+    action.sa_handler = cb;
+    sigaction(signo, &action, NULL);
+}
+
 #ifndef NEVERBLEED_OPAQUE_RSA_METHOD
 
 static RSA_METHOD static_rsa_method = {
@@ -1522,9 +1539,18 @@ int neverbleed_init(neverbleed_t *nb, char *errbuf)
         goto Fail;
     case 0:
         close(pipe_fds[1]);
-#ifdef __linux__
+#if defined(__linux__)
         prctl(PR_SET_DUMPABLE, 0, 0, 0, 0);
+        prctl(PR_SET_PDEATHSIG, SIGTERM);
+#elif defined(__FreeBSD__)
+        int dumpable = PROC_TRACE_CTL_DISABLE;
+        procctl(P_PID, 0, PROC_TRACE_CTL, &dumpable);
+#elif defined(__sun)
+        setpflags(__PROC_PROTECT, 1);
+#elif defined(__APPLE__)
+        ptrace(PT_DENY_ATTACH, 0, 0, 0);
 #endif
+        set_signal_handler(SIGTERM, SIG_IGN);
         if (neverbleed_post_fork_cb != NULL)
             neverbleed_post_fork_cb();
         daemon_vars.nb = nb;

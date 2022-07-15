@@ -2775,6 +2775,7 @@ static uint8_t *encode_quic_address(uint8_t *dst, quicly_address_t *addr)
         break;
     case AF_UNSPEC:
         *dst++ = 0;
+        break;
     default:
         h2o_fatal("unknown protocol family");
         break;
