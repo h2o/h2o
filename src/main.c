@@ -3322,8 +3322,12 @@ static void *run_loop(void *_thread_index)
             next_buffer_gc_at = h2o_now(conf.threads[thread_index].ctx.loop) + 1000;
     }
 
+    fprintf(stderr, "%s:%d:%zu\n", __FUNCTION__, __LINE__, thread_index);
+
     if (thread_index == 0)
         fprintf(stderr, "received SIGTERM, gracefully shutting down\n");
+
+    fprintf(stderr, "%s:%d:%zu\n", __FUNCTION__, __LINE__, thread_index);
 
     /* shutdown requested, unregister, close the listeners and notify the protocol handlers */
     for (i = 0; i != conf.num_listeners; ++i) {
@@ -3341,9 +3345,15 @@ static void *run_loop(void *_thread_index)
     }
     h2o_context_request_shutdown(&conf.threads[thread_index].ctx);
 
+    fprintf(stderr, "%s:%d:%zu\n", __FUNCTION__, __LINE__, thread_index);
+
     /* wait until all the connection gets closed */
-    while (num_connections(0) != 0)
+    while (num_connections(0) != 0) {
+        fprintf(stderr, "%s:%d:%zu\n", __FUNCTION__, __LINE__, thread_index);
         h2o_evloop_run(conf.threads[thread_index].ctx.loop, INT32_MAX);
+    }
+
+    fprintf(stderr, "%s:%d:%zu\n", __FUNCTION__, __LINE__, thread_index);
 
     return NULL;
 }
@@ -4145,6 +4155,7 @@ int main(int argc, char **argv)
 
     /* wait for all threads to exit */
     for (size_t i = 1; i != conf.thread_map.size; ++i) {
+        fprintf(stderr, "%s:%d:%zu\n", __FUNCTION__, __LINE__, i);
         if (pthread_join(tids[i], NULL) != 0) {
             char errbuf[256];
             h2o_fatal("pthread_join: %s", h2o_strerror_r(errno, errbuf, sizeof(errbuf)));
