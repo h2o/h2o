@@ -3205,7 +3205,7 @@ static void on_server_notification(h2o_multithread_receiver_t *receiver, h2o_lin
     }
 }
 
-static void *run_loop(void *_thread_index)
+H2O_NORETURN static void *run_loop(void *_thread_index)
 {
     thread_index = (size_t)_thread_index;
     struct listener_ctx_t *listeners = alloca(sizeof(*listeners) * conf.num_listeners);
@@ -3345,7 +3345,18 @@ static void *run_loop(void *_thread_index)
     while (num_connections(0) != 0)
         h2o_evloop_run(conf.threads[thread_index].ctx.loop, INT32_MAX);
 
-    return NULL;
+    /* the process that detects num_connections becoming zero performs the last cleanup */
+    if (conf.pid_file != NULL)
+        unlink(conf.pid_file);
+
+    /* remove the pid file */
+    if (conf.pid_file != NULL)
+        unlink(conf.pid_file);
+
+    /* Use `_exit` to prevent functions registered via `atexit` from being invoked, otherwise we might see some threads die while
+     * trying to use whatever state that are cleaned up. Specifically, we see the ticket updater thread dying inside RAND_bytes,
+     * while or after `OpenSSL_cleanup` is invoked as an atexit callback. */
+    _exit(0);
 }
 
 static char **build_server_starter_argv(const char *h2o_cmd, const char *config_file)
@@ -4136,27 +4147,15 @@ int main(int argc, char **argv)
 
     /* start the threads */
     conf.threads = alloca(sizeof(conf.threads[0]) * conf.thread_map.size);
-    pthread_t *tids = alloca(sizeof(*tids) * conf.thread_map.size);
-    for (size_t i = 1; i != conf.thread_map.size; ++i)
-        h2o_multithread_create_thread(&tids[i], NULL, run_loop, (void *)i);
+    size_t i;
+    for (i = 1; i != conf.thread_map.size; ++i) {
+        pthread_t tid;
+        h2o_multithread_create_thread(&tid, NULL, run_loop, (void *)i);
+    }
 
     /* this thread becomes the first thread */
     run_loop((void *)0);
 
-    /* wait for all threads to exit */
-    for (size_t i = 1; i != conf.thread_map.size; ++i) {
-        if (pthread_join(tids[i], NULL) != 0) {
-            char errbuf[256];
-            h2o_fatal("pthread_join: %s", h2o_strerror_r(errno, errbuf, sizeof(errbuf)));
-        }
-    }
-
-    /* remove the pid file */
-    if (conf.pid_file != NULL)
-        unlink(conf.pid_file);
-
-    /* Use `_exit` to prevent functions registered via `atexit` from being invoked, otherwise we might see some threads die while
-     * trying to use whatever state that are cleaned up. Specifically, we see the ticket updater thread dying inside RAND_bytes,
-     * while or after `OpenSSL_cleanup` is invoked as an atexit callback. */
-    _exit(0);
+    /* notreached */
+    return 0;
 }
