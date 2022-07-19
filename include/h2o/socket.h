@@ -208,6 +208,10 @@ struct st_h2o_socket_t {
         size_t suggested_write_size;       /* SIZE_MAX if no need to optimize for latency */
     } _latency_optimization;
     struct st_h2o_socket_zerocopy_buffers_t *_zerocopy;
+    struct {
+        int enabled;
+        void *data;
+    } async;
 };
 
 typedef struct st_h2o_socket_export_t {

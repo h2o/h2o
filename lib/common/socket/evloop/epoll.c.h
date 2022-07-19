@@ -140,7 +140,7 @@ static int update_status(struct st_h2o_evloop_epoll_t *loop)
                     zerocopy_buffers_dispose(sock->super._zerocopy);
                     free(sock->super._zerocopy);
                 }
-                if (sock->fd != -1) {
+                if (sock->fd != -1 && (sock->_flags & H2O_SOCKET_FLAG_DONT_CLOSE) == 0) {
                     if (!delete_from_epoll_on_close(sock))
                         h2o_error_printf("update_status: epoll(DEL) returned error %d (fd=%d)\n", errno, sock->fd);
                     close(sock->fd);

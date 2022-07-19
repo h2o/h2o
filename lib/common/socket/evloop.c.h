@@ -347,7 +347,7 @@ void do_dispose_socket(h2o_socket_t *_sock)
 
     dispose_write_buf(&sock->super);
 
-    sock->_flags = H2O_SOCKET_FLAG_IS_DISPOSED | (sock->_flags & H2O_SOCKET_FLAG__EPOLL_IS_REGISTERED);
+    sock->_flags = H2O_SOCKET_FLAG_IS_DISPOSED | (sock->_flags & H2O_SOCKET_FLAG__EPOLL_IS_REGISTERED) | (sock->_flags & H2O_SOCKET_FLAG_DONT_CLOSE);
 
     /* Give backends chance to do the necessary cleanup, as well as giving them chance to switch to their own disposal method; e.g.,
      * shutdown(SHUT_RDWR) with delays to reclaim all zero copy buffers. */
@@ -355,9 +355,11 @@ void do_dispose_socket(h2o_socket_t *_sock)
         return;
 
     /* immediate close */
-    if (sock->fd != -1) {
-        close(sock->fd);
-        sock->fd = -1;
+    if ((sock->_flags & H2O_SOCKET_FLAG_DONT_CLOSE) == 0) {
+        if (sock->fd != -1) {
+            close(sock->fd);
+            sock->fd = -1;
+        }
     }
     link_to_statechanged(sock);
 }
@@ -645,8 +647,10 @@ static void set_nodelay_if_likely_tcp(int fd, struct sockaddr *sa)
 
 h2o_socket_t *h2o_evloop_socket_create(h2o_evloop_t *loop, int fd, int flags)
 {
-    /* It is the reponsibility of the event loop to modify the properties of a socket for its use (e.g., set O_NONBLOCK). */
-    fcntl(fd, F_SETFL, O_NONBLOCK);
+    if ((flags & H2O_SOCKET_FLAG_DONT_NONBLOCK) == 0) {
+        /* It is the reponsibility of the event loop to modify the properties of a socket for its use (e.g., set O_NONBLOCK). */
+        fcntl(fd, F_SETFL, O_NONBLOCK);
+    }
     set_nodelay_if_likely_tcp(fd, NULL);
 
     return &create_socket(loop, fd, flags)->super;
