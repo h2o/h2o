@@ -198,7 +198,7 @@ subtest "h2olog -A=127.0.0.2", sub {
   };
 
   subtest "with matched IP address", sub {
-    my ($headers) = `curl --interface 127.0.0.2 --head -sSf http://127.0.0.1:$server->{port}/`;
+    my ($headers) = `strace curl --interface 127.0.0.2 --head -sSf http://127.0.0.1:$server->{port}/`;
     like $headers, qr{^HTTP/1\.1 200\b}, "req: HTTP/1.1";
 
     sleep(1);
