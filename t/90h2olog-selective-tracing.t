@@ -217,6 +217,8 @@ subtest "h2olog -A=127.0.0.2", sub {
     is_deeply scalar(grep {
         $_->{type} eq "h1-close"
       } @logs), 1, "h1-close header in logs";
+
+      diag $trace;
   };
 };
 
