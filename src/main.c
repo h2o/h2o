@@ -3205,7 +3205,7 @@ static void on_server_notification(h2o_multithread_receiver_t *receiver, h2o_lin
     }
 }
 
-static void *run_loop(void *_thread_index)
+H2O_NORETURN static void *run_loop(void *_thread_index)
 {
     thread_index = (size_t)_thread_index;
     struct listener_ctx_t *listeners = alloca(sizeof(*listeners) * conf.num_listeners);
@@ -3341,11 +3341,24 @@ static void *run_loop(void *_thread_index)
     }
     h2o_context_request_shutdown(&conf.threads[thread_index].ctx);
 
-    /* wait until all the connection gets closed */
+    /* Wait until all the connections get closed. At least one worker thread that closed the last connection, turning
+     * `num_connections(0)` to zero, will exit from this loop. Other worker threads might get stuck, as `h2o_evloop_run` does not
+     * return when a different worker thread closes a connection. */
     while (num_connections(0) != 0)
         h2o_evloop_run(conf.threads[thread_index].ctx.loop, INT32_MAX);
 
-    return NULL;
+    /* More than one thread might reach here; take a lock so that the first thread does the cleanup. */
+    static pthread_mutex_t cleanup_lock = PTHREAD_MUTEX_INITIALIZER;
+    pthread_mutex_lock(&cleanup_lock);
+
+    /* remove the pid file */
+    if (conf.pid_file != NULL)
+        unlink(conf.pid_file);
+
+    /* Use `_exit` to prevent functions registered via `atexit` from being invoked, otherwise we might see some threads die while
+     * trying to use whatever state that are cleaned up. Specifically, we see the ticket updater thread dying inside RAND_bytes,
+     * while or after `OpenSSL_cleanup` is invoked as an atexit callback. */
+    _exit(0);
 }
 
 static char **build_server_starter_argv(const char *h2o_cmd, const char *config_file)
@@ -3859,7 +3872,7 @@ int main(int argc, char **argv)
         size_t i;
         for (i = 0; i != conf.server_starter.num_fds; ++i)
             set_cloexec(conf.server_starter.fds[i]);
-        conf.server_starter.bound_fd_map = alloca(conf.server_starter.num_fds);
+        conf.server_starter.bound_fd_map = malloc(conf.server_starter.num_fds);
         memset(conf.server_starter.bound_fd_map, 0, conf.server_starter.num_fds);
     }
 
@@ -4135,28 +4148,15 @@ int main(int argc, char **argv)
     }
 
     /* start the threads */
-    conf.threads = alloca(sizeof(conf.threads[0]) * conf.thread_map.size);
-    pthread_t *tids = alloca(sizeof(*tids) * conf.thread_map.size);
-    for (size_t i = 1; i != conf.thread_map.size; ++i)
-        h2o_multithread_create_thread(&tids[i], NULL, run_loop, (void *)i);
+    conf.threads = malloc(sizeof(conf.threads[0]) * conf.thread_map.size);
+    for (size_t i = 1; i != conf.thread_map.size; ++i) {
+        pthread_t tid;
+        h2o_multithread_create_thread(&tid, NULL, run_loop, (void *)i);
+    }
 
     /* this thread becomes the first thread */
     run_loop((void *)0);
 
-    /* wait for all threads to exit */
-    for (size_t i = 1; i != conf.thread_map.size; ++i) {
-        if (pthread_join(tids[i], NULL) != 0) {
-            char errbuf[256];
-            h2o_fatal("pthread_join: %s", h2o_strerror_r(errno, errbuf, sizeof(errbuf)));
-        }
-    }
-
-    /* remove the pid file */
-    if (conf.pid_file != NULL)
-        unlink(conf.pid_file);
-
-    /* Use `_exit` to prevent functions registered via `atexit` from being invoked, otherwise we might see some threads die while
-     * trying to use whatever state that are cleaned up. Specifically, we see the ticket updater thread dying inside RAND_bytes,
-     * while or after `OpenSSL_cleanup` is invoked as an atexit callback. */
-    _exit(0);
+    /* notreached */
+    return 0;
 }
