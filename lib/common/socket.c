@@ -85,7 +85,13 @@ struct st_h2o_socket_ssl_t {
     } offload;
     int *did_write_in_read; /* used for detecting and closing the connection upon renegotiation (FIXME implement renegotiation) */
     size_t record_overhead;
-    uint64_t ossl_last_record_iv; /* UINT64_MAX if not used */
+    struct {
+        uint64_t send_finished_iv; /* UINT64_MAX if not available */
+        struct {
+            uint8_t type;
+            uint16_t length;
+        } last_received[2];
+    } tls12_record_layer;
     struct {
         h2o_socket_cb cb;
         union {
@@ -230,6 +236,13 @@ static int read_bio(BIO *b, char *out, int len)
         return -1;
     }
 
+    if (len == 5 && sock->ssl->input.encrypted->size >= 5) {
+        sock->ssl->tls12_record_layer.last_received[1] = sock->ssl->tls12_record_layer.last_received[0];
+        sock->ssl->tls12_record_layer.last_received[0].type = sock->ssl->input.encrypted->bytes[0];
+        sock->ssl->tls12_record_layer.last_received[0].length =
+            ((sock->ssl->input.encrypted->bytes[3] & 0xff) << 8) | (sock->ssl->input.encrypted->bytes[4] & 0xff);
+    }
+
     if (sock->ssl->input.encrypted->size < len) {
         len = (int)sock->ssl->input.encrypted->size;
     }
@@ -343,9 +356,9 @@ static int write_bio(BIO *b, const char *in, int len)
      * starts with that explicit IV incremented by 1. */
     if (h2o_socket_use_picotls_for_tls12 && len >= 45 && memcmp(in + len - 45, H2O_STRLIT("\x16\x03\x03\x00\x28")) == 0) {
         const uint8_t *p = (const uint8_t *)in + len - 40;
-        sock->ssl->ossl_last_record_iv = quicly_decode64(&p);
+        sock->ssl->tls12_record_layer.send_finished_iv = quicly_decode64(&p);
     } else {
-        sock->ssl->ossl_last_record_iv = UINT64_MAX;
+        sock->ssl->tls12_record_layer.send_finished_iv = UINT64_MAX;
     }
 
     write_ssl_bytes(sock, in, len);
@@ -1394,9 +1407,14 @@ static int switch_to_zerocopy_ptls(h2o_socket_t *sock, uint16_t csid)
     if (*cs == NULL)
         return 0;
 
-    /* AES-GCM ciphers use explicit (i.e., per-record) IV, that are initially selected at-random by OpenSSL. Bail out in case we
-     * failed to record that value. */
-    if ((*cs)->aead->tls12.record_iv_size != 0 && sock->ssl->ossl_last_record_iv == UINT64_MAX)
+    /* The precondition for calling `ptls_build_tl12_export_params` is that we have sent and received only one encrypted record
+     * (i.e., next sequence number is 1). Bail out if that expectation is not met (which is very unlikely in practice). At the same
+     * time, obtain explicit nonce that has been used, if the underlying AEAD uses one. */
+    if (!(sock->ssl->tls12_record_layer.last_received[1].type == 20 /* TLS 1.2 ChangeCipherSpec */ &&
+          sock->ssl->tls12_record_layer.last_received[0].type == 22 /* TLS 1.2 Handshake record */ &&
+          sock->ssl->tls12_record_layer.last_received[0].length == (*cs)->aead->tls12.record_iv_size + 16 + (*cs)->aead->tag_size))
+        return 0;
+    if ((*cs)->aead->tls12.record_iv_size != 0 && sock->ssl->tls12_record_layer.send_finished_iv == UINT64_MAX)
         return 0;
 
     uint8_t master_secret[PTLS_TLS12_MASTER_SECRET_SIZE], hello_randoms[PTLS_HELLO_RANDOM_SIZE * 2], params_smallbuf[128];
@@ -1417,7 +1435,7 @@ static int switch_to_zerocopy_ptls(h2o_socket_t *sock, uint16_t csid)
     /* try to create ptls context */
     h2o_iovec_t negotiated_protocol = h2o_socket_ssl_get_selected_protocol(sock);
     if (ptls_build_tls12_export_params(ptls_ctx, &params, SSL_is_server(sock->ssl->ossl), SSL_session_reused(sock->ssl->ossl), *cs,
-                                       master_secret, hello_randoms, sock->ssl->ossl_last_record_iv + 1,
+                                       master_secret, hello_randoms, sock->ssl->tls12_record_layer.send_finished_iv + 1,
                                        h2o_socket_get_ssl_server_name(sock),
                                        ptls_iovec_init(negotiated_protocol.base, negotiated_protocol.len)) != 0)
         goto Exit;
@@ -1745,8 +1763,8 @@ void h2o_socket_ssl_handshake(h2o_socket_t *sock, SSL_CTX *ssl_ctx, const char *
                               h2o_socket_cb handshake_cb)
 {
     sock->ssl = h2o_mem_alloc(sizeof(*sock->ssl));
-    *sock->ssl =
-        (struct st_h2o_socket_ssl_t){.ssl_ctx = ssl_ctx, .handshake = {.cb = handshake_cb}, .ossl_last_record_iv = UINT64_MAX};
+    *sock->ssl = (struct st_h2o_socket_ssl_t){
+        .ssl_ctx = ssl_ctx, .handshake = {.cb = handshake_cb}, .tls12_record_layer = {.send_finished_iv = UINT64_MAX}};
 #if H2O_USE_KTLS
     /* Set offload state to TBD if kTLS is enabled. Otherwise, remains H2O_SOCKET_SSL_OFFLOAD_OFF. */
     if (h2o_socket_use_ktls)
