@@ -390,44 +390,45 @@ int %s(struct pt_regs *ctx) {
     arg_type = arg['type']
 
     if arg_name in appdata_field_set:
-      c += "  // %s %s (appdata)\n" % (arg_type, arg_name)
+      c += "  { // %s %s (appdata)\n" % (arg_type, arg_name)
     else:
-      c += "  // %s %s\n" % (arg_type, arg_name)
+      c += "  { // %s %s\n" % (arg_type, arg_name)
 
     if is_str_type(arg_type) or is_bin_type(arg_type):
-      c += "  bpf_usdt_readarg(%d, ctx, &buf);\n" % (i+1)
+      c += "    bpf_usdt_readarg(%d, ctx, &buf);\n" % (i+1)
       # Use `sizeof(buf)` instead of a length variable, because older kernels
       # do not accept a variable for `bpf_probe_read()`'s length parameter.
       event_t_name = "%s.%s" % (probe_name, arg_name)
-      c += "  bpf_probe_read(&event.%s, sizeof(event.%s), buf);\n" % (
+      c += "    bpf_probe_read(&event.%s, sizeof(event.%s), buf);\n" % (
           event_t_name, event_t_name)
     elif is_sockaddr(arg_type):
-      c += "  bpf_usdt_readarg(%d, ctx, &buf);\n" % (i+1)
+      c += "    bpf_usdt_readarg(%d, ctx, &buf);\n" % (i+1)
       event_t_name = "%s.%s" % (probe_name, arg_name)
-      c += "  bpf_probe_read(&event.%s, sizeof_sockaddr, buf);\n" % event_t_name
-      c += "  if (get_sockaddr__sa_family(&event.%s) == AF_INET) {\n" % event_t_name
-      c += "    bpf_probe_read(&event.%s, sizeof_sockaddr_in, buf);\n" % event_t_name
-      c += "  } else if (get_sockaddr__sa_family(&event.%s) == AF_INET6) {\n" % event_t_name
-      c += "    bpf_probe_read(&event.%s, sizeof_sockaddr_in6, buf);\n" % event_t_name
-      c += "  }\n"
+      c += "    bpf_probe_read(&event.%s, sizeof_sockaddr, buf);\n" % event_t_name
+      c += "    if (get_sockaddr__sa_family(&event.%s) == AF_INET) {\n" % event_t_name
+      c += "      bpf_probe_read(&event.%s, sizeof_sockaddr_in, buf);\n" % event_t_name
+      c += "    } else if (get_sockaddr__sa_family(&event.%s) == AF_INET6) {\n" % event_t_name
+      c += "      bpf_probe_read(&event.%s, sizeof_sockaddr_in6, buf);\n" % event_t_name
+      c += "    }\n"
     elif is_ptr_type(arg_type):
       st_name = strip_typename(arg_type)
       if st_name in struct_map:
         if struct_map[st_name]:
-          c += "  uint8_t %s[sizeof_%s] = {};\n" % (arg_name, st_name)
-          c += "  bpf_usdt_readarg(%d, ctx, &buf);\n" % (i+1)
-          c += "  bpf_probe_read(&%s, sizeof_%s, buf);\n" % (arg_name, st_name)
+          c += "    uint8_t %s[sizeof_%s] = {};\n" % (arg_name, st_name)
+          c += "    bpf_usdt_readarg(%d, ctx, &buf);\n" % (i+1)
+          c += "    bpf_probe_read(&%s, sizeof_%s, buf);\n" % (arg_name, st_name)
           for st_field_access, st_field_name in struct_map[st_name]:
             event_t_name = "%s.%s_%s" % (probe_name, arg_name, st_field_name or st_field_access)
-            c += "  event.%s = get_%s__%s(%s);\n" % (
+            c += "    event.%s = get_%s__%s(%s);\n" % (
                 event_t_name, st_name, st_field_name or st_field_access, arg_name)
         else:
-          c += "  bpf_usdt_readarg(%d, ctx, &buf);\n" % (i+1)
-          c += "  bpf_probe_read(&event.%s.%s, sizeof_%s, buf);\n" % (probe_name, arg_name, st_name)
+          c += "    bpf_usdt_readarg(%d, ctx, &buf);\n" % (i+1)
+          c += "    bpf_probe_read(&event.%s.%s, sizeof_%s, buf);\n" % (probe_name, arg_name, st_name)
       else:
-        c += "  bpf_usdt_readarg(%d, ctx, &event.%s.%s);\n" % (i + 1, probe_name, arg_name)
+        c += "    bpf_usdt_readarg(%d, ctx, &event.%s.%s);\n" % (i + 1, probe_name, arg_name)
     else:
-      c += "  bpf_usdt_readarg(%d, ctx, &event.%s.%s);\n" % (i + 1, probe_name, arg_name)
+      c += "    bpf_usdt_readarg(%d, ctx, &event.%s.%s);\n" % (i + 1, probe_name, arg_name)
+    c += "  }\n"
   if fully_specified_probe_name == "h2o:send_response_header":
       # handle -s option
     c += r"""

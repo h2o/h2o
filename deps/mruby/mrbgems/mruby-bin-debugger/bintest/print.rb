@@ -1,9 +1,10 @@
 require 'open3'
 require 'tempfile'
+require 'strscan'
 
 class BinTest_MrubyBinDebugger
-  @debug1=false
-  @debug2=true
+#  @debug1=false
+#  @debug2=true
   def self.test(rubysource, testcase)
     script, bin = Tempfile.new(['test', '.rb']), Tempfile.new(['test', '.mrb'])
 
@@ -12,17 +13,27 @@ class BinTest_MrubyBinDebugger
     script.flush
 
     # compile
-    `./bin/mrbc -g -o "#{bin.path}" "#{script.path}"`
+    `#{cmd("mrbc")} -g -o "#{bin.path}" "#{script.path}"`
 
     # add mrdb quit
     testcase << {:cmd=>"quit"}
 
     stdin_data = testcase.map{|t| t[:cmd]}.join("\n") << "\n"
 
-    ["bin/mrdb #{script.path}","bin/mrdb -b #{bin.path}"].each do |cmd|
+    prompt = /^\(#{Regexp.escape(script.path)}:\d+\) /
+    ["#{cmd('mrdb')} #{script.path}", "#{cmd('mrdb')} -b #{bin.path}"].each do |cmd|
       o, s = Open3.capture2(cmd, :stdin_data => stdin_data)
+      scanner = StringScanner.new(o)
+      scanner.skip_until(prompt)
+      testcase.each do |tc|
+        exp = tc[:exp]
+        if exp
+          act = scanner.scan_until(/\n/)
+          break unless assert_operator act, :start_with?, exp
+        end
+        scanner.skip_until(prompt)
+      end
 
-      exp_vals = testcase.map{|t| t.fetch(:exp, nil)}
 =begin
 if @debug1
   o.split("\n").each_with_index do |i,actual|
@@ -41,14 +52,6 @@ end
         assert_true actual.include?(exp) unless exp.nil?
       end
 =end
-      idx = 0
-      exp_vals.each do |exp|
-        next if exp.nil?
-        idx = o.index(exp, idx)
-        assert_false idx.nil?
-        break unless idx
-        idx += 1
-      end
     end
   end
 end
@@ -64,7 +67,7 @@ assert('mruby-bin-debugger(print) invalid arguments') do
   BinTest_MrubyBinDebugger.test(src, tc)
 end
 
-assert('mruby-bin-debugger(print) nomal') do
+assert('mruby-bin-debugger(print) normal') do
   # ruby source
   src = <<"SRC"
 foo = 'foo'
@@ -90,13 +93,13 @@ assert('mruby-bin-debugger(print) error') do
 
   # test case
   tc = []
-  tc << {:cmd=>"p (1+2",  :exp=>'$1 = SyntaxError'}
-  tc << {:cmd=>"p bar",   :exp=>'$2 = (eval):2: undefined method'}
+  tc << {:cmd=>"p (1+2",  :exp=>'$1 = line 1: syntax error'}
+  tc << {:cmd=>"p bar",   :exp=>'$2 = undefined method'}
 
   BinTest_MrubyBinDebugger.test(src, tc)
 end
 
-# Kernel#instance_eval(string) does't work multiple statements.
+# Kernel#instance_eval(string) doesn't work multiple statements.
 =begin
 assert('mruby-bin-debugger(print) multiple statements') do
   # ruby source
@@ -231,7 +234,7 @@ SRC
   BinTest_MrubyBinDebugger.test(src, tc)
 end
 
-assert('mruby-bin-debugger(print) same name:local variabe') do
+assert('mruby-bin-debugger(print) same name:local variable') do
   # ruby source (bp is break point)
   src = <<"SRC"
 lv = 'top'
@@ -261,7 +264,7 @@ SRC
   BinTest_MrubyBinDebugger.test(src, tc)
 end
 
-assert('mruby-bin-debugger(print) same name:instance variabe') do
+assert('mruby-bin-debugger(print) same name:instance variable') do
   # ruby source (bp is break point)
   src = <<"SRC"
 @iv = 'top'
@@ -293,7 +296,7 @@ SRC
   BinTest_MrubyBinDebugger.test(src, tc)
 end
 
-# Kernel#instance_eval(string) does't work const.
+# Kernel#instance_eval(string) doesn't work const.
 =begin
 assert('mruby-bin-debugger(print) same name:const') do
   # ruby source (bp is break point)
@@ -513,7 +516,7 @@ SRC
   tc << {:cmd=>'p a+1',   :exp=>'$1 = 2'}
   tc << {:cmd=>'p 2-b',   :exp=>'$2 = -3'}
   tc << {:cmd=>'p c * 3', :exp=>'$3 = 24'}
-  tc << {:cmd=>'p a/b',   :exp=>'$4 = 0.2'}
+  tc << {:cmd=>'p a/b',   :exp=>'$4 = 0'}
   tc << {:cmd=>'p c%b',   :exp=>'$5 = 3'}
   tc << {:cmd=>'p 2**10', :exp=>'$6 = 1024'}
   tc << {:cmd=>'p ~3',    :exp=>'$7 = -4'}
@@ -588,7 +591,7 @@ SRC
   tc << {:cmd=>'p foo=[foo,bar,baz]', :exp=>'$2 = ["foo", "bar", "baz"]'}
 
   tc << {:cmd=>'p undefined=-1',      :exp=>'$3 = -1'}
-  tc << {:cmd=>'p "#{undefined}"',    :exp=>'$4 = (eval):2: undefined method'}
+  tc << {:cmd=>'p "#{undefined}"',    :exp=>'$4 = undefined method'}
 
   BinTest_MrubyBinDebugger.test(src, tc)
 end
@@ -611,13 +614,13 @@ SRC
   tc << {:cmd=>'p a+=9',   :exp=>'$1 = 10'}
   tc << {:cmd=>'p b-=c',   :exp=>'$2 = 15'}
   tc << {:cmd=>'p bar*=2', :exp=>'$3 = "barbar"'}
-  tc << {:cmd=>'p a/=4',   :exp=>'$4 = 2.5'}
+  tc << {:cmd=>'p a/=4',   :exp=>'$4 = 2'}
   tc << {:cmd=>'p c%=4',   :exp=>'$5 = 2'}
 
   tc << {:cmd=>'p b&=0b0101', :exp=>'$6 = 5'}
   tc << {:cmd=>'p c|=0x10',   :exp=>'$7 = 18'}
 
-  tc << {:cmd=>'p "#{a} #{b} #{c}"',     :exp=>'$8 = "2.5 5 18"'}
+  tc << {:cmd=>'p "#{a} #{b} #{c}"',     :exp=>'$8 = "2 5 18"'}
   tc << {:cmd=>'p "#{foo}#{bar}#{baz}"', :exp=>'$9 = "foobarbarbaz"'}
 
   tc << {:cmd=>'p a,b,c=[10,20,30]',:exp=>'$10 = [10, 20, 30]'}
@@ -626,7 +629,7 @@ SRC
   tc << {:cmd=>'p [a,b]',           :exp=>'$13 = [20, 10]'}
 
   tc << {:cmd=>'p undefined=-1',    :exp=>'$14 = -1'}
-  tc << {:cmd=>'p "#{undefined}"',  :exp=>'$15 = (eval):2: undefined method'}
+  tc << {:cmd=>'p "#{undefined}"',  :exp=>'$15 = undefined method'}
 
   BinTest_MrubyBinDebugger.test(src, tc)
 end
@@ -679,13 +682,13 @@ SRC
   tc << {:cmd=>'p a+=9',   :exp=>'$1 = 10'}
   tc << {:cmd=>'p b-=c',   :exp=>'$2 = 15'}
   tc << {:cmd=>'p bar*=2', :exp=>'$3 = "barbar"'}
-  tc << {:cmd=>'p a/=4',   :exp=>'$4 = 2.5'}
+  tc << {:cmd=>'p a/=4',   :exp=>'$4 = 2'}
   tc << {:cmd=>'p c%=4',   :exp=>'$5 = 2'}
 
   tc << {:cmd=>'p b&=0b0101', :exp=>'$6 = 5'}
   tc << {:cmd=>'p c|=0x10',   :exp=>'$7 = 18'}
 
-  tc << {:cmd=>'p "#{a} #{b} #{c}"',     :exp=>'$8 = "2.5 5 18"'}
+  tc << {:cmd=>'p "#{a} #{b} #{c}"',     :exp=>'$8 = "2 5 18"'}
   tc << {:cmd=>'p "#{foo}#{bar}#{baz}"', :exp=>'$9 = "foobarbarbaz"'}
 
   tc << {:cmd=>'p a,b,c=[10,20,30]',:exp=>'$10 = [10, 20, 30]'}
@@ -694,8 +697,7 @@ SRC
   tc << {:cmd=>'p [a,b]',           :exp=>'$13 = [20, 10]'}
 
   tc << {:cmd=>'p undefined=-1',    :exp=>'$14 = -1'}
-  tc << {:cmd=>'p "#{undefined}"',  :exp=>'$15 = (eval):2: undefined method'}
+  tc << {:cmd=>'p "#{undefined}"',  :exp=>'$15 = undefined method'}
 
   BinTest_MrubyBinDebugger.test(src, tc)
 end
-

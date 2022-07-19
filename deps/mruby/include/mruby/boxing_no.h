@@ -1,5 +1,5 @@
-/*
-** mruby/boxing_no.h - unboxed mrb_value definition
+/**
+** @file mruby/boxing_no.h - unboxed mrb_value definition
 **
 ** See Copyright Notice in mruby.h
 */
@@ -8,30 +8,31 @@
 #define MRUBY_BOXING_NO_H
 
 #define MRB_FIXNUM_SHIFT 0
-#define MRB_TT_HAS_BASIC MRB_TT_OBJECT
+#define MRB_SYMBOL_SHIFT 0
+#define MRB_FIXNUM_MIN MRB_INT_MIN
+#define MRB_FIXNUM_MAX MRB_INT_MAX
+
+union mrb_value_union {
+#ifndef MRB_NO_FLOAT
+  mrb_float f;
+#endif
+  void *p;
+  mrb_int i;
+  mrb_sym sym;
+};
 
 typedef struct mrb_value {
-  union {
-#ifndef MRB_WITHOUT_FLOAT
-    mrb_float f;
-#endif
-    void *p;
-    mrb_int i;
-    mrb_sym sym;
-  } value;
+  union mrb_value_union value;
   enum mrb_vtype tt;
 } mrb_value;
 
-#ifndef MRB_WITHOUT_FLOAT
-#define mrb_float_pool(mrb,f) mrb_float_value(mrb,f)
-#endif
-
 #define mrb_ptr(o)      (o).value.p
 #define mrb_cptr(o)     mrb_ptr(o)
-#ifndef MRB_WITHOUT_FLOAT
+#ifndef MRB_NO_FLOAT
 #define mrb_float(o)    (o).value.f
 #endif
 #define mrb_fixnum(o)   (o).value.i
+#define mrb_integer(o)  mrb_fixnum(o)
 #define mrb_symbol(o)   (o).value.sym
 #define mrb_type(o)     (o).tt
 
@@ -44,8 +45,9 @@ typedef struct mrb_value {
 #define SET_FALSE_VALUE(r) BOXNIX_SET_VALUE(r, MRB_TT_FALSE, value.i, 1)
 #define SET_TRUE_VALUE(r) BOXNIX_SET_VALUE(r, MRB_TT_TRUE, value.i, 1)
 #define SET_BOOL_VALUE(r,b) BOXNIX_SET_VALUE(r, b ? MRB_TT_TRUE : MRB_TT_FALSE, value.i, 1)
-#define SET_INT_VALUE(r,n) BOXNIX_SET_VALUE(r, MRB_TT_FIXNUM, value.i, (n))
-#ifndef MRB_WITHOUT_FLOAT
+#define SET_INT_VALUE(mrb,r,n) BOXNIX_SET_VALUE(r, MRB_TT_INTEGER, value.i, (n))
+#define SET_FIXNUM_VALUE(r,n) BOXNIX_SET_VALUE(r, MRB_TT_INTEGER, value.i, (n))
+#ifndef MRB_NO_FLOAT
 #define SET_FLOAT_VALUE(mrb,r,v) BOXNIX_SET_VALUE(r, MRB_TT_FLOAT, value.f, (v))
 #endif
 #define SET_SYM_VALUE(r,v) BOXNIX_SET_VALUE(r, MRB_TT_SYMBOL, value.sym, (v))

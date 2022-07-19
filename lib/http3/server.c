@@ -105,7 +105,6 @@ struct st_h2o_http3_server_conn_t {
     h2o_conn_t super;
     h2o_http3_conn_t h3;
     ptls_handshake_properties_t handshake_properties;
-    h2o_linklist_t _conns; /* linklist to h2o_context_t::http3._conns */
     /**
      * link-list of pending requests using st_h2o_http3_server_stream_t::link
      */
@@ -171,6 +170,10 @@ struct st_h2o_http3_server_conn_t {
      * stream map used for datagram flows
      */
     khash_t(stream) * datagram_flows;
+    /**
+     * timeout entry used for graceful shutdown
+     */
+    h2o_timer_t _graceful_shutdown_timeout;
 };
 
 /**
@@ -242,6 +245,9 @@ struct st_h2o_http3_server_stream_t {
     h2o_req_t req;
 };
 
+static int foreach_request(h2o_conn_t *_conn, int (*cb)(h2o_req_t *req, void *cbdata), void *cbdata);
+static void initiate_graceful_shutdown(h2o_conn_t *_conn);
+static void close_idle_connection(h2o_conn_t *_conn);
 static void on_stream_destroy(quicly_stream_t *qs, int err);
 static int handle_input_post_trailers(struct st_h2o_http3_server_stream_t *stream, const uint8_t **src, const uint8_t *src_end,
                                       int in_generator, const char **err_desc);
@@ -648,7 +654,7 @@ Redo:
         ",cwnd-minimum=%" PRIu32 ",cwnd-maximum=%" PRIu32 ",num-loss-episodes=%" PRIu32 ",num-ptos=%" PRIu64
         ",delivery-rate-latest=%" PRIu64 ",delivery-rate-smoothed=%" PRIu64
         ",delivery-rate-stdev=%" PRIu64 APPLY_NUM_FRAMES(FORMAT_OF_NUM_FRAMES, received)
-            APPLY_NUM_FRAMES(FORMAT_OF_NUM_FRAMES, sent),
+            APPLY_NUM_FRAMES(FORMAT_OF_NUM_FRAMES, sent) ",num-sentmap-packets-largest=%zu",
         stats.num_packets.received, stats.num_packets.decryption_failed, stats.num_packets.sent, stats.num_packets.lost,
         stats.num_packets.lost_time_threshold, stats.num_packets.ack_received, stats.num_packets.late_acked,
         stats.num_bytes.received, stats.num_bytes.sent, stats.num_bytes.lost, stats.num_bytes.ack_received,
@@ -656,7 +662,8 @@ Redo:
         stats.rtt.variance, stats.rtt.latest, stats.cc.cwnd, stats.cc.ssthresh, stats.cc.cwnd_initial,
         stats.cc.cwnd_exiting_slow_start, stats.cc.cwnd_minimum, stats.cc.cwnd_maximum, stats.cc.num_loss_episodes, stats.num_ptos,
         stats.delivery_rate.latest, stats.delivery_rate.smoothed,
-        stats.delivery_rate.stdev APPLY_NUM_FRAMES(VALUE_OF_NUM_FRAMES, received) APPLY_NUM_FRAMES(VALUE_OF_NUM_FRAMES, sent));
+        stats.delivery_rate.stdev APPLY_NUM_FRAMES(VALUE_OF_NUM_FRAMES, received) APPLY_NUM_FRAMES(VALUE_OF_NUM_FRAMES, sent),
+        stats.num_sentmap_packets_largest);
     if (len + 1 > bufsize) {
         bufsize = len + 1;
         goto Redo;
@@ -681,6 +688,9 @@ void on_stream_destroy(quicly_stream_t *qs, int err)
     struct st_h2o_http3_server_stream_t *stream = qs->data;
     struct st_h2o_http3_server_conn_t *conn = get_conn(stream);
 
+    /* There is no need to call `update_conn_state` upon stream destruction, as all the streams transition to CLOSE_WAIT before
+     * being destroyed (and it is hard to call `update_conn_state` here, because the number returned by
+     * `quicly_num_streams_by_group` is decremented only after returing from this function. */
     --*get_state_counter(conn, stream->state);
 
     req_scheduler_deactivate(&conn->scheduler.reqs, &stream->scheduler);
@@ -695,6 +705,12 @@ void on_stream_destroy(quicly_stream_t *qs, int err)
     h2o_buffer_dispose(&stream->recvbuf.buf);
 
     free(stream);
+
+    uint32_t num_req_streams_incl_self = quicly_num_streams_by_group(conn->h3.super.quic, 0, 0);
+    assert(num_req_streams_incl_self > 0 &&
+           "during the invocation of the destroy callback, stream count should include the number of the stream being destroyed");
+    if (num_req_streams_incl_self == 1)
+        h2o_conn_set_state(&conn->super, H2O_CONN_STATE_IDLE);
 }
 
 /**
@@ -1180,8 +1196,9 @@ static int handle_input_expect_headers_process_connect(struct st_h2o_http3_serve
     if (datagram_flow_id_field != NULL) {
         /* CONNECT-UDP */
         if (datagram_flow_id_field->base != NULL) {
-            /* check if it can be used */
-            if (!h2o_http3_can_use_h3_datagram(&get_conn(stream)->h3)) {
+            /* check if the peer is permitted to send datagram frames, by consulting our SETTINGS.H3_DATAGRAM parameter */
+            quicly_context_t *qctx = quicly_get_context(get_conn(stream)->h3.super.quic);
+            if (qctx->transport_params.max_datagram_frame_size == 0) {
                 *err_desc = "unexpected h3 datagram";
                 return H2O_HTTP3_ERROR_GENERAL_PROTOCOL;
             }
@@ -1355,27 +1372,35 @@ static void shutdown_by_generator(struct st_h2o_http3_server_stream_t *stream)
 
 static h2o_iovec_t finalize_do_send_setup_udp_tunnel(struct st_h2o_http3_server_stream_t *stream)
 {
-    /* check requirements */
-    if (!(stream->datagram_flow_id != UINT64_MAX && (200 <= stream->req.res.status && stream->req.res.status <= 299) &&
-          stream->req.forward_datagram.write_ != NULL)) {
+    /* Bail out if we cannot receive or send datagrams. */
+    if (!((200 <= stream->req.res.status && stream->req.res.status <= 299) && stream->req.forward_datagram.write_ != NULL)) {
         stream->datagram_flow_id = UINT64_MAX;
         return h2o_iovec_init(NULL, 0);
     }
 
-    /* register to the map */
-    struct st_h2o_http3_server_conn_t *conn = get_conn(stream);
-    int r;
-    khiter_t iter = kh_put(stream, conn->datagram_flows, stream->datagram_flow_id, &r);
-    assert(iter != kh_end(conn->datagram_flows));
-    kh_val(conn->datagram_flows, iter) = stream;
-    /* set the callback */
-    stream->req.forward_datagram.read_ = tunnel_on_udp_read;
+    /* Register the flow id to the connection so that datagram frames being received from the client would be dispatched to
+     * `req->forward_datagram.write_`. */
+    if (stream->datagram_flow_id != UINT64_MAX) {
+        struct st_h2o_http3_server_conn_t *conn = get_conn(stream);
+        int r;
+        khiter_t iter = kh_put(stream, conn->datagram_flows, stream->datagram_flow_id, &r);
+        assert(iter != kh_end(conn->datagram_flows));
+        kh_val(conn->datagram_flows, iter) = stream;
+    }
 
-    /* build and return the value of datagram-flow-id header field */
-    h2o_iovec_t datagram_flow_id;
-    datagram_flow_id.base = h2o_mem_alloc_pool(&stream->req.pool, char, sizeof(H2O_UINT64_LONGEST_STR));
-    datagram_flow_id.len = sprintf(datagram_flow_id.base, "%" PRIu64, stream->datagram_flow_id);
-    return datagram_flow_id;
+    /* If `datagram-flow-id` was provided and the peer is willing to accept datagrams as well, use the same flow ID for sending
+     * datagrams from us. Otherwise, do not use  */
+    if (stream->datagram_flow_id != UINT64_MAX && get_conn(stream)->h3.peer_settings.h3_datagram) {
+        /* register the route that would be used by the CONNECT handler for forwarding datagrams */
+        stream->req.forward_datagram.read_ = tunnel_on_udp_read;
+        /* build and return the value of datagram-flow-id header field */
+        h2o_iovec_t datagram_flow_id;
+        datagram_flow_id.base = h2o_mem_alloc_pool(&stream->req.pool, char, sizeof(H2O_UINT64_LONGEST_STR));
+        datagram_flow_id.len = sprintf(datagram_flow_id.base, "%" PRIu64, stream->datagram_flow_id);
+        return datagram_flow_id;
+    } else {
+        return h2o_iovec_init(NULL, 0);
+    }
 }
 
 static void finalize_do_send(struct st_h2o_http3_server_stream_t *stream)
@@ -1568,6 +1593,8 @@ static int stream_open_cb(quicly_stream_open_t *self, quicly_stream_t *qs)
     stream->quic->callbacks = &callbacks;
 
     ++*get_state_counter(get_conn(stream), stream->state);
+    h2o_conn_set_state(&get_conn(stream)->super, H2O_CONN_STATE_ACTIVE);
+
     return 0;
 }
 
@@ -1786,12 +1813,15 @@ static void on_h3_destroy(h2o_quic_conn_t *h3_)
 #define ACC(fld, _unused) conn->super.ctx->quic_stats.quicly.fld += stats.fld;
         H2O_QUIC_AGGREGATED_STATS_APPLY(ACC);
 #undef ACC
+        if (conn->super.ctx->quic_stats.num_sentmap_packets_largest < stats.num_sentmap_packets_largest)
+            conn->super.ctx->quic_stats.num_sentmap_packets_largest = stats.num_sentmap_packets_largest;
     }
 
     /* unlink and dispose */
-    h2o_linklist_unlink(&conn->_conns);
     if (h2o_timer_is_linked(&conn->timeout))
         h2o_timer_unlink(&conn->timeout);
+    if (h2o_timer_is_linked(&conn->_graceful_shutdown_timeout))
+        h2o_timer_unlink(&conn->_graceful_shutdown_timeout);
     h2o_http3_dispose_conn(&conn->h3);
     kh_destroy(stream, conn->datagram_flows);
 
@@ -1810,7 +1840,7 @@ static void on_h3_destroy(h2o_quic_conn_t *h3_)
     assert(h2o_linklist_is_empty(&conn->scheduler.reqs.conn_blocked));
 
     /* free memory */
-    free(conn);
+    h2o_destroy_connection(&conn->super);
 }
 
 void h2o_http3_server_init_context(h2o_context_t *h2o, h2o_quic_ctx_t *ctx, h2o_loop_t *loop, h2o_socket_t *sock,
@@ -1829,6 +1859,9 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
         .get_peername = get_peername,
         .get_ptls = get_ptls,
         .skip_tracing = get_skip_tracing,
+        .close_idle_connection = close_idle_connection,
+        .foreach_request = foreach_request,
+        .request_shutdown = initiate_graceful_shutdown,
         .num_reqs_inflight = num_reqs_inflight,
         .get_tracer = get_tracer,
         .log_ = {{
@@ -1859,6 +1892,8 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
     /* setup the structure */
     struct st_h2o_http3_server_conn_t *conn = (void *)h2o_create_connection(
         sizeof(*conn), ctx->accept_ctx->ctx, ctx->accept_ctx->hosts, h2o_gettimeofday(ctx->accept_ctx->ctx->loop), &conn_callbacks);
+    memset((char *)conn + sizeof(conn->super), 0, sizeof(*conn) - sizeof(conn->super));
+
     h2o_http3_init_conn(&conn->h3, &ctx->super, h3_callbacks, &ctx->qpack);
     conn->handshake_properties = (ptls_handshake_properties_t){{{{NULL}}}};
     h2o_linklist_init_anchor(&conn->delayed_streams.recv_body_blocked);
@@ -1872,7 +1907,6 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
     conn->scheduler.uni.active = 0;
     conn->scheduler.uni.conn_blocked = 0;
     conn->datagram_flows = kh_init(stream);
-    conn->_conns = (h2o_linklist_t){};
 
     /* accept connection */
 #if PICOTLS_USE_DTRACE
@@ -1888,22 +1922,24 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
     if (accept_ret != 0) {
         h2o_http3_conn_t *ret = NULL;
         if (accept_ret == QUICLY_ERROR_DECRYPTION_FAILED)
-            ret = (h2o_http3_conn_t *)H2O_QUIC_ACCEPT_CONN_DECRYPTION_FAILED;
+            ret = (h2o_http3_conn_t *)&h2o_quic_accept_conn_decryption_failed;
         h2o_http3_dispose_conn(&conn->h3);
         kh_destroy(stream, conn->datagram_flows);
-        free(conn);
+        h2o_destroy_connection(&conn->super);
         return ret;
     }
     if (ctx->super.quic_stats != NULL) {
         ++ctx->super.quic_stats->packet_processed;
     }
     ++ctx->super.next_cid.master_id; /* FIXME check overlap */
-    h2o_linklist_insert(&ctx->accept_ctx->ctx->http3._conns, &conn->_conns);
     h2o_http3_setup(&conn->h3, qconn);
 
     H2O_PROBE_CONN(H3S_ACCEPT, &conn->super, &conn->super, conn->h3.super.quic, h2o_conn_get_uuid(&conn->super));
 
-    h2o_quic_send(&conn->h3.super);
+    if (!h2o_quic_send(&conn->h3.super)) {
+        /* When `h2o_quic_send` fails, it destroys the connection object. */
+        return &h2o_http3_accept_conn_closed;
+    }
 
     return &conn->h3;
 }
@@ -1924,76 +1960,61 @@ void h2o_http3_server_amend_quicly_context(h2o_globalconf_t *conf, quicly_contex
     quic->receive_datagram_frame = &on_receive_datagram_frame;
 }
 
-static void graceful_shutdown_close_stragglers(h2o_timer_t *entry)
+static void graceful_shutdown_close_straggler(h2o_timer_t *entry)
 {
-    h2o_context_t *ctx = H2O_STRUCT_FROM_MEMBER(h2o_context_t, http3._graceful_shutdown_timeout, entry);
-    h2o_linklist_t *node, *next;
+    struct st_h2o_http3_server_conn_t *conn =
+        H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_conn_t, _graceful_shutdown_timeout, entry);
 
     /* We've sent two GOAWAY frames, close the remaining connections */
-    for (node = ctx->http3._conns.next; node != &ctx->http3._conns; node = next) {
-        struct st_h2o_http3_server_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_conn_t, _conns, node);
-        next = node->next;
-        h2o_quic_close_connection(&conn->h3.super, 0, "shutting down");
-    }
+    h2o_quic_close_connection(&conn->h3.super, 0, "shutting down");
 
-    ctx->http3._graceful_shutdown_timeout.cb = NULL;
+    conn->_graceful_shutdown_timeout.cb = NULL;
 }
 
 static void graceful_shutdown_resend_goaway(h2o_timer_t *entry)
 {
-    h2o_context_t *ctx = H2O_STRUCT_FROM_MEMBER(h2o_context_t, http3._graceful_shutdown_timeout, entry);
-    h2o_linklist_t *node;
-    int do_close_stragglers = 0;
+    struct st_h2o_http3_server_conn_t *conn =
+        H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_conn_t, _graceful_shutdown_timeout, entry);
 
     /* HTTP/3 draft section 5.2.8 --
      * "After allowing time for any in-flight requests or pushes to arrive, the endpoint can send another GOAWAY frame
      * indicating which requests or pushes it might accept before the end of the connection.
      * This ensures that a connection can be cleanly shut down without losing requests. */
-    for (node = ctx->http3._conns.next; node != &ctx->http3._conns; node = node->next) {
-        struct st_h2o_http3_server_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_conn_t, _conns, node);
-        if (conn->h3.state < H2O_HTTP3_CONN_STATE_HALF_CLOSED && quicly_get_state(conn->h3.super.quic) == QUICLY_STATE_CONNECTED) {
-            quicly_stream_id_t next_stream_id = quicly_get_remote_next_stream_id(conn->h3.super.quic, 0 /* == bidi */);
-            /* Section 5.2-1: "This identifier MAY be zero if no requests or pushes were processed."" */
-            quicly_stream_id_t max_stream_id = next_stream_id < 4 ? 0 /* we haven't received any stream yet */ : next_stream_id - 4;
-            h2o_http3_send_goaway_frame(&conn->h3, max_stream_id);
-            conn->h3.state = H2O_HTTP3_CONN_STATE_HALF_CLOSED;
-            do_close_stragglers = 1;
-        }
-    }
 
-    /* After waiting a second, we still had active connections. If configured, wait one
-     * final timeout before closing the connections */
-    if (do_close_stragglers && ctx->globalconf->http3.graceful_shutdown_timeout > 0) {
-        ctx->http3._graceful_shutdown_timeout.cb = graceful_shutdown_close_stragglers;
-        h2o_timer_link(ctx->loop, ctx->globalconf->http3.graceful_shutdown_timeout, &ctx->http3._graceful_shutdown_timeout);
-    } else {
-        ctx->http3._graceful_shutdown_timeout.cb = NULL;
+    if (conn->h3.state < H2O_HTTP3_CONN_STATE_HALF_CLOSED && quicly_get_state(conn->h3.super.quic) == QUICLY_STATE_CONNECTED) {
+        quicly_stream_id_t next_stream_id = quicly_get_remote_next_stream_id(conn->h3.super.quic, 0 /* == bidi */);
+        /* Section 5.2-1: "This identifier MAY be zero if no requests or pushes were processed."" */
+        quicly_stream_id_t max_stream_id = next_stream_id < 4 ? 0 /* we haven't received any stream yet */ : next_stream_id - 4;
+        h2o_http3_send_goaway_frame(&conn->h3, max_stream_id);
+        conn->h3.state = H2O_HTTP3_CONN_STATE_HALF_CLOSED;
+        /* After waiting a second, we still have an active connection. If configured, wait one
+         * final timeout before closing the connection */
+        if (conn->super.ctx->globalconf->http3.graceful_shutdown_timeout > 0) {
+            conn->_graceful_shutdown_timeout.cb = graceful_shutdown_close_straggler;
+            h2o_timer_link(conn->super.ctx->loop, conn->super.ctx->globalconf->http3.graceful_shutdown_timeout,
+                           &conn->_graceful_shutdown_timeout);
+        } else {
+            conn->_graceful_shutdown_timeout.cb = NULL;
+        }
     }
 }
 
-static void initiate_graceful_shutdown(h2o_context_t *ctx)
+static void close_idle_connection(h2o_conn_t *_conn)
 {
-    h2o_linklist_t *node;
+    initiate_graceful_shutdown(_conn);
+}
 
-    /* only doit once */
-    if (ctx->http3._graceful_shutdown_timeout.cb != NULL)
-        return;
-    ctx->http3._graceful_shutdown_timeout.cb = graceful_shutdown_resend_goaway;
+static void initiate_graceful_shutdown(h2o_conn_t *_conn)
+{
+    h2o_conn_set_state(_conn, H2O_CONN_STATE_SHUTDOWN);
 
-    for (node = ctx->http3._conns.next; node != &ctx->http3._conns; node = node->next) {
-        struct st_h2o_http3_server_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_conn_t, _conns, node);
-        /* There is a moment where the control stream is already closed while st_h2o_http3_server_conn_t is not.
-         * Check QUIC connection state to skip sending GOAWAY in such a case. */
-        if (conn->h3.state < H2O_HTTP3_CONN_STATE_HALF_CLOSED && quicly_get_state(conn->h3.super.quic) == QUICLY_STATE_CONNECTED) {
-            /* advertise the maximum stream ID to indicate that we will no longer accept new requests.
-             * HTTP/3 draft section 5.2.8 --
-             * "An endpoint that is attempting to gracefully shut down a connection can send a GOAWAY frame with a value set to the
-             * maximum possible value (2^62-4 for servers, 2^62-1 for clients). This ensures that the peer stops creating new
-             * requests or pushes." */
-            h2o_http3_send_goaway_frame(&conn->h3, (UINT64_C(1) << 62) - 4);
-        }
-    }
-    h2o_timer_link(ctx->loop, 1000, &ctx->http3._graceful_shutdown_timeout);
+    struct st_h2o_http3_server_conn_t *conn = (void *)_conn;
+    assert(conn->_graceful_shutdown_timeout.cb == NULL);
+    conn->_graceful_shutdown_timeout.cb = graceful_shutdown_resend_goaway;
+
+    h2o_http3_send_shutdown_goaway_frame(&conn->h3);
+
+    h2o_timer_link(conn->super.ctx->loop, 1000, &conn->_graceful_shutdown_timeout);
 }
 
 struct foreach_request_ctx {
@@ -2017,17 +2038,13 @@ static int foreach_request_per_conn(void *_ctx, quicly_stream_t *qs)
     return ctx->cb(&stream->req, ctx->cbdata);
 }
 
-static int foreach_request(h2o_context_t *ctx, int (*cb)(h2o_req_t *req, void *cbdata), void *cbdata)
+static int foreach_request(h2o_conn_t *_conn, int (*cb)(h2o_req_t *req, void *cbdata), void *cbdata)
 {
     struct foreach_request_ctx foreach_ctx = {.cb = cb, .cbdata = cbdata};
 
-    for (h2o_linklist_t *node = ctx->http3._conns.next; node != &ctx->http3._conns; node = node->next) {
-        struct st_h2o_http3_server_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_conn_t, _conns, node);
-        quicly_foreach_stream(conn->h3.super.quic, &foreach_ctx, foreach_request_per_conn);
-    }
-
+    struct st_h2o_http3_server_conn_t *conn = (void *)_conn;
+    quicly_foreach_stream(conn->h3.super.quic, &foreach_ctx, foreach_request_per_conn);
     return 0;
 }
 
-const h2o_protocol_callbacks_t H2O_HTTP3_SERVER_CALLBACKS = {initiate_graceful_shutdown, foreach_request};
 const h2o_http3_conn_callbacks_t H2O_HTTP3_CONN_CALLBACKS = {{on_h3_destroy}, handle_control_stream_frame};

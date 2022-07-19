@@ -166,7 +166,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size)
     h2o_http3_conn_t *conn = h2o_http3_server_accept(&server_ctx, &dst_addr, &src_addr, NULL /* initial_packet */,
                                                      NULL /* address_token */, 0 /* skip_tracing */, &conn_callbacks);
     assert(conn != NULL);
-    assert(&conn->super != H2O_QUIC_ACCEPT_CONN_DECRYPTION_FAILED);
+    assert(&conn->super != &h2o_quic_accept_conn_decryption_failed);
     quicly_stream_t *stream;
     int ret = mquicly_open_stream(conn->super.quic, &stream, 1 /* remote initiated */, 0 /* bidi */);
     assert(ret == 0);

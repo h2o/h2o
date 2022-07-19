@@ -184,7 +184,6 @@ void h2o_config_init(h2o_globalconf_t *config)
     config->http1.req_timeout = H2O_DEFAULT_HTTP1_REQ_TIMEOUT;
     config->http1.req_io_timeout = H2O_DEFAULT_HTTP1_REQ_IO_TIMEOUT;
     config->http1.upgrade_to_http2 = H2O_DEFAULT_HTTP1_UPGRADE_TO_HTTP2;
-    config->http1.callbacks = H2O_HTTP1_CALLBACKS;
     config->http2.idle_timeout = H2O_DEFAULT_HTTP2_IDLE_TIMEOUT;
     config->http2.graceful_shutdown_timeout = H2O_DEFAULT_HTTP2_GRACEFUL_SHUTDOWN_TIMEOUT;
     config->proxy.io_timeout = H2O_DEFAULT_PROXY_IO_TIMEOUT;
@@ -201,12 +200,10 @@ void h2o_config_init(h2o_globalconf_t *config)
     config->http2.latency_optimization.min_rtt = 50; // milliseconds
     config->http2.latency_optimization.max_additional_delay = 10;
     config->http2.latency_optimization.max_cwnd = 65535;
-    config->http2.callbacks = H2O_HTTP2_CALLBACKS;
     config->http3.idle_timeout = quicly_spec_context.transport_params.max_idle_timeout;
     config->http3.active_stream_window_size = H2O_DEFAULT_HTTP3_ACTIVE_STREAM_WINDOW_SIZE;
     config->http3.allow_delayed_ack = 1;
     config->http3.use_gso = 1;
-    config->http3.callbacks = H2O_HTTP3_SERVER_CALLBACKS;
     config->send_informational_mode = H2O_SEND_INFORMATIONAL_MODE_EXCEPT_H1;
     config->mimemap = h2o_mimemap_create();
     h2o_socketpool_init_global(&config->proxy.global_socketpool, SIZE_MAX);
