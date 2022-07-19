@@ -37,7 +37,7 @@ sub spawn_my_h2o {
     opts => [qw(--mode=worker)],
     user => scalar(getpwuid($ENV{SUDO_UID})),
     conf => << "EOT",
-# prevent out-of-date events being reported from other worker threads (why?)
+# an attempt to reduce flakiness (at least that caused by there being many worker threads)
 num-threads: 1
 # Either CAP_BPF or CAP_NET_ADMIN is required to use selective tracing if `kernel.unplivileged_bpf_disable` is set to true to
 # mitigate CVE-2022-0001 and CVE-2022-0001.
