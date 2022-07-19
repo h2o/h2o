@@ -8,9 +8,6 @@ use Test::More;
 use JSON;
 use t::Util;
 
-plan skip_all => "DTRACE_TESTS=0 is set to skip this file"
-    if defined($ENV{DTRACE_TESTS}) && !$ENV{DTRACE_TESTS};
-
 run_as_root();
 
 my $h2olog_prog = bindir() . "/h2olog";
