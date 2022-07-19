@@ -18,7 +18,6 @@ use Protocol::HTTP2::Connection;
 use Protocol::HTTP2::Constants;
 use Scope::Guard;
 use Symbol 'gensym';
-use Test::Builder;
 use Test::More;
 use Time::HiRes qw(sleep gettimeofday tv_interval);
 use Carp;
@@ -892,11 +891,8 @@ EOT
     return join("\n", ($resp_out, $resp_err));
 }
 
-my $Test;
 sub test_is_passing {
-    $Test = Test::Builder->new
-        unless defined $Test;
-    $Test->is_passing;
+    Test::More->builder->is_passing;
 }
 
 1;
