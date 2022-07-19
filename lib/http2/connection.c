@@ -625,8 +625,9 @@ static int handle_incoming_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
     /* check existence of pseudo-headers */
     int expected_map = H2O_HPACK_PARSE_HEADERS_METHOD_EXISTS | H2O_HPACK_PARSE_HEADERS_AUTHORITY_EXISTS;
     if (!is_connect)
-        expected_map |= H2O_HPACK_PARSE_HEADERS_SCHEME_EXISTS | H2O_HPACK_PARSE_HEADERS_PATH_EXISTS;
-    if (header_exists_map != expected_map) {
+        expected_map =
+            H2O_HPACK_PARSE_HEADERS_METHOD_EXISTS | H2O_HPACK_PARSE_HEADERS_SCHEME_EXISTS | H2O_HPACK_PARSE_HEADERS_PATH_EXISTS;
+    if ((header_exists_map & expected_map) != expected_map) {
         ret = H2O_HTTP2_ERROR_PROTOCOL;
         goto SendRSTStream;
     }

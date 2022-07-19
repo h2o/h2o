@@ -536,6 +536,10 @@ static void test_bidirectional(void)
 
 void test_lossy(void)
 {
+    uint64_t handshake_timeout_backup = quic_ctx.handshake_timeout_rtt_multiplier;
+    /* loss tests tend to incur gigantic (and artificial) latencies, which easily trigger handshake timeout.
+     * for this test, we totally disable handshake timeout so we can focus on the loss test */
+    quic_ctx.handshake_timeout_rtt_multiplier = UINT32_MAX;
     subtest("even", test_even);
 
     uint64_t idle_timeout_backup = quic_ctx.transport_params.max_idle_timeout;
@@ -544,4 +548,5 @@ void test_lossy(void)
     quic_ctx.transport_params.max_idle_timeout = (uint64_t)600 * 1000; /* 600 seconds */
     subtest("bidirectional", test_bidirectional);
     quic_ctx.transport_params.max_idle_timeout = idle_timeout_backup;
+    quic_ctx.handshake_timeout_rtt_multiplier = handshake_timeout_backup;
 }
