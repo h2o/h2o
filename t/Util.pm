@@ -18,6 +18,7 @@ use Protocol::HTTP2::Connection;
 use Protocol::HTTP2::Constants;
 use Scope::Guard;
 use Symbol 'gensym';
+use Test::Builder;
 use Test::More;
 use Time::HiRes qw(sleep gettimeofday tv_interval);
 use Carp;
@@ -59,6 +60,7 @@ our @EXPORT = qw(
     spawn_dns_server
     run_openssl_client
     run_fuzzer
+    test_is_passing
 );
 
 use constant ASSETS_DIR => 't/assets';
@@ -888,6 +890,13 @@ EOT
     }
 
     return join("\n", ($resp_out, $resp_err));
+}
+
+my $Test;
+sub test_is_passing {
+    $Test = Test::Builder->new
+        unless defined $Test;
+    $Test->is_passing;
 }
 
 1;

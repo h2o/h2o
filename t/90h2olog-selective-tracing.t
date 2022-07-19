@@ -197,6 +197,9 @@ subtest "h2olog -A=127.0.0.2", sub {
         $_->{type} eq "h3s-destroy"
       } @logs
     ], [], "no h3s-destroy header in logs";
+
+    diag $trace
+        unless test_is_passing();
   };
 
   subtest "with matched IP address", sub {
