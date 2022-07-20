@@ -1564,7 +1564,9 @@ static void proceed_handshake_picotls(h2o_socket_t *sock)
     if (wbuf.off != 0) {
         h2o_socket_read_stop(sock);
         write_ssl_bytes(sock, wbuf.base, wbuf.off);
-        flush_pending_ssl(sock, next_cb);
+        if (ret != PTLS_ERROR_ASYNC_OPERATION) {
+            flush_pending_ssl(sock, next_cb);
+        }
     } else if (ret == PTLS_ERROR_IN_PROGRESS) {
         h2o_socket_read_start(sock, next_cb);
     } else {
@@ -1736,7 +1738,9 @@ static void proceed_handshake_undetermined(h2o_socket_t *sock)
             cb = on_handshake_fail_complete;
             break;
         }
-        flush_pending_ssl(sock, cb);
+        if (ret != PTLS_ERROR_ASYNC_OPERATION) {
+            flush_pending_ssl(sock, cb);
+        }
     }
     ptls_buffer_dispose(&wbuf);
 }
