@@ -103,6 +103,10 @@ extern "C" {
 #define PTLS_MAX_IV_SIZE 16
 #define PTLS_MAX_DIGEST_SIZE 64
 
+/* versions */
+#define PTLS_PROTOCOL_VERSION_TLS12 0x0303
+#define PTLS_PROTOCOL_VERSION_TLS13 0x0304
+
 /* cipher-suites */
 #define PTLS_CIPHER_SUITE_AES_128_GCM_SHA256 0x1301
 #define PTLS_CIPHER_SUITE_NAME_AES_128_GCM_SHA256 "TLS_AES_128_GCM_SHA256"
@@ -1190,6 +1194,11 @@ ptls_iovec_t ptls_get_client_random(ptls_t *tls);
  * returns the cipher-suite being used
  */
 ptls_cipher_suite_t *ptls_get_cipher(ptls_t *tls);
+/**
+ * Returns protocol version (e.g., 0x0303 for TLS 1.2, 0x0304 for TLS 1.3). The result may be unstable prior to handshake
+ * completion.
+ */
+uint16_t ptls_get_protocol_version(ptls_t *tls);
 /**
  * Returns current state of traffic keys. The cipher-suite being used, as well as the length of the traffic keys, can be obtained
  * via `ptls_get_cipher`.
