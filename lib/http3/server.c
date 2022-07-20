@@ -25,6 +25,7 @@
 #include "h2o/http3_common.h"
 #include "h2o/http3_server.h"
 #include "h2o/http3_internal.h"
+#include "./../h2o_log.h"
 #include "./../probes_.h"
 
 /**
@@ -1935,6 +1936,11 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
     h2o_http3_setup(&conn->h3, qconn);
 
     H2O_PROBE_CONN(H3S_ACCEPT, &conn->super, &conn->super, conn->h3.super.quic, h2o_conn_get_uuid(&conn->super));
+    H2O_LOG_CONN(h3s_accept, &conn->super, {
+        H2O_LOG_ELEMENT_PTR(conn, &conn->super);
+        H2O_LOG_ELEMENT_PTR(quic, conn->h3.super.quic);
+        H2O_LOG_ELEMENT_SAFESTR(conn_uuid, h2o_conn_get_uuid(&conn->super));
+    });
 
     if (!h2o_quic_send(&conn->h3.super)) {
         /* When `h2o_quic_send` fails, it destroys the connection object. */
