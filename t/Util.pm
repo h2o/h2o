@@ -42,6 +42,7 @@ our @EXPORT = qw(
     prog_exists
     run_prog
     openssl_can_negotiate
+    openssl_supports_tls13
     curl_supports_http2
     run_with_curl
     h2get_exists
@@ -369,6 +370,10 @@ sub openssl_can_negotiate {
         or die "cannot parse OpenSSL version: $openssl_ver";
     $openssl_ver = $1 * 10000 + $2 * 100 + $3;
     return $openssl_ver >= 10001;
+}
+
+sub openssl_supports_tls13 {
+    return !!( `openssl s_client -help 2>&1` =~ /^\s*-tls1_3\s+/m);
 }
 
 sub curl_supports_http2 {
