@@ -59,6 +59,7 @@ our @EXPORT = qw(
     spawn_dns_server
     run_openssl_client
     run_fuzzer
+    test_is_passing
 );
 
 use constant ASSETS_DIR => 't/assets';
@@ -888,6 +889,10 @@ EOT
     }
 
     return join("\n", ($resp_out, $resp_err));
+}
+
+sub test_is_passing {
+    Test::More->builder->is_passing;
 }
 
 1;
