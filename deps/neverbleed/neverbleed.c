@@ -49,6 +49,7 @@
 
 #include <openssl/opensslconf.h>
 #include <openssl/opensslv.h>
+#include <openssl/async.h>
 
 #if OPENSSL_VERSION_NUMBER >= 0x1010000fL && !defined(LIBRESSL_VERSION_NUMBER)
 /* RSA_METHOD is opaque, so RSA_meth* are used. */
@@ -328,6 +329,23 @@ static int expbuf_read(struct expbuf_t *buf, int fd)
 {
     size_t sz;
 
+    ASYNC_JOB *job;
+    if ((job = ASYNC_get_current_job()) != NULL) {
+        ASYNC_WAIT_CTX *waitctx = ASYNC_get_wait_ctx(job);
+
+        size_t numfds;
+        if (ASYNC_WAIT_CTX_get_all_fds(waitctx, NULL, &numfds) && numfds == 0) {
+            if(!ASYNC_WAIT_CTX_set_wait_fd(waitctx, "neverbleed", fd, NULL, NULL)) {
+                fprintf(stderr, "could not set async fd\n");
+                return -1;
+            }
+        }
+        ASYNC_pause_job();
+        if(!ASYNC_WAIT_CTX_clear_fd(waitctx, "neverbleed")) {
+            fprintf(stderr, "could not clear async fd\n");
+            return -1;
+        }
+    }
     if (read_nbytes(fd, &sz, sizeof(sz)) != 0)
         return -1;
     expbuf_reserve(buf, sz);
@@ -1574,6 +1592,7 @@ int neverbleed_init(neverbleed_t *nb, char *errbuf)
         snprintf(errbuf, NEVERBLEED_ERRBUF_SIZE, "failed to initialize the OpenSSL engine");
         goto Fail;
     }
+    ERR_load_ASYNC_strings();
     ENGINE_add(nb->engine);
 
     /* setup thread key */
