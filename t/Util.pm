@@ -798,38 +798,40 @@ EOT
 sub spawn_dns_server {
     my ($dns_port, $zone_rrs, $delays) = @_;
 
+    my $ns = Net::DNS::Nameserver->new(
+        LocalPort    => $dns_port,
+        ReplyHandler => sub {
+            my ($qname, $qclass, $qtype, $peerhost, $query, $conn) = @_;
+            my ($rcode, @ans, @auth, @add);
+
+            foreach (@$zone_rrs) {
+                my $rr = Net::DNS::RR->new($_);
+                if ($rr->owner eq $qname && $rr->class eq $qclass && $rr->type eq $qtype) {
+                    push @ans, $rr;
+                }
+            }
+
+            if (!@ans) {
+                $rcode = "NXDOMAIN";
+            } else {
+                $rcode = "NOERROR";
+            }
+            # mark the answer as authoritative (by setting the 'aa' flag)
+            my $headermask = {aa => 1};
+            my $optionmask = {};
+            if ($delays && $delays->{$qtype} > 0) {
+                sleep($delays->{$qtype});
+            }
+            @ans = shuffle(@ans);
+            return ($rcode, \@ans, \@auth, \@add, $headermask, $optionmask);
+        },
+        Verbose      => 0
+    ) || die "couldn't create nameserver object\n";
+
     my $server = spawn_forked(sub {
-            my $ns = Net::DNS::Nameserver->new(
-                LocalPort    => $dns_port,
-                ReplyHandler => sub {
-                    my ($qname, $qclass, $qtype, $peerhost, $query, $conn) = @_;
-                    my ($rcode, @ans, @auth, @add);
+        $ns->main_loop;
+    });
 
-                    foreach (@$zone_rrs) {
-                        my $rr = Net::DNS::RR->new($_);
-                        if ($rr->owner eq $qname && $rr->class eq $qclass && $rr->type eq $qtype) {
-                            push @ans, $rr;
-                        }
-                    }
-
-                    if (!@ans) {
-                        $rcode = "NXDOMAIN";
-                    } else {
-                        $rcode = "NOERROR";
-                    }
-                    # mark the answer as authoritative (by setting the 'aa' flag)
-                    my $headermask = {aa => 1};
-                    my $optionmask = {};
-                    if ($delays && $delays->{$qtype} > 0) {
-                        sleep($delays->{$qtype});
-                    }
-                    @ans = shuffle(@ans);
-                    return ($rcode, \@ans, \@auth, \@add, $headermask, $optionmask);
-                },
-                Verbose      => 0
-            ) || die "couldn't create nameserver object\n";
-            $ns->main_loop;
-        });
     return $server;
 }
 
