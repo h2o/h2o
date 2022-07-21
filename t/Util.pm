@@ -3,6 +3,7 @@ package t::Util;
 use strict;
 use warnings;
 use Digest::MD5 qw(md5_hex);
+use Fcntl qw(:flock);
 use File::Temp qw(tempfile tempdir);
 use IO::Socket::INET;
 use IO::Socket::SSL;
@@ -61,6 +62,7 @@ our @EXPORT = qw(
     run_openssl_client
     run_fuzzer
     test_is_passing
+    get_exclusive_lock
 );
 
 use constant ASSETS_DIR => 't/assets';
@@ -898,6 +900,33 @@ EOT
 
 sub test_is_passing {
     Test::More->builder->is_passing;
+}
+
+sub get_exclusive_lock {
+    if (! defined $ENV{LOCKFD}) {
+        warn "not taking lock, as LOCKFD is not set\n";
+        return;
+    }
+    return if $ENV{LOCKFD} eq "SKIP";
+
+    # open lockfile
+    my $lockfh = IO::Handle->new();
+    $lockfh->fdopen($ENV{LOCKFD}, "w")
+        or die "failed to open file descriptor $ENV{LOCKFD}:$!";
+    print STDERR "taking exclusive lock...\n";
+    STDERR->flush;
+
+    # Unlock before taking an exclusive lock, otherwise we might deadlock when two processes that have already taken LOCK_SH
+    # competes for LOCK_EX.
+    flock($lockfh, LOCK_UN)
+        or die "flock(LOCK_UN) failed:$!";
+    flock($lockfh, LOCK_EX)
+        or die "flock(LOCK_EX) failed:$!";
+    print STDERR "lock taken\n";
+    STDERR->flush;
+
+    # prevent waring above when trying to lock again
+    $ENV{LOCKFD} = "SKIP";
 }
 
 1;

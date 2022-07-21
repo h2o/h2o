@@ -1337,7 +1337,7 @@
 		E9D49A4F25FB561A00F4A80D /* 40http1-streaming-framing.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "40http1-streaming-framing.t"; sourceTree = "<group>"; };
 		E9D49A5025FB561A00F4A80D /* 40http3-forward-initial.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "40http3-forward-initial.t"; sourceTree = "<group>"; };
 		E9D49A5125FB562800F4A80D /* 50http1-proxy-full-uri.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50http1-proxy-full-uri.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
-		E9D49A5225FB562800F4A80D /* 90h2olog.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = 90h2olog.t; sourceTree = "<group>"; };
+		E9D49A5225FB562800F4A80D /* 90h2olog.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = 90h2olog.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		E9D49A5325FB562800F4A80D /* quic-ndec-initial-gen.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = "quic-ndec-initial-gen.c"; sourceTree = "<group>"; };
 		E9DF012724E4CDEE0002EEC7 /* cc-cubic.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = "cc-cubic.c"; sourceTree = "<group>"; };
 		E9E50472214A5B8A004DC170 /* http3client.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = http3client.c; sourceTree = "<group>"; };
