@@ -1591,6 +1591,7 @@ DEFINE_LOGGER(ssl_cipher_bits)
 DEFINE_LOGGER(ssl_session_id)
 DEFINE_LOGGER(ssl_server_name)
 DEFINE_LOGGER(ssl_negotiated_protocol)
+DEFINE_LOGGER(ssl_backend)
 #undef DEFINE_LOGGER
 
 static h2o_iovec_t log_stream_id(h2o_req_t *req)
@@ -1698,6 +1699,7 @@ static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_hostconf_t **hosts,
                     .session_id = log_ssl_session_id,
                     .server_name = log_ssl_server_name,
                     .negotiated_protocol = log_ssl_negotiated_protocol,
+                    .backend = log_ssl_backend,
                 },
             .http2 =
                 {

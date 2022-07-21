@@ -84,7 +84,7 @@ hosts:
         file.dir: @{[ DOC_ROOT ]}
 access-log:
   path: $tempdir/access_log
-  format: "%{ssl.protocol-version}x %{ssl.cipher}x %{ssl.cipher-bits}x"
+  format: "%{ssl.protocol-version}x %{ssl.cipher}x %{ssl.cipher-bits}x %{ssl.backend}x"
 EOT
 
     open my $logfh, "<", "$tempdir/access_log"
@@ -98,7 +98,7 @@ EOT
             is $output, "hello\n", "output";
             sleep 1; # make sure log is emitted
             sysread $logfh, my $log, 4096; # use sysread to avoid buffering that prevents us from reading what's being appended
-            like $log, qr/^TLSv1\.2 $ciphers{$cipher}->[0] $ciphers{$cipher}->[1]$/m, "log";
+            like $log, qr/^TLSv1\.2 $ciphers{$cipher}->[0] $ciphers{$cipher}->[1] picotls$/m, "log";
         };
     }
 };
