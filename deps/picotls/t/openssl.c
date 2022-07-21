@@ -138,18 +138,21 @@ static void test_key_exchanges(void)
 static void test_sign_verify(EVP_PKEY *key, const struct st_ptls_openssl_signature_scheme_t *schemes)
 {
     for (size_t i = 0; schemes[i].scheme_id != UINT16_MAX; ++i) {
+        struct sign_ctx *args = malloc(sizeof(*args));
+        memset(args, 0, sizeof(*args));
         note("scheme 0x%04x", schemes[i].scheme_id);
         const void *message = "hello world";
         ptls_buffer_t sigbuf;
         uint8_t sigbuf_small[1024];
 
         ptls_buffer_init(&sigbuf, sigbuf_small, sizeof(sigbuf_small));
-        ok(do_sign(key, schemes + i, &sigbuf, ptls_iovec_init(message, strlen(message))) == 0);
+        ok(do_sign(key, schemes + i, &sigbuf, ptls_iovec_init(message, strlen(message)), (void**)&args) == 0);
         EVP_PKEY_up_ref(key);
         ok(verify_sign(key, schemes[i].scheme_id, ptls_iovec_init(message, strlen(message)),
                        ptls_iovec_init(sigbuf.base, sigbuf.off)) == 0);
 
         ptls_buffer_dispose(&sigbuf);
+        free(args);
     }
 }
 

@@ -191,6 +191,7 @@ extern "C" {
 #define PTLS_ERROR_ESNI_RETRY (PTLS_ERROR_CLASS_INTERNAL + 8)
 #define PTLS_ERROR_REJECT_EARLY_DATA (PTLS_ERROR_CLASS_INTERNAL + 9)
 #define PTLS_ERROR_DELEGATE (PTLS_ERROR_CLASS_INTERNAL + 10)
+#define PTLS_ERROR_ASYNC_OPERATION (PTLS_ERROR_CLASS_INTERNAL + 11)
 
 #define PTLS_ERROR_INCORRECT_BASE64 (PTLS_ERROR_CLASS_INTERNAL + 50)
 #define PTLS_ERROR_PEM_LABEL_NOT_FOUND (PTLS_ERROR_CLASS_INTERNAL + 51)
@@ -396,7 +397,7 @@ typedef const struct st_ptls_aead_algorithm_t {
     /**
      * if encrypted bytes are going to be written using non-temporal store instructions (i.e., skip cache)
      */
-    uint8_t non_temporal : 1;
+    unsigned non_temporal : 1;
     /**
      * log2(alignment) being required
      */
@@ -604,9 +605,14 @@ PTLS_CALLBACK_TYPE(int, on_client_hello, ptls_t *tls, ptls_on_client_hello_param
 PTLS_CALLBACK_TYPE(int, emit_certificate, ptls_t *tls, ptls_message_emitter_t *emitter, ptls_key_schedule_t *key_sched,
                    ptls_iovec_t context, int push_status_request, const uint16_t *compress_algos, size_t num_compress_algos);
 /**
- * when gerenating CertificateVerify, the core calls the callback to sign the handshake context using the certificate.
+ * When gerenating CertificateVerify, the core calls the callback to sign the handshake context using the certificate. This callback
+ * may return PTLS_ERROR_ASYNC_OPERATION, and signal the application outside of picotls when the signature has been generated. At
+ * that point, the application should call `ptls_handshake`, which in turn would invoke this callback once again. The callback then
+ * fills `*selected_algorithm` and `output` with the signature being generated. Note that `algorithms` and `num_algorithms` are
+ * provided only when the callback is called for the first time. The callback can store arbitrary pointer specific to each signature
+ * generation in `*sign_ctx`.
  */
-PTLS_CALLBACK_TYPE(int, sign_certificate, ptls_t *tls, uint16_t *selected_algorithm, ptls_buffer_t *output, ptls_iovec_t input,
+PTLS_CALLBACK_TYPE(int, sign_certificate, ptls_t *tls, void **sign_certificate_ctx, uint16_t *selected_algorithm, ptls_buffer_t *output, ptls_iovec_t input,
                    const uint16_t *algorithms, size_t num_algorithms);
 /**
  * after receiving Certificate, the core calls the callback to verify the certificate chain and to obtain a pointer to a
@@ -1157,6 +1163,10 @@ ptls_context_t *ptls_get_context(ptls_t *tls);
  * updates the context of a connection. Can be called from `on_client_hello` callback.
  */
 void ptls_set_context(ptls_t *tls, ptls_context_t *ctx);
+/**
+ * get the sign ctx
+ */
+void *ptls_get_sign_ctx(ptls_t *tls);
 /**
  * returns the client-random
  */
