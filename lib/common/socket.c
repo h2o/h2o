@@ -1011,8 +1011,16 @@ ptls_t *h2o_socket_get_ptls(h2o_socket_t *sock)
 const char *h2o_socket_get_ssl_protocol_version(h2o_socket_t *sock)
 {
     if (sock->ssl != NULL) {
-        if (sock->ssl->ptls != NULL)
-            return "TLSv1.3";
+        if (sock->ssl->ptls != NULL) {
+            switch (ptls_get_protocol_version(sock->ssl->ptls)) {
+            case PTLS_PROTOCOL_VERSION_TLS12:
+                return "TLSv1.2";
+            case PTLS_PROTOCOL_VERSION_TLS13:
+                return "TLSv1.3";
+            default:
+                return "TLSv?";
+            }
+        }
         if (sock->ssl->ossl != NULL)
             return SSL_get_version(sock->ssl->ossl);
     }
