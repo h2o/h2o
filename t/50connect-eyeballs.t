@@ -30,9 +30,9 @@ plan skip_all => "injectaddr does not work (maybe ASAN is on?)" unless
     $injectaddr->(sub { system("ls > /dev/null") == 0 });
 
 # IPv6 is not available on docker on GitHub Actions; see https://twitter.com/kazuho/status/1465310656303796224
-my $v6_port = create_listener("::1")
+my ($v6_guard, $v6_port) = create_listener("::1")
     or plan skip_all => "IPv6 may not be available:$!";
-my $v4_port = create_listener("127.0.0.1")
+my ($v4_guard, $v4_port) = create_listener("127.0.0.1")
     or die "failed to create IPv4 listener:$!";
 my $blackhole_ip_v4 = find_blackhole_ip();
 my $quic_port = empty_port({
@@ -143,7 +143,10 @@ sub create_listener {
         }
         exit 0;
     }
-    $listener->sockport;
+    +(
+        make_guard(sub { kill 'KILL', $pid }),
+        $listener->sockport,
+    );
 }
 
 sub foreach_http {
