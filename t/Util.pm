@@ -907,8 +907,12 @@ sub get_exclusive_lock {
     my $lockfh = IO::Handle->new();
     $lockfh->fdopen($ENV{LOCKFD}, "w")
         or die "failed to open file descriptor $ENV{LOCKFD}:$!";
+    print STDERR "taking exclusive lock...\n";
+    STDERR->flush;
     flock($lockfh, LOCK_EX)
         or die "failed to obtain exclusive lock for fd $ENV{LOCKFD}:$!";
+    print STDERR "lock taken\n";
+    STDERR->flush;
 
     $ENV{LOCKFD} = "SKIP";
 }
