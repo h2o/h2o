@@ -904,16 +904,23 @@ sub get_exclusive_lock {
     }
     return if $ENV{LOCKFD} eq "SKIP";
 
+    # open lockfile
     my $lockfh = IO::Handle->new();
     $lockfh->fdopen($ENV{LOCKFD}, "w")
         or die "failed to open file descriptor $ENV{LOCKFD}:$!";
     print STDERR "taking exclusive lock...\n";
     STDERR->flush;
+
+    # Unlock before taking an exclusive lock, otherwise we might deadlock when two processes that have already taken LOCK_SH
+    # competes for LOCK_EX.
+    flock($lockfh, LOCK_UN)
+        or die "flock(LOCK_UN) failed:$!";
     flock($lockfh, LOCK_EX)
-        or die "failed to obtain exclusive lock for fd $ENV{LOCKFD}:$!";
+        or die "flock(LOCK_EX) failed:$!";
     print STDERR "lock taken\n";
     STDERR->flush;
 
+    # prevent waring above when trying to lock again
     $ENV{LOCKFD} = "SKIP";
 }
 
