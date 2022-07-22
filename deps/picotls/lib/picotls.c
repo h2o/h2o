@@ -4504,7 +4504,7 @@ void ptls_set_context(ptls_t *tls, ptls_context_t *ctx)
     tls->ctx = ctx;
 }
 
-void *ptls_get_sign_ctx(ptls_t *tls)
+void *ptls_get_sign_context(ptls_t *tls)
 {
     assert(tls->is_server);
     return tls->server.sign_certificate_ctx;

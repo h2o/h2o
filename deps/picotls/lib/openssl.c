@@ -698,17 +698,38 @@ int ptls_openssl_create_key_exchange(ptls_key_exchange_context_t **ctx, EVP_PKEY
 struct sign_ctx {
     const struct st_ptls_openssl_signature_scheme_t *scheme;
     EVP_MD_CTX *ctx;
-    ptls_buffer_t buf;
-    size_t siglen;
     ASYNC_WAIT_CTX *waitctx;
     ASYNC_JOB *job;
+    size_t siglen;
+    // must be last, see `sign_ctx_alloc`
+    uint8_t sig[0];
 };
+
+static struct sign_ctx *sign_ctx_alloc(size_t siglen)
+{
+    // the last member of `struct sign_ctx` is a buffer to store `siglen` bytes
+    struct sign_ctx *sign_ctx = malloc(sizeof(*sign_ctx) + siglen);
+    memset(sign_ctx, 0, sizeof(*sign_ctx) + siglen);
+    sign_ctx->siglen = siglen;
+    return sign_ctx;
+}
+
+static void sign_ctx_destroy(struct sign_ctx *sign_ctx)
+{
+    if (sign_ctx == NULL) return;
+
+    if (sign_ctx->ctx != NULL)
+        EVP_MD_CTX_destroy(sign_ctx->ctx);
+    if (sign_ctx->waitctx != NULL)
+        ASYNC_WAIT_CTX_free(sign_ctx->waitctx);
+    free(sign_ctx);
+}
 
 int ptls_openssl_get_async_fd(ptls_t *ptls)
 {
     int fds[1];
     size_t numfds;
-    struct sign_ctx *args = ptls_get_sign_ctx(ptls);
+    struct sign_ctx *args = ptls_get_sign_context(ptls);
     ASYNC_WAIT_CTX_get_all_fds(args->waitctx, NULL, &numfds);
     assert(numfds == 1);
     ASYNC_WAIT_CTX_get_all_fds(args->waitctx, fds, &numfds);
@@ -718,7 +739,7 @@ int ptls_openssl_get_async_fd(ptls_t *ptls)
 static int async_sign(void *vargs)
 {
     struct sign_ctx *args = *(struct sign_ctx **)vargs;
-    return EVP_DigestSignFinal(args->ctx, args->buf.base, &args->siglen);
+    return EVP_DigestSignFinal(args->ctx, args->sig, &args->siglen);
 }
 
 static int do_sign(EVP_PKEY *key, const struct st_ptls_openssl_signature_scheme_t *scheme, ptls_buffer_t *outbuf,
@@ -727,15 +748,20 @@ static int do_sign(EVP_PKEY *key, const struct st_ptls_openssl_signature_scheme_
     const EVP_MD *md = scheme->scheme_md != NULL ? scheme->scheme_md() : NULL;
     int ret;
 
-    struct sign_ctx *args = *sign_ctx;
-    if (args->ctx == NULL) {
+    struct sign_ctx *args = NULL;
+    EVP_MD_CTX *ctx = NULL;
+    if (*sign_ctx != NULL) {
+        args = *sign_ctx;
+    } else {
+        size_t siglen;
         EVP_PKEY_CTX *pkey_ctx;
-        if ((args->ctx = EVP_MD_CTX_create()) == NULL) {
+
+        if ((ctx = EVP_MD_CTX_create()) == NULL) {
             ret = PTLS_ERROR_NO_MEMORY;
             goto Exit;
         }
 
-        if (EVP_DigestSignInit(args->ctx, &pkey_ctx, md, NULL, key) != 1) {
+        if (EVP_DigestSignInit(ctx, &pkey_ctx, md, NULL, key) != 1) {
             ret = PTLS_ERROR_LIBRARY;
             goto Exit;
         }
@@ -743,13 +769,13 @@ static int do_sign(EVP_PKEY *key, const struct st_ptls_openssl_signature_scheme_
 #if PTLS_OPENSSL_HAVE_ED25519
         if (EVP_PKEY_id(key) == EVP_PKEY_ED25519) {
             /* ED25519 requires the use of the all-at-once function that appeared in OpenSSL 1.1.1, hence different path */
-            if (EVP_DigestSign(args->ctx, NULL, &args->siglen, input.base, input.len) != 1) {
+            if (EVP_DigestSign(ctx, NULL, &siglen, input.base, input.len) != 1) {
                 ret = PTLS_ERROR_LIBRARY;
                 goto Exit;
             }
-            if ((ret = ptls_buffer_reserve(outbuf, args->siglen)) != 0)
+            if ((ret = ptls_buffer_reserve(outbuf, siglen)) != 0)
                 goto Exit;
-            if (EVP_DigestSign(args->ctx, outbuf->base + outbuf->off, &args->siglen, input.base, input.len) != 1) {
+            if (EVP_DigestSign(ctx, outbuf->base + outbuf->off, &siglen, input.base, input.len) != 1) {
                 ret = PTLS_ERROR_LIBRARY;
                 goto Exit;
             }
@@ -770,18 +796,21 @@ static int do_sign(EVP_PKEY *key, const struct st_ptls_openssl_signature_scheme_
                     goto Exit;
                 }
             }
-            if (EVP_DigestSignUpdate(args->ctx, input.base, input.len) != 1) {
+            if (EVP_DigestSignUpdate(ctx, input.base, input.len) != 1) {
                 ret = PTLS_ERROR_LIBRARY;
                 goto Exit;
             }
 
-            if (EVP_DigestSignFinal(args->ctx, NULL, &args->siglen) != 1) {
+            if (EVP_DigestSignFinal(ctx, NULL, &siglen) != 1) {
                 ret = PTLS_ERROR_LIBRARY;
                 goto Exit;
             }
 
-            if ((ret = ptls_buffer_reserve(&args->buf, args->siglen)) != 0)
-                goto Exit;
+            args = sign_ctx_alloc(siglen);
+            args->ctx = ctx;
+            ctx = NULL;
+            args->scheme = scheme;
+            *sign_ctx = args;
         }
     }
 
@@ -810,8 +839,7 @@ static int do_sign(EVP_PKEY *key, const struct st_ptls_openssl_signature_scheme_
                     ret = PTLS_ERROR_LIBRARY;
                     goto Exit;
                 case ASYNC_FINISH: {
-                    args->buf.off += args->siglen;
-                    ptls_buffer__do_pushv(outbuf, args->buf.base, args->buf.off);
+                    ptls_buffer__do_pushv(outbuf, args->sig, args->siglen);
                     args->job = NULL;
                     break;
                 }
@@ -824,9 +852,10 @@ static int do_sign(EVP_PKEY *key, const struct st_ptls_openssl_signature_scheme_
 
     ret = 0;
 Exit:
-    if (args->ctx != NULL) {
-        EVP_MD_CTX_destroy(args->ctx);
-    }
+    *sign_ctx = NULL;
+    sign_ctx_destroy(args);
+    if (ctx != NULL)
+        EVP_MD_CTX_destroy(ctx);
     return ret;
 }
 
@@ -1112,19 +1141,13 @@ static int sign_certificate(ptls_sign_certificate_t *_self, ptls_t *tls, void **
     ptls_openssl_sign_certificate_t *self = (ptls_openssl_sign_certificate_t *)_self;
     const struct st_ptls_openssl_signature_scheme_t *scheme;
 
-    struct sign_ctx *args;
-    if (*sign_ctx == NULL) {
-        args = malloc(sizeof(*args));
-        memset(args, 0, sizeof(*args));
-        ptls_buffer_init(&args->buf, "", 0);
-
+    struct sign_ctx *args = *sign_ctx;
+    if (args == NULL) {
         // first invocation, get scheme
         for (scheme = self->schemes; scheme->scheme_id != UINT16_MAX; ++scheme) {
             size_t i;
             for (i = 0; i != num_algorithms; ++i) {
                 if (algorithms[i] == scheme->scheme_id) {
-                    args->scheme = scheme;
-                    *sign_ctx = args;
                     goto Exit;
                 }
             }
@@ -1133,7 +1156,6 @@ static int sign_certificate(ptls_sign_certificate_t *_self, ptls_t *tls, void **
         // second invocation
         // algorithms should be NULL, re-use cached scheme
         assert(algorithms == NULL);
-        args = *sign_ctx;
         scheme = args->scheme;
         goto Exit;
     }
@@ -1142,13 +1164,7 @@ static int sign_certificate(ptls_sign_certificate_t *_self, ptls_t *tls, void **
 
 Exit:
     *selected_algorithm = scheme->scheme_id;
-    int ret = do_sign(self->key, scheme, outbuf, input, sign_ctx);
-    if (ret != PTLS_ERROR_ASYNC_OPERATION) {
-        *sign_ctx = NULL;
-        ptls_buffer_dispose(&args->buf);
-        free(args);
-    }
-    return ret;
+    return do_sign(self->key, scheme, outbuf, input, sign_ctx);
 }
 
 static X509 *to_x509(ptls_iovec_t vec)

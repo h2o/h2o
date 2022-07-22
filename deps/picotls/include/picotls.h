@@ -1164,9 +1164,9 @@ ptls_context_t *ptls_get_context(ptls_t *tls);
  */
 void ptls_set_context(ptls_t *tls, ptls_context_t *ctx);
 /**
- * get the sign ctx
+ * get the signature context
  */
-void *ptls_get_sign_ctx(ptls_t *tls);
+void *ptls_get_sign_context(ptls_t *tls);
 /**
  * returns the client-random
  */
