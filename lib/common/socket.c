@@ -1489,8 +1489,7 @@ static void do_ssl_async(h2o_socket_t *sock)
     assert(!sock->async.enabled);
     sock->async.enabled = 1;
 
-    // dup the async fd as to not interfere with library
-    int async_fd = dup(ptls_openssl_get_async_fd(sock->ssl->ptls));
+    int async_fd = ptls_openssl_get_async_fd(sock->ssl->ptls);
 
     // add async fd to event loop in order to retry when openssl engine is ready
 #if H2O_USE_LIBUV
