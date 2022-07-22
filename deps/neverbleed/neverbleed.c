@@ -324,28 +324,9 @@ static int expbuf_write(struct expbuf_t *buf, int fd)
 
     return 0;
 }
-
 static int expbuf_read(struct expbuf_t *buf, int fd)
 {
     size_t sz;
-
-    ASYNC_JOB *job;
-    if ((job = ASYNC_get_current_job()) != NULL) {
-        ASYNC_WAIT_CTX *waitctx = ASYNC_get_wait_ctx(job);
-
-        size_t numfds;
-        if (ASYNC_WAIT_CTX_get_all_fds(waitctx, NULL, &numfds) && numfds == 0) {
-            if(!ASYNC_WAIT_CTX_set_wait_fd(waitctx, "neverbleed", fd, NULL, NULL)) {
-                fprintf(stderr, "could not set async fd\n");
-                return -1;
-            }
-        }
-        ASYNC_pause_job();
-        if(!ASYNC_WAIT_CTX_clear_fd(waitctx, "neverbleed")) {
-            fprintf(stderr, "could not clear async fd\n");
-            return -1;
-        }
-    }
     if (read_nbytes(fd, &sz, sizeof(sz)) != 0)
         return -1;
     expbuf_reserve(buf, sz);
@@ -566,6 +547,37 @@ static size_t daemon_set_rsa(RSA *rsa)
     return index;
 }
 
+static int async_pause(int fd)
+{
+    ASYNC_JOB *job;
+
+    // dup the fd as the applicaiton may want to close it after polling
+    fd = dup(fd);
+    if (fd == -1) {
+        fprintf(stderr, "failed to dup(2) fd\n");
+        return -1;
+    }
+
+    if ((job = ASYNC_get_current_job()) != NULL) {
+        ASYNC_WAIT_CTX *waitctx = ASYNC_get_wait_ctx(job);
+
+        size_t numfds;
+        if (ASYNC_WAIT_CTX_get_all_fds(waitctx, NULL, &numfds) && numfds == 0) {
+            if(!ASYNC_WAIT_CTX_set_wait_fd(waitctx, "neverbleed", fd, NULL, NULL)) {
+                fprintf(stderr, "could not set async fd\n");
+                return -1;
+            }
+        }
+        ASYNC_pause_job();
+        if(!ASYNC_WAIT_CTX_clear_fd(waitctx, "neverbleed")) {
+            fprintf(stderr, "could not clear async fd\n");
+            return -1;
+        }
+    }
+    return 0;
+}
+
+
 static int priv_encdec_proxy(const char *cmd, int flen, const unsigned char *from, unsigned char *_to, RSA *rsa, int padding)
 {
     struct st_neverbleed_rsa_exdata_t *exdata;
@@ -585,6 +597,7 @@ static int priv_encdec_proxy(const char *cmd, int flen, const unsigned char *fro
         dief(errno != 0 ? "write error" : "connection closed by daemon");
     expbuf_dispose(&buf);
 
+    async_pause(thdata->fd);
     if (expbuf_read(&buf, thdata->fd) != 0)
         dief(errno != 0 ? "read error" : "connection closed by daemon");
     if (expbuf_shift_num(&buf, &ret) != 0 || (to = expbuf_shift_bytes(&buf, &tolen)) == NULL) {
@@ -667,6 +680,7 @@ static int sign_proxy(int type, const unsigned char *m, unsigned int m_len, unsi
         dief(errno != 0 ? "write error" : "connection closed by daemon");
     expbuf_dispose(&buf);
 
+    async_pause(thdata->fd);
     if (expbuf_read(&buf, thdata->fd) != 0)
         dief(errno != 0 ? "read error" : "connection closed by daemon");
     if (expbuf_shift_num(&buf, &ret) != 0 || (sigret = expbuf_shift_bytes(&buf, &siglen)) == NULL) {
@@ -849,6 +863,7 @@ static int ecdsa_sign_proxy(int type, const unsigned char *m, int m_len, unsigne
         dief(errno != 0 ? "write error" : "connection closed by daemon");
     expbuf_dispose(&buf);
 
+    async_pause(thdata->fd);
     if (expbuf_read(&buf, thdata->fd) != 0)
         dief(errno != 0 ? "read error" : "connection closed by daemon");
     if (expbuf_shift_num(&buf, &ret) != 0 || (sigret = expbuf_shift_bytes(&buf, &siglen)) == NULL) {
@@ -928,6 +943,7 @@ static void priv_ecdsa_finish(EC_KEY *key)
         dief(errno != 0 ? "write error" : "connection closed by daemon");
     expbuf_dispose(&buf);
 
+    async_pause(thdata->fd);
     if (expbuf_read(&buf, thdata->fd) != 0)
         dief(errno != 0 ? "read error" : "connection closed by daemon");
     if (expbuf_shift_num(&buf, &ret) != 0) {
@@ -1270,6 +1286,7 @@ static int priv_rsa_finish(RSA *rsa)
         dief(errno != 0 ? "write error" : "connection closed by daemon");
     expbuf_dispose(&buf);
 
+    async_pause(thdata->fd);
     if (expbuf_read(&buf, thdata->fd) != 0)
         dief(errno != 0 ? "read error" : "connection closed by daemon");
     if (expbuf_shift_num(&buf, &ret) != 0) {
