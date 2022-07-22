@@ -35,7 +35,7 @@ extern "C" {
 #include "h2o/string_.h"
 
 #ifndef H2O_USE_LIBUV
-#if H2O_USE_SELECT || H2O_USE_EPOLL || H2O_USE_KQUEUE
+#if H2O_USE_POLL || H2O_USE_EPOLL || H2O_USE_KQUEUE
 #define H2O_USE_LIBUV 0
 #else
 #define H2O_USE_LIBUV 1
