@@ -151,14 +151,6 @@ provider h2o {
       */
     probe connect_tcp_read_error(uint64_t conn_id, uint64_t req_id, const char *err);
     /**
-      * The remote end closed the TCP connection on the backend-side of a CONNECT tunnel.
-      */
-    probe connect_tcp_read_closed(uint64_t conn_id, uint64_t req_id);
-    /**
-      * The client-initiated TCP connection close on the backend-side of a CONNECT tunnel.
-      */
-    probe connect_tcp_write_closed(uint64_t conn_id, uint64_t req_id);
-    /**
       * An attempt to connect on the backend-side of a CONNECT-UDP tunnel.
       */
     probe connect_udp_attempt(uint64_t conn_id, uint64_t req_id, struct sockaddr *dest);
@@ -181,5 +173,5 @@ provider h2o {
     /**
       * Done handling a CONNECT or CONNECT-UDP request.
       */
-    probe connect_done(uint64_t conn_id, uint64_t req_id);
+    probe connect_dispose(uint64_t conn_id, uint64_t req_id);
 };

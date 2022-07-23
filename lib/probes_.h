@@ -53,6 +53,26 @@ struct st_h2o_tunnel_t;
         }                                                                                                                          \
     } while (0)
 
+#define H2O_PROBE_REQUEST0(label, req)                                                                                             \
+    do {                                                                                                                           \
+        h2o_req_t *_req = (req);                                                                                                   \
+        h2o_conn_t *_conn = _req->conn;                                                                                            \
+        if (H2O_CONN_IS_PROBED(label, _conn)) {                                                                                    \
+            uint64_t _req_id = _conn->callbacks->get_req_id(_conn, _req);                                                          \
+            H2O_##label(_conn->id, _req_id);                                                                                       \
+        }                                                                                                                          \
+    } while (0)
+
+#define H2O_PROBE_REQUEST(label, req, ...)                                                                                         \
+    do {                                                                                                                           \
+        h2o_req_t *_req = (req);                                                                                                   \
+        h2o_conn_t *_conn = _req->conn;                                                                                            \
+        if (H2O_CONN_IS_PROBED(label, _conn)) {                                                                                    \
+            uint64_t _req_id = _conn->callbacks->get_req_id(_conn, _req);                                                          \
+            H2O_##label(_conn->id, _req_id, __VA_ARGS__);                                                                          \
+        }                                                                                                                          \
+    } while (0)
+
 #define H2O_PROBE(label, ...)                                                                                                      \
     do {                                                                                                                           \
         if (PTLS_UNLIKELY(H2O_##label##_ENABLED())) {                                                                              \
@@ -71,6 +91,8 @@ struct st_h2o_tunnel_t;
 #define H2O_CONN_IS_PROBED(label, conn) (0)
 #define H2O_PROBE_CONN0(label, conn)
 #define H2O_PROBE_CONN(label, conn, ...)
+#define H2O_PROBE_REQUEST0(label, req)
+#define H2O_PROBE_REQUEST(label, req, ...)
 #define H2O_PROBE(label, ...)
 #define H2O_PROBE_HEXDUMP(s, l)
 
@@ -95,7 +117,6 @@ __attribute__((noinline)) static void h2o_probe_response_header(h2o_req_t *req, 
 
 static inline void h2o_probe_log_request(h2o_req_t *req, uint64_t req_index)
 {
-    req->req_index = req_index;
     H2O_PROBE_CONN(RECEIVE_REQUEST, req->conn, req_index, req->version);
     if (H2O_CONN_IS_PROBED(RECEIVE_REQUEST_HEADER, req->conn)) {
         if (req->input.authority.base != NULL)

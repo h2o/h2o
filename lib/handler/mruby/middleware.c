@@ -400,6 +400,12 @@ static int skip_tracing(h2o_conn_t *conn)
     return 1;
 }
 
+static uint64_t get_req_id(h2o_conn_t *_conn, h2o_req_t *req)
+{
+    /* only one sub-request on this dummy connection */
+    return 0;
+}
+
 static int handle_header_raw_key(h2o_mruby_shared_context_t *shared_ctx, h2o_iovec_t *raw_key, h2o_iovec_t value, void *_req)
 {
     h2o_req_t *req = _req;
@@ -619,6 +625,7 @@ static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_val
         .get_sockname = get_sockname,
         .get_peername = get_peername,
         .skip_tracing = skip_tracing,
+        .get_req_id = get_req_id,
     };
 
     mrb_state *mrb = ctx->shared->mrb;

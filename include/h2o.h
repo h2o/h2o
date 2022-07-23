@@ -944,6 +944,11 @@ typedef struct st_h2o_conn_callbacks_t {
      */
     int64_t (*get_rtt)(h2o_conn_t *conn);
     /**
+     * This is a mandatory callback.  It returns a number that identifies the
+     * request on the connection in h2olog output.
+     */
+    uint64_t (*get_req_id)(h2o_conn_t *conn, h2o_req_t *req);
+    /**
      * logging callbacks (all of them are optional)
      */
     union {
@@ -1356,9 +1361,6 @@ struct st_h2o_req_t {
     h2o_ostream_t *_ostr_top;
     size_t _next_filter_index;
     h2o_timer_t _timeout_entry;
-
-    /* a number that identifies the request on the connection (in h2olog output) */
-    uint64_t req_index;
 
     /* per-request memory pool (placed at the last since the structure is large) */
     h2o_mem_pool_t pool;

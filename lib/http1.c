@@ -1186,6 +1186,12 @@ static int skip_tracing(h2o_conn_t *_conn)
     return h2o_socket_skip_tracing(conn->sock);
 }
 
+static uint64_t get_req_id(h2o_conn_t *_conn, h2o_req_t *req)
+{
+    struct st_h2o_http1_conn_t *conn = (void *)_conn;
+    return conn->_req_index;
+}
+
 #define DEFINE_LOGGER(name)                                                                                                        \
     static h2o_iovec_t log_##name(h2o_req_t *req)                                                                                  \
     {                                                                                                                              \
@@ -1231,6 +1237,7 @@ static const h2o_conn_callbacks_t h1_callbacks = {
     .get_peername = get_peername,
     .get_ptls = get_ptls,
     .skip_tracing = skip_tracing,
+    .get_req_id = get_req_id,
     .log_ = {{
         .transport =
             {

@@ -502,6 +502,12 @@ static int get_skip_tracing(h2o_conn_t *conn)
     return ptls_skip_tracing(ptls);
 }
 
+static uint64_t get_req_id(h2o_conn_t *_conn, h2o_req_t *req)
+{
+    struct st_h2o_http3_server_stream_t *stream = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_stream_t, req, req);
+    return stream->quic->stream_id;
+}
+
 static uint32_t num_reqs_inflight(h2o_conn_t *_conn)
 {
     struct st_h2o_http3_server_conn_t *conn = (void *)_conn;
@@ -1805,6 +1811,7 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
         .get_peername = get_peername,
         .get_ptls = get_ptls,
         .skip_tracing = get_skip_tracing,
+        .get_req_id = get_req_id,
         .num_reqs_inflight = num_reqs_inflight,
         .get_tracer = get_tracer,
         .log_ = {{
