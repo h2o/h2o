@@ -10,7 +10,7 @@ all:    $(TARGET)
 	$(CC) $(CFLAGS) -c $<
 
 $(TARGET): $(OBJS)
-	$(CC) $(CFLAGS) -o $@ $(OBJS) $(LIBS)
+	$(CC) $(CFLAGS) -o $@ $(OBJS) $(LIBS) $(LDFLAGS)
 
 clean:
 	rm -fr $(OBJS) $(TARGET)

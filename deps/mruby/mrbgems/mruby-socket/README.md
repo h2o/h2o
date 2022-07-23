@@ -1,11 +1,10 @@
-mruby-socket
-============
+# mruby-socket
 
 "mruby-socket" mrbgem provides BSD socket interface for mruby.
 API is compatible with CRuby's "socket" library.
 
-
 ## Example
+
 ```sh
 % vi kame.rb
 s = TCPSocket.open("www.kame.net", 80)
@@ -20,21 +19,23 @@ Date: Tue, 21 May 2013 04:31:30 GMT
 ```
 
 ## Requirement
-- [iij/mruby-io](https://github.com/iij/mruby-io) mrbgem
-- [iij/mruby-mtest](https://github.com/iij/mruby-mtest) mrgbem to run tests
-- system must have RFC3493 basic socket interface
-- and some POSIX API...
+
+* [mruby-io](https://github.com/mruby/mruby/tree/master/mrbgems/mruby-io) mrbgem
+* [iij/mruby-mtest](https://github.com/iij/mruby-mtest) mrgbem to run tests
+* system must have RFC3493 basic socket interface
+* and some POSIX API...
 
 ## TODO
-- add missing methods
-- write more tests
-- fix possible descriptor leakage (see XXX comments)
-- `UNIXSocket#recv_io` `UNIXSocket#send_io`
 
+* add missing methods
+* write more tests
+* fix possible descriptor leakage (see XXX comments)
+* `UNIXSocket#recv_io` `UNIXSocket#send_io`
 
 ## License
 
 Copyright (c) 2013 Internet Initiative Japan Inc.
+Copyright (c) 2017 mruby developers
 
 Permission is hereby granted, free of charge, to any person obtaining a
 copy of this software and associated documentation files (the "Software"),

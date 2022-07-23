@@ -146,16 +146,20 @@ run_with_curl($server, sub {
             is md5_hex($content), $files{$file}->{md5}, "$proto://127.0.0.1/echo (POST, chunked, $file, md5)";
         }
     }
-    my $content = `$curl --silent --show-error --data-binary \@$huge_file $proto://127.0.0.1:$port/echo`;
-    is length($content), $huge_file_size, "$proto://127.0.0.1/echo (POST, mmap-backed, size)";
-    is md5_hex($content), $huge_file_md5, "$proto://127.0.0.1/echo (POST, mmap-backed, md5)";
-    if ($curl !~ /--http2/) {
-        $content = `$curl --silent --show-error --header 'Transfer-Encoding: chunked' --data-binary \@$huge_file $proto://127.0.0.1:$port/echo`;
-        is length($content), $huge_file_size, "$proto://127.0.0.1/echo (POST, chunked, mmap-backed, size)";
-        is md5_hex($content), $huge_file_md5, "$proto://127.0.0.1/echo (POST, chunked, mmap-backed, md5)";
+    SKIP: {
+        skip "On GitHub Actions, too few pages can be pinned", 2
+            if $ssl_offload eq 'zerocopy' and ($ENV{TEST_PLATFORM} || '') eq 'github-actions';
+        my $content = `$curl --silent --show-error --data-binary \@$huge_file $proto://127.0.0.1:$port/echo`;
+        is length($content), $huge_file_size, "$proto://127.0.0.1/echo (POST, mmap-backed, size)";
+        is md5_hex($content), $huge_file_md5, "$proto://127.0.0.1/echo (POST, mmap-backed, md5)";
+        if ($curl !~ /--http2/) {
+            $content = `$curl --silent --show-error --header 'Transfer-Encoding: chunked' --data-binary \@$huge_file $proto://127.0.0.1:$port/echo`;
+            is length($content), $huge_file_size, "$proto://127.0.0.1/echo (POST, chunked, mmap-backed, size)";
+            is md5_hex($content), $huge_file_md5, "$proto://127.0.0.1/echo (POST, chunked, mmap-backed, md5)";
+        }
     }
     subtest 'rewrite-redirect' => sub {
-        $content = `$curl --silent --dump-header /dev/stdout --max-redirs 0 "$proto://127.0.0.1:$port/?resp:status=302&resp:location=http://@{[uri_escape($upstream)]}/abc"`;
+        my $content = `$curl --silent --dump-header /dev/stdout --max-redirs 0 "$proto://127.0.0.1:$port/?resp:status=302&resp:location=http://@{[uri_escape($upstream)]}/abc"`;
         like $content, qr{HTTP/[^ ]+ 302\s}m;
         like $content, qr{^location: ?$proto://127.0.0.1:$port/abc\r$}m;
     };

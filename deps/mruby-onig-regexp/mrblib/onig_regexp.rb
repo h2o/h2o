@@ -15,6 +15,10 @@ class OnigRegexp
     @last_match
   end
 
+  def self.last_match=(match)
+    @last_match = match
+  end
+
   # ISO 15.2.15.7.2
   def initialize_copy(other)
     initialize(other.source, other.options)
@@ -47,9 +51,15 @@ class String
     end
   end
 
+  # ISO 15.2.10.5.27
+  def match(re, pos=0, &block)
+    re.match(self, pos, &block)
+  end
+
+
   # redefine methods with oniguruma regexp version
   %i[sub gsub split scan].each do |v|
-    alias_method :"string_#{v}", v
+    alias_method :"string_#{v}", v if method_defined?(v)
     alias_method v, :"onig_regexp_#{v}"
   end
 
@@ -57,6 +67,7 @@ class String
 
   alias_method :old_slice, :slice
   alias_method :old_square_brancket, :[]
+  alias_method :old_square_brancket_equal, :[]=
 
   def [](*args)
     return old_square_brancket(*args) unless args[0].class == Regexp
@@ -81,6 +92,27 @@ class String
   end
 
   alias_method :slice, :[]
+
+  def []=(*args)
+    return old_square_brancket_equal(*args) unless args[0].class == Regexp
+
+    n_args = args.size
+    case n_args
+    when 2
+      match = args[0].match(self)
+      beg = match.begin(0)
+      self[beg, match.end(0) - beg] = args[1]
+    when 3
+      match = args[0].match(self)
+      n = args[1]
+      beg = match.begin(n)
+      self[beg, match.end(n) - beg] = args[2]
+    else
+      raise ArgumentError, "wrong number of arguments (#{n_args} for 2..3)"
+    end
+
+    self
+  end
 
   def slice!(*args)
     if args.size < 2

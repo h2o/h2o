@@ -8,4 +8,3 @@ end
 assert('BasicObject superclass') do
   assert_nil(BasicObject.superclass)
 end
-

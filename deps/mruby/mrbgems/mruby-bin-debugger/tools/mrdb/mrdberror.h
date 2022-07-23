@@ -17,4 +17,3 @@
 #define MRB_DEBUG_BREAK_NO_OVER        (-15)
 
 #endif
-

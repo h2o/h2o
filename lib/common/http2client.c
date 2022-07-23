@@ -89,6 +89,7 @@ struct st_h2o_http2client_stream_t {
         h2o_http2_window_t window;
         h2o_buffer_t *buf;
         h2o_linklist_t sending_link;
+        h2o_httpclient_proceed_req_cb proceed_req; /* set to NULL once entire request body is provided to http2client */
     } output;
 
     struct {
@@ -100,11 +101,7 @@ struct st_h2o_http2client_stream_t {
         unsigned message_body_forbidden : 1;
     } input;
 
-    struct {
-        h2o_httpclient_proceed_req_cb proceed_req;
-        unsigned char done : 1;
-        unsigned char inflight : 1;
-    } streaming;
+    int *notify_destroyed;
 };
 
 static void do_emit_writereq(struct st_h2o_http2client_conn_t *conn);
@@ -246,6 +243,9 @@ static void close_stream(struct st_h2o_http2client_stream_t *stream)
         h2o_buffer_dispose(&stream->output.buf);
     h2o_buffer_dispose(&stream->input.body);
 
+    if (stream->notify_destroyed != NULL)
+        *stream->notify_destroyed = 1;
+
     free(stream);
 }
 
@@ -270,9 +270,11 @@ static void call_callback_with_error(struct st_h2o_http2client_stream_t *stream,
         stream->super._cb.on_body(&stream->super, errstr);
         break;
     case STREAM_STATE_CLOSED:
-        if (stream->streaming.proceed_req != NULL) {
-            stream->streaming.inflight = 0; /* proceed_req can be called to indicate error, regardless of write being inflight */
-            stream->streaming.proceed_req(&stream->super, errstr);
+        /* proceed_req can be called to indicate error, regardless of write being inflight */
+        if (stream->output.proceed_req != NULL) {
+            h2o_httpclient_proceed_req_cb cb = stream->output.proceed_req;
+            stream->output.proceed_req = NULL;
+            cb(&stream->super, errstr);
         }
         break;
     }
@@ -621,14 +623,12 @@ static int handle_rst_stream_frame(struct st_h2o_http2client_conn_t *conn, h2o_h
 
 static int update_stream_output_window(struct st_h2o_http2client_stream_t *stream, ssize_t delta)
 {
-    ssize_t before = h2o_http2_window_get_avail(&stream->output.window);
     if (h2o_http2_window_update(&stream->output.window, delta) != 0)
         return -1;
     ssize_t after = h2o_http2_window_get_avail(&stream->output.window);
-    if (before <= 0 && 0 < after && stream->output.buf != NULL && stream->output.buf->size != 0) {
-        assert(!h2o_linklist_is_linked(&stream->output.sending_link));
+    if (after > 0 && stream->output.buf != NULL && stream->output.buf->size != 0 &&
+        !h2o_linklist_is_linked(&stream->output.sending_link))
         h2o_linklist_insert(&stream->conn->output.sending_streams, &stream->output.sending_link);
-    }
     return 0;
 }
 
@@ -1023,7 +1023,7 @@ static void on_connection_ready(struct st_h2o_http2client_stream_t *stream, stru
 
     stream->super._cb.on_head =
         stream->super._cb.on_connect(&stream->super, NULL, &method, &url, (const h2o_header_t **)&headers, &num_headers, &body,
-                                     &stream->streaming.proceed_req, &props, &conn->super.origin_url);
+                                     &stream->output.proceed_req, &props, &conn->super.origin_url);
     if (stream->super._cb.on_head == NULL) {
         close_stream(stream);
         return;
@@ -1032,10 +1032,8 @@ static void on_connection_ready(struct st_h2o_http2client_stream_t *stream, stru
     h2o_http2_window_init(&stream->output.window, conn->peer_settings.initial_window_size);
 
     /* forward request state */
-    if (stream->streaming.proceed_req != NULL) {
+    if (stream->output.proceed_req != NULL) {
         stream->state.req = STREAM_STATE_BODY;
-        if (body.len != 0)
-            stream->streaming.inflight = 1;
     } else if (body.base != NULL) {
         stream->state.req = STREAM_STATE_BODY;
     } else {
@@ -1097,12 +1095,18 @@ static void on_write_complete(h2o_socket_t *sock, const char *err)
             H2O_STRUCT_FROM_MEMBER(struct st_h2o_http2client_stream_t, output.sending_link, link);
         h2o_linklist_unlink(link);
 
-        if (stream->streaming.proceed_req != NULL && stream->streaming.inflight) {
-            stream->streaming.inflight = 0;
-            stream->streaming.proceed_req(&stream->super, NULL);
+        /* request the app to send more, unless the stream is already closed (note: invocation of `proceed_req` might invoke
+         * `do_write_req` synchronously) */
+        int stream_destroyed = 0;
+        if (stream->output.proceed_req != NULL) {
+            stream->notify_destroyed = &stream_destroyed;
+            stream->output.proceed_req(&stream->super, NULL);
+            if (stream_destroyed)
+                continue;
+            stream->notify_destroyed = NULL;
         }
 
-        if (stream->streaming.proceed_req == NULL || stream->streaming.done) {
+        if (stream->output.proceed_req == NULL && !h2o_linklist_is_linked(&stream->output.sending_link)) {
             stream->state.req = STREAM_STATE_CLOSED;
             h2o_timer_link(stream->super.ctx->loop, stream->super.ctx->first_byte_timeout, &stream->super._timeout);
         }
@@ -1111,15 +1115,22 @@ static void on_write_complete(h2o_socket_t *sock, const char *err)
     /* reset the other buffer */
     h2o_buffer_dispose(&conn->output.buf_in_flight);
 
+    /* bail out if nothing can be written */
+    if (conn->output.buf->size == 0 && h2o_linklist_is_empty(&conn->output.sending_streams)) {
+        assert(!h2o_timer_is_linked(&conn->output.defer_timeout));
+        close_connection_if_necessary(conn);
+        return;
+    }
+
+    /* run next write now instead of relying on the deferred timeout */
+    if (h2o_timer_is_linked(&conn->output.defer_timeout))
+        h2o_timer_unlink(&conn->output.defer_timeout);
 #if !H2O_USE_LIBUV
     if (conn->state == H2O_HTTP2CLIENT_CONN_STATE_OPEN) {
-        if (conn->output.buf->size != 0 || !h2o_linklist_is_empty(&conn->output.sending_streams))
-            h2o_socket_notify_write(sock, on_notify_write);
+        h2o_socket_notify_write(sock, on_notify_write);
         return;
     }
 #endif
-
-    /* write more, if possible */
     do_emit_writereq(conn);
     close_connection_if_necessary(conn);
 }
@@ -1144,11 +1155,11 @@ static void stream_emit_pending_data(struct st_h2o_http2client_stream_t *stream)
 {
     size_t max_payload_size = calc_max_payload_size(stream);
     size_t payload_size = sz_min(max_payload_size, stream->output.buf->size);
-    int end_stream = (stream->streaming.proceed_req == NULL || stream->streaming.done) && payload_size == stream->output.buf->size;
+    int end_stream = stream->output.proceed_req == NULL && payload_size == stream->output.buf->size;
     if (payload_size == 0 && !end_stream)
         return;
     char *dst = h2o_buffer_reserve(&stream->conn->output.buf, H2O_HTTP2_FRAME_HEADER_SIZE + payload_size).base;
-    h2o_http2_encode_frame_header((void *)dst, stream->output.buf->size, H2O_HTTP2_FRAME_TYPE_DATA,
+    h2o_http2_encode_frame_header((void *)dst, payload_size, H2O_HTTP2_FRAME_TYPE_DATA,
                                   end_stream ? H2O_HTTP2_FRAME_FLAG_END_STREAM : 0, stream->stream_id);
     h2o_memcpy(dst + H2O_HTTP2_FRAME_HEADER_SIZE, stream->output.buf->bytes, payload_size);
     stream->conn->output.buf->size += H2O_HTTP2_FRAME_HEADER_SIZE + payload_size;
@@ -1162,27 +1173,26 @@ static void do_emit_writereq(struct st_h2o_http2client_conn_t *conn)
 {
     assert(conn->output.buf_in_flight == NULL);
 
-    /* emit DATA frames */
-    h2o_linklist_t *node = conn->output.sending_streams.next;
-    h2o_linklist_t *first = node;
-    while (node != &conn->output.sending_streams) {
-        h2o_linklist_t *next = node->next;
+    /* send DATA frames */
+    h2o_linklist_t pending;
+    h2o_linklist_init_anchor(&pending);
+    h2o_linklist_insert_list(&pending, &conn->output.sending_streams);
+    while (!h2o_linklist_is_empty(&pending)) {
         struct st_h2o_http2client_stream_t *stream =
-            H2O_STRUCT_FROM_MEMBER(struct st_h2o_http2client_stream_t, output.sending_link, node);
-        h2o_linklist_unlink(node);
+            H2O_STRUCT_FROM_MEMBER(struct st_h2o_http2client_stream_t, output.sending_link, pending.next);
+        h2o_linklist_unlink(&stream->output.sending_link);
 
         if (stream->output.buf != NULL)
             stream_emit_pending_data(stream);
 
-        if (stream->output.buf != NULL && stream->output.buf->size == 0) {
-            h2o_linklist_insert(&conn->output.sent_streams, node);
+        if (stream->output.buf == NULL || stream->output.buf->size == 0) {
+            h2o_linklist_insert(&conn->output.sent_streams, &stream->output.sending_link);
         } else if (h2o_http2_window_get_avail(&stream->output.window) > 0) {
-            h2o_linklist_insert(&conn->output.sending_streams, node); /* move to the tail to rotate buffers */
+            /* re-insert to tail so that streams would be sent round-robin */
+            h2o_linklist_insert(&conn->output.sending_streams, &stream->output.sending_link);
+        } else {
+            /* stream is flow-control-blocked; is not linked until WINDOW_UPDATE frame is received */
         }
-
-        if (next == first)
-            break;
-        node = next;
     }
 
     if (conn->output.buf->size != 0) {
@@ -1291,25 +1301,20 @@ static void do_update_window(h2o_httpclient_t *_client)
 static int do_write_req(h2o_httpclient_t *_client, h2o_iovec_t chunk, int is_end_stream)
 {
     struct st_h2o_http2client_stream_t *stream = (void *)_client;
-    assert(stream->streaming.proceed_req != NULL);
-    assert(!stream->streaming.inflight);
+    assert(stream->output.proceed_req != NULL);
+    assert(!h2o_linklist_is_linked(&stream->output.sending_link));
 
-    stream->streaming.inflight = 1;
     if (is_end_stream)
-        stream->streaming.done = 1;
+        stream->output.proceed_req = NULL;
 
-    if (stream->output.buf == NULL) {
+    if (stream->output.buf == NULL)
         h2o_buffer_init(&stream->output.buf, &h2o_socket_buffer_prototype);
-    }
 
-    if (chunk.len != 0) {
+    if (chunk.len != 0)
         h2o_buffer_append(&stream->output.buf, chunk.base, chunk.len);
-    }
 
-    if (!h2o_linklist_is_linked(&stream->output.sending_link)) {
-        h2o_linklist_insert(&stream->conn->output.sending_streams, &stream->output.sending_link);
-        request_write(stream->conn);
-    }
+    h2o_linklist_insert(&stream->conn->output.sending_streams, &stream->output.sending_link);
+    request_write(stream->conn);
 
     return 0;
 }

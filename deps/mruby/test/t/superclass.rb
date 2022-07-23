@@ -23,22 +23,21 @@
   [:Exception, :Object, '15.2.22.2'],
   [:StandardError, :Exception, '15.2.23.2'],
   [:ArgumentError, :StandardError, '15.2.24.2'],
-  # [:LocalJumpError, :StandardError, '15.2.25.2'],
-  [:LocalJumpError, :ScriptError, '15.2.25.2'], # mruby specific
-  [:RangeError, :StandardError, '12.2.26.2'],
-  [:RegexpError, :StandardError, '12.2.27.2'],
-  [:RuntimeError, :StandardError, '12.2.28.2'],
-  [:TypeError, :StandardError, '12.2.29.2'],
-#  [:ZeroDivisionError, :StandardError, '12.2.30.2'],  # No ZeroDivisionError in mruby
+  [:LocalJumpError, :StandardError, '15.2.25.2'],
+  [:RangeError, :StandardError, '15.2.26.2'],
+  [:RegexpError, :StandardError, '15.2.27.2'],
+  [:RuntimeError, :StandardError, '15.2.28.2'],
+  [:TypeError, :StandardError, '15.2.29.2'],
+  [:ZeroDivisionError, :StandardError, '15.2.30.2'],
   [:NameError, :StandardError, '15.2.31.2'],
   [:NoMethodError, :NameError, '15.2.32.2'],
   [:IndexError, :StandardError, '15.2.33.2'],
-#  [:IOError, :StandardError, '12.2.34.2'],
-#  [:EOFError, :IOError, '12.2.35.2'],
+#  [:IOError, :StandardError, '15.2.34.2'],
+#  [:EOFError, :IOError, '15.2.35.2'],
 #  [:SystemCallError, :StandardError, '15.2.36.2'],
-  [:ScriptError, :Exception, '12.2.37.2'],
-  [:SyntaxError, :ScriptError, '12.2.38.2'],
-#  [:LoadError, :ScriptError, '12.2.39,2'],
+  [:ScriptError, :Exception, '15.2.37.2'],
+  [:SyntaxError, :ScriptError, '15.2.38.2'],
+#  [:LoadError, :ScriptError, '15.2.39,2'],
 ].each do |cls, super_cls, iso|
   assert "Direct superclass of #{cls}", iso do
     skip "#{cls} isn't defined" unless Object.const_defined? cls

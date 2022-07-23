@@ -259,6 +259,8 @@ static struct {
      * Can be set to INT_MAX so that only max_connections would be used.
      */
     int max_quic_connections;
+    int soft_connection_limit;
+    int soft_connection_limit_min_age;
     /**
      * array size == number of worker threads to instantiate, the values indicate which CPU to pin, -1 if not
      */
@@ -316,6 +318,8 @@ static struct {
     .error_log = NULL,
     .max_connections = 1024,
     .max_quic_connections = INT_MAX, /* (INT_MAX = i.e., allow up to max_connections) */
+    .soft_connection_limit = INT_MAX,
+    .soft_connection_limit_min_age = 30,
     .thread_map = {0},               /* initialized in main() */
     .quic = {0},                     /* 0 defaults to all, conn_callbacks (initialized in main() */
     .tfo_queues = 0,                 /* initialized in main() */
@@ -2009,12 +2013,14 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
                 listener->quic.ctx = quic;
                 if (quic_node != NULL) {
                     yoml_t **retry_node, **sndbuf, **rcvbuf, **amp_limit, **qpack_encoder_table_capacity, **max_streams_bidi,
-                        **max_udp_payload_size;
+                        **max_udp_payload_size, **handshake_timeout_rtt_multiplier, **max_initial_handshake_packets;
                     if (h2o_configurator_parse_mapping(cmd, *quic_node, NULL,
                                                        "retry:s,sndbuf:s,rcvbuf:s,amp-limit:s,qpack-encoder-table-capacity:s,max-"
-                                                       "streams-bidi:s,max-udp-payload-size:s",
+                                                       "streams-bidi:s,max-udp-payload-size:s,handshake-timeout-rtt-multiplier:s,"
+                                                       "max-initial-handshake-packets:s",
                                                        &retry_node, &sndbuf, &rcvbuf, &amp_limit, &qpack_encoder_table_capacity,
-                                                       &max_streams_bidi, &max_udp_payload_size) != 0)
+                                                       &max_streams_bidi, &max_udp_payload_size, &handshake_timeout_rtt_multiplier,
+                                                       &max_initial_handshake_packets) != 0)
                         return -1;
                     if (retry_node != NULL) {
                         ssize_t on = h2o_configurator_get_one_of(cmd, *retry_node, "OFF,ON");
@@ -2045,6 +2051,27 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
                         if (h2o_configurator_scanf(cmd, *max_udp_payload_size, "%" SCNu64,
                                                    &listener->quic.ctx->transport_params.max_udp_payload_size) != 0)
                             return -1;
+                    }
+                    if (handshake_timeout_rtt_multiplier != NULL) {
+                        uint32_t v;
+                        if (h2o_configurator_scanf(cmd, *handshake_timeout_rtt_multiplier, "%" SCNu32, &v) != 0)
+                            return -1;
+                        if (v == 0)
+                            h2o_configurator_errprintf(
+                                cmd, *handshake_timeout_rtt_multiplier,
+                                "[WARNING] handshake timeout multiplier == 0 is not recommended except for testing.");
+                        listener->quic.ctx->handshake_timeout_rtt_multiplier = v;
+                    }
+                    if (max_initial_handshake_packets != NULL) {
+                        uint64_t v;
+                        if (h2o_configurator_scanf(cmd, *max_initial_handshake_packets, "%" SCNu64, &v) != 0)
+                            return -1;
+                        if (v == 0) {
+                            h2o_configurator_errprintf(cmd, *max_initial_handshake_packets,
+                                                       "max Initial/Handshake packets must be greater than 0");
+                            return -1;
+                        }
+                        listener->quic.ctx->max_initial_handshake_packets = v;
                     }
                 }
                 if (conf.run_mode == RUN_MODE_WORKER)
@@ -2215,6 +2242,16 @@ static int on_config_max_connections(h2o_configurator_command_t *cmd, h2o_config
 static int on_config_max_quic_connections(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     return h2o_configurator_scanf(cmd, node, "%d", &conf.max_quic_connections);
+}
+
+static int on_config_soft_connection_limit(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    return h2o_configurator_scanf(cmd, node, "%d", &conf.soft_connection_limit);
+}
+
+static int on_config_soft_connection_limit_min_age(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    return h2o_configurator_scanf(cmd, node, "%d", &conf.soft_connection_limit_min_age);
 }
 
 static inline int on_config_num_threads_add_cpu(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
@@ -2734,6 +2771,7 @@ static uint8_t *encode_quic_address(uint8_t *dst, quicly_address_t *addr)
         break;
     case AF_UNSPEC:
         *dst++ = 0;
+        break;
     default:
         h2o_fatal("unknown protocol family");
         break;
@@ -2932,6 +2970,14 @@ static void on_socketclose(void *data)
     num_connections(-1);
 }
 
+static void close_idle_connections(h2o_context_t *ctx)
+{
+    int excess_connections = num_connections(0) - conf.soft_connection_limit;
+    if (excess_connections > 0) {
+        h2o_context_close_idle_connections(ctx, excess_connections / conf.thread_map.size,
+                                           conf.soft_connection_limit_min_age * 1000);
+    }
+}
 static void on_accept(h2o_socket_t *listener, const char *err)
 {
     struct listener_ctx_t *ctx = listener->data;
@@ -2945,6 +2991,8 @@ static void on_accept(h2o_socket_t *listener, const char *err)
 
     do {
         h2o_socket_t *sock;
+        close_idle_connections(ctx->accept_ctx.ctx);
+
         if (num_connections(1) >= conf.max_connections) {
             /* The accepting socket is disactivated before entering the next in `run_loop`.
              * Note: it is possible that the server would accept at most `max_connections + num_threads` connections, since the
@@ -3017,6 +3065,9 @@ static int validate_token(h2o_http3_server_ctx_t *ctx, struct sockaddr *remote, 
 static h2o_quic_conn_t *on_http3_accept(h2o_quic_ctx_t *_ctx, quicly_address_t *destaddr, quicly_address_t *srcaddr,
                                         quicly_decoded_packet_t *packet)
 {
+    h2o_http3_server_ctx_t *ctx = (void *)_ctx;
+    close_idle_connections(ctx->accept_ctx->ctx);
+
     /* adjust number of connections, or drop the incoming packet when handling too many connections */
     if (num_connections(1) >= conf.max_connections) {
         num_connections(-1);
@@ -3028,7 +3079,6 @@ static h2o_quic_conn_t *on_http3_accept(h2o_quic_ctx_t *_ctx, quicly_address_t *
         return NULL;
     }
 
-    h2o_http3_server_ctx_t *ctx = (void *)_ctx;
     struct init_ebpf_key_info_t ebpf_key_info = {
         .local = &destaddr->sa,
         .remote = &srcaddr->sa,
@@ -3109,16 +3159,21 @@ static h2o_quic_conn_t *on_http3_accept(h2o_quic_ctx_t *_ctx, quicly_address_t *
     /* accept the connection */
     conn = h2o_http3_server_accept(ctx, destaddr, srcaddr, packet, token, (H2O_EBPF_FLAGS_SKIP_TRACING_BIT & flags) != 0,
                                    &conf.quic.conn_callbacks);
-    if (conn == NULL || &conn->super == H2O_QUIC_ACCEPT_CONN_DECRYPTION_FAILED)
+    if (conn == NULL || &conn->super == &h2o_quic_accept_conn_decryption_failed) {
         goto Exit;
+    } else if (conn == &h2o_http3_accept_conn_closed) {
+        conn = NULL;
+        goto ExitNoDecrements;
+    }
     num_sessions(1);
 
 Exit:
-    if (conn == NULL || &conn->super == H2O_QUIC_ACCEPT_CONN_DECRYPTION_FAILED) {
+    if (conn == NULL || &conn->super == &h2o_quic_accept_conn_decryption_failed) {
         /* revert the changes to the connection counts */
         num_connections(-1);
         num_quic_connections(-1);
     }
+ExitNoDecrements:
     return &conn->super;
 }
 
@@ -3150,7 +3205,7 @@ static void on_server_notification(h2o_multithread_receiver_t *receiver, h2o_lin
     }
 }
 
-static void *run_loop(void *_thread_index)
+H2O_NORETURN static void *run_loop(void *_thread_index)
 {
     thread_index = (size_t)_thread_index;
     struct listener_ctx_t *listeners = alloca(sizeof(*listeners) * conf.num_listeners);
@@ -3286,11 +3341,24 @@ static void *run_loop(void *_thread_index)
     }
     h2o_context_request_shutdown(&conf.threads[thread_index].ctx);
 
-    /* wait until all the connection gets closed */
+    /* Wait until all the connections get closed. At least one worker thread that closed the last connection, turning
+     * `num_connections(0)` to zero, will exit from this loop. Other worker threads might get stuck, as `h2o_evloop_run` does not
+     * return when a different worker thread closes a connection. */
     while (num_connections(0) != 0)
         h2o_evloop_run(conf.threads[thread_index].ctx.loop, INT32_MAX);
 
-    return NULL;
+    /* More than one thread might reach here; take a lock so that the first thread does the cleanup. */
+    static pthread_mutex_t cleanup_lock = PTHREAD_MUTEX_INITIALIZER;
+    pthread_mutex_lock(&cleanup_lock);
+
+    /* remove the pid file */
+    if (conf.pid_file != NULL)
+        unlink(conf.pid_file);
+
+    /* Use `_exit` to prevent functions registered via `atexit` from being invoked, otherwise we might see some threads die while
+     * trying to use whatever state that are cleaned up. Specifically, we see the ticket updater thread dying inside RAND_bytes,
+     * while or after `OpenSSL_cleanup` is invoked as an atexit callback. */
+    _exit(0);
 }
 
 static char **build_server_starter_argv(const char *h2o_cmd, const char *config_file)
@@ -3458,11 +3526,14 @@ static h2o_iovec_t on_extra_status(void *unused, h2o_globalconf_t *_conf, h2o_re
                        " \"generation\": %s,\n"
                        " \"connections\": %d,\n"
                        " \"max-connections\": %d,\n"
+                       " \"soft-connection-limit\": %d,\n"
+                       " \"soft-connection-limit.min-age\": %d,\n"
                        " \"listeners\": %zu,\n"
                        " \"worker-threads\": %zu,\n"
                        " \"num-sessions\": %lu",
                        OpenSSL_version(OPENSSL_VERSION), current_time, restart_time, (uint64_t)(now - conf.launch_time), generation,
-                       num_connections(0), conf.max_connections, conf.num_listeners, conf.thread_map.size, num_sessions(0));
+                       num_connections(0), conf.max_connections, conf.soft_connection_limit, conf.soft_connection_limit_min_age,
+                       conf.num_listeners, conf.thread_map.size, num_sessions(0));
     assert(ret.len < BUFSIZE);
 
 #if JEMALLOC_STATS == 1
@@ -3553,6 +3624,9 @@ static void setup_configurators(void)
                                         on_config_error_log);
         h2o_configurator_define_command(c, "max-connections", H2O_CONFIGURATOR_FLAG_GLOBAL, on_config_max_connections);
         h2o_configurator_define_command(c, "max-quic-connections", H2O_CONFIGURATOR_FLAG_GLOBAL, on_config_max_quic_connections);
+        h2o_configurator_define_command(c, "soft-connection-limit", H2O_CONFIGURATOR_FLAG_GLOBAL, on_config_soft_connection_limit);
+        h2o_configurator_define_command(c, "soft-connection-limit.min-age", H2O_CONFIGURATOR_FLAG_GLOBAL,
+                                        on_config_soft_connection_limit_min_age);
         h2o_configurator_define_command(c, "num-threads", H2O_CONFIGURATOR_FLAG_GLOBAL, on_config_num_threads);
         h2o_configurator_define_command(c, "num-quic-threads", H2O_CONFIGURATOR_FLAG_GLOBAL, on_config_num_quic_threads);
         h2o_configurator_define_command(c, "num-name-resolution-threads", H2O_CONFIGURATOR_FLAG_GLOBAL,
@@ -3798,7 +3872,7 @@ int main(int argc, char **argv)
         size_t i;
         for (i = 0; i != conf.server_starter.num_fds; ++i)
             set_cloexec(conf.server_starter.fds[i]);
-        conf.server_starter.bound_fd_map = alloca(conf.server_starter.num_fds);
+        conf.server_starter.bound_fd_map = malloc(conf.server_starter.num_fds);
         memset(conf.server_starter.bound_fd_map, 0, conf.server_starter.num_fds);
     }
 
@@ -4074,28 +4148,15 @@ int main(int argc, char **argv)
     }
 
     /* start the threads */
-    conf.threads = alloca(sizeof(conf.threads[0]) * conf.thread_map.size);
-    pthread_t *tids = alloca(sizeof(*tids) * conf.thread_map.size);
-    for (size_t i = 1; i != conf.thread_map.size; ++i)
-        h2o_multithread_create_thread(&tids[i], NULL, run_loop, (void *)i);
+    conf.threads = malloc(sizeof(conf.threads[0]) * conf.thread_map.size);
+    for (size_t i = 1; i != conf.thread_map.size; ++i) {
+        pthread_t tid;
+        h2o_multithread_create_thread(&tid, NULL, run_loop, (void *)i);
+    }
 
     /* this thread becomes the first thread */
     run_loop((void *)0);
 
-    /* wait for all threads to exit */
-    for (size_t i = 1; i != conf.thread_map.size; ++i) {
-        if (pthread_join(tids[i], NULL) != 0) {
-            char errbuf[256];
-            h2o_fatal("pthread_join: %s", h2o_strerror_r(errno, errbuf, sizeof(errbuf)));
-        }
-    }
-
-    /* remove the pid file */
-    if (conf.pid_file != NULL)
-        unlink(conf.pid_file);
-
-    /* Use `_exit` to prevent functions registered via `atexit` from being invoked, otherwise we might see some threads die while
-     * trying to use whatever state that are cleaned up. Specifically, we see the ticket updater thread dying inside RAND_bytes,
-     * while or after `OpenSSL_cleanup` is invoked as an atexit callback. */
-    _exit(0);
+    /* notreached */
+    return 0;
 }

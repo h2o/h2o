@@ -242,7 +242,7 @@ info_break_select(mrb_state *mrb, mrdb_state *mrdb)
 }
 
 mrb_debug_bptype
-parse_breakcommand(mrdb_state *mrdb, const char **file, uint32_t *line, char **cname, char **method)
+parse_breakcommand(mrb_state *mrb, mrdb_state *mrdb, const char **file, uint32_t *line, char **cname, char **method)
 {
   mrb_debug_context *dbg = mrdb->dbg;
   char *args;
@@ -274,7 +274,7 @@ parse_breakcommand(mrdb_state *mrdb, const char **file, uint32_t *line, char **c
       STRTOUL(l, body);
       if (l <= 65535) {
         *line = l;
-        *file = (body == args)? mrb_debug_get_filename(dbg->irep, dbg->pc - dbg->irep->iseq): args;
+        *file = (body == args)? mrb_debug_get_filename(mrb, dbg->irep, dbg->pc - dbg->irep->iseq): args;
       }
       else {
         puts(BREAK_ERR_MSG_RANGEOVER);
@@ -332,7 +332,7 @@ dbgcmd_break(mrb_state *mrb, mrdb_state *mrdb)
   char *method = NULL;
   int32_t ret;
 
-  type = parse_breakcommand(mrdb, &file, &line, &cname, &method);
+  type = parse_breakcommand(mrb, mrdb, &file, &line, &cname, &method);
   switch (type) {
     case MRB_DEBUG_BPTYPE_LINE:
       ret = mrb_debug_set_break_line(mrb, dbg, file, line);
