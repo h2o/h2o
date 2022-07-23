@@ -63,7 +63,7 @@ ENV PERL_CPANM_OPT="--mirror https://cpan.metacpan.org/"
 RUN cpanm -n Test::More Starlet Protocol::HTTP2 Net::DNS::Nameserver Test::TCP
 
 # h2spec
-RUN curl -Ls https://github.com/i110/h2spec/releases/download/v2.2.0-4e8cc7e/h2spec_linux_amd64.tar.gz | tar zx -C /usr/local/bin
+RUN curl -Ls https://github.com/summerwind/h2spec/releases/download/v2.6.0/h2spec_linux_amd64.tar.gz | tar zx -C /usr/local/bin
 
 # bcc and bpftrace
 RUN apt-get install --yes \
