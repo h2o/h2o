@@ -124,12 +124,7 @@ struct st_connect_generator_t {
 
 static void record_error(struct st_connect_generator_t *self, const char *error_type, const char *details, const char *rcode)
 {
-    if (H2O_CONN_IS_PROBED(CONNECT_ERROR, self->src_req->conn)) {
-        char msg1[64], msg2[64]; // STR_LEN in src/h2olog/misc/gen_raw_tracer.py
-        snprintf(msg1, sizeof(msg1), "%s%s%s", error_type, (rcode != NULL ? " " : ""), (rcode != NULL ? rcode : ""));
-        snprintf(msg2, sizeof(msg2), "%s", (details != NULL ? details : "(null)"));
-        H2O_PROBE_REQUEST(CONNECT_ERROR, self->src_req, msg1, msg2);
-    }
+    H2O_PROBE_REQUEST(CONNECT_ERROR, self->src_req, error_type, details, rcode);
 
     h2o_req_log_error(self->src_req, MODULE_NAME, "%s; rcode=%s; details=%s", error_type, rcode != NULL ? rcode : "(null)",
                       details != NULL ? details : "(null)");

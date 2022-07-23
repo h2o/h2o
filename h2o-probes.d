@@ -165,7 +165,7 @@ provider h2o {
     /**
       * Error trying to establish a CONNECT or CONNECT-UDP tunnel.
       */
-    probe connect_error(uint64_t conn_id, uint64_t req_id, const char *error, const char *details);
+    probe connect_error(uint64_t conn_id, uint64_t req_id, const char *error_type, const char *details, const char *rcode);
     /**
       * Idle timeout on a CONNECT or CONNECT-UDP tunnel.
       */

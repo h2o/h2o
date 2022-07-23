@@ -837,8 +837,9 @@ struct h2olog_event_t {
     struct { // h2o:connect_error
       uint64_t conn_id;
       uint64_t req_id;
-      char error[STR_LEN];
+      char error_type[STR_LEN];
       char details[STR_LEN];
+      char rcode[STR_LEN];
     } connect_error;
     struct { // h2o:connect_io_timeout
       uint64_t conn_id;
@@ -2081,8 +2082,9 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
     json_write_pair_c(out_, STR_LIT("seq"), seq_);
     json_write_pair_c(out_, STR_LIT("conn-id"), event.connect_error.conn_id);
     json_write_pair_c(out_, STR_LIT("req-id"), event.connect_error.req_id);
-    json_write_pair_c(out_, STR_LIT("error"), event.connect_error.error, strlen(event.connect_error.error));
+    json_write_pair_c(out_, STR_LIT("error-type"), event.connect_error.error_type, strlen(event.connect_error.error_type));
     json_write_pair_c(out_, STR_LIT("details"), event.connect_error.details, strlen(event.connect_error.details));
+    json_write_pair_c(out_, STR_LIT("rcode"), event.connect_error.rcode, strlen(event.connect_error.rcode));
     json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
     break;
   }
@@ -2875,8 +2877,9 @@ struct h2olog_event_t {
     struct { // h2o:connect_error
       uint64_t conn_id;
       uint64_t req_id;
-      char error[STR_LEN];
+      char error_type[STR_LEN];
       char details[STR_LEN];
+      char rcode[STR_LEN];
     } connect_error;
     struct { // h2o:connect_io_timeout
       uint64_t conn_id;
@@ -5710,13 +5713,17 @@ int trace_h2o__connect_error(struct pt_regs *ctx) {
   { // uint64_t req_id
     bpf_usdt_readarg(2, ctx, &event.connect_error.req_id);
   }
-  { // const char * error
+  { // const char * error_type
     bpf_usdt_readarg(3, ctx, &buf);
-    bpf_probe_read(&event.connect_error.error, sizeof(event.connect_error.error), buf);
+    bpf_probe_read(&event.connect_error.error_type, sizeof(event.connect_error.error_type), buf);
   }
   { // const char * details
     bpf_usdt_readarg(4, ctx, &buf);
     bpf_probe_read(&event.connect_error.details, sizeof(event.connect_error.details), buf);
+  }
+  { // const char * rcode
+    bpf_usdt_readarg(5, ctx, &buf);
+    bpf_probe_read(&event.connect_error.rcode, sizeof(event.connect_error.rcode), buf);
   }
 
   if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
