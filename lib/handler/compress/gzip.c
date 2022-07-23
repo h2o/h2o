@@ -101,10 +101,10 @@ static h2o_send_state_t do_process(h2o_compress_context_t *_self, h2o_sendvec_t 
     if (inbufcnt != 0) {
         size_t i;
         for (i = 0; i != inbufcnt - 1; ++i) {
-            assert(inbufs[i].callbacks->flatten == h2o_sendvec_flatten_raw);
+            assert(inbufs[i].callbacks->read_ == h2o_sendvec_read_raw);
             outbufindex = process_chunk(self, inbufs[i].raw, inbufs[i].len, Z_NO_FLUSH, outbufindex, proc);
         }
-        assert(inbufs[i].callbacks->flatten == h2o_sendvec_flatten_raw);
+        assert(inbufs[i].callbacks->read_ == h2o_sendvec_read_raw);
         last_buf = inbufs + i;
     } else {
         static const h2o_sendvec_t zero_buf = {0};

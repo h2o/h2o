@@ -705,7 +705,10 @@ int main(int argc, char **argv)
             }
             for (value_start = colon + 1; *value_start == ' ' || *value_start == '\t'; ++value_start)
                 ;
-            req.headers[req.num_headers].name = h2o_iovec_init(optarg, colon - optarg);
+            /* lowercase the header field name (HTTP/2: RFC 9113 Section 8.2, HTTP/3: RFC 9114 Section 4.2) */
+            h2o_iovec_t name = h2o_strdup(NULL, optarg, colon - optarg);
+            h2o_strtolower(name.base, name.len);
+            req.headers[req.num_headers].name = name;
             req.headers[req.num_headers].value = h2o_iovec_init(value_start, strlen(value_start));
             ++req.num_headers;
         } break;

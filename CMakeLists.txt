@@ -77,7 +77,7 @@ __sync_add_and_fetch(&a, 1);
 return 0;
 }" ARCH_SUPPORTS_64BIT_ATOMICS)
 
-# Find out if libc provices backtrace()
+# Find out if libc provides backtrace()
 CMAKE_PUSH_CHECK_STATE()
 FIND_LIBRARY(LIBC_BACKTRACE_LIB "execinfo")
 IF (LIBC_BACKTRACE_LIB)
@@ -153,15 +153,36 @@ IF (WITH_DTRACE)
     MESSAGE(STATUS "Enabling USDT support")
 ENDIF ()
 
-IF ((CMAKE_SIZEOF_VOID_P EQUAL 8) AND
-    (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64") OR
-     (CMAKE_SYSTEM_PROCESSOR STREQUAL "amd64") OR
-     (CMAKE_SYSTEM_PROCESSOR STREQUAL "AMD64"))
+CMAKE_PUSH_CHECK_STATE()
+SET(CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS} -mavx2 -maes -mpclmul -mvaes -mvpclmulqdq")
+CHECK_C_SOURCE_COMPILES("int main(void) {}" CC_HAS_AESNI256)
+CMAKE_POP_CHECK_STATE()
+IF (CC_HAS_AESNI256)
     SET(WITH_FUSION_DEFAULT "ON")
 ELSE ()
     SET(WITH_FUSION_DEFAULT "OFF")
 ENDIF ()
 OPTION(WITH_FUSION "build with fusion AES-GCM engine" ${WITH_FUSION_DEFAULT})
+
+# KTLS
+IF (CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    CHECK_C_SOURCE_COMPILES("
+#include <sys/socket.h>
+#include <linux/tcp.h>
+#include <linux/tls.h>
+int main (void) {
+    return TCP_ULP + SOL_TLS + TLS_TX + TLS_1_2_VERSION + TLS_CIPHER_AES_GCM_128 + TLS_CIPHER_AES_GCM_256;
+}
+" SYSTEM_HAS_KTLS)
+    IF (SYSTEM_HAS_KTLS)
+        SET(WITH_KTLS_DEFAULT "ON")
+    ELSE ()
+        SET(WITH_KTLS_DEFAULT "OFF")
+    ENDIF ()
+ELSE ()
+    SET(WITH_KTLS_DEFAULT "OFF")
+ENDIF()
+OPTION(WITH_KTLS "use Kernel TLS" ${WITH_KTLS_DEFAULT})
 
 INCLUDE_DIRECTORIES(
     include
@@ -505,6 +526,7 @@ SET(UNIT_TEST_SOURCE_FILES
     t/00unit/lib/common/url.c
     t/00unit/lib/common/timerwheel.c
     t/00unit/lib/common/absprio.c
+    t/00unit/lib/core/config.c
     t/00unit/lib/core/headers.c
     t/00unit/lib/core/proxy.c
     t/00unit/lib/core/util.c
@@ -751,7 +773,10 @@ ENDIF (WITH_MRUBY)
 IF (WITH_FUSION)
     SET(STANDALONE_COMPILE_FLAGS "${STANDALONE_COMPILE_FLAGS} -DH2O_USE_FUSION=1")
     LIST(APPEND STANDALONE_SOURCE_FILES deps/picotls/lib/fusion.c)
-    SET_SOURCE_FILES_PROPERTIES(deps/picotls/lib/fusion.c PROPERTIES COMPILE_FLAGS "-mavx2 -maes -mpclmul")
+    SET_SOURCE_FILES_PROPERTIES(deps/picotls/lib/fusion.c PROPERTIES COMPILE_FLAGS "-mavx2 -maes -mpclmul -mvaes -mvpclmulqdq")
+ENDIF ()
+IF (WITH_KTLS)
+    SET(STANDALONE_COMPILE_FLAGS "${STANDALONE_COMPILE_FLAGS} -DH2O_USE_KTLS=1")
 ENDIF ()
 ADD_EXECUTABLE(h2o ${STANDALONE_SOURCE_FILES})
 SET_TARGET_PROPERTIES(h2o PROPERTIES COMPILE_FLAGS "${STANDALONE_COMPILE_FLAGS}")

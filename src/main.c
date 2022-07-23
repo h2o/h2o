@@ -302,6 +302,7 @@ static struct {
     char *crash_handler;
     int crash_handler_wait_pipe_close;
     int tcp_reuseport;
+    int ssl_zerocopy;
 #ifdef LIBCAP_FOUND
     H2O_VECTOR(cap_value_t) capabilities;
 #endif
@@ -325,6 +326,7 @@ static struct {
     .crash_handler = "share/h2o/annotate-backtrace-symbols",
     .crash_handler_wait_pipe_close = 0,
     .tcp_reuseport = 0,
+    .ssl_zerocopy = 0,
 };
 
 static __thread size_t thread_index;
@@ -738,6 +740,32 @@ Exit:
     return ret;
 }
 
+#if H2O_USE_FUSION
+
+static ptls_cipher_suite_t **replace_ciphersuites(ptls_cipher_suite_t **input, ptls_cipher_suite_t **replacements)
+{
+    H2O_VECTOR(ptls_cipher_suite_t *) new_list = {NULL};
+
+    for (; *input != NULL; ++input) {
+        ptls_cipher_suite_t *cs = *input;
+        for (ptls_cipher_suite_t **cand = replacements; *cand != NULL; ++cand) {
+            if (cs->id == (*cand)->id) {
+                cs = *cand;
+                break;
+            }
+        }
+        h2o_vector_reserve(NULL, &new_list, new_list.size + 1);
+        new_list.entries[new_list.size++] = cs;
+    }
+
+    h2o_vector_reserve(NULL, &new_list, new_list.size + 1);
+    new_list.entries[new_list.size++] = NULL;
+
+    return new_list.entries;
+}
+
+#endif
+
 static const char *listener_setup_ssl_picotls(struct listener_config_t *listener, struct listener_ssl_identity_t *identity,
                                               ptls_iovec_t raw_public_key, ptls_cipher_suite_t **cipher_suites,
                                               int server_cipher_preference)
@@ -859,29 +887,12 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
 #if H2O_USE_FUSION
         /* rebuild and replace the cipher suite list, replacing the corresponding ones to fusion */
         if (ptls_fusion_is_supported_by_cpu()) {
-            static const ptls_cipher_suite_t fusion_aes128gcmsha256 = {PTLS_CIPHER_SUITE_AES_128_GCM_SHA256, &ptls_fusion_aes128gcm,
-                                                                       &ptls_openssl_sha256},
-                                             fusion_aes256gcmsha384 = {PTLS_CIPHER_SUITE_AES_256_GCM_SHA384, &ptls_fusion_aes256gcm,
-                                                                       &ptls_openssl_sha384};
-            H2O_VECTOR(ptls_cipher_suite_t *) new_list = {};
-#define PUSH_NEW(x)                                                                                                                \
-    do {                                                                                                                           \
-        h2o_vector_reserve(NULL, &new_list, new_list.size + 1);                                                                    \
-        new_list.entries[new_list.size++] = (x);                                                                                   \
-    } while (0)
-            for (ptls_cipher_suite_t **input = pctx->ctx.cipher_suites; *input != NULL; ++input) {
-                h2o_vector_reserve(NULL, &new_list, new_list.size + 1);
-                if (*input == &ptls_openssl_aes128gcmsha256) {
-                    PUSH_NEW(&fusion_aes128gcmsha256);
-                } else if (*input == &ptls_openssl_aes256gcmsha384) {
-                    PUSH_NEW(&fusion_aes256gcmsha384);
-                } else {
-                    PUSH_NEW(*input);
-                }
-            }
-            PUSH_NEW(NULL);
-#undef PUSH_NEW
-            pctx->ctx.cipher_suites = new_list.entries;
+            static ptls_cipher_suite_t aes128gcmsha256 = {PTLS_CIPHER_SUITE_AES_128_GCM_SHA256, &ptls_fusion_aes128gcm,
+                                                          &ptls_openssl_sha256},
+                                       aes256gcmsha384 = {PTLS_CIPHER_SUITE_AES_256_GCM_SHA384, &ptls_fusion_aes256gcm,
+                                                          &ptls_openssl_sha384},
+                                       *fusion_all[] = {&aes128gcmsha256, &aes256gcmsha384, NULL};
+            pctx->ctx.cipher_suites = replace_ciphersuites(pctx->ctx.cipher_suites, fusion_all);
         }
 #endif
         quicly_amend_ptls_context(&pctx->ctx);
@@ -2443,6 +2454,37 @@ static int on_tcp_reuseport(h2o_configurator_command_t *cmd, h2o_configurator_co
     return on_config_onoff(cmd, node, &conf.tcp_reuseport);
 }
 
+static int on_config_ssl_offload(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    switch (h2o_configurator_get_one_of(cmd, node, "OFF,kernel,zerocopy")) {
+    case 0:
+        h2o_socket_use_ktls = 0;
+        conf.ssl_zerocopy = 0;
+        break;
+    case 1:
+        h2o_socket_use_ktls = 1;
+        break;
+    case 2:
+#if !H2O_USE_MSG_ZEROCOPY
+        h2o_configurator_errprintf(cmd, node, "SO_ZEROCOPY is not available");
+        return -1;
+#endif
+#if H2O_USE_FUSION
+        if (ptls_fusion_is_supported_by_cpu()) {
+            h2o_socket_use_ktls = 0;
+            conf.ssl_zerocopy = 1;
+            break;
+        }
+#endif
+        h2o_configurator_errprintf(cmd, node, "zerocopy cannot be used, as non-temporal aes-gcm engine is unavailable");
+        return -1;
+    default:
+        return -1;
+    }
+
+    return 0;
+}
+
 static yoml_t *load_config(yoml_parse_args_t *parse_args, yoml_t *source)
 {
     FILE *fp;
@@ -3207,20 +3249,22 @@ static void *run_loop(void *_thread_index)
     h2o_barrier_wait(&conf.startup_sync_barrier_post);
 
     /* the main loop */
-    uint64_t last_buffer_gc_at = 0;
+    uint64_t next_buffer_gc_at = UINT64_MAX;
     while (1) {
         if (conf.shutdown_requested)
             break;
         update_listener_state(listeners);
         /* run the loop once */
-        h2o_evloop_run(conf.threads[thread_index].ctx.loop, INT32_MAX);
+        h2o_evloop_run(conf.threads[thread_index].ctx.loop, next_buffer_gc_at == UINT64_MAX ? INT32_MAX : 1000);
         /* cleanup */
         h2o_filecache_clear(conf.threads[thread_index].ctx.filecache);
-        if (last_buffer_gc_at + 1000 < h2o_now(conf.threads[thread_index].ctx.loop)) {
-            last_buffer_gc_at = h2o_now(conf.threads[thread_index].ctx.loop);
+        if (h2o_now(conf.threads[thread_index].ctx.loop) >= next_buffer_gc_at) {
             h2o_buffer_clear_recycle(0);
-            h2o_mem_clear_recycle(&h2o_socket_ssl_buffer_allocator, 0);
+            h2o_socket_clear_recycle(0);
+            next_buffer_gc_at = UINT64_MAX;
         }
+        if (next_buffer_gc_at == UINT64_MAX && (!h2o_buffer_recycle_is_empty() || !h2o_socket_recycle_is_empty()))
+            next_buffer_gc_at = h2o_now(conf.threads[thread_index].ctx.loop) + 1000;
     }
 
     if (thread_index == 0)
@@ -3532,6 +3576,8 @@ static void setup_configurators(void)
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_crash_handler_wait_pipe_close);
         h2o_configurator_define_command(c, "tcp-reuseport", H2O_CONFIGURATOR_FLAG_GLOBAL, on_tcp_reuseport);
+        h2o_configurator_define_command(c, "ssl-offload", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                        on_config_ssl_offload);
     }
 
     h2o_access_log_register_configurator(&conf.globalconf);
@@ -3695,6 +3741,12 @@ int main(int argc, char **argv)
 #if H2O_USE_FUSION
                 printf("fusion: YES\n");
 #endif
+#if H2O_USE_MSG_ZEROCOPY
+                printf("ssl-zerocopy: YES\n");
+#endif
+#if H2O_USE_KTLS
+                printf("ktls: YES\n");
+#endif
                 exit(0);
             case 'h':
                 printf("h2o version " H2O_VERSION "\n"
@@ -3762,12 +3814,11 @@ int main(int argc, char **argv)
             exit(EX_CONFIG);
         if (h2o_configurator_apply(&conf.globalconf, yoml, conf.run_mode != RUN_MODE_WORKER) != 0)
             exit(EX_CONFIG);
-
         dispose_resolve_tag_arg(&resolve_tag_arg);
         yoml_free(yoml, NULL);
     }
 
-    {
+    { /* test if temporary files can be created */
         int fd = h2o_file_mktemp(h2o_socket_buffer_mmap_settings.fn_template);
         if (fd == -1) {
             fprintf(stderr, "temp-buffer-path: failed to create temporary file from the mkstemp(3) template '%s': %s\n",
@@ -3776,6 +3827,30 @@ int main(int argc, char **argv)
         }
         close(fd);
     }
+
+#if H2O_USE_FUSION
+    /* Swap aes-gcm cipher suites of TLS-over-TCP listeners to non-temporal aesgcm engine, if it is to be used. */
+    if (conf.ssl_zerocopy) {
+        static ptls_cipher_suite_t aes128gcmsha256 = {PTLS_CIPHER_SUITE_AES_128_GCM_SHA256, &ptls_non_temporal_aes128gcm,
+                                                      &ptls_openssl_sha256},
+                                   aes256gcmsha384 = {PTLS_CIPHER_SUITE_AES_256_GCM_SHA384, &ptls_non_temporal_aes256gcm,
+                                                      &ptls_openssl_sha384},
+                                   *non_temporal_all[] = {&aes128gcmsha256, &aes256gcmsha384, NULL};
+        for (size_t listener_index = 0; listener_index != conf.num_listeners; ++listener_index) {
+            struct listener_config_t *listener = conf.listeners[listener_index];
+            if (listener->quic.ctx == NULL) {
+                for (size_t ssl_index = 0; ssl_index != listener->ssl.size; ++ssl_index) {
+                    struct listener_ssl_config_t *ssl = listener->ssl.entries[ssl_index];
+                    for (struct listener_ssl_identity_t *identity = ssl->identities; identity->certificate_file != NULL;
+                         ++identity) {
+                        if (identity->ptls != NULL)
+                            identity->ptls->cipher_suites = replace_ciphersuites(identity->ptls->cipher_suites, non_temporal_all);
+                    }
+                }
+            }
+        }
+    }
+#endif
 
     /* calculate defaults (note: open file cached is purged once every loop) */
     conf.globalconf.filecache.capacity = conf.globalconf.http2.max_concurrent_requests_per_connection * 2;
@@ -3830,10 +3905,9 @@ int main(int argc, char **argv)
         conf.error_log = NULL;
     }
 
-    {
+    { /* raise RLIMIT_NOFILE, making sure that we can reach max_connections */
         struct rlimit limit = {0};
         if (getrlimit(RLIMIT_NOFILE, &limit) == 0) {
-            /* raise RLIMIT_NOFILE, making sure that we can reach max_connections */
             if (conf.max_connections > limit.rlim_max) {
                 fprintf(stderr, "[error] 'max-connections'=[%d] configuration value should not exceed the hard limit of file "
                                 "descriptors 'RLIMIT_NOFILE'=[%llu]\n",
@@ -3854,6 +3928,32 @@ int main(int argc, char **argv)
             fprintf(stderr, "[warning] getrlimit(RLIMIT_NOFILE) failed:%s\n", strerror(errno));
         }
     }
+
+    /* Raise RLIMIT_MEMLOCK when zerocopy is to be used, or emit an warning if it is capped and cannot be raised. */
+#if H2O_USE_MSG_ZEROCOPY
+    if (conf.ssl_zerocopy) {
+        struct rlimit limit = {0};
+        if (getuid() == 0) {
+            limit.rlim_cur = RLIM_INFINITY;
+            limit.rlim_max = RLIM_INFINITY;
+            if (setrlimit(RLIMIT_MEMLOCK, &limit) != 0) {
+                fprintf(stderr, "[error] failed to raise RLIMIT_MEMLOCK:%s\n", strerror(errno));
+                return EX_CONFIG;
+            }
+            fprintf(stderr, "[INFO] raised RLIMIT_MEMLOCK to unlimited\n");
+        } else {
+            if (getrlimit(RLIMIT_MEMLOCK, &limit) != 0) {
+                fprintf(stderr, "[error] getrlimit(RLIMIT_MEMLOCK) failed:%s\n", strerror(errno));
+                return EX_CONFIG;
+            }
+            if (limit.rlim_cur != RLIM_INFINITY)
+                fprintf(stderr,
+                        "[warning] Beaware of the possibility of running out of locked pages. Even though MSG_ZEROCOPY is enabled, "
+                        "RLIMIT_MEMLOCK is set to %zu bytes, and cannot be raised due to lack of root privileges.\n",
+                        (size_t)limit.rlim_cur);
+        }
+    }
+#endif
 
     setup_signal_handlers();
     if (conf.globalconf.usdt_selective_tracing && !h2o_socket_ebpf_setup()) {
