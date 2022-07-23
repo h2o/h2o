@@ -45,7 +45,7 @@ provider h2o {
     /**
      * socket write at H2O socket abstraction layer
      */
-    probe socket_write(struct st_h2o_socket_t *sock, struct st_h2o_iovec_t *bufs, size_t bufcnt, void *cb);
+    probe socket_write(struct st_h2o_socket_t *sock, struct st_h2o_iovec_t *bufs, size_t bufcnt, uintptr_t cb);
     /**
      * write complete
      */

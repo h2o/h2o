@@ -699,7 +699,7 @@ struct h2olog_event_t {
       struct st_h2o_socket_t * sock;
       struct st_h2o_iovec_t * bufs;
       size_t bufcnt;
-      uint8_t cb[STR_LEN];
+      uintptr_t cb;
     } socket_write;
     struct { // h2o:socket_write_complete
       struct st_h2o_socket_t * sock;
@@ -1749,7 +1749,7 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
     json_write_pair_c(out_, STR_LIT("sock"), event.socket_write.sock);
     json_write_pair_c(out_, STR_LIT("bufs"), event.socket_write.bufs);
     json_write_pair_c(out_, STR_LIT("bufcnt"), event.socket_write.bufcnt);
-    # warning "missing `cb_len` param in the probe h2o:socket_write, ignored."
+    json_write_pair_c(out_, STR_LIT("cb"), event.socket_write.cb);
     json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
     break;
   }
@@ -2586,7 +2586,7 @@ struct h2olog_event_t {
       struct st_h2o_socket_t * sock;
       struct st_h2o_iovec_t * bufs;
       size_t bufcnt;
-      uint8_t cb[STR_LEN];
+      uintptr_t cb;
     } socket_write;
     struct { // h2o:socket_write_complete
       struct st_h2o_socket_t * sock;
@@ -4929,9 +4929,8 @@ int trace_h2o__socket_write(struct pt_regs *ctx) {
   { // size_t bufcnt
     bpf_usdt_readarg(3, ctx, &event.socket_write.bufcnt);
   }
-  { // void * cb
-    bpf_usdt_readarg(4, ctx, &buf);
-    bpf_probe_read(&event.socket_write.cb, sizeof(event.socket_write.cb), buf);
+  { // uintptr_t cb
+    bpf_usdt_readarg(4, ctx, &event.socket_write.cb);
   }
 
   if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
