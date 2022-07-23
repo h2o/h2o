@@ -80,7 +80,8 @@ static inline struct timeval h2o_gettimeofday(h2o_evloop_t *loop)
 {
 #ifdef H2O_EVLOOP_USE_CLOCK_MONOTONIC
     struct timeval tv;
-    gettimeofday(&tv, NULL);
+    tv.tv_sec = loop->_ts_at.tv_sec;
+    tv.tv_usec = loop->_ts_at.tv_nsec / 1000;
     return tv;
 #else
     return loop->_tv_at;
