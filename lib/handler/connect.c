@@ -598,7 +598,7 @@ static void tcp_on_connect(h2o_socket_t *_sock, const char *err)
 
 static int tcp_start_connect(struct st_connect_generator_t *self, struct st_server_address_t *server_address)
 {
-    H2O_PROBE_REQUEST(CONNECT_TCP_ATTEMPT, self->src_req, server_address->sa);
+    H2O_PROBE_REQUEST(CONNECT_TCP_START, self->src_req, server_address->sa);
 
     const char *errstr;
     if ((self->sock = h2o_socket_connect(get_loop(self), server_address->sa, server_address->salen, tcp_on_connect, &errstr)) ==
@@ -791,7 +791,7 @@ static int udp_connect(struct st_connect_generator_t *self, struct st_server_add
 {
     int fd;
 
-    H2O_PROBE_REQUEST(CONNECT_UDP_ATTEMPT, self->src_req, server_address->sa);
+    H2O_PROBE_REQUEST(CONNECT_UDP_START, self->src_req, server_address->sa);
     /* connect */
     if ((fd = socket(server_address->sa->sa_family, SOCK_DGRAM, 0)) == -1 ||
         connect(fd, server_address->sa, server_address->salen) != 0) {

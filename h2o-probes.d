@@ -133,7 +133,7 @@ provider h2o {
     /**
       * An attempt to connect on the backend-side of a CONNECT tunnel.
       */
-    probe connect_tcp_attempt(uint64_t conn_id, uint64_t req_id, struct sockaddr *dest);
+    probe connect_tcp_start(uint64_t conn_id, uint64_t req_id, struct sockaddr *dest);
     /**
       * A write to the TCP connection on the backend-side of a CONNECT tunnel.
       */
@@ -153,7 +153,7 @@ provider h2o {
     /**
       * An attempt to connect on the backend-side of a CONNECT-UDP tunnel.
       */
-    probe connect_udp_attempt(uint64_t conn_id, uint64_t req_id, struct sockaddr *dest);
+    probe connect_udp_start(uint64_t conn_id, uint64_t req_id, struct sockaddr *dest);
     /**
       * A write to the UDP connection on the backend-side of a CONNECT-UDP tunnel.
       */
