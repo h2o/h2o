@@ -1566,6 +1566,12 @@ static int skip_tracing(h2o_conn_t *_conn)
     return h2o_socket_skip_tracing(conn->sock);
 }
 
+static uint64_t get_req_id(h2o_req_t *req)
+{
+    h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, req, req);
+    return stream->stream_id;
+}
+
 static int64_t get_rtt(h2o_conn_t *_conn)
 {
     struct st_h2o_http2_conn_t *conn = (void *)_conn;
@@ -1677,6 +1683,7 @@ static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_hostconf_t **hosts,
         .get_peername = get_peername,
         .get_ptls = get_ptls,
         .skip_tracing = skip_tracing,
+        .get_req_id = get_req_id,
         .push_path = push_path,
         .get_debug_state = h2o_http2_get_debug_state,
         .close_idle_connection = close_idle_connection,
