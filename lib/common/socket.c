@@ -1498,7 +1498,7 @@ static void do_ssl_async(h2o_socket_t *sock)
     h2o_socket_t *async_sock = h2o_evloop_socket_create(h2o_socket_get_loop(sock), async_fd, H2O_SOCKET_FLAG_DONT_READ | H2O_SOCKET_FLAG_DONT_NONBLOCK);
 #endif
 
-    struct async_data *adata = malloc(sizeof(struct async_data));
+    struct async_data *adata = h2o_mem_alloc(sizeof(struct async_data));
     adata->client.sock = sock;
     adata->async_sock = async_sock;
 
