@@ -58,7 +58,7 @@ struct st_h2o_tunnel_t;
         h2o_req_t *_req = (req);                                                                                                   \
         h2o_conn_t *_conn = _req->conn;                                                                                            \
         if (H2O_CONN_IS_PROBED(label, _conn)) {                                                                                    \
-            uint64_t _req_id = _conn->callbacks->get_req_id(_conn, _req);                                                          \
+            uint64_t _req_id = _conn->callbacks->get_req_id(_req);                                                                 \
             H2O_##label(_conn->id, _req_id);                                                                                       \
         }                                                                                                                          \
     } while (0)
@@ -68,7 +68,7 @@ struct st_h2o_tunnel_t;
         h2o_req_t *_req = (req);                                                                                                   \
         h2o_conn_t *_conn = _req->conn;                                                                                            \
         if (H2O_CONN_IS_PROBED(label, _conn)) {                                                                                    \
-            uint64_t _req_id = _conn->callbacks->get_req_id(_conn, _req);                                                          \
+            uint64_t _req_id = _conn->callbacks->get_req_id(_req);                                                                 \
             H2O_##label(_conn->id, _req_id, __VA_ARGS__);                                                                          \
         }                                                                                                                          \
     } while (0)

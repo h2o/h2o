@@ -401,7 +401,7 @@ static int skip_tracing(h2o_conn_t *conn)
     return 1;
 }
 
-static uint64_t get_req_id(h2o_conn_t *_conn, h2o_req_t *req)
+static uint64_t get_req_id(h2o_req_t *req)
 {
     /* only one sub-request on this dummy connection */
     return 0;

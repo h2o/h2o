@@ -526,7 +526,7 @@ static int get_skip_tracing(h2o_conn_t *conn)
     return ptls_skip_tracing(ptls);
 }
 
-static uint64_t get_req_id(h2o_conn_t *_conn, h2o_req_t *req)
+static uint64_t get_req_id(h2o_req_t *req)
 {
     struct st_h2o_http3_server_stream_t *stream = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_stream_t, req, req);
     return stream->quic->stream_id;

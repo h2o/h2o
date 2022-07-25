@@ -1150,9 +1150,9 @@ static int can_zerocopy(h2o_conn_t *_conn)
     return conn->sock->ssl == NULL || h2o_socket_can_tls_offload(conn->sock);
 }
 
-static uint64_t get_req_id(h2o_conn_t *_conn, h2o_req_t *req)
+static uint64_t get_req_id(h2o_req_t *req)
 {
-    struct st_h2o_http1_conn_t *conn = (void *)_conn;
+    struct st_h2o_http1_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http1_conn_t, req, req);
     return conn->_req_index;
 }
 

@@ -939,10 +939,9 @@ typedef struct st_h2o_conn_callbacks_t {
      */
     int (*can_zerocopy)(h2o_conn_t *conn);
     /**
-     * This is a mandatory callback.  It returns a number that identifies the
-     * request on the connection in h2olog output.
+     * Mandatory callback that returns a number identifying the request of a particular connection (e.g., HTTP/2 stream ID)
      */
-    uint64_t (*get_req_id)(h2o_conn_t *conn, h2o_req_t *req);
+    uint64_t (*get_req_id)(h2o_req_t *req);
     /**
      * logging callbacks (all of them are optional)
      */

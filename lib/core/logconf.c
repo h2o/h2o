@@ -772,7 +772,7 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
 
         case ELEMENT_TYPE_REQUEST_ID:
             RESERVE(sizeof(H2O_UINT64_LONGEST_STR) - 1);
-            pos += sprintf(pos, "%" PRIu64, req->conn->callbacks->get_req_id(req->conn, req));
+            pos += sprintf(pos, "%" PRIu64, req->conn->callbacks->get_req_id(req));
             break;
 
         case ELEMENT_TYPE_REQUEST_HEADER_TIME:

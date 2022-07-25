@@ -1566,7 +1566,7 @@ static int skip_tracing(h2o_conn_t *_conn)
     return h2o_socket_skip_tracing(conn->sock);
 }
 
-static uint64_t get_req_id(h2o_conn_t *_conn, h2o_req_t *req)
+static uint64_t get_req_id(h2o_req_t *req)
 {
     h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, req, req);
     return stream->stream_id;
