@@ -304,6 +304,7 @@ static struct {
     char *crash_handler;
     int crash_handler_wait_pipe_close;
     int tcp_reuseport;
+    char *connection_mapper;
     int ssl_zerocopy;
 #ifdef LIBCAP_FOUND
     H2O_VECTOR(cap_value_t) capabilities;
@@ -320,16 +321,17 @@ static struct {
     .max_quic_connections = INT_MAX, /* (INT_MAX = i.e., allow up to max_connections) */
     .soft_connection_limit = INT_MAX,
     .soft_connection_limit_min_age = 30,
-    .thread_map = {0},               /* initialized in main() */
-    .quic = {0},                     /* 0 defaults to all, conn_callbacks (initialized in main() */
-    .tfo_queues = 0,                 /* initialized in main() */
-    .launch_time = 0,                /* initialized in main() */
+    .thread_map = {0}, /* initialized in main() */
+    .quic = {0},       /* 0 defaults to all, conn_callbacks (initialized in main() */
+    .tfo_queues = 0,   /* initialized in main() */
+    .launch_time = 0,  /* initialized in main() */
     .threads = NULL,
     .shutdown_requested = 0,
     .state = {{0}},
     .crash_handler = "share/h2o/annotate-backtrace-symbols",
     .crash_handler_wait_pipe_close = 0,
     .tcp_reuseport = 0,
+    .connection_mapper = NULL,
     .ssl_zerocopy = 0,
 };
 
@@ -1618,10 +1620,9 @@ ErrorExit:
     return -1;
 }
 
-static void socket_reuseport(int fd)
+static void socket_reuseport(int fd, int opt)
 {
 #if H2O_USE_REUSEPORT
-    int opt = 1;
     if (setsockopt(fd, SOL_SOCKET, H2O_SO_REUSEPORT, &opt, sizeof(opt)) != 0)
         fprintf(stderr, "[warning] setsockopt(SO_REUSEPORT) failed:%s\n", strerror(errno));
 #endif
@@ -1651,7 +1652,7 @@ static int open_listener(int domain, int type, int protocol, struct sockaddr *ad
     switch (type) {
     case SOCK_STREAM: {
         if (conf.tcp_reuseport)
-            socket_reuseport(fd);
+            socket_reuseport(fd, 1);
         /* TCP: set SO_REUSEADDR flag to avoid TIME_WAIT after shutdown */
         int on = 1;
         if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on)) != 0)
@@ -1659,7 +1660,7 @@ static int open_listener(int domain, int type, int protocol, struct sockaddr *ad
     } break;
     case SOCK_DGRAM:
         /* UDP: set SO_REUSEPORT and DF bit */
-        socket_reuseport(fd);
+        socket_reuseport(fd, 1);
         h2o_socket_set_df_bit(fd, domain);
         break;
     default:
@@ -2489,6 +2490,12 @@ static int on_config_crash_handler_wait_pipe_close(h2o_configurator_command_t *c
 static int on_tcp_reuseport(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     return on_config_onoff(cmd, node, &conf.tcp_reuseport);
+}
+
+static int on_config_connection_mapper(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    conf.connection_mapper = h2o_strdup(NULL, node->data.scalar, SIZE_MAX).base;
+    return 0;
 }
 
 static int on_config_ssl_offload(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
@@ -3650,6 +3657,8 @@ static void setup_configurators(void)
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_crash_handler_wait_pipe_close);
         h2o_configurator_define_command(c, "tcp-reuseport", H2O_CONFIGURATOR_FLAG_GLOBAL, on_tcp_reuseport);
+        h2o_configurator_define_command(c, "connection-mapper", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                        on_config_connection_mapper);
         h2o_configurator_define_command(c, "ssl-offload", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_ssl_offload);
     }
@@ -3677,7 +3686,7 @@ static void setup_configurators(void)
     h2o_config_register_status_handler(&conf.globalconf, &extra_status_handler);
 }
 
-static int dup_listener(struct listener_config_t *config)
+static int listener_is_reuseport(struct listener_config_t *config)
 {
     int reuseport = 0;
 
@@ -3690,7 +3699,13 @@ static int dup_listener(struct listener_config_t *config)
     assert(reuseportlen == sizeof(reuseport));
 #endif
 
-    int fd = -1;
+    return reuseport;
+}
+
+static int dup_listener(struct listener_config_t *config)
+{
+    int fd = -1, reuseport = listener_is_reuseport(config);
+
 #if H2O_USE_REUSEPORT
     if (reuseport) {
         int type;
@@ -3734,6 +3749,68 @@ static void create_per_thread_listeners(void)
             listener_config->fds.entries[listener_config->fds.size++] = fd;
         }
     }
+}
+
+static void spawn_connection_mapper(void)
+{
+    if (conf.connection_mapper == NULL)
+        return;
+
+#define SET_ALL_REUSEPORT(opt)                                                                                                     \
+    do {                                                                                                                           \
+        for (size_t li = 0; li != conf.num_listeners; ++li) {                                                                      \
+            if (listener_is_reuseport(conf.listeners[li])) {                                                                       \
+                for (size_t ti = 0; ti != conf.thread_map.size; ++ti)                                                              \
+                    socket_reuseport(conf.listeners[li]->fds.entries[ti], 0);                                                      \
+            }                                                                                                                      \
+        }                                                                                                                          \
+    } while (0)
+
+    char *cmd_fullpath = h2o_configurator_get_cmd_path(conf.connection_mapper), *argv[] = {cmd_fullpath, NULL};
+    int pipefds[2];
+
+    /* unset O_CLOEXEC of listening sockets with SO_REUSEPORT, so that they can be passed to the helper */
+    SET_ALL_REUSEPORT(0);
+
+    /* create pipe */
+    if (pipe(pipefds) != 0) {
+        perror("pipe(2) failed");
+        abort();
+    }
+    set_cloexec(pipefds[1]);
+
+    /* spawn the connection mapper */
+    int mapped_fds[] = {pipefds[0], 0, /* output of the pipe is connecto STDIN of the spawned process */
+                        2, 1,          /* STDOUT of the spawned process is connected to STDERR of h2o */
+                        -1};
+    if (h2o_spawnp(cmd_fullpath, argv, mapped_fds, 0) == -1) {
+        fprintf(stderr, "failed to spawn %s:%s:%d\n", cmd_fullpath, strerror(errno), errno);
+        exit(EX_CONFIG);
+    }
+
+    /* set O_CLOEXEC again for the sockets that were unset */
+    SET_ALL_REUSEPORT(1);
+
+    /* For each processor ID, write comma-separated list of file descriptors bound to that processor. List for each processor ID is
+     * split by a return. */
+    size_t nproc = h2o_numproc();
+    for (size_t procid = 0; procid < nproc; ++procid) {
+        for (size_t ti = 0; ti != conf.thread_map.size; ++ti) {
+            if (procid == conf.thread_map.entries[ti]) {
+                for (size_t li = 0; li != conf.num_listeners; ++li) {
+                    char buf[32];
+                    buf[0] = ':';
+                    sprintf(buf + (li != 0), "%d", conf.listeners[li]->fds.entries[ti]);
+                    write(pipefds[1], buf, strlen(buf));
+                }
+            }
+        }
+        write(pipefds[1], "\n", 1);
+    }
+
+    /* pipefds[1] is kept open - pipe close notifies the spawned process exit of h2o */
+
+#undef SET_ALL_REUSEPORT
 }
 
 int main(int argc, char **argv)
@@ -4045,6 +4122,8 @@ int main(int argc, char **argv)
 
     /* call `bind()` before setuid(), different uids can't bind the same address */
     create_per_thread_listeners();
+
+    spawn_connection_mapper();
 
     /* setuid */
     if (conf.globalconf.user != NULL) {
