@@ -252,7 +252,10 @@ struct st_ptls_t {
             uint8_t pending_traffic_secret[PTLS_MAX_DIGEST_SIZE];
             uint32_t early_data_skipped_bytes; /* if not UINT32_MAX, the server is skipping early data */
             unsigned can_send_session_ticket : 1;
-            void *sign_certificate_ctx;
+            struct {
+                void (*cb)(void *sign_certificate_ctx);
+                void *sign_certificate_ctx;
+            } sign_certificate;
         } server;
     };
     /**
@@ -2755,8 +2758,9 @@ static int send_certificate_verify(ptls_t *tls, ptls_message_emitter_t *emitter,
             uint16_t algo;
             uint8_t data[PTLS_MAX_CERTIFICATE_VERIFY_SIGNDATA_SIZE];
             size_t datalen = build_certificate_verify_signdata(data, tls->key_schedule, context_string);
-            if ((ret = tls->ctx->sign_certificate->cb(tls->ctx->sign_certificate, tls, &tls->server.sign_certificate_ctx, &algo,
-                                                      sendbuf, ptls_iovec_init(data, datalen),
+            if ((ret = tls->ctx->sign_certificate->cb(tls->ctx->sign_certificate, tls, &tls->server.sign_certificate.cb,
+                                                      &tls->server.sign_certificate.sign_certificate_ctx,
+                                                      &algo, sendbuf, ptls_iovec_init(data, datalen),
                                                       signature_algorithms != NULL ? signature_algorithms->list : NULL,
                                                       signature_algorithms != NULL ? signature_algorithms->count : 0)) != 0) {
                 if (ret == PTLS_ERROR_ASYNC_OPERATION) {
@@ -4483,6 +4487,9 @@ void ptls_free(ptls_t *tls)
     if (tls->certificate_verify.cb != NULL) {
         tls->certificate_verify.cb(tls->certificate_verify.verify_ctx, 0, ptls_iovec_init(NULL, 0), ptls_iovec_init(NULL, 0));
     }
+    if (tls->server.sign_certificate.cb != NULL) {
+        tls->server.sign_certificate.cb(tls->server.sign_certificate.sign_certificate_ctx);
+    }
     if (tls->pending_handshake_secret != NULL) {
         ptls_clear_memory(tls->pending_handshake_secret, PTLS_MAX_DIGEST_SIZE);
         free(tls->pending_handshake_secret);
@@ -4507,7 +4514,7 @@ void ptls_set_context(ptls_t *tls, ptls_context_t *ctx)
 void *ptls_get_sign_context(ptls_t *tls)
 {
     assert(tls->is_server);
-    return tls->server.sign_certificate_ctx;
+    return tls->server.sign_certificate.sign_certificate_ctx;
 }
 
 ptls_iovec_t ptls_get_client_random(ptls_t *tls)
