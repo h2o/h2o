@@ -740,6 +740,9 @@
 		08CEA9D426701D8E00B4BB6B /* rand.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = rand.c; sourceTree = "<group>"; };
 		08CEA9D6267AF0EB00B4BB6B /* self_trace.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = self_trace.c; sourceTree = "<group>"; };
 		08CEA9DA267B0E3B00B4BB6B /* self_trace.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = self_trace.c; sourceTree = "<group>"; };
+		08DAFA01288FDE8E00364143 /* irqbalance.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = irqbalance.c; sourceTree = "<group>"; };
+		08DAFA02288FDE8E00364143 /* irqbalance.bpf.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = irqbalance.bpf.c; sourceTree = "<group>"; };
+		08DAFA04289129DF00364143 /* irqbalance.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = irqbalance.h; sourceTree = "<group>"; };
 		08E9CC4D1E41F6660049DD26 /* embedded.c.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = embedded.c.h; sourceTree = "<group>"; };
 		08EFC4CF27FD8FAA004C532C /* 50file-shrink.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50file-shrink.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		08EFC4DF27FE9F96004C532C /* throttle_resp.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = throttle_resp.c; sourceTree = "<group>"; };
@@ -1500,6 +1503,16 @@
 			path = hiredis;
 			sourceTree = "<group>";
 		};
+		08DAFA03288FDE9900364143 /* irqbalance */ = {
+			isa = PBXGroup;
+			children = (
+				08DAFA02288FDE8E00364143 /* irqbalance.bpf.c */,
+				08DAFA01288FDE8E00364143 /* irqbalance.c */,
+				08DAFA04289129DF00364143 /* irqbalance.h */,
+			);
+			path = irqbalance;
+			sourceTree = "<group>";
+		};
 		100A550D1C2BB12A00C4E3E0 /* mruby */ = {
 			isa = PBXGroup;
 			children = (
@@ -2007,6 +2020,7 @@
 		107923AA19A3216B00C52AD6 /* misc */ = {
 			isa = PBXGroup;
 			children = (
+				08DAFA03288FDE9900364143 /* irqbalance */,
 				10583BE61AE5A322004A3AD6 /* clang-format-all.sh */,
 				E908A2AC2320AE210039BCEE /* docker-ci */,
 				104960151B9D3F9100FF136D /* dump-github-repository.pl */,
