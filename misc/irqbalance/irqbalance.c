@@ -158,7 +158,7 @@ int main(int argc, char **argv)
                 break;
             if (ch != '\n') {
                 fprintf(stderr, "unexpected char:%c\n", ch);
-                return 1;
+                return EX_CONFIG;
             }
         }
 
@@ -209,7 +209,7 @@ int main(int argc, char **argv)
                 break;
             default:
                 fprintf(stderr, "fd %d has unexpected address family %d\n", sock->fd, (int)sock->addr.ss_family);
-                break;
+                return EX_CONFIG;
             }
         }
 
