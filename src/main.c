@@ -3799,22 +3799,25 @@ static void spawn_connection_balancer(void)
     /* set CLOEXEC again for the sockets that were unset */
     ALTER_CLOEXEC(1);
 
-    /* For each processor ID, write comma-separated list of file descriptors bound to that processor. List for each processor ID is
-     * split by a return. */
+    /* For each group of sockets, emit a comma-separated list of `nproc` entries, each element being the file descriptor mapped to
+     * each processor (or empty string if none). */
     size_t nproc = h2o_numproc();
-    for (size_t procid = 0; procid < nproc; ++procid) {
-        int needs_colon = 0;
-        for (size_t ti = 0; ti != conf.thread_map.size; ++ti) {
-            if (procid == conf.thread_map.entries[ti]) {
-                for (size_t li = 0; li != conf.num_listeners; ++li) {
-                    if (listener_is_reuseport(conf.listeners[li])) {
-                        char buf[32];
-                        buf[0] = ':';
-                        sprintf(buf + needs_colon, "%d", conf.listeners[li]->fds.entries[ti]);
-                        write(pipefds[1], buf, strlen(buf));
-                        needs_colon = 1;
+    for (size_t li = 0; li != conf.num_listeners; ++li) {
+        if (listener_is_reuseport(conf.listeners[li])) {
+            for (size_t procid = 0; procid < nproc; ++procid) {
+                int fd = -1;
+                for (size_t ti = 0; ti != conf.thread_map.size; ++ti) {
+                    if (conf.thread_map.entries[ti] == procid) {
+                        fd = conf.listeners[li]->fds.entries[ti];
+                        break;
                     }
                 }
+                char buf[32] = "";
+                if (procid != 0)
+                    strcat(buf, ",");
+                if (fd != -1)
+                    sprintf(buf + strlen(buf), "%d", fd);
+                write(pipefds[1], buf, strlen(buf));
             }
         }
         write(pipefds[1], "\n", 1);

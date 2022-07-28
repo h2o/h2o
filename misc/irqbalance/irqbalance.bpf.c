@@ -7,41 +7,17 @@
 #include "irqbalance.h"
 
 struct {
-    __uint(type, BPF_MAP_TYPE_SOCKMAP);
-    __uint(max_entries, IRQBALANCE_MAX_CPUS *IRQBALANCE_MAX_SOCKS_PER_CPU);
+    __uint(type, BPF_MAP_TYPE_REUSEPORT_SOCKARRAY);
+    __uint(max_entries, IRQBALANCE_MAX_CPUS);
     __type(key, __u32);
     __type(value, __u64);
-} cpuid_tcp_sockmap SEC(".maps"), cpuid_udp_sockmap SEC(".maps");
+} sockarray SEC(".maps");
 
-SEC("sk_lookup/irqbalance")
-int irqbalance(struct bpf_sk_lookup *ctx)
+SEC("sk_reuseport")
+int irqbalance(struct sk_reuseport_md *md)
 {
-    int is_tcp;
-
-    switch (ctx->protocol) {
-    case IPPROTO_TCP:
-        is_tcp = 1;
-        break;
-    case IPPROTO_UDP:
-        is_tcp = 0;
-        break;
-    default:
-        return SK_PASS; /* let others decide */
-    }
-
-    /* try the ones in the map in the order being provided */
-    __u32 base = bpf_get_smp_processor_id() * IRQBALANCE_MAX_SOCKS_PER_CPU;
-    for (__u32 offset = 0; offset < IRQBALANCE_MAX_SOCKS_PER_CPU; ++offset) {
-        __u32 slot = base + offset;
-        struct bpf_sock *s =
-            is_tcp ? bpf_map_lookup_elem(&cpuid_tcp_sockmap, &slot) : bpf_map_lookup_elem(&cpuid_udp_sockmap, &slot);
-        if (s == NULL)
-             break;
-        int err = bpf_sk_assign(ctx, s, BPF_SK_LOOKUP_F_NO_REUSEPORT);
-        bpf_sk_release(s);
-        if (err == 0)
-            break;
-    }
+    __u32 slot = bpf_get_smp_processor_id();
+    bpf_sk_select_reuseport(md, &sockarray, &slot, 0);
 
     return SK_PASS;
 }
