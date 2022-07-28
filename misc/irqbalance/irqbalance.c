@@ -61,15 +61,18 @@ static int get_num_list(int *list)
     int count = 0, n, ch;
 
     while (1) {
-        if (get_num(&list[count]) == 0)
-            ++count;
+        if (get_num(&n) != 0)
+            n = -1;
         if ((ch = fgetc(stdin)) == EOF)
             break;
         if (ch != ',') {
             ungetc(ch, stdin);
             break;
         }
+        list[count++] = n;
     }
+    if (n != -1)
+        list[count++] = n;
 
     return count;
 }
