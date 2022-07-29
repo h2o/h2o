@@ -2022,7 +2022,6 @@
 		107923AA19A3216B00C52AD6 /* misc */ = {
 			isa = PBXGroup;
 			children = (
-				08DAFA03288FDE9900364143 /* irqbalance */,
 				10583BE61AE5A322004A3AD6 /* clang-format-all.sh */,
 				E908A2AC2320AE210039BCEE /* docker-ci */,
 				104960151B9D3F9100FF136D /* dump-github-repository.pl */,
@@ -2070,6 +2069,7 @@
 		107923FE19A3239200C52AD6 /* examples */ = {
 			isa = PBXGroup;
 			children = (
+				08DAFA03288FDE9900364143 /* irqbalance */,
 				10BF213E1A087CDF008F7129 /* libh2o */,
 			);
 			path = examples;
