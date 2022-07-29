@@ -254,6 +254,13 @@ void *h2o_mem__do_alloc_pool_aligned(h2o_mem_pool_t *pool, size_t alignment, siz
  * @param pool pool to which the allocated chunk should be linked (or NULL to allocate an orphan chunk)
  */
 void *h2o_mem_alloc_shared(h2o_mem_pool_t *pool, size_t sz, void (*dispose)(void *));
+
+/**
+ * builds a string like asprintf(3) but uses the memory pool to allocate the memory.
+ */
+int h2o_mem_asprintf(h2o_mem_pool_t *pool, char **dest, const char *fmt, ...) __attribute__((format(printf, 3, 4)));
+int h2o_mem_vasprintf(h2o_mem_pool_t *pool, char **dest, const char *fmt, va_list ap);
+
 /**
  * links a ref-counted chunk to a memory pool.
  * The ref-count of the chunk will be decremented when the pool is cleared.

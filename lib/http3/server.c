@@ -647,11 +647,7 @@ static h2o_iovec_t log_quic_stats(h2o_req_t *req)
         return h2o_iovec_init(H2O_STRLIT("-"));
 
     char *buf;
-    size_t len, bufsize = 1400;
-Redo:
-    buf = h2o_mem_alloc_pool(&req->pool, char, bufsize);
-    len = snprintf(
-        buf, bufsize,
+    int len = h2o_mem_asprintf(&req->pool, &buf,
         "packets-received=%" PRIu64 ",packets-decryption-failed=%" PRIu64 ",packets-sent=%" PRIu64 ",packets-lost=%" PRIu64
         ",packets-lost-time-threshold=%" PRIu64 ",packets-ack-received=%" PRIu64 ",late-acked=%" PRIu64 ",bytes-received=%" PRIu64
         ",bytes-sent=%" PRIu64 ",bytes-lost=%" PRIu64 ",bytes-ack-received=%" PRIu64 ",bytes-stream-data-sent=%" PRIu64
@@ -670,10 +666,8 @@ Redo:
         stats.delivery_rate.latest, stats.delivery_rate.smoothed,
         stats.delivery_rate.stdev APPLY_NUM_FRAMES(VALUE_OF_NUM_FRAMES, received) APPLY_NUM_FRAMES(VALUE_OF_NUM_FRAMES, sent),
         stats.num_sentmap_packets_largest);
-    if (len + 1 > bufsize) {
-        bufsize = len + 1;
-        goto Redo;
-    }
+    if (H2O_UNLIKELY(len < 0))
+        return h2o_iovec_init(H2O_STRLIT("-"));
 
     return h2o_iovec_init(buf, len);
 

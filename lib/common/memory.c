@@ -622,3 +622,29 @@ void h2o_perror(const char *msg)
 
     h2o_error_printf("%s: %s\n", msg, h2o_strerror_r(errno, buf, sizeof(buf)));
 }
+
+int h2o_mem_asprintf(h2o_mem_pool_t *pool, char **dest, const char *fmt, ...)
+{
+    va_list args;
+    va_start(args, fmt);
+    int ret = h2o_mem_vasprintf(pool, dest, fmt, args);
+    va_end(args);
+    return ret;
+}
+
+int h2o_mem_vasprintf(h2o_mem_pool_t *pool, char **dest, const char *fmt, va_list args)
+{
+    va_list args_copy;
+    va_copy(args_copy, args);
+    int ret = vsnprintf(NULL, 0, fmt, args_copy);
+    va_end(args_copy);
+    if (H2O_UNLIKELY(ret < 0))
+        return ret;
+
+    char *s = h2o_mem_alloc_pool(pool, char, ret + 1);
+    ret = vsprintf(s, fmt, args);
+    if (H2O_UNLIKELY(ret < 0))
+        return ret;
+    *dest = s;
+    return ret;
+}
