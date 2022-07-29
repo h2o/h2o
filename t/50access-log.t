@@ -319,7 +319,7 @@ subtest 'error' => sub {
             system("curl --silent http://127.0.0.1:$server->{port}/fastcgi > /dev/null");
         },
         '%{error}x',
-        [ qr{^\[lib/handler/fastcgi\.c\] in request:/fastcgi:connection failed:}s ],
+        [ qr{^\[lib/handler/fastcgi\.c\] in request:/fastcgi:.+:connection failed:}s ],
     );
 };
 
