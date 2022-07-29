@@ -744,6 +744,7 @@
 		08DAFA02288FDE8E00364143 /* irqbalance.bpf.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = irqbalance.bpf.c; sourceTree = "<group>"; };
 		08DAFA04289129DF00364143 /* irqbalance.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = irqbalance.h; sourceTree = "<group>"; };
 		08DAFA05289162B300364143 /* Makefile */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.make; path = Makefile; sourceTree = "<group>"; };
+		08DAFA062893AD6300364143 /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
 		08E9CC4D1E41F6660049DD26 /* embedded.c.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = embedded.c.h; sourceTree = "<group>"; };
 		08EFC4CF27FD8FAA004C532C /* 50file-shrink.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50file-shrink.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		08EFC4DF27FE9F96004C532C /* throttle_resp.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = throttle_resp.c; sourceTree = "<group>"; };
@@ -1511,6 +1512,7 @@
 				08DAFA01288FDE8E00364143 /* irqbalance.c */,
 				08DAFA04289129DF00364143 /* irqbalance.h */,
 				08DAFA05289162B300364143 /* Makefile */,
+				08DAFA062893AD6300364143 /* README.md */,
 			);
 			path = irqbalance;
 			sourceTree = "<group>";
