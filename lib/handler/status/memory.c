@@ -23,13 +23,21 @@
 #include "h2o.h"
 #include <inttypes.h>
 
+struct st_recycle_status_t {
+    uint64_t chunks;
+    uint64_t low_watermark;
+};
+
 struct st_memory_status_ctx_t {
-    struct {
-        uint64_t chunks;
-        uint64_t low_watermark;
-    } mem_pool, socket_ssl, socket_zerocopy;
+    struct st_recycle_status_t mem_pool, socket_ssl, socket_zerocopy;
     pthread_mutex_t mutex;
 };
+
+static void recycle_status_per_thread(struct st_recycle_status_t *status, h2o_mem_recycle_t *recycle)
+{
+    status->chunks += recycle->chunks.size;
+    status->low_watermark += recycle->low_watermark;
+}
 
 static void memory_status_per_thread(void *priv, h2o_context_t *ctx)
 {
@@ -37,12 +45,9 @@ static void memory_status_per_thread(void *priv, h2o_context_t *ctx)
 
     pthread_mutex_lock(&csc->mutex);
 
-    csc->mem_pool.chunks += h2o_mem_pool_allocator.chunks.size;
-    csc->mem_pool.low_watermark += h2o_mem_pool_allocator.low_watermark;
-    csc->socket_ssl.chunks += h2o_socket_ssl_buffer_allocator.chunks.size;
-    csc->socket_ssl.low_watermark += h2o_socket_ssl_buffer_allocator.chunks.size;
-    csc->socket_zerocopy.chunks += h2o_socket_zerocopy_buffer_allocator.chunks.size;
-    csc->socket_zerocopy.low_watermark += h2o_socket_zerocopy_buffer_allocator.chunks.size;
+    recycle_status_per_thread(&csc->mem_pool, &h2o_mem_pool_allocator);
+    recycle_status_per_thread(&csc->socket_ssl, &h2o_socket_ssl_buffer_allocator);
+    recycle_status_per_thread(&csc->socket_zerocopy, &h2o_socket_zerocopy_buffer_allocator);
 
     pthread_mutex_unlock(&csc->mutex);
 }
@@ -60,19 +65,17 @@ static h2o_iovec_t memory_status_json(void *priv, h2o_globalconf_t *gconf, h2o_r
     h2o_iovec_t ret;
 
 #define BUFSIZE 512
+#define FMT(prefix)                                                                                                                \
+    " \"memory." H2O_TO_STR(prefix) ".chunks\": %" PRIu64 ",\n \"memory." H2O_TO_STR(prefix) ".low_watermark\": %" PRIu64 ",\n"
+#define ARGS(prefix) csc->prefix.chunks, csc->prefix.low_watermark
     ret.base = h2o_mem_alloc_pool(&req->pool, char, BUFSIZE);
-    ret.len = snprintf(ret.base, BUFSIZE,
-                       ",\n"
-                       " \"memory.mem_pool.chunks\": %" PRIu64 ",\n"
-                       " \"memory.mem_pool.low_watermark\": %" PRIu64 ",\n"
-                       " \"memory.socket.ssl.chunks\": %" PRIu64 ",\n"
-                       " \"memory.socket.ssl.low_watermark\": %" PRIu64 ",\n"
-                       " \"memory.socket.zerocopy.chunks\": %" PRIu64 ",\n"
-                       " \"memory.socket.zerocopy.low_watermark\": %" PRIu64 "\n",
-                       csc->mem_pool.chunks, csc->mem_pool.low_watermark, csc->socket_ssl.chunks, csc->socket_ssl.low_watermark,
-                       csc->socket_zerocopy.chunks, csc->socket_zerocopy.low_watermark);
-    pthread_mutex_destroy(&csc->mutex);
+    ret.len = snprintf(ret.base, BUFSIZE, ",\n" FMT(mem_pool) FMT(socket.ssl) FMT(socket.zerocopy), ARGS(mem_pool),
+                       ARGS(socket_ssl), ARGS(socket_zerocopy));
+#undef FMT
+#undef ARGS
 #undef BUFSIZE
+
+    pthread_mutex_destroy(&csc->mutex);
     free(csc);
     return ret;
 }
