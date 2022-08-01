@@ -69,7 +69,7 @@ _mount:
 	# allow write of mruby executables being generated (FIXME don't generate here)
 	for i in deps/mruby/bin misc/h2get/deps/mruby/bin; do \
 		sudo rm -rf $(SRC_DIR)/$$i; \
-		sudo mkdir $(SRC_DIR)/$$i; \
+		sudo mkdir -p $(SRC_DIR)/$$i; \
 		sudo chown -R ci:ci $(SRC_DIR)/$$i; \
 	done
 
