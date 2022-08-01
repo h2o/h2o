@@ -25,21 +25,10 @@ unless ($ENV{DTRACE_TESTS})  {
       unless server_features()->{dtrace};
 }
 
-my $quic_port = empty_port({
-    host  => "127.0.0.1",
-    proto => "udp",
-});
-
 my $server = spawn_h2o({
     opts => [qw(--mode=worker)],
     user => scalar(getpwuid($ENV{SUDO_UID})),
     conf => << "EOT",
-listen:
-  type: quic
-  port: $quic_port
-  ssl:
-    key-file: examples/h2o/server.key
-    certificate-file: examples/h2o/server.crt
 hosts:
   default:
     paths:
@@ -54,7 +43,7 @@ subtest "h2olog", sub {
     args => [],
   });
 
-  my ($headers, $body) = run_prog("$client_prog -3 https://127.0.0.1:$quic_port/");
+  my ($headers, $body) = run_prog("$client_prog -3 100 https://127.0.0.1:$server->{quic_port}/");
   like $headers, qr{^HTTP/3 200\n}m, "req: HTTP/3";
 
   my $trace;
@@ -81,7 +70,7 @@ subtest "h2olog -t", sub {
     ],
   });
 
-  my ($headers, $body) = run_prog("$client_prog -3 https://127.0.0.1:$quic_port/");
+  my ($headers, $body) = run_prog("$client_prog -3 100 https://127.0.0.1:$server->{quic_port}/");
   like $headers, qr{^HTTP/3 200\n}m, "req: HTTP/3";
 
   my $trace;
@@ -105,7 +94,7 @@ subtest "h2olog -H", sub {
     args => ["-H"],
   });
 
-  my ($headers, $body) = run_prog("$client_prog -3 https://127.0.0.1:$quic_port/");
+  my ($headers, $body) = run_prog("$client_prog -3 100 https://127.0.0.1:$server->{quic_port}/");
   like $headers, qr{^HTTP/3 200\n}m, "req: HTTP/3";
 
   my $trace;
