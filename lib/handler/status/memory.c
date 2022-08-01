@@ -29,8 +29,8 @@ struct st_recycle_status_t {
 };
 
 struct st_memory_status_ctx_t {
-    struct st_recycle_status_t mem_pool, socket_ssl, socket_zerocopy;
     pthread_mutex_t mutex;
+    struct st_recycle_status_t mem_pool, socket_ssl, socket_zerocopy;
 };
 
 static void recycle_status_per_thread(struct st_recycle_status_t *status, h2o_mem_recycle_t *recycle)
@@ -55,7 +55,7 @@ static void memory_status_per_thread(void *priv, h2o_context_t *ctx)
 static void *memory_status_init(void)
 {
     struct st_memory_status_ctx_t *ret = h2o_mem_alloc(sizeof(*ret));
-    *ret = (struct st_memory_status_ctx_t){{}, {}, {}, PTHREAD_MUTEX_INITIALIZER};
+    *ret = (struct st_memory_status_ctx_t){PTHREAD_MUTEX_INITIALIZER};
     return ret;
 }
 
