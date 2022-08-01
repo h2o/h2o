@@ -14,7 +14,6 @@ plan skip_all => 'curl not found'
 my $tempdir = tempdir(CLEANUP => 1);
 
 my $server = spawn_h2o({
-    quic => { disable => 1 }, # TODO: enable it later
     opts => [qw(--mode=worker)],
     user => "nobody",
     conf => << 'EOT',
@@ -40,9 +39,9 @@ if ($tracer_pid == 0) {
 /* arg2: unsigned int
  * Workarond for an issue that bpftrace always grabs 64-bit integer from memory regardless of
  * the datatype declared in h2o-probes.d. Ignore the upper bits by masking. */
-usdt::h2o:receive_request {printf("*** %llu:%llu version %d.%d ***\n", arg0, arg1, (arg2 & 0xffffffff) / 256, (arg2 & 0xffffffff) % 256)}
+usdt::h2o:receive_request {printf("*** conn_id=%llu,req_id=%llu,version=%d.%d ***\n", arg0, arg1, (arg2 & 0xffffffff) / 256, (arg2 & 0xffffffff) % 256)}
 usdt::h2o:receive_request_header {printf("%s: %s\n", str(arg2, arg3), str(arg4, arg5))}
-usdt::h2o:send_response {printf("%llu:%llu status:%u\n", arg0, arg1, arg2)}
+usdt::h2o:send_response {printf("conn_id=%llu,req_id=%llu,status=%u\n", arg0, arg1, arg2)}
 usdt::h2o:send_response_header {printf("%s: %s\n", str(arg2, arg3), str(arg4, arg5))}
 /* arg1: uint8_t
  * Same workaround for bpftrace */
@@ -54,7 +53,7 @@ EOT
         exec(
             qw(unbuffer dtrace -p), $server->{pid}, "-n", <<'EOT',
 :h2o::receive_request {
-    printf("\nXXXX*** %u:%u version %d.%d ***\n", arg0, arg1, arg2 / 256, arg2 % 256);
+    printf("\nXXXX*** conn_id=%u,req_id=%u,version=%d.%d ***\n", arg0, arg1, arg2 / 256, arg2 % 256);
 }
 EOT
             "-n", <<'EOT',
@@ -68,7 +67,7 @@ EOT
 EOT
             "-n", <<'EOT',
 :h2o::send_response {
-    printf("\nXXXX%u:%u status:%u\n", arg0, arg1, arg2);
+    printf("\nXXXX conn_id=%u,req_id=%u,status=%u\n", arg0, arg1, arg2);
 }
 EOT
             "-n", <<'EOT',
@@ -120,12 +119,13 @@ run_with_curl($server, sub {
     # get trace
     my $trace = $get_trace->();
     my ($ver_major, $ver_minor) = (int($http_ver / 256), $http_ver % 256);
-    like $trace, qr{^\*{3} \d+:1 version $ver_major\.$ver_minor \*{3}$}m;
+    my $req_id = $ver_major == 3 ? 0 : 1;
+    like $trace, qr{^\*{3} conn_id=\d+,req_id=$req_id,version=$ver_major\.$ver_minor \*{3}$}m;
     like $trace, qr{^:method: GET$}m;
     like $trace, qr{^:scheme: $proto$}m;
     like $trace, qr{^:authority: 127\.0\.0\.1:$port$}m;
     like $trace, qr{^:path: /$}m;
-    like $trace, qr{^\d+:1 status:200}m;
+    like $trace, qr{^conn_id=\d+,req_id=$req_id,status=200}m;
     like $trace, qr{content-length: 6}m;
     like $trace, qr{content-type: text/plain}m;
     like $trace, qr{accept-ranges: bytes}m;
