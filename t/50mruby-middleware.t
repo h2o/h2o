@@ -60,7 +60,8 @@ sub get {
     my ($sline, @hlines) = split(/\r\n/, $hstr);
     chomp($sline //= '');
     unless ($sline =~ m{^HTTP/[\d\.]+ (\d+)}) {
-        confess("failed to get `$curl_cmd`: @{[ $sline // '' ]}");
+        diag("failed to get `$curl_cmd`: @{[ $sline // '' ]}");
+        return (499, Hash::MultiValue->new, "");
     }
     my $status = $1 + 0;
     my $headers = Hash::MultiValue->new(map { (lc($_->[0]), $_->[1]) } map { [ split(': ', $_, 2) ] } @hlines);
@@ -227,7 +228,7 @@ EOT
             my ($server, $tc, $mode, $file, $gopts) = @_;
             run_with_curl($server, sub {
                 my ($proto, $port, $curl) = @_;
-                plan skip_all => "TODO: HTTP/3" if $curl =~ /--http3/;
+                local $TODO = "HTTP/3 is not yet supported" if $curl =~ /--http3/;
                 my ($status, $headers, $body) = get($proto, $port, $curl, "@{[ into_path($tc->{name})]}/$file", $gopts);
                 is $status, 200;
                 is $body, 'mruby';
