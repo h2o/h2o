@@ -189,6 +189,7 @@ h2o_mem_recycle_conf_t h2o_socket_ssl_buffer_conf = {.memsize = H2O_SOCKET_DEFAU
 };
 __thread h2o_mem_recycle_t h2o_socket_ssl_buffer_allocator = {&h2o_socket_ssl_buffer_conf};
 __thread h2o_mem_recycle_t h2o_socket_zerocopy_buffer_allocator = {&h2o_socket_ssl_buffer_conf};
+__thread size_t h2o_socket_num_zerocopy_buffers_inflight;
 
 int h2o_socket_use_ktls = 0;
 

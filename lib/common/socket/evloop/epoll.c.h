@@ -103,6 +103,7 @@ static int handle_zerocopy_notification(struct st_h2o_evloop_socket_t *sock)
                             } else {
                                 h2o_mem_free_recycle(&zerocopy_buffer_allocator, p);
                             }
+                            --h2o_socket_num_zerocopy_buffers_inflight;
                         }
                     }
                 }
