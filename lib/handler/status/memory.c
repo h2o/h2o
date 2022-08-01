@@ -72,7 +72,7 @@ static h2o_iovec_t memory_status_json(void *priv, h2o_globalconf_t *gconf, h2o_r
 #define ARGS(prefix) csc->prefix.chunks, csc->prefix.low_watermark
     ret.base = h2o_mem_alloc_pool(&req->pool, char, BUFSIZE);
     ret.len = snprintf(ret.base, BUFSIZE,
-                       ",\n" FMT(mem_pool) FMT(socket.ssl) FMT(socket.zerocopy) " \"memory.socket.zerocopy_inflight\": %zu,\n",
+                       ",\n" FMT(mem_pool) FMT(socket.ssl) FMT(socket.zerocopy) " \"memory.socket.zerocopy_inflight\": %zu\n",
                        ARGS(mem_pool), ARGS(socket_ssl), ARGS(socket_zerocopy),
                        csc->socket_zerocopy_inflight * h2o_socket_zerocopy_buffer_allocator.conf->memsize);
 #undef FMT
