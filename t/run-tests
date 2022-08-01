@@ -9,6 +9,7 @@ use Term::ANSIColor;
 use Time::HiRes qw(time);
 
 my $jobs = $ENV{TEST_JOBS} || 1;
+my $timeout_sec = 900;
 
 GetOptions(
    "jobs|j=i" => \$jobs,
@@ -30,7 +31,7 @@ while (@scripts or %pids) {
     # wait for tasks to exit
     my $kid = do {
         local $SIG{ALRM} = sub { die };
-        alarm(600);
+        alarm($timeout_sec);
         my $kid = eval { wait };
         alarm(0);
         $kid;
@@ -57,6 +58,8 @@ if (@failures) {
 
 sub spawn_script {
     my $script = shift;
+
+    print STDERR colorize("# spawning $script\n", 'magenta');
 
     my $logfn = get_logfn($script);
     open my $logfh, ">", $logfn
