@@ -232,8 +232,10 @@ static size_t write_core(struct st_h2o_evloop_socket_t *sock, h2o_iovec_t **bufs
             }
             if (sendmsg_flags != 0 && (encbufcnt == 0 || enc_written > 0)) {
                 zerocopy_buffers_push(sock->super._zerocopy, sock->super.ssl->output.buf.base);
-                sock->super.ssl->output.zerocopy_owned = 1;
-                ++h2o_socket_num_zerocopy_buffers_inflight;
+                if (!sock->super.ssl->output.zerocopy_owned) {
+                    sock->super.ssl->output.zerocopy_owned = 1;
+                    ++h2o_socket_num_zerocopy_buffers_inflight;
+                }
             }
             /* if write is incomplete, record the advance and bail out */
             if (encbufcnt != 0) {
