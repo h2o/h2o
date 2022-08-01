@@ -2055,7 +2055,8 @@ void h2o_socket_clear_recycle(int full)
 
 int h2o_socket_recycle_is_empty(void)
 {
-    return h2o_mem_recycle_is_empty(&h2o_socket_ssl_buffer_allocator) && h2o_mem_recycle_is_empty(&h2o_socket_zerocopy_buffer_allocator);
+    return h2o_mem_recycle_is_empty(&h2o_socket_ssl_buffer_allocator) &&
+           h2o_mem_recycle_is_empty(&h2o_socket_zerocopy_buffer_allocator);
 }
 
 #if H2O_USE_EBPF_MAP

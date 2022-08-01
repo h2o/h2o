@@ -44,7 +44,6 @@ static void memory_status_per_thread(void *priv, h2o_context_t *ctx)
     csc->socket_zerocopy.chunks += h2o_socket_zerocopy_buffer_allocator.chunks.size;
     csc->socket_zerocopy.low_watermark += h2o_socket_zerocopy_buffer_allocator.chunks.size;
 
-
     pthread_mutex_unlock(&csc->mutex);
 }
 
@@ -70,12 +69,8 @@ static h2o_iovec_t memory_status_json(void *priv, h2o_globalconf_t *gconf, h2o_r
                        " \"memory.socket.ssl.low_watermark\": %" PRIu64 ",\n"
                        " \"memory.socket.zerocopy.chunks\": %" PRIu64 ",\n"
                        " \"memory.socket.zerocopy.low_watermark\": %" PRIu64 "\n",
-                       csc->mem_pool.chunks,
-                       csc->mem_pool.low_watermark,
-                       csc->socket_ssl.chunks,
-                       csc->socket_ssl.low_watermark,
-                       csc->socket_zerocopy.chunks,
-                       csc->socket_zerocopy.low_watermark);
+                       csc->mem_pool.chunks, csc->mem_pool.low_watermark, csc->socket_ssl.chunks, csc->socket_ssl.low_watermark,
+                       csc->socket_zerocopy.chunks, csc->socket_zerocopy.low_watermark);
     pthread_mutex_destroy(&csc->mutex);
 #undef BUFSIZE
     free(csc);
