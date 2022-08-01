@@ -22,7 +22,6 @@
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <stdlib.h>
-#include <sys/socket.h>
 #include <sys/time.h>
 #include <sys/uio.h>
 #include <unistd.h>
@@ -61,6 +60,7 @@ struct st_h2o_evloop_socket_t {
 };
 
 static void link_to_pending(struct st_h2o_evloop_socket_t *sock);
+static void link_to_statechanged(struct st_h2o_evloop_socket_t *sock);
 static void write_pending(struct st_h2o_evloop_socket_t *sock);
 static h2o_evloop_t *create_evloop(size_t sz);
 static void update_now(h2o_evloop_t *loop);
@@ -70,7 +70,7 @@ static int32_t adjust_max_wait(h2o_evloop_t *loop, int32_t max_wait);
 static int evloop_do_proceed(h2o_evloop_t *loop, int32_t max_wait);
 static void evloop_do_dispose(h2o_evloop_t *loop);
 static void evloop_do_on_socket_create(struct st_h2o_evloop_socket_t *sock);
-static void evloop_do_on_socket_close(struct st_h2o_evloop_socket_t *sock);
+static int evloop_do_on_socket_close(struct st_h2o_evloop_socket_t *sock);
 static void evloop_do_on_socket_export(struct st_h2o_evloop_socket_t *sock);
 
 #if H2O_USE_POLL || H2O_USE_EPOLL || H2O_USE_KQUEUE
@@ -80,9 +80,15 @@ static void evloop_do_on_socket_export(struct st_h2o_evloop_socket_t *sock);
 #define H2O_USE_KQUEUE 1
 #elif defined(__linux)
 #define H2O_USE_EPOLL 1
+#if defined(SO_ZEROCOPY) && defined(SO_EE_ORIGIN_ZEROCOPY)
+#define H2O_USE_MSG_ZEROCOPY 1
+#endif
 #else
 #define H2O_USE_POLL 1
 #endif
+#endif
+#if !defined(H2O_USE_MSG_ZEROCOPY)
+#define H2O_USE_MSG_ZEROCOPY 0
 #endif
 
 #if H2O_USE_POLL
@@ -108,7 +114,7 @@ void link_to_pending(struct st_h2o_evloop_socket_t *sock)
     }
 }
 
-static void link_to_statechanged(struct st_h2o_evloop_socket_t *sock)
+void link_to_statechanged(struct st_h2o_evloop_socket_t *sock)
 {
     if (sock->_next_statechanged == sock) {
         sock->_next_statechanged = NULL;
@@ -153,15 +159,17 @@ static const char *on_read_core(int fd, h2o_buffer_t **input, size_t max_bytes)
     return NULL;
 }
 
-static size_t write_vecs(struct st_h2o_evloop_socket_t *sock, h2o_iovec_t **bufs, size_t *bufcnt)
+static size_t write_vecs(struct st_h2o_evloop_socket_t *sock, h2o_iovec_t **bufs, size_t *bufcnt, int sendmsg_flags)
 {
     ssize_t wret;
 
     while (*bufcnt != 0) {
         /* write */
         int iovcnt = *bufcnt < IOV_MAX ? (int)*bufcnt : IOV_MAX;
-        while ((wret = writev(sock->fd, (struct iovec *)*bufs, iovcnt)) == -1 && errno == EINTR)
-            ;
+        struct msghdr msg;
+        do {
+            msg = (struct msghdr){.msg_iov = (struct iovec *)*bufs, .msg_iovlen = iovcnt};
+        } while ((wret = sendmsg(sock->fd, &msg, sendmsg_flags)) == -1 && errno == EINTR);
         SOCKET_PROBE(WRITEV, &sock->super, wret);
 
         if (wret == -1)
@@ -192,7 +200,7 @@ static size_t write_core(struct st_h2o_evloop_socket_t *sock, h2o_iovec_t **bufs
     if (sock->super.ssl == NULL || sock->super.ssl->offload == H2O_SOCKET_SSL_OFFLOAD_ON) {
         if (sock->super.ssl != NULL)
             assert(!has_pending_ssl_bytes(sock->super.ssl));
-        return write_vecs(sock, bufs, bufcnt);
+        return write_vecs(sock, bufs, bufcnt, 0);
     }
 
     /* SSL */
@@ -204,9 +212,26 @@ static size_t write_core(struct st_h2o_evloop_socket_t *sock, h2o_iovec_t **bufs
                                                 sock->super.ssl->output.buf.off - sock->super.ssl->output.pending_off);
             h2o_iovec_t *encbufs = &encbuf;
             size_t encbufcnt = 1, enc_written;
-            if ((enc_written = write_vecs(sock, &encbufs, &encbufcnt)) == SIZE_MAX) {
+            int sendmsg_flags = 0;
+#if H2O_USE_MSG_ZEROCOPY
+            /* Use zero copy if amount of data to be written is no less than 4KB, and if the memory can be returned to
+             * `zerocopy_buffer_allocator`. Latter is a short-cut. It is only under exceptional conditions (e.g., TLS stack adding
+             * a post-handshake message) that we'd see the buffer grow to a size that cannot be returned to the recycling allocator.
+             * Even though https://www.kernel.org/doc/html/v5.17/networking/msg_zerocopy.html recommends 10KB, 4KB has been chosen
+             * as the threshold, because we are likely to be using the non-temporal aesgcm engine and tx-nocache-copy, in which case
+             * copying sendmsg is going to be more costly than what the kernel documentation assumes. In a synthetic benchmark,
+             * changing from 16KB to 4KB increased the throughput by ~10%. */
+            if (sock->super.ssl->output.allocated_for_zerocopy && encbuf.len >= 4096 &&
+                sock->super.ssl->output.buf.capacity == zerocopy_buffer_allocator.conf->memsize)
+                sendmsg_flags = MSG_ZEROCOPY;
+#endif
+            if ((enc_written = write_vecs(sock, &encbufs, &encbufcnt, sendmsg_flags)) == SIZE_MAX) {
                 dispose_ssl_output_buffer(sock->super.ssl);
                 return SIZE_MAX;
+            }
+            if (sendmsg_flags != 0 && (encbufcnt == 0 || enc_written > 0)) {
+                zerocopy_buffers_push(sock->super._zerocopy, sock->super.ssl->output.buf.base);
+                sock->super.ssl->output.zerocopy_owned = 1;
             }
             /* if write is incomplete, record the advance and bail out */
             if (encbufcnt != 0) {
@@ -320,13 +345,20 @@ void do_dispose_socket(h2o_socket_t *_sock)
 {
     struct st_h2o_evloop_socket_t *sock = (struct st_h2o_evloop_socket_t *)_sock;
 
-    evloop_do_on_socket_close(sock);
     dispose_write_buf(&sock->super);
+
+    sock->_flags = H2O_SOCKET_FLAG_IS_DISPOSED | (sock->_flags & H2O_SOCKET_FLAG__EPOLL_IS_REGISTERED);
+
+    /* Give backends chance to do the necessary cleanup, as well as giving them chance to switch to their own disposal method; e.g.,
+     * shutdown(SHUT_RDWR) with delays to reclaim all zero copy buffers. */
+    if (evloop_do_on_socket_close(sock))
+        return;
+
+    /* immediate close */
     if (sock->fd != -1) {
         close(sock->fd);
         sock->fd = -1;
     }
-    sock->_flags = H2O_SOCKET_FLAG_IS_DISPOSED;
     link_to_statechanged(sock);
 }
 
@@ -541,7 +573,7 @@ int do_export(h2o_socket_t *_sock, h2o_socket_export_t *info)
 
     assert((sock->_flags & H2O_SOCKET_FLAG_IS_DISPOSED) == 0);
     evloop_do_on_socket_export(sock);
-    sock->_flags = H2O_SOCKET_FLAG_IS_DISPOSED;
+    sock->_flags = H2O_SOCKET_FLAG_IS_DISPOSED | (sock->_flags & H2O_SOCKET_FLAG__EPOLL_IS_REGISTERED);
 
     info->fd = sock->fd;
     sock->fd = -1;

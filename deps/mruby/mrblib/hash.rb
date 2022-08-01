@@ -4,6 +4,15 @@
 # ISO 15.2.13
 class Hash
   ##
+  # Hash is enumerable
+  #
+  # ISO 15.2.13.3
+  include Enumerable
+
+  ##
+  # call-seq:
+  #   hash == object -> true or false
+  #
   #  Equality---Two hashes are equal if they each contain the same number
   #  of keys and if each key-value pair is equal to (according to
   #  <code>Object#==</code>) the corresponding elements in the other
@@ -24,6 +33,9 @@ class Hash
   end
 
   ##
+  # call-seq:
+  #   hash.eql? object -> true or false
+  #
   # Returns <code>true</code> if <i>hash</i> and <i>other</i> are
   # both hashes with the same content compared by eql?.
   #
@@ -42,6 +54,10 @@ class Hash
   end
 
   ##
+  # call-seq:
+  #   hash.delete(key) -> value or nil
+  #   hash.delete(key) {|key| ... } -> object
+  #
   # Delete the element with the key +key+.
   # Return the value of the element if +key+
   # was found. Return nil if nothing was
@@ -57,15 +73,14 @@ class Hash
   end
 
   ##
-  # Calls the given block for each element of +self+
-  # and pass the key and value of each element.
-  #
   # call-seq:
   #   hsh.each      {| key, value | block } -> hsh
   #   hsh.each_pair {| key, value | block } -> hsh
   #   hsh.each                              -> an_enumerator
   #   hsh.each_pair                         -> an_enumerator
   #
+  # Calls the given block for each element of +self+
+  # and pass the key and value of each element.
   #
   # If no block is given, an enumerator is returned instead.
   #
@@ -93,12 +108,12 @@ class Hash
   end
 
   ##
-  # Calls the given block for each element of +self+
-  # and pass the key of each element.
-  #
   # call-seq:
   #   hsh.each_key {| key | block } -> hsh
   #   hsh.each_key                  -> an_enumerator
+  #
+  # Calls the given block for each element of +self+
+  # and pass the key of each element.
   #
   # If no block is given, an enumerator is returned instead.
   #
@@ -119,12 +134,11 @@ class Hash
   end
 
   ##
-  # Calls the given block for each element of +self+
-  # and pass the value of each element.
-  #
   # call-seq:
-  #   hsh.each_value {| value | block } -> hsh
+  #   hsh.each_value {| value | block } -> self
   #   hsh.each_value                    -> an_enumerator
+  #
+  # Calls the given block with each value; returns +self+:
   #
   # If no block is given, an enumerator is returned instead.
   #
@@ -140,75 +154,70 @@ class Hash
   def each_value(&block)
     return to_enum :each_value unless block
 
-    self.keys.each{|k| block.call(self[k])}
+    self.values.each{|v| block.call(v)}
     self
   end
 
   ##
-  # Replaces the contents of <i>hsh</i> with the contents of other hash
+  # call-seq:
+  #     hsh.merge(other_hash..)                                 -> hsh
+  #     hsh.merge(other_hash..){|key, oldval, newval| block}    -> hsh
   #
-  # ISO 15.2.13.4.23
-  def replace(hash)
-    raise TypeError, "Hash required (#{hash.class} given)" unless Hash === hash
-    self.clear
-    hash.each_key{|k|
-      self[k] = hash[k]
-    }
-    if hash.default_proc
-      self.default_proc = hash.default_proc
-    else
-      self.default = hash.default
-    end
-    self
-  end
-  # ISO 15.2.13.4.17
-  alias initialize_copy replace
-
-  ##
-  # Return a hash which contains the content of
-  # +self+ and +other+. If a block is given
-  # it will be called for each element with
-  # a duplicate key. The value of the block
-  # will be the final value of this element.
+  #  Returns the new \Hash formed by merging each of +other_hashes+
+  #  into a copy of +self+.
+  #
+  #  Each argument in +other_hashes+ must be a \Hash.
+  #  Adds the contents of _other_hash_ to _hsh_.  If no block is specified,
+  #  entries with duplicate keys are overwritten with the values from
+  #  _other_hash_, otherwise the value of each duplicate key is determined by
+  #  calling the block with the key, its value in _hsh_ and its value in
+  #  _other_hash_.
+  #
+  #  Example:
+  #   h = {foo: 0, bar: 1, baz: 2}
+  #   h1 = {bat: 3, bar: 4}
+  #   h2 = {bam: 5, bat:6}
+  #   h3 = h.merge(h1, h2) { |key, old_value, new_value| old_value + new_value }
+  #   h3 # => {:foo=>0, :bar=>5, :baz=>2, :bat=>9, :bam=>5}
   #
   # ISO 15.2.13.4.22
-  def merge(other, &block)
-    raise TypeError, "Hash required (#{other.class} given)" unless Hash === other
+  def merge(*others, &block)
+    i=0; len=others.size
     h = self.dup
-    if block
+    return h.__merge(*others) unless block
+    while i<len
+      other = others[i]
+      i += 1
+      raise TypeError, "Hash required (#{other.class} given)" unless Hash === other
       other.each_key{|k|
         h[k] = (self.has_key?(k))? block.call(k, self[k], other[k]): other[k]
       }
-    else
-      other.each_key{|k| h[k] = other[k]}
     end
     h
   end
 
   # internal method for Hash inspection
-  def _inspect
+  def _inspect(recur_list)
     return "{}" if self.size == 0
+    return "{...}" if recur_list[self.object_id]
+    recur_list[self.object_id] = true
     ary=[]
     keys=self.keys
+    vals=self.values
     size=keys.size
     i=0
     while i<size
-      k=keys[i]
-      ary<<(k._inspect + "=>" + self[k]._inspect)
+      ary<<(keys[i]._inspect(recur_list) + "=>" + vals[i]._inspect(recur_list))
       i+=1
     end
     "{"+ary.join(", ")+"}"
   end
   ##
   # Return the contents of this hash as a string.
- #
+  #
   # ISO 15.2.13.4.30 (x)
   def inspect
-    begin
-      self._inspect
-    rescue SystemStackError
-      "{...}"
-    end
+    self._inspect({})
   end
   # ISO 15.2.13.4.31 (x)
   alias to_s inspect
@@ -318,12 +327,4 @@ class Hash
     }
     h
   end
-end
-
-##
-# Hash is enumerable
-#
-# ISO 15.2.13.3
-class Hash
-  include Enumerable
 end

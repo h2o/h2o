@@ -21,7 +21,7 @@ class Interpreter
   }
   def interpret(string)
     @ret = ""
-    string.each_char {|b| Dispatcher[b].bind(self).call }
+    string.split("").each {|b| Dispatcher[b].bind(self).call }
   end
 end
 
@@ -77,7 +77,7 @@ end
 
 assert 'instance' do
   assert_kind_of Method, 1.method(:+)
-  assert_kind_of UnboundMethod, Fixnum.instance_method(:+)
+  assert_kind_of UnboundMethod, Integer.instance_method(:+)
 end
 
 assert 'Method#call' do
@@ -92,12 +92,15 @@ assert 'Method#call' do
   assert_equal 42, klass2.new.method(:foo).call
 
   i = Class.new {
-   def bar
-     yield 3
-   end
+    def bar
+      yield 3
+    end
   }.new
   assert_raise(LocalJumpError) { i.method(:bar).call }
   assert_equal 3, i.method(:bar).call { |i| i }
+
+  assert_raise(ArgumentError) { nil.method(:__id__).call nil, 1 }
+  assert_raise(ArgumentError) { nil.method(:__id__).call nil, opts: 1 }
 end
 
 assert 'Method#call for regression' do
@@ -208,6 +211,19 @@ assert 'Method#to_proc' do
     yield 39
   end
   assert_equal 42, o.bar(&3.method(:+))
+
+  def o.baz(x, y, z, *w, u:, v:, **opts, &blk)
+    { x:, y:, z:, w:, u:, v:, opts:, blk: }
+  end
+  blk = -> { }
+  values = { x: 1, y: 2, z: 3, w: [4, 5, 6], u: 7, v: 8, opts: { s: 9, t: 10 }, blk: blk }
+  assert_equal values, o.method(:baz).to_proc.call(1, 2, 3, 4, 5, 6, u: 7, v: 8, s: 9, t: 10, &blk)
+  assert_equal values, o.method(:baz).to_proc.call(1, 2, 3, 4, 5, 6, **{ u: 7, v: 8, s: 9, t: 10 }, &blk)
+  assert_equal values, o.method(:baz).to_proc.call(*[1, 2, 3, 4, 5, 6], u: 7, v: 8, s: 9, t: 10, &blk)
+  assert_equal values, o.method(:baz).to_proc.call(*[1, 2, 3, 4, 5, 6], **{ u: 7, v: 8, s: 9, t: 10 }, &blk)
+
+  assert_raise(ArgumentError) { nil.method(:__id__).to_proc.call nil, 1 }
+  assert_raise(ArgumentError) { nil.method(:__id__).to_proc.call nil, opts: 1 }
 end
 
 assert 'to_s' do
@@ -404,10 +420,11 @@ assert 'UnboundMethod#arity' do
 end
 
 assert 'UnboundMethod#==' do
-  assert_false(Fixnum.instance_method(:+) == Fixnum.instance_method(:-))
-  assert_true(Fixnum.instance_method(:+) == Fixnum.instance_method(:+))
-  assert_false(Fixnum.instance_method(:+) == Float.instance_method(:+))
+  assert_false(Integer.instance_method(:+) == Integer.instance_method(:-))
+  assert_true(Integer.instance_method(:+) == Integer.instance_method(:+))
   assert_true(UnboundMethod.instance_method(:==) == UnboundMethod.instance_method(:eql?))
+  skip unless Object.const_defined?(:Float)
+  assert_false(Integer.instance_method(:+) == Float.instance_method(:+))
 end
 
 assert 'UnboundMethod#super_method' do
@@ -440,4 +457,28 @@ assert 'UnboundMethod#bind' do
   assert_raise(TypeError) { sc.instance_method(:foo).bind([]) }
   assert_raise(TypeError) { Array.instance_method(:each).bind(1) }
   assert_kind_of Method, Object.instance_method(:object_id).bind(Object.new)
+end
+
+assert 'UnboundMethod#bind_call' do
+  m = Array.instance_method(:size)
+  assert_equal(:size, m.name)
+  assert_equal(0, m.bind_call([]))
+  assert_equal(1, m.bind_call([1]))
+  assert_equal(2, m.bind_call([1,2]))
+
+  o = Object.new
+  def m(x, y, z, *w, u:, v:, **opts, &blk)
+    { x:, y:, z:, w:, u:, v:, opts:, blk: }
+  end
+  m = o.method(:m).unbind
+  blk = -> { }
+  values = { x: 1, y: 2, z: 3, w: [4, 5, 6], u: 7, v: 8, opts: { s: 9, t: 10 }, blk: blk }
+  assert_equal values, m.bind_call(o, 1, 2, 3, 4, 5, 6, u: 7, v: 8, s: 9, t: 10, &blk)
+  assert_equal values, m.bind_call(o, 1, 2, 3, 4, 5, 6, **{ u: 7, v: 8, s: 9, t: 10 }, &blk)
+  assert_equal values, m.bind_call(o, *[1, 2, 3, 4, 5, 6], u: 7, v: 8, s: 9, t: 10, &blk)
+  assert_equal values, m.bind_call(o, *[1, 2, 3, 4, 5, 6], **{ u: 7, v: 8, s: 9, t: 10 }, &blk)
+  assert_raise(ArgumentError) { m.bind_call }
+
+  assert_raise(ArgumentError) { BasicObject.instance_method(:__id__).bind_call nil, 1 }
+  assert_raise(ArgumentError) { BasicObject.instance_method(:__id__).bind_call nil, opts: 1 }
 end

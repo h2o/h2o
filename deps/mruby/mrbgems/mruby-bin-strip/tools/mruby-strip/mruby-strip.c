@@ -1,9 +1,14 @@
-#include <stdio.h>
+#include <mruby.h>
+
+#ifdef MRB_NO_STDIO
+# error mruby-bin-strip conflicts 'MRB_NO_STDIO' in your build configuration
+#endif
+
 #include <stdlib.h>
 #include <string.h>
-#include <mruby.h>
 #include <mruby/irep.h>
 #include <mruby/dump.h>
+#include <mruby/internal.h>
 
 struct strip_args {
   int argc_start;

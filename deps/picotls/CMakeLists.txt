@@ -148,14 +148,14 @@ ENDIF ()
 
 IF (WITH_FUSION)
     ADD_LIBRARY(picotls-fusion lib/fusion.c)
-    SET_TARGET_PROPERTIES(picotls-fusion PROPERTIES COMPILE_FLAGS "-mavx2 -maes -mpclmul")
+    SET_TARGET_PROPERTIES(picotls-fusion PROPERTIES COMPILE_FLAGS "-mavx2 -maes -mpclmul -mvaes -mvpclmulqdq")
     TARGET_LINK_LIBRARIES(picotls-fusion picotls-core)
     ADD_EXECUTABLE(test-fusion.t
         deps/picotest/picotest.c
         lib/picotls.c
         t/fusion.c)
     TARGET_LINK_LIBRARIES(test-fusion.t picotls-minicrypto)
-    SET_TARGET_PROPERTIES(test-fusion.t PROPERTIES COMPILE_FLAGS "-mavx2 -maes -mpclmul")
+    SET_TARGET_PROPERTIES(test-fusion.t PROPERTIES COMPILE_FLAGS "-mavx2 -maes -mpclmul -mvaes -mvpclmulqdq")
     IF (WITH_DTRACE)
         ADD_DEPENDENCIES(test-fusion.t generate-picotls-probes)
     ENDIF ()

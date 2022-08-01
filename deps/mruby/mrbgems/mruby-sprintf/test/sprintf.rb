@@ -1,5 +1,7 @@
-#assert('Kernel.sprintf') do
-#end
+assert('sprintf invalid') do
+  assert_raise(ArgumentError) { sprintf('%1$*d', 3) }
+  assert_raise(ArgumentError) { sprintf('%1$.*d', 3) }
+end
 
 assert('String#%') do
   assert_equal "one=1", "one=%d" % 1
@@ -8,6 +10,11 @@ assert('String#%') do
   assert_equal 15, ("%b" % (1<<14)).size
   skip unless Object.const_defined?(:Float)
   assert_equal "1.0", "%3.1f" % 1.01
+  assert_equal " 12345.12", "% 4.2f" % 12345.1234
+  assert_equal "12345.12", "%-4.2f" % 12345.12345
+  assert_equal "+12345.12", "%+4.2f" % 12345.1234
+  assert_equal "12345.12", "%04.2f" % 12345.12345
+  assert_equal "0012345.12", "%010.2f" % 12345.1234
 end
 
 assert('String#% with inf') do
@@ -66,29 +73,6 @@ assert('String#% with nan') do
   assert_equal " NaN", "% 3f" % nan
   assert_equal " NaN", "% 4f" % nan
   assert_equal "  NaN", "% 5f" % nan
-end
-
-assert("String#% with invalid chr") do
-  begin
-    class Fixnum
-      alias_method :chr_, :chr if method_defined?(:chr)
-
-      def chr
-        nil
-      end
-    end
-
-    assert_raise TypeError do
-      "%c" % 0x80
-    end
-  ensure
-    class Fixnum
-      if method_defined?(:chr_)
-        alias_method :chr, :chr_
-        remove_method :chr_
-      end
-    end
-  end
 end
 
 assert("String#% %b") do

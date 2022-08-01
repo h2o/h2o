@@ -1,10 +1,13 @@
 #include <mruby.h>
+#include <mruby/string.h>
 #include <stdio.h>
 
 static mrb_value
 mrb_c_method(mrb_state *mrb, mrb_value self)
 {
-  puts("A C Extension");
+  mrb_ensure_string_type(mrb, self);
+  printf("%s: A C Extension\n", mrb_str_to_cstr(mrb, self));
+
   return self;
 }
 

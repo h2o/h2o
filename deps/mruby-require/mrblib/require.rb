@@ -1,16 +1,6 @@
 class LoadError < ScriptError; end
 
 $__mruby_require_toplevel_self__ = self
-begin
-  eval "1", nil
-  def _require_eval_load(*args)
-    $__mruby_require_toplevel_self__.eval(*args)
-  end
-rescue ArgumentError
-  def _require_eval_load(*args)
-    $__mruby_require_toplevel_self__.eval(args[0])
-  end
-end
 
 module Kernel
   def load(path)
@@ -20,7 +10,7 @@ module Kernel
       _load_mrb_file path
     elsif File.exist?(path)
       # _load_rb_str File.open(path).read.to_s, path
-      _require_eval_load File.open(path).read.to_s, nil, path
+      $__mruby_require_toplevel_self__.eval(File.open(path).read.to_s, nil, path)
     else
       raise LoadError, "File not found -- #{path}"
     end

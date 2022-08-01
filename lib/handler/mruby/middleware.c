@@ -294,14 +294,14 @@ static void prepare_subreq_entity(h2o_req_t *subreq, h2o_mruby_context_t *ctx, m
 
     // TODO: fastpath?
     if (!mrb_respond_to(mrb, rack_input, mrb_intern_lit(mrb, "read"))) {
-        mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "'rack.input' must respond to 'read'"));
+        mrb->exc = mrb_obj_ptr(mrb_exc_new_lit(mrb, E_RUNTIME_ERROR, "'rack.input' must respond to 'read'"));
         return;
     }
     mrb_value body = mrb_funcall(mrb, rack_input, "read", 0);
     if (mrb->exc != NULL)
         return;
     if (!mrb_string_p(body)) {
-        mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "return value of `read` must be a string"));
+        mrb->exc = mrb_obj_ptr(mrb_exc_new_lit(mrb, E_RUNTIME_ERROR, "return value of `read` must be a string"));
         return;
     }
     subreq->entity = h2o_strdup(&subreq->pool, RSTRING_PTR(body), RSTRING_LEN(body));
@@ -399,6 +399,12 @@ static socklen_t get_peername(h2o_conn_t *_conn, struct sockaddr *sa)
 static int skip_tracing(h2o_conn_t *conn)
 {
     return 1;
+}
+
+static uint64_t get_req_id(h2o_req_t *req)
+{
+    /* only one sub-request on this dummy connection */
+    return 0;
 }
 
 static int handle_header_raw_key(h2o_mruby_shared_context_t *shared_ctx, h2o_iovec_t *raw_key, h2o_iovec_t value, void *_req)
@@ -620,6 +626,7 @@ static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_val
         .get_sockname = get_sockname,
         .get_peername = get_peername,
         .skip_tracing = skip_tracing,
+        .get_req_id = get_req_id,
     };
 
     mrb_state *mrb = ctx->shared->mrb;
@@ -639,7 +646,8 @@ static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_val
     subreq->state = INITIAL;
     subreq->chain_proceed = 0;
 
-    /* initialize super and conn */
+    /* Initialize super and conn. At the moment, `conn.super` (i.e., `h2o_conn_t`) is instantiated directly (TODO consider using
+     * `h2o_create_connection`). */
     subreq->conn.super.ctx = ctx->shared->ctx;
     h2o_init_request(&subreq->super, &subreq->conn.super, NULL);
     h2o_ostream_t *ostream = h2o_add_ostream(&subreq->super, H2O_ALIGNOF(*ostream), sizeof(*ostream), &subreq->super._ostr_top);
@@ -679,10 +687,10 @@ static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_val
 #define CHECK_REQUIRED(k, v, non_empty)                                                                                            \
     do {                                                                                                                           \
         if (mrb_nil_p(v)) {                                                                                                        \
-            mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "missing required environment key: " k));             \
+            mrb->exc = mrb_obj_ptr(mrb_exc_new_lit(mrb, E_RUNTIME_ERROR, "missing required environment key: " k));                 \
             goto Failed;                                                                                                           \
         } else if (non_empty && RSTRING_LEN(v) == 0) {                                                                             \
-            mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, k " must be not empty"));                             \
+            mrb->exc = mrb_obj_ptr(mrb_exc_new_lit(mrb, E_RUNTIME_ERROR, k " must be not empty"));                                 \
             goto Failed;                                                                                                           \
         }                                                                                                                          \
     } while (0)
@@ -694,15 +702,15 @@ static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_val
 #undef CHECK_REQUIRED
 
     if (RSTRING_LEN(data.env.script_name) != 0 && RSTRING_PTR(data.env.script_name)[0] != '/') {
-        mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "SCRIPT_NAME must start with `/`"));
+        mrb->exc = mrb_obj_ptr(mrb_exc_new_lit(mrb, E_RUNTIME_ERROR, "SCRIPT_NAME must start with `/`"));
         goto Failed;
     }
     if (RSTRING_LEN(data.env.path_info) != 0 && RSTRING_PTR(data.env.path_info)[0] != '/') {
-        mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "PATH_INFO must start with `/`"));
+        mrb->exc = mrb_obj_ptr(mrb_exc_new_lit(mrb, E_RUNTIME_ERROR, "PATH_INFO must start with `/`"));
         goto Failed;
     }
     if (mrb_nil_p(data.env.http_host) && (mrb_nil_p(data.env.server_name) || mrb_nil_p(data.env.server_port))) {
-        mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "HTTP_HOST or (SERVER_NAME and SERVER_PORT) is required"));
+        mrb->exc = mrb_obj_ptr(mrb_exc_new_lit(mrb, E_RUNTIME_ERROR, "HTTP_HOST or (SERVER_NAME and SERVER_PORT) is required"));
         goto Failed;
     }
 
@@ -712,7 +720,7 @@ static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_val
         size_t confpath_len_wo_slash = confpath.base[confpath.len - 1] == '/' ? confpath.len - 1 : confpath.len;
         if (!(RSTRING_LEN(data.env.script_name) == confpath_len_wo_slash &&
               memcmp(RSTRING_PTR(data.env.script_name), confpath.base, confpath_len_wo_slash) == 0)) {
-            mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(
+            mrb->exc = mrb_obj_ptr(mrb_exc_new_lit(
                 mrb, E_RUNTIME_ERROR, "can't modify `SCRIPT_NAME` with `H2O.next`. Is `H2O.reprocess` what you want?"));
             goto Failed;
         }
@@ -742,7 +750,7 @@ static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_val
     h2o_url_t url_parsed;
     if (h2o_url_parse(url_str.base, url_str.len, &url_parsed) != 0) {
         /* TODO is there any other way to show better error message? */
-        mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, E_ARGUMENT_ERROR, "env variable contains invalid values"));
+        mrb->exc = mrb_obj_ptr(mrb_exc_new_lit(mrb, E_ARGUMENT_ERROR, "env variable contains invalid values"));
         goto Failed;
     }
 
@@ -809,7 +817,7 @@ static mrb_value middleware_wait_response_callback(h2o_mruby_context_t *mctx, mr
 
     if ((subreq = mrb_data_check_get_ptr(mrb, mrb_ary_entry(args, 0), &app_request_type)) == NULL) {
         *run_again = 1;
-        return mrb_exc_new_str_lit(mrb, E_ARGUMENT_ERROR, "AppRequest#join wrong self");
+        return mrb_exc_new_lit(mrb, E_ARGUMENT_ERROR, "AppRequest#join wrong self");
     }
 
     subreq->receiver = *receiver;
@@ -861,9 +869,8 @@ static mrb_value middleware_request_method(mrb_state *mrb, mrb_value self)
     h2o_req_t *super = &subreq->super;
     if (mrb_bool(reprocess)) {
         h2o_url_t resolved;
-        if (h2o_req_resolve_internal_redirect_url(super, super->path, &resolved) != 0) {
-            mrb_exc_raise(mrb, mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "failed to resolve reprocess uri"));
-        }
+        if (h2o_req_resolve_internal_redirect_url(super, super->path, &resolved) != 0)
+            mrb_exc_raise(mrb, mrb_exc_new_lit(mrb, E_RUNTIME_ERROR, "failed to resolve reprocess uri"));
         h2o_reprocess_request_deferred(super, super->method, resolved.scheme, resolved.authority, resolved.path, super->overrides,
                                        1);
     } else {
@@ -881,9 +888,9 @@ static mrb_value middleware_wait_chunk_callback(h2o_mruby_context_t *mctx, mrb_v
 
     mrb_value obj = mrb_ary_entry(args, 0);
     if (DATA_PTR(obj) == NULL) {
-        return mrb_exc_new_str_lit(mrb, E_ARGUMENT_ERROR, "downstream HTTP closed");
+        return mrb_exc_new_lit(mrb, E_ARGUMENT_ERROR, "downstream HTTP closed");
     } else if ((subreq = mrb_data_check_get_ptr(mrb, obj, &app_input_stream_type)) == NULL) {
-        return mrb_exc_new_str_lit(mrb, E_ARGUMENT_ERROR, "AppInputStream#each wrong self");
+        return mrb_exc_new_lit(mrb, E_ARGUMENT_ERROR, "AppInputStream#each wrong self");
     }
 
     if (subreq->buf->size != 0) {

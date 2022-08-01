@@ -12,6 +12,6 @@ mrbgems/*/mrblib/**/*.rb
 mrbgems/*/include/**/*.h
 -
 AUTHORS
-MITL
+LICENSE
 CONTRIBUTING.md
 doc/guides/*.md
