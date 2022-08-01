@@ -215,8 +215,9 @@ static size_t write_core(struct st_h2o_evloop_socket_t *sock, h2o_iovec_t **bufs
             int sendmsg_flags = 0;
 #if H2O_USE_MSG_ZEROCOPY
             /* Use zero copy if amount of data to be written is no less than 4KB, and if the memory can be returned to
-             * `zerocopy_buffer_allocator`. Latter is a short-cut. It is only under exceptional conditions (e.g., TLS stack adding
-             * a post-handshake message) that we'd see the buffer grow to a size that cannot be returned to the recycling allocator.
+             * `h2o_socket_zerocopy_buffer_allocator`. Latter is a short-cut. It is only under exceptional conditions (e.g., TLS
+             * stack adding a post-handshake message) that we'd see the buffer grow to a size that cannot be returned to the
+             * recycling allocator.
              * Even though https://www.kernel.org/doc/html/v5.17/networking/msg_zerocopy.html recommends 10KB, 4KB has been chosen
              * as the threshold, because we are likely to be using the non-temporal aesgcm engine and tx-nocache-copy, in which case
              * copying sendmsg is going to be more costly than what the kernel documentation assumes. In a synthetic benchmark,
