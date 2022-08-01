@@ -119,7 +119,7 @@ run_with_curl($server, sub {
     # get trace
     my $trace = $get_trace->();
     my ($ver_major, $ver_minor) = (int($http_ver / 256), $http_ver % 256);
-    my $req_id = $ver_major == 3 ? 0 : 1;
+    my $req_id = $ver_major == 3 ? 0 : 1; # In HTTP/3, req_id is stream_id, which starts with 0. Otherwise, it starts with 1.
     like $trace, qr{^\*{3} conn_id=\d+,req_id=$req_id,version=$ver_major\.$ver_minor \*{3}$}m;
     like $trace, qr{^:method: GET$}m;
     like $trace, qr{^:scheme: $proto$}m;
