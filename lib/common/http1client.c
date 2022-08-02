@@ -867,7 +867,11 @@ static void do_cancel(h2o_httpclient_t *_client)
 
 void update_read_state(struct st_h2o_http1client_t *client)
 {
-    if (client->pipe_reader.on_body_piped != NULL) {
+    /* If pipe used, `client->reader` would have switched to `on_body_pipe` by the time this function is called for the first time.
+     */
+    assert((client->pipe_reader.on_body_piped != NULL) == (client->reader == on_body_to_pipe));
+
+    if (client->reader == on_body_to_pipe) {
         /* When pipe is being used, resume read when consumption is notified from user. `h2o_socket_read_start` is invoked without
          * checking if we are already reading; this is because we want to make sure that the read callback replaced to the current
          * one. */
@@ -899,6 +903,16 @@ void update_read_state(struct st_h2o_http1client_t *client)
 static void do_update_window(struct st_h2o_httpclient_t *_client)
 {
     struct st_h2o_http1client_t *client = (void *)_client;
+
+    /* When we are splicing to pipe, read synchronously. For prioritization logic to work correctly, it is important to provide
+     * additional data synchronously in response to the invocation of `h2o_proceed_response`. When memory buffers are used,
+     * lib/core/proxy.c uses a double buffering to prepare next chunk of data while a chunk of data is being fed to the HTTP
+     * handlers via `h2o_sendvec`. But when using splice, the pipe is the only one buffer available. */
+    if (client->reader == on_body_to_pipe) {
+        on_body_to_pipe(client->sock, NULL);
+        return;
+    }
+
     update_read_state(client);
 }
 
