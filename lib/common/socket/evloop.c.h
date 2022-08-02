@@ -215,14 +215,15 @@ static size_t write_core(struct st_h2o_evloop_socket_t *sock, h2o_iovec_t **bufs
             int sendmsg_flags = 0;
 #if H2O_USE_MSG_ZEROCOPY
             /* Use zero copy if amount of data to be written is no less than 4KB, and if the memory can be returned to
-             * `zerocopy_buffer_allocator`. Latter is a short-cut. It is only under exceptional conditions (e.g., TLS stack adding
-             * a post-handshake message) that we'd see the buffer grow to a size that cannot be returned to the recycling allocator.
+             * `h2o_socket_zerocopy_buffer_allocator`. Latter is a short-cut. It is only under exceptional conditions (e.g., TLS
+             * stack adding a post-handshake message) that we'd see the buffer grow to a size that cannot be returned to the
+             * recycling allocator.
              * Even though https://www.kernel.org/doc/html/v5.17/networking/msg_zerocopy.html recommends 10KB, 4KB has been chosen
              * as the threshold, because we are likely to be using the non-temporal aesgcm engine and tx-nocache-copy, in which case
              * copying sendmsg is going to be more costly than what the kernel documentation assumes. In a synthetic benchmark,
              * changing from 16KB to 4KB increased the throughput by ~10%. */
             if (sock->super.ssl->output.allocated_for_zerocopy && encbuf.len >= 4096 &&
-                sock->super.ssl->output.buf.capacity == zerocopy_buffer_allocator.conf->memsize)
+                sock->super.ssl->output.buf.capacity == h2o_socket_zerocopy_buffer_allocator.conf->memsize)
                 sendmsg_flags = MSG_ZEROCOPY;
 #endif
             if ((enc_written = write_vecs(sock, &encbufs, &encbufcnt, sendmsg_flags)) == SIZE_MAX) {
@@ -231,7 +232,10 @@ static size_t write_core(struct st_h2o_evloop_socket_t *sock, h2o_iovec_t **bufs
             }
             if (sendmsg_flags != 0 && (encbufcnt == 0 || enc_written > 0)) {
                 zerocopy_buffers_push(sock->super._zerocopy, sock->super.ssl->output.buf.base);
-                sock->super.ssl->output.zerocopy_owned = 1;
+                if (!sock->super.ssl->output.zerocopy_owned) {
+                    sock->super.ssl->output.zerocopy_owned = 1;
+                    ++h2o_socket_num_zerocopy_buffers_inflight;
+                }
             }
             /* if write is incomplete, record the advance and bail out */
             if (encbufcnt != 0) {

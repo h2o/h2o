@@ -101,6 +101,8 @@ enum h2olog_event_id_t {
   H2OLOG_EVENT_ID_QUICLY_RECEIVE,
   H2OLOG_EVENT_ID_QUICLY_VERSION_SWITCH,
   H2OLOG_EVENT_ID_QUICLY_IDLE_TIMEOUT,
+  H2OLOG_EVENT_ID_QUICLY_HANDSHAKE_TIMEOUT,
+  H2OLOG_EVENT_ID_QUICLY_INITIAL_HANDSHAKE_PACKET_EXCEED,
   H2OLOG_EVENT_ID_QUICLY_STATELESS_RESET_RECEIVE,
   H2OLOG_EVENT_ID_QUICLY_CRYPTO_HANDSHAKE,
   H2OLOG_EVENT_ID_QUICLY_CRYPTO_UPDATE_SECRET,
@@ -192,6 +194,17 @@ enum h2olog_event_id_t {
   H2OLOG_EVENT_ID_H2O_H3_PACKET_FORWARD_TO_NODE_IGNORE,
   H2OLOG_EVENT_ID_H2O_H3_PACKET_FORWARD_TO_THREAD_IGNORE,
   H2OLOG_EVENT_ID_H2O_H3_FORWARDED_PACKET_RECEIVE,
+  H2OLOG_EVENT_ID_H2O_CONNECT_TCP_START,
+  H2OLOG_EVENT_ID_H2O_CONNECT_TCP_WRITE,
+  H2OLOG_EVENT_ID_H2O_CONNECT_TCP_WRITE_ERROR,
+  H2OLOG_EVENT_ID_H2O_CONNECT_TCP_READ,
+  H2OLOG_EVENT_ID_H2O_CONNECT_TCP_READ_ERROR,
+  H2OLOG_EVENT_ID_H2O_CONNECT_UDP_START,
+  H2OLOG_EVENT_ID_H2O_CONNECT_UDP_WRITE,
+  H2OLOG_EVENT_ID_H2O_CONNECT_UDP_READ,
+  H2OLOG_EVENT_ID_H2O_CONNECT_ERROR,
+  H2OLOG_EVENT_ID_H2O_CONNECT_IO_TIMEOUT,
+  H2OLOG_EVENT_ID_H2O_CONNECT_DISPOSE,
 };
 
 
@@ -237,6 +250,17 @@ struct h2olog_event_t {
       typeof_st_quicly_conn_t__master_id conn_master_id;
       int64_t at;
     } idle_timeout;
+    struct { // quicly:handshake_timeout
+      typeof_st_quicly_conn_t__master_id conn_master_id;
+      int64_t at;
+      int64_t elapsed;
+      uint32_t rtt_smoothed;
+    } handshake_timeout;
+    struct { // quicly:initial_handshake_packet_exceed
+      typeof_st_quicly_conn_t__master_id conn_master_id;
+      int64_t at;
+      uint64_t num_packets;
+    } initial_handshake_packet_exceed;
     struct { // quicly:stateless_reset_receive
       typeof_st_quicly_conn_t__master_id conn_master_id;
       int64_t at;
@@ -783,6 +807,61 @@ struct h2olog_event_t {
       quicly_address_t src;
       size_t num_bytes;
     } h3_forwarded_packet_receive;
+    struct { // h2o:connect_tcp_start
+      uint64_t conn_id;
+      uint64_t req_id;
+      quicly_address_t dest;
+    } connect_tcp_start;
+    struct { // h2o:connect_tcp_write
+      uint64_t conn_id;
+      uint64_t req_id;
+      size_t num_bytes;
+    } connect_tcp_write;
+    struct { // h2o:connect_tcp_write_error
+      uint64_t conn_id;
+      uint64_t req_id;
+      char err[STR_LEN];
+    } connect_tcp_write_error;
+    struct { // h2o:connect_tcp_read
+      uint64_t conn_id;
+      uint64_t req_id;
+      size_t num_bytes;
+    } connect_tcp_read;
+    struct { // h2o:connect_tcp_read_error
+      uint64_t conn_id;
+      uint64_t req_id;
+      char err[STR_LEN];
+    } connect_tcp_read_error;
+    struct { // h2o:connect_udp_start
+      uint64_t conn_id;
+      uint64_t req_id;
+      quicly_address_t dest;
+    } connect_udp_start;
+    struct { // h2o:connect_udp_write
+      uint64_t conn_id;
+      uint64_t req_id;
+      size_t num_bytes;
+    } connect_udp_write;
+    struct { // h2o:connect_udp_read
+      uint64_t conn_id;
+      uint64_t req_id;
+      size_t num_bytes;
+    } connect_udp_read;
+    struct { // h2o:connect_error
+      uint64_t conn_id;
+      uint64_t req_id;
+      char error_type[STR_LEN];
+      char details[STR_LEN];
+      char rcode[STR_LEN];
+    } connect_error;
+    struct { // h2o:connect_io_timeout
+      uint64_t conn_id;
+      uint64_t req_id;
+    } connect_io_timeout;
+    struct { // h2o:connect_dispose
+      uint64_t conn_id;
+      uint64_t req_id;
+    } connect_dispose;
 
   };
 };
@@ -797,6 +876,8 @@ void h2o_raw_tracer::initialize() {
     h2o_tracer::usdt("quicly", "receive", "trace_quicly__receive"),
     h2o_tracer::usdt("quicly", "version_switch", "trace_quicly__version_switch"),
     h2o_tracer::usdt("quicly", "idle_timeout", "trace_quicly__idle_timeout"),
+    h2o_tracer::usdt("quicly", "handshake_timeout", "trace_quicly__handshake_timeout"),
+    h2o_tracer::usdt("quicly", "initial_handshake_packet_exceed", "trace_quicly__initial_handshake_packet_exceed"),
     h2o_tracer::usdt("quicly", "stateless_reset_receive", "trace_quicly__stateless_reset_receive"),
     h2o_tracer::usdt("quicly", "crypto_handshake", "trace_quicly__crypto_handshake"),
     h2o_tracer::usdt("quicly", "crypto_update_secret", "trace_quicly__crypto_update_secret"),
@@ -886,6 +967,17 @@ void h2o_raw_tracer::initialize() {
     h2o_tracer::usdt("h2o", "h3_packet_forward_to_node_ignore", "trace_h2o__h3_packet_forward_to_node_ignore"),
     h2o_tracer::usdt("h2o", "h3_packet_forward_to_thread_ignore", "trace_h2o__h3_packet_forward_to_thread_ignore"),
     h2o_tracer::usdt("h2o", "h3_forwarded_packet_receive", "trace_h2o__h3_forwarded_packet_receive"),
+    h2o_tracer::usdt("h2o", "connect_tcp_start", "trace_h2o__connect_tcp_start"),
+    h2o_tracer::usdt("h2o", "connect_tcp_write", "trace_h2o__connect_tcp_write"),
+    h2o_tracer::usdt("h2o", "connect_tcp_write_error", "trace_h2o__connect_tcp_write_error"),
+    h2o_tracer::usdt("h2o", "connect_tcp_read", "trace_h2o__connect_tcp_read"),
+    h2o_tracer::usdt("h2o", "connect_tcp_read_error", "trace_h2o__connect_tcp_read_error"),
+    h2o_tracer::usdt("h2o", "connect_udp_start", "trace_h2o__connect_udp_start"),
+    h2o_tracer::usdt("h2o", "connect_udp_write", "trace_h2o__connect_udp_write"),
+    h2o_tracer::usdt("h2o", "connect_udp_read", "trace_h2o__connect_udp_read"),
+    h2o_tracer::usdt("h2o", "connect_error", "trace_h2o__connect_error"),
+    h2o_tracer::usdt("h2o", "connect_io_timeout", "trace_h2o__connect_io_timeout"),
+    h2o_tracer::usdt("h2o", "connect_dispose", "trace_h2o__connect_dispose"),
 
   });
 }
@@ -969,6 +1061,25 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
     json_write_pair_c(out_, STR_LIT("seq"), seq_);
     json_write_pair_c(out_, STR_LIT("conn"), event.idle_timeout.conn_master_id);
     json_write_pair_c(out_, STR_LIT("time"), event.idle_timeout.at);
+    break;
+  }
+  case H2OLOG_EVENT_ID_QUICLY_HANDSHAKE_TIMEOUT: { // quicly:handshake_timeout
+    json_write_pair_n(out_, STR_LIT("type"), STR_LIT("handshake-timeout"));
+    json_write_pair_c(out_, STR_LIT("tid"), event.tid);
+    json_write_pair_c(out_, STR_LIT("seq"), seq_);
+    json_write_pair_c(out_, STR_LIT("conn"), event.handshake_timeout.conn_master_id);
+    json_write_pair_c(out_, STR_LIT("time"), event.handshake_timeout.at);
+    json_write_pair_c(out_, STR_LIT("elapsed"), event.handshake_timeout.elapsed);
+    json_write_pair_c(out_, STR_LIT("smoothed-rtt"), event.handshake_timeout.rtt_smoothed);
+    break;
+  }
+  case H2OLOG_EVENT_ID_QUICLY_INITIAL_HANDSHAKE_PACKET_EXCEED: { // quicly:initial_handshake_packet_exceed
+    json_write_pair_n(out_, STR_LIT("type"), STR_LIT("initial-handshake-packet-exceed"));
+    json_write_pair_c(out_, STR_LIT("tid"), event.tid);
+    json_write_pair_c(out_, STR_LIT("seq"), seq_);
+    json_write_pair_c(out_, STR_LIT("conn"), event.initial_handshake_packet_exceed.conn_master_id);
+    json_write_pair_c(out_, STR_LIT("time"), event.initial_handshake_packet_exceed.at);
+    json_write_pair_c(out_, STR_LIT("num-packets"), event.initial_handshake_packet_exceed.num_packets);
     break;
   }
   case H2OLOG_EVENT_ID_QUICLY_STATELESS_RESET_RECEIVE: { // quicly:stateless_reset_receive
@@ -1919,6 +2030,116 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
     json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
     break;
   }
+  case H2OLOG_EVENT_ID_H2O_CONNECT_TCP_START: { // h2o:connect_tcp_start
+    json_write_pair_n(out_, STR_LIT("type"), STR_LIT("connect-tcp-start"));
+    json_write_pair_c(out_, STR_LIT("tid"), event.tid);
+    json_write_pair_c(out_, STR_LIT("seq"), seq_);
+    json_write_pair_c(out_, STR_LIT("conn-id"), event.connect_tcp_start.conn_id);
+    json_write_pair_c(out_, STR_LIT("req-id"), event.connect_tcp_start.req_id);
+    json_write_pair_c(out_, STR_LIT("dest"), event.connect_tcp_start.dest);
+    json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
+    break;
+  }
+  case H2OLOG_EVENT_ID_H2O_CONNECT_TCP_WRITE: { // h2o:connect_tcp_write
+    json_write_pair_n(out_, STR_LIT("type"), STR_LIT("connect-tcp-write"));
+    json_write_pair_c(out_, STR_LIT("tid"), event.tid);
+    json_write_pair_c(out_, STR_LIT("seq"), seq_);
+    json_write_pair_c(out_, STR_LIT("conn-id"), event.connect_tcp_write.conn_id);
+    json_write_pair_c(out_, STR_LIT("req-id"), event.connect_tcp_write.req_id);
+    json_write_pair_c(out_, STR_LIT("bytes-len"), event.connect_tcp_write.num_bytes);
+    json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
+    break;
+  }
+  case H2OLOG_EVENT_ID_H2O_CONNECT_TCP_WRITE_ERROR: { // h2o:connect_tcp_write_error
+    json_write_pair_n(out_, STR_LIT("type"), STR_LIT("connect-tcp-write-error"));
+    json_write_pair_c(out_, STR_LIT("tid"), event.tid);
+    json_write_pair_c(out_, STR_LIT("seq"), seq_);
+    json_write_pair_c(out_, STR_LIT("conn-id"), event.connect_tcp_write_error.conn_id);
+    json_write_pair_c(out_, STR_LIT("req-id"), event.connect_tcp_write_error.req_id);
+    json_write_pair_c(out_, STR_LIT("err"), event.connect_tcp_write_error.err, strlen(event.connect_tcp_write_error.err));
+    json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
+    break;
+  }
+  case H2OLOG_EVENT_ID_H2O_CONNECT_TCP_READ: { // h2o:connect_tcp_read
+    json_write_pair_n(out_, STR_LIT("type"), STR_LIT("connect-tcp-read"));
+    json_write_pair_c(out_, STR_LIT("tid"), event.tid);
+    json_write_pair_c(out_, STR_LIT("seq"), seq_);
+    json_write_pair_c(out_, STR_LIT("conn-id"), event.connect_tcp_read.conn_id);
+    json_write_pair_c(out_, STR_LIT("req-id"), event.connect_tcp_read.req_id);
+    json_write_pair_c(out_, STR_LIT("bytes-len"), event.connect_tcp_read.num_bytes);
+    json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
+    break;
+  }
+  case H2OLOG_EVENT_ID_H2O_CONNECT_TCP_READ_ERROR: { // h2o:connect_tcp_read_error
+    json_write_pair_n(out_, STR_LIT("type"), STR_LIT("connect-tcp-read-error"));
+    json_write_pair_c(out_, STR_LIT("tid"), event.tid);
+    json_write_pair_c(out_, STR_LIT("seq"), seq_);
+    json_write_pair_c(out_, STR_LIT("conn-id"), event.connect_tcp_read_error.conn_id);
+    json_write_pair_c(out_, STR_LIT("req-id"), event.connect_tcp_read_error.req_id);
+    json_write_pair_c(out_, STR_LIT("err"), event.connect_tcp_read_error.err, strlen(event.connect_tcp_read_error.err));
+    json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
+    break;
+  }
+  case H2OLOG_EVENT_ID_H2O_CONNECT_UDP_START: { // h2o:connect_udp_start
+    json_write_pair_n(out_, STR_LIT("type"), STR_LIT("connect-udp-start"));
+    json_write_pair_c(out_, STR_LIT("tid"), event.tid);
+    json_write_pair_c(out_, STR_LIT("seq"), seq_);
+    json_write_pair_c(out_, STR_LIT("conn-id"), event.connect_udp_start.conn_id);
+    json_write_pair_c(out_, STR_LIT("req-id"), event.connect_udp_start.req_id);
+    json_write_pair_c(out_, STR_LIT("dest"), event.connect_udp_start.dest);
+    json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
+    break;
+  }
+  case H2OLOG_EVENT_ID_H2O_CONNECT_UDP_WRITE: { // h2o:connect_udp_write
+    json_write_pair_n(out_, STR_LIT("type"), STR_LIT("connect-udp-write"));
+    json_write_pair_c(out_, STR_LIT("tid"), event.tid);
+    json_write_pair_c(out_, STR_LIT("seq"), seq_);
+    json_write_pair_c(out_, STR_LIT("conn-id"), event.connect_udp_write.conn_id);
+    json_write_pair_c(out_, STR_LIT("req-id"), event.connect_udp_write.req_id);
+    json_write_pair_c(out_, STR_LIT("bytes-len"), event.connect_udp_write.num_bytes);
+    json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
+    break;
+  }
+  case H2OLOG_EVENT_ID_H2O_CONNECT_UDP_READ: { // h2o:connect_udp_read
+    json_write_pair_n(out_, STR_LIT("type"), STR_LIT("connect-udp-read"));
+    json_write_pair_c(out_, STR_LIT("tid"), event.tid);
+    json_write_pair_c(out_, STR_LIT("seq"), seq_);
+    json_write_pair_c(out_, STR_LIT("conn-id"), event.connect_udp_read.conn_id);
+    json_write_pair_c(out_, STR_LIT("req-id"), event.connect_udp_read.req_id);
+    json_write_pair_c(out_, STR_LIT("bytes-len"), event.connect_udp_read.num_bytes);
+    json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
+    break;
+  }
+  case H2OLOG_EVENT_ID_H2O_CONNECT_ERROR: { // h2o:connect_error
+    json_write_pair_n(out_, STR_LIT("type"), STR_LIT("connect-error"));
+    json_write_pair_c(out_, STR_LIT("tid"), event.tid);
+    json_write_pair_c(out_, STR_LIT("seq"), seq_);
+    json_write_pair_c(out_, STR_LIT("conn-id"), event.connect_error.conn_id);
+    json_write_pair_c(out_, STR_LIT("req-id"), event.connect_error.req_id);
+    json_write_pair_c(out_, STR_LIT("error-type"), event.connect_error.error_type, strlen(event.connect_error.error_type));
+    json_write_pair_c(out_, STR_LIT("details"), event.connect_error.details, strlen(event.connect_error.details));
+    json_write_pair_c(out_, STR_LIT("rcode"), event.connect_error.rcode, strlen(event.connect_error.rcode));
+    json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
+    break;
+  }
+  case H2OLOG_EVENT_ID_H2O_CONNECT_IO_TIMEOUT: { // h2o:connect_io_timeout
+    json_write_pair_n(out_, STR_LIT("type"), STR_LIT("connect-io-timeout"));
+    json_write_pair_c(out_, STR_LIT("tid"), event.tid);
+    json_write_pair_c(out_, STR_LIT("seq"), seq_);
+    json_write_pair_c(out_, STR_LIT("conn-id"), event.connect_io_timeout.conn_id);
+    json_write_pair_c(out_, STR_LIT("req-id"), event.connect_io_timeout.req_id);
+    json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
+    break;
+  }
+  case H2OLOG_EVENT_ID_H2O_CONNECT_DISPOSE: { // h2o:connect_dispose
+    json_write_pair_n(out_, STR_LIT("type"), STR_LIT("connect-dispose"));
+    json_write_pair_c(out_, STR_LIT("tid"), event.tid);
+    json_write_pair_c(out_, STR_LIT("seq"), seq_);
+    json_write_pair_c(out_, STR_LIT("conn-id"), event.connect_dispose.conn_id);
+    json_write_pair_c(out_, STR_LIT("req-id"), event.connect_dispose.req_id);
+    json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
+    break;
+  }
 
   default:
     std::abort();
@@ -1954,6 +2175,8 @@ enum h2olog_event_id_t {
   H2OLOG_EVENT_ID_QUICLY_RECEIVE,
   H2OLOG_EVENT_ID_QUICLY_VERSION_SWITCH,
   H2OLOG_EVENT_ID_QUICLY_IDLE_TIMEOUT,
+  H2OLOG_EVENT_ID_QUICLY_HANDSHAKE_TIMEOUT,
+  H2OLOG_EVENT_ID_QUICLY_INITIAL_HANDSHAKE_PACKET_EXCEED,
   H2OLOG_EVENT_ID_QUICLY_STATELESS_RESET_RECEIVE,
   H2OLOG_EVENT_ID_QUICLY_CRYPTO_HANDSHAKE,
   H2OLOG_EVENT_ID_QUICLY_CRYPTO_UPDATE_SECRET,
@@ -2045,6 +2268,17 @@ enum h2olog_event_id_t {
   H2OLOG_EVENT_ID_H2O_H3_PACKET_FORWARD_TO_NODE_IGNORE,
   H2OLOG_EVENT_ID_H2O_H3_PACKET_FORWARD_TO_THREAD_IGNORE,
   H2OLOG_EVENT_ID_H2O_H3_FORWARDED_PACKET_RECEIVE,
+  H2OLOG_EVENT_ID_H2O_CONNECT_TCP_START,
+  H2OLOG_EVENT_ID_H2O_CONNECT_TCP_WRITE,
+  H2OLOG_EVENT_ID_H2O_CONNECT_TCP_WRITE_ERROR,
+  H2OLOG_EVENT_ID_H2O_CONNECT_TCP_READ,
+  H2OLOG_EVENT_ID_H2O_CONNECT_TCP_READ_ERROR,
+  H2OLOG_EVENT_ID_H2O_CONNECT_UDP_START,
+  H2OLOG_EVENT_ID_H2O_CONNECT_UDP_WRITE,
+  H2OLOG_EVENT_ID_H2O_CONNECT_UDP_READ,
+  H2OLOG_EVENT_ID_H2O_CONNECT_ERROR,
+  H2OLOG_EVENT_ID_H2O_CONNECT_IO_TIMEOUT,
+  H2OLOG_EVENT_ID_H2O_CONNECT_DISPOSE,
 };
 
 
@@ -2090,6 +2324,17 @@ struct h2olog_event_t {
       typeof_st_quicly_conn_t__master_id conn_master_id;
       int64_t at;
     } idle_timeout;
+    struct { // quicly:handshake_timeout
+      typeof_st_quicly_conn_t__master_id conn_master_id;
+      int64_t at;
+      int64_t elapsed;
+      uint32_t rtt_smoothed;
+    } handshake_timeout;
+    struct { // quicly:initial_handshake_packet_exceed
+      typeof_st_quicly_conn_t__master_id conn_master_id;
+      int64_t at;
+      uint64_t num_packets;
+    } initial_handshake_packet_exceed;
     struct { // quicly:stateless_reset_receive
       typeof_st_quicly_conn_t__master_id conn_master_id;
       int64_t at;
@@ -2636,6 +2881,61 @@ struct h2olog_event_t {
       quicly_address_t src;
       size_t num_bytes;
     } h3_forwarded_packet_receive;
+    struct { // h2o:connect_tcp_start
+      uint64_t conn_id;
+      uint64_t req_id;
+      quicly_address_t dest;
+    } connect_tcp_start;
+    struct { // h2o:connect_tcp_write
+      uint64_t conn_id;
+      uint64_t req_id;
+      size_t num_bytes;
+    } connect_tcp_write;
+    struct { // h2o:connect_tcp_write_error
+      uint64_t conn_id;
+      uint64_t req_id;
+      char err[STR_LEN];
+    } connect_tcp_write_error;
+    struct { // h2o:connect_tcp_read
+      uint64_t conn_id;
+      uint64_t req_id;
+      size_t num_bytes;
+    } connect_tcp_read;
+    struct { // h2o:connect_tcp_read_error
+      uint64_t conn_id;
+      uint64_t req_id;
+      char err[STR_LEN];
+    } connect_tcp_read_error;
+    struct { // h2o:connect_udp_start
+      uint64_t conn_id;
+      uint64_t req_id;
+      quicly_address_t dest;
+    } connect_udp_start;
+    struct { // h2o:connect_udp_write
+      uint64_t conn_id;
+      uint64_t req_id;
+      size_t num_bytes;
+    } connect_udp_write;
+    struct { // h2o:connect_udp_read
+      uint64_t conn_id;
+      uint64_t req_id;
+      size_t num_bytes;
+    } connect_udp_read;
+    struct { // h2o:connect_error
+      uint64_t conn_id;
+      uint64_t req_id;
+      char error_type[STR_LEN];
+      char details[STR_LEN];
+      char rcode[STR_LEN];
+    } connect_error;
+    struct { // h2o:connect_io_timeout
+      uint64_t conn_id;
+      uint64_t req_id;
+    } connect_io_timeout;
+    struct { // h2o:connect_dispose
+      uint64_t conn_id;
+      uint64_t req_id;
+    } connect_dispose;
 
   };
 };
@@ -2832,6 +3132,55 @@ int trace_quicly__idle_timeout(struct pt_regs *ctx) {
 
   if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
     bpf_trace_printk("failed to perf_submit in trace_quicly__idle_timeout\n");
+
+  return 0;
+}
+// quicly:handshake_timeout
+int trace_quicly__handshake_timeout(struct pt_regs *ctx) {
+  const void *buf = NULL;
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_HANDSHAKE_TIMEOUT, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
+
+  { // struct st_quicly_conn_t * conn
+    uint8_t conn[sizeof_st_quicly_conn_t] = {};
+    bpf_usdt_readarg(1, ctx, &buf);
+    bpf_probe_read(&conn, sizeof_st_quicly_conn_t, buf);
+    event.handshake_timeout.conn_master_id = get_st_quicly_conn_t__master_id(conn);
+  }
+  { // int64_t at
+    bpf_usdt_readarg(2, ctx, &event.handshake_timeout.at);
+  }
+  { // int64_t elapsed
+    bpf_usdt_readarg(3, ctx, &event.handshake_timeout.elapsed);
+  }
+  { // uint32_t rtt_smoothed
+    bpf_usdt_readarg(4, ctx, &event.handshake_timeout.rtt_smoothed);
+  }
+
+  if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
+    bpf_trace_printk("failed to perf_submit in trace_quicly__handshake_timeout\n");
+
+  return 0;
+}
+// quicly:initial_handshake_packet_exceed
+int trace_quicly__initial_handshake_packet_exceed(struct pt_regs *ctx) {
+  const void *buf = NULL;
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_INITIAL_HANDSHAKE_PACKET_EXCEED, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
+
+  { // struct st_quicly_conn_t * conn
+    uint8_t conn[sizeof_st_quicly_conn_t] = {};
+    bpf_usdt_readarg(1, ctx, &buf);
+    bpf_probe_read(&conn, sizeof_st_quicly_conn_t, buf);
+    event.initial_handshake_packet_exceed.conn_master_id = get_st_quicly_conn_t__master_id(conn);
+  }
+  { // int64_t at
+    bpf_usdt_readarg(2, ctx, &event.initial_handshake_packet_exceed.at);
+  }
+  { // uint64_t num_packets
+    bpf_usdt_readarg(3, ctx, &event.initial_handshake_packet_exceed.num_packets);
+  }
+
+  if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
+    bpf_trace_printk("failed to perf_submit in trace_quicly__initial_handshake_packet_exceed\n");
 
   return 0;
 }
@@ -5272,6 +5621,243 @@ int trace_h2o__h3_forwarded_packet_receive(struct pt_regs *ctx) {
 
   if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
     bpf_trace_printk("failed to perf_submit in trace_h2o__h3_forwarded_packet_receive\n");
+
+  return 0;
+}
+// h2o:connect_tcp_start
+int trace_h2o__connect_tcp_start(struct pt_regs *ctx) {
+  const void *buf = NULL;
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_H2O_CONNECT_TCP_START, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
+
+  { // uint64_t conn_id
+    bpf_usdt_readarg(1, ctx, &event.connect_tcp_start.conn_id);
+  }
+  { // uint64_t req_id
+    bpf_usdt_readarg(2, ctx, &event.connect_tcp_start.req_id);
+  }
+  { // struct sockaddr * dest
+    bpf_usdt_readarg(3, ctx, &buf);
+    bpf_probe_read(&event.connect_tcp_start.dest, sizeof_sockaddr, buf);
+    if (get_sockaddr__sa_family(&event.connect_tcp_start.dest) == AF_INET) {
+      bpf_probe_read(&event.connect_tcp_start.dest, sizeof_sockaddr_in, buf);
+    } else if (get_sockaddr__sa_family(&event.connect_tcp_start.dest) == AF_INET6) {
+      bpf_probe_read(&event.connect_tcp_start.dest, sizeof_sockaddr_in6, buf);
+    }
+  }
+
+  if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
+    bpf_trace_printk("failed to perf_submit in trace_h2o__connect_tcp_start\n");
+
+  return 0;
+}
+// h2o:connect_tcp_write
+int trace_h2o__connect_tcp_write(struct pt_regs *ctx) {
+  const void *buf = NULL;
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_H2O_CONNECT_TCP_WRITE, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
+
+  { // uint64_t conn_id
+    bpf_usdt_readarg(1, ctx, &event.connect_tcp_write.conn_id);
+  }
+  { // uint64_t req_id
+    bpf_usdt_readarg(2, ctx, &event.connect_tcp_write.req_id);
+  }
+  { // size_t num_bytes
+    bpf_usdt_readarg(3, ctx, &event.connect_tcp_write.num_bytes);
+  }
+
+  if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
+    bpf_trace_printk("failed to perf_submit in trace_h2o__connect_tcp_write\n");
+
+  return 0;
+}
+// h2o:connect_tcp_write_error
+int trace_h2o__connect_tcp_write_error(struct pt_regs *ctx) {
+  const void *buf = NULL;
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_H2O_CONNECT_TCP_WRITE_ERROR, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
+
+  { // uint64_t conn_id
+    bpf_usdt_readarg(1, ctx, &event.connect_tcp_write_error.conn_id);
+  }
+  { // uint64_t req_id
+    bpf_usdt_readarg(2, ctx, &event.connect_tcp_write_error.req_id);
+  }
+  { // const char * err
+    bpf_usdt_readarg(3, ctx, &buf);
+    bpf_probe_read(&event.connect_tcp_write_error.err, sizeof(event.connect_tcp_write_error.err), buf);
+  }
+
+  if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
+    bpf_trace_printk("failed to perf_submit in trace_h2o__connect_tcp_write_error\n");
+
+  return 0;
+}
+// h2o:connect_tcp_read
+int trace_h2o__connect_tcp_read(struct pt_regs *ctx) {
+  const void *buf = NULL;
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_H2O_CONNECT_TCP_READ, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
+
+  { // uint64_t conn_id
+    bpf_usdt_readarg(1, ctx, &event.connect_tcp_read.conn_id);
+  }
+  { // uint64_t req_id
+    bpf_usdt_readarg(2, ctx, &event.connect_tcp_read.req_id);
+  }
+  { // size_t num_bytes
+    bpf_usdt_readarg(3, ctx, &event.connect_tcp_read.num_bytes);
+  }
+
+  if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
+    bpf_trace_printk("failed to perf_submit in trace_h2o__connect_tcp_read\n");
+
+  return 0;
+}
+// h2o:connect_tcp_read_error
+int trace_h2o__connect_tcp_read_error(struct pt_regs *ctx) {
+  const void *buf = NULL;
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_H2O_CONNECT_TCP_READ_ERROR, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
+
+  { // uint64_t conn_id
+    bpf_usdt_readarg(1, ctx, &event.connect_tcp_read_error.conn_id);
+  }
+  { // uint64_t req_id
+    bpf_usdt_readarg(2, ctx, &event.connect_tcp_read_error.req_id);
+  }
+  { // const char * err
+    bpf_usdt_readarg(3, ctx, &buf);
+    bpf_probe_read(&event.connect_tcp_read_error.err, sizeof(event.connect_tcp_read_error.err), buf);
+  }
+
+  if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
+    bpf_trace_printk("failed to perf_submit in trace_h2o__connect_tcp_read_error\n");
+
+  return 0;
+}
+// h2o:connect_udp_start
+int trace_h2o__connect_udp_start(struct pt_regs *ctx) {
+  const void *buf = NULL;
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_H2O_CONNECT_UDP_START, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
+
+  { // uint64_t conn_id
+    bpf_usdt_readarg(1, ctx, &event.connect_udp_start.conn_id);
+  }
+  { // uint64_t req_id
+    bpf_usdt_readarg(2, ctx, &event.connect_udp_start.req_id);
+  }
+  { // struct sockaddr * dest
+    bpf_usdt_readarg(3, ctx, &buf);
+    bpf_probe_read(&event.connect_udp_start.dest, sizeof_sockaddr, buf);
+    if (get_sockaddr__sa_family(&event.connect_udp_start.dest) == AF_INET) {
+      bpf_probe_read(&event.connect_udp_start.dest, sizeof_sockaddr_in, buf);
+    } else if (get_sockaddr__sa_family(&event.connect_udp_start.dest) == AF_INET6) {
+      bpf_probe_read(&event.connect_udp_start.dest, sizeof_sockaddr_in6, buf);
+    }
+  }
+
+  if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
+    bpf_trace_printk("failed to perf_submit in trace_h2o__connect_udp_start\n");
+
+  return 0;
+}
+// h2o:connect_udp_write
+int trace_h2o__connect_udp_write(struct pt_regs *ctx) {
+  const void *buf = NULL;
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_H2O_CONNECT_UDP_WRITE, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
+
+  { // uint64_t conn_id
+    bpf_usdt_readarg(1, ctx, &event.connect_udp_write.conn_id);
+  }
+  { // uint64_t req_id
+    bpf_usdt_readarg(2, ctx, &event.connect_udp_write.req_id);
+  }
+  { // size_t num_bytes
+    bpf_usdt_readarg(3, ctx, &event.connect_udp_write.num_bytes);
+  }
+
+  if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
+    bpf_trace_printk("failed to perf_submit in trace_h2o__connect_udp_write\n");
+
+  return 0;
+}
+// h2o:connect_udp_read
+int trace_h2o__connect_udp_read(struct pt_regs *ctx) {
+  const void *buf = NULL;
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_H2O_CONNECT_UDP_READ, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
+
+  { // uint64_t conn_id
+    bpf_usdt_readarg(1, ctx, &event.connect_udp_read.conn_id);
+  }
+  { // uint64_t req_id
+    bpf_usdt_readarg(2, ctx, &event.connect_udp_read.req_id);
+  }
+  { // size_t num_bytes
+    bpf_usdt_readarg(3, ctx, &event.connect_udp_read.num_bytes);
+  }
+
+  if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
+    bpf_trace_printk("failed to perf_submit in trace_h2o__connect_udp_read\n");
+
+  return 0;
+}
+// h2o:connect_error
+int trace_h2o__connect_error(struct pt_regs *ctx) {
+  const void *buf = NULL;
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_H2O_CONNECT_ERROR, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
+
+  { // uint64_t conn_id
+    bpf_usdt_readarg(1, ctx, &event.connect_error.conn_id);
+  }
+  { // uint64_t req_id
+    bpf_usdt_readarg(2, ctx, &event.connect_error.req_id);
+  }
+  { // const char * error_type
+    bpf_usdt_readarg(3, ctx, &buf);
+    bpf_probe_read(&event.connect_error.error_type, sizeof(event.connect_error.error_type), buf);
+  }
+  { // const char * details
+    bpf_usdt_readarg(4, ctx, &buf);
+    bpf_probe_read(&event.connect_error.details, sizeof(event.connect_error.details), buf);
+  }
+  { // const char * rcode
+    bpf_usdt_readarg(5, ctx, &buf);
+    bpf_probe_read(&event.connect_error.rcode, sizeof(event.connect_error.rcode), buf);
+  }
+
+  if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
+    bpf_trace_printk("failed to perf_submit in trace_h2o__connect_error\n");
+
+  return 0;
+}
+// h2o:connect_io_timeout
+int trace_h2o__connect_io_timeout(struct pt_regs *ctx) {
+  const void *buf = NULL;
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_H2O_CONNECT_IO_TIMEOUT, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
+
+  { // uint64_t conn_id
+    bpf_usdt_readarg(1, ctx, &event.connect_io_timeout.conn_id);
+  }
+  { // uint64_t req_id
+    bpf_usdt_readarg(2, ctx, &event.connect_io_timeout.req_id);
+  }
+
+  if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
+    bpf_trace_printk("failed to perf_submit in trace_h2o__connect_io_timeout\n");
+
+  return 0;
+}
+// h2o:connect_dispose
+int trace_h2o__connect_dispose(struct pt_regs *ctx) {
+  const void *buf = NULL;
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_H2O_CONNECT_DISPOSE, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
+
+  { // uint64_t conn_id
+    bpf_usdt_readarg(1, ctx, &event.connect_dispose.conn_id);
+  }
+  { // uint64_t req_id
+    bpf_usdt_readarg(2, ctx, &event.connect_dispose.req_id);
+  }
+
+  if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
+    bpf_trace_printk("failed to perf_submit in trace_h2o__connect_dispose\n");
 
   return 0;
 }
