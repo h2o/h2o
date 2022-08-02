@@ -88,7 +88,7 @@ sub spawn_script {
         or die "failed to redirect STDERR:$!";
     autoflush STDERR 1;
     $ENV{PERL5LIB} = join ":", ".", split ":", $ENV{PERL5LIB} || "";
-    exec "time", $^X, $script;
+    exec 'prove', '-v', '--timer', $script;
     die "failed to exec $^X $script:$!";
 }
 
