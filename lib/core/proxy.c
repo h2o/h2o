@@ -401,8 +401,12 @@ static void do_send_from_pipe(struct rp_generator_t *self)
                                                        : H2O_SEND_STATE_IN_PROGRESS;
 
     if (self->body_bytes_read == self->body_bytes_sent) {
-        if (!h2o_send_state_is_in_progress(send_state))
+        if (h2o_send_state_is_in_progress(send_state)) {
+            /* resume reading only when we know that the pipe (to which we read) has become empty */
+            self->client->update_window(self->client);
+        } else {
             h2o_send(self->src_req, NULL, 0, send_state);
+        }
         return;
     }
 
@@ -434,10 +438,9 @@ static void do_proceed(h2o_generator_t *generator, h2o_req_t *req)
         do_send_from_pipe(self);
     } else {
         do_send(self);
+        if (!(self->res_done || self->had_body_error))
+            self->client->update_window(self->client);
     }
-
-    if (!(self->res_done || self->had_body_error))
-        self->client->update_window(self->client);
 }
 
 static void copy_stats(struct rp_generator_t *self)
