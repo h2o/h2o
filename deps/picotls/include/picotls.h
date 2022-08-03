@@ -1537,6 +1537,7 @@ extern int ptlslog_fd;
  * Builds a JSON-safe string. Supplied buffer MUST be 4x + 1 bytes bigger than the input.
  */
 size_t ptls_escape_json_unsafe_string(char *dst, const void *bytes, size_t len);
+static void ptls_byte_to_hex(char *dst, uint8_t byte);
 
 static int ptlslog__do_push_safestr(ptls_buffer_t *buf, const char *s);
 int ptlslog__do_push_unsafestr(ptls_buffer_t *buf, const char *s);

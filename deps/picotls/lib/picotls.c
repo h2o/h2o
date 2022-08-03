@@ -19,6 +19,10 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
+#ifdef _WINDOWS
+#define _CRT_SECURE_NO_WARNINGS
+#define _CRT_NONSTDC_NO_WARNINGS
+#endif
 #include <assert.h>
 #include <stddef.h>
 #include <stdio.h>
@@ -1284,10 +1288,11 @@ static int commission_handshake_secret(ptls_t *tls)
 
 static void log_client_random(ptls_t *tls)
 {
+    char buf[sizeof(tls->client_random) * 2 + 1];
     /* FIXME probe says the argument is `void *` but we emit hexstring? */
-    PTLS_PROBE(CLIENT_RANDOM, tls, PTLS_HEXDUMP(tls->client_random, sizeof(tls->client_random)));
+    PTLS_PROBE(CLIENT_RANDOM, tls, ptls_hexdump(buf, tls->client_random, sizeof(tls->client_random)));
     PTLSLOG_CONN(client_random, tls,
-                 { PTLSLOG_ELEMENT_SAFESTR(bytes, PTLS_HEXDUMP(tls->client_random, sizeof(tls->client_random))); });
+                 { PTLSLOG_ELEMENT_SAFESTR(bytes, ptls_hexdump(buf, tls->client_random, sizeof(tls->client_random))); });
 }
 
 #define SESSION_IDENTIFIER_MAGIC "ptls0001" /* the number should be changed upon incompatible format change */

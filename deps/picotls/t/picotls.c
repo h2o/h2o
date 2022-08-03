@@ -1693,7 +1693,7 @@ static void test_escape_json_unsafe_string(void)
 {
     const char *src = "\"\\/\'\n\r\t foo bar";
     size_t src_len = strlen(src);
-    char buf[src_len * 4 + 1];
+    char *buf = alloca(src_len * 4 + 1);
     size_t escaped_len = ptls_escape_json_unsafe_string(buf, src, src_len);
     fprintf(stderr, "src:      [%s] (%zu)\n", src, strlen(src));
     fprintf(stderr, "escaped:  [%s] (%zu)\n", buf, strlen(buf));
