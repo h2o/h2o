@@ -500,6 +500,10 @@ typedef struct st_quicly_stats_t {
      */
     quicly_rtt_t rtt;
     /**
+     * Loss thresholds.
+     */
+    quicly_loss_thresholds_t loss_thresholds;
+    /**
      * Congestion control stats (experimental; TODO cherry-pick what can be exposed as part of a stable API).
      */
     quicly_cc_t cc;
@@ -1235,6 +1239,20 @@ void quicly_stream_noop_on_receive(quicly_stream_t *stream, size_t off, const vo
 void quicly_stream_noop_on_receive_reset(quicly_stream_t *stream, int err);
 
 extern const quicly_stream_callbacks_t quicly_stream_noop_callbacks;
+
+#define QUICLY_LOG(type, block) PTLSLOG(quicly, type, block)
+
+#define QUICLY_LOG_CONN(_type, _conn, _block)                                                                                      \
+    do {                                                                                                                           \
+        quicly_conn_t *__conn = (_conn);                                                                                           \
+        if (!ptls_skip_tracing(__conn->crypto.tls))                                                                                \
+            QUICLY_LOG(_type, {                                                                                                    \
+                PTLSLOG_ELEMENT_PTR(conn, __conn);                                                                                 \
+                do {                                                                                                               \
+                    _block                                                                                                         \
+                } while (0);                                                                                                       \
+            });                                                                                                                    \
+    } while (0)
 
 /* inline definitions */
 

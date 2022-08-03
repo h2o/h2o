@@ -70,7 +70,7 @@ provider quicly {
     probe cc_congestion(struct st_quicly_conn_t *conn, int64_t at, uint64_t max_lost_pn, size_t inflight, uint32_t cwnd);
 
     probe ack_block_received(struct st_quicly_conn_t *conn, int64_t at, uint64_t ack_block_begin, uint64_t ack_block_end);
-    probe ack_delay_received(struct st_quicly_conn_t *conn, int64_t at, int64_t ack_delay);
+    probe ack_delay_received(struct st_quicly_conn_t *conn, int64_t at, uint64_t ack_delay);
     probe ack_send(struct st_quicly_conn_t *conn, int64_t at, uint64_t largest_acked, uint64_t ack_delay);
 
     probe ping_send(struct st_quicly_conn_t *conn, int64_t at);
@@ -90,10 +90,10 @@ provider quicly {
     probe stream_lost(struct st_quicly_conn_t *conn, int64_t at, int64_t stream_id, uint64_t off, size_t len);
 
     probe reset_stream_send(struct st_quicly_conn_t *conn, int64_t at, int64_t stream_id, uint16_t error_code, uint64_t final_size);
-    probe reset_stream_receive(struct st_quicly_conn_t *conn, int64_t at, int64_t stream_id, uint16_t error_code, uint64_t final_size);
+    probe reset_stream_receive(struct st_quicly_conn_t *conn, int64_t at, uint64_t stream_id, uint16_t error_code, uint64_t final_size);
 
     probe stop_sending_send(struct st_quicly_conn_t *conn, int64_t at, int64_t stream_id, uint16_t error_code);
-    probe stop_sending_receive(struct st_quicly_conn_t *conn, int64_t at, int64_t stream_id, uint16_t error_code);
+    probe stop_sending_receive(struct st_quicly_conn_t *conn, int64_t at, uint64_t stream_id, uint16_t error_code);
 
     probe max_data_send(struct st_quicly_conn_t *conn, int64_t at, uint64_t maximum);
     probe max_data_receive(struct st_quicly_conn_t *conn, int64_t at, uint64_t maximum);
@@ -102,7 +102,7 @@ provider quicly {
     probe max_streams_receive(struct st_quicly_conn_t *conn, int64_t at, uint64_t maximum, int is_unidirectional);
 
     probe max_stream_data_send(struct st_quicly_conn_t *conn, int64_t at, struct st_quicly_stream_t *stream, uint64_t maximum);
-    probe max_stream_data_receive(struct st_quicly_conn_t *conn, int64_t at, int64_t stream_id, uint64_t maximum);
+    probe max_stream_data_receive(struct st_quicly_conn_t *conn, int64_t at, uint64_t stream_id, uint64_t maximum);
 
     probe new_token_send(struct st_quicly_conn_t *conn, int64_t at, uint8_t *token, size_t token_len, uint64_t generation);
     probe new_token_acked(struct st_quicly_conn_t *conn, int64_t at, uint64_t generation);

@@ -57,7 +57,6 @@ def handle_packet_received(events, idx):
         handler = FRAME_EVENT_HANDLERS.get(ev["type"])
         if handler:
             frames.append(handler(ev))
-
     ret = {
         "time": events[idx]["time"],
         "name": "transport:packet_received",
@@ -199,7 +198,7 @@ def handle_new_token_receive(event):
     return {
         "frame_type": "new_token",
         "token": event["token"],
-        "generation": event["generation"]
+        # "generation": event["generation"]
     }
 
 def handle_new_token_send(event):
@@ -363,7 +362,14 @@ Usage:
 def load_quicly_events(infile):
     events = []
     for line in infile:
-        events.append(json.loads(line))
+        object = json.loads(line)
+        # normalize the key format to kebab-case
+        normalized_object = {}
+        for key, value in object.items():
+            normalized_object[key.replace("_", "-")] = value
+        if "type" in normalized_object:
+            normalized_object["type"] = normalized_object["type"].replace("_", "-")
+        events.append(normalized_object)
     return events
 
 def main():
@@ -394,7 +400,7 @@ def main():
                 "time_format": "absolute"
             }
         }
-    }))
+    }, separators=(',', ':')))
     for i, event in enumerate(source_events):
         handler = QLOG_EVENT_HANDLERS.get(event["type"])
         if handler:

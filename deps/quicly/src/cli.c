@@ -1067,6 +1067,23 @@ static void push_req(const char *path, int to_file)
     memset(reqs + i + 1, 0, sizeof(*reqs));
 }
 
+static void setup_ptlslog(const char *fn)
+{
+    int fd;
+    if ((fd = open(fn, O_WRONLY | O_CREAT | O_APPEND, 0666)) == -1) {
+        fprintf(stderr, "failed to open file:%s:%s\n", fn, strerror(errno));
+        exit(1);
+    }
+    ptlslog_fd = fd;
+}
+
+static void setup_ptlslog_from_env(void)
+{
+    const char *fn = getenv("PTLSLOG");
+    if (fn)
+        setup_ptlslog(fn);
+}
+
 int main(int argc, char **argv)
 {
     const char *cert_file = NULL, *raw_pubkey_file = NULL, *host, *port, *cid_key = NULL;
@@ -1086,6 +1103,7 @@ int main(int argc, char **argv)
 
     setup_session_cache(ctx.tls);
     quicly_amend_ptls_context(ctx.tls);
+    setup_ptlslog_from_env();
 
     {
         uint8_t secret[PTLS_MAX_DIGEST_SIZE];
@@ -1094,7 +1112,7 @@ int main(int argc, char **argv)
         address_token_aead.dec = ptls_aead_new(&ptls_openssl_aes128gcm, &ptls_openssl_sha256, 0, secret, "");
     }
 
-    while ((ch = getopt(argc, argv, "a:b:B:c:C:Dd:k:Ee:f:Gi:I:K:l:M:m:NnOp:P:Rr:S:s:u:U:Vvw:W:x:X:y:h")) != -1) {
+    while ((ch = getopt(argc, argv, "a:b:B:c:C:Dd:k:Ee:f:Gi:I:j:K:l:M:m:NnOp:P:Rr:S:s:u:U:Vvw:W:x:X:y:h")) != -1) {
         switch (ch) {
         case 'a':
             assert(negotiated_protocols.count < PTLS_ELEMENTSOF(negotiated_protocols.list));
@@ -1175,6 +1193,9 @@ int main(int argc, char **argv)
                 fprintf(stderr, "failed to parse idle timeout: %s\n", optarg);
                 exit(1);
             }
+        case 'j':
+            setup_ptlslog(optarg);
+            break;
         case 'K':
             if (sscanf(optarg, "%" SCNu64, &ctx.max_packets_per_key) != 1) {
                 fprintf(stderr, "failed to parse key update interval: %s\n", optarg);
