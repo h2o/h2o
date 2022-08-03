@@ -697,6 +697,7 @@ static size_t append_with_limit(char *dst, h2o_iovec_t input, size_t limit)
         memcpy(dst, input.base, input.len);
         return input.len;
     } else {
+        assert(limit >= 3);
         memcpy(dst, input.base, (limit - 3));
         memcpy(dst + (limit - 3), "...", 3);
         return limit;
