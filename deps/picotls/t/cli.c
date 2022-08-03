@@ -67,6 +67,23 @@ static void shift_buffer(ptls_buffer_t *buf, size_t delta)
     }
 }
 
+static void setup_ptlslog(const char *fn)
+{
+    int fd;
+    if ((fd = open(fn, O_WRONLY | O_CREAT | O_APPEND, 0666)) == -1) {
+        fprintf(stderr, "failed to open file:%s:%s\n", fn, strerror(errno));
+        exit(1);
+    }
+    ptlslog_fd = fd;
+}
+
+static void setup_ptlslog_from_env(void)
+{
+    const char *fn = getenv("PTLSLOG");
+    if (fn)
+        setup_ptlslog(fn);
+}
+
 static int handle_connection(int sockfd, ptls_context_t *ctx, const char *server_name, const char *input_file,
                              ptls_handshake_properties_t *hsprop, int request_key_update, int keep_sender_open)
 {
@@ -353,6 +370,7 @@ static void usage(const char *cmd)
            "  -I                   keep send side open after sending all data (client-only)\n"
            "  -k key-file          specifies the credentials for signing the certificate\n"
            "  -l log-file          file to log events (incl. traffic secrets)\n"
+           "  -j log-file          file to log probe events in JSON-Lines (PTLSOG=log-file is equivalent)\n"
            "  -n                   negotiates the key exchange method (i.e. wait for HRR)\n"
            "  -N named-group       named group to be used (default: secp256r1)\n"
            "  -s session-file      file to read/write the session ticket\n"
@@ -408,6 +426,7 @@ int main(int argc, char **argv)
 #endif
 
     res_init();
+    setup_ptlslog_from_env();
 
     ptls_key_exchange_algorithm_t *key_exchanges[128] = {NULL};
     ptls_cipher_suite_t *cipher_suites[128] = {NULL};
@@ -424,7 +443,7 @@ int main(int argc, char **argv)
     int family = 0;
     const char *raw_pub_key_file = NULL, *cert_location = NULL;
 
-    while ((ch = getopt(argc, argv, "46abBC:c:i:Ik:nN:es:Sr:E:K:l:y:vV:h")) != -1) {
+    while ((ch = getopt(argc, argv, "46abBC:c:i:Ij:k:nN:es:Sr:E:K:l:y:vV:h")) != -1) {
         switch (ch) {
         case '4':
             family = AF_INET;
@@ -460,6 +479,9 @@ int main(int argc, char **argv)
             break;
         case 'I':
             keep_sender_open = 1;
+            break;
+        case 'j':
+            setup_ptlslog(optarg);
             break;
         case 'k':
             load_private_key(&ctx, optarg);

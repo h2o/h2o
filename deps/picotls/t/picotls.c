@@ -1689,6 +1689,19 @@ static void test_tls12_hello(void)
     ctx->on_client_hello = orig;
 }
 
+static void test_escape_json_unsafe_string(void)
+{
+    const char *src = "\"\\/\'\n\r\t foo bar";
+    size_t src_len = strlen(src);
+    char buf[src_len * 4 + 1];
+    size_t escaped_len = ptls_escape_json_unsafe_string(buf, src, src_len);
+    fprintf(stderr, "src:      [%s] (%zu)\n", src, strlen(src));
+    fprintf(stderr, "escaped:  [%s] (%zu)\n", buf, strlen(buf));
+    fprintf(stderr, "expected: [%s]\n", "\"\\\\\\/\\'\\n\\r\\t foo bar");
+    ok(escaped_len == strlen(buf));
+    ok(strcmp(buf, "\\\"\\\\\\/\\'\\n\\r\\t foo bar") == 0);
+}
+
 void test_picotls(void)
 {
     subtest("is_ipaddr", test_is_ipaddr);
@@ -1710,6 +1723,7 @@ void test_picotls(void)
     subtest("handshake", test_all_handshakes);
     subtest("quic", test_quic);
     subtest("tls12-hello", test_tls12_hello);
+    subtest("ptls_escape_json_unsafe_string", test_escape_json_unsafe_string);
 }
 
 void test_picotls_esni(ptls_key_exchange_context_t **keys)
