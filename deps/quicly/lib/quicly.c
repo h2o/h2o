@@ -4343,7 +4343,7 @@ static int send_connection_close(quicly_conn_t *conn, size_t epoch, quicly_send_
             PTLSLOG_ELEMENT_SIGNED(time, conn->stash.now);
             PTLSLOG_ELEMENT_UNSIGNED(error_code, error_code);
             PTLSLOG_ELEMENT_UNSIGNED(frame_type, offending_frame_type);
-            PTLSLOG_ELEMENT_UNSAFESTR(reason_phrase, reason_phrase);
+            PTLSLOG_ELEMENT_UNSAFESTR(reason_phrase, reason_phrase, strlen(reason_phrase));
         });
     } else {
         ++conn->super.stats.num_frames_sent.application_close;
@@ -4351,7 +4351,7 @@ static int send_connection_close(quicly_conn_t *conn, size_t epoch, quicly_send_
         QUICLY_LOG_CONN(application_close_send, conn, {
             PTLSLOG_ELEMENT_SIGNED(time, conn->stash.now);
             PTLSLOG_ELEMENT_UNSIGNED(error_code, error_code);
-            PTLSLOG_ELEMENT_UNSAFESTR(reason_phrase, reason_phrase);
+            PTLSLOG_ELEMENT_UNSAFESTR(reason_phrase, reason_phrase, strlen(reason_phrase));
         });
     }
 
@@ -5713,7 +5713,7 @@ static int handle_transport_close_frame(quicly_conn_t *conn, struct st_quicly_ha
         PTLSLOG_ELEMENT_SIGNED(time, conn->stash.now);
         PTLSLOG_ELEMENT_UNSIGNED(error_code, frame.error_code);
         PTLSLOG_ELEMENT_UNSIGNED(frame_type, frame.frame_type);
-        PTLSLOG_ELEMENT_UNSAFESTR(reason_phrase, (const char *)frame.reason_phrase.base);
+        PTLSLOG_ELEMENT_UNSAFESTR(reason_phrase, (const char *)frame.reason_phrase.base, frame.reason_phrase.len);
     });
     return handle_close(conn, QUICLY_ERROR_FROM_TRANSPORT_ERROR_CODE(frame.error_code), frame.frame_type, frame.reason_phrase);
 }
@@ -5731,7 +5731,7 @@ static int handle_application_close_frame(quicly_conn_t *conn, struct st_quicly_
     QUICLY_LOG_CONN(application_close_receive, conn, {
         PTLSLOG_ELEMENT_SIGNED(time, conn->stash.now);
         PTLSLOG_ELEMENT_UNSIGNED(error_code, frame.error_code);
-        PTLSLOG_ELEMENT_UNSAFESTR(reason_phrase, (const char *)frame.reason_phrase.base);
+        PTLSLOG_ELEMENT_UNSAFESTR(reason_phrase, (const char *)frame.reason_phrase.base, frame.reason_phrase.len);
     });
     return handle_close(conn, QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(frame.error_code), UINT64_MAX, frame.reason_phrase);
 }
