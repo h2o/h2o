@@ -9,6 +9,7 @@ use JSON;
 use Time::HiRes qw(sleep);
 use t::Util;
 
+get_exclusive_lock(); # take exclusive lock before sudo closes LOCKFD
 run_as_root();
 
 my $h2olog_prog = bindir() . "/h2olog";
@@ -37,6 +38,8 @@ sub spawn_my_h2o {
     opts => [qw(--mode=worker)],
     user => scalar(getpwuid($ENV{SUDO_UID})),
     conf => << "EOT",
+# an attempt to reduce flakiness (at least that caused by there being many worker threads)
+num-threads: 1
 # Either CAP_BPF or CAP_NET_ADMIN is required to use selective tracing if `kernel.unplivileged_bpf_disable` is set to true to
 # mitigate CVE-2022-0001 and CVE-2022-0001.
 capabilities:
@@ -195,6 +198,9 @@ subtest "h2olog -A=127.0.0.2", sub {
         $_->{type} eq "h3s-destroy"
       } @logs
     ], [], "no h3s-destroy header in logs";
+
+    diag $trace
+        unless test_is_passing();
   };
 
   subtest "with matched IP address", sub {
@@ -217,7 +223,11 @@ subtest "h2olog -A=127.0.0.2", sub {
     is_deeply scalar(grep {
         $_->{type} eq "h1-close"
       } @logs), 1, "h1-close header in logs";
+
+    diag $trace
+        unless test_is_passing();
   };
+
 };
 
 subtest "h2olog -N=localhost.examp1e.net", sub {

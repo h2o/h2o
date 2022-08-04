@@ -3,38 +3,38 @@ MRuby::Gem::Specification.new 'mruby-compiler' do |spec|
   spec.author  = 'mruby developers'
   spec.summary = 'mruby compiler library'
 
-  current_dir = spec.dir
-  current_build_dir = spec.build_dir
-
-  lex_def = "#{current_dir}/core/lex.def"
-  core_objs = Dir.glob("#{current_dir}/core/*.c").map { |f|
-    next nil if build.cxx_exception_enabled? and f =~ /(codegen).c$/
-    objfile(f.pathmap("#{current_build_dir}/core/%n"))
-  }.compact
-
-  if build.cxx_exception_enabled?
-    core_objs <<
-      build.compile_as_cxx("#{current_build_dir}/core/y.tab.c", "#{current_build_dir}/core/y.tab.cxx",
-                           objfile("#{current_build_dir}/y.tab"), ["#{current_dir}/core"]) <<
-      build.compile_as_cxx("#{current_dir}/core/codegen.c", "#{current_build_dir}/core/codegen.cxx")
-  else
-    core_objs << objfile("#{current_build_dir}/core/y.tab")
-    file objfile("#{current_build_dir}/core/y.tab") => "#{current_build_dir}/core/y.tab.c" do |t|
-      cc.run t.name, t.prerequisites.first, [], ["#{current_dir}/core"]
+  objs = %w[codegen y.tab].map do |name|
+    src = "#{dir}/core/#{name}.c"
+    if build.cxx_exception_enabled?
+      build.compile_as_cxx(src)
+    else
+      objfile(src.pathmap("#{build_dir}/core/%n"))
     end
   end
+  build.libmruby_core_objs << objs
+end
+
+if MRuby::Build.current.name == "host"
+  dir = __dir__
+  lex_def = "#{dir}/core/lex.def"
 
   # Parser
-  file "#{current_build_dir}/core/y.tab.c" => ["#{current_dir}/core/parse.y", lex_def] do |t|
-    FileUtils.mkdir_p File.dirname t.name
-    yacc.run t.name, t.prerequisites.first
+  file "#{dir}/core/y.tab.c" => ["#{dir}/core/parse.y", lex_def] do |t|
+    MRuby.targets["host"].yacc.run t.name, t.prerequisites.first
+    replace_line_directive(t.name)
   end
 
   # Lexical analyzer
-  file lex_def => "#{current_dir}/core/keywords" do |t|
-    gperf.run t.name, t.prerequisites.first
+  file lex_def => "#{dir}/core/keywords" do |t|
+    MRuby.targets["host"].gperf.run t.name, t.prerequisites.first
+    replace_line_directive(t.name)
   end
 
-  file build.libmruby_core_static => core_objs
-  build.libmruby << core_objs
+  def replace_line_directive(path)
+    content = File.read(path).gsub(%r{
+      ^\#line\s+\d+\s+"\K.*(?="$) |             # #line directive
+      ^/\*\s+Command-line:.*\s\K\S+(?=\s+\*/$)  # header comment in lex.def
+    }x, &:relative_path)
+    File.write(path, content)
+  end
 end

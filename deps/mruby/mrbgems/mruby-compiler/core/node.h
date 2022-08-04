@@ -51,6 +51,7 @@ enum node_type {
   NODE_IVAR,
   NODE_CONST,
   NODE_CVAR,
+  NODE_NVAR,
   NODE_NTH_REF,
   NODE_BACK_REF,
   NODE_MATCH,

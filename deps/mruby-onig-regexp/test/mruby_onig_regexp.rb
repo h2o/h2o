@@ -1,7 +1,9 @@
 
 # Constant
 assert("OnigRegexp::CONSTANT") do
-  OnigRegexp::IGNORECASE == 1 and OnigRegexp::EXTENDED == 2 and OnigRegexp::MULTILINE == 4
+  assert_equal 1, OnigRegexp::IGNORECASE
+  assert_equal 2, OnigRegexp::EXTENDED
+  assert_equal 4, OnigRegexp::MULTILINE
 end
 
 
@@ -30,7 +32,8 @@ end
 
 # Instance method
 assert('OnigRegexp#initialize', '15.2.15.7.1') do
-  OnigRegexp.new(".*") and OnigRegexp.new(".*", OnigRegexp::MULTILINE)
+  assert_equal OnigRegexp, OnigRegexp.new(".*").class
+  assert_equal OnigRegexp, OnigRegexp.new(".*", OnigRegexp::MULTILINE).class
 end
 
 assert('OnigRegexp#initialize_copy', '15.2.15.7.2') do
@@ -87,7 +90,7 @@ assert("OnigRegexp#source", '15.2.15.7.8') do
   str = "(https?://[^/]+)[-a-zA-Z0-9./]+"
   reg = OnigRegexp.new(str)
 
-  reg.source == str
+  assert_equal str, reg.source
 end
 
 if OnigRegexp.const_defined? :ASCII_RANGE
@@ -134,17 +137,13 @@ end
 
 # Extended patterns.
 assert("OnigRegexp#match (no flags)") do
-  o = Object.new
-  def o.to_str
-    "obj"
-  end
   [
     [ ".*", "abcd\nefg", "abcd" ],
     [ "^a.", "abcd\naefg", "ab" ],
     [ "^a.", "bacd\naefg", "ae" ],
     [ ".$", "bacd\naefg", "d" ],
     [ "bc", :abc, "bc"],
-    [ "bj", o, "bj"],
+    [ "bj", "obj", "bj"],
   ].each do |reg, str, result|
     m = OnigRegexp.new(reg).match(str)
     assert_equal result, m[0] if assert_false m.nil?
@@ -158,7 +157,7 @@ assert("OnigRegexp#match (multiline)") do
     [ OnigRegexp.new(".*", OnigRegexp::MULTILINE), "abcd\nefg", "abcd\nefg" ]
   ]
 
-  patterns.all?{ |reg, str, result| reg.match(str)[0] == result }
+  patterns.each{ |reg, str, result| assert_equal result, reg.match(str)[0] }
 end
 
 assert("OnigRegexp#match (ignorecase)") do
@@ -185,7 +184,7 @@ assert("OnigRegexp#match (with block)") do
 end
 
 assert('OnigRegexp.version') do
-  OnigRegexp.version.kind_of? String
+  assert_kind_of String, OnigRegexp.version
 end
 
 def onig_match_data_example
@@ -404,12 +403,19 @@ assert('String#onig_regexp_split') do
 
   assert_equal [], ''.onig_regexp_split(OnigRegexp.new(','), -1)
 
-  o = Object.new
-  def o.to_str
-    ","
-  end
-  assert_equal ["こ", "に", "ち", "わ"], "こ,に,ち,わ".onig_regexp_split(o)
+  assert_equal ["こ", "に", "ち", "わ"], "こ,に,ち,わ".onig_regexp_split(",")
   assert_raise(TypeError) { "".onig_regexp_split(1) }
+end
+
+assert('String#onig_regexp_match') do
+  reg = OnigRegexp.new('d(e)f')
+  assert_equal ['def', 'e'], 'abcdef'.match(reg).to_a
+  assert_nil 'abcdef'.match(reg, 4)
+  match_data = nil
+  'abcdef'.match(reg) do |m|
+    match_data = m
+  end
+  assert_equal ['def', 'e'], match_data.to_a
 end
 
 assert('String#index') do
@@ -534,9 +540,34 @@ assert('String#match?') do
   assert_true 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8'.onig_regexp_match?(OnigRegexp.new('webp'))
 end
 
+assert('String#[]=') do
+  string = 'abc'
+  string[OnigRegexp.new('.')] = 'A'
+  assert_equal 'Abc', string
+  string[OnigRegexp.new('.(.)'), 1] = 'B'
+  assert_equal 'ABc', string
+  string[OnigRegexp.new('(?<a>.)(?<b>.)(?<c>.)'), 'c'] = 'C'
+  assert_equal 'ABC', string
+
+  assert_raise(ArgumentError) do
+    string[OnigRegexp.new('.'), 0, :extra] = 'x'
+  end
+end
+
+assert('String#slice!') do
+  string = 'abc'
+  assert_equal 'a', string.slice!(OnigRegexp.new('.'))
+  assert_equal 'bc', string
+end
+
+assert 'raises RegexpError' do
+  assert_raise(RegexpError) { OnigRegexp.new('*') }
+end
+
 Regexp = Object
 
 assert('OnigRegexp not default') do
+  $~ = nil
   onig_match_data_example
   assert_nil $~
 end

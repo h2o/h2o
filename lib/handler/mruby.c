@@ -31,6 +31,7 @@
 #include <mruby/compile.h>
 #include <mruby/error.h>
 #include <mruby/hash.h>
+#include <mruby/numeric.h>
 #include <mruby/opcode.h>
 #include <mruby/string.h>
 #include <mruby/throw.h>
@@ -124,9 +125,29 @@ mrb_value h2o_mruby_to_str(mrb_state *mrb, mrb_value v)
     return v;
 }
 
+/* This function is a simplified copy of `mrb_convert_to_integer` that existed in the earlier versions of mruby and is covered by
+ * the MIT License as stated in deps/mruby/README.md. */
+static mrb_value convert_to_integer(mrb_state *mrb, mrb_value val)
+{
+    if (mrb_nil_p(val))
+        mrb_raise(mrb, E_TYPE_ERROR, "can't convert nil into Integer");
+    switch (mrb_type(val)) {
+    case MRB_TT_FLOAT:
+        return mrb_float_to_integer(mrb, val);
+    case MRB_TT_INTEGER:
+        return val;
+    case MRB_TT_STRING:
+        return mrb_str_to_inum(mrb, val, 0, TRUE);
+    default:
+        break;
+    }
+    /* to raise TypeError */
+    return mrb_to_int(mrb, val);
+}
+
 mrb_value h2o_mruby_to_int(mrb_state *mrb, mrb_value v)
 {
-    H2O_MRUBY_EXEC_GUARD({ v = mrb_Integer(mrb, v); });
+    H2O_MRUBY_EXEC_GUARD({ v = convert_to_integer(mrb, v); });
     return v;
 }
 
@@ -1052,7 +1073,7 @@ void h2o_mruby_run_fiber(h2o_mruby_context_t *ctx, mrb_value receiver, mrb_value
             goto GotException;
 
         if (!mrb_array_p(output)) {
-            mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "Fiber.yield must return an array"));
+            mrb->exc = mrb_obj_ptr(mrb_exc_new_lit(mrb, E_RUNTIME_ERROR, "Fiber.yield must return an array"));
             goto GotException;
         }
 
@@ -1061,7 +1082,7 @@ void h2o_mruby_run_fiber(h2o_mruby_context_t *ctx, mrb_value receiver, mrb_value
             if ((send_response_callback = h2o_mruby_middleware_get_send_response_callback(ctx, resp)) != NULL) {
                 break;
             } else {
-                mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "rack app did not return an array"));
+                mrb->exc = mrb_obj_ptr(mrb_exc_new_lit(mrb, E_RUNTIME_ERROR, "rack app did not return an array"));
                 goto GotException;
             }
         }
@@ -1072,7 +1093,7 @@ void h2o_mruby_run_fiber(h2o_mruby_context_t *ctx, mrb_value receiver, mrb_value
             goto GotException;
         if (status >= 0) {
             if (!(100 <= status && status <= 999)) {
-                mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "status returned from rack app is out of range"));
+                mrb->exc = mrb_obj_ptr(mrb_exc_new_lit(mrb, E_RUNTIME_ERROR, "status returned from rack app is out of range"));
                 goto GotException;
             }
             break;
@@ -1084,7 +1105,7 @@ void h2o_mruby_run_fiber(h2o_mruby_context_t *ctx, mrb_value receiver, mrb_value
 
         size_t callback_index = -status - 1;
         if (callback_index >= ctx->shared->callbacks.size) {
-            input = mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "unexpected callback id sent from rack app");
+            input = mrb_exc_new_lit(mrb, E_RUNTIME_ERROR, "unexpected callback id sent from rack app");
             run_again = 1;
         } else {
             h2o_mruby_callback_t callback = ctx->shared->callbacks.entries[callback_index];
@@ -1204,7 +1225,7 @@ int h2o_mruby_iterate_rack_headers(h2o_mruby_shared_context_t *shared_ctx, mrb_v
         for (i = 0; i != len; ++i) {
             mrb_value pair = mrb_ary_entry(headers, i);
             if (!mrb_array_p(pair)) {
-                mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, E_ARGUMENT_ERROR, "array element of headers MUST by an array"));
+                mrb->exc = mrb_obj_ptr(mrb_exc_new_lit(mrb, E_ARGUMENT_ERROR, "array element of headers MUST by an array"));
                 return -1;
             }
             if (h2o_mruby_iterate_header_values(shared_ctx, mrb_ary_entry(pair, 0), mrb_ary_entry(pair, 1), cb, cb_data) != 0)
