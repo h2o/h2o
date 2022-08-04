@@ -5686,9 +5686,11 @@ size_t ptls_escape_json_unsafe_string(char *buf, const void *bytes, size_t len)
             if (0x20 <= *src && *src <= 0x7e) {
                 *dst++ = *src;
             } else {
-                // FIZME: recognize UTF-8 characters
+                // FIXME: recognize UTF-8 characters
                 *dst++ = '\\';
                 *dst++ = 'u';
+                *dst++ = '0';
+                *dst++ = '0';
                 ptls_byte_to_hex(dst, *src);
                 dst += 2;
             }
@@ -5704,8 +5706,11 @@ int ptlslog_fd = -1;
 
 void ptlslog__do_write(const ptls_buffer_t *buf)
 {
-    while (write(ptlslog_fd, buf->base, buf->off) == -1 && errno == EINTR)
+    ssize_t ret;
+    while ((ret = write(ptlslog_fd, buf->base, buf->off)) == -1 && errno == EINTR)
         ;
+    if (ret == -1 && errno != EAGAIN)
+        ptlslog_fd = -1;
 }
 
 int ptlslog__do_pushv(ptls_buffer_t *buf, const void *p, size_t l)
@@ -5718,9 +5723,8 @@ int ptlslog__do_pushv(ptls_buffer_t *buf, const void *p, size_t l)
     return 1;
 }
 
-int ptlslog__do_push_unsafestr(ptls_buffer_t *buf, const char *s)
+int ptlslog__do_push_unsafestr(ptls_buffer_t *buf, const char *s, size_t l)
 {
-    size_t l = strlen(s);
     if (ptls_buffer_reserve(buf, l * 4 + 1) != 0)
         return 0;
 

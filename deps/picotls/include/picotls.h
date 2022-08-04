@@ -1492,10 +1492,10 @@ extern int ptlslog_fd;
         PTLSLOG__DO_PUSH_SAFESTR("\"");                                                                                            \
     } while (0)
 
-#define PTLSLOG_ELEMENT_UNSAFESTR(name, value)                                                                                     \
+#define PTLSLOG_ELEMENT_UNSAFESTR(name, value, value_len)                                                                          \
     do {                                                                                                                           \
         PTLSLOG__DO_PUSH_SAFESTR(",\"" PTLS_TO_STR(name) "\":\"");                                                                 \
-        PTLSLOG__DO_PUSH_UNSAFESTR(value);                                                                                         \
+        PTLSLOG__DO_PUSH_UNSAFESTR(value, value_len);                                                                              \
         PTLSLOG__DO_PUSH_SAFESTR("\"");                                                                                            \
     } while (0)
 
@@ -1517,9 +1517,9 @@ extern int ptlslog_fd;
         if (!ptlslog_skip && PTLS_UNLIKELY(!ptlslog__do_push_safestr(&ptlslogbuf, (v))))                                           \
             ptlslog_skip = 1;                                                                                                      \
     } while (0)
-#define PTLSLOG__DO_PUSH_UNSAFESTR(v)                                                                                              \
+#define PTLSLOG__DO_PUSH_UNSAFESTR(v, l)                                                                                           \
     do {                                                                                                                           \
-        if (!ptlslog_skip && PTLS_UNLIKELY(!ptlslog__do_push_unsafestr(&ptlslogbuf, (v))))                                         \
+        if (!ptlslog_skip && PTLS_UNLIKELY(!ptlslog__do_push_unsafestr(&ptlslogbuf, (v), (l))))                                    \
             ptlslog_skip = 1;                                                                                                      \
     } while (0)
 #define PTLSLOG__DO_PUSH_SIGNED(v)                                                                                                 \
@@ -1540,7 +1540,7 @@ size_t ptls_escape_json_unsafe_string(char *dst, const void *bytes, size_t len);
 static void ptls_byte_to_hex(char *dst, uint8_t byte);
 
 static int ptlslog__do_push_safestr(ptls_buffer_t *buf, const char *s);
-int ptlslog__do_push_unsafestr(ptls_buffer_t *buf, const char *s);
+int ptlslog__do_push_unsafestr(ptls_buffer_t *buf, const char *s, size_t l);
 int ptlslog__do_pushv(ptls_buffer_t *buf, const void *p, size_t l);
 int ptlslog__do_push_signed(ptls_buffer_t *buf, int64_t v);
 int ptlslog__do_push_unsigned(ptls_buffer_t *buf, uint64_t v);
