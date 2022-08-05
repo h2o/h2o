@@ -40,6 +40,10 @@
 #include <sys/uio.h>
 #include <unistd.h>
 
+#ifdef LIBBSD_FOUND
+#include <bsd/unistd.h>
+#endif
+
 #include <openssl/opensslconf.h>
 #include <openssl/opensslv.h>
 
@@ -1369,7 +1373,7 @@ Exit:
 
 static void cleanup_fds(int listen_fd, int close_notify_fd)
 {
-#if defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__)
+#if defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__) || defined(LIBBSD_FOUND)
     int maxfd, k;
 
     maxfd = 0;

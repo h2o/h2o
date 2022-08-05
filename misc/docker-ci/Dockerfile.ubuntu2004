@@ -13,6 +13,7 @@ RUN apt-get install --yes \
 	flex \
 	git \
 	libbrotli-dev \
+	libbsd-dev \
 	libc-ares-dev \
 	libcap-dev \
 	libclang-dev \

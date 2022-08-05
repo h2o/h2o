@@ -251,6 +251,16 @@ IF (PKG_CONFIG_FOUND)
     ENDIF (LIBCAP_FOUND)
 ENDIF (PKG_CONFIG_FOUND)
 
+IF (PKG_CONFIG_FOUND)
+    PKG_CHECK_MODULES(LIBBSD libbsd)
+    IF (LIBBSD_FOUND)
+        INCLUDE_DIRECTORIES(${LIBBSD_INCLUDE_DIRS})
+        LINK_DIRECTORIES(${LIBBSD_LIBRARY_DIRS})
+        LIST(APPEND EXTRA_LIBS ${LIBBSD_LIBRARIES})
+        ADD_DEFINITIONS("-DLIBBSD_FOUND")
+    ENDIF (LIBBSD_FOUND)
+ENDIF (PKG_CONFIG_FOUND)
+
 SET(CC_WARNING_FLAGS "-Wall -Wno-unused-value -Wno-unused-function -Wno-nullability-completeness -Wno-expansion-to-defined -Werror=implicit-function-declaration -Werror=incompatible-pointer-types")
 
 IF ("${CMAKE_C_COMPILER_ID}" STREQUAL "GNU")
