@@ -58,7 +58,7 @@ def handle_packet_received(events, idx):
         if handler:
             frames.append(handler(ev))
 
-    return {
+    ret = {
         "time": events[idx]["time"],
         "name": "transport:packet_received",
         "data": {
@@ -70,16 +70,26 @@ def handle_packet_received(events, idx):
         }
     }
 
+    # draft-ietf-quic-qlog-quic-events A.8:
+    # ; only if packet_type === "initial" || "handshake" || "0RTT"
+    # ; Signifies length of the packet_number plus the payload
+    #
+    # packet-type == 3: 1-RTT
+    if events[idx]["packet-type"] != 3:
+        ret["length"] = events[idx]["decrypted-len"]
+
+    return ret
+
 def handle_packet_sent(events, idx):
     frames = []
     i = idx-1
-    while i > 0 and events[i]["type"] != "packet-prepare":
+    while i >= 0 and events[i]["type"] != "packet-prepare":
         handler = FRAME_EVENT_HANDLERS.get(events[i]["type"])
         if handler:
             frames.append(handler(events[i]))
         i -= 1
 
-    return {
+    ret = {
         "time": events[idx]["time"],
         "name": "transport:packet_sent",
         "data": {
@@ -90,6 +100,11 @@ def handle_packet_sent(events, idx):
             "frames": frames
         }
     }
+
+    if events[idx]["packet-type"] != 3:
+        ret["length"] = events[idx]["len"]
+
+    return ret
 
 def handle_ack_send(event):
     return render_ack_frame([[event["largest-acked"]]])
@@ -127,6 +142,17 @@ def handle_max_data_send(event):
     }
 
 def handle_max_streams_send(event):
+    if event["is-unidirectional"]:
+        stream_type = "unidirectional"
+    else:
+        stream_type = "bidirectional"
+    return {
+        "frame_type": "max_streams",
+        "stream_type": stream_type,
+        "maximum": event["maximum"]
+    }
+
+def handle_max_streams_receive(event):
     if event["is-unidirectional"]:
         stream_type = "unidirectional"
     else:
@@ -304,6 +330,7 @@ FRAME_EVENT_HANDLERS = {
     "max-data-receive": handle_max_data_receive,
     "max-data-send": handle_max_data_send,
     "max-streams-send": handle_max_streams_send,
+    "max-streams-receive": handle_max_streams_receive,
     "max-stream-data-receive": handle_max_stream_data_receive,
     "max-stream-data-send": handle_max_stream_data_send,
     "new-connection-id-receive": handle_new_connection_id_receive,
@@ -328,22 +355,31 @@ FRAME_EVENT_HANDLERS = {
 def usage():
     print(r"""
 Usage:
-    python qlog-adapter.py inTrace.jsonl
+    ./misc/qlog-adapter.py [inTrace.jsonl]
+
+    If the argument is omitted, inTrace will be read from stdin.
 """.strip())
 
 def load_quicly_events(infile):
     events = []
-    with open(infile, "r") as fh:
-        for line in fh:
-            events.append(json.loads(line))
+    for line in infile:
+        events.append(json.loads(line))
     return events
 
 def main():
-    if len(sys.argv) != 2:
+    if len(sys.argv) > 2:
         usage()
         sys.exit(1)
 
-    (_, infile) = sys.argv
+    if len(sys.argv) == 1:
+        infile = sys.stdin
+    else:
+        (_, fn) = sys.argv
+        try:
+            infile = open(fn, "r")
+        except OSError as e:
+            sys.exit("Failed to open %s: %s" % (fn, e.strerror))
+
     source_events = load_quicly_events(infile)
     print(json.dumps({
         "qlog_format": "NDJSON",

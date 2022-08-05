@@ -1,29 +1,29 @@
 # AO render benchmark
-# Original program (C) Syoyo Fujita in Javascript (and other languages)
+# Original program (C) Syoyo Fujita in JavaScript (and other languages)
 #      https://code.google.com/p/aobench/
 # Ruby(yarv2llvm) version by Hideki Miura
 # mruby version by Hideki Miura
 #
 
-IMAGE_WIDTH = 64
-IMAGE_HEIGHT = 64
+IMAGE_WIDTH = Integer(ARGV[0] || 64)
+IMAGE_HEIGHT = IMAGE_WIDTH
 NSUBSAMPLES = 2
 NAO_SAMPLES = 8
 
 module Rand
   # Use xorshift
-  @@x = 123456789
-  @@y = 362436069
-  @@z = 521288629
-  @@w = 88675123
+  @x = 123456789
+  @y = 362436069
+  @z = 521288629
+  @w = 88675123
   BNUM = 1 << 29
   BNUMF = BNUM.to_f
   def self.rand
-    x = @@x
+    x = @x
     t = x ^ ((x & 0xfffff) << 11)
-    w = @@w
-    @@x, @@y, @@z = @@y, @@z, w
-    w = @@w = (w ^ (w >> 19) ^ (t ^ (t >> 8)))
+    w = @w
+    @x, @y, @z = @y, @z, w
+    w = @w = (w ^ (w >> 19) ^ (t ^ (t >> 8)))
     (w % BNUM) / BNUMF
   end
 end
@@ -179,7 +179,7 @@ def clamp(f)
   i.to_i
 end
 
-def otherBasis(basis, n)
+def orthoBasis(basis, n)
   basis[2] = Vec.new(n.x, n.y, n.z)
   basis[1] = Vec.new(0.0, 0.0, 0.0)
 
@@ -211,7 +211,7 @@ class Scene
 
   def ambient_occlusion(isect)
     basis = Array.new(3)
-    otherBasis(basis, isect.n)
+    orthoBasis(basis, isect.n)
 
     ntheta    = NAO_SAMPLES
     nphi      = NAO_SAMPLES
@@ -243,8 +243,6 @@ class Scene
         @plane.intersect(ray, occisect)
         if occisect.hit
           occlusion = occlusion + 1.0
-        else
-          0.0
         end
       end
     end
@@ -254,16 +252,14 @@ class Scene
   end
 
   def render(w, h, nsubsamples)
-    cnt = 0
     nsf = nsubsamples.to_f
     h.times do |y|
       w.times do |x|
         rad = Vec.new(0.0, 0.0, 0.0)
 
-        # Subsmpling
+        # Subsampling
         nsubsamples.times do |v|
           nsubsamples.times do |u|
-            cnt = cnt + 1
             wf = w.to_f
             hf = h.to_f
             xf = x.to_f
@@ -288,8 +284,6 @@ class Scene
               rad.x = rad.x + col.x
               rad.y = rad.y + col.y
               rad.z = rad.z + col.z
-            else
-              0.0
             end
           end
         end

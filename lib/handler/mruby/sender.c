@@ -199,9 +199,9 @@ Found:
 static mrb_value check_precond(mrb_state *mrb, h2o_mruby_generator_t *generator)
 {
     if (generator == NULL || generator->req == NULL)
-        return mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "downstream HTTP closed");
+        return mrb_exc_new_lit(mrb, E_RUNTIME_ERROR, "downstream HTTP closed");
     if (generator->req->_generator == NULL)
-        return mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "cannot send chunk before sending headers");
+        return mrb_exc_new_lit(mrb, E_RUNTIME_ERROR, "cannot send chunk before sending headers");
     return mrb_nil_value();
 }
 
@@ -229,7 +229,7 @@ static mrb_value send_chunk_method(mrb_state *mrb, mrb_value self)
             len = sender->super.bytes_left; /* trim data too long */
         if (len != 0) {
             if ((h2o_buffer_try_reserve(&sender->receiving, len)).base == NULL) {
-                mrb_value exc = mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "failed to allocate memory");
+                mrb_value exc = mrb_exc_new_lit(mrb, E_RUNTIME_ERROR, "failed to allocate memory");
                 mrb_exc_raise(mrb, exc);
             }
             memcpy(sender->receiving->bytes + sender->receiving->size, s, len);

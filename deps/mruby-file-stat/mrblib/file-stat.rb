@@ -33,8 +33,10 @@ class File
         'mtime' => mtime,
         'ctime' => ctime,
       }
-      if respond_to? :birthtime
+      begin
         stats['birthtime'] = birthtime
+      rescue NotImplementedError
+        # skip
       end
 
       "#<#{self.class.to_s} #{stats.map{|k, v| "#{k}=#{v}"}.join(', ')}>"

@@ -46,6 +46,8 @@ provider quicly {
     probe receive(struct st_quicly_conn_t *conn, int64_t at, const char *dcid, const void *bytes, size_t bytes_len);
     probe version_switch(struct st_quicly_conn_t *conn, int64_t at, uint32_t new_version);
     probe idle_timeout(struct st_quicly_conn_t *conn, int64_t at);
+    probe handshake_timeout(struct st_quicly_conn_t *conn, int64_t at, int64_t elapsed, uint32_t rtt_smoothed);
+    probe initial_handshake_packet_exceed(struct st_quicly_conn_t *conn, int64_t at, uint64_t num_packets);
     probe stateless_reset_receive(struct st_quicly_conn_t *conn, int64_t at);
 
     probe crypto_handshake(struct st_quicly_conn_t *conn, int64_t at, int ret);

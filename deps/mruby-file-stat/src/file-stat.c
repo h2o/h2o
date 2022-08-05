@@ -2,12 +2,19 @@
  * original is https://github.com/ruby/ruby/blob/trunk/file.c
  */
 
+#include "config.h"
+
 #include "mruby.h"
 #include "mruby/string.h"
 #include "mruby/data.h"
 #include "mruby/error.h"
 #include "mruby/class.h"
 
+#include <stdlib.h>
+#ifdef HAVE_SYS_SYSMACROS_H
+#include <sys/sysmacros.h>
+#endif
+#include <time.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <string.h>
@@ -94,8 +101,6 @@
 #  define S_ISDIR(m) (((m) & S_IFMT) == S_IFDIR)
 #endif
 
-#include "config.h"
-
 #define STAT(p,s) stat(p,s)
 #ifdef HAVE_LSTAT
 #  define LSTAT(p,s) lstat(p,s)
@@ -162,8 +167,16 @@ file_s_lstat(mrb_state *mrb, mrb_value klass)
     tmp = mrb_convert_type(mrb, fname, MRB_TT_STRING, "String", "to_str");
   }
   path = mrb_str_to_cstr(mrb, tmp);
-  if (LSTAT(path, &st) == -1) {
-    mrb_sys_fail(mrb, path);
+  {
+    char *locale_path;
+    int lstat_result;
+
+    locale_path = mrb_locale_from_utf8(path, -1);
+    lstat_result = LSTAT(locale_path, &st);
+    mrb_locale_free(locale_path);
+    if (lstat_result == -1) {
+      mrb_sys_fail(mrb, path);
+    }
   }
 
   file_class = mrb_class_ptr(klass);
@@ -188,8 +201,16 @@ stat_initialize(mrb_state *mrb, mrb_value self)
     tmp = mrb_convert_type(mrb, fname, MRB_TT_STRING, "String", "to_str");
   }
   path = mrb_str_to_cstr(mrb, tmp);
-  if (STAT(path, &st) == -1) {
-    mrb_sys_fail(mrb, path);
+  {
+    char *locale_path;
+    int stat_result;
+
+    locale_path = mrb_locale_from_utf8(path, -1);
+    stat_result = STAT(locale_path, &st);
+    mrb_locale_free(locale_path);
+    if (stat_result == -1) {
+      mrb_sys_fail(mrb, path);
+    }
   }
 
   ptr = (struct stat *)DATA_PTR(self);
@@ -246,7 +267,12 @@ static mrb_value
 mrb_ll2num(mrb_state *mrb, long long t)
 {
   if (MRB_INT_MIN <= t && t <= MRB_INT_MAX) {
+/* mruby is 2b188ed8a191257f23ddf6f8a27bf1d3964587ed or later. */
+#ifdef SET_FIXNUM_VALUE
+    return mrb_int_value(mrb, (mrb_int)t);
+#else
     return mrb_fixnum_value((mrb_int)t);
+#endif
   } else {
     return mrb_float_value(mrb, (mrb_float)t);
   }
@@ -362,39 +388,95 @@ stat_rdev_minor(mrb_state *mrb, mrb_value self)
 }
 
 static mrb_value
-time_at_with_sec(mrb_state *mrb, long long sec)
+time_at_with_sec_nsec(mrb_state *mrb, time_t sec, long nsec)
 {
-  return mrb_funcall(mrb, mrb_obj_value(mrb_class_get(mrb, "Time")), "at", 1, mrb_ll2num(mrb, sec));
+  return mrb_funcall(mrb, mrb_obj_value(mrb_class_get(mrb, "Time")), "at", 2, mrb_ll2num(mrb, sec), mrb_ll2num(mrb, nsec / 1000));
+}
+
+static struct timespec
+stat_atimespec(const struct stat *st)
+{
+  struct timespec ts;
+  ts.tv_sec = st->st_atime;
+#if defined(HAVE_STRUCT_STAT_ST_ATIM)
+  ts.tv_nsec = st->st_atim.tv_nsec;
+#elif defined(HAVE_STRUCT_STAT_ST_ATIMESPEC)
+  ts.tv_nsec = st->st_atimespec.tv_nsec;
+#elif defined(HAVE_STRUCT_STAT_ST_ATIMENSEC)
+  ts.tv_nsec = (long)st->st_atimensec;
+#else
+  ts.tv_nsec = 0;
+#endif
+  return ts;
 }
 
 static mrb_value
 stat_atime(mrb_state *mrb, mrb_value self)
 {
-  return time_at_with_sec(mrb, get_stat(mrb, self)->st_atime);
+  struct timespec ts = stat_atimespec(get_stat(mrb, self));
+  return time_at_with_sec_nsec(mrb, ts.tv_sec, ts.tv_nsec);
+}
+
+static struct timespec
+stat_mtimespec(const struct stat *st)
+{
+  struct timespec ts;
+  ts.tv_sec = st->st_mtime;
+#if defined(HAVE_STRUCT_STAT_ST_MTIM)
+  ts.tv_nsec = st->st_mtim.tv_nsec;
+#elif defined(HAVE_STRUCT_STAT_ST_MTIMESPEC)
+  ts.tv_nsec = st->st_mtimespec.tv_nsec;
+#elif defined(HAVE_STRUCT_STAT_ST_MTIMENSEC)
+  ts.tv_nsec = (long)st->st_mtimensec;
+#else
+  ts.tv_nsec = 0;
+#endif
+  return ts;
 }
 
 static mrb_value
 stat_mtime(mrb_state *mrb, mrb_value self)
 {
-  return time_at_with_sec(mrb, get_stat(mrb, self)->st_mtime);
+  struct timespec ts = stat_mtimespec(get_stat(mrb, self));
+  return time_at_with_sec_nsec(mrb, ts.tv_sec, ts.tv_nsec);
+}
+
+static struct timespec
+stat_ctimespec(const struct stat *st)
+{
+  struct timespec ts;
+  ts.tv_sec = st->st_ctime;
+#if defined(HAVE_STRUCT_STAT_ST_CTIM)
+  ts.tv_nsec = st->st_ctim.tv_nsec;
+#elif defined(HAVE_STRUCT_STAT_ST_CTIMESPEC)
+  ts.tv_nsec = st->st_ctimespec.tv_nsec;
+#elif defined(HAVE_STRUCT_STAT_ST_CTIMENSEC)
+  ts.tv_nsec = (long)st->st_ctimensec;
+#else
+  ts.tv_nsec = 0;
+#endif
+  return ts;
 }
 
 static mrb_value
 stat_ctime(mrb_state *mrb, mrb_value self)
 {
-  return time_at_with_sec(mrb, get_stat(mrb, self)->st_ctime);
+  struct timespec ts = stat_ctimespec(get_stat(mrb, self));
+  return time_at_with_sec_nsec(mrb, ts.tv_sec, ts.tv_nsec);
 }
 
 #if defined(HAVE_STRUCT_STAT_ST_BIRTHTIMESPEC)
 static mrb_value
 stat_birthtime(mrb_state *mrb, mrb_value self)
 {
-  return time_at_with_sec(mrb, get_stat(mrb, self)->st_birthtimespec.tv_sec);
+  struct stat *st = get_stat(mrb, self);
+  const struct timespec *ts = &st->st_birthtimespec;
+  return time_at_with_sec_nsec(mrb, ts->tv_sec, ts->tv_nsec);
 }
-# define HAVE_METHOD_BIRTHTIME 1
 #elif defined(_WIN32)
 # define stat_birthtime stat_ctime
-# define HAVE_METHOD_BIRTHTIME 1
+#else
+# define stat_birthtime mrb_notimplement_m
 #endif
 
 static mrb_value
@@ -596,9 +678,9 @@ stat_writable_real_p(mrb_state *mrb, mrb_value self)
 static mrb_value
 stat_world_writable_p(mrb_state *mrb, mrb_value self)
 {
-#ifdef S_IROTH
+#ifdef S_IWOTH
   struct stat *st = get_stat(mrb, self);
-  if ((st->st_mode & (S_IROTH)) == S_IROTH) {
+  if ((st->st_mode & (S_IWOTH)) == S_IWOTH) {
     return mrb_fixnum_value(st->st_mode & (S_IRUGO|S_IWUGO|S_IXUGO));
   }
   else {
@@ -833,9 +915,7 @@ mrb_mruby_file_stat_gem_init(mrb_state* mrb)
   mrb_define_method(mrb, stat, "atime", stat_atime, MRB_ARGS_NONE());
   mrb_define_method(mrb, stat, "mtime", stat_mtime, MRB_ARGS_NONE());
   mrb_define_method(mrb, stat, "ctime", stat_ctime, MRB_ARGS_NONE());
-#ifdef HAVE_METHOD_BIRTHTIME
   mrb_define_method(mrb, stat, "birthtime", stat_birthtime, MRB_ARGS_NONE());
-#endif
   mrb_define_method(mrb, stat, "size", stat_size, MRB_ARGS_NONE());
   mrb_define_method(mrb, stat, "blksize", stat_blksize, MRB_ARGS_NONE());
   mrb_define_method(mrb, stat, "blocks", stat_blocks, MRB_ARGS_NONE());

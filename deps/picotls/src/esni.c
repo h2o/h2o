@@ -34,6 +34,7 @@
 #include <strings.h>
 #endif
 #include <time.h>
+#define OPENSSL_API_COMPAT 0x00908000L
 #include <openssl/err.h>
 #include <openssl/engine.h>
 #include <openssl/pem.h>
