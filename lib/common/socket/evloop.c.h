@@ -209,7 +209,17 @@ static size_t write_core(struct st_h2o_evloop_socket_t *sock, h2o_iovec_t **bufs
         return write_vecs(sock, bufs, bufcnt, 0);
     }
 
-    /* SSL */
+    /* SSL: flatten given vector if that has not been done yet; `*bufs` is guaranteed to have one slot available at the end; see
+     * `do_write_with_sendvec`, `init_write_buf`. */
+    if (sock->sendvec.callbacks != NULL) {
+        size_t veclen = flatten_sendvec(&sock->super, &sock->sendvec);
+        if (veclen == SIZE_MAX)
+            return SIZE_MAX;
+        sock->sendvec.callbacks = NULL;
+        (*bufs)[(*bufcnt)++] = h2o_iovec_init(sock->super._write_buf.flattened, veclen);
+    }
+
+    /* continue encrypting and writing, until we run out of data */
     size_t first_buf_written = 0;
     while (1) {
         /* write bytes already encrypted, if any */
@@ -255,15 +265,6 @@ static size_t write_core(struct st_h2o_evloop_socket_t *sock, h2o_iovec_t **bufs
         if (*bufcnt == 0 && sock->sendvec.callbacks == NULL)
             break;
         /* convert more cleartext to TLS records if possible, or bail out on fatal error */
-        if (sock->sendvec.callbacks != NULL) {
-            /* flatten given vector if that has not been done yet; `*bufs` is guaranteed to have one slot available at the end; see
-             * `do_write_with_sendvec`, `init_write_buf`. */
-            size_t veclen = flatten_sendvec(&sock->super, &sock->sendvec);
-            if (veclen == SIZE_MAX)
-                return SIZE_MAX;
-            sock->sendvec.callbacks = NULL;
-            (*bufs)[(*bufcnt)++] = h2o_iovec_init(sock->super._write_buf.flattened, veclen);
-        }
         if ((first_buf_written = generate_tls_records(&sock->super, bufs, bufcnt, first_buf_written)) == SIZE_MAX)
             break;
         /* as an optimization, if we have a flattened vector, release memory as soon as they have been encrypted */
