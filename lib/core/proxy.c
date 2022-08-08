@@ -813,7 +813,7 @@ static void on_generator_dispose(void *_self)
         h2o_buffer_dispose(&self->last_content_before_send);
     }
     h2o_doublebuffer_dispose(&self->sending);
-    if (self->generator_disposed)
+    if (self->generator_disposed != NULL)
         *self->generator_disposed = 1;
 }
 
