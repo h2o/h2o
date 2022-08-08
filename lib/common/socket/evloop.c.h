@@ -305,7 +305,12 @@ void write_pending(struct st_h2o_evloop_socket_t *sock)
     assert(sock->super._cb.write != NULL);
 
     /* write from buffer, if we have anything */
-    if (sock->super._write_buf.cnt != 0 || has_pending_ssl_bytes(sock->super.ssl)) {
+    int ssl_needs_flatten = sock->sendvec.callbacks != NULL && sock->super.ssl != NULL
+#if H2O_USE_KTLS
+        && sock->super.ssl->offload != H2O_SOCKET_SSL_OFFLOAD_ON
+#endif
+    ;
+    if (sock->super._write_buf.cnt != 0 || has_pending_ssl_bytes(sock->super.ssl) || ssl_needs_flatten) {
         size_t first_buf_written;
         if ((first_buf_written = write_core(sock, &sock->super._write_buf.bufs, &sock->super._write_buf.cnt)) != SIZE_MAX) {
             /* return if there's still pending data, adjusting buf[0] if necessary */
