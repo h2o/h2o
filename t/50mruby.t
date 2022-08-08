@@ -435,7 +435,7 @@ EOT
                 map { my $l = $_; chomp $l; $l } <$fh>;
             };
             @log = grep { $_ =~ /^\[h2o_mruby\]/ } @log;
-            like $log[$#log], qr{\[h2o_mruby\] in request:/:mruby raised:\s+(:$lineno:|)\s*hoge \(RuntimeError\)};
+            like $log[$#log], qr{\[h2o_mruby\] in request:127\.0\.0\.1:\d+/:mruby raised:\s+(:$lineno:|)\s*hoge \(RuntimeError\)};
         };
     };
     $tester->("flow style", <<"EOT", 6);

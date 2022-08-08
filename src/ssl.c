@@ -119,8 +119,9 @@ static void spawn_cache_cleanup_thread(SSL_CTX **_contexts, size_t num_contexts)
     pthread_t tid;
     pthread_attr_t attr;
     pthread_attr_init(&attr);
-    pthread_attr_setdetachstate(&attr, 1);
+    pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
     h2o_multithread_create_thread(&tid, &attr, cache_cleanup_thread, contexts);
+    pthread_attr_destroy(&attr);
 }
 
 static void setup_cache_disable(SSL_CTX **contexts, size_t num_contexts)
@@ -1112,8 +1113,9 @@ void ssl_setup_session_resumption(SSL_CTX **contexts, size_t num_contexts, struc
         pthread_t tid;
         pthread_attr_t attr;
         pthread_attr_init(&attr);
-        pthread_attr_setdetachstate(&attr, 1);
+        pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
         h2o_multithread_create_thread(&tid, &attr, conf.ticket.update_thread, NULL);
+        pthread_attr_destroy(&attr);
         size_t i;
         for (i = 0; i != num_contexts; ++i) {
             SSL_CTX *ctx = contexts[i];

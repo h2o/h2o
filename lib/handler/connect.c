@@ -800,6 +800,7 @@ static int udp_connect(struct st_connect_generator_t *self, struct st_server_add
             err = h2o_socket_get_error_string(errno, err);
             close(fd);
         }
+        set_last_error(self, ERROR_CLASS_CONNECT, err);
         return 0;
     }
 
