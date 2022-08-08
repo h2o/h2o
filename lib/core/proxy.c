@@ -48,6 +48,7 @@ struct rp_generator_t {
     unsigned req_done : 1;
     unsigned res_done : 1;
     unsigned pipe_inflight : 1;
+    int *generator_disposed;
 };
 
 static h2o_httpclient_ctx_t *get_client_ctx(h2o_req_t *req)
@@ -476,14 +477,18 @@ static void on_body_on_close(struct rp_generator_t *self, const char *errstr)
 
 static int on_body(h2o_httpclient_t *client, const char *errstr)
 {
+    int generator_disposed = 0;
     struct rp_generator_t *self = client->data;
 
     self->body_bytes_read = client->bytes_read.body;
     h2o_timer_unlink(&self->send_headers_timeout);
 
-    if (errstr != NULL)
+    if (errstr != NULL) {
+        self->generator_disposed = &generator_disposed;
         on_body_on_close(self, errstr);
-    if (!self->sending.inflight)
+        self->generator_disposed = NULL;
+    }
+    if (!generator_disposed && !self->sending.inflight)
         do_send(self);
 
     return 0;
@@ -808,6 +813,8 @@ static void on_generator_dispose(void *_self)
         h2o_buffer_dispose(&self->last_content_before_send);
     }
     h2o_doublebuffer_dispose(&self->sending);
+    if (self->generator_disposed != NULL)
+        *self->generator_disposed = 1;
 }
 
 static struct rp_generator_t *proxy_send_prepare(h2o_req_t *req)
@@ -817,6 +824,7 @@ static struct rp_generator_t *proxy_send_prepare(h2o_req_t *req)
     self->super.proceed = do_proceed;
     self->super.stop = do_stop;
     self->src_req = req;
+    self->generator_disposed = NULL;
     self->client = NULL; /* when connection establish timeouts, self->client remains unset by `h2o_httpclient_connect` */
     self->had_body_error = 0;
     self->up_req.is_head = h2o_memis(req->method.base, req->method.len, H2O_STRLIT("HEAD"));
