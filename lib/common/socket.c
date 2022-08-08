@@ -195,7 +195,8 @@ h2o_mem_recycle_conf_t h2o_socket_ssl_buffer_conf = {.memsize = H2O_SOCKET_DEFAU
 #endif
 };
 __thread h2o_mem_recycle_t h2o_socket_ssl_buffer_allocator = {&h2o_socket_ssl_buffer_conf};
-static __thread h2o_mem_recycle_t zerocopy_buffer_allocator = {&h2o_socket_ssl_buffer_conf};
+__thread h2o_mem_recycle_t h2o_socket_zerocopy_buffer_allocator = {&h2o_socket_ssl_buffer_conf};
+__thread size_t h2o_socket_num_zerocopy_buffers_inflight;
 
 int h2o_socket_use_ktls = 0;
 int h2o_socket_use_picotls_for_tls12 = 1;
@@ -288,7 +289,7 @@ static void dispose_write_buf(h2o_socket_t *sock)
 
 static void init_ssl_output_buffer(struct st_h2o_socket_ssl_t *ssl, int zerocopy)
 {
-    h2o_mem_recycle_t *allocator = zerocopy ? &zerocopy_buffer_allocator : &h2o_socket_ssl_buffer_allocator;
+    h2o_mem_recycle_t *allocator = zerocopy ? &h2o_socket_zerocopy_buffer_allocator : &h2o_socket_ssl_buffer_allocator;
     ptls_buffer_init(&ssl->output.buf, h2o_mem_alloc_recycle(allocator), allocator->conf->memsize);
     ssl->output.buf.is_allocated = 1; /* set to true, so that the allocated memory is freed when the buffer is expanded */
     ssl->output.buf.align_bits = allocator->conf->align_bits;
@@ -307,7 +308,7 @@ static void dispose_ssl_output_buffer(struct st_h2o_socket_ssl_t *ssl)
 
     if (!ssl->output.zerocopy_owned) {
         h2o_mem_recycle_t *allocator =
-            ssl->output.allocated_for_zerocopy ? &zerocopy_buffer_allocator : &h2o_socket_ssl_buffer_allocator;
+            ssl->output.allocated_for_zerocopy ? &h2o_socket_zerocopy_buffer_allocator : &h2o_socket_ssl_buffer_allocator;
         if (ssl->output.buf.capacity == allocator->conf->memsize) {
             h2o_mem_free_recycle(allocator, ssl->output.buf.base);
         } else {
@@ -2180,12 +2181,13 @@ void *zerocopy_buffers_release(struct st_h2o_socket_zerocopy_buffers_t *buffers,
 void h2o_socket_clear_recycle(int full)
 {
     h2o_mem_clear_recycle(&h2o_socket_ssl_buffer_allocator, full);
-    h2o_mem_clear_recycle(&zerocopy_buffer_allocator, full);
+    h2o_mem_clear_recycle(&h2o_socket_zerocopy_buffer_allocator, full);
 }
 
 int h2o_socket_recycle_is_empty(void)
 {
-    return h2o_mem_recycle_is_empty(&h2o_socket_ssl_buffer_allocator) && h2o_mem_recycle_is_empty(&zerocopy_buffer_allocator);
+    return h2o_mem_recycle_is_empty(&h2o_socket_ssl_buffer_allocator) &&
+           h2o_mem_recycle_is_empty(&h2o_socket_zerocopy_buffer_allocator);
 }
 
 #if H2O_USE_EBPF_MAP

@@ -263,17 +263,33 @@ subtest 'extensions' => sub {
                         system("nghttp -n --weight=22 https://localhost:$server->{tls_port}/");
                     }
                 },
-                '%{connection-id}x %{ssl.protocol-version}x %{ssl.session-reused}x %{ssl.cipher}x %{ssl.cipher-bits}x %{ssl.server-name}x %{http2.stream-id}x %{http2.priority.received}x',
+                '%{connection-id}x %{request-id}x %{ssl.protocol-version}x %{ssl.session-reused}x %{ssl.cipher}x %{ssl.cipher-bits}x %{ssl.server-name}x %{http2.stream-id}x %{http2.priority.received}x',
                 do {
                     my @expected = (
-                        qr{^2 - - - - - - -$}is,
-                        qr{^3 $tlsver 0 $cipher (?:128|256) localhost - -$}is,
-                        qr{^4 $tlsver 0 $cipher (?:128|256) - - -$}is,
+                        qr{^2 1 - - - - - - -$}is,
+                        qr{^3 1 $tlsver 0 $cipher (?:128|256) localhost - -$}is,
+                        qr{^4 1 $tlsver 0 $cipher (?:128|256) - - -$}is,
                     );
                     if (prog_exists("nghttp")) {
+                        my $check = sub {
+                            my ($line, $re) = @_;
+                            my $ok = $line =~ /$re/;
+                            if ($ok) {
+                                my ($req_id, $stream_id) = ($1, $2);
+                                pass "basic";
+                                is $req_id, $stream_id, "request-id";
+                                ok $stream_id % 2 == 1, "stream ID is odd";
+                            } else {
+                                fail "basic";
+                            }
+                        };
                         push @expected, +(
-                            qr{^5 $tlsver 0 $cipher (?:128|256) localhost [0-9]*[13579] 0:[0-9]+:16}is,
-                            qr{^6 $tlsver 0 $cipher (?:128|256) localhost [0-9]*[13579] 0:[0-9]+:22}is,
+                            sub {
+                                $check->(shift, qr{^5 ([0-9]+) $tlsver 0 $cipher (?:128|256) localhost ([0-9]+) 0:[0-9]+:16}is);
+                            },
+                            sub {
+                                $check->(shift, qr{^6 ([0-9]+) $tlsver 0 $cipher (?:128|256) localhost ([0-9]+) 0:[0-9]+:22}is);
+                            },
                         );
                     }
                     \@expected;
@@ -303,7 +319,7 @@ subtest 'error' => sub {
             system("curl --silent http://127.0.0.1:$server->{port}/fastcgi > /dev/null");
         },
         '%{error}x',
-        [ qr{^\[lib/handler/fastcgi\.c\] in request:/fastcgi:connection failed:}s ],
+        [ qr{^\[lib/handler/fastcgi\.c\] in request:127\.0\.0\.1:\d+/fastcgi:connection failed:}s ],
     );
 };
 
