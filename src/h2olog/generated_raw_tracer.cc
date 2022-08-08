@@ -371,7 +371,7 @@ struct h2olog_event_t {
     struct { // quicly:ack_delay_received
       typeof_st_quicly_conn_t__master_id conn_master_id;
       int64_t at;
-      int64_t ack_delay;
+      uint64_t ack_delay;
     } ack_delay_received;
     struct { // quicly:ack_send
       typeof_st_quicly_conn_t__master_id conn_master_id;
@@ -452,7 +452,7 @@ struct h2olog_event_t {
     struct { // quicly:reset_stream_receive
       typeof_st_quicly_conn_t__master_id conn_master_id;
       int64_t at;
-      int64_t stream_id;
+      uint64_t stream_id;
       uint16_t error_code;
       uint64_t final_size;
     } reset_stream_receive;
@@ -465,7 +465,7 @@ struct h2olog_event_t {
     struct { // quicly:stop_sending_receive
       typeof_st_quicly_conn_t__master_id conn_master_id;
       int64_t at;
-      int64_t stream_id;
+      uint64_t stream_id;
       uint16_t error_code;
     } stop_sending_receive;
     struct { // quicly:max_data_send
@@ -499,7 +499,7 @@ struct h2olog_event_t {
     struct { // quicly:max_stream_data_receive
       typeof_st_quicly_conn_t__master_id conn_master_id;
       int64_t at;
-      int64_t stream_id;
+      uint64_t stream_id;
       uint64_t maximum;
     } max_stream_data_receive;
     struct { // quicly:new_token_send
@@ -2445,7 +2445,7 @@ struct h2olog_event_t {
     struct { // quicly:ack_delay_received
       typeof_st_quicly_conn_t__master_id conn_master_id;
       int64_t at;
-      int64_t ack_delay;
+      uint64_t ack_delay;
     } ack_delay_received;
     struct { // quicly:ack_send
       typeof_st_quicly_conn_t__master_id conn_master_id;
@@ -2526,7 +2526,7 @@ struct h2olog_event_t {
     struct { // quicly:reset_stream_receive
       typeof_st_quicly_conn_t__master_id conn_master_id;
       int64_t at;
-      int64_t stream_id;
+      uint64_t stream_id;
       uint16_t error_code;
       uint64_t final_size;
     } reset_stream_receive;
@@ -2539,7 +2539,7 @@ struct h2olog_event_t {
     struct { // quicly:stop_sending_receive
       typeof_st_quicly_conn_t__master_id conn_master_id;
       int64_t at;
-      int64_t stream_id;
+      uint64_t stream_id;
       uint16_t error_code;
     } stop_sending_receive;
     struct { // quicly:max_data_send
@@ -2573,7 +2573,7 @@ struct h2olog_event_t {
     struct { // quicly:max_stream_data_receive
       typeof_st_quicly_conn_t__master_id conn_master_id;
       int64_t at;
-      int64_t stream_id;
+      uint64_t stream_id;
       uint64_t maximum;
     } max_stream_data_receive;
     struct { // quicly:new_token_send
@@ -3662,7 +3662,7 @@ int trace_quicly__ack_delay_received(struct pt_regs *ctx) {
   { // int64_t at
     bpf_usdt_readarg(2, ctx, &event.ack_delay_received.at);
   }
-  { // int64_t ack_delay
+  { // uint64_t ack_delay
     bpf_usdt_readarg(3, ctx, &event.ack_delay_received.ack_delay);
   }
 
@@ -4019,7 +4019,7 @@ int trace_quicly__reset_stream_receive(struct pt_regs *ctx) {
   { // int64_t at
     bpf_usdt_readarg(2, ctx, &event.reset_stream_receive.at);
   }
-  { // int64_t stream_id
+  { // uint64_t stream_id
     bpf_usdt_readarg(3, ctx, &event.reset_stream_receive.stream_id);
   }
   { // uint16_t error_code
@@ -4074,7 +4074,7 @@ int trace_quicly__stop_sending_receive(struct pt_regs *ctx) {
   { // int64_t at
     bpf_usdt_readarg(2, ctx, &event.stop_sending_receive.at);
   }
-  { // int64_t stream_id
+  { // uint64_t stream_id
     bpf_usdt_readarg(3, ctx, &event.stop_sending_receive.stream_id);
   }
   { // uint16_t error_code
@@ -4227,7 +4227,7 @@ int trace_quicly__max_stream_data_receive(struct pt_regs *ctx) {
   { // int64_t at
     bpf_usdt_readarg(2, ctx, &event.max_stream_data_receive.at);
   }
-  { // int64_t stream_id
+  { // uint64_t stream_id
     bpf_usdt_readarg(3, ctx, &event.max_stream_data_receive.stream_id);
   }
   { // uint64_t maximum

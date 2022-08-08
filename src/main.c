@@ -83,6 +83,7 @@
 #include "h2o/http3_server.h"
 #include "h2o/serverutil.h"
 #include "h2o/file.h"
+#include "h2o/probe_log.h"
 #include "h2o/version.h"
 #if H2O_USE_MRUBY
 #include "h2o/mruby_.h"
@@ -253,6 +254,7 @@ static struct {
     size_t num_listeners;
     char *pid_file;
     char *error_log;
+    char *probe_log; // path of the unix domain socket
     int max_connections;
     /**
      * In addition to max_connections, maximum number of H3 connections can be further capped by this configuration variable.
@@ -316,6 +318,7 @@ static struct {
     .num_listeners = 0,
     .pid_file = NULL,
     .error_log = NULL,
+    .probe_log = NULL,
     .max_connections = 1024,
     .max_quic_connections = INT_MAX, /* (INT_MAX = i.e., allow up to max_connections) */
     .soft_connection_limit = INT_MAX,
@@ -2234,6 +2237,12 @@ static int on_config_error_log(h2o_configurator_command_t *cmd, h2o_configurator
     return 0;
 }
 
+static int on_config_probe_log(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    conf.probe_log = h2o_strdup(NULL, node->data.scalar, SIZE_MAX).base;
+    return 0;
+}
+
 static int on_config_max_connections(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     return h2o_configurator_scanf(cmd, node, "%d", &conf.max_connections);
@@ -3622,6 +3631,8 @@ static void setup_configurators(void)
                                         on_config_pid_file);
         h2o_configurator_define_command(c, "error-log", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_error_log);
+        h2o_configurator_define_command(c, "probe-log", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                        on_config_probe_log);
         h2o_configurator_define_command(c, "max-connections", H2O_CONFIGURATOR_FLAG_GLOBAL, on_config_max_connections);
         h2o_configurator_define_command(c, "max-quic-connections", H2O_CONFIGURATOR_FLAG_GLOBAL, on_config_max_quic_connections);
         h2o_configurator_define_command(c, "soft-connection-limit", H2O_CONFIGURATOR_FLAG_GLOBAL, on_config_soft_connection_limit);
@@ -4039,6 +4050,13 @@ int main(int argc, char **argv)
     if (conf.error_log != NULL) {
         if ((error_log_fd = h2o_access_log_open_log(conf.error_log)) == -1)
             return EX_CONFIG;
+    }
+    if (conf.probe_log != NULL) {
+        int ret = h2o_setup_probe_log(conf.probe_log);
+        if (ret != 0) {
+            h2o_error_printf("failed to setup probe-log:%s:%s\n", conf.probe_log, strerror(ret));
+            return EX_CONFIG;
+        }
     }
     setvbuf(stdout, NULL, _IOLBF, 0);
     setvbuf(stderr, NULL, _IOLBF, 0);
