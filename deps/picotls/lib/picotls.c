@@ -29,6 +29,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include <pthread.h>
 #ifdef _WINDOWS
 #include "wincompat.h"
 #else
@@ -1291,8 +1292,7 @@ static void log_client_random(ptls_t *tls)
     char buf[sizeof(tls->client_random) * 2 + 1];
     /* FIXME probe says the argument is `void *` but we emit hexstring? */
     PTLS_PROBE(CLIENT_RANDOM, tls, ptls_hexdump(buf, tls->client_random, sizeof(tls->client_random)));
-    PTLSLOG_CONN(client_random, tls,
-                 { PTLSLOG_ELEMENT_SAFESTR(bytes, ptls_hexdump(buf, tls->client_random, sizeof(tls->client_random))); });
+    PTLSLOG_CONN(client_random, tls, { PTLSLOG_ELEMENT_HEXDUMP(bytes, tls->client_random, sizeof(tls->client_random)); });
 }
 
 #define SESSION_IDENTIFIER_MAGIC "ptls0001" /* the number should be changed upon incompatible format change */
@@ -5647,7 +5647,7 @@ char *ptls_hexdump(char *buf, const void *_src, size_t len)
     return buf;
 }
 
-size_t ptls_escape_json_unsafe_string(char *buf, const void *bytes, size_t len)
+static size_t escape_json_unsafe_string(char *buf, const void *bytes, size_t len)
 {
     char *dst = buf;
     const uint8_t *src = bytes, *end = src + len;
@@ -5702,15 +5702,71 @@ size_t ptls_escape_json_unsafe_string(char *buf, const void *bytes, size_t len)
     return (size_t)(dst - buf);
 }
 
-int ptlslog_fd = -1;
+// Only PTSLOG_MAXCONN of clients can be attached to the process at a time
+#define PTLSLOG_MAXCONN (8)
+struct st_ptlslog_context_t {
+    int fds[PTLSLOG_MAXCONN];
+    size_t num_active_fds;
+    int initialized;
+    pthread_mutex_t mutex;
+} ptlslog = {
+    .fds = {0},
+    .num_active_fds = 0,
+    .initialized = 0,
+    .mutex = PTHREAD_MUTEX_INITIALIZER,
+};
+
+int ptlslog_is_active(void)
+{
+    return ptlslog.num_active_fds > 0;
+}
+
+int ptlslog_add_fd(int fd)
+{
+    int ret = 0;
+    pthread_mutex_lock(&ptlslog.mutex);
+    if (PTLS_UNLIKELY(ptlslog.num_active_fds == PTLSLOG_MAXCONN))
+        goto Exit;
+
+    if (!ptlslog.initialized) {
+        for (int i = 0; i < PTLSLOG_MAXCONN; ++i) {
+            ptlslog.fds[i] = -1;
+        }
+        ptlslog.initialized = 1;
+    }
+
+    for (int i = 0; i < PTLSLOG_MAXCONN; ++i) {
+        if (ptlslog.fds[i] == -1) {
+            ptlslog.fds[i] = fd;
+            ++ptlslog.num_active_fds;
+            goto Exit;
+        }
+    }
+    ret = 1;
+
+Exit:
+    pthread_mutex_unlock(&ptlslog.mutex);
+
+    return ret;
+}
 
 void ptlslog__do_write(const ptls_buffer_t *buf)
 {
-    ssize_t ret;
-    while ((ret = write(ptlslog_fd, buf->base, buf->off)) == -1 && errno == EINTR)
-        ;
-    if (ret == -1 && errno != EAGAIN)
-        ptlslog_fd = -1;
+    pthread_mutex_lock(&ptlslog.mutex);
+    for (int i = 0, num_handled = 0; i < PTLSLOG_MAXCONN && num_handled < ptlslog.num_active_fds; ++i) {
+        if (ptlslog.fds[i] != -1) {
+            ++num_handled;
+
+            ssize_t ret;
+            while ((ret = write(ptlslog.fds[i], buf->base, buf->off)) == -1 && errno == EINTR)
+                ;
+            if (ret == -1 && errno != EAGAIN) {
+                ptlslog.fds[i] = -1;
+                --ptlslog.num_active_fds;
+            }
+        }
+    }
+    pthread_mutex_unlock(&ptlslog.mutex);
 }
 
 int ptlslog__do_pushv(ptls_buffer_t *buf, const void *p, size_t l)
@@ -5728,7 +5784,17 @@ int ptlslog__do_push_unsafestr(ptls_buffer_t *buf, const char *s, size_t l)
     if (ptls_buffer_reserve(buf, l * 4 + 1) != 0)
         return 0;
 
-    buf->off += ptls_escape_json_unsafe_string((char *)(buf->base + buf->off), s, l);
+    buf->off += escape_json_unsafe_string((char *)(buf->base + buf->off), s, l);
+    return 1;
+}
+
+int ptlslog__do_push_hexdump(ptls_buffer_t *buf, const void *s, size_t l)
+{
+    if (ptls_buffer_reserve(buf, l * 2 + 1) != 0)
+        return 0;
+
+    ptls_hexdump((char *)(buf->base + buf->off), s, l);
+    buf->off += l * 2;
     return 1;
 }
 

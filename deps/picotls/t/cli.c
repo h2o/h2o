@@ -74,14 +74,7 @@ static void setup_ptlslog(const char *fn)
         fprintf(stderr, "failed to open file:%s:%s\n", fn, strerror(errno));
         exit(1);
     }
-    ptlslog_fd = fd;
-}
-
-static void setup_ptlslog_from_env(void)
-{
-    const char *fn = getenv("PTLSLOG");
-    if (fn)
-        setup_ptlslog(fn);
+    ptlslog_add_fd(fd);
 }
 
 static int handle_connection(int sockfd, ptls_context_t *ctx, const char *server_name, const char *input_file,
@@ -368,9 +361,9 @@ static void usage(const char *cmd)
            "  -c certificate-file  certificate chain used for server authentication\n"
            "  -i file              a file to read from and send to the peer (default: stdin)\n"
            "  -I                   keep send side open after sending all data (client-only)\n"
+           "  -j log-file          file to log probe events in JSON-Lines\n"
            "  -k key-file          specifies the credentials for signing the certificate\n"
            "  -l log-file          file to log events (incl. traffic secrets)\n"
-           "  -j log-file          file to log probe events in JSON-Lines (PTLSOG=log-file is equivalent)\n"
            "  -n                   negotiates the key exchange method (i.e. wait for HRR)\n"
            "  -N named-group       named group to be used (default: secp256r1)\n"
            "  -s session-file      file to read/write the session ticket\n"
@@ -426,7 +419,6 @@ int main(int argc, char **argv)
 #endif
 
     res_init();
-    setup_ptlslog_from_env();
 
     ptls_key_exchange_algorithm_t *key_exchanges[128] = {NULL};
     ptls_cipher_suite_t *cipher_suites[128] = {NULL};
