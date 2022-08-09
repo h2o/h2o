@@ -161,7 +161,7 @@ static void on_error(h2o_httpclient_ctx_t *ctx, h2o_mem_pool_t *pool, const char
     va_start(args, fmt);
     int errlen = vsnprintf(errbuf, sizeof(errbuf), fmt, args);
     va_end(args);
-    fprintf(stderr, "%.*s\n", errlen, errbuf);
+    fprintf(stderr, "[httpclient.c] %.*s\n", errlen, errbuf);
 
     /* defer using zero timeout to send pending GOAWAY frame */
     create_timeout(ctx->loop, 0, on_exit_deferred, NULL);
