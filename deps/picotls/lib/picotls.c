@@ -5761,6 +5761,7 @@ void ptlslog__do_write(const ptls_buffer_t *buf)
             while ((ret = write(ptlslog.fds[i], buf->base, buf->off)) == -1 && errno == EINTR)
                 ;
             if (ret == -1 && errno != EAGAIN) {
+                close(ptlslog.fds[i]);
                 ptlslog.fds[i] = -1;
                 --ptlslog.num_active_fds;
             }
