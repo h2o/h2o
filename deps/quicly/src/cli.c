@@ -1025,6 +1025,7 @@ static void usage(const char *cmd)
            "  -G                        enable UDP generic segmentation offload\n"
            "  -i interval               interval to reissue requests (in milliseconds)\n"
            "  -I timeout                idle timeout (in milliseconds; default: 600,000)\n"
+           "  -j log-file               file to log probe events in JSON-Lines\n"
            "  -K num-packets            perform key update every num-packets packets\n"
            "  -l log-file               file to log traffic secrets\n"
            "  -M <bytes>                max stream data (in bytes; default: 1MB)\n"
@@ -1074,14 +1075,7 @@ static void setup_ptlslog(const char *fn)
         fprintf(stderr, "failed to open file:%s:%s\n", fn, strerror(errno));
         exit(1);
     }
-    ptlslog_fd = fd;
-}
-
-static void setup_ptlslog_from_env(void)
-{
-    const char *fn = getenv("PTLSLOG");
-    if (fn)
-        setup_ptlslog(fn);
+    ptlslog_add_fd(fd);
 }
 
 int main(int argc, char **argv)
@@ -1103,7 +1097,6 @@ int main(int argc, char **argv)
 
     setup_session_cache(ctx.tls);
     quicly_amend_ptls_context(ctx.tls);
-    setup_ptlslog_from_env();
 
     {
         uint8_t secret[PTLS_MAX_DIGEST_SIZE];

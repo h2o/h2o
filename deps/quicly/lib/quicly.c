@@ -93,7 +93,11 @@ KHASH_MAP_INIT_INT64(quicly_stream_t, quicly_stream_t *)
 #else
 #define QUICLY_PROBE(label, conn, ...) QUICLY_TRACER(label, conn, __VA_ARGS__)
 #endif
-#define QUICLY_PROBE_HEXDUMP(s, l) PTLS_HEXDUMP((s), (l))
+#define QUICLY_PROBE_HEXDUMP(s, l)                                                                                                 \
+    ({                                                                                                                             \
+        size_t _l = (l);                                                                                                           \
+        ptls_hexdump(alloca(_l * 2 + 1), (s), _l);                                                                                 \
+    })
 #define QUICLY_PROBE_ESCAPE_UNSAFE_STRING(s, l)                                                                                    \
     ({                                                                                                                             \
         size_t _l = (l);                                                                                                           \
@@ -3305,8 +3309,7 @@ static int do_allocate_frame(quicly_conn_t *conn, quicly_send_context_t *s, size
     QUICLY_LOG_CONN(packet_prepare, conn, {
         PTLSLOG_ELEMENT_SIGNED(time, conn->stash.now);
         PTLSLOG_ELEMENT_UNSIGNED(first_octet, s->current.first_byte);
-        PTLSLOG_ELEMENT_SAFESTR(
-            dcid, PTLS_HEXDUMP(conn->super.remote.cid_set.cids[0].cid.cid, conn->super.remote.cid_set.cids[0].cid.len));
+        PTLSLOG_ELEMENT_HEXDUMP(dcid, conn->super.remote.cid_set.cids[0].cid.cid, conn->super.remote.cid_set.cids[0].cid.len);
     });
 
     /* emit header */
@@ -4093,7 +4096,7 @@ static int send_resumption_token(quicly_conn_t *conn, quicly_send_context_t *s)
     QUICLY_PROBE(NEW_TOKEN_SEND, conn, conn->stash.now, tokenbuf.base, tokenbuf.off, sent->data.new_token.generation);
     QUICLY_LOG_CONN(new_token_send, conn, {
         PTLSLOG_ELEMENT_SIGNED(time, conn->stash.now);
-        PTLSLOG_ELEMENT_SAFESTR(token, PTLS_HEXDUMP(tokenbuf.base, tokenbuf.off));
+        PTLSLOG_ELEMENT_HEXDUMP(token, tokenbuf.base, tokenbuf.off);
         PTLSLOG_ELEMENT_UNSIGNED(generation, sent->data.new_token.generation);
     });
     ret = 0;
@@ -4382,9 +4385,8 @@ static int send_new_connection_id(quicly_conn_t *conn, quicly_send_context_t *s,
         PTLSLOG_ELEMENT_SIGNED(time, conn->stash.now);
         PTLSLOG_ELEMENT_UNSIGNED(sequence, new_cid->sequence);
         PTLSLOG_ELEMENT_UNSIGNED(retire_prior_to, retire_prior_to);
-        PTLSLOG_ELEMENT_SAFESTR(cid, PTLS_HEXDUMP(new_cid->cid.cid, new_cid->cid.len));
-        PTLSLOG_ELEMENT_SAFESTR(stateless_reset_token,
-                                PTLS_HEXDUMP(new_cid->stateless_reset_token, QUICLY_STATELESS_RESET_TOKEN_LEN));
+        PTLSLOG_ELEMENT_HEXDUMP(cid, new_cid->cid.cid, new_cid->cid.len);
+        PTLSLOG_ELEMENT_HEXDUMP(stateless_reset_token, new_cid->stateless_reset_token, QUICLY_STATELESS_RESET_TOKEN_LEN);
     });
 
     return 0;
@@ -4819,8 +4821,7 @@ int quicly_send(quicly_conn_t *conn, quicly_address_t *dest, quicly_address_t *s
     QUICLY_LOG_CONN(send, conn, {
         PTLSLOG_ELEMENT_SIGNED(time, conn->stash.now);
         PTLSLOG_ELEMENT_SIGNED(state, conn->super.state);
-        PTLSLOG_ELEMENT_SAFESTR(
-            dcid, PTLS_HEXDUMP(conn->super.remote.cid_set.cids[0].cid.cid, conn->super.remote.cid_set.cids[0].cid.len));
+        PTLSLOG_ELEMENT_HEXDUMP(dcid, conn->super.remote.cid_set.cids[0].cid.cid, conn->super.remote.cid_set.cids[0].cid.len);
     });
 
     if (conn->super.state >= QUICLY_STATE_CLOSING) {
@@ -5459,7 +5460,7 @@ static int handle_new_token_frame(quicly_conn_t *conn, struct st_quicly_handle_p
     QUICLY_PROBE(NEW_TOKEN_RECEIVE, conn, conn->stash.now, frame.token.base, frame.token.len);
     QUICLY_LOG_CONN(new_token_receive, conn, {
         PTLSLOG_ELEMENT_SIGNED(time, conn->stash.now);
-        PTLSLOG_ELEMENT_SAFESTR(token, PTLS_HEXDUMP(frame.token.base, frame.token.len));
+        PTLSLOG_ELEMENT_HEXDUMP(token, frame.token.base, frame.token.len);
     });
     if (conn->super.ctx->save_resumption_token == NULL)
         return 0;
@@ -5766,8 +5767,8 @@ static int handle_new_connection_id_frame(quicly_conn_t *conn, struct st_quicly_
         PTLSLOG_ELEMENT_SIGNED(time, conn->stash.now);
         PTLSLOG_ELEMENT_UNSIGNED(sequence, frame.sequence);
         PTLSLOG_ELEMENT_UNSIGNED(retire_prior_to, frame.retire_prior_to);
-        PTLSLOG_ELEMENT_SAFESTR(cid, PTLS_HEXDUMP(frame.cid.base, frame.cid.len));
-        PTLSLOG_ELEMENT_SAFESTR(stateless_reset_token, PTLS_HEXDUMP(frame.stateless_reset_token, QUICLY_STATELESS_RESET_TOKEN_LEN));
+        PTLSLOG_ELEMENT_HEXDUMP(cid, frame.cid.base, frame.cid.len);
+        PTLSLOG_ELEMENT_HEXDUMP(stateless_reset_token, frame.stateless_reset_token, QUICLY_STATELESS_RESET_TOKEN_LEN);
     });
 
     if (frame.sequence < conn->super.remote.largest_retire_prior_to) {
@@ -6128,7 +6129,7 @@ int quicly_accept(quicly_conn_t **conn, quicly_context_t *ctx, struct sockaddr *
                  QUICLY_PROBE_HEXDUMP(packet->cid.dest.encrypted.base, packet->cid.dest.encrypted.len), address_token);
     QUICLY_LOG_CONN(accept, *conn, {
         PTLSLOG_ELEMENT_SIGNED(time, (*conn)->stash.now);
-        PTLSLOG_ELEMENT_SAFESTR(dcid, PTLS_HEXDUMP(packet->cid.dest.encrypted.base, packet->cid.dest.encrypted.len));
+        PTLSLOG_ELEMENT_HEXDUMP(dcid, packet->cid.dest.encrypted.base, packet->cid.dest.encrypted.len);
         PTLSLOG_ELEMENT_PTR(address_token, address_token);
     });
     QUICLY_PROBE(PACKET_RECEIVED, *conn, (*conn)->stash.now, pn, payload.base, payload.len, get_epoch(packet->octets.base[0]));
@@ -6186,8 +6187,8 @@ int quicly_receive(quicly_conn_t *conn, struct sockaddr *dest_addr, struct socka
                  packet->octets.len);
     QUICLY_LOG_CONN(receive, conn, {
         PTLSLOG_ELEMENT_SIGNED(time, conn->stash.now);
-        PTLSLOG_ELEMENT_SAFESTR(dcid, PTLS_HEXDUMP(packet->cid.dest.encrypted.base, packet->cid.dest.encrypted.len));
-        PTLSLOG_ELEMENT_SAFESTR(bytes, PTLS_HEXDUMP(packet->octets.base, packet->octets.len));
+        PTLSLOG_ELEMENT_HEXDUMP(dcid, packet->cid.dest.encrypted.base, packet->cid.dest.encrypted.len);
+        PTLSLOG_ELEMENT_HEXDUMP(bytes, packet->octets.base, packet->octets.len);
     });
 
     if (is_stateless_reset(conn, packet)) {
