@@ -28,16 +28,16 @@
 
 #include "h2o.h"
 #include "h2o/multithread.h"
-#include "h2o/probe_log.h"
+#include "h2o/h2olog_socket.h"
 #include "cloexec.h"
 
-struct st_probe_log_t {
+struct st_h2olog_socket_context_t {
     int listen_fd;
 };
 
 static void *thread_main(void *_ctx)
 {
-    struct st_probe_log_t *ctx = _ctx;
+    struct st_h2olog_socket_context_t *ctx = _ctx;
 
     while (1) {
         int fd = accept(ctx->listen_fd, NULL, 0);
@@ -58,16 +58,16 @@ static void *thread_main(void *_ctx)
     return NULL;
 }
 
-int h2o_setup_probe_log(const char *path)
+int h2o_setup_h2olog_socket(const char *socket_path)
 {
     struct sockaddr_un sa;
 
-    if (strlen(path) >= sizeof(sa.sun_path)) {
+    if (strlen(socket_path) >= sizeof(sa.sun_path)) {
         return EINVAL;
     }
 
     sa.sun_family = AF_UNIX;
-    strcpy(sa.sun_path, path);
+    strcpy(sa.sun_path, socket_path);
 
     int listen_fd;
     if ((listen_fd = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
@@ -83,8 +83,8 @@ int h2o_setup_probe_log(const char *path)
         return EINVAL;
     }
 
-    struct st_probe_log_t *ctx = h2o_mem_alloc(sizeof(*ctx));
-    *ctx = (struct st_probe_log_t){
+    struct st_h2olog_socket_context_t *ctx = h2o_mem_alloc(sizeof(*ctx));
+    *ctx = (struct st_h2olog_socket_context_t){
         .listen_fd = listen_fd,
     };
 

@@ -19,9 +19,9 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-#ifndef h2o__probe_log_h
-#define h2o__probe_log_h
+#ifndef h2o__h2olog_socket_h
+#define h2o__h2olog_socket_h
 
-int h2o_setup_probe_log(const char *path);
+int h2o_setup_h2olog_socket(const char *socket_path);
 
 #endif

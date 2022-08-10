@@ -13,7 +13,7 @@ my $client_prog = bindir() . "/h2o-httpclient";
 plan skip_all => "$client_prog not found" unless -e $client_prog;
 
 my $tempdir = tempdir(CLEANUP => 1);
-my $probe_log = "$tempdir/probe-log";
+my $h2olog_socket = "$tempdir/h2olog.sock";
 
 my $quic_port = empty_port({
     host  => "127.0.0.1",
@@ -21,7 +21,7 @@ my $quic_port = empty_port({
 });
 
 my $server = spawn_h2o({ conf => <<"EOT" });
-probe-log: $probe_log
+h2olog-socket: $h2olog_socket
 listen:
   type: quic
   port: $quic_port
@@ -51,8 +51,8 @@ for my $i(1 ... 3) {
   # parent
   my $client = IO::Socket::UNIX->new(
       Type => SOCK_STREAM(),
-      Peer => $probe_log,
-  ) or die "Cannot connect to a unix domain socket '$probe_log': $!";
+      Peer => $h2olog_socket,
+  ) or die "Cannot connect to a unix domain socket '$h2olog_socket': $!";
 
   my $t0 = time();
   my $timeout = 2;
@@ -70,7 +70,7 @@ for my $i(1 ... 3) {
 
   diag($logs . "\nlength: " . length($logs)) if $ENV{TEST_DEBUG};
 
-  ok $logs, "something is written to the probe log ($i)";
+  ok $logs, "something is written to h2olog socket '$h2olog_socket' ($i)";
   # check if the logs are valid JSON-Lines
   for my $json (split /\n/, $logs) {
     unless (eval { decode_json($json) }) {
