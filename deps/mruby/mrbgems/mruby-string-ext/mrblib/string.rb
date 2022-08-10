@@ -93,7 +93,7 @@ class String
   #    "hello".rstrip!      #=> nil
   #
   def rstrip!
-    raise RuntimeError, "can't modify frozen String" if frozen?
+    raise FrozenError, "can't modify frozen String" if frozen?
     s = self.rstrip
     (s == self) ? nil : self.replace(s)
   end
@@ -111,36 +111,6 @@ class String
     (s == self) ? nil : self.replace(s)
   end
 
-  ##
-  # call-seq:
-  #    str.casecmp(other_str)   -> -1, 0, +1 or nil
-  #
-  # Case-insensitive version of <code>String#<=></code>.
-  #
-  #    "abcdef".casecmp("abcde")     #=> 1
-  #    "aBcDeF".casecmp("abcdef")    #=> 0
-  #    "abcdef".casecmp("abcdefg")   #=> -1
-  #    "abcdef".casecmp("ABCDEF")    #=> 0
-  #
-  def casecmp(str)
-    self.downcase <=> str.__to_str.downcase
-  rescue NoMethodError
-    nil
-  end
-
-  ##
-  # call-seq:
-  #   str.casecmp?(other)  -> true, false, or nil
-  #
-  # Returns true if str and other_str are equal after case folding,
-  # false if they are not equal, and nil if other_str is not a string.
-
-  def casecmp?(str)
-    c = self.casecmp(str)
-    return nil if c.nil?
-    return c == 0
-  end
-
   def partition(sep)
     raise TypeError, "type mismatch: #{sep.class} given" unless sep.is_a? String
     n = index(sep)
@@ -148,7 +118,7 @@ class String
       m = n + sep.size
       [ slice(0, n), sep, slice(m, size - m) ]
     else
-      [ self, "", "" ]
+      [ self[0..-1], "", "" ]
     end
   end
 
@@ -181,7 +151,7 @@ class String
   #
   def slice!(arg1, arg2=nil)
     raise FrozenError, "can't modify frozen String" if frozen?
-    raise "wrong number of arguments (for 1..2)" if arg1.nil? && arg2.nil?
+    raise ArgumentError, "wrong number of arguments (expected 1..2)" if arg1.nil? && arg2.nil?
 
     if !arg1.nil? && !arg2.nil?
       idx = arg1
@@ -275,8 +245,8 @@ class String
   def ljust(idx, padstr = ' ')
     raise ArgumentError, 'zero width padding' if padstr == ''
     return self if idx <= self.size
-    pad_repetitions = (idx / padstr.length).ceil
-    padding = (padstr * pad_repetitions)[0...(idx - self.length)]
+    pad_repetitions = idx / padstr.size
+    padding = (padstr * pad_repetitions)[0, idx-self.size]
     self + padding
   end
 
@@ -294,9 +264,29 @@ class String
   def rjust(idx, padstr = ' ')
     raise ArgumentError, 'zero width padding' if padstr == ''
     return self if idx <= self.size
-    pad_repetitions = (idx / padstr.length).ceil
-    padding = (padstr * pad_repetitions)[0...(idx - self.length)]
+    pad_repetitions = idx / padstr.size
+    padding = (padstr * pad_repetitions)[0, idx-self.size]
     padding + self
+  end
+
+  ##
+  #  call-seq:
+  #     str.center(width, padstr=' ')   -> new_str
+  #
+  #  Centers +str+ in +width+.  If +width+ is greater than the length of +str+,
+  #  returns a new String of length +width+ with +str+ centered and padded with
+  #  +padstr+; otherwise, returns +str+.
+  #
+  #     "hello".center(4)         #=> "hello"
+  #     "hello".center(20)        #=> "       hello        "
+  #     "hello".center(20, '123') #=> "1231231hello12312312"
+  def center(width, padstr = ' ')
+    raise ArgumentError, 'zero width padding' if padstr == ''
+    return self if width <= self.size
+    width -= self.size
+    pad1 = width / 2
+    pad2 = width - pad1
+    (padstr*pad1)[0,pad1] + self + (padstr*pad2)[0,pad2]
   end
 
   def chars(&block)
@@ -310,18 +300,20 @@ class String
     end
   end
 
+  ##
+  # Call the given block for each character of
+  # +self+.
   def each_char(&block)
     return to_enum :each_char unless block
-
-    split('').each do |i|
-      block.call(i)
+    pos = 0
+    while pos < self.size
+      block.call(self[pos])
+      pos += 1
     end
     self
   end
 
   def codepoints(&block)
-    len = self.size
-
     if block_given?
       self.split('').each do|x|
         block.call(x.ord)
@@ -410,7 +402,7 @@ class String
       e = max.ord
       while c <= e
         break if exclusive and c == e
-        yield c.chr
+        yield c.chr(__ENCODING__)
         c += 1
       end
       return self
@@ -418,7 +410,6 @@ class String
     # both edges are all digits
     bi = self.to_i(10)
     ei = max.to_i(10)
-    len = self.length
     if (bi > 0 or bi == "0"*len) and (ei > 0 or ei == "0"*maxlen)
       while bi <= ei
         break if exclusive and bi == ei
@@ -436,6 +427,29 @@ class String
       break if exclusive and n == 0
       yield bs
       break if n == 0
+      bsiz = bs.size
+      break if bsiz > max.size || bsiz == 0
+      bs = bs.succ
+    end
+    self
+  end
+
+  def __upto_endless(&block)
+    len = self.length
+    # both edges are all digits
+    bi = self.to_i(10)
+    if bi > 0 or bi == "0"*len
+      while true
+        s = bi.to_s
+        s = s.rjust(len, "0") if s.length < len
+        yield s
+        bi += 1
+      end
+      return self
+    end
+    bs = self
+    while true
+      yield bs
       bs = bs.succ
     end
     self

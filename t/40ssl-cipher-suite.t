@@ -49,7 +49,7 @@ subtest "tls1.2" => sub {
 
 subtest "tls1.3" => sub {
     plan skip_all => "openssl does not support tls 1.3"
-        unless `openssl s_client -help 2>&1` =~ /^\s*-tls1_3\s+/m;
+        unless openssl_supports_tls13();
     # TLS 1.3 test
     my $log = run_openssl_client({ host => "127.0.0.1", port => $port, opts => "-tls1_3 -ciphersuites TLS_AES_128_GCM_SHA256:TLS_CHACHA20_POLY1305_SHA256" });
     like $log, qr/^\s*Cipher\s*:\s*TLS_CHACHA20_POLY1305_SHA256\s*$/m;

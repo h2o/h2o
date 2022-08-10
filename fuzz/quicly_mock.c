@@ -237,27 +237,24 @@ static quicly_stream_t *open_stream(quicly_conn_t *conn, quicly_stream_id_t stre
     return stream;
 }
 
-static struct st_quicly_conn_streamgroup_state_t *get_streamgroup_state(quicly_conn_t *conn, int is_remote_initiated,
-                                                                        int unidirectional)
+static struct st_quicly_conn_streamgroup_state_t *get_streamgroup_state(quicly_conn_t *conn, quicly_stream_id_t stream_id)
 {
-    struct st_quicly_conn_streamgroup_state_t *group;
-    if (unidirectional) {
-        if (is_remote_initiated)
-            group = &conn->super.remote.uni;
-        else
-            group = &conn->super.local.uni;
+    if (quicly_is_client(conn) == quicly_stream_is_client_initiated(stream_id)) {
+        return quicly_stream_is_unidirectional(stream_id) ? &conn->super.local.uni : &conn->super.local.bidi;
     } else {
-        if (is_remote_initiated)
-            group = &conn->super.remote.bidi;
-        else
-            group = &conn->super.local.bidi;
+        return quicly_stream_is_unidirectional(stream_id) ? &conn->super.remote.uni : &conn->super.remote.bidi;
     }
-    return group;
 }
 
 int mquicly_open_stream(quicly_conn_t *conn, quicly_stream_t **stream, int is_remote_initiated, int unidirectional)
 {
-    struct st_quicly_conn_streamgroup_state_t *group = get_streamgroup_state(conn, is_remote_initiated, unidirectional);
+    struct st_quicly_conn_streamgroup_state_t *group;
+
+    if (is_remote_initiated) {
+        group = unidirectional ? &conn->super.remote.uni : &conn->super.remote.bidi;
+    } else {
+        group = unidirectional ? &conn->super.local.uni : &conn->super.local.bidi;
+    }
 
     *stream = open_stream(conn, group->next_stream_id);
     group->next_stream_id += 4;
@@ -279,8 +276,7 @@ static void destroy_stream(quicly_stream_t *stream, int err)
     assert(iter != kh_end(conn->streams));
     kh_del(quicly_stream_t, conn->streams, iter);
 
-    struct st_quicly_conn_streamgroup_state_t *group = get_streamgroup_state(
-        conn, !quicly_stream_is_client_initiated(stream->stream_id), quicly_stream_is_unidirectional(stream->stream_id));
+    struct st_quicly_conn_streamgroup_state_t *group = get_streamgroup_state(conn, stream->stream_id);
     --group->num_streams;
 
     quicly_sendstate_dispose(&stream->sendstate);
@@ -326,8 +322,9 @@ int quicly_is_destination(quicly_conn_t *conn, struct sockaddr *dest_addr, struc
 
 uint32_t quicly_num_streams_by_group(quicly_conn_t *conn, int uni, int locally_initiated)
 {
-    assert(0 && "unimplemented");
-    return 0;
+    int server_initiated = quicly_is_client(conn) != locally_initiated;
+    struct st_quicly_conn_streamgroup_state_t *state = get_streamgroup_state(conn, uni * 2 + server_initiated);
+    return state->num_streams;
 }
 
 int quicly_get_delivery_rate(quicly_conn_t *conn, quicly_rate_t *delivery_rate)

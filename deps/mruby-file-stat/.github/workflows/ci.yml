@@ -1,0 +1,110 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+
+jobs:
+  ubuntu-1804-gcc:
+    strategy:
+      matrix:
+        mruby-version:
+          - 2.1.2
+          - 2.0.1
+        include:
+          - mruby-version: 3.0.0
+            disable-presym: 'true'
+          - mruby-version: 3.0.0
+            disable-presym: 'false'
+    runs-on: ubuntu-18.04
+    steps:
+      - uses: actions/checkout@v2
+      - uses: ruby/setup-ruby@v1.59.1
+        with:
+          ruby-version: '2.7'
+      - name: Build and test
+        env:
+          CC: gcc
+          CXX: g++
+          MRUBY_VERSION: ${{ matrix.mruby-version }}
+          DISABLE_PRESYM: ${{ matrix.disable-presym }}
+        run: rake test
+
+  ubuntu-1804-clang:
+    strategy:
+      matrix:
+        mruby-version:
+          - 2.1.2
+          - 2.0.1
+        include:
+          - mruby-version: 3.0.0
+            disable-presym: 'true'
+          - mruby-version: 3.0.0
+            disable-presym: 'false'
+    runs-on: ubuntu-18.04
+    steps:
+      - uses: actions/checkout@v2
+      - uses: ruby/setup-ruby@v1.59.1
+        with:
+          ruby-version: '2.7'
+      - name: Build and test
+        env:
+          CC: clang
+          CXX: clang++
+          MRUBY_VERSION: ${{ matrix.mruby-version }}
+          DISABLE_PRESYM: ${{ matrix.disable-presym }}
+        run: rake test
+
+  ubuntu-1804-mingw:
+    strategy:
+      matrix:
+        mruby-version:
+          - 2.1.2
+          - 2.0.1
+        include:
+          - mruby-version: 3.0.0
+            disable-presym: 'true'
+          - mruby-version: 3.0.0
+            disable-presym: 'false'
+    runs-on: ubuntu-18.04
+    steps:
+      - uses: actions/checkout@v2
+      - uses: ruby/setup-ruby@v1.59.1
+        with:
+          ruby-version: '2.7'
+      - name: apt
+        run: sudo apt install mingw-w64
+      - name: Build and test
+        env:
+          TARGET: windows-x86_64
+          MRUBY_VERSION: ${{ matrix.mruby-version }}
+          DISABLE_PRESYM: ${{ matrix.disable-presym }}
+        run: rake test
+
+  windows-mingw:
+    strategy:
+      matrix:
+        mruby-version:
+          - 2.1.2
+          - 2.0.1
+        include:
+          - mruby-version: 3.0.0
+            disable-presym: 'true'
+          - mruby-version: 3.0.0
+            disable-presym: 'false'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: ruby/setup-ruby@v1.59.1
+        with:
+          ruby-version: '2.7'
+      - name: Build and test
+        env:
+          CFLAGS: -g -O1 -Wall -Wundef
+          MRUBY_VERSION: ${{ matrix.mruby-version }}
+          DISABLE_PRESYM: ${{ matrix.disable-presym }}
+        run: rake test

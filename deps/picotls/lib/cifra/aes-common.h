@@ -174,11 +174,14 @@ static inline int aead_aesgcm_setup_crypto(ptls_aead_context_t *_ctx, int is_enc
         ctx->super.do_encrypt_update = aesgcm_encrypt_update;
         ctx->super.do_encrypt_final = aesgcm_encrypt_final;
         ctx->super.do_encrypt = ptls_aead__do_encrypt;
+        ctx->super.do_encrypt_v = ptls_aead__do_encrypt_v;
         ctx->super.do_decrypt = NULL;
     } else {
         ctx->super.do_encrypt_init = NULL;
         ctx->super.do_encrypt_update = NULL;
         ctx->super.do_encrypt_final = NULL;
+        ctx->super.do_encrypt = NULL;
+        ctx->super.do_encrypt_v = NULL;
         ctx->super.do_decrypt = aesgcm_decrypt;
     }
 

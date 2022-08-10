@@ -184,7 +184,6 @@ void h2o_config_init(h2o_globalconf_t *config)
     config->http1.req_timeout = H2O_DEFAULT_HTTP1_REQ_TIMEOUT;
     config->http1.req_io_timeout = H2O_DEFAULT_HTTP1_REQ_IO_TIMEOUT;
     config->http1.upgrade_to_http2 = H2O_DEFAULT_HTTP1_UPGRADE_TO_HTTP2;
-    config->http1.callbacks = H2O_HTTP1_CALLBACKS;
     config->http2.idle_timeout = H2O_DEFAULT_HTTP2_IDLE_TIMEOUT;
     config->http2.graceful_shutdown_timeout = H2O_DEFAULT_HTTP2_GRACEFUL_SHUTDOWN_TIMEOUT;
     config->proxy.io_timeout = H2O_DEFAULT_PROXY_IO_TIMEOUT;
@@ -193,6 +192,7 @@ void h2o_config_init(h2o_globalconf_t *config)
     config->proxy.emit_x_forwarded_headers = 1;
     config->proxy.emit_via_header = 1;
     config->proxy.emit_missing_date_header = 1;
+    config->proxy.zerocopy = H2O_PROXY_ZEROCOPY_ENABLED;
     config->http2.max_concurrent_requests_per_connection = H2O_HTTP2_SETTINGS_HOST_MAX_CONCURRENT_STREAMS;
     config->http2.max_concurrent_streaming_requests_per_connection = H2O_HTTP2_SETTINGS_HOST_MAX_CONCURRENT_STREAMING_REQUESTS;
     config->http2.max_streams_for_priority = 16;
@@ -200,12 +200,10 @@ void h2o_config_init(h2o_globalconf_t *config)
     config->http2.latency_optimization.min_rtt = 50; // milliseconds
     config->http2.latency_optimization.max_additional_delay = 10;
     config->http2.latency_optimization.max_cwnd = 65535;
-    config->http2.callbacks = H2O_HTTP2_CALLBACKS;
     config->http3.idle_timeout = quicly_spec_context.transport_params.max_idle_timeout;
     config->http3.active_stream_window_size = H2O_DEFAULT_HTTP3_ACTIVE_STREAM_WINDOW_SIZE;
     config->http3.allow_delayed_ack = 1;
     config->http3.use_gso = 1;
-    config->http3.callbacks = H2O_HTTP3_SERVER_CALLBACKS;
     config->send_informational_mode = H2O_SEND_INFORMATIONAL_MODE_EXCEPT_H1;
     config->mimemap = h2o_mimemap_create();
     h2o_socketpool_init_global(&config->proxy.global_socketpool, SIZE_MAX);
@@ -223,8 +221,24 @@ h2o_pathconf_t *h2o_config_register_path(h2o_hostconf_t *hostconf, const char *p
     h2o_pathconf_t *pathconf = h2o_mem_alloc(sizeof(*pathconf));
     h2o_config_init_pathconf(pathconf, hostconf->global, path, hostconf->mimemap);
 
+    /* Find the slot to insert the new pathconf. Sort order is descending by the path length so that longer pathconfs overriding
+     * subdirectories of shorter ones would work, regardless of the regisration order. Pathconfs sharing the same length are sorted
+     * in the ascending order of memcmp / strcmp (as we have always done in the h2o standalone server). */
+    size_t slot;
+    for (slot = 0; slot < hostconf->paths.size; ++slot) {
+        if (pathconf->path.len > hostconf->paths.entries[slot]->path.len)
+            break;
+        if (pathconf->path.len == hostconf->paths.entries[slot]->path.len &&
+            memcmp(pathconf->path.base, hostconf->paths.entries[slot]->path.base, pathconf->path.len) < 0)
+            break;
+    }
+
     h2o_vector_reserve(NULL, &hostconf->paths, hostconf->paths.size + 1);
-    hostconf->paths.entries[hostconf->paths.size++] = pathconf;
+    if (slot < hostconf->paths.size)
+        memmove(hostconf->paths.entries + slot + 1, hostconf->paths.entries + slot,
+                (hostconf->paths.size - slot) * sizeof(hostconf->paths.entries[0]));
+    hostconf->paths.entries[slot] = pathconf;
+    ++hostconf->paths.size;
 
     return pathconf;
 }

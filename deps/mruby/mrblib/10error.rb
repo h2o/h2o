@@ -1,9 +1,22 @@
+class Exception
+  ##
+  # call-seq:
+  #   exception.message   ->  string
+  #
+  # Returns the result of invoking <code>exception.to_s</code>.
+  # Normally this returns the exception's message or name.
+  #
+  def message
+    to_s
+  end
+end
+
 # ISO 15.2.24
 class ArgumentError < StandardError
 end
 
-# ISO 15.2.25 says "LocalJumpError < StandardError"
-class LocalJumpError < ScriptError
+# ISO 15.2.25
+class LocalJumpError < StandardError
 end
 
 # ISO 15.2.26
@@ -19,6 +32,10 @@ end
 
 # ISO 15.2.29
 class TypeError < StandardError
+end
+
+# ISO 15.2.30
+class ZeroDivisionError < StandardError
 end
 
 # ISO 15.2.31

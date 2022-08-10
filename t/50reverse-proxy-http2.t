@@ -297,6 +297,27 @@ subtest 'request body streaming' => sub {
             "$http2_streaming_requests == $streaming_request_count"
 };
 
+my $test = sub {
+    my $opts = shift;
+
+    my $upstream_port = $ENV{UPSTREAM_PORT} || empty_port({ host => '0.0.0.0' });
+    my $upstream = spawn_h2_server($upstream_port, +{
+        &HALF_CLOSED => sub {
+            my ($conn, $stream_id) = @_;
+            $conn->send_headers($stream_id, [ ':status' => 200 ], 1);
+        },
+    });
+
+    my $server = create_h2o($upstream_port);
+    my ($headers, $body) = run_prog("curl --max-time 3 -s --dump-header /dev/stderr $opts http://127.0.0.1:@{[$server->{port}]}");
+    like $headers, qr{^HTTP/[0-9.]+ 200}is;
+    ok check_port($server->{port}), 'live check';
+};
+
+subtest 'POST request with no body, no C-L', sub { $test->('-X POST') };
+subtest 'POST request with no body, with C-L:0', sub { $test->("-X POST -d ''") };
+subtest 'POST request with body', sub { $test->("-X POST -d a=b") };
+
 sub create_h2o {
     my ($upstream_port) = @_;
     if (my $port = $ENV{H2O_PORT}) {

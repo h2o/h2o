@@ -6,17 +6,41 @@
 ** immediately. It's a REPL...
 */
 
+#include <mruby.h>
+
+#ifdef MRB_NO_STDIO
+# error mruby-bin-mirb conflicts 'MRB_NO_STDIO' in your build configuration
+#endif
+
+#include <mruby/array.h>
+#include <mruby/proc.h>
+#include <mruby/compile.h>
+#include <mruby/dump.h>
+#include <mruby/string.h>
+#include <mruby/variable.h>
+#include <mruby/presym.h>
+
 #include <stdlib.h>
 #include <string.h>
-#include <stdio.h>
 #include <ctype.h>
 
 #include <signal.h>
 #include <setjmp.h>
 
+/* obsolete configuration */
 #ifdef ENABLE_READLINE
-#include <readline/readline.h>
-#include <readline/history.h>
+# define MRB_USE_READLINE
+#endif
+#ifdef ENABLE_LINENOISE
+# define MRB_USE_LINENOISE
+#endif
+#ifdef DISABLE_MIRB_UNDERSCORE
+# define MRB_NO_MIRB_UNDERSCORE
+#endif
+
+#ifdef MRB_USE_READLINE
+#include MRB_READLINE_HEADER
+#include MRB_READLINE_HISTORY
 #define MIRB_ADD_HISTORY(line) add_history(line)
 #define MIRB_READLINE(ch) readline(ch)
 #if !defined(RL_READLINE_VERSION) || RL_READLINE_VERSION < 0x600
@@ -28,8 +52,8 @@
 #define MIRB_WRITE_HISTORY(path) write_history(path)
 #define MIRB_READ_HISTORY(path) read_history(path)
 #define MIRB_USING_HISTORY() using_history()
-#elif defined(ENABLE_LINENOISE)
-#define ENABLE_READLINE
+#elif defined(MRB_USE_LINENOISE)
+#define MRB_USE_READLINE
 #include <linenoise.h>
 #define MIRB_ADD_HISTORY(line) linenoiseHistoryAdd(line)
 #define MIRB_READLINE(ch) linenoise(ch)
@@ -39,7 +63,7 @@
 #define MIRB_USING_HISTORY()
 #endif
 
-#ifndef _WIN32
+#if !defined(_WIN32) && defined(_POSIX_C_SOURCE)
 #define MIRB_SIGSETJMP(env) sigsetjmp(env, 1)
 #define MIRB_SIGLONGJMP(env, val) siglongjmp(env, val)
 #define SIGJMP_BUF sigjmp_buf
@@ -49,16 +73,7 @@
 #define SIGJMP_BUF jmp_buf
 #endif
 
-#include <mruby.h>
-#include <mruby/array.h>
-#include <mruby/proc.h>
-#include <mruby/compile.h>
-#include <mruby/dump.h>
-#include <mruby/string.h>
-#include <mruby/variable.h>
-#include <mruby/throw.h>
-
-#ifdef ENABLE_READLINE
+#ifdef MRB_USE_READLINE
 
 static const char history_file_name[] = ".mirb_history";
 
@@ -100,13 +115,13 @@ p(mrb_state *mrb, mrb_value obj, int prompt)
   mrb_value val;
   char* msg;
 
-  val = mrb_funcall(mrb, obj, "inspect", 0);
+  val = mrb_funcall_id(mrb, obj, MRB_SYM(inspect), 0);
   if (prompt) {
     if (!mrb->exc) {
       fputs(" => ", stdout);
     }
     else {
-      val = mrb_funcall(mrb, mrb_obj_value(mrb->exc), "inspect", 0);
+      val = mrb_funcall_id(mrb, mrb_obj_value(mrb->exc), MRB_SYM(inspect), 0);
     }
   }
   if (!mrb_string_p(val)) {
@@ -119,7 +134,7 @@ p(mrb_state *mrb, mrb_value obj, int prompt)
 }
 
 /* Guess if the user might want to enter more
- * or if he wants an evaluation of his code now */
+ * or if they wants an evaluation of their code now */
 static mrb_bool
 is_code_block_open(struct mrb_parser_state *parser)
 {
@@ -196,7 +211,7 @@ is_code_block_open(struct mrb_parser_state *parser)
     /* an expression was ended */
     break;
   case EXPR_ENDARG:
-    /* closing parenthese */
+    /* closing parenthesis */
     break;
   case EXPR_ENDFN:
     /* definition end */
@@ -240,7 +255,7 @@ usage(const char *name)
   };
   const char *const *p = usage_msg;
 
-  printf("Usage: %s [switches]\n", name);
+  printf("Usage: %s [switches] [programfile] [arguments]\n", name);
   while (*p)
     printf("  %s\n", *p++);
 }
@@ -349,7 +364,7 @@ print_hint(void)
   printf("mirb - Embeddable Interactive Ruby Shell\n\n");
 }
 
-#ifndef ENABLE_READLINE
+#ifndef MRB_USE_READLINE
 /* Print the command line prompt of the REPL */
 static void
 print_cmdline(int code_block_open)
@@ -373,7 +388,7 @@ check_keyword(const char *buf, const char *word)
   size_t len = strlen(word);
 
   /* skip preceding spaces */
-  while (*p && isspace((unsigned char)*p)) {
+  while (*p && ISSPACE(*p)) {
     p++;
   }
   /* check keyword */
@@ -383,14 +398,14 @@ check_keyword(const char *buf, const char *word)
   p += len;
   /* skip trailing spaces */
   while (*p) {
-    if (!isspace((unsigned char)*p)) return 0;
+    if (!ISSPACE(*p)) return 0;
     p++;
   }
   return 1;
 }
 
 
-#ifndef ENABLE_READLINE
+#ifndef MRB_USE_READLINE
 volatile sig_atomic_t input_canceled = 0;
 void
 ctrl_c_handler(int signo)
@@ -406,12 +421,32 @@ ctrl_c_handler(int signo)
 }
 #endif
 
+#ifndef MRB_NO_MIRB_UNDERSCORE
+void decl_lv_underscore(mrb_state *mrb, mrbc_context *cxt)
+{
+  struct RProc *proc;
+  struct mrb_parser_state *parser;
+
+  parser = mrb_parse_string(mrb, "_=nil", cxt);
+  if (parser == NULL) {
+    fputs("create parser state error\n", stderr);
+    mrb_close(mrb);
+    exit(EXIT_FAILURE);
+  }
+
+  proc = mrb_generate_code(mrb, parser);
+  mrb_vm_run(mrb, proc, mrb_top_self(mrb), 0);
+
+  mrb_parser_free(parser);
+}
+#endif
+
 int
 main(int argc, char **argv)
 {
   char ruby_code[4096] = { 0 };
   char last_code_line[1024] = { 0 };
-#ifndef ENABLE_READLINE
+#ifndef MRB_USE_READLINE
   int last_char;
   size_t char_index;
 #else
@@ -455,7 +490,7 @@ main(int argc, char **argv)
   mrb_define_global_const(mrb, "ARGV", ARGV);
   mrb_gv_set(mrb, mrb_intern_lit(mrb, "$DEBUG"), mrb_bool_value(args.debug));
 
-#ifdef ENABLE_READLINE
+#ifdef MRB_USE_READLINE
   history_path = get_history_path(mrb);
   if (history_path == NULL) {
     fputs("failed to get history path\n", stderr);
@@ -473,6 +508,7 @@ main(int argc, char **argv)
 
   /* Load libraries */
   for (i = 0; i < args.libc; i++) {
+    struct REnv *e;
     FILE *lfp = fopen(args.libv[i], "r");
     if (lfp == NULL) {
       printf("Cannot open library file. (%s)\n", args.libv[i]);
@@ -481,7 +517,15 @@ main(int argc, char **argv)
     }
     mrb_load_file_cxt(mrb, lfp, cxt);
     fclose(lfp);
+    e = mrb_vm_ci_env(mrb->c->cibase);
+    mrb_vm_ci_env_set(mrb->c->cibase, NULL);
+    mrb_env_unshare(mrb, e);
+    mrbc_cleanup_local_variables(mrb, cxt);
   }
+
+#ifndef MRB_NO_MIRB_UNDERSCORE
+  decl_lv_underscore(mrb, cxt);
+#endif
 
   cxt->capture_errors = TRUE;
   cxt->lineno = 1;
@@ -492,17 +536,14 @@ main(int argc, char **argv)
 
   while (TRUE) {
     char *utf8;
-    struct mrb_jmpbuf c_jmp;
 
-    MRB_TRY(&c_jmp);
-    mrb->jmp = &c_jmp;
     if (args.rfp) {
       if (fgets(last_code_line, sizeof(last_code_line)-1, args.rfp) != NULL)
         goto done;
       break;
     }
 
-#ifndef ENABLE_READLINE
+#ifndef MRB_USE_READLINE
     print_cmdline(code_block_open);
 
     signal(SIGINT, ctrl_c_handler);
@@ -610,19 +651,18 @@ main(int argc, char **argv)
         /* generate bytecode */
         struct RProc *proc = mrb_generate_code(mrb, parser);
         if (proc == NULL) {
-          fputs("codegen error\n", stderr);
           mrb_parser_free(parser);
-          break;
+          continue;
         }
 
         if (args.verbose) {
           mrb_codedump_all(mrb, proc);
         }
         /* adjust stack length of toplevel environment */
-        if (mrb->c->cibase->env) {
-          struct REnv *e = mrb->c->cibase->env;
-          if (e && MRB_ENV_STACK_LEN(e) < proc->body.irep->nlocals) {
-            MRB_ENV_SET_STACK_LEN(e, proc->body.irep->nlocals);
+        if (mrb->c->cibase->u.env) {
+          struct REnv *e = mrb_vm_ci_env(mrb->c->cibase);
+          if (e && MRB_ENV_LEN(e) < proc->body.irep->nlocals) {
+            MRB_ENV_SET_LEN(e, proc->body.irep->nlocals);
           }
         }
         /* pass a proc for evaluation */
@@ -639,10 +679,13 @@ main(int argc, char **argv)
         }
         else {
           /* no */
-          if (!mrb_respond_to(mrb, result, mrb_intern_lit(mrb, "inspect"))){
+          if (!mrb_respond_to(mrb, result, MRB_SYM(inspect))){
             result = mrb_any_to_s(mrb, result);
           }
           p(mrb, result, 1);
+#ifndef MRB_NO_MIRB_UNDERSCORE
+          *(mrb->c->ci->stack + 1) = result;
+#endif
         }
       }
       ruby_code[0] = '\0';
@@ -651,14 +694,9 @@ main(int argc, char **argv)
     }
     mrb_parser_free(parser);
     cxt->lineno++;
-    MRB_CATCH(&c_jmp) {
-      p(mrb, mrb_obj_value(mrb->exc), 0);
-      mrb->exc = 0;
-    }
-    MRB_END_EXC(&c_jmp);
   }
 
-#ifdef ENABLE_READLINE
+#ifdef MRB_USE_READLINE
   MIRB_WRITE_HISTORY(history_path);
   mrb_free(mrb, history_path);
 #endif

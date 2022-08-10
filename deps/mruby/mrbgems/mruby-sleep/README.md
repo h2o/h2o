@@ -1,8 +1,11 @@
 # Sleep Module for mruby
+
 mruby sleep module
 
-## install by mrbgems
- - add conf.gem line to `build_config.rb`
+## Install by mrbgems
+
+* add `conf.gem` line to your build configuration.
+
 ```ruby
 MRuby::Build.new do |conf|
 
@@ -12,7 +15,7 @@ MRuby::Build.new do |conf|
 end
 ```
 
-## example
+## Example
 
 ```ruby
 sleep(10)
@@ -20,8 +23,7 @@ usleep(10000)
 ```
 
 # License
+
 under the MIT License:
 
-* http://www.opensource.org/licenses/mit-license.php
-
-
+* <https://www.opensource.org/licenses/mit-license.php>

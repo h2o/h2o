@@ -119,7 +119,7 @@ static void check_pool_expired_locked(h2o_socketpool_t *pool, h2o_loop_t *this_l
 static void on_timeout(h2o_timer_t *timeout)
 {
     /* decrease the frequency of this function being called; the expiration
-     * check can be (should be) performed in the `connect` fuction as well
+     * check can be (should be) performed in the `connect` function as well
      */
     h2o_socketpool_t *pool = H2O_STRUCT_FROM_MEMBER(h2o_socketpool_t, _interval_cb.timeout, timeout);
 

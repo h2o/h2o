@@ -4,8 +4,6 @@
 ** See Copyright Notice in mruby.h
 */
 
-#include <stddef.h>
-#include <stdint.h>
 #include <string.h>
 #include <mruby.h>
 

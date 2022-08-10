@@ -16,7 +16,7 @@ jobs:
       matrix:
         include:
           - name: "Linux / OpenSSL 1.1.0"
-            command: make -f misc/docker-ci.mk CMAKE_ARGS='-DOPENSSL_ROOT_DIR=-DOPENSSL_ROOT_DIR=/opt/openssl-1.1.0' CONTAINER_NAME='h2oserver/h2o-ci:ubuntu1604'
+            command: make -f misc/docker-ci.mk CMAKE_ARGS='-DOPENSSL_ROOT_DIR=-DOPENSSL_ROOT_DIR=/opt/openssl-1.1.0 -DWITH_FUSION=OFF' CONTAINER_NAME='h2oserver/h2o-ci:ubuntu1604'
           - name: "Linux / OpenSSL 1.1.1"
             command: make -f misc/docker-ci.mk
           - name: "Linux / OpenSSL 1.1.1 + ASan & UBSan"

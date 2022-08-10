@@ -95,7 +95,7 @@ static int test_adjust_notsent_lowat(h2o_socket_t *sock, unsigned notsent_lowat)
 
 static void test_prepare_for_latency_optimization(void)
 {
-    struct st_h2o_socket_ssl_t sock_ssl = {NULL, NULL, NULL, NULL, 5 + 8 + 16 /* GCM overhead */};
+    struct st_h2o_socket_ssl_t sock_ssl = {.record_overhead = 5 + 8 + 16 /* GCM overhead */};
     h2o_socket_t sock = {NULL, &sock_ssl};
     h2o_socket_latency_optimization_conditions_t cond = {UINT_MAX, 10, 65535};
 
@@ -163,9 +163,84 @@ static void test_prepare_for_latency_optimization(void)
     ok(cb_ret_vars.minimize_notsent_lowat.cur == 0);
 }
 
+static void test_zerocopy_buffers(void)
+{
+    struct st_h2o_socket_zerocopy_buffers_t buffers = {};
+
+    /* push and release in-order */
+    ok(zerocopy_buffers_is_empty(&buffers));
+    for (uintptr_t i = 0; i < 100; ++i)
+        zerocopy_buffers_push(&buffers, (void *)(i + 1));
+    for (uintptr_t i = 0; i < 100; ++i) {
+        ok(!zerocopy_buffers_is_empty(&buffers));
+        ok(zerocopy_buffers_release(&buffers, i) == (void *)(i + 1));
+    }
+    ok(zerocopy_buffers_is_empty(&buffers));
+
+    /* push 2, release 1 in-order */
+    uintptr_t push = 100, release = 100;
+    for (int i = 0; i < 100; ++i) {
+        zerocopy_buffers_push(&buffers, (void *)push++);
+        zerocopy_buffers_push(&buffers, (void *)push++);
+        ok(zerocopy_buffers_release(&buffers, release) == (void *)release);
+        ++release;
+    }
+
+    /* gaps */
+    ok(zerocopy_buffers_release(&buffers, release + 1) == (void *)(release + 1));
+    ok(zerocopy_buffers_release(&buffers, release + 2) == (void *)(release + 2));
+    ok(buffers.first_counter == release);
+    ok(zerocopy_buffers_release(&buffers, release) == (void *)release);
+    ok(buffers.first_counter == release + 3);
+    release += 3;
+
+    while (!zerocopy_buffers_is_empty(&buffers)) {
+        ok(zerocopy_buffers_release(&buffers, release) == (void *)release);
+        ++release;
+    }
+
+    ok(push == release);
+
+    zerocopy_buffers_dispose(&buffers);
+}
+
+static void test_zerocopy_buffers_random(void)
+{
+    struct st_h2o_socket_zerocopy_buffers_t buffers = {};
+
+    int rseed = 13;
+#define RAND() (rseed = (rseed * 1103515245 + 12345) & 255)
+
+    /* push 1000 entries, repeating each of them at 25% probability */
+    for (uintptr_t i = 0; i < 1000; ++i) {
+        do {
+            zerocopy_buffers_push(&buffers, (void *)(i + 100000));
+        } while (RAND() >= 192);
+    }
+
+    uint8_t freed[1000] = {0};
+    while (!zerocopy_buffers_is_empty(&buffers)) {
+        uint64_t c = buffers.first_counter + RAND() % (buffers.last - buffers.first);
+        if (buffers.bufs[c - buffers.first_counter + buffers.first] != NULL) {
+            uintptr_t p = (uintptr_t)zerocopy_buffers_release(&buffers, c);
+            if (p) {
+                assert(!freed[p - 100000]);
+                freed[p - 100000] = 1;
+            }
+        }
+    }
+
+    for (size_t i = 0; i < PTLS_ELEMENTSOF(freed); ++i)
+        assert(freed[i]);
+
+#undef RAND
+}
+
 void test_lib__common__socket_c(void)
 {
     subtest("on_alpn_select", test_on_alpn_select);
     subtest("sliding_counter", test_sliding_counter);
     subtest("prepare_for_latency_optimization", test_prepare_for_latency_optimization);
+    subtest("zerocopy_buffers", test_zerocopy_buffers);
+    subtest("zerocopy_buffers_random", test_zerocopy_buffers_random);
 }

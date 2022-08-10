@@ -1,6 +1,7 @@
 #!/usr/bin/env perl
 use strict;
 use warnings;
+use Fcntl qw(:flock F_SETFD F_GETFD FD_CLOEXEC);
 use File::Temp qw(tempdir);
 use Getopt::Long qw(:config posix_default no_ignore_case gnu_compat);
 use POSIX qw(:sys_wait_h);
@@ -68,6 +69,15 @@ sub spawn_script {
 
     # return the spawned PID if in parent process
     return $pid if $pid != 0;
+
+    # obtain shared lock for lockfile
+    open my $lockfh, ">>", "$tempdir/lock"
+        or die "failed to open $tempdir/lock:$!";
+    fcntl($lockfh, F_SETFD, fcntl($lockfh, F_GETFD, 0) & ~FD_CLOEXEC)
+        or die "failed to clear FD_CLOEXEC:$!";
+    flock($lockfh, LOCK_SH)
+        or die "failed to obtain shared lock fo $tempdir/lock:$!";
+    $ENV{LOCKFD} = fileno $lockfh;
 
     # child process, redirect STDOUT, STDERR to tempfile and exec
     $logfh = log_add_timestamp($logfh);
