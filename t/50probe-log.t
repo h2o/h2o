@@ -20,9 +20,7 @@ my $quic_port = empty_port({
     proto => "udp",
 });
 
-my $server = spawn_h2o(sub {
-		my ($port, $tls_port) = @_;
-		return << "EOT";
+my $server = spawn_h2o({ conf => <<"EOT" });
 probe-log: $probe_log
 listen:
   type: quic
@@ -36,48 +34,49 @@ hosts:
       /:
         file.dir: examples/doc_root
 EOT
-});
 
 wait_port({ port => $quic_port, proto => "udp" });
 
-for (1 ... 3) {
-  diag "$_";
-  my $client = IO::Socket::UNIX->new(
-      Type => SOCK_STREAM(),
-      Peer => $probe_log,
-  ) or die "Cannot connect to a unix domain socket '$probe_log': $!";
+for my $i(1 ... 3) {
+  diag $i;
 
   my $pid = fork;
   die "Cannot fork: $!" unless defined $pid;
   if ($pid == 0) {
     # child
     sleep 0.1;
-    exec($client_prog, "-t", "2", "-3", "100", "https://127.0.0.1:$quic_port/");
+    exec($client_prog, "-t", "3", "-3", "100", "https://127.0.0.1:$quic_port/");
     die "Cannot exec $client_prog: $!";
   }
   # parent
+  my $client = IO::Socket::UNIX->new(
+      Type => SOCK_STREAM(),
+      Peer => $probe_log,
+  ) or die "Cannot connect to a unix domain socket '$probe_log': $!";
+
   my $t0 = time();
-  my $timeout = 5;
+  my $timeout = 2;
   my $select = IO::Select->new($client);
   my $logs = '';
   while ($select->can_read($timeout)) {
+    $timeout -= time() - $t0;
     diag "timeout: $timeout";
     $client->sysread(my $buf, 4096) or last;
     $logs .= $buf;
 
-    $timeout -= time() - $t0;
     last if $timeout <= 0;
   }
   $client->close;
+
   diag($logs . "\nlength: " . length($logs)) if $ENV{TEST_DEBUG};
-  ok $logs, "something is written to the probe log ($_)";
+
+  ok $logs, "something is written to the probe log ($i)";
+  # check if the logs are valid JSON-Lines
   for my $json (split /\n/, $logs) {
     unless (eval { decode_json($json) }) {
       fail "invalid json: $json\n$@";
     }
-  };
+  }
 }
 
-diag "shuting down the server";
-undef $server;
 done_testing;

@@ -31,8 +31,6 @@
 #include "h2o/probe_log.h"
 #include "cloexec.h"
 
-#define PROBE_LOG_MAXCONN 1
-
 struct st_probe_log_t {
     int listen_fd;
 };
@@ -41,20 +39,21 @@ static void *thread_main(void *_ctx)
 {
     struct st_probe_log_t *ctx = _ctx;
 
-    // This server accepts only one client
     while (1) {
-        int fd = cloexec_accept(ctx->listen_fd, NULL, 0);
+        int fd = accept(ctx->listen_fd, NULL, 0);
         if (fd == -1) {
+            h2o_perror("failed to accept");
             continue;
         }
-        fcntl(fd, F_SETFL, O_NONBLOCK);
-        ptlslog_fd = fd;
-
-        // wait until fd is invalidated by ptlslog
-        while (ptlslog_fd != -1) {
-            usleep(1);
+        if (fcntl(fd, F_SETFD, FD_CLOEXEC) == -1) {
+            h2o_perror("failed to set FD_CLOEXEC");
+            continue;
         }
-        close(fd);
+        if (fcntl(fd, F_SETFL, O_NONBLOCK) == -1) {
+            h2o_perror("failed to set O_NONBLOCK");
+            continue;
+        }
+        ptlslog_add_fd(fd);
     }
     return NULL;
 }
@@ -79,7 +78,7 @@ int h2o_setup_probe_log(const char *path)
         h2o_error_printf("[lib/common/probe_log.c] bind(2) failed: %s\n", strerror(errno));
         return EINVAL;
     }
-    if (listen(listen_fd, PROBE_LOG_MAXCONN) != 0) {
+    if (listen(listen_fd, 8) != 0) {
         h2o_error_printf("[lib/common/probe_log.c] listen(2) failed: %s\n", strerror(errno));
         return EINVAL;
     }
