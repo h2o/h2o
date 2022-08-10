@@ -6,6 +6,7 @@ use IO::Socket::UNIX;
 use IO::Select;
 use Time::HiRes qw(time sleep);
 use Net::EmptyPort qw(empty_port wait_port);
+use Carp;
 use JSON;
 use t::Util;
 
@@ -45,28 +46,11 @@ for my $i(1 ... 3) {
   if ($pid == 0) {
     # child
     sleep 0.1;
-    exec($client_prog, "-t", "3", "-3", "100", "https://127.0.0.1:$quic_port/");
+    exec($client_prog, "-t", "2", "-3", "100", "https://127.0.0.1:$quic_port/");
     die "Cannot exec $client_prog: $!";
   }
   # parent
-  my $client = IO::Socket::UNIX->new(
-      Type => SOCK_STREAM(),
-      Peer => $h2olog_socket,
-  ) or die "Cannot connect to a unix domain socket '$h2olog_socket': $!";
-
-  my $t0 = time();
-  my $timeout = 2;
-  my $select = IO::Select->new($client);
-  my $logs = '';
-  while ($select->can_read($timeout)) {
-    $timeout -= time() - $t0;
-    diag "timeout: $timeout";
-    $client->sysread(my $buf, 4096) or last;
-    $logs .= $buf;
-
-    last if $timeout <= 0;
-  }
-  $client->close;
+  my $logs = slurp_h2olog_socket($h2olog_socket, { timeout => 2 });
 
   diag($logs . "\nlength: " . length($logs)) if $ENV{TEST_DEBUG};
 
@@ -77,6 +61,46 @@ for my $i(1 ... 3) {
       fail "invalid json: $json\n$@";
     }
   }
+}
+
+subtest "lost messages", sub {
+  my $client = IO::Socket::UNIX->new(
+      Type => SOCK_STREAM,
+      Peer => $h2olog_socket,
+  ) or croak "Cannot connect to a unix domain socket '$h2olog_socket': $!";
+  # a client connects to h2olog socket, but does not read from the socket.
+
+  system($client_prog, "-t", "2", "-3", "100", "https://127.0.0.1:$quic_port/") == 0 or die $!;
+  system($client_prog, "-t", "2", "-3", "100", "https://127.0.0.1:$quic_port/") == 0 or die $!;
+  system($client_prog, "-t", "2", "-3", "100", "https://127.0.0.1:$quic_port/") == 0 or die $!;
+
+  local $TODO = "get number of lost events via status handlers";
+  fail;
+};
+
+sub slurp_h2olog_socket {
+  my($path, $opts) = @_;
+  my $timeout = $opts->{timeout} or croak "timeout is not specified";
+
+  my $client = IO::Socket::UNIX->new(
+      Type => SOCK_STREAM,
+      Peer => $path,
+  ) or croak "Cannot connect to a unix domain socket '$path': $!";
+
+  my $t0 = Time::HiRes::time();
+  my $select = IO::Select->new($client);
+  my $logs = '';
+  while ($select->can_read($timeout)) {
+    $timeout -= Time::HiRes::time() - $t0;
+    diag "timeout remains: $timeout";
+    $client->sysread(my $buf, 4096) or last;
+    $logs .= $buf;
+
+    last if $timeout <= 0;
+  }
+  $client->close;
+
+  return $logs;
 }
 
 done_testing;
