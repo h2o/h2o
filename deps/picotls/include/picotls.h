@@ -1448,8 +1448,13 @@ extern PTLS_THREADLOCAL unsigned ptls_default_skip_tracing;
 #endif
 
 int ptlslog_is_active(void);
+
 /**
- * Registers an fd for ptslog. A registered fd is automatically removed if it is closed.
+ * Returns the number of lost events.
+ */
+size_t ptlslog_num_lost(void);
+/**
+ * Registers an fd for ptslog. A registered fd is automatically closed and removed if it is invalidated.
  */
 int ptlslog_add_fd(int fd);
 
