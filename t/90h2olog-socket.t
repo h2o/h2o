@@ -34,13 +34,56 @@ hosts:
     paths:
       /:
         file.dir: examples/doc_root
+      "/status":
+        status: ON
 EOT
 
 wait_port({ port => $quic_port, proto => "udp" });
 
-for my $i(1 ... 3) {
-  diag $i;
 
+subtest "read socket", sub {
+  for my $i(1 ... 3) {
+    diag $i;
+
+    my $pid = fork;
+    die "Cannot fork: $!" unless defined $pid;
+    if ($pid == 0) {
+      # child
+      sleep 0.1;
+      exec($client_prog, "-t", "2", "-3", "100", "https://127.0.0.1:$quic_port/");
+      die "Cannot exec $client_prog: $!";
+    }
+    # parent
+    my $logs = slurp_h2olog_socket($h2olog_socket, { timeout => 2 });
+
+    diag($logs . "\nlength: " . length($logs)) if $ENV{TEST_DEBUG};
+
+    ok $logs, "something is written to h2olog socket '$h2olog_socket' ($i)";
+    # check if the logs are valid JSON-Lines
+    for my $json (split /\n/, $logs) {
+      unless (eval { decode_json($json) }) {
+        fail "invalid json: $json\n$@";
+      }
+    }
+
+    cmp_ok get_status()->{"h2olog.lost"}, "==", 0, "does not lost messages";
+  }
+};
+
+subtest "lost messages", sub {
+  my $client = IO::Socket::UNIX->new(
+      Type => SOCK_STREAM,
+      Peer => $h2olog_socket,
+  ) or croak "Cannot connect to a unix domain socket '$h2olog_socket': $!";
+  # a client connects to h2olog socket, but does not read from the socket.
+
+  system($client_prog, "-3", "100", "https://127.0.0.1:$quic_port/") == 0 or die $!;
+  system($client_prog, "-3", "100", "https://127.0.0.1:$quic_port/") == 0 or die $!;
+  system($client_prog, "-3", "100", "https://127.0.0.1:$quic_port/") == 0 or die $!;
+
+  cmp_ok get_status()->{"h2olog.lost"}, ">", 0, "losts messages if client does not read socket";
+
+  # make sure event lost does not break the socket buffer
   my $pid = fork;
   die "Cannot fork: $!" unless defined $pid;
   if ($pid == 0) {
@@ -52,31 +95,20 @@ for my $i(1 ... 3) {
   # parent
   my $logs = slurp_h2olog_socket($h2olog_socket, { timeout => 2 });
 
-  diag($logs . "\nlength: " . length($logs)) if $ENV{TEST_DEBUG};
-
-  ok $logs, "something is written to h2olog socket '$h2olog_socket' ($i)";
+  ok $logs, "something is written to h2olog socket '$h2olog_socket'";
   # check if the logs are valid JSON-Lines
   for my $json (split /\n/, $logs) {
     unless (eval { decode_json($json) }) {
       fail "invalid json: $json\n$@";
     }
   }
-}
-
-subtest "lost messages", sub {
-  my $client = IO::Socket::UNIX->new(
-      Type => SOCK_STREAM,
-      Peer => $h2olog_socket,
-  ) or croak "Cannot connect to a unix domain socket '$h2olog_socket': $!";
-  # a client connects to h2olog socket, but does not read from the socket.
-
-  system($client_prog, "-t", "2", "-3", "100", "https://127.0.0.1:$quic_port/") == 0 or die $!;
-  system($client_prog, "-t", "2", "-3", "100", "https://127.0.0.1:$quic_port/") == 0 or die $!;
-  system($client_prog, "-t", "2", "-3", "100", "https://127.0.0.1:$quic_port/") == 0 or die $!;
-
-  local $TODO = "get number of lost events via status handlers";
-  fail;
 };
+
+
+sub get_status {
+  my $status_json = `$client_prog http://127.0.0.1:$server->{port}/status/json`;
+  return decode_json($status_json);
+}
 
 sub slurp_h2olog_socket {
   my($path, $opts) = @_;
