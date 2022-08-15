@@ -1500,12 +1500,11 @@ static void async_on_close(void *data)
     free(adata);
 }
 
+#ifdef PTLS_OPENSSL_HAVE_ASYNC
 static void do_ssl_async(h2o_socket_t *sock)
 {
-    // async_handshake_in_flight = sock;
     assert(!sock->async.enabled);
     sock->async.enabled = 1;
-
     int async_fd = ptls_openssl_get_async_fd(sock->ssl->ptls);
 
     // add async fd to event loop in order to retry when openssl engine is ready
@@ -1548,6 +1547,7 @@ static void do_ssl_async(h2o_socket_t *sock)
 
     h2o_socket_read_start(async_sock, async_read_ready);
 }
+#endif
 
 static void proceed_handshake_picotls(h2o_socket_t *sock)
 {
@@ -1555,7 +1555,11 @@ static void proceed_handshake_picotls(h2o_socket_t *sock)
     ptls_buffer_t wbuf;
     ptls_buffer_init(&wbuf, "", 0);
 
-    int ret = ptls_handshake(sock->ssl->ptls, &wbuf, sock->ssl->input.encrypted->bytes, &consumed, NULL);
+    int ret;
+#ifndef PTLS_OPENSSL_HAVE_ASYNC
+Retry:
+#endif
+    ret = ptls_handshake(sock->ssl->ptls, &wbuf, sock->ssl->input.encrypted->bytes, &consumed, NULL);
     h2o_buffer_consume(&sock->ssl->input.encrypted, consumed);
 
     /* determine the next action */
@@ -1565,7 +1569,11 @@ static void proceed_handshake_picotls(h2o_socket_t *sock)
         next_cb = on_handshake_complete;
         break;
     case PTLS_ERROR_ASYNC_OPERATION:
+#ifdef PTLS_OPENSSL_HAVE_ASYNC
         do_ssl_async(sock);
+#else
+        goto Retry;
+#endif
         /* fallthrough */
     case PTLS_ERROR_IN_PROGRESS:
         next_cb = proceed_handshake;
@@ -1720,7 +1728,12 @@ static void proceed_handshake_undetermined(h2o_socket_t *sock)
     if (ptls == NULL)
         h2o_fatal("no memory");
     *ptls_get_data_ptr(ptls) = sock;
-    int ret = ptls_handshake(ptls, &wbuf, sock->ssl->input.encrypted->bytes, &consumed, NULL);
+
+    int ret;
+#ifndef PTLS_OPENSSL_HAVE_ASYNC
+Retry:
+#endif
+    ret = ptls_handshake(ptls, &wbuf, sock->ssl->input.encrypted->bytes, &consumed, NULL);
 
     if (ret == PTLS_ERROR_IN_PROGRESS && wbuf.off == 0) {
         /* we aren't sure if the picotls can process the handshake, retain handshake transcript and replay on next occasion */
@@ -1744,7 +1757,11 @@ static void proceed_handshake_undetermined(h2o_socket_t *sock)
             cb = on_handshake_complete;
             break;
         case PTLS_ERROR_ASYNC_OPERATION:
+#ifdef PTLS_OPENSSL_HAVE_ASYNC
             do_ssl_async(sock);
+#else
+            goto Retry;
+#endif
             /* fallthrough */
         case PTLS_ERROR_IN_PROGRESS:
             cb = proceed_handshake;
