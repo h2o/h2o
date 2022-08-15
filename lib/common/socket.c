@@ -1442,6 +1442,7 @@ static void on_handshake_fail_complete(h2o_socket_t *sock, const char *err)
 
 static void proceed_handshake(h2o_socket_t *sock, const char *err);
 
+#ifdef PTLS_OPENSSL_HAVE_ASYNC
 struct async_data {
     h2o_socket_t *async_sock;
     struct {
@@ -1500,7 +1501,6 @@ static void async_on_close(void *data)
     free(adata);
 }
 
-#ifdef PTLS_OPENSSL_HAVE_ASYNC
 static void do_ssl_async(h2o_socket_t *sock)
 {
     assert(!sock->async.enabled);
