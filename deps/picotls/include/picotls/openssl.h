@@ -39,6 +39,12 @@ extern "C" {
 #endif
 #endif
 
+#if OPENSSL_VERSION_NUMBER >= 0x10100010L && !defined(LIBRESSL_VERSION_NUMBER)
+#if !defined(OPENSSL_NO_ASYNC)
+#define PTLS_OPENSSL_HAVE_ASYNC 1
+#endif
+#endif
+
 extern ptls_key_exchange_algorithm_t ptls_openssl_secp256r1;
 #ifdef NID_secp384r1
 #define PTLS_OPENSSL_HAVE_SECP384R1 1
@@ -91,7 +97,9 @@ void ptls_openssl_random_bytes(void *buf, size_t len);
  * constructs a key exchange context. pkey's reference count is incremented.
  */
 int ptls_openssl_create_key_exchange(ptls_key_exchange_context_t **ctx, EVP_PKEY *pkey);
+#ifdef PTLS_OPENSSL_HAVE_ASYNC
 int ptls_openssl_get_async_fd(ptls_t *ptls);
+#endif
 
 struct st_ptls_openssl_signature_scheme_t {
     uint16_t scheme_id;

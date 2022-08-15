@@ -42,9 +42,12 @@
 #include <openssl/x509.h>
 #include <openssl/x509v3.h>
 #include <openssl/x509_vfy.h>
-#include <openssl/async.h>
 #include "picotls.h"
 #include "picotls/openssl.h"
+
+#ifdef PTLS_OPENSSL_HAVE_ASYNC
+#include <openssl/async.h>
+#endif
 
 #ifdef _WINDOWS
 #ifndef _CRT_SECURE_NO_WARNINGS
@@ -698,8 +701,10 @@ int ptls_openssl_create_key_exchange(ptls_key_exchange_context_t **ctx, EVP_PKEY
 struct sign_ctx {
     const struct st_ptls_openssl_signature_scheme_t *scheme;
     EVP_MD_CTX *ctx;
+#ifdef PTLS_OPENSSL_HAVE_ASYNC
     ASYNC_WAIT_CTX *waitctx;
     ASYNC_JOB *job;
+#endif
     size_t siglen;
     // must be last, see `sign_ctx_alloc`
     uint8_t sig[0];
@@ -711,7 +716,9 @@ static struct sign_ctx *sign_ctx_alloc(size_t siglen)
     struct sign_ctx *sign_ctx = malloc(sizeof(*sign_ctx) + siglen);
     memset(sign_ctx, 0, sizeof(*sign_ctx) + siglen);
     sign_ctx->siglen = siglen;
+#ifdef PTLS_OPENSSL_HAVE_ASYNC
     sign_ctx->waitctx = ASYNC_WAIT_CTX_new();
+#endif
 
     return sign_ctx;
 }
@@ -722,6 +729,7 @@ static void sign_ctx_destroy(struct sign_ctx *sign_ctx)
 
     if (sign_ctx->ctx != NULL)
         EVP_MD_CTX_destroy(sign_ctx->ctx);
+#ifdef PTLS_OPENSSL_HAVE_ASYNC
     if (sign_ctx->job != NULL) {
         int _ret;
         // resume the job to free resources
@@ -729,9 +737,11 @@ static void sign_ctx_destroy(struct sign_ctx *sign_ctx)
     }
     if (sign_ctx->waitctx != NULL)
         ASYNC_WAIT_CTX_free(sign_ctx->waitctx);
+#endif
     free(sign_ctx);
 }
 
+#ifdef PTLS_OPENSSL_HAVE_ASYNC
 int ptls_openssl_get_async_fd(ptls_t *ptls)
 {
     int fds[1];
@@ -742,6 +752,7 @@ int ptls_openssl_get_async_fd(ptls_t *ptls)
     ASYNC_WAIT_CTX_get_all_fds(args->waitctx, fds, &numfds);
     return fds[0];
 }
+#endif
 
 static void async_sign_cancel(void *vargs)
 {
@@ -749,7 +760,7 @@ static void async_sign_cancel(void *vargs)
     sign_ctx_destroy(args);
 }
 
-static int async_sign(void *vargs)
+static int do_sign_final(void *vargs)
 {
     struct sign_ctx *args = *(struct sign_ctx **)vargs;
     return EVP_DigestSignFinal(args->ctx, args->sig, &args->siglen);
@@ -833,9 +844,10 @@ static int do_sign(EVP_PKEY *key, const struct st_ptls_openssl_signature_scheme_
     } else
 #endif
     {
+#ifdef PTLS_OPENSSL_HAVE_ASYNC
         if (ASYNC_get_current_job() == NULL) {
             // start async sign
-            switch (ASYNC_start_job(&args->job, args->waitctx, &ret, async_sign, &args, sizeof(struct sign_ctx**)))
+            switch (ASYNC_start_job(&args->job, args->waitctx, &ret, do_sign_final, &args, sizeof(struct sign_ctx**)))
             {
                 case ASYNC_ERR:
                     ret = PTLS_ERROR_LIBRARY;
@@ -859,6 +871,10 @@ static int do_sign(EVP_PKEY *key, const struct st_ptls_openssl_signature_scheme_
                     goto Exit;
             }
         }
+#else
+    do_sign_final(&args);
+    ptls_buffer__do_pushv(outbuf, args->sig, args->siglen);
+#endif
     }
 
     ret = 0;
