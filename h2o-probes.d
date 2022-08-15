@@ -129,4 +129,49 @@ provider h2o {
      * HTTP/3 event, indicating that a forwarded QUIC packet has been received.
      */
     probe h3_forwarded_packet_receive(struct sockaddr *dest, struct sockaddr *src, size_t num_bytes);
+
+    /**
+      * An attempt to connect on the backend-side of a CONNECT tunnel.
+      */
+    probe connect_tcp_start(uint64_t conn_id, uint64_t req_id, struct sockaddr *dest);
+    /**
+      * A write to the TCP connection on the backend-side of a CONNECT tunnel.
+      */
+    probe connect_tcp_write(uint64_t conn_id, uint64_t req_id, size_t num_bytes);
+    /**
+      * A write error on the TCP connection on the backend-side of a CONNECT tunnel.
+      */
+    probe connect_tcp_write_error(uint64_t conn_id, uint64_t req_id, const char *err);
+    /**
+      * A read from the TCP connection on the backend-side of a CONNECT tunnel.
+      */
+    probe connect_tcp_read(uint64_t conn_id, uint64_t req_id, size_t num_bytes);
+    /**
+      * A read error on the TCP connection on the backend-side of a CONNECT tunnel.
+      */
+    probe connect_tcp_read_error(uint64_t conn_id, uint64_t req_id, const char *err);
+    /**
+      * An attempt to connect on the backend-side of a CONNECT-UDP tunnel.
+      */
+    probe connect_udp_start(uint64_t conn_id, uint64_t req_id, struct sockaddr *dest);
+    /**
+      * A write to the UDP connection on the backend-side of a CONNECT-UDP tunnel.
+      */
+    probe connect_udp_write(uint64_t conn_id, uint64_t req_id, size_t num_bytes);
+    /**
+      * A read from the UDP connection on the backend-side of a CONNECT-UDP tunnel.
+      */
+    probe connect_udp_read(uint64_t conn_id, uint64_t req_id, size_t num_bytes);
+    /**
+      * Error trying to establish a CONNECT or CONNECT-UDP tunnel.
+      */
+    probe connect_error(uint64_t conn_id, uint64_t req_id, const char *error_type, const char *details, const char *rcode);
+    /**
+      * Idle timeout on a CONNECT or CONNECT-UDP tunnel.
+      */
+    probe connect_io_timeout(uint64_t conn_id, uint64_t req_id);
+    /**
+      * Done handling a CONNECT or CONNECT-UDP request.
+      */
+    probe connect_dispose(uint64_t conn_id, uint64_t req_id);
 };

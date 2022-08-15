@@ -174,6 +174,7 @@ static void *zerocopy_buffers_release(struct st_h2o_socket_zerocopy_buffers_t *b
 
 /* internal functions called from the backend */
 static const char *decode_ssl_input(h2o_socket_t *sock);
+static size_t flatten_sendvec(h2o_socket_t *sock, h2o_sendvec_t *sendvec);
 static void on_write_complete(h2o_socket_t *sock, const char *err);
 
 h2o_buffer_mmap_settings_t h2o_socket_buffer_mmap_settings = {
@@ -193,7 +194,8 @@ h2o_mem_recycle_conf_t h2o_socket_ssl_buffer_conf = {.memsize = H2O_SOCKET_DEFAU
 #endif
 };
 __thread h2o_mem_recycle_t h2o_socket_ssl_buffer_allocator = {&h2o_socket_ssl_buffer_conf};
-static __thread h2o_mem_recycle_t zerocopy_buffer_allocator = {&h2o_socket_ssl_buffer_conf};
+__thread h2o_mem_recycle_t h2o_socket_zerocopy_buffer_allocator = {&h2o_socket_ssl_buffer_conf};
+__thread size_t h2o_socket_num_zerocopy_buffers_inflight;
 
 int h2o_socket_use_ktls = 0;
 
@@ -244,12 +246,16 @@ static int read_bio(BIO *b, char *out, int len)
 
 static void init_write_buf(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, size_t first_buf_written)
 {
+    /* Use smallbufs or allocate slots. An additional slot is reserved at the end so that sendvec can be flattened there for
+     * encryption. */
     if (bufcnt < PTLS_ELEMENTSOF(sock->_write_buf.smallbufs)) {
         sock->_write_buf.bufs = sock->_write_buf.smallbufs;
     } else {
-        sock->_write_buf.bufs = h2o_mem_alloc(sizeof(sock->_write_buf.bufs[0]) * bufcnt);
+        sock->_write_buf.bufs = h2o_mem_alloc(sizeof(sock->_write_buf.bufs[0]) * (bufcnt + 1));
         sock->_write_buf.alloced_ptr = sock->_write_buf.bufs;
     }
+
+    /* Initialize the vector. */
     if (bufcnt != 0) {
         sock->_write_buf.bufs[0].base = bufs[0].base + first_buf_written;
         sock->_write_buf.bufs[0].len = bufs[0].len - first_buf_written;
@@ -278,7 +284,7 @@ static void dispose_write_buf(h2o_socket_t *sock)
 
 static void init_ssl_output_buffer(struct st_h2o_socket_ssl_t *ssl, int zerocopy)
 {
-    h2o_mem_recycle_t *allocator = zerocopy ? &zerocopy_buffer_allocator : &h2o_socket_ssl_buffer_allocator;
+    h2o_mem_recycle_t *allocator = zerocopy ? &h2o_socket_zerocopy_buffer_allocator : &h2o_socket_ssl_buffer_allocator;
     ptls_buffer_init(&ssl->output.buf, h2o_mem_alloc_recycle(allocator), allocator->conf->memsize);
     ssl->output.buf.is_allocated = 1; /* set to true, so that the allocated memory is freed when the buffer is expanded */
     ssl->output.buf.align_bits = allocator->conf->align_bits;
@@ -297,7 +303,7 @@ static void dispose_ssl_output_buffer(struct st_h2o_socket_ssl_t *ssl)
 
     if (!ssl->output.zerocopy_owned) {
         h2o_mem_recycle_t *allocator =
-            ssl->output.allocated_for_zerocopy ? &zerocopy_buffer_allocator : &h2o_socket_ssl_buffer_allocator;
+            ssl->output.allocated_for_zerocopy ? &h2o_socket_zerocopy_buffer_allocator : &h2o_socket_ssl_buffer_allocator;
         if (ssl->output.buf.capacity == allocator->conf->memsize) {
             h2o_mem_free_recycle(allocator, ssl->output.buf.base);
         } else {
@@ -859,6 +865,21 @@ static size_t generate_tls_records(h2o_socket_t *sock, h2o_iovec_t **bufs, size_
     return first_buf_written;
 }
 
+size_t flatten_sendvec(h2o_socket_t *sock, h2o_sendvec_t *sendvec)
+{
+    assert(h2o_socket_ssl_buffer_allocator.conf->memsize >= H2O_PULL_SENDVEC_MAX_SIZE);
+    sock->_write_buf.flattened = h2o_mem_alloc_recycle(&h2o_socket_ssl_buffer_allocator);
+    size_t len = sendvec->len;
+
+    if (!sendvec->callbacks->read_(sendvec, sock->_write_buf.flattened, len)) {
+        /* failed */
+        h2o_mem_free_recycle(&h2o_socket_ssl_buffer_allocator, sock->_write_buf.flattened);
+        sock->_write_buf.flattened = NULL;
+        return SIZE_MAX;
+    }
+    return len;
+}
+
 void h2o_socket_write(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_socket_cb cb)
 {
     SOCKET_PROBE(WRITE, sock, bufs, bufcnt, cb);
@@ -903,21 +924,17 @@ void h2o_socket_sendvec(h2o_socket_t *sock, h2o_sendvec_t *vecs, size_t cnt, h2o
         /* If the pull vector has a send callback, and if we have the necessary conditions to utilize it, Let it write directly to
          * the socket. */
 #if !H2O_USE_LIBUV
-        if (pull_index == cnt - 1 && vecs[pull_index].callbacks->send_ != NULL &&
+        if (pull_index == cnt - 1 && vecs[pull_index].callbacks != NULL &&
             do_write_with_sendvec(sock, bufs, cnt - 1, vecs + pull_index))
             return;
 #endif
         /* Load the vector onto memory now. */
-        assert(h2o_socket_ssl_buffer_allocator.conf->memsize >= H2O_PULL_SENDVEC_MAX_SIZE);
-        sock->_write_buf.flattened = h2o_mem_alloc_recycle(&h2o_socket_ssl_buffer_allocator);
-        bufs[pull_index] = h2o_iovec_init(sock->_write_buf.flattened, vecs[pull_index].len);
-        if (!vecs[pull_index].callbacks->read_(vecs + pull_index, bufs[pull_index].base, bufs[pull_index].len)) {
-            /* failed */
-            h2o_mem_free_recycle(&h2o_socket_ssl_buffer_allocator, sock->_write_buf.flattened);
-            sock->_write_buf.flattened = NULL;
+        size_t pulllen = flatten_sendvec(sock, &vecs[pull_index]);
+        if (pulllen == SIZE_MAX) {
             report_early_write_error(sock);
             return;
         }
+        bufs[pull_index] = h2o_iovec_init(sock->_write_buf.flattened, pulllen);
     }
 
     do_write(sock, bufs, cnt);
@@ -1031,7 +1048,7 @@ int h2o_socket_get_ssl_cipher_bits(h2o_socket_t *sock)
             ptls_cipher_suite_t *cipher = ptls_get_cipher(sock->ssl->ptls);
             if (cipher == NULL)
                 return 0;
-            return (int)cipher->aead->key_size;
+            return (int)cipher->aead->key_size * 8;
         } else if (sock->ssl->ossl != NULL) {
             return SSL_get_cipher_bits(sock->ssl->ossl, NULL);
         }
@@ -2172,12 +2189,13 @@ void *zerocopy_buffers_release(struct st_h2o_socket_zerocopy_buffers_t *buffers,
 void h2o_socket_clear_recycle(int full)
 {
     h2o_mem_clear_recycle(&h2o_socket_ssl_buffer_allocator, full);
-    h2o_mem_clear_recycle(&zerocopy_buffer_allocator, full);
+    h2o_mem_clear_recycle(&h2o_socket_zerocopy_buffer_allocator, full);
 }
 
 int h2o_socket_recycle_is_empty(void)
 {
-    return h2o_mem_recycle_is_empty(&h2o_socket_ssl_buffer_allocator) && h2o_mem_recycle_is_empty(&zerocopy_buffer_allocator);
+    return h2o_mem_recycle_is_empty(&h2o_socket_ssl_buffer_allocator) &&
+           h2o_mem_recycle_is_empty(&h2o_socket_zerocopy_buffer_allocator);
 }
 
 #if H2O_USE_EBPF_MAP

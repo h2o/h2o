@@ -91,7 +91,7 @@ struct st_h2o_http1client_t {
 static void on_body_to_pipe(h2o_socket_t *_sock, const char *err);
 
 static void req_body_send(struct st_h2o_http1client_t *client);
-static void do_update_window(h2o_httpclient_t *_client);
+static void update_read_state(struct st_h2o_http1client_t *client);
 
 static void close_client(struct st_h2o_http1client_t *client)
 {
@@ -196,7 +196,7 @@ static void on_body_until_close(h2o_socket_t *sock, const char *err)
             close_client(client);
             return;
         }
-        do_update_window(&client->super);
+        update_read_state(client);
     }
 }
 
@@ -247,7 +247,7 @@ static void on_body_content_length(h2o_socket_t *sock, const char *err)
         client->reader = on_body_to_pipe;
     }
 #endif
-    do_update_window(&client->super);
+    update_read_state(client);
 }
 
 void on_body_to_pipe(h2o_socket_t *_sock, const char *err)
@@ -269,7 +269,7 @@ void on_body_to_pipe(h2o_socket_t *_sock, const char *err)
            errno == EINTR)
         ;
     if (bytes_read == -1 && errno == EAGAIN) {
-        do_update_window(&client->super);
+        update_read_state(client);
         return;
     }
     if (bytes_read <= 0) {
@@ -372,7 +372,7 @@ static void on_body_chunked(h2o_socket_t *sock, const char *err)
             close_client(client);
             return;
         }
-        do_update_window(&client->super);
+        update_read_state(client);
     }
 }
 
@@ -865,11 +865,13 @@ static void do_cancel(h2o_httpclient_t *_client)
     close_client(client);
 }
 
-static void do_update_window(h2o_httpclient_t *_client)
+void update_read_state(struct st_h2o_http1client_t *client)
 {
-    struct st_h2o_http1client_t *client = (void *)_client;
+    /* If pipe used, `client->reader` would have switched to `on_body_pipe` by the time this function is called for the first time.
+     */
+    assert((client->pipe_reader.on_body_piped != NULL) == (client->reader == on_body_to_pipe));
 
-    if (client->pipe_reader.on_body_piped != NULL) {
+    if (client->reader == on_body_to_pipe) {
         /* When pipe is being used, resume read when consumption is notified from user. `h2o_socket_read_start` is invoked without
          * checking if we are already reading; this is because we want to make sure that the read callback replaced to the current
          * one. */
@@ -896,6 +898,22 @@ static void do_update_window(h2o_httpclient_t *_client)
         if (h2o_timer_is_linked(&client->super._timeout))
             h2o_timer_unlink(&client->super._timeout);
     }
+}
+
+static void do_update_window(struct st_h2o_httpclient_t *_client)
+{
+    struct st_h2o_http1client_t *client = (void *)_client;
+
+    /* When we are splicing to pipe, read synchronously. For prioritization logic to work correctly, it is important to provide
+     * additional data synchronously in response to the invocation of `h2o_proceed_response`. When memory buffers are used,
+     * lib/core/proxy.c uses a double buffering to prepare next chunk of data while a chunk of data is being fed to the HTTP
+     * handlers via `h2o_sendvec`. But when using splice, the pipe is the only one buffer available. */
+    if (client->reader == on_body_to_pipe) {
+        on_body_to_pipe(client->sock, NULL);
+        return;
+    }
+
+    update_read_state(client);
 }
 
 static void do_get_conn_properties(h2o_httpclient_t *_client, h2o_httpclient_conn_properties_t *properties)

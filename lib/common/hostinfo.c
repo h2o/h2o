@@ -153,9 +153,9 @@ static void create_lookup_thread_if_necessary(void)
     pthread_attr_t attr;
     int ret;
     pthread_attr_init(&attr);
-    pthread_attr_setdetachstate(&attr, 1);
+    pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
     pthread_attr_setstacksize(&attr, 100 * 1024);
-    if ((ret = pthread_create(&tid, NULL, lookup_thread_main, NULL)) != 0) {
+    if ((ret = pthread_create(&tid, &attr, lookup_thread_main, NULL)) != 0) {
         char buf[128];
         if (queue.num_threads == 0) {
             h2o_fatal("failed to start first thread for getaddrinfo: %s", h2o_strerror_r(ret, buf, sizeof(buf)));
@@ -164,6 +164,7 @@ static void create_lookup_thread_if_necessary(void)
         }
         return;
     }
+    pthread_attr_destroy(&attr);
 
     ++queue.num_threads;
     ++queue.num_threads_idle;

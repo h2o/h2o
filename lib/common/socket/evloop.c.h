@@ -53,6 +53,11 @@ struct st_h2o_evloop_socket_t {
     size_t max_read_size;
     struct st_h2o_evloop_socket_t *_next_pending;
     struct st_h2o_evloop_socket_t *_next_statechanged;
+    struct {
+        uint64_t prev_loop;
+        uint64_t cur_loop;
+        uint64_t cur_run_count;
+    } bytes_written;
     /**
      * vector to be sent (or vec.callbacks is NULL when not used)
      */
@@ -102,6 +107,7 @@ static void evloop_do_on_socket_export(struct st_h2o_evloop_socket_t *sock);
 #endif
 
 size_t h2o_evloop_socket_max_read_size = 1024 * 1024; /* by default, we read up to 1MB at once */
+size_t h2o_evloop_socket_max_write_size = 1024 * 1024; /* by default, we write up to 1MB at once */
 
 void link_to_pending(struct st_h2o_evloop_socket_t *sock)
 {
@@ -203,7 +209,17 @@ static size_t write_core(struct st_h2o_evloop_socket_t *sock, h2o_iovec_t **bufs
         return write_vecs(sock, bufs, bufcnt, 0);
     }
 
-    /* SSL */
+    /* SSL: flatten given vector if that has not been done yet; `*bufs` is guaranteed to have one slot available at the end; see
+     * `do_write_with_sendvec`, `init_write_buf`. */
+    if (sock->sendvec.callbacks != NULL) {
+        size_t veclen = flatten_sendvec(&sock->super, &sock->sendvec);
+        if (veclen == SIZE_MAX)
+            return SIZE_MAX;
+        sock->sendvec.callbacks = NULL;
+        (*bufs)[(*bufcnt)++] = h2o_iovec_init(sock->super._write_buf.flattened, veclen);
+    }
+
+    /* continue encrypting and writing, until we run out of data */
     size_t first_buf_written = 0;
     while (1) {
         /* write bytes already encrypted, if any */
@@ -215,14 +231,15 @@ static size_t write_core(struct st_h2o_evloop_socket_t *sock, h2o_iovec_t **bufs
             int sendmsg_flags = 0;
 #if H2O_USE_MSG_ZEROCOPY
             /* Use zero copy if amount of data to be written is no less than 4KB, and if the memory can be returned to
-             * `zerocopy_buffer_allocator`. Latter is a short-cut. It is only under exceptional conditions (e.g., TLS stack adding
-             * a post-handshake message) that we'd see the buffer grow to a size that cannot be returned to the recycling allocator.
+             * `h2o_socket_zerocopy_buffer_allocator`. Latter is a short-cut. It is only under exceptional conditions (e.g., TLS
+             * stack adding a post-handshake message) that we'd see the buffer grow to a size that cannot be returned to the
+             * recycling allocator.
              * Even though https://www.kernel.org/doc/html/v5.17/networking/msg_zerocopy.html recommends 10KB, 4KB has been chosen
              * as the threshold, because we are likely to be using the non-temporal aesgcm engine and tx-nocache-copy, in which case
              * copying sendmsg is going to be more costly than what the kernel documentation assumes. In a synthetic benchmark,
              * changing from 16KB to 4KB increased the throughput by ~10%. */
             if (sock->super.ssl->output.allocated_for_zerocopy && encbuf.len >= 4096 &&
-                sock->super.ssl->output.buf.capacity == zerocopy_buffer_allocator.conf->memsize)
+                sock->super.ssl->output.buf.capacity == h2o_socket_zerocopy_buffer_allocator.conf->memsize)
                 sendmsg_flags = MSG_ZEROCOPY;
 #endif
             if ((enc_written = write_vecs(sock, &encbufs, &encbufcnt, sendmsg_flags)) == SIZE_MAX) {
@@ -231,7 +248,10 @@ static size_t write_core(struct st_h2o_evloop_socket_t *sock, h2o_iovec_t **bufs
             }
             if (sendmsg_flags != 0 && (encbufcnt == 0 || enc_written > 0)) {
                 zerocopy_buffers_push(sock->super._zerocopy, sock->super.ssl->output.buf.base);
-                sock->super.ssl->output.zerocopy_owned = 1;
+                if (!sock->super.ssl->output.zerocopy_owned) {
+                    sock->super.ssl->output.zerocopy_owned = 1;
+                    ++h2o_socket_num_zerocopy_buffers_inflight;
+                }
             }
             /* if write is incomplete, record the advance and bail out */
             if (encbufcnt != 0) {
@@ -242,7 +262,7 @@ static size_t write_core(struct st_h2o_evloop_socket_t *sock, h2o_iovec_t **bufs
             dispose_ssl_output_buffer(sock->super.ssl);
         }
         /* bail out if complete */
-        if (*bufcnt == 0)
+        if (*bufcnt == 0 && sock->sendvec.callbacks == NULL)
             break;
         /* convert more cleartext to TLS records if possible, or bail out on fatal error */
         if ((first_buf_written = generate_tls_records(&sock->super, bufs, bufcnt, first_buf_written)) == SIZE_MAX)
@@ -282,11 +302,15 @@ static int sendvec_core(struct st_h2o_evloop_socket_t *sock)
 
 void write_pending(struct st_h2o_evloop_socket_t *sock)
 {
-
     assert(sock->super._cb.write != NULL);
 
     /* write from buffer, if we have anything */
-    if (sock->super._write_buf.cnt != 0 || has_pending_ssl_bytes(sock->super.ssl)) {
+    int ssl_needs_flatten = sock->sendvec.callbacks != NULL && sock->super.ssl != NULL
+#if H2O_USE_KTLS
+        && sock->super.ssl->offload != H2O_SOCKET_SSL_OFFLOAD_ON
+#endif
+    ;
+    if (sock->super._write_buf.cnt != 0 || has_pending_ssl_bytes(sock->super.ssl) || ssl_needs_flatten) {
         size_t first_buf_written;
         if ((first_buf_written = write_core(sock, &sock->super._write_buf.bufs, &sock->super._write_buf.cnt)) != SIZE_MAX) {
             /* return if there's still pending data, adjusting buf[0] if necessary */
@@ -312,6 +336,7 @@ void write_pending(struct st_h2o_evloop_socket_t *sock)
 
     /* operation completed or failed, schedule notification */
     SOCKET_PROBE(WRITE_COMPLETE, &sock->super, sock->super._write_buf.cnt == 0 && !has_pending_ssl_bytes(sock->super.ssl));
+    sock->bytes_written.cur_loop = sock->super.bytes_written;
     sock->_flags |= H2O_SOCKET_FLAG_IS_WRITE_NOTIFY;
     link_to_pending(sock);
     link_to_statechanged(sock); /* might need to disable the write polling */
@@ -379,6 +404,16 @@ void do_write(h2o_socket_t *_sock, h2o_iovec_t *bufs, size_t bufcnt)
     struct st_h2o_evloop_socket_t *sock = (struct st_h2o_evloop_socket_t *)_sock;
     size_t first_buf_written;
 
+    /* Don't write too much; if more than 1MB have been already written in the current invocation of `h2o_evloop_run`, wait until
+     * the event loop notifies us that the socket is writable. */
+    if (sock->bytes_written.cur_run_count != sock->loop->run_count) {
+        sock->bytes_written.prev_loop = sock->bytes_written.cur_loop;
+        sock->bytes_written.cur_run_count = sock->loop->run_count;
+    } else if (sock->bytes_written.cur_loop - sock->bytes_written.prev_loop >= h2o_evloop_socket_max_write_size) {
+        init_write_buf(&sock->super, bufs, bufcnt, 0);
+        goto Schedule_Write;
+    }
+
     /* try to write now */
     if ((first_buf_written = write_core(sock, &bufs, &bufcnt)) == SIZE_MAX) {
         report_early_write_error(&sock->super);
@@ -398,6 +433,7 @@ void do_write(h2o_socket_t *_sock, h2o_iovec_t *bufs, size_t bufcnt)
             if (sock->sendvec.callbacks != NULL)
                 goto Schedule_Write;
         }
+        sock->bytes_written.cur_loop = sock->super.bytes_written;
         sock->_flags |= H2O_SOCKET_FLAG_IS_WRITE_NOTIFY;
         link_to_pending(sock);
         return;
@@ -509,23 +545,28 @@ Fail:
 }
 #endif
 
+/**
+ * `bufs` should be an array capable of storing `bufcnt + 1` objects, as we will be flattening `sendvec` at the end of `bufs` before
+ * encryption; see `write_core`.
+ */
 static int do_write_with_sendvec(h2o_socket_t *_sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_sendvec_t *sendvec)
 {
     struct st_h2o_evloop_socket_t *sock = (struct st_h2o_evloop_socket_t *)_sock;
 
-    assert(sendvec->callbacks->send_ != NULL);
+    assert(sendvec->callbacks->read_ != NULL);
     assert(sock->sendvec.callbacks == NULL);
 
-    /* If userspace TLS is currently in use, either switch to kTLS or refuse. */
+    /* If userspace TLS is used, rely on `read_` which is a mandatory callback. Otherwise, rely on `send_` if it is available. */
     if (sock->super.ssl != NULL) {
 #if H2O_USE_KTLS
         if (sock->super.ssl->offload == H2O_SOCKET_SSL_OFFLOAD_TBD)
             switch_to_ktls(sock);
-        if (sock->super.ssl->offload != H2O_SOCKET_SSL_OFFLOAD_ON)
+        if (sock->super.ssl->offload == H2O_SOCKET_SSL_OFFLOAD_ON && sendvec->callbacks->send_ == NULL)
             return 0;
-#else
-        return 0;
 #endif
+    } else {
+        if (sendvec->callbacks->send_ == NULL)
+            return 0;
     }
 
     /* handling writes with sendvec, here */
@@ -876,6 +917,8 @@ void h2o_evloop_destroy(h2o_evloop_t *loop)
 
 int h2o_evloop_run(h2o_evloop_t *loop, int32_t max_wait)
 {
+    ++loop->run_count;
+
     /* update socket states, poll, set readable flags, perform pending writes */
     if (evloop_do_proceed(loop, max_wait) != 0)
         return -1;

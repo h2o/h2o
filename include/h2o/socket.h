@@ -250,6 +250,8 @@ extern h2o_buffer_prototype_t h2o_socket_buffer_prototype;
  */
 extern h2o_mem_recycle_conf_t h2o_socket_ssl_buffer_conf;
 extern __thread h2o_mem_recycle_t h2o_socket_ssl_buffer_allocator;
+extern __thread h2o_mem_recycle_t h2o_socket_zerocopy_buffer_allocator;
+extern __thread size_t h2o_socket_num_zerocopy_buffers_inflight;
 
 /**
  * boolean flag indicating if kTLS should be used (when preferable)
