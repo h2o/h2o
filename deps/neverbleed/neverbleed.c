@@ -49,11 +49,16 @@
 
 #include <openssl/opensslconf.h>
 #include <openssl/opensslv.h>
-#include <openssl/async.h>
 
 #if OPENSSL_VERSION_NUMBER >= 0x1010000fL && !defined(LIBRESSL_VERSION_NUMBER)
 /* RSA_METHOD is opaque, so RSA_meth* are used. */
 #define NEVERBLEED_OPAQUE_RSA_METHOD
+#endif
+
+#if OPENSSL_VERSION_NUMBER >= 0x10100010L && !defined(LIBRESSL_VERSION_NUMBER)
+#if !defined(OPENSSL_NO_ASYNC)
+#define NEVERBLEED_OPENSSL_HAVE_ASYNC 1
+#endif
 #endif
 
 #if OPENSSL_VERSION_NUMBER >= 0x1010000fL && !defined(OPENSSL_NO_EC) \
@@ -69,6 +74,9 @@
 #include <openssl/rand.h>
 #include <openssl/rsa.h>
 #include <openssl/ssl.h>
+#ifdef NEVERBLEED_OPENSSL_HAVE_ASYNC
+#include <openssl/async.h>
+#endif
 
 #if OPENSSL_VERSION_NUMBER < 0x1010000fL \
     || (defined(LIBRESSL_VERSION_NUMBER) && LIBRESSL_VERSION_NUMBER < 0x2070000fL)
@@ -547,8 +555,11 @@ static size_t daemon_set_rsa(RSA *rsa)
     return index;
 }
 
+// sets up file descriptor and calls OpenSSL's `ASYNC_pause_job`
+// if OpenSSL async is not available, this function is a no-op
 static int async_pause(int fd)
 {
+#ifdef NEVERBLEED_OPENSSL_HAVE_ASYNC
     ASYNC_JOB *job;
 
     // dup the fd as the applicaiton may want to close it after polling
@@ -576,6 +587,7 @@ static int async_pause(int fd)
             return -1;
         }
     }
+#endif
 
     return 0;
 }
@@ -1617,7 +1629,9 @@ int neverbleed_init(neverbleed_t *nb, char *errbuf)
         snprintf(errbuf, NEVERBLEED_ERRBUF_SIZE, "failed to initialize the OpenSSL engine");
         goto Fail;
     }
+#ifdef NEVERBLEED_OPENSSL_HAVE_ASYNC
     ERR_load_ASYNC_strings();
+#endif
     ENGINE_add(nb->engine);
 
     /* setup thread key */
