@@ -2758,8 +2758,9 @@ static int send_certificate_verify(ptls_t *tls, ptls_message_emitter_t *emitter,
             uint16_t algo;
             uint8_t data[PTLS_MAX_CERTIFICATE_VERIFY_SIGNDATA_SIZE];
             size_t datalen = build_certificate_verify_signdata(data, tls->key_schedule, context_string);
-            if ((ret = tls->ctx->sign_certificate->cb(tls->ctx->sign_certificate, tls, &tls->server.sign_certificate.cb,
-                                                      &tls->server.sign_certificate.sign_certificate_ctx,
+            if ((ret = tls->ctx->sign_certificate->cb(tls->ctx->sign_certificate, tls,
+                                                      tls->is_server ? &tls->server.sign_certificate.cb : NULL,
+                                                      tls->is_server ? &tls->server.sign_certificate.sign_certificate_ctx : NULL,
                                                       &algo, sendbuf, ptls_iovec_init(data, datalen),
                                                       signature_algorithms != NULL ? signature_algorithms->list : NULL,
                                                       signature_algorithms != NULL ? signature_algorithms->count : 0)) != 0) {

@@ -863,7 +863,6 @@ static int do_sign(EVP_PKEY *key, const struct st_ptls_openssl_signature_scheme_
                 case ASYNC_FINISH: {
                     ptls_buffer__do_pushv(outbuf, args->sig, args->siglen);
                     args->job = NULL;
-                    *cb = NULL;
                     break;
                 }
                 default:
@@ -880,6 +879,7 @@ static int do_sign(EVP_PKEY *key, const struct st_ptls_openssl_signature_scheme_
     ret = 0;
 Exit:
     *sign_ctx = NULL;
+    *cb = NULL;
     sign_ctx_destroy(args);
     if (ctx != NULL)
         EVP_MD_CTX_destroy(ctx);
@@ -1162,6 +1162,21 @@ ptls_define_hash(sha256, SHA256_CTX, SHA256_Init, SHA256_Update, _sha256_final);
 #define _sha384_final(ctx, md) SHA384_Final((md), (ctx))
 ptls_define_hash(sha384, SHA512_CTX, SHA384_Init, SHA384_Update, _sha384_final);
 
+static const struct st_ptls_openssl_signature_scheme_t *match_scheme(const struct st_ptls_openssl_signature_scheme_t *schemes,
+                                                                     const uint16_t *algorithms,
+                                                                     size_t num_algorithms)
+{
+    const struct st_ptls_openssl_signature_scheme_t *scheme;
+    for (scheme = schemes; scheme->scheme_id != UINT16_MAX; ++scheme) {
+        size_t i;
+        for (i = 0; i != num_algorithms; ++i) {
+            if (algorithms[i] == scheme->scheme_id) {
+                return scheme;
+            }
+        }
+    }
+    return scheme;
+}
 static int sign_certificate(ptls_sign_certificate_t *_self, ptls_t *tls, void (**cb)(void *sign_ctx), void **sign_ctx,
                             uint16_t *selected_algorithm, ptls_buffer_t *outbuf, ptls_iovec_t input, const uint16_t *algorithms,
                             size_t num_algorithms)
@@ -1169,22 +1184,29 @@ static int sign_certificate(ptls_sign_certificate_t *_self, ptls_t *tls, void (*
     ptls_openssl_sign_certificate_t *self = (ptls_openssl_sign_certificate_t *)_self;
     const struct st_ptls_openssl_signature_scheme_t *scheme;
 
-    struct sign_ctx *args = *sign_ctx;
-    if (args == NULL) {
-        // first invocation, get scheme
-        for (scheme = self->schemes; scheme->scheme_id != UINT16_MAX; ++scheme) {
-            size_t i;
-            for (i = 0; i != num_algorithms; ++i) {
-                if (algorithms[i] == scheme->scheme_id) {
-                    goto Exit;
-                }
-            }
+    if (ptls_is_server(tls)) {
+        assert(sign_ctx != NULL);
+        // server signing is asynchronous
+        struct sign_ctx *args = *sign_ctx;
+        if (args == NULL) {
+            // first invocation, get scheme
+            scheme = match_scheme(self->schemes, algorithms, num_algorithms);
+            goto Exit;
+        } else {
+            // second invocation
+            // algorithms should be NULL, re-use cached scheme
+            assert(algorithms == NULL);
+            scheme = args->scheme;
+            goto Exit;
         }
     } else {
-        // second invocation
-        // algorithms should be NULL, re-use cached scheme
-        assert(algorithms == NULL);
-        scheme = args->scheme;
+        assert(sign_ctx == NULL);
+        // setup temporary ctx for client
+        void *tmp_sign_ctx = NULL;
+        void (*tmp_sign_ctx_cb)(void *sign_ctx);
+        sign_ctx = &tmp_sign_ctx;
+        cb = &tmp_sign_ctx_cb;
+        scheme = match_scheme(self->schemes, algorithms, num_algorithms);
         goto Exit;
     }
 
