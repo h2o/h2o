@@ -15,14 +15,17 @@ plan skip_all => "$client_prog not found" unless -e $client_prog;
 
 my $tempdir = tempdir(CLEANUP => 1);
 my $h2olog_socket = "$tempdir/h2olog.sock";
-
 my $quic_port = empty_port({
     host  => "127.0.0.1",
     proto => "udp",
 });
 
-my $server = spawn_h2o({ conf => <<"EOT" });
-h2olog-socket: $h2olog_socket
+
+subtest "read socket", sub {
+  my $server = spawn_h2o({ conf => <<"EOT" });
+h2olog-socket:
+  path: $h2olog_socket
+  permission: 666
 listen:
   type: quic
   port: $quic_port
@@ -38,10 +41,9 @@ hosts:
         status: ON
 EOT
 
-wait_port({ port => $quic_port, proto => "udp" });
+  wait_port({ port => $quic_port, proto => "udp" });
 
 
-subtest "read socket", sub {
   for my $i(1 ... 3) {
     diag $i;
 
@@ -58,19 +60,36 @@ subtest "read socket", sub {
 
     diag($logs . "\nlength: " . length($logs)) if $ENV{TEST_DEBUG};
 
-    ok $logs, "something is written to h2olog socket '$h2olog_socket' ($i)";
-    # check if the logs are valid JSON-Lines
-    for my $json (split /\n/, $logs) {
-      unless (eval { decode_json($json) }) {
-        fail "invalid json: $json\n$@";
-      }
-    }
+    json_lines_ok($logs, "JSON Lines are written to h2olog socket '$h2olog_socket' ($i)");
 
-    cmp_ok get_status()->{"h2olog.lost"}, "==", 0, "does not lost messages";
+    cmp_ok get_status($server)->{"h2olog.lost"}, "==", 0, "does not lost messages";
   }
 };
 
 subtest "lost messages", sub {
+  my $server = spawn_h2o({ conf => <<"EOT" });
+h2olog-socket:
+  path: $h2olog_socket
+  permission: 666
+  sndbuf: 1024
+listen:
+  type: quic
+  port: $quic_port
+  ssl:
+    key-file: examples/h2o/server.key
+    certificate-file: examples/h2o/server.crt
+hosts:
+  "*":
+    paths:
+      /:
+        file.dir: examples/doc_root
+      "/status":
+        status: ON
+EOT
+
+  wait_port({ port => $quic_port, proto => "udp" });
+
+
   my $client = IO::Socket::UNIX->new(
       Type => SOCK_STREAM,
       Peer => $h2olog_socket,
@@ -81,7 +100,7 @@ subtest "lost messages", sub {
   system($client_prog, "-3", "100", "https://127.0.0.1:$quic_port/") == 0 or die $!;
   system($client_prog, "-3", "100", "https://127.0.0.1:$quic_port/") == 0 or die $!;
 
-  cmp_ok get_status()->{"h2olog.lost"}, ">", 0, "losts messages if client does not read socket";
+  cmp_ok get_status($server)->{"h2olog.lost"}, ">", 0, "losts messages if client does not read socket";
 
   # make sure event lost does not break the socket buffer
   my $pid = fork;
@@ -94,18 +113,24 @@ subtest "lost messages", sub {
   }
   # parent
   my $logs = slurp_h2olog_socket($h2olog_socket, { timeout => 2 });
+  json_lines_ok($logs, "valid JSON Lines are written to h2olog socket '$h2olog_socket' even if some events are lost");
+};
 
-  ok $logs, "something is written to h2olog socket '$h2olog_socket'";
-  # check if the logs are valid JSON-Lines
-  for my $json (split /\n/, $logs) {
-    unless (eval { decode_json($json) }) {
-      fail "invalid json: $json\n$@";
+sub json_lines_ok {
+  my ($json_lines, $msg) = @_;
+
+  ok length($json_lines) > 0, $msg;
+
+  for my $json_str (split /\n/, $json_lines) {
+    unless (eval { decode_json($json_str) }) {
+      fail "invalid json: $json_str\n$@";
     }
   }
-};
+}
 
 
 sub get_status {
+  my ($server) = @_;
   my $status_json = `$client_prog http://127.0.0.1:$server->{port}/status/json`;
   return decode_json($status_json);
 }

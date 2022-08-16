@@ -254,7 +254,7 @@ static struct {
     size_t num_listeners;
     char *pid_file;
     char *error_log;
-    char *h2olog_socket_path;
+    int h2olog_socket_fd;
     int max_connections;
     /**
      * In addition to max_connections, maximum number of H3 connections can be further capped by this configuration variable.
@@ -318,7 +318,7 @@ static struct {
     .num_listeners = 0,
     .pid_file = NULL,
     .error_log = NULL,
-    .h2olog_socket_path = NULL,
+    .h2olog_socket_fd = -1,
     .max_connections = 1024,
     .max_quic_connections = INT_MAX, /* (INT_MAX = i.e., allow up to max_connections) */
     .soft_connection_limit = INT_MAX,
@@ -2239,7 +2239,34 @@ static int on_config_error_log(h2o_configurator_command_t *cmd, h2o_configurator
 
 static int on_config_h2olog_socket(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    conf.h2olog_socket_path = h2o_strdup(NULL, node->data.scalar, SIZE_MAX).base;
+    yoml_t **path_node, **owner_node, **group_node, **permission_node, **sndbuf_node;
+    if (h2o_configurator_parse_mapping(cmd, node, "path:s", "owner:s,group:s,permission:s,sndbuf:s", &path_node, &owner_node,
+                                       &group_node, &permission_node, &sndbuf_node) != 0)
+        return -1;
+
+    const char *path = (*path_node)->data.scalar;
+    struct sockaddr_un sa;
+    if (strlen(path) >= sizeof(sa.sun_path)) {
+        h2o_configurator_errprintf(cmd, node, "path:%s is too long as a unix socket name", path);
+        return -1;
+    }
+    sa = (struct sockaddr_un){
+        .sun_family = AF_UNIX,
+    };
+    strcpy(sa.sun_path, path);
+
+    int fd = open_unix_listener(cmd, node, &sa, owner_node, group_node, permission_node);
+    if (fd == -1) {
+        return -1;
+    }
+    unsigned sndbuf = 0;
+    if (sndbuf_node != NULL && h2o_configurator_scanf(cmd, *sndbuf_node, "%u", &sndbuf) != 0)
+        return -1;
+
+    add_listener(fd, (struct sockaddr *)&sa, sizeof(sa), 0, 0, sndbuf, 0);
+
+    conf.h2olog_socket_fd = fd;
+
     return 0;
 }
 
@@ -3026,7 +3053,11 @@ static void on_accept(h2o_socket_t *listener, const char *err)
             setsockopt(h2o_socket_get_fd(sock), SOL_SOCKET, SO_RCVBUF, &listener_config->rcvbuf, sizeof(listener_config->rcvbuf));
         set_tcp_congestion_controller(sock, listener_config->tcp_congestion_controller);
 
-        h2o_accept(&ctx->accept_ctx, sock);
+        if (conf.listeners[ctx->listener_index]->fds.entries[0] != conf.h2olog_socket_fd) {
+            h2o_accept(&ctx->accept_ctx, sock);
+        } else {
+            h2o_h2olog_accept(sock);
+        }
 
     } while (--num_accepts != 0);
 }
@@ -3631,7 +3662,7 @@ static void setup_configurators(void)
                                         on_config_pid_file);
         h2o_configurator_define_command(c, "error-log", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_error_log);
-        h2o_configurator_define_command(c, "h2olog-socket", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+        h2o_configurator_define_command(c, "h2olog-socket", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING,
                                         on_config_h2olog_socket);
         h2o_configurator_define_command(c, "max-connections", H2O_CONFIGURATOR_FLAG_GLOBAL, on_config_max_connections);
         h2o_configurator_define_command(c, "max-quic-connections", H2O_CONFIGURATOR_FLAG_GLOBAL, on_config_max_quic_connections);
@@ -4050,13 +4081,6 @@ int main(int argc, char **argv)
     if (conf.error_log != NULL) {
         if ((error_log_fd = h2o_access_log_open_log(conf.error_log)) == -1)
             return EX_CONFIG;
-    }
-    if (conf.h2olog_socket_path != NULL) {
-        int ret = h2o_setup_h2olog_socket(conf.h2olog_socket_path);
-        if (ret != 0) {
-            h2o_error_printf("failed to setup h2olog-socket:%s:%s\n", conf.h2olog_socket_path, strerror(ret));
-            return EX_CONFIG;
-        }
     }
     setvbuf(stdout, NULL, _IOLBF, 0);
     setvbuf(stderr, NULL, _IOLBF, 0);

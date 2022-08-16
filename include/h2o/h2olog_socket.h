@@ -22,6 +22,8 @@
 #ifndef h2o__h2olog_socket_h
 #define h2o__h2olog_socket_h
 
-int h2o_setup_h2olog_socket(const char *socket_path);
+#include "h2o.h"
+
+void h2o_h2olog_accept(h2o_socket_t *sock);
 
 #endif
