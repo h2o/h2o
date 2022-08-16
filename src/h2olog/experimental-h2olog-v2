@@ -1,0 +1,33 @@
+#!/usr/bin/perl
+# An experimental version of h2olog v2
+# It requries H2O_ROOT, H2OLOG_SOCKET, or -s <socket_path> option to be set.
+use strict;
+use warnings;
+use IO::Socket::UNIX;
+use IO::Select;
+use Getopt::Std;
+
+my $h2o_root = $ENV{H2O_ROOT} // ".";
+
+my %opts;
+getopts('s:c:', \%opts);
+
+$SIG{INT} = $SIG{TERM} = sub {
+    my ($sig) = @_;
+    print STDERR "$sig\n";
+    exit;
+};
+
+my $socket_path = $opts{s} // $ENV{H2OLOG_SOCKET} // "$h2o_root/h2olog.sock";
+
+my $socket = IO::Socket::UNIX->new(
+    Type => SOCK_STREAM,
+    Peer => $socket_path,
+) or die "Cannot connect to $socket_path: $!";
+
+my $select = IO::Select->new($socket);
+while ($select->can_read()) {
+    my $buf;
+    $socket->sysread($buf, 4096) or warn "failed to read from '$socket_path': $!\n";
+    print $buf;
+}
