@@ -89,7 +89,7 @@ subtest "response" => sub {
     };
     my ($headers, $body) = split /\n\n/, $resp, 2;
     like $headers, qr{^HTTP/3 200\n}s;
-    like $body, qr{^hello(?:I/O error|)$}s;
+    like $body, qr{^hello(?:\[httpclient\.c\] I/O error)?$}s;
 };
 
 done_testing;
