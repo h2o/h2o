@@ -1056,6 +1056,8 @@ IF (WITH_H2OLOG)
     INSTALL(TARGETS h2olog RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 ENDIF (WITH_H2OLOG)
 
+ADD_EXECUTABLE(experimental-h2olog-v2 "src/h2olog/experimental-h2olog-v2.c")
+
 # gitrev
 IF ("${VERSION_PRERELEASE}" STREQUAL "-DEV")
     # To ask generate_gitrev.pl whether or not a gitrev is available,
