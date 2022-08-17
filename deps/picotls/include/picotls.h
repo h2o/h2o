@@ -399,7 +399,7 @@ typedef const struct st_ptls_aead_algorithm_t {
     /**
      * if encrypted bytes are going to be written using non-temporal store instructions (i.e., skip cache)
      */
-    unsigned non_temporal : 1;
+    uint8_t non_temporal : 1;
     /**
      * log2(alignment) being required
      */
@@ -1592,7 +1592,7 @@ inline void ptls_buffer_init(ptls_buffer_t *buf, void *smallbuf, size_t smallbuf
 inline void ptls_buffer_dispose(ptls_buffer_t *buf)
 {
     ptls_buffer__release_memory(buf);
-    *buf = (ptls_buffer_t){NULL, 0, 0, 0, 0};
+    *buf = (ptls_buffer_t){NULL, 0, 0, 0};
 }
 
 inline uint8_t *ptls_encode_quicint(uint8_t *p, uint64_t v)

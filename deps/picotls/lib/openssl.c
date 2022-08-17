@@ -566,8 +566,7 @@ static int evp_keyex_init(ptls_key_exchange_algorithm_t *algo, ptls_key_exchange
     /* set public key */
     if ((ctx->super.pubkey.len = EVP_PKEY_get1_tls_encodedpoint(ctx->privkey, &ctx->super.pubkey.base)) == 0) {
         ctx->super.pubkey.base = NULL;
-        ret = PTLS_ERROR_NO_MEMORY;
-        goto Exit;
+        return PTLS_ERROR_NO_MEMORY;
     }
 
     *_ctx = &ctx->super;
