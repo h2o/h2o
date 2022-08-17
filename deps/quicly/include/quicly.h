@@ -500,10 +500,6 @@ typedef struct st_quicly_stats_t {
      */
     quicly_rtt_t rtt;
     /**
-     * Loss thresholds.
-     */
-    quicly_loss_thresholds_t loss_thresholds;
-    /**
      * Congestion control stats (experimental; TODO cherry-pick what can be exposed as part of a stable API).
      */
     quicly_cc_t cc;

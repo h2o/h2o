@@ -88,7 +88,7 @@ KHASH_MAP_INIT_INT64(quicly_stream_t, quicly_stream_t *)
         quicly_conn_t *_conn = (conn);                                                                                             \
         if (PTLS_UNLIKELY(QUICLY_##label##_ENABLED()) && !ptls_skip_tracing(_conn->crypto.tls))                                    \
             QUICLY_##label(_conn, __VA_ARGS__);                                                                                    \
-        QUICLY_TRACER(label, _conn, __VA_ARGS__);                                                                                  \
+        QUICLY_TRACER(label, _conn,  __VA_ARGS__);                                                                                 \
     } while (0)
 #else
 #define QUICLY_PROBE(label, conn, ...) QUICLY_TRACER(label, conn, __VA_ARGS__)
@@ -1220,7 +1220,6 @@ int quicly_get_stats(quicly_conn_t *conn, quicly_stats_t *stats)
 
     /* set or generate the non-pre-built stats fields here */
     stats->rtt = conn->egress.loss.rtt;
-    stats->loss_thresholds = conn->egress.loss.thresholds;
     stats->cc = conn->egress.cc;
     quicly_ratemeter_report(&conn->egress.ratemeter, &stats->delivery_rate);
     stats->num_sentmap_packets_largest = conn->egress.loss.sentmap.num_packets_largest;
@@ -3171,10 +3170,11 @@ static int commit_send_packet(quicly_conn_t *conn, quicly_send_context_t *s, int
     datagram_size = s->dst - s->payload_buf.datagram;
     assert(datagram_size <= conn->egress.max_udp_payload_size);
 
-    conn->super.ctx->crypto_engine->encrypt_packet(
-        conn->super.ctx->crypto_engine, conn, s->target.cipher->header_protection, s->target.cipher->aead,
-        ptls_iovec_init(s->payload_buf.datagram, datagram_size), s->target.first_byte_at - s->payload_buf.datagram,
-        s->dst_payload_from - s->payload_buf.datagram, conn->egress.packet_number, coalesced);
+    conn->super.ctx->crypto_engine->encrypt_packet(conn->super.ctx->crypto_engine, conn, s->target.cipher->header_protection,
+                                                   s->target.cipher->aead, ptls_iovec_init(s->payload_buf.datagram, datagram_size),
+                                                   s->target.first_byte_at - s->payload_buf.datagram,
+                                                   s->dst_payload_from - s->payload_buf.datagram, conn->egress.packet_number,
+                                                   coalesced);
 
     /* update CC, commit sentmap */
     if (s->target.ack_eliciting) {
@@ -5152,7 +5152,7 @@ static int handle_ack_frame(quicly_conn_t *conn, struct st_quicly_handle_payload
         int64_t sent_at;
     } largest_newly_acked = {UINT64_MAX, INT64_MAX};
     size_t bytes_acked = 0;
-    int includes_ack_eliciting = 0, includes_late_ack = 0, ret;
+    int includes_ack_eliciting = 0, ret;
 
     if ((ret = quicly_decode_ack_frame(&state->src, state->end, &frame, state->frame_type == QUICLY_FRAME_TYPE_ACK_ECN)) != 0)
         return ret;
@@ -5209,7 +5209,6 @@ static int handle_ack_frame(quicly_conn_t *conn, struct st_quicly_handle_payload
                 includes_ack_eliciting = 1;
                 if (sent->cc_bytes_in_flight == 0) {
                     is_late_ack = 1;
-                    includes_late_ack = 1;
                     ++conn->super.stats.num_packets.late_acked;
                 }
             }
@@ -5263,10 +5262,7 @@ static int handle_ack_frame(quicly_conn_t *conn, struct st_quicly_handle_payload
     /* Update loss detection engine on ack. The function uses ack_delay only when the largest_newly_acked is also the largest acked
      * so far. So, it does not matter if the ack_delay being passed in does not apply to the largest_newly_acked. */
     quicly_loss_on_ack_received(&conn->egress.loss, largest_newly_acked.pn, state->epoch, conn->stash.now,
-                                largest_newly_acked.sent_at, frame.ack_delay,
-                                includes_ack_eliciting ? includes_late_ack ? QUICLY_LOSS_ACK_RECEIVED_KIND_ACK_ELICITING_LATE_ACK
-                                                                           : QUICLY_LOSS_ACK_RECEIVED_KIND_ACK_ELICITING
-                                                       : QUICLY_LOSS_ACK_RECEIVED_KIND_NON_ACK_ELICITING);
+                                largest_newly_acked.sent_at, frame.ack_delay, includes_ack_eliciting);
 
     /* OnPacketAcked and OnPacketAckedCC */
     if (bytes_acked > 0) {
