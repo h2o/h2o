@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018 Fastly, Kazuho Oku
+ * Copyright (c) 2022 Fastly, Inc., Goro Fuji.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to
