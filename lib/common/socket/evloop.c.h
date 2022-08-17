@@ -384,6 +384,18 @@ void do_dispose_socket(h2o_socket_t *_sock)
         close(sock->fd);
         sock->fd = -1;
     }
+
+    /* immediate close */
+    link_to_statechanged(sock);
+}
+
+void do_close_socket(h2o_socket_t *_sock)
+{
+    struct st_h2o_evloop_socket_t *sock = (struct st_h2o_evloop_socket_t *)_sock;
+
+    sock->_flags = H2O_SOCKET_FLAG_IS_PAUSED |
+        (sock->_flags & H2O_SOCKET_FLAG__EPOLL_IS_REGISTERED);
+
     link_to_statechanged(sock);
 }
 
@@ -826,6 +838,10 @@ void h2o_socket_notify_write(h2o_socket_t *_sock, h2o_socket_cb cb)
 
 static void run_socket(struct st_h2o_evloop_socket_t *sock)
 {
+    if ((sock->_flags & H2O_SOCKET_FLAG_IS_PAUSED) != 0) {
+        return;
+    }
+
     if ((sock->_flags & H2O_SOCKET_FLAG_IS_DISPOSED) != 0) {
         /* is freed in updatestates phase */
         return;

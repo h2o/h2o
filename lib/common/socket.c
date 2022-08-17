@@ -177,6 +177,26 @@ static const char *decode_ssl_input(h2o_socket_t *sock);
 static size_t flatten_sendvec(h2o_socket_t *sock, h2o_sendvec_t *sendvec);
 static void on_write_complete(h2o_socket_t *sock, const char *err);
 
+static __thread h2o_socket_t *async_handshake_in_flight = NULL;
+
+int h2o_is_ssl_handhsake_in_flight() {
+    return async_handshake_in_flight != NULL;
+}
+
+/**
+ * list of h2o_socket_t*
+ */
+static __thread h2o_linklist_t delayed_handshakes;
+
+static int init_delayed_handshakes() {
+    static __thread int initialized = 0;
+    if (!initialized) {
+        h2o_linklist_init_anchor(&delayed_handshakes);
+        initialized = 1;
+    }
+    return initialized;
+}
+
 h2o_buffer_mmap_settings_t h2o_socket_buffer_mmap_settings = {
     32 * 1024 * 1024, /* 32MB, should better be greater than max frame size of HTTP2 for performance reasons */
     "/tmp/h2o.b.XXXXXX"};
@@ -481,10 +501,52 @@ static void destroy_ssl(struct st_h2o_socket_ssl_t *ssl)
     free(ssl);
 }
 
+static void proceed_handshake(h2o_socket_t *sock, const char *err);
+
+static void do_delayed_handshakes(h2o_socket_t *sock)
+{
+    if (async_handshake_in_flight == sock) {
+        async_handshake_in_flight = NULL;
+
+        // proceed delayed handshakes
+        while (init_delayed_handshakes()
+                && async_handshake_in_flight == NULL
+                && !h2o_linklist_is_empty(&delayed_handshakes)) {
+            h2o_socket_t *next_sock = H2O_STRUCT_FROM_MEMBER(h2o_socket_t, async.delayed_handshake_link, delayed_handshakes.next);
+            h2o_linklist_unlink(&next_sock->async.delayed_handshake_link);
+            proceed_handshake(next_sock, NULL);
+        }
+    }
+}
+
+static void dispose_socket(h2o_socket_t *sock, const char *err);
+
+static void retry_dispose_socket(h2o_timer_t *entry)
+{
+    h2o_socket_t *sock = H2O_STRUCT_FROM_MEMBER(h2o_socket_t, async.retry_dispose, entry);
+
+    dispose_socket(sock, NULL);
+}
+
 static void dispose_socket(h2o_socket_t *sock, const char *err)
 {
     void (*close_cb)(void *data);
     void *close_cb_data;
+
+    if (h2o_linklist_is_linked(&sock->async.delayed_handshake_link)) {
+        h2o_linklist_unlink(&sock->async.delayed_handshake_link);
+    }
+
+    if (sock->async.retry_dispose.cb == NULL) {
+        do_close_socket(sock);
+        sock->async.retry_dispose.cb = retry_dispose_socket;
+    }
+    if (sock->ssl != NULL && async_handshake_in_flight != NULL && async_handshake_in_flight != sock) {
+        // retry later if handshake in flight
+        // we do this because ssl destroy may require neverbleed connection
+        h2o_timer_link(h2o_socket_get_loop(sock), 100, &sock->async.retry_dispose);
+        return;
+    }
 
     if (sock->ssl != NULL) {
         destroy_ssl(sock->ssl);
@@ -1373,6 +1435,10 @@ static int on_async_resumption_new(SSL *ssl, SSL_SESSION *session)
 
 static void on_handshake_complete(h2o_socket_t *sock, const char *err)
 {
+    if (h2o_linklist_is_linked(&sock->async.delayed_handshake_link)) {
+        h2o_linklist_unlink(&sock->async.delayed_handshake_link);
+    }
+
     if (err == NULL) {
         if (sock->ssl->ptls != NULL) {
             sock->ssl->record_overhead = ptls_get_record_overhead(sock->ssl->ptls);
@@ -1440,8 +1506,6 @@ static void on_handshake_fail_complete(h2o_socket_t *sock, const char *err)
     on_handshake_complete(sock, get_handshake_error(sock->ssl));
 }
 
-static void proceed_handshake(h2o_socket_t *sock, const char *err);
-
 #ifdef PTLS_OPENSSL_HAVE_ASYNC
 struct async_data {
     h2o_socket_t *async_sock;
@@ -1463,27 +1527,31 @@ static void async_read_ready(h2o_socket_t *listener, const char *err)
     // reset async
     assert(adata->client.sock->async.enabled);
     adata->client.sock->async.enabled = 0;
+    do_close_socket(listener);
     do_dispose_socket(listener);
 
     if (err != NULL) {
         return;
     }
     proceed_handshake(adata->client.sock, NULL);
+    do_delayed_handshakes(adata->client.sock);
 }
 
 static void async_ssl_on_close(void *data)
 {
     struct async_data *adata = data;
 
-    // closing ssl, resume async transaction if pending to allow
-    // resources to be freed
-    if (SSL_waiting_for_async(adata->client.sock->ssl->ossl)) {
-        assert(adata->client.sock->async.enabled);
-        SSL_do_handshake(adata->client.sock->ssl->ossl);
+    if (adata->client.sock->async.enabled) {
+        // closing ssl, resume async transaction if pending to allow
+        // resources to be freed in async_on_close
+        if (SSL_waiting_for_async(adata->client.sock->ssl->ossl)) {
+            SSL_do_handshake(adata->client.sock->ssl->ossl);
+        }
     }
 
     // call original cb
     adata->client.ssl.on_close_cb(adata->client.ssl.on_close_data);
+    do_delayed_handshakes(adata->client.sock);
 }
 
 static void async_on_close(void *data)
@@ -1492,8 +1560,11 @@ static void async_on_close(void *data)
 
     // cancel async callback
     if (adata->client.sock->async.enabled) {
+        do_close_socket(adata->async_sock);
         do_dispose_socket(adata->async_sock);
     }
+
+    do_delayed_handshakes(adata->client.sock);
 
     // call original cb
     adata->client.on_close_cb(adata->client.on_close_data);
@@ -1503,6 +1574,7 @@ static void async_on_close(void *data)
 
 static void do_ssl_async(h2o_socket_t *sock)
 {
+    async_handshake_in_flight = sock;
     assert(!sock->async.enabled);
     sock->async.enabled = 1;
     int async_fd = ptls_openssl_get_async_fd(sock->ssl->ptls);
@@ -1786,6 +1858,18 @@ static void proceed_handshake(h2o_socket_t *sock, const char *err)
         h2o_socket_read_stop(sock);
         on_handshake_complete(sock, err);
         return;
+    }
+
+    if (init_delayed_handshakes()) {
+        if (async_handshake_in_flight == NULL || async_handshake_in_flight == sock) {
+        } else {
+            // handshake is in-flight, delay the handshake
+            if (!h2o_linklist_is_linked(&sock->async.delayed_handshake_link)) {
+                fprintf(stderr, "delayed %p\n", sock);
+                h2o_linklist_insert(&delayed_handshakes, &sock->async.delayed_handshake_link);
+            }
+            return;
+        }
     }
 
     if (sock->ssl->ptls != NULL) {

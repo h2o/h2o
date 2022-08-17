@@ -35,6 +35,7 @@
 #define H2O_SOCKET_FLAG_IS_ACCEPTED_CONNECTION 0x80
 #define H2O_SOCKET_FLAG_IS_CONNECTING_CONNECTED 0x100
 #define H2O_SOCKET_FLAG_DONT_NONBLOCK 0x200
+#define H2O_SOCKET_FLAG_IS_PAUSED 0x400
 /**
  * Determines if the socket has been registered to epoll. Must be preserved when setting H2O_SOCKET_FLAG_IS_DISPOSED, as this flag
  * is used for skipping unnecessary invocations of `epoll_ctl` or for determining the `op` being specified.

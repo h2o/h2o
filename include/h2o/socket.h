@@ -93,6 +93,7 @@ typedef struct st_h2o_sliding_counter_t {
 static int h2o_sliding_counter_is_running(h2o_sliding_counter_t *counter);
 static void h2o_sliding_counter_start(h2o_sliding_counter_t *counter, uint64_t now);
 void h2o_sliding_counter_stop(h2o_sliding_counter_t *counter, uint64_t now);
+int h2o_is_ssl_handhsake_in_flight();
 
 #define H2O_SOCKET_INITIAL_INPUT_BUFFER_SIZE 4096
 
@@ -211,6 +212,8 @@ struct st_h2o_socket_t {
     struct {
         int enabled;
         void *data;
+        h2o_linklist_t delayed_handshake_link;
+        h2o_timer_t retry_dispose;
     } async;
 };
 

@@ -68,7 +68,8 @@ static int collect_status(struct st_h2o_socket_loop_kqueue_t *loop, struct keven
         loop->super._statechanged.head = sock->_next_statechanged;
         sock->_next_statechanged = sock;
         /* update the state */
-        if ((sock->_flags & H2O_SOCKET_FLAG_IS_DISPOSED) != 0) {
+        if ((sock->_flags & H2O_SOCKET_FLAG_IS_PAUSED) != 0) {
+        } else if ((sock->_flags & H2O_SOCKET_FLAG_IS_DISPOSED) != 0) {
             free(sock);
         } else {
             if (h2o_socket_is_reading(&sock->super)) {
@@ -133,13 +134,13 @@ int evloop_do_proceed(h2o_evloop_t *_loop, int32_t max_wait)
         assert(sock->fd == events[i].ident);
         switch (events[i].filter) {
         case EVFILT_READ:
-            if (sock->_flags != H2O_SOCKET_FLAG_IS_DISPOSED) {
+            if (sock->_flags != H2O_SOCKET_FLAG_IS_DISPOSED && (sock->_flags & H2O_SOCKET_FLAG_IS_PAUSED) == 0) {
                 sock->_flags |= H2O_SOCKET_FLAG_IS_READ_READY;
                 link_to_pending(sock);
             }
             break;
         case EVFILT_WRITE:
-            if (sock->_flags != H2O_SOCKET_FLAG_IS_DISPOSED) {
+            if (sock->_flags != H2O_SOCKET_FLAG_IS_DISPOSED && (sock->_flags & H2O_SOCKET_FLAG_IS_PAUSED) == 0) {
                 write_pending(sock);
             }
             break;
