@@ -1577,7 +1577,19 @@ static void do_ssl_async(h2o_socket_t *sock)
     async_handshake_in_flight = sock;
     assert(!sock->async.enabled);
     sock->async.enabled = 1;
-    int async_fd = ptls_openssl_get_async_fd(sock->ssl->ptls);
+    int async_fd;
+    if (sock->ssl->ptls != NULL) {
+        async_fd = ptls_openssl_get_async_fd(sock->ssl->ptls);
+    } else {
+        size_t numfds;
+        int fds[1];
+        assert(sock->ssl->ossl != NULL);
+        // get async fd
+        SSL_get_all_async_fds(sock->ssl->ossl, NULL, &numfds);
+        assert(numfds == 1);
+        SSL_get_all_async_fds(sock->ssl->ossl, fds, &numfds);
+        async_fd = fds[0];
+    }
 
     // add async fd to event loop in order to retry when openssl engine is ready
 #if H2O_USE_LIBUV
@@ -1724,6 +1736,16 @@ Redo:
     }
 
     if (ret == 0 || (ret < 0 && SSL_get_error(sock->ssl->ossl, ret) != SSL_ERROR_WANT_READ)) {
+        if (SSL_get_error(sock->ssl->ossl, ret) == SSL_ERROR_WANT_ASYNC) {
+#ifdef PTLS_OPENSSL_HAVE_ASYNC
+            fprintf(stderr, "openssl_have_async\n");
+            do_ssl_async(sock);
+            return;
+#else
+            goto Redo;
+#endif
+        }
+
         /* OpenSSL 1.1.0 emits an alert immediately, we  send it now. 1.0.2 emits the error when SSL_shutdown is called in
          * shutdown_ssl. */
         if (has_pending_ssl_bytes(sock->ssl)) {
