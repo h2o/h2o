@@ -134,9 +134,7 @@ static int update_status(struct st_h2o_evloop_epoll_t *loop)
         loop->super._statechanged.head = sock->_next_statechanged;
         sock->_next_statechanged = sock;
         /* update the state */
-        if ((sock->_flags & H2O_SOCKET_FLAG_IS_PAUSED) != 0) {
-            // don't do anything
-        } else if ((sock->_flags & H2O_SOCKET_FLAG_IS_DISPOSED) != 0) {
+        if ((sock->_flags & H2O_SOCKET_FLAG_IS_DISPOSED) != 0) {
             if (sock->super._zerocopy == NULL || zerocopy_buffers_is_empty(sock->super._zerocopy)) {
                 /* Call close (2) and destroy, now that all zero copy buffers have been reclaimed. */
                 if (sock->super._zerocopy != NULL) {
@@ -214,9 +212,6 @@ int evloop_do_proceed(h2o_evloop_t *_loop, int32_t max_wait)
         struct st_h2o_evloop_socket_t *sock = events[i].data.ptr;
         int notified = 0;
 
-        if ((sock->_flags & H2O_SOCKET_FLAG_IS_PAUSED) != 0) {
-            continue;
-        }
         /* When receiving HUP (indicating reset) while the socket is polled neither for read nor write, unregister the socket from
          * epoll, otherwise epoll_wait() would continue raising the HUP event. This problem cannot be avoided by using edge trigger.
          * The application will eventually try to read or write to the socket and at that point close the socket, detecting that it

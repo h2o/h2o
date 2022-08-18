@@ -42,8 +42,7 @@ static void update_socks(struct st_h2o_evloop_poll_t *loop)
         loop->super._statechanged.head = sock->_next_statechanged;
         sock->_next_statechanged = sock;
         /* update the state */
-        if ((sock->_flags & H2O_SOCKET_FLAG_IS_PAUSED) != 0) {
-        } else if ((sock->_flags & H2O_SOCKET_FLAG_IS_DISPOSED) != 0) {
+        if ((sock->_flags & H2O_SOCKET_FLAG_IS_DISPOSED) != 0) {
             assert(sock->fd == -1);
             free(sock);
         } else {
@@ -119,7 +118,7 @@ int evloop_do_proceed(h2o_evloop_t *_loop, int32_t max_wait)
                 struct st_h2o_evloop_socket_t *sock = loop->socks.entries[pollfds.entries[i].fd];
                 assert(sock != NULL);
                 assert(sock->fd == pollfds.entries[i].fd);
-                if (sock->_flags != H2O_SOCKET_FLAG_IS_DISPOSED && (sock->_flags & H2O_SOCKET_FLAG_IS_PAUSED) == 0) {
+                if (sock->_flags != H2O_SOCKET_FLAG_IS_DISPOSED) {
                     sock->_flags |= H2O_SOCKET_FLAG_IS_READ_READY;
                     link_to_pending(sock);
                     DEBUG_LOG("added fd %d as read_ready\n", sock->fd);
@@ -129,7 +128,7 @@ int evloop_do_proceed(h2o_evloop_t *_loop, int32_t max_wait)
                 struct st_h2o_evloop_socket_t *sock = loop->socks.entries[pollfds.entries[i].fd];
                 assert(sock != NULL);
                 assert(sock->fd == pollfds.entries[i].fd);
-                if (sock->_flags != H2O_SOCKET_FLAG_IS_DISPOSED && (sock->_flags & H2O_SOCKET_FLAG_IS_PAUSED) == 0) {
+                if (sock->_flags != H2O_SOCKET_FLAG_IS_DISPOSED) {
                     DEBUG_LOG("handling pending writes on fd %d\n", fd);
                     write_pending(sock);
                 }
