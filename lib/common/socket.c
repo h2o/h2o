@@ -1741,10 +1741,8 @@ Redo:
             fprintf(stderr, "openssl_have_async\n");
             do_ssl_async(sock);
             return;
-#else
-            goto Redo;
-#endif
         }
+#endif
 
         /* OpenSSL 1.1.0 emits an alert immediately, we  send it now. 1.0.2 emits the error when SSL_shutdown is called in
          * shutdown_ssl. */
