@@ -1736,8 +1736,8 @@ Redo:
     }
 
     if (ret == 0 || (ret < 0 && SSL_get_error(sock->ssl->ossl, ret) != SSL_ERROR_WANT_READ)) {
-        if (SSL_get_error(sock->ssl->ossl, ret) == SSL_ERROR_WANT_ASYNC) {
 #ifdef PTLS_OPENSSL_HAVE_ASYNC
+        if (SSL_get_error(sock->ssl->ossl, ret) == SSL_ERROR_WANT_ASYNC) {
             fprintf(stderr, "openssl_have_async\n");
             do_ssl_async(sock);
             return;
