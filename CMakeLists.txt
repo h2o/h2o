@@ -391,6 +391,7 @@ SET(LIB_SOURCE_FILES
     lib/common/cache.c
     lib/common/file.c
     lib/common/filecache.c
+    lib/common/h2olog_socket.c
     lib/common/hostinfo.c
     lib/common/http1client.c
     lib/common/http2client.c
@@ -400,7 +401,6 @@ SET(LIB_SOURCE_FILES
     lib/common/memory.c
     lib/common/multithread.c
     lib/common/redis.c
-    lib/common/h2olog_socket.c
     lib/common/serverutil.c
     lib/common/socket.c
     lib/common/socketpool.c

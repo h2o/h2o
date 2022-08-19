@@ -78,12 +78,12 @@
 #include "neverbleed.h"
 #include "h2o.h"
 #include "h2o/configurator.h"
+#include "h2o/h2olog_socket.h"
 #include "h2o/http1.h"
 #include "h2o/http2.h"
 #include "h2o/http3_server.h"
 #include "h2o/serverutil.h"
 #include "h2o/file.h"
-#include "h2o/h2olog_socket.h"
 #include "h2o/version.h"
 #if H2O_USE_MRUBY
 #include "h2o/mruby_.h"
