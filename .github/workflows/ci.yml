@@ -25,6 +25,8 @@ jobs:
             command: make -f misc/docker-ci/check.mk ossl3.0 BUILD_ARGS=-j6 TEST_ENV='TEST_JOBS=4 TEST_PLATFORM=github-actions'
           - name: DTrace + ASan
             command: make -f misc/docker-ci/check.mk dtrace+asan BUILD_ARGS=-j6 TEST_ENV='TEST_JOBS=4 TEST_PLATFORM=github-actions'
+          - name: Coverage
+            command: make -f misc/docker-ci/check.mk coverage BUILD_ARGS=-j6 TEST_ENV='TEST_JOBS=4 TEST_PLATFORM=github-actions'
 
     timeout-minutes: 60
     steps:
@@ -45,6 +47,9 @@ jobs:
         # restart docker with ipv6 support
         cat /etc/docker/daemon.json | perl -pe 's| }|, "ipv6": true, "fixed-cidr-v6": "2001:db8:1::/64" }|' | sudo tee /etc/docker/daemon.json > /dev/null; sudo systemctl restart docker; sleep 10
         ${{ matrix.command }}
+        # if there's a summary markdown in the container, show it.
+        container_id=$(docker container ls -al --format '{{ .ID }}')
+        docker cp $container_id:/home/ci/summary.md $GITHUB_STEP_SUMMARY || true
 
   # See https://github.com/google/oss-fuzz/tree/master/projects/h2o for details
   ossfuzz:
