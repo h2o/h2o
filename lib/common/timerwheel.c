@@ -44,6 +44,10 @@
         h2o_fatal("timerwheel");                                                                                                   \
     } while (0)
 
+struct st_h2o_timerwheel_slots_t {
+    h2o_linklist_t slots[H2O_TIMERWHEEL_SLOTS_PER_WHEEL];
+};
+
 struct st_h2o_timerwheel_t {
     /**
      * the last time h2o_timer_run_wheel was called
@@ -58,7 +62,7 @@ struct st_h2o_timerwheel_t {
      * number of wheels and the wheel
      */
     size_t num_wheels;
-    h2o_linklist_t wheels[1][H2O_TIMERWHEEL_SLOTS_PER_WHEEL];
+    struct st_h2o_timerwheel_slots_t wheels[0];
 };
 
 void h2o_timerwheel_dump(h2o_timerwheel_t *ctx)
@@ -68,7 +72,7 @@ void h2o_timerwheel_dump(h2o_timerwheel_t *ctx)
     h2o_error_printf("%s(%p):\n", __FUNCTION__, ctx);
     for (wheel = 0; wheel < ctx->num_wheels; wheel++) {
         for (slot = 0; slot < H2O_TIMERWHEEL_SLOTS_PER_WHEEL; slot++) {
-            h2o_linklist_t *anchor = &ctx->wheels[wheel][slot], *l;
+            h2o_linklist_t *anchor = &ctx->wheels[wheel].slots[slot], *l;
             for (l = anchor->next; l != anchor; l = l->next) {
                 h2o_timerwheel_entry_t *e = H2O_STRUCT_FROM_MEMBER(h2o_timerwheel_entry_t, _link, l);
                 h2o_error_printf("  - {wheel: %zu, slot: %zu, expires:%" PRIu64 ", self: %p, cb:%p}\n", wheel, slot, e->expire_at,
@@ -126,7 +130,7 @@ static void calc_expire_for_slot(size_t num_wheels, uint64_t last_run, size_t wh
 
 static int validate_slot(h2o_timerwheel_t *ctx, size_t wheel, size_t slot)
 {
-    h2o_linklist_t *anchor = &ctx->wheels[wheel][slot], *link;
+    h2o_linklist_t *anchor = &ctx->wheels[wheel].slots[slot], *link;
     uint64_t at_min, at_max;
     int success = 1;
 
@@ -167,7 +171,7 @@ uint64_t h2o_timerwheel_get_wake_at(h2o_timerwheel_t *ctx)
         size_t slot_base = timer_slot(wheel, at);
         /* check current wheel from slot_base */
         for (slot = slot_base; slot < H2O_TIMERWHEEL_SLOTS_PER_WHEEL; ++slot) {
-            if (!h2o_linklist_is_empty(&ctx->wheels[wheel][slot]))
+            if (!h2o_linklist_is_empty(&ctx->wheels[wheel].slots[slot]))
                 goto Found;
             at += at_incr;
         }
@@ -177,7 +181,7 @@ uint64_t h2o_timerwheel_get_wake_at(h2o_timerwheel_t *ctx)
                 size_t wi;
                 for (wi = wheel + 1; wi < ctx->num_wheels; ++wi) {
                     size_t si = timer_slot(wi, at);
-                    if (!h2o_linklist_is_empty(&ctx->wheels[wi][si]))
+                    if (!h2o_linklist_is_empty(&ctx->wheels[wi].slots[si]))
                         goto Found;
                     if (si != 0)
                         break;
@@ -187,7 +191,7 @@ uint64_t h2o_timerwheel_get_wake_at(h2o_timerwheel_t *ctx)
             if (slot_base == 0)
                 break;
             for (slot = 0; slot < slot_base; ++slot) {
-                if (!h2o_linklist_is_empty(&ctx->wheels[wheel][slot]))
+                if (!h2o_linklist_is_empty(&ctx->wheels[wheel].slots[slot]))
                     goto Found;
                 at += at_incr;
             }
@@ -221,7 +225,7 @@ static void link_timer(h2o_timerwheel_t *ctx, h2o_timerwheel_entry_t *entry)
                                 at_max);
     }
 
-    h2o_linklist_insert(&ctx->wheels[wheel][slot], &entry->_link);
+    h2o_linklist_insert(&ctx->wheels[wheel].slots[slot], &entry->_link);
 }
 
 /* timer wheel APIs */
@@ -231,7 +235,8 @@ static void link_timer(h2o_timerwheel_t *ctx, h2o_timerwheel_entry_t *entry)
  */
 h2o_timerwheel_t *h2o_timerwheel_create(size_t num_wheels, uint64_t now)
 {
-    h2o_timerwheel_t *ctx = h2o_mem_alloc(offsetof(h2o_timerwheel_t, wheels) + sizeof(ctx->wheels[0]) * num_wheels);
+    h2o_timerwheel_t *ctx =
+        h2o_mem_alloc(sizeof(struct st_h2o_timerwheel_t) + sizeof(struct st_h2o_timerwheel_slots_t) * num_wheels);
     size_t i, j;
 
     ctx->last_run = now;
@@ -240,7 +245,7 @@ h2o_timerwheel_t *h2o_timerwheel_create(size_t num_wheels, uint64_t now)
     ctx->num_wheels = num_wheels;
     for (i = 0; i < ctx->num_wheels; i++)
         for (j = 0; j < H2O_TIMERWHEEL_SLOTS_PER_WHEEL; j++)
-            h2o_linklist_init_anchor(&ctx->wheels[i][j]);
+            h2o_linklist_init_anchor(&ctx->wheels[i].slots[j]);
 
     return ctx;
 }
@@ -251,8 +256,8 @@ void h2o_timerwheel_destroy(h2o_timerwheel_t *ctx)
 
     for (i = 0; i < ctx->num_wheels; ++i) {
         for (j = 0; j < H2O_TIMERWHEEL_SLOTS_PER_WHEEL; ++j) {
-            while (!h2o_linklist_is_empty(&ctx->wheels[i][j])) {
-                h2o_timerwheel_entry_t *entry = H2O_STRUCT_FROM_MEMBER(h2o_timerwheel_entry_t, _link, ctx->wheels[i][j].next);
+            while (!h2o_linklist_is_empty(&ctx->wheels[i].slots[j])) {
+                h2o_timerwheel_entry_t *entry = H2O_STRUCT_FROM_MEMBER(h2o_timerwheel_entry_t, _link, ctx->wheels[i].slots[j].next);
                 h2o_timerwheel_unlink(entry);
             }
         }
@@ -269,7 +274,7 @@ static void cascade_one(h2o_timerwheel_t *ctx, size_t wheel, size_t slot)
 {
     assert(wheel > 0);
 
-    h2o_linklist_t *s = &ctx->wheels[wheel][slot];
+    h2o_linklist_t *s = &ctx->wheels[wheel].slots[slot];
 
     while (!h2o_linklist_is_empty(s)) {
         h2o_timerwheel_entry_t *entry = H2O_STRUCT_FROM_MEMBER(h2o_timerwheel_entry_t, _link, s->next);
@@ -287,7 +292,7 @@ static int cascade_all(h2o_timerwheel_t *ctx, size_t wheel)
 
     for (; wheel < ctx->num_wheels; ++wheel) {
         size_t slot = timer_slot(wheel, ctx->last_run);
-        if (!h2o_linklist_is_empty(&ctx->wheels[wheel][slot]))
+        if (!h2o_linklist_is_empty(&ctx->wheels[wheel].slots[slot]))
             cascaded = 1;
         cascade_one(ctx, wheel, slot);
         if (slot != 0)
@@ -312,14 +317,14 @@ Redo:
     slot_start = timer_slot(wheel, ctx->last_run);
     for (slot = slot_start; slot < H2O_TIMERWHEEL_SLOTS_PER_WHEEL; ++slot) {
         if (wheel == 0) {
-            h2o_linklist_insert_list(expired, &ctx->wheels[wheel][slot]);
+            h2o_linklist_insert_list(expired, &ctx->wheels[wheel].slots[slot]);
             if (ctx->last_run == now)
                 goto Exit;
             ++ctx->last_run;
         } else {
-            if (!h2o_linklist_is_empty(&ctx->wheels[wheel][slot])) {
+            if (!h2o_linklist_is_empty(&ctx->wheels[wheel].slots[slot])) {
                 cascade_one(ctx, wheel, slot);
-                assert(h2o_linklist_is_empty(&ctx->wheels[wheel][slot]));
+                assert(h2o_linklist_is_empty(&ctx->wheels[wheel].slots[slot]));
                 wheel = 0;
                 goto Redo;
             }
