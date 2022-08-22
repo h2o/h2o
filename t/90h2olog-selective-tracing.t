@@ -15,7 +15,7 @@ run_as_root();
 my $h2olog_prog = bindir() . "/h2olog";
 my $client_prog = bindir() . "/h2o-httpclient";
 
-unless ($ENV{DTRACE_TEST})  {
+unless ($ENV{DTRACE_TESTS})  {
   plan skip_all => "$h2olog_prog not found"
       unless -e $h2olog_prog;
 

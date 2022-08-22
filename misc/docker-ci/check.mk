@@ -50,6 +50,22 @@ dtrace+asan:
 		BUILD_ARGS='$(BUILD_ARGS)' \
 		TEST_ENV='ASAN_OPTIONS=detect_leaks=0:alloc_dealloc_mismatch=0 $(TEST_ENV)'
 
+# https://clang.llvm.org/docs/SourceBasedCodeCoverage.html
+coverage:
+	docker run $(DOCKER_RUN_OPTS) h2oserver/h2o-ci:ubuntu2204  \
+		make -f $(SRC_DIR).ro/misc/docker-ci/check.mk _check _coverage_report \
+		CMAKE_ARGS='-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_FLAGS="-fprofile-instr-generate -fcoverage-mapping -mllvm -runtime-counter-relocation" -DCMAKE_CXX_FLAGS= -DCMAKE_BUILD_TYPE=Debug -DWITH_H2OLOG=OFF' \
+		BUILD_ARGS='$(BUILD_ARGS)' \
+		TEST_ENV='LLVM_PROFILE_FILE=/home/ci/profraw/%c%p.profraw $(TEST_ENV)'
+
+_coverage_report:
+	llvm-profdata merge -sparse -o h2o.profdata /home/ci/profraw/*.profraw
+	llvm-cov report -show-region-summary=0 -instr-profile h2o.profdata h2o $(SRC_DIR)/lib $(SRC_DIR)/src $(SRC_DIR)/deps/quicly/lib $(SRC_DIR)/deps/picotls/lib | tee /home/ci/summary.txt
+	echo '~~~' > /home/ci/summary.md
+	cat /home/ci/summary.txt >> /home/ci/summary.md
+	echo '~~~' >> /home/ci/summary.md
+	# TODO: send the coverage report to a coverage analyzing service
+
 _check: _mount _do_check
 
 _mount:
