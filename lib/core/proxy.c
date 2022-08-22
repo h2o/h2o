@@ -486,7 +486,8 @@ static int on_body(h2o_httpclient_t *client, const char *errstr)
     if (errstr != NULL) {
         self->generator_disposed = &generator_disposed;
         on_body_on_close(self, errstr);
-        self->generator_disposed = NULL;
+        if (!generator_disposed)
+            self->generator_disposed = NULL;
     }
     if (!generator_disposed && !self->sending.inflight)
         do_send(self);
