@@ -159,6 +159,7 @@ static void dispose_ssl_output_buffer(struct st_h2o_socket_ssl_t *ssl);
 static int has_pending_ssl_bytes(struct st_h2o_socket_ssl_t *ssl);
 static size_t generate_tls_records(h2o_socket_t *sock, h2o_iovec_t **bufs, size_t *bufcnt, size_t first_buf_written);
 static void do_dispose_socket(h2o_socket_t *sock);
+static void do_close_socket(h2o_socket_t *sock);
 static void report_early_write_error(h2o_socket_t *sock);
 static void do_write(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt);
 static void do_read_start(h2o_socket_t *sock);
@@ -538,6 +539,7 @@ static void dispose_socket(h2o_socket_t *sock, const char *err)
     }
 
     if (sock->async.retry_dispose.cb == NULL) {
+        do_close_socket(sock);
         sock->async.retry_dispose.cb = retry_dispose_socket;
     }
     if (sock->ssl != NULL && async_handshake_in_flight != NULL && async_handshake_in_flight != sock) {
@@ -1526,6 +1528,7 @@ static void async_read_ready(h2o_socket_t *listener, const char *err)
     // reset async
     assert(adata->client.sock->async.enabled);
     adata->client.sock->async.enabled = 0;
+    do_close_socket(listener);
     do_dispose_socket(listener);
 
     if (err != NULL) {
@@ -1558,6 +1561,7 @@ static void async_on_close(void *data)
 
     // cancel async callback
     if (adata->client.sock->async.enabled) {
+        do_close_socket(adata->async_sock);
         do_dispose_socket(adata->async_sock);
     }
 
@@ -1881,7 +1885,6 @@ static void proceed_handshake(h2o_socket_t *sock, const char *err)
         } else {
             // handshake is in-flight, delay the handshake
             if (!h2o_linklist_is_linked(&sock->async.delayed_handshake_link)) {
-                fprintf(stderr, "delayed %p\n", sock);
                 h2o_linklist_insert(&delayed_handshakes, &sock->async.delayed_handshake_link);
             }
             return;

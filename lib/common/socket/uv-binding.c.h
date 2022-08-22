@@ -141,9 +141,14 @@ static void free_sock(uv_handle_t *handle)
 void do_dispose_socket(h2o_socket_t *_sock)
 {
     struct st_h2o_uv_socket_t *sock = (struct st_h2o_uv_socket_t *)_sock;
+    uv_close(sock->handle, free_sock);
+}
+
+void do_close_socket(h2o_socket_t *_sock)
+{
+    struct st_h2o_uv_socket_t *sock = (struct st_h2o_uv_socket_t *)_sock;
     sock->super._cb.write = NULL; /* avoid the write callback getting called when closing the socket (#1249) */
     h2o_timer_unlink(&sock->write_cb_timer);
-    uv_close(sock->handle, free_sock);
 }
 
 int h2o_socket_get_fd(h2o_socket_t *_sock)

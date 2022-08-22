@@ -370,16 +370,29 @@ void do_dispose_socket(h2o_socket_t *_sock)
 {
     struct st_h2o_evloop_socket_t *sock = (struct st_h2o_evloop_socket_t *)_sock;
 
+    sock->_flags = H2O_SOCKET_FLAG_IS_DISPOSED |
+        (sock->_flags & H2O_SOCKET_FLAG_IS_CLOSED) |
+        (sock->_flags & H2O_SOCKET_FLAG__EPOLL_IS_REGISTERED);
+
+    /* immediate dispose */
+    link_to_statechanged(sock);
+}
+
+void do_close_socket(h2o_socket_t *_sock)
+{
+    struct st_h2o_evloop_socket_t *sock = (struct st_h2o_evloop_socket_t *)_sock;
+
     dispose_write_buf(&sock->super);
 
-    sock->_flags = H2O_SOCKET_FLAG_IS_DISPOSED | (sock->_flags & H2O_SOCKET_FLAG__EPOLL_IS_REGISTERED);
+    sock->_flags = H2O_SOCKET_FLAG_IS_CLOSED |
+        (sock->_flags & H2O_SOCKET_FLAG__EPOLL_IS_REGISTERED);
 
     /* Give backends chance to do the necessary cleanup, as well as giving them chance to switch to their own disposal method; e.g.,
      * shutdown(SHUT_RDWR) with delays to reclaim all zero copy buffers. */
-    if (evloop_do_on_socket_close(sock))
+    if (evloop_do_on_socket_close(sock)) {
         return;
+    }
 
-    /* immediate close */
     if (sock->fd != -1) {
         close(sock->fd);
         sock->fd = -1;
