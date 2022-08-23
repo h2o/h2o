@@ -958,19 +958,20 @@ int h2o_http3_read_frame(h2o_http3_read_frame_t *frame, int is_client, uint64_t 
         }                                                                                                                          \
         break
         /* clang-format off */
-        /*   +-----------------+-------------+-------------+
-         *   |                 | req-stream  | ctrl-stream |
-         *   |      frame      +------+------+------+------+
-         *   |                 |client|server|client|server|
-         *   +-----------------+------+------+------+------+ */
-        FRAME( DATA            ,    1 ,    1 ,    0 ,    0 );
-        FRAME( HEADERS         ,    1 ,    1 ,    0 ,    0 );
-        FRAME( CANCEL_PUSH     ,    0 ,    0 ,    1 ,    1 );
-        FRAME( SETTINGS        ,    0 ,    0 ,    1 ,    1 );
-        FRAME( PUSH_PROMISE    ,    0 ,    1 ,    0 ,    0 );
-        FRAME( GOAWAY          ,    0 ,    0 ,    1 ,    1 );
-        FRAME( MAX_PUSH_ID     ,    0 ,    0 ,    1 ,    0 );
-        FRAME( PRIORITY_UPDATE ,    0 ,    0 ,    1 ,    0 );
+        /*   +-------------------------+-------------+-------------+
+         *   |                         | req-stream  | ctrl-stream |
+         *   |      frame              +------+------+------+------+
+         *   |                         |client|server|client|server|
+         *   +-------------------------+------+------+------+------+ */
+        FRAME( DATA                    ,    1 ,    1 ,    0 ,    0 );
+        FRAME( HEADERS                 ,    1 ,    1 ,    0 ,    0 );
+        FRAME( CANCEL_PUSH             ,    0 ,    0 ,    1 ,    1 );
+        FRAME( SETTINGS                ,    0 ,    0 ,    1 ,    1 );
+        FRAME( PUSH_PROMISE            ,    0 ,    1 ,    0 ,    0 );
+        FRAME( GOAWAY                  ,    0 ,    0 ,    1 ,    1 );
+        FRAME( MAX_PUSH_ID             ,    0 ,    0 ,    1 ,    0 );
+        FRAME( PRIORITY_UPDATE_REQUEST ,    0 ,    0 ,    1 ,    0 );
+        FRAME( PRIORITY_UPDATE_PUSH    ,    0 ,    0 ,    1 ,    0 );
         /*   +-----------------+------+------+------+------+ */
         /* clang-format on */
 #undef FRAME

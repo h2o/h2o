@@ -38,7 +38,8 @@
 #define H2O_HTTP3_FRAME_TYPE_PUSH_PROMISE 5
 #define H2O_HTTP3_FRAME_TYPE_GOAWAY 7
 #define H2O_HTTP3_FRAME_TYPE_MAX_PUSH_ID 13
-#define H2O_HTTP3_FRAME_TYPE_PRIORITY_UPDATE 15
+#define H2O_HTTP3_FRAME_TYPE_PRIORITY_UPDATE_REQUEST 0xF0700
+#define H2O_HTTP3_FRAME_TYPE_PRIORITY_UPDATE_PUSH 0xF0701
 
 #define H2O_HTTP3_STREAM_TYPE_CONTROL 0
 #define H2O_HTTP3_STREAM_TYPE_PUSH_STREAM 1
@@ -361,7 +362,7 @@ typedef struct st_h2o_http3_qpack_context_t {
 
 typedef struct st_h2o_http3_conn_callbacks_t {
     h2o_quic_conn_callbacks_t super;
-    void (*handle_control_stream_frame)(h2o_http3_conn_t *conn, uint8_t type, const uint8_t *payload, size_t len);
+    void (*handle_control_stream_frame)(h2o_http3_conn_t *conn, uint64_t type, const uint8_t *payload, size_t len);
 } h2o_http3_conn_callbacks_t;
 
 struct st_h2o_http3_conn_t {
