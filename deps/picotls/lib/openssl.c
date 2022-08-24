@@ -767,14 +767,15 @@ static int do_sign_final(void *vargs)
 }
 
 static int do_sign(EVP_PKEY *key, const struct st_ptls_openssl_signature_scheme_t *scheme, ptls_buffer_t *outbuf,
-                   ptls_iovec_t input, void (**cb)(void *sign_ctx), void **sign_ctx)
+                   ptls_iovec_t input, void (**cb)(void *sign_ctx), void **sign_ctx, int is_async)
 {
     const EVP_MD *md = scheme->scheme_md != NULL ? scheme->scheme_md() : NULL;
+    int pkey_id = EVP_PKEY_id(key);
     int ret;
 
     struct sign_ctx *args = NULL;
     EVP_MD_CTX *ctx = NULL;
-    if (*sign_ctx != NULL) {
+    if (sign_ctx != NULL && *sign_ctx != NULL) {
         args = *sign_ctx;
     } else {
         size_t siglen;
@@ -791,7 +792,7 @@ static int do_sign(EVP_PKEY *key, const struct st_ptls_openssl_signature_scheme_
         }
 
 #if PTLS_OPENSSL_HAVE_ED25519
-        if (EVP_PKEY_id(key) == EVP_PKEY_ED25519) {
+        if (pkey_id == EVP_PKEY_ED25519) {
             /* ED25519 requires the use of the all-at-once function that appeared in OpenSSL 1.1.1, hence different path */
             if (EVP_DigestSign(ctx, NULL, &siglen, input.base, input.len) != 1) {
                 ret = PTLS_ERROR_LIBRARY;
@@ -806,7 +807,7 @@ static int do_sign(EVP_PKEY *key, const struct st_ptls_openssl_signature_scheme_
         } else
 #endif
         {
-            if (EVP_PKEY_id(key) == EVP_PKEY_RSA) {
+            if (pkey_id == EVP_PKEY_RSA) {
                 if (EVP_PKEY_CTX_set_rsa_padding(pkey_ctx, RSA_PKCS1_PSS_PADDING) != 1) {
                     ret = PTLS_ERROR_LIBRARY;
                     goto Exit;
@@ -834,35 +835,41 @@ static int do_sign(EVP_PKEY *key, const struct st_ptls_openssl_signature_scheme_
             args->ctx = ctx;
             ctx = NULL;
             args->scheme = scheme;
-            *sign_ctx = args;
+            if (sign_ctx != NULL)
+                *sign_ctx = args;
         }
     }
 
 #if PTLS_OPENSSL_HAVE_ED25519
-    if (EVP_PKEY_id(key) == EVP_PKEY_ED25519) {
+    if (pkey_id == EVP_PKEY_ED25519) {
         // signing is complete as ED25519 is one-shot
     } else
 #endif
     {
+        if (is_async) {
 #ifdef PTLS_OPENSSL_HAVE_ASYNC
         if (ASYNC_get_current_job() == NULL) {
             // start async sign
-            switch (ASYNC_start_job(&args->job, args->waitctx, &ret, do_sign_final, &args, sizeof(struct sign_ctx**)))
+            switch (ASYNC_start_job(&args->job, args->waitctx, &ret, do_sign_final, &args, sizeof(struct sign_ctx*)))
             {
                 case ASYNC_ERR:
                     ret = PTLS_ERROR_LIBRARY;
                     goto Exit;
                 case ASYNC_PAUSE: {
                     ret = PTLS_ERROR_ASYNC_OPERATION;
-                    *cb = async_sign_cancel;
+                    if (cb != NULL)
+                        *cb = async_sign_cancel;
                     return ret;
                 }
                 case ASYNC_NO_JOBS:
                     ret = PTLS_ERROR_LIBRARY;
                     goto Exit;
                 case ASYNC_FINISH: {
-                    ptls_buffer__do_pushv(outbuf, args->sig, args->siglen);
                     args->job = NULL;
+                    if (ptls_buffer__do_pushv(outbuf, args->sig, args->siglen) != 0) {
+                        ret = PTLS_ERROR_LIBRARY;
+                        goto Exit;
+                    }
                     break;
                 }
                 default:
@@ -872,14 +879,26 @@ static int do_sign(EVP_PKEY *key, const struct st_ptls_openssl_signature_scheme_
         }
 #else
     do_sign_final(&args);
-    ptls_buffer__do_pushv(outbuf, args->sig, args->siglen);
+    if (ptls_buffer__do_pushv(outbuf, args->sig, args->siglen) != 0) {
+        ret = PTLS_ERROR_LIBRARY;
+        goto Exit;
+    }
 #endif
+        } else {
+            do_sign_final(&args);
+            if (ptls_buffer__do_pushv(outbuf, args->sig, args->siglen) != 0) {
+                ret = PTLS_ERROR_LIBRARY;
+                goto Exit;
+            }
+        }
     }
 
     ret = 0;
 Exit:
-    *sign_ctx = NULL;
-    *cb = NULL;
+    if (sign_ctx != NULL)
+        *sign_ctx = NULL;
+    if (cb != NULL)
+        *cb = NULL;
     sign_ctx_destroy(args);
     if (ctx != NULL)
         EVP_MD_CTX_destroy(ctx);
@@ -1183,6 +1202,7 @@ static int sign_certificate(ptls_sign_certificate_t *_self, ptls_t *tls, void (*
 {
     ptls_openssl_sign_certificate_t *self = (ptls_openssl_sign_certificate_t *)_self;
     const struct st_ptls_openssl_signature_scheme_t *scheme;
+    int is_async = ptls_get_context(tls)->async_handshake == 1;
 
     if (ptls_is_server(tls)) {
         assert(sign_ctx != NULL);
@@ -1201,11 +1221,6 @@ static int sign_certificate(ptls_sign_certificate_t *_self, ptls_t *tls, void (*
         }
     } else {
         assert(sign_ctx == NULL);
-        // setup temporary ctx for client
-        void *tmp_sign_ctx = NULL;
-        void (*tmp_sign_ctx_cb)(void *sign_ctx);
-        sign_ctx = &tmp_sign_ctx;
-        cb = &tmp_sign_ctx_cb;
         scheme = match_scheme(self->schemes, algorithms, num_algorithms);
         goto Exit;
     }
@@ -1214,7 +1229,7 @@ static int sign_certificate(ptls_sign_certificate_t *_self, ptls_t *tls, void (*
 
 Exit:
     *selected_algorithm = scheme->scheme_id;
-    return do_sign(self->key, scheme, outbuf, input, cb, sign_ctx);
+    return do_sign(self->key, scheme, outbuf, input, cb, sign_ctx, is_async);
 }
 
 static X509 *to_x509(ptls_iovec_t vec)

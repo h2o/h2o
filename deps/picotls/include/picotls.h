@@ -786,6 +786,10 @@ struct st_ptls_context_t {
      */
     unsigned server_cipher_preference : 1;
     /**
+     * boolean indicating if handshaking should be asynchronous
+     */
+    unsigned async_handshake : 1;
+    /**
      *
      */
     ptls_encrypt_ticket_t *encrypt_ticket;
