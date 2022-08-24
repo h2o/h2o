@@ -818,6 +818,7 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
                 .require_client_authentication = 0,
                 .omit_end_of_early_data = 0,
                 .server_cipher_preference = server_cipher_preference,
+                .async_handshake = 1,
                 .encrypt_ticket = NULL, /* initialized later */
                 .save_ticket = NULL,    /* initialized later */
                 .log_event = NULL,
@@ -898,6 +899,8 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
                                        *fusion_all[] = {&aes128gcmsha256, &aes256gcmsha384, NULL};
             pctx->ctx.cipher_suites = replace_ciphersuites(pctx->ctx.cipher_suites, fusion_all);
         }
+        // disable async handshaking in quic until it is supported in quicly
+        pctx->ctx.async_handshake = 0;
 #endif
         quicly_amend_ptls_context(&pctx->ctx);
     }
