@@ -630,10 +630,11 @@ package H2ologTracer {
         my ($class, $opts) = @_;
         my $h2o_pid = $opts->{pid} or Carp::croak("Missing pid in the opts");
         my $h2olog_args = $opts->{args} // [];
+        my $output_dir = $opts->{output_dir} // File::Temp::tempdir(CLEANUP => 1);
+
         my $h2olog_prog = t::Util::bindir() . "/h2olog";
 
-        my $tempdir = File::Temp::tempdir(CLEANUP => 1);
-        my $output_file = "$tempdir/h2olog.jsonl";
+        my $output_file = "$output_dir/h2olog.jsonl";
 
         my $tracer_pid = open my($errfh), "-|", qq{exec $h2olog_prog @{$h2olog_args} -d -p $h2o_pid -w '$output_file' 2>&1};
         die "failed to spawn $h2olog_prog: $!" unless defined $tracer_pid;
@@ -676,6 +677,8 @@ package H2ologTracer {
             _guard => $guard,
             tracer_pid => $tracer_pid,
             get_trace => $get_trace,
+            output_dir => $output_dir,
+            output_file => $output_file,
         }, $class;
     }
 
