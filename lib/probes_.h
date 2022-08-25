@@ -152,6 +152,23 @@ static inline void h2o_probe_log_response(h2o_req_t *req, uint64_t req_index)
     }
 }
 
+// ptlslog integration
+
+#define H2O_LOG(_type, _block) PTLSLOG(h2o, _type, _block)
+
+#define H2O_LOG_CONN(_type, _conn, _block)                                                                                         \
+    do {                                                                                                                           \
+        h2o_conn_t *__conn = (_conn);                                                                                              \
+        if (!__conn->callbacks->skip_tracing(__conn)) {                                                                            \
+            H2O_LOG(_type, {                                                                                                       \
+                PTLSLOG_ELEMENT_UNSIGNED(conn_id, __conn->id);                                                                     \
+                do {                                                                                                               \
+                    _block                                                                                                         \
+                } while (0);                                                                                                       \
+            });                                                                                                                    \
+        }                                                                                                                          \
+    } while (0)
+
 #endif
 
 #endif

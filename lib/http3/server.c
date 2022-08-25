@@ -1814,6 +1814,7 @@ static void on_h3_destroy(h2o_quic_conn_t *h3_)
     quicly_stats_t stats;
 
     H2O_PROBE_CONN0(H3S_DESTROY, &conn->super);
+    H2O_LOG_CONN(h3s_destroy, &conn->super, {});
 
     if (quicly_get_stats(h3_->quic, &stats) == 0) {
 #define ACC(fld, _unused) conn->super.ctx->quic_stats.quicly.fld += stats.fld;
@@ -1942,6 +1943,11 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
     h2o_http3_setup(&conn->h3, qconn);
 
     H2O_PROBE_CONN(H3S_ACCEPT, &conn->super, &conn->super, conn->h3.super.quic, h2o_conn_get_uuid(&conn->super));
+    H2O_LOG_CONN(h3s_accept, &conn->super, {
+        PTLSLOG_ELEMENT_PTR(conn, &conn->super);
+        PTLSLOG_ELEMENT_PTR(quic, conn->h3.super.quic);
+        PTLSLOG_ELEMENT_SAFESTR(conn_uuid, h2o_conn_get_uuid(&conn->super));
+    });
 
     if (!h2o_quic_send(&conn->h3.super)) {
         /* When `h2o_quic_send` fails, it destroys the connection object. */
