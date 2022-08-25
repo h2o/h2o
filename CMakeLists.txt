@@ -271,6 +271,10 @@ IF ("${CMAKE_C_COMPILER_ID}" STREQUAL "GNU")
     IF (NOT ("${CMAKE_C_COMPILER_VERSION}" VERSION_LESS "4.5"))
         SET(CC_WARNING_FLAGS "${CC_WARNING_FLAGS} -Wno-unused-result")
     ENDIF ()
+
+    # -Werror=format implies -Werror=nonull in gcc, which introduces compile errors in some test files,
+    # but all of them are false positive.
+    SET(CC_WARNING_FLAGS "${CC_WARNING_FLAGS} -Wno-nonnull")
 ENDIF ()
 
 # setup compile flags
