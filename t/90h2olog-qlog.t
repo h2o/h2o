@@ -91,9 +91,7 @@ subtest "h2olog to qlog", sub {
 subtest "h2olog (v2) to qlog", sub {
   my $server = spawn_h2o_with_quic();
 
-  # TODO: it should be merged to h2olog(1)
-  my $h2olog2 = bindir() . "/experimental-h2olog-v2";
-  system("$h2olog2 -u $tempdir/h2olog.sock > $qlog_dir/h2olog2.jsonl &");
+  system("$h2olog_prog -u $tempdir/h2olog.sock > $qlog_dir/h2olog2.jsonl &");
   sleep 1;
 
   my ($headers, $body) = run_prog("$client_prog -3 100 https://127.0.0.1:$server->{quic_port}/halfdome.jpg");

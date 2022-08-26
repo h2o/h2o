@@ -33,6 +33,9 @@ extern "C" {
 #include <limits.h>
 #include <arpa/inet.h>
 #include <sys/time.h>
+#include <sys/select.h>
+#include <sys/socket.h>
+#include <sys/un.h>
 #include "h2o/memory.h"
 #include "h2o/version.h"
 #include "h2o/ebpf.h"
@@ -67,6 +70,7 @@ Optional arguments:
   -f <flag>         Turn on a BCC debug flag (supported flag: DEBUG_LLVM_IR,
                     DEBUG_BPF, DEBUG_PREPROCESSOR, DEBUG_SOURCE,
                     DEBUG_BPF_REGISTER_STATE, DEBUG_BTF)
+  -u <unix-socket>  Path to the unix socket to connect to. Experimental.
 
 Examples:
   h2olog -p $(pgrep -o h2o) -H
@@ -257,6 +261,54 @@ static std::string build_cc_macro_str(const char *name, const std::string &str)
     return build_cc_macro_expr(name, "\"" + str + "\"");
 }
 
+
+static int read_from_unix_socket(const char *unix_socket_path)
+{
+    struct sockaddr_un sa = {
+        .sun_family = AF_UNIX,
+    };
+    if (strlen(unix_socket_path) >= sizeof(sa.sun_path)) {
+        fprintf(stderr, "'%s' is too long as the name of a unix domain socket.\n", unix_socket_path);
+        return EXIT_FAILURE;
+    }
+    strcpy(sa.sun_path, unix_socket_path);
+
+    int fd;
+    if ((fd = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
+        perror("failed to create a socket");
+        return EXIT_FAILURE;
+    }
+    if (connect(fd, (const struct sockaddr *)&sa, sizeof(sa)) == -1) {
+        perror("failed to connect to the socket");
+        return EXIT_FAILURE;
+    }
+
+    setvbuf(stdout, NULL, _IOLBF, 0);
+    setvbuf(stderr, NULL, _IOLBF, 0);
+
+    fd_set fds;
+    FD_ZERO(&fds);
+    FD_SET(fd, &fds);
+
+    while (select(fd + 1, &fds, NULL, NULL, NULL) > 0) {
+        char buf[4096];
+        ssize_t ret = read(fd, buf, sizeof(buf));
+        if (ret == -1) {
+            if (ret != EINTR)
+                break;
+        } else if (ret > 0) {
+            fwrite(buf, 1, ret, stdout);
+        } else {
+            // disconnected
+            break;
+        }
+    }
+    close(fd);
+
+    return 0;
+}
+
+
 #define CC_MACRO_EXPR(name) build_cc_macro_expr(#name, name)
 #define CC_MACRO_STR(name) build_cc_macro_str(#name, name)
 
@@ -276,7 +328,8 @@ int main(int argc, char **argv)
     double sampling_rate = 1.0;
     std::vector<std::pair<std::vector<uint8_t> /* address */, unsigned /* netmask */>> sampling_addresses;
     std::vector<std::string> sampling_snis;
-    while ((c = getopt(argc, argv, "hHdrlap:t:s:w:S:A:N:f:")) != -1) {
+    const char *unix_socket_path = NULL; // h2olog-socket.path in h2o conf file
+    while ((c = getopt(argc, argv, "hHdrlap:t:s:w:S:A:N:f:u:")) != -1) {
         switch (c) {
         case 'H':
             tracer.reset(create_http_tracer());
@@ -363,6 +416,9 @@ int main(int argc, char **argv)
         case 'r':
             preserve_root = true;
             break;
+        case 'u':
+            unix_socket_path = optarg;
+            break;
         case 'h':
             usage();
             exit(EXIT_SUCCESS);
@@ -376,6 +432,13 @@ int main(int argc, char **argv)
         fprintf(stderr, "Error: too many aruments\n");
         usage();
         exit(EXIT_FAILURE);
+    }
+
+    if (unix_socket_path != NULL) {
+        if (debug)
+            fprintf(stderr, "Attaching %s\n", unix_socket_path);
+        drop_root_privilege();
+        return read_from_unix_socket(unix_socket_path);
     }
 
     if (list_usdts) {
