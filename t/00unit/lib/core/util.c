@@ -76,9 +76,13 @@ struct expected_t {
 static void check_path(void *ctx, const char *path, size_t path_len, int is_critical)
 {
     struct expected_t **expected = ctx;
-    ok(h2o_memis(path, path_len, (*expected)->path, strlen((*expected)->path)));
-    ok(is_critical == (*expected)->is_critical);
-    ++*expected;
+    if ((*expected)->path != NULL) {
+        ok(h2o_memis(path, path_len, (*expected)->path, strlen((*expected)->path)));
+        ok(is_critical == (*expected)->is_critical);
+        ++*expected;
+    } else {
+        ok(0);
+    }
 }
 
 static void test_extract_push_path_from_link_header(void)
