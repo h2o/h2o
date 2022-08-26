@@ -1528,8 +1528,7 @@ static void async_read_ready(h2o_socket_t *listener, const char *err)
     // reset async
     assert(adata->client.sock->async.enabled);
     adata->client.sock->async.enabled = 0;
-    do_close_socket(listener);
-    do_dispose_socket(listener);
+    dispose_socket(listener, NULL);
 
     if (err != NULL) {
         return;
@@ -1544,9 +1543,12 @@ static void async_ssl_on_close(void *data)
 
     if (adata->client.sock->async.enabled) {
         // closing ssl, resume async transaction if pending to allow
-        // resources to be freed in async_on_close
-        if (SSL_waiting_for_async(adata->client.sock->ssl->ossl)) {
-            SSL_do_handshake(adata->client.sock->ssl->ossl);
+        // resources to be freed in async_on_close. In the case of ptls,
+        // this is done in `ptls_free` by calling a cancelation callback
+        if (adata->client.sock->ssl->ossl != NULL) {
+            if (SSL_waiting_for_async(adata->client.sock->ssl->ossl)) {
+                SSL_do_handshake(adata->client.sock->ssl->ossl);
+            }
         }
     }
 
@@ -1561,8 +1563,7 @@ static void async_on_close(void *data)
 
     // cancel async callback
     if (adata->client.sock->async.enabled) {
-        do_close_socket(adata->async_sock);
-        do_dispose_socket(adata->async_sock);
+        dispose_socket(adata->async_sock, NULL);
     }
 
     do_delayed_handshakes(adata->client.sock);
@@ -1575,10 +1576,11 @@ static void async_on_close(void *data)
 
 static void do_ssl_async(h2o_socket_t *sock)
 {
+    int async_fd;
+
     async_handshake_in_flight = sock;
     assert(!sock->async.enabled);
     sock->async.enabled = 1;
-    int async_fd;
     if (sock->ssl->ptls != NULL) {
         async_fd = ptls_openssl_get_async_fd(sock->ssl->ptls);
     } else {
@@ -1591,6 +1593,9 @@ static void do_ssl_async(h2o_socket_t *sock)
         SSL_get_all_async_fds(sock->ssl->ossl, fds, &numfds);
         async_fd = fds[0];
     }
+    // dup the fd as h2o socket handling will close it
+    async_fd = dup(async_fd);
+    assert(async_fd != -1);
 
     // add async fd to event loop in order to retry when openssl engine is ready
 #if H2O_USE_LIBUV
