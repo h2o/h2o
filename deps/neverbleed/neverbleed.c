@@ -415,8 +415,8 @@ struct st_neverbleed_thread_data_t *get_thread_data(neverbleed_t *nb)
             dief("malloc failed");
     }
 
-        thdata->in_flight = 0;
-        thdata->self_pid = self_pid;
+    thdata->in_flight = 0;
+    thdata->self_pid = self_pid;
 #ifdef SOCK_CLOEXEC
     if ((thdata->fd = socket(PF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0)) == -1)
         dief("socket(2) failed");
@@ -580,26 +580,17 @@ static int async_pause(int fd)
     ASYNC_JOB *job;
 
     if ((job = ASYNC_get_current_job()) != NULL) {
-        // dup the fd as the applicaiton may want to close it after polling
-        fd = dup(fd);
-        if (fd == -1) {
-            fprintf(stderr, "failed to dup(2) fd\n");
-            return -1;
-        }
-
         ASYNC_WAIT_CTX *waitctx = ASYNC_get_wait_ctx(job);
 
         size_t numfds;
         assert(ASYNC_WAIT_CTX_get_all_fds(waitctx, NULL, &numfds) && numfds == 0);
-        if(!ASYNC_WAIT_CTX_set_wait_fd(waitctx, "neverbleed", fd, NULL, NULL)) {
+        if (!ASYNC_WAIT_CTX_set_wait_fd(waitctx, "neverbleed", fd, NULL, NULL)) {
             fprintf(stderr, "could not set async fd\n");
-            close(fd);
             return -1;
         }
         ASYNC_pause_job();
-        if(!ASYNC_WAIT_CTX_clear_fd(waitctx, "neverbleed")) {
+        if (!ASYNC_WAIT_CTX_clear_fd(waitctx, "neverbleed")) {
             fprintf(stderr, "could not clear async fd\n");
-            close(fd);
             return -1;
         }
     }
