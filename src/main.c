@@ -1731,10 +1731,11 @@ static int open_inet_listener(h2o_configurator_command_t *cmd, yoml_t *node, con
 
 static void set_socket_buffers(int fd, unsigned sndbuf, unsigned rcvbuf)
 {
+    char errstr[256];
     if (sndbuf != 0 && setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &sndbuf, sizeof(sndbuf)) != 0)
-        h2o_fatal("failed to set SO_SNDBUF:%s", strerror(errno));
+        h2o_fatal("failed to set SO_SNDBUF:%s", h2o_strerror_r(errno, errstr, sizeof(errstr)));
     if (rcvbuf != 0 && setsockopt(fd, SOL_SOCKET, SO_RCVBUF, &rcvbuf, sizeof(rcvbuf)) != 0)
-        h2o_fatal("failed to set SO_RCVBUF:%s", strerror(errno));
+        h2o_fatal("failed to set SO_RCVBUF:%s", h2o_strerror_r(errno, errstr, sizeof(errstr)));
 }
 
 static void set_quic_sockopts(int fd, int family, unsigned sndbuf, unsigned rcvbuf)
