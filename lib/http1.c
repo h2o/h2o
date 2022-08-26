@@ -370,10 +370,10 @@ static const char *init_headers(h2o_mem_pool_t *pool, h2o_headers_t *headers, co
         h2o_vector_reserve(pool, headers, len);
         for (i = 0; i != len; ++i) {
             const h2o_token_t *name_token;
-            char orig_case[src[i].name_len];
             /* reject multiline header */
             if (src[i].name_len == 0)
                 return "line folding of header fields is not supported";
+            char orig_case[src[i].name_len];
             /* preserve the original case */
             memcpy(orig_case, src[i].name, src[i].name_len);
             /* convert to lower-case in-place */
