@@ -900,6 +900,9 @@ void h2o_socket_sendvec(h2o_socket_t *sock, h2o_sendvec_t *vecs, size_t cnt, h2o
 
     sock->_cb.write = cb;
 
+    if (cnt == 0)
+        return do_write(sock, NULL, 0);
+
     h2o_iovec_t bufs[cnt];
     size_t pull_index = SIZE_MAX;
 
