@@ -1722,6 +1722,9 @@ Redo:
         case ASYNC_RESUMPTION_STATE_REQUEST_SENT: {
             /* sent async request, reset the ssl state, and wait for async response */
             assert(ret < 0);
+            if (SSL_waiting_for_async(sock->ssl->ossl)) {
+                goto Redo;
+            }
             SSL_free(sock->ssl->ossl);
             create_ossl(sock);
             if (has_pending_ssl_bytes(sock->ssl))
