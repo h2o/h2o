@@ -273,14 +273,15 @@ static int read_from_unix_socket(const char *unix_socket_path)
     }
     strcpy(sa.sun_path, unix_socket_path);
 
-    int fd;
+    int fd = -1;
+    int ret = EXIT_FAILURE;
     if ((fd = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
         perror("failed to create a socket");
-        return EXIT_FAILURE;
+        goto Exit;
     }
     if (connect(fd, (const struct sockaddr *)&sa, sizeof(sa)) == -1) {
         perror("failed to connect to the socket");
-        return EXIT_FAILURE;
+        goto Exit;
     }
 
     setvbuf(stdout, NULL, _IOLBF, 0);
@@ -303,9 +304,14 @@ static int read_from_unix_socket(const char *unix_socket_path)
             break;
         }
     }
-    close(fd);
 
-    return 0;
+    ret = EXIT_SUCCESS;
+
+Exit:
+    if (fd != -1)
+        close(fd);
+
+    return ret;
 }
 
 
