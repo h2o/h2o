@@ -443,7 +443,6 @@ int main(int argc, char **argv)
     if (unix_socket_path != NULL) {
         if (debug)
             fprintf(stderr, "Attaching %s\n", unix_socket_path);
-        drop_root_privilege();
         return read_from_unix_socket(unix_socket_path);
     }
 
