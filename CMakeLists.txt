@@ -262,7 +262,7 @@ IF (PKG_CONFIG_FOUND)
     ENDIF (LIBCAP_FOUND)
 ENDIF (PKG_CONFIG_FOUND)
 
-SET(CC_WARNING_FLAGS "-Wall -Wno-unused-value -Wno-unused-function -Wno-nullability-completeness -Wno-expansion-to-defined -Werror=implicit-function-declaration -Werror=incompatible-pointer-types -Werror=format")
+SET(CC_WARNING_FLAGS "-Wall -Wno-unused-value -Wno-unused-function -Wno-nullability-completeness -Wno-expansion-to-defined -Werror=implicit-function-declaration -Werror=incompatible-pointer-types")
 
 IF ("${CMAKE_C_COMPILER_ID}" STREQUAL "GNU")
     IF (NOT ("${CMAKE_C_COMPILER_VERSION}" VERSION_LESS "4.6"))
@@ -271,6 +271,10 @@ IF ("${CMAKE_C_COMPILER_ID}" STREQUAL "GNU")
     IF (NOT ("${CMAKE_C_COMPILER_VERSION}" VERSION_LESS "4.5"))
         SET(CC_WARNING_FLAGS "${CC_WARNING_FLAGS} -Wno-unused-result")
     ENDIF ()
+ENDIF ()
+IF ("${CMAKE_C_COMPILER_ID}" STREQUAL "Clang")
+    # gcc may detect false positive. See issue#3105.
+    SET(CC_WARNING_FLAGS "${CC_WARNING_FLAGS} -Werror=format")
 ENDIF ()
 
 # setup compile flags
