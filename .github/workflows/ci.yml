@@ -2,6 +2,11 @@ name: CI
 
 on: [push, pull_request]
 
+# Extra C/CXX flags only for CI,
+# as some C flags have side effects that we do not prefer and thus not suitable for the defaults.
+env:
+  CMAKE_ARGS: CMAKE_C_FLAGS=-Werror=format CMAKE_CXX_FLAGS=-Werror=format
+
 jobs:
   build:
     name: "${{ matrix.name }}"

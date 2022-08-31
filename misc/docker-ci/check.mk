@@ -1,9 +1,9 @@
 CONTAINER_NAME=h2oserver/h2o-ci:ubuntu1604
 SRC_DIR=/h2o
 CHECK_MK=$(SRC_DIR)/misc/docker-ci/check.mk
-CMAKE_ARGS=
-BUILD_ARGS=
-TEST_ENV=
+CMAKE_ARGS?=
+BUILD_ARGS?=
+TEST_ENV?=
 FUZZ_ASAN=ASAN_OPTIONS=detect_leaks=0
 DOCKER_RUN_OPTS=--privileged \
 	--ulimit memlock=-1 \
@@ -24,14 +24,14 @@ ossl1.1.0+fuzz:
 	docker run $(DOCKER_RUN_OPTS) $(CONTAINER_NAME) \
 		env CC=clang CXX=clang++ \
 		make -f $(SRC_DIR).ro/misc/docker-ci/check.mk _check \
-		CMAKE_ARGS='-DOPENSSL_ROOT_DIR=/opt/openssl-1.1.0 -DBUILD_FUZZER=ON' \
+		CMAKE_ARGS="$(CMAKE_ARGS) -DOPENSSL_ROOT_DIR=/opt/openssl-1.1.0 -DBUILD_FUZZER=ON" \
 		BUILD_ARGS='$(BUILD_ARGS)' \
 		TEST_ENV='$(TEST_ENV)'
 
 ossl1.1.1:
 	docker run $(DOCKER_RUN_OPTS) $(CONTAINER_NAME) \
 		make -f $(SRC_DIR).ro/misc/docker-ci/check.mk _check \
-		CMAKE_ARGS='-DOPENSSL_ROOT_DIR=/opt/openssl-1.1.1' \
+		CMAKE_ARGS="$(CMAKE_ARGS) -DOPENSSL_ROOT_DIR=/opt/openssl-1.1.1" \
 		BUILD_ARGS='$(BUILD_ARGS)' \
 		TEST_ENV='$(TEST_ENV)'
 
@@ -39,6 +39,7 @@ ossl3.0:
 	docker run $(DOCKER_RUN_OPTS) h2oserver/h2o-ci:ubuntu2204 \
 		env DTRACE_TESTS=1 \
 		make -f $(SRC_DIR).ro/misc/docker-ci/check.mk _check \
+		CMAKE_ARGS="$(CMAKE_ARGS)" \
 		BUILD_ARGS='$(BUILD_ARGS)' \
 		TEST_ENV='$(TEST_ENV)'
 
@@ -46,7 +47,7 @@ dtrace+asan:
 	docker run $(DOCKER_RUN_OPTS) h2oserver/h2o-ci:ubuntu2004 \
 		env DTRACE_TESTS=1 \
 		make -f $(SRC_DIR).ro/misc/docker-ci/check.mk _check \
-		CMAKE_ARGS='-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_FLAGS=-fsanitize=address -DCMAKE_CXX_FLAGS=-fsanitize=address' \
+		CMAKE_ARGS="$(CMAKE_ARGS) -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_FLAGS=-fsanitize=address -DCMAKE_CXX_FLAGS=-fsanitize=address" \
 		BUILD_ARGS='$(BUILD_ARGS)' \
 		TEST_ENV='ASAN_OPTIONS=detect_leaks=0:alloc_dealloc_mismatch=0 $(TEST_ENV)'
 
@@ -54,7 +55,7 @@ dtrace+asan:
 coverage:
 	docker run $(DOCKER_RUN_OPTS) h2oserver/h2o-ci:ubuntu2204  \
 		make -f $(SRC_DIR).ro/misc/docker-ci/check.mk _check _coverage_report \
-		CMAKE_ARGS='-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_FLAGS="-fprofile-instr-generate -fcoverage-mapping -mllvm -runtime-counter-relocation" -DCMAKE_CXX_FLAGS= -DCMAKE_BUILD_TYPE=Debug -DWITH_H2OLOG=OFF' \
+		CMAKE_ARGS="$(CMAKE_ARGS) -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_FLAGS="-fprofile-instr-generate -fcoverage-mapping -mllvm -runtime-counter-relocation" -DCMAKE_CXX_FLAGS= -DCMAKE_BUILD_TYPE=Debug -DWITH_H2OLOG=OFF" \
 		BUILD_ARGS='$(BUILD_ARGS)' \
 		TEST_ENV='LLVM_PROFILE_FILE=/home/ci/profraw/%c%p.profraw $(TEST_ENV)'
 
