@@ -1,9 +1,10 @@
 CONTAINER_NAME=h2oserver/h2o-ci:ubuntu1604
 SRC_DIR=/h2o
 CHECK_MK=$(SRC_DIR)/misc/docker-ci/check.mk
-CMAKE_ARGS?=
-BUILD_ARGS?=
-TEST_ENV?=
+# Specify the compiler flags for CI that might have side effects.
+CMAKE_ARGS=-Werror=format CMAKE_CXX_FLAGS=-Werror=format
+BUILD_ARGS=
+TEST_ENV=
 FUZZ_ASAN=ASAN_OPTIONS=detect_leaks=0
 DOCKER_RUN_OPTS=--privileged \
 	--ulimit memlock=-1 \
