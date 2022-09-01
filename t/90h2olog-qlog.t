@@ -2,7 +2,7 @@
 # DTRACE_TESTS=1 to skip to check prereqisites
 # TEST_DEBUG=1 for more logs
 # TEST_QLOG_DIR=<dir> to save qlogs to <dir>
-#   h2olog-qlog.json - the output of h2olog v1
+#   h2olog1-qlog.json - the output of h2olog v1
 #   h2olog2-qlog.json - the output of h2olog v2
 
 use strict;
@@ -73,7 +73,16 @@ EOT
 }
 
 subtest "h2olog to qlog", sub {
+  # h2olog and h2olog2 can attach an h2o process at the same time,
+  # so they do to compare their outputs.
+  # The raw outputs are not the same, though. qlog-converted ones must be equivalent.
   my $server = spawn_h2o_with_quic();
+
+  # h2olog v2
+  my $h2olog2_output_file = "$qlog_dir/h2olog2.json";
+  system("$h2olog_prog -u $tempdir/h2olog.sock > $h2olog2_output_file &");
+
+  # h2olog v1
   my $tracer = H2ologTracer->new({
     pid => $server->{pid},
     args => [],
@@ -82,24 +91,20 @@ subtest "h2olog to qlog", sub {
 
   my ($headers, $body) = run_prog("$client_prog -3 100 https://127.0.0.1:$server->{quic_port}/halfdome.jpg");
   like $headers, qr{^HTTP/3 200\n}m, "req: HTTP/3";
+  my $h2olog1_output_file = $tracer->{output_file};
 
+  diag "shutting down h2o and h2olog ...";
   undef $server;
+  undef $tracer;
+  diag "done";
 
-  is system("$qlog_adapter < $tracer->{output_file} > $qlog_dir/h2olog-qlog.json"), 0, "qlog-adapter can handle the logs";
-};
+  my $h2olog1_qlog = `$qlog_adapter < $h2olog1_output_file | tee $qlog_dir/h2olog1-qlog.json`;
+  my $h2olog2_qlog = `$qlog_adapter < $h2olog2_output_file | tee $qlog_dir/h2olog2-qlog.json`;
 
-subtest "h2olog (v2) to qlog", sub {
-  my $server = spawn_h2o_with_quic();
+  my $h2olog1_qlog_obj = eval { decode_json($h2olog1_qlog) } or diag($@, $h2olog1_qlog);
+  my $h2olog2_qlog_obj = eval { decode_json($h2olog2_qlog) } or diag($@, $h2olog2_qlog);
 
-  system("$h2olog_prog -u $tempdir/h2olog.sock > $qlog_dir/h2olog2.jsonl &");
-  sleep 1;
-
-  my ($headers, $body) = run_prog("$client_prog -3 100 https://127.0.0.1:$server->{quic_port}/halfdome.jpg");
-  like $headers, qr{^HTTP/3 200\n}m, "req: HTTP/3";
-
-  undef $server;
-
-  is system("$qlog_adapter < $qlog_dir/h2olog2.jsonl > $qlog_dir/h2olog2-qlog.json"), 0, "qlog-adapter can handle the logs";
+  is_deeply $h2olog1_qlog_obj, $h2olog2_qlog_obj, "h2olog v1 and v2 outputs are equivalent";
 };
 
 done_testing();
