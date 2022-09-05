@@ -70,6 +70,14 @@ extern "C" {
 #define H2O_RETURNS_NONNULL
 #endif
 
+#ifdef __GNUC__
+#define H2O_MALLOC __attribute__((malloc))
+#define H2O_ALLOC_SIZE(a) __attribute__((alloc_size(a)))
+#else
+#define H2O_MALLOC
+#define H2O_ALLOC_SIZE(a)
+#endif
+
 #define H2O_TO__STR(n) #n
 #define H2O_TO_STR(n) H2O_TO__STR(n)
 
@@ -203,11 +211,11 @@ static h2o_iovec_t h2o_iovec_init(const void *base, size_t len);
 /**
  * wrapper of malloc; allocates given size of memory or dies if impossible
  */
-H2O_RETURNS_NONNULL static void *h2o_mem_alloc(size_t sz);
+H2O_RETURNS_NONNULL H2O_MALLOC static void *h2o_mem_alloc(size_t sz);
 /**
  * wrapper of posix_memalign; if alignment is zero, calls `malloc`
  */
-H2O_RETURNS_NONNULL static void *h2o_mem_aligned_alloc(size_t alignment, size_t sz);
+H2O_RETURNS_NONNULL H2O_ALLOC_SIZE(2) H2O_MALLOC static void *h2o_mem_aligned_alloc(size_t alignment, size_t sz);
 /**
  * warpper of realloc; reallocs the given chunk or dies if impossible
  */
