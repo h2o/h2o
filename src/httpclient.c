@@ -70,7 +70,7 @@ static struct {
 } std_in;
 static int io_interval = 0, req_interval = 0;
 static int ssl_verify_none = 0;
-static int exit_failure_on_server_returning_errors = 0;
+static int exit_failure_on_http_errors = 0;
 static int program_exit_status = EXIT_SUCCESS;
 static h2o_socket_t *udp_sock = NULL;
 static h2o_httpclient_forward_datagram_cb udp_write;
@@ -355,7 +355,7 @@ static int on_body(h2o_httpclient_t *client, const char *errstr)
 
 static void print_status_line(int version, int status, h2o_iovec_t msg)
 {
-    if (exit_failure_on_server_returning_errors && status >= 400)
+    if (exit_failure_on_http_errors && status >= 400)
         program_exit_status = EXIT_FAILURE;
 
     fprintf(stderr, "HTTP/%d", (version >> 8));
@@ -780,7 +780,7 @@ int main(int argc, char **argv)
             h3ctx.quic.transport_params.max_stream_data.bidi_remote = v;
         } break;
         case 'f':
-            exit_failure_on_server_returning_errors = 1;
+            exit_failure_on_http_errors = 1;
             break;
         case 'h':
             usage(argv[0]);
