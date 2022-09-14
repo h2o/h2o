@@ -1648,6 +1648,15 @@ static int open_listener(int domain, int type, int protocol, struct sockaddr *ad
         /* UDP: set SO_REUSEPORT and DF bit */
         socket_reuseport(fd);
         h2o_socket_set_df_bit(fd, domain);
+#ifdef IP_TRANSPARENT
+        if (conf.globalconf.http3.start_dsr != NULL) {
+            int on = 1;
+            if (setsockopt(fd, SOL_IP, IP_TRANSPARENT, &on, sizeof(on)) != 0) {
+                perror("HTTP/3 DSR is on but setsockopt(IP_TRANSPARENT) failed");
+                goto Error;
+            }
+        }
+#endif
         break;
     default:
         h2o_fatal("unexpected socket type %d", type);
