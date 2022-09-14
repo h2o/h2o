@@ -88,7 +88,7 @@ KHASH_MAP_INIT_INT64(quicly_stream_t, quicly_stream_t *)
         quicly_conn_t *_conn = (conn);                                                                                             \
         if (PTLS_UNLIKELY(QUICLY_##label##_ENABLED()) && !ptls_skip_tracing(_conn->crypto.tls))                                    \
             QUICLY_##label(_conn, __VA_ARGS__);                                                                                    \
-        QUICLY_TRACER(label, _conn,  __VA_ARGS__);                                                                                 \
+        QUICLY_TRACER(label, _conn, __VA_ARGS__);                                                                                  \
     } while (0)
 #else
 #define QUICLY_PROBE(label, conn, ...) QUICLY_TRACER(label, conn, __VA_ARGS__)
@@ -387,6 +387,10 @@ struct st_quicly_conn_t {
          */
         uint8_t should_rearm_on_send : 1;
     } idle_timeout;
+    /**
+     * records the time when this connection was created
+     */
+    int64_t created_at;
     /**
      * structure to hold various data used internally
      */
@@ -1207,8 +1211,11 @@ int quicly_get_stats(quicly_conn_t *conn, quicly_stats_t *stats)
 
     /* set or generate the non-pre-built stats fields here */
     stats->rtt = conn->egress.loss.rtt;
+    stats->loss_thresholds = conn->egress.loss.thresholds;
     stats->cc = conn->egress.cc;
     quicly_ratemeter_report(&conn->egress.ratemeter, &stats->delivery_rate);
+    stats->num_sentmap_packets_largest = conn->egress.loss.sentmap.num_packets_largest;
+    stats->handshake_confirmed_msec = conn->super.stats.handshake_confirmed_msec;
 
     return 0;
 }
@@ -1475,6 +1482,10 @@ static int discard_handshake_context(quicly_conn_t *conn, size_t epoch)
     if ((ret = discard_sentmap_by_epoch(conn, 1u << epoch)) != 0)
         return ret;
     destroy_handshake_flow(conn, epoch);
+    if (epoch == QUICLY_EPOCH_HANDSHAKE) {
+        assert(conn->stash.now != 0);
+        conn->super.stats.handshake_confirmed_msec = conn->stash.now - conn->created_at;
+    }
     free_handshake_space(epoch == QUICLY_EPOCH_INITIAL ? &conn->initial : &conn->handshake);
 
     return 0;
@@ -2086,6 +2097,8 @@ static quicly_conn_t *create_connection(quicly_context_t *ctx, uint32_t protocol
     memset(conn, 0, sizeof(*conn));
     conn->super.ctx = ctx;
     lock_now(conn, 0);
+    conn->created_at = conn->stash.now;
+    conn->super.stats.handshake_confirmed_msec = UINT64_MAX;
     set_address(&conn->super.local.address, local_addr);
     set_address(&conn->super.remote.address, remote_addr);
     quicly_local_cid_init_set(&conn->super.local.cid_set, ctx->cid_encryptor, local_cid);
@@ -3089,7 +3102,22 @@ static int commit_send_packet(quicly_conn_t *conn, quicly_send_context_t *s, enu
         /* length is always 2 bytes, see _do_prepare_packet */
         length |= 0x4000;
         quicly_encode16(s->dst_payload_from - QUICLY_SEND_PN_SIZE - 2, length);
+        switch (*s->target.first_byte_at & QUICLY_PACKET_TYPE_BITMASK) {
+        case QUICLY_PACKET_TYPE_INITIAL:
+        case QUICLY_PACKET_TYPE_HANDSHAKE:
+            conn->super.stats.num_packets.initial_handshake_sent++;
+            break;
+        }
+    } else {
+        if (conn->egress.packet_number >= conn->application->cipher.egress.key_update_pn.next) {
+            int ret;
+            if ((ret = update_1rtt_egress_key(conn)) != 0)
+                return ret;
+        }
+        if ((conn->application->cipher.egress.key_phase & 1) != 0)
+            *s->target.first_byte_at |= QUICLY_KEY_PHASE_BIT;
     }
+    quicly_encode16(s->dst_payload_from - QUICLY_SEND_PN_SIZE, (uint16_t)conn->egress.packet_number);
 
     /* encrypt the packet */
     s->dst += s->target.cipher->aead->algo->tag_size;
@@ -3543,7 +3571,44 @@ int quicly_can_send_data(quicly_conn_t *conn, quicly_send_context_t *s)
 }
 
 /**
-<<<<<<< HEAD
+ * If necessary, changes the frame representation from one without a length field to one with, if necessary. Or, as an alternaive,
+ * prepends PADDING frames. Upon return, `dst` points to the end of the frame being built. `*len`, `*wrote_all`, `*frame_type_at`
+ * are also updated reflecting their values post-adjustment.
+ */
+static inline void adjust_stream_frame_layout(uint8_t **dst, uint8_t *const dst_end, size_t *len, int *wrote_all,
+                                              uint8_t **frame_at)
+{
+    size_t space_left = (dst_end - *dst) - *len, len_of_len = quicly_encodev_capacity(*len);
+
+    if (**frame_at == QUICLY_FRAME_TYPE_CRYPTO) {
+        /* CRYPTO frame: adjust payload length to make space for the length field, if necessary. */
+        if (space_left < len_of_len) {
+            *len = dst_end - *dst - len_of_len;
+            *wrote_all = 0;
+        }
+    } else {
+        /* STREAM frame: insert length if space can be left for more frames. Otherwise, retain STREAM frame header omitting the
+         * lengh field, prepending PADDING if necessary. */
+        if (space_left <= len_of_len) {
+            if (space_left != 0) {
+                memmove(*frame_at + space_left, *frame_at, *dst + *len - *frame_at);
+                memset(*frame_at, QUICLY_FRAME_TYPE_PADDING, space_left);
+                *dst += space_left;
+                *frame_at += space_left;
+            }
+            *dst += *len;
+            return;
+        }
+        **frame_at |= QUICLY_FRAME_TYPE_STREAM_BIT_LEN;
+    }
+
+    /* insert length before payload of `*len` bytes */
+    memmove(*dst + len_of_len, *dst, *len);
+    *dst = quicly_encodev(*dst, *len);
+    *dst += *len;
+}
+
+/**
  * stream for which on_send_emit has been invoked; becomes NULL when detached
  */
 static __thread struct st_quicly_send_stream_detach_ctx_t {
@@ -3584,59 +3649,16 @@ void quicly_stream_on_send_emit_detach_packet(quicly_detached_send_packet_t *det
         .packet_from = s->target.first_byte_at - s->payload_buf.datagram,
         .packet_payload_from = s->dst_payload_from - s->payload_buf.datagram,
     };
-=======
- * If necessary, changes the frame representation from one without length field to one that has if necessary. Or, as an alternaive,
- * prepends PADDING frames. Upon return, `dst` points to the end of the frame being built. `*len`, `*wrote_all`, `*frame_type_at`
- * are also updated reflecting their values post-adjustment.
- */
-static inline void adjust_stream_frame_layout(uint8_t **dst, uint8_t *const dst_end, size_t *len, int *wrote_all,
-                                              uint8_t **frame_at)
-{
-    size_t space_left = (dst_end - *dst) - *len, len_of_len = quicly_encodev_capacity(*len);
-
-    if (**frame_at == QUICLY_FRAME_TYPE_CRYPTO) {
-        /* CRYPTO frame: adjust payload length to make space for the length field, if necessary. */
-        if (space_left < len_of_len) {
-            *len = dst_end - *dst - len_of_len;
-            *wrote_all = 0;
-        }
-    } else {
-        /* STREAM frame: insert length if space can be left for more frames. Otherwise, retain STREAM frame header omitting the
-         * lengh field, prepending PADDING if necessary. */
-        if (space_left <= len_of_len) {
-            if (space_left != 0) {
-                memmove(*frame_at + space_left, *frame_at, *dst + *len - *frame_at);
-                memset(*frame_at, QUICLY_FRAME_TYPE_PADDING, space_left);
-                *dst += space_left;
-                *frame_at += space_left;
-            }
-            *dst += *len;
-            return;
-        }
-        **frame_at |= QUICLY_FRAME_TYPE_STREAM_BIT_LEN;
-    }
-
-    /* insert length before payload of `*len` bytes */
-    memmove(*dst + len_of_len, *dst, *len);
-    *dst = quicly_encodev(*dst, *len);
-    *dst += *len;
->>>>>>> ef1916a23
 }
 
 int quicly_send_stream(quicly_stream_t *stream, quicly_send_context_t *s)
 {
     uint64_t off = stream->sendstate.pending.ranges[0].start;
     quicly_sent_t *sent;
-<<<<<<< HEAD
-    uint8_t *frame_type_at;
-    size_t capacity;
-    int ret, wrote_all, is_fin, detached = 0;
-=======
     uint8_t *dst; /* this pointer points to the current write position within the frame being built, while `s->dst` points to the
                    * beginning of the frame. */
     size_t len;
-    int ret, wrote_all, is_fin;
->>>>>>> ef1916a23
+    int ret, wrote_all, is_fin, detached = 0;
 
     /* write frame type, stream_id and offset, calculate capacity (and store that in `len`) */
     if (stream->stream_id < 0) {
@@ -3704,30 +3726,22 @@ int quicly_send_stream(quicly_stream_t *stream, quicly_send_context_t *s)
             len = range_capacity;
     }
 
-<<<<<<< HEAD
-    /* write payload */
-    assert(capacity != 0);
-    size_t emit_off = (size_t)(off - stream->sendstate.acked.ranges[0].end), len = capacity;
-    QUICLY_PROBE(STREAM_ON_SEND_EMIT, stream->conn, stream->conn->stash.now, stream, emit_off, len);
-    {
-        struct st_quicly_send_stream_detach_ctx_t detach_ctx = {s, frame_type_at};
-        send_stream_detach_ctx = &detach_ctx;
-        stream->callbacks->on_send_emit(stream, emit_off, s->dst, &len, &wrote_all);
-        if (send_stream_detach_ctx == NULL) {
-            detached = 1;
-        } else {
-            send_stream_detach_ctx = NULL;
-        }
-    }
-=======
     /* Write payload, adjusting len to actual size. Note that `on_send_emit` might fail (e.g., when underlying pread(2) fails), in
      * which case the application will either close the connection immediately or reset the stream. If that happens, we return
      * immediately without updating state. */
     assert(len != 0);
     size_t emit_off = (size_t)(off - stream->sendstate.acked.ranges[0].end);
     QUICLY_PROBE(STREAM_ON_SEND_EMIT, stream->conn, stream->conn->stash.now, stream, emit_off, len);
-    stream->callbacks->on_send_emit(stream, emit_off, dst, &len, &wrote_all);
->>>>>>> ef1916a23
+    {
+        struct st_quicly_send_stream_detach_ctx_t detach_ctx = {s, s->dst};
+        send_stream_detach_ctx = &detach_ctx;
+        stream->callbacks->on_send_emit(stream, emit_off, dst, &len, &wrote_all);
+        if (send_stream_detach_ctx == NULL) {
+            detached = 1;
+        } else {
+            send_stream_detach_ctx = NULL;
+        }
+    }
     if (stream->conn->super.state >= QUICLY_STATE_CLOSING) {
         return QUICLY_ERROR_IS_CLOSING;
     } else if (stream->_send_aux.reset_stream.sender_state != QUICLY_SENDER_STATE_NONE) {
@@ -3735,48 +3749,21 @@ int quicly_send_stream(quicly_stream_t *stream, quicly_send_context_t *s)
     }
     assert(len != 0);
 
-<<<<<<< HEAD
-    /* update s->dst, insert length if necessary */
     if (detached) {
-        /* detached, current frame is going to be the last frame */
-        assert(frame_type_at != NULL);
-    } else if (frame_type_at == NULL || len < s->dst_end - s->dst) {
-        /* insert the length field, so that more frames can be added */
-        if (frame_type_at != NULL)
-            *frame_type_at |= QUICLY_FRAME_TYPE_STREAM_BIT_LEN;
-        size_t len_of_len = quicly_encodev_capacity(len);
-        if (len_of_len + len > s->dst_end - s->dst) {
-            len = s->dst_end - s->dst - len_of_len;
-            wrote_all = 0;
-        }
-        memmove(s->dst + len_of_len, s->dst, len);
-        s->dst = quicly_encodev(s->dst, len);
-    }
-    s->dst += len;
-    end_off = off + len;
-
-    /* determine if the frame incorporates FIN */
-    if (!quicly_sendstate_is_open(&stream->sendstate) && end_off == stream->sendstate.final_size) {
-        assert(frame_type_at != NULL);
-        /* in case the frame is detached, we need to use a new packet for just carrying the fin bit */
-        if (detached) {
-            is_fin = 0;
-        } else {
-            is_fin = 1;
-            *frame_type_at |= QUICLY_FRAME_TYPE_STREAM_BIT_FIN;
-        }
-=======
-    adjust_stream_frame_layout(&dst, s->dst_end, &len, &wrote_all, &s->dst);
-
-    /* determine if the frame incorporates FIN */
-    if (off + len == stream->sendstate.final_size) {
-        assert(!quicly_sendstate_is_open(&stream->sendstate));
-        assert(s->dst != NULL);
-        is_fin = 1;
-        *s->dst |= QUICLY_FRAME_TYPE_STREAM_BIT_FIN;
->>>>>>> ef1916a23
-    } else {
+        /* Detached: current frame is going to be the last frame, and FIN is to be sent separately, using a non-detached frame. */
+        dst += len;
         is_fin = 0;
+    } else {
+        /* Not detached: adjust frame layout then adjust FIN. */
+        adjust_stream_frame_layout(&dst, s->dst_end, &len, &wrote_all, &s->dst);
+        if (off + len == stream->sendstate.final_size) {
+            assert(!quicly_sendstate_is_open(&stream->sendstate));
+            assert(s->dst != NULL);
+            is_fin = 1;
+            *s->dst |= QUICLY_FRAME_TYPE_STREAM_BIT_FIN;
+        } else {
+            is_fin = 0;
+        }
     }
 
     /* update s->dst now that frame construction is complete */
@@ -4449,9 +4436,20 @@ static int do_send(quicly_conn_t *conn, quicly_send_context_t *s)
     /* handle timeouts */
     if (conn->idle_timeout.at <= conn->stash.now) {
         QUICLY_PROBE(IDLE_TIMEOUT, conn, conn->stash.now);
-        conn->super.state = QUICLY_STATE_DRAINING;
-        destroy_all_streams(conn, 0, 0);
-        return QUICLY_ERROR_FREE_CONNECTION;
+        goto CloseNow;
+    }
+    /* handle handshake timeouts */
+    if ((conn->initial != NULL || conn->handshake != NULL) &&
+        conn->created_at + (uint64_t)conn->super.ctx->handshake_timeout_rtt_multiplier * conn->egress.loss.rtt.smoothed <=
+            conn->stash.now) {
+        QUICLY_PROBE(HANDSHAKE_TIMEOUT, conn, conn->stash.now, conn->stash.now - conn->created_at, conn->egress.loss.rtt.smoothed);
+        conn->super.stats.num_handshake_timeouts++;
+        goto CloseNow;
+    }
+    if (conn->super.stats.num_packets.initial_handshake_sent > conn->super.ctx->max_initial_handshake_packets) {
+        QUICLY_PROBE(INITIAL_HANDSHAKE_PACKET_EXCEED, conn, conn->stash.now, conn->super.stats.num_packets.initial_handshake_sent);
+        conn->super.stats.num_initial_handshake_exceeded++;
+        goto CloseNow;
     }
     if (conn->egress.loss.alarm_at <= conn->stash.now) {
         if ((ret = quicly_loss_on_alarm(&conn->egress.loss, conn->stash.now, conn->super.remote.transport_params.max_ack_delay,
@@ -4670,6 +4668,11 @@ Exit:
             update_idle_timeout(conn, 0);
     }
     return ret;
+
+CloseNow:
+    conn->super.state = QUICLY_STATE_DRAINING;
+    destroy_all_streams(conn, 0, 0);
+    return QUICLY_ERROR_FREE_CONNECTION;
 }
 
 void quicly_send_datagram_frames(quicly_conn_t *conn, ptls_iovec_t *datagrams, size_t num_datagrams)
@@ -4714,7 +4717,8 @@ int quicly_send(quicly_conn_t *conn, quicly_address_t *dest, quicly_address_t *s
 
     if (conn->super.state >= QUICLY_STATE_CLOSING) {
         quicly_sentmap_iter_t iter;
-        init_acks_iter(conn, &iter);
+        if ((ret = init_acks_iter(conn, &iter)) != 0)
+            goto Exit;
         /* check if the connection can be closed now (after 3 pto) */
         if (conn->super.state == QUICLY_STATE_DRAINING ||
             conn->super.stats.num_frames_sent.transport_close + conn->super.stats.num_frames_sent.application_close != 0) {
@@ -5024,7 +5028,7 @@ static int handle_ack_frame(quicly_conn_t *conn, struct st_quicly_handle_payload
         int64_t sent_at;
     } largest_newly_acked = {UINT64_MAX, INT64_MAX};
     size_t bytes_acked = 0;
-    int includes_ack_eliciting = 0, ret;
+    int includes_ack_eliciting = 0, includes_late_ack = 0, ret;
 
     if ((ret = quicly_decode_ack_frame(&state->src, state->end, &frame, state->frame_type == QUICLY_FRAME_TYPE_ACK_ECN)) != 0)
         return ret;
@@ -5041,7 +5045,8 @@ static int handle_ack_frame(quicly_conn_t *conn, struct st_quicly_handle_payload
         break;
     }
 
-    init_acks_iter(conn, &iter);
+    if ((ret = init_acks_iter(conn, &iter)) != 0)
+        return ret;
 
     /* TODO log PNs being ACKed too late */
 
@@ -5075,6 +5080,7 @@ static int handle_ack_frame(quicly_conn_t *conn, struct st_quicly_handle_payload
                 includes_ack_eliciting = 1;
                 if (sent->cc_bytes_in_flight == 0) {
                     is_late_ack = 1;
+                    includes_late_ack = 1;
                     ++conn->super.stats.num_packets.late_acked;
                 }
             }
@@ -5115,7 +5121,10 @@ static int handle_ack_frame(quicly_conn_t *conn, struct st_quicly_handle_payload
     /* Update loss detection engine on ack. The function uses ack_delay only when the largest_newly_acked is also the largest acked
      * so far. So, it does not matter if the ack_delay being passed in does not apply to the largest_newly_acked. */
     quicly_loss_on_ack_received(&conn->egress.loss, largest_newly_acked.pn, state->epoch, conn->stash.now,
-                                largest_newly_acked.sent_at, frame.ack_delay, includes_ack_eliciting);
+                                largest_newly_acked.sent_at, frame.ack_delay,
+                                includes_ack_eliciting ? includes_late_ack ? QUICLY_LOSS_ACK_RECEIVED_KIND_ACK_ELICITING_LATE_ACK
+                                                                           : QUICLY_LOSS_ACK_RECEIVED_KIND_ACK_ELICITING
+                                                       : QUICLY_LOSS_ACK_RECEIVED_KIND_NON_ACK_ELICITING);
 
     /* OnPacketAcked and OnPacketAckedCC */
     if (bytes_acked > 0) {
@@ -5320,7 +5329,7 @@ static int handle_max_data_frame(quicly_conn_t *conn, struct st_quicly_handle_pa
     if (frame.max_data <= conn->egress.max_data.permitted)
         return 0;
     conn->egress.max_data.permitted = frame.max_data;
-    conn->egress.data_blocked = QUICLY_SENDER_STATE_UNACKED; /* DATA_BLOCKED has not been sent for the new limit */
+    conn->egress.data_blocked = QUICLY_SENDER_STATE_NONE; /* DATA_BLOCKED has not been sent for the new limit */
 
     return 0;
 }
