@@ -30,21 +30,27 @@ static void test_parse_req(void)
 
     memset(&req, 0x55, sizeof(req));
 
-    ok(h2o_dsr_parse_req(&req, H2O_STRLIT("quic=4278190109, cipher=4865, address=\"127.0.0.1\""), 443));
-    ok(req.quic_version == 0xff00001d);
-    ok(req.cipher == 0x1301);
-    ok(req.address.sa.sa_family == AF_INET);
-    ok(req.address.sin.sin_addr.s_addr == htonl(0x7f000001));
-    ok(req.address.sin.sin_port == htons(443));
+    ok(h2o_dsr_parse_req(&req, H2O_STRLIT("http-version=768, quic=4278190109, cipher=4865, address=\"127.0.0.1\""), 443));
+    ok(req.http_version == 0x300);
+    ok(req.transport.quic.version == 0xff00001d);
+    ok(req.transport.quic.cipher == 0x1301);
+    ok(req.transport.quic.address.sa.sa_family == AF_INET);
+    ok(req.transport.quic.address.sin.sin_addr.s_addr == htonl(0x7f000001));
+    ok(req.transport.quic.address.sin.sin_port == htons(443));
 
-    ok(h2o_dsr_parse_req(&req, H2O_STRLIT("quic=4278190109, cipher=4865, address=\"[2001:db8:85a3::8a2e:370:7334]:8443\""), 443));
-    ok(req.quic_version == 0xff00001d);
-    ok(req.cipher == 0x1301);
-    ok(req.address.sa.sa_family == AF_INET6);
-    ok(memcmp(&req.address.sin6.sin6_addr, "\x20\x01\x0d\xb8\x85\xa3\x00\x00\x00\x00\x8a\x2e\x03\x70\x73\x34", 16) == 0);
-    ok(req.address.sin6.sin6_port == htons(8443));
+    ok(h2o_dsr_parse_req(
+        &req, H2O_STRLIT("http-version=768, quic=4278190109, cipher=4865, address=\"[2001:db8:85a3::8a2e:370:7334]:8443\""), 443));
+    ok(req.http_version == 0x300);
+    ok(req.transport.quic.version == 0xff00001d);
+    ok(req.transport.quic.cipher == 0x1301);
+    ok(req.transport.quic.address.sa.sa_family == AF_INET6);
+    ok(memcmp(&req.transport.quic.address.sin6.sin6_addr, "\x20\x01\x0d\xb8\x85\xa3\x00\x00\x00\x00\x8a\x2e\x03\x70\x73\x34", 16) ==
+       0);
+    ok(req.transport.quic.address.sin6.sin6_port == htons(8443));
 
     ok(!h2o_dsr_parse_req(&req, H2O_STRLIT(""), 443));
+    ok(!h2o_dsr_parse_req(&req, H2O_STRLIT("http-version=768"), 443));                                    /* missing quic fields */
+    ok(!h2o_dsr_parse_req(&req, H2O_STRLIT("quic=4278190109, cipher=4865, address=\"127.0.0.1\""), 443)); /* missing http version*/
     ok(!h2o_dsr_parse_req(&req, H2O_STRLIT("quic=\"abc\", cipher=4865, address=\"127.0.0.1:8443\""), 443));
     ok(!h2o_dsr_parse_req(&req, H2O_STRLIT("protocol=4278190109, cipher=444865, address=\"127.0.0.1:8443\""), 443));
     ok(!h2o_dsr_parse_req(&req, H2O_STRLIT("protocol=4278190109, cipher=a, address=\"127.0.0.1:8443\""), 443));
@@ -73,20 +79,20 @@ static void test_encdec(void)
 
     /* encode instructions */
     h2o_buffer_t *buf;
-    h2o_dsr_encoder_state_t encstate = {};
+    h2o_dsr_quic_encoder_state_t encstate = {};
     h2o_buffer_init(&buf, &h2o_socket_buffer_prototype);
-    h2o_dsr_decoded_instruction_t inst;
+    h2o_dsr_quic_decoded_instruction_t inst;
     ssize_t inst_len;
 
     /* encode a group consisting of one instruction */
-    h2o_dsr_add_instruction(&buf, &encstate, (struct sockaddr *)&dest_addr, &detached, 1, 256);
+    h2o_dsr_quic_add_instruction(&buf, &encstate, (struct sockaddr *)&dest_addr, &detached, 1, 256);
 
     /* decode  */
-    inst_len = h2o_dsr_decode_instruction(&inst, (const uint8_t *)buf->bytes, buf->size);
+    inst_len = h2o_dsr_quic_decode_instruction(&inst, (const uint8_t *)buf->bytes, buf->size);
     ok(inst_len > 0);
     ok(inst.type == H2O_DSR_DECODED_INSTRUCTION_SET_CONTEXT);
     h2o_buffer_consume(&buf, inst_len);
-    inst_len = h2o_dsr_decode_instruction(&inst, (const uint8_t *)buf->bytes, buf->size);
+    inst_len = h2o_dsr_quic_decode_instruction(&inst, (const uint8_t *)buf->bytes, buf->size);
     ok(inst_len > 0);
     ok(inst.type == H2O_DSR_DECODED_INSTRUCTION_SEND_PACKET);
     ok(h2o_memis(inst.data.send_packet.prefix.base, inst.data.send_packet.prefix.len, detached.datagram.base,

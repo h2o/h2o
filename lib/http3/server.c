@@ -273,7 +273,7 @@ struct st_h2o_http3_server_stream_t {
         /**
          *
          */
-        h2o_dsr_encoder_state_t encoder_state;
+        h2o_dsr_quic_encoder_state_t encoder_state;
     } dsr;
     /**
      * the request. Placed at the end, as it holds the pool.
@@ -878,7 +878,8 @@ static void on_send_emit(quicly_stream_t *qs, size_t off, void *_dst, size_t *le
                 size_t already_written = dst - (uint8_t *)_dst;
                 quicly_stream_on_send_emit_detach_packet(&detached, stream->quic, _dst, already_written + sz, already_written);
                 quicly_conn_t *qc = stream->quic->conn;
-                h2o_dsr_add_instruction(&stream->dsr.buf, &stream->dsr.encoder_state, quicly_get_peername(qc), &detached, off, sz);
+                h2o_dsr_quic_add_instruction(&stream->dsr.buf, &stream->dsr.encoder_state, quicly_get_peername(qc), &detached, off,
+                                             sz);
                 dst += sz;
                 off += sz;
                 assert(this_vec->entity_offset != UINT64_MAX); /* must not be headers */
@@ -1166,10 +1167,13 @@ static void run_delayed(h2o_timer_t *timer)
                     struct sockaddr *local_addr = quicly_get_sockname(conn->h3.super.quic);
                     if (local_addr->sa_family != AF_UNSPEC) {
                         h2o_dsr_req_t dsr_req = {
-                            .quic_version = quicly_get_protocol_version(conn->h3.super.quic),
-                            .cipher = ptls_get_cipher(quicly_get_tls(conn->h3.super.quic))->id,
+                            .http_version = 0x300,
+                            .transport.quic = {
+                                .version = quicly_get_protocol_version(conn->h3.super.quic),
+                                .cipher = ptls_get_cipher(quicly_get_tls(conn->h3.super.quic))->id,
+                            },
                         };
-                        memcpy(&dsr_req.address.sa, local_addr, quicly_get_socklen(local_addr));
+                        memcpy(&dsr_req.transport.quic.address.sa, local_addr, quicly_get_socklen(local_addr));
                         conn->dsr.req = h2o_dsr_serialize_req(&dsr_req);
                     }
                 }
@@ -1700,7 +1704,7 @@ static int stream_open_cb(quicly_stream_open_t *self, quicly_stream_t *qs)
     stream->dsr.buf = NULL;
     stream->dsr.buf_inflight = NULL;
     stream->dsr.link = (h2o_linklist_t){};
-    stream->dsr.encoder_state = (h2o_dsr_encoder_state_t){};
+    stream->dsr.encoder_state = (h2o_dsr_quic_encoder_state_t){};
 
     h2o_init_request(&stream->req, &conn->super, NULL);
     stream->req.version = 0x0300;
