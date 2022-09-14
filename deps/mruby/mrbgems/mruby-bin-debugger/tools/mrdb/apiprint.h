@@ -8,6 +8,6 @@
 #include <mruby.h>
 #include "mrdb.h"
 
-mrb_value mrb_debug_eval(mrb_state*, mrb_debug_context*, const char*, size_t, mrb_bool*);
+mrb_value mrb_debug_eval(mrb_state*, mrb_debug_context*, const char*, size_t, mrb_bool*, int);
 
 #endif /* APIPRINT_H_ */

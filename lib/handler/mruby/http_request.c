@@ -140,7 +140,7 @@ const static struct mrb_data_type input_stream_type = {"http_input_stream", on_g
 
 static mrb_value create_already_consumed_error(mrb_state *mrb)
 {
-    return mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "http response body is already consumed");
+    return mrb_exc_new_lit(mrb, E_RUNTIME_ERROR, "http response body is already consumed");
 }
 
 static h2o_buffer_t **peek_content(h2o_mruby_http_request_context_t *ctx, int *is_final)
@@ -618,7 +618,7 @@ static mrb_value http_join_response_callback(h2o_mruby_context_t *mctx, mrb_valu
 
     if ((ctx = mrb_data_check_get_ptr(mrb, mrb_ary_entry(args, 0), &request_type)) == NULL) {
         *run_again = 1;
-        return mrb_exc_new_str_lit(mrb, E_ARGUMENT_ERROR, "HttpRequest#join wrong self");
+        return mrb_exc_new_lit(mrb, E_ARGUMENT_ERROR, "HttpRequest#join wrong self");
     }
 
     attach_receiver(ctx, *receiver);
@@ -634,7 +634,7 @@ static mrb_value http_fetch_chunk_callback(h2o_mruby_context_t *mctx, mrb_value 
 
     if ((ctx = mrb_data_check_get_ptr(mrb, mrb_ary_entry(args, 0), &input_stream_type)) == NULL) {
         *run_again = 1;
-        return mrb_exc_new_str_lit(mrb, E_ARGUMENT_ERROR, "_HttpInputStream#each wrong self");
+        return mrb_exc_new_lit(mrb, E_ARGUMENT_ERROR, "_HttpInputStream#each wrong self");
     }
 
     mrb_value first = mrb_ary_entry(args, 1);

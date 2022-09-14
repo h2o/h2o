@@ -1,39 +1,34 @@
 #include <mruby.h>
 #include <mruby/range.h>
-#include <math.h>
 
 static mrb_bool
-r_le(mrb_state *mrb, mrb_value a, mrb_value b)
+r_less(mrb_state *mrb, mrb_value a, mrb_value b, mrb_bool excl)
 {
-  mrb_value r = mrb_funcall(mrb, a, "<=>", 1, b); /* compare result */
-  /* output :a < b => -1, a = b =>  0, a > b => +1 */
-
-  if (mrb_fixnum_p(r)) {
-    mrb_int c = mrb_fixnum(r);
-    if (c == 0 || c == -1) return TRUE;
+  switch (mrb_cmp(mrb, a, b)) {
+  case -2:                      /* failure */
+  case 1:
+    return FALSE;
+  case 0:
+    return !excl;
+  case -1:
+  default:                      /* just in case */
+    return TRUE;
   }
-
-  return FALSE;
-}
-
-static mrb_bool
-r_lt(mrb_state *mrb, mrb_value a, mrb_value b)
-{
-  mrb_value r = mrb_funcall(mrb, a, "<=>", 1, b);
-  /* output :a < b => -1, a = b =>  0, a > b => +1 */
-
-  return mrb_fixnum_p(r) && mrb_fixnum(r) == -1;
 }
 
 /*
  *  call-seq:
  *     rng.cover?(obj)  ->  true or false
+ *     rng.cover?(range) -> true or false
  *
- *  Returns <code>true</code> if +obj+ is between the begin and end of
- *  the range.
+ *  Returns +true+ if the given argument is within +self+, +false+ otherwise.
  *
- *  This tests <code>begin <= obj <= end</code> when #exclude_end? is +false+
- *  and <code>begin <= obj < end</code> when #exclude_end? is +true+.
+ *  With non-range argument +object+, evaluates with <tt><=</tt> and <tt><</tt>.
+ *
+ *  For range +self+ with included end value (<tt>#exclude_end? == false</tt>),
+ *  evaluates thus:
+ *
+ *    self.begin <= object <= self.end
  *
  *     ("a".."z").cover?("c")    #=> true
  *     ("a".."z").cover?("5")    #=> false
@@ -42,57 +37,61 @@ r_lt(mrb_state *mrb, mrb_value a, mrb_value b)
 static mrb_value
 range_cover(mrb_state *mrb, mrb_value range)
 {
-  mrb_value val;
   struct RRange *r = mrb_range_ptr(mrb, range);
+  mrb_value val = mrb_get_arg1(mrb);
   mrb_value beg, end;
-
-  mrb_get_args(mrb, "o", &val);
 
   beg = RANGE_BEG(r);
   end = RANGE_END(r);
 
-  if (r_le(mrb, beg, val)) {
-    if (RANGE_EXCL(r)) {
-      if (r_lt(mrb, val, end))
-        return mrb_true_value();
+  if (mrb_nil_p(beg) && mrb_nil_p(end)) return mrb_true_value();
+
+  if (mrb_range_p(val)) {
+    struct RRange *r2 = mrb_range_ptr(mrb, val);
+    mrb_value beg2 = RANGE_BEG(r2);
+    mrb_value end2 = RANGE_END(r2);
+
+    /* range.cover?(nil..nil) => true */
+    if (mrb_nil_p(beg2) && mrb_nil_p(end2)) return mrb_true_value();
+
+    /* (a..b).cover?(c..d) */
+    if (mrb_nil_p(end)) {       /* a.. */
+      /* (a..).cover?(c..) => true */
+      if (mrb_nil_p(end2)) return mrb_bool_value(mrb_cmp(mrb, beg, beg2) != -2);
+      /* (a..).cover?(c..d) where d<a => false */
+      if (r_less(mrb, end2, beg, RANGE_EXCL(r2))) return mrb_false_value();
+      return mrb_true_value();
     }
-    else {
-      if (r_le(mrb, val, end))
-        return mrb_true_value();
+    else if (mrb_nil_p(beg)) {  /* ..b */
+      /* (..b).cover?(..d) => true */
+      if (mrb_nil_p(beg2)) return mrb_bool_value(mrb_cmp(mrb, end, end2) != -2);
+      /* (..b).cover?(c..d) where b<c => false */
+      if (r_less(mrb, end, beg2, RANGE_EXCL(r))) return mrb_false_value();
+      return mrb_true_value();
+    }
+    else {                      /* a..b */
+      /* (a..b).cover?(c..) => (c<b) */
+      if (mrb_nil_p(end2))
+        return mrb_bool_value(r_less(mrb, beg2, end, RANGE_EXCL(r)));
+      /* (a..b).cover?(..d) => (a<d) */
+      if (mrb_nil_p(beg2))
+        return mrb_bool_value(r_less(mrb, beg, end2, RANGE_EXCL(r2)));
+      /* (a..b).cover?(c..d) where (b<c) => false */
+      if (r_less(mrb, end, beg2, RANGE_EXCL(r))) return mrb_false_value();
+      /* (a..b).cover?(c..d) where (d<a) => false */
+      if (r_less(mrb, end2, beg, RANGE_EXCL(r2))) return mrb_false_value();
+      return mrb_true_value();
     }
   }
 
+  if (mrb_nil_p(beg) || r_less(mrb, beg, val, FALSE)) {
+    if (mrb_nil_p(end)) {
+      return mrb_true_value();
+    }
+    if (r_less(mrb, val, end, RANGE_EXCL(r)))
+      return mrb_true_value();
+  }
   return mrb_false_value();
-}
-
-/*
- *  call-seq:
- *     rng.last    -> obj
- *     rng.last(n) -> an_array
- *
- *  Returns the last object in the range,
- *  or an array of the last +n+ elements.
- *
- *  Note that with no arguments +last+ will return the object that defines
- *  the end of the range even if #exclude_end? is +true+.
- *
- *    (10..20).last      #=> 20
- *    (10...20).last     #=> 20
- *    (10..20).last(3)   #=> [18, 19, 20]
- *    (10...20).last(3)  #=> [17, 18, 19]
- */
-static mrb_value
-range_last(mrb_state *mrb, mrb_value range)
-{
-  mrb_value num;
-  mrb_value array;
-
-  if (mrb_get_args(mrb, "|o", &num) == 0) {
-    return mrb_range_end(mrb, range);
-  }
-
-  array = mrb_funcall(mrb, range, "to_a", 0);
-  return mrb_funcall(mrb, array, "last", 1, mrb_to_int(mrb, num));
 }
 
 /*
@@ -106,6 +105,7 @@ range_last(mrb_state *mrb, mrb_value range)
  *    ('a'..'z').size  #=> nil
  */
 
+#ifndef MRB_NO_FLOAT
 static mrb_value
 range_size(mrb_state *mrb, mrb_value range)
 {
@@ -117,9 +117,13 @@ range_size(mrb_state *mrb, mrb_value range)
 
   beg = RANGE_BEG(r);
   end = RANGE_END(r);
+  if ((mrb_integer_p(beg) || mrb_float_p(beg)) && mrb_nil_p(end)) {
+    return mrb_float_value(mrb, INFINITY);
+  }
+
   excl = RANGE_EXCL(r);
-  if (mrb_fixnum_p(beg)) {
-    beg_f = (mrb_float)mrb_fixnum(beg);
+  if (mrb_integer_p(beg)) {
+    beg_f = (mrb_float)mrb_integer(beg);
   }
   else if (mrb_float_p(beg)) {
     beg_f = mrb_float(beg);
@@ -127,8 +131,8 @@ range_size(mrb_state *mrb, mrb_value range)
   else {
     num_p = FALSE;
   }
-  if (mrb_fixnum_p(end)) {
-    end_f = (mrb_float)mrb_fixnum(end);
+  if (mrb_integer_p(end)) {
+    end_f = (mrb_float)mrb_integer(end);
   }
   else if (mrb_float_p(end)) {
     end_f = mrb_float(end);
@@ -158,6 +162,32 @@ range_size(mrb_state *mrb, mrb_value range)
   }
   return mrb_nil_value();
 }
+#else
+static mrb_value
+range_size(mrb_state *mrb, mrb_value range)
+{
+  struct RRange *r = mrb_range_ptr(mrb, range);
+  mrb_value beg, end;
+  mrb_int excl;
+
+  beg = RANGE_BEG(r);
+  end = RANGE_END(r);
+  if (mrb_integer_p(beg) && mrb_nil_p(end)) {
+    return mrb_nil_value();
+  }
+
+  excl = RANGE_EXCL(r) ? 0 : 1;
+
+  if (mrb_integer_p(beg) && mrb_integer_p(end)) {
+    mrb_int a = mrb_integer(beg);
+    mrb_int b = mrb_integer(end);
+    mrb_int c = b - a + excl;
+
+    return mrb_int_value(mrb, c);
+  }
+  return mrb_nil_value();
+}
+#endif /* MRB_NO_FLOAT */
 
 void
 mrb_mruby_range_ext_gem_init(mrb_state* mrb)
@@ -165,7 +195,6 @@ mrb_mruby_range_ext_gem_init(mrb_state* mrb)
   struct RClass * s = mrb_class_get(mrb, "Range");
 
   mrb_define_method(mrb, s, "cover?", range_cover, MRB_ARGS_REQ(1));
-  mrb_define_method(mrb, s, "last",   range_last,  MRB_ARGS_OPT(1));
   mrb_define_method(mrb, s, "size",   range_size,  MRB_ARGS_NONE());
 }
 

@@ -4,12 +4,17 @@
 static mrb_value
 f_exit(mrb_state *mrb, mrb_value self)
 {
-  mrb_int i = EXIT_SUCCESS;
+  mrb_value status = mrb_true_value();
+  int istatus;
 
-  mrb_get_args(mrb, "|i", &i);
-  exit((int)i);
+  mrb_get_args(mrb, "|o", &status);
+  istatus = mrb_true_p(status) ? EXIT_SUCCESS :
+            mrb_false_p(status) ? EXIT_FAILURE :
+            (int)mrb_int(mrb, status);
+  exit(istatus);
+
   /* not reached */
-  return mrb_nil_value();
+  return status;
 }
 
 void

@@ -131,18 +131,49 @@ provider h2o {
     probe h3_forwarded_packet_receive(struct sockaddr *dest, struct sockaddr *src, size_t num_bytes);
 
     /**
-     * FIXME define probes for http3client, aligning the arguments of `h2o_tunnel_create`
-     */
-    probe h3c_tunnel_create(struct st_h2o_tunnel_t *tunnel);
-
-    probe tunnel_on_destroy(struct st_h2o_tunnel_t *tunnel);
-    probe tunnel_on_read(struct st_h2o_tunnel_t *tunnel, const char *err, const void *bytes, size_t bytes_len);
-    probe tunnel_proceed_read(struct st_h2o_tunnel_t *tunnel);
-    probe tunnel_write(struct st_h2o_tunnel_t *tunnel, const void *bytes, size_t bytes_len);
-    probe tunnel_on_write_complete(struct st_h2o_tunnel_t *tunnel, const char *err);
-
-    probe socket_tunnel_create(struct st_h2o_tunnel_t *tunnel);
-    probe socket_tunnel_start(struct st_h2o_tunnel_t *tunnel, size_t bytes_to_consume);
+      * An attempt to connect on the backend-side of a CONNECT tunnel.
+      */
+    probe connect_tcp_start(uint64_t conn_id, uint64_t req_id, struct sockaddr *dest);
+    /**
+      * A write to the TCP connection on the backend-side of a CONNECT tunnel.
+      */
+    probe connect_tcp_write(uint64_t conn_id, uint64_t req_id, size_t num_bytes);
+    /**
+      * A write error on the TCP connection on the backend-side of a CONNECT tunnel.
+      */
+    probe connect_tcp_write_error(uint64_t conn_id, uint64_t req_id, const char *err);
+    /**
+      * A read from the TCP connection on the backend-side of a CONNECT tunnel.
+      */
+    probe connect_tcp_read(uint64_t conn_id, uint64_t req_id, size_t num_bytes);
+    /**
+      * A read error on the TCP connection on the backend-side of a CONNECT tunnel.
+      */
+    probe connect_tcp_read_error(uint64_t conn_id, uint64_t req_id, const char *err);
+    /**
+      * An attempt to connect on the backend-side of a CONNECT-UDP tunnel.
+      */
+    probe connect_udp_start(uint64_t conn_id, uint64_t req_id, struct sockaddr *dest);
+    /**
+      * A write to the UDP connection on the backend-side of a CONNECT-UDP tunnel.
+      */
+    probe connect_udp_write(uint64_t conn_id, uint64_t req_id, size_t num_bytes);
+    /**
+      * A read from the UDP connection on the backend-side of a CONNECT-UDP tunnel.
+      */
+    probe connect_udp_read(uint64_t conn_id, uint64_t req_id, size_t num_bytes);
+    /**
+      * Error trying to establish a CONNECT or CONNECT-UDP tunnel.
+      */
+    probe connect_error(uint64_t conn_id, uint64_t req_id, const char *error_type, const char *details, const char *rcode);
+    /**
+      * Idle timeout on a CONNECT or CONNECT-UDP tunnel.
+      */
+    probe connect_io_timeout(uint64_t conn_id, uint64_t req_id);
+    /**
+      * Done handling a CONNECT or CONNECT-UDP request.
+      */
+    probe connect_dispose(uint64_t conn_id, uint64_t req_id);
 
     /**
      * QUIC event, indicating that a QUIC DSR packet has been sent.

@@ -1286,7 +1286,11 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				GCC_PREPROCESSOR_DEFINITIONS = "$(inherited)";
-				OTHER_CFLAGS = "-march=native";
+				OTHER_CFLAGS = (
+					"-march=native",
+					"-mvaes",
+					"-mvpclmulqdq",
+				);
 				OTHER_LDFLAGS = "";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
@@ -1296,7 +1300,11 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				GCC_PREPROCESSOR_DEFINITIONS = "$(inherited)";
-				OTHER_CFLAGS = "-march=native";
+				OTHER_CFLAGS = (
+					"-march=native",
+					"-mvaes",
+					"-mvpclmulqdq",
+				);
 				OTHER_LDFLAGS = "";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};

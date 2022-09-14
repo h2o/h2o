@@ -34,5 +34,5 @@ assert('BS Literal 8') do
 end
 
 assert('BS Literal 9') do
-  assert_equal Fixnum, 1234.class
+  assert_equal Integer, 1234.class
 end

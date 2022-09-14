@@ -93,9 +93,9 @@ void h2o_context_init(h2o_context_t *ctx, h2o_loop_t *loop, h2o_globalconf_t *co
     h2o_multithread_register_receiver(ctx->queue, &ctx->receivers.hostinfo_getaddr, h2o_hostinfo_getaddr_receiver);
     ctx->filecache = h2o_filecache_create(config->filecache.capacity);
 
-    h2o_linklist_init_anchor(&ctx->http1._conns);
-    h2o_linklist_init_anchor(&ctx->http2._conns);
-    h2o_linklist_init_anchor(&ctx->http3._conns);
+    h2o_linklist_init_anchor(&ctx->_conns.active);
+    h2o_linklist_init_anchor(&ctx->_conns.idle);
+    h2o_linklist_init_anchor(&ctx->_conns.shutdown);
     ctx->proxy.client_ctx.loop = loop;
     ctx->proxy.client_ctx.io_timeout = ctx->globalconf->proxy.io_timeout;
     ctx->proxy.client_ctx.connect_timeout = ctx->globalconf->proxy.connect_timeout;
@@ -172,12 +172,12 @@ void h2o_context_dispose(h2o_context_t *ctx)
 void h2o_context_request_shutdown(h2o_context_t *ctx)
 {
     ctx->shutdown_requested = 1;
-    if (ctx->globalconf->http1.callbacks.request_shutdown != NULL)
-        ctx->globalconf->http1.callbacks.request_shutdown(ctx);
-    if (ctx->globalconf->http2.callbacks.request_shutdown != NULL)
-        ctx->globalconf->http2.callbacks.request_shutdown(ctx);
-    if (ctx->globalconf->http3.callbacks.request_shutdown != NULL)
-        ctx->globalconf->http3.callbacks.request_shutdown(ctx);
+
+    H2O_CONN_LIST_FOREACH(h2o_conn_t * conn, ({&ctx->_conns.active, &ctx->_conns.idle}), {
+        if (conn->callbacks->request_shutdown != NULL) {
+            conn->callbacks->request_shutdown(conn);
+        }
+    });
 }
 
 void h2o_context_update_timestamp_string_cache(h2o_context_t *ctx)
@@ -189,4 +189,93 @@ void h2o_context_update_timestamp_string_cache(h2o_context_t *ctx)
     gmtime_r(&ctx->_timestamp_cache.tv_at.tv_sec, &gmt);
     h2o_time2str_rfc1123(ctx->_timestamp_cache.value->rfc1123, &gmt);
     h2o_time2str_log(ctx->_timestamp_cache.value->log, ctx->_timestamp_cache.tv_at.tv_sec);
+}
+
+void h2o_context_close_idle_connections(h2o_context_t *ctx, size_t max_connections_to_close, uint64_t min_age)
+{
+    if (max_connections_to_close <= 0)
+        return;
+
+    size_t closed = ctx->_conns.num_conns.shutdown;
+
+    if (closed >= max_connections_to_close)
+        return;
+
+    H2O_CONN_LIST_FOREACH(h2o_conn_t * conn, ({&ctx->_conns.idle}), {
+        struct timeval now = h2o_gettimeofday(ctx->loop);
+        if (h2o_timeval_subtract(&conn->connected_at, &now) < (min_age * 1000))
+            continue;
+        ctx->connection_stats.idle_closed++;
+        conn->callbacks->close_idle_connection(conn);
+        closed++;
+        if (closed == max_connections_to_close)
+            return;
+    });
+}
+
+static size_t *get_connection_state_counter(h2o_context_t *ctx, h2o_conn_state_t state)
+{
+    return ctx->_conns.num_conns.counters + (size_t)state;
+}
+
+static void unlink_conn(h2o_conn_t *conn)
+{
+    --*get_connection_state_counter(conn->ctx, conn->state);
+    h2o_linklist_unlink(&conn->_conns);
+}
+
+static void link_conn(h2o_conn_t *conn)
+{
+    switch (conn->state) {
+    case H2O_CONN_STATE_IDLE:
+        h2o_linklist_insert(&conn->ctx->_conns.idle, &conn->_conns);
+        break;
+    case H2O_CONN_STATE_ACTIVE:
+        h2o_linklist_insert(&conn->ctx->_conns.active, &conn->_conns);
+        break;
+    case H2O_CONN_STATE_SHUTDOWN:
+        h2o_linklist_insert(&conn->ctx->_conns.shutdown, &conn->_conns);
+        break;
+    }
+    ++*get_connection_state_counter(conn->ctx, conn->state);
+}
+
+h2o_conn_t *h2o_create_connection(size_t sz, h2o_context_t *ctx, h2o_hostconf_t **hosts, struct timeval connected_at,
+                                  const h2o_conn_callbacks_t *callbacks)
+{
+    h2o_conn_t *conn = (h2o_conn_t *)h2o_mem_alloc(sz);
+
+    conn->ctx = ctx;
+    conn->hosts = hosts;
+    conn->connected_at = connected_at;
+#ifdef H2O_NO_64BIT_ATOMICS
+    pthread_mutex_lock(&h2o_conn_id_mutex);
+    conn->id = ++h2o_connection_id;
+    pthread_mutex_unlock(&h2o_conn_id_mutex);
+#else
+    conn->id = __sync_add_and_fetch(&h2o_connection_id, 1);
+#endif
+    conn->callbacks = callbacks;
+    conn->_uuid.is_initialized = 0;
+
+    conn->state = H2O_CONN_STATE_ACTIVE;
+    conn->_conns = (h2o_linklist_t){};
+    link_conn(conn);
+
+    return conn;
+}
+
+void h2o_destroy_connection(h2o_conn_t *conn)
+{
+    unlink_conn(conn);
+    free(conn);
+}
+
+void h2o_conn_set_state(h2o_conn_t *conn, h2o_conn_state_t state)
+{
+    if (conn->state != state) {
+        unlink_conn(conn);
+        conn->state = state;
+        link_conn(conn);
+    }
 }

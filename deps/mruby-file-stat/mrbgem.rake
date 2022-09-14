@@ -19,11 +19,18 @@ MRuby::Gem::Specification.new('mruby-file-stat') do |spec|
         FileUtils.touch "#{build_dir}/config.h", :verbose => true
       else
         _pp './configure', dir
-        system env, "#{dir}/configure"
+        host = ''
+        if build.kind_of?(MRuby::CrossBuild) && build.host_target
+          host = "--host #{build.host_target}"
+        end
+        system env, "#{dir}/configure #{host}"
       end
     end
   end
-  file "#{build_dir}/src/file-stat.o" => [ "#{dir}/src/file-stat.c", config ]
+
+  # build hook
+  file "#{dir}/src/file-stat.c" => config
+
   task :clean do
     FileUtils.rm_f config, :verbose => true
   end

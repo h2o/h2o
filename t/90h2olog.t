@@ -8,6 +8,7 @@ use Test::More;
 use JSON;
 use t::Util;
 
+get_exclusive_lock(); # take exclusive lock before sudo closes LOCKFD
 run_as_root();
 
 my $h2olog_prog = bindir() . "/h2olog";

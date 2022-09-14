@@ -25,7 +25,7 @@
 #if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
 #define _PICOHASH_BIG_ENDIAN
 #endif
-#else               // ! defined __LITTLE_ENDIAN__
+#elif !defined(_WIN32)
 #include <endian.h> // machine/endian.h
 #if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
 #define _PICOHASH_BIG_ENDIAN
@@ -35,11 +35,12 @@
 #define PICOHASH_MD5_BLOCK_LENGTH 64
 #define PICOHASH_MD5_DIGEST_LENGTH 16
 
-typedef struct {
+typedef struct _picohash_md5_ctx_t {
     uint_fast32_t lo, hi;
     uint_fast32_t a, b, c, d;
     unsigned char buffer[64];
     uint_fast32_t block[PICOHASH_MD5_DIGEST_LENGTH];
+    const void *(*_body)(struct _picohash_md5_ctx_t *ctx, const void *data, size_t size);
 } _picohash_md5_ctx_t;
 
 static void _picohash_md5_init(_picohash_md5_ctx_t *ctx);
@@ -268,6 +269,8 @@ inline void _picohash_md5_init(_picohash_md5_ctx_t *ctx)
 
     ctx->lo = 0;
     ctx->hi = 0;
+
+    ctx->_body = _picohash_md5_body;
 }
 
 inline void _picohash_md5_update(_picohash_md5_ctx_t *ctx, const void *data, size_t size)
@@ -293,11 +296,11 @@ inline void _picohash_md5_update(_picohash_md5_ctx_t *ctx, const void *data, siz
         memcpy(&ctx->buffer[used], data, free);
         data = (const unsigned char *)data + free;
         size -= free;
-        _picohash_md5_body(ctx, ctx->buffer, 64);
+        ctx->_body(ctx, ctx->buffer, 64);
     }
 
     if (size >= 64) {
-        data = _picohash_md5_body(ctx, data, size & ~(unsigned long)0x3f);
+        data = ctx->_body(ctx, data, size & ~(unsigned long)0x3f);
         size &= 0x3f;
     }
 
@@ -317,7 +320,7 @@ inline void _picohash_md5_final(_picohash_md5_ctx_t *ctx, void *_digest)
 
     if (free < 8) {
         memset(&ctx->buffer[used], 0, free);
-        _picohash_md5_body(ctx, ctx->buffer, 64);
+        ctx->_body(ctx, ctx->buffer, 64);
         used = 0;
         free = 64;
     }
@@ -334,7 +337,7 @@ inline void _picohash_md5_final(_picohash_md5_ctx_t *ctx, void *_digest)
     ctx->buffer[62] = ctx->hi >> 16;
     ctx->buffer[63] = ctx->hi >> 24;
 
-    _picohash_md5_body(ctx, ctx->buffer, 64);
+    ctx->_body(ctx, ctx->buffer, 64);
 
     digest[0] = ctx->a;
     digest[1] = ctx->a >> 8;
