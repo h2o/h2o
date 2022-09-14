@@ -72,23 +72,21 @@ static void test_encdec(void)
     };
 
     /* encode instructions */
-    h2o_dsr_instruction_builder_t builder = {.sock = (void *)"fake"};
-    h2o_linklist_t anchor;
+    h2o_buffer_t *buf;
+    h2o_dsr_encoder_state_t encstate = {};
+    h2o_buffer_init(&buf, &h2o_socket_buffer_prototype);
     h2o_dsr_decoded_instruction_t inst;
     ssize_t inst_len;
 
-    h2o_linklist_init_anchor(&anchor);
-
     /* encode a group consisting of one instruction */
-    ok(h2o_dsr_add_instruction(&builder, &anchor, (struct sockaddr *)&dest_addr, &detached, 1, 256));
-    ok(!h2o_linklist_is_empty(&anchor));
+    h2o_dsr_add_instruction(&buf, &encstate, (struct sockaddr *)&dest_addr, &detached, 1, 256);
 
     /* decode  */
-    inst_len = h2o_dsr_decode_instruction(&inst, (const uint8_t *)builder.buf->bytes, builder.buf->size);
+    inst_len = h2o_dsr_decode_instruction(&inst, (const uint8_t *)buf->bytes, buf->size);
     ok(inst_len > 0);
     ok(inst.type == H2O_DSR_DECODED_INSTRUCTION_SET_CONTEXT);
-    h2o_buffer_consume(&builder.buf, inst_len);
-    inst_len = h2o_dsr_decode_instruction(&inst, (const uint8_t *)builder.buf->bytes, builder.buf->size);
+    h2o_buffer_consume(&buf, inst_len);
+    inst_len = h2o_dsr_decode_instruction(&inst, (const uint8_t *)buf->bytes, buf->size);
     ok(inst_len > 0);
     ok(inst.type == H2O_DSR_DECODED_INSTRUCTION_SEND_PACKET);
     ok(h2o_memis(inst.data.send_packet.prefix.base, inst.data.send_packet.prefix.len, detached.datagram.base,
@@ -99,10 +97,10 @@ static void test_encdec(void)
     ok(inst.data.send_packet._packet_from == 0);
     ok(inst.data.send_packet._packet_payload_from == 7);
 
-    h2o_buffer_consume(&builder.buf, inst_len);
-    ok(builder.buf->size == 0);
+    h2o_buffer_consume(&buf, inst_len);
+    ok(buf->size == 0);
 
-    h2o_buffer_dispose(&builder.buf);
+    h2o_buffer_dispose(&buf);
 }
 
 void test_lib__common__dsr_c(void)
