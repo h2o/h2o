@@ -30,8 +30,6 @@
 #include "h2o/memory.h"
 #include "h2o/socket.h"
 
-typedef struct st_h2o_dsr_instruction_builder_t h2o_dsr_instruction_builder_t;
-
 /**
  * DSR request
  */
@@ -82,6 +80,10 @@ typedef struct st_h2o_dsr_decoded_instruction_t {
     } data;
 } h2o_dsr_decoded_instruction_t;
 
+typedef struct st_h2o_dsr_encoder_state_t {
+    unsigned context_sent : 1;
+} h2o_dsr_encoder_state_t;
+
 typedef struct st_h2o_dsr_quic_packet_encryptor_t {
     quicly_context_t *ctx;
     ptls_cipher_suite_t *cipher_suite;
@@ -101,20 +103,8 @@ int h2o_dsr_parse_req(h2o_dsr_req_t *req, const char *value, size_t value_len, u
 /**
  *
  */
-h2o_dsr_instruction_builder_t *h2o_dsr_create_instruction_builder(h2o_socket_t *sock);
-/**
- *
- */
-void h2o_dsr_destroy_instruction_builder(h2o_dsr_instruction_builder_t *builder);
-/**
- * Returns a boolean indication if the operation was successful.
- */
-int h2o_dsr_add_instruction(h2o_dsr_instruction_builder_t *builder, h2o_linklist_t *anchor, struct sockaddr *dest_addr,
-                            quicly_detached_send_packet_t *detached, uint64_t body_off, uint16_t body_len);
-/**
- *
- */
-void h2o_dsr_send_all_instructions(h2o_linklist_t *anchor);
+void h2o_dsr_add_instruction(h2o_buffer_t **buf, h2o_dsr_encoder_state_t *state, struct sockaddr *dest_addr,
+                             quicly_detached_send_packet_t *detached, uint64_t body_off, uint16_t body_len);
 /**
  * Decodes one DSR instruction. Returns size of the instruction, 0 if invalid, -1 if incomplete.
  */
@@ -140,6 +130,6 @@ int h2o_dsr_quic_packet_encryptor_set_context(h2o_dsr_quic_packet_encryptor_t *e
  * specified by the instruction before invoking this function.
  */
 void h2o_dsr_encrypt_quic_packet(h2o_dsr_quic_packet_encryptor_t *encryptor, h2o_dsr_decoded_instruction_t *instruction,
-                                        ptls_iovec_t datagram);
+                                 ptls_iovec_t datagram);
 
 #endif

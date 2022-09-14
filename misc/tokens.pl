@@ -311,11 +311,8 @@ __DATA__
 0 0 0 0 0 0 0 1 x-frame-options
 0 0 0 0 0 0 0 1 priority
 0 0 0 0 0 0 0 1 no-early-hints
-<<<<<<< HEAD
-0 1 1 0 1 0 0 0 dsr
-=======
 0 1 1 0 1 0 0 0 datagram-flow-id
->>>>>>> ef1916a23
+0 1 1 0 1 0 0 0 dsr
 
 # QPACK static table (index, name, value)
 0 :authority

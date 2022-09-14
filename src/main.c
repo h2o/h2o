@@ -1806,7 +1806,6 @@ static void on_http3_conn_destroy(h2o_quic_conn_t *conn)
     H2O_HTTP3_CONN_CALLBACKS.super.destroy_connection(conn);
 }
 
-<<<<<<< HEAD
 static h2o_quic_ctx_t *start_dsr(h2o_req_t *req, struct sockaddr *local_addr)
 {
     struct sockaddr_storage src_addr;
@@ -1858,10 +1857,7 @@ AddrFound:
     return &ctx->listeners[listener_index].http3.ctx.super;
 }
 
-static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
-=======
 static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
->>>>>>> ef1916a23
 {
     const char *hostname = NULL, *servname, *type = "tcp";
     yoml_t **ssl_node = NULL, **owner_node = NULL, **permission_node = NULL, **quic_node = NULL, **cc_node = NULL,
@@ -3273,14 +3269,8 @@ static void *run_loop(void *_thread_index)
     /* and start listening */
     update_listener_state(listeners);
 
-<<<<<<< HEAD
     conf.threads[thread_index].listeners = listeners;
 
-    /* make sure all threads are initialized before starting to serve requests */
-    h2o_barrier_wait(&conf.startup_sync_barrier);
-
-    if (thread_index == 0)
-=======
     /* Wait for all threads to become ready but before letting any of them serve connections, swap the signal handler for graceful
      * shutdown, check (and exit) if SIGTERM has been received already. */
     h2o_barrier_wait(&conf.startup_sync_barrier_init);
@@ -3288,7 +3278,6 @@ static void *run_loop(void *_thread_index)
         h2o_set_signal_handler(SIGTERM, on_sigterm_set_flag_notify_threads);
         if (conf.shutdown_requested)
             exit(0);
->>>>>>> ef1916a23
         fprintf(stderr, "h2o server (pid:%d) is ready to serve requests with %zu threads\n", (int)getpid(), conf.thread_map.size);
     }
     h2o_barrier_wait(&conf.startup_sync_barrier_post);

@@ -105,7 +105,7 @@ h2o_token_t h2o__tokens[] = {{{H2O_STRLIT(":authority")}, {1, 0, 0, 0, 0, 0, 0, 
                              {{H2O_STRLIT("x-reproxy-url")}, {0, 0, 0, 0, 0, 0, 0, 0}},
                              {{H2O_STRLIT("x-traffic")}, {0, 0, 0, 0, 0, 0, 0, 0}},
                              {{H2O_STRLIT("x-xss-protection")}, {0, 0, 0, 0, 0, 0, 0, 1}}};
-size_t h2o__num_tokens = 83;
+size_t h2o__num_tokens = 84;
 
 const h2o_hpack_static_table_entry_t h2o_hpack_static_table[61] = {{H2O_TOKEN_AUTHORITY, {H2O_STRLIT("")}},
                                                                    {H2O_TOKEN_METHOD, {H2O_STRLIT("GET")}},
@@ -1594,7 +1594,7 @@ int32_t h2o_qpack_lookup_x_xss_protection(h2o_iovec_t value, int *is_exact)
     return 62;
 }
 
-const h2o_qpack_lookup_static_cb h2o_qpack_lookup_static[83] = {h2o_qpack_lookup_authority,
+const h2o_qpack_lookup_static_cb h2o_qpack_lookup_static[84] = {h2o_qpack_lookup_authority,
                                                                 h2o_qpack_lookup_method,
                                                                 h2o_qpack_lookup_path,
                                                                 h2o_qpack_lookup_scheme,

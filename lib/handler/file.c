@@ -115,6 +115,8 @@ static void on_dsr_read(h2o_socket_t *sock, const char *err)
 
         case H2O_DSR_DECODED_INSTRUCTION_SEND_PACKET:
             /* validate */
+            if (sender->encryptor.aead_ctx == NULL)
+                goto Close;
             if (inst.data.send_packet.prefix.len + inst.data.send_packet.body_len + sender->encryptor.aead_ctx->algo->tag_size >
                 datagram_buf + sizeof(datagram_buf) - datagram_pt)
                 goto Close;
@@ -266,22 +268,7 @@ static int do_pread(h2o_sendvec_t *src, h2o_req_t *req, h2o_iovec_t dst, size_t 
 
     assert(off + dst.len <= src->len);
 
-<<<<<<< HEAD
     return h2o_file_pread_full(self->file.ref->fd, dst.base, dst.len, file_chunk_at + off);
-=======
-    /* read */
-    while (bytes_read < dst.len) {
-        while ((rret = pread(self->file.ref->fd, dst.base + bytes_read, dst.len - bytes_read, file_chunk_at + off + bytes_read)) ==
-                   -1 &&
-               errno == EINTR)
-            ;
-        if (rret <= 0)
-            return 0;
-        bytes_read += rret;
-    }
-
-    return 1;
->>>>>>> ef1916a23
 }
 
 static void sendvec_update_refcnt(h2o_sendvec_t *vec, h2o_req_t *req, int is_incr)

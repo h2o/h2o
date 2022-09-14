@@ -1333,13 +1333,10 @@ struct st_h2o_req_t {
     h2o_iovec_t upgrade;
 
     /**
-     * A protocol implementation that is willing to serve the content using DSR should set `dsr.req` to the values to be sent using
-     * the `dsr` request header field. Then, the core will call `on_upgrade` if upstream responds with a 101 Protocol Switch.
+     * A protocol implementation that is willing to serve the content using DSR should set `dsr_req` to the values to be sent using
+     * the `dsr` request header field. Then, when 101 is obtained, it means that the channel has upgrade to DSR.
      */
-    struct {
-        h2o_iovec_t req;
-        void (*on_upgrade)(h2o_req_t *req, h2o_socket_t *sock);
-    } dsr;
+    h2o_iovec_t dsr_req;
 
     /**
      * preferred chunk size by the ostream

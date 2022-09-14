@@ -129,7 +129,6 @@ provider h2o {
      * HTTP/3 event, indicating that a forwarded QUIC packet has been received.
      */
     probe h3_forwarded_packet_receive(struct sockaddr *dest, struct sockaddr *src, size_t num_bytes);
-<<<<<<< HEAD
 
     /**
      * FIXME define probes for http3client, aligning the arguments of `h2o_tunnel_create`
@@ -150,6 +149,4 @@ provider h2o {
      */
     probe quic_dsr_send(uint64_t conn_id, struct sockaddr *dest, struct sockaddr *src, uint64_t packet_number, uint64_t offset,
                         size_t len);
-=======
->>>>>>> ef1916a23
 };

@@ -156,7 +156,7 @@ typedef int (*h2o_quic_preprocess_packet_cb)(h2o_quic_ctx_t *ctx, struct msghdr 
  * be used for generating expression that take all the members equally.
  */
 struct st_h2o_quic_aggregated_stats_t {
-    QUICLY_STATS_PREBUILT_FIELDS;
+    QUICLY_STATS_PREBUILT_COUNTERS;
 };
 
 typedef struct st_h2o_quic_stats_t {
@@ -306,6 +306,7 @@ struct st_h2o_quic_ctx_t {
 
 typedef struct st_h2o_quic_conn_callbacks_t {
     void (*destroy_connection)(h2o_quic_conn_t *conn);
+    void (*send_dsr_instructions)(h2o_quic_conn_t *conn);
 } h2o_quic_conn_callbacks_t;
 
 /**
@@ -339,10 +340,6 @@ struct st_h2o_quic_conn_t {
      *
      */
     uint64_t _accept_hashkey;
-    /**
-     *
-     */
-    h2o_linklist_t _dsr_builders;
 };
 
 typedef struct st_h2o_http3_qpack_context_t {
