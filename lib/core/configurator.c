@@ -23,6 +23,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <inttypes.h>
+#include <sys/types.h>
 #include <netinet/udp.h>
 #include "h2o.h"
 #include "h2o/configurator.h"
@@ -415,6 +416,11 @@ static int on_config_max_delegations(h2o_configurator_command_t *cmd, h2o_config
     return h2o_configurator_scanf(cmd, node, "%u", &ctx->globalconf->max_delegations);
 }
 
+static int on_config_max_reprocesses(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    return h2o_configurator_scanf(cmd, node, "%u", &ctx->globalconf->max_reprocesses);
+}
+
 static int on_config_handshake_timeout(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     return config_timeout(cmd, node, &ctx->globalconf->handshake_timeout);
@@ -606,13 +612,27 @@ static int on_config_http3_input_window_size(h2o_configurator_command_t *cmd, h2
     return 0;
 }
 
-static int on_config_http3_delayed_ack(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+static int on_config_http3_ack_frequency(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    double v;
+
+    if (h2o_configurator_scanf(cmd, node, "%lf", &v) != 0)
+        return -1;
+    if (!(0 <= v && v <= 1)) {
+        h2o_configurator_errprintf(cmd, node, "ack frequency must be between 0 and 1");
+        return -1;
+    }
+    ctx->globalconf->http3.ack_frequency = (uint16_t)(v * 1024);
+    return 0;
+}
+
+static int on_config_http3_allow_delayed_ack(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     ssize_t on;
 
     if ((on = h2o_configurator_get_one_of(cmd, node, "OFF,ON")) == -1)
         return -1;
-    ctx->globalconf->http3.use_delayed_ack = (uint8_t)on;
+    ctx->globalconf->http3.allow_delayed_ack = (uint8_t)on;
     return 0;
 }
 
@@ -1022,6 +1042,9 @@ void h2o_configurator__init_core(h2o_globalconf_t *conf)
         h2o_configurator_define_command(&c->super, "max-delegations",
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_max_delegations);
+        h2o_configurator_define_command(&c->super, "max-reprocesses",
+                                        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                        on_config_max_reprocesses);
         h2o_configurator_define_command(&c->super, "handshake-timeout",
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_handshake_timeout);
@@ -1081,9 +1104,12 @@ void h2o_configurator__init_core(h2o_globalconf_t *conf)
         h2o_configurator_define_command(&c->super, "http3-input-window-size",
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_http3_input_window_size);
-        h2o_configurator_define_command(&c->super, "http3-delayed-ack",
+        h2o_configurator_define_command(&c->super, "http3-ack-frequency",
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
-                                        on_config_http3_delayed_ack);
+                                        on_config_http3_ack_frequency);
+        h2o_configurator_define_command(&c->super, "http3-allow-delayed-ack",
+                                        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                        on_config_http3_allow_delayed_ack);
         h2o_configurator_define_command(&c->super, "http3-gso", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_http3_gso);
         h2o_configurator_define_command(&c->super, "file.mime.settypes",

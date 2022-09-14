@@ -58,15 +58,20 @@ EOT
     exit(0);
 }
 
-die "no certificate file\n"
-    if @ARGV == 0;
-my $cert_fn = shift @ARGV;
-
 my $tempdir = tempdir(CLEANUP => 1);
 
 my $openssl_version = run_openssl("version");
 chomp $openssl_version;
 print STDERR "fetch-ocsp-response (using $openssl_version)\n";
+
+my $cert_fn;
+if (@ARGV == 0) {
+    $cert_fn = "$tempdir/cert.crt";
+    write_file($cert_fn, do { local $/; <STDIN> });
+} else {
+    $cert_fn = shift @ARGV;
+}
+
 
 # obtain ocsp uri
 my $ocsp_uri = run_openssl("x509 -in $cert_fn -noout -ocsp_uri");

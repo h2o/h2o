@@ -40,7 +40,7 @@ static void test_request(h2o_iovec_t first_req, h2o_iovec_t second_req, h2o_iove
     in = first_req;
     r = h2o_hpack_parse_request(&req.pool, h2o_hpack_decode_header, &header_table, &req.input.method, &req.input.scheme,
                                 &req.input.authority, &req.input.path, &req.headers, &pseudo_headers_map, &content_length, NULL,
-                                (const uint8_t *)in.base, in.len, &err_desc);
+                                NULL, (const uint8_t *)in.base, in.len, &err_desc);
     ok(r == 0);
     ok(req.input.authority.len == 15);
     ok(memcmp(req.input.authority.base, H2O_STRLIT("www.example.com")) == 0);
@@ -58,7 +58,7 @@ static void test_request(h2o_iovec_t first_req, h2o_iovec_t second_req, h2o_iove
     in = second_req;
     r = h2o_hpack_parse_request(&req.pool, h2o_hpack_decode_header, &header_table, &req.input.method, &req.input.scheme,
                                 &req.input.authority, &req.input.path, &req.headers, &pseudo_headers_map, &content_length, NULL,
-                                (const uint8_t *)in.base, in.len, &err_desc);
+                                NULL, (const uint8_t *)in.base, in.len, &err_desc);
     ok(r == 0);
     ok(req.input.authority.len == 15);
     ok(memcmp(req.input.authority.base, H2O_STRLIT("www.example.com")) == 0);
@@ -78,7 +78,7 @@ static void test_request(h2o_iovec_t first_req, h2o_iovec_t second_req, h2o_iove
     in = third_req;
     r = h2o_hpack_parse_request(&req.pool, h2o_hpack_decode_header, &header_table, &req.input.method, &req.input.scheme,
                                 &req.input.authority, &req.input.path, &req.headers, &pseudo_headers_map, &content_length, NULL,
-                                (const uint8_t *)in.base, in.len, &err_desc);
+                                NULL, (const uint8_t *)in.base, in.len, &err_desc);
     ok(r == 0);
     ok(req.input.authority.len == 15);
     ok(memcmp(req.input.authority.base, H2O_STRLIT("www.example.com")) == 0);
@@ -102,8 +102,9 @@ static void check_flatten(h2o_hpack_header_table_t *header_table, h2o_res_t *res
     const char *err_desc;
 
     h2o_buffer_init(&buf, &h2o_socket_buffer_prototype);
-    h2o_hpack_flatten_response(&buf, header_table, 1, H2O_HTTP2_SETTINGS_DEFAULT.max_frame_size, res->status, res->headers.entries,
-                               res->headers.size, NULL, SIZE_MAX);
+    h2o_hpack_flatten_response(&buf, header_table, H2O_HTTP2_SETTINGS_DEFAULT.header_table_size, 1,
+                               H2O_HTTP2_SETTINGS_DEFAULT.max_frame_size, res->status, res->headers.entries, res->headers.size,
+                               NULL, SIZE_MAX);
 
     ok(h2o_http2_decode_frame(&frame, (uint8_t *)buf->bytes, buf->size, H2O_HTTP2_SETTINGS_DEFAULT.max_frame_size, &err_desc) > 0);
     ok(h2o_memis(frame.payload, frame.length, expected, expected_len));
@@ -350,7 +351,7 @@ static void parse_and_compare_request(h2o_hpack_header_table_t *ht, const char *
     const char *err_desc = NULL;
     int r = h2o_hpack_parse_request(&req.pool, h2o_hpack_decode_header, ht, &req.input.method, &req.input.scheme,
                                     &req.input.authority, &req.input.path, &req.headers, &pseudo_header_exists_map, &content_length,
-                                    NULL, (void *)(promise_base + 13), promise_len - 13, &err_desc);
+                                    NULL, NULL, (void *)(promise_base + 13), promise_len - 13, &err_desc);
     ok(r == 0);
     ok(h2o_memis(req.input.method.base, req.input.method.len, expected_method.base, expected_method.len));
     ok(req.input.scheme == expected_scheme);
@@ -402,8 +403,8 @@ static void test_hpack_push(void)
     h2o_add_header(&req.pool, &req.headers, H2O_TOKEN_ACCEPT_ENCODING, NULL, accept_encoding.base, accept_encoding.len);
 
     /* serialize, deserialize, and compare */
-    h2o_hpack_flatten_push_promise(&buf, &encode_table, 0, 16384, req.input.scheme, req.input.authority, req.input.method,
-                                   req.input.path, req.headers.entries, req.headers.size, 0);
+    h2o_hpack_flatten_push_promise(&buf, &encode_table, H2O_HTTP2_SETTINGS_DEFAULT.header_table_size, 0, 16384, req.input.scheme,
+                                   req.input.authority, req.input.method, req.input.path, req.headers.entries, req.headers.size, 0);
     parse_and_compare_request(&decode_table, buf->bytes, buf->size, method, &H2O_URL_SCHEME_HTTPS, authority,
                               h2o_iovec_init(H2O_STRLIT("/")), H2O_TOKEN_USER_AGENT->buf, user_agent, H2O_TOKEN_ACCEPT->buf,
                               accept_root, H2O_TOKEN_ACCEPT_LANGUAGE->buf, accept_language, H2O_TOKEN_ACCEPT_ENCODING->buf,
@@ -420,8 +421,8 @@ static void test_hpack_push(void)
     h2o_add_header(&req.pool, &req.headers, H2O_TOKEN_REFERER, NULL, referer.base, referer.len);
 
     /* serialize, deserialize, and compare */
-    h2o_hpack_flatten_push_promise(&buf, &encode_table, 0, 16384, req.input.scheme, req.input.authority, req.input.method,
-                                   req.input.path, req.headers.entries, req.headers.size, 0);
+    h2o_hpack_flatten_push_promise(&buf, &encode_table, H2O_HTTP2_SETTINGS_DEFAULT.header_table_size, 0, 16384, req.input.scheme,
+                                   req.input.authority, req.input.method, req.input.path, req.headers.entries, req.headers.size, 0);
     parse_and_compare_request(
         &decode_table, buf->bytes, buf->size, method, &H2O_URL_SCHEME_HTTPS, authority, h2o_iovec_init(H2O_STRLIT("/banner.jpg")),
         H2O_TOKEN_USER_AGENT->buf, user_agent, H2O_TOKEN_ACCEPT->buf, accept_images, H2O_TOKEN_ACCEPT_LANGUAGE->buf,
@@ -432,8 +433,8 @@ static void test_hpack_push(void)
     req.input.path = h2o_iovec_init(H2O_STRLIT("/icon.png"));
 
     /* serialize, deserialize, and compare */
-    h2o_hpack_flatten_push_promise(&buf, &encode_table, 0, 16384, req.input.scheme, req.input.authority, req.input.method,
-                                   req.input.path, req.headers.entries, req.headers.size, 0);
+    h2o_hpack_flatten_push_promise(&buf, &encode_table, H2O_HTTP2_SETTINGS_DEFAULT.header_table_size, 0, 16384, req.input.scheme,
+                                   req.input.authority, req.input.method, req.input.path, req.headers.entries, req.headers.size, 0);
     parse_and_compare_request(&decode_table, buf->bytes, buf->size, method, &H2O_URL_SCHEME_HTTPS, authority,
                               h2o_iovec_init(H2O_STRLIT("/icon.png")), H2O_TOKEN_USER_AGENT->buf, user_agent, H2O_TOKEN_ACCEPT->buf,
                               accept_images, H2O_TOKEN_ACCEPT_LANGUAGE->buf, accept_language, H2O_TOKEN_ACCEPT_ENCODING->buf,
@@ -499,8 +500,9 @@ static void test_token_wo_hpack_id(void)
     res.reason = "OK";
     h2o_add_header(&pool, &res.headers, H2O_TOKEN_TE, NULL, H2O_STRLIT("test"));
 
-    h2o_hpack_flatten_response(&buf, &table, 1, H2O_HTTP2_SETTINGS_DEFAULT.max_frame_size, res.status, res.headers.entries,
-                               res.headers.size, NULL, SIZE_MAX);
+    h2o_hpack_flatten_response(&buf, &table, H2O_HTTP2_SETTINGS_DEFAULT.header_table_size, 1,
+                               H2O_HTTP2_SETTINGS_DEFAULT.max_frame_size, res.status, res.headers.entries, res.headers.size, NULL,
+                               SIZE_MAX);
     ok(h2o_memis(buf->bytes + 9, buf->size - 9,
                  H2O_STRLIT("\x88"     /* :status:200 */
                             "\x40\x02" /* literal header w. incremental indexing, raw, TE */
@@ -508,8 +510,9 @@ static void test_token_wo_hpack_id(void)
                             "\x83" /* header value, huffman */
                             "IP\x9f" /* test */)));
     h2o_buffer_consume(&buf, buf->size);
-    h2o_hpack_flatten_response(&buf, &table, 1, H2O_HTTP2_SETTINGS_DEFAULT.max_frame_size, res.status, res.headers.entries,
-                               res.headers.size, NULL, SIZE_MAX);
+    h2o_hpack_flatten_response(&buf, &table, H2O_HTTP2_SETTINGS_DEFAULT.header_table_size, 1,
+                               H2O_HTTP2_SETTINGS_DEFAULT.max_frame_size, res.status, res.headers.entries, res.headers.size, NULL,
+                               SIZE_MAX);
     ok(h2o_memis(buf->bytes + 9, buf->size - 9,
                  H2O_STRLIT("\x88" /* :status:200 */
                             "\xbe" /* te: test, indexed */)));
@@ -532,7 +535,7 @@ static void do_test_inherit_invalid(h2o_iovec_t first_input, h2o_iovec_t second_
         int status;
         h2o_headers_t headers = {};
         const char *err_desc = NULL;
-        int ret = h2o_hpack_parse_response(&pool, h2o_hpack_decode_header, &table, &status, &headers,
+        int ret = h2o_hpack_parse_response(&pool, h2o_hpack_decode_header, &table, &status, &headers, NULL,
                                            (const uint8_t *)first_input.base, first_input.len, &err_desc);
         ok(ret == H2O_HTTP2_ERROR_INVALID_HEADER_CHAR);
         ok(err_desc == expected_first_err_desc);
@@ -547,7 +550,7 @@ static void do_test_inherit_invalid(h2o_iovec_t first_input, h2o_iovec_t second_
         int status;
         h2o_headers_t headers = {};
         const char *err_desc = NULL;
-        int ret = h2o_hpack_parse_response(&pool, h2o_hpack_decode_header, &table, &status, &headers,
+        int ret = h2o_hpack_parse_response(&pool, h2o_hpack_decode_header, &table, &status, &headers, NULL,
                                            (const uint8_t *)second_input.base, second_input.len, &err_desc);
         if (expected_second_err_desc == NULL) {
             ok(ret == 0);
@@ -613,6 +616,33 @@ static void test_inherit_invalid(void)
     }
 }
 
+static void test_dynamic_table_size_update(void)
+{
+    h2o_hpack_header_table_t encoder = {}, decoder = {};
+    encoder.hpack_capacity = encoder.hpack_max_capacity = decoder.hpack_capacity = decoder.hpack_max_capacity = 4096;
+    h2o_buffer_t *buf;
+    h2o_buffer_init(&buf, &h2o_socket_buffer_prototype);
+    h2o_mem_pool_t pool;
+    h2o_mem_init_pool(&pool);
+    h2o_headers_t headers = {};
+    const char *err_desc = NULL;
+    int status, ret;
+
+    /* first response */
+    h2o_hpack_flatten_response(&buf, &encoder, 1024, 1, H2O_HTTP2_SETTINGS_DEFAULT.max_frame_size, 200, NULL, 0, NULL, 12345);
+    ret = h2o_hpack_parse_response(&pool, h2o_hpack_decode_header, &decoder, &status, &headers, NULL, (uint8_t *)buf->bytes + 9,
+                                   buf->size - 9, &err_desc);
+    ok(ret == 0);
+    ok(decoder.hpack_capacity == 1024); /* check that capacity has changed */
+    ok(status == 200);
+    ok(headers.size == 1);
+    ok(headers.entries[0].name == &H2O_TOKEN_CONTENT_LENGTH->buf);
+    ok(h2o_memis(headers.entries[0].value.base, headers.entries[0].value.len, H2O_STRLIT("12345")));
+
+    h2o_mem_clear_pool(&pool);
+    h2o_buffer_dispose(&buf);
+}
+
 void test_lib__http2__hpack(void)
 {
     subtest("hpack", test_hpack);
@@ -620,4 +650,5 @@ void test_lib__http2__hpack(void)
     subtest("hpack-dynamic-table", test_hpack_dynamic_table);
     subtest("token-wo-hpack-id", test_token_wo_hpack_id);
     subtest("inherit-invalid", test_inherit_invalid);
+    subtest("dynamic-table-size-update", test_dynamic_table_size_update);
 }

@@ -3,7 +3,6 @@ use warnings;
 use feature qw/say/;
 BEGIN { $ENV{HTTP2_DEBUG} = 'debug' }
 use Net::EmptyPort qw(check_port empty_port);
-use Scope::Guard;
 use Test::More;
 use Time::HiRes qw(sleep);
 use IO::Socket::INET;
@@ -349,14 +348,12 @@ use IO::Select;
 use Socket;
 use Errno qw(EAGAIN EWOULDBLOCK);
 use Test::More;
-use Scope::Guard;
 
 sub new {
     my ($class, $server) = @_;
 
     my $self; $self = bless {
         sock => undef,
-        # guard => Scope::Guard->new(sub { diag 'GUARD HAPPEN'; $self->close }),
     }, $class;
 
     my $retry = 5;

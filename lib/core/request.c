@@ -134,14 +134,13 @@ h2o_hostconf_t *h2o_req_setup(h2o_req_t *req)
 
     req->processed_at = h2o_get_timestamp(ctx, &req->pool);
 
-    /* find the host context */
-    if (req->input.authority.base != NULL) {
+    /* find the host context (or use the default if authority is missing or is of zero-length) */
+    if (req->input.authority.len != 0) {
         if (req->conn->hosts[1] == NULL ||
             (hostconf = find_hostconf(req->conn->hosts, req->input.authority, req->input.scheme->default_port,
                                       &req->authority_wildcard_match)) == NULL)
             hostconf = find_default_hostconf(req->conn->hosts);
     } else {
-        /* set the authority name to the default one */
         hostconf = find_default_hostconf(req->conn->hosts);
         req->input.authority = hostconf->authority.hostport;
     }
@@ -269,7 +268,7 @@ void h2o_init_request(h2o_req_t *req, h2o_conn_t *conn, h2o_req_t *src)
     req->preferred_chunk_size = SIZE_MAX;
     req->content_length = SIZE_MAX;
     req->remaining_delegations = conn == NULL ? 0 : conn->ctx->globalconf->max_delegations;
-    req->remaining_reprocesses = 5;
+    req->remaining_reprocesses = conn == NULL ? 0 : conn->ctx->globalconf->max_reprocesses;
     req->error_log_delegate.cb = on_default_error_callback;
     req->error_log_delegate.data = req;
 
@@ -339,6 +338,21 @@ void h2o_dispose_request(h2o_req_t *req)
         h2o_buffer_dispose(&req->error_logs);
 
     h2o_mem_clear_pool(&req->pool);
+}
+
+int h2o_req_validate_pseudo_headers(h2o_req_t *req)
+{
+    if (h2o_memis(req->input.method.base, req->input.method.len, H2O_STRLIT("CONNECT-UDP"))) {
+        if (req->input.scheme != &H2O_URL_SCHEME_MASQUE)
+            return 0;
+        if (!h2o_memis(req->input.path.base, req->input.path.len, H2O_STRLIT("/")))
+            return 0;
+    } else {
+        if (req->input.scheme == &H2O_URL_SCHEME_MASQUE)
+            return 0;
+    }
+
+    return 1;
 }
 
 h2o_handler_t *h2o_get_first_handler(h2o_req_t *req)
@@ -496,11 +510,15 @@ void h2o_start_response(h2o_req_t *req, h2o_generator_t *generator)
     assert(req->_generator == NULL);
     req->_generator = generator;
 
-    /* setup response filters */
-    if (req->prefilters != NULL) {
-        req->prefilters->on_setup_ostream(req->prefilters, req, &req->_ostr_top);
+    if (req->is_tunnel_req && (req->res.status == 101 || req->res.status == 200)) {
+        /* a tunnel has been established; forward response as is */
     } else {
-        h2o_setup_next_ostream(req, &req->_ostr_top);
+        /* setup response filters */
+        if (req->prefilters != NULL) {
+            req->prefilters->on_setup_ostream(req->prefilters, req, &req->_ostr_top);
+        } else {
+            h2o_setup_next_ostream(req, &req->_ostr_top);
+        }
     }
 }
 
@@ -659,6 +677,11 @@ void h2o_send_error_generic(h2o_req_t *req, int status, const char *reason, cons
         h2o_hostconf_t *hostconf = h2o_req_setup(req);
         h2o_req_bind_conf(req, hostconf, &hostconf->fallback_path);
     }
+
+    /* If the request is broken or incomplete, do not apply filters, as it would be dangerous to do so. Legitimate clients would not
+     * send broken requests, so we do not need to decorate error responses using errordoc handler or anything else. */
+    if ((flags & H2O_SEND_ERROR_BROKEN_REQUEST) != 0)
+        req->_next_filter_index = SIZE_MAX;
 
     if ((flags & H2O_SEND_ERROR_HTTP1_CLOSE_CONNECTION) != 0)
         req->http1_is_persistent = 0;

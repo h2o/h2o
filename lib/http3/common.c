@@ -23,12 +23,12 @@
 #define __APPLE_USE_RFC_3542 /* to use IPV6_PKTINFO */
 #endif
 #include <errno.h>
+#include <sys/types.h>
 #include <netinet/in.h>
 #include <netinet/udp.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <sys/socket.h>
-#include <sys/types.h>
 #include "picotls/openssl.h"
 #include "h2o/string_.h"
 #include "h2o/http3_common.h"
@@ -79,39 +79,46 @@ int h2o_quic_send_datagrams(h2o_quic_ctx_t *ctx, quicly_address_t *dest, quicly_
 #else
             CMSG_SPACE(1)
 #endif
-            +
 #ifdef UDP_SEGMENT
-            CMSG_SPACE(sizeof(uint16_t))
-#else
-            0
+            + CMSG_SPACE(sizeof(uint16_t))
 #endif
+            + CMSG_SPACE(1) /* sentry */
         ];
-    } cmsgbuf = {.buf = {}};
-    struct cmsghdr *cmsg = &cmsgbuf.hdr;
+    } cmsgbuf = {.buf = {} /* zero-cleared so that CMSG_NXTHDR can be used for locating the *next* cmsghdr */ };
+    struct msghdr mess = {
+        .msg_name = &dest->sa,
+        .msg_namelen = quicly_get_socklen(&dest->sa),
+        .msg_control = cmsgbuf.buf,
+        .msg_controllen = sizeof(cmsgbuf.buf),
+    };
+    struct cmsghdr *cmsg = CMSG_FIRSTHDR(&mess);
+    int ret;
+
+#define PUSH_CMSG(level, type, value)                                                                                              \
+    do {                                                                                                                           \
+        cmsg->cmsg_level = (level);                                                                                                \
+        cmsg->cmsg_type = (type);                                                                                                  \
+        cmsg->cmsg_len = CMSG_LEN(sizeof(value));                                                                                  \
+        memcpy(CMSG_DATA(cmsg), &value, sizeof(value));                                                                            \
+        cmsg = CMSG_NXTHDR(&mess, cmsg);                                                                                           \
+    } while (0)
 
     /* first CMSG is the source address */
     if (src->sa.sa_family != AF_UNSPEC) {
-        size_t cmsg_bodylen = 0;
         switch (src->sa.sa_family) {
         case AF_INET: {
 #if defined(IP_PKTINFO)
             if (*ctx->sock.port != src->sin.sin_port)
                 return 0;
-            cmsg->cmsg_level = IPPROTO_IP;
-            cmsg->cmsg_type = IP_PKTINFO;
-            cmsg_bodylen = sizeof(struct in_pktinfo);
-            memcpy(&((struct in_pktinfo *)CMSG_DATA(cmsg))->ipi_spec_dst, &src->sin.sin_addr, sizeof(struct in_addr));
+            struct in_pktinfo info = {.ipi_spec_dst = src->sin.sin_addr};
+            PUSH_CMSG(IPPROTO_IP, IP_PKTINFO, info);
 #elif defined(IP_SENDSRCADDR)
             if (*ctx->sock.port != src->sin.sin_port)
                 return 0;
             struct sockaddr_in *fdaddr = (struct sockaddr_in *)&ctx->sock.addr;
             assert(fdaddr->sin_family == AF_INET);
-            if (fdaddr->sin_addr.s_addr == INADDR_ANY) {
-                cmsg->cmsg_level = IPPROTO_IP;
-                cmsg->cmsg_type = IP_SENDSRCADDR;
-                cmsg_bodylen = sizeof(struct in_addr);
-                memcpy(CMSG_DATA(cmsg), &src->sin.sin_addr, sizeof(struct in_addr));
-            }
+            if (fdaddr->sin_addr.s_addr == INADDR_ANY)
+                PUSH_CMSG(IPPROTO_IP, IP_SENDSRCADDR, src->sin.sin_addr);
 #else
             h2o_fatal("IP_PKTINFO not available");
 #endif
@@ -120,10 +127,8 @@ int h2o_quic_send_datagrams(h2o_quic_ctx_t *ctx, quicly_address_t *dest, quicly_
 #ifdef IPV6_PKTINFO
             if (*ctx->sock.port != src->sin6.sin6_port)
                 return 0;
-            cmsg->cmsg_level = IPPROTO_IPV6;
-            cmsg->cmsg_type = IPV6_PKTINFO;
-            cmsg_bodylen = sizeof(struct in6_pktinfo);
-            memcpy(&((struct in6_pktinfo *)CMSG_DATA(cmsg))->ipi6_addr, &src->sin6.sin6_addr, sizeof(struct in6_addr));
+            struct in6_pktinfo info = {.ipi6_addr = src->sin6.sin6_addr};
+            PUSH_CMSG(IPPROTO_IPV6, IPV6_PKTINFO, info);
 #else
             h2o_fatal("IPV6_PKTINFO not available");
 #endif
@@ -132,8 +137,6 @@ int h2o_quic_send_datagrams(h2o_quic_ctx_t *ctx, quicly_address_t *dest, quicly_
             h2o_fatal("unexpected address family");
             break;
         }
-        cmsg->cmsg_len = (socklen_t)CMSG_LEN(cmsg_bodylen);
-        cmsg = (struct cmsghdr *)((char *)cmsg + CMSG_SPACE(cmsg_bodylen));
     }
 
     /* next CMSG is UDP_SEGMENT size (for GSO) */
@@ -143,26 +146,16 @@ int h2o_quic_send_datagrams(h2o_quic_ctx_t *ctx, quicly_address_t *dest, quicly_
         for (size_t i = 1; i < num_datagrams - 1; ++i)
             assert(datagrams[i].iov_len == datagrams[0].iov_len);
         uint16_t segsize = (uint16_t)datagrams[0].iov_len;
-        cmsg->cmsg_level = SOL_UDP;
-        cmsg->cmsg_type = UDP_SEGMENT;
-        cmsg->cmsg_len = CMSG_LEN(sizeof(segsize));
-        memcpy(CMSG_DATA(cmsg), &segsize, sizeof(segsize));
-        cmsg = (struct cmsghdr *)((char *)cmsg + CMSG_SPACE(sizeof(segsize)));
+        PUSH_CMSG(SOL_UDP, UDP_SEGMENT, segsize);
         using_gso = 1;
     }
 #endif
 
-    /* send datagrams */
-    struct msghdr mess = {
-        .msg_name = &dest->sa,
-        .msg_namelen = quicly_get_socklen(&dest->sa),
-    };
-    if (cmsg != &cmsgbuf.hdr) {
-        mess.msg_control = &cmsgbuf.buf;
-        mess.msg_controllen = (socklen_t)((char *)cmsg - cmsgbuf.buf);
-    }
-    int ret;
+    /* commit CMSG length */
+    if ((mess.msg_controllen = (socklen_t)((char *)cmsg - (char *)cmsgbuf.buf)) == 0)
+        mess.msg_control = NULL;
 
+    /* send datagrams */
     if (using_gso) {
         mess.msg_iov = datagrams;
         mess.msg_iovlen = (int)num_datagrams;
@@ -198,6 +191,8 @@ SendmsgError:
     h2o_error_reporter_record_error(ctx->loop, &track_sendmsg, 60000, errno);
 
     return 1;
+
+#undef PUSH_CMSG
 }
 
 static inline const h2o_http3_conn_callbacks_t *get_callbacks(h2o_http3_conn_t *conn)
@@ -525,6 +520,10 @@ static void process_packets(h2o_quic_ctx_t *ctx, quicly_address_t *destaddr, qui
 
     assert(num_packets != 0);
 
+    if (ctx->quic_stats != NULL) {
+        ctx->quic_stats->packet_received += num_packets;
+    }
+
 #if H2O_USE_DTRACE
     if (PTLS_UNLIKELY(H2O_H3_PACKET_RECEIVE_ENABLED())) {
         for (size_t i = 0; i != num_packets; ++i)
@@ -672,6 +671,11 @@ static void process_packets(h2o_quic_ctx_t *ctx, quicly_address_t *destaddr, qui
                     conn->callbacks->destroy_connection(conn);
                     return;
                 }
+                if (ret != QUICLY_ERROR_PACKET_IGNORED && ret != QUICLY_ERROR_DECRYPTION_FAILED) {
+                    if (ctx->quic_stats != NULL) {
+                        ++ctx->quic_stats->packet_processed;
+                    }
+                }
             }
         }
     }
@@ -767,7 +771,8 @@ void h2o_quic_read_socket(h2o_quic_ctx_t *ctx, h2o_socket_t *sock)
 #ifdef IP_PKTINFO
                 if (cmsg->cmsg_level == IPPROTO_IP && cmsg->cmsg_type == IP_PKTINFO) {
                     dgrams[dgram_index].destaddr.sin.sin_family = AF_INET;
-                    dgrams[dgram_index].destaddr.sin.sin_addr = ((struct in_pktinfo *)CMSG_DATA(cmsg))->ipi_addr;
+                    memcpy(&dgrams[dgram_index].destaddr.sin.sin_addr, CMSG_DATA(cmsg) + offsetof(struct in_pktinfo, ipi_addr),
+                           sizeof(struct in_addr));
                     dgrams[dgram_index].destaddr.sin.sin_port = *ctx->sock.port;
                     goto DestAddrFound;
                 }
@@ -775,7 +780,7 @@ void h2o_quic_read_socket(h2o_quic_ctx_t *ctx, h2o_socket_t *sock)
 #ifdef IP_RECVDSTADDR
                 if (cmsg->cmsg_level == IPPROTO_IP && cmsg->cmsg_type == IP_RECVDSTADDR) {
                     dgrams[dgram_index].destaddr.sin.sin_family = AF_INET;
-                    dgrams[dgram_index].destaddr.sin.sin_addr = *(struct in_addr *)CMSG_DATA(cmsg);
+                    memcpy(&dgrams[dgram_index].destaddr.sin.sin_addr, CMSG_DATA(cmsg), sizeof(struct in_addr));
                     dgrams[dgram_index].destaddr.sin.sin_port = *ctx->sock.port;
                     goto DestAddrFound;
                 }
@@ -783,7 +788,8 @@ void h2o_quic_read_socket(h2o_quic_ctx_t *ctx, h2o_socket_t *sock)
 #ifdef IPV6_PKTINFO
                 if (cmsg->cmsg_level == IPPROTO_IPV6 && cmsg->cmsg_type == IPV6_PKTINFO) {
                     dgrams[dgram_index].destaddr.sin6.sin6_family = AF_INET6;
-                    dgrams[dgram_index].destaddr.sin6.sin6_addr = ((struct in6_pktinfo *)CMSG_DATA(cmsg))->ipi6_addr;
+                    memcpy(&dgrams[dgram_index].destaddr.sin6.sin6_addr, CMSG_DATA(cmsg) + offsetof(struct in6_pktinfo, ipi6_addr),
+                           sizeof(struct in6_addr));
                     dgrams[dgram_index].destaddr.sin6.sin6_port = *ctx->sock.port;
                     goto DestAddrFound;
                 }
@@ -977,7 +983,8 @@ Validation_Success:;
 }
 
 void h2o_quic_init_context(h2o_quic_ctx_t *ctx, h2o_loop_t *loop, h2o_socket_t *sock, quicly_context_t *quic,
-                           h2o_quic_accept_cb acceptor, h2o_quic_notify_connection_update_cb notify_conn_update, uint8_t use_gso)
+                           h2o_quic_accept_cb acceptor, h2o_quic_notify_connection_update_cb notify_conn_update, uint8_t use_gso,
+                           h2o_quic_stats_t *quic_stats)
 {
     assert(quic->stream_open != NULL);
 
@@ -991,6 +998,7 @@ void h2o_quic_init_context(h2o_quic_ctx_t *ctx, h2o_loop_t *loop, h2o_socket_t *
         .notify_conn_update = notify_conn_update,
         .acceptor = acceptor,
         .use_gso = use_gso,
+        .quic_stats = quic_stats,
     };
     ctx->sock.sock->data = ctx;
     ctx->sock.addrlen = h2o_socket_getsockname(ctx->sock.sock, (void *)&ctx->sock.addr);
@@ -1115,6 +1123,33 @@ void h2o_http3_dispose_conn(h2o_http3_conn_t *conn)
     h2o_quic_dispose_conn(&conn->super);
 }
 
+static size_t build_firstflight(h2o_http3_conn_t *conn, uint8_t *bytebuf, size_t capacity)
+{
+    ptls_buffer_t buf;
+    int ret = 0;
+
+    ptls_buffer_init(&buf, bytebuf, capacity);
+
+    /* push stream type */
+    ptls_buffer_push_quicint(&buf, H2O_HTTP3_STREAM_TYPE_CONTROL);
+
+    /* push SETTINGS frame */
+    ptls_buffer_push_quicint(&buf, H2O_HTTP3_FRAME_TYPE_SETTINGS);
+    ptls_buffer_push_block(&buf, -1, {
+        quicly_context_t *qctx = quicly_get_context(conn->super.quic);
+        if (qctx->transport_params.max_datagram_frame_size != 0) {
+            ptls_buffer_push_quicint(&buf, H2O_HTTP3_SETTINGS_H3_DATAGRAM);
+            ptls_buffer_push_quicint(&buf, 1);
+        };
+    });
+
+    assert(!buf.is_allocated);
+    return buf.off;
+
+Exit:
+    h2o_fatal("unreachable");
+}
+
 int h2o_http3_setup(h2o_http3_conn_t *conn, quicly_conn_t *quic)
 {
     int ret;
@@ -1130,12 +1165,10 @@ int h2o_http3_setup(h2o_http3_conn_t *conn, quicly_conn_t *quic)
     conn->qpack.dec = h2o_qpack_create_decoder(0, 100 /* FIXME */);
 
     { /* open control streams, send SETTINGS */
-        static const uint8_t client_first_flight[] = {H2O_HTTP3_STREAM_TYPE_CONTROL, H2O_HTTP3_FRAME_TYPE_SETTINGS, 0};
-        static const uint8_t server_first_flight[] = {H2O_HTTP3_STREAM_TYPE_CONTROL, H2O_HTTP3_FRAME_TYPE_SETTINGS, 0};
-        h2o_iovec_t first_flight = quicly_is_client(conn->super.quic)
-                                       ? h2o_iovec_init(client_first_flight, sizeof(client_first_flight))
-                                       : h2o_iovec_init(server_first_flight, sizeof(server_first_flight));
-        if ((ret = open_egress_unistream(conn, &conn->_control_streams.egress.control, first_flight)) != 0)
+        uint8_t firstflight[32];
+        size_t firstflight_len = build_firstflight(conn, firstflight, sizeof(firstflight));
+        if ((ret = open_egress_unistream(conn, &conn->_control_streams.egress.control,
+                                         h2o_iovec_init(firstflight, firstflight_len))) != 0)
             return ret;
     }
 
@@ -1238,6 +1271,20 @@ int h2o_http3_handle_settings_frame(h2o_http3_conn_t *conn, const uint8_t *paylo
         case H2O_HTTP3_SETTINGS_QPACK_BLOCKED_STREAMS:
             blocked_streams = value;
             break;
+        case H2O_HTTP3_SETTINGS_H3_DATAGRAM:
+            switch (value) {
+            case 0:
+                break;
+            case 1: {
+                const quicly_transport_parameters_t *remote_tp = quicly_get_remote_transport_parameters(conn->super.quic);
+                if (remote_tp->max_datagram_frame_size == 0)
+                    goto Malformed;
+                conn->peer_settings.h3_datagram = 1;
+            } break;
+            default:
+                goto Malformed;
+            }
+            break;
         default:
             break;
         }
@@ -1279,4 +1326,37 @@ void h2o_http3_send_goaway_frame(h2o_http3_conn_t *conn, uint64_t stream_or_push
     h2o_http3_encode_goaway_frame((uint8_t *)alloced.base, stream_or_push_id);
     conn->_control_streams.egress.control->sendbuf->size += cap;
     quicly_stream_sync_sendbuf(conn->_control_streams.egress.control->quic, 1);
+}
+
+int h2o_http3_can_use_h3_datagram(h2o_http3_conn_t *conn)
+{
+    if (!conn->peer_settings.h3_datagram)
+        return 0;
+    quicly_context_t *qctx = quicly_get_context(conn->super.quic);
+    return qctx->transport_params.max_datagram_frame_size != 0;
+}
+
+void h2o_http3_send_h3_datagrams(h2o_http3_conn_t *conn, uint64_t flow_id, h2o_iovec_t *datagrams, size_t num_datagrams)
+{
+    for (size_t i = 0; i < num_datagrams; ++i) {
+        h2o_iovec_t *src = datagrams + i;
+        uint8_t buf[quicly_encodev_capacity(flow_id) + src->len], *p = buf;
+        p = quicly_encodev(p, flow_id);
+        memcpy(p, src->base, src->len);
+        p += src->len;
+        ptls_iovec_t payload = ptls_iovec_init(buf, p - buf);
+        quicly_send_datagram_frames(conn->super.quic, &payload, 1);
+    }
+
+    h2o_quic_schedule_timer(&conn->super);
+}
+
+uint64_t h2o_http3_decode_h3_datagram(h2o_iovec_t *payload, const void *_src, size_t len)
+{
+    const uint8_t *src = _src, *end = src + len;
+    uint64_t flow_id;
+
+    if ((flow_id = ptls_decode_quicint(&src, end)) != UINT64_MAX)
+        *payload = h2o_iovec_init(src, end - src);
+    return flow_id;
 }

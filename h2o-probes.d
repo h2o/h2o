@@ -24,9 +24,7 @@
 {
     "receive_request_header": ["name", "value"],
     "send_response_header": ["name", "value"],
-    "h3_frame_receive": ["bytes"],
-    "tunnel_on_read": ["bytes"],
-    "tunnel_write": ["bytes"]
+    "h3_frame_receive": ["bytes"]
 }
 */
 
@@ -45,6 +43,23 @@ provider h2o {
     probe _private_socket_lookup_flags_sni(pid_t tid, uint64_t original_flags, const char *server_name, size_t server_name_len);
 
     /**
+     * socket write at H2O socket abstraction layer
+     */
+    probe socket_write(struct st_h2o_socket_t *sock, struct st_h2o_iovec_t *bufs, size_t bufcnt, void *cb);
+    /**
+     * write complete
+     */
+    probe socket_write_complete(struct st_h2o_socket_t *sock, int success);
+    /**
+     * amount of bytes being written using writev(2)
+     */
+    probe socket_writev(struct st_h2o_socket_t *sock, ssize_t ret);
+    /**
+     * amount of payload being provided to the TLS layer, as well as amount of TLS records being buffered
+     */
+    probe socket_write_tls_record(struct st_h2o_socket_t *sock, size_t write_size, size_t bytes_buffered);
+
+    /**
      * HTTP-level event, indicating that a request has been received.
      */
     probe receive_request(uint64_t conn_id, uint64_t req_id, int http_version);
@@ -56,7 +71,7 @@ provider h2o {
     /**
      * HTTP-level event, indicating that a response has been sent.
      */
-    probe send_response(uint64_t conn_id, uint64_t req_id, int status, struct st_h2o_tunnel_t *tunnel);
+    probe send_response(uint64_t conn_id, uint64_t req_id, int status);
     /**
      * HTTP-level event, indicating the response header fields being sent.
      */
@@ -114,6 +129,7 @@ provider h2o {
      * HTTP/3 event, indicating that a forwarded QUIC packet has been received.
      */
     probe h3_forwarded_packet_receive(struct sockaddr *dest, struct sockaddr *src, size_t num_bytes);
+<<<<<<< HEAD
 
     /**
      * FIXME define probes for http3client, aligning the arguments of `h2o_tunnel_create`
@@ -134,4 +150,6 @@ provider h2o {
      */
     probe quic_dsr_send(uint64_t conn_id, struct sockaddr *dest, struct sockaddr *src, uint64_t packet_number, uint64_t offset,
                         size_t len);
+=======
+>>>>>>> ef1916a23
 };

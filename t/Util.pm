@@ -7,14 +7,17 @@ use File::Temp qw(tempfile tempdir);
 use IO::Socket::INET;
 use IO::Socket::SSL;
 use IO::Poll qw(POLLIN POLLOUT POLLHUP POLLERR);
+use IPC::Open3;
 use List::Util qw(shuffle);
+use List::MoreUtils qw(firstidx);
 use Net::EmptyPort qw(check_port empty_port);
 use Net::DNS::Nameserver;
 use POSIX ":sys_wait_h";
 use Path::Tiny;
 use Protocol::HTTP2::Connection;
 use Protocol::HTTP2::Constants;
-use Scope::Guard qw(scope_guard);
+use Scope::Guard;
+use Symbol 'gensym';
 use Test::More;
 use Time::HiRes qw(sleep gettimeofday tv_interval);
 use Carp;
@@ -35,6 +38,7 @@ our @EXPORT = qw(
     empty_ports
     create_data_file
     md5_file
+    etag_file
     prog_exists
     run_prog
     openssl_can_negotiate
@@ -45,6 +49,7 @@ our @EXPORT = qw(
     run_with_h2get_simple
     one_shot_http_upstream
     wait_debugger
+    make_guard
     spawn_forked
     spawn_h2_server
     find_blackhole_ip
@@ -52,6 +57,7 @@ our @EXPORT = qw(
     check_dtrace_availability
     run_picotls_client
     spawn_dns_server
+    run_openssl_client
     run_fuzzer
 );
 
@@ -180,26 +186,30 @@ sub spawn_server {
     if ($pid != 0) {
         print STDERR "spawning $args{argv}->[0]... ";
         if ($args{is_ready}) {
-            while (1) {
-                if ($args{is_ready}->()) {
-                    print STDERR "done\n";
-                    last;
-                }
+            for (my $i = 0; !$args{is_ready}->(); ++$i) {
                 if (waitpid($pid, WNOHANG) == $pid) {
                     die "server failed to start (got $?)\n";
                 }
+                die "server failed to boot in 10 seconds\n"
+                    if $i > 100;
                 sleep 0.1;
             }
+            print STDERR "done\n";
         }
-        my $guard = scope_guard(sub {
+        my $guard = make_guard(sub {
             return if $$ != $ppid;
             print STDERR "killing $args{argv}->[0]... ";
             my $sig = 'TERM';
           Retry:
             if (kill $sig, $pid) {
                 my $i = 0;
+                my $sigterm = sig_num('TERM');
+                my $sigkill = sig_num('KILL');
+                my $sigzero = sig_num('ZERO');
                 while (1) {
                     if (waitpid($pid, WNOHANG) == $pid) {
+                        Test::More::fail "server die with signal $?"
+                            unless $? == $sigterm || $? == $sigkill || $? == $sigzero;
                         print STDERR "killed (got $?)\n";
                         last;
                     }
@@ -225,6 +235,11 @@ sub spawn_server {
     die "failed to exec $args{argv}->[0]:$!";
 }
 
+sub sig_num {
+    my $name = shift;
+    firstidx { $_ eq $name } split " ", $Config::Config{sig_name};
+}
+
 # returns a hash containing `port`, `tls_port`, `guard`
 sub spawn_h2o {
     my ($conf) = @_;
@@ -233,6 +248,7 @@ sub spawn_h2o {
 
     # decide the port numbers
     my ($port, $tls_port) = empty_ports(2, { host => "0.0.0.0" });
+    my @all_ports = ($port, $tls_port);
 
     # setup the configuration file
     $conf = $conf->($port, $tls_port)
@@ -243,24 +259,24 @@ sub spawn_h2o {
             if $conf->{opts};
         $max_ssl_version = $conf->{max_ssl_version} || undef;
         $user = $conf->{user} if exists $conf->{user};
+        push @all_ports, $conf->{extra_ports} if exists $conf->{extra_ports};
         $conf = $conf->{conf};
     }
     $conf = <<"EOT";
 $conf
 listen:
-  host: 0.0.0.0
-  port: $port
-listen:
-  host: 0.0.0.0
-  port: $tls_port
-  ssl:
-    key-file: examples/h2o/server.key
-    certificate-file: examples/h2o/server.crt
-    @{[$max_ssl_version ? "max-version: $max_ssl_version" : ""]}
+  - host: 0.0.0.0
+    port: $port
+  - host: 0.0.0.0
+    port: $tls_port
+    ssl:
+      key-file: examples/h2o/server.key
+      certificate-file: examples/h2o/server.crt
+      @{[$max_ssl_version ? "max-version: $max_ssl_version" : ""]}
 @{[$user ? "user: $user" : ""]}
 EOT
 
-    my $ret = spawn_h2o_raw($conf, [$port, $tls_port], \@opts);
+    my $ret = spawn_h2o_raw($conf, \@all_ports, \@opts);
     return {
         %$ret,
         port => $port,
@@ -271,8 +287,16 @@ EOT
 sub spawn_h2o_raw {
     my ($conf, $check_ports, $opts) = @_;
 
+    # By default, h2o will launch as many threads as there are CPU cores on the
+    # host, unless 'num-threads' is specified. This results in the process
+    # running out of file descriptors, if the 'nofiles' limit is low and the
+    # host has a large number of CPU cores. So make sure the number of threads
+    # is bound.
+    $conf = "num-threads: 2\n$conf" unless $conf =~ /^num-threads:/m;
+
     my ($conffh, $conffn) = tempfile(UNLINK => 1);
     print $conffh $conf;
+    Test::More::diag($conf) if $ENV{TEST_DEBUG};
 
     # spawn the server
     my ($guard, $pid) = spawn_server(
@@ -314,6 +338,13 @@ sub md5_file {
         or die "failed to open file:$fn:$!";
     local $/;
     return md5_hex(join '', <$fh>);
+}
+
+sub etag_file {
+    my $fn = shift;
+    my @st = stat $fn
+        or die "failed to stat file:$fn:$!";
+    return sprintf("\"%08x-%zx\"", $st[9], $st[7]);
 }
 
 sub prog_exists {
@@ -434,7 +465,7 @@ sub one_shot_http_upstream {
     die "fork failed" unless defined $pid;
     if ($pid != 0) {
         close $listen;
-        my $guard = scope_guard(sub {
+        my $guard = make_guard(sub {
             kill 'KILL', $pid;
             while (waitpid($pid, WNOHANG) != $pid) {}
         });
@@ -464,6 +495,14 @@ sub wait_debugger {
     undef;
 }
 
+sub make_guard {
+    my $code = shift;
+    return Scope::Guard->new(sub {
+        local $?;
+        $code->();
+    });
+}
+
 sub spawn_forked {
     my ($code) = @_;
 
@@ -483,7 +522,7 @@ sub spawn_forked {
                 kill 'KILL', $pid;
                 undef $pid;
             },
-            guard => Scope::Guard->new(sub { $upstream->{kill}->() }),
+            guard => make_guard(sub { $upstream->{kill}->() }),
             stdout => $pin,
             stderr => $pin2,
         };
@@ -613,7 +652,7 @@ package H2ologTracer {
             return $bytes;
         };
 
-        my $guard = Scope::Guard->new(sub {
+        my $guard = t::Util::make_guard(sub {
             if (waitpid($tracer_pid, WNOHANG) == 0) {
                 Test::More::diag "killing h2olog[$tracer_pid] with SIGTERM";
                 kill("TERM", $tracer_pid)
@@ -783,6 +822,71 @@ sub spawn_dns_server {
             $ns->main_loop;
         });
     return $server;
+}
+
+sub run_openssl_client {
+    my($opts) = @_;
+    my $port = $opts->{port} or croak("`port` is required!");
+    my $san = $opts->{san};
+    my $host = $opts->{host} // '127.0.0.1';
+    my $path = $opts->{path} // '/';
+    my $timeout = $opts->{timeout} // 2.0;
+    my $request = $opts->{request};
+    my $request_default = $opts->{request_default} // undef;
+    my $ossl_opts = $opts->{opts} // '';
+    my $ossl_cmd = $opts->{ossl_cmd} // 'openssl';
+    my $split_return = $opts->{split_return} // undef;
+
+    my $cmd = "$ossl_cmd s_client $ossl_opts -connect $host:$port";
+    if (defined $san && $san ne '') {
+        $cmd = $cmd." -servername $san";
+    }
+    diag("run_openssl_client: $cmd");
+
+    my $cpid = open3(my $chld_in, my $chld_out, my $chld_err = gensym, $cmd);
+    sleep $timeout;
+    $chld_in->autoflush(1);
+
+    {
+        local $SIG{PIPE} = 'IGNORE';
+
+        if ($request_default) {
+            print $chld_in <<"EOT";
+GET $path HTTP/1.1\r
+Host: $san:$port\r
+Connection: close\r
+\r
+EOT
+        } elsif (defined $request && $request ne '') {
+            print $chld_in "$request";
+        }
+    }
+
+    while ($timeout > 0.0) {
+        my $cpid_wait = waitpid($cpid, POSIX::WNOHANG);
+        if ($cpid_wait == $cpid || $cpid_wait == -1) {
+            last;
+        }
+
+        sleep 0.1;
+        $timeout -= 0.1
+    }
+
+    close $chld_in;
+    my $resp_out = do { local $/; <$chld_out> };
+    my $resp_err = do { local $/; <$chld_err> };
+    close $chld_out;
+    close $chld_err;
+
+    if ($timeout <= 0.0) {
+        kill 'KILL', $cpid;
+    }
+
+    if ($split_return) {
+        return ($resp_out, $resp_err);
+    }
+
+    return join("\n", ($resp_out, $resp_err));
 }
 
 1;

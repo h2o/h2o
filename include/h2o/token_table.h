@@ -57,8 +57,13 @@
 #define H2O_TOKEN_CONTENT_SECURITY_POLICY (h2o__tokens + 30)
 #define H2O_TOKEN_CONTENT_TYPE (h2o__tokens + 31)
 #define H2O_TOKEN_COOKIE (h2o__tokens + 32)
+<<<<<<< HEAD
 #define H2O_TOKEN_DATE (h2o__tokens + 33)
 #define H2O_TOKEN_DSR (h2o__tokens + 34)
+=======
+#define H2O_TOKEN_DATAGRAM_FLOW_ID (h2o__tokens + 33)
+#define H2O_TOKEN_DATE (h2o__tokens + 34)
+>>>>>>> ef1916a23
 #define H2O_TOKEN_EARLY_DATA (h2o__tokens + 35)
 #define H2O_TOKEN_ETAG (h2o__tokens + 36)
 #define H2O_TOKEN_EXPECT (h2o__tokens + 37)
@@ -147,6 +152,7 @@ int32_t h2o_qpack_lookup_content_range(h2o_iovec_t value, int *is_exact);
 int32_t h2o_qpack_lookup_content_security_policy(h2o_iovec_t value, int *is_exact);
 int32_t h2o_qpack_lookup_content_type(h2o_iovec_t value, int *is_exact);
 int32_t h2o_qpack_lookup_cookie(h2o_iovec_t value, int *is_exact);
+int32_t h2o_qpack_lookup_datagram_flow_id(h2o_iovec_t value, int *is_exact);
 int32_t h2o_qpack_lookup_date(h2o_iovec_t value, int *is_exact);
 int32_t h2o_qpack_lookup_dsr(h2o_iovec_t value, int *is_exact);
 int32_t h2o_qpack_lookup_early_data(h2o_iovec_t value, int *is_exact);

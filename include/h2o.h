@@ -51,7 +51,6 @@ extern "C" {
 #include "h2o/time_.h"
 #include "h2o/token.h"
 #include "h2o/url.h"
-#include "h2o/version.h"
 #include "h2o/balancer.h"
 #include "h2o/http2_common.h"
 #include "h2o/http3_common.h"
@@ -79,6 +78,7 @@ extern "C" {
 
 #define H2O_DEFAULT_MAX_REQUEST_ENTITY_SIZE (1024 * 1024 * 1024)
 #define H2O_DEFAULT_MAX_DELEGATIONS 5
+#define H2O_DEFAULT_MAX_REPROCESSES 5
 #define H2O_DEFAULT_HANDSHAKE_TIMEOUT_IN_SECS 10
 #define H2O_DEFAULT_HANDSHAKE_TIMEOUT (H2O_DEFAULT_HANDSHAKE_TIMEOUT_IN_SECS * 1000)
 #define H2O_DEFAULT_HTTP1_REQ_TIMEOUT_IN_SECS 10
@@ -94,7 +94,8 @@ extern "C" {
 #define H2O_DEFAULT_HTTP3_ACTIVE_STREAM_WINDOW_SIZE H2O_DEFAULT_HTTP2_ACTIVE_STREAM_WINDOW_SIZE
 #define H2O_DEFAULT_PROXY_IO_TIMEOUT_IN_SECS 30
 #define H2O_DEFAULT_PROXY_IO_TIMEOUT (H2O_DEFAULT_PROXY_IO_TIMEOUT_IN_SECS * 1000)
-#define H2O_DEFAULT_PROXY_TUNNEL_TIMEOUT_IN_SECS 300
+#define H2O_DEFAULT_HAPPY_EYEBALLS_NAME_RESOLUTION_DELAY 50
+#define H2O_DEFAULT_HAPPY_EYEBALLS_CONNECTION_ATTEMPT_DELAY 250
 #define H2O_DEFAULT_PROXY_SSL_SESSION_CACHE_CAPACITY 4096
 #define H2O_DEFAULT_PROXY_SSL_SESSION_CACHE_DURATION 86400000 /* 24 hours */
 #define H2O_DEFAULT_PROXY_HTTP2_MAX_CONCURRENT_STREAMS 100
@@ -348,6 +349,10 @@ struct st_h2o_globalconf_t {
      */
     h2o_iovec_t server_name;
     /**
+     * formated "sf-token" or "sf-string" for the proxy-status header
+     */
+    h2o_iovec_t proxy_status_identity;
+    /**
      * maximum size of the accepted request entity (e.g. POST data)
      */
     size_t max_request_entity_size;
@@ -355,6 +360,10 @@ struct st_h2o_globalconf_t {
      * maximum count for delegations
      */
     unsigned max_delegations;
+    /**
+     * maximum count for reprocesses
+     */
+    unsigned max_reprocesses;
     /**
      * setuid user (or NULL)
      */
@@ -441,9 +450,13 @@ struct st_h2o_globalconf_t {
          */
         uint32_t active_stream_window_size;
         /**
+         * See quicly_context_t::ack_frequency
+         */
+        uint16_t ack_frequency;
+        /**
          * a boolean indicating if the delayed ack extension should be used (default true)
          */
-        uint8_t use_delayed_ack : 1;
+        uint8_t allow_delayed_ack : 1;
         /**
          * a boolean indicating if UDP GSO should be used when possible
          */
@@ -613,79 +626,6 @@ typedef struct st_h2o_context_storage_item_t {
 typedef H2O_VECTOR(h2o_context_storage_item_t) h2o_context_storage_t;
 
 /**
- * Holds the counters. It is mere coincident that the members are equivalent with QUICLY_STATS_PREBUILT_FIELDS. The macro below can
- * be used for generating expression that take all the members equally.
- */
-struct st_h2o_quic_aggregated_stats_t {
-    QUICLY_STATS_PREBUILT_FIELDS;
-};
-
-/* clang-format off */
-#define H2O_QUIC_AGGREGATED_STATS_APPLY(func) \
-    func(num_packets.received, "num-packets.received") \
-    func(num_packets.decryption_failed, "num-packets.decryption-failed") \
-    func(num_packets.sent, "num-packets.sent") \
-    func(num_packets.lost, "num-packets.lost") \
-    func(num_packets.lost_time_threshold, "num-packets.lost-time-threshold") \
-    func(num_packets.ack_received, "num-packets.ack-received") \
-    func(num_packets.late_acked, "num-packets.late-acked") \
-    func(num_bytes.received, "num-bytes.received") \
-    func(num_bytes.sent, "num-bytes.sent") \
-    func(num_bytes.lost, "num-bytes.lost") \
-    func(num_bytes.stream_data_sent, "num-bytes.stream-data-sent") \
-    func(num_bytes.stream_data_resent, "num-bytes.stream-data-resent") \
-    func(num_frames_sent.padding, "num-frames-sent.padding") \
-    func(num_frames_sent.ping, "num-frames-sent.ping") \
-    func(num_frames_sent.ack, "num-frames-sent.ack") \
-    func(num_frames_sent.reset_stream, "num-frames-sent.reset_stream") \
-    func(num_frames_sent.stop_sending, "num-frames-sent.stop_sending") \
-    func(num_frames_sent.crypto, "num-frames-sent.crypto") \
-    func(num_frames_sent.new_token, "num-frames-sent.new_token") \
-    func(num_frames_sent.stream, "num-frames-sent.stream") \
-    func(num_frames_sent.max_data, "num-frames-sent.max_data") \
-    func(num_frames_sent.max_stream_data, "num-frames-sent.max_stream_data") \
-    func(num_frames_sent.max_streams_bidi, "num-frames-sent.max_streams_bidi") \
-    func(num_frames_sent.max_streams_uni, "num-frames-sent.max_streams_uni") \
-    func(num_frames_sent.data_blocked, "num-frames-sent.data_blocked") \
-    func(num_frames_sent.stream_data_blocked, "num-frames-sent.stream_data_blocked") \
-    func(num_frames_sent.streams_blocked, "num-frames-sent.streams_blocked") \
-    func(num_frames_sent.new_connection_id, "num-frames-sent.new_connection_id") \
-    func(num_frames_sent.retire_connection_id, "num-frames-sent.retire_connection_id") \
-    func(num_frames_sent.path_challenge, "num-frames-sent.path_challenge") \
-    func(num_frames_sent.path_response, "num-frames-sent.path_response") \
-    func(num_frames_sent.transport_close, "num-frames-sent.transport_close") \
-    func(num_frames_sent.application_close, "num-frames-sent.application_close") \
-    func(num_frames_sent.handshake_done, "num-frames-sent.handshake_done") \
-    func(num_frames_sent.datagram, "num-frames-sent.datagram") \
-    func(num_frames_sent.ack_frequency, "num-frames-sent.ack_frequency") \
-    func(num_frames_received.padding, "num-frames-received.padding") \
-    func(num_frames_received.ping, "num-frames-received.ping") \
-    func(num_frames_received.ack, "num-frames-received.ack") \
-    func(num_frames_received.reset_stream, "num-frames-received.reset_stream") \
-    func(num_frames_received.stop_sending, "num-frames-received.stop_sending") \
-    func(num_frames_received.crypto, "num-frames-received.crypto") \
-    func(num_frames_received.new_token, "num-frames-received.new_token") \
-    func(num_frames_received.stream, "num-frames-received.stream") \
-    func(num_frames_received.max_data, "num-frames-received.max_data") \
-    func(num_frames_received.max_stream_data, "num-frames-received.max_stream_data") \
-    func(num_frames_received.max_streams_bidi, "num-frames-received.max_streams_bidi") \
-    func(num_frames_received.max_streams_uni, "num-frames-received.max_streams_uni") \
-    func(num_frames_received.data_blocked, "num-frames-received.data_blocked") \
-    func(num_frames_received.stream_data_blocked, "num-frames-received.stream_data_blocked") \
-    func(num_frames_received.streams_blocked, "num-frames-received.streams_blocked") \
-    func(num_frames_received.new_connection_id, "num-frames-received.new_connection_id") \
-    func(num_frames_received.retire_connection_id, "num-frames-received.retire_connection_id") \
-    func(num_frames_received.path_challenge, "num-frames-received.path_challenge") \
-    func(num_frames_received.path_response, "num-frames-received.path_response") \
-    func(num_frames_received.transport_close, "num-frames-received.transport_close") \
-    func(num_frames_received.application_close, "num-frames-received.application_close") \
-    func(num_frames_received.handshake_done, "num-frames-received.handshake_done") \
-    func(num_frames_received.datagram, "num-frames-received.datagram") \
-    func(num_frames_received.ack_frequency, "num-frames-received.ack_frequency") \
-    func(num_ptos, "num-ptos")
-/* clang-format on */
-
-/**
  * context of the http server.
  */
 struct st_h2o_context_t {
@@ -819,9 +759,9 @@ struct st_h2o_context_t {
     } ssl;
 
     /**
-     * aggregated quicly stats
+     * aggregated quic stats
      */
-    struct st_h2o_quic_aggregated_stats_t quic;
+    h2o_quic_stats_t quic_stats;
 
     /**
      * pointer to per-module configs
@@ -1142,16 +1082,21 @@ typedef struct st_h2o_filereq_t {
 
 /**
  * Called be the protocol handler to submit chunk of request body to the generator. The callback returns 0 if successful, otherwise
- * a non-zero value. The buffer pointed to by `chunk` can be reused once this callback returns. `chunk` must be non-empty, or
- * `is_end_stream` must be set.
+ * a non-zero value. Once `write_req.cb` is called, subsequent invocations MUST be postponed until the `proceed_req` is called. At
+ * the moment, `write_req_cb` is required to create a copy of data being provided before returning. To avoid copying, we should
+ * consider delegating the responsibility of retaining the buffer to the caller.
  */
-typedef int (*h2o_write_req_cb)(void *ctx, h2o_iovec_t chunk, int is_end_stream);
+typedef int (*h2o_write_req_cb)(void *ctx, int is_end_stream);
 /**
- * In response to `h2o_write_req_cb`, called by the generator to indicate to the protocol handler that new chunk can be submitted.
- * Unless `send_states` indicates an error, `bytes_written` and `send_state` echoes the input values `chunked.len` and
- * `is_end_stream`.
+ * Called by the generator, in response to `h2o_write_req_cb` to indicate to the protocol handler that new chunk can be submitted,
+ * or to notify that an error has occurred. In the latter case, write might not be inflight. Note that `errstr` will be NULL (rather
+ * than an error code indicating EOS) when called in response to `h2o_write_req_cb` with `is_end_stream` set to 1.
  */
-typedef void (*h2o_proceed_req_cb)(h2o_req_t *req, size_t bytes_written, h2o_send_state_t send_state);
+typedef void (*h2o_proceed_req_cb)(h2o_req_t *req, const char *errstr);
+/**
+ *
+ */
+typedef void (*h2o_forward_datagram_cb)(h2o_req_t *req, h2o_iovec_t *datagrams, size_t num_datagrams);
 
 #define H2O_SEND_SERVER_TIMING_BASIC 1
 #define H2O_SEND_SERVER_TIMING_PROXY 2
@@ -1323,12 +1268,6 @@ struct st_h2o_req_t {
     unsigned remaining_delegations;
 
     /**
-     * Optional callback used to establish a tunnel. When a tunnel is being established to upstream, the generator fills the
-     * response headers, then calls this function directly, bypassing the ordinary `h2o_send` chain.
-     */
-    void (*establish_tunnel)(h2o_req_t *req, h2o_tunnel_t *tunnel, uint64_t idle_timeout);
-
-    /**
      * environment variables
      */
     h2o_iovec_vector_t env;
@@ -1371,6 +1310,11 @@ struct st_h2o_req_t {
      * if h2o_process_request has been called
      */
     unsigned char process_called : 1;
+    /**
+     * Indicates if requested to serve something other than HTTP (e.g., websocket, upgrade, CONNECT, ...) using the streaming API.
+     * When the protocol handler returns a successful response, filters are skipped.
+     */
+    unsigned char is_tunnel_req : 1;
 
     /**
      * whether if the response should include server-timing header. Logical OR of H2O_SEND_SERVER_TIMING_*
@@ -1414,6 +1358,13 @@ struct st_h2o_req_t {
      * callback and context for receiving more request body (see h2o_handler_t::supports_request_streaming for details)
      */
     h2o_proceed_req_cb proceed_req;
+
+    /**
+     * Callbacks used for forwarding datagrams. Write-side is assumed to use `write_req.ctx` for retaining the context if necessary.
+     */
+    struct {
+        h2o_forward_datagram_cb write_, read_;
+    } forward_datagram;
 
     /* internal structure */
     h2o_generator_t *_generator;
@@ -1523,6 +1474,11 @@ void h2o_init_request(h2o_req_t *req, h2o_conn_t *conn, h2o_req_t *src);
  * releases resources allocated for handling a request
  */
 void h2o_dispose_request(h2o_req_t *req);
+/**
+ * Checks and returns if pseudo headers meet the constraints. This function should be called by each protocol implementation before
+ * passing the request to `h2o_process_request`.
+ */
+int h2o_req_validate_pseudo_headers(h2o_req_t *req);
 /**
  * called by the connection layer to start processing a request that is ready
  */
@@ -1780,7 +1736,11 @@ enum {
     /**
      * if set, does not flush the registered response headers
      */
-    H2O_SEND_ERROR_KEEP_HEADERS = 0x2
+    H2O_SEND_ERROR_KEEP_HEADERS = 0x2,
+    /**
+     * indicates a broken or incomplete HTTP request, and that some fields of `h2o_req_t` e.g., `input` might be NULL
+     */
+    H2O_SEND_ERROR_BROKEN_REQUEST = 0x04
 };
 
 /**
@@ -2197,13 +2157,19 @@ typedef struct st_h2o_proxy_config_vars_t {
     uint64_t connect_timeout;
     uint64_t first_byte_timeout;
     uint64_t keepalive_timeout;
+    struct {
+        uint64_t name_resolution_delay;
+        uint64_t connection_attempt_delay;
+    } happy_eyeballs;
     unsigned preserve_host : 1;
     unsigned use_proxy_protocol : 1;
     unsigned tunnel_enabled : 1;
+    unsigned connect_proxy_status_enabled : 1;
     h2o_headers_command_t *headers_cmds;
     size_t max_buffer_size;
     struct {
         uint32_t max_concurrent_streams;
+        unsigned force_cleartext : 1;
     } http2;
     h2o_httpclient_protocol_ratio_t protocol_ratio;
 } h2o_proxy_config_vars_t;

@@ -19,7 +19,7 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 # IN THE SOFTWARE.
 
-CMAKE_MINIMUM_REQUIRED(VERSION 2.8.11)
+CMAKE_MINIMUM_REQUIRED(VERSION 2.8.12)
 CMAKE_POLICY(SET CMP0003 NEW)
 
 PROJECT(h2o)
@@ -76,27 +76,6 @@ uint64_t a;
 __sync_add_and_fetch(&a, 1);
 return 0;
 }" ARCH_SUPPORTS_64BIT_ATOMICS)
-
-CMAKE_PUSH_CHECK_STATE()
-SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -pthread")
-CHECK_C_SOURCE_COMPILES("
-#define _GNU_SOURCE
-#include <sched.h>
-#include <pthread.h>
-int main(void) {
-#ifndef __NetBSD__
-cpu_set_t s;
-CPU_ZERO(&s);
-pthread_setaffinity_np(0, sizeof(s), &s);
-#else
-cpuset_t *s = cpuset_create();
-cpuset_zero(s);
-pthread_setaffinity_np(0, cpuset_size(s), s);
-cpuset_destroy(s);
-#endif
-return 0;
-}" HAS_PTHREAD_SETAFFINITY_NP)
-CMAKE_POP_CHECK_STATE()
 
 # Find out if libc provices backtrace()
 CMAKE_PUSH_CHECK_STATE()
@@ -173,6 +152,16 @@ OPTION(WITH_DTRACE "use USDT (userspace Dtrace probes)" ${HAVE_DTRACE})
 IF (WITH_DTRACE)
     MESSAGE(STATUS "Enabling USDT support")
 ENDIF ()
+
+IF ((CMAKE_SIZEOF_VOID_P EQUAL 8) AND
+    (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64") OR
+     (CMAKE_SYSTEM_PROCESSOR STREQUAL "amd64") OR
+     (CMAKE_SYSTEM_PROCESSOR STREQUAL "AMD64"))
+    SET(WITH_FUSION_DEFAULT "ON")
+ELSE ()
+    SET(WITH_FUSION_DEFAULT "OFF")
+ENDIF ()
+OPTION(WITH_FUSION "build with fusion AES-GCM engine" ${WITH_FUSION_DEFAULT})
 
 INCLUDE_DIRECTORIES(
     include
@@ -465,8 +454,6 @@ SET(LIB_SOURCE_FILES
 
     lib/http1.c
 
-    lib/tunnel.c
-
     lib/http2/cache_digests.c
     lib/http2/casper.c
     lib/http2/connection.c
@@ -530,6 +517,7 @@ SET(UNIT_TEST_SOURCE_FILES
     t/00unit/lib/handler/headers.c
     t/00unit/lib/handler/mimemap.c
     t/00unit/lib/handler/redirect.c
+    t/00unit/lib/handler/throttle_resp.c
     t/00unit/lib/http2/cache_digests.c
     t/00unit/lib/http2/casper.c
     t/00unit/lib/http2/hpack.c
@@ -568,6 +556,7 @@ LIST(REMOVE_ITEM UNIT_TEST_SOURCE_FILES
     lib/handler/headers.c
     lib/handler/mimemap.c
     lib/handler/redirect.c
+    lib/handler/throttle_resp.c
     lib/http2/cache_digests.c
     lib/http2/casper.c
     lib/http2/hpack.c
@@ -762,6 +751,11 @@ IF (WITH_MRUBY)
     SET(STANDALONE_COMPILE_FLAGS "${STANDALONE_COMPILE_FLAGS} -DH2O_USE_MRUBY=1")
     SET_PROPERTY(DIRECTORY PROPERTY ADDITIONAL_MAKE_CLEAN_FILES ${CMAKE_CURRENT_BINARY_DIR}/mruby/)
 ENDIF (WITH_MRUBY)
+IF (WITH_FUSION)
+    SET(STANDALONE_COMPILE_FLAGS "${STANDALONE_COMPILE_FLAGS} -DH2O_USE_FUSION=1")
+    LIST(APPEND STANDALONE_SOURCE_FILES deps/picotls/lib/fusion.c)
+    SET_SOURCE_FILES_PROPERTIES(deps/picotls/lib/fusion.c PROPERTIES COMPILE_FLAGS "-mavx2 -maes -mpclmul")
+ENDIF ()
 ADD_EXECUTABLE(h2o ${STANDALONE_SOURCE_FILES})
 SET_TARGET_PROPERTIES(h2o PROPERTIES COMPILE_FLAGS "${STANDALONE_COMPILE_FLAGS}")
 TARGET_INCLUDE_DIRECTORIES(h2o PUBLIC ${OPENSSL_INCLUDE_DIR})
@@ -1077,3 +1071,13 @@ IF ("${VERSION_PRERELEASE}" STREQUAL "-DEV")
         ENDIF (TARGET h2olog)
     ENDIF ()
 ENDIF ()
+
+# injectaddr.so
+IF (CMAKE_SYSTEM_NAME STREQUAL "Linux" OR APPLE)
+    ADD_LIBRARY(injectaddr SHARED t/injectaddr.c)
+    SET_TARGET_PROPERTIES(injectaddr PROPERTIES EXCLUDE_FROM_ALL 1)
+    IF (CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        TARGET_LINK_LIBRARIES(injectaddr dl)
+    ENDIF ()
+    ADD_DEPENDENCIES(checkdepends injectaddr)
+ENDIF()

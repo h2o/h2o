@@ -25,9 +25,13 @@
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
+#include <openssl/opensslv.h>
 #include <openssl/bio.h>
 #include <openssl/pem.h>
 #include <openssl/engine.h>
+#if !defined(LIBRESSL_VERSION_NUMBER) && OPENSSL_VERSION_NUMBER >= 0x30000000L
+#include <openssl/provider.h>
+#endif
 #include "picotls.h"
 #include "picotls/minicrypto.h"
 #include "../deps/picotest/picotest.h"
@@ -65,23 +69,24 @@
 
 #define RSA_CERTIFICATE                                                                                                            \
     "-----BEGIN CERTIFICATE-----\n"                                                                                                \
-    "MIIDKzCCAhOgAwIBAgIBADANBgkqhkiG9w0BAQsFADAaMRgwFgYDVQQDEw9waWNv\n"                                                           \
-    "dGxzIHRlc3QgY2EwHhcNMTgwMjIzMDIzODEyWhcNMjgwMjIxMDIzODEyWjAbMRkw\n"                                                           \
+    "MIIDQjCCAiqgAwIBAgIBBTANBgkqhkiG9w0BAQsFADAaMRgwFgYDVQQDEw9waWNv\n"                                                           \
+    "dGxzIHRlc3QgY2EwHhcNMjExMjEzMDY1MzQwWhcNMzExMjExMDY1MzQwWjAbMRkw\n"                                                           \
     "FwYDVQQDExB0ZXN0LmV4YW1wbGUuY29tMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8A\n"                                                           \
     "MIIBCgKCAQEA5soWzSG7iyawQlHM1yaX2dUAATUkhpbg2WPFOEem7E3zYzc6A/Z+\n"                                                           \
     "bViFlfEgL37cbDUb4pnOAHrrsjGgkyBYh5i9iCTVfCk+H6SOHZJORO1Tq8X9C7Wc\n"                                                           \
     "NcshpSdm2Pa8hmv9hsHbLSeoPNeg8NkTPwMVaMZ2GpdmiyAmhzSZ2H9mzNI7ntPW\n"                                                           \
     "/XCchVf+ax2yt9haZ+mQE2NPYwHDjqCtdGkP5ZXXnYhJSBzSEhxfGckIiKDyOxiN\n"                                                           \
     "kLFLvUdT4ERSFBjauP2cSI0XoOUsiBxJNwHH310AU8jZbveSTcXGYgEuu2MIuDo7\n"                                                           \
-    "Vhkq5+TCqXsIFNbjy0taOoPRvUbPsbqFlQIDAQABo3sweTAJBgNVHRMEAjAAMCwG\n"                                                           \
-    "CWCGSAGG+EIBDQQfFh1PcGVuU1NMIEdlbmVyYXRlZCBDZXJ0aWZpY2F0ZTAdBgNV\n"                                                           \
-    "HQ4EFgQUE1vXDjBT8j2etP4brfHQ9DeKnpgwHwYDVR0jBBgwFoAUv3nKl7JgeCCW\n"                                                           \
-    "qkZXnN+nsiP1JWMwDQYJKoZIhvcNAQELBQADggEBAKwARsxOCiGPXU1xhvs+pq9I\n"                                                           \
-    "63mLi4rfnssOGzGnnAfuEaxggpozf3fOSgfyTaDbACdRPTZEStjQ5HMCcHvY7CH0\n"                                                           \
-    "8EYA+lkmFbuXXL8uHby1JBTzbTGf8pkRUsuF/Ie0SLChoDgt8oF3mY5pyU4HUaAw\n"                                                           \
-    "Zp6HBpIRMdmbwGcwm25bl9MQYTrTX3dBfp3XPzfXbVwjJ7bsiTwAGq+dKwzwOQeM\n"                                                           \
-    "2ZMZt4BQBoevsNopPrqG0S6kGUmJOIax0t13bKwDj21+Hp/O90HTFVCtAaDxRC56\n"                                                           \
-    "k0O8Q62ZxzjGJ7Zw6K3azXlH/BYE+CajxTUF+FKRRkkWL1GrFVUsYd9KLDAVry0=\n"                                                           \
+    "Vhkq5+TCqXsIFNbjy0taOoPRvUbPsbqFlQIDAQABo4GRMIGOMAkGA1UdEwQCMAAw\n"                                                           \
+    "LAYJYIZIAYb4QgENBB8WHU9wZW5TU0wgR2VuZXJhdGVkIENlcnRpZmljYXRlMB0G\n"                                                           \
+    "A1UdDgQWBBQTW9cOMFPyPZ60/hut8dD0N4qemDAfBgNVHSMEGDAWgBS/ecqXsmB4\n"                                                           \
+    "IJaqRlec36eyI/UlYzATBgNVHSUEDDAKBggrBgEFBQcDATANBgkqhkiG9w0BAQsF\n"                                                           \
+    "AAOCAQEAYTglgIYqxhbmErQar8yFmRRJp93Zul+PnCuq1nkGPokJoytszoQtGBfw\n"                                                           \
+    "ftgcMyTH3TOR22XThQafi/qWj3gz//oicZ09AuDfk/GMweWPjPGSs2lNUCbC9FqW\n"                                                           \
+    "75JpYWsKqk8s0GwetZ710rX/65wJQAb4EcibMdWq98C/HUwQspXiXBXkEMDbMF5Q\n"                                                           \
+    "s41vyeASk03jff+ofvTZl33sPurltO2oyRtDfUKWFAMBS7Bk/h/d3ZIwmv7DjXVw\n"                                                           \
+    "ZKjxMZbXSmlgdngzBCBYZb5p+VkGXHqVjd07KhZd4nn5sqLy2i1COWB4OCb0xUHr\n"                                                           \
+    "QxHvmJiqQ57FTFDypV0sKZRLuY9ovQ==\n"                                                                                           \
     "-----END CERTIFICATE-----\n"
 
 static void test_bf(void)
@@ -297,6 +302,12 @@ int main(int argc, char **argv)
     ENGINE_load_builtin_engines();
     ENGINE_register_all_ciphers();
     ENGINE_register_all_digests();
+#endif
+
+#if !defined(LIBRESSL_VERSION_NUMBER) && OPENSSL_VERSION_NUMBER >= 0x30000000L
+    /* Explicitly load the legacy provider in addition to default, as we test Blowfish in one of the tests. */
+    OSSL_PROVIDER *legacy = OSSL_PROVIDER_load(NULL, "legacy");
+    OSSL_PROVIDER *dflt = OSSL_PROVIDER_load(NULL, "default");
 #endif
 
     subtest("bf", test_bf);

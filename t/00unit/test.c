@@ -175,6 +175,7 @@ int main(int argc, char **argv)
         subtest("lib/handler/connect.c", test_lib__handler__connect_c);
         subtest("lib/handler/headers.c", test_lib__handler__headers_c);
         subtest("lib/handler/mimemap.c", test_lib__handler__mimemap_c);
+        subtest("lib/handler/throttle_resp.c", test_lib__handler__throttle_resp_c);
         subtest("lib/http2/hpack.c", test_lib__http2__hpack);
         subtest("lib/http2/scheduler.c", test_lib__http2__scheduler);
         subtest("lib/http2/casper.c", test_lib__http2__casper);
