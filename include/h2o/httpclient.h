@@ -33,9 +33,10 @@ extern "C" {
 #include "h2o/send_state.h"
 #include "h2o/socket.h"
 #include "h2o/socketpool.h"
-#include "h2o/tunnel.h"
 
 typedef struct st_h2o_httpclient_t h2o_httpclient_t;
+
+typedef void (*h2o_httpclient_forward_datagram_cb)(h2o_httpclient_t *client, h2o_iovec_t *datagrams, size_t num_datagrams);
 
 /**
  * Additional properties related to the HTTP request being issued.
@@ -69,10 +70,12 @@ typedef struct st_h2o_httpclient_on_head_t {
     h2o_header_t *headers;
     size_t num_headers;
     int header_requires_dup;
-    h2o_tunnel_t *tunnel;
+    struct {
+        h2o_httpclient_forward_datagram_cb write_, *read_;
+    } forward_datagram;
 } h2o_httpclient_on_head_t;
 
-typedef void (*h2o_httpclient_proceed_req_cb)(h2o_httpclient_t *client, size_t written, h2o_send_state_t send_state);
+typedef void (*h2o_httpclient_proceed_req_cb)(h2o_httpclient_t *client, const char *errstr);
 typedef int (*h2o_httpclient_body_cb)(h2o_httpclient_t *client, const char *errstr);
 typedef h2o_httpclient_body_cb (*h2o_httpclient_head_cb)(h2o_httpclient_t *client, const char *errstr,
                                                          h2o_httpclient_on_head_t *args);
@@ -268,8 +271,8 @@ struct st_h2o_httpclient_t {
      */
     void (*update_window)(h2o_httpclient_t *client);
     /**
-     * function for writing request body. `proceed_req_cb` supplied through the `on_connect` callback will be called when the
-     * given data is sent to the server.
+     * Function for writing request body. `proceed_req_cb` supplied through the `on_connect` callback will be called when the
+     * given data is sent to the server. Regarding the usage, refer to the doc-comment of `h2o_write_req_cb`.
      */
     int (*write_req)(h2o_httpclient_t *client, h2o_iovec_t chunk, int is_end_stream);
 
@@ -382,6 +385,7 @@ void h2o_httpclient_set_conn_properties_of_socket(h2o_socket_t *sock, h2o_httpcl
 
 void h2o_httpclient_http3_notify_connection_update(h2o_quic_ctx_t *ctx, h2o_quic_conn_t *conn);
 extern quicly_stream_open_t h2o_httpclient_http3_on_stream_open;
+extern quicly_receive_datagram_frame_t h2o_httpclient_http3_on_receive_datagram_frame;
 void h2o_httpclient__connect_h3(h2o_httpclient_t **client, h2o_mem_pool_t *pool, void *data, h2o_httpclient_ctx_t *ctx,
                                 h2o_httpclient_connection_pool_t *connpool, h2o_url_t *target, const char *upgrade_to,
                                 h2o_httpclient_connect_cb cb);

@@ -60,6 +60,11 @@ extern "C" {
 #define H2O_USE_NPN 0
 #endif
 
+/**
+ * Maximum amount of TLS records to generate at once. Default is 4 full-sized TLS records using 32-byte tag.
+ */
+#define H2O_SOCKET_DEFAULT_SSL_BUFFER_SIZE ((5 + 16384 + 32) * 4)
+
 typedef struct st_h2o_sliding_counter_t {
     uint64_t average;
     struct {
@@ -133,10 +138,18 @@ struct st_h2o_socket_t {
     struct st_h2o_socket_addr_t *_peername;
     struct st_h2o_socket_addr_t *_sockname;
     struct {
+        size_t cnt;
+        h2o_iovec_t *bufs;
+        union {
+            h2o_iovec_t *alloced_ptr;
+            h2o_iovec_t smallbufs[4];
+        };
+    } _write_buf;
+    struct {
         uint8_t state; /* one of H2O_SOCKET_LATENCY_STATE_* */
         uint8_t notsent_is_minimized : 1;
         size_t suggested_tls_payload_size; /* suggested TLS record payload size, or SIZE_MAX when no need to restrict */
-        size_t suggested_write_size; /* SIZE_MAX if no need to optimize for latency */
+        size_t suggested_write_size;       /* SIZE_MAX if no need to optimize for latency */
     } _latency_optimization;
 };
 
@@ -171,10 +184,18 @@ typedef void (*h2o_socket_ssl_resumption_remove_cb)(h2o_iovec_t session_id);
 extern h2o_buffer_mmap_settings_t h2o_socket_buffer_mmap_settings;
 extern h2o_buffer_prototype_t h2o_socket_buffer_prototype;
 
+extern size_t h2o_socket_ssl_buffer_size;
+extern __thread h2o_mem_recycle_t h2o_socket_ssl_buffer_allocator;
+
 extern const char h2o_socket_error_out_of_memory[];
 extern const char h2o_socket_error_io[];
 extern const char h2o_socket_error_closed[];
 extern const char h2o_socket_error_conn_fail[];
+extern const char h2o_socket_error_conn_refused[];
+extern const char h2o_socket_error_conn_timed_out[];
+extern const char h2o_socket_error_network_unreachable[];
+extern const char h2o_socket_error_host_unreachable[];
+extern const char h2o_socket_error_socket_fail[];
 extern const char h2o_socket_error_ssl_no_cert[];
 extern const char h2o_socket_error_ssl_cert_invalid[];
 extern const char h2o_socket_error_ssl_cert_name_mismatch[];
@@ -202,7 +223,7 @@ void h2o_socket_dispose_export(h2o_socket_export_t *info);
  */
 void h2o_socket_close(h2o_socket_t *sock);
 /**
- * Schedules a callback to be notify we the socket can be written to
+ * Schedules a callback that would be invoked when the socket becomes immediately writable
  */
 void h2o_socket_notify_write(h2o_socket_t *sock, h2o_socket_cb cb);
 /**
@@ -218,7 +239,7 @@ void h2o_socket_dont_read(h2o_socket_t *sock, int dont_read);
 /**
  * connects to peer
  */
-h2o_socket_t *h2o_socket_connect(h2o_loop_t *loop, struct sockaddr *addr, socklen_t addrlen, h2o_socket_cb cb);
+h2o_socket_t *h2o_socket_connect(h2o_loop_t *loop, struct sockaddr *addr, socklen_t addrlen, h2o_socket_cb cb, const char **err);
 /**
  * prepares for latency-optimized write and returns the number of octets that should be written, or SIZE_MAX if failed to prepare
  */
@@ -305,6 +326,10 @@ size_t h2o_socket_getnumerichost(const struct sockaddr *sa, socklen_t salen, cha
  * returns the port number, or -1 if failed
  */
 int32_t h2o_socket_getport(const struct sockaddr *sa);
+/**
+ * converts given error number to string representation if known, otherwise returns `default_err`
+ */
+const char *h2o_socket_get_error_string(int errnum, const char *default_err);
 /**
  * performs SSL handshake on a socket
  * @param sock the socket

@@ -28,6 +28,8 @@
 #define DEFAULT_MAX_CRYPTO_BYTES 65536
 #define DEFAULT_INITCWND_PACKETS 10
 #define DEFAULT_PRE_VALIDATION_AMPLIFICATION_LIMIT 3
+#define DEFAULT_HANDSHAKE_TIMEOUT_RTT_MULTIPLIER 400
+#define DEFAULT_MAX_INITIAL_HANDSHAKE_PACKETS 1000
 
 /* profile that employs IETF specified values */
 const quicly_context_t quicly_spec_context = {NULL,                                                 /* tls */
@@ -44,6 +46,9 @@ const quicly_context_t quicly_spec_context = {NULL,                             
                                               DEFAULT_INITCWND_PACKETS,
                                               QUICLY_PROTOCOL_VERSION_1,
                                               DEFAULT_PRE_VALIDATION_AMPLIFICATION_LIMIT,
+                                              0, /* ack_frequency */
+                                              DEFAULT_HANDSHAKE_TIMEOUT_RTT_MULTIPLIER,
+                                              DEFAULT_MAX_INITIAL_HANDSHAKE_PACKETS,
                                               0, /* enlarge_client_hello */
                                               NULL,
                                               NULL, /* on_stream_open */
@@ -71,6 +76,9 @@ const quicly_context_t quicly_performant_context = {NULL,                       
                                                     DEFAULT_INITCWND_PACKETS,
                                                     QUICLY_PROTOCOL_VERSION_1,
                                                     DEFAULT_PRE_VALIDATION_AMPLIFICATION_LIMIT,
+                                                    0, /* ack_frequency */
+                                                    DEFAULT_HANDSHAKE_TIMEOUT_RTT_MULTIPLIER,
+                                                    DEFAULT_MAX_INITIAL_HANDSHAKE_PACKETS,
                                                     0, /* enlarge_client_hello */
                                                     NULL,
                                                     NULL, /* on_stream_open */
@@ -395,13 +403,6 @@ static int default_setup_cipher(quicly_crypto_engine_t *engine, quicly_conn_t *c
     if ((*aead_ctx = ptls_aead_new(aead, hash, is_enc, secret, QUICLY_AEAD_BASE_LABEL)) == NULL) {
         ret = PTLS_ERROR_NO_MEMORY;
         goto Exit;
-    }
-    if (QUICLY_DEBUG) {
-        char *secret_hex = quicly_hexdump(secret, hash->digest_size, SIZE_MAX),
-             *hpkey_hex = quicly_hexdump(hpkey, aead->ctr_cipher->key_size, SIZE_MAX);
-        fprintf(stderr, "%s:\n  aead-secret: %s\n  hp-key: %s\n", __FUNCTION__, secret_hex, hpkey_hex);
-        free(secret_hex);
-        free(hpkey_hex);
     }
 
     ret = 0;

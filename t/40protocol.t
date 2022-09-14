@@ -51,6 +51,14 @@ subtest 'nghttp' => sub {
             unless openssl_can_negotiate();
         $doit->('https', $tls_port);
     };
+    subtest 'dtsu' => sub {
+        plan skip_all => 'OpenSSL does not support protocol negotiation; it is too old'
+            unless openssl_can_negotiate();
+        for my $table_size (0, 1024) {
+            my $content = `nghttp --header-table-size=$table_size https://127.0.0.1:$tls_port/index.txt`;
+            is $content, "hello\n";
+        }
+    };
 };
 
 subtest 'ab' => sub {

@@ -25,12 +25,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/types.h>
 #include <netinet/udp.h>
 #include "h2o.h"
 #include "h2o/configurator.h"
 #include "h2o/http1.h"
 #include "h2o/http2.h"
 #include "h2o/http3_server.h"
+#include "h2o/version.h"
 
 static h2o_hostconf_t *create_hostconf(h2o_globalconf_t *globalconf)
 {
@@ -177,6 +179,7 @@ void h2o_config_init(h2o_globalconf_t *config)
     config->server_name = h2o_iovec_init(H2O_STRLIT("h2o/" H2O_VERSION));
     config->max_request_entity_size = H2O_DEFAULT_MAX_REQUEST_ENTITY_SIZE;
     config->max_delegations = H2O_DEFAULT_MAX_DELEGATIONS;
+    config->max_reprocesses = H2O_DEFAULT_MAX_REPROCESSES;
     config->handshake_timeout = H2O_DEFAULT_HANDSHAKE_TIMEOUT;
     config->http1.req_timeout = H2O_DEFAULT_HTTP1_REQ_TIMEOUT;
     config->http1.req_io_timeout = H2O_DEFAULT_HTTP1_REQ_IO_TIMEOUT;
@@ -200,7 +203,7 @@ void h2o_config_init(h2o_globalconf_t *config)
     config->http2.callbacks = H2O_HTTP2_CALLBACKS;
     config->http3.idle_timeout = quicly_spec_context.transport_params.max_idle_timeout;
     config->http3.active_stream_window_size = H2O_DEFAULT_HTTP3_ACTIVE_STREAM_WINDOW_SIZE;
-    config->http3.use_delayed_ack = 1;
+    config->http3.allow_delayed_ack = 1;
     config->http3.use_gso = 1;
     config->http3.callbacks = H2O_HTTP3_SERVER_CALLBACKS;
     config->send_informational_mode = H2O_SEND_INFORMATIONAL_MODE_EXCEPT_H1;

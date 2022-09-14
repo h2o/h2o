@@ -46,10 +46,6 @@ extern "C" {
 #include "quicly/cid.h"
 #include "quicly/remote_cid.h"
 
-#ifndef QUICLY_DEBUG
-#define QUICLY_DEBUG 0
-#endif
-
 /* invariants! */
 #define QUICLY_LONG_HEADER_BIT 0x80
 #define QUICLY_QUIC_BIT 0x40
@@ -277,8 +273,8 @@ struct st_quicly_context_t {
     ptls_context_t *tls;
     /**
      * Maximum size of packets that we are willing to send when path-specific information is unavailable. As a path-specific
-     * * optimization, quicly acting as a server expands this value to `min(local.tp.max_udp_payload_size,
-     * * remote.tp.max_udp_payload_size, max_size_of_incoming_datagrams)` when it receives the Transport Parameters from the client.
+     * optimization, quicly acting as a server expands this value to `min(local.tp.max_udp_payload_size,
+     * remote.tp.max_udp_payload_size, max_size_of_incoming_datagrams)` when it receives the Transport Parameters from the client.
      */
     uint16_t initial_egress_max_udp_payload_size;
     /**
@@ -310,6 +306,21 @@ struct st_quicly_context_t {
      * (server-only) amplification limit before the peer address is validated
      */
     uint16_t pre_validation_amplification_limit;
+    /**
+     * How frequent the endpoint should induce ACKs from the peer, relative to RTT (or CWND) multiplied by 1024. As an example, 128
+     * will request the peer to send one ACK every 1/8 RTT (or CWND). 0 disables the use of the delayed-ack extension.
+     */
+    uint16_t ack_frequency;
+    /**
+     * If the handshake does not complete within this value * RTT, close connection.
+     * When RTT is not observed, timeout is calculated relative to initial RTT (333ms by default).
+     */
+    uint32_t handshake_timeout_rtt_multiplier;
+    /**
+     * if the number of Initial/Handshake packets sent during the handshake phase exceeds this limit, treat it as an error and close
+     * the connection.
+     */
+    uint64_t max_initial_handshake_packets;
     /**
      * expand client hello so that it does not fit into one datagram
      */
@@ -393,10 +404,10 @@ struct st_quicly_conn_streamgroup_state_t {
 };
 
 /**
- * Values that do not need to be gathered upon the invocation of `quicly_get_stats`. We use typedef to define the same fields in
- * the same order for quicly_stats_t and `struct st_quicly_conn_public_t::stats`.
+ * Aggregatable counters that do not need to be gathered upon the invocation of `quicly_get_stats`. We use typedef to define the
+ * same fields in the same order for quicly_stats_t and `struct st_quicly_conn_public_t::stats`.
  */
-#define QUICLY_STATS_PREBUILT_FIELDS                                                                                               \
+#define QUICLY_STATS_PREBUILT_COUNTERS                                                                                             \
     struct {                                                                                                                       \
         /**                                                                                                                        \
          * Total number of packets received.                                                                                       \
@@ -426,6 +437,10 @@ struct st_quicly_conn_streamgroup_state_t {
          * Total number of packets for which acknowledgements were received after being marked lost.                               \
          */                                                                                                                        \
         uint64_t late_acked;                                                                                                       \
+        /**                                                                                                                        \
+         * Total number of Initial and Handshake packets sent.                                                                     \
+         */                                                                                                                        \
+        uint64_t initial_handshake_sent;                                                                                           \
     } num_packets;                                                                                                                 \
     struct {                                                                                                                       \
         /**                                                                                                                        \
@@ -465,17 +480,29 @@ struct st_quicly_conn_streamgroup_state_t {
     /**                                                                                                                            \
      * Total number of PTOs observed during the connection.                                                                        \
      */                                                                                                                            \
-    uint64_t num_ptos
+    uint64_t num_ptos;                                                                                                             \
+    /**                                                                                                                            \
+     * number of timeouts occurred during handshake due to no progress being made (see `handshake_timeout_rtt_multiplier`)         \
+     */                                                                                                                            \
+    uint64_t num_handshake_timeouts;                                                                                               \
+    /**                                                                                                                            \
+     * Total number of events where `initial_handshake_sent` exceeds limit.                                                        \
+     */                                                                                                                            \
+    uint64_t num_initial_handshake_exceeded
 
 typedef struct st_quicly_stats_t {
     /**
      * The pre-built fields. This MUST be the first member of `quicly_stats_t` so that we can use `memcpy`.
      */
-    QUICLY_STATS_PREBUILT_FIELDS;
+    QUICLY_STATS_PREBUILT_COUNTERS;
     /**
      * RTT stats.
      */
     quicly_rtt_t rtt;
+    /**
+     * Loss thresholds.
+     */
+    quicly_loss_thresholds_t loss_thresholds;
     /**
      * Congestion control stats (experimental; TODO cherry-pick what can be exposed as part of a stable API).
      */
@@ -484,6 +511,14 @@ typedef struct st_quicly_stats_t {
      * Estimated delivery rate, in bytes/second.
      */
     quicly_rate_t delivery_rate;
+    /**
+     * largest number of packets contained in the sentmap
+     */
+    size_t num_sentmap_packets_largest;
+    /**
+     * Time took until handshake is confirmed. UINT64_MAX if handshake is not confirmed yet.
+     */
+    uint64_t handshake_confirmed_msec;
 } quicly_stats_t;
 
 /**
@@ -552,7 +587,11 @@ struct _st_quicly_conn_public_t {
     quicly_cid_t original_dcid;
     struct st_quicly_default_scheduler_state_t _default_scheduler;
     struct {
-        QUICLY_STATS_PREBUILT_FIELDS;
+        QUICLY_STATS_PREBUILT_COUNTERS;
+        /**
+         * Time took until handshake is confirmed. UINT64_MAX if handshake is not confirmed yet.
+         */
+        uint64_t handshake_confirmed_msec;
     } stats;
     uint32_t version;
     void *data;
@@ -1052,7 +1091,7 @@ int quicly_encode_transport_parameter_list(ptls_buffer_t *buf, const quicly_tran
  */
 int quicly_decode_transport_parameter_list(quicly_transport_parameters_t *params, quicly_cid_t *original_dcid,
                                            quicly_cid_t *initial_scid, quicly_cid_t *retry_scid, void *stateless_reset_token,
-                                           const uint8_t *src, const uint8_t *end, int recognize_delayed_ack);
+                                           const uint8_t *src, const uint8_t *end);
 /**
  * Initiates a new connection.
  * @param new_cid the CID to be used for the connection. path_id is ignored.

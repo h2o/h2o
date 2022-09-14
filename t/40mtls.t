@@ -3,6 +3,7 @@ use warnings;
 use File::Temp qw(tempdir);
 use Net::EmptyPort qw(empty_port);
 use Test::More;
+use Time::HiRes qw(sleep);
 use t::Util;
 
 my $tls_port = empty_port();

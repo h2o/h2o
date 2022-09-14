@@ -115,6 +115,8 @@ static void on_dsr_read(h2o_socket_t *sock, const char *err)
 
         case H2O_DSR_DECODED_INSTRUCTION_SEND_PACKET:
             /* validate */
+            if (sender->encryptor.aead_ctx == NULL)
+                goto Close;
             if (inst.data.send_packet.prefix.len + inst.data.send_packet.body_len + sender->encryptor.aead_ctx->algo->tag_size >
                 datagram_buf + sizeof(datagram_buf) - datagram_pt)
                 goto Close;

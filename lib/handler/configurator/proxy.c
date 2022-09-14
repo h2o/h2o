@@ -77,6 +77,20 @@ static int on_config_timeout_keepalive(h2o_configurator_command_t *cmd, h2o_conf
     return h2o_configurator_scanf(cmd, node, "%" SCNu64, &self->vars->conf.keepalive_timeout);
 }
 
+static int on_config_happy_eyeballs_name_resolution_delay(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx,
+                                                          yoml_t *node)
+{
+    struct proxy_configurator_t *self = (void *)cmd->configurator;
+    return h2o_configurator_scanf(cmd, node, "%" SCNu64, &self->vars->conf.happy_eyeballs.name_resolution_delay);
+}
+
+static int on_config_happy_eyeballs_connection_attempt_delay(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx,
+                                                             yoml_t *node)
+{
+    struct proxy_configurator_t *self = (void *)cmd->configurator;
+    return h2o_configurator_scanf(cmd, node, "%" SCNu64, &self->vars->conf.happy_eyeballs.connection_attempt_delay);
+}
+
 static int on_config_preserve_host(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct proxy_configurator_t *self = (void *)cmd->configurator;
@@ -94,6 +108,42 @@ static int on_config_proxy_protocol(h2o_configurator_command_t *cmd, h2o_configu
     if (ret == -1)
         return -1;
     self->vars->conf.use_proxy_protocol = (int)ret;
+    return 0;
+}
+
+static int on_config_connect_proxy_status(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    struct proxy_configurator_t *self = (void *)cmd->configurator;
+    ssize_t ret = h2o_configurator_get_one_of(cmd, node, "OFF,ON");
+    if (ret == -1)
+        return -1;
+    self->vars->conf.connect_proxy_status_enabled = (int)ret;
+    return 0;
+}
+
+static int on_config_proxy_status_identity(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    /* https://tools.ietf.org/html/rfc8941#section-3.3.4 */
+    static const char *tfirst = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz*";
+    static const char *tchars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz!#$%&'*+-.^_`|~:/";
+
+    const char *s = node->data.scalar;
+    size_t slen = strlen(s);
+    for (size_t i = 0; i < slen; ++i) {
+        unsigned char b = s[i];
+        if (b < 0x20 || b > 0x7E) {
+            h2o_configurator_errprintf(cmd, node, "proxy-status.identity must only consist of printable ASCII characters");
+            return -1;
+        }
+    }
+    if (s[0] != '\0' && strchr(tfirst, s[0]) != NULL && strspn(s, tchars) == slen) {
+        /* sf-token */
+        ctx->globalconf->proxy_status_identity = h2o_strdup(NULL, s, slen);
+    } else {
+        /* sf-string */
+        ctx->globalconf->proxy_status_identity = h2o_encode_sf_string(NULL, s, slen);
+    }
+
     return 0;
 }
 
@@ -365,6 +415,11 @@ static int on_config_reverse_url(h2o_configurator_command_t *cmd, h2o_configurat
         h2o_configurator_errprintf(cmd, node, "sum of http2.ratio and http3.ratio cannot be greater than 100");
         return -1;
     }
+    if (self->vars->conf.http2.force_cleartext && self->vars->conf.protocol_ratio.http2 != 100) {
+        h2o_configurator_errprintf(
+            cmd, node, "when `proxy.http2.force-cleartext` is `ON`, `proxy.http2.ratio` must be set to `100` (percent)");
+        return -1;
+    }
 
     if (self->vars->conf.headers_cmds != NULL)
         h2o_mem_addref_shared(self->vars->conf.headers_cmds);
@@ -447,6 +502,16 @@ static int on_config_http2_max_concurrent_streams(h2o_configurator_command_t *cm
 {
     struct proxy_configurator_t *self = (void *)cmd->configurator;
     return h2o_configurator_scanf(cmd, node, "%u", &self->vars->conf.http2.max_concurrent_streams);
+}
+
+static int on_config_http2_force_cleartext(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    struct proxy_configurator_t *self = (void *)cmd->configurator;
+    ssize_t ret = h2o_configurator_get_one_of(cmd, node, "OFF,ON");
+    if (ret < 0)
+        return -1;
+    self->vars->conf.http2.force_cleartext = (unsigned)ret;
+    return 0;
 }
 
 static int on_config_http2_ratio(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
@@ -552,14 +617,21 @@ void h2o_proxy_register_configurator(h2o_globalconf_t *conf)
 
     /* set default vars */
     c->vars = c->_vars_stack;
-    c->vars->conf.io_timeout = H2O_DEFAULT_PROXY_IO_TIMEOUT;
-    c->vars->conf.connect_timeout = H2O_DEFAULT_PROXY_IO_TIMEOUT;
-    c->vars->conf.first_byte_timeout = H2O_DEFAULT_PROXY_IO_TIMEOUT;
-    c->vars->conf.tunnel_enabled = 0; /* experimental support for tunneling (e.g., CONNECT, websocket) is disabled by default */
-    c->vars->conf.max_buffer_size = SIZE_MAX;
-    c->vars->conf.http2.max_concurrent_streams = H2O_DEFAULT_PROXY_HTTP2_MAX_CONCURRENT_STREAMS;
-    c->vars->conf.protocol_ratio.http2 = -1;
-    c->vars->conf.keepalive_timeout = h2o_socketpool_get_timeout(&conf->proxy.global_socketpool);
+    c->vars->conf = (h2o_proxy_config_vars_t){
+        .io_timeout = H2O_DEFAULT_PROXY_IO_TIMEOUT,
+        .connect_timeout = H2O_DEFAULT_PROXY_IO_TIMEOUT,
+        .first_byte_timeout = H2O_DEFAULT_PROXY_IO_TIMEOUT,
+        .happy_eyeballs =
+            {
+                .name_resolution_delay = H2O_DEFAULT_HAPPY_EYEBALLS_NAME_RESOLUTION_DELAY,
+                .connection_attempt_delay = H2O_DEFAULT_HAPPY_EYEBALLS_CONNECTION_ATTEMPT_DELAY,
+            },
+        .tunnel_enabled = 0, /* experimental support for tunneling (e.g., CONNECT, websocket) is disabled by default */
+        .max_buffer_size = SIZE_MAX,
+        .http2.max_concurrent_streams = H2O_DEFAULT_PROXY_HTTP2_MAX_CONCURRENT_STREAMS,
+        .protocol_ratio.http2 = -1,
+        .keepalive_timeout = h2o_socketpool_get_timeout(&conf->proxy.global_socketpool),
+    };
 
     /* setup handlers */
     c->super.enter = on_config_enter;
@@ -573,6 +645,12 @@ void h2o_proxy_register_configurator(h2o_globalconf_t *conf)
                                     H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SEQUENCE |
                                         H2O_CONFIGURATOR_FLAG_DEFERRED,
                                     on_config_connect_proxy);
+    h2o_configurator_define_command(&c->super, "proxy.connect.proxy-status",
+                                    H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                    on_config_connect_proxy_status);
+    h2o_configurator_define_command(&c->super, "proxy-status.identity",
+                                    H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                    on_config_proxy_status_identity);
     h2o_configurator_define_command(&c->super, "proxy.preserve-host",
                                     H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                     on_config_preserve_host);
@@ -590,6 +668,12 @@ void h2o_proxy_register_configurator(h2o_globalconf_t *conf)
     h2o_configurator_define_command(&c->super, "proxy.timeout.keepalive",
                                     H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                     on_config_timeout_keepalive);
+    h2o_configurator_define_command(&c->super, "proxy.happy-eyeballs.name-resolution-delay",
+                                    H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                    on_config_happy_eyeballs_name_resolution_delay);
+    h2o_configurator_define_command(&c->super, "proxy.happy-eyeballs.connection-attempt-delay",
+                                    H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                    on_config_happy_eyeballs_connection_attempt_delay);
     h2o_configurator_define_command(&c->super, "proxy.tunnel",
                                     H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR, on_config_tunnel);
     h2o_configurator_define_command(&c->super, "proxy.ssl.verify-peer",
@@ -617,6 +701,9 @@ void h2o_proxy_register_configurator(h2o_globalconf_t *conf)
     h2o_configurator_define_command(&c->super, "proxy.http2.max-concurrent_streams",
                                     H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                     on_config_http2_max_concurrent_streams);
+    h2o_configurator_define_command(&c->super, "proxy.http2.force-cleartext",
+                                    H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                    on_config_http2_force_cleartext);
     h2o_configurator_define_command(&c->super, "proxy.http2.ratio",
                                     H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR, on_config_http2_ratio);
     h2o_configurator_define_command(&c->super, "proxy.http3.ratio",

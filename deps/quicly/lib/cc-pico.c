@@ -19,27 +19,44 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
+#include <math.h>
 #include "quicly/cc.h"
 #include "quicly.h"
 
 /**
- * Speed at which the multiplicative increase grows from BETA to 1. Unit is Hz.
+ * Calculates the increase ratio to be used in congestion avoidance phase.
  */
-#define QUICLY_PICO_MULT_HZ 1.0
-
-static uint32_t calc_bytes_per_mtu_increase(uint32_t cwnd, uint32_t ssthresh, uint32_t rtt, uint32_t mtu)
+static uint32_t calc_bytes_per_mtu_increase(uint32_t cwnd, uint32_t rtt, uint32_t mtu)
 {
-    /* Increase per byte acked is the sum of 1mtu/cwnd (additive part) and ... */
-    double increase_per_byte = (double)mtu / cwnd;
-    /* ... multiplicative part being 1 during slow start, and the RTT-compensated rate for recovery within ~1/QUICLY_PICO_MULT_HZ
-     * seconds congestion avoidance. */
-    if (cwnd < ssthresh) {
-        increase_per_byte += 1;
-    } else {
-        increase_per_byte += (1 / QUICLY_RENO_BETA - 1) * QUICLY_PICO_MULT_HZ / 1000 * rtt;
-    }
+    /* Reno: CWND size after reduction */
+    uint32_t reno = cwnd * QUICLY_RENO_BETA;
 
-    return (uint32_t)(mtu / increase_per_byte);
+    /* Cubic: Cubic reaches original CWND (i.e., Wmax) in K seconds, therefore:
+     *   amount_to_increase = 0.3 * Wmax
+     *   amount_to_be_acked = K * Wmax / RTT_at_Wmax
+     * where
+     *   K = (0.3 / 0.4 * Wmax / MTU)^(1/3)
+     *
+     * Hence:
+     *   bytes_per_mtu_increase = amount_to_be_acked / amount_to_increase * MTU
+     *     = (K * Wmax / RTT_at_Wmax) / (0.3 * Wmax) * MTU
+     *     = K * MTU / (0.3 * RTT_at_Wmax)
+     *
+     * In addition, we have to adjust the value to take fast convergence into account. On a path with stable capacity, 50% of
+     * congestion events adjust Wmax to 0.85x of before calculating K. If that happens, the modified K (K') is:
+     *
+     *   K' = (0.3 / 0.4 * 0.85 * Wmax / MTU)^(1/3) = 0.85^(1/3) * K
+     *
+     * where K' represents the time to reach 0.85 * Wmax. As the cubic curve is point symmetric at the point where this curve
+     * reaches 0.85 * Wmax, it would take 2 * K' seconds to reach Wmax.
+     *
+     * Therefore, by amortizing the two modes, the congestion period of Cubic with fast convergence is calculated as:
+     *
+     *   bytes_per_mtu_increase = ((1 + 0.85^(1/3) * 2) / 2) * K * MTU / (0.3 * RTT_at_Wmax)
+     */
+    uint32_t cubic = 1.447 / 0.3 * 1000 * cbrt(0.3 / 0.4 * cwnd / mtu) / rtt * mtu;
+
+    return reno < cubic ? reno : cubic;
 }
 
 /* TODO: Avoid increase if sender was application limited. */
@@ -55,7 +72,12 @@ static void pico_on_acked(quicly_cc_t *cc, const quicly_loss_t *loss, uint32_t b
     cc->state.pico.stash += bytes;
 
     /* Calculate the amount of bytes required to be acked for incrementing CWND by one MTU. */
-    uint32_t bytes_per_mtu_increase = calc_bytes_per_mtu_increase(cc->cwnd, cc->ssthresh, loss->rtt.smoothed, max_udp_payload_size);
+    uint32_t bytes_per_mtu_increase;
+    if (cc->cwnd < cc->ssthresh) {
+        bytes_per_mtu_increase = max_udp_payload_size;
+    } else {
+        bytes_per_mtu_increase = cc->state.pico.bytes_per_mtu_increase;
+    }
 
     /* Bail out if we do not yet have enough bytes being acked. */
     if (cc->state.pico.stash < bytes_per_mtu_increase)
@@ -82,6 +104,9 @@ static void pico_on_lost(quicly_cc_t *cc, const quicly_loss_t *loss, uint32_t by
     if (cc->cwnd_exiting_slow_start == 0)
         cc->cwnd_exiting_slow_start = cc->cwnd;
 
+    /* Calculate increase rate. */
+    cc->state.pico.bytes_per_mtu_increase = calc_bytes_per_mtu_increase(cc->cwnd, loss->rtt.smoothed, max_udp_payload_size);
+
     /* Reduce congestion window. */
     cc->cwnd *= QUICLY_RENO_BETA;
     if (cc->cwnd < QUICLY_MIN_CWND * max_udp_payload_size)
@@ -105,6 +130,7 @@ static void pico_on_sent(quicly_cc_t *cc, const quicly_loss_t *loss, uint32_t by
 static void pico_init_pico_state(quicly_cc_t *cc, uint32_t stash)
 {
     cc->state.pico.stash = stash;
+    cc->state.pico.bytes_per_mtu_increase = cc->cwnd * QUICLY_RENO_BETA; /* use Reno, for simplicity */
 }
 
 static void pico_reset(quicly_cc_t *cc, uint32_t initcwnd)

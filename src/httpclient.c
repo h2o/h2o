@@ -38,10 +38,6 @@
 #include "h2o/httpclient.h"
 #include "h2o/serverutil.h"
 
-#ifndef MIN
-#define MIN(a, b) (((a) > (b)) ? (b) : (a))
-#endif
-
 #define IO_TIMEOUT 5000
 
 static int save_http3_token_cb(quicly_save_resumption_token_t *self, quicly_conn_t *conn, ptls_iovec_t token);
@@ -50,7 +46,7 @@ static int save_http3_ticket_cb(ptls_save_ticket_t *self, ptls_t *tls, ptls_iove
 static ptls_save_ticket_t save_http3_ticket = {save_http3_ticket_cb};
 static h2o_httpclient_connection_pool_t *connpool;
 struct {
-    const char *target; /* either URL or host:port when the method is CONNECT */
+    const char *target; /* either URL or host:port when the method is CONNECT or CONNECT_UDP */
     const char *method;
     struct {
         h2o_iovec_t name;
@@ -63,8 +59,15 @@ struct {
 static unsigned cnt_left = 1, concurrency = 1;
 static int chunk_size = 10;
 static h2o_iovec_t iov_filler;
+static struct {
+    h2o_socket_t *sock;
+    int closed;
+} std_in;
 static int io_interval = 0, req_interval = 0;
 static int ssl_verify_none = 0;
+static h2o_socket_t *udp_sock = NULL;
+static h2o_httpclient_forward_datagram_cb udp_write;
+static struct sockaddr_in udp_sock_remote_addr;
 static const ptls_key_exchange_algorithm_t *h3_key_exchanges[] = {
 #if PTLS_OPENSSL_HAVE_X25519
     &ptls_openssl_x25519,
@@ -162,88 +165,92 @@ static void on_error(h2o_httpclient_ctx_t *ctx, h2o_mem_pool_t *pool, const char
     free(pool);
 }
 
-struct st_tunnel_t {
-    h2o_socket_t *std_in;
-    h2o_tunnel_t *tunnel;
-    /**
-     * buffer that stores data inflight (i.e. that being passed to `tunnel->write` for which the completion callback has not been
-     * called yet)
-     */
-    h2o_doublebuffer_t buf;
-};
-
-static void tunnel_write(struct st_tunnel_t *tunnel)
+static void stdin_on_read(h2o_socket_t *_sock, const char *err)
 {
-    if (tunnel->buf.inflight || tunnel->std_in->input->size == 0)
+    assert(std_in.sock == _sock);
+
+    h2o_socket_read_stop(std_in.sock);
+    if (err != NULL)
+        std_in.closed = 1;
+    if (udp_sock != NULL)
+        h2o_socket_read_stop(udp_sock);
+
+    h2o_httpclient_t *client = std_in.sock->data;
+
+    /* bail out if the client is not yet ready to receive data */
+    if (client == NULL || client->write_req == NULL)
         return;
 
-    h2o_iovec_t vec = h2o_doublebuffer_prepare(&tunnel->buf, &tunnel->std_in->input, SIZE_MAX);
-    tunnel->tunnel->write_(tunnel->tunnel, vec.base, vec.len);
-}
-
-static void tunnel_on_write_complete(h2o_tunnel_t *_tunnel, const char *err)
-{
-    struct st_tunnel_t *tunnel = _tunnel->data;
-    assert(tunnel->tunnel == _tunnel);
-
-    if (err != NULL) {
-        fprintf(stderr, "%s\n", err);
-        exit(0);
+    if (client->write_req(client, h2o_iovec_init(std_in.sock->input->bytes, std_in.sock->input->size), std_in.closed) != 0) {
+        fprintf(stderr, "write_req error\n");
+        exit(1);
     }
-
-    h2o_doublebuffer_consume(&tunnel->buf);
-    tunnel_write(tunnel);
+    h2o_buffer_consume(&std_in.sock->input, std_in.sock->input->size);
 }
 
-static void tunnel_on_stdin_read(h2o_socket_t *sock, const char *err)
+static void tunnel_on_udp_sock_read(h2o_socket_t *sock, const char *err)
 {
-    struct st_tunnel_t *tunnel = sock->data;
+    uint8_t buf[1500];
+    struct iovec vec;
+    struct msghdr mess = {};
+    ssize_t rret;
 
-    if (err != NULL)
-        exit(0);
+    /* read one UDP datagram, or return */
+    do {
+        vec.iov_base = buf;
+        vec.iov_len = sizeof(buf);
+        mess.msg_name = &udp_sock_remote_addr;
+        mess.msg_namelen = sizeof(udp_sock_remote_addr);
+        mess.msg_iov = &vec;
+        mess.msg_iovlen = 1;
+    } while ((rret = recvmsg(h2o_socket_get_fd(sock), &mess, 0)) == -1 && errno == EINTR);
+    if (rret == -1)
+        return;
 
-    tunnel_write(tunnel);
-}
+    h2o_httpclient_t *client = std_in.sock->data;
 
-static void tunnel_on_read(h2o_tunnel_t *_tunnel, const char *err, const void *bytes, size_t len)
-{
-    struct st_tunnel_t *tunnel = _tunnel->data;
-    assert(tunnel->tunnel == _tunnel);
+    /* drop datagram if the connection is not ready */
+    if (client == NULL || client->write_req == NULL)
+        return;
 
-    if (len != 0)
-        write(1, bytes, len);
-
-    if (err != NULL) {
-        fprintf(stderr, "%s\n", err);
-        exit(0);
+    /* send the datagram directly or encapsulated on the stream */
+    if (udp_write != NULL) {
+        h2o_iovec_t datagram = h2o_iovec_init(buf, rret);
+        udp_write(client, &datagram, 1);
+    } else {
+        /* append UDP chunk to the input buffer of stdin read socket! */
+        uint8_t header[3] = {0}, *header_end = quicly_encodev(header + 1, (uint64_t)rret);
+        h2o_buffer_append(&std_in.sock->input, header, header_end - header);
+        h2o_buffer_append(&std_in.sock->input, buf, rret);
+        /* pretend as if we read from stdin */
+        stdin_on_read(std_in.sock, NULL);
     }
-
-    tunnel->tunnel->proceed_read(tunnel->tunnel);
 }
 
-static void tunnel_create(h2o_loop_t *loop, h2o_tunnel_t *_tunnel)
+static void tunnel_on_udp_read(h2o_httpclient_t *client, h2o_iovec_t *datagrams, size_t num_datagrams)
 {
-    struct st_tunnel_t *tunnel = h2o_mem_alloc(sizeof(*tunnel));
+    for (size_t i = 0; i != num_datagrams; ++i) {
+        const h2o_iovec_t *src = datagrams + i;
+        struct iovec vec = {.iov_base = src->base, .iov_len = src->len};
+        struct msghdr mess = {.msg_name = &udp_sock_remote_addr, .msg_namelen = sizeof(udp_sock_remote_addr), .msg_iov = &vec, .msg_iovlen = 1};
+        sendmsg(h2o_socket_get_fd(udp_sock), &mess, 0);
+    }
+}
 
-#if H2O_USE_LIBUV
-    tunnel->std_in = h2o_uv__poll_create(loop, 0, (uv_close_cb)free);
-#else
-    tunnel->std_in = h2o_evloop_socket_create(loop, 0, 0);
-#endif
-    tunnel->std_in->data = tunnel;
-    tunnel->tunnel = _tunnel;
-    tunnel->tunnel->data = tunnel;
-    tunnel->tunnel->on_read = tunnel_on_read;
-    tunnel->tunnel->on_write_complete = tunnel_on_write_complete;
-    h2o_doublebuffer_init(&tunnel->buf, &h2o_socket_buffer_prototype);
-
-    h2o_socket_read_start(tunnel->std_in, tunnel_on_stdin_read);
+static void stdin_proceed_request(h2o_httpclient_t *client, const char *errstr)
+{
+    if (errstr == NULL && !std_in.closed) {
+        h2o_socket_read_start(std_in.sock, stdin_on_read);
+        if (udp_sock != NULL)
+            h2o_socket_read_start(udp_sock, tunnel_on_udp_sock_read);
+    }
 }
 
 static void start_request(h2o_httpclient_ctx_t *ctx)
 {
     h2o_mem_pool_t *pool;
     h2o_url_t *url_parsed;
+    int is_connect = strcmp(req.method, "CONNECT") == 0 || strcmp(req.method, "CONNECT-UDP") == 0;
 
     /* allocate memory pool */
     pool = h2o_mem_alloc(sizeof(*pool));
@@ -251,11 +258,15 @@ static void start_request(h2o_httpclient_ctx_t *ctx)
 
     /* parse URL, or host:port if CONNECT */
     url_parsed = h2o_mem_alloc_pool(pool, *url_parsed, 1);
-    if (strcmp(req.method, "CONNECT") == 0) {
+    if (is_connect) {
         if (h2o_url_init(url_parsed, NULL, h2o_iovec_init(req.target, strlen(req.target)), h2o_iovec_init(NULL, 0)) != 0 ||
             url_parsed->_port == 0 || url_parsed->_port == 65535) {
             on_error(ctx, pool, "CONNECT target should be in the form of host:port: %s", req.target);
             return;
+        }
+        if (strcmp(req.method, "CONNECT-UDP") == 0) {
+            url_parsed->scheme = &H2O_URL_SCHEME_MASQUE;
+            url_parsed->path = h2o_iovec_init(H2O_STRLIT("/"));
         }
     } else {
         if (h2o_url_parse(req.target, SIZE_MAX, url_parsed) != 0) {
@@ -293,8 +304,8 @@ static void start_request(h2o_httpclient_ctx_t *ctx)
         h2o_socketpool_set_ssl_ctx(sockpool, ssl_ctx);
         SSL_CTX_free(ssl_ctx);
     }
-    h2o_httpclient_connect(NULL, pool, url_parsed, ctx, connpool, url_parsed,
-                           strcmp(req.method, "CONNECT") == 0 ? h2o_httpclient_upgrade_to_connect : NULL, on_connect);
+    h2o_httpclient_connect(std_in.sock != NULL ? (h2o_httpclient_t **)&std_in.sock->data : NULL, pool, url_parsed, ctx, connpool,
+                           url_parsed, is_connect ? h2o_httpclient_upgrade_to_connect : NULL, on_connect);
 }
 
 static void on_next_request(h2o_timer_t *entry)
@@ -308,9 +319,13 @@ static void on_next_request(h2o_timer_t *entry)
 
 static int on_body(h2o_httpclient_t *client, const char *errstr)
 {
-    if (errstr != NULL && errstr != h2o_httpclient_error_is_eos) {
-        on_error(client->ctx, client->pool, errstr);
-        return -1;
+    if (errstr != NULL) {
+        if (udp_sock != NULL)
+            h2o_socket_read_stop(udp_sock);
+        if (errstr != h2o_httpclient_error_is_eos) {
+            on_error(client->ctx, client->pool, errstr);
+            return -1;
+        }
     }
 
     fwrite((*client->buf)->bytes, 1, (*client->buf)->size, stdout);
@@ -375,53 +390,42 @@ h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, h2o
 
     print_response_headers(args->version, args->status, args->msg, args->headers, args->num_headers);
 
-    if (args->tunnel != NULL) {
-        tunnel_create(client->ctx->loop, args->tunnel);
-        return NULL;
-    }
-
     if (errstr == h2o_httpclient_error_is_eos) {
         on_error(client->ctx, client->pool, "no body");
         return NULL;
     }
 
+    if (udp_sock != NULL && (200 <= args->status && args->status <= 299)) {
+        udp_write = args->forward_datagram.write_;
+        if (args->forward_datagram.read_ != NULL)
+            *args->forward_datagram.read_ = tunnel_on_udp_read;
+    }
+
     return on_body;
 }
 
-static size_t *remaining_req_bytes(h2o_httpclient_t *client)
+static size_t *filler_remaining_bytes(h2o_httpclient_t *client)
 {
     return (size_t *)&client->data;
 }
 
-int fill_body(h2o_httpclient_t *client, h2o_iovec_t *reqbuf)
-{
-    size_t *cur_req_body_size = remaining_req_bytes(client);
-    if (*cur_req_body_size > 0) {
-        memcpy(reqbuf, &iov_filler, sizeof(*reqbuf));
-        reqbuf->len = MIN(iov_filler.len, *cur_req_body_size);
-        *cur_req_body_size -= reqbuf->len;
-        return 0;
-    } else {
-        *reqbuf = h2o_iovec_init(NULL, 0);
-        return 1;
-    }
-}
-
-static void on_io_timeout(h2o_timer_t *entry)
+static void filler_on_io_timeout(h2o_timer_t *entry)
 {
     struct st_timeout *t = H2O_STRUCT_FROM_MEMBER(struct st_timeout, timeout, entry);
     h2o_httpclient_t *client = t->ptr;
     free(t);
 
-    h2o_iovec_t reqbuf;
-    fill_body(client, &reqbuf);
-    client->write_req(client, reqbuf, *remaining_req_bytes(client) <= 0);
+    h2o_iovec_t vec = iov_filler;
+    if (vec.len > *filler_remaining_bytes(client))
+        vec.len = *filler_remaining_bytes(client);
+    *filler_remaining_bytes(client) -= vec.len;
+    client->write_req(client, vec, *filler_remaining_bytes(client) == 0);
 }
 
-static void proceed_request(h2o_httpclient_t *client, size_t written, h2o_send_state_t send_state)
+static void filler_proceed_request(h2o_httpclient_t *client, const char *errstr)
 {
-    if (*remaining_req_bytes(client) > 0)
-        create_timeout(client->ctx->loop, io_interval, on_io_timeout, client);
+    if (*filler_remaining_bytes(client) > 0)
+        create_timeout(client->ctx->loop, io_interval, filler_on_io_timeout, client);
 }
 
 h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *errstr, h2o_iovec_t *_method, h2o_url_t *url,
@@ -444,14 +448,21 @@ h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *errstr, 
     *body = h2o_iovec_init(NULL, 0);
     *proceed_req_cb = NULL;
 
-    if (req.body_size > 0) {
-        *remaining_req_bytes(client) = req.body_size;
+    if (client->upgrade_to != NULL) {
+        *proceed_req_cb = stdin_proceed_request;
+        if (std_in.sock->input->size != 0) {
+            body->len = std_in.sock->input->size;
+            body->base = h2o_mem_alloc_pool(client->pool, char, body->len);
+            memcpy(body->base, std_in.sock->input->bytes, body->len);
+            h2o_buffer_consume(&std_in.sock->input, body->len);
+        }
+    } else if (req.body_size > 0) {
+        *filler_remaining_bytes(client) = req.body_size;
         char *clbuf = h2o_mem_alloc_pool(client->pool, char, sizeof(H2O_UINT32_LONGEST_STR) - 1);
         size_t clbuf_len = sprintf(clbuf, "%zu", req.body_size);
         h2o_add_header(client->pool, &headers_vec, H2O_TOKEN_CONTENT_LENGTH, NULL, clbuf, clbuf_len);
-
-        *proceed_req_cb = proceed_request;
-        create_timeout(client->ctx->loop, io_interval, on_io_timeout, client);
+        *proceed_req_cb = filler_proceed_request;
+        create_timeout(client->ctx->loop, io_interval, filler_on_io_timeout, client);
     }
 
     *headers = headers_vec.entries;
@@ -485,6 +496,8 @@ static void usage(const char *progname)
             "               set to HTTP, cleartext TCP is used. When the scheme is HTTPS,\n"
             "               TLS is used and the provided hostname is used for peer.\n"
             "               verification\n"
+            "  -X <local-udp-port>\n"
+            "               specifies that the tunnel being created is a CONNECT-UDP tunnel\n"
             "  --initial-udp-payload-size <bytes>\n"
             "               specifies the udp payload size of the initial message (default:\n"
             "               %" PRIu16 ")\n"
@@ -496,6 +509,26 @@ static void usage(const char *progname)
             progname, quicly_spec_context.initial_egress_max_udp_payload_size,
             quicly_spec_context.transport_params.max_udp_payload_size);
 }
+
+#if !H2O_USE_LIBUV
+h2o_socket_t *create_udp_socket(h2o_loop_t *loop, uint16_t port)
+{
+    int fd;
+    struct sockaddr_in sin;
+    if ((fd = socket(PF_INET, SOCK_DGRAM, 0)) == -1) {
+        perror("failed to create UDP socket");
+        exit(EXIT_FAILURE);
+    }
+    sin.sin_family = AF_INET;
+    sin.sin_addr.s_addr = htonl(0);
+    sin.sin_port = htons(port);
+    if (bind(fd, (void *)&sin, sizeof(sin)) != 0) {
+        perror("failed to bind bind UDP socket");
+        exit(EXIT_FAILURE);
+    }
+    return h2o_evloop_socket_create(loop, fd, H2O_SOCKET_FLAG_DONT_READ);
+}
+#endif
 
 static void on_sigfatal(int signo)
 {
@@ -539,6 +572,8 @@ int main(int argc, char **argv)
     quicly_amend_ptls_context(&h3ctx.tls);
     h3ctx.quic = quicly_spec_context;
     h3ctx.quic.transport_params.max_streams_uni = 10;
+    h3ctx.quic.transport_params.max_datagram_frame_size = 1500;
+    h3ctx.quic.receive_datagram_frame = &h2o_httpclient_http3_on_receive_datagram_frame;
     h3ctx.quic.tls = &h3ctx.tls;
     h3ctx.quic.save_resumption_token = &save_http3_token;
     {
@@ -573,17 +608,23 @@ int main(int argc, char **argv)
         }
         h2o_socket_t *sock = h2o_evloop_socket_create(ctx.loop, fd, H2O_SOCKET_FLAG_DONT_READ);
         h2o_quic_init_context(&h3ctx.h3, ctx.loop, sock, &h3ctx.quic, NULL, h2o_httpclient_http3_notify_connection_update,
-                              1 /* use_gso */);
+                              1 /* use_gso */, NULL);
     }
 #endif
 
-    int is_opt_initial_udp_payload_size = 0;
-    int is_opt_max_udp_payload_size = 0;
-    struct option longopts[] = {{"initial-udp-payload-size", required_argument, &is_opt_initial_udp_payload_size, 1},
-                                {"max-udp-payload-size", required_argument, &is_opt_max_udp_payload_size, 1},
+    enum {
+        OPT_INITIAL_UDP_PAYLOAD_SIZE = 0x100,
+        OPT_MAX_UDP_PAYLOAD_SIZE,
+        OPT_DISALLOW_DELAYED_ACK,
+        OPT_ACK_FREQUENCY,
+    };
+    struct option longopts[] = {{"initial-udp-payload-size", required_argument, NULL, OPT_INITIAL_UDP_PAYLOAD_SIZE},
+                                {"max-udp-payload-size", required_argument, NULL, OPT_MAX_UDP_PAYLOAD_SIZE},
+                                {"disallow-delayed-ack", no_argument, NULL, OPT_DISALLOW_DELAYED_ACK},
+                                {"ack-frequency", required_argument, NULL, OPT_ACK_FREQUENCY},
                                 {"help", no_argument, NULL, 'h'},
                                 {NULL}};
-    const char *optstring = "t:m:o:b:x:C:c:d:H:i:k2:W:h3:"
+    const char *optstring = "t:m:o:b:x:X:C:c:d:H:i:k2:W:h3:"
 #ifdef __GNUC__
                             ":" /* for backward compatibility, optarg of -3 is optional when using glibc */
 #endif
@@ -619,6 +660,23 @@ int main(int argc, char **argv)
                 exit(EXIT_FAILURE);
             }
             break;
+        case 'X': {
+#if H2O_USE_LIBUV
+            fprintf(stderr, "-X is not supported by the libuv backend\n");
+            exit(EXIT_FAILURE);
+#else
+            uint16_t udp_port;
+            if (sscanf(optarg, "%" SCNu16, &udp_port) != 1) {
+                fprintf(stderr, "failed to parse optarg of -X\n");
+                exit(EXIT_FAILURE);
+            }
+            udp_sock = create_udp_socket(ctx.loop, udp_port);
+            h2o_socket_read_start(udp_sock, tunnel_on_udp_sock_read);
+            h3ctx.quic.initial_egress_max_udp_payload_size = 1400; /* increase initial UDP payload size so that we'd have room to
+                                                                    * carry ordinary QUIC packets. */
+            req.method = "CONNECT-UDP";
+#endif
+        } break;
         case 'C':
             if (sscanf(optarg, "%u", &concurrency) != 1 || concurrency < 1) {
                 fprintf(stderr, "concurrency (-C) must be a number greather than zero");
@@ -662,7 +720,7 @@ int main(int argc, char **argv)
                 ctx.protocol_selector.ratio.http2 = 100;
                 ctx.force_cleartext_http2 = 1;
             } else if (sscanf(optarg, "%" SCNd8, &ctx.protocol_selector.ratio.http2) != 1 ||
-                !(0 <= ctx.protocol_selector.ratio.http2 && ctx.protocol_selector.ratio.http2 <= 100)) {
+                       !(0 <= ctx.protocol_selector.ratio.http2 && ctx.protocol_selector.ratio.http2 <= 100)) {
                 fprintf(stderr, "failed to parse HTTP/2 ratio (-2)\n");
                 exit(EXIT_FAILURE);
             }
@@ -704,21 +762,29 @@ int main(int argc, char **argv)
             usage(argv[0]);
             exit(0);
             break;
-        case 0:
-            if (is_opt_initial_udp_payload_size == 1) {
-                if (sscanf(optarg, "%" SCNu16, &h3ctx.quic.initial_egress_max_udp_payload_size) != 1) {
-                    fprintf(stderr, "failed to parse --initial-udp-payload-size\n");
-                    exit(EXIT_FAILURE);
-                }
-                is_opt_initial_udp_payload_size = 0;
-            } else if (is_opt_max_udp_payload_size == 1) {
-                if (sscanf(optarg, "%" SCNu64, &h3ctx.quic.transport_params.max_udp_payload_size) != 1) {
-                    fprintf(stderr, "failed to parse --max-udp-payload-size\n");
-                    exit(EXIT_FAILURE);
-                }
-                is_opt_max_udp_payload_size = 0;
+        case OPT_INITIAL_UDP_PAYLOAD_SIZE:
+            if (sscanf(optarg, "%" SCNu16, &h3ctx.quic.initial_egress_max_udp_payload_size) != 1) {
+                fprintf(stderr, "failed to parse --initial-udp-payload-size\n");
+                exit(EXIT_FAILURE);
             }
             break;
+        case OPT_MAX_UDP_PAYLOAD_SIZE:
+            if (sscanf(optarg, "%" SCNu64, &h3ctx.quic.transport_params.max_udp_payload_size) != 1) {
+                fprintf(stderr, "failed to parse --max-udp-payload-size\n");
+                exit(EXIT_FAILURE);
+            }
+            break;
+        case OPT_DISALLOW_DELAYED_ACK:
+            h3ctx.quic.transport_params.min_ack_delay_usec = UINT64_MAX;
+            break;
+        case OPT_ACK_FREQUENCY: {
+            double f;
+            if (sscanf(optarg, "%lf", &f) != 1 || !(0 <= f && f <= 1)) {
+                fprintf(stderr, "failed to parse --ack-frequency\n");
+                exit(EXIT_FAILURE);
+            }
+            h3ctx.quic.ack_frequency = (uint16_t)(f * 1024);
+        } break;
         default:
             exit(EXIT_FAILURE);
             break;
@@ -731,9 +797,17 @@ int main(int argc, char **argv)
         fprintf(stderr, "sum of the use ratio of HTTP/2 and HTTP/3 is greater than 100\n");
         exit(EXIT_FAILURE);
     }
-    if (strcmp(req.method, "CONNECT") == 0 && req.connect_to == NULL) {
-        fprintf(stderr, "CONNECT method must be accompanied by an `-x` option\n");
-        exit(EXIT_FAILURE);
+    if (strcmp(req.method, "CONNECT") == 0 || strcmp(req.method, "CONNECT-UDP") == 0) {
+        if (req.connect_to == NULL) {
+            fprintf(stderr, "CONNECT method must be accompanied by an `-x` option\n");
+            exit(EXIT_FAILURE);
+        }
+#if H2O_USE_LIBUV
+        std_in.sock = h2o_uv__poll_create(ctx.loop, 0, (uv_close_cb)free);
+#else
+        std_in.sock = h2o_evloop_socket_create(ctx.loop, 0, 0);
+#endif
+        h2o_socket_read_start(std_in.sock, stdin_on_read);
     }
 
     if (argc < 1) {

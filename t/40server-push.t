@@ -37,6 +37,11 @@ hosts:
             [399, { "link" => "</index.txt.gz>; rel=preload" }, [] ]
           end
         proxy.reverse.url: http://127.0.0.1:$upstream_port
+      /push-unprioritized:
+        mruby.handler: |
+          Proc.new do |env|
+            [200, { "link" => "</assets/index.txt>; rel=preload" }, [ File.read("@{[DOC_ROOT]}/halfdome.jpg") ] ]
+          end
       /mruby-critical:
         mruby.handler: |
           Proc.new do |env|
@@ -55,8 +60,8 @@ EOT
         };
         subtest 'push-unprioritized' => sub {
             # index.txt is smaller than index.txt.gz, hence receiving the former always completes first
-            my $resp = `nghttp $opts -n --stat -w 1 '$proto://127.0.0.1:$port/index.txt?resp:link=</index.txt.gz>\%3b\%20rel=preload'`;
-            like $resp, qr{\nid\s*responseEnd\s.*\s/index\.txt\?.*\s/index\.txt.gz\n}is;
+            my $resp = `nghttp $opts -n --stat -W 20 -w 20 '$proto://127.0.0.1:$port/push-unprioritized'`;
+            like $resp, qr{\nid\s*responseEnd\s.*\s/push-unprioritized.*\s/assets/index\.txt}is;
         };
         subtest "push-1xx" => sub {
             my $out = `nghttp $opts -n --stat '$proto://127.0.0.1:$port/1xx-push/'`;

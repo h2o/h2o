@@ -73,6 +73,7 @@ void test_lib__handler__gzip_c(void);
 void test_lib__handler__headers_c(void);
 void test_lib__handler__mimemap_c(void);
 void test_lib__handler__redirect_c(void);
+void test_lib__handler__throttle_resp_c(void);
 void test_lib__http2__hpack(void);
 void test_lib__http2__scheduler(void);
 void test_lib__http2__casper(void);

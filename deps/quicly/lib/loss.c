@@ -32,13 +32,22 @@ int quicly_loss_init_sentmap_iter(quicly_loss_t *loss, quicly_sentmap_iter_t *it
      * below 32 packets. This exception (the threshold of 32) exists to be capable of recognizing excessively late-ACKs when under
      * heavy loss; in such case, 32 is more than enough, yet small enough that the memory footprint does not matter. */
     const quicly_sent_packet_t *sent;
-    while ((sent = quicly_sentmap_get(iter))->sent_at <= retire_before && sent->cc_bytes_in_flight == 0) {
+    while ((sent = quicly_sentmap_get(iter))->sent_at <= retire_before) {
         int ret;
         if (!is_closing && loss->sentmap.num_packets < 32)
             break;
+        if (sent->cc_bytes_in_flight != 0) {
+            /* cannot retire packets with cc_bytes_in_flight, but we may find retirable ones later in the map */
+            quicly_sentmap_skip(iter);
+            continue;
+        }
         if ((ret = quicly_sentmap_update(&loss->sentmap, iter, QUICLY_SENTMAP_EVENT_EXPIRED)) != 0)
             return ret;
     }
+
+    /* rewind iter to the head of the sentmap, before returning it to the caller */
+    quicly_sentmap_init_iter(&loss->sentmap, iter);
+
     return 0;
 }
 
@@ -48,10 +57,18 @@ int quicly_loss_detect_loss(quicly_loss_t *loss, int64_t now, uint32_t max_ack_d
     /* This function ensures that the value returned in loss_time is when the next application timer should be set for loss
      * detection. if no timer is required, loss_time is set to INT64_MAX. */
 
-    const uint32_t delay_until_lost = ((loss->rtt.latest > loss->rtt.smoothed ? loss->rtt.latest : loss->rtt.smoothed) * 9 + 7) / 8;
+    const uint32_t delay_until_lost = ((loss->rtt.latest > loss->rtt.smoothed ? loss->rtt.latest : loss->rtt.smoothed) *
+                                           (1024 + loss->thresholds.time_based_percentile) +
+                                       1023) /
+                                      1024;
     quicly_sentmap_iter_t iter;
     const quicly_sent_packet_t *sent;
     int ret;
+
+#define CHECK_TIME_THRESHOLD(sent) ((sent)->sent_at <= now - delay_until_lost)
+#define CHECK_PACKET_THRESHOLD(sent)                                                                                               \
+    (loss->thresholds.use_packet_based &&                                                                                          \
+     (int64_t)(sent)->packet_number <= largest_acked_signed - QUICLY_LOSS_DEFAULT_PACKET_THRESHOLD)
 
     loss->loss_time = INT64_MAX;
 
@@ -62,12 +79,9 @@ int quicly_loss_detect_loss(quicly_loss_t *loss, int64_t now, uint32_t max_ack_d
      * windows. Once marked as lost, cc_bytes_in_flight becomes zero. */
     while ((sent = quicly_sentmap_get(&iter))->packet_number != UINT64_MAX) {
         int64_t largest_acked_signed = loss->largest_acked_packet_plus1[sent->ack_epoch] - 1;
-        if ((int64_t)sent->packet_number < largest_acked_signed &&
-            (sent->sent_at <= now - delay_until_lost ||                                                      /* time threshold */
-             (int64_t)sent->packet_number <= largest_acked_signed - QUICLY_LOSS_DEFAULT_PACKET_THRESHOLD)) { /* packet threshold */
+        if ((int64_t)sent->packet_number < largest_acked_signed && (CHECK_TIME_THRESHOLD(sent) || CHECK_PACKET_THRESHOLD(sent))) {
             if (sent->cc_bytes_in_flight != 0) {
-                on_loss_detected(loss, sent,
-                                 (int64_t)sent->packet_number > largest_acked_signed - QUICLY_LOSS_DEFAULT_PACKET_THRESHOLD);
+                on_loss_detected(loss, sent, !CHECK_PACKET_THRESHOLD(sent));
                 if ((ret = quicly_sentmap_update(&loss->sentmap, &iter, QUICLY_SENTMAP_EVENT_LOST)) != 0)
                     return ret;
             } else {
@@ -81,6 +95,9 @@ int quicly_loss_detect_loss(quicly_loss_t *loss, int64_t now, uint32_t max_ack_d
             quicly_sentmap_skip(&iter);
         }
     }
+
+#undef CHECK_TIME_THRESHOLD
+#undef CHECK_PACKET_THRESHOLD
 
     if (!is_1rtt_only) {
         if ((ret = quicly_loss_init_sentmap_iter(loss, &iter, now, max_ack_delay, 0)) != 0)

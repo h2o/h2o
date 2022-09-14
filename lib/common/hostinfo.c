@@ -50,6 +50,58 @@ static struct {
 
 size_t h2o_hostinfo_max_threads = 1;
 
+/* generic errors (https://tools.ietf.org/html/rfc8499#section-3) */
+const char h2o_hostinfo_error_nxdomain[] = "hostname does not exist";
+const char h2o_hostinfo_error_nodata[] = "no address associated with hostname";
+const char h2o_hostinfo_error_refused[] = "non-recoverable failure in name resolution";
+const char h2o_hostinfo_error_servfail[] = "temporary failure in name resolution";
+
+/* errors specfic to getaddrinfo */
+const char h2o_hostinfo_error_gai_addrfamily[] = "address family for hostname not supported";
+const char h2o_hostinfo_error_gai_badflags[] = "bad value for ai_flags";
+const char h2o_hostinfo_error_gai_family[] = "ai_family not supported";
+const char h2o_hostinfo_error_gai_memory[] = "memory allocation failure";
+const char h2o_hostinfo_error_gai_service[] = "servname not supported for ai_socktype";
+const char h2o_hostinfo_error_gai_socktype[] = "ai_socktype not supported";
+const char h2o_hostinfo_error_gai_system[] = "system error";
+const char h2o_hostinfo_error_gai_other[] = "name resolution failed";
+
+static void create_lookup_thread_if_necessary(void);
+
+static const char *hostinfo_error_from_gai_error(int ret)
+{
+    switch (ret) {
+    case EAI_NONAME:
+        return h2o_hostinfo_error_nxdomain;
+#ifdef EAI_NODATA /* obsoleted in RFC 3493 and not supported by FreeBSD */
+    case EAI_NODATA:
+        return h2o_hostinfo_error_nodata;
+#endif
+    case EAI_FAIL:
+        return h2o_hostinfo_error_refused;
+    case EAI_AGAIN:
+        return h2o_hostinfo_error_servfail;
+#ifdef EAI_ADDRFAMILY
+    case EAI_ADDRFAMILY:
+        return h2o_hostinfo_error_gai_addrfamily;
+#endif
+    case EAI_BADFLAGS:
+        return h2o_hostinfo_error_gai_badflags;
+    case EAI_FAMILY:
+        return h2o_hostinfo_error_gai_family;
+    case EAI_MEMORY:
+        return h2o_hostinfo_error_gai_memory;
+    case EAI_SERVICE:
+        return h2o_hostinfo_error_gai_service;
+    case EAI_SOCKTYPE:
+        return h2o_hostinfo_error_gai_socktype;
+    case EAI_SYSTEM:
+        return h2o_hostinfo_error_gai_system;
+    default:
+        return h2o_hostinfo_error_gai_other;
+    }
+}
+
 static void lookup_and_respond(h2o_hostinfo_getaddr_req_t *req)
 {
     struct addrinfo *res;
@@ -57,7 +109,7 @@ static void lookup_and_respond(h2o_hostinfo_getaddr_req_t *req)
     int ret = getaddrinfo(req->_in.name, req->_in.serv, &req->_in.hints, &res);
     req->_out.message = (h2o_multithread_message_t){{NULL}};
     if (ret != 0) {
-        req->_out.errstr = gai_strerror(ret);
+        req->_out.errstr = hostinfo_error_from_gai_error(ret);
         req->_out.ai = NULL;
     } else {
         req->_out.errstr = NULL;
@@ -76,6 +128,7 @@ static void *lookup_thread_main(void *_unused)
         while (!h2o_linklist_is_empty(&queue.pending)) {
             h2o_hostinfo_getaddr_req_t *req = H2O_STRUCT_FROM_MEMBER(h2o_hostinfo_getaddr_req_t, _pending, queue.pending.next);
             h2o_linklist_unlink(&req->_pending);
+            create_lookup_thread_if_necessary();
             pthread_mutex_unlock(&queue.mutex);
             lookup_and_respond(req);
             pthread_mutex_lock(&queue.mutex);
@@ -88,12 +141,17 @@ static void *lookup_thread_main(void *_unused)
     return NULL;
 }
 
-static void create_lookup_thread(void)
+static void create_lookup_thread_if_necessary(void)
 {
+    /* do nothing if there's no need to, or if we are already at the maximum. */
+    if (queue.num_threads_idle != 0 || h2o_linklist_is_empty(&queue.pending))
+        return;
+     if (queue.num_threads == h2o_hostinfo_max_threads)
+         return;
+
     pthread_t tid;
     pthread_attr_t attr;
     int ret;
-
     pthread_attr_init(&attr);
     pthread_attr_setdetachstate(&attr, 1);
     pthread_attr_setstacksize(&attr, 100 * 1024);
@@ -117,8 +175,7 @@ static void dispatch_hostinfo_getaddr(h2o_hostinfo_getaddr_req_t *req)
 
     h2o_linklist_insert(&queue.pending, &req->_pending);
 
-    if (queue.num_threads_idle == 0 && queue.num_threads < h2o_hostinfo_max_threads)
-        create_lookup_thread();
+    create_lookup_thread_if_necessary();
 
     pthread_cond_signal(&queue.cond);
     pthread_mutex_unlock(&queue.mutex);

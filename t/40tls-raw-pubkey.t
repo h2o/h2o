@@ -65,9 +65,17 @@ num-threads: 1
 listen:
   port: $tls_port
   ssl: &ssl
-    key-file: examples/h2o/server.key
-    @{[$use_cert ? "certificate-file: examples/h2o/server.crt" : ""]}
-    @{[$use_raw ? "raw-pubkey-file: examples/h2o/server.pub" : ""]}
+    identity:
+EOT
+    $conf .= <<"EOT" if $use_raw;
+    - key-file: examples/h2o/server.key
+      certificate-file: examples/h2o/server.pub
+EOT
+    $conf .= <<"EOT" if $use_cert;
+    - key-file: examples/h2o/server.key
+      certificate-file: examples/h2o/server.crt
+EOT
+    $conf .= << "EOT";
 listen:
   port: $tls_port
   type: quic

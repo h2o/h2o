@@ -164,13 +164,31 @@ The <code style="font-weight: bold;">ssl</code> attribute must be defined as a m
 </p>
 <dl>
 <dt id="certificate-file">certificate-file:</dt>
-<dd>path of the SSL certificate file (mandatory)</dd>
+<dd>
+Path of the SSL certificate file (mandatory).
+This attribute can specify a PEM file containing either an X.509 certificate chain or a raw public key.
+When the latter form is being used, <a href="https://datatracker.ietf.org/doc/html/rfc7250">RFC 7250</a> handshake will be used.
+</dd>
 <dt id="key-file">key-file:</dt>
-<dd>path of the SSL private key file (mandatory)</dd>
+<dd>Path of the SSL private key file (mandatory).</dd>
+<dt>identity:</dt>
+<dd>List of certificate / key pairs.
+This attribute can be used in place of <code>certificate-file</code> and <code>key-file</code> to specify more than one pair of certificates and keys.
+When a TLS handshake is performed, h2o uses the first pair that contains a compatible certificate / key.
+The last pair acts as the fallback.
+<?= $ctx->{example}->('Using RSA and ECDSA certificates', <<'EOT')
+ssl:
+  identity:
+  - key-file: /path/to/rsa.key
+    certificate-file: /path/to/rsa.crt
+  - key-file: /path/to/ecdsa.key
+    certificate-file: /path/to/ecdsa.crt
+EOT
+?>
 <dt id="minimum-version">minimum-version:</dt>
 <dd>
 minimum protocol version, should be one of: <code>SSLv2</code>, <code>SSLv3</code>, <code>TLSv1</code>, <code>TLSv1.1</code>, <code>TLSv1.2</code>.
-Default is <code>TLSv1</code>
+Default is <code>TLSv1</code>.
 </dd>
 <dt id="min-version">min-version:</dt>
 <dd>
@@ -412,13 +430,16 @@ $ctx->{directive}->(
     name     => "send-server-name",
     levels   => [ qw(global) ],
     since    => '2.0',
-    desc     => q{A boolean flag (<code>ON</code> or <code>OFF</code>) indicating whether if the <code>server</code> response header should be sent.},
+    desc     => q{Sets whether if the <code>server</code> response header should be sent or forwarded from backend.},
     default  => q{send-server-name: ON},
     see_also => render_mt(<<'EOT'),
 <a href="configure/base_directives.html#server-name"><code>server-name</code></a>
 EOT
 )->(sub {
 ?>
+<p>
+By setting the value to (<code>ON</code> or <code>OFF</code>) indicating whether if the <code>server</code> response header should be sent. And by setting the value to <code>preserve</code>, it forwards the value received from the backend when proxying.
+</p>
 ? })
 
 <?

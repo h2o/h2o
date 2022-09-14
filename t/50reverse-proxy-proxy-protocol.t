@@ -4,7 +4,6 @@ use IO::Socket::INET;
 use Test::TCP;
 use Net::EmptyPort qw(check_port empty_port);
 use Test::More;
-use Scope::Guard qw(guard);
 use t::Util;
 
 my $upstream_port = empty_port();
@@ -31,9 +30,9 @@ print STDERR "**** yeoh";
             }
         }
     }
-    guard {
+    make_guard(sub {
         kill 'TERM', $pid;
-    };
+    });
 };
 
 my $server = spawn_h2o(<< "EOT");

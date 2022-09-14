@@ -26,28 +26,6 @@
 #include "h2o/url.h"
 #include "h2o/dsr.h"
 
-/**
- * Context used for building DSR instruction packets.
- */
-struct st_h2o_dsr_instruction_builder_t {
-    /**
-     * The connection on which the DSR instructions are sent. Reset to NULL when the peer closes the connection.
-     */
-    h2o_socket_t *sock;
-    /**
-     *
-     */
-    h2o_linklist_t _link;
-    /**
-     * buffer used for building the instructions (always non-NULL)
-     */
-    h2o_buffer_t *buf;
-    /**
-     * the buffer inflight (NULL when nothing is in flight)
-     */
-    h2o_buffer_t *buf_inflight;
-};
-
 h2o_iovec_t h2o_dsr_serialize_req(h2o_dsr_req_t *req)
 {
     h2o_iovec_t output = h2o_iovec_init(
@@ -250,74 +228,15 @@ Incomplete:
     return -1;
 }
 
-h2o_dsr_instruction_builder_t *h2o_dsr_create_instruction_builder(h2o_socket_t *sock)
+void h2o_dsr_add_instruction(h2o_buffer_t **buf, h2o_dsr_encoder_state_t *state, struct sockaddr *dest_addr,
+                             quicly_detached_send_packet_t *detached, uint64_t body_off, uint16_t body_len)
 {
-    h2o_dsr_instruction_builder_t *builder = h2o_mem_alloc(sizeof(*builder));
-
-    builder->sock = sock;
-    builder->_link = (h2o_linklist_t){};
-    builder->buf = NULL;
-    builder->buf_inflight = NULL;
-
-    sock->data = builder;
-
-    return builder;
-}
-
-void h2o_dsr_destroy_instruction_builder(h2o_dsr_instruction_builder_t *builder)
-{
-    if (builder->sock != NULL)
-        h2o_socket_close(builder->sock);
-    if (h2o_linklist_is_linked(&builder->_link))
-        h2o_linklist_unlink(&builder->_link);
-    if (builder->buf != NULL)
-        h2o_buffer_dispose(&builder->buf);
-    if (builder->buf_inflight != NULL)
-        h2o_buffer_dispose(&builder->buf_inflight);
-    free(builder);
-}
-
-static void on_instructions_write_complete(h2o_socket_t *sock, const char *err);
-
-static void send_instructions(h2o_dsr_instruction_builder_t *builder)
-{
-    if (h2o_linklist_is_linked(&builder->_link))
-        h2o_linklist_unlink(&builder->_link);
-
-    if (builder->buf_inflight != NULL || builder->buf->size == 0)
-        return;
-
-    builder->buf_inflight = builder->buf;
-    builder->buf = NULL;
-    h2o_iovec_t vec = h2o_iovec_init(builder->buf_inflight->bytes, builder->buf_inflight->size);
-    h2o_socket_write(builder->sock, &vec, 1, on_instructions_write_complete);
-}
-
-void on_instructions_write_complete(h2o_socket_t *sock, const char *err)
-{
-    h2o_dsr_instruction_builder_t *builder = sock->data;
-    assert(builder->sock == sock);
-
-    h2o_buffer_dispose(&builder->buf_inflight);
-
-    if (err != NULL) {
-        h2o_socket_close(builder->sock);
-        builder->sock = NULL;
-    } else if (builder->buf != NULL) {
-        send_instructions(builder);
-    }
-}
-
-int h2o_dsr_add_instruction(h2o_dsr_instruction_builder_t *builder, h2o_linklist_t *anchor, struct sockaddr *dest_addr,
-                            quicly_detached_send_packet_t *detached, uint64_t body_off, uint16_t body_len)
-{
-#define APPEND_BYTE(b) builder->buf->bytes[builder->buf->size++] = (b)
-#define APPEND_VARINT(v)                                                                                                           \
-    builder->buf->size = (char *)quicly_encodev((uint8_t *)(builder->buf->bytes + builder->buf->size), (v)) - builder->buf->bytes
+#define APPEND_BYTE(b) (*buf)->bytes[(*buf)->size++] = (b)
+#define APPEND_VARINT(v) (*buf)->size = (char *)quicly_encodev((uint8_t *)((*buf)->bytes + (*buf)->size), (v)) - (*buf)->bytes
 #define APPEND_VEC(p, l)                                                                                                           \
     do {                                                                                                                           \
-        memcpy(builder->buf->bytes + builder->buf->size, (p), (l));                                                                \
-        builder->buf->size += (l);                                                                                                 \
+        memcpy((*buf)->bytes + (*buf)->size, (p), (l));                                                                            \
+        (*buf)->size += (l);                                                                                                       \
     } while (0)
 #define APPEND_BLOCK(p, l)                                                                                                         \
     do {                                                                                                                           \
@@ -325,21 +244,18 @@ int h2o_dsr_add_instruction(h2o_dsr_instruction_builder_t *builder, h2o_linklist
         APPEND_VEC((p), (l));                                                                                                      \
     } while (0)
 
-    /* report error if the socket has been closed */
-    if (builder->sock == NULL)
-        return 0;
-
-    /* encode context, when building a new payload */
-    if (builder->buf == NULL) {
-        h2o_buffer_init(&builder->buf, &h2o_socket_buffer_prototype);
-        h2o_buffer_reserve(&builder->buf, 1024);
+    /* encode context when the first instruction send_packet instruction is to be sent (TODO handle key updates) */
+    if (!state->context_sent) {
+        h2o_buffer_init(buf, &h2o_socket_buffer_prototype);
+        h2o_buffer_reserve(buf, 1024);
         /* type */
         APPEND_BYTE(H2O_DSR_DECODED_INSTRUCTION_SET_CONTEXT);
         /* write 4-tuple */
-        builder->buf->size += encode_address(builder->buf->bytes + builder->buf->size, dest_addr);
+        (*buf)->size += encode_address((*buf)->bytes + (*buf)->size, dest_addr);
         /* write secrets */
         APPEND_BLOCK(detached->header_protection_secret, detached->cipher->hash->digest_size);
         APPEND_BLOCK(detached->aead_secret, detached->cipher->hash->digest_size);
+        state->context_sent = 1;
     }
 
     /* calculate the size of the instruction */
@@ -352,7 +268,7 @@ int h2o_dsr_add_instruction(h2o_dsr_instruction_builder_t *builder, h2o_linklist
     inst_size += quicly_encodev_capacity(detached->packet_payload_from);
 
     /* reserve memory */
-    h2o_buffer_reserve(&builder->buf, inst_size);
+    h2o_buffer_reserve(buf, inst_size);
 
     /* encode the instruction */
     APPEND_BYTE(H2O_DSR_DECODED_INSTRUCTION_SEND_PACKET);
@@ -362,26 +278,12 @@ int h2o_dsr_add_instruction(h2o_dsr_instruction_builder_t *builder, h2o_linklist
     APPEND_VARINT(detached->packet_number);
     APPEND_VARINT(detached->packet_from);
     APPEND_VARINT(detached->packet_payload_from);
-    assert(builder->buf->size <= builder->buf->capacity);
-
-    /* link */
-    if (!h2o_linklist_is_linked(&builder->_link))
-        h2o_linklist_insert(anchor, &builder->_link);
-
-    return 1;
+    assert((*buf)->size <= (*buf)->capacity);
 
 #undef APPEND_BYTE
 #undef APPEND_VARINT
 #undef APPEND_VEC
 #undef APPEND_BLOCK
-}
-
-void h2o_dsr_send_all_instructions(h2o_linklist_t *anchor)
-{
-    while (!h2o_linklist_is_empty(anchor)) {
-        h2o_dsr_instruction_builder_t *builder = H2O_STRUCT_FROM_MEMBER(h2o_dsr_instruction_builder_t, _link, anchor->next);
-        send_instructions(builder);
-    }
 }
 
 ssize_t h2o_dsr_decode_instruction(h2o_dsr_decoded_instruction_t *instruction, const uint8_t *src, size_t len)
