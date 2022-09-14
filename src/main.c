@@ -3605,11 +3605,13 @@ static void setup_configurators(void)
     if (getuid() == 0 && getpwnam("nobody") != NULL)
         conf.globalconf.user = "nobody";
 
-    {
+    { /* "listen" is invoked after global attributes like `tcp-fastopen`, but before `hosts`) */
         h2o_configurator_t *c = h2o_configurator_create(&conf.globalconf, sizeof(*c));
         c->enter = on_config_listen_enter;
         c->exit = on_config_listen_exit;
-        h2o_configurator_define_command(c, "listen", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST, on_config_listen);
+        h2o_configurator_define_command(
+            c, "listen", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_SEMI_DEFERRED,
+            on_config_listen);
     }
 
     {
