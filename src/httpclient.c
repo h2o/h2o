@@ -70,6 +70,8 @@ static struct {
 } std_in;
 static int io_interval = 0, req_interval = 0;
 static int ssl_verify_none = 0;
+static int exit_failure_on_http_errors = 0;
+static int program_exit_status = EXIT_SUCCESS;
 static h2o_socket_t *udp_sock = NULL;
 static h2o_httpclient_forward_datagram_cb udp_write;
 static struct sockaddr_in udp_sock_remote_addr;
@@ -353,6 +355,9 @@ static int on_body(h2o_httpclient_t *client, const char *errstr)
 
 static void print_status_line(int version, int status, h2o_iovec_t msg)
 {
+    if (exit_failure_on_http_errors && status >= 400)
+        program_exit_status = EXIT_FAILURE;
+
     fprintf(stderr, "HTTP/%d", (version >> 8));
     if ((version & 0xff) != 0) {
         fprintf(stderr, ".%d", version & 0xff);
@@ -488,6 +493,7 @@ static void usage(const char *progname)
             "               sets the number of requests run at once (default: 1)\n"
             "  -c <size>    size of body chunk (in bytes; default: 10)\n"
             "  -d <delay>   request interval (in msec; default: 0)\n"
+            "  -f           returns an error if an HTTP response code is 400 or greater.\n"
             "  -H <name:value>\n"
             "               adds a request header\n"
             "  -i <delay>   I/O interval between sending chunks (in msec; default: 0)\n"
@@ -636,7 +642,7 @@ int main(int argc, char **argv)
                                 {"ack-frequency", required_argument, NULL, OPT_ACK_FREQUENCY},
                                 {"help", no_argument, NULL, 'h'},
                                 {NULL}};
-    const char *optstring = "t:m:o:b:x:X:C:c:d:H:i:k2:W:h3:"
+    const char *optstring = "t:m:o:b:x:X:C:c:d:H:i:fk2:W:h3:"
 #ifdef __GNUC__
                             ":" /* for backward compatibility, optarg of -3 is optional when using glibc */
 #endif
@@ -773,6 +779,9 @@ int main(int argc, char **argv)
             h3ctx.quic.transport_params.max_stream_data.bidi_local = v;
             h3ctx.quic.transport_params.max_stream_data.bidi_remote = v;
         } break;
+        case 'f':
+            exit_failure_on_http_errors = 1;
+            break;
         case 'h':
             usage(argv[0]);
             exit(0);
@@ -867,5 +876,5 @@ int main(int argc, char **argv)
     if (req.connect_to != NULL)
         free(req.connect_to);
 
-    return 0;
+    return program_exit_status;
 }
