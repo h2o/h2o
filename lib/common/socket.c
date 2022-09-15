@@ -87,10 +87,6 @@ struct st_h2o_socket_ssl_t {
     int *did_write_in_read; /* used for detecting and closing the connection upon renegotiation (FIXME implement renegotiation) */
     size_t record_overhead;
     struct {
-        void (*cb)(void *data);
-        void *data;
-    } on_close;
-    struct {
         h2o_socket_cb cb;
         union {
             struct {
@@ -490,6 +486,9 @@ static void destroy_ssl(struct st_h2o_socket_ssl_t *ssl)
         ssl->ptls = NULL;
     }
     if (ssl->ossl != NULL) {
+        if (SSL_waiting_for_async(ssl->ossl)) {
+            SSL_do_handshake(ssl->ossl);
+        }
         if (!SSL_is_server(ssl->ossl)) {
             free(ssl->handshake.client.server_name);
             free(ssl->handshake.client.session_cache_key.base);
@@ -1551,26 +1550,6 @@ static void async_read_ready(h2o_socket_t *listener, const char *err)
     do_delayed_sockets(adata->client.sock);
 }
 
-static void async_ssl_on_close(void *data)
-{
-    struct async_data *adata = data;
-
-    if (adata->client.sock->async.enabled) {
-        // closing ssl, resume async transaction if pending to allow
-        // resources to be freed in async_on_close. In the case of ptls,
-        // this is done in `ptls_free` by calling a cancelation callback
-        if (adata->client.sock->ssl->ossl != NULL) {
-            if (SSL_waiting_for_async(adata->client.sock->ssl->ossl)) {
-                SSL_do_handshake(adata->client.sock->ssl->ossl);
-            }
-        }
-    }
-
-    // call original cb
-    adata->client.ssl.on_close_cb(adata->client.ssl.on_close_data);
-    do_delayed_handshakes(adata->client.sock);
-}
-
 static void async_on_close(void *data)
 {
     struct async_data *adata = data;
@@ -1626,8 +1605,6 @@ static void do_ssl_async(h2o_socket_t *sock)
         // new socket, keep original callbacks
         adata->client.on_close_cb = sock->on_close.cb;
         adata->client.on_close_data = sock->on_close.data;
-        adata->client.ssl.on_close_cb = sock->ssl->on_close.cb;
-        adata->client.ssl.on_close_data = sock->ssl->on_close.data;
     } else {
         // sock callbacks were overwritten
         // get original callbacks from previous adata
@@ -1642,8 +1619,6 @@ static void do_ssl_async(h2o_socket_t *sock)
     // overrite socket close callbacks in order to cancel async and free socket
     sock->on_close.cb = async_on_close;
     sock->on_close.data = adata;
-    sock->ssl->on_close.cb = async_ssl_on_close;
-    sock->ssl->on_close.data = adata;
 
     // free previous data
     free(sock->async.data);
