@@ -486,9 +486,11 @@ static void destroy_ssl(struct st_h2o_socket_ssl_t *ssl)
         ssl->ptls = NULL;
     }
     if (ssl->ossl != NULL) {
+#ifdef PTLS_OPENSSL_HAVE_ASYNC
         while (SSL_waiting_for_async(ssl->ossl)) {
             SSL_do_handshake(ssl->ossl);
         }
+#endif
         if (!SSL_is_server(ssl->ossl)) {
             free(ssl->handshake.client.server_name);
             free(ssl->handshake.client.session_cache_key.base);
