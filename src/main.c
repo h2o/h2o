@@ -818,7 +818,6 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
                 .require_client_authentication = 0,
                 .omit_end_of_early_data = 0,
                 .server_cipher_preference = server_cipher_preference,
-                .async_handshake = 1,
                 .encrypt_ticket = NULL, /* initialized later */
                 .save_ticket = NULL,    /* initialized later */
                 .log_event = NULL,
@@ -843,6 +842,10 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
                     {
                         .cb = on_emit_certificate_ptls,
                     },
+            },
+        .sc =
+            {
+                .async = 1,
             },
     };
     { /* obtain key and cert (via fake connection for libressl compatibility) */
@@ -901,7 +904,7 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
         }
 #endif
         // disable async handshaking in quic until it is supported in quicly
-        pctx->ctx.async_handshake = 0;
+        pctx->sc.async = 0;
 
         quicly_amend_ptls_context(&pctx->ctx);
     }
