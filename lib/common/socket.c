@@ -486,7 +486,7 @@ static void destroy_ssl(struct st_h2o_socket_ssl_t *ssl)
         ssl->ptls = NULL;
     }
     if (ssl->ossl != NULL) {
-        if (SSL_waiting_for_async(ssl->ossl)) {
+        while (SSL_waiting_for_async(ssl->ossl)) {
             SSL_do_handshake(ssl->ossl);
         }
         if (!SSL_is_server(ssl->ossl)) {
@@ -1712,8 +1712,8 @@ Redo:
             /* sent async request, reset the ssl state, and wait for async response */
             assert(ret < 0);
 #ifdef PTLS_OPENSSL_HAVE_ASYNC
-            if (SSL_waiting_for_async(sock->ssl->ossl)) {
-                goto Redo;
+            while (SSL_waiting_for_async(sock->ssl->ossl)) {
+                SSL_accept(sock->ssl->ossl);
             }
 #endif
             SSL_free(sock->ssl->ossl);
