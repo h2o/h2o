@@ -54,6 +54,10 @@ int neverbleed_load_private_key_file(neverbleed_t *nb, SSL_CTX *ctx, const char 
  */
 int neverbleed_setuidgid(neverbleed_t *nb, const char *user, int change_socket_ownership);
 /**
+ * set the cpu affinity for the neverbleed thread (returns 0 if successful)
+ */
+int neverbleed_setaffinity(neverbleed_t *nb, cpu_set_t *cpuset);
+/**
  * an optional callback that can be registered by the application for doing stuff immediately after the neverbleed process is being
  * spawned
  */

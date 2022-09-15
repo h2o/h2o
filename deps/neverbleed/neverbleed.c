@@ -342,6 +342,31 @@ static int expbuf_write(struct expbuf_t *buf, int fd)
 
     return 0;
 }
+
+static void yield_on_data(int fd)
+{
+    fd_set rfds;
+    int ret;
+    FD_ZERO(&rfds);
+    FD_SET(fd, &rfds);
+
+    while((ret = select(fd + 1, &rfds, NULL, NULL, NULL)) == -1 && (errno == EAGAIN || errno == EINTR))
+        ;
+    if (ret == -1) {
+        fprintf(stderr, "error in select(2): %d, %s\n", errno, strerror(errno));
+        dief("select(2)");
+    } else if (ret > 0) {
+        // yield when data is available
+        struct timespec tv = { .tv_nsec = 1 };
+        if (-1 == nanosleep(&tv, NULL)) {
+            dief("nanosleep");
+        }
+    } else {
+        // unreachable, no timeout configured
+        assert(0);
+    }
+}
+
 static int expbuf_read(struct expbuf_t *buf, int fd)
 {
     size_t sz;
@@ -1276,6 +1301,58 @@ Respond:
     return 0;
 }
 
+int neverbleed_setaffinity(neverbleed_t *nb, cpu_set_t *cpuset)
+{
+    THDATA_IN_FLIGHT *thdata = get_thread_data(nb);
+    struct expbuf_t buf = {NULL};
+    size_t ret;
+
+    expbuf_push_str(&buf, "setaffinity");
+    expbuf_push_bytes(&buf, cpuset, sizeof(*cpuset));
+    if (expbuf_write(&buf, thdata->fd) != 0)
+        dief(errno != 0 ? "write error" : "connection closed by daemon");
+    expbuf_dispose(&buf);
+
+    if (expbuf_read(&buf, thdata->fd) != 0)
+        dief(errno != 0 ? "read error" : "connection closed by daemon");
+    if (expbuf_shift_num(&buf, &ret) != 0) {
+        errno = 0;
+        dief("failed to parse response");
+    }
+    expbuf_dispose(&buf);
+
+    return (int)ret;
+}
+
+static int setaffinity_stub(struct expbuf_t *buf)
+{
+    char *cpuset_bytes;
+    size_t cpuset_len;
+    cpu_set_t cpuset;
+    int ret = 1;
+    CPU_ZERO(&cpuset);
+
+    if ((cpuset_bytes = expbuf_shift_bytes(buf, &cpuset_len)) == NULL) {
+        errno = 0;
+        warnf("%s: failed to parse request", __FUNCTION__);
+        return -1;
+    }
+
+    assert(cpuset_len == sizeof(cpuset));
+    memcpy(&cpuset, cpuset_bytes, cpuset_len);
+
+    if(pthread_setaffinity_np(pthread_self(), sizeof(cpuset), &cpuset) != 0) {
+        goto Respond;
+    }
+
+    ret = 0;
+
+Respond:
+    expbuf_dispose(buf);
+    expbuf_push_num(buf, ret);
+    return 0;
+}
+
 __attribute__((noreturn)) static void *daemon_close_notify_thread(void *_close_notify_fd)
 {
     int close_notify_fd = (int)((char *)_close_notify_fd - (char *)NULL);
@@ -1382,6 +1459,7 @@ static void *daemon_conn_thread(void *_sock_fd)
 
     while (1) {
         char *cmd;
+        yield_on_data(sock_fd);
         if (expbuf_read(&buf, sock_fd) != 0) {
             if (errno != 0)
                 warnf("read error");
@@ -1417,6 +1495,9 @@ static void *daemon_conn_thread(void *_sock_fd)
                 break;
         } else if (strcmp(cmd, "setuidgid") == 0) {
             if (setuidgid_stub(&buf) != 0)
+                break;
+        } else if (strcmp(cmd, "setaffinity") == 0) {
+            if (setaffinity_stub(&buf) != 0)
                 break;
         } else {
             warnf("unknown command:%s", cmd);
