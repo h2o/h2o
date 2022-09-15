@@ -253,7 +253,7 @@ struct st_ptls_t {
             uint32_t early_data_skipped_bytes; /* if not UINT32_MAX, the server is skipping early data */
             unsigned can_send_session_ticket : 1;
             struct {
-                void (*cb)(void *sign_certificate_ctx);
+                void (*cancel_cb)(void *sign_certificate_ctx);
                 void *sign_certificate_ctx;
             } sign_certificate;
         } server;
@@ -389,7 +389,7 @@ static int hkdf_expand_label(ptls_hash_algorithm_t *algo, void *output, size_t o
                              ptls_iovec_t hash_value, const char *label_prefix);
 static ptls_aead_context_t *new_aead(ptls_aead_algorithm_t *aead, ptls_hash_algorithm_t *hash, int is_enc, const void *secret,
                                      ptls_iovec_t hash_value, const char *label_prefix);
-static int server_complete_handshake(ptls_t *tls, ptls_message_emitter_t *emitter, int send_cert_verify,
+static int server_finish_handshake(ptls_t *tls, ptls_message_emitter_t *emitter, int send_cert_verify,
                                      struct st_ptls_signature_algorithms_t *signature_algorithms);
 
 static int is_supported_version(uint16_t v)
@@ -2759,7 +2759,7 @@ static int send_certificate_verify(ptls_t *tls, ptls_message_emitter_t *emitter,
             uint8_t data[PTLS_MAX_CERTIFICATE_VERIFY_SIGNDATA_SIZE];
             size_t datalen = build_certificate_verify_signdata(data, tls->key_schedule, context_string);
             if ((ret = tls->ctx->sign_certificate->cb(tls->ctx->sign_certificate, tls,
-                                                      tls->is_server ? &tls->server.sign_certificate.cb : NULL,
+                                                      tls->is_server ? &tls->server.sign_certificate.cancel_cb : NULL,
                                                       tls->is_server ? &tls->server.sign_certificate.sign_certificate_ctx : NULL,
                                                       &algo, sendbuf, ptls_iovec_init(data, datalen),
                                                       signature_algorithms != NULL ? signature_algorithms->list : NULL,
@@ -4187,11 +4187,11 @@ static int server_handle_hello(ptls_t *tls, ptls_message_emitter_t *emitter, ptl
                                     ch->cert_compression_algos.list, ch->cert_compression_algos.count)) != 0)
             goto Exit;
         /* send certificateverify, finished, and complete the handshake */
-        if ((ret = server_complete_handshake(tls, emitter, 1, &ch->signature_algorithms)) != 0)
+        if ((ret = server_finish_handshake(tls, emitter, 1, &ch->signature_algorithms)) != 0)
             goto Exit;
     } else {
         /* send finished, and complete the handshake */
-        if ((ret = server_complete_handshake(tls, emitter, 0, NULL)) != 0)
+        if ((ret = server_finish_handshake(tls, emitter, 0, NULL)) != 0)
             goto Exit;
     }
 
@@ -4208,7 +4208,7 @@ Exit:
 #undef EMIT_HELLO_RETRY_REQUEST
 }
 
-static int server_complete_handshake(ptls_t *tls, ptls_message_emitter_t *emitter, int send_cert_verify,
+static int server_finish_handshake(ptls_t *tls, ptls_message_emitter_t *emitter, int send_cert_verify,
                               struct st_ptls_signature_algorithms_t *signature_algorithms)
 {
     int ret;
@@ -4488,8 +4488,8 @@ void ptls_free(ptls_t *tls)
     if (tls->certificate_verify.cb != NULL) {
         tls->certificate_verify.cb(tls->certificate_verify.verify_ctx, 0, ptls_iovec_init(NULL, 0), ptls_iovec_init(NULL, 0));
     }
-    if (tls->server.sign_certificate.cb != NULL) {
-        tls->server.sign_certificate.cb(tls->server.sign_certificate.sign_certificate_ctx);
+    if (tls->server.sign_certificate.cancel_cb != NULL) {
+        tls->server.sign_certificate.cancel_cb(tls->server.sign_certificate.sign_certificate_ctx);
     }
     if (tls->pending_handshake_secret != NULL) {
         ptls_clear_memory(tls->pending_handshake_secret, PTLS_MAX_DIGEST_SIZE);
@@ -4959,7 +4959,7 @@ int ptls_handshake(ptls_t *tls, ptls_buffer_t *_sendbuf, const void *input, size
         return send_client_hello(tls, &emitter.super, properties, NULL);
     }
     case PTLS_STATE_SERVER_GENERATING_CERTIFICATE_VERIFY:
-        return server_complete_handshake(tls, &emitter.super, 1, NULL);
+        return server_finish_handshake(tls, &emitter.super, 1, NULL);
     default:
         break;
     }
@@ -5535,7 +5535,7 @@ int ptls_server_handle_message(ptls_t *tls, ptls_buffer_t *sendbuf, size_t epoch
 
     if (tls->state == PTLS_STATE_SERVER_GENERATING_CERTIFICATE_VERIFY) {
         int ret;
-        if ((ret = server_complete_handshake(tls, &emitter.super, 1, NULL)) != 0)
+        if ((ret = server_finish_handshake(tls, &emitter.super, 1, NULL)) != 0)
             return ret;
     }
 

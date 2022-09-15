@@ -610,10 +610,11 @@ PTLS_CALLBACK_TYPE(int, emit_certificate, ptls_t *tls, ptls_message_emitter_t *e
  * that point, the application should call `ptls_handshake`, which in turn would invoke this callback once again. The callback then
  * fills `*selected_algorithm` and `output` with the signature being generated. Note that `algorithms` and `num_algorithms` are
  * provided only when the callback is called for the first time. The callback can store arbitrary pointer specific to each signature
- * generation in `*sign_ctx`. `*cb` can be set as an opportunity to cancel any asynchronous operation or free any temporary
- * data allocated for the callback.
+ * generation in `*sign_ctx`.
+ * When `ptls_t` is disposed of while the async operation is in flight, `*cancel_cb` will be invoked. The backend should abort the
+ * calculation and free any temporary data allocated for that calculation.
  */
-PTLS_CALLBACK_TYPE(int, sign_certificate, ptls_t *tls, void (**cb)(void *sign_ctx), void **sign_certificate_ctx,
+PTLS_CALLBACK_TYPE(int, sign_certificate, ptls_t *tls, void (**cancel_cb)(void *sign_ctx), void **sign_certificate_ctx,
                    uint16_t *selected_algorithm, ptls_buffer_t *output, ptls_iovec_t input, const uint16_t *algorithms, size_t num_algorithms);
 /**
  * after receiving Certificate, the core calls the callback to verify the certificate chain and to obtain a pointer to a
@@ -785,10 +786,6 @@ struct st_ptls_context_t {
      * boolean indicating if the cipher-suite should be chosen based on server's preference
      */
     unsigned server_cipher_preference : 1;
-    /**
-     * boolean indicating if handshaking should be asynchronous
-     */
-    unsigned async_handshake : 1;
     /**
      *
      */

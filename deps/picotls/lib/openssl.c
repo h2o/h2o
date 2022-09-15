@@ -767,7 +767,7 @@ static int do_sign_final(void *vargs)
 }
 
 static int do_sign(EVP_PKEY *key, const struct st_ptls_openssl_signature_scheme_t *scheme, ptls_buffer_t *outbuf,
-                   ptls_iovec_t input, void (**cb)(void *sign_ctx), void **sign_ctx, int is_async)
+                   ptls_iovec_t input, void (**cancel_cb)(void *sign_ctx), void **sign_ctx, int is_async)
 {
     const EVP_MD *md = scheme->scheme_md != NULL ? scheme->scheme_md() : NULL;
     int pkey_id = EVP_PKEY_id(key);
@@ -857,8 +857,8 @@ static int do_sign(EVP_PKEY *key, const struct st_ptls_openssl_signature_scheme_
                     goto Exit;
                 case ASYNC_PAUSE: {
                     ret = PTLS_ERROR_ASYNC_OPERATION;
-                    if (cb != NULL)
-                        *cb = async_sign_cancel;
+                    assert(cancel_cb == NULL);
+                    *cancel_cb = async_sign_cancel;
                     return ret;
                 }
                 case ASYNC_NO_JOBS:
@@ -897,8 +897,8 @@ static int do_sign(EVP_PKEY *key, const struct st_ptls_openssl_signature_scheme_
 Exit:
     if (sign_ctx != NULL)
         *sign_ctx = NULL;
-    if (cb != NULL)
-        *cb = NULL;
+    if (cancel_cb != NULL)
+        *cancel_cb = NULL;
     sign_ctx_destroy(args);
     if (ctx != NULL)
         EVP_MD_CTX_destroy(ctx);
@@ -1196,13 +1196,13 @@ static const struct st_ptls_openssl_signature_scheme_t *match_scheme(const struc
     }
     return scheme;
 }
-static int sign_certificate(ptls_sign_certificate_t *_self, ptls_t *tls, void (**cb)(void *sign_ctx), void **sign_ctx,
+static int sign_certificate(ptls_sign_certificate_t *_self, ptls_t *tls, void (**cancel_cb)(void *sign_ctx), void **sign_ctx,
                             uint16_t *selected_algorithm, ptls_buffer_t *outbuf, ptls_iovec_t input, const uint16_t *algorithms,
                             size_t num_algorithms)
 {
     ptls_openssl_sign_certificate_t *self = (ptls_openssl_sign_certificate_t *)_self;
     const struct st_ptls_openssl_signature_scheme_t *scheme;
-    int is_async = ptls_get_context(tls)->async_handshake == 1;
+    int is_async = self->async == 1;
 
     if (ptls_is_server(tls)) {
         assert(sign_ctx != NULL);
@@ -1229,7 +1229,7 @@ static int sign_certificate(ptls_sign_certificate_t *_self, ptls_t *tls, void (*
 
 Exit:
     *selected_algorithm = scheme->scheme_id;
-    return do_sign(self->key, scheme, outbuf, input, cb, sign_ctx, is_async);
+    return do_sign(self->key, scheme, outbuf, input, cancel_cb, sign_ctx, is_async);
 }
 
 static X509 *to_x509(ptls_iovec_t vec)
