@@ -857,7 +857,7 @@ static int do_sign(EVP_PKEY *key, const struct st_ptls_openssl_signature_scheme_
                     goto Exit;
                 case ASYNC_PAUSE: {
                     ret = PTLS_ERROR_ASYNC_OPERATION;
-                    assert(cancel_cb == NULL);
+                    assert(*cancel_cb == NULL);
                     *cancel_cb = async_sign_cancel;
                     return ret;
                 }
@@ -1320,6 +1320,7 @@ Exit:
 int ptls_openssl_init_sign_certificate(ptls_openssl_sign_certificate_t *self, EVP_PKEY *key)
 {
     *self = (ptls_openssl_sign_certificate_t){{sign_certificate}};
+    self->async = 1;
 
     if ((self->schemes = lookup_signature_schemes(key)) == NULL)
         return PTLS_ERROR_INCOMPATIBLE_KEY;
