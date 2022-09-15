@@ -212,8 +212,8 @@ struct st_h2o_socket_t {
     struct {
         int enabled;
         void *data;
-        h2o_linklist_t delayed_handshake_link;
-        h2o_timer_t retry_dispose;
+        h2o_linklist_t delayed_link;
+        h2o_socket_cb delayed_cb;
     } async;
 };
 

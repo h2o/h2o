@@ -402,6 +402,16 @@ void do_close_socket(h2o_socket_t *_sock)
     link_to_statechanged(sock);
 }
 
+int socket_is_closed(h2o_socket_t *_sock)
+{
+    struct st_h2o_evloop_socket_t *sock = (struct st_h2o_evloop_socket_t *)_sock;
+    if ((sock->_flags & H2O_SOCKET_FLAG_IS_CLOSED) != 0) {
+        return 1;
+    }
+
+    return 0;
+}
+
 void report_early_write_error(h2o_socket_t *_sock)
 {
     struct st_h2o_evloop_socket_t *sock = (struct st_h2o_evloop_socket_t *)_sock;
