@@ -272,6 +272,7 @@ static int do_pread(h2o_sendvec_t *src, void *dst, size_t len)
         return 0;
 
     src->cb_arg[1] += len;
+    src->len -= len;
     return 1;
 }
 
