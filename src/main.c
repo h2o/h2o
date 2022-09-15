@@ -843,10 +843,6 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
                         .cb = on_emit_certificate_ptls,
                     },
             },
-        .sc =
-            {
-                .async = 1,
-            },
     };
     { /* obtain key and cert (via fake connection for libressl compatibility) */
         SSL *fakeconn = SSL_new(identity->ossl);
