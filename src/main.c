@@ -3011,10 +3011,10 @@ static void on_accept(h2o_socket_t *listener, const char *err)
         sock->on_close.data = ctx->accept_ctx.ctx;
 
         struct listener_config_t *listener_config = conf.listeners[ctx->listener_index];
-        if (listener_config->sndbuf != 0)
-            setsockopt(h2o_socket_get_fd(sock), SOL_SOCKET, SO_SNDBUF, &listener_config->sndbuf, sizeof(listener_config->sndbuf));
-        if (listener_config->rcvbuf != 0)
-            setsockopt(h2o_socket_get_fd(sock), SOL_SOCKET, SO_RCVBUF, &listener_config->rcvbuf, sizeof(listener_config->rcvbuf));
+        if (listener_config->sndbuf != 0 && setsockopt(h2o_socket_get_fd(sock), SOL_SOCKET, SO_SNDBUF, &listener_config->sndbuf, sizeof(listener_config->sndbuf)) != 0)
+            h2o_perror("failed to set SO_SNDBUF");
+        if (listener_config->rcvbuf != 0 && setsockopt(h2o_socket_get_fd(sock), SOL_SOCKET, SO_RCVBUF, &listener_config->rcvbuf, sizeof(listener_config->rcvbuf))  != 0)
+            h2o_perror("failed to set SO_RCVBUF");
         set_tcp_congestion_controller(sock, listener_config->tcp_congestion_controller);
 
         h2o_accept(&ctx->accept_ctx, sock);
