@@ -22,6 +22,7 @@
 #ifndef h2o__evloop_h
 #define h2o__evloop_h
 
+#include <sys/time.h>
 #include "h2o/linklist.h"
 #include "h2o/timerwheel.h"
 
