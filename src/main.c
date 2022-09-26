@@ -2576,9 +2576,13 @@ static yoml_t *resolve_file_tag(yoml_t *node, resolve_tag_arg_t *arg)
     }
 
     yoml_parse_args_t parse_args = {
-        filename,          /* filename */
-        NULL,              /* mem_set */
-        {resolve_tag, arg} /* resolve_tag */
+        .filename = filename,
+        .resolve_tag = {
+            .cb = resolve_tag,
+            .cb_arg = arg,
+        },
+        .resolve_alias = 1,
+        .resolve_merge = 1,
     };
     loaded = load_config(&parse_args, node);
 
@@ -3882,9 +3886,13 @@ int main(int argc, char **argv)
         yoml_t *yoml;
         resolve_tag_arg_t resolve_tag_arg = {{NULL}};
         yoml_parse_args_t parse_args = {
-            opt_config_file,                /* filename */
-            NULL,                           /* mem_set */
-            {resolve_tag, &resolve_tag_arg} /* resolve_tag */
+            .filename = opt_config_file,
+            .resolve_tag = {
+                .cb = resolve_tag,
+                .cb_arg = &resolve_tag_arg
+            },
+            .resolve_alias = 1,
+            .resolve_merge = 1,
         };
         if ((yoml = load_config(&parse_args, NULL)) == NULL)
             exit(EX_CONFIG);
