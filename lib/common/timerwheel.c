@@ -58,7 +58,7 @@ struct st_h2o_timerwheel_t {
      * number of wheels and the wheel
      */
     size_t num_wheels;
-    h2o_linklist_t wheels[1][H2O_TIMERWHEEL_SLOTS_PER_WHEEL];
+    h2o_linklist_t wheels[][H2O_TIMERWHEEL_SLOTS_PER_WHEEL];
 };
 
 void h2o_timerwheel_dump(h2o_timerwheel_t *ctx)
