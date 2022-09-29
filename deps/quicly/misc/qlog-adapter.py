@@ -404,7 +404,7 @@ def main():
     for i, event in enumerate(source_events):
         handler = QLOG_EVENT_HANDLERS.get(event["type"])
         if handler:
-            print(json.dumps(handler(source_events, i)))
+            print(json.dumps(handler(source_events, i), separators=(',', ':')))
 
 if __name__ == "__main__":
     main()

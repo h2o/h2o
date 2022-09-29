@@ -45,7 +45,10 @@ subtest "hello" => sub {
         diag("qlog:\n$qlog") if $ENV{TEST_DEBUG};
         my @events = map { decode_json($_) } split /\n/, $qlog;
         cmp_ok scalar(@events), ">=", 2, "it has at least two events";
-        # TODO: validate the events according to the qlog spec
+
+        # https://github.com/quicwg/qlog/blob/main/draft-ietf-quic-qlog-main-schema.md#the-high-level-qlog-schema-top-level
+        ok $events[0]->{qlog_version}, "it has qlog_version";
+        # TODO: validate the events according to the qlog schema
     };
 };
 

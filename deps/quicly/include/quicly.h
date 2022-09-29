@@ -500,6 +500,10 @@ typedef struct st_quicly_stats_t {
      */
     quicly_rtt_t rtt;
     /**
+     * Loss thresholds.
+     */
+    quicly_loss_thresholds_t loss_thresholds;
+    /**
      * Congestion control stats (experimental; TODO cherry-pick what can be exposed as part of a stable API).
      */
     quicly_cc_t cc;
@@ -511,6 +515,10 @@ typedef struct st_quicly_stats_t {
      * largest number of packets contained in the sentmap
      */
     size_t num_sentmap_packets_largest;
+    /**
+     * Time took until handshake is confirmed. UINT64_MAX if handshake is not confirmed yet.
+     */
+    uint64_t handshake_confirmed_msec;
 } quicly_stats_t;
 
 /**

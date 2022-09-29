@@ -1186,6 +1186,7 @@ int main(int argc, char **argv)
                 fprintf(stderr, "failed to parse idle timeout: %s\n", optarg);
                 exit(1);
             }
+            break;
         case 'j':
             setup_ptlslog(optarg);
             break;

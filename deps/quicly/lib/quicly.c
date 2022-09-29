@@ -88,7 +88,7 @@ KHASH_MAP_INIT_INT64(quicly_stream_t, quicly_stream_t *)
         quicly_conn_t *_conn = (conn);                                                                                             \
         if (PTLS_UNLIKELY(QUICLY_##label##_ENABLED()) && !ptls_skip_tracing(_conn->crypto.tls))                                    \
             QUICLY_##label(_conn, __VA_ARGS__);                                                                                    \
-        QUICLY_TRACER(label, _conn,  __VA_ARGS__);                                                                                 \
+        QUICLY_TRACER(label, _conn, __VA_ARGS__);                                                                                  \
     } while (0)
 #else
 #define QUICLY_PROBE(label, conn, ...) QUICLY_TRACER(label, conn, __VA_ARGS__)
@@ -1220,9 +1220,11 @@ int quicly_get_stats(quicly_conn_t *conn, quicly_stats_t *stats)
 
     /* set or generate the non-pre-built stats fields here */
     stats->rtt = conn->egress.loss.rtt;
+    stats->loss_thresholds = conn->egress.loss.thresholds;
     stats->cc = conn->egress.cc;
     quicly_ratemeter_report(&conn->egress.ratemeter, &stats->delivery_rate);
     stats->num_sentmap_packets_largest = conn->egress.loss.sentmap.num_packets_largest;
+    stats->handshake_confirmed_msec = conn->super.stats.handshake_confirmed_msec;
 
     return 0;
 }
@@ -3170,11 +3172,10 @@ static int commit_send_packet(quicly_conn_t *conn, quicly_send_context_t *s, int
     datagram_size = s->dst - s->payload_buf.datagram;
     assert(datagram_size <= conn->egress.max_udp_payload_size);
 
-    conn->super.ctx->crypto_engine->encrypt_packet(conn->super.ctx->crypto_engine, conn, s->target.cipher->header_protection,
-                                                   s->target.cipher->aead, ptls_iovec_init(s->payload_buf.datagram, datagram_size),
-                                                   s->target.first_byte_at - s->payload_buf.datagram,
-                                                   s->dst_payload_from - s->payload_buf.datagram, conn->egress.packet_number,
-                                                   coalesced);
+    conn->super.ctx->crypto_engine->encrypt_packet(
+        conn->super.ctx->crypto_engine, conn, s->target.cipher->header_protection, s->target.cipher->aead,
+        ptls_iovec_init(s->payload_buf.datagram, datagram_size), s->target.first_byte_at - s->payload_buf.datagram,
+        s->dst_payload_from - s->payload_buf.datagram, conn->egress.packet_number, coalesced);
 
     /* update CC, commit sentmap */
     if (s->target.ack_eliciting) {
@@ -3194,7 +3195,7 @@ static int commit_send_packet(quicly_conn_t *conn, quicly_send_context_t *s, int
         PTLSLOG_ELEMENT_UNSIGNED(pn, conn->egress.packet_number);
         PTLSLOG_ELEMENT_UNSIGNED(len, s->dst - s->target.first_byte_at);
         PTLSLOG_ELEMENT_UNSIGNED(packet_type, get_epoch(*s->target.first_byte_at));
-        PTLSLOG_ELEMENT_SIGNED(ack_only, !s->target.ack_eliciting);
+        PTLSLOG_ELEMENT_BOOL(ack_only, !s->target.ack_eliciting);
     });
 
     ++conn->egress.packet_number;
@@ -3809,7 +3810,7 @@ UpdateState:
         PTLSLOG_ELEMENT_SIGNED(stream_id, stream->stream_id);
         PTLSLOG_ELEMENT_UNSIGNED(off, off);
         PTLSLOG_ELEMENT_UNSIGNED(len, len);
-        PTLSLOG_ELEMENT_SIGNED(is_fin, is_fin);
+        PTLSLOG_ELEMENT_BOOL(is_fin, is_fin);
     });
 
     QUICLY_PROBE(QUICTRACE_SEND_STREAM, stream->conn, stream->conn->stash.now, stream, off, len, is_fin);
@@ -3949,7 +3950,7 @@ static int send_max_streams(quicly_conn_t *conn, int uni, quicly_send_context_t 
     QUICLY_LOG_CONN(max_streams_send, conn, {
         PTLSLOG_ELEMENT_SIGNED(time, conn->stash.now);
         PTLSLOG_ELEMENT_UNSIGNED(maximum, new_count);
-        PTLSLOG_ELEMENT_SIGNED(is_unidirectional, uni);
+        PTLSLOG_ELEMENT_BOOL(is_unidirectional, uni);
     });
 
     return 0;
@@ -3983,7 +3984,7 @@ static int send_streams_blocked(quicly_conn_t *conn, int uni, quicly_send_contex
     QUICLY_LOG_CONN(streams_blocked_send, conn, {
         PTLSLOG_ELEMENT_SIGNED(time, conn->stash.now);
         PTLSLOG_ELEMENT_UNSIGNED(maximum, max_streams->count);
-        PTLSLOG_ELEMENT_SIGNED(is_unidirectional, uni);
+        PTLSLOG_ELEMENT_BOOL(is_unidirectional, uni);
     });
 
     return 0;
@@ -4432,7 +4433,7 @@ static int update_traffic_key_cb(ptls_update_traffic_key_t *self, ptls_t *tls, i
                  QUICLY_PROBE_HEXDUMP(secret, cipher->hash->digest_size));
     QUICLY_LOG_CONN(crypto_update_secret, conn, {
         PTLSLOG_ELEMENT_SIGNED(time, conn->stash.now);
-        PTLSLOG_ELEMENT_SIGNED(is_enc, is_enc);
+        PTLSLOG_ELEMENT_BOOL(is_enc, is_enc);
         PTLSLOG_ELEMENT_UNSIGNED(epoch, epoch);
         PTLSLOG_ELEMENT_SAFESTR(label, log_label);
     });
@@ -5152,7 +5153,7 @@ static int handle_ack_frame(quicly_conn_t *conn, struct st_quicly_handle_payload
         int64_t sent_at;
     } largest_newly_acked = {UINT64_MAX, INT64_MAX};
     size_t bytes_acked = 0;
-    int includes_ack_eliciting = 0, ret;
+    int includes_ack_eliciting = 0, includes_late_ack = 0, ret;
 
     if ((ret = quicly_decode_ack_frame(&state->src, state->end, &frame, state->frame_type == QUICLY_FRAME_TYPE_ACK_ECN)) != 0)
         return ret;
@@ -5209,6 +5210,7 @@ static int handle_ack_frame(quicly_conn_t *conn, struct st_quicly_handle_payload
                 includes_ack_eliciting = 1;
                 if (sent->cc_bytes_in_flight == 0) {
                     is_late_ack = 1;
+                    includes_late_ack = 1;
                     ++conn->super.stats.num_packets.late_acked;
                 }
             }
@@ -5219,7 +5221,7 @@ static int handle_ack_frame(quicly_conn_t *conn, struct st_quicly_handle_payload
             QUICLY_LOG_CONN(packet_acked, conn, {
                 PTLSLOG_ELEMENT_SIGNED(time, conn->stash.now);
                 PTLSLOG_ELEMENT_UNSIGNED(pn, pn_acked);
-                PTLSLOG_ELEMENT_SIGNED(is_late_ack, is_late_ack);
+                PTLSLOG_ELEMENT_BOOL(is_late_ack, is_late_ack);
             });
             if (sent->cc_bytes_in_flight != 0) {
                 bytes_acked += sent->cc_bytes_in_flight;
@@ -5262,7 +5264,10 @@ static int handle_ack_frame(quicly_conn_t *conn, struct st_quicly_handle_payload
     /* Update loss detection engine on ack. The function uses ack_delay only when the largest_newly_acked is also the largest acked
      * so far. So, it does not matter if the ack_delay being passed in does not apply to the largest_newly_acked. */
     quicly_loss_on_ack_received(&conn->egress.loss, largest_newly_acked.pn, state->epoch, conn->stash.now,
-                                largest_newly_acked.sent_at, frame.ack_delay, includes_ack_eliciting);
+                                largest_newly_acked.sent_at, frame.ack_delay,
+                                includes_ack_eliciting ? includes_late_ack ? QUICLY_LOSS_ACK_RECEIVED_KIND_ACK_ELICITING_LATE_ACK
+                                                                           : QUICLY_LOSS_ACK_RECEIVED_KIND_ACK_ELICITING
+                                                       : QUICLY_LOSS_ACK_RECEIVED_KIND_NON_ACK_ELICITING);
 
     /* OnPacketAcked and OnPacketAckedCC */
     if (bytes_acked > 0) {
@@ -5386,7 +5391,7 @@ static int handle_streams_blocked_frame(quicly_conn_t *conn, struct st_quicly_ha
     QUICLY_LOG_CONN(streams_blocked_receive, conn, {
         PTLSLOG_ELEMENT_SIGNED(time, conn->stash.now);
         PTLSLOG_ELEMENT_UNSIGNED(maximum, frame.count);
-        PTLSLOG_ELEMENT_SIGNED(is_unidirectional, uni);
+        PTLSLOG_ELEMENT_BOOL(is_unidirectional, uni);
     });
 
     if (should_send_max_streams(conn, uni)) {
@@ -5410,7 +5415,7 @@ static int handle_max_streams_frame(quicly_conn_t *conn, struct st_quicly_handle
     QUICLY_LOG_CONN(max_streams_receive, conn, {
         PTLSLOG_ELEMENT_SIGNED(time, conn->stash.now);
         PTLSLOG_ELEMENT_UNSIGNED(maximum, frame.count);
-        PTLSLOG_ELEMENT_SIGNED(is_unidirectional, uni);
+        PTLSLOG_ELEMENT_BOOL(is_unidirectional, uni);
     });
 
     if ((ret = update_max_streams(uni ? &conn->egress.max_streams.uni : &conn->egress.max_streams.bidi, frame.count)) != 0)
@@ -5516,7 +5521,7 @@ static int handle_max_data_frame(quicly_conn_t *conn, struct st_quicly_handle_pa
     if (frame.max_data <= conn->egress.max_data.permitted)
         return 0;
     conn->egress.max_data.permitted = frame.max_data;
-    conn->egress.data_blocked = QUICLY_SENDER_STATE_UNACKED; /* DATA_BLOCKED has not been sent for the new limit */
+    conn->egress.data_blocked = QUICLY_SENDER_STATE_NONE; /* DATA_BLOCKED has not been sent for the new limit */
 
     return 0;
 }
