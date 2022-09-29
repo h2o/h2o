@@ -5659,10 +5659,13 @@ char *ptls_hexdump(char *buf, const void *_src, size_t len)
     return buf;
 }
 
-static size_t escape_json_unsafe_string(char *buf, const void *bytes, size_t len)
+/**
+ * Builds a JSON-safe string without double quotes. Supplied buffer MUST be 6x + 1 bytes larger than the input.
+ */
+static size_t escape_json_unsafe_string(char *buf, const void *unsafe_str, size_t len)
 {
     char *dst = buf;
-    const uint8_t *src = bytes, *end = src + len;
+    const uint8_t *src = unsafe_str, *end = src + len;
 
     for (; src != end; ++src) {
         switch (*src) {

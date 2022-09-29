@@ -1581,9 +1581,6 @@ int ptlslog_add_fd(int fd);
         }                                                                                                                          \
     } while (0)
 
-/**
- * Builds a JSON-safe string. Supplied buffer MUST be 4x + 1 bytes bigger than the input.
- */
 static void ptls_byte_to_hex(char *dst, uint8_t byte);
 
 static int ptlslog__do_push_safestr(ptls_buffer_t *buf, const char *s);
