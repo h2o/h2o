@@ -76,9 +76,13 @@ struct expected_t {
 static void check_path(void *ctx, const char *path, size_t path_len, int is_critical)
 {
     struct expected_t **expected = ctx;
-    ok(h2o_memis(path, path_len, (*expected)->path, strlen((*expected)->path)));
-    ok(is_critical == (*expected)->is_critical);
-    ++*expected;
+    if ((*expected)->path != NULL) {
+        ok(h2o_memis(path, path_len, (*expected)->path, strlen((*expected)->path)));
+        ok(is_critical == (*expected)->is_critical);
+        ++*expected;
+    } else {
+        ok(0);
+    }
 }
 
 static void test_extract_push_path_from_link_header(void)
@@ -91,12 +95,13 @@ static void test_extract_push_path_from_link_header(void)
 #define DO_CHECK(_base_scheme, _base_authority, _input, _filtered_expected, ...)                                                   \
     do {                                                                                                                           \
         h2o_iovec_t input = h2o_iovec_init(_input, strlen(_input)), filtered;                                                      \
+        const char *filtered_expected = (_filtered_expected);                                                                      \
         struct expected_t expected[] = {__VA_ARGS__, {NULL}}, *e = expected;                                                       \
         h2o_extract_push_path_from_link_header(&pool, input.base, input.len, base_path, &H2O_URL_SCHEME_HTTP, input_authority,     \
                                                _base_scheme, _base_authority, check_path, &e, &filtered, 0);                       \
         ok(e->path == NULL);                                                                                                       \
-        if (_filtered_expected != NULL) {                                                                                          \
-            ok(h2o_memis(filtered.base, filtered.len, _filtered_expected, strlen(_filtered_expected)));                            \
+        if (filtered_expected != NULL) {                                                                                           \
+            ok(h2o_memis(filtered.base, filtered.len, filtered_expected, strlen(filtered_expected)));                              \
         } else {                                                                                                                   \
             ok(h2o_memis(filtered.base, filtered.len, input.base, input.len));                                                     \
         }                                                                                                                          \

@@ -32,7 +32,8 @@ static yoml_t *parse(const char *fn, const char *s)
 
     yaml_parser_initialize(&parser);
     yaml_parser_set_input_string(&parser, (yaml_char_t*)s, strlen(s));
-    doc = yoml_parse_document(&parser, NULL, NULL, fn);
+    yoml_parse_args_t args = (yoml_parse_args_t){ .filename = fn, .resolve_alias = 1, .resolve_merge = 1 };
+    doc = yoml_parse_document(&parser, NULL, &args);
     yaml_parser_delete(&parser);
 
     return doc;
@@ -273,6 +274,34 @@ int main(int argc, char **argv)
     ok(strcmp(doc->data.mapping.elements[2].value->data.mapping.elements[1].key->data.scalar, "y") == 0);
     ok(doc->data.mapping.elements[2].value->data.mapping.elements[1].value->type == YOML_TYPE_SCALAR);
     ok(strcmp(doc->data.mapping.elements[2].value->data.mapping.elements[1].value->data.scalar, "2") == 0);
+
+    doc = parse(
+        "foo.yaml",
+        "a: &foo\n"
+        " b: c\n"
+        " <<:\n"
+        "  d: e\n"
+        "f: *foo\n"
+    );
+    ok(doc != NULL);
+    ok(doc->type == YOML_TYPE_MAPPING);
+    ok(doc->data.mapping.size == 2);
+    ok(doc->data.mapping.elements[1].value->type == YOML_TYPE_MAPPING);
+    ok(doc->data.mapping.elements[1].value->data.mapping.elements[0].key->type == YOML_TYPE_SCALAR);
+    ok(strcmp(doc->data.mapping.elements[1].value->data.mapping.elements[0].key->data.scalar, "b") == 0);
+    ok(doc->data.mapping.elements[1].value->data.mapping.elements[0].value->type == YOML_TYPE_SCALAR);
+    ok(strcmp(doc->data.mapping.elements[1].value->data.mapping.elements[0].value->data.scalar, "c") == 0);
+    ok(doc->data.mapping.elements[1].value->data.mapping.elements[1].key->type == YOML_TYPE_SCALAR);
+    ok(strcmp(doc->data.mapping.elements[1].value->data.mapping.elements[1].key->data.scalar, "d") == 0);
+    ok(doc->data.mapping.elements[1].value->data.mapping.elements[1].value->type == YOML_TYPE_SCALAR);
+    ok(strcmp(doc->data.mapping.elements[1].value->data.mapping.elements[1].value->data.scalar, "e") == 0);
+
+    /* in current implementation, merge generates a new node for each occurences of an alias,
+       so these two nodes become different */
+    ok(doc->data.mapping.elements[0].value != doc->data.mapping.elements[1].value);
+    ok(doc->data.mapping.elements[0].value->_refcnt == 1);
+    ok(doc->data.mapping.elements[1].value->_refcnt == 1);
+
 
     return done_testing();
 }

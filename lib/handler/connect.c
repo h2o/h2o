@@ -416,13 +416,18 @@ static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errs
         }
     }
 
-    /* Try connecting if possible. */
-    if (self->server_addresses.used == self->server_addresses.size)
-        return;
-    /* If connection attempt has been under way for more than CONNECTION_ATTEMPT_DELAY_MS, stop that and try next address. Return
-     * otherwise. */
+    /* If the connection attempt has been under way for more than CONNECTION_ATTEMPT_DELAY_MS and the lookup that just completed
+     * gave us a new address to try, then stop that connection attempt and start a new connection attempt using the new address.
+     *
+     * If the connection attempt has been under way for less than that, then do nothing for now.  Eventually, either the timeout
+     * will expire or the connection attempt will complete.
+     *
+     * If the connection attempt is under way but the lookup has not provided us any new address to try, then do nothing for now,
+     * and wait for the connection attempt to complete. */
     if (self->sock != NULL) {
         if (h2o_timer_is_linked(&self->eyeball_delay))
+            return;
+        if (self->server_addresses.used == self->server_addresses.size)
             return;
         h2o_socket_close(self->sock);
         self->sock = NULL;
@@ -800,6 +805,7 @@ static int udp_connect(struct st_connect_generator_t *self, struct st_server_add
             err = h2o_socket_get_error_string(errno, err);
             close(fd);
         }
+        set_last_error(self, ERROR_CLASS_CONNECT, err);
         return 0;
     }
 

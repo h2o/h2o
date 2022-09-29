@@ -110,11 +110,13 @@ static h2o_iovec_t events_status_final(void *priv, h2o_globalconf_t *gconf, h2o_
     /* clang-format off */
     ret.len = snprintf(ret.base, BUFSIZE, ",\n"
                                           " \"status-errors.400\": %" PRIu64 ",\n"
+                                          " \"status-errors.401\": %" PRIu64 ",\n"
                                           " \"status-errors.403\": %" PRIu64 ",\n"
                                           " \"status-errors.404\": %" PRIu64 ",\n"
                                           " \"status-errors.405\": %" PRIu64 ",\n"
                                           " \"status-errors.416\": %" PRIu64 ",\n"
                                           " \"status-errors.417\": %" PRIu64 ",\n"
+                                          " \"status-errors.421\": %" PRIu64 ",\n"
                                           " \"status-errors.500\": %" PRIu64 ",\n"
                                           " \"status-errors.502\": %" PRIu64 ",\n"
                                           " \"status-errors.503\": %" PRIu64 ",\n"
@@ -145,18 +147,20 @@ static h2o_iovec_t events_status_final(void *priv, h2o_globalconf_t *gconf, h2o_
                                           " \"quic.packet-received\": %" PRIu64 ",\n"
                                           " \"quic.packet-processed\": %" PRIu64 ",\n"
                                           " \"quic.num-sentmap-packets-largest\": %zu"
-                                          ",\n" H2O_QUIC_AGGREGATED_STATS_APPLY(QUIC_FMT) " \"ssl.errors\": %" PRIu64 ",\n"
-                                                                                          " \"memory.mmap_errors\": %zu,\n"
-                                                                                          " \"h2olog.lost\": %zu\n",
-                       H1_AGG_ERR(400), H1_AGG_ERR(403), H1_AGG_ERR(404), H1_AGG_ERR(405), H1_AGG_ERR(416), H1_AGG_ERR(417),
-                       H1_AGG_ERR(500), H1_AGG_ERR(502), H1_AGG_ERR(503), esc->h1_request_timeout, esc->h1_request_io_timeout,
+                                          ",\n" H2O_QUIC_AGGREGATED_STATS_APPLY(QUIC_FMT)
+                                          " \"ssl.errors\": %" PRIu64 ",\n"
+                                          " \"memory.mmap_errors\": %zu,\n"
+                                          " \"h2olog.lost\": %zu\n",
+                       H1_AGG_ERR(400), H1_AGG_ERR(401), H1_AGG_ERR(403), H1_AGG_ERR(404), H1_AGG_ERR(405), H1_AGG_ERR(416),
+                       H1_AGG_ERR(417), H1_AGG_ERR(421), H1_AGG_ERR(500), H1_AGG_ERR(502), H1_AGG_ERR(503),
+                       esc->h1_request_timeout, esc->h1_request_io_timeout,
                        H2_AGG_ERR(PROTOCOL), H2_AGG_ERR(INTERNAL), H2_AGG_ERR(FLOW_CONTROL), H2_AGG_ERR(SETTINGS_TIMEOUT),
                        H2_AGG_ERR(STREAM_CLOSED), H2_AGG_ERR(FRAME_SIZE), H2_AGG_ERR(REFUSED_STREAM), H2_AGG_ERR(CANCEL),
                        H2_AGG_ERR(COMPRESSION), H2_AGG_ERR(CONNECT), H2_AGG_ERR(ENHANCE_YOUR_CALM), H2_AGG_ERR(INADEQUATE_SECURITY),
                        esc->h2_read_closed, esc->h2_write_closed, esc->h2_idle_timeout, esc->h2_streaming_requests,
                        esc->http3.packet_forwarded, esc->http3.forwarded_packet_received,
-                       esc->connection_stats.idle_closed, esc->connection_stats.num_idle, esc->connection_stats.num_active, esc->connection_stats.num_shutdown,
-                       esc->quic_stats.packet_received, esc->quic_stats.packet_processed,
+                       esc->connection_stats.idle_closed, esc->connection_stats.num_idle, esc->connection_stats.num_active,
+                       esc->connection_stats.num_shutdown, esc->quic_stats.packet_received, esc->quic_stats.packet_processed,
                        esc->quic_stats.num_sentmap_packets_largest
                        H2O_QUIC_AGGREGATED_STATS_APPLY(QUIC_VAL),
                        esc->ssl_errors, h2o_mmap_errors, ptlslog_num_lost());
