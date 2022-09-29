@@ -5781,10 +5781,11 @@ int ptlslog__do_push_hexdump(ptls_buffer_t *buf, const void *s, size_t l)
 int ptlslog__do_push_signed32(ptls_buffer_t *buf, int32_t v)
 {
     /* TODO optimize */
-    char s[sizeof("-9223372036854775808")];
+    char s[sizeof("-2147483648")];
     int len = sprintf(s, "%" PRId32, v);
     return ptlslog__do_pushv(buf, s, (size_t)len);
 }
+
 int ptlslog__do_push_signed64(ptls_buffer_t *buf, int64_t v)
 {
     /* TODO optimize */
