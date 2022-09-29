@@ -261,7 +261,6 @@ static std::string build_cc_macro_str(const char *name, const std::string &str)
     return build_cc_macro_expr(name, "\"" + str + "\"");
 }
 
-
 static int read_from_unix_socket(const char *unix_socket_path)
 {
     struct sockaddr_un sa = {
@@ -273,7 +272,7 @@ static int read_from_unix_socket(const char *unix_socket_path)
     }
     strcpy(sa.sun_path, unix_socket_path);
 
-    int fd = -1;
+    int fd;
     int ret = EXIT_FAILURE;
     if ((fd = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
         perror("failed to create a socket");
@@ -306,14 +305,12 @@ static int read_from_unix_socket(const char *unix_socket_path)
     }
 
     ret = EXIT_SUCCESS;
-
 Exit:
     if (fd != -1)
         close(fd);
 
     return ret;
 }
-
 
 #define CC_MACRO_EXPR(name) build_cc_macro_expr(#name, name)
 #define CC_MACRO_STR(name) build_cc_macro_str(#name, name)

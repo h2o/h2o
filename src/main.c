@@ -2264,9 +2264,7 @@ static int on_config_h2olog_socket(h2o_configurator_command_t *cmd, h2o_configur
         return -1;
 
     add_listener(fd, (struct sockaddr *)&sa, sizeof(sa), 0, 0, sndbuf, 0);
-
     conf.h2olog_socket_fd = fd;
-
     return 0;
 }
 
