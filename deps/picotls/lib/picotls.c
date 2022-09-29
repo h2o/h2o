@@ -4404,7 +4404,7 @@ ptls_t *ptls_client_new(ptls_context_t *ctx)
     }
 
     PTLS_PROBE(NEW, tls, 0);
-    PTLSLOG_CONN(new, tls, { PTLSLOG_ELEMENT_SIGNED(is_server, 0); });
+    PTLSLOG_CONN(new, tls, { PTLSLOG_ELEMENT_BOOL(is_server, 0); });
     return tls;
 }
 
@@ -4415,7 +4415,7 @@ ptls_t *ptls_server_new(ptls_context_t *ctx)
     tls->server.early_data_skipped_bytes = UINT32_MAX;
 
     PTLS_PROBE(NEW, tls, 1);
-    PTLSLOG_CONN(new, tls, { PTLSLOG_ELEMENT_SIGNED(is_server, 1); });
+    PTLSLOG_CONN(new, tls, { PTLSLOG_ELEMENT_BOOL(is_server, 1); });
     return tls;
 }
 
@@ -4642,8 +4642,8 @@ static int handle_client_handshake_message(ptls_t *tls, ptls_message_emitter_t *
     PTLS_PROBE(RECEIVE_MESSAGE, tls, message.base[0], message.base + PTLS_HANDSHAKE_HEADER_SIZE,
                message.len - PTLS_HANDSHAKE_HEADER_SIZE, ret);
     PTLSLOG_CONN(receive_message, tls, {
-        PTLSLOG_ELEMENT_SIGNED(message, message.base[0]);
-        PTLSLOG_ELEMENT_SIGNED(len, message.len - PTLS_HANDSHAKE_HEADER_SIZE);
+        PTLSLOG_ELEMENT_UNSIGNED(message, message.base[0]);
+        PTLSLOG_ELEMENT_UNSIGNED(len, message.len - PTLS_HANDSHAKE_HEADER_SIZE);
         PTLSLOG_ELEMENT_SIGNED(result, ret);
     });
 
@@ -4713,8 +4713,8 @@ static int handle_server_handshake_message(ptls_t *tls, ptls_message_emitter_t *
     PTLS_PROBE(RECEIVE_MESSAGE, tls, message.base[0], message.base + PTLS_HANDSHAKE_HEADER_SIZE,
                message.len - PTLS_HANDSHAKE_HEADER_SIZE, ret);
     PTLSLOG_CONN(receive_message, tls, {
-        PTLSLOG_ELEMENT_SIGNED(message, message.base[0]);
-        PTLSLOG_ELEMENT_SIGNED(len, message.len - PTLS_HANDSHAKE_HEADER_SIZE);
+        PTLSLOG_ELEMENT_UNSIGNED(message, message.base[0]);
+        PTLSLOG_ELEMENT_UNSIGNED(len, message.len - PTLS_HANDSHAKE_HEADER_SIZE);
         PTLSLOG_ELEMENT_SIGNED(result, ret);
     });
 
@@ -5666,45 +5666,33 @@ static size_t escape_json_unsafe_string(char *buf, const void *bytes, size_t len
 
     for (; src != end; ++src) {
         switch (*src) {
-        case '"':
-            *dst++ = '\\';
-            *dst++ = '"';
-            break;
-        case '\'':
-            *dst++ = '\\';
-            *dst++ = '\'';
-            break;
-        case '\\':
-            *dst++ = '\\';
-            *dst++ = '\\';
-            break;
-        case '/':
-            *dst++ = '\\';
-            *dst++ = '/';
-            break;
-        case '\r':
-            *dst++ = '\\';
-            *dst++ = 'r';
-            break;
-        case '\n':
-            *dst++ = '\\';
-            *dst++ = 'n';
-            break;
-        case '\t':
-            *dst++ = '\\';
-            *dst++ = 't';
-            break;
+#define MAP(ch, escaped)                                                                                                           \
+    case ch: {                                                                                                                     \
+        memcpy(dst, (escaped), sizeof(escaped) - 1);                                                                               \
+        dst += sizeof(escaped) - 1;                                                                                                \
+    } break;
+
+            MAP('"', "\\\"");
+            MAP('\\', "\\\\");
+            MAP('/', "\\/");
+            MAP('\b', "\\b");
+            MAP('\f', "\\f");
+            MAP('\n', "\\n");
+            MAP('\r', "\\r");
+            MAP('\t', "\\t");
+
+#undef MAP
+
         default:
-            if (0x20 <= *src && *src <= 0x7e) {
-                *dst++ = *src;
-            } else {
-                // FIXME: recognize UTF-8 characters
+            if (*src < 0x20 || *src == 0x7f) {
                 *dst++ = '\\';
                 *dst++ = 'u';
                 *dst++ = '0';
                 *dst++ = '0';
                 ptls_byte_to_hex(dst, *src);
                 dst += 2;
+            } else {
+                *dst++ = *src;
             }
             break;
         }
@@ -5714,75 +5702,44 @@ static size_t escape_json_unsafe_string(char *buf, const void *bytes, size_t len
     return (size_t)(dst - buf);
 }
 
-// Only PTSLOG_MAXCONN of clients can be attached to the process at a time
-#define PTLSLOG_MAXCONN (8)
-struct st_ptlslog_context_t {
-    int fds[PTLSLOG_MAXCONN];
-    size_t num_active_fds;
-    size_t lost;
-    int initialized;
-    pthread_mutex_t mutex;
-} ptlslog = {
+ptlslog_context_t ptlslog = {
     .mutex = PTHREAD_MUTEX_INITIALIZER,
 };
 
-int ptlslog_is_active(void)
-{
-    return ptlslog.num_active_fds > 0;
-}
-
 size_t ptlslog_num_lost(void)
 {
-    return ptlslog.lost;
+    return ptlslog.num_lost;
 }
 
 int ptlslog_add_fd(int fd)
 {
-    int ret = 0;
     pthread_mutex_lock(&ptlslog.mutex);
-    if (PTLS_UNLIKELY(ptlslog.num_active_fds == PTLSLOG_MAXCONN))
-        goto Exit;
 
-    if (!ptlslog.initialized) {
-        for (int i = 0; i < PTLSLOG_MAXCONN; ++i) {
-            ptlslog.fds[i] = -1;
-        }
-        ptlslog.initialized = 1;
-    }
+    ptlslog.fds = realloc(ptlslog.fds, sizeof(ptlslog.fds[0]) * (ptlslog.num_fds + 1));
+    ptlslog.fds[ptlslog.num_fds] = fd;
+    ptlslog.num_fds++;
 
-    for (int i = 0; i < PTLSLOG_MAXCONN; ++i) {
-        if (ptlslog.fds[i] == -1) {
-            ptlslog.fds[i] = fd;
-            ++ptlslog.num_active_fds;
-            ret = 1;
-            goto Exit;
-        }
-    }
-
-Exit:
     pthread_mutex_unlock(&ptlslog.mutex);
-
-    return ret;
+    return 1;
 }
 
 void ptlslog__do_write(const ptls_buffer_t *buf)
 {
     pthread_mutex_lock(&ptlslog.mutex);
-    for (int i = 0, num_handled = 0; i < PTLSLOG_MAXCONN && num_handled < ptlslog.num_active_fds; ++i) {
-        if (ptlslog.fds[i] != -1) {
-            ++num_handled;
-
-            ssize_t ret;
-            while ((ret = write(ptlslog.fds[i], buf->base, buf->off)) == -1 && errno == EINTR)
-                ;
-            if (ret == -1) {
-                if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                    ptlslog.lost++;
-                } else {
-                    close(ptlslog.fds[i]);
-                    ptlslog.fds[i] = -1;
-                    --ptlslog.num_active_fds;
-                }
+    for (size_t i = 0; i < ptlslog.num_fds; ++i) {
+        ssize_t ret;
+        while ((ret = write(ptlslog.fds[i], buf->base, buf->off)) == -1 && errno == EINTR)
+            ;
+        if (ret == -1) {
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                ptlslog.num_lost++;
+            } else {
+                // close fd and remove the entry of it from the array
+                // ptlslog.fds is released by realloc(ptlslog.fds, 0) when ptlslog.num_fds is 1.
+                close(ptlslog.fds[i]);
+                memmove(ptlslog.fds + i, ptlslog.fds + i + 1, sizeof(ptlslog.fds[0]) * (ptlslog.num_fds - i - 1));
+                ptlslog.fds = realloc(ptlslog.fds, sizeof(ptlslog.fds[0]) * (ptlslog.num_fds - 1));
+                --ptlslog.num_fds;
             }
         }
     }
@@ -5801,7 +5758,7 @@ int ptlslog__do_pushv(ptls_buffer_t *buf, const void *p, size_t l)
 
 int ptlslog__do_push_unsafestr(ptls_buffer_t *buf, const char *s, size_t l)
 {
-    if (ptls_buffer_reserve(buf, l * 4 + 1) != 0)
+    if (ptls_buffer_reserve(buf, l * strlen("\\u0000") + 1) != 0)
         return 0;
 
     buf->off += escape_json_unsafe_string((char *)(buf->base + buf->off), s, l);
@@ -5810,28 +5767,41 @@ int ptlslog__do_push_unsafestr(ptls_buffer_t *buf, const char *s, size_t l)
 
 int ptlslog__do_push_hexdump(ptls_buffer_t *buf, const void *s, size_t l)
 {
-    if (ptls_buffer_reserve(buf, l * 2 + 1) != 0)
+    if (ptls_buffer_reserve(buf, l * strlen("ff") + 1) != 0)
         return 0;
 
     ptls_hexdump((char *)(buf->base + buf->off), s, l);
-    buf->off += l * 2;
+    buf->off += l * strlen("ff");
     return 1;
 }
 
-int ptlslog__do_push_signed(ptls_buffer_t *buf, int64_t v)
+int ptlslog__do_push_signed32(ptls_buffer_t *buf, int32_t v)
 {
     /* TODO optimize */
-    char s[32];
+    char s[sizeof("-9223372036854775808")];
+    int len = sprintf(s, "%" PRId32, v);
+    return ptlslog__do_pushv(buf, s, (size_t)len);
+}
+int ptlslog__do_push_signed64(ptls_buffer_t *buf, int64_t v)
+{
+    /* TODO optimize */
+    char s[sizeof("-9223372036854775808")];
     int len = sprintf(s, "%" PRId64, v);
-
     return ptlslog__do_pushv(buf, s, (size_t)len);
 }
 
-int ptlslog__do_push_unsigned(ptls_buffer_t *buf, uint64_t v)
+int ptlslog__do_push_unsigned32(ptls_buffer_t *buf, uint32_t v)
 {
     /* TODO optimize */
-    char s[32];
-    int len = sprintf(s, "%" PRIu64, v);
+    char s[sizeof("4294967295")];
+    int len = sprintf(s, "%" PRIu32, v);
+    return ptlslog__do_pushv(buf, s, (size_t)len);
+}
 
+int ptlslog__do_push_unsigned64(ptls_buffer_t *buf, uint64_t v)
+{
+    /* TODO optimize */
+    char s[sizeof("18446744073709551615")];
+    int len = sprintf(s, "%" PRIu64, v);
     return ptlslog__do_pushv(buf, s, (size_t)len);
 }

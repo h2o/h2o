@@ -1691,12 +1691,19 @@ static void test_tls12_hello(void)
 
 static void test_escape_json_unsafe_string(void)
 {
-    const char *src = "\"\\/\'\n\r\t foo bar";
-    size_t src_len = strlen(src);
-    char *buf = alloca(src_len * 4 + 1);
-    size_t escaped_len = escape_json_unsafe_string(buf, src, src_len);
+#define STRLIT(s) s, sizeof(s) - 1
+    char buf[100];
+    size_t escaped_len;
+
+    escaped_len = escape_json_unsafe_string(buf, STRLIT("\" \\ / \b \f \n \r \t foo bar"));
     ok(escaped_len == strlen(buf));
-    ok(strcmp(buf, "\\\"\\\\\\/\\'\\n\\r\\t foo bar") == 0);
+    ok(strcmp(buf, "\\\" \\\\ \\/ \\b \\f \\n \\r \\t foo bar") == 0);
+
+    escaped_len = escape_json_unsafe_string(buf, STRLIT("こんにちは、🌏！"));
+    ok(strcmp(buf, "こんにちは、🌏！") == 0);
+
+    escaped_len = escape_json_unsafe_string(buf, STRLIT("\x00 \x1f \x7f"));
+    ok(strcmp(buf, "\\u0000 \\u001f \\u007f") == 0);
 }
 
 void test_picotls(void)
