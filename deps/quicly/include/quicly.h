@@ -33,6 +33,7 @@ extern "C" {
 #include <sys/socket.h>
 #include <sys/types.h>
 #include "picotls.h"
+#include "picotls/ptlslog.h"
 #include "quicly/constants.h"
 #include "quicly/frame.h"
 #include "quicly/local_cid.h"

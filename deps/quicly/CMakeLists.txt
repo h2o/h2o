@@ -33,7 +33,7 @@ OPTION(WITH_FUSION "whether or not to use the Fusion AES-GCM engine in the cli b
 IF(NOT CMAKE_BUILD_TYPE)
     SET(CMAKE_BUILD_TYPE Release)
 ENDIF(NOT CMAKE_BUILD_TYPE)
-SET(CMAKE_C_FLAGS "-std=c99 -Wall -g -DQUICLY_USE_TRACER=1 ${CC_WARNING_FLAGS} ${CMAKE_C_FLAGS}")
+SET(CMAKE_C_FLAGS "-std=c99 -Wall -g -DPICOTLS_USE_PTLSLOG -DQUICLY_USE_TRACER=1 ${CC_WARNING_FLAGS} ${CMAKE_C_FLAGS}")
 SET(CMAKE_C_FLAGS_DEBUG "-O0")
 SET(CMAKE_C_FLAGS_RELEASE "-O2")
 
@@ -51,7 +51,9 @@ INCLUDE_DIRECTORIES(
 SET(PICOTLS_OPENSSL_FILES
     deps/picotls/lib/openssl.c
     deps/picotls/lib/pembase64.c
-    deps/picotls/lib/picotls.c)
+    deps/picotls/lib/picotls.c
+    deps/picotls/lib/ptlslog.c
+)
 
 SET(QUICLY_LIBRARY_FILES
     lib/frame.c
