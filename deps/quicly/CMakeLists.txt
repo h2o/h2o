@@ -37,6 +37,9 @@ SET(CMAKE_C_FLAGS "-std=c99 -Wall -g -DQUICLY_USE_TRACER=1 ${CC_WARNING_FLAGS} $
 SET(CMAKE_C_FLAGS_DEBUG "-O0")
 SET(CMAKE_C_FLAGS_RELEASE "-O2")
 
+# C++ flags are used only in tests
+SET(CMAKE_CXX_FLAGS "-Wall")
+
 INCLUDE_DIRECTORIES(
     ${OPENSSL_INCLUDE_DIR}
     deps/klib
@@ -135,9 +138,11 @@ TARGET_LINK_LIBRARIES(examples-echo quicly ${OPENSSL_LIBRARIES} ${CMAKE_DL_LIBS}
 
 ADD_EXECUTABLE(udpfw t/udpfw.c)
 
+ADD_EXECUTABLE(cpp-compat t/cpp-compat.cc)
+
 ADD_CUSTOM_TARGET(check env BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR} WITH_DTRACE=${WITH_DTRACE} prove --exec "sh -c" -v ${CMAKE_CURRENT_BINARY_DIR}/*.t t/*.t
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    DEPENDS cli test.t)
+    DEPENDS cli test.t cpp-compat)
 
 ADD_CUSTOM_TARGET(format clang-format -i `git ls-files include lib src t | egrep '\\.[ch]$$'`)
 
