@@ -25,6 +25,17 @@ IF (WITH_FUSION)
     MESSAGE(STATUS "Enabling 'fusion' AES-GCM engine")
 ENDIF ()
 
+# ptlslog is enabled by default only on Linux and macOS, because it depends on pthreads.
+IF (CMAKE_SYSTEM_NAME STREQUAL "Linux" OR CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+    SET(WITH_PTLSLOG_DEFAULT "ON")
+ELSE ()
+    SET(WITH_PTLSLOG_DEFAULT "OFF")
+ENDIF ()
+OPTION(WITH_PTLSLOG "build ptlslog probes" ${WITH_PTLSLOG_DEFAULT})
+IF (WITH_PTLSLOG)
+    MESSAGE(STATUS "Enabling ptlslog support")
+ENDIF()
+
 SET(CMAKE_C_FLAGS "-std=c99 -Wall -O2 -g ${CC_WARNING_FLAGS} ${CMAKE_C_FLAGS}")
 INCLUDE_DIRECTORIES(
     deps/cifra/src/ext
@@ -62,6 +73,10 @@ IF (WITH_DTRACE)
         LIST(APPEND CORE_FILES ${CMAKE_CURRENT_BINARY_DIR}/picotls-probes.o)
         LIST(APPEND CORE_TEST_FILES ${CMAKE_CURRENT_BINARY_DIR}/picotls-probes.o)
     ENDIF ()
+ENDIF ()
+IF (WITH_PTLSLOG)
+    SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DPICOTLS_USE_PTLSLOG=1")
+    LIST(APPEND CORE_FILES "include/picotls/ptlslog.h" "lib/ptlslog.c")
 ENDIF ()
 
 PKG_CHECK_MODULES(BROTLI_DEC libbrotlidec)

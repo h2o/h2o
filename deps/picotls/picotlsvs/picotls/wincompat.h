@@ -1,6 +1,9 @@
 #ifndef WINCOMPAT_H
 #define WINCOMPAT_H
 
+#define _CRT_SECURE_NO_WARNINGS
+#define _CRT_NONSTDC_NO_WARNINGS
+
 #include <stdint.h>
 #define ssize_t int
 #include <Winsock2.h>
