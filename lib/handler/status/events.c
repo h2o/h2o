@@ -21,7 +21,6 @@
  */
 
 #include "h2o.h"
-#include "picotls.h"
 #include <inttypes.h>
 
 struct st_events_status_ctx_t {
