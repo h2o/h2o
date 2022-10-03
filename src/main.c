@@ -2584,9 +2584,13 @@ static yoml_t *resolve_file_tag(yoml_t *node, resolve_tag_arg_t *arg)
     }
 
     yoml_parse_args_t parse_args = {
-        filename,          /* filename */
-        NULL,              /* mem_set */
-        {resolve_tag, arg} /* resolve_tag */
+        .filename = filename,
+        .resolve_tag = {
+            .cb = resolve_tag,
+            .cb_arg = arg,
+        },
+        .resolve_alias = 1,
+        .resolve_merge = 1,
     };
     loaded = load_config(&parse_args, node);
 
@@ -3019,10 +3023,10 @@ static void on_accept(h2o_socket_t *listener, const char *err)
         sock->on_close.data = ctx->accept_ctx.ctx;
 
         struct listener_config_t *listener_config = conf.listeners[ctx->listener_index];
-        if (listener_config->sndbuf != 0)
-            setsockopt(h2o_socket_get_fd(sock), SOL_SOCKET, SO_SNDBUF, &listener_config->sndbuf, sizeof(listener_config->sndbuf));
-        if (listener_config->rcvbuf != 0)
-            setsockopt(h2o_socket_get_fd(sock), SOL_SOCKET, SO_RCVBUF, &listener_config->rcvbuf, sizeof(listener_config->rcvbuf));
+        if (listener_config->sndbuf != 0 && setsockopt(h2o_socket_get_fd(sock), SOL_SOCKET, SO_SNDBUF, &listener_config->sndbuf, sizeof(listener_config->sndbuf)) != 0)
+            h2o_perror("failed to set SO_SNDBUF");
+        if (listener_config->rcvbuf != 0 && setsockopt(h2o_socket_get_fd(sock), SOL_SOCKET, SO_RCVBUF, &listener_config->rcvbuf, sizeof(listener_config->rcvbuf))  != 0)
+            h2o_perror("failed to set SO_RCVBUF");
         set_tcp_congestion_controller(sock, listener_config->tcp_congestion_controller);
 
         h2o_accept(&ctx->accept_ctx, sock);
@@ -3613,11 +3617,13 @@ static void setup_configurators(void)
     if (getuid() == 0 && getpwnam("nobody") != NULL)
         conf.globalconf.user = "nobody";
 
-    {
+    { /* "listen" is invoked after global attributes like `tcp-fastopen`, but before `hosts`) */
         h2o_configurator_t *c = h2o_configurator_create(&conf.globalconf, sizeof(*c));
         c->enter = on_config_listen_enter;
         c->exit = on_config_listen_exit;
-        h2o_configurator_define_command(c, "listen", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST, on_config_listen);
+        h2o_configurator_define_command(
+            c, "listen", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_SEMI_DEFERRED,
+            on_config_listen);
     }
 
     {
@@ -3888,9 +3894,13 @@ int main(int argc, char **argv)
         yoml_t *yoml;
         resolve_tag_arg_t resolve_tag_arg = {{NULL}};
         yoml_parse_args_t parse_args = {
-            opt_config_file,                /* filename */
-            NULL,                           /* mem_set */
-            {resolve_tag, &resolve_tag_arg} /* resolve_tag */
+            .filename = opt_config_file,
+            .resolve_tag = {
+                .cb = resolve_tag,
+                .cb_arg = &resolve_tag_arg
+            },
+            .resolve_alias = 1,
+            .resolve_merge = 1,
         };
         if ((yoml = load_config(&parse_args, NULL)) == NULL)
             exit(EX_CONFIG);

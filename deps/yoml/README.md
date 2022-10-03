@@ -5,7 +5,7 @@ YOML is a DOM-like interface to YAML, implemented as a wrapper around [libyaml](
 
 It is a header-only library.  Just include the .h files to use the library.
 
-```
+```C
 #include "yoml.h" /* defines the structures */
 #include "yoml-parser.h" /* defines the parser */
 
@@ -34,16 +34,16 @@ static void dump_node(yoml_t *node, int indent)
     break;
   case YOML_TYPE_SEQUENCE:
     printf("%*s[SEQUENCE] (size:%zu)\n", indent, "", node->data.sequence.size);
-    for (i = 0; i != node.data.sequence.size; ++i)
+    for (i = 0; i != node->data.sequence.size; ++i)
       dump_node(node->data.sequence.elements[i], indent + 2);
     break;
   case YOML_TYPE_MAPPING:
     printf("%*s[MAPPING] (size:%zu)\n", indent, "", node->data.mapping.size);
     indent += 2;
-    for (i = 0; i != node.data.mapping.size; ++i) {
-      printf(%*s[KEY]\n", indent, "");
+    for (i = 0; i != node->data.mapping.size; ++i) {
+      printf("%*s[KEY]\n", indent, "");
       dump_node(node->data.mapping.elements[i].key, indent + 2);
-      printf(%*s[VALUE]\n", indent, "");
+      printf("%*s[VALUE]\n", indent, "");
       dump_node(node->data.mapping.elements[i].value, indent + 2);
     }
     indent -= 2;
