@@ -1604,10 +1604,6 @@ static void proceed_handshake_picotls(h2o_socket_t *sock)
     ptls_buffer_init(&wbuf, "", 0);
 
     int ret;
-#if PTLS_OPENSSL_HAVE_ASYNC
-#else
-Retry:
-#endif
     ret = ptls_handshake(sock->ssl->ptls, &wbuf, sock->ssl->input.encrypted->bytes, &consumed, NULL);
     h2o_buffer_consume(&sock->ssl->input.encrypted, consumed);
 
@@ -1621,7 +1617,8 @@ Retry:
 #if PTLS_OPENSSL_HAVE_ASYNC
         do_ssl_async(sock);
 #else
-        goto Retry;
+        h2o_error_printf("PTLS_ERROR_ASYNC_OPERATION returned but cannot be handled");
+        abort();
 #endif
         /* fallthrough */
     case PTLS_ERROR_IN_PROGRESS:
@@ -1791,10 +1788,6 @@ static void proceed_handshake_undetermined(h2o_socket_t *sock)
     *ptls_get_data_ptr(ptls) = sock;
 
     int ret;
-#if PTLS_OPENSSL_HAVE_ASYNC
-#else
-Retry:
-#endif
     ret = ptls_handshake(ptls, &wbuf, sock->ssl->input.encrypted->bytes, &consumed, NULL);
 
     if (ret == PTLS_ERROR_IN_PROGRESS && wbuf.off == 0) {
@@ -1822,7 +1815,8 @@ Retry:
 #if PTLS_OPENSSL_HAVE_ASYNC
             do_ssl_async(sock);
 #else
-            goto Retry;
+            h2o_error_printf("PTLS_ERROR_ASYNC_OPERATION returned but cannot be handled");
+            abort();
 #endif
             /* fallthrough */
         case PTLS_ERROR_IN_PROGRESS:
