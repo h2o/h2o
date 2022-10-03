@@ -195,6 +195,13 @@ static int init_delayed_sockets(void) {
     return initialized;
 }
 
+#if PTLS_OPENSSL_HAVE_ASYNC
+struct async_ctx {
+    h2o_socket_t *sock;
+    h2o_socket_t *async_sock;
+};
+#endif
+
 h2o_buffer_mmap_settings_t h2o_socket_buffer_mmap_settings = {
     32 * 1024 * 1024, /* 32MB, should better be greater than max frame size of HTTP2 for performance reasons */
     "/tmp/h2o.b.XXXXXX"};
@@ -536,6 +543,15 @@ static void dispose_socket(h2o_socket_t *sock, const char *err)
 {
     void (*close_cb)(void *data);
     void *close_cb_data;
+
+#if PTLS_OPENSSL_HAVE_ASYNC
+    if (sock->async.enabled) {
+        struct async_ctx *async_ctx = sock->async.data;
+        dispose_socket(async_ctx->async_sock, NULL);
+        free(sock->async.data);
+        do_delayed_sockets(sock);
+    }
+#endif
 
     if (h2o_linklist_is_linked(&sock->async.delayed_link)) {
         sock->async.delayed_cb(sock, h2o_socket_error_closed);
@@ -1521,51 +1537,23 @@ static void on_handshake_fail_complete(h2o_socket_t *sock, const char *err)
     on_handshake_complete(sock, get_handshake_error(sock->ssl));
 }
 
-#ifdef PTLS_OPENSSL_HAVE_ASYNC
-struct async_data {
-    h2o_socket_t *async_sock;
-    struct {
-        h2o_socket_t *sock;
-        void (*on_close_cb)(void *data);
-        void *on_close_data;
-        struct {
-            void (*on_close_cb)(void *data);
-            void *on_close_data;
-        } ssl;
-    } client;
-};
-
-static void async_read_ready(h2o_socket_t *listener, const char *err)
+#if PTLS_OPENSSL_HAVE_ASYNC
+static void async_read_ready(h2o_socket_t *async_sock, const char *err)
 {
-    struct async_data *adata = listener->data;
+    struct async_ctx *async_ctx = async_sock->data;
+    h2o_socket_t *sock = async_ctx->sock;
 
     // reset async
-    assert(adata->client.sock->async.enabled);
-    adata->client.sock->async.enabled = 0;
-    dispose_socket(listener, NULL);
+    assert(sock->async.enabled);
+    sock->async.enabled = 0;
+    free(async_ctx);
+    dispose_socket(async_sock, NULL);
 
     if (err != NULL) {
         return;
     }
-    proceed_handshake(adata->client.sock, NULL);
-    do_delayed_sockets(adata->client.sock);
-}
-
-static void async_on_close(void *data)
-{
-    struct async_data *adata = data;
-
-    // cancel async callback
-    if (adata->client.sock->async.enabled) {
-        dispose_socket(adata->async_sock, NULL);
-    }
-
-    do_delayed_sockets(adata->client.sock);
-
-    // call original cb
-    adata->client.on_close_cb(adata->client.on_close_data);
-
-    free(adata);
+    proceed_handshake(sock, NULL);
+    do_delayed_sockets(sock);
 }
 
 static void do_ssl_async(h2o_socket_t *sock)
@@ -1598,33 +1586,13 @@ static void do_ssl_async(h2o_socket_t *sock)
     h2o_socket_t *async_sock = h2o_evloop_socket_create(h2o_socket_get_loop(sock), async_fd, H2O_SOCKET_FLAG_DONT_READ | H2O_SOCKET_FLAG_DONT_NONBLOCK);
 #endif
 
-    struct async_data *adata = h2o_mem_alloc(sizeof(struct async_data));
-    adata->client.sock = sock;
-    adata->async_sock = async_sock;
+    struct async_ctx *async_ctx = h2o_mem_alloc(sizeof(struct async_ctx));
+    async_ctx->sock = sock;
+    async_ctx->async_sock = async_sock;
 
-    if (sock->async.data == NULL) {
-        // new socket, keep original callbacks
-        adata->client.on_close_cb = sock->on_close.cb;
-        adata->client.on_close_data = sock->on_close.data;
-    } else {
-        // sock callbacks were overwritten
-        // get original callbacks from previous adata
-        adata->client.on_close_cb = ((struct async_data*)sock->async.data)->client.on_close_cb;
-        adata->client.on_close_data = ((struct async_data*)sock->async.data)->client.on_close_data;
-        adata->client.ssl.on_close_cb = ((struct async_data*)sock->async.data)->client.ssl.on_close_cb;
-        adata->client.ssl.on_close_data = ((struct async_data*)sock->async.data)->client.ssl.on_close_data;
-    }
-
-    async_sock->data = adata;
-
-    // overrite socket close callbacks in order to cancel async and free socket
-    sock->on_close.cb = async_on_close;
-    sock->on_close.data = adata;
-
-    // free previous data
-    free(sock->async.data);
-    sock->async.data = adata;
-
+    assert(sock->async.data == NULL);
+    sock->async.data = async_ctx;
+    async_sock->data = async_ctx;
     h2o_socket_read_start(async_sock, async_read_ready);
 }
 #endif
