@@ -140,6 +140,13 @@ int ptls_openssl_encrypt_ticket(ptls_buffer_t *dst, ptls_iovec_t src,
 int ptls_openssl_decrypt_ticket(ptls_buffer_t *dst, ptls_iovec_t src,
                                 int (*cb)(unsigned char *, unsigned char *, EVP_CIPHER_CTX *, HMAC_CTX *, int));
 
+#if OPENSSL_VERSION_NUMBER >= 0x30000000L
+int ptls_openssl_encrypt_ticket_evp(ptls_buffer_t *dst, ptls_iovec_t src,
+                                    int (*cb)(unsigned char *, unsigned char *, EVP_CIPHER_CTX *, EVP_MAC_CTX *, int));
+int ptls_openssl_decrypt_ticket_evp(ptls_buffer_t *dst, ptls_iovec_t src,
+                                    int (*cb)(unsigned char *, unsigned char *, EVP_CIPHER_CTX *, EVP_MAC_CTX *, int));
+#endif
+
 #ifdef __cplusplus
 }
 #endif
