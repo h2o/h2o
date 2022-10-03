@@ -34,6 +34,7 @@ extern "C" {
 #include <openssl/ssl.h>
 #include <openssl/opensslconf.h>
 #include "picotls.h"
+#include "picotls/openssl.h"
 #include "h2o/cache.h"
 #include "h2o/ebpf.h"
 #include "h2o/memory.h"
