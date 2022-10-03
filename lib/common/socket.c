@@ -175,6 +175,7 @@ static const char *decode_ssl_input(h2o_socket_t *sock);
 static size_t flatten_sendvec(h2o_socket_t *sock, h2o_sendvec_t *sendvec);
 static void on_write_complete(h2o_socket_t *sock, const char *err);
 
+#if PTLS_OPENSSL_HAVE_ASYNC
 static __thread h2o_socket_t *async_handshake_in_flight = NULL;
 
 int h2o_is_ssl_handhsake_in_flight(void) {
@@ -195,7 +196,6 @@ static int init_delayed_sockets(void) {
     return initialized;
 }
 
-#if PTLS_OPENSSL_HAVE_ASYNC
 struct async_ctx {
     h2o_socket_t *sock;
     h2o_socket_t *async_sock;
@@ -512,6 +512,7 @@ static void destroy_ssl(struct st_h2o_socket_ssl_t *ssl)
 }
 
 static void proceed_handshake(h2o_socket_t *sock, const char *err);
+#if PTLS_OPENSSL_HAVE_ASYNC
 
 static void do_delayed_sockets(h2o_socket_t *sock)
 {
@@ -538,6 +539,7 @@ static void retry_dispose_socket(h2o_socket_t *sock, const char *err)
         dispose_socket(sock, err);
     }
 }
+#endif
 
 static void dispose_socket(h2o_socket_t *sock, const char *err)
 {
@@ -551,18 +553,19 @@ static void dispose_socket(h2o_socket_t *sock, const char *err)
         free(sock->async.data);
         do_delayed_sockets(sock);
     }
-#endif
 
     if (h2o_linklist_is_linked(&sock->async.delayed_link)) {
         sock->async.delayed_cb(sock, h2o_socket_error_closed);
         sock->async.delayed_cb = NULL;
         h2o_linklist_unlink(&sock->async.delayed_link);
     }
+#endif
 
     if (!socket_is_closed(sock)) {
         do_close_socket(sock);
     }
 
+#if PTLS_OPENSSL_HAVE_ASYNC
     if (init_delayed_sockets()) {
         if (sock->ssl != NULL && async_handshake_in_flight != NULL && async_handshake_in_flight != sock) {
             // retry later if handshake in flight
@@ -574,6 +577,7 @@ static void dispose_socket(h2o_socket_t *sock, const char *err)
             return;
         }
     }
+#endif
 
     if (sock->ssl != NULL) {
         destroy_ssl(sock->ssl);
@@ -1465,10 +1469,12 @@ static int on_async_resumption_new(SSL *ssl, SSL_SESSION *session)
 
 static void on_handshake_complete(h2o_socket_t *sock, const char *err)
 {
+#if PTLS_OPENSSL_HAVE_ASYNC
     if (h2o_linklist_is_linked(&sock->async.delayed_link)) {
         sock->async.delayed_cb = NULL;
         h2o_linklist_unlink(&sock->async.delayed_link);
     }
+#endif
 
     if (err == NULL) {
         if (sock->ssl->ptls != NULL) {
@@ -1834,11 +1840,13 @@ static void proceed_handshake_undetermined(h2o_socket_t *sock)
     ptls_buffer_dispose(&wbuf);
 }
 
+#if PTLS_OPENSSL_HAVE_ASYNC
 static void retry_proceed_handshake(h2o_socket_t *sock, const char *err) {
     if (err == NULL) {
         proceed_handshake(sock, err);
     }
 }
+#endif
 
 static void proceed_handshake(h2o_socket_t *sock, const char *err)
 {
@@ -1850,6 +1858,7 @@ static void proceed_handshake(h2o_socket_t *sock, const char *err)
         return;
     }
 
+#if PTLS_OPENSSL_HAVE_ASYNC
     if (init_delayed_sockets()) {
         if (async_handshake_in_flight != NULL && async_handshake_in_flight != sock) {
             // handshake is in-flight, delay the handshake
@@ -1861,6 +1870,7 @@ static void proceed_handshake(h2o_socket_t *sock, const char *err)
             return;
         }
     }
+#endif
 
     if (sock->ssl->ptls != NULL) {
         proceed_handshake_picotls(sock);
