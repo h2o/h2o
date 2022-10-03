@@ -1162,8 +1162,11 @@ static int sign_certificate(ptls_sign_certificate_t *_self, ptls_t *tls, ptls_as
 
     /* Just resume the asynchronous operation, if one is in flight. */
 #if PTLS_OPENSSL_HAVE_ASYNC
-    if (async != NULL && *async != NULL)
+    if (async != NULL && *async != NULL) {
+        struct async_sign_ctx *sign_ctx = (struct async_sign_ctx *)(*async);
+        *selected_algorithm = sign_ctx->scheme->scheme_id;
         return do_sign_async(outbuf, async);
+    }
 #endif
 
     /* Select the algorithm (driven by server-side preference of `self->schemes`), or return failure if none found. */
