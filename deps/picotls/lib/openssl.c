@@ -45,10 +45,6 @@
 #include "picotls.h"
 #include "picotls/openssl.h"
 
-#ifdef PTLS_OPENSSL_HAVE_ASYNC
-#include <openssl/async.h>
-#endif
-
 #ifdef _WINDOWS
 #ifndef _CRT_SECURE_NO_WARNINGS
 #define _CRT_SECURE_NO_WARNINGS
@@ -698,208 +694,185 @@ int ptls_openssl_create_key_exchange(ptls_key_exchange_context_t **ctx, EVP_PKEY
     }
 }
 
-struct sign_ctx {
+#if PTLS_OPENSSL_HAVE_ASYNC
+
+struct async_sign_ctx {
+    ptls_async_job_t super;
     const struct st_ptls_openssl_signature_scheme_t *scheme;
     EVP_MD_CTX *ctx;
-#ifdef PTLS_OPENSSL_HAVE_ASYNC
     ASYNC_WAIT_CTX *waitctx;
     ASYNC_JOB *job;
-#endif
     size_t siglen;
-    // must be last, see `sign_ctx_alloc`
-    uint8_t sig[0];
+    uint8_t sig[0]; // must be last, see `async_sign_ctx_new`
 };
 
-static struct sign_ctx *sign_ctx_alloc(size_t siglen)
+static void async_sign_ctx_free(ptls_async_job_t *_self)
 {
-    // the last member of `struct sign_ctx` is a buffer to store `siglen` bytes
-    struct sign_ctx *sign_ctx = malloc(sizeof(*sign_ctx) + siglen);
-    memset(sign_ctx, 0, sizeof(*sign_ctx) + siglen);
-    sign_ctx->siglen = siglen;
-#ifdef PTLS_OPENSSL_HAVE_ASYNC
-    sign_ctx->waitctx = ASYNC_WAIT_CTX_new();
-#endif
+    struct async_sign_ctx *self = (void *)_self;
 
-    return sign_ctx;
-}
-
-static void sign_ctx_destroy(struct sign_ctx *sign_ctx)
-{
-    if (sign_ctx == NULL) return;
-
-    if (sign_ctx->ctx != NULL)
-        EVP_MD_CTX_destroy(sign_ctx->ctx);
-#ifdef PTLS_OPENSSL_HAVE_ASYNC
-    if (sign_ctx->job != NULL) {
-        int _ret;
-        // resume the job to free resources
-        ASYNC_start_job(&sign_ctx->job, sign_ctx->waitctx, &_ret, NULL, NULL, 0);
+    /* Once the async operation is complete, the user might call `ptls_free` instead of `ptls_handshake`. In such case, to avoid
+     * desynchronization, let the backend read the result from the socket. The code below is a loop, but it is not going to block;
+     * it is the responsibility of the user to refrain from calling `ptls_free` until the asynchronous operation is complete. */
+    if (self->job != NULL) {
+        int ret;
+        while (ASYNC_start_job(&self->job, self->waitctx, &ret, NULL, NULL, 0) == ASYNC_PAUSE)
+            ;
     }
-    if (sign_ctx->waitctx != NULL)
-        ASYNC_WAIT_CTX_free(sign_ctx->waitctx);
-#endif
-    free(sign_ctx);
+
+    EVP_MD_CTX_destroy(self->ctx);
+    ASYNC_WAIT_CTX_free(self->waitctx);
+    free(self);
 }
 
-#ifdef PTLS_OPENSSL_HAVE_ASYNC
-int ptls_openssl_get_async_fd(ptls_t *ptls)
+static ptls_async_job_t *async_sign_ctx_new(const struct st_ptls_openssl_signature_scheme_t *scheme, EVP_MD_CTX *ctx, size_t siglen)
 {
-    int fds[1];
+    struct async_sign_ctx *self;
+
+    if ((self = malloc(offsetof(struct async_sign_ctx, sig) + siglen)) == NULL)
+        return NULL;
+
+    self->super = (ptls_async_job_t){async_sign_ctx_free};
+    self->scheme = scheme;
+    self->ctx = ctx;
+    self->waitctx = ASYNC_WAIT_CTX_new();
+    self->job = NULL;
+    self->siglen = siglen;
+    memset(self->sig, 0, siglen);
+
+    return &self->super;
+}
+
+OSSL_ASYNC_FD ptls_openssl_get_async_fd(ptls_t *ptls)
+{
+    OSSL_ASYNC_FD fds[1];
     size_t numfds;
-    struct sign_ctx *args = ptls_get_sign_context(ptls);
-    ASYNC_WAIT_CTX_get_all_fds(args->waitctx, NULL, &numfds);
+    struct async_sign_ctx *async = (void *)ptls_get_async_job(ptls);
+    assert(async != NULL);
+    ASYNC_WAIT_CTX_get_all_fds(async->waitctx, NULL, &numfds);
     assert(numfds == 1);
-    ASYNC_WAIT_CTX_get_all_fds(args->waitctx, fds, &numfds);
+    ASYNC_WAIT_CTX_get_all_fds(async->waitctx, fds, &numfds);
     return fds[0];
 }
-#endif
 
-static void async_sign_cancel(void *vargs)
+static int do_sign_async_job(void *_async)
 {
-    struct sign_ctx *args = (struct sign_ctx *)vargs;
-    sign_ctx_destroy(args);
+    struct async_sign_ctx *async = *(struct async_sign_ctx **)_async;
+    return EVP_DigestSignFinal(async->ctx, async->sig, &async->siglen);
 }
 
-static int do_sign_final(void *vargs)
+static int do_sign_async(ptls_buffer_t *outbuf, ptls_async_job_t **_async)
 {
-    struct sign_ctx *args = *(struct sign_ctx **)vargs;
-    return EVP_DigestSignFinal(args->ctx, args->sig, &args->siglen);
-}
-
-static int do_sign(EVP_PKEY *key, const struct st_ptls_openssl_signature_scheme_t *scheme, ptls_buffer_t *outbuf,
-                   ptls_iovec_t input, void (**cancel_cb)(void *sign_ctx), void **sign_ctx, int is_async)
-{
-    const EVP_MD *md = scheme->scheme_md != NULL ? scheme->scheme_md() : NULL;
-    int pkey_id = EVP_PKEY_id(key);
+    struct async_sign_ctx *async = (void *)*_async;
     int ret;
 
-    struct sign_ctx *args = NULL;
-    EVP_MD_CTX *ctx = NULL;
-    if (sign_ctx != NULL && *sign_ctx != NULL) {
-        args = *sign_ctx;
-    } else {
-        size_t siglen;
-        EVP_PKEY_CTX *pkey_ctx;
-
-        if ((ctx = EVP_MD_CTX_create()) == NULL) {
-            ret = PTLS_ERROR_NO_MEMORY;
-            goto Exit;
-        }
-
-        if (EVP_DigestSignInit(ctx, &pkey_ctx, md, NULL, key) != 1) {
-            ret = PTLS_ERROR_LIBRARY;
-            goto Exit;
-        }
-
-#if PTLS_OPENSSL_HAVE_ED25519
-        if (pkey_id == EVP_PKEY_ED25519) {
-            /* ED25519 requires the use of the all-at-once function that appeared in OpenSSL 1.1.1, hence different path */
-            if (EVP_DigestSign(ctx, NULL, &siglen, input.base, input.len) != 1) {
-                ret = PTLS_ERROR_LIBRARY;
-                goto Exit;
-            }
-            if ((ret = ptls_buffer_reserve(outbuf, siglen)) != 0)
-                goto Exit;
-            if (EVP_DigestSign(ctx, outbuf->base + outbuf->off, &siglen, input.base, input.len) != 1) {
-                ret = PTLS_ERROR_LIBRARY;
-                goto Exit;
-            }
-        } else
-#endif
-        {
-            if (pkey_id == EVP_PKEY_RSA) {
-                if (EVP_PKEY_CTX_set_rsa_padding(pkey_ctx, RSA_PKCS1_PSS_PADDING) != 1) {
-                    ret = PTLS_ERROR_LIBRARY;
-                    goto Exit;
-                }
-                if (EVP_PKEY_CTX_set_rsa_pss_saltlen(pkey_ctx, -1) != 1) {
-                    ret = PTLS_ERROR_LIBRARY;
-                    goto Exit;
-                }
-                if (EVP_PKEY_CTX_set_rsa_mgf1_md(pkey_ctx, md) != 1) {
-                    ret = PTLS_ERROR_LIBRARY;
-                    goto Exit;
-                }
-            }
-            if (EVP_DigestSignUpdate(ctx, input.base, input.len) != 1) {
-                ret = PTLS_ERROR_LIBRARY;
-                goto Exit;
-            }
-
-            if (EVP_DigestSignFinal(ctx, NULL, &siglen) != 1) {
-                ret = PTLS_ERROR_LIBRARY;
-                goto Exit;
-            }
-
-            args = sign_ctx_alloc(siglen);
-            args->ctx = ctx;
-            ctx = NULL;
-            args->scheme = scheme;
-            if (sign_ctx != NULL)
-                *sign_ctx = args;
-        }
+    switch (ASYNC_start_job(&async->job, async->waitctx, &ret, do_sign_async_job, &async, sizeof(async))) {
+    case ASYNC_PAUSE:
+        return PTLS_ERROR_ASYNC_OPERATION; // async operation inflight; bail out without getting rid of async context
+    case ASYNC_ERR:
+        ret = PTLS_ERROR_LIBRARY;
+        break;
+    case ASYNC_NO_JOBS:
+        ret = PTLS_ERROR_LIBRARY;
+        break;
+    case ASYNC_FINISH:
+        async->job = NULL;
+        ptls_buffer_pushv(outbuf, async->sig, async->siglen);
+        ret = 0;
+        break;
+    default:
+        ret = PTLS_ERROR_LIBRARY;
+        break;
     }
 
-#if PTLS_OPENSSL_HAVE_ED25519
-    if (pkey_id == EVP_PKEY_ED25519) {
-        // signing is complete as ED25519 is one-shot
-    } else
+Exit:
+    async_sign_ctx_free(&async->super);
+    *_async = NULL;
+    return ret;
+}
+
 #endif
-    {
-        if (is_async) {
-#ifdef PTLS_OPENSSL_HAVE_ASYNC
-        if (ASYNC_get_current_job() == NULL) {
-            // start async sign
-            switch (ASYNC_start_job(&args->job, args->waitctx, &ret, do_sign_final, &args, sizeof(struct sign_ctx*)))
-            {
-                case ASYNC_ERR:
-                    ret = PTLS_ERROR_LIBRARY;
-                    goto Exit;
-                case ASYNC_PAUSE: {
-                    ret = PTLS_ERROR_ASYNC_OPERATION;
-                    assert(*cancel_cb == NULL);
-                    *cancel_cb = async_sign_cancel;
-                    return ret;
-                }
-                case ASYNC_NO_JOBS:
-                    ret = PTLS_ERROR_LIBRARY;
-                    goto Exit;
-                case ASYNC_FINISH: {
-                    args->job = NULL;
-                    if (ptls_buffer__do_pushv(outbuf, args->sig, args->siglen) != 0) {
-                        ret = PTLS_ERROR_LIBRARY;
-                        goto Exit;
-                    }
-                    break;
-                }
-                default:
-                    ret = PTLS_ERROR_LIBRARY;
-                    goto Exit;
-            }
-        }
-#else
-    do_sign_final(&args);
-    if (ptls_buffer__do_pushv(outbuf, args->sig, args->siglen) != 0) {
+
+static int do_sign(EVP_PKEY *key, const struct st_ptls_openssl_signature_scheme_t *scheme, ptls_buffer_t *outbuf,
+                   ptls_iovec_t input, ptls_async_job_t **async)
+{
+    EVP_MD_CTX *ctx = NULL;
+    const EVP_MD *md = scheme->scheme_md != NULL ? scheme->scheme_md() : NULL;
+    EVP_PKEY_CTX *pkey_ctx;
+    size_t siglen;
+    int ret;
+
+    if ((ctx = EVP_MD_CTX_create()) == NULL) {
+        ret = PTLS_ERROR_NO_MEMORY;
+        goto Exit;
+    }
+
+    if (EVP_DigestSignInit(ctx, &pkey_ctx, md, NULL, key) != 1) {
         ret = PTLS_ERROR_LIBRARY;
         goto Exit;
     }
+
+#if PTLS_OPENSSL_HAVE_ED25519
+    if (EVP_PKEY_id(key) == EVP_PKEY_ED25519) {
+        /* ED25519 requires the use of the all-at-once function that appeared in OpenSSL 1.1.1, hence different path */
+        if (EVP_DigestSign(ctx, NULL, &siglen, input.base, input.len) != 1) {
+            ret = PTLS_ERROR_LIBRARY;
+            goto Exit;
+        }
+        if ((ret = ptls_buffer_reserve(outbuf, siglen)) != 0)
+            goto Exit;
+        if (EVP_DigestSign(ctx, outbuf->base + outbuf->off, &siglen, input.base, input.len) != 1) {
+            ret = PTLS_ERROR_LIBRARY;
+            goto Exit;
+        }
+    } else
 #endif
-        } else {
-            do_sign_final(&args);
-            if (ptls_buffer__do_pushv(outbuf, args->sig, args->siglen) != 0) {
+    {
+        if (EVP_PKEY_id(key) == EVP_PKEY_RSA) {
+            if (EVP_PKEY_CTX_set_rsa_padding(pkey_ctx, RSA_PKCS1_PSS_PADDING) != 1) {
+                ret = PTLS_ERROR_LIBRARY;
+                goto Exit;
+            }
+            if (EVP_PKEY_CTX_set_rsa_pss_saltlen(pkey_ctx, -1) != 1) {
+                ret = PTLS_ERROR_LIBRARY;
+                goto Exit;
+            }
+            if (EVP_PKEY_CTX_set_rsa_mgf1_md(pkey_ctx, md) != 1) {
                 ret = PTLS_ERROR_LIBRARY;
                 goto Exit;
             }
         }
+        if (EVP_DigestSignUpdate(ctx, input.base, input.len) != 1) {
+            ret = PTLS_ERROR_LIBRARY;
+            goto Exit;
+        }
+        if (EVP_DigestSignFinal(ctx, NULL, &siglen) != 1) {
+            ret = PTLS_ERROR_LIBRARY;
+            goto Exit;
+        }
+        /* If permitted by the caller (by providing a non-NULL `async` slot), use the asynchronous signing method and return
+         * immediately. */
+#if PTLS_OPENSSL_HAVE_ASYNC
+        if (async != NULL) {
+            if ((*async = async_sign_ctx_new(scheme, ctx, siglen)) == NULL) {
+                ret = PTLS_ERROR_NO_MEMORY;
+                goto Exit;
+            }
+            return do_sign_async(outbuf, async);
+        }
+#endif
+        /* Otherwise, generate signature synchronously. */
+        if ((ret = ptls_buffer_reserve(outbuf, siglen)) != 0)
+            goto Exit;
+        if (EVP_DigestSignFinal(ctx, outbuf->base + outbuf->off, &siglen) != 1) {
+            ret = PTLS_ERROR_LIBRARY;
+            goto Exit;
+        }
     }
+
+    outbuf->off += siglen;
 
     ret = 0;
 Exit:
-    if (sign_ctx != NULL)
-        *sign_ctx = NULL;
-    if (cancel_cb != NULL)
-        *cancel_cb = NULL;
-    sign_ctx_destroy(args);
     if (ctx != NULL)
         EVP_MD_CTX_destroy(ctx);
     return ret;
@@ -1181,55 +1154,37 @@ ptls_define_hash(sha256, SHA256_CTX, SHA256_Init, SHA256_Update, _sha256_final);
 #define _sha384_final(ctx, md) SHA384_Final((md), (ctx))
 ptls_define_hash(sha384, SHA512_CTX, SHA384_Init, SHA384_Update, _sha384_final);
 
-static const struct st_ptls_openssl_signature_scheme_t *match_scheme(const struct st_ptls_openssl_signature_scheme_t *schemes,
-                                                                     const uint16_t *algorithms,
-                                                                     size_t num_algorithms)
-{
-    const struct st_ptls_openssl_signature_scheme_t *scheme;
-    for (scheme = schemes; scheme->scheme_id != UINT16_MAX; ++scheme) {
-        size_t i;
-        for (i = 0; i != num_algorithms; ++i) {
-            if (algorithms[i] == scheme->scheme_id) {
-                return scheme;
-            }
-        }
-    }
-    return scheme;
-}
-static int sign_certificate(ptls_sign_certificate_t *_self, ptls_t *tls, void (**cancel_cb)(void *sign_ctx), void **sign_ctx,
-                            uint16_t *selected_algorithm, ptls_buffer_t *outbuf, ptls_iovec_t input, const uint16_t *algorithms,
-                            size_t num_algorithms)
+static int sign_certificate(ptls_sign_certificate_t *_self, ptls_t *tls, ptls_async_job_t **async, uint16_t *selected_algorithm,
+                            ptls_buffer_t *outbuf, ptls_iovec_t input, const uint16_t *algorithms, size_t num_algorithms)
 {
     ptls_openssl_sign_certificate_t *self = (ptls_openssl_sign_certificate_t *)_self;
     const struct st_ptls_openssl_signature_scheme_t *scheme;
-    int is_async = self->async == 1;
 
-    if (ptls_is_server(tls)) {
-        assert(sign_ctx != NULL);
-        // server signing is asynchronous
-        struct sign_ctx *args = *sign_ctx;
-        if (args == NULL) {
-            // first invocation, get scheme
-            scheme = match_scheme(self->schemes, algorithms, num_algorithms);
-            goto Exit;
-        } else {
-            // second invocation
-            // algorithms should be NULL, re-use cached scheme
-            assert(algorithms == NULL);
-            scheme = args->scheme;
-            goto Exit;
-        }
-    } else {
-        assert(sign_ctx == NULL);
-        scheme = match_scheme(self->schemes, algorithms, num_algorithms);
-        goto Exit;
+    /* Just resume the asynchronous operation, if one is in flight. */
+#if PTLS_OPENSSL_HAVE_ASYNC
+    if (async != NULL && *async != NULL)
+        return do_sign_async(outbuf, async);
+#endif
+
+    /* Select the algorithm (driven by server-side preference of `self->schemes`), or return failure if none found. */
+    for (scheme = self->schemes; scheme->scheme_id != UINT16_MAX; ++scheme) {
+        size_t i;
+        for (i = 0; i != num_algorithms; ++i)
+            if (algorithms[i] == scheme->scheme_id)
+                goto Found;
     }
-
     return PTLS_ALERT_HANDSHAKE_FAILURE;
 
-Exit:
+Found:
     *selected_algorithm = scheme->scheme_id;
-    return do_sign(self->key, scheme, outbuf, input, cancel_cb, sign_ctx, is_async);
+#if PTLS_OPENSSL_HAVE_ASYNC
+    if (!self->async && async != NULL) {
+        /* indicate to `do_sign` that async mode is disabled for this operation */
+        assert(*async == NULL);
+        async = NULL;
+    }
+#endif
+    return do_sign(self->key, scheme, outbuf, input, async);
 }
 
 static X509 *to_x509(ptls_iovec_t vec)
@@ -1319,8 +1274,7 @@ Exit:
 
 int ptls_openssl_init_sign_certificate(ptls_openssl_sign_certificate_t *self, EVP_PKEY *key)
 {
-    *self = (ptls_openssl_sign_certificate_t){{sign_certificate}};
-    self->async = 1;
+    *self = (ptls_openssl_sign_certificate_t){.super = {sign_certificate}, .async = 1};
 
     if ((self->schemes = lookup_signature_schemes(key)) == NULL)
         return PTLS_ERROR_INCOMPATIBLE_KEY;
@@ -1733,6 +1687,157 @@ Exit:
         HMAC_CTX_free(hctx);
     return ret;
 }
+
+#if OPENSSL_VERSION_NUMBER >= 0x30000000L
+int ptls_openssl_encrypt_ticket_evp(ptls_buffer_t *buf, ptls_iovec_t src,
+                                    int (*cb)(unsigned char *key_name, unsigned char *iv, EVP_CIPHER_CTX *ctx, EVP_MAC_CTX *hctx,
+                                              int enc))
+{
+    EVP_CIPHER_CTX *cctx = NULL;
+    EVP_MAC *mac = NULL;
+    EVP_MAC_CTX *hctx = NULL;
+    size_t hlen;
+    uint8_t *dst;
+    int clen, ret;
+
+    if ((cctx = EVP_CIPHER_CTX_new()) == NULL) {
+        ret = PTLS_ERROR_NO_MEMORY;
+        goto Exit;
+    }
+    if ((mac = EVP_MAC_fetch(NULL, "HMAC", NULL)) == NULL) {
+        ret = PTLS_ERROR_NO_MEMORY;
+        goto Exit;
+    }
+    if ((hctx = EVP_MAC_CTX_new(mac)) == NULL) {
+        ret = PTLS_ERROR_NO_MEMORY;
+        goto Exit;
+    }
+
+    if ((ret = ptls_buffer_reserve(buf, TICKET_LABEL_SIZE + TICKET_IV_SIZE + src.len + EVP_MAX_BLOCK_LENGTH + EVP_MAX_MD_SIZE)) !=
+        0)
+        goto Exit;
+    dst = buf->base + buf->off;
+
+    /* fill label and iv, as well as obtaining the keys */
+    if (!(*cb)(dst, dst + TICKET_LABEL_SIZE, cctx, hctx, 1)) {
+        ret = PTLS_ERROR_LIBRARY;
+        goto Exit;
+    }
+    dst += TICKET_LABEL_SIZE + TICKET_IV_SIZE;
+
+    /* encrypt */
+    if (!EVP_EncryptUpdate(cctx, dst, &clen, src.base, (int)src.len)) {
+        ret = PTLS_ERROR_LIBRARY;
+        goto Exit;
+    }
+    dst += clen;
+    if (!EVP_EncryptFinal_ex(cctx, dst, &clen)) {
+        ret = PTLS_ERROR_LIBRARY;
+        goto Exit;
+    }
+    dst += clen;
+
+    /* append hmac */
+    if (!EVP_MAC_update(hctx, buf->base + buf->off, dst - (buf->base + buf->off)) ||
+        !EVP_MAC_final(hctx, dst, &hlen, EVP_MAC_CTX_get_mac_size(hctx))) {
+        ret = PTLS_ERROR_LIBRARY;
+        goto Exit;
+    }
+    dst += hlen;
+
+    assert(dst <= buf->base + buf->capacity);
+    buf->off += dst - (buf->base + buf->off);
+    ret = 0;
+
+Exit:
+    if (cctx != NULL)
+        EVP_CIPHER_CTX_free(cctx);
+    if (hctx != NULL)
+        EVP_MAC_CTX_free(hctx);
+    if (mac != NULL)
+        EVP_MAC_free(mac);
+    return ret;
+}
+
+int ptls_openssl_decrypt_ticket_evp(ptls_buffer_t *buf, ptls_iovec_t src,
+                                    int (*cb)(unsigned char *key_name, unsigned char *iv, EVP_CIPHER_CTX *ctx, EVP_MAC_CTX *hctx,
+                                              int enc))
+{
+    EVP_CIPHER_CTX *cctx = NULL;
+    EVP_MAC *mac = NULL;
+    EVP_MAC_CTX *hctx = NULL;
+    size_t hlen;
+    int clen, ret;
+
+    if ((cctx = EVP_CIPHER_CTX_new()) == NULL) {
+        ret = PTLS_ERROR_NO_MEMORY;
+        goto Exit;
+    }
+    if ((mac = EVP_MAC_fetch(NULL, "HMAC", NULL)) == NULL) {
+        ret = PTLS_ERROR_NO_MEMORY;
+        goto Exit;
+    }
+    if ((hctx = EVP_MAC_CTX_new(mac)) == NULL) {
+        ret = PTLS_ERROR_NO_MEMORY;
+        goto Exit;
+    }
+
+    /* obtain cipher and hash context.
+     * Note: no need to handle renew, since in picotls we always send a new ticket to minimize the chance of ticket reuse */
+    if (src.len < TICKET_LABEL_SIZE + TICKET_IV_SIZE) {
+        ret = PTLS_ALERT_DECODE_ERROR;
+        goto Exit;
+    }
+    if (!(*cb)(src.base, src.base + TICKET_LABEL_SIZE, cctx, hctx, 0)) {
+        ret = PTLS_ERROR_LIBRARY;
+        goto Exit;
+    }
+
+    /* check hmac, and exclude label, iv, hmac */
+    size_t hmac_size = EVP_MAC_CTX_get_mac_size(hctx);
+    if (src.len < TICKET_LABEL_SIZE + TICKET_IV_SIZE + hmac_size) {
+        ret = PTLS_ALERT_DECODE_ERROR;
+        goto Exit;
+    }
+    src.len -= hmac_size;
+    uint8_t hmac[EVP_MAX_MD_SIZE];
+    if (!EVP_MAC_update(hctx, src.base, src.len) || !EVP_MAC_final(hctx, hmac, &hlen, sizeof(hmac))) {
+        ret = PTLS_ERROR_LIBRARY;
+        goto Exit;
+    }
+    if (!ptls_mem_equal(src.base + src.len, hmac, hmac_size)) {
+        ret = PTLS_ALERT_HANDSHAKE_FAILURE;
+        goto Exit;
+    }
+    src.base += TICKET_LABEL_SIZE + TICKET_IV_SIZE;
+    src.len -= TICKET_LABEL_SIZE + TICKET_IV_SIZE;
+
+    /* decrypt */
+    if ((ret = ptls_buffer_reserve(buf, src.len)) != 0)
+        goto Exit;
+    if (!EVP_DecryptUpdate(cctx, buf->base + buf->off, &clen, src.base, (int)src.len)) {
+        ret = PTLS_ERROR_LIBRARY;
+        goto Exit;
+    }
+    buf->off += clen;
+    if (!EVP_DecryptFinal_ex(cctx, buf->base + buf->off, &clen)) {
+        ret = PTLS_ERROR_LIBRARY;
+        goto Exit;
+    }
+    buf->off += clen;
+
+    ret = 0;
+
+Exit:
+    if (cctx != NULL)
+        EVP_CIPHER_CTX_free(cctx);
+    if (hctx != NULL)
+        EVP_MAC_CTX_free(hctx);
+    if (mac != NULL)
+        EVP_MAC_free(mac);
+    return ret;
+}
+#endif
 
 ptls_key_exchange_algorithm_t ptls_openssl_secp256r1 = {.id = PTLS_GROUP_SECP256R1,
                                                         .name = PTLS_GROUP_NAME_SECP256R1,

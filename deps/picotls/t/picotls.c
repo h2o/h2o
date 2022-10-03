@@ -906,55 +906,57 @@ static void test_handshake(ptls_iovec_t ticket, int mode, int expect_ticket, int
 
 static ptls_sign_certificate_t *sc_orig;
 
-static int sign_certificate(ptls_sign_certificate_t *self, ptls_t *tls, void (**cancel_cb)(void *sign_ctx), void **sign_ctx,
-                            uint16_t *selected_algorithm, ptls_buffer_t *output, ptls_iovec_t input, const uint16_t *algorithms,
-                            size_t num_algorithms)
+static int sign_certificate(ptls_sign_certificate_t *self, ptls_t *tls, ptls_async_job_t **async, uint16_t *selected_algorithm,
+                            ptls_buffer_t *output, ptls_iovec_t input, const uint16_t *algorithms, size_t num_algorithms)
 {
     ++*(ptls_is_server(tls) ? &server_sc_callcnt : &client_sc_callcnt);
-    return sc_orig->cb(sc_orig, tls, cancel_cb, sign_ctx, selected_algorithm, output, input, algorithms, num_algorithms);
+    return sc_orig->cb(sc_orig, tls, async, selected_algorithm, output, input, algorithms, num_algorithms);
 }
 
-static int async_sign_certificate(ptls_sign_certificate_t *self, ptls_t *tls, void (**cancel_cb)(void *sign_ctx), void **sign_ctx,
-                                  uint16_t *selected_algorithm, ptls_buffer_t *output, ptls_iovec_t input, const uint16_t *algorithms,
-                                  size_t num_algorithms)
+static int async_sign_certificate(ptls_sign_certificate_t *self, ptls_t *tls, ptls_async_job_t **async,
+                                  uint16_t *selected_algorithm, ptls_buffer_t *output, ptls_iovec_t input,
+                                  const uint16_t *algorithms, size_t num_algorithms)
 {
-    static void *inner_sign_ctx = NULL;
-    if (!ptls_is_server(tls)) {
-        /* do it synchronously, as async mode is only supported on the server-side */
-    }
-    else if (*sign_ctx == NULL) {
-        /* first invocation, make a fake call to the backend and obtain the algorithm, return it, but not the signature */
-        ptls_buffer_t fakebuf;
-        ptls_buffer_init(&fakebuf, "", 0);
-        int ret = sign_certificate(self, tls, cancel_cb, &inner_sign_ctx, selected_algorithm, &fakebuf, input, algorithms,
-                                   num_algorithms);
-        assert(ret == 0);
-        ptls_buffer_dispose(&fakebuf);
-        static uint16_t selected;
-        selected = *selected_algorithm;
-        *sign_ctx = &selected;
-        --server_sc_callcnt;
-        ++async_sc_callcnt;
-        return PTLS_ERROR_ASYNC_OPERATION;
-    } else {
-        /* second invocation, restore algorithm, and delegate the call */
-        assert(algorithms == NULL);
-        algorithms = *sign_ctx;
-        num_algorithms = 1;
+    static struct {
+        ptls_async_job_t super;
+        uint16_t selected_algorithm;
+    } async_ctx;
+
+    if (async != NULL) {
+        if (*async == NULL) {
+            /* first invocation, make a fake call to the backend and obtain the algorithm, return it, but not the signature */
+            ptls_buffer_t fakebuf;
+            ptls_buffer_init(&fakebuf, "", 0);
+            int ret = sign_certificate(self, tls, NULL, selected_algorithm, &fakebuf, input, algorithms, num_algorithms);
+            assert(ret == 0);
+            ptls_buffer_dispose(&fakebuf);
+            async_ctx.super.destroy_ = (void (*)(ptls_async_job_t *))0xdeadbeef;
+            async_ctx.selected_algorithm = *selected_algorithm;
+            *async = &async_ctx.super;
+            --server_sc_callcnt;
+            ++async_sc_callcnt;
+            return PTLS_ERROR_ASYNC_OPERATION;
+        } else {
+            /* second invocation, restore algorithm, and delegate the call */
+            assert(*async == &async_ctx.super);
+            assert(algorithms == NULL);
+            algorithms = &async_ctx.selected_algorithm;
+            num_algorithms = 1;
+            *async = NULL;
+        }
     }
 
-    return sign_certificate(self, tls, cancel_cb, &inner_sign_ctx, selected_algorithm, output, input, algorithms,
-                            num_algorithms);
+    return sign_certificate(self, tls, NULL, selected_algorithm, output, input, algorithms, num_algorithms);
 }
 
 static ptls_sign_certificate_t *second_sc_orig;
 
-static int second_sign_certificate(ptls_sign_certificate_t *self, ptls_t *tls, void (**cancel_cb)(void *sign_ctx), void **sign_ctx,
-                                   uint16_t *selected_algorithm, ptls_buffer_t *output, ptls_iovec_t input, const uint16_t *algorithms,
-                                   size_t num_algorithms)
+static int second_sign_certificate(ptls_sign_certificate_t *self, ptls_t *tls, ptls_async_job_t **async,
+                                   uint16_t *selected_algorithm, ptls_buffer_t *output, ptls_iovec_t input,
+                                   const uint16_t *algorithms, size_t num_algorithms)
 {
     ++*(ptls_is_server(tls) ? &server_sc_callcnt : &client_sc_callcnt);
-    return second_sc_orig->cb(second_sc_orig, tls, cancel_cb, sign_ctx, selected_algorithm, output, input, algorithms, num_algorithms);
+    return second_sc_orig->cb(second_sc_orig, tls, async, selected_algorithm, output, input, algorithms, num_algorithms);
 }
 
 static void test_full_handshake_impl(int require_client_authentication, int is_async)

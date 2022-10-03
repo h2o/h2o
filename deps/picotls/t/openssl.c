@@ -35,8 +35,16 @@
 #endif
 #include "picotls.h"
 #include "picotls/minicrypto.h"
+#include "picotls/openssl.h"
+#if PTLS_OPENSSL_HAVE_ASYNC && PTLS_OPENSSL_HAVE_X25519 && !defined(_WINDOWS)
+#include <sys/select.h>
+#include <sys/time.h>
+#define ASYNC_TESTS 1
+#endif
 #include "../deps/picotest/picotest.h"
+#undef OPENSSL_API_COMPAT
 #include "../lib/openssl.c"
+
 #include "test.h"
 
 #define RSA_PRIVATE_KEY                                                                                                            \
@@ -138,21 +146,18 @@ static void test_key_exchanges(void)
 static void test_sign_verify(EVP_PKEY *key, const struct st_ptls_openssl_signature_scheme_t *schemes)
 {
     for (size_t i = 0; schemes[i].scheme_id != UINT16_MAX; ++i) {
-        struct sign_ctx *args = malloc(sizeof(*args));
-        memset(args, 0, sizeof(*args));
         note("scheme 0x%04x", schemes[i].scheme_id);
         const void *message = "hello world";
         ptls_buffer_t sigbuf;
         uint8_t sigbuf_small[1024];
 
         ptls_buffer_init(&sigbuf, sigbuf_small, sizeof(sigbuf_small));
-        ok(do_sign(key, schemes + i, &sigbuf, ptls_iovec_init(message, strlen(message)), (void**)&args) == 0);
+        ok(do_sign(key, schemes + i, &sigbuf, ptls_iovec_init(message, strlen(message)), NULL) == 0);
         EVP_PKEY_up_ref(key);
         ok(verify_sign(key, schemes[i].scheme_id, ptls_iovec_init(message, strlen(message)),
                        ptls_iovec_init(sigbuf.base, sigbuf.off)) == 0);
 
         ptls_buffer_dispose(&sigbuf);
-        free(args);
     }
 }
 
@@ -294,6 +299,133 @@ DEFINE_FFX_AES128_ALGORITHMS(openssl);
 DEFINE_FFX_CHACHA20_ALGORITHMS(openssl);
 #endif
 
+#if ASYNC_TESTS
+
+static ENGINE *load_engine(const char *name)
+{
+    ENGINE *e;
+
+    if ((e = ENGINE_by_id("dynamic")) == NULL)
+        return NULL;
+    if (!ENGINE_ctrl_cmd_string(e, "SO_PATH", name, 0) || !ENGINE_ctrl_cmd_string(e, "LOAD", NULL, 0)) {
+        ENGINE_free(e);
+        return NULL;
+    }
+
+    return e;
+}
+
+static struct {
+    struct {
+        size_t next_pending;
+        ptls_t *tls;
+        int wait_fd;
+    } conns[10];
+    size_t first_pending;
+} qat;
+
+static void qat_set_pending(size_t index)
+{
+    qat.conns[index].next_pending = qat.first_pending;
+    qat.first_pending = index;
+}
+
+static void many_handshakes(void)
+{
+    ptls_buffer_t hellobuf;
+    int ret;
+
+    { /* generate ClientHello (that we would be used as a template) */
+        ptls_buffer_init(&hellobuf, "", 0);
+        ptls_t *client = ptls_new(ctx, 0);
+        ret = ptls_handshake(client, &hellobuf, NULL, NULL, NULL);
+        ok(ret == PTLS_ERROR_IN_PROGRESS);
+        ptls_free(client);
+    }
+
+    qat.first_pending = 0;
+    for (size_t i = 0; i < PTLS_ELEMENTSOF(qat.conns); ++i) {
+        qat.conns[i].next_pending = i + 1;
+        qat.conns[i].tls = NULL;
+        qat.conns[i].wait_fd = -1;
+    }
+    qat.conns[PTLS_ELEMENTSOF(qat.conns) - 1].next_pending = SIZE_MAX;
+
+    struct timeval start, end;
+    gettimeofday(&start, NULL);
+
+    static const size_t num_total = 10000;
+    size_t num_issued = 0, num_running = 0;
+    while (1) {
+        while (qat.first_pending != SIZE_MAX) {
+            size_t offending = qat.first_pending;
+            /* detach the offending entry from pending list */
+            qat.first_pending = qat.conns[offending].next_pending;
+            qat.conns[offending].next_pending = SIZE_MAX;
+            /* run the offending entry */
+            if (qat.conns[offending].tls == NULL) {
+                qat.conns[offending].tls = ptls_new(ctx_peer, 1);
+                ++num_issued;
+                ++num_running;
+            }
+            ptls_buffer_t hsbuf;
+            uint8_t hsbuf_small[8192];
+            ptls_buffer_init(&hsbuf, hsbuf_small, sizeof(hsbuf_small));
+            size_t inlen = hellobuf.off;
+            ret = ptls_handshake(qat.conns[offending].tls, &hsbuf, hellobuf.base, &inlen, NULL);
+            ptls_buffer_dispose(&hsbuf);
+            /* advance the handshake context */
+            switch (ret) {
+            case 0:
+                ptls_free(qat.conns[offending].tls);
+                qat.conns[offending].tls = NULL;
+                --num_running;
+                if (num_issued < num_total)
+                    qat_set_pending(offending);
+                break;
+            case PTLS_ERROR_ASYNC_OPERATION:
+                qat.conns[offending].wait_fd = ptls_openssl_get_async_fd(qat.conns[offending].tls);
+                assert(qat.conns[offending].wait_fd != -1);
+                break;
+            default:
+                fprintf(stderr, "ptls_handshake returned %d\n", ret);
+                abort();
+                break;
+            }
+        }
+        if (num_running == 0)
+            break;
+        /* poll for next action */
+        fd_set rfds;
+        FD_ZERO(&rfds);
+        int nfds = 0;
+        for (size_t i = 0; i < PTLS_ELEMENTSOF(qat.conns); ++i) {
+            if (qat.conns[i].wait_fd != -1) {
+                FD_SET(qat.conns[i].wait_fd, &rfds);
+                if (nfds <= qat.conns[i].wait_fd)
+                    nfds = qat.conns[i].wait_fd + 1;
+            }
+        }
+        if (select(nfds, &rfds, NULL, NULL, NULL) > 0) {
+            for (size_t i = 0; i < PTLS_ELEMENTSOF(qat.conns); ++i) {
+                if (qat.conns[i].wait_fd != -1 && FD_ISSET(qat.conns[i].wait_fd, &rfds)) {
+                    qat.conns[i].wait_fd = -1;
+                    qat_set_pending(i);
+                }
+            }
+        }
+    }
+
+    gettimeofday(&end, NULL);
+
+    note("run %zu handshakes in %f seconds", num_total,
+         (end.tv_sec + end.tv_usec / 1000000.) - (start.tv_sec + start.tv_usec / 1000000.));
+
+    ptls_buffer_dispose(&hellobuf);
+}
+
+#endif
+
 int main(int argc, char **argv)
 {
     ptls_openssl_sign_certificate_t openssl_sign_certificate;
@@ -301,17 +433,16 @@ int main(int argc, char **argv)
 
     ERR_load_crypto_strings();
     OpenSSL_add_all_algorithms();
-#if !defined(OPENSSL_NO_ENGINE)
-    /* Load all compiled-in ENGINEs */
-    ENGINE_load_builtin_engines();
-    ENGINE_register_all_ciphers();
-    ENGINE_register_all_digests();
-#endif
 
 #if !defined(LIBRESSL_VERSION_NUMBER) && OPENSSL_VERSION_NUMBER >= 0x30000000L
     /* Explicitly load the legacy provider in addition to default, as we test Blowfish in one of the tests. */
     OSSL_PROVIDER *legacy = OSSL_PROVIDER_load(NULL, "legacy");
     OSSL_PROVIDER *dflt = OSSL_PROVIDER_load(NULL, "default");
+#elif !defined(OPENSSL_NO_ENGINE)
+    /* Load all compiled-in ENGINEs */
+    ENGINE_load_builtin_engines();
+    ENGINE_register_all_ciphers();
+    ENGINE_register_all_digests();
 #endif
 
     subtest("bf", test_bf);
@@ -386,6 +517,30 @@ int main(int argc, char **argv)
     ctx = &minicrypto_ctx;
     ctx_peer = &openssl_ctx;
     subtest("minicrypto vs.", test_picotls);
+
+#if ASYNC_TESTS
+    // switch to x25519 as we run benchmarks
+    static ptls_key_exchange_algorithm_t *x25519_keyex[] = {&ptls_openssl_x25519, NULL}; // use x25519 for speed
+    openssl_ctx.key_exchanges = x25519_keyex;
+    ctx = &openssl_ctx;
+    ctx_peer = &openssl_ctx;
+    openssl_sign_certificate.async = 0;
+    subtest("many-handshakes-non-async", many_handshakes);
+    openssl_sign_certificate.async = 0;
+    subtest("many-handshakes-async", many_handshakes);
+    { /* qatengine should be tested at last, because we do not have the code to unload or un-default it */
+        const char *engine_name = "qatengine";
+        ENGINE *qatengine;
+        if ((qatengine = ENGINE_by_id(engine_name)) != NULL || (qatengine = load_engine(engine_name)) != NULL) {
+            ENGINE_set_default_RSA(qatengine);
+            ptls_openssl_dispose_sign_certificate(&openssl_sign_certificate); // reload cert to use qatengine
+            setup_sign_certificate(&openssl_sign_certificate);
+            subtest("many-handshakes-qatengine", many_handshakes);
+        } else {
+            note("%s not found", engine_name);
+        }
+    }
+#endif
 
     esni_private_keys[0]->on_exchange(esni_private_keys, 1, NULL, ptls_iovec_init(NULL, 0));
     int ret = done_testing();

@@ -41,6 +41,7 @@ extern "C" {
 
 #if OPENSSL_VERSION_NUMBER >= 0x10100010L && !defined(LIBRESSL_VERSION_NUMBER)
 #if !defined(OPENSSL_NO_ASYNC)
+#include <openssl/async.h>
 #define PTLS_OPENSSL_HAVE_ASYNC 1
 #endif
 #endif
@@ -97,8 +98,12 @@ void ptls_openssl_random_bytes(void *buf, size_t len);
  * constructs a key exchange context. pkey's reference count is incremented.
  */
 int ptls_openssl_create_key_exchange(ptls_key_exchange_context_t **ctx, EVP_PKEY *pkey);
-#ifdef PTLS_OPENSSL_HAVE_ASYNC
-int ptls_openssl_get_async_fd(ptls_t *ptls);
+
+#if PTLS_OPENSSL_HAVE_ASYNC
+/**
+ * Returns the file descriptor of the asynchronous operation in flight.
+ */
+OSSL_ASYNC_FD ptls_openssl_get_async_fd(ptls_t *ptls);
 #endif
 
 struct st_ptls_openssl_signature_scheme_t {
@@ -111,7 +116,11 @@ typedef struct st_ptls_openssl_sign_certificate_t {
     EVP_PKEY *key;
     const struct st_ptls_openssl_signature_scheme_t *schemes; /* terminated by .scheme_id == UINT16_MAX */
     /**
-     * boolean indicating if signing should be asynchronous
+     * When set to true, indicates to the backend that the signature can be generated asynchronously. When the backend decides to
+     * generate the signature asynchronously, `ptls_handshake` will return PTLS_ERROR_ASYNC_OPERATION. When receiving that error
+     * code, the user should call `ptls_openssl_get_async_fd` to obtain the file descriptor that represents the asynchronous
+     * operation and poll it for read. Once the file descriptor becomes readable, the user calls `ptls_handshake` once again to
+     * obtain the handshake messages being generated, or call `ptls_free` to discard TLS state.
      */
     unsigned async : 1;
 } ptls_openssl_sign_certificate_t;
@@ -152,6 +161,13 @@ int ptls_openssl_encrypt_ticket(ptls_buffer_t *dst, ptls_iovec_t src,
                                 int (*cb)(unsigned char *, unsigned char *, EVP_CIPHER_CTX *, HMAC_CTX *, int));
 int ptls_openssl_decrypt_ticket(ptls_buffer_t *dst, ptls_iovec_t src,
                                 int (*cb)(unsigned char *, unsigned char *, EVP_CIPHER_CTX *, HMAC_CTX *, int));
+
+#if OPENSSL_VERSION_NUMBER >= 0x30000000L
+int ptls_openssl_encrypt_ticket_evp(ptls_buffer_t *dst, ptls_iovec_t src,
+                                    int (*cb)(unsigned char *, unsigned char *, EVP_CIPHER_CTX *, EVP_MAC_CTX *, int));
+int ptls_openssl_decrypt_ticket_evp(ptls_buffer_t *dst, ptls_iovec_t src,
+                                    int (*cb)(unsigned char *, unsigned char *, EVP_CIPHER_CTX *, EVP_MAC_CTX *, int));
+#endif
 
 #ifdef __cplusplus
 }
