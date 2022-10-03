@@ -512,8 +512,7 @@ static void do_delayed_sockets(h2o_socket_t *sock)
         async_handshake_in_flight = NULL;
 
         // proceed delayed handshakes
-        while (init_delayed_sockets()
-                && async_handshake_in_flight == NULL
+        while (async_handshake_in_flight == NULL
                 && !h2o_linklist_is_empty(&delayed_sockets)) {
             h2o_socket_t *next_sock = H2O_STRUCT_FROM_MEMBER(h2o_socket_t, async.delayed_link, delayed_sockets.next);
             h2o_linklist_unlink(&next_sock->async.delayed_link);
