@@ -177,7 +177,7 @@ static void on_write_complete(h2o_socket_t *sock, const char *err);
 
 static __thread h2o_socket_t *async_handshake_in_flight = NULL;
 
-int h2o_is_ssl_handhsake_in_flight() {
+int h2o_is_ssl_handhsake_in_flight(void) {
     return async_handshake_in_flight != NULL;
 }
 
@@ -186,7 +186,7 @@ int h2o_is_ssl_handhsake_in_flight() {
  */
 static __thread h2o_linklist_t delayed_sockets;
 
-static int init_delayed_sockets() {
+static int init_delayed_sockets(void) {
     static __thread int initialized = 0;
     if (!initialized) {
         h2o_linklist_init_anchor(&delayed_sockets);
