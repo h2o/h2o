@@ -493,7 +493,7 @@ static void destroy_ssl(struct st_h2o_socket_ssl_t *ssl)
         ssl->ptls = NULL;
     }
     if (ssl->ossl != NULL) {
-#ifdef PTLS_OPENSSL_HAVE_ASYNC
+#if PTLS_OPENSSL_HAVE_ASYNC
         while (SSL_waiting_for_async(ssl->ossl)) {
             SSL_do_handshake(ssl->ossl);
         }
@@ -1604,7 +1604,8 @@ static void proceed_handshake_picotls(h2o_socket_t *sock)
     ptls_buffer_init(&wbuf, "", 0);
 
     int ret;
-#ifndef PTLS_OPENSSL_HAVE_ASYNC
+#if PTLS_OPENSSL_HAVE_ASYNC
+#else
 Retry:
 #endif
     ret = ptls_handshake(sock->ssl->ptls, &wbuf, sock->ssl->input.encrypted->bytes, &consumed, NULL);
@@ -1617,7 +1618,7 @@ Retry:
         next_cb = on_handshake_complete;
         break;
     case PTLS_ERROR_ASYNC_OPERATION:
-#ifdef PTLS_OPENSSL_HAVE_ASYNC
+#if PTLS_OPENSSL_HAVE_ASYNC
         do_ssl_async(sock);
 #else
         goto Retry;
@@ -1680,7 +1681,7 @@ Redo:
         case ASYNC_RESUMPTION_STATE_REQUEST_SENT: {
             /* sent async request, reset the ssl state, and wait for async response */
             assert(ret < 0);
-#ifdef PTLS_OPENSSL_HAVE_ASYNC
+#if PTLS_OPENSSL_HAVE_ASYNC
             while (SSL_waiting_for_async(sock->ssl->ossl)) {
                 SSL_accept(sock->ssl->ossl);
             }
@@ -1705,7 +1706,7 @@ Redo:
     }
 
     if (ret == 0 || (ret < 0 && SSL_get_error(sock->ssl->ossl, ret) != SSL_ERROR_WANT_READ)) {
-#ifdef PTLS_OPENSSL_HAVE_ASYNC
+#if PTLS_OPENSSL_HAVE_ASYNC
         if (SSL_get_error(sock->ssl->ossl, ret) == SSL_ERROR_WANT_ASYNC) {
             do_ssl_async(sock);
             return;
@@ -1790,7 +1791,8 @@ static void proceed_handshake_undetermined(h2o_socket_t *sock)
     *ptls_get_data_ptr(ptls) = sock;
 
     int ret;
-#ifndef PTLS_OPENSSL_HAVE_ASYNC
+#if PTLS_OPENSSL_HAVE_ASYNC
+#else
 Retry:
 #endif
     ret = ptls_handshake(ptls, &wbuf, sock->ssl->input.encrypted->bytes, &consumed, NULL);
@@ -1817,7 +1819,7 @@ Retry:
             cb = on_handshake_complete;
             break;
         case PTLS_ERROR_ASYNC_OPERATION:
-#ifdef PTLS_OPENSSL_HAVE_ASYNC
+#if PTLS_OPENSSL_HAVE_ASYNC
             do_ssl_async(sock);
 #else
             goto Retry;

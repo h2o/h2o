@@ -209,12 +209,14 @@ struct st_h2o_socket_t {
         size_t suggested_write_size;       /* SIZE_MAX if no need to optimize for latency */
     } _latency_optimization;
     struct st_h2o_socket_zerocopy_buffers_t *_zerocopy;
+#if PTLS_OPENSSL_HAVE_ASYNC
     struct {
         int enabled;
         void *data;
         h2o_linklist_t delayed_link;
         h2o_socket_cb delayed_cb;
     } async;
+#endif
 };
 
 typedef struct st_h2o_socket_export_t {

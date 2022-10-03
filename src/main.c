@@ -1307,7 +1307,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
         /* initialize OpenSSL context */
         identity->ossl = SSL_CTX_new(SSLv23_server_method());
         SSL_CTX_set_options(identity->ossl, ssl_options);
-#ifdef PTLS_OPENSSL_HAVE_ASYNC
+#if PTLS_OPENSSL_HAVE_ASYNC
         SSL_CTX_set_mode(identity->ossl, SSL_MODE_ASYNC);
 #endif
 
