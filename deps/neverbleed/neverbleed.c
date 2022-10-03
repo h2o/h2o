@@ -75,7 +75,7 @@
 #include <openssl/rand.h>
 #include <openssl/rsa.h>
 #include <openssl/ssl.h>
-#ifdef NEVERBLEED_OPENSSL_HAVE_ASYNC
+#if NEVERBLEED_OPENSSL_HAVE_ASYNC
 #include <openssl/async.h>
 #endif
 
@@ -344,6 +344,11 @@ static int expbuf_write(struct expbuf_t *buf, int fd)
     return 0;
 }
 
+/**
+ * This function waits for the provided socket to become readable, then calls `nanosleep(1)` before returning.
+ * The intention behind sleep is to provide the application to complete its event loop before the neverbleed process starts
+ * spending CPU cycles on the time-consuming RSA operation.
+ */
 static void yield_on_data(int fd)
 {
     fd_set rfds;
@@ -354,17 +359,15 @@ static void yield_on_data(int fd)
     while((ret = select(fd + 1, &rfds, NULL, NULL, NULL)) == -1 && (errno == EAGAIN || errno == EINTR))
         ;
     if (ret == -1) {
-        fprintf(stderr, "error in select(2): %d, %s\n", errno, strerror(errno));
-        dief("select(2)");
+        dief("select(2)\n");
     } else if (ret > 0) {
         // yield when data is available
         struct timespec tv = { .tv_nsec = 1 };
         if (-1 == nanosleep(&tv, NULL)) {
-            dief("nanosleep");
+            warnf("nanosleep failed/interupted");
         }
     } else {
-        // unreachable, no timeout configured
-        assert(0);
+        dief("unreachable, no timeout configured");
     }
 }
 
@@ -498,9 +501,7 @@ static struct {
         struct key_slots ecdsa_slots;
     } keys;
     neverbleed_t *nb;
-} daemon_vars = {
-    .keys.lock = PTHREAD_MUTEX_INITIALIZER,
-};
+} daemon_vars = {{PTHREAD_MUTEX_INITIALIZER}};
 
 static RSA *daemon_get_rsa(size_t key_index)
 {
@@ -600,9 +601,9 @@ static size_t daemon_set_rsa(RSA *rsa)
 
 // sets up file descriptor and calls OpenSSL's `ASYNC_pause_job`
 // if OpenSSL async is not available, this function is a no-op
-static int async_pause(int fd)
+static void async_pause(int fd)
 {
-#ifdef NEVERBLEED_OPENSSL_HAVE_ASYNC
+#if NEVERBLEED_OPENSSL_HAVE_ASYNC
     ASYNC_JOB *job;
 
     if ((job = ASYNC_get_current_job()) != NULL) {
@@ -610,19 +611,13 @@ static int async_pause(int fd)
 
         size_t numfds;
         assert(ASYNC_WAIT_CTX_get_all_fds(waitctx, NULL, &numfds) && numfds == 0);
-        if (!ASYNC_WAIT_CTX_set_wait_fd(waitctx, "neverbleed", fd, NULL, NULL)) {
-            fprintf(stderr, "could not set async fd\n");
-            return -1;
-        }
+        if (!ASYNC_WAIT_CTX_set_wait_fd(waitctx, "neverbleed", fd, NULL, NULL))
+            dief("could not set async fd\n");
         ASYNC_pause_job();
-        if (!ASYNC_WAIT_CTX_clear_fd(waitctx, "neverbleed")) {
-            fprintf(stderr, "could not clear async fd\n");
-            return -1;
-        }
+        if (!ASYNC_WAIT_CTX_clear_fd(waitctx, "neverbleed"))
+            dief("could not clear async fd\n");
     }
 #endif
-
-    return 0;
 }
 
 
@@ -645,8 +640,7 @@ static int priv_encdec_proxy(const char *cmd, int flen, const unsigned char *fro
         dief(errno != 0 ? "write error" : "connection closed by daemon");
     expbuf_dispose(&buf);
 
-    if (async_pause(thdata->fd) != 0)
-        fprintf(stderr, "priv_encdec_proxy: could not async pause\n");
+    async_pause(thdata->fd);
     if (expbuf_read(&buf, thdata->fd) != 0)
         dief(errno != 0 ? "read error" : "connection closed by daemon");
     if (expbuf_shift_num(&buf, &ret) != 0 || (to = expbuf_shift_bytes(&buf, &tolen)) == NULL) {
@@ -729,8 +723,7 @@ static int sign_proxy(int type, const unsigned char *m, unsigned int m_len, unsi
         dief(errno != 0 ? "write error" : "connection closed by daemon");
     expbuf_dispose(&buf);
 
-    if (async_pause(thdata->fd) != 0)
-        fprintf(stderr, "sign_proxy: could not async pause\n");
+    async_pause(thdata->fd);
     if (expbuf_read(&buf, thdata->fd) != 0)
         dief(errno != 0 ? "read error" : "connection closed by daemon");
     if (expbuf_shift_num(&buf, &ret) != 0 || (sigret = expbuf_shift_bytes(&buf, &siglen)) == NULL) {
@@ -913,8 +906,7 @@ static int ecdsa_sign_proxy(int type, const unsigned char *m, int m_len, unsigne
         dief(errno != 0 ? "write error" : "connection closed by daemon");
     expbuf_dispose(&buf);
 
-    if (async_pause(thdata->fd) != 0)
-        fprintf(stderr, "ecdsa_sign_proxy: could not async pause\n");
+    async_pause(thdata->fd);
     if (expbuf_read(&buf, thdata->fd) != 0)
         dief(errno != 0 ? "read error" : "connection closed by daemon");
     if (expbuf_shift_num(&buf, &ret) != 0 || (sigret = expbuf_shift_bytes(&buf, &siglen)) == NULL) {
@@ -994,8 +986,7 @@ static void priv_ecdsa_finish(EC_KEY *key)
         dief(errno != 0 ? "write error" : "connection closed by daemon");
     expbuf_dispose(&buf);
 
-    if (async_pause(thdata->fd) != 0)
-        fprintf(stderr, "priv_ecdsa_finish: could not async pause\n");
+    async_pause(thdata->fd);
     if (expbuf_read(&buf, thdata->fd) != 0)
         dief(errno != 0 ? "read error" : "connection closed by daemon");
     if (expbuf_shift_num(&buf, &ret) != 0) {
@@ -1302,7 +1293,8 @@ Respond:
     return 0;
 }
 
-int neverbleed_setaffinity(neverbleed_t *nb, cpu_set_t *cpuset)
+#if NEVERBLEED_HAS_PTHREAD_SETAFFINITY_NP
+int neverbleed_setaffinity(neverbleed_t *nb, NEVERBLEED_CPU_SET_T *cpuset)
 {
     THDATA_IN_FLIGHT *thdata = get_thread_data(nb);
     struct expbuf_t buf = {NULL};
@@ -1324,14 +1316,14 @@ int neverbleed_setaffinity(neverbleed_t *nb, cpu_set_t *cpuset)
 
     return (int)ret;
 }
+#endif
 
 static int setaffinity_stub(struct expbuf_t *buf)
 {
     char *cpuset_bytes;
     size_t cpuset_len;
-    cpu_set_t cpuset;
+    NEVERBLEED_CPU_SET_T cpuset;
     int ret = 1;
-    CPU_ZERO(&cpuset);
 
     if ((cpuset_bytes = expbuf_shift_bytes(buf, &cpuset_len)) == NULL) {
         errno = 0;
@@ -1339,10 +1331,16 @@ static int setaffinity_stub(struct expbuf_t *buf)
         return -1;
     }
 
-    assert(cpuset_len == sizeof(cpuset));
+    assert(cpuset_len == sizeof(NEVERBLEED_CPU_SET_T));
     memcpy(&cpuset, cpuset_bytes, cpuset_len);
 
-    if(pthread_setaffinity_np(pthread_self(), sizeof(cpuset), &cpuset) != 0) {
+#ifdef __NetBSD__
+    ret = pthread_setaffinity_np(pthread_self(), cpuset_size(cpuset), cpuset);
+#else
+    ret = pthread_setaffinity_np(pthread_self(), sizeof(NEVERBLEED_CPU_SET_T), &cpuset);
+#endif
+    if (ret != 0) {
+        ret = 1;
         goto Respond;
     }
 
@@ -1390,8 +1388,7 @@ static int priv_rsa_finish(RSA *rsa)
         dief(errno != 0 ? "write error" : "connection closed by daemon");
     expbuf_dispose(&buf);
 
-    if (async_pause(thdata->fd) != 0)
-        fprintf(stderr, "priv_rsa_finish: could not async pause\n");
+    async_pause(thdata->fd);
     if (expbuf_read(&buf, thdata->fd) != 0)
         dief(errno != 0 ? "read error" : "connection closed by daemon");
     if (expbuf_shift_num(&buf, &ret) != 0) {
@@ -1722,7 +1719,7 @@ int neverbleed_init(neverbleed_t *nb, char *errbuf)
         snprintf(errbuf, NEVERBLEED_ERRBUF_SIZE, "failed to initialize the OpenSSL engine");
         goto Fail;
     }
-#ifdef NEVERBLEED_OPENSSL_HAVE_ASYNC
+#if NEVERBLEED_OPENSSL_HAVE_ASYNC
     ERR_load_ASYNC_strings();
 #endif
     ENGINE_add(nb->engine);

@@ -30,6 +30,15 @@
 extern "C" {
 #endif
 
+#if defined(__linux__) || defined(__FreeBSD__) || defined(__NetBSD__)
+#define NEVERBLEED_HAS_PTHREAD_SETAFFINITY_NP 1
+#if defined(__linux__)
+#define NEVERBLEED_CPU_SET_T cpu_set_t
+#else
+#define NEVERBLEED_CPU_SET_T cpuset_t
+#endif
+#endif
+
 #define NEVERBLEED_ERRBUF_SIZE (256)
 #define NEVERBLEED_AUTH_TOKEN_SIZE 32
 
@@ -53,10 +62,14 @@ int neverbleed_load_private_key_file(neverbleed_t *nb, SSL_CTX *ctx, const char 
  * setuidgid (also changes the file permissions so that `user` can connect to the daemon, if change_socket_ownership is non-zero)
  */
 int neverbleed_setuidgid(neverbleed_t *nb, const char *user, int change_socket_ownership);
+
+#if NEVERBLEED_HAS_PTHREAD_SETAFFINITY_NP
 /**
  * set the cpu affinity for the neverbleed thread (returns 0 if successful)
  */
-int neverbleed_setaffinity(neverbleed_t *nb, cpu_set_t *cpuset);
+int neverbleed_setaffinity(neverbleed_t *nb, NEVERBLEED_CPU_SET_T *cpuset);
+#endif
+
 /**
  * an optional callback that can be registered by the application for doing stuff immediately after the neverbleed process is being
  * spawned
