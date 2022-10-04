@@ -28,6 +28,7 @@ extern "C" {
 
 #include <stdint.h>
 #include <sys/socket.h>
+#include <time.h>
 #ifdef __linux__
 #include <linux/errqueue.h>
 #endif
