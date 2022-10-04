@@ -30,7 +30,7 @@ static void test_parse_req(void)
 
     memset(&req, 0x55, sizeof(req));
 
-    ok(h2o_dsr_parse_req(&req, H2O_STRLIT("http-version=768, quic=4278190109, cipher=4865, address=\"127.0.0.1\""), 443));
+    ok(h2o_dsr_parse_req(&req, H2O_STRLIT("http=768, quic=4278190109, cipher=4865, address=\"127.0.0.1\""), 443));
     ok(req.http_version == 0x300);
     ok(req.transport.quic.version == 0xff00001d);
     ok(req.transport.quic.cipher == 0x1301);
@@ -39,7 +39,7 @@ static void test_parse_req(void)
     ok(req.transport.quic.address.sin.sin_port == htons(443));
 
     ok(h2o_dsr_parse_req(
-        &req, H2O_STRLIT("http-version=768, quic=4278190109, cipher=4865, address=\"[2001:db8:85a3::8a2e:370:7334]:8443\""), 443));
+        &req, H2O_STRLIT("http=768, quic=4278190109, cipher=4865, address=\"[2001:db8:85a3::8a2e:370:7334]:8443\""), 443));
     ok(req.http_version == 0x300);
     ok(req.transport.quic.version == 0xff00001d);
     ok(req.transport.quic.cipher == 0x1301);
@@ -49,7 +49,7 @@ static void test_parse_req(void)
     ok(req.transport.quic.address.sin6.sin6_port == htons(8443));
 
     ok(!h2o_dsr_parse_req(&req, H2O_STRLIT(""), 443));
-    ok(!h2o_dsr_parse_req(&req, H2O_STRLIT("http-version=768"), 443));                                    /* missing quic fields */
+    ok(!h2o_dsr_parse_req(&req, H2O_STRLIT("http=768"), 443));                                            /* missing quic fields */
     ok(!h2o_dsr_parse_req(&req, H2O_STRLIT("quic=4278190109, cipher=4865, address=\"127.0.0.1\""), 443)); /* missing http version*/
     ok(!h2o_dsr_parse_req(&req, H2O_STRLIT("quic=\"abc\", cipher=4865, address=\"127.0.0.1:8443\""), 443));
     ok(!h2o_dsr_parse_req(&req, H2O_STRLIT("protocol=4278190109, cipher=444865, address=\"127.0.0.1:8443\""), 443));

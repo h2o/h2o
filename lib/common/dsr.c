@@ -29,12 +29,12 @@
 h2o_iovec_t h2o_dsr_serialize_req(h2o_dsr_req_t *req)
 {
     h2o_iovec_t output = h2o_iovec_init(
-        h2o_mem_alloc(sizeof(
-            "http-version=4294967295, quic=4294967295, cipher=65535, address=\"[0000:1111:2222:3333:4444:5555:6666:7777]:65535\"")),
+        h2o_mem_alloc(
+            sizeof("http=4294967295, quic=4294967295, cipher=65535, address=\"[0000:1111:2222:3333:4444:5555:6666:7777]:65535\"")),
         0);
     assert(req->http_version >= 0);
 
-    output.len += sprintf(output.base + output.len, "http-version=%d", req->http_version);
+    output.len += sprintf(output.base + output.len, "http=%d", req->http_version);
 
     if (req->http_version == 0x300) {
         output.len += sprintf(output.base + output.len, ", quic=%" PRIu32 ", cipher=%" PRIu16 ", address=\"",
@@ -99,8 +99,8 @@ int h2o_dsr_parse_req(h2o_dsr_req_t *req, const char *_value, size_t _value_len,
     req->transport.quic.address.sa.sa_family = AF_UNSPEC;
 
     while ((name = h2o_next_token(&iter, ',', ',', &name_len, &value)) != NULL) {
-        if (h2o_memis(name, name_len, H2O_STRLIT("http-version"))) {
-            /* parse http-version=768 (i.e. 0x300==http3) */
+        if (h2o_memis(name, name_len, H2O_STRLIT("http"))) {
+            /* parse http=768 (i.e. 0x300==http3) */
             int v;
             if ((v = parse_number(value.base, value.len, INT32_MAX)) < 0)
                 return 0;
