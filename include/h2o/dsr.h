@@ -37,7 +37,7 @@ typedef struct st_h2o_dsr_req_t {
     /**
      * HTTP version of front-end connection
      */
-    int http_version;
+    uint32_t http_version;
     struct {
         /*
          * We use struct instead of union here to make it easier when parsing a serialized string.
