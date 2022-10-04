@@ -94,8 +94,10 @@ int h2o_dsr_parse_req(h2o_dsr_req_t *req, const char *_value, size_t _value_len,
     const char *name;
     size_t name_len;
     int64_t n;
+    struct st_h2o_dsr_req_quic_t quic_req;
 
     memset(req, 0, sizeof(*req));
+    memset(&quic_req, 0, sizeof(quic_req));
     req->transport.quic.address.sa.sa_family = AF_UNSPEC;
 
     while ((name = h2o_next_token(&iter, ',', ',', &name_len, &value)) != NULL) {
@@ -109,12 +111,12 @@ int h2o_dsr_parse_req(h2o_dsr_req_t *req, const char *_value, size_t _value_len,
             /* parse quic=4278190110 (i.e., draft-29) */
             if ((n = parse_number(value.base, value.len, UINT32_MAX)) < 0)
                 return 0;
-            req->transport.quic.version = (uint32_t)n;
+            quic_req.version = (uint32_t)n;
         } else if (h2o_memis(name, name_len, H2O_STRLIT("cipher"))) {
             /* parse cipher=12345 (i.e. aes128gcmsha256) */
             if ((n = parse_number(value.base, value.len, UINT16_MAX)) < 0)
                 return 0;
-            req->transport.quic.cipher = (uint16_t)n;
+            quic_req.cipher = (uint16_t)n;
         } else if (h2o_memis(name, name_len, H2O_STRLIT("address"))) {
             /* parse address="ip-address[:port]" */
             if (!(value.len >= 2 && value.base[0] == '"' && value.base[value.len - 1] == '"'))
@@ -133,23 +135,22 @@ int h2o_dsr_parse_req(h2o_dsr_req_t *req, const char *_value, size_t _value_len,
                 return 0;
             memcpy(hostbuf, host.base, host.len);
             hostbuf[host.len] = '\0';
-            if (inet_pton(AF_INET, hostbuf, &req->transport.quic.address.sin.sin_addr) == 1) {
-                req->transport.quic.address.sin.sin_family = AF_INET;
-                req->transport.quic.address.sin.sin_port = htons(port);
-            } else if (inet_pton(AF_INET6, hostbuf, &req->transport.quic.address.sin6.sin6_addr) == 1) {
-                req->transport.quic.address.sin6.sin6_family = AF_INET6;
-                req->transport.quic.address.sin6.sin6_port = htons(port);
+            if (inet_pton(AF_INET, hostbuf, &quic_req.address.sin.sin_addr) == 1) {
+                quic_req.address.sin.sin_family = AF_INET;
+                quic_req.address.sin.sin_port = htons(port);
+            } else if (inet_pton(AF_INET6, hostbuf, &quic_req.address.sin6.sin6_addr) == 1) {
+                quic_req.address.sin6.sin6_family = AF_INET6;
+                quic_req.address.sin6.sin6_port = htons(port);
             } else {
                 return 0;
             }
         }
     }
 
-    /* version-dependent validation */
     if (req->http_version == 0x300) {
-        if (req->transport.quic.version == 0 || req->transport.quic.cipher == 0 ||
-            req->transport.quic.address.sa.sa_family == AF_UNSPEC)
+        if (quic_req.version == 0 || quic_req.cipher == 0 || quic_req.address.sa.sa_family == AF_UNSPEC)
             return 0;
+        req->transport.quic = quic_req;
     } else {
         return 0;
     }
