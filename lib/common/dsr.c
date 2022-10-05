@@ -93,11 +93,9 @@ int h2o_dsr_parse_req(h2o_dsr_req_t *req, const char *_value, size_t _value_len,
     const char *name;
     size_t name_len;
     int64_t n;
-    struct st_h2o_dsr_req_quic_t quic_req;
+    struct st_h2o_dsr_req_quic_t quic_req = {.address.sa.sa_family = AF_UNSPEC};
 
-    memset(req, 0, sizeof(*req));
-    memset(&quic_req, 0, sizeof(quic_req));
-    req->transport.quic.address.sa.sa_family = AF_UNSPEC;
+    *req = (h2o_dsr_req_t){};
 
     while ((name = h2o_next_token(&iter, ',', ',', &name_len, &value)) != NULL) {
         if (h2o_memis(name, name_len, H2O_STRLIT("http"))) {
