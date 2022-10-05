@@ -142,14 +142,14 @@ struct st_neverbleed_thread_data_t {
     int fd;
 };
 
-void thdata_reset_in_flight(struct st_neverbleed_thread_data_t **_thdata)
+static void thdata_reset_in_flight(struct st_neverbleed_thread_data_t **_thdata)
 {
     struct st_neverbleed_thread_data_t *thdata = *_thdata;
     assert(thdata->in_flight);
     thdata->in_flight = 0;
 }
 
-#define THDATA_IN_FLIGHT __attribute__ ((__cleanup__(thdata_reset_in_flight))) struct st_neverbleed_thread_data_t
+#define THDATA_IN_FLIGHT __attribute__((__cleanup__(thdata_reset_in_flight))) struct st_neverbleed_thread_data_t
 
 static void warnvf(const char *fmt, va_list args)
 {
@@ -356,16 +356,14 @@ static void yield_on_data(int fd)
     FD_ZERO(&rfds);
     FD_SET(fd, &rfds);
 
-    while((ret = select(fd + 1, &rfds, NULL, NULL, NULL)) == -1 && (errno == EAGAIN || errno == EINTR))
+    while ((ret = select(fd + 1, &rfds, NULL, NULL, NULL)) == -1 && (errno == EAGAIN || errno == EINTR))
         ;
     if (ret == -1) {
         dief("select(2)\n");
     } else if (ret > 0) {
         // yield when data is available
-        struct timespec tv = { .tv_nsec = 1 };
-        if (-1 == nanosleep(&tv, NULL)) {
-            warnf("nanosleep failed/interupted");
-        }
+        struct timespec tv = {.tv_nsec = 1};
+        (void)nanosleep(&tv, NULL);
     } else {
         dief("unreachable, no timeout configured");
     }
@@ -419,7 +417,7 @@ static void unlink_dir(const char *path)
     rmdir(path);
 }
 
-void dispose_thread_data(void *_thdata)
+static void dispose_thread_data(void *_thdata)
 {
     struct st_neverbleed_thread_data_t *thdata = _thdata;
     assert(thdata->fd >= 0);
@@ -428,7 +426,7 @@ void dispose_thread_data(void *_thdata)
     free(thdata);
 }
 
-struct st_neverbleed_thread_data_t *get_thread_data(neverbleed_t *nb)
+static struct st_neverbleed_thread_data_t *get_thread_data(neverbleed_t *nb)
 {
     struct st_neverbleed_thread_data_t *thdata;
     pid_t self_pid = getpid();
