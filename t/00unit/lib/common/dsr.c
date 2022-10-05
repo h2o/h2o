@@ -51,6 +51,7 @@ static void test_parse_req(void)
     ok(!h2o_dsr_parse_req(&req, H2O_STRLIT(""), 443));
     ok(!h2o_dsr_parse_req(&req, H2O_STRLIT("http=768"), 443));                                            /* missing quic fields */
     ok(!h2o_dsr_parse_req(&req, H2O_STRLIT("quic=4278190109, cipher=4865, address=\"127.0.0.1\""), 443)); /* missing http version*/
+    ok(!h2o_dsr_parse_req(&req, H2O_STRLIT("quic=4278190109, cipher=4865"), 443));                        /* missing address */
     ok(!h2o_dsr_parse_req(&req, H2O_STRLIT("quic=\"abc\", cipher=4865, address=\"127.0.0.1:8443\""), 443));
     ok(!h2o_dsr_parse_req(&req, H2O_STRLIT("protocol=4278190109, cipher=444865, address=\"127.0.0.1:8443\""), 443));
     ok(!h2o_dsr_parse_req(&req, H2O_STRLIT("protocol=4278190109, cipher=a, address=\"127.0.0.1:8443\""), 443));
