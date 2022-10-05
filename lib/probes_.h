@@ -22,6 +22,23 @@
 #ifndef h2o__probes_h
 #define h2o__probes_h
 
+// ptlslog integration, which is always available even if H2O_USE_DTRACE is false
+#include "picotls/ptlslog.h"
+
+#define H2O_LOG(_type, _block) PTLSLOG(h2o, _type, _block)
+#define H2O_LOG_CONN(_type, _conn, _block)                                                                                         \
+    do {                                                                                                                           \
+        h2o_conn_t *__conn = (_conn);                                                                                              \
+        if (!__conn->callbacks->skip_tracing(__conn)) {                                                                            \
+            H2O_LOG(_type, {                                                                                                       \
+                PTLSLOG_ELEMENT_UNSIGNED(conn_id, __conn->id);                                                                     \
+                do {                                                                                                               \
+                    _block                                                                                                         \
+                } while (0);                                                                                                       \
+            });                                                                                                                    \
+        }                                                                                                                          \
+    } while (0)
+
 /* This file is placed under lib, and must only be included from the source files of the h2o / libh2o, because H2O_USE_DTRACE is a
  * symbol available only during the build phase of h2o.  That's fine, because only h2o / libh2o has the sole right to define probes
  * belonging to the h2o namespace.
@@ -118,6 +135,10 @@ __attribute__((noinline)) static void h2o_probe_response_header(h2o_req_t *req, 
 static inline void h2o_probe_log_request(h2o_req_t *req, uint64_t req_index)
 {
     H2O_PROBE_CONN(RECEIVE_REQUEST, req->conn, req_index, req->version);
+    H2O_LOG_CONN(receive_request, req->conn, {
+        PTLSLOG_ELEMENT_UNSIGNED(req_id, req_index);
+        PTLSLOG_ELEMENT_SIGNED(http_version, req->version);
+    });
     if (H2O_CONN_IS_PROBED(RECEIVE_REQUEST_HEADER, req->conn)) {
         if (req->input.authority.base != NULL)
             h2o_probe_request_header(req, req_index, H2O_TOKEN_AUTHORITY->buf, req->input.authority);
@@ -138,6 +159,10 @@ static inline void h2o_probe_log_request(h2o_req_t *req, uint64_t req_index)
 static inline void h2o_probe_log_response(h2o_req_t *req, uint64_t req_index)
 {
     H2O_PROBE_CONN(SEND_RESPONSE, req->conn, req_index, req->res.status);
+    H2O_LOG_CONN(send_response, req->conn, {
+        PTLSLOG_ELEMENT_UNSIGNED(req_id, req_index);
+        PTLSLOG_ELEMENT_SIGNED(status, req->res.status);
+    });
     if (H2O_CONN_IS_PROBED(SEND_RESPONSE_HEADER, req->conn)) {
         if (req->res.content_length != SIZE_MAX) {
             char buf[sizeof(H2O_SIZE_T_LONGEST_STR)];
@@ -151,23 +176,6 @@ static inline void h2o_probe_log_response(h2o_req_t *req, uint64_t req_index)
         }
     }
 }
-
-// ptlslog integration
-
-#define H2O_LOG(_type, _block) PTLSLOG(h2o, _type, _block)
-
-#define H2O_LOG_CONN(_type, _conn, _block)                                                                                         \
-    do {                                                                                                                           \
-        h2o_conn_t *__conn = (_conn);                                                                                              \
-        if (!__conn->callbacks->skip_tracing(__conn)) {                                                                            \
-            H2O_LOG(_type, {                                                                                                       \
-                PTLSLOG_ELEMENT_UNSIGNED(conn_id, __conn->id);                                                                     \
-                do {                                                                                                               \
-                    _block                                                                                                         \
-                } while (0);                                                                                                       \
-            });                                                                                                                    \
-        }                                                                                                                          \
-    } while (0)
 
 #endif
 
