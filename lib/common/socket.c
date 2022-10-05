@@ -178,7 +178,8 @@ static void on_write_complete(h2o_socket_t *sock, const char *err);
 #if PTLS_OPENSSL_HAVE_ASYNC
 static __thread h2o_socket_t *async_handshake_in_flight = NULL;
 
-int h2o_is_ssl_handhsake_in_flight(void) {
+int h2o_is_ssl_handhsake_in_flight(void)
+{
     return async_handshake_in_flight != NULL;
 }
 
@@ -187,7 +188,8 @@ int h2o_is_ssl_handhsake_in_flight(void) {
  */
 static __thread h2o_linklist_t delayed_sockets;
 
-static int init_delayed_sockets(void) {
+static int init_delayed_sockets(void)
+{
     static __thread int initialized = 0;
     if (!initialized) {
         h2o_linklist_init_anchor(&delayed_sockets);
@@ -520,8 +522,7 @@ static void do_delayed_sockets(h2o_socket_t *sock)
         async_handshake_in_flight = NULL;
 
         // proceed delayed handshakes
-        while (async_handshake_in_flight == NULL
-                && !h2o_linklist_is_empty(&delayed_sockets)) {
+        while (async_handshake_in_flight == NULL && !h2o_linklist_is_empty(&delayed_sockets)) {
             h2o_socket_t *next_sock = H2O_STRUCT_FROM_MEMBER(h2o_socket_t, async.delayed_link, delayed_sockets.next);
             h2o_linklist_unlink(&next_sock->async.delayed_link);
             h2o_socket_cb delayed_cb = next_sock->async.delayed_cb;
@@ -1589,7 +1590,8 @@ static void do_ssl_async(h2o_socket_t *sock)
 #if H2O_USE_LIBUV
     h2o_socket_t *async_sock = h2o_uv__poll_create(h2o_socket_get_loop(sock), async_fd, (uv_close_cb)free);
 #else
-    h2o_socket_t *async_sock = h2o_evloop_socket_create(h2o_socket_get_loop(sock), async_fd, H2O_SOCKET_FLAG_DONT_READ | H2O_SOCKET_FLAG_DONT_NONBLOCK);
+    h2o_socket_t *async_sock =
+        h2o_evloop_socket_create(h2o_socket_get_loop(sock), async_fd, H2O_SOCKET_FLAG_DONT_READ | H2O_SOCKET_FLAG_DONT_NONBLOCK);
 #endif
 
     struct async_ctx *async_ctx = h2o_mem_alloc(sizeof(struct async_ctx));
@@ -1841,7 +1843,8 @@ static void proceed_handshake_undetermined(h2o_socket_t *sock)
 }
 
 #if PTLS_OPENSSL_HAVE_ASYNC
-static void retry_proceed_handshake(h2o_socket_t *sock, const char *err) {
+static void retry_proceed_handshake(h2o_socket_t *sock, const char *err)
+{
     if (err == NULL) {
         proceed_handshake(sock, err);
     }
