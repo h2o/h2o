@@ -591,12 +591,14 @@ typedef struct st_h2o_mimemap_type_t {
 enum {
     /* http1 protocol errors */
     H2O_STATUS_ERROR_400 = 0,
+    H2O_STATUS_ERROR_401,
     H2O_STATUS_ERROR_403,
     H2O_STATUS_ERROR_404,
     H2O_STATUS_ERROR_405,
     H2O_STATUS_ERROR_413,
     H2O_STATUS_ERROR_416,
     H2O_STATUS_ERROR_417,
+    H2O_STATUS_ERROR_421,
     H2O_STATUS_ERROR_500,
     H2O_STATUS_ERROR_502,
     H2O_STATUS_ERROR_503,
@@ -955,6 +957,7 @@ typedef struct st_h2o_conn_callbacks_t {
                 h2o_iovec_t (*session_id)(h2o_req_t *req);
                 h2o_iovec_t (*server_name)(h2o_req_t *req);
                 h2o_iovec_t (*negotiated_protocol)(h2o_req_t *req);
+                h2o_iovec_t (*backend)(h2o_req_t *req);
             } ssl;
             struct {
                 h2o_iovec_t (*request_index)(h2o_req_t *req);
@@ -1773,12 +1776,14 @@ void h2o_send_error_generic(h2o_req_t *req, int status, const char *reason, cons
     }
 
 H2O_SEND_ERROR_XXX(400)
+H2O_SEND_ERROR_XXX(401)
 H2O_SEND_ERROR_XXX(403)
 H2O_SEND_ERROR_XXX(404)
 H2O_SEND_ERROR_XXX(405)
 H2O_SEND_ERROR_XXX(413)
 H2O_SEND_ERROR_XXX(416)
 H2O_SEND_ERROR_XXX(417)
+H2O_SEND_ERROR_XXX(421)
 H2O_SEND_ERROR_XXX(500)
 H2O_SEND_ERROR_XXX(502)
 H2O_SEND_ERROR_XXX(503)

@@ -158,7 +158,7 @@ static int handle_connection(int sockfd, ptls_context_t *ctx, const char *server
                         /* ok */
                     } else {
                         if (encbuf.off != 0)
-                            (void)write(sockfd, encbuf.base, encbuf.off);
+                            repeat_while_eintr(write(sockfd, encbuf.base, encbuf.off), { break; });
                         fprintf(stderr, "ptls_handshake:%d\n", ret);
                         goto Exit;
                     }
@@ -167,7 +167,7 @@ static int handle_connection(int sockfd, ptls_context_t *ctx, const char *server
                         if (rbuf.off != 0) {
                             data_received += rbuf.off;
                             if (input_file != input_file_is_benchmark)
-                                write(1, rbuf.base, rbuf.off);
+                                repeat_while_eintr(write(1, rbuf.base, rbuf.off), { goto Exit; });
                             rbuf.off = 0;
                         }
                     } else if (ret == PTLS_ERROR_IN_PROGRESS) {
@@ -254,7 +254,10 @@ static int handle_connection(int sockfd, ptls_context_t *ctx, const char *server
                     fprintf(stderr, "ptls_send_alert:%d\n", ret);
                 }
                 if (wbuf.off != 0)
-                    (void)write(sockfd, wbuf.base, wbuf.off);
+                    repeat_while_eintr(write(sockfd, wbuf.base, wbuf.off), {
+                        ptls_buffer_dispose(&wbuf);
+                        goto Exit;
+                    });
                 ptls_buffer_dispose(&wbuf);
                 shutdown(sockfd, SHUT_WR);
             }
