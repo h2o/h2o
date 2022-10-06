@@ -478,10 +478,6 @@ struct st_h2o_globalconf_t {
          */
         uint64_t keepalive_timeout;
         /**
-         * a boolean flag if set to true, instructs the proxy to close the frontend h1 connection on behalf of the upstream
-         */
-        unsigned forward_close_connection : 1;
-        /**
          * a boolean flag if set to true, instructs the proxy to preserve the x-forwarded-proto header passed by the client
          */
         unsigned preserve_x_forwarded_proto : 1;
@@ -2168,6 +2164,7 @@ typedef struct st_h2o_proxy_config_vars_t {
     unsigned use_proxy_protocol : 1;
     unsigned tunnel_enabled : 1;
     unsigned connect_proxy_status_enabled : 1;
+    unsigned forward_close_connection : 1;
     h2o_headers_command_t *headers_cmds;
     size_t max_buffer_size;
     struct {

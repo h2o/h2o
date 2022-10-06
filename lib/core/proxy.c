@@ -570,7 +570,7 @@ static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errs
             const h2o_token_t *token = H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, args->headers[i].name);
             if (token->flags.proxy_should_drop_for_res) {
                 if (token == H2O_TOKEN_CONNECTION && self->src_req->version < 0x200 &&
-                    req->conn->ctx->globalconf->proxy.forward_close_connection) {
+                    get_client_ctx(self->src_req)->forward_close_connection) {
                     if (h2o_lcstris(args->headers[i].value.base, args->headers[i].value.len, H2O_STRLIT("close")))
                         self->src_req->http1_is_persistent = 0;
                 }
