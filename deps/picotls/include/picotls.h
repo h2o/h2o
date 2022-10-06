@@ -1514,7 +1514,7 @@ inline void ptls_buffer_init(ptls_buffer_t *buf, void *smallbuf, size_t smallbuf
 inline void ptls_buffer_dispose(ptls_buffer_t *buf)
 {
     ptls_buffer__release_memory(buf);
-    *buf = (ptls_buffer_t){NULL, 0, 0, 0};
+    *buf = (ptls_buffer_t){NULL, 0, 0, 0, 0};
 }
 
 inline uint8_t *ptls_encode_quicint(uint8_t *p, uint64_t v)

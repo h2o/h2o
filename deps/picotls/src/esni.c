@@ -36,6 +36,9 @@
 #include <time.h>
 #define OPENSSL_API_COMPAT 0x00908000L
 #include <openssl/err.h>
+#if !defined(LIBRESSL_VERSION_NUMBER) && OPENSSL_VERSION_NUMBER >= 0x30000000L
+#include <openssl/provider.h>
+#endif
 #include <openssl/engine.h>
 #include <openssl/pem.h>
 #include "picotls.h"
@@ -134,7 +137,9 @@ int main(int argc, char **argv)
     char const *file_output = NULL;
     ERR_load_crypto_strings();
     OpenSSL_add_all_algorithms();
-#if !defined(OPENSSL_NO_ENGINE)
+#if !defined(LIBRESSL_VERSION_NUMBER) && OPENSSL_VERSION_NUMBER >= 0x30000000L
+    (void) OSSL_PROVIDER_load(NULL, "default");
+#elif !defined(OPENSSL_NO_ENGINE)
     /* Load all compiled-in ENGINEs */
     ENGINE_load_builtin_engines();
     ENGINE_register_all_ciphers();
