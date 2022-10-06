@@ -103,6 +103,10 @@ extern "C" {
 #define PTLS_MAX_IV_SIZE 16
 #define PTLS_MAX_DIGEST_SIZE 64
 
+/* versions */
+#define PTLS_PROTOCOL_VERSION_TLS12 0x0303
+#define PTLS_PROTOCOL_VERSION_TLS13 0x0304
+
 /* cipher-suites */
 #define PTLS_CIPHER_SUITE_AES_128_GCM_SHA256 0x1301
 #define PTLS_CIPHER_SUITE_NAME_AES_128_GCM_SHA256 "TLS_AES_128_GCM_SHA256"
@@ -178,6 +182,14 @@ extern "C" {
 #define PTLS_ALERT_UNRECOGNIZED_NAME 112
 #define PTLS_ALERT_CERTIFICATE_REQUIRED 116
 #define PTLS_ALERT_NO_APPLICATION_PROTOCOL 120
+
+/* TLS 1.2 */
+#define PTLS_TLS12_MASTER_SECRET_SIZE 48
+#define PTLS_TLS12_AAD_SIZE 13
+#define PTLS_TLS12_AESGCM_FIXED_IV_SIZE 4
+#define PTLS_TLS12_AESGCM_RECORD_IV_SIZE 8
+#define PTLS_TLS12_CHACHAPOLY_FIXED_IV_SIZE 12
+#define PTLS_TLS12_CHACHAPOLY_RECORD_IV_SIZE 0
 
 /* internal errors */
 #define PTLS_ERROR_NO_MEMORY (PTLS_ERROR_CLASS_INTERNAL + 1)
@@ -393,6 +405,13 @@ typedef const struct st_ptls_aead_algorithm_t {
      * size of the tag
      */
     size_t tag_size;
+    /**
+     * TLS/1.2 Security Parameters (AEAD without support for TLS 1.2 must set both values to 0)
+     */
+    struct {
+        size_t fixed_iv_size;
+        size_t record_iv_size;
+    } tls12;
     /**
      * if encrypted bytes are going to be written using non-temporal store instructions (i.e., skip cache)
      */
@@ -1142,9 +1161,19 @@ ptls_t *ptls_client_new(ptls_context_t *ctx);
  */
 ptls_t *ptls_server_new(ptls_context_t *ctx);
 /**
- * creates a object handle new TLS connection
+ * creates an object handle new TLS connection
  */
 static ptls_t *ptls_new(ptls_context_t *ctx, int is_server);
+/**
+ * creates TLS 1.2 record layer for post-handshake communication
+ */
+int ptls_build_tls12_export_params(ptls_context_t *ctx, ptls_buffer_t *output, int is_server, int session_reused,
+                                   ptls_cipher_suite_t *cipher, const void *master_secret, const void *hello_randoms,
+                                   uint64_t next_send_record_iv, const char *server_name, ptls_iovec_t negotiated_protocol);
+/**
+ * create a post-handshake TLS connection object using given parameters
+ */
+int ptls_import(ptls_context_t *ctx, ptls_t **tls, ptls_iovec_t params);
 /**
  * releases all resources associated to the object
  */
@@ -1165,6 +1194,11 @@ ptls_iovec_t ptls_get_client_random(ptls_t *tls);
  * returns the cipher-suite being used
  */
 ptls_cipher_suite_t *ptls_get_cipher(ptls_t *tls);
+/**
+ * Returns protocol version (e.g., 0x0303 for TLS 1.2, 0x0304 for TLS 1.3). The result may be unstable prior to handshake
+ * completion.
+ */
+uint16_t ptls_get_protocol_version(ptls_t *tls);
 /**
  * Returns current state of traffic keys. The cipher-suite being used, as well as the length of the traffic keys, can be obtained
  * via `ptls_get_cipher`.
@@ -1274,6 +1308,11 @@ int ptls_hkdf_expand(ptls_hash_algorithm_t *hash, void *output, size_t outlen, p
  */
 int ptls_hkdf_expand_label(ptls_hash_algorithm_t *algo, void *output, size_t outlen, ptls_iovec_t secret, const char *label,
                            ptls_iovec_t hash_value, const char *label_prefix);
+/**
+ * The expansion function of TLS 1.2 defined in RFC 5426 section 5. When `label` is NULL, acts as P_<hash>, or if non-NULL, as PRF.
+ */
+int ptls_tls12_phash(ptls_hash_algorithm_t *algo, void *output, size_t outlen, ptls_iovec_t secret, const char *label,
+                     ptls_iovec_t seed);
 /**
  * instantiates a symmetric cipher
  */

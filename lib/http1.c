@@ -1172,6 +1172,7 @@ DEFINE_LOGGER(ssl_cipher_bits)
 DEFINE_LOGGER(ssl_session_id)
 DEFINE_LOGGER(ssl_server_name)
 DEFINE_LOGGER(ssl_negotiated_protocol)
+DEFINE_LOGGER(ssl_backend)
 
 #undef DEFINE_LOGGER
 
@@ -1219,6 +1220,7 @@ static const h2o_conn_callbacks_t h1_callbacks = {
                 .session_id = log_ssl_session_id,
                 .server_name = log_ssl_server_name,
                 .negotiated_protocol = log_ssl_negotiated_protocol,
+                .backend = log_ssl_backend,
             },
         .http1 =
             {
