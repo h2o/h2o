@@ -1,8 +1,11 @@
 #include <mruby.h>
+
+#ifdef MRB_NO_STDIO
+# error print conflicts 'MRB_NO_STDIO' in your build configuration
+#endif
+
 #include <mruby/string.h>
-#include <stdio.h>
 #include <string.h>
-#include <stdlib.h>
 #if defined(_WIN32)
 # include <windows.h>
 # include <io.h>
@@ -13,40 +16,34 @@
 #endif
 
 static void
-printstr(mrb_state *mrb, mrb_value obj)
+printstr(mrb_state *mrb, const char *p, mrb_int len)
 {
-  if (mrb_string_p(obj)) {
 #if defined(_WIN32)
-    if (isatty(fileno(stdout))) {
-      DWORD written;
-      int mlen = (int)RSTRING_LEN(obj);
-      char* utf8 = RSTRING_PTR(obj);
-      int wlen = MultiByteToWideChar(CP_UTF8, 0, utf8, mlen, NULL, 0);
-      wchar_t* utf16 = (wchar_t*)mrb_malloc(mrb, (wlen+1) * sizeof(wchar_t));
-      if (MultiByteToWideChar(CP_UTF8, 0, utf8, mlen, utf16, wlen) > 0) {
-        utf16[wlen] = 0;
-        WriteConsoleW(GetStdHandle(STD_OUTPUT_HANDLE),
-          utf16, wlen, &written, NULL);
-      }
-      mrb_free(mrb, utf16);
-    } else
+  if (isatty(fileno(stdout))) {
+    DWORD written;
+    int wlen = MultiByteToWideChar(CP_UTF8, 0, p, (int)len, NULL, 0);
+    wchar_t* utf16 = (wchar_t*)mrb_malloc(mrb, (wlen+1) * sizeof(wchar_t));
+    if (MultiByteToWideChar(CP_UTF8, 0, p, (int)len, utf16, wlen) > 0) {
+      utf16[wlen] = 0;
+      WriteConsoleW(GetStdHandle(STD_OUTPUT_HANDLE),
+                    utf16, (DWORD)wlen, &written, NULL);
+    }
+    mrb_free(mrb, utf16);
+  } else
 #endif
-      fwrite(RSTRING_PTR(obj), RSTRING_LEN(obj), 1, stdout);
-    fflush(stdout);
-  }
+    fwrite(p, (size_t)len, 1, stdout);
+  fflush(stdout);
 }
 
-/* 15.3.1.2.9  */
-/* 15.3.1.3.34 */
-mrb_value
+static mrb_value
 mrb_printstr(mrb_state *mrb, mrb_value self)
 {
-  mrb_value argv;
+  mrb_value s = mrb_get_arg1(mrb);
 
-  mrb_get_args(mrb, "o", &argv);
-  printstr(mrb, argv);
-
-  return argv;
+  if (mrb_string_p(s)) {
+    printstr(mrb, RSTRING_PTR(s), RSTRING_LEN(s));
+  }
+  return s;
 }
 
 void

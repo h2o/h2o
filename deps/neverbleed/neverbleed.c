@@ -32,13 +32,21 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#ifdef __linux__
-#include <sys/prctl.h>
-#endif
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <sys/uio.h>
 #include <unistd.h>
+#include <signal.h>
+#if defined(__linux__)
+#include <sys/syscall.h>
+#include <sys/prctl.h>
+#elif defined(__APPLE__)
+#include <sys/ptrace.h>
+#elif defined(__FreeBSD__)
+#include <sys/procctl.h>
+#elif defined(__sun)
+#include <priv.h>
+#endif
 
 #include <openssl/opensslconf.h>
 #include <openssl/opensslv.h>
@@ -227,7 +235,7 @@ static void expbuf_reserve(struct expbuf_t *buf, size_t extra)
         buf->capacity *= 2;
     if ((n = realloc(buf->buf, buf->capacity)) == NULL)
         dief("realloc failed");
-    buf->start = n + (buf->start - buf->end);
+    buf->start = n + (buf->start - buf->buf);
     buf->end = n + (buf->end - buf->buf);
     buf->buf = n;
 }
@@ -1069,7 +1077,7 @@ static int load_key_stub(struct expbuf_t *buf)
         const EC_POINT *ec_pubkey;
         EC_KEY *ec_key;
 
-        ec_key = EVP_PKEY_get0_EC_KEY(pkey);
+        ec_key = (EC_KEY *)EVP_PKEY_get0_EC_KEY(pkey);
         type = NEVERBLEED_TYPE_ECDSA;
         key_index = daemon_set_ecdsa(ec_key);
         ec_group = EC_KEY_get0_group(ec_key);
@@ -1367,9 +1375,23 @@ Exit:
     return NULL;
 }
 
+#if !(defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__))
+#define closefrom my_closefrom
+static void my_closefrom(int lowfd)
+{
+    /* On linux, try close_range (2), then fall back to the slow loop if it fails. */
+#if defined(__linux__) && defined(__NR_close_range)
+    if (syscall(__NR_close_range, lowfd, ~0, 0) == 0)
+        return;
+#endif
+
+    for (int fd = (int)sysconf(_SC_OPEN_MAX) - 1; fd >= lowfd; --fd)
+        (void)close(fd);
+}
+#endif
+
 static void cleanup_fds(int listen_fd, int close_notify_fd)
 {
-#if defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__)
     int maxfd, k;
 
     maxfd = 0;
@@ -1388,20 +1410,10 @@ static void cleanup_fds(int listen_fd, int close_notify_fd)
         case STDIN_FILENO:
             break;
         default:
-            (void) close(k);
+            (void)close(k);
         }
     }
     closefrom(maxfd + 1);
-#else
-    int fd;
-
-    fd = (int)sysconf(_SC_OPEN_MAX) - 1;
-    for (; fd > 2; --fd) {
-        if (fd == listen_fd || fd == close_notify_fd)
-                continue;
-        close(fd);
-    }
-#endif
 }
 
 __attribute__((noreturn)) static void daemon_main(int listen_fd, int close_notify_fd, const char *tempdir)
@@ -1423,6 +1435,16 @@ __attribute__((noreturn)) static void daemon_main(int listen_fd, int close_notif
         if (pthread_create(&tid, &thattr, daemon_conn_thread, (char *)NULL + sock_fd) != 0)
             dief("pthread_create failed");
     }
+}
+
+static void set_signal_handler(int signo, void (*cb)(int signo))
+{
+    struct sigaction action;
+
+    memset(&action, 0, sizeof(action));
+    sigemptyset(&action.sa_mask);
+    action.sa_handler = cb;
+    sigaction(signo, &action, NULL);
 }
 
 #ifndef NEVERBLEED_OPAQUE_RSA_METHOD
@@ -1522,9 +1544,18 @@ int neverbleed_init(neverbleed_t *nb, char *errbuf)
         goto Fail;
     case 0:
         close(pipe_fds[1]);
-#ifdef __linux__
+#if defined(__linux__)
         prctl(PR_SET_DUMPABLE, 0, 0, 0, 0);
+        prctl(PR_SET_PDEATHSIG, SIGTERM);
+#elif defined(__FreeBSD__)
+        int dumpable = PROC_TRACE_CTL_DISABLE;
+        procctl(P_PID, 0, PROC_TRACE_CTL, &dumpable);
+#elif defined(__sun)
+        setpflags(__PROC_PROTECT, 1);
+#elif defined(__APPLE__)
+        ptrace(PT_DENY_ATTACH, 0, 0, 0);
 #endif
+        set_signal_handler(SIGTERM, SIG_IGN);
         if (neverbleed_post_fork_cb != NULL)
             neverbleed_post_fork_cb();
         daemon_vars.nb = nb;

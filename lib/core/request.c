@@ -522,34 +522,6 @@ void h2o_start_response(h2o_req_t *req, h2o_generator_t *generator)
     }
 }
 
-void h2o_sendvec_init_raw(h2o_sendvec_t *vec, const void *base, size_t len)
-{
-    static const h2o_sendvec_callbacks_t callbacks = {h2o_sendvec_flatten_raw};
-    vec->callbacks = &callbacks;
-    vec->raw = (char *)base;
-    vec->len = len;
-}
-
-static void sendvec_immutable_update_refcnt(h2o_sendvec_t *vec, h2o_req_t *req, int is_incr)
-{
-    /* noop */
-}
-
-void h2o_sendvec_init_immutable(h2o_sendvec_t *vec, const void *base, size_t len)
-{
-    static const h2o_sendvec_callbacks_t callbacks = {h2o_sendvec_flatten_raw, sendvec_immutable_update_refcnt};
-    vec->callbacks = &callbacks;
-    vec->raw = (char *)base;
-    vec->len = len;
-}
-
-int h2o_sendvec_flatten_raw(h2o_sendvec_t *src, h2o_req_t *req, h2o_iovec_t dst, size_t off)
-{
-    assert(off + dst.len <= src->len);
-    memcpy(dst.base, src->raw + off, dst.len);
-    return 1;
-}
-
 static void do_sendvec(h2o_req_t *req, h2o_sendvec_t *bufs, size_t bufcnt, h2o_send_state_t state)
 {
     assert(req->_generator != NULL);
@@ -573,7 +545,7 @@ void h2o_send(h2o_req_t *req, h2o_iovec_t *bufs, size_t bufcnt, h2o_send_state_t
 
 void h2o_sendvec(h2o_req_t *req, h2o_sendvec_t *bufs, size_t bufcnt, h2o_send_state_t state)
 {
-    assert(bufcnt == 0 || (bufs[0].callbacks->flatten == &h2o_sendvec_flatten_raw || bufcnt == 1));
+    assert(bufcnt == 0 || (bufs[0].callbacks->read_ == &h2o_sendvec_read_raw || bufcnt == 1));
     do_sendvec(req, bufs, bufcnt, state);
 }
 
@@ -719,6 +691,18 @@ DECL_SEND_ERROR_DEFERRED(502)
 
 #undef DECL_SEND_ERROR_DEFERRED
 
+static size_t append_with_limit(char *dst, h2o_iovec_t input, size_t limit)
+{
+    if (input.len < limit) {
+        memcpy(dst, input.base, input.len);
+        return input.len;
+    } else {
+        memcpy(dst, input.base, (limit - 3));
+        memcpy(dst + (limit - 3), "...", 3);
+        return limit;
+    }
+}
+
 void h2o_req_log_error(h2o_req_t *req, const char *module, const char *fmt, ...)
 {
 #define INITIAL_BUF_SIZE 256
@@ -742,17 +726,11 @@ void h2o_req_log_error(h2o_req_t *req, const char *module, const char *fmt, ...)
 #undef INITIAL_BUF_SIZE
 
     /* build prefix */
-    char *pbuf = h2o_mem_alloc_pool(&req->pool, char, sizeof("[] in request::") + 32 + strlen(module)), *p = pbuf;
+    char *pbuf = h2o_mem_alloc_pool(&req->pool, char, sizeof("[] in request::") + strlen(module) + 64 + 32);
+    char *p = pbuf;
     p += sprintf(p, "[%s] in request:", module);
-    if (req->path.len < 32) {
-        memcpy(p, req->path.base, req->path.len);
-        p += req->path.len;
-    } else {
-        memcpy(p, req->path.base, 29);
-        p += 29;
-        memcpy(p, "...", 3);
-        p += 3;
-    }
+    p += append_with_limit(p, req->authority, 64);
+    p += append_with_limit(p, req->path, 32);
     *p++ = ':';
     h2o_iovec_t prefix = h2o_iovec_init(pbuf, p - pbuf);
 

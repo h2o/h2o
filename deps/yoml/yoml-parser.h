@@ -40,6 +40,8 @@ typedef struct st_yoml_parse_args_t {
         yoml_t *(*cb)(const char *tag, yoml_t *node, void *cb_arg);
         void *cb_arg;
     } resolve_tag;
+    int resolve_alias : 1;
+    int resolve_merge : 1;
 } yoml_parse_args_t;
 
 static yoml_t *yoml__parse_node(yaml_parser_t *parser, yaml_event_type_t *last_event, yoml_parse_args_t *parse_args);
@@ -177,37 +179,47 @@ static yoml_t *yoml__parse_node(yaml_parser_t *parser, yaml_event_type_t *unhand
     return node;
 }
 
-static inline int yoml__merge(yoml_t **dest, size_t offset, yoml_t *src)
+static inline int yoml__merge(yoml_t **dest, size_t offset, size_t delete_count, yoml_t *src, yoml_parse_args_t *parse_args)
 {
-    yoml_t *key, *value;
-    size_t i, j;
+    assert(offset + delete_count <= (*dest)->data.mapping.size);
 
     if (src->type != YOML_TYPE_MAPPING)
         return -1;
 
-    for (i = 0; i != src->data.mapping.size; ++i) {
-        key = src->data.mapping.elements[i].key;
-        value = src->data.mapping.elements[i].value;
-        if (key->type == YOML_TYPE_SCALAR) {
-            for (j = offset; j != (*dest)->data.mapping.size; ++j) {
+    /* create new node, copy attributes and elements of `*dest` up to `offset` */
+    yoml_t *new_node = malloc(offsetof(yoml_t, data.mapping.elements) + ((*dest)->data.mapping.size + src->data.mapping.size - delete_count) *
+                                                                            sizeof(new_node->data.mapping.elements[0]));
+    memcpy(new_node, *dest, offsetof(yoml_t, data.mapping.elements) + offset * sizeof((*dest)->data.mapping.elements[0]));
+    new_node->_refcnt = 1;
+    new_node->data.mapping.size = offset;
+
+    /* copy elements from `src`, ignoring the ones that are defined later in `*dest` */
+    for (size_t i = 0; i != src->data.mapping.size; ++i) {
+        yoml_mapping_element_t *src_element = src->data.mapping.elements + i;
+        if (src_element->key->type == YOML_TYPE_SCALAR) {
+            for (size_t j = offset + delete_count; j != (*dest)->data.mapping.size; ++j) {
                 if ((*dest)->data.mapping.elements[j].key->type == YOML_TYPE_SCALAR &&
-                    strcmp((*dest)->data.mapping.elements[j].key->data.scalar, key->data.scalar) == 0)
+                    strcmp((*dest)->data.mapping.elements[j].key->data.scalar, src_element->key->data.scalar) == 0)
                     goto Skip;
             }
         }
-        *dest = realloc(*dest, offsetof(yoml_t, data.mapping.elements) +
-                                   ((*dest)->data.mapping.size + 1) * sizeof((*dest)->data.mapping.elements[0]));
-        memmove((*dest)->data.mapping.elements + offset + 1, (*dest)->data.mapping.elements + offset,
-                ((*dest)->data.mapping.size - offset) * sizeof((*dest)->data.mapping.elements[0]));
-        (*dest)->data.mapping.elements[offset].key = key;
-        ++key->_refcnt;
-        (*dest)->data.mapping.elements[offset].value = value;
-        ++value->_refcnt;
-        ++(*dest)->data.mapping.size;
-        ++offset;
-    Skip:
-        ;
+        new_node->data.mapping.elements[new_node->data.mapping.size++] = *src_element;
+    Skip:;
     }
+
+    /* copy elements of `*dest` after `offset + delete_count` */
+    memcpy(new_node->data.mapping.elements + new_node->data.mapping.size, (*dest)->data.mapping.elements + offset + delete_count,
+           ((*dest)->data.mapping.size - offset - delete_count) * sizeof(new_node->data.mapping.elements[0]));
+    new_node->data.mapping.size += (*dest)->data.mapping.size - offset - delete_count;
+
+    /* increment the reference counters of the elements being added to the newly created node */
+    for (size_t i = 0; i != new_node->data.mapping.size; ++i) {
+        ++new_node->data.mapping.elements[i].key->_refcnt;
+        ++new_node->data.mapping.elements[i].value->_refcnt;
+    }
+
+    /* replace `*dest` with `new_node` */
+    *dest = new_node;
 
     return 0;
 }
@@ -236,15 +248,11 @@ static inline int yoml__resolve_merge(yoml_t **target, yaml_parser_t *parser, yo
                     return -1;
                 if ((*target)->data.mapping.elements[i].key->type == YOML_TYPE_SCALAR &&
                     strcmp((*target)->data.mapping.elements[i].key->data.scalar, "<<") == 0) {
-                    /* erase the slot (as well as preserving the values) */
                     yoml_mapping_element_t src = (*target)->data.mapping.elements[i];
-                    memmove((*target)->data.mapping.elements + i, (*target)->data.mapping.elements + i + 1,
-                            ((*target)->data.mapping.size - i - 1) * sizeof((*target)->data.mapping.elements[0]));
-                    --(*target)->data.mapping.size;
                     /* merge */
                     if (src.value->type == YOML_TYPE_SEQUENCE) {
                         for (j = 0; j != src.value->data.sequence.size; ++j)
-                            if (yoml__merge(target, i, src.value->data.sequence.elements[j]) != 0) {
+                            if (yoml__merge(target, i, j == 0, src.value->data.sequence.elements[j], parse_args) != 0) {
                             MergeError:
                                 if (parser != NULL) {
                                     parser->problem = "value of the merge key MUST be a mapping or a sequence of mappings";
@@ -254,12 +262,9 @@ static inline int yoml__resolve_merge(yoml_t **target, yaml_parser_t *parser, yo
                                 return -1;
                             }
                     } else {
-                        if (yoml__merge(target, i, src.value) != 0)
+                        if (yoml__merge(target, i, 1, src.value, parse_args) != 0)
                             goto MergeError;
                     }
-                    /* cleanup */
-                    yoml_free(src.key, parse_args->mem_set);
-                    yoml_free(src.value, parse_args->mem_set);
                 }
             } while (i != 0);
         }
@@ -372,9 +377,9 @@ static inline yoml_t *yoml_parse_document(yaml_parser_t *parser, yaml_event_type
     /* resolve tags, aliases and merge */
     if (yoml__resolve_tag(&doc, parser, parse_args) != 0)
         goto Error;
-    if (yoml__resolve_alias(&doc, doc, parser, parse_args) != 0)
+    if (parse_args->resolve_alias && yoml__resolve_alias(&doc, doc, parser, parse_args) != 0)
         goto Error;
-    if (yoml__resolve_merge(&doc, parser, parse_args) != 0)
+    if (parse_args->resolve_merge && yoml__resolve_merge(&doc, parser, parse_args) != 0)
         goto Error;
 
     return doc;

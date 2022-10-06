@@ -1,5 +1,5 @@
 class RubyExtension
   def RubyExtension.ruby_method
-    puts "A Ruby Extension"
+    puts "#{self}: A Ruby Extension"
   end
 end

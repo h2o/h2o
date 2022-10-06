@@ -29,6 +29,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#define OPENSSL_API_COMPAT 0x00908000L
 #include <openssl/bn.h>
 #include <openssl/crypto.h>
 #include <openssl/ec.h>
@@ -565,7 +566,8 @@ static int evp_keyex_init(ptls_key_exchange_algorithm_t *algo, ptls_key_exchange
     /* set public key */
     if ((ctx->super.pubkey.len = EVP_PKEY_get1_tls_encodedpoint(ctx->privkey, &ctx->super.pubkey.base)) == 0) {
         ctx->super.pubkey.base = NULL;
-        return PTLS_ERROR_NO_MEMORY;
+        ret = PTLS_ERROR_NO_MEMORY;
+        goto Exit;
     }
 
     *_ctx = &ctx->super;
@@ -980,11 +982,14 @@ static int aead_setup_crypto(ptls_aead_context_t *_ctx, int is_enc, const void *
         ctx->super.do_encrypt_update = aead_do_encrypt_update;
         ctx->super.do_encrypt_final = aead_do_encrypt_final;
         ctx->super.do_encrypt = ptls_aead__do_encrypt;
+        ctx->super.do_encrypt_v = ptls_aead__do_encrypt_v;
         ctx->super.do_decrypt = NULL;
     } else {
         ctx->super.do_encrypt_init = NULL;
         ctx->super.do_encrypt_update = NULL;
         ctx->super.do_encrypt_final = NULL;
+        ctx->super.do_encrypt = NULL;
+        ctx->super.do_encrypt_v = NULL;
         ctx->super.do_decrypt = aead_do_decrypt;
     }
     ctx->evp_ctx = NULL;
@@ -1215,10 +1220,12 @@ Exit:
     return ret;
 }
 
-static int verify_cert_chain(X509_STORE *store, X509 *cert, STACK_OF(X509) * chain, int is_server, const char *server_name)
+static int verify_cert_chain(X509_STORE *store, X509 *cert, STACK_OF(X509) * chain, int is_server, const char *server_name,
+                             int *ossl_x509_err)
 {
     X509_STORE_CTX *verify_ctx;
     int ret;
+    *ossl_x509_err = 0;
 
     /* verify certificate chain */
     if ((verify_ctx = X509_STORE_CTX_new()) == NULL) {
@@ -1247,8 +1254,8 @@ static int verify_cert_chain(X509_STORE *store, X509 *cert, STACK_OF(X509) * cha
     }
 
     if (X509_verify_cert(verify_ctx) != 1) {
-        int x509_err = X509_STORE_CTX_get_error(verify_ctx);
-        switch (x509_err) {
+        *ossl_x509_err = X509_STORE_CTX_get_error(verify_ctx);
+        switch (*ossl_x509_err) {
         case X509_V_ERR_OUT_OF_MEM:
             ret = PTLS_ERROR_NO_MEMORY;
             break;
@@ -1292,26 +1299,34 @@ static int verify_cert(ptls_verify_certificate_t *_self, ptls_t *tls,
     X509 *cert = NULL;
     STACK_OF(X509) *chain = sk_X509_new_null();
     size_t i;
-    int ret = 0;
+    int ossl_x509_err, ret;
 
-    assert(num_certs != 0);
-
-    /* convert certificates to OpenSSL representation */
-    if ((cert = to_x509(certs[0])) == NULL) {
-        ret = PTLS_ALERT_BAD_CERTIFICATE;
-        goto Exit;
-    }
-    for (i = 1; i != num_certs; ++i) {
-        X509 *interm = to_x509(certs[i]);
-        if (interm == NULL) {
+    /* If any certs are given, convert them to OpenSSL representation, then verify the cert chain. If no certs are given, just give
+     * the override_callback to see if we want to stay fail open. */
+    if (num_certs != 0) {
+        if ((cert = to_x509(certs[0])) == NULL) {
             ret = PTLS_ALERT_BAD_CERTIFICATE;
             goto Exit;
         }
-        sk_X509_push(chain, interm);
+        for (i = 1; i != num_certs; ++i) {
+            X509 *interm = to_x509(certs[i]);
+            if (interm == NULL) {
+                ret = PTLS_ALERT_BAD_CERTIFICATE;
+                goto Exit;
+            }
+            sk_X509_push(chain, interm);
+        }
+        ret = verify_cert_chain(self->cert_store, cert, chain, ptls_is_server(tls), ptls_get_server_name(tls), &ossl_x509_err);
+    } else {
+        ret = PTLS_ALERT_CERTIFICATE_REQUIRED;
+        ossl_x509_err = 0;
     }
 
-    /* verify the chain */
-    if ((ret = verify_cert_chain(self->cert_store, cert, chain, ptls_is_server(tls), ptls_get_server_name(tls))) != 0)
+    /* When override callback is available, let it override the error. */
+    if (self->override_callback != NULL)
+        ret = self->override_callback->cb(self->override_callback, tls, ret, ossl_x509_err, cert, chain);
+
+    if (ret != 0 || num_certs == 0)
         goto Exit;
 
     /* extract public key for verifying the TLS handshake signature */
@@ -1331,7 +1346,7 @@ Exit:
 
 int ptls_openssl_init_verify_certificate(ptls_openssl_verify_certificate_t *self, X509_STORE *store)
 {
-    *self = (ptls_openssl_verify_certificate_t){{verify_cert, default_signature_schemes}};
+    *self = (ptls_openssl_verify_certificate_t){{verify_cert, default_signature_schemes}, NULL};
 
     if (store != NULL) {
         X509_STORE_up_ref(store);
@@ -1550,6 +1565,157 @@ Exit:
     return ret;
 }
 
+#if OPENSSL_VERSION_NUMBER >= 0x30000000L
+int ptls_openssl_encrypt_ticket_evp(ptls_buffer_t *buf, ptls_iovec_t src,
+                                    int (*cb)(unsigned char *key_name, unsigned char *iv, EVP_CIPHER_CTX *ctx, EVP_MAC_CTX *hctx,
+                                              int enc))
+{
+    EVP_CIPHER_CTX *cctx = NULL;
+    EVP_MAC *mac = NULL;
+    EVP_MAC_CTX *hctx = NULL;
+    size_t hlen;
+    uint8_t *dst;
+    int clen, ret;
+
+    if ((cctx = EVP_CIPHER_CTX_new()) == NULL) {
+        ret = PTLS_ERROR_NO_MEMORY;
+        goto Exit;
+    }
+    if ((mac = EVP_MAC_fetch(NULL, "HMAC", NULL)) == NULL) {
+        ret = PTLS_ERROR_NO_MEMORY;
+        goto Exit;
+    }
+    if ((hctx = EVP_MAC_CTX_new(mac)) == NULL) {
+        ret = PTLS_ERROR_NO_MEMORY;
+        goto Exit;
+    }
+
+    if ((ret = ptls_buffer_reserve(buf, TICKET_LABEL_SIZE + TICKET_IV_SIZE + src.len + EVP_MAX_BLOCK_LENGTH + EVP_MAX_MD_SIZE)) !=
+        0)
+        goto Exit;
+    dst = buf->base + buf->off;
+
+    /* fill label and iv, as well as obtaining the keys */
+    if (!(*cb)(dst, dst + TICKET_LABEL_SIZE, cctx, hctx, 1)) {
+        ret = PTLS_ERROR_LIBRARY;
+        goto Exit;
+    }
+    dst += TICKET_LABEL_SIZE + TICKET_IV_SIZE;
+
+    /* encrypt */
+    if (!EVP_EncryptUpdate(cctx, dst, &clen, src.base, (int)src.len)) {
+        ret = PTLS_ERROR_LIBRARY;
+        goto Exit;
+    }
+    dst += clen;
+    if (!EVP_EncryptFinal_ex(cctx, dst, &clen)) {
+        ret = PTLS_ERROR_LIBRARY;
+        goto Exit;
+    }
+    dst += clen;
+
+    /* append hmac */
+    if (!EVP_MAC_update(hctx, buf->base + buf->off, dst - (buf->base + buf->off)) ||
+        !EVP_MAC_final(hctx, dst, &hlen, EVP_MAC_CTX_get_mac_size(hctx))) {
+        ret = PTLS_ERROR_LIBRARY;
+        goto Exit;
+    }
+    dst += hlen;
+
+    assert(dst <= buf->base + buf->capacity);
+    buf->off += dst - (buf->base + buf->off);
+    ret = 0;
+
+Exit:
+    if (cctx != NULL)
+        EVP_CIPHER_CTX_free(cctx);
+    if (hctx != NULL)
+        EVP_MAC_CTX_free(hctx);
+    if (mac != NULL)
+        EVP_MAC_free(mac);
+    return ret;
+}
+
+int ptls_openssl_decrypt_ticket_evp(ptls_buffer_t *buf, ptls_iovec_t src,
+                                    int (*cb)(unsigned char *key_name, unsigned char *iv, EVP_CIPHER_CTX *ctx, EVP_MAC_CTX *hctx,
+                                              int enc))
+{
+    EVP_CIPHER_CTX *cctx = NULL;
+    EVP_MAC *mac = NULL;
+    EVP_MAC_CTX *hctx = NULL;
+    size_t hlen;
+    int clen, ret;
+
+    if ((cctx = EVP_CIPHER_CTX_new()) == NULL) {
+        ret = PTLS_ERROR_NO_MEMORY;
+        goto Exit;
+    }
+    if ((mac = EVP_MAC_fetch(NULL, "HMAC", NULL)) == NULL) {
+        ret = PTLS_ERROR_NO_MEMORY;
+        goto Exit;
+    }
+    if ((hctx = EVP_MAC_CTX_new(mac)) == NULL) {
+        ret = PTLS_ERROR_NO_MEMORY;
+        goto Exit;
+    }
+
+    /* obtain cipher and hash context.
+     * Note: no need to handle renew, since in picotls we always send a new ticket to minimize the chance of ticket reuse */
+    if (src.len < TICKET_LABEL_SIZE + TICKET_IV_SIZE) {
+        ret = PTLS_ALERT_DECODE_ERROR;
+        goto Exit;
+    }
+    if (!(*cb)(src.base, src.base + TICKET_LABEL_SIZE, cctx, hctx, 0)) {
+        ret = PTLS_ERROR_LIBRARY;
+        goto Exit;
+    }
+
+    /* check hmac, and exclude label, iv, hmac */
+    size_t hmac_size = EVP_MAC_CTX_get_mac_size(hctx);
+    if (src.len < TICKET_LABEL_SIZE + TICKET_IV_SIZE + hmac_size) {
+        ret = PTLS_ALERT_DECODE_ERROR;
+        goto Exit;
+    }
+    src.len -= hmac_size;
+    uint8_t hmac[EVP_MAX_MD_SIZE];
+    if (!EVP_MAC_update(hctx, src.base, src.len) || !EVP_MAC_final(hctx, hmac, &hlen, sizeof(hmac))) {
+        ret = PTLS_ERROR_LIBRARY;
+        goto Exit;
+    }
+    if (!ptls_mem_equal(src.base + src.len, hmac, hmac_size)) {
+        ret = PTLS_ALERT_HANDSHAKE_FAILURE;
+        goto Exit;
+    }
+    src.base += TICKET_LABEL_SIZE + TICKET_IV_SIZE;
+    src.len -= TICKET_LABEL_SIZE + TICKET_IV_SIZE;
+
+    /* decrypt */
+    if ((ret = ptls_buffer_reserve(buf, src.len)) != 0)
+        goto Exit;
+    if (!EVP_DecryptUpdate(cctx, buf->base + buf->off, &clen, src.base, (int)src.len)) {
+        ret = PTLS_ERROR_LIBRARY;
+        goto Exit;
+    }
+    buf->off += clen;
+    if (!EVP_DecryptFinal_ex(cctx, buf->base + buf->off, &clen)) {
+        ret = PTLS_ERROR_LIBRARY;
+        goto Exit;
+    }
+    buf->off += clen;
+
+    ret = 0;
+
+Exit:
+    if (cctx != NULL)
+        EVP_CIPHER_CTX_free(cctx);
+    if (hctx != NULL)
+        EVP_MAC_CTX_free(hctx);
+    if (mac != NULL)
+        EVP_MAC_free(mac);
+    return ret;
+}
+#endif
+
 ptls_key_exchange_algorithm_t ptls_openssl_secp256r1 = {.id = PTLS_GROUP_SECP256R1,
                                                         .name = PTLS_GROUP_NAME_SECP256R1,
                                                         .create = x9_62_create_key_exchange,
@@ -1590,6 +1756,9 @@ ptls_aead_algorithm_t ptls_openssl_aes128gcm = {"AES128-GCM",
                                                 PTLS_AES128_KEY_SIZE,
                                                 PTLS_AESGCM_IV_SIZE,
                                                 PTLS_AESGCM_TAG_SIZE,
+                                                {PTLS_TLS12_AESGCM_FIXED_IV_SIZE, PTLS_TLS12_AESGCM_RECORD_IV_SIZE},
+                                                0,
+                                                0,
                                                 sizeof(struct aead_crypto_context_t),
                                                 aead_aes128gcm_setup_crypto};
 ptls_cipher_algorithm_t ptls_openssl_aes256ecb = {
@@ -1606,6 +1775,9 @@ ptls_aead_algorithm_t ptls_openssl_aes256gcm = {"AES256-GCM",
                                                 PTLS_AES256_KEY_SIZE,
                                                 PTLS_AESGCM_IV_SIZE,
                                                 PTLS_AESGCM_TAG_SIZE,
+                                                {PTLS_TLS12_AESGCM_FIXED_IV_SIZE, PTLS_TLS12_AESGCM_RECORD_IV_SIZE},
+                                                0,
+                                                0,
                                                 sizeof(struct aead_crypto_context_t),
                                                 aead_aes256gcm_setup_crypto};
 ptls_hash_algorithm_t ptls_openssl_sha256 = {PTLS_SHA256_BLOCK_SIZE, PTLS_SHA256_DIGEST_SIZE, sha256_create,
@@ -1632,6 +1804,9 @@ ptls_aead_algorithm_t ptls_openssl_chacha20poly1305 = {"CHACHA20-POLY1305",
                                                        PTLS_CHACHA20_KEY_SIZE,
                                                        PTLS_CHACHA20POLY1305_IV_SIZE,
                                                        PTLS_CHACHA20POLY1305_TAG_SIZE,
+                                                       {PTLS_TLS12_CHACHAPOLY_FIXED_IV_SIZE, PTLS_TLS12_CHACHAPOLY_RECORD_IV_SIZE},
+                                                       0,
+                                                       0,
                                                        sizeof(struct aead_crypto_context_t),
                                                        aead_chacha20poly1305_setup_crypto};
 ptls_cipher_suite_t ptls_openssl_chacha20poly1305sha256 = {.id = PTLS_CIPHER_SUITE_CHACHA20_POLY1305_SHA256,

@@ -4,8 +4,11 @@
 #
 # ISO 15.2.12
 class Array
-
   ##
+  # call-seq:
+  #   array.each {|element| ... } -> self
+  #   array.each -> Enumerator
+  #
   # Calls the given block for each element of +self+
   # and pass the respective element.
   #
@@ -22,6 +25,10 @@ class Array
   end
 
   ##
+  # call-seq:
+  #   array.each_index {|index| ... } -> self
+  #   array.each_index -> Enumerator
+  #
   # Calls the given block for each element of +self+
   # and pass the index of the respective element.
   #
@@ -38,6 +45,10 @@ class Array
   end
 
   ##
+  # call-seq:
+  #   array.collect! {|element| ... } -> self
+  #   array.collect! -> new_enumerator
+  #
   # Calls the given block for each element of +self+
   # and pass the respective element. Each element will
   # be replaced by the resulting values.
@@ -56,6 +67,10 @@ class Array
   end
 
   ##
+  # call-seq:
+  #   array.map! {|element| ... } -> self
+  #   array.map! -> new_enumerator
+  #
   # Alias for collect!
   #
   # ISO 15.2.12.5.20
@@ -66,6 +81,10 @@ class Array
   #
   # ISO 15.2.12.5.15
   def initialize(size=0, obj=nil, &block)
+    if size.is_a?(Array) && obj==nil && block == nil
+      self.replace(size)
+      return self
+    end
     size = size.__to_int
     raise ArgumentError, "negative array size" if size < 0
 
@@ -83,13 +102,15 @@ class Array
     self
   end
 
-  def _inspect
+  def _inspect(recur_list)
     size = self.size
     return "[]" if size == 0
+    return "[...]" if recur_list[self.object_id]
+    recur_list[self.object_id] = true
     ary=[]
     i=0
     while i<size
-      ary<<self[i].inspect
+      ary<<self[i]._inspect(recur_list)
       i+=1
     end
     "["+ary.join(", ")+"]"
@@ -99,16 +120,15 @@ class Array
   #
   # ISO 15.2.12.5.31 (x)
   def inspect
-    begin
-      self._inspect
-    rescue SystemStackError
-      "[...]"
-    end
+    self._inspect({})
   end
   # ISO 15.2.12.5.32 (x)
   alias to_s inspect
 
   ##
+  # call-seq:
+  #   array == other   -> true or false
+  #
   #  Equality---Two arrays are equal if they contain the same number
   #  of elements and if each element is equal to (according to
   #  Object.==) the corresponding element in the other array.
@@ -128,6 +148,9 @@ class Array
   end
 
   ##
+  # call-seq:
+  #   array.eql? other_array -> true or false
+  #
   #  Returns <code>true</code> if +self+ and _other_ are the same object,
   #  or are both arrays with the same content.
   #
@@ -146,6 +169,9 @@ class Array
   end
 
   ##
+  # call-seq:
+  #   array <=> other_array -> -1, 0, or 1
+  #
   #  Comparison---Returns an integer (-1, 0, or +1)
   #  if this array is less than, equal to, or greater than <i>other_ary</i>.
   #  Each object in each array is compared (using <=>). If any value isn't
@@ -166,10 +192,14 @@ class Array
     n = other.size
     len = n if len > n
     i = 0
-    while i < len
-      n = (self[i] <=> other[i])
-      return n if n.nil? || n != 0
-      i += 1
+    begin
+      while i < len
+        n = (self[i] <=> other[i])
+        return n if n.nil? || n != 0
+        i += 1
+      end
+    rescue NoMethodError
+      return nil
     end
     len = self.size - other.size
     if len == 0
@@ -182,6 +212,10 @@ class Array
   end
 
   ##
+  # call-seq:
+  #   array.delete(obj) -> deleted_object
+  #   array.delete(obj) {|nosuch| ... } -> deleted_object or block_return
+  #
   # Delete element with index +key+
   def delete(key, &block)
     while i = self.index(key)
@@ -191,15 +225,12 @@ class Array
     return block.call if ret.nil? && block
     ret
   end
-end
-
-##
-# Array is enumerable
-class Array
-  # ISO 15.2.12.3
-  include Enumerable
 
   ##
+  # call-seq:
+  #   array.sort! -> self
+  #   array.sort! {|a, b| ... } -> self
+  #
   # Sort all elements and replace +self+ with these
   # elements.
   def sort!(&block)
@@ -213,7 +244,11 @@ class Array
           if left + 1 == right
             lval = self[left]
             rval = self[right]
-            if (block&.call(lval, rval) || (lval <=> rval)) > 0
+            cmp = if block then block.call(lval,rval) else lval <=> rval end
+            if cmp.nil?
+              raise ArgumentError, "comparison of #{lval.inspect} and #{rval.inspect} failed"
+            end
+            if cmp > 0
               self[left]  = rval
               self[right] = lval
             end
@@ -245,7 +280,11 @@ class Array
           else
             lval = lary[lidx]
             rval = self[ridx]
-            if (block&.call(lval, rval) || (lval <=> rval)) <= 0
+            cmp = if block then block.call(lval,rval) else lval <=> rval end
+            if cmp.nil?
+              raise ArgumentError, "comparison of #{lval.inspect} and #{rval.inspect} failed"
+            end
+            if cmp <= 0
               self[i] = lval
               lidx += 1
             else
@@ -259,7 +298,28 @@ class Array
     self
   end
 
+  ##
+  # call-seq:
+  #   array.sort -> new_array
+  #   array.sort {|a, b| ... } -> new_array
+  #
+  # Returns a new Array whose elements are those from +self+, sorted.
   def sort(&block)
     self.dup.sort!(&block)
   end
+
+  ##
+  # call-seq:
+  #   array.to_a -> self
+  #
+  # Returns self, no need to convert.
+  def to_a
+    self
+  end
+  alias entries to_a
+
+  ##
+  # Array is enumerable
+  # ISO 15.2.12.3
+  include Enumerable
 end

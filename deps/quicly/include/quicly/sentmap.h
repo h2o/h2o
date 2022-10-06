@@ -211,6 +211,10 @@ struct st_quicly_sentmap_t {
      */
     size_t num_packets;
     /**
+     * largest number recorded for num_packets
+     */
+    size_t num_packets_largest;
+    /**
      * bytes in-flight
      */
     size_t bytes_in_flight;
@@ -299,6 +303,8 @@ inline void quicly_sentmap_commit(quicly_sentmap_t *map, uint16_t bytes_in_fligh
     map->_pending_packet = NULL;
 
     ++map->num_packets;
+    if (map->num_packets > map->num_packets_largest)
+        map->num_packets_largest = map->num_packets;
 }
 
 inline quicly_sent_t *quicly_sentmap_allocate(quicly_sentmap_t *map, quicly_sent_acked_cb acked)

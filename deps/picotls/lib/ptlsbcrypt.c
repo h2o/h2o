@@ -545,12 +545,15 @@ static int ptls_bcrypt_aead_setup_crypto(ptls_aead_context_t *_ctx, int is_enc, 
             ctx->super.do_encrypt_update = ptls_bcrypt_aead_do_encrypt_update;
             ctx->super.do_encrypt_final = ptls_bcrypt_aead_do_encrypt_final;
             ctx->super.do_encrypt = ptls_bcrypt_do_encrypt;
+            ctx->super.do_encrypt_v = ptls_aead__do_encrypt_v;
         } else {
             ctx->super.dispose_crypto = ptls_bcrypt_aead_dispose_crypto;
             ctx->super.do_decrypt = ptls_bcrypt_aead_do_decrypt;
             ctx->super.do_encrypt_init = NULL;
             ctx->super.do_encrypt_update = NULL;
             ctx->super.do_encrypt_final = NULL;
+            ctx->super.do_encrypt = NULL;
+            ctx->super.do_encrypt_v = NULL;
         }
         return 0;
     } else {
@@ -783,6 +786,9 @@ ptls_aead_algorithm_t ptls_bcrypt_aes128gcm = {"AES128-GCM",
                                                PTLS_AES128_KEY_SIZE,
                                                PTLS_AESGCM_IV_SIZE,
                                                PTLS_AESGCM_TAG_SIZE,
+                                               {PTLS_TLS12_AESGCM_FIXED_IV_SIZE, PTLS_TLS12_AESGCM_RECORD_IV_SIZE},
+                                               0,
+                                               0,
                                                sizeof(struct ptls_bcrypt_aead_context_t),
                                                ptls_bcrypt_aead_setup_crypto_aesgcm};
 
@@ -794,6 +800,9 @@ ptls_aead_algorithm_t ptls_bcrypt_aes256gcm = {"AES256-GCM",
                                                PTLS_AES256_KEY_SIZE,
                                                PTLS_AESGCM_IV_SIZE,
                                                PTLS_AESGCM_TAG_SIZE,
+                                               {PTLS_TLS12_AESGCM_FIXED_IV_SIZE, PTLS_TLS12_AESGCM_RECORD_IV_SIZE},
+                                               0,
+                                               0,
                                                sizeof(struct ptls_bcrypt_aead_context_t),
                                                ptls_bcrypt_aead_setup_crypto_aesgcm};
 

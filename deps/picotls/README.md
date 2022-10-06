@@ -83,3 +83,7 @@ License
 
 The software is provided under the MIT license.
 Note that additional licences apply if you use the minicrypto binding (see above).
+
+Reporting Security Issues
+---
+Please report vulnerabilities to h2o-vuln@googlegroups.com. See [SECURITY.md](SECURITY.md) for more information.

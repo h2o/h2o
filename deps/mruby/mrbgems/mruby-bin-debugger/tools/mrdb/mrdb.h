@@ -10,10 +10,6 @@
 
 #include "mrdbconf.h"
 
-#ifdef _MSC_VER
-# define __func__ __FUNCTION__
-#endif
-
 #define MAX_COMMAND_WORD (16)
 
 typedef enum debug_command_id {
@@ -23,6 +19,7 @@ typedef enum debug_command_id {
   DBGCMD_STEP,
   DBGCMD_BREAK,
   DBGCMD_INFO_BREAK,
+  DBGCMD_INFO_LOCAL,
   DBGCMD_WATCH,
   DBGCMD_INFO_WATCH,
   DBGCMD_ENABLE,
@@ -102,9 +99,9 @@ typedef struct mrb_debug_breakpoint {
 } mrb_debug_breakpoint;
 
 typedef struct mrb_debug_context {
-  struct mrb_irep *root_irep;
-  struct mrb_irep *irep;
-  mrb_code *pc;
+  const struct mrb_irep *root_irep;
+  const struct mrb_irep *irep;
+  const mrb_code *pc;
   mrb_value *regs;
 
   const char *prvfile;
@@ -151,6 +148,7 @@ dbgcmd_state dbgcmd_next(mrb_state*, mrdb_state*);
 /* cmdbreak.c */
 dbgcmd_state dbgcmd_break(mrb_state*, mrdb_state*);
 dbgcmd_state dbgcmd_info_break(mrb_state*, mrdb_state*);
+dbgcmd_state dbgcmd_info_local(mrb_state*, mrdb_state*);
 dbgcmd_state dbgcmd_delete(mrb_state*, mrdb_state*);
 dbgcmd_state dbgcmd_enable(mrb_state*, mrdb_state*);
 dbgcmd_state dbgcmd_disable(mrb_state*, mrdb_state*);

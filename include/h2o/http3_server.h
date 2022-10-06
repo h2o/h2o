@@ -38,7 +38,6 @@ typedef struct st_h2o_http3_server_ctx_t {
     h2o_http3_qpack_context_t qpack;
 } h2o_http3_server_ctx_t;
 
-extern const h2o_protocol_callbacks_t H2O_HTTP3_SERVER_CALLBACKS;
 extern const h2o_http3_conn_callbacks_t H2O_HTTP3_CONN_CALLBACKS;
 
 /**

@@ -1,5 +1,5 @@
-/*
-** mruby/version.h - mruby version definition
+/**
+** @file mruby/version.h - mruby version definition
 **
 ** See Copyright Notice in mruby.h
 */
@@ -27,7 +27,7 @@ MRB_BEGIN_DECL
 /*
  * The version of Ruby used by mruby.
  */
-#define MRUBY_RUBY_VERSION "2.0"
+#define MRUBY_RUBY_VERSION "3.1"
 
 /*
  * Ruby engine.
@@ -37,17 +37,35 @@ MRB_BEGIN_DECL
 /*
  * Major release version number.
  */
-#define MRUBY_RELEASE_MAJOR 2
+#define MRUBY_RELEASE_MAJOR 3
 
 /*
  * Minor release version number.
  */
-#define MRUBY_RELEASE_MINOR 0
+#define MRUBY_RELEASE_MINOR 1
 
 /*
  * Tiny release version number.
  */
 #define MRUBY_RELEASE_TEENY 0
+
+/*
+ * Patch level.
+ */
+#define MRUBY_PATCHLEVEL -1
+
+/*
+ * Patch level string. (optional)
+ */
+#define MRUBY_PATCHLEVEL_STR ""
+
+#ifndef MRUBY_PATCHLEVEL_STR
+# if MRUBY_PATCHLEVEL < 0
+#   define MRUBY_PATCHLEVEL_STR "dev"
+# else
+#   define MRUBY_PATCHLEVEL_STR "p"MRB_STRINGIZE(MRUBY_PATCHLEVEL)
+# endif
+#endif
 
 /*
  * The mruby version.
@@ -62,22 +80,36 @@ MRB_BEGIN_DECL
 /*
  * Release year.
  */
-#define MRUBY_RELEASE_YEAR 2018
+#define MRUBY_RELEASE_YEAR 2022
 
 /*
  * Release month.
  */
-#define MRUBY_RELEASE_MONTH 12
+#define MRUBY_RELEASE_MONTH 5
 
 /*
  * Release day.
  */
-#define MRUBY_RELEASE_DAY 11
+#define MRUBY_RELEASE_DAY 12
 
 /*
  * Release date as a string.
  */
-#define MRUBY_RELEASE_DATE MRB_STRINGIZE(MRUBY_RELEASE_YEAR) "-" MRB_STRINGIZE(MRUBY_RELEASE_MONTH) "-" MRB_STRINGIZE(MRUBY_RELEASE_DAY)
+#define MRUBY_RELEASE_DATE    \
+  MRUBY_RELEASE_YEAR_STR "-"  \
+  MRUBY_RELEASE_MONTH_STR "-" \
+  MRUBY_RELEASE_DAY_STR
+#define MRUBY_RELEASE_YEAR_STR MRB_STRINGIZE(MRUBY_RELEASE_YEAR)
+#if MRUBY_RELEASE_MONTH < 10
+#define MRUBY_RELEASE_MONTH_STR "0" MRB_STRINGIZE(MRUBY_RELEASE_MONTH)
+#else
+#define MRUBY_RELEASE_MONTH_STR MRB_STRINGIZE(MRUBY_RELEASE_MONTH)
+#endif
+#if MRUBY_RELEASE_DAY < 10
+#define MRUBY_RELEASE_DAY_STR "0" MRB_STRINGIZE(MRUBY_RELEASE_DAY)
+#else
+#define MRUBY_RELEASE_DAY_STR MRB_STRINGIZE(MRUBY_RELEASE_DAY)
+#endif
 
 /*
  * The year mruby was first created.
@@ -92,9 +124,10 @@ MRB_BEGIN_DECL
 /*
  * mruby's version, and release date.
  */
-#define MRUBY_DESCRIPTION      \
-  "mruby " MRUBY_VERSION       \
-  " (" MRUBY_RELEASE_DATE ") " \
+#define MRUBY_DESCRIPTION     \
+  "mruby " MRUBY_VERSION      \
+  MRUBY_PATCHLEVEL_STR        \
+  " (" MRUBY_RELEASE_DATE ")" \
 
 /*
  * mruby's copyright information.

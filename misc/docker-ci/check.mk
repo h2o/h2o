@@ -35,13 +35,37 @@ ossl1.1.1:
 		BUILD_ARGS='$(BUILD_ARGS)' \
 		TEST_ENV='$(TEST_ENV)'
 
+ossl3.0:
+	docker run $(DOCKER_RUN_OPTS) h2oserver/h2o-ci:ubuntu2204 \
+		env DTRACE_TESTS=1 \
+		make -f $(SRC_DIR).ro/misc/docker-ci/check.mk _check \
+		CMAKE_ARGS='-DCMAKE_C_FLAGS=-Werror=format' \
+		BUILD_ARGS='$(BUILD_ARGS)' \
+		TEST_ENV='$(TEST_ENV)'
+
 dtrace+asan:
-	docker run $(DOCKER_RUN_OPTS) h2oserver/h2o-ci:ubuntu2004  \
+	docker run $(DOCKER_RUN_OPTS) h2oserver/h2o-ci:ubuntu2004 \
 		env DTRACE_TESTS=1 \
 		make -f $(SRC_DIR).ro/misc/docker-ci/check.mk _check \
 		CMAKE_ARGS='-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_FLAGS=-fsanitize=address -DCMAKE_CXX_FLAGS=-fsanitize=address' \
 		BUILD_ARGS='$(BUILD_ARGS)' \
 		TEST_ENV='ASAN_OPTIONS=detect_leaks=0:alloc_dealloc_mismatch=0 $(TEST_ENV)'
+
+# https://clang.llvm.org/docs/SourceBasedCodeCoverage.html
+coverage:
+	docker run $(DOCKER_RUN_OPTS) h2oserver/h2o-ci:ubuntu2204  \
+		make -f $(SRC_DIR).ro/misc/docker-ci/check.mk _check _coverage_report \
+		CMAKE_ARGS='-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_FLAGS="-fprofile-instr-generate -fcoverage-mapping -mllvm -runtime-counter-relocation" -DCMAKE_CXX_FLAGS= -DCMAKE_BUILD_TYPE=Debug -DWITH_H2OLOG=OFF' \
+		BUILD_ARGS='$(BUILD_ARGS)' \
+		TEST_ENV='LLVM_PROFILE_FILE=/home/ci/profraw/%c%p.profraw $(TEST_ENV)'
+
+_coverage_report:
+	llvm-profdata merge -sparse -o h2o.profdata /home/ci/profraw/*.profraw
+	llvm-cov report -show-region-summary=0 -instr-profile h2o.profdata h2o $(SRC_DIR)/lib $(SRC_DIR)/src $(SRC_DIR)/deps/quicly/lib $(SRC_DIR)/deps/picotls/lib | tee /home/ci/summary.txt
+	echo '~~~' > /home/ci/summary.md
+	cat /home/ci/summary.txt >> /home/ci/summary.md
+	echo '~~~' >> /home/ci/summary.md
+	# TODO: send the coverage report to a coverage analyzing service
 
 _check: _mount _do_check
 
@@ -55,12 +79,15 @@ _mount:
 	sudo mount -t overlay overlay -o lowerdir=$(SRC_DIR).ro,upperdir=/tmp/src/upper,workdir=/tmp/src/work /tmp/src/upper
 	sudo mount --bind /tmp/src/upper $(SRC_DIR)
 	# allow overwrite of include/h2o/version.h
-	sudo chown ci:ci $(SRC_DIR)/include/h2o
+	sudo chown -R ci:ci $(SRC_DIR)/include/h2o
+	# allow taking lock: mruby_config.rb.lock (which might or might not exist)
+	sudo touch $(SRC_DIR)/misc/mruby_config.rb.lock $(SRC_DIR)/misc/h2get/misc/mruby_config.rb.lock
+	sudo chown ci:ci $(SRC_DIR)/misc/mruby_config.rb.lock $(SRC_DIR)/misc/h2get/misc/mruby_config.rb.lock
 	# allow write of mruby executables being generated (FIXME don't generate here)
-	for i in deps/mruby/bin misc/h2get/deps/mruby-1.2.0/bin; do \
+	for i in deps/mruby/bin misc/h2get/deps/mruby/bin; do \
 		sudo rm -rf $(SRC_DIR)/$$i; \
 		sudo mkdir $(SRC_DIR)/$$i; \
-		sudo chown ci:ci $(SRC_DIR)/$$i; \
+		sudo chown -R ci:ci $(SRC_DIR)/$$i; \
 	done
 
 _do_check:

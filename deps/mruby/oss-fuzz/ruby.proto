@@ -1,0 +1,201 @@
+syntax = "proto2";
+
+message VarRef {
+  required int32 varnum = 1;
+}
+
+message ArrType {
+    repeated Const elements = 1;
+}
+
+message KVPair {
+    required string key = 1;
+    required string val = 2;
+}
+
+message HashType {
+    repeated KVPair keyval = 1;
+}
+
+message StringExtNoArg {
+  enum StrExtOp {
+    DUMP = 0;
+    STRIP = 1;
+    LSTRIP = 2;
+    RSTRIP = 3;
+    STRIPE = 4;
+    LSTRIPE = 5;
+    RSTRIPE = 6;
+    SWAPCASE = 7;
+    SWAPCASEE = 8;
+    SQUEEZE = 9;
+  }
+  required StrExtOp str_op = 1;
+  required string str_arg = 2;
+}
+
+message MathConst {
+    enum MathConstLit {
+        PI = 0;
+        E = 1;
+    }
+    required MathConstLit math_const = 1;
+}
+
+message Const {
+    oneof const_oneof {
+        uint32 int_lit = 1;
+        bool bool_val = 4;
+    }
+}
+
+message BinaryOp {
+  enum Op {
+    ADD = 0;
+    SUB = 1;
+    MUL = 2;
+    DIV = 3;
+    MOD = 4;
+    XOR = 5;
+    AND = 6;
+    OR = 7;
+    EQ = 8;
+    NE = 9;
+    LE = 10;
+    GE = 11;
+    LT = 12;
+    GT = 13;
+    RS = 14;
+  };
+  required Op op = 1;
+  required Rvalue left = 2;
+  required Rvalue right = 3;
+}
+
+message Rvalue {
+  oneof rvalue_oneof {
+    VarRef varref = 1;
+    Const cons = 2;
+    BinaryOp binop = 3;
+  }
+}
+
+message AssignmentStatement {
+  required Rvalue rvalue = 2;
+}
+
+
+message IfElse {
+  required Rvalue cond = 1;
+  required StatementSeq if_body = 2;
+  required StatementSeq else_body = 3;
+}
+
+//TODO: Add Switch statement
+//message Switch {
+//    required Rvalue switch_var = 1;
+//    repeated Rvalue cond = 2;
+//}
+
+message Ternary {
+    required Rvalue tern_cond = 1;
+    required Rvalue t_branch = 2;
+    required Rvalue f_branch = 3;
+}
+
+message ObjectSpace {
+    enum OS_methods {
+        COUNT = 1;
+    }
+    required OS_methods os_func = 1;
+    required HashType os_arg = 2;
+}
+
+message Time {
+    enum T_methods {
+        AT = 1;
+        GM = 2;
+    }
+    required T_methods t_func = 1;
+    required uint32 t_arg = 2;
+}
+
+message Array {
+    enum Arr_methods {
+        FLATTEN = 1;
+        COMPACT = 2;
+        FETCH = 3;
+        FILL = 4;
+        ROTATE = 5;
+        ROTATE_E = 6;
+        DELETEIF = 7;
+        INSERT = 8;
+        BSEARCH = 9;
+        KEEPIF = 10;
+        SELECT = 11;
+        VALUES_AT = 12;
+        BLOCK = 13;
+        DIG = 14;
+        SLICE = 15;
+        PERM = 16;
+        COMB = 17;
+        ASSOC = 18;
+        RASSOC = 19;
+    }
+    required Arr_methods arr_func = 1;
+    required ArrType  arr_arg = 2;
+    required Rvalue   val_arg = 3;
+}
+
+message MathType {
+    oneof math_arg_oneof {
+        Rvalue math_rval = 2;
+        MathConst math_const = 3;
+    }
+}
+
+message MathOps {
+    enum Mops {
+      CBRT = 1;
+      COS = 2;
+      ERF = 3;
+      ERFC = 4;
+      LOG = 5;
+      LOG10 = 6;
+      LOG2 = 7;
+      SIN = 8;
+      SQRT = 9;
+      TAN = 10;
+    }
+    required Mops math_op = 1;
+    required MathType math_arg = 2;
+}
+
+message BuiltinFuncs {
+    oneof bifunc_oneof {
+        ObjectSpace os = 1;
+        Time time = 2;
+        Array arr = 3;
+        MathOps mops = 4;
+    }
+}
+
+message Statement {
+  oneof stmt_oneof {
+    AssignmentStatement assignment = 1;
+    IfElse              ifelse     = 2;
+    Ternary             ternary_stmt = 3;
+    BuiltinFuncs        builtins = 4;
+    StatementSeq        blockstmt = 5;
+  }
+}
+
+message StatementSeq {
+  repeated Statement statements = 1;
+}
+
+message Function {
+  required StatementSeq statements = 1;
+}
+
+package ruby_fuzzer;

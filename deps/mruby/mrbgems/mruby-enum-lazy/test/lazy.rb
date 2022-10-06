@@ -41,7 +41,7 @@ assert("Enumerator::Lazy laziness") do
 end
 
 assert("Enumerator::Lazy#to_enum") do
-  lazy_enum = (0..Float::INFINITY).lazy.to_enum(:each_slice, 2)
+  lazy_enum = (0..).lazy.to_enum(:each_slice, 2)
   assert_kind_of Enumerator::Lazy, lazy_enum
   assert_equal [0*1, 2*3, 4*5, 6*7], lazy_enum.map { |a| a.first * a.last }.first(4)
 end

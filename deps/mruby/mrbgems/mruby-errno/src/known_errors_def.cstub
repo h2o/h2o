@@ -1,0 +1,780 @@
+#ifdef EPERM
+  itsdefined(EPERM, MRB_SYM(EPERM))
+#else
+  itsnotdefined(EPERM, MRB_SYM(EPERM))
+#endif
+#ifdef ENOENT
+  itsdefined(ENOENT, MRB_SYM(ENOENT))
+#else
+  itsnotdefined(ENOENT, MRB_SYM(ENOENT))
+#endif
+#ifdef ESRCH
+  itsdefined(ESRCH, MRB_SYM(ESRCH))
+#else
+  itsnotdefined(ESRCH, MRB_SYM(ESRCH))
+#endif
+#ifdef EINTR
+  itsdefined(EINTR, MRB_SYM(EINTR))
+#else
+  itsnotdefined(EINTR, MRB_SYM(EINTR))
+#endif
+#ifdef EIO
+  itsdefined(EIO, MRB_SYM(EIO))
+#else
+  itsnotdefined(EIO, MRB_SYM(EIO))
+#endif
+#ifdef ENXIO
+  itsdefined(ENXIO, MRB_SYM(ENXIO))
+#else
+  itsnotdefined(ENXIO, MRB_SYM(ENXIO))
+#endif
+#ifdef E2BIG
+  itsdefined(E2BIG, MRB_SYM(E2BIG))
+#else
+  itsnotdefined(E2BIG, MRB_SYM(E2BIG))
+#endif
+#ifdef ENOEXEC
+  itsdefined(ENOEXEC, MRB_SYM(ENOEXEC))
+#else
+  itsnotdefined(ENOEXEC, MRB_SYM(ENOEXEC))
+#endif
+#ifdef EBADF
+  itsdefined(EBADF, MRB_SYM(EBADF))
+#else
+  itsnotdefined(EBADF, MRB_SYM(EBADF))
+#endif
+#ifdef ECHILD
+  itsdefined(ECHILD, MRB_SYM(ECHILD))
+#else
+  itsnotdefined(ECHILD, MRB_SYM(ECHILD))
+#endif
+#ifdef EAGAIN
+  itsdefined(EAGAIN, MRB_SYM(EAGAIN))
+#else
+  itsnotdefined(EAGAIN, MRB_SYM(EAGAIN))
+#endif
+#ifdef ENOMEM
+  itsdefined(ENOMEM, MRB_SYM(ENOMEM))
+#else
+  itsnotdefined(ENOMEM, MRB_SYM(ENOMEM))
+#endif
+#ifdef EACCES
+  itsdefined(EACCES, MRB_SYM(EACCES))
+#else
+  itsnotdefined(EACCES, MRB_SYM(EACCES))
+#endif
+#ifdef EFAULT
+  itsdefined(EFAULT, MRB_SYM(EFAULT))
+#else
+  itsnotdefined(EFAULT, MRB_SYM(EFAULT))
+#endif
+#ifdef ENOTBLK
+  itsdefined(ENOTBLK, MRB_SYM(ENOTBLK))
+#else
+  itsnotdefined(ENOTBLK, MRB_SYM(ENOTBLK))
+#endif
+#ifdef EBUSY
+  itsdefined(EBUSY, MRB_SYM(EBUSY))
+#else
+  itsnotdefined(EBUSY, MRB_SYM(EBUSY))
+#endif
+#ifdef EEXIST
+  itsdefined(EEXIST, MRB_SYM(EEXIST))
+#else
+  itsnotdefined(EEXIST, MRB_SYM(EEXIST))
+#endif
+#ifdef EXDEV
+  itsdefined(EXDEV, MRB_SYM(EXDEV))
+#else
+  itsnotdefined(EXDEV, MRB_SYM(EXDEV))
+#endif
+#ifdef ENODEV
+  itsdefined(ENODEV, MRB_SYM(ENODEV))
+#else
+  itsnotdefined(ENODEV, MRB_SYM(ENODEV))
+#endif
+#ifdef ENOTDIR
+  itsdefined(ENOTDIR, MRB_SYM(ENOTDIR))
+#else
+  itsnotdefined(ENOTDIR, MRB_SYM(ENOTDIR))
+#endif
+#ifdef EISDIR
+  itsdefined(EISDIR, MRB_SYM(EISDIR))
+#else
+  itsnotdefined(EISDIR, MRB_SYM(EISDIR))
+#endif
+#ifdef EINVAL
+  itsdefined(EINVAL, MRB_SYM(EINVAL))
+#else
+  itsnotdefined(EINVAL, MRB_SYM(EINVAL))
+#endif
+#ifdef ENFILE
+  itsdefined(ENFILE, MRB_SYM(ENFILE))
+#else
+  itsnotdefined(ENFILE, MRB_SYM(ENFILE))
+#endif
+#ifdef EMFILE
+  itsdefined(EMFILE, MRB_SYM(EMFILE))
+#else
+  itsnotdefined(EMFILE, MRB_SYM(EMFILE))
+#endif
+#ifdef ENOTTY
+  itsdefined(ENOTTY, MRB_SYM(ENOTTY))
+#else
+  itsnotdefined(ENOTTY, MRB_SYM(ENOTTY))
+#endif
+#ifdef ETXTBSY
+  itsdefined(ETXTBSY, MRB_SYM(ETXTBSY))
+#else
+  itsnotdefined(ETXTBSY, MRB_SYM(ETXTBSY))
+#endif
+#ifdef EFBIG
+  itsdefined(EFBIG, MRB_SYM(EFBIG))
+#else
+  itsnotdefined(EFBIG, MRB_SYM(EFBIG))
+#endif
+#ifdef ENOSPC
+  itsdefined(ENOSPC, MRB_SYM(ENOSPC))
+#else
+  itsnotdefined(ENOSPC, MRB_SYM(ENOSPC))
+#endif
+#ifdef ESPIPE
+  itsdefined(ESPIPE, MRB_SYM(ESPIPE))
+#else
+  itsnotdefined(ESPIPE, MRB_SYM(ESPIPE))
+#endif
+#ifdef EROFS
+  itsdefined(EROFS, MRB_SYM(EROFS))
+#else
+  itsnotdefined(EROFS, MRB_SYM(EROFS))
+#endif
+#ifdef EMLINK
+  itsdefined(EMLINK, MRB_SYM(EMLINK))
+#else
+  itsnotdefined(EMLINK, MRB_SYM(EMLINK))
+#endif
+#ifdef EPIPE
+  itsdefined(EPIPE, MRB_SYM(EPIPE))
+#else
+  itsnotdefined(EPIPE, MRB_SYM(EPIPE))
+#endif
+#ifdef EDOM
+  itsdefined(EDOM, MRB_SYM(EDOM))
+#else
+  itsnotdefined(EDOM, MRB_SYM(EDOM))
+#endif
+#ifdef ERANGE
+  itsdefined(ERANGE, MRB_SYM(ERANGE))
+#else
+  itsnotdefined(ERANGE, MRB_SYM(ERANGE))
+#endif
+#ifdef EDEADLK
+  itsdefined(EDEADLK, MRB_SYM(EDEADLK))
+#else
+  itsnotdefined(EDEADLK, MRB_SYM(EDEADLK))
+#endif
+#ifdef ENAMETOOLONG
+  itsdefined(ENAMETOOLONG, MRB_SYM(ENAMETOOLONG))
+#else
+  itsnotdefined(ENAMETOOLONG, MRB_SYM(ENAMETOOLONG))
+#endif
+#ifdef ENOLCK
+  itsdefined(ENOLCK, MRB_SYM(ENOLCK))
+#else
+  itsnotdefined(ENOLCK, MRB_SYM(ENOLCK))
+#endif
+#ifdef ENOSYS
+  itsdefined(ENOSYS, MRB_SYM(ENOSYS))
+#else
+  itsnotdefined(ENOSYS, MRB_SYM(ENOSYS))
+#endif
+#ifdef ENOTEMPTY
+  itsdefined(ENOTEMPTY, MRB_SYM(ENOTEMPTY))
+#else
+  itsnotdefined(ENOTEMPTY, MRB_SYM(ENOTEMPTY))
+#endif
+#ifdef ELOOP
+  itsdefined(ELOOP, MRB_SYM(ELOOP))
+#else
+  itsnotdefined(ELOOP, MRB_SYM(ELOOP))
+#endif
+#ifdef EWOULDBLOCK
+  itsdefined(EWOULDBLOCK, MRB_SYM(EWOULDBLOCK))
+#else
+  itsnotdefined(EWOULDBLOCK, MRB_SYM(EWOULDBLOCK))
+#endif
+#ifdef ENOMSG
+  itsdefined(ENOMSG, MRB_SYM(ENOMSG))
+#else
+  itsnotdefined(ENOMSG, MRB_SYM(ENOMSG))
+#endif
+#ifdef EIDRM
+  itsdefined(EIDRM, MRB_SYM(EIDRM))
+#else
+  itsnotdefined(EIDRM, MRB_SYM(EIDRM))
+#endif
+#ifdef ECHRNG
+  itsdefined(ECHRNG, MRB_SYM(ECHRNG))
+#else
+  itsnotdefined(ECHRNG, MRB_SYM(ECHRNG))
+#endif
+#ifdef EL2NSYNC
+  itsdefined(EL2NSYNC, MRB_SYM(EL2NSYNC))
+#else
+  itsnotdefined(EL2NSYNC, MRB_SYM(EL2NSYNC))
+#endif
+#ifdef EL3HLT
+  itsdefined(EL3HLT, MRB_SYM(EL3HLT))
+#else
+  itsnotdefined(EL3HLT, MRB_SYM(EL3HLT))
+#endif
+#ifdef EL3RST
+  itsdefined(EL3RST, MRB_SYM(EL3RST))
+#else
+  itsnotdefined(EL3RST, MRB_SYM(EL3RST))
+#endif
+#ifdef ELNRNG
+  itsdefined(ELNRNG, MRB_SYM(ELNRNG))
+#else
+  itsnotdefined(ELNRNG, MRB_SYM(ELNRNG))
+#endif
+#ifdef EUNATCH
+  itsdefined(EUNATCH, MRB_SYM(EUNATCH))
+#else
+  itsnotdefined(EUNATCH, MRB_SYM(EUNATCH))
+#endif
+#ifdef ENOCSI
+  itsdefined(ENOCSI, MRB_SYM(ENOCSI))
+#else
+  itsnotdefined(ENOCSI, MRB_SYM(ENOCSI))
+#endif
+#ifdef EL2HLT
+  itsdefined(EL2HLT, MRB_SYM(EL2HLT))
+#else
+  itsnotdefined(EL2HLT, MRB_SYM(EL2HLT))
+#endif
+#ifdef EBADE
+  itsdefined(EBADE, MRB_SYM(EBADE))
+#else
+  itsnotdefined(EBADE, MRB_SYM(EBADE))
+#endif
+#ifdef EBADR
+  itsdefined(EBADR, MRB_SYM(EBADR))
+#else
+  itsnotdefined(EBADR, MRB_SYM(EBADR))
+#endif
+#ifdef EXFULL
+  itsdefined(EXFULL, MRB_SYM(EXFULL))
+#else
+  itsnotdefined(EXFULL, MRB_SYM(EXFULL))
+#endif
+#ifdef ENOANO
+  itsdefined(ENOANO, MRB_SYM(ENOANO))
+#else
+  itsnotdefined(ENOANO, MRB_SYM(ENOANO))
+#endif
+#ifdef EBADRQC
+  itsdefined(EBADRQC, MRB_SYM(EBADRQC))
+#else
+  itsnotdefined(EBADRQC, MRB_SYM(EBADRQC))
+#endif
+#ifdef EBADSLT
+  itsdefined(EBADSLT, MRB_SYM(EBADSLT))
+#else
+  itsnotdefined(EBADSLT, MRB_SYM(EBADSLT))
+#endif
+#ifdef EDEADLOCK
+  itsdefined(EDEADLOCK, MRB_SYM(EDEADLOCK))
+#else
+  itsnotdefined(EDEADLOCK, MRB_SYM(EDEADLOCK))
+#endif
+#ifdef EBFONT
+  itsdefined(EBFONT, MRB_SYM(EBFONT))
+#else
+  itsnotdefined(EBFONT, MRB_SYM(EBFONT))
+#endif
+#ifdef ENOSTR
+  itsdefined(ENOSTR, MRB_SYM(ENOSTR))
+#else
+  itsnotdefined(ENOSTR, MRB_SYM(ENOSTR))
+#endif
+#ifdef ENODATA
+  itsdefined(ENODATA, MRB_SYM(ENODATA))
+#else
+  itsnotdefined(ENODATA, MRB_SYM(ENODATA))
+#endif
+#ifdef ETIME
+  itsdefined(ETIME, MRB_SYM(ETIME))
+#else
+  itsnotdefined(ETIME, MRB_SYM(ETIME))
+#endif
+#ifdef ENOSR
+  itsdefined(ENOSR, MRB_SYM(ENOSR))
+#else
+  itsnotdefined(ENOSR, MRB_SYM(ENOSR))
+#endif
+#ifdef ENONET
+  itsdefined(ENONET, MRB_SYM(ENONET))
+#else
+  itsnotdefined(ENONET, MRB_SYM(ENONET))
+#endif
+#ifdef ENOPKG
+  itsdefined(ENOPKG, MRB_SYM(ENOPKG))
+#else
+  itsnotdefined(ENOPKG, MRB_SYM(ENOPKG))
+#endif
+#ifdef EREMOTE
+  itsdefined(EREMOTE, MRB_SYM(EREMOTE))
+#else
+  itsnotdefined(EREMOTE, MRB_SYM(EREMOTE))
+#endif
+#ifdef ENOLINK
+  itsdefined(ENOLINK, MRB_SYM(ENOLINK))
+#else
+  itsnotdefined(ENOLINK, MRB_SYM(ENOLINK))
+#endif
+#ifdef EADV
+  itsdefined(EADV, MRB_SYM(EADV))
+#else
+  itsnotdefined(EADV, MRB_SYM(EADV))
+#endif
+#ifdef ESRMNT
+  itsdefined(ESRMNT, MRB_SYM(ESRMNT))
+#else
+  itsnotdefined(ESRMNT, MRB_SYM(ESRMNT))
+#endif
+#ifdef ECOMM
+  itsdefined(ECOMM, MRB_SYM(ECOMM))
+#else
+  itsnotdefined(ECOMM, MRB_SYM(ECOMM))
+#endif
+#ifdef EPROTO
+  itsdefined(EPROTO, MRB_SYM(EPROTO))
+#else
+  itsnotdefined(EPROTO, MRB_SYM(EPROTO))
+#endif
+#ifdef ENOTCAPABLE
+  itsdefined(ENOTCAPABLE, MRB_SYM(ENOTCAPABLE))
+#else
+  itsnotdefined(ENOTCAPABLE, MRB_SYM(ENOTCAPABLE))
+#endif
+#ifdef ECAPMODE
+  itsdefined(ECAPMODE, MRB_SYM(ECAPMODE))
+#else
+  itsnotdefined(ECAPMODE, MRB_SYM(ECAPMODE))
+#endif
+#ifdef EMULTIHOP
+  itsdefined(EMULTIHOP, MRB_SYM(EMULTIHOP))
+#else
+  itsnotdefined(EMULTIHOP, MRB_SYM(EMULTIHOP))
+#endif
+#ifdef EDOTDOT
+  itsdefined(EDOTDOT, MRB_SYM(EDOTDOT))
+#else
+  itsnotdefined(EDOTDOT, MRB_SYM(EDOTDOT))
+#endif
+#ifdef EBADMSG
+  itsdefined(EBADMSG, MRB_SYM(EBADMSG))
+#else
+  itsnotdefined(EBADMSG, MRB_SYM(EBADMSG))
+#endif
+#ifdef EPWROFF
+  itsdefined(EPWROFF, MRB_SYM(EPWROFF))
+#else
+  itsnotdefined(EPWROFF, MRB_SYM(EPWROFF))
+#endif
+#ifdef EDEVERR
+  itsdefined(EDEVERR, MRB_SYM(EDEVERR))
+#else
+  itsnotdefined(EDEVERR, MRB_SYM(EDEVERR))
+#endif
+#ifdef EOVERFLOW
+  itsdefined(EOVERFLOW, MRB_SYM(EOVERFLOW))
+#else
+  itsnotdefined(EOVERFLOW, MRB_SYM(EOVERFLOW))
+#endif
+#ifdef EBADEXEC
+  itsdefined(EBADEXEC, MRB_SYM(EBADEXEC))
+#else
+  itsnotdefined(EBADEXEC, MRB_SYM(EBADEXEC))
+#endif
+#ifdef EBADARCH
+  itsdefined(EBADARCH, MRB_SYM(EBADARCH))
+#else
+  itsnotdefined(EBADARCH, MRB_SYM(EBADARCH))
+#endif
+#ifdef EBADMACHO
+  itsdefined(EBADMACHO, MRB_SYM(EBADMACHO))
+#else
+  itsnotdefined(EBADMACHO, MRB_SYM(EBADMACHO))
+#endif
+#ifdef ESHLIBVERS
+  itsdefined(ESHLIBVERS, MRB_SYM(ESHLIBVERS))
+#else
+  itsnotdefined(ESHLIBVERS, MRB_SYM(ESHLIBVERS))
+#endif
+#ifdef ENOTUNIQ
+  itsdefined(ENOTUNIQ, MRB_SYM(ENOTUNIQ))
+#else
+  itsnotdefined(ENOTUNIQ, MRB_SYM(ENOTUNIQ))
+#endif
+#ifdef EBADFD
+  itsdefined(EBADFD, MRB_SYM(EBADFD))
+#else
+  itsnotdefined(EBADFD, MRB_SYM(EBADFD))
+#endif
+#ifdef EREMCHG
+  itsdefined(EREMCHG, MRB_SYM(EREMCHG))
+#else
+  itsnotdefined(EREMCHG, MRB_SYM(EREMCHG))
+#endif
+#ifdef ELIBACC
+  itsdefined(ELIBACC, MRB_SYM(ELIBACC))
+#else
+  itsnotdefined(ELIBACC, MRB_SYM(ELIBACC))
+#endif
+#ifdef ELIBBAD
+  itsdefined(ELIBBAD, MRB_SYM(ELIBBAD))
+#else
+  itsnotdefined(ELIBBAD, MRB_SYM(ELIBBAD))
+#endif
+#ifdef ELIBSCN
+  itsdefined(ELIBSCN, MRB_SYM(ELIBSCN))
+#else
+  itsnotdefined(ELIBSCN, MRB_SYM(ELIBSCN))
+#endif
+#ifdef ELIBMAX
+  itsdefined(ELIBMAX, MRB_SYM(ELIBMAX))
+#else
+  itsnotdefined(ELIBMAX, MRB_SYM(ELIBMAX))
+#endif
+#ifdef ELIBEXEC
+  itsdefined(ELIBEXEC, MRB_SYM(ELIBEXEC))
+#else
+  itsnotdefined(ELIBEXEC, MRB_SYM(ELIBEXEC))
+#endif
+#ifdef EILSEQ
+  itsdefined(EILSEQ, MRB_SYM(EILSEQ))
+#else
+  itsnotdefined(EILSEQ, MRB_SYM(EILSEQ))
+#endif
+#ifdef ERESTART
+  itsdefined(ERESTART, MRB_SYM(ERESTART))
+#else
+  itsnotdefined(ERESTART, MRB_SYM(ERESTART))
+#endif
+#ifdef ESTRPIPE
+  itsdefined(ESTRPIPE, MRB_SYM(ESTRPIPE))
+#else
+  itsnotdefined(ESTRPIPE, MRB_SYM(ESTRPIPE))
+#endif
+#ifdef EUSERS
+  itsdefined(EUSERS, MRB_SYM(EUSERS))
+#else
+  itsnotdefined(EUSERS, MRB_SYM(EUSERS))
+#endif
+#ifdef ENOTSOCK
+  itsdefined(ENOTSOCK, MRB_SYM(ENOTSOCK))
+#else
+  itsnotdefined(ENOTSOCK, MRB_SYM(ENOTSOCK))
+#endif
+#ifdef EDESTADDRREQ
+  itsdefined(EDESTADDRREQ, MRB_SYM(EDESTADDRREQ))
+#else
+  itsnotdefined(EDESTADDRREQ, MRB_SYM(EDESTADDRREQ))
+#endif
+#ifdef EMSGSIZE
+  itsdefined(EMSGSIZE, MRB_SYM(EMSGSIZE))
+#else
+  itsnotdefined(EMSGSIZE, MRB_SYM(EMSGSIZE))
+#endif
+#ifdef EPROTOTYPE
+  itsdefined(EPROTOTYPE, MRB_SYM(EPROTOTYPE))
+#else
+  itsnotdefined(EPROTOTYPE, MRB_SYM(EPROTOTYPE))
+#endif
+#ifdef ENOPROTOOPT
+  itsdefined(ENOPROTOOPT, MRB_SYM(ENOPROTOOPT))
+#else
+  itsnotdefined(ENOPROTOOPT, MRB_SYM(ENOPROTOOPT))
+#endif
+#ifdef EPROTONOSUPPORT
+  itsdefined(EPROTONOSUPPORT, MRB_SYM(EPROTONOSUPPORT))
+#else
+  itsnotdefined(EPROTONOSUPPORT, MRB_SYM(EPROTONOSUPPORT))
+#endif
+#ifdef ESOCKTNOSUPPORT
+  itsdefined(ESOCKTNOSUPPORT, MRB_SYM(ESOCKTNOSUPPORT))
+#else
+  itsnotdefined(ESOCKTNOSUPPORT, MRB_SYM(ESOCKTNOSUPPORT))
+#endif
+#ifdef EOPNOTSUPP
+  itsdefined(EOPNOTSUPP, MRB_SYM(EOPNOTSUPP))
+#else
+  itsnotdefined(EOPNOTSUPP, MRB_SYM(EOPNOTSUPP))
+#endif
+#ifdef EPFNOSUPPORT
+  itsdefined(EPFNOSUPPORT, MRB_SYM(EPFNOSUPPORT))
+#else
+  itsnotdefined(EPFNOSUPPORT, MRB_SYM(EPFNOSUPPORT))
+#endif
+#ifdef EAFNOSUPPORT
+  itsdefined(EAFNOSUPPORT, MRB_SYM(EAFNOSUPPORT))
+#else
+  itsnotdefined(EAFNOSUPPORT, MRB_SYM(EAFNOSUPPORT))
+#endif
+#ifdef EADDRINUSE
+  itsdefined(EADDRINUSE, MRB_SYM(EADDRINUSE))
+#else
+  itsnotdefined(EADDRINUSE, MRB_SYM(EADDRINUSE))
+#endif
+#ifdef EADDRNOTAVAIL
+  itsdefined(EADDRNOTAVAIL, MRB_SYM(EADDRNOTAVAIL))
+#else
+  itsnotdefined(EADDRNOTAVAIL, MRB_SYM(EADDRNOTAVAIL))
+#endif
+#ifdef ENETDOWN
+  itsdefined(ENETDOWN, MRB_SYM(ENETDOWN))
+#else
+  itsnotdefined(ENETDOWN, MRB_SYM(ENETDOWN))
+#endif
+#ifdef ENETUNREACH
+  itsdefined(ENETUNREACH, MRB_SYM(ENETUNREACH))
+#else
+  itsnotdefined(ENETUNREACH, MRB_SYM(ENETUNREACH))
+#endif
+#ifdef ENETRESET
+  itsdefined(ENETRESET, MRB_SYM(ENETRESET))
+#else
+  itsnotdefined(ENETRESET, MRB_SYM(ENETRESET))
+#endif
+#ifdef ECONNABORTED
+  itsdefined(ECONNABORTED, MRB_SYM(ECONNABORTED))
+#else
+  itsnotdefined(ECONNABORTED, MRB_SYM(ECONNABORTED))
+#endif
+#ifdef ECONNRESET
+  itsdefined(ECONNRESET, MRB_SYM(ECONNRESET))
+#else
+  itsnotdefined(ECONNRESET, MRB_SYM(ECONNRESET))
+#endif
+#ifdef ENOBUFS
+  itsdefined(ENOBUFS, MRB_SYM(ENOBUFS))
+#else
+  itsnotdefined(ENOBUFS, MRB_SYM(ENOBUFS))
+#endif
+#ifdef EISCONN
+  itsdefined(EISCONN, MRB_SYM(EISCONN))
+#else
+  itsnotdefined(EISCONN, MRB_SYM(EISCONN))
+#endif
+#ifdef ENOTCONN
+  itsdefined(ENOTCONN, MRB_SYM(ENOTCONN))
+#else
+  itsnotdefined(ENOTCONN, MRB_SYM(ENOTCONN))
+#endif
+#ifdef ESHUTDOWN
+  itsdefined(ESHUTDOWN, MRB_SYM(ESHUTDOWN))
+#else
+  itsnotdefined(ESHUTDOWN, MRB_SYM(ESHUTDOWN))
+#endif
+#ifdef ETOOMANYREFS
+  itsdefined(ETOOMANYREFS, MRB_SYM(ETOOMANYREFS))
+#else
+  itsnotdefined(ETOOMANYREFS, MRB_SYM(ETOOMANYREFS))
+#endif
+#ifdef ETIMEDOUT
+  itsdefined(ETIMEDOUT, MRB_SYM(ETIMEDOUT))
+#else
+  itsnotdefined(ETIMEDOUT, MRB_SYM(ETIMEDOUT))
+#endif
+#ifdef ECONNREFUSED
+  itsdefined(ECONNREFUSED, MRB_SYM(ECONNREFUSED))
+#else
+  itsnotdefined(ECONNREFUSED, MRB_SYM(ECONNREFUSED))
+#endif
+#ifdef EHOSTDOWN
+  itsdefined(EHOSTDOWN, MRB_SYM(EHOSTDOWN))
+#else
+  itsnotdefined(EHOSTDOWN, MRB_SYM(EHOSTDOWN))
+#endif
+#ifdef EHOSTUNREACH
+  itsdefined(EHOSTUNREACH, MRB_SYM(EHOSTUNREACH))
+#else
+  itsnotdefined(EHOSTUNREACH, MRB_SYM(EHOSTUNREACH))
+#endif
+#ifdef EALREADY
+  itsdefined(EALREADY, MRB_SYM(EALREADY))
+#else
+  itsnotdefined(EALREADY, MRB_SYM(EALREADY))
+#endif
+#ifdef EINPROGRESS
+  itsdefined(EINPROGRESS, MRB_SYM(EINPROGRESS))
+#else
+  itsnotdefined(EINPROGRESS, MRB_SYM(EINPROGRESS))
+#endif
+#ifdef ESTALE
+  itsdefined(ESTALE, MRB_SYM(ESTALE))
+#else
+  itsnotdefined(ESTALE, MRB_SYM(ESTALE))
+#endif
+#ifdef EUCLEAN
+  itsdefined(EUCLEAN, MRB_SYM(EUCLEAN))
+#else
+  itsnotdefined(EUCLEAN, MRB_SYM(EUCLEAN))
+#endif
+#ifdef ENOTNAM
+  itsdefined(ENOTNAM, MRB_SYM(ENOTNAM))
+#else
+  itsnotdefined(ENOTNAM, MRB_SYM(ENOTNAM))
+#endif
+#ifdef ENAVAIL
+  itsdefined(ENAVAIL, MRB_SYM(ENAVAIL))
+#else
+  itsnotdefined(ENAVAIL, MRB_SYM(ENAVAIL))
+#endif
+#ifdef EISNAM
+  itsdefined(EISNAM, MRB_SYM(EISNAM))
+#else
+  itsnotdefined(EISNAM, MRB_SYM(EISNAM))
+#endif
+#ifdef EREMOTEIO
+  itsdefined(EREMOTEIO, MRB_SYM(EREMOTEIO))
+#else
+  itsnotdefined(EREMOTEIO, MRB_SYM(EREMOTEIO))
+#endif
+#ifdef EDQUOT
+  itsdefined(EDQUOT, MRB_SYM(EDQUOT))
+#else
+  itsnotdefined(EDQUOT, MRB_SYM(EDQUOT))
+#endif
+#ifdef ECANCELED
+  itsdefined(ECANCELED, MRB_SYM(ECANCELED))
+#else
+  itsnotdefined(ECANCELED, MRB_SYM(ECANCELED))
+#endif
+#ifdef EKEYEXPIRED
+  itsdefined(EKEYEXPIRED, MRB_SYM(EKEYEXPIRED))
+#else
+  itsnotdefined(EKEYEXPIRED, MRB_SYM(EKEYEXPIRED))
+#endif
+#ifdef EKEYREJECTED
+  itsdefined(EKEYREJECTED, MRB_SYM(EKEYREJECTED))
+#else
+  itsnotdefined(EKEYREJECTED, MRB_SYM(EKEYREJECTED))
+#endif
+#ifdef EKEYREVOKED
+  itsdefined(EKEYREVOKED, MRB_SYM(EKEYREVOKED))
+#else
+  itsnotdefined(EKEYREVOKED, MRB_SYM(EKEYREVOKED))
+#endif
+#ifdef EMEDIUMTYPE
+  itsdefined(EMEDIUMTYPE, MRB_SYM(EMEDIUMTYPE))
+#else
+  itsnotdefined(EMEDIUMTYPE, MRB_SYM(EMEDIUMTYPE))
+#endif
+#ifdef ENOKEY
+  itsdefined(ENOKEY, MRB_SYM(ENOKEY))
+#else
+  itsnotdefined(ENOKEY, MRB_SYM(ENOKEY))
+#endif
+#ifdef ENOMEDIUM
+  itsdefined(ENOMEDIUM, MRB_SYM(ENOMEDIUM))
+#else
+  itsnotdefined(ENOMEDIUM, MRB_SYM(ENOMEDIUM))
+#endif
+#ifdef ENOTRECOVERABLE
+  itsdefined(ENOTRECOVERABLE, MRB_SYM(ENOTRECOVERABLE))
+#else
+  itsnotdefined(ENOTRECOVERABLE, MRB_SYM(ENOTRECOVERABLE))
+#endif
+#ifdef EOWNERDEAD
+  itsdefined(EOWNERDEAD, MRB_SYM(EOWNERDEAD))
+#else
+  itsnotdefined(EOWNERDEAD, MRB_SYM(EOWNERDEAD))
+#endif
+#ifdef EINTEGRITY
+  itsdefined(EINTEGRITY, MRB_SYM(EINTEGRITY))
+#else
+  itsnotdefined(EINTEGRITY, MRB_SYM(EINTEGRITY))
+#endif
+#ifdef ERFKILL
+  itsdefined(ERFKILL, MRB_SYM(ERFKILL))
+#else
+  itsnotdefined(ERFKILL, MRB_SYM(ERFKILL))
+#endif
+#ifdef EAUTH
+  itsdefined(EAUTH, MRB_SYM(EAUTH))
+#else
+  itsnotdefined(EAUTH, MRB_SYM(EAUTH))
+#endif
+#ifdef EBADRPC
+  itsdefined(EBADRPC, MRB_SYM(EBADRPC))
+#else
+  itsnotdefined(EBADRPC, MRB_SYM(EBADRPC))
+#endif
+#ifdef EDOOFUS
+  itsdefined(EDOOFUS, MRB_SYM(EDOOFUS))
+#else
+  itsnotdefined(EDOOFUS, MRB_SYM(EDOOFUS))
+#endif
+#ifdef EFTYPE
+  itsdefined(EFTYPE, MRB_SYM(EFTYPE))
+#else
+  itsnotdefined(EFTYPE, MRB_SYM(EFTYPE))
+#endif
+#ifdef ENEEDAUTH
+  itsdefined(ENEEDAUTH, MRB_SYM(ENEEDAUTH))
+#else
+  itsnotdefined(ENEEDAUTH, MRB_SYM(ENEEDAUTH))
+#endif
+#ifdef ENOATTR
+  itsdefined(ENOATTR, MRB_SYM(ENOATTR))
+#else
+  itsnotdefined(ENOATTR, MRB_SYM(ENOATTR))
+#endif
+#ifdef ENOTSUP
+  itsdefined(ENOTSUP, MRB_SYM(ENOTSUP))
+#else
+  itsnotdefined(ENOTSUP, MRB_SYM(ENOTSUP))
+#endif
+#ifdef EPROCLIM
+  itsdefined(EPROCLIM, MRB_SYM(EPROCLIM))
+#else
+  itsnotdefined(EPROCLIM, MRB_SYM(EPROCLIM))
+#endif
+#ifdef EPROCUNAVAIL
+  itsdefined(EPROCUNAVAIL, MRB_SYM(EPROCUNAVAIL))
+#else
+  itsnotdefined(EPROCUNAVAIL, MRB_SYM(EPROCUNAVAIL))
+#endif
+#ifdef EPROGMISMATCH
+  itsdefined(EPROGMISMATCH, MRB_SYM(EPROGMISMATCH))
+#else
+  itsnotdefined(EPROGMISMATCH, MRB_SYM(EPROGMISMATCH))
+#endif
+#ifdef EPROGUNAVAIL
+  itsdefined(EPROGUNAVAIL, MRB_SYM(EPROGUNAVAIL))
+#else
+  itsnotdefined(EPROGUNAVAIL, MRB_SYM(EPROGUNAVAIL))
+#endif
+#ifdef ERPCMISMATCH
+  itsdefined(ERPCMISMATCH, MRB_SYM(ERPCMISMATCH))
+#else
+  itsnotdefined(ERPCMISMATCH, MRB_SYM(ERPCMISMATCH))
+#endif
+#ifdef EIPSEC
+  itsdefined(EIPSEC, MRB_SYM(EIPSEC))
+#else
+  itsnotdefined(EIPSEC, MRB_SYM(EIPSEC))
+#endif
+#ifdef ENOPOLICY
+  itsdefined(ENOPOLICY, MRB_SYM(ENOPOLICY))
+#else
+  itsnotdefined(ENOPOLICY, MRB_SYM(ENOPOLICY))
+#endif
+#ifdef EQFULL
+  itsdefined(EQFULL, MRB_SYM(EQFULL))
+#else
+  itsnotdefined(EQFULL, MRB_SYM(EQFULL))
+#endif

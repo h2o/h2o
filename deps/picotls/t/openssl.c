@@ -25,6 +25,7 @@
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
+#define OPENSSL_API_COMPAT 0x00908000L
 #include <openssl/opensslv.h>
 #include <openssl/bio.h>
 #include <openssl/pem.h>
@@ -35,6 +36,7 @@
 #include "picotls.h"
 #include "picotls/minicrypto.h"
 #include "../deps/picotest/picotest.h"
+#undef OPENSSL_API_COMPAT
 #include "../lib/openssl.c"
 #include "test.h"
 
@@ -231,22 +233,22 @@ static void test_cert_verify(void)
     X509 *cert = x509_from_pem(RSA_CERTIFICATE);
     STACK_OF(X509) *chain = sk_X509_new_null();
     X509_STORE *store = X509_STORE_new();
-    int ret;
+    int ret, ossl_x509_err;
 
     /* expect fail when no CA is registered */
-    ret = verify_cert_chain(store, cert, chain, 0, "test.example.com");
+    ret = verify_cert_chain(store, cert, chain, 0, "test.example.com", &ossl_x509_err);
     ok(ret == PTLS_ALERT_UNKNOWN_CA);
 
     /* expect success after registering the CA */
     X509_LOOKUP *lookup = X509_STORE_add_lookup(store, X509_LOOKUP_file());
     ret = X509_LOOKUP_load_file(lookup, "t/assets/test-ca.crt", X509_FILETYPE_PEM);
     ok(ret);
-    ret = verify_cert_chain(store, cert, chain, 0, "test.example.com");
+    ret = verify_cert_chain(store, cert, chain, 0, "test.example.com", &ossl_x509_err);
     ok(ret == 0);
 
 #ifdef X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS
     /* different server_name */
-    ret = verify_cert_chain(store, cert, chain, 0, "test2.example.com");
+    ret = verify_cert_chain(store, cert, chain, 0, "test2.example.com", &ossl_x509_err);
     ok(ret == PTLS_ALERT_BAD_CERTIFICATE);
 #else
     fprintf(stderr, "**** skipping test for hostname validation failure ***\n");
@@ -297,18 +299,18 @@ int main(int argc, char **argv)
 
     ERR_load_crypto_strings();
     OpenSSL_add_all_algorithms();
-#if !defined(OPENSSL_NO_ENGINE)
+
+#if !defined(LIBRESSL_VERSION_NUMBER) && OPENSSL_VERSION_NUMBER >= 0x30000000L
+    /* Explicitly load the legacy provider in addition to default, as we test Blowfish in one of the tests. */
+    OSSL_PROVIDER *legacy = OSSL_PROVIDER_load(NULL, "legacy");
+    OSSL_PROVIDER *dflt = OSSL_PROVIDER_load(NULL, "default");
+#elif !defined(OPENSSL_NO_ENGINE)
     /* Load all compiled-in ENGINEs */
     ENGINE_load_builtin_engines();
     ENGINE_register_all_ciphers();
     ENGINE_register_all_digests();
 #endif
 
-#if !defined(LIBRESSL_VERSION_NUMBER) && OPENSSL_VERSION_NUMBER >= 0x30000000L
-    /* Explicitly load the legacy provider in addition to default, as we test Blowfish in one of the tests. */
-    OSSL_PROVIDER *legacy = OSSL_PROVIDER_load(NULL, "legacy");
-    OSSL_PROVIDER *dflt = OSSL_PROVIDER_load(NULL, "default");
-#endif
 
     subtest("bf", test_bf);
 
@@ -384,5 +386,10 @@ int main(int argc, char **argv)
     subtest("minicrypto vs.", test_picotls);
 
     esni_private_keys[0]->on_exchange(esni_private_keys, 1, NULL, ptls_iovec_init(NULL, 0));
-    return done_testing();
+    int ret = done_testing();
+#if !defined(LIBRESSL_VERSION_NUMBER) && OPENSSL_VERSION_NUMBER >= 0x30000000L
+    OSSL_PROVIDER_unload(dflt);
+    OSSL_PROVIDER_unload(legacy);
+#endif
+    return ret;
 }
