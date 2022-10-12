@@ -175,6 +175,8 @@ static void cleanup_connection(struct st_h2o_http1_conn_t *conn)
  */
 static void set_req_timeout(struct st_h2o_http1_conn_t *conn, uint64_t timeout, h2o_timer_cb cb)
 {
+    if (conn->req.is_tunnel_req)
+        cb = NULL;
     if (conn->_timeout_entry.cb != NULL)
         h2o_timer_unlink(&conn->_timeout_entry);
     conn->_timeout_entry.cb = cb;
@@ -184,6 +186,8 @@ static void set_req_timeout(struct st_h2o_http1_conn_t *conn, uint64_t timeout, 
 
 static void set_req_io_timeout(struct st_h2o_http1_conn_t *conn, uint64_t timeout, h2o_timer_cb cb)
 {
+    if (conn->req.is_tunnel_req)
+        cb = NULL;
     if (conn->_io_timeout_entry.cb != NULL)
         h2o_timer_unlink(&conn->_io_timeout_entry);
     conn->_io_timeout_entry.cb = cb;
