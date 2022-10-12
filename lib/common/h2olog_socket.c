@@ -25,5 +25,8 @@
 void h2o_h2olog_accept(h2o_socket_t *sock)
 {
     int fd = h2o_socket_get_fd(sock);
-    ptlslog_add_fd(fd);
+    int ret = ptls_log_add_fd(fd);
+    if (ret != 0) {
+        h2o_socket_close(sock);
+    }
 }

@@ -162,7 +162,7 @@ static h2o_iovec_t events_status_final(void *priv, h2o_globalconf_t *gconf, h2o_
                        esc->connection_stats.num_shutdown, esc->quic_stats.packet_received, esc->quic_stats.packet_processed,
                        esc->quic_stats.num_sentmap_packets_largest
                        H2O_QUIC_AGGREGATED_STATS_APPLY(QUIC_VAL),
-                       esc->ssl_errors, h2o_mmap_errors, ptlslog_num_lost());
+                       esc->ssl_errors, h2o_mmap_errors, ptls_log_num_lost());
     /* clang-format on */
     assert(ret.len < BUFSIZE);
 #undef H1_AGG_ERR

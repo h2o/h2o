@@ -22,16 +22,15 @@
 #ifndef h2o__probes_h
 #define h2o__probes_h
 
-// ptlslog integration, which is always available even if H2O_USE_DTRACE is false
-#include "picotls/ptlslog.h"
+#include "picotls.h"
 
-#define H2O_LOG(_type, _block) PTLSLOG(h2o, _type, _block)
+#define H2O_LOG(_type, _block) PTLS_LOG(h2o, _type, _block)
 #define H2O_LOG_CONN(_type, _conn, _block)                                                                                         \
     do {                                                                                                                           \
         h2o_conn_t *__conn = (_conn);                                                                                              \
         if (!__conn->callbacks->skip_tracing(__conn)) {                                                                            \
             H2O_LOG(_type, {                                                                                                       \
-                PTLSLOG_ELEMENT_UNSIGNED(conn_id, __conn->id);                                                                     \
+                PTLS_LOG_ELEMENT_UNSIGNED(conn_id, __conn->id);                                                                    \
                 do {                                                                                                               \
                     _block                                                                                                         \
                 } while (0);                                                                                                       \
@@ -136,8 +135,8 @@ static inline void h2o_probe_log_request(h2o_req_t *req, uint64_t req_index)
 {
     H2O_PROBE_CONN(RECEIVE_REQUEST, req->conn, req_index, req->version);
     H2O_LOG_CONN(receive_request, req->conn, {
-        PTLSLOG_ELEMENT_UNSIGNED(req_id, req_index);
-        PTLSLOG_ELEMENT_SIGNED(http_version, req->version);
+        PTLS_LOG_ELEMENT_UNSIGNED(req_id, req_index);
+        PTLS_LOG_ELEMENT_SIGNED(http_version, req->version);
     });
     if (H2O_CONN_IS_PROBED(RECEIVE_REQUEST_HEADER, req->conn)) {
         if (req->input.authority.base != NULL)
@@ -160,8 +159,8 @@ static inline void h2o_probe_log_response(h2o_req_t *req, uint64_t req_index)
 {
     H2O_PROBE_CONN(SEND_RESPONSE, req->conn, req_index, req->res.status);
     H2O_LOG_CONN(send_response, req->conn, {
-        PTLSLOG_ELEMENT_UNSIGNED(req_id, req_index);
-        PTLSLOG_ELEMENT_SIGNED(status, req->res.status);
+        PTLS_LOG_ELEMENT_UNSIGNED(req_id, req_index);
+        PTLS_LOG_ELEMENT_SIGNED(status, req->res.status);
     });
     if (H2O_CONN_IS_PROBED(SEND_RESPONSE_HEADER, req->conn)) {
         if (req->res.content_length != SIZE_MAX) {
