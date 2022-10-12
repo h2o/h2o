@@ -35,9 +35,7 @@
 #include "quicly/frame.h"
 #include "quicly/streambuf.h"
 #include "quicly/cc.h"
-#if QUICLY_USE_EMBEDDED_PROBES
-#include "embedded-probes.h"
-#elif QUICLY_USE_DTRACE
+#if QUICLY_USE_DTRACE
 #include "quicly-probes.h"
 #endif
 #include "quicly/retire_cid.h"
@@ -82,7 +80,7 @@ KHASH_MAP_INIT_INT64(quicly_stream_t, quicly_stream_t *)
 #define QUICLY_TRACER(...)
 #endif
 
-#if QUICLY_USE_EMBEDDED_PROBES || QUICLY_USE_DTRACE
+#if QUICLY_USE_DTRACE
 #define QUICLY_PROBE(label, conn, ...)                                                                                             \
     do {                                                                                                                           \
         quicly_conn_t *_conn = (conn);                                                                                             \
@@ -981,10 +979,7 @@ void crypto_stream_receive(quicly_stream_t *stream, size_t off, const void *src,
                                                    &conn->crypto.handshake_properties);
         quicly_streambuf_ingress_shift(stream, input.len);
         QUICLY_PROBE(CRYPTO_HANDSHAKE, conn, conn->stash.now, handshake_result);
-        QUICLY_LOG_CONN(crypto_handshake, conn, {
-            PTLSLOG_ELEMENT_SIGNED(time, conn->stash.now);
-            PTLSLOG_ELEMENT_SIGNED(ret, handshake_result);
-        });
+        QUICLY_LOG_CONN(crypto_handshake, conn, { PTLS_LOG_ELEMENT_SIGNED(ret, handshake_result); });
         switch (handshake_result) {
         case 0:
         case PTLS_ERROR_IN_PROGRESS:
@@ -1135,9 +1130,8 @@ static void destroy_stream(quicly_stream_t *stream, int err)
 
     QUICLY_PROBE(STREAM_ON_DESTROY, conn, conn->stash.now, stream, err);
     QUICLY_LOG_CONN(stream_on_destroy, conn, {
-        PTLSLOG_ELEMENT_SIGNED(time, conn->stash.now);
-        PTLSLOG_ELEMENT_SIGNED(stream_id, stream->stream_id);
-        PTLSLOG_ELEMENT_SIGNED(err, err);
+        PTLS_LOG_ELEMENT_SIGNED(stream_id, stream->stream_id);
+        PTLS_LOG_ELEMENT_SIGNED(err, err);
     });
 
     if (stream->callbacks != NULL)
@@ -1559,8 +1553,8 @@ static int update_1rtt_egress_key(quicly_conn_t *conn)
     QUICLY_PROBE(CRYPTO_SEND_KEY_UPDATE, conn, conn->stash.now, space->cipher.egress.key_phase,
                  QUICLY_PROBE_HEXDUMP(space->cipher.egress.secret, cipher->hash->digest_size));
     QUICLY_LOG_CONN(crypto_send_key_update, conn, {
-        PTLSLOG_ELEMENT_SIGNED(time, conn->stash.now);
-        PTLSLOG_ELEMENT_UNSIGNED(phase, space->cipher.egress.key_phase);
+        PTLS_LOG_ELEMENT_UNSIGNED(phase, space->cipher.egress.key_phase);
+        PTLS_LOG_APPDATA_ELEMENT_HEXDUMP(secret, space->cipher.egress.secret, cipher->hash->digest_size);
     });
 
     return 0;
@@ -1578,8 +1572,9 @@ static int received_key_update(quicly_conn_t *conn, uint64_t newly_decrypted_key
     QUICLY_PROBE(CRYPTO_RECEIVE_KEY_UPDATE, conn, conn->stash.now, space->cipher.ingress.key_phase.decrypted,
                  QUICLY_PROBE_HEXDUMP(space->cipher.ingress.secret, ptls_get_cipher(conn->crypto.tls)->hash->digest_size));
     QUICLY_LOG_CONN(crypto_receive_key_update, conn, {
-        PTLSLOG_ELEMENT_SIGNED(time, conn->stash.now);
-        PTLSLOG_ELEMENT_UNSIGNED(phase, space->cipher.ingress.key_phase.decrypted);
+        PTLS_LOG_ELEMENT_UNSIGNED(phase, space->cipher.ingress.key_phase.decrypted);
+        PTLS_LOG_APPDATA_ELEMENT_HEXDUMP(secret, space->cipher.ingress.secret,
+                                         ptls_get_cipher(conn->crypto.tls)->hash->digest_size);
     });
 
     if (space->cipher.egress.key_phase < space->cipher.ingress.key_phase.decrypted) {
@@ -1600,9 +1595,9 @@ void quicly_free(quicly_conn_t *conn)
     lock_now(conn, 0);
 
     QUICLY_PROBE(FREE, conn, conn->stash.now);
-    QUICLY_LOG_CONN(free, conn, { PTLSLOG_ELEMENT_SIGNED(time, conn->stash.now); });
+    QUICLY_LOG_CONN(free, conn, {});
 
-#if QUICLY_USE_EMBEDDED_PROBES || QUICLY_USE_DTRACE
+#if QUICLY_USE_DTRACE
     if (QUICLY_CONN_STATS_ENABLED()) {
         quicly_stats_t stats;
         quicly_get_stats(conn, &stats);
@@ -1718,10 +1713,9 @@ static int apply_stream_frame(quicly_stream_t *stream, quicly_stream_frame_t *fr
 
     QUICLY_PROBE(STREAM_RECEIVE, stream->conn, stream->conn->stash.now, stream, frame->offset, frame->data.len);
     QUICLY_LOG_CONN(stream_receive, stream->conn, {
-        PTLSLOG_ELEMENT_SIGNED(time, stream->conn->stash.now);
-        PTLSLOG_ELEMENT_SIGNED(stream_id, stream->stream_id);
-        PTLSLOG_ELEMENT_UNSIGNED(off, frame->offset);
-        PTLSLOG_ELEMENT_UNSIGNED(len, frame->data.len);
+        PTLS_LOG_ELEMENT_SIGNED(stream_id, stream->stream_id);
+        PTLS_LOG_ELEMENT_UNSIGNED(off, frame->offset);
+        PTLS_LOG_ELEMENT_UNSIGNED(len, frame->data.len);
     });
 
     if (quicly_recvstate_transfer_complete(&stream->recvstate))
@@ -1759,10 +1753,9 @@ static int apply_stream_frame(quicly_stream_t *stream, quicly_stream_frame_t *fr
         const void *apply_src = frame->data.base + frame->data.len - apply_len;
         QUICLY_PROBE(STREAM_ON_RECEIVE, stream->conn, stream->conn->stash.now, stream, (size_t)buf_offset, apply_src, apply_len);
         QUICLY_LOG_CONN(stream_on_receive, stream->conn, {
-            PTLSLOG_ELEMENT_SIGNED(time, stream->conn->stash.now);
-            PTLSLOG_ELEMENT_SIGNED(stream_id, stream->stream_id);
-            PTLSLOG_ELEMENT_UNSIGNED(off, buf_offset);
-            PTLSLOG_ELEMENT_UNSIGNED(src_len, apply_len);
+            PTLS_LOG_ELEMENT_SIGNED(stream_id, stream->stream_id);
+            PTLS_LOG_ELEMENT_UNSIGNED(off, buf_offset);
+            PTLS_LOG_APPDATA_ELEMENT_HEXDUMP(src, apply_src, apply_len);
         });
         stream->callbacks->on_receive(stream, (size_t)buf_offset, apply_src, apply_len);
         if (stream->conn->super.state >= QUICLY_STATE_CLOSING)
@@ -2311,10 +2304,7 @@ int quicly_connect(quicly_conn_t **_conn, quicly_context_t *ctx, const char *ser
     conn->super.original_dcid = *server_cid;
 
     QUICLY_PROBE(CONNECT, conn, conn->stash.now, conn->super.version);
-    QUICLY_LOG_CONN(connect, conn, {
-        PTLSLOG_ELEMENT_SIGNED(time, conn->stash.now);
-        PTLSLOG_ELEMENT_UNSIGNED(version, conn->super.version);
-    });
+    QUICLY_LOG_CONN(connect, conn, { PTLS_LOG_ELEMENT_UNSIGNED(version, conn->super.version); });
 
     if ((ret = setup_handshake_space_and_flow(conn, QUICLY_EPOCH_INITIAL)) != 0)
         goto Exit;
@@ -2483,8 +2473,8 @@ static int aead_decrypt_1rtt(void *ctx, uint64_t pn, quicly_decoded_packet_t *pa
         QUICLY_PROBE(CRYPTO_RECEIVE_KEY_UPDATE_PREPARE, conn, conn->stash.now, space->cipher.ingress.key_phase.prepared,
                      QUICLY_PROBE_HEXDUMP(space->cipher.ingress.secret, cipher->hash->digest_size));
         QUICLY_LOG_CONN(crypto_receive_key_update_prepare, conn, {
-            PTLSLOG_ELEMENT_SIGNED(time, conn->stash.now);
-            PTLSLOG_ELEMENT_UNSIGNED(phase, space->cipher.ingress.key_phase.prepared);
+            PTLS_LOG_ELEMENT_UNSIGNED(phase, space->cipher.ingress.key_phase.prepared);
+            PTLS_LOG_APPDATA_ELEMENT_HEXDUMP(secret, space->cipher.ingress.secret, cipher->hash->digest_size);
         });
     }
     }
@@ -2669,9 +2659,8 @@ static int on_ack_stream_ack_one(quicly_conn_t *conn, quicly_stream_id_t stream_
         QUICLY_PROBE(STREAM_ON_SEND_SHIFT, stream->conn, stream->conn->stash.now, stream, bytes_to_shift);
         stream->callbacks->on_send_shift(stream, bytes_to_shift);
         QUICLY_LOG_CONN(stream_on_send_shift, stream->conn, {
-            PTLSLOG_ELEMENT_SIGNED(time, stream->conn->stash.now);
-            PTLSLOG_ELEMENT_SIGNED(stream_id, stream->stream_id);
-            PTLSLOG_ELEMENT_UNSIGNED(delta, bytes_to_shift);
+            PTLS_LOG_ELEMENT_SIGNED(stream_id, stream->stream_id);
+            PTLS_LOG_ELEMENT_UNSIGNED(delta, bytes_to_shift);
         });
     }
     if (stream_is_destroyable(stream)) {
@@ -2705,10 +2694,9 @@ static int on_ack_stream(quicly_sentmap_t *map, const quicly_sent_packet_t *pack
         QUICLY_PROBE(STREAM_ACKED, conn, conn->stash.now, sent->data.stream.stream_id, sent->data.stream.args.start,
                      sent->data.stream.args.end - sent->data.stream.args.start);
         QUICLY_LOG_CONN(stream_acked, conn, {
-            PTLSLOG_ELEMENT_SIGNED(time, conn->stash.now);
-            PTLSLOG_ELEMENT_SIGNED(stream_id, sent->data.stream.stream_id);
-            PTLSLOG_ELEMENT_UNSIGNED(off, sent->data.stream.args.start);
-            PTLSLOG_ELEMENT_UNSIGNED(len, sent->data.stream.args.end - sent->data.stream.args.start);
+            PTLS_LOG_ELEMENT_SIGNED(stream_id, sent->data.stream.stream_id);
+            PTLS_LOG_ELEMENT_UNSIGNED(off, sent->data.stream.args.start);
+            PTLS_LOG_ELEMENT_UNSIGNED(len, sent->data.stream.args.end - sent->data.stream.args.start);
         });
 
         if (packet->frames_in_flight && conn->stash.on_ack_stream.active_acked_cache.stream_id == sent->data.stream.stream_id &&
@@ -2734,10 +2722,9 @@ static int on_ack_stream(quicly_sentmap_t *map, const quicly_sent_packet_t *pack
         QUICLY_PROBE(STREAM_LOST, conn, conn->stash.now, sent->data.stream.stream_id, sent->data.stream.args.start,
                      sent->data.stream.args.end - sent->data.stream.args.start);
         QUICLY_LOG_CONN(stream_lost, conn, {
-            PTLSLOG_ELEMENT_SIGNED(time, conn->stash.now);
-            PTLSLOG_ELEMENT_SIGNED(stream_id, sent->data.stream.stream_id);
-            PTLSLOG_ELEMENT_UNSIGNED(off, sent->data.stream.args.start);
-            PTLSLOG_ELEMENT_UNSIGNED(len, sent->data.stream.args.end - sent->data.stream.args.start);
+            PTLS_LOG_ELEMENT_SIGNED(stream_id, sent->data.stream.stream_id);
+            PTLS_LOG_ELEMENT_UNSIGNED(off, sent->data.stream.args.start);
+            PTLS_LOG_ELEMENT_UNSIGNED(len, sent->data.stream.args.end - sent->data.stream.args.start);
         });
 
         quicly_stream_t *stream;
@@ -2906,10 +2893,7 @@ static int on_ack_new_token(quicly_sentmap_t *map, const quicly_sent_packet_t *p
     }
     if (acked) {
         QUICLY_PROBE(NEW_TOKEN_ACKED, conn, conn->stash.now, sent->data.new_token.generation);
-        QUICLY_LOG_CONN(new_token_acked, conn, {
-            PTLSLOG_ELEMENT_SIGNED(time, conn->stash.now);
-            PTLSLOG_ELEMENT_UNSIGNED(generation, sent->data.new_token.generation);
-        });
+        QUICLY_LOG_CONN(new_token_acked, conn, { PTLS_LOG_ELEMENT_UNSIGNED(generation, sent->data.new_token.generation); });
         if (conn->egress.new_token.max_acked < sent->data.new_token.generation)
             conn->egress.new_token.max_acked = sent->data.new_token.generation;
     }
@@ -3191,11 +3175,10 @@ static int commit_send_packet(quicly_conn_t *conn, quicly_send_context_t *s, int
     QUICLY_PROBE(PACKET_SENT, conn, conn->stash.now, conn->egress.packet_number, s->dst - s->target.first_byte_at,
                  get_epoch(*s->target.first_byte_at), !s->target.ack_eliciting);
     QUICLY_LOG_CONN(packet_sent, conn, {
-        PTLSLOG_ELEMENT_SIGNED(time, conn->stash.now);
-        PTLSLOG_ELEMENT_UNSIGNED(pn, conn->egress.packet_number);
-        PTLSLOG_ELEMENT_UNSIGNED(len, s->dst - s->target.first_byte_at);
-        PTLSLOG_ELEMENT_UNSIGNED(packet_type, get_epoch(*s->target.first_byte_at));
-        PTLSLOG_ELEMENT_BOOL(ack_only, !s->target.ack_eliciting);
+        PTLS_LOG_ELEMENT_UNSIGNED(pn, conn->egress.packet_number);
+        PTLS_LOG_ELEMENT_UNSIGNED(len, s->dst - s->target.first_byte_at);
+        PTLS_LOG_ELEMENT_UNSIGNED(packet_type, get_epoch(*s->target.first_byte_at));
+        PTLS_LOG_ELEMENT_BOOL(ack_only, !s->target.ack_eliciting);
     });
 
     ++conn->egress.packet_number;
@@ -3308,9 +3291,8 @@ static int do_allocate_frame(quicly_conn_t *conn, quicly_send_context_t *s, size
     QUICLY_PROBE(PACKET_PREPARE, conn, conn->stash.now, s->current.first_byte,
                  QUICLY_PROBE_HEXDUMP(conn->super.remote.cid_set.cids[0].cid.cid, conn->super.remote.cid_set.cids[0].cid.len));
     QUICLY_LOG_CONN(packet_prepare, conn, {
-        PTLSLOG_ELEMENT_SIGNED(time, conn->stash.now);
-        PTLSLOG_ELEMENT_UNSIGNED(first_octet, s->current.first_byte);
-        PTLSLOG_ELEMENT_HEXDUMP(dcid, conn->super.remote.cid_set.cids[0].cid.cid, conn->super.remote.cid_set.cids[0].cid.len);
+        PTLS_LOG_ELEMENT_UNSIGNED(first_octet, s->current.first_byte);
+        PTLS_LOG_ELEMENT_HEXDUMP(dcid, conn->super.remote.cid_set.cids[0].cid.cid, conn->super.remote.cid_set.cids[0].cid.len);
     });
 
     /* emit header */
@@ -3430,9 +3412,8 @@ Emit: /* emit an ACK frame */
     ++conn->super.stats.num_frames_sent.ack;
     QUICLY_PROBE(ACK_SEND, conn, conn->stash.now, space->ack_queue.ranges[space->ack_queue.num_ranges - 1].end - 1, ack_delay);
     QUICLY_LOG_CONN(ack_send, conn, {
-        PTLSLOG_ELEMENT_SIGNED(time, conn->stash.now);
-        PTLSLOG_ELEMENT_UNSIGNED(largest_acked, space->ack_queue.ranges[space->ack_queue.num_ranges - 1].end - 1);
-        PTLSLOG_ELEMENT_UNSIGNED(ack_delay, ack_delay);
+        PTLS_LOG_ELEMENT_UNSIGNED(largest_acked, space->ack_queue.ranges[space->ack_queue.num_ranges - 1].end - 1);
+        PTLS_LOG_ELEMENT_UNSIGNED(ack_delay, ack_delay);
     });
 
     /* when there are no less than QUICLY_NUM_ACK_BLOCKS_TO_INDUCE_ACKACK (8) gaps, bundle PING once every 4 packets being sent */
@@ -3441,7 +3422,7 @@ Emit: /* emit an ACK frame */
         *dst++ = QUICLY_FRAME_TYPE_PING;
         ++conn->super.stats.num_frames_sent.ping;
         QUICLY_PROBE(PING_SEND, conn, conn->stash.now);
-        QUICLY_LOG_CONN(ping_send, conn, { PTLSLOG_ELEMENT_SIGNED(time, conn->stash.now); });
+        QUICLY_LOG_CONN(ping_send, conn, {});
     }
 
     s->dst = dst;
@@ -3517,9 +3498,8 @@ static int send_control_frames_of_stream(quicly_stream_t *stream, quicly_send_co
         QUICLY_PROBE(STOP_SENDING_SEND, stream->conn, stream->conn->stash.now, stream->stream_id,
                      stream->_send_aux.stop_sending.error_code);
         QUICLY_LOG_CONN(stop_sending_send, stream->conn, {
-            PTLSLOG_ELEMENT_SIGNED(time, stream->conn->stash.now);
-            PTLSLOG_ELEMENT_SIGNED(stream_id, stream->stream_id);
-            PTLSLOG_ELEMENT_UNSIGNED(error_code, stream->_send_aux.stop_sending.error_code);
+            PTLS_LOG_ELEMENT_SIGNED(stream_id, stream->stream_id);
+            PTLS_LOG_ELEMENT_UNSIGNED(error_code, stream->_send_aux.stop_sending.error_code);
         });
     }
 
@@ -3540,9 +3520,8 @@ static int send_control_frames_of_stream(quicly_stream_t *stream, quicly_send_co
         ++stream->conn->super.stats.num_frames_sent.max_stream_data;
         QUICLY_PROBE(MAX_STREAM_DATA_SEND, stream->conn, stream->conn->stash.now, stream, new_value);
         QUICLY_LOG_CONN(max_stream_data_send, stream->conn, {
-            PTLSLOG_ELEMENT_SIGNED(time, stream->conn->stash.now);
-            PTLSLOG_ELEMENT_SIGNED(stream_id, stream->stream_id);
-            PTLSLOG_ELEMENT_UNSIGNED(maximum, new_value);
+            PTLS_LOG_ELEMENT_SIGNED(stream_id, stream->stream_id);
+            PTLS_LOG_ELEMENT_UNSIGNED(maximum, new_value);
         });
     }
 
@@ -3557,10 +3536,9 @@ static int send_control_frames_of_stream(quicly_stream_t *stream, quicly_send_co
         QUICLY_PROBE(RESET_STREAM_SEND, stream->conn, stream->conn->stash.now, stream->stream_id,
                      stream->_send_aux.reset_stream.error_code, stream->sendstate.size_inflight);
         QUICLY_LOG_CONN(reset_stream_send, stream->conn, {
-            PTLSLOG_ELEMENT_SIGNED(time, stream->conn->stash.now);
-            PTLSLOG_ELEMENT_SIGNED(stream_id, stream->stream_id);
-            PTLSLOG_ELEMENT_UNSIGNED(error_code, stream->_send_aux.reset_stream.error_code);
-            PTLSLOG_ELEMENT_UNSIGNED(final_size, stream->sendstate.size_inflight);
+            PTLS_LOG_ELEMENT_SIGNED(stream_id, stream->stream_id);
+            PTLS_LOG_ELEMENT_UNSIGNED(error_code, stream->_send_aux.reset_stream.error_code);
+            PTLS_LOG_ELEMENT_UNSIGNED(final_size, stream->sendstate.size_inflight);
         });
     }
 
@@ -3578,9 +3556,8 @@ static int send_control_frames_of_stream(quicly_stream_t *stream, quicly_send_co
         ++stream->conn->super.stats.num_frames_sent.stream_data_blocked;
         QUICLY_PROBE(STREAM_DATA_BLOCKED_SEND, stream->conn, stream->conn->stash.now, stream->stream_id, offset);
         QUICLY_LOG_CONN(stream_data_blocked_send, stream->conn, {
-            PTLSLOG_ELEMENT_SIGNED(time, stream->conn->stash.now);
-            PTLSLOG_ELEMENT_SIGNED(stream_id, stream->stream_id);
-            PTLSLOG_ELEMENT_UNSIGNED(maximum, offset);
+            PTLS_LOG_ELEMENT_SIGNED(stream_id, stream->stream_id);
+            PTLS_LOG_ELEMENT_UNSIGNED(maximum, offset);
         });
     }
 
@@ -3766,10 +3743,9 @@ int quicly_send_stream(quicly_stream_t *stream, quicly_send_context_t *s)
     size_t emit_off = (size_t)(off - stream->sendstate.acked.ranges[0].end);
     QUICLY_PROBE(STREAM_ON_SEND_EMIT, stream->conn, stream->conn->stash.now, stream, emit_off, len);
     QUICLY_LOG_CONN(stream_on_send_emit, stream->conn, {
-        PTLSLOG_ELEMENT_SIGNED(time, stream->conn->stash.now);
-        PTLSLOG_ELEMENT_SIGNED(stream_id, stream->stream_id);
-        PTLSLOG_ELEMENT_UNSIGNED(off, off);
-        PTLSLOG_ELEMENT_UNSIGNED(capacity, len);
+        PTLS_LOG_ELEMENT_SIGNED(stream_id, stream->stream_id);
+        PTLS_LOG_ELEMENT_UNSIGNED(off, off);
+        PTLS_LOG_ELEMENT_UNSIGNED(capacity, len);
     });
     stream->callbacks->on_send_emit(stream, emit_off, dst, &len, &wrote_all);
     if (stream->conn->super.state >= QUICLY_STATE_CLOSING) {
@@ -3806,11 +3782,10 @@ UpdateState:
             (stream->sendstate.size_inflight < off + len ? stream->sendstate.size_inflight : off + len) - off;
     QUICLY_PROBE(STREAM_SEND, stream->conn, stream->conn->stash.now, stream, off, len, is_fin);
     QUICLY_LOG_CONN(stream_send, stream->conn, {
-        PTLSLOG_ELEMENT_SIGNED(time, stream->conn->stash.now);
-        PTLSLOG_ELEMENT_SIGNED(stream_id, stream->stream_id);
-        PTLSLOG_ELEMENT_UNSIGNED(off, off);
-        PTLSLOG_ELEMENT_UNSIGNED(len, len);
-        PTLSLOG_ELEMENT_BOOL(is_fin, is_fin);
+        PTLS_LOG_ELEMENT_SIGNED(stream_id, stream->stream_id);
+        PTLS_LOG_ELEMENT_UNSIGNED(off, off);
+        PTLS_LOG_ELEMENT_UNSIGNED(len, len);
+        PTLS_LOG_ELEMENT_BOOL(is_fin, is_fin);
     });
 
     QUICLY_PROBE(QUICTRACE_SEND_STREAM, stream->conn, stream->conn->stash.now, stream, off, len, is_fin);
@@ -3904,17 +3879,15 @@ static void on_loss_detected(quicly_loss_t *loss, const quicly_sent_packet_t *lo
                                      conn->egress.max_udp_payload_size);
     QUICLY_PROBE(PACKET_LOST, conn, conn->stash.now, lost_packet->packet_number, lost_packet->ack_epoch);
     QUICLY_LOG_CONN(packet_lost, conn, {
-        PTLSLOG_ELEMENT_SIGNED(time, conn->stash.now);
-        PTLSLOG_ELEMENT_UNSIGNED(pn, lost_packet->packet_number);
-        PTLSLOG_ELEMENT_UNSIGNED(packet_type, lost_packet->ack_epoch);
+        PTLS_LOG_ELEMENT_UNSIGNED(pn, lost_packet->packet_number);
+        PTLS_LOG_ELEMENT_UNSIGNED(packet_type, lost_packet->ack_epoch);
     });
     QUICLY_PROBE(CC_CONGESTION, conn, conn->stash.now, lost_packet->packet_number + 1, conn->egress.loss.sentmap.bytes_in_flight,
                  conn->egress.cc.cwnd);
     QUICLY_LOG_CONN(cc_congestion, conn, {
-        PTLSLOG_ELEMENT_SIGNED(time, conn->stash.now);
-        PTLSLOG_ELEMENT_UNSIGNED(max_lost_pn, lost_packet->packet_number + 1);
-        PTLSLOG_ELEMENT_UNSIGNED(flight, conn->egress.loss.sentmap.bytes_in_flight);
-        PTLSLOG_ELEMENT_UNSIGNED(cwnd, conn->egress.cc.cwnd);
+        PTLS_LOG_ELEMENT_UNSIGNED(max_lost_pn, lost_packet->packet_number + 1);
+        PTLS_LOG_ELEMENT_UNSIGNED(flight, conn->egress.loss.sentmap.bytes_in_flight);
+        PTLS_LOG_ELEMENT_UNSIGNED(cwnd, conn->egress.cc.cwnd);
     });
     QUICLY_PROBE(QUICTRACE_CC_LOST, conn, conn->stash.now, &conn->egress.loss.rtt, conn->egress.cc.cwnd,
                  conn->egress.loss.sentmap.bytes_in_flight);
@@ -3948,9 +3921,8 @@ static int send_max_streams(quicly_conn_t *conn, int uni, quicly_send_context_t 
     }
     QUICLY_PROBE(MAX_STREAMS_SEND, conn, conn->stash.now, new_count, uni);
     QUICLY_LOG_CONN(max_streams_send, conn, {
-        PTLSLOG_ELEMENT_SIGNED(time, conn->stash.now);
-        PTLSLOG_ELEMENT_UNSIGNED(maximum, new_count);
-        PTLSLOG_ELEMENT_BOOL(is_unidirectional, uni);
+        PTLS_LOG_ELEMENT_UNSIGNED(maximum, new_count);
+        PTLS_LOG_ELEMENT_BOOL(is_unidirectional, uni);
     });
 
     return 0;
@@ -3982,9 +3954,8 @@ static int send_streams_blocked(quicly_conn_t *conn, int uni, quicly_send_contex
     ++conn->super.stats.num_frames_sent.streams_blocked;
     QUICLY_PROBE(STREAMS_BLOCKED_SEND, conn, conn->stash.now, max_streams->count, uni);
     QUICLY_LOG_CONN(streams_blocked_send, conn, {
-        PTLSLOG_ELEMENT_SIGNED(time, conn->stash.now);
-        PTLSLOG_ELEMENT_UNSIGNED(maximum, max_streams->count);
-        PTLSLOG_ELEMENT_BOOL(is_unidirectional, uni);
+        PTLS_LOG_ELEMENT_UNSIGNED(maximum, max_streams->count);
+        PTLS_LOG_ELEMENT_BOOL(is_unidirectional, uni);
     });
 
     return 0;
@@ -4030,7 +4001,7 @@ static int send_handshake_done(quicly_conn_t *conn, quicly_send_context_t *s)
     conn->egress.pending_flows &= ~QUICLY_PENDING_FLOW_HANDSHAKE_DONE_BIT;
     ++conn->super.stats.num_frames_sent.handshake_done;
     QUICLY_PROBE(HANDSHAKE_DONE_SEND, conn, conn->stash.now);
-    QUICLY_LOG_CONN(handshake_done_send, conn, { PTLSLOG_ELEMENT_SIGNED(time, conn->stash.now); });
+    QUICLY_LOG_CONN(handshake_done_send, conn, {});
 
     ret = 0;
 Exit:
@@ -4051,10 +4022,7 @@ static int send_data_blocked(quicly_conn_t *conn, quicly_send_context_t *s)
 
     ++conn->super.stats.num_frames_sent.data_blocked;
     QUICLY_PROBE(DATA_BLOCKED_SEND, conn, conn->stash.now, offset);
-    QUICLY_LOG_CONN(data_blocked_send, conn, {
-        PTLSLOG_ELEMENT_SIGNED(time, conn->stash.now);
-        PTLSLOG_ELEMENT_UNSIGNED(off, offset);
-    });
+    QUICLY_LOG_CONN(data_blocked_send, conn, { PTLS_LOG_ELEMENT_UNSIGNED(off, offset); });
 
     ret = 0;
 Exit:
@@ -4096,9 +4064,8 @@ static int send_resumption_token(quicly_conn_t *conn, quicly_send_context_t *s)
     ++conn->super.stats.num_frames_sent.new_token;
     QUICLY_PROBE(NEW_TOKEN_SEND, conn, conn->stash.now, tokenbuf.base, tokenbuf.off, sent->data.new_token.generation);
     QUICLY_LOG_CONN(new_token_send, conn, {
-        PTLSLOG_ELEMENT_SIGNED(time, conn->stash.now);
-        PTLSLOG_ELEMENT_HEXDUMP(token, tokenbuf.base, tokenbuf.off);
-        PTLSLOG_ELEMENT_UNSIGNED(generation, sent->data.new_token.generation);
+        PTLS_LOG_ELEMENT_HEXDUMP(token, tokenbuf.base, tokenbuf.off);
+        PTLS_LOG_ELEMENT_UNSIGNED(generation, sent->data.new_token.generation);
     });
     ret = 0;
 Exit:
@@ -4300,7 +4267,7 @@ static int send_handshake_flow(quicly_conn_t *conn, size_t epoch, quicly_send_co
             conn->egress.last_retransmittable_sent_at = conn->stash.now;
             ++conn->super.stats.num_frames_sent.ping;
             QUICLY_PROBE(PING_SEND, conn, conn->stash.now);
-            QUICLY_LOG_CONN(ping_send, conn, { PTLSLOG_ELEMENT_SIGNED(time, conn->stash.now); });
+            QUICLY_LOG_CONN(ping_send, conn, {});
         }
     }
 
@@ -4344,18 +4311,16 @@ static int send_connection_close(quicly_conn_t *conn, size_t epoch, quicly_send_
         ++conn->super.stats.num_frames_sent.transport_close;
         QUICLY_PROBE(TRANSPORT_CLOSE_SEND, conn, conn->stash.now, error_code, offending_frame_type, reason_phrase);
         QUICLY_LOG_CONN(transport_close_send, conn, {
-            PTLSLOG_ELEMENT_SIGNED(time, conn->stash.now);
-            PTLSLOG_ELEMENT_UNSIGNED(error_code, error_code);
-            PTLSLOG_ELEMENT_UNSIGNED(frame_type, offending_frame_type);
-            PTLSLOG_ELEMENT_UNSAFESTR(reason_phrase, reason_phrase, strlen(reason_phrase));
+            PTLS_LOG_ELEMENT_UNSIGNED(error_code, error_code);
+            PTLS_LOG_ELEMENT_UNSIGNED(frame_type, offending_frame_type);
+            PTLS_LOG_ELEMENT_UNSAFESTR(reason_phrase, reason_phrase, strlen(reason_phrase));
         });
     } else {
         ++conn->super.stats.num_frames_sent.application_close;
         QUICLY_PROBE(APPLICATION_CLOSE_SEND, conn, conn->stash.now, error_code, reason_phrase);
         QUICLY_LOG_CONN(application_close_send, conn, {
-            PTLSLOG_ELEMENT_SIGNED(time, conn->stash.now);
-            PTLSLOG_ELEMENT_UNSIGNED(error_code, error_code);
-            PTLSLOG_ELEMENT_UNSAFESTR(reason_phrase, reason_phrase, strlen(reason_phrase));
+            PTLS_LOG_ELEMENT_UNSIGNED(error_code, error_code);
+            PTLS_LOG_ELEMENT_UNSAFESTR(reason_phrase, reason_phrase, strlen(reason_phrase));
         });
     }
 
@@ -4383,11 +4348,10 @@ static int send_new_connection_id(quicly_conn_t *conn, quicly_send_context_t *s,
                  QUICLY_PROBE_HEXDUMP(new_cid->cid.cid, new_cid->cid.len),
                  QUICLY_PROBE_HEXDUMP(new_cid->stateless_reset_token, QUICLY_STATELESS_RESET_TOKEN_LEN));
     QUICLY_LOG_CONN(new_connection_id_send, conn, {
-        PTLSLOG_ELEMENT_SIGNED(time, conn->stash.now);
-        PTLSLOG_ELEMENT_UNSIGNED(sequence, new_cid->sequence);
-        PTLSLOG_ELEMENT_UNSIGNED(retire_prior_to, retire_prior_to);
-        PTLSLOG_ELEMENT_HEXDUMP(cid, new_cid->cid.cid, new_cid->cid.len);
-        PTLSLOG_ELEMENT_HEXDUMP(stateless_reset_token, new_cid->stateless_reset_token, QUICLY_STATELESS_RESET_TOKEN_LEN);
+        PTLS_LOG_ELEMENT_UNSIGNED(sequence, new_cid->sequence);
+        PTLS_LOG_ELEMENT_UNSIGNED(retire_prior_to, retire_prior_to);
+        PTLS_LOG_ELEMENT_HEXDUMP(cid, new_cid->cid.cid, new_cid->cid.len);
+        PTLS_LOG_ELEMENT_HEXDUMP(stateless_reset_token, new_cid->stateless_reset_token, QUICLY_STATELESS_RESET_TOKEN_LEN);
     });
 
     return 0;
@@ -4408,10 +4372,7 @@ static int send_retire_connection_id(quicly_conn_t *conn, quicly_send_context_t 
 
     ++conn->super.stats.num_frames_sent.retire_connection_id;
     QUICLY_PROBE(RETIRE_CONNECTION_ID_SEND, conn, conn->stash.now, sequence);
-    QUICLY_LOG_CONN(retire_connection_id_send, conn, {
-        PTLSLOG_ELEMENT_SIGNED(time, conn->stash.now);
-        PTLSLOG_ELEMENT_UNSIGNED(sequence, sequence);
-    });
+    QUICLY_LOG_CONN(retire_connection_id_send, conn, { PTLS_LOG_ELEMENT_UNSIGNED(sequence, sequence); });
 
     return 0;
 }
@@ -4432,10 +4393,10 @@ static int update_traffic_key_cb(ptls_update_traffic_key_t *self, ptls_t *tls, i
     QUICLY_PROBE(CRYPTO_UPDATE_SECRET, conn, conn->stash.now, is_enc, epoch, log_label,
                  QUICLY_PROBE_HEXDUMP(secret, cipher->hash->digest_size));
     QUICLY_LOG_CONN(crypto_update_secret, conn, {
-        PTLSLOG_ELEMENT_SIGNED(time, conn->stash.now);
-        PTLSLOG_ELEMENT_BOOL(is_enc, is_enc);
-        PTLSLOG_ELEMENT_UNSIGNED(epoch, epoch);
-        PTLSLOG_ELEMENT_SAFESTR(label, log_label);
+        PTLS_LOG_ELEMENT_BOOL(is_enc, is_enc);
+        PTLS_LOG_ELEMENT_UNSIGNED(epoch, epoch);
+        PTLS_LOG_ELEMENT_SAFESTR(label, log_label);
+        PTLS_LOG_APPDATA_ELEMENT_HEXDUMP(secret, secret, cipher->hash->digest_size);
     });
 
     if (tlsctx->log_event != NULL) {
@@ -4524,7 +4485,7 @@ static int do_send(quicly_conn_t *conn, quicly_send_context_t *s)
     /* handle timeouts */
     if (conn->idle_timeout.at <= conn->stash.now) {
         QUICLY_PROBE(IDLE_TIMEOUT, conn, conn->stash.now);
-        QUICLY_LOG_CONN(idle_timeout, conn, { PTLSLOG_ELEMENT_SIGNED(time, conn->stash.now); });
+        QUICLY_LOG_CONN(idle_timeout, conn, {});
         goto CloseNow;
     }
     /* handle handshake timeouts */
@@ -4533,19 +4494,16 @@ static int do_send(quicly_conn_t *conn, quicly_send_context_t *s)
             conn->stash.now) {
         QUICLY_PROBE(HANDSHAKE_TIMEOUT, conn, conn->stash.now, conn->stash.now - conn->created_at, conn->egress.loss.rtt.smoothed);
         QUICLY_LOG_CONN(handshake_timeout, conn, {
-            PTLSLOG_ELEMENT_SIGNED(time, conn->stash.now);
-            PTLSLOG_ELEMENT_SIGNED(elapsed, conn->stash.now - conn->created_at);
-            PTLSLOG_ELEMENT_UNSIGNED(rtt_smoothed, conn->egress.loss.rtt.smoothed);
+            PTLS_LOG_ELEMENT_SIGNED(elapsed, conn->stash.now - conn->created_at);
+            PTLS_LOG_ELEMENT_UNSIGNED(rtt_smoothed, conn->egress.loss.rtt.smoothed);
         });
         conn->super.stats.num_handshake_timeouts++;
         goto CloseNow;
     }
     if (conn->super.stats.num_packets.initial_handshake_sent > conn->super.ctx->max_initial_handshake_packets) {
         QUICLY_PROBE(INITIAL_HANDSHAKE_PACKET_EXCEED, conn, conn->stash.now, conn->super.stats.num_packets.initial_handshake_sent);
-        QUICLY_LOG_CONN(initial_handshake_packet_exceed, conn, {
-            PTLSLOG_ELEMENT_SIGNED(time, conn->stash.now);
-            PTLSLOG_ELEMENT_UNSIGNED(num_packets, conn->super.stats.num_packets.initial_handshake_sent);
-        });
+        QUICLY_LOG_CONN(initial_handshake_packet_exceed, conn,
+                        { PTLS_LOG_ELEMENT_UNSIGNED(num_packets, conn->super.stats.num_packets.initial_handshake_sent); });
         conn->super.stats.num_initial_handshake_exceeded++;
         goto CloseNow;
     }
@@ -4564,10 +4522,9 @@ static int do_send(quicly_conn_t *conn, quicly_send_context_t *s)
             QUICLY_PROBE(PTO, conn, conn->stash.now, conn->egress.loss.sentmap.bytes_in_flight, conn->egress.cc.cwnd,
                          conn->egress.loss.pto_count);
             QUICLY_LOG_CONN(pto, conn, {
-                PTLSLOG_ELEMENT_SIGNED(time, conn->stash.now);
-                PTLSLOG_ELEMENT_SIGNED(inflight, conn->egress.loss.sentmap.bytes_in_flight);
-                PTLSLOG_ELEMENT_UNSIGNED(cwnd, conn->egress.cc.cwnd);
-                PTLSLOG_ELEMENT_SIGNED(pto_count, conn->egress.loss.pto_count);
+                PTLS_LOG_ELEMENT_SIGNED(inflight, conn->egress.loss.sentmap.bytes_in_flight);
+                PTLS_LOG_ELEMENT_UNSIGNED(cwnd, conn->egress.cc.cwnd);
+                PTLS_LOG_ELEMENT_SIGNED(pto_count, conn->egress.loss.pto_count);
             });
             ++conn->super.stats.num_ptos;
             size_t bytes_to_mark = min_packets_to_send * conn->egress.max_udp_payload_size;
@@ -4621,10 +4578,8 @@ static int do_send(quicly_conn_t *conn, quicly_send_context_t *s)
                 if (s->dst_end - s->dst >= required_space) {
                     s->dst = quicly_encode_datagram_frame(s->dst, *payload);
                     QUICLY_PROBE(DATAGRAM_SEND, conn, conn->stash.now, payload->base, payload->len);
-                    QUICLY_LOG_CONN(datagram_send, conn, {
-                        PTLSLOG_ELEMENT_SIGNED(time, conn->stash.now);
-                        PTLSLOG_ELEMENT_UNSIGNED(payload_len, payload->len);
-                    });
+                    QUICLY_LOG_CONN(datagram_send, conn,
+                                    { PTLS_LOG_APPDATA_ELEMENT_HEXDUMP(payload, payload->base, payload->len); });
                 } else {
                     /* FIXME: At the moment, we add a padding because we do not have a way to reclaim allocated space, and because
                      * it is forbidden to send an empty QUIC packet. */
@@ -4640,7 +4595,7 @@ static int do_send(quicly_conn_t *conn, quicly_send_context_t *s)
                 *s->dst++ = QUICLY_FRAME_TYPE_PING;
                 ++conn->super.stats.num_frames_sent.ping;
                 QUICLY_PROBE(PING_SEND, conn, conn->stash.now);
-                QUICLY_LOG_CONN(ping_send, conn, { PTLSLOG_ELEMENT_SIGNED(time, conn->stash.now); });
+                QUICLY_LOG_CONN(ping_send, conn, {});
             }
             /* take actions only permitted for short header packets */
             if (conn->application->one_rtt_writable) {
@@ -4690,10 +4645,7 @@ static int do_send(quicly_conn_t *conn, quicly_send_context_t *s)
                     quicly_maxsender_record(&conn->ingress.max_data.sender, new_value, &sent->data.max_data.args);
                     ++conn->super.stats.num_frames_sent.max_data;
                     QUICLY_PROBE(MAX_DATA_SEND, conn, conn->stash.now, new_value);
-                    QUICLY_LOG_CONN(max_data_send, conn, {
-                        PTLSLOG_ELEMENT_SIGNED(time, conn->stash.now);
-                        PTLSLOG_ELEMENT_UNSIGNED(maximum, new_value);
-                    });
+                    QUICLY_LOG_CONN(max_data_send, conn, { PTLS_LOG_ELEMENT_UNSIGNED(maximum, new_value); });
                 }
                 if (conn->egress.data_blocked == QUICLY_SENDER_STATE_SEND && (ret = send_data_blocked(conn, s)) != 0)
                     goto Exit;
@@ -4820,9 +4772,8 @@ int quicly_send(quicly_conn_t *conn, quicly_address_t *dest, quicly_address_t *s
     QUICLY_PROBE(SEND, conn, conn->stash.now, conn->super.state,
                  QUICLY_PROBE_HEXDUMP(conn->super.remote.cid_set.cids[0].cid.cid, conn->super.remote.cid_set.cids[0].cid.len));
     QUICLY_LOG_CONN(send, conn, {
-        PTLSLOG_ELEMENT_SIGNED(time, conn->stash.now);
-        PTLSLOG_ELEMENT_SIGNED(state, conn->super.state);
-        PTLSLOG_ELEMENT_HEXDUMP(dcid, conn->super.remote.cid_set.cids[0].cid.cid, conn->super.remote.cid_set.cids[0].cid.len);
+        PTLS_LOG_ELEMENT_SIGNED(state, conn->super.state);
+        PTLS_LOG_ELEMENT_HEXDUMP(dcid, conn->super.remote.cid_set.cids[0].cid.cid, conn->super.remote.cid_set.cids[0].cid.len);
     });
 
     if (conn->super.state >= QUICLY_STATE_CLOSING) {
@@ -5058,10 +5009,7 @@ int quicly_get_or_open_stream(quicly_conn_t *conn, uint64_t stream_id, quicly_st
                     goto Exit;
                 }
                 QUICLY_PROBE(STREAM_ON_OPEN, conn, conn->stash.now, *stream);
-                QUICLY_LOG_CONN(stream_on_open, conn, {
-                    PTLSLOG_ELEMENT_SIGNED(time, conn->stash.now);
-                    PTLSLOG_ELEMENT_SIGNED(stream_id, (*stream)->stream_id);
-                });
+                QUICLY_LOG_CONN(stream_on_open, conn, { PTLS_LOG_ELEMENT_SIGNED(stream_id, (*stream)->stream_id); });
                 if ((ret = conn->super.ctx->stream_open->cb(conn->super.ctx->stream_open, *stream)) != 0) {
                     *stream = NULL;
                     goto Exit;
@@ -5113,10 +5061,9 @@ static int handle_reset_stream_frame(quicly_conn_t *conn, struct st_quicly_handl
         return ret;
     QUICLY_PROBE(RESET_STREAM_RECEIVE, conn, conn->stash.now, frame.stream_id, frame.app_error_code, frame.final_size);
     QUICLY_LOG_CONN(reset_stream_receive, conn, {
-        PTLSLOG_ELEMENT_SIGNED(time, conn->stash.now);
-        PTLSLOG_ELEMENT_UNSIGNED(stream_id, frame.stream_id);
-        PTLSLOG_ELEMENT_UNSIGNED(app_error_code, frame.app_error_code);
-        PTLSLOG_ELEMENT_UNSIGNED(final_size, frame.final_size);
+        PTLS_LOG_ELEMENT_SIGNED(stream_id, (quicly_stream_id_t)frame.stream_id);
+        PTLS_LOG_ELEMENT_UNSIGNED(app_error_code, frame.app_error_code);
+        PTLS_LOG_ELEMENT_UNSIGNED(final_size, frame.final_size);
     });
 
     if ((ret = quicly_get_or_open_stream(conn, frame.stream_id, &stream)) != 0 || stream == NULL)
@@ -5130,9 +5077,8 @@ static int handle_reset_stream_frame(quicly_conn_t *conn, struct st_quicly_handl
         int err = QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(frame.app_error_code);
         QUICLY_PROBE(STREAM_ON_RECEIVE_RESET, stream->conn, stream->conn->stash.now, stream, err);
         QUICLY_LOG_CONN(stream_on_receive_reset, stream->conn, {
-            PTLSLOG_ELEMENT_SIGNED(time, stream->conn->stash.now);
-            PTLSLOG_ELEMENT_SIGNED(stream_id, stream->stream_id);
-            PTLSLOG_ELEMENT_SIGNED(err, err);
+            PTLS_LOG_ELEMENT_SIGNED(stream_id, stream->stream_id);
+            PTLS_LOG_ELEMENT_SIGNED(err, err);
         });
         stream->callbacks->on_receive_reset(stream, err);
         if (stream->conn->super.state >= QUICLY_STATE_CLOSING)
@@ -5183,9 +5129,8 @@ static int handle_ack_frame(quicly_conn_t *conn, struct st_quicly_handle_payload
         uint64_t pn_block_max = pn_acked + frame.ack_block_lengths[gap_index] - 1;
         QUICLY_PROBE(ACK_BLOCK_RECEIVED, conn, conn->stash.now, pn_acked, pn_block_max);
         QUICLY_LOG_CONN(ack_block_received, conn, {
-            PTLSLOG_ELEMENT_SIGNED(time, conn->stash.now);
-            PTLSLOG_ELEMENT_UNSIGNED(ack_block_begin, pn_acked);
-            PTLSLOG_ELEMENT_UNSIGNED(ack_block_end, pn_block_max);
+            PTLS_LOG_ELEMENT_UNSIGNED(ack_block_begin, pn_acked);
+            PTLS_LOG_ELEMENT_UNSIGNED(ack_block_end, pn_block_max);
         });
         while (quicly_sentmap_get(&iter)->packet_number < pn_acked)
             quicly_sentmap_skip(&iter);
@@ -5219,9 +5164,8 @@ static int handle_ack_frame(quicly_conn_t *conn, struct st_quicly_handle_payload
             largest_newly_acked.sent_at = sent->sent_at;
             QUICLY_PROBE(PACKET_ACKED, conn, conn->stash.now, pn_acked, is_late_ack);
             QUICLY_LOG_CONN(packet_acked, conn, {
-                PTLSLOG_ELEMENT_SIGNED(time, conn->stash.now);
-                PTLSLOG_ELEMENT_UNSIGNED(pn, pn_acked);
-                PTLSLOG_ELEMENT_BOOL(is_late_ack, is_late_ack);
+                PTLS_LOG_ELEMENT_UNSIGNED(pn, pn_acked);
+                PTLS_LOG_ELEMENT_BOOL(is_late_ack, is_late_ack);
             });
             if (sent->cc_bytes_in_flight != 0) {
                 bytes_acked += sent->cc_bytes_in_flight;
@@ -5235,10 +5179,8 @@ static int handle_ack_frame(quicly_conn_t *conn, struct st_quicly_handle_payload
                     space->cipher.egress.key_update_pn.last = UINT64_MAX;
                     space->cipher.egress.key_update_pn.next = conn->egress.packet_number + conn->super.ctx->max_packets_per_key;
                     QUICLY_PROBE(CRYPTO_SEND_KEY_UPDATE_CONFIRMED, conn, conn->stash.now, space->cipher.egress.key_update_pn.next);
-                    QUICLY_LOG_CONN(crypto_send_key_update_confirmed, conn, {
-                        PTLSLOG_ELEMENT_SIGNED(time, conn->stash.now);
-                        PTLSLOG_ELEMENT_UNSIGNED(next_pn, space->cipher.egress.key_update_pn.next);
-                    });
+                    QUICLY_LOG_CONN(crypto_send_key_update_confirmed, conn,
+                                    { PTLS_LOG_ELEMENT_UNSIGNED(next_pn, space->cipher.egress.key_update_pn.next); });
                 }
             }
             ++pn_acked;
@@ -5253,10 +5195,7 @@ static int handle_ack_frame(quicly_conn_t *conn, struct st_quicly_handle_payload
         return ret;
 
     QUICLY_PROBE(ACK_DELAY_RECEIVED, conn, conn->stash.now, frame.ack_delay);
-    QUICLY_LOG_CONN(ack_delay_received, conn, {
-        PTLSLOG_ELEMENT_SIGNED(time, conn->stash.now);
-        PTLSLOG_ELEMENT_UNSIGNED(ack_delay, frame.ack_delay);
-    });
+    QUICLY_LOG_CONN(ack_delay_received, conn, { PTLS_LOG_ELEMENT_UNSIGNED(ack_delay, frame.ack_delay); });
 
     quicly_ratemeter_on_ack(&conn->egress.ratemeter, conn->stash.now, conn->super.stats.num_bytes.ack_received,
                             largest_newly_acked.pn);
@@ -5281,11 +5220,10 @@ static int handle_ack_frame(quicly_conn_t *conn, struct st_quicly_handle_payload
     QUICLY_PROBE(CC_ACK_RECEIVED, conn, conn->stash.now, frame.largest_acknowledged, bytes_acked, conn->egress.cc.cwnd,
                  conn->egress.loss.sentmap.bytes_in_flight);
     QUICLY_LOG_CONN(cc_ack_received, conn, {
-        PTLSLOG_ELEMENT_SIGNED(time, conn->stash.now);
-        PTLSLOG_ELEMENT_UNSIGNED(largest_acked, frame.largest_acknowledged);
-        PTLSLOG_ELEMENT_UNSIGNED(bytes_acked, bytes_acked);
-        PTLSLOG_ELEMENT_UNSIGNED(cwnd, conn->egress.cc.cwnd);
-        PTLSLOG_ELEMENT_UNSIGNED(inflight, conn->egress.loss.sentmap.bytes_in_flight);
+        PTLS_LOG_ELEMENT_UNSIGNED(largest_acked, frame.largest_acknowledged);
+        PTLS_LOG_ELEMENT_UNSIGNED(bytes_acked, bytes_acked);
+        PTLS_LOG_ELEMENT_UNSIGNED(cwnd, conn->egress.cc.cwnd);
+        PTLS_LOG_ELEMENT_UNSIGNED(inflight, conn->egress.loss.sentmap.bytes_in_flight);
     });
 
     /* loss-detection  */
@@ -5308,9 +5246,8 @@ static int handle_max_stream_data_frame(quicly_conn_t *conn, struct st_quicly_ha
 
     QUICLY_PROBE(MAX_STREAM_DATA_RECEIVE, conn, conn->stash.now, frame.stream_id, frame.max_stream_data);
     QUICLY_LOG_CONN(max_stream_data_receive, conn, {
-        PTLSLOG_ELEMENT_SIGNED(time, conn->stash.now);
-        PTLSLOG_ELEMENT_UNSIGNED(stream_id, frame.stream_id);
-        PTLSLOG_ELEMENT_UNSIGNED(max_stream_data, frame.max_stream_data);
+        PTLS_LOG_ELEMENT_SIGNED(stream_id, (quicly_stream_id_t)frame.stream_id);
+        PTLS_LOG_ELEMENT_UNSIGNED(max_stream_data, frame.max_stream_data);
     });
 
     if (!quicly_stream_has_send_side(quicly_is_client(conn), frame.stream_id))
@@ -5339,10 +5276,7 @@ static int handle_data_blocked_frame(quicly_conn_t *conn, struct st_quicly_handl
         return ret;
 
     QUICLY_PROBE(DATA_BLOCKED_RECEIVE, conn, conn->stash.now, frame.offset);
-    QUICLY_LOG_CONN(data_blocked_receive, conn, {
-        PTLSLOG_ELEMENT_SIGNED(time, conn->stash.now);
-        PTLSLOG_ELEMENT_UNSIGNED(off, frame.offset);
-    });
+    QUICLY_LOG_CONN(data_blocked_receive, conn, { PTLS_LOG_ELEMENT_UNSIGNED(off, frame.offset); });
 
     quicly_maxsender_request_transmit(&conn->ingress.max_data.sender);
     if (should_send_max_data(conn))
@@ -5362,9 +5296,8 @@ static int handle_stream_data_blocked_frame(quicly_conn_t *conn, struct st_quicl
 
     QUICLY_PROBE(STREAM_DATA_BLOCKED_RECEIVE, conn, conn->stash.now, frame.stream_id, frame.offset);
     QUICLY_LOG_CONN(stream_data_blocked_receive, conn, {
-        PTLSLOG_ELEMENT_SIGNED(time, conn->stash.now);
-        PTLSLOG_ELEMENT_SIGNED(stream_id, frame.stream_id);
-        PTLSLOG_ELEMENT_UNSIGNED(maximum, frame.offset);
+        PTLS_LOG_ELEMENT_SIGNED(stream_id, frame.stream_id);
+        PTLS_LOG_ELEMENT_UNSIGNED(maximum, frame.offset);
     });
 
     if (!quicly_stream_has_receive_side(quicly_is_client(conn), frame.stream_id))
@@ -5389,9 +5322,8 @@ static int handle_streams_blocked_frame(quicly_conn_t *conn, struct st_quicly_ha
 
     QUICLY_PROBE(STREAMS_BLOCKED_RECEIVE, conn, conn->stash.now, frame.count, uni);
     QUICLY_LOG_CONN(streams_blocked_receive, conn, {
-        PTLSLOG_ELEMENT_SIGNED(time, conn->stash.now);
-        PTLSLOG_ELEMENT_UNSIGNED(maximum, frame.count);
-        PTLSLOG_ELEMENT_BOOL(is_unidirectional, uni);
+        PTLS_LOG_ELEMENT_UNSIGNED(maximum, frame.count);
+        PTLS_LOG_ELEMENT_BOOL(is_unidirectional, uni);
     });
 
     if (should_send_max_streams(conn, uni)) {
@@ -5413,9 +5345,8 @@ static int handle_max_streams_frame(quicly_conn_t *conn, struct st_quicly_handle
 
     QUICLY_PROBE(MAX_STREAMS_RECEIVE, conn, conn->stash.now, frame.count, uni);
     QUICLY_LOG_CONN(max_streams_receive, conn, {
-        PTLSLOG_ELEMENT_SIGNED(time, conn->stash.now);
-        PTLSLOG_ELEMENT_UNSIGNED(maximum, frame.count);
-        PTLSLOG_ELEMENT_BOOL(is_unidirectional, uni);
+        PTLS_LOG_ELEMENT_UNSIGNED(maximum, frame.count);
+        PTLS_LOG_ELEMENT_BOOL(is_unidirectional, uni);
     });
 
     if ((ret = update_max_streams(uni ? &conn->egress.max_streams.uni : &conn->egress.max_streams.bidi, frame.count)) != 0)
@@ -5459,10 +5390,7 @@ static int handle_new_token_frame(quicly_conn_t *conn, struct st_quicly_handle_p
     if ((ret = quicly_decode_new_token_frame(&state->src, state->end, &frame)) != 0)
         return ret;
     QUICLY_PROBE(NEW_TOKEN_RECEIVE, conn, conn->stash.now, frame.token.base, frame.token.len);
-    QUICLY_LOG_CONN(new_token_receive, conn, {
-        PTLSLOG_ELEMENT_SIGNED(time, conn->stash.now);
-        PTLSLOG_ELEMENT_HEXDUMP(token, frame.token.base, frame.token.len);
-    });
+    QUICLY_LOG_CONN(new_token_receive, conn, { PTLS_LOG_ELEMENT_HEXDUMP(token, frame.token.base, frame.token.len); });
     if (conn->super.ctx->save_resumption_token == NULL)
         return 0;
     return conn->super.ctx->save_resumption_token->cb(conn->super.ctx->save_resumption_token, conn, frame.token);
@@ -5478,9 +5406,8 @@ static int handle_stop_sending_frame(quicly_conn_t *conn, struct st_quicly_handl
         return ret;
     QUICLY_PROBE(STOP_SENDING_RECEIVE, conn, conn->stash.now, frame.stream_id, frame.app_error_code);
     QUICLY_LOG_CONN(stop_sending_receive, conn, {
-        PTLSLOG_ELEMENT_SIGNED(time, conn->stash.now);
-        PTLSLOG_ELEMENT_UNSIGNED(stream_id, frame.stream_id);
-        PTLSLOG_ELEMENT_UNSIGNED(error_code, frame.app_error_code);
+        PTLS_LOG_ELEMENT_UNSIGNED(stream_id, (quicly_stream_id_t)frame.stream_id);
+        PTLS_LOG_ELEMENT_UNSIGNED(error_code, frame.app_error_code);
     });
 
     if ((ret = quicly_get_or_open_stream(conn, frame.stream_id, &stream)) != 0 || stream == NULL)
@@ -5492,9 +5419,8 @@ static int handle_stop_sending_frame(quicly_conn_t *conn, struct st_quicly_handl
         quicly_reset_stream(stream, err);
         QUICLY_PROBE(STREAM_ON_SEND_STOP, stream->conn, stream->conn->stash.now, stream, err);
         QUICLY_LOG_CONN(stream_on_send_stop, stream->conn, {
-            PTLSLOG_ELEMENT_SIGNED(time, stream->conn->stash.now);
-            PTLSLOG_ELEMENT_SIGNED(stream_id, stream->stream_id);
-            PTLSLOG_ELEMENT_SIGNED(err, err);
+            PTLS_LOG_ELEMENT_SIGNED(stream_id, stream->stream_id);
+            PTLS_LOG_ELEMENT_SIGNED(err, err);
         });
         stream->callbacks->on_send_stop(stream, err);
         if (stream->conn->super.state >= QUICLY_STATE_CLOSING)
@@ -5513,10 +5439,7 @@ static int handle_max_data_frame(quicly_conn_t *conn, struct st_quicly_handle_pa
         return ret;
 
     QUICLY_PROBE(MAX_DATA_RECEIVE, conn, conn->stash.now, frame.max_data);
-    QUICLY_LOG_CONN(max_data_receive, conn, {
-        PTLSLOG_ELEMENT_SIGNED(time, conn->stash.now);
-        PTLSLOG_ELEMENT_UNSIGNED(maximum, frame.max_data);
-    });
+    QUICLY_LOG_CONN(max_data_receive, conn, { PTLS_LOG_ELEMENT_UNSIGNED(maximum, frame.max_data); });
 
     if (frame.max_data <= conn->egress.max_data.permitted)
         return 0;
@@ -5533,10 +5456,7 @@ static int negotiate_using_version(quicly_conn_t *conn, uint32_t version)
     /* set selected version, update transport parameters extension ID */
     conn->super.version = version;
     QUICLY_PROBE(VERSION_SWITCH, conn, conn->stash.now, version);
-    QUICLY_LOG_CONN(version_switch, conn, {
-        PTLSLOG_ELEMENT_SIGNED(time, conn->stash.now);
-        PTLSLOG_ELEMENT_UNSIGNED(new_version, version);
-    });
+    QUICLY_LOG_CONN(version_switch, conn, { PTLS_LOG_ELEMENT_UNSIGNED(new_version, version); });
 
     /* replace initial keys */
     if ((ret = reinstall_initial_encryption(conn, PTLS_ERROR_LIBRARY)) != 0)
@@ -5712,10 +5632,9 @@ static int handle_transport_close_frame(quicly_conn_t *conn, struct st_quicly_ha
     QUICLY_PROBE(TRANSPORT_CLOSE_RECEIVE, conn, conn->stash.now, frame.error_code, frame.frame_type,
                  QUICLY_PROBE_ESCAPE_UNSAFE_STRING(frame.reason_phrase.base, frame.reason_phrase.len));
     QUICLY_LOG_CONN(transport_close_receive, conn, {
-        PTLSLOG_ELEMENT_SIGNED(time, conn->stash.now);
-        PTLSLOG_ELEMENT_UNSIGNED(error_code, frame.error_code);
-        PTLSLOG_ELEMENT_UNSIGNED(frame_type, frame.frame_type);
-        PTLSLOG_ELEMENT_UNSAFESTR(reason_phrase, (const char *)frame.reason_phrase.base, frame.reason_phrase.len);
+        PTLS_LOG_ELEMENT_UNSIGNED(error_code, frame.error_code);
+        PTLS_LOG_ELEMENT_UNSIGNED(frame_type, frame.frame_type);
+        PTLS_LOG_ELEMENT_UNSAFESTR(reason_phrase, (const char *)frame.reason_phrase.base, frame.reason_phrase.len);
     });
     return handle_close(conn, QUICLY_ERROR_FROM_TRANSPORT_ERROR_CODE(frame.error_code), frame.frame_type, frame.reason_phrase);
 }
@@ -5731,9 +5650,8 @@ static int handle_application_close_frame(quicly_conn_t *conn, struct st_quicly_
     QUICLY_PROBE(APPLICATION_CLOSE_RECEIVE, conn, conn->stash.now, frame.error_code,
                  QUICLY_PROBE_ESCAPE_UNSAFE_STRING(frame.reason_phrase.base, frame.reason_phrase.len));
     QUICLY_LOG_CONN(application_close_receive, conn, {
-        PTLSLOG_ELEMENT_SIGNED(time, conn->stash.now);
-        PTLSLOG_ELEMENT_UNSIGNED(error_code, frame.error_code);
-        PTLSLOG_ELEMENT_UNSAFESTR(reason_phrase, (const char *)frame.reason_phrase.base, frame.reason_phrase.len);
+        PTLS_LOG_ELEMENT_UNSIGNED(error_code, frame.error_code);
+        PTLS_LOG_ELEMENT_UNSAFESTR(reason_phrase, (const char *)frame.reason_phrase.base, frame.reason_phrase.len);
     });
     return handle_close(conn, QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(frame.error_code), UINT64_MAX, frame.reason_phrase);
 }
@@ -5746,7 +5664,7 @@ static int handle_padding_frame(quicly_conn_t *conn, struct st_quicly_handle_pay
 static int handle_ping_frame(quicly_conn_t *conn, struct st_quicly_handle_payload_state_t *state)
 {
     QUICLY_PROBE(PING_RECEIVE, conn, conn->stash.now);
-    QUICLY_LOG_CONN(ping_receive, conn, { PTLSLOG_ELEMENT_SIGNED(time, conn->stash.now); });
+    QUICLY_LOG_CONN(ping_receive, conn, {});
 
     return 0;
 }
@@ -5765,11 +5683,10 @@ static int handle_new_connection_id_frame(quicly_conn_t *conn, struct st_quicly_
                  QUICLY_PROBE_HEXDUMP(frame.cid.base, frame.cid.len),
                  QUICLY_PROBE_HEXDUMP(frame.stateless_reset_token, QUICLY_STATELESS_RESET_TOKEN_LEN));
     QUICLY_LOG_CONN(new_connection_id_receive, conn, {
-        PTLSLOG_ELEMENT_SIGNED(time, conn->stash.now);
-        PTLSLOG_ELEMENT_UNSIGNED(sequence, frame.sequence);
-        PTLSLOG_ELEMENT_UNSIGNED(retire_prior_to, frame.retire_prior_to);
-        PTLSLOG_ELEMENT_HEXDUMP(cid, frame.cid.base, frame.cid.len);
-        PTLSLOG_ELEMENT_HEXDUMP(stateless_reset_token, frame.stateless_reset_token, QUICLY_STATELESS_RESET_TOKEN_LEN);
+        PTLS_LOG_ELEMENT_UNSIGNED(sequence, frame.sequence);
+        PTLS_LOG_ELEMENT_UNSIGNED(retire_prior_to, frame.retire_prior_to);
+        PTLS_LOG_ELEMENT_HEXDUMP(cid, frame.cid.base, frame.cid.len);
+        PTLS_LOG_ELEMENT_HEXDUMP(stateless_reset_token, frame.stateless_reset_token, QUICLY_STATELESS_RESET_TOKEN_LEN);
     });
 
     if (frame.sequence < conn->super.remote.largest_retire_prior_to) {
@@ -5808,10 +5725,7 @@ static int handle_retire_connection_id_frame(quicly_conn_t *conn, struct st_quic
         return ret;
 
     QUICLY_PROBE(RETIRE_CONNECTION_ID_RECEIVE, conn, conn->stash.now, frame.sequence);
-    QUICLY_LOG_CONN(retire_connection_id_receive, conn, {
-        PTLSLOG_ELEMENT_SIGNED(time, conn->stash.now);
-        PTLSLOG_ELEMENT_UNSIGNED(sequence, frame.sequence);
-    });
+    QUICLY_LOG_CONN(retire_connection_id_receive, conn, { PTLS_LOG_ELEMENT_UNSIGNED(sequence, frame.sequence); });
 
     if (frame.sequence >= conn->super.local.cid_set.plaintext.path_id) {
         /* Receipt of a RETIRE_CONNECTION_ID frame containing a sequence number greater than any previously sent to the remote peer
@@ -5832,7 +5746,7 @@ static int handle_handshake_done_frame(quicly_conn_t *conn, struct st_quicly_han
     int ret;
 
     QUICLY_PROBE(HANDSHAKE_DONE_RECEIVE, conn, conn->stash.now);
-    QUICLY_LOG_CONN(handshake_done_receive, conn, { PTLSLOG_ELEMENT_SIGNED(time, conn->stash.now); });
+    QUICLY_LOG_CONN(handshake_done_receive, conn, {});
 
     if (!quicly_is_client(conn))
         return QUICLY_TRANSPORT_ERROR_PROTOCOL_VIOLATION;
@@ -5861,10 +5775,7 @@ static int handle_datagram_frame(quicly_conn_t *conn, struct st_quicly_handle_pa
     if ((ret = quicly_decode_datagram_frame(state->frame_type, &state->src, state->end, &frame)) != 0)
         return ret;
     QUICLY_PROBE(DATAGRAM_RECEIVE, conn, conn->stash.now, frame.payload.base, frame.payload.len);
-    QUICLY_LOG_CONN(datagram_receive, conn, {
-        PTLSLOG_ELEMENT_SIGNED(time, conn->stash.now);
-        PTLSLOG_ELEMENT_UNSIGNED(payload_len, frame.payload.len);
-    });
+    QUICLY_LOG_CONN(datagram_receive, conn, { PTLS_LOG_ELEMENT_UNSIGNED(payload_len, frame.payload.len); });
 
     /* handle the frame. Applications might call quicly_close or other functions that modify the connection state. */
     conn->super.ctx->receive_datagram_frame->cb(conn->super.ctx->receive_datagram_frame, conn, frame.payload);
@@ -5887,12 +5798,11 @@ static int handle_ack_frequency_frame(quicly_conn_t *conn, struct st_quicly_hand
     QUICLY_PROBE(ACK_FREQUENCY_RECEIVE, conn, conn->stash.now, frame.sequence, frame.packet_tolerance, frame.max_ack_delay,
                  (int)frame.ignore_order, (int)frame.ignore_ce);
     QUICLY_LOG_CONN(ack_frequency_receive, conn, {
-        PTLSLOG_ELEMENT_SIGNED(time, conn->stash.now);
-        PTLSLOG_ELEMENT_UNSIGNED(sequence, frame.sequence);
-        PTLSLOG_ELEMENT_UNSIGNED(packet_tolerance, frame.packet_tolerance);
-        PTLSLOG_ELEMENT_UNSIGNED(max_ack_delay, frame.max_ack_delay);
-        PTLSLOG_ELEMENT_SIGNED(ignore_order, (int)frame.ignore_order);
-        PTLSLOG_ELEMENT_SIGNED(ignore_ce, (int)frame.ignore_ce);
+        PTLS_LOG_ELEMENT_UNSIGNED(sequence, frame.sequence);
+        PTLS_LOG_ELEMENT_UNSIGNED(packet_tolerance, frame.packet_tolerance);
+        PTLS_LOG_ELEMENT_UNSIGNED(max_ack_delay, frame.max_ack_delay);
+        PTLS_LOG_ELEMENT_SIGNED(ignore_order, (int)frame.ignore_order);
+        PTLS_LOG_ELEMENT_SIGNED(ignore_ce, (int)frame.ignore_ce);
     });
 
     /* Reject Request Max Ack Delay below our TP.min_ack_delay (which is at the moment equal to LOCAL_MAX_ACK_DELAY). */
@@ -6043,7 +5953,7 @@ static int handle_payload(quicly_conn_t *conn, size_t epoch, const uint8_t *_src
 static int handle_stateless_reset(quicly_conn_t *conn)
 {
     QUICLY_PROBE(STATELESS_RESET_RECEIVE, conn, conn->stash.now);
-    QUICLY_LOG_CONN(stateless_reset_receive, conn, { PTLSLOG_ELEMENT_SIGNED(time, conn->stash.now); });
+    QUICLY_LOG_CONN(stateless_reset_receive, conn, {});
     return handle_close(conn, QUICLY_ERROR_RECEIVED_STATELESS_RESET, UINT64_MAX, ptls_iovec_init("", 0));
 }
 
@@ -6129,16 +6039,14 @@ int quicly_accept(quicly_conn_t **conn, quicly_context_t *ctx, struct sockaddr *
     QUICLY_PROBE(ACCEPT, *conn, (*conn)->stash.now,
                  QUICLY_PROBE_HEXDUMP(packet->cid.dest.encrypted.base, packet->cid.dest.encrypted.len), address_token);
     QUICLY_LOG_CONN(accept, *conn, {
-        PTLSLOG_ELEMENT_SIGNED(time, (*conn)->stash.now);
-        PTLSLOG_ELEMENT_HEXDUMP(dcid, packet->cid.dest.encrypted.base, packet->cid.dest.encrypted.len);
-        PTLSLOG_ELEMENT_PTR(address_token, address_token);
+        PTLS_LOG_ELEMENT_HEXDUMP(dcid, packet->cid.dest.encrypted.base, packet->cid.dest.encrypted.len);
+        PTLS_LOG_ELEMENT_PTR(address_token, address_token);
     });
     QUICLY_PROBE(PACKET_RECEIVED, *conn, (*conn)->stash.now, pn, payload.base, payload.len, get_epoch(packet->octets.base[0]));
     QUICLY_LOG_CONN(packet_received, *conn, {
-        PTLSLOG_ELEMENT_SIGNED(time, (*conn)->stash.now);
-        PTLSLOG_ELEMENT_UNSIGNED(pn, pn);
-        PTLSLOG_ELEMENT_UNSIGNED(decrypted_len, payload.len);
-        PTLSLOG_ELEMENT_UNSIGNED(packet_type, get_epoch(packet->octets.base[0]));
+        PTLS_LOG_ELEMENT_UNSIGNED(pn, pn);
+        PTLS_LOG_APPDATA_ELEMENT_HEXDUMP(decrypted, payload.base, payload.len);
+        PTLS_LOG_ELEMENT_UNSIGNED(packet_type, get_epoch(packet->octets.base[0]));
     });
 
     /* handle the input; we ignore is_ack_only, we consult if there's any output from TLS in response to CH anyways */
@@ -6187,9 +6095,8 @@ int quicly_receive(quicly_conn_t *conn, struct sockaddr *dest_addr, struct socka
                  QUICLY_PROBE_HEXDUMP(packet->cid.dest.encrypted.base, packet->cid.dest.encrypted.len), packet->octets.base,
                  packet->octets.len);
     QUICLY_LOG_CONN(receive, conn, {
-        PTLSLOG_ELEMENT_SIGNED(time, conn->stash.now);
-        PTLSLOG_ELEMENT_HEXDUMP(dcid, packet->cid.dest.encrypted.base, packet->cid.dest.encrypted.len);
-        PTLSLOG_ELEMENT_HEXDUMP(bytes, packet->octets.base, packet->octets.len);
+        PTLS_LOG_ELEMENT_HEXDUMP(dcid, packet->cid.dest.encrypted.base, packet->cid.dest.encrypted.len);
+        PTLS_LOG_ELEMENT_HEXDUMP(bytes, packet->octets.base, packet->octets.len);
     });
 
     if (is_stateless_reset(conn, packet)) {
@@ -6349,10 +6256,9 @@ int quicly_receive(quicly_conn_t *conn, struct sockaddr *dest_addr, struct socka
 
     QUICLY_PROBE(PACKET_RECEIVED, conn, conn->stash.now, pn, payload.base, payload.len, get_epoch(packet->octets.base[0]));
     QUICLY_LOG_CONN(packet_received, conn, {
-        PTLSLOG_ELEMENT_SIGNED(time, conn->stash.now);
-        PTLSLOG_ELEMENT_UNSIGNED(pn, pn);
-        PTLSLOG_ELEMENT_UNSIGNED(decrypted_len, payload.len);
-        PTLSLOG_ELEMENT_UNSIGNED(packet_type, get_epoch(packet->octets.base[0]));
+        PTLS_LOG_ELEMENT_UNSIGNED(pn, pn);
+        PTLS_LOG_ELEMENT_UNSIGNED(decrypted_len, payload.len);
+        PTLS_LOG_ELEMENT_UNSIGNED(packet_type, get_epoch(packet->octets.base[0]));
     });
 
     /* update states */
@@ -6489,7 +6395,7 @@ int quicly_open_stream(quicly_conn_t *conn, quicly_stream_t **_stream, int uni)
 
     /* application-layer initialization */
     QUICLY_PROBE(STREAM_ON_OPEN, conn, conn->stash.now, stream);
-    QUICLY_LOG_CONN(stream_on_open, conn, { PTLSLOG_ELEMENT_SIGNED(time, conn->stash.now); });
+    QUICLY_LOG_CONN(stream_on_open, conn, {});
 
     if ((ret = conn->super.ctx->stream_open->cb(conn->super.ctx->stream_open, stream)) != 0)
         return ret;
@@ -6879,7 +6785,7 @@ const quicly_stream_callbacks_t quicly_stream_noop_callbacks = {
 
 void quicly__debug_printf(quicly_conn_t *conn, const char *function, int line, const char *fmt, ...)
 {
-#if QUICLY_USE_EMBEDDED_PROBES || QUICLY_USE_DTRACE
+#if QUICLY_USE_DTRACE
     char buf[1024];
     va_list args;
 

@@ -33,12 +33,9 @@ OPTION(WITH_FUSION "whether or not to use the Fusion AES-GCM engine in the cli b
 IF(NOT CMAKE_BUILD_TYPE)
     SET(CMAKE_BUILD_TYPE Release)
 ENDIF(NOT CMAKE_BUILD_TYPE)
-SET(CMAKE_C_FLAGS "-std=c99 -Wall -g -DPICOTLS_USE_PTLSLOG -DQUICLY_USE_TRACER=1 ${CC_WARNING_FLAGS} ${CMAKE_C_FLAGS}")
+SET(CMAKE_C_FLAGS "-std=c99 -Wall -g -DQUICLY_USE_TRACER=1 ${CC_WARNING_FLAGS} ${CMAKE_C_FLAGS}")
 SET(CMAKE_C_FLAGS_DEBUG "-O0")
 SET(CMAKE_C_FLAGS_RELEASE "-O2")
-
-# C++ flags are used only in tests
-SET(CMAKE_CXX_FLAGS "-Wall")
 
 INCLUDE_DIRECTORIES(
     ${OPENSSL_INCLUDE_DIR}
@@ -51,9 +48,7 @@ INCLUDE_DIRECTORIES(
 SET(PICOTLS_OPENSSL_FILES
     deps/picotls/lib/openssl.c
     deps/picotls/lib/pembase64.c
-    deps/picotls/lib/picotls.c
-    deps/picotls/lib/ptlslog.c
-)
+    deps/picotls/lib/picotls.c)
 
 SET(QUICLY_LIBRARY_FILES
     lib/frame.c
@@ -105,11 +100,6 @@ IF (WITH_DTRACE)
 ENDIF ()
 
 ADD_CUSTOM_COMMAND(
-    OUTPUT embedded-probes.h
-    COMMAND ${PROJECT_SOURCE_DIR}/misc/probe2trace.pl -a embedded < ${PROJECT_SOURCE_DIR}/quicly-probes.d > ${CMAKE_CURRENT_BINARY_DIR}/embedded-probes.h
-    DEPENDS quicly-probes.d misc/probe2trace.pl
-    VERBATIM)
-ADD_CUSTOM_COMMAND(
     OUTPUT quicly-tracer.h
     COMMAND ${PROJECT_SOURCE_DIR}/misc/probe2trace.pl -a tracer < ${PROJECT_SOURCE_DIR}/quicly-probes.d > ${CMAKE_CURRENT_BINARY_DIR}/quicly-tracer.h
     DEPENDS quicly-probes.d misc/probe2trace.pl
@@ -118,8 +108,8 @@ ADD_CUSTOM_COMMAND(
 ADD_LIBRARY(quicly ${QUICLY_LIBRARY_FILES})
 TARGET_LINK_LIBRARIES(quicly LINK_PUBLIC m)
 
-SET(CLI_FILES ${PICOTLS_OPENSSL_FILES} ${QUICLY_LIBRARY_FILES} src/cli.c embedded-probes.h)
-SET(CLI_COMPILE_FLAGS "-DQUICLY_USE_EMBEDDED_PROBES=1")
+SET(CLI_FILES ${PICOTLS_OPENSSL_FILES} ${QUICLY_LIBRARY_FILES} src/cli.c)
+SET(CLI_COMPILE_FLAGS "")
 IF (WITH_FUSION)
     LIST(APPEND CLI_FILES deps/picotls/lib/fusion.c)
     SET(CLI_COMPILE_FLAGS "-mavx2 -maes -mpclmul -mvaes -mvpclmulqdq -DQUICLY_HAVE_FUSION=1 ${CLI_COMPILE_FLAGS}")
@@ -131,8 +121,7 @@ TARGET_LINK_LIBRARIES(cli ${OPENSSL_LIBRARIES} ${CMAKE_DL_LIBS} m)
 ADD_EXECUTABLE(test.t ${PICOTLS_OPENSSL_FILES} ${UNITTEST_SOURCE_FILES})
 TARGET_LINK_LIBRARIES(test.t quicly ${OPENSSL_LIBRARIES} ${CMAKE_DL_LIBS})
 
-ADD_EXECUTABLE(simulator ${PICOTLS_OPENSSL_FILES} ${QUICLY_LIBRARY_FILES} t/simulator.c embedded-probes.h)
-SET_TARGET_PROPERTIES(simulator PROPERTIES COMPILE_FLAGS "-DQUICLY_USE_EMBEDDED_PROBES=1")
+ADD_EXECUTABLE(simulator ${PICOTLS_OPENSSL_FILES} ${QUICLY_LIBRARY_FILES} t/simulator.c)
 TARGET_LINK_LIBRARIES(simulator ${OPENSSL_LIBRARIES} ${CMAKE_DL_LIBS} m)
 
 ADD_EXECUTABLE(examples-echo ${PICOTLS_OPENSSL_FILES} examples/echo.c)
@@ -140,11 +129,9 @@ TARGET_LINK_LIBRARIES(examples-echo quicly ${OPENSSL_LIBRARIES} ${CMAKE_DL_LIBS}
 
 ADD_EXECUTABLE(udpfw t/udpfw.c)
 
-ADD_EXECUTABLE(cpp-compat t/cpp-compat.cc)
-
 ADD_CUSTOM_TARGET(check env BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR} WITH_DTRACE=${WITH_DTRACE} prove --exec "sh -c" -v ${CMAKE_CURRENT_BINARY_DIR}/*.t t/*.t
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    DEPENDS cli test.t cpp-compat)
+    DEPENDS cli test.t)
 
 ADD_CUSTOM_TARGET(format clang-format -i `git ls-files include lib src t | egrep '\\.[ch]$$'`)
 

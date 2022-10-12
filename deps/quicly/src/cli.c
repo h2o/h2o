@@ -1025,7 +1025,6 @@ static void usage(const char *cmd)
            "  -G                        enable UDP generic segmentation offload\n"
            "  -i interval               interval to reissue requests (in milliseconds)\n"
            "  -I timeout                idle timeout (in milliseconds; default: 600,000)\n"
-           "  -j log-file               file to log probe events in JSON-Lines\n"
            "  -K num-packets            perform key update every num-packets packets\n"
            "  -l log-file               file to log traffic secrets\n"
            "  -M <bytes>                max stream data (in bytes; default: 1MB)\n"
@@ -1068,16 +1067,6 @@ static void push_req(const char *path, int to_file)
     memset(reqs + i + 1, 0, sizeof(*reqs));
 }
 
-static void setup_ptlslog(const char *fn)
-{
-    int fd;
-    if ((fd = open(fn, O_WRONLY | O_CREAT | O_APPEND, 0666)) == -1) {
-        fprintf(stderr, "failed to open file:%s:%s\n", fn, strerror(errno));
-        exit(1);
-    }
-    ptlslog_add_fd(fd);
-}
-
 int main(int argc, char **argv)
 {
     const char *cert_file = NULL, *raw_pubkey_file = NULL, *host, *port, *cid_key = NULL;
@@ -1105,7 +1094,7 @@ int main(int argc, char **argv)
         address_token_aead.dec = ptls_aead_new(&ptls_openssl_aes128gcm, &ptls_openssl_sha256, 0, secret, "");
     }
 
-    while ((ch = getopt(argc, argv, "a:b:B:c:C:Dd:k:Ee:f:Gi:I:j:K:l:M:m:NnOp:P:Rr:S:s:u:U:Vvw:W:x:X:y:h")) != -1) {
+    while ((ch = getopt(argc, argv, "a:b:B:c:C:Dd:k:Ee:f:Gi:I:K:l:M:m:NnOp:P:Rr:S:s:u:U:Vvw:W:x:X:y:h")) != -1) {
         switch (ch) {
         case 'a':
             assert(negotiated_protocols.count < PTLS_ELEMENTSOF(negotiated_protocols.list));
@@ -1160,13 +1149,15 @@ int main(int argc, char **argv)
         case 'E':
             ctx.expand_client_hello = 1;
             break;
-        case 'e':
-            if ((quicly_trace_fp = fopen(optarg, "w")) == NULL) {
+        case 'e': {
+            int fd;
+            if ((fd = open(optarg, O_WRONLY | O_CREAT | O_TRUNC, 0666)) == -1) {
                 fprintf(stderr, "failed to open file:%s:%s\n", optarg, strerror(errno));
                 exit(1);
             }
-            setvbuf(quicly_trace_fp, NULL, _IONBF, 0);
-            break;
+            ptls_log_add_fd(fd);
+            ptls_log.include_appdata = 1;
+        } break;
         case 'f': {
             double fraction;
             if (sscanf(optarg, "%lf", &fraction) != 1) {
@@ -1186,10 +1177,6 @@ int main(int argc, char **argv)
                 fprintf(stderr, "failed to parse idle timeout: %s\n", optarg);
                 exit(1);
             }
-            break;
-        case 'j':
-            setup_ptlslog(optarg);
-            break;
         case 'K':
             if (sscanf(optarg, "%" SCNu64, &ctx.max_packets_per_key) != 1) {
                 fprintf(stderr, "failed to parse key update interval: %s\n", optarg);

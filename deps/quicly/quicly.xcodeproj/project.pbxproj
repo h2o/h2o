@@ -35,6 +35,7 @@
 		0829878F26E03D4D0053638F /* rate.c in Sources */ = {isa = PBXBuildFile; fileRef = 0829878D26E03D4D0053638F /* rate.c */; };
 		0829879026E03D4D0053638F /* rate.c in Sources */ = {isa = PBXBuildFile; fileRef = 0829878D26E03D4D0053638F /* rate.c */; };
 		0829879226E0A9DF0053638F /* rate.c in Sources */ = {isa = PBXBuildFile; fileRef = 0829879126E0A9DF0053638F /* rate.c */; };
+		085125F828F51BA20074C124 /* quicly-probes.d in Sources */ = {isa = PBXBuildFile; fileRef = E95EBCCD227EC13F0022C32D /* quicly-probes.d */; };
 		086001CB273271E80043886F /* rate.c in Sources */ = {isa = PBXBuildFile; fileRef = 0829878D26E03D4D0053638F /* rate.c */; };
 		E904233D24AED0410072C5B7 /* loss.c in Sources */ = {isa = PBXBuildFile; fileRef = E904233C24AED0410072C5B7 /* loss.c */; };
 		E904233E24AED0410072C5B7 /* loss.c in Sources */ = {isa = PBXBuildFile; fileRef = E904233C24AED0410072C5B7 /* loss.c */; };
@@ -185,6 +186,7 @@
 		0829878C26DF775B0053638F /* rate.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = rate.h; sourceTree = "<group>"; };
 		0829878D26E03D4D0053638F /* rate.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = rate.c; sourceTree = "<group>"; };
 		0829879126E0A9DF0053638F /* rate.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = rate.c; sourceTree = "<group>"; };
+		085125F728EFC0480074C124 /* cplusplus.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = cplusplus.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		E904233C24AED0410072C5B7 /* loss.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = loss.c; sourceTree = "<group>"; };
 		E904234024AEFB980072C5B7 /* loss.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = loss.c; sourceTree = "<group>"; };
 		E9056C071F56965300E2B96C /* linklist.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = linklist.h; sourceTree = "<group>"; };
@@ -463,6 +465,7 @@
 		E9CC44121EC1926000DC7D3E /* t */ = {
 			isa = PBXGroup;
 			children = (
+				085125F728EFC0480074C124 /* cplusplus.t */,
 				E98884C221E3F23A0060F010 /* e2e.t */,
 				E99F8C281F4EAEF800C26B3D /* frame.c */,
 				E9736533246FD3DA0039AA49 /* local_cid.c */,
@@ -619,7 +622,6 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = E98448371EA48D6B00390927 /* Build configuration list for PBXNativeTarget "cli" */;
 			buildPhases = (
-				E941428B23B0B70F002D3CE0 /* ShellScript */,
 				E984482F1EA48D6B00390927 /* Sources */,
 				E98448301EA48D6B00390927 /* Frameworks */,
 				E98448311EA48D6B00390927 /* CopyFiles */,
@@ -747,25 +749,6 @@
 			shellPath = /bin/sh;
 			shellScript = "# Type a script or drag a script file from your workspace to insert its path.\n\nexec $SRCROOT/misc/probe2trace.pl -a tracer < $SRCROOT/quicly-probes.d > $DERIVED_FILES_DIR/quicly-tracer.h\n";
 		};
-		E941428B23B0B70F002D3CE0 /* ShellScript */ = {
-			isa = PBXShellScriptBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputFileListPaths = (
-			);
-			inputPaths = (
-				"$(SRCROOT)/quicly-probes.d",
-			);
-			outputFileListPaths = (
-			);
-			outputPaths = (
-				"$(DERIVED_FILES_DIR)/embedded-probes.h",
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "# Type a script or drag a script file from your workspace to insert its path.\n\nexec $SRCROOT/misc/probe2trace.pl -a embedded < $SRCROOT/quicly-probes.d > $DERIVED_FILES_DIR/embedded-probes.h\n";
-		};
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -860,6 +843,7 @@
 				E941428A23B0B454002D3CE0 /* quicly.c in Sources */,
 				E941429323B0B879002D3CE0 /* sentmap.c in Sources */,
 				E984483C1EA48DD300390927 /* picotls.c in Sources */,
+				085125F828F51BA20074C124 /* quicly-probes.d in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -923,7 +907,7 @@
 					"QUICLY_USE_EMBEDDED_PROBES=1",
 					"QUICLY_HAVE_FUSION=1",
 				);
-				OTHER_CFLAGS = "-march=native";
+				OTHER_CFLAGS = "$(inherited)";
 				OTHER_LDFLAGS = (
 					"-L/usr/local/opt/openssl@1.1/lib",
 					"-lcrypto",
@@ -940,7 +924,7 @@
 					"QUICLY_USE_EMBEDDED_PROBES=1",
 					"QUICLY_HAVE_FUSION=1",
 				);
-				OTHER_CFLAGS = "-march=native";
+				OTHER_CFLAGS = "$(inherited)";
 				OTHER_LDFLAGS = (
 					"-L/usr/local/opt/openssl@1.1/lib",
 					"-lcrypto",
@@ -1024,6 +1008,13 @@
 				MACOSX_DEPLOYMENT_TARGET = 10.12;
 				MTL_ENABLE_DEBUG_INFO = YES;
 				ONLY_ACTIVE_ARCH = YES;
+				OTHER_CFLAGS = (
+					"-march=native",
+					"-maes",
+					"-mpclmul",
+					"-mvaes",
+					"-mvpclmulqdq",
+				);
 				SDKROOT = macosx;
 			};
 			name = Debug;
@@ -1076,6 +1067,13 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 10.12;
 				MTL_ENABLE_DEBUG_INFO = NO;
+				OTHER_CFLAGS = (
+					"-march=native",
+					"-maes",
+					"-mpclmul",
+					"-mvaes",
+					"-mvpclmulqdq",
+				);
 				SDKROOT = macosx;
 			};
 			name = Release;
@@ -1112,7 +1110,7 @@
 					"QUICLY_USE_EMBEDDED_PROBES=1",
 					"QUICLY_HAVE_FUSION=1",
 				);
-				OTHER_CFLAGS = "-march=native";
+				OTHER_CFLAGS = "$(inherited)";
 				OTHER_LDFLAGS = (
 					"-L/usr/local/opt/openssl@1.1/lib",
 					"-lcrypto",
@@ -1129,7 +1127,7 @@
 					"QUICLY_USE_EMBEDDED_PROBES=1",
 					"QUICLY_HAVE_FUSION=1",
 				);
-				OTHER_CFLAGS = "-march=native";
+				OTHER_CFLAGS = "$(inherited)";
 				OTHER_LDFLAGS = (
 					"-L/usr/local/opt/openssl@1.1/lib",
 					"-lcrypto",
