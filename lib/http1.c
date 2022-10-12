@@ -177,18 +177,26 @@ static void set_req_timeout(struct st_h2o_http1_conn_t *conn, uint64_t timeout, 
 {
     if (conn->_timeout_entry.cb != NULL)
         h2o_timer_unlink(&conn->_timeout_entry);
-    conn->_timeout_entry.cb = cb;
-    if (cb != NULL)
-        h2o_timer_link(conn->super.ctx->loop, timeout, &conn->_timeout_entry);
+    if (conn->req.is_tunnel_req) {
+        conn->_timeout_entry.cb = NULL;
+    } else {
+        conn->_timeout_entry.cb = cb;
+        if (cb != NULL)
+            h2o_timer_link(conn->super.ctx->loop, timeout, &conn->_timeout_entry);
+    }
 }
 
 static void set_req_io_timeout(struct st_h2o_http1_conn_t *conn, uint64_t timeout, h2o_timer_cb cb)
 {
     if (conn->_io_timeout_entry.cb != NULL)
         h2o_timer_unlink(&conn->_io_timeout_entry);
-    conn->_io_timeout_entry.cb = cb;
-    if (cb != NULL)
-        h2o_timer_link(conn->super.ctx->loop, timeout, &conn->_io_timeout_entry);
+    if (conn->req.is_tunnel_req) {
+        conn->_timeout_entry.cb = NULL;
+    } else {
+        conn->_io_timeout_entry.cb = cb;
+        if (cb != NULL)
+            h2o_timer_link(conn->super.ctx->loop, timeout, &conn->_io_timeout_entry);
+    }
 }
 
 static void clear_timeouts(struct st_h2o_http1_conn_t *conn)
