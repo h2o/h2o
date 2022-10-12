@@ -31,9 +31,6 @@
 #include "picotls/pembase64.h"
 #include "../deps/picotest/picotest.h"
 #include "../lib/picotls.c"
-#if PICOTLS_USE_PTLSLOG
-#include "../lib/ptlslog.c"
-#endif
 #include "test.h"
 
 static void test_is_ipaddr(void)
@@ -1694,23 +1691,20 @@ static void test_tls12_hello(void)
 
 static void test_escape_json_unsafe_string(void)
 {
-#if PICOTLS_USE_PTLSLOG
-
 #define STRLIT(s) s, sizeof(s) - 1
     char buf[100];
     size_t escaped_len;
 
-    escaped_len = escape_json_unsafe_string(buf, STRLIT("\" \\ / \b \f \n \r \t foo bar"));
+    escaped_len = ptls_jsonescape(buf, STRLIT("\" \\ / \b \f \n \r \t foo bar")) - buf;
     ok(escaped_len == strlen(buf));
     ok(strcmp(buf, "\\\" \\\\ \\/ \\b \\f \\n \\r \\t foo bar") == 0);
 
-    escaped_len = escape_json_unsafe_string(buf, STRLIT("こんにちは、🌏！"));
+    escaped_len = ptls_jsonescape(buf, STRLIT("こんにちは、🌏！")) - buf;
     ok(strcmp(buf, "こんにちは、🌏！") == 0);
 
-    escaped_len = escape_json_unsafe_string(buf, STRLIT("\x00 \x1f \x7f"));
+    escaped_len = ptls_jsonescape(buf, STRLIT("\x00 \x1f \x7f")) - buf;
     ok(strcmp(buf, "\\u0000 \\u001f \\u007f") == 0);
-
-#endif /* PICOTLS_USE_PTLSLOG */
+#undef STRLIT
 }
 
 void test_picotls(void)
