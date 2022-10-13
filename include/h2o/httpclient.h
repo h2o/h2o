@@ -155,7 +155,6 @@ typedef struct st_h2o_httpclient_ctx_t {
     size_t max_buffer_size;
     unsigned tunnel_enabled : 1;
     unsigned force_cleartext_http2 : 1;
-    unsigned forward_close_connection : 1;
 
     struct st_h2o_httpclient_protocol_selector_t {
         h2o_httpclient_protocol_ratio_t ratio;
