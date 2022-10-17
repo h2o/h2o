@@ -27,10 +27,10 @@
 #define H2O_LOG(_type, _block) PTLS_LOG(h2o, _type, _block)
 #define H2O_LOG_CONN(_type, _conn, _block)                                                                                         \
     do {                                                                                                                           \
-        h2o_conn_t *__conn = (_conn);                                                                                              \
-        if (!__conn->callbacks->skip_tracing(__conn)) {                                                                            \
+        h2o_conn_t *conn_ = (_conn);                                                                                               \
+        if (!conn_->callbacks->skip_tracing(conn_)) {                                                                              \
             H2O_LOG(_type, {                                                                                                       \
-                PTLS_LOG_ELEMENT_UNSIGNED(conn_id, __conn->id);                                                                    \
+                PTLS_LOG_ELEMENT_UNSIGNED(conn_id, conn_->id);                                                                     \
                 do {                                                                                                               \
                     _block                                                                                                         \
                 } while (0);                                                                                                       \
