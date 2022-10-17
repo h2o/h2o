@@ -331,7 +331,7 @@ int main(int argc, char **argv)
     double sampling_rate = 1.0;
     std::vector<std::pair<std::vector<uint8_t> /* address */, unsigned /* netmask */>> sampling_addresses;
     std::vector<std::string> sampling_snis;
-    const char *unix_socket_path = NULL; // h2olog-socket.path in h2o conf file
+    const char *unix_socket_path = NULL; // h2olog.path in h2o conf file
     while ((c = getopt(argc, argv, "hHdrlap:t:s:w:S:A:N:f:u:")) != -1) {
         switch (c) {
         case 'H':

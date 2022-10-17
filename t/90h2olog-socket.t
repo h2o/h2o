@@ -23,7 +23,7 @@ my $quic_port = empty_port({
 
 subtest "read socket", sub {
   my $server = spawn_h2o({ conf => <<"EOT" });
-h2olog-socket:
+h2olog:
   path: $h2olog_socket
   permission: 666
   appdata: ON
@@ -90,7 +90,7 @@ EOT
 
 subtest "lost messages", sub {
   my $server = spawn_h2o({ conf => <<"EOT" });
-h2olog-socket:
+h2olog:
   path: $h2olog_socket
   permission: 666
   sndbuf: 1024

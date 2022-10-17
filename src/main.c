@@ -253,7 +253,7 @@ static struct {
     size_t num_listeners;
     char *pid_file;
     char *error_log;
-    int h2olog_socket_fd;
+    int h2olog_listening_fd;
     int max_connections;
     /**
      * In addition to max_connections, maximum number of H3 connections can be further capped by this configuration variable.
@@ -317,7 +317,7 @@ static struct {
     .num_listeners = 0,
     .pid_file = NULL,
     .error_log = NULL,
-    .h2olog_socket_fd = -1,
+    .h2olog_listening_fd = -1,
     .max_connections = 1024,
     .max_quic_connections = INT_MAX, /* (INT_MAX = i.e., allow up to max_connections) */
     .soft_connection_limit = INT_MAX,
@@ -2239,7 +2239,7 @@ static int on_config_error_log(h2o_configurator_command_t *cmd, h2o_configurator
 static void *h2olog_thread(void *_ctx)
 {
     while (1) {
-        int fd = accept(conf.h2olog_socket_fd, NULL, 0);
+        int fd = accept(conf.h2olog_listening_fd, NULL, 0);
         if (fd == -1) {
             continue;
         }
@@ -2268,7 +2268,7 @@ static void create_h2olog_thread(void)
     pthread_attr_destroy(&attr);
 }
 
-static int on_config_h2olog_socket(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+static int on_config_h2olog(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     yoml_t **path_node, **owner_node, **group_node, **permission_node, **sndbuf_node, **appdata_node;
     if (h2o_configurator_parse_mapping(cmd, node, "path:s", "owner:s,group:s,permission:s,sndbuf:s,appdata:s", &path_node, &owner_node,
@@ -2296,7 +2296,7 @@ static int on_config_h2olog_socket(h2o_configurator_command_t *cmd, h2o_configur
     if (appdata_node != NULL && strcasecmp((*appdata_node)->data.scalar, "ON") == 0)
         ptls_log.include_appdata = 1;
 
-    conf.h2olog_socket_fd = fd;
+    conf.h2olog_listening_fd = fd;
     return 0;
 }
 
@@ -3694,8 +3694,8 @@ static void setup_configurators(void)
                                         on_config_pid_file);
         h2o_configurator_define_command(c, "error-log", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_error_log);
-        h2o_configurator_define_command(c, "h2olog-socket", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING,
-                                        on_config_h2olog_socket);
+        h2o_configurator_define_command(c, "h2olog", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING,
+                                        on_config_h2olog);
         h2o_configurator_define_command(c, "max-connections", H2O_CONFIGURATOR_FLAG_GLOBAL, on_config_max_connections);
         h2o_configurator_define_command(c, "max-quic-connections", H2O_CONFIGURATOR_FLAG_GLOBAL, on_config_max_quic_connections);
         h2o_configurator_define_command(c, "soft-connection-limit", H2O_CONFIGURATOR_FLAG_GLOBAL, on_config_soft_connection_limit);
