@@ -972,7 +972,7 @@ int h2o_http3_read_frame(h2o_http3_read_frame_t *frame, int is_client, uint64_t 
         FRAME( MAX_PUSH_ID             ,    0 ,    0 ,    1 ,    0 );
         FRAME( PRIORITY_UPDATE_REQUEST ,    0 ,    0 ,    1 ,    0 );
         FRAME( PRIORITY_UPDATE_PUSH    ,    0 ,    0 ,    1 ,    0 );
-        /*   +-----------------+------+------+------+------+ */
+        /*   +-------------------------+------+------+------+------+ */
         /* clang-format on */
 #undef FRAME
     default:
