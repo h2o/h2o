@@ -960,7 +960,7 @@ int h2o_http3_read_frame(h2o_http3_read_frame_t *frame, int is_client, uint64_t 
         /* clang-format off */
         /*   +-------------------------+-------------+-------------+
          *   |                         | req-stream  | ctrl-stream |
-         *   |      frame              +------+------+------+------+
+         *   |          frame          +------+------+------+------+
          *   |                         |client|server|client|server|
          *   +-------------------------+------+------+------+------+ */
         FRAME( DATA                    ,    1 ,    1 ,    0 ,    0 );
