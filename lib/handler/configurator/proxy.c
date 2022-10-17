@@ -561,10 +561,11 @@ static int on_config_http3_ratio(h2o_configurator_command_t *cmd, h2o_configurat
 
 static int on_config_forward_close_connection(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
+    struct proxy_configurator_t *self = (void *)cmd->configurator;
     ssize_t ret = h2o_configurator_get_one_of(cmd, node, "OFF,ON");
     if (ret == -1)
         return -1;
-    ctx->globalconf->proxy.forward_close_connection = (int)ret;
+    self->vars->conf.forward_close_connection = (int)ret;
     return 0;
 }
 
@@ -730,6 +731,6 @@ void h2o_proxy_register_configurator(h2o_globalconf_t *conf)
     h2o_configurator_define_command(&c->super, "proxy.http3.ratio",
                                     H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR, on_config_http3_ratio);
     h2o_configurator_define_command(&c->super, "proxy.forward.close-connection",
-                                    H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                    H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                     on_config_forward_close_connection);
 }
