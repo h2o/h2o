@@ -39,6 +39,7 @@ ossl3.0:
 	docker run $(DOCKER_RUN_OPTS) h2oserver/h2o-ci:ubuntu2204 \
 		env DTRACE_TESTS=1 \
 		make -f $(SRC_DIR).ro/misc/docker-ci/check.mk _check \
+		CMAKE_ARGS='-DCMAKE_C_FLAGS=-Werror=format' \
 		BUILD_ARGS='$(BUILD_ARGS)' \
 		TEST_ENV='$(TEST_ENV)'
 

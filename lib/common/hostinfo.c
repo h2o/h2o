@@ -154,7 +154,6 @@ static void create_lookup_thread_if_necessary(void)
     int ret;
     pthread_attr_init(&attr);
     pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
-    pthread_attr_setstacksize(&attr, 100 * 1024);
     if ((ret = pthread_create(&tid, &attr, lookup_thread_main, NULL)) != 0) {
         char buf[128];
         if (queue.num_threads == 0) {
