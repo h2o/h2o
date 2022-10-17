@@ -523,7 +523,7 @@ static ptls_t *get_ptls(h2o_conn_t *_conn)
 static int get_skip_tracing(h2o_conn_t *conn)
 {
     ptls_t *ptls = get_ptls(conn);
-    return ptls != NULL && ptls_skip_tracing(ptls);
+    return ptls_skip_tracing(ptls);
 }
 
 static uint64_t get_req_id(h2o_req_t *req)
