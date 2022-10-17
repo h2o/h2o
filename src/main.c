@@ -2236,6 +2236,38 @@ static int on_config_error_log(h2o_configurator_command_t *cmd, h2o_configurator
     return 0;
 }
 
+static void *h2olog_thread(void *_ctx)
+{
+    while (1) {
+        int fd = accept(conf.h2olog_socket_fd, NULL, 0);
+        if (fd == -1) {
+            continue;
+        }
+        if (fcntl(fd, F_SETFD, FD_CLOEXEC) != 0) {
+            close(fd);
+            continue;
+        }
+        if (fcntl(fd, F_SETFL, O_NONBLOCK) != 0) {
+            close(fd);
+            continue;
+        }
+        if (ptls_log_add_fd(fd) != 0) {
+            close(fd);
+            continue;
+        }
+    }
+}
+
+static void create_h2olog_thread(void)
+{
+    pthread_t tid;
+    pthread_attr_t attr;
+    pthread_attr_init(&attr);
+    pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+    h2o_multithread_create_thread(&tid, &attr, h2olog_thread, NULL);
+    pthread_attr_destroy(&attr);
+}
+
 static int on_config_h2olog_socket(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     yoml_t **path_node, **owner_node, **group_node, **permission_node, **sndbuf_node, **appdata_node;
@@ -2264,8 +2296,6 @@ static int on_config_h2olog_socket(h2o_configurator_command_t *cmd, h2o_configur
     if (appdata_node != NULL && strcasecmp((*appdata_node)->data.scalar, "ON") == 0)
         ptls_log.include_appdata = 1;
 
-
-    add_listener(fd, (struct sockaddr *)&sa, sizeof(sa), 0, 0, sndbuf, 0);
     conf.h2olog_socket_fd = fd;
     return 0;
 }
@@ -3019,15 +3049,6 @@ static void close_idle_connections(h2o_context_t *ctx)
     }
 }
 
-static void h2olog_socket_accept(h2o_socket_t *sock)
-{
-    int fd = h2o_socket_get_fd(sock);
-    int ret = ptls_log_add_fd(fd);
-    if (ret != 0) {
-        h2o_socket_close(sock);
-    }
-}
-
 static void on_accept(h2o_socket_t *listener, const char *err)
 {
     struct listener_ctx_t *ctx = listener->data;
@@ -3067,12 +3088,7 @@ static void on_accept(h2o_socket_t *listener, const char *err)
             h2o_perror("failed to set SO_RCVBUF");
         set_tcp_congestion_controller(sock, listener_config->tcp_congestion_controller);
 
-        if (conf.listeners[ctx->listener_index]->fds.entries[0] != conf.h2olog_socket_fd) {
-            h2o_accept(&ctx->accept_ctx, sock);
-        } else {
-            h2olog_socket_accept(sock);
-        }
-
+        h2o_accept(&ctx->accept_ctx, sock);
     } while (--num_accepts != 0);
 }
 
@@ -4215,6 +4231,7 @@ int main(int argc, char **argv)
         pthread_t tid;
         h2o_multithread_create_thread(&tid, NULL, run_loop, (void *)i);
     }
+    create_h2olog_thread();
 
     /* this thread becomes the first thread */
     run_loop((void *)0);
