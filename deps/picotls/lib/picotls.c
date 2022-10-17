@@ -1330,9 +1330,8 @@ static int commission_handshake_secret(ptls_t *tls)
 
 static void log_client_random(ptls_t *tls)
 {
-    char buf[sizeof(tls->client_random) * 2 + 1];
-    /* FIXME probe says the argument is `void *` but we emit hexstring? */
-    PTLS_PROBE(CLIENT_RANDOM, tls, ptls_hexdump(buf, tls->client_random, sizeof(tls->client_random)));
+    PTLS_PROBE(CLIENT_RANDOM, tls,
+               ptls_hexdump(alloca(sizeof(tls->client_random) * 2 + 1), tls->client_random, sizeof(tls->client_random)));
     PTLS_LOG_CONN(client_random, tls, { PTLS_LOG_ELEMENT_HEXDUMP(bytes, tls->client_random, sizeof(tls->client_random)); });
 }
 
@@ -6059,7 +6058,7 @@ char *ptls_jsonescape(char *buf, const char *unsafe_str, size_t len)
     return dst;
 }
 
-int ptlslog__do_pushv(ptls_buffer_t *buf, const void *p, size_t l)
+int ptls_log__do_pushv(ptls_buffer_t *buf, const void *p, size_t l)
 {
     if (ptls_buffer_reserve(buf, l) != 0)
         return 0;
@@ -6069,7 +6068,7 @@ int ptlslog__do_pushv(ptls_buffer_t *buf, const void *p, size_t l)
     return 1;
 }
 
-int ptlslog__do_push_unsafestr(ptls_buffer_t *buf, const char *s, size_t l)
+int ptls_log__do_push_unsafestr(ptls_buffer_t *buf, const char *s, size_t l)
 {
     if (ptls_buffer_reserve(buf, l * (sizeof("\\uXXXX") - 1) + 1) != 0)
         return 0;
@@ -6079,7 +6078,7 @@ int ptlslog__do_push_unsafestr(ptls_buffer_t *buf, const char *s, size_t l)
     return 1;
 }
 
-int ptlslog__do_push_hexdump(ptls_buffer_t *buf, const void *s, size_t l)
+int ptls_log__do_push_hexdump(ptls_buffer_t *buf, const void *s, size_t l)
 {
     if (ptls_buffer_reserve(buf, l * 2 + 1) != 0)
         return 0;
@@ -6088,36 +6087,36 @@ int ptlslog__do_push_hexdump(ptls_buffer_t *buf, const void *s, size_t l)
     return 1;
 }
 
-int ptlslog__do_push_signed32(ptls_buffer_t *buf, int32_t v)
+int ptls_log__do_push_signed32(ptls_buffer_t *buf, int32_t v)
 {
     /* TODO optimize */
     char s[sizeof("-2147483648")];
     int len = snprintf(s, sizeof(s), "%" PRId32, v);
-    return ptlslog__do_pushv(buf, s, (size_t)len);
+    return ptls_log__do_pushv(buf, s, (size_t)len);
 }
 
-int ptlslog__do_push_signed64(ptls_buffer_t *buf, int64_t v)
+int ptls_log__do_push_signed64(ptls_buffer_t *buf, int64_t v)
 {
     /* TODO optimize */
     char s[sizeof("-9223372036854775808")];
     int len = snprintf(s, sizeof(s), "%" PRId64, v);
-    return ptlslog__do_pushv(buf, s, (size_t)len);
+    return ptls_log__do_pushv(buf, s, (size_t)len);
 }
 
-int ptlslog__do_push_unsigned32(ptls_buffer_t *buf, uint32_t v)
+int ptls_log__do_push_unsigned32(ptls_buffer_t *buf, uint32_t v)
 {
     /* TODO optimize */
     char s[sizeof("4294967295")];
     int len = snprintf(s, sizeof(s), "%" PRIu32, v);
-    return ptlslog__do_pushv(buf, s, (size_t)len);
+    return ptls_log__do_pushv(buf, s, (size_t)len);
 }
 
-int ptlslog__do_push_unsigned64(ptls_buffer_t *buf, uint64_t v)
+int ptls_log__do_push_unsigned64(ptls_buffer_t *buf, uint64_t v)
 {
     /* TODO optimize */
     char s[sizeof("18446744073709551615")];
     int len = snprintf(s, sizeof(s), "%" PRIu64, v);
-    return ptlslog__do_pushv(buf, s, (size_t)len);
+    return ptls_log__do_pushv(buf, s, (size_t)len);
 }
 
 #if PTLS_HAVE_LOG
@@ -6160,7 +6159,7 @@ Exit:
 
 #endif
 
-void ptlslog__do_write(const ptls_buffer_t *buf)
+void ptls_log__do_write(const ptls_buffer_t *buf)
 {
 #if PTLS_HAVE_LOG
     pthread_mutex_lock(&logctx.mutex);
