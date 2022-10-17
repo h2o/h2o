@@ -27,15 +27,17 @@
 #define H2O_LOG(_type, _block) PTLS_LOG(h2o, _type, _block)
 #define H2O_LOG_CONN(_type, _conn, _block)                                                                                         \
     do {                                                                                                                           \
+        if (!ptls_log.is_active)                                                                                                   \
+            break;                                                                                                                 \
         h2o_conn_t *conn_ = (_conn);                                                                                               \
-        if (ptls_log.is_active && !conn_->callbacks->skip_tracing(conn_)) {                                                        \
-            H2O_LOG(_type, {                                                                                                       \
-                PTLS_LOG_ELEMENT_UNSIGNED(conn_id, conn_->id);                                                                     \
-                do {                                                                                                               \
-                    _block                                                                                                         \
-                } while (0);                                                                                                       \
-            });                                                                                                                    \
-        }                                                                                                                          \
+        if (conn_->callbacks->skip_tracing(conn_))                                                                                 \
+            break;                                                                                                                 \
+        PTLS_LOG__DO_LOG(h2o, _type, {                                                                                             \
+            PTLS_LOG_ELEMENT_UNSIGNED(conn_id, conn_->id);                                                                         \
+            do {                                                                                                                   \
+                _block                                                                                                             \
+            } while (0);                                                                                                           \
+        });                                                                                                                        \
     } while (0)
 
 /* This file is placed under lib, and must only be included from the source files of the h2o / libh2o, because H2O_USE_DTRACE is a
