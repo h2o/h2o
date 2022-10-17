@@ -26,6 +26,7 @@ subtest "read socket", sub {
 h2olog-socket:
   path: $h2olog_socket
   permission: 666
+  appdata: ON
 listen:
   type: quic
   port: $quic_port
@@ -132,6 +133,9 @@ sub json_lines_ok {
 sub get_status {
   my ($server) = @_;
   my $status_json = `$client_prog http://127.0.0.1:$server->{port}/status/json`;
+  if (!$status_json) {
+    BAIL_OUT "h2o does not respond to /status/json";
+  }
   return decode_json($status_json);
 }
 

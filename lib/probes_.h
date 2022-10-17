@@ -123,12 +123,22 @@ __attribute__((noinline)) static void h2o_probe_request_header(h2o_req_t *req, u
                                                                h2o_iovec_t value)
 {
     H2O_PROBE_CONN(RECEIVE_REQUEST_HEADER, req->conn, req_index, name.base, name.len, value.base, value.len);
+    H2O_LOG_CONN(receive_request_header, req->conn, {
+        PTLS_LOG_ELEMENT_UNSIGNED(req_id, req_index);
+        PTLS_LOG_APPDATA_ELEMENT_UNSAFESTR(name, name.base, name.len);
+        PTLS_LOG_APPDATA_ELEMENT_UNSAFESTR(value, value.base, value.len);
+    });
 }
 
 __attribute__((noinline)) static void h2o_probe_response_header(h2o_req_t *req, uint64_t req_index, h2o_iovec_t name,
                                                                 h2o_iovec_t value)
 {
     H2O_PROBE_CONN(SEND_RESPONSE_HEADER, req->conn, req_index, name.base, name.len, value.base, value.len);
+    H2O_LOG_CONN(send_response_header, req->conn, {
+        PTLS_LOG_ELEMENT_UNSIGNED(req_id, req_index);
+        PTLS_LOG_APPDATA_ELEMENT_UNSAFESTR(name, name.base, name.len);
+        PTLS_LOG_APPDATA_ELEMENT_UNSAFESTR(value, value.base, value.len);
+    });
 }
 
 static inline void h2o_probe_log_request(h2o_req_t *req, uint64_t req_index)
@@ -138,7 +148,7 @@ static inline void h2o_probe_log_request(h2o_req_t *req, uint64_t req_index)
         PTLS_LOG_ELEMENT_UNSIGNED(req_id, req_index);
         PTLS_LOG_ELEMENT_SIGNED(http_version, req->version);
     });
-    if (H2O_CONN_IS_PROBED(RECEIVE_REQUEST_HEADER, req->conn)) {
+    if (H2O_CONN_IS_PROBED(RECEIVE_REQUEST_HEADER, req->conn) || ptls_log.is_active) {
         if (req->input.authority.base != NULL)
             h2o_probe_request_header(req, req_index, H2O_TOKEN_AUTHORITY->buf, req->input.authority);
         if (req->input.method.base != NULL)
@@ -162,7 +172,7 @@ static inline void h2o_probe_log_response(h2o_req_t *req, uint64_t req_index)
         PTLS_LOG_ELEMENT_UNSIGNED(req_id, req_index);
         PTLS_LOG_ELEMENT_SIGNED(status, req->res.status);
     });
-    if (H2O_CONN_IS_PROBED(SEND_RESPONSE_HEADER, req->conn)) {
+    if (H2O_CONN_IS_PROBED(SEND_RESPONSE_HEADER, req->conn) || ptls_log.is_active) {
         if (req->res.content_length != SIZE_MAX) {
             char buf[sizeof(H2O_SIZE_T_LONGEST_STR)];
             size_t len = (size_t)sprintf(buf, "%zu", req->res.content_length);

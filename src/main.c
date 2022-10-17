@@ -2239,9 +2239,9 @@ static int on_config_error_log(h2o_configurator_command_t *cmd, h2o_configurator
 
 static int on_config_h2olog_socket(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    yoml_t **path_node, **owner_node, **group_node, **permission_node, **sndbuf_node;
-    if (h2o_configurator_parse_mapping(cmd, node, "path:s", "owner:s,group:s,permission:s,sndbuf:s", &path_node, &owner_node,
-                                       &group_node, &permission_node, &sndbuf_node) != 0)
+    yoml_t **path_node, **owner_node, **group_node, **permission_node, **sndbuf_node, **appdata_node;
+    if (h2o_configurator_parse_mapping(cmd, node, "path:s", "owner:s,group:s,permission:s,sndbuf:s,appdata:s", &path_node, &owner_node,
+                                       &group_node, &permission_node, &sndbuf_node, &appdata_node) != 0)
         return -1;
 
     const char *path = (*path_node)->data.scalar;
@@ -2262,6 +2262,9 @@ static int on_config_h2olog_socket(h2o_configurator_command_t *cmd, h2o_configur
     unsigned sndbuf = 0;
     if (sndbuf_node != NULL && h2o_configurator_scanf(cmd, *sndbuf_node, "%u", &sndbuf) != 0)
         return -1;
+    if (appdata_node != NULL && strcasecmp((*appdata_node)->data.scalar, "ON") == 0)
+        ptls_log.include_appdata = 1;
+
 
     add_listener(fd, (struct sockaddr *)&sa, sizeof(sa), 0, 0, sndbuf, 0);
     conf.h2olog_socket_fd = fd;
