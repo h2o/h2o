@@ -23,6 +23,8 @@
 #define h2o__openssl_backport_h
 
 #include <stdlib.h>
+#include <openssl/ssl.h>
+#include <openssl/opensslconf.h>
 
 /* backports for OpenSSL 1.0.2 */
 #if OPENSSL_VERSION_NUMBER < 0x10100000L || (defined(LIBRESSL_VERSION_NUMBER) && LIBRESSL_VERSION_NUMBER < 0x2070000fL)

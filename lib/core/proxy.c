@@ -48,6 +48,7 @@ struct rp_generator_t {
     unsigned req_done : 1;
     unsigned res_done : 1;
     unsigned pipe_inflight : 1;
+    int *generator_disposed;
 };
 
 static h2o_httpclient_ctx_t *get_client_ctx(h2o_req_t *req)
@@ -146,7 +147,7 @@ static void build_request(h2o_req_t *req, h2o_iovec_t *method, h2o_url_t *url, h
     char remote_addr[NI_MAXHOST];
     struct sockaddr_storage ss;
     socklen_t sslen;
-    h2o_iovec_t cookie_buf = {NULL}, xff_buf = {NULL}, via_buf = {NULL};
+    h2o_iovec_t xff_buf = {NULL}, via_buf = {NULL};
     int preserve_x_forwarded_proto = req->conn->ctx->globalconf->proxy.preserve_x_forwarded_proto;
     int emit_x_forwarded_headers = req->conn->ctx->globalconf->proxy.emit_x_forwarded_headers;
     int emit_via_header = req->conn->ctx->globalconf->proxy.emit_via_header;
@@ -196,6 +197,7 @@ static void build_request(h2o_req_t *req, h2o_iovec_t *method, h2o_url_t *url, h
     }
 
     /* headers */
+    h2o_iovec_vector_t cookie_values = {NULL};
     {
         const h2o_header_t *h, *h_end;
         int found_early_data = 0;
@@ -205,9 +207,8 @@ static void build_request(h2o_req_t *req, h2o_iovec_t *method, h2o_url_t *url, h
                 if (token->flags.proxy_should_drop_for_req)
                     continue;
                 if (token == H2O_TOKEN_COOKIE) {
-                    /* merge the cookie headers; see HTTP/2 8.1.2.5 and HTTP/1 (RFC6265 5.4) */
-                    /* FIXME current algorithm is O(n^2) against the number of cookie headers */
-                    cookie_buf = build_request_merge_headers(&req->pool, cookie_buf, h->value, ';');
+                    h2o_vector_reserve(&req->pool, &cookie_values, cookie_values.size + 1);
+                    cookie_values.entries[cookie_values.size++] = h->value;
                     continue;
                 } else if (token == H2O_TOKEN_VIA) {
                     if (!emit_via_header) {
@@ -244,7 +245,12 @@ static void build_request(h2o_req_t *req, h2o_iovec_t *method, h2o_url_t *url, h
         }
     }
 
-    if (cookie_buf.len != 0) {
+    if (cookie_values.size == 1) {
+        /* fast path */
+        h2o_add_header(&req->pool, headers, H2O_TOKEN_COOKIE, NULL, cookie_values.entries[0].base, cookie_values.entries[0].len);
+    } else if (cookie_values.size > 1) {
+        /* merge the cookie headers; see HTTP/2 8.1.2.5 and HTTP/1 (RFC6265 5.4) */
+        h2o_iovec_t cookie_buf = h2o_join_list(&req->pool, cookie_values.entries, cookie_values.size, h2o_iovec_init(H2O_STRLIT("; ")));
         h2o_add_header(&req->pool, headers, H2O_TOKEN_COOKIE, NULL, cookie_buf.base, cookie_buf.len);
     }
     if (emit_x_forwarded_headers) {
@@ -401,8 +407,12 @@ static void do_send_from_pipe(struct rp_generator_t *self)
                                                        : H2O_SEND_STATE_IN_PROGRESS;
 
     if (self->body_bytes_read == self->body_bytes_sent) {
-        if (!h2o_send_state_is_in_progress(send_state))
+        if (h2o_send_state_is_in_progress(send_state)) {
+            /* resume reading only when we know that the pipe (to which we read) has become empty */
+            self->client->update_window(self->client);
+        } else {
             h2o_send(self->src_req, NULL, 0, send_state);
+        }
         return;
     }
 
@@ -434,10 +444,9 @@ static void do_proceed(h2o_generator_t *generator, h2o_req_t *req)
         do_send_from_pipe(self);
     } else {
         do_send(self);
+        if (!(self->res_done || self->had_body_error))
+            self->client->update_window(self->client);
     }
-
-    if (!(self->res_done || self->had_body_error))
-        self->client->update_window(self->client);
 }
 
 static void copy_stats(struct rp_generator_t *self)
@@ -473,14 +482,19 @@ static void on_body_on_close(struct rp_generator_t *self, const char *errstr)
 
 static int on_body(h2o_httpclient_t *client, const char *errstr)
 {
+    int generator_disposed = 0;
     struct rp_generator_t *self = client->data;
 
     self->body_bytes_read = client->bytes_read.body;
     h2o_timer_unlink(&self->send_headers_timeout);
 
-    if (errstr != NULL)
+    if (errstr != NULL) {
+        self->generator_disposed = &generator_disposed;
         on_body_on_close(self, errstr);
-    if (!self->sending.inflight)
+        if (!generator_disposed)
+            self->generator_disposed = NULL;
+    }
+    if (!generator_disposed && !self->sending.inflight)
         do_send(self);
 
     return 0;
@@ -562,7 +576,7 @@ static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errs
             const h2o_token_t *token = H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, args->headers[i].name);
             if (token->flags.proxy_should_drop_for_res) {
                 if (token == H2O_TOKEN_CONNECTION && self->src_req->version < 0x200 &&
-                    req->conn->ctx->globalconf->proxy.forward_close_connection) {
+                    req->overrides != NULL && req->overrides->forward_close_connection) {
                     if (h2o_lcstris(args->headers[i].value.base, args->headers[i].value.len, H2O_STRLIT("close")))
                         self->src_req->http1_is_persistent = 0;
                 }
@@ -805,6 +819,8 @@ static void on_generator_dispose(void *_self)
         h2o_buffer_dispose(&self->last_content_before_send);
     }
     h2o_doublebuffer_dispose(&self->sending);
+    if (self->generator_disposed != NULL)
+        *self->generator_disposed = 1;
 }
 
 static struct rp_generator_t *proxy_send_prepare(h2o_req_t *req)
@@ -814,6 +830,7 @@ static struct rp_generator_t *proxy_send_prepare(h2o_req_t *req)
     self->super.proceed = do_proceed;
     self->super.stop = do_stop;
     self->src_req = req;
+    self->generator_disposed = NULL;
     self->client = NULL; /* when connection establish timeouts, self->client remains unset by `h2o_httpclient_connect` */
     self->had_body_error = 0;
     self->up_req.is_head = h2o_memis(req->method.base, req->method.len, H2O_STRLIT("HEAD"));

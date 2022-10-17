@@ -35,7 +35,9 @@
 #include "picotls/ffx.h"
 #include "picotls/minicrypto.h"
 #include "picotls/openssl.h"
+#ifndef _WINDOWS
 #include "picotls/fusion.h"
+#endif
 #include <openssl/opensslv.h>
 
 #ifdef _WINDOWS
@@ -255,7 +257,7 @@ static ptls_bench_entry_t aead_list[] = {
     {"ptlsbcrypt", "aes128gcm", &ptls_bcrypt_aes128gcm, &ptls_bcrypt_sha256, 1},
     {"ptlsbcrypt", "aes256gcm", &ptls_bcrypt_aes256gcm, &ptls_bcrypt_sha384, 1},
 #endif
-#if !defined(_WINDOWS) || defined(_WINDOWS64)
+#if !defined(_WINDOWS)
     {"fusion", "aes128gcm", &ptls_fusion_aes128gcm, &ptls_minicrypto_sha256, 1},
     {"fusion", "aes256gcm", &ptls_fusion_aes256gcm, &ptls_minicrypto_sha384, 1},
 #endif

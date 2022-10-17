@@ -691,6 +691,18 @@ DECL_SEND_ERROR_DEFERRED(502)
 
 #undef DECL_SEND_ERROR_DEFERRED
 
+static size_t append_with_limit(char *dst, h2o_iovec_t input, size_t limit)
+{
+    if (input.len < limit) {
+        memcpy(dst, input.base, input.len);
+        return input.len;
+    } else {
+        memcpy(dst, input.base, (limit - 3));
+        memcpy(dst + (limit - 3), "...", 3);
+        return limit;
+    }
+}
+
 void h2o_req_log_error(h2o_req_t *req, const char *module, const char *fmt, ...)
 {
 #define INITIAL_BUF_SIZE 256
@@ -714,17 +726,11 @@ void h2o_req_log_error(h2o_req_t *req, const char *module, const char *fmt, ...)
 #undef INITIAL_BUF_SIZE
 
     /* build prefix */
-    char *pbuf = h2o_mem_alloc_pool(&req->pool, char, sizeof("[] in request::") + 32 + strlen(module)), *p = pbuf;
+    char *pbuf = h2o_mem_alloc_pool(&req->pool, char, sizeof("[] in request::") + strlen(module) + 64 + 32);
+    char *p = pbuf;
     p += sprintf(p, "[%s] in request:", module);
-    if (req->path.len < 32) {
-        memcpy(p, req->path.base, req->path.len);
-        p += req->path.len;
-    } else {
-        memcpy(p, req->path.base, 29);
-        p += 29;
-        memcpy(p, "...", 3);
-        p += 3;
-    }
+    p += append_with_limit(p, req->authority, 64);
+    p += append_with_limit(p, req->path, 32);
     *p++ = ':';
     h2o_iovec_t prefix = h2o_iovec_init(pbuf, p - pbuf);
 

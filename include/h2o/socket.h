@@ -28,6 +28,7 @@ extern "C" {
 
 #include <stdint.h>
 #include <sys/socket.h>
+#include <time.h>
 #ifdef __linux__
 #include <linux/errqueue.h>
 #endif
@@ -246,11 +247,17 @@ extern h2o_buffer_prototype_t h2o_socket_buffer_prototype;
  */
 extern h2o_mem_recycle_conf_t h2o_socket_ssl_buffer_conf;
 extern __thread h2o_mem_recycle_t h2o_socket_ssl_buffer_allocator;
+extern __thread h2o_mem_recycle_t h2o_socket_zerocopy_buffer_allocator;
+extern __thread size_t h2o_socket_num_zerocopy_buffers_inflight;
 
 /**
  * boolean flag indicating if kTLS should be used (when preferable)
  */
 extern int h2o_socket_use_ktls;
+/**
+ * boolean flag indicating if picotls should be used for the record layer of TLS 1.2 (if possible)
+ */
+extern int h2o_socket_use_picotls_for_tls12;
 
 extern const char h2o_socket_error_out_of_memory[];
 extern const char h2o_socket_error_io[];
@@ -385,6 +392,7 @@ h2o_iovec_t h2o_socket_log_ssl_cipher_bits(h2o_socket_t *sock, h2o_mem_pool_t *p
 h2o_iovec_t h2o_socket_log_ssl_session_id(h2o_socket_t *sock, h2o_mem_pool_t *pool);
 static h2o_iovec_t h2o_socket_log_ssl_server_name(h2o_socket_t *sock, h2o_mem_pool_t *pool);
 static h2o_iovec_t h2o_socket_log_ssl_negotiated_protocol(h2o_socket_t *sock, h2o_mem_pool_t *pool);
+h2o_iovec_t h2o_socket_log_ssl_backend(h2o_socket_t *sock, h2o_mem_pool_t *pool);
 int h2o_socket_ssl_new_session_cb(SSL *s, SSL_SESSION *sess);
 
 /**

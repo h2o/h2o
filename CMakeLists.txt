@@ -441,6 +441,7 @@ SET(LIB_SOURCE_FILES
     lib/handler/status.c
     lib/handler/headers_util.c
     lib/handler/status/events.c
+    lib/handler/status/memory.c
     lib/handler/status/requests.c
     lib/handler/status/ssl.c
     lib/handler/http2_debug_state.c
@@ -873,7 +874,7 @@ GET_FILENAME_COMPONENT(EXTERNALPROJECT_SSL_ROOT_DIR ${OPENSSL_INCLUDE_DIR} PATH)
 
 IF (EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/misc/h2get/CMakeLists.txt AND RUBY AND BISON)
     ExternalProject_Add(h2get
-                        CONFIGURE_COMMAND ${CMAKE_COMMAND} -DH2GET_SSL_ROOT_DIR=${EXTERNALPROJECT_SSL_ROOT_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/misc/h2get
+                        CONFIGURE_COMMAND ${CMAKE_COMMAND} -DH2GET_SSL_ROOT_DIR=${EXTERNALPROJECT_SSL_ROOT_DIR} "-DCMAKE_C_FLAGS=-include ${CMAKE_SOURCE_DIR}/include/h2o/openssl_backport.h" ${CMAKE_CURRENT_SOURCE_DIR}/misc/h2get
                         SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/misc/h2get
                         BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/h2get_bin
                         BUILD_COMMAND ${CMAKE_MAKE_PROGRAM}

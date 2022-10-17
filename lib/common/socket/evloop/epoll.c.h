@@ -101,8 +101,9 @@ static int handle_zerocopy_notification(struct st_h2o_evloop_socket_t *sock)
                                 assert(sock->super.ssl->output.zerocopy_owned);
                                 sock->super.ssl->output.zerocopy_owned = 0;
                             } else {
-                                h2o_mem_free_recycle(&zerocopy_buffer_allocator, p);
+                                h2o_mem_free_recycle(&h2o_socket_zerocopy_buffer_allocator, p);
                             }
+                            --h2o_socket_num_zerocopy_buffers_inflight;
                         }
                     }
                 }
@@ -315,15 +316,10 @@ h2o_evloop_t *h2o_evloop_create(void)
 {
     struct st_h2o_evloop_epoll_t *loop = (struct st_h2o_evloop_epoll_t *)create_evloop(sizeof(*loop));
 
-    pthread_mutex_lock(&cloexec_mutex);
-    loop->ep = epoll_create(10);
-    while (fcntl(loop->ep, F_SETFD, FD_CLOEXEC) == -1) {
-        if (errno != EAGAIN) {
-            char buf[128];
-            h2o_fatal("h2o_evloop_create: failed to set FD_CLOEXEC: %s\n", h2o_strerror_r(errno, buf, sizeof(buf)));
-        }
+    if ((loop->ep = epoll_create1(EPOLL_CLOEXEC)) == -1) {
+        char buf[128];
+        h2o_fatal("h2o_evloop_create: epoll_create1 failed:%d:%s\n", errno, h2o_strerror_r(errno, buf, sizeof(buf)));
     }
-    pthread_mutex_unlock(&cloexec_mutex);
 
     return &loop->super;
 }

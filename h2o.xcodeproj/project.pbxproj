@@ -44,6 +44,8 @@
 		08CEA9DB267B0E3B00B4BB6B /* self_trace.c in Sources */ = {isa = PBXBuildFile; fileRef = 08CEA9DA267B0E3B00B4BB6B /* self_trace.c */; };
 		08CEA9DC267B0E3B00B4BB6B /* self_trace.c in Sources */ = {isa = PBXBuildFile; fileRef = 08CEA9DA267B0E3B00B4BB6B /* self_trace.c */; };
 		08CEA9DD267B0E3B00B4BB6B /* self_trace.c in Sources */ = {isa = PBXBuildFile; fileRef = 08CEA9DA267B0E3B00B4BB6B /* self_trace.c */; };
+		08DAFA08289763FC00364143 /* memory.c in Sources */ = {isa = PBXBuildFile; fileRef = 08DAFA07289763FC00364143 /* memory.c */; };
+		08DAFA09289763FC00364143 /* memory.c in Sources */ = {isa = PBXBuildFile; fileRef = 08DAFA07289763FC00364143 /* memory.c */; };
 		08E9CC4E1E41F6660049DD26 /* embedded.c.h in Headers */ = {isa = PBXBuildFile; fileRef = 08E9CC4D1E41F6660049DD26 /* embedded.c.h */; };
 		08EFC4E027FE9F96004C532C /* throttle_resp.c in Sources */ = {isa = PBXBuildFile; fileRef = 08EFC4DF27FE9F96004C532C /* throttle_resp.c */; };
 		08F320DD1E7A9CA60038FA5A /* redis.c in Sources */ = {isa = PBXBuildFile; fileRef = 08790DE31D8276EA00A04BC1 /* redis.c */; };
@@ -740,6 +742,7 @@
 		08CEA9D426701D8E00B4BB6B /* rand.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = rand.c; sourceTree = "<group>"; };
 		08CEA9D6267AF0EB00B4BB6B /* self_trace.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = self_trace.c; sourceTree = "<group>"; };
 		08CEA9DA267B0E3B00B4BB6B /* self_trace.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = self_trace.c; sourceTree = "<group>"; };
+		08DAFA07289763FC00364143 /* memory.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = memory.c; sourceTree = "<group>"; };
 		08E9CC4D1E41F6660049DD26 /* embedded.c.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = embedded.c.h; sourceTree = "<group>"; };
 		08EFC4CF27FD8FAA004C532C /* 50file-shrink.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50file-shrink.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		08EFC4DF27FE9F96004C532C /* throttle_resp.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = throttle_resp.c; sourceTree = "<group>"; };
@@ -2179,6 +2182,7 @@
 			children = (
 				10FEF2491D6FC6F600E11B1D /* durations.c */,
 				10C45D531CFE9B300096DB06 /* events.c */,
+				08DAFA07289763FC00364143 /* memory.c */,
 				10C45D541CFE9B300096DB06 /* requests.c */,
 				7DE1DB35212B1CC00055F500 /* ssl.c */,
 			);
@@ -3317,6 +3321,7 @@
 				10835E031C9A860000197E59 /* status.c in Sources */,
 				084FC7C51D54BB9200E89F66 /* http2_debug_state.c in Sources */,
 				E9E5048D214EC5DE004DC170 /* openssl.c in Sources */,
+				08DAFA08289763FC00364143 /* memory.c in Sources */,
 				10AA2E961A80A612004322AC /* time.c in Sources */,
 				0812AB2B1D7FD54700004F23 /* read.c in Sources */,
 				107923C319A3217300C52AD6 /* file.c in Sources */,
@@ -3675,6 +3680,7 @@
 				E9F677D520074770006476D3 /* roundrobin.c in Sources */,
 				E9708AE81E49A2420029E0A5 /* picotls.c in Sources */,
 				10756E361AC1264D0009BF57 /* writer.c in Sources */,
+				08DAFA09289763FC00364143 /* memory.c in Sources */,
 				E987E5D31FD7BE9C00DE4346 /* literal_cost.c in Sources */,
 				E9708B851E52C8560029E0A5 /* connection.c in Sources */,
 				E9708B601E52C80F0029E0A5 /* fastcgi.c in Sources */,
