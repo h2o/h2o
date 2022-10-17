@@ -1515,7 +1515,7 @@ static int handle_priority_update_frame(struct st_h2o_http3_server_conn_t *conn,
     return 0;
 }
 
-static void handle_control_stream_frame(h2o_http3_conn_t *_conn, uint8_t type, const uint8_t *payload, size_t len)
+static void handle_control_stream_frame(h2o_http3_conn_t *_conn, uint64_t type, const uint8_t *payload, size_t len)
 {
     struct st_h2o_http3_server_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_conn_t, h3, _conn);
     int err;
@@ -1535,9 +1535,11 @@ static void handle_control_stream_frame(h2o_http3_conn_t *_conn, uint8_t type, c
             err = H2O_HTTP3_ERROR_FRAME_UNEXPECTED;
             err_desc = "unexpected SETTINGS frame";
             goto Fail;
-        case H2O_HTTP3_FRAME_TYPE_PRIORITY_UPDATE: {
+        case H2O_HTTP3_FRAME_TYPE_PRIORITY_UPDATE_REQUEST:
+        case H2O_HTTP3_FRAME_TYPE_PRIORITY_UPDATE_PUSH: {
             h2o_http3_priority_update_frame_t frame;
-            if ((err = h2o_http3_decode_priority_update_frame(&frame, payload, len, &err_desc)) != 0)
+            if ((err = h2o_http3_decode_priority_update_frame(&frame, type == H2O_HTTP3_FRAME_TYPE_PRIORITY_UPDATE_PUSH, payload,
+                                                              len, &err_desc)) != 0)
                 goto Fail;
             if ((err = handle_priority_update_frame(conn, &frame)) != 0) {
                 err_desc = "invalid PRIORITY_UPDATE frame";
