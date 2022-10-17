@@ -61,9 +61,30 @@ EOT
 
     diag($logs . "\nlength: " . length($logs)) if $ENV{TEST_DEBUG};
 
-    json_lines_ok($logs, "JSON Lines are written to h2olog socket '$h2olog_socket' ($i)");
+    my @events = parse_json_lines($logs) or fail("Invalid JSON lines from '$h2olog_socket' ($i)");
 
-    cmp_ok get_status($server)->{"h2olog.lost"}, "==", 0, "does not lost messages";
+    my ($receive_request) = find_event(\@events, { module => "h2o", type => "receive_request" });
+    is $receive_request->{http_version}, 768, "h2o:receive_request ($i)";
+
+    # Test events to cover all the necessary usecases of ptlslog.
+    # appdata are emitted as well by setting `h2olog-socket.appdata: ON`
+    my (@req_headers) = find_event(\@events, { module => "h2o", type => "receive_request_header" });
+    is $req_headers[0]->{name}, ":authority", ":authority";
+    is $req_headers[0]->{value}, "127.0.0.1:$quic_port", ":authority value";
+
+    is $req_headers[1]->{name}, ":method", ":method";
+    is $req_headers[1]->{value}, "GET", ":method value";
+
+    is $req_headers[2]->{name}, ":path", ":path";
+    is $req_headers[2]->{value}, "/", ":path value";
+
+    is $req_headers[3]->{name}, ":scheme", ":scheme";
+    is $req_headers[3]->{value}, "https", ":scheme value";
+
+    my ($send_response) = find_event(\@events, { module => "h2o", type => "send_response" });
+    is $send_response->{status}, 200, "h2o:send_response ($i)";
+
+    cmp_ok get_status($server)->{"h2olog.lost"}, "==", 0, "does not lost messages ($i)";
   }
 };
 
@@ -114,19 +135,36 @@ EOT
   }
   # parent
   my $logs = slurp_h2olog_socket($h2olog_socket, { timeout => 2 });
-  json_lines_ok($logs, "valid JSON Lines are written to h2olog socket '$h2olog_socket' even if some events are lost");
+  ok scalar(parse_json_lines($logs)), "valid JSON Lines are written to h2olog socket '$h2olog_socket' even if some events are lost";
 };
 
-sub json_lines_ok {
-  my ($json_lines, $msg) = @_;
+sub find_event {
+  my($rows, $matcher) = @_;
 
-  ok length($json_lines) > 0, $msg;
+  my @results;
+  ROW: for my $row (@$rows) {
+    for my $key(keys %$matcher) {
+      no warnings "uninitialized";
+      next ROW if $row->{$key} ne $matcher->{$key};
+    }
+    push @results, $row;
+  }
+  return @results;
+}
 
+sub parse_json_lines {
+  my ($json_lines) = @_;
+
+  my @rows;
   for my $json_str (split /\n/, $json_lines) {
-    unless (eval { decode_json($json_str) }) {
-      fail "invalid json: $json_str\n$@";
+    if (my $row = eval { decode_json($json_str) }) {
+      push @rows, $row;
+    } else {
+      diag "invalid json: $json_str\n$@";
+      return;
     }
   }
+  return @rows;
 }
 
 
