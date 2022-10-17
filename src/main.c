@@ -3019,6 +3019,16 @@ static void close_idle_connections(h2o_context_t *ctx)
                                            conf.soft_connection_limit_min_age * 1000);
     }
 }
+
+static void h2olog_socket_accept(h2o_socket_t *sock)
+{
+    int fd = h2o_socket_get_fd(sock);
+    int ret = ptls_log_add_fd(fd);
+    if (ret != 0) {
+        h2o_socket_close(sock);
+    }
+}
+
 static void on_accept(h2o_socket_t *listener, const char *err)
 {
     struct listener_ctx_t *ctx = listener->data;
@@ -3061,7 +3071,7 @@ static void on_accept(h2o_socket_t *listener, const char *err)
         if (conf.listeners[ctx->listener_index]->fds.entries[0] != conf.h2olog_socket_fd) {
             h2o_accept(&ctx->accept_ctx, sock);
         } else {
-            h2o_h2olog_accept(sock);
+            h2olog_socket_accept(sock);
         }
 
     } while (--num_accepts != 0);
