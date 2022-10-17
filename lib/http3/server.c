@@ -1538,8 +1538,8 @@ static void handle_control_stream_frame(h2o_http3_conn_t *_conn, uint64_t type, 
         case H2O_HTTP3_FRAME_TYPE_PRIORITY_UPDATE_REQUEST:
         case H2O_HTTP3_FRAME_TYPE_PRIORITY_UPDATE_PUSH: {
             h2o_http3_priority_update_frame_t frame;
-            frame.element_is_push = (type == H2O_HTTP3_FRAME_TYPE_PRIORITY_UPDATE_PUSH);
-            if ((err = h2o_http3_decode_priority_update_frame(&frame, payload, len, &err_desc)) != 0)
+            if ((err = h2o_http3_decode_priority_update_frame(&frame, type == H2O_HTTP3_FRAME_TYPE_PRIORITY_UPDATE_PUSH, payload,
+                                                              len, &err_desc)) != 0)
                 goto Fail;
             if ((err = handle_priority_update_frame(conn, &frame)) != 0) {
                 err_desc = "invalid PRIORITY_UPDATE frame";

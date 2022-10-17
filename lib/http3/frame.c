@@ -38,10 +38,12 @@ uint8_t *h2o_http3_encode_priority_update_frame(uint8_t *dst, const h2o_http3_pr
     return dst;
 }
 
-int h2o_http3_decode_priority_update_frame(h2o_http3_priority_update_frame_t *frame, const uint8_t *payload, size_t len,
-                                           const char **err_desc)
+int h2o_http3_decode_priority_update_frame(h2o_http3_priority_update_frame_t *frame, int is_push, const uint8_t *payload,
+                                           size_t len, const char **err_desc)
 {
     const uint8_t *src = payload, *end = src + len;
+
+    frame->element_is_push = is_push;
 
     if (src == end)
         return H2O_HTTP3_ERROR_FRAME;
