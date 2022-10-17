@@ -1246,15 +1246,18 @@ extern const quicly_stream_callbacks_t quicly_stream_noop_callbacks;
 
 #define QUICLY_LOG_CONN(_type, _conn, _block)                                                                                      \
     do {                                                                                                                           \
+        if (!ptls_log.is_active)                                                                                                   \
+            break;                                                                                                                 \
         quicly_conn_t *_c = (_conn);                                                                                               \
-        if (!ptls_skip_tracing(_c->crypto.tls))                                                                                    \
-            PTLS_LOG(quicly, _type, {                                                                                              \
-                PTLS_LOG_ELEMENT_PTR(conn, _c);                                                                                    \
-                PTLS_LOG_ELEMENT_SIGNED(time, _c->stash.now);                                                                      \
-                do {                                                                                                               \
-                    _block                                                                                                         \
-                } while (0);                                                                                                       \
-            });                                                                                                                    \
+        if (ptls_skip_tracing(_c->crypto.tls))                                                                                     \
+            break;                                                                                                                 \
+        PTLS_LOG__DO_LOG(quicly, _type, {                                                                                          \
+            PTLS_LOG_ELEMENT_PTR(conn, _c);                                                                                        \
+            PTLS_LOG_ELEMENT_SIGNED(time, _c->stash.now);                                                                          \
+            do {                                                                                                                   \
+                _block                                                                                                             \
+            } while (0);                                                                                                           \
+        });                                                                                                                        \
     } while (0)
 
 /* inline definitions */
