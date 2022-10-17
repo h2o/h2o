@@ -24,9 +24,8 @@
 
 uint8_t *h2o_http3_encode_priority_update_frame(uint8_t *dst, const h2o_http3_priority_update_frame_t *frame)
 {
-    *dst++ = frame->element_is_push
-        ? H2O_HTTP3_FRAME_TYPE_PRIORITY_UPDATE_PUSH
-        : H2O_HTTP3_FRAME_TYPE_PRIORITY_UPDATE_REQUEST;
+    dst = quicly_encodev(dst, frame->element_is_push ? H2O_HTTP3_FRAME_TYPE_PRIORITY_UPDATE_PUSH
+                                                     : H2O_HTTP3_FRAME_TYPE_PRIORITY_UPDATE_REQUEST);
     dst = quicly_encodev(dst, frame->element);
     *dst++ = 'u';
     *dst++ = '=';
