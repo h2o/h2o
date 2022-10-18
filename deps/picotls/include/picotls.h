@@ -833,6 +833,10 @@ struct st_ptls_context_t {
      *
      */
     ptls_on_extension_t *on_extension;
+    /**
+     * (optional) list of supported tls12 cipher-suites terminated by NULL
+     */
+    ptls_cipher_suite_t **tls12_cipher_suites;
 };
 
 typedef struct st_ptls_raw_extension_t {
@@ -1357,6 +1361,10 @@ ptls_iovec_t ptls_get_client_random(ptls_t *tls);
  * returns the cipher-suite being used
  */
 ptls_cipher_suite_t *ptls_get_cipher(ptls_t *tls);
+/**
+ * returns a supported cipher-suite given an id
+ */
+ptls_cipher_suite_t *ptls_find_cipher_suite(ptls_cipher_suite_t **cipher_suites, uint16_t id);
 /**
  * Returns protocol version (e.g., 0x0303 for TLS 1.2, 0x0304 for TLS 1.3). The result may be unstable prior to handshake
  * completion.
