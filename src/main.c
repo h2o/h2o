@@ -2241,46 +2241,6 @@ static int on_config_error_log(h2o_configurator_command_t *cmd, h2o_configurator
     return 0;
 }
 
-static void *h2olog_thread(void *_ctx)
-{
-    while (1) {
-        int fd = accept(conf.h2olog.listening_fd, NULL, 0);
-        if (fd == -1) {
-            continue;
-        }
-        if (fcntl(fd, F_SETFD, FD_CLOEXEC) != 0) {
-            h2o_perror("failed to set FD_CLOEXEC");
-            close(fd);
-            continue;
-        }
-        if (fcntl(fd, F_SETFL, O_NONBLOCK) != 0) {
-            h2o_perror("failed to set O_NONBLOCK");
-            close(fd);
-            continue;
-        }
-        if (conf.h2olog.sndbuf != 0 && setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &conf.h2olog.sndbuf, sizeof(conf.h2olog.sndbuf)) != 0) {
-            h2o_perror("failed to set SO_SNDBUF");
-            close(fd);
-            continue;
-        }
-
-        if (ptls_log_add_fd(fd) != 0) {
-            close(fd);
-            continue;
-        }
-    }
-}
-
-static void create_h2olog_thread(void)
-{
-    pthread_t tid;
-    pthread_attr_t attr;
-    pthread_attr_init(&attr);
-    pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
-    h2o_multithread_create_thread(&tid, &attr, h2olog_thread, NULL);
-    pthread_attr_destroy(&attr);
-}
-
 static int on_config_h2olog(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     yoml_t **path_node, **owner_node, **group_node, **permission_node, **sndbuf_node, **appdata_node;
@@ -3822,6 +3782,46 @@ static void create_per_thread_listeners(void)
             listener_config->fds.entries[listener_config->fds.size++] = fd;
         }
     }
+}
+
+static void *h2olog_thread(void *_ctx)
+{
+    while (1) {
+        int fd = accept(conf.h2olog.listening_fd, NULL, 0);
+        if (fd == -1) {
+            continue;
+        }
+        if (fcntl(fd, F_SETFD, FD_CLOEXEC) != 0) {
+            h2o_perror("failed to set FD_CLOEXEC");
+            close(fd);
+            continue;
+        }
+        if (fcntl(fd, F_SETFL, O_NONBLOCK) != 0) {
+            h2o_perror("failed to set O_NONBLOCK");
+            close(fd);
+            continue;
+        }
+        if (conf.h2olog.sndbuf != 0 && setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &conf.h2olog.sndbuf, sizeof(conf.h2olog.sndbuf)) != 0) {
+            h2o_perror("failed to set SO_SNDBUF");
+            close(fd);
+            continue;
+        }
+
+        if (ptls_log_add_fd(fd) != 0) {
+            close(fd);
+            continue;
+        }
+    }
+}
+
+static void create_h2olog_thread(void)
+{
+    pthread_t tid;
+    pthread_attr_t attr;
+    pthread_attr_init(&attr);
+    pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+    h2o_multithread_create_thread(&tid, &attr, h2olog_thread, NULL);
+    pthread_attr_destroy(&attr);
 }
 
 int main(int argc, char **argv)
