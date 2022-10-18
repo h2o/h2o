@@ -329,10 +329,10 @@ static struct {
     .max_quic_connections = INT_MAX, /* (INT_MAX = i.e., allow up to max_connections) */
     .soft_connection_limit = INT_MAX,
     .soft_connection_limit_min_age = 30,
-    .thread_map = {0},               /* initialized in main() */
-    .quic = {0},                     /* 0 defaults to all, conn_callbacks (initialized in main() */
-    .tfo_queues = 0,                 /* initialized in main() */
-    .launch_time = 0,                /* initialized in main() */
+    .thread_map = {0}, /* initialized in main() */
+    .quic = {0},       /* 0 defaults to all, conn_callbacks (initialized in main() */
+    .tfo_queues = 0,   /* initialized in main() */
+    .launch_time = 0,  /* initialized in main() */
     .threads = NULL,
     .shutdown_requested = 0,
     .state = {{0}},
@@ -3092,8 +3092,7 @@ static void on_h2olog_accept(h2o_socket_t *listener, const char *err)
         return;
     }
 
-    if (conf.h2olog.sndbuf != 0 &&
-        setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &conf.h2olog.sndbuf, sizeof(conf.h2olog.sndbuf)) != 0) {
+    if (conf.h2olog.sndbuf != 0 && setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &conf.h2olog.sndbuf, sizeof(conf.h2olog.sndbuf)) != 0) {
         h2o_perror("failed to set SO_SNDBUF");
         close(fd);
         return;

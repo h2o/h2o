@@ -261,7 +261,7 @@ static std::string build_cc_macro_str(const char *name, const std::string &str)
     return build_cc_macro_expr(name, "\"" + str + "\"");
 }
 
-static int read_from_unix_socket(const char *unix_socket_path, FILE* outfp, bool preserve_root)
+static int read_from_unix_socket(const char *unix_socket_path, FILE *outfp, bool preserve_root)
 {
     struct sockaddr_un sa = {
         .sun_family = AF_UNIX,
