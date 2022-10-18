@@ -2246,34 +2246,33 @@ static int on_config_error_log(h2o_configurator_command_t *cmd, h2o_configurator
 static int on_config_h2olog(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     yoml_t **path_node, **owner_node, **group_node, **permission_node, **sndbuf_node, **appdata_node;
+
     if (h2o_configurator_parse_mapping(cmd, node, "path:s", "owner:s,group:s,permission:s,sndbuf:s,appdata:s", &path_node,
                                        &owner_node, &group_node, &permission_node, &sndbuf_node, &appdata_node) != 0)
         return -1;
 
     const char *path = (*path_node)->data.scalar;
     struct sockaddr_un sa;
+    int fd;
+    unsigned sndbuf = 0;
+
     if (strlen(path) >= sizeof(sa.sun_path)) {
         h2o_configurator_errprintf(cmd, node, "path:%s is too long as a unix socket name", path);
         return -1;
     }
-    sa = (struct sockaddr_un){
-        .sun_family = AF_UNIX,
-    };
+    sa = (struct sockaddr_un){.sun_family = AF_UNIX};
     strcpy(sa.sun_path, path);
 
-    int fd = open_unix_listener(cmd, node, &sa, owner_node, group_node, permission_node);
-    if (fd == -1) {
+    if ((fd = open_unix_listener(cmd, node, &sa, owner_node, group_node, permission_node)) == -1)
         return -1;
-    }
-    unsigned sndbuf = 0;
+
     if (sndbuf_node != NULL && h2o_configurator_scanf(cmd, *sndbuf_node, "%u", &sndbuf) != 0)
         return -1;
 
     if (appdata_node != NULL) {
         ssize_t v;
-        if ((v = h2o_configurator_get_one_of(cmd, *appdata_node, "OFF,ON")) == -1) {
+        if ((v = h2o_configurator_get_one_of(cmd, *appdata_node, "OFF,ON")) == -1)
             return -1;
-        }
         ptls_log.include_appdata = v;
     }
 
