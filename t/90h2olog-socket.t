@@ -86,6 +86,30 @@ EOT
 
     cmp_ok get_status($server)->{"h2olog.lost"}, "==", 0, "does not lost messages ($i)";
   }
+
+  subtest "multi clients", sub {
+    my @tracers;
+
+    for (1 .. 5) {
+      my $tracer = H2ologTracer->new({
+        path => $h2olog_socket,
+      });
+      push @tracers, $tracer;
+    }
+
+    system($client_prog, "-3", "100", "https://127.0.0.1:$quic_port/");
+
+    my @logs;
+    for my $tracer(@tracers) {
+      my $logs = '';
+      until (($logs .= $tracer->get_trace()) =~ m{"type":"h3s_destroy"}) {}
+      push @logs, $logs;
+    }
+
+    for (my $i = 1; $i < @tracers; $i++) {
+      is $logs[$i], $logs[0], "same logs (0 vs $i)";
+    }
+  };
 };
 
 subtest "lost messages", sub {
