@@ -2273,7 +2273,7 @@ static int on_config_h2olog(h2o_configurator_command_t *cmd, h2o_configurator_co
         ssize_t v;
         if ((v = h2o_configurator_get_one_of(cmd, *appdata_node, "OFF,ON")) == -1)
             return -1;
-        ptls_log.include_appdata = v;
+        ptls_log.include_appdata = (unsigned)v;
     }
 
     conf.h2olog.listen_fd = fd;
