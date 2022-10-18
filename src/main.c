@@ -3784,7 +3784,7 @@ static void create_per_thread_listeners(void)
     }
 }
 
-static void *h2olog_thread(void *_ctx)
+H2O_NORETURN static void *h2olog_thread(void *_ctx)
 {
     while (1) {
         int fd = accept(conf.h2olog.listening_fd, NULL, 0);
@@ -3808,8 +3808,8 @@ static void *h2olog_thread(void *_ctx)
         }
 
         if (ptls_log_add_fd(fd) != 0) {
+            h2o_perror("failed to register fd to ptls_log");
             close(fd);
-            continue;
         }
     }
 }
