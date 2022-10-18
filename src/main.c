@@ -321,11 +321,12 @@ static struct {
     .num_listeners = 0,
     .pid_file = NULL,
     .error_log = NULL,
-    .h2olog = {
-        .listen_fd = -1,
-        .listen_sock = NULL,
-        .sndbuf = 0,
-    },
+    .h2olog =
+        {
+            .listen_fd = -1,
+            .listen_sock = NULL,
+            .sndbuf = 0,
+        },
     .max_connections = 1024,
     .max_quic_connections = INT_MAX, /* (INT_MAX = i.e., allow up to max_connections) */
     .soft_connection_limit = INT_MAX,
@@ -2247,8 +2248,8 @@ static int on_config_error_log(h2o_configurator_command_t *cmd, h2o_configurator
 static int on_config_h2olog(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     yoml_t **path_node, **owner_node, **group_node, **permission_node, **sndbuf_node, **appdata_node;
-    if (h2o_configurator_parse_mapping(cmd, node, "path:s", "owner:s,group:s,permission:s,sndbuf:s,appdata:s", &path_node, &owner_node,
-                                       &group_node, &permission_node, &sndbuf_node, &appdata_node) != 0)
+    if (h2o_configurator_parse_mapping(cmd, node, "path:s", "owner:s,group:s,permission:s,sndbuf:s,appdata:s", &path_node,
+                                       &owner_node, &group_node, &permission_node, &sndbuf_node, &appdata_node) != 0)
         return -1;
 
     const char *path = (*path_node)->data.scalar;
@@ -3091,8 +3092,8 @@ static void on_h2olog_accept(h2o_socket_t *listener, const char *err)
         h2o_error_printf("failed to export h2o socket\n");
         return;
     }
-    if (conf.h2olog.sndbuf != 0
-            && setsockopt(sockinfo.fd, SOL_SOCKET, SO_SNDBUF, &conf.h2olog.sndbuf, sizeof(conf.h2olog.sndbuf)) != 0) {
+    if (conf.h2olog.sndbuf != 0 &&
+        setsockopt(sockinfo.fd, SOL_SOCKET, SO_SNDBUF, &conf.h2olog.sndbuf, sizeof(conf.h2olog.sndbuf)) != 0) {
         h2o_perror("failed to set SO_SNDBUF");
         close(sockinfo.fd);
         return;
@@ -3378,8 +3379,8 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
 
     /* setup the h2olog listener */
     if (conf.h2olog.listen_fd != -1) {
-        conf.h2olog.listen_sock = h2o_evloop_socket_create(conf.threads[thread_index].ctx.loop, conf.h2olog.listen_fd,
-                                                            H2O_SOCKET_FLAG_DONT_READ);
+        conf.h2olog.listen_sock =
+            h2o_evloop_socket_create(conf.threads[thread_index].ctx.loop, conf.h2olog.listen_fd, H2O_SOCKET_FLAG_DONT_READ);
     }
 
     /* and start listening */
