@@ -255,7 +255,6 @@ static struct {
     char *error_log;
     struct {
         int listen_fd;
-        h2o_socket_t *listen_sock;
         unsigned sndbuf;
     } h2olog;
     int max_connections;
@@ -324,7 +323,6 @@ static struct {
     .h2olog =
         {
             .listen_fd = -1,
-            .listen_sock = NULL,
             .sndbuf = 0,
         },
     .max_connections = 1024,
@@ -3083,26 +3081,28 @@ static void on_h2olog_accept(h2o_socket_t *listener, const char *err)
         return;
     }
 
-    h2o_socket_t *sock;
-    if ((sock = h2o_evloop_socket_accept(listener)) == NULL)
-        return;
-
-    h2o_socket_export_t sockinfo;
-    if (h2o_socket_export(sock, &sockinfo) != 0) {
-        h2o_error_printf("failed to export h2o socket\n");
+    int fd;
+    if ((fd = cloexec_accept(h2o_socket_get_fd(listener), NULL, NULL)) == -1) {
+        h2o_perror("failed to accept a connection to h2olog");
         return;
     }
+    if (fcntl(fd, F_SETFL, O_NONBLOCK) != 0) {
+        h2o_perror("failed to set O_NONBLOCK");
+        close(fd);
+        return;
+    }
+
     if (conf.h2olog.sndbuf != 0 &&
-        setsockopt(sockinfo.fd, SOL_SOCKET, SO_SNDBUF, &conf.h2olog.sndbuf, sizeof(conf.h2olog.sndbuf)) != 0) {
+        setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &conf.h2olog.sndbuf, sizeof(conf.h2olog.sndbuf)) != 0) {
         h2o_perror("failed to set SO_SNDBUF");
-        close(sockinfo.fd);
+        close(fd);
         return;
     }
 
     int ret;
-    if ((ret = ptls_log_add_fd(sockinfo.fd)) != 0) {
+    if ((ret = ptls_log_add_fd(fd)) != 0) {
         h2o_error_printf("failed to add fd to h2olog: %d\n", ret);
-        close(sockinfo.fd);
+        close(fd);
     }
 }
 
@@ -3276,9 +3276,6 @@ static void update_listener_state(struct listener_ctx_t *listeners)
                 h2o_socket_read_stop(listeners[i].sock);
         }
     }
-
-    if (conf.h2olog.listen_sock != NULL && !h2o_socket_is_reading(conf.h2olog.listen_sock))
-        h2o_socket_read_start(conf.h2olog.listen_sock, on_h2olog_accept);
 }
 
 static void on_server_notification(h2o_multithread_receiver_t *receiver, h2o_linklist_t *messages)
@@ -3377,12 +3374,6 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
         }
     }
 
-    /* setup the h2olog listener */
-    if (conf.h2olog.listen_fd != -1) {
-        conf.h2olog.listen_sock =
-            h2o_evloop_socket_create(conf.threads[thread_index].ctx.loop, conf.h2olog.listen_fd, H2O_SOCKET_FLAG_DONT_READ);
-    }
-
     /* and start listening */
     update_listener_state(listeners);
 
@@ -3393,6 +3384,14 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
         h2o_set_signal_handler(SIGTERM, on_sigterm_set_flag_notify_threads);
         if (conf.shutdown_requested)
             exit(0);
+
+        /* setup the h2olog listener */
+        if (conf.h2olog.listen_fd != -1) {
+            h2o_socket_t *sock =
+                h2o_evloop_socket_create(conf.threads[0].ctx.loop, conf.h2olog.listen_fd, H2O_SOCKET_FLAG_DONT_READ);
+            h2o_socket_read_start(sock, on_h2olog_accept);
+        }
+
         fprintf(stderr, "h2o server (pid:%d) is ready to serve requests with %zu threads\n", (int)getpid(), conf.thread_map.size);
     }
     h2o_barrier_wait(&conf.startup_sync_barrier_post);
