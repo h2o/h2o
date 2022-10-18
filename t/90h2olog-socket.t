@@ -12,6 +12,8 @@ use t::Util;
 
 my $client_prog = bindir() . "/h2o-httpclient";
 plan skip_all => "$client_prog not found" unless -e $client_prog;
+my $h2olog_prog = bindir() . "/h2olog";
+plan skip_all => "$h2olog_prog not found" unless -e $h2olog_prog;
 
 my $tempdir = tempdir(CLEANUP => 1);
 my $h2olog_socket = "$tempdir/h2olog.sock";
