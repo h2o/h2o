@@ -261,7 +261,7 @@ static std::string build_cc_macro_str(const char *name, const std::string &str)
     return build_cc_macro_expr(name, "\"" + str + "\"");
 }
 
-static int read_from_unix_socket(const char *unix_socket_path)
+static int read_from_unix_socket(const char *unix_socket_path, FILE* outfp, bool preserve_root)
 {
     struct sockaddr_un sa = {
         .sun_family = AF_UNIX,
@@ -283,8 +283,10 @@ static int read_from_unix_socket(const char *unix_socket_path)
         goto Exit;
     }
 
-    setvbuf(stdout, NULL, _IOLBF, 0);
-    setvbuf(stderr, NULL, _IOLBF, 0);
+    setvbuf(outfp, NULL, _IOLBF, 0);
+
+    if (!preserve_root)
+        drop_root_privilege();
 
     fd_set fds;
     FD_ZERO(&fds);
@@ -297,7 +299,7 @@ static int read_from_unix_socket(const char *unix_socket_path)
             if (ret != EINTR)
                 break;
         } else if (ret > 0) {
-            fwrite(buf, 1, ret, stdout);
+            fwrite(buf, 1, ret, outfp);
         } else {
             // disconnected
             break;
@@ -439,8 +441,8 @@ int main(int argc, char **argv)
 
     if (unix_socket_path != NULL) {
         if (debug)
-            fprintf(stderr, "Attaching %s\n", unix_socket_path);
-        return read_from_unix_socket(unix_socket_path);
+            infof("Attaching %s\n", unix_socket_path);
+        return read_from_unix_socket(unix_socket_path, outfp, preserve_root);
     }
 
     if (list_usdts) {

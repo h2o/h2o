@@ -48,16 +48,14 @@ EOT
   for my $i(1 ... 3) {
     diag $i;
 
-    my $pid = fork;
-    die "Cannot fork: $!" unless defined $pid;
-    if ($pid == 0) {
-      # child
-      sleep 0.1;
-      exec($client_prog, "-t", "2", "-3", "100", "https://127.0.0.1:$quic_port/");
-      die "Cannot exec $client_prog: $!";
-    }
-    # parent
-    my $logs = slurp_h2olog_socket($h2olog_socket, { timeout => 2 });
+    my $tracer = H2ologTracer->new({
+      path => $h2olog_socket,
+    });
+
+    system($client_prog, "-3", "100", "https://127.0.0.1:$quic_port/");
+
+    my $logs = "";
+    until (($logs .= $tracer->get_trace()) =~ m{"type":"h3s_destroy"}) {}
 
     diag($logs . "\nlength: " . length($logs)) if $ENV{TEST_DEBUG};
 
@@ -111,18 +109,18 @@ EOT
 
   wait_port({ port => $quic_port, proto => "udp" });
 
-
+  # use a hand-written client to read socket with timeouts.
   my $client = IO::Socket::UNIX->new(
       Type => SOCK_STREAM,
       Peer => $h2olog_socket,
   ) or croak "Cannot connect to a unix domain socket '$h2olog_socket': $!";
-  # a client connects to h2olog socket, but does not read from the socket.
 
   system($client_prog, "-3", "100", "https://127.0.0.1:$quic_port/") == 0 or die $!;
 
   cmp_ok get_status($server)->{"h2olog.lost"}, ">", 0, "losts messages if client does not read socket";
 
-  # make sure event lost does not break the socket buffer
+  # make sure event lost does not break the output structure
+
   my $pid = fork;
   die "Cannot fork: $!" unless defined $pid;
   if ($pid == 0) {
