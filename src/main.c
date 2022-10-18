@@ -3063,6 +3063,7 @@ static void on_accept(h2o_socket_t *listener, const char *err)
         set_tcp_congestion_controller(sock, listener_config->tcp_congestion_controller);
 
         h2o_accept(&ctx->accept_ctx, sock);
+
     } while (--num_accepts != 0);
 }
 
