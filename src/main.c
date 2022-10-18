@@ -253,7 +253,10 @@ static struct {
     size_t num_listeners;
     char *pid_file;
     char *error_log;
-    int h2olog_listening_fd;
+    struct {
+        int listening_fd;
+        unsigned sndbuf;
+    } h2olog;
     int max_connections;
     /**
      * In addition to max_connections, maximum number of H3 connections can be further capped by this configuration variable.
@@ -317,7 +320,9 @@ static struct {
     .num_listeners = 0,
     .pid_file = NULL,
     .error_log = NULL,
-    .h2olog_listening_fd = -1,
+    .h2olog = {
+        .listening_fd = -1,
+    },
     .max_connections = 1024,
     .max_quic_connections = INT_MAX, /* (INT_MAX = i.e., allow up to max_connections) */
     .soft_connection_limit = INT_MAX,
@@ -2239,18 +2244,26 @@ static int on_config_error_log(h2o_configurator_command_t *cmd, h2o_configurator
 static void *h2olog_thread(void *_ctx)
 {
     while (1) {
-        int fd = accept(conf.h2olog_listening_fd, NULL, 0);
+        int fd = accept(conf.h2olog.listening_fd, NULL, 0);
         if (fd == -1) {
             continue;
         }
         if (fcntl(fd, F_SETFD, FD_CLOEXEC) != 0) {
+            h2o_perror("failed to set FD_CLOEXEC");
             close(fd);
             continue;
         }
         if (fcntl(fd, F_SETFL, O_NONBLOCK) != 0) {
+            h2o_perror("failed to set O_NONBLOCK");
             close(fd);
             continue;
         }
+        if (conf.h2olog.sndbuf != 0 && setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &conf.h2olog.sndbuf, sizeof(conf.h2olog.sndbuf)) != 0) {
+            h2o_perror("failed to set SO_SNDBUF");
+            close(fd);
+            continue;
+        }
+
         if (ptls_log_add_fd(fd) != 0) {
             close(fd);
             continue;
@@ -2296,7 +2309,8 @@ static int on_config_h2olog(h2o_configurator_command_t *cmd, h2o_configurator_co
     if (appdata_node != NULL && strcasecmp((*appdata_node)->data.scalar, "ON") == 0)
         ptls_log.include_appdata = 1;
 
-    conf.h2olog_listening_fd = fd;
+    conf.h2olog.listening_fd = fd;
+    conf.h2olog.sndbuf = sndbuf;
     return 0;
 }
 

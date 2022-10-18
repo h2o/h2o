@@ -93,7 +93,7 @@ subtest "lost messages", sub {
 h2olog:
   path: $h2olog_socket
   permission: 666
-  sndbuf: 1024
+  sndbuf: 512
 listen:
   type: quic
   port: $quic_port
@@ -118,8 +118,6 @@ EOT
   ) or croak "Cannot connect to a unix domain socket '$h2olog_socket': $!";
   # a client connects to h2olog socket, but does not read from the socket.
 
-  system($client_prog, "-3", "100", "https://127.0.0.1:$quic_port/") == 0 or die $!;
-  system($client_prog, "-3", "100", "https://127.0.0.1:$quic_port/") == 0 or die $!;
   system($client_prog, "-3", "100", "https://127.0.0.1:$quic_port/") == 0 or die $!;
 
   cmp_ok get_status($server)->{"h2olog.lost"}, ">", 0, "losts messages if client does not read socket";
