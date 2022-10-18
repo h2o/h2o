@@ -255,6 +255,7 @@ static struct {
     char *error_log;
     struct {
         int listen_fd;
+        h2o_socket_t *listen_sock;
         unsigned sndbuf;
     } h2olog;
     int max_connections;
@@ -322,6 +323,8 @@ static struct {
     .error_log = NULL,
     .h2olog = {
         .listen_fd = -1,
+        .listen_sock = NULL,
+        .sndbuf = 0,
     },
     .max_connections = 1024,
     .max_quic_connections = INT_MAX, /* (INT_MAX = i.e., allow up to max_connections) */
@@ -3073,6 +3076,35 @@ static void on_accept(h2o_socket_t *listener, const char *err)
     } while (--num_accepts != 0);
 }
 
+static void on_h2olog_accept(h2o_socket_t *listener, const char *err)
+{
+    if (err != NULL) {
+        return;
+    }
+
+    h2o_socket_t *sock;
+    if ((sock = h2o_evloop_socket_accept(listener)) == NULL)
+        return;
+
+    h2o_socket_export_t sockinfo;
+    if (h2o_socket_export(sock, &sockinfo) != 0) {
+        h2o_error_printf("failed to export h2o socket\n");
+        return;
+    }
+    if (conf.h2olog.sndbuf != 0
+            && setsockopt(sockinfo.fd, SOL_SOCKET, SO_SNDBUF, &conf.h2olog.sndbuf, sizeof(conf.h2olog.sndbuf)) != 0) {
+        h2o_perror("failed to set SO_SNDBUF");
+        close(sockinfo.fd);
+        return;
+    }
+
+    int ret;
+    if ((ret = ptls_log_add_fd(sockinfo.fd)) != 0) {
+        h2o_error_printf("failed to add fd to h2olog: %d\n", ret);
+        close(sockinfo.fd);
+    }
+}
+
 struct init_ebpf_key_info_t {
     struct sockaddr *local, *remote;
 };
@@ -3243,6 +3275,9 @@ static void update_listener_state(struct listener_ctx_t *listeners)
                 h2o_socket_read_stop(listeners[i].sock);
         }
     }
+
+    if (conf.h2olog.listen_sock != NULL && !h2o_socket_is_reading(conf.h2olog.listen_sock))
+        h2o_socket_read_start(conf.h2olog.listen_sock, on_h2olog_accept);
 }
 
 static void on_server_notification(h2o_multithread_receiver_t *receiver, h2o_linklist_t *messages)
@@ -3340,6 +3375,13 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
             conf.listeners[i]->quic.thread_fds[thread_index] = fds[1];
         }
     }
+
+    /* setup the h2olog listener */
+    if (conf.h2olog.listen_fd != -1) {
+        conf.h2olog.listen_sock = h2o_evloop_socket_create(conf.threads[thread_index].ctx.loop, conf.h2olog.listen_fd,
+                                                            H2O_SOCKET_FLAG_DONT_READ);
+    }
+
     /* and start listening */
     update_listener_state(listeners);
 
@@ -3791,48 +3833,6 @@ static void create_per_thread_listeners(void)
     }
 }
 
-H2O_NORETURN static void *h2olog_thread(void *_ctx)
-{
-    while (1) {
-        int fd = accept(conf.h2olog.listen_fd, NULL, 0);
-        if (fd == -1) {
-            h2o_perror("failed to accept");
-            continue;
-        }
-        if (fcntl(fd, F_SETFD, FD_CLOEXEC) != 0) {
-            h2o_perror("failed to set FD_CLOEXEC");
-            close(fd);
-            continue;
-        }
-        if (fcntl(fd, F_SETFL, O_NONBLOCK) != 0) {
-            h2o_perror("failed to set O_NONBLOCK");
-            close(fd);
-            continue;
-        }
-        if (conf.h2olog.sndbuf != 0 && setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &conf.h2olog.sndbuf, sizeof(conf.h2olog.sndbuf)) != 0) {
-            h2o_perror("failed to set SO_SNDBUF");
-            close(fd);
-            continue;
-        }
-
-        int ret;
-        if ((ret = ptls_log_add_fd(fd)) != 0) {
-            h2o_error_printf("failed to register fd to ptls_log (error code=%d)\n", ret);
-            close(fd);
-        }
-    }
-}
-
-static void create_h2olog_thread(void)
-{
-    pthread_t tid;
-    pthread_attr_t attr;
-    pthread_attr_init(&attr);
-    pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
-    h2o_multithread_create_thread(&tid, &attr, h2olog_thread, NULL);
-    pthread_attr_destroy(&attr);
-}
-
 int main(int argc, char **argv)
 {
     cmd_argc = argc;
@@ -4254,7 +4254,6 @@ int main(int argc, char **argv)
         pthread_t tid;
         h2o_multithread_create_thread(&tid, NULL, run_loop, (void *)i);
     }
-    create_h2olog_thread();
 
     /* this thread becomes the first thread */
     run_loop((void *)0);
