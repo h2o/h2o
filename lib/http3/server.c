@@ -884,27 +884,29 @@ static void handle_buffered_input(struct st_h2o_http3_server_stream_t *stream, i
        * c) all bytes are processed - exit the loop. */
         size_t bytes_available = quicly_recvstate_bytes_available(&stream->quic->recvstate);
         assert(bytes_available <= stream->recvbuf.buf->size);
-        const uint8_t *src = (const uint8_t *)stream->recvbuf.buf->bytes, *src_end = src + bytes_available;
-        while (src != src_end) {
-            int err;
-            const char *err_desc = NULL;
-            if ((err = stream->recvbuf.handle_input(stream, &src, src_end, in_generator, &err_desc)) != 0) {
-                if (err == H2O_HTTP3_ERROR_INCOMPLETE) {
-                    if (!quicly_recvstate_transfer_complete(&stream->quic->recvstate))
-                        break;
-                    err = H2O_HTTP3_ERROR_GENERAL_PROTOCOL;
-                    err_desc = "incomplete frame";
+        if (bytes_available != 0) {
+            const uint8_t *src = (const uint8_t *)stream->recvbuf.buf->bytes, *src_end = src + bytes_available;
+            while (src != src_end) {
+                int err;
+                const char *err_desc = NULL;
+                if ((err = stream->recvbuf.handle_input(stream, &src, src_end, in_generator, &err_desc)) != 0) {
+                    if (err == H2O_HTTP3_ERROR_INCOMPLETE) {
+                        if (!quicly_recvstate_transfer_complete(&stream->quic->recvstate))
+                            break;
+                        err = H2O_HTTP3_ERROR_GENERAL_PROTOCOL;
+                        err_desc = "incomplete frame";
+                    }
+                    h2o_quic_close_connection(&conn->h3.super, err, err_desc);
+                    return;
+                } else if (stream->state >= H2O_HTTP3_SERVER_STREAM_STATE_CLOSE_WAIT) {
+                    return;
                 }
-                h2o_quic_close_connection(&conn->h3.super, err, err_desc);
-                return;
-            } else if (stream->state >= H2O_HTTP3_SERVER_STREAM_STATE_CLOSE_WAIT) {
-                return;
             }
+            /* Processed zero or more bytes without noticing an error; shift the bytes that have been processed as frames. */
+            size_t bytes_consumed = src - (const uint8_t *)stream->recvbuf.buf->bytes;
+            h2o_buffer_consume(&stream->recvbuf.buf, bytes_consumed);
+            quicly_stream_sync_recvbuf(stream->quic, bytes_consumed);
         }
-        /* Processed zero or more bytes without noticing an error; shift the bytes that have been processed as frames. */
-        size_t bytes_consumed = src - (const uint8_t *)stream->recvbuf.buf->bytes;
-        h2o_buffer_consume(&stream->recvbuf.buf, bytes_consumed);
-        quicly_stream_sync_recvbuf(stream->quic, bytes_consumed);
     }
 
     if (quicly_recvstate_transfer_complete(&stream->quic->recvstate)) {

@@ -407,8 +407,10 @@ static inline char *append_safe_string(char *pos, const char *src, size_t len)
 
 static char *append_unsafe_string_apache(char *pos, const char *src, size_t len)
 {
-    const char *src_end = src + len;
+    if (len == 0)
+        return pos;
 
+    const char *src_end = src + len;
     for (; src != src_end; ++src) {
         if (' ' <= *src && *src < 0x7d && *src != '"') {
             *pos++ = *src;
