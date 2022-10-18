@@ -3375,23 +3375,25 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
     /* and start listening */
     update_listener_state(listeners);
 
-    /* Wait for all threads to become ready but before letting any of them serve connections, swap the signal handler for graceful
-     * shutdown, check (and exit) if SIGTERM has been received already. */
+    /* wait for all threads to become ready */
     h2o_barrier_wait(&conf.startup_sync_barrier_init);
+
+    /* now that all worker threads are ready, the main thread does the following:
+     * i) set signal handler for graceful shutdown / or exit immediately
+     * ii) start listening to h2olog clients */
     if (thread_index == 0) {
         h2o_set_signal_handler(SIGTERM, on_sigterm_set_flag_notify_threads);
         if (conf.shutdown_requested)
             exit(0);
-
-        /* setup the h2olog listener */
         if (conf.h2olog.listen_fd != -1) {
             h2o_socket_t *sock =
                 h2o_evloop_socket_create(conf.threads[0].ctx.loop, conf.h2olog.listen_fd, H2O_SOCKET_FLAG_DONT_READ);
             h2o_socket_read_start(sock, on_h2olog_accept);
         }
-
         fprintf(stderr, "h2o server (pid:%d) is ready to serve requests with %zu threads\n", (int)getpid(), conf.thread_map.size);
     }
+
+    /* let all worker threads start accepting connections */
     h2o_barrier_wait(&conf.startup_sync_barrier_post);
 
     /* the main loop */
