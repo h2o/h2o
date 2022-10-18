@@ -254,7 +254,7 @@ static struct {
     char *pid_file;
     char *error_log;
     struct {
-        int listening_fd;
+        int listen_fd;
         unsigned sndbuf;
     } h2olog;
     int max_connections;
@@ -321,7 +321,7 @@ static struct {
     .pid_file = NULL,
     .error_log = NULL,
     .h2olog = {
-        .listening_fd = -1,
+        .listen_fd = -1,
     },
     .max_connections = 1024,
     .max_quic_connections = INT_MAX, /* (INT_MAX = i.e., allow up to max_connections) */
@@ -2266,10 +2266,16 @@ static int on_config_h2olog(h2o_configurator_command_t *cmd, h2o_configurator_co
     unsigned sndbuf = 0;
     if (sndbuf_node != NULL && h2o_configurator_scanf(cmd, *sndbuf_node, "%u", &sndbuf) != 0)
         return -1;
-    if (appdata_node != NULL && strcasecmp((*appdata_node)->data.scalar, "ON") == 0)
-        ptls_log.include_appdata = 1;
 
-    conf.h2olog.listening_fd = fd;
+    if (appdata_node != NULL) {
+        ssize_t v;
+        if ((v = h2o_configurator_get_one_of(cmd, *appdata_node, "OFF,ON")) == -1) {
+            return -1;
+        }
+        ptls_log.include_appdata = v;
+    }
+
+    conf.h2olog.listen_fd = fd;
     conf.h2olog.sndbuf = sndbuf;
     return 0;
 }
@@ -3788,8 +3794,9 @@ static void create_per_thread_listeners(void)
 H2O_NORETURN static void *h2olog_thread(void *_ctx)
 {
     while (1) {
-        int fd = accept(conf.h2olog.listening_fd, NULL, 0);
+        int fd = accept(conf.h2olog.listen_fd, NULL, 0);
         if (fd == -1) {
+            h2o_perror("failed to accept");
             continue;
         }
         if (fcntl(fd, F_SETFD, FD_CLOEXEC) != 0) {
@@ -3808,8 +3815,9 @@ H2O_NORETURN static void *h2olog_thread(void *_ctx)
             continue;
         }
 
-        if (ptls_log_add_fd(fd) != 0) {
-            h2o_perror("failed to register fd to ptls_log");
+        int ret;
+        if ((ret = ptls_log_add_fd(fd)) != 0) {
+            h2o_error_printf("failed to register fd to ptls_log (error code=%d)\n", ret);
             close(fd);
         }
     }
