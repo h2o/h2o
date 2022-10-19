@@ -124,7 +124,7 @@ h2o_iovec_t h2o_url_normalize_path(h2o_mem_pool_t *pool, const char *path, size_
     *query_at = SIZE_MAX;
     *norm_indexes = NULL;
 
-    if (len == 0) {
+    if (len == 0 || (len == 1 && path[0] == '/')) {
         ret = h2o_iovec_init("/", 1);
         return ret;
     }
