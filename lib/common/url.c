@@ -129,32 +129,31 @@ h2o_iovec_t h2o_url_normalize_path(h2o_mem_pool_t *pool, const char *path, size_
         return ret;
     }
 
+    const char *p = path, *end = path + len;
+
     if (path[0] != '/')
         goto Rewrite;
 
-    {
-        const char *p = path, *end = path + len;
-        for (; p + 1 < end; ++p) {
-            if ((p[0] == '/' && p[1] == '.') || p[0] == '%') {
-                /* detect false positives as well */
-                goto Rewrite;
-            } else if (p[0] == '?') {
-                *query_at = p - path;
-                goto Return;
-            }
+    for (; p + 1 < end; ++p) {
+        if ((p[0] == '/' && p[1] == '.') || p[0] == '%') {
+            /* detect false positives as well */
+            goto Rewrite;
+        } else if (p[0] == '?') {
+            *query_at = p - path;
+            goto Return;
         }
-        for (; p < end; ++p) {
-            if (p[0] == '?') {
-                *query_at = p - path;
-                goto Return;
-            }
-        }
-
-    Return:
-        ret.base = (char *)path;
-        ret.len = p - path;
-        return ret;
     }
+    for (; p < end; ++p) {
+        if (p[0] == '?') {
+            *query_at = p - path;
+            goto Return;
+        }
+    }
+
+Return:
+    ret.base = (char *)path;
+    ret.len = p - path;
+    return ret;
 
 Rewrite:
     ret = rebuild_path(pool, path, len, query_at, norm_indexes);
