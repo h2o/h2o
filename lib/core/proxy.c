@@ -198,10 +198,9 @@ static void build_request(h2o_req_t *req, h2o_iovec_t *method, h2o_url_t *url, h
 
     /* headers */
     h2o_iovec_vector_t cookie_values = {NULL};
-    {
-        const h2o_header_t *h, *h_end;
-        int found_early_data = 0;
-        for (h = req->headers.entries, h_end = h + req->headers.size; h != h_end; ++h) {
+    int found_early_data = 0;
+    if (H2O_LIKELY(req->headers.size != 0)) {
+        for (const h2o_header_t *h = req->headers.entries, *h_end = h + req->headers.size; h != h_end; ++h) {
             if (h2o_iovec_is_token(h->name)) {
                 const h2o_token_t *token = (void *)h->name;
                 if (token->flags.proxy_should_drop_for_req)
@@ -238,11 +237,11 @@ static void build_request(h2o_req_t *req, h2o_iovec_t *method, h2o_url_t *url, h
                                       h->value.len);
             }
         }
-        if (found_early_data) {
-            *reprocess_if_too_early = 0;
-        } else if (*reprocess_if_too_early) {
-            h2o_add_header(&req->pool, headers, H2O_TOKEN_EARLY_DATA, NULL, H2O_STRLIT("1"));
-        }
+    }
+    if (found_early_data) {
+        *reprocess_if_too_early = 0;
+    } else if (*reprocess_if_too_early) {
+        h2o_add_header(&req->pool, headers, H2O_TOKEN_EARLY_DATA, NULL, H2O_STRLIT("1"));
     }
 
     if (cookie_values.size == 1) {
