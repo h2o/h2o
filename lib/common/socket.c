@@ -1064,7 +1064,7 @@ const char *h2o_socket_get_ssl_cipher(h2o_socket_t *sock)
         if (sock->ssl->ptls != NULL) {
             ptls_cipher_suite_t *cipher = ptls_get_cipher(sock->ssl->ptls);
             if (cipher != NULL)
-                return cipher->aead->name;
+                return cipher->name;
         } else if (sock->ssl->ossl != NULL) {
             return SSL_get_cipher_name(sock->ssl->ossl);
         }

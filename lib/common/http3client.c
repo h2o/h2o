@@ -784,7 +784,7 @@ static void do_get_conn_properties(h2o_httpclient_t *_client, h2o_httpclient_con
     if (req->quic != NULL && (tls = quicly_get_tls(req->quic->conn), (cipher = ptls_get_cipher(tls)) != NULL)) {
         properties->ssl.protocol_version = "TLSv1.3";
         properties->ssl.session_reused = ptls_is_psk_handshake(tls);
-        properties->ssl.cipher = cipher->aead->name;
+        properties->ssl.cipher = cipher->name;
         properties->ssl.cipher_bits = (int)cipher->aead->key_size;
     } else {
         properties->ssl.protocol_version = NULL;
