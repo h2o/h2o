@@ -3075,35 +3075,83 @@ static void on_accept(h2o_socket_t *listener, const char *err)
     } while (--num_accepts != 0);
 }
 
+void on_h2olog_read(h2o_socket_t *sock, const char *err)
+{
+    if (err) {
+        h2o_socket_close(sock);
+        return;
+    }
+
+    if (sock->input->size != 0) {
+        // parameters from h2olog client:
+        // syntax: name '=' value (';' name '=' value)* '\n'
+
+#define ST_KEY 0
+#define ST_VALUE 1
+        const char *src = sock->input->bytes, *end = src + sock->input->size;
+        const char *key_beg = src, *key_end, *val_beg, *val_end;
+        int state = ST_KEY;
+        for (; src != end; ++src) {
+            switch (state) {
+                case ST_KEY:
+                    if (*src == '=') {
+                        key_end = src;
+                        state = ST_VALUE;
+                        val_beg = src + 1;
+                    }
+                    break;
+                case ST_VALUE:
+                    if (*src == ';' || *src == '\n') {
+                        val_end = src;
+
+                        if (h2o_memis(key_beg, key_end - key_beg, H2O_STRLIT("include_appdata"))) {
+                            ptls_log.include_appdata = !h2o_memis(val_beg, val_end - val_beg, H2O_STRLIT("0"));
+                        } else {
+                            h2o_error_printf("unknown h2olog parameter: %.*s\n", (int)(key_end - key_beg), key_beg);
+                        }
+
+                        state = ST_KEY;
+                        key_beg = src + 1;
+                    }
+                    break;
+                default:
+                    assert(0);
+            }
+        }
+#undef ST_KEY
+#undef ST_VALUE
+
+        h2o_buffer_consume(&sock->input, sock->input->size);
+    }
+}
+
 static void on_h2olog_accept(h2o_socket_t *listener, const char *err)
 {
     if (err != NULL) {
         return;
     }
 
-    int fd;
-    if ((fd = cloexec_accept(h2o_socket_get_fd(listener), NULL, NULL)) == -1) {
+    h2o_socket_t *sock;
+    if ((sock = h2o_evloop_socket_accept(listener)) == NULL) {
         h2o_perror("failed to accept a connection to h2olog");
         return;
     }
-    if (fcntl(fd, F_SETFL, O_NONBLOCK) != 0) {
-        h2o_perror("failed to set O_NONBLOCK");
-        close(fd);
-        return;
-    }
+    int fd = h2o_socket_get_fd(sock);
 
     if (conf.h2olog.sndbuf != 0 &&
         setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &conf.h2olog.sndbuf, sizeof(conf.h2olog.sndbuf)) != 0) {
         h2o_perror("failed to set SO_SNDBUF");
-        close(fd);
+        h2o_socket_close(sock);
         return;
     }
 
     int ret;
-    if ((ret = ptls_log_add_fd(fd)) != 0) {
+    if ((ret = ptls_log_add_fd(h2o_socket_get_fd(sock))) != 0) {
         h2o_error_printf("failed to add fd to h2olog: %d\n", ret);
-        close(fd);
+        h2o_socket_close(sock);
     }
+
+    h2o_socket_read_start(sock, on_h2olog_read);
 }
 
 struct init_ebpf_key_info_t {

@@ -261,7 +261,7 @@ static std::string build_cc_macro_str(const char *name, const std::string &str)
     return build_cc_macro_expr(name, "\"" + str + "\"");
 }
 
-static int read_from_unix_socket(const char *unix_socket_path, FILE* outfp, bool preserve_root)
+static int read_from_unix_socket(const char *unix_socket_path, FILE* outfp, bool preserve_root, bool include_appdata)
 {
     struct sockaddr_un sa = {
         .sun_family = AF_UNIX,
@@ -284,6 +284,16 @@ static int read_from_unix_socket(const char *unix_socket_path, FILE* outfp, bool
     }
 
     setvbuf(outfp, NULL, _IOLBF, 0);
+
+    {
+        std::string query("include_appdata=");
+        query += include_appdata ? "1" : "0";
+        // TODO: pass -S and -A options
+        // query += ";sampling_rate=...";
+        // query += ";address=...";
+        query += "\n";
+        write(fd, query.c_str(), query.size());
+    }
 
     if (!preserve_root)
         drop_root_privilege();
@@ -442,7 +452,7 @@ int main(int argc, char **argv)
     if (unix_socket_path != NULL) {
         if (debug)
             infof("Attaching %s\n", unix_socket_path);
-        return read_from_unix_socket(unix_socket_path, outfp, preserve_root);
+        return read_from_unix_socket(unix_socket_path, outfp, preserve_root, include_appdata);
     }
 
     if (list_usdts) {
