@@ -41,6 +41,13 @@
 #include "../probes_.h"
 
 struct dsr_file_sender;
+
+/**
+ * creates a file sender, with a specified `size` of memory region, and initializes some common fields.
+ * return object must be freed with `destroy_dsr_file_sender`
+ */
+static struct dsr_file_sender *create_dsr_file_sender(h2o_req_t *req, h2o_dsr_req_t *dsr_req, h2o_filecache_ref_t *file,
+                                                      size_t size);
 typedef void (*dsr_file_sender_destroy_cb_t)(struct dsr_file_sender *sender);
 
 struct dsr_file_sender {
@@ -77,17 +84,6 @@ static void destroy_dsr_file_sender(struct dsr_file_sender *sender)
     free(sender);
 }
 
-static void init_dsr_file_sender_common(struct dsr_file_sender *sender, h2o_req_t *req, h2o_filecache_ref_t *file,
-                                        dsr_file_sender_destroy_cb_t on_destroy)
-{
-    sender->http_version = req->version;
-    sender->file = file;
-    h2o_filecache_dup(file);
-    sender->sock = NULL;
-    sender->conn_id = req->conn->id;
-    sender->on_destroy = on_destroy;
-}
-
 static struct dsr_file_sender *create_quic_dsr_file_sender(h2o_req_t *req, h2o_dsr_req_t *dsr_req, h2o_filecache_ref_t *file)
 {
     h2o_quic_ctx_t *quic_ctx;
@@ -96,15 +92,14 @@ static struct dsr_file_sender *create_quic_dsr_file_sender(h2o_req_t *req, h2o_d
         (quic_ctx = req->conn->ctx->globalconf->http3.start_dsr(req, &dsr_req->transport.quic.address.sa)) == NULL)
         return NULL;
 
-    struct quic_dsr_file_sender *sender = h2o_mem_alloc(sizeof(*sender));
+    struct quic_dsr_file_sender *sender =
+        (struct quic_dsr_file_sender *)create_dsr_file_sender(req, dsr_req, file, sizeof(*sender));
+    sender->super.on_destroy = quic_dsr_file_sender_on_destroy;
 
     /* create encryptor */
     if (!h2o_dsr_init_quic_packet_encryptor(&sender->encryptor, quic_ctx->quic, dsr_req->transport.quic.version,
                                             dsr_req->transport.quic.cipher))
         return NULL;
-
-    /* setup the rest */
-    init_dsr_file_sender_common(&sender->super, req, file, quic_dsr_file_sender_on_destroy);
 
     sender->ctx = quic_ctx;
     sender->dest_addr.sa.sa_family = AF_UNSPEC;
@@ -113,10 +108,19 @@ static struct dsr_file_sender *create_quic_dsr_file_sender(h2o_req_t *req, h2o_d
     return &sender->super;
 }
 
-static struct dsr_file_sender *create_dsr_file_sender(h2o_req_t *req, h2o_dsr_req_t *dsr_req, h2o_filecache_ref_t *file)
+static struct dsr_file_sender *create_dsr_file_sender(h2o_req_t *req, h2o_dsr_req_t *dsr_req, h2o_filecache_ref_t *file,
+                                                      size_t size)
 {
-    if (dsr_req->http_version == 0x300)
-        return create_quic_dsr_file_sender(req, dsr_req, file);
+    struct dsr_file_sender *sender = h2o_mem_alloc(size);
+    assert(size >= sizeof(struct dsr_file_sender));
+
+    memset(sender, 0, size);
+
+    sender->http_version = req->version;
+    sender->file = file;
+    h2o_filecache_dup(file);
+    sender->sock = NULL;
+    sender->conn_id = req->conn->id;
 
     return NULL;
 }
@@ -566,8 +570,13 @@ static int try_dsr(struct st_h2o_sendfile_generator_t *self)
         return 0;
 
     /* create DSR sender */
-    if ((sender = create_dsr_file_sender(self->req, &dsr_req, self->file.ref)) == NULL)
+    if (dsr_req.http_version == 0x300) {
+        if ((sender = create_quic_dsr_file_sender(self->req, &dsr_req, self->file.ref)) == NULL)
+            return 0;
+    } else {
+        /* unsupported HTTP version */
         return 0;
+    }
 
     /* now that DSR has started, switch status to 101, add header */
     self->req->res.status = 101;
