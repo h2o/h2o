@@ -32,21 +32,20 @@ static void test_parse_req(void)
 
     ok(h2o_dsr_parse_req(&req, H2O_STRLIT("http=768, quic=4278190109, cipher=4865, address=\"127.0.0.1\""), 443));
     ok(req.http_version == 0x300);
-    ok(req.transport.quic.version == 0xff00001d);
-    ok(req.transport.quic.cipher == 0x1301);
-    ok(req.transport.quic.address.sa.sa_family == AF_INET);
-    ok(req.transport.quic.address.sin.sin_addr.s_addr == htonl(0x7f000001));
-    ok(req.transport.quic.address.sin.sin_port == htons(443));
+    ok(req.h3.quic.version == 0xff00001d);
+    ok(req.h3.quic.cipher == 0x1301);
+    ok(req.h3.quic.address.sa.sa_family == AF_INET);
+    ok(req.h3.quic.address.sin.sin_addr.s_addr == htonl(0x7f000001));
+    ok(req.h3.quic.address.sin.sin_port == htons(443));
 
     ok(h2o_dsr_parse_req(
         &req, H2O_STRLIT("http=768, quic=4278190109, cipher=4865, address=\"[2001:db8:85a3::8a2e:370:7334]:8443\""), 443));
     ok(req.http_version == 0x300);
-    ok(req.transport.quic.version == 0xff00001d);
-    ok(req.transport.quic.cipher == 0x1301);
-    ok(req.transport.quic.address.sa.sa_family == AF_INET6);
-    ok(memcmp(&req.transport.quic.address.sin6.sin6_addr, "\x20\x01\x0d\xb8\x85\xa3\x00\x00\x00\x00\x8a\x2e\x03\x70\x73\x34", 16) ==
-       0);
-    ok(req.transport.quic.address.sin6.sin6_port == htons(8443));
+    ok(req.h3.quic.version == 0xff00001d);
+    ok(req.h3.quic.cipher == 0x1301);
+    ok(req.h3.quic.address.sa.sa_family == AF_INET6);
+    ok(memcmp(&req.h3.quic.address.sin6.sin6_addr, "\x20\x01\x0d\xb8\x85\xa3\x00\x00\x00\x00\x8a\x2e\x03\x70\x73\x34", 16) == 0);
+    ok(req.h3.quic.address.sin6.sin6_port == htons(8443));
 
     ok(!h2o_dsr_parse_req(&req, H2O_STRLIT(""), 443));
     ok(!h2o_dsr_parse_req(&req, H2O_STRLIT("http=768"), 443));                                            /* missing quic fields */

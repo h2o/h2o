@@ -89,7 +89,7 @@ static struct dsr_file_sender *create_quic_dsr_file_sender(h2o_req_t *req, h2o_d
     h2o_quic_ctx_t *quic_ctx;
 
     if (req->conn->ctx->globalconf->http3.start_dsr == NULL ||
-        (quic_ctx = req->conn->ctx->globalconf->http3.start_dsr(req, &dsr_req->transport.quic.address.sa)) == NULL)
+        (quic_ctx = req->conn->ctx->globalconf->http3.start_dsr(req, &dsr_req->h3.quic.address.sa)) == NULL)
         return NULL;
 
     struct quic_dsr_file_sender *sender =
@@ -97,13 +97,12 @@ static struct dsr_file_sender *create_quic_dsr_file_sender(h2o_req_t *req, h2o_d
     sender->super.on_destroy = quic_dsr_file_sender_on_destroy;
 
     /* create encryptor */
-    if (!h2o_dsr_init_quic_packet_encryptor(&sender->encryptor, quic_ctx->quic, dsr_req->transport.quic.version,
-                                            dsr_req->transport.quic.cipher))
+    if (!h2o_dsr_init_quic_packet_encryptor(&sender->encryptor, quic_ctx->quic, dsr_req->h3.quic.version, dsr_req->h3.quic.cipher))
         return NULL;
 
     sender->ctx = quic_ctx;
     sender->dest_addr.sa.sa_family = AF_UNSPEC;
-    sender->src_addr = dsr_req->transport.quic.address;
+    sender->src_addr = dsr_req->h3.quic.address;
 
     return &sender->super;
 }

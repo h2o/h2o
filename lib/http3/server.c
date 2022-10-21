@@ -1168,12 +1168,12 @@ static void run_delayed(h2o_timer_t *timer)
                     if (local_addr->sa_family != AF_UNSPEC) {
                         h2o_dsr_req_t dsr_req = {
                             .http_version = 0x300,
-                            .transport.quic = {
+                            .h3.quic = {
                                 .version = quicly_get_protocol_version(conn->h3.super.quic),
                                 .cipher = ptls_get_cipher(quicly_get_tls(conn->h3.super.quic))->id,
                             },
                         };
-                        memcpy(&dsr_req.transport.quic.address.sa, local_addr, quicly_get_socklen(local_addr));
+                        memcpy(&dsr_req.h3.quic.address.sa, local_addr, quicly_get_socklen(local_addr));
                         conn->dsr.req = h2o_dsr_serialize_req(&dsr_req);
                     }
                 }

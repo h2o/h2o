@@ -36,19 +36,19 @@ h2o_iovec_t h2o_dsr_serialize_req(h2o_dsr_req_t *req)
     output.len += sprintf(output.base + output.len, "http=%d", req->http_version);
 
     if (req->http_version == 0x300) {
-        output.len += sprintf(output.base + output.len, ", quic=%" PRIu32 ", cipher=%" PRIu16 ", address=\"",
-                              req->transport.quic.version, req->transport.quic.cipher);
-        switch (req->transport.quic.address.sa.sa_family) {
+        output.len += sprintf(output.base + output.len, ", quic=%" PRIu32 ", cipher=%" PRIu16 ", address=\"", req->h3.quic.version,
+                              req->h3.quic.cipher);
+        switch (req->h3.quic.address.sa.sa_family) {
         case AF_INET:
-            inet_ntop(AF_INET, &req->transport.quic.address.sin.sin_addr, output.base + output.len, INET_ADDRSTRLEN);
+            inet_ntop(AF_INET, &req->h3.quic.address.sin.sin_addr, output.base + output.len, INET_ADDRSTRLEN);
             output.len += strlen(output.base + output.len);
-            output.len += sprintf(output.base + output.len, ":%" PRIu16, ntohs(req->transport.quic.address.sin.sin_port));
+            output.len += sprintf(output.base + output.len, ":%" PRIu16, ntohs(req->h3.quic.address.sin.sin_port));
             break;
         case AF_INET6:
             output.base[output.len++] = '[';
-            inet_ntop(AF_INET6, &req->transport.quic.address.sin6.sin6_addr, output.base + output.len, INET6_ADDRSTRLEN);
+            inet_ntop(AF_INET6, &req->h3.quic.address.sin6.sin6_addr, output.base + output.len, INET6_ADDRSTRLEN);
             output.len += strlen(output.base + output.len);
-            output.len += sprintf(output.base + output.len, "]:%" PRIu16, ntohs(req->transport.quic.address.sin.sin_port));
+            output.len += sprintf(output.base + output.len, "]:%" PRIu16, ntohs(req->h3.quic.address.sin.sin_port));
             break;
         default:
             h2o_fatal("unexpected address family");
@@ -147,7 +147,7 @@ int h2o_dsr_parse_req(h2o_dsr_req_t *req, const char *_value, size_t _value_len,
     if (req->http_version == 0x300) {
         if (quic_req.version == 0 || quic_req.cipher == 0 || quic_req.address.sa.sa_family == AF_UNSPEC)
             return 0;
-        req->transport.quic = quic_req;
+        req->h3.quic = quic_req;
     } else {
         return 0;
     }

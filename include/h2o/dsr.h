@@ -39,22 +39,24 @@ typedef struct st_h2o_dsr_req_t {
      */
     uint32_t http_version;
     union {
-        struct st_h2o_dsr_req_quic_t {
-            /**
-             * The transport protocol for which DSR is performed (e.g., quic-29). This value indicates how the packet should be
-             * protected, aside from the cipher-suite being used.
-             */
-            uint32_t version;
-            /**
-             * The cipher-suite being used, as the ID registered to the TLS Cipher Suites registry.
-             */
-            uint16_t cipher;
-            /**
-             * address from which QUIC packets should be sent
-             */
-            quicly_address_t address;
-        } quic;
-    } transport;
+        struct st_h2o_dsr_req_http3_t {
+            struct st_h2o_dsr_req_quic_t {
+                /**
+                 * The transport protocol for which DSR is performed (e.g., quic-29). This value indicates how the packet should be
+                 * protected, aside from the cipher-suite being used.
+                 */
+                uint32_t version;
+                /**
+                 * The cipher-suite being used, as the ID registered to the TLS Cipher Suites registry.
+                 */
+                uint16_t cipher;
+                /**
+                 * address from which QUIC packets should be sent
+                 */
+                quicly_address_t address;
+            } quic;
+        } h3;
+    };
 } h2o_dsr_req_t;
 
 /**
