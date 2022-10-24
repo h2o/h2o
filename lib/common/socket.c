@@ -1495,7 +1495,7 @@ static void on_handshake_complete(h2o_socket_t *sock, const char *err)
         /* Post-handshake setup: set record_overhead, zerocopy, switch to picotls */
         if (sock->ssl->ptls == NULL) {
             const SSL_CIPHER *cipher = SSL_get_current_cipher(sock->ssl->ossl);
-            uint32_t csid = SSL_CIPHER_get_protocol_id(cipher);
+            uint32_t csid = SSL_CIPHER_get_id(cipher) & 0x0000ffff;
             sock->ssl->record_overhead = 32; /* sufficiently large number that can hold most payloads */
             if (!switch_to_zerocopy_ptls(sock, csid)) {
                 if ((csid & 0xff00) == 0xcc00) /* chacha/poly1305 ciphers */
