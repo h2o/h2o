@@ -19,14 +19,18 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
+#ifdef _WINDOWS
+#include "wincompat.h"
+#endif
 #include <assert.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#ifdef _WINDOWS
-#include "wincompat.h"
-#else
+#ifndef _WINDOWS
+#include <errno.h>
+#include <pthread.h>
+#include <unistd.h>
 #include <arpa/inet.h>
 #include <sys/time.h>
 #endif
@@ -916,6 +920,7 @@ static void log_secret(ptls_t *tls, const char *type, ptls_iovec_t secret)
     char hexbuf[PTLS_MAX_DIGEST_SIZE * 2 + 1];
 
     PTLS_PROBE(NEW_SECRET, tls, type, ptls_hexdump(hexbuf, secret.base, secret.len));
+    PTLS_LOG_CONN(new_secret, tls, { PTLS_LOG_ELEMENT_SAFESTR(label, type); });
 
     if (tls->ctx->log_event != NULL)
         tls->ctx->log_event->cb(tls->ctx->log_event, tls, type, "%s", ptls_hexdump(hexbuf, secret.base, secret.len));
@@ -1327,6 +1332,7 @@ static void log_client_random(ptls_t *tls)
 {
     PTLS_PROBE(CLIENT_RANDOM, tls,
                ptls_hexdump(alloca(sizeof(tls->client_random) * 2 + 1), tls->client_random, sizeof(tls->client_random)));
+    PTLS_LOG_CONN(client_random, tls, { PTLS_LOG_ELEMENT_HEXDUMP(bytes, tls->client_random, sizeof(tls->client_random)); });
 }
 
 #define SESSION_IDENTIFIER_MAGIC "ptls0001" /* the number should be changed upon incompatible format change */
@@ -2239,11 +2245,12 @@ Exit:
     return ret;
 }
 
-static ptls_cipher_suite_t *find_cipher_suite(ptls_context_t *ctx, uint16_t id)
+ptls_cipher_suite_t *ptls_find_cipher_suite(ptls_cipher_suite_t **cipher_suites, uint16_t id)
 {
     ptls_cipher_suite_t **cs;
-
-    for (cs = ctx->cipher_suites; *cs != NULL && (*cs)->id != id; ++cs)
+    if (cipher_suites == NULL)
+        return NULL;
+    for (cs = cipher_suites; *cs != NULL && (*cs)->id != id; ++cs)
         ;
     return *cs;
 }
@@ -2283,7 +2290,7 @@ static int decode_server_hello(ptls_t *tls, struct st_ptls_server_hello_t *sh, c
         uint16_t csid;
         if ((ret = ptls_decode16(&csid, &src, end)) != 0)
             goto Exit;
-        if ((tls->cipher_suite = find_cipher_suite(tls->ctx, csid)) == NULL) {
+        if ((tls->cipher_suite = ptls_find_cipher_suite(tls->ctx->cipher_suites, csid)) == NULL) {
             ret = PTLS_ALERT_ILLEGAL_PARAMETER;
             goto Exit;
         }
@@ -4426,6 +4433,7 @@ ptls_t *ptls_client_new(ptls_context_t *ctx)
     }
 
     PTLS_PROBE(NEW, tls, 0);
+    PTLS_LOG_CONN(new, tls, { PTLS_LOG_ELEMENT_BOOL(is_server, 0); });
     return tls;
 }
 
@@ -4436,6 +4444,7 @@ ptls_t *ptls_server_new(ptls_context_t *ctx)
     tls->server.early_data_skipped_bytes = UINT32_MAX;
 
     PTLS_PROBE(NEW, tls, 1);
+    PTLS_LOG_CONN(new, tls, { PTLS_LOG_ELEMENT_BOOL(is_server, 1); });
     return tls;
 }
 
@@ -4580,12 +4589,7 @@ int ptls_import(ptls_context_t *ctx, ptls_t **tls, ptls_iovec_t params)
             goto Exit;
         if ((ret = ptls_decode16(&csid, &src, end)) != 0)
             goto Exit;
-        for (ptls_cipher_suite_t **cipher = ctx->cipher_suites; *cipher != NULL; ++cipher) {
-            if ((*cipher)->id == csid) {
-                (*tls)->cipher_suite = *cipher;
-                break;
-            }
-        }
+        (*tls)->cipher_suite = ptls_find_cipher_suite(ctx->tls12_cipher_suites, csid);
         if ((*tls)->cipher_suite == NULL) {
             ret = PTLS_ALERT_HANDSHAKE_FAILURE;
             goto Exit;
@@ -4647,6 +4651,8 @@ Exit:
 void ptls_free(ptls_t *tls)
 {
     PTLS_PROBE0(FREE, tls);
+    PTLS_LOG_CONN(free, tls, {});
+
     ptls_buffer_dispose(&tls->recvbuf.rec);
     ptls_buffer_dispose(&tls->recvbuf.mess);
     free_exporter_master_secret(tls, 1);
@@ -4872,6 +4878,11 @@ static int handle_client_handshake_message(ptls_t *tls, ptls_message_emitter_t *
 
     PTLS_PROBE(RECEIVE_MESSAGE, tls, message.base[0], message.base + PTLS_HANDSHAKE_HEADER_SIZE,
                message.len - PTLS_HANDSHAKE_HEADER_SIZE, ret);
+    PTLS_LOG_CONN(receive_message, tls, {
+        PTLS_LOG_ELEMENT_UNSIGNED(message, message.base[0]);
+        PTLS_LOG_ELEMENT_UNSIGNED(len, message.len - PTLS_HANDSHAKE_HEADER_SIZE);
+        PTLS_LOG_ELEMENT_SIGNED(result, ret);
+    });
 
     return ret;
 }
@@ -4938,6 +4949,11 @@ static int handle_server_handshake_message(ptls_t *tls, ptls_message_emitter_t *
 
     PTLS_PROBE(RECEIVE_MESSAGE, tls, message.base[0], message.base + PTLS_HANDSHAKE_HEADER_SIZE,
                message.len - PTLS_HANDSHAKE_HEADER_SIZE, ret);
+    PTLS_LOG_CONN(receive_message, tls, {
+        PTLS_LOG_ELEMENT_UNSIGNED(message, message.base[0]);
+        PTLS_LOG_ELEMENT_UNSIGNED(len, message.len - PTLS_HANDSHAKE_HEADER_SIZE);
+        PTLS_LOG_ELEMENT_SIGNED(result, ret);
+    });
 
     return ret;
 }
@@ -5982,16 +5998,189 @@ int ptls_server_name_is_ipaddr(const char *name)
     return 0;
 }
 
-char *ptls_hexdump(char *buf, const void *_src, size_t len)
+static char *byte_to_hex(char *dst, uint8_t v)
+{
+    *dst++ = "0123456789abcdef"[v >> 4];
+    *dst++ = "0123456789abcdef"[v & 0xf];
+    return dst;
+}
+
+char *ptls_hexdump(char *dst, const void *_src, size_t len)
+{
+    const uint8_t *src = _src;
+
+    for (size_t i = 0; i != len; ++i)
+        dst = byte_to_hex(dst, src[i]);
+    *dst = '\0';
+    return dst;
+}
+
+char *ptls_jsonescape(char *buf, const char *unsafe_str, size_t len)
 {
     char *dst = buf;
-    const uint8_t *src = _src;
-    size_t i;
+    const uint8_t *src = (const uint8_t *)unsafe_str, *end = src + len;
 
-    for (i = 0; i != len; ++i) {
-        *dst++ = "0123456789abcdef"[src[i] >> 4];
-        *dst++ = "0123456789abcdef"[src[i] & 0xf];
+    for (; src != end; ++src) {
+        switch (*src) {
+#define MAP(ch, escaped)                                                                                                           \
+    case ch:                                                                                                                       \
+        memcpy(dst, (escaped), sizeof(escaped) - 1);                                                                               \
+        dst += sizeof(escaped) - 1;                                                                                                \
+        break
+            MAP('"', "\\\"");
+            MAP('\\', "\\\\");
+            MAP('/', "\\/");
+            MAP('\b', "\\b");
+            MAP('\f', "\\f");
+            MAP('\n', "\\n");
+            MAP('\r', "\\r");
+            MAP('\t', "\\t");
+#undef MAP
+        default:
+            if (*src < 0x20 || *src == 0x7f) {
+                *dst++ = '\\';
+                *dst++ = 'u';
+                *dst++ = '0';
+                *dst++ = '0';
+                dst = byte_to_hex(dst, *src);
+            } else {
+                *dst++ = *src;
+            }
+            break;
+        }
     }
-    *dst++ = '\0';
-    return buf;
+    *dst = '\0';
+
+    return dst;
+}
+
+int ptls_log__do_pushv(ptls_buffer_t *buf, const void *p, size_t l)
+{
+    if (ptls_buffer_reserve(buf, l) != 0)
+        return 0;
+
+    memcpy(buf->base + buf->off, p, l);
+    buf->off += l;
+    return 1;
+}
+
+int ptls_log__do_push_unsafestr(ptls_buffer_t *buf, const char *s, size_t l)
+{
+    if (ptls_buffer_reserve(buf, l * (sizeof("\\uXXXX") - 1) + 1) != 0)
+        return 0;
+
+    buf->off = (uint8_t *)ptls_jsonescape((char *)(buf->base + buf->off), s, l) - buf->base;
+
+    return 1;
+}
+
+int ptls_log__do_push_hexdump(ptls_buffer_t *buf, const void *s, size_t l)
+{
+    if (ptls_buffer_reserve(buf, l * 2 + 1) != 0)
+        return 0;
+
+    buf->off = (uint8_t *)ptls_hexdump((char *)(buf->base + buf->off), s, l) - buf->base;
+    return 1;
+}
+
+int ptls_log__do_push_signed32(ptls_buffer_t *buf, int32_t v)
+{
+    /* TODO optimize */
+    char s[sizeof("-2147483648")];
+    int len = snprintf(s, sizeof(s), "%" PRId32, v);
+    return ptls_log__do_pushv(buf, s, (size_t)len);
+}
+
+int ptls_log__do_push_signed64(ptls_buffer_t *buf, int64_t v)
+{
+    /* TODO optimize */
+    char s[sizeof("-9223372036854775808")];
+    int len = snprintf(s, sizeof(s), "%" PRId64, v);
+    return ptls_log__do_pushv(buf, s, (size_t)len);
+}
+
+int ptls_log__do_push_unsigned32(ptls_buffer_t *buf, uint32_t v)
+{
+    /* TODO optimize */
+    char s[sizeof("4294967295")];
+    int len = snprintf(s, sizeof(s), "%" PRIu32, v);
+    return ptls_log__do_pushv(buf, s, (size_t)len);
+}
+
+int ptls_log__do_push_unsigned64(ptls_buffer_t *buf, uint64_t v)
+{
+    /* TODO optimize */
+    char s[sizeof("18446744073709551615")];
+    int len = snprintf(s, sizeof(s), "%" PRIu64, v);
+    return ptls_log__do_pushv(buf, s, (size_t)len);
+}
+
+#if PTLS_HAVE_LOG
+
+volatile ptls_log_t ptls_log = {};
+
+static struct {
+    int *fds;
+    size_t num_fds;
+    size_t num_lost;
+    pthread_mutex_t mutex;
+} logctx = {.mutex = PTHREAD_MUTEX_INITIALIZER};
+
+size_t ptls_log_num_lost(void)
+{
+    return logctx.num_lost;
+}
+
+int ptls_log_add_fd(int fd)
+{
+    int ret;
+
+    pthread_mutex_lock(&logctx.mutex);
+
+    int *newfds;
+    if ((newfds = realloc(logctx.fds, sizeof(logctx.fds[0]) * (logctx.num_fds + 1))) == NULL) {
+        ret = PTLS_ERROR_NO_MEMORY;
+        goto Exit;
+    }
+    logctx.fds = newfds;
+    logctx.fds[logctx.num_fds++] = fd;
+    ptls_log.is_active = 1;
+
+    ret = 0; /* success */
+
+Exit:
+    pthread_mutex_unlock(&logctx.mutex);
+    return ret;
+}
+
+#endif
+
+void ptls_log__do_write(const ptls_buffer_t *buf)
+{
+#if PTLS_HAVE_LOG
+    pthread_mutex_lock(&logctx.mutex);
+
+    for (size_t fd_index = 0; fd_index < logctx.num_fds;) {
+        ssize_t ret;
+        while ((ret = write(logctx.fds[fd_index], buf->base, buf->off)) == -1 && errno == EINTR)
+            ;
+        if (ret == buf->off) {
+            /* success */
+            ++fd_index;
+        } else if (ret > 0 || (ret == -1 && (errno == EAGAIN || errno == EWOULDBLOCK))) {
+            /* partial write or buffer full */
+            ++logctx.num_lost;
+            ++fd_index;
+        } else {
+            /* write error; close and remove that fd from array */
+            close(logctx.fds[fd_index]);
+            logctx.fds[fd_index] = logctx.fds[logctx.num_fds - 1];
+            --logctx.num_fds;
+            if (logctx.num_fds == 0)
+                ptls_log.is_active = 0;
+        }
+    }
+
+    pthread_mutex_unlock(&logctx.mutex);
+#endif
 }
