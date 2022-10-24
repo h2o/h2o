@@ -803,6 +803,7 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
                 .get_time = &ptls_get_time,
                 .key_exchanges = key_exchanges,
                 .cipher_suites = cipher_suites,
+                .tls12_cipher_suites = ptls_openssl_tls12_cipher_suites,
                 .certificates = {0}, /* fill later */
                 .esni = NULL,        /* fill later */
                 .on_client_hello = &pctx->ch.super,

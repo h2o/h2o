@@ -60,7 +60,7 @@ subtest "tls12-on-picotls" => sub {
     plan skip_all => 'curl not found'
         unless prog_exists('curl');
 
-    # mapping of TLS 1.2 cipher suite => TLS 1.3 cipher-suite & bits (do we want to bother emitting TLS 1.2 cipher suites?)
+    # mapping of TLS 1.2 cipher suite => TLS 1.3 cipher-suite & bits
     my %ciphers = (
         "ECDHE-RSA-AES128-GCM-SHA256" => [ "TLS_AES_128_GCM_SHA256", 128 ],
         "ECDHE-RSA-AES256-GCM-SHA384" => [ "TLS_AES_256_GCM_SHA384", 256 ],
@@ -98,7 +98,7 @@ EOT
             is $output, "hello\n", "output";
             sleep 1; # make sure log is emitted
             sysread $logfh, my $log, 4096; # use sysread to avoid buffering that prevents us from reading what's being appended
-            like $log, qr/^TLSv1\.2 $ciphers{$cipher}->[0] $ciphers{$cipher}->[1] picotls$/m, "log";
+            like $log, qr/^TLSv1\.2 $cipher $ciphers{$cipher}->[1] picotls$/m, "log";
         };
     }
 };

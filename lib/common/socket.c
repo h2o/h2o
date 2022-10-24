@@ -1437,11 +1437,8 @@ static int switch_to_zerocopy_ptls(h2o_socket_t *sock, uint16_t csid)
         return 0;
 
     /* find the corresponding zerocopy cipher suite, or bail out */
-    ptls_cipher_suite_t **cs;
-    for (cs = ptls_ctx->cipher_suites; *cs != NULL; ++cs)
-        if ((*cs)->id == csid && (*cs)->aead->tls12.fixed_iv_size + (*cs)->aead->tls12.record_iv_size != 0)
-            break;
-    if (*cs == NULL)
+    ptls_cipher_suite_t *cs = ptls_find_cipher_suite(ptls_ctx->tls12_cipher_suites, csid);
+    if (cs == NULL)
         return 0;
 
     /* The precondition for calling `ptls_build_tl12_export_params` is that we have sent and received only one encrypted record
@@ -1449,9 +1446,9 @@ static int switch_to_zerocopy_ptls(h2o_socket_t *sock, uint16_t csid)
      * time, obtain explicit nonce that has been used, if the underlying AEAD uses one. */
     if (!(sock->ssl->tls12_record_layer.last_received[1].type == 20 /* TLS 1.2 ChangeCipherSpec */ &&
           sock->ssl->tls12_record_layer.last_received[0].type == 22 /* TLS 1.2 Handshake record */ &&
-          sock->ssl->tls12_record_layer.last_received[0].length == (*cs)->aead->tls12.record_iv_size + 16 + (*cs)->aead->tag_size))
+          sock->ssl->tls12_record_layer.last_received[0].length == (cs)->aead->tls12.record_iv_size + 16 + (cs)->aead->tag_size))
         return 0;
-    if ((*cs)->aead->tls12.record_iv_size != 0 && sock->ssl->tls12_record_layer.send_finished_iv == UINT64_MAX)
+    if ((cs)->aead->tls12.record_iv_size != 0 && sock->ssl->tls12_record_layer.send_finished_iv == UINT64_MAX)
         return 0;
 
     uint8_t master_secret[PTLS_TLS12_MASTER_SECRET_SIZE], hello_randoms[PTLS_HELLO_RANDOM_SIZE * 2], params_smallbuf[128];
@@ -1471,7 +1468,7 @@ static int switch_to_zerocopy_ptls(h2o_socket_t *sock, uint16_t csid)
 
     /* try to create ptls context */
     h2o_iovec_t negotiated_protocol = h2o_socket_ssl_get_selected_protocol(sock);
-    if (ptls_build_tls12_export_params(ptls_ctx, &params, SSL_is_server(sock->ssl->ossl), SSL_session_reused(sock->ssl->ossl), *cs,
+    if (ptls_build_tls12_export_params(ptls_ctx, &params, SSL_is_server(sock->ssl->ossl), SSL_session_reused(sock->ssl->ossl), cs,
                                        master_secret, hello_randoms, sock->ssl->tls12_record_layer.send_finished_iv + 1,
                                        h2o_socket_get_ssl_server_name(sock),
                                        ptls_iovec_init(negotiated_protocol.base, negotiated_protocol.len)) != 0)
@@ -1498,32 +1495,13 @@ static void on_handshake_complete(h2o_socket_t *sock, const char *err)
         /* Post-handshake setup: set record_overhead, zerocopy, switch to picotls */
         if (sock->ssl->ptls == NULL) {
             const SSL_CIPHER *cipher = SSL_get_current_cipher(sock->ssl->ossl);
-            switch (SSL_CIPHER_get_id(cipher)) {
-            case TLS1_CK_RSA_WITH_AES_128_GCM_SHA256:
-            case TLS1_CK_DHE_RSA_WITH_AES_128_GCM_SHA256:
-            case TLS1_CK_ECDHE_RSA_WITH_AES_128_GCM_SHA256:
-            case TLS1_CK_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256:
-                if (!switch_to_zerocopy_ptls(sock, PTLS_CIPHER_SUITE_AES_128_GCM_SHA256))
-                    sock->ssl->record_overhead = 5 /* header */ + 8 /* iv (RFC 5288 3) */ + 16 /* tag (RFC 5116 5.1) */;
-                break;
-            case TLS1_CK_RSA_WITH_AES_256_GCM_SHA384:
-            case TLS1_CK_DHE_RSA_WITH_AES_256_GCM_SHA384:
-            case TLS1_CK_ECDHE_RSA_WITH_AES_256_GCM_SHA384:
-            case TLS1_CK_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384:
-                if (!switch_to_zerocopy_ptls(sock, PTLS_CIPHER_SUITE_AES_256_GCM_SHA384))
-                    sock->ssl->record_overhead = 5 /* header */ + 8 /* iv (RFC 5288 3) */ + 16 /* tag (RFC 5116 5.1) */;
-                break;
-#if defined(TLS1_CK_DHE_RSA_WITH_CHACHA20_POLY1305)
-            case TLS1_CK_DHE_RSA_WITH_CHACHA20_POLY1305:
-            case TLS1_CK_ECDHE_RSA_WITH_CHACHA20_POLY1305:
-            case TLS1_CK_ECDHE_ECDSA_WITH_CHACHA20_POLY1305:
-                if (!switch_to_zerocopy_ptls(sock, PTLS_CIPHER_SUITE_CHACHA20_POLY1305_SHA256))
+            uint32_t csid = SSL_CIPHER_get_protocol_id(cipher);
+            sock->ssl->record_overhead = 32; /* sufficiently large number that can hold most payloads */
+            if (!switch_to_zerocopy_ptls(sock, csid)) {
+                if ((csid & 0xff00) == 0xcc00) /* chacha/poly1305 ciphers */
                     sock->ssl->record_overhead = 5 /* header */ + 16 /* tag */;
-                break;
-#endif
-            default:
-                sock->ssl->record_overhead = 32; /* sufficiently large number that can hold most payloads */
-                break;
+                else /* aes/sha ciphers */
+                    sock->ssl->record_overhead = 5 /* header */ + 8 /* iv (RFC 5288 3) */ + 16 /* tag (RFC 5116 5.1) */;
             }
         }
         if (sock->ssl->ptls != NULL) {
