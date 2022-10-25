@@ -200,7 +200,6 @@ __thread h2o_mem_recycle_t h2o_socket_zerocopy_buffer_allocator = {&h2o_socket_s
 __thread size_t h2o_socket_num_zerocopy_buffers_inflight;
 
 int h2o_socket_use_ktls = 0;
-int h2o_socket_use_picotls_for_tls12 = 1;
 
 const char h2o_socket_error_out_of_memory[] = "out of memory";
 const char h2o_socket_error_io[] = "I/O error";
@@ -360,7 +359,7 @@ static int write_bio(BIO *b, const char *in, int len)
     /* Record bytes where the explicit IV will exist within a TLS 1.2 Finished message. When migrating the connection to picotls,
      * Finished is going to be the last and the only encrypted record being sent by OpenSSL. We record that explicit IV and picotls
      * starts with that explicit IV incremented by 1. */
-    if (h2o_socket_use_picotls_for_tls12 && len >= 45 && memcmp(in + len - 45, H2O_STRLIT("\x16\x03\x03\x00\x28")) == 0) {
+    if (len >= 45 && memcmp(in + len - 45, H2O_STRLIT("\x16\x03\x03\x00\x28")) == 0) {
         const uint8_t *p = (const uint8_t *)in + len - 40;
         sock->ssl->tls12_record_layer.send_finished_iv = quicly_decode64(&p);
     } else {
@@ -1421,8 +1420,6 @@ static int switch_to_zerocopy_ptls(h2o_socket_t *sock, uint16_t csid)
      * the keylog callback that can be used as an alternative. */
     return 0;
 #else
-    if (!h2o_socket_use_picotls_for_tls12)
-        return 0;
 
     /* TODO When using boringssl (the only fork of OpenSSL that supports TLS 1.2 False Start), we should probably refuse to switch
      * to picotls when `SSL_in_false_start` returns true, as `SSL_handshake` might signal completion before receiving Finished.
