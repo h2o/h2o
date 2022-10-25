@@ -3916,15 +3916,15 @@ int main(int argc, char **argv)
 #if H2O_USE_FUSION
     /* Swap aes-gcm cipher suites of TLS-over-TCP listeners to non-temporal aesgcm engine, if it is to be used. */
     if (conf.ssl_zerocopy) {
-        static ptls_cipher_suite_t aes128gcmsha256 = {.id = PTLS_CIPHER_SUITE_AES_128_GCM_SHA256,
-                                                      .name = PTLS_CIPHER_SUITE_NAME_AES_128_GCM_SHA256,
-                                                      .aead = &ptls_non_temporal_aes128gcm,
-                                                      .hash = &ptls_openssl_sha256},
-                                   aes256gcmsha384 = {.id = PTLS_CIPHER_SUITE_AES_256_GCM_SHA384,
-                                                      .name = PTLS_CIPHER_SUITE_NAME_AES_256_GCM_SHA384,
-                                                      .aead = &ptls_non_temporal_aes256gcm,
-                                                      .hash = &ptls_openssl_sha384},
-                                   *non_temporal_all[] = {&aes128gcmsha256, &aes256gcmsha384, NULL};
+        static ptls_cipher_suite_t tls13_aes128gcmsha256 = {.id = PTLS_CIPHER_SUITE_AES_128_GCM_SHA256,
+                                                            .name = PTLS_CIPHER_SUITE_NAME_AES_128_GCM_SHA256,
+                                                            .aead = &ptls_non_temporal_aes128gcm,
+                                                            .hash = &ptls_openssl_sha256},
+                                   tls13_aes256gcmsha384 = {.id = PTLS_CIPHER_SUITE_AES_256_GCM_SHA384,
+                                                            .name = PTLS_CIPHER_SUITE_NAME_AES_256_GCM_SHA384,
+                                                            .aead = &ptls_non_temporal_aes256gcm,
+                                                            .hash = &ptls_openssl_sha384},
+                                   *tls13_non_temporal_all[] = {&tls13_aes128gcmsha256, &tls13_aes256gcmsha384, NULL};
         for (size_t listener_index = 0; listener_index != conf.num_listeners; ++listener_index) {
             struct listener_config_t *listener = conf.listeners[listener_index];
             if (listener->quic.ctx == NULL) {
@@ -3933,7 +3933,8 @@ int main(int argc, char **argv)
                     for (struct listener_ssl_identity_t *identity = ssl->identities; identity->certificate_file != NULL;
                          ++identity) {
                         if (identity->ptls != NULL)
-                            identity->ptls->cipher_suites = replace_ciphersuites(identity->ptls->cipher_suites, non_temporal_all);
+                            identity->ptls->cipher_suites =
+                                replace_ciphersuites(identity->ptls->cipher_suites, tls13_non_temporal_all);
                     }
                 }
             }
