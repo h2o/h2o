@@ -1495,14 +1495,33 @@ static void on_handshake_complete(h2o_socket_t *sock, const char *err)
         /* Post-handshake setup: set record_overhead, zerocopy, switch to picotls */
         if (sock->ssl->ptls == NULL) {
             const SSL_CIPHER *cipher = SSL_get_current_cipher(sock->ssl->ossl);
-            uint32_t csid = SSL_CIPHER_get_id(cipher) & 0x0000ffff;
-            sock->ssl->record_overhead = 32; /* sufficiently large number that can hold most payloads */
-            if (!switch_to_zerocopy_ptls(sock, csid)) {
-                if ((csid & 0xff00) == 0xcc00) /* chacha/poly1305 ciphers */
-                    sock->ssl->record_overhead = 5 /* header */ + 16 /* tag */;
-                else /* aes/sha ciphers */
-                    sock->ssl->record_overhead = 5 /* header */ + 8 /* iv (RFC 5288 3) */ + 16 /* tag (RFC 5116 5.1) */;
+            uint32_t cipher_id = SSL_CIPHER_get_id(cipher);
+            switch (cipher_id) {
+            case TLS1_CK_RSA_WITH_AES_128_GCM_SHA256:
+            case TLS1_CK_DHE_RSA_WITH_AES_128_GCM_SHA256:
+            case TLS1_CK_ECDHE_RSA_WITH_AES_128_GCM_SHA256:
+            case TLS1_CK_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256:
+                sock->ssl->record_overhead = 5 /* header */ + 8 /* iv (RFC 5288 3) */ + 16 /* tag (RFC 5116 5.1) */;
+                break;
+            case TLS1_CK_RSA_WITH_AES_256_GCM_SHA384:
+            case TLS1_CK_DHE_RSA_WITH_AES_256_GCM_SHA384:
+            case TLS1_CK_ECDHE_RSA_WITH_AES_256_GCM_SHA384:
+            case TLS1_CK_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384:
+                sock->ssl->record_overhead = 5 /* header */ + 8 /* iv (RFC 5288 3) */ + 16 /* tag (RFC 5116 5.1) */;
+                break;
+#if defined(TLS1_CK_DHE_RSA_WITH_CHACHA20_POLY1305)
+            case TLS1_CK_DHE_RSA_WITH_CHACHA20_POLY1305:
+            case TLS1_CK_ECDHE_RSA_WITH_CHACHA20_POLY1305:
+            case TLS1_CK_ECDHE_ECDSA_WITH_CHACHA20_POLY1305:
+                sock->ssl->record_overhead = 5 /* header */ + 16 /* tag */;
+                break;
+#endif
+            default:
+                sock->ssl->record_overhead = 32; /* sufficiently large number that can hold most payloads */
+                break;
             }
+            switch_to_zerocopy_ptls(sock,
+                                    cipher_id & 0xffff /* obtain IANA cipher-suite ID in a way compatible w. OpenSSL 1.1.0 */);
         }
         if (sock->ssl->ptls != NULL) {
             sock->ssl->record_overhead = ptls_get_record_overhead(sock->ssl->ptls);
