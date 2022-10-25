@@ -3916,10 +3916,14 @@ int main(int argc, char **argv)
 #if H2O_USE_FUSION
     /* Swap aes-gcm cipher suites of TLS-over-TCP listeners to non-temporal aesgcm engine, if it is to be used. */
     if (conf.ssl_zerocopy) {
-        static ptls_cipher_suite_t aes128gcmsha256 = {PTLS_CIPHER_SUITE_AES_128_GCM_SHA256, &ptls_non_temporal_aes128gcm,
-                                                      &ptls_openssl_sha256},
-                                   aes256gcmsha384 = {PTLS_CIPHER_SUITE_AES_256_GCM_SHA384, &ptls_non_temporal_aes256gcm,
-                                                      &ptls_openssl_sha384},
+        static ptls_cipher_suite_t aes128gcmsha256 = {.id = PTLS_CIPHER_SUITE_AES_128_GCM_SHA256,
+                                                      .name = PTLS_CIPHER_SUITE_NAME_AES_128_GCM_SHA256,
+                                                      .aead = &ptls_non_temporal_aes128gcm,
+                                                      .hash = &ptls_openssl_sha256},
+                                   aes256gcmsha384 = {.id = PTLS_CIPHER_SUITE_AES_256_GCM_SHA384,
+                                                      .name = PTLS_CIPHER_SUITE_NAME_AES_256_GCM_SHA384,
+                                                      .aead = &ptls_non_temporal_aes256gcm,
+                                                      .hash = &ptls_openssl_sha384},
                                    *non_temporal_all[] = {&aes128gcmsha256, &aes256gcmsha384, NULL};
         for (size_t listener_index = 0; listener_index != conf.num_listeners; ++listener_index) {
             struct listener_config_t *listener = conf.listeners[listener_index];
