@@ -311,7 +311,6 @@ int main(int argc, char **argv)
     ENGINE_register_all_digests();
 #endif
 
-
     subtest("bf", test_bf);
 
     subtest("key-exchange", test_key_exchanges);
@@ -323,15 +322,13 @@ int main(int argc, char **argv)
     X509_STORE_set_verify_cb(cert_store, verify_cert_cb);
     ptls_openssl_init_verify_certificate(&openssl_verify_certificate, cert_store);
     /* we should call X509_STORE_free on OpenSSL 1.1 or in prior versions decrement refount then call _free */
-    ptls_context_t openssl_ctx = {ptls_openssl_random_bytes,
-                                  &ptls_get_time,
-                                  ptls_openssl_key_exchanges,
-                                  ptls_openssl_cipher_suites,
-                                  {&cert, 1},
-                                  NULL,
-                                  NULL,
-                                  NULL,
-                                  &openssl_sign_certificate.super};
+    ptls_context_t openssl_ctx = {.random_bytes = ptls_openssl_random_bytes,
+                                  .get_time = &ptls_get_time,
+                                  .key_exchanges = ptls_openssl_key_exchanges,
+                                  .cipher_suites = ptls_openssl_cipher_suites,
+                                  .tls12_cipher_suites = ptls_openssl_tls12_cipher_suites,
+                                  .certificates = {&cert, 1},
+                                  .sign_certificate = &openssl_sign_certificate.super};
     assert(openssl_ctx.cipher_suites[0]->hash->digest_size == 48); /* sha384 */
     ptls_context_t openssl_ctx_sha256only = openssl_ctx;
     ++openssl_ctx_sha256only.cipher_suites;

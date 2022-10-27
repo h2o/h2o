@@ -1788,10 +1788,30 @@ ptls_cipher_suite_t ptls_openssl_aes128gcmsha256 = {.id = PTLS_CIPHER_SUITE_AES_
                                                     .name = PTLS_CIPHER_SUITE_NAME_AES_128_GCM_SHA256,
                                                     .aead = &ptls_openssl_aes128gcm,
                                                     .hash = &ptls_openssl_sha256};
+ptls_cipher_suite_t ptls_openssl_tls12_ecdhe_rsa_aes128gcmsha256 = {.id = PTLS_CIPHER_SUITE_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+                                                                    .name =
+                                                                        PTLS_CIPHER_SUITE_NAME_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+                                                                    .aead = &ptls_openssl_aes128gcm,
+                                                                    .hash = &ptls_openssl_sha256};
+ptls_cipher_suite_t ptls_openssl_tls12_ecdhe_ecdsa_aes128gcmsha256 = {
+    .id = PTLS_CIPHER_SUITE_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+    .name = PTLS_CIPHER_SUITE_NAME_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+    .aead = &ptls_openssl_aes128gcm,
+    .hash = &ptls_openssl_sha256};
 ptls_cipher_suite_t ptls_openssl_aes256gcmsha384 = {.id = PTLS_CIPHER_SUITE_AES_256_GCM_SHA384,
                                                     .name = PTLS_CIPHER_SUITE_NAME_AES_256_GCM_SHA384,
                                                     .aead = &ptls_openssl_aes256gcm,
                                                     .hash = &ptls_openssl_sha384};
+ptls_cipher_suite_t ptls_openssl_tls12_ecdhe_rsa_aes256gcmsha384 = {.id = PTLS_CIPHER_SUITE_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+                                                                    .name =
+                                                                        PTLS_CIPHER_SUITE_NAME_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+                                                                    .aead = &ptls_openssl_aes256gcm,
+                                                                    .hash = &ptls_openssl_sha384};
+ptls_cipher_suite_t ptls_openssl_tls12_ecdhe_ecdsa_aes256gcmsha384 = {
+    .id = PTLS_CIPHER_SUITE_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+    .name = PTLS_CIPHER_SUITE_NAME_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+    .aead = &ptls_openssl_aes256gcm,
+    .hash = &ptls_openssl_sha384};
 #if PTLS_OPENSSL_HAVE_CHACHA20_POLY1305
 ptls_cipher_algorithm_t ptls_openssl_chacha20 = {
     "CHACHA20",           PTLS_CHACHA20_KEY_SIZE, 1 /* block size */, PTLS_CHACHA20_IV_SIZE, sizeof(struct cipher_context_t),
@@ -1813,12 +1833,32 @@ ptls_cipher_suite_t ptls_openssl_chacha20poly1305sha256 = {.id = PTLS_CIPHER_SUI
                                                            .name = PTLS_CIPHER_SUITE_NAME_CHACHA20_POLY1305_SHA256,
                                                            .aead = &ptls_openssl_chacha20poly1305,
                                                            .hash = &ptls_openssl_sha256};
+ptls_cipher_suite_t ptls_openssl_tls12_ecdhe_rsa_chacha20poly1305sha256 = {
+    .id = PTLS_CIPHER_SUITE_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
+    .name = PTLS_CIPHER_SUITE_NAME_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
+    .aead = &ptls_openssl_chacha20poly1305,
+    .hash = &ptls_openssl_sha256};
+ptls_cipher_suite_t ptls_openssl_tls12_ecdhe_ecdsa_chacha20poly1305sha256 = {
+    .id = PTLS_CIPHER_SUITE_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
+    .name = PTLS_CIPHER_SUITE_NAME_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
+    .aead = &ptls_openssl_chacha20poly1305,
+    .hash = &ptls_openssl_sha256};
 #endif
 ptls_cipher_suite_t *ptls_openssl_cipher_suites[] = {&ptls_openssl_aes256gcmsha384, &ptls_openssl_aes128gcmsha256,
 #if PTLS_OPENSSL_HAVE_CHACHA20_POLY1305
                                                      &ptls_openssl_chacha20poly1305sha256,
 #endif
                                                      NULL};
+
+ptls_cipher_suite_t *ptls_openssl_tls12_cipher_suites[] = {&ptls_openssl_tls12_ecdhe_rsa_aes128gcmsha256,
+                                                           &ptls_openssl_tls12_ecdhe_ecdsa_aes128gcmsha256,
+                                                           &ptls_openssl_tls12_ecdhe_rsa_aes256gcmsha384,
+                                                           &ptls_openssl_tls12_ecdhe_ecdsa_aes256gcmsha384,
+#if PTLS_OPENSSL_HAVE_CHACHA20_POLY1305
+                                                           &ptls_openssl_tls12_ecdhe_rsa_chacha20poly1305sha256,
+                                                           &ptls_openssl_tls12_ecdhe_ecdsa_chacha20poly1305sha256,
+#endif
+                                                           NULL};
 
 #if PTLS_OPENSSL_HAVE_BF
 ptls_cipher_algorithm_t ptls_openssl_bfecb = {"BF-ECB",        PTLS_BLOWFISH_KEY_SIZE,          PTLS_BLOWFISH_BLOCK_SIZE,
