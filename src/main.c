@@ -338,17 +338,16 @@ static __thread size_t thread_index;
 static neverbleed_t *neverbleed = NULL;
 
 #if H2O_USE_FUSION
-static const ptls_cipher_suite_t tls13_non_temporal_aes128gcmsha256 = {.id = PTLS_CIPHER_SUITE_AES_128_GCM_SHA256,
-                                                                       .name = PTLS_CIPHER_SUITE_NAME_AES_128_GCM_SHA256,
-                                                                       .aead = &ptls_non_temporal_aes128gcm,
-                                                                       .hash = &ptls_openssl_sha256},
-                                 tls13_non_temporal_aes256gcmsha384 = {.id = PTLS_CIPHER_SUITE_AES_256_GCM_SHA384,
-                                                                       .name = PTLS_CIPHER_SUITE_NAME_AES_256_GCM_SHA384,
-                                                                       .aead = &ptls_non_temporal_aes256gcm,
-                                                                       .hash = &ptls_openssl_sha384},
-                                 *tls13_non_temporal_all[] = {&tls13_non_temporal_aes128gcmsha256,
-                                                              &tls13_non_temporal_aes256gcmsha384, NULL};
-static const ptls_cipher_suite_t
+static ptls_cipher_suite_t
+    tls13_non_temporal_aes128gcmsha256 = {.id = PTLS_CIPHER_SUITE_AES_128_GCM_SHA256,
+                                          .name = PTLS_CIPHER_SUITE_NAME_AES_128_GCM_SHA256,
+                                          .aead = &ptls_non_temporal_aes128gcm,
+                                          .hash = &ptls_openssl_sha256},
+    tls13_non_temporal_aes256gcmsha384 = {.id = PTLS_CIPHER_SUITE_AES_256_GCM_SHA384,
+                                          .name = PTLS_CIPHER_SUITE_NAME_AES_256_GCM_SHA384,
+                                          .aead = &ptls_non_temporal_aes256gcm,
+                                          .hash = &ptls_openssl_sha384},
+    *tls13_non_temporal_all[] = {&tls13_non_temporal_aes128gcmsha256, &tls13_non_temporal_aes256gcmsha384, NULL},
     tls12_non_temporal_ecdhe_rsa_aes128gcmsha256 = {.id = PTLS_CIPHER_SUITE_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
                                                     .name = PTLS_CIPHER_SUITE_NAME_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
                                                     .aead = &ptls_non_temporal_aes128gcm,
