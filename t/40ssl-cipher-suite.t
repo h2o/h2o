@@ -60,23 +60,30 @@ subtest "tls12-on-picotls" => sub {
     plan skip_all => 'curl not found'
         unless prog_exists('curl');
 
-    # mapping of TLS 1.2 cipher suite => bits
-    my %ciphers = (
-        "ECDHE-RSA-AES128-GCM-SHA256" => 128,
-        "ECDHE-RSA-AES256-GCM-SHA384" => 256,
-        "ECDHE-RSA-CHACHA20-POLY1305" => 256,
-    );
-
     my $doit = sub {
         my $ssl_offload = shift;
-        my $server = spawn_h2o_raw(<< "EOT", [ $port ]);
+
+        for my $set (
+            ["examples/h2o/server.key", "examples/h2o/server.crt", {
+                    "ECDHE-RSA-AES128-GCM-SHA256" => 128,
+                    "ECDHE-RSA-AES256-GCM-SHA384" => 256,
+                    "ECDHE-RSA-CHACHA20-POLY1305" => 256,
+            }],
+            ["deps/picotls/t/assets/secp256r1/key.pem", "deps/picotls/t/assets/secp256r1/cert.pem", {
+                "ECDHE-ECDSA-AES128-GCM-SHA256" => 128,
+                "ECDHE-ECDSA-AES256-GCM-SHA384" => 256,
+                "ECDHE-ECDSA-CHACHA20-POLY1305" => 256,
+            }]) {
+            my ($key_file, $cert_file, $ciphers) = @$set;
+            my $server = spawn_h2o_raw(<< "EOT", [ $port ]);
 listen:
   host: 127.0.0.1
   port: $port
   ssl:
-    key-file: examples/h2o/server.key
-    certificate-file: examples/h2o/server.crt
-    cipher-suite: "@{[ join q(:), sort keys %ciphers ]}"
+    identity:
+    - key-file: $key_file
+      certificate-file: $cert_file
+    cipher-suite: "@{[ join q(:), sort keys %$ciphers ]}"
     cipher-preference: server
     max-version: TLSv1.3
 ssl-offload: $ssl_offload
@@ -90,19 +97,19 @@ access-log:
   format: "%{ssl.protocol-version}x %{ssl.cipher}x %{ssl.cipher-bits}x %{ssl.backend}x"
 EOT
 
-        open my $logfh, "<", "$tempdir/access_log"
-            or die "failed to open $tempdir/access_log:$!";
-
-        for my $cipher (sort keys %ciphers) {
-            subtest $cipher => sub {
-                plan skip_all => "$cipher is unavailable"
-                    unless do { `openssl ciphers | fgrep $cipher`; $? == 0 };
-                my $output = `curl --silent -k --tls-max 1.2 --ciphers $cipher https://127.0.0.1:$port/`;
-                is $output, "hello\n", "output";
-                sleep 1; # make sure log is emitted
-                sysread $logfh, my $log, 4096; # use sysread to avoid buffering that prevents us from reading what's being appended
-                like $log, qr/^TLSv1\.2 $cipher $ciphers{$cipher} picotls$/m, "log";
-            };
+            open my $logfh, "<", "$tempdir/access_log"
+                or die "failed to open $tempdir/access_log:$!";
+            for my $cipher (sort keys %$ciphers) {
+                subtest $cipher => sub {
+                    plan skip_all => "$cipher is unavailable"
+                        unless do { `openssl ciphers | fgrep $cipher`; $? == 0 };
+                    my $output = `curl --silent -k --tls-max 1.2 --ciphers $cipher https://127.0.0.1:$port/`;
+                    is $output, "hello\n", "output";
+                    sleep 1; # make sure log is emitted
+                    sysread $logfh, my $log, 4096; # use sysread to avoid buffering that prevents us from reading what's being appended
+                    like $log, qr/^TLSv1\.2 $cipher $ciphers->{$cipher} picotls$/m, "log";
+                };
+            }
         }
     };
 
