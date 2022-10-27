@@ -1413,12 +1413,12 @@ static int on_async_resumption_new(SSL *ssl, SSL_SESSION *session)
 /**
  * transfer traffic secret to picotls and discard OpenSSL state, if possible
  */
-static int switch_to_picotls(h2o_socket_t *sock, uint16_t csid)
+static void switch_to_picotls(h2o_socket_t *sock, uint16_t csid)
 {
 #if defined(LIBRESSL_VERSION_NUMBER) || OPENSSL_VERSION_NUMBER < 0x1010000fL
     /* Libressl and openssl 1.0.2 does not have SSL_SESSION_get_master_key, or the functions to obtain hello random. Also, they lack
      * the keylog callback that can be used as an alternative. */
-    return 0;
+    return;
 #else
 
     /* TODO When using boringssl (the only fork of OpenSSL that supports TLS 1.2 False Start), we should probably refuse to switch
@@ -1427,16 +1427,16 @@ static int switch_to_picotls(h2o_socket_t *sock, uint16_t csid)
 
     /* skip protocols other than TLS 1.2 */
     if (SSL_version(sock->ssl->ossl) != TLS1_2_VERSION)
-        return 0;
+        return;
 
     ptls_context_t *ptls_ctx = h2o_socket_ssl_get_picotls_context(sock->ssl->ssl_ctx);
     if (ptls_ctx == NULL)
-        return 0;
+        return;
 
     /* find the corresponding zerocopy cipher suite, or bail out */
     ptls_cipher_suite_t *cs = ptls_find_cipher_suite(ptls_ctx->tls12_cipher_suites, csid);
     if (cs == NULL)
-        return 0;
+        return;
 
     /* The precondition for calling `ptls_build_tl12_export_params` is that we have sent and received only one encrypted record
      * (i.e., next sequence number is 1). Bail out if that expectation is not met (which is very unlikely in practice). At the same
@@ -1444,9 +1444,9 @@ static int switch_to_picotls(h2o_socket_t *sock, uint16_t csid)
     if (!(sock->ssl->tls12_record_layer.last_received[1].type == 20 /* TLS 1.2 ChangeCipherSpec */ &&
           sock->ssl->tls12_record_layer.last_received[0].type == 22 /* TLS 1.2 Handshake record */ &&
           sock->ssl->tls12_record_layer.last_received[0].length == (cs)->aead->tls12.record_iv_size + 16 + (cs)->aead->tag_size))
-        return 0;
+        return;
     if ((cs)->aead->tls12.record_iv_size != 0 && sock->ssl->tls12_record_layer.send_finished_iv == UINT64_MAX)
-        return 0;
+        return;
 
     uint8_t master_secret[PTLS_TLS12_MASTER_SECRET_SIZE], hello_randoms[PTLS_HELLO_RANDOM_SIZE * 2], params_smallbuf[128];
     ptls_buffer_t params;
@@ -1482,7 +1482,6 @@ static int switch_to_picotls(h2o_socket_t *sock, uint16_t csid)
 Exit:
     ptls_clear_memory(master_secret, sizeof(master_secret));
     ptls_buffer_dispose(&params);
-    return sock->ssl->ptls != NULL;
 #endif
 }
 
