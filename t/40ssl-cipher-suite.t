@@ -67,7 +67,9 @@ subtest "tls12-on-picotls" => sub {
         "ECDHE-RSA-CHACHA20-POLY1305" => 256,
     );
 
-    my $server = spawn_h2o_raw(<< "EOT", [ $port ]);
+    my $doit = sub {
+        my $ssl_offload = shift;
+        my $server = spawn_h2o_raw(<< "EOT", [ $port ]);
 listen:
   host: 127.0.0.1
   port: $port
@@ -77,6 +79,7 @@ listen:
     cipher-suite: "@{[ join q(:), sort keys %ciphers ]}"
     cipher-preference: server
     max-version: TLSv1.3
+ssl-offload: $ssl_offload
 hosts:
   default:
     paths:
@@ -87,20 +90,31 @@ access-log:
   format: "%{ssl.protocol-version}x %{ssl.cipher}x %{ssl.cipher-bits}x %{ssl.backend}x"
 EOT
 
-    open my $logfh, "<", "$tempdir/access_log"
-        or die "failed to open $tempdir/access_log:$!";
+        open my $logfh, "<", "$tempdir/access_log"
+            or die "failed to open $tempdir/access_log:$!";
 
-    for my $cipher (sort keys %ciphers) {
-        subtest $cipher => sub {
-            plan skip_all => "$cipher is unavailable"
-                unless do { `openssl ciphers | fgrep $cipher`; $? == 0 };
-            my $output = `curl --silent -k --tls-max 1.2 --ciphers $cipher https://127.0.0.1:$port/`;
-            is $output, "hello\n", "output";
-            sleep 1; # make sure log is emitted
-            sysread $logfh, my $log, 4096; # use sysread to avoid buffering that prevents us from reading what's being appended
-            like $log, qr/^TLSv1\.2 $cipher $ciphers{$cipher} picotls$/m, "log";
-        };
-    }
+        for my $cipher (sort keys %ciphers) {
+            subtest $cipher => sub {
+                plan skip_all => "$cipher is unavailable"
+                    unless do { `openssl ciphers | fgrep $cipher`; $? == 0 };
+                my $output = `curl --silent -k --tls-max 1.2 --ciphers $cipher https://127.0.0.1:$port/`;
+                is $output, "hello\n", "output";
+                sleep 1; # make sure log is emitted
+                sysread $logfh, my $log, 4096; # use sysread to avoid buffering that prevents us from reading what's being appended
+                like $log, qr/^TLSv1\.2 $cipher $ciphers{$cipher} picotls$/m, "log";
+            };
+        }
+    };
+
+    subtest "libcrypto" => sub {
+        $doit->("off");
+    };
+    subtest "zerocopy" => sub {
+        plan skip_all => "zerocopy not available"
+            unless server_features()->{"ssl-zerocopy"};
+        $doit->("zerocopy");
+    };
+    # add ktls when we add support for TLS/1.2?
 };
 
 done_testing;

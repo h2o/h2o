@@ -1413,7 +1413,7 @@ static int on_async_resumption_new(SSL *ssl, SSL_SESSION *session)
 /**
  * transfer traffic secret to picotls and discard OpenSSL state, if possible
  */
-static int switch_to_zerocopy_ptls(h2o_socket_t *sock, uint16_t csid)
+static int switch_to_picotls(h2o_socket_t *sock, uint16_t csid)
 {
 #if defined(LIBRESSL_VERSION_NUMBER) || OPENSSL_VERSION_NUMBER < 0x1010000fL
     /* Libressl and openssl 1.0.2 does not have SSL_SESSION_get_master_key, or the functions to obtain hello random. Also, they lack
@@ -1517,8 +1517,7 @@ static void on_handshake_complete(h2o_socket_t *sock, const char *err)
                 sock->ssl->record_overhead = 32; /* sufficiently large number that can hold most payloads */
                 break;
             }
-            switch_to_zerocopy_ptls(sock,
-                                    cipher_id & 0xffff /* obtain IANA cipher-suite ID in a way compatible w. OpenSSL 1.1.0 */);
+            switch_to_picotls(sock, cipher_id & 0xffff /* obtain IANA cipher-suite ID in a way compatible w. OpenSSL 1.1.0 */);
         }
         if (sock->ssl->ptls != NULL) {
             sock->ssl->record_overhead = ptls_get_record_overhead(sock->ssl->ptls);
