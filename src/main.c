@@ -346,6 +346,38 @@ static __thread size_t thread_index;
 
 static neverbleed_t *neverbleed = NULL;
 
+#if H2O_USE_FUSION
+static ptls_cipher_suite_t
+    tls13_non_temporal_aes128gcmsha256 = {.id = PTLS_CIPHER_SUITE_AES_128_GCM_SHA256,
+                                          .name = PTLS_CIPHER_SUITE_NAME_AES_128_GCM_SHA256,
+                                          .aead = &ptls_non_temporal_aes128gcm,
+                                          .hash = &ptls_openssl_sha256},
+    tls13_non_temporal_aes256gcmsha384 = {.id = PTLS_CIPHER_SUITE_AES_256_GCM_SHA384,
+                                          .name = PTLS_CIPHER_SUITE_NAME_AES_256_GCM_SHA384,
+                                          .aead = &ptls_non_temporal_aes256gcm,
+                                          .hash = &ptls_openssl_sha384},
+    *tls13_non_temporal_all[] = {&tls13_non_temporal_aes128gcmsha256, &tls13_non_temporal_aes256gcmsha384, NULL},
+    tls12_non_temporal_ecdhe_rsa_aes128gcmsha256 = {.id = PTLS_CIPHER_SUITE_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+                                                    .name = PTLS_CIPHER_SUITE_NAME_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+                                                    .aead = &ptls_non_temporal_aes128gcm,
+                                                    .hash = &ptls_openssl_sha256},
+    tls12_non_temporal_ecdhe_ecdsa_aes128gcmsha256 = {.id = PTLS_CIPHER_SUITE_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+                                                      .name = PTLS_CIPHER_SUITE_NAME_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+                                                      .aead = &ptls_non_temporal_aes128gcm,
+                                                      .hash = &ptls_openssl_sha256},
+    tls12_non_temporal_ecdhe_rsa_aes256gcmsha384 = {.id = PTLS_CIPHER_SUITE_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+                                                    .name = PTLS_CIPHER_SUITE_NAME_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+                                                    .aead = &ptls_non_temporal_aes256gcm,
+                                                    .hash = &ptls_openssl_sha384},
+    tls12_non_temporal_ecdhe_ecdsa_aes256gcmsha384 = {.id = PTLS_CIPHER_SUITE_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+                                                      .name = PTLS_CIPHER_SUITE_NAME_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+                                                      .aead = &ptls_non_temporal_aes256gcm,
+                                                      .hash = &ptls_openssl_sha384},
+    *tls12_non_temporal_all[] = {&tls12_non_temporal_ecdhe_rsa_aes128gcmsha256, &tls12_non_temporal_ecdhe_ecdsa_aes128gcmsha256,
+                                 &tls12_non_temporal_ecdhe_rsa_aes256gcmsha384, &tls12_non_temporal_ecdhe_ecdsa_aes256gcmsha384,
+                                 NULL};
+#endif
+
 static int cmd_argc;
 static char **cmd_argv;
 
@@ -812,6 +844,7 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
                 .get_time = &ptls_get_time,
                 .key_exchanges = key_exchanges,
                 .cipher_suites = cipher_suites,
+                .tls12_cipher_suites = ptls_openssl_tls12_cipher_suites,
                 .certificates = {0}, /* fill later */
                 .esni = NULL,        /* fill later */
                 .on_client_hello = &pctx->ch.super,
@@ -4006,11 +4039,6 @@ int main(int argc, char **argv)
 #if H2O_USE_FUSION
     /* Swap aes-gcm cipher suites of TLS-over-TCP listeners to non-temporal aesgcm engine, if it is to be used. */
     if (conf.ssl_zerocopy) {
-        static ptls_cipher_suite_t aes128gcmsha256 = {PTLS_CIPHER_SUITE_AES_128_GCM_SHA256, &ptls_non_temporal_aes128gcm,
-                                                      &ptls_openssl_sha256},
-                                   aes256gcmsha384 = {PTLS_CIPHER_SUITE_AES_256_GCM_SHA384, &ptls_non_temporal_aes256gcm,
-                                                      &ptls_openssl_sha384},
-                                   *non_temporal_all[] = {&aes128gcmsha256, &aes256gcmsha384, NULL};
         for (size_t listener_index = 0; listener_index != conf.num_listeners; ++listener_index) {
             struct listener_config_t *listener = conf.listeners[listener_index];
             if (listener->quic.ctx == NULL) {
@@ -4018,8 +4046,12 @@ int main(int argc, char **argv)
                     struct listener_ssl_config_t *ssl = listener->ssl.entries[ssl_index];
                     for (struct listener_ssl_identity_t *identity = ssl->identities; identity->certificate_file != NULL;
                          ++identity) {
-                        if (identity->ptls != NULL)
-                            identity->ptls->cipher_suites = replace_ciphersuites(identity->ptls->cipher_suites, non_temporal_all);
+                        if (identity->ptls != NULL) {
+                            identity->ptls->cipher_suites =
+                                replace_ciphersuites(identity->ptls->cipher_suites, tls13_non_temporal_all);
+                            identity->ptls->tls12_cipher_suites =
+                                replace_ciphersuites(identity->ptls->tls12_cipher_suites, tls12_non_temporal_all);
+                        }
                     }
                 }
             }
