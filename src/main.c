@@ -348,30 +348,26 @@ static const ptls_cipher_suite_t tls13_non_temporal_aes128gcmsha256 = {.id = PTL
                                                                        .hash = &ptls_openssl_sha384},
                                  *tls13_non_temporal_all[] = {&tls13_non_temporal_aes128gcmsha256,
                                                               &tls13_non_temporal_aes256gcmsha384, NULL};
-#define TLS12_CIPHER(pubkeyupper, pubkeylower, aeadupper, aeadlower, hashupper, hashlower)                                         \
-    static const ptls_cipher_suite_t tls12_non_temporal_##pubkeylower##_##aeadlower##hashlower = {                                 \
-        .id = PTLS_CIPHER_SUITE_##pubkeyupper##_WITH_##aeadupper##_##hashupper,                                                    \
-        .name = PTLS_CIPHER_SUITE_NAME_##pubkeyupper##_WITH_##aeadupper##_##hashupper,                                             \
-        .aead = &ptls_non_temporal_##aeadlower,                                                                                    \
-        .hash = &ptls_openssl_##hashlower}
-TLS12_CIPHER(RSA, rsa, AES_128_GCM, aes128gcm, SHA256, sha256);
-TLS12_CIPHER(DHE_RSA, dhe_rsa, AES_128_GCM, aes128gcm, SHA256, sha256);
-TLS12_CIPHER(ECDHE_RSA, ecdhe_rsa, AES_128_GCM, aes128gcm, SHA256, sha256);
-TLS12_CIPHER(ECDHE_ECDSA, ecdhe_ecdsa, AES_128_GCM, aes128gcm, SHA256, sha256);
-TLS12_CIPHER(RSA, rsa, AES_256_GCM, aes256gcm, SHA384, sha384);
-TLS12_CIPHER(DHE_RSA, dhe_rsa, AES_256_GCM, aes256gcm, SHA384, sha384);
-TLS12_CIPHER(ECDHE_RSA, ecdhe_rsa, AES_256_GCM, aes256gcm, SHA384, sha384);
-TLS12_CIPHER(ECDHE_ECDSA, ecdhe_ecdsa, AES_256_GCM, aes256gcm, SHA384, sha384);
-#undef TLS12_CIPHER
-static const ptls_cipher_suite_t *tls12_non_temporal_all[] = {&tls12_non_temporal_rsa_aes128gcmsha256,
-                                                              &tls12_non_temporal_dhe_rsa_aes128gcmsha256,
-                                                              &tls12_non_temporal_ecdhe_rsa_aes128gcmsha256,
-                                                              &tls12_non_temporal_ecdhe_ecdsa_aes128gcmsha256,
-                                                              &tls12_non_temporal_rsa_aes256gcmsha384,
-                                                              &tls12_non_temporal_dhe_rsa_aes256gcmsha384,
-                                                              &tls12_non_temporal_ecdhe_rsa_aes256gcmsha384,
-                                                              &tls12_non_temporal_ecdhe_ecdsa_aes256gcmsha384,
-                                                              NULL};
+static const ptls_cipher_suite_t
+    tls12_non_temporal_ecdhe_rsa_aes128gcmsha256 = {.id = PTLS_CIPHER_SUITE_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+                                                    .name = PTLS_CIPHER_SUITE_NAME_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+                                                    .aead = &ptls_non_temporal_aes128gcm,
+                                                    .hash = &ptls_openssl_sha256},
+    tls12_non_temporal_ecdhe_ecdsa_aes128gcmsha256 = {.id = PTLS_CIPHER_SUITE_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+                                                      .name = PTLS_CIPHER_SUITE_NAME_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+                                                      .aead = &ptls_non_temporal_aes128gcm,
+                                                      .hash = &ptls_openssl_sha256},
+    tls12_non_temporal_ecdhe_rsa_aes256gcmsha384 = {.id = PTLS_CIPHER_SUITE_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+                                                    .name = PTLS_CIPHER_SUITE_NAME_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+                                                    .aead = &ptls_non_temporal_aes256gcm,
+                                                    .hash = &ptls_openssl_sha384},
+    tls12_non_temporal_ecdhe_ecdsa_aes256gcmsha384 = {.id = PTLS_CIPHER_SUITE_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+                                                      .name = PTLS_CIPHER_SUITE_NAME_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+                                                      .aead = &ptls_non_temporal_aes256gcm,
+                                                      .hash = &ptls_openssl_sha384},
+    *tls12_non_temporal_all[] = {&tls12_non_temporal_ecdhe_rsa_aes128gcmsha256, &tls12_non_temporal_ecdhe_ecdsa_aes128gcmsha256,
+                                 &tls12_non_temporal_ecdhe_rsa_aes256gcmsha384, &tls12_non_temporal_ecdhe_ecdsa_aes256gcmsha384,
+                                 NULL};
 #endif
 
 static int cmd_argc;
