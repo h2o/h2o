@@ -1443,9 +1443,9 @@ static void switch_to_picotls(h2o_socket_t *sock, uint16_t csid)
      * time, obtain explicit nonce that has been used, if the underlying AEAD uses one. */
     if (!(sock->ssl->tls12_record_layer.last_received[1].type == 20 /* TLS 1.2 ChangeCipherSpec */ &&
           sock->ssl->tls12_record_layer.last_received[0].type == 22 /* TLS 1.2 Handshake record */ &&
-          sock->ssl->tls12_record_layer.last_received[0].length == (cs)->aead->tls12.record_iv_size + 16 + (cs)->aead->tag_size))
+          sock->ssl->tls12_record_layer.last_received[0].length == cs->aead->tls12.record_iv_size + 16 + cs->aead->tag_size))
         return;
-    if ((cs)->aead->tls12.record_iv_size != 0 && sock->ssl->tls12_record_layer.send_finished_iv == UINT64_MAX)
+    if (cs->aead->tls12.record_iv_size != 0 && sock->ssl->tls12_record_layer.send_finished_iv == UINT64_MAX)
         return;
 
     uint8_t master_secret[PTLS_TLS12_MASTER_SECRET_SIZE], hello_randoms[PTLS_HELLO_RANDOM_SIZE * 2], params_smallbuf[128];
