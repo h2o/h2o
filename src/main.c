@@ -2197,11 +2197,12 @@ static int on_config_user(h2o_configurator_command_t *cmd, h2o_configurator_cont
 static int on_config_capabilities(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
 #ifndef LIBCAP_FOUND
-    h2o_configurator_errprintf(cmd, node, "the platform does not support Linux capabilities"
+    h2o_configurator_errprintf(cmd, node,
+                               "the platform does not support Linux capabilities"
 #ifdef __linux
-        " (hint: install libcap-dev or libcap-devel and rerun cmake)"
+                               " (hint: install libcap-dev or libcap-devel and rerun cmake)"
 #endif
-        );
+    );
     return -1;
 #else
 
@@ -2618,10 +2619,11 @@ static yoml_t *resolve_file_tag(yoml_t *node, resolve_tag_arg_t *arg)
 
     yoml_parse_args_t parse_args = {
         .filename = filename,
-        .resolve_tag = {
-            .cb = resolve_tag,
-            .cb_arg = arg,
-        },
+        .resolve_tag =
+            {
+                .cb = resolve_tag,
+                .cb_arg = arg,
+            },
         .resolve_alias = 1,
         .resolve_merge = 1,
     };
@@ -3056,9 +3058,11 @@ static void on_accept(h2o_socket_t *listener, const char *err)
         sock->on_close.data = ctx->accept_ctx.ctx;
 
         struct listener_config_t *listener_config = conf.listeners[ctx->listener_index];
-        if (listener_config->sndbuf != 0 && setsockopt(h2o_socket_get_fd(sock), SOL_SOCKET, SO_SNDBUF, &listener_config->sndbuf, sizeof(listener_config->sndbuf)) != 0)
+        if (listener_config->sndbuf != 0 && setsockopt(h2o_socket_get_fd(sock), SOL_SOCKET, SO_SNDBUF, &listener_config->sndbuf,
+                                                       sizeof(listener_config->sndbuf)) != 0)
             h2o_perror("failed to set SO_SNDBUF");
-        if (listener_config->rcvbuf != 0 && setsockopt(h2o_socket_get_fd(sock), SOL_SOCKET, SO_RCVBUF, &listener_config->rcvbuf, sizeof(listener_config->rcvbuf))  != 0)
+        if (listener_config->rcvbuf != 0 && setsockopt(h2o_socket_get_fd(sock), SOL_SOCKET, SO_RCVBUF, &listener_config->rcvbuf,
+                                                       sizeof(listener_config->rcvbuf)) != 0)
             h2o_perror("failed to set SO_RCVBUF");
         set_tcp_congestion_controller(sock, listener_config->tcp_congestion_controller);
 
@@ -4012,10 +4016,7 @@ int main(int argc, char **argv)
         resolve_tag_arg_t resolve_tag_arg = {{NULL}};
         yoml_parse_args_t parse_args = {
             .filename = opt_config_file,
-            .resolve_tag = {
-                .cb = resolve_tag,
-                .cb_arg = &resolve_tag_arg
-            },
+            .resolve_tag = {.cb = resolve_tag, .cb_arg = &resolve_tag_arg},
             .resolve_alias = 1,
             .resolve_merge = 1,
         };
@@ -4117,8 +4118,9 @@ int main(int argc, char **argv)
         struct rlimit limit = {0};
         if (getrlimit(RLIMIT_NOFILE, &limit) == 0) {
             if (conf.max_connections > limit.rlim_max) {
-                fprintf(stderr, "[error] 'max-connections'=[%d] configuration value should not exceed the hard limit of file "
-                                "descriptors 'RLIMIT_NOFILE'=[%llu]\n",
+                fprintf(stderr,
+                        "[error] 'max-connections'=[%d] configuration value should not exceed the hard limit of file "
+                        "descriptors 'RLIMIT_NOFILE'=[%llu]\n",
                         conf.max_connections, (unsigned long long)limit.rlim_max);
                 return EX_CONFIG;
             }
@@ -4127,7 +4129,7 @@ int main(int argc, char **argv)
 #ifdef __APPLE__
                 || (limit.rlim_cur = OPEN_MAX, setrlimit(RLIMIT_NOFILE, &limit)) == 0
 #endif
-                ) {
+            ) {
                 fprintf(stderr, "[INFO] raised RLIMIT_NOFILE to %llu\n", (unsigned long long)limit.rlim_cur);
             } else {
                 fprintf(stderr, "[warning] setrlimit(RLIMIT_NOFILE) failed:%s\n", strerror(errno));
