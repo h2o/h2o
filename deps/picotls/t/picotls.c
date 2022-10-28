@@ -1689,6 +1689,24 @@ static void test_tls12_hello(void)
     ctx->on_client_hello = orig;
 }
 
+static void test_escape_json_unsafe_string(void)
+{
+#define STRLIT(s) s, sizeof(s) - 1
+    char buf[100];
+    size_t escaped_len;
+
+    escaped_len = ptls_jsonescape(buf, STRLIT("\" \\ / \b \f \n \r \t foo bar")) - buf;
+    ok(escaped_len == strlen(buf));
+    ok(strcmp(buf, "\\\" \\\\ \\/ \\b \\f \\n \\r \\t foo bar") == 0);
+
+    escaped_len = ptls_jsonescape(buf, STRLIT("こんにちは、🌏！")) - buf;
+    ok(strcmp(buf, "こんにちは、🌏！") == 0);
+
+    escaped_len = ptls_jsonescape(buf, STRLIT("\x00 \x1f \x7f")) - buf;
+    ok(strcmp(buf, "\\u0000 \\u001f \\u007f") == 0);
+#undef STRLIT
+}
+
 void test_picotls(void)
 {
     subtest("is_ipaddr", test_is_ipaddr);
@@ -1710,6 +1728,7 @@ void test_picotls(void)
     subtest("handshake", test_all_handshakes);
     subtest("quic", test_quic);
     subtest("tls12-hello", test_tls12_hello);
+    subtest("ptls_escape_json_unsafe_string", test_escape_json_unsafe_string);
 }
 
 void test_picotls_esni(ptls_key_exchange_context_t **keys)
