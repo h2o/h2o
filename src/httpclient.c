@@ -240,7 +240,8 @@ static void tunnel_on_udp_read(h2o_httpclient_t *client, h2o_iovec_t *datagrams,
     for (size_t i = 0; i != num_datagrams; ++i) {
         const h2o_iovec_t *src = datagrams + i;
         struct iovec vec = {.iov_base = src->base, .iov_len = src->len};
-        struct msghdr mess = {.msg_name = &udp_sock_remote_addr, .msg_namelen = sizeof(udp_sock_remote_addr), .msg_iov = &vec, .msg_iovlen = 1};
+        struct msghdr mess = {
+            .msg_name = &udp_sock_remote_addr, .msg_namelen = sizeof(udp_sock_remote_addr), .msg_iov = &vec, .msg_iovlen = 1};
         sendmsg(h2o_socket_get_fd(udp_sock), &mess, 0);
     }
 }
