@@ -35,6 +35,14 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <sys/uio.h>
+#include <sys/stat.h>
+#if defined(__linux__)
+#include <sys/eventfd.h>
+#define NEVERBLEED_USE_EVENTFD 1
+#define NEVERBLEED_SIGNAL_T eventfd_t
+#else
+#define NEVERBLEED_SIGNAL_T char
+#endif
 #include <unistd.h>
 #include <signal.h>
 #if defined(__linux__)
@@ -51,15 +59,15 @@
 #include <openssl/opensslconf.h>
 #include <openssl/opensslv.h>
 
-#if OPENSSL_VERSION_NUMBER >= 0x1010000fL && !defined(LIBRESSL_VERSION_NUMBER)
-/* RSA_METHOD is opaque, so RSA_meth* are used. */
-#define NEVERBLEED_OPAQUE_RSA_METHOD
-#endif
-
 #if OPENSSL_VERSION_NUMBER >= 0x10100010L && !defined(LIBRESSL_VERSION_NUMBER)
 #if !defined(OPENSSL_NO_ASYNC)
 #define NEVERBLEED_OPENSSL_HAVE_ASYNC 1
 #endif
+#endif
+
+#if OPENSSL_VERSION_NUMBER >= 0x1010000fL && !defined(LIBRESSL_VERSION_NUMBER)
+/* RSA_METHOD is opaque, so RSA_meth* are used. */
+#define NEVERBLEED_OPAQUE_RSA_METHOD
 #endif
 
 #if OPENSSL_VERSION_NUMBER >= 0x1010000fL && !defined(OPENSSL_NO_EC) \
@@ -129,6 +137,13 @@ struct expbuf_t {
     char *start;
     char *end;
     size_t capacity;
+
+    size_t read_sz;
+    size_t bytes_read;
+
+    int efd_write;
+    int efd_read;
+    struct expbuf_t *next;
 };
 
 struct st_neverbleed_rsa_exdata_t {
@@ -136,20 +151,51 @@ struct st_neverbleed_rsa_exdata_t {
     size_t key_index;
 };
 
-struct st_neverbleed_thread_data_t {
-    int in_flight;
-    pid_t self_pid;
-    int fd;
+struct expbuf_list_t {
+    struct expbuf_t *head;
+    struct expbuf_t **tail;
 };
 
-static void thdata_reset_in_flight(struct st_neverbleed_thread_data_t **_thdata)
+static void expbuf_list_init(struct expbuf_list_t *list)
 {
-    struct st_neverbleed_thread_data_t *thdata = *_thdata;
-    assert(thdata->in_flight);
-    thdata->in_flight = 0;
+    list->head = NULL;
+    list->tail = &list->head;
 }
 
-#define THDATA_IN_FLIGHT __attribute__((__cleanup__(thdata_reset_in_flight))) struct st_neverbleed_thread_data_t
+static int expbuf_list_is_empty(struct expbuf_list_t *list)
+{
+    return list->head == NULL;
+}
+
+static void expbuf_list_push_tail(struct expbuf_list_t *list, struct expbuf_t *buf)
+{
+    buf->next = NULL;
+    *list->tail = buf;
+    list->tail = &buf->next;
+}
+
+static struct expbuf_t *expbuf_list_pop_head(struct expbuf_list_t *list)
+{
+    struct expbuf_t *buf = list->head;
+    list->head = buf->next;
+    if (list->head == NULL)
+        list->tail = &list->head;
+    return buf;
+}
+
+static struct expbuf_t *expbuf_list_peek_head(struct expbuf_list_t *list)
+{
+    return list->head;
+}
+
+struct st_neverbleed_thread_data_t {
+    pid_t self_pid;
+    struct expbuf_list_t write_pending;
+    struct expbuf_list_t in_flight;
+    int fd;
+    neverbleed_cb write_cb;
+    neverbleed_cb read_cb;
+};
 
 static void warnvf(const char *fmt, va_list args)
 {
@@ -210,6 +256,40 @@ static void set_cloexec(int fd)
         dief("failed to set O_CLOEXEC to fd %d", fd);
 }
 
+// sets up file descriptor and calls OpenSSL's `ASYNC_pause_job`
+// if OpenSSL async is not available, this function is a no-op
+static void async_pause(struct expbuf_t *buf)
+{
+#if NEVERBLEED_OPENSSL_HAVE_ASYNC
+    ASYNC_JOB *job;
+
+    if ((job = ASYNC_get_current_job()) != NULL) {
+        int ret;
+        size_t numfds;
+        ASYNC_WAIT_CTX *waitctx = ASYNC_get_wait_ctx(job);
+
+        assert(ASYNC_WAIT_CTX_get_all_fds(waitctx, NULL, &numfds) && numfds == 0);
+        if (!ASYNC_WAIT_CTX_set_wait_fd(waitctx, "neverbleed", buf->efd_read, NULL, NULL))
+            dief("could not set async fd\n");
+        ASYNC_pause_job();
+        if (!ASYNC_WAIT_CTX_clear_fd(waitctx, "neverbleed"))
+            dief("could not clear async fd\n");
+
+        // consume notification
+        NEVERBLEED_SIGNAL_T sig;
+        while ((ret = read(buf->efd_read, &sig, sizeof(sig))) == -1 && errno == EINTR)
+            ;
+        assert(ret > 0);
+        close(buf->efd_read);
+#if !NEVERBLEED_USE_EVENTFD
+        // in the case of eventfd, the efd_read == efd_write
+        // but, in the case of pipe, we need to close the write side
+        close(buf->efd_write);
+#endif
+    }
+#endif
+}
+
 static int read_nbytes(int fd, void *p, size_t sz)
 {
     while (sz != 0) {
@@ -238,9 +318,14 @@ static void expbuf_dispose(struct expbuf_t *buf)
     if (buf->capacity != 0)
         OPENSSL_cleanse(buf->buf, buf->capacity);
     free(buf->buf);
-    memset(buf, 0, sizeof(*buf));
+    buf->buf = NULL;
+    buf->start = NULL;
+    buf->end = NULL;
+    buf->capacity = 0;
+    buf->read_sz = 0;
+    buf->bytes_read = 0;
+    // do not dispose of efd & linkm this is handled in async functions
 }
-
 static void expbuf_reserve(struct expbuf_t *buf, size_t extra)
 {
     char *n;
@@ -270,6 +355,7 @@ static void expbuf_push_str(struct expbuf_t *buf, const char *s)
 {
     size_t l = strlen(s) + 1;
     expbuf_reserve(buf, l);
+    assert(buf->end != NULL);
     memcpy(buf->end, s, l);
     buf->end += l;
 }
@@ -313,6 +399,82 @@ static void *expbuf_shift_bytes(struct expbuf_t *buf, size_t *l)
     return ret;
 }
 
+void expbuf_notify(struct expbuf_t *buf)
+{
+#if NEVERBLEED_USE_EVENTFD
+    if (eventfd_write(buf->efd_write, 1) != 0)
+        dief("eventfd_write error");
+#else
+    int ret;
+    while ((ret = write(buf->efd_write, "x", 1) == -1 && errno == EINTR))
+        ;
+    if (ret == 1) {
+        dief("write");
+    }
+#endif
+}
+
+static int expbuf_read(struct expbuf_t *buf, int fd)
+{
+    size_t sz;
+    if (read_nbytes(fd, &sz, sizeof(sz)) != 0)
+        return -1;
+    expbuf_reserve(buf, sz);
+    if (read_nbytes(fd, buf->end, sz) != 0)
+        return -1;
+    buf->end += sz;
+    return 0;
+}
+
+static size_t expbuf_read_async(struct st_neverbleed_thread_data_t *thdata, char *buffer, size_t len, struct expbuf_t **out_buf)
+{
+    struct expbuf_t *buf = expbuf_list_peek_head(&thdata->in_flight);
+
+    if (buf == NULL)
+        return 0;
+
+    size_t read = 0;
+
+    if (buf->bytes_read < sizeof(buf->read_sz) && // we are reading the message size
+        (len - read) >= sizeof(buf->read_sz)) {   // we have enough data to read the size
+        expbuf_dispose(buf);
+
+        memcpy(&buf->read_sz, buffer, sizeof(buf->read_sz));
+        read += sizeof(buf->read_sz);
+        buf->bytes_read += sizeof(buf->read_sz);
+
+        expbuf_reserve(buf, buf->read_sz);
+    }
+
+    if (buf->bytes_read >= sizeof(buf->read_sz) // we are reading the message body
+        && (len - read) >= buf->read_sz) {      // we have enough data to read the message
+        memcpy(buf->end, buffer + read, buf->read_sz);
+        buf->end += buf->read_sz;
+
+        read += buf->read_sz;
+        buf->bytes_read += buf->read_sz;
+
+        // we got the buffer
+        *out_buf = expbuf_list_pop_head(&thdata->in_flight);
+    }
+    return read;
+}
+
+static size_t do_expbuf_read_async(struct st_neverbleed_thread_data_t *thdata, char *buffer, size_t len)
+{
+    struct expbuf_t *buf = NULL;
+
+    size_t read = expbuf_read_async(thdata, buffer, len, &buf);
+
+    if (buf == NULL) {
+        return 0;
+    }
+
+    expbuf_notify(buf);
+
+    return read;
+}
+
 static int expbuf_write(struct expbuf_t *buf, int fd)
 {
     struct iovec vecs[2] = {{NULL}};
@@ -344,41 +506,132 @@ static int expbuf_write(struct expbuf_t *buf, int fd)
     return 0;
 }
 
-/**
- * This function waits for the provided socket to become readable, then calls `nanosleep(1)` before returning.
- * The intention behind sleep is to provide the application to complete its event loop before the neverbleed process starts
- * spending CPU cycles on the time-consuming RSA operation.
- */
-static void yield_on_data(int fd)
+static void do_expbuf_read(struct st_neverbleed_thread_data_t *thdata)
 {
-    fd_set rfds;
-    int ret;
-    FD_ZERO(&rfds);
-    FD_SET(fd, &rfds);
+    // expbufs are sent and processed in order, the response will be at the head of the in_flight list
+    struct expbuf_t *buf = expbuf_list_pop_head(&thdata->in_flight);
 
-    while ((ret = select(fd + 1, &rfds, NULL, NULL, NULL)) == -1 && (errno == EAGAIN || errno == EINTR))
-        ;
-    if (ret == -1) {
-        dief("select(2)\n");
-    } else if (ret > 0) {
-        // yield when data is available
-        struct timespec tv = {.tv_nsec = 1};
-        (void)nanosleep(&tv, NULL);
-    } else {
-        dief("unreachable, no timeout configured");
+    expbuf_dispose(buf);
+    if (expbuf_read(buf, thdata->fd) == -1) {
+        if (errno != 0) {
+            dief("read error (%d) %s", errno, strerror(errno));
+        } else {
+            dief("connection closed by daemon");
+        }
     }
+
+    expbuf_notify(buf);
 }
 
-static int expbuf_read(struct expbuf_t *buf, int fd)
+static void do_expbuf_write(struct st_neverbleed_thread_data_t *thdata)
 {
-    size_t sz;
-    if (read_nbytes(fd, &sz, sizeof(sz)) != 0)
-        return -1;
-    expbuf_reserve(buf, sz);
-    if (read_nbytes(fd, buf->end, sz) != 0)
-        return -1;
-    buf->end += sz;
-    return 0;
+    if (expbuf_list_is_empty(&thdata->write_pending)) {
+        return;
+    }
+
+    // pop from list
+    struct expbuf_t *buf = expbuf_list_pop_head(&thdata->write_pending);
+
+    if (expbuf_write(buf, thdata->fd) == -1) {
+        if (errno != 0) {
+            dief("write error (%d) %s", errno, strerror(errno));
+        } else {
+            dief("connection closed by daemon");
+        }
+    }
+
+    // transition to in-flight
+    expbuf_list_push_tail(&thdata->in_flight, buf);
+}
+
+/* This function is a conveniance wrapper around writing and reading an expbuf.
+ * In the asynchronous case, the `buf` is queued to be written and an application callback is called.
+ */
+static void expbuf_send(struct expbuf_t *buf, struct st_neverbleed_thread_data_t *thdata)
+{
+    int fd_read;
+    int fd_write;
+#if NEVERBLEED_USE_EVENTFD
+    /**
+     * The kernel overhead of an eventfd file descriptor is
+     * much lower than that of a pipe, and only one file descriptor is required
+     */
+    int fd;
+
+    fd = eventfd(0, EFD_CLOEXEC);
+    if (fd == -1) {
+        dief("eventfd");
+    }
+    fd_read = fd;
+    fd_write = fd;
+#else
+    int fds[2];
+
+    if (pipe(fds) != 0) {
+        dief("pipe");
+    }
+    set_cloexec(fds[0]);
+    set_cloexec(fds[1]);
+    fd_read = fds[0];
+    fd_write = fds[1];
+#endif
+    buf->efd_read = fd_read;
+    buf->efd_write = fd_write;
+
+#if NEVERBLEED_OPENSSL_HAVE_ASYNC
+    if (ASYNC_get_current_job() != NULL && thdata->write_cb != NULL) {
+        // the application has the ability to handle transactions asynchronously
+        expbuf_list_push_tail(&thdata->write_pending, buf);
+        thdata->write_cb(1);
+        async_pause(buf);
+    } else
+#endif
+    {
+        int ret;
+        NEVERBLEED_SIGNAL_T sig;
+        if (fcntl(buf->efd_read, F_SETFL, O_NONBLOCK) == -1)
+            dief("fcntl");
+
+        expbuf_list_push_tail(&thdata->write_pending, buf);
+
+        int flags = fcntl(thdata->fd, F_GETFL, 0);
+
+        // set fd to blocking for synchronous I/O
+        if (fcntl(thdata->fd, F_SETFL, flags & ~O_NONBLOCK) == -1)
+            dief("fcntl");
+
+        // read all in-flight
+        while (!expbuf_list_is_empty(&thdata->in_flight)) {
+            thdata->read_cb(0);
+        }
+
+        // keep on writing / reading pending expbufs synchronously until we receive our signal
+        while ((ret = read(buf->efd_read, &sig, sizeof(sig))) == -1 && (errno == EAGAIN || errno == EINTR)) {
+            if (thdata->write_cb != NULL && thdata->read_cb != NULL) {
+                thdata->write_cb(0);
+                thdata->read_cb(0);
+            } else {
+                do_expbuf_write(thdata);
+                do_expbuf_read(thdata);
+            }
+        }
+        if (ret == -1) {
+            dief("eventfd read failed\n");
+        } else {
+            assert(ret == sizeof(sig));
+        }
+        close(buf->efd_read);
+
+        // set fd back to original
+        if (fcntl(thdata->fd, F_SETFL, flags) == -1)
+            dief("fcntl");
+
+#if !NEVERBLEED_USE_EVENTFD
+        // in the case of eventfd, the efd_read == efd_write
+        // but, in the case of pipe, we need to close the write side
+        close(buf->efd_write);
+#endif
+    }
 }
 
 #if !defined(NAME_MAX) || defined(__linux__)
@@ -420,6 +673,7 @@ static void unlink_dir(const char *path)
 static void dispose_thread_data(void *_thdata)
 {
     struct st_neverbleed_thread_data_t *thdata = _thdata;
+
     assert(thdata->fd >= 0);
     close(thdata->fd);
     thdata->fd = -1;
@@ -440,10 +694,12 @@ static struct st_neverbleed_thread_data_t *get_thread_data(neverbleed_t *nb)
     } else {
         if ((thdata = malloc(sizeof(*thdata))) == NULL)
             dief("malloc failed");
+        memset(thdata, 0, sizeof(*thdata));
     }
 
-    thdata->in_flight = 0;
     thdata->self_pid = self_pid;
+    expbuf_list_init(&thdata->write_pending);
+    expbuf_list_init(&thdata->in_flight);
 #ifdef SOCK_CLOEXEC
     if ((thdata->fd = socket(PF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0)) == -1)
         dief("socket(2) failed");
@@ -462,9 +718,44 @@ static struct st_neverbleed_thread_data_t *get_thread_data(neverbleed_t *nb)
     pthread_setspecific(nb->thread_key, thdata);
 
 Return:
-    assert(!thdata->in_flight);
-    thdata->in_flight = 1;
     return thdata;
+}
+
+int neverbleed_get_fd(neverbleed_t *nb)
+{
+    struct st_neverbleed_thread_data_t *thdata = get_thread_data(nb);
+    return thdata->fd;
+}
+
+void neverbleed_register(neverbleed_t *nb, neverbleed_cb write_cb, neverbleed_cb read_cb)
+{
+    struct st_neverbleed_thread_data_t *thdata = get_thread_data(nb);
+    assert(write_cb != NULL && read_cb != NULL);
+    thdata->write_cb = write_cb;
+    thdata->read_cb = read_cb;
+}
+
+void neverbleed_get_transaction(neverbleed_t *nb, size_t *size, char **data)
+{
+    struct st_neverbleed_thread_data_t *thdata = get_thread_data(nb);
+    if (expbuf_list_is_empty(&thdata->write_pending)) {
+        return;
+    }
+
+    // pop from list
+    struct expbuf_t *buf = expbuf_list_pop_head(&thdata->write_pending);
+
+    *size = expbuf_size(buf);
+    *data = buf->start;
+
+    // transition to in-flight
+    expbuf_list_push_tail(&thdata->in_flight, buf);
+}
+
+size_t neverbleed_read(neverbleed_t *nb, char *buffer, size_t size)
+{
+    struct st_neverbleed_thread_data_t *thdata = get_thread_data(nb);
+    return do_expbuf_read_async(thdata, buffer, size);
 }
 
 static void get_privsep_data(const RSA *rsa, struct st_neverbleed_rsa_exdata_t **exdata,
@@ -597,32 +888,11 @@ static size_t daemon_set_rsa(RSA *rsa)
     return index;
 }
 
-// sets up file descriptor and calls OpenSSL's `ASYNC_pause_job`
-// if OpenSSL async is not available, this function is a no-op
-static void async_pause(int fd)
-{
-#if NEVERBLEED_OPENSSL_HAVE_ASYNC
-    ASYNC_JOB *job;
-
-    if ((job = ASYNC_get_current_job()) != NULL) {
-        ASYNC_WAIT_CTX *waitctx = ASYNC_get_wait_ctx(job);
-
-        size_t numfds;
-        assert(ASYNC_WAIT_CTX_get_all_fds(waitctx, NULL, &numfds) && numfds == 0);
-        if (!ASYNC_WAIT_CTX_set_wait_fd(waitctx, "neverbleed", fd, NULL, NULL))
-            dief("could not set async fd\n");
-        ASYNC_pause_job();
-        if (!ASYNC_WAIT_CTX_clear_fd(waitctx, "neverbleed"))
-            dief("could not clear async fd\n");
-    }
-#endif
-}
-
 
 static int priv_encdec_proxy(const char *cmd, int flen, const unsigned char *from, unsigned char *_to, RSA *rsa, int padding)
 {
     struct st_neverbleed_rsa_exdata_t *exdata;
-    THDATA_IN_FLIGHT *thdata;
+    struct st_neverbleed_thread_data_t *thdata;
     struct expbuf_t buf = {NULL};
     size_t ret;
     unsigned char *to;
@@ -634,13 +904,9 @@ static int priv_encdec_proxy(const char *cmd, int flen, const unsigned char *fro
     expbuf_push_bytes(&buf, from, flen);
     expbuf_push_num(&buf, exdata->key_index);
     expbuf_push_num(&buf, padding);
-    if (expbuf_write(&buf, thdata->fd) != 0)
-        dief(errno != 0 ? "write error" : "connection closed by daemon");
-    expbuf_dispose(&buf);
 
-    async_pause(thdata->fd);
-    if (expbuf_read(&buf, thdata->fd) != 0)
-        dief(errno != 0 ? "read error" : "connection closed by daemon");
+    expbuf_send(&buf, thdata);
+
     if (expbuf_shift_num(&buf, &ret) != 0 || (to = expbuf_shift_bytes(&buf, &tolen)) == NULL) {
         errno = 0;
         dief("failed to parse response");
@@ -706,7 +972,7 @@ static int sign_proxy(int type, const unsigned char *m, unsigned int m_len, unsi
                       const RSA *rsa)
 {
     struct st_neverbleed_rsa_exdata_t *exdata;
-    THDATA_IN_FLIGHT *thdata;
+    struct st_neverbleed_thread_data_t *thdata;
     struct expbuf_t buf = {NULL};
     size_t ret, siglen;
     unsigned char *sigret;
@@ -717,13 +983,8 @@ static int sign_proxy(int type, const unsigned char *m, unsigned int m_len, unsi
     expbuf_push_num(&buf, type);
     expbuf_push_bytes(&buf, m, m_len);
     expbuf_push_num(&buf, exdata->key_index);
-    if (expbuf_write(&buf, thdata->fd) != 0)
-        dief(errno != 0 ? "write error" : "connection closed by daemon");
-    expbuf_dispose(&buf);
+    expbuf_send(&buf, thdata);
 
-    async_pause(thdata->fd);
-    if (expbuf_read(&buf, thdata->fd) != 0)
-        dief(errno != 0 ? "read error" : "connection closed by daemon");
     if (expbuf_shift_num(&buf, &ret) != 0 || (sigret = expbuf_shift_bytes(&buf, &siglen)) == NULL) {
         errno = 0;
         dief("failed to parse response");
@@ -881,8 +1142,8 @@ static int ecdsa_sign_proxy(int type, const unsigned char *m, int m_len, unsigne
                             const BIGNUM *kinv, const BIGNUM *rp, EC_KEY *ec_key)
 {
     struct st_neverbleed_rsa_exdata_t *exdata;
-    THDATA_IN_FLIGHT *thdata;
-    struct expbuf_t buf = {};
+    struct st_neverbleed_thread_data_t *thdata;
+    struct expbuf_t buf = {NULL};
     size_t ret, siglen;
     unsigned char *sigret;
 
@@ -900,13 +1161,8 @@ static int ecdsa_sign_proxy(int type, const unsigned char *m, int m_len, unsigne
     expbuf_push_num(&buf, type);
     expbuf_push_bytes(&buf, m, m_len);
     expbuf_push_num(&buf, exdata->key_index);
-    if (expbuf_write(&buf, thdata->fd) != 0)
-        dief(errno != 0 ? "write error" : "connection closed by daemon");
-    expbuf_dispose(&buf);
+    expbuf_send(&buf, thdata);
 
-    async_pause(thdata->fd);
-    if (expbuf_read(&buf, thdata->fd) != 0)
-        dief(errno != 0 ? "read error" : "connection closed by daemon");
     if (expbuf_shift_num(&buf, &ret) != 0 || (sigret = expbuf_shift_bytes(&buf, &siglen)) == NULL) {
         errno = 0;
         dief("failed to parse response");
@@ -971,7 +1227,7 @@ static EVP_PKEY *ecdsa_create_pkey(neverbleed_t *nb, size_t key_index, int curve
 static void priv_ecdsa_finish(EC_KEY *key)
 {
     struct st_neverbleed_rsa_exdata_t *exdata;
-    THDATA_IN_FLIGHT *thdata;
+    struct st_neverbleed_thread_data_t *thdata;
 
     ecdsa_get_privsep_data(key, &exdata, &thdata);
 
@@ -980,13 +1236,8 @@ static void priv_ecdsa_finish(EC_KEY *key)
 
     expbuf_push_str(&buf, "del_ecdsa_key");
     expbuf_push_num(&buf, exdata->key_index);
-    if (expbuf_write(&buf, thdata->fd) != 0)
-        dief(errno != 0 ? "write error" : "connection closed by daemon");
-    expbuf_dispose(&buf);
+    expbuf_send(&buf, thdata);
 
-    async_pause(thdata->fd);
-    if (expbuf_read(&buf, thdata->fd) != 0)
-        dief(errno != 0 ? "read error" : "connection closed by daemon");
     if (expbuf_shift_num(&buf, &ret) != 0) {
         errno = 0;
         dief("failed to parse response");
@@ -1036,7 +1287,7 @@ respond:
 
 int neverbleed_load_private_key_file(neverbleed_t *nb, SSL_CTX *ctx, const char *fn, char *errbuf)
 {
-    THDATA_IN_FLIGHT *thdata = get_thread_data(nb);
+    struct st_neverbleed_thread_data_t *thdata = get_thread_data(nb);
     struct expbuf_t buf = {NULL};
     int ret = 1;
     size_t index, type;
@@ -1044,12 +1295,8 @@ int neverbleed_load_private_key_file(neverbleed_t *nb, SSL_CTX *ctx, const char 
 
     expbuf_push_str(&buf, "load_key");
     expbuf_push_str(&buf, fn);
-    if (expbuf_write(&buf, thdata->fd) != 0)
-        dief(errno != 0 ? "write error" : "connection closed by daemon");
-    expbuf_dispose(&buf);
+    expbuf_send(&buf, thdata);
 
-    if (expbuf_read(&buf, thdata->fd) != 0)
-        dief(errno != 0 ? "read error" : "connection closed by daemon");
     if (expbuf_shift_num(&buf, &type) != 0 || expbuf_shift_num(&buf, &index) != 0) {
         errno = 0;
         dief("failed to parse response");
@@ -1214,19 +1461,15 @@ Respond:
 
 int neverbleed_setuidgid(neverbleed_t *nb, const char *user, int change_socket_ownership)
 {
-    THDATA_IN_FLIGHT *thdata = get_thread_data(nb);
+    struct st_neverbleed_thread_data_t *thdata = get_thread_data(nb);
     struct expbuf_t buf = {NULL};
     size_t ret;
 
     expbuf_push_str(&buf, "setuidgid");
     expbuf_push_str(&buf, user);
     expbuf_push_num(&buf, change_socket_ownership);
-    if (expbuf_write(&buf, thdata->fd) != 0)
-        dief(errno != 0 ? "write error" : "connection closed by daemon");
-    expbuf_dispose(&buf);
+    expbuf_send(&buf, thdata);
 
-    if (expbuf_read(&buf, thdata->fd) != 0)
-        dief(errno != 0 ? "read error" : "connection closed by daemon");
     if (expbuf_shift_num(&buf, &ret) != 0) {
         errno = 0;
         dief("failed to parse response");
@@ -1294,18 +1537,14 @@ Respond:
 #if NEVERBLEED_HAS_PTHREAD_SETAFFINITY_NP
 int neverbleed_setaffinity(neverbleed_t *nb, NEVERBLEED_CPU_SET_T *cpuset)
 {
-    THDATA_IN_FLIGHT *thdata = get_thread_data(nb);
+    struct st_neverbleed_thread_data_t *thdata = get_thread_data(nb);
     struct expbuf_t buf = {NULL};
     size_t ret;
 
     expbuf_push_str(&buf, "setaffinity");
     expbuf_push_bytes(&buf, cpuset, sizeof(*cpuset));
-    if (expbuf_write(&buf, thdata->fd) != 0)
-        dief(errno != 0 ? "write error" : "connection closed by daemon");
-    expbuf_dispose(&buf);
+    expbuf_send(&buf, thdata);
 
-    if (expbuf_read(&buf, thdata->fd) != 0)
-        dief(errno != 0 ? "read error" : "connection closed by daemon");
     if (expbuf_shift_num(&buf, &ret) != 0) {
         errno = 0;
         dief("failed to parse response");
@@ -1373,7 +1612,7 @@ Redo:
 static int priv_rsa_finish(RSA *rsa)
 {
     struct st_neverbleed_rsa_exdata_t *exdata;
-    THDATA_IN_FLIGHT *thdata;
+    struct st_neverbleed_thread_data_t *thdata;
 
     get_privsep_data(rsa, &exdata, &thdata);
 
@@ -1382,13 +1621,8 @@ static int priv_rsa_finish(RSA *rsa)
 
     expbuf_push_str(&buf, "del_rsa_key");
     expbuf_push_num(&buf, exdata->key_index);
-    if (expbuf_write(&buf, thdata->fd) != 0)
-        dief(errno != 0 ? "write error" : "connection closed by daemon");
-    expbuf_dispose(&buf);
+    expbuf_send(&buf, thdata);
 
-    async_pause(thdata->fd);
-    if (expbuf_read(&buf, thdata->fd) != 0)
-        dief(errno != 0 ? "read error" : "connection closed by daemon");
     if (expbuf_shift_num(&buf, &ret) != 0) {
         errno = 0;
         dief("failed to parse response");
@@ -1435,6 +1669,31 @@ respond:
     expbuf_dispose(buf);
     expbuf_push_num(buf, ret);
     return 0;
+}
+
+/**
+ * This function waits for the provided socket to become readable, then calls `nanosleep(1)` before returning.
+ * The intention behind sleep is to provide the application to complete its event loop before the neverbleed process starts
+ * spending CPU cycles on the time-consuming RSA operation.
+ */
+static void yield_on_data(int fd)
+{
+    fd_set rfds;
+    int ret;
+    FD_ZERO(&rfds);
+    FD_SET(fd, &rfds);
+
+    while ((ret = select(fd + 1, &rfds, NULL, NULL, NULL)) == -1 && (errno == EAGAIN || errno == EINTR))
+        ;
+    if (ret == -1) {
+        dief("select(2)\n");
+    } else if (ret > 0) {
+        // yield when data is available
+        struct timespec tv = {.tv_nsec = 1};
+        (void)nanosleep(&tv, NULL);
+    } else {
+        dief("unreachable, no timeout configured");
+    }
 }
 
 static void *daemon_conn_thread(void *_sock_fd)

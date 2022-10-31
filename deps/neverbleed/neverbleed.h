@@ -29,7 +29,6 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-
 #if defined(__linux__) || defined(__FreeBSD__) || defined(__NetBSD__)
 #define NEVERBLEED_HAS_PTHREAD_SETAFFINITY_NP 1
 #if defined(__linux__)
@@ -75,6 +74,13 @@ int neverbleed_setaffinity(neverbleed_t *nb, NEVERBLEED_CPU_SET_T *cpuset);
  * spawned
  */
 extern void (*neverbleed_post_fork_cb)(void);
+
+typedef void (*neverbleed_cb)(int);
+
+int neverbleed_get_fd(neverbleed_t *nb);
+void neverbleed_register(neverbleed_t *nb, neverbleed_cb write_cb, neverbleed_cb read_cb);
+size_t neverbleed_read(neverbleed_t *nb, char *buffer, size_t size);
+void neverbleed_get_transaction(neverbleed_t *nb, size_t *size, char **data);
 
 #ifdef __cplusplus
 }
