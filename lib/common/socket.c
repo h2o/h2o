@@ -86,6 +86,13 @@ struct st_h2o_socket_ssl_t {
     int *did_write_in_read; /* used for detecting and closing the connection upon renegotiation (FIXME implement renegotiation) */
     size_t record_overhead;
     struct {
+        uint64_t send_finished_iv; /* UINT64_MAX if not available */
+        struct {
+            uint8_t type;
+            uint16_t length;
+        } last_received[2];
+    } tls12_record_layer;
+    struct {
         h2o_socket_cb cb;
         union {
             struct {
@@ -242,6 +249,13 @@ static int read_bio(BIO *b, char *out, int len)
         return -1;
     }
 
+    if (len == 5 && sock->ssl->input.encrypted->size >= 5) {
+        sock->ssl->tls12_record_layer.last_received[1] = sock->ssl->tls12_record_layer.last_received[0];
+        sock->ssl->tls12_record_layer.last_received[0].type = sock->ssl->input.encrypted->bytes[0];
+        sock->ssl->tls12_record_layer.last_received[0].length =
+            ((sock->ssl->input.encrypted->bytes[3] & 0xff) << 8) | (sock->ssl->input.encrypted->bytes[4] & 0xff);
+    }
+
     if (sock->ssl->input.encrypted->size < len) {
         len = (int)sock->ssl->input.encrypted->size;
     }
@@ -352,6 +366,16 @@ static int write_bio(BIO *b, const char *in, int len)
     if (sock->ssl->did_write_in_read != NULL) {
         *sock->ssl->did_write_in_read = 1;
         return -1;
+    }
+
+    /* Record bytes where the explicit IV will exist within a TLS 1.2 Finished message. When migrating the connection to picotls,
+     * Finished is going to be the last and the only encrypted record being sent by OpenSSL. We record that explicit IV and picotls
+     * starts with that explicit IV incremented by 1. */
+    if (len >= 45 && memcmp(in + len - 45, H2O_STRLIT("\x16\x03\x03\x00\x28")) == 0) {
+        const uint8_t *p = (const uint8_t *)in + len - 40;
+        sock->ssl->tls12_record_layer.send_finished_iv = quicly_decode64(&p);
+    } else {
+        sock->ssl->tls12_record_layer.send_finished_iv = UINT64_MAX;
     }
 
     write_ssl_bytes(sock, in, len);
@@ -1044,8 +1068,16 @@ ptls_t *h2o_socket_get_ptls(h2o_socket_t *sock)
 const char *h2o_socket_get_ssl_protocol_version(h2o_socket_t *sock)
 {
     if (sock->ssl != NULL) {
-        if (sock->ssl->ptls != NULL)
-            return "TLSv1.3";
+        if (sock->ssl->ptls != NULL) {
+            switch (ptls_get_protocol_version(sock->ssl->ptls)) {
+            case PTLS_PROTOCOL_VERSION_TLS12:
+                return "TLSv1.2";
+            case PTLS_PROTOCOL_VERSION_TLS13:
+                return "TLSv1.3";
+            default:
+                return "TLSv?";
+            }
+        }
         if (sock->ssl->ossl != NULL)
             return SSL_get_version(sock->ssl->ossl);
     }
@@ -1069,7 +1101,7 @@ const char *h2o_socket_get_ssl_cipher(h2o_socket_t *sock)
         if (sock->ssl->ptls != NULL) {
             ptls_cipher_suite_t *cipher = ptls_get_cipher(sock->ssl->ptls);
             if (cipher != NULL)
-                return cipher->aead->name;
+                return cipher->name;
         } else if (sock->ssl->ossl != NULL) {
             return SSL_get_cipher_name(sock->ssl->ossl);
         }
@@ -1256,6 +1288,15 @@ h2o_iovec_t h2o_socket_log_ssl_cipher_bits(h2o_socket_t *sock, h2o_mem_pool_t *p
     }
 }
 
+h2o_iovec_t h2o_socket_log_ssl_backend(h2o_socket_t *sock, h2o_mem_pool_t *pool)
+{
+    if (sock->ssl->ptls != NULL)
+        return h2o_iovec_init(H2O_STRLIT("picotls"));
+    if (sock->ssl->ossl != NULL)
+        return h2o_iovec_init(H2O_STRLIT("openssl"));
+    return h2o_iovec_init(NULL, 0);
+}
+
 int h2o_socket_compare_address(struct sockaddr *x, struct sockaddr *y, int check_port)
 {
 #define CMP(a, b)                                                                                                                  \
@@ -1407,9 +1448,114 @@ static int on_async_resumption_new(SSL *ssl, SSL_SESSION *session)
     return 0;
 }
 
+/**
+ * transfer traffic secret to picotls and discard OpenSSL state, if possible
+ */
+static void switch_to_picotls(h2o_socket_t *sock, uint16_t csid)
+{
+#if defined(LIBRESSL_VERSION_NUMBER) || OPENSSL_VERSION_NUMBER < 0x1010000fL
+    /* Libressl and openssl 1.0.2 does not have SSL_SESSION_get_master_key, or the functions to obtain hello random. Also, they lack
+     * the keylog callback that can be used as an alternative. */
+    return;
+#else
+
+    /* TODO When using boringssl (the only fork of OpenSSL that supports TLS 1.2 False Start), we should probably refuse to switch
+     * to picotls when `SSL_in_false_start` returns true, as `SSL_handshake` might signal completion before receiving Finished.
+     * This is a issue specific to client-side connections; it does not matter for h2o accepting TLS 1.2 connections. */
+
+    /* skip protocols other than TLS 1.2 */
+    if (SSL_version(sock->ssl->ossl) != TLS1_2_VERSION)
+        return;
+
+    ptls_context_t *ptls_ctx = h2o_socket_ssl_get_picotls_context(sock->ssl->ssl_ctx);
+    if (ptls_ctx == NULL)
+        return;
+
+    /* find the corresponding zerocopy cipher suite, or bail out */
+    ptls_cipher_suite_t *cs = ptls_find_cipher_suite(ptls_ctx->tls12_cipher_suites, csid);
+    if (cs == NULL)
+        return;
+
+    /* The precondition for calling `ptls_build_tl12_export_params` is that we have sent and received only one encrypted record
+     * (i.e., next sequence number is 1). Bail out if that expectation is not met (which is very unlikely in practice). At the same
+     * time, obtain explicit nonce that has been used, if the underlying AEAD uses one. */
+    if (!(sock->ssl->tls12_record_layer.last_received[1].type == 20 /* TLS 1.2 ChangeCipherSpec */ &&
+          sock->ssl->tls12_record_layer.last_received[0].type == 22 /* TLS 1.2 Handshake record */ &&
+          sock->ssl->tls12_record_layer.last_received[0].length == cs->aead->tls12.record_iv_size + 16 + cs->aead->tag_size))
+        return;
+    if (cs->aead->tls12.record_iv_size != 0 && sock->ssl->tls12_record_layer.send_finished_iv == UINT64_MAX)
+        return;
+
+    uint8_t master_secret[PTLS_TLS12_MASTER_SECRET_SIZE], hello_randoms[PTLS_HELLO_RANDOM_SIZE * 2], params_smallbuf[128];
+    ptls_buffer_t params;
+    int ret;
+
+    ptls_buffer_init(&params, params_smallbuf, sizeof(params_smallbuf));
+
+    /* extract the necessary bits */
+    if (SSL_SESSION_get_master_key(SSL_get_session(sock->ssl->ossl), master_secret, sizeof(master_secret)) != sizeof(master_secret))
+        goto Exit;
+    if (SSL_get_server_random(sock->ssl->ossl, hello_randoms, PTLS_HELLO_RANDOM_SIZE) != PTLS_HELLO_RANDOM_SIZE)
+        goto Exit;
+    if (SSL_get_client_random(sock->ssl->ossl, hello_randoms + PTLS_HELLO_RANDOM_SIZE, PTLS_HELLO_RANDOM_SIZE) !=
+        PTLS_HELLO_RANDOM_SIZE)
+        goto Exit;
+
+    /* try to create ptls context */
+    h2o_iovec_t negotiated_protocol = h2o_socket_ssl_get_selected_protocol(sock);
+    if (ptls_build_tls12_export_params(ptls_ctx, &params, SSL_is_server(sock->ssl->ossl), SSL_session_reused(sock->ssl->ossl), cs,
+                                       master_secret, hello_randoms, sock->ssl->tls12_record_layer.send_finished_iv + 1,
+                                       h2o_socket_get_ssl_server_name(sock),
+                                       ptls_iovec_init(negotiated_protocol.base, negotiated_protocol.len)) != 0)
+        goto Exit;
+    if ((ret = ptls_import(ptls_ctx, &sock->ssl->ptls, ptls_iovec_init(params.base, params.off))) != 0)
+        h2o_fatal("failed to import TLS params built using the same context:%d", ret);
+
+    if (sock->ssl->ptls != NULL) {
+        SSL_set_shutdown(sock->ssl->ossl, SSL_SENT_SHUTDOWN); /* close the session so that it can be resumed */
+        SSL_free(sock->ssl->ossl);
+        sock->ssl->ossl = NULL;
+    }
+
+Exit:
+    ptls_clear_memory(master_secret, sizeof(master_secret));
+    ptls_buffer_dispose(&params);
+#endif
+}
+
 static void on_handshake_complete(h2o_socket_t *sock, const char *err)
 {
     if (err == NULL) {
+        /* Post-handshake setup: set record_overhead, zerocopy, switch to picotls */
+        if (sock->ssl->ptls == NULL) {
+            const SSL_CIPHER *cipher = SSL_get_current_cipher(sock->ssl->ossl);
+            uint32_t cipher_id = SSL_CIPHER_get_id(cipher);
+            switch (cipher_id) {
+            case TLS1_CK_RSA_WITH_AES_128_GCM_SHA256:
+            case TLS1_CK_DHE_RSA_WITH_AES_128_GCM_SHA256:
+            case TLS1_CK_ECDHE_RSA_WITH_AES_128_GCM_SHA256:
+            case TLS1_CK_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256:
+                sock->ssl->record_overhead = 5 /* header */ + 8 /* iv (RFC 5288 3) */ + 16 /* tag (RFC 5116 5.1) */;
+                break;
+            case TLS1_CK_RSA_WITH_AES_256_GCM_SHA384:
+            case TLS1_CK_DHE_RSA_WITH_AES_256_GCM_SHA384:
+            case TLS1_CK_ECDHE_RSA_WITH_AES_256_GCM_SHA384:
+            case TLS1_CK_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384:
+                sock->ssl->record_overhead = 5 /* header */ + 8 /* iv (RFC 5288 3) */ + 16 /* tag (RFC 5116 5.1) */;
+                break;
+#if defined(TLS1_CK_DHE_RSA_WITH_CHACHA20_POLY1305)
+            case TLS1_CK_DHE_RSA_WITH_CHACHA20_POLY1305:
+            case TLS1_CK_ECDHE_RSA_WITH_CHACHA20_POLY1305:
+            case TLS1_CK_ECDHE_ECDSA_WITH_CHACHA20_POLY1305:
+                sock->ssl->record_overhead = 5 /* header */ + 16 /* tag */;
+                break;
+#endif
+            default:
+                sock->ssl->record_overhead = 32; /* sufficiently large number that can hold most payloads */
+                break;
+            }
+            switch_to_picotls(sock, cipher_id & 0xffff /* obtain IANA cipher-suite ID in a way compatible w. OpenSSL 1.1.0 */);
+        }
         if (sock->ssl->ptls != NULL) {
             sock->ssl->record_overhead = ptls_get_record_overhead(sock->ssl->ptls);
 #if H2O_USE_MSG_ZEROCOPY
@@ -1424,29 +1570,7 @@ static void on_handshake_complete(h2o_socket_t *sock, const char *err)
             }
 #endif
         } else {
-            const SSL_CIPHER *cipher = SSL_get_current_cipher(sock->ssl->ossl);
-            switch (SSL_CIPHER_get_id(cipher)) {
-            case TLS1_CK_RSA_WITH_AES_128_GCM_SHA256:
-            case TLS1_CK_DHE_RSA_WITH_AES_128_GCM_SHA256:
-            case TLS1_CK_ECDHE_RSA_WITH_AES_128_GCM_SHA256:
-            case TLS1_CK_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256:
-            case TLS1_CK_RSA_WITH_AES_256_GCM_SHA384:
-            case TLS1_CK_DHE_RSA_WITH_AES_256_GCM_SHA384:
-            case TLS1_CK_ECDHE_RSA_WITH_AES_256_GCM_SHA384:
-            case TLS1_CK_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384:
-                sock->ssl->record_overhead = 5 /* header */ + 8 /* record_iv_length (RFC 5288 3) */ + 16 /* tag (RFC 5116 5.1) */;
-                break;
-#if defined(TLS1_CK_DHE_RSA_WITH_CHACHA20_POLY1305)
-            case TLS1_CK_DHE_RSA_WITH_CHACHA20_POLY1305:
-            case TLS1_CK_ECDHE_RSA_WITH_CHACHA20_POLY1305:
-            case TLS1_CK_ECDHE_ECDSA_WITH_CHACHA20_POLY1305:
-                sock->ssl->record_overhead = 5 /* header */ + 16 /* tag */;
-                break;
-#endif
-            default:
-                sock->ssl->record_overhead = 32; /* sufficiently large number that can hold most payloads */
-                break;
-            }
+            assert(sock->ssl->ossl != NULL);
         }
     }
 
@@ -1851,14 +1975,13 @@ void h2o_socket_ssl_handshake(h2o_socket_t *sock, SSL_CTX *ssl_ctx, const char *
                               h2o_socket_cb handshake_cb)
 {
     sock->ssl = h2o_mem_alloc(sizeof(*sock->ssl));
-    *sock->ssl = (struct st_h2o_socket_ssl_t){};
+    *sock->ssl = (struct st_h2o_socket_ssl_t){
+        .ssl_ctx = ssl_ctx, .handshake = {.cb = handshake_cb}, .tls12_record_layer = {.send_finished_iv = UINT64_MAX}};
 #if H2O_USE_KTLS
     /* Set offload state to TBD if kTLS is enabled. Otherwise, remains H2O_SOCKET_SSL_OFFLOAD_OFF. */
     if (h2o_socket_use_ktls)
         sock->ssl->offload = H2O_SOCKET_SSL_OFFLOAD_TBD;
 #endif
-
-    sock->ssl->ssl_ctx = ssl_ctx;
 
     /* setup the buffers; sock->input should be empty, sock->ssl->input.encrypted should contain the initial input, if any */
     h2o_buffer_init(&sock->ssl->input.encrypted, &h2o_socket_buffer_prototype);
@@ -1868,7 +1991,6 @@ void h2o_socket_ssl_handshake(h2o_socket_t *sock, SSL_CTX *ssl_ctx, const char *
         sock->ssl->input.encrypted = tmp;
     }
 
-    sock->ssl->handshake.cb = handshake_cb;
     if (server_name == NULL) {
         /* is server */
         if (SSL_CTX_sess_get_get_cb(sock->ssl->ssl_ctx) != NULL)

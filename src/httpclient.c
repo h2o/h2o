@@ -90,6 +90,7 @@ static h2o_http3client_ctx_t h3ctx = {
             .save_ticket = &save_http3_ticket,
         },
 };
+static const char *progname; /* refers to argv[0] */
 
 static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *errstr, h2o_iovec_t *method, h2o_url_t *url,
                                          const h2o_header_t **headers, size_t *num_headers, h2o_iovec_t *body,
@@ -163,7 +164,7 @@ static void on_error(h2o_httpclient_ctx_t *ctx, h2o_mem_pool_t *pool, const char
     va_start(args, fmt);
     int errlen = vsnprintf(errbuf, sizeof(errbuf), fmt, args);
     va_end(args);
-    fprintf(stderr, "%.*s\n", errlen, errbuf);
+    fprintf(stderr, "%s: %.*s\n", progname, errlen, errbuf);
 
     /* defer using zero timeout to send pending GOAWAY frame */
     create_timeout(ctx->loop, 0, on_exit_deferred, NULL);
@@ -239,7 +240,8 @@ static void tunnel_on_udp_read(h2o_httpclient_t *client, h2o_iovec_t *datagrams,
     for (size_t i = 0; i != num_datagrams; ++i) {
         const h2o_iovec_t *src = datagrams + i;
         struct iovec vec = {.iov_base = src->base, .iov_len = src->len};
-        struct msghdr mess = {.msg_name = &udp_sock_remote_addr, .msg_namelen = sizeof(udp_sock_remote_addr), .msg_iov = &vec, .msg_iovlen = 1};
+        struct msghdr mess = {
+            .msg_name = &udp_sock_remote_addr, .msg_namelen = sizeof(udp_sock_remote_addr), .msg_iov = &vec, .msg_iovlen = 1};
         sendmsg(h2o_socket_get_fd(udp_sock), &mess, 0);
     }
 }
@@ -556,6 +558,8 @@ static void on_sigfatal(int signo)
 
 int main(int argc, char **argv)
 {
+    progname = argv[0];
+
     h2o_set_signal_handler(SIGABRT, on_sigfatal);
     h2o_set_signal_handler(SIGBUS, on_sigfatal);
     h2o_set_signal_handler(SIGFPE, on_sigfatal);

@@ -119,7 +119,6 @@ static h2o_iovec_t rebuild_path(h2o_mem_pool_t *pool, const char *src, size_t sr
 
 h2o_iovec_t h2o_url_normalize_path(h2o_mem_pool_t *pool, const char *path, size_t len, size_t *query_at, size_t **norm_indexes)
 {
-    const char *p = path, *end = path + len;
     h2o_iovec_t ret;
 
     *query_at = SIZE_MAX;
@@ -129,6 +128,8 @@ h2o_iovec_t h2o_url_normalize_path(h2o_mem_pool_t *pool, const char *path, size_
         ret = h2o_iovec_init("/", 1);
         return ret;
     }
+
+    const char *p = path, *end = path + len;
 
     if (path[0] != '/')
         goto Rewrite;

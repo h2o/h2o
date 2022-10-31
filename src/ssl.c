@@ -1133,7 +1133,7 @@ void ssl_setup_session_resumption(SSL_CTX **contexts, size_t num_contexts, struc
 void ssl_setup_session_resumption_ptls(ptls_context_t *ptls, quicly_context_t *quic)
 {
     if (conf.ticket.update_thread != NULL) {
-        ptls->ticket_lifetime = 86400 * 7; // FIXME conf.lifetime
+        ptls->ticket_lifetime = conf.lifetime;
         assert((quic != NULL) == ptls->omit_end_of_early_data && "detected contradictory setting");
         ptls->encrypt_ticket = create_encrypt_ticket_ptls(quic);
     }

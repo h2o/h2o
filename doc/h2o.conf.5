@@ -552,13 +552,39 @@ The ssl attribute must be defined as a mapping, and recognizes the following att
 
 
 certificate-file:
-path of the SSL certificate file (mandatory)
+
+Path of the SSL certificate file (mandatory).
+This attribute can specify a PEM file containing either an X.509 certificate chain or a raw public key.
+When the latter form is being used, RFC 7250 handshake will be used.
+
 key-file:
-path of the SSL private key file (mandatory)
+Path of the SSL private key file (mandatory).
+identity:
+List of certificate / key pairs.
+This attribute can be used in place of certificate-file and key-file to specify more than one pair of certificates and keys.
+When a TLS handshake is performed, h2o uses the first pair that contains a compatible certificate / key.
+The last pair acts as the fallback.
+.PP
+.BR Example:\ 
+Using RSA and ECDSA certificates
+.PP
+.nf
+.RS
+ssl:
+  identity:
+  - key-file: /path/to/rsa.key
+    certificate-file: /path/to/rsa.crt
+  - key-file: /path/to/ecdsa.key
+    certificate-file: /path/to/ecdsa.crt
+
+.RE
+.fi
+.PP
+
 minimum-version:
 
-minimum protocol version, should be one of: SSLv2, SSLv3, TLSv1, TLSv1.1, TLSv1.2.
-Default is TLSv1
+minimum protocol version, should be one of: SSLv2, SSLv3, TLSv1, TLSv1.1, TLSv1.2, TLSv1.3.
+Default is TLSv1.
 
 min-version:
 
@@ -822,9 +848,12 @@ On other platforms the default value is 0 (disabled).
 
 .SS send-server-name
 (since v2.0)
-A boolean flag (ON or OFF) indicating whether if the server response header should be sent.
+Sets whether if the server response header should be sent or forwarded from backend.
 
 .PP
+
+
+By setting the value to (ON or OFF) indicating whether if the server response header should be sent. And by setting the value to preserve, it forwards the value received from the backend when proxying.
 
 
 .PP

@@ -198,10 +198,9 @@ static void build_request(h2o_req_t *req, h2o_iovec_t *method, h2o_url_t *url, h
 
     /* headers */
     h2o_iovec_vector_t cookie_values = {NULL};
-    {
-        const h2o_header_t *h, *h_end;
-        int found_early_data = 0;
-        for (h = req->headers.entries, h_end = h + req->headers.size; h != h_end; ++h) {
+    int found_early_data = 0;
+    if (H2O_LIKELY(req->headers.size != 0)) {
+        for (const h2o_header_t *h = req->headers.entries, *h_end = h + req->headers.size; h != h_end; ++h) {
             if (h2o_iovec_is_token(h->name)) {
                 const h2o_token_t *token = (void *)h->name;
                 if (token->flags.proxy_should_drop_for_req)
@@ -238,16 +237,20 @@ static void build_request(h2o_req_t *req, h2o_iovec_t *method, h2o_url_t *url, h
                                       h->value.len);
             }
         }
-        if (found_early_data) {
-            *reprocess_if_too_early = 0;
-        } else if (*reprocess_if_too_early) {
-            h2o_add_header(&req->pool, headers, H2O_TOKEN_EARLY_DATA, NULL, H2O_STRLIT("1"));
-        }
+    }
+    if (found_early_data) {
+        *reprocess_if_too_early = 0;
+    } else if (*reprocess_if_too_early) {
+        h2o_add_header(&req->pool, headers, H2O_TOKEN_EARLY_DATA, NULL, H2O_STRLIT("1"));
     }
 
-    if (cookie_values.size != 0) {
+    if (cookie_values.size == 1) {
+        /* fast path */
+        h2o_add_header(&req->pool, headers, H2O_TOKEN_COOKIE, NULL, cookie_values.entries[0].base, cookie_values.entries[0].len);
+    } else if (cookie_values.size > 1) {
         /* merge the cookie headers; see HTTP/2 8.1.2.5 and HTTP/1 (RFC6265 5.4) */
-        h2o_iovec_t cookie_buf = h2o_join_list(&req->pool, cookie_values.entries, cookie_values.size, h2o_iovec_init(H2O_STRLIT("; ")));
+        h2o_iovec_t cookie_buf =
+            h2o_join_list(&req->pool, cookie_values.entries, cookie_values.size, h2o_iovec_init(H2O_STRLIT("; ")));
         h2o_add_header(&req->pool, headers, H2O_TOKEN_COOKIE, NULL, cookie_buf.base, cookie_buf.len);
     }
     if (emit_x_forwarded_headers) {
@@ -572,8 +575,8 @@ static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errs
         if (h2o_iovec_is_token(args->headers[i].name)) {
             const h2o_token_t *token = H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, args->headers[i].name);
             if (token->flags.proxy_should_drop_for_res) {
-                if (token == H2O_TOKEN_CONNECTION && self->src_req->version < 0x200 &&
-                    req->conn->ctx->globalconf->proxy.forward_close_connection) {
+                if (token == H2O_TOKEN_CONNECTION && self->src_req->version < 0x200 && req->overrides != NULL &&
+                    req->overrides->forward_close_connection) {
                     if (h2o_lcstris(args->headers[i].value.base, args->headers[i].value.len, H2O_STRLIT("close")))
                         self->src_req->http1_is_persistent = 0;
                 }

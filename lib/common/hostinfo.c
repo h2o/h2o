@@ -146,8 +146,8 @@ static void create_lookup_thread_if_necessary(void)
     /* do nothing if there's no need to, or if we are already at the maximum. */
     if (queue.num_threads_idle != 0 || h2o_linklist_is_empty(&queue.pending))
         return;
-     if (queue.num_threads == h2o_hostinfo_max_threads)
-         return;
+    if (queue.num_threads == h2o_hostinfo_max_threads)
+        return;
 
     pthread_t tid;
     pthread_attr_t attr;

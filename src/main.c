@@ -321,10 +321,10 @@ static struct {
     .max_quic_connections = INT_MAX, /* (INT_MAX = i.e., allow up to max_connections) */
     .soft_connection_limit = INT_MAX,
     .soft_connection_limit_min_age = 30,
-    .thread_map = {0},               /* initialized in main() */
-    .quic = {0},                     /* 0 defaults to all, conn_callbacks (initialized in main() */
-    .tfo_queues = 0,                 /* initialized in main() */
-    .launch_time = 0,                /* initialized in main() */
+    .thread_map = {0}, /* initialized in main() */
+    .quic = {0},       /* 0 defaults to all, conn_callbacks (initialized in main() */
+    .tfo_queues = 0,   /* initialized in main() */
+    .launch_time = 0,  /* initialized in main() */
     .threads = NULL,
     .shutdown_requested = 0,
     .state = {{0}},
@@ -337,6 +337,38 @@ static struct {
 static __thread size_t thread_index;
 
 static neverbleed_t *neverbleed = NULL;
+
+#if H2O_USE_FUSION
+static ptls_cipher_suite_t
+    tls13_non_temporal_aes128gcmsha256 = {.id = PTLS_CIPHER_SUITE_AES_128_GCM_SHA256,
+                                          .name = PTLS_CIPHER_SUITE_NAME_AES_128_GCM_SHA256,
+                                          .aead = &ptls_non_temporal_aes128gcm,
+                                          .hash = &ptls_openssl_sha256},
+    tls13_non_temporal_aes256gcmsha384 = {.id = PTLS_CIPHER_SUITE_AES_256_GCM_SHA384,
+                                          .name = PTLS_CIPHER_SUITE_NAME_AES_256_GCM_SHA384,
+                                          .aead = &ptls_non_temporal_aes256gcm,
+                                          .hash = &ptls_openssl_sha384},
+    *tls13_non_temporal_all[] = {&tls13_non_temporal_aes128gcmsha256, &tls13_non_temporal_aes256gcmsha384, NULL},
+    tls12_non_temporal_ecdhe_rsa_aes128gcmsha256 = {.id = PTLS_CIPHER_SUITE_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+                                                    .name = PTLS_CIPHER_SUITE_NAME_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+                                                    .aead = &ptls_non_temporal_aes128gcm,
+                                                    .hash = &ptls_openssl_sha256},
+    tls12_non_temporal_ecdhe_ecdsa_aes128gcmsha256 = {.id = PTLS_CIPHER_SUITE_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+                                                      .name = PTLS_CIPHER_SUITE_NAME_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+                                                      .aead = &ptls_non_temporal_aes128gcm,
+                                                      .hash = &ptls_openssl_sha256},
+    tls12_non_temporal_ecdhe_rsa_aes256gcmsha384 = {.id = PTLS_CIPHER_SUITE_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+                                                    .name = PTLS_CIPHER_SUITE_NAME_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+                                                    .aead = &ptls_non_temporal_aes256gcm,
+                                                    .hash = &ptls_openssl_sha384},
+    tls12_non_temporal_ecdhe_ecdsa_aes256gcmsha384 = {.id = PTLS_CIPHER_SUITE_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+                                                      .name = PTLS_CIPHER_SUITE_NAME_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+                                                      .aead = &ptls_non_temporal_aes256gcm,
+                                                      .hash = &ptls_openssl_sha384},
+    *tls12_non_temporal_all[] = {&tls12_non_temporal_ecdhe_rsa_aes128gcmsha256, &tls12_non_temporal_ecdhe_ecdsa_aes128gcmsha256,
+                                 &tls12_non_temporal_ecdhe_rsa_aes256gcmsha384, &tls12_non_temporal_ecdhe_ecdsa_aes256gcmsha384,
+                                 NULL};
+#endif
 
 static int cmd_argc;
 static char **cmd_argv;
@@ -875,6 +907,7 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
                 .get_time = &ptls_get_time,
                 .key_exchanges = key_exchanges,
                 .cipher_suites = cipher_suites,
+                .tls12_cipher_suites = ptls_openssl_tls12_cipher_suites,
                 .certificates = {0}, /* fill later */
                 .esni = NULL,        /* fill later */
                 .on_client_hello = &pctx->ch.super,
@@ -2242,11 +2275,12 @@ static int on_config_user(h2o_configurator_command_t *cmd, h2o_configurator_cont
 static int on_config_capabilities(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
 #ifndef LIBCAP_FOUND
-    h2o_configurator_errprintf(cmd, node, "the platform does not support Linux capabilities"
+    h2o_configurator_errprintf(cmd, node,
+                               "the platform does not support Linux capabilities"
 #ifdef __linux
-        " (hint: install libcap-dev or libcap-devel and rerun cmake)"
+                               " (hint: install libcap-dev or libcap-devel and rerun cmake)"
 #endif
-        );
+    );
     return -1;
 #else
 
@@ -2657,10 +2691,11 @@ static yoml_t *resolve_file_tag(yoml_t *node, resolve_tag_arg_t *arg)
 
     yoml_parse_args_t parse_args = {
         .filename = filename,
-        .resolve_tag = {
-            .cb = resolve_tag,
-            .cb_arg = arg,
-        },
+        .resolve_tag =
+            {
+                .cb = resolve_tag,
+                .cb_arg = arg,
+            },
         .resolve_alias = 1,
         .resolve_merge = 1,
     };
@@ -3095,9 +3130,11 @@ static void on_accept(h2o_socket_t *listener, const char *err)
         sock->on_close.data = ctx->accept_ctx.ctx;
 
         struct listener_config_t *listener_config = conf.listeners[ctx->listener_index];
-        if (listener_config->sndbuf != 0 && setsockopt(h2o_socket_get_fd(sock), SOL_SOCKET, SO_SNDBUF, &listener_config->sndbuf, sizeof(listener_config->sndbuf)) != 0)
+        if (listener_config->sndbuf != 0 && setsockopt(h2o_socket_get_fd(sock), SOL_SOCKET, SO_SNDBUF, &listener_config->sndbuf,
+                                                       sizeof(listener_config->sndbuf)) != 0)
             h2o_perror("failed to set SO_SNDBUF");
-        if (listener_config->rcvbuf != 0 && setsockopt(h2o_socket_get_fd(sock), SOL_SOCKET, SO_RCVBUF, &listener_config->rcvbuf, sizeof(listener_config->rcvbuf))  != 0)
+        if (listener_config->rcvbuf != 0 && setsockopt(h2o_socket_get_fd(sock), SOL_SOCKET, SO_RCVBUF, &listener_config->rcvbuf,
+                                                       sizeof(listener_config->rcvbuf)) != 0)
             h2o_perror("failed to set SO_RCVBUF");
         set_tcp_congestion_controller(sock, listener_config->tcp_congestion_controller);
 
@@ -3979,10 +4016,7 @@ int main(int argc, char **argv)
         resolve_tag_arg_t resolve_tag_arg = {{NULL}};
         yoml_parse_args_t parse_args = {
             .filename = opt_config_file,
-            .resolve_tag = {
-                .cb = resolve_tag,
-                .cb_arg = &resolve_tag_arg
-            },
+            .resolve_tag = {.cb = resolve_tag, .cb_arg = &resolve_tag_arg},
             .resolve_alias = 1,
             .resolve_merge = 1,
         };
@@ -4007,11 +4041,6 @@ int main(int argc, char **argv)
 #if H2O_USE_FUSION
     /* Swap aes-gcm cipher suites of TLS-over-TCP listeners to non-temporal aesgcm engine, if it is to be used. */
     if (conf.ssl_zerocopy) {
-        static ptls_cipher_suite_t aes128gcmsha256 = {PTLS_CIPHER_SUITE_AES_128_GCM_SHA256, &ptls_non_temporal_aes128gcm,
-                                                      &ptls_openssl_sha256},
-                                   aes256gcmsha384 = {PTLS_CIPHER_SUITE_AES_256_GCM_SHA384, &ptls_non_temporal_aes256gcm,
-                                                      &ptls_openssl_sha384},
-                                   *non_temporal_all[] = {&aes128gcmsha256, &aes256gcmsha384, NULL};
         for (size_t listener_index = 0; listener_index != conf.num_listeners; ++listener_index) {
             struct listener_config_t *listener = conf.listeners[listener_index];
             if (listener->quic.ctx == NULL) {
@@ -4019,8 +4048,12 @@ int main(int argc, char **argv)
                     struct listener_ssl_config_t *ssl = listener->ssl.entries[ssl_index];
                     for (struct listener_ssl_identity_t *identity = ssl->identities; identity->certificate_file != NULL;
                          ++identity) {
-                        if (identity->ptls != NULL)
-                            identity->ptls->cipher_suites = replace_ciphersuites(identity->ptls->cipher_suites, non_temporal_all);
+                        if (identity->ptls != NULL) {
+                            identity->ptls->cipher_suites =
+                                replace_ciphersuites(identity->ptls->cipher_suites, tls13_non_temporal_all);
+                            identity->ptls->tls12_cipher_suites =
+                                replace_ciphersuites(identity->ptls->tls12_cipher_suites, tls12_non_temporal_all);
+                        }
                     }
                 }
             }
@@ -4085,8 +4118,9 @@ int main(int argc, char **argv)
         struct rlimit limit = {0};
         if (getrlimit(RLIMIT_NOFILE, &limit) == 0) {
             if (conf.max_connections > limit.rlim_max) {
-                fprintf(stderr, "[error] 'max-connections'=[%d] configuration value should not exceed the hard limit of file "
-                                "descriptors 'RLIMIT_NOFILE'=[%llu]\n",
+                fprintf(stderr,
+                        "[error] 'max-connections'=[%d] configuration value should not exceed the hard limit of file "
+                        "descriptors 'RLIMIT_NOFILE'=[%llu]\n",
                         conf.max_connections, (unsigned long long)limit.rlim_max);
                 return EX_CONFIG;
             }
@@ -4095,7 +4129,7 @@ int main(int argc, char **argv)
 #ifdef __APPLE__
                 || (limit.rlim_cur = OPEN_MAX, setrlimit(RLIMIT_NOFILE, &limit)) == 0
 #endif
-                ) {
+            ) {
                 fprintf(stderr, "[INFO] raised RLIMIT_NOFILE to %llu\n", (unsigned long long)limit.rlim_cur);
             } else {
                 fprintf(stderr, "[warning] setrlimit(RLIMIT_NOFILE) failed:%s\n", strerror(errno));

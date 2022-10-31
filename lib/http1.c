@@ -175,6 +175,8 @@ static void cleanup_connection(struct st_h2o_http1_conn_t *conn)
  */
 static void set_req_timeout(struct st_h2o_http1_conn_t *conn, uint64_t timeout, h2o_timer_cb cb)
 {
+    if (conn->req.is_tunnel_req)
+        cb = NULL;
     if (conn->_timeout_entry.cb != NULL)
         h2o_timer_unlink(&conn->_timeout_entry);
     conn->_timeout_entry.cb = cb;
@@ -184,6 +186,8 @@ static void set_req_timeout(struct st_h2o_http1_conn_t *conn, uint64_t timeout, 
 
 static void set_req_io_timeout(struct st_h2o_http1_conn_t *conn, uint64_t timeout, h2o_timer_cb cb)
 {
+    if (conn->req.is_tunnel_req)
+        cb = NULL;
     if (conn->_io_timeout_entry.cb != NULL)
         h2o_timer_unlink(&conn->_io_timeout_entry);
     conn->_io_timeout_entry.cb = cb;
@@ -413,8 +417,7 @@ static const char *init_headers(h2o_mem_pool_t *pool, h2o_headers_t *headers, co
 
 static int upgrade_is_h2(h2o_iovec_t upgrade)
 {
-    if (h2o_lcstris(upgrade.base, upgrade.len, H2O_STRLIT("h2c")) ||
-        h2o_lcstris(upgrade.base, upgrade.len, H2O_STRLIT("h2c-14")) ||
+    if (h2o_lcstris(upgrade.base, upgrade.len, H2O_STRLIT("h2c")) || h2o_lcstris(upgrade.base, upgrade.len, H2O_STRLIT("h2c-14")) ||
         h2o_lcstris(upgrade.base, upgrade.len, H2O_STRLIT("h2c-16")))
         return 1;
     return 0;
@@ -1172,6 +1175,7 @@ DEFINE_LOGGER(ssl_cipher_bits)
 DEFINE_LOGGER(ssl_session_id)
 DEFINE_LOGGER(ssl_server_name)
 DEFINE_LOGGER(ssl_negotiated_protocol)
+DEFINE_LOGGER(ssl_backend)
 
 #undef DEFINE_LOGGER
 
@@ -1219,6 +1223,7 @@ static const h2o_conn_callbacks_t h1_callbacks = {
                 .session_id = log_ssl_session_id,
                 .server_name = log_ssl_server_name,
                 .negotiated_protocol = log_ssl_negotiated_protocol,
+                .backend = log_ssl_backend,
             },
         .http1 =
             {
