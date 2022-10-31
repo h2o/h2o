@@ -46,8 +46,6 @@ sub spawn_h2o_with_quic {
   opts => [qw(--mode=worker)],
   user => scalar(getpwuid($ENV{SUDO_UID})),
   conf => << "EOT",
-h2olog:
-  path: $tempdir/h2olog.sock
 listen:
   type: quic
   port: $quic_port
@@ -59,6 +57,14 @@ hosts:
     paths:
       /:
         file.dir: t/assets/doc_root
+  h2olog:
+    listen:
+      type: unix
+      port: $tempdir/h2olog.sock
+    paths:
+      /:
+        h2olog:
+          appdata: ON
 EOT
   });
 
