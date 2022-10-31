@@ -117,7 +117,7 @@ static int handle_zerocopy_notification(struct st_h2o_evloop_socket_t *sock)
     }
 
     /* if the socket has been shut down and zerocopy buffer has become empty, link the socket so that it would be destroyed */
-    if (made_progress && (sock->_flags & H2O_SOCKET_FLAG_IS_CLOSED) != 0 && zerocopy_buffers_is_empty(sock->super._zerocopy))
+    if (made_progress && (sock->_flags & H2O_SOCKET_FLAG_IS_DISPOSED) != 0 && zerocopy_buffers_is_empty(sock->super._zerocopy))
         link_to_statechanged(sock);
 
     return made_progress;
@@ -134,9 +134,7 @@ static int update_status(struct st_h2o_evloop_epoll_t *loop)
         loop->super._statechanged.head = sock->_next_statechanged;
         sock->_next_statechanged = sock;
         /* update the state */
-        if ((sock->_flags & H2O_SOCKET_FLAG_IS_CLOSED) != 0 && (sock->_flags & H2O_SOCKET_FLAG_IS_DISPOSED) == 0) {
-            // do nothing
-        } else if ((sock->_flags & H2O_SOCKET_FLAG_IS_DISPOSED) != 0) {
+        if ((sock->_flags & H2O_SOCKET_FLAG_IS_DISPOSED) != 0) {
             if (sock->super._zerocopy == NULL || zerocopy_buffers_is_empty(sock->super._zerocopy)) {
                 /* Call close (2) and destroy, now that all zero copy buffers have been reclaimed. */
                 if (sock->super._zerocopy != NULL) {
@@ -220,7 +218,7 @@ int evloop_do_proceed(h2o_evloop_t *_loop, int32_t max_wait)
          * has become unusable. */
         if ((events[i].events & EPOLLHUP) != 0 &&
             (sock->_flags & (H2O_SOCKET_FLAG_IS_POLLED_FOR_READ | H2O_SOCKET_FLAG_IS_POLLED_FOR_WRITE)) == 0 &&
-            !(sock->super._zerocopy != NULL && (sock->_flags & H2O_SOCKET_FLAG_IS_CLOSED) != 0)) {
+            !(sock->super._zerocopy != NULL && (sock->_flags & H2O_SOCKET_FLAG_IS_DISPOSED) != 0)) {
             assert((sock->_flags & H2O_SOCKET_FLAG__EPOLL_IS_REGISTERED) != 0);
             int ret;
             while ((ret = epoll_ctl(loop->ep, EPOLL_CTL_DEL, sock->fd, NULL)) != 0 && errno == EINTR)
@@ -254,7 +252,7 @@ int evloop_do_proceed(h2o_evloop_t *_loop, int32_t max_wait)
         /* Report events that could be notified, as that would help us debug issues. This mechanism is disabled once the socket is
          * closed, as there will be misfires due to the nature of edge triggers (race between us draining between events queued up).
          */
-        if (!notified && (sock->_flags & H2O_SOCKET_FLAG_IS_CLOSED) == 0) {
+        if (!notified && (sock->_flags & H2O_SOCKET_FLAG_IS_DISPOSED) == 0) {
             static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
             static time_t last_reported = 0;
             time_t now = time(NULL);

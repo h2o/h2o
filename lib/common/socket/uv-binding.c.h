@@ -25,7 +25,6 @@ struct st_h2o_uv_socket_t {
     uv_handle_t *handle;
     uv_close_cb close_cb;
     h2o_timer_t write_cb_timer;
-    int is_closed;
     union {
         struct {
             union {
@@ -142,21 +141,9 @@ static void free_sock(uv_handle_t *handle)
 void do_dispose_socket(h2o_socket_t *_sock)
 {
     struct st_h2o_uv_socket_t *sock = (struct st_h2o_uv_socket_t *)_sock;
-    uv_close(sock->handle, free_sock);
-}
-
-void do_close_socket(h2o_socket_t *_sock)
-{
-    struct st_h2o_uv_socket_t *sock = (struct st_h2o_uv_socket_t *)_sock;
-    sock->is_closed = 1;
     sock->super._cb.write = NULL; /* avoid the write callback getting called when closing the socket (#1249) */
     h2o_timer_unlink(&sock->write_cb_timer);
-}
-
-int socket_is_closed(h2o_socket_t *_sock)
-{
-    struct st_h2o_uv_socket_t *sock = (struct st_h2o_uv_socket_t *)_sock;
-    return sock->is_closed;
+    uv_close(sock->handle, free_sock);
 }
 
 int h2o_socket_get_fd(h2o_socket_t *_sock)

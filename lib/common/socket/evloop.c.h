@@ -66,7 +66,8 @@ struct st_h2o_evloop_socket_t {
 
 static void link_to_pending(struct st_h2o_evloop_socket_t *sock);
 static void link_to_statechanged(struct st_h2o_evloop_socket_t *sock);
-static void write_pending(struct st_h2o_evloop_socket_t *sock);
+void write_pending(struct st_h2o_evloop_socket_t *sock);
+const char *do_read(struct st_h2o_evloop_socket_t *sock);
 static h2o_evloop_t *create_evloop(size_t sz);
 static void update_now(h2o_evloop_t *loop);
 static int32_t adjust_max_wait(h2o_evloop_t *loop, int32_t max_wait);
@@ -163,6 +164,12 @@ static const char *on_read_core(int fd, h2o_buffer_t **input, size_t max_bytes)
             break;
     }
     return NULL;
+}
+
+const char *do_read(struct st_h2o_evloop_socket_t *sock)
+{
+    return on_read_core(sock->fd, sock->super.ssl == NULL ? &sock->super.input : &sock->super.ssl->input.encrypted,
+                            sock->max_read_size);
 }
 
 static size_t write_vecs(struct st_h2o_evloop_socket_t *sock, h2o_iovec_t **bufs, size_t *bufcnt, int sendmsg_flags)
@@ -370,22 +377,9 @@ void do_dispose_socket(h2o_socket_t *_sock)
 {
     struct st_h2o_evloop_socket_t *sock = (struct st_h2o_evloop_socket_t *)_sock;
 
-    sock->_flags = H2O_SOCKET_FLAG_IS_DISPOSED |
-        (sock->_flags & H2O_SOCKET_FLAG_IS_CLOSED) |
-        (sock->_flags & H2O_SOCKET_FLAG__EPOLL_IS_REGISTERED);
-
-    /* immediate dispose */
-    link_to_statechanged(sock);
-}
-
-void do_close_socket(h2o_socket_t *_sock)
-{
-    struct st_h2o_evloop_socket_t *sock = (struct st_h2o_evloop_socket_t *)_sock;
+    sock->_flags = H2O_SOCKET_FLAG_IS_DISPOSED | (sock->_flags & H2O_SOCKET_FLAG__EPOLL_IS_REGISTERED);
 
     dispose_write_buf(&sock->super);
-
-    sock->_flags = H2O_SOCKET_FLAG_IS_CLOSED |
-        (sock->_flags & H2O_SOCKET_FLAG__EPOLL_IS_REGISTERED);
 
     /* Give backends chance to do the necessary cleanup, as well as giving them chance to switch to their own disposal method; e.g.,
      * shutdown(SHUT_RDWR) with delays to reclaim all zero copy buffers. */
@@ -398,18 +392,8 @@ void do_close_socket(h2o_socket_t *_sock)
         sock->fd = -1;
     }
 
-    /* immediate close */
+    /* immediate dispose */
     link_to_statechanged(sock);
-}
-
-int socket_is_closed(h2o_socket_t *_sock)
-{
-    struct st_h2o_evloop_socket_t *sock = (struct st_h2o_evloop_socket_t *)_sock;
-    if ((sock->_flags & H2O_SOCKET_FLAG_IS_CLOSED) != 0) {
-        return 1;
-    }
-
-    return 0;
 }
 
 void report_early_write_error(h2o_socket_t *_sock)
@@ -851,7 +835,7 @@ void h2o_socket_notify_write(h2o_socket_t *_sock, h2o_socket_cb cb)
 
 static void run_socket(struct st_h2o_evloop_socket_t *sock)
 {
-    if ((sock->_flags & H2O_SOCKET_FLAG_IS_CLOSED) != 0 || (sock->_flags & H2O_SOCKET_FLAG_IS_DISPOSED) != 0) {
+    if ((sock->_flags & H2O_SOCKET_FLAG_IS_DISPOSED) != 0) {
         /* is freed in updatestates phase */
         return;
     }

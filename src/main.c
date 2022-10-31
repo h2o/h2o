@@ -49,6 +49,7 @@
 #include <sys/uio.h>
 #include <sys/un.h>
 #include <sys/wait.h>
+#include <openssl/opensslv.h>
 #ifdef __FreeBSD__
 #include <pthread_np.h>
 #endif
@@ -357,6 +358,77 @@ static void on_neverbleed_fork(void)
         memset(cmd_argv[i], 0, strlen(cmd_argv[i]));
     strcpy(cmd_argv[0], "neverbleed");
 #endif
+}
+
+static void nb_read_ready(h2o_socket_t *sock, const char *err)
+{
+    size_t read;
+    while ((read = neverbleed_read(neverbleed, sock->input->bytes, sock->input->size)) != 0) {
+        h2o_buffer_consume(&sock->input, read);
+    }
+}
+
+static void nb_write_ready(h2o_socket_t *sock, const char *err);
+
+static void nb_write_complete(h2o_socket_t *sock, const char *err)
+{
+    h2o_socket_notify_write(conf.threads[thread_index].ctx.neverbleed.sock, nb_write_ready);
+}
+
+static int nb_transaction_write(h2o_socket_t *sock, h2o_socket_cb cb)
+{
+    int ret = 0;
+    size_t size = 0;
+    char *data = NULL;
+    neverbleed_get_transaction(neverbleed, &size, &data);
+
+    // we got something to write
+    if (size > 0 && data != NULL) {
+        h2o_iovec_t bufs[2];
+        bufs[0] = h2o_iovec_init(&size, sizeof(size));
+        bufs[1] = h2o_iovec_init(data, size);
+
+        if (!h2o_socket_is_writing(sock)) {
+            h2o_socket_write(sock, bufs, 2, cb);
+        } else {
+            h2o_socket_append(sock, bufs, 2);
+        }
+        ret = 1;
+    }
+
+    return ret;
+}
+
+static void nb_write_ready(h2o_socket_t *sock, const char *err)
+{
+    nb_transaction_write(sock, nb_write_complete);
+}
+
+static void nb_write_sync_complete(h2o_socket_t *sock, const char *err)
+{
+    h2o_socket_notify_write(conf.threads[thread_index].ctx.neverbleed.sock, nb_write_ready);
+}
+
+static void on_neverbleed_write(int is_async)
+{
+    h2o_socket_t *sock = conf.threads[thread_index].ctx.neverbleed.sock;
+    if (is_async) {
+        if (!h2o_socket_is_writing(sock)) {
+            h2o_socket_notify_write(sock, nb_write_ready);
+        }
+    } else {
+        nb_transaction_write(sock, nb_write_sync_complete);
+        h2o_socket_flush(sock);
+    }
+}
+
+static void on_neverbleed_read(int is_async)
+{
+    // this should only get called in the synchronous case as we register the fd in the evloop
+    assert(is_async == 0);
+    h2o_socket_t *sock = conf.threads[thread_index].ctx.neverbleed.sock;
+    h2o_socket_read(sock);
+    nb_read_ready(sock, NULL);
 }
 
 static int on_openssl_print_errors(const char *str, size_t len, void *fp)
@@ -3228,7 +3300,19 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
                                       on_server_notification);
     h2o_multithread_register_receiver(conf.threads[thread_index].ctx.queue, &conf.threads[thread_index].memcached,
                                       h2o_memcached_receiver);
+    if (neverbleed != NULL) {
+        int fd = neverbleed_get_fd(neverbleed);
+        neverbleed_register(neverbleed, on_neverbleed_write, on_neverbleed_read);
 
+#if H2O_USE_LIBUV
+        conf.threads[thread_index].ctx.neverbleed.sock =
+            h2o_uv__poll_create(conf.threads[thread_index].ctx.loop, fd, (uv_close_cb)free);
+#else
+        conf.threads[thread_index].ctx.neverbleed.sock = h2o_evloop_socket_create(conf.threads[thread_index].ctx.loop, fd, 0);
+#endif
+
+        h2o_socket_read_start(conf.threads[thread_index].ctx.neverbleed.sock, nb_read_ready);
+    }
     if (conf.thread_map.entries[thread_index] >= 0) {
 #if H2O_HAS_PTHREAD_SETAFFINITY_NP
         int r;
@@ -4067,15 +4151,15 @@ int main(int argc, char **argv)
     /* setuid */
     if (conf.globalconf.user != NULL) {
         capabilities_set_keepcaps();
+        if (neverbleed != NULL && neverbleed_setuidgid(neverbleed, conf.globalconf.user, 1) != 0) {
+            fprintf(stderr, "failed to change the running user of neverbleed daemon\n");
+            return EX_OSERR;
+        }
         if (h2o_setuidgid(conf.globalconf.user) != 0) {
             fprintf(stderr, "failed to change the running user (are you sure you are running as root?)\n");
             return EX_OSERR;
         }
         capabilities_drop();
-        if (neverbleed != NULL && neverbleed_setuidgid(neverbleed, conf.globalconf.user, 1) != 0) {
-            fprintf(stderr, "failed to change the running user of neverbleed daemon\n");
-            return EX_OSERR;
-        }
     } else {
         if (getuid() == 0) {
             fprintf(stderr, "refusing to run as root (and failed to switch to `nobody`); you can use the `user` directive to set "

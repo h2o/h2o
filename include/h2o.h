@@ -792,6 +792,10 @@ struct st_h2o_context_t {
         h2o_timestamp_string_t *value;
     } _timestamp_cache;
 
+    struct {
+        h2o_socket_t *sock;
+    } neverbleed;
+
     /**
      * counter for http1 error status internally emitted by h2o
      */
