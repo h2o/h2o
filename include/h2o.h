@@ -941,6 +941,10 @@ typedef struct st_h2o_conn_callbacks_t {
      */
     uint64_t (*get_req_id)(h2o_req_t *req);
     /**
+     * An optional callback to move the ownership of the socket to the caller.
+     */
+    h2o_socket_t *(*steal_socket)(h2o_conn_t *conn);
+    /**
      * logging callbacks (all of them are optional)
      */
     union {
@@ -2303,6 +2307,18 @@ void h2o_self_trace_register(h2o_pathconf_t *conf);
  *
  */
 void h2o_self_trace_register_configurator(h2o_globalconf_t *conf);
+
+/* lib/handler/h2olog.c */
+
+/**
+ * registers the h2olog handler, where h2olog(1) connects to.
+ */
+void h2o_log_register(h2o_pathconf_t *pathconf);
+/**
+ * registers the h2olog configurator.
+ */
+void h2o_log_register_configurator(h2o_globalconf_t *conf);
+
 
 /* inline defs */
 

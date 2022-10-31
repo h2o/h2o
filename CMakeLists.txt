@@ -439,13 +439,14 @@ SET(LIB_SOURCE_FILES
     lib/handler/self_trace.c
     lib/handler/server_timing.c
     lib/handler/status.c
-    lib/handler/headers_util.c
     lib/handler/status/events.c
     lib/handler/status/memory.c
     lib/handler/status/requests.c
     lib/handler/status/ssl.c
-    lib/handler/http2_debug_state.c
     lib/handler/status/durations.c
+    lib/handler/headers_util.c
+    lib/handler/http2_debug_state.c
+    lib/handler/h2olog.c
     lib/handler/configurator/access_log.c
     lib/handler/configurator/compress.c
     lib/handler/configurator/errordoc.c
@@ -462,6 +463,7 @@ SET(LIB_SOURCE_FILES
     lib/handler/configurator/status.c
     lib/handler/configurator/http2_debug_state.c
     lib/handler/configurator/headers_util.c
+    lib/handler/configurator/h2olog.c
 
     lib/http1.c
 

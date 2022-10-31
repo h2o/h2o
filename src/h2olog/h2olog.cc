@@ -39,6 +39,7 @@ extern "C" {
 #include "h2o/memory.h"
 #include "h2o/version.h"
 #include "h2o/ebpf.h"
+#include "h2o/string_.h"
 }
 #include "h2olog.h"
 
@@ -261,7 +262,8 @@ static std::string build_cc_macro_str(const char *name, const std::string &str)
     return build_cc_macro_expr(name, "\"" + str + "\"");
 }
 
-static int read_from_unix_socket(const char *unix_socket_path, FILE *outfp, bool preserve_root)
+static int read_from_unix_socket(const char *unix_socket_path, FILE *outfp, bool debug, bool preserve_root, const char *path,
+                                 bool include_appdata)
 {
     struct sockaddr_un sa = {
         .sun_family = AF_UNIX,
@@ -288,21 +290,50 @@ static int read_from_unix_socket(const char *unix_socket_path, FILE *outfp, bool
     if (!preserve_root)
         drop_root_privilege();
 
-    fd_set fds;
-    FD_ZERO(&fds);
-    FD_SET(fd, &fds);
+    {
+        std::string req = "GET ";
+        req += path;
+        if (include_appdata)
+            req += "?appdata=1";
+        req += " HTTP/1.0\r\n\r\n";
 
-    while (select(fd + 1, &fds, NULL, NULL, NULL) > 0) {
-        char buf[4096];
-        ssize_t ret = read(fd, buf, sizeof(buf));
-        if (ret == -1) {
-            if (ret != EINTR)
+        (void)write(fd, req.c_str(), req.size());
+    }
+
+    if (debug)
+        infof("Attaching %s", unix_socket_path);
+
+    {
+        fd_set fds;
+        FD_ZERO(&fds);
+        FD_SET(fd, &fds);
+
+        bool headers_done = false;
+        while (select(fd + 1, &fds, NULL, NULL, NULL) > 0) {
+            char buf[4096];
+            ssize_t ret = read(fd, buf, sizeof(buf));
+            if (ret == -1) {
+                if (ret != EINTR)
+                    break;
+            } else if (ret > 0) {
+                if (!headers_done) {
+                    // h2olog is not interested in the response headers.
+                    size_t headers_done_at;
+                    if (((headers_done_at = h2o_strstr(buf, ret, H2O_STRLIT("\r\n\r\n"))) != SIZE_MAX)) {
+                        headers_done = true;
+                        (void)fwrite(buf + headers_done_at + sizeof("\r\n\r\n"), 1, ret - headers_done_at - sizeof("\r\n\r\n"),
+                                     outfp);
+                    }
+                    continue;
+                }
+
+                (void)fwrite(buf, 1, ret, outfp);
+            } else {
+                if (debug)
+                    infof("Connection closed\n");
+                // disconnected
                 break;
-        } else if (ret > 0) {
-            fwrite(buf, 1, ret, outfp);
-        } else {
-            // disconnected
-            break;
+            }
         }
     }
 
@@ -440,9 +471,8 @@ int main(int argc, char **argv)
     }
 
     if (unix_socket_path != NULL) {
-        if (debug)
-            infof("Attaching %s\n", unix_socket_path);
-        return read_from_unix_socket(unix_socket_path, outfp, preserve_root);
+        // TODO: the path might not be "/"
+        return read_from_unix_socket(unix_socket_path, outfp, debug, preserve_root, "/", include_appdata);
     }
 
     if (list_usdts) {
