@@ -332,16 +332,17 @@ static void qat_set_pending(size_t index)
 
 static void many_handshakes(void)
 {
-    ptls_buffer_t hellobuf;
+    ptls_t *client = ptls_new(ctx, 0), *resp_sample_conn = NULL;
+    ptls_buffer_t clientbuf, resp_sample;
     int ret;
 
-    { /* generate ClientHello (that we would be used as a template) */
-        ptls_buffer_init(&hellobuf, "", 0);
-        ptls_t *client = ptls_new(ctx, 0);
-        ret = ptls_handshake(client, &hellobuf, NULL, NULL, NULL);
+    { /* generate ClientHello that we would be sent to all the server-side objects */
+        ptls_buffer_init(&clientbuf, "", 0);
+        ret = ptls_handshake(client, &clientbuf, NULL, NULL, NULL);
         ok(ret == PTLS_ERROR_IN_PROGRESS);
-        ptls_free(client);
     }
+
+    ptls_buffer_init(&resp_sample, "", 0);
 
     qat.first_pending = 0;
     for (size_t i = 0; i < PTLS_ELEMENTSOF(qat.conns); ++i) {
@@ -365,18 +366,25 @@ static void many_handshakes(void)
             /* run the offending entry */
             if (qat.conns[offending].tls == NULL) {
                 qat.conns[offending].tls = ptls_new(ctx_peer, 1);
+                if (resp_sample_conn == NULL)
+                    resp_sample_conn = qat.conns[offending].tls;
                 ++num_issued;
                 ++num_running;
             }
             ptls_buffer_t hsbuf;
             uint8_t hsbuf_small[8192];
             ptls_buffer_init(&hsbuf, hsbuf_small, sizeof(hsbuf_small));
-            size_t inlen = hellobuf.off;
-            ret = ptls_handshake(qat.conns[offending].tls, &hsbuf, hellobuf.base, &inlen, NULL);
+            size_t inlen = ptls_get_cipher(qat.conns[offending].tls) == NULL ? clientbuf.off : 0; /* feed CH only as first flight */
+            int hsret = ptls_handshake(qat.conns[offending].tls, &hsbuf, clientbuf.base, &inlen, NULL);
+            if (resp_sample_conn == qat.conns[offending].tls) {
+                ptls_buffer_pushv(&resp_sample, hsbuf.base, hsbuf.off);
+            }
             ptls_buffer_dispose(&hsbuf);
             /* advance the handshake context */
-            switch (ret) {
+            switch (hsret) {
             case 0:
+                if (qat.conns[offending].tls == resp_sample_conn)
+                    resp_sample_conn = (void *)1;
                 ptls_free(qat.conns[offending].tls);
                 qat.conns[offending].tls = NULL;
                 --num_running;
@@ -388,7 +396,7 @@ static void many_handshakes(void)
                 assert(qat.conns[offending].wait_fd != -1);
                 break;
             default:
-                fprintf(stderr, "ptls_handshake returned %d\n", ret);
+                fprintf(stderr, "ptls_handshake returned %d\n", hsret);
                 abort();
                 break;
             }
@@ -421,7 +429,19 @@ static void many_handshakes(void)
     note("run %zu handshakes in %f seconds", num_total,
          (end.tv_sec + end.tv_usec / 1000000.) - (start.tv_sec + start.tv_usec / 1000000.));
 
-    ptls_buffer_dispose(&hellobuf);
+    clientbuf.off = 0;
+
+    /* confirm that the response looks okay */
+    size_t resplen = resp_sample.off;
+    ok(ptls_handshake(client, &clientbuf, resp_sample.base, &resplen, NULL) == 0);
+
+    ptls_buffer_dispose(&clientbuf);
+    ptls_buffer_dispose(&resp_sample);
+    ptls_free(client);
+
+    return;
+Exit:
+    assert("unreachable");
 }
 
 #endif
@@ -456,15 +476,13 @@ int main(int argc, char **argv)
     X509_STORE_set_verify_cb(cert_store, verify_cert_cb);
     ptls_openssl_init_verify_certificate(&openssl_verify_certificate, cert_store);
     /* we should call X509_STORE_free on OpenSSL 1.1 or in prior versions decrement refount then call _free */
-    ptls_context_t openssl_ctx = {ptls_openssl_random_bytes,
-                                  &ptls_get_time,
-                                  ptls_openssl_key_exchanges,
-                                  ptls_openssl_cipher_suites,
-                                  {&cert, 1},
-                                  NULL,
-                                  NULL,
-                                  NULL,
-                                  &openssl_sign_certificate.super};
+    ptls_context_t openssl_ctx = {.random_bytes = ptls_openssl_random_bytes,
+                                  .get_time = &ptls_get_time,
+                                  .key_exchanges = ptls_openssl_key_exchanges,
+                                  .cipher_suites = ptls_openssl_cipher_suites,
+                                  .tls12_cipher_suites = ptls_openssl_tls12_cipher_suites,
+                                  .certificates = {&cert, 1},
+                                  .sign_certificate = &openssl_sign_certificate.super};
     assert(openssl_ctx.cipher_suites[0]->hash->digest_size == 48); /* sha384 */
     ptls_context_t openssl_ctx_sha256only = openssl_ctx;
     ++openssl_ctx_sha256only.cipher_suites;
@@ -519,9 +537,11 @@ int main(int argc, char **argv)
     subtest("minicrypto vs.", test_picotls);
 
 #if ASYNC_TESTS
-    // switch to x25519 as we run benchmarks
-    static ptls_key_exchange_algorithm_t *x25519_keyex[] = {&ptls_openssl_x25519, NULL}; // use x25519 for speed
-    openssl_ctx.key_exchanges = x25519_keyex;
+    // switch to x25519 / aes128gcmsha256 as we run benchmarks
+    static ptls_key_exchange_algorithm_t *fast_keyex[] = {&ptls_openssl_x25519, NULL}; // use x25519 for speed
+    static ptls_cipher_suite_t *fast_cipher[] = {&ptls_openssl_aes128gcmsha256, NULL};
+    openssl_ctx.key_exchanges = fast_keyex;
+    openssl_ctx.cipher_suites = fast_cipher;
     ctx = &openssl_ctx;
     ctx_peer = &openssl_ctx;
     openssl_sign_certificate.async = 0;

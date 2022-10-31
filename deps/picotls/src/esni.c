@@ -138,7 +138,7 @@ int main(int argc, char **argv)
     ERR_load_crypto_strings();
     OpenSSL_add_all_algorithms();
 #if !defined(LIBRESSL_VERSION_NUMBER) && OPENSSL_VERSION_NUMBER >= 0x30000000L
-    (void) OSSL_PROVIDER_load(NULL, "default");
+    (void)OSSL_PROVIDER_load(NULL, "default");
 #elif !defined(OPENSSL_NO_ENGINE)
     /* Load all compiled-in ENGINEs */
     ENGINE_load_builtin_engines();
