@@ -44,7 +44,7 @@ struct st_h2o_dsr_req_quic_t {
      * address from which QUIC packets should be sent
      */
     quicly_address_t address;
-} quic;
+};
 
 /**
  * DSR request
