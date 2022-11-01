@@ -939,21 +939,22 @@ const char h2o_npn_protocols[] = NPN_PROTOCOLS_CORE "\x08"
 
 uint64_t h2o_connection_id = 0;
 
-void h2o_cleanup_thread(uint64_t now, h2o_context_t *ctx_optional)
+uint64_t h2o_cleanup_thread(uint64_t now, h2o_context_t *ctx_optional)
 {
     int full = now == 0;
 
     if (ctx_optional != NULL)
         h2o_filecache_clear(ctx_optional->filecache);
 
-    static __thread uint64_t next_buffer_gc_at = UINT64_MAX;
-    if (full || now >= next_buffer_gc_at) {
+    if (full) {
         h2o_buffer_clear_recycle(full);
         h2o_socket_clear_recycle(full);
         h2o_mem_clear_recycle(&h2o_mem_pool_allocator, full);
-        next_buffer_gc_at = UINT64_MAX;
     }
 
-    if (next_buffer_gc_at == UINT64_MAX && (!h2o_buffer_recycle_is_empty() || !h2o_socket_recycle_is_empty()))
-        next_buffer_gc_at = now + 1000;
+    /* if all the recyclers are empty, we can sleep forever */
+    if (h2o_buffer_recycle_is_empty() && h2o_socket_recycle_is_empty() && h2o_mem_recycle_is_empty(&h2o_mem_pool_allocator))
+        return UINT64_MAX;
+    /* otherwise, `h2o_clean_thread` should be invoked one second later */
+    return now + 1000;
 }
