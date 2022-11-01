@@ -939,8 +939,26 @@ const char h2o_npn_protocols[] = NPN_PROTOCOLS_CORE "\x08"
 
 uint64_t h2o_connection_id = 0;
 
-void h2o_cleanup_thread(void)
+uint64_t h2o_cleanup_thread(uint64_t now, h2o_context_t *ctx_optional)
 {
-    h2o_mem_clear_recycle(&h2o_mem_pool_allocator, 1);
-    h2o_buffer_clear_recycle(1);
+    int full = now == 0;
+
+    /* File descriptor cache is cleared fully per event loop and it is sufficient to do so, because:
+     * * if the file handler opens one file only once per event loop, then calling open (2) is relatively lightweight compared to
+     *   other stuff such as connection establishment, and
+     * * if a file is large enough that it is not served in one event loop, the file descriptor remains open within the cache. */
+    if (ctx_optional != NULL)
+        h2o_filecache_clear(ctx_optional->filecache);
+
+    /* recycle either fully or partially */
+    h2o_buffer_clear_recycle(full);
+    h2o_socket_clear_recycle(full);
+    h2o_mem_clear_recycle(&h2o_mem_pool_allocator, full);
+
+    /* if all the recyclers are empty, we can sleep forever */
+    if (h2o_buffer_recycle_is_empty() && h2o_socket_recycle_is_empty() && h2o_mem_recycle_is_empty(&h2o_mem_pool_allocator))
+        return UINT64_MAX;
+
+    /* otherwise, `h2o_clean_thread` should be invoked one second later */
+    return now + 1000;
 }
