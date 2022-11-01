@@ -1600,9 +1600,9 @@ static void on_handshake_fail_complete(h2o_socket_t *sock, const char *err)
     on_handshake_complete(sock, get_handshake_error(sock->ssl));
 }
 
-#if PTLS_OPENSSL_HAVE_ASYNC
 static void proceed_handshake(h2o_socket_t *sock, const char *err);
 
+#if PTLS_OPENSSL_HAVE_ASYNC
 static void ptls_free_async(void *data)
 {
     ptls_t *tls = data;
