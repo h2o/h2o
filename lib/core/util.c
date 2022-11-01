@@ -944,10 +944,9 @@ uint64_t h2o_cleanup_thread(uint64_t now, h2o_context_t *ctx_optional)
     int full = now == 0;
 
     /* File descriptor cache is cleared fully per event loop and it is sufficient to do so, because:
-     * * if the file handler opens one file only once per event loop, then calling open (2) is relatively lightweight to other stuff
-     *   such as connection establishment,
-     * * if the file is large enough that it is not served in one event loop, the file descriptor remains open and will be reused.
-     */
+     * * if the file handler opens one file only once per event loop, then calling open (2) is relatively lightweight compared to
+     *   other stuff such as connection establishment, and
+     * * if a file is large enough that it is not served in one event loop, the file descriptor remains open within the cache. */
     if (ctx_optional != NULL)
         h2o_filecache_clear(ctx_optional->filecache);
 
