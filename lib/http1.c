@@ -1164,6 +1164,10 @@ static h2o_socket_t *steal_socket(h2o_conn_t *_conn)
 {
     struct st_h2o_http1_conn_t *conn = (void *)_conn;
     h2o_socket_t *sock = conn->sock;
+
+    if (sock->ssl != NULL)
+        return NULL;
+
     close_connection(conn, 0);
     return sock;
 }

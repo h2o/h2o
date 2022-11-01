@@ -39,12 +39,12 @@ hosts:
       "/status":
         status: ON
   "h2olog":
+    h2olog:
+      appdata: ON
     listen:
       - type: unix
         port: $h2olog_socket
-    paths:
-      /:
-        h2olog: ON
+    paths: {}
 EOT
 
   wait_port({ port => $quic_port, proto => "udp" });
@@ -55,7 +55,6 @@ EOT
 
     my $tracer = H2ologTracer->new({
       path => $h2olog_socket,
-      args => ['-a'],
     });
 
     system($client_prog, "-3", "100", "https://127.0.0.1:$quic_port/");
@@ -140,42 +139,33 @@ hosts:
       "/status":
         status: ON
   "h2olog":
+    h2olog:
+      appdata: ON
     listen:
       - type: unix
         port: $h2olog_socket
         sndbuf: 512
-    paths:
-      /:
-        h2olog:
-          appdata: ON
+    paths: {}
 EOT
 
   wait_port({ port => $quic_port, proto => "udp" });
 
-  # use a hand-written client to read socket with timeouts.
-  my $client = IO::Socket::UNIX->new(
-      Type => SOCK_STREAM,
-      Peer => $h2olog_socket,
-  ) or croak "Cannot connect to a unix domain socket '$h2olog_socket': $!";
-  $client->syswrite("GET / HTTP/1.0\r\n\r\n");
+  my $h2olog = H2ologTracer->new({
+    path => $h2olog_socket,
+  });
 
   system($client_prog, "-3", "100", "https://127.0.0.1:$quic_port/") == 0 or die $!;
 
   cmp_ok get_status($server)->{"h2olog.lost"}, ">", 0, "losts messages if client does not read socket";
 
-  # make sure event lost does not break the output structure
+  system($client_prog, "-3", "100", "https://127.0.0.1:$quic_port/") == 0 or die $!;
 
-  my $pid = fork;
-  die "Cannot fork: $!" unless defined $pid;
-  if ($pid == 0) {
-    # child
-    sleep 0.1;
-    exec($client_prog, "-t", "2", "-3", "100", "https://127.0.0.1:$quic_port/");
-    die "Cannot exec $client_prog: $!";
-  }
-  # parent
 
-  my $logs = slurp_h2olog_socket($client, { timeout => 2 });
+  my $logs = do {
+    local $/;
+    open my $fh, "<", $h2olog->{output_file} or die $!;
+    <$fh>;
+  };
   ok $logs;
   # It cannot be guaranteed so far that the logs are valid JSON-Lines.
   # ok scalar(parse_json_lines($logs)), "valid JSON Lines are written to h2olog socket '$h2olog_socket' even if some events are lost";
@@ -218,28 +208,6 @@ sub get_status {
     BAIL_OUT "h2o does not respond to /status/json";
   }
   return decode_json($status_json);
-}
-
-sub slurp_h2olog_socket {
-  my($client, $opts) = @_;
-  my $timeout = $opts->{timeout} or croak "timeout is not specified";
-
-  my $t0 = Time::HiRes::time();
-  my $select = IO::Select->new($client);
-  my $logs = '';
-  while ($select->can_read($timeout)) {
-    $timeout -= Time::HiRes::time() - $t0;
-    diag "timeout remains: $timeout";
-    $client->sysread(my $buf, 4096) or last;
-    $logs .= $buf;
-
-    last if $timeout <= 0;
-  }
-  $client->close;
-  diag "h2o: \n$logs" if $ENV{TEST_DEBUG};
-
-  my ($headers, $content) = split /\r\n\r\n/, $logs, 2;
-  return $content;
 }
 
 done_testing;

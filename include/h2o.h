@@ -99,6 +99,8 @@ extern "C" {
 #define H2O_DEFAULT_PROXY_SSL_SESSION_CACHE_DURATION 86400000 /* 24 hours */
 #define H2O_DEFAULT_PROXY_HTTP2_MAX_CONCURRENT_STREAMS 100
 
+#define H2O_LOG_ENDPOINT "/.well-known/h2olog"
+
 typedef struct st_h2o_conn_t h2o_conn_t;
 typedef struct st_h2o_context_t h2o_context_t;
 typedef struct st_h2o_req_t h2o_req_t;
@@ -941,7 +943,8 @@ typedef struct st_h2o_conn_callbacks_t {
      */
     uint64_t (*get_req_id)(h2o_req_t *req);
     /**
-     * An optional callback to move the ownership of the socket to the caller.
+     * An optional callback to move the ownership of the socket to the caller. It returns non-null for cleartext connections
+     * and thus the caller can call h2o_socket_export() and write cleartext to its fd.
      */
     h2o_socket_t *(*steal_socket)(h2o_conn_t *conn);
     /**
@@ -2313,7 +2316,7 @@ void h2o_self_trace_register_configurator(h2o_globalconf_t *conf);
 /**
  * registers the h2olog handler, where h2olog(1) connects to.
  */
-void h2o_log_register(h2o_pathconf_t *pathconf);
+void h2o_log_register(h2o_hostconf_t *hostconf);
 /**
  * registers the h2olog configurator.
  */

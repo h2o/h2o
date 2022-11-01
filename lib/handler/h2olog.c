@@ -25,78 +25,34 @@ struct st_h2o_log_handler_t {
     h2o_handler_t super;
 } h2o_log_handler;
 
-static h2o_iovec_t get_query_param(const h2o_req_t *req, const char *name, size_t name_len)
-{
-    if (req->query_at == SIZE_MAX)
-        goto NotFound;
-    const char *query = req->path.base + req->query_at;
-    const char *end = req->path.base + req->path.len;
-    while (query != end) {
-        const char *eq = strchr(query, '=');
-        if (eq == NULL)
-            goto NotFound;
-
-        if (h2o_memis(query, query - eq, name, name_len) == 0) {
-            const char *value = eq + 1;
-            const char *next_and = strchr(value, '&');
-            size_t value_len = next_and == NULL ? ((req->path.base + req->path.len) - value) : (next_and - value);
-            return h2o_iovec_init(value, value_len);
-        }
-        query = strchr(query, '&');
-        if (query == NULL)
-            goto NotFound;
-        query += 1;
-    }
-
-NotFound:
-    return h2o_iovec_init(NULL, 0);
-}
-
 static int on_req(h2o_handler_t *_self, h2o_req_t *req)
 {
     if (req->conn->callbacks->steal_socket == NULL)
         goto Error;
-    int req_version = req->version;
-    if (req_version != 0x100 && req_version != 0x101 && req->scheme->is_ssl)
-        goto Error;
-
-    int include_appdata;
-    {
-        h2o_iovec_t appdata = get_query_param(req, H2O_STRLIT("appdata"));
-        // TODO: this parameter changes the global flag forever, but it would be better if the flag is per-connection.
-        if (appdata.base != NULL)
-            ptls_log.include_appdata = !h2o_memis(appdata.base, appdata.len, H2O_STRLIT("0"));
-    }
 
     h2o_socket_t *sock = req->conn->callbacks->steal_socket(req->conn);
+    if (sock == NULL)
+        goto Error;
+
+    int ret;
+    if ((ret = ptls_log_add_fd(h2o_socket_get_fd(sock))) != 0) {
+        h2o_error_printf("failed to add fd to h2olog: %d\n", ret);
+        goto Error;
+    }
 
     h2o_socket_export_t export_info;
     h2o_socket_export(sock, &export_info);
-
-    if (req_version == 0x100) {
-        (void)write(export_info.fd, H2O_STRLIT("HTTP/1.0 200 OK\r\n\r\n"));
-    } else {
-        (void)write(export_info.fd, H2O_STRLIT("HTTP/1.1 200 OK\r\n\r\n"));
-    }
-
-    int ret;
-    if ((ret = ptls_log_add_fd(export_info.fd)) != 0) {
-        h2o_error_printf("failed to add fd to h2olog: %d\n", ret);
-        close(export_info.fd);
-        return 0;
-    }
+    (void)write(export_info.fd, H2O_STRLIT("HTTP/1.1 200 OK\r\n\r\n"));
     return 0;
 
 Error:
-    req->res.status = 400;
-    static h2o_generator_t generator;
-    h2o_start_response(req, &generator);
-    h2o_send(req, NULL, 0, H2O_SEND_STATE_ERROR);
+    h2o_send_error_400(req, "Bad Request", "h2olog is available only for cleartext HTTP/1", 0);
     return 0;
 }
 
-void h2o_log_register(h2o_pathconf_t *conf)
+void h2o_log_register(h2o_hostconf_t *hostconf)
 {
-    struct st_h2o_log_handler_t *self = (void *)h2o_create_handler(conf, sizeof(*self));
+    h2o_pathconf_t *pathconf = h2o_config_register_path(hostconf, H2O_LOG_ENDPOINT, 0);
+    struct st_h2o_log_handler_t *self = (void *)h2o_create_handler(pathconf, sizeof(*self));
     self->super.on_req = on_req;
 }

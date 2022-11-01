@@ -52,7 +52,7 @@ static int on_config_h2olog(h2o_configurator_command_t *cmd, h2o_configurator_co
         }
     }
 
-    h2o_log_register(ctx->pathconf);
+    h2o_log_register(ctx->hostconf);
     return 0;
 }
 
@@ -63,5 +63,5 @@ void h2o_log_register_configurator(h2o_globalconf_t *conf)
     // it takes either a scalar ("OFF,ON") or a mapping for customized configuration
     h2o_configurator_define_command(
         &c->super, "h2olog",
-        H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR | H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING, on_config_h2olog);
+        H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR | H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING, on_config_h2olog);
 }

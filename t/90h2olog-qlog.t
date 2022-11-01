@@ -58,13 +58,12 @@ hosts:
       /:
         file.dir: t/assets/doc_root
   h2olog:
+    h2olog:
+      appdata: ON
     listen:
       type: unix
       port: $tempdir/h2olog.sock
-    paths:
-      /:
-        h2olog:
-          appdata: ON
+    paths: {}
 EOT
   });
 

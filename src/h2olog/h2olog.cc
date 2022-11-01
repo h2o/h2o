@@ -36,10 +36,8 @@ extern "C" {
 #include <sys/select.h>
 #include <sys/socket.h>
 #include <sys/un.h>
-#include "h2o/memory.h"
+#include "h2o.h"
 #include "h2o/version.h"
-#include "h2o/ebpf.h"
-#include "h2o/string_.h"
 }
 #include "h2olog.h"
 
@@ -262,8 +260,7 @@ static std::string build_cc_macro_str(const char *name, const std::string &str)
     return build_cc_macro_expr(name, "\"" + str + "\"");
 }
 
-static int read_from_unix_socket(const char *unix_socket_path, FILE *outfp, bool debug, bool preserve_root, const char *path,
-                                 bool include_appdata)
+static int read_from_unix_socket(const char *unix_socket_path, FILE *outfp, bool debug, bool preserve_root)
 {
     struct sockaddr_un sa = {
         .sun_family = AF_UNIX,
@@ -291,12 +288,7 @@ static int read_from_unix_socket(const char *unix_socket_path, FILE *outfp, bool
         drop_root_privilege();
 
     {
-        std::string req = "GET ";
-        req += path;
-        if (include_appdata)
-            req += "?appdata=1";
-        req += " HTTP/1.0\r\n\r\n";
-
+        std::string req = "GET " H2O_LOG_ENDPOINT " HTTP/1.0\r\n\r\n";
         (void)write(fd, req.c_str(), req.size());
     }
 
@@ -472,7 +464,7 @@ int main(int argc, char **argv)
 
     if (unix_socket_path != NULL) {
         // TODO: the path might not be "/"
-        return read_from_unix_socket(unix_socket_path, outfp, debug, preserve_root, "/", include_appdata);
+        return read_from_unix_socket(unix_socket_path, outfp, debug, preserve_root);
     }
 
     if (list_usdts) {
