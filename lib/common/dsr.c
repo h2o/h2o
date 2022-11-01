@@ -29,27 +29,35 @@
 h2o_iovec_t h2o_dsr_serialize_req(h2o_dsr_req_t *req)
 {
     h2o_iovec_t output = h2o_iovec_init(
-        h2o_mem_alloc(sizeof("quic=4294967295, cipher=65535, address=\"[0000:1111:2222:3333:4444:5555:6666:7777]:65535\"")), 0);
+        h2o_mem_alloc(
+            sizeof("http=4294967295, quic=4294967295, cipher=65535, address=\"[0000:1111:2222:3333:4444:5555:6666:7777]:65535\"")),
+        0);
 
-    output.len +=
-        sprintf(output.base + output.len, "quic=%" PRIu32 ", cipher=%" PRIu16 ", address=\"", req->quic_version, req->cipher);
-    switch (req->address.sa.sa_family) {
-    case AF_INET:
-        inet_ntop(AF_INET, &req->address.sin.sin_addr, output.base + output.len, INET_ADDRSTRLEN);
-        output.len += strlen(output.base + output.len);
-        output.len += sprintf(output.base + output.len, ":%" PRIu16, ntohs(req->address.sin.sin_port));
-        break;
-    case AF_INET6:
-        output.base[output.len++] = '[';
-        inet_ntop(AF_INET6, &req->address.sin6.sin6_addr, output.base + output.len, INET6_ADDRSTRLEN);
-        output.len += strlen(output.base + output.len);
-        output.len += sprintf(output.base + output.len, "]:%" PRIu16, ntohs(req->address.sin.sin_port));
-        break;
-    default:
-        h2o_fatal("unexpected address family");
-        break;
+    output.len += sprintf(output.base + output.len, "http=%d", req->http_version);
+
+    if (req->http_version == 0x300) {
+        output.len += sprintf(output.base + output.len, ", quic=%" PRIu32 ", cipher=%" PRIu16 ", address=\"", req->h3.quic.version,
+                              req->h3.quic.cipher);
+        switch (req->h3.quic.address.sa.sa_family) {
+        case AF_INET:
+            inet_ntop(AF_INET, &req->h3.quic.address.sin.sin_addr, output.base + output.len, INET_ADDRSTRLEN);
+            output.len += strlen(output.base + output.len);
+            output.len += sprintf(output.base + output.len, ":%" PRIu16, ntohs(req->h3.quic.address.sin.sin_port));
+            break;
+        case AF_INET6:
+            output.base[output.len++] = '[';
+            inet_ntop(AF_INET6, &req->h3.quic.address.sin6.sin6_addr, output.base + output.len, INET6_ADDRSTRLEN);
+            output.len += strlen(output.base + output.len);
+            output.len += sprintf(output.base + output.len, "]:%" PRIu16, ntohs(req->h3.quic.address.sin.sin_port));
+            break;
+        default:
+            h2o_fatal("unexpected address family");
+            break;
+        }
+        output.base[output.len++] = '"';
+    } else {
+        assert(0 && "unexpected HTTP version in DSR request.");
     }
-    output.base[output.len++] = '"';
     output.base[output.len] = '\0';
 
     return output;
@@ -85,22 +93,27 @@ int h2o_dsr_parse_req(h2o_dsr_req_t *req, const char *_value, size_t _value_len,
     const char *name;
     size_t name_len;
     int64_t n;
+    struct st_h2o_dsr_req_quic_t quic_req = {.address.sa.sa_family = AF_UNSPEC};
 
-    req->quic_version = 0;
-    req->cipher = 0;
-    req->address.sa.sa_family = AF_UNSPEC;
+    *req = (h2o_dsr_req_t){};
 
     while ((name = h2o_next_token(&iter, ',', ',', &name_len, &value)) != NULL) {
-        if (h2o_memis(name, name_len, H2O_STRLIT("quic"))) {
+        if (h2o_memis(name, name_len, H2O_STRLIT("http"))) {
+            /* parse http=768 (i.e. 0x300==http3) */
+            uint32_t v;
+            if ((v = parse_number(value.base, value.len, INT32_MAX)) < 0)
+                return 0;
+            req->http_version = v;
+        } else if (h2o_memis(name, name_len, H2O_STRLIT("quic"))) {
             /* parse quic=4278190110 (i.e., draft-29) */
             if ((n = parse_number(value.base, value.len, UINT32_MAX)) < 0)
                 return 0;
-            req->quic_version = (uint32_t)n;
+            quic_req.version = (uint32_t)n;
         } else if (h2o_memis(name, name_len, H2O_STRLIT("cipher"))) {
             /* parse cipher=12345 (i.e. aes128gcmsha256) */
             if ((n = parse_number(value.base, value.len, UINT16_MAX)) < 0)
                 return 0;
-            req->cipher = (uint16_t)n;
+            quic_req.cipher = (uint16_t)n;
         } else if (h2o_memis(name, name_len, H2O_STRLIT("address"))) {
             /* parse address="ip-address[:port]" */
             if (!(value.len >= 2 && value.base[0] == '"' && value.base[value.len - 1] == '"'))
@@ -119,20 +132,25 @@ int h2o_dsr_parse_req(h2o_dsr_req_t *req, const char *_value, size_t _value_len,
                 return 0;
             memcpy(hostbuf, host.base, host.len);
             hostbuf[host.len] = '\0';
-            if (inet_pton(AF_INET, hostbuf, &req->address.sin.sin_addr) == 1) {
-                req->address.sin.sin_family = AF_INET;
-                req->address.sin.sin_port = htons(port);
-            } else if (inet_pton(AF_INET6, hostbuf, &req->address.sin6.sin6_addr) == 1) {
-                req->address.sin6.sin6_family = AF_INET6;
-                req->address.sin6.sin6_port = htons(port);
+            if (inet_pton(AF_INET, hostbuf, &quic_req.address.sin.sin_addr) == 1) {
+                quic_req.address.sin.sin_family = AF_INET;
+                quic_req.address.sin.sin_port = htons(port);
+            } else if (inet_pton(AF_INET6, hostbuf, &quic_req.address.sin6.sin6_addr) == 1) {
+                quic_req.address.sin6.sin6_family = AF_INET6;
+                quic_req.address.sin6.sin6_port = htons(port);
             } else {
                 return 0;
             }
         }
     }
 
-    if (req->quic_version == 0 || req->cipher == 0 || req->address.sa.sa_family == AF_UNSPEC)
+    if (req->http_version == 0x300) {
+        if (quic_req.version == 0 || quic_req.cipher == 0 || quic_req.address.sa.sa_family == AF_UNSPEC)
+            return 0;
+        req->h3.quic = quic_req;
+    } else {
         return 0;
+    }
 
     return 1;
 }
@@ -228,8 +246,8 @@ Incomplete:
     return -1;
 }
 
-void h2o_dsr_add_instruction(h2o_buffer_t **buf, h2o_dsr_encoder_state_t *state, struct sockaddr *dest_addr,
-                             quicly_detached_send_packet_t *detached, uint64_t body_off, uint16_t body_len)
+void h2o_dsr_quic_add_instruction(h2o_buffer_t **buf, h2o_dsr_quic_encoder_state_t *state, struct sockaddr *dest_addr,
+                                  quicly_detached_send_packet_t *detached, uint64_t body_off, uint16_t body_len)
 {
 #define APPEND_BYTE(b) (*buf)->bytes[(*buf)->size++] = (b)
 #define APPEND_VARINT(v) (*buf)->size = (char *)quicly_encodev((uint8_t *)((*buf)->bytes + (*buf)->size), (v)) - (*buf)->bytes
@@ -286,7 +304,7 @@ void h2o_dsr_add_instruction(h2o_buffer_t **buf, h2o_dsr_encoder_state_t *state,
 #undef APPEND_BLOCK
 }
 
-ssize_t h2o_dsr_decode_instruction(h2o_dsr_decoded_instruction_t *instruction, const uint8_t *src, size_t len)
+ssize_t h2o_dsr_quic_decode_instruction(h2o_dsr_quic_decoded_instruction_t *instruction, const uint8_t *src, size_t len)
 {
 #define DECODE16(p)                                                                                                                \
     do {                                                                                                                           \
@@ -406,7 +424,7 @@ int h2o_dsr_quic_packet_encryptor_set_context(h2o_dsr_quic_packet_encryptor_t *e
     return 1;
 }
 
-void h2o_dsr_encrypt_quic_packet(h2o_dsr_quic_packet_encryptor_t *encryptor, h2o_dsr_decoded_instruction_t *instruction,
+void h2o_dsr_encrypt_quic_packet(h2o_dsr_quic_packet_encryptor_t *encryptor, h2o_dsr_quic_decoded_instruction_t *instruction,
                                  ptls_iovec_t datagram)
 {
     assert(instruction->type == H2O_DSR_DECODED_INSTRUCTION_SEND_PACKET);

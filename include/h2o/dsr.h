@@ -35,24 +35,34 @@
  */
 typedef struct st_h2o_dsr_req_t {
     /**
-     * The transport protocol for which DSR is performed (e.g., quic-29). This value indicates how the packet should be protected,
-     * aside from the cipher-suite being used.
+     * HTTP version of front-end connection
      */
-    uint32_t quic_version;
-    /**
-     * The cipher-suite being used, as the ID registered to the TLS Cipher Suites registry.
-     */
-    uint16_t cipher;
-    /**
-     * address from which QUIC packets should be sent
-     */
-    quicly_address_t address;
+    uint32_t http_version;
+    union {
+        struct st_h2o_dsr_req_http3_t {
+            struct st_h2o_dsr_req_quic_t {
+                /**
+                 * The transport protocol for which DSR is performed (e.g., quic-29). This value indicates how the packet should be
+                 * protected, aside from the cipher-suite being used.
+                 */
+                uint32_t version;
+                /**
+                 * The cipher-suite being used, as the ID registered to the TLS Cipher Suites registry.
+                 */
+                uint16_t cipher;
+                /**
+                 * address from which QUIC packets should be sent
+                 */
+                quicly_address_t address;
+            } quic;
+        } h3;
+    };
 } h2o_dsr_req_t;
 
 /**
  * An DSR instruction.
  */
-typedef struct st_h2o_dsr_decoded_instruction_t {
+typedef struct st_h2o_dsr_quic_decoded_instruction_t {
     enum { H2O_DSR_DECODED_INSTRUCTION_SET_CONTEXT, H2O_DSR_DECODED_INSTRUCTION_SEND_PACKET } type;
     union {
         struct {
@@ -78,11 +88,11 @@ typedef struct st_h2o_dsr_decoded_instruction_t {
             uint16_t _packet_payload_from;
         } send_packet;
     } data;
-} h2o_dsr_decoded_instruction_t;
+} h2o_dsr_quic_decoded_instruction_t;
 
-typedef struct st_h2o_dsr_encoder_state_t {
+typedef struct st_h2o_dsr_quic_encoder_state_t {
     unsigned context_sent : 1;
-} h2o_dsr_encoder_state_t;
+} h2o_dsr_quic_encoder_state_t;
 
 typedef struct st_h2o_dsr_quic_packet_encryptor_t {
     quicly_context_t *ctx;
@@ -103,12 +113,12 @@ int h2o_dsr_parse_req(h2o_dsr_req_t *req, const char *value, size_t value_len, u
 /**
  *
  */
-void h2o_dsr_add_instruction(h2o_buffer_t **buf, h2o_dsr_encoder_state_t *state, struct sockaddr *dest_addr,
-                             quicly_detached_send_packet_t *detached, uint64_t body_off, uint16_t body_len);
+void h2o_dsr_quic_add_instruction(h2o_buffer_t **buf, h2o_dsr_quic_encoder_state_t *state, struct sockaddr *dest_addr,
+                                  quicly_detached_send_packet_t *detached, uint64_t body_off, uint16_t body_len);
 /**
  * Decodes one DSR instruction. Returns size of the instruction, 0 if invalid, -1 if incomplete.
  */
-ssize_t h2o_dsr_decode_instruction(h2o_dsr_decoded_instruction_t *instruction, const uint8_t *src, size_t len);
+ssize_t h2o_dsr_quic_decode_instruction(h2o_dsr_quic_decoded_instruction_t *instruction, const uint8_t *src, size_t len);
 /**
  *
  */
@@ -129,7 +139,7 @@ int h2o_dsr_quic_packet_encryptor_set_context(h2o_dsr_quic_packet_encryptor_t *e
  * which the instruction belongs. It is the caller's responsibility to setup `datagram` by writing the prefix and the content as
  * specified by the instruction before invoking this function.
  */
-void h2o_dsr_encrypt_quic_packet(h2o_dsr_quic_packet_encryptor_t *encryptor, h2o_dsr_decoded_instruction_t *instruction,
+void h2o_dsr_encrypt_quic_packet(h2o_dsr_quic_packet_encryptor_t *encryptor, h2o_dsr_quic_decoded_instruction_t *instruction,
                                  ptls_iovec_t datagram);
 
 #endif
