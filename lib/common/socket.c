@@ -920,8 +920,13 @@ size_t flatten_sendvec(h2o_socket_t *sock, h2o_sendvec_t *sendvec)
 
 const char *h2o_socket_read(h2o_socket_t *_sock)
 {
+#if H2O_USE_LIBUV
+    do_read_start(_sock);
+    return NULL;
+#else
     struct st_h2o_evloop_socket_t *sock = (struct st_h2o_evloop_socket_t *)_sock;
     return do_read(sock);
+#endif
 }
 
 void h2o_socket_append(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt)
@@ -950,8 +955,13 @@ void h2o_socket_write(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_
 void h2o_socket_flush(h2o_socket_t *_sock)
 {
     if (h2o_socket_is_writing(_sock)) {
+#if H2O_USE_LIBUV
+        h2o_iovec_t buf = h2o_iovec_init(_sock->_write_buf.bufs->base, _sock->_write_buf.bufs->len);
+        do_write(_sock, &buf, 1);
+#else
         struct st_h2o_evloop_socket_t *sock = (struct st_h2o_evloop_socket_t *)_sock;
         write_pending(sock);
+#endif
     }
 }
 
