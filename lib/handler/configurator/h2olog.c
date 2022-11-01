@@ -34,12 +34,12 @@ static int on_config_h2olog(h2o_configurator_command_t *cmd, h2o_configurator_co
         case 0: /* OFF */
             return 0;
         case 1: /* ON */
-            h2o_log_register(ctx->pathconf);
-            return 0;
+            break;
         default:
             return -1;
         }
     } else {
+        assert(node->type == YOML_TYPE_MAPPING);
         yoml_t **appdata_node;
         if (h2o_configurator_parse_mapping(cmd, node, NULL, "appdata:s", &appdata_node) != 0)
             return -1;
@@ -50,9 +50,9 @@ static int on_config_h2olog(h2o_configurator_command_t *cmd, h2o_configurator_co
                 return -1;
             ptls_log.include_appdata = (unsigned)v;
         }
-
-        h2o_log_register(ctx->pathconf);
     }
+
+    h2o_log_register(ctx->pathconf);
     return 0;
 }
 
