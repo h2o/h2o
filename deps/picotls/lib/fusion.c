@@ -1013,21 +1013,24 @@ ptls_fusion_aesgcm_context_t *ptls_fusion_aesgcm_new(const void *key, size_t key
 
 ptls_fusion_aesgcm_context_t *ptls_fusion_aesgcm_set_capacity(ptls_fusion_aesgcm_context_t *ctx, size_t capacity)
 {
-    size_t ghash_cnt = aesgcm_calc_ghash_cnt(capacity);
+    size_t new_ghash_cnt = aesgcm_calc_ghash_cnt(capacity);
 
-    if (ghash_cnt <= ctx->ghash_cnt)
+    if (new_ghash_cnt <= ctx->ghash_cnt)
         return ctx;
 
-    size_t ctx_size = calc_aesgcm_context_size(&ghash_cnt, ctx->ecb.aesni256);
+    size_t new_ctx_size = calc_aesgcm_context_size(&new_ghash_cnt, ctx->ecb.aesni256),
+           old_ctx_size = calc_aesgcm_context_size(&ctx->ghash_cnt, ctx->ecb.aesni256);
+
     ptls_fusion_aesgcm_context_t *newp;
-    if ((newp = aligned_alloc(32, ctx_size)) == NULL)
+    if ((newp = aligned_alloc(32, new_ctx_size)) == NULL)
         return NULL;
-    memcpy(newp, ctx, ctx_size);
+    memcpy(newp, ctx, old_ctx_size);
+    ptls_clear_memory(ctx, old_ctx_size);
     free(ctx);
     ctx = newp;
 
     ctx->capacity = capacity;
-    while (ghash_cnt < ctx->ghash_cnt)
+    while (ctx->ghash_cnt < new_ghash_cnt)
         setup_one_ghash_entry(ctx);
 
     return ctx;
@@ -1221,6 +1224,7 @@ ptls_aead_algorithm_t ptls_fusion_aes128gcm = {"AES128-GCM",
                                                PTLS_AES128_KEY_SIZE,
                                                PTLS_AESGCM_IV_SIZE,
                                                PTLS_AESGCM_TAG_SIZE,
+                                               {0}, // while it may work, no reason to support TLS/1.2
                                                0,
                                                0,
                                                sizeof(struct aesgcm_context),
@@ -1233,6 +1237,7 @@ ptls_aead_algorithm_t ptls_fusion_aes256gcm = {"AES256-GCM",
                                                PTLS_AES256_KEY_SIZE,
                                                PTLS_AESGCM_IV_SIZE,
                                                PTLS_AESGCM_TAG_SIZE,
+                                               {0}, // while it may work, no reason to support TLS/1.2
                                                0,
                                                0,
                                                sizeof(struct aesgcm_context),
@@ -2141,6 +2146,7 @@ ptls_aead_algorithm_t ptls_non_temporal_aes128gcm = {"AES128-GCM",
                                                      PTLS_AES128_KEY_SIZE,
                                                      PTLS_AESGCM_IV_SIZE,
                                                      PTLS_AESGCM_TAG_SIZE,
+                                                     {PTLS_TLS12_AESGCM_FIXED_IV_SIZE, PTLS_TLS12_AESGCM_RECORD_IV_SIZE},
                                                      1,
                                                      PTLS_X86_CACHE_LINE_ALIGN_BITS,
                                                      sizeof(struct aesgcm_context),
@@ -2153,6 +2159,7 @@ ptls_aead_algorithm_t ptls_non_temporal_aes256gcm = {"AES256-GCM",
                                                      PTLS_AES256_KEY_SIZE,
                                                      PTLS_AESGCM_IV_SIZE,
                                                      PTLS_AESGCM_TAG_SIZE,
+                                                     {PTLS_TLS12_AESGCM_FIXED_IV_SIZE, PTLS_TLS12_AESGCM_RECORD_IV_SIZE},
                                                      1,
                                                      PTLS_X86_CACHE_LINE_ALIGN_BITS,
                                                      sizeof(struct aesgcm_context),

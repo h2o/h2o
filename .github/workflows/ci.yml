@@ -23,18 +23,18 @@ jobs:
             command: make -f misc/docker-ci/check.mk ossl1.1.1 BUILD_ARGS=-j6 TEST_ENV='TEST_JOBS=4 TEST_PLATFORM=github-actions'
           - name: OpenSSL 3.0 (Ubuntu 22.04 / DTrace)
             command: make -f misc/docker-ci/check.mk ossl3.0 BUILD_ARGS=-j6 TEST_ENV='TEST_JOBS=4 TEST_PLATFORM=github-actions'
-          - name: DTrace + ASan
-            command: make -f misc/docker-ci/check.mk dtrace+asan BUILD_ARGS=-j6 TEST_ENV='TEST_JOBS=4 TEST_PLATFORM=github-actions'
+          - name: ASan (Ubuntu 20.04)
+            command: make -f misc/docker-ci/check.mk asan BUILD_ARGS=-j6 TEST_ENV='TEST_JOBS=4 TEST_PLATFORM=github-actions'
           - name: Coverage
             command: make -f misc/docker-ci/check.mk coverage BUILD_ARGS=-j6 TEST_ENV='TEST_JOBS=4 TEST_PLATFORM=github-actions'
 
     timeout-minutes: 60
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
       with:
         submodules: recursive
     - name: Login to Docker Hub
-      uses: docker/login-action@v1
+      uses: docker/login-action@v2
       with:
         username: ${{ secrets.DOCKERHUB_USERNAME }}
         password: ${{ secrets.DOCKERHUB_TOKEN }}

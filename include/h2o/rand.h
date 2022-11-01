@@ -33,8 +33,10 @@
  * Wrapper of rand (3) or arc4random (3). Guaranteed to be multi-thread safe.
  */
 #if defined(__APPLE__) || defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__)
+#define H2O_RAND_MAX UINT32_MAX
 #define h2o_rand() arc4random()
 #else
+#define H2O_RAND_MAX RAND_MAX
 #define H2O_DEFINE_RAND 1
 int h2o_rand(void);
 #endif

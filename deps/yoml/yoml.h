@@ -35,7 +35,7 @@ typedef struct st_yoml_t yoml_t;
 
 typedef struct st_yoml_sequence_t {
     size_t size;
-    yoml_t *elements[1];
+    yoml_t *elements[];
 } yoml_sequence_t;
 
 typedef struct st_yoml_mapping_element_t {
@@ -45,7 +45,7 @@ typedef struct st_yoml_mapping_element_t {
 
 typedef struct st_yoml_mapping_t {
     size_t size;
-    yoml_mapping_element_t elements[1];
+    yoml_mapping_element_t elements[];
 } yoml_mapping_t;
 
 struct st_yoml_t {

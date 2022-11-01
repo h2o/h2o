@@ -38,6 +38,7 @@
 #include <unistd.h>
 #include <signal.h>
 #if defined(__linux__)
+#include <sys/syscall.h>
 #include <sys/prctl.h>
 #elif defined(__APPLE__)
 #include <sys/ptrace.h>
@@ -1374,9 +1375,23 @@ Exit:
     return NULL;
 }
 
+#if !(defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__))
+#define closefrom my_closefrom
+static void my_closefrom(int lowfd)
+{
+    /* On linux, try close_range (2), then fall back to the slow loop if it fails. */
+#if defined(__linux__) && defined(__NR_close_range)
+    if (syscall(__NR_close_range, lowfd, ~0, 0) == 0)
+        return;
+#endif
+
+    for (int fd = (int)sysconf(_SC_OPEN_MAX) - 1; fd >= lowfd; --fd)
+        (void)close(fd);
+}
+#endif
+
 static void cleanup_fds(int listen_fd, int close_notify_fd)
 {
-#if defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__)
     int maxfd, k;
 
     maxfd = 0;
@@ -1395,20 +1410,10 @@ static void cleanup_fds(int listen_fd, int close_notify_fd)
         case STDIN_FILENO:
             break;
         default:
-            (void) close(k);
+            (void)close(k);
         }
     }
     closefrom(maxfd + 1);
-#else
-    int fd;
-
-    fd = (int)sysconf(_SC_OPEN_MAX) - 1;
-    for (; fd > 2; --fd) {
-        if (fd == listen_fd || fd == close_notify_fd)
-                continue;
-        close(fd);
-    }
-#endif
 }
 
 __attribute__((noreturn)) static void daemon_main(int listen_fd, int close_notify_fd, const char *tempdir)

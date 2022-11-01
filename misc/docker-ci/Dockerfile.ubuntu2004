@@ -15,17 +15,13 @@ RUN apt-get install --yes \
 	libbrotli-dev \
 	libc-ares-dev \
 	libcap-dev \
-	libclang-dev \
 	libedit-dev \
 	libelf-dev \
 	libev-dev \
 	libssl-dev \
 	libuv1-dev \
-	llvm-dev \
-	libllvm7 \
-	llvm-7-dev \
-	libclang-7-dev \
 	zlib1g-dev \
+	libbpfcc-dev \
 	memcached \
 	net-tools \
 	netcat-openbsd \
@@ -64,18 +60,6 @@ RUN cpanm -n Test::More Starlet Protocol::HTTP2 Net::DNS::Nameserver Test::TCP
 
 # h2spec
 RUN curl -Ls https://github.com/summerwind/h2spec/releases/download/v2.6.0/h2spec_linux_amd64.tar.gz | tar zx -C /usr/local/bin
-
-# bcc and bpftrace
-RUN apt-get install --yes \
-	libbpfcc-dev
-RUN git clone --branch kazuho/usdt-attach-all-locations https://github.com/kazuho/bpftrace.git && \
-	cd bpftrace && \
-	mkdir build &&  \
-	cd build && \
-	cmake -DLLVM_REQUESTED_VERSION=7 .. && \
-	make && \
-	make install && \
-	make clean
 
 # use dumb-init
 RUN wget -O /usr/local/bin/dumb-init https://github.com/Yelp/dumb-init/releases/download/v1.2.1/dumb-init_1.2.1_amd64 \

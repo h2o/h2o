@@ -1565,6 +1565,157 @@ Exit:
     return ret;
 }
 
+#if OPENSSL_VERSION_NUMBER >= 0x30000000L
+int ptls_openssl_encrypt_ticket_evp(ptls_buffer_t *buf, ptls_iovec_t src,
+                                    int (*cb)(unsigned char *key_name, unsigned char *iv, EVP_CIPHER_CTX *ctx, EVP_MAC_CTX *hctx,
+                                              int enc))
+{
+    EVP_CIPHER_CTX *cctx = NULL;
+    EVP_MAC *mac = NULL;
+    EVP_MAC_CTX *hctx = NULL;
+    size_t hlen;
+    uint8_t *dst;
+    int clen, ret;
+
+    if ((cctx = EVP_CIPHER_CTX_new()) == NULL) {
+        ret = PTLS_ERROR_NO_MEMORY;
+        goto Exit;
+    }
+    if ((mac = EVP_MAC_fetch(NULL, "HMAC", NULL)) == NULL) {
+        ret = PTLS_ERROR_NO_MEMORY;
+        goto Exit;
+    }
+    if ((hctx = EVP_MAC_CTX_new(mac)) == NULL) {
+        ret = PTLS_ERROR_NO_MEMORY;
+        goto Exit;
+    }
+
+    if ((ret = ptls_buffer_reserve(buf, TICKET_LABEL_SIZE + TICKET_IV_SIZE + src.len + EVP_MAX_BLOCK_LENGTH + EVP_MAX_MD_SIZE)) !=
+        0)
+        goto Exit;
+    dst = buf->base + buf->off;
+
+    /* fill label and iv, as well as obtaining the keys */
+    if (!(*cb)(dst, dst + TICKET_LABEL_SIZE, cctx, hctx, 1)) {
+        ret = PTLS_ERROR_LIBRARY;
+        goto Exit;
+    }
+    dst += TICKET_LABEL_SIZE + TICKET_IV_SIZE;
+
+    /* encrypt */
+    if (!EVP_EncryptUpdate(cctx, dst, &clen, src.base, (int)src.len)) {
+        ret = PTLS_ERROR_LIBRARY;
+        goto Exit;
+    }
+    dst += clen;
+    if (!EVP_EncryptFinal_ex(cctx, dst, &clen)) {
+        ret = PTLS_ERROR_LIBRARY;
+        goto Exit;
+    }
+    dst += clen;
+
+    /* append hmac */
+    if (!EVP_MAC_update(hctx, buf->base + buf->off, dst - (buf->base + buf->off)) ||
+        !EVP_MAC_final(hctx, dst, &hlen, EVP_MAC_CTX_get_mac_size(hctx))) {
+        ret = PTLS_ERROR_LIBRARY;
+        goto Exit;
+    }
+    dst += hlen;
+
+    assert(dst <= buf->base + buf->capacity);
+    buf->off += dst - (buf->base + buf->off);
+    ret = 0;
+
+Exit:
+    if (cctx != NULL)
+        EVP_CIPHER_CTX_free(cctx);
+    if (hctx != NULL)
+        EVP_MAC_CTX_free(hctx);
+    if (mac != NULL)
+        EVP_MAC_free(mac);
+    return ret;
+}
+
+int ptls_openssl_decrypt_ticket_evp(ptls_buffer_t *buf, ptls_iovec_t src,
+                                    int (*cb)(unsigned char *key_name, unsigned char *iv, EVP_CIPHER_CTX *ctx, EVP_MAC_CTX *hctx,
+                                              int enc))
+{
+    EVP_CIPHER_CTX *cctx = NULL;
+    EVP_MAC *mac = NULL;
+    EVP_MAC_CTX *hctx = NULL;
+    size_t hlen;
+    int clen, ret;
+
+    if ((cctx = EVP_CIPHER_CTX_new()) == NULL) {
+        ret = PTLS_ERROR_NO_MEMORY;
+        goto Exit;
+    }
+    if ((mac = EVP_MAC_fetch(NULL, "HMAC", NULL)) == NULL) {
+        ret = PTLS_ERROR_NO_MEMORY;
+        goto Exit;
+    }
+    if ((hctx = EVP_MAC_CTX_new(mac)) == NULL) {
+        ret = PTLS_ERROR_NO_MEMORY;
+        goto Exit;
+    }
+
+    /* obtain cipher and hash context.
+     * Note: no need to handle renew, since in picotls we always send a new ticket to minimize the chance of ticket reuse */
+    if (src.len < TICKET_LABEL_SIZE + TICKET_IV_SIZE) {
+        ret = PTLS_ALERT_DECODE_ERROR;
+        goto Exit;
+    }
+    if (!(*cb)(src.base, src.base + TICKET_LABEL_SIZE, cctx, hctx, 0)) {
+        ret = PTLS_ERROR_LIBRARY;
+        goto Exit;
+    }
+
+    /* check hmac, and exclude label, iv, hmac */
+    size_t hmac_size = EVP_MAC_CTX_get_mac_size(hctx);
+    if (src.len < TICKET_LABEL_SIZE + TICKET_IV_SIZE + hmac_size) {
+        ret = PTLS_ALERT_DECODE_ERROR;
+        goto Exit;
+    }
+    src.len -= hmac_size;
+    uint8_t hmac[EVP_MAX_MD_SIZE];
+    if (!EVP_MAC_update(hctx, src.base, src.len) || !EVP_MAC_final(hctx, hmac, &hlen, sizeof(hmac))) {
+        ret = PTLS_ERROR_LIBRARY;
+        goto Exit;
+    }
+    if (!ptls_mem_equal(src.base + src.len, hmac, hmac_size)) {
+        ret = PTLS_ALERT_HANDSHAKE_FAILURE;
+        goto Exit;
+    }
+    src.base += TICKET_LABEL_SIZE + TICKET_IV_SIZE;
+    src.len -= TICKET_LABEL_SIZE + TICKET_IV_SIZE;
+
+    /* decrypt */
+    if ((ret = ptls_buffer_reserve(buf, src.len)) != 0)
+        goto Exit;
+    if (!EVP_DecryptUpdate(cctx, buf->base + buf->off, &clen, src.base, (int)src.len)) {
+        ret = PTLS_ERROR_LIBRARY;
+        goto Exit;
+    }
+    buf->off += clen;
+    if (!EVP_DecryptFinal_ex(cctx, buf->base + buf->off, &clen)) {
+        ret = PTLS_ERROR_LIBRARY;
+        goto Exit;
+    }
+    buf->off += clen;
+
+    ret = 0;
+
+Exit:
+    if (cctx != NULL)
+        EVP_CIPHER_CTX_free(cctx);
+    if (hctx != NULL)
+        EVP_MAC_CTX_free(hctx);
+    if (mac != NULL)
+        EVP_MAC_free(mac);
+    return ret;
+}
+#endif
+
 ptls_key_exchange_algorithm_t ptls_openssl_secp256r1 = {.id = PTLS_GROUP_SECP256R1,
                                                         .name = PTLS_GROUP_NAME_SECP256R1,
                                                         .create = x9_62_create_key_exchange,
@@ -1605,6 +1756,7 @@ ptls_aead_algorithm_t ptls_openssl_aes128gcm = {"AES128-GCM",
                                                 PTLS_AES128_KEY_SIZE,
                                                 PTLS_AESGCM_IV_SIZE,
                                                 PTLS_AESGCM_TAG_SIZE,
+                                                {PTLS_TLS12_AESGCM_FIXED_IV_SIZE, PTLS_TLS12_AESGCM_RECORD_IV_SIZE},
                                                 0,
                                                 0,
                                                 sizeof(struct aead_crypto_context_t),
@@ -1623,6 +1775,7 @@ ptls_aead_algorithm_t ptls_openssl_aes256gcm = {"AES256-GCM",
                                                 PTLS_AES256_KEY_SIZE,
                                                 PTLS_AESGCM_IV_SIZE,
                                                 PTLS_AESGCM_TAG_SIZE,
+                                                {PTLS_TLS12_AESGCM_FIXED_IV_SIZE, PTLS_TLS12_AESGCM_RECORD_IV_SIZE},
                                                 0,
                                                 0,
                                                 sizeof(struct aead_crypto_context_t),
@@ -1635,10 +1788,30 @@ ptls_cipher_suite_t ptls_openssl_aes128gcmsha256 = {.id = PTLS_CIPHER_SUITE_AES_
                                                     .name = PTLS_CIPHER_SUITE_NAME_AES_128_GCM_SHA256,
                                                     .aead = &ptls_openssl_aes128gcm,
                                                     .hash = &ptls_openssl_sha256};
+ptls_cipher_suite_t ptls_openssl_tls12_ecdhe_rsa_aes128gcmsha256 = {.id = PTLS_CIPHER_SUITE_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+                                                                    .name =
+                                                                        PTLS_CIPHER_SUITE_NAME_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+                                                                    .aead = &ptls_openssl_aes128gcm,
+                                                                    .hash = &ptls_openssl_sha256};
+ptls_cipher_suite_t ptls_openssl_tls12_ecdhe_ecdsa_aes128gcmsha256 = {
+    .id = PTLS_CIPHER_SUITE_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+    .name = PTLS_CIPHER_SUITE_NAME_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+    .aead = &ptls_openssl_aes128gcm,
+    .hash = &ptls_openssl_sha256};
 ptls_cipher_suite_t ptls_openssl_aes256gcmsha384 = {.id = PTLS_CIPHER_SUITE_AES_256_GCM_SHA384,
                                                     .name = PTLS_CIPHER_SUITE_NAME_AES_256_GCM_SHA384,
                                                     .aead = &ptls_openssl_aes256gcm,
                                                     .hash = &ptls_openssl_sha384};
+ptls_cipher_suite_t ptls_openssl_tls12_ecdhe_rsa_aes256gcmsha384 = {.id = PTLS_CIPHER_SUITE_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+                                                                    .name =
+                                                                        PTLS_CIPHER_SUITE_NAME_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+                                                                    .aead = &ptls_openssl_aes256gcm,
+                                                                    .hash = &ptls_openssl_sha384};
+ptls_cipher_suite_t ptls_openssl_tls12_ecdhe_ecdsa_aes256gcmsha384 = {
+    .id = PTLS_CIPHER_SUITE_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+    .name = PTLS_CIPHER_SUITE_NAME_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+    .aead = &ptls_openssl_aes256gcm,
+    .hash = &ptls_openssl_sha384};
 #if PTLS_OPENSSL_HAVE_CHACHA20_POLY1305
 ptls_cipher_algorithm_t ptls_openssl_chacha20 = {
     "CHACHA20",           PTLS_CHACHA20_KEY_SIZE, 1 /* block size */, PTLS_CHACHA20_IV_SIZE, sizeof(struct cipher_context_t),
@@ -1651,6 +1824,7 @@ ptls_aead_algorithm_t ptls_openssl_chacha20poly1305 = {"CHACHA20-POLY1305",
                                                        PTLS_CHACHA20_KEY_SIZE,
                                                        PTLS_CHACHA20POLY1305_IV_SIZE,
                                                        PTLS_CHACHA20POLY1305_TAG_SIZE,
+                                                       {PTLS_TLS12_CHACHAPOLY_FIXED_IV_SIZE, PTLS_TLS12_CHACHAPOLY_RECORD_IV_SIZE},
                                                        0,
                                                        0,
                                                        sizeof(struct aead_crypto_context_t),
@@ -1659,12 +1833,32 @@ ptls_cipher_suite_t ptls_openssl_chacha20poly1305sha256 = {.id = PTLS_CIPHER_SUI
                                                            .name = PTLS_CIPHER_SUITE_NAME_CHACHA20_POLY1305_SHA256,
                                                            .aead = &ptls_openssl_chacha20poly1305,
                                                            .hash = &ptls_openssl_sha256};
+ptls_cipher_suite_t ptls_openssl_tls12_ecdhe_rsa_chacha20poly1305sha256 = {
+    .id = PTLS_CIPHER_SUITE_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
+    .name = PTLS_CIPHER_SUITE_NAME_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
+    .aead = &ptls_openssl_chacha20poly1305,
+    .hash = &ptls_openssl_sha256};
+ptls_cipher_suite_t ptls_openssl_tls12_ecdhe_ecdsa_chacha20poly1305sha256 = {
+    .id = PTLS_CIPHER_SUITE_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
+    .name = PTLS_CIPHER_SUITE_NAME_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
+    .aead = &ptls_openssl_chacha20poly1305,
+    .hash = &ptls_openssl_sha256};
 #endif
 ptls_cipher_suite_t *ptls_openssl_cipher_suites[] = {&ptls_openssl_aes256gcmsha384, &ptls_openssl_aes128gcmsha256,
 #if PTLS_OPENSSL_HAVE_CHACHA20_POLY1305
                                                      &ptls_openssl_chacha20poly1305sha256,
 #endif
                                                      NULL};
+
+ptls_cipher_suite_t *ptls_openssl_tls12_cipher_suites[] = {&ptls_openssl_tls12_ecdhe_rsa_aes128gcmsha256,
+                                                           &ptls_openssl_tls12_ecdhe_ecdsa_aes128gcmsha256,
+                                                           &ptls_openssl_tls12_ecdhe_rsa_aes256gcmsha384,
+                                                           &ptls_openssl_tls12_ecdhe_ecdsa_aes256gcmsha384,
+#if PTLS_OPENSSL_HAVE_CHACHA20_POLY1305
+                                                           &ptls_openssl_tls12_ecdhe_rsa_chacha20poly1305sha256,
+                                                           &ptls_openssl_tls12_ecdhe_ecdsa_chacha20poly1305sha256,
+#endif
+                                                           NULL};
 
 #if PTLS_OPENSSL_HAVE_BF
 ptls_cipher_algorithm_t ptls_openssl_bfecb = {"BF-ECB",        PTLS_BLOWFISH_KEY_SIZE,          PTLS_BLOWFISH_BLOCK_SIZE,

@@ -147,7 +147,7 @@ static void build_request(h2o_req_t *req, h2o_iovec_t *method, h2o_url_t *url, h
     char remote_addr[NI_MAXHOST];
     struct sockaddr_storage ss;
     socklen_t sslen;
-    h2o_iovec_t cookie_buf = {NULL}, xff_buf = {NULL}, via_buf = {NULL};
+    h2o_iovec_t xff_buf = {NULL}, via_buf = {NULL};
     int preserve_x_forwarded_proto = req->conn->ctx->globalconf->proxy.preserve_x_forwarded_proto;
     int emit_x_forwarded_headers = req->conn->ctx->globalconf->proxy.emit_x_forwarded_headers;
     int emit_via_header = req->conn->ctx->globalconf->proxy.emit_via_header;
@@ -203,18 +203,17 @@ static void build_request(h2o_req_t *req, h2o_iovec_t *method, h2o_url_t *url, h
     }
 
     /* general headers */
-    {
-        const h2o_header_t *h, *h_end;
-        int found_early_data = 0;
-        for (h = req->headers.entries, h_end = h + req->headers.size; h != h_end; ++h) {
+    h2o_iovec_vector_t cookie_values = {NULL};
+    int found_early_data = 0;
+    if (H2O_LIKELY(req->headers.size != 0)) {
+        for (const h2o_header_t *h = req->headers.entries, *h_end = h + req->headers.size; h != h_end; ++h) {
             if (h2o_iovec_is_token(h->name)) {
                 const h2o_token_t *token = (void *)h->name;
                 if (token->flags.proxy_should_drop_for_req)
                     continue;
                 if (token == H2O_TOKEN_COOKIE) {
-                    /* merge the cookie headers; see HTTP/2 8.1.2.5 and HTTP/1 (RFC6265 5.4) */
-                    /* FIXME current algorithm is O(n^2) against the number of cookie headers */
-                    cookie_buf = build_request_merge_headers(&req->pool, cookie_buf, h->value, ';');
+                    h2o_vector_reserve(&req->pool, &cookie_values, cookie_values.size + 1);
+                    cookie_values.entries[cookie_values.size++] = h->value;
                     continue;
                 } else if (token == H2O_TOKEN_VIA) {
                     if (!emit_via_header) {
@@ -244,14 +243,20 @@ static void build_request(h2o_req_t *req, h2o_iovec_t *method, h2o_url_t *url, h
                                       h->value.len);
             }
         }
-        if (found_early_data) {
-            *reprocess_if_too_early = 0;
-        } else if (*reprocess_if_too_early) {
-            h2o_add_header(&req->pool, headers, H2O_TOKEN_EARLY_DATA, NULL, H2O_STRLIT("1"));
-        }
+    }
+    if (found_early_data) {
+        *reprocess_if_too_early = 0;
+    } else if (*reprocess_if_too_early) {
+        h2o_add_header(&req->pool, headers, H2O_TOKEN_EARLY_DATA, NULL, H2O_STRLIT("1"));
     }
 
-    if (cookie_buf.len != 0) {
+    if (cookie_values.size == 1) {
+        /* fast path */
+        h2o_add_header(&req->pool, headers, H2O_TOKEN_COOKIE, NULL, cookie_values.entries[0].base, cookie_values.entries[0].len);
+    } else if (cookie_values.size > 1) {
+        /* merge the cookie headers; see HTTP/2 8.1.2.5 and HTTP/1 (RFC6265 5.4) */
+        h2o_iovec_t cookie_buf =
+            h2o_join_list(&req->pool, cookie_values.entries, cookie_values.size, h2o_iovec_init(H2O_STRLIT("; ")));
         h2o_add_header(&req->pool, headers, H2O_TOKEN_COOKIE, NULL, cookie_buf.base, cookie_buf.len);
     }
     if (emit_x_forwarded_headers) {
@@ -492,7 +497,8 @@ static int on_body(h2o_httpclient_t *client, const char *errstr)
     if (errstr != NULL) {
         self->generator_disposed = &generator_disposed;
         on_body_on_close(self, errstr);
-        self->generator_disposed = NULL;
+        if (!generator_disposed)
+            self->generator_disposed = NULL;
     }
     if (!generator_disposed && !self->sending.inflight)
         do_send(self);
@@ -575,8 +581,8 @@ static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errs
         if (h2o_iovec_is_token(args->headers[i].name)) {
             const h2o_token_t *token = H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, args->headers[i].name);
             if (token->flags.proxy_should_drop_for_res) {
-                if (token == H2O_TOKEN_CONNECTION && self->src_req->version < 0x200 &&
-                    req->conn->ctx->globalconf->proxy.forward_close_connection) {
+                if (token == H2O_TOKEN_CONNECTION && self->src_req->version < 0x200 && req->overrides != NULL &&
+                    req->overrides->forward_close_connection) {
                     if (h2o_lcstris(args->headers[i].value.base, args->headers[i].value.len, H2O_STRLIT("close")))
                         self->src_req->http1_is_persistent = 0;
                 }
