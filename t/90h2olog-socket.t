@@ -39,8 +39,7 @@ hosts:
       "/status":
         status: ON
   "h2olog":
-    h2olog:
-      appdata: ON
+    h2olog: appdata
     listen:
       - type: unix
         port: $h2olog_socket
@@ -139,8 +138,7 @@ hosts:
       "/status":
         status: ON
   "h2olog":
-    h2olog:
-      appdata: ON
+    h2olog: appdata
     listen:
       - type: unix
         port: $h2olog_socket

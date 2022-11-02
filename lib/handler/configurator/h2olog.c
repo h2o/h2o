@@ -29,27 +29,18 @@ struct st_h2olog_configurator {
 
 static int on_config_h2olog(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    if (node->type == YOML_TYPE_SCALAR) {
-        switch (h2o_configurator_get_one_of(cmd, node, "OFF,ON")) {
-        case 0: /* OFF */
-            return 0;
-        case 1: /* ON */
-            break;
-        default:
-            return -1;
-        }
-    } else {
-        assert(node->type == YOML_TYPE_MAPPING);
-        yoml_t **appdata_node;
-        if (h2o_configurator_parse_mapping(cmd, node, NULL, "appdata:s", &appdata_node) != 0)
-            return -1;
+    assert(node->type == YOML_TYPE_SCALAR);
 
-        if (appdata_node != NULL) {
-            ssize_t v;
-            if ((v = h2o_configurator_get_one_of(cmd, *appdata_node, "OFF,ON")) == -1)
-                return -1;
-            ptls_log.include_appdata = (unsigned)v;
-        }
+    switch (h2o_configurator_get_one_of(cmd, node, "OFF,ON,appdata")) {
+    case 0: /* OFF */
+        return 0;
+    case 1: /* ON */
+        break;
+    case 2: /* appdata */
+        ptls_log.include_appdata = 1;
+        break;
+    default:
+        return -1;
     }
 
     h2o_log_register(ctx->hostconf);
@@ -61,7 +52,6 @@ void h2o_log_register_configurator(h2o_globalconf_t *conf)
     struct st_h2olog_configurator *c = (void *)h2o_configurator_create(conf, sizeof(*c));
 
     // it takes either a scalar ("OFF,ON") or a mapping for customized configuration
-    h2o_configurator_define_command(
-        &c->super, "h2olog",
-        H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR | H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING, on_config_h2olog);
+    h2o_configurator_define_command(&c->super, "h2olog", H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                    on_config_h2olog);
 }
