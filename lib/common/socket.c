@@ -642,7 +642,6 @@ void h2o_socket_close(h2o_socket_t *sock)
     } else {
 #if PTLS_OPENSSL_HAVE_ASYNC
     if (sock->async.state == H2O_SOCKET_ASYNC_STATE_PENDING) {
-        h2o_socket_read_stop(sock);
         sock->async.state = H2O_SOCKET_ASYNC_STATE_SHUTDOWN;
         return;
     }
@@ -1535,6 +1534,12 @@ Exit:
 
 static void on_handshake_complete(h2o_socket_t *sock, const char *err)
 {
+#if PTLS_OPENSSL_HAVE_ASYNC
+    if (sock->async.state == H2O_SOCKET_ASYNC_STATE_SHUTDOWN) {
+        shutdown_ssl(sock, NULL);
+        return;
+    }
+#endif
     if (err == NULL) {
         /* Post-handshake setup: set record_overhead, zerocopy, switch to picotls */
         if (sock->ssl->ptls == NULL) {
@@ -1810,15 +1815,6 @@ Redo:
     } else {
         ret = SSL_connect(sock->ssl->ossl);
     }
-
-#if PTLS_OPENSSL_HAVE_ASYNC
-    if (ret < 0 && SSL_get_error(sock->ssl->ossl, ret) != SSL_ERROR_WANT_ASYNC) {
-        if (sock->async.state == H2O_SOCKET_ASYNC_STATE_SHUTDOWN) {
-            shutdown_ssl(sock, NULL);
-            return;
-        }
-    }
-#endif
 
     /* handshake failed either in strict mTLS mode or others */
     if (ret == 0 || (ret < 0 && SSL_get_error(sock->ssl->ossl, ret) != SSL_ERROR_WANT_READ)) {
