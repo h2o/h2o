@@ -148,25 +148,17 @@ EOT
 
   wait_port({ port => $quic_port, proto => "udp" });
 
-  my $h2olog = H2ologTracer->new({
-    path => $h2olog_socket,
-  });
+
+  # A client connects to h2o's h2olog endpoint, but reads nothing.
+  my $client = IO::Socket::UNIX->new(
+    Type => SOCK_STREAM,
+    Peer => $h2olog_socket,
+  ) or croak "Cannot connect to a unix domain socket '$h2olog_socket': $!";
+  $client->syswrite("GET /.well-known/h2olog HTTP/1.0\r\n\r\n");
 
   system($client_prog, "-3", "100", "https://127.0.0.1:$quic_port/") == 0 or die $!;
 
   cmp_ok get_status($server)->{"h2olog.lost"}, ">", 0, "losts messages if client does not read socket";
-
-  system($client_prog, "-3", "100", "https://127.0.0.1:$quic_port/") == 0 or die $!;
-
-
-  my $logs = do {
-    local $/;
-    open my $fh, "<", $h2olog->{output_file} or die $!;
-    <$fh>;
-  };
-  ok $logs;
-  # It cannot be guaranteed so far that the logs are valid JSON-Lines.
-  # ok scalar(parse_json_lines($logs)), "valid JSON Lines are written to h2olog socket '$h2olog_socket' even if some events are lost";
 };
 
 sub find_event {
