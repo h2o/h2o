@@ -310,11 +310,11 @@ static int read_from_unix_socket(const char *unix_socket_path, FILE *outfp, bool
             } else if (ret > 0) {
                 if (!headers_done) {
                     // h2olog is not interested in the response headers.
+                    static const h2o_iovec_t h_sep = h2o_iovec_init(H2O_STRLIT("\r\n\r\n"));
                     size_t headers_done_at;
-                    if (((headers_done_at = h2o_strstr(buf, ret, H2O_STRLIT("\r\n\r\n"))) != SIZE_MAX)) {
+                    if (((headers_done_at = h2o_strstr(buf, ret, h_sep.base, h_sep.len)) != SIZE_MAX)) {
                         headers_done = true;
-                        (void)fwrite(buf + headers_done_at + sizeof("\r\n\r\n"), 1, ret - headers_done_at - sizeof("\r\n\r\n"),
-                                     outfp);
+                        (void)fwrite(buf + headers_done_at + h_sep.len, 1, ret - headers_done_at - h_sep.len, outfp);
                     }
                     continue;
                 }
