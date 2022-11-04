@@ -121,7 +121,7 @@ static struct dsr_file_sender *create_dsr_file_sender(h2o_req_t *req, h2o_dsr_re
     sender->sock = NULL;
     sender->conn_id = req->conn->id;
 
-    return NULL;
+    return sender;
 }
 
 static void on_quic_dsr_read(h2o_socket_t *sock, const char *err)
