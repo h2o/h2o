@@ -41,6 +41,9 @@ extern "C" {
 }
 #include "h2olog.h"
 
+#define PICOJSON_USE_INT64 1
+#include "picojson.h"
+
 #define POLL_TIMEOUT (1000)
 #define PERF_BUFFER_PAGE_COUNT 256
 
@@ -260,7 +263,69 @@ static std::string build_cc_macro_str(const char *name, const std::string &str)
     return build_cc_macro_expr(name, "\"" + str + "\"");
 }
 
-static int read_from_unix_socket(const char *unix_socket_path, FILE *outfp, bool debug, bool preserve_root)
+static bool is_json_whitespace(char c)
+{
+    return c == ' ' || c == '\t' || c == '\r' || c == '\n';
+}
+
+static void http_tracer_transform_logs(FILE *outfp, const char *buf, size_t len)
+{
+    // ptlslog could write only a part of a JSON line, but won't retry to write the rest. In that case, this function does not parse
+    // a broken JSON line.
+
+    auto cur = buf;
+    auto end = buf + len;
+    while (cur != end) {
+        picojson::value ev;
+        std::string err;
+
+        cur = picojson::parse(ev, cur, end, &err);
+
+        if (err.empty()) {
+            if (ev.get("module") == picojson::value("h2o")) {
+                if (ev.get("type") == picojson::value("receive_request")) {
+                    fprintf(outfp, "%" PRIu64 " %" PRIu64 " RxProtocol HTTP/%" PRIu64 ".%" PRIu64 "\n",
+                            ev.get("conn_id").get<int64_t>(), ev.get("req_id").get<int64_t>(),
+                            ev.get("http_version").get<int64_t>() / 256, ev.get("http_version").get<int64_t>() % 256);
+                } else if (ev.get("type") == picojson::value("receive_request_header")) {
+                    if (ev.get("name").is<picojson::null>()) {
+                        infof("Error: no appdata is provided in the log (%s). Turns on it by `h2olog: appdata` in the h2o "
+                              "configuration file.",
+                              ev.serialize().c_str());
+                        exit(1);
+                    }
+
+                    fprintf(outfp, "%" PRIu64 " %" PRIu64 " RxHeader   %s %s\n", ev.get("conn_id").get<int64_t>(),
+                            ev.get("req_id").get<int64_t>(), ev.get("name").get<std::string>().c_str(),
+                            ev.get("value").get<std::string>().c_str());
+                } else if (ev.get("type") == picojson::value("send_response")) {
+                    fprintf(outfp, "%" PRIu64 " %" PRIu64 " TxStatus   %" PRIu64 "\n", ev.get("conn_id").get<int64_t>(),
+                            ev.get("req_id").get<int64_t>(), ev.get("status").get<int64_t>());
+                } else if (ev.get("type") == picojson::value("send_response_header")) {
+                    fprintf(outfp, "%" PRIu64 " %" PRIu64 " TxHeader   %s %s\n", ev.get("conn_id").get<int64_t>(),
+                            ev.get("req_id").get<int64_t>(), ev.get("name").get<std::string>().c_str(),
+                            ev.get("value").get<std::string>().c_str());
+                }
+            }
+        } else {
+            infof("Warn: failed to parse JSON: %s", err.c_str());
+        }
+
+        while (is_json_whitespace(*cur))
+            cur++;
+    }
+}
+
+static void do_write(FILE *outfp, const char *buf, size_t len, bool trace_http)
+{
+    if (trace_http) {
+        http_tracer_transform_logs(outfp, buf, len);
+    } else {
+        fwrite(buf, 1, len, outfp);
+    }
+}
+
+static int read_from_unix_socket(const char *unix_socket_path, FILE *outfp, bool debug, bool preserve_root, bool trace_http)
 {
     struct sockaddr_un sa = {
         .sun_family = AF_UNIX,
@@ -288,7 +353,9 @@ static int read_from_unix_socket(const char *unix_socket_path, FILE *outfp, bool
         drop_root_privilege();
 
     {
-        std::string req = "GET " H2O_LOG_ENDPOINT " HTTP/1.0\r\n\r\n";
+        std::string req = "GET " H2O_LOG_ENDPOINT " HTTP/1.0\r\n"
+                          "h2olog: 1\r\n"
+                          "\r\n\r\n";
         (void)write(fd, req.c_str(), req.size());
     }
 
@@ -314,12 +381,15 @@ static int read_from_unix_socket(const char *unix_socket_path, FILE *outfp, bool
                     size_t headers_done_at;
                     if (((headers_done_at = h2o_strstr(buf, ret, h_sep.base, h_sep.len)) != SIZE_MAX)) {
                         headers_done = true;
-                        (void)fwrite(buf + headers_done_at + h_sep.len, 1, ret - headers_done_at - h_sep.len, outfp);
+
+                        const char *content = buf + headers_done_at + h_sep.len;
+                        size_t len = ret - headers_done_at - h_sep.len;
+                        if (len > 0)
+                            do_write(outfp, content, len, trace_http);
                     }
                     continue;
                 }
-
-                (void)fwrite(buf, 1, ret, outfp);
+                do_write(outfp, buf, ret, trace_http);
             } else {
                 if (debug)
                     infof("Connection closed\n");
@@ -349,6 +419,7 @@ int main(int argc, char **argv)
     bool preserve_root = false;
     bool list_usdts = false;
     bool include_appdata = false;
+    bool trace_http = false;
     FILE *outfp = stdout;
     std::vector<std::string> response_header_filters;
     int c;
@@ -360,7 +431,7 @@ int main(int argc, char **argv)
     while ((c = getopt(argc, argv, "hHdrlap:t:s:w:S:A:N:f:u:")) != -1) {
         switch (c) {
         case 'H':
-            tracer.reset(create_http_tracer());
+            trace_http = true;
             break;
         case 'p':
             h2o_pid = atoi(optarg);
@@ -464,7 +535,7 @@ int main(int argc, char **argv)
 
     if (unix_socket_path != NULL) {
         // TODO: the path might not be "/"
-        return read_from_unix_socket(unix_socket_path, outfp, debug, preserve_root);
+        return read_from_unix_socket(unix_socket_path, outfp, debug, preserve_root, trace_http);
     }
 
     if (list_usdts) {
@@ -484,6 +555,9 @@ int main(int argc, char **argv)
         fprintf(stderr, "Error: root privilege is required\n");
         exit(EXIT_FAILURE);
     }
+
+    if (trace_http)
+        tracer.reset(create_http_tracer());
 
     tracer->init(outfp, include_appdata);
 
