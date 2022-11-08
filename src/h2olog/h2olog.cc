@@ -50,34 +50,30 @@ extern "C" {
 static void usage(void)
 {
     printf(R"(h2olog (h2o v%s)
-Usage: h2olog -p PID
+Usage: h2olog -u <h2olog-socket-path>
+       where <h2olog-socket-path> is specified in the h2o configuration file.
+
 Optional arguments:
   -d                Print debugging information (-dd shows more).
   -h                Print this help and exit.
-  -l                Print the list of available tracepoints and exit.
   -H                Trace HTTP requests and responses in varnishlog-like format.
   -s <header-name>  A response header name to show, e.g. "content-type".
   -t <tracepoint>   A tracepoint, or fully-qualified probe name to trace. Glob
                     patterns can be used; e.g., "quicly:accept", "h2o:*".
-  -S <rate>         Enable random sampling per connection (0.0-1.0). Requires
-                    use of `usdt-selective-tracing`.
+  -S <rate>         Enable random sampling per connection in 0 < N <= UINT32_MAX.
   -A <ip-address>   Limit connections being traced to those coming from the
-                    specified address. Requries use of `usdt-selective-tracing`.
+                    specified address. <ip-address> can have a netmask.
   -N <server-name>  Limit connections being traced to those carrying the
-                    specified name in the TLS SNI extension. Requires use of
-                    `usdt-selective-tracing: ON`.
+                    specified name in the TLS SNI extension.
   -a                Include application data which are omitted by default.
   -r                Run without dropping root privilege.
   -w <path>         Path to write the output (default: stdout).
-  -f <flag>         Turn on a BCC debug flag (supported flag: DEBUG_LLVM_IR,
-                    DEBUG_BPF, DEBUG_PREPROCESSOR, DEBUG_SOURCE,
-                    DEBUG_BPF_REGISTER_STATE, DEBUG_BTF)
   -u <unix-socket>  Path to the unix socket to connect to. Experimental.
 
 Examples:
-  h2olog -p $(pgrep -o h2o) -H
-  h2olog -p $(pgrep -o h2o) -t quicly:accept -t quicly:free
-  h2olog -p $(pgrep -o h2o) -t h2o:send_response_header -t h2o:h3s_accept \
+  h2olog -u $H2OLOG_SOCK -H
+  h2olog -u $H2OLOG_SOCK -t quicly:accept -t quicly:free
+  h2olog -u $H2OLOG_SOCK -t h2o:send_response_header -t h2o:h3s_accept \
          -t h2o:h3s_destroy -s alt-svc
 )",
            H2O_VERSION);
@@ -325,7 +321,15 @@ static void do_write(FILE *outfp, const char *buf, size_t len, bool trace_http)
     }
 }
 
-static int read_from_unix_socket(const char *unix_socket_path, FILE *outfp, bool debug, bool preserve_root, bool trace_http)
+struct sampling_address_t {
+    std::string input;
+    std::vector<uint8_t> address;
+    unsigned netmask;
+};
+
+static int read_from_unix_socket(const char *unix_socket_path, FILE *outfp, bool debug, bool preserve_root, bool trace_http,
+                                 uint32_t sampling_rate, std::vector<sampling_address_t> sampling_addresses,
+                                 std::vector<std::string> sampling_snis)
 {
     struct sockaddr_un sa = {
         .sun_family = AF_UNIX,
@@ -353,9 +357,33 @@ static int read_from_unix_socket(const char *unix_socket_path, FILE *outfp, bool
         drop_root_privilege();
 
     {
-        std::string req = "GET " H2O_LOG_ENDPOINT " HTTP/1.0\r\n"
-                          "h2olog: 1\r\n"
-                          "\r\n\r\n";
+
+        std::string req = "GET " H2O_LOG_ENDPOINT "?";
+
+        if (sampling_rate != 0)
+            req += "sampling_rate=" + std::to_string(sampling_rate);
+
+        if (!sampling_addresses.empty()) {
+            for (const auto &item : sampling_addresses) {
+                if (req[req.size() - 1] != '?')
+                    req += "&";
+
+                req += "sampling_address=" + item.input;
+            }
+        }
+
+        if (!sampling_snis.empty()) {
+            for (const auto &item : sampling_snis) {
+                if (req[req.size() - 1] != '?')
+                    req += "&";
+
+                req += "sampling_sni=" + item;
+            }
+        }
+
+        req += " HTTP/1.0\r\n"
+               "h2olog: 1\r\n"
+               "\r\n";
         (void)write(fd, req.c_str(), req.size());
     }
 
@@ -424,8 +452,8 @@ int main(int argc, char **argv)
     std::vector<std::string> response_header_filters;
     int c;
     pid_t h2o_pid = -1;
-    double sampling_rate = 1.0;
-    std::vector<std::pair<std::vector<uint8_t> /* address */, unsigned /* netmask */>> sampling_addresses;
+    uint32_t sampling_rate = 0; // e.g. 1 for no-sampling, 100 for 1/100.
+    std::vector<sampling_address_t> sampling_addresses;
     std::vector<std::string> sampling_snis;
     const char *unix_socket_path = NULL; // h2olog.path in h2o conf file
     while ((c = getopt(argc, argv, "hHdrlap:t:s:w:S:A:N:f:u:")) != -1) {
@@ -435,6 +463,7 @@ int main(int argc, char **argv)
             break;
         case 'p':
             h2o_pid = atoi(optarg);
+            fprintf(stderr, "-p <pid> is obsolete. Use -u <socket-path> instead.\n");
             break;
         case 't': {
             std::string err = tracer->select_usdts(optarg);
@@ -453,30 +482,41 @@ int main(int argc, char **argv)
                 exit(EXIT_FAILURE);
             }
             break;
-        case 'S': // can take 0.0 ... 1.0
-            sampling_rate = atof(optarg);
-            if (!(sampling_rate >= 0.0 && sampling_rate <= 1.0)) {
-                fprintf(stderr, "Error: the argument of -S must be in the range of 0.0 to 1.0\n");
+        case 'S': { // positive integer
+            char *end;
+            unsigned long v = strtoul(optarg, &end, 10);
+            if ((optarg + strlen(optarg) != end) && !(0 < v && v <= UINT32_MAX)) {
+                fprintf(stderr, "Error: the argument of -S must be a positive integer in the range of 0 < N <= UINT32_MAX\n");
                 exit(EXIT_FAILURE);
             }
+            sampling_rate = static_cast<uint32_t>(v);
             break;
-        case 'A': {
+        }
+        case 'A': { // IPv4 or IPv6 with an optional netmask
             const char *slash = std::find(optarg, optarg + strlen(optarg), '/');
             std::string addr(optarg, slash - optarg);
             in_addr v4;
             in6_addr v6;
             if (inet_pton(AF_INET, addr.c_str(), (sockaddr *)&v4) == 1) {
                 const uint8_t *src = reinterpret_cast<const uint8_t *>(&v4);
-                sampling_addresses.emplace_back(std::vector<uint8_t>(src, src + 4), 32);
+                sampling_addresses.emplace_back((sampling_address_t){
+                    .input = optarg,
+                    .address = std::vector<uint8_t>(src, src + 4),
+                    .netmask = 32,
+                });
             } else if (inet_pton(AF_INET6, addr.c_str(), (sockaddr *)&v6) == 1) {
                 const uint8_t *src = reinterpret_cast<const uint8_t *>(&v6);
-                sampling_addresses.emplace_back(std::vector<uint8_t>(src, src + 16), 128);
+                sampling_addresses.emplace_back((sampling_address_t){
+                    .input = optarg,
+                    .address = std::vector<uint8_t>(src, src + 16),
+                    .netmask = 128,
+                });
             } else {
                 fprintf(stderr, "Error: invalid address supplied to -A: %s\n", optarg);
                 exit(EXIT_FAILURE);
             }
             if (*slash != '\0') {
-                if (sscanf(slash + 1, "%u", &sampling_addresses.back().second) != 1) {
+                if (sscanf(slash + 1, "%u", &sampling_addresses.back().netmask) != 1) {
                     fprintf(stderr, "Error: invalid address mask supplied to -A: %s\n", optarg);
                     exit(EXIT_FAILURE);
                 }
@@ -487,6 +527,7 @@ int main(int argc, char **argv)
             break;
         case 'a':
             include_appdata = true;
+            fprintf(stderr, "-a is not yet implemented. Set `h2olog: appdata` in the h2o config file instead.\n");
             break;
         case 'd':
             debug++;
@@ -535,7 +576,8 @@ int main(int argc, char **argv)
 
     if (unix_socket_path != NULL) {
         // TODO: the path might not be "/"
-        return read_from_unix_socket(unix_socket_path, outfp, debug, preserve_root, trace_http);
+        return read_from_unix_socket(unix_socket_path, outfp, debug, preserve_root, trace_http, sampling_rate, sampling_addresses,
+                                     sampling_snis);
     }
 
     if (list_usdts) {
@@ -584,10 +626,8 @@ int main(int argc, char **argv)
     std::vector<ebpf::USDT> probes;
 
     bool selective_tracing = false;
-    if (sampling_rate < 1.0) {
-        /* eBPF bytecode cannot handle floating point numbers see man bpf(2). We use uint32_t which maps to 0 <= value < 1. */
-        cflags.push_back(
-            build_cc_macro_expr("H2OLOG_SAMPLING_RATE_U32", static_cast<uint32_t>(sampling_rate * (UINT64_C(1) << 32))));
+    if (sampling_rate != 0) {
+        cflags.push_back(build_cc_macro_expr("H2OLOG_SAMPLING_RATE_U32", sampling_rate));
         selective_tracing = true;
     }
     if (!sampling_addresses.empty()) {
@@ -596,21 +636,21 @@ int main(int argc, char **argv)
             if (!expr.empty())
                 expr += " || ";
             expr += "((family) == ";
-            expr += addrmask.first.size() == 4 ? '4' : '6';
+            expr += addrmask.address.size() == 4 ? '4' : '6';
             size_t off;
-            for (off = 0; off < addrmask.second / 8 * 8; off += 8) {
+            for (off = 0; off < addrmask.netmask / 8 * 8; off += 8) {
                 expr += " && (addr)[";
                 expr += std::to_string(off / 8);
                 expr += "] == ";
-                expr += std::to_string(addrmask.first[off / 8]);
+                expr += std::to_string(addrmask.address[off / 8]);
             }
-            if (addrmask.second % 8 != 0) {
+            if (addrmask.netmask % 8 != 0) {
                 expr += " && ((addr)[";
                 expr += std::to_string(off / 8);
                 expr += "] & ";
-                expr += std::to_string((uint8_t)(0xff << (8 - addrmask.second % 8)));
+                expr += std::to_string((uint8_t)(0xff << (8 - addrmask.netmask % 8)));
                 expr += ") == ";
-                expr += std::to_string(addrmask.first[off / 8]);
+                expr += std::to_string(addrmask.address[off / 8]);
             }
             expr += ')';
         }

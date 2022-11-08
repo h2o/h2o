@@ -425,6 +425,8 @@ static void on_sni_update_tracing(void *conn, int is_quic, const char *server_na
 
     uint64_t flags = cur_skip_tracing ? H2O_EBPF_FLAGS_SKIP_TRACING_BIT : 0;
     flags = h2o_socket_ebpf_lookup_flags_sni(conf.threads[thread_index].ctx.loop, flags, server_name, server_name_len);
+    if (h2o_log_skip_tracing_sni(server_name, server_name_len))
+        flags |= H2O_EBPF_FLAGS_SKIP_TRACING_BIT;
 
     int new_skip_tracing = (flags & H2O_EBPF_FLAGS_SKIP_TRACING_BIT) != 0;
 
@@ -3122,6 +3124,8 @@ static h2o_quic_conn_t *on_http3_accept(h2o_quic_ctx_t *_ctx, quicly_address_t *
         .remote = &srcaddr->sa,
     };
     uint64_t flags = h2o_socket_ebpf_lookup_flags(ctx->super.loop, init_ebpf_key, &ebpf_key_info);
+    if (h2o_log_skip_tracing(&destaddr->sa, &srcaddr->sa))
+        flags |= H2O_EBPF_FLAGS_SKIP_TRACING_BIT;
 
     quicly_address_token_plaintext_t *token = NULL, token_buf;
     h2o_http3_conn_t *conn = NULL;

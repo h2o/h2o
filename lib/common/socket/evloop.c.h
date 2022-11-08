@@ -698,24 +698,12 @@ h2o_socket_t *h2o_evloop_socket_accept(h2o_socket_t *_listener)
     struct st_h2o_evloop_socket_t *listener = (struct st_h2o_evloop_socket_t *)_listener;
     int fd;
     h2o_socket_t *sock;
-
-    /* cache the remote address, if we know that we are going to use the value (in h2o_socket_ebpf_lookup_flags) */
-#if H2O_USE_EBPF_MAP
-    struct {
-        struct sockaddr_storage storage;
-        socklen_t len;
-    } _peeraddr;
-    _peeraddr.len = sizeof(_peeraddr.storage);
-    struct sockaddr_storage *peeraddr = &_peeraddr.storage;
-    socklen_t *peeraddrlen = &_peeraddr.len;
-#else
-    struct sockaddr_storage *peeraddr = NULL;
-    socklen_t *peeraddrlen = NULL;
-#endif
+    struct sockaddr_storage peeraddr;
+    socklen_t peeraddrlen;
 
 #if H2O_USE_ACCEPT4
     /* the anticipation here is that a socket returned by `accept4` will inherit the TCP_NODELAY flag from the listening socket */
-    if ((fd = accept4(listener->fd, (struct sockaddr *)peeraddr, peeraddrlen, SOCK_NONBLOCK | SOCK_CLOEXEC)) == -1)
+    if ((fd = accept4(listener->fd, (struct sockaddr *)&peeraddr, &peeraddrlen, SOCK_NONBLOCK | SOCK_CLOEXEC)) == -1)
         return NULL;
     sock = &create_socket(listener->loop, fd, H2O_SOCKET_FLAG_IS_ACCEPTED_CONNECTION)->super;
 #else
@@ -724,11 +712,18 @@ h2o_socket_t *h2o_evloop_socket_accept(h2o_socket_t *_listener)
     fcntl(fd, F_SETFL, O_NONBLOCK);
     sock = &create_socket(listener->loop, fd, H2O_SOCKET_FLAG_IS_ACCEPTED_CONNECTION)->super;
 #endif
-    set_nodelay_if_likely_tcp(fd, (struct sockaddr *)peeraddr);
+    set_nodelay_if_likely_tcp(fd, (struct sockaddr *)&peeraddr);
 
-    if (peeraddr != NULL && *peeraddrlen <= sizeof(*peeraddr))
-        h2o_socket_setpeername(sock, (struct sockaddr *)peeraddr, *peeraddrlen);
+    h2o_socket_setpeername(sock, (struct sockaddr *)&peeraddr, peeraddrlen);
+
     uint64_t flags = h2o_socket_ebpf_lookup_flags(listener->loop, h2o_socket_ebpf_init_key, sock);
+    {
+        struct sockaddr_storage localaddr;
+        if (h2o_socket_getsockname(sock, (struct sockaddr *)&localaddr) != 0) {
+            if (h2o_log_skip_tracing((struct sockaddr *)&localaddr, (struct sockaddr *)&peeraddr))
+                flags |= H2O_EBPF_FLAGS_SKIP_TRACING_BIT;
+        }
+    }
     if ((flags & H2O_EBPF_FLAGS_SKIP_TRACING_BIT) != 0)
         sock->_skip_tracing = 1;
     return sock;
