@@ -49,6 +49,18 @@ typedef struct st_neverbleed_t {
     unsigned char auth_token[NEVERBLEED_AUTH_TOKEN_SIZE];
 } neverbleed_t;
 
+struct expbuf_t {
+    char *buf;
+    char *start;
+    char *end;
+    size_t capacity;
+
+    int is_async;
+    int efd_write;
+    int efd_read;
+    void *data;
+};
+
 /**
  * initializes the privilege separation engine (returns 0 if successful)
  */
@@ -74,13 +86,18 @@ int neverbleed_setaffinity(neverbleed_t *nb, NEVERBLEED_CPU_SET_T *cpuset);
  * spawned
  */
 extern void (*neverbleed_post_fork_cb)(void);
+extern void (*neverbleed_read_cb)(struct expbuf_t *);
+extern void (*neverbleed_write_cb)(struct expbuf_t *);
 
 typedef void (*neverbleed_cb)(int);
 
 int neverbleed_get_fd(neverbleed_t *nb);
-void neverbleed_register(neverbleed_t *nb, neverbleed_cb write_cb, neverbleed_cb read_cb);
-size_t neverbleed_read(neverbleed_t *nb, char *buffer, size_t size);
-void neverbleed_get_transaction(neverbleed_t *nb, size_t *size, char **data);
+void neverbleed_set_buffer_data(neverbleed_t *nb, void *data);
+size_t neverbleed_buffer_size(struct expbuf_t *buf);
+void neverbleed_read_transaction(neverbleed_t *nb, struct expbuf_t *buf);
+void neverbleed_write_transaction(neverbleed_t *nb, struct expbuf_t *buf);
+void neverbleed_on_read_complete(struct expbuf_t *buf);
+void neverbleed_on_write_complete(struct expbuf_t *buf);
 
 #ifdef __cplusplus
 }
