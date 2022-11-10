@@ -699,7 +699,7 @@ h2o_socket_t *h2o_evloop_socket_accept(h2o_socket_t *_listener)
     int fd;
     h2o_socket_t *sock;
     struct sockaddr_storage peeraddr;
-    socklen_t peeraddrlen;
+    socklen_t peeraddrlen = sizeof(peeraddr);
 
 #if H2O_USE_ACCEPT4
     /* the anticipation here is that a socket returned by `accept4` will inherit the TCP_NODELAY flag from the listening socket */
