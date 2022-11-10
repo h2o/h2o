@@ -117,7 +117,8 @@ subtest "lost messages", sub {
 h2olog:
   path: $h2olog_socket
   permission: 666
-  sndbuf: 512
+  # Set the min value (it's doubled. See socket(7)) to trigger the event lost
+  sndbuf: 1024
 listen:
   type: quic
   port: $quic_port
