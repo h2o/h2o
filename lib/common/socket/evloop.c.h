@@ -714,8 +714,8 @@ h2o_socket_t *h2o_evloop_socket_accept(h2o_socket_t *_listener)
 #endif
     set_nodelay_if_likely_tcp(fd, (struct sockaddr *)&peeraddr);
 
-    h2o_socket_setpeername(sock, (struct sockaddr *)&peeraddr, peeraddrlen);
-
+    if (peeraddrlen <= sizeof(peeraddr))
+        h2o_socket_setpeername(sock, (struct sockaddr *)&peeraddr, peeraddrlen);
     uint64_t flags = h2o_socket_ebpf_lookup_flags(listener->loop, h2o_socket_ebpf_init_key, sock);
     {
         struct sockaddr_storage localaddr;
