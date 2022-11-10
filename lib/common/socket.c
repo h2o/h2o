@@ -641,8 +641,8 @@ void h2o_socket_close(h2o_socket_t *sock)
         dispose_socket(sock, 0);
     } else {
 #if PTLS_OPENSSL_HAVE_ASYNC
-    if (sock->async.state == H2O_SOCKET_ASYNC_STATE_PENDING) {
-        sock->async.state = H2O_SOCKET_ASYNC_STATE_SHUTDOWN;
+    if (sock->async.is_pending) {
+        sock->async.is_closed = 1;
         return;
     }
 #endif
@@ -917,19 +917,13 @@ size_t flatten_sendvec(h2o_socket_t *sock, h2o_sendvec_t *sendvec)
     return len;
 }
 
-const char *h2o_socket_read(h2o_socket_t *_sock)
+void h2o_socket_write(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_socket_cb cb)
 {
-#if H2O_USE_LIBUV
-    do_read_start(_sock);
-    return NULL;
-#else
-    struct st_h2o_evloop_socket_t *sock = (struct st_h2o_evloop_socket_t *)_sock;
-    return do_read(sock);
-#endif
-}
+    SOCKET_PROBE(WRITE, sock, bufs, bufcnt, cb);
 
-void h2o_socket_append(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt)
-{
+    assert(sock->_cb.write == NULL);
+    sock->_cb.write = cb;
+
     for (size_t i = 0; i != bufcnt; ++i) {
         sock->bytes_written += bufs[i].len;
 #if H2O_SOCKET_DUMP_WRITE
@@ -939,29 +933,6 @@ void h2o_socket_append(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt)
     }
 
     do_write(sock, bufs, bufcnt);
-}
-
-void h2o_socket_write(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_socket_cb cb)
-{
-    SOCKET_PROBE(WRITE, sock, bufs, bufcnt, cb);
-
-    assert(sock->_cb.write == NULL);
-    sock->_cb.write = cb;
-
-    h2o_socket_append(sock, bufs, bufcnt);
-}
-
-void h2o_socket_flush(h2o_socket_t *_sock)
-{
-    if (h2o_socket_is_writing(_sock)) {
-#if H2O_USE_LIBUV
-        h2o_iovec_t buf = h2o_iovec_init(_sock->_write_buf.bufs->base, _sock->_write_buf.bufs->len);
-        do_write(_sock, &buf, 1);
-#else
-        struct st_h2o_evloop_socket_t *sock = (struct st_h2o_evloop_socket_t *)_sock;
-        write_pending(sock);
-#endif
-    }
 }
 
 void h2o_socket_sendvec(h2o_socket_t *sock, h2o_sendvec_t *vecs, size_t cnt, h2o_socket_cb cb)
@@ -1018,6 +989,7 @@ void on_write_complete(h2o_socket_t *sock, const char *err)
 
     cb = sock->_cb.write;
     sock->_cb.write = NULL;
+    assert(cb != NULL);
     cb(sock, err);
 }
 
@@ -1535,7 +1507,8 @@ Exit:
 static void on_handshake_complete(h2o_socket_t *sock, const char *err)
 {
 #if PTLS_OPENSSL_HAVE_ASYNC
-    if (sock->async.state == H2O_SOCKET_ASYNC_STATE_SHUTDOWN) {
+    assert(!sock->async.is_pending);
+    if (sock->async.is_closed) {
         shutdown_ssl(sock, NULL);
         return;
     }
@@ -1594,6 +1567,7 @@ static void on_handshake_complete(h2o_socket_t *sock, const char *err)
     sock->ssl->handshake.cb = NULL;
     if (err == NULL)
         err = decode_ssl_input(sock);
+    assert(handshake_cb != NULL);
     handshake_cb(sock, err);
 }
 
@@ -1627,10 +1601,8 @@ static void ptls_free_async(void *data)
 static void proceed_handshake_async(void *data)
 {
     h2o_socket_t *sock = data;
-    if (sock->async.state == H2O_SOCKET_ASYNC_STATE_PENDING) {
-        // reset async
-        sock->async.state = H2O_SOCKET_ASYNC_STATE_NONE;
-    }
+    assert(sock->async.is_pending);
+    sock->async.is_pending = 0;
 
     proceed_handshake(sock, NULL);
 }
@@ -1645,6 +1617,7 @@ static void _async_cb_proxy(h2o_socket_t *listener, const char *err)
 
     async_cb cb = async_ctx->async.cb;
     void *cb_data = async_ctx->async.data;
+    assert(cb != NULL);
     cb(cb_data);
 
 Close:
@@ -1665,7 +1638,7 @@ static void _do_generic_async(h2o_loop_t *loop, int fd, async_cb async_cb, void 
 #if H2O_USE_LIBUV
     h2o_socket_t *async_sock = h2o_uv__poll_create(loop, async_fd, (uv_close_cb)free);
 #else
-    h2o_socket_t *async_sock = h2o_evloop_socket_create(loop, async_fd, H2O_SOCKET_FLAG_DONT_READ | H2O_SOCKET_FLAG_DONT_NONBLOCK);
+    h2o_socket_t *async_sock = h2o_evloop_socket_create(loop, async_fd, H2O_SOCKET_FLAG_DONT_READ);
 #endif
 
     struct async_ctx *async_ctx = h2o_mem_alloc(sizeof(struct async_ctx));
@@ -1700,14 +1673,15 @@ static void do_openssl_async(h2o_loop_t *loop, SSL *ossl, async_cb async_cb, voi
 }
 static void do_proceed_handshake_async(h2o_socket_t *sock)
 {
-    assert(sock->async.state == H2O_SOCKET_ASYNC_STATE_NONE);
-    sock->async.state = H2O_SOCKET_ASYNC_STATE_PENDING;
+    assert(!sock->async.is_pending);
+    sock->async.is_pending = 1;
     if (sock->ssl->ptls != NULL) {
         do_picotls_async(h2o_socket_get_loop(sock), sock->ssl->ptls, proceed_handshake_async, sock);
     } else {
         assert(sock->ssl->ossl != NULL);
         do_openssl_async(h2o_socket_get_loop(sock), sock->ssl->ossl, proceed_handshake_async, sock);
     }
+    h2o_socket_read_stop(sock);
 }
 #endif
 
@@ -1961,7 +1935,7 @@ static void proceed_handshake(h2o_socket_t *sock, const char *err)
 
 #if PTLS_OPENSSL_HAVE_ASYNC
     // waiting on async operation
-    if (sock->async.state == H2O_SOCKET_ASYNC_STATE_PENDING)
+    if (sock->async.is_pending)
         return;
 #endif
 

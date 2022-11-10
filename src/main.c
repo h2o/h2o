@@ -338,6 +338,14 @@ static __thread size_t thread_index;
 
 static neverbleed_t *neverbleed = NULL;
 
+static __thread struct {
+    h2o_socket_t *sock;
+    h2o_linklist_t write_queue;
+    size_t write_queue_len;
+    h2o_linklist_t read_queue;
+    size_t read_queue_len;
+} neverbleed_conf = { NULL };
+
 #if H2O_USE_FUSION
 static ptls_cipher_suite_t
     tls13_non_temporal_aes128gcmsha256 = {.id = PTLS_CIPHER_SUITE_AES_128_GCM_SHA256,
@@ -392,75 +400,139 @@ static void on_neverbleed_fork(void)
 #endif
 }
 
+struct nb_buf {
+    struct expbuf_t *buf;
+    size_t write_size;
+    h2o_linklist_t link;
+};
+
+static void nb_submit_write_pending();
+
+static void nb_on_write_complete(h2o_socket_t *sock, const char *err)
+{
+    struct nb_buf *nb_buf = H2O_STRUCT_FROM_MEMBER(struct nb_buf, link, neverbleed_conf.write_queue.next);
+
+    // transition to read queue
+    h2o_linklist_unlink(&nb_buf->link);
+    neverbleed_conf.write_queue_len--;
+    h2o_linklist_insert(&neverbleed_conf.read_queue, &nb_buf->link);
+    neverbleed_conf.read_queue_len++;
+
+    nb_submit_write_pending(sock);
+}
+
+static void nb_submit_write_pending(h2o_socket_t *sock)
+{
+    if (!h2o_socket_is_writing(sock) && !h2o_linklist_is_empty(&neverbleed_conf.write_queue)) {
+        // write a buf
+        struct nb_buf *nb_buf = H2O_STRUCT_FROM_MEMBER(struct nb_buf, link, neverbleed_conf.write_queue.next);
+        h2o_iovec_t bufs[2];
+        nb_buf->write_size = neverbleed_buffer_size(nb_buf->buf);
+        bufs[0] = h2o_iovec_init(&nb_buf->write_size, sizeof(nb_buf->write_size));
+        bufs[1] = h2o_iovec_init(nb_buf->buf->start, nb_buf->write_size);
+        h2o_socket_write(sock, bufs, 2, nb_on_write_complete);
+
+        neverbleed_on_write_complete(nb_buf->buf);
+    }
+}
+
+static void nb_write_sync_transaction(struct expbuf_t *buf)
+{
+    int fd = neverbleed_get_fd(neverbleed);
+    int flags = fcntl(fd, F_GETFL, 0);
+
+    // set fd to blocking for synchronous I/O
+    if (fcntl(fd, F_SETFL, flags & ~O_NONBLOCK) == -1) {
+        perror("fcntl");
+        abort();
+    }
+
+    neverbleed_write_transaction(neverbleed, buf);
+
+    // set fd back to original
+    if (fcntl(fd, F_SETFL, flags) == -1) {
+        perror("fcntl");
+        abort();
+    }
+}
+
+static void nb_read_sync_transaction(struct expbuf_t *buf)
+{
+    int fd = neverbleed_get_fd(neverbleed);
+    int flags = fcntl(fd, F_GETFL, 0);
+
+    // set fd to blocking for synchronous I/O
+    if (fcntl(fd, F_SETFL, flags & ~O_NONBLOCK) == -1) {
+        perror("fcntl");
+        abort();
+    }
+
+    neverbleed_read_transaction(neverbleed, buf);
+
+    // set fd back to original
+    if (fcntl(fd, F_SETFL, flags) == -1) {
+        perror("fcntl");
+        abort();
+    }
+}
+
 static void nb_read_ready(h2o_socket_t *sock, const char *err)
 {
-    size_t read;
-    while ((read = neverbleed_read(neverbleed, sock->input->bytes, sock->input->size)) != 0) {
-        h2o_buffer_consume(&sock->input, read);
+    struct nb_buf *nb_buf = H2O_STRUCT_FROM_MEMBER(struct nb_buf, link, neverbleed_conf.read_queue.next);
+
+    nb_read_sync_transaction(nb_buf->buf);
+    neverbleed_on_read_complete(nb_buf->buf);
+
+    h2o_linklist_unlink(&nb_buf->link);
+    neverbleed_conf.read_queue_len--;
+    free(nb_buf);
+
+    if (h2o_linklist_is_empty(&neverbleed_conf.read_queue)) {
+        h2o_socket_read_stop(sock);
     }
 }
 
-static void nb_write_ready(h2o_socket_t *sock, const char *err);
-
-static void nb_write_complete(h2o_socket_t *sock, const char *err)
+static void on_neverbleed_read(struct expbuf_t *buf)
 {
-    h2o_socket_notify_write(conf.threads[thread_index].ctx.neverbleed.sock, nb_write_ready);
-}
-
-static int nb_transaction_write(h2o_socket_t *sock, h2o_socket_cb cb)
-{
-    int ret = 0;
-    size_t size = 0;
-    char *data = NULL;
-    neverbleed_get_transaction(neverbleed, &size, &data);
-
-    // we got something to write
-    if (size > 0 && data != NULL) {
-        h2o_iovec_t bufs[2];
-        bufs[0] = h2o_iovec_init(&size, sizeof(size));
-        bufs[1] = h2o_iovec_init(data, size);
-
-        if (!h2o_socket_is_writing(sock)) {
-            h2o_socket_write(sock, bufs, 2, cb);
-        } else {
-            h2o_socket_append(sock, bufs, 2);
-        }
-        ret = 1;
-    }
-
-    return ret;
-}
-
-static void nb_write_ready(h2o_socket_t *sock, const char *err)
-{
-    nb_transaction_write(sock, nb_write_complete);
-}
-
-static void nb_write_sync_complete(h2o_socket_t *sock, const char *err)
-{
-    h2o_socket_notify_write(conf.threads[thread_index].ctx.neverbleed.sock, nb_write_ready);
-}
-
-static void on_neverbleed_write(int is_async)
-{
-    h2o_socket_t *sock = conf.threads[thread_index].ctx.neverbleed.sock;
-    if (is_async) {
-        if (!h2o_socket_is_writing(sock)) {
-            h2o_socket_notify_write(sock, nb_write_ready);
+    h2o_socket_t *sock = buf->data;
+    if (sock != NULL && buf->is_async) {
+        if (!h2o_socket_is_reading(sock)) {
+            h2o_socket_read_start(sock, nb_read_ready);
         }
     } else {
-        nb_transaction_write(sock, nb_write_sync_complete);
-        h2o_socket_flush(sock);
+        // read synchronous
+        nb_read_sync_transaction(buf);
+        neverbleed_on_read_complete(buf);
     }
 }
 
-static void on_neverbleed_read(int is_async)
+static void on_neverbleed_write(struct expbuf_t *buf)
 {
-    // this should only get called in the synchronous case as we register the fd in the evloop
-    assert(is_async == 0);
-    h2o_socket_t *sock = conf.threads[thread_index].ctx.neverbleed.sock;
-    h2o_socket_read(sock);
-    nb_read_ready(sock, NULL);
+    h2o_socket_t *sock = buf->data;
+    if (sock != NULL) {
+        if (buf->is_async) {
+            struct nb_buf *nb_buf = h2o_mem_alloc(sizeof(*nb_buf));
+            memset(nb_buf, 0, sizeof(*nb_buf));
+            nb_buf->buf = buf;
+            assert(h2o_socket_get_fd(sock) == neverbleed_get_fd(neverbleed));
+            h2o_linklist_insert(&neverbleed_conf.write_queue, &nb_buf->link);
+            neverbleed_conf.write_queue_len++;
+            nb_submit_write_pending(sock);
+        } else {
+            // read all pending before writing
+            while (!h2o_linklist_is_empty(&neverbleed_conf.read_queue)) {
+                nb_read_ready(sock, NULL);
+            }
+
+            // write synchronous
+            nb_write_sync_transaction(buf);
+            neverbleed_on_write_complete(buf);
+        }
+    } else {
+        // write synchronous
+        nb_write_sync_transaction(buf);
+        neverbleed_on_write_complete(buf);
+    }
 }
 
 static int on_openssl_print_errors(const char *str, size_t len, void *fp)
@@ -1137,6 +1209,8 @@ static int load_ssl_identity(h2o_configurator_command_t *cmd, SSL_CTX *ssl_ctx, 
         char errbuf[NEVERBLEED_ERRBUF_SIZE];
         if (neverbleed == NULL) {
             neverbleed_post_fork_cb = on_neverbleed_fork;
+            neverbleed_read_cb = on_neverbleed_read;
+            neverbleed_write_cb = on_neverbleed_write;
             neverbleed = h2o_mem_alloc(sizeof(*neverbleed));
             if (neverbleed_init(neverbleed, errbuf) != 0) {
                 fprintf(stderr, "%s\n", errbuf);
@@ -3337,19 +3411,19 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
                                       on_server_notification);
     h2o_multithread_register_receiver(conf.threads[thread_index].ctx.queue, &conf.threads[thread_index].memcached,
                                       h2o_memcached_receiver);
-    if (neverbleed != NULL) {
-        int fd = neverbleed_get_fd(neverbleed);
-        neverbleed_register(neverbleed, on_neverbleed_write, on_neverbleed_read);
-
-#if H2O_USE_LIBUV
-        conf.threads[thread_index].ctx.neverbleed.sock =
-            h2o_uv__poll_create(conf.threads[thread_index].ctx.loop, fd, (uv_close_cb)free);
-#else
-        conf.threads[thread_index].ctx.neverbleed.sock = h2o_evloop_socket_create(conf.threads[thread_index].ctx.loop, fd, 0);
-#endif
-
-        h2o_socket_read_start(conf.threads[thread_index].ctx.neverbleed.sock, nb_read_ready);
-    }
+//     if (neverbleed != NULL) {
+//         int fd = neverbleed_get_fd(neverbleed);
+//         neverbleed_register(neverbleed, on_neverbleed_write, on_neverbleed_read);
+//
+// #if H2O_USE_LIBUV
+//         conf.threads[thread_index].ctx.neverbleed.sock =
+//             h2o_uv__poll_create(conf.threads[thread_index].ctx.loop, fd, (uv_close_cb)free);
+// #else
+//         conf.threads[thread_index].ctx.neverbleed.sock = h2o_evloop_socket_create(conf.threads[thread_index].ctx.loop, fd, 0);
+// #endif
+//
+//         h2o_socket_read_start(conf.threads[thread_index].ctx.neverbleed.sock, nb_read_ready);
+//     }
     if (conf.thread_map.entries[thread_index] >= 0) {
 #if H2O_HAS_PTHREAD_SETAFFINITY_NP
         int r;

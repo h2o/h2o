@@ -66,8 +66,7 @@ struct st_h2o_evloop_socket_t {
 
 static void link_to_pending(struct st_h2o_evloop_socket_t *sock);
 static void link_to_statechanged(struct st_h2o_evloop_socket_t *sock);
-void write_pending(struct st_h2o_evloop_socket_t *sock);
-const char *do_read(struct st_h2o_evloop_socket_t *sock);
+static void write_pending(struct st_h2o_evloop_socket_t *sock);
 static h2o_evloop_t *create_evloop(size_t sz);
 static void update_now(h2o_evloop_t *loop);
 static int32_t adjust_max_wait(h2o_evloop_t *loop, int32_t max_wait);
@@ -164,12 +163,6 @@ static const char *on_read_core(int fd, h2o_buffer_t **input, size_t max_bytes)
             break;
     }
     return NULL;
-}
-
-const char *do_read(struct st_h2o_evloop_socket_t *sock)
-{
-    return on_read_core(sock->fd, sock->super.ssl == NULL ? &sock->super.input : &sock->super.ssl->input.encrypted,
-                            sock->max_read_size);
 }
 
 static size_t write_vecs(struct st_h2o_evloop_socket_t *sock, h2o_iovec_t **bufs, size_t *bufcnt, int sendmsg_flags)
@@ -307,7 +300,7 @@ static int sendvec_core(struct st_h2o_evloop_socket_t *sock)
     return 1;
 }
 
-void write_pending(struct st_h2o_evloop_socket_t *sock)
+static void write_pending(struct st_h2o_evloop_socket_t *sock)
 {
     assert(sock->super._cb.write != NULL);
 
@@ -370,6 +363,7 @@ Notify:
      * can update their timeout counters when a partial SSL record arrives.
      */
     sock->super.bytes_read += sock->super.input->size - prev_size;
+    assert(sock->super._cb.read != NULL);
     sock->super._cb.read(&sock->super, err);
 }
 
@@ -377,22 +371,20 @@ void do_dispose_socket(h2o_socket_t *_sock)
 {
     struct st_h2o_evloop_socket_t *sock = (struct st_h2o_evloop_socket_t *)_sock;
 
-    sock->_flags = H2O_SOCKET_FLAG_IS_DISPOSED | (sock->_flags & H2O_SOCKET_FLAG__EPOLL_IS_REGISTERED);
-
     dispose_write_buf(&sock->super);
+
+    sock->_flags = H2O_SOCKET_FLAG_IS_DISPOSED | (sock->_flags & H2O_SOCKET_FLAG__EPOLL_IS_REGISTERED);
 
     /* Give backends chance to do the necessary cleanup, as well as giving them chance to switch to their own disposal method; e.g.,
      * shutdown(SHUT_RDWR) with delays to reclaim all zero copy buffers. */
-    if (evloop_do_on_socket_close(sock)) {
+    if (evloop_do_on_socket_close(sock))
         return;
-    }
 
     if (sock->fd != -1) {
         close(sock->fd);
         sock->fd = -1;
     }
 
-    /* immediate dispose */
     link_to_statechanged(sock);
 }
 
@@ -695,10 +687,8 @@ static void set_nodelay_if_likely_tcp(int fd, struct sockaddr *sa)
 
 h2o_socket_t *h2o_evloop_socket_create(h2o_evloop_t *loop, int fd, int flags)
 {
-    if ((flags & H2O_SOCKET_FLAG_DONT_NONBLOCK) == 0) {
-        /* It is the reponsibility of the event loop to modify the properties of a socket for its use (e.g., set O_NONBLOCK). */
-        fcntl(fd, F_SETFL, O_NONBLOCK);
-    }
+    /* It is the reponsibility of the event loop to modify the properties of a socket for its use (e.g., set O_NONBLOCK). */
+    fcntl(fd, F_SETFL, O_NONBLOCK);
     set_nodelay_if_likely_tcp(fd, NULL);
 
     return &create_socket(loop, fd, flags)->super;

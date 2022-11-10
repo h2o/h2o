@@ -166,13 +166,6 @@ struct st_h2o_sendvec_t {
     };
 };
 
-#if PTLS_OPENSSL_HAVE_ASYNC
-enum {
-    H2O_SOCKET_ASYNC_STATE_NONE = 0,
-    H2O_SOCKET_ASYNC_STATE_PENDING,
-    H2O_SOCKET_ASYNC_STATE_SHUTDOWN
-};
-#endif
 /**
  * abstraction layer for sockets (SSL vs. TCP)
  */
@@ -220,7 +213,8 @@ struct st_h2o_socket_t {
     struct st_h2o_socket_zerocopy_buffers_t *_zerocopy;
 #if PTLS_OPENSSL_HAVE_ASYNC
     struct {
-        uint8_t state; /* one of H2O_SOCKET_ASYNC_STATE_* */
+        int is_pending;
+        int is_closed;
         void *data;
     } async;
 #endif
@@ -330,8 +324,6 @@ static size_t h2o_socket_prepare_for_latency_optimized_write(h2o_socket_t *sock,
                                                              const h2o_socket_latency_optimization_conditions_t *conditions);
 size_t h2o_socket_do_prepare_for_latency_optimized_write(h2o_socket_t *sock,
                                                          const h2o_socket_latency_optimization_conditions_t *conditions);
-const char *h2o_socket_read(h2o_socket_t *sock);
-void h2o_socket_append(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt);
 /**
  * writes given data to socket
  * @param sock the socket
@@ -340,7 +332,6 @@ void h2o_socket_append(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt);
  * @param cb callback to be called when write is complete
  */
 void h2o_socket_write(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_socket_cb cb);
-void h2o_socket_flush(h2o_socket_t *sock);
 
 /**
  *
