@@ -714,10 +714,10 @@ h2o_socket_t *h2o_evloop_socket_accept(h2o_socket_t *_listener)
 #endif
     set_nodelay_if_likely_tcp(fd, (struct sockaddr *)&peeraddr);
 
-    if (peeraddrlen <= sizeof(peeraddr))
-        h2o_socket_setpeername(sock, (struct sockaddr *)&peeraddr, peeraddrlen);
     uint64_t flags = h2o_socket_ebpf_lookup_flags(listener->loop, h2o_socket_ebpf_init_key, sock);
-    {
+    if (peeraddrlen <= sizeof(peeraddr)) {
+        h2o_socket_setpeername(sock, (struct sockaddr *)&peeraddr, peeraddrlen);
+
         struct sockaddr_storage localaddr;
         if (h2o_socket_getsockname(sock, (struct sockaddr *)&localaddr) != 0) {
             if (h2o_log_skip_tracing((struct sockaddr *)&localaddr, (struct sockaddr *)&peeraddr))
