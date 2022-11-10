@@ -79,6 +79,7 @@ int h2o_file_pread_full(int fd, void *_buf, size_t nbyte, off_t off)
             return 0;
         buf += rret;
         nbyte -= rret;
+        off += rret;
     }
 
     return 1;
