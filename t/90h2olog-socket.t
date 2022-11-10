@@ -142,7 +142,8 @@ hosts:
     listen:
       - type: unix
         port: $h2olog_socket
-        sndbuf: 512
+        # Set the min value (it's doubled. See socket(7)) to trigger the event lost
+        sndbuf: 1024
     paths: {}
 EOT
 
