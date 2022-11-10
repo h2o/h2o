@@ -527,6 +527,16 @@ int h2o_socket_ebpf_init_key_raw(h2o_ebpf_map_key_t *key, int sock_type, struct 
  */
 int h2o_socket_ebpf_init_key(h2o_ebpf_map_key_t *key, void *sock);
 
+/**
+ * Returns true if the connection should skip h2olog tracing.
+ * Equivalent to h2o_socket_ebpf_lookup_flags() but configured in the h2olog handler (as part of h2olog v2).
+ */
+int h2o_log_skip_tracing(const struct sockaddr *local, const struct sockaddr *remote);
+/**
+ * Equivalent to h2o_socket_ebpf_lookup_flags_sni() but configured in the h2olog handler (as part of h2olog v2).
+ */
+int h2o_log_skip_tracing_sni(const char *server_name, size_t server_name_len);
+
 /* inline defs */
 
 inline int h2o_socket_is_writing(h2o_socket_t *sock)

@@ -1,0 +1,4 @@
+BasedOnStyle: "LLVM"
+ColumnLimit: 132
+AllowShortFunctionsOnASingleLine: None
+SortIncludes: false

@@ -193,6 +193,7 @@ INCLUDE_DIRECTORIES(
     deps/quicly/include
     deps/yaml/include
     deps/yoml
+    deps/picojson
     ${CMAKE_CURRENT_BINARY_DIR})
 
 IF (PKG_CONFIG_FOUND)

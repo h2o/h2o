@@ -21,14 +21,120 @@
  */
 #include "h2o.h"
 
+static struct {
+    uint32_t rate;
+
+    // TODO: addresses, snis
+} h2o_log_sampling;
+
 struct st_h2o_log_handler_t {
     h2o_handler_t super;
 } h2o_log_handler;
+
+struct st_query_param_iter_t {
+    struct {
+        h2o_iovec_t path;
+        size_t query_at;
+    } input;
+
+    struct {
+        char *cur;
+        char *end;
+    } cursor;
+};
+
+int h2o_log_skip_tracing(const struct sockaddr *local, const struct sockaddr *remote)
+{
+    int skip_tracing = 0;
+
+    if (h2o_log_sampling.rate != 0) {
+        skip_tracing = h2o_rand() % h2o_log_sampling.rate != 0;
+    }
+
+    // TODO: use h2o_log_sampling.addresses
+    return skip_tracing;
+}
+
+int h2o_log_skip_tracing_sni(const char *server_name, size_t server_name_len)
+{
+    // TODO: use h2o_log_sampling.snis
+    return 0;
+}
+
+static void query_param_iter_init(struct st_query_param_iter_t *iter, h2o_iovec_t path, size_t query_at)
+{
+    assert(query_at != SIZE_MAX);
+
+    *iter = (struct st_query_param_iter_t){
+        .input =
+            {
+                .path = path,
+                .query_at = query_at,
+            },
+        .cursor =
+            {
+                .cur = path.base + query_at + 1,
+                .end = path.base + path.len,
+            },
+    };
+}
+
+static int query_param_iter_next(struct st_query_param_iter_t *iter, h2o_iovec_t *name, h2o_iovec_t *value)
+{
+    if (iter->cursor.cur != iter->cursor.end) {
+        char *eq = memchr(iter->cursor.cur, '=', iter->input.path.len);
+        if (eq == NULL)
+            return 0;
+
+        *name = (h2o_iovec_t){iter->cursor.cur, eq - iter->cursor.cur};
+
+        char *v = eq + 1;
+        const char *next_and = memchr(v, '&', iter->input.path.len);
+        size_t v_len = next_and == NULL ? (iter->cursor.end - v) : (next_and - v);
+        *value = (h2o_iovec_t){v, v_len};
+
+        iter->cursor.cur = v + v_len + 1;
+
+        return 1;
+    }
+
+    return 0;
+}
 
 static int on_req(h2o_handler_t *_self, h2o_req_t *req)
 {
     if (req->conn->callbacks->steal_socket == NULL)
         goto Error;
+
+    if (req->query_at != SIZE_MAX) {
+        struct st_query_param_iter_t iter;
+        query_param_iter_init(&iter, req->path, req->query_at);
+
+        h2o_iovec_t name, value;
+        while (query_param_iter_next(&iter, &name, &value)) {
+            if (h2o_memis(name.base, name.len, H2O_STRLIT("sampling_rate"))) {
+                char src[value.len + 1];
+                memcpy(src, value.base, value.len);
+                src[value.len] = '\0'; // strtoul(3) requires a null-terminated string
+                char *end;
+                unsigned long v = strtoul(src, &end, 10);
+                if ((src + value.len) != end && (0 < v && v <= UINT32_MAX)) {
+                    h2o_log_sampling.rate = v;
+                } else {
+                    h2o_error_printf("h2olog: sampling_rate must be a positive integer (0 < N <= UINT32_MAX), but got: %.*s\n", (int)value.len, value.base);
+                }
+            } else if (h2o_memis(name.base, name.len, H2O_STRLIT("sampling_address"))) {
+                // h2olog -A <sampring_addr>
+                // TODO
+            } else if (h2o_memis(name.base, name.len, H2O_STRLIT("sampling_sni"))) {
+                // h2olog -N <sampring_sni>
+                // TODO
+            } else {
+                h2o_error_printf("h2olog: unrecognized parameter: %.*s=%.*s\n", (int)name.len, name.base, (int)value.len,
+                                 value.base);
+            }
+        }
+    }
 
     h2o_socket_t *sock = req->conn->callbacks->steal_socket(req->conn);
     if (sock == NULL)
