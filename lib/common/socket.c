@@ -641,7 +641,7 @@ void h2o_socket_close(h2o_socket_t *sock)
         dispose_socket(sock, 0);
     } else {
 #if PTLS_OPENSSL_HAVE_ASYNC
-    if (sock->async.is_pending) {
+    if (sock->async.is_pending_handshake) {
         sock->async.is_closed = 1;
         return;
     }
@@ -1507,7 +1507,7 @@ Exit:
 static void on_handshake_complete(h2o_socket_t *sock, const char *err)
 {
 #if PTLS_OPENSSL_HAVE_ASYNC
-    assert(!sock->async.is_pending);
+    assert(!sock->async.is_pending_handshake);
     if (sock->async.is_closed) {
         shutdown_ssl(sock, NULL);
         return;
@@ -1601,8 +1601,8 @@ static void openssl_ssl_free_async(void *data)
 static void proceed_handshake_async(void *data)
 {
     h2o_socket_t *sock = data;
-    assert(sock->async.is_pending);
-    sock->async.is_pending = 0;
+    assert(sock->async.is_pending_handshake);
+    sock->async.is_pending_handshake = 0;
 
     proceed_handshake(sock, NULL);
 }
@@ -1673,8 +1673,8 @@ static void do_openssl_async(h2o_loop_t *loop, SSL *ossl, async_cb async_cb, voi
 }
 static void do_proceed_handshake_async(h2o_socket_t *sock)
 {
-    assert(!sock->async.is_pending);
-    sock->async.is_pending = 1;
+    assert(!sock->async.is_pending_handshake);
+    sock->async.is_pending_handshake = 1;
     if (sock->ssl->ptls != NULL) {
         do_picotls_async(h2o_socket_get_loop(sock), sock->ssl->ptls, proceed_handshake_async, sock);
     } else {
@@ -1937,7 +1937,7 @@ static void proceed_handshake(h2o_socket_t *sock, const char *err)
 
 #if PTLS_OPENSSL_HAVE_ASYNC
     // waiting on async operation
-    if (sock->async.is_pending)
+    if (sock->async.is_pending_handshake)
         return;
 #endif
 

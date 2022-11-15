@@ -213,7 +213,7 @@ struct st_h2o_socket_t {
     struct st_h2o_socket_zerocopy_buffers_t *_zerocopy;
 #if PTLS_OPENSSL_HAVE_ASYNC
     struct {
-        int is_pending;
+        int is_pending_handshake;
         int is_closed;
         void *data;
     } async;
