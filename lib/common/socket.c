@@ -1592,10 +1592,10 @@ static void on_handshake_fail_complete(h2o_socket_t *sock, const char *err)
 static void proceed_handshake(h2o_socket_t *sock, const char *err);
 
 #if PTLS_OPENSSL_HAVE_ASYNC
-static void ptls_free_async(void *data)
+static void openssl_ssl_free_async(void *data)
 {
-    ptls_t *tls = data;
-    ptls_free(tls);
+    SSL *ossl = data;
+    SSL_free(ossl);
 }
 
 static void proceed_handshake_async(void *data)
@@ -1767,11 +1767,13 @@ Redo:
             /* sent async request, reset the ssl state, and wait for async response */
             assert(ret < 0);
 #if PTLS_OPENSSL_HAVE_ASYNC
-            while (SSL_waiting_for_async(sock->ssl->ossl)) {
-                SSL_accept(sock->ssl->ossl);
-            }
+            if (SSL_get_error(sock->ssl->ossl, ret) == SSL_ERROR_WANT_ASYNC) {
+                do_openssl_async(h2o_socket_get_loop(sock), sock->ssl->ossl, openssl_ssl_free_async, sock->ssl->ossl);
+            } else
 #endif
-            SSL_free(sock->ssl->ossl);
+            {
+                SSL_free(sock->ssl->ossl);
+            }
             create_ossl(sock);
             if (has_pending_ssl_bytes(sock->ssl))
                 dispose_ssl_output_buffer(sock->ssl);
