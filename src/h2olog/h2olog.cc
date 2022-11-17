@@ -522,7 +522,6 @@ int main(int argc, char **argv)
     }
 
     if (unix_socket_path != NULL) {
-        // TODO: the path might not be "/"
         return read_from_unix_socket(unix_socket_path, outfp, debug, preserve_root);
     }
 
