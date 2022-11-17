@@ -38,6 +38,7 @@ extern "C" {
 #include <sys/un.h>
 #include "h2o.h"
 #include "h2o/version.h"
+#include "picohttpparser.h"
 }
 #include "h2olog.h"
 
@@ -260,6 +261,13 @@ static std::string build_cc_macro_str(const char *name, const std::string &str)
     return build_cc_macro_expr(name, "\"" + str + "\"");
 }
 
+enum resp_error_t {
+    ERROR_NONE,
+    ERROR_IO,
+    ERROR_PARSE,
+    ERROR_RESPONSE_HEADER_TOO_LARGE,
+};
+
 static int read_from_unix_socket(const char *unix_socket_path, FILE *outfp, bool debug, bool preserve_root)
 {
     struct sockaddr_un sa = {
@@ -296,26 +304,73 @@ static int read_from_unix_socket(const char *unix_socket_path, FILE *outfp, bool
         infof("Attaching %s", unix_socket_path);
 
     {
-        fd_set fds;
-        FD_ZERO(&fds);
-        FD_SET(fd, &fds);
-
-        bool headers_done = false;
         char buf[4096];
-        int ret;
-        while ((ret = read(fd, buf, sizeof(buf))) != -1) {
-            if (ret > 0) {
-                if (!headers_done) {
-                    // h2olog is not interested in the response headers.
-                    static const h2o_iovec_t h_sep = h2o_iovec_init(H2O_STRLIT("\r\n\r\n"));
-                    size_t headers_done_at;
-                    if (((headers_done_at = h2o_strstr(buf, ret, h_sep.base, h_sep.len)) != SIZE_MAX)) {
-                        headers_done = true;
-                        (void)fwrite(buf + headers_done_at + h_sep.len, 1, ret - headers_done_at - h_sep.len, outfp);
-                    }
-                    continue;
-                }
+        const char *msg;
+        int pret, status;
+        size_t buflen = 0, prevbuflen = 0, msg_len;
+        enum resp_error_t error = ERROR_NONE;
 
+        // headers
+        while (1) {
+            struct phr_header headers[100];
+            size_t num_headers = sizeof(headers) / sizeof(headers[0]);
+            int minor_version;
+            ssize_t rret;
+            while ((rret = read(fd, buf + buflen, sizeof(buf) - buflen)) == -1 && errno == EINTR)
+                ;
+            if (rret <= 0) {
+                error = ERROR_IO;
+                break;
+            }
+
+            prevbuflen = buflen;
+            buflen += rret;
+
+            num_headers = sizeof(headers) / sizeof(headers[0]);
+            pret = phr_parse_response(buf, buflen, &minor_version, &status, &msg, &msg_len, headers, &num_headers, 0);
+            if (pret > 0) {
+                break; /* successfully parsed the response */
+            } else if (pret == -1) {
+                error = ERROR_PARSE;
+                break;
+            }
+            /* request is incomplete, continue the loop */
+            assert(pret == -2);
+            if (buflen == sizeof(buf)) {
+                error = ERROR_RESPONSE_HEADER_TOO_LARGE;
+                break;
+            }
+        }
+
+        if (error) {
+            fprintf(stderr, "Failed to parse the response: ");
+            switch (error) {
+            case ERROR_IO:
+                fprintf(stderr, "I/O error");
+                break;
+            case ERROR_PARSE:
+                fprintf(stderr, "invalid HTTP response");
+                break;
+            case ERROR_RESPONSE_HEADER_TOO_LARGE:
+                fprintf(stderr, "response header is too large");
+                break;
+            default:
+                assert(!"unreachable");
+                break;
+            }
+            fprintf(stderr, "\n");
+            goto Exit;
+        }
+
+        if (status != 200) {
+            fprintf(stderr, "Failed to request: %d %.*s\n", status, (int)msg_len, msg);
+            goto Exit;
+        }
+
+        /* response content */
+        (void)fwrite(buf + pret, 1, buflen - pret, outfp);
+        while ((ret = read(fd, buf, sizeof(buf))) != -1 || errno == EINTR) {
+            if (ret > 0) {
                 (void)fwrite(buf, 1, ret, outfp);
             } else {
                 if (debug)
