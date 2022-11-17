@@ -303,6 +303,7 @@ static int read_from_unix_socket(const char *unix_socket_path, FILE *outfp, bool
     if (debug)
         infof("Attaching %s", unix_socket_path);
 
+    // parse response status & headers
     {
         char buf[4096];
         const char *msg;
@@ -369,9 +370,15 @@ static int read_from_unix_socket(const char *unix_socket_path, FILE *outfp, bool
 
         /* response content */
         (void)fwrite(buf + pret, 1, buflen - pret, outfp);
-        while ((ret = read(fd, buf, sizeof(buf))) != -1 || errno == EINTR) {
-            if (ret > 0) {
-                (void)fwrite(buf, 1, ret, outfp);
+    }
+
+    // process streaming contents
+    {
+        char buf[4096];
+        ssize_t rret;
+        while ((rret = read(fd, buf, sizeof(buf))) != -1 || errno == EINTR) {
+            if (rret > 0) {
+                (void)fwrite(buf, 1, rret, outfp);
             } else {
                 if (debug)
                     infof("Connection closed\n");
