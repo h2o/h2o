@@ -301,13 +301,10 @@ static int read_from_unix_socket(const char *unix_socket_path, FILE *outfp, bool
         FD_SET(fd, &fds);
 
         bool headers_done = false;
-        while (select(fd + 1, &fds, NULL, NULL, NULL) > 0) {
-            char buf[4096];
-            ssize_t ret = read(fd, buf, sizeof(buf));
-            if (ret == -1) {
-                if (ret != EINTR)
-                    break;
-            } else if (ret > 0) {
+        char buf[4096];
+        int ret;
+        while ((ret = read(fd, buf, sizeof(buf))) != -1) {
+            if (ret > 0) {
                 if (!headers_done) {
                     // h2olog is not interested in the response headers.
                     static const h2o_iovec_t h_sep = h2o_iovec_init(H2O_STRLIT("\r\n\r\n"));
