@@ -50,8 +50,6 @@ static int on_config_h2olog(h2o_configurator_command_t *cmd, h2o_configurator_co
 void h2o_log_register_configurator(h2o_globalconf_t *conf)
 {
     struct st_h2olog_configurator *c = (void *)h2o_configurator_create(conf, sizeof(*c));
-
-    // it takes either a scalar ("OFF,ON") or a mapping for customized configuration
     h2o_configurator_define_command(&c->super, "h2olog", H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                     on_config_h2olog);
 }
