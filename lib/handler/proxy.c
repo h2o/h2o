@@ -64,11 +64,6 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
 
 static h2o_http3client_ctx_t *create_http3_context(h2o_context_t *ctx, int use_gso)
 {
-#if H2O_USE_LIBUV
-    fprintf(stderr, "no HTTP/3 support for libuv\n");
-    abort();
-#else
-
     h2o_http3client_ctx_t *h3ctx = h2o_mem_alloc(sizeof(*h3ctx));
 
     /* tls (FIXME provide knobs to configure, incl. certificate validation) */
@@ -109,7 +104,6 @@ static h2o_http3client_ctx_t *create_http3_context(h2o_context_t *ctx, int use_g
     h3ctx->load_session = NULL; /* TODO reuse session? */
 
     return h3ctx;
-#endif
 }
 
 static void destroy_http3_context(h2o_http3client_ctx_t *h3ctx)

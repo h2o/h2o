@@ -19,7 +19,6 @@ RUN apt-get install --yes \
 	libelf-dev \
 	libev-dev \
 	libssl-dev \
-	libuv1-dev \
 	zlib1g-dev \
 	libbpfcc-dev \
 	memcached \

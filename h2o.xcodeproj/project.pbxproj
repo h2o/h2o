@@ -4253,7 +4253,6 @@
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"DEBUG=1",
 					"H2O_USE_MRUBY=1",
-					"H2O_USE_LIBUV=0",
 					"H2O_ROOT=/mydev/h2o",
 					"$(inherited)",
 					"kh_inline=\"inline __unused\"",
@@ -4316,7 +4315,6 @@
 				GCC_ENABLE_OBJC_EXCEPTIONS = YES;
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"H2O_USE_MRUBY=1",
-					"H2O_USE_LIBUV=0",
 					"H2O_ROOT=/mydev/h2o",
 					"kh_inline=\"inline __unused\"",
 					"$(inherited)",
@@ -4493,7 +4491,6 @@
 			buildSettings = {
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"H2O_UNITTEST=1",
-					"H2O_USE_LIBUV=0",
 					"H2O_USE_BROTLI=1",
 				);
 				HEADER_SEARCH_PATHS = "$(inherited)";
@@ -4841,7 +4838,6 @@
 		E918FC372136583F00CCB252 /* evloop-release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				GCC_PREPROCESSOR_DEFINITIONS = "H2O_USE_LIBUV=0";
 				HEADER_SEARCH_PATHS = "$(inherited)";
 				LIBRARY_SEARCH_PATHS = "$(inherited)";
 				OTHER_LDFLAGS = (

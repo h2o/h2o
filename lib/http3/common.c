@@ -1232,10 +1232,9 @@ void h2o_quic_schedule_timer(h2o_quic_conn_t *conn)
 {
     int64_t timeout = quicly_get_first_timeout(conn->quic);
     if (h2o_timer_is_linked(&conn->_timeout)) {
-#if !H2O_USE_LIBUV /* optimization to skip registering a timer specifying the same time */
+        /* optimization to skip registering a timer specifying the same time */
         if (timeout == conn->_timeout.expire_at)
             return;
-#endif
         h2o_timer_unlink(&conn->_timeout);
     }
     uint64_t now = h2o_now(conn->ctx->loop), delay = now < timeout ? timeout - now : 0;

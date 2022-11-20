@@ -41,14 +41,6 @@ extern "C" {
 #include "h2o/openssl_backport.h"
 #include "h2o/string_.h"
 
-#ifndef H2O_USE_LIBUV
-#if H2O_USE_POLL || H2O_USE_EPOLL || H2O_USE_KQUEUE
-#define H2O_USE_LIBUV 0
-#else
-#define H2O_USE_LIBUV 1
-#endif
-#endif
-
 #if defined(SO_ZEROCOPY) && defined(SO_EE_ORIGIN_ZEROCOPY)
 #define H2O_USE_MSG_ZEROCOPY 1
 #endif
@@ -104,11 +96,7 @@ typedef struct st_h2o_socket_t h2o_socket_t;
 
 typedef void (*h2o_socket_cb)(h2o_socket_t *sock, const char *err);
 
-#if H2O_USE_LIBUV
-#include "socket/uv-binding.h"
-#else
 #include "socket/evloop.h"
-#endif
 
 struct st_h2o_socket_addr_t {
     socklen_t len;

@@ -30,7 +30,7 @@
 #include "h2o/httpclient.h"
 #include "h2o/token.h"
 
-#if !H2O_USE_LIBUV && defined(__linux__)
+#if defined(__linux__)
 #define USE_PIPE_READER 1
 #else
 #define USE_PIPE_READER 0

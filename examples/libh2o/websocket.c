@@ -78,52 +78,6 @@ static int setup_ssl(const char *cert_file, const char *key_file)
     return 0;
 }
 
-#if H2O_USE_LIBUV
-static void on_accept(uv_stream_t *listener, int status)
-{
-    uv_tcp_t *conn;
-    h2o_socket_t *sock;
-
-    if (status != 0)
-        return;
-
-    conn = h2o_mem_alloc(sizeof(*conn));
-    uv_tcp_init(listener->loop, conn);
-
-    if (uv_accept(listener, (uv_stream_t *)conn) != 0) {
-        uv_close((uv_handle_t *)conn, (uv_close_cb)free);
-        return;
-    }
-
-    sock = h2o_uv_socket_create((uv_handle_t *)conn, (uv_close_cb)free);
-    h2o_accept(&accept_ctx, sock);
-}
-
-static int create_listener(void)
-{
-    static uv_tcp_t listener;
-    struct sockaddr_in addr;
-    int r;
-
-    uv_tcp_init(ctx.loop, &listener);
-    uv_ip4_addr("127.0.0.1", 7890, &addr);
-    if ((r = uv_tcp_bind(&listener, (struct sockaddr *)&addr, 0)) != 0) {
-        fprintf(stderr, "uv_tcp_bind:%s\n", uv_strerror(r));
-        goto Error;
-    }
-    if ((r = uv_listen((uv_stream_t *)&listener, 128, on_accept)) != 0) {
-        fprintf(stderr, "uv_listen:%s\n", uv_strerror(r));
-        goto Error;
-    }
-
-    return 0;
-Error:
-    uv_close((uv_handle_t *)&listener, NULL);
-    return r;
-}
-
-#else
-
 static void on_accept(h2o_socket_t *listener, const char *err)
 {
     h2o_socket_t *sock;
@@ -160,8 +114,6 @@ static int create_listener(void)
     return 0;
 }
 
-#endif
-
 int main(int argc, char **argv)
 {
     h2o_hostconf_t *hostconf;
@@ -172,13 +124,7 @@ int main(int argc, char **argv)
     pathconf = h2o_config_register_path(hostconf, "/", 0);
     h2o_create_handler(pathconf, sizeof(h2o_handler_t))->on_req = on_req;
 
-#if H2O_USE_LIBUV
-    uv_loop_t loop;
-    uv_loop_init(&loop);
-    h2o_context_init(&ctx, &loop, &config);
-#else
     h2o_context_init(&ctx, h2o_evloop_create(), &config);
-#endif
 
     /* disabled by default: uncomment the block below to use HTTPS instead of HTTP */
     /*
@@ -194,12 +140,8 @@ int main(int argc, char **argv)
         goto Error;
     }
 
-#if H2O_USE_LIBUV
-    uv_run(ctx.loop, UV_RUN_DEFAULT);
-#else
     while (h2o_evloop_run(ctx.loop, INT32_MAX) == 0)
         ;
-#endif
 
 Error:
     return 1;
