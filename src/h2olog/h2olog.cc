@@ -308,7 +308,7 @@ static int read_from_unix_socket(const char *unix_socket_path, FILE *outfp, bool
         char buf[4096];
         const char *msg;
         int pret, status;
-        size_t buflen = 0, prevbuflen = 0, msg_len;
+        size_t buflen = 0, msg_len;
         enum resp_error_t error = ERROR_NONE;
 
         // headers
@@ -324,7 +324,6 @@ static int read_from_unix_socket(const char *unix_socket_path, FILE *outfp, bool
                 break;
             }
 
-            prevbuflen = buflen;
             buflen += rret;
 
             num_headers = sizeof(headers) / sizeof(headers[0]);
