@@ -356,8 +356,7 @@ static int read_from_unix_socket(const char *unix_socket_path, FILE *outfp, bool
                 fprintf(stderr, "response header is too large");
                 break;
             default:
-                assert(!"unreachable");
-                break;
+                h2o_fatal("unreachable");
             }
             fprintf(stderr, "\n");
             goto Exit;
