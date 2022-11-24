@@ -55,9 +55,6 @@ struct expbuf_t {
     char *end;
     size_t capacity;
 
-    int is_async;
-    int efd_write;
-    int efd_read;
     void *data;
 };
 
@@ -86,7 +83,6 @@ int neverbleed_setaffinity(neverbleed_t *nb, NEVERBLEED_CPU_SET_T *cpuset);
  * spawned
  */
 extern void (*neverbleed_post_fork_cb)(void);
-extern void (*neverbleed_read_cb)(struct expbuf_t *);
 extern void (*neverbleed_write_cb)(struct expbuf_t *);
 
 typedef void (*neverbleed_cb)(int);
@@ -96,8 +92,6 @@ void neverbleed_set_buffer_data(neverbleed_t *nb, void *data);
 size_t neverbleed_buffer_size(struct expbuf_t *buf);
 void neverbleed_read_transaction(neverbleed_t *nb, struct expbuf_t *buf);
 void neverbleed_write_transaction(neverbleed_t *nb, struct expbuf_t *buf);
-void neverbleed_on_read_complete(struct expbuf_t *buf);
-void neverbleed_on_write_complete(struct expbuf_t *buf);
 
 #ifdef __cplusplus
 }

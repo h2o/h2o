@@ -36,13 +36,6 @@
 #include <sys/types.h>
 #include <sys/uio.h>
 #include <sys/stat.h>
-#if defined(__linux__)
-#include <sys/eventfd.h>
-#define NEVERBLEED_USE_EVENTFD 1
-#define NEVERBLEED_SIGNAL_T eventfd_t
-#else
-#define NEVERBLEED_SIGNAL_T char
-#endif
 #include <unistd.h>
 #include <signal.h>
 #if defined(__linux__)
@@ -202,27 +195,6 @@ static void set_cloexec(int fd)
         dief("failed to set O_CLOEXEC to fd %d", fd);
 }
 
-// sets up file descriptor and calls OpenSSL's `ASYNC_pause_job`
-// if OpenSSL async is not available, this function is a no-op
-static void async_pause(struct expbuf_t *buf)
-{
-#if NEVERBLEED_OPENSSL_HAVE_ASYNC
-    ASYNC_JOB *job;
-
-    if ((job = ASYNC_get_current_job()) != NULL) {
-        size_t numfds;
-        ASYNC_WAIT_CTX *waitctx = ASYNC_get_wait_ctx(job);
-
-        assert(ASYNC_WAIT_CTX_get_all_fds(waitctx, NULL, &numfds) && numfds == 0);
-        if (!ASYNC_WAIT_CTX_set_wait_fd(waitctx, "neverbleed", buf->efd_read, NULL, NULL))
-            dief("could not set async fd\n");
-        ASYNC_pause_job();
-        if (!ASYNC_WAIT_CTX_clear_fd(waitctx, "neverbleed"))
-            dief("could not clear async fd\n");
-    }
-#endif
-}
-
 static int read_nbytes(int fd, void *p, size_t sz)
 {
     while (sz != 0) {
@@ -373,87 +345,13 @@ static int expbuf_write(struct expbuf_t *buf, int fd)
     return 0;
 }
 
-static void expbuf_setup_notification(struct expbuf_t *buf)
-{
-    int fd_read;
-    int fd_write;
-#if NEVERBLEED_USE_EVENTFD
-    /**
-     * The kernel overhead of an eventfd file descriptor is
-     * much lower than that of a pipe, and only one file descriptor is required
-     */
-    int fd;
-
-    fd = eventfd(0, EFD_CLOEXEC);
-    if (fd == -1) {
-        dief("eventfd");
-    }
-    fd_read = fd;
-    fd_write = fd;
-#else
-    int fds[2];
-
-    if (pipe(fds) != 0) {
-        dief("pipe");
-    }
-    cloexec_pipe(fds);
-    fd_read = fds[0];
-    fd_write = fds[1];
-#endif
-    buf->efd_read = fd_read;
-    buf->efd_write = fd_write;
-}
-
-static void expbuf_send_notification(struct expbuf_t *buf)
-{
-#if NEVERBLEED_USE_EVENTFD
-    if (eventfd_write(buf->efd_write, 1) != 0)
-        dief("eventfd_write error");
-#else
-    int ret;
-    while ((ret = write(buf->efd_write, "x", 1) == -1 && errno == EINTR))
-        ;
-    if (ret == 1) {
-        dief("write");
-    }
-#endif
-}
-
-static void expbuf_consume_notification(struct expbuf_t *buf)
-{
-    int ret;
-    // consume notification
-    NEVERBLEED_SIGNAL_T sig;
-    while ((ret = read(buf->efd_read, &sig, sizeof(sig))) == -1 && errno == EINTR)
-        ;
-    assert(ret > 0);
-    close(buf->efd_read);
-#if !NEVERBLEED_USE_EVENTFD
-    // in the case of eventfd, the efd_read == efd_write
-    // but, in the case of pipe, we need to close the write side
-    close(buf->efd_write);
-#endif
-}
-
 /* This function is a conveniance wrapper around writing and reading an expbuf.
  */
 static void expbuf_send(struct expbuf_t *buf, struct st_neverbleed_thread_data_t *thdata)
 {
-    buf->data = NULL;
-    buf->is_async = 0;
-#if NEVERBLEED_OPENSSL_HAVE_ASYNC
-    if (ASYNC_get_current_job() != NULL) {
-        buf->is_async = 1;
-    }
-#endif
-
-    if (neverbleed_write_cb != NULL && neverbleed_read_cb != NULL) {
-        expbuf_setup_notification(buf);
+    if (neverbleed_write_cb != NULL) {
         buf->data = thdata->buf_data;
         neverbleed_write_cb(buf); // notify application of write
-        neverbleed_read_cb(buf); // notify application of read
-        async_pause(buf);
-        expbuf_consume_notification(buf);
     } else {
         if (expbuf_write(buf, thdata->fd) == -1) {
             if (errno != 0) {
@@ -575,11 +473,6 @@ size_t neverbleed_buffer_size(struct expbuf_t *buf)
     return expbuf_size(buf);
 }
 
-void neverbleed_on_read_complete(struct expbuf_t *buf)
-{
-    expbuf_send_notification(buf);
-}
-
 void neverbleed_read_transaction(neverbleed_t *nb, struct expbuf_t *buf)
 {
     struct st_neverbleed_thread_data_t *thdata = get_thread_data(nb);
@@ -591,10 +484,6 @@ void neverbleed_read_transaction(neverbleed_t *nb, struct expbuf_t *buf)
             dief("connection closed by daemon");
         }
     }
-}
-
-void neverbleed_on_write_complete(struct expbuf_t *buf)
-{
 }
 
 void neverbleed_write_transaction(neverbleed_t *nb, struct expbuf_t *buf)
@@ -1856,5 +1745,4 @@ Fail:
 }
 
 void (*neverbleed_post_fork_cb)(void) = NULL;
-void (*neverbleed_read_cb)(struct expbuf_t *) = NULL;
 void (*neverbleed_write_cb)(struct expbuf_t *) = NULL;
