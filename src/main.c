@@ -2530,7 +2530,8 @@ static int on_config_quic_dsr(h2o_configurator_command_t *cmd, h2o_configurator_
 
     if ((v = h2o_configurator_get_one_of(cmd, node, "OFF,ON")) == -1)
         return -1;
-    conf.globalconf.http3.start_dsr = start_dsr;
+    if (v == 1)
+        conf.globalconf.http3.start_dsr = start_dsr;
     return 0;
 }
 
