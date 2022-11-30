@@ -52,12 +52,6 @@
 #include <openssl/opensslconf.h>
 #include <openssl/opensslv.h>
 
-#if OPENSSL_VERSION_NUMBER >= 0x10100010L && !defined(LIBRESSL_VERSION_NUMBER)
-#if !defined(OPENSSL_NO_ASYNC)
-#define NEVERBLEED_OPENSSL_HAVE_ASYNC 1
-#endif
-#endif
-
 #if OPENSSL_VERSION_NUMBER >= 0x1010000fL && !defined(LIBRESSL_VERSION_NUMBER)
 /* RSA_METHOD is opaque, so RSA_meth* are used. */
 #define NEVERBLEED_OPAQUE_RSA_METHOD
@@ -76,9 +70,6 @@
 #include <openssl/rand.h>
 #include <openssl/rsa.h>
 #include <openssl/ssl.h>
-#if NEVERBLEED_OPENSSL_HAVE_ASYNC
-#include <openssl/async.h>
-#endif
 
 #if OPENSSL_VERSION_NUMBER < 0x1010000fL \
     || (defined(LIBRESSL_VERSION_NUMBER) && LIBRESSL_VERSION_NUMBER < 0x2070000fL)
@@ -1718,9 +1709,6 @@ int neverbleed_init(neverbleed_t *nb, char *errbuf)
         snprintf(errbuf, NEVERBLEED_ERRBUF_SIZE, "failed to initialize the OpenSSL engine");
         goto Fail;
     }
-#if NEVERBLEED_OPENSSL_HAVE_ASYNC
-    ERR_load_ASYNC_strings();
-#endif
     ENGINE_add(nb->engine);
 
     /* setup thread key */

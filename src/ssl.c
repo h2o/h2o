@@ -1181,6 +1181,9 @@ void init_openssl(void)
     SSL_load_error_strings();
     SSL_library_init();
     OpenSSL_add_all_algorithms();
+#if PTLS_OPENSSL_HAVE_ASYNC
+    ERR_load_ASYNC_strings();
+#endif
 
     /* When using OpenSSL >= 3.0, load legacy provider so that blowfish can be used for 64-bit QUIC CIDs. */
 #if LOAD_OPENSSL_PROVIDER
