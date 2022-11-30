@@ -409,14 +409,14 @@ static void on_neverbleed_fork(void)
 }
 
 struct nbbuf {
-    struct expbuf_t *buf;
+    neverbleed_iobuf_t *buf;
     size_t write_size;
     h2o_linklist_t link;
     int efd_write;
     int efd_read;
 };
 
-static struct nbbuf * nbbuf_new(struct expbuf_t *buf)
+static struct nbbuf * nbbuf_new(neverbleed_iobuf_t *buf)
 {
     struct nbbuf *nb_buf = h2o_mem_alloc(sizeof(*nb_buf));
     memset(nb_buf, 0, sizeof(*nb_buf));
@@ -514,14 +514,14 @@ static void nb_submit_write_pending(void)
         // write a buf
         struct nbbuf *nb_buf = H2O_STRUCT_FROM_MEMBER(struct nbbuf, link, neverbleed_conf.write_queue.next);
         h2o_iovec_t bufs[2];
-        nb_buf->write_size = neverbleed_buffer_size(nb_buf->buf);
+        nb_buf->write_size = neverbleed_iobuf_size(nb_buf->buf);
         bufs[0] = h2o_iovec_init(&nb_buf->write_size, sizeof(nb_buf->write_size));
         bufs[1] = h2o_iovec_init(nb_buf->buf->start, nb_buf->write_size);
         h2o_socket_write(neverbleed_conf.sock, bufs, 2, nb_on_write_complete_cb);
     }
 }
 
-static void nb_write_sync_transaction(struct expbuf_t *buf)
+static void nb_write_sync_transaction(neverbleed_iobuf_t *buf)
 {
     int fd = neverbleed_get_fd(neverbleed);
     int flags = fcntl(fd, F_GETFL, 0);
@@ -541,7 +541,7 @@ static void nb_write_sync_transaction(struct expbuf_t *buf)
     }
 }
 
-static void nb_read_sync_transaction(struct expbuf_t *buf)
+static void nb_read_sync_transaction(neverbleed_iobuf_t *buf)
 {
     int fd = neverbleed_get_fd(neverbleed);
     int flags = fcntl(fd, F_GETFL, 0);
@@ -603,7 +603,7 @@ static void async_pause(struct nbbuf *buf)
 }
 
 
-static void on_neverbleed_transaction(struct expbuf_t *buf)
+static void on_neverbleed_transaction(neverbleed_iobuf_t *buf)
 {
     int is_async = 0;
 #if PTLS_OPENSSL_HAVE_ASYNC

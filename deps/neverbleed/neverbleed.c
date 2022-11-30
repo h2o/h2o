@@ -203,12 +203,12 @@ static int read_nbytes(int fd, void *p, size_t sz)
     return 0;
 }
 
-static size_t expbuf_size(struct expbuf_t *buf)
+static size_t expbuf_size(neverbleed_iobuf_t *buf)
 {
     return buf->end - buf->start;
 }
 
-static void expbuf_dispose(struct expbuf_t *buf)
+static void expbuf_dispose(neverbleed_iobuf_t *buf)
 {
     if (buf->capacity != 0)
         OPENSSL_cleanse(buf->buf, buf->capacity);
@@ -216,7 +216,7 @@ static void expbuf_dispose(struct expbuf_t *buf)
     memset(buf, 0, sizeof(*buf));
 }
 
-static void expbuf_reserve(struct expbuf_t *buf, size_t extra)
+static void expbuf_reserve(neverbleed_iobuf_t *buf, size_t extra)
 {
     char *n;
 
@@ -234,14 +234,14 @@ static void expbuf_reserve(struct expbuf_t *buf, size_t extra)
     buf->buf = n;
 }
 
-static void expbuf_push_num(struct expbuf_t *buf, size_t v)
+static void expbuf_push_num(neverbleed_iobuf_t *buf, size_t v)
 {
     expbuf_reserve(buf, sizeof(v));
     memcpy(buf->end, &v, sizeof(v));
     buf->end += sizeof(v);
 }
 
-static void expbuf_push_str(struct expbuf_t *buf, const char *s)
+static void expbuf_push_str(neverbleed_iobuf_t *buf, const char *s)
 {
     size_t l = strlen(s) + 1;
     expbuf_reserve(buf, l);
@@ -249,7 +249,7 @@ static void expbuf_push_str(struct expbuf_t *buf, const char *s)
     buf->end += l;
 }
 
-static void expbuf_push_bytes(struct expbuf_t *buf, const void *p, size_t l)
+static void expbuf_push_bytes(neverbleed_iobuf_t *buf, const void *p, size_t l)
 {
     expbuf_push_num(buf, l);
     expbuf_reserve(buf, l);
@@ -257,7 +257,7 @@ static void expbuf_push_bytes(struct expbuf_t *buf, const void *p, size_t l)
     buf->end += l;
 }
 
-static int expbuf_shift_num(struct expbuf_t *buf, size_t *v)
+static int expbuf_shift_num(neverbleed_iobuf_t *buf, size_t *v)
 {
     if (expbuf_size(buf) < sizeof(*v))
         return -1;
@@ -266,7 +266,7 @@ static int expbuf_shift_num(struct expbuf_t *buf, size_t *v)
     return 0;
 }
 
-static char *expbuf_shift_str(struct expbuf_t *buf)
+static char *expbuf_shift_str(neverbleed_iobuf_t *buf)
 {
     char *nul = memchr(buf->start, '\0', expbuf_size(buf)), *ret;
     if (nul == NULL)
@@ -276,7 +276,7 @@ static char *expbuf_shift_str(struct expbuf_t *buf)
     return ret;
 }
 
-static void *expbuf_shift_bytes(struct expbuf_t *buf, size_t *l)
+static void *expbuf_shift_bytes(neverbleed_iobuf_t *buf, size_t *l)
 {
     void *ret;
     if (expbuf_shift_num(buf, l) != 0)
@@ -288,7 +288,7 @@ static void *expbuf_shift_bytes(struct expbuf_t *buf, size_t *l)
     return ret;
 }
 
-static int expbuf_read(struct expbuf_t *buf, int fd)
+static int expbuf_read(neverbleed_iobuf_t *buf, int fd)
 {
     size_t sz;
     if (read_nbytes(fd, &sz, sizeof(sz)) != 0)
@@ -300,7 +300,7 @@ static int expbuf_read(struct expbuf_t *buf, int fd)
     return 0;
 }
 
-static int expbuf_write(struct expbuf_t *buf, int fd)
+static int expbuf_write(neverbleed_iobuf_t *buf, int fd)
 {
     struct iovec vecs[2] = {{NULL}};
     size_t bufsz = expbuf_size(buf);
@@ -334,7 +334,7 @@ static int expbuf_write(struct expbuf_t *buf, int fd)
 /**
  * Sends a request and reads a response.
  */
-static void expbuf_transaction(struct expbuf_t *buf, struct st_neverbleed_thread_data_t *thdata)
+static void expbuf_transaction(neverbleed_iobuf_t *buf, struct st_neverbleed_thread_data_t *thdata)
 {
     if (neverbleed_transaction_cb != NULL) {
         neverbleed_transaction_cb(buf);
@@ -446,12 +446,12 @@ int neverbleed_get_fd(neverbleed_t *nb)
     return thdata->fd;
 }
 
-size_t neverbleed_buffer_size(struct expbuf_t *buf)
+size_t neverbleed_iobuf_size(neverbleed_iobuf_t *buf)
 {
     return expbuf_size(buf);
 }
 
-void neverbleed_transaction_read(neverbleed_t *nb, struct expbuf_t *buf)
+void neverbleed_transaction_read(neverbleed_t *nb, neverbleed_iobuf_t *buf)
 {
     struct st_neverbleed_thread_data_t *thdata = get_thread_data(nb);
     expbuf_dispose(buf);
@@ -464,7 +464,7 @@ void neverbleed_transaction_read(neverbleed_t *nb, struct expbuf_t *buf)
     }
 }
 
-void neverbleed_transaction_write(neverbleed_t *nb, struct expbuf_t *buf)
+void neverbleed_transaction_write(neverbleed_t *nb, neverbleed_iobuf_t *buf)
 {
     struct st_neverbleed_thread_data_t *thdata = get_thread_data(nb);
     if (expbuf_write(buf, thdata->fd) == -1) {
@@ -611,7 +611,7 @@ static int priv_encdec_proxy(const char *cmd, int flen, const unsigned char *fro
 {
     struct st_neverbleed_rsa_exdata_t *exdata;
     struct st_neverbleed_thread_data_t *thdata;
-    struct expbuf_t buf = {NULL};
+    neverbleed_iobuf_t buf = {NULL};
     size_t ret;
     unsigned char *to;
     size_t tolen;
@@ -637,7 +637,7 @@ static int priv_encdec_proxy(const char *cmd, int flen, const unsigned char *fro
 
 static int priv_encdec_stub(const char *name,
                             int (*func)(int flen, const unsigned char *from, unsigned char *to, RSA *rsa, int padding),
-                            struct expbuf_t *buf)
+                            neverbleed_iobuf_t *buf)
 {
     unsigned char *from, to[4096];
     size_t flen;
@@ -671,7 +671,7 @@ static int priv_enc_proxy(int flen, const unsigned char *from, unsigned char *to
     return priv_encdec_proxy("priv_enc", flen, from, to, rsa, padding);
 }
 
-static int priv_enc_stub(struct expbuf_t *buf)
+static int priv_enc_stub(neverbleed_iobuf_t *buf)
 {
     return priv_encdec_stub(__FUNCTION__, RSA_private_encrypt, buf);
 }
@@ -681,7 +681,7 @@ static int priv_dec_proxy(int flen, const unsigned char *from, unsigned char *to
     return priv_encdec_proxy("priv_dec", flen, from, to, rsa, padding);
 }
 
-static int priv_dec_stub(struct expbuf_t *buf)
+static int priv_dec_stub(neverbleed_iobuf_t *buf)
 {
     return priv_encdec_stub(__FUNCTION__, RSA_private_decrypt, buf);
 }
@@ -691,7 +691,7 @@ static int sign_proxy(int type, const unsigned char *m, unsigned int m_len, unsi
 {
     struct st_neverbleed_rsa_exdata_t *exdata;
     struct st_neverbleed_thread_data_t *thdata;
-    struct expbuf_t buf = {NULL};
+    neverbleed_iobuf_t buf = {NULL};
     size_t ret, siglen;
     unsigned char *sigret;
 
@@ -714,7 +714,7 @@ static int sign_proxy(int type, const unsigned char *m, unsigned int m_len, unsi
     return (int)ret;
 }
 
-static int sign_stub(struct expbuf_t *buf)
+static int sign_stub(neverbleed_iobuf_t *buf)
 {
     unsigned char *m, sigret[4096];
     size_t type, m_len, key_index;
@@ -814,7 +814,7 @@ static size_t daemon_set_ecdsa(EC_KEY *ec_key)
     return index;
 }
 
-static int ecdsa_sign_stub(struct expbuf_t *buf)
+static int ecdsa_sign_stub(neverbleed_iobuf_t *buf)
 {
     unsigned char *m, sigret[4096];
     size_t type, m_len, key_index;
@@ -861,7 +861,7 @@ static int ecdsa_sign_proxy(int type, const unsigned char *m, int m_len, unsigne
 {
     struct st_neverbleed_rsa_exdata_t *exdata;
     struct st_neverbleed_thread_data_t *thdata;
-    struct expbuf_t buf = {NULL};
+    neverbleed_iobuf_t buf = {NULL};
     size_t ret, siglen;
     unsigned char *sigret;
 
@@ -949,7 +949,7 @@ static void priv_ecdsa_finish(EC_KEY *key)
 
     ecdsa_get_privsep_data(key, &exdata, &thdata);
 
-    struct expbuf_t buf = {NULL};
+    neverbleed_iobuf_t buf = {NULL};
     size_t ret;
 
     expbuf_push_str(&buf, "del_ecdsa_key");
@@ -963,7 +963,7 @@ static void priv_ecdsa_finish(EC_KEY *key)
     expbuf_dispose(&buf);
 }
 
-static int del_ecdsa_key_stub(struct expbuf_t *buf)
+static int del_ecdsa_key_stub(neverbleed_iobuf_t *buf)
 {
     size_t key_index;
     int ret = 0;
@@ -1006,7 +1006,7 @@ respond:
 int neverbleed_load_private_key_file(neverbleed_t *nb, SSL_CTX *ctx, const char *fn, char *errbuf)
 {
     struct st_neverbleed_thread_data_t *thdata = get_thread_data(nb);
-    struct expbuf_t buf = {NULL};
+    neverbleed_iobuf_t buf = {NULL};
     int ret = 1;
     size_t index, type;
     EVP_PKEY *pkey;
@@ -1069,7 +1069,7 @@ int neverbleed_load_private_key_file(neverbleed_t *nb, SSL_CTX *ctx, const char 
     return ret;
 }
 
-static int load_key_stub(struct expbuf_t *buf)
+static int load_key_stub(neverbleed_iobuf_t *buf)
 {
     char *fn;
     FILE *fp = NULL;
@@ -1180,7 +1180,7 @@ Respond:
 int neverbleed_setuidgid(neverbleed_t *nb, const char *user, int change_socket_ownership)
 {
     struct st_neverbleed_thread_data_t *thdata = get_thread_data(nb);
-    struct expbuf_t buf = {NULL};
+    neverbleed_iobuf_t buf = {NULL};
     size_t ret;
 
     expbuf_push_str(&buf, "setuidgid");
@@ -1197,7 +1197,7 @@ int neverbleed_setuidgid(neverbleed_t *nb, const char *user, int change_socket_o
     return (int)ret;
 }
 
-static int setuidgid_stub(struct expbuf_t *buf)
+static int setuidgid_stub(neverbleed_iobuf_t *buf)
 {
     const char *user;
     size_t change_socket_ownership;
@@ -1334,7 +1334,7 @@ static int priv_rsa_finish(RSA *rsa)
 
     get_privsep_data(rsa, &exdata, &thdata);
 
-    struct expbuf_t buf = {NULL};
+    neverbleed_iobuf_t buf = {NULL};
     size_t ret;
 
     expbuf_push_str(&buf, "del_rsa_key");
@@ -1350,7 +1350,7 @@ static int priv_rsa_finish(RSA *rsa)
     return (int)ret;
 }
 
-static int del_rsa_key_stub(struct expbuf_t *buf)
+static int del_rsa_key_stub(neverbleed_iobuf_t *buf)
 {
     size_t key_index;
 
@@ -1417,7 +1417,7 @@ static void yield_on_data(int fd)
 static void *daemon_conn_thread(void *_sock_fd)
 {
     int sock_fd = (int)((char *)_sock_fd - (char *)NULL);
-    struct expbuf_t buf = {NULL};
+    neverbleed_iobuf_t buf = {NULL};
     unsigned char auth_token[NEVERBLEED_AUTH_TOKEN_SIZE];
 
     /* authenticate */
@@ -1722,4 +1722,4 @@ Fail:
 }
 
 void (*neverbleed_post_fork_cb)(void) = NULL;
-void (*neverbleed_transaction_cb)(struct expbuf_t *) = NULL;
+void (*neverbleed_transaction_cb)(neverbleed_iobuf_t *) = NULL;

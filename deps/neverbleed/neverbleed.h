@@ -49,12 +49,12 @@ typedef struct st_neverbleed_t {
     unsigned char auth_token[NEVERBLEED_AUTH_TOKEN_SIZE];
 } neverbleed_t;
 
-struct expbuf_t {
+typedef struct st_neverbleed_iobuf_t {
     char *buf;
     char *start;
     char *end;
     size_t capacity;
-};
+} neverbleed_iobuf_t;
 
 /**
  * initializes the privilege separation engine (returns 0 if successful)
@@ -81,14 +81,18 @@ int neverbleed_setaffinity(neverbleed_t *nb, NEVERBLEED_CPU_SET_T *cpuset);
  * spawned
  */
 extern void (*neverbleed_post_fork_cb)(void);
-extern void (*neverbleed_transaction_cb)(struct expbuf_t *);
+/**
+ * An optional callback used for replacing `expbuf_send`; i.e., the logic that sends the request and receives the response. The
+ * callback returns a boolean indicating if it handled the task. It may return false to delagate the task back to the default logic.
+ */
+extern void (*neverbleed_transaction_cb)(neverbleed_iobuf_t *);
 
 typedef void (*neverbleed_cb)(int);
 
 int neverbleed_get_fd(neverbleed_t *nb);
-size_t neverbleed_buffer_size(struct expbuf_t *buf);
-void neverbleed_transaction_read(neverbleed_t *nb, struct expbuf_t *buf);
-void neverbleed_transaction_write(neverbleed_t *nb, struct expbuf_t *buf);
+size_t neverbleed_iobuf_size(neverbleed_iobuf_t *buf);
+void neverbleed_transaction_read(neverbleed_t *nb, neverbleed_iobuf_t *buf);
+void neverbleed_transaction_write(neverbleed_t *nb, neverbleed_iobuf_t *buf);
 
 #ifdef __cplusplus
 }
