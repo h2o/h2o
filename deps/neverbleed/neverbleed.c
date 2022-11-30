@@ -203,11 +203,6 @@ static int read_nbytes(int fd, void *p, size_t sz)
     return 0;
 }
 
-static size_t expbuf_size(neverbleed_iobuf_t *buf)
-{
-    return buf->end - buf->start;
-}
-
 static void expbuf_dispose(neverbleed_iobuf_t *buf)
 {
     if (buf->capacity != 0)
@@ -259,7 +254,7 @@ static void expbuf_push_bytes(neverbleed_iobuf_t *buf, const void *p, size_t l)
 
 static int expbuf_shift_num(neverbleed_iobuf_t *buf, size_t *v)
 {
-    if (expbuf_size(buf) < sizeof(*v))
+    if (neverbleed_iobuf_size(buf) < sizeof(*v))
         return -1;
     memcpy(v, buf->start, sizeof(*v));
     buf->start += sizeof(*v);
@@ -268,7 +263,7 @@ static int expbuf_shift_num(neverbleed_iobuf_t *buf, size_t *v)
 
 static char *expbuf_shift_str(neverbleed_iobuf_t *buf)
 {
-    char *nul = memchr(buf->start, '\0', expbuf_size(buf)), *ret;
+    char *nul = memchr(buf->start, '\0', neverbleed_iobuf_size(buf)), *ret;
     if (nul == NULL)
         return NULL;
     ret = buf->start;
@@ -281,7 +276,7 @@ static void *expbuf_shift_bytes(neverbleed_iobuf_t *buf, size_t *l)
     void *ret;
     if (expbuf_shift_num(buf, l) != 0)
         return NULL;
-    if (expbuf_size(buf) < *l)
+    if (neverbleed_iobuf_size(buf) < *l)
         return NULL;
     ret = buf->start;
     buf->start += *l;
@@ -303,7 +298,7 @@ static int expbuf_read(neverbleed_iobuf_t *buf, int fd)
 static int expbuf_write(neverbleed_iobuf_t *buf, int fd)
 {
     struct iovec vecs[2] = {{NULL}};
-    size_t bufsz = expbuf_size(buf);
+    size_t bufsz = neverbleed_iobuf_size(buf);
     int vecindex;
     ssize_t r;
 
@@ -444,11 +439,6 @@ int neverbleed_get_fd(neverbleed_t *nb)
 {
     struct st_neverbleed_thread_data_t *thdata = get_thread_data(nb);
     return thdata->fd;
-}
-
-size_t neverbleed_iobuf_size(neverbleed_iobuf_t *buf)
-{
-    return expbuf_size(buf);
 }
 
 void neverbleed_transaction_read(neverbleed_t *nb, neverbleed_iobuf_t *buf)

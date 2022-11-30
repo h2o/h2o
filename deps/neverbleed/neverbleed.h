@@ -90,9 +90,16 @@ extern void (*neverbleed_transaction_cb)(neverbleed_iobuf_t *);
 typedef void (*neverbleed_cb)(int);
 
 int neverbleed_get_fd(neverbleed_t *nb);
-size_t neverbleed_iobuf_size(neverbleed_iobuf_t *buf);
+static size_t neverbleed_iobuf_size(neverbleed_iobuf_t *buf);
 void neverbleed_transaction_read(neverbleed_t *nb, neverbleed_iobuf_t *buf);
 void neverbleed_transaction_write(neverbleed_t *nb, neverbleed_iobuf_t *buf);
+
+/* inline function definitions */
+
+inline size_t neverbleed_iobuf_size(neverbleed_iobuf_t *buf)
+{
+    return buf->end - buf->start;
+}
 
 #ifdef __cplusplus
 }
