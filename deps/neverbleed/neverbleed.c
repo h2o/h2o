@@ -213,12 +213,9 @@ static void expbuf_dispose(struct expbuf_t *buf)
     if (buf->capacity != 0)
         OPENSSL_cleanse(buf->buf, buf->capacity);
     free(buf->buf);
-    buf->buf = NULL;
-    buf->start = NULL;
-    buf->end = NULL;
-    buf->capacity = 0;
-    // do not dispose of event fds, this is handled in async functions
+    memset(buf, 0, sizeof(*buf));
 }
+
 static void expbuf_reserve(struct expbuf_t *buf, size_t extra)
 {
     char *n;
@@ -248,7 +245,6 @@ static void expbuf_push_str(struct expbuf_t *buf, const char *s)
 {
     size_t l = strlen(s) + 1;
     expbuf_reserve(buf, l);
-    assert(buf->end != NULL);
     memcpy(buf->end, s, l);
     buf->end += l;
 }
@@ -415,13 +411,12 @@ static struct st_neverbleed_thread_data_t *get_thread_data(neverbleed_t *nb)
 
     if ((thdata = pthread_getspecific(nb->thread_key)) != NULL) {
         if (thdata->self_pid == self_pid)
-            goto Return;
+            return thdata;
         /* we have been forked! */
         close(thdata->fd);
     } else {
         if ((thdata = malloc(sizeof(*thdata))) == NULL)
             dief("malloc failed");
-        memset(thdata, 0, sizeof(*thdata));
     }
 
     thdata->self_pid = self_pid;
@@ -442,7 +437,6 @@ static struct st_neverbleed_thread_data_t *get_thread_data(neverbleed_t *nb)
         dief("failed to send authentication token");
     pthread_setspecific(nb->thread_key, thdata);
 
-Return:
     return thdata;
 }
 
