@@ -1467,9 +1467,12 @@ void h2o_add_server_timing_header(h2o_req_t *req, int uses_trailer);
 h2o_iovec_t h2o_build_server_timing_trailer(h2o_req_t *req, const char *prefix, size_t prefix_len, const char *suffix,
                                             size_t suffix_len);
 /**
- * release all thread-local resources used by h2o
+ * Garbage collects resources kept for future reuse in the current thread. If `now` is set to zero, performs full GC. If a valid
+ * pointer is passed to `ctx_optional`, resource associated to the context will be collected as well. This function returns when
+ * it should be called the next time, or UINT64_MAX if there are no resources being held that can be acclaimed in the foreseeable
+ * future.
  */
-void h2o_cleanup_thread(void);
+uint64_t h2o_cleanup_thread(uint64_t now, h2o_context_t *ctx_optional);
 
 extern uint64_t h2o_connection_id;
 
