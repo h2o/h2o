@@ -336,13 +336,14 @@ static int expbuf_write(struct expbuf_t *buf, int fd)
     return 0;
 }
 
-/* This function is a conveniance wrapper around writing and reading an expbuf.
+/**
+ * Sends a request and reads a response.
  */
-static void expbuf_send(struct expbuf_t *buf, struct st_neverbleed_thread_data_t *thdata)
+static void expbuf_transaction(struct expbuf_t *buf, struct st_neverbleed_thread_data_t *thdata)
 {
-    if (neverbleed_write_cb != NULL) {
+    if (neverbleed_transaction_cb != NULL) {
         buf->data = thdata->buf_data;
-        neverbleed_write_cb(buf); // notify application of write
+        neverbleed_transaction_cb(buf); // notify application of write
     } else {
         if (expbuf_write(buf, thdata->fd) == -1) {
             if (errno != 0) {
@@ -464,7 +465,7 @@ size_t neverbleed_buffer_size(struct expbuf_t *buf)
     return expbuf_size(buf);
 }
 
-void neverbleed_read_transaction(neverbleed_t *nb, struct expbuf_t *buf)
+void neverbleed_transaction_read(neverbleed_t *nb, struct expbuf_t *buf)
 {
     struct st_neverbleed_thread_data_t *thdata = get_thread_data(nb);
     expbuf_dispose(buf);
@@ -477,7 +478,7 @@ void neverbleed_read_transaction(neverbleed_t *nb, struct expbuf_t *buf)
     }
 }
 
-void neverbleed_write_transaction(neverbleed_t *nb, struct expbuf_t *buf)
+void neverbleed_transaction_write(neverbleed_t *nb, struct expbuf_t *buf)
 {
     struct st_neverbleed_thread_data_t *thdata = get_thread_data(nb);
     if (expbuf_write(buf, thdata->fd) == -1) {
@@ -636,7 +637,7 @@ static int priv_encdec_proxy(const char *cmd, int flen, const unsigned char *fro
     expbuf_push_num(&buf, exdata->key_index);
     expbuf_push_num(&buf, padding);
 
-    expbuf_send(&buf, thdata);
+    expbuf_transaction(&buf, thdata);
 
     if (expbuf_shift_num(&buf, &ret) != 0 || (to = expbuf_shift_bytes(&buf, &tolen)) == NULL) {
         errno = 0;
@@ -714,7 +715,7 @@ static int sign_proxy(int type, const unsigned char *m, unsigned int m_len, unsi
     expbuf_push_num(&buf, type);
     expbuf_push_bytes(&buf, m, m_len);
     expbuf_push_num(&buf, exdata->key_index);
-    expbuf_send(&buf, thdata);
+    expbuf_transaction(&buf, thdata);
 
     if (expbuf_shift_num(&buf, &ret) != 0 || (sigret = expbuf_shift_bytes(&buf, &siglen)) == NULL) {
         errno = 0;
@@ -892,7 +893,7 @@ static int ecdsa_sign_proxy(int type, const unsigned char *m, int m_len, unsigne
     expbuf_push_num(&buf, type);
     expbuf_push_bytes(&buf, m, m_len);
     expbuf_push_num(&buf, exdata->key_index);
-    expbuf_send(&buf, thdata);
+    expbuf_transaction(&buf, thdata);
 
     if (expbuf_shift_num(&buf, &ret) != 0 || (sigret = expbuf_shift_bytes(&buf, &siglen)) == NULL) {
         errno = 0;
@@ -967,7 +968,7 @@ static void priv_ecdsa_finish(EC_KEY *key)
 
     expbuf_push_str(&buf, "del_ecdsa_key");
     expbuf_push_num(&buf, exdata->key_index);
-    expbuf_send(&buf, thdata);
+    expbuf_transaction(&buf, thdata);
 
     if (expbuf_shift_num(&buf, &ret) != 0) {
         errno = 0;
@@ -1026,7 +1027,7 @@ int neverbleed_load_private_key_file(neverbleed_t *nb, SSL_CTX *ctx, const char 
 
     expbuf_push_str(&buf, "load_key");
     expbuf_push_str(&buf, fn);
-    expbuf_send(&buf, thdata);
+    expbuf_transaction(&buf, thdata);
 
     if (expbuf_shift_num(&buf, &type) != 0 || expbuf_shift_num(&buf, &index) != 0) {
         errno = 0;
@@ -1199,7 +1200,7 @@ int neverbleed_setuidgid(neverbleed_t *nb, const char *user, int change_socket_o
     expbuf_push_str(&buf, "setuidgid");
     expbuf_push_str(&buf, user);
     expbuf_push_num(&buf, change_socket_ownership);
-    expbuf_send(&buf, thdata);
+    expbuf_transaction(&buf, thdata);
 
     if (expbuf_shift_num(&buf, &ret) != 0) {
         errno = 0;
@@ -1274,7 +1275,7 @@ int neverbleed_setaffinity(neverbleed_t *nb, NEVERBLEED_CPU_SET_T *cpuset)
 
     expbuf_push_str(&buf, "setaffinity");
     expbuf_push_bytes(&buf, cpuset, sizeof(*cpuset));
-    expbuf_send(&buf, thdata);
+    expbuf_transaction(&buf, thdata);
 
     if (expbuf_shift_num(&buf, &ret) != 0) {
         errno = 0;
@@ -1352,7 +1353,7 @@ static int priv_rsa_finish(RSA *rsa)
 
     expbuf_push_str(&buf, "del_rsa_key");
     expbuf_push_num(&buf, exdata->key_index);
-    expbuf_send(&buf, thdata);
+    expbuf_transaction(&buf, thdata);
 
     if (expbuf_shift_num(&buf, &ret) != 0) {
         errno = 0;
@@ -1735,4 +1736,4 @@ Fail:
 }
 
 void (*neverbleed_post_fork_cb)(void) = NULL;
-void (*neverbleed_write_cb)(struct expbuf_t *) = NULL;
+void (*neverbleed_transaction_cb)(struct expbuf_t *) = NULL;

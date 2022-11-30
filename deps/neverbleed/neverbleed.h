@@ -83,15 +83,15 @@ int neverbleed_setaffinity(neverbleed_t *nb, NEVERBLEED_CPU_SET_T *cpuset);
  * spawned
  */
 extern void (*neverbleed_post_fork_cb)(void);
-extern void (*neverbleed_write_cb)(struct expbuf_t *);
+extern void (*neverbleed_transaction_cb)(struct expbuf_t *);
 
 typedef void (*neverbleed_cb)(int);
 
 int neverbleed_get_fd(neverbleed_t *nb);
 void neverbleed_set_buffer_data(neverbleed_t *nb, void *data);
 size_t neverbleed_buffer_size(struct expbuf_t *buf);
-void neverbleed_read_transaction(neverbleed_t *nb, struct expbuf_t *buf);
-void neverbleed_write_transaction(neverbleed_t *nb, struct expbuf_t *buf);
+void neverbleed_transaction_read(neverbleed_t *nb, struct expbuf_t *buf);
+void neverbleed_transaction_write(neverbleed_t *nb, struct expbuf_t *buf);
 
 #ifdef __cplusplus
 }

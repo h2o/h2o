@@ -532,7 +532,7 @@ static void nb_write_sync_transaction(struct expbuf_t *buf)
         abort();
     }
 
-    neverbleed_write_transaction(neverbleed, buf);
+    neverbleed_transaction_write(neverbleed, buf);
 
     // set fd back to original
     if (fcntl(fd, F_SETFL, flags) == -1) {
@@ -552,7 +552,7 @@ static void nb_read_sync_transaction(struct expbuf_t *buf)
         abort();
     }
 
-    neverbleed_read_transaction(neverbleed, buf);
+    neverbleed_transaction_read(neverbleed, buf);
 
     // set fd back to original
     if (fcntl(fd, F_SETFL, flags) == -1) {
@@ -603,7 +603,7 @@ static void async_pause(struct nbbuf *buf)
 }
 
 
-static void on_neverbleed_write(struct expbuf_t *buf)
+static void on_neverbleed_transaction(struct expbuf_t *buf)
 {
     int is_async = 0;
 #if PTLS_OPENSSL_HAVE_ASYNC
@@ -1316,7 +1316,7 @@ static int load_ssl_identity(h2o_configurator_command_t *cmd, SSL_CTX *ssl_ctx, 
         char errbuf[NEVERBLEED_ERRBUF_SIZE];
         if (neverbleed == NULL) {
             neverbleed_post_fork_cb = on_neverbleed_fork;
-            neverbleed_write_cb = on_neverbleed_write;
+            neverbleed_transaction_cb = on_neverbleed_transaction;
             neverbleed = h2o_mem_alloc(sizeof(*neverbleed));
             if (neverbleed_init(neverbleed, errbuf) != 0) {
                 fprintf(stderr, "%s\n", errbuf);
