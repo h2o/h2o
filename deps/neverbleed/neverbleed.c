@@ -35,7 +35,6 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <sys/uio.h>
-#include <sys/stat.h>
 #include <unistd.h>
 #include <signal.h>
 #if defined(__linux__)
