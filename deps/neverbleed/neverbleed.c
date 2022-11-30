@@ -1293,7 +1293,6 @@ int neverbleed_setaffinity(neverbleed_t *nb, NEVERBLEED_CPU_SET_T *cpuset)
 
     return (int)ret;
 }
-#endif
 
 static int setaffinity_stub(struct expbuf_t *buf)
 {
@@ -1328,6 +1327,7 @@ Respond:
     expbuf_push_num(buf, ret);
     return 0;
 }
+#endif
 
 __attribute__((noreturn)) static void *daemon_close_notify_thread(void *_close_notify_fd)
 {
@@ -1491,9 +1491,11 @@ static void *daemon_conn_thread(void *_sock_fd)
         } else if (strcmp(cmd, "setuidgid") == 0) {
             if (setuidgid_stub(&buf) != 0)
                 break;
+#if NEVERBLEED_HAS_PTHREAD_SETAFFINITY_NP
         } else if (strcmp(cmd, "setaffinity") == 0) {
             if (setaffinity_stub(&buf) != 0)
                 break;
+#endif
         } else {
             warnf("unknown command:%s", cmd);
             break;
