@@ -478,7 +478,7 @@ static void nbbuf_free(struct nbbuf *nb_buf)
 {
     // consume notification
     NEVERBLEED_SIGNAL_T sig;
-    int ret;
+    ssize_t ret;
     while ((ret = read(nb_buf->efd_read, &sig, sizeof(sig))) == -1 && errno == EINTR)
         ;
     assert(ret > 0);
