@@ -161,6 +161,37 @@ static void test_sign_verify(EVP_PKEY *key, const struct st_ptls_openssl_signatu
     }
 }
 
+static void test_sha(void)
+{
+    static const char *text =
+        "Alice was beginning to get very tired of sitting by her sister on the bank, and of having nothing to do: once or twice "
+        "she had peeped into the book her sister was reading, but it had no pictures or conversations in it, and where is the use "
+        "of a book, thought Alice, without pictures or conversations?";
+    static const struct {
+        ptls_hash_algorithm_t *algo;
+        uint8_t expected[PTLS_MAX_DIGEST_SIZE];
+    } all[] = {
+        {&ptls_openssl_sha256, {0x9b, 0x5d, 0x38, 0x9a, 0xa5, 0xfd, 0xc8, 0x3a, 0xf5, 0x59, 0x8e, 0x90, 0xd7, 0x4e, 0x99, 0xb2,
+                                0xbc, 0xeb, 0x97, 0x45, 0x7a, 0xc5, 0xda, 0xde, 0xd5, 0xd2, 0x18, 0x1c, 0x33, 0x5c, 0x93, 0x41}},
+        {&ptls_openssl_sha384, {0x41, 0x7a, 0x7e, 0xda, 0x89, 0x55, 0xc6, 0xb4, 0x31, 0xde, 0x73, 0x2c, 0x8d, 0xc9, 0x3b, 0xcc,
+                                0xc7, 0xbc, 0xe8, 0x96, 0x91, 0x7a, 0xa6, 0xa2, 0xf8, 0x73, 0x7e, 0xb9, 0xff, 0x09, 0xc6, 0x32,
+                                0x31, 0x7b, 0xe1, 0x5b, 0xd7, 0xaa, 0xf2, 0xbd, 0x2a, 0x5c, 0x3a, 0xda, 0x3b, 0x24, 0x75, 0x92}},
+        {&ptls_openssl_sha512, {0x40, 0x9d, 0x7f, 0x12, 0x8e, 0x32, 0x96, 0x89, 0xdc, 0xa5, 0x72, 0xe4, 0xa5, 0x39, 0xb4, 0x2b,
+                                0xf0, 0x24, 0xe5, 0x42, 0x7a, 0x61, 0x77, 0x69, 0xda, 0xd5, 0xfd, 0x72, 0x85, 0x83, 0x39, 0x01,
+                                0x31, 0xa6, 0xc8, 0x2f, 0x6a, 0x09, 0xfe, 0xa0, 0x54, 0x0c, 0xe3, 0x89, 0xdb, 0x8c, 0x4a, 0x83,
+                                0x2f, 0x90, 0x94, 0x54, 0x93, 0x3f, 0xe9, 0x8a, 0x32, 0x3f, 0x85, 0x24, 0xa5, 0x9b, 0x5b, 0x02}},
+
+        {NULL}};
+
+    for (size_t i = 0; all[i].algo != NULL; ++i) {
+        uint8_t actual[PTLS_MAX_DIGEST_SIZE];
+        note("%s", all[i].algo->name);
+        int ret = ptls_calc_hash(all[i].algo, actual, text, strlen(text));
+        ok(ret == 0);
+        ok(memcmp(actual, all[i].expected, all[i].algo->digest_size) == 0);
+    }
+}
+
 static void test_rsa_sign(void)
 {
     ptls_openssl_sign_certificate_t *sc = (ptls_openssl_sign_certificate_t *)ctx->sign_certificate;
@@ -298,6 +329,11 @@ DEFINE_FFX_AES128_ALGORITHMS(openssl);
 #if PTLS_OPENSSL_HAVE_CHACHA20_POLY1305
 DEFINE_FFX_CHACHA20_ALGORITHMS(openssl);
 #endif
+
+static void test_all_hpke(void)
+{
+    test_hpke(ptls_openssl_hpke_kems, ptls_openssl_hpke_cipher_suites);
+}
 
 #if ASYNC_TESTS
 
@@ -497,6 +533,7 @@ int main(int argc, char **argv)
     ADD_FFX_CHACHA20_ALGORITHMS(openssl);
 #endif
 
+    subtest("sha", test_sha);
     subtest("rsa-sign", test_rsa_sign);
     subtest("ecdsa-sign", test_ecdsa_sign);
     subtest("ed25519-sign", test_ed25519_sign);
@@ -563,6 +600,9 @@ int main(int argc, char **argv)
 #endif
 
     esni_private_keys[0]->on_exchange(esni_private_keys, 1, NULL, ptls_iovec_init(NULL, 0));
+
+    subtest("hpke", test_all_hpke);
+
     int ret = done_testing();
 #if !defined(LIBRESSL_VERSION_NUMBER) && OPENSSL_VERSION_NUMBER >= 0x30000000L
     OSSL_PROVIDER_unload(dflt);

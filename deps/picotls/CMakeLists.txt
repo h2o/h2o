@@ -55,9 +55,11 @@ SET(MINICRYPTO_LIBRARY_FILES
     deps/cifra/src/sha256.c
     deps/cifra/src/sha512.c)
 SET(CORE_FILES
+    lib/hpke.c
     lib/picotls.c
     lib/pembase64.c)
 SET(CORE_TEST_FILES
+    t/hpke.c
     t/picotls.c)
 IF (WITH_DTRACE)
     SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DPICOTLS_USE_DTRACE=1")

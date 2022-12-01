@@ -362,7 +362,6 @@ struct st_ptls_server_hello_t {
 
 struct st_ptls_key_schedule_t {
     unsigned generation; /* early secret (1), hanshake secret (2), master secret (3) */
-    const char *hkdf_label_prefix;
     uint8_t secret[PTLS_MAX_DIGEST_SIZE];
     size_t num_hashes;
     struct {
@@ -382,8 +381,6 @@ struct st_ptls_extension_bitmap_t {
 
 static const uint8_t zeroes_of_max_digest_size[PTLS_MAX_DIGEST_SIZE] = {0};
 
-static int hkdf_expand_label(ptls_hash_algorithm_t *algo, void *output, size_t outlen, ptls_iovec_t secret, const char *label,
-                             ptls_iovec_t hash_value, const char *label_prefix);
 static ptls_aead_context_t *new_aead(ptls_aead_algorithm_t *aead, ptls_hash_algorithm_t *hash, int is_enc, const void *secret,
                                      ptls_iovec_t hash_value, const char *label_prefix);
 static int server_finish_handshake(ptls_t *tls, ptls_message_emitter_t *emitter, int send_cert_verify,
@@ -411,73 +408,52 @@ static inline void extension_bitmap_set(struct st_ptls_extension_bitmap_t *bitma
         bitmap->bits[id / 8] |= 1 << (id % 8);
 }
 
-static inline void init_extension_bitmap(struct st_ptls_extension_bitmap_t *bitmap, uint8_t hstype)
+static inline void init_extension_bitmap(struct st_ptls_extension_bitmap_t *bitmap, unsigned hstype)
 {
-    *bitmap = (struct st_ptls_extension_bitmap_t){{0}};
-
-#define EXT(extid, proc)                                                                                                           \
+#define HSTYPE_TO_BIT(hstype) ((uint64_t)1 << ((hstype) + 1)) /* min(hstype) is -1 (PSEUDO_HRR) */
+#define DEFINE_BIT(abbrev, hstype) static const uint64_t abbrev = HSTYPE_TO_BIT(PTLS_HANDSHAKE_TYPE_##hstype)
+#define EXT(extid, allowed_bits)                                                                                                   \
     do {                                                                                                                           \
-        int _found = 0;                                                                                                            \
-        do {                                                                                                                       \
-            proc                                                                                                                   \
-        } while (0);                                                                                                               \
-        if (!_found)                                                                                                               \
+        if (((allowed_bits)&HSTYPE_TO_BIT(hstype)) == 0)                                                                           \
             extension_bitmap_set(bitmap, PTLS_EXTENSION_TYPE_##extid);                                                             \
     } while (0)
-#define ALLOW(allowed_hstype) _found = _found || hstype == PTLS_HANDSHAKE_TYPE_##allowed_hstype
 
-    /* Implements the table found in section 4.2 of draft-19; "If an implementation receives an extension which it recognizes and
-     * which is not specified for the message in which it appears it MUST abort the handshake with an “illegal_parameter” alert."
-     */
-    EXT(SERVER_NAME, {
-        ALLOW(CLIENT_HELLO);
-        ALLOW(ENCRYPTED_EXTENSIONS);
-    });
-    EXT(STATUS_REQUEST, {
-        ALLOW(CLIENT_HELLO);
-        ALLOW(CERTIFICATE);
-        ALLOW(CERTIFICATE_REQUEST);
-    });
-    EXT(SUPPORTED_GROUPS, {
-        ALLOW(CLIENT_HELLO);
-        ALLOW(ENCRYPTED_EXTENSIONS);
-    });
-    EXT(SIGNATURE_ALGORITHMS, {
-        ALLOW(CLIENT_HELLO);
-        ALLOW(CERTIFICATE_REQUEST);
-    });
-    EXT(ALPN, {
-        ALLOW(CLIENT_HELLO);
-        ALLOW(ENCRYPTED_EXTENSIONS);
-    });
-    EXT(KEY_SHARE, {
-        ALLOW(CLIENT_HELLO);
-        ALLOW(SERVER_HELLO);
-    });
-    EXT(PRE_SHARED_KEY, {
-        ALLOW(CLIENT_HELLO);
-        ALLOW(SERVER_HELLO);
-    });
-    EXT(PSK_KEY_EXCHANGE_MODES, { ALLOW(CLIENT_HELLO); });
-    EXT(EARLY_DATA, {
-        ALLOW(CLIENT_HELLO);
-        ALLOW(ENCRYPTED_EXTENSIONS);
-        ALLOW(NEW_SESSION_TICKET);
-    });
-    EXT(COOKIE, {
-        ALLOW(CLIENT_HELLO);
-        ALLOW(SERVER_HELLO);
-    });
-    EXT(SUPPORTED_VERSIONS, {
-        ALLOW(CLIENT_HELLO);
-        ALLOW(SERVER_HELLO);
-    });
-    EXT(SERVER_CERTIFICATE_TYPE, {
-        ALLOW(CLIENT_HELLO);
-        ALLOW(ENCRYPTED_EXTENSIONS);
-    });
+    DEFINE_BIT(CH, CLIENT_HELLO);
+    DEFINE_BIT(SH, SERVER_HELLO);
+    DEFINE_BIT(HRR, PSEUDO_HRR);
+    DEFINE_BIT(EE, ENCRYPTED_EXTENSIONS);
+    DEFINE_BIT(CR, CERTIFICATE_REQUEST);
+    DEFINE_BIT(CT, CERTIFICATE);
+    DEFINE_BIT(NST, NEW_SESSION_TICKET);
 
-#undef ALLOW
+    *bitmap = (struct st_ptls_extension_bitmap_t){{0}};
+
+    /* clang-format off */
+    /* RFC 8446 section 4.2: "The table below indicates the messages where a given extension may appear... If an implementation
+     * receives an extension which it recognizes and which is not specified for the message in which it appears, it MUST abort the
+     * handshake with an "illegal_parameter" alert.
+     *
+     * +-------------------------+---------------+
+     * +        Extension        |    Allowed    |
+     * +-------------------------+---------------+ */
+    EXT( SERVER_NAME             , CH + EE       );
+    EXT( STATUS_REQUEST          , CH + CR + CT  );
+    EXT( SUPPORTED_GROUPS        , CH + EE       );
+    EXT( SIGNATURE_ALGORITHMS    , CH + CR       );
+    EXT( ALPN                    , CH + EE       );
+    EXT( SERVER_CERTIFICATE_TYPE , CH + EE       );
+    EXT( KEY_SHARE               , CH + SH + HRR );
+    EXT( PRE_SHARED_KEY          , CH + SH       );
+    EXT( PSK_KEY_EXCHANGE_MODES  , CH            );
+    EXT( EARLY_DATA              , CH + EE + NST );
+    EXT( COOKIE                  , CH + HRR      );
+    EXT( SUPPORTED_VERSIONS      , CH + SH + HRR );
+    EXT( COMPRESS_CERTIFICATE    , CH + CR       ); /* from RFC 8879 */
+    /* +-----------------------------------------+ */
+    /* clang-format on */
+
+#undef HSTYPE_TO_BIT
+#undef DEFINE_ABBREV
 #undef EXT
 }
 
@@ -699,12 +675,12 @@ static int aead_decrypt(struct st_ptls_traffic_protection_t *ctx, void *output, 
 static void build_tls12_aad(uint8_t *aad, uint8_t type, uint64_t seq, uint16_t length)
 {
     for (size_t i = 0; i < 8; ++i)
-        aad[i] = seq >> (56 - i * 8);
+        aad[i] = (uint8_t)(seq >> (56 - i * 8));
     aad[8] = type;
     aad[9] = PTLS_RECORD_VERSION_MAJOR;
     aad[10] = PTLS_RECORD_VERSION_MINOR;
     aad[11] = length >> 8;
-    aad[12] = length;
+    aad[12] = (uint8_t)length;
 }
 
 #define buffer_push_record(buf, type, block)                                                                                       \
@@ -741,7 +717,7 @@ static int buffer_push_encrypted_records(ptls_buffer_t *buf, uint8_t type, const
                 }
                 /* build AAD */
                 uint8_t aad[PTLS_TLS12_AAD_SIZE];
-                build_tls12_aad(aad, type, enc->seq, chunk_size);
+                build_tls12_aad(aad, type, enc->seq, (uint16_t)chunk_size);
                 /* encrypt */
                 buf->off += ptls_aead_encrypt(enc->aead, buf->base + buf->off, src, chunk_size, nonce, aad, sizeof(aad));
                 ++enc->seq;
@@ -864,6 +840,14 @@ static int commit_record_message(ptls_message_emitter_t *_self)
         ptls_decode_assert_block_close((src), end);                                                                                \
     } while (0)
 
+int ptls_decode8(uint8_t *value, const uint8_t **src, const uint8_t *end)
+{
+    if (*src == end)
+        return PTLS_ALERT_DECODE_ERROR;
+    *value = *(*src)++;
+    return 0;
+}
+
 int ptls_decode16(uint16_t *value, const uint8_t **src, const uint8_t *end)
 {
     if (end - *src < 2)
@@ -940,8 +924,7 @@ static void key_schedule_free(ptls_key_schedule_t *sched)
     free(sched);
 }
 
-static ptls_key_schedule_t *key_schedule_new(ptls_cipher_suite_t *preferred, ptls_cipher_suite_t **offered,
-                                             const char *hkdf_label_prefix)
+static ptls_key_schedule_t *key_schedule_new(ptls_cipher_suite_t *preferred, ptls_cipher_suite_t **offered)
 {
 #define FOREACH_HASH(block)                                                                                                        \
     do {                                                                                                                           \
@@ -966,15 +949,12 @@ static ptls_key_schedule_t *key_schedule_new(ptls_cipher_suite_t *preferred, ptl
 
     ptls_key_schedule_t *sched;
 
-    if (hkdf_label_prefix == NULL)
-        hkdf_label_prefix = PTLS_HKDF_EXPAND_LABEL_PREFIX;
-
     { /* allocate */
         size_t num_hashes = 0;
         FOREACH_HASH({ ++num_hashes; });
         if ((sched = malloc(offsetof(ptls_key_schedule_t, hashes) + sizeof(sched->hashes[0]) * num_hashes)) == NULL)
             return NULL;
-        *sched = (ptls_key_schedule_t){0, hkdf_label_prefix};
+        *sched = (ptls_key_schedule_t){0};
     }
 
     /* setup the hash algos and contexts */
@@ -1001,10 +981,10 @@ static int key_schedule_extract(ptls_key_schedule_t *sched, ptls_iovec_t ikm)
         ikm = ptls_iovec_init(zeroes_of_max_digest_size, sched->hashes[0].algo->digest_size);
 
     if (sched->generation != 0 &&
-        (ret = hkdf_expand_label(sched->hashes[0].algo, sched->secret, sched->hashes[0].algo->digest_size,
-                                 ptls_iovec_init(sched->secret, sched->hashes[0].algo->digest_size), "derived",
-                                 ptls_iovec_init(sched->hashes[0].algo->empty_digest, sched->hashes[0].algo->digest_size),
-                                 sched->hkdf_label_prefix)) != 0)
+        (ret = ptls_hkdf_expand_label(sched->hashes[0].algo, sched->secret, sched->hashes[0].algo->digest_size,
+                                      ptls_iovec_init(sched->secret, sched->hashes[0].algo->digest_size), "derived",
+                                      ptls_iovec_init(sched->hashes[0].algo->empty_digest, sched->hashes[0].algo->digest_size),
+                                      NULL)) != 0)
         return ret;
 
     ++sched->generation;
@@ -1081,9 +1061,9 @@ static void key_schedule_transform_post_ch1hash(ptls_key_schedule_t *sched)
 
 static int derive_secret_with_hash(ptls_key_schedule_t *sched, void *secret, const char *label, const uint8_t *hash)
 {
-    int ret = hkdf_expand_label(sched->hashes[0].algo, secret, sched->hashes[0].algo->digest_size,
-                                ptls_iovec_init(sched->secret, sched->hashes[0].algo->digest_size), label,
-                                ptls_iovec_init(hash, sched->hashes[0].algo->digest_size), sched->hkdf_label_prefix);
+    int ret = ptls_hkdf_expand_label(sched->hashes[0].algo, secret, sched->hashes[0].algo->digest_size,
+                                     ptls_iovec_init(sched->secret, sched->hashes[0].algo->digest_size), label,
+                                     ptls_iovec_init(hash, sched->hashes[0].algo->digest_size), NULL);
     PTLS_DEBUGF("%s: (label=%s, hash=%02x%02x) => %02x%02x\n", __FUNCTION__, label, hash[0], hash[1], ((uint8_t *)secret)[0],
                 ((uint8_t *)secret)[1]);
     return ret;
@@ -1141,9 +1121,8 @@ static int derive_resumption_secret(ptls_key_schedule_t *sched, uint8_t *secret,
 
     if ((ret = derive_secret(sched, secret, "res master")) != 0)
         goto Exit;
-    if ((ret = hkdf_expand_label(sched->hashes[0].algo, secret, sched->hashes[0].algo->digest_size,
-                                 ptls_iovec_init(secret, sched->hashes[0].algo->digest_size), "resumption", nonce,
-                                 sched->hkdf_label_prefix)) != 0)
+    if ((ret = ptls_hkdf_expand_label(sched->hashes[0].algo, secret, sched->hashes[0].algo->digest_size,
+                                      ptls_iovec_init(secret, sched->hashes[0].algo->digest_size), "resumption", nonce, NULL)) != 0)
         goto Exit;
 
 Exit:
@@ -1444,9 +1423,9 @@ static int calc_verify_data(void *output, ptls_key_schedule_t *sched, const void
     uint8_t digest[PTLS_MAX_DIGEST_SIZE];
     int ret;
 
-    if ((ret = hkdf_expand_label(sched->hashes[0].algo, digest, sched->hashes[0].algo->digest_size,
-                                 ptls_iovec_init(secret, sched->hashes[0].algo->digest_size), "finished", ptls_iovec_init(NULL, 0),
-                                 sched->hkdf_label_prefix)) != 0)
+    if ((ret = ptls_hkdf_expand_label(sched->hashes[0].algo, digest, sched->hashes[0].algo->digest_size,
+                                      ptls_iovec_init(secret, sched->hashes[0].algo->digest_size), "finished",
+                                      ptls_iovec_init(NULL, 0), NULL)) != 0)
         return ret;
     if ((hmac = ptls_hmac_create(sched->hashes[0].algo, digest, sched->hashes[0].algo->digest_size)) == NULL) {
         ptls_clear_memory(digest, sizeof(digest));
@@ -2070,7 +2049,7 @@ static int send_client_hello(ptls_t *tls, ptls_message_emitter_t *emitter, ptls_
         tls->key_share = tls->ctx->key_exchanges[0];
 
     if (!is_second_flight) {
-        tls->key_schedule = key_schedule_new(tls->cipher_suite, tls->ctx->cipher_suites, tls->ctx->hkdf_label_prefix__obsolete);
+        tls->key_schedule = key_schedule_new(tls->cipher_suite, tls->ctx->cipher_suites);
         if ((ret = key_schedule_extract(tls->key_schedule, resumption_secret)) != 0)
             goto Exit;
     }
@@ -2301,73 +2280,70 @@ static int decode_server_hello(ptls_t *tls, struct st_ptls_server_hello_t *sh, c
         }
     }
 
-    /* legacy_compression_method */
-    if (src == end || *src++ != 0) {
-        ret = PTLS_ALERT_ILLEGAL_PARAMETER;
-        goto Exit;
+    { /* legacy_compression_method */
+        uint8_t method;
+        if ((ret = ptls_decode8(&method, &src, end)) != 0)
+            goto Exit;
+        if (method != 0) {
+            ret = PTLS_ALERT_ILLEGAL_PARAMETER;
+            goto Exit;
+        }
     }
 
     if (sh->is_retry_request)
         sh->retry_request.selected_group = UINT16_MAX;
 
     uint16_t exttype, found_version = UINT16_MAX, selected_psk_identity = UINT16_MAX;
-    decode_extensions(src, end, PTLS_HANDSHAKE_TYPE_SERVER_HELLO, &exttype, {
-        if (tls->ctx->on_extension != NULL &&
-            (ret = tls->ctx->on_extension->cb(tls->ctx->on_extension, tls, PTLS_HANDSHAKE_TYPE_SERVER_HELLO, exttype,
-                                              ptls_iovec_init(src, end - src)) != 0))
-            goto Exit;
-        switch (exttype) {
-        case PTLS_EXTENSION_TYPE_SUPPORTED_VERSIONS:
-            if ((ret = ptls_decode16(&found_version, &src, end)) != 0)
-                goto Exit;
-            break;
-        case PTLS_EXTENSION_TYPE_KEY_SHARE:
-            if (sh->is_retry_request) {
-                if ((ret = ptls_decode16(&sh->retry_request.selected_group, &src, end)) != 0)
-                    goto Exit;
-            } else {
-                uint16_t group;
-                if ((ret = decode_key_share_entry(&group, &sh->peerkey, &src, end)) != 0)
-                    goto Exit;
-                if (src != end) {
-                    ret = PTLS_ALERT_DECODE_ERROR;
-                    goto Exit;
-                }
-                if (tls->key_share == NULL || tls->key_share->id != group) {
-                    ret = PTLS_ALERT_ILLEGAL_PARAMETER;
-                    goto Exit;
-                }
-            }
-            break;
-        case PTLS_EXTENSION_TYPE_COOKIE:
-            if (sh->is_retry_request) {
-                ptls_decode_block(src, end, 2, {
-                    if (src == end) {
-                        ret = PTLS_ALERT_DECODE_ERROR;
-                        goto Exit;
-                    }
-                    sh->retry_request.cookie = ptls_iovec_init(src, end - src);
-                    src = end;
-                });
-            } else {
-                ret = PTLS_ALERT_ILLEGAL_PARAMETER;
-                goto Exit;
-            }
-            break;
-        case PTLS_EXTENSION_TYPE_PRE_SHARED_KEY:
-            if (sh->is_retry_request) {
-                ret = PTLS_ALERT_ILLEGAL_PARAMETER;
-                goto Exit;
-            } else {
-                if ((ret = ptls_decode16(&selected_psk_identity, &src, end)) != 0)
-                    goto Exit;
-            }
-            break;
-        default:
-            src = end;
-            break;
-        }
-    });
+    decode_extensions(src, end, sh->is_retry_request ? PTLS_HANDSHAKE_TYPE_PSEUDO_HRR : PTLS_HANDSHAKE_TYPE_SERVER_HELLO, &exttype,
+                      {
+                          if (tls->ctx->on_extension != NULL &&
+                              (ret = tls->ctx->on_extension->cb(tls->ctx->on_extension, tls, PTLS_HANDSHAKE_TYPE_SERVER_HELLO,
+                                                                exttype, ptls_iovec_init(src, end - src)) != 0))
+                              goto Exit;
+                          switch (exttype) {
+                          case PTLS_EXTENSION_TYPE_SUPPORTED_VERSIONS:
+                              if ((ret = ptls_decode16(&found_version, &src, end)) != 0)
+                                  goto Exit;
+                              break;
+                          case PTLS_EXTENSION_TYPE_KEY_SHARE:
+                              if (sh->is_retry_request) {
+                                  if ((ret = ptls_decode16(&sh->retry_request.selected_group, &src, end)) != 0)
+                                      goto Exit;
+                              } else {
+                                  uint16_t group;
+                                  if ((ret = decode_key_share_entry(&group, &sh->peerkey, &src, end)) != 0)
+                                      goto Exit;
+                                  if (src != end) {
+                                      ret = PTLS_ALERT_DECODE_ERROR;
+                                      goto Exit;
+                                  }
+                                  if (tls->key_share == NULL || tls->key_share->id != group) {
+                                      ret = PTLS_ALERT_ILLEGAL_PARAMETER;
+                                      goto Exit;
+                                  }
+                              }
+                              break;
+                          case PTLS_EXTENSION_TYPE_COOKIE:
+                              assert(sh->is_retry_request);
+                              ptls_decode_block(src, end, 2, {
+                                  if (src == end) {
+                                      ret = PTLS_ALERT_DECODE_ERROR;
+                                      goto Exit;
+                                  }
+                                  sh->retry_request.cookie = ptls_iovec_init(src, end - src);
+                                  src = end;
+                              });
+                              break;
+                          case PTLS_EXTENSION_TYPE_PRE_SHARED_KEY:
+                              assert(!sh->is_retry_request);
+                              if ((ret = ptls_decode16(&selected_psk_identity, &src, end)) != 0)
+                                  goto Exit;
+                              break;
+                          default:
+                              src = end;
+                              break;
+                          }
+                      });
 
     if (!is_supported_version(found_version)) {
         ret = PTLS_ALERT_ILLEGAL_PARAMETER;
@@ -3145,12 +3121,10 @@ static int client_hello_decode_server_name(ptls_iovec_t *name, const uint8_t **s
     int ret = 0;
 
     ptls_decode_open_block(*src, end, 2, {
-        if (*src == end) {
-            ret = PTLS_ALERT_DECODE_ERROR;
-            goto Exit;
-        }
         do {
-            uint8_t type = *(*src)++;
+            uint8_t type;
+            if ((ret = ptls_decode8(&type, src, end)) != 0)
+                goto Exit;
             ptls_decode_open_block(*src, end, 2, {
                 switch (type) {
                 case PTLS_SERVER_NAME_TYPE_HOSTNAME:
@@ -3504,11 +3478,10 @@ static int decode_client_hello(ptls_t *tls, struct st_ptls_client_hello_t *ch, c
                         ch->cookie.ch1_hash = ptls_iovec_init(src, end - src);
                         src = end;
                     });
-                    if (src == end) {
-                        ret = PTLS_ALERT_DECODE_ERROR;
+                    uint8_t sent_key_share;
+                    if ((ret = ptls_decode8(&sent_key_share, &src, end)) != 0)
                         goto Exit;
-                    }
-                    switch (*src++) {
+                    switch (sent_key_share) {
                     case 0:
                         assert(!ch->cookie.sent_key_share);
                         break;
@@ -3563,14 +3536,13 @@ static int decode_client_hello(ptls_t *tls, struct st_ptls_client_hello_t *ch, c
         } break;
         case PTLS_EXTENSION_TYPE_PSK_KEY_EXCHANGE_MODES:
             ptls_decode_block(src, end, 1, {
-                if (src == end) {
-                    ret = PTLS_ALERT_DECODE_ERROR;
-                    goto Exit;
-                }
-                for (; src != end; ++src) {
-                    if (*src < sizeof(ch->psk.ke_modes) * 8)
-                        ch->psk.ke_modes |= 1u << *src;
-                }
+                do {
+                    uint8_t mode;
+                    if ((ret = ptls_decode8(&mode, &src, end)) != 0)
+                        goto Exit;
+                    if (mode < sizeof(ch->psk.ke_modes) * 8)
+                        ch->psk.ke_modes |= 1u << mode;
+                } while (src != end);
             });
             break;
         case PTLS_EXTENSION_TYPE_EARLY_DATA:
@@ -3947,7 +3919,7 @@ static int server_handle_hello(ptls_t *tls, ptls_message_emitter_t *emitter, ptl
             goto Exit;
         if (!is_second_flight) {
             tls->cipher_suite = cs;
-            tls->key_schedule = key_schedule_new(cs, NULL, tls->ctx->hkdf_label_prefix__obsolete);
+            tls->key_schedule = key_schedule_new(cs, NULL);
         } else {
             if (tls->cipher_suite != cs) {
                 ret = PTLS_ALERT_HANDSHAKE_FAILURE;
@@ -4349,8 +4321,8 @@ static int update_traffic_key(ptls_t *tls, int is_enc)
     int ret;
 
     ptls_hash_algorithm_t *hash = tls->key_schedule->hashes[0].algo;
-    if ((ret = hkdf_expand_label(hash, secret, hash->digest_size, ptls_iovec_init(tp->secret, hash->digest_size), "traffic upd",
-                                 ptls_iovec_init(NULL, 0), tls->key_schedule->hkdf_label_prefix)) != 0)
+    if ((ret = ptls_hkdf_expand_label(hash, secret, hash->digest_size, ptls_iovec_init(tp->secret, hash->digest_size),
+                                      "traffic upd", ptls_iovec_init(NULL, 0), NULL)) != 0)
         goto Exit;
     memcpy(tp->secret, secret, sizeof(secret));
     ret = setup_traffic_protection(tls, is_enc, NULL, 3, 1);
@@ -4600,7 +4572,7 @@ static int build_tls12_traffic_protection(ptls_t *tls, int is_enc, const uint8_t
 {
     struct st_ptls_traffic_protection_t *tp = is_enc ? &tls->traffic_protection.enc : &tls->traffic_protection.dec;
 
-    if (end - *src < tls->cipher_suite->aead->key_size + tls->cipher_suite->aead->tls12.fixed_iv_size + sizeof(uint64_t))
+    if ((size_t)(end - *src) < tls->cipher_suite->aead->key_size + tls->cipher_suite->aead->tls12.fixed_iv_size + sizeof(uint64_t))
         return PTLS_ALERT_DECODE_ERROR;
 
     /* set properties */
@@ -5472,12 +5444,11 @@ int ptls_export_secret(ptls_t *tls, void *output, size_t outlen, const char *lab
     if ((ret = ptls_calc_hash(algo, context_value_hash, context_value.base, context_value.len)) != 0)
         return ret;
 
-    if ((ret = hkdf_expand_label(algo, derived_secret, algo->digest_size, ptls_iovec_init(master_secret, algo->digest_size), label,
-                                 ptls_iovec_init(algo->empty_digest, algo->digest_size), tls->key_schedule->hkdf_label_prefix)) !=
-        0)
+    if ((ret = ptls_hkdf_expand_label(algo, derived_secret, algo->digest_size, ptls_iovec_init(master_secret, algo->digest_size),
+                                      label, ptls_iovec_init(algo->empty_digest, algo->digest_size), NULL)) != 0)
         goto Exit;
-    ret = hkdf_expand_label(algo, output, outlen, ptls_iovec_init(derived_secret, algo->digest_size), "exporter",
-                            ptls_iovec_init(context_value_hash, algo->digest_size), tls->key_schedule->hkdf_label_prefix);
+    ret = ptls_hkdf_expand_label(algo, output, outlen, ptls_iovec_init(derived_secret, algo->digest_size), "exporter",
+                                 ptls_iovec_init(context_value_hash, algo->digest_size), NULL);
 
 Exit:
     ptls_clear_memory(derived_secret, sizeof(derived_secret));
@@ -5615,19 +5586,19 @@ int ptls_hkdf_expand(ptls_hash_algorithm_t *algo, void *output, size_t outlen, p
     return 0;
 }
 
-int hkdf_expand_label(ptls_hash_algorithm_t *algo, void *output, size_t outlen, ptls_iovec_t secret, const char *label,
-                      ptls_iovec_t hash_value, const char *label_prefix)
+int ptls_hkdf_expand_label(ptls_hash_algorithm_t *algo, void *output, size_t outlen, ptls_iovec_t secret, const char *label,
+                           ptls_iovec_t hash_value, const char *label_prefix)
 {
     ptls_buffer_t hkdf_label;
     uint8_t hkdf_label_buf[80];
     int ret;
 
-    assert(label_prefix != NULL);
-
     ptls_buffer_init(&hkdf_label, hkdf_label_buf, sizeof(hkdf_label_buf));
 
     ptls_buffer_push16(&hkdf_label, (uint16_t)outlen);
     ptls_buffer_push_block(&hkdf_label, 1, {
+        if (label_prefix == NULL)
+            label_prefix = PTLS_HKDF_EXPAND_LABEL_PREFIX;
         ptls_buffer_pushv(&hkdf_label, label_prefix, strlen(label_prefix));
         ptls_buffer_pushv(&hkdf_label, label, strlen(label));
     });
@@ -5638,16 +5609,6 @@ int hkdf_expand_label(ptls_hash_algorithm_t *algo, void *output, size_t outlen, 
 Exit:
     ptls_buffer_dispose(&hkdf_label);
     return ret;
-}
-
-int ptls_hkdf_expand_label(ptls_hash_algorithm_t *algo, void *output, size_t outlen, ptls_iovec_t secret, const char *label,
-                           ptls_iovec_t hash_value, const char *label_prefix)
-{
-    /* the handshake layer should call hkdf_expand_label directly, always setting key_schedule->hkdf_label_prefix as the
-     * argument */
-    if (label_prefix == NULL)
-        label_prefix = PTLS_HKDF_EXPAND_LABEL_PREFIX;
-    return hkdf_expand_label(algo, output, outlen, secret, label, hash_value, label_prefix);
 }
 
 int ptls_tls12_phash(ptls_hash_algorithm_t *algo, void *output, size_t outlen, ptls_iovec_t secret, const char *label,
