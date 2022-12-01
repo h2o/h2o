@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		081F00CA2918823200534A86 /* hpke.c in Sources */ = {isa = PBXBuildFile; fileRef = 081F00C92918823200534A86 /* hpke.c */; };
+		08F0FDF62910F67A00EE657D /* hpke.c in Sources */ = {isa = PBXBuildFile; fileRef = 08F0FDF52910F67A00EE657D /* hpke.c */; };
 		105900431DC8D57000FB4085 /* picotls.c in Sources */ = {isa = PBXBuildFile; fileRef = 106530E91D9B7C13005B2C60 /* picotls.c */; };
 		105900441DC8D57000FB4085 /* picotest.c in Sources */ = {isa = PBXBuildFile; fileRef = 106530E31D9B4021005B2C60 /* picotest.c */; };
 		1059004C1DC8D5B700FB4085 /* openssl.c in Sources */ = {isa = PBXBuildFile; fileRef = 106530C51D9B1A98005B2C60 /* openssl.c */; };
@@ -222,6 +224,12 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		081F00C92918823200534A86 /* hpke.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = hpke.c; sourceTree = "<group>"; };
+		081F00CB291A357700534A86 /* ptlsbcrypt.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = ptlsbcrypt.c; sourceTree = "<group>"; };
+		081F00CC291A358800534A86 /* asn1.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = asn1.h; sourceTree = "<group>"; };
+		081F00CD291A358800534A86 /* pembase64.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = pembase64.h; sourceTree = "<group>"; };
+		081F00CE291A358800534A86 /* ptlsbcrypt.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ptlsbcrypt.h; sourceTree = "<group>"; };
+		08F0FDF52910F67A00EE657D /* hpke.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = hpke.c; sourceTree = "<group>"; };
 		105900241DC8D37500FB4085 /* aes.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = aes.c; path = src/aes.c; sourceTree = "<group>"; };
 		105900251DC8D37500FB4085 /* aes.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = aes.h; path = src/aes.h; sourceTree = "<group>"; };
 		105900281DC8D39800FB4085 /* bitops.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = bitops.h; path = src/bitops.h; sourceTree = "<group>"; };
@@ -461,16 +469,18 @@
 			isa = PBXGroup;
 			children = (
 				E99B75DE1F5CDDB500CF503E /* asn1.c */,
-				E97577022212405D00D1EF74 /* ffx.c */,
-				E9B43DBF24619D1700824E51 /* fusion.c */,
-				E99B75DF1F5CDDB500CF503E /* pembase64.c */,
+				E9E4B12A2180530400514B47 /* certificate_compression.c */,
 				E9F20BDF22E34B210018D260 /* cifra */,
 				1059003F1DC8D53200FB4085 /* cifra.c */,
-				106530C21D9B004B005B2C60 /* openssl.c */,
-				106530BF1D998641005B2C60 /* picotls.c */,
-				105900C51DC9798800FB4085 /* uecc.c */,
+				E97577022212405D00D1EF74 /* ffx.c */,
+				E9B43DBF24619D1700824E51 /* fusion.c */,
+				08F0FDF52910F67A00EE657D /* hpke.c */,
 				E949EF272073629300511ECA /* minicrypto-pem.c */,
-				E9E4B12A2180530400514B47 /* certificate_compression.c */,
+				106530C21D9B004B005B2C60 /* openssl.c */,
+				E99B75DF1F5CDDB500CF503E /* pembase64.c */,
+				106530BF1D998641005B2C60 /* picotls.c */,
+				081F00CB291A357700534A86 /* ptlsbcrypt.c */,
+				105900C51DC9798800FB4085 /* uecc.c */,
 			);
 			path = lib;
 			sourceTree = "<group>";
@@ -481,9 +491,10 @@
 				106530FE1DAD8A3C005B2C60 /* cli.c */,
 				E97577072213148800D1EF74 /* e2e.t */,
 				E9B43DE224619D7E00824E51 /* fusion.c */,
-				106530E91D9B7C13005B2C60 /* picotls.c */,
+				081F00C92918823200534A86 /* hpke.c */,
 				1059003D1DC8D4E300FB4085 /* minicrypto.c */,
 				106530C51D9B1A98005B2C60 /* openssl.c */,
+				106530E91D9B7C13005B2C60 /* picotls.c */,
 				106530E61D9B7AF6005B2C60 /* test.h */,
 				E9E3849C1F0748DD00D50990 /* util.h */,
 			);
@@ -512,11 +523,14 @@
 		106530EE1D9E3476005B2C60 /* picotls */ = {
 			isa = PBXGroup;
 			children = (
+				081F00CC291A358800534A86 /* asn1.h */,
+				E9E4B1292180514000514B47 /* certificate_compression.h */,
 				E97577002212405300D1EF74 /* ffx.h */,
+				E9B43DE62461A06800824E51 /* fusion.h */,
 				1059004F1DC8D64E00FB4085 /* minicrypto.h */,
 				106530ED1D9CEFF7005B2C60 /* openssl.h */,
-				E9E4B1292180514000514B47 /* certificate_compression.h */,
-				E9B43DE62461A06800824E51 /* fusion.h */,
+				081F00CD291A358800534A86 /* pembase64.h */,
+				081F00CE291A358800534A86 /* ptlsbcrypt.h */,
 			);
 			path = picotls;
 			sourceTree = "<group>";
@@ -787,7 +801,7 @@
 		106530AA1D9985E0005B2C60 /* Project object */ = {
 			isa = PBXProject;
 			attributes = {
-				LastUpgradeCheck = 0830;
+				LastUpgradeCheck = 1320;
 				ORGANIZATIONNAME = "DeNA Co., Ltd.";
 				TargetAttributes = {
 					106530CB1D9B3D45005B2C60 = {
@@ -894,6 +908,7 @@
 				105900CE1DCBECF700FB4085 /* gf128.c in Sources */,
 				105900CC1DCBECF100FB4085 /* hmac.c in Sources */,
 				E9BC76D41EF3A37200EB7A09 /* chacha20.c in Sources */,
+				081F00CA2918823200534A86 /* hpke.c in Sources */,
 				105900CB1DCBECEA00FB4085 /* drbg.c in Sources */,
 				105900CA1DCBECE500FB4085 /* curve25519.c in Sources */,
 				E99B75E41F5CE64E00CF503E /* pembase64.c in Sources */,
@@ -906,6 +921,7 @@
 			files = (
 				E99B75E01F5CDDB500CF503E /* asn1.c in Sources */,
 				E99B75E11F5CDDB500CF503E /* pembase64.c in Sources */,
+				08F0FDF62910F67A00EE657D /* hpke.c in Sources */,
 				E95E95382290456B00215ACD /* picotls-probes.d in Sources */,
 				E97577032212405D00D1EF74 /* ffx.c in Sources */,
 				106530EB1D9B7C5C005B2C60 /* picotls.c in Sources */,
