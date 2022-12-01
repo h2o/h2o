@@ -1001,7 +1001,6 @@ void on_write_complete(h2o_socket_t *sock, const char *err)
 
     cb = sock->_cb.write;
     sock->_cb.write = NULL;
-    assert(cb != NULL);
     cb(sock, err);
 }
 
