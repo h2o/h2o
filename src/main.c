@@ -352,7 +352,7 @@ static __thread struct {
     size_t write_queue_len;
     h2o_linklist_t read_queue;
     size_t read_queue_len;
-} neverbleed_conf = { NULL };
+} neverbleed_conf = {NULL};
 
 #if H2O_USE_FUSION
 static ptls_cipher_suite_t
@@ -416,7 +416,7 @@ struct nbbuf {
     int efd_read;
 };
 
-static struct nbbuf * nbbuf_new(neverbleed_iobuf_t *buf)
+static struct nbbuf *nbbuf_new(neverbleed_iobuf_t *buf)
 {
     struct nbbuf *nb_buf = h2o_mem_alloc(sizeof(*nb_buf));
     memset(nb_buf, 0, sizeof(*nb_buf));
@@ -493,7 +493,6 @@ static void nbbuf_free(struct nbbuf *nb_buf)
 }
 
 static void nb_submit_write_pending();
-
 
 static void nb_on_write_complete_cb(h2o_socket_t *sock, const char *err)
 {
@@ -580,7 +579,6 @@ static void async_pause(struct nbbuf *buf)
     }
 #endif
 }
-
 
 static void on_neverbleed_transaction(neverbleed_iobuf_t *buf)
 {
