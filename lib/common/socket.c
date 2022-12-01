@@ -1954,14 +1954,23 @@ static void proceed_handshake_undetermined(h2o_socket_t *sock)
     if (ret == PTLS_ERROR_IN_PROGRESS && wbuf->off == 0) {
         /* we aren't sure if the picotls can process the handshake, retain handshake transcript and replay on next occasion */
         ptls_free(ptls);
+#if PTLS_OPENSSL_HAVE_ASYNC
+        sock->ssl->async.undetermined.ptls = NULL;
+#endif
     } else if (ret == PTLS_ALERT_PROTOCOL_VERSION) {
         /* the client cannot use tls1.3, fallback to openssl */
         ptls_free(ptls);
+#if PTLS_OPENSSL_HAVE_ASYNC
+        sock->ssl->async.undetermined.ptls = NULL;
+#endif
         create_ossl(sock);
         proceed_handshake_openssl(sock);
     } else {
         /* picotls is responsible for handling the handshake */
         sock->ssl->ptls = ptls;
+#if PTLS_OPENSSL_HAVE_ASYNC
+        sock->ssl->async.undetermined.ptls = NULL;
+#endif
         sock->ssl->handshake.server.async_resumption.state = ASYNC_RESUMPTION_STATE_COMPLETE;
         h2o_buffer_consume(&sock->ssl->input.encrypted, consumed);
         /* stop reading, send response */
@@ -1983,9 +1992,6 @@ static void proceed_handshake_undetermined(h2o_socket_t *sock)
         flush_pending_ssl(sock, cb);
     }
     ptls_buffer_dispose(wbuf);
-#if PTLS_OPENSSL_HAVE_ASYNC
-        sock->ssl->async.undetermined.ptls = NULL;
-#endif
 }
 
 static void proceed_handshake(h2o_socket_t *sock, const char *err)
