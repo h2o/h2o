@@ -521,7 +521,7 @@ static void nb_submit_write_pending(void)
     }
 }
 
-static void nb_write_sync_transaction(neverbleed_iobuf_t *buf)
+static void nb_sync_transaction(neverbleed_iobuf_t *buf, void (*transaction_cb)(neverbleed_t *, neverbleed_iobuf_t *))
 {
     int fd = neverbleed_get_fd(neverbleed);
     int flags = fcntl(fd, F_GETFL, 0);
@@ -532,7 +532,7 @@ static void nb_write_sync_transaction(neverbleed_iobuf_t *buf)
         abort();
     }
 
-    neverbleed_transaction_write(neverbleed, buf);
+    transaction_cb(neverbleed, buf);
 
     // set fd back to original
     if (fcntl(fd, F_SETFL, flags) == -1) {
@@ -540,33 +540,12 @@ static void nb_write_sync_transaction(neverbleed_iobuf_t *buf)
         abort();
     }
 }
-
-static void nb_read_sync_transaction(neverbleed_iobuf_t *buf)
-{
-    int fd = neverbleed_get_fd(neverbleed);
-    int flags = fcntl(fd, F_GETFL, 0);
-
-    // set fd to blocking for synchronous I/O
-    if (fcntl(fd, F_SETFL, flags & ~O_NONBLOCK) == -1) {
-        perror("fcntl");
-        abort();
-    }
-
-    neverbleed_transaction_read(neverbleed, buf);
-
-    // set fd back to original
-    if (fcntl(fd, F_SETFL, flags) == -1) {
-        perror("fcntl");
-        abort();
-    }
-}
-
 
 static void nb_read_ready(h2o_socket_t *sock, const char *err)
 {
     struct nbbuf *nb_buf = H2O_STRUCT_FROM_MEMBER(struct nbbuf, link, neverbleed_conf.read_queue.next);
 
-    nb_read_sync_transaction(nb_buf->buf);
+    nb_sync_transaction(nb_buf->buf, neverbleed_transaction_read);
     nbbuf_send_notification(nb_buf);
 
     h2o_linklist_unlink(&nb_buf->link);
@@ -635,8 +614,8 @@ static void on_neverbleed_transaction(neverbleed_iobuf_t *buf)
             nb_read_ready(neverbleed_conf.sock, NULL);
     }
 
-    nb_write_sync_transaction(buf);
-    nb_read_sync_transaction(buf);
+    nb_sync_transaction(buf, neverbleed_transaction_write);
+    nb_sync_transaction(buf, neverbleed_transaction_read);
 }
 
 static int on_openssl_print_errors(const char *str, size_t len, void *fp)
