@@ -346,12 +346,23 @@ static __thread size_t thread_index;
 
 static neverbleed_t *neverbleed = NULL;
 
+struct nbbuf {
+    neverbleed_iobuf_t *buf;
+    size_t write_size;
+    h2o_linklist_t link;
+    int efd_write;
+    int efd_read;
+};
+
+struct nbbuf_queue_t {
+    h2o_linklist_t anchor;
+    size_t len;
+};
+
 static __thread struct {
     h2o_socket_t *sock;
-    h2o_linklist_t write_queue;
-    size_t write_queue_len;
-    h2o_linklist_t read_queue;
-    size_t read_queue_len;
+    struct nbbuf_queue_t write_queue;
+    struct nbbuf_queue_t read_queue;
 } neverbleed_conf = {NULL};
 
 #if H2O_USE_FUSION
@@ -408,14 +419,6 @@ static void on_neverbleed_fork(void)
 #endif
 }
 
-struct nbbuf {
-    neverbleed_iobuf_t *buf;
-    size_t write_size;
-    h2o_linklist_t link;
-    int efd_write;
-    int efd_read;
-};
-
 static struct nbbuf *nbbuf_new(neverbleed_iobuf_t *buf)
 {
     struct nbbuf *nb_buf = h2o_mem_alloc(sizeof(*nb_buf));
@@ -454,6 +457,39 @@ static struct nbbuf *nbbuf_new(neverbleed_iobuf_t *buf)
     nb_buf->efd_write = fd_write;
 
     return nb_buf;
+}
+
+static struct nbbuf *nbbuf_get(struct nbbuf_queue_t *queue)
+{
+    if (queue->len == 0) {
+        assert(h2o_linklist_is_empty(&queue->anchor));
+        return NULL;
+    }
+
+    assert(!h2o_linklist_is_empty(&queue->anchor));
+
+    struct nbbuf *buf = H2O_STRUCT_FROM_MEMBER(struct nbbuf, link, queue->anchor.next);
+    return buf;
+}
+
+static struct nbbuf *nbbuf_pop(struct nbbuf_queue_t *queue)
+{
+    struct nbbuf *buf;
+
+    if ((buf = nbbuf_get(queue)) != NULL) {
+        h2o_linklist_unlink(&buf->link);
+        --queue->len;
+    }
+
+    return buf;
+}
+
+static void nbbuf_push(struct nbbuf_queue_t *queue, struct nbbuf *buf)
+{
+    assert(!h2o_linklist_is_linked(&buf->link));
+
+    h2o_linklist_insert(&queue->anchor, &buf->link);
+    ++queue->len;
 }
 
 static void nbbuf_send_notification(struct nbbuf *buf)
@@ -496,22 +532,18 @@ static void nb_submit_write_pending();
 
 static void nb_on_write_complete_cb(h2o_socket_t *sock, const char *err)
 {
-    struct nbbuf *nb_buf = H2O_STRUCT_FROM_MEMBER(struct nbbuf, link, neverbleed_conf.write_queue.next);
-
-    // transition to read queue
-    h2o_linklist_unlink(&nb_buf->link);
-    neverbleed_conf.write_queue_len--;
-    h2o_linklist_insert(&neverbleed_conf.read_queue, &nb_buf->link);
-    neverbleed_conf.read_queue_len++;
+    /* transition from write queue to read queue */
+    nbbuf_push(&neverbleed_conf.read_queue, nbbuf_pop(&neverbleed_conf.write_queue));
 
     nb_submit_write_pending(sock);
 }
 
 static void nb_submit_write_pending(void)
 {
-    if (!h2o_socket_is_writing(neverbleed_conf.sock) && !h2o_linklist_is_empty(&neverbleed_conf.write_queue)) {
-        // write a buf
-        struct nbbuf *nb_buf = H2O_STRUCT_FROM_MEMBER(struct nbbuf, link, neverbleed_conf.write_queue.next);
+    struct nbbuf *nb_buf;
+
+    if (!h2o_socket_is_writing(neverbleed_conf.sock) && (nb_buf = nbbuf_get(&neverbleed_conf.write_queue)) != NULL) {
+        /* write the first buf in the write queue */
         h2o_iovec_t bufs[2];
         nb_buf->write_size = neverbleed_iobuf_size(nb_buf->buf);
         bufs[0] = h2o_iovec_init(&nb_buf->write_size, sizeof(nb_buf->write_size));
@@ -542,17 +574,14 @@ static void nb_sync_transaction(neverbleed_iobuf_t *buf, void (*transaction_cb)(
 
 static void nb_read_ready(h2o_socket_t *sock, const char *err)
 {
-    struct nbbuf *nb_buf = H2O_STRUCT_FROM_MEMBER(struct nbbuf, link, neverbleed_conf.read_queue.next);
+    struct nbbuf *nb_buf = nbbuf_pop(&neverbleed_conf.read_queue);
+    assert(nb_buf != NULL);
 
     nb_sync_transaction(nb_buf->buf, neverbleed_transaction_read);
     nbbuf_send_notification(nb_buf);
 
-    h2o_linklist_unlink(&nb_buf->link);
-    neverbleed_conf.read_queue_len--;
-
-    if (h2o_linklist_is_empty(&neverbleed_conf.read_queue)) {
+    if (neverbleed_conf.read_queue.len == 0)
         h2o_socket_read_stop(sock);
-    }
 }
 
 // sets up file descriptor and calls OpenSSL's `ASYNC_pause_job`
@@ -594,8 +623,7 @@ static void on_neverbleed_transaction(neverbleed_iobuf_t *buf)
     if (is_async) {
         struct nbbuf *nb_buf = nbbuf_new(buf);
         assert(h2o_socket_get_fd(neverbleed_conf.sock) == neverbleed_get_fd(neverbleed));
-        h2o_linklist_insert(&neverbleed_conf.write_queue, &nb_buf->link);
-        neverbleed_conf.write_queue_len++;
+        nbbuf_push(&neverbleed_conf.write_queue, nb_buf);
         nb_submit_write_pending();
 
         if (!h2o_socket_is_reading(neverbleed_conf.sock)) {
@@ -608,7 +636,7 @@ static void on_neverbleed_transaction(neverbleed_iobuf_t *buf)
 
     /* do it synchronously, by at first reading all pending reads, then write asynchronously and wait for the repsonse */
     if (neverbleed_conf.sock != NULL) {
-        while (!h2o_linklist_is_empty(&neverbleed_conf.read_queue))
+        while (neverbleed_conf.read_queue.len != 0)
             nb_read_ready(neverbleed_conf.sock, NULL);
     }
 
@@ -3494,8 +3522,8 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
     if (neverbleed != NULL) {
         int fd = neverbleed_get_fd(neverbleed);
         neverbleed_conf.sock = h2o_evloop_socket_create(conf.threads[thread_index].ctx.loop, fd, H2O_SOCKET_FLAG_DONT_READ);
-        h2o_linklist_init_anchor(&neverbleed_conf.read_queue);
-        h2o_linklist_init_anchor(&neverbleed_conf.write_queue);
+        h2o_linklist_init_anchor(&neverbleed_conf.read_queue.anchor);
+        h2o_linklist_init_anchor(&neverbleed_conf.write_queue.anchor);
     }
     if (conf.thread_map.entries[thread_index] >= 0) {
 #if H2O_HAS_PTHREAD_SETAFFINITY_NP
