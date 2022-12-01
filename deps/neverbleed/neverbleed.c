@@ -124,7 +124,6 @@ struct st_neverbleed_rsa_exdata_t {
 struct st_neverbleed_thread_data_t {
     pid_t self_pid;
     int fd;
-    void *buf_data;
 };
 
 static void warnvf(const char *fmt, va_list args)
@@ -342,8 +341,7 @@ static int expbuf_write(struct expbuf_t *buf, int fd)
 static void expbuf_transaction(struct expbuf_t *buf, struct st_neverbleed_thread_data_t *thdata)
 {
     if (neverbleed_transaction_cb != NULL) {
-        buf->data = thdata->buf_data;
-        neverbleed_transaction_cb(buf); // notify application of write
+        neverbleed_transaction_cb(buf);
     } else {
         if (expbuf_write(buf, thdata->fd) == -1) {
             if (errno != 0) {
@@ -452,12 +450,6 @@ int neverbleed_get_fd(neverbleed_t *nb)
 {
     struct st_neverbleed_thread_data_t *thdata = get_thread_data(nb);
     return thdata->fd;
-}
-
-void neverbleed_set_buffer_data(neverbleed_t *nb, void *data)
-{
-    struct st_neverbleed_thread_data_t *thdata = get_thread_data(nb);
-    thdata->buf_data = data;
 }
 
 size_t neverbleed_buffer_size(struct expbuf_t *buf)
