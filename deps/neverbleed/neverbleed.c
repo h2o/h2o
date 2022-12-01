@@ -326,6 +326,29 @@ static int iobuf_write(neverbleed_iobuf_t *buf, int fd)
     return 0;
 }
 
+static void iobuf_transaction_read(neverbleed_iobuf_t *buf, struct st_neverbleed_thread_data_t *thdata)
+{
+    iobuf_dispose(buf);
+    if (iobuf_read(buf, thdata->fd) == -1) {
+        if (errno != 0) {
+            dief("read error (%d) %s", errno, strerror(errno));
+        } else {
+            dief("connection closed by daemon");
+        }
+    }
+}
+
+static void iobuf_transaction_write(neverbleed_iobuf_t *buf, struct st_neverbleed_thread_data_t *thdata)
+{
+    if (iobuf_write(buf, thdata->fd) == -1) {
+        if (errno != 0) {
+            dief("write error (%d) %s", errno, strerror(errno));
+        } else {
+            dief("connection closed by daemon");
+        }
+    }
+}
+
 /**
  * Sends a request and reads a response.
  */
@@ -334,21 +357,8 @@ static void iobuf_transaction(neverbleed_iobuf_t *buf, struct st_neverbleed_thre
     if (neverbleed_transaction_cb != NULL) {
         neverbleed_transaction_cb(buf);
     } else {
-        if (iobuf_write(buf, thdata->fd) == -1) {
-            if (errno != 0) {
-                dief("write error (%d) %s", errno, strerror(errno));
-            } else {
-                dief("connection closed by daemon");
-            }
-        }
-        iobuf_dispose(buf);
-        if (iobuf_read(buf, thdata->fd) == -1) {
-            if (errno != 0) {
-                dief("read error (%d) %s", errno, strerror(errno));
-            } else {
-                dief("connection closed by daemon");
-            }
-        }
+        iobuf_transaction_write(buf, thdata);
+        iobuf_transaction_read(buf, thdata);
     }
 }
 
@@ -444,26 +454,13 @@ int neverbleed_get_fd(neverbleed_t *nb)
 void neverbleed_transaction_read(neverbleed_t *nb, neverbleed_iobuf_t *buf)
 {
     struct st_neverbleed_thread_data_t *thdata = get_thread_data(nb);
-    iobuf_dispose(buf);
-    if (iobuf_read(buf, thdata->fd) == -1) {
-        if (errno != 0) {
-            dief("read error (%d) %s", errno, strerror(errno));
-        } else {
-            dief("connection closed by daemon");
-        }
-    }
+    iobuf_transaction_read(buf, thdata);
 }
 
 void neverbleed_transaction_write(neverbleed_t *nb, neverbleed_iobuf_t *buf)
 {
     struct st_neverbleed_thread_data_t *thdata = get_thread_data(nb);
-    if (iobuf_write(buf, thdata->fd) == -1) {
-        if (errno != 0) {
-            dief("write error (%d) %s", errno, strerror(errno));
-        } else {
-            dief("connection closed by daemon");
-        }
-    }
+    iobuf_transaction_write(buf, thdata);
 }
 
 static void get_privsep_data(const RSA *rsa, struct st_neverbleed_rsa_exdata_t **exdata,
