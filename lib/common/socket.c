@@ -35,6 +35,7 @@
 #include <sys/ioctl.h>
 #endif
 #include "picotls.h"
+#include "picotls/openssl.h" /* for PTLS_OPENSSL_HAVE_ASYNC */
 #if H2O_USE_FUSION
 #include "picotls/fusion.h"
 #endif

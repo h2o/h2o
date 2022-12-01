@@ -35,7 +35,6 @@ extern "C" {
 #include <openssl/ssl.h>
 #include <openssl/opensslconf.h>
 #include "picotls.h"
-#include "picotls/openssl.h"
 #include "h2o/cache.h"
 #include "h2o/ebpf.h"
 #include "h2o/memory.h"
@@ -95,7 +94,6 @@ typedef struct st_h2o_sliding_counter_t {
 static int h2o_sliding_counter_is_running(h2o_sliding_counter_t *counter);
 static void h2o_sliding_counter_start(h2o_sliding_counter_t *counter, uint64_t now);
 void h2o_sliding_counter_stop(h2o_sliding_counter_t *counter, uint64_t now);
-int h2o_is_ssl_handhsake_in_flight(void);
 
 #define H2O_SOCKET_INITIAL_INPUT_BUFFER_SIZE 4096
 
@@ -325,7 +323,6 @@ size_t h2o_socket_do_prepare_for_latency_optimized_write(h2o_socket_t *sock,
  * @param cb callback to be called when write is complete
  */
 void h2o_socket_write(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_socket_cb cb);
-
 /**
  *
  */
