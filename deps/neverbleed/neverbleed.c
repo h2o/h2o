@@ -203,7 +203,7 @@ static int read_nbytes(int fd, void *p, size_t sz)
     return 0;
 }
 
-static void expbuf_dispose(neverbleed_iobuf_t *buf)
+static void iobuf_dispose(neverbleed_iobuf_t *buf)
 {
     if (buf->capacity != 0)
         OPENSSL_cleanse(buf->buf, buf->capacity);
@@ -211,7 +211,7 @@ static void expbuf_dispose(neverbleed_iobuf_t *buf)
     memset(buf, 0, sizeof(*buf));
 }
 
-static void expbuf_reserve(neverbleed_iobuf_t *buf, size_t extra)
+static void iobuf_reserve(neverbleed_iobuf_t *buf, size_t extra)
 {
     char *n;
 
@@ -229,30 +229,30 @@ static void expbuf_reserve(neverbleed_iobuf_t *buf, size_t extra)
     buf->buf = n;
 }
 
-static void expbuf_push_num(neverbleed_iobuf_t *buf, size_t v)
+static void iobuf_push_num(neverbleed_iobuf_t *buf, size_t v)
 {
-    expbuf_reserve(buf, sizeof(v));
+    iobuf_reserve(buf, sizeof(v));
     memcpy(buf->end, &v, sizeof(v));
     buf->end += sizeof(v);
 }
 
-static void expbuf_push_str(neverbleed_iobuf_t *buf, const char *s)
+static void iobuf_push_str(neverbleed_iobuf_t *buf, const char *s)
 {
     size_t l = strlen(s) + 1;
-    expbuf_reserve(buf, l);
+    iobuf_reserve(buf, l);
     memcpy(buf->end, s, l);
     buf->end += l;
 }
 
-static void expbuf_push_bytes(neverbleed_iobuf_t *buf, const void *p, size_t l)
+static void iobuf_push_bytes(neverbleed_iobuf_t *buf, const void *p, size_t l)
 {
-    expbuf_push_num(buf, l);
-    expbuf_reserve(buf, l);
+    iobuf_push_num(buf, l);
+    iobuf_reserve(buf, l);
     memcpy(buf->end, p, l);
     buf->end += l;
 }
 
-static int expbuf_shift_num(neverbleed_iobuf_t *buf, size_t *v)
+static int iobuf_shift_num(neverbleed_iobuf_t *buf, size_t *v)
 {
     if (neverbleed_iobuf_size(buf) < sizeof(*v))
         return -1;
@@ -261,7 +261,7 @@ static int expbuf_shift_num(neverbleed_iobuf_t *buf, size_t *v)
     return 0;
 }
 
-static char *expbuf_shift_str(neverbleed_iobuf_t *buf)
+static char *iobuf_shift_str(neverbleed_iobuf_t *buf)
 {
     char *nul = memchr(buf->start, '\0', neverbleed_iobuf_size(buf)), *ret;
     if (nul == NULL)
@@ -271,10 +271,10 @@ static char *expbuf_shift_str(neverbleed_iobuf_t *buf)
     return ret;
 }
 
-static void *expbuf_shift_bytes(neverbleed_iobuf_t *buf, size_t *l)
+static void *iobuf_shift_bytes(neverbleed_iobuf_t *buf, size_t *l)
 {
     void *ret;
-    if (expbuf_shift_num(buf, l) != 0)
+    if (iobuf_shift_num(buf, l) != 0)
         return NULL;
     if (neverbleed_iobuf_size(buf) < *l)
         return NULL;
@@ -283,19 +283,19 @@ static void *expbuf_shift_bytes(neverbleed_iobuf_t *buf, size_t *l)
     return ret;
 }
 
-static int expbuf_read(neverbleed_iobuf_t *buf, int fd)
+static int iobuf_read(neverbleed_iobuf_t *buf, int fd)
 {
     size_t sz;
     if (read_nbytes(fd, &sz, sizeof(sz)) != 0)
         return -1;
-    expbuf_reserve(buf, sz);
+    iobuf_reserve(buf, sz);
     if (read_nbytes(fd, buf->end, sz) != 0)
         return -1;
     buf->end += sz;
     return 0;
 }
 
-static int expbuf_write(neverbleed_iobuf_t *buf, int fd)
+static int iobuf_write(neverbleed_iobuf_t *buf, int fd)
 {
     struct iovec vecs[2] = {{NULL}};
     size_t bufsz = neverbleed_iobuf_size(buf);
@@ -329,20 +329,20 @@ static int expbuf_write(neverbleed_iobuf_t *buf, int fd)
 /**
  * Sends a request and reads a response.
  */
-static void expbuf_transaction(neverbleed_iobuf_t *buf, struct st_neverbleed_thread_data_t *thdata)
+static void iobuf_transaction(neverbleed_iobuf_t *buf, struct st_neverbleed_thread_data_t *thdata)
 {
     if (neverbleed_transaction_cb != NULL) {
         neverbleed_transaction_cb(buf);
     } else {
-        if (expbuf_write(buf, thdata->fd) == -1) {
+        if (iobuf_write(buf, thdata->fd) == -1) {
             if (errno != 0) {
                 dief("write error (%d) %s", errno, strerror(errno));
             } else {
                 dief("connection closed by daemon");
             }
         }
-        expbuf_dispose(buf);
-        if (expbuf_read(buf, thdata->fd) == -1) {
+        iobuf_dispose(buf);
+        if (iobuf_read(buf, thdata->fd) == -1) {
             if (errno != 0) {
                 dief("read error (%d) %s", errno, strerror(errno));
             } else {
@@ -444,8 +444,8 @@ int neverbleed_get_fd(neverbleed_t *nb)
 void neverbleed_transaction_read(neverbleed_t *nb, neverbleed_iobuf_t *buf)
 {
     struct st_neverbleed_thread_data_t *thdata = get_thread_data(nb);
-    expbuf_dispose(buf);
-    if (expbuf_read(buf, thdata->fd) == -1) {
+    iobuf_dispose(buf);
+    if (iobuf_read(buf, thdata->fd) == -1) {
         if (errno != 0) {
             dief("read error (%d) %s", errno, strerror(errno));
         } else {
@@ -457,7 +457,7 @@ void neverbleed_transaction_read(neverbleed_t *nb, neverbleed_iobuf_t *buf)
 void neverbleed_transaction_write(neverbleed_t *nb, neverbleed_iobuf_t *buf)
 {
     struct st_neverbleed_thread_data_t *thdata = get_thread_data(nb);
-    if (expbuf_write(buf, thdata->fd) == -1) {
+    if (iobuf_write(buf, thdata->fd) == -1) {
         if (errno != 0) {
             dief("write error (%d) %s", errno, strerror(errno));
         } else {
@@ -608,19 +608,19 @@ static int priv_encdec_proxy(const char *cmd, int flen, const unsigned char *fro
 
     get_privsep_data(rsa, &exdata, &thdata);
 
-    expbuf_push_str(&buf, cmd);
-    expbuf_push_bytes(&buf, from, flen);
-    expbuf_push_num(&buf, exdata->key_index);
-    expbuf_push_num(&buf, padding);
+    iobuf_push_str(&buf, cmd);
+    iobuf_push_bytes(&buf, from, flen);
+    iobuf_push_num(&buf, exdata->key_index);
+    iobuf_push_num(&buf, padding);
 
-    expbuf_transaction(&buf, thdata);
+    iobuf_transaction(&buf, thdata);
 
-    if (expbuf_shift_num(&buf, &ret) != 0 || (to = expbuf_shift_bytes(&buf, &tolen)) == NULL) {
+    if (iobuf_shift_num(&buf, &ret) != 0 || (to = iobuf_shift_bytes(&buf, &tolen)) == NULL) {
         errno = 0;
         dief("failed to parse response");
     }
     memcpy(_to, to, tolen);
-    expbuf_dispose(&buf);
+    iobuf_dispose(&buf);
 
     return (int)ret;
 }
@@ -635,8 +635,8 @@ static int priv_encdec_stub(const char *name,
     RSA *rsa;
     int ret;
 
-    if ((from = expbuf_shift_bytes(buf, &flen)) == NULL || expbuf_shift_num(buf, &key_index) != 0 ||
-        expbuf_shift_num(buf, &padding) != 0) {
+    if ((from = iobuf_shift_bytes(buf, &flen)) == NULL || iobuf_shift_num(buf, &key_index) != 0 ||
+        iobuf_shift_num(buf, &padding) != 0) {
         errno = 0;
         warnf("%s: failed to parse request", name);
         return -1;
@@ -647,11 +647,11 @@ static int priv_encdec_stub(const char *name,
         return -1;
     }
     ret = func((int)flen, from, to, rsa, (int)padding);
-    expbuf_dispose(buf);
+    iobuf_dispose(buf);
     RSA_free(rsa);
 
-    expbuf_push_num(buf, ret);
-    expbuf_push_bytes(buf, to, ret > 0 ? ret : 0);
+    iobuf_push_num(buf, ret);
+    iobuf_push_bytes(buf, to, ret > 0 ? ret : 0);
 
     return 0;
 }
@@ -687,19 +687,19 @@ static int sign_proxy(int type, const unsigned char *m, unsigned int m_len, unsi
 
     get_privsep_data(rsa, &exdata, &thdata);
 
-    expbuf_push_str(&buf, "sign");
-    expbuf_push_num(&buf, type);
-    expbuf_push_bytes(&buf, m, m_len);
-    expbuf_push_num(&buf, exdata->key_index);
-    expbuf_transaction(&buf, thdata);
+    iobuf_push_str(&buf, "sign");
+    iobuf_push_num(&buf, type);
+    iobuf_push_bytes(&buf, m, m_len);
+    iobuf_push_num(&buf, exdata->key_index);
+    iobuf_transaction(&buf, thdata);
 
-    if (expbuf_shift_num(&buf, &ret) != 0 || (sigret = expbuf_shift_bytes(&buf, &siglen)) == NULL) {
+    if (iobuf_shift_num(&buf, &ret) != 0 || (sigret = iobuf_shift_bytes(&buf, &siglen)) == NULL) {
         errno = 0;
         dief("failed to parse response");
     }
     memcpy(_sigret, sigret, siglen);
     *_siglen = (unsigned)siglen;
-    expbuf_dispose(&buf);
+    iobuf_dispose(&buf);
 
     return (int)ret;
 }
@@ -712,8 +712,8 @@ static int sign_stub(neverbleed_iobuf_t *buf)
     unsigned siglen = 0;
     int ret;
 
-    if (expbuf_shift_num(buf, &type) != 0 || (m = expbuf_shift_bytes(buf, &m_len)) == NULL ||
-        expbuf_shift_num(buf, &key_index) != 0) {
+    if (iobuf_shift_num(buf, &type) != 0 || (m = iobuf_shift_bytes(buf, &m_len)) == NULL ||
+        iobuf_shift_num(buf, &key_index) != 0) {
         errno = 0;
         warnf("%s: failed to parse request", __FUNCTION__);
         return -1;
@@ -724,11 +724,11 @@ static int sign_stub(neverbleed_iobuf_t *buf)
         return -1;
     }
     ret = RSA_sign((int)type, m, (unsigned)m_len, sigret, &siglen, rsa);
-    expbuf_dispose(buf);
+    iobuf_dispose(buf);
     RSA_free(rsa);
 
-    expbuf_push_num(buf, ret);
-    expbuf_push_bytes(buf, sigret, ret == 1 ? siglen : 0);
+    iobuf_push_num(buf, ret);
+    iobuf_push_bytes(buf, sigret, ret == 1 ? siglen : 0);
 
     return 0;
 }
@@ -812,8 +812,8 @@ static int ecdsa_sign_stub(neverbleed_iobuf_t *buf)
     unsigned siglen = 0;
     int ret;
 
-    if (expbuf_shift_num(buf, &type) != 0 || (m = expbuf_shift_bytes(buf, &m_len)) == NULL ||
-        expbuf_shift_num(buf, &key_index) != 0) {
+    if (iobuf_shift_num(buf, &type) != 0 || (m = iobuf_shift_bytes(buf, &m_len)) == NULL ||
+        iobuf_shift_num(buf, &key_index) != 0) {
         errno = 0;
         warnf("%s: failed to parse request", __FUNCTION__);
         return -1;
@@ -825,12 +825,12 @@ static int ecdsa_sign_stub(neverbleed_iobuf_t *buf)
     }
 
     ret = ECDSA_sign((int)type, m, (unsigned)m_len, sigret, &siglen, ec_key);
-    expbuf_dispose(buf);
+    iobuf_dispose(buf);
 
     EC_KEY_free(ec_key);
 
-    expbuf_push_num(buf, ret);
-    expbuf_push_bytes(buf, sigret, ret == 1 ? siglen : 0);
+    iobuf_push_num(buf, ret);
+    iobuf_push_bytes(buf, sigret, ret == 1 ? siglen : 0);
 
     return 0;
 }
@@ -865,19 +865,19 @@ static int ecdsa_sign_proxy(int type, const unsigned char *m, int m_len, unsigne
         dief("unexpected non-NULL kinv and rp");
     }
 
-    expbuf_push_str(&buf, "ecdsa_sign");
-    expbuf_push_num(&buf, type);
-    expbuf_push_bytes(&buf, m, m_len);
-    expbuf_push_num(&buf, exdata->key_index);
-    expbuf_transaction(&buf, thdata);
+    iobuf_push_str(&buf, "ecdsa_sign");
+    iobuf_push_num(&buf, type);
+    iobuf_push_bytes(&buf, m, m_len);
+    iobuf_push_num(&buf, exdata->key_index);
+    iobuf_transaction(&buf, thdata);
 
-    if (expbuf_shift_num(&buf, &ret) != 0 || (sigret = expbuf_shift_bytes(&buf, &siglen)) == NULL) {
+    if (iobuf_shift_num(&buf, &ret) != 0 || (sigret = iobuf_shift_bytes(&buf, &siglen)) == NULL) {
         errno = 0;
         dief("failed to parse response");
     }
     memcpy(_sigret, sigret, siglen);
     *_siglen = (unsigned)siglen;
-    expbuf_dispose(&buf);
+    iobuf_dispose(&buf);
 
     return (int)ret;
 }
@@ -942,15 +942,15 @@ static void priv_ecdsa_finish(EC_KEY *key)
     neverbleed_iobuf_t buf = {NULL};
     size_t ret;
 
-    expbuf_push_str(&buf, "del_ecdsa_key");
-    expbuf_push_num(&buf, exdata->key_index);
-    expbuf_transaction(&buf, thdata);
+    iobuf_push_str(&buf, "del_ecdsa_key");
+    iobuf_push_num(&buf, exdata->key_index);
+    iobuf_transaction(&buf, thdata);
 
-    if (expbuf_shift_num(&buf, &ret) != 0) {
+    if (iobuf_shift_num(&buf, &ret) != 0) {
         errno = 0;
         dief("failed to parse response");
     }
-    expbuf_dispose(&buf);
+    iobuf_dispose(&buf);
 }
 
 static int del_ecdsa_key_stub(neverbleed_iobuf_t *buf)
@@ -958,7 +958,7 @@ static int del_ecdsa_key_stub(neverbleed_iobuf_t *buf)
     size_t key_index;
     int ret = 0;
 
-    if (expbuf_shift_num(buf, &key_index) != 0) {
+    if (iobuf_shift_num(buf, &key_index) != 0) {
         errno = 0;
         warnf("%s: failed to parse request", __FUNCTION__);
         return -1;
@@ -986,8 +986,8 @@ static int del_ecdsa_key_stub(neverbleed_iobuf_t *buf)
     ret = 1;
 
 respond:
-    expbuf_dispose(buf);
-    expbuf_push_num(buf, ret);
+    iobuf_dispose(buf);
+    iobuf_push_num(buf, ret);
     return 0;
 }
 
@@ -1001,11 +1001,11 @@ int neverbleed_load_private_key_file(neverbleed_t *nb, SSL_CTX *ctx, const char 
     size_t index, type;
     EVP_PKEY *pkey;
 
-    expbuf_push_str(&buf, "load_key");
-    expbuf_push_str(&buf, fn);
-    expbuf_transaction(&buf, thdata);
+    iobuf_push_str(&buf, "load_key");
+    iobuf_push_str(&buf, fn);
+    iobuf_transaction(&buf, thdata);
 
-    if (expbuf_shift_num(&buf, &type) != 0 || expbuf_shift_num(&buf, &index) != 0) {
+    if (iobuf_shift_num(&buf, &type) != 0 || iobuf_shift_num(&buf, &index) != 0) {
         errno = 0;
         dief("failed to parse response");
     }
@@ -1014,7 +1014,7 @@ int neverbleed_load_private_key_file(neverbleed_t *nb, SSL_CTX *ctx, const char 
     case NEVERBLEED_TYPE_RSA: {
         char *estr, *nstr;
 
-        if ((estr = expbuf_shift_str(&buf)) == NULL || (nstr = expbuf_shift_str(&buf)) == NULL) {
+        if ((estr = iobuf_shift_str(&buf)) == NULL || (nstr = iobuf_shift_str(&buf)) == NULL) {
             errno = 0;
             dief("failed to parse response");
         }
@@ -1026,7 +1026,7 @@ int neverbleed_load_private_key_file(neverbleed_t *nb, SSL_CTX *ctx, const char 
         char *ec_pubkeystr;
         size_t curve_name;
 
-        if (expbuf_shift_num(&buf, &curve_name) != 0 || (ec_pubkeystr = expbuf_shift_str(&buf)) == NULL) {
+        if (iobuf_shift_num(&buf, &curve_name) != 0 || (ec_pubkeystr = iobuf_shift_str(&buf)) == NULL) {
             errno = 0;
             dief("failed to parse response");
         }
@@ -1037,7 +1037,7 @@ int neverbleed_load_private_key_file(neverbleed_t *nb, SSL_CTX *ctx, const char 
     default: {
         char *errstr;
 
-        if ((errstr = expbuf_shift_str(&buf)) == NULL) {
+        if ((errstr = iobuf_shift_str(&buf)) == NULL) {
             errno = 0;
             dief("failed to parse response");
         }
@@ -1047,7 +1047,7 @@ int neverbleed_load_private_key_file(neverbleed_t *nb, SSL_CTX *ctx, const char 
     }
     }
 
-    expbuf_dispose(&buf);
+    iobuf_dispose(&buf);
 
     /* success */
     if (SSL_CTX_use_PrivateKey(ctx, pkey) != 1) {
@@ -1074,7 +1074,7 @@ static int load_key_stub(neverbleed_iobuf_t *buf)
     char *ec_pubkeystr = NULL;
 #endif
 
-    if ((fn = expbuf_shift_str(buf)) == NULL) {
+    if ((fn = iobuf_shift_str(buf)) == NULL) {
         warnf("%s: failed to parse request", __FUNCTION__);
         return -1;
     }
@@ -1130,22 +1130,22 @@ static int load_key_stub(neverbleed_iobuf_t *buf)
     }
 
 Respond:
-    expbuf_dispose(buf);
-    expbuf_push_num(buf, type);
-    expbuf_push_num(buf, key_index);
+    iobuf_dispose(buf);
+    iobuf_push_num(buf, type);
+    iobuf_push_num(buf, key_index);
     switch (type) {
     case NEVERBLEED_TYPE_RSA:
-        expbuf_push_str(buf, estr != NULL ? estr : "");
-        expbuf_push_str(buf, nstr != NULL ? nstr : "");
+        iobuf_push_str(buf, estr != NULL ? estr : "");
+        iobuf_push_str(buf, nstr != NULL ? nstr : "");
         break;
 #ifdef NEVERBLEED_ECDSA
     case NEVERBLEED_TYPE_ECDSA:
-        expbuf_push_num(buf, EC_GROUP_get_curve_name(ec_group));
-        expbuf_push_str(buf, ec_pubkeystr);
+        iobuf_push_num(buf, EC_GROUP_get_curve_name(ec_group));
+        iobuf_push_str(buf, ec_pubkeystr);
         break;
 #endif
     default:
-        expbuf_push_str(buf, errbuf);
+        iobuf_push_str(buf, errbuf);
     }
     if (rsa != NULL)
         RSA_free(rsa);
@@ -1173,16 +1173,16 @@ int neverbleed_setuidgid(neverbleed_t *nb, const char *user, int change_socket_o
     neverbleed_iobuf_t buf = {NULL};
     size_t ret;
 
-    expbuf_push_str(&buf, "setuidgid");
-    expbuf_push_str(&buf, user);
-    expbuf_push_num(&buf, change_socket_ownership);
-    expbuf_transaction(&buf, thdata);
+    iobuf_push_str(&buf, "setuidgid");
+    iobuf_push_str(&buf, user);
+    iobuf_push_num(&buf, change_socket_ownership);
+    iobuf_transaction(&buf, thdata);
 
-    if (expbuf_shift_num(&buf, &ret) != 0) {
+    if (iobuf_shift_num(&buf, &ret) != 0) {
         errno = 0;
         dief("failed to parse response");
     }
-    expbuf_dispose(&buf);
+    iobuf_dispose(&buf);
 
     return (int)ret;
 }
@@ -1195,7 +1195,7 @@ static int setuidgid_stub(neverbleed_iobuf_t *buf)
     char pwstrbuf[65536]; /* should be large enough */
     int ret = -1;
 
-    if ((user = expbuf_shift_str(buf)) == NULL || expbuf_shift_num(buf, &change_socket_ownership) != 0) {
+    if ((user = iobuf_shift_str(buf)) == NULL || iobuf_shift_num(buf, &change_socket_ownership) != 0) {
         errno = 0;
         warnf("%s: failed to parse request", __FUNCTION__);
         return -1;
@@ -1237,8 +1237,8 @@ static int setuidgid_stub(neverbleed_iobuf_t *buf)
     ret = 0;
 
 Respond:
-    expbuf_dispose(buf);
-    expbuf_push_num(buf, ret);
+    iobuf_dispose(buf);
+    iobuf_push_num(buf, ret);
     return 0;
 }
 
@@ -1246,30 +1246,30 @@ Respond:
 int neverbleed_setaffinity(neverbleed_t *nb, NEVERBLEED_CPU_SET_T *cpuset)
 {
     struct st_neverbleed_thread_data_t *thdata = get_thread_data(nb);
-    struct expbuf_t buf = {NULL};
+    neverbleed_iobuf_t buf = {NULL};
     size_t ret;
 
-    expbuf_push_str(&buf, "setaffinity");
-    expbuf_push_bytes(&buf, cpuset, sizeof(*cpuset));
-    expbuf_transaction(&buf, thdata);
+    iobuf_push_str(&buf, "setaffinity");
+    iobuf_push_bytes(&buf, cpuset, sizeof(*cpuset));
+    iobuf_transaction(&buf, thdata);
 
-    if (expbuf_shift_num(&buf, &ret) != 0) {
+    if (iobuf_shift_num(&buf, &ret) != 0) {
         errno = 0;
         dief("failed to parse response");
     }
-    expbuf_dispose(&buf);
+    iobuf_dispose(&buf);
 
     return (int)ret;
 }
 
-static int setaffinity_stub(struct expbuf_t *buf)
+static int setaffinity_stub(neverbleed_iobuf_t *buf)
 {
     char *cpuset_bytes;
     size_t cpuset_len;
     NEVERBLEED_CPU_SET_T cpuset;
     int ret = 1;
 
-    if ((cpuset_bytes = expbuf_shift_bytes(buf, &cpuset_len)) == NULL) {
+    if ((cpuset_bytes = iobuf_shift_bytes(buf, &cpuset_len)) == NULL) {
         errno = 0;
         warnf("%s: failed to parse request", __FUNCTION__);
         return -1;
@@ -1291,8 +1291,8 @@ static int setaffinity_stub(struct expbuf_t *buf)
     ret = 0;
 
 Respond:
-    expbuf_dispose(buf);
-    expbuf_push_num(buf, ret);
+    iobuf_dispose(buf);
+    iobuf_push_num(buf, ret);
     return 0;
 }
 #endif
@@ -1327,15 +1327,15 @@ static int priv_rsa_finish(RSA *rsa)
     neverbleed_iobuf_t buf = {NULL};
     size_t ret;
 
-    expbuf_push_str(&buf, "del_rsa_key");
-    expbuf_push_num(&buf, exdata->key_index);
-    expbuf_transaction(&buf, thdata);
+    iobuf_push_str(&buf, "del_rsa_key");
+    iobuf_push_num(&buf, exdata->key_index);
+    iobuf_transaction(&buf, thdata);
 
-    if (expbuf_shift_num(&buf, &ret) != 0) {
+    if (iobuf_shift_num(&buf, &ret) != 0) {
         errno = 0;
         dief("failed to parse response");
     }
-    expbuf_dispose(&buf);
+    iobuf_dispose(&buf);
 
     return (int)ret;
 }
@@ -1346,7 +1346,7 @@ static int del_rsa_key_stub(neverbleed_iobuf_t *buf)
 
     int ret = 0;
 
-    if (expbuf_shift_num(buf, &key_index) != 0) {
+    if (iobuf_shift_num(buf, &key_index) != 0) {
         errno = 0;
         warnf("%s: failed to parse request", __FUNCTION__);
         return -1;
@@ -1374,8 +1374,8 @@ static int del_rsa_key_stub(neverbleed_iobuf_t *buf)
     ret = 1;
 
 respond:
-    expbuf_dispose(buf);
-    expbuf_push_num(buf, ret);
+    iobuf_dispose(buf);
+    iobuf_push_num(buf, ret);
     return 0;
 }
 
@@ -1423,12 +1423,12 @@ static void *daemon_conn_thread(void *_sock_fd)
     while (1) {
         char *cmd;
         yield_on_data(sock_fd);
-        if (expbuf_read(&buf, sock_fd) != 0) {
+        if (iobuf_read(&buf, sock_fd) != 0) {
             if (errno != 0)
                 warnf("read error");
             break;
         }
-        if ((cmd = expbuf_shift_str(&buf)) == NULL) {
+        if ((cmd = iobuf_shift_str(&buf)) == NULL) {
             errno = 0;
             warnf("failed to parse request");
             break;
@@ -1468,15 +1468,15 @@ static void *daemon_conn_thread(void *_sock_fd)
             warnf("unknown command:%s", cmd);
             break;
         }
-        if (expbuf_write(&buf, sock_fd) != 0) {
+        if (iobuf_write(&buf, sock_fd) != 0) {
             warnf(errno != 0 ? "write error" : "connection closed by client");
             break;
         }
-        expbuf_dispose(&buf);
+        iobuf_dispose(&buf);
     }
 
 Exit:
-    expbuf_dispose(&buf);
+    iobuf_dispose(&buf);
     close(sock_fd);
 
     return NULL;
