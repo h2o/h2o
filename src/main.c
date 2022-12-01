@@ -527,14 +527,14 @@ static void nbbuf_free(struct nbbuf *nb_buf)
     free(nb_buf);
 }
 
-static void nb_submit_write_pending();
+static void nb_submit_write_pending(void);
 
 static void nb_on_write_complete_cb(h2o_socket_t *sock, const char *err)
 {
     /* transition from write queue to read queue */
     nbbuf_push(&neverbleed_conf.read_queue, nbbuf_pop(&neverbleed_conf.write_queue));
 
-    nb_submit_write_pending(sock);
+    nb_submit_write_pending();
 }
 
 static void nb_submit_write_pending(void)
