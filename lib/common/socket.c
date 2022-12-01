@@ -1623,16 +1623,17 @@ static void _async_cb_proxy(h2o_socket_t *listener, const char *err)
 {
     struct async_ctx *async_ctx = listener->data;
 
-    if (err != NULL) {
-        goto Close;
-    }
+    if (err != NULL)
+        h2o_fatal("error on internal notification fd:%s", err);
+
+    /* Do we need to handle spurious events for eventfds / pipes used for intra-process communication? If so, we have to read
+     * something here (or let `async_cb` read and return if it succeeded). */
 
     async_cb cb = async_ctx->async.cb;
     void *cb_data = async_ctx->async.data;
     assert(cb != NULL);
     cb(cb_data);
 
-Close:
     h2o_socket_read_stop(listener);
     dispose_socket(listener, NULL);
     free(async_ctx);
