@@ -283,18 +283,6 @@ static void *iobuf_shift_bytes(neverbleed_iobuf_t *buf, size_t *l)
     return ret;
 }
 
-static int iobuf_read(neverbleed_iobuf_t *buf, int fd)
-{
-    size_t sz;
-    if (read_nbytes(fd, &sz, sizeof(sz)) != 0)
-        return -1;
-    iobuf_reserve(buf, sz);
-    if (read_nbytes(fd, buf->end, sz) != 0)
-        return -1;
-    buf->end += sz;
-    return 0;
-}
-
 static int iobuf_write(neverbleed_iobuf_t *buf, int fd)
 {
     struct iovec vecs[2] = {{NULL}};
@@ -326,16 +314,16 @@ static int iobuf_write(neverbleed_iobuf_t *buf, int fd)
     return 0;
 }
 
-static void iobuf_transaction_read(neverbleed_iobuf_t *buf, struct st_neverbleed_thread_data_t *thdata)
+static int iobuf_read(neverbleed_iobuf_t *buf, int fd)
 {
-    iobuf_dispose(buf);
-    if (iobuf_read(buf, thdata->fd) == -1) {
-        if (errno != 0) {
-            dief("read error (%d) %s", errno, strerror(errno));
-        } else {
-            dief("connection closed by daemon");
-        }
-    }
+    size_t sz;
+    if (read_nbytes(fd, &sz, sizeof(sz)) != 0)
+        return -1;
+    iobuf_reserve(buf, sz);
+    if (read_nbytes(fd, buf->end, sz) != 0)
+        return -1;
+    buf->end += sz;
+    return 0;
 }
 
 static void iobuf_transaction_write(neverbleed_iobuf_t *buf, struct st_neverbleed_thread_data_t *thdata)
@@ -343,6 +331,18 @@ static void iobuf_transaction_write(neverbleed_iobuf_t *buf, struct st_neverblee
     if (iobuf_write(buf, thdata->fd) == -1) {
         if (errno != 0) {
             dief("write error (%d) %s", errno, strerror(errno));
+        } else {
+            dief("connection closed by daemon");
+        }
+    }
+}
+
+static void iobuf_transaction_read(neverbleed_iobuf_t *buf, struct st_neverbleed_thread_data_t *thdata)
+{
+    iobuf_dispose(buf);
+    if (iobuf_read(buf, thdata->fd) == -1) {
+        if (errno != 0) {
+            dief("read error (%d) %s", errno, strerror(errno));
         } else {
             dief("connection closed by daemon");
         }
