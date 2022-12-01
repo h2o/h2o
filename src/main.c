@@ -595,15 +595,11 @@ static void async_pause(struct nbbuf *buf)
         ASYNC_WAIT_CTX *waitctx = ASYNC_get_wait_ctx(job);
 
         assert(ASYNC_WAIT_CTX_get_all_fds(waitctx, NULL, &numfds) && numfds == 0);
-        if (!ASYNC_WAIT_CTX_set_wait_fd(waitctx, "neverbleed", buf->efd_read, NULL, NULL)) {
-            fprintf(stderr, "could not set async fd\n");
-            abort();
-        }
+        if (!ASYNC_WAIT_CTX_set_wait_fd(waitctx, "neverbleed", buf->efd_read, NULL, NULL))
+            h2o_fatal("could not set async fd");
         ASYNC_pause_job();
-        if (!ASYNC_WAIT_CTX_clear_fd(waitctx, "neverbleed")) {
-            fprintf(stderr, "could not clear async fd\n");
-            abort();
-        }
+        if (!ASYNC_WAIT_CTX_clear_fd(waitctx, "neverbleed"))
+            h2o_fatal("could not clear async fd");
     }
 #endif
 }
