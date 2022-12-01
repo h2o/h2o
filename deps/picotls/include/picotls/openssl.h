@@ -79,6 +79,7 @@ extern ptls_cipher_algorithm_t ptls_openssl_aes256ctr;
 extern ptls_aead_algorithm_t ptls_openssl_aes256gcm;
 extern ptls_hash_algorithm_t ptls_openssl_sha256;
 extern ptls_hash_algorithm_t ptls_openssl_sha384;
+extern ptls_hash_algorithm_t ptls_openssl_sha512;
 extern ptls_cipher_suite_t ptls_openssl_aes128gcmsha256;
 extern ptls_cipher_suite_t ptls_openssl_aes256gcmsha384;
 extern ptls_cipher_suite_t *ptls_openssl_cipher_suites[];
@@ -90,16 +91,11 @@ extern ptls_aead_algorithm_t ptls_openssl_chacha20poly1305;
 extern ptls_cipher_suite_t ptls_openssl_chacha20poly1305sha256;
 #endif
 
-extern ptls_cipher_suite_t ptls_openssl_tls12_rsa_aes128gcmsha256;
-extern ptls_cipher_suite_t ptls_openssl_tls12_dhe_rsa_aes128gcmsha256;
 extern ptls_cipher_suite_t ptls_openssl_tls12_ecdhe_rsa_aes128gcmsha256;
 extern ptls_cipher_suite_t ptls_openssl_tls12_ecdhe_ecdsa_aes128gcmsha256;
-extern ptls_cipher_suite_t ptls_openssl_tls12_rsa_aes256gcmsha384;
-extern ptls_cipher_suite_t ptls_openssl_tls12_dhe_rsa_aes256gcmsha384;
 extern ptls_cipher_suite_t ptls_openssl_tls12_ecdhe_rsa_aes256gcmsha384;
 extern ptls_cipher_suite_t ptls_openssl_tls12_ecdhe_ecdsa_aes256gcmsha384;
 #if PTLS_OPENSSL_HAVE_CHACHA20_POLY1305
-extern ptls_cipher_suite_t ptls_openssl_tls12_dhe_rsa_chacha20poly1305sha256;
 extern ptls_cipher_suite_t ptls_openssl_tls12_ecdhe_rsa_chacha20poly1305sha256;
 extern ptls_cipher_suite_t ptls_openssl_tls12_ecdhe_ecdsa_chacha20poly1305sha256;
 #endif
@@ -107,6 +103,21 @@ extern ptls_cipher_suite_t ptls_openssl_tls12_ecdhe_ecdsa_chacha20poly1305sha256
 #if PTLS_OPENSSL_HAVE_BF
 extern ptls_cipher_algorithm_t ptls_openssl_bfecb;
 #endif
+
+extern ptls_hpke_kem_t ptls_openssl_hpke_kem_p256sha256;
+extern ptls_hpke_kem_t ptls_openssl_hpke_kem_p384sha384;
+#if PTLS_OPENSSL_HAVE_X25519
+extern ptls_hpke_kem_t ptls_openssl_hpke_kem_x25519sha256;
+#endif
+extern ptls_hpke_kem_t *ptls_openssl_hpke_kems[];
+
+extern ptls_hpke_cipher_suite_t ptls_openssl_hpke_aes128gcmsha256;
+extern ptls_hpke_cipher_suite_t ptls_openssl_hpke_aes128gcmsha512;
+extern ptls_hpke_cipher_suite_t ptls_openssl_hpke_aes256gcmsha384;
+#if PTLS_OPENSSL_HAVE_CHACHA20_POLY1305
+extern ptls_hpke_cipher_suite_t ptls_openssl_hpke_chacha20poly1305sha256;
+#endif
+extern ptls_hpke_cipher_suite_t *ptls_openssl_hpke_cipher_suites[];
 
 void ptls_openssl_random_bytes(void *buf, size_t len);
 /**
