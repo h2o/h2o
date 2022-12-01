@@ -445,11 +445,10 @@ static struct nbbuf *nbbuf_new(neverbleed_iobuf_t *buf)
 #else
     int fds[2];
 
-    if (pipe(fds) != 0) {
+    if (cloexec_pipe(fds) != 0) {
         perror("pipe");
         abort();
     }
-    cloexec_pipe(fds);
     fd_read = fds[0];
     fd_write = fds[1];
 #endif
