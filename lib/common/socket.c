@@ -1517,6 +1517,8 @@ Exit:
 
 static void on_handshake_complete(h2o_socket_t *sock, const char *err)
 {
+    assert(sock->ssl->handshake.cb != NULL);
+
 #if PTLS_OPENSSL_HAVE_ASYNC
     assert(!sock->ssl->async.is_pending_handshake);
     if (sock->ssl->async.is_closed) {
@@ -1578,7 +1580,6 @@ static void on_handshake_complete(h2o_socket_t *sock, const char *err)
     sock->ssl->handshake.cb = NULL;
     if (err == NULL)
         err = decode_ssl_input(sock);
-    assert(handshake_cb != NULL);
     handshake_cb(sock, err);
 }
 
