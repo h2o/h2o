@@ -3495,15 +3495,9 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
                                       h2o_memcached_receiver);
     if (neverbleed != NULL) {
         int fd = neverbleed_get_fd(neverbleed);
-
-#if H2O_USE_LIBUV
-        neverbleed_conf.sock =
-            h2o_uv__poll_create(conf.threads[thread_index].ctx.loop, fd, (uv_close_cb)free);
-#else
         neverbleed_conf.sock = h2o_evloop_socket_create(conf.threads[thread_index].ctx.loop, fd, H2O_SOCKET_FLAG_DONT_READ);
         h2o_linklist_init_anchor(&neverbleed_conf.read_queue);
         h2o_linklist_init_anchor(&neverbleed_conf.write_queue);
-#endif
     }
     if (conf.thread_map.entries[thread_index] >= 0) {
 #if H2O_HAS_PTHREAD_SETAFFINITY_NP
