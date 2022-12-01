@@ -1643,8 +1643,10 @@ static void _do_generic_async(h2o_loop_t *loop, int fd, async_cb async_cb, void 
     int async_fd;
 
     // dup the fd as h2o socket handling will close it
-    async_fd = dup(fd);
-    assert(async_fd != -1);
+    if ((async_fd = dup(fd)) == -1) {
+        char errbuf[256];
+        h2o_fatal("dup failed:%s", h2o_strerror_r(errno, errbuf, sizeof(errbuf)));
+    }
 
     // add async fd to event loop in order to retry when openssl engine is ready
 #if H2O_USE_LIBUV
