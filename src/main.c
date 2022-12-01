@@ -583,51 +583,40 @@ static void nb_read_ready(h2o_socket_t *sock, const char *err)
         h2o_socket_read_stop(sock);
 }
 
-// sets up file descriptor and calls OpenSSL's `ASYNC_pause_job`
-// if OpenSSL async is not available, this function is a no-op
-static void async_pause(struct nbbuf *buf)
-{
-#if PTLS_OPENSSL_HAVE_ASYNC
-    ASYNC_JOB *job;
-
-    if ((job = ASYNC_get_current_job()) != NULL) {
-        size_t numfds;
-        ASYNC_WAIT_CTX *waitctx = ASYNC_get_wait_ctx(job);
-
-        assert(ASYNC_WAIT_CTX_get_all_fds(waitctx, NULL, &numfds) && numfds == 0);
-        if (!ASYNC_WAIT_CTX_set_wait_fd(waitctx, "neverbleed", buf->efd_read, NULL, NULL))
-            h2o_fatal("could not set async fd");
-        ASYNC_pause_job();
-        if (!ASYNC_WAIT_CTX_clear_fd(waitctx, "neverbleed"))
-            h2o_fatal("could not clear async fd");
-    }
-#endif
-}
-
 static void on_neverbleed_transaction(neverbleed_iobuf_t *buf)
 {
-    int is_async = 0;
 #if PTLS_OPENSSL_HAVE_ASYNC
-    if (ASYNC_get_current_job() != NULL) {
-        is_async = 1;
-    }
-#endif
+    /* When using OpenSSL with ASYNC support, we may receive requests from a fiber. If so, process them asynchronously. */
+    ASYNC_JOB *job;
+    if ((job = ASYNC_get_current_job()) != NULL) {
 
-    /* if the request comes from a "job" fiber, register the request and call `ASYNC_pause_job` to yield the execution back to the
-     * main fiber */
-    if (is_async) {
+        /* register the request and kick the write operation */
         struct nbbuf *nb_buf = nbbuf_new(buf);
         assert(h2o_socket_get_fd(neverbleed_conf.sock) == neverbleed_get_fd(neverbleed));
         nbbuf_push(&neverbleed_conf.write_queue, nb_buf);
         nb_submit_write_pending();
 
+        /* start reading */
         if (!h2o_socket_is_reading(neverbleed_conf.sock)) {
             h2o_socket_read_start(neverbleed_conf.sock, nb_read_ready);
         }
-        async_pause(nb_buf);
+
+        { /* setup file descriptor and call `ASYNC_pause_job`, to yield the operation back to the original fiber, until
+           * `nb_read_ready` notifies the this fiber (in paused state) to resume. */
+            size_t numfds;
+            ASYNC_WAIT_CTX *waitctx = ASYNC_get_wait_ctx(job);
+            assert(ASYNC_WAIT_CTX_get_all_fds(waitctx, NULL, &numfds) && numfds == 0);
+            if (!ASYNC_WAIT_CTX_set_wait_fd(waitctx, "neverbleed", nb_buf->efd_read, NULL, NULL))
+                h2o_fatal("could not set async fd");
+            ASYNC_pause_job();
+            if (!ASYNC_WAIT_CTX_clear_fd(waitctx, "neverbleed"))
+                h2o_fatal("could not clear async fd");
+        }
+
         nbbuf_free(nb_buf);
         return;
     }
+#endif
 
     /* do it synchronously, by at first reading all pending reads, then write asynchronously and wait for the repsonse */
     if (neverbleed_conf.sock != NULL) {
