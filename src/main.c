@@ -528,12 +528,16 @@ static void nbbuf_free(struct nbbuf *nb_buf)
 }
 
 static void nb_submit_write_pending(void);
+static void nb_read_ready(h2o_socket_t *sock, const char *err);
 
 static void nb_on_write_complete_cb(h2o_socket_t *sock, const char *err)
 {
-    /* transition from write queue to read queue */
+    /* add to the read queue the entry for which we have written the request, and start reading from the socket */
     nbbuf_push(&neverbleed_conf.read_queue, nbbuf_pop(&neverbleed_conf.write_queue));
+    if (!h2o_socket_is_reading(neverbleed_conf.sock))
+        h2o_socket_read_start(neverbleed_conf.sock, nb_read_ready);
 
+    /* submit more requests if there's anything queued */
     nb_submit_write_pending();
 }
 
@@ -595,11 +599,6 @@ static void on_neverbleed_transaction(neverbleed_iobuf_t *buf)
         assert(h2o_socket_get_fd(neverbleed_conf.sock) == neverbleed_get_fd(neverbleed));
         nbbuf_push(&neverbleed_conf.write_queue, nb_buf);
         nb_submit_write_pending();
-
-        /* start reading */
-        if (!h2o_socket_is_reading(neverbleed_conf.sock)) {
-            h2o_socket_read_start(neverbleed_conf.sock, nb_read_ready);
-        }
 
         { /* setup file descriptor and call `ASYNC_pause_job`, to yield the operation back to the original fiber, until
            * `nb_read_ready` notifies the this fiber (in paused state) to resume. */
