@@ -1762,14 +1762,15 @@ static void proceed_handshake_picotls(h2o_socket_t *sock)
     if (wbuf->off != 0) {
         h2o_socket_read_stop(sock);
         write_ssl_bytes(sock, wbuf->base, wbuf->off);
+        ptls_buffer_dispose(wbuf);
         flush_pending_ssl(sock, next_cb);
     } else if (ret == PTLS_ERROR_IN_PROGRESS) {
+        ptls_buffer_dispose(wbuf);
         h2o_socket_read_start(sock, next_cb);
     } else {
+        ptls_buffer_dispose(wbuf);
         next_cb(sock, NULL);
     }
-
-    ptls_buffer_dispose(wbuf);
 }
 
 static void proceed_handshake_openssl(h2o_socket_t *sock)
@@ -1953,12 +1954,14 @@ static void proceed_handshake_undetermined(h2o_socket_t *sock)
 #if PTLS_OPENSSL_HAVE_ASYNC
         sock->ssl->async.undetermined.ptls = NULL;
 #endif
+        ptls_buffer_dispose(wbuf);
     } else if (ret == PTLS_ALERT_PROTOCOL_VERSION) {
         /* the client cannot use tls1.3, fallback to openssl */
         ptls_free(ptls);
 #if PTLS_OPENSSL_HAVE_ASYNC
         sock->ssl->async.undetermined.ptls = NULL;
 #endif
+        ptls_buffer_dispose(wbuf);
         create_ossl(sock);
         proceed_handshake_openssl(sock);
     } else {
@@ -1972,6 +1975,7 @@ static void proceed_handshake_undetermined(h2o_socket_t *sock)
         /* stop reading, send response */
         h2o_socket_read_stop(sock);
         write_ssl_bytes(sock, wbuf->base, wbuf->off);
+        ptls_buffer_dispose(wbuf);
         h2o_socket_cb cb;
         switch (ret) {
         case 0:
@@ -1987,7 +1991,6 @@ static void proceed_handshake_undetermined(h2o_socket_t *sock)
         }
         flush_pending_ssl(sock, cb);
     }
-    ptls_buffer_dispose(wbuf);
 }
 
 static void proceed_handshake(h2o_socket_t *sock, const char *err)
