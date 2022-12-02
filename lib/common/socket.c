@@ -653,10 +653,10 @@ void h2o_socket_close(h2o_socket_t *sock)
         dispose_socket(sock, 0);
     } else {
 #if PTLS_OPENSSL_HAVE_ASYNC
-    if (sock->ssl->async.is_pending_handshake) {
-        sock->ssl->async.is_closed = 1;
-        return;
-    }
+        if (sock->ssl->async.is_pending_handshake) {
+            sock->ssl->async.is_closed = 1;
+            return;
+        }
 #endif
         shutdown_ssl(sock, 0);
     }
@@ -1703,15 +1703,15 @@ static void _do_proceed_handshake_async(h2o_socket_t *sock, SSL *ossl, ptls_t *p
 
 static void do_proceed_handshake_undetermined_async(h2o_socket_t *sock, ptls_t *ptls)
 {
-     _do_proceed_handshake_async(sock, NULL, ptls);
+    _do_proceed_handshake_async(sock, NULL, ptls);
 }
 
 static void do_proceed_handshake_async(h2o_socket_t *sock)
 {
     if (sock->ssl->ptls != NULL) {
-         _do_proceed_handshake_async(sock, NULL, sock->ssl->ptls);
+        _do_proceed_handshake_async(sock, NULL, sock->ssl->ptls);
     } else {
-         _do_proceed_handshake_async(sock, sock->ssl->ossl, NULL);
+        _do_proceed_handshake_async(sock, sock->ssl->ossl, NULL);
     }
 }
 #endif
