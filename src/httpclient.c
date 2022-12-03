@@ -875,6 +875,14 @@ int main(int argc, char **argv)
             h2o_evloop_run(ctx.loop, INT32_MAX);
         }
     }
+    if (ctx.protocol_selector.ratio.http2 > 0) {
+        while(!h2o_linklist_is_empty(&connpool->http2.conns)) {
+            h2o_httpclient__h2_conn_t *conn =
+                H2O_STRUCT_FROM_MEMBER(h2o_httpclient__h2_conn_t, link, connpool->http2.conns.next);
+            conn->close_conn(conn);
+            h2o_evloop_run(ctx.loop, INT32_MAX);
+        }
+    }
 #endif
 
     if (req.connect_to != NULL)
