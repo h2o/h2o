@@ -245,7 +245,7 @@ subtest 'header-termination (issue 462)' => sub {
 };
 
 subtest 'extensions' => sub {
-    for my $set ([ qw{TLSv1.2 \S+RSA\S+} ], [ qw{TLSv1.3 AES(?:128|256)-GCM} ]) {
+    for my $set ([ qw{TLSv1.2 \S+RSA\S+} ], [ qw{TLSv1.3 TLS_AES_(?:128|256)_GCM_SHA(?:256|384)} ]) {
         my $tlsver = $set->[0];
         my $cipher = $set->[1];
         subtest $tlsver => sub {
@@ -319,7 +319,7 @@ subtest 'error' => sub {
             system("curl --silent http://127.0.0.1:$server->{port}/fastcgi > /dev/null");
         },
         '%{error}x',
-        [ qr{^\[lib/handler/fastcgi\.c\] in request:/fastcgi:connection failed:}s ],
+        [ qr{^\[lib/handler/fastcgi\.c\] in request:127\.0\.0\.1:\d+/fastcgi:connection failed:}s ],
     );
 };
 

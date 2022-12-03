@@ -109,7 +109,7 @@ static void test_gfmul(void)
 #define GHASH256 (((struct ptls_fusion_aesgcm_context256 *)ctx)->ghash)
 
     {                                                     /* one block */
-        static const char input[32] = "deaddeadbeefbeef"; /* latter 16-byte is NUL */
+        static const char input[32] = "deaddeadbeefbeef"; /* latter 16-bytes are NUL */
         __m128i hash;
         if (ctx->ecb.aesni256) {
             struct ptls_fusion_gfmul_state256 state;
@@ -170,7 +170,8 @@ static void test_gfmul(void)
     }
 
     { /* five blocks */
-        static const char input[80] = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor ";
+        static const char input[96] =
+            "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor "; /* last 16 bytes are NUL */
         __m128i hash;
         if (ctx->ecb.aesni256) {
             struct ptls_fusion_gfmul_state256 state;
@@ -391,6 +392,10 @@ static void test_generated(void)
     const int nb_runs = 10000;
 #endif
     for (i = 0; i < nb_runs; ++i) {
+        if (i % 100 == 0) {
+            fputc('.', stderr);
+            fflush(stderr);
+        }
         /* generate input using RNG */
         uint8_t key[32], iv[12], seq32[4], aadlen, textlen;
         uint64_t seq;
@@ -445,13 +450,40 @@ static void test_generated(void)
         }
     }
 
+    fputc('\n', stderr);
+    fflush(stderr);
+
     ok(1);
     ptls_cipher_free(rand);
     return;
 
 Fail:
+    fputc('\n', stderr);
+    fflush(stderr);
     note("mismatch at index=%d", i);
     ok(0);
+}
+
+/**
+ * Default capacity of fusion is 1500 bytes (see `aesgcm_setup`), input of 3000 bytes triggers the invocation of
+ * `ptls_fusion_aesgcm_set_capacity`.
+ */
+static void test_generated_set_capacity(void)
+{
+    static const uint8_t secret[PTLS_MAX_DIGEST_SIZE] = "deadbeef", input[3000] = {0};
+    uint8_t encrypted[4000], decrypted[4000];
+
+    ptls_aead_context_t *enc = ptls_aead_new(test_generated_encryptor, &ptls_minicrypto_sha256, 1, secret, ""),
+                        *dec = ptls_aead_new(test_generated_encryptor, &ptls_minicrypto_sha256, 0, secret, "");
+
+    size_t enclen = ptls_aead_encrypt(enc, encrypted, input, sizeof(input), 123, "", 0);
+    size_t declen = ptls_aead_decrypt(dec, decrypted, encrypted, enclen, 123, "", 0);
+
+    ok(declen == sizeof(input));
+    ok(memcmp(input, decrypted, sizeof(input)) == 0);
+
+    ptls_aead_free(enc);
+    ptls_aead_free(dec);
 }
 
 static void test_generated_all(ptls_aead_algorithm_t *e1, ptls_aead_algorithm_t *e2, int can_multivec)
@@ -473,6 +505,8 @@ static void test_generated_all(ptls_aead_algorithm_t *e1, ptls_aead_algorithm_t 
         test_generated_multivec = 0;
     }
 
+    subtest("set-capacity", test_generated_set_capacity);
+
     test_generated_encryptor = e2;
     test_generated_decryptor = e1;
 
@@ -480,6 +514,8 @@ static void test_generated_all(ptls_aead_algorithm_t *e1, ptls_aead_algorithm_t 
     subtest("decrypt", test_generated);
     test_generated_iv96 = 1;
     subtest("decrypt-iv96", test_generated);
+
+    subtest("set-capacity", test_generated_set_capacity);
 }
 
 static void test_fusion_aes128gcm(void)

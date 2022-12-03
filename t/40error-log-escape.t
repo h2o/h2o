@@ -43,9 +43,9 @@ my $i = 0;
 while(<FH>) {
     if (/lib\/core\/proxy\.c/) {
         if ($i == 0) {
-            like $_, qr{\[lib/core/proxy\.c\] in request:/%s:connection refused}, "Error logged has % properly escaped";
+            like $_, qr{\[lib/core/proxy\.c\] in request:127\.0\.0\.1:\d+/%s:connection refused}, "Error logged has % properly escaped";
         } else {
-            like $_, qr{\[lib/core/proxy\.c\] in request:/%s01234567890123456789012345\.\.\.:connection refused}, "Error logged has % properly escaped, and is truncated";
+            like $_, qr{\[lib/core/proxy\.c\] in request:127\.0\.0\.1:\d+/%s01234567890123456789012345\.\.\.:connection refused}, "Error logged has % properly escaped, and is truncated";
         }
         $i++;
     }

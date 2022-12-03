@@ -337,7 +337,6 @@ void finalostream_send(h2o_ostream_t *self, h2o_req_t *req, h2o_sendvec_t *bufs,
         return;
     }
 
-
     stream->send_state = state;
 
     /* send headers */

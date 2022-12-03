@@ -146,16 +146,15 @@ static void create_lookup_thread_if_necessary(void)
     /* do nothing if there's no need to, or if we are already at the maximum. */
     if (queue.num_threads_idle != 0 || h2o_linklist_is_empty(&queue.pending))
         return;
-     if (queue.num_threads == h2o_hostinfo_max_threads)
-         return;
+    if (queue.num_threads == h2o_hostinfo_max_threads)
+        return;
 
     pthread_t tid;
     pthread_attr_t attr;
     int ret;
     pthread_attr_init(&attr);
-    pthread_attr_setdetachstate(&attr, 1);
-    pthread_attr_setstacksize(&attr, 100 * 1024);
-    if ((ret = pthread_create(&tid, NULL, lookup_thread_main, NULL)) != 0) {
+    pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+    if ((ret = pthread_create(&tid, &attr, lookup_thread_main, NULL)) != 0) {
         char buf[128];
         if (queue.num_threads == 0) {
             h2o_fatal("failed to start first thread for getaddrinfo: %s", h2o_strerror_r(ret, buf, sizeof(buf)));
@@ -164,6 +163,7 @@ static void create_lookup_thread_if_necessary(void)
         }
         return;
     }
+    pthread_attr_destroy(&attr);
 
     ++queue.num_threads;
     ++queue.num_threads_idle;

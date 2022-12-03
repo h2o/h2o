@@ -285,7 +285,7 @@ int openssl_init_test_client(ptls_context_t *ctx_client, char const * crt_file)
     ctx_client->get_time = &ptls_get_time;
 	ctx_client->key_exchanges = ptls_openssl_key_exchanges;
 	ctx_client->cipher_suites = ptls_openssl_cipher_suites;
-	ptls_openssl_init_verify_certificate(&verifier, openssl_init_cert_store(crt_file), NULL);
+	ptls_openssl_init_verify_certificate(&verifier, openssl_init_cert_store(crt_file));
 	ctx_client->verify_certificate = &verifier.super;
 
 	return ret;

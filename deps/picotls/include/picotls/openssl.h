@@ -75,11 +75,21 @@ extern ptls_hash_algorithm_t ptls_openssl_sha384;
 extern ptls_cipher_suite_t ptls_openssl_aes128gcmsha256;
 extern ptls_cipher_suite_t ptls_openssl_aes256gcmsha384;
 extern ptls_cipher_suite_t *ptls_openssl_cipher_suites[];
+extern ptls_cipher_suite_t *ptls_openssl_tls12_cipher_suites[];
 
-#if defined(PTLS_OPENSSL_HAVE_CHACHA20_POLY1305)
+#if PTLS_OPENSSL_HAVE_CHACHA20_POLY1305
 extern ptls_cipher_algorithm_t ptls_openssl_chacha20;
 extern ptls_aead_algorithm_t ptls_openssl_chacha20poly1305;
 extern ptls_cipher_suite_t ptls_openssl_chacha20poly1305sha256;
+#endif
+
+extern ptls_cipher_suite_t ptls_openssl_tls12_ecdhe_rsa_aes128gcmsha256;
+extern ptls_cipher_suite_t ptls_openssl_tls12_ecdhe_ecdsa_aes128gcmsha256;
+extern ptls_cipher_suite_t ptls_openssl_tls12_ecdhe_rsa_aes256gcmsha384;
+extern ptls_cipher_suite_t ptls_openssl_tls12_ecdhe_ecdsa_aes256gcmsha384;
+#if PTLS_OPENSSL_HAVE_CHACHA20_POLY1305
+extern ptls_cipher_suite_t ptls_openssl_tls12_ecdhe_rsa_chacha20poly1305sha256;
+extern ptls_cipher_suite_t ptls_openssl_tls12_ecdhe_ecdsa_chacha20poly1305sha256;
 #endif
 
 #if PTLS_OPENSSL_HAVE_BF
@@ -139,6 +149,13 @@ int ptls_openssl_encrypt_ticket(ptls_buffer_t *dst, ptls_iovec_t src,
                                 int (*cb)(unsigned char *, unsigned char *, EVP_CIPHER_CTX *, HMAC_CTX *, int));
 int ptls_openssl_decrypt_ticket(ptls_buffer_t *dst, ptls_iovec_t src,
                                 int (*cb)(unsigned char *, unsigned char *, EVP_CIPHER_CTX *, HMAC_CTX *, int));
+
+#if OPENSSL_VERSION_NUMBER >= 0x30000000L
+int ptls_openssl_encrypt_ticket_evp(ptls_buffer_t *dst, ptls_iovec_t src,
+                                    int (*cb)(unsigned char *, unsigned char *, EVP_CIPHER_CTX *, EVP_MAC_CTX *, int));
+int ptls_openssl_decrypt_ticket_evp(ptls_buffer_t *dst, ptls_iovec_t src,
+                                    int (*cb)(unsigned char *, unsigned char *, EVP_CIPHER_CTX *, EVP_MAC_CTX *, int));
+#endif
 
 #ifdef __cplusplus
 }
