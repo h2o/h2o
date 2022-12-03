@@ -1713,11 +1713,6 @@ static void _do_proceed_handshake_async(h2o_socket_t *sock, SSL *ossl, ptls_t *p
     }
 }
 
-static void do_proceed_handshake_undetermined_async(h2o_socket_t *sock, ptls_t *ptls)
-{
-    _do_proceed_handshake_async(sock, NULL, ptls);
-}
-
 static void do_proceed_handshake_async(h2o_socket_t *sock)
 {
     if (sock->ssl->ptls != NULL) {
