@@ -61,6 +61,10 @@
 #define H2O_USE_EBPF_MAP 1
 #endif
 
+#if !defined(LIBRESSL_VERSION_NUMBER) && OPENSSL_VERSION_NUMBER >= 0x1010100fL
+#define H2O_USE_OPENSSL_CLIENT_HELLO_CB 1
+#endif
+
 #define OPENSSL_HOSTNAME_VALIDATION_LINKAGE static
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wpragmas"
@@ -1385,6 +1389,9 @@ static SSL_SESSION *on_async_resumption_get(SSL *ssl,
 
     switch (sock->ssl->handshake.server.async_resumption.state) {
     case ASYNC_RESUMPTION_STATE_RECORD:
+#if H2O_USE_OPENSSL_CLIENT_HELLO_CB
+        h2o_fatal("on_async_resumption_client_hello should have captured this state");
+#endif
         sock->ssl->handshake.server.async_resumption.state = ASYNC_RESUMPTION_STATE_REQUEST_SENT;
         resumption_get_async(sock, h2o_iovec_init(data, len));
         return NULL;
@@ -1396,6 +1403,24 @@ static SSL_SESSION *on_async_resumption_get(SSL *ssl,
         return NULL;
     }
 }
+
+#if H2O_USE_OPENSSL_CLIENT_HELLO_CB
+static int on_async_resumption_client_hello(SSL *ssl, int *al, void *arg)
+{
+    h2o_socket_t *sock = BIO_get_data(SSL_get_rbio(ssl));
+    const unsigned char *sess_id;
+    size_t sess_id_len;
+
+    if (sock->ssl->handshake.server.async_resumption.state == ASYNC_RESUMPTION_STATE_RECORD &&
+        (sess_id_len = SSL_client_hello_get0_session_id(ssl, &sess_id)) != 0) {
+        sock->ssl->handshake.server.async_resumption.state = ASYNC_RESUMPTION_STATE_REQUEST_SENT;
+        resumption_get_async(sock, h2o_iovec_init(sess_id, sess_id_len));
+        return SSL_CLIENT_HELLO_RETRY;
+    }
+
+    return SSL_CLIENT_HELLO_SUCCESS;
+}
+#endif
 
 int h2o_socket_ssl_new_session_cb(SSL *s, SSL_SESSION *sess)
 {
@@ -2076,8 +2101,27 @@ void h2o_socket_ssl_async_resumption_init(h2o_socket_ssl_resumption_get_async_cb
 
 void h2o_socket_ssl_async_resumption_setup_ctx(SSL_CTX *ctx)
 {
+    /**
+     * Asynchronous resumption is a feature of libh2o that allows the use of an external session store.
+     * The traditional API provided by OpenSSL (`SSL_CTX_sess_set_get_cb`) assumes a blocking operation for the session store
+     * lookup. However, on an event-loop-based design, we cannot block while sending a request to and waiting for a response from a
+     * remote session store.
+     * Our strategy to evade this problem is to run the handshake twice for each TCP connection. When the `SSL_CTX_sess_set_get_cb`
+     * callback is called for the first time, asynchronous lookup is initiated. Then, immediately, the TLS handshake state is
+     * discarded, while ClientHello (input from TCP to the SSL handshake state machine) is retained. Once the asynchronous lookup is
+     * complete, we rerun the TLS handshake from scratch. When the session callback is called again, the result of the asynchronous
+     * lookup is supplied.
+     * With OpenSSL 1.1.1 and above, `SSL_CTX_set_client_hello_cb` is used to capture the session ID. This is because with the new
+     * callback it is possible to stop the SSL handshake state machine from preparing the full handshake response. With the old
+     * `SSL_CTX_sess_set_get_cb` callback, it is impossible to stop OpenSSL doing that even in the case of us discarding everything
+     * modulo the session ID. That includes private key operation which is very CPU intensive.
+     */
     SSL_CTX_sess_set_get_cb(ctx, on_async_resumption_get);
     SSL_CTX_sess_set_new_cb(ctx, on_async_resumption_new);
+#if H2O_USE_OPENSSL_CLIENT_HELLO_CB
+    SSL_CTX_set_client_hello_cb(ctx, on_async_resumption_client_hello, NULL);
+#endif
+
     /* if necessary, it is the responsibility of the caller to disable the internal cache */
 }
 
