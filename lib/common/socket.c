@@ -1677,49 +1677,24 @@ static void _do_generic_async(h2o_loop_t *loop, int fd, async_cb async_cb, void 
     h2o_socket_read_start(async_sock, _async_cb_proxy);
 }
 
-static void do_picotls_async(h2o_loop_t *loop, ptls_t *tls, async_cb async_cb, void *data)
-{
-    int async_fd = ptls_openssl_get_async_fd(tls);
-
-    _do_generic_async(loop, async_fd, async_cb, data);
-}
-
-static void do_openssl_async(h2o_loop_t *loop, SSL *ossl, async_cb async_cb, void *data)
-{
-    int async_fd;
-    size_t numfds;
-    int fds[1];
-
-    // get async fd
-    SSL_get_all_async_fds(ossl, NULL, &numfds);
-    assert(numfds == 1);
-    SSL_get_all_async_fds(ossl, fds, &numfds);
-    async_fd = fds[0];
-
-    _do_generic_async(loop, async_fd, async_cb, data);
-}
-
-static void _do_proceed_handshake_async(h2o_socket_t *sock, SSL *ossl, ptls_t *ptls)
+static void do_proceed_handshake_async(h2o_socket_t *sock)
 {
     assert(!sock->ssl->async.is_pending_handshake);
     sock->ssl->async.is_pending_handshake = 1;
     h2o_socket_read_stop(sock);
-    if (ptls != NULL) {
-        assert(ossl == NULL);
-        do_picotls_async(h2o_socket_get_loop(sock), ptls, proceed_handshake_async, sock);
-    } else {
-        assert(ossl != NULL);
-        do_openssl_async(h2o_socket_get_loop(sock), ossl, proceed_handshake_async, sock);
-    }
-}
 
-static void do_proceed_handshake_async(h2o_socket_t *sock)
-{
+    int async_fd;
     if (sock->ssl->ptls != NULL) {
-        _do_proceed_handshake_async(sock, NULL, sock->ssl->ptls);
+        async_fd = ptls_openssl_get_async_fd(sock->ssl->ptls);
     } else {
-        _do_proceed_handshake_async(sock, sock->ssl->ossl, NULL);
+        size_t numfds;
+        // get async fd
+        SSL_get_all_async_fds(sock->ssl->ossl, NULL, &numfds);
+        assert(numfds == 1);
+        SSL_get_all_async_fds(sock->ssl->ossl, &async_fd, &numfds);
+        assert(numfds == 1);
     }
+    _do_generic_async(h2o_socket_get_loop(sock), async_fd, proceed_handshake_async, sock);
 }
 #endif
 
