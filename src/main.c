@@ -589,7 +589,7 @@ static void nb_read_ready(h2o_socket_t *sock, const char *err)
 
 static void on_neverbleed_transaction(neverbleed_iobuf_t *buf)
 {
-#if PTLS_OPENSSL_HAVE_ASYNC
+#if H2O_CAN_ASYNC_SSL
     /* When using OpenSSL with ASYNC support, we may receive requests from a fiber. If so, process them asynchronously. */
     ASYNC_JOB *job;
     if ((job = ASYNC_get_current_job()) != NULL) {
@@ -1577,7 +1577,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
         /* initialize OpenSSL context */
         identity->ossl = SSL_CTX_new(SSLv23_server_method());
         SSL_CTX_set_options(identity->ossl, ssl_options);
-#if PTLS_OPENSSL_HAVE_ASYNC
+#if H2O_CAN_ASYNC_SSL
         if (use_neverbleed)
             SSL_CTX_set_mode(identity->ossl, SSL_MODE_ASYNC);
 #endif

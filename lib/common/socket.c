@@ -35,7 +35,6 @@
 #include <sys/ioctl.h>
 #endif
 #include "picotls.h"
-#include "picotls/openssl.h" /* for PTLS_OPENSSL_HAVE_ASYNC */
 #if H2O_USE_FUSION
 #include "picotls/fusion.h"
 #endif
@@ -59,10 +58,6 @@
 
 #if H2O_USE_DTRACE && defined(__linux__)
 #define H2O_USE_EBPF_MAP 1
-#endif
-
-#if !defined(LIBRESSL_VERSION_NUMBER) && OPENSSL_VERSION_NUMBER >= 0x1010100fL
-#define H2O_USE_OPENSSL_CLIENT_HELLO_CB 1
 #endif
 
 #define OPENSSL_HOSTNAME_VALIDATION_LINKAGE static
@@ -142,7 +137,7 @@ struct st_h2o_socket_ssl_t {
         unsigned zerocopy_owned : 1;
         unsigned allocated_for_zerocopy : 1;
     } output;
-#if PTLS_OPENSSL_HAVE_ASYNC
+#if H2O_CAN_ASYNC_SSL
     struct {
         int is_pending_handshake;
         int is_closed;
@@ -192,7 +187,7 @@ static const char *decode_ssl_input(h2o_socket_t *sock);
 static size_t flatten_sendvec(h2o_socket_t *sock, h2o_sendvec_t *sendvec);
 static void on_write_complete(h2o_socket_t *sock, const char *err);
 
-#if PTLS_OPENSSL_HAVE_ASYNC
+#if H2O_CAN_ASYNC_SSL
 typedef void (*async_cb)(void *data);
 
 struct async_ctx {
@@ -653,7 +648,7 @@ void h2o_socket_close(h2o_socket_t *sock)
     if (sock->ssl == NULL) {
         dispose_socket(sock, 0);
     } else {
-#if PTLS_OPENSSL_HAVE_ASYNC
+#if H2O_CAN_ASYNC_SSL
         if (sock->ssl->async.is_pending_handshake) {
             sock->ssl->async.is_closed = 1;
             return;
@@ -1541,7 +1536,7 @@ static void on_handshake_complete(h2o_socket_t *sock, const char *err)
 {
     assert(sock->ssl->handshake.cb != NULL);
 
-#if PTLS_OPENSSL_HAVE_ASYNC
+#if H2O_CAN_ASYNC_SSL
     assert(!sock->ssl->async.is_pending_handshake);
     if (sock->ssl->async.is_closed) {
         shutdown_ssl(sock, NULL);
@@ -1625,7 +1620,7 @@ static void on_handshake_fail_complete(h2o_socket_t *sock, const char *err)
 
 static void proceed_handshake(h2o_socket_t *sock, const char *err);
 
-#if PTLS_OPENSSL_HAVE_ASYNC
+#if H2O_CAN_ASYNC_SSL
 
 static void proceed_handshake_async(void *data)
 {
@@ -1738,7 +1733,7 @@ static void proceed_handshake_picotls(h2o_socket_t *sock)
     size_t consumed = sock->ssl->input.encrypted->size;
     ptls_buffer_t *wbuf = NULL;
 
-#if PTLS_OPENSSL_HAVE_ASYNC
+#if H2O_CAN_ASYNC_SSL
     if (sock->ssl->async.wbuf.base == NULL) {
         // first invocation
         ptls_buffer_init(&sock->ssl->async.wbuf, "", 0);
@@ -1755,7 +1750,7 @@ static void proceed_handshake_picotls(h2o_socket_t *sock)
     h2o_buffer_consume(&sock->ssl->input.encrypted, consumed);
 
     if (ret == PTLS_ERROR_ASYNC_OPERATION) {
-#if PTLS_OPENSSL_HAVE_ASYNC
+#if H2O_CAN_ASYNC_SSL
         do_proceed_handshake_async(sock);
         return;
 #else
@@ -1824,7 +1819,7 @@ Redo:
         case ASYNC_RESUMPTION_STATE_REQUEST_SENT: {
             /* sent async request, reset the ssl state, and wait for async response */
             assert(ret < 0);
-#if PTLS_OPENSSL_HAVE_ASYNC
+#if H2O_CAN_ASYNC_SSL
             assert(SSL_get_error(sock->ssl->ossl, ret) != SSL_ERROR_WANT_ASYNC &&
                    "async operation should start only after resumption state is obtained and OpenSSL decides not to resume");
 #endif
@@ -1849,7 +1844,7 @@ Redo:
 
     /* handshake failed either in strict mTLS mode or others */
     if (ret == 0 || (ret < 0 && SSL_get_error(sock->ssl->ossl, ret) != SSL_ERROR_WANT_READ)) {
-#if PTLS_OPENSSL_HAVE_ASYNC
+#if H2O_CAN_ASYNC_SSL
         if (SSL_get_error(sock->ssl->ossl, ret) == SSL_ERROR_WANT_ASYNC) {
             do_proceed_handshake_async(sock);
             return;
@@ -1932,7 +1927,7 @@ static void proceed_handshake_undetermined(h2o_socket_t *sock)
         h2o_fatal("no memory");
     *ptls_get_data_ptr(ptls) = sock;
 
-#if PTLS_OPENSSL_HAVE_ASYNC
+#if H2O_CAN_ASYNC_SSL
     wbuf = &sock->ssl->async.wbuf;
 #else
     ptls_buffer_t wbuf_local;
@@ -1956,7 +1951,7 @@ static void proceed_handshake_undetermined(h2o_socket_t *sock)
         sock->ssl->handshake.server.async_resumption.state = ASYNC_RESUMPTION_STATE_COMPLETE;
         h2o_buffer_consume(&sock->ssl->input.encrypted, consumed);
         if (ret == PTLS_ERROR_ASYNC_OPERATION) {
-#if PTLS_OPENSSL_HAVE_ASYNC
+#if H2O_CAN_ASYNC_SSL
             do_proceed_handshake_async(sock);
             return;
 #else
@@ -1994,7 +1989,7 @@ static void proceed_handshake(h2o_socket_t *sock, const char *err)
         return;
     }
 
-#if PTLS_OPENSSL_HAVE_ASYNC
+#if H2O_CAN_ASYNC_SSL
     // waiting on async operation
     if (sock->ssl->async.is_pending_handshake)
         return;
