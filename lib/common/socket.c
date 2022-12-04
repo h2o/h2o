@@ -1610,7 +1610,7 @@ static void proceed_handshake(h2o_socket_t *sock, const char *err);
 
 #if H2O_CAN_ASYNC_SSL
 
-static void on_async_proceed_handshake(h2o_socket_t *listener, const char *err)
+static void on_async_proceed_handshake(h2o_socket_t *async_sock, const char *err)
 {
     if (err != NULL)
         h2o_fatal("error on internal notification fd:%s", err);
@@ -1618,12 +1618,12 @@ static void on_async_proceed_handshake(h2o_socket_t *listener, const char *err)
     /* Do we need to handle spurious events for eventfds / pipes used for intra-process communication? If so, we have to read
      * something here (or let `async_cb` read and return if it succeeded). */
 
-    h2o_socket_t *sock = listener->data;
+    h2o_socket_t *sock = async_sock->data;
     assert(sock->ssl->async.is_pending_handshake);
     sock->ssl->async.is_pending_handshake = 0;
 
-    h2o_socket_read_stop(listener);
-    dispose_socket(listener, NULL);
+    h2o_socket_read_stop(async_sock);
+    dispose_socket(async_sock, NULL);
 
     proceed_handshake(sock, NULL);
 }
