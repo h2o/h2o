@@ -140,7 +140,7 @@ struct st_h2o_socket_ssl_t {
 #if H2O_CAN_ASYNC_SSL
     struct {
         unsigned inflight : 1;
-        unsigned is_closed : 1;
+        unsigned sock_is_closed : 1;
         ptls_buffer_t ptls_wbuf;
     } async;
 #endif
@@ -637,7 +637,7 @@ void h2o_socket_close(h2o_socket_t *sock)
     } else {
 #if H2O_CAN_ASYNC_SSL
         if (sock->ssl->async.inflight) {
-            sock->ssl->async.is_closed = 1;
+            sock->ssl->async.sock_is_closed = 1;
             return;
         }
 #endif
@@ -1525,7 +1525,7 @@ static void on_handshake_complete(h2o_socket_t *sock, const char *err)
 
 #if H2O_CAN_ASYNC_SSL
     assert(!sock->ssl->async.inflight);
-    if (sock->ssl->async.is_closed) {
+    if (sock->ssl->async.sock_is_closed) {
         shutdown_ssl(sock, NULL);
         return;
     }
