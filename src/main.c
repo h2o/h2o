@@ -496,7 +496,7 @@ static void async_nb_push(struct async_nb_queue_t *queue, struct async_nb_transa
 static void async_nb_send_notification(struct async_nb_transaction_t *transaction)
 {
 #if ASYNC_NB_USE_EVENTFD
-    if (eventfd_write(buf->efd_write, 1) != 0) {
+    if (eventfd_write(transaction->efd_write, 1) != 0) {
         perror("eventfd_write");
         abort();
     }
