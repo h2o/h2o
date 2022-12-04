@@ -187,18 +187,6 @@ static const char *decode_ssl_input(h2o_socket_t *sock);
 static size_t flatten_sendvec(h2o_socket_t *sock, h2o_sendvec_t *sendvec);
 static void on_write_complete(h2o_socket_t *sock, const char *err);
 
-#if H2O_CAN_ASYNC_SSL
-typedef void (*async_cb)(void *data);
-
-struct async_ctx {
-    h2o_socket_t *async_sock;
-    struct {
-        async_cb cb;
-        void *data;
-    } async;
-};
-#endif
-
 h2o_buffer_mmap_settings_t h2o_socket_buffer_mmap_settings = {
     32 * 1024 * 1024, /* 32MB, should better be greater than max frame size of HTTP2 for performance reasons */
     "/tmp/h2o.b.XXXXXX"};
@@ -1622,59 +1610,22 @@ static void proceed_handshake(h2o_socket_t *sock, const char *err);
 
 #if H2O_CAN_ASYNC_SSL
 
-static void proceed_handshake_async(void *data)
+static void on_async_proceed_handshake(h2o_socket_t *listener, const char *err)
 {
-    h2o_socket_t *sock = data;
-    assert(sock->ssl->async.is_pending_handshake);
-    sock->ssl->async.is_pending_handshake = 0;
-
-    proceed_handshake(sock, NULL);
-}
-
-static void _async_cb_proxy(h2o_socket_t *listener, const char *err)
-{
-    struct async_ctx *async_ctx = listener->data;
-
     if (err != NULL)
         h2o_fatal("error on internal notification fd:%s", err);
 
     /* Do we need to handle spurious events for eventfds / pipes used for intra-process communication? If so, we have to read
      * something here (or let `async_cb` read and return if it succeeded). */
 
-    async_cb cb = async_ctx->async.cb;
-    void *cb_data = async_ctx->async.data;
-    assert(cb != NULL);
-    cb(cb_data);
+    h2o_socket_t *sock = listener->data;
+    assert(sock->ssl->async.is_pending_handshake);
+    sock->ssl->async.is_pending_handshake = 0;
 
     h2o_socket_read_stop(listener);
     dispose_socket(listener, NULL);
-    free(async_ctx);
-}
 
-static void _do_generic_async(h2o_loop_t *loop, int fd, async_cb async_cb, void *data)
-{
-    int async_fd;
-
-    // dup the fd as h2o socket handling will close it
-    if ((async_fd = dup(fd)) == -1) {
-        char errbuf[256];
-        h2o_fatal("dup failed:%s", h2o_strerror_r(errno, errbuf, sizeof(errbuf)));
-    }
-
-    // add async fd to event loop in order to retry when openssl engine is ready
-#if H2O_USE_LIBUV
-    h2o_socket_t *async_sock = h2o_uv__poll_create(loop, async_fd, (uv_close_cb)free);
-#else
-    h2o_socket_t *async_sock = h2o_evloop_socket_create(loop, async_fd, H2O_SOCKET_FLAG_DONT_READ);
-#endif
-
-    struct async_ctx *async_ctx = h2o_mem_alloc(sizeof(struct async_ctx));
-    async_ctx->async_sock = async_sock;
-    async_ctx->async.cb = async_cb;
-    async_ctx->async.data = data;
-
-    async_sock->data = async_ctx;
-    h2o_socket_read_start(async_sock, _async_cb_proxy);
+    proceed_handshake(sock, NULL);
 }
 
 static void do_proceed_handshake_async(h2o_socket_t *sock)
@@ -1683,19 +1634,34 @@ static void do_proceed_handshake_async(h2o_socket_t *sock)
     sock->ssl->async.is_pending_handshake = 1;
     h2o_socket_read_stop(sock);
 
+    /* get async fd */
     int async_fd;
     if (sock->ssl->ptls != NULL) {
         async_fd = ptls_openssl_get_async_fd(sock->ssl->ptls);
     } else {
         size_t numfds;
-        // get async fd
         SSL_get_all_async_fds(sock->ssl->ossl, NULL, &numfds);
         assert(numfds == 1);
         SSL_get_all_async_fds(sock->ssl->ossl, &async_fd, &numfds);
         assert(numfds == 1);
     }
-    _do_generic_async(h2o_socket_get_loop(sock), async_fd, proceed_handshake_async, sock);
+
+    /* dup async_fd as h2o socket handling will close it */
+    if ((async_fd = dup(async_fd)) == -1) {
+        char errbuf[256];
+        h2o_fatal("dup failed:%s", h2o_strerror_r(errno, errbuf, sizeof(errbuf)));
+    }
+
+    /* add async fd to event loop in order to retry when openssl engine is ready */
+#if H2O_USE_LIBUV
+    h2o_socket_t *async_sock = h2o_uv__poll_create(h2o_socket_get_loop(sock), async_fd, (uv_close_cb)free);
+#else
+    h2o_socket_t *async_sock = h2o_evloop_socket_create(h2o_socket_get_loop(sock), async_fd, H2O_SOCKET_FLAG_DONT_READ);
+#endif
+    async_sock->data = sock;
+    h2o_socket_read_start(async_sock, on_async_proceed_handshake);
 }
+
 #endif
 
 static void proceed_handshake_picotls(h2o_socket_t *sock)
