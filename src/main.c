@@ -423,9 +423,9 @@ static __thread struct {
 
 static struct async_nb_transaction_t *async_nb_new(neverbleed_iobuf_t *buf)
 {
-    struct async_nb_transaction_t *nb_buf = h2o_mem_alloc(sizeof(*nb_buf));
-    memset(nb_buf, 0, sizeof(*nb_buf));
-    nb_buf->buf = buf;
+    struct async_nb_transaction_t *transaction = h2o_mem_alloc(sizeof(*transaction));
+    memset(transaction, 0, sizeof(*transaction));
+    transaction->buf = buf;
 
     // setup notification
     int fd_read;
@@ -454,10 +454,10 @@ static struct async_nb_transaction_t *async_nb_new(neverbleed_iobuf_t *buf)
     fd_read = fds[0];
     fd_write = fds[1];
 #endif
-    nb_buf->efd_read = fd_read;
-    nb_buf->efd_write = fd_write;
+    transaction->efd_read = fd_read;
+    transaction->efd_write = fd_write;
 
-    return nb_buf;
+    return transaction;
 }
 
 static struct async_nb_transaction_t *async_nb_get(struct async_nb_queue_t *queue)
@@ -511,22 +511,22 @@ static void async_nb_send_notification(struct async_nb_transaction_t *buf)
 #endif
 }
 
-static void async_nb_free(struct async_nb_transaction_t *nb_buf)
+static void async_nb_free(struct async_nb_transaction_t *transaction)
 {
     // consume notification
     ASYNC_NB_SIGNAL_T sig;
     ssize_t ret;
-    while ((ret = read(nb_buf->efd_read, &sig, sizeof(sig))) == -1 && errno == EINTR)
+    while ((ret = read(transaction->efd_read, &sig, sizeof(sig))) == -1 && errno == EINTR)
         ;
     assert(ret > 0);
-    close(nb_buf->efd_read);
+    close(transaction->efd_read);
 #if !ASYNC_NB_USE_EVENTFD
     // in the case of eventfd, the efd_read == efd_write
     // but, in the case of pipe, we need to close the write side
-    close(nb_buf->efd_write);
+    close(transaction->efd_write);
 #endif
-    assert(!h2o_linklist_is_linked(&nb_buf->link));
-    free(nb_buf);
+    assert(!h2o_linklist_is_linked(&transaction->link));
+    free(transaction);
 }
 
 static void async_nb_submit_write_pending(void);
@@ -545,14 +545,14 @@ static void async_nb_on_write_complete(h2o_socket_t *sock, const char *err)
 
 static void async_nb_submit_write_pending(void)
 {
-    struct async_nb_transaction_t *nb_buf;
+    struct async_nb_transaction_t *transaction;
 
-    if (!h2o_socket_is_writing(async_nb.sock) && (nb_buf = async_nb_get(&async_nb.write_queue)) != NULL) {
+    if (!h2o_socket_is_writing(async_nb.sock) && (transaction = async_nb_get(&async_nb.write_queue)) != NULL) {
         /* write the first buf in the write queue */
         h2o_iovec_t bufs[2];
-        nb_buf->write_size = neverbleed_iobuf_size(nb_buf->buf);
-        bufs[0] = h2o_iovec_init(&nb_buf->write_size, sizeof(nb_buf->write_size));
-        bufs[1] = h2o_iovec_init(nb_buf->buf->start, nb_buf->write_size);
+        transaction->write_size = neverbleed_iobuf_size(transaction->buf);
+        bufs[0] = h2o_iovec_init(&transaction->write_size, sizeof(transaction->write_size));
+        bufs[1] = h2o_iovec_init(transaction->buf->start, transaction->write_size);
         h2o_socket_write(async_nb.sock, bufs, 2, async_nb_on_write_complete);
     }
 }
@@ -579,11 +579,11 @@ static void async_nb_run_sync(neverbleed_iobuf_t *buf, void (*transaction_cb)(ne
 
 static void async_nb_read_ready(h2o_socket_t *sock, const char *err)
 {
-    struct async_nb_transaction_t *nb_buf = async_nb_pop(&async_nb.read_queue);
-    assert(nb_buf != NULL);
+    struct async_nb_transaction_t *transaction = async_nb_pop(&async_nb.read_queue);
+    assert(transaction != NULL);
 
-    async_nb_run_sync(nb_buf->buf, neverbleed_transaction_read);
-    async_nb_send_notification(nb_buf);
+    async_nb_run_sync(transaction->buf, neverbleed_transaction_read);
+    async_nb_send_notification(transaction);
 
     if (async_nb.read_queue.len == 0)
         h2o_socket_read_stop(sock);
@@ -596,9 +596,9 @@ static void async_nb_transaction(neverbleed_iobuf_t *buf)
     if ((job = ASYNC_get_current_job()) != NULL) {
 
         /* register the request and kick the write operation */
-        struct async_nb_transaction_t *nb_buf = async_nb_new(buf);
+        struct async_nb_transaction_t *transaction = async_nb_new(buf);
         assert(h2o_socket_get_fd(async_nb.sock) == neverbleed_get_fd(neverbleed));
-        async_nb_push(&async_nb.write_queue, nb_buf);
+        async_nb_push(&async_nb.write_queue, transaction);
         async_nb_submit_write_pending();
 
         { /* setup file descriptor and call `ASYNC_pause_job`, to yield the operation back to the original fiber, until
@@ -606,14 +606,14 @@ static void async_nb_transaction(neverbleed_iobuf_t *buf)
             size_t numfds;
             ASYNC_WAIT_CTX *waitctx = ASYNC_get_wait_ctx(job);
             assert(ASYNC_WAIT_CTX_get_all_fds(waitctx, NULL, &numfds) && numfds == 0);
-            if (!ASYNC_WAIT_CTX_set_wait_fd(waitctx, "neverbleed", nb_buf->efd_read, NULL, NULL))
+            if (!ASYNC_WAIT_CTX_set_wait_fd(waitctx, "neverbleed", transaction->efd_read, NULL, NULL))
                 h2o_fatal("could not set async fd");
             ASYNC_pause_job();
             if (!ASYNC_WAIT_CTX_clear_fd(waitctx, "neverbleed"))
                 h2o_fatal("could not clear async fd");
         }
 
-        async_nb_free(nb_buf);
+        async_nb_free(transaction);
         return;
     }
 
