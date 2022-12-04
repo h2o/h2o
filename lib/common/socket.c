@@ -489,6 +489,11 @@ static void flush_pending_ssl(h2o_socket_t *sock, h2o_socket_cb cb)
 
 static void destroy_ssl(struct st_h2o_socket_ssl_t *ssl)
 {
+#if H2O_CAN_ASYNC_SSL
+    assert(!ssl->async.inflight);
+    assert(ssl->async.ptls_wbuf.base == NULL);
+#endif
+
     if (ssl->ptls != NULL) {
         ptls_free(ssl->ptls);
         ssl->ptls = NULL;
@@ -596,6 +601,9 @@ int h2o_socket_export(h2o_socket_t *sock, h2o_socket_export_t *info)
 
     assert(sock->_zerocopy == NULL);
     assert(!h2o_socket_is_writing(sock));
+#if H2O_CAN_ASYNC_SSL
+    assert(!sock->ssl->async.inflight);
+#endif
 
     if (do_export(sock, info) == -1)
         return -1;
