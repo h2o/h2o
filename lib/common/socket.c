@@ -1915,6 +1915,10 @@ static void proceed_handshake_undetermined(h2o_socket_t *sock)
 
 static void proceed_handshake(h2o_socket_t *sock, const char *err)
 {
+#if H2O_CAN_ASYNC_SSL
+    assert(!sock->ssl->async.inflight && "while async operation is inflight, the socket should be neither reading nor writing");
+#endif
+
     sock->_cb.write = NULL;
 
     if (err != NULL) {
@@ -1922,12 +1926,6 @@ static void proceed_handshake(h2o_socket_t *sock, const char *err)
         on_handshake_complete(sock, err);
         return;
     }
-
-#if H2O_CAN_ASYNC_SSL
-    // waiting on async operation
-    if (sock->ssl->async.inflight)
-        return;
-#endif
 
     if (sock->ssl->ptls != NULL) {
         proceed_handshake_picotls(sock);
