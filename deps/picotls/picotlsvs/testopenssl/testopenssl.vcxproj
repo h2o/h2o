@@ -152,6 +152,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="..\..\deps\picotest\picotest.c" />
+    <ClCompile Include="..\..\t\hpke.c" />
     <ClCompile Include="..\..\t\openssl.c" />
     <ClCompile Include="..\..\t\picotls.c" />
   </ItemGroup>

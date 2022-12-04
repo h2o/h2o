@@ -104,4 +104,6 @@ void test_key_exchange(ptls_key_exchange_algorithm_t *client, ptls_key_exchange_
 void test_picotls(void);
 void test_picotls_esni(ptls_key_exchange_context_t **keys);
 
+void test_hpke(ptls_hpke_kem_t **all_kems, ptls_hpke_cipher_suite_t **all_ciphers);
+
 #endif

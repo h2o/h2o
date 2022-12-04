@@ -154,6 +154,7 @@
     <ClInclude Include="targetver.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="..\..\lib\hpke.c" />
     <ClCompile Include="..\..\lib\pembase64.c" />
     <ClCompile Include="..\..\lib\picotls.c" />
     <ClCompile Include="..\picotls\wintimeofday.c" />
