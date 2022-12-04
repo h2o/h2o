@@ -602,7 +602,7 @@ int h2o_socket_export(h2o_socket_t *sock, h2o_socket_export_t *info)
     assert(sock->_zerocopy == NULL);
     assert(!h2o_socket_is_writing(sock));
 #if H2O_CAN_ASYNC_SSL
-    assert(!sock->ssl->async.inflight);
+    assert(sock->ssl == NULL || !sock->ssl->async.inflight);
 #endif
 
     if (do_export(sock, info) == -1)
