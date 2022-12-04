@@ -139,8 +139,8 @@ struct st_h2o_socket_ssl_t {
     } output;
 #if H2O_CAN_ASYNC_SSL
     struct {
-        int is_pending_handshake;
-        int is_closed;
+        unsigned is_pending_handshake : 1;
+        unsigned is_closed : 1;
         ptls_buffer_t ptls_wbuf;
     } async;
 #endif
