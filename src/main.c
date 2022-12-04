@@ -469,31 +469,31 @@ static struct async_nb_transaction_t *async_nb_get(struct async_nb_queue_t *queu
 
     assert(!h2o_linklist_is_empty(&queue->anchor));
 
-    struct async_nb_transaction_t *buf = H2O_STRUCT_FROM_MEMBER(struct async_nb_transaction_t, link, queue->anchor.next);
-    return buf;
+    struct async_nb_transaction_t *transaction = H2O_STRUCT_FROM_MEMBER(struct async_nb_transaction_t, link, queue->anchor.next);
+    return transaction;
 }
 
 static struct async_nb_transaction_t *async_nb_pop(struct async_nb_queue_t *queue)
 {
-    struct async_nb_transaction_t *buf;
+    struct async_nb_transaction_t *transaction;
 
-    if ((buf = async_nb_get(queue)) != NULL) {
-        h2o_linklist_unlink(&buf->link);
+    if ((transaction = async_nb_get(queue)) != NULL) {
+        h2o_linklist_unlink(&transaction->link);
         --queue->len;
     }
 
-    return buf;
+    return transaction;
 }
 
-static void async_nb_push(struct async_nb_queue_t *queue, struct async_nb_transaction_t *buf)
+static void async_nb_push(struct async_nb_queue_t *queue, struct async_nb_transaction_t *transaction)
 {
-    assert(!h2o_linklist_is_linked(&buf->link));
+    assert(!h2o_linklist_is_linked(&transaction->link));
 
-    h2o_linklist_insert(&queue->anchor, &buf->link);
+    h2o_linklist_insert(&queue->anchor, &transaction->link);
     ++queue->len;
 }
 
-static void async_nb_send_notification(struct async_nb_transaction_t *buf)
+static void async_nb_send_notification(struct async_nb_transaction_t *transaction)
 {
 #if ASYNC_NB_USE_EVENTFD
     if (eventfd_write(buf->efd_write, 1) != 0) {
@@ -502,7 +502,7 @@ static void async_nb_send_notification(struct async_nb_transaction_t *buf)
     }
 #else
     int ret;
-    while ((ret = write(buf->efd_write, "x", 1) == -1 && errno == EINTR))
+    while ((ret = write(transaction->efd_write, "x", 1) == -1 && errno == EINTR))
         ;
     if (ret == 1) {
         perror("write");
