@@ -300,7 +300,7 @@ static int sendvec_core(struct st_h2o_evloop_socket_t *sock)
     return 1;
 }
 
-static void write_pending(struct st_h2o_evloop_socket_t *sock)
+void write_pending(struct st_h2o_evloop_socket_t *sock)
 {
     assert(sock->super._cb.write != NULL);
 
@@ -363,7 +363,6 @@ Notify:
      * can update their timeout counters when a partial SSL record arrives.
      */
     sock->super.bytes_read += sock->super.input->size - prev_size;
-    assert(sock->super._cb.read != NULL);
     sock->super._cb.read(&sock->super, err);
 }
 
@@ -380,11 +379,11 @@ void do_dispose_socket(h2o_socket_t *_sock)
     if (evloop_do_on_socket_close(sock))
         return;
 
+    /* immediate close */
     if (sock->fd != -1) {
         close(sock->fd);
         sock->fd = -1;
     }
-
     link_to_statechanged(sock);
 }
 

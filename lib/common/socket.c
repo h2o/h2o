@@ -1868,7 +1868,6 @@ static void proceed_handshake_undetermined(h2o_socket_t *sock)
     if (ptls == NULL)
         h2o_fatal("no memory");
     *ptls_get_data_ptr(ptls) = sock;
-
     int ret = ptls_handshake(ptls, &wbuf, sock->ssl->input.encrypted->bytes, &consumed, NULL);
 
     if (ret == PTLS_ERROR_IN_PROGRESS && wbuf.off == 0) {

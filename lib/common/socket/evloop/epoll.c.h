@@ -211,7 +211,6 @@ int evloop_do_proceed(h2o_evloop_t *_loop, int32_t max_wait)
     for (i = 0; i != nevents; ++i) {
         struct st_h2o_evloop_socket_t *sock = events[i].data.ptr;
         int notified = 0;
-
         /* When receiving HUP (indicating reset) while the socket is polled neither for read nor write, unregister the socket from
          * epoll, otherwise epoll_wait() would continue raising the HUP event. This problem cannot be avoided by using edge trigger.
          * The application will eventually try to read or write to the socket and at that point close the socket, detecting that it
