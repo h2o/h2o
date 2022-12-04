@@ -139,7 +139,7 @@ struct st_h2o_socket_ssl_t {
     } output;
 #if H2O_CAN_ASYNC_SSL
     struct {
-        unsigned is_pending_handshake : 1;
+        unsigned inflight : 1;
         unsigned is_closed : 1;
         ptls_buffer_t ptls_wbuf;
     } async;
@@ -636,7 +636,7 @@ void h2o_socket_close(h2o_socket_t *sock)
         dispose_socket(sock, 0);
     } else {
 #if H2O_CAN_ASYNC_SSL
-        if (sock->ssl->async.is_pending_handshake) {
+        if (sock->ssl->async.inflight) {
             sock->ssl->async.is_closed = 1;
             return;
         }
@@ -1524,7 +1524,7 @@ static void on_handshake_complete(h2o_socket_t *sock, const char *err)
     assert(sock->ssl->handshake.cb != NULL);
 
 #if H2O_CAN_ASYNC_SSL
-    assert(!sock->ssl->async.is_pending_handshake);
+    assert(!sock->ssl->async.inflight);
     if (sock->ssl->async.is_closed) {
         shutdown_ssl(sock, NULL);
         return;
@@ -1618,8 +1618,8 @@ static void on_async_proceed_handshake(h2o_socket_t *async_sock, const char *err
      * something here (or let `async_cb` read and return if it succeeded). */
 
     h2o_socket_t *sock = async_sock->data;
-    assert(sock->ssl->async.is_pending_handshake);
-    sock->ssl->async.is_pending_handshake = 0;
+    assert(sock->ssl->async.inflight);
+    sock->ssl->async.inflight = 0;
 
     h2o_socket_read_stop(async_sock);
     dispose_socket(async_sock, NULL);
@@ -1629,8 +1629,8 @@ static void on_async_proceed_handshake(h2o_socket_t *async_sock, const char *err
 
 static void do_proceed_handshake_async(h2o_socket_t *sock, ptls_buffer_t *ptls_wbuf)
 {
-    assert(!sock->ssl->async.is_pending_handshake);
-    sock->ssl->async.is_pending_handshake = 1;
+    assert(!sock->ssl->async.inflight);
+    sock->ssl->async.inflight = 1;
     h2o_socket_read_stop(sock);
 
     /* get async fd and retain wbuf */
@@ -1917,7 +1917,7 @@ static void proceed_handshake(h2o_socket_t *sock, const char *err)
 
 #if H2O_CAN_ASYNC_SSL
     // waiting on async operation
-    if (sock->ssl->async.is_pending_handshake)
+    if (sock->ssl->async.inflight)
         return;
 #endif
 
