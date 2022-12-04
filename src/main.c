@@ -93,10 +93,10 @@
 
 #if defined(__linux__)
 #include <sys/eventfd.h>
-#define NEVERBLEED_USE_EVENTFD 1
-#define NEVERBLEED_SIGNAL_T eventfd_t
+#define ASYNC_NB_USE_EVENTFD 1
+#define ASYNC_NB_SIGNAL_T eventfd_t
 #else
-#define NEVERBLEED_SIGNAL_T char
+#define ASYNC_NB_SIGNAL_T char
 #endif
 
 #ifdef TCP_FASTOPEN
@@ -346,25 +346,6 @@ static __thread size_t thread_index;
 
 static neverbleed_t *neverbleed = NULL;
 
-struct nbbuf {
-    neverbleed_iobuf_t *buf;
-    size_t write_size;
-    h2o_linklist_t link;
-    int efd_write;
-    int efd_read;
-};
-
-struct nbbuf_queue_t {
-    h2o_linklist_t anchor;
-    size_t len;
-};
-
-static __thread struct {
-    h2o_socket_t *sock;
-    struct nbbuf_queue_t write_queue;
-    struct nbbuf_queue_t read_queue;
-} neverbleed_conf = {NULL};
-
 #if H2O_USE_FUSION
 static ptls_cipher_suite_t
     tls13_non_temporal_aes128gcmsha256 = {.id = PTLS_CIPHER_SUITE_AES_128_GCM_SHA256,
@@ -419,16 +400,37 @@ static void on_neverbleed_fork(void)
 #endif
 }
 
-static struct nbbuf *nbbuf_new(neverbleed_iobuf_t *buf)
+#if H2O_CAN_ASYNC_SSL
+
+struct async_nb_transaction_t {
+    neverbleed_iobuf_t *buf;
+    size_t write_size;
+    h2o_linklist_t link;
+    int efd_write;
+    int efd_read;
+};
+
+struct async_nb_queue_t {
+    h2o_linklist_t anchor;
+    size_t len;
+};
+
+static __thread struct {
+    h2o_socket_t *sock;
+    struct async_nb_queue_t write_queue;
+    struct async_nb_queue_t read_queue;
+} async_nb = {NULL};
+
+static struct async_nb_transaction_t *async_nb_new(neverbleed_iobuf_t *buf)
 {
-    struct nbbuf *nb_buf = h2o_mem_alloc(sizeof(*nb_buf));
+    struct async_nb_transaction_t *nb_buf = h2o_mem_alloc(sizeof(*nb_buf));
     memset(nb_buf, 0, sizeof(*nb_buf));
     nb_buf->buf = buf;
 
     // setup notification
     int fd_read;
     int fd_write;
-#if NEVERBLEED_USE_EVENTFD
+#if ASYNC_NB_USE_EVENTFD
     /**
      * The kernel overhead of an eventfd file descriptor is
      * much lower than that of a pipe, and only one file descriptor is required
@@ -458,7 +460,7 @@ static struct nbbuf *nbbuf_new(neverbleed_iobuf_t *buf)
     return nb_buf;
 }
 
-static struct nbbuf *nbbuf_get(struct nbbuf_queue_t *queue)
+static struct async_nb_transaction_t *async_nb_get(struct async_nb_queue_t *queue)
 {
     if (queue->len == 0) {
         assert(h2o_linklist_is_empty(&queue->anchor));
@@ -467,15 +469,15 @@ static struct nbbuf *nbbuf_get(struct nbbuf_queue_t *queue)
 
     assert(!h2o_linklist_is_empty(&queue->anchor));
 
-    struct nbbuf *buf = H2O_STRUCT_FROM_MEMBER(struct nbbuf, link, queue->anchor.next);
+    struct async_nb_transaction_t *buf = H2O_STRUCT_FROM_MEMBER(struct async_nb_transaction_t, link, queue->anchor.next);
     return buf;
 }
 
-static struct nbbuf *nbbuf_pop(struct nbbuf_queue_t *queue)
+static struct async_nb_transaction_t *async_nb_pop(struct async_nb_queue_t *queue)
 {
-    struct nbbuf *buf;
+    struct async_nb_transaction_t *buf;
 
-    if ((buf = nbbuf_get(queue)) != NULL) {
+    if ((buf = async_nb_get(queue)) != NULL) {
         h2o_linklist_unlink(&buf->link);
         --queue->len;
     }
@@ -483,7 +485,7 @@ static struct nbbuf *nbbuf_pop(struct nbbuf_queue_t *queue)
     return buf;
 }
 
-static void nbbuf_push(struct nbbuf_queue_t *queue, struct nbbuf *buf)
+static void async_nb_push(struct async_nb_queue_t *queue, struct async_nb_transaction_t *buf)
 {
     assert(!h2o_linklist_is_linked(&buf->link));
 
@@ -491,9 +493,9 @@ static void nbbuf_push(struct nbbuf_queue_t *queue, struct nbbuf *buf)
     ++queue->len;
 }
 
-static void nbbuf_send_notification(struct nbbuf *buf)
+static void async_nb_send_notification(struct async_nb_transaction_t *buf)
 {
-#if NEVERBLEED_USE_EVENTFD
+#if ASYNC_NB_USE_EVENTFD
     if (eventfd_write(buf->efd_write, 1) != 0) {
         perror("eventfd_write");
         abort();
@@ -509,16 +511,16 @@ static void nbbuf_send_notification(struct nbbuf *buf)
 #endif
 }
 
-static void nbbuf_free(struct nbbuf *nb_buf)
+static void async_nb_free(struct async_nb_transaction_t *nb_buf)
 {
     // consume notification
-    NEVERBLEED_SIGNAL_T sig;
+    ASYNC_NB_SIGNAL_T sig;
     ssize_t ret;
     while ((ret = read(nb_buf->efd_read, &sig, sizeof(sig))) == -1 && errno == EINTR)
         ;
     assert(ret > 0);
     close(nb_buf->efd_read);
-#if !NEVERBLEED_USE_EVENTFD
+#if !ASYNC_NB_USE_EVENTFD
     // in the case of eventfd, the efd_read == efd_write
     // but, in the case of pipe, we need to close the write side
     close(nb_buf->efd_write);
@@ -527,35 +529,35 @@ static void nbbuf_free(struct nbbuf *nb_buf)
     free(nb_buf);
 }
 
-static void nb_submit_write_pending(void);
-static void nb_read_ready(h2o_socket_t *sock, const char *err);
+static void async_nb_submit_write_pending(void);
+static void async_nb_read_ready(h2o_socket_t *sock, const char *err);
 
-static void nb_on_write_complete_cb(h2o_socket_t *sock, const char *err)
+static void async_nb_on_write_complete(h2o_socket_t *sock, const char *err)
 {
     /* add to the read queue the entry for which we have written the request, and start reading from the socket */
-    nbbuf_push(&neverbleed_conf.read_queue, nbbuf_pop(&neverbleed_conf.write_queue));
-    if (!h2o_socket_is_reading(neverbleed_conf.sock))
-        h2o_socket_read_start(neverbleed_conf.sock, nb_read_ready);
+    async_nb_push(&async_nb.read_queue, async_nb_pop(&async_nb.write_queue));
+    if (!h2o_socket_is_reading(async_nb.sock))
+        h2o_socket_read_start(async_nb.sock, async_nb_read_ready);
 
     /* submit more requests if there's anything queued */
-    nb_submit_write_pending();
+    async_nb_submit_write_pending();
 }
 
-static void nb_submit_write_pending(void)
+static void async_nb_submit_write_pending(void)
 {
-    struct nbbuf *nb_buf;
+    struct async_nb_transaction_t *nb_buf;
 
-    if (!h2o_socket_is_writing(neverbleed_conf.sock) && (nb_buf = nbbuf_get(&neverbleed_conf.write_queue)) != NULL) {
+    if (!h2o_socket_is_writing(async_nb.sock) && (nb_buf = async_nb_get(&async_nb.write_queue)) != NULL) {
         /* write the first buf in the write queue */
         h2o_iovec_t bufs[2];
         nb_buf->write_size = neverbleed_iobuf_size(nb_buf->buf);
         bufs[0] = h2o_iovec_init(&nb_buf->write_size, sizeof(nb_buf->write_size));
         bufs[1] = h2o_iovec_init(nb_buf->buf->start, nb_buf->write_size);
-        h2o_socket_write(neverbleed_conf.sock, bufs, 2, nb_on_write_complete_cb);
+        h2o_socket_write(async_nb.sock, bufs, 2, async_nb_on_write_complete);
     }
 }
 
-static void nb_sync_transaction(neverbleed_iobuf_t *buf, void (*transaction_cb)(neverbleed_t *, neverbleed_iobuf_t *))
+static void async_nb_run_sync(neverbleed_iobuf_t *buf, void (*transaction_cb)(neverbleed_t *, neverbleed_iobuf_t *))
 {
     int fd = neverbleed_get_fd(neverbleed);
     int flags = fcntl(fd, F_GETFL, 0);
@@ -575,30 +577,29 @@ static void nb_sync_transaction(neverbleed_iobuf_t *buf, void (*transaction_cb)(
     }
 }
 
-static void nb_read_ready(h2o_socket_t *sock, const char *err)
+static void async_nb_read_ready(h2o_socket_t *sock, const char *err)
 {
-    struct nbbuf *nb_buf = nbbuf_pop(&neverbleed_conf.read_queue);
+    struct async_nb_transaction_t *nb_buf = async_nb_pop(&async_nb.read_queue);
     assert(nb_buf != NULL);
 
-    nb_sync_transaction(nb_buf->buf, neverbleed_transaction_read);
-    nbbuf_send_notification(nb_buf);
+    async_nb_run_sync(nb_buf->buf, neverbleed_transaction_read);
+    async_nb_send_notification(nb_buf);
 
-    if (neverbleed_conf.read_queue.len == 0)
+    if (async_nb.read_queue.len == 0)
         h2o_socket_read_stop(sock);
 }
 
-static void on_neverbleed_transaction(neverbleed_iobuf_t *buf)
+static void async_nb_transaction(neverbleed_iobuf_t *buf)
 {
-#if H2O_CAN_ASYNC_SSL
     /* When using OpenSSL with ASYNC support, we may receive requests from a fiber. If so, process them asynchronously. */
     ASYNC_JOB *job;
     if ((job = ASYNC_get_current_job()) != NULL) {
 
         /* register the request and kick the write operation */
-        struct nbbuf *nb_buf = nbbuf_new(buf);
-        assert(h2o_socket_get_fd(neverbleed_conf.sock) == neverbleed_get_fd(neverbleed));
-        nbbuf_push(&neverbleed_conf.write_queue, nb_buf);
-        nb_submit_write_pending();
+        struct async_nb_transaction_t *nb_buf = async_nb_new(buf);
+        assert(h2o_socket_get_fd(async_nb.sock) == neverbleed_get_fd(neverbleed));
+        async_nb_push(&async_nb.write_queue, nb_buf);
+        async_nb_submit_write_pending();
 
         { /* setup file descriptor and call `ASYNC_pause_job`, to yield the operation back to the original fiber, until
            * `nb_read_ready` notifies the this fiber (in paused state) to resume. */
@@ -612,20 +613,21 @@ static void on_neverbleed_transaction(neverbleed_iobuf_t *buf)
                 h2o_fatal("could not clear async fd");
         }
 
-        nbbuf_free(nb_buf);
+        async_nb_free(nb_buf);
         return;
     }
-#endif
 
     /* do it synchronously, by at first reading all pending reads, then write asynchronously and wait for the repsonse */
-    if (neverbleed_conf.sock != NULL) {
-        while (neverbleed_conf.read_queue.len != 0)
-            nb_read_ready(neverbleed_conf.sock, NULL);
+    if (async_nb.sock != NULL) {
+        while (async_nb.read_queue.len != 0)
+            async_nb_read_ready(async_nb.sock, NULL);
     }
 
-    nb_sync_transaction(buf, neverbleed_transaction_write);
-    nb_sync_transaction(buf, neverbleed_transaction_read);
+    async_nb_run_sync(buf, neverbleed_transaction_write);
+    async_nb_run_sync(buf, neverbleed_transaction_read);
 }
+
+#endif
 
 static int on_openssl_print_errors(const char *str, size_t len, void *fp)
 {
@@ -1301,12 +1303,14 @@ static int load_ssl_identity(h2o_configurator_command_t *cmd, SSL_CTX *ssl_ctx, 
         char errbuf[NEVERBLEED_ERRBUF_SIZE];
         if (neverbleed == NULL) {
             neverbleed_post_fork_cb = on_neverbleed_fork;
-            neverbleed_transaction_cb = on_neverbleed_transaction;
             neverbleed = h2o_mem_alloc(sizeof(*neverbleed));
             if (neverbleed_init(neverbleed, errbuf) != 0) {
                 fprintf(stderr, "%s\n", errbuf);
                 abort();
             }
+#if H2O_CAN_ASYNC_SSL
+            neverbleed_transaction_cb = async_nb_transaction;
+#endif
         }
         if (neverbleed_load_private_key_file(neverbleed, ssl_ctx, (*parsed->key_file)->data.scalar, errbuf) != 1) {
             h2o_configurator_errprintf(cmd, *parsed->key_file, "failed to load private key file:%s:%s\n",
@@ -3502,12 +3506,14 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
                                       on_server_notification);
     h2o_multithread_register_receiver(conf.threads[thread_index].ctx.queue, &conf.threads[thread_index].memcached,
                                       h2o_memcached_receiver);
+#if H2O_CAN_ASYNC_SSL
     if (neverbleed != NULL) {
         int fd = neverbleed_get_fd(neverbleed);
-        neverbleed_conf.sock = h2o_evloop_socket_create(conf.threads[thread_index].ctx.loop, fd, H2O_SOCKET_FLAG_DONT_READ);
-        h2o_linklist_init_anchor(&neverbleed_conf.read_queue.anchor);
-        h2o_linklist_init_anchor(&neverbleed_conf.write_queue.anchor);
+        async_nb.sock = h2o_evloop_socket_create(conf.threads[thread_index].ctx.loop, fd, H2O_SOCKET_FLAG_DONT_READ);
+        h2o_linklist_init_anchor(&async_nb.read_queue.anchor);
+        h2o_linklist_init_anchor(&async_nb.write_queue.anchor);
     }
+#endif
     if (conf.thread_map.entries[thread_index] >= 0) {
 #if H2O_HAS_PTHREAD_SETAFFINITY_NP
         int r;
