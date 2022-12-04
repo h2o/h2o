@@ -4336,15 +4336,15 @@ int main(int argc, char **argv)
     /* setuid */
     if (conf.globalconf.user != NULL) {
         capabilities_set_keepcaps();
-        if (neverbleed != NULL && neverbleed_setuidgid(neverbleed, conf.globalconf.user, 1) != 0) {
-            fprintf(stderr, "failed to change the running user of neverbleed daemon\n");
-            return EX_OSERR;
-        }
         if (h2o_setuidgid(conf.globalconf.user) != 0) {
             fprintf(stderr, "failed to change the running user (are you sure you are running as root?)\n");
             return EX_OSERR;
         }
         capabilities_drop();
+        if (neverbleed != NULL && neverbleed_setuidgid(neverbleed, conf.globalconf.user, 1) != 0) {
+            fprintf(stderr, "failed to change the running user of neverbleed daemon\n");
+            return EX_OSERR;
+        }
     } else {
         if (getuid() == 0) {
             fprintf(stderr, "refusing to run as root (and failed to switch to `nobody`); you can use the `user` directive to set "
