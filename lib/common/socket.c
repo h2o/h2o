@@ -1754,7 +1754,7 @@ static void proceed_handshake_picotls(h2o_socket_t *sock)
         do_proceed_handshake_async(sock);
         return;
 #else
-        h2o_abort("PTLS_ERROR_ASYNC_OPERATION returned but cannot be handled");
+        h2o_fatal("PTLS_ERROR_ASYNC_OPERATION returned but cannot be handled");
 #endif
     }
 
@@ -1955,7 +1955,7 @@ static void proceed_handshake_undetermined(h2o_socket_t *sock)
             do_proceed_handshake_async(sock);
             return;
 #else
-            h2o_abort("PTLS_ERROR_ASYNC_OPERATION returned but cannot be handled");
+            h2o_fatal("PTLS_ERROR_ASYNC_OPERATION returned but cannot be handled");
 #endif
         }
         /* stop reading, send response */
