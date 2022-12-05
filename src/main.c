@@ -4132,19 +4132,6 @@ int main(int argc, char **argv)
         }
     }
 
-    for (size_t i = 0; i != conf.num_listeners; ++i) {
-        struct listener_config_t *listener_config = conf.listeners[i];
-        for (size_t j = 0; j != conf.listeners[i]->ssl.size; ++j) {
-            ptls_context_t *ptls = conf.listeners[i]->ssl.entries[j]->identities[0].ptls;
-            if (ptls != NULL && ptls->esni != NULL) {
-                ptls_esni_dispose_context(*ptls->esni);
-                ptls->esni = NULL;
-            }
-        }
-        free(listener_config->esni.key_exchanges);
-        free(listener_config->esni.rr);
-    }
-
     /* remove the pid file */
     if (conf.pid_file != NULL)
         unlink(conf.pid_file);
