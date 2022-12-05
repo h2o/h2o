@@ -1587,7 +1587,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
         SSL_CTX_set_options(identity->ossl, ssl_options);
 #if H2O_CAN_ASYNC_SSL
         if (use_neverbleed)
-            SSL_CTX_set_mode(identity->ossl, SSL_MODE_ASYNC);
+            SSL_CTX_set_mode(identity->ossl, SSL_CTX_get_mode(identity->ossl) | SSL_MODE_ASYNC);
 #endif
 
         SSL_CTX_set_session_id_context(identity->ossl, H2O_SESSID_CTX, H2O_SESSID_CTX_LEN);
