@@ -31,6 +31,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <openssl/opensslv.h>
+#if !defined(LIBRESSL_VERSION_NUMBER) && OPENSSL_VERSION_NUMBER >= 0x30000000L
+#include <openssl/provider.h>
+#define LOAD_OPENSSL_PROVIDER 1
+#endif
 #include "picotls.h"
 #include "picotls/openssl.h"
 #include "quicly.h"
@@ -65,6 +70,8 @@ static struct {
 } std_in;
 static int io_interval = 0, req_interval = 0;
 static int ssl_verify_none = 0;
+static int exit_failure_on_http_errors = 0;
+static int program_exit_status = EXIT_SUCCESS;
 static h2o_socket_t *udp_sock = NULL;
 static h2o_httpclient_forward_datagram_cb udp_write;
 static struct sockaddr_in udp_sock_remote_addr;
@@ -83,6 +90,7 @@ static h2o_http3client_ctx_t h3ctx = {
             .save_ticket = &save_http3_ticket,
         },
 };
+static const char *progname; /* refers to argv[0] */
 
 static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *errstr, h2o_iovec_t *method, h2o_url_t *url,
                                          const h2o_header_t **headers, size_t *num_headers, h2o_iovec_t *body,
@@ -156,7 +164,7 @@ static void on_error(h2o_httpclient_ctx_t *ctx, h2o_mem_pool_t *pool, const char
     va_start(args, fmt);
     int errlen = vsnprintf(errbuf, sizeof(errbuf), fmt, args);
     va_end(args);
-    fprintf(stderr, "%.*s\n", errlen, errbuf);
+    fprintf(stderr, "%s: %.*s\n", progname, errlen, errbuf);
 
     /* defer using zero timeout to send pending GOAWAY frame */
     create_timeout(ctx->loop, 0, on_exit_deferred, NULL);
@@ -232,7 +240,8 @@ static void tunnel_on_udp_read(h2o_httpclient_t *client, h2o_iovec_t *datagrams,
     for (size_t i = 0; i != num_datagrams; ++i) {
         const h2o_iovec_t *src = datagrams + i;
         struct iovec vec = {.iov_base = src->base, .iov_len = src->len};
-        struct msghdr mess = {.msg_name = &udp_sock_remote_addr, .msg_namelen = sizeof(udp_sock_remote_addr), .msg_iov = &vec, .msg_iovlen = 1};
+        struct msghdr mess = {
+            .msg_name = &udp_sock_remote_addr, .msg_namelen = sizeof(udp_sock_remote_addr), .msg_iov = &vec, .msg_iovlen = 1};
         sendmsg(h2o_socket_get_fd(udp_sock), &mess, 0);
     }
 }
@@ -348,6 +357,9 @@ static int on_body(h2o_httpclient_t *client, const char *errstr)
 
 static void print_status_line(int version, int status, h2o_iovec_t msg)
 {
+    if (exit_failure_on_http_errors && status >= 400)
+        program_exit_status = EXIT_FAILURE;
+
     fprintf(stderr, "HTTP/%d", (version >> 8));
     if ((version & 0xff) != 0) {
         fprintf(stderr, ".%d", version & 0xff);
@@ -483,6 +495,7 @@ static void usage(const char *progname)
             "               sets the number of requests run at once (default: 1)\n"
             "  -c <size>    size of body chunk (in bytes; default: 10)\n"
             "  -d <delay>   request interval (in msec; default: 0)\n"
+            "  -f           returns an error if an HTTP response code is 400 or greater.\n"
             "  -H <name:value>\n"
             "               adds a request header\n"
             "  -i <delay>   I/O interval between sending chunks (in msec; default: 0)\n"
@@ -545,6 +558,8 @@ static void on_sigfatal(int signo)
 
 int main(int argc, char **argv)
 {
+    progname = argv[0];
+
     h2o_set_signal_handler(SIGABRT, on_sigfatal);
     h2o_set_signal_handler(SIGBUS, on_sigfatal);
     h2o_set_signal_handler(SIGFPE, on_sigfatal);
@@ -569,6 +584,12 @@ int main(int argc, char **argv)
     SSL_library_init();
     OpenSSL_add_all_algorithms();
 
+    /* When using OpenSSL >= 3.0, load legacy provider so that blowfish can be used for 64-bit QUIC CIDs. */
+#if LOAD_OPENSSL_PROVIDER
+    OSSL_PROVIDER_load(NULL, "legacy");
+    OSSL_PROVIDER_load(NULL, "default");
+#endif
+
     quicly_amend_ptls_context(&h3ctx.tls);
     h3ctx.quic = quicly_spec_context;
     h3ctx.quic.transport_params.max_streams_uni = 10;
@@ -581,6 +602,7 @@ int main(int argc, char **argv)
         h3ctx.tls.random_bytes(random_key, sizeof(random_key));
         h3ctx.quic.cid_encryptor = quicly_new_default_cid_encryptor(
             &ptls_openssl_bfecb, &ptls_openssl_aes128ecb, &ptls_openssl_sha256, ptls_iovec_init(random_key, sizeof(random_key)));
+        assert(h3ctx.quic.cid_encryptor != NULL);
         ptls_clear_memory(random_key, sizeof(random_key));
     }
     h3ctx.quic.stream_open = &h2o_httpclient_http3_on_stream_open;
@@ -624,7 +646,7 @@ int main(int argc, char **argv)
                                 {"ack-frequency", required_argument, NULL, OPT_ACK_FREQUENCY},
                                 {"help", no_argument, NULL, 'h'},
                                 {NULL}};
-    const char *optstring = "t:m:o:b:x:X:C:c:d:H:i:k2:W:h3:"
+    const char *optstring = "t:m:o:b:x:X:C:c:d:H:i:fk2:W:h3:"
 #ifdef __GNUC__
                             ":" /* for backward compatibility, optarg of -3 is optional when using glibc */
 #endif
@@ -705,7 +727,10 @@ int main(int argc, char **argv)
             }
             for (value_start = colon + 1; *value_start == ' ' || *value_start == '\t'; ++value_start)
                 ;
-            req.headers[req.num_headers].name = h2o_iovec_init(optarg, colon - optarg);
+            /* lowercase the header field name (HTTP/2: RFC 9113 Section 8.2, HTTP/3: RFC 9114 Section 4.2) */
+            h2o_iovec_t name = h2o_strdup(NULL, optarg, colon - optarg);
+            h2o_strtolower(name.base, name.len);
+            req.headers[req.num_headers].name = name;
             req.headers[req.num_headers].value = h2o_iovec_init(value_start, strlen(value_start));
             ++req.num_headers;
         } break;
@@ -758,6 +783,9 @@ int main(int argc, char **argv)
             h3ctx.quic.transport_params.max_stream_data.bidi_local = v;
             h3ctx.quic.transport_params.max_stream_data.bidi_remote = v;
         } break;
+        case 'f':
+            exit_failure_on_http_errors = 1;
+            break;
         case 'h':
             usage(argv[0]);
             exit(0);
@@ -852,5 +880,5 @@ int main(int argc, char **argv)
     if (req.connect_to != NULL)
         free(req.connect_to);
 
-    return 0;
+    return program_exit_status;
 }

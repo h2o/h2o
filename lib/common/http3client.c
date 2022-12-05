@@ -306,7 +306,7 @@ static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errs
     start_connect(conn, selected->ai_addr);
 }
 
-static void handle_control_stream_frame(h2o_http3_conn_t *_conn, uint8_t type, const uint8_t *payload, size_t len)
+static void handle_control_stream_frame(h2o_http3_conn_t *_conn, uint64_t type, const uint8_t *payload, size_t len)
 {
     struct st_h2o_httpclient__h3_conn_t *conn = (void *)_conn;
     int err;
@@ -744,7 +744,7 @@ void start_request(struct st_h2o_http3client_req_t *req)
     /* send request (TODO optimize) */
     h2o_iovec_t datagram_flow_id = {};
     if (req->super.upgrade_to == h2o_httpclient_upgrade_to_connect &&
-        h2o_memis(method.base, method.len, H2O_STRLIT("CONNECT-UDP")) && h2o_http3_can_use_h3_datagram(&req->conn->super)) {
+        h2o_memis(method.base, method.len, H2O_STRLIT("CONNECT-UDP")) && req->conn->super.peer_settings.h3_datagram) {
         datagram_flow_id.len = sprintf(datagram_flow_id_buf, "%" PRIu64, req->quic->stream_id);
         datagram_flow_id.base = datagram_flow_id_buf;
         req->offered_datagram_flow_id = 1;
@@ -784,7 +784,7 @@ static void do_get_conn_properties(h2o_httpclient_t *_client, h2o_httpclient_con
     if (req->quic != NULL && (tls = quicly_get_tls(req->quic->conn), (cipher = ptls_get_cipher(tls)) != NULL)) {
         properties->ssl.protocol_version = "TLSv1.3";
         properties->ssl.session_reused = ptls_is_psk_handshake(tls);
-        properties->ssl.cipher = cipher->aead->name;
+        properties->ssl.cipher = cipher->name;
         properties->ssl.cipher_bits = (int)cipher->aead->key_size;
     } else {
         properties->ssl.protocol_version = NULL;

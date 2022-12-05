@@ -56,6 +56,7 @@ enum {
     ELEMENT_TYPE_OUT_HEADER_TOKEN_CONCATENATED, /* %{data.header_token}o */
     ELEMENT_TYPE_EXTENDED_VAR,                  /* %{data.name}x */
     ELEMENT_TYPE_CONNECTION_ID,                 /* %{connection-id}x */
+    ELEMENT_TYPE_REQUEST_ID,                    /* %{request-id}x */
     ELEMENT_TYPE_CONNECT_TIME,                  /* %{connect-time}x */
     ELEMENT_TYPE_REQUEST_HEADER_TIME,           /* %{request-header-time}x */
     ELEMENT_TYPE_REQUEST_BODY_TIME,             /* %{request-body-time}x */
@@ -256,6 +257,7 @@ h2o_logconf_t *h2o_logconf_compile(const char *fmt, int escape, char *errbuf)
     }
                     MAP_EXT_TO_TYPE("connection-id", ELEMENT_TYPE_CONNECTION_ID);
                     MAP_EXT_TO_TYPE("connect-time", ELEMENT_TYPE_CONNECT_TIME);
+                    MAP_EXT_TO_TYPE("request-id", ELEMENT_TYPE_REQUEST_ID);
                     MAP_EXT_TO_TYPE("request-total-time", ELEMENT_TYPE_REQUEST_TOTAL_TIME);
                     MAP_EXT_TO_TYPE("request-header-time", ELEMENT_TYPE_REQUEST_HEADER_TIME);
                     MAP_EXT_TO_TYPE("request-body-time", ELEMENT_TYPE_REQUEST_BODY_TIME);
@@ -301,6 +303,7 @@ h2o_logconf_t *h2o_logconf_compile(const char *fmt, int escape, char *errbuf)
                     MAP_EXT_TO_PROTO("ssl.session-id", ssl.session_id);
                     MAP_EXT_TO_PROTO("ssl.server-name", ssl.server_name);
                     MAP_EXT_TO_PROTO("ssl.negotiated-protocol", ssl.negotiated_protocol);
+                    MAP_EXT_TO_PROTO("ssl.backend", ssl.backend);
                     { /* not found */
                         h2o_iovec_t name = strdup_lowercased(pt, quote_end - pt);
                         NEW_ELEMENT(ELEMENT_TYPE_EXTENDED_VAR);
@@ -404,9 +407,10 @@ static inline char *append_safe_string(char *pos, const char *src, size_t len)
 
 static char *append_unsafe_string_apache(char *pos, const char *src, size_t len)
 {
-    const char *src_end = src + len;
+    if (len == 0)
+        return pos;
 
-    for (; src != src_end; ++src) {
+    for (const char *src_end = src + len; src != src_end; ++src) {
         if (' ' <= *src && *src < 0x7d && *src != '"') {
             *pos++ = *src;
         } else {
@@ -766,6 +770,11 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
 
         case ELEMENT_TYPE_CONNECT_TIME:
             APPEND_DURATION(pos, connect_time);
+            break;
+
+        case ELEMENT_TYPE_REQUEST_ID:
+            RESERVE(sizeof(H2O_UINT64_LONGEST_STR) - 1);
+            pos += sprintf(pos, "%" PRIu64, req->conn->callbacks->get_req_id(req));
             break;
 
         case ELEMENT_TYPE_REQUEST_HEADER_TIME:

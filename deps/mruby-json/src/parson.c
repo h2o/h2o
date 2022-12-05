@@ -96,7 +96,9 @@ struct json_array_t {
 };
 
 /* Various */
+#ifndef MRB_DISABLE_STDIO
 static char * read_file(const char *filename);
+#endif
 static void   remove_comments(char *string, const char *start_token, const char *end_token);
 static char * parson_strndup(const char *string, size_t n);
 static char * parson_strdup(const char *string);
@@ -268,6 +270,7 @@ static int is_decimal(const char *string, size_t length) {
     return 1;
 }
 
+#ifndef MRB_DISABLE_STDIO
 static char * read_file(const char * filename) {
     FILE *fp = fopen(filename, "r");
     size_t size_to_read = 0;
@@ -300,6 +303,7 @@ static char * read_file(const char * filename) {
     file_contents[size_read] = '\0';
     return file_contents;
 }
+#endif
 
 static void remove_comments(char *string, const char *start_token, const char *end_token) {
     int in_string = 0, escaped = 0;
@@ -1058,6 +1062,7 @@ static int append_string(char *buf, const char *string) {
 #undef APPEND_INDENT
 
 /* Parser API */
+#ifndef MRB_DISABLE_STDIO
 JSON_Value * json_parse_file(const char *filename) {
     char *file_contents = read_file(filename);
     JSON_Value *output_value = NULL;
@@ -1079,6 +1084,7 @@ JSON_Value * json_parse_file_with_comments(const char *filename) {
     parson_free(file_contents);
     return output_value;
 }
+#endif
 
 JSON_Value * json_parse_string(const char *string) {
     if (string == NULL) {
@@ -1513,6 +1519,7 @@ JSON_Status json_serialize_to_buffer(const JSON_Value *value, char *buf, size_t 
     return JSONSuccess;
 }
 
+#ifndef MRB_DISABLE_STDIO
 JSON_Status json_serialize_to_file(const JSON_Value *value, const char *filename) {
     JSON_Status return_code = JSONSuccess;
     FILE *fp = NULL;
@@ -1534,6 +1541,7 @@ JSON_Status json_serialize_to_file(const JSON_Value *value, const char *filename
     json_free_serialized_string(serialized_string);
     return return_code;
 }
+#endif
 
 char * json_serialize_to_string(const JSON_Value *value) {
     JSON_Status serialization_result = JSONFailure;
@@ -1573,6 +1581,7 @@ JSON_Status json_serialize_to_buffer_pretty(const JSON_Value *value, char *buf, 
     return JSONSuccess;
 }
 
+#ifndef MRB_DISABLE_STDIO
 JSON_Status json_serialize_to_file_pretty(const JSON_Value *value, const char *filename) {
     JSON_Status return_code = JSONSuccess;
     FILE *fp = NULL;
@@ -1594,6 +1603,7 @@ JSON_Status json_serialize_to_file_pretty(const JSON_Value *value, const char *f
     json_free_serialized_string(serialized_string);
     return return_code;
 }
+#endif
 
 char * json_serialize_to_string_pretty(const JSON_Value *value) {
     JSON_Status serialization_result = JSONFailure;

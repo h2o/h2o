@@ -22,7 +22,8 @@
 static mrb_value
 hash_values_at(mrb_state *mrb, mrb_value hash)
 {
-  mrb_value *argv, result;
+  const mrb_value *argv;
+  mrb_value result;
   mrb_int argc, i;
   int ai;
 
@@ -49,14 +50,13 @@ hash_values_at(mrb_state *mrb, mrb_value hash)
 static mrb_value
 hash_slice(mrb_state *mrb, mrb_value hash)
 {
-  mrb_value *argv, result;
+  const mrb_value *argv;
+  mrb_value result;
   mrb_int argc, i;
 
   mrb_get_args(mrb, "*", &argv, &argc);
-  if (argc == 0) {
-    return mrb_hash_new_capa(mrb, argc);
-  }
   result = mrb_hash_new_capa(mrb, argc);
+  if (argc == 0) return result; /* empty hash */
   for (i = 0; i < argc; i++) {
     mrb_value key = argv[i];
     mrb_value val;
@@ -69,6 +69,31 @@ hash_slice(mrb_state *mrb, mrb_value hash)
   return result;
 }
 
+/*
+ *  call-seq:
+ *     hsh.except(*keys) -> a_hash
+ *
+ *  Returns a hash excluding the given keys and their values.
+ *
+ *     h = { a: 100, b: 200, c: 300 }
+ *     h.except(:a)          #=> {:b=>200, :c=>300}
+ *     h.except(:b, :c, :d)  #=> {:a=>100}
+ */
+static mrb_value
+hash_except(mrb_state *mrb, mrb_value hash)
+{
+  const mrb_value *argv;
+  mrb_value result;
+  mrb_int argc, i;
+
+  mrb_get_args(mrb, "*", &argv, &argc);
+  result = mrb_hash_dup(mrb, hash);
+  for (i = 0; i < argc; i++) {
+    mrb_hash_delete_key(mrb, result, argv[i]);
+  }
+  return result;
+}
+
 void
 mrb_mruby_hash_ext_gem_init(mrb_state *mrb)
 {
@@ -77,6 +102,7 @@ mrb_mruby_hash_ext_gem_init(mrb_state *mrb)
   h = mrb->hash_class;
   mrb_define_method(mrb, h, "values_at", hash_values_at, MRB_ARGS_ANY());
   mrb_define_method(mrb, h, "slice",     hash_slice, MRB_ARGS_ANY());
+  mrb_define_method(mrb, h, "except",    hash_except, MRB_ARGS_ANY());
 }
 
 void

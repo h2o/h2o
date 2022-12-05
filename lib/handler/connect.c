@@ -23,6 +23,7 @@
 #include "h2o/memory.h"
 #include "h2o/socket.h"
 #include "h2o.h"
+#include "../probes_.h"
 
 #define MODULE_NAME "lib/handler/connect.c"
 
@@ -62,11 +63,7 @@ struct st_connect_generator_t {
      * Most significant and latest error that occurred, if any. Significance is represented as `class`, in descending order.
      */
     struct {
-        enum error_class {
-            ERROR_CLASS_NAME_RESOLUTION,
-            ERROR_CLASS_ACCESS_PROHIBITED,
-            ERROR_CLASS_CONNECT
-        } class;
+        enum error_class { ERROR_CLASS_NAME_RESOLUTION, ERROR_CLASS_ACCESS_PROHIBITED, ERROR_CLASS_CONNECT } class;
         const char *str;
     } last_error;
 
@@ -123,6 +120,8 @@ struct st_connect_generator_t {
 
 static void record_error(struct st_connect_generator_t *self, const char *error_type, const char *details, const char *rcode)
 {
+    H2O_PROBE_REQUEST(CONNECT_ERROR, self->src_req, error_type, details, rcode);
+
     h2o_req_log_error(self->src_req, MODULE_NAME, "%s; rcode=%s; details=%s", error_type, rcode != NULL ? rcode : "(null)",
                       details != NULL ? details : "(null)");
 
@@ -254,6 +253,7 @@ static void close_readwrite(struct st_connect_generator_t *self)
 static void on_io_timeout(h2o_timer_t *timer)
 {
     struct st_connect_generator_t *self = H2O_STRUCT_FROM_MEMBER(struct st_connect_generator_t, timeout, timer);
+    H2O_PROBE_REQUEST0(CONNECT_IO_TIMEOUT, self->src_req);
     close_readwrite(self);
 }
 
@@ -412,13 +412,18 @@ static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errs
         }
     }
 
-    /* Try connecting if possible. */
-    if (self->server_addresses.used == self->server_addresses.size)
-        return;
-    /* If connection attempt has been under way for more than CONNECTION_ATTEMPT_DELAY_MS, stop that and try next address. Return
-     * otherwise. */
+    /* If the connection attempt has been under way for more than CONNECTION_ATTEMPT_DELAY_MS and the lookup that just completed
+     * gave us a new address to try, then stop that connection attempt and start a new connection attempt using the new address.
+     *
+     * If the connection attempt has been under way for less than that, then do nothing for now.  Eventually, either the timeout
+     * will expire or the connection attempt will complete.
+     *
+     * If the connection attempt is under way but the lookup has not provided us any new address to try, then do nothing for now,
+     * and wait for the connection attempt to complete. */
     if (self->sock != NULL) {
         if (h2o_timer_is_linked(&self->eyeball_delay))
+            return;
+        if (self->server_addresses.used == self->server_addresses.size)
             return;
         h2o_socket_close(self->sock);
         self->sock = NULL;
@@ -443,9 +448,11 @@ static struct st_server_address_t *pick_and_swap(struct st_connect_generator_t *
 
 static void try_connect(struct st_connect_generator_t *self)
 {
-    struct st_server_address_t *server_address = NULL;
+    struct st_server_address_t *server_address;
 
     do {
+        server_address = NULL;
+
         /* Fetch the next address from the list of resolved addresses. */
         for (size_t i = self->server_addresses.used; i < self->server_addresses.size; i++) {
             if (self->pick_v4 && self->server_addresses.list[i].sa->sa_family == AF_INET)
@@ -477,6 +484,10 @@ static void tcp_on_write_complete(h2o_socket_t *_sock, const char *err)
 {
     struct st_connect_generator_t *self = _sock->data;
 
+    if (err != NULL) {
+        H2O_PROBE_REQUEST(CONNECT_TCP_WRITE_ERROR, self->src_req, err);
+    }
+
     /* until h2o_socket_t implements shutdown(SHUT_WR), do a bidirectional close when we close the write-side */
     if (err != NULL || self->write_closed) {
         close_readwrite(self);
@@ -494,6 +505,7 @@ static void tcp_do_write(struct st_connect_generator_t *self)
     reset_io_timeout(self);
 
     h2o_iovec_t vec = h2o_iovec_init(self->tcp.sendbuf->bytes, self->tcp.sendbuf->size);
+    H2O_PROBE_REQUEST(CONNECT_TCP_WRITE, self->src_req, vec.len);
     h2o_socket_write(self->sock, &vec, 1, tcp_on_write_complete);
 }
 
@@ -531,8 +543,10 @@ static void tcp_on_read(h2o_socket_t *_sock, const char *err)
 
     if (err == NULL) {
         h2o_iovec_t vec = h2o_iovec_init(self->sock->input->bytes, self->sock->input->size);
+        H2O_PROBE_REQUEST(CONNECT_TCP_READ, self->src_req, vec.len);
         h2o_send(self->src_req, &vec, 1, H2O_SEND_STATE_IN_PROGRESS);
     } else {
+        H2O_PROBE_REQUEST(CONNECT_TCP_READ_ERROR, self->src_req, err);
         /* unidirectional close is signalled using H2O_SEND_STATE_FINAL, but the write side remains open */
         self->read_closed = 1;
         h2o_send(self->src_req, NULL, 0, H2O_SEND_STATE_FINAL);
@@ -585,6 +599,8 @@ static void tcp_on_connect(h2o_socket_t *_sock, const char *err)
 
 static int tcp_start_connect(struct st_connect_generator_t *self, struct st_server_address_t *server_address)
 {
+    H2O_PROBE_REQUEST(CONNECT_TCP_START, self->src_req, server_address->sa);
+
     const char *errstr;
     if ((self->sock = h2o_socket_connect(get_loop(self), server_address->sa, server_address->salen, tcp_on_connect, &errstr)) ==
         NULL) {
@@ -634,6 +650,7 @@ static h2o_iovec_t udp_get_next_chunk(const char *start, size_t len, size_t *to_
 
 static void udp_write_core(struct st_connect_generator_t *self, h2o_iovec_t datagram)
 {
+    H2O_PROBE_REQUEST(CONNECT_UDP_WRITE, self->src_req, datagram.len);
     while (send(h2o_socket_get_fd(self->sock), datagram.base, datagram.len, 0) == -1 && errno == EINTR)
         ;
 }
@@ -735,6 +752,7 @@ static void udp_on_read(h2o_socket_t *_sock, const char *err)
         ;
     if (rret == -1)
         return;
+    H2O_PROBE_REQUEST(CONNECT_UDP_READ, self->src_req, (size_t)rret);
 
     /* forward UDP datagram as is; note that it might be zero-sized */
     if (self->src_req->forward_datagram.read_ != NULL) {
@@ -774,6 +792,7 @@ static int udp_connect(struct st_connect_generator_t *self, struct st_server_add
 {
     int fd;
 
+    H2O_PROBE_REQUEST(CONNECT_UDP_START, self->src_req, server_address->sa);
     /* connect */
     if ((fd = socket(server_address->sa->sa_family, SOCK_DGRAM, 0)) == -1 ||
         connect(fd, server_address->sa, server_address->salen) != 0) {
@@ -782,6 +801,7 @@ static int udp_connect(struct st_connect_generator_t *self, struct st_server_add
             err = h2o_socket_get_error_string(errno, err);
             close(fd);
         }
+        set_last_error(self, ERROR_CLASS_CONNECT, err);
         return 0;
     }
 
@@ -821,6 +841,7 @@ static void on_stop(h2o_generator_t *_self, h2o_req_t *req)
 static void on_generator_dispose(void *_self)
 {
     struct st_connect_generator_t *self = _self;
+    H2O_PROBE_REQUEST0(CONNECT_DISPOSE, self->src_req);
     dispose_generator(self);
 }
 
@@ -871,14 +892,12 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
     char port_str[sizeof(H2O_UINT16_LONGEST_STR)];
     int port_strlen = sprintf(port_str, "%" PRIu16, port);
 
-    self->getaddr_req.v6 =
-        h2o_hostinfo_getaddr(&self->src_req->conn->ctx->receivers.hostinfo_getaddr, host, h2o_iovec_init(port_str, port_strlen),
-                             AF_INET6, is_tcp ? SOCK_STREAM : SOCK_DGRAM, is_tcp ? IPPROTO_TCP : IPPROTO_UDP,
-                             AI_ADDRCONFIG | AI_NUMERICSERV, on_getaddr, self);
-    self->getaddr_req.v4 =
-        h2o_hostinfo_getaddr(&self->src_req->conn->ctx->receivers.hostinfo_getaddr, host, h2o_iovec_init(port_str, port_strlen),
-                             AF_INET, is_tcp ? SOCK_STREAM : SOCK_DGRAM, is_tcp ? IPPROTO_TCP : IPPROTO_UDP,
-                             AI_ADDRCONFIG | AI_NUMERICSERV, on_getaddr, self);
+    self->getaddr_req.v6 = h2o_hostinfo_getaddr(
+        &self->src_req->conn->ctx->receivers.hostinfo_getaddr, host, h2o_iovec_init(port_str, port_strlen), AF_INET6,
+        is_tcp ? SOCK_STREAM : SOCK_DGRAM, is_tcp ? IPPROTO_TCP : IPPROTO_UDP, AI_ADDRCONFIG | AI_NUMERICSERV, on_getaddr, self);
+    self->getaddr_req.v4 = h2o_hostinfo_getaddr(
+        &self->src_req->conn->ctx->receivers.hostinfo_getaddr, host, h2o_iovec_init(port_str, port_strlen), AF_INET,
+        is_tcp ? SOCK_STREAM : SOCK_DGRAM, is_tcp ? IPPROTO_TCP : IPPROTO_UDP, AI_ADDRCONFIG | AI_NUMERICSERV, on_getaddr, self);
 
     return 0;
 }

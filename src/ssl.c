@@ -29,6 +29,10 @@
 #include <openssl/evp.h>
 #include <openssl/rand.h>
 #include <openssl/ssl.h>
+#if !defined(LIBRESSL_VERSION_NUMBER) && OPENSSL_VERSION_NUMBER >= 0x30000000L
+#include <openssl/provider.h>
+#define LOAD_OPENSSL_PROVIDER 1
+#endif
 #include "h2o/hiredis_.h"
 #include "yoml-parser.h"
 #include "yrmcds.h"
@@ -115,8 +119,9 @@ static void spawn_cache_cleanup_thread(SSL_CTX **_contexts, size_t num_contexts)
     pthread_t tid;
     pthread_attr_t attr;
     pthread_attr_init(&attr);
-    pthread_attr_setdetachstate(&attr, 1);
+    pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
     h2o_multithread_create_thread(&tid, &attr, cache_cleanup_thread, contexts);
+    pthread_attr_destroy(&attr);
 }
 
 static void setup_cache_disable(SSL_CTX **contexts, size_t num_contexts)
@@ -1108,8 +1113,9 @@ void ssl_setup_session_resumption(SSL_CTX **contexts, size_t num_contexts, struc
         pthread_t tid;
         pthread_attr_t attr;
         pthread_attr_init(&attr);
-        pthread_attr_setdetachstate(&attr, 1);
+        pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
         h2o_multithread_create_thread(&tid, &attr, conf.ticket.update_thread, NULL);
+        pthread_attr_destroy(&attr);
         size_t i;
         for (i = 0; i != num_contexts; ++i) {
             SSL_CTX *ctx = contexts[i];
@@ -1127,7 +1133,7 @@ void ssl_setup_session_resumption(SSL_CTX **contexts, size_t num_contexts, struc
 void ssl_setup_session_resumption_ptls(ptls_context_t *ptls, quicly_context_t *quic)
 {
     if (conf.ticket.update_thread != NULL) {
-        ptls->ticket_lifetime = 86400 * 7; // FIXME conf.lifetime
+        ptls->ticket_lifetime = conf.lifetime;
         assert((quic != NULL) == ptls->omit_end_of_early_data && "detected contradictory setting");
         ptls->encrypt_ticket = create_encrypt_ticket_ptls(quic);
     }
@@ -1175,6 +1181,12 @@ void init_openssl(void)
     SSL_load_error_strings();
     SSL_library_init();
     OpenSSL_add_all_algorithms();
+
+    /* When using OpenSSL >= 3.0, load legacy provider so that blowfish can be used for 64-bit QUIC CIDs. */
+#if LOAD_OPENSSL_PROVIDER
+    OSSL_PROVIDER_load(NULL, "legacy");
+    OSSL_PROVIDER_load(NULL, "default");
+#endif
 
     cache_init_defaults();
 #if H2O_USE_SESSION_TICKETS

@@ -272,7 +272,7 @@ void h2o_httpclient_connect(h2o_httpclient_t **_client, h2o_mem_pool_t *pool, vo
             /* both of h1 and h2 connections exist, compare in-use ratio */
             double http1_ratio = (double)(connpool->socketpool->_shared.count - connpool->socketpool->_shared.pooled_count) /
                                  connpool->socketpool->_shared.count;
-            double http2_ratio = h2conn->num_streams / h2o_httpclient__h2_get_max_concurrent_streams(h2conn);
+            double http2_ratio = (double)h2conn->num_streams / h2o_httpclient__h2_get_max_concurrent_streams(h2conn);
             if (http2_ratio <= http1_ratio) {
                 connect_using_h2conn(_client, pool, data, h2conn, connpool, upgrade_to, on_connect);
             } else {

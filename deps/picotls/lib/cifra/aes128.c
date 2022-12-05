@@ -38,7 +38,7 @@ static int aead_aes128gcm_setup_crypto(ptls_aead_context_t *ctx, int is_enc, con
 
 ptls_define_hash(sha256, cf_sha256_context, cf_sha256_init, cf_sha256_update, cf_sha256_digest_final);
 
-ptls_hash_algorithm_t ptls_minicrypto_sha256 = {PTLS_SHA256_BLOCK_SIZE, PTLS_SHA256_DIGEST_SIZE, sha256_create,
+ptls_hash_algorithm_t ptls_minicrypto_sha256 = {"sha256", PTLS_SHA256_BLOCK_SIZE, PTLS_SHA256_DIGEST_SIZE, sha256_create,
                                                 PTLS_ZERO_DIGEST_SHA256};
 
 ptls_cipher_algorithm_t ptls_minicrypto_aes128ecb = {
@@ -55,6 +55,9 @@ ptls_aead_algorithm_t ptls_minicrypto_aes128gcm = {"AES128-GCM",
                                                    PTLS_AES128_KEY_SIZE,
                                                    PTLS_AESGCM_IV_SIZE,
                                                    PTLS_AESGCM_TAG_SIZE,
+                                                   {PTLS_TLS12_AESGCM_FIXED_IV_SIZE, PTLS_TLS12_AESGCM_RECORD_IV_SIZE},
+                                                   0,
+                                                   0,
                                                    sizeof(struct aesgcm_context_t),
                                                    aead_aes128gcm_setup_crypto};
 ptls_cipher_suite_t ptls_minicrypto_aes128gcmsha256 = {.id = PTLS_CIPHER_SUITE_AES_128_GCM_SHA256,

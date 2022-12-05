@@ -420,7 +420,7 @@ h2o_memcached_context_t *h2o_memcached_create_context(const char *host, uint16_t
         pthread_attr_t attr;
         size_t i;
         pthread_attr_init(&attr);
-        pthread_attr_setdetachstate(&attr, 1);
+        pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
         for (i = 0; i != num_threads; ++i)
             h2o_multithread_create_thread(&tid, &attr, thread_main, ctx);
         pthread_attr_destroy(&attr);

@@ -12,4 +12,20 @@ module Kernel
       File.open(file, *rest, &block)
     end
   end
+
+  def print(*args)
+    $stdout.print(*args)
+  end
+
+  def puts(*args)
+    $stdout.puts(*args)
+  end
+
+  def printf(*args)
+    $stdout.printf(*args)
+  end
+
+  def gets(*args)
+    $stdin.gets(*args)
+  end
 end

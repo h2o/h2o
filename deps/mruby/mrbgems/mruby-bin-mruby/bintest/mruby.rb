@@ -1,17 +1,25 @@
 require 'tempfile'
+require 'open3'
+
+def assert_mruby(exp_out, exp_err, exp_success, args)
+  out, err, stat = Open3.capture3( *(cmd_list("mruby") + args))
+  assert "assert_mruby" do
+    assert_operator(exp_out, :===, out, "standard output")
+    assert_operator(exp_err, :===, err, "standard error")
+    assert_equal(exp_success, stat.success?, "exit success?")
+  end
+end
 
 assert('regression for #1564') do
-  o = `#{cmd('mruby')} -e #{shellquote('<<')} 2>&1`
-  assert_include o, "-e:1:2: syntax error"
-  o = `#{cmd('mruby')} -e #{shellquote('<<-')} 2>&1`
-  assert_include o, "-e:1:3: syntax error"
+  assert_mruby("", /\A-e:1:2: syntax error, .*\n\z/, false, %w[-e <<])
+  assert_mruby("", /\A-e:1:3: syntax error, .*\n\z/, false, %w[-e <<-])
 end
 
 assert('regression for #1572') do
   script, bin = Tempfile.new('test.rb'), Tempfile.new('test.mrb')
   File.write script.path, 'p "ok"'
   system "#{cmd('mrbc')} -g -o #{bin.path} #{script.path}"
-  o = `#{cmd('mruby')} -b #{bin.path}`.strip
+  o = `#{cmd('mruby')} #{bin.path}`.strip
   assert_equal '"ok"', o
 end
 
@@ -25,17 +33,15 @@ assert '$0 value' do
 
   # .mrb file
   `#{cmd('mrbc')} -o "#{bin.path}" "#{script.path}"`
-  assert_equal "\"#{bin.path}\"", `#{cmd('mruby')} -b "#{bin.path}"`.chomp
+  assert_equal "\"#{bin.path}\"", `#{cmd('mruby')} "#{bin.path}"`.chomp
 
   # one liner
   assert_equal '"-e"', `#{cmd('mruby')} -e #{shellquote('p $0')}`.chomp
 end
 
-assert('float literal') do
-  script, bin = Tempfile.new('test.rb'), Tempfile.new('test.mrb')
-  File.write script.path, 'p [3.21, 2e308.infinite?, -2e308.infinite?]'
-  system "#{cmd('mrbc')} -g -o #{bin.path} #{script.path}"
-  assert_equal "[3.21, 1, -1]", `#{cmd('mruby')} -b #{bin.path}`.chomp!
+assert 'ARGV value' do
+  assert_mruby(%{["ab", "cde"]\n}, "", true, %w[-e p(ARGV) ab cde])
+  assert_mruby("[]\n", "", true, %w[-e p(ARGV)])
 end
 
 assert '__END__', '8.6' do
@@ -66,11 +72,22 @@ RUBY
   assert_equal 0, $?.exitstatus
 end
 
+assert('mruby -c option') do
+  assert_mruby("Syntax OK\n", "", true, ["-c", "-e", "p 1"])
+  assert_mruby("", /\A-e:1:7: syntax error, .*\n\z/, false, ["-c", "-e", "p 1; 1."])
+end
+
 assert('mruby -d option') do
-  o = `#{cmd('mruby')} -e #{shellquote('p $DEBUG')}`
-  assert_equal "false\n", o
-  o = `#{cmd('mruby')} -d -e #{shellquote('p $DEBUG')}`
-  assert_equal "true\n", o
+  assert_mruby("false\n", "", true, ["-e", "p $DEBUG"])
+  assert_mruby("true\n", "", true, ["-dep $DEBUG"])
+end
+
+assert('mruby -e option (no code specified)') do
+  assert_mruby("", /\A.*: No code specified for -e\n\z/, false, %w[-e])
+end
+
+assert('mruby -h option') do
+  assert_mruby(/\AUsage: #{Regexp.escape cmd_bin("mruby")} .*/m, "", true, %w[-h])
 end
 
 assert('mruby -r option') do
@@ -94,4 +111,68 @@ EOS
 
   assert_equal 'hogeClass', `#{cmd('mruby')} -r #{lib.path} -r #{script.path} -e #{shellquote('print Hoge.class')}`
   assert_equal 0, $?.exitstatus
+end
+
+assert('mruby -r option (no library specified)') do
+  assert_mruby("", /\A.*: No library specified for -r\n\z/, false, %w[-r])
+end
+
+assert('mruby -r option (file not found)') do
+  assert_mruby("", /\A.*: Cannot open library file: .*\n\z/, false, %w[-r _no_exists_])
+end
+
+assert('mruby -v option') do
+  ver_re = '\Amruby \d+\.\d+\.\d+.* \(\d+-\d+-\d+\)\n'
+  assert_mruby(/#{ver_re}\z/, "", true, %w[-v])
+  assert_mruby(/#{ver_re}^[^\n]*NODE.*\n:end\n\z/m, "", true, %w[-v -e p(:end)])
+end
+
+assert('mruby --verbose option') do
+  assert_mruby(/\A[^\n]*NODE.*\n:end\n\z/m, "", true, %w[--verbose -e p(:end)])
+end
+
+assert('mruby --') do
+  assert_mruby(%{["-x", "1"]\n}, "", true, %w[-e p(ARGV) -- -x 1])
+end
+
+assert('mruby invalid short option') do
+  assert_mruby("", /\A.*: invalid option -1 .*\n\z/, false, %w[-1])
+end
+
+assert('mruby invalid long option') do
+  assert_mruby("", /\A.*: invalid option --longopt .*\n\z/, false, %w[--longopt])
+end
+
+assert('unhandled exception') do
+  assert_mruby("", /\bEXCEPTION\b.*\n\z/, false, %w[-e raise("EXCEPTION")])
+end
+
+assert('program file not found') do
+  assert_mruby("", /\A.*: Cannot open program file: .*\n\z/, false, %w[_no_exists_])
+end
+
+assert('codegen error') do
+  code = "def f(#{(1..100).map{|n| "a#{n}"} * ","}); end"
+  assert_mruby("", /\A.*\n\z/, false, ["-e", code])
+end
+
+assert('top level local variables are in file scope') do
+  arb, amrb = Tempfile.new('a.rb'), Tempfile.new('a.mrb')
+  brb, bmrb = Tempfile.new('b.rb'), Tempfile.new('b.mrb')
+  crb, cmrb = Tempfile.new('c.rb'), Tempfile.new('c.mrb')
+  drb, dmrb = Tempfile.new('d.rb'), Tempfile.new('d.mrb')
+
+  File.write arb.path, 'a = 1'
+  system "#{cmd('mrbc')} -g -o #{amrb.path} #{arb.path}"
+  File.write brb.path, 'p a'
+  system "#{cmd('mrbc')} -g -o #{bmrb.path} #{brb.path}"
+  assert_mruby("", /:1: undefined method 'a' \(NoMethodError\)\n\z/, false, ["-r", arb.path, brb.path])
+  assert_mruby("", /:1: undefined method 'a' \(NoMethodError\)\n\z/, false, ["-b", "-r", amrb.path, bmrb.path])
+
+  File.write crb.path, 'a, b, c = 1, 2, 3; A = -> { b = -2; [a, b, c] }'
+  system "#{cmd('mrbc')} -g -o #{cmrb.path} #{crb.path}"
+  File.write drb.path, 'a, b = 5, 6; p A.call; p a, b'
+  system "#{cmd('mrbc')} -g -o #{dmrb.path} #{drb.path}"
+  assert_mruby("[1, -2, 3]\n5\n6\n", "", true, ["-r", crb.path, drb.path])
+  assert_mruby("[1, -2, 3]\n5\n6\n", "", true, ["-b", "-r", cmrb.path, dmrb.path])
 end

@@ -28,8 +28,6 @@ extern "C" {
 
 #include "http2_common.h"
 
-extern const h2o_protocol_callbacks_t H2O_HTTP2_CALLBACKS;
-
 /* don't forget to update SERVER_PREFACE when choosing non-default parameters */
 #define H2O_HTTP2_SETTINGS_HOST_HEADER_TABLE_SIZE 4096
 #define H2O_HTTP2_SETTINGS_HOST_ENABLE_PUSH 0 /* _client_ is never allowed to push */

@@ -483,6 +483,25 @@ static int on_config_emit_missing_date_header(h2o_configurator_command_t *cmd, h
     return 0;
 }
 
+static int on_config_zerocopy(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    ssize_t ret = h2o_configurator_get_one_of(cmd, node, "OFF,ON,ALWAYS");
+    switch (ret) {
+    case 0:
+        ctx->globalconf->proxy.zerocopy = H2O_PROXY_ZEROCOPY_DISABLED;
+        break;
+    case 1:
+        ctx->globalconf->proxy.zerocopy = H2O_PROXY_ZEROCOPY_ENABLED;
+        break;
+    case 2:
+        ctx->globalconf->proxy.zerocopy = H2O_PROXY_ZEROCOPY_ALWAYS;
+        break;
+    default:
+        return -1;
+    }
+    return 0;
+}
+
 static int on_config_preserve_x_forwarded_proto(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     ssize_t ret = h2o_configurator_get_one_of(cmd, node, "OFF,ON");
@@ -542,10 +561,11 @@ static int on_config_http3_ratio(h2o_configurator_command_t *cmd, h2o_configurat
 
 static int on_config_forward_close_connection(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
+    struct proxy_configurator_t *self = (void *)cmd->configurator;
     ssize_t ret = h2o_configurator_get_one_of(cmd, node, "OFF,ON");
     if (ret == -1)
         return -1;
-    ctx->globalconf->proxy.forward_close_connection = (int)ret;
+    self->vars->conf.forward_close_connection = (int)ret;
     return 0;
 }
 
@@ -694,6 +714,8 @@ void h2o_proxy_register_configurator(h2o_globalconf_t *conf)
     h2o_configurator_define_command(&c->super, "proxy.emit-missing-date-header",
                                     H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                     on_config_emit_missing_date_header);
+    h2o_configurator_define_command(&c->super, "proxy.zerocopy", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                    on_config_zerocopy);
     h2o_configurator_define_headers_commands(conf, &c->super, "proxy.header", get_headers_commands);
     h2o_configurator_define_command(&c->super, "proxy.max-buffer-size",
                                     H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
@@ -709,6 +731,6 @@ void h2o_proxy_register_configurator(h2o_globalconf_t *conf)
     h2o_configurator_define_command(&c->super, "proxy.http3.ratio",
                                     H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR, on_config_http3_ratio);
     h2o_configurator_define_command(&c->super, "proxy.forward.close-connection",
-                                    H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                    H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                     on_config_forward_close_connection);
 }

@@ -25,6 +25,7 @@
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
+#define OPENSSL_API_COMPAT 0x00908000L
 #include <openssl/opensslv.h>
 #include <openssl/bio.h>
 #include <openssl/pem.h>
@@ -34,8 +35,16 @@
 #endif
 #include "picotls.h"
 #include "picotls/minicrypto.h"
+#include "picotls/openssl.h"
+#if PTLS_OPENSSL_HAVE_ASYNC && PTLS_OPENSSL_HAVE_X25519 && !defined(_WINDOWS)
+#include <sys/select.h>
+#include <sys/time.h>
+#define ASYNC_TESTS 1
+#endif
 #include "../deps/picotest/picotest.h"
+#undef OPENSSL_API_COMPAT
 #include "../lib/openssl.c"
+
 #include "test.h"
 
 #define RSA_PRIVATE_KEY                                                                                                            \
@@ -143,12 +152,43 @@ static void test_sign_verify(EVP_PKEY *key, const struct st_ptls_openssl_signatu
         uint8_t sigbuf_small[1024];
 
         ptls_buffer_init(&sigbuf, sigbuf_small, sizeof(sigbuf_small));
-        ok(do_sign(key, schemes + i, &sigbuf, ptls_iovec_init(message, strlen(message))) == 0);
+        ok(do_sign(key, schemes + i, &sigbuf, ptls_iovec_init(message, strlen(message)), NULL) == 0);
         EVP_PKEY_up_ref(key);
         ok(verify_sign(key, schemes[i].scheme_id, ptls_iovec_init(message, strlen(message)),
                        ptls_iovec_init(sigbuf.base, sigbuf.off)) == 0);
 
         ptls_buffer_dispose(&sigbuf);
+    }
+}
+
+static void test_sha(void)
+{
+    static const char *text =
+        "Alice was beginning to get very tired of sitting by her sister on the bank, and of having nothing to do: once or twice "
+        "she had peeped into the book her sister was reading, but it had no pictures or conversations in it, and where is the use "
+        "of a book, thought Alice, without pictures or conversations?";
+    static const struct {
+        ptls_hash_algorithm_t *algo;
+        uint8_t expected[PTLS_MAX_DIGEST_SIZE];
+    } all[] = {
+        {&ptls_openssl_sha256, {0x9b, 0x5d, 0x38, 0x9a, 0xa5, 0xfd, 0xc8, 0x3a, 0xf5, 0x59, 0x8e, 0x90, 0xd7, 0x4e, 0x99, 0xb2,
+                                0xbc, 0xeb, 0x97, 0x45, 0x7a, 0xc5, 0xda, 0xde, 0xd5, 0xd2, 0x18, 0x1c, 0x33, 0x5c, 0x93, 0x41}},
+        {&ptls_openssl_sha384, {0x41, 0x7a, 0x7e, 0xda, 0x89, 0x55, 0xc6, 0xb4, 0x31, 0xde, 0x73, 0x2c, 0x8d, 0xc9, 0x3b, 0xcc,
+                                0xc7, 0xbc, 0xe8, 0x96, 0x91, 0x7a, 0xa6, 0xa2, 0xf8, 0x73, 0x7e, 0xb9, 0xff, 0x09, 0xc6, 0x32,
+                                0x31, 0x7b, 0xe1, 0x5b, 0xd7, 0xaa, 0xf2, 0xbd, 0x2a, 0x5c, 0x3a, 0xda, 0x3b, 0x24, 0x75, 0x92}},
+        {&ptls_openssl_sha512, {0x40, 0x9d, 0x7f, 0x12, 0x8e, 0x32, 0x96, 0x89, 0xdc, 0xa5, 0x72, 0xe4, 0xa5, 0x39, 0xb4, 0x2b,
+                                0xf0, 0x24, 0xe5, 0x42, 0x7a, 0x61, 0x77, 0x69, 0xda, 0xd5, 0xfd, 0x72, 0x85, 0x83, 0x39, 0x01,
+                                0x31, 0xa6, 0xc8, 0x2f, 0x6a, 0x09, 0xfe, 0xa0, 0x54, 0x0c, 0xe3, 0x89, 0xdb, 0x8c, 0x4a, 0x83,
+                                0x2f, 0x90, 0x94, 0x54, 0x93, 0x3f, 0xe9, 0x8a, 0x32, 0x3f, 0x85, 0x24, 0xa5, 0x9b, 0x5b, 0x02}},
+
+        {NULL}};
+
+    for (size_t i = 0; all[i].algo != NULL; ++i) {
+        uint8_t actual[PTLS_MAX_DIGEST_SIZE];
+        note("%s", all[i].algo->name);
+        int ret = ptls_calc_hash(all[i].algo, actual, text, strlen(text));
+        ok(ret == 0);
+        ok(memcmp(actual, all[i].expected, all[i].algo->digest_size) == 0);
     }
 }
 
@@ -231,22 +271,22 @@ static void test_cert_verify(void)
     X509 *cert = x509_from_pem(RSA_CERTIFICATE);
     STACK_OF(X509) *chain = sk_X509_new_null();
     X509_STORE *store = X509_STORE_new();
-    int ret;
+    int ret, ossl_x509_err;
 
     /* expect fail when no CA is registered */
-    ret = verify_cert_chain(store, cert, chain, 0, "test.example.com");
+    ret = verify_cert_chain(store, cert, chain, 0, "test.example.com", &ossl_x509_err);
     ok(ret == PTLS_ALERT_UNKNOWN_CA);
 
     /* expect success after registering the CA */
     X509_LOOKUP *lookup = X509_STORE_add_lookup(store, X509_LOOKUP_file());
     ret = X509_LOOKUP_load_file(lookup, "t/assets/test-ca.crt", X509_FILETYPE_PEM);
     ok(ret);
-    ret = verify_cert_chain(store, cert, chain, 0, "test.example.com");
+    ret = verify_cert_chain(store, cert, chain, 0, "test.example.com", &ossl_x509_err);
     ok(ret == 0);
 
 #ifdef X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS
     /* different server_name */
-    ret = verify_cert_chain(store, cert, chain, 0, "test2.example.com");
+    ret = verify_cert_chain(store, cert, chain, 0, "test2.example.com", &ossl_x509_err);
     ok(ret == PTLS_ALERT_BAD_CERTIFICATE);
 #else
     fprintf(stderr, "**** skipping test for hostname validation failure ***\n");
@@ -290,6 +330,158 @@ DEFINE_FFX_AES128_ALGORITHMS(openssl);
 DEFINE_FFX_CHACHA20_ALGORITHMS(openssl);
 #endif
 
+static void test_all_hpke(void)
+{
+    test_hpke(ptls_openssl_hpke_kems, ptls_openssl_hpke_cipher_suites);
+}
+
+#if ASYNC_TESTS
+
+static ENGINE *load_engine(const char *name)
+{
+    ENGINE *e;
+
+    if ((e = ENGINE_by_id("dynamic")) == NULL)
+        return NULL;
+    if (!ENGINE_ctrl_cmd_string(e, "SO_PATH", name, 0) || !ENGINE_ctrl_cmd_string(e, "LOAD", NULL, 0)) {
+        ENGINE_free(e);
+        return NULL;
+    }
+
+    return e;
+}
+
+static struct {
+    struct {
+        size_t next_pending;
+        ptls_t *tls;
+        int wait_fd;
+    } conns[10];
+    size_t first_pending;
+} qat;
+
+static void qat_set_pending(size_t index)
+{
+    qat.conns[index].next_pending = qat.first_pending;
+    qat.first_pending = index;
+}
+
+static void many_handshakes(void)
+{
+    ptls_t *client = ptls_new(ctx, 0), *resp_sample_conn = NULL;
+    ptls_buffer_t clientbuf, resp_sample;
+    int ret;
+
+    { /* generate ClientHello that we would be sent to all the server-side objects */
+        ptls_buffer_init(&clientbuf, "", 0);
+        ret = ptls_handshake(client, &clientbuf, NULL, NULL, NULL);
+        ok(ret == PTLS_ERROR_IN_PROGRESS);
+    }
+
+    ptls_buffer_init(&resp_sample, "", 0);
+
+    qat.first_pending = 0;
+    for (size_t i = 0; i < PTLS_ELEMENTSOF(qat.conns); ++i) {
+        qat.conns[i].next_pending = i + 1;
+        qat.conns[i].tls = NULL;
+        qat.conns[i].wait_fd = -1;
+    }
+    qat.conns[PTLS_ELEMENTSOF(qat.conns) - 1].next_pending = SIZE_MAX;
+
+    struct timeval start, end;
+    gettimeofday(&start, NULL);
+
+    static const size_t num_total = 10000;
+    size_t num_issued = 0, num_running = 0;
+    while (1) {
+        while (qat.first_pending != SIZE_MAX) {
+            size_t offending = qat.first_pending;
+            /* detach the offending entry from pending list */
+            qat.first_pending = qat.conns[offending].next_pending;
+            qat.conns[offending].next_pending = SIZE_MAX;
+            /* run the offending entry */
+            if (qat.conns[offending].tls == NULL) {
+                qat.conns[offending].tls = ptls_new(ctx_peer, 1);
+                if (resp_sample_conn == NULL)
+                    resp_sample_conn = qat.conns[offending].tls;
+                ++num_issued;
+                ++num_running;
+            }
+            ptls_buffer_t hsbuf;
+            uint8_t hsbuf_small[8192];
+            ptls_buffer_init(&hsbuf, hsbuf_small, sizeof(hsbuf_small));
+            size_t inlen = ptls_get_cipher(qat.conns[offending].tls) == NULL ? clientbuf.off : 0; /* feed CH only as first flight */
+            int hsret = ptls_handshake(qat.conns[offending].tls, &hsbuf, clientbuf.base, &inlen, NULL);
+            if (resp_sample_conn == qat.conns[offending].tls) {
+                ptls_buffer_pushv(&resp_sample, hsbuf.base, hsbuf.off);
+            }
+            ptls_buffer_dispose(&hsbuf);
+            /* advance the handshake context */
+            switch (hsret) {
+            case 0:
+                if (qat.conns[offending].tls == resp_sample_conn)
+                    resp_sample_conn = (void *)1;
+                ptls_free(qat.conns[offending].tls);
+                qat.conns[offending].tls = NULL;
+                --num_running;
+                if (num_issued < num_total)
+                    qat_set_pending(offending);
+                break;
+            case PTLS_ERROR_ASYNC_OPERATION:
+                qat.conns[offending].wait_fd = ptls_openssl_get_async_fd(qat.conns[offending].tls);
+                assert(qat.conns[offending].wait_fd != -1);
+                break;
+            default:
+                fprintf(stderr, "ptls_handshake returned %d\n", hsret);
+                abort();
+                break;
+            }
+        }
+        if (num_running == 0)
+            break;
+        /* poll for next action */
+        fd_set rfds;
+        FD_ZERO(&rfds);
+        int nfds = 0;
+        for (size_t i = 0; i < PTLS_ELEMENTSOF(qat.conns); ++i) {
+            if (qat.conns[i].wait_fd != -1) {
+                FD_SET(qat.conns[i].wait_fd, &rfds);
+                if (nfds <= qat.conns[i].wait_fd)
+                    nfds = qat.conns[i].wait_fd + 1;
+            }
+        }
+        if (select(nfds, &rfds, NULL, NULL, NULL) > 0) {
+            for (size_t i = 0; i < PTLS_ELEMENTSOF(qat.conns); ++i) {
+                if (qat.conns[i].wait_fd != -1 && FD_ISSET(qat.conns[i].wait_fd, &rfds)) {
+                    qat.conns[i].wait_fd = -1;
+                    qat_set_pending(i);
+                }
+            }
+        }
+    }
+
+    gettimeofday(&end, NULL);
+
+    note("run %zu handshakes in %f seconds", num_total,
+         (end.tv_sec + end.tv_usec / 1000000.) - (start.tv_sec + start.tv_usec / 1000000.));
+
+    clientbuf.off = 0;
+
+    /* confirm that the response looks okay */
+    size_t resplen = resp_sample.off;
+    ok(ptls_handshake(client, &clientbuf, resp_sample.base, &resplen, NULL) == 0);
+
+    ptls_buffer_dispose(&clientbuf);
+    ptls_buffer_dispose(&resp_sample);
+    ptls_free(client);
+
+    return;
+Exit:
+    assert("unreachable");
+}
+
+#endif
+
 int main(int argc, char **argv)
 {
     ptls_openssl_sign_certificate_t openssl_sign_certificate;
@@ -297,17 +489,16 @@ int main(int argc, char **argv)
 
     ERR_load_crypto_strings();
     OpenSSL_add_all_algorithms();
-#if !defined(OPENSSL_NO_ENGINE)
-    /* Load all compiled-in ENGINEs */
-    ENGINE_load_builtin_engines();
-    ENGINE_register_all_ciphers();
-    ENGINE_register_all_digests();
-#endif
 
 #if !defined(LIBRESSL_VERSION_NUMBER) && OPENSSL_VERSION_NUMBER >= 0x30000000L
     /* Explicitly load the legacy provider in addition to default, as we test Blowfish in one of the tests. */
     OSSL_PROVIDER *legacy = OSSL_PROVIDER_load(NULL, "legacy");
     OSSL_PROVIDER *dflt = OSSL_PROVIDER_load(NULL, "default");
+#elif !defined(OPENSSL_NO_ENGINE)
+    /* Load all compiled-in ENGINEs */
+    ENGINE_load_builtin_engines();
+    ENGINE_register_all_ciphers();
+    ENGINE_register_all_digests();
 #endif
 
     subtest("bf", test_bf);
@@ -321,15 +512,13 @@ int main(int argc, char **argv)
     X509_STORE_set_verify_cb(cert_store, verify_cert_cb);
     ptls_openssl_init_verify_certificate(&openssl_verify_certificate, cert_store);
     /* we should call X509_STORE_free on OpenSSL 1.1 or in prior versions decrement refount then call _free */
-    ptls_context_t openssl_ctx = {ptls_openssl_random_bytes,
-                                  &ptls_get_time,
-                                  ptls_openssl_key_exchanges,
-                                  ptls_openssl_cipher_suites,
-                                  {&cert, 1},
-                                  NULL,
-                                  NULL,
-                                  NULL,
-                                  &openssl_sign_certificate.super};
+    ptls_context_t openssl_ctx = {.random_bytes = ptls_openssl_random_bytes,
+                                  .get_time = &ptls_get_time,
+                                  .key_exchanges = ptls_openssl_key_exchanges,
+                                  .cipher_suites = ptls_openssl_cipher_suites,
+                                  .tls12_cipher_suites = ptls_openssl_tls12_cipher_suites,
+                                  .certificates = {&cert, 1},
+                                  .sign_certificate = &openssl_sign_certificate.super};
     assert(openssl_ctx.cipher_suites[0]->hash->digest_size == 48); /* sha384 */
     ptls_context_t openssl_ctx_sha256only = openssl_ctx;
     ++openssl_ctx_sha256only.cipher_suites;
@@ -344,6 +533,7 @@ int main(int argc, char **argv)
     ADD_FFX_CHACHA20_ALGORITHMS(openssl);
 #endif
 
+    subtest("sha", test_sha);
     subtest("rsa-sign", test_rsa_sign);
     subtest("ecdsa-sign", test_ecdsa_sign);
     subtest("ed25519-sign", test_ed25519_sign);
@@ -383,6 +573,40 @@ int main(int argc, char **argv)
     ctx_peer = &openssl_ctx;
     subtest("minicrypto vs.", test_picotls);
 
+#if ASYNC_TESTS
+    // switch to x25519 / aes128gcmsha256 as we run benchmarks
+    static ptls_key_exchange_algorithm_t *fast_keyex[] = {&ptls_openssl_x25519, NULL}; // use x25519 for speed
+    static ptls_cipher_suite_t *fast_cipher[] = {&ptls_openssl_aes128gcmsha256, NULL};
+    openssl_ctx.key_exchanges = fast_keyex;
+    openssl_ctx.cipher_suites = fast_cipher;
+    ctx = &openssl_ctx;
+    ctx_peer = &openssl_ctx;
+    openssl_sign_certificate.async = 0;
+    subtest("many-handshakes-non-async", many_handshakes);
+    openssl_sign_certificate.async = 0;
+    subtest("many-handshakes-async", many_handshakes);
+    { /* qatengine should be tested at last, because we do not have the code to unload or un-default it */
+        const char *engine_name = "qatengine";
+        ENGINE *qatengine;
+        if ((qatengine = ENGINE_by_id(engine_name)) != NULL || (qatengine = load_engine(engine_name)) != NULL) {
+            ENGINE_set_default_RSA(qatengine);
+            ptls_openssl_dispose_sign_certificate(&openssl_sign_certificate); // reload cert to use qatengine
+            setup_sign_certificate(&openssl_sign_certificate);
+            subtest("many-handshakes-qatengine", many_handshakes);
+        } else {
+            note("%s not found", engine_name);
+        }
+    }
+#endif
+
     esni_private_keys[0]->on_exchange(esni_private_keys, 1, NULL, ptls_iovec_init(NULL, 0));
-    return done_testing();
+
+    subtest("hpke", test_all_hpke);
+
+    int ret = done_testing();
+#if !defined(LIBRESSL_VERSION_NUMBER) && OPENSSL_VERSION_NUMBER >= 0x30000000L
+    OSSL_PROVIDER_unload(dflt);
+    OSSL_PROVIDER_unload(legacy);
+#endif
+    return ret;
 }

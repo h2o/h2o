@@ -3,6 +3,12 @@ CMAKE_POLICY(SET CMP0003 NEW)
 
 PROJECT(picotls)
 
+IF (CMAKE_VERSION VERSION_LESS 3.13.0)
+  MACRO (TARGET_LINK_DIRECTORIES target scope)
+    link_directories(${ARGN})
+  ENDMACRO ()
+ENDIF ()
+
 FIND_PACKAGE(PkgConfig REQUIRED)
 INCLUDE(cmake/dtrace-utils.cmake)
 
@@ -49,9 +55,11 @@ SET(MINICRYPTO_LIBRARY_FILES
     deps/cifra/src/sha256.c
     deps/cifra/src/sha512.c)
 SET(CORE_FILES
+    lib/hpke.c
     lib/picotls.c
     lib/pembase64.c)
 SET(CORE_TEST_FILES
+    t/hpke.c
     t/picotls.c)
 IF (WITH_DTRACE)
     SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DPICOTLS_USE_DTRACE=1")
@@ -68,15 +76,16 @@ PKG_CHECK_MODULES(BROTLI_DEC libbrotlidec)
 PKG_CHECK_MODULES(BROTLI_ENC libbrotlienc)
 IF (BROTLI_DEC_FOUND AND BROTLI_ENC_FOUND)
     INCLUDE_DIRECTORIES(${BROTLI_DEC_INCLUDE_DIRS} ${BROTLI_ENC_INCLUDE_DIRS})
-    LINK_DIRECTORIES(${BROTLI_DEC_LIBRARY_DIRS} ${BROTLI_ENC_LIBRARY_DIRS})
     SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DPICOTLS_USE_BROTLI=1")
     LIST(APPEND CORE_FILES
         lib/certificate_compression.c)
     LIST(APPEND CORE_EXTRA_LIBS ${BROTLI_DEC_LIBRARIES} ${BROTLI_ENC_LIBRARIES})
+    LIST(APPEND CORE_EXTRA_LIBS_DIRS (${BROTLI_DEC_LIBRARY_DIRS} ${BROTLI_ENC_LIBRARY_DIRS}))
 ENDIF ()
 
 ADD_LIBRARY(picotls-core ${CORE_FILES})
 TARGET_LINK_LIBRARIES(picotls-core ${CORE_EXTRA_LIBS})
+TARGET_LINK_DIRECTORIES(picotls-core PUBLIC ${CORE_EXTRA_LIBS_DIRS})
 
 ADD_LIBRARY(picotls-minicrypto
     ${MINICRYPTO_LIBRARY_FILES}
@@ -115,11 +124,11 @@ IF (OPENSSL_FOUND AND NOT (OPENSSL_VERSION VERSION_LESS "1.0.1"))
     MESSAGE(STATUS "  Enabling OpenSSL support")
     INCLUDE_DIRECTORIES(${OPENSSL_INCLUDE_DIR})
     ADD_LIBRARY(picotls-openssl lib/openssl.c)
-    TARGET_LINK_LIBRARIES(picotls-openssl ${OPENSSL_LIBRARIES} picotls-core ${CMAKE_DL_LIBS})
+    TARGET_LINK_LIBRARIES(picotls-openssl ${OPENSSL_CRYPTO_LIBRARIES} picotls-core ${CMAKE_DL_LIBS})
     ADD_EXECUTABLE(cli t/cli.c lib/pembase64.c)
     TARGET_LINK_LIBRARIES(cli picotls-openssl picotls-core)
     ADD_EXECUTABLE(picotls-esni src/esni.c)
-    TARGET_LINK_LIBRARIES(picotls-esni picotls-openssl picotls-core ${OPENSSL_LIBRARIES} ${CMAKE_DL_LIBS})
+    TARGET_LINK_LIBRARIES(picotls-esni picotls-openssl picotls-core ${OPENSSL_CRYPTO_LIBRARIES} ${CMAKE_DL_LIBS})
 
     ADD_EXECUTABLE(test-openssl.t
         ${MINICRYPTO_LIBRARY_FILES}
@@ -137,9 +146,9 @@ IF (OPENSSL_FOUND AND NOT (OPENSSL_VERSION VERSION_LESS "1.0.1"))
         ${CORE_TEST_FILES}
         t/openssl.c)
     SET_TARGET_PROPERTIES(test-openssl.t PROPERTIES COMPILE_FLAGS "-DPTLS_MEMORY_DEBUG=1")
-    TARGET_LINK_LIBRARIES(test-openssl.t ${OPENSSL_LIBRARIES} ${CMAKE_DL_LIBS})
+    TARGET_LINK_LIBRARIES(test-openssl.t ${OPENSSL_CRYPTO_LIBRARIES} ${CMAKE_DL_LIBS})
 
-    LIST(APPEND PTLSBENCH_LIBS picotls-openssl ${OPENSSL_LIBRARIES} ${CMAKE_DL_LIBS})
+    LIST(APPEND PTLSBENCH_LIBS picotls-openssl ${OPENSSL_CRYPTO_LIBRARIES} ${CMAKE_DL_LIBS})
 
     SET(TEST_EXES ${TEST_EXES} test-openssl.t)
 ELSE ()
@@ -148,14 +157,14 @@ ENDIF ()
 
 IF (WITH_FUSION)
     ADD_LIBRARY(picotls-fusion lib/fusion.c)
-    SET_TARGET_PROPERTIES(picotls-fusion PROPERTIES COMPILE_FLAGS "-mavx2 -maes -mpclmul")
+    SET_TARGET_PROPERTIES(picotls-fusion PROPERTIES COMPILE_FLAGS "-mavx2 -maes -mpclmul -mvaes -mvpclmulqdq")
     TARGET_LINK_LIBRARIES(picotls-fusion picotls-core)
     ADD_EXECUTABLE(test-fusion.t
         deps/picotest/picotest.c
         lib/picotls.c
         t/fusion.c)
     TARGET_LINK_LIBRARIES(test-fusion.t picotls-minicrypto)
-    SET_TARGET_PROPERTIES(test-fusion.t PROPERTIES COMPILE_FLAGS "-mavx2 -maes -mpclmul")
+    SET_TARGET_PROPERTIES(test-fusion.t PROPERTIES COMPILE_FLAGS "-mavx2 -maes -mpclmul -mvaes -mvpclmulqdq")
     IF (WITH_DTRACE)
         ADD_DEPENDENCIES(test-fusion.t generate-picotls-probes)
     ENDIF ()
@@ -215,8 +224,8 @@ IF (BUILD_FUZZER)
             LINK_FLAGS "-fsanitize=fuzzer")
     ENDIF (OSS_FUZZ)
 
-    TARGET_LINK_LIBRARIES(fuzz-asn1 picotls-minicrypto picotls-core picotls-openssl ${OPENSSL_LIBRARIES} ${LIB_FUZZER})
-    TARGET_LINK_LIBRARIES(fuzz-server-hello picotls-core picotls-openssl ${OPENSSL_LIBRARIES} ${LIB_FUZZER})
-    TARGET_LINK_LIBRARIES(fuzz-client-hello picotls-core picotls-openssl ${OPENSSL_LIBRARIES} ${LIB_FUZZER})
+    TARGET_LINK_LIBRARIES(fuzz-asn1 picotls-minicrypto picotls-core picotls-openssl ${OPENSSL_CRYPTO_LIBRARIES} ${LIB_FUZZER})
+    TARGET_LINK_LIBRARIES(fuzz-server-hello picotls-core picotls-openssl ${OPENSSL_CRYPTO_LIBRARIES} ${LIB_FUZZER})
+    TARGET_LINK_LIBRARIES(fuzz-client-hello picotls-core picotls-openssl ${OPENSSL_CRYPTO_LIBRARIES} ${LIB_FUZZER})
 
 ENDIF()

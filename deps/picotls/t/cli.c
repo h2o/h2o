@@ -39,6 +39,7 @@
 #include <sys/time.h>
 #include <sys/types.h>
 #include <unistd.h>
+#define OPENSSL_API_COMPAT 0x00908000L
 #include <openssl/err.h>
 #include <openssl/evp.h>
 #include <openssl/engine.h>
@@ -64,6 +65,16 @@ static void shift_buffer(ptls_buffer_t *buf, size_t delta)
             memmove(buf->base, buf->base + delta, buf->off - delta);
         buf->off -= delta;
     }
+}
+
+static void setup_ptlslog(const char *fn)
+{
+    int fd;
+    if ((fd = open(fn, O_WRONLY | O_CREAT | O_APPEND, 0666)) == -1) {
+        fprintf(stderr, "failed to open file:%s:%s\n", fn, strerror(errno));
+        exit(1);
+    }
+    ptls_log_add_fd(fd);
 }
 
 static int handle_connection(int sockfd, ptls_context_t *ctx, const char *server_name, const char *input_file,
@@ -157,7 +168,7 @@ static int handle_connection(int sockfd, ptls_context_t *ctx, const char *server
                         /* ok */
                     } else {
                         if (encbuf.off != 0)
-                            (void)write(sockfd, encbuf.base, encbuf.off);
+                            repeat_while_eintr(write(sockfd, encbuf.base, encbuf.off), { break; });
                         fprintf(stderr, "ptls_handshake:%d\n", ret);
                         goto Exit;
                     }
@@ -166,7 +177,7 @@ static int handle_connection(int sockfd, ptls_context_t *ctx, const char *server
                         if (rbuf.off != 0) {
                             data_received += rbuf.off;
                             if (input_file != input_file_is_benchmark)
-                                write(1, rbuf.base, rbuf.off);
+                                repeat_while_eintr(write(1, rbuf.base, rbuf.off), { goto Exit; });
                             rbuf.off = 0;
                         }
                     } else if (ret == PTLS_ERROR_IN_PROGRESS) {
@@ -253,7 +264,10 @@ static int handle_connection(int sockfd, ptls_context_t *ctx, const char *server
                     fprintf(stderr, "ptls_send_alert:%d\n", ret);
                 }
                 if (wbuf.off != 0)
-                    (void)write(sockfd, wbuf.base, wbuf.off);
+                    repeat_while_eintr(write(sockfd, wbuf.base, wbuf.off), {
+                        ptls_buffer_dispose(&wbuf);
+                        goto Exit;
+                    });
                 ptls_buffer_dispose(&wbuf);
                 shutdown(sockfd, SHUT_WR);
             }
@@ -350,6 +364,7 @@ static void usage(const char *cmd)
            "  -c certificate-file  certificate chain used for server authentication\n"
            "  -i file              a file to read from and send to the peer (default: stdin)\n"
            "  -I                   keep send side open after sending all data (client-only)\n"
+           "  -j log-file          file to log probe events in JSON-Lines\n"
            "  -k key-file          specifies the credentials for signing the certificate\n"
            "  -l log-file          file to log events (incl. traffic secrets)\n"
            "  -n                   negotiates the key exchange method (i.e. wait for HRR)\n"
@@ -423,7 +438,7 @@ int main(int argc, char **argv)
     int family = 0;
     const char *raw_pub_key_file = NULL, *cert_location = NULL;
 
-    while ((ch = getopt(argc, argv, "46abBC:c:i:Ik:nN:es:Sr:E:K:l:y:vV:h")) != -1) {
+    while ((ch = getopt(argc, argv, "46abBC:c:i:Ij:k:nN:es:Sr:E:K:l:y:vV:h")) != -1) {
         switch (ch) {
         case '4':
             family = AF_INET;
@@ -459,6 +474,9 @@ int main(int argc, char **argv)
             break;
         case 'I':
             keep_sender_open = 1;
+            break;
+        case 'j':
+            setup_ptlslog(optarg);
             break;
         case 'k':
             load_private_key(&ctx, optarg);

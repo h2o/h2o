@@ -1692,6 +1692,93 @@ $as_echo "$ac_res" >&6; }
   eval $as_lineno_stack; ${as_lineno_stack:+:} unset as_lineno
 
 } # ac_fn_c_check_func
+
+# ac_fn_c_check_header_mongrel LINENO HEADER VAR INCLUDES
+# -------------------------------------------------------
+# Tests whether HEADER exists, giving a warning if it cannot be compiled using
+# the include files in INCLUDES and setting the cache variable VAR
+# accordingly.
+ac_fn_c_check_header_mongrel ()
+{
+  as_lineno=${as_lineno-"$1"} as_lineno_stack=as_lineno_stack=$as_lineno_stack
+  if eval \${$3+:} false; then :
+  { $as_echo "$as_me:${as_lineno-$LINENO}: checking for $2" >&5
+$as_echo_n "checking for $2... " >&6; }
+if eval \${$3+:} false; then :
+  $as_echo_n "(cached) " >&6
+fi
+eval ac_res=\$$3
+	       { $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_res" >&5
+$as_echo "$ac_res" >&6; }
+else
+  # Is the header compilable?
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking $2 usability" >&5
+$as_echo_n "checking $2 usability... " >&6; }
+cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+$4
+#include <$2>
+_ACEOF
+if ac_fn_c_try_compile "$LINENO"; then :
+  ac_header_compiler=yes
+else
+  ac_header_compiler=no
+fi
+rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_header_compiler" >&5
+$as_echo "$ac_header_compiler" >&6; }
+
+# Is the header present?
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking $2 presence" >&5
+$as_echo_n "checking $2 presence... " >&6; }
+cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+#include <$2>
+_ACEOF
+if ac_fn_c_try_cpp "$LINENO"; then :
+  ac_header_preproc=yes
+else
+  ac_header_preproc=no
+fi
+rm -f conftest.err conftest.i conftest.$ac_ext
+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_header_preproc" >&5
+$as_echo "$ac_header_preproc" >&6; }
+
+# So?  What about this header?
+case $ac_header_compiler:$ac_header_preproc:$ac_c_preproc_warn_flag in #((
+  yes:no: )
+    { $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: $2: accepted by the compiler, rejected by the preprocessor!" >&5
+$as_echo "$as_me: WARNING: $2: accepted by the compiler, rejected by the preprocessor!" >&2;}
+    { $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: $2: proceeding with the compiler's result" >&5
+$as_echo "$as_me: WARNING: $2: proceeding with the compiler's result" >&2;}
+    ;;
+  no:yes:* )
+    { $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: $2: present but cannot be compiled" >&5
+$as_echo "$as_me: WARNING: $2: present but cannot be compiled" >&2;}
+    { $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: $2:     check for missing prerequisite headers?" >&5
+$as_echo "$as_me: WARNING: $2:     check for missing prerequisite headers?" >&2;}
+    { $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: $2: see the Autoconf documentation" >&5
+$as_echo "$as_me: WARNING: $2: see the Autoconf documentation" >&2;}
+    { $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: $2:     section \"Present But Cannot Be Compiled\"" >&5
+$as_echo "$as_me: WARNING: $2:     section \"Present But Cannot Be Compiled\"" >&2;}
+    { $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: $2: proceeding with the compiler's result" >&5
+$as_echo "$as_me: WARNING: $2: proceeding with the compiler's result" >&2;}
+    ;;
+esac
+  { $as_echo "$as_me:${as_lineno-$LINENO}: checking for $2" >&5
+$as_echo_n "checking for $2... " >&6; }
+if eval \${$3+:} false; then :
+  $as_echo_n "(cached) " >&6
+else
+  eval "$3=\$ac_header_compiler"
+fi
+eval ac_res=\$$3
+	       { $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_res" >&5
+$as_echo "$ac_res" >&6; }
+fi
+  eval $as_lineno_stack; ${as_lineno_stack:+:} unset as_lineno
+
+} # ac_fn_c_check_header_mongrel
 cat >config.log <<_ACEOF
 This file contains any messages produced by compilers while
 running configure, to aid debugging if configure makes a mistake.
@@ -3267,6 +3354,97 @@ _ACEOF
 
 fi
 
+
+ac_fn_c_check_member "$LINENO" "struct stat" "st_atim" "ac_cv_member_struct_stat_st_atim" "$ac_includes_default"
+if test "x$ac_cv_member_struct_stat_st_atim" = xyes; then :
+
+cat >>confdefs.h <<_ACEOF
+#define HAVE_STRUCT_STAT_ST_ATIM 1
+_ACEOF
+
+
+fi
+
+ac_fn_c_check_member "$LINENO" "struct stat" "st_atimespec" "ac_cv_member_struct_stat_st_atimespec" "$ac_includes_default"
+if test "x$ac_cv_member_struct_stat_st_atimespec" = xyes; then :
+
+cat >>confdefs.h <<_ACEOF
+#define HAVE_STRUCT_STAT_ST_ATIMESPEC 1
+_ACEOF
+
+
+fi
+
+ac_fn_c_check_member "$LINENO" "struct stat" "st_atimensec" "ac_cv_member_struct_stat_st_atimensec" "$ac_includes_default"
+if test "x$ac_cv_member_struct_stat_st_atimensec" = xyes; then :
+
+cat >>confdefs.h <<_ACEOF
+#define HAVE_STRUCT_STAT_ST_ATIMENSEC 1
+_ACEOF
+
+
+fi
+
+ac_fn_c_check_member "$LINENO" "struct stat" "st_mtim" "ac_cv_member_struct_stat_st_mtim" "$ac_includes_default"
+if test "x$ac_cv_member_struct_stat_st_mtim" = xyes; then :
+
+cat >>confdefs.h <<_ACEOF
+#define HAVE_STRUCT_STAT_ST_MTIM 1
+_ACEOF
+
+
+fi
+
+ac_fn_c_check_member "$LINENO" "struct stat" "st_mtimespec" "ac_cv_member_struct_stat_st_mtimespec" "$ac_includes_default"
+if test "x$ac_cv_member_struct_stat_st_mtimespec" = xyes; then :
+
+cat >>confdefs.h <<_ACEOF
+#define HAVE_STRUCT_STAT_ST_MTIMESPEC 1
+_ACEOF
+
+
+fi
+
+ac_fn_c_check_member "$LINENO" "struct stat" "st_mtimensec" "ac_cv_member_struct_stat_st_mtimensec" "$ac_includes_default"
+if test "x$ac_cv_member_struct_stat_st_mtimensec" = xyes; then :
+
+cat >>confdefs.h <<_ACEOF
+#define HAVE_STRUCT_STAT_ST_MTIMENSEC 1
+_ACEOF
+
+
+fi
+
+ac_fn_c_check_member "$LINENO" "struct stat" "st_ctim" "ac_cv_member_struct_stat_st_ctim" "$ac_includes_default"
+if test "x$ac_cv_member_struct_stat_st_ctim" = xyes; then :
+
+cat >>confdefs.h <<_ACEOF
+#define HAVE_STRUCT_STAT_ST_CTIM 1
+_ACEOF
+
+
+fi
+
+ac_fn_c_check_member "$LINENO" "struct stat" "st_ctimespec" "ac_cv_member_struct_stat_st_ctimespec" "$ac_includes_default"
+if test "x$ac_cv_member_struct_stat_st_ctimespec" = xyes; then :
+
+cat >>confdefs.h <<_ACEOF
+#define HAVE_STRUCT_STAT_ST_CTIMESPEC 1
+_ACEOF
+
+
+fi
+
+ac_fn_c_check_member "$LINENO" "struct stat" "st_ctimensec" "ac_cv_member_struct_stat_st_ctimensec" "$ac_includes_default"
+if test "x$ac_cv_member_struct_stat_st_ctimensec" = xyes; then :
+
+cat >>confdefs.h <<_ACEOF
+#define HAVE_STRUCT_STAT_ST_CTIMENSEC 1
+_ACEOF
+
+
+fi
+
 ac_fn_c_check_member "$LINENO" "struct stat" "st_birthtimespec" "ac_cv_member_struct_stat_st_birthtimespec" "$ac_includes_default"
 if test "x$ac_cv_member_struct_stat_st_birthtimespec" = xyes; then :
 
@@ -3298,6 +3476,19 @@ if test "x$ac_cv_func_lstat" = xyes; then :
 _ACEOF
 
 fi
+done
+
+
+for ac_header in sys/sysmacros.h
+do :
+  ac_fn_c_check_header_mongrel "$LINENO" "sys/sysmacros.h" "ac_cv_header_sys_sysmacros_h" "$ac_includes_default"
+if test "x$ac_cv_header_sys_sysmacros_h" = xyes; then :
+  cat >>confdefs.h <<_ACEOF
+#define HAVE_SYS_SYSMACROS_H 1
+_ACEOF
+
+fi
+
 done
 
 

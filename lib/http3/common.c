@@ -36,6 +36,9 @@
 #include "h2o/multithread.h"
 #include "../probes_.h"
 
+h2o_quic_conn_t h2o_quic_accept_conn_decryption_failed;
+h2o_http3_conn_t h2o_http3_accept_conn_closed;
+
 struct st_h2o_http3_ingress_unistream_t {
     /**
      * back pointer
@@ -84,7 +87,7 @@ int h2o_quic_send_datagrams(h2o_quic_ctx_t *ctx, quicly_address_t *dest, quicly_
 #endif
             + CMSG_SPACE(1) /* sentry */
         ];
-    } cmsgbuf = {.buf = {} /* zero-cleared so that CMSG_NXTHDR can be used for locating the *next* cmsghdr */ };
+    } cmsgbuf = {.buf = {} /* zero-cleared so that CMSG_NXTHDR can be used for locating the *next* cmsghdr */};
     struct msghdr mess = {
         .msg_name = &dest->sa,
         .msg_namelen = quicly_get_socklen(&dest->sa),
@@ -612,7 +615,7 @@ static void process_packets(h2o_quic_ctx_t *ctx, quicly_address_t *destaddr, qui
                 if ((packets[i].octets.base[0] & QUICLY_PACKET_TYPE_BITMASK) == QUICLY_PACKET_TYPE_INITIAL)
                     if ((conn = ctx->acceptor(ctx, destaddr, srcaddr, packets + i)) != NULL) {
                         /* non-null generally means success, except for H2O_QUIC_ACCEPT_CONN_DECRYPTION_FAILED */
-                        if (conn == (h2o_quic_conn_t *)H2O_QUIC_ACCEPT_CONN_DECRYPTION_FAILED) {
+                        if (conn == &h2o_quic_accept_conn_decryption_failed) {
                             /* failed to decrypt Initial packet <=> it could belong to a connection on a different node; forward it
                              * to the destination being claimed by the DCID */
                             uint64_t offending_node_id = packets[i].cid.dest.plaintext.node_id;
@@ -801,8 +804,8 @@ void h2o_quic_read_socket(h2o_quic_ctx_t *ctx, h2o_socket_t *sock)
         dgrams[dgram_index].ttl = ctx->default_ttl;
         /* preprocess (and drop the packet if it failed) */
         if (ctx->preprocess_packet != NULL &&
-            !ctx->preprocess_packet(ctx, &mess[dgram_index].msg_hdr, &dgrams[dgram_index].destaddr,
-                                    &dgrams[dgram_index].srcaddr, &dgrams[dgram_index].ttl)) {
+            !ctx->preprocess_packet(ctx, &mess[dgram_index].msg_hdr, &dgrams[dgram_index].destaddr, &dgrams[dgram_index].srcaddr,
+                                    &dgrams[dgram_index].ttl)) {
             dgrams[dgram_index].vec.iov_len = 0; /* mark as unused */
         } else {
             assert(dgrams[dgram_index].srcaddr.sa.sa_family == AF_INET || dgrams[dgram_index].srcaddr.sa.sa_family == AF_INET6);
@@ -831,8 +834,7 @@ void h2o_quic_read_socket(h2o_quic_ctx_t *ctx, h2o_socket_t *sock)
             if (dgrams[dgram_index - 1].destaddr.sa.sa_family == AF_UNSPEC &&
                 dgrams[dgram_index].destaddr.sa.sa_family == AF_UNSPEC) {
                 /* ok */
-            } else if (h2o_socket_compare_address(&dgrams[dgram_index - 1].destaddr.sa, &dgrams[dgram_index].destaddr.sa, 1) ==
-                       0) {
+            } else if (h2o_socket_compare_address(&dgrams[dgram_index - 1].destaddr.sa, &dgrams[dgram_index].destaddr.sa, 1) == 0) {
                 /* ok */
             } else {
                 goto ProcessPackets;
@@ -874,8 +876,8 @@ void h2o_quic_read_socket(h2o_quic_ctx_t *ctx, h2o_socket_t *sock)
 
     ProcessPackets:
         if (packet_index != 0) {
-            process_packets(ctx, &dgrams[dgram_index - 1].destaddr, &dgrams[dgram_index - 1].srcaddr,
-                            dgrams[dgram_index - 1].ttl, packets, packet_index);
+            process_packets(ctx, &dgrams[dgram_index - 1].destaddr, &dgrams[dgram_index - 1].srcaddr, dgrams[dgram_index - 1].ttl,
+                            packets, packet_index);
             if (has_decoded) {
                 packets[0] = packets[packet_index];
                 packet_index = 1;
@@ -955,20 +957,21 @@ int h2o_http3_read_frame(h2o_http3_read_frame_t *frame, int is_client, uint64_t 
         }                                                                                                                          \
         break
         /* clang-format off */
-        /*   +-----------------+-------------+-------------+
-         *   |                 | req-stream  | ctrl-stream |
-         *   |      frame      +------+------+------+------+
-         *   |                 |client|server|client|server|
-         *   +-----------------+------+------+------+------+ */
-        FRAME( DATA            ,    1 ,    1 ,    0 ,    0 );
-        FRAME( HEADERS         ,    1 ,    1 ,    0 ,    0 );
-        FRAME( CANCEL_PUSH     ,    0 ,    0 ,    1 ,    1 );
-        FRAME( SETTINGS        ,    0 ,    0 ,    1 ,    1 );
-        FRAME( PUSH_PROMISE    ,    0 ,    1 ,    0 ,    0 );
-        FRAME( GOAWAY          ,    0 ,    0 ,    1 ,    1 );
-        FRAME( MAX_PUSH_ID     ,    0 ,    0 ,    1 ,    0 );
-        FRAME( PRIORITY_UPDATE ,    0 ,    0 ,    1 ,    0 );
-        /*   +-----------------+------+------+------+------+ */
+        /*   +-------------------------+-------------+-------------+
+         *   |                         | req-stream  | ctrl-stream |
+         *   |          frame          +------+------+------+------+
+         *   |                         |client|server|client|server|
+         *   +-------------------------+------+------+------+------+ */
+        FRAME( DATA                    ,    1 ,    1 ,    0 ,    0 );
+        FRAME( HEADERS                 ,    1 ,    1 ,    0 ,    0 );
+        FRAME( CANCEL_PUSH             ,    0 ,    0 ,    1 ,    1 );
+        FRAME( SETTINGS                ,    0 ,    0 ,    1 ,    1 );
+        FRAME( PUSH_PROMISE            ,    0 ,    1 ,    0 ,    0 );
+        FRAME( GOAWAY                  ,    0 ,    0 ,    1 ,    1 );
+        FRAME( MAX_PUSH_ID             ,    0 ,    0 ,    1 ,    0 );
+        FRAME( PRIORITY_UPDATE_REQUEST ,    0 ,    0 ,    1 ,    0 );
+        FRAME( PRIORITY_UPDATE_PUSH    ,    0 ,    0 ,    1 ,    0 );
+        /*   +-------------------------+------+------+------+------+ */
         /* clang-format on */
 #undef FRAME
     default:
@@ -1313,6 +1316,20 @@ void h2o_http3_send_qpack_header_ack(h2o_http3_conn_t *conn, const void *bytes, 
     H2O_HTTP3_CHECK_SUCCESS(quicly_stream_sync_sendbuf(stream->quic, 1));
 }
 
+void h2o_http3_send_shutdown_goaway_frame(h2o_http3_conn_t *conn)
+{
+    /* There is a moment where the transport-level close has been initiated while st_h2o_http3_server_conn_t remains.
+     * Check QUIC connection state to skip sending GOAWAY in such a case. */
+    if (conn->state < H2O_HTTP3_CONN_STATE_HALF_CLOSED && quicly_get_state(conn->super.quic) == QUICLY_STATE_CONNECTED) {
+        /* advertise the maximum stream ID to indicate that we will no longer accept new requests.
+         * HTTP/3 draft section 5.2.8 --
+         * "An endpoint that is attempting to gracefully shut down a connection can send a GOAWAY frame with a value set to the
+         * maximum possible value (2^62-4 for servers, 2^62-1 for clients). This ensures that the peer stops creating new
+         * requests or pushes." */
+        h2o_http3_send_goaway_frame(conn, (UINT64_C(1) << 62) - 4);
+    }
+}
+
 void h2o_http3_send_goaway_frame(h2o_http3_conn_t *conn, uint64_t stream_or_push_id)
 {
     size_t cap = h2o_http3_goaway_frame_capacity(stream_or_push_id);
@@ -1320,14 +1337,6 @@ void h2o_http3_send_goaway_frame(h2o_http3_conn_t *conn, uint64_t stream_or_push
     h2o_http3_encode_goaway_frame((uint8_t *)alloced.base, stream_or_push_id);
     conn->_control_streams.egress.control->sendbuf->size += cap;
     quicly_stream_sync_sendbuf(conn->_control_streams.egress.control->quic, 1);
-}
-
-int h2o_http3_can_use_h3_datagram(h2o_http3_conn_t *conn)
-{
-    if (!conn->peer_settings.h3_datagram)
-        return 0;
-    quicly_context_t *qctx = quicly_get_context(conn->super.quic);
-    return qctx->transport_params.max_datagram_frame_size != 0;
 }
 
 void h2o_http3_send_h3_datagrams(h2o_http3_conn_t *conn, uint64_t flow_id, h2o_iovec_t *datagrams, size_t num_datagrams)

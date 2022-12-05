@@ -98,7 +98,8 @@ static void on_setup_ostream(h2o_filter_t *_self, h2o_req_t *req, h2o_ostream_t 
     if (compressible_types == 0)
         goto Next;
 
-    /* skip if content-encoding header is being set (as well as obtain the location of accept-ranges moreover identify index of etag to modified weaken) */
+    /* skip if content-encoding header is being set (as well as obtain the location of accept-ranges moreover identify index of etag
+     * to modified weaken) */
     size_t content_encoding_header_index = -1, accept_ranges_header_index = -1, etag_header_index = -1;
     for (i = 0; i != req->res.headers.size; ++i) {
         if (req->res.headers.entries[i].name == &H2O_TOKEN_CONTENT_ENCODING->buf)
@@ -133,7 +134,8 @@ static void on_setup_ostream(h2o_filter_t *_self, h2o_req_t *req, h2o_ostream_t 
     h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_ENCODING, NULL, compressor->name.base, compressor->name.len);
     h2o_set_header_token(&req->pool, &req->res.headers, H2O_TOKEN_VARY, H2O_STRLIT("accept-encoding"));
     if (etag_header_index != -1) {
-        req->res.headers.entries[etag_header_index].value = h2o_concat(&req->pool, h2o_iovec_init(H2O_STRLIT("W/")), req->res.headers.entries[etag_header_index].value);
+        req->res.headers.entries[etag_header_index].value =
+            h2o_concat(&req->pool, h2o_iovec_init(H2O_STRLIT("W/")), req->res.headers.entries[etag_header_index].value);
     }
     if (accept_ranges_header_index != -1) {
         req->res.headers.entries[accept_ranges_header_index].value = h2o_iovec_init(H2O_STRLIT("none"));
@@ -167,17 +169,18 @@ h2o_send_state_t h2o_compress_transform(h2o_compress_context_t *self, h2o_req_t 
 {
     h2o_sendvec_t flattened;
 
-    if (inbufcnt != 0 && inbufs->callbacks->flatten != &h2o_sendvec_flatten_raw) {
+    if (inbufcnt != 0 && inbufs->callbacks->read_ != &h2o_sendvec_read_raw) {
         assert(inbufcnt == 1);
-        assert(inbufs->len <= H2O_PULL_SENDVEC_MAX_SIZE);
+        size_t buflen = inbufs->len;
+        assert(buflen <= H2O_PULL_SENDVEC_MAX_SIZE);
         if (self->push_buf == NULL)
-            self->push_buf = h2o_mem_alloc(h2o_send_state_is_in_progress(state) ? H2O_PULL_SENDVEC_MAX_SIZE : inbufs->len);
-        if (!(*inbufs->callbacks->flatten)(inbufs, req, h2o_iovec_init(self->push_buf, inbufs->len), 0)) {
+            self->push_buf = h2o_mem_alloc(h2o_send_state_is_in_progress(state) ? H2O_PULL_SENDVEC_MAX_SIZE : buflen);
+        if (!(*inbufs->callbacks->read_)(inbufs, self->push_buf, buflen)) {
             *outbufs = NULL;
             *outbufcnt = 0;
             return H2O_SEND_STATE_ERROR;
         }
-        h2o_sendvec_init_raw(&flattened, self->push_buf, inbufs->len);
+        h2o_sendvec_init_raw(&flattened, self->push_buf, buflen);
         inbufs = &flattened;
     }
 

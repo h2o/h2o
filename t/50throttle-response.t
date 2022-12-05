@@ -75,7 +75,7 @@ EOT
         is $resp, "hello world";
         my $elapsed = time - $start_time;
         cmp_ok $elapsed, '>', 0.9;
-        cmp_ok $elapsed, '<', 1.1;
+        cmp_ok $elapsed, '<', 1.3;
     });
 };
 
