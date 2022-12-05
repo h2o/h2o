@@ -28,12 +28,9 @@
 #include "wincompat.h"
 #else
 #include <arpa/inet.h>
-#include <arpa/nameser.h>
-#include <resolv.h>
 #include <sys/time.h>
 #endif
 #include "picotls.h"
-#include "picotls/pembase64.h"
 #if PICOTLS_USE_DTRACE
 #include "picotls-probes.h"
 #endif
@@ -5550,67 +5547,6 @@ void ptls_esni_dispose_context(ptls_esni_context_t *esni)
 ptls_esni_secret_t *ptls_get_esni_secret(ptls_t *ctx)
 {
     return ctx->esni;
-}
-
-static inline int normalize_txt(uint8_t *p, size_t len)
-{
-    uint8_t *const end = p + len, *dst = p;
-
-    if (p == end)
-        return 0;
-
-    do {
-        size_t block_len = *p++;
-        if (end - p < block_len)
-            return 0;
-        memmove(dst, p, block_len);
-        dst += block_len;
-        p += block_len;
-    } while (p != end);
-    *dst = '\0';
-
-    return 1;
-}
-
-ptls_iovec_t ptls_resolve_esni_keys(ptls_iovec_t server_name)
-{
-    char esni_name[256], *base64;
-    uint8_t answer[1024];
-    ns_msg msg;
-    ns_rr rr;
-    ptls_buffer_t decode_buf;
-    ptls_base64_decode_state_t ds;
-    int answer_len;
-    char *buf = "";
-
-    ptls_buffer_init(&decode_buf, buf, 0);
-
-    if (server_name.base == NULL)
-        goto Error;
-
-    if (snprintf(esni_name, sizeof(esni_name), "_esni.%.*s", (int)server_name.len, server_name.base) > sizeof(esni_name) - 1)
-        goto Error;
-    if ((answer_len = res_query(esni_name, ns_c_in, ns_t_txt, answer, sizeof(answer))) <= 0)
-        goto Error;
-    if (ns_initparse(answer, answer_len, &msg) != 0)
-        goto Error;
-    if (ns_msg_count(msg, ns_s_an) < 1)
-        goto Error;
-    if (ns_parserr(&msg, ns_s_an, 0, &rr) != 0)
-        goto Error;
-    base64 = (char *)ns_rr_rdata(rr);
-    if (!normalize_txt((uint8_t *)base64, ns_rr_rdlen(rr)))
-        goto Error;
-
-    ptls_base64_decode_init(&ds);
-    if (ptls_base64_decode(base64, &ds, &decode_buf) != 0)
-        goto Error;
-    assert(decode_buf.is_allocated);
-
-    return ptls_iovec_init(decode_buf.base, decode_buf.off);
-Error:
-    ptls_buffer_dispose(&decode_buf);
-    return ptls_iovec_init(NULL, 0);
 }
 
 /**

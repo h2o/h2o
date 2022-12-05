@@ -339,7 +339,7 @@ static h2o_socketpool_target_t *parse_backend(h2o_configurator_command_t *cmd, y
         h2o_configurator_errprintf(cmd, *url_node, "failed to parse URL: %s\n", (*url_node)->data.scalar);
         return NULL;
     }
-    return h2o_socketpool_create_target(&url, &url, &lb_per_target_conf);
+    return h2o_socketpool_create_target(&url, &lb_per_target_conf);
 }
 
 static int on_config_reverse_url(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)

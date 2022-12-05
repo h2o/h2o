@@ -318,7 +318,7 @@ static int run_client(struct sockaddr *sa, socklen_t salen, ptls_context_t *ctx,
 {
     int fd;
 
-    hsprop->client.esni_keys = ptls_resolve_esni_keys(ptls_iovec_init(server_name, strlen(server_name)));
+    hsprop->client.esni_keys = resolve_esni_keys(server_name);
 
     if ((fd = socket(sa->sa_family, SOCK_STREAM, 0)) == 1) {
         perror("socket(2) failed");

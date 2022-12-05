@@ -27,7 +27,6 @@
 #include <netinet/udp.h>
 #include "h2o.h"
 #include "h2o/configurator.h"
-#include "picotls/openssl.h"
 
 struct st_core_config_vars_t {
     struct {

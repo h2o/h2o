@@ -370,10 +370,6 @@ struct st_ptls_context_t *h2o_socket_ssl_get_picotls_context(SSL_CTX *ossl);
  */
 void h2o_socket_ssl_set_picotls_context(SSL_CTX *ossl, struct st_ptls_context_t *ptls);
 /**
- * set esni keys
- */
-void h2o_socket_ssl_set_picotls_esni_keys(h2o_socket_t *sock, ptls_iovec_t esni_keys);
-/**
  *
  */
 h2o_cache_t *h2o_socket_ssl_get_session_cache(SSL_CTX *ctx);

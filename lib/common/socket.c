@@ -75,7 +75,6 @@ struct st_h2o_socket_ssl_t {
     SSL_CTX *ssl_ctx;
     SSL *ossl;
     ptls_t *ptls;
-    ptls_handshake_properties_t ptls_hs_prop;
     int *did_write_in_read; /* used for detecting and closing the connection upon renegotiation (FIXME implement renegotiation) */
     size_t record_overhead;
     struct {
@@ -408,10 +407,6 @@ static void destroy_ssl(struct st_h2o_socket_ssl_t *ssl)
     if (ssl->ptls != NULL) {
         ptls_free(ssl->ptls);
         ssl->ptls = NULL;
-    }
-    if (ssl->ptls_hs_prop.client.esni_keys.base != NULL) {
-        free(ssl->ptls_hs_prop.client.esni_keys.base);
-        ssl->ptls_hs_prop.client.esni_keys.base = NULL;
     }
     if (ssl->ossl != NULL) {
         if (!SSL_is_server(ssl->ossl)) {
@@ -1318,7 +1313,7 @@ static void proceed_handshake_picotls(h2o_socket_t *sock)
     ptls_buffer_t wbuf;
     ptls_buffer_init(&wbuf, "", 0);
 
-    int ret = ptls_handshake(sock->ssl->ptls, &wbuf, sock->ssl->input.encrypted->bytes, &consumed, &sock->ssl->ptls_hs_prop);
+    int ret = ptls_handshake(sock->ssl->ptls, &wbuf, sock->ssl->input.encrypted->bytes, &consumed, NULL);
     h2o_buffer_consume(&sock->ssl->input.encrypted, consumed);
 
     /* determine the next action */
@@ -1478,7 +1473,7 @@ static void proceed_handshake_undetermined(h2o_socket_t *sock)
     if (ptls == NULL)
         h2o_fatal("no memory");
     *ptls_get_data_ptr(ptls) = sock;
-    int ret = ptls_handshake(ptls, &wbuf, sock->ssl->input.encrypted->bytes, &consumed, &sock->ssl->ptls_hs_prop);
+    int ret = ptls_handshake(ptls, &wbuf, sock->ssl->input.encrypted->bytes, &consumed, NULL);
 
     if (ret == PTLS_ERROR_IN_PROGRESS && wbuf.off == 0) {
         /* we aren't sure if the picotls can process the handshake, retain handshake transcript and replay on next occasion */
@@ -1539,8 +1534,6 @@ static void proceed_handshake(h2o_socket_t *sock, const char *err)
 void h2o_socket_ssl_handshake(h2o_socket_t *sock, SSL_CTX *ssl_ctx, const char *server_name, h2o_iovec_t alpn_protos,
                               h2o_socket_cb handshake_cb)
 {
-    ptls_iovec_t esni_keys;
-
     sock->ssl = h2o_mem_alloc(sizeof(*sock->ssl));
     *sock->ssl = (struct st_h2o_socket_ssl_t){};
 
@@ -1552,14 +1545,6 @@ void h2o_socket_ssl_handshake(h2o_socket_t *sock, SSL_CTX *ssl_ctx, const char *
         h2o_buffer_t *tmp = sock->input;
         sock->input = sock->ssl->input.encrypted;
         sock->ssl->input.encrypted = tmp;
-    }
-
-    if (server_name != NULL) {
-        esni_keys = ptls_resolve_esni_keys(ptls_iovec_init(server_name, strlen(server_name)));
-        if (esni_keys.base != NULL) {
-            h2o_socket_ssl_set_picotls_esni_keys(sock, esni_keys);
-            free(esni_keys.base);
-        }
     }
 
     sock->ssl->handshake.cb = handshake_cb;
@@ -1652,13 +1637,6 @@ ptls_context_t *h2o_socket_ssl_get_picotls_context(SSL_CTX *ossl)
 void h2o_socket_ssl_set_picotls_context(SSL_CTX *ossl, ptls_context_t *ptls)
 {
     SSL_CTX_set_ex_data(ossl, get_ptls_index(), ptls);
-}
-
-void h2o_socket_ssl_set_picotls_esni_keys(h2o_socket_t *sock, ptls_iovec_t esni_keys)
-{
-    ptls_iovec_t cpy = ptls_iovec_init(h2o_mem_alloc(esni_keys.len), esni_keys.len);
-    h2o_memcpy(cpy.base, esni_keys.base, cpy.len);
-    sock->ssl->ptls_hs_prop.client.esni_keys = cpy;
 }
 
 static void on_dispose_ssl_ctx_session_cache(void *parent, void *ptr, CRYPTO_EX_DATA *ad, int idx, long argl, void *argp)
