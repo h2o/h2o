@@ -205,6 +205,7 @@ enum h2olog_event_id_t {
   H2OLOG_EVENT_ID_H2O_CONNECT_ERROR,
   H2OLOG_EVENT_ID_H2O_CONNECT_IO_TIMEOUT,
   H2OLOG_EVENT_ID_H2O_CONNECT_DISPOSE,
+  H2OLOG_EVENT_ID_H2O_QUIC_DSR_SEND,
 };
 
 
@@ -862,6 +863,14 @@ struct h2olog_event_t {
       uint64_t conn_id;
       uint64_t req_id;
     } connect_dispose;
+    struct { // h2o:quic_dsr_send
+      uint64_t conn_id;
+      quicly_address_t dest;
+      quicly_address_t src;
+      uint64_t packet_number;
+      uint64_t offset;
+      size_t len;
+    } quic_dsr_send;
 
   };
 };
@@ -978,6 +987,7 @@ void h2o_raw_tracer::initialize() {
     h2o_tracer::usdt("h2o", "connect_error", "trace_h2o__connect_error"),
     h2o_tracer::usdt("h2o", "connect_io_timeout", "trace_h2o__connect_io_timeout"),
     h2o_tracer::usdt("h2o", "connect_dispose", "trace_h2o__connect_dispose"),
+    h2o_tracer::usdt("h2o", "quic_dsr_send", "trace_h2o__quic_dsr_send"),
 
   });
 }
@@ -2140,6 +2150,19 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
     json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
     break;
   }
+  case H2OLOG_EVENT_ID_H2O_QUIC_DSR_SEND: { // h2o:quic_dsr_send
+    json_write_pair_n(out_, STR_LIT("type"), STR_LIT("quic-dsr-send"));
+    json_write_pair_c(out_, STR_LIT("tid"), event.tid);
+    json_write_pair_c(out_, STR_LIT("seq"), seq_);
+    json_write_pair_c(out_, STR_LIT("conn-id"), event.quic_dsr_send.conn_id);
+    json_write_pair_c(out_, STR_LIT("dest"), event.quic_dsr_send.dest);
+    json_write_pair_c(out_, STR_LIT("src"), event.quic_dsr_send.src);
+    json_write_pair_c(out_, STR_LIT("packet-number"), event.quic_dsr_send.packet_number);
+    json_write_pair_c(out_, STR_LIT("offset"), event.quic_dsr_send.offset);
+    json_write_pair_c(out_, STR_LIT("len"), event.quic_dsr_send.len);
+    json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
+    break;
+  }
 
   default:
     std::abort();
@@ -2279,6 +2302,7 @@ enum h2olog_event_id_t {
   H2OLOG_EVENT_ID_H2O_CONNECT_ERROR,
   H2OLOG_EVENT_ID_H2O_CONNECT_IO_TIMEOUT,
   H2OLOG_EVENT_ID_H2O_CONNECT_DISPOSE,
+  H2OLOG_EVENT_ID_H2O_QUIC_DSR_SEND,
 };
 
 
@@ -2936,6 +2960,14 @@ struct h2olog_event_t {
       uint64_t conn_id;
       uint64_t req_id;
     } connect_dispose;
+    struct { // h2o:quic_dsr_send
+      uint64_t conn_id;
+      quicly_address_t dest;
+      quicly_address_t src;
+      uint64_t packet_number;
+      uint64_t offset;
+      size_t len;
+    } quic_dsr_send;
 
   };
 };
@@ -5858,6 +5890,47 @@ int trace_h2o__connect_dispose(struct pt_regs *ctx) {
 
   if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
     bpf_trace_printk("failed to perf_submit in trace_h2o__connect_dispose\n");
+
+  return 0;
+}
+// h2o:quic_dsr_send
+int trace_h2o__quic_dsr_send(struct pt_regs *ctx) {
+  const void *buf = NULL;
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_H2O_QUIC_DSR_SEND, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
+
+  { // uint64_t conn_id
+    bpf_usdt_readarg(1, ctx, &event.quic_dsr_send.conn_id);
+  }
+  { // struct sockaddr * dest
+    bpf_usdt_readarg(2, ctx, &buf);
+    bpf_probe_read(&event.quic_dsr_send.dest, sizeof_sockaddr, buf);
+    if (get_sockaddr__sa_family(&event.quic_dsr_send.dest) == AF_INET) {
+      bpf_probe_read(&event.quic_dsr_send.dest, sizeof_sockaddr_in, buf);
+    } else if (get_sockaddr__sa_family(&event.quic_dsr_send.dest) == AF_INET6) {
+      bpf_probe_read(&event.quic_dsr_send.dest, sizeof_sockaddr_in6, buf);
+    }
+  }
+  { // struct sockaddr * src
+    bpf_usdt_readarg(3, ctx, &buf);
+    bpf_probe_read(&event.quic_dsr_send.src, sizeof_sockaddr, buf);
+    if (get_sockaddr__sa_family(&event.quic_dsr_send.src) == AF_INET) {
+      bpf_probe_read(&event.quic_dsr_send.src, sizeof_sockaddr_in, buf);
+    } else if (get_sockaddr__sa_family(&event.quic_dsr_send.src) == AF_INET6) {
+      bpf_probe_read(&event.quic_dsr_send.src, sizeof_sockaddr_in6, buf);
+    }
+  }
+  { // uint64_t packet_number
+    bpf_usdt_readarg(4, ctx, &event.quic_dsr_send.packet_number);
+  }
+  { // uint64_t offset
+    bpf_usdt_readarg(5, ctx, &event.quic_dsr_send.offset);
+  }
+  { // size_t len
+    bpf_usdt_readarg(6, ctx, &event.quic_dsr_send.len);
+  }
+
+  if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
+    bpf_trace_printk("failed to perf_submit in trace_h2o__quic_dsr_send\n");
 
   return 0;
 }

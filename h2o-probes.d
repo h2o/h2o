@@ -174,4 +174,10 @@ provider h2o {
       * Done handling a CONNECT or CONNECT-UDP request.
       */
     probe connect_dispose(uint64_t conn_id, uint64_t req_id);
+
+    /**
+     * QUIC event, indicating that a QUIC DSR packet has been sent.
+     */
+    probe quic_dsr_send(uint64_t conn_id, struct sockaddr *dest, struct sockaddr *src, uint64_t packet_number, uint64_t offset,
+                        size_t len);
 };

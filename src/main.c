@@ -273,10 +273,12 @@ static struct {
     } quic;
     int tfo_queues;
     time_t launch_time;
-    struct {
+    struct h2o_thread_context {
+        pthread_t tid;
         h2o_context_t ctx;
         h2o_multithread_receiver_t server_notifications;
         h2o_multithread_receiver_t memcached;
+        struct listener_ctx_t *listeners;
     } * threads;
     volatile sig_atomic_t shutdown_requested;
     h2o_barrier_t startup_sync_barrier_init;
@@ -1694,6 +1696,15 @@ static int open_listener(int domain, int type, int protocol, struct sockaddr *ad
         /* UDP: set SO_REUSEPORT and DF bit */
         socket_reuseport(fd);
         h2o_socket_set_df_bit(fd, domain);
+#ifdef IP_TRANSPARENT
+        if (conf.globalconf.http3.start_dsr != NULL) {
+            int on = 1;
+            if (setsockopt(fd, SOL_IP, IP_TRANSPARENT, &on, sizeof(on)) != 0) {
+                perror("HTTP/3 DSR is on but setsockopt(IP_TRANSPARENT) failed");
+                goto Error;
+            }
+        }
+#endif
         break;
     default:
         h2o_fatal("unexpected socket type %d", type);
@@ -1850,6 +1861,57 @@ static void on_http3_conn_destroy(h2o_quic_conn_t *conn)
     num_quic_connections(-1);
 
     H2O_HTTP3_CONN_CALLBACKS.super.destroy_connection(conn);
+}
+
+static h2o_quic_ctx_t *start_dsr(h2o_req_t *req, struct sockaddr *local_addr)
+{
+    struct sockaddr_storage src_addr;
+    struct h2o_thread_context *ctx;
+    size_t listener_index;
+
+    /* check source address */
+    if (req->conn->callbacks->get_peername(req->conn, (void *)&src_addr) == 0)
+        return NULL;
+    for (size_t i = 0; i < conf.quic.forward_nodes.size; ++i) {
+        struct st_h2o_quic_forward_node_t *node = &conf.quic.forward_nodes.entries[i];
+        if (h2o_socket_compare_address(&node->address.sa, (struct sockaddr *)&src_addr, 0) == 0)
+            goto Authenticated;
+    }
+    return NULL;
+
+Authenticated:
+    /* lookup a socket that we can use for sending packets using given local address */
+    ctx = H2O_STRUCT_FROM_MEMBER(struct h2o_thread_context, ctx, req->conn->ctx);
+    for (listener_index = 0; listener_index < conf.num_listeners; ++listener_index) {
+        if (ctx->listeners[listener_index].http3.forwarded_sock != NULL) {
+            struct sockaddr *bind_addr = (struct sockaddr *)&ctx->listeners[listener_index].http3.ctx.super.sock.addr;
+            if (bind_addr->sa_family == local_addr->sa_family) {
+                switch (local_addr->sa_family) {
+                case AF_INET: {
+                    struct sockaddr_in *bind_sin = (struct sockaddr_in *)bind_addr, *local_sin = (struct sockaddr_in *)local_addr;
+                    if (bind_sin->sin_port == local_sin->sin_port &&
+                        (bind_sin->sin_addr.s_addr == htonl(INADDR_ANY) || bind_sin->sin_addr.s_addr == local_sin->sin_addr.s_addr))
+                        goto AddrFound;
+                } break;
+                case AF_INET6: {
+                    struct sockaddr_in6 *bind_sin6 = (struct sockaddr_in6 *)bind_addr,
+                                        *local_sin6 = (struct sockaddr_in6 *)local_addr;
+                    if (bind_sin6->sin6_port == local_sin6->sin6_port &&
+                        (memcmp(&bind_sin6->sin6_addr, &in6addr_any, sizeof(bind_sin6->sin6_addr)) == 0 ||
+                         memcmp(&bind_sin6->sin6_addr, &local_sin6->sin6_addr, sizeof(bind_sin6->sin6_addr)) == 0))
+                        goto AddrFound;
+                } break;
+                default:
+                    h2o_fatal("unexected address family");
+                    break;
+                }
+            }
+        }
+    }
+    return NULL;
+
+AddrFound:
+    return &ctx->listeners[listener_index].http3.ctx.super;
 }
 
 static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
@@ -2411,6 +2473,17 @@ static int configure_quic_forward_node(h2o_configurator_command_t *cmd, struct s
     /* lookup the address */
     if ((ai = resolve_address(cmd, input->value, SOCK_DGRAM, IPPROTO_UDP, hostname, servname)) == NULL)
         goto Exit;
+    switch (ai->ai_addr->sa_family) {
+    case AF_INET:
+        target->address.sin = *(struct sockaddr_in *)ai->ai_addr;
+        break;
+    case AF_INET6:
+        target->address.sin6 = *(struct sockaddr_in6 *)ai->ai_addr;
+        break;
+    default:
+        h2o_configurator_errprintf(cmd, input->value, "%s resolved to unexpected address type", input->value->data.scalar);
+        goto Exit;
+    }
 
     /* open connected socket */
     if ((target->fd = socket(ai->ai_family, ai->ai_socktype, ai->ai_protocol)) == -1 ||
@@ -2448,6 +2521,17 @@ static int on_config_quic_nodes(h2o_configurator_command_t *cmd, h2o_configurato
     }
     conf.quic.forward_nodes.size = (*mapping_node)->data.mapping.size;
 
+    return 0;
+}
+
+static int on_config_quic_dsr(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    ssize_t v;
+
+    if ((v = h2o_configurator_get_one_of(cmd, node, "OFF,ON")) == -1)
+        return -1;
+    if (v == 1)
+        conf.globalconf.http3.start_dsr = start_dsr;
     return 0;
 }
 
@@ -3333,6 +3417,8 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
     /* and start listening */
     update_listener_state(listeners);
 
+    conf.threads[thread_index].listeners = listeners;
+
     /* Wait for all threads to become ready but before letting any of them serve connections, swap the signal handler for graceful
      * shutdown, check (and exit) if SIGTERM has been received already. */
     h2o_barrier_wait(&conf.startup_sync_barrier_init);
@@ -3670,6 +3756,8 @@ static void setup_configurators(void)
         h2o_configurator_define_command(c, "tcp-fastopen", H2O_CONFIGURATOR_FLAG_GLOBAL, on_config_tcp_fastopen);
         h2o_configurator_define_command(c, "quic-nodes", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING,
                                         on_config_quic_nodes);
+        h2o_configurator_define_command(c, "quic-dsr", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                        on_config_quic_dsr);
         h2o_configurator_define_command(c, "ssl-session-resumption",
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING,
                                         ssl_session_resumption_on_config);

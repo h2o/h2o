@@ -509,7 +509,8 @@ void h2o_start_response(h2o_req_t *req, h2o_generator_t *generator)
     assert(req->_generator == NULL);
     req->_generator = generator;
 
-    if (req->is_tunnel_req && (req->res.status == 101 || req->res.status == 200)) {
+    if ((req->is_tunnel_req && (req->res.status == 101 || req->res.status == 200)) ||
+        (req->dsr_req.base != NULL && req->res.status == 101)) {
         /* a tunnel has been established; forward response as is */
     } else {
         /* setup response filters */

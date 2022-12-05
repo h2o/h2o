@@ -67,6 +67,24 @@ Error:
     return (h2o_iovec_t){NULL};
 }
 
+int h2o_file_pread_full(int fd, void *_buf, size_t nbyte, off_t off)
+{
+    uint8_t *buf = _buf;
+    ssize_t rret;
+
+    while (nbyte != 0) {
+        while ((rret = pread(fd, buf, nbyte, off)) == -1 && errno == EINTR)
+            ;
+        if (rret <= 0)
+            return 0;
+        buf += rret;
+        nbyte -= rret;
+        off += rret;
+    }
+
+    return 1;
+}
+
 int h2o_file_mktemp(const char *fn_template)
 {
     int fd;

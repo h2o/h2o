@@ -469,3 +469,9 @@ void quicly_send_datagram_frames(quicly_conn_t *conn, ptls_iovec_t *datagrams, s
 
 const uint32_t quicly_supported_versions[] = {QUICLY_PROTOCOL_VERSION_1, QUICLY_PROTOCOL_VERSION_DRAFT29,
                                               QUICLY_PROTOCOL_VERSION_DRAFT27, 0};
+
+void quicly_stream_on_send_emit_detach_packet(quicly_detached_send_packet_t *detached, quicly_stream_t *stream, uint8_t *dst,
+                                              size_t len, size_t len_built)
+{
+    assert(0 && "unimplemented");
+}

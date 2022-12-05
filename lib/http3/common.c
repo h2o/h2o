@@ -1212,6 +1212,9 @@ int h2o_quic_send(h2o_quic_conn_t *conn)
         abort();
     }
 
+    if (conn->callbacks->send_dsr_instructions != NULL)
+        conn->callbacks->send_dsr_instructions(conn);
+
     h2o_quic_schedule_timer(conn);
 
     return 1;

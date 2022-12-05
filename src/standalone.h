@@ -50,6 +50,7 @@ extern quicly_generate_resumption_token_t quic_resumption_token_generator;
 struct st_h2o_quic_forward_node_t {
     uint64_t id;
     int fd;
+    quicly_address_t address;
 };
 
 typedef H2O_VECTOR(struct st_h2o_quic_forward_node_t) h2o_quic_forward_node_vector_t;

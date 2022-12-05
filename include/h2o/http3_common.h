@@ -27,6 +27,7 @@
 #include "quicly.h"
 #include "quicly/defaults.h"
 #include "h2o/absprio.h"
+#include "h2o/dsr.h"
 #include "h2o/memory.h"
 #include "h2o/socket.h"
 #include "h2o/qpack.h"
@@ -317,6 +318,7 @@ struct st_h2o_quic_ctx_t {
 
 typedef struct st_h2o_quic_conn_callbacks_t {
     void (*destroy_connection)(h2o_quic_conn_t *conn);
+    void (*send_dsr_instructions)(h2o_quic_conn_t *conn);
 } h2o_quic_conn_callbacks_t;
 
 /**
