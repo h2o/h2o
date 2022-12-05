@@ -1142,6 +1142,10 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
         free(pctx);
         return "failed to setup private key";
     }
+#if H2O_CAN_ASYNC_SSL
+    if ((SSL_CTX_get_mode(identity->ossl) & SSL_MODE_ASYNC) != 0)
+        pctx->sc.async = 1;
+#endif
 
     if (raw_public_key.base == NULL) {
         /* setup X.509 certificates */
