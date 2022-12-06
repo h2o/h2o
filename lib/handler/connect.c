@@ -125,15 +125,9 @@ static h2o_iovec_t get_proxy_status_identity(struct st_connect_generator_t *self
     return identity;
 }
 
-#define TO_BITMASK(type, len) ((type) ~(((type)1 << (sizeof(type) * 8 - (len))) - 1))
-
-static void record_error(struct st_connect_generator_t *self, const char *error_type, const char *details, const char *rcode)
+static h2o_iovec_t get_dest_addr_str(struct st_connect_generator_t *self, char *dest_addr_strbuf)
 {
-    H2O_PROBE_REQUEST(CONNECT_ERROR, self->src_req, error_type, details, rcode);
-
-    char dest_addr_strbuf[NI_MAXHOST];
     h2o_iovec_t dest_addr_str = h2o_iovec_init(NULL, 0);
-
     if (self->server_addresses.trying != NULL) {
         const struct st_server_address_t *addr = self->server_addresses.trying;
         size_t len = h2o_socket_getnumerichost(addr->sa, addr->salen, dest_addr_strbuf);
@@ -141,37 +135,55 @@ static void record_error(struct st_connect_generator_t *self, const char *error_
             dest_addr_str = h2o_iovec_init(dest_addr_strbuf, len);
         }
     }
+    return dest_addr_str;
+}
+
+static void add_proxy_status_header(struct st_connect_generator_t *self, const char *error_type, const char *details,
+                                    const char *rcode, h2o_iovec_t dest_addr_str)
+{
+    if (!self->handler->config.connect_proxy_status_enabled)
+        return;
+
+    h2o_mem_pool_t *pool = &self->src_req->pool;
+    h2o_iovec_t parts[9] = {
+        get_proxy_status_identity(self),
+    };
+    size_t nparts = 1;
+    if (error_type != NULL) {
+        parts[nparts++] = h2o_iovec_init(H2O_STRLIT("; error="));
+        parts[nparts++] = h2o_iovec_init(error_type, strlen(error_type));
+    }
+    if (rcode != NULL) {
+        parts[nparts++] = h2o_iovec_init(H2O_STRLIT("; rcode="));
+        parts[nparts++] = h2o_iovec_init(rcode, strlen(rcode));
+    }
+    if (details != NULL) {
+        parts[nparts++] = h2o_iovec_init(H2O_STRLIT("; details="));
+        parts[nparts++] = h2o_encode_sf_string(pool, details, SIZE_MAX);
+    }
+    if (dest_addr_str.base != NULL) {
+        parts[nparts++] = h2o_iovec_init(H2O_STRLIT("; next-hop="));
+        parts[nparts++] = dest_addr_str;
+    }
+    assert(nparts <= sizeof(parts) / sizeof(parts[0]));
+    h2o_iovec_t hval = h2o_concat_list(pool, parts, nparts);
+    h2o_add_header_by_str(pool, &self->src_req->res.headers, H2O_STRLIT("proxy-status"), 0, NULL, hval.base, hval.len);
+}
+
+#define TO_BITMASK(type, len) ((type) ~(((type)1 << (sizeof(type) * 8 - (len))) - 1))
+
+static void record_error(struct st_connect_generator_t *self, const char *error_type, const char *details, const char *rcode)
+{
+    H2O_PROBE_REQUEST(CONNECT_ERROR, self->src_req, error_type, details, rcode);
+
+    char dest_addr_strbuf[NI_MAXHOST];
+    h2o_iovec_t dest_addr_str = get_dest_addr_str(self, dest_addr_strbuf);
 
     h2o_req_log_error(self->src_req, MODULE_NAME, "%s; rcode=%s; details=%s; next-hop=%s", error_type,
                       rcode != NULL ? rcode : "(null)", details != NULL ? details : "(null)",
                       dest_addr_str.base != NULL ? dest_addr_str.base : "(null)");
 
-    if (self->handler->config.connect_proxy_status_enabled) {
-        h2o_mem_pool_t *pool = &self->src_req->pool;
-
-        h2o_iovec_t parts[9] = {
-            get_proxy_status_identity(self),
-            h2o_iovec_init(H2O_STRLIT("; error=")),
-            h2o_iovec_init(error_type, strlen(error_type)),
-        };
-        size_t nparts = 3;
-        if (rcode != NULL) {
-            parts[nparts++] = h2o_iovec_init(H2O_STRLIT("; rcode="));
-            parts[nparts++] = h2o_iovec_init(rcode, strlen(rcode));
-        }
-        if (details != NULL) {
-            parts[nparts++] = h2o_iovec_init(H2O_STRLIT("; details="));
-            parts[nparts++] = h2o_encode_sf_string(pool, details, SIZE_MAX);
-        }
-        if (dest_addr_str.base != NULL) {
-            parts[nparts++] = h2o_iovec_init(H2O_STRLIT("; next-hop="));
-            parts[nparts++] = dest_addr_str;
-        }
-        assert(nparts <= sizeof(parts) / sizeof(parts[0]));
-        h2o_iovec_t hval = h2o_concat_list(pool, parts, nparts);
-
-        h2o_add_header_by_str(pool, &self->src_req->res.headers, H2O_STRLIT("proxy-status"), 0, NULL, hval.base, hval.len);
-    }
+    add_proxy_status_header(self, error_type, details, rcode, dest_addr_str);
 }
 
 static void record_connect_success(struct st_connect_generator_t *self)
@@ -182,24 +194,9 @@ static void record_connect_success(struct st_connect_generator_t *self)
 
     H2O_PROBE_REQUEST(CONNECT_SUCCESS, self->src_req, addr->sa);
 
-    if (!self->handler->config.connect_proxy_status_enabled)
-        return;
-
-    char addr_str[NI_MAXHOST];
-    size_t addr_str_len = h2o_socket_getnumerichost(addr->sa, addr->salen, addr_str);
-    if (addr_str_len == SIZE_MAX)
-        return;
-
-    h2o_iovec_t parts[] = {
-        get_proxy_status_identity(self),
-        h2o_iovec_init(H2O_STRLIT("; next-hop=")),
-        h2o_iovec_init(addr_str, addr_str_len),
-    };
-    const size_t nparts = sizeof(parts) / sizeof(parts[0]);
-    h2o_iovec_t hval = h2o_concat_list(&self->src_req->pool, parts, nparts);
-
-    h2o_add_header_by_str(&self->src_req->pool, &self->src_req->res.headers, H2O_STRLIT("proxy-status"), 0, NULL, hval.base,
-                          hval.len);
+    char dest_addr_strbuf[NI_MAXHOST];
+    h2o_iovec_t dest_addr_str = get_dest_addr_str(self, dest_addr_strbuf);
+    add_proxy_status_header(self, NULL, NULL, NULL, dest_addr_str);
 }
 
 static void record_socket_error(struct st_connect_generator_t *self, const char *err)
