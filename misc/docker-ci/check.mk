@@ -93,7 +93,7 @@ _do_check:
 	cmake $(CMAKE_ARGS) -H$(SRC_DIR) -B.
 	time komake $(BUILD_ARGS) all checkdepends
 	if [ -e h2o-fuzzer-http1 ] ; then export $(FUZZ_ASAN); fi; \
-		ulimit -n 10000; \
+		ulimit -n 1024; \
 		env $(TEST_ENV) make check
 
 enter:
