@@ -1685,7 +1685,9 @@ static void proceed_handshake_picotls(h2o_socket_t *sock)
         sock->ssl->async.ptls_wbuf = (ptls_buffer_t){NULL};
     } else
 #endif
+    {
         ptls_buffer_init(&wbuf, "", 0);
+    }
 
     int ret = ptls_handshake(sock->ssl->ptls, &wbuf, sock->ssl->input.encrypted->bytes, &consumed, NULL);
     h2o_buffer_consume(&sock->ssl->input.encrypted, consumed);
