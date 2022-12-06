@@ -56,7 +56,6 @@ struct st_connect_generator_t {
         struct st_server_address_t list[MAX_ADDRESSES_PER_FAMILY * 2];
         size_t size;
         size_t used;
-        const struct st_server_address_t *trying;
     } server_addresses;
 
     h2o_socket_t *sock;
@@ -129,15 +128,20 @@ static h2o_iovec_t get_proxy_status_identity(struct st_connect_generator_t *self
     return identity;
 }
 
-static h2o_iovec_t get_dest_addr_str(struct st_connect_generator_t *self, char *dest_addr_strbuf)
+static h2o_iovec_t get_dest_addr_str(struct st_connect_generator_t *self, char *dest_addr_strbuf,
+                                     const struct st_server_address_t **addr_out)
 {
+    const struct st_server_address_t *addr = NULL;
     h2o_iovec_t dest_addr_str = h2o_iovec_init(NULL, 0);
-    if (self->server_addresses.trying != NULL) {
-        const struct st_server_address_t *addr = self->server_addresses.trying;
+    if (self->server_addresses.used > 0 && self->server_addresses.used <= self->server_addresses.size) {
+        addr = &self->server_addresses.list[self->server_addresses.used - 1];
         size_t len = h2o_socket_getnumerichost(addr->sa, addr->salen, dest_addr_strbuf);
         if (len != SIZE_MAX) {
             dest_addr_str = h2o_iovec_init(dest_addr_strbuf, len);
         }
+    }
+    if (addr_out != NULL) {
+        *addr_out = addr;
     }
     return dest_addr_str;
 }
@@ -181,7 +185,7 @@ static void record_error(struct st_connect_generator_t *self, const char *error_
     H2O_PROBE_REQUEST(CONNECT_ERROR, self->src_req, error_type, details, rcode);
 
     char dest_addr_strbuf[NI_MAXHOST];
-    h2o_iovec_t dest_addr_str = get_dest_addr_str(self, dest_addr_strbuf);
+    h2o_iovec_t dest_addr_str = get_dest_addr_str(self, dest_addr_strbuf, NULL);
 
     h2o_req_log_error(self->src_req, MODULE_NAME, "%s; rcode=%s; details=%s; next-hop=%s", error_type,
                       rcode != NULL ? rcode : "(null)", details != NULL ? details : "(null)",
@@ -192,14 +196,14 @@ static void record_error(struct st_connect_generator_t *self, const char *error_
 
 static void record_connect_success(struct st_connect_generator_t *self)
 {
-    if (self->server_addresses.trying == NULL)
+    char dest_addr_strbuf[NI_MAXHOST];
+    const struct st_server_address_t *addr;
+    h2o_iovec_t dest_addr_str = get_dest_addr_str(self, dest_addr_strbuf, &addr);
+    if (addr == NULL)
         return;
-    const struct st_server_address_t *addr = self->server_addresses.trying;
 
     H2O_PROBE_REQUEST(CONNECT_SUCCESS, self->src_req, addr->sa);
 
-    char dest_addr_strbuf[NI_MAXHOST];
-    h2o_iovec_t dest_addr_str = get_dest_addr_str(self, dest_addr_strbuf);
     add_proxy_status_header(self, NULL, NULL, NULL, dest_addr_str);
 }
 
@@ -521,9 +525,6 @@ static void try_connect(struct st_connect_generator_t *self)
             server_address = &self->server_addresses.list[self->server_addresses.used];
             self->server_addresses.used++;
         }
-
-        /* For proxy-status, remember which address we are trying to use. */
-        self->server_addresses.trying = server_address;
 
         /* Connect. Retry if the connect function returns error immediately. */
     } while (!(self->is_tcp ? tcp_start_connect : udp_connect)(self, server_address));
