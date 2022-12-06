@@ -124,22 +124,13 @@ static h2o_iovec_t get_proxy_status_identity(struct st_connect_generator_t *self
     return identity;
 }
 
-static h2o_iovec_t get_dest_addr_str(struct st_connect_generator_t *self, char *dest_addr_strbuf,
-                                     const struct st_server_address_t **addr_out)
+static const struct st_server_address_t *get_dest_addr(struct st_connect_generator_t *self)
 {
-    const struct st_server_address_t *addr = NULL;
-    h2o_iovec_t dest_addr_str = h2o_iovec_init(NULL, 0);
-    if (self->server_addresses.used > 0 && self->server_addresses.used <= self->server_addresses.size) {
-        addr = &self->server_addresses.list[self->server_addresses.used - 1];
-        size_t len = h2o_socket_getnumerichost(addr->sa, addr->salen, dest_addr_strbuf);
-        if (len != SIZE_MAX) {
-            dest_addr_str = h2o_iovec_init(dest_addr_strbuf, len);
-        }
+    if (self->server_addresses.used > 0) {
+        return &self->server_addresses.list[self->server_addresses.used - 1];
+    } else {
+        return NULL;
     }
-    if (addr_out != NULL) {
-        *addr_out = addr;
-    }
-    return dest_addr_str;
 }
 
 static void add_proxy_status_header(struct st_connect_generator_t *self, const char *error_type, const char *details,
@@ -181,7 +172,14 @@ static void record_error(struct st_connect_generator_t *self, const char *error_
     H2O_PROBE_REQUEST(CONNECT_ERROR, self->src_req, error_type, details, rcode);
 
     char dest_addr_strbuf[NI_MAXHOST];
-    h2o_iovec_t dest_addr_str = get_dest_addr_str(self, dest_addr_strbuf, NULL);
+    h2o_iovec_t dest_addr_str = h2o_iovec_init(NULL, 0);
+    const struct st_server_address_t *addr = get_dest_addr(self);
+    if (addr != NULL) {
+        size_t len = h2o_socket_getnumerichost(addr->sa, addr->salen, dest_addr_strbuf);
+        if (len != SIZE_MAX) {
+            dest_addr_str = h2o_iovec_init(dest_addr_strbuf, len);
+        }
+    }
 
     h2o_req_log_error(self->src_req, MODULE_NAME, "%s; rcode=%s; details=%s; next-hop=%s", error_type,
                       rcode != NULL ? rcode : "(null)", details != NULL ? details : "(null)",
@@ -192,15 +190,17 @@ static void record_error(struct st_connect_generator_t *self, const char *error_
 
 static void record_connect_success(struct st_connect_generator_t *self)
 {
-    char dest_addr_strbuf[NI_MAXHOST];
-    const struct st_server_address_t *addr;
-    h2o_iovec_t dest_addr_str = get_dest_addr_str(self, dest_addr_strbuf, &addr);
+    const struct st_server_address_t *addr = get_dest_addr(self);
     if (addr == NULL)
         return;
 
     H2O_PROBE_REQUEST(CONNECT_SUCCESS, self->src_req, addr->sa);
 
-    add_proxy_status_header(self, NULL, NULL, NULL, dest_addr_str);
+    char dest_addr_strbuf[NI_MAXHOST];
+    size_t len = h2o_socket_getnumerichost(addr->sa, addr->salen, dest_addr_strbuf);
+    if (len != SIZE_MAX) {
+        add_proxy_status_header(self, NULL, NULL, NULL, h2o_iovec_init(dest_addr_strbuf, len));
+    }
 }
 
 static void record_socket_error(struct st_connect_generator_t *self, const char *err)
