@@ -694,8 +694,106 @@ int ptls_openssl_create_key_exchange(ptls_key_exchange_context_t **ctx, EVP_PKEY
     }
 }
 
+#if PTLS_OPENSSL_HAVE_ASYNC
+
+struct async_sign_ctx {
+    ptls_async_job_t super;
+    const struct st_ptls_openssl_signature_scheme_t *scheme;
+    EVP_MD_CTX *ctx;
+    ASYNC_WAIT_CTX *waitctx;
+    ASYNC_JOB *job;
+    size_t siglen;
+    uint8_t sig[0]; // must be last, see `async_sign_ctx_new`
+};
+
+static void async_sign_ctx_free(ptls_async_job_t *_self)
+{
+    struct async_sign_ctx *self = (void *)_self;
+
+    /* Once the async operation is complete, the user might call `ptls_free` instead of `ptls_handshake`. In such case, to avoid
+     * desynchronization, let the backend read the result from the socket. The code below is a loop, but it is not going to block;
+     * it is the responsibility of the user to refrain from calling `ptls_free` until the asynchronous operation is complete. */
+    if (self->job != NULL) {
+        int ret;
+        while (ASYNC_start_job(&self->job, self->waitctx, &ret, NULL, NULL, 0) == ASYNC_PAUSE)
+            ;
+    }
+
+    EVP_MD_CTX_destroy(self->ctx);
+    ASYNC_WAIT_CTX_free(self->waitctx);
+    free(self);
+}
+
+static ptls_async_job_t *async_sign_ctx_new(const struct st_ptls_openssl_signature_scheme_t *scheme, EVP_MD_CTX *ctx, size_t siglen)
+{
+    struct async_sign_ctx *self;
+
+    if ((self = malloc(offsetof(struct async_sign_ctx, sig) + siglen)) == NULL)
+        return NULL;
+
+    self->super = (ptls_async_job_t){async_sign_ctx_free};
+    self->scheme = scheme;
+    self->ctx = ctx;
+    self->waitctx = ASYNC_WAIT_CTX_new();
+    self->job = NULL;
+    self->siglen = siglen;
+    memset(self->sig, 0, siglen);
+
+    return &self->super;
+}
+
+OSSL_ASYNC_FD ptls_openssl_get_async_fd(ptls_t *ptls)
+{
+    OSSL_ASYNC_FD fds[1];
+    size_t numfds;
+    struct async_sign_ctx *async = (void *)ptls_get_async_job(ptls);
+    assert(async != NULL);
+    ASYNC_WAIT_CTX_get_all_fds(async->waitctx, NULL, &numfds);
+    assert(numfds == 1);
+    ASYNC_WAIT_CTX_get_all_fds(async->waitctx, fds, &numfds);
+    return fds[0];
+}
+
+static int do_sign_async_job(void *_async)
+{
+    struct async_sign_ctx *async = *(struct async_sign_ctx **)_async;
+    return EVP_DigestSignFinal(async->ctx, async->sig, &async->siglen);
+}
+
+static int do_sign_async(ptls_buffer_t *outbuf, ptls_async_job_t **_async)
+{
+    struct async_sign_ctx *async = (void *)*_async;
+    int ret;
+
+    switch (ASYNC_start_job(&async->job, async->waitctx, &ret, do_sign_async_job, &async, sizeof(async))) {
+    case ASYNC_PAUSE:
+        return PTLS_ERROR_ASYNC_OPERATION; // async operation inflight; bail out without getting rid of async context
+    case ASYNC_ERR:
+        ret = PTLS_ERROR_LIBRARY;
+        break;
+    case ASYNC_NO_JOBS:
+        ret = PTLS_ERROR_LIBRARY;
+        break;
+    case ASYNC_FINISH:
+        async->job = NULL;
+        ptls_buffer_pushv(outbuf, async->sig, async->siglen);
+        ret = 0;
+        break;
+    default:
+        ret = PTLS_ERROR_LIBRARY;
+        break;
+    }
+
+Exit:
+    async_sign_ctx_free(&async->super);
+    *_async = NULL;
+    return ret;
+}
+
+#endif
+
 static int do_sign(EVP_PKEY *key, const struct st_ptls_openssl_signature_scheme_t *scheme, ptls_buffer_t *outbuf,
-                   ptls_iovec_t input)
+                   ptls_iovec_t input, ptls_async_job_t **async)
 {
     EVP_MD_CTX *ctx = NULL;
     const EVP_MD *md = scheme->scheme_md != NULL ? scheme->scheme_md() : NULL;
@@ -751,6 +849,18 @@ static int do_sign(EVP_PKEY *key, const struct st_ptls_openssl_signature_scheme_
             ret = PTLS_ERROR_LIBRARY;
             goto Exit;
         }
+        /* If permitted by the caller (by providing a non-NULL `async` slot), use the asynchronous signing method and return
+         * immediately. */
+#if PTLS_OPENSSL_HAVE_ASYNC
+        if (async != NULL) {
+            if ((*async = async_sign_ctx_new(scheme, ctx, siglen)) == NULL) {
+                ret = PTLS_ERROR_NO_MEMORY;
+                goto Exit;
+            }
+            return do_sign_async(outbuf, async);
+        }
+#endif
+        /* Otherwise, generate signature synchronously. */
         if ((ret = ptls_buffer_reserve(outbuf, siglen)) != 0)
             goto Exit;
         if (EVP_DigestSignFinal(ctx, outbuf->base + outbuf->off, &siglen) != 1) {
@@ -1044,13 +1154,25 @@ ptls_define_hash(sha256, SHA256_CTX, SHA256_Init, SHA256_Update, _sha256_final);
 #define _sha384_final(ctx, md) SHA384_Final((md), (ctx))
 ptls_define_hash(sha384, SHA512_CTX, SHA384_Init, SHA384_Update, _sha384_final);
 
-static int sign_certificate(ptls_sign_certificate_t *_self, ptls_t *tls, uint16_t *selected_algorithm, ptls_buffer_t *outbuf,
-                            ptls_iovec_t input, const uint16_t *algorithms, size_t num_algorithms)
+#define _sha512_final(ctx, md) SHA512_Final((md), (ctx))
+ptls_define_hash(sha512, SHA512_CTX, SHA512_Init, SHA512_Update, _sha512_final);
+
+static int sign_certificate(ptls_sign_certificate_t *_self, ptls_t *tls, ptls_async_job_t **async, uint16_t *selected_algorithm,
+                            ptls_buffer_t *outbuf, ptls_iovec_t input, const uint16_t *algorithms, size_t num_algorithms)
 {
     ptls_openssl_sign_certificate_t *self = (ptls_openssl_sign_certificate_t *)_self;
     const struct st_ptls_openssl_signature_scheme_t *scheme;
 
-    /* select the algorithm (driven by server-side preference of `self->schemes`) */
+    /* Just resume the asynchronous operation, if one is in flight. */
+#if PTLS_OPENSSL_HAVE_ASYNC
+    if (async != NULL && *async != NULL) {
+        struct async_sign_ctx *sign_ctx = (struct async_sign_ctx *)(*async);
+        *selected_algorithm = sign_ctx->scheme->scheme_id;
+        return do_sign_async(outbuf, async);
+    }
+#endif
+
+    /* Select the algorithm (driven by server-side preference of `self->schemes`), or return failure if none found. */
     for (scheme = self->schemes; scheme->scheme_id != UINT16_MAX; ++scheme) {
         size_t i;
         for (i = 0; i != num_algorithms; ++i)
@@ -1061,7 +1183,14 @@ static int sign_certificate(ptls_sign_certificate_t *_self, ptls_t *tls, uint16_
 
 Found:
     *selected_algorithm = scheme->scheme_id;
-    return do_sign(self->key, scheme, outbuf, input);
+#if PTLS_OPENSSL_HAVE_ASYNC
+    if (!self->async && async != NULL) {
+        /* indicate to `do_sign` that async mode is disabled for this operation */
+        assert(*async == NULL);
+        async = NULL;
+    }
+#endif
+    return do_sign(self->key, scheme, outbuf, input, async);
 }
 
 static X509 *to_x509(ptls_iovec_t vec)
@@ -1151,7 +1280,7 @@ Exit:
 
 int ptls_openssl_init_sign_certificate(ptls_openssl_sign_certificate_t *self, EVP_PKEY *key)
 {
-    *self = (ptls_openssl_sign_certificate_t){{sign_certificate}};
+    *self = (ptls_openssl_sign_certificate_t){.super = {sign_certificate}, .async = 1};
 
     if ((self->schemes = lookup_signature_schemes(key)) == NULL)
         return PTLS_ERROR_INCOMPATIBLE_KEY;
@@ -1780,10 +1909,12 @@ ptls_aead_algorithm_t ptls_openssl_aes256gcm = {"AES256-GCM",
                                                 0,
                                                 sizeof(struct aead_crypto_context_t),
                                                 aead_aes256gcm_setup_crypto};
-ptls_hash_algorithm_t ptls_openssl_sha256 = {PTLS_SHA256_BLOCK_SIZE, PTLS_SHA256_DIGEST_SIZE, sha256_create,
+ptls_hash_algorithm_t ptls_openssl_sha256 = {"sha256", PTLS_SHA256_BLOCK_SIZE, PTLS_SHA256_DIGEST_SIZE, sha256_create,
                                              PTLS_ZERO_DIGEST_SHA256};
-ptls_hash_algorithm_t ptls_openssl_sha384 = {PTLS_SHA384_BLOCK_SIZE, PTLS_SHA384_DIGEST_SIZE, sha384_create,
+ptls_hash_algorithm_t ptls_openssl_sha384 = {"sha384", PTLS_SHA384_BLOCK_SIZE, PTLS_SHA384_DIGEST_SIZE, sha384_create,
                                              PTLS_ZERO_DIGEST_SHA384};
+ptls_hash_algorithm_t ptls_openssl_sha512 = {"sha512", PTLS_SHA512_BLOCK_SIZE, PTLS_SHA512_DIGEST_SIZE, sha512_create,
+                                             PTLS_ZERO_DIGEST_SHA512};
 ptls_cipher_suite_t ptls_openssl_aes128gcmsha256 = {.id = PTLS_CIPHER_SUITE_AES_128_GCM_SHA256,
                                                     .name = PTLS_CIPHER_SUITE_NAME_AES_128_GCM_SHA256,
                                                     .aead = &ptls_openssl_aes128gcm,
@@ -1864,3 +1995,40 @@ ptls_cipher_suite_t *ptls_openssl_tls12_cipher_suites[] = {&ptls_openssl_tls12_e
 ptls_cipher_algorithm_t ptls_openssl_bfecb = {"BF-ECB",        PTLS_BLOWFISH_KEY_SIZE,          PTLS_BLOWFISH_BLOCK_SIZE,
                                               0 /* iv size */, sizeof(struct cipher_context_t), bfecb_setup_crypto};
 #endif
+
+ptls_hpke_kem_t ptls_openssl_hpke_kem_p256sha256 = {PTLS_HPKE_KEM_P256_SHA256, &ptls_openssl_secp256r1, &ptls_openssl_sha256};
+ptls_hpke_kem_t ptls_openssl_hpke_kem_p384sha384 = {PTLS_HPKE_KEM_P384_SHA384, &ptls_openssl_secp384r1, &ptls_openssl_sha384};
+#if PTLS_OPENSSL_HAVE_X25519
+ptls_hpke_kem_t ptls_openssl_hpke_kem_x25519sha256 = {PTLS_HPKE_KEM_X25519_SHA256, &ptls_openssl_x25519, &ptls_openssl_sha256};
+#endif
+ptls_hpke_kem_t *ptls_openssl_hpke_kems[] = {&ptls_openssl_hpke_kem_p384sha384,
+#if PTLS_OPENSSL_HAVE_X25519
+                                             &ptls_openssl_hpke_kem_x25519sha256,
+#endif
+                                             &ptls_openssl_hpke_kem_p256sha256, NULL};
+
+ptls_hpke_cipher_suite_t ptls_openssl_hpke_aes128gcmsha256 = {
+    .id = {.kdf = PTLS_HPKE_HKDF_SHA256, .aead = PTLS_HPKE_AEAD_AES_128_GCM},
+    .hash = &ptls_openssl_sha256,
+    .aead = &ptls_openssl_aes128gcm};
+ptls_hpke_cipher_suite_t ptls_openssl_hpke_aes128gcmsha512 = {
+    .id = {.kdf = PTLS_HPKE_HKDF_SHA512, .aead = PTLS_HPKE_AEAD_AES_128_GCM},
+    .hash = &ptls_openssl_sha512,
+    .aead = &ptls_openssl_aes128gcm};
+ptls_hpke_cipher_suite_t ptls_openssl_hpke_aes256gcmsha384 = {
+    .id = {.kdf = PTLS_HPKE_HKDF_SHA384, .aead = PTLS_HPKE_AEAD_AES_256_GCM},
+    .hash = &ptls_openssl_sha384,
+    .aead = &ptls_openssl_aes256gcm};
+#if PTLS_OPENSSL_HAVE_CHACHA20_POLY1305
+ptls_hpke_cipher_suite_t ptls_openssl_hpke_chacha20poly1305sha256 = {
+    .id = {.kdf = PTLS_HPKE_HKDF_SHA256, .aead = PTLS_HPKE_AEAD_CHACHA20POLY1305},
+    .hash = &ptls_openssl_sha256,
+    .aead = &ptls_openssl_chacha20poly1305};
+#endif
+ptls_hpke_cipher_suite_t *ptls_openssl_hpke_cipher_suites[] = {&ptls_openssl_hpke_aes128gcmsha256,
+                                                               &ptls_openssl_hpke_aes256gcmsha384,
+#if PTLS_OPENSSL_HAVE_CHACHA20_POLY1305
+                                                               &ptls_openssl_hpke_chacha20poly1305sha256,
+#endif
+                                                               &ptls_openssl_hpke_aes128gcmsha512, /* likely only for tests */
+                                                               NULL};
