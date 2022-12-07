@@ -171,12 +171,6 @@ extern "C" {
 #define PTLS_HPKE_AEAD_AES_256_GCM 2
 #define PTLS_HPKE_AEAD_CHACHA20POLY1305 3
 
-/* ESNI */
-#define PTLS_ESNI_VERSION_DRAFT03 0xff02
-
-#define PTLS_ESNI_RESPONSE_TYPE_ACCEPT 0
-#define PTLS_ESNI_RESPONSE_TYPE_RETRY_REQUEST 1
-
 /* error classes and macros */
 #define PTLS_ERROR_CLASS_SELF_ALERT 0
 #define PTLS_ERROR_CLASS_PEER_ALERT 0x100
@@ -212,9 +206,11 @@ extern "C" {
 #define PTLS_ALERT_INTERNAL_ERROR 80
 #define PTLS_ALERT_USER_CANCELED 90
 #define PTLS_ALERT_MISSING_EXTENSION 109
+#define PTLS_ALERT_UNSUPPORTED_EXTENSION 110
 #define PTLS_ALERT_UNRECOGNIZED_NAME 112
 #define PTLS_ALERT_CERTIFICATE_REQUIRED 116
 #define PTLS_ALERT_NO_APPLICATION_PROTOCOL 120
+#define PTLS_ALERT_ECH_REQUIRED 121
 
 /* TLS 1.2 */
 #define PTLS_TLS12_MASTER_SECRET_SIZE 48
@@ -233,7 +229,6 @@ extern "C" {
 #define PTLS_ERROR_STATELESS_RETRY (PTLS_ERROR_CLASS_INTERNAL + 6)
 #define PTLS_ERROR_NOT_AVAILABLE (PTLS_ERROR_CLASS_INTERNAL + 7)
 #define PTLS_ERROR_COMPRESSION_FAILURE (PTLS_ERROR_CLASS_INTERNAL + 8)
-#define PTLS_ERROR_ESNI_RETRY (PTLS_ERROR_CLASS_INTERNAL + 8)
 #define PTLS_ERROR_REJECT_EARLY_DATA (PTLS_ERROR_CLASS_INTERNAL + 9)
 #define PTLS_ERROR_DELEGATE (PTLS_ERROR_CLASS_INTERNAL + 10)
 #define PTLS_ERROR_ASYNC_OPERATION (PTLS_ERROR_CLASS_INTERNAL + 11)
@@ -588,41 +583,6 @@ typedef const struct st_ptls_hpke_cipher_suite_t {
     ptls_aead_algorithm_t *aead;
 } ptls_hpke_cipher_suite_t;
 
-/**
- * holds ESNIKeys and the private key (instantiated by ptls_esni_parse, freed using ptls_esni_dispose)
- */
-typedef struct st_ptls_esni_context_t {
-    ptls_key_exchange_context_t **key_exchanges;
-    struct {
-        ptls_cipher_suite_t *cipher_suite;
-        uint8_t record_digest[PTLS_MAX_DIGEST_SIZE];
-    } * cipher_suites;
-    uint16_t padded_length;
-    uint64_t not_before;
-    uint64_t not_after;
-    uint16_t version;
-} ptls_esni_context_t;
-
-/**
- * holds the ESNI secret, as exchanged during the handshake
- */
-
-#define PTLS_ESNI_NONCE_SIZE 16
-
-typedef struct st_ptls_esni_secret_t {
-    ptls_iovec_t secret;
-    uint8_t nonce[PTLS_ESNI_NONCE_SIZE];
-    uint8_t esni_contents_hash[PTLS_MAX_DIGEST_SIZE];
-    struct {
-        ptls_key_exchange_algorithm_t *key_share;
-        ptls_cipher_suite_t *cipher;
-        ptls_iovec_t pubkey;
-        uint8_t record_digest[PTLS_MAX_DIGEST_SIZE];
-        uint16_t padded_length;
-    } client;
-    uint16_t version;
-} ptls_esni_secret_t;
-
 #define PTLS_CALLBACK_TYPE0(ret, name)                                                                                             \
     typedef struct st_ptls_##name##_t {                                                                                            \
         ret (*cb)(struct st_ptls_##name##_t * self);                                                                               \
@@ -669,10 +629,6 @@ typedef struct st_ptls_on_client_hello_parameters_t {
         size_t count;
     } server_certificate_types;
     /**
-     * if ESNI was used
-     */
-    unsigned esni : 1;
-    /**
      * set to 1 if ClientHello is too old (or too new) to be handled by picotls
      */
     unsigned incompatible_version : 1;
@@ -710,9 +666,11 @@ PTLS_CALLBACK_TYPE(int, sign_certificate, ptls_t *tls, ptls_async_job_t **async,
  * callback to the invocation of the verify_sign callback, verify_sign is called with both data and sign set to an empty buffer.
  * The implementor of the callback should use that as the opportunity to free any temporary data allocated for the verify_sign
  * callback.
+ * The name of the server to be verified, if any, is provided explicitly as `server_name`. When ECH is offered by the client but
+ * the was rejected by the server, this value can be different from that being sent via `ptls_get_server_name`.
  */
 typedef struct st_ptls_verify_certificate_t {
-    int (*cb)(struct st_ptls_verify_certificate_t *self, ptls_t *tls,
+    int (*cb)(struct st_ptls_verify_certificate_t *self, ptls_t *tls, const char *server_name,
               int (**verify_sign)(void *verify_ctx, uint16_t algo, ptls_iovec_t data, ptls_iovec_t sign), void **verify_data,
               ptls_iovec_t *certs, size_t num_certs);
     /**
@@ -766,10 +724,12 @@ typedef struct st_ptls_decompress_certificate_t {
               ptls_iovec_t input);
 } ptls_decompress_certificate_t;
 /**
- * provides access to the ESNI shared secret (Zx).  API is subject to change.
+ * ECH: creates the AEAD context to be used for "Open"-ing inner CH. Given `config_id`, the callback looks up the ECH config and the
+ * corresponding private key, invokes `ptls_hpke_setup_base_r` with provided `cipher`, `enc`, and `info_prefix` (which will be
+ * "tls ech" || 00).
  */
-PTLS_CALLBACK_TYPE(int, update_esni_key, ptls_t *tls, ptls_iovec_t secret, ptls_hash_algorithm_t *hash,
-                   const void *hashed_esni_contents);
+PTLS_CALLBACK_TYPE(ptls_aead_context_t *, ech_create_opener, ptls_hpke_kem_t **kem, ptls_hpke_cipher_suite_t **cipher, ptls_t *tls,
+                   uint8_t config_id, ptls_hpke_cipher_suite_id_t cipher_id, ptls_iovec_t enc, ptls_iovec_t info_prefix);
 
 /**
  * the configuration
@@ -799,9 +759,30 @@ struct st_ptls_context_t {
         size_t count;
     } certificates;
     /**
-     * list of ESNI data terminated by NULL
+     * ECH
      */
-    ptls_esni_context_t **esni;
+    struct {
+        struct {
+            /**
+             * list of HPKE symmetric cipher-suites (set to NULL to disable ECH altogether)
+             */
+            ptls_hpke_cipher_suite_t **ciphers;
+            /**
+             * KEMs being supported
+             */
+            ptls_hpke_kem_t **kems;
+        } client;
+        struct {
+            /**
+             * callback that does ECDH key exchange and returns the AEAD context
+             */
+            ptls_ech_create_opener_t *create_opener;
+            /**
+             * ECHConfigList to be sent to the client when there is mismatch (or when the client sends a grease)
+             */
+            ptls_iovec_t retry_configs;
+        } server;
+    } ech;
     /**
      *
      */
@@ -900,10 +881,6 @@ struct st_ptls_context_t {
     /**
      *
      */
-    ptls_update_esni_key_t *update_esni_key;
-    /**
-     *
-     */
     ptls_on_extension_t *on_extension;
     /**
      * (optional) list of supported tls12 cipher-suites terminated by NULL
@@ -961,9 +938,18 @@ typedef struct st_ptls_handshake_properties_t {
              */
             unsigned negotiate_before_key_exchange : 1;
             /**
-             * ESNIKeys (the value of the TXT record, after being base64-"decoded")
+             * ECH
              */
-            ptls_iovec_t esni_keys;
+            struct {
+                /**
+                 * config offered by server e.g., by HTTPS RR
+                 */
+                ptls_iovec_t configs;
+                /**
+                 * slot to save the config obtained from server on mismatch; user must free the returned blob by calling `free`
+                 */
+                ptls_iovec_t *retry_configs;
+            } ech;
         } client;
         struct {
             /**
@@ -1159,7 +1145,7 @@ static uint8_t *ptls_encode_quicint(uint8_t *p, uint64_t v);
         ptls_buffer_push(_buf, (type));                                                                                            \
         ptls_buffer_push_block(_buf, 3, block);                                                                                    \
         if (_key_sched != NULL)                                                                                                    \
-            ptls__key_schedule_update_hash(_key_sched, _buf->base + mess_start, _buf->off - mess_start);                           \
+            ptls__key_schedule_update_hash(_key_sched, _buf->base + mess_start, _buf->off - mess_start, 0);                        \
     } while (0)
 
 #define ptls_push_message(emitter, key_sched, type, block)                                                                         \
@@ -1482,6 +1468,10 @@ int ptls_handshake_is_complete(ptls_t *tls);
  */
 int ptls_is_psk_handshake(ptls_t *tls);
 /**
+ * return if a ECH handshake was performed, as well as optionally the kem and cipher-suite being used
+ */
+int ptls_is_ech_handshake(ptls_t *tls, ptls_hpke_kem_t **kem, ptls_hpke_cipher_suite_t **cipher);
+/**
  * returns a pointer to user data pointer (client is reponsible for freeing the associated data prior to calling ptls_free)
  */
 void **ptls_get_data_ptr(ptls_t *tls);
@@ -1683,7 +1673,7 @@ static void ptls_aead__do_encrypt_v(ptls_aead_context_t *ctx, void *_output, ptl
 /**
  * internal
  */
-void ptls__key_schedule_update_hash(ptls_key_schedule_t *sched, const uint8_t *msg, size_t msglen);
+void ptls__key_schedule_update_hash(ptls_key_schedule_t *sched, const uint8_t *msg, size_t msglen, int use_outer);
 /**
  * clears memory
  */
@@ -1696,6 +1686,11 @@ extern int (*volatile ptls_mem_equal)(const void *x, const void *y, size_t len);
  * checks if a server name is an IP address.
  */
 int ptls_server_name_is_ipaddr(const char *name);
+/**
+ * encodes one ECH Config
+ */
+int ptls_ech_encode_config(ptls_buffer_t *buf, uint8_t config_id, ptls_hpke_kem_t *kem, ptls_iovec_t public_key,
+                           ptls_hpke_cipher_suite_t **ciphers, uint8_t max_name_length, const char *public_name);
 /**
  * loads a certificate chain to ptls_context_t::certificates. `certificate.list` and each element of the list is allocated by
  * malloc.  It is the responsibility of the user to free them when discarding the TLS context.
@@ -1713,19 +1708,6 @@ int ptls_hpke_setup_base_s(ptls_hpke_kem_t *kem, ptls_hpke_cipher_suite_t *ciphe
  */
 int ptls_hpke_setup_base_r(ptls_hpke_kem_t *kem, ptls_hpke_cipher_suite_t *cipher, ptls_key_exchange_context_t *keyex,
                            ptls_aead_context_t **ctx, ptls_iovec_t pk_s, ptls_iovec_t info);
-/**
- *
- */
-int ptls_esni_init_context(ptls_context_t *ctx, ptls_esni_context_t *esni, ptls_iovec_t esni_keys,
-                           ptls_key_exchange_context_t **key_exchanges);
-/**
- *
- */
-void ptls_esni_dispose_context(ptls_esni_context_t *esni);
-/**
- * Obtain the ESNI secrets negotiated during the handshake.
- */
-ptls_esni_secret_t *ptls_get_esni_secret(ptls_t *ctx);
 /**
  *
  */
