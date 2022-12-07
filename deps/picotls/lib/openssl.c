@@ -1280,7 +1280,7 @@ Exit:
 
 int ptls_openssl_init_sign_certificate(ptls_openssl_sign_certificate_t *self, EVP_PKEY *key)
 {
-    *self = (ptls_openssl_sign_certificate_t){.super = {sign_certificate}, .async = 1};
+    *self = (ptls_openssl_sign_certificate_t){.super = {sign_certificate}, .async = 0 /* libssl has it off by default too */};
 
     if ((self->schemes = lookup_signature_schemes(key)) == NULL)
         return PTLS_ERROR_INCOMPATIBLE_KEY;
