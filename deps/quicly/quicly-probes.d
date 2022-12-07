@@ -70,7 +70,7 @@ provider quicly {
     probe cc_congestion(struct st_quicly_conn_t *conn, int64_t at, uint64_t max_lost_pn, size_t inflight, uint32_t cwnd);
 
     probe ack_block_received(struct st_quicly_conn_t *conn, int64_t at, uint64_t ack_block_begin, uint64_t ack_block_end);
-    probe ack_delay_received(struct st_quicly_conn_t *conn, int64_t at, int64_t ack_delay);
+    probe ack_delay_received(struct st_quicly_conn_t *conn, int64_t at, uint64_t ack_delay);
     probe ack_send(struct st_quicly_conn_t *conn, int64_t at, uint64_t largest_acked, uint64_t ack_delay);
 
     probe ping_send(struct st_quicly_conn_t *conn, int64_t at);

@@ -500,6 +500,10 @@ typedef struct st_quicly_stats_t {
      */
     quicly_rtt_t rtt;
     /**
+     * Loss thresholds.
+     */
+    quicly_loss_thresholds_t loss_thresholds;
+    /**
      * Congestion control stats (experimental; TODO cherry-pick what can be exposed as part of a stable API).
      */
     quicly_cc_t cc;
@@ -511,6 +515,10 @@ typedef struct st_quicly_stats_t {
      * largest number of packets contained in the sentmap
      */
     size_t num_sentmap_packets_largest;
+    /**
+     * Time took until handshake is confirmed. UINT64_MAX if handshake is not confirmed yet.
+     */
+    uint64_t handshake_confirmed_msec;
 } quicly_stats_t;
 
 /**
@@ -1235,6 +1243,22 @@ void quicly_stream_noop_on_receive(quicly_stream_t *stream, size_t off, const vo
 void quicly_stream_noop_on_receive_reset(quicly_stream_t *stream, int err);
 
 extern const quicly_stream_callbacks_t quicly_stream_noop_callbacks;
+
+#define QUICLY_LOG_CONN(_type, _conn, _block)                                                                                      \
+    do {                                                                                                                           \
+        if (!ptls_log.is_active)                                                                                                   \
+            break;                                                                                                                 \
+        quicly_conn_t *_c = (_conn);                                                                                               \
+        if (ptls_skip_tracing(_c->crypto.tls))                                                                                     \
+            break;                                                                                                                 \
+        PTLS_LOG__DO_LOG(quicly, _type, {                                                                                          \
+            PTLS_LOG_ELEMENT_PTR(conn, _c);                                                                                        \
+            PTLS_LOG_ELEMENT_SIGNED(time, _c->stash.now);                                                                          \
+            do {                                                                                                                   \
+                _block                                                                                                             \
+            } while (0);                                                                                                           \
+        });                                                                                                                        \
+    } while (0)
 
 /* inline definitions */
 

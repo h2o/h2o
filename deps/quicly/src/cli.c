@@ -1149,13 +1149,15 @@ int main(int argc, char **argv)
         case 'E':
             ctx.expand_client_hello = 1;
             break;
-        case 'e':
-            if ((quicly_trace_fp = fopen(optarg, "w")) == NULL) {
+        case 'e': {
+            int fd;
+            if ((fd = open(optarg, O_WRONLY | O_CREAT | O_TRUNC, 0666)) == -1) {
                 fprintf(stderr, "failed to open file:%s:%s\n", optarg, strerror(errno));
                 exit(1);
             }
-            setvbuf(quicly_trace_fp, NULL, _IONBF, 0);
-            break;
+            ptls_log_add_fd(fd);
+            ptls_log.include_appdata = 1;
+        } break;
         case 'f': {
             double fraction;
             if (sscanf(optarg, "%lf", &fraction) != 1) {

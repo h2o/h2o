@@ -37,13 +37,30 @@ subtest "hello" => sub {
     my $guard = spawn_server();
     my $resp = `$cli -e $tempdir/events -p /12 127.0.0.1 $port 2> /dev/null`;
     is $resp, "hello world\n";
+
     subtest "events" => sub {
         my $events = slurp_file("$tempdir/events");
         complex $events, sub {
-            $_ =~ /"type":"transport-close-send",.*?"type":"([^\"]*)",.*?"type":"([^\"]*)",.*?"type":"([^\"]*)",.*?"type":"([^\"]*)"/s
-                and $1 eq 'packet-sent' and $2 eq 'send' and $3 eq 'free';
+            $_ =~ /"type":"transport_close_send",.*?"type":"([^\"]*)",.*?"type":"([^\"]*)",.*?"type":"([^\"]*)",.*?"type":"([^\"]*)"/s
+                and $1 eq 'packet_sent' and $2 eq 'send' and $3 eq 'free';
+        };
+
+        # check that the events are compatible with qlog-adapter
+        subtest "qlog-adapter" => sub {
+            plan skip_all => "python3 not found"
+                unless system("which python3 > /dev/null 2>&1") == 0;
+            my $qlog = `misc/qlog-adapter.py < $tempdir/events`;
+            is $?, 0, "qlog-adapter can transform raw event logs";
+            diag("qlog:\n$qlog") if $ENV{TEST_DEBUG};
+            my @events = map { decode_json($_) } split /\n/, $qlog;
+            cmp_ok scalar(@events), ">=", 2, "it has at least two events";
+
+            # https://github.com/quicwg/qlog/blob/main/draft-ietf-quic-qlog-main-schema.md#the-high-level-qlog-schema-top-level
+            ok $events[0]->{qlog_version}, "it has qlog_version";
+            # TODO: validate the events according to the qlog schema
         };
     };
+
     # check if the client receives extra connection IDs
     subtest "initial-ncid" => sub {
         my $events = slurp_file("$tempdir/events");
@@ -51,7 +68,7 @@ subtest "hello" => sub {
             my @seen;
             my @expected = (0, 1, 1, 1); # expecting to see sequence=1,2,3 as we set active_connection_id_limit to 4
             foreach (split(/\n/)) {
-                if ( /"type":"new-connection-id-receive",.*"sequence":([0-9]+),/ ) {
+                if ( /"type":"new_connection_id_receive",.*"sequence":([0-9]+),/ ) {
                     # $1 contains sequence number
                     $seen[$1] = 1;
                 }
@@ -84,7 +101,7 @@ subtest "version-negotiation" => sub {
     my $resp = `$cli -n -e $tempdir/events -p /12 127.0.0.1 $port 2> /dev/null`;
     is $resp, "hello world\n";
     my $events = slurp_file("$tempdir/events");
-    if ($events =~ /"type":"connect",.*"version":(\d+)(?:.|\n)*"type":"version-switch",.*"new-version":(\d+)/m) {
+    if ($events =~ /"type":"connect",.*"version":(\d+)(?:.|\n)*"type":"version_switch",.*"new_version":(\d+)/m) {
         is $2, 1;
         isnt $1, 1;
     } else {
@@ -102,7 +119,7 @@ subtest "retry" => sub {
             my $events = slurp_file("$tempdir/events");
             unlike $events, qr/version-switch/, "no version switch";
             complex $events, sub {
-                $_ =~ qr/"type":"receive",.*"first-octet":(\d+).*\n.*"type":"stream-lost",.*"stream-id":-1,.*"off":0,/ and $1 >= 240
+                $_ =~ qr/"type":"receive",.*"bytes":"([0-9A-Fa-f]{2}).*\n.*"type":"stream_lost",.*"stream_id":-1,.*"off":0,/ and hex($1) >= 240
             }, "CH deemed lost in response to retry";
         };
     }
@@ -115,7 +132,7 @@ subtest "large-client-hello" => sub {
     my $events = slurp_file("$tempdir/events");
     complex $events, sub {
         my $before_receive = (split /"receive"/, $_)[0];
-        $before_receive =~ /"stream-send".*?\n.*?"stream-send"/s;
+        $before_receive =~ /"stream_send".*?\n.*?"stream_send"/s;
     };
 };
 
@@ -128,8 +145,8 @@ subtest "0-rtt" => sub {
     ok -e "$tempdir/session", "session saved";
     system "$cli -s $tempdir/session -e $tempdir/events 127.0.0.1 $port > /dev/null 2>&1";
     my $events = slurp_file("$tempdir/events");
-    like $events, qr/"type":"stream-send".*"stream-id":0,(.|\n)*"type":"packet-sent".*"pn":1,/m, "stream 0 on pn 1";
-    like $events, qr/"type":"cc-ack-received".*"largest-acked":1,/m, "pn 1 acked";
+    like $events, qr/"type":"stream_send".*"stream_id":0,(.|\n)*"type":"packet_sent".*"pn":1,/m, "stream 0 on pn 1";
+    like $events, qr/"type":"cc_ack_received".*"largest_acked":1,/m, "pn 1 acked";
 };
 
 unlink "$tempdir/session";
@@ -156,7 +173,7 @@ subtest "retry-invalid-token" => sub {
     $resp = `$cli -e $tempdir/events -s $tempdir/session -p /12 127.0.0.1 $port 2> /dev/null`;
     isnt $resp, "hello world\n", "not a valid response";
     my $events = slurp_file("$tempdir/events");
-    like $events, qr/"type":"transport-close-receive",.*"error-code":11,.*"reason-phrase":"token decryption failure"/m, "received token decryption failure";
+    like $events, qr/"type":"transport_close_receive",.*"error_code":11,.*"reason_phrase":"token decryption failure"/m, "received token decryption failure";
 };
 
 subtest "stateless-reset" => sub {
@@ -180,8 +197,8 @@ subtest "stateless-reset" => sub {
     }
     # check that the stateless reset is logged
     my $events = slurp_file("$tempdir/events");
-    like $events, qr/"type":"stateless-reset-receive",/m, 'got stateless reset';
-    unlike +($events =~ /"type":"stateless-reset-receive",.*?\n/ and $'), qr/"type":"packet-sent",/m, 'nothing sent after receiving stateless reset';
+    like $events, qr/"type":"stateless_reset_receive",/m, 'got stateless reset';
+    unlike +($events =~ /"type":"stateless_reset_receive",.*?\n/ and $'), qr/"type":"packet_sent",/m, 'nothing sent after receiving stateless reset';
 };
 
 subtest "no-compatible-version" => sub {
@@ -222,8 +239,8 @@ subtest "idle-timeout" => sub {
     like $resp, qr/^hello world\n(|hello world\n|)$/s;
     sleep 2;
     undef $guard;
-    like slurp_file("$tempdir/client-events"), qr/"type":("idle-timeout"|"stateless-reset-receive"),/m;
-    like slurp_file("$tempdir/server-events"), qr/"type":"idle-timeout",/m;
+    like slurp_file("$tempdir/client-events"), qr/"type":("idle_timeout"|"stateless_reset_receive"),/m;
+    like slurp_file("$tempdir/server-events"), qr/"type":"idle_timeout",/m;
 };
 
 subtest "blocked-streams" => sub {
@@ -247,14 +264,14 @@ subtest "max-data-crapped" => sub {
     my $events = ":";
     while (my $line = <$fh>) {
         my $event = from_json($line);
-        if ($event->{type} =~ /^(send|receive|max-data-receive)$/) {
+        if ($event->{type} =~ /^(send|receive|max_data_receive)$/) {
             $events .= "$event->{type}:";
-        } elsif ($event->{type} eq 'stream-send') {
-            $events .= "stream-send\@$event->{'stream-id'}:";
+        } elsif ($event->{type} eq 'stream_send') {
+            $events .= "stream_send\@$event->{stream_id}:";
         }
     }
     # check that events are happening in expected order, without a busy loop to quicly_send
-    like $events, qr/:send:stream-send\@0:receive:max-data-receive:send:stream-send\@0:/;
+    like $events, qr/:send:stream_send\@0:receive:max_data_receive:send:stream_send\@0:/;
 };
 
 unlink "$tempdir/session";
@@ -302,7 +319,7 @@ subtest "key-update" => sub {
                 local $/;
                 <$fh>;
             };
-            () = $loglines =~ /{"type":"crypto-send-key-update",/sg;
+            () = $loglines =~ /,"type":"crypto_send_key_update",/sg;
         };
         if ($doing_updates) {
             cmp_ok($num_key_updates, ">=", 4);

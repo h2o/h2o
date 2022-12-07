@@ -708,7 +708,7 @@ int main(int argc, char **argv)
                                     ptls_openssl_key_exchanges,
                                     ptls_openssl_cipher_suites,
                                     {&cert, 1},
-                                    NULL,
+                                    {{NULL}},
                                     NULL,
                                     NULL,
                                     &cert_signer.super,
