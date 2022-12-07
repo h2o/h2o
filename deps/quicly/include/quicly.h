@@ -161,6 +161,11 @@ QUICLY_CALLBACK_TYPE(void, init_cc, quicly_cc_t *cc, uint32_t initcwnd, int64_t 
  * delta must be either 1 or -1.
  */
 QUICLY_CALLBACK_TYPE(void, update_open_count, ssize_t delta);
+/**
+ * Called when picotls return PTLS_ERROR_ASYNC_OPERATION. The application must call `ptls_resume_handshake` once the async operation
+ * is complete.
+ */
+QUICLY_CALLBACK_TYPE(void, async_handshake, ptls_t *tls);
 
 /**
  * crypto offload API
@@ -369,6 +374,10 @@ struct st_quicly_context_t {
      * optional refcount callback
      */
     quicly_update_open_count_t *update_open_count;
+    /**
+     *
+     */
+    quicly_async_handshake_t *async_handshake;
 };
 
 /**
@@ -1087,6 +1096,10 @@ int quicly_accept(quicly_conn_t **conn, quicly_context_t *ctx, struct sockaddr *
  *
  */
 ptls_t *quicly_get_tls(quicly_conn_t *conn);
+/**
+ * resumes an async TLS handshake; see `quicly_async_handshake_t`
+ */
+void quicly_resume_handshake(ptls_t *tls);
 /**
  *
  */
