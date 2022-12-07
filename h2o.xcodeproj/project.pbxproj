@@ -35,9 +35,9 @@
 		08790E111D8BD85700A04BC1 /* redis-client.c in Sources */ = {isa = PBXBuildFile; fileRef = 08790DF41D8BD72500A04BC1 /* redis-client.c */; };
 		08819C25218C9FA90057ED23 /* libh2o.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 1079231519A320A700C52AD6 /* libh2o.a */; };
 		08819C2E218C9FF70057ED23 /* qif.c in Sources */ = {isa = PBXBuildFile; fileRef = 08819C2D218C9FF70057ED23 /* qif.c */; };
-		08B3297629404059009D6766 /* hpke.c in Sources */ = {isa = PBXBuildFile; fileRef = 08B3297529404059009D6766 /* hpke.c */; };
-		08B3297729404059009D6766 /* hpke.c in Sources */ = {isa = PBXBuildFile; fileRef = 08B3297529404059009D6766 /* hpke.c */; };
-		08B3297829404059009D6766 /* hpke.c in Sources */ = {isa = PBXBuildFile; fileRef = 08B3297529404059009D6766 /* hpke.c */; };
+		08B3297F29407664009D6766 /* hpke.c in Sources */ = {isa = PBXBuildFile; fileRef = 08B3297E29407664009D6766 /* hpke.c */; };
+		08B3298029407664009D6766 /* hpke.c in Sources */ = {isa = PBXBuildFile; fileRef = 08B3297E29407664009D6766 /* hpke.c */; };
+		08B3298129407664009D6766 /* hpke.c in Sources */ = {isa = PBXBuildFile; fileRef = 08B3297E29407664009D6766 /* hpke.c */; };
 		08CEA9D226701D7600B4BB6B /* rand.c in Sources */ = {isa = PBXBuildFile; fileRef = 08CEA9D126701D7600B4BB6B /* rand.c */; };
 		08CEA9D326701D7600B4BB6B /* rand.c in Sources */ = {isa = PBXBuildFile; fileRef = 08CEA9D126701D7600B4BB6B /* rand.c */; };
 		08CEA9D526701D8E00B4BB6B /* rand.c in Sources */ = {isa = PBXBuildFile; fileRef = 08CEA9D426701D8E00B4BB6B /* rand.c */; };
@@ -737,7 +737,7 @@
 		0879B8CC2724DBF400F77220 /* 10socket.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = 10socket.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		08819C2C218C9FA90057ED23 /* qif */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = qif; sourceTree = BUILT_PRODUCTS_DIR; };
 		08819C2D218C9FF70057ED23 /* qif.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = qif.c; sourceTree = "<group>"; };
-		08B3297529404059009D6766 /* hpke.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = hpke.c; sourceTree = "<group>"; };
+		08B3297E29407664009D6766 /* hpke.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = hpke.c; sourceTree = "<group>"; };
 		08B3D43A26042CAF002F195C /* 50connect-deadlock.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50connect-deadlock.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		08C7C365262AB30F009C944C /* 40mtls.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = 40mtls.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		08CEA9CF2662136B00B4BB6B /* 80http3-header-linefeed.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "80http3-header-linefeed.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
@@ -2712,10 +2712,10 @@
 		E9708AD71E499DEA0029E0A5 /* lib */ = {
 			isa = PBXGroup;
 			children = (
-				08B3297529404059009D6766 /* hpke.c */,
 				E9316ED724417E0A00C9C127 /* certificate_compression.c */,
 				E9581B9822F001C000299E8A /* cifra */,
 				086A681028361A0500233AB6 /* fusion.c */,
+				08B3297E29407664009D6766 /* hpke.c */,
 				E9708AD91E499E040029E0A5 /* openssl.c */,
 				E93BB58D25DE3987009C24D8 /* pembase64.c */,
 				E9708ADA1E499E040029E0A5 /* picotls.c */,
@@ -3303,7 +3303,7 @@
 				E98884D121E7F3C80060F010 /* sendstate.c in Sources */,
 				10DA969E1CD2BFAC00679165 /* cache.c in Sources */,
 				107923D219A3217300C52AD6 /* token.c in Sources */,
-				08B3297629404059009D6766 /* hpke.c in Sources */,
+				08B3297F29407664009D6766 /* hpke.c in Sources */,
 				10C45D551CFE9B300096DB06 /* events.c in Sources */,
 				E9FF84BC24C5AA47002577CA /* quicly-probes.d in Sources */,
 				1058C88A1AA6E5E3008D6180 /* hostinfo.c in Sources */,
@@ -3483,7 +3483,7 @@
 				1024A4001D23606300EB13F1 /* cache_digests.c in Sources */,
 				08CEA9D8267AF0EB00B4BB6B /* self_trace.c in Sources */,
 				E987E5F61FD8C04D00DE4346 /* entropy_encode.c in Sources */,
-				08B3297729404059009D6766 /* hpke.c in Sources */,
+				08B3298029407664009D6766 /* hpke.c in Sources */,
 				105534C91A3BB41C00627ECB /* proxy.c in Sources */,
 				E93C7F9A22701806007BF39A /* frame.c in Sources */,
 				107D4D461B5880BC004A9B21 /* dumper.c in Sources */,
@@ -3640,7 +3640,7 @@
 				E987E5D61FD7BEB500DE4346 /* backward_references.c in Sources */,
 				E9708B1E1E49BAC10029E0A5 /* blockwise.c in Sources */,
 				E9581B9E22F0022D00299E8A /* random.c in Sources */,
-				08B3297829404059009D6766 /* hpke.c in Sources */,
+				08B3298129407664009D6766 /* hpke.c in Sources */,
 				E987E5D41FD7BE9F00DE4346 /* histogram.c in Sources */,
 				08CEA9D9267AF0EB00B4BB6B /* self_trace.c in Sources */,
 				08F320DE1E7A9CB80038FA5A /* async.c in Sources */,
