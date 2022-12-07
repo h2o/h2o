@@ -1627,7 +1627,7 @@ void h2o_socket_start_async_handshake(h2o_loop_t *loop, int async_fd, void *data
 
     /* add async fd to event loop in order to retry when openssl engine is ready */
 #if H2O_USE_LIBUV
-    h2o_socket_t *async_sock = h2o_uv__poll_create(h2o_socket_get_loop(sock), async_fd, (uv_close_cb)free);
+    h2o_socket_t *async_sock = h2o_uv__poll_create(loop, async_fd, (uv_close_cb)free);
 #else
     h2o_socket_t *async_sock = h2o_evloop_socket_create(loop, async_fd, H2O_SOCKET_FLAG_DONT_READ);
 #endif
