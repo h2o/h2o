@@ -1075,7 +1075,7 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
                 .cipher_suites = cipher_suites,
                 .tls12_cipher_suites = ptls_openssl_tls12_cipher_suites,
                 .certificates = {0}, /* fill later */
-                .esni = NULL,        /* fill later */
+                .ech.server = {NULL},
                 .on_client_hello = &pctx->ch.super,
                 .emit_certificate = &pctx->ec.super,
                 .sign_certificate = &pctx->sc.super,
@@ -1095,7 +1095,6 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
                 .update_open_count = NULL,
                 .update_traffic_key = NULL,
                 .decompress_certificate = NULL,
-                .update_esni_key = NULL,
                 .on_extension = NULL,
             },
         .ch =

@@ -366,6 +366,7 @@ SET(LIB_SOURCE_FILES
     deps/picotls/deps/cifra/src/hmac.c
     deps/picotls/deps/cifra/src/sha256.c
     deps/picotls/lib/certificate_compression.c
+    deps/picotls/lib/hpke.c
     deps/picotls/lib/pembase64.c
     deps/picotls/lib/picotls.c
     deps/picotls/lib/openssl.c

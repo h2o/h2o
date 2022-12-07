@@ -1420,7 +1420,7 @@ Exit:
     return ret;
 }
 
-static int verify_cert(ptls_verify_certificate_t *_self, ptls_t *tls,
+static int verify_cert(ptls_verify_certificate_t *_self, ptls_t *tls, const char *server_name,
                        int (**verifier)(void *, uint16_t, ptls_iovec_t, ptls_iovec_t), void **verify_data, ptls_iovec_t *certs,
                        size_t num_certs)
 {
@@ -1445,7 +1445,7 @@ static int verify_cert(ptls_verify_certificate_t *_self, ptls_t *tls,
             }
             sk_X509_push(chain, interm);
         }
-        ret = verify_cert_chain(self->cert_store, cert, chain, ptls_is_server(tls), ptls_get_server_name(tls), &ossl_x509_err);
+        ret = verify_cert_chain(self->cert_store, cert, chain, ptls_is_server(tls), server_name, &ossl_x509_err);
     } else {
         ret = PTLS_ALERT_CERTIFICATE_REQUIRED;
         ossl_x509_err = 0;
@@ -1515,7 +1515,7 @@ Error:
     return NULL;
 }
 
-static int verify_raw_cert(ptls_verify_certificate_t *_self, ptls_t *tls,
+static int verify_raw_cert(ptls_verify_certificate_t *_self, ptls_t *tls, const char *server_name,
                            int (**verifier)(void *, uint16_t algo, ptls_iovec_t, ptls_iovec_t), void **verify_data,
                            ptls_iovec_t *certs, size_t num_certs)
 {
