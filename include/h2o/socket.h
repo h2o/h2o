@@ -488,6 +488,21 @@ static int h2o_socket_skip_tracing(h2o_socket_t *sock);
  */
 void h2o_socket_set_skip_tracing(h2o_socket_t *sock, int skip_tracing);
 
+#if H2O_CAN_ASYNC_SSL
+/**
+ * When generating a TLS handshake signature asynchronously, it is necessary to wait for a notification on a file descriptor at
+ * which point the TLS handshake machinery is to be resumed. This function sets up a callback that would be called when that
+ * notification is received. The callback must invoke `h2o_socket_async_handshake_on_notify` to do the necessary clean up, as well
+ * as obtain the `data` pointer it has supplied.
+ */
+void h2o_socket_start_async_handshake(h2o_loop_t *loop, int async_fd, void *data, h2o_socket_cb cb);
+/**
+ * The function to be called by the callback supplied to `h2o_socket_start_async_handshake`. It returns the `data` pointer supplied
+ * to `h2o_socket_start_async_handshake`.
+ */
+void *h2o_socket_async_handshake_on_notify(h2o_socket_t *async_sock, const char *err);
+#endif
+
 /**
  * Initializes a send vector that refers to mutable memory region. When the `proceed` callback is invoked, it is possible for the
  * generator to reuse (or release) that memory region.
