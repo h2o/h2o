@@ -1109,7 +1109,7 @@ struct ech_create_opener_t {
         ptls_hpke_cipher_suite_t **cipher_suites;
         uint8_t max_name_length;
         ptls_iovec_t ech_config;
-        unsigned stale : 1;
+        unsigned advertise : 1;
     } configs[1];
 };
 
@@ -1161,12 +1161,12 @@ Exit:
 
 static int on_config_one_ech(h2o_configurator_command_t *cmd, yoml_t *map, struct ech_opener_config_t *config)
 {
-    yoml_t **key_file, **config_id, **public_name, **ciphers, **max_name_length, **stale;
+    yoml_t **key_file, **config_id, **public_name, **ciphers, **max_name_length, **advertise;
 
-    *config = (struct ech_opener_config_t){.cipher_suites = ptls_openssl_hpke_cipher_suites, .max_name_length = 64};
+    *config = (struct ech_opener_config_t){.cipher_suites = ptls_openssl_hpke_cipher_suites, .max_name_length = 64, .advertise = 1};
 
-    if (h2o_configurator_parse_mapping(cmd, map, "key-file:s,config-id:s,public-name:s", "ciphers:s,max-name-length:s,stale:s",
-                                       &key_file, &config_id, &public_name, &ciphers, &max_name_length, &stale) != 0)
+    if (h2o_configurator_parse_mapping(cmd, map, "key-file:s,config-id:s,public-name:s", "ciphers:s,max-name-length:s,advertise:s",
+                                       &key_file, &config_id, &public_name, &ciphers, &max_name_length, &advertise) != 0)
         return -1;
 
     { /* load private key */
@@ -1214,13 +1214,13 @@ static int on_config_one_ech(h2o_configurator_command_t *cmd, yoml_t *map, struc
         h2o_configurator_errprintf(cmd, *max_name_length, "max-name-length must be a number between 64 and 255");
         return -1;
     }
-    if (stale != NULL) {
+    if (advertise != NULL) {
         ssize_t v;
-        if ((v = h2o_configurator_get_one_of(cmd, *stale, "NO,YES")) == -1) {
-            h2o_configurator_errprintf(cmd, *stale, "stale must be either YES or NO (default: NO)");
+        if ((v = h2o_configurator_get_one_of(cmd, *advertise, "NO,YES")) == -1) {
+            h2o_configurator_errprintf(cmd, *advertise, "advertise must be either YES or NO (default: YES)");
             return -1;
         }
-        config->stale = !!v;
+        config->advertise = !!v;
     }
 
     { /* build ECHConfig */
@@ -1262,7 +1262,7 @@ static int on_config_ech(h2o_configurator_command_t *cmd, yoml_t *configs, ptls_
             return -1;
 
         /* append to retry_config */
-        if (!opener->configs[config_index].stale) {
+        if (opener->configs[config_index].advertise) {
             if (retry_configs->base == NULL)
                 *retry_configs = ptls_iovec_init(h2o_mem_alloc(2), 2);
             retry_configs->base =
