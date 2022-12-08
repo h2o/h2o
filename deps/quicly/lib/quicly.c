@@ -1038,23 +1038,24 @@ void crypto_stream_receive(quicly_stream_t *stream, size_t off, const void *src,
     }
 }
 
-void quicly_resume_handshake(ptls_t *tls)
+quicly_conn_t *quicly_resume_handshake(ptls_t *tls)
 {
     quicly_conn_t *conn;
 
     if ((conn = *ptls_get_data_ptr(tls)) == NULL) {
         /* QUIC connection has been closed while TLS async operation was inflight. */
         ptls_free(tls);
-        return;
+        return NULL;
     }
 
     assert(conn->crypto.async_in_progress);
     conn->crypto.async_in_progress = 0;
 
     if (conn->super.state >= QUICLY_STATE_CLOSING)
-        return;
+        return conn;
 
     crypto_handshake(conn, 0, ptls_iovec_init(NULL, 0));
+    return conn;
 }
 
 static void init_stream_properties(quicly_stream_t *stream, uint32_t initial_max_stream_data_local,

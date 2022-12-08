@@ -1097,9 +1097,10 @@ int quicly_accept(quicly_conn_t **conn, quicly_context_t *ctx, struct sockaddr *
  */
 ptls_t *quicly_get_tls(quicly_conn_t *conn);
 /**
- * resumes an async TLS handshake; see `quicly_async_handshake_t`
+ * Resumes an async TLS handshake, and returns a pointer to the QUIC connection or NULL if the corresponding QUIC connection has
+ * been discarded. See `quicly_async_handshake_t`.
  */
-void quicly_resume_handshake(ptls_t *tls);
+quicly_conn_t *quicly_resume_handshake(ptls_t *tls);
 /**
  *
  */
