@@ -629,8 +629,15 @@ static void async_nb_transaction(neverbleed_iobuf_t *buf)
 
 static void async_nb_on_quic_notify(h2o_socket_t *async_sock, const char *err)
 {
+    /* resume the handshake */
     ptls_t *tls = h2o_socket_async_handshake_on_notify(async_sock, err);
-    quicly_resume_handshake(tls);
+    quicly_conn_t *quic = quicly_resume_handshake(tls);
+
+    /* if the connection is still alive, schedule the timer for packet emission */
+    if (quic != NULL) {
+        h2o_quic_conn_t *conn = *quicly_get_data(quic);
+        h2o_quic_schedule_timer(conn);
+    }
 }
 
 static void async_nb_start_quic(quicly_async_handshake_t *self, ptls_t *tls)
