@@ -15,8 +15,6 @@ listen:
   port: $tls_port
   ssl: &ssl
     identity:
-    - key-file: deps/picotls/t/assets/secp256r1/key.pem
-      certificate-file: deps/picotls/t/assets/secp256r1/cert.pem
     - key-file: examples/h2o/server.key
       certificate-file: examples/h2o/server.crt
     ech:
