@@ -26,4 +26,5 @@ provider picotls {
     probe client_random(struct st_ptls_t *tls, const void *bytes);
     probe receive_message(struct st_ptls_t *tls, uint8_t message, const void *bytes, size_t len, int result);
     probe new_secret(struct st_ptls_t *tls, const char *label, const char *secret_hex);
+    probe ech_selection(struct st_ptls_t *tls, int is_ech);
 };

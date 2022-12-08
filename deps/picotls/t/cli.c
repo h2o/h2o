@@ -141,6 +141,20 @@ Exit:
     return NULL;
 }
 
+static void ech_save_retry_configs(void)
+{
+    if (ech.retry.configs.base == NULL)
+        return;
+
+    FILE *fp;
+    if ((fp = fopen(ech.retry.fn, "wt")) == NULL) {
+        fprintf(stderr, "failed to write to ECH config file:%s:%s\n", ech.retry.fn, strerror(errno));
+        exit(1);
+    }
+    fwrite(ech.retry.configs.base, 1, ech.retry.configs.len, fp);
+    fclose(fp);
+}
+
 static void shift_buffer(ptls_buffer_t *buf, size_t delta)
 {
     if (delta != 0) {
@@ -243,6 +257,7 @@ static int handle_connection(int sockfd, ptls_context_t *ctx, const char *server
                     if ((ret = ptls_handshake(tls, &encbuf, bytebuf + off, &leftlen, hsprop)) == 0) {
                         state = IN_1RTT;
                         assert(ptls_is_server(tls) || hsprop->client.early_data_acceptance != PTLS_EARLY_DATA_ACCEPTANCE_UNKNOWN);
+                        ech_save_retry_configs();
                         /* release data sent as early-data, if server accepted it */
                         if (hsprop->client.early_data_acceptance == PTLS_EARLY_DATA_ACCEPTED)
                             shift_buffer(&ptbuf, early_bytes_sent);
@@ -253,15 +268,7 @@ static int handle_connection(int sockfd, ptls_context_t *ctx, const char *server
                     } else {
                         if (ret == PTLS_ALERT_ECH_REQUIRED) {
                             assert(!ptls_is_server(tls));
-                            if (ech.retry.configs.base != NULL) {
-                                FILE *fp;
-                                if ((fp = fopen(ech.retry.fn, "wt")) == NULL) {
-                                    fprintf(stderr, "failed to write to ECH config file:%s:%s\n", ech.retry.fn, strerror(errno));
-                                    exit(1);
-                                }
-                                fwrite(ech.retry.configs.base, 1, ech.retry.configs.len, fp);
-                                fclose(fp);
-                            }
+                            ech_save_retry_configs();
                         }
                         if (encbuf.off != 0)
                             repeat_while_eintr(write(sockfd, encbuf.base, encbuf.off), { break; });
@@ -465,8 +472,9 @@ static void usage(const char *cmd)
            "  -N named-group       named group to be used (default: secp256r1)\n"
            "  -s session-file      file to read/write the session ticket\n"
            "  -S                   require public key exchange when resuming a session\n"
-           "  -E echconfiglist     file that contains ECHConfigList; overwritten when\n"
-           "                       receiving retry_configs from the server\n"
+           "  -E echconfiglist     file that contains ECHConfigList or an empty file to\n"
+           "                       grease ECH; will be overwritten when receiving\n"
+           "                       retry_configs from the server\n"
            "  -e                   when resuming a session, send first 8,192 bytes of input\n"
            "                       as early data\n"
            "  -r public-key-file   use raw public keys (RFC 7250). When set and running as a\n"
