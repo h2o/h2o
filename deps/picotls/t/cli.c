@@ -57,21 +57,6 @@
 /* sentinels indicating that the endpoint is in benchmark mode */
 static const char input_file_is_benchmark[] = "is:benchmark";
 
-static struct {
-    ptls_iovec_t config_list;
-    struct {
-        struct {
-            ptls_hpke_kem_t *kem;
-            ptls_key_exchange_context_t *ctx;
-        } list[16];
-        size_t count;
-    } keyex;
-    struct {
-        ptls_iovec_t configs;
-        char *fn;
-    } retry;
-} ech;
-
 static ptls_hpke_kem_t *find_kem(ptls_key_exchange_algorithm_t *algo)
 {
     for (size_t i = 0; ptls_openssl_hpke_kems[i] != NULL; ++i)
@@ -80,79 +65,6 @@ static ptls_hpke_kem_t *find_kem(ptls_key_exchange_algorithm_t *algo)
 
     fprintf(stderr, "HPKE KEM not found for %s\n", algo->name);
     return NULL;
-}
-
-static ptls_aead_context_t *create_ech_opener(ptls_ech_create_opener_t *self, ptls_hpke_kem_t **kem,
-                                              ptls_hpke_cipher_suite_t **cipher, ptls_t *tls, uint8_t config_id,
-                                              ptls_hpke_cipher_suite_id_t cipher_id, ptls_iovec_t enc, ptls_iovec_t info_prefix)
-{
-    const uint8_t *src = ech.config_list.base, *const end = src + ech.config_list.len;
-    size_t index = 0;
-    int ret = 0;
-
-    /* look for the cipher implementation; this should better be specific to each ECHConfig (as each of them may advertise different
-     * set of values) */
-    *cipher = NULL;
-    for (size_t i = 0; ptls_openssl_hpke_cipher_suites[i] != NULL; ++i) {
-        if (ptls_openssl_hpke_cipher_suites[i]->id.kdf == cipher_id.kdf &&
-            ptls_openssl_hpke_cipher_suites[i]->id.aead == cipher_id.aead) {
-            *cipher = ptls_openssl_hpke_cipher_suites[i];
-            break;
-        }
-    }
-    if (*cipher == NULL)
-        goto Exit;
-
-    ptls_decode_open_block(src, end, 2, {
-        uint16_t version;
-        if ((ret = ptls_decode16(&version, &src, end)) != 0)
-            goto Exit;
-        do {
-            ptls_decode_open_block(src, end, 2, {
-                if (src == end) {
-                    ret = PTLS_ALERT_DECODE_ERROR;
-                    goto Exit;
-                }
-                if (*src == config_id) {
-                    /* this is the ECHConfig that we have been looking for */
-                    if (index >= ech.keyex.count) {
-                        fprintf(stderr, "ECH key missing for config %zu\n", index);
-                        return NULL;
-                    }
-                    uint8_t *info = malloc(info_prefix.len + end - (src - 4));
-                    memcpy(info, info_prefix.base, info_prefix.len);
-                    memcpy(info + info_prefix.len, src - 4, end - (src - 4));
-                    ptls_aead_context_t *aead;
-                    ptls_hpke_setup_base_r(ech.keyex.list[index].kem, *cipher, ech.keyex.list[index].ctx, &aead, enc,
-                                           ptls_iovec_init(info, info_prefix.len + end - (src - 4)));
-                    free(info);
-                    *kem = ech.keyex.list[index].kem;
-                    return aead;
-                }
-                ++index;
-                src = end;
-            });
-        } while (src != end);
-    });
-
-Exit:
-    if (ret != 0)
-        fprintf(stderr, "ECH decode error:%d\n", ret);
-    return NULL;
-}
-
-static void ech_save_retry_configs(void)
-{
-    if (ech.retry.configs.base == NULL)
-        return;
-
-    FILE *fp;
-    if ((fp = fopen(ech.retry.fn, "wt")) == NULL) {
-        fprintf(stderr, "failed to write to ECH config file:%s:%s\n", ech.retry.fn, strerror(errno));
-        exit(1);
-    }
-    fwrite(ech.retry.configs.base, 1, ech.retry.configs.len, fp);
-    fclose(fp);
 }
 
 static void shift_buffer(ptls_buffer_t *buf, size_t delta)
@@ -528,7 +440,6 @@ int main(int argc, char **argv)
 
     ptls_key_exchange_algorithm_t *key_exchanges[128] = {NULL};
     ptls_cipher_suite_t *cipher_suites[128] = {NULL};
-    ptls_ech_create_opener_t ech_opener = {.cb = create_ech_opener};
     ptls_context_t ctx = {
         .random_bytes = ptls_openssl_random_bytes,
         .get_time = &ptls_get_time,
@@ -602,42 +513,12 @@ int main(int argc, char **argv)
         case 'S':
             ctx.require_dhe_on_psk = 1;
             break;
-        case 'E': {
-            FILE *fp;
-            if ((fp = fopen(optarg, "rt")) == NULL) {
-                fprintf(stderr, "failed to open ECHConfigList file:%s:%s\n", optarg, strerror(errno));
-                return 1;
-            }
-            ech.config_list.base = malloc(65536);
-            if ((ech.config_list.len = fread(ech.config_list.base, 1, 65536, fp)) == 65536) {
-                fprintf(stderr, "ECHConfigList is too large:%s\n", optarg);
-                return 1;
-            }
-            fclose(fp);
-            ech.retry.fn = optarg;
-        } break;
-        case 'K': {
-            FILE *fp;
-            EVP_PKEY *pkey;
-            int ret;
-            if ((fp = fopen(optarg, "rt")) == NULL) {
-                fprintf(stderr, "failed to open ECH private key file:%s:%s\n", optarg, strerror(errno));
-                return 1;
-            }
-            if ((pkey = PEM_read_PrivateKey(fp, NULL, NULL, NULL)) == NULL) {
-                fprintf(stderr, "failed to load private key from file:%s\n", optarg);
-                return 1;
-            }
-            if ((ret = ptls_openssl_create_key_exchange(&ech.keyex.list[ech.keyex.count].ctx, pkey)) != 0) {
-                fprintf(stderr, "failed to load private key from file:%s:picotls-error:%d", optarg, ret);
-                return 1;
-            }
-            ech.keyex.list[ech.keyex.count].kem = find_kem(ech.keyex.list[ech.keyex.count].ctx->algo);
-            ++ech.keyex.count;
-            EVP_PKEY_free(pkey);
-            fclose(fp);
-            ctx.ech.server.create_opener = &ech_opener;
-        } break;
+        case 'E':
+            ech_setup_configs(optarg);
+            break;
+        case 'K':
+            ech_setup_key(&ctx, optarg);
+            break;
         case 'l':
             setup_log_event(&ctx, optarg);
             break;
