@@ -362,6 +362,7 @@ struct st_quicly_conn_t {
             ptls_raw_extension_t ext[3];
             ptls_buffer_t buf;
         } transport_params;
+        unsigned async_in_progress : 1;
     } crypto;
     /**
      * token (if the token is a Retry token can be determined by consulting the length of retry_scid)
@@ -961,56 +962,100 @@ static int write_crypto_data(quicly_conn_t *conn, ptls_buffer_t *tlsbuf, size_t 
     return 0;
 }
 
-void crypto_stream_receive(quicly_stream_t *stream, size_t off, const void *src, size_t len)
+static void crypto_handshake(quicly_conn_t *conn, size_t in_epoch, ptls_iovec_t input)
 {
-    quicly_conn_t *conn = stream->conn;
-    size_t in_epoch = -(1 + stream->stream_id), epoch_offsets[5] = {0};
-    ptls_iovec_t input;
     ptls_buffer_t output;
+    size_t epoch_offsets[5] = {0};
 
-    if (quicly_streambuf_ingress_receive(stream, off, src, len) != 0)
-        return;
+    assert(!conn->crypto.async_in_progress);
 
     ptls_buffer_init(&output, "", 0);
 
-    /* send handshake messages to picotls, and let it fill in the response */
-    while ((input = quicly_streambuf_ingress_get(stream)).len != 0) {
-        int handshake_result = ptls_handle_message(conn->crypto.tls, &output, epoch_offsets, in_epoch, input.base, input.len,
-                                                   &conn->crypto.handshake_properties);
-        quicly_streambuf_ingress_shift(stream, input.len);
-        QUICLY_PROBE(CRYPTO_HANDSHAKE, conn, conn->stash.now, handshake_result);
-        QUICLY_LOG_CONN(crypto_handshake, conn, { PTLS_LOG_ELEMENT_SIGNED(ret, handshake_result); });
-        switch (handshake_result) {
-        case 0:
-        case PTLS_ERROR_IN_PROGRESS:
-            break;
-        default:
-            initiate_close(conn,
-                           PTLS_ERROR_GET_CLASS(handshake_result) == PTLS_ERROR_CLASS_SELF_ALERT ? handshake_result
-                                                                                                 : QUICLY_TRANSPORT_ERROR_INTERNAL,
-                           QUICLY_FRAME_TYPE_CRYPTO, NULL);
-            goto Exit;
-        }
-        /* drop 0-RTT write key if 0-RTT is rejected by remote peer */
-        if (conn->application != NULL && !conn->application->one_rtt_writable &&
-            conn->application->cipher.egress.key.aead != NULL) {
-            assert(quicly_is_client(conn));
-            if (conn->crypto.handshake_properties.client.early_data_acceptance == PTLS_EARLY_DATA_REJECTED) {
-                dispose_cipher(&conn->application->cipher.egress.key);
-                conn->application->cipher.egress.key = (struct st_quicly_cipher_context_t){NULL};
-                /* retire all packets with ack_epoch == 3; they are all 0-RTT packets */
-                int ret;
-                if ((ret = discard_sentmap_by_epoch(conn, 1u << QUICLY_EPOCH_1RTT)) != 0) {
-                    initiate_close(conn, ret, QUICLY_FRAME_TYPE_CRYPTO, NULL);
-                    goto Exit;
-                }
+    int handshake_result = ptls_handle_message(conn->crypto.tls, &output, epoch_offsets, in_epoch, input.base, input.len,
+                                               &conn->crypto.handshake_properties);
+    QUICLY_PROBE(CRYPTO_HANDSHAKE, conn, conn->stash.now, handshake_result);
+    QUICLY_LOG_CONN(crypto_handshake, conn, { PTLS_LOG_ELEMENT_SIGNED(ret, handshake_result); });
+    switch (handshake_result) {
+    case 0:
+    case PTLS_ERROR_IN_PROGRESS:
+        break;
+    case PTLS_ERROR_ASYNC_OPERATION:
+        assert(conn->super.ctx->async_handshake != NULL &&
+               "async handshake is used but the quicly_context_t::async_handshake is NULL");
+        conn->crypto.async_in_progress = 1;
+        conn->super.ctx->async_handshake->cb(conn->super.ctx->async_handshake, conn->crypto.tls);
+        break;
+    default:
+        initiate_close(conn,
+                       PTLS_ERROR_GET_CLASS(handshake_result) == PTLS_ERROR_CLASS_SELF_ALERT ? handshake_result
+                                                                                             : QUICLY_TRANSPORT_ERROR_INTERNAL,
+                       QUICLY_FRAME_TYPE_CRYPTO, NULL);
+        goto Exit;
+    }
+    /* drop 0-RTT write key if 0-RTT is rejected by remote peer */
+    if (conn->application != NULL && !conn->application->one_rtt_writable &&
+        conn->application->cipher.egress.key.aead != NULL) {
+        assert(quicly_is_client(conn));
+        if (conn->crypto.handshake_properties.client.early_data_acceptance == PTLS_EARLY_DATA_REJECTED) {
+            dispose_cipher(&conn->application->cipher.egress.key);
+            conn->application->cipher.egress.key = (struct st_quicly_cipher_context_t){NULL};
+            /* retire all packets with ack_epoch == 3; they are all 0-RTT packets */
+            int ret;
+            if ((ret = discard_sentmap_by_epoch(conn, 1u << QUICLY_EPOCH_1RTT)) != 0) {
+                initiate_close(conn, ret, QUICLY_FRAME_TYPE_CRYPTO, NULL);
+                goto Exit;
             }
         }
     }
+
     write_crypto_data(conn, &output, epoch_offsets);
 
 Exit:
     ptls_buffer_dispose(&output);
+}
+
+void crypto_stream_receive(quicly_stream_t *stream, size_t off, const void *src, size_t len)
+{
+    quicly_conn_t *conn = stream->conn;
+    ptls_iovec_t input;
+
+    /* store input */
+    if (quicly_streambuf_ingress_receive(stream, off, src, len) != 0)
+        return;
+
+    /* While the server generates the handshake signature asynchronously, clients would not send additional messages. They cannot
+     * generate Finished. They would not send Certificate / CertificateVerify before authenticating the server identity. */
+    if (conn->crypto.async_in_progress) {
+        initiate_close(conn, PTLS_ALERT_UNEXPECTED_MESSAGE, QUICLY_FRAME_TYPE_CRYPTO, NULL);
+        return;
+    }
+
+    /* feed the input into TLS, send result */
+    if ((input = quicly_streambuf_ingress_get(stream)).len != 0) {
+        size_t in_epoch = -(1 + stream->stream_id);
+        crypto_handshake(conn, in_epoch, input);
+        quicly_streambuf_ingress_shift(stream, input.len);
+    }
+}
+
+quicly_conn_t *quicly_resume_handshake(ptls_t *tls)
+{
+    quicly_conn_t *conn;
+
+    if ((conn = *ptls_get_data_ptr(tls)) == NULL) {
+        /* QUIC connection has been closed while TLS async operation was inflight. */
+        ptls_free(tls);
+        return NULL;
+    }
+
+    assert(conn->crypto.async_in_progress);
+    conn->crypto.async_in_progress = 0;
+
+    if (conn->super.state >= QUICLY_STATE_CLOSING)
+        return conn;
+
+    crypto_handshake(conn, 0, ptls_iovec_init(NULL, 0));
+    return conn;
 }
 
 static void init_stream_properties(quicly_stream_t *stream, uint32_t initial_max_stream_data_local,
@@ -1632,7 +1677,12 @@ void quicly_free(quicly_conn_t *conn)
     free_application_space(&conn->application);
 
     ptls_buffer_dispose(&conn->crypto.transport_params.buf);
-    ptls_free(conn->crypto.tls);
+    if (conn->crypto.async_in_progress) {
+        /* When async signature generation is inflight, `ptls_free` will be called from `quicly_resume_handshake` laterwards. */
+        *ptls_get_data_ptr(conn->crypto.tls) = NULL;
+    } else {
+        ptls_free(conn->crypto.tls);
+    }
 
     unlock_now(conn);
 
