@@ -251,6 +251,149 @@ static inline void setup_session_cache(ptls_context_t *ctx)
     ctx->encrypt_ticket = &sc.super;
 }
 
+static struct {
+    ptls_iovec_t config_list;
+    struct {
+        struct {
+            ptls_hpke_kem_t *kem;
+            ptls_key_exchange_context_t *ctx;
+        } list[16];
+        size_t count;
+    } keyex;
+    struct {
+        ptls_iovec_t configs;
+        char *fn;
+    } retry;
+} ech;
+
+static ptls_aead_context_t *ech_create_opener(ptls_ech_create_opener_t *self, ptls_hpke_kem_t **kem,
+                                              ptls_hpke_cipher_suite_t **cipher, ptls_t *tls, uint8_t config_id,
+                                              ptls_hpke_cipher_suite_id_t cipher_id, ptls_iovec_t enc, ptls_iovec_t info_prefix)
+{
+    const uint8_t *src = ech.config_list.base, *const end = src + ech.config_list.len;
+    size_t index = 0;
+    int ret = 0;
+
+    /* look for the cipher implementation; this should better be specific to each ECHConfig (as each of them may advertise different
+     * set of values) */
+    *cipher = NULL;
+    for (size_t i = 0; ptls_openssl_hpke_cipher_suites[i] != NULL; ++i) {
+        if (ptls_openssl_hpke_cipher_suites[i]->id.kdf == cipher_id.kdf &&
+            ptls_openssl_hpke_cipher_suites[i]->id.aead == cipher_id.aead) {
+            *cipher = ptls_openssl_hpke_cipher_suites[i];
+            break;
+        }
+    }
+    if (*cipher == NULL)
+        goto Exit;
+
+    ptls_decode_open_block(src, end, 2, {
+        uint16_t version;
+        if ((ret = ptls_decode16(&version, &src, end)) != 0)
+            goto Exit;
+        do {
+            ptls_decode_open_block(src, end, 2, {
+                if (src == end) {
+                    ret = PTLS_ALERT_DECODE_ERROR;
+                    goto Exit;
+                }
+                if (*src == config_id) {
+                    /* this is the ECHConfig that we have been looking for */
+                    if (index >= ech.keyex.count) {
+                        fprintf(stderr, "ECH key missing for config %zu\n", index);
+                        return NULL;
+                    }
+                    uint8_t *info = malloc(info_prefix.len + end - (src - 4));
+                    memcpy(info, info_prefix.base, info_prefix.len);
+                    memcpy(info + info_prefix.len, src - 4, end - (src - 4));
+                    ptls_aead_context_t *aead;
+                    ptls_hpke_setup_base_r(ech.keyex.list[index].kem, *cipher, ech.keyex.list[index].ctx, &aead, enc,
+                                           ptls_iovec_init(info, info_prefix.len + end - (src - 4)));
+                    free(info);
+                    *kem = ech.keyex.list[index].kem;
+                    return aead;
+                }
+                ++index;
+                src = end;
+            });
+        } while (src != end);
+    });
+
+Exit:
+    if (ret != 0)
+        fprintf(stderr, "ECH decode error:%d\n", ret);
+    return NULL;
+}
+
+static void ech_save_retry_configs(void)
+{
+    if (ech.retry.configs.base == NULL)
+        return;
+
+    FILE *fp;
+    if ((fp = fopen(ech.retry.fn, "wt")) == NULL) {
+        fprintf(stderr, "failed to write to ECH config file:%s:%s\n", ech.retry.fn, strerror(errno));
+        exit(1);
+    }
+    fwrite(ech.retry.configs.base, 1, ech.retry.configs.len, fp);
+    fclose(fp);
+}
+
+static void ech_setup_configs(const char *fn)
+{
+    FILE *fp;
+
+    if ((fp = fopen(fn, "rt")) == NULL) {
+        fprintf(stderr, "failed to open ECHConfigList file:%s:%s\n", fn, strerror(errno));
+        exit(1);
+    }
+    ech.config_list.base = malloc(65536);
+    if ((ech.config_list.len = fread(ech.config_list.base, 1, 65536, fp)) == 65536) {
+        fprintf(stderr, "ECHConfigList is too large:%s\n", fn);
+        exit(1);
+    }
+    fclose(fp);
+    ech.retry.fn = strdup(fn);
+}
+
+static void ech_setup_key(ptls_context_t *ctx, const char *fn)
+{
+    FILE *fp;
+    EVP_PKEY *pkey;
+    int ret;
+
+    if ((fp = fopen(fn, "rt")) == NULL) {
+        fprintf(stderr, "failed to open ECH private key file:%s:%s\n", fn, strerror(errno));
+        exit(1);
+    }
+    if ((pkey = PEM_read_PrivateKey(fp, NULL, NULL, NULL)) == NULL) {
+        fprintf(stderr, "failed to load private key from file:%s\n", fn);
+        exit(1);
+    }
+    if ((ret = ptls_openssl_create_key_exchange(&ech.keyex.list[ech.keyex.count].ctx, pkey)) != 0) {
+        fprintf(stderr, "failed to load private key from file:%s:picotls-error:%d", fn, ret);
+        exit(1);
+    }
+    EVP_PKEY_free(pkey);
+    fclose(fp);
+
+    for (size_t i = 0; ptls_openssl_hpke_kems[i] != NULL; ++i) {
+        if (ptls_openssl_hpke_kems[i]->keyex == ech.keyex.list[ech.keyex.count].ctx->algo) {
+            ech.keyex.list[ech.keyex.count].kem = ptls_openssl_hpke_kems[i];
+            break;
+        }
+    }
+    if (ech.keyex.list[ech.keyex.count].kem == NULL) {
+        fprintf(stderr, "kem unknown for private key:%s\n", fn);
+        exit(1);
+    }
+
+    ++ech.keyex.count;
+
+    static ptls_ech_create_opener_t opener = {.cb = ech_create_opener};
+    ctx->ech.server.create_opener = &opener;
+}
+
 static inline int resolve_address(struct sockaddr *sa, socklen_t *salen, const char *host, const char *port, int family, int type,
                                   int proto)
 {
