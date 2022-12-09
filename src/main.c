@@ -1417,7 +1417,8 @@ static int on_config_one_ech(h2o_configurator_command_t *cmd, yoml_t *map, struc
                                        &key_file, &config_id, &public_name, &ciphers, &max_name_length, &advertise) != 0)
         return -1;
 
-    { /* load private key */
+    { /* Load private key. TODO use neverbleed instead of retaining the ECH private key inside h2o. We may not need or want
+       * asynchronous handling though, because X25519 is lightweight. */
         FILE *fp;
         if ((fp = fopen((*key_file)->data.scalar, "rt")) == NULL) {
             h2o_configurator_errprintf(cmd, *key_file, "failed to open ECH private key file:%s:%s", (*key_file)->data.scalar,
