@@ -627,6 +627,27 @@ static void async_nb_transaction(neverbleed_iobuf_t *buf)
     async_nb_run_sync(buf, neverbleed_transaction_read);
 }
 
+static void async_nb_on_quic_notify(h2o_socket_t *async_sock, const char *err)
+{
+    /* resume the handshake */
+    ptls_t *tls = h2o_socket_async_handshake_on_notify(async_sock, err);
+    quicly_conn_t *quic = quicly_resume_handshake(tls);
+
+    /* if the connection is still alive, schedule the timer for packet emission */
+    if (quic != NULL) {
+        h2o_quic_conn_t *conn = *quicly_get_data(quic);
+        h2o_quic_schedule_timer(conn);
+    }
+}
+
+static void async_nb_start_quic(quicly_async_handshake_t *self, ptls_t *tls)
+{
+    int async_fd = ptls_openssl_get_async_fd(tls);
+    h2o_socket_start_async_handshake(conf.threads[thread_index].ctx.loop, async_fd, tls, async_nb_on_quic_notify);
+}
+
+static quicly_async_handshake_t async_nb_quic_handler = {async_nb_start_quic};
+
 #endif
 
 static int on_openssl_print_errors(const char *str, size_t len, void *fp)
@@ -1173,9 +1194,6 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
             pctx->ctx.cipher_suites = replace_ciphersuites(pctx->ctx.cipher_suites, fusion_all);
         }
 #endif
-        // disable async handshaking in quic until it is supported in quicly
-        pctx->sc.async = 0;
-
         quicly_amend_ptls_context(&pctx->ctx);
     }
 
@@ -2294,6 +2312,9 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
                 *quic = quicly_spec_context;
                 quic->cid_encryptor = &quic_cid_encryptor;
                 quic->generate_resumption_token = &quic_resumption_token_generator;
+#if H2O_CAN_ASYNC_SSL
+                quic->async_handshake = &async_nb_quic_handler;
+#endif
                 listener = add_listener(fd, ai->ai_addr, ai->ai_addrlen, ctx->hostconf == NULL, 0, 0, 0);
                 listener->quic.ctx = quic;
                 if (quic_node != NULL) {

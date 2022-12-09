@@ -203,6 +203,7 @@
 		081F00CC291A358800534A86 /* asn1.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = asn1.h; sourceTree = "<group>"; };
 		081F00CD291A358800534A86 /* pembase64.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = pembase64.h; sourceTree = "<group>"; };
 		081F00CE291A358800534A86 /* ptlsbcrypt.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ptlsbcrypt.h; sourceTree = "<group>"; };
+		08B3298229419DFC009D6766 /* ech-live.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "ech-live.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		08F0FDF52910F67A00EE657D /* hpke.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = hpke.c; sourceTree = "<group>"; };
 		105900241DC8D37500FB4085 /* aes.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = aes.c; path = src/aes.c; sourceTree = "<group>"; };
 		105900251DC8D37500FB4085 /* aes.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = aes.h; path = src/aes.h; sourceTree = "<group>"; };
@@ -260,7 +261,7 @@
 		E95EBCCA227EA0180022C32D /* dtrace-utils.cmake */ = {isa = PBXFileReference; lastKnownFileType = text; path = "dtrace-utils.cmake"; sourceTree = "<group>"; };
 		E97577002212405300D1EF74 /* ffx.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = ffx.h; sourceTree = "<group>"; };
 		E97577022212405D00D1EF74 /* ffx.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = ffx.c; sourceTree = "<group>"; };
-		E97577072213148800D1EF74 /* e2e.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.script.perl; path = e2e.t; sourceTree = "<group>"; };
+		E97577072213148800D1EF74 /* e2e.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.script.perl; path = e2e.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		E99B75DE1F5CDDB500CF503E /* asn1.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = asn1.c; sourceTree = "<group>"; };
 		E99B75DF1F5CDDB500CF503E /* pembase64.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = pembase64.c; sourceTree = "<group>"; };
 		E9B43DBF24619D1700824E51 /* fusion.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = fusion.c; sourceTree = "<group>"; };
@@ -452,6 +453,7 @@
 			children = (
 				106530FE1DAD8A3C005B2C60 /* cli.c */,
 				E97577072213148800D1EF74 /* e2e.t */,
+				08B3298229419DFC009D6766 /* ech-live.t */,
 				E9B43DE224619D7E00824E51 /* fusion.c */,
 				081F00C92918823200534A86 /* hpke.c */,
 				1059003D1DC8D4E300FB4085 /* minicrypto.c */,
