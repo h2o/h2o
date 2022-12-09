@@ -579,6 +579,7 @@ typedef struct st_ptls_hpke_cipher_suite_id_t {
 
 typedef const struct st_ptls_hpke_cipher_suite_t {
     ptls_hpke_cipher_suite_id_t id;
+    const char *name; /* in form of "<kdf>/<aead>" using the sames specified in IANA HPKE registry */
     ptls_hash_algorithm_t *hash;
     ptls_aead_algorithm_t *aead;
 } ptls_hpke_cipher_suite_t;
@@ -942,7 +943,8 @@ typedef struct st_ptls_handshake_properties_t {
              */
             struct {
                 /**
-                 * config offered by server e.g., by HTTPS RR
+                 * Config offered by server e.g., by HTTPS RR. If config.base is non-NULL but config.len is zero, a grease ECH will
+                 * be sent, assuming that X25519-SHA256 KEM and SHA256-AES-128-GCM HPKE cipher is available.
                  */
                 ptls_iovec_t configs;
                 /**

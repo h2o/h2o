@@ -172,6 +172,7 @@ struct st_decoded_ech_config_t {
  */
 struct st_ptls_ech_t {
     uint8_t offered : 1;
+    uint8_t offered_grease : 1;
     uint8_t accepted : 1;
     uint8_t config_id;
     ptls_hpke_kem_t *kem;
@@ -1159,6 +1160,50 @@ Exit:
     if (ret != 0)
         clear_ech(ech, 0);
     return ret;
+}
+
+static void client_setup_ech_grease(struct st_ptls_ech_t *ech, void (*random_bytes)(void *, size_t), ptls_hpke_kem_t **kems,
+                                    ptls_hpke_cipher_suite_t **ciphers, const char *sni_name)
+{
+    static const size_t x25519_key_size = 32;
+    uint8_t random_secret[PTLS_AES128_KEY_SIZE + PTLS_AES_IV_SIZE];
+
+    /* pick up X25519, AES-128-GCM or bail out */
+    for (size_t i = 0; kems[i] != NULL; ++i) {
+        if (kems[i]->id == PTLS_HPKE_KEM_X25519_SHA256) {
+            ech->kem = kems[i];
+            break;
+        }
+    }
+    for (size_t i = 0; ciphers[i] != NULL; ++i) {
+        if (ciphers[i]->id.kdf == PTLS_HPKE_HKDF_SHA256 && ciphers[i]->id.aead == PTLS_HPKE_AEAD_AES_128_GCM) {
+            ech->cipher = ciphers[i];
+            break;
+        }
+    }
+    if (ech->kem == NULL || ech->cipher == NULL)
+        goto Fail;
+
+    /* aead is generated from random */
+    random_bytes(random_secret, sizeof(random_secret));
+    ech->aead = ptls_aead_new_direct(ech->cipher->aead, 1, random_secret, random_secret + PTLS_AES128_KEY_SIZE);
+
+    /* `enc` is random bytes */
+    if ((ech->client.enc.base = malloc(x25519_key_size)) == NULL)
+        goto Fail;
+    ech->client.enc.len = x25519_key_size;
+    random_bytes(ech->client.enc.base, ech->client.enc.len);
+
+    /* setup the rest (inner_client_random is left zeros) */
+    random_bytes(&ech->config_id, sizeof(ech->config_id));
+    ech->client.max_name_length = 64;
+    if ((ech->client.public_name = duplicate_as_str(sni_name, strlen(sni_name))) == NULL)
+        goto Fail;
+
+    return;
+
+Fail:
+    clear_ech(ech, 0);
 }
 
 #define ECH_CONFIRMATION_SERVER_HELLO "ech accept confirmation"
@@ -2265,13 +2310,18 @@ static int send_client_hello(ptls_t *tls, ptls_message_emitter_t *emitter, ptls_
 
     if (properties != NULL) {
         /* try to use ECH (ignore broken ECHConfigList; it is delivered insecurely) */
-        if (!is_second_flight && sni_name != NULL && tls->ctx->ech.client.ciphers != NULL &&
-            properties->client.ech.configs.len != 0) {
-            struct st_decoded_ech_config_t decoded;
-            client_decode_ech_config_list(tls->ctx, &decoded, properties->client.ech.configs);
-            if (decoded.kem != NULL && decoded.cipher != NULL) {
-                if ((ret = client_setup_ech(&tls->ech, &decoded, tls->ctx->random_bytes)) != 0)
-                    goto Exit;
+        if (!is_second_flight && sni_name != NULL && tls->ctx->ech.client.ciphers != NULL) {
+            if (properties->client.ech.configs.len != 0) {
+                struct st_decoded_ech_config_t decoded;
+                client_decode_ech_config_list(tls->ctx, &decoded, properties->client.ech.configs);
+                if (decoded.kem != NULL && decoded.cipher != NULL) {
+                    if ((ret = client_setup_ech(&tls->ech, &decoded, tls->ctx->random_bytes)) != 0)
+                        goto Exit;
+                }
+            } else {
+                /* zero-length config indicates ECH greasing */
+                client_setup_ech_grease(&tls->ech, tls->ctx->random_bytes, tls->ctx->ech.client.kems, tls->ctx->ech.client.ciphers,
+                                        sni_name);
             }
         }
         /* setup resumption-related data. If successful, resumption_secret becomes a non-zero value. */
@@ -2404,7 +2454,11 @@ static int send_client_hello(ptls_t *tls, ptls_message_emitter_t *emitter, ptls_
             memcpy(tls->ech.client.first_ech.base,
                    emitter->buf->base + ech_size_offset - outer_ech_header_size(tls->ech.client.enc.len), len);
             tls->ech.client.first_ech.len = len;
-            tls->ech.offered = 1;
+            if (properties->client.ech.configs.len != 0) {
+                tls->ech.offered = 1;
+            } else {
+                tls->ech.offered_grease = 1;
+            }
         }
         /* update hash */
         ptls__key_schedule_update_hash(tls->key_schedule, emitter->buf->base + mess_start, emitter->buf->off - mess_start, 1);
@@ -2546,7 +2600,7 @@ static int decode_server_hello(ptls_t *tls, struct st_ptls_server_hello_t *sh, c
                               break;
                           case PTLS_EXTENSION_TYPE_ENCRYPTED_CLIENT_HELLO:
                               assert(sh->is_retry_request);
-                              if (!tls->ech.offered) {
+                              if (!(tls->ech.offered || tls->ech.offered_grease)) {
                                   ret = PTLS_ALERT_UNSUPPORTED_EXTENSION;
                                   goto Exit;
                               }
@@ -2659,6 +2713,8 @@ static int client_ech_select_hello(ptls_t *tls, ptls_iovec_t message, size_t con
     key_schedule_select_outer(tls->key_schedule);
 
 Exit:
+    PTLS_PROBE(ECH_SELECTION, tls, !!tls->ech.accepted);
+    PTLS_LOG_CONN(ech_selection, tls, { PTLS_LOG_ELEMENT_BOOL(is_ech, tls->ech.accepted); });
     ptls_clear_memory(confirm_hash_expected, sizeof(confirm_hash_expected));
     return ret;
 }
@@ -2682,10 +2738,17 @@ static int client_handle_hello(ptls_t *tls, ptls_message_emitter_t *emitter, ptl
         if ((ret = key_schedule_select_cipher(tls->key_schedule, tls->cipher_suite, 0)) != 0)
             goto Exit;
         key_schedule_transform_post_ch1hash(tls->key_schedule);
-        if (tls->ech.aead != NULL &&
-            (ret = client_ech_select_hello(tls, message, sh.retry_request.ech != NULL ? sh.retry_request.ech - message.base : 0,
-                                           ECH_CONFIRMATION_HRR)) != 0)
-            goto Exit;
+        if (tls->ech.aead != NULL) {
+            size_t confirm_hash_off = 0;
+            if (tls->ech.offered) {
+                if (sh.retry_request.ech != NULL)
+                    confirm_hash_off = sh.retry_request.ech - message.base;
+            } else {
+                assert(tls->ech.offered_grease);
+            }
+            if ((ret = client_ech_select_hello(tls, message, confirm_hash_off, ECH_CONFIRMATION_HRR)) != 0)
+                goto Exit;
+        }
         ptls__key_schedule_update_hash(tls->key_schedule, message.base, message.len, 0);
         return handle_hello_retry_request(tls, emitter, &sh, message, properties);
     }
@@ -2695,9 +2758,14 @@ static int client_handle_hello(ptls_t *tls, ptls_message_emitter_t *emitter, ptl
         goto Exit;
 
     /* check if ECH is accepted */
-    static const size_t confirm_hash_off =
-        PTLS_HANDSHAKE_HEADER_SIZE + 2 /* legacy_version */ + PTLS_HELLO_RANDOM_SIZE - PTLS_ECH_CONFIRM_LENGTH;
     if (tls->ech.aead != NULL) {
+        size_t confirm_hash_off = 0;
+        if (tls->ech.offered) {
+            confirm_hash_off =
+                PTLS_HANDSHAKE_HEADER_SIZE + 2 /* legacy_version */ + PTLS_HELLO_RANDOM_SIZE - PTLS_ECH_CONFIRM_LENGTH;
+        } else {
+            assert(tls->ech.offered_grease);
+        }
         if ((ret = client_ech_select_hello(tls, message, confirm_hash_off, ECH_CONFIRMATION_SERVER_HELLO)) != 0)
             goto Exit;
     }
@@ -2837,7 +2905,7 @@ static int client_handle_encrypted_extensions(ptls_t *tls, ptls_iovec_t message,
             break;
         case PTLS_EXTENSION_TYPE_ENCRYPTED_CLIENT_HELLO: {
             /* accept retry_configs only if we offered ECH but rejected */
-            if (!(tls->ech.offered && !ptls_is_ech_handshake(tls, NULL, NULL))) {
+            if (!((tls->ech.offered || tls->ech.offered_grease) && !ptls_is_ech_handshake(tls, NULL, NULL))) {
                 ret = PTLS_ALERT_UNSUPPORTED_EXTENSION;
                 goto Exit;
             }
@@ -4197,6 +4265,10 @@ static int server_handle_hello(ptls_t *tls, ptls_message_emitter_t *emitter, ptl
                      tls->ctx->ech.server.create_opener, &tls->ech.kem, &tls->ech.cipher, tls, ch->ech.config_id,
                      ch->ech.cipher_suite, ch->ech.enc, ptls_iovec_init(ech_info_prefix, sizeof(ech_info_prefix)))) != NULL)
                 tls->ech.config_id = ch->ech.config_id;
+        }
+        if (!is_second_flight) {
+            PTLS_PROBE(ECH_SELECTION, tls, tls->ech.aead != NULL);
+            PTLS_LOG_CONN(ech_selection, tls, { PTLS_LOG_ELEMENT_BOOL(is_ech, tls->ech.aead != NULL); });
         }
         if (tls->ech.aead != NULL) {
             /* now that AEAD context is available, create AAD and decrypt inner CH */
