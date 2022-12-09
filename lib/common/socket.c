@@ -1617,20 +1617,46 @@ static void proceed_handshake(h2o_socket_t *sock, const char *err);
 
 #if H2O_CAN_ASYNC_SSL
 
-static void on_async_proceed_handshake(h2o_socket_t *async_sock, const char *err)
+void h2o_socket_start_async_handshake(h2o_loop_t *loop, int async_fd, void *data, h2o_socket_cb cb)
+{
+    /* dup async_fd as h2o socket handling will close it */
+    if ((async_fd = dup(async_fd)) == -1) {
+        char errbuf[256];
+        h2o_fatal("dup failed:%s", h2o_strerror_r(errno, errbuf, sizeof(errbuf)));
+    }
+
+    /* add async fd to event loop in order to retry when openssl engine is ready */
+#if H2O_USE_LIBUV
+    h2o_socket_t *async_sock = h2o_uv__poll_create(loop, async_fd, (uv_close_cb)free);
+#else
+    h2o_socket_t *async_sock = h2o_evloop_socket_create(loop, async_fd, H2O_SOCKET_FLAG_DONT_READ);
+#endif
+    async_sock->data = data;
+    h2o_socket_read_start(async_sock, cb);
+}
+
+void *h2o_socket_async_handshake_on_notify(h2o_socket_t *async_sock, const char *err)
 {
     if (err != NULL)
         h2o_fatal("error on internal notification fd:%s", err);
 
-    /* Do we need to handle spurious events for eventfds / pipes used for intra-process communication? If so, we have to read
-     * something here (or let `async_cb` read and return if it succeeded). */
+    /* Do we need to handle spurious events for eventfds / pipes used for intra-process communication? If so, maybe we should call
+     * select (2) here to assert that the socket is actually readable, and return NULL if it is not. */
 
-    h2o_socket_t *sock = async_sock->data;
-    assert(sock->ssl->async.inflight);
-    sock->ssl->async.inflight = 0;
+    void *data = async_sock->data;
 
     h2o_socket_read_stop(async_sock);
     dispose_socket(async_sock, NULL);
+
+    return data;
+}
+
+static void on_async_proceed_handshake(h2o_socket_t *async_sock, const char *err)
+{
+    h2o_socket_t *sock = h2o_socket_async_handshake_on_notify(async_sock, err);
+
+    assert(sock->ssl->async.inflight);
+    sock->ssl->async.inflight = 0;
 
     proceed_handshake(sock, NULL);
 }
@@ -1656,20 +1682,7 @@ static void do_proceed_handshake_async(h2o_socket_t *sock, ptls_buffer_t *ptls_w
         assert(numfds == 1);
     }
 
-    /* dup async_fd as h2o socket handling will close it */
-    if ((async_fd = dup(async_fd)) == -1) {
-        char errbuf[256];
-        h2o_fatal("dup failed:%s", h2o_strerror_r(errno, errbuf, sizeof(errbuf)));
-    }
-
-    /* add async fd to event loop in order to retry when openssl engine is ready */
-#if H2O_USE_LIBUV
-    h2o_socket_t *async_sock = h2o_uv__poll_create(h2o_socket_get_loop(sock), async_fd, (uv_close_cb)free);
-#else
-    h2o_socket_t *async_sock = h2o_evloop_socket_create(h2o_socket_get_loop(sock), async_fd, H2O_SOCKET_FLAG_DONT_READ);
-#endif
-    async_sock->data = sock;
-    h2o_socket_read_start(async_sock, on_async_proceed_handshake);
+    h2o_socket_start_async_handshake(h2o_socket_get_loop(sock), async_fd, sock, on_async_proceed_handshake);
 }
 
 #endif

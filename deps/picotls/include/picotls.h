@@ -1632,7 +1632,7 @@ static size_t ptls_aead_encrypt_final(ptls_aead_context_t *ctx, void *output);
 static size_t ptls_aead_decrypt(ptls_aead_context_t *ctx, void *output, const void *input, size_t inlen, uint64_t seq,
                                 const void *aad, size_t aadlen);
 /**
- * Return the current read epoch.
+ * Return the current read epoch (i.e., that of the message being received or to be)
  */
 size_t ptls_get_read_epoch(ptls_t *tls);
 /**
