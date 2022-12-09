@@ -1409,12 +1409,13 @@ Exit:
 
 static int on_config_one_ech(h2o_configurator_command_t *cmd, yoml_t *map, struct ech_opener_config_t *config)
 {
-    yoml_t **key_file, **config_id, **public_name, **ciphers, **max_name_length, **advertise;
+    yoml_t **key_file, **config_id, **public_name, **cipher_suites, **max_name_length, **advertise;
 
     *config = (struct ech_opener_config_t){.cipher_suites = ptls_openssl_hpke_cipher_suites, .max_name_length = 64, .advertise = 1};
 
-    if (h2o_configurator_parse_mapping(cmd, map, "key-file:s,config-id:s,public-name:s", "ciphers:s,max-name-length:s,advertise:s",
-                                       &key_file, &config_id, &public_name, &ciphers, &max_name_length, &advertise) != 0)
+    if (h2o_configurator_parse_mapping(cmd, map, "key-file:s,config-id:s,public-name:s",
+                                       "cipher-suite:a,max-name-length:s,advertise:s", &key_file, &config_id, &public_name,
+                                       &cipher_suites, &max_name_length, &advertise) != 0)
         return -1;
 
     { /* Load private key. TODO use neverbleed instead of retaining the ECH private key inside h2o. We may not need or want
@@ -1450,13 +1451,34 @@ static int on_config_one_ech(h2o_configurator_command_t *cmd, yoml_t *map, struc
         return -1;
     }
 
+    /* replace ciphers to the provided list, if specified */
+    if (cipher_suites != NULL) {
+        config->cipher_suites = h2o_mem_alloc(sizeof(config->cipher_suites[0]) * ((*cipher_suites)->data.sequence.size + 1));
+        for (size_t input_index = 0; input_index < (*cipher_suites)->data.sequence.size; ++input_index) {
+            yoml_t *input = (*cipher_suites)->data.sequence.elements[input_index];
+            if (input->type != YOML_TYPE_SCALAR) {
+                h2o_configurator_errprintf(cmd, input, "elements of cipher-suites must be a string");
+                return -1;
+            }
+            ptls_hpke_cipher_suite_t **cand;
+            for (cand = ptls_openssl_hpke_cipher_suites; *cand != NULL; ++cand)
+                if (strcasecmp(input->data.scalar, (*cand)->name) == 0)
+                    break;
+            if (*cand == NULL) {
+                h2o_configurator_errprintf(cmd, input,
+                                           "ECH cipher-suite not found; should be in specified in the form of <kdf>/<aead> using "
+                                           "the names defined in IANA HPKE registry");
+                return -1;
+            }
+            config->cipher_suites[input_index] = *cand;
+        }
+        config->cipher_suites[(*cipher_suites)->data.sequence.size] = NULL;
+    }
+
     /* rest of the parameters */
     if (h2o_configurator_scanf(cmd, *config_id, "%" SCNu8, &config->config_id) != 0) {
         h2o_configurator_errprintf(cmd, *config_id, "config_id must be uint8");
         return -1;
-    }
-    if (ciphers != NULL) {
-        assert(!"FIXME");
     }
     if (max_name_length != NULL &&
         (h2o_configurator_scanf(cmd, *max_name_length, "%" SCNu8, &config->max_name_length) != 0 || config->max_name_length < 64)) {
