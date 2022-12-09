@@ -37,22 +37,30 @@ hosts:
         file.dir: t/assets/doc_root
 EOT
 
-my $req_fn = "$tempdir/req";
 my $ech_config_fn = "$tempdir/echconfig";
 my $trace_fn = "$tempdir/trace.out";
 
-{ # build request
-    open my $fh, ">", $req_fn
-        or die "failed to create file:$req_fn:$!";
-    print $fh "GET /index.txt HTTP/1.0\r\n\r\n";
-}
 
 subtest "tcp" => sub {
+    my $req_fn = "$tempdir/req";
+
+    { # build request
+        open my $fh, ">", $req_fn
+            or die "failed to create file:$req_fn:$!";
+        print $fh "GET /index.txt HTTP/1.0\r\n\r\n";
+    }
+
+    my $fetch = sub {
+        open my $fh, "@{[bindir()]}/picotls/cli -j $trace_fn -I -E $ech_config_fn localhost.examp1e.net $tls_port < $req_fn |"
+            or die "failed to launch @{[bindir()]}/picotls/cli:$!";
+        join "", <$fh>;
+    };
+
     create_empty_file($ech_config_fn);
     create_empty_file($trace_fn);
 
     # first connection is grease ECH
-    my $resp = fetch();
+    my $resp = $fetch->();
     like $resp, qr{\r\n\r\nhello\n$}s, "response";
     sleep 0.1;
     ok !trace_says_ech(), "connection is non-ECH";
@@ -61,20 +69,37 @@ subtest "tcp" => sub {
     create_empty_file($trace_fn);
 
     # second connection is ECH
-    $resp = fetch();
+    $resp = $fetch->();
     like $resp, qr{\r\n\r\nhello\n$}s, "response";
     sleep 0.1;
     ok trace_says_ech(), "connection is ECH";
+};
+
+subtest "quic" => sub {
+    my $fetch = sub {
+        open my $fh, "@{[bindir()]}/quicly/cli -a h3 -e $trace_fn --ech-configs $ech_config_fn localhost.examp1e.net $tls_port < /dev/null |"
+            or die "failed to launch @{[bindir()]}/picotls/cli:$!";
+        join "", <$fh>;
+    };
+
+    create_empty_file($ech_config_fn);
+    create_empty_file($trace_fn);
+
+    # first connection is grease ECH
+    my $resp = $fetch->();
+    sleep 0.1;
+    ok !trace_says_ech(), "connection is non-ECH";
     isnt +(stat $ech_config_fn)[7], 0, "got retry_configs";
+
+    create_empty_file($trace_fn);
+
+    # second connection is ECH
+    $resp = $fetch->();
+    sleep 0.1;
+    ok trace_says_ech(), "connection is ECH";
 };
 
 done_testing;
-
-sub fetch {
-    open my $fh, "@{[bindir()]}/picotls/cli -j $trace_fn -I -E $ech_config_fn localhost.examp1e.net $tls_port < $req_fn |"
-        or die "failed to launch @{[bindir()]}/picotls/cli:$!";
-    join "", <$fh>;
-}
 
 sub trace_says_ech {
     open my $fh, "<", $trace_fn
