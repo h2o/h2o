@@ -243,7 +243,7 @@ ssl:
 EOT
 ?>
 <p>
-The example above defines one ECH configuration with a config-id of 11, with the public-name being <code>public-name.example.net</code>, HPKE SymmetricCipherSutie being <code>HKDF-SHA256/AES-128-GCM</code> that uses the private key contained in <code>/path/to/ech.key</code> as the semi-static ECDH key.
+The example above defines one ECH configuration that uses <code>/path/to/ech.key</code> as the semi-static ECDH key with a config-id of 11, with the public-name being <code>public-name.example.net</code>, and the HPKE SymmetricCipherSuite being <code>HKDF-SHA256/AES-128-GCM</code>.
 </p>
 <p>
 In addition to these four attributes, following attributes may be specified.
