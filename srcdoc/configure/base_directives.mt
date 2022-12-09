@@ -229,7 +229,7 @@ Default is 3.
 </dd>
 <dt id="ech">ech:</dt>
 <dd>
-This experimental attribute is used to configure the use of <a href="https://datatracker.ietf.org/doc/draft-ietf-tls-esni/">Encrypted Client Hello (draft-15)</a>.
+This experimental attribute controls the use of <a href="https://datatracker.ietf.org/doc/draft-ietf-tls-esni/">TLS Encrypted Client Hello extension (draft-15)</a>.
 The attribute takes a sequence of mappings, each of them defining one ECH configuration.
 <?= $ctx->{example}->('Encrypted Clint hello', <<'EOT')
 ssl:
