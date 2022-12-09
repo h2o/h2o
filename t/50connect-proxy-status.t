@@ -33,6 +33,7 @@ subtest "basic", sub {
         my ($proto, $port, $curl) = @_;
         my $content = `$curl --proxy-insecure -p -x $proto://127.0.0.1:$port --silent -v --show-error http://127.0.0.1:$origin_port/echo 2>&1`;
         like $content, qr{Proxy replied 200 to CONNECT request}m, "Connect got a 200 response to CONNECT";
+        like $content, qr{proxy-status: h2o/test; next-hop=127\.0\.0\.1}i;
         my @c = $content =~ /$ok_resp/g;
         is @c, 2, "Got two 200 responses";
     });
@@ -61,7 +62,7 @@ subtest "refused" => sub {
     run_with_curl($server, sub {
         my ($proto, $port, $curl) = @_;
         my $content = `$curl --proxy-insecure -p -x $proto://127.0.0.1:$port --silent -v --show-error https://127.0.0.1:1/ 2>&1`;
-        like $content, qr{proxy-status: h2o/test; error=connection_refused}i;
+        like $content, qr{proxy-status: h2o/test; error=connection_refused; next-hop=127\.0\.0\.1}i;
         like $content, qr{Received HTTP code 502 from proxy after CONNECT};
     });
 };

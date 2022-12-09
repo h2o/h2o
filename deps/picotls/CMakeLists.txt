@@ -55,9 +55,11 @@ SET(MINICRYPTO_LIBRARY_FILES
     deps/cifra/src/sha256.c
     deps/cifra/src/sha512.c)
 SET(CORE_FILES
+    lib/hpke.c
     lib/picotls.c
     lib/pembase64.c)
 SET(CORE_TEST_FILES
+    t/hpke.c
     t/picotls.c)
 IF (WITH_DTRACE)
     SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DPICOTLS_USE_DTRACE=1")
@@ -125,8 +127,6 @@ IF (OPENSSL_FOUND AND NOT (OPENSSL_VERSION VERSION_LESS "1.0.1"))
     TARGET_LINK_LIBRARIES(picotls-openssl ${OPENSSL_CRYPTO_LIBRARIES} picotls-core ${CMAKE_DL_LIBS})
     ADD_EXECUTABLE(cli t/cli.c lib/pembase64.c)
     TARGET_LINK_LIBRARIES(cli picotls-openssl picotls-core)
-    ADD_EXECUTABLE(picotls-esni src/esni.c)
-    TARGET_LINK_LIBRARIES(picotls-esni picotls-openssl picotls-core ${OPENSSL_CRYPTO_LIBRARIES} ${CMAKE_DL_LIBS})
 
     ADD_EXECUTABLE(test-openssl.t
         ${MINICRYPTO_LIBRARY_FILES}

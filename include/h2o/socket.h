@@ -35,6 +35,7 @@ extern "C" {
 #include <openssl/ssl.h>
 #include <openssl/opensslconf.h>
 #include "picotls.h"
+#include "picotls/openssl.h" /* for H2O_CAN_ASYNC_SSL */
 #include "h2o/cache.h"
 #include "h2o/ebpf.h"
 #include "h2o/memory.h"
@@ -66,6 +67,13 @@ extern "C" {
 #else
 #define H2O_USE_ALPN 0
 #define H2O_USE_NPN 0
+#endif
+
+#if !defined(LIBRESSL_VERSION_NUMBER) && OPENSSL_VERSION_NUMBER >= 0x1010100fL
+#define H2O_USE_OPENSSL_CLIENT_HELLO_CB 1
+#endif
+#if PTLS_OPENSSL_HAVE_ASYNC && H2O_USE_OPENSSL_CLIENT_HELLO_CB
+#define H2O_CAN_ASYNC_SSL 1
 #endif
 
 /**
