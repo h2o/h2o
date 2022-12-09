@@ -2713,7 +2713,7 @@ static int client_ech_select_hello(ptls_t *tls, ptls_iovec_t message, size_t con
     key_schedule_select_outer(tls->key_schedule);
 
 Exit:
-    PTLS_PROBE(ECH_SELECTION, tls, tls->ech.accepted);
+    PTLS_PROBE(ECH_SELECTION, tls, !!tls->ech.accepted);
     PTLS_LOG_CONN(ech_selection, tls, { PTLS_LOG_ELEMENT_BOOL(is_ech, tls->ech.accepted); });
     ptls_clear_memory(confirm_hash_expected, sizeof(confirm_hash_expected));
     return ret;
