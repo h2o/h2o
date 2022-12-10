@@ -1063,7 +1063,8 @@ static ptls_cipher_suite_t **replace_ciphersuites(ptls_cipher_suite_t **input, p
 
 static const char *listener_setup_ssl_picotls(struct listener_config_t *listener, struct listener_ssl_identity_t *identity,
                                               ptls_iovec_t raw_public_key, ptls_cipher_suite_t **cipher_suites,
-                                              int server_cipher_preference)
+                                              int server_cipher_preference, ptls_ech_create_opener_t *ech_create_opener,
+                                              ptls_iovec_t ech_retry_configs)
 {
     static const ptls_key_exchange_algorithm_t *key_exchanges[] = {
 #ifdef PTLS_OPENSSL_HAVE_X25519
@@ -1096,7 +1097,7 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
                 .cipher_suites = cipher_suites,
                 .tls12_cipher_suites = ptls_openssl_tls12_cipher_suites,
                 .certificates = {0}, /* fill later */
-                .ech.server = {NULL},
+                .ech.server = {ech_create_opener, ech_retry_configs},
                 .on_client_hello = &pctx->ch.super,
                 .emit_certificate = &pctx->ec.super,
                 .sign_certificate = &pctx->sc.super,
@@ -1365,13 +1366,222 @@ static int load_ssl_identity(h2o_configurator_command_t *cmd, SSL_CTX *ssl_ctx, 
     return 0;
 }
 
+struct ech_create_opener_t {
+    ptls_ech_create_opener_t super;
+    struct ech_opener_config_t {
+        ptls_key_exchange_context_t *keyex; /* NULL indicates end of configs */
+        uint8_t config_id;
+        ptls_hpke_kem_t *kem;
+        ptls_hpke_cipher_suite_t **cipher_suites;
+        uint8_t max_name_length;
+        ptls_iovec_t ech_config;
+        unsigned advertise : 1;
+    } configs[1];
+};
+
+static ptls_aead_context_t *ech_create_opener(ptls_ech_create_opener_t *_self, ptls_hpke_kem_t **kem,
+                                              ptls_hpke_cipher_suite_t **cipher, ptls_t *tls, uint8_t config_id,
+                                              ptls_hpke_cipher_suite_id_t cipher_id, ptls_iovec_t enc, ptls_iovec_t info_prefix)
+{
+    struct ech_create_opener_t *self = (struct ech_create_opener_t *)_self;
+    struct ech_opener_config_t *config = NULL;
+    ptls_aead_context_t *aead = NULL;
+    ptls_buffer_t info;
+    int ret;
+
+    *kem = NULL;
+    *cipher = NULL;
+
+    ptls_buffer_init(&info, "", 0);
+
+    /* find matching config, or bail out if not found */
+    for (config = self->configs; config->keyex != NULL; ++config)
+        if (config->config_id == config_id)
+            break;
+    if (config->keyex == NULL)
+        goto Exit;
+
+    /* find matching cipher-suite, or bail out if not found */
+    for (size_t i = 0; config->cipher_suites[i] != NULL; ++i) {
+        if (config->cipher_suites[i]->id.kdf == cipher_id.kdf && config->cipher_suites[i]->id.aead == cipher_id.aead) {
+            *cipher = config->cipher_suites[i];
+            break;
+        }
+    }
+    if (*cipher == NULL)
+        goto Exit;
+
+    /* build info */
+    ptls_buffer_pushv(&info, info_prefix.base, info_prefix.len);
+    ptls_buffer_pushv(&info, config->ech_config.base, config->ech_config.len);
+
+    /* set kem, generate AEAD */
+    *kem = config->kem;
+    if ((ret = ptls_hpke_setup_base_r(*kem, *cipher, config->keyex, &aead, enc, ptls_iovec_init(info.base, info.off))) != 0)
+        goto Exit;
+
+Exit:
+    ptls_buffer_dispose(&info);
+    return aead;
+}
+
+static int on_config_one_ech(h2o_configurator_command_t *cmd, yoml_t *map, struct ech_opener_config_t *config)
+{
+    yoml_t **key_file, **config_id, **public_name, **cipher_suites, **max_name_length, **advertise;
+
+    *config = (struct ech_opener_config_t){.cipher_suites = ptls_openssl_hpke_cipher_suites, .max_name_length = 64, .advertise = 1};
+
+    if (h2o_configurator_parse_mapping(cmd, map, "key-file:s,config-id:s,public-name:s",
+                                       "cipher-suite:a,max-name-length:s,advertise:s", &key_file, &config_id, &public_name,
+                                       &cipher_suites, &max_name_length, &advertise) != 0)
+        return -1;
+
+    { /* Load private key. TODO use neverbleed instead of retaining the ECH private key inside h2o. We may not need or want
+       * asynchronous handling though, because X25519 is lightweight. */
+        FILE *fp;
+        if ((fp = fopen((*key_file)->data.scalar, "rt")) == NULL) {
+            h2o_configurator_errprintf(cmd, *key_file, "failed to open ECH private key file:%s:%s", (*key_file)->data.scalar,
+                                       strerror(errno));
+            return -1;
+        }
+        EVP_PKEY *pkey;
+        if ((pkey = PEM_read_PrivateKey(fp, NULL, NULL, NULL)) == NULL) {
+            h2o_configurator_errprintf(cmd, *key_file, "failed to load ECH private key from file:%s", (*key_file)->data.scalar);
+            return -1;
+        }
+        if (ptls_openssl_create_key_exchange(&config->keyex, pkey) != 0) {
+            h2o_configurator_errprintf(cmd, *key_file, "failed to setup ECH private key from file:%s", (*key_file)->data.scalar);
+            return -1;
+        }
+        EVP_PKEY_free(pkey);
+        fclose(fp);
+    }
+
+    /* determine kem */
+    for (size_t i = 0; ptls_openssl_hpke_kems[i] != NULL; ++i) {
+        if (ptls_openssl_hpke_kems[i]->keyex == config->keyex->algo) {
+            config->kem = ptls_openssl_hpke_kems[i];
+            break;
+        }
+    }
+    if (config->kem == NULL) {
+        h2o_configurator_errprintf(cmd, *key_file, "private key of type %s is not supported for ECH", config->keyex->algo->name);
+        return -1;
+    }
+
+    /* replace ciphers to the provided list, if specified */
+    if (cipher_suites != NULL) {
+        config->cipher_suites = h2o_mem_alloc(sizeof(config->cipher_suites[0]) * ((*cipher_suites)->data.sequence.size + 1));
+        for (size_t input_index = 0; input_index < (*cipher_suites)->data.sequence.size; ++input_index) {
+            yoml_t *input = (*cipher_suites)->data.sequence.elements[input_index];
+            if (input->type != YOML_TYPE_SCALAR) {
+                h2o_configurator_errprintf(cmd, input, "elements of cipher-suites must be a string");
+                return -1;
+            }
+            ptls_hpke_cipher_suite_t **cand;
+            for (cand = ptls_openssl_hpke_cipher_suites; *cand != NULL; ++cand)
+                if (strcasecmp(input->data.scalar, (*cand)->name) == 0)
+                    break;
+            if (*cand == NULL) {
+                h2o_configurator_errprintf(cmd, input,
+                                           "ECH cipher-suite not found; should be in specified in the form of <kdf>/<aead> using "
+                                           "the names defined in IANA HPKE registry");
+                return -1;
+            }
+            config->cipher_suites[input_index] = *cand;
+        }
+        config->cipher_suites[(*cipher_suites)->data.sequence.size] = NULL;
+    }
+
+    /* rest of the parameters */
+    if (h2o_configurator_scanf(cmd, *config_id, "%" SCNu8, &config->config_id) != 0) {
+        h2o_configurator_errprintf(cmd, *config_id, "config_id must be uint8");
+        return -1;
+    }
+    if (max_name_length != NULL &&
+        (h2o_configurator_scanf(cmd, *max_name_length, "%" SCNu8, &config->max_name_length) != 0 || config->max_name_length < 64)) {
+        h2o_configurator_errprintf(cmd, *max_name_length, "max-name-length must be a number between 64 and 255");
+        return -1;
+    }
+    if (advertise != NULL) {
+        ssize_t v;
+        if ((v = h2o_configurator_get_one_of(cmd, *advertise, "NO,YES")) == -1) {
+            h2o_configurator_errprintf(cmd, *advertise, "advertise must be either YES or NO (default: YES)");
+            return -1;
+        }
+        config->advertise = !!v;
+    }
+
+    { /* build ECHConfig */
+        ptls_buffer_t buf;
+        ptls_buffer_init(&buf, "", 0);
+        int ret = ptls_ech_encode_config(&buf, config->config_id, config->kem, config->keyex->pubkey, config->cipher_suites,
+                                         config->max_name_length, (*public_name)->data.scalar);
+        if (ret != 0)
+            h2o_fatal("failed to build ECHConfig:%d", ret);
+        config->ech_config = ptls_iovec_init(buf.base, buf.off); /* steal ownership of malloc'ed memory */
+    }
+
+    return 0;
+}
+
+/**
+ * Given config, instantiates opener and retry_configs.
+ */
+static int on_config_ech(h2o_configurator_command_t *cmd, yoml_t *configs, ptls_ech_create_opener_t **_opener,
+                         ptls_iovec_t *retry_configs)
+{
+    struct ech_create_opener_t *opener =
+        h2o_mem_alloc(sizeof(opener) + sizeof(opener->configs[0]) * (configs->data.sequence.size + 1));
+    *opener = (struct ech_create_opener_t){{ech_create_opener}};
+    *_opener = &opener->super;
+
+    /* By default, retry_configs is not set, indicating that ECH support is not to be advertised. Note that while in the midst of
+     * turning off ECH, we might continue accepting ECH handshakes but not advertise retry_configs. */
+    *retry_configs = ptls_iovec_init(NULL, 0);
+
+    /* parse configs being provided */
+    for (size_t config_index = 0; config_index < configs->data.sequence.size; ++config_index) {
+        yoml_t *element = configs->data.sequence.elements[config_index];
+        if (element->type != YOML_TYPE_MAPPING) {
+            h2o_configurator_errprintf(cmd, element, "elements of ech must be a mapping");
+            return -1;
+        }
+        if (on_config_one_ech(cmd, element, opener->configs + config_index) != 0)
+            return -1;
+
+        /* append to retry_config */
+        if (opener->configs[config_index].advertise) {
+            if (retry_configs->base == NULL)
+                *retry_configs = ptls_iovec_init(h2o_mem_alloc(2), 2);
+            retry_configs->base =
+                h2o_mem_realloc(retry_configs->base, retry_configs->len + opener->configs[config_index].ech_config.len);
+            memcpy(retry_configs->base + retry_configs->len, opener->configs[config_index].ech_config.base,
+                   opener->configs[config_index].ech_config.len);
+            retry_configs->len += opener->configs[config_index].ech_config.len;
+        }
+    }
+
+    /* terminate the list of configs */
+    opener->configs[configs->data.sequence.size] = (struct ech_opener_config_t){NULL};
+
+    /* write the length of retry_configs */
+    if (retry_configs->base != NULL) {
+        uint16_t len = retry_configs->len - 2;
+        retry_configs->base[0] = (uint8_t)(len >> 8);
+        retry_configs->base[1] = (uint8_t)len;
+    }
+
+    return 0;
+}
+
 static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *listen_node,
                               yoml_t **ssl_node, yoml_t **cc_node, yoml_t **initcwnd_node, struct listener_config_t *listener,
                               int listener_is_new)
 {
     yoml_t **dh_file, **min_version, **max_version, **cipher_suite, **cipher_suite_tls13_node, **ocsp_update_cmd,
         **ocsp_update_interval_node, **ocsp_max_failures_node, **cipher_preference_node, **neverbleed_node,
-        **http2_origin_frame_node, **client_ca_file;
+        **http2_origin_frame_node, **client_ca_file, **ech_node;
     struct listener_ssl_parsed_identity_t *parsed_identities;
     size_t num_parsed_identities;
 
@@ -1379,6 +1589,10 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
     long ssl_options = SSL_OP_ALL;
     int use_neverbleed = 1, use_picotls = 1; /* enabled by default */
     ptls_cipher_suite_t **cipher_suite_tls13 = NULL;
+    struct {
+        ptls_ech_create_opener_t *create_opener;
+        ptls_iovec_t retry_configs;
+    } ech = {NULL};
 
     if (!listener_is_new) {
         if (listener->ssl.size != 0 && ssl_node == NULL) {
@@ -1400,11 +1614,11 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
                                            "identity:a,certificate-file:s,key-file:s,min-version:s,minimum-version:s,max-version:s,"
                                            "maximum-version:s,cipher-suite:s,cipher-suite-tls1.3:a,ocsp-update-cmd:s,"
                                            "ocsp-update-interval:*,ocsp-max-failures:*,dh-file:s,cipher-preference:*,neverbleed:*,"
-                                           "http2-origin-frame:*,client-ca-file:s",
+                                           "http2-origin-frame:*,client-ca-file:s,ech:a",
                                            &identity_node, &certificate_file, &key_file, &min_version, &min_version, &max_version,
                                            &max_version, &cipher_suite, &cipher_suite_tls13_node, &ocsp_update_cmd,
                                            &ocsp_update_interval_node, &ocsp_max_failures_node, &dh_file, &cipher_preference_node,
-                                           &neverbleed_node, &http2_origin_frame_node, &client_ca_file) != 0)
+                                           &neverbleed_node, &http2_origin_frame_node, &client_ca_file, &ech_node) != 0)
             return -1;
         if (identity_node != NULL) {
             if (certificate_file != NULL || key_file != NULL) {
@@ -1574,6 +1788,25 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
         goto Error;
     }
 
+    /* ECH: only the first SSL entry for each address can have ECH configured. For entries sharing the same address, supply the
+     * the values configured for the first entry. */
+    if (ech_node != NULL) {
+        if (!use_picotls) {
+            h2o_configurator_errprintf(cmd, *ech_node, "ECH requires use of TLS 1.3");
+            goto Error;
+        }
+        if (listener->ssl.size != 0) {
+            h2o_configurator_errprintf(cmd, *ech_node, "only the first `ssl` node for each address may have `ech` configured");
+            goto Error;
+        }
+        if (on_config_ech(cmd, *ech_node, &ech.create_opener, &ech.retry_configs) != 0)
+            goto Error;
+    } else if (listener->ssl.size != 0 && listener->ssl.entries[0]->identities[0].ptls != NULL) {
+        ptls_context_t *base = listener->ssl.entries[0]->identities[0].ptls;
+        ech.create_opener = base->ech.server.create_opener;
+        ech.retry_configs = base->ech.server.retry_configs;
+    }
+
     /* create a new entry in the SSL context list */
     struct listener_ssl_config_t *ssl_config = h2o_mem_alloc(sizeof(*ssl_config));
     memset(ssl_config, 0, sizeof(*ssl_config));
@@ -1650,8 +1883,9 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
             goto Error;
 
         if (use_picotls) {
-            const char *errstr = listener_setup_ssl_picotls(listener, identity, raw_pubkey, cipher_suite_tls13,
-                                                            !!(ssl_options & SSL_OP_CIPHER_SERVER_PREFERENCE));
+            const char *errstr =
+                listener_setup_ssl_picotls(listener, identity, raw_pubkey, cipher_suite_tls13,
+                                           !!(ssl_options & SSL_OP_CIPHER_SERVER_PREFERENCE), ech.create_opener, ech.retry_configs);
             if (errstr != NULL) {
                 /* It is a fatal error to setup TLS 1.3 context, when setting up alternative identities, or a QUIC context. */
                 if (identity != ssl_config->identities || listener->quic.ctx != NULL) {

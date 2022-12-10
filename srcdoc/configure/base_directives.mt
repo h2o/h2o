@@ -227,6 +227,41 @@ Default is <code>14400</code> (4 hours).
 number of consecutive OCSP query failures before stopping to send OCSP stapling data to the client.
 Default is 3.
 </dd>
+<dt id="ech">ech:</dt>
+<dd>
+This experimental attribute controls the use of <a href="https://datatracker.ietf.org/doc/draft-ietf-tls-esni/">TLS Encrypted Client Hello extension (draft-15)</a>.
+The attribute takes a sequence of mappings, each of them defining one ECH configuration.
+<?= $ctx->{example}->('Encrypted Clint hello', <<'EOT')
+ssl:
+  key-file: /path/to/rsa.key
+  certificate-file: /path/to/rsa.crt
+  ech:
+  - key-file: /path/to/ech.key
+    config-id: 11
+    public-name: public-name.example.net
+    cipher-suite: [ HKDF-SHA256/AES-128-GCM ]
+EOT
+?>
+<p>
+The example above defines one ECH configuration that uses <code>/path/to/ech.key</code> as the semi-static ECDH key with a config-id of 11, with the public-name being <code>public-name.example.net</code>, and the HPKE SymmetricCipherSuite being <code>HKDF-SHA256/AES-128-GCM</code>.
+</p>
+<p>
+In addition to these four attributes, following attributes may be specified.
+</p>
+<p>
+<code>max-name-length</code> specifies the maximum-name-length field of an ECH confguration (default: 64).
+</p>
+<p>
+<code>advertise</code> takes either <code>YES</code> (default) or <code>NO</code> as the argument.
+This argument indicates if given ECH configuration should be advertised as part of <code>retry_configs</code> (draft-ietf-tls-esni-15; section 5).
+</p>
+<p>
+When removing a stale ECH configuration, its <code>advertise</code> attribute should be set at first to <code>NO</code> so that the stale configuration would not be advertised.
+Then, after waiting for the expiry of caches containing the stale configuration, the stale ECH configuration can be removed.
+This may take long depending on the TTL of the HTTPS / SVC DNS resource record advertising the configuration.
+</p>
+The <code>ech</code> attribute must be set only in the first <code>ssl</code> attribute that binds to a particular address.
+</dd>
 <dt id="neverbleed">neverbleed:</dt>
 <dd>
 unless set to <code>OFF</code>, H2O isolates RSA private key operations to an isolated process by using <a href="https://github.com/h2o/neverbleed">Neverbleed</a>.

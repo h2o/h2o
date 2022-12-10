@@ -623,6 +623,49 @@ ocsp-max-failures:
 number of consecutive OCSP query failures before stopping to send OCSP stapling data to the client.
 Default is 3.
 
+ech:
+
+This experimental attribute controls the use of TLS Encrypted Client Hello extension (draft-15).
+The attribute takes a sequence of mappings, each of them defining one ECH configuration.
+.PP
+.BR Example:\ 
+Encrypted Clint hello
+.PP
+.nf
+.RS
+ssl:
+  key-file: /path/to/rsa.key
+  certificate-file: /path/to/rsa.crt
+  ech:
+  - key-file: /path/to/ech.key
+    config-id: 11
+    public-name: public-name.example.net
+    cipher-suite: [ HKDF-SHA256/AES-128-GCM ]
+
+.RE
+.fi
+.PP
+
+
+The example above defines one ECH configuration that uses /path/to/ech.key as the semi-static ECDH key with a config-id of 11, with the public-name being public-name.example.net, and the HPKE SymmetricCipherSuite being HKDF-SHA256/AES-128-GCM.
+
+
+In addition to these four attributes, following attributes may be specified.
+
+
+max-name-length specifies the maximum-name-length field of an ECH confguration (default: 64).
+
+
+advertise takes either YES (default) or NO as the argument.
+This argument indicates if given ECH configuration should be advertised as part of retry_configs (draft-ietf-tls-esni-15; section 5).
+
+
+When removing a stale ECH configuration, its advertise attribute should be set at first to NO so that the stale configuration would not be advertised.
+Then, after waiting for the expiry of caches containing the stale configuration, the stale ECH configuration can be removed.
+This may take long depending on the TTL of the HTTPS / SVC DNS resource record advertising the configuration.
+
+The ech attribute must be set only in the first ssl attribute that binds to a particular address.
+
 neverbleed:
 
 unless set to OFF, H2O isolates RSA private key operations to an isolated process by using Neverbleed.
