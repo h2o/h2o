@@ -328,10 +328,6 @@ typedef struct st_h2o_httpclient__h2_conn_t {
      * `num_streams`.
      */
     h2o_linklist_t link;
-    /**
-     * close the connection
-     */
-    int (*close_conn)(struct st_h2o_httpclient__h2_conn_t *conn);
 } h2o_httpclient__h2_conn_t;
 
 struct st_h2o_httpclient__h3_conn_t {

@@ -1212,14 +1212,6 @@ static void emit_writereq(h2o_timer_t *entry)
     do_emit_writereq(conn);
 }
 
-static int close_conn(h2o_httpclient__h2_conn_t *_conn)
-{
-    struct st_h2o_http2client_conn_t *conn = (void *)_conn;
-    enqueue_goaway(conn, H2O_HTTP2_ERROR_NONE, h2o_iovec_init(NULL, 0));
-    request_write(conn);
-    return close_connection(conn);
-}
-
 static struct st_h2o_http2client_conn_t *create_connection(h2o_httpclient_ctx_t *ctx, h2o_socket_t *sock, h2o_url_t *origin_url,
                                                            h2o_httpclient_connection_pool_t *connpool)
 {
@@ -1227,7 +1219,6 @@ static struct st_h2o_http2client_conn_t *create_connection(h2o_httpclient_ctx_t 
     memset(conn, 0, sizeof(*conn));
     conn->super.ctx = ctx;
     conn->super.sock = sock;
-    conn->super.close_conn = close_conn;
     conn->state = H2O_HTTP2CLIENT_CONN_STATE_OPEN;
     conn->peer_settings = H2O_HTTP2_SETTINGS_DEFAULT;
     conn->streams = kh_init(stream);
