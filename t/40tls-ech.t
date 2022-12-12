@@ -35,6 +35,9 @@ hosts:
     paths:
       /:
         file.dir: t/assets/doc_root
+        access-log:
+          format: '\%s,\%{ssl.ech.config-id}x,\%{ssl.ech.kem}x,\%{ssl.ech.cipher}x,\%{ssl.ech.cipher-bits}x'
+          path: $tempdir/access_log
 EOT
 if (server_features()->{mruby}) {
     $conf .= <<'EOT';
@@ -89,6 +92,36 @@ subtest "tcp" => sub {
 
     subtest "index.txt" => sub {
         $doit->("/index.txt", qr{\r\n\r\nhello\n$}s, qr{\r\n\r\nhello\n$}s);
+    };
+
+    sleep 0.1;
+
+    subtest "access-log" => sub {
+        open my $fh, "<", "$tempdir/access_log"
+            or die "failed to open $tempdir/access_log:$!";
+        my $get_success = sub {
+            while (my $line = <$fh>) {
+                chomp $line;
+                my ($status, @rest) = split ",", $line;
+                return @rest
+                    if $status == 200;
+            }
+            die "unexpected end of access_log";
+        };
+        subtest "non-ech" => sub {
+            my ($config_id, $kem, $cipher, $cipher_bits) = $get_success->();
+            is $config_id, "-";
+            is $kem, "-";
+            is $cipher, "-";
+            is $cipher_bits, "-";
+        };
+        subtest "ech" => sub {
+            my ($config_id, $kem, $cipher, $cipher_bits) = $get_success->();
+            is $config_id, "0";
+            is $kem, "secp256r1";
+            is $cipher, "HKDF-SHA256/AES-128-GCM";
+            is $cipher_bits, "128";
+        };
     };
 
     subtest "mruby" => sub {
