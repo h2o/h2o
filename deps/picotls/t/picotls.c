@@ -1002,11 +1002,11 @@ static void test_handshake(ptls_iovec_t ticket, int mode, int expect_ticket, int
     }
 
     if (can_ech(ctx_peer, 1) && can_ech(ctx, 0)) {
-        ok(ptls_is_ech_handshake(client, NULL, NULL));
-        ok(ptls_is_ech_handshake(server, NULL, NULL));
+        ok(ptls_is_ech_handshake(client, NULL, NULL, NULL));
+        ok(ptls_is_ech_handshake(server, NULL, NULL, NULL));
     } else {
-        ok(!ptls_is_ech_handshake(client, NULL, NULL));
-        ok(!ptls_is_ech_handshake(server, NULL, NULL));
+        ok(!ptls_is_ech_handshake(client, NULL, NULL, NULL));
+        ok(!ptls_is_ech_handshake(server, NULL, NULL, NULL));
     }
 
     ptls_buffer_dispose(&cbuf);
