@@ -2905,7 +2905,7 @@ static int client_handle_encrypted_extensions(ptls_t *tls, ptls_iovec_t message,
             break;
         case PTLS_EXTENSION_TYPE_ENCRYPTED_CLIENT_HELLO: {
             /* accept retry_configs only if we offered ECH but rejected */
-            if (!((tls->ech.offered || tls->ech.offered_grease) && !ptls_is_ech_handshake(tls, NULL, NULL))) {
+            if (!((tls->ech.offered || tls->ech.offered_grease) && !ptls_is_ech_handshake(tls, NULL, NULL, NULL))) {
                 ret = PTLS_ALERT_UNSUPPORTED_EXTENSION;
                 goto Exit;
             }
@@ -3184,7 +3184,7 @@ static int handle_certificate(ptls_t *tls, const uint8_t *src, const uint8_t *en
     if (tls->ctx->verify_certificate != NULL) {
         const char *server_name = NULL;
         if (!ptls_is_server(tls)) {
-            if (tls->ech.offered && !ptls_is_ech_handshake(tls, NULL, NULL)) {
+            if (tls->ech.offered && !ptls_is_ech_handshake(tls, NULL, NULL, NULL)) {
                 server_name = tls->ech.client.public_name;
             } else {
                 server_name = tls->server_name;
@@ -3355,7 +3355,7 @@ static int server_handle_certificate_verify(ptls_t *tls, ptls_iovec_t message)
 static int client_handle_finished(ptls_t *tls, ptls_message_emitter_t *emitter, ptls_iovec_t message)
 {
     uint8_t send_secret[PTLS_MAX_DIGEST_SIZE];
-    int alert_ech_required = tls->ech.offered && !ptls_is_ech_handshake(tls, NULL, NULL), ret;
+    int alert_ech_required = tls->ech.offered && !ptls_is_ech_handshake(tls, NULL, NULL, NULL), ret;
 
     if ((ret = verify_finished(tls, message)) != 0)
         goto Exit;
@@ -4422,7 +4422,7 @@ static int server_handle_hello(ptls_t *tls, ptls_message_emitter_t *emitter, ptl
             /* Either send a stateless retry (w. cookies) or a stateful one. When sending the latter, run the state machine. At the
              * moment, stateless retry is disabled when ECH is used (do we need to support it?). */
             int retry_uses_cookie =
-                properties != NULL && properties->server.retry_uses_cookie && !ptls_is_ech_handshake(tls, NULL, NULL);
+                properties != NULL && properties->server.retry_uses_cookie && !ptls_is_ech_handshake(tls, NULL, NULL, NULL);
             if (!retry_uses_cookie) {
                 key_schedule_transform_post_ch1hash(tls->key_schedule);
                 key_schedule_extract(tls->key_schedule, ptls_iovec_init(NULL, 0));
@@ -4432,7 +4432,7 @@ static int server_handle_hello(ptls_t *tls, ptls_message_emitter_t *emitter, ptl
                 tls->key_schedule, key_share.algorithm != NULL ? NULL : negotiated_group,
                 {
                     ptls_buffer_t *sendbuf = emitter->buf;
-                    if (ptls_is_ech_handshake(tls, NULL, NULL)) {
+                    if (ptls_is_ech_handshake(tls, NULL, NULL, NULL)) {
                         buffer_push_extension(sendbuf, PTLS_EXTENSION_TYPE_ENCRYPTED_CLIENT_HELLO, {
                             if ((ret = ptls_buffer_reserve(sendbuf, PTLS_ECH_CONFIRM_LENGTH)) != 0)
                                 goto Exit;
@@ -4572,7 +4572,7 @@ static int server_handle_hello(ptls_t *tls, ptls_message_emitter_t *emitter, ptl
             {
                 tls->ctx->random_bytes(emitter->buf->base + emitter->buf->off, PTLS_HELLO_RANDOM_SIZE);
                 /* when accepting CHInner, last 8 byte of SH.random is zero for the handshake transcript */
-                if (ptls_is_ech_handshake(tls, NULL, NULL)) {
+                if (ptls_is_ech_handshake(tls, NULL, NULL, NULL)) {
                     ech_confirm_off = emitter->buf->off + PTLS_HELLO_RANDOM_SIZE - PTLS_ECH_CONFIRM_LENGTH;
                     memset(emitter->buf->base + ech_confirm_off, 0, PTLS_ECH_CONFIRM_LENGTH);
                 }
@@ -4649,7 +4649,7 @@ static int server_handle_hello(ptls_t *tls, ptls_message_emitter_t *emitter, ptl
             if (tls->pending_handshake_secret != NULL)
                 buffer_push_extension(sendbuf, PTLS_EXTENSION_TYPE_EARLY_DATA, {});
             /* send ECH retry_configs, if ECH was offered by rejected, even though we (the server) could have accepted ECH */
-            if (tls->ech.offered && !ptls_is_ech_handshake(tls, NULL, NULL) && tls->ctx->ech.server.create_opener != NULL &&
+            if (tls->ech.offered && !ptls_is_ech_handshake(tls, NULL, NULL, NULL) && tls->ctx->ech.server.create_opener != NULL &&
                 tls->ctx->ech.server.retry_configs.len != 0)
                 buffer_push_extension(sendbuf, PTLS_EXTENSION_TYPE_ENCRYPTED_CLIENT_HELLO, {
                     ptls_buffer_pushv(sendbuf, tls->ctx->ech.server.retry_configs.base, tls->ctx->ech.server.retry_configs.len);
@@ -5299,9 +5299,11 @@ int ptls_is_psk_handshake(ptls_t *tls)
     return tls->is_psk_handshake;
 }
 
-int ptls_is_ech_handshake(ptls_t *tls, ptls_hpke_kem_t **kem, ptls_hpke_cipher_suite_t **cipher)
+int ptls_is_ech_handshake(ptls_t *tls, uint8_t *config_id, ptls_hpke_kem_t **kem, ptls_hpke_cipher_suite_t **cipher)
 {
     if (tls->ech.accepted) {
+        if (config_id != NULL)
+            *config_id = tls->ech.config_id;
         if (kem != NULL)
             *kem = tls->ech.kem;
         if (cipher != NULL)

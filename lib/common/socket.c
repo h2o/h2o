@@ -1271,6 +1271,57 @@ h2o_iovec_t h2o_socket_log_ssl_cipher_bits(h2o_socket_t *sock, h2o_mem_pool_t *p
     }
 }
 
+h2o_iovec_t h2o_socket_log_ssl_ech_config_id(h2o_socket_t *sock, h2o_mem_pool_t *pool)
+{
+    uint8_t config_id;
+
+    if (sock->ssl != NULL && sock->ssl->ptls != NULL && ptls_is_ech_handshake(sock->ssl->ptls, &config_id, NULL, NULL)) {
+        char *s = (char *)(pool != NULL ? h2o_mem_alloc_pool(pool, char, sizeof(H2O_UINT8_LONGEST_STR))
+                                        : h2o_mem_alloc(sizeof(H2O_UINT8_LONGEST_STR)));
+        size_t len = sprintf(s, "%" PRIu8, config_id);
+        return h2o_iovec_init(s, len);
+    } else {
+        return h2o_iovec_init(NULL, 0);
+    }
+}
+
+h2o_iovec_t h2o_socket_log_ssl_ech_kem(h2o_socket_t *sock, h2o_mem_pool_t *pool)
+{
+    ptls_hpke_kem_t *kem;
+
+    if (sock->ssl != NULL && sock->ssl->ptls != NULL && ptls_is_ech_handshake(sock->ssl->ptls, NULL, &kem, NULL)) {
+        return h2o_iovec_init(kem->keyex->name, strlen(kem->keyex->name));
+    } else {
+        return h2o_iovec_init(NULL, 0);
+    }
+}
+
+h2o_iovec_t h2o_socket_log_ssl_ech_cipher(h2o_socket_t *sock, h2o_mem_pool_t *pool)
+{
+    ptls_hpke_cipher_suite_t *cipher;
+
+    if (sock->ssl != NULL && sock->ssl->ptls != NULL && ptls_is_ech_handshake(sock->ssl->ptls, NULL, NULL, &cipher)) {
+        return h2o_iovec_init(cipher->name, strlen(cipher->name));
+    } else {
+        return h2o_iovec_init(NULL, 0);
+    }
+}
+
+h2o_iovec_t h2o_socket_log_ssl_ech_cipher_bits(h2o_socket_t *sock, h2o_mem_pool_t *pool)
+{
+    ptls_hpke_cipher_suite_t *cipher;
+
+    if (sock->ssl != NULL && sock->ssl->ptls != NULL && ptls_is_ech_handshake(sock->ssl->ptls, NULL, NULL, &cipher)) {
+        uint16_t bits = (uint16_t)(cipher->aead->key_size * 8);
+        char *s = (char *)(pool != NULL ? h2o_mem_alloc_pool(pool, char, sizeof(H2O_UINT16_LONGEST_STR))
+                                        : h2o_mem_alloc(sizeof(H2O_UINT16_LONGEST_STR)));
+        size_t len = sprintf(s, "%" PRIu16, bits);
+        return h2o_iovec_init(s, len);
+    } else {
+        return h2o_iovec_init(NULL, 0);
+    }
+}
+
 h2o_iovec_t h2o_socket_log_ssl_backend(h2o_socket_t *sock, h2o_mem_pool_t *pool)
 {
     if (sock->ssl->ptls != NULL)

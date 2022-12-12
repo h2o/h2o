@@ -622,6 +622,63 @@ static h2o_iovec_t log_negotiated_protocol(h2o_req_t *req)
     return proto != NULL ? h2o_iovec_init(proto, strlen(proto)) : h2o_iovec_init(NULL, 0);
 }
 
+static h2o_iovec_t log_ech_config_id(h2o_req_t *req)
+{
+    struct st_h2o_http3_server_conn_t *conn = (struct st_h2o_http3_server_conn_t *)req->conn;
+    ptls_t *tls = quicly_get_tls(conn->h3.super.quic);
+    uint8_t config_id;
+
+    if (ptls_is_ech_handshake(tls, &config_id, NULL, NULL)) {
+        char *s = h2o_mem_alloc_pool(&req->pool, char, sizeof(H2O_UINT8_LONGEST_STR));
+        size_t len = sprintf(s, "%" PRIu8, config_id);
+        return h2o_iovec_init(s, len);
+    } else {
+        return h2o_iovec_init(NULL, 0);
+    }
+}
+
+static h2o_iovec_t log_ech_kem(h2o_req_t *req)
+{
+    struct st_h2o_http3_server_conn_t *conn = (struct st_h2o_http3_server_conn_t *)req->conn;
+    ptls_t *tls = quicly_get_tls(conn->h3.super.quic);
+    ptls_hpke_kem_t *kem;
+
+    if (ptls_is_ech_handshake(tls, NULL, &kem, NULL)) {
+        return h2o_iovec_init(kem->keyex->name, strlen(kem->keyex->name));
+    } else {
+        return h2o_iovec_init(NULL, 0);
+    }
+}
+
+static h2o_iovec_t log_ech_cipher(h2o_req_t *req)
+{
+    struct st_h2o_http3_server_conn_t *conn = (struct st_h2o_http3_server_conn_t *)req->conn;
+    ptls_t *tls = quicly_get_tls(conn->h3.super.quic);
+    ptls_hpke_cipher_suite_t *cipher;
+
+    if (ptls_is_ech_handshake(tls, NULL, NULL, &cipher)) {
+        return h2o_iovec_init(cipher->name, strlen(cipher->name));
+    } else {
+        return h2o_iovec_init(NULL, 0);
+    }
+}
+
+static h2o_iovec_t log_ech_cipher_bits(h2o_req_t *req)
+{
+    struct st_h2o_http3_server_conn_t *conn = (struct st_h2o_http3_server_conn_t *)req->conn;
+    ptls_t *tls = quicly_get_tls(conn->h3.super.quic);
+    ptls_hpke_cipher_suite_t *cipher;
+
+    if (ptls_is_ech_handshake(tls, NULL, NULL, &cipher)) {
+        uint16_t bits = (uint16_t)(cipher->aead->key_size * 8);
+        char *s = h2o_mem_alloc_pool(&req->pool, char, sizeof(H2O_UINT16_LONGEST_STR));
+        size_t len = sprintf(s, "%" PRIu16, bits);
+        return h2o_iovec_init(s, len);
+    } else {
+        return h2o_iovec_init(NULL, 0);
+    }
+}
+
 static h2o_iovec_t log_stream_id(h2o_req_t *_req)
 {
     struct st_h2o_http3_server_stream_t *stream = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_stream_t, req, _req);
@@ -1890,6 +1947,10 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
                     .session_id = log_session_id,
                     .server_name = log_server_name,
                     .negotiated_protocol = log_negotiated_protocol,
+                    .ech_config_id = log_ech_config_id,
+                    .ech_kem = log_ech_kem,
+                    .ech_cipher = log_ech_cipher,
+                    .ech_cipher_bits = log_ech_cipher_bits,
                 },
             .http3 =
                 {
