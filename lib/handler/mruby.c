@@ -288,6 +288,19 @@ static mrb_value get_rtt_proc(mrb_state *mrb, mrb_value self)
     return mrb_nil_value();
 }
 
+static mrb_value is_ech_proc(mrb_state *mrb, mrb_value self)
+{
+    h2o_mruby_generator_t *generator = h2o_mruby_get_generator(mrb, mrb_proc_cfunc_env_get(mrb, 0));
+    if (generator == NULL)
+        return mrb_nil_value();
+    ptls_t *tls = generator->req->conn->callbacks->get_ptls(generator->req->conn);
+    if (tls != NULL && ptls_is_ech_handshake(tls, NULL, NULL)) {
+        return mrb_true_value();
+    } else {
+        return mrb_false_value();
+    }
+}
+
 static mrb_value build_constants(mrb_state *mrb, const char *server_name, size_t server_name_len)
 {
     mrb_value ary = mrb_ary_new_capa(mrb, H2O_MRUBY_NUM_CONSTANTS);
@@ -355,6 +368,7 @@ static mrb_value build_constants(mrb_state *mrb, const char *server_name, size_t
     SET_LITERAL(H2O_MRUBY_LIT_H2O_REMAINING_DELEGATIONS, "h2o.remaining_delegations");
     SET_LITERAL(H2O_MRUBY_LIT_H2O_REMAINING_REPROCESSES, "h2o.remaining_reprocesses");
     SET_LITERAL(H2O_MRUBY_LIT_H2O_GET_RTT, "h2o.get_rtt");
+    SET_LITERAL(H2O_MRUBY_LIT_H2O_IS_ECH, "h2o.is_ech");
     SET_STRING(H2O_MRUBY_LIT_SERVER_SOFTWARE_VALUE, h2o_mruby_new_str(mrb, server_name, server_name_len));
 
 #undef SET_LITERAL
@@ -806,6 +820,8 @@ static mrb_value build_env(h2o_mruby_generator_t *generator)
         mrb_hash_set(mrb, env, mrb_ary_entry(shared->constants, H2O_MRUBY_LIT_H2O_GET_RTT),
                      mrb_obj_value(mrb_proc_new_cfunc_with_env(mrb, get_rtt_proc, 1, &generator->refs.generator)));
     }
+    mrb_hash_set(mrb, env, mrb_ary_entry(shared->constants, H2O_MRUBY_LIT_H2O_IS_ECH),
+                 mrb_obj_value(mrb_proc_new_cfunc_with_env(mrb, is_ech_proc, 1, &generator->refs.generator)));
     {
         size_t i;
         for (i = 0; i != generator->req->env.size; i += 2) {
