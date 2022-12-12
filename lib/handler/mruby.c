@@ -294,7 +294,7 @@ static mrb_value is_ech_proc(mrb_state *mrb, mrb_value self)
     if (generator == NULL)
         return mrb_nil_value();
     ptls_t *tls = generator->req->conn->callbacks->get_ptls(generator->req->conn);
-    if (tls != NULL && ptls_is_ech_handshake(tls, NULL, NULL)) {
+    if (tls != NULL && ptls_is_ech_handshake(tls, NULL, NULL, NULL)) {
         return mrb_true_value();
     } else {
         return mrb_false_value();
