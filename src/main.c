@@ -152,9 +152,12 @@ struct listener_ssl_identity_t {
      */
     h2o_iovec_t cert_chain_pem;
     /**
-     * Picotls context used for accepting TLS 1.3 handshakes. When TLS 1.3 is disabled, this property will be set to NULL.
+     * Picotls context used for accepting TLS 1.3 handshakes. When TLS 1.3 is disabled, `ptls.ctx` will be set to NULL.
      */
-    ptls_context_t *ptls;
+    struct {
+        ptls_context_t *ctx;
+        const ptls_openssl_signature_scheme_t *signature_schemes;
+    } ptls;
     /**
      * if non-NULL, points to OCSP stapling configuration
      */
@@ -767,22 +770,21 @@ static int on_client_hello_ptls(ptls_on_client_hello_t *_self, ptls_t *tls, ptls
                                        params->server_certificate_types.count) != NULL;
     struct listener_ssl_identity_t *identity;
     for (identity = ssl_config->identities + 1; identity->certificate_file != NULL; ++identity) {
-        if (prefer_raw_public_key == identity->ptls->use_raw_public_keys) {
-            ptls_openssl_sign_certificate_t *signer = (ptls_openssl_sign_certificate_t *)identity->ptls->sign_certificate;
+        if (prefer_raw_public_key == identity->ptls.ctx->use_raw_public_keys) {
             /* If the client omits siganture_algorithms extension (using RFC 7250), use the first identity with the same certificate
              * type. Otherwise, choose the first identity that contains a compatible signature scheme. */
             if (params->signature_algorithms.count == 0)
                 goto IdentityFound;
-            for (size_t signer_index = 0; signer->schemes[signer_index].scheme_id != UINT16_MAX; ++signer_index)
+            for (size_t signer_index = 0; identity->ptls.signature_schemes[signer_index].scheme_id != UINT16_MAX; ++signer_index)
                 for (size_t hello_index = 0; hello_index < params->signature_algorithms.count; ++hello_index)
-                    if (signer->schemes[signer_index].scheme_id == params->signature_algorithms.list[hello_index])
+                    if (identity->ptls.signature_schemes[signer_index].scheme_id == params->signature_algorithms.list[hello_index])
                         goto IdentityFound;
         }
     }
     /* Compatible identity was not found within the alternatives. Use the default. */
     identity = ssl_config->identities;
 IdentityFound:
-    ptls_set_context(tls, identity->ptls);
+    ptls_set_context(tls, identity->ptls.ctx);
 
     /* handle ALPN */
     if (params->negotiated_protocols.count != 0) {
@@ -832,9 +834,9 @@ static void build_ssl_dynamic_data(struct listener_ssl_identity_t *identity, h2o
 {
     ptls_emit_compressed_certificate_t *emit_cert_compressed_ptls = NULL;
 
-    if (identity->ptls != NULL)
+    if (identity->ptls.ctx != NULL)
         emit_cert_compressed_ptls = build_compressed_certificate_ptls(
-            identity->ptls,
+            identity->ptls.ctx,
             ocsp_status != NULL ? ptls_iovec_init(ocsp_status->bytes, ocsp_status->size) : ptls_iovec_init(NULL, 0));
 
     pthread_mutex_lock(&identity->dynamic.mutex);
@@ -1171,7 +1173,8 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
         quicly_amend_ptls_context(&pctx->ctx);
     }
 
-    identity->ptls = &pctx->ctx;
+    identity->ptls.ctx = &pctx->ctx;
+    identity->ptls.signature_schemes = pctx->sc.schemes;
 
     return NULL;
 }
@@ -1774,8 +1777,8 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
         }
         if (on_config_ech(cmd, *ech_node, &ech.create_opener, &ech.retry_configs) != 0)
             goto Error;
-    } else if (listener->ssl.size != 0 && listener->ssl.entries[0]->identities[0].ptls != NULL) {
-        ptls_context_t *base = listener->ssl.entries[0]->identities[0].ptls;
+    } else if (listener->ssl.size != 0 && listener->ssl.entries[0]->identities[0].ptls.ctx != NULL) {
+        ptls_context_t *base = listener->ssl.entries[0]->identities[0].ptls.ctx;
         ech.create_opener = base->ech.server.create_opener;
         ech.retry_configs = base->ech.server.retry_configs;
     }
@@ -1868,7 +1871,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
                 h2o_configurator_errprintf(cmd, *ssl_node, "%s; TLS 1.3 will be disabled", errstr);
             }
             if (listener->quic.ctx != NULL && listener->quic.ctx->tls == NULL)
-                listener->quic.ctx->tls = ssl_config->identities[0].ptls;
+                listener->quic.ctx->tls = ssl_config->identities[0].ptls.ctx;
         } else if (raw_pubkey.base != NULL) {
             h2o_configurator_errprintf(cmd, *parsed->certificate_file, "raw public key can only be used with TLS 1.3 or QUIC");
             goto Error;
@@ -1883,8 +1886,8 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
                 SSL_CTX_set_tlsext_servername_arg(ossl, listener);
             }
             /* associate picotls context to SSL_CTX, so that the handshake can switch to TLS 1.3 */
-            if (identity->ptls != NULL)
-                h2o_socket_ssl_set_picotls_context(identity->ossl, identity->ptls);
+            if (identity->ptls.ctx != NULL)
+                h2o_socket_ssl_set_picotls_context(identity->ossl, identity->ptls.ctx);
         } else {
             /* at the moment, on the OpenSSL-side, we do not support multiple types of certificate. */
             SSL_CTX_free(identity->ossl);
@@ -1892,7 +1895,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
         }
 
         /* start OCSP fetcher */
-        if (ocsp_stapling != NULL && (identity->ptls == NULL || !identity->ptls->use_raw_public_keys)) {
+        if (ocsp_stapling != NULL && (identity->ptls.ctx == NULL || !identity->ptls.ctx->use_raw_public_keys)) {
             identity->ocsp_stapling = ocsp_stapling;
             switch (conf.run_mode) {
             case RUN_MODE_WORKER: {
@@ -4436,11 +4439,11 @@ int main(int argc, char **argv)
                     struct listener_ssl_config_t *ssl = listener->ssl.entries[ssl_index];
                     for (struct listener_ssl_identity_t *identity = ssl->identities; identity->certificate_file != NULL;
                          ++identity) {
-                        if (identity->ptls != NULL) {
-                            identity->ptls->cipher_suites =
-                                replace_ciphersuites(identity->ptls->cipher_suites, tls13_non_temporal_all);
-                            identity->ptls->tls12_cipher_suites =
-                                replace_ciphersuites(identity->ptls->tls12_cipher_suites, tls12_non_temporal_all);
+                        if (identity->ptls.ctx != NULL) {
+                            identity->ptls.ctx->cipher_suites =
+                                replace_ciphersuites(identity->ptls.ctx->cipher_suites, tls13_non_temporal_all);
+                            identity->ptls.ctx->tls12_cipher_suites =
+                                replace_ciphersuites(identity->ptls.ctx->tls12_cipher_suites, tls12_non_temporal_all);
                         }
                     }
                 }
@@ -4633,7 +4636,7 @@ int main(int argc, char **argv)
         free(ssl_contexts.entries);
         for (i = 0; i != conf.num_listeners; ++i) {
             for (j = 0; j != conf.listeners[i]->ssl.size; ++j) {
-                ptls_context_t *ptls = conf.listeners[i]->ssl.entries[j]->identities[0].ptls;
+                ptls_context_t *ptls = conf.listeners[i]->ssl.entries[j]->identities[0].ptls.ctx;
                 if (ptls != NULL)
                     ssl_setup_session_resumption_ptls(ptls, conf.listeners[i]->quic.ctx);
             }
