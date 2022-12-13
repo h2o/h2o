@@ -406,8 +406,7 @@ struct async_nb_transaction_t {
     neverbleed_iobuf_t *buf;
     size_t write_size;
     h2o_linklist_t link;
-    int efd_write;
-    int efd_read;
+    int notify_fd;
 };
 
 struct async_nb_queue_t {
@@ -420,45 +419,6 @@ static __thread struct {
     struct async_nb_queue_t write_queue;
     struct async_nb_queue_t read_queue;
 } async_nb = {NULL};
-
-static struct async_nb_transaction_t *async_nb_new(neverbleed_iobuf_t *buf)
-{
-    struct async_nb_transaction_t *transaction = h2o_mem_alloc(sizeof(*transaction));
-    memset(transaction, 0, sizeof(*transaction));
-    transaction->buf = buf;
-
-    // setup notification
-    int fd_read;
-    int fd_write;
-#if ASYNC_NB_USE_EVENTFD
-    /**
-     * The kernel overhead of an eventfd file descriptor is
-     * much lower than that of a pipe, and only one file descriptor is required
-     */
-    int fd;
-
-    fd = eventfd(0, EFD_CLOEXEC);
-    if (fd == -1) {
-        perror("eventfd");
-        abort();
-    }
-    fd_read = fd;
-    fd_write = fd;
-#else
-    int fds[2];
-
-    if (cloexec_pipe(fds) != 0) {
-        perror("pipe");
-        abort();
-    }
-    fd_read = fds[0];
-    fd_write = fds[1];
-#endif
-    transaction->efd_read = fd_read;
-    transaction->efd_write = fd_write;
-
-    return transaction;
-}
 
 static struct async_nb_transaction_t *async_nb_get(struct async_nb_queue_t *queue)
 {
@@ -496,37 +456,19 @@ static void async_nb_push(struct async_nb_queue_t *queue, struct async_nb_transa
 static void async_nb_send_notification(struct async_nb_transaction_t *transaction)
 {
 #if ASYNC_NB_USE_EVENTFD
-    if (eventfd_write(transaction->efd_write, 1) != 0) {
+    if (eventfd_write(transaction->notify_fd, 1) != 0) {
         perror("eventfd_write");
         abort();
     }
 #else
     ssize_t ret;
-    while ((ret = write(transaction->efd_write, "x", 1)) == -1 && errno == EINTR)
+    while ((ret = write(transaction->notify_fd, "x", 1)) == -1 && errno == EINTR)
         ;
     if (ret != 1) {
         perror("write");
         abort();
     }
 #endif
-}
-
-static void async_nb_free(struct async_nb_transaction_t *transaction)
-{
-    // consume notification
-    ASYNC_NB_SIGNAL_T sig;
-    ssize_t ret;
-    while ((ret = read(transaction->efd_read, &sig, sizeof(sig))) == -1 && errno == EINTR)
-        ;
-    assert(ret > 0);
-    close(transaction->efd_read);
-#if !ASYNC_NB_USE_EVENTFD
-    // in the case of eventfd, the efd_read == efd_write
-    // but, in the case of pipe, we need to close the write side
-    close(transaction->efd_write);
-#endif
-    assert(!h2o_linklist_is_linked(&transaction->link));
-    free(transaction);
 }
 
 static void async_nb_submit_write_pending(void);
@@ -589,31 +531,69 @@ static void async_nb_read_ready(h2o_socket_t *sock, const char *err)
         h2o_socket_read_stop(sock);
 }
 
+static void async_nb_do_async_transaction(ASYNC_JOB *job, neverbleed_iobuf_t *buf)
+{
+    struct async_nb_transaction_t transaction = {.buf = buf};
+    int readfd;
+
+    /* setup fd to notify OpenSSL; eventfd is used if available, as it is lightweight and uses only one file descriptor */
+#if ASYNC_NB_USE_EVENTFD
+    if ((transaction.notify_fd = eventfd(0, EFD_CLOEXEC)) == -1) {
+        char errbuf[256];
+        h2o_fatal("eventfd:%s", h2o_strerror_r(errno, errbuf, sizeof(errbuf)));
+    }
+    readfd = transaction.notify_fd;
+#else
+    {
+        int pipefds[2];
+        if (cloexec_pipe(pipefds) == -1) {
+            char errbuf[256];
+            h2o_fatal("pipe:%s", h2o_strerror_r(errno, errbuf, sizeof(errbuf)));
+        }
+        readfd = pipefds[0];
+        transaction.notify_fd = pipefds[1];
+    }
+#endif
+
+    /* register the request and kick the write operation */
+    async_nb_push(&async_nb.write_queue, &transaction);
+    async_nb_submit_write_pending();
+
+    { /* setup file descriptor and call `ASYNC_pause_job`, to yield the operation back to the original fiber, until
+       * `nb_read_ready` notifies the this fiber (in paused state) to resume. */
+        size_t numfds;
+        ASYNC_WAIT_CTX *waitctx = ASYNC_get_wait_ctx(job);
+        assert(ASYNC_WAIT_CTX_get_all_fds(waitctx, NULL, &numfds) && numfds == 0);
+        if (!ASYNC_WAIT_CTX_set_wait_fd(waitctx, "neverbleed", readfd, NULL, NULL))
+            h2o_fatal("could not set async fd");
+        ASYNC_pause_job();
+        if (!ASYNC_WAIT_CTX_clear_fd(waitctx, "neverbleed"))
+            h2o_fatal("could not clear async fd");
+    }
+
+    assert(!h2o_linklist_is_linked(&transaction.link));
+
+    { /* consume notification and close the notification file descriptors */
+        ASYNC_NB_SIGNAL_T sig;
+        ssize_t ret;
+        while ((ret = read(readfd, &sig, sizeof(sig))) == -1 && errno == EINTR)
+            ;
+        assert(ret > 0);
+#if !ASYNC_NB_USE_EVENTFD
+        close(readfd);
+#endif
+        close(transaction.notify_fd);
+    }
+}
+
 static void async_nb_transaction(neverbleed_iobuf_t *buf)
 {
-    /* When using OpenSSL with ASYNC support, we may receive requests from a fiber. If so, process them asynchronously. */
     ASYNC_JOB *job;
+
+    /* When using OpenSSL with ASYNC support, we may receive requests from a fiber. If so, process them asynchronously. */
     if ((job = ASYNC_get_current_job()) != NULL) {
-
-        /* register the request and kick the write operation */
-        struct async_nb_transaction_t *transaction = async_nb_new(buf);
         assert(h2o_socket_get_fd(async_nb.sock) == neverbleed_get_fd(neverbleed));
-        async_nb_push(&async_nb.write_queue, transaction);
-        async_nb_submit_write_pending();
-
-        { /* setup file descriptor and call `ASYNC_pause_job`, to yield the operation back to the original fiber, until
-           * `nb_read_ready` notifies the this fiber (in paused state) to resume. */
-            size_t numfds;
-            ASYNC_WAIT_CTX *waitctx = ASYNC_get_wait_ctx(job);
-            assert(ASYNC_WAIT_CTX_get_all_fds(waitctx, NULL, &numfds) && numfds == 0);
-            if (!ASYNC_WAIT_CTX_set_wait_fd(waitctx, "neverbleed", transaction->efd_read, NULL, NULL))
-                h2o_fatal("could not set async fd");
-            ASYNC_pause_job();
-            if (!ASYNC_WAIT_CTX_clear_fd(waitctx, "neverbleed"))
-                h2o_fatal("could not clear async fd");
-        }
-
-        async_nb_free(transaction);
+        async_nb_do_async_transaction(job, buf);
         return;
     }
 
