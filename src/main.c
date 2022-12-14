@@ -613,7 +613,9 @@ static void async_nb_on_quic_notify(h2o_socket_t *async_sock, const char *err)
 
 static void async_nb_start_quic(quicly_async_handshake_t *self, ptls_t *tls)
 {
-    int async_fd = ptls_openssl_get_async_fd(tls);
+    ptls_async_job_t *job = ptls_get_async_job(tls);
+    assert(job->get_fd != NULL);
+    int async_fd = job->get_fd(job);
     h2o_socket_start_async_handshake(conf.threads[thread_index].ctx.loop, async_fd, tls, async_nb_on_quic_notify);
 }
 

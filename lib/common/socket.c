@@ -1721,7 +1721,9 @@ static void do_proceed_handshake_async(h2o_socket_t *sock, ptls_buffer_t *ptls_w
     /* get async fd and retain wbuf */
     int async_fd;
     if (sock->ssl->ptls != NULL) {
-        async_fd = ptls_openssl_get_async_fd(sock->ssl->ptls);
+        ptls_async_job_t *job = ptls_get_async_job(sock->ssl->ptls);
+        assert(job->get_fd != NULL);
+        async_fd = job->get_fd(job);
         sock->ssl->async.ptls_wbuf = *ptls_wbuf;
         *ptls_wbuf = (ptls_buffer_t){NULL};
     } else {
