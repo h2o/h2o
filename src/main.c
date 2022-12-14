@@ -94,9 +94,6 @@
 #if defined(__linux__)
 #include <sys/eventfd.h>
 #define ASYNC_NB_USE_EVENTFD 1
-#define ASYNC_NB_SIGNAL_T eventfd_t
-#else
-#define ASYNC_NB_SIGNAL_T char
 #endif
 
 #ifdef TCP_FASTOPEN
@@ -573,17 +570,11 @@ static void async_nb_do_async_transaction(ASYNC_JOB *job, neverbleed_iobuf_t *bu
 
     assert(!h2o_linklist_is_linked(&transaction.link));
 
-    { /* consume notification and close the notification file descriptors */
-        ASYNC_NB_SIGNAL_T sig;
-        ssize_t ret;
-        while ((ret = read(readfd, &sig, sizeof(sig))) == -1 && errno == EINTR)
-            ;
-        assert(ret > 0);
+    /* close the notification file descriptors used for notification */
 #if !ASYNC_NB_USE_EVENTFD
-        close(readfd);
+    close(readfd);
 #endif
-        close(transaction.notify_fd);
-    }
+    close(transaction.notify_fd);
 }
 
 static void async_nb_transaction(neverbleed_iobuf_t *buf)
