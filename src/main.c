@@ -24,6 +24,8 @@
 #ifdef __APPLE__
 #define __APPLE_USE_RFC_3542 /* to use IPV6_RECVPKTINFO */
 #endif
+
+/* system header files */
 #include <arpa/inet.h>
 #include <assert.h>
 #include <errno.h>
@@ -50,9 +52,13 @@
 #include <sys/un.h>
 #include <sys/wait.h>
 #include <openssl/opensslv.h>
+
+/* OS-specific header files */
 #ifdef __FreeBSD__
 #include <pthread_np.h>
 #endif
+
+/* environment / configuration-specific header files */
 #ifdef LIBCAP_FOUND
 #include <sys/capability.h>
 #include <sys/prctl.h>
@@ -63,9 +69,9 @@
 #include <openssl/ssl.h>
 #ifdef LIBC_HAS_BACKTRACE
 #include <execinfo.h>
-#include <quicly.h>
-
 #endif
+
+/* non-system header files */
 #include "picotls.h"
 #include "picotls/certificate_compression.h"
 #include "picotls/minicrypto.h"
@@ -74,6 +80,7 @@
 #if H2O_USE_FUSION
 #include "picotls/fusion.h"
 #endif
+#include "quicly.h"
 #include "cloexec.h"
 #include "yoml-parser.h"
 #include "neverbleed.h"
