@@ -1712,20 +1712,35 @@ static void on_async_proceed_handshake(h2o_socket_t *async_sock, const char *err
     proceed_handshake(sock, NULL);
 }
 
+static void on_async_job_complete(void *_sock)
+{
+    h2o_socket_t *sock = _sock;
+
+    assert(sock->ssl->async.inflight);
+    sock->ssl->async.inflight = 0;
+
+    proceed_handshake(sock, NULL);
+}
+
 static void do_proceed_handshake_async(h2o_socket_t *sock, ptls_buffer_t *ptls_wbuf)
 {
     assert(!sock->ssl->async.inflight);
     sock->ssl->async.inflight = 1;
     h2o_socket_read_stop(sock);
 
-    /* get async fd and retain wbuf */
+    /* retain wbuf, get async fd */
     int async_fd;
     if (sock->ssl->ptls != NULL) {
-        ptls_async_job_t *job = ptls_get_async_job(sock->ssl->ptls);
-        assert(job->get_fd != NULL);
-        async_fd = job->get_fd(job);
         sock->ssl->async.ptls_wbuf = *ptls_wbuf;
         *ptls_wbuf = (ptls_buffer_t){NULL};
+        ptls_async_job_t *job = ptls_get_async_job(sock->ssl->ptls);
+        if (job->set_completion_callback != NULL) {
+            /* completion is notified via a callback */
+            job->set_completion_callback(job, on_async_job_complete, sock);
+            return;
+        }
+        assert(job->get_fd != NULL);
+        async_fd = job->get_fd(job);
     } else {
         assert(ptls_wbuf == NULL);
         size_t numfds;
