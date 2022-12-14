@@ -501,10 +501,10 @@ static void async_nb_send_notification(struct async_nb_transaction_t *transactio
         abort();
     }
 #else
-    int ret;
-    while ((ret = write(transaction->efd_write, "x", 1) == -1 && errno == EINTR))
+    ssize_t ret;
+    while ((ret = write(transaction->efd_write, "x", 1)) == -1 && errno == EINTR)
         ;
-    if (ret == 1) {
+    if (ret != 1) {
         perror("write");
         abort();
     }
