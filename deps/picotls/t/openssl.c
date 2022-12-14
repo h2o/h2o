@@ -143,7 +143,7 @@ static void test_key_exchanges(void)
 #endif
 }
 
-static void test_sign_verify(EVP_PKEY *key, const struct st_ptls_openssl_signature_scheme_t *schemes)
+static void test_sign_verify(EVP_PKEY *key, const ptls_openssl_signature_scheme_t *schemes)
 {
     for (size_t i = 0; schemes[i].scheme_id != UINT16_MAX; ++i) {
         note("scheme 0x%04x", schemes[i].scheme_id);
@@ -198,7 +198,7 @@ static void test_rsa_sign(void)
     test_sign_verify(sc->key, sc->schemes);
 }
 
-static void do_test_ecdsa_sign(int nid, const struct st_ptls_openssl_signature_scheme_t *schemes)
+static void do_test_ecdsa_sign(int nid, const ptls_openssl_signature_scheme_t *schemes)
 {
     EVP_PKEY *pkey;
 
@@ -464,10 +464,12 @@ static void many_handshakes(void)
                 if (num_issued < num_total)
                     qat_set_pending(offending);
                 break;
-            case PTLS_ERROR_ASYNC_OPERATION:
-                qat.conns[offending].wait_fd = ptls_openssl_get_async_fd(qat.conns[offending].tls);
+            case PTLS_ERROR_ASYNC_OPERATION: {
+                ptls_async_job_t *job = ptls_get_async_job(qat.conns[offending].tls);
+                assert(job->get_fd != NULL);
+                qat.conns[offending].wait_fd = job->get_fd(job);
                 assert(qat.conns[offending].wait_fd != -1);
-                break;
+            } break;
             default:
                 fprintf(stderr, "ptls_handshake returned %d\n", hsret);
                 abort();

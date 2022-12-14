@@ -61,6 +61,9 @@
 
 #ifdef _WINDOWS
 #define aligned_alloc(a, s) _aligned_malloc((s), (a))
+#define aligned_free(p) _aligned_free(p)
+#else
+#define aligned_free(p) free(p)
 #endif
 
 struct ptls_fusion_aesgcm_context {
@@ -1026,7 +1029,7 @@ ptls_fusion_aesgcm_context_t *ptls_fusion_aesgcm_set_capacity(ptls_fusion_aesgcm
         return NULL;
     memcpy(newp, ctx, old_ctx_size);
     ptls_clear_memory(ctx, old_ctx_size);
-    free(ctx);
+    aligned_free(ctx);
     ctx = newp;
 
     ctx->capacity = capacity;
@@ -1041,7 +1044,7 @@ void ptls_fusion_aesgcm_free(ptls_fusion_aesgcm_context_t *ctx)
     ptls_clear_memory(ctx, calc_aesgcm_context_size(&ctx->ghash_cnt, ctx->ecb.aesni256));
     /* skip ptls_fusion_aesecb_dispose, based on the knowledge that it does not allocate memory elsewhere */
 
-    free(ctx);
+    aligned_free(ctx);
 }
 
 static void ctr_dispose(ptls_cipher_context_t *_ctx)
