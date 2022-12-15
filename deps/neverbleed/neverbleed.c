@@ -479,11 +479,12 @@ static void get_privsep_data(const RSA *rsa, struct st_neverbleed_rsa_exdata_t *
 static struct {
     struct {
         pthread_mutex_t lock;
-        struct {
+        /**
+         * if the slot is use contains a non-NULL key; if not in use, contains the index of the next empty slot or SIZE_MAX if there
+         * are no more empty slots
+         */
+        union {
             EVP_PKEY *pkey;
-            /**
-             * if the slot is currently empty, contains the index of the next empty slot, or SIZE_MAX if there is no more
-             */
             size_t next_empty;
         } *slots;
         size_t num_slots;
@@ -497,7 +498,7 @@ static RSA *daemon_get_rsa(size_t key_index)
     RSA *rsa = NULL;
 
     pthread_mutex_lock(&daemon_vars.keys.lock);
-    if (key_index < daemon_vars.keys.num_slots && daemon_vars.keys.slots[key_index].pkey != NULL)
+    if (key_index < daemon_vars.keys.num_slots)
         rsa = EVP_PKEY_get1_RSA(daemon_vars.keys.slots[key_index].pkey);
     pthread_mutex_unlock(&daemon_vars.keys.lock);
 
@@ -506,25 +507,32 @@ static RSA *daemon_get_rsa(size_t key_index)
 
 size_t allocate_slot(void)
 {
-    size_t index;
-
-    if ((index = daemon_vars.keys.first_empty) != SIZE_MAX) {
-        daemon_vars.keys.first_empty = daemon_vars.keys.slots[index].next_empty;
-    } else {
-        if ((daemon_vars.keys.slots = realloc(daemon_vars.keys.slots,
-                                              sizeof(daemon_vars.keys.slots[0]) * (daemon_vars.keys.num_slots + 1))) == NULL)
+    /* expand if all slots are in use */
+    if (daemon_vars.keys.first_empty == SIZE_MAX) {
+        size_t new_capacity = (daemon_vars.keys.num_slots < 4 ? 4 : daemon_vars.keys.num_slots) * 2;
+        if ((daemon_vars.keys.slots = realloc(daemon_vars.keys.slots, sizeof(daemon_vars.keys.slots[0]) * new_capacity)) == NULL)
             dief("no memory");
-        index = daemon_vars.keys.num_slots++;
+        daemon_vars.keys.first_empty = daemon_vars.keys.num_slots;
+        for (size_t i = daemon_vars.keys.num_slots; i < new_capacity - 1; ++i)
+            daemon_vars.keys.slots[i].next_empty = i + 1;
+        daemon_vars.keys.slots[new_capacity - 1].next_empty = SIZE_MAX;
+        daemon_vars.keys.num_slots = new_capacity;
     }
 
-    daemon_vars.keys.slots[index].pkey = NULL;
-    daemon_vars.keys.slots[index].next_empty = SIZE_MAX;
+    /* detach the first empty slot from the empty list */
+    size_t slot_index = daemon_vars.keys.first_empty;
+    daemon_vars.keys.first_empty = daemon_vars.keys.slots[slot_index].next_empty;
 
-    return index;
+    /* set bogus value in the allocated slot to help figure out what happened upon crash */
+    daemon_vars.keys.slots[slot_index].next_empty = SIZE_MAX - 1;
+
+    return slot_index;
 }
 
 static size_t daemon_set_pkey(EVP_PKEY *pkey)
 {
+    assert(pkey != NULL);
+
     pthread_mutex_lock(&daemon_vars.keys.lock);
 
     size_t index = allocate_slot();
@@ -714,7 +722,7 @@ static EC_KEY *daemon_get_ecdsa(size_t key_index)
     EC_KEY *ec_key = NULL;
 
     pthread_mutex_lock(&daemon_vars.keys.lock);
-    if (key_index < daemon_vars.keys.num_slots && daemon_vars.keys.slots[key_index].pkey != NULL)
+    if (key_index < daemon_vars.keys.num_slots)
         ec_key = EVP_PKEY_get1_EC_KEY(daemon_vars.keys.slots[key_index].pkey);
     pthread_mutex_unlock(&daemon_vars.keys.lock);
 
@@ -877,7 +885,7 @@ static EVP_PKEY *daemon_get_pkey(size_t key_index)
     EVP_PKEY *pkey = NULL;
 
     pthread_mutex_lock(&daemon_vars.keys.lock);
-    if (key_index < daemon_vars.keys.num_slots && daemon_vars.keys.slots[key_index].pkey != NULL) {
+    if (key_index < daemon_vars.keys.num_slots) {
         pkey = daemon_vars.keys.slots[key_index].pkey;
         EVP_PKEY_up_ref(pkey);
     }
@@ -1359,9 +1367,8 @@ static int del_pkey_stub(neverbleed_iobuf_t *buf)
 
     pthread_mutex_lock(&daemon_vars.keys.lock);
     /* set slot as available */
-    if (key_index < daemon_vars.keys.num_slots && daemon_vars.keys.slots[key_index].pkey != NULL) {
+    if (key_index < daemon_vars.keys.num_slots) {
         EVP_PKEY_free(daemon_vars.keys.slots[key_index].pkey);
-        daemon_vars.keys.slots[key_index].pkey = NULL;
         daemon_vars.keys.slots[key_index].next_empty = daemon_vars.keys.first_empty;
         daemon_vars.keys.first_empty = key_index;
     } else {
