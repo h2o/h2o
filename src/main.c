@@ -400,18 +400,11 @@ static void on_neverbleed_fork(void)
 #endif
 }
 
-#if H2O_CAN_ASYNC_SSL
-
 struct async_nb_transaction_t {
     neverbleed_iobuf_t *buf;
     size_t write_size;
     h2o_linklist_t link;
     void (*on_read_complete)(struct async_nb_transaction_t *transaction);
-};
-
-struct async_nb_transaction_fd_notify_t {
-    struct async_nb_transaction_t super;
-    int notify_fd;
 };
 
 struct async_nb_queue_t {
@@ -456,26 +449,6 @@ static void async_nb_push(struct async_nb_queue_t *queue, struct async_nb_transa
 
     h2o_linklist_insert(&queue->anchor, &transaction->link);
     ++queue->len;
-}
-
-static void async_nb_notify_fd(struct async_nb_transaction_t *_transaction)
-{
-    struct async_nb_transaction_fd_notify_t *transaction = (struct async_nb_transaction_fd_notify_t *)_transaction;
-
-#if ASYNC_NB_USE_EVENTFD
-    if (eventfd_write(transaction->notify_fd, 1) != 0) {
-        perror("eventfd_write");
-        abort();
-    }
-#else
-    ssize_t ret;
-    while ((ret = write(transaction->notify_fd, "x", 1)) == -1 && errno == EINTR)
-        ;
-    if (ret != 1) {
-        perror("write");
-        abort();
-    }
-#endif
 }
 
 static void async_nb_submit_write_pending(void);
@@ -537,6 +510,33 @@ static void async_nb_read_ready(h2o_socket_t *sock, const char *err)
         h2o_socket_read_stop(sock);
 
     transaction->on_read_complete(transaction);
+}
+
+#if H2O_CAN_OSSL_ASYNC
+
+struct async_nb_transaction_fd_notify_t {
+    struct async_nb_transaction_t super;
+    int notify_fd;
+};
+
+static void async_nb_notify_fd(struct async_nb_transaction_t *_transaction)
+{
+    struct async_nb_transaction_fd_notify_t *transaction = (struct async_nb_transaction_fd_notify_t *)_transaction;
+
+#if ASYNC_NB_USE_EVENTFD
+    if (eventfd_write(transaction->notify_fd, 1) != 0) {
+        perror("eventfd_write");
+        abort();
+    }
+#else
+    ssize_t ret;
+    while ((ret = write(transaction->notify_fd, "x", 1)) == -1 && errno == EINTR)
+        ;
+    if (ret != 1) {
+        perror("write");
+        abort();
+    }
+#endif
 }
 
 static void async_nb_do_async_transaction(ASYNC_JOB *job, neverbleed_iobuf_t *buf)
@@ -608,6 +608,8 @@ static void async_nb_transaction(neverbleed_iobuf_t *buf)
     async_nb_run_sync(buf, neverbleed_transaction_write);
     async_nb_run_sync(buf, neverbleed_transaction_read);
 }
+
+#endif
 
 struct async_nb_digestsign_t {
     ptls_sign_certificate_t super;
@@ -719,11 +721,13 @@ static void async_nb_resume_quic_handshake(void *tls)
     }
 }
 
+#if H2O_CAN_OSSL_ASYNC
 static void async_nb_on_quic_notify(h2o_socket_t *async_sock, const char *err)
 {
     ptls_t *tls = h2o_socket_async_handshake_on_notify(async_sock, err);
     async_nb_resume_quic_handshake(tls);
 }
+#endif
 
 static void async_nb_start_quic(quicly_async_handshake_t *self, ptls_t *tls)
 {
@@ -731,16 +735,18 @@ static void async_nb_start_quic(quicly_async_handshake_t *self, ptls_t *tls)
 
     if (job->set_completion_callback != NULL) {
         job->set_completion_callback(job, async_nb_resume_quic_handshake, tls);
-        return;
+    } else {
+#if H2O_CAN_OSSL_ASYNC
+        assert(job->get_fd != NULL);
+        int async_fd = job->get_fd(job);
+        h2o_socket_start_async_handshake(conf.threads[thread_index].ctx.loop, async_fd, tls, async_nb_on_quic_notify);
+#else
+        h2o_fatal("when OpenSSL async API is unavailable, callback-based approach must have been the only option");
+#endif
     }
-    assert(job->get_fd != NULL);
-    int async_fd = job->get_fd(job);
-    h2o_socket_start_async_handshake(conf.threads[thread_index].ctx.loop, async_fd, tls, async_nb_on_quic_notify);
 }
 
 static quicly_async_handshake_t async_nb_quic_handler = {async_nb_start_quic};
-
-#endif
 
 static int on_openssl_print_errors(const char *str, size_t len, void *fp)
 {
@@ -1269,7 +1275,7 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
             free(pctx);
             return "failed to setup private key";
         }
-#if H2O_CAN_ASYNC_SSL
+#if H2O_CAN_OSSL_ASYNC
         if (use_neverbleed)
             pctx->sc.ossl.async = 1;
 #endif
@@ -1439,7 +1445,7 @@ static int load_ssl_identity(h2o_configurator_command_t *cmd, SSL_CTX *ssl_ctx, 
                 fprintf(stderr, "%s\n", errbuf);
                 abort();
             }
-#if H2O_CAN_ASYNC_SSL
+#if H2O_CAN_OSSL_ASYNC
             neverbleed_transaction_cb = async_nb_transaction;
 #endif
         }
@@ -1944,7 +1950,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
         /* initialize OpenSSL context */
         identity->ossl = SSL_CTX_new(SSLv23_server_method());
         SSL_CTX_set_options(identity->ossl, ssl_options);
-#if H2O_CAN_ASYNC_SSL
+#if H2O_CAN_OSSL_ASYNC
         if (use_neverbleed)
             SSL_CTX_set_mode(identity->ossl, SSL_CTX_get_mode(identity->ossl) | SSL_MODE_ASYNC);
 #endif
@@ -2655,9 +2661,7 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
                 *quic = quicly_spec_context;
                 quic->cid_encryptor = &quic_cid_encryptor;
                 quic->generate_resumption_token = &quic_resumption_token_generator;
-#if H2O_CAN_ASYNC_SSL
                 quic->async_handshake = &async_nb_quic_handler;
-#endif
                 listener = add_listener(fd, ai->ai_addr, ai->ai_addrlen, ctx->hostconf == NULL, 0, 0, 0);
                 listener->quic.ctx = quic;
                 if (quic_node != NULL) {
@@ -3873,7 +3877,7 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
                                       on_server_notification);
     h2o_multithread_register_receiver(conf.threads[thread_index].ctx.queue, &conf.threads[thread_index].memcached,
                                       h2o_memcached_receiver);
-#if H2O_CAN_ASYNC_SSL
+#if H2O_CAN_OSSL_ASYNC
     if (neverbleed != NULL) {
         int fd = neverbleed_get_fd(neverbleed);
         async_nb.sock = h2o_evloop_socket_create(conf.threads[thread_index].ctx.loop, fd, H2O_SOCKET_FLAG_DONT_READ);
