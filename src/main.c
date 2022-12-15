@@ -721,29 +721,12 @@ static void async_nb_resume_quic_handshake(void *tls)
     }
 }
 
-#if H2O_CAN_OSSL_ASYNC
-static void async_nb_on_quic_notify(h2o_socket_t *async_sock, const char *err)
-{
-    ptls_t *tls = h2o_socket_async_handshake_on_notify(async_sock, err);
-    async_nb_resume_quic_handshake(tls);
-}
-#endif
-
 static void async_nb_start_quic(quicly_async_handshake_t *self, ptls_t *tls)
 {
     ptls_async_job_t *job = ptls_get_async_job(tls);
 
-    if (job->set_completion_callback != NULL) {
-        job->set_completion_callback(job, async_nb_resume_quic_handshake, tls);
-    } else {
-#if H2O_CAN_OSSL_ASYNC
-        assert(job->get_fd != NULL);
-        int async_fd = job->get_fd(job);
-        h2o_socket_start_async_handshake(conf.threads[thread_index].ctx.loop, async_fd, tls, async_nb_on_quic_notify);
-#else
-        h2o_fatal("when OpenSSL async API is unavailable, callback-based approach must have been the only option");
-#endif
-    }
+    assert(job->set_completion_callback != NULL);
+    job->set_completion_callback(job, async_nb_resume_quic_handshake, tls);
 }
 
 static quicly_async_handshake_t async_nb_quic_handler = {async_nb_start_quic};
@@ -1259,7 +1242,7 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
     }
 
     /* create signer */
-    if (use_neverbleed && 1) {
+    if (use_neverbleed) {
         pctx->sc.async_digestsign = (struct async_nb_digestsign_t){
             .super = {async_nb_digestsign},
             .key = key,
@@ -1275,10 +1258,6 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
             free(pctx);
             return "failed to setup private key";
         }
-#if H2O_CAN_OSSL_ASYNC
-        if (use_neverbleed)
-            pctx->sc.ossl.async = 1;
-#endif
         pctx->ctx.sign_certificate = &pctx->sc.ossl.super;
         identity->ptls.signature_schemes = pctx->sc.ossl.schemes;
     }
