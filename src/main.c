@@ -595,16 +595,19 @@ static void async_nb_do_async_transaction(ASYNC_JOB *job, neverbleed_iobuf_t *bu
     close(transaction.notify_fd);
 }
 
+#endif
+
 static void async_nb_transaction(neverbleed_iobuf_t *buf)
 {
-    ASYNC_JOB *job;
-
+#if H2O_CAN_OSSL_ASYNC
     /* When using OpenSSL with ASYNC support, we may receive requests from a fiber. If so, process them asynchronously. */
-    if ((job = ASYNC_get_current_job()) != NULL) {
+    ASYNC_JOB *job;
+   if ((job = ASYNC_get_current_job()) != NULL) {
         assert(h2o_socket_get_fd(async_nb.sock) == neverbleed_get_fd(neverbleed));
         async_nb_do_async_transaction(job, buf);
         return;
     }
+#endif
 
     /* do it synchronously, by at first reading all pending reads, then write asynchronously and wait for the repsonse */
     if (async_nb.sock != NULL) {
@@ -615,8 +618,6 @@ static void async_nb_transaction(neverbleed_iobuf_t *buf)
     async_nb_run_sync(buf, neverbleed_transaction_write);
     async_nb_run_sync(buf, neverbleed_transaction_read);
 }
-
-#endif
 
 struct async_nb_digestsign_t {
     ptls_sign_certificate_t super;
@@ -1431,9 +1432,7 @@ static int load_ssl_identity(h2o_configurator_command_t *cmd, SSL_CTX *ssl_ctx, 
                 fprintf(stderr, "%s\n", errbuf);
                 abort();
             }
-#if H2O_CAN_OSSL_ASYNC
             neverbleed_transaction_cb = async_nb_transaction;
-#endif
         }
         if (neverbleed_load_private_key_file(neverbleed, ssl_ctx, (*parsed->key_file)->data.scalar, errbuf) != 1) {
             h2o_configurator_errprintf(cmd, *parsed->key_file, "failed to load private key file:%s:%s\n",
