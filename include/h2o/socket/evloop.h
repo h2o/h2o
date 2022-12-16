@@ -53,6 +53,9 @@ typedef struct st_h2o_evloop_t {
     h2o_timerwheel_t *_timeouts;
     h2o_sliding_counter_t exec_time_nanosec_counter;
     uint64_t run_count;
+#if H2O_USE_IO_URING
+    struct st_h2o_evloop_read_file_t *_read_file;
+#endif
 } h2o_evloop_t;
 
 typedef h2o_evloop_t h2o_loop_t;
@@ -78,6 +81,10 @@ void h2o_evloop_destroy(h2o_evloop_t *loop);
  * rerun the event loop.
  */
 int h2o_evloop_run(h2o_evloop_t *loop, int32_t max_wait);
+
+#if H2O_USE_IO_URING
+void h2o_evloop_set_io_uring_batch_size(h2o_evloop_t *loop, size_t batch_size);
+#endif
 
 #define h2o_timer_init h2o_timerwheel_init_entry
 #define h2o_timer_is_linked h2o_timerwheel_is_linked
