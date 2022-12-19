@@ -200,7 +200,7 @@ static size_t sendvec_send(h2o_sendvec_t *src, int sockfd, size_t len)
 static void do_proceed(h2o_generator_t *_self, h2o_req_t *req)
 {
     static const h2o_sendvec_callbacks_t sendvec_callbacks = {
-        do_pread,
+        do_pread, NULL,
 #if !NO_SENDFILE
         sendvec_send,
 #endif
