@@ -149,7 +149,7 @@ static int do_pread(h2o_sendvec_t *src, void *dst, size_t len)
 }
 
 #if defined(__linux__)
-size_t do_sendfile(int sockfd, int filefd, off_t off, size_t len)
+static size_t do_sendfile(int sockfd, int filefd, off_t off, size_t len)
 {
     off_t iooff = off;
     ssize_t ret;
@@ -160,7 +160,7 @@ size_t do_sendfile(int sockfd, int filefd, off_t off, size_t len)
     return ret;
 }
 #elif defined(__APPLE__)
-size_t do_sendfile(int sockfd, int filefd, off_t off, size_t len)
+static size_t do_sendfile(int sockfd, int filefd, off_t off, size_t len)
 {
     off_t iolen = len;
     int ret;
@@ -171,7 +171,7 @@ size_t do_sendfile(int sockfd, int filefd, off_t off, size_t len)
     return iolen;
 }
 #elif defined(__FreeBSD__)
-size_t do_sendfile(int sockfd, int filefd, off_t off, size_t len)
+static size_t do_sendfile(int sockfd, int filefd, off_t off, size_t len)
 {
     off_t outlen;
     int ret;
