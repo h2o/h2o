@@ -148,6 +148,18 @@ static int sendvec_read(h2o_sendvec_t *src, void *dst, size_t len)
     return 1;
 }
 
+#if H2O_USE_IO_URING
+static void sendvec_read_async(h2o_sendvec_t *src, h2o_socket_read_file_cmd_t **cmd, void *dst, size_t len,
+                               h2o_socket_read_file_cb cb, void *cbdata)
+{
+    struct st_h2o_sendfile_generator_t *self = (void *)src->cb_arg[0];
+    uint64_t *file_chunk_at = &src->cb_arg[1], read_off = *file_chunk_at;
+
+    *file_chunk_at += len;
+    h2o_socket_read_file(cmd, self->req->conn->ctx->loop, self->file.ref->fd, read_off, h2o_iovec_init(dst, len), cb, cbdata);
+}
+#endif
+
 #if defined(__linux__)
 static size_t do_sendfile(int sockfd, int filefd, off_t off, size_t len)
 {
@@ -200,9 +212,12 @@ static size_t sendvec_send(h2o_sendvec_t *src, int sockfd, size_t len)
 static void do_proceed(h2o_generator_t *_self, h2o_req_t *req)
 {
     static const h2o_sendvec_callbacks_t sendvec_callbacks = {
-        sendvec_read, NULL,
+        .read_ = sendvec_read,
+#if H2O_USE_IO_URING
+        .read_async = sendvec_read_async,
+#endif
 #if !NO_SENDFILE
-        sendvec_send,
+        .send_ = sendvec_send,
 #endif
     };
 
