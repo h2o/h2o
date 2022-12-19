@@ -127,7 +127,7 @@ static void on_generator_dispose(void *_self)
     close_file(self);
 }
 
-static int do_pread(h2o_sendvec_t *src, void *dst, size_t len)
+static int sendvec_read(h2o_sendvec_t *src, void *dst, size_t len)
 {
     struct st_h2o_sendfile_generator_t *self = (void *)src->cb_arg[0];
     uint64_t *file_chunk_at = &src->cb_arg[1];
@@ -200,7 +200,7 @@ static size_t sendvec_send(h2o_sendvec_t *src, int sockfd, size_t len)
 static void do_proceed(h2o_generator_t *_self, h2o_req_t *req)
 {
     static const h2o_sendvec_callbacks_t sendvec_callbacks = {
-        do_pread, NULL,
+        sendvec_read, NULL,
 #if !NO_SENDFILE
         sendvec_send,
 #endif
