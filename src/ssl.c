@@ -1181,7 +1181,7 @@ void init_openssl(void)
     SSL_load_error_strings();
     SSL_library_init();
     OpenSSL_add_all_algorithms();
-#if H2O_CAN_ASYNC_SSL
+#if H2O_CAN_OSSL_ASYNC
     ERR_load_ASYNC_strings();
 #endif
 
