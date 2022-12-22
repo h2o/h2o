@@ -38,7 +38,7 @@ struct st_h2o_uv_socket_t {
     };
 };
 
-static void do_ssl_write(struct st_h2o_uv_socket_t *sock, int is_first_call, h2o_iovec_t *initial_bufs, size_t initial_bufcnt);
+static void do_ssl_write(struct st_h2o_uv_socket_t *sock, int is_first_call);
 
 static void alloc_inbuf(h2o_buffer_t **buf, uv_buf_t *_vec)
 {
@@ -229,24 +229,16 @@ static void on_ssl_write_complete(uv_write_t *wreq, int status)
 
     /* If current write succeeded and there's more to be sent, call `do_ssl_write`. Otherwise, the operation is complete. */
     if (status == 0 && sock->super._write_buf.cnt != 0) {
-        do_ssl_write(sock, 0, NULL, 0);
+        do_ssl_write(sock, 0);
     } else {
         on_do_write_complete(&sock->stream._wreq, status);
     }
 }
 
-void do_ssl_write(struct st_h2o_uv_socket_t *sock, int is_first_call, h2o_iovec_t *initial_bufs, size_t initial_bufcnt)
+void do_ssl_write(struct st_h2o_uv_socket_t *sock, int is_first_call)
 {
-    h2o_iovec_t **bufs;
-    size_t *bufcnt;
-
-    if (is_first_call) {
-        bufs = &initial_bufs;
-        bufcnt = &initial_bufcnt;
-    } else {
-        bufs = &sock->super._write_buf.bufs;
-        bufcnt = &sock->super._write_buf.cnt;
-    }
+    h2o_iovec_t **bufs = &sock->super._write_buf.bufs;
+    size_t *bufcnt = &sock->super._write_buf.cnt;
 
     /* generate TLS records */
     size_t first_buf_written = 0;
@@ -272,12 +264,8 @@ void do_ssl_write(struct st_h2o_uv_socket_t *sock, int is_first_call, h2o_iovec_
     } else {
         /* There's more cleartext data to be converted and to be sent. Record pending cleartext data. */
         assert(has_pending_ssl_bytes(sock->super.ssl));
-        if (is_first_call) {
-            init_write_buf(&sock->super, *bufs, *bufcnt, first_buf_written);
-        } else {
-            sock->super._write_buf.bufs->base += first_buf_written;
-            sock->super._write_buf.bufs->len -= first_buf_written;
-        }
+        sock->super._write_buf.bufs->base += first_buf_written;
+        sock->super._write_buf.bufs->len -= first_buf_written;
     }
 
     /* Send pending TLS records. */
@@ -285,19 +273,20 @@ void do_ssl_write(struct st_h2o_uv_socket_t *sock, int is_first_call, h2o_iovec_
     uv_write(&sock->stream._wreq, (uv_stream_t *)sock->handle, &uvbuf, 1, on_ssl_write_complete);
 }
 
-void do_write(h2o_socket_t *_sock, h2o_iovec_t *bufs, size_t bufcnt)
+void do_write(h2o_socket_t *_sock)
 {
     struct st_h2o_uv_socket_t *sock = (struct st_h2o_uv_socket_t *)_sock;
     assert(sock->handle->type == UV_TCP);
 
     if (sock->super.ssl == NULL) {
-        if (bufcnt > 0) {
-            uv_write(&sock->stream._wreq, (uv_stream_t *)sock->handle, (uv_buf_t *)bufs, (int)bufcnt, on_do_write_complete);
+        if (sock->super._write_buf.cnt > 0) {
+            uv_write(&sock->stream._wreq, (uv_stream_t *)sock->handle, (uv_buf_t *)sock->super._write_buf.bufs,
+                     (int)sock->super._write_buf.cnt, on_do_write_complete);
         } else {
             call_write_complete_delayed(sock, 0);
         }
     } else {
-        do_ssl_write(sock, 1, bufs, bufcnt);
+        do_ssl_write(sock, 1);
     }
 }
 

@@ -162,14 +162,13 @@ struct st_h2o_socket_zerocopy_buffers_t {
 };
 
 /* backend functions */
-static void init_write_buf(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, size_t first_buf_written);
 static void dispose_write_buf(h2o_socket_t *sock);
 static void dispose_ssl_output_buffer(struct st_h2o_socket_ssl_t *ssl);
 static int has_pending_ssl_bytes(struct st_h2o_socket_ssl_t *ssl);
 static size_t generate_tls_records(h2o_socket_t *sock, h2o_iovec_t **bufs, size_t *bufcnt, size_t first_buf_written);
 static void do_dispose_socket(h2o_socket_t *sock);
 static void report_early_write_error(h2o_socket_t *sock);
-static void do_write(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt);
+static void do_write(h2o_socket_t *sock);
 static void do_read_start(h2o_socket_t *sock);
 static void do_read_stop(h2o_socket_t *sock);
 static int do_export(h2o_socket_t *_sock, h2o_socket_export_t *info);
@@ -260,25 +259,15 @@ static int read_bio(BIO *b, char *out, int len)
     return len;
 }
 
-static void init_write_buf(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, size_t first_buf_written)
+static void alloc_write_buf(h2o_socket_t *sock, size_t cnt)
 {
-    /* Use smallbufs or allocate slots. An additional slot is reserved at the end so that sendvec can be flattened there for
-     * encryption. */
-    if (bufcnt < PTLS_ELEMENTSOF(sock->_write_buf.smallbufs)) {
+    if (cnt <= PTLS_ELEMENTSOF(sock->_write_buf.smallbufs)) {
         sock->_write_buf.bufs = sock->_write_buf.smallbufs;
     } else {
-        sock->_write_buf.bufs = h2o_mem_alloc(sizeof(sock->_write_buf.bufs[0]) * (bufcnt + 1));
+        sock->_write_buf.bufs = h2o_mem_alloc(sizeof(sock->_write_buf.bufs[0]) * cnt);
         sock->_write_buf.alloced_ptr = sock->_write_buf.bufs;
     }
-
-    /* Initialize the vector. */
-    if (bufcnt != 0) {
-        sock->_write_buf.bufs[0].base = bufs[0].base + first_buf_written;
-        sock->_write_buf.bufs[0].len = bufs[0].len - first_buf_written;
-        for (size_t i = 1; i < bufcnt; ++i)
-            sock->_write_buf.bufs[i] = bufs[i];
-    }
-    sock->_write_buf.cnt = bufcnt;
+    sock->_write_buf.cnt = 0;
 }
 
 static void dispose_write_buf(h2o_socket_t *sock)
@@ -484,7 +473,7 @@ const char *decode_ssl_input(h2o_socket_t *sock)
 static void flush_pending_ssl(h2o_socket_t *sock, h2o_socket_cb cb)
 {
     sock->_cb.write = cb;
-    do_write(sock, NULL, 0);
+    do_write(sock);
 }
 
 static void destroy_ssl(struct st_h2o_socket_ssl_t *ssl)
@@ -927,15 +916,20 @@ void h2o_socket_write(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_
     assert(sock->_cb.write == NULL);
     sock->_cb.write = cb;
 
+    alloc_write_buf(sock, bufcnt);
+
     for (size_t i = 0; i != bufcnt; ++i) {
-        sock->bytes_written += bufs[i].len;
+        if (bufs[i].len != 0) {
+            sock->_write_buf.bufs[sock->_write_buf.cnt++] = bufs[i];
+            sock->bytes_written += bufs[i].len;
 #if H2O_SOCKET_DUMP_WRITE
-        h2o_error_printf("writing %zu bytes to fd:%d\n", bufs[i].len, h2o_socket_get_fd(sock));
-        h2o_dump_memory(stderr, bufs[i].base, bufs[i].len);
+            h2o_error_printf("writing %zu bytes to fd:%d\n", bufs[i].len, h2o_socket_get_fd(sock));
+            h2o_dump_memory(stderr, bufs[i].base, bufs[i].len);
 #endif
+        }
     }
 
-    do_write(sock, bufs, bufcnt);
+    do_write(sock);
 }
 
 void h2o_socket_sendvec(h2o_socket_t *sock, h2o_sendvec_t *vecs, size_t cnt, h2o_socket_cb cb)
@@ -945,42 +939,48 @@ void h2o_socket_sendvec(h2o_socket_t *sock, h2o_sendvec_t *vecs, size_t cnt, h2o
 
     sock->_cb.write = cb;
 
-    if (cnt == 0)
-        return do_write(sock, NULL, 0);
+    /* prepare the array of h2o_iovec_t to store flattened vectors to be sent, with +1 slot to flatten pull vector */
+    alloc_write_buf(sock, cnt + 1);
 
-    h2o_iovec_t bufs[cnt];
-    size_t pull_index = SIZE_MAX;
+    size_t vec_pull_index = SIZE_MAX, buf_pull_index = SIZE_MAX;
 
     /* copy vectors to bufs, while looking for one to flatten */
     for (size_t i = 0; i < cnt; ++i) {
-        sock->bytes_written += vecs[i].len;
-        if (vecs[i].callbacks->read_ == h2o_sendvec_read_raw || vecs[i].len == 0) {
-            bufs[i] = h2o_iovec_init(vecs[i].raw, vecs[i].len);
-        } else {
-            assert(pull_index == SIZE_MAX || !"h2o_socket_sendvec can only handle one pull vector at a time");
-            assert(vecs[i].len <= H2O_PULL_SENDVEC_MAX_SIZE); /* at the moment, this is our size limit */
-            pull_index = i;
+        if (vecs[i].len != 0) {
+            sock->bytes_written += vecs[i].len;
+            if (vecs[i].callbacks->read_ == h2o_sendvec_read_raw) {
+                sock->_write_buf.bufs[sock->_write_buf.cnt] = h2o_iovec_init(vecs[i].raw, vecs[i].len);
+            } else {
+                assert(vec_pull_index == SIZE_MAX || !"h2o_socket_sendvec can only handle one pull vector at a time");
+                assert(vecs[i].len <= H2O_PULL_SENDVEC_MAX_SIZE); /* at the moment, this is our size limit */
+                vec_pull_index = i;
+                buf_pull_index = sock->_write_buf.cnt;
+            }
+            ++sock->_write_buf.cnt;
         }
     }
 
-    if (pull_index != SIZE_MAX) {
+    if (vec_pull_index != SIZE_MAX) {
         /* If the pull vector has a send callback, and if we have the necessary conditions to utilize it, Let it write directly to
          * the socket. */
 #if !H2O_USE_LIBUV
-        if (pull_index == cnt - 1 && vecs[pull_index].callbacks != NULL &&
-            do_write_with_sendvec(sock, bufs, cnt - 1, vecs + pull_index))
-            return;
+        if (buf_pull_index == sock->_write_buf.cnt - 1 && vecs[vec_pull_index].callbacks != NULL) {
+            --sock->_write_buf.cnt;
+            if (do_write_with_sendvec(sock, vecs + vec_pull_index))
+                return;
+            ++sock->_write_buf.cnt;
+        }
 #endif
         /* Load the vector onto memory now. */
-        size_t pulllen = flatten_sendvec(sock, &vecs[pull_index]);
+        size_t pulllen = flatten_sendvec(sock, &vecs[vec_pull_index]);
         if (pulllen == SIZE_MAX) {
             report_early_write_error(sock);
             return;
         }
-        bufs[pull_index] = h2o_iovec_init(sock->_write_buf.flattened, pulllen);
+        sock->_write_buf.bufs[buf_pull_index] = h2o_iovec_init(sock->_write_buf.flattened, pulllen);
     }
 
-    do_write(sock, bufs, cnt);
+    do_write(sock);
 }
 
 void on_write_complete(h2o_socket_t *sock, const char *err)

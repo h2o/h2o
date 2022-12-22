@@ -100,7 +100,7 @@ struct st_h2o_evloop_read_file_t {
 
 static void link_to_pending(struct st_h2o_evloop_socket_t *sock);
 static void link_to_statechanged(struct st_h2o_evloop_socket_t *sock);
-static void write_pending(struct st_h2o_evloop_socket_t *sock);
+static int write_pending(struct st_h2o_evloop_socket_t *sock);
 static h2o_evloop_t *create_evloop(size_t sz);
 static void update_now(h2o_evloop_t *loop);
 static int32_t adjust_max_wait(h2o_evloop_t *loop, int32_t max_wait);
@@ -340,7 +340,7 @@ static int sendvec_core(struct st_h2o_evloop_socket_t *sock)
     return 1;
 }
 
-void write_pending(struct st_h2o_evloop_socket_t *sock)
+int write_pending(struct st_h2o_evloop_socket_t *sock)
 {
     assert(sock->super._cb.write != NULL);
 
@@ -357,9 +357,9 @@ void write_pending(struct st_h2o_evloop_socket_t *sock)
             if (sock->super._write_buf.cnt != 0) {
                 sock->super._write_buf.bufs[0].base += first_buf_written;
                 sock->super._write_buf.bufs[0].len -= first_buf_written;
-                return;
+                return 0;
             } else if (has_pending_ssl_bytes(sock->super.ssl)) {
-                return;
+                return 0;
             }
         }
     }
@@ -371,7 +371,7 @@ void write_pending(struct st_h2o_evloop_socket_t *sock)
     if (sock->sendvec.callbacks != NULL && sock->super._write_buf.cnt == 0 && !has_pending_ssl_bytes(sock->super.ssl)) {
         /* send, and upon partial send, return without changing state for another round */
         if (sendvec_core(sock) && sock->sendvec.callbacks != NULL)
-            return;
+            return 0;
     }
 
     /* operation completed or failed, schedule notification */
@@ -380,6 +380,8 @@ void write_pending(struct st_h2o_evloop_socket_t *sock)
     sock->_flags |= H2O_SOCKET_FLAG_IS_WRITE_NOTIFY;
     link_to_pending(sock);
     link_to_statechanged(sock); /* might need to disable the write polling */
+
+    return 1;
 }
 
 static void read_on_ready(struct st_h2o_evloop_socket_t *sock)
@@ -439,10 +441,9 @@ void report_early_write_error(h2o_socket_t *_sock)
     link_to_pending(sock);
 }
 
-void do_write(h2o_socket_t *_sock, h2o_iovec_t *bufs, size_t bufcnt)
+void do_write(h2o_socket_t *_sock)
 {
     struct st_h2o_evloop_socket_t *sock = (struct st_h2o_evloop_socket_t *)_sock;
-    size_t first_buf_written;
 
     /* Don't write too much; if more than 1MB have been already written in the current invocation of `h2o_evloop_run`, wait until
      * the event loop notifies us that the socket is writable. */
@@ -450,40 +451,13 @@ void do_write(h2o_socket_t *_sock, h2o_iovec_t *bufs, size_t bufcnt)
         sock->bytes_written.prev_loop = sock->bytes_written.cur_loop;
         sock->bytes_written.cur_run_count = sock->loop->run_count;
     } else if (sock->bytes_written.cur_loop - sock->bytes_written.prev_loop >= h2o_evloop_socket_max_write_size) {
-        init_write_buf(&sock->super, bufs, bufcnt, 0);
-        goto Schedule_Write;
-    }
-
-    /* try to write now */
-    if ((first_buf_written = write_core(sock, &bufs, &bufcnt)) == SIZE_MAX) {
-        report_early_write_error(&sock->super);
-        return;
-    }
-    if (bufcnt == 0 && !has_pending_ssl_bytes(sock->super.ssl)) {
-        /* write complete, schedule the callback */
-        if (sock->super._write_buf.flattened != NULL) {
-            h2o_mem_free_recycle(&h2o_socket_ssl_buffer_allocator, sock->super._write_buf.flattened);
-            sock->super._write_buf.flattened = NULL;
-        }
-        if (sock->sendvec.callbacks != NULL) {
-            if (!sendvec_core(sock)) {
-                report_early_write_error(&sock->super);
-                return;
-            }
-            if (sock->sendvec.callbacks != NULL)
-                goto Schedule_Write;
-        }
-        sock->bytes_written.cur_loop = sock->super.bytes_written;
-        sock->_flags |= H2O_SOCKET_FLAG_IS_WRITE_NOTIFY;
-        link_to_pending(sock);
+        link_to_statechanged(sock);
         return;
     }
 
-    /* setup the buffer to send pending data */
-    init_write_buf(&sock->super, bufs, bufcnt, first_buf_written);
-
-Schedule_Write:
-    link_to_statechanged(sock);
+    /* write, and if the operation is incomplete, mark the socket as write-inflight */
+    if (!write_pending(sock))
+        link_to_statechanged(sock);
 }
 
 static int can_tls_offload(h2o_socket_t *sock)
@@ -589,7 +563,7 @@ Fail:
  * `bufs` should be an array capable of storing `bufcnt + 1` objects, as we will be flattening `sendvec` at the end of `bufs` before
  * encryption; see `write_core`.
  */
-static int do_write_with_sendvec(h2o_socket_t *_sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_sendvec_t *sendvec)
+static int do_write_with_sendvec(h2o_socket_t *_sock, h2o_sendvec_t *sendvec)
 {
     struct st_h2o_evloop_socket_t *sock = (struct st_h2o_evloop_socket_t *)_sock;
 
@@ -611,7 +585,7 @@ static int do_write_with_sendvec(h2o_socket_t *_sock, h2o_iovec_t *bufs, size_t 
 
     /* handling writes with sendvec, here */
     sock->sendvec = *sendvec;
-    do_write(&sock->super, bufs, bufcnt);
+    do_write(&sock->super);
 
     return 1;
 }
