@@ -433,10 +433,8 @@ void report_early_write_error(h2o_socket_t *_sock)
 {
     struct st_h2o_evloop_socket_t *sock = (struct st_h2o_evloop_socket_t *)_sock;
 
-    /* fill in _wreq.bufs with fake data to indicate error */
-    sock->super._write_buf.bufs = sock->super._write_buf.smallbufs;
-    sock->super._write_buf.cnt = 1;
-    *sock->super._write_buf.bufs = h2o_iovec_init(H2O_STRLIT("deadbeef"));
+    dispose_write_buf(&sock->super);
+
     sock->_flags |= H2O_SOCKET_FLAG_IS_WRITE_NOTIFY;
     link_to_pending(sock);
 }
