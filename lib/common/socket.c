@@ -869,11 +869,7 @@ static size_t generate_tls_records(h2o_socket_t *sock, h2o_iovec_t **bufs, size_
     assert(!has_pending_ssl_bytes(sock->ssl) && "we are filling encrypted bytes from the front, with no existing buffer, always");
 
     while (*bufcnt != 0) {
-        if ((*bufs)->len == 0) {
-            ++*bufs;
-            --*bufcnt;
-            continue;
-        }
+        assert((*bufs)->len != 0);
         if (!has_pending_ssl_bytes(sock->ssl))
             init_ssl_output_buffer(sock->ssl, sock->_zerocopy != NULL);
         size_t bytes_newly_written =
