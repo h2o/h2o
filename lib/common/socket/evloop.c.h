@@ -252,11 +252,10 @@ static size_t write_core(struct st_h2o_evloop_socket_t *sock, h2o_iovec_t **bufs
     /* SSL: flatten given vector if that has not been done yet; `*bufs` is guaranteed to have one slot available at the end; see
      * `do_write_with_sendvec`, `init_write_buf`. */
     if (sock->sendvec.callbacks != NULL) {
-        size_t veclen = flatten_sendvec(&sock->super, &sock->sendvec);
-        if (veclen == SIZE_MAX)
+        if (!flatten_sendvec(&sock->super, *bufcnt, &sock->sendvec))
             return SIZE_MAX;
         sock->sendvec.callbacks = NULL;
-        (*bufs)[(*bufcnt)++] = h2o_iovec_init(sock->super._write_buf.flattened, veclen);
+        ++*bufcnt;
     }
 
     /* continue encrypting and writing, until we run out of data */
