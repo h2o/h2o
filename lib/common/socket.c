@@ -182,7 +182,7 @@ static void *zerocopy_buffers_release(struct st_h2o_socket_zerocopy_buffers_t *b
 
 /* internal functions called from the backend */
 static const char *decode_ssl_input(h2o_socket_t *sock);
-static int flatten_sendvec(h2o_socket_t *sock, size_t buf_index, h2o_sendvec_t *sendvec);
+static int flatten_sendvec(h2o_socket_t *sock, size_t buf_index, h2o_sendvec_t *sendvec, h2o_socket_read_file_cb async_cb);
 static void on_write_complete(h2o_socket_t *sock, const char *err);
 
 h2o_buffer_mmap_settings_t h2o_socket_buffer_mmap_settings = {
@@ -270,6 +270,11 @@ static void alloc_write_buf(h2o_socket_t *sock, size_t cnt)
     sock->_write_buf.cnt = 0;
 }
 
+static void async_read_on_complete_post_disposal(h2o_socket_read_file_cmd_t *cmd)
+{
+    h2o_mem_free_recycle(&h2o_socket_ssl_buffer_allocator, cmd->cb.data);
+}
+
 static void dispose_write_buf(h2o_socket_t *sock)
 {
     if (sock->_write_buf.smallbufs <= sock->_write_buf.bufs &&
@@ -279,6 +284,13 @@ static void dispose_write_buf(h2o_socket_t *sock)
     } else {
         free(sock->_write_buf.alloced_ptr);
         sock->_write_buf.bufs = sock->_write_buf.smallbufs;
+    }
+
+    if (sock->_write_buf.async_read.cmd != NULL) {
+        assert(sock->_write_buf.flattened != NULL);
+        sock->_write_buf.async_read.cmd->cb.func = async_read_on_complete_post_disposal;
+        sock->_write_buf.async_read.cmd->cb.data = sock->_write_buf.flattened;
+        sock->_write_buf.flattened = NULL;
     }
 
     if (sock->_write_buf.flattened != NULL) {
@@ -890,20 +902,45 @@ static size_t generate_tls_records(h2o_socket_t *sock, h2o_iovec_t **bufs, size_
     return first_buf_written;
 }
 
-int flatten_sendvec(h2o_socket_t *sock, size_t buf_index, h2o_sendvec_t *sendvec)
+static void flatten_sendvec_async_read_on_complete_in_sync(h2o_socket_read_file_cmd_t *cmd)
+{
+    h2o_socket_t *sock = cmd->cb.data;
+
+    sock->_write_buf.async_read.cmd = NULL;
+    sock->_write_buf.async_read.sync_fail = cmd->err != NULL;
+}
+
+/**
+ * Flattens a sendvec to the specified slot, either synchronously or asynchronously. If an error occurs synchronously, false is
+ * returned; otherwise, true is returned. When true is returned, the caller should consult the value of
+ * `sock->_write_buf.async_read.cmd`; if it is NULL, loading has completed. If it is non-NULL, async read is inflight and the caller
+ * should wait for the invocation of `async_cb`.
+ */
+int flatten_sendvec(h2o_socket_t *sock, size_t buf_index, h2o_sendvec_t *sendvec, h2o_socket_read_file_cb async_cb)
 {
     assert(h2o_socket_ssl_buffer_allocator.conf->memsize >= H2O_PULL_SENDVEC_MAX_SIZE);
     sock->_write_buf.flattened = h2o_mem_alloc_recycle(&h2o_socket_ssl_buffer_allocator);
 
     sock->_write_buf.bufs[buf_index] = h2o_iovec_init(sock->_write_buf.flattened, sendvec->len);
 
-    if (!sendvec->callbacks->read_(sendvec, sock->_write_buf.flattened, sendvec->len)) {
-        /* failed */
-        h2o_mem_free_recycle(&h2o_socket_ssl_buffer_allocator, sock->_write_buf.flattened);
-        sock->_write_buf.flattened = NULL;
-        return 0;
+    if (sendvec->callbacks->read_async != NULL) {
+        sendvec->callbacks->read_async(sendvec, &sock->_write_buf.async_read.cmd, sock->_write_buf.flattened, sendvec->len,
+                                       flatten_sendvec_async_read_on_complete_in_sync, sock);
+        if (sock->_write_buf.async_read.cmd != NULL) {
+            sock->_write_buf.async_read.cmd->cb.func = async_cb;
+        } else if (sock->_write_buf.async_read.sync_fail) {
+            goto Fail;
+        }
+    } else if (!sendvec->callbacks->read_(sendvec, sock->_write_buf.flattened, sendvec->len)) {
+        goto Fail;
     }
+
     return 1;
+
+Fail:
+    h2o_mem_free_recycle(&h2o_socket_ssl_buffer_allocator, sock->_write_buf.flattened);
+    sock->_write_buf.flattened = NULL;
+    return 0;
 }
 
 void h2o_socket_write(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_socket_cb cb)
@@ -927,6 +964,19 @@ void h2o_socket_write(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_
     }
 
     do_write(sock);
+}
+
+static void socket_sendvec_on_async_read_complete(h2o_socket_read_file_cmd_t *cmd)
+{
+    h2o_socket_t *sock = cmd->cb.data;
+
+    sock->_write_buf.async_read.cmd = NULL;
+
+    if (cmd->err != NULL) {
+        report_early_write_error(sock);
+    } else {
+        do_write(sock);
+    }
 }
 
 void h2o_socket_sendvec(h2o_socket_t *sock, h2o_sendvec_t *vecs, size_t cnt, h2o_socket_cb cb)
@@ -969,10 +1019,12 @@ void h2o_socket_sendvec(h2o_socket_t *sock, h2o_sendvec_t *vecs, size_t cnt, h2o
         }
 #endif
         /* Load the vector onto memory now. */
-        if (!flatten_sendvec(sock, buf_pull_index, &vecs[vec_pull_index])) {
+        if (!flatten_sendvec(sock, buf_pull_index, &vecs[vec_pull_index], socket_sendvec_on_async_read_complete)) {
             report_early_write_error(sock);
             return;
         }
+        if (sock->_write_buf.async_read.cmd != NULL)
+            return;
     }
 
     do_write(sock);

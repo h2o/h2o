@@ -101,6 +101,7 @@ struct st_h2o_evloop_read_file_t {
 static void link_to_pending(struct st_h2o_evloop_socket_t *sock);
 static void link_to_statechanged(struct st_h2o_evloop_socket_t *sock);
 static int write_pending(struct st_h2o_evloop_socket_t *sock);
+static int write_pending_post_send_buffers(struct st_h2o_evloop_socket_t *sock);
 static h2o_evloop_t *create_evloop(size_t sz);
 static void update_now(h2o_evloop_t *loop);
 static int32_t adjust_max_wait(h2o_evloop_t *loop, int32_t max_wait);
@@ -241,6 +242,20 @@ static size_t write_vecs(struct st_h2o_evloop_socket_t *sock, h2o_iovec_t **bufs
     return 0;
 }
 
+static void write_core_async_read_on_complete(h2o_socket_read_file_cmd_t *cmd)
+{
+    struct st_h2o_evloop_socket_t *sock = cmd->cb.data;
+
+    sock->super._write_buf.async_read.cmd = NULL;
+
+    if (cmd->err != NULL) {
+        write_pending_post_send_buffers(sock);
+    } else {
+        link_to_statechanged(sock);
+        write_pending(sock);
+    }
+}
+
 static size_t write_core(struct st_h2o_evloop_socket_t *sock, h2o_iovec_t **bufs, size_t *bufcnt)
 {
     if (sock->super.ssl == NULL || sock->super.ssl->offload == H2O_SOCKET_SSL_OFFLOAD_ON) {
@@ -252,10 +267,14 @@ static size_t write_core(struct st_h2o_evloop_socket_t *sock, h2o_iovec_t **bufs
     /* SSL: flatten given vector if that has not been done yet; `*bufs` is guaranteed to have one slot available at the end; see
      * `do_write_with_sendvec`, `init_write_buf`. */
     if (sock->sendvec.callbacks != NULL) {
-        if (!flatten_sendvec(&sock->super, *bufcnt, &sock->sendvec))
+        if (!flatten_sendvec(&sock->super, *bufcnt, &sock->sendvec, write_core_async_read_on_complete))
             return SIZE_MAX;
         sock->sendvec.callbacks = NULL;
         ++*bufcnt;
+        if (sock->super._write_buf.async_read.cmd != NULL) {
+            link_to_statechanged(sock); /* might need to disable the write polling */
+            return 0;
+        }
     }
 
     /* continue encrypting and writing, until we run out of data */
@@ -363,6 +382,11 @@ int write_pending(struct st_h2o_evloop_socket_t *sock)
         }
     }
 
+    return write_pending_post_send_buffers(sock);
+}
+
+int write_pending_post_send_buffers(struct st_h2o_evloop_socket_t *sock)
+{
     /* either completed or failed */
     dispose_write_buf(&sock->super);
 

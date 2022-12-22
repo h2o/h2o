@@ -228,6 +228,10 @@ struct st_h2o_socket_t {
             h2o_iovec_t smallbufs[4];
         };
         char *flattened;
+        struct {
+            h2o_socket_read_file_cmd_t *cmd;
+            unsigned sync_fail : 1;
+        } async_read;
     } _write_buf;
     struct {
         uint8_t state; /* one of H2O_SOCKET_LATENCY_STATE_* */
