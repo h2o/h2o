@@ -567,18 +567,11 @@ static int do_write_with_sendvec(h2o_socket_t *_sock, h2o_sendvec_t *sendvec)
     assert(sendvec->callbacks->read_ != NULL);
     assert(sock->sendvec.callbacks == NULL);
 
-    /* If userspace TLS is used, rely on `read_` which is a mandatory callback. Otherwise, rely on `send_` if it is available. */
-    if (sock->super.ssl != NULL) {
+    /* If kTLS is available and there is an opportunity to use it, try turning on kTLS. */
 #if H2O_USE_KTLS
-        if (sock->super.ssl->offload == H2O_SOCKET_SSL_OFFLOAD_TBD)
-            switch_to_ktls(sock);
-        if (sock->super.ssl->offload == H2O_SOCKET_SSL_OFFLOAD_ON && sendvec->callbacks->send_ == NULL)
-            return 0;
+    if (sock->super.ssl != NULL && sock->super.ssl->offload == H2O_SOCKET_SSL_OFFLOAD_TBD && sendvec->callbacks->send_ != NULL)
+        switch_to_ktls(sock);
 #endif
-    } else {
-        if (sendvec->callbacks->send_ == NULL)
-            return 0;
-    }
 
     /* handling writes with sendvec, here */
     sock->sendvec = *sendvec;
