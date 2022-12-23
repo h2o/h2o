@@ -2812,15 +2812,15 @@ uint64_t h2o_socket_ebpf_lookup_flags_sni(h2o_loop_t *loop, uint64_t flags, cons
 
 #if H2O_USE_LIBUV || !H2O_USE_IO_URING
 
-void h2o_socket_read_file(h2o_socket_read_file_cmd_t **_cmd, h2o_loop_t *loop, int fd, uint64_t offset, h2o_iovec_t dst,
-                          h2o_socket_read_file_cb _cb, void *_data)
+void h2o_socket_read_file(h2o_socket_read_file_cmd_t **_cmd, h2o_loop_t *loop, h2o_filecache_ref_t *fileref, uint64_t offset,
+                          h2o_iovec_t dst, h2o_socket_read_file_cb _cb, void *_data)
 {
     h2o_socket_read_file_cmd_t cmd = {.cb = {.func = _cb, .data = _data}};
 
     size_t off = 0;
     while (off < dst.len) {
         ssize_t ret;
-        while ((ret = pread(fd, dst.base + off, dst.len - off, offset + off)) == -1 && errno == EINTR)
+        while ((ret = pread(fileref->fd, dst.base + off, dst.len - off, offset + off)) == -1 && errno == EINTR)
             ;
         if (ret <= 0) {
             cmd.err = h2o_socket_error_io;

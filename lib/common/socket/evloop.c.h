@@ -71,7 +71,7 @@ struct st_h2o_evloop_socket_t {
 
 struct st_h2o_evloop_read_file_cmd_t {
     h2o_socket_read_file_cmd_t super;
-    int fd;
+    h2o_filecache_ref_t *fileref;
     uint64_t offset;
     h2o_iovec_t vec;
     struct st_h2o_evloop_read_file_cmd_t *next;
@@ -1050,7 +1050,7 @@ static int read_file_submit(h2o_evloop_t *loop, int can_delay)
             break;
         struct st_h2o_evloop_read_file_cmd_t *cmd = read_file_queue_pop(&loop->_read_file->submission);
         assert(cmd != NULL);
-        io_uring_prep_read(sqe, cmd->fd, cmd->vec.base, cmd->vec.len, cmd->offset);
+        io_uring_prep_read(sqe, cmd->fileref->fd, cmd->vec.base, cmd->vec.len, cmd->offset);
         sqe->user_data = (uint64_t)cmd;
         made_progress = 1;
     }
@@ -1120,23 +1120,25 @@ static int read_file_dispatch_completed(h2o_evloop_t *loop)
     do {
         struct st_h2o_evloop_read_file_cmd_t *cmd = read_file_queue_pop(&loop->_read_file->completion);
         H2O_PROBE(SOCKET_READ_FILE_ASYNC_END, cmd);
+        h2o_filecache_close_file(cmd->fileref);
         cmd->super.cb.func(&cmd->super);
         free(cmd);
     } while (loop->_read_file->completion.head != NULL);
     return 1;
 }
 
-void h2o_socket_read_file(h2o_socket_read_file_cmd_t **_cmd, h2o_loop_t *loop, int _fd, uint64_t _offset, h2o_iovec_t _dst,
-                          h2o_socket_read_file_cb _cb, void *_data)
+void h2o_socket_read_file(h2o_socket_read_file_cmd_t **_cmd, h2o_loop_t *loop, h2o_filecache_ref_t *_fileref, uint64_t _offset,
+                          h2o_iovec_t _dst, h2o_socket_read_file_cb _cb, void *_data)
 {
     /* build command and register */
     struct st_h2o_evloop_read_file_cmd_t *cmd = h2o_mem_alloc(sizeof(*cmd));
     *cmd = (struct st_h2o_evloop_read_file_cmd_t){
         .super = {.cb = {.func = _cb, .data = _data}},
-        .fd = _fd,
+        .fileref = _fileref,
         .offset = _offset,
         .vec = _dst,
     };
+    h2o_filecache_addref(cmd->fileref);
     read_file_queue_insert(&loop->_read_file->submission, cmd);
 
     /* Submit enqueued commands as much as possible, then read completed ones as much as possible. The hope here is that the read
@@ -1144,6 +1146,7 @@ void h2o_socket_read_file(h2o_socket_read_file_cmd_t **_cmd, h2o_loop_t *loop, i
      * If that is the case, call the callback synchronously. */
     if (read_file_submit(loop, 1)) {
         if (read_file_check_completion(loop, cmd)) {
+            h2o_filecache_close_file(cmd->fileref);
             cmd->super.cb.func(&cmd->super);
             free(cmd);
             cmd = NULL;

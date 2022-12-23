@@ -38,6 +38,7 @@ extern "C" {
 #include "picotls/openssl.h" /* for H2O_CAN_OSSL_ASYNC */
 #include "h2o/cache.h"
 #include "h2o/ebpf.h"
+#include "h2o/filecache.h"
 #include "h2o/memory.h"
 #include "h2o/openssl_backport.h"
 #include "h2o/string_.h"
@@ -399,8 +400,8 @@ void h2o_socket_setpeername(h2o_socket_t *sock, struct sockaddr *sa, socklen_t l
  *             synchronously, `*cmd` is set to NULL.
  * @param cb   Callback function to be invoked when read is complete. This callback can get called synchronously.
  */
-void h2o_socket_read_file(h2o_socket_read_file_cmd_t **cmd, h2o_loop_t *loop, int fd, uint64_t offset, h2o_iovec_t dst,
-                          h2o_socket_read_file_cb cb, void *data);
+void h2o_socket_read_file(h2o_socket_read_file_cmd_t **cmd, h2o_loop_t *loop, h2o_filecache_ref_t *fileref, uint64_t offset,
+                          h2o_iovec_t dst, h2o_socket_read_file_cb cb, void *data);
 /**
  *
  */
