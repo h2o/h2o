@@ -250,11 +250,7 @@ static uint64_t band(struct gkc_summary *s, uint64_t delta)
 
     diff = 1 + (s->epsilon * s->nr_elems * 2) - delta;
 
-    if (diff == 1) {
-        return 0;
-    } else {
-        return ullog2(diff)/ullog2(2);
-    }
+    return ullog2(diff);
 }
 
 static void gkc_compress(struct gkc_summary *s)
