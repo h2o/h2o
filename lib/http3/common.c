@@ -1097,8 +1097,16 @@ void h2o_quic_dispose_conn(h2o_quic_conn_t *conn)
 
 void h2o_quic_setup(h2o_quic_conn_t *conn, quicly_conn_t *quic)
 {
+    /* Setup relation between `h2o_quic_conn_t` and `quicly_conn_t`. At this point, `conn` will not have `quic` associated, though
+     * the back pointer might have alreday been set up (see how we call `quicly_accept`). */
+    assert(conn->quic == NULL);
+    void **backptr = quicly_get_data(conn->quic);
+    if (backptr == NULL) {
+        *backptr = conn;
+    } else {
+        assert(*backptr == conn);
+    }
     conn->quic = quic;
-    *quicly_get_data(conn->quic) = conn;
 
     /* register to the idmap */
     int r;

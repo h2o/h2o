@@ -1986,8 +1986,10 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
     ptls_default_skip_tracing = skip_tracing;
 #endif
     quicly_conn_t *qconn;
-    int accept_ret = quicly_accept(&qconn, ctx->super.quic, &destaddr->sa, &srcaddr->sa, packet, address_token,
-                                   &ctx->super.next_cid, &conn->handshake_properties);
+    int accept_ret = quicly_accept(
+        &qconn, ctx->super.quic, &destaddr->sa, &srcaddr->sa, packet, address_token, &ctx->super.next_cid,
+        &conn->handshake_properties,
+        &conn->h3 /* back pointer is set up here so that callbacks being called while parsing ClientHello can refer to `conn` */);
 #if PICOTLS_USE_DTRACE
     ptls_default_skip_tracing = orig_skip_tracing;
 #endif
