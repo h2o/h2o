@@ -2034,6 +2034,16 @@ void h2o_http3_server_amend_quicly_context(h2o_globalconf_t *conf, quicly_contex
     quic->receive_datagram_frame = &on_receive_datagram_frame;
 }
 
+h2o_conn_t *h2o_http3_get_connection(quicly_conn_t *quic)
+{
+    struct st_h2o_http3_server_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_conn_t, h3, *quicly_get_data(quic));
+
+    /* this assertion is most likely to fire if the provided QUIC connection does not represent a server-side HTTP connection */
+    assert(conn->h3.super.quic == quic);
+
+    return &conn->super;
+}
+
 static void graceful_shutdown_close_straggler(h2o_timer_t *entry)
 {
     struct st_h2o_http3_server_conn_t *conn =
