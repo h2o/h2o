@@ -997,7 +997,12 @@ void neverbleed_start_digestsign(neverbleed_iobuf_t *buf, EVP_PKEY *pkey, const 
 
 void neverbleed_finish_digestsign(neverbleed_iobuf_t *buf, void **digest, size_t *digest_len)
 {
-    const void *src = iobuf_shift_bytes(buf, digest_len);
+    const void *src;
+
+    if ((src = iobuf_shift_bytes(buf, digest_len)) == NULL) {
+        errno = 0;
+        dief("failed to parse response");
+    }
     if ((*digest = malloc(*digest_len)) == NULL)
         dief("no memory");
     memcpy(*digest, src, *digest_len);
