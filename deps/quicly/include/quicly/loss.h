@@ -72,7 +72,7 @@ typedef struct quicly_loss_conf_t {
 /**
  * Holds RTT variables. We use this structure differently from the specification:
  * * if the first sample has been obtained should be checked by doing: `latest != 0`
- * * smoothed and variance are avaiable even before the first RTT sample is obtained
+ * * smoothed and variance are available even before the first RTT sample is obtained
  */
 typedef struct quicly_rtt_t {
     /**
@@ -180,7 +180,7 @@ static void quicly_loss_on_ack_received(quicly_loss_t *r, uint64_t largest_newly
                                         uint64_t ack_delay_encoded, quicly_loss_ack_received_kind_t kind);
 /* This function updates the loss detection timer and indicates to the caller how many packets should be sent.
  * After calling this function, app should:
- *  * send min_packets_to_send number of packets immmediately. min_packets_to_send should never be 0.
+ *  * send min_packets_to_send number of packets immediately. min_packets_to_send should never be 0.
  *  * if restrict_sending is true, limit sending to min_packets_to_send, otherwise as limited by congestion/flow control
  * and then call quicly_loss_update_alarm and update the alarm
  */
@@ -271,7 +271,7 @@ inline void quicly_loss_update_alarm(quicly_loss_t *r, int64_t now, int64_t last
                                      int is_after_send)
 {
     if (!has_outstanding) {
-        /* Do not set alarm if there's no data oustanding */
+        /* Do not set alarm if there's no data outstanding */
         r->alarm_at = INT64_MAX;
         r->loss_time = INT64_MAX;
         return;

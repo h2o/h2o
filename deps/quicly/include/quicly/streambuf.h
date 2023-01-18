@@ -72,7 +72,7 @@ typedef struct st_quicly_sendbuf_t {
 } quicly_sendbuf_t;
 
 /**
- * Inilializes the send buffer.
+ * Initializes the send buffer.
  */
 static void quicly_sendbuf_init(quicly_sendbuf_t *sb);
 /**

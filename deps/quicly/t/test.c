@@ -625,7 +625,7 @@ static void test_nondecryptable_initial(void)
     ok(num_decoded == 1);
 
     /* decryption should fail */
-    ret = quicly_accept(&server, &quic_ctx, NULL, &fake_address.sa, &decoded, NULL, new_master_id(), NULL);
+    ret = quicly_accept(&server, &quic_ctx, NULL, &fake_address.sa, &decoded, NULL, new_master_id(), NULL, NULL);
     ok(ret == QUICLY_ERROR_DECRYPTION_FAILED);
 #undef PACKET_LEN
 #undef HEADER_LEN
@@ -639,7 +639,7 @@ static void test_set_cc(void)
     int ret;
 
     ret = quicly_connect(&conn, &quic_ctx, "example.com", &fake_address.sa, NULL, new_master_id(), ptls_iovec_init(NULL, 0), NULL,
-                         NULL);
+                         NULL, NULL);
     ok(ret == 0);
 
     quicly_stats_t stats;

@@ -313,7 +313,7 @@ static int default_stream_scheduler_do_send(quicly_stream_scheduler_t *self, qui
         }
         /* send! */
         if ((ret = quicly_send_stream(stream, s)) != 0) {
-            /* FIXME Stop quicly_send_stream emitting SENDBUF_FULL (happpens when CWND is congested). Otherwise, we need to make
+            /* FIXME Stop quicly_send_stream emitting SENDBUF_FULL (happens when CWND is congested). Otherwise, we need to make
              * adjustments to the scheduler after popping a stream */
             if (ret == QUICLY_ERROR_SENDBUF_FULL) {
                 assert(quicly_stream_can_send(stream, 1));
@@ -341,7 +341,7 @@ static int default_stream_scheduler_update_state(quicly_stream_scheduler_t *self
         /* activate if not */
         link_stream(sched, stream, quicly_is_blocked(stream->conn));
     } else {
-        /* disactivate if active */
+        /* deactivate if active */
         if (quicly_linklist_is_linked(&stream->_send_aux.pending_link.default_scheduler))
             quicly_linklist_unlink(&stream->_send_aux.pending_link.default_scheduler);
     }
