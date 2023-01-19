@@ -715,10 +715,12 @@ int h2o_mruby_iterate_native_headers(h2o_mruby_shared_context_t *shared_ctx, h2o
         /* build flattened value of the header field values that have the same name as sorted[i] */
         size_t num_values = 0;
         values[num_values++] = sorted[i]->value;
-        while (i < num_sorted - 1 && h2o_header_name_is_equal(sorted[i], sorted[i + 1])) {
-            ++i;
-            values[num_values++] = h2o_iovec_init(sorted[i]->name == &H2O_TOKEN_COOKIE->buf ? "; " : ", ", 2);
-            values[num_values++] = sorted[i]->value;
+        if (sorted[i]->name != &H2O_TOKEN_SET_COOKIE->buf) {
+            while (i < num_sorted - 1 && h2o_header_name_is_equal(sorted[i], sorted[i + 1])) {
+                ++i;
+                values[num_values++] = h2o_iovec_init(sorted[i]->name == &H2O_TOKEN_COOKIE->buf ? "; " : ", ", 2);
+                values[num_values++] = sorted[i]->value;
+            }
         }
         h2o_header_t h = *sorted[i];
         h.value = num_values == 1 ? values[0] : h2o_concat_list(pool, values, num_values);
