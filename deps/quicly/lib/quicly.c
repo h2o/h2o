@@ -1473,7 +1473,7 @@ static int setup_cipher(quicly_conn_t *conn, size_t epoch, int is_enc, ptls_ciph
                         ptls_aead_context_t **aead_ctx, ptls_aead_algorithm_t *aead, ptls_hash_algorithm_t *hash,
                         const void *secret)
 {
-    /* quicly_accept builds cipher before instantitating a connection. In such case, we use the default crypto engine */
+    /* quicly_accept builds cipher before instantiating a connection. In such case, we use the default crypto engine */
     quicly_crypto_engine_t *engine = conn != NULL ? conn->super.ctx->crypto_engine : &quicly_default_crypto_engine;
 
     return engine->setup_cipher(engine, conn, epoch, is_enc, hp_ctx, aead_ctx, aead, hash, secret);
@@ -2098,7 +2098,7 @@ int quicly_decode_transport_parameter_list(quicly_transport_parameters_t *params
         });
     }
 
-    /* check consistency between the transpart parameters */
+    /* check consistency between the transport parameters */
     if (params->min_ack_delay_usec != UINT64_MAX) {
         if (params->min_ack_delay_usec > params->max_ack_delay * 1000) {
             ret = QUICLY_TRANSPORT_ERROR_PROTOCOL_VIOLATION;
@@ -2143,7 +2143,7 @@ static int collect_transport_parameters(ptls_t *tls, struct st_ptls_handshake_pr
 static quicly_conn_t *create_connection(quicly_context_t *ctx, uint32_t protocol_version, const char *server_name,
                                         struct sockaddr *remote_addr, struct sockaddr *local_addr, ptls_iovec_t *remote_cid,
                                         const quicly_cid_plaintext_t *local_cid, ptls_handshake_properties_t *handshake_properties,
-                                        uint32_t initcwnd)
+                                        void *appdata, uint32_t initcwnd)
 {
     ptls_t *tls = NULL;
     quicly_conn_t *conn;
@@ -2168,6 +2168,7 @@ static quicly_conn_t *create_connection(quicly_context_t *ctx, uint32_t protocol
     }
     memset(conn, 0, sizeof(*conn));
     conn->super.ctx = ctx;
+    conn->super.data = appdata;
     lock_now(conn, 0);
     conn->created_at = conn->stash.now;
     conn->super.stats.handshake_confirmed_msec = UINT64_MAX;
@@ -2254,7 +2255,7 @@ static int client_collected_extensions(ptls_t *tls, ptls_handshake_properties_t 
     quicly_transport_parameters_t params;
     quicly_cid_t original_dcid, initial_scid, retry_scid = {};
 
-    /* obtain pointer to initial CID of the peer. It is guaranteeed to exist in the first slot, as TP is received before any frame
+    /* obtain pointer to initial CID of the peer. It is guaranteed to exist in the first slot, as TP is received before any frame
      * that updates the CID set. */
     quicly_remote_cid_t *remote_cid = &conn->super.remote.cid_set.cids[0];
     assert(remote_cid->sequence == 0);
@@ -2311,7 +2312,8 @@ Exit:
 
 int quicly_connect(quicly_conn_t **_conn, quicly_context_t *ctx, const char *server_name, struct sockaddr *dest_addr,
                    struct sockaddr *src_addr, const quicly_cid_plaintext_t *new_cid, ptls_iovec_t address_token,
-                   ptls_handshake_properties_t *handshake_properties, const quicly_transport_parameters_t *resumed_transport_params)
+                   ptls_handshake_properties_t *handshake_properties, const quicly_transport_parameters_t *resumed_transport_params,
+                   void *appdata)
 {
     const struct st_ptls_salt_t *salt;
     quicly_conn_t *conn = NULL;
@@ -2335,7 +2337,7 @@ int quicly_connect(quicly_conn_t **_conn, quicly_context_t *ctx, const char *ser
     }
 
     if ((conn = create_connection(
-             ctx, ctx->initial_version, server_name, dest_addr, src_addr, NULL, new_cid, handshake_properties,
+             ctx, ctx->initial_version, server_name, dest_addr, src_addr, NULL, new_cid, handshake_properties, appdata,
              quicly_cc_calc_initial_cwnd(ctx->initcwnd_packets, ctx->transport_params.max_udp_payload_size))) == NULL) {
         ret = PTLS_ERROR_NO_MEMORY;
         goto Exit;
@@ -3028,7 +3030,7 @@ static size_t calc_send_window(quicly_conn_t *conn, size_t min_bytes_to_send, ui
 }
 
 /**
- * Checks if the server is waiting for ClientFinished. When that is the case, the loss timer is disactivated, to avoid repeatedly
+ * Checks if the server is waiting for ClientFinished. When that is the case, the loss timer is deactivated, to avoid repeatedly
  * sending 1-RTT packets while the client spends time verifying the certificate chain at the same time buffering 1-RTT packets.
  */
 static int is_point5rtt_with_no_handshake_data_to_send(quicly_conn_t *conn)
@@ -3106,7 +3108,7 @@ struct st_quicly_send_context_t {
          */
         uint8_t ack_eliciting : 1;
         /**
-         * if the target datagram sholud be padded to full size
+         * if the target datagram should be padded to full size
          */
         uint8_t full_size : 1;
     } target;
@@ -3433,7 +3435,7 @@ static int send_ack(quicly_conn_t *conn, struct st_quicly_pn_space_t *space, qui
     /* calc ack_delay */
     if (space->largest_pn_received_at < conn->stash.now) {
         /* We underreport ack_delay up to 1 milliseconds assuming that QUICLY_LOCAL_ACK_DELAY_EXPONENT is 10. It's considered a
-         * non-issue because our time measurement is at millisecond granurality anyways. */
+         * non-issue because our time measurement is at millisecond granularity anyways. */
         ack_delay = ((conn->stash.now - space->largest_pn_received_at) * 1000) >> QUICLY_LOCAL_ACK_DELAY_EXPONENT;
     } else {
         ack_delay = 0;
@@ -3537,7 +3539,7 @@ static int send_control_frames_of_stream(quicly_stream_t *stream, quicly_send_co
 {
     int ret;
 
-    /* send STOP_SENDING if necessray */
+    /* send STOP_SENDING if necessary */
     if (stream->_send_aux.stop_sending.sender_state == QUICLY_SENDER_STATE_SEND) {
         /* FIXME also send an empty STREAM frame */
         if ((ret = prepare_stream_state_sender(stream, &stream->_send_aux.stop_sending.sender_state, s,
@@ -3674,7 +3676,7 @@ int quicly_can_send_data(quicly_conn_t *conn, quicly_send_context_t *s)
 }
 
 /**
- * If necessary, changes the frame representation from one without length field to one that has if necessary. Or, as an alternaive,
+ * If necessary, changes the frame representation from one without length field to one that has if necessary. Or, as an alternative,
  * prepends PADDING frames. Upon return, `dst` points to the end of the frame being built. `*len`, `*wrote_all`, `*frame_type_at`
  * are also updated reflecting their values post-adjustment.
  */
@@ -3691,7 +3693,7 @@ static inline void adjust_stream_frame_layout(uint8_t **dst, uint8_t *const dst_
         }
     } else {
         /* STREAM frame: insert length if space can be left for more frames. Otherwise, retain STREAM frame header omitting the
-         * lengh field, prepending PADDING if necessary. */
+         * length field, prepending PADDING if necessary. */
         if (space_left <= len_of_len) {
             if (space_left != 0) {
                 memmove(*frame_at + space_left, *frame_at, *dst + *len - *frame_at);
@@ -6020,7 +6022,7 @@ static int validate_retry_tag(quicly_decoded_packet_t *packet, quicly_cid_t *odc
 
 int quicly_accept(quicly_conn_t **conn, quicly_context_t *ctx, struct sockaddr *dest_addr, struct sockaddr *src_addr,
                   quicly_decoded_packet_t *packet, quicly_address_token_plaintext_t *address_token,
-                  const quicly_cid_plaintext_t *new_cid, ptls_handshake_properties_t *handshake_properties)
+                  const quicly_cid_plaintext_t *new_cid, ptls_handshake_properties_t *handshake_properties, void *appdata)
 {
     const struct st_ptls_salt_t *salt;
     struct {
@@ -6063,7 +6065,7 @@ int quicly_accept(quicly_conn_t **conn, quicly_context_t *ctx, struct sockaddr *
 
     /* create connection */
     if ((*conn = create_connection(
-             ctx, packet->version, NULL, src_addr, dest_addr, &packet->cid.src, new_cid, handshake_properties,
+             ctx, packet->version, NULL, src_addr, dest_addr, &packet->cid.src, new_cid, handshake_properties, appdata,
              quicly_cc_calc_initial_cwnd(ctx->initcwnd_packets, ctx->transport_params.max_udp_payload_size))) == NULL) {
         ret = PTLS_ERROR_NO_MEMORY;
         goto Exit;
@@ -6612,7 +6614,7 @@ int quicly_encrypt_address_token(void (*random_bytes)(void *, size_t), ptls_aead
                 port = ntohs(plaintext->remote.sin6.sin6_port);
                 break;
             default:
-                assert(!"unspported address type");
+                assert(!"unsupported address type");
                 break;
             }
         });

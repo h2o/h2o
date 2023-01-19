@@ -1986,8 +1986,10 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
     ptls_default_skip_tracing = skip_tracing;
 #endif
     quicly_conn_t *qconn;
-    int accept_ret = quicly_accept(&qconn, ctx->super.quic, &destaddr->sa, &srcaddr->sa, packet, address_token,
-                                   &ctx->super.next_cid, &conn->handshake_properties);
+    int accept_ret = quicly_accept(
+        &qconn, ctx->super.quic, &destaddr->sa, &srcaddr->sa, packet, address_token, &ctx->super.next_cid,
+        &conn->handshake_properties,
+        &conn->h3 /* back pointer is set up here so that callbacks being called while parsing ClientHello can refer to `conn` */);
 #if PICOTLS_USE_DTRACE
     ptls_default_skip_tracing = orig_skip_tracing;
 #endif
@@ -2030,6 +2032,16 @@ void h2o_http3_server_amend_quicly_context(h2o_globalconf_t *conf, quicly_contex
     quic->stream_open = &on_stream_open;
     quic->stream_scheduler = &scheduler;
     quic->receive_datagram_frame = &on_receive_datagram_frame;
+}
+
+h2o_conn_t *h2o_http3_get_connection(quicly_conn_t *quic)
+{
+    struct st_h2o_http3_server_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_conn_t, h3, *quicly_get_data(quic));
+
+    /* this assertion is most likely to fire if the provided QUIC connection does not represent a server-side HTTP connection */
+    assert(conn->h3.super.quic == quic);
+
+    return &conn->super;
 }
 
 static void graceful_shutdown_close_straggler(h2o_timer_t *entry)

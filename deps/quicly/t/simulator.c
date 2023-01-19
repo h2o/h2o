@@ -309,7 +309,7 @@ static void net_endpoint_forward(struct net_node *_self, struct net_packet *pack
         } else {
             assert(self->accept_ctx != NULL && "a packet for which we do not have state must be a new connection request");
             if (quicly_accept(&conn->quic, self->accept_ctx, &packet->dest.sa, &packet->src->addr.sa, &qp, NULL, &next_quic_cid,
-                              NULL) == 0) {
+                              NULL, NULL) == 0) {
                 assert(conn->quic != NULL);
                 ++next_quic_cid.master_id;
                 conn->egress = &packet->src->super;
@@ -598,7 +598,7 @@ int main(int argc, char **argv)
             net_endpoint_init(client_node);
             client_node->start_at = now + start;
             int ret = quicly_connect(&client_node->conns[0].quic, &quicctx, "hello.example.com", &server_node.node.addr.sa,
-                                     &client_node->addr.sa, &next_quic_cid, ptls_iovec_init(NULL, 0), NULL, NULL);
+                                     &client_node->addr.sa, &next_quic_cid, ptls_iovec_init(NULL, 0), NULL, NULL, NULL);
             ++next_quic_cid.master_id;
             assert(ret == 0);
             quicly_stream_t *stream;

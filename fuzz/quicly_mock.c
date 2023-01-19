@@ -66,7 +66,7 @@ static quicly_conn_t *create_connection(quicly_context_t *ctx, int is_client, st
 
 int quicly_accept(quicly_conn_t **conn, quicly_context_t *ctx, struct sockaddr *dest_addr, struct sockaddr *src_addr,
                   quicly_decoded_packet_t *packet, quicly_address_token_plaintext_t *address_token,
-                  const quicly_cid_plaintext_t *new_cid, ptls_handshake_properties_t *handshake_properties)
+                  const quicly_cid_plaintext_t *new_cid, ptls_handshake_properties_t *handshake_properties, void *appdata)
 {
     *conn = create_connection(ctx, 0, src_addr, dest_addr);
     (*conn)->super.state = QUICLY_STATE_CONNECTED;
@@ -389,7 +389,8 @@ int quicly_can_send_data(quicly_conn_t *conn, quicly_send_context_t *s)
 
 int quicly_connect(quicly_conn_t **conn, quicly_context_t *ctx, const char *server_name, struct sockaddr *dest_addr,
                    struct sockaddr *src_addr, const quicly_cid_plaintext_t *new_cid, ptls_iovec_t address_token,
-                   ptls_handshake_properties_t *handshake_properties, const quicly_transport_parameters_t *resumed_transport_params)
+                   ptls_handshake_properties_t *handshake_properties, const quicly_transport_parameters_t *resumed_transport_params,
+                   void *appdata)
 {
     assert(0 && "unimplemented");
     return 0;
