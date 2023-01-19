@@ -149,8 +149,8 @@ static h2o_iovec_t convert_env_key_to_header_name(h2o_mem_pool_t *pool, const ch
 static int iterate_headers_callback(h2o_mruby_shared_context_t *shared_ctx, h2o_mem_pool_t *pool, h2o_header_t *header,
                                     void *cb_data)
 {
-    mrb_value result_hash = mrb_obj_value(cb_data);
-    mrb_value n;
+    mrb_value n, result_hash = mrb_obj_value(cb_data);
+
     if (h2o_iovec_is_token(header->name)) {
         const h2o_token_t *token = H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, header->name);
         n = h2o_mruby_token_string(shared_ctx, token);
@@ -158,7 +158,19 @@ static int iterate_headers_callback(h2o_mruby_shared_context_t *shared_ctx, h2o_
         n = h2o_mruby_new_str(shared_ctx->mrb, header->name->base, header->name->len);
     }
     mrb_value v = h2o_mruby_new_str(shared_ctx->mrb, header->value.base, header->value.len);
-    mrb_hash_set(shared_ctx->mrb, result_hash, n, v);
+
+    mrb_value existing = mrb_hash_fetch(shared_ctx->mrb, result_hash, n, mrb_nil_value());
+    if (mrb_nil_p(existing)) {
+        mrb_hash_set(shared_ctx->mrb, result_hash, n, v);
+    } else if (mrb_array_p(existing)) {
+        mrb_ary_push(shared_ctx->mrb, existing, v);
+    } else {
+        mrb_value a = mrb_ary_new_capa(shared_ctx->mrb, 2);
+        mrb_ary_push(shared_ctx->mrb, a, existing);
+        mrb_ary_push(shared_ctx->mrb, a, v);
+        mrb_hash_set(shared_ctx->mrb, result_hash, n, a);
+    }
+
     return 0;
 }
 
@@ -591,10 +603,9 @@ static int retrieve_env(mrb_state *mrb, mrb_value key, mrb_value value, void *_d
         RETRIEVE_ENV_STR(data->env.scheme);
     } else if (CHECK_KEY("rack.early_hints")) {
     } else if (keystr_len >= 5 && memcmp(keystr, "HTTP_", 5) == 0) {
-        mrb_value http_header = mrb_nil_value();
-        RETRIEVE_ENV_STR(http_header);
-        if (!mrb_nil_p(http_header))
-            h2o_mruby_iterate_header_values(data->ctx->shared, key, http_header, handle_header_env_key, &data->subreq->super);
+        if (!mrb_nil_p(value) &&
+            h2o_mruby_iterate_header_values(data->ctx->shared, key, value, handle_header_env_key, &data->subreq->super) != 0)
+            return -1;
     } else if (keystr_len != 0) {
         /* set to req->env */
         mrb_value reqenv = mrb_nil_value();

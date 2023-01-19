@@ -1185,6 +1185,29 @@ mrb_value h2o_mruby_each_to_array(h2o_mruby_shared_context_t *shared_ctx, mrb_va
                             shared_ctx->symbols.sym_call, 1, &src);
 }
 
+static int iterate_header_values_handle_str(h2o_mruby_shared_context_t *shared_ctx, h2o_iovec_t *namevec, mrb_value value,
+                                            int (*cb)(h2o_mruby_shared_context_t *, h2o_iovec_t *, h2o_iovec_t, void *),
+                                            void *cb_data)
+{
+    value = h2o_mruby_to_str(shared_ctx->mrb, value);
+
+    const char *vstart = RSTRING_PTR(value), *vend = vstart + RSTRING_LEN(value), *eol;
+
+    /* call the callback, splitting the values with '\n' */
+    while (1) {
+        for (eol = vstart; eol != vend; ++eol)
+            if (*eol == '\n')
+                break;
+        if (cb(shared_ctx, namevec, h2o_iovec_init(vstart, eol - vstart), cb_data) != 0)
+            return -1;
+        if (eol == vend)
+            break;
+        vstart = eol + 1;
+    }
+
+    return 0;
+}
+
 int h2o_mruby_iterate_header_values(h2o_mruby_shared_context_t *shared_ctx, mrb_value name, mrb_value value,
                                     int (*cb)(h2o_mruby_shared_context_t *, h2o_iovec_t *, h2o_iovec_t, void *), void *cb_data)
 {
@@ -1196,21 +1219,16 @@ int h2o_mruby_iterate_header_values(h2o_mruby_shared_context_t *shared_ctx, mrb_
     if (mrb->exc != NULL)
         return -1;
     namevec = (h2o_iovec_init(RSTRING_PTR(name), RSTRING_LEN(name)));
-    value = h2o_mruby_to_str(mrb, value);
-    if (mrb->exc != NULL)
-        return -1;
 
-    /* call the callback, splitting the values with '\n' */
-    const char *vstart = RSTRING_PTR(value), *vend = vstart + RSTRING_LEN(value), *eol;
-    while (1) {
-        for (eol = vstart; eol != vend; ++eol)
-            if (*eol == '\n')
-                break;
-        if (cb(shared_ctx, &namevec, h2o_iovec_init(vstart, eol - vstart), cb_data) != 0)
+    if (mrb_array_p(value)) {
+        mrb_int i, len = RARRAY_LEN(value);
+        for (i = 0; i != len; ++i) {
+            if (iterate_header_values_handle_str(shared_ctx, &namevec, mrb_ary_entry(value, i), cb, cb_data) != 0)
+                return -1;
+        }
+    } else {
+        if (iterate_header_values_handle_str(shared_ctx, &namevec, value, cb, cb_data) != 0)
             return -1;
-        if (eol == vend)
-            break;
-        vstart = eol + 1;
     }
 
     return 0;
