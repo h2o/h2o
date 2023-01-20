@@ -854,14 +854,13 @@ static int on_client_hello_ptls(ptls_on_client_hello_t *_self, ptls_t *tls, ptls
         return 0;
 
     struct st_on_client_hello_ptls_t *self = (struct st_on_client_hello_ptls_t *)_self;
-    void *conn = *ptls_get_data_ptr(tls);
+    void *conn = *ptls_get_data_ptr(tls); /* either h2o_socket_t (TCP) or quicly_conn_t (QUIC) */
+    int conn_is_quic = self->listener->quic.ctx != NULL, ret = 0;
     struct listener_ssl_config_t *ssl_config;
-    int ret = 0;
 
     /* determine ssl_config based on SNI */
     if (params->server_name.base != NULL) {
-        on_sni_update_tracing(conn, self->listener->quic.ctx != NULL, (const char *)params->server_name.base,
-                              params->server_name.len);
+        on_sni_update_tracing(conn, conn_is_quic, (const char *)params->server_name.base, params->server_name.len);
         ssl_config = resolve_sni(self->listener, (const char *)params->server_name.base, params->server_name.len);
         ptls_set_server_name(tls, (const char *)params->server_name.base, params->server_name.len);
     } else {
@@ -870,7 +869,7 @@ static int on_client_hello_ptls(ptls_on_client_hello_t *_self, ptls_t *tls, ptls
     }
 
     /* apply config at ssl_config-level */
-    if (self->listener->quic.ctx == NULL) {
+    if (!conn_is_quic) {
         set_tcp_congestion_controller(conn, ssl_config->cc.tcp);
     } else {
         if (ssl_config->cc.quic != NULL)
@@ -901,7 +900,7 @@ IdentityFound:
 
     /* handle ALPN */
     if (params->negotiated_protocols.count != 0) {
-        if (self->listener->quic.ctx != NULL) {
+        if (conn_is_quic) {
             size_t i, j;
             for (i = 0; i != sizeof(h2o_http3_alpn) / sizeof(h2o_http3_alpn[0]); ++i) {
                 for (j = 0; j != params->negotiated_protocols.count; ++j)

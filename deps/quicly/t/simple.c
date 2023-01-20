@@ -36,7 +36,7 @@ static void test_handshake(void)
 
     /* send CH */
     ret = quicly_connect(&client, &quic_ctx, "example.com", &fake_address.sa, NULL, new_master_id(), ptls_iovec_init(NULL, 0), NULL,
-                         NULL);
+                         NULL, NULL);
     ok(ret == 0);
     num_packets = PTLS_ELEMENTSOF(packets);
     ret = quicly_send(client, &dest, &src, packets, &num_packets, packetsbuf, sizeof(packetsbuf));
@@ -47,7 +47,7 @@ static void test_handshake(void)
     /* receive CH, send handshake upto ServerFinished */
     num_decoded = decode_packets(decoded, packets, num_packets);
     ok(num_decoded == 1);
-    ret = quicly_accept(&server, &quic_ctx, NULL, &fake_address.sa, decoded, NULL, new_master_id(), NULL);
+    ret = quicly_accept(&server, &quic_ctx, NULL, &fake_address.sa, decoded, NULL, new_master_id(), NULL, NULL);
     ok(ret == 0);
     ok(quicly_get_state(server) == QUICLY_STATE_CONNECTED);
     ok(quicly_connection_is_ready(server));
@@ -362,7 +362,7 @@ static void tiny_stream_window(void)
     quic_now += QUICLY_DELAYED_ACK_TIMEOUT;
     transmit(client, server);
 
-    /* server should have recieved ACK to the RESET_STREAM it has sent */
+    /* server should have received ACK to the RESET_STREAM it has sent */
     ok(server_streambuf->is_detached);
     ok(quicly_num_streams(server) == 0);
 
@@ -548,7 +548,7 @@ static void tiny_connection_window(void)
         quicly_decoded_packet_t decoded;
 
         ret = quicly_connect(&client, &quic_ctx, "example.com", &fake_address.sa, NULL, new_master_id(), ptls_iovec_init(NULL, 0),
-                             NULL, NULL);
+                             NULL, NULL, NULL);
         ok(ret == 0);
         num_packets = 1;
         ret = quicly_send(client, &dest, &src, &raw, &num_packets, rawbuf, sizeof(rawbuf));
@@ -557,7 +557,7 @@ static void tiny_connection_window(void)
         ok(quicly_get_first_timeout(client) > quic_ctx.now->cb(quic_ctx.now));
         decode_packets(&decoded, &raw, 1);
         ok(num_packets == 1);
-        ret = quicly_accept(&server, &quic_ctx, NULL, &fake_address.sa, &decoded, NULL, new_master_id(), NULL);
+        ret = quicly_accept(&server, &quic_ctx, NULL, &fake_address.sa, &decoded, NULL, new_master_id(), NULL, NULL);
         ok(ret == 0);
     }
 
