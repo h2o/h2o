@@ -2039,7 +2039,7 @@ h2o_conn_t *h2o_http3_get_connection(quicly_conn_t *quic)
     struct st_h2o_http3_server_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_conn_t, h3, *quicly_get_data(quic));
 
     /* this assertion is most likely to fire if the provided QUIC connection does not represent a server-side HTTP connection */
-    assert(conn->h3.super.quic == quic);
+    assert(conn->h3.super.quic == NULL || conn->h3.super.quic == quic);
 
     return &conn->super;
 }
