@@ -273,10 +273,34 @@ void do_ssl_write(struct st_h2o_uv_socket_t *sock, int is_first_call)
     uv_write(&sock->stream._wreq, (uv_stream_t *)sock->handle, &uvbuf, 1, on_ssl_write_complete);
 }
 
+static void do_write_on_read_complete(h2o_sendvec_puller_t *puller)
+{
+    struct st_h2o_uv_socket_t *sock = H2O_STRUCT_FROM_MEMBER(struct st_h2o_uv_socket_t, super._write_buf.puller, puller);
+
+    if (sock->super._write_buf.puller.failed) {
+        report_early_write_error(&sock->super);
+    } else {
+        do_write(&sock->super);
+    }
+}
+
 void do_write(h2o_socket_t *_sock)
 {
     struct st_h2o_uv_socket_t *sock = (struct st_h2o_uv_socket_t *)_sock;
     assert(sock->handle->type == UV_TCP);
+
+    /* flatten if necessary */
+    if (sock->super._write_buf.puller.vecs.size != 0) {
+        assert(h2o_sendvec_puller_send_is_complete(&sock->super._write_buf.puller));
+        h2o_sendvec_puller_read(&sock->super._write_buf.puller);
+        if (!h2o_sendvec_puller_read_is_complete(&sock->super._write_buf.puller)) {
+            sock->super._write_buf.puller.on_async_read_complete = do_write_on_read_complete;
+            return;
+        } else if (sock->super._write_buf.puller.failed) {
+            report_early_write_error(&sock->super);
+            return;
+        }
+    }
 
     if (sock->super.ssl == NULL) {
         if (sock->super._write_buf.cnt > 0) {
@@ -288,6 +312,11 @@ void do_write(h2o_socket_t *_sock)
     } else {
         do_ssl_write(sock, 1);
     }
+}
+
+static int can_use_sendfile(h2o_socket_t *_sock)
+{
+    return 0;
 }
 
 void h2o_socket_notify_write(h2o_socket_t *_sock, h2o_socket_cb cb)

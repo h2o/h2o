@@ -192,6 +192,40 @@ struct st_h2o_sendvec_t {
     };
 };
 
+typedef struct st_h2o_sendvec_puller_t h2o_sendvec_puller_t;
+
+struct st_h2o_sendvec_puller_vec_t {
+    h2o_sendvec_puller_t *puller;
+    h2o_sendvec_t vec;
+    char **dst;
+    h2o_socket_read_file_cmd_t *cmd;
+    void *buf_recycle;
+};
+
+struct st_h2o_sendvec_puller_t {
+    /**
+     * called when async read is complete; users should assign this callback read is incomplete after calling
+     * `h2o_sendvec_puller_read`
+     */
+    void (*on_async_read_complete)(h2o_sendvec_puller_t *);
+    /**
+     * list of vectors to pull
+     */
+    H2O_VECTOR(struct st_h2o_sendvec_puller_vec_t) vecs;
+    /**
+     * number of file being read completely; if this value is below `send_index` it indicates that some vectors have to be read
+     */
+    size_t num_read;
+    /**
+     * index of the vector on which the `send_` should be called
+     */
+    size_t send_index;
+    /**
+     * if any operation failed
+     */
+    unsigned failed : 1;
+};
+
 /**
  * abstraction layer for sockets (SSL vs. TCP)
  */
@@ -228,11 +262,7 @@ struct st_h2o_socket_t {
             h2o_iovec_t *alloced_ptr;
             h2o_iovec_t smallbufs[4];
         };
-        char *flattened;
-        struct {
-            h2o_socket_read_file_cmd_t *cmd;
-            unsigned sync_fail : 1;
-        } async_read;
+        h2o_sendvec_puller_t puller;
     } _write_buf;
     struct {
         uint8_t state; /* one of H2O_SOCKET_LATENCY_STATE_* */
@@ -586,6 +616,19 @@ int h2o_socket_ebpf_init_key_raw(h2o_ebpf_map_key_t *key, int sock_type, struct 
  */
 int h2o_socket_ebpf_init_key(h2o_ebpf_map_key_t *key, void *sock);
 
+void h2o_sendvec_puller_dispose(h2o_sendvec_puller_t *self);
+/**
+ * Registers a pull vector.
+ * @param dst pointer to where the starting address of the buffer allocated by the puller is written; even when `may_sendfile` is
+ *            true, the puller may still decide to read the vector (see `h2o_sendvec_puller_t::send_index`)
+ * @param may_sendfile if the vector can be sent using the send_ callback
+ */
+void h2o_sendvec_puller_add(h2o_sendvec_puller_t *self, h2o_sendvec_t *vec, char **dst, int may_sendfile);
+static int h2o_sendvec_puller_read_is_complete(h2o_sendvec_puller_t *self);
+void h2o_sendvec_puller_read(h2o_sendvec_puller_t *self);
+static int h2o_sendvec_puller_send_is_complete(h2o_sendvec_puller_t *self);
+void h2o_sendvec_puller_send(h2o_sendvec_puller_t *self, int fd);
+
 /* inline defs */
 
 inline int h2o_socket_is_writing(h2o_socket_t *sock)
@@ -663,6 +706,16 @@ inline void h2o_sliding_counter_start(h2o_sliding_counter_t *counter, uint64_t n
 inline int h2o_socket_skip_tracing(h2o_socket_t *sock)
 {
     return sock->_skip_tracing;
+}
+
+inline int h2o_sendvec_puller_read_is_complete(h2o_sendvec_puller_t *self)
+{
+    return self->num_read == self->send_index;
+}
+
+inline int h2o_sendvec_puller_send_is_complete(h2o_sendvec_puller_t *self)
+{
+    return self->send_index == self->vecs.size;
 }
 
 #ifdef __cplusplus

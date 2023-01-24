@@ -266,11 +266,8 @@ static void alloc_write_buf(h2o_socket_t *sock, size_t cnt)
         sock->_write_buf.alloced_ptr = sock->_write_buf.bufs;
     }
     sock->_write_buf.cnt = 0;
-}
 
-static void async_read_on_complete_post_disposal(h2o_socket_read_file_cmd_t *cmd)
-{
-    h2o_mem_free_recycle(&h2o_socket_ssl_buffer_allocator, cmd->cb.data);
+    sock->_write_buf.puller = (h2o_sendvec_puller_t){NULL};
 }
 
 static void dispose_write_buf(h2o_socket_t *sock)
@@ -284,17 +281,7 @@ static void dispose_write_buf(h2o_socket_t *sock)
         sock->_write_buf.bufs = sock->_write_buf.smallbufs;
     }
 
-    if (sock->_write_buf.async_read.cmd != NULL) {
-        assert(sock->_write_buf.flattened != NULL);
-        sock->_write_buf.async_read.cmd->cb.func = async_read_on_complete_post_disposal;
-        sock->_write_buf.async_read.cmd->cb.data = sock->_write_buf.flattened;
-        sock->_write_buf.flattened = NULL;
-    }
-
-    if (sock->_write_buf.flattened != NULL) {
-        h2o_mem_free_recycle(&h2o_socket_ssl_buffer_allocator, sock->_write_buf.flattened);
-        sock->_write_buf.flattened = NULL;
-    }
+    h2o_sendvec_puller_dispose(&sock->_write_buf.puller);
 }
 
 static void init_ssl_output_buffer(struct st_h2o_socket_ssl_t *ssl, int zerocopy)
@@ -894,47 +881,6 @@ static size_t generate_tls_records(h2o_socket_t *sock, h2o_iovec_t **bufs, size_
     return first_buf_written;
 }
 
-static void flatten_sendvec_async_read_on_complete_in_sync(h2o_socket_read_file_cmd_t *cmd)
-{
-    h2o_socket_t *sock = cmd->cb.data;
-
-    sock->_write_buf.async_read.cmd = NULL;
-    sock->_write_buf.async_read.sync_fail = cmd->err != NULL;
-}
-
-/**
- * Flattens a sendvec to the specified slot, either synchronously or asynchronously. If an error occurs synchronously, false is
- * returned; otherwise, true is returned. When true is returned, the caller should consult the value of
- * `sock->_write_buf.async_read.cmd`; if it is NULL, loading has completed. If it is non-NULL, async read is inflight and the caller
- * should wait for the invocation of `async_cb`.
- */
-int flatten_sendvec(h2o_socket_t *sock, size_t buf_index, h2o_sendvec_t *sendvec, h2o_socket_read_file_cb async_cb)
-{
-    assert(h2o_socket_ssl_buffer_allocator.conf->memsize >= H2O_PULL_SENDVEC_MAX_SIZE);
-    sock->_write_buf.flattened = h2o_mem_alloc_recycle(&h2o_socket_ssl_buffer_allocator);
-
-    sock->_write_buf.bufs[buf_index] = h2o_iovec_init(sock->_write_buf.flattened, sendvec->len);
-
-    if (sendvec->callbacks->read_async != NULL) {
-        sendvec->callbacks->read_async(sendvec, &sock->_write_buf.async_read.cmd, sock->_write_buf.flattened, sendvec->len,
-                                       flatten_sendvec_async_read_on_complete_in_sync, sock);
-        if (sock->_write_buf.async_read.cmd != NULL) {
-            sock->_write_buf.async_read.cmd->cb.func = async_cb;
-        } else if (sock->_write_buf.async_read.sync_fail) {
-            goto Fail;
-        }
-    } else if (!sendvec->callbacks->read_(sendvec, sock->_write_buf.flattened, sendvec->len)) {
-        goto Fail;
-    }
-
-    return 1;
-
-Fail:
-    h2o_mem_free_recycle(&h2o_socket_ssl_buffer_allocator, sock->_write_buf.flattened);
-    sock->_write_buf.flattened = NULL;
-    return 0;
-}
-
 void h2o_socket_write(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_socket_cb cb)
 {
     SOCKET_PROBE(WRITE, sock, bufs, bufcnt, cb);
@@ -958,30 +904,14 @@ void h2o_socket_write(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_
     do_write(sock);
 }
 
-static void socket_sendvec_on_async_read_complete(h2o_socket_read_file_cmd_t *cmd)
-{
-    h2o_socket_t *sock = cmd->cb.data;
-
-    sock->_write_buf.async_read.cmd = NULL;
-
-    if (cmd->err != NULL) {
-        report_early_write_error(sock);
-    } else {
-        do_write(sock);
-    }
-}
-
 void h2o_socket_sendvec(h2o_socket_t *sock, h2o_sendvec_t *vecs, size_t cnt, h2o_socket_cb cb)
 {
     assert(sock->_cb.write == NULL);
-    assert(sock->_write_buf.flattened == NULL);
 
     sock->_cb.write = cb;
 
     /* prepare the array of h2o_iovec_t to store flattened vectors to be sent, with +1 slot to flatten pull vector */
-    alloc_write_buf(sock, cnt + 1);
-
-    size_t vec_pull_index = SIZE_MAX, buf_pull_index = SIZE_MAX;
+    alloc_write_buf(sock, cnt);
 
     /* copy vectors to bufs, while looking for one to flatten */
     for (size_t i = 0; i < cnt; ++i) {
@@ -989,35 +919,25 @@ void h2o_socket_sendvec(h2o_socket_t *sock, h2o_sendvec_t *vecs, size_t cnt, h2o
             sock->bytes_written += vecs[i].len;
             if (vecs[i].callbacks->read_ == h2o_sendvec_read_raw) {
                 sock->_write_buf.bufs[sock->_write_buf.cnt] = h2o_iovec_init(vecs[i].raw, vecs[i].len);
+                /* sendfile vectors cannot precede the ones to be read */
+                sock->_write_buf.puller.send_index = sock->_write_buf.puller.vecs.size;
             } else {
-                assert(vec_pull_index == SIZE_MAX || !"h2o_socket_sendvec can only handle one pull vector at a time");
-                assert(vecs[i].len <= H2O_PULL_SENDVEC_MAX_SIZE); /* at the moment, this is our size limit */
-                vec_pull_index = i;
-                buf_pull_index = sock->_write_buf.cnt;
+                sock->_write_buf.bufs[sock->_write_buf.cnt] = h2o_iovec_init(NULL, vecs[i].len);
+                int may_sendfile = 0;
+                if (vecs[i].callbacks->send_ != NULL && can_use_sendfile(sock))
+                    may_sendfile = 1;
+                h2o_sendvec_puller_add(&sock->_write_buf.puller, &vecs[i], &sock->_write_buf.bufs[sock->_write_buf.cnt].base,
+                                       may_sendfile);
             }
             ++sock->_write_buf.cnt;
         }
     }
-
-    if (vec_pull_index != SIZE_MAX) {
-        /* If the pull vector has a send callback, and if we have the necessary conditions to utilize it, Let it write directly to
-         * the socket. */
-#if !H2O_USE_LIBUV
-        if (buf_pull_index == sock->_write_buf.cnt - 1) {
-            --sock->_write_buf.cnt;
-            if (do_write_with_sendvec(sock, vecs + vec_pull_index))
-                return;
-            ++sock->_write_buf.cnt;
-        }
-#endif
-        /* Load the vector onto memory now. */
-        if (!flatten_sendvec(sock, buf_pull_index, &vecs[vec_pull_index], socket_sendvec_on_async_read_complete)) {
-            report_early_write_error(sock);
-            return;
-        }
-        if (sock->_write_buf.async_read.cmd != NULL)
-            return;
-    }
+    /* If last N buffers where sendfile buffers, subtract them from `bufs`; they are recognized separately by the event loop.
+     * At the moment, only the buffers at the end can be "sent." Justification for this constraint is that HTTP/2 (that might
+     * provide multiple "send"-able vectors in one call) is almost always used on top of TLS (rather than cleartext).  When TLS is
+     * used, we will be reading the pull vectors rather than just "send"ing them, unless kTLS is used. */
+    if (sock->_write_buf.puller.send_index < sock->_write_buf.puller.vecs.size)
+        sock->_write_buf.cnt -= sock->_write_buf.puller.vecs.size - sock->_write_buf.puller.send_index;
 
     do_write(sock);
 }
@@ -2809,6 +2729,83 @@ uint64_t h2o_socket_ebpf_lookup_flags_sni(h2o_loop_t *loop, uint64_t flags, cons
 }
 
 #endif
+
+static void sendvec_puller_on_complete_post_disposal(h2o_socket_read_file_cmd_t *cmd)
+{
+    h2o_mem_free_recycle(&h2o_socket_ssl_buffer_allocator, cmd->cb.data);
+}
+
+void h2o_sendvec_puller_dispose(h2o_sendvec_puller_t *self)
+{
+    for (size_t i = 0; i < self->vecs.size; ++i) {
+        struct st_h2o_sendvec_puller_vec_t *vec = &self->vecs.entries[i];
+        if (vec->cmd != NULL) {
+            assert(vec->buf_recycle != NULL);
+            vec->cmd->cb.func = sendvec_puller_on_complete_post_disposal;
+            vec->cmd->cb.data = vec->buf_recycle;
+        } else if (vec->buf_recycle != NULL) {
+            h2o_mem_free_recycle(&h2o_socket_ssl_buffer_allocator, vec->buf_recycle);
+        }
+    }
+    if (self->vecs.size != 0)
+        free(self->vecs.entries);
+
+    /* reset all fields modulo failed */
+    int failed = self->failed;
+    *self = (h2o_sendvec_puller_t){.failed = failed};
+}
+
+void h2o_sendvec_puller_add(h2o_sendvec_puller_t *self, h2o_sendvec_t *vec, char **dst, int may_sendfile)
+{
+    assert(vec->len <= H2O_PULL_SENDVEC_MAX_SIZE);
+
+    *dst = NULL;
+
+    h2o_vector_reserve(NULL, &self->vecs, self->vecs.size + 1);
+    self->vecs.entries[self->vecs.size++] = (struct st_h2o_sendvec_puller_vec_t){.puller = self, .vec = *vec, .dst = dst};
+
+    if (!may_sendfile)
+        self->send_index = self->vecs.size;
+}
+
+static void sendvec_puller_on_read_complete(h2o_socket_read_file_cmd_t *cmd)
+{
+    struct st_h2o_sendvec_puller_vec_t *vec = cmd->cb.data;
+    h2o_sendvec_puller_t *self = vec->puller;
+
+    if (cmd->err != NULL)
+        self->failed = 1;
+    ++self->num_read;
+
+    if (h2o_sendvec_puller_read_is_complete(self) && self->on_async_read_complete != NULL)
+        self->on_async_read_complete(self);
+}
+
+void h2o_sendvec_puller_read(h2o_sendvec_puller_t *self)
+{
+    for (size_t i = 0; i < self->vecs.size; ++i) {
+        struct st_h2o_sendvec_puller_vec_t *vec = &self->vecs.entries[i];
+        vec->buf_recycle = h2o_mem_alloc_recycle(&h2o_socket_ssl_buffer_allocator);
+        *vec->dst = vec->buf_recycle;
+        vec->vec.callbacks->read_async(&vec->vec, &vec->cmd, vec->buf_recycle, vec->vec.len, sendvec_puller_on_read_complete, vec);
+    }
+}
+
+void h2o_sendvec_puller_send(h2o_sendvec_puller_t *self, int fd)
+{
+    for (; self->send_index < self->vecs.size; ++self->send_index) {
+        struct st_h2o_sendvec_puller_vec_t *vec = &self->vecs.entries[self->send_index];
+
+        /* send; if an error is returned set the failed flag and bail out */
+        if (vec->vec.callbacks->send_(&vec->vec, fd, vec->vec.len) == SIZE_MAX) {
+            self->failed = 1;
+            break;
+        }
+        /* break if partial write */
+        if (vec->vec.len != 0)
+            break;
+    }
+}
 
 #if H2O_USE_LIBUV || !H2O_USE_IO_URING
 

@@ -82,7 +82,7 @@ static int collect_status(struct st_h2o_socket_loop_kqueue_t *loop, struct keven
                     SET_AND_UPDATE(EVFILT_READ, EV_DELETE);
                 }
             }
-            if (h2o_socket_is_writing(&sock->super) && sock->super._write_buf.async_read.cmd == NULL) {
+            if (h2o_socket_is_writing(&sock->super) && h2o_sendvec_puller_read_is_complete(&sock->super._write_buf.puller)) {
                 if ((sock->_flags & H2O_SOCKET_FLAG_IS_POLLED_FOR_WRITE) == 0) {
                     sock->_flags |= H2O_SOCKET_FLAG_IS_POLLED_FOR_WRITE;
                     SET_AND_UPDATE(EVFILT_WRITE, EV_ADD);
