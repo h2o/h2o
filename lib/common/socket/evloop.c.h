@@ -320,8 +320,10 @@ static size_t write_core(struct st_h2o_evloop_socket_t *sock, h2o_iovec_t **bufs
         if ((first_buf_written = generate_tls_records(&sock->super, bufs, bufcnt, first_buf_written)) == SIZE_MAX)
             break;
         /* as an optimization, if we have a flattened vector, release memory as soon as they have been encrypted */
-        if (*bufcnt == 0)
+        if (*bufcnt == 0) {
+            assert(h2o_sendvec_puller_send_is_complete(&sock->super._write_buf.puller));
             h2o_sendvec_puller_dispose(&sock->super._write_buf.puller);
+        }
     }
 
     return first_buf_written;
