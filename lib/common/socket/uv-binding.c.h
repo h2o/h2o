@@ -214,7 +214,7 @@ static void call_write_complete_delayed(struct st_h2o_uv_socket_t *sock, int sta
     h2o_timer_link(sock->handle->loop, 0, &sock->write_cb_timer);
 }
 
-void report_early_write_error(h2o_socket_t *_sock)
+static void report_early_write_error(h2o_socket_t *_sock)
 {
     struct st_h2o_uv_socket_t *sock = (struct st_h2o_uv_socket_t *)_sock;
     call_write_complete_delayed(sock, 1);

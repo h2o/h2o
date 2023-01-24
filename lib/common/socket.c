@@ -165,7 +165,6 @@ static void dispose_ssl_output_buffer(struct st_h2o_socket_ssl_t *ssl);
 static int has_pending_ssl_bytes(struct st_h2o_socket_ssl_t *ssl);
 static size_t generate_tls_records(h2o_socket_t *sock, h2o_iovec_t **bufs, size_t *bufcnt, size_t first_buf_written);
 static void do_dispose_socket(h2o_socket_t *sock);
-static void report_early_write_error(h2o_socket_t *sock);
 static void do_write(h2o_socket_t *sock);
 static void do_read_start(h2o_socket_t *sock);
 static void do_read_stop(h2o_socket_t *sock);

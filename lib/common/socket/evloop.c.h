@@ -420,16 +420,6 @@ void do_dispose_socket(h2o_socket_t *_sock)
     link_to_statechanged(sock);
 }
 
-void report_early_write_error(h2o_socket_t *_sock)
-{
-    struct st_h2o_evloop_socket_t *sock = (struct st_h2o_evloop_socket_t *)_sock;
-
-    dispose_write_buf(&sock->super);
-
-    sock->_flags |= H2O_SOCKET_FLAG_IS_WRITE_NOTIFY;
-    link_to_pending(sock);
-}
-
 void do_write(h2o_socket_t *_sock)
 {
     struct st_h2o_evloop_socket_t *sock = (struct st_h2o_evloop_socket_t *)_sock;
