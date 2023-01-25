@@ -601,6 +601,7 @@ int main(int argc, char **argv)
                                      ptls_minicrypto_key_exchanges,
                                      ptls_minicrypto_cipher_suites,
                                      {&minicrypto_certificate, 1},
+                                     {},
                                      {{NULL}},
                                      NULL,
                                      NULL,

@@ -32,6 +32,11 @@
 #define OPENSSL_API_COMPAT 0x00908000L
 #include <openssl/bn.h>
 #include <openssl/crypto.h>
+#ifdef OPENSSL_IS_BORINGSSL
+#include <openssl/curve25519.h>
+#include <openssl/chacha.h>
+#include <openssl/poly1305.h>
+#endif
 #include <openssl/ec.h>
 #include <openssl/ecdh.h>
 #include <openssl/err.h>
@@ -89,22 +94,22 @@ static int EVP_CIPHER_CTX_reset(EVP_CIPHER_CTX *ctx)
 
 #endif
 
-static const ptls_openssl_signature_scheme_t rsa_signature_schemes[] = {{PTLS_SIGNATURE_RSA_PSS_RSAE_SHA256, EVP_sha256},
+static const struct st_ptls_openssl_signature_scheme_t rsa_signature_schemes[] = {{PTLS_SIGNATURE_RSA_PSS_RSAE_SHA256, EVP_sha256},
                                                                                   {PTLS_SIGNATURE_RSA_PSS_RSAE_SHA384, EVP_sha384},
                                                                                   {PTLS_SIGNATURE_RSA_PSS_RSAE_SHA512, EVP_sha512},
                                                                                   {UINT16_MAX, NULL}};
-static const ptls_openssl_signature_scheme_t secp256r1_signature_schemes[] = {
+static const struct st_ptls_openssl_signature_scheme_t secp256r1_signature_schemes[] = {
     {PTLS_SIGNATURE_ECDSA_SECP256R1_SHA256, EVP_sha256}, {UINT16_MAX, NULL}};
 #if PTLS_OPENSSL_HAVE_SECP384R1
-static const ptls_openssl_signature_scheme_t secp384r1_signature_schemes[] = {
+static const struct st_ptls_openssl_signature_scheme_t secp384r1_signature_schemes[] = {
     {PTLS_SIGNATURE_ECDSA_SECP384R1_SHA384, EVP_sha384}, {UINT16_MAX, NULL}};
 #endif
 #if PTLS_OPENSSL_HAVE_SECP521R1
-static const ptls_openssl_signature_scheme_t secp521r1_signature_schemes[] = {
+static const struct st_ptls_openssl_signature_scheme_t secp521r1_signature_schemes[] = {
     {PTLS_SIGNATURE_ECDSA_SECP521R1_SHA512, EVP_sha512}, {UINT16_MAX, NULL}};
 #endif
 #if PTLS_OPENSSL_HAVE_ED25519
-static const ptls_openssl_signature_scheme_t ed25519_signature_schemes[] = {{PTLS_SIGNATURE_ED25519, NULL},
+static const struct st_ptls_openssl_signature_scheme_t ed25519_signature_schemes[] = {{PTLS_SIGNATURE_ED25519, NULL},
                                                                                       {UINT16_MAX, NULL}};
 #endif
 
@@ -513,6 +518,25 @@ static int evp_keyex_on_exchange(ptls_key_exchange_context_t **_ctx, int release
         goto Exit;
     }
 
+#ifdef OPENSSL_IS_BORINGSSL
+    if (ctx->super.algo->id == PTLS_GROUP_X25519) {
+        secret->len = peerkey.len;
+        if ((secret->base = malloc(secret->len)) == NULL) {
+            ret = PTLS_ERROR_NO_MEMORY;
+            goto Exit;
+        }
+        uint8_t sk_raw[32];
+        size_t sk_raw_len = sizeof(sk_raw);
+        if (EVP_PKEY_get_raw_private_key(ctx->privkey, sk_raw, &sk_raw_len) != 1) {
+            ret = PTLS_ERROR_LIBRARY;
+            goto Exit;
+        }
+        X25519(secret->base, sk_raw, peerkey.base);
+        ret = 0;
+        goto Exit;
+    }
+#endif
+
     if ((evppeer = EVP_PKEY_new()) == NULL) {
         ret = PTLS_ERROR_NO_MEMORY;
         goto Exit;
@@ -652,7 +676,6 @@ Exit:
         free(outpubkey->base);
     return ret;
 }
-
 #endif
 
 int ptls_openssl_create_key_exchange(ptls_key_exchange_context_t **ctx, EVP_PKEY *pkey)
@@ -712,7 +735,7 @@ int ptls_openssl_create_key_exchange(ptls_key_exchange_context_t **ctx, EVP_PKEY
 
 struct async_sign_ctx {
     ptls_async_job_t super;
-    const ptls_openssl_signature_scheme_t *scheme;
+    const struct st_ptls_openssl_signature_scheme_t *scheme;
     EVP_MD_CTX *ctx;
     ASYNC_WAIT_CTX *waitctx;
     ASYNC_JOB *job;
@@ -738,26 +761,14 @@ static void async_sign_ctx_free(ptls_async_job_t *_self)
     free(self);
 }
 
-int async_sign_ctx_get_fd(ptls_async_job_t *_self)
-{
-    struct async_sign_ctx *self = (void *)_self;
-    OSSL_ASYNC_FD fds[1];
-    size_t numfds;
-
-    ASYNC_WAIT_CTX_get_all_fds(self->waitctx, NULL, &numfds);
-    assert(numfds == 1);
-    ASYNC_WAIT_CTX_get_all_fds(self->waitctx, fds, &numfds);
-    return (int)fds[0];
-}
-
-static ptls_async_job_t *async_sign_ctx_new(const ptls_openssl_signature_scheme_t *scheme, EVP_MD_CTX *ctx, size_t siglen)
+static ptls_async_job_t *async_sign_ctx_new(const struct st_ptls_openssl_signature_scheme_t *scheme, EVP_MD_CTX *ctx, size_t siglen)
 {
     struct async_sign_ctx *self;
 
     if ((self = malloc(offsetof(struct async_sign_ctx, sig) + siglen)) == NULL)
         return NULL;
 
-    self->super = (ptls_async_job_t){async_sign_ctx_free, async_sign_ctx_get_fd};
+    self->super = (ptls_async_job_t){async_sign_ctx_free};
     self->scheme = scheme;
     self->ctx = ctx;
     self->waitctx = ASYNC_WAIT_CTX_new();
@@ -766,6 +777,18 @@ static ptls_async_job_t *async_sign_ctx_new(const ptls_openssl_signature_scheme_
     memset(self->sig, 0, siglen);
 
     return &self->super;
+}
+
+OSSL_ASYNC_FD ptls_openssl_get_async_fd(ptls_t *ptls)
+{
+    OSSL_ASYNC_FD fds[1];
+    size_t numfds;
+    struct async_sign_ctx *async = (void *)ptls_get_async_job(ptls);
+    assert(async != NULL);
+    ASYNC_WAIT_CTX_get_all_fds(async->waitctx, NULL, &numfds);
+    assert(numfds == 1);
+    ASYNC_WAIT_CTX_get_all_fds(async->waitctx, fds, &numfds);
+    return fds[0];
 }
 
 static int do_sign_async_job(void *_async)
@@ -806,7 +829,7 @@ Exit:
 
 #endif
 
-static int do_sign(EVP_PKEY *key, const ptls_openssl_signature_scheme_t *scheme, ptls_buffer_t *outbuf,
+static int do_sign(EVP_PKEY *key, const struct st_ptls_openssl_signature_scheme_t *scheme, ptls_buffer_t *outbuf,
                    ptls_iovec_t input, ptls_async_job_t **async)
 {
     EVP_MD_CTX *ctx = NULL;
@@ -895,6 +918,10 @@ Exit:
 struct cipher_context_t {
     ptls_cipher_context_t super;
     EVP_CIPHER_CTX *evp;
+#ifdef OPENSSL_IS_BORINGSSL
+    uint8_t chacha20_key[32];
+    uint8_t chacha20_iv[12];
+#endif
 };
 
 static void cipher_dispose(ptls_cipher_context_t *_ctx)
@@ -907,6 +934,13 @@ static void cipher_do_init(ptls_cipher_context_t *_ctx, const void *iv)
 {
     struct cipher_context_t *ctx = (struct cipher_context_t *)_ctx;
     int ret;
+
+#ifdef OPENSSL_IS_BORINGSSL
+    if (strcmp(ctx->super.algo->name, "CHACHA20") == 0) {
+        memcpy(ctx->chacha20_iv, iv, sizeof ctx->chacha20_iv);
+        return;
+    }
+#endif
     ret = EVP_EncryptInit_ex(ctx->evp, NULL, NULL, NULL, iv);
     assert(ret);
 }
@@ -923,6 +957,12 @@ static int cipher_setup_crypto(ptls_cipher_context_t *_ctx, int is_enc, const vo
     if ((ctx->evp = EVP_CIPHER_CTX_new()) == NULL)
         return PTLS_ERROR_NO_MEMORY;
 
+#ifdef OPENSSL_IS_BORINGSSL
+    if (strcmp(ctx->super.algo->name, "CHACHA20") == 0) {
+        memcpy(ctx->chacha20_key, key, sizeof ctx->chacha20_key);
+        return 0;
+    }
+#endif
     if (is_enc) {
         if (!EVP_EncryptInit_ex(ctx->evp, cipher, NULL, key, NULL))
             goto Error;
@@ -941,6 +981,13 @@ Error:
 static void cipher_encrypt(ptls_cipher_context_t *_ctx, void *output, const void *input, size_t _len)
 {
     struct cipher_context_t *ctx = (struct cipher_context_t *)_ctx;
+
+#ifdef OPENSSL_IS_BORINGSSL
+    if (strcmp(ctx->super.algo->name, "CHACHA20") == 0) {
+        CRYPTO_chacha_20(output, input, _len, ctx->chacha20_key, ctx->chacha20_iv, 0);
+        return;
+    }
+#endif
     int len = (int)_len, ret = EVP_EncryptUpdate(ctx->evp, output, &len, input, len);
     assert(ret);
     assert(len == (int)_len);
@@ -976,6 +1023,13 @@ static int aes256ctr_setup_crypto(ptls_cipher_context_t *ctx, int is_enc, const 
 
 #if PTLS_OPENSSL_HAVE_CHACHA20_POLY1305
 
+#ifdef OPENSSL_IS_BORINGSSL
+static const EVP_CIPHER *EVP_chacha20(void)
+{
+    return NULL;
+}
+#endif
+
 static int chacha20_setup_crypto(ptls_cipher_context_t *ctx, int is_enc, const void *key)
 {
     return cipher_setup_crypto(ctx, 1, key, EVP_chacha20(), cipher_encrypt);
@@ -994,6 +1048,13 @@ static int bfecb_setup_crypto(ptls_cipher_context_t *ctx, int is_enc, const void
 
 struct aead_crypto_context_t {
     ptls_aead_context_t super;
+#ifdef OPENSSL_IS_BORINGSSL
+    poly1305_state poly1305;
+    uint8_t chachapoly_key[32];
+    uint8_t chachapoly_iv[12];
+    size_t aadlen;
+    size_t mlen;
+#endif
     EVP_CIPHER_CTX *evp_ctx;
     uint8_t static_iv[PTLS_MAX_IV_SIZE];
 };
@@ -1018,10 +1079,38 @@ static void aead_xor_iv(ptls_aead_context_t *_ctx, const void *_bytes, size_t le
 static void aead_do_encrypt_init(ptls_aead_context_t *_ctx, uint64_t seq, const void *aad, size_t aadlen)
 {
     struct aead_crypto_context_t *ctx = (struct aead_crypto_context_t *)_ctx;
+
     uint8_t iv[PTLS_MAX_IV_SIZE];
     int ret;
 
+#ifdef OPENSSL_IS_BORINGSSL
+    ctx->aadlen = 0;
+    ctx->mlen = 0;
     ptls_aead__build_iv(ctx->super.algo, iv, ctx->static_iv, seq);
+    memcpy(ctx->chachapoly_iv, iv, sizeof ctx->chachapoly_iv);
+#else
+    ptls_aead__build_iv(ctx->super.algo, iv, ctx->static_iv, seq);
+#endif
+
+#ifdef OPENSSL_IS_BORINGSSL
+    if (strcmp(ctx->super.algo->name, "CHACHA20-POLY1305") == 0) {
+        uint8_t polykey[32] = {0};
+
+        CRYPTO_chacha_20(polykey, polykey, sizeof polykey, ctx->chachapoly_key, ctx->chachapoly_iv, 0);
+        CRYPTO_poly1305_init(&ctx->poly1305, polykey);
+
+        if (aadlen != 0) {
+            CRYPTO_poly1305_update(&ctx->poly1305, aad, aadlen);
+            if (aadlen % 16 != 0) {
+                const uint8_t zero[16] = {0};
+                CRYPTO_poly1305_update(&ctx->poly1305, zero, 16 - (aadlen % 16));
+            }
+            ctx->aadlen = aadlen;
+        }
+        return;
+    }
+#endif
+
     ret = EVP_EncryptInit_ex(ctx->evp_ctx, NULL, NULL, NULL, iv);
     assert(ret);
 
@@ -1037,11 +1126,37 @@ static size_t aead_do_encrypt_update(ptls_aead_context_t *_ctx, void *output, co
     struct aead_crypto_context_t *ctx = (struct aead_crypto_context_t *)_ctx;
     int blocklen, ret;
 
+#ifdef OPENSSL_IS_BORINGSSL
+    if (strcmp(ctx->super.algo->name, "CHACHA20-POLY1305") == 0) {
+        if (ctx->mlen % 64 != 0) {
+            return SIZE_MAX;
+        }
+        CRYPTO_chacha_20(output, input, inlen, ctx->chachapoly_key, ctx->chachapoly_iv, 1);
+        CRYPTO_poly1305_update(&ctx->poly1305, output, inlen);
+        ctx->mlen += inlen;
+        return inlen;
+    }
+#endif
+
     ret = EVP_EncryptUpdate(ctx->evp_ctx, output, &blocklen, input, (int)inlen);
     assert(ret);
 
     return blocklen;
 }
+
+#ifdef OPENSSL_IS_BORINGSSL
+static void u64_to_le(uint8_t *p, uint64_t v)
+{
+    p[0] = (uint8_t)v;
+    p[1] = (uint8_t)(v >> 8);
+    p[2] = (uint8_t)(v >> 16);
+    p[3] = (uint8_t)(v >> 24);
+    p[4] = (uint8_t)(v >> 32);
+    p[5] = (uint8_t)(v >> 40);
+    p[6] = (uint8_t)(v >> 48);
+    p[7] = (uint8_t)(v >> 56);
+}
+#endif
 
 static size_t aead_do_encrypt_final(ptls_aead_context_t *_ctx, void *_output)
 {
@@ -1049,6 +1164,23 @@ static size_t aead_do_encrypt_final(ptls_aead_context_t *_ctx, void *_output)
     uint8_t *output = _output;
     size_t off = 0, tag_size = ctx->super.algo->tag_size;
     int blocklen, ret;
+
+
+#ifdef OPENSSL_IS_BORINGSSL
+    if (strcmp(ctx->super.algo->name, "CHACHA20-POLY1305") == 0) {
+        uint8_t fb_buf[16];
+
+        if (ctx->mlen % 16 != 0) {
+            const uint8_t zero[16] = {0};
+            CRYPTO_poly1305_update(&ctx->poly1305, zero, 16 - (ctx->mlen % 16));
+        }
+        u64_to_le(fb_buf, ctx->aadlen);
+        u64_to_le(fb_buf + 8, ctx->mlen);
+        CRYPTO_poly1305_update(&ctx->poly1305, fb_buf, 16);
+        CRYPTO_poly1305_finish(&ctx->poly1305, output);
+        return ctx->super.algo->tag_size;
+    }
+#endif
 
     ret = EVP_EncryptFinal_ex(ctx->evp_ctx, output + off, &blocklen);
     assert(ret);
@@ -1065,6 +1197,7 @@ static size_t aead_do_decrypt(ptls_aead_context_t *_ctx, void *_output, const vo
 {
     struct aead_crypto_context_t *ctx = (struct aead_crypto_context_t *)_ctx;
     uint8_t *output = _output, iv[PTLS_MAX_IV_SIZE];
+
     size_t off = 0, tag_size = ctx->super.algo->tag_size;
     int blocklen, ret;
 
@@ -1072,6 +1205,43 @@ static size_t aead_do_decrypt(ptls_aead_context_t *_ctx, void *_output, const vo
         return SIZE_MAX;
 
     ptls_aead__build_iv(ctx->super.algo, iv, ctx->static_iv, seq);
+
+#ifdef OPENSSL_IS_BORINGSSL
+    if (strcmp(ctx->super.algo->name, "CHACHA20-POLY1305") == 0) {
+        uint8_t polykey[32] = {0};
+
+        CRYPTO_chacha_20(polykey, polykey, sizeof polykey, ctx->chachapoly_key, iv, 0);
+        CRYPTO_poly1305_init(&ctx->poly1305, polykey);
+
+        if (aadlen != 0) {
+            CRYPTO_poly1305_update(&ctx->poly1305, aad, aadlen);
+            if (aadlen % 16 != 0) {
+                const uint8_t zero[16] = {0};
+                CRYPTO_poly1305_update(&ctx->poly1305, zero, 16 - (aadlen % 16));
+            }
+            ctx->aadlen = aadlen;
+        }
+
+        CRYPTO_poly1305_update(&ctx->poly1305, input, inlen - tag_size);
+        CRYPTO_chacha_20(output, input, inlen - tag_size, ctx->chachapoly_key, iv, 1);
+
+        if ((inlen - tag_size) % 16 != 0) {
+            const uint8_t zero[16] = {0};
+            CRYPTO_poly1305_update(&ctx->poly1305, zero, 16 - ((inlen - tag_size) % 16));
+        }
+
+        uint8_t fb_buf[16];
+        u64_to_le(fb_buf, aadlen);
+        u64_to_le(fb_buf + 8, inlen - tag_size);
+        CRYPTO_poly1305_update(&ctx->poly1305, fb_buf, 16);
+        CRYPTO_poly1305_finish(&ctx->poly1305, fb_buf);
+        if (CRYPTO_memcmp(fb_buf, (uint8_t *)input + inlen - tag_size, tag_size) != 0) {
+            return SIZE_MAX;
+        }
+        return inlen - tag_size;
+    }
+#endif
+
     ret = EVP_DecryptInit_ex(ctx->evp_ctx, NULL, NULL, NULL, iv);
     assert(ret);
     if (aadlen != 0) {
@@ -1101,6 +1271,7 @@ static int aead_setup_crypto(ptls_aead_context_t *_ctx, int is_enc, const void *
 
     ctx->super.dispose_crypto = aead_dispose_crypto;
     ctx->super.do_xor_iv = aead_xor_iv;
+
     if (is_enc) {
         ctx->super.do_encrypt_init = aead_do_encrypt_init;
         ctx->super.do_encrypt_update = aead_do_encrypt_update;
@@ -1122,6 +1293,14 @@ static int aead_setup_crypto(ptls_aead_context_t *_ctx, int is_enc, const void *
         ret = PTLS_ERROR_NO_MEMORY;
         goto Error;
     }
+
+#ifdef OPENSSL_IS_BORINGSSL
+    if (strcmp(ctx->super.algo->name, "CHACHA20-POLY1305") == 0) {
+        memcpy(ctx->chachapoly_key, key, sizeof ctx->chachapoly_key);
+        return 0;
+    }
+#endif
+
     if (is_enc) {
         if (!EVP_EncryptInit_ex(ctx->evp_ctx, cipher, NULL, key, NULL)) {
             ret = PTLS_ERROR_LIBRARY;
@@ -1155,6 +1334,13 @@ static int aead_aes256gcm_setup_crypto(ptls_aead_context_t *ctx, int is_enc, con
     return aead_setup_crypto(ctx, is_enc, key, iv, EVP_aes_256_gcm());
 }
 
+#ifdef OPENSSL_IS_BORINGSSL
+static EVP_CIPHER *EVP_chacha20_poly1305(void)
+{
+    return NULL;
+}
+#endif
+
 #if PTLS_OPENSSL_HAVE_CHACHA20_POLY1305
 static int aead_chacha20poly1305_setup_crypto(ptls_aead_context_t *ctx, int is_enc, const void *key, const void *iv)
 {
@@ -1175,7 +1361,7 @@ static int sign_certificate(ptls_sign_certificate_t *_self, ptls_t *tls, ptls_as
                             ptls_buffer_t *outbuf, ptls_iovec_t input, const uint16_t *algorithms, size_t num_algorithms)
 {
     ptls_openssl_sign_certificate_t *self = (ptls_openssl_sign_certificate_t *)_self;
-    const ptls_openssl_signature_scheme_t *scheme;
+    const struct st_ptls_openssl_signature_scheme_t *scheme;
 
     /* Just resume the asynchronous operation, if one is in flight. */
 #if PTLS_OPENSSL_HAVE_ASYNC
@@ -1186,11 +1372,17 @@ static int sign_certificate(ptls_sign_certificate_t *_self, ptls_t *tls, ptls_as
     }
 #endif
 
-    /* Select the algorithm or return failure if none found. */
-    if ((scheme = ptls_openssl_select_signature_scheme(self->schemes, algorithms, num_algorithms)) == NULL)
-        return PTLS_ALERT_HANDSHAKE_FAILURE;
-    *selected_algorithm = scheme->scheme_id;
+    /* Select the algorithm (driven by server-side preference of `self->schemes`), or return failure if none found. */
+    for (scheme = self->schemes; scheme->scheme_id != UINT16_MAX; ++scheme) {
+        size_t i;
+        for (i = 0; i != num_algorithms; ++i)
+            if (algorithms[i] == scheme->scheme_id)
+                goto Found;
+    }
+    return PTLS_ALERT_HANDSHAKE_FAILURE;
 
+Found:
+    *selected_algorithm = scheme->scheme_id;
 #if PTLS_OPENSSL_HAVE_ASYNC
     if (!self->async && async != NULL) {
         /* indicate to `do_sign` that async mode is disabled for this operation */
@@ -2017,23 +2209,19 @@ ptls_hpke_kem_t *ptls_openssl_hpke_kems[] = {&ptls_openssl_hpke_kem_p384sha384,
 
 ptls_hpke_cipher_suite_t ptls_openssl_hpke_aes128gcmsha256 = {
     .id = {.kdf = PTLS_HPKE_HKDF_SHA256, .aead = PTLS_HPKE_AEAD_AES_128_GCM},
-    .name = "HKDF-SHA256/AES-128-GCM",
     .hash = &ptls_openssl_sha256,
     .aead = &ptls_openssl_aes128gcm};
 ptls_hpke_cipher_suite_t ptls_openssl_hpke_aes128gcmsha512 = {
     .id = {.kdf = PTLS_HPKE_HKDF_SHA512, .aead = PTLS_HPKE_AEAD_AES_128_GCM},
-    .name = "HKDF-SHA512/AES-128-GCM",
     .hash = &ptls_openssl_sha512,
     .aead = &ptls_openssl_aes128gcm};
 ptls_hpke_cipher_suite_t ptls_openssl_hpke_aes256gcmsha384 = {
     .id = {.kdf = PTLS_HPKE_HKDF_SHA384, .aead = PTLS_HPKE_AEAD_AES_256_GCM},
-    .name = "HKDF-SHA384/AES-256-GCM",
     .hash = &ptls_openssl_sha384,
     .aead = &ptls_openssl_aes256gcm};
 #if PTLS_OPENSSL_HAVE_CHACHA20_POLY1305
 ptls_hpke_cipher_suite_t ptls_openssl_hpke_chacha20poly1305sha256 = {
     .id = {.kdf = PTLS_HPKE_HKDF_SHA256, .aead = PTLS_HPKE_AEAD_CHACHA20POLY1305},
-    .name = "HKDF-SHA256/ChaCha20Poly1305",
     .hash = &ptls_openssl_sha256,
     .aead = &ptls_openssl_chacha20poly1305};
 #endif

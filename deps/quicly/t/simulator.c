@@ -518,7 +518,11 @@ static void usage(const char *cmd)
 
 int main(int argc, char **argv)
 {
+#ifdef OPENSSL_IS_BORINGSSL
+    ERR_load_crypto_strings();
+#else
     ERR_load_CRYPTO_strings();
+#endif
     OpenSSL_add_all_algorithms();
 
     ptls_iovec_t cert = {};

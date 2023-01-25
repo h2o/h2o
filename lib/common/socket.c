@@ -1444,14 +1444,18 @@ static int on_async_resumption_client_hello(SSL *ssl, int *al, void *arg)
     const unsigned char *sess_id;
     size_t sess_id_len;
 
+#ifdef OPENSSL_IS_BORINGSSL
+    return ssl_select_cert_success;
+#else
+
     if (sock->ssl->handshake.server.async_resumption.state == ASYNC_RESUMPTION_STATE_RECORD &&
         (sess_id_len = SSL_client_hello_get0_session_id(ssl, &sess_id)) != 0) {
         sock->ssl->handshake.server.async_resumption.state = ASYNC_RESUMPTION_STATE_REQUEST_SENT;
         resumption_get_async(sock, h2o_iovec_init(sess_id, sess_id_len));
         return SSL_CLIENT_HELLO_RETRY;
     }
-
     return SSL_CLIENT_HELLO_SUCCESS;
+#endif
 }
 #endif
 
@@ -2094,6 +2098,7 @@ void h2o_socket_ssl_async_resumption_init(h2o_socket_ssl_resumption_get_async_cb
 
 void h2o_socket_ssl_async_resumption_setup_ctx(SSL_CTX *ctx)
 {
+#ifndef OPENSSL_IS_BORINGSSL
     /**
      * Asynchronous resumption is a feature of libh2o that allows the use of an external session store.
      * The traditional API provided by OpenSSL (`SSL_CTX_sess_set_get_cb`) assumes a blocking operation for the session store
@@ -2113,6 +2118,8 @@ void h2o_socket_ssl_async_resumption_setup_ctx(SSL_CTX *ctx)
     SSL_CTX_sess_set_new_cb(ctx, on_async_resumption_new);
 #if H2O_USE_OPENSSL_CLIENT_HELLO_CB
     SSL_CTX_set_client_hello_cb(ctx, on_async_resumption_client_hello, NULL);
+#endif
+
 #endif
 
     /* if necessary, it is the responsibility of the caller to disable the internal cache */

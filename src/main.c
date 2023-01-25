@@ -83,7 +83,9 @@
 #include "quicly.h"
 #include "cloexec.h"
 #include "yoml-parser.h"
+#if H2O_USE_NEVERBLEED
 #include "neverbleed.h"
+#endif
 #include "h2o.h"
 #include "h2o/configurator.h"
 #include "h2o/http1.h"
@@ -351,7 +353,9 @@ static struct {
 
 static __thread size_t thread_index;
 
+#if H2O_USE_NEVERBLEED
 static neverbleed_t *neverbleed = NULL;
+#endif
 
 #if H2O_USE_FUSION
 static ptls_cipher_suite_t
@@ -396,6 +400,7 @@ static void set_cloexec(int fd)
     }
 }
 
+#if H2O_USE_NEVERBLEED
 static void on_neverbleed_fork(void)
 {
 /* Rewrite of argv should only be done on platforms that are known to benefit from doing that. On linux, doing so helps admins look
@@ -738,6 +743,8 @@ static void async_nb_start_quic(quicly_async_handshake_t *self, ptls_t *tls)
 }
 
 static quicly_async_handshake_t async_nb_quic_handler = {async_nb_start_quic};
+
+#endif
 
 static int on_openssl_print_errors(const char *str, size_t len, void *fp)
 {
@@ -1154,19 +1161,23 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
                                               ptls_ech_create_opener_t *ech_create_opener, ptls_iovec_t ech_retry_configs)
 {
     static const ptls_key_exchange_algorithm_t *key_exchanges[] = {
-#ifdef PTLS_OPENSSL_HAVE_X25519
+#if defined(PTLS_OPENSSL_HAVE_X25519)
         &ptls_openssl_x25519,
 #else
         &ptls_minicrypto_x25519,
 #endif
-        &ptls_openssl_secp256r1, NULL};
+        &ptls_openssl_secp256r1,
+        NULL
+    };
     struct st_fat_context_t {
         ptls_context_t ctx;
         struct st_on_client_hello_ptls_t ch;
         struct st_emit_certificate_ptls_t ec;
         struct {
             ptls_openssl_sign_certificate_t ossl;
+#ifndef OPENSSL_IS_BORINGSSL
             struct async_nb_digestsign_t async_digestsign;
+#endif
         } sc;
         ptls_openssl_verify_certificate_t vc;
     } *pctx = h2o_mem_alloc(sizeof(*pctx));
@@ -1232,6 +1243,11 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
         key = SSL_get_privatekey(fakeconn);
         assert(key != NULL);
         cert = SSL_get_certificate(fakeconn);
+        assert(cert != NULL);
+#ifdef OPENSSL_IS_BORINGSSL
+        /* boringssl calls a destructor when cert goes out of scope */
+        X509_up_ref(cert);
+#endif
         /* obtain peer verify mode */
         use_client_verify = (SSL_get_verify_mode(fakeconn) & SSL_VERIFY_PEER) ? 1 : 0;
         SSL_free(fakeconn);
@@ -1250,6 +1266,7 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
 
     /* create signer */
     if (use_neverbleed) {
+#ifndef OPENSSL_IS_BORINGSSL
         pctx->sc.async_digestsign = (struct async_nb_digestsign_t){
             .super = {async_nb_digestsign},
             .key = key,
@@ -1260,6 +1277,7 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
             return "failed to setup private key";
         pctx->ctx.sign_certificate = &pctx->sc.async_digestsign.super;
         identity->ptls.signature_schemes = pctx->sc.async_digestsign.schemes;
+#endif
     } else {
         if (ptls_openssl_init_sign_certificate(&pctx->sc.ossl, key) != 0) {
             free(pctx);
@@ -1422,6 +1440,7 @@ static int load_ssl_identity(h2o_configurator_command_t *cmd, SSL_CTX *ssl_ctx, 
 
     /* Load private key after the certificate. By doing so, openssl can reject keys that do not correspond to the public key being
      * found in the certificate. */
+#if H2O_USE_NEVERBLEED
     if (use_neverbleed) {
         char errbuf[NEVERBLEED_ERRBUF_SIZE];
         if (neverbleed == NULL) {
@@ -1438,7 +1457,9 @@ static int load_ssl_identity(h2o_configurator_command_t *cmd, SSL_CTX *ssl_ctx, 
                                        (*parsed->key_file)->data.scalar, errbuf);
             return -1;
         }
-    } else {
+    } else
+#endif
+    {
         if (SSL_CTX_use_PrivateKey_file(ssl_ctx, (*parsed->key_file)->data.scalar, SSL_FILETYPE_PEM) != 1) {
             h2o_configurator_errprintf(cmd, *parsed->key_file, "failed to load private key file:%s\n",
                                        (*parsed->key_file)->data.scalar);
@@ -1686,7 +1707,12 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
 
     h2o_iovec_t *http2_origin_frame = NULL;
     long ssl_options = SSL_OP_ALL;
-    int use_neverbleed = 1, use_picotls = 1; /* enabled by default */
+#ifdef H2O_USE_NEVERBLEED
+    int use_neverbleed = 1;
+#else
+    int use_neverbleed = 0;
+#endif
+    int use_picotls = 1; /* enabled by default */
     ptls_cipher_suite_t **cipher_suite_tls13 = NULL;
     struct {
         ptls_ech_create_opener_t *create_opener;
@@ -2645,7 +2671,9 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
                 *quic = quicly_spec_context;
                 quic->cid_encryptor = &quic_cid_encryptor;
                 quic->generate_resumption_token = &quic_resumption_token_generator;
+#if defined(H2O_USE_NEVERBLEED) && !defined(OPENSSL_IS_BORINGSSL)
                 quic->async_handshake = &async_nb_quic_handler;
+#endif
                 listener = add_listener(fd, ai->ai_addr, ai->ai_addrlen, ctx->hostconf == NULL, 0, 0, 0);
                 listener->quic.ctx = quic;
                 if (quic_node != NULL) {
@@ -3861,12 +3889,16 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
                                       on_server_notification);
     h2o_multithread_register_receiver(conf.threads[thread_index].ctx.queue, &conf.threads[thread_index].memcached,
                                       h2o_memcached_receiver);
+#if H2O_USE_NEVERBLEED
     if (neverbleed != NULL) {
         int fd = neverbleed_get_fd(neverbleed);
+#ifndef OPENSSL_IS_BORINGSSL
         async_nb.sock = h2o_evloop_socket_create(conf.threads[thread_index].ctx.loop, fd, H2O_SOCKET_FLAG_DONT_READ);
         h2o_linklist_init_anchor(&async_nb.read_queue.anchor);
         h2o_linklist_init_anchor(&async_nb.write_queue.anchor);
+#endif
     }
+#endif
     if (conf.thread_map.entries[thread_index] >= 0) {
 #if H2O_HAS_PTHREAD_SETAFFINITY_NP
         int r;
@@ -4700,10 +4732,12 @@ int main(int argc, char **argv)
             return EX_OSERR;
         }
         capabilities_drop();
+#if H2O_USE_NEVERBLEED
         if (neverbleed != NULL && neverbleed_setuidgid(neverbleed, conf.globalconf.user, 1) != 0) {
             fprintf(stderr, "failed to change the running user of neverbleed daemon\n");
             return EX_OSERR;
         }
+#endif
     } else {
         if (getuid() == 0) {
             fprintf(stderr, "refusing to run as root (and failed to switch to `nobody`); you can use the `user` directive to set "
