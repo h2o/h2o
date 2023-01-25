@@ -197,9 +197,15 @@ typedef struct st_h2o_sendvec_puller_t h2o_sendvec_puller_t;
 struct st_h2o_sendvec_puller_vec_t {
     h2o_sendvec_puller_t *puller;
     h2o_sendvec_t vec;
-    char **dst;
+    size_t len;
     h2o_socket_read_file_cmd_t *cmd;
-    void *buf_recycle;
+    char **dst;
+    /**
+     * If `buf` is non-NULL and if `dst` is non-NULL, `buf` is a chunk allocated from `h2o_socket_ssl_buffer_allocator` which is to
+     * be recycled when `h2o_sendvec_puller_dispose` is called. If `buf` is non-NULL and `dst` is NULL, `buf` points to a buffer
+     * owned by the caller.
+     */
+    void *buf;
 };
 
 struct st_h2o_sendvec_puller_t {
@@ -623,7 +629,11 @@ void h2o_sendvec_puller_dispose(h2o_sendvec_puller_t *self);
  *            true, the puller may still decide to read the vector (see `h2o_sendvec_puller_t::send_index`)
  * @param may_sendfile if the vector can be sent using the send_ callback
  */
-void h2o_sendvec_puller_add(h2o_sendvec_puller_t *self, h2o_sendvec_t *vec, char **dst, int may_sendfile);
+void h2o_sendvec_puller_add(h2o_sendvec_puller_t *self, h2o_sendvec_t *vec, size_t len, char **dst, int may_sendfile);
+/**
+ * registers a pull vector so that the content would be read to the buffer being supplied by the caller
+ */
+void h2o_sendvec_puller_add_read_external(h2o_sendvec_puller_t *self, h2o_sendvec_t *vec, size_t len, void *buf);
 static int h2o_sendvec_puller_read_is_complete(h2o_sendvec_puller_t *self);
 void h2o_sendvec_puller_read(h2o_sendvec_puller_t *self);
 static int h2o_sendvec_puller_send_is_complete(h2o_sendvec_puller_t *self);

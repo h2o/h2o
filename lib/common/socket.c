@@ -925,8 +925,8 @@ void h2o_socket_sendvec(h2o_socket_t *sock, h2o_sendvec_t *vecs, size_t cnt, h2o
                 int may_sendfile = 0;
                 if (vecs[i].callbacks->send_ != NULL && can_use_sendfile(sock))
                     may_sendfile = 1;
-                h2o_sendvec_puller_add(&sock->_write_buf.puller, &vecs[i], &sock->_write_buf.bufs[sock->_write_buf.cnt].base,
-                                       may_sendfile);
+                h2o_sendvec_puller_add(&sock->_write_buf.puller, &vecs[i], vecs[i].len,
+                                       &sock->_write_buf.bufs[sock->_write_buf.cnt].base, may_sendfile);
             }
             ++sock->_write_buf.cnt;
         }
@@ -2738,12 +2738,19 @@ void h2o_sendvec_puller_dispose(h2o_sendvec_puller_t *self)
 {
     for (size_t i = 0; i < self->vecs.size; ++i) {
         struct st_h2o_sendvec_puller_vec_t *vec = &self->vecs.entries[i];
-        if (vec->cmd != NULL) {
-            assert(vec->buf_recycle != NULL);
-            vec->cmd->cb.func = sendvec_puller_on_complete_post_disposal;
-            vec->cmd->cb.data = vec->buf_recycle;
-        } else if (vec->buf_recycle != NULL) {
-            h2o_mem_free_recycle(&h2o_socket_ssl_buffer_allocator, vec->buf_recycle);
+        if (vec->buf != NULL) {
+            if (vec->dst != NULL) {
+                /* buf is owned; it is the puller's reponsibility to recycle it */
+                if (vec->cmd != NULL) {
+                    vec->cmd->cb.func = sendvec_puller_on_complete_post_disposal;
+                    vec->cmd->cb.data = vec->buf;
+                } else {
+                    h2o_mem_free_recycle(&h2o_socket_ssl_buffer_allocator, vec->buf);
+                }
+            } else {
+                /* buf is external and therefore the user must wait for completion */
+                assert(vec->cmd == NULL);
+            }
         }
     }
     if (self->vecs.size != 0)
@@ -2754,17 +2761,30 @@ void h2o_sendvec_puller_dispose(h2o_sendvec_puller_t *self)
     *self = (h2o_sendvec_puller_t){.failed = failed};
 }
 
-void h2o_sendvec_puller_add(h2o_sendvec_puller_t *self, h2o_sendvec_t *vec, char **dst, int may_sendfile)
+void h2o_sendvec_puller_add(h2o_sendvec_puller_t *self, h2o_sendvec_t *vec, size_t len, char **dst, int may_sendfile)
 {
+    assert(len <= vec->len);
     assert(vec->len <= H2O_PULL_SENDVEC_MAX_SIZE);
 
     *dst = NULL;
 
     h2o_vector_reserve(NULL, &self->vecs, self->vecs.size + 1);
-    self->vecs.entries[self->vecs.size++] = (struct st_h2o_sendvec_puller_vec_t){.puller = self, .vec = *vec, .dst = dst};
+    self->vecs.entries[self->vecs.size++] =
+        (struct st_h2o_sendvec_puller_vec_t){.puller = self, .vec = *vec, .len = len, .dst = dst};
 
     if (!may_sendfile)
         self->send_index = self->vecs.size;
+}
+
+void h2o_sendvec_puller_add_read_external(h2o_sendvec_puller_t *self, h2o_sendvec_t *vec, size_t len, void *buf)
+{
+    assert(vec->len <= H2O_PULL_SENDVEC_MAX_SIZE);
+
+    h2o_vector_reserve(NULL, &self->vecs, self->vecs.size + 1);
+    self->vecs.entries[self->vecs.size++] =
+        (struct st_h2o_sendvec_puller_vec_t){.puller = self, .vec = *vec, .len = len, .buf = buf};
+
+    self->send_index = self->vecs.size;
 }
 
 static void sendvec_puller_on_vec_read_complete(h2o_sendvec_puller_t *self, int success)
@@ -2789,13 +2809,13 @@ void h2o_sendvec_puller_read(h2o_sendvec_puller_t *self)
 {
     for (size_t i = 0; i < self->vecs.size; ++i) {
         struct st_h2o_sendvec_puller_vec_t *vec = &self->vecs.entries[i];
-        vec->buf_recycle = h2o_mem_alloc_recycle(&h2o_socket_ssl_buffer_allocator);
-        *vec->dst = vec->buf_recycle;
+        vec->buf = h2o_mem_alloc_recycle(&h2o_socket_ssl_buffer_allocator);
+        *vec->dst = vec->buf;
         if (vec->vec.callbacks->read_async != NULL) {
-            vec->vec.callbacks->read_async(&vec->vec, &vec->cmd, vec->buf_recycle, vec->vec.len,
-                                           sendvec_puller_on_async_vec_read_complete, vec);
+            vec->vec.callbacks->read_async(&vec->vec, &vec->cmd, vec->buf, vec->len, sendvec_puller_on_async_vec_read_complete,
+                                           vec);
         } else {
-            int success = vec->vec.callbacks->read_(&vec->vec, vec->buf_recycle, vec->vec.len);
+            int success = vec->vec.callbacks->read_(&vec->vec, vec->buf, vec->len);
             sendvec_puller_on_vec_read_complete(self, success);
         }
     }
