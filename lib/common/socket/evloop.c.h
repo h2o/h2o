@@ -252,14 +252,7 @@ static void write_core_async_read_on_complete(h2o_sendvec_puller_t *puller)
 
 static size_t write_core(struct st_h2o_evloop_socket_t *sock, h2o_iovec_t **bufs, size_t *bufcnt)
 {
-    if (sock->super.ssl == NULL || sock->super.ssl->offload == H2O_SOCKET_SSL_OFFLOAD_ON) {
-        if (sock->super.ssl != NULL)
-            assert(!has_pending_ssl_bytes(sock->super.ssl));
-        return write_vecs(sock, bufs, bufcnt, 0);
-    }
-
-    /* SSL: flatten given vector if that has not been done yet; `*bufs` is guaranteed to have one slot available at the end; see
-     * `do_write_with_sendvec`, `init_write_buf`. */
+    /* flatten given vector if that has not been done yet */
     if (!h2o_sendvec_puller_read_is_complete(&sock->super._write_buf.puller)) {
         h2o_sendvec_puller_read(&sock->super._write_buf.puller);
         if (!h2o_sendvec_puller_read_is_complete(&sock->super._write_buf.puller)) {
@@ -269,6 +262,12 @@ static size_t write_core(struct st_h2o_evloop_socket_t *sock, h2o_iovec_t **bufs
         } else if (sock->super._write_buf.puller.failed) {
             return SIZE_MAX;
         }
+    }
+
+    if (sock->super.ssl == NULL || sock->super.ssl->offload == H2O_SOCKET_SSL_OFFLOAD_ON) {
+        if (sock->super.ssl != NULL)
+            assert(!has_pending_ssl_bytes(sock->super.ssl));
+        return write_vecs(sock, bufs, bufcnt, 0);
     }
 
     /* continue encrypting and writing, until we run out of data */
@@ -365,8 +364,9 @@ int write_pending_post_send_buffers(struct st_h2o_evloop_socket_t *sock)
             return 0;
     }
 
-    /* operation completed or failed, schedule notification */
+    /* operation completed or failed; dispose puller, schedule notification */
     SOCKET_PROBE(WRITE_COMPLETE, &sock->super, sock->super._write_buf.cnt == 0 && !has_pending_ssl_bytes(sock->super.ssl));
+    h2o_sendvec_puller_dispose(&sock->super._write_buf.puller);
     sock->bytes_written.cur_loop = sock->super.bytes_written;
     sock->_flags |= H2O_SOCKET_FLAG_IS_WRITE_NOTIFY;
     link_to_pending(sock);

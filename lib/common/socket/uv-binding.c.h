@@ -125,6 +125,7 @@ static void on_do_write_complete(uv_write_t *wreq, int status)
     struct st_h2o_uv_socket_t *sock = H2O_STRUCT_FROM_MEMBER(struct st_h2o_uv_socket_t, stream._wreq, wreq);
 
     dispose_write_buf(&sock->super);
+    h2o_sendvec_puller_dispose(&sock->super._write_buf.puller);
 
     if (sock->super._cb.write != NULL)
         on_write_complete(&sock->super, status == 0 ? NULL : h2o_socket_error_io);

@@ -280,7 +280,7 @@ static void dispose_write_buf(h2o_socket_t *sock)
         sock->_write_buf.bufs = sock->_write_buf.smallbufs;
     }
 
-    h2o_sendvec_puller_dispose(&sock->_write_buf.puller);
+    /* _write_buf.puller should be disposed of separately */
 }
 
 static void init_ssl_output_buffer(struct st_h2o_socket_ssl_t *ssl, int zerocopy)
@@ -2767,17 +2767,22 @@ void h2o_sendvec_puller_add(h2o_sendvec_puller_t *self, h2o_sendvec_t *vec, char
         self->send_index = self->vecs.size;
 }
 
-static void sendvec_puller_on_read_complete(h2o_socket_read_file_cmd_t *cmd)
+static void sendvec_puller_on_vec_read_complete(h2o_sendvec_puller_t *self, int success)
 {
-    struct st_h2o_sendvec_puller_vec_t *vec = cmd->cb.data;
-    h2o_sendvec_puller_t *self = vec->puller;
-
-    if (cmd->err != NULL)
+    if (!success)
         self->failed = 1;
     ++self->num_read;
 
     if (h2o_sendvec_puller_read_is_complete(self) && self->on_async_read_complete != NULL)
         self->on_async_read_complete(self);
+}
+
+static void sendvec_puller_on_async_vec_read_complete(h2o_socket_read_file_cmd_t *cmd)
+{
+    struct st_h2o_sendvec_puller_vec_t *vec = cmd->cb.data;
+    h2o_sendvec_puller_t *self = vec->puller;
+
+    sendvec_puller_on_vec_read_complete(self, cmd->err == NULL);
 }
 
 void h2o_sendvec_puller_read(h2o_sendvec_puller_t *self)
@@ -2786,7 +2791,13 @@ void h2o_sendvec_puller_read(h2o_sendvec_puller_t *self)
         struct st_h2o_sendvec_puller_vec_t *vec = &self->vecs.entries[i];
         vec->buf_recycle = h2o_mem_alloc_recycle(&h2o_socket_ssl_buffer_allocator);
         *vec->dst = vec->buf_recycle;
-        vec->vec.callbacks->read_async(&vec->vec, &vec->cmd, vec->buf_recycle, vec->vec.len, sendvec_puller_on_read_complete, vec);
+        if (vec->vec.callbacks->read_async != NULL) {
+            vec->vec.callbacks->read_async(&vec->vec, &vec->cmd, vec->buf_recycle, vec->vec.len,
+                                           sendvec_puller_on_async_vec_read_complete, vec);
+        } else {
+            int success = vec->vec.callbacks->read_(&vec->vec, vec->buf_recycle, vec->vec.len);
+            sendvec_puller_on_vec_read_complete(self, success);
+        }
     }
 }
 
