@@ -136,7 +136,7 @@ extern "C" {
 
 /* negotiated_groups */
 #define PTLS_GROUP_SECP256R1 23
-#define PTLS_GROUP_NAME_SECP256R1 "scep256r1"
+#define PTLS_GROUP_NAME_SECP256R1 "secp256r1"
 #define PTLS_GROUP_SECP384R1 24
 #define PTLS_GROUP_NAME_SECP384R1 "secp384r1"
 #define PTLS_GROUP_SECP521R1 25

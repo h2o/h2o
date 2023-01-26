@@ -94,22 +94,22 @@ static int EVP_CIPHER_CTX_reset(EVP_CIPHER_CTX *ctx)
 
 #endif
 
-static const struct st_ptls_openssl_signature_scheme_t rsa_signature_schemes[] = {{PTLS_SIGNATURE_RSA_PSS_RSAE_SHA256, EVP_sha256},
+static const ptls_openssl_signature_scheme_t rsa_signature_schemes[] = {{PTLS_SIGNATURE_RSA_PSS_RSAE_SHA256, EVP_sha256},
                                                                                   {PTLS_SIGNATURE_RSA_PSS_RSAE_SHA384, EVP_sha384},
                                                                                   {PTLS_SIGNATURE_RSA_PSS_RSAE_SHA512, EVP_sha512},
                                                                                   {UINT16_MAX, NULL}};
-static const struct st_ptls_openssl_signature_scheme_t secp256r1_signature_schemes[] = {
+static const ptls_openssl_signature_scheme_t secp256r1_signature_schemes[] = {
     {PTLS_SIGNATURE_ECDSA_SECP256R1_SHA256, EVP_sha256}, {UINT16_MAX, NULL}};
 #if PTLS_OPENSSL_HAVE_SECP384R1
-static const struct st_ptls_openssl_signature_scheme_t secp384r1_signature_schemes[] = {
+static const ptls_openssl_signature_scheme_t secp384r1_signature_schemes[] = {
     {PTLS_SIGNATURE_ECDSA_SECP384R1_SHA384, EVP_sha384}, {UINT16_MAX, NULL}};
 #endif
 #if PTLS_OPENSSL_HAVE_SECP521R1
-static const struct st_ptls_openssl_signature_scheme_t secp521r1_signature_schemes[] = {
+static const ptls_openssl_signature_scheme_t secp521r1_signature_schemes[] = {
     {PTLS_SIGNATURE_ECDSA_SECP521R1_SHA512, EVP_sha512}, {UINT16_MAX, NULL}};
 #endif
 #if PTLS_OPENSSL_HAVE_ED25519
-static const struct st_ptls_openssl_signature_scheme_t ed25519_signature_schemes[] = {{PTLS_SIGNATURE_ED25519, NULL},
+static const ptls_openssl_signature_scheme_t ed25519_signature_schemes[] = {{PTLS_SIGNATURE_ED25519, NULL},
                                                                                       {UINT16_MAX, NULL}};
 #endif
 
@@ -735,7 +735,7 @@ int ptls_openssl_create_key_exchange(ptls_key_exchange_context_t **ctx, EVP_PKEY
 
 struct async_sign_ctx {
     ptls_async_job_t super;
-    const struct st_ptls_openssl_signature_scheme_t *scheme;
+    const ptls_openssl_signature_scheme_t *scheme;
     EVP_MD_CTX *ctx;
     ASYNC_WAIT_CTX *waitctx;
     ASYNC_JOB *job;
@@ -761,7 +761,7 @@ static void async_sign_ctx_free(ptls_async_job_t *_self)
     free(self);
 }
 
-static ptls_async_job_t *async_sign_ctx_new(const struct st_ptls_openssl_signature_scheme_t *scheme, EVP_MD_CTX *ctx, size_t siglen)
+static ptls_async_job_t *async_sign_ctx_new(const ptls_openssl_signature_scheme_t *scheme, EVP_MD_CTX *ctx, size_t siglen)
 {
     struct async_sign_ctx *self;
 
@@ -829,7 +829,7 @@ Exit:
 
 #endif
 
-static int do_sign(EVP_PKEY *key, const struct st_ptls_openssl_signature_scheme_t *scheme, ptls_buffer_t *outbuf,
+static int do_sign(EVP_PKEY *key, const ptls_openssl_signature_scheme_t *scheme, ptls_buffer_t *outbuf,
                    ptls_iovec_t input, ptls_async_job_t **async)
 {
     EVP_MD_CTX *ctx = NULL;
@@ -1361,7 +1361,7 @@ static int sign_certificate(ptls_sign_certificate_t *_self, ptls_t *tls, ptls_as
                             ptls_buffer_t *outbuf, ptls_iovec_t input, const uint16_t *algorithms, size_t num_algorithms)
 {
     ptls_openssl_sign_certificate_t *self = (ptls_openssl_sign_certificate_t *)_self;
-    const struct st_ptls_openssl_signature_scheme_t *scheme;
+    const ptls_openssl_signature_scheme_t *scheme;
 
     /* Just resume the asynchronous operation, if one is in flight. */
 #if PTLS_OPENSSL_HAVE_ASYNC
@@ -2209,19 +2209,23 @@ ptls_hpke_kem_t *ptls_openssl_hpke_kems[] = {&ptls_openssl_hpke_kem_p384sha384,
 
 ptls_hpke_cipher_suite_t ptls_openssl_hpke_aes128gcmsha256 = {
     .id = {.kdf = PTLS_HPKE_HKDF_SHA256, .aead = PTLS_HPKE_AEAD_AES_128_GCM},
+    .name = "HKDF-SHA256/AES-128-GCM",
     .hash = &ptls_openssl_sha256,
     .aead = &ptls_openssl_aes128gcm};
 ptls_hpke_cipher_suite_t ptls_openssl_hpke_aes128gcmsha512 = {
     .id = {.kdf = PTLS_HPKE_HKDF_SHA512, .aead = PTLS_HPKE_AEAD_AES_128_GCM},
+    .name = "HKDF-SHA512/AES-128-GCM",
     .hash = &ptls_openssl_sha512,
     .aead = &ptls_openssl_aes128gcm};
 ptls_hpke_cipher_suite_t ptls_openssl_hpke_aes256gcmsha384 = {
     .id = {.kdf = PTLS_HPKE_HKDF_SHA384, .aead = PTLS_HPKE_AEAD_AES_256_GCM},
+    .name = "HKDF-SHA384/AES-256-GCM",
     .hash = &ptls_openssl_sha384,
     .aead = &ptls_openssl_aes256gcm};
 #if PTLS_OPENSSL_HAVE_CHACHA20_POLY1305
 ptls_hpke_cipher_suite_t ptls_openssl_hpke_chacha20poly1305sha256 = {
     .id = {.kdf = PTLS_HPKE_HKDF_SHA256, .aead = PTLS_HPKE_AEAD_CHACHA20POLY1305},
+    .name = "HKDF-SHA256/ChaCha20Poly1305",
     .hash = &ptls_openssl_sha256,
     .aead = &ptls_openssl_chacha20poly1305};
 #endif
