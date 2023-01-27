@@ -163,7 +163,7 @@ static int update_status(struct st_h2o_evloop_epoll_t *loop)
                     changed = 1;
                 }
             }
-            if (h2o_socket_is_writing(&sock->super) && h2o_sendvec_puller_read_is_complete(&sock->super._write_buf.puller)) {
+            if (h2o_socket_is_writing(&sock->super) && sock->super._write_buf.puller.on_async_read_complete == NULL) {
                 events |= EPOLLOUT;
                 if ((sock->_flags & H2O_SOCKET_FLAG_IS_POLLED_FOR_WRITE) == 0) {
                     sock->_flags |= H2O_SOCKET_FLAG_IS_POLLED_FOR_WRITE;
