@@ -129,19 +129,19 @@ static void on_generator_dispose(void *_self)
 
 static int do_pread(h2o_sendvec_t *src, void *dst, size_t len)
 {
-    struct st_h2o_sendfile_generator_t *self = (void *)src->cb_arg[0];
-    uint64_t *file_chunk_at = &src->cb_arg[1];
+    struct st_h2o_sendfile_generator_t *self = (void *)src->cb_arg;
     size_t bytes_read = 0;
     ssize_t rret;
 
     /* read */
     while (bytes_read < len) {
-        while ((rret = pread(self->file.ref->fd, dst + bytes_read, len - bytes_read, *file_chunk_at)) == -1 && errno == EINTR)
+        while ((rret = pread(self->file.ref->fd, dst + bytes_read, len - bytes_read, self->file.off)) == -1 && errno == EINTR)
             ;
         if (rret <= 0)
             return 0;
         bytes_read += rret;
-        *file_chunk_at += rret;
+        self->file.off += rret;
+        self->bytesleft -= rret;
         src->len -= rret;
     }
 
@@ -187,10 +187,11 @@ size_t do_sendfile(int sockfd, int filefd, off_t off, size_t len)
 #if !NO_SENDFILE
 static size_t sendvec_send(h2o_sendvec_t *src, int sockfd, size_t len)
 {
-    struct st_h2o_sendfile_generator_t *self = (void *)src->cb_arg[0];
-    ssize_t bytes_sent = do_sendfile(sockfd, self->file.ref->fd, (off_t)src->cb_arg[1], len);
+    struct st_h2o_sendfile_generator_t *self = (void *)src->cb_arg;
+    ssize_t bytes_sent = do_sendfile(sockfd, self->file.ref->fd, self->file.off, len);
     if (bytes_sent > 0) {
-        src->cb_arg[1] += bytes_sent;
+        self->file.off += bytes_sent;
+        self->bytesleft -= bytes_sent;
         src->len -= bytes_sent;
     }
     return bytes_sent;
@@ -212,12 +213,9 @@ static void do_proceed(h2o_generator_t *_self, h2o_req_t *req)
 
     vec.len = self->bytesleft < H2O_PULL_SENDVEC_MAX_SIZE ? self->bytesleft : H2O_PULL_SENDVEC_MAX_SIZE;
     vec.callbacks = &sendvec_callbacks;
-    vec.cb_arg[0] = (uint64_t)self;
-    vec.cb_arg[1] = self->file.off;
+    vec.cb_arg = (uint64_t)self;
 
-    self->file.off += vec.len;
-    self->bytesleft -= vec.len;
-    if (self->bytesleft == 0) {
+    if (self->bytesleft == vec.len) {
         send_state = H2O_SEND_STATE_FINAL;
     } else {
         send_state = H2O_SEND_STATE_IN_PROGRESS;
