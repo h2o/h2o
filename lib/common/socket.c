@@ -919,7 +919,7 @@ void h2o_socket_sendvec(h2o_socket_t *sock, h2o_sendvec_t *vecs, size_t cnt, h2o
             if (vecs[i].callbacks->read_ == h2o_sendvec_read_raw) {
                 sock->_write_buf.bufs[sock->_write_buf.cnt] = h2o_iovec_init(vecs[i].raw, vecs[i].len);
                 /* sendfile vectors cannot precede the ones to be read */
-                sock->_write_buf.puller.send_index = sock->_write_buf.puller.vecs.size;
+                h2o_sendvec_puller_convert_sends_to_reads(&sock->_write_buf.puller);
             } else {
                 sock->_write_buf.bufs[sock->_write_buf.cnt] = h2o_iovec_init(NULL, vecs[i].len);
                 int may_sendfile = 0;
@@ -935,8 +935,8 @@ void h2o_socket_sendvec(h2o_socket_t *sock, h2o_sendvec_t *vecs, size_t cnt, h2o
      * At the moment, only the buffers at the end can be "sent." Justification for this constraint is that HTTP/2 (that might
      * provide multiple "send"-able vectors in one call) is almost always used on top of TLS (rather than cleartext).  When TLS is
      * used, we will be reading the pull vectors rather than just "send"ing them, unless kTLS is used. */
-    if (sock->_write_buf.puller.send_index < sock->_write_buf.puller.vecs.size)
-        sock->_write_buf.cnt -= sock->_write_buf.puller.vecs.size - sock->_write_buf.puller.send_index;
+    if (sock->_write_buf.puller.first_send < sock->_write_buf.puller.vecs.size)
+        sock->_write_buf.cnt -= sock->_write_buf.puller.vecs.size - sock->_write_buf.puller.first_send;
 
     do_write(sock);
 }
@@ -2773,7 +2773,7 @@ void h2o_sendvec_puller_add(h2o_sendvec_puller_t *self, h2o_sendvec_t *vec, size
         (struct st_h2o_sendvec_puller_vec_t){.puller = self, .vec = *vec, .len = len, .dst = dst};
 
     if (!may_sendfile)
-        self->send_index = self->vecs.size;
+        h2o_sendvec_puller_convert_sends_to_reads(self);
 }
 
 void h2o_sendvec_puller_add_read_external(h2o_sendvec_puller_t *self, h2o_sendvec_t *vec, size_t len, void *buf)
@@ -2784,14 +2784,14 @@ void h2o_sendvec_puller_add_read_external(h2o_sendvec_puller_t *self, h2o_sendve
     self->vecs.entries[self->vecs.size++] =
         (struct st_h2o_sendvec_puller_vec_t){.puller = self, .vec = *vec, .len = len, .buf = buf};
 
-    self->send_index = self->vecs.size;
+    h2o_sendvec_puller_convert_sends_to_reads(self);
 }
 
 static void sendvec_puller_on_vec_read_complete(h2o_sendvec_puller_t *self, int success)
 {
     if (!success)
         self->failed = 1;
-    ++self->num_read;
+    ++self->cur_read;
 
     if (h2o_sendvec_puller_read_is_complete(self) && self->on_async_read_complete != NULL)
         self->on_async_read_complete(self);
@@ -2823,8 +2823,8 @@ void h2o_sendvec_puller_read(h2o_sendvec_puller_t *self)
 
 void h2o_sendvec_puller_send(h2o_sendvec_puller_t *self, int fd)
 {
-    for (; self->send_index < self->vecs.size; ++self->send_index) {
-        struct st_h2o_sendvec_puller_vec_t *vec = &self->vecs.entries[self->send_index];
+    for (; self->cur_send < self->vecs.size; ++self->cur_send) {
+        struct st_h2o_sendvec_puller_vec_t *vec = &self->vecs.entries[self->cur_send];
 
         /* send; if an error is returned set the failed flag and bail out */
         if (vec->vec.callbacks->send_(&vec->vec, fd, vec->vec.len) == SIZE_MAX) {

@@ -219,13 +219,13 @@ struct st_h2o_sendvec_puller_t {
      */
     H2O_VECTOR(struct st_h2o_sendvec_puller_vec_t) vecs;
     /**
-     * number of file being read completely; if this value is below `send_index` it indicates that some vectors have to be read
+     * index of the current vector on which `read_` or `read_async` is called
      */
-    size_t num_read;
+    size_t cur_read;
     /**
-     * index of the vector on which the `send_` should be called
+     * index of the first send vector and the current one on which `send_` is called
      */
-    size_t send_index;
+    size_t first_send, cur_send;
     /**
      * if any operation failed
      */
@@ -634,6 +634,10 @@ void h2o_sendvec_puller_add(h2o_sendvec_puller_t *self, h2o_sendvec_t *vec, size
  * registers a pull vector so that the content would be read to the buffer being supplied by the caller
  */
 void h2o_sendvec_puller_add_read_external(h2o_sendvec_puller_t *self, h2o_sendvec_t *vec, size_t len, void *buf);
+/**
+ * converts vectors registered to possibly use sendfile to use the read callback instead
+ */
+static void h2o_sendvec_puller_convert_sends_to_reads(h2o_sendvec_puller_t *self);
 static int h2o_sendvec_puller_read_is_complete(h2o_sendvec_puller_t *self);
 void h2o_sendvec_puller_read(h2o_sendvec_puller_t *self);
 static int h2o_sendvec_puller_send_is_complete(h2o_sendvec_puller_t *self);
@@ -703,6 +707,12 @@ inline h2o_iovec_t h2o_socket_log_ssl_negotiated_protocol(h2o_socket_t *sock, h2
     return h2o_socket_ssl_get_selected_protocol(sock);
 }
 
+inline void h2o_sendvec_puller_convert_sends_to_reads(h2o_sendvec_puller_t *self)
+{
+    self->first_send = self->vecs.size;
+    self->cur_send = self->vecs.size;
+}
+
 inline int h2o_sliding_counter_is_running(h2o_sliding_counter_t *counter)
 {
     return counter->cur.start_at != 0;
@@ -720,12 +730,12 @@ inline int h2o_socket_skip_tracing(h2o_socket_t *sock)
 
 inline int h2o_sendvec_puller_read_is_complete(h2o_sendvec_puller_t *self)
 {
-    return self->num_read == self->send_index;
+    return self->cur_read == self->first_send;
 }
 
 inline int h2o_sendvec_puller_send_is_complete(h2o_sendvec_puller_t *self)
 {
-    return self->send_index == self->vecs.size;
+    return self->cur_send == self->vecs.size;
 }
 
 #ifdef __cplusplus
