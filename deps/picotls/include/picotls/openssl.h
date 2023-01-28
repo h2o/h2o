@@ -125,13 +125,6 @@ void ptls_openssl_random_bytes(void *buf, size_t len);
  */
 int ptls_openssl_create_key_exchange(ptls_key_exchange_context_t **ctx, EVP_PKEY *pkey);
 
-#if PTLS_OPENSSL_HAVE_ASYNC
-/**
- * Returns the file descriptor of the asynchronous operation in flight.
- */
-OSSL_ASYNC_FD ptls_openssl_get_async_fd(ptls_t *ptls);
-#endif
-
 typedef struct st_ptls_openssl_signature_scheme_t {
     uint16_t scheme_id;
     const EVP_MD *(*scheme_md)(void);

@@ -120,7 +120,7 @@ SET(PTLSBENCH_LIBS
     picotls-minicrypto picotls-core)
 
 FIND_PACKAGE(OpenSSL)
-IF (OPENSSL_FOUND)
+IF (OPENSSL_FOUND AND NOT (OPENSSL_VERSION VERSION_LESS "1.0.1"))
     MESSAGE(STATUS "  Enabling OpenSSL support")
     INCLUDE_DIRECTORIES(${OPENSSL_INCLUDE_DIR})
     ADD_LIBRARY(picotls-openssl lib/openssl.c)

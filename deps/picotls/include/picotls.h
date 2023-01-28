@@ -365,7 +365,6 @@ typedef const struct st_ptls_key_exchange_algorithm_t {
  */
 typedef struct st_ptls_cipher_context_t {
     const struct st_ptls_cipher_algorithm_t *algo;
-
     /* field above this line must not be altered by the crypto binding */
     void (*do_dispose)(struct st_ptls_cipher_context_t *ctx);
     void (*do_init)(struct st_ptls_cipher_context_t *ctx, const void *iv);
@@ -652,7 +651,12 @@ PTLS_CALLBACK_TYPE(int, on_client_hello, ptls_t *tls, ptls_on_client_hello_param
 PTLS_CALLBACK_TYPE(int, emit_certificate, ptls_t *tls, ptls_message_emitter_t *emitter, ptls_key_schedule_t *key_sched,
                    ptls_iovec_t context, int push_status_request, const uint16_t *compress_algos, size_t num_compress_algos);
 /**
- * context object of an async operation (e.g., RSA signature generation)
+ * An object that represents an asynchronous task (e.g., RSA signature generation).
+ * When `ptls_handshake` returns `PTLS_ERROR_ASYNC_OPERATION`, it has an associated task in flight. The user should obtain the
+ * reference to the associated task by calling `ptls_get_async_job`, then either wait for the file descriptor obtained from
+ * the `get_fd` callback to become readable, or set a completion callback via `set_completion_callback` and wait for its
+ * invocation. Once notified, the user should invoke `ptls_handshake` again.
+ * Async jobs typically provide support for only one of the two methods.
  */
 typedef struct st_ptls_async_job_t {
     void (*destroy_)(struct st_ptls_async_job_t *self);
@@ -953,7 +957,8 @@ typedef struct st_ptls_handshake_properties_t {
              */
             struct {
                 /**
-                 * config offered by server e.g., by HTTPS RR
+                 * Config offered by server e.g., by HTTPS RR. If config.base is non-NULL but config.len is zero, a grease ECH will
+                 * be sent, assuming that X25519-SHA256 KEM and SHA256-AES-128-GCM HPKE cipher is available.
                  */
                 ptls_iovec_t configs;
                 /**
@@ -1641,7 +1646,7 @@ static size_t ptls_aead_encrypt_final(ptls_aead_context_t *ctx, void *output);
 static size_t ptls_aead_decrypt(ptls_aead_context_t *ctx, void *output, const void *input, size_t inlen, uint64_t seq,
                                 const void *aad, size_t aadlen);
 /**
- * Return the current read epoch.
+ * Return the current read epoch (i.e., that of the message being received or to be)
  */
 size_t ptls_get_read_epoch(ptls_t *tls);
 /**

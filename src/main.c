@@ -1175,7 +1175,7 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
         struct st_emit_certificate_ptls_t ec;
         struct {
             ptls_openssl_sign_certificate_t ossl;
-#ifndef OPENSSL_IS_BORINGSSL
+#if !defined(OPENSSL_IS_BORINGSSL) && defined(H2O_USE_NEVERBLEED)
             struct async_nb_digestsign_t async_digestsign;
 #endif
         } sc;
@@ -1266,7 +1266,7 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
 
     /* create signer */
     if (use_neverbleed) {
-#ifndef OPENSSL_IS_BORINGSSL
+#if !defined(OPENSSL_IS_BORINGSSL) && defined(H2O_USE_NEVERBLEED)
         pctx->sc.async_digestsign = (struct async_nb_digestsign_t){
             .super = {async_nb_digestsign},
             .key = key,

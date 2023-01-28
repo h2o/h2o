@@ -2571,7 +2571,6 @@ static int do_decrypt_packet(ptls_cipher_context_t *header_protection,
         return QUICLY_ERROR_PACKET_IGNORED;
     }
     ptls_cipher_init(header_protection, packet->octets.base + packet->encrypted_off + QUICLY_MAX_PN_SIZE);
-    fprintf(stderr, "pn %zu cid master_id %u octets.base [0x%02hhx 0x%02hhx 0x%02hhx\n", *pn, packet->cid.dest.plaintext.master_id, packet->octets.base[0], packet->octets.base[1], packet->octets.base[2]);
     ptls_cipher_encrypt(header_protection, hpmask, hpmask, sizeof(hpmask));
     packet->octets.base[0] ^= hpmask[0] & (QUICLY_PACKET_IS_LONG_HEADER(packet->octets.base[0]) ? 0xf : 0x1f);
     pnlen = (packet->octets.base[0] & 0x3) + 1;
@@ -2961,8 +2960,6 @@ static int on_ack_new_connection_id(quicly_sentmap_t *map, const quicly_sent_pac
 {
     quicly_conn_t *conn = (quicly_conn_t *)((char *)map - offsetof(quicly_conn_t, egress.loss.sentmap));
     uint64_t sequence = sent->data.new_connection_id.sequence;
-
-    fprintf(stderr, "on_ack_new_connection_id: %zu", sequence);
 
     if (acked) {
         quicly_local_cid_on_acked(&conn->super.local.cid_set, sequence);

@@ -761,6 +761,18 @@ static void async_sign_ctx_free(ptls_async_job_t *_self)
     free(self);
 }
 
+static int async_sign_ctx_get_fd(ptls_async_job_t *_self)
+{
+    struct async_sign_ctx *self = (void *)_self;
+    OSSL_ASYNC_FD fds[1];
+    size_t numfds;
+
+    ASYNC_WAIT_CTX_get_all_fds(self->waitctx, NULL, &numfds);
+    assert(numfds == 1);
+    ASYNC_WAIT_CTX_get_all_fds(self->waitctx, fds, &numfds);
+    return (int)fds[0];
+}
+
 static ptls_async_job_t *async_sign_ctx_new(const ptls_openssl_signature_scheme_t *scheme, EVP_MD_CTX *ctx, size_t siglen)
 {
     struct async_sign_ctx *self;
@@ -768,7 +780,7 @@ static ptls_async_job_t *async_sign_ctx_new(const ptls_openssl_signature_scheme_
     if ((self = malloc(offsetof(struct async_sign_ctx, sig) + siglen)) == NULL)
         return NULL;
 
-    self->super = (ptls_async_job_t){async_sign_ctx_free};
+    self->super = (ptls_async_job_t){async_sign_ctx_free, async_sign_ctx_get_fd};
     self->scheme = scheme;
     self->ctx = ctx;
     self->waitctx = ASYNC_WAIT_CTX_new();
@@ -1372,16 +1384,9 @@ static int sign_certificate(ptls_sign_certificate_t *_self, ptls_t *tls, ptls_as
     }
 #endif
 
-    /* Select the algorithm (driven by server-side preference of `self->schemes`), or return failure if none found. */
-    for (scheme = self->schemes; scheme->scheme_id != UINT16_MAX; ++scheme) {
-        size_t i;
-        for (i = 0; i != num_algorithms; ++i)
-            if (algorithms[i] == scheme->scheme_id)
-                goto Found;
-    }
-    return PTLS_ALERT_HANDSHAKE_FAILURE;
-
-Found:
+    /* Select the algorithm or return failure if none found. */
+    if ((scheme = ptls_openssl_select_signature_scheme(self->schemes, algorithms, num_algorithms)) == NULL)
+        return PTLS_ALERT_HANDSHAKE_FAILURE;
     *selected_algorithm = scheme->scheme_id;
 #if PTLS_OPENSSL_HAVE_ASYNC
     if (!self->async && async != NULL) {
