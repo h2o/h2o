@@ -213,7 +213,7 @@ static void do_proceed(h2o_generator_t *_self, h2o_req_t *req)
 
     vec.len = self->bytesleft < H2O_PULL_SENDVEC_MAX_SIZE ? self->bytesleft : H2O_PULL_SENDVEC_MAX_SIZE;
     vec.callbacks = &sendvec_callbacks;
-    vec.cb_arg = (uint64_t)self;
+    vec.cb_arg = (uintptr_t)self;
 
     if (self->bytesleft == vec.len) {
         send_state = H2O_SEND_STATE_FINAL;

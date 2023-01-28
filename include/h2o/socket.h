@@ -168,7 +168,7 @@ struct st_h2o_sendvec_t {
      */
     union {
         char *raw;
-        uint64_t cb_arg;
+        uintptr_t cb_arg;
     };
 };
 
