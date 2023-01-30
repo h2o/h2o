@@ -361,7 +361,7 @@ static void do_send(struct rp_generator_t *self)
 
 static int from_pipe_read(h2o_sendvec_t *vec, void *dst, size_t len)
 {
-    struct rp_generator_t *self = (void *)vec->cb_arg[0];
+    struct rp_generator_t *self = (void *)vec->cb_arg;
 
     while (len != 0) {
         ssize_t ret;
@@ -382,7 +382,7 @@ static int from_pipe_read(h2o_sendvec_t *vec, void *dst, size_t len)
 static size_t from_pipe_send(h2o_sendvec_t *vec, int sockfd, size_t len)
 {
 #ifdef __linux__
-    struct rp_generator_t *self = (void *)vec->cb_arg[0];
+    struct rp_generator_t *self = (void *)vec->cb_arg;
 
     ssize_t bytes_sent;
     while ((bytes_sent = splice(self->pipe_reader.fds[0], NULL, sockfd, NULL, len, SPLICE_F_NONBLOCK)) == -1 && errno == EINTR)
@@ -420,8 +420,7 @@ static void do_send_from_pipe(struct rp_generator_t *self)
     h2o_sendvec_t vec = {.callbacks = &callbacks};
     if ((vec.len = self->body_bytes_read - self->body_bytes_sent) > H2O_PULL_SENDVEC_MAX_SIZE)
         vec.len = H2O_PULL_SENDVEC_MAX_SIZE;
-    vec.cb_arg[0] = (uint64_t)self;
-    vec.cb_arg[1] = 0; /* unused */
+    vec.cb_arg = (uintptr_t)self;
 
     self->body_bytes_sent += vec.len;
     self->pipe_inflight = 1;
