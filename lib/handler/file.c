@@ -156,6 +156,7 @@ static void sendvec_read_async(h2o_sendvec_t *src, h2o_socket_read_file_cmd_t **
     uint64_t read_off = self->file.off;
 
     self->file.off += len;
+    self->bytesleft -= len;
     h2o_socket_read_file(cmd, self->req->conn->ctx->loop, self->file.ref, read_off, h2o_iovec_init(dst, len), cb, cbdata);
 }
 #endif
