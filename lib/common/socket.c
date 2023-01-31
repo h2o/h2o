@@ -2802,6 +2802,7 @@ static void sendvec_puller_on_async_vec_read_complete(h2o_socket_read_file_cmd_t
     struct st_h2o_sendvec_puller_vec_t *vec = cmd->cb.data;
     h2o_sendvec_puller_t *self = vec->puller;
 
+    vec->cmd = NULL;
     sendvec_puller_on_vec_read_complete(self, cmd->err == NULL);
 }
 
