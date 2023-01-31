@@ -66,10 +66,6 @@ provider h2o {
      *
      */
     probe socket_read_file_async_end(struct st_h2o_socket_read_file_cmd_t *cmd);
-    /**
-     *
-     */
-    probe socket_read_file_async_cancel(struct st_h2o_socket_read_file_cmd_t *cmd);
 
     /**
      * HTTP-level event, indicating that a request has been received.

@@ -180,7 +180,6 @@ enum h2olog_event_id_t {
   H2OLOG_EVENT_ID_H2O_SOCKET_WRITE_TLS_RECORD,
   H2OLOG_EVENT_ID_H2O_SOCKET_READ_FILE_ASYNC_START,
   H2OLOG_EVENT_ID_H2O_SOCKET_READ_FILE_ASYNC_END,
-  H2OLOG_EVENT_ID_H2O_SOCKET_READ_FILE_ASYNC_CANCEL,
   H2OLOG_EVENT_ID_H2O_RECEIVE_REQUEST,
   H2OLOG_EVENT_ID_H2O_RECEIVE_REQUEST_HEADER,
   H2OLOG_EVENT_ID_H2O_SEND_RESPONSE,
@@ -735,9 +734,6 @@ struct h2olog_event_t {
     struct { // h2o:socket_read_file_async_end
       struct st_h2o_socket_read_file_cmd_t * cmd;
     } socket_read_file_async_end;
-    struct { // h2o:socket_read_file_async_cancel
-      struct st_h2o_socket_read_file_cmd_t * cmd;
-    } socket_read_file_async_cancel;
     struct { // h2o:receive_request
       uint64_t conn_id;
       uint64_t req_id;
@@ -971,7 +967,6 @@ void h2o_raw_tracer::initialize() {
     h2o_tracer::usdt("h2o", "socket_write_tls_record", "trace_h2o__socket_write_tls_record"),
     h2o_tracer::usdt("h2o", "socket_read_file_async_start", "trace_h2o__socket_read_file_async_start"),
     h2o_tracer::usdt("h2o", "socket_read_file_async_end", "trace_h2o__socket_read_file_async_end"),
-    h2o_tracer::usdt("h2o", "socket_read_file_async_cancel", "trace_h2o__socket_read_file_async_cancel"),
     h2o_tracer::usdt("h2o", "receive_request", "trace_h2o__receive_request"),
     h2o_tracer::usdt("h2o", "receive_request_header", "trace_h2o__receive_request_header"),
     h2o_tracer::usdt("h2o", "send_response", "trace_h2o__send_response"),
@@ -1896,14 +1891,6 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
     json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
     break;
   }
-  case H2OLOG_EVENT_ID_H2O_SOCKET_READ_FILE_ASYNC_CANCEL: { // h2o:socket_read_file_async_cancel
-    json_write_pair_n(out_, STR_LIT("type"), STR_LIT("socket-read-file-async-cancel"));
-    json_write_pair_c(out_, STR_LIT("tid"), event.tid);
-    json_write_pair_c(out_, STR_LIT("seq"), seq_);
-    json_write_pair_c(out_, STR_LIT("cmd"), event.socket_read_file_async_cancel.cmd);
-    json_write_pair_c(out_, STR_LIT("time"), time_milliseconds());
-    break;
-  }
   case H2OLOG_EVENT_ID_H2O_RECEIVE_REQUEST: { // h2o:receive_request
     json_write_pair_n(out_, STR_LIT("type"), STR_LIT("receive-request"));
     json_write_pair_c(out_, STR_LIT("tid"), event.tid);
@@ -2310,7 +2297,6 @@ enum h2olog_event_id_t {
   H2OLOG_EVENT_ID_H2O_SOCKET_WRITE_TLS_RECORD,
   H2OLOG_EVENT_ID_H2O_SOCKET_READ_FILE_ASYNC_START,
   H2OLOG_EVENT_ID_H2O_SOCKET_READ_FILE_ASYNC_END,
-  H2OLOG_EVENT_ID_H2O_SOCKET_READ_FILE_ASYNC_CANCEL,
   H2OLOG_EVENT_ID_H2O_RECEIVE_REQUEST,
   H2OLOG_EVENT_ID_H2O_RECEIVE_REQUEST_HEADER,
   H2OLOG_EVENT_ID_H2O_SEND_RESPONSE,
@@ -2865,9 +2851,6 @@ struct h2olog_event_t {
     struct { // h2o:socket_read_file_async_end
       struct st_h2o_socket_read_file_cmd_t * cmd;
     } socket_read_file_async_end;
-    struct { // h2o:socket_read_file_async_cancel
-      struct st_h2o_socket_read_file_cmd_t * cmd;
-    } socket_read_file_async_cancel;
     struct { // h2o:receive_request
       uint64_t conn_id;
       uint64_t req_id;
@@ -5345,20 +5328,6 @@ int trace_h2o__socket_read_file_async_end(struct pt_regs *ctx) {
 
   if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
     bpf_trace_printk("failed to perf_submit in trace_h2o__socket_read_file_async_end\n");
-
-  return 0;
-}
-// h2o:socket_read_file_async_cancel
-int trace_h2o__socket_read_file_async_cancel(struct pt_regs *ctx) {
-  const void *buf = NULL;
-  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_H2O_SOCKET_READ_FILE_ASYNC_CANCEL, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
-
-  { // struct st_h2o_socket_read_file_cmd_t * cmd
-    bpf_usdt_readarg(1, ctx, &event.socket_read_file_async_cancel.cmd);
-  }
-
-  if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
-    bpf_trace_printk("failed to perf_submit in trace_h2o__socket_read_file_async_cancel\n");
 
   return 0;
 }
