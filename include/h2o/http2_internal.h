@@ -97,7 +97,15 @@ struct st_h2o_http2_stream_t {
         size_t bytes_unnotified;
     } input_window;
     h2o_http2_priority_t received_priority;
-    H2O_VECTOR(h2o_sendvec_t) _data;
+    /**
+     * send vectors that have not yet been completely written to socket; vecs is a chunk of memory alllocated from `req->pool`
+     * sufficient to hold `capacity` entries
+     */
+    struct {
+        h2o_sendvec_t *vecs;
+        size_t capacity;
+        size_t cnt, cur, off_within_cur;
+    } _sendvecs;
     /**
      * points to http2_conn_t::num_streams::* in which the stream is counted
      */
@@ -201,6 +209,7 @@ struct st_h2o_http2_conn_t {
         h2o_linklist_t streams_to_proceed;
         h2o_timer_t timeout_entry;
         h2o_http2_window_t window;
+        h2o_sendvec_puller_t puller;
     } _write;
     h2o_cache_t *push_memo;
     h2o_http2_casper_t *casper;
@@ -418,7 +427,7 @@ inline void h2o_http2_stream_prepare_for_request(h2o_http2_conn_t *conn, h2o_htt
 
 inline int h2o_http2_stream_has_pending_data(h2o_http2_stream_t *stream)
 {
-    return stream->_data.size != 0;
+    return stream->_sendvecs.cnt != 0;
 }
 
 inline void h2o_http2_stream_send_push_promise(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)

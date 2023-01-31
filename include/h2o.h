@@ -717,6 +717,10 @@ struct st_h2o_context_t {
              * streaming request counter
              */
             uint64_t streaming_requests;
+            /**
+             *
+             */
+            uint64_t pull_failures;
         } events;
     } http2;
 

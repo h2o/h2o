@@ -57,6 +57,7 @@ static void initiate_graceful_shutdown(h2o_conn_t *_conn);
 static void close_connection_now(h2o_http2_conn_t *conn);
 static int close_connection(h2o_http2_conn_t *conn);
 static ssize_t expect_default(h2o_http2_conn_t *conn, const uint8_t *src, size_t len, const char **err_desc);
+static int write_is_in_flight(h2o_http2_conn_t *conn);
 static void do_emit_writereq(h2o_http2_conn_t *conn);
 static void on_read(h2o_socket_t *sock, const char *err);
 static void push_path(h2o_req_t *src_req, const char *abspath, size_t abspath_len, int is_critical);
@@ -136,7 +137,8 @@ static void on_idle_timeout(h2o_timer_t *entry)
     h2o_http2_conn_t *conn = H2O_STRUCT_FROM_MEMBER(h2o_http2_conn_t, _timeout_entry, entry);
     conn->super.ctx->http2.events.idle_timeouts++;
 
-    if (conn->_write.buf_in_flight != NULL) {
+    if (write_is_in_flight(conn)) {
+        assert(!h2o_sendvec_puller_read_is_complete(&conn->_write.puller));
         close_connection_now(conn);
     } else {
         enqueue_goaway(conn, H2O_HTTP2_ERROR_NONE, h2o_iovec_init(H2O_STRLIT("idle timeout")));
@@ -147,8 +149,12 @@ static void on_idle_timeout(h2o_timer_t *entry)
 static void update_idle_timeout(h2o_http2_conn_t *conn)
 {
     /* do nothing touch anything if write is in progress */
-    if (conn->_write.buf_in_flight != NULL) {
-        assert(h2o_timer_is_linked(&conn->_timeout_entry));
+    if (write_is_in_flight(conn)) {
+        if (h2o_sendvec_puller_read_is_complete(&conn->_write.puller)) {
+            assert(h2o_timer_is_linked(&conn->_timeout_entry));
+        } else {
+            assert(!h2o_timer_is_linked(&conn->_timeout_entry));
+        }
         return;
     }
 
@@ -445,7 +451,7 @@ static void stream_send_error(h2o_http2_conn_t *conn, uint32_t stream_id, int er
 static void request_gathered_write(h2o_http2_conn_t *conn)
 {
     assert(conn->state < H2O_HTTP2_CONN_STATE_IS_CLOSING);
-    if (!h2o_socket_is_writing(conn->sock) && !h2o_timer_is_linked(&conn->_write.timeout_entry)) {
+    if (!write_is_in_flight(conn) && !h2o_socket_is_writing(conn->sock) && !h2o_timer_is_linked(&conn->_write.timeout_entry)) {
         h2o_timer_link(conn->super.ctx->loop, 0, &conn->_write.timeout_entry);
     }
 }
@@ -1500,21 +1506,26 @@ static int emit_writereq_of_openref(h2o_http2_scheduler_openref_t *ref, int *sti
     return h2o_http2_conn_get_buffer_window(conn) > 0 ? 0 : -1;
 }
 
-void do_emit_writereq(h2o_http2_conn_t *conn)
+static int write_is_in_flight(h2o_http2_conn_t *conn)
 {
-    assert(conn->_write.buf_in_flight == NULL);
+    return conn->_write.buf_in_flight != NULL;
+}
 
-    /* push DATA frames */
-    if (conn->state < H2O_HTTP2_CONN_STATE_IS_CLOSING && h2o_http2_conn_get_buffer_window(conn) > 0)
-        h2o_http2_scheduler_run(&conn->scheduler, emit_writereq_of_openref, conn);
+static void do_emit_writereq_send(h2o_http2_conn_t *conn)
+{
+    h2o_sendvec_puller_dispose(&conn->_write.puller);
 
-    if (conn->_write.buf->size != 0) {
+    if (conn->_write.puller.failed) {
+        ++conn->super.ctx->http2.events.pull_failures;
+        close_connection_now(conn);
+        return;
+    }
+
+    if (conn->_write.buf_in_flight != NULL) {
         /* write and wait for completion */
-        h2o_iovec_t buf = {conn->_write.buf->bytes, conn->_write.buf->size};
+        h2o_iovec_t buf = {conn->_write.buf_in_flight->bytes, conn->_write.buf_in_flight->size};
+        assert(buf.len != 0);
         h2o_socket_write(conn->sock, &buf, 1, on_write_complete);
-        conn->_write.buf_in_flight = conn->_write.buf;
-        h2o_buffer_init(&conn->_write.buf, &h2o_http2_wbuf_buffer_prototype);
-        h2o_timer_unlink(&conn->_timeout_entry);
         h2o_timer_link(conn->super.ctx->loop, H2O_HTTP2_DEFAULT_OUTBUF_WRITE_TIMEOUT, &conn->_timeout_entry);
     }
 
@@ -1533,10 +1544,55 @@ void do_emit_writereq(h2o_http2_conn_t *conn)
     }
 }
 
+static void do_emit_writereq_on_async_read_complete(h2o_sendvec_puller_t *puller)
+{
+    h2o_http2_conn_t *conn = H2O_STRUCT_FROM_MEMBER(h2o_http2_conn_t, _write.puller, puller);
+    do_emit_writereq_send(conn);
+}
+
+void do_emit_writereq(h2o_http2_conn_t *conn)
+{
+    assert(!write_is_in_flight(conn));
+
+    /* push DATA frames */
+    if (conn->state < H2O_HTTP2_CONN_STATE_IS_CLOSING && h2o_http2_conn_get_buffer_window(conn) > 0)
+        h2o_http2_scheduler_run(&conn->scheduler, emit_writereq_of_openref, conn);
+
+    /* if there is no data to write, do not enter "in-flight" state */
+    if (conn->_write.buf->size == 0)
+        return do_emit_writereq_send(conn);
+
+    /* move the frames being built to `buf_in_flight`, prepare `buf` for next set of frames */
+    conn->_write.buf_in_flight = conn->_write.buf;
+    h2o_buffer_init(&conn->_write.buf, &h2o_http2_wbuf_buffer_prototype);
+
+    /* idle timeout is disabled while pulling content; it is enabled at the moment we write to the socket */
+    h2o_timer_unlink(&conn->_timeout_entry);
+
+    /* if there are no pull vectors, proceed to calling `h2o_socket_write` immediately */
+    if (h2o_sendvec_puller_read_is_complete(&conn->_write.puller))
+        return do_emit_writereq_send(conn);
+
+    /* flatten the pull vectors after adjusting converting the offsets being registered to pointers */
+    for (size_t i = 0; i < conn->_write.puller.vecs.size; ++i) {
+        struct st_h2o_sendvec_puller_vec_t *vec = &conn->_write.puller.vecs.entries[i];
+        uintptr_t off = (uintptr_t)vec->buf;
+        vec->buf = conn->_write.buf_in_flight->bytes + off;
+    }
+    h2o_sendvec_puller_read(&conn->_write.puller);
+
+    /* if pull is complete, write to the socket now; otherwise wait for pull completion */
+    if (h2o_sendvec_puller_read_is_complete(&conn->_write.puller))
+        return do_emit_writereq_send(conn);
+
+    conn->_write.puller.on_async_read_complete = do_emit_writereq_on_async_read_complete;
+}
+
 static void emit_writereq(h2o_timer_t *entry)
 {
     h2o_http2_conn_t *conn = H2O_STRUCT_FROM_MEMBER(h2o_http2_conn_t, _write.timeout_entry, entry);
 
+    conn->_write.puller = (h2o_sendvec_puller_t){};
     do_emit_writereq(conn);
 }
 

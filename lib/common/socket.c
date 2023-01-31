@@ -2810,8 +2810,11 @@ void h2o_sendvec_puller_read(h2o_sendvec_puller_t *self)
 {
     for (size_t i = 0; i < self->vecs.size; ++i) {
         struct st_h2o_sendvec_puller_vec_t *vec = &self->vecs.entries[i];
-        vec->buf = h2o_mem_alloc_recycle(&h2o_socket_ssl_buffer_allocator);
-        *vec->dst = vec->buf;
+        if (vec->dst != NULL) {
+            assert(vec->buf == NULL);
+            vec->buf = h2o_mem_alloc_recycle(&h2o_socket_ssl_buffer_allocator);
+            *vec->dst = vec->buf;
+        }
         if (vec->vec.callbacks->read_async != NULL) {
             vec->vec.callbacks->read_async(&vec->vec, &vec->cmd, vec->buf, vec->len, sendvec_puller_on_async_vec_read_complete,
                                            vec);
