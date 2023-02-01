@@ -201,6 +201,7 @@ struct st_h2o_http3_server_stream_t {
         size_t min_index_to_addref;
         uint64_t final_size, final_body_size;
         uint8_t data_frame_header_buf[9];
+        uint8_t includes_pull : 1;
     } sendbuf;
     enum h2o_http3_server_stream_state state;
     h2o_linklist_t link;
@@ -254,24 +255,16 @@ static int handle_input_post_trailers(struct st_h2o_http3_server_stream_t *strea
 static int handle_input_expect_data(struct st_h2o_http3_server_stream_t *stream, const uint8_t **src, const uint8_t *src_end,
                                     int in_generator, const char **err_desc);
 
-static const h2o_sendvec_callbacks_t self_allocated_vec_callbacks = {h2o_sendvec_read_raw, NULL},
+static const h2o_sendvec_callbacks_t recycled_vec_callbacks = {h2o_sendvec_read_raw, NULL},
+                                     freed_vec_callbacks = {&h2o_sendvec_read_raw, NULL},
                                      immutable_vec_callbacks = {h2o_sendvec_read_raw, NULL};
-
-static int sendvec_size_is_for_recycle(size_t size)
-{
-    if (h2o_socket_ssl_buffer_allocator.conf->memsize / 2 <= size && size <= h2o_socket_ssl_buffer_allocator.conf->memsize)
-        return 1;
-    return 0;
-}
 
 static void dispose_sendvec(struct st_h2o_http3_server_sendvec_t *vec)
 {
-    if (vec->vec.callbacks == &self_allocated_vec_callbacks) {
-        if (sendvec_size_is_for_recycle(vec->vec.len)) {
-            h2o_mem_free_recycle(&h2o_socket_ssl_buffer_allocator, vec->vec.raw);
-        } else {
-            free(vec->vec.raw);
-        }
+    if (vec->vec.callbacks == &recycled_vec_callbacks) {
+        h2o_mem_free_recycle(&h2o_socket_ssl_buffer_allocator, vec->vec.raw);
+    } else if (vec->vec.callbacks == &freed_vec_callbacks) {
+        free(vec->vec.raw);
     }
 }
 
@@ -780,24 +773,31 @@ void on_stream_destroy(quicly_stream_t *qs, int err)
  * Converts vectors owned by the generator to ones owned by the HTTP/3 implementation, as the former becomes inaccessible once we
  * call `do_proceed`.
  */
-static int retain_sendvecs(struct st_h2o_http3_server_stream_t *stream)
+static void retain_sendvecs(struct st_h2o_http3_server_stream_t *stream)
 {
     for (; stream->sendbuf.min_index_to_addref != stream->sendbuf.vecs.size; ++stream->sendbuf.min_index_to_addref) {
         struct st_h2o_http3_server_sendvec_t *vec = stream->sendbuf.vecs.entries + stream->sendbuf.min_index_to_addref;
         assert(vec->vec.callbacks->read_ == h2o_sendvec_read_raw);
-        if (!(vec->vec.callbacks == &self_allocated_vec_callbacks || vec->vec.callbacks == &immutable_vec_callbacks)) {
+        if (!(vec->vec.callbacks == &recycled_vec_callbacks || vec->vec.callbacks == &freed_vec_callbacks ||
+              vec->vec.callbacks == &immutable_vec_callbacks)) {
             size_t off_within_vec = stream->sendbuf.min_index_to_addref == 0 ? stream->sendbuf.off_within_first_vec : 0,
                    newlen = vec->vec.len - off_within_vec;
-            void *newbuf = sendvec_size_is_for_recycle(newlen) ? h2o_mem_alloc_recycle(&h2o_socket_ssl_buffer_allocator)
-                                                               : h2o_mem_alloc(newlen);
+            /* allocate memory either from ssl buffer allocator or malloc; latter is used when the chunk is too large */
+            void *newbuf;
+            const h2o_sendvec_callbacks_t *callbacks;
+            if (newlen <= h2o_socket_ssl_buffer_allocator.conf->memsize) {
+                newbuf = h2o_mem_alloc_recycle(&h2o_socket_ssl_buffer_allocator);
+                callbacks = &recycled_vec_callbacks;
+            } else {
+                newbuf = h2o_mem_alloc(newlen);
+                callbacks = &freed_vec_callbacks;
+            }
             memcpy(newbuf, vec->vec.raw + off_within_vec, newlen);
-            vec->vec = (h2o_sendvec_t){&self_allocated_vec_callbacks, newlen, {newbuf}};
+            vec->vec = (h2o_sendvec_t){callbacks, newlen, {newbuf}};
             if (stream->sendbuf.min_index_to_addref == 0)
                 stream->sendbuf.off_within_first_vec = 0;
         }
     }
-
-    return 1;
 }
 
 static void on_send_shift(quicly_stream_t *qs, size_t delta)
@@ -874,17 +874,6 @@ static void on_send_emit(quicly_stream_t *qs, size_t off, void *_dst, size_t *le
         size_t sz = this_vec->vec.len - off;
         if (dst_end - dst < sz)
             sz = dst_end - dst;
-        /* convert vector into raw form, the first time it's being sent (TODO use ssl_buffer_recyle) */
-        if (this_vec->vec.callbacks->read_ != h2o_sendvec_read_raw) {
-            size_t newlen = this_vec->vec.len;
-            void *newbuf = sendvec_size_is_for_recycle(newlen) ? h2o_mem_alloc_recycle(&h2o_socket_ssl_buffer_allocator)
-                                                               : h2o_mem_alloc(newlen);
-            if (!this_vec->vec.callbacks->read_(&this_vec->vec, newbuf, newlen)) {
-                free(newbuf);
-                goto Error;
-            }
-            this_vec->vec = (h2o_sendvec_t){&self_allocated_vec_callbacks, newlen, {newbuf}};
-        }
         /* copy payload */
         memcpy(dst, this_vec->vec.raw + off, sz);
         /* adjust offsets */
@@ -908,17 +897,10 @@ static void on_send_emit(quicly_stream_t *qs, size_t off, void *_dst, size_t *le
     /* retain the payload of response body before calling `h2o_proceed_request`, as the generator might discard the buffer */
     if (stream->state == H2O_HTTP3_SERVER_STREAM_STATE_SEND_BODY && *wrote_all &&
         quicly_sendstate_is_open(&stream->quic->sendstate) && !stream->proceed_requested) {
-        if (!retain_sendvecs(stream))
-            goto Error;
+        retain_sendvecs(stream);
         stream->proceed_requested = 1;
         stream->proceed_while_sending = 1;
     }
-
-    return;
-Error:
-    *len = 0;
-    *wrote_all = 1;
-    shutdown_stream(stream, H2O_HTTP3_ERROR_EARLY_RESPONSE, H2O_HTTP3_ERROR_INTERNAL, 0);
 }
 
 static void on_send_stop(quicly_stream_t *qs, int err)
@@ -1505,6 +1487,7 @@ static void do_send(h2o_ostream_t *_ostr, h2o_req_t *_req, h2o_sendvec_t *bufs, 
 
     /* If vectors carrying response body are being provided, copy them, incrementing the reference count if possible (for future
      * retransmissions), as well as prepending a DATA frame header */
+    stream->sendbuf.includes_pull = 0;
     if (bufcnt != 0) {
         h2o_vector_reserve(&stream->req.pool, &stream->sendbuf.vecs, stream->sendbuf.vecs.size + 1 + bufcnt);
         uint64_t prev_body_size = stream->sendbuf.final_body_size;
@@ -1514,6 +1497,8 @@ static void do_send(h2o_ostream_t *_ostr, h2o_req_t *_req, h2o_sendvec_t *bufs, 
             dst->vec = bufs[i];
             dst->entity_offset = stream->sendbuf.final_body_size;
             stream->sendbuf.final_body_size += bufs[i].len;
+            if (bufs[i].callbacks->read_ != h2o_sendvec_read_raw)
+                stream->sendbuf.includes_pull = 1;
         }
         uint64_t payload_size = stream->sendbuf.final_body_size - prev_body_size;
         /* build DATA frame header */
@@ -1694,6 +1679,31 @@ static int scheduler_can_send(quicly_stream_scheduler_t *sched, quicly_conn_t *q
     return 0;
 }
 
+static int pull_sendvecs(struct st_h2o_http3_server_stream_t *stream)
+{
+    stream->sendbuf.includes_pull = 0;
+
+    for (size_t i = 0; i < stream->sendbuf.vecs.size; ++i) {
+        struct st_h2o_http3_server_sendvec_t *vec = &stream->sendbuf.vecs.entries[i];
+        if (vec->vec.callbacks->read_ != h2o_sendvec_read_raw) {
+            void *newbuf = h2o_mem_alloc_recycle(&h2o_socket_ssl_buffer_allocator);
+            size_t newlen = vec->vec.len;
+            assert(newlen <= h2o_socket_ssl_buffer_allocator.conf->memsize); /* pull vectors have size limit */
+            if (!vec->vec.callbacks->read_(&vec->vec, newbuf, newlen)) {
+                h2o_mem_free_recycle(&h2o_socket_ssl_buffer_allocator, newbuf);
+                goto Error;
+            }
+            vec->vec = (h2o_sendvec_t){&recycled_vec_callbacks, newlen, {newbuf}};
+        }
+    }
+
+    return 1;
+
+Error:
+    shutdown_stream(stream, H2O_HTTP3_ERROR_EARLY_RESPONSE, H2O_HTTP3_ERROR_INTERNAL, 0);
+    return 0;
+}
+
 static int scheduler_do_send(quicly_stream_scheduler_t *sched, quicly_conn_t *qc, quicly_send_context_t *s)
 {
     struct st_h2o_http3_server_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_conn_t, h3, *quicly_get_data(qc));
@@ -1750,6 +1760,12 @@ static int scheduler_do_send(quicly_stream_scheduler_t *sched, quicly_conn_t *qc
             /* 1. link to the conn_blocked list if necessary */
             if (quicly_is_blocked(conn->h3.super.quic) && !quicly_stream_can_send(stream->quic, 0)) {
                 req_scheduler_conn_blocked(&conn->scheduler.reqs, &stream->scheduler);
+                continue;
+            }
+            /* 2. Load the content. The stream is deactivated unless the content is successfully and synchronously read. Upon error,
+             * resets are sent outside the scheduler. Upon async read, the steram will be reactivated when the read completes. */
+            if (stream->sendbuf.includes_pull && !pull_sendvecs(stream)) {
+                req_scheduler_deactivate(&conn->scheduler.reqs, &stream->scheduler);
                 continue;
             }
             /* 3. send */
