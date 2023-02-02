@@ -200,7 +200,6 @@ struct st_h2o_http3_server_stream_t {
         size_t off_within_first_vec;
         size_t min_index_to_addref;
         uint64_t final_size, final_body_size;
-        uint8_t data_frame_header_buf[9];
         uint8_t includes_pull : 1;
     } sendbuf;
     enum h2o_http3_server_stream_state state;
@@ -1393,18 +1392,17 @@ static void write_response(struct st_h2o_http3_server_stream_t *stream, h2o_iove
 static size_t flatten_data_frame_header(struct st_h2o_http3_server_stream_t *stream, struct st_h2o_http3_server_sendvec_t *dst,
                                         size_t payload_size)
 {
-    size_t header_size = 0;
+    uint8_t *bytes = h2o_mem_alloc(9), *p = bytes;
 
     /* build header */
-    stream->sendbuf.data_frame_header_buf[header_size++] = H2O_HTTP3_FRAME_TYPE_DATA;
-    header_size =
-        quicly_encodev(stream->sendbuf.data_frame_header_buf + header_size, payload_size) - stream->sendbuf.data_frame_header_buf;
+    *p++ = H2O_HTTP3_FRAME_TYPE_DATA;
+    p = quicly_encodev(p, payload_size);
 
     /* initilaize the vector */
-    h2o_sendvec_init_raw(&dst->vec, stream->sendbuf.data_frame_header_buf, header_size);
-    dst->entity_offset = UINT64_MAX;
+    *dst = (struct st_h2o_http3_server_sendvec_t){.vec = {&freed_vec_callbacks, p - bytes, {(char *)bytes}},
+                                                  .entity_offset = UINT64_MAX};
 
-    return header_size;
+    return dst->vec.len;
 }
 
 static void shutdown_by_generator(struct st_h2o_http3_server_stream_t *stream)
