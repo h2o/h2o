@@ -198,7 +198,7 @@ struct st_h2o_http3_server_stream_t {
     struct {
         H2O_VECTOR(struct st_h2o_http3_server_sendvec_t) vecs;
         size_t off_within_first_vec;
-        size_t min_index_to_addref;
+        size_t min_index_to_retain;
         uint64_t final_size, final_body_size;
         uint8_t includes_pull : 1;
     } sendbuf;
@@ -774,12 +774,12 @@ void on_stream_destroy(quicly_stream_t *qs, int err)
  */
 static void retain_sendvecs(struct st_h2o_http3_server_stream_t *stream)
 {
-    for (; stream->sendbuf.min_index_to_addref != stream->sendbuf.vecs.size; ++stream->sendbuf.min_index_to_addref) {
-        struct st_h2o_http3_server_sendvec_t *vec = stream->sendbuf.vecs.entries + stream->sendbuf.min_index_to_addref;
+    for (; stream->sendbuf.min_index_to_retain != stream->sendbuf.vecs.size; ++stream->sendbuf.min_index_to_retain) {
+        struct st_h2o_http3_server_sendvec_t *vec = stream->sendbuf.vecs.entries + stream->sendbuf.min_index_to_retain;
         assert(vec->vec.callbacks->read_ == h2o_sendvec_read_raw);
         if (!(vec->vec.callbacks == &recycled_vec_callbacks || vec->vec.callbacks == &freed_vec_callbacks ||
               vec->vec.callbacks == &immutable_vec_callbacks)) {
-            size_t off_within_vec = stream->sendbuf.min_index_to_addref == 0 ? stream->sendbuf.off_within_first_vec : 0,
+            size_t off_within_vec = stream->sendbuf.min_index_to_retain == 0 ? stream->sendbuf.off_within_first_vec : 0,
                    newlen = vec->vec.len - off_within_vec;
             /* allocate memory either from ssl buffer allocator or malloc; latter is used when the chunk is too large */
             void *newbuf;
@@ -793,7 +793,7 @@ static void retain_sendvecs(struct st_h2o_http3_server_stream_t *stream)
             }
             memcpy(newbuf, vec->vec.raw + off_within_vec, newlen);
             vec->vec = (h2o_sendvec_t){callbacks, newlen, {newbuf}};
-            if (stream->sendbuf.min_index_to_addref == 0)
+            if (stream->sendbuf.min_index_to_retain == 0)
                 stream->sendbuf.off_within_first_vec = 0;
         }
     }
@@ -829,10 +829,10 @@ static void on_send_shift(quicly_stream_t *qs, size_t delta)
     memmove(stream->sendbuf.vecs.entries, stream->sendbuf.vecs.entries + i,
             (stream->sendbuf.vecs.size - i) * sizeof(stream->sendbuf.vecs.entries[0]));
     stream->sendbuf.vecs.size -= i;
-    if (stream->sendbuf.min_index_to_addref <= i) {
-        stream->sendbuf.min_index_to_addref = 0;
+    if (stream->sendbuf.min_index_to_retain <= i) {
+        stream->sendbuf.min_index_to_retain = 0;
     } else {
-        stream->sendbuf.min_index_to_addref -= i;
+        stream->sendbuf.min_index_to_retain -= i;
     }
 
     if (stream->sendbuf.vecs.size == 0) {
@@ -1483,8 +1483,7 @@ static void do_send(h2o_ostream_t *_ostr, h2o_req_t *_req, h2o_sendvec_t *bufs, 
         break;
     }
 
-    /* If vectors carrying response body are being provided, copy them, incrementing the reference count if possible (for future
-     * retransmissions), as well as prepending a DATA frame header */
+    /* If vectors carrying response body are being provided, copy them as well as prepending a DATA frame header */
     stream->sendbuf.includes_pull = 0;
     if (bufcnt != 0) {
         h2o_vector_reserve(&stream->req.pool, &stream->sendbuf.vecs, stream->sendbuf.vecs.size + 1 + bufcnt);
