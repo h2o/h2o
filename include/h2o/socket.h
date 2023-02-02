@@ -219,9 +219,9 @@ struct st_h2o_sendvec_puller_t {
      */
     H2O_VECTOR(struct st_h2o_sendvec_puller_vec_t) vecs;
     /**
-     * index of the current vector on which `read_` or `read_async` is called
+     * number of vectors that have been read
      */
-    size_t cur_read;
+    size_t num_read_complete;
     /**
      * index of the first send vector and the current one on which `send_` is called
      */
@@ -730,7 +730,7 @@ inline int h2o_socket_skip_tracing(h2o_socket_t *sock)
 
 inline int h2o_sendvec_puller_read_is_complete(h2o_sendvec_puller_t *self)
 {
-    return self->cur_read == self->first_send;
+    return self->num_read_complete == self->first_send;
 }
 
 inline int h2o_sendvec_puller_send_is_complete(h2o_sendvec_puller_t *self)

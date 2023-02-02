@@ -2791,7 +2791,7 @@ static void sendvec_puller_on_vec_read_complete(h2o_sendvec_puller_t *self, int 
 {
     if (!success)
         self->failed = 1;
-    ++self->cur_read;
+    ++self->num_read_complete;
 
     if (h2o_sendvec_puller_read_is_complete(self) && self->on_async_read_complete != NULL)
         self->on_async_read_complete(self);
