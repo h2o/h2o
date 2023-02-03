@@ -152,17 +152,11 @@ typedef struct st_h2o_sendvec_t h2o_sendvec_t;
  */
 typedef struct st_h2o_sendvec_callbacks_t {
     /**
-     * Mandatory callback used to load the bytes held by the vector. Returns if the operation succeeded. When false is returned, the
-     * generator is considered as been error-closed by itself.  If the callback is `h2o_sendvec_read_raw`, the data is available as
-     * raw bytes in `h2o_sendvec_t::raw`.
+     * Mandatory callback for loading the bytes held by the vector. If the callback is `h2o_sendvec_read_raw`, the data is
+     * available as raw bytes in `h2o_sendvec_t::raw`.
      */
-    int (*read_)(h2o_sendvec_t *vec, void *dst, size_t len);
-    /**
-     * Optional callback for loading the bytes held by the vector asynchronously. When both `read` and `read_async` are available,
-     * consumer of a sendvec is recommended to use the async variant, as its availability indicates that the read might block.
-     */
-    void (*read_async)(h2o_sendvec_t *vec, h2o_socket_read_file_cmd_t **cmd, void *dst, size_t len, h2o_socket_read_file_cb cb,
-                       void *cbdata);
+    void (*read_)(h2o_sendvec_t *vec, h2o_socket_read_file_cmd_t **cmd, void *dst, size_t len, h2o_socket_read_file_cb cb,
+                  void *cbdata);
     /**
      * Optional callback for sending contents of a vector directly to a socket. Returns number of bytes being sent (could be zero),
      * or, upon error, SIZE_MAX.
@@ -583,7 +577,8 @@ void h2o_sendvec_init_raw(h2o_sendvec_t *vec, const void *base, size_t len);
 /**
  *
  */
-int h2o_sendvec_read_raw(h2o_sendvec_t *vec, void *dst, size_t len);
+void h2o_sendvec_read_raw(h2o_sendvec_t *vec, h2o_socket_read_file_cmd_t **cmd, void *dst, size_t len, h2o_socket_read_file_cb cb,
+                          void *cbdata);
 
 /**
  * GC resources

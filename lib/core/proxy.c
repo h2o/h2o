@@ -359,9 +359,12 @@ static void do_send(struct rp_generator_t *self)
     h2o_send(self->src_req, vecs, veccnt, ststate);
 }
 
-static int from_pipe_read(h2o_sendvec_t *vec, void *dst, size_t len)
+static void from_pipe_read(h2o_sendvec_t *vec, h2o_socket_read_file_cmd_t **_cmd, void *dst, size_t len, h2o_socket_read_file_cb cb,
+                           void *cbdata)
 {
+    /* the behavior mimics that of `h2o_socket_read_file` */
     struct rp_generator_t *self = (void *)vec->cb_arg;
+    h2o_socket_read_file_cmd_t cmd = {.cb = {.func = cb, .data = cbdata}, .err = NULL};
 
     while (len != 0) {
         ssize_t ret;
@@ -369,14 +372,17 @@ static int from_pipe_read(h2o_sendvec_t *vec, void *dst, size_t len)
             ;
         if (ret <= 0) {
             assert(errno != EAGAIN);
-            return 0;
+            cmd.err = h2o_socket_error_io;
+            goto Exit;
         }
         dst += ret;
         len -= ret;
         vec->len -= ret;
     }
 
-    return 1;
+Exit:
+    cb(&cmd);
+    *_cmd = NULL;
 }
 
 static size_t from_pipe_send(h2o_sendvec_t *vec, int sockfd, size_t len)

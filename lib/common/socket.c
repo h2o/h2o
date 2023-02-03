@@ -2294,13 +2294,18 @@ void h2o_sendvec_init_raw(h2o_sendvec_t *vec, const void *base, size_t len)
     vec->len = len;
 }
 
-int h2o_sendvec_read_raw(h2o_sendvec_t *src, void *dst, size_t len)
+void h2o_sendvec_read_raw(h2o_sendvec_t *vec, h2o_socket_read_file_cmd_t **_cmd, void *dst, size_t len, h2o_socket_read_file_cb cb,
+                          void *cbdata)
 {
-    assert(len <= src->len);
-    memcpy(dst, src->raw, len);
-    src->raw += len;
-    src->len -= len;
-    return 1;
+    assert(len <= vec->len);
+    memcpy(dst, vec->raw, len);
+    vec->raw += len;
+    vec->len -= len;
+
+    /* the observed output is equivalent to the synchronous operation of `h2o_socket_read_file` */
+    h2o_socket_read_file_cmd_t cmd = {.cb = {.func = cb, .data = cbdata}, .err = NULL};
+    cb(&cmd);
+    *_cmd = NULL;
 }
 
 int zerocopy_buffers_is_empty(struct st_h2o_socket_zerocopy_buffers_t *buffers)
@@ -2815,13 +2820,7 @@ void h2o_sendvec_puller_read(h2o_sendvec_puller_t *self)
             vec->buf = h2o_mem_alloc_recycle(&h2o_socket_ssl_buffer_allocator);
             *vec->dst = vec->buf;
         }
-        if (vec->vec.callbacks->read_async != NULL) {
-            vec->vec.callbacks->read_async(&vec->vec, &vec->cmd, vec->buf, vec->len, sendvec_puller_on_async_vec_read_complete,
-                                           vec);
-        } else {
-            int success = vec->vec.callbacks->read_(&vec->vec, vec->buf, vec->len);
-            sendvec_puller_on_vec_read_complete(self, success);
-        }
+        vec->vec.callbacks->read_(&vec->vec, &vec->cmd, vec->buf, vec->len, sendvec_puller_on_async_vec_read_complete, vec);
     }
 }
 
