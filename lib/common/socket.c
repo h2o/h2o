@@ -179,7 +179,6 @@ static void *zerocopy_buffers_release(struct st_h2o_socket_zerocopy_buffers_t *b
 
 /* internal functions called from the backend */
 static const char *decode_ssl_input(h2o_socket_t *sock);
-static int flatten_sendvec(h2o_socket_t *sock, size_t buf_index, h2o_sendvec_t *sendvec, h2o_socket_read_file_cb async_cb);
 static void on_write_complete(h2o_socket_t *sock, const char *err);
 
 h2o_buffer_mmap_settings_t h2o_socket_buffer_mmap_settings = {
