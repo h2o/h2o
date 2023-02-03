@@ -440,7 +440,7 @@ static void do_send_file(struct st_h2o_sendfile_generator_t *self, h2o_req_t *re
             (void *)h2o_add_ostream(req, H2O_ALIGNOF(*decoder), sizeof(*decoder), &req->_ostr_top);
         decoder->decompressor = h2o_compress_gunzip_open(&req->pool);
         decoder->super.do_send = send_decompressed;
-        /* FIXME disable pull mode */
+        h2o_add_ostream_flattener(req, &req->_ostr_top);
     }
 
     if (self->ranged.range_count == 1)

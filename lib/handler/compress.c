@@ -144,6 +144,7 @@ static void on_setup_ostream(h2o_filter_t *_self, h2o_req_t *req, h2o_ostream_t 
     }
 
     /* setup filter */
+    slot = h2o_add_ostream_flattener(req, slot);
     encoder = (void *)h2o_add_ostream(req, H2O_ALIGNOF(*encoder), sizeof(*encoder), slot);
     encoder->super.do_send = do_send;
     slot = &encoder->super.next;
@@ -167,22 +168,8 @@ void h2o_compress_register(h2o_pathconf_t *pathconf, h2o_compress_args_t *args)
 h2o_send_state_t h2o_compress_transform(h2o_compress_context_t *self, h2o_req_t *req, h2o_sendvec_t *inbufs, size_t inbufcnt,
                                         h2o_send_state_t state, h2o_sendvec_t **outbufs, size_t *outbufcnt)
 {
-    h2o_sendvec_t flattened;
-
-    if (inbufcnt != 0 && inbufs->callbacks->read_ != &h2o_sendvec_read_raw) {
-        assert(inbufcnt == 1);
-        size_t buflen = inbufs->len;
-        assert(buflen <= H2O_PULL_SENDVEC_MAX_SIZE);
-        if (self->push_buf == NULL)
-            self->push_buf = h2o_mem_alloc(h2o_send_state_is_in_progress(state) ? H2O_PULL_SENDVEC_MAX_SIZE : buflen);
-        if (!(*inbufs->callbacks->read_)(inbufs, self->push_buf, buflen)) {
-            *outbufs = NULL;
-            *outbufcnt = 0;
-            return H2O_SEND_STATE_ERROR;
-        }
-        h2o_sendvec_init_raw(&flattened, self->push_buf, buflen);
-        inbufs = &flattened;
-    }
+    /* it is the responsibility of the caller to flatten all the vectors; we try to catch at least some misuse */
+    assert(inbufcnt == 0 || inbufs[0].callbacks->read_ == &h2o_sendvec_read_raw);
 
     return self->do_transform(self, inbufs, inbufcnt, state, outbufs, outbufcnt);
 }
