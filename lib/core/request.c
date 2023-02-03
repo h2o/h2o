@@ -905,7 +905,7 @@ struct st_h2o_ostream_flattener_t {
     struct st_h2o_ostream_flattener_puller_t {
         h2o_sendvec_puller_t puller;
         struct st_h2o_ostream_flattener_t *backref;
-    } *puller;
+    } * puller;
     struct {
         h2o_req_t *req;
         h2o_sendvec_t *bufs;
