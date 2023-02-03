@@ -908,8 +908,7 @@ struct st_h2o_ostream_flattener_t {
     } * puller;
     struct {
         h2o_req_t *req;
-        h2o_sendvec_t *bufs;
-        size_t bufcnt;
+        H2O_VECTOR(h2o_sendvec_t) bufs;
         h2o_send_state_t state;
     } buffered;
 };
@@ -926,7 +925,8 @@ static void ostream_flattener_call_next(struct st_h2o_ostream_flattener_t *self)
     if (self->puller != NULL && self->puller->puller.failed)
         return h2o_ostream_send_next(&self->super, self->buffered.req, NULL, 0, H2O_SEND_STATE_ERROR);
 
-    h2o_ostream_send_next(&self->super, self->buffered.req, self->buffered.bufs, self->buffered.bufcnt, self->buffered.state);
+    h2o_ostream_send_next(&self->super, self->buffered.req, self->buffered.bufs.entries, self->buffered.bufs.size,
+                          self->buffered.state);
 }
 
 static void ostream_flattener_on_async_read_complete(h2o_sendvec_puller_t *_puller)
@@ -948,25 +948,25 @@ static void ostream_flattener_do_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_
         h2o_sendvec_puller_dispose(&self->puller->puller);
     }
 
-    /* retain the arguments */
+    /* retain the arguments, rewriting pull vectors to flattened images as we register the pull vectors to `h2o_sendvec_puller_t` */
     self->buffered.req = req;
-    self->buffered.bufs = bufs;
-    self->buffered.bufcnt = bufcnt;
     self->buffered.state = state;
-
-    /* rewrite pull vectors to flattened images, as we register the pull vectors to `h2o_sendvec_puller_t` */
+    h2o_vector_reserve(&req->pool, &self->buffered.bufs, bufcnt);
     for (size_t i = 0; i < bufcnt; ++i) {
+        h2o_sendvec_t *dst = &self->buffered.bufs.entries[i];
         if (bufs[i].callbacks->read_ != h2o_sendvec_read_raw) {
             if (self->puller == NULL) {
                 self->puller = h2o_mem_alloc_shared(&req->pool, sizeof(*self->puller), ostream_flattener_puller_on_dispose);
                 self->puller->puller = (h2o_sendvec_puller_t){};
                 self->puller->backref = self;
             }
-            h2o_sendvec_t tmp = bufs[i];
-            h2o_sendvec_init_raw(&bufs[i], NULL, tmp.len);
-            h2o_sendvec_puller_add(&self->puller->puller, &tmp, tmp.len, &bufs[i].raw, 0);
+            h2o_sendvec_init_raw(dst, NULL, bufs[i].len);
+            h2o_sendvec_puller_add(&self->puller->puller, &bufs[i], dst->len, &dst->raw, 0);
+        } else {
+            *dst = bufs[i];
         }
     }
+    self->buffered.bufs.size = bufcnt;
 
     /* pull if necessary, and if async operation has started, setup the delayed callback and bail out */
     if (self->puller != NULL && self->puller->puller.vecs.size != 0) {
@@ -997,6 +997,7 @@ h2o_ostream_t **h2o_add_ostream_flattener(h2o_req_t *req, h2o_ostream_t **slot)
     self->super.do_send = ostream_flattener_do_send;
     self->super.stop = ostream_flattener_stop;
     self->puller = NULL;
+    memset(&self->buffered, 0, sizeof(self->buffered));
 
     return &self->super.next;
 }
