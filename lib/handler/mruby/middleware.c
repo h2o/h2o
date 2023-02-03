@@ -46,6 +46,7 @@ struct st_mruby_subreq_conn_t {
 
 struct st_mruby_subreq_t {
     h2o_req_t super;
+    h2o_ostream_t ostr_final;
     struct st_mruby_subreq_conn_t conn;
     h2o_mruby_context_t *ctx;
     h2o_buffer_t *buf;
@@ -664,9 +665,8 @@ static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_val
      * `h2o_create_connection`). */
     subreq->conn.super.ctx = ctx->shared->ctx;
     h2o_init_request(&subreq->super, &subreq->conn.super, NULL);
-    h2o_ostream_t *ostream = h2o_add_ostream(&subreq->super, H2O_ALIGNOF(*ostream), sizeof(*ostream), &subreq->super._ostr_top);
-    ostream->intermediary = 0;
-    ostream->do_send = subreq_ostream_send;
+    subreq->super._ostr_top = &subreq->ostr_final;
+    subreq->ostr_final = (h2o_ostream_t){.do_send = subreq_ostream_send};
     subreq->conn.super.hosts = ctx->handler->pathconf->global->hosts;
     subreq->conn.super.connected_at = (struct timeval){0}; /* no need because subreq won't logged */
     subreq->conn.super.id = 0; /* currently conn->id is used only for logging, so set zero as a meaningless value */
