@@ -355,7 +355,7 @@ int write_pending_post_send_buffers(struct st_h2o_evloop_socket_t *sock)
     /* either completed or failed */
     dispose_write_buf(&sock->super);
 
-    /* send the vector, if all buffered writes are complete and if we have some */
+    /* send zero-copy vectors (e.g., sendfile) if any, once all flattened ones have been written */
     if (sock->super._write_buf.cnt == 0 && !has_pending_ssl_bytes(sock->super.ssl) &&
         !h2o_sendvec_puller_send_is_complete(&sock->super._write_buf.puller)) {
         assert(!sock->super._write_buf.puller.failed); /* if read had failed, _write_buf.cnt cannot be zero */
