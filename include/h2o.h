@@ -1859,6 +1859,10 @@ void h2o_logconf_dispose(h2o_logconf_t *logconf);
  * logs a request
  */
 char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char *buf);
+/**
+ * helper filter for flattening pull vectors
+ */
+h2o_ostream_t **h2o_add_ostream_flattener(h2o_req_t *req, h2o_ostream_t **slot);
 
 /* proxy */
 

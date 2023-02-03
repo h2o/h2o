@@ -893,3 +893,108 @@ int h2o_req_resolve_internal_redirect_url(h2o_req_t *req, h2o_iovec_t dest, h2o_
 
     return 0;
 }
+
+struct st_h2o_ostream_flattener_t {
+    h2o_ostream_t super;
+    /**
+     * This struct is allocated as a refcounted object associated to `h2o_req_t` so that the buffers owned by `h2o_sendvec_puller_t`
+     * remains accessible after the last invocation of `h2_ostream_send_next`.
+     */
+    struct st_h2o_ostream_flattener_puller_t {
+        h2o_sendvec_puller_t puller;
+        struct st_h2o_ostream_flattener_t *backref;
+    } *puller;
+    struct {
+        h2o_req_t *req;
+        h2o_sendvec_t *bufs;
+        size_t bufcnt;
+        h2o_send_state_t state;
+    } buffered;
+};
+
+static void ostream_flattener_puller_on_dispose(void *_puller)
+{
+    struct st_h2o_ostream_flattener_puller_t *puller = _puller;
+
+    h2o_sendvec_puller_dispose(&puller->puller);
+}
+
+static void ostream_flattener_call_next(struct st_h2o_ostream_flattener_t *self)
+{
+    if (self->puller != NULL && self->puller->puller.failed)
+        return h2o_ostream_send_next(&self->super, self->buffered.req, NULL, 0, H2O_SEND_STATE_ERROR);
+
+    h2o_ostream_send_next(&self->super, self->buffered.req, self->buffered.bufs, self->buffered.bufcnt, self->buffered.state);
+}
+
+static void ostream_flattener_on_async_read_complete(h2o_sendvec_puller_t *_puller)
+{
+    struct st_h2o_ostream_flattener_puller_t *puller = (void *)_puller;
+
+    if (puller->backref != NULL)
+        ostream_flattener_call_next(puller->backref);
+}
+
+static void ostream_flattener_do_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_sendvec_t *bufs, size_t bufcnt,
+                                      h2o_send_state_t state)
+{
+    struct st_h2o_ostream_flattener_t *self = (struct st_h2o_ostream_flattener_t *)_self;
+
+    /* dispose of the bytes retained by puller for the previous invocation */
+    if (self->puller != NULL) {
+        assert(!self->puller->puller.failed);
+        h2o_sendvec_puller_dispose(&self->puller->puller);
+    }
+
+    /* retain the arguments */
+    self->buffered.req = req;
+    self->buffered.bufs = bufs;
+    self->buffered.bufcnt = bufcnt;
+    self->buffered.state = state;
+
+    /* rewrite pull vectors to flattened images, as we register the pull vectors to `h2o_sendvec_puller_t` */
+    for (size_t i = 0; i < bufcnt; ++i) {
+        if (bufs[i].callbacks->read_ != h2o_sendvec_read_raw) {
+            if (self->puller == NULL) {
+                self->puller = h2o_mem_alloc_shared(&req->pool, sizeof(*self->puller), ostream_flattener_puller_on_dispose);
+                self->puller->puller = (h2o_sendvec_puller_t){};
+                self->puller->backref = self;
+            }
+            h2o_sendvec_t tmp = bufs[i];
+            h2o_sendvec_init_raw(&bufs[i], NULL, tmp.len);
+            h2o_sendvec_puller_add(&self->puller->puller, &tmp, tmp.len, &bufs[i].raw, 0);
+        }
+    }
+
+    /* pull if necessary, and if async operation has started, setup the delayed callback and bail out */
+    if (self->puller != NULL && self->puller->puller.vecs.size != 0) {
+        h2o_sendvec_puller_read(&self->puller->puller);
+        if (!h2o_sendvec_puller_read_is_complete(&self->puller->puller)) {
+            self->puller->puller.on_async_read_complete = ostream_flattener_on_async_read_complete;
+            return;
+        }
+    }
+
+    /* delegate to next ostream immediately */
+    ostream_flattener_call_next(self);
+}
+
+static void ostream_flattener_stop(h2o_ostream_t *_self, h2o_req_t *req)
+{
+    struct st_h2o_ostream_flattener_t *self = (struct st_h2o_ostream_flattener_t *)_self;
+
+    if (self->puller != NULL)
+        self->puller->backref = NULL;
+}
+
+h2o_ostream_t **h2o_add_ostream_flattener(h2o_req_t *req, h2o_ostream_t **slot)
+{
+    struct st_h2o_ostream_flattener_t *self =
+        (struct st_h2o_ostream_flattener_t *)h2o_add_ostream(req, H2O_ALIGNOF(*self), sizeof(*self), slot);
+
+    self->super.do_send = ostream_flattener_do_send;
+    self->super.stop = ostream_flattener_stop;
+    self->puller = NULL;
+
+    return &self->super.next;
+}
