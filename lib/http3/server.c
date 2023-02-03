@@ -1626,7 +1626,7 @@ static int stream_open_cb(quicly_stream_open_t *self, quicly_stream_t *qs)
     memset(&stream->sendbuf, 0, sizeof(stream->sendbuf));
     stream->state = H2O_HTTP3_SERVER_STREAM_STATE_RECV_HEADERS;
     stream->link = (h2o_linklist_t){NULL};
-    stream->ostr_final = (h2o_ostream_t){NULL, do_send, NULL, do_send_informational};
+    stream->ostr_final = (h2o_ostream_t){.do_send = do_send, .send_informational = do_send_informational};
     stream->scheduler.link = (h2o_linklist_t){NULL};
     stream->scheduler.priority = h2o_absprio_default;
     stream->scheduler.call_cnt = 0;

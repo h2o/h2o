@@ -204,7 +204,8 @@ static void close_generator_and_filters(h2o_req_t *req)
         req->_generator = NULL;
     }
     /* close the ostreams still open */
-    while (req->_ostr_top->next != NULL) {
+    while (req->_ostr_top->intermediary) {
+        assert(req->_ostr_top->next != NULL);
         if (req->_ostr_top->stop != NULL)
             req->_ostr_top->stop(req->_ostr_top, req);
         req->_ostr_top = req->_ostr_top->next;
@@ -560,6 +561,7 @@ h2o_ostream_t *h2o_add_ostream(h2o_req_t *req, size_t alignment, size_t sz, h2o_
 {
     h2o_ostream_t *ostr = h2o_mem_alloc_pool_aligned(&req->pool, alignment, sz);
     ostr->next = *slot;
+    ostr->intermediary = 1;
     ostr->do_send = NULL;
     ostr->stop = NULL;
     ostr->send_informational = NULL;
@@ -841,7 +843,7 @@ void h2o_send_informational(h2o_req_t *req)
 {
     /* 1xx must be sent before h2o_start_response is called*/
     assert(req->_generator == NULL);
-    assert(req->_ostr_top->next == NULL);
+    assert(!req->_ostr_top->intermediary);
     assert(100 <= req->res.status && req->res.status <= 199 && req->res.status != 101);
 
     if (req->_ostr_top->send_informational == NULL)

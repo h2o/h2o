@@ -817,13 +817,18 @@ typedef struct st_h2o_generator_t {
 
 /**
  * an output stream that may alter the output.
- * The object is typically constructed by filters calling the h2o_prepend_ostream function.
+ * The object is typically constructed by filters calling the h2o_add_ostream function.
  */
 struct st_h2o_ostream_t {
     /**
      * points to the next output stream
      */
     struct st_h2o_ostream_t *next;
+    /**
+     * if the instance is an intermediary object that is to be discarded when re-running a request. In contrast, final objects
+     * (e.g., protocol handlers) are kept until when the request is disposed of.
+     */
+    unsigned intermediary : 1;
     /**
      * called by the core to send output.
      * Intermediary output streams should process the given output and call the h2o_ostream_send_next function if any data can be

@@ -123,11 +123,10 @@ static void init_request(struct st_h2o_http1_conn_t *conn)
     conn->req._ostr_top = &conn->_ostr_final.super;
 
     conn->_ostr_final = (struct st_h2o_http1_finalostream_t){{
-        NULL,              /* next */
-        finalostream_send, /* do_send */
-        NULL,              /* stop */
-        conn->super.ctx->globalconf->send_informational_mode == H2O_SEND_INFORMATIONAL_MODE_ALL ? finalostream_send_informational
-                                                                                                : NULL, /* send_informational */
+        .do_send = finalostream_send,
+        .send_informational = conn->super.ctx->globalconf->send_informational_mode == H2O_SEND_INFORMATIONAL_MODE_ALL
+                                  ? finalostream_send_informational
+                                  : NULL,
     }};
 }
 

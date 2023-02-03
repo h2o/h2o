@@ -665,12 +665,14 @@ static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_val
     subreq->conn.super.ctx = ctx->shared->ctx;
     h2o_init_request(&subreq->super, &subreq->conn.super, NULL);
     h2o_ostream_t *ostream = h2o_add_ostream(&subreq->super, H2O_ALIGNOF(*ostream), sizeof(*ostream), &subreq->super._ostr_top);
+    ostream->intermediary = 0;
     ostream->do_send = subreq_ostream_send;
     subreq->conn.super.hosts = ctx->handler->pathconf->global->hosts;
     subreq->conn.super.connected_at = (struct timeval){0}; /* no need because subreq won't logged */
     subreq->conn.super.id = 0; /* currently conn->id is used only for logging, so set zero as a meaningless value */
     subreq->conn.super.callbacks = &callbacks;
     h2o_add_ostream_flattener(&subreq->super, &subreq->super._ostr_top);
+    subreq->super._ostr_top->intermediary = 0; /* flattener is to be kept until the disposal of `h2o_req_t` */
 
     struct st_mruby_env_foreach_data_t data = {ctx,
                                                subreq,
