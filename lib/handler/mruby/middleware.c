@@ -215,11 +215,12 @@ static void append_bufs(struct st_mruby_subreq_t *subreq, h2o_sendvec_t *inbufs,
 {
     size_t i;
     for (i = 0; i != inbufcnt; ++i) {
+        assert(inbufs[i].callbacks->read_ == h2o_sendvec_read_raw);
         size_t len = inbufs[i].len;
         char *dst = h2o_buffer_reserve(&subreq->buf, len).base;
-        assert(dst != NULL && "no memory or disk space; FIXME bail out gracefully");
-        if (!(*inbufs[i].callbacks->read_)(inbufs + i, dst, len))
-            h2o_fatal("FIXME handle error from pull handler");
+        if (dst == NULL)
+            h2o_fatal("no memory or disk space; FIXME bail out gracefully");
+        memcpy(dst, inbufs[i].raw, len);
         subreq->buf->size += len;
     }
 }
@@ -669,6 +670,7 @@ static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_val
     subreq->conn.super.connected_at = (struct timeval){0}; /* no need because subreq won't logged */
     subreq->conn.super.id = 0; /* currently conn->id is used only for logging, so set zero as a meaningless value */
     subreq->conn.super.callbacks = &callbacks;
+    h2o_add_ostream_flattener(&subreq->super, &subreq->super._ostr_top);
 
     struct st_mruby_env_foreach_data_t data = {ctx,
                                                subreq,
