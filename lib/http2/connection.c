@@ -57,7 +57,6 @@ static void initiate_graceful_shutdown(h2o_conn_t *_conn);
 static void close_connection_now(h2o_http2_conn_t *conn);
 static int close_connection(h2o_http2_conn_t *conn);
 static ssize_t expect_default(h2o_http2_conn_t *conn, const uint8_t *src, size_t len, const char **err_desc);
-static int write_is_in_flight(h2o_http2_conn_t *conn);
 static void do_emit_writereq(h2o_http2_conn_t *conn);
 static void on_read(h2o_socket_t *sock, const char *err);
 static void push_path(h2o_req_t *src_req, const char *abspath, size_t abspath_len, int is_critical);
@@ -67,6 +66,11 @@ static void stream_send_error(h2o_http2_conn_t *conn, uint32_t stream_id, int er
 static int is_idle_stream_id(h2o_http2_conn_t *conn, uint32_t stream_id)
 {
     return (h2o_http2_stream_is_push(stream_id) ? conn->push_stream_ids.max_open : conn->pull_stream_ids.max_open) < stream_id;
+}
+
+static int write_is_in_flight(h2o_http2_conn_t *conn)
+{
+    return conn->_write.buf_in_flight != NULL;
 }
 
 static void enqueue_goaway(h2o_http2_conn_t *conn, int errnum, h2o_iovec_t additional_data)
@@ -1504,11 +1508,6 @@ static int emit_writereq_of_openref(h2o_http2_scheduler_openref_t *ref, int *sti
     }
 
     return h2o_http2_conn_get_buffer_window(conn) > 0 ? 0 : -1;
-}
-
-static int write_is_in_flight(h2o_http2_conn_t *conn)
-{
-    return conn->_write.buf_in_flight != NULL;
 }
 
 static void do_emit_writereq_send(h2o_http2_conn_t *conn)
