@@ -2797,8 +2797,15 @@ static void sendvec_puller_on_vec_read_complete(h2o_sendvec_puller_t *self, int 
         self->failed = 1;
     ++self->num_read_complete;
 
-    if (h2o_sendvec_puller_read_is_complete(self) && self->on_async_read_complete != NULL)
-        self->on_async_read_complete(self);
+    if (h2o_sendvec_puller_read_is_complete(self)) {
+        for (size_t i = 0; i < self->first_send; ++i) {
+            struct st_h2o_sendvec_puller_vec_t *vec = &self->vecs.entries[i];
+            if (vec->dst != NULL)
+                *vec->dst = vec->buf;
+        }
+        if (self->on_async_read_complete != NULL)
+            self->on_async_read_complete(self);
+    }
 }
 
 static void sendvec_puller_on_async_vec_read_complete(h2o_socket_read_file_cmd_t *cmd)
@@ -2817,7 +2824,6 @@ void h2o_sendvec_puller_read(h2o_sendvec_puller_t *self)
         if (vec->dst != NULL) {
             assert(vec->buf == NULL);
             vec->buf = h2o_mem_alloc_recycle(&h2o_socket_ssl_buffer_allocator);
-            *vec->dst = vec->buf;
         }
         vec->vec.callbacks->read_(&vec->vec, &vec->cmd, vec->buf, vec->len, sendvec_puller_on_async_vec_read_complete, vec);
     }
