@@ -2819,7 +2819,7 @@ static void sendvec_puller_on_async_vec_read_complete(h2o_socket_read_file_cmd_t
 
 void h2o_sendvec_puller_read(h2o_sendvec_puller_t *self)
 {
-    for (size_t i = 0; i < self->vecs.size; ++i) {
+    for (size_t i = 0; i < self->first_send; ++i) {
         struct st_h2o_sendvec_puller_vec_t *vec = &self->vecs.entries[i];
         if (vec->dst != NULL) {
             assert(vec->buf == NULL);
