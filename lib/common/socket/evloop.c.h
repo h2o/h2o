@@ -85,12 +85,9 @@ struct st_h2o_evloop_read_file_t {
     struct st_h2o_evloop_socket_t *sock_notify;
     struct st_h2o_evloop_read_file_queue_t submission, completion;
     h2o_timer_t delayed;
-    /**
-     * Number of read commands to issue at once. Issuance of read commands are delayed until the number of entries in the
-     * submission queue reaches this value, or when the event loop runs once.
-     */
-    size_t batch_size;
 };
+
+size_t h2o_evloop_io_uring_batch_size;
 
 #endif
 
@@ -780,7 +777,6 @@ h2o_evloop_t *create_evloop(size_t sz)
         read_file_queue_init(&loop->_read_file->submission);
         read_file_queue_init(&loop->_read_file->completion);
         h2o_timer_init(&loop->_read_file->delayed, read_file_on_delayed);
-        loop->_read_file->batch_size = 1; /* default is to run commands one by one (hoping that it completes synchronously) */
     }
 #endif
 
@@ -955,12 +951,6 @@ int h2o_evloop_run(h2o_evloop_t *loop, int32_t max_wait)
 
 #if H2O_USE_IO_URING
 
-void h2o_evloop_set_io_uring_batch_size(h2o_evloop_t *loop, size_t batch_size)
-{
-    assert(batch_size != 0);
-    loop->_read_file->batch_size = batch_size;
-}
-
 void read_file_queue_init(struct st_h2o_evloop_read_file_queue_t *queue)
 {
     queue->head = NULL;
@@ -991,7 +981,7 @@ static struct st_h2o_evloop_read_file_cmd_t *read_file_queue_pop(struct st_h2o_e
 
 static int read_file_submit(h2o_evloop_t *loop, int can_delay)
 {
-    if (can_delay && loop->_read_file->submission.size < loop->_read_file->batch_size)
+    if (can_delay && loop->_read_file->submission.size < h2o_evloop_io_uring_batch_size)
         return 0;
 
     int made_progress = 0;
